@@ -870,9 +870,9 @@ pub fn test_opaque_tyvar_in_extra_argument_of_equality_on_another_type() {
         // `?s` sits in an extra argument of `Rebuild c ?s = Array I64`, whose subject is `c`
         foo : [?s : ToString, c : Rebuildable, Elem c = I64, Rebuild c ?s = Array I64] c -> ?s;
         foo = |x| (
-            let y = x.rebuild(|n| n == 0);
-            let z : Array I64 = y;
-            z.@(0).to_string
+            let rebuilt = x.rebuild(|n| n == 0);
+            let arr : Array I64 = rebuilt;
+            arr.@(0).to_string
         );
 
         main : IO ();
@@ -910,9 +910,9 @@ pub fn test_opaque_tyvar_nested_in_extra_argument_of_equality_on_another_type() 
         // `?s` sits inside an extra argument of `Rebuild c (Array ?s) = Array I64`, whose subject is `c`
         foo : [?s : ToString, c : Rebuildable, Elem c = I64, Rebuild c (Array ?s) = Array I64] c -> ?s;
         foo = |x| (
-            let y = x.rebuild(|n| [n.to_string]);
-            let z : Array I64 = y;
-            z.@(0).to_string
+            let rebuilt = x.rebuild(|n| [n.to_string]);
+            let arr : Array I64 = rebuilt;
+            arr.@(0).to_string
         );
 
         main : IO ();
