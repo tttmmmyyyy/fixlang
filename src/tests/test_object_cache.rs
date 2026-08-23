@@ -8,7 +8,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::fix_command_at_opt_level;
+    use crate::tests::test_util::{assert_succeeded, fix_command_at_opt_level};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -44,13 +44,12 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
             .current_dir(dir)
             .output()
             .unwrap_or_else(|e| panic!("Failed to execute {}: {}", what, e));
-        let streams = format!(
+        assert_succeeded(&output, &format!("{} should succeed.", what));
+        format!(
             "stdout:\n{}\nstderr:\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(output.status.success(), "{} should succeed.\n{}", what, streams);
-        streams
+        )
     }
 
     /// The files directly under `dir` whose name ends in `suffix`.

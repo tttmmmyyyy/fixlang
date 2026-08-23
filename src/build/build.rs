@@ -134,7 +134,9 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         libs_opts.push(ld_flag.clone());
     }
 
-    // Build runtime.c to object file.
+    // Build runtime.c to object file. The object is named by the hash of the settings it is
+    // compiled under, so a setting the compilation below reads belongs in
+    // `Configuration::runtime_object_hash`.
     let runtime_obj_path = PathBuf::from(INTERMEDIATE_PATH)
         .join(format!("fixruntime.{}.o", config.runtime_object_hash()));
     if !runtime_obj_path.exists() {
