@@ -2151,9 +2151,13 @@ impl ClosureSpecializationVisitor {
 // values a key or a name ran together would hand one copy to both.
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::ast::expr::{expr_app, expr_let, var_var};
-    use crate::constants::INSTANCIATED_NAME_SEPARATOR;
+    use super::{is_moved_by_placing, ClosureTree, FuncCopy, Slot};
+    use crate::ast::expr::{expr_app, expr_let, expr_var, var_var, ExprNode};
+    use crate::ast::name::FullName;
+    use crate::ast::pattern::PatternNode;
+    use crate::constants::{CLOSURE_LAM_SUFFIX, INSTANCIATED_NAME_SEPARATOR};
+    use crate::misc::{Map, Set};
+    use std::sync::Arc;
 
     /// The name of the global function the `index`-th lambda of `Main::main` was lifted to.
     fn lifted(index: u32) -> FullName {
