@@ -4,9 +4,7 @@
 use crate::misc::{split_by_max_size, Map, Set};
 use std::fmt;
 use std::path::PathBuf;
-
 use rand::Rng;
-
 use crate::ast::name::Name;
 use crate::ast::program::Symbol;
 use crate::configuration::Configuration;
@@ -110,23 +108,23 @@ impl CompileUnit {
         self.dependent_modules.sort();
 
         // Add dependency to the configuration.
-        let mut data = vec![];
-        data.push("<configuration>".to_string());
-        data.push(config.object_generation_hash());
+        let mut hash_inputs = vec![];
+        hash_inputs.push("<configuration>".to_string());
+        hash_inputs.push(config.object_generation_hash());
 
         // Add dependency to the symbols.
-        data.push("<symbols>".to_string());
+        hash_inputs.push("<symbols>".to_string());
         for symbol in &self.symbols {
-            data.push(symbol.hash());
+            hash_inputs.push(symbol.hash());
         }
 
         // Add dependency to source codes of the dependent modules.
-        data.push("<dependent modules>".to_string());
+        hash_inputs.push("<dependent modules>".to_string());
         for name in &self.dependent_modules {
-            data.push(module_dependency_hash[name].clone());
+            hash_inputs.push(module_dependency_hash[name].clone());
         }
 
-        self.unit_hash = md5_hex(&data.join(", "));
+        self.unit_hash = md5_hex(&hash_inputs.join(", "));
     }
 
     /// Sets this unit's hash to a random value, so that the build generates the unit's object file
@@ -151,10 +149,10 @@ impl CompileUnit {
         // every boundary where it was and the units holding no edited symbol keep their cached
         // object files. `Symbol::hash` takes in the `expr` too, so a boundary read off it would
         // move at every symbol whose `expr` changed.
-        let split_symbols = split_by_max_size(symbols, max_size, |symbol| symbol.name.to_string());
+        let symbol_pieces = split_by_max_size(symbols, max_size, |symbol| symbol.name.to_string());
         let mut units = vec![];
-        for symbols in split_symbols {
-            units.push(CompileUnit::new(symbols, dependent_modules.clone()));
+        for piece in symbol_pieces {
+            units.push(CompileUnit::new(piece, dependent_modules.clone()));
         }
 
         units
@@ -170,28 +168,36 @@ impl CompileUnit {
         module_dependency_map: &Map<Name, Set<Name>>,
         config: &Configuration,
     ) -> Vec<CompileUnit> {
-        let mut units: Map<
+        let mut units_by_dependencies: Map<
             String, /* concatenated string of dependent modules sorted by their names */
             CompileUnit,
         > = Map::default();
         // Classify symbols into compilation units depending on their dependent modules.
         for symbol in symbols {
-            let mut depmods = Set::default();
+            let mut dependent_modules = Set::default();
             for module in symbol.dependent_modules() {
-                depmods.extend(module_dependency_map[&module].clone());
+                dependent_modules.extend(module_dependency_map[&module].clone());
             }
-            let mut depmods = depmods.iter().cloned().collect::<Vec<_>>();
-            depmods.sort();
-            let concat_depmods = depmods.join(", ");
-            let unit = if let Some(unit) = units.get_mut(&concat_depmods) {
+            let mut dependent_modules = dependent_modules.iter().cloned().collect::<Vec<_>>();
+            dependent_modules.sort();
+            let dependent_modules_key = dependent_modules.join(", ");
+            let unit = if let Some(unit) = units_by_dependencies.get_mut(&dependent_modules_key) {
                 unit
             } else {
-                units.insert(concat_depmods.clone(), CompileUnit::new(vec![], depmods));
-                units.get_mut(&concat_depmods).unwrap()
+                units_by_dependencies.insert(
+                    dependent_modules_key.clone(),
+                    CompileUnit::new(vec![], dependent_modules),
+                );
+                units_by_dependencies
+                    .get_mut(&dependent_modules_key)
+                    .unwrap()
             };
             unit.symbols.push(symbol);
         }
-        let mut units = units.into_iter().map(|(_, unit)| unit).collect::<Vec<_>>();
+        let mut units = units_by_dependencies
+            .into_iter()
+            .map(|(_, unit)| unit)
+            .collect::<Vec<_>>();
         for unit in &mut units {
             unit.symbols
                 .sort_by(|a, b| a.name.to_string().partial_cmp(&b.name.to_string()).unwrap());

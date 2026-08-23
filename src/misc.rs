@@ -180,13 +180,13 @@ pub fn flatten_opt<T>(o: Option<Option<T>>) -> Option<T> {
 /// `nonempty_subsequences(&vec![1, 2])` is `[[1], [1, 2], [2]]`.
 #[allow(unused)]
 pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
-    let mut result = vec![];
+    let mut runs = vec![];
     for i in 0..v.len() {
         for j in i..v.len() {
-            result.push(v[i..j + 1].to_vec());
+            runs.push(v[i..j + 1].to_vec());
         }
     }
-    result
+    runs
 }
 
 /// Splits `v` into pieces of at most `max_size` elements, each piece holding at least one element
@@ -271,33 +271,33 @@ pub(crate) use function_name;
 /// `number_to_varname(0)` is `a`, `number_to_varname(25)` is `z`, and `number_to_varname(26)` is
 /// `a1`.
 pub fn number_to_varname(n: usize) -> String {
-    let mut ret = "".to_string();
+    let mut varname = "".to_string();
     let mut n = n;
     let c = (n % 26) as u8 + 'a' as u8;
-    ret.push(c as char);
+    varname.push(c as char);
     n /= 26;
     if n == 0 {
-        return ret;
+        return varname;
     }
-    ret += &n.to_string();
-    ret
+    varname += &n.to_string();
+    varname
 }
 
 /// `count` variable names, each differing from the others and from every name in `used_names`.
 pub fn generate_fresh_varnames(count: usize, used_names: &Set<Name>) -> Vec<Name> {
-    let mut result = Vec::with_capacity(count);
-    let mut name_no = 0usize;
+    let mut fresh_names = Vec::with_capacity(count);
+    let mut candidate_no = 0usize;
     for _ in 0..count {
         loop {
-            let candidate = number_to_varname(name_no);
-            name_no += 1;
+            let candidate = number_to_varname(candidate_no);
+            candidate_no += 1;
             if !used_names.contains(&candidate) {
-                result.push(candidate);
+                fresh_names.push(candidate);
                 break;
             }
         }
     }
-    result
+    fresh_names
 }
 
 /// `path` taken against the current directory and canonicalized, so that two paths leading to one
@@ -305,7 +305,7 @@ pub fn generate_fresh_varnames(count: usize, used_names: &Set<Name>) -> Vec<Name
 ///
 /// Canonicalization reads the file system, so the path has to lead to a file that exists.
 pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
-    let abs = if path.is_absolute() {
+    let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
         match env::current_dir() {
@@ -318,15 +318,15 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
             Ok(cur_dir) => cur_dir.join(path),
         }
     };
-    let abs = abs.canonicalize();
-    if let Err(e) = abs {
+    let canonicalized = absolute.canonicalize();
+    if let Err(e) = canonicalized {
         return Err(Errors::from_msg(format!(
             "Failed to canonicalize path \"{}\": {}",
             path.to_string_lossy(),
             e
         )));
     }
-    Ok(abs.unwrap())
+    Ok(canonicalized.unwrap())
 }
 
 /// The path `target` written relative to the path `base`, so that `base` joined with the result
@@ -433,7 +433,7 @@ pub fn shorten_for_report(text: String) -> String {
 pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut current_word = String::new();
-    let mut in_quotes = None; // None if not in quotes, Some(') if in single quotes, Some(") if in double quotes
+    let mut open_quote = None;
     let mut escaped = false; // true if the previous character is an escape character
 
     for c in s.chars() {
@@ -444,16 +444,16 @@ pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
         }
 
         match c {
-            ' ' if in_quotes.is_none() => {
+            ' ' if open_quote.is_none() => {
                 if !current_word.is_empty() {
                     words.push(current_word.clone());
                     current_word.clear();
                 }
             }
-            '"' if in_quotes.is_none() => in_quotes = Some('"'),
-            '"' if in_quotes == Some('"') => in_quotes = None,
-            '\'' if in_quotes.is_none() => in_quotes = Some('\''),
-            '\'' if in_quotes == Some('\'') => in_quotes = None,
+            '"' if open_quote.is_none() => open_quote = Some('"'),
+            '"' if open_quote == Some('"') => open_quote = None,
+            '\'' if open_quote.is_none() => open_quote = Some('\''),
+            '\'' if open_quote == Some('\'') => open_quote = None,
             '\\' => escaped = true, // The next character is escaped
             _ => current_word.push(c),
         }
@@ -475,18 +475,18 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
         "Input must contain only ASCII alphanumeric characters"
     );
 
-    let mut result = String::new();
+    let mut lower_snake = String::new();
     for (i, c) in s.chars().enumerate() {
         if c.is_ascii_uppercase() {
             if i > 0 {
-                result.push('_');
+                lower_snake.push('_');
             }
-            result.push(c.to_ascii_lowercase());
+            lower_snake.push(c.to_ascii_lowercase());
         } else {
-            result.push(c);
+            lower_snake.push(c);
         }
     }
-    result
+    lower_snake
 }
 
 #[cfg(test)]
