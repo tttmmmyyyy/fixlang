@@ -2291,11 +2291,11 @@ impl Scheme {
                 ));
             }
         }
-        // An opaque type variable stands for a type this signature hides, which the use site
-        // learns nothing about. So an equality naming one has to be the equality on it (`args[0]`
-        // is that variable), which states what the hidden type is like and is given to the use
-        // site. An equality on another type states a condition the use site has to meet, and a
-        // condition relating a hidden type to anything else can be met by nobody.
+        // An opaque type variable stands for a type this signature hides from the use site. So an
+        // equality naming one has to be the equality on it, whose `args[0]` is that variable: such
+        // an equality states what the hidden type is like and is given to the use site. An equality
+        // on another type states a condition the use site has to meet, and a use site can meet only
+        // conditions about types it sees.
         for eq in &self.equalities {
             if eq.on_opaque_tyvar() {
                 continue;

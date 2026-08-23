@@ -846,10 +846,11 @@ pub fn test_opaque_in_impl_type_param() {
     test_source_fail(&source, Configuration::develop_mode(), "is not allowed");
 }
 
+/// An opaque type variable standing as an extra argument of an equality on another type is
+/// rejected. `Rebuild c ?s = Array I64` is on `c`, so meeting it falls to the use site, which
+/// never learns what `?s` stands for.
 #[test]
 pub fn test_opaque_tyvar_in_extra_argument_of_equality_on_another_type() {
-    // An opaque type variable in an extra argument of an equality whose subject is another type
-    // should be rejected
     let source = r##"
         module Main;
 
@@ -867,7 +868,7 @@ pub fn test_opaque_tyvar_in_extra_argument_of_equality_on_another_type() {
             rebuild = |f, arr| arr.map(f);
         }
 
-        // `?s` sits in an extra argument of `Rebuild c ?s = Array I64`, whose subject is `c`
+        // `?s` sits in an extra argument of `Rebuild c ?s = Array I64`, an equality on `c`
         foo : [?s : ToString, c : Rebuildable, Elem c = I64, Rebuild c ?s = Array I64] c -> ?s;
         foo = |x| (
             let rebuilt = x.rebuild(|n| n == 0);
@@ -886,10 +887,11 @@ pub fn test_opaque_tyvar_in_extra_argument_of_equality_on_another_type() {
     );
 }
 
+/// An opaque type variable inside an extra argument of an equality on another type is rejected.
+/// `Rebuild c (Array ?s) = Array I64` is on `c`, and `?s` stands one level down, inside
+/// `Array ?s`.
 #[test]
 pub fn test_opaque_tyvar_nested_in_extra_argument_of_equality_on_another_type() {
-    // An opaque type variable inside an extra argument of an equality whose subject is another
-    // type should be rejected
     let source = r##"
         module Main;
 
@@ -907,7 +909,7 @@ pub fn test_opaque_tyvar_nested_in_extra_argument_of_equality_on_another_type() 
             rebuild = |f, arr| arr.map(f);
         }
 
-        // `?s` sits inside an extra argument of `Rebuild c (Array ?s) = Array I64`, whose subject is `c`
+        // `?s` sits inside an extra argument of `Rebuild c (Array ?s) = Array I64`, an equality on `c`
         foo : [?s : ToString, c : Rebuildable, Elem c = I64, Rebuild c (Array ?s) = Array I64] c -> ?s;
         foo = |x| (
             let rebuilt = x.rebuild(|n| [n.to_string]);
@@ -926,10 +928,11 @@ pub fn test_opaque_tyvar_nested_in_extra_argument_of_equality_on_another_type() 
     );
 }
 
+/// An opaque type variable on the right side of an equality on another type is rejected.
+/// `Rebuild c Bool = ?s` is on `c`, and `?s` stands as the type the equality says
+/// `Rebuild c Bool` is.
 #[test]
 pub fn test_opaque_tyvar_on_right_side_of_equality_on_another_type() {
-    // An opaque type variable on the right side of an equality whose subject is another type
-    // should be rejected
     let source = r##"
         module Main;
 
@@ -947,7 +950,7 @@ pub fn test_opaque_tyvar_on_right_side_of_equality_on_another_type() {
             rebuild = |f, arr| arr.map(f);
         }
 
-        // `?s` stands on the right side of `Rebuild c Bool = ?s`, whose subject is `c`
+        // `?s` stands on the right side of `Rebuild c Bool = ?s`, an equality on `c`
         foo : [?s : ToString, c : Rebuildable, Elem c = I64, Rebuild c Bool = ?s] c -> ?s;
         foo = |x| x.rebuild(|n| n == 0);
 
