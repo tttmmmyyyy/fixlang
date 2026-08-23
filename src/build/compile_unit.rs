@@ -1,15 +1,15 @@
 //! The division of a program into compilation units, each compiled into an object file that is
 //! cached under a hash of everything the code in it is generated from.
 
-use crate::misc::{split_by_max_size, Map, Set};
-use std::fmt;
-use std::path::PathBuf;
-use rand::Rng;
 use crate::ast::name::Name;
 use crate::ast::program::Symbol;
 use crate::configuration::Configuration;
 use crate::constants::COMPILATION_UNITS_PATH;
 use crate::hash::md5_hex;
+use crate::misc::{split_by_max_size, Map, Set};
+use rand::Rng;
+use std::fmt;
+use std::path::PathBuf;
 
 /// A set of the program's symbols compiled into one object file, which is cached under
 /// `unit_hash`, so that a rebuild regenerates only the units whose inputs changed.
