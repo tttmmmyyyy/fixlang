@@ -2291,23 +2291,31 @@ impl Scheme {
                 ));
             }
         }
-        // If the right side of an equality contains an opaque type variable,
-        // then the equality must be on an opaque type variable (i.e., args[0] is an opaque tyvar).
+        // An opaque type variable stands for a type this signature hides, which the use site
+        // learns nothing about. So an equality naming one has to be the equality on it (`args[0]`
+        // is that variable), which states what the hidden type is like and is given to the use
+        // site. An equality on another type states a condition the use site has to meet, and a
+        // condition relating a hidden type to anything else can be met by nobody.
         for eq in &self.equalities {
-            let rhs_has_opaque = eq
-                .value
-                .free_vars_vec()
-                .iter()
-                .any(|tv| is_opaque_tyvar(&tv.name));
-            if rhs_has_opaque && !eq.on_opaque_tyvar() {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "The left side of an equality constraint involving an opaque type must be \
-                         an associated type applied to an opaque type variable.",
-                    ),
-                    &[&eq.src],
-                ));
+            if eq.on_opaque_tyvar() {
+                continue;
             }
+            let mut vars = vec![];
+            eq.free_vars_to_vec(&mut vars);
+            let Some(opaque_var) = vars.iter().find(|tv| is_opaque_tyvar(&tv.name)) else {
+                continue;
+            };
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "An opaque type variable can appear in an equality constraint only when the \
+                     left side of that constraint is an associated type applied to it. \
+                     NOTE: `{}` appears in `{}`, whose left side is applied to `{}`.",
+                    opaque_var.name,
+                    eq.to_string(),
+                    eq.args[0].to_string(),
+                ),
+                &[&eq.src],
+            ));
         }
         // For an equality on an opaque type variable, the extra arguments (args[1..]) must be
         // mutually distinct type variables, and they must not appear elsewhere in the scheme
