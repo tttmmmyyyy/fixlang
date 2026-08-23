@@ -187,7 +187,7 @@ fn test_a_library_on_a_link_line_is_called() {
 /// spelling from the unit that defines it and from the unit that reads it.
 ///
 /// The getter symbol heads the name of a field's getter, and Fix takes it at the head of any value
-/// name, so a program can write one itself. Separate compilation, which `max_cu_size` divides, runs
+/// name, so a program can write one itself. Separate compilation, which `cu_size` divides, runs
 /// at `Basic` and below, so the level comes down to it: at a higher one the whole program is one
 /// unit and no read crosses a boundary.
 #[test]
@@ -216,6 +216,6 @@ fn test_a_value_named_with_the_getter_symbol_crosses_compilation_units() {
     "#;
     let mut config = Configuration::develop_mode();
     config.set_fix_opt_level(FixOptimizationLevel::Basic);
-    config.max_cu_size = 1;
+    config.cu_size = 1;
     test_source(SOURCE, config);
 }

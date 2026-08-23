@@ -2,7 +2,7 @@
 Cache system for object (*.o) files.
 */
 
-use crate::misc::{split_by_max_size, Map, Set};
+use crate::misc::{split_at_name_boundaries, Map, Set};
 use std::fmt;
 use std::path::PathBuf;
 
@@ -116,7 +116,7 @@ impl CompileUnit {
         );
     }
 
-    pub fn split_by_max_size(self, max_size: usize) -> Vec<CompileUnit> {
+    pub fn split_at_name_boundaries(self, mean_size: usize) -> Vec<CompileUnit> {
         // `unit_hash` is lost after this method is called.
         assert_eq!(self.unit_hash, "");
 
@@ -127,9 +127,10 @@ impl CompileUnit {
         // every boundary where it was and the units holding no edited symbol keep their cached
         // object files. `Symbol::hash` takes in the `expr` too, so a boundary read off it would
         // move at every symbol whose `expr` changed.
-        let split_symbols = split_by_max_size(symbols, max_size, |symbol| symbol.name.to_string());
+        let symbol_pieces =
+            split_at_name_boundaries(symbols, mean_size, |symbol| symbol.name.to_string());
         let mut units = vec![];
-        for symbols in split_symbols {
+        for symbols in symbol_pieces {
             units.push(CompileUnit::new(symbols, dependent_modules.clone()));
         }
 
@@ -173,7 +174,7 @@ impl CompileUnit {
         // Split compilation units into smaller ones if they are too large.
         let mut units = units
             .into_iter()
-            .flat_map(|unit| unit.split_by_max_size(config.max_cu_size))
+            .flat_map(|unit| unit.split_at_name_boundaries(config.cu_size))
             .collect::<Vec<_>>();
 
         // Set unit hash.
@@ -210,14 +211,14 @@ mod tests {
     /// it was compiled into. A boundary read off `Symbol::hash`, which takes in the `expr` as well,
     /// moves at every symbol whose `expr` changed.
     #[test]
-    fn test_split_by_max_size_places_the_boundaries_by_the_symbol_names() {
+    fn test_split_at_name_boundaries_places_the_boundaries_by_the_symbol_names() {
         const SYMBOL_COUNT: usize = 200;
         const MAX_SIZE: usize = 8;
 
         let unit_symbol_names = |body: &str| -> Vec<Vec<String>> {
             let symbols = (0..SYMBOL_COUNT).map(|i| symbol(i, body)).collect();
             CompileUnit::new(symbols, vec![])
-                .split_by_max_size(MAX_SIZE)
+                .split_at_name_boundaries(MAX_SIZE)
                 .iter()
                 .map(|unit| unit.symbols().iter().map(|s| s.name.to_string()).collect())
                 .collect()

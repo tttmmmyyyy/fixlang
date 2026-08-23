@@ -57,7 +57,7 @@ use configuration::{
     OutputFileType, Sanitizer, SubCommand,
 };
 use constants::{
-    DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR, DEFAULT_REGISTRY, OPTIMIZATION_LEVEL_BASIC,
+    DEFAULT_COMPILATION_UNIT_SIZE_STR, DEFAULT_REGISTRY, OPTIMIZATION_LEVEL_BASIC,
     OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
     PROJECT_FILE_PATH,
 };
@@ -218,13 +218,14 @@ fn run_cli() {
         .short('v')
         .takes_value(false)
         .help("Show verbose messages.");
-    let max_cu_size = Arg::new("max-cu-size")
-        .long("max-cu-size")
+    let cu_size = Arg::new("cu-size")
+        .long("cu-size")
         .takes_value(true)
-        .default_value(DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR)
+        .default_value(DEFAULT_COMPILATION_UNIT_SIZE_STR)
         .value_parser(value_parser!(usize))
         .help(
-            "Maximum size of compilation units created by separate compilation.\n\
+            "Average number of symbols in a compilation unit created by separate compilation.\n\
+            Where a unit ends is decided by the names of the symbols, so a unit runs longer or shorter than this; the value sets how often a boundary falls.\n\
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n\
             NOTE: Separate compilation is disabled under the default optimization level.\n",
         );
@@ -305,7 +306,7 @@ fn run_cli() {
         .arg(threaded.clone())
         .arg(sanitize.clone())
         .arg(verbose.clone())
-        .arg(max_cu_size.clone())
+        .arg(cu_size.clone())
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
         .arg(emit_rc_ir.clone())
@@ -333,7 +334,7 @@ fn run_cli() {
             .arg(threaded.clone())
             .arg(sanitize.clone())
             .arg(verbose.clone())
-            .arg(max_cu_size.clone())
+            .arg(cu_size.clone())
             .arg(llvm_passes_file.clone())
             .arg(emit_symbols.clone())
             .arg(emit_rc_ir.clone())
@@ -690,10 +691,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             config.verbose = true;
         }
 
-        // Set `max_cu_size`.
-        config.max_cu_size = *args
-            .get_one::<usize>("max-cu-size")
-            .expect("the `--max-cu-size` option carries a default value");
+        // Set `cu_size`.
+        config.cu_size = *args
+            .get_one::<usize>("cu-size")
+            .expect("the `--cu-size` option carries a default value");
 
         // Set `llvm_passes_override`.
         // Reading the file here puts the passes into `Configuration::object_generation_hash`, so
