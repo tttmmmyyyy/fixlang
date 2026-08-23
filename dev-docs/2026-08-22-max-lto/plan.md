@@ -235,5 +235,5 @@ internalize し直す。** 必要な機構は inkwell 0.5.0 に揃っており�
 ## 付録: 測定の道具
 
 `benchmark/compiletime/bench.py` (PR #497)。コーパスの実体は
-`/home/maruyama/fix-compile-bench/corpus` (50 プロジェクト、うち check 可能 35、build 可能 17)。
+リポジトリの外に置いた `fix-compile-bench/corpus` (50 プロジェクト、うち check 可能 35、build 可能 17)。
 指標は `perf stat -e instructions:u`。
