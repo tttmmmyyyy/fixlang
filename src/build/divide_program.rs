@@ -103,6 +103,7 @@ pub fn divide_among_units(
     for (index, unit_program) in unit_programs.iter_mut().enumerate() {
         unit_program.roots = names_defined_here(unit_program)
             .filter(|name| !imported[index].contains(name) && published.contains(name))
+            .cloned()
             .collect();
     }
 
@@ -177,29 +178,25 @@ fn copyable_funcs(program: &RcProgram) -> Map<FullName, RcFunc> {
 }
 
 /// The names `unit_program` defines: its functions and its globals.
-fn names_defined_here(unit_program: &RcProgram) -> impl Iterator<Item = FullName> + '_ {
+fn names_defined_here(unit_program: &RcProgram) -> impl Iterator<Item = &FullName> + '_ {
     unit_program
         .funcs
         .keys()
-        .map(|fref| fref.name.clone())
-        .chain(
-            unit_program
-                .globals
-                .iter()
-                .map(|global| global.symbol.clone()),
-        )
+        .map(|fref| &fref.name)
+        .chain(unit_program.globals.iter().map(|global| &global.symbol))
 }
 
 /// Whether `unit_program` defines `name` itself.
 fn defines(unit_program: &RcProgram, name: &FullName) -> bool {
-    unit_program
-        .funcs
-        .contains_key(&FuncRef { name: name.clone() })
-        || unit_program.globals.iter().any(|g| &g.symbol == name)
+    names_defined_here(unit_program).any(|defined| defined == name)
 }
 
 /// The names the bodies of `unit_program` mention without defining them.
+///
+/// The names it defines are collected once and looked up by hash, since the walk asks after every
+/// mention of every body and the copying below repeats the walk until it finds nothing new.
 fn names_reached_elsewhere(unit_program: &RcProgram, mut visit: impl FnMut(&FullName)) {
+    let defined: Set<&FullName> = names_defined_here(unit_program).collect();
     let bodies = unit_program
         .funcs
         .values()
@@ -207,7 +204,7 @@ fn names_reached_elsewhere(unit_program: &RcProgram, mut visit: impl FnMut(&Full
         .chain(unit_program.globals.iter().map(|global| &global.init));
     for body in bodies {
         collect_mentions(body, &mut |mentioned| {
-            if !defines(unit_program, mentioned) {
+            if !defined.contains(mentioned) {
                 visit(mentioned);
             }
         });
@@ -287,6 +284,8 @@ fn give_the_main_unit_the_root_values(
         if defines(&unit_programs[main_unit], name) {
             continue;
         }
+        // A root value of funptr type is a function rather than a global, so it has no accessor to
+        // copy and the main unit reaches it by declaring it.
         let Some(global) = all_globals.get(name) else {
             continue;
         };
@@ -306,6 +305,8 @@ fn published_to_the_linker(
     let mut published = root_value_names;
     for unit_program in unit_programs {
         names_reached_elsewhere(unit_program, |mentioned| {
+            // A mention no symbol of the program owns is a runtime function or a C declaration,
+            // which carries the linkage its own definition gives it.
             if mentioned.is_global() && unit_of(mentioned).is_some() {
                 published.insert(mentioned.clone());
             }
@@ -367,7 +368,7 @@ pub fn generated_code_hash(
     unit: &CompileUnit,
     unit_program: &RcProgram,
     division: &DividedProgram,
-    entry: Option<&Program>,
+    program_for_the_entry: Option<&Program>,
     config: &Configuration,
 ) -> String {
     let by_name = |a: &&FullName, b: &&FullName| a.cmp(b);
@@ -407,7 +408,7 @@ pub fn generated_code_hash(
         published,
         shared_globals,
         declared,
-        entry: entry.map(main_unit_entry),
+        entry: program_for_the_entry.map(main_unit_entry),
     };
     let mut hash_source = HashSource::default();
     hash_source.push_bytes(

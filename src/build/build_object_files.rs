@@ -322,12 +322,12 @@ pub fn build_object_files<'c>(
     // functions.
     let last_unit = units.len() - 1;
     for (index, unit) in units.iter_mut().enumerate() {
-        let entry = (index == last_unit).then_some(&program);
+        let program_for_the_entry = (index == last_unit).then_some(&program);
         let hash = generated_code_hash(
             unit,
             &division.unit_programs[index],
             &division,
-            entry,
+            program_for_the_entry,
             config,
         );
         unit.set_unit_hash(hash);
