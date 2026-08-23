@@ -991,12 +991,6 @@ impl Configuration {
         }
     }
 
-    /// A hash of the settings that decide what the elaborated program is.
-    ///
-    /// The fields are listed by hand, so every field of `Configuration` that changes the program
-    /// elaboration produces has to be hashed here: one left out makes a build reuse the type-check
-    /// results of a build that elaborated a different program.
-    ///
     /// The settings this configuration's caches are keyed by, sorted by what each field of it
     /// reaches.
     ///
