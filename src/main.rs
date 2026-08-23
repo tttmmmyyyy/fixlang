@@ -224,7 +224,8 @@ fn run_cli() {
         .default_value(DEFAULT_COMPILATION_UNIT_SIZE_STR)
         .value_parser(value_parser!(usize))
         .help(
-            "Average number of symbols in a compilation unit; a unit runs longer or shorter than this.\n\
+            "Average number of symbols in a compilation unit created by separate compilation.\n\
+            Where a unit ends is decided by the names of the symbols, so a unit runs longer or shorter than this; the value sets how often a boundary falls.\n\
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n\
             NOTE: Separate compilation is disabled under the default optimization level.\n",
         );
