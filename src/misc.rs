@@ -17,6 +17,9 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+/// The map the compiler holds its data in. `fxhash` is fast on the short string keys the compiler
+/// looks values up by, and hashes from a fixed seed, at the cost of the resistance to chosen-key
+/// collisions a random seed gives.
 pub type Map<K, V> = FxHashMap<K, V>;
 
 /// A map holding the given key-value pairs. When a key is given more than once, the value that
@@ -29,6 +32,7 @@ pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K
     map
 }
 
+/// The set the compiler holds its data in, hashed by `fxhash` as `Map` is.
 pub type Set<T> = FxHashSet<T>;
 
 /// A set holding the given elements, with an element that appears several times held once.
@@ -161,6 +165,7 @@ pub fn collect_results<T, E>(results: impl Iterator<Item = Result<T, E>>) -> Res
     Ok(ok_results)
 }
 
+/// The value `o` holds, with a `None` at either level giving `None`.
 pub fn flatten_opt<T>(o: Option<Option<T>>) -> Option<T> {
     match o {
         Some(o) => o,
@@ -175,13 +180,13 @@ pub fn flatten_opt<T>(o: Option<Option<T>>) -> Option<T> {
 /// `nonempty_subsequences(&vec![1, 2])` is `[[1], [1, 2], [2]]`.
 #[allow(unused)]
 pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
-    let mut result = vec![];
+    let mut runs = vec![];
     for i in 0..v.len() {
         for j in i..v.len() {
-            result.push(v[i..j + 1].to_vec());
+            runs.push(v[i..j + 1].to_vec());
         }
     }
-    result
+    runs
 }
 
 /// Splits `v` into pieces averaging `mean_size` elements, each piece holding at least one element
@@ -242,7 +247,7 @@ pub fn insert_to_map_vec_many<K: Clone + Eq + Hash, V>(
     }
 }
 
-// A macro to get the name of a function.
+/// The name of the function this macro is expanded in, without the path leading to it.
 #[allow(unused)]
 macro_rules! function_name {
     () => {{
@@ -270,33 +275,33 @@ pub(crate) use function_name;
 /// `number_to_varname(0)` is `a`, `number_to_varname(25)` is `z`, and `number_to_varname(26)` is
 /// `a1`.
 pub fn number_to_varname(n: usize) -> String {
-    let mut ret = "".to_string();
+    let mut varname = "".to_string();
     let mut n = n;
     let c = (n % 26) as u8 + 'a' as u8;
-    ret.push(c as char);
+    varname.push(c as char);
     n /= 26;
     if n == 0 {
-        return ret;
+        return varname;
     }
-    ret += &n.to_string();
-    ret
+    varname += &n.to_string();
+    varname
 }
 
 /// `count` variable names, each differing from the others and from every name in `used_names`.
 pub fn generate_fresh_varnames(count: usize, used_names: &Set<Name>) -> Vec<Name> {
-    let mut result = Vec::with_capacity(count);
-    let mut name_no = 0usize;
+    let mut fresh_names = Vec::with_capacity(count);
+    let mut candidate_no = 0usize;
     for _ in 0..count {
         loop {
-            let candidate = number_to_varname(name_no);
-            name_no += 1;
+            let candidate = number_to_varname(candidate_no);
+            candidate_no += 1;
             if !used_names.contains(&candidate) {
-                result.push(candidate);
+                fresh_names.push(candidate);
                 break;
             }
         }
     }
-    result
+    fresh_names
 }
 
 /// `path` taken against the current directory and canonicalized, so that two paths leading to one
@@ -304,7 +309,7 @@ pub fn generate_fresh_varnames(count: usize, used_names: &Set<Name>) -> Vec<Name
 ///
 /// Canonicalization reads the file system, so the path has to lead to a file that exists.
 pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
-    let abs = if path.is_absolute() {
+    let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
         match env::current_dir() {
@@ -317,15 +322,15 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
             Ok(cur_dir) => cur_dir.join(path),
         }
     };
-    let abs = abs.canonicalize();
-    if let Err(e) = abs {
+    let canonicalized = absolute.canonicalize();
+    if let Err(e) = canonicalized {
         return Err(Errors::from_msg(format!(
             "Failed to canonicalize path \"{}\": {}",
             path.to_string_lossy(),
             e
         )));
     }
-    Ok(abs.unwrap())
+    Ok(canonicalized.unwrap())
 }
 
 /// The path `target` written relative to the path `base`, so that `base` joined with the result
@@ -432,7 +437,7 @@ pub fn shorten_for_report(text: String) -> String {
 pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut current_word = String::new();
-    let mut in_quotes = None; // None if not in quotes, Some(') if in single quotes, Some(") if in double quotes
+    let mut open_quote = None;
     let mut escaped = false; // true if the previous character is an escape character
 
     for c in s.chars() {
@@ -443,16 +448,16 @@ pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
         }
 
         match c {
-            ' ' if in_quotes.is_none() => {
+            ' ' if open_quote.is_none() => {
                 if !current_word.is_empty() {
                     words.push(current_word.clone());
                     current_word.clear();
                 }
             }
-            '"' if in_quotes.is_none() => in_quotes = Some('"'),
-            '"' if in_quotes == Some('"') => in_quotes = None,
-            '\'' if in_quotes.is_none() => in_quotes = Some('\''),
-            '\'' if in_quotes == Some('\'') => in_quotes = None,
+            '"' if open_quote.is_none() => open_quote = Some('"'),
+            '"' if open_quote == Some('"') => open_quote = None,
+            '\'' if open_quote.is_none() => open_quote = Some('\''),
+            '\'' if open_quote == Some('\'') => open_quote = None,
             '\\' => escaped = true, // The next character is escaped
             _ => current_word.push(c),
         }
@@ -474,18 +479,18 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
         "Input must contain only ASCII alphanumeric characters"
     );
 
-    let mut result = String::new();
+    let mut lower_snake = String::new();
     for (i, c) in s.chars().enumerate() {
         if c.is_ascii_uppercase() {
             if i > 0 {
-                result.push('_');
+                lower_snake.push('_');
             }
-            result.push(c.to_ascii_lowercase());
+            lower_snake.push(c.to_ascii_lowercase());
         } else {
-            result.push(c);
+            lower_snake.push(c);
         }
     }
-    result
+    lower_snake
 }
 
 #[cfg(test)]
@@ -701,6 +706,8 @@ mod tests {
         );
     }
 
+    /// Every capital opens a word of its own, so a run of capitals comes out as one-letter words,
+    /// and a digit stays in the word it follows.
     #[test]
     fn test_upper_camel_to_lower_snake() {
         assert_eq!(upper_camel_to_lower_snake("HelloWorld"), "hello_world");
@@ -715,6 +722,9 @@ mod tests {
         assert_eq!(upper_camel_to_lower_snake("CUnsignedInt"), "c_unsigned_int");
     }
 
+    /// Characters whose UTF-8 length and UTF-16 width differ — ASCII at one byte and one code unit,
+    /// Japanese at three bytes and one, an emoji at four bytes and two — and a position at or past
+    /// the end of the string, which lands on its length.
     #[test]
     fn test_utf16_pos_to_utf8_byte_pos() {
         // ASCII only
@@ -736,6 +746,9 @@ mod tests {
         assert_eq!(utf16_pos_to_utf8_byte_pos("a😀b", 4), 6);
     }
 
+    /// The count restarts at each line, so a column means the same in the first line and the last,
+    /// and it runs ahead of the column wherever a character of the line takes two UTF-16 code
+    /// units.
     #[test]
     fn test_char_pos_to_utf16_pos() {
         // ASCII only - single line
@@ -779,8 +792,12 @@ mod tests {
     }
 }
 
-// Convert a UTF-16 code unit position to a UTF-8 byte position in a string.
-// This is useful for converting LSP positions (which use UTF-16) to Rust string indices (which use UTF-8).
+/// The byte offset into `s` of the character standing at `utf16_pos`, a position counted in UTF-16
+/// code units from the start of `s`. A position at or past the end of `s` gives `s.len()`.
+///
+/// # Examples
+/// `utf16_pos_to_utf8_byte_pos("a😀b", 3)` is `5`: the emoji before `b` is two UTF-16 code
+/// units wide and four UTF-8 bytes long.
 pub fn utf16_pos_to_utf8_byte_pos(s: &str, utf16_pos: usize) -> usize {
     let mut utf16_count = 0;
 
@@ -795,8 +812,13 @@ pub fn utf16_pos_to_utf8_byte_pos(s: &str, utf16_pos: usize) -> usize {
     s.len()
 }
 
-// Convert character position to UTF-16 code unit position
-// This is useful for converting source span positions (which use character counts) to LSP positions (which use UTF-16).
+/// The offset in UTF-16 code units, from the start of line `line` of `source`, of the character
+/// standing `char_col` characters into that line. Lines and characters are both counted from zero,
+/// and a column past the end of the line gives the whole line's width.
+///
+/// # Examples
+/// In `"a😀b"`, `char_pos_to_utf16_pos(source, 0, 2)` is `3`: the emoji before `b` is one
+/// character and two UTF-16 code units.
 pub fn char_pos_to_utf16_pos(source: &str, line: usize, char_col: usize) -> usize {
     let mut current_line = 0;
     let mut char_count = 0;
@@ -826,6 +848,8 @@ pub fn char_pos_to_utf16_pos(source: &str, line: usize, char_col: usize) -> usiz
     utf16_count
 }
 
+/// Whether this platform can run a program the compiler built under valgrind. A valgrind setting
+/// given on a platform without it is dropped with a warning.
 pub fn platform_valgrind_supported() -> bool {
     env::consts::OS == "linux"
 }

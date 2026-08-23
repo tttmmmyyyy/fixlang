@@ -3056,7 +3056,6 @@ pub fn test93() {
     main : IO ();
     main = (
         let leaker = Leaker { data : Option::none() };
-        // let leaker = leaker.set_data!(Option::some(leaker)); // panics
         eval leaker.set_data(Option::some(leaker)); // doesn't make circular reference in fact.
         pure()
     );
