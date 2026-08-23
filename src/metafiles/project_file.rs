@@ -12,6 +12,7 @@ use crate::{
         LockFileType, ProjectSource,
     },
     error::Errors,
+    hash::HashSource,
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
     misc::{info_msg, to_absolute_path, warn_msg, Set},
     parse::sourcefile::{SourceFile, Span},
@@ -423,25 +424,29 @@ impl ProjectFile {
         // Sort the dependencies by name.
         deps.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let mut hash_source = String::new();
-        for dep in &deps {
-            hash_source += serde_json::to_string(&dep).unwrap().as_str();
-        }
+        let mut hash_source = HashSource::default();
+        hash_source.push_list(
+            &deps
+                .iter()
+                .map(|dep| serde_json::to_string(dep).unwrap())
+                .collect::<Vec<_>>(),
+        );
 
         // Also include the content of path-based dependencies' project files in the hash.
         // This ensures that when a local path dependency changes its own dependencies,
         // the lock file is invalidated and re-created.
-        for dep in &deps {
-            if let Some(dep_dir) = &dep.path {
-                let proj_file_path = self.join_to_project_dir(dep_dir).join(PROJECT_FILE_PATH);
-                if let Ok(content) = fs::read_to_string(&proj_file_path) {
-                    hash_source += &content;
-                }
-            }
-        }
+        hash_source.push_list(
+            &deps
+                .iter()
+                .filter_map(|dep| dep.path.as_ref())
+                .map(|dep_dir| {
+                    let proj_file_path = self.join_to_project_dir(dep_dir).join(PROJECT_FILE_PATH);
+                    fs::read_to_string(&proj_file_path).unwrap_or_default()
+                })
+                .collect::<Vec<_>>(),
+        );
 
-        // Calculate the hash value.
-        format!("{:x}", md5::compute(hash_source))
+        hash_source.finish()
     }
 
     /// Checks that `name` is a non-empty string of alphanumeric characters and hyphens.

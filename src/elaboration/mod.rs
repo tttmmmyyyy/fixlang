@@ -132,10 +132,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
 
     // Instantiate Main::main (or Test::test).
     match config.output_file_type {
-        OutputFileType::Executable => program.instantiate_entry_io_value(
-            &typechecker,
-            matches!(config.subcommand, SubCommand::Test),
-        )?,
+        OutputFileType::Executable => {
+            program.instantiate_entry_io_value(&typechecker, config.entry_point_runs_tests())?
+        }
         OutputFileType::DynamicLibrary => {}
     };
 

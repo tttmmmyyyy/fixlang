@@ -50,6 +50,7 @@ mod test_match_result_alias;
 mod test_match_return_outer;
 mod test_memcheck;
 mod test_no_runtime_check_setting;
+mod test_object_cache;
 mod test_object_cache_layout_change;
 mod test_opaque_type;
 mod test_output_file_setting;

@@ -2,6 +2,7 @@
 Cache system for object (*.o) files.
 */
 
+use crate::hash::HashSource;
 use crate::misc::{split_by_max_size, Map, Set};
 use std::fmt;
 use std::path::PathBuf;
@@ -85,24 +86,24 @@ impl CompileUnit {
             .sort_by(|a, b| a.name.to_string().cmp(&b.name.to_string()));
         self.dependent_modules.sort();
 
-        // Add dependency to the configuration.
-        let mut data = vec![];
-        data.push("<configuration>".to_string());
-        data.push(config.object_generation_hash());
+        let mut hash_source = HashSource::default();
 
-        // Add dependency to the symbols.
-        data.push("<symbols>".to_string());
-        for symbol in &self.symbols {
-            data.push(symbol.hash());
-        }
+        // The settings the code of this unit is generated under.
+        hash_source.push_text(&config.object_generation_hash());
 
-        // Add dependency to source codes of the dependent modules.
-        data.push("<dependent modules>".to_string());
-        for name in &self.dependent_modules {
-            data.push(module_dependency_hash[name].clone());
-        }
+        // The symbols this unit implements.
+        hash_source.push_list(&self.symbols.iter().map(Symbol::hash).collect::<Vec<_>>());
 
-        self.unit_hash = format!("{:x}", md5::compute(data.join(", ")));
+        // The sources of the modules this unit's symbols are made of.
+        hash_source.push_list(
+            &self
+                .dependent_modules
+                .iter()
+                .map(|name| module_dependency_hash[name].clone())
+                .collect::<Vec<_>>(),
+        );
+
+        self.unit_hash = hash_source.finish();
     }
 
     // Set the hash of this compilation unit to a random value.

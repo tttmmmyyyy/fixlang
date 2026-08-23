@@ -6,7 +6,7 @@ use crate::{
         program::{Program, Symbol, TypeEnv},
         types::TypeNode,
     },
-    build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
+    build::compile_unit::CompileUnit,
     configuration::{Configuration, OutputFileType},
     constants::{
         C_ENTRY_POINT_NAME, DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV,
@@ -231,11 +231,13 @@ pub fn build_object_files<'c>(
 
     // Return cached object files if available.
     // This cache is especially effective when running "fix run" repeatedly without editing the source code.
-    if let Some(cached) = load_build_object_files_cache(&program, config) {
-        if config.verbose {
-            info_msg("Using cached object files.");
+    if !config.dumps_generated_code() {
+        if let Some(cached) = load_build_object_files_cache(&program, config) {
+            if config.verbose {
+                info_msg("Using cached object files.");
+            }
+            return Ok(cached);
         }
-        return Ok(cached);
     }
 
     // Run optimizations.
@@ -296,7 +298,7 @@ pub fn build_object_files<'c>(
 
         obj_paths.push(unit.object_file_path());
         // If the object file is cached, skip the generation.
-        if unit.is_cached() {
+        if unit.is_cached() && !config.dumps_generated_code() {
             if config.verbose {
                 info_msg(&format!(
                     "Skipping generation of object file for {}.",
@@ -489,6 +491,11 @@ fn build_object_files_cache_hash(
 ) -> Result<String, Errors> {
     let mut hash_source = HashSource::default();
     hash_source.push_text(&config.object_generation_hash());
+    // What this cache holds is the object files of a whole build, and how many of them there are is
+    // decided by the most symbols one compilation unit may hold. A unit's own object file is named
+    // by the symbols it holds (`CompileUnit::update_unit_hash`), so a build that divides itself
+    // differently still reuses each unit whose symbols it leaves together.
+    hash_source.push_text(&config.max_cu_size.to_string());
     for mi in &program.modules {
         hash_source.push_text(&mi.source.input.hash()?);
     }
@@ -524,9 +531,6 @@ pub(crate) fn get_target_machine(
             panic_with_msg(&format!("failed to create target: {}", e));
         })
         .unwrap();
-    let cpu_name = TargetMachine::get_host_cpu_name();
-    let mut features = CpuFeatures::parse(TargetMachine::get_host_cpu_features().to_str().unwrap());
-    config.edit_cpu_features(&mut features);
     let reloc_mode = if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
         RelocMode::PIC
     } else {
@@ -534,8 +538,8 @@ pub(crate) fn get_target_machine(
     };
     let target_machine = target.create_target_machine(
         &triple,
-        cpu_name.to_str().unwrap(),
-        &features.to_string(),
+        &config.host_cpu.name,
+        &config.target_cpu_features(),
         opt_level,
         reloc_mode,
         CodeModel::Default,
