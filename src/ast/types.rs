@@ -2243,9 +2243,10 @@ impl Scheme {
                 // The first argument of the left side of an equality constraint should be a type variable.
                 // If this condition is not satisified, then a type can be reduced in two ways, by this equality and by an instance of the associated type,
                 // which implies that there is no "normal form" of the type.
+                // An opaque type variable stands there too; such an equality is validated in the branch above.
                 if !eq.args[0].is_tyvar() {
                     return Err(Errors::from_msg_srcs(
-                        "The first argument of the left side of an equality constraint should be a type variable.".to_string(),
+                        "The first argument of the left side of an equality constraint should be a type variable or an opaque type.".to_string(),
                         &[&eq.src],
                     ));
                 }
@@ -2291,20 +2292,22 @@ impl Scheme {
                 ));
             }
         }
-        // If the right side of an equality contains an opaque type variable,
-        // then the equality must be on an opaque type variable (i.e., args[0] is an opaque tyvar).
+        // An opaque type variable stands for a type this signature hides from the use site. So an
+        // equality naming one has to have an opaque type variable as `args[0]`: such an equality
+        // states what a hidden type is like and is given to the use site. An equality on another
+        // type states a condition the use site has to meet, and a use site can meet only
+        // conditions about types it sees.
         for eq in &self.equalities {
-            let rhs_has_opaque = eq
-                .value
-                .free_vars_vec()
-                .iter()
-                .any(|tv| is_opaque_tyvar(&tv.name));
-            if rhs_has_opaque && !eq.on_opaque_tyvar() {
+            if eq.on_opaque_tyvar() {
+                continue;
+            }
+            let mut vars = vec![];
+            eq.free_vars_to_vec(&mut vars);
+            if vars.iter().any(|tv| is_opaque_tyvar(&tv.name)) {
                 return Err(Errors::from_msg_srcs(
-                    format!(
-                        "The left side of an equality constraint involving an opaque type must be \
-                         an associated type applied to an opaque type variable.",
-                    ),
+                    "The first argument of the left side of an equality constraint involving an \
+                     opaque type should be an opaque type."
+                        .to_string(),
                     &[&eq.src],
                 ));
             }
