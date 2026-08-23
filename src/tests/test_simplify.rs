@@ -134,17 +134,52 @@ mod integration_tests {
         assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
     }
 
+    /// A loop body that decides between two conditions builds a `LoopState` on each of its three
+    /// paths, and the copy of `Std::loop` made for that body matches what it built. The copy takes
+    /// the body, so the constructions and the match stand in one function, and the simplifier
+    /// cancels them: no `LoopState` is left anywhere in the program. The built program still finds
+    /// the same elements, so the removal leaves what the loop computes intact.
+    ///
+    /// Reaching this needs both the body in the copy and the walk that moves a case-of-case arm
+    /// following a `match` in tail position — the two conditions leave the second construction under
+    /// one, and the move is all-or-nothing.
+    #[test]
+    fn test_loop_state_cancelled() {
+        let (_temp_dir, project_dir) = setup_test_env("loop_two_conditions");
+        let dump = emit_all_rc_ir(&project_dir);
+        assert!(
+            !dump.contains("LoopState"),
+            "the loop state of a two-condition loop body should be cancelled, and the dump still \
+             names one:\n{}",
+            dump
+        );
+
+        let output = Command::new(project_dir.join("a.out"))
+            .output()
+            .expect("failed to run the built executable");
+        assert!(
+            output.status.success(),
+            "the built executable did not run cleanly"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "[0, 3, 5, -1]"
+        );
+    }
+
     /// Every fold driver this program runs builds no union: the `Option` that `range`'s `advance`
     /// returns and `fold` immediately matches is cancelled, so the loop carries the range's two
-    /// scalars alone. The built program still sums the range — 0 + 1 + .. + 99 — so the removal
-    /// leaves what the loop computes intact.
+    /// scalars alone. The driver is checked to still add them, so a lowering that stopped putting
+    /// the range's arithmetic there fails the test rather than leaving it passing over a shape that
+    /// no longer holds a union to cancel. The built program still sums the range — 0 + 1 + .. + 99 —
+    /// so the removal leaves what the loop computes intact.
     #[test]
     fn test_range_fold_union_removed() {
         assert_union_cancelled(
             "read_fold",
             &["Iterator::fold"],
             "a fold driver",
-            &[],
+            &["int_add"],
             "4950",
         );
     }

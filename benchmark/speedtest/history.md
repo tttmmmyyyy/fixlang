@@ -22,6 +22,97 @@ accesses the cache condition reads.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 30176a1ecd13001de31148dde1573928bcb172d9
+
+The first row carrying the five combinator-chain cases — `iter_map`, `iter_map_map`, `iter_filter`,
+`iter_filter_map` and `iter_flatten`, a million elements each. The corpus had no case where the
+function an iterator carries sits in a field, which is what #450 is about, so nothing here moved
+with the work on it.
+
+Built with the merge base instead, the same five cases read 17,083,788 / 25,084,087 / 19,091,760 /
+19,593,750 / 24,346,695 instructions, so this row stands at -75.00%, -81.98%, -39.30%, -38.29% and
+-28.73%.
+
+`iter_flatten` carries one split store per element (999,017 against the merge base's 15), and its
+cycles fall by 12.1% while its instructions fall by 28.7% — the straddling store is eating part of
+the win. The other four chains stay at 24 splits.
+
+`cp_lib_bipartite` and `push_back` came away without a cycle count under 0.65 cores of other work.
+
+## dde0bf3c1af23804a56e5277e5fb5395c200b978
+
+Splitting a struct argument into one argument per field, and reading a construction where the code
+taking it apart can see it (#450, #452, PR #473), measured against `c445cc15`, the fork point, whose
+row is recorded beside it. Both rows were measured on this machine, one after the other.
+
+**Five cases move, and every one of them gets faster.** `bounds_check_indexable` reads and writes a
+two-dimensional array through `Indexable`, and the indirect call it made per element is gone, so LLVM
+folds the inner loop into a copy of the row: 71,268,374 instructions to 2,271,451, **-96.81%**.
+`sum_by_fix` -3.01%, `cp_lib_segtree` -0.40%, `cp_lib_unionfind` -0.37%, `cp_lib_lsegtree` -0.08%.
+The other forty-six are identical to the instruction.
+
+Six cases read one instruction column apart by exactly fourteen instructions in each direction,
+`startup` among them. Fourteen is what `startup` itself moved by, so it is the harness environment
+and not the corpus.
+
+**Both rows came away short of cycle counts** — twenty-four of fifty-one on the new row and
+twenty-five on the old, with other work taking 1.2 and 1.8 cores while they ran. The instruction and
+memory columns are read under cachegrind and do not move with the machine, so the comparison above
+stands on those.
+## 8440ee5f070f0f8f2abd7118711d5ab9f12f4575
+
+「共有だと観測してから行動する」が原子的でない件 (#461) の修正を、fork point の `fffebab4` と並べて
+測った。両方の行がこの下に在る。
+
+**命令数の動いた 22 ケースのうち、ゆらぎでないのは 1 つだけ。** `cp_lib_scc` が **-299,830 命令
+(-0.20%)**、メモリ参照も -299,146。`Std::FFI::Destructor` の解放から、減算の前に置かれていた一意性の検査
+(状態の load と比較と分岐) が消えた分である。残る 21 ケースの差は最大 233 命令で、`startup` を含む
+±14 の帯は #291 / #342 が記録している実行ごとのゆらぎ。
+
+**配列側の修正はコーパスを動かさない。** 共有された記憶域の解放が最後になり得るのは他のスレッドが
+参照を落とせるときだけなので、要素の走査は threaded なビルドで、かつ記憶域が local と証明されていない
+ときにだけ出す。コーパスは全部が単一スレッドなので、生成されるコードは fork point と同じである。
+**参照を持たない要素型で走査と retain を出さなくした分も、この水準では中立である** — `-O experimental`
+では LLVM が同じものを消すので、命令数が動いたのは上の 1 ケースだけだった (`-O none` では効く:
+100,000 要素の `Array I64` を 100 本、解放が 220,630,800 -> 130,629,002 命令、複製が
+161,899,537 -> 141,899,523 命令)。
+
+**条件を付けない版は `cp_lib_bipartite` を +1,433,506 命令 (+0.61%) 動かした。** 差は全部
+`CPLib.MaxFlow::Dinic::dfs` の中にあり (173,041,661 -> 174,475,184)、他の関数は 1 命令も動いていない。
+足した走査は**一度も実行されない** — 走査の先頭で abort するようにしたプログラムが最後まで走る — ので、
+これは冷たい枝が 230 バイト太った (`dfs` が 5,235 -> 5,465 バイト) ことで hot なループのレジスタ割り当てが
+変わった分である。**同じケースは、走査の代わりに abort を置いた 3 つ目の版では -0.32% 動いた**:
+この関数の命令数は、この領域のコードの大きさに対して ±0.6% の幅で動く。
+
+**2 つの行のサイクル列は互いに比較できない。** fork point の行は他の仕事が 2.99 コアを使っている間に、
+この行は 0.72 コアの間に測った。両方に残った 11 ケースは -4.11% から +0.16% までばらつき、11 件中 8 件が
+負で、命令数が 1 命令も動いていない `nbody` が -2.36% を示している。これは変更ではなく機械の状態である。
+
+## 1334dac79d3b0cac55a4f0c622a23b9d793137e3
+
+値のオブジェクトへ印を付けるとき、経路ごとではなくオブジェクトごとに 1 度だけ訪れるようにした変更 (#433) を、
+fork point の `0343f84b` と並べて測った。両方の行がこの下に在る。
+
+**コーパスは動かない。** 命令数の動いた 38 ケースで、最大の絶対差は **18 命令** (`cp_lib_bipartite`、
+2 億 3644 万分の 18)、最大の相対差は **`startup` の 0.0123%** (113,647 -> 113,633、14 命令) である。
+`startup` は `pure()` を返すだけで、印付けも解放も持たない — **この変更が触れようのないケースが、相対では
+最も大きく動いている**。これは #291 / #342 が記録している実行ごとのゆらぎで、ランタイムの C ソースが
+乱数の名前を持ち、その名前がシンボルを通って動的ローダの仕事を変えることによる。メモリ参照の最大の差は
+`index_syntax` の -8,208 (0.0014%)。
+
+**足した検査は最適化で消える。** `gen_random_array` (グローバルの配列に印を付ける) を両方のコンパイラで
+`--emit-llvm` してビルドすると、**最適化後の LLVM IR がバイト単位で一致する**。確保直後のオブジェクトは
+状態が分かっているので、印付けが読む load と比較と分岐は定数畳み込みで消える。生成直後の IR には差が出る。
+捕捉を持つクロージャのプログラムでも、トラバーサの `switch` の下がり方は 2 つのコンパイラで同一だった
+(既定に `unreachable` を置いたので、LLVM は既定に来ないと分かる)。
+
+**この 2 行は、サイクルを取る規則が変わる前のハーネスで測っている** (上の前書きが述べる、忙しい機械でも
+サイクルを残す読み方は、この 2 行には掛かっていない)。**したがって 2 行のサイクル列は互いに比較できない。** `0343f84b` の行は contention 0.38 で 51 ケース全部の
+サイクルを持つが、`1334dac7` の行は contention 11.47 で 34 ケース分しか残っていない。命令数とメモリ参照は
+cachegrind のもので機械の負荷に依存しないので、上の判断はそちらだけに載っている。
+
+**ベースラインは測り直した。** この 2 行の前の最新は `b08926a5` で、fork point の 51 コミット前に在る。
+
 ## b08926a54a66d5cb1eb4bb0f4708196bdddb5ab4
 
 Making the RC-IR simplifier's case-of-case rewrite cancel in one step and take a move only when the

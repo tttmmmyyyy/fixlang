@@ -4056,6 +4056,194 @@ void check(int expect_malloc, int expect_free)
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// A `Std::FFI::Destructor` reached only through a container runs its destructor function exactly
+/// once. Whichever shape holds the value, the release that reaches it goes through the traverser
+/// generated for the container's type rather than straight from a binding, and the destructor
+/// function belongs to that release just the same.
+#[test]
+pub fn test_destructor_reached_through_a_container_runs_once() {
+    let source = r#"
+module Main;
+
+// A resource that reports its own release.
+make_resource : I64 -> IO (Destructor I64);
+make_resource = |tag| Destructor::make(tag, |tag|
+    FFI_CALL_IO[() note_released()];;
+    pure $ tag
+);
+
+type Holder = box struct { held : Destructor I64 };
+type Pair = unbox struct { left : Destructor I64, right : I64 };
+
+main : IO ();
+main = (
+    // Held as an array element.
+    let a = *make_resource(0);
+    eval [a];
+
+    // Held as the field of a boxed struct.
+    let b = *make_resource(1);
+    eval Holder { held : b };
+
+    // Held as the field of an unboxed struct.
+    let c = *make_resource(2);
+    eval Pair { left : c, right : 2 };
+
+    // Held as the payload of a union.
+    let d = *make_resource(3);
+    eval (Option::some(d) : Option (Destructor I64));
+
+    // Held among a closure's captured values.
+    let e = *make_resource(4);
+    eval (|x| e.borrow(|tag| tag + x));
+
+    FFI_CALL_IO[() check(CInt), 5.c_int];;
+    pure()
+);
+    "#;
+
+    let c_source = r#"
+#include <stdio.h>
+#include <stdlib.h>
+
+int released = 0;
+
+void note_released()
+{
+    released++;
+}
+
+// Aborts unless every container released the resource it held exactly once.
+void check(int expected)
+{
+    if (released != expected)
+    {
+        printf("Expected releases: %d, Actual: %d\n", expected, released);
+        exit(1);
+    }
+}
+    "#;
+
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// The destructor function receives the resource with nobody else holding it.
+/// `Std::FFI::Destructor`'s documentation states the guarantee — "it is guaranteed that `dtor`
+/// receives a unique value" — and rests the editing of a resource such as an `Array Ptr` in place
+/// on it.
+#[test]
+pub fn test_destructor_function_receives_a_unique_resource() {
+    let source = r#"
+module Main;
+
+main : IO ();
+main = (
+    // A boxed value built from a literal is a global, and a global is never uniquely owned, so the
+    // resource is built from the program's own arguments.
+    let args = *get_args;
+    let resource = Box::make(args.@(0).@size);
+    let dtor = *Destructor::make(resource, |resource|
+        let (unique, resource) = resource.unsafe_is_unique;
+        if !unique { undefined("the destructor function should receive a unique resource") };
+        FFI_CALL_IO[() note_destructor_ran()];;
+        pure $ resource
+    );
+    eval dtor;
+    FFI_CALL_IO[() check(CInt), 1.c_int];;
+    pure()
+);
+    "#;
+
+    let c_source = r#"
+#include <stdio.h>
+#include <stdlib.h>
+
+int destructor_runs = 0;
+
+void note_destructor_ran()
+{
+    destructor_runs++;
+}
+
+// Aborts unless the destructor function ran the expected number of times, so that a check made
+// inside it counts only where the run happened.
+void check(int expected)
+{
+    if (destructor_runs != expected)
+    {
+        printf("Expected destructor runs: %d, Actual: %d\n", expected, destructor_runs);
+        exit(1);
+    }
+}
+    "#;
+
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// Destroying a `Std::FFI::Destructor` destroys the resource its destructor function returns, as
+/// well as the one that function was given. Its documentation describes destruction as updating the
+/// value field with the destructor function and then destroying what the field then holds, which is
+/// why the destructor function returns a value at all.
+#[test]
+pub fn test_destructor_destroys_the_resource_its_function_returns() {
+    let source = r#"
+module Main;
+
+// A resource that reports its own release under the tag it carries.
+make_resource : I64 -> IO (Destructor I64);
+make_resource = |tag| Destructor::make(tag, |tag|
+    FFI_CALL_IO[() note_released(CInt), tag.c_int];;
+    pure $ tag
+);
+
+main : IO ();
+main = (
+    // The outer value holds one resource and its destructor function hands back another, so
+    // destroying the outer value destroys both: the one it held, released where the function drops
+    // it, and the one the function returned, released with the field it was left in.
+    let held = *make_resource(1);
+    let outer = *Destructor::make(held, |held|
+        eval held;
+        make_resource(2)
+    );
+    eval outer;
+    FFI_CALL_IO[() check(CInt, CInt), 1.c_int, 1.c_int];;
+    pure()
+);
+    "#;
+
+    let c_source = r#"
+#include <stdio.h>
+#include <stdlib.h>
+
+int released_held = 0;
+int released_returned = 0;
+
+void note_released(int tag)
+{
+    if (tag == 1) { released_held++; }
+    if (tag == 2) { released_returned++; }
+}
+
+// Aborts unless each resource was released the expected number of times.
+void check(int expect_held, int expect_returned)
+{
+    if (released_held != expect_held)
+    {
+        printf("Expected releases of the resource held: %d, Actual: %d\n", expect_held, released_held);
+        exit(1);
+    }
+    if (released_returned != expect_returned)
+    {
+        printf("Expected releases of the resource returned: %d, Actual: %d\n", expect_returned, released_returned);
+        exit(1);
+    }
+}
+    "#;
+
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
 #[test]
 pub fn test117() {
     // Test String::from_c_str

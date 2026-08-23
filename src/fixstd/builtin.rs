@@ -25,10 +25,10 @@ use crate::constants::{
     DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
     FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
     IDENTITY_NAME, IOSTATE_NAME, IO_NAME, IS_UNIQUE_VALUE_FIELD, LAZY_NAME, PTR_NAME,
-    PUNCHED_ARRAY_NAME, STD_NAME, STORAGE_BUF_IDX, STRING_NAME, STRUCT_GETTER_SYMBOL,
-    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
-    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME,
-    U64_NAME, U8_NAME, UNION_DATA_IDX,
+    PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, PUNCHED_ARRAY_NAME, STD_NAME, STORAGE_BUF_IDX,
+    STRING_NAME, STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
+    STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
+    TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
 };
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
@@ -698,7 +698,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntLit {
-    val: i64, // Since `serde_pickle` only supports i64 and not u64, we use i64 here.
+    val: u64,
 }
 
 #[typetag::serde]
@@ -716,7 +716,7 @@ impl LLVMGen for InlineLLVMIntLit {
             .get_field_type_at_index(0)
             .unwrap()
             .into_int_type();
-        let value = int_ty.const_int(self.val as u64, false);
+        let value = int_ty.const_int(self.val, false);
         obj.insert_field(gc, 0, value)
     }
 
@@ -747,7 +747,7 @@ impl LLVMGen for InlineLLVMIntLit {
 }
 
 pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
-    expr_llvm(Box::new(InlineLLVMIntLit { val: val as i64 }), ty, source).global_to_absolute()
+    expr_llvm(Box::new(InlineLLVMIntLit { val }), ty, source).global_to_absolute()
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -2011,7 +2011,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let size = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let buf = get_array_storage_buf(gc, &array);
-        ObjectFieldType::release_or_mark_array_slice(
+        ObjectFieldType::traverse_array_slice(
             gc,
             buf,
             new_len,
@@ -2082,7 +2082,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
-        // `release_or_mark_array_slice` releases the elements the shrink drops, whatever
+        // `traverse_array_slice` releases the elements the shrink drops, whatever
         // `force_unique` says.
         let mut targets = clone_path_rc_targets(self.unique_check_operand(arg_tys, type_env));
         targets.push(RcTarget::Contents(0, vec![]));
@@ -2537,23 +2537,22 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
             None,
             assumed_state(self.assume_local),
         );
-        gc.build_release_mark(
-            storage.clone(),
-            TraverserWorkType::release(),
-            assumed_state(self.assume_local),
-        );
+        release_replaced_array(gc, array.clone(), None, assumed_state(self.assume_local));
         let new_storage_val = new_storage.value(gc);
-        let cloned = array
+        let cloned_array = array
             .clone()
             .insert_field(gc, ARRAY_STORAGE_IDX, new_storage_val);
-        let cloned = cloned.insert_field(gc, ARRAY_CAP_IDX, new_cap);
+        let cloned_array = cloned_array.insert_field(gc, ARRAY_CAP_IDX, new_cap);
         let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Merge over the array value.
         gc.builder().position_at_end(end_bb);
         gc.build_object_phi(
-            &[(realloced, succ_of_unique_bb), (cloned, succ_of_shared_bb)],
+            &[
+                (realloced, succ_of_unique_bb),
+                (cloned_array, succ_of_shared_bb),
+            ],
             "array_phi@set_capacity",
         )
     }
@@ -3180,6 +3179,79 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Release the array value a clone replaces, which still holds the shared storage the clone was
+/// copied out of. `hole`, where it is given, names the slot whose element was moved out of the
+/// value, and which the value therefore does not own.
+///
+/// The release goes through the traverser of the value rather than of the storage, because that is
+/// what releases the elements where this release turns out to be the last one: another thread can
+/// drop the last other reference between the count being read and this release, and a
+/// `#ArrayStorage` carries no length, so the value is the only thing that knows how many elements
+/// to release.
+fn release_replaced_array<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    array: Object<'c>,
+    hole: Option<IntValue<'c>>,
+    state: RcState,
+) {
+    let work = TraverserWorkType::release();
+    // Where no other thread can hold the storage -- a build with one thread, or a storage the
+    // compiler has proved local -- the count that chose the shared arm cannot fall further, so the
+    // element release below would never run. Releasing the storage on its own does the same work
+    // without emitting it.
+    //
+    // This arm is a shortcut and nothing else: deleting it leaves the generated code correct, and a
+    // little larger. It earns its place by what that dead traversal costs where it is emitted --
+    // `cp_lib_bipartite` grew 0.61% of its instructions, all of it in one hot function whose
+    // register allocation changed once the cold arm beside it grew (`benchmark/speedtest/history.md`).
+    if !(gc.config.threaded && state.dispatches()) {
+        let storage = get_array_storage(gc, &array);
+        gc.build_traverser_work(storage, work, state);
+        return;
+    }
+    match hole {
+        None => gc.build_traverser_work(array, work, state),
+        Some(hole) => {
+            // An array with a hole is what a `Std::PunchedArray` holds, and its traverser is the
+            // one that skips the slot.
+            let hole_obj = create_obj(
+                make_i64_ty(),
+                &vec![],
+                None,
+                gc,
+                Some("hole@release_replaced_array"),
+            );
+            let hole_obj = hole_obj.insert_field(gc, 0, hole);
+            let punched = build_punched_array(gc, array, &hole_obj);
+            gc.build_traverser_work(punched, work, state);
+        }
+    }
+}
+
+/// Build the `Std::PunchedArray` value holding `array` with the element at `idx` moved out of it.
+fn build_punched_array<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    array: Object<'c>,
+    idx: &Object<'c>,
+) -> Object<'c> {
+    let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+    let punched_ty = type_tyapp(make_punched_array_ty(), elem_ty);
+    let fields = &punched_ty.toplevel_tycon_info(gc.type_env()).fields;
+    assert_eq!(
+        [
+            fields[PUNCHED_ARRAY_ARRAY_IDX as usize].name.as_str(),
+            fields[PUNCHED_ARRAY_HOLE_IDX as usize].name.as_str(),
+        ],
+        ["_arr", "_idx"],
+        "`{}` holds its fields in an order the field indices do not name.",
+        punched_ty.to_string(),
+    );
+    let punched = create_obj(punched_ty, &vec![], None, gc, Some("alloca@punched_array"));
+    let punched =
+        ObjectFieldType::move_into_struct_field(gc, punched, PUNCHED_ARRAY_ARRAY_IDX, &array);
+    ObjectFieldType::move_into_struct_field(gc, punched, PUNCHED_ARRAY_HOLE_IDX, idx)
+}
+
 /// Force an array object to be unique: a unique array is returned as it is, and a shared one is
 /// cloned.
 ///
@@ -3212,7 +3284,7 @@ fn make_array_unique_with_hole<'c, 'm>(
     let src_buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
     let dst_buf = new_storage.gep_boxed(gc, STORAGE_BUF_IDX);
     ObjectFieldType::clone_array_buf(gc, size, src_buf, dst_buf, elem_ty, hole, state);
-    gc.build_release_mark(storage.clone(), TraverserWorkType::release(), state);
+    release_replaced_array(gc, array.clone(), hole, state);
     let new_storage_val = new_storage.value(gc);
     let cloned_array = array
         .clone()
@@ -3610,18 +3682,25 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 
         // Move the element at `idx` out without retaining, leaving its slot as the hole; the
         // length is unchanged.
-        let punched_ty = ret_ty.collect_type_arguments().get(0).unwrap().clone();
         let elem_ty = ret_ty.collect_type_arguments().get(1).unwrap().clone();
         let buf = get_array_storage_buf(gc, &array);
         let elem = ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, elem_ty, idx);
 
         // Build `(PunchedArray { _arr : array, _idx : idx }, elem)`.
-        let punched = create_obj(punched_ty, &vec![], None, gc, Some("alloca@_punch"));
-        let punched = ObjectFieldType::move_into_struct_field(gc, punched, 0, &array);
-        let punched = ObjectFieldType::move_into_struct_field(gc, punched, 1, &idx_obj);
+        let punched = build_punched_array(gc, array, &idx_obj);
         let res = create_obj(ret_ty.clone(), &vec![], None, gc, Some("alloca@_punch_ret"));
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &punched);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &elem);
+        let res = ObjectFieldType::move_into_struct_field(
+            gc,
+            res,
+            PUNCH_RESULT_ARRAY_FIELD as u32,
+            &punched,
+        );
+        let res = ObjectFieldType::move_into_struct_field(
+            gc,
+            res,
+            PUNCH_RESULT_ELEMENT_FIELD as u32,
+            &elem,
+        );
         res
     }
 
@@ -3678,7 +3757,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         // is what lets the `plug` completing the update drop its own check. The element is moved out
         // without a retain, so another holder of it may still be live: its leaves stay `Unknown`, since
         // calling them `Fresh` would let a later in-place update overwrite shared data.
-        Provenance::fresh_under(result_ty, type_env, &[PUNCHED_ARRAY_FIELD])
+        Provenance::fresh_under(result_ty, type_env, &[PUNCH_RESULT_ARRAY_FIELD])
     }
 
     fn result_locality(
@@ -3689,7 +3768,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
     ) -> ExtShape {
         // The result is `(punched array, element)`, and the punched array is uniquely owned either
         // way (see `result_prov`).
-        punched_out_locality(result_ty, type_env, 0, PUNCHED_ARRAY_FIELD)
+        punched_out_locality(result_ty, type_env, 0, PUNCH_RESULT_ARRAY_FIELD)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3698,10 +3777,10 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 }
 
 /// The index of the punched array in the result of an array punch, `(PunchedArray a, a)`.
-const PUNCHED_ARRAY_FIELD: usize = 0;
+const PUNCH_RESULT_ARRAY_FIELD: usize = 0;
 
-/// The index of the array a `PunchedArray a` holds, in `unbox struct { _arr, _idx }`.
-const PUNCHED_ARRAY_ARR_FIELD: usize = 0;
+/// The index of the element moved out, in the result of an array punch, `(PunchedArray a, a)`.
+const PUNCH_RESULT_ELEMENT_FIELD: usize = PUNCH_RESULT_ARRAY_FIELD + 1;
 
 /// The locality of the result of a punch — the punched container, at `container_field` of the
 /// result, beside the value moved out of it — given the operand position of the container.
@@ -3781,8 +3860,8 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         let punched = gc.get_scoped_obj(&self.punched_name);
 
         // Deconstruct PunchedArray { _arr : array, _idx : idx }.
-        let array = ObjectFieldType::move_out_struct_field(gc, &punched, 0);
-        let idx_obj = ObjectFieldType::move_out_struct_field(gc, &punched, 1);
+        let array = ObjectFieldType::move_out_struct_field(gc, &punched, PUNCHED_ARRAY_ARRAY_IDX);
+        let idx_obj = ObjectFieldType::move_out_struct_field(gc, &punched, PUNCHED_ARRAY_HOLE_IDX);
         let idx = idx_obj.extract_field(gc, 0).into_int_value();
 
         // On a shared array, clone skipping the hole so this plug gets a private array.
@@ -3821,7 +3900,7 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         if !self.force_unique {
             return None;
         }
-        unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_ARR_FIELD], arg_tys, type_env)
+        unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_ARRAY_IDX as usize], arg_tys, type_env)
     }
 
     fn assuming_local(&self) -> Box<dyn LLVMGen> {

@@ -1,0 +1,9 @@
+module Main;
+
+// The walk past the inner iterators that yield nothing is a body of its own, so the loop consuming
+// the flattened iterator holds both iterators.
+sum_of_rows : Array (Array I64) -> I64;
+sum_of_rows = |rows| rows.to_iter.map(to_iter).flatten.fold(0, |x, acc| acc + x);
+
+main : IO ();
+main = println $ sum_of_rows(Array::from_map(50, |r| Array::from_map(20, |i| r + i))).to_string;

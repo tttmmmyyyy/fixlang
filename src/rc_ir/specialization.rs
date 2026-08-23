@@ -8,10 +8,10 @@
 //! names without losing its ownership annotation.
 //!
 //! The clone keyed on the least informative inputs keeps the original function's name and is called
-//! the *canonical* one. Every function keeps its canonical version: the entry points a program is
-//! compiled for are not identifiable from the RC IR alone, and neither are the functions reached
-//! from outside the compilation unit, so no original is dropped and specialization only adds the
-//! more specific clones the call sites reach.
+//! the *canonical* one. Every function keeps its canonical version, since a pass that routes calls
+//! reads no root set and so takes any function to be callable; specialization only adds the more
+//! specific clones the call sites reach. `dead_code_elim::eliminate_unreachable` then drops the
+//! versions nothing calls.
 
 use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{FuncRef, RcExprNode, RcFunc, RcProgram, RcVar};
@@ -26,7 +26,7 @@ use std::hash::Hash;
 /// product, so a body of a few lines can name thousands of clones and a caller chain multiplies
 /// them. Nothing in a key's meaning bounds this, and a pass whose lattice happens to collapse — as
 /// uniqueness does, since duplicating a reference costs a value its claim to be the only one — is
-/// bounded by luck rather than by design.
+/// bounded only by luck.
 ///
 /// So the count is bounded outright. Past it, a call routes to the canonical version, which is keyed
 /// on the least informative inputs and therefore carries no annotation at all: exceeding the budget

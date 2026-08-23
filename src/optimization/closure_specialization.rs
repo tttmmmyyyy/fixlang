@@ -1,6 +1,7 @@
 use super::{
     capture_struct::{fresh_global_name, CaptureStruct},
     find_usage_of_name::{self, UsageType},
+    let_elimination::create_global_lambda_to_arity_map,
     uncurry::internalize_let_to_var_at_head,
     unique_local_names,
 };
@@ -22,7 +23,10 @@ use crate::{
     },
     graph::Graph,
     misc::{Map, Set},
-    optimization::{pull_let, rename::rename_free_names},
+    optimization::{
+        pull_let,
+        rename::{rename_free_names, substitute_free_name},
+    },
     tool::stopwatch::StopWatch,
 };
 use std::{
@@ -645,6 +649,9 @@ fn realize_all(
     let mut global_names = originals.keys().cloned().collect::<Set<_>>();
     let mut symbols: Map<FullName, Symbol> = Map::default();
     let budget = Rc::new(RefCell::new(CopyBudget::default()));
+    // The lambdas each copy is specialized on, as the functions the copy calls them through. Their
+    // bodies go into the copy once every body has been made.
+    let mut specialized_lambdas: Map<FullName, Vec<FullName>> = Map::default();
 
     // Every function stands for the copy of itself that substitutes nothing.
     let mut queue = originals
@@ -713,13 +720,141 @@ fn realize_all(
                 inline_into_callers: false,
             },
         );
+        let lambdas = request
+            .func_copy
+            .subst
+            .iter()
+            .map(|(_, tree)| tree.receiving_copy().name())
+            .collect::<Vec<_>>();
+        if !lambdas.is_empty() {
+            specialized_lambdas.insert(name.clone(), lambdas);
+        }
         global_names.insert(name);
         queue.extend(visitor.required_specializations);
     }
 
+    // The capture lists the copies receive are declared here, so that the types the copies carry are
+    // in the type environment the rest of the compiler reads.
     prg.type_env
         .add_tycons(lifted.borrow_mut().take_new_tycons());
+
+    inline_specialized_lambdas(&mut symbols, &specialized_lambdas);
+
     prg.symbols = symbols;
+}
+
+/// Whether putting `lambda`'s body where `copy` writes its name moves the body rather than copying
+/// it: `copy` is the only symbol naming `lambda`, it writes the name once, and that one place is the
+/// callee of a call supplying every argument.
+///
+/// The body goes into every place the name is written, so one place is what makes putting it there a
+/// move. What that one place is decides the rest: a name passed as an argument, captured, held as a
+/// value, or called with fewer arguments than the lambda takes leaves a closure where it stands,
+/// which is a body that has to stay.
+///
+/// # Arguments
+/// * `copy` - the body of the copy, in which the uses of `lambda` are counted.
+/// * `naming_symbol_counts` - how many symbols of the program name each global.
+/// * `arity_map` - how many parameters each global lambda takes.
+fn is_moved_by_placing(
+    lambda: &FullName,
+    copy: &Arc<ExprNode>,
+    naming_symbol_counts: &Map<FullName, usize>,
+    arity_map: &Map<FullName, usize>,
+) -> bool {
+    let naming_symbol_count = *naming_symbol_counts.get(lambda).unwrap_or_else(|| {
+        panic!(
+            "a copy is specialized on {}, which no symbol names",
+            lambda.to_string()
+        )
+    });
+    if naming_symbol_count != 1 {
+        return false;
+    }
+    let arity = match arity_map.get(lambda) {
+        Some(arity) => *arity,
+        None => return false,
+    };
+    // The walk records one use per place the name is written, so the copy writes the lambda's name
+    // once, and writes it as the callee of a call supplying every parameter, exactly when this is
+    // the whole of what it says about the name.
+    matches!(
+        find_usage_of_name::run(copy, lambda).as_slice(),
+        [UsageType::CalledAsFunction { arg_count }] if *arg_count == arity
+    )
+}
+
+/// Put the body of each lambda a copy is specialized on where the copy calls it.
+///
+/// A copy exists because a way into it receives a lambda whose identity is known, and what the copy
+/// does with that lambda is call it by name. Inlining runs before this pass, so no call made here
+/// has ever been offered a body: the value a loop body returns each round, for one, is built in the
+/// lambda and taken apart in the copy of `Std::loop` that calls it, and the simplifier cancels the
+/// two only once they stand in one function.
+///
+/// A body goes in one level deep and into a copy alone, so what the program grows by is bounded by
+/// the bodies the copies are specialized on, and the calls those bodies make are left as calls.
+fn inline_specialized_lambdas(
+    symbols: &mut Map<FullName, Symbol>,
+    specialized_lambdas: &Map<FullName, Vec<FullName>>,
+) {
+    // Every body as it stands before any of them is put anywhere. A lambda is a copy like the one
+    // receiving it, so reading the bodies as they are rewritten would hand a copy what another copy
+    // has already been given — one level per copy, but a chain of them across the program.
+    let bodies = specialized_lambdas
+        .iter()
+        .flat_map(|(copy, lambdas)| lambdas.iter().map(move |lambda| (copy, lambda)))
+        .map(|(copy, lambda)| {
+            let sym = symbols.get(lambda).unwrap_or_else(|| {
+                panic!(
+                    "{} is specialized on {}, which no copy was made for",
+                    copy.to_string(),
+                    lambda.to_string()
+                )
+            });
+            (lambda.clone(), sym.expr.as_ref().unwrap().clone())
+        })
+        .collect::<Map<FullName, Arc<ExprNode>>>();
+
+    // How many symbols name each global. A lambda named by one symbol alone is one whose body has
+    // nowhere else to be, so putting it there moves it rather than copying it.
+    let mut naming_symbol_counts: Map<FullName, usize> = Map::default();
+    for sym in symbols.values() {
+        for name in sym.expr.as_ref().unwrap().free_vars() {
+            *naming_symbol_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+    }
+
+    // How many parameters each lifted lambda takes, which says whether the call a copy makes
+    // supplies an argument for all of them.
+    let arity_map = create_global_lambda_to_arity_map(symbols);
+
+    for (copy, lambdas) in specialized_lambdas {
+        // The body goes in where that is a move rather than a copy: this copy is the only symbol
+        // naming the lambda, and it names it as the callee of one saturated call, so the body ends up
+        // in one place and the lambda itself falls to dead-symbol elimination. Where the lambda is
+        // named anywhere else, or called more than once, placing the body would duplicate it, and how
+        // much duplication is worth its gain is the judgement `inline` makes.
+        let copy_expr = symbols[copy].expr.as_ref().unwrap().clone();
+        let moved_bodies = lambdas
+            .iter()
+            .filter(|lambda| {
+                is_moved_by_placing(lambda, &copy_expr, &naming_symbol_counts, &arity_map)
+            })
+            .map(|lambda| (lambda.clone(), bodies[lambda].clone()))
+            .collect::<Map<FullName, Arc<ExprNode>>>();
+        if moved_bodies.is_empty() {
+            continue;
+        }
+        // The lambda is named by the call alone, so putting the body where its name stands leaves the
+        // body applied to the arguments the call supplies.
+        let mut expr = copy_expr;
+        for (lambda, body) in moved_bodies {
+            expr = substitute_free_name(&expr, &lambda, &body);
+        }
+        let sym = symbols.get_mut(copy).unwrap();
+        sym.expr = Some(expr);
+    }
 }
 
 // The capture list a copy receives in place of the one its origin was built with, where the copy is
@@ -867,7 +1002,7 @@ fn reaches_a_direct_call(
     find_usage_of_name::run(body, name)
         .into_iter()
         .any(|usage| match usage {
-            UsageType::CalledAsFunction => true,
+            UsageType::CalledAsFunction { .. } => true,
             // A call whose callee is an expression rather than a name is one no copy can be made
             // of, so nothing arrives at a way in through it.
             UsageType::FunctionArgument(func, idx) => func
@@ -886,6 +1021,9 @@ fn reaches_a_direct_call(
                     )
                 })
             }
+            // A value held where nothing takes it apart is passed on whole, so a way in is reached
+            // through whatever holds it rather than here.
+            UsageType::Elsewhere => false,
         })
 }
 
@@ -2013,10 +2151,13 @@ impl ClosureSpecializationVisitor {
 // values a key or a name ran together would hand one copy to both.
 #[cfg(test)]
 mod tests {
-    use super::{ClosureTree, FuncCopy, Slot};
+    use super::{is_moved_by_placing, ClosureTree, FuncCopy, Slot};
+    use crate::ast::expr::{expr_app, expr_let, expr_var, var_var, ExprNode};
     use crate::ast::name::FullName;
+    use crate::ast::pattern::PatternNode;
     use crate::constants::{CLOSURE_LAM_SUFFIX, INSTANCIATED_NAME_SEPARATOR};
-    use crate::misc::Set;
+    use crate::misc::{Map, Set};
+    use std::sync::Arc;
 
     /// The name of the global function the `index`-th lambda of `Main::main` was lifted to.
     fn lifted(index: u32) -> FullName {
@@ -2027,6 +2168,162 @@ mod tests {
                 INSTANCIATED_NAME_SEPARATOR, CLOSURE_LAM_SUFFIX, index
             ),
         )
+    }
+
+    /// `func` applied to `arg_count` arguments, written one argument at a time.
+    fn call(func: &FullName, arg_count: usize) -> Arc<ExprNode> {
+        let mut expr = expr_var(func.clone(), None);
+        for index in 0..arg_count {
+            let arg = expr_var(FullName::local(&format!("a{}", index)), None);
+            expr = expr_app(expr, vec![arg], None);
+        }
+        expr
+    }
+
+    /// The two tables the placement rule reads: `lambda` is named by `naming_symbol_count` symbols
+    /// of the program and takes `arity` parameters.
+    fn tables(
+        lambda: &FullName,
+        naming_symbol_count: usize,
+        arity: usize,
+    ) -> (Map<FullName, usize>, Map<FullName, usize>) {
+        (
+            [(lambda.clone(), naming_symbol_count)]
+                .into_iter()
+                .collect(),
+            [(lambda.clone(), arity)].into_iter().collect(),
+        )
+    }
+
+    /// A copy naming the lambda as the callee of one call that supplies every argument is the shape
+    /// the body moves at.
+    #[test]
+    fn one_saturated_call_moves_the_body() {
+        let lambda = lifted(0);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
+        assert!(is_moved_by_placing(
+            &lambda,
+            &call(&lambda, 2),
+            &naming_symbol_counts,
+            &arity_map
+        ));
+    }
+
+    /// A lambda a second symbol names is one whose body has somewhere else to be.
+    #[test]
+    fn a_lambda_two_symbols_name_keeps_its_body() {
+        let lambda = lifted(0);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 2, 2);
+        assert!(!is_moved_by_placing(
+            &lambda,
+            &call(&lambda, 2),
+            &naming_symbol_counts,
+            &arity_map
+        ));
+    }
+
+    /// A call supplying fewer arguments than the lambda takes leaves a closure where the name stood,
+    /// so the body stays where it is.
+    #[test]
+    fn a_call_short_of_an_argument_keeps_the_body() {
+        let lambda = lifted(0);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 3);
+        assert!(!is_moved_by_placing(
+            &lambda,
+            &call(&lambda, 2),
+            &naming_symbol_counts,
+            &arity_map
+        ));
+    }
+
+    /// A call supplying more arguments than the lambda takes calls what the lambda returns.
+    #[test]
+    fn a_call_past_the_last_parameter_keeps_the_body() {
+        let lambda = lifted(0);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
+        assert!(!is_moved_by_placing(
+            &lambda,
+            &call(&lambda, 3),
+            &naming_symbol_counts,
+            &arity_map
+        ));
+    }
+
+    /// Two calls name the lambda in two places, so the body stays where it is even where the two
+    /// together supply as many arguments as one saturated call would.
+    #[test]
+    fn two_calls_keep_the_body() {
+        let lambda = lifted(0);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
+        let callee = FullName::from_strs(&["Main"], "g#0123abcd");
+        let copy = expr_app(
+            expr_app(expr_var(callee, None), vec![call(&lambda, 1)], None),
+            vec![call(&lambda, 1)],
+            None,
+        );
+        assert!(!is_moved_by_placing(
+            &lambda,
+            &copy,
+            &naming_symbol_counts,
+            &arity_map
+        ));
+    }
+
+    /// A lambda handed to a call as an argument is one the body would have to stay behind for.
+    #[test]
+    fn a_lambda_passed_as_an_argument_keeps_its_body() {
+        let lambda = lifted(0);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
+        let callee = FullName::from_strs(&["Main"], "g#0123abcd");
+        let copy = expr_app(
+            expr_app(
+                expr_var(callee, None),
+                vec![expr_var(lambda.clone(), None)],
+                None,
+            ),
+            vec![call(&lambda, 2)],
+            None,
+        );
+        assert!(!is_moved_by_placing(
+            &lambda,
+            &copy,
+            &naming_symbol_counts,
+            &arity_map
+        ));
+    }
+
+    /// A lambda a `let` also binds is written in two places, so putting the body where the name
+    /// stands writes it into both rather than moving it. `find_usage_of_name` records nothing for
+    /// the `let`, which is why the rule counts the places the name is written.
+    #[test]
+    fn a_lambda_a_let_also_binds_keeps_its_body() {
+        let lambda = lifted(0);
+        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
+        let copy = expr_let(
+            PatternNode::make_var(var_var(FullName::local("v")), None),
+            expr_var(lambda.clone(), None),
+            call(&lambda, 2),
+            None,
+        );
+        assert!(!is_moved_by_placing(
+            &lambda,
+            &copy,
+            &naming_symbol_counts,
+            &arity_map
+        ));
+    }
+
+    /// A lambda the arity table does not answer for is one the rule cannot judge.
+    #[test]
+    fn a_lambda_the_arity_table_does_not_answer_for_keeps_its_body() {
+        let lambda = lifted(0);
+        let naming_symbol_counts = [(lambda.clone(), 1)].into_iter().collect();
+        assert!(!is_moved_by_placing(
+            &lambda,
+            &call(&lambda, 2),
+            &naming_symbol_counts,
+            &Map::default()
+        ));
     }
 
     /// The values two capture fields of one lambda hold read differently from the one value the

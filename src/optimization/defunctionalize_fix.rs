@@ -103,7 +103,7 @@ fn run_one(
     // Elaboration aliases the self-parameter of `fix` behind a `let` (`let go = #self`); collapsing
     // trivial variable-aliasing lets makes every self-reference name the parameter directly, so the
     // single substitution below reaches them all.
-    let arity_map = let_elimination::create_global_lambda_to_arity_map(prg);
+    let arity_map = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
     let symbols = mem::take(&mut prg.symbols);
     let mut global_names: Set<FullName> = symbols.keys().cloned().collect();
     let mut new_symbols: Map<FullName, Symbol> = Map::default();

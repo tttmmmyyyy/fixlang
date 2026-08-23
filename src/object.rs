@@ -2,13 +2,13 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
-    TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT, ARRAY_CAP_IDX,
-    ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX,
-    CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
+    RefcntState, TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT,
+    ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME,
+    BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
     DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
-    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME,
-    STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
-    TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
+    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, PUNCHED_ARRAY_ARRAY_IDX,
+    PUNCHED_ARRAY_HOLE_IDX, STD_NAME, STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL,
+    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
 };
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
@@ -102,8 +102,15 @@ fn union_buf_type<'c, 'm>(
         16 => gc.context.i128_type(),
         _ => panic!("Unsupported alignment: {}", max_align),
     };
-    let num_of_ints = (max_size as f32 / max_align as f32).ceil() as u32;
-    max_align_int.array_type(num_of_ints).into()
+    let num_of_ints = max_size.div_ceil(max_align);
+    assert!(
+        num_of_ints <= u32::MAX as u64,
+        "A payload of {} bytes needs {} integers of {} bytes to cover it, more than an LLVM array type holds.",
+        max_size,
+        num_of_ints,
+        max_align,
+    );
+    max_align_int.array_type(num_of_ints as u32).into()
 }
 
 impl ObjectFieldType {
@@ -275,7 +282,15 @@ impl ObjectFieldType {
         }
     }
 
-    // Take array and generate code iterating its elements.
+    /// Emit a loop that visits the indices `[0, size)` of `buffer`, calling `loop_body` at each
+    /// index and `after_loop` once the loop ends. The builder is left positioned in the block
+    /// after the loop.
+    ///
+    /// # Arguments
+    /// * `size` — how many elements the walk covers, counted from `buffer`'s first element.
+    /// * `loop_body` — receives the current index, `size` and `buffer`.
+    /// * `after_loop` — receives `size` and `buffer`, and runs once, including when `size` is
+    ///   zero.
     fn loop_over_array_buf<'c, 'm, F, G>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -364,8 +379,15 @@ impl ObjectFieldType {
         after_loop(gc, size, buffer);
     }
 
-    // The buffer and element count of the elements that follow a hole: elements `(hole, size)`
-    // live at `&buffer[hole + 1]`, and there are `size - hole - 1` of them.
+    /// Locate the elements that follow a hole: elements `(hole, size)` live at
+    /// `&buffer[hole + 1]`, and there are `size - hole - 1` of them.
+    ///
+    /// # Arguments
+    /// * `hole` — the index of the slot whose element was moved out of the array
+    ///   (`Std::PunchedArray`).
+    ///
+    /// # Returns
+    /// The address of the first element after the hole, and how many elements follow it.
     fn array_buf_after_hole<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         elem_basic_ty: BasicTypeEnum<'c>,
@@ -387,8 +409,13 @@ impl ObjectFieldType {
         (tail_buffer, tail_count)
     }
 
-    // Release / mark each of `count` consecutive elements starting at `buffer`.
-    fn release_or_mark_array_range<'c, 'm>(
+    /// Perform `work_type`'s work — release, mark-global or mark-threaded — on each of `count`
+    /// consecutive elements starting at `buffer`. An element type that is fully unboxed holds no
+    /// reference, so nothing is emitted for one.
+    ///
+    /// # Arguments
+    /// * `state` — what is known about the reference-counting state of the elements.
+    fn traverse_array_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
         count: IntValue<'c>,
@@ -396,9 +423,14 @@ impl ObjectFieldType {
         work_type: TraverserWorkType,
         state: RcState,
     ) {
+        // A fully unboxed element holds no reference, so an array of such elements has no element
+        // the work reaches.
+        if elem_ty.is_fully_unboxed(gc.type_env()) {
+            return;
+        }
         let value_ty = elem_ty.get_embedded_type(gc);
 
-        // In loop body, release object of idx = counter_val.
+        // In loop body, release the element the buffer holds at `idx`.
         let loop_body = |gc: &mut Generator<'c, 'm>,
                          idx: IntValue<'c>,
                          _size: IntValue<'c>,
@@ -412,9 +444,9 @@ impl ObjectFieldType {
                 .builder()
                 .build_load(value_ty, ptr, "elem_of_array")
                 .unwrap();
-            // Perform release or mark global or mark threaded.
+            // Perform the work on the element.
             let obj = Object::new(obj_val, elem_ty.clone(), gc);
-            gc.build_release_mark(obj, work_type, state);
+            gc.build_traverser_work(obj, work_type, state);
         };
 
         // After loop, do nothing.
@@ -429,8 +461,12 @@ impl ObjectFieldType {
         Self::loop_over_array_buf(gc, count, buffer, loop_body, after_loop);
     }
 
-    // Release / mark the elements in `[begin, end)` of an array's buffer.
-    pub fn release_or_mark_array_slice<'c, 'm>(
+    /// Perform `work_type`'s work on the elements in `[begin, end)` of an array's buffer.
+    ///
+    /// # Arguments
+    /// * `begin`, `end` — element indices counted from `buffer`'s first element, a half-open
+    ///   range.
+    pub fn traverse_array_slice<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
         begin: IntValue<'c>,
@@ -449,12 +485,16 @@ impl ObjectFieldType {
             .builder()
             .build_int_sub(end, begin, "array_slice_count")
             .unwrap();
-        Self::release_or_mark_array_range(gc, slice_begin, count, elem_ty, work_type, state);
+        Self::traverse_array_range(gc, slice_begin, count, elem_ty, work_type, state);
     }
 
-    // Release / mark every element of an array's buffer. When `hole` is `Some(idx)`, the element
-    // at `idx` is skipped (a slot whose element was moved out).
-    pub fn release_or_mark_array_buf<'c, 'm>(
+    /// Perform `work_type`'s work on every element of an array's buffer.
+    ///
+    /// # Arguments
+    /// * `size` — the array's element count; the elements walked are `[0, size)`.
+    /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
+    ///   (`Std::PunchedArray`), which the storage therefore does not own, so it is skipped.
+    pub fn traverse_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
         buffer: PointerValue<'c>,
@@ -464,32 +504,23 @@ impl ObjectFieldType {
         state: RcState,
     ) {
         match hole {
-            None => Self::release_or_mark_array_range(gc, buffer, size, elem_ty, work_type, state),
+            None => Self::traverse_array_range(gc, buffer, size, elem_ty, work_type, state),
             Some(hole) => {
                 let value_ty = elem_ty.get_embedded_type(gc);
-                Self::release_or_mark_array_range(
-                    gc,
-                    buffer,
-                    hole,
-                    elem_ty.clone(),
-                    work_type,
-                    state,
-                );
+                Self::traverse_array_range(gc, buffer, hole, elem_ty.clone(), work_type, state);
                 let (tail_buffer, tail_count) =
                     Self::array_buf_after_hole(gc, value_ty, buffer, size, hole);
-                Self::release_or_mark_array_range(
-                    gc,
-                    tail_buffer,
-                    tail_count,
-                    elem_ty,
-                    work_type,
-                    state,
-                );
+                Self::traverse_array_range(gc, tail_buffer, tail_count, elem_ty, work_type, state);
             }
         }
     }
 
-    // Initialize an array by value.
+    /// Store `value` into every slot of `[0, size)` of `buffer`, giving each slot its own
+    /// reference through one retain per slot, and consume the caller's own reference to `value`.
+    /// The net change to `value`'s reference count is `size - 1`, correct at `size == 0`.
+    ///
+    /// # Arguments
+    /// * `buffer` — allocated and uninitialized; every slot this writes is a first write.
     pub fn initialize_array_buf_by_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -526,11 +557,14 @@ impl ObjectFieldType {
         }
     }
 
-    // Store `value` into `[begin, begin + count)` of an array's buffer. Each slot is given its own
-    // reference through a single retain-by-`count` rather than one retain per slot, the slots are
-    // written without releasing their (uninitialized) old contents, and the caller's own reference
-    // to `value` is then consumed. The net change to `value`'s reference count is `count - 1`,
-    // correct at `count == 0`.
+    /// Store `value` into `[begin, begin + count)` of an array's buffer. Each slot is given its
+    /// own reference through a single reference-count add of `count`, and the caller's own
+    /// reference to `value` is then consumed. The net change to `value`'s reference count is
+    /// `count - 1`, correct at `count == 0`.
+    ///
+    /// # Arguments
+    /// * `begin` — the index the store starts at, counted from `buffer`'s first element. The
+    ///   slots it covers are allocated and uninitialized, and each is a first write.
     pub fn append_value_into_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
@@ -709,8 +743,11 @@ impl ObjectFieldType {
         gc.builder().build_store(elm_ptr, value.value(gc)).unwrap();
     }
 
-    // Clone (retain + copy) `count` consecutive elements from `src_buffer` into `dst_buffer`,
-    // starting at index 0 of each. `dst_buffer` should be already allocated but not initialized.
+    /// Copy `count` consecutive elements from `src_buffer` into `dst_buffer`, starting at index 0
+    /// of each, and retain every one so that both buffers own it.
+    ///
+    /// # Arguments
+    /// * `dst_buffer` — allocated and uninitialized; every slot this writes is a first write.
     fn clone_array_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src_buffer: PointerValue<'c>,
@@ -720,7 +757,8 @@ impl ObjectFieldType {
         state: RcState,
     ) {
         let elm_basic_ty = elem_ty.get_embedded_type(gc);
-        // In loop body, retain value and store it at idx.
+        // In loop body, retain value and store it at idx. A fully unboxed element holds no
+        // reference, so the copy of one is the store alone.
         let loop_body = |gc: &mut Generator<'c, 'm>,
                          idx: IntValue<'c>,
                          _len: IntValue<'c>,
@@ -740,8 +778,10 @@ impl ObjectFieldType {
                 .build_load(elm_basic_ty, src_ptr, "src_elem")
                 .unwrap();
             gc.builder().build_store(dst_ptr, src_elem).unwrap();
-            let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
-            gc.retain(src_obj, state);
+            if !elem_ty.is_fully_unboxed(gc.type_env()) {
+                let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
+                gc.retain(src_obj, state);
+            }
         };
 
         // After loop, do nothing.
@@ -751,9 +791,14 @@ impl ObjectFieldType {
         Self::loop_over_array_buf(gc, count, src_buffer, loop_body, after_loop);
     }
 
-    // Clone an array's buffer into `dst`. When `hole` is `Some(idx)`, the element at `idx` is
-    // skipped — its slot in `dst` is left uninitialized. `dst` should be already allocated but
-    // not initialized.
+    /// Copy the `len` elements of an array's buffer from `src_buffer` into `dst_buffer`,
+    /// retaining each one so that both buffers own it.
+    ///
+    /// # Arguments
+    /// * `dst_buffer` — allocated and uninitialized; every slot this writes is a first write.
+    /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
+    ///   (`Std::PunchedArray`), which the source therefore does not own; the copy skips it and
+    ///   leaves `dst_buffer[idx]` uninitialized.
     pub fn clone_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,
@@ -884,7 +929,7 @@ impl ObjectFieldType {
                     gc.build_retain(subobj, amount, state);
                 }
             } else {
-                gc.build_release_mark(subobj, work_type.unwrap(), state);
+                gc.build_traverser_work(subobj, work_type.unwrap(), state);
             }
             gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -2076,14 +2121,8 @@ pub fn create_obj<'c, 'm>(
                     .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false))
                     .unwrap();
 
-                // Initialize the reference counter state to REFCNT_STATE_LOCAL.
-                let ptr_to_refcnt_state = gc.get_refcnt_state_ptr(ptr_to_ctrl_blk);
-                gc.builder()
-                    .build_store(
-                        ptr_to_refcnt_state,
-                        refcnt_state_type(context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                    )
-                    .unwrap();
+                // A fresh object is reachable from the thread that made it alone.
+                gc.set_refcnt_state(ptr_to_ctrl_blk, RefcntState::LOCAL);
 
                 // Record how far the object was placed above the base of its allocation.
                 write_alloc_offset(gc, ptr_to_ctrl_blk, alloc_offset);
@@ -2233,7 +2272,9 @@ pub fn create_traverser<'c, 'm>(
                 .unwrap()
                 .into_int_value();
 
-            // Depending the value of `work`, do different works: destruction of objects (`work == 0`), or marking object as global (`work` == 1).
+            // Branch to the block of the work asked for: destruction of the objects it owns
+            // (`work == 0`), marking them global (`work == 1`), or marking them threaded
+            // (`work == 2`, compiled only into a program that runs on several threads).
             let release_bb = gc.context.append_basic_block(func, "release_bb@traverser");
             let mark_global_bb = gc
                 .context
@@ -2249,13 +2290,24 @@ pub fn create_traverser<'c, 'm>(
                 work_bbs.push((TRAVERSER_WORK_MARK_THREADED, mark_threaded_bb))
             }
             let work_ty = traverser_work_type(gc.context);
-            let mut cases = work_bbs
+            let cases = work_bbs
                 .iter()
                 .map(|(work, bb)| (work_ty.const_int(*work as u64, false), bb.clone()))
                 .collect::<Vec<_>>();
+
+            // Every call passes a work this traverser was generated for, so the block reached by
+            // any other value ends the program instead of standing in for one of them.
+            let unknown_work_bb = gc
+                .context
+                .append_basic_block(func, "unknown_work_bb@traverser");
             gc.builder()
-                .build_switch(work, cases.pop().unwrap().1, &cases)
+                .build_switch(work, unknown_work_bb, &cases)
                 .unwrap();
+            gc.builder().position_at_end(unknown_work_bb);
+            if gc.config.develop_mode {
+                gc.panic("A traverser was called with a work it was not generated for.\n");
+            }
+            gc.builder().build_unreachable().unwrap();
 
             for (work, work_bb) in work_bbs.iter() {
                 let work = TraverserWorkType(*work);
@@ -2279,7 +2331,7 @@ fn build_traverse<'c, 'm>(
     state: RcState, // What is known about the state of the boxed leaves this traverser reaches.
 ) {
     // `Array a` = unbox { SubObject(#ArrayStorage a), size, cap }: the storage's own destructor is
-    // free-only, so the array value drives element release. Release / mark the storage through its
+    // free-only, so the array value drives element release. Work on the storage through its
     // refcount bookkeeping, and when that drops it to zero release its `[0, size)` elements. Doing
     // the element release inside `traverse_refs` (called only at rc 1 -> 0) keeps a shared array's
     // elements alive.
@@ -2288,8 +2340,8 @@ fn build_traverse<'c, 'm>(
         let size = obj.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
         let storage = get_array_storage(gc, &obj);
         let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        gc.build_release_mark_nonnull_boxed_with(&storage, work, state, |gc| {
-            ObjectFieldType::release_or_mark_array_buf(
+        gc.build_traverser_work_nonnull_boxed_with(&storage, work, state, |gc| {
+            ObjectFieldType::traverse_array_buf(
                 gc,
                 size,
                 buffer,
@@ -2302,23 +2354,31 @@ fn build_traverse<'c, 'm>(
         return;
     }
 
-    // `PunchedArray a` = unbox { Array a, I64 idx }: release / mark the inner array's elements
+    // `PunchedArray a` = unbox { Array a, I64 idx }: work on the inner array's elements
     // while skipping the hole at `idx` (the moved-out element), reusing the storage's refcount
     // bookkeeping.
     if obj.ty.is_punched_array() {
         let inner_array_ty = obj.ty.field_types(gc.type_env())[0].clone();
         let elem_ty = inner_array_ty.field_types(gc.type_env())[0].clone();
-        let inner_array = Object::new(obj.extract_field(gc, 0), inner_array_ty, gc);
-        let idx = Object::new(obj.extract_field(gc, 1), make_i64_ty(), gc)
-            .extract_field(gc, 0)
-            .into_int_value();
+        let inner_array = Object::new(
+            obj.extract_field(gc, PUNCHED_ARRAY_ARRAY_IDX),
+            inner_array_ty,
+            gc,
+        );
+        let idx = Object::new(
+            obj.extract_field(gc, PUNCHED_ARRAY_HOLE_IDX),
+            make_i64_ty(),
+            gc,
+        )
+        .extract_field(gc, 0)
+        .into_int_value();
         let size = inner_array
             .extract_field(gc, ARRAY_SIZE_IDX)
             .into_int_value();
         let storage = get_array_storage(gc, &inner_array);
         let buffer = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        gc.build_release_mark_nonnull_boxed_with(&storage, work, state, |gc| {
-            ObjectFieldType::release_or_mark_array_buf(
+        gc.build_traverser_work_nonnull_boxed_with(&storage, work, state, |gc| {
+            ObjectFieldType::traverse_array_buf(
                 gc,
                 size,
                 buffer,
@@ -2347,7 +2407,7 @@ fn build_traverse<'c, 'm>(
                     obj.extract_field_as(gc, struct_type, i as u32)
                 };
                 let subobj = Object::new(subval, subty.clone(), gc);
-                gc.build_release_mark(subobj, work, state);
+                gc.build_traverser_work(subobj, work, state);
             }
             ObjectFieldType::ControlBlock => {}
             ObjectFieldType::LambdaFunction(_) => {}

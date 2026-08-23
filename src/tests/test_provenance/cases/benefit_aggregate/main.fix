@@ -1,0 +1,38 @@
+module Main;
+
+// Read-only recursion: `arr` is only read, so it is inferred Borrow and `tally` gets a borrow
+// version.
+tally : Array I64 -> I64 -> I64;
+tally = |arr, i| (
+    if i == arr.@size { 0 } else { arr.@(i) + tally(arr, i + 1) }
+);
+
+// An array beside a scalar, so that a call can be handed the array read out of the pair.
+type Env = unbox struct { table : Array I64, key : I64 };
+
+// Recursive, so the inliner leaves it a call and what it answers with is a value the caller reads a
+// leaf out of.
+//
+// # Parameters
+// * `n` - How far the key is raised above the value it starts at.
+build : I64 -> Env;
+build = |n| (
+    if n == 0 { Env { table : Array::fill(4, 1), key : 3 } };
+    build(n - 1).mod_key(|k| k + 1)
+);
+
+main : IO ();
+main = (
+    // `kept.@table` is passed and named nowhere afterwards, and `kept` is read after the call: the
+    // reference the leaf holds is one this function made for the call, so routing to the borrow
+    // version removes it together with the retain that made it.
+    let kept = build(2);
+    let kept_tally = tally(kept.@table, 0);
+    let kept_key = kept.@key;
+    // `spent` is read a leaf out of and named nowhere after the call, so the object that leaf refers
+    // to ends at the call: the own version moves it in and frees it, and borrowing it would only
+    // delay the release.
+    let spent = build(1);
+    let spent_tally = tally(spent.@table, 0);
+    println $ (kept_tally + kept_key + spent_tally).to_string
+);

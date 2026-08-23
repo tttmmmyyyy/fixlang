@@ -105,6 +105,21 @@ mod integration_tests {
     /// records: raising the allowance the budget grants leaves this count where it is.
     const DEEP_RELAY_COPIES: usize = 7;
 
+    /// The segment `uncurry` appends to the name of a function it gives a function-pointer version,
+    /// which is what a call in the RC IR names. A capture list is named after the lambda that
+    /// receives it and carries no such segment, so this is what tells a call from a type.
+    const FUNPTR_SEGMENT: &str = "#funptr";
+
+    /// What `inlined_body` prints: the first element of the array at or above 5 sits at index 3.
+    const INLINED_BODY_OUTPUT: &str = "3";
+
+    /// What `borrowed_capture` prints: `scaled_sum` over the array for the keys 0 to 3.
+    const BORROWED_CAPTURE_OUTPUT: &str = "111";
+
+    /// What `shared_body` prints: `twice` over `|x| x * 3 - x` at 8, and `sum_up` and `sum_down`
+    /// over `|x| x * 3` at 4, which cancel.
+    const SHARED_BODY_OUTPUT: &str = "72";
+
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
@@ -227,6 +242,53 @@ mod integration_tests {
             .filter(|(_, is_lambda_copy)| *is_lambda_copy)
             .map(|(name, _)| name)
             .collect()
+    }
+
+    /// The names in `dump` carrying all of `needles`, deduplicated. A name stands in the dump
+    /// wherever the program mentions it — a function's own line, a call, or the type of a capture
+    /// list named after the copy that receives it.
+    fn names_in<'a>(dump: &'a str, needles: &[&str]) -> Vec<&'a str> {
+        let mut names = dump
+            .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '#' || c == '@'))
+            .filter(|token| needles.iter().all(|needle| token.contains(needle)))
+            .collect::<Vec<_>>();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    /// The copies of the function named by `func_prefix` in `dump`, each as the line naming it and
+    /// the body under it. One copy of `Std::loop` stands for one loop body of the case.
+    ///
+    /// A blank line ends a body, so what follows the last function — the initializer of every global
+    /// — stays out of it.
+    fn spec_copies<'a>(dump: &'a str, func_prefix: &str) -> Vec<(&'a str, &'a str)> {
+        dump.split("\nfn ")
+            .filter_map(|function| function.split_once('\n'))
+            .filter(|(header, _)| {
+                header.starts_with(func_prefix) && header.contains(CLOSURE_SPEC_SUFFIX)
+            })
+            .map(|(header, body)| (header, body.split("\n\n").next().unwrap()))
+            .collect()
+    }
+
+    /// The name the header line of a function opens with, without the parameter list that follows
+    /// it.
+    fn func_name(header: &str) -> &str {
+        header.split('(').next().unwrap().trim()
+    }
+
+    /// Asserts that the copy whose header is `header` holds the body of the lambda it is specialized
+    /// on, which is what a body calling no lambda through a function pointer says.
+    fn assert_holds_the_lambdas_body(header: &str, body: &str) {
+        let called_lambdas = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
+        assert!(
+            called_lambdas.is_empty(),
+            "the copy `{}` should hold the body of the lambda it is specialized on, and it \
+             calls {:?} instead",
+            func_name(header),
+            called_lambdas
+        );
     }
 
     /// The largest number of distinct copies of the function named by `callee_prefix` that any one
@@ -538,10 +600,9 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("relayed_closure");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", RELAYED_CLOSURE_OUTPUT);
 
-        let narrowed = functions_named_with(&dump, CLOSURE_SPEC_SUFFIX)
-            .into_iter()
-            .filter(|name| name.contains(CLOSURE_LAM_SUFFIX))
-            .collect::<Vec<_>>();
+        // The copy of the lambda names the capture list it receives, so its name is in the dump
+        // whether it stands there as a function or its body was put where the copy calls it.
+        let narrowed = names_in(&dump, &[CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX]);
         assert!(
             !narrowed.is_empty(),
             "the lambda `relay` hands to `fold` should get a copy receiving the narrowed capture \
@@ -555,6 +616,112 @@ mod integration_tests {
             "the chain should reach `terminal` through that capture list and copy it, but the dump \
              names only: {:?}",
             terminal
+        );
+    }
+
+    /// A copy calls the lambda a way into it receives, and inlining has run by the time that call
+    /// exists, so the copy takes the body of that lambda: the loop of `inlined_body` reads the array
+    /// it captures through the index primitive, and its copy of `Std::loop` calls no lambda at all.
+    #[test]
+    pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls() {
+        let (_temp_dir, project_dir) = setup_test_env("inlined_body");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", INLINED_BODY_OUTPUT);
+
+        let copies = spec_copies(&dump, "Std::loop");
+        assert!(
+            !copies.is_empty(),
+            "the loop body should get a copy of `Std::loop`, but the dump names none: {:?}",
+            functions_named_with(&dump, "Std::loop")
+        );
+        for (header, body) in copies {
+            assert_holds_the_lambdas_body(header, body);
+        }
+    }
+
+    /// A body goes into a copy where that moves it, and nowhere else. Two copies name the lambda
+    /// `sum_up` and `sum_down` are both specialized on, and the copy of `twice` names its lambda in
+    /// two calls, so placing a body at either would write it twice: each copy goes on calling the
+    /// lambda by name, and the lambda stands as a function of its own.
+    #[test]
+    pub fn test_a_copy_that_would_duplicate_a_body_goes_on_calling_it() {
+        let (_temp_dir, project_dir) = setup_test_env("shared_body");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", SHARED_BODY_OUTPUT);
+
+        let standing_lambdas = functions_named_with(&dump, CLOSURE_LAM_SUFFIX);
+        for func_prefix in ["Main::sum_up#", "Main::sum_down#", "Main::twice#"] {
+            let copies = spec_copies(&dump, func_prefix);
+            assert!(
+                !copies.is_empty(),
+                "`{}` should be specialized on the lambda it is given, and the dump names no copy \
+                 of it: {:?}",
+                func_prefix,
+                functions_named_with(&dump, "Main::")
+            );
+            for (header, body) in copies {
+                let called_lambdas = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
+                assert!(
+                    !called_lambdas.is_empty(),
+                    "the copy `{}` should go on calling the lambda it is specialized on, since \
+                     placing the body there would write it twice:\n{}",
+                    func_name(header),
+                    body
+                );
+                for name in called_lambdas {
+                    assert!(
+                        standing_lambdas.contains(&name),
+                        "the lambda `{}` that the copy `{}` calls should stand as a function of \
+                         its own. The dump names: {:?}",
+                        name,
+                        func_name(header),
+                        standing_lambdas
+                    );
+                }
+            }
+        }
+    }
+
+    /// A loop body that hands a value it captured to a call is placed like any other: the copy is the
+    /// only symbol naming it and calls it once, so the body moves in. The call the body makes then
+    /// stands in a copy that owns the capture list it hands to the next round, and it is routed to the
+    /// callee's borrow version, so the round pays no reference count for handing the array over.
+    ///
+    /// `borrowed_capture` holds one loop of each kind: the loop in `main` hands the array it captures
+    /// to `scaled_sum`, and the loop inside `scaled_sum` reads the array it captures through the index
+    /// primitive.
+    #[test]
+    pub fn test_a_copy_that_hands_a_captured_value_to_a_call_counts_no_reference() {
+        let (_temp_dir, project_dir) = setup_test_env("borrowed_capture");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", BORROWED_CAPTURE_OUTPUT);
+
+        let mut lending_copies = 0;
+        for (header, body) in spec_copies(&dump, "Std::loop") {
+            assert_holds_the_lambdas_body(header, body);
+            // Each copy receives the capture list of the lambda it is made for, which is named after
+            // the function that lambda was written in.
+            if !header.contains("CapList@main") {
+                continue;
+            }
+            lending_copies += 1;
+            assert!(
+                body.contains("Main::scaled_sum") && body.contains("#borrow("),
+                "the copy `{}` hands the array it captured to `scaled_sum`, which should be reached \
+                 through its borrow version:\n{}",
+                func_name(header),
+                body
+            );
+            assert!(
+                !body.contains("retain"),
+                "the copy `{}` should hand the array over without counting a reference, and it \
+                 retains:\n{}",
+                func_name(header),
+                body
+            );
+        }
+        assert!(
+            lending_copies > 0,
+            "the case should have a copy made for the body that hands an array to a call. The dump \
+             names: {:?}",
+            functions_named_with(&dump, "Std::loop")
         );
     }
 }

@@ -1,6 +1,10 @@
 //! Reading a construction where the code taking it apart can see it, as the program answers and as
 //! the `--emit-rc-ir` dump shows it.
 //!
+//! The chains whose `advance` walked past elements by calling itself are asserted the same way: an
+//! `advance` that calls itself is a body `inline` never moves, so a chain that keeps one leaves it
+//! standing as a function of its own in the dump.
+//!
 //! What the rewrites are for cannot be observed by running the program — they leave the answer
 //! unchanged — so the chain that motivates them is asserted on the dump: a function an iterator
 //! carries in a field is called through a pointer, and the same function reached as an argument is
@@ -22,6 +26,23 @@ mod integration_tests {
     /// What `read_constructions` prints: `sum_pair(4)` 17, `choose(3)` 12, `choose(-2)` -2,
     /// `magnitude(-7)` 7, `defaulted(2)` 12 and `defaulted(-3)` -3.
     const READ_CONSTRUCTIONS_OUTPUT: &str = "43";
+
+    /// What `shadowed_field_name` prints: `f(2, ..)` reads the value bound before the pattern, so
+    /// the two rounds contribute 4000 + 10 + 3 and 2000 + 50 + 6.
+    const SHADOWED_FIELD_NAME_OUTPUT: &str = "6069";
+
+    /// What `field_in_another_argument` prints: `f` adds the field it was given on each of three
+    /// rounds, 1 + 2 + 4.
+    const FIELD_IN_ANOTHER_ARGUMENT_OUTPUT: &str = "7";
+
+    /// What `filter_chain` prints: the sum of the even values among `i % 251` over `0..999`.
+    const FILTER_CHAIN_OUTPUT: &str = "62502";
+
+    /// What `filter_map_chain` prints: twice `FILTER_CHAIN_OUTPUT`.
+    const FILTER_MAP_CHAIN_OUTPUT: &str = "125004";
+
+    /// What `flatten_chain` prints: the sum of `r + i` over 50 rows of 20.
+    const FLATTEN_CHAIN_OUTPUT: &str = "34000";
 
     /// What `split_field_order` prints: `run` folds `high` into `low` three times to reach 7321, and
     /// adds the weight of the value it was handed on each round, 3007 + 2073 + 1732.
@@ -127,6 +148,17 @@ mod integration_tests {
         ""
     }
 
+    /// The functions of `dump` whose name says they are an iterator's `advance`.
+    ///
+    /// An `advance` that walks past elements by calling itself is a body `inline` never moves, so the
+    /// loop consuming the iterator calls it once per element. Handing that walk to a body of its own
+    /// leaves `advance` small enough to go into the consumer, and then none stands as a function.
+    fn advance_functions(dump: &str) -> Vec<&str> {
+        dump.lines()
+            .filter(|line| line.starts_with("fn Std::Iterator::advance"))
+            .collect()
+    }
+
     /// A chain of two `map`s hands the fold two functions, each in a field of a struct that is in a
     /// field of the next, and a third as the fold's own operation. Reading each construction where
     /// the fold takes it apart is what makes all three arguments, so the fold receives three capture
@@ -148,6 +180,49 @@ mod integration_tests {
     /// A chain of two iterators of one type constructor answers the same at every level, so the
     /// rewrites that flatten it — which hand the fold the value the outer one carries and the value
     /// the inner one carries, both named after the same field — keep the two apart.
+    /// `filter` walks past the elements its predicate rejects, and that walk is a body of its own, so
+    /// the `advance` handing back an accepted element goes into the loop consuming it.
+    #[test]
+    pub fn test_the_filter_chain_leaves_no_advance_of_its_own() {
+        let (_temp_dir, project_dir) = setup_test_env("filter_chain");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", FILTER_CHAIN_OUTPUT);
+
+        let advances = advance_functions(&dump);
+        assert!(
+            advances.is_empty(),
+            "no advance of the chain should stand as a function of its own, but these do:\n{}",
+            advances.join("\n")
+        );
+    }
+
+    /// The same for `filter_map`, whose walk passes the elements its function declines.
+    #[test]
+    pub fn test_the_filter_map_chain_leaves_no_advance_of_its_own() {
+        let (_temp_dir, project_dir) = setup_test_env("filter_map_chain");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", FILTER_MAP_CHAIN_OUTPUT);
+
+        let advances = advance_functions(&dump);
+        assert!(
+            advances.is_empty(),
+            "no advance of the chain should stand as a function of its own, but these do:\n{}",
+            advances.join("\n")
+        );
+    }
+
+    /// The same for `flatten`, whose walk passes the inner iterators that yield nothing.
+    #[test]
+    pub fn test_the_flatten_chain_leaves_no_advance_of_its_own() {
+        let (_temp_dir, project_dir) = setup_test_env("flatten_chain");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", FLATTEN_CHAIN_OUTPUT);
+
+        let advances = advance_functions(&dump);
+        assert!(
+            advances.is_empty(),
+            "no advance of the chain should stand as a function of its own, but these do:\n{}",
+            advances.join("\n")
+        );
+    }
+
     #[test]
     pub fn test_a_chain_of_two_iterators_of_one_type_answers_the_same() {
         let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
@@ -178,6 +253,28 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("split_field_order");
         for opt_level in OPT_LEVELS {
             build_run_and_read_rc_ir(&project_dir, opt_level, SPLIT_FIELD_ORDER_OUTPUT);
+        }
+    }
+
+    /// A field handed over as an argument of its own carries its name over the whole body, so a
+    /// value bound to that name before the pattern is read as the field unless every local has a
+    /// name of its own.
+    #[test]
+    pub fn test_a_value_named_like_a_field_before_the_pattern_stays_itself() {
+        let (_temp_dir, project_dir) = setup_test_env("shadowed_field_name");
+        for opt_level in OPT_LEVELS {
+            build_run_and_read_rc_ir(&project_dir, opt_level, SHADOWED_FIELD_NAME_OUTPUT);
+        }
+    }
+
+    /// An argument written beside the struct can name a field of the struct the call was given,
+    /// while the struct argument builds the value the call passes on. The first reaches the call
+    /// under a name of its own, so it keeps reading the value it was written against.
+    #[test]
+    pub fn test_an_argument_naming_a_field_reads_the_value_it_was_written_against() {
+        let (_temp_dir, project_dir) = setup_test_env("field_in_another_argument");
+        for opt_level in OPT_LEVELS {
+            build_run_and_read_rc_ir(&project_dir, opt_level, FIELD_IN_ANOTHER_ARGUMENT_OUTPUT);
         }
     }
 }

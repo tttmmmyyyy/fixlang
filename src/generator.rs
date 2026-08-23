@@ -9,6 +9,7 @@ use crate::ast::types::type_tycon;
 use crate::ast::types::TyCon;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
+use crate::constants::RefcntState;
 use crate::constants::TraverserWorkType;
 use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::constants::CLOSURE_FUNPTR_IDX;
@@ -18,9 +19,6 @@ use crate::constants::DESTRUCTOR_OBJECT_DTOR_FIELD_IDX;
 use crate::constants::DESTRUCTOR_OBJECT_VALUE_FIELD_IDX;
 use crate::constants::DYNAMIC_OBJ_CAP_IDX;
 use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
-use crate::constants::REFCNT_STATE_GLOBAL;
-use crate::constants::REFCNT_STATE_LOCAL;
-use crate::constants::REFCNT_STATE_THREADED;
 use crate::constants::SYMBOL_VERSION_SEPARATOR;
 use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
 use crate::error::panic_with_msg;
@@ -486,38 +484,37 @@ impl<'c> Object<'c> {
     }
 }
 
-// The local variables in scope at the point being generated. Globals are held separately, in
-// `Generator::global`.
+/// The local variables in scope at the point being generated. Globals are held separately, in
+/// `Generator::declared_globals`.
 #[derive(Default)]
 pub struct Scope<'c> {
-    // Bindings of each name, innermost last: a lookup sees the last one pushed, so a binding
-    // shadows the outer bindings of the same name for as long as it lives.
+    /// Bindings of each name, innermost last: a lookup sees the last one pushed, so a binding
+    /// shadows the outer bindings of the same name for as long as it lives.
     data: Map<FullName, Vec<ScopedValue<'c>>>,
 }
 
 impl<'c> Scope<'c> {
-    // Bind `var` to `obj`, shadowing whatever the name is bound to until the binding is popped.
+    /// Bind `var` to `obj`, shadowing whatever the name is bound to until the binding is popped.
     fn push_local(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         // TODO: add assertion that var is local (or change var to Name).
-        if !self.data.contains_key(var) {
-            self.data.insert(var.clone(), Default::default());
-        }
-        self.data.get_mut(var).unwrap().push(ScopedValue {
+        self.data.entry(var.clone()).or_default().push(ScopedValue {
             accessor: ValueAccessor::Local(obj.clone()),
             retain_on_read: false,
         });
     }
 
+    /// Drop the innermost binding of `var`, revealing the binding it shadowed.
     fn pop_local(&mut self, var: &FullName) {
         // TODO: add assertion that var is local (or change var to Name).
-        self.data.get_mut(var).unwrap().pop();
-        if self.data.get(var).unwrap().is_empty() {
+        let bindings = self.data.get_mut(var).unwrap();
+        bindings.pop();
+        if bindings.is_empty() {
             self.data.remove(var);
         }
     }
 
-    // The value `var` is currently bound to, which is the innermost of its bindings: a shadowed
-    // binding is seen again once the binding shadowing it is popped.
+    /// The value `var` is currently bound to, which is the innermost of its bindings: a shadowed
+    /// binding is seen again once the binding shadowing it is popped.
     pub fn get(&self, var: &FullName) -> ScopedValue<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
@@ -620,7 +617,8 @@ impl<'c> Drop for PopDebugScopeGuard<'c> {
 }
 
 impl<'c, 'm> Generator<'c, 'm> {
-    // Add a global string.
+    /// The module-level constant holding `s` as a null-terminated string. One constant is created
+    /// per distinct string, and every later call for that string returns it again.
     pub fn add_global_string(&mut self, s: &str) -> GlobalValue<'c> {
         if let Some(val) = self.global_strings.get(s) {
             return val.clone();
@@ -676,6 +674,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
     }
 
+    /// The type definitions of the program, which a Fix type is resolved to its layout through.
     pub fn type_env(&self) -> &TypeEnv {
         &self.type_env
     }
@@ -1067,8 +1066,11 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             // Implement unique_threaded_bb.
             self.builder().position_at_end(unique_threaded_bb);
-            // Mark the object as non_threaded.
-            self.mark_local_one(obj_ptr);
+            // A unique object has one holder, so its count is updated without atomics. Marking
+            // rests on this too: `build_mark_boxed_with` ends its traversal at an object carrying
+            // the mark, and a threaded object is returned to the local state here before a write
+            // in place gives it a child of its own.
+            self.set_refcnt_state(obj_ptr, RefcntState::LOCAL);
             // And jump to unique_bb.
             self.builder()
                 .build_unconditional_branch(unique_bb)
@@ -1108,16 +1110,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
         // Load refcnt_state.
         let current_func = self.current_function();
-        let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
-        let refcnt_state = self
-            .builder()
-            .build_load(
-                refcnt_state_type(self.context),
-                refcnt_state_ptr,
-                "refcnt_state",
-            )
-            .unwrap()
-            .into_int_value();
+        let refcnt_state = self.build_load_refcnt_state(obj_ptr, "refcnt_state");
 
         // Add three basic blocks.
         let local_bb = self.context.append_basic_block(current_func, "local_bb");
@@ -1127,16 +1120,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         if !self.config.threaded {
             // In single-threaded program,
 
-            // Check refcnt_state and jump to local_bb if it is equal to `REFCNT_STATE_LOCAL`.
-            let is_refcnt_state_local = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                    "is_refcnt_state_local",
-                )
-                .unwrap();
+            // Check refcnt_state and jump to local_bb if the object is local.
+            let is_refcnt_state_local = self.build_compare_refcnt_state(
+                refcnt_state,
+                IntPredicate::EQ,
+                RefcntState::LOCAL,
+                "is_refcnt_state_local",
+            );
             self.builder()
                 .build_conditional_branch(is_refcnt_state_local, local_bb, global_bb)
                 .unwrap();
@@ -1147,30 +1137,24 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             let nonlocal_bb = self.context.append_basic_block(current_func, "nonlocal_bb");
 
-            let is_refcnt_state_local = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                    "is_refcnt_state_local",
-                )
-                .unwrap();
+            let is_refcnt_state_local = self.build_compare_refcnt_state(
+                refcnt_state,
+                IntPredicate::EQ,
+                RefcntState::LOCAL,
+                "is_refcnt_state_local",
+            );
             self.builder()
                 .build_conditional_branch(is_refcnt_state_local, local_bb, nonlocal_bb)
                 .unwrap();
 
             // Implement nonlocal_bb.
             self.builder().position_at_end(nonlocal_bb);
-            let is_refcnt_state_threaded = self
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    refcnt_state,
-                    refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
-                    "is_refcnt_state_threaded",
-                )
-                .unwrap();
+            let is_refcnt_state_threaded = self.build_compare_refcnt_state(
+                refcnt_state,
+                IntPredicate::EQ,
+                RefcntState::THREADED,
+                "is_refcnt_state_threaded",
+            );
             self.builder()
                 .build_conditional_branch(is_refcnt_state_threaded, threaded_bb, global_bb)
                 .unwrap();
@@ -1186,32 +1170,18 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// operation, and this is the only check on those: the whole test suite is built in develop
     /// mode, so every annotated site is verified dynamically on every test program.
     ///
-    /// Reaching every such site takes two call sites, because the state dispatch is built two ways:
-    /// `build_branch_by_refcnt_state` covers the release and the uniqueness check, and
-    /// `retain_nonnull_boxed` inlines its own dispatch and calls this itself.
+    /// The check belongs in every state dispatch, so that no annotated site goes unchecked.
     fn build_assert_refcnt_state_local(&mut self, obj_ptr: PointerValue<'c>) {
         if !self.config.develop_mode {
             return;
         }
-        let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
-        let refcnt_state = self
-            .builder()
-            .build_load(
-                refcnt_state_type(self.context),
-                refcnt_state_ptr,
-                "refcnt_state@assert_local",
-            )
-            .unwrap()
-            .into_int_value();
-        let is_local = self
-            .builder()
-            .build_int_compare(
-                IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                "is_refcnt_state_local@assert",
-            )
-            .unwrap();
+        let refcnt_state = self.build_load_refcnt_state(obj_ptr, "refcnt_state@assert_local");
+        let is_local = self.build_compare_refcnt_state(
+            refcnt_state,
+            IntPredicate::EQ,
+            RefcntState::LOCAL,
+            "is_refcnt_state_local@assert",
+        );
         let current_func = self.current_function();
         let nonlocal_bb = self
             .context
@@ -1482,7 +1452,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.lambda_calling_convention
     }
 
-    // The function currently being generated.
+    /// The function the builder is positioned in, which is the one being generated.
     pub fn current_function(&self) -> FunctionValue<'c> {
         self.builder()
             .get_insert_block()
@@ -1739,10 +1709,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         Object::from_parts(part_phis, ty, self)
     }
 
-    // Define (once per module) and call the per-type RC helper `<prefix>_<hash>` for `obj`. The
-    // object is passed as its parts rather than as one aggregate (see `lambda_function_type`), so no
-    // aggregate is materialized across the call; `build_body` emits the retain / release / mark work
-    // on the object reassembled from those parts inside the helper.
+    /// Define (once per module) and call the per-type RC helper `<prefix>_<hash>` for `obj`. The
+    /// object is passed as its parts rather than as one aggregate (see `lambda_function_type`), so
+    /// no aggregate is materialized across the call; `build_body` emits the retain / release / mark
+    /// work on the object reassembled from those parts inside the helper.
     fn emit_rc_helper_call(
         &mut self,
         obj: Object<'c>,
@@ -1875,9 +1845,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Increment the reference count of a non-null boxed object, according to its refcount state,
-    // without the null check `build_retain` performs for a possibly-null dynamic object. The caller
-    // guarantees the object is a non-null boxed pointer (e.g. a non-empty capture object).
+    /// Increment by `amount` the reference count of a boxed object, in the way its refcount state
+    /// calls for. The caller guarantees the object is a non-null boxed pointer (e.g. a non-empty
+    /// capture object).
     pub(crate) fn retain_nonnull_boxed(
         &mut self,
         obj: &Object<'c>,
@@ -1960,77 +1930,101 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(cont_bb);
     }
 
-    // Release or mark global or mark threaded nonnull boxed object.
-    // Release or mark a non-null boxed object: process its owned references with the standard
-    // traverser.
-    fn build_release_mark_nonnull_boxed(
+    /// Perform a traverser's work on a non-null boxed object, processing the references it owns
+    /// with the traverser generated for its type.
+    fn build_traverser_work_nonnull_boxed(
         &mut self,
         obj: &Object<'c>,
         work: TraverserWorkType,
         state: RcState,
     ) {
         let obj_for_refs = obj.clone();
-        self.build_release_mark_nonnull_boxed_with(obj, work, state, move |gc| {
+        self.build_traverser_work_nonnull_boxed_with(obj, work, state, move |gc| {
             gc.traverse_boxed_refs(&obj_for_refs, work)
         });
     }
 
-    // Release or mark a non-null boxed object, using `traverse_refs` — in place of the type's
-    // standard traverser — to process its owned references. A caller thus reuses the refcount
-    // bookkeeping with a custom reference traversal.
-    pub(crate) fn build_release_mark_nonnull_boxed_with(
+    /// Perform a traverser's work on a non-null boxed object, calling `traverse_refs` to process
+    /// the references it owns. `traverse_refs` stands where the traverser generated for the
+    /// object's type would: on the release path once the count reaches zero, and on a mark path
+    /// once the object itself is marked.
+    ///
+    /// # Arguments
+    /// * `state` — what is known of the object's refcount state, which the release path dispatches
+    ///   on. A mark reads the state from the object itself, whatever the caller knows of it.
+    pub(crate) fn build_traverser_work_nonnull_boxed_with(
         &mut self,
         obj: &Object<'c>,
         work: TraverserWorkType,
         state: RcState,
         traverse_refs: impl FnOnce(&mut Self),
     ) {
-        // If the work is release, and the object's type is Std::Destructor, then call destructor when the refcnt is one.
-        if work == TraverserWorkType::release() && obj.is_destructor_object() {
-            // Branch by whether or not the reference counter is one.
-            let obj_ptr = obj.value(self).into_pointer_value();
-            // The destructor pre-stage of a release still reads the state; annotating it is
-            // separate work.
-            let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr, RcState::Unknown);
-
-            // If reference counter is one, call destructor.
-            self.builder().position_at_end(unique_bb);
-            let value = ObjectFieldType::move_out_struct_field(
-                self,
-                obj,
-                DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
-            );
-            let dtor =
-                ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX);
-            let one = self.context.i64_type().const_int(1, false);
-            self.build_retain(dtor.clone(), one, RcState::Unknown);
-            let io_act = self.apply_lambda(dtor, vec![value], false).unwrap();
-            let res = run_io_or_ios_runner(self, &io_act);
-            ObjectFieldType::move_into_struct_field(
-                self,
-                obj.clone(), // Since `obj` is boxed, it is ok to clone it and discard the result of `move_into_struct_field`.
-                DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
-                &res,
-            );
-            self.builder()
-                .build_unconditional_branch(shared_bb)
-                .unwrap();
-
-            self.builder().position_at_end(shared_bb);
-        }
-
-        if work == TraverserWorkType::release() {
-            self.build_release_boxed_with(obj, state, traverse_refs);
-        } else {
+        if work != TraverserWorkType::release() {
             self.build_mark_boxed_with(obj, work, traverse_refs);
+            return;
         }
+        // A `Std::FFI::Destructor` runs its destructor function on the way out, before the
+        // references it holds are released. The count reaching zero is what picks the thread that
+        // runs it, so it runs exactly once however many threads release the object at the same
+        // moment.
+        if obj.is_destructor_object() {
+            let destructor = obj.clone();
+            self.build_release_boxed_with(obj, state, move |gc| {
+                gc.build_run_destructor(&destructor);
+                traverse_refs(gc);
+            });
+            return;
+        }
+        self.build_release_boxed_with(obj, state, traverse_refs);
     }
 
-    /// Perform `work` — release, mark-global or mark-threaded — on every boxed object `obj` owns.
-    pub fn build_release_mark(&mut self, obj: Object<'c>, work: TraverserWorkType, state: RcState) {
+    /// Run a `Std::FFI::Destructor` object's destructor function on the resource it holds, leaving
+    /// what the run returns in the value field for the release that follows.
+    fn build_run_destructor(&mut self, obj: &Object<'c>) {
+        let fields = &obj.ty.toplevel_tycon_info(self.type_env()).fields;
+        assert_eq!(
+            [
+                fields[DESTRUCTOR_OBJECT_VALUE_FIELD_IDX as usize]
+                    .name
+                    .as_str(),
+                fields[DESTRUCTOR_OBJECT_DTOR_FIELD_IDX as usize]
+                    .name
+                    .as_str(),
+            ],
+            ["_value", "_dtor"],
+            "`{}` holds its fields in an order the field indices do not name.",
+            obj.ty.to_string(),
+        );
+        let value =
+            ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX);
+        let dtor =
+            ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX);
+        // The application consumes a reference to the destructor function, and the field keeps the
+        // one that the release of the object's own references drops.
+        let one = self.context.i64_type().const_int(1, false);
+        self.build_retain(dtor.clone(), one, RcState::Unknown);
+        let io_act = self.apply_lambda(dtor, vec![value], false).unwrap();
+        let res = run_io_or_ios_runner(self, &io_act);
+        ObjectFieldType::move_into_struct_field(
+            self,
+            obj.clone(), // Since `obj` is boxed, it is ok to clone it and discard the result of `move_into_struct_field`.
+            DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
+            &res,
+        );
+    }
+
+    /// Perform `work` — release, mark-global or mark-threaded — on `obj` itself: on its own count
+    /// where it is boxed, and on the boxed objects it holds where it is not. What it owns is
+    /// reached through the traverser generated for its type, which `build_traverse` writes.
+    pub fn build_traverser_work(
+        &mut self,
+        obj: Object<'c>,
+        work: TraverserWorkType,
+        state: RcState,
+    ) {
         if obj.is_box(self.type_env()) {
-            self.build_if_nonnull(&obj, "release_mark", |gc| {
-                gc.build_release_mark_nonnull_boxed(&obj, work, state);
+            self.build_if_nonnull(&obj, "traverser_work", |gc| {
+                gc.build_traverser_work_nonnull_boxed(&obj, work, state);
             });
         } else if obj.is_funptr() {
             // Nothing to do for function pointers.
@@ -2049,9 +2043,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Traverse a non-null boxed object's owned references (its elements / fields) for `work`
-    // (release / mark). Dynamic objects carry their traverser and are called indirectly;
-    // others use the statically generated one.
+    /// Traverse a non-null boxed object's owned references (its elements / fields) for `work`
+    /// (release / mark). A dynamic object carries its traverser and is called through it; any other
+    /// object is traversed by the function generated for its type.
     fn traverse_boxed_refs(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
         let obj_ptr = obj.value(self).into_pointer_value();
         if obj.is_dynamic_object() {
@@ -2085,8 +2079,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Release a non-null boxed object, emitting `traverse_refs` to release its owned references
-    // once the refcount reaches zero, before the object is freed.
+    /// Release a non-null boxed object, emitting `traverse_refs` to release the references it owns
+    /// once the refcount reaches zero, before the object is freed.
     fn build_release_boxed_with(
         &mut self,
         obj: &Object<'c>,
@@ -2200,8 +2194,20 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(end_bb);
     }
 
-    // Mark a boxed object, emitting `traverse_refs` to mark its owned references before the
-    // object itself is marked.
+    /// Mark a boxed object, and through `traverse_refs` every object it owns.
+    ///
+    /// An object that already carries the mark ends the traversal there, since it owns only
+    /// objects carrying the mark or a stronger one. Each object is therefore marked once: the work
+    /// is proportional to the objects a value holds, even where one of them is reached along many
+    /// paths, and the traversal terminates on a cyclic graph.
+    ///
+    /// A marked object owns only marked objects because a write in place is the only way it gains
+    /// a child, and such a write reaches a marked object through `build_branch_by_is_unique`: a
+    /// global object leaves that check as shared and is cloned, and a threaded one is returned to
+    /// the local state there. That check stays in place for a value made threaded, since
+    /// `Std::mark_threaded` hands the value back with an `Unknown` provenance and unique-check
+    /// elimination drops a check only on a value it knows to be uniquely owned (see
+    /// `InlineLLVMMarkThreadedFunctionBody::result_prov`).
     fn build_mark_boxed_with(
         &mut self,
         obj: &Object<'c>,
@@ -2211,19 +2217,47 @@ impl<'c, 'm> Generator<'c, 'm> {
         assert!(
             work == TraverserWorkType::mark_global() || work == TraverserWorkType::mark_threaded()
         );
+        let marks_global = work == TraverserWorkType::mark_global();
 
         // Get pointer to the object.
         let obj_ptr = obj.value(self).into_pointer_value();
 
-        // Mark the object's owned references.
-        traverse_refs(self);
+        let current_func = self.current_function();
+        let mark_bb = self
+            .context
+            .append_basic_block(current_func, "mark_bb@mark_boxed");
+        let cont_bb = self
+            .context
+            .append_basic_block(current_func, "cont_bb@mark_boxed");
 
-        // Mark the object itself.
-        if work == TraverserWorkType::mark_global() {
-            self.mark_global_one(obj_ptr);
+        // Load refcnt state.
+        let refcnt_state = self.build_load_refcnt_state(obj_ptr, "refcnt_state");
+
+        // Branch by whether or not the object carries the mark. A state covers every state below
+        // it, so the object carries the mark where its state reaches the marked one.
+        let mark_state = if marks_global {
+            RefcntState::GLOBAL
         } else {
-            self.mark_threaded_one(obj_ptr);
-        }
+            RefcntState::THREADED
+        };
+        let is_marked = self.build_compare_refcnt_state(
+            refcnt_state,
+            IntPredicate::UGE,
+            mark_state,
+            "is_marked",
+        );
+        self.builder()
+            .build_conditional_branch(is_marked, cont_bb, mark_bb)
+            .unwrap();
+
+        // Implement mark_bb: mark the object itself, then the objects it owns.
+        self.builder().position_at_end(mark_bb);
+        self.set_refcnt_state(obj_ptr, mark_state);
+        traverse_refs(self);
+        self.builder().build_unconditional_branch(cont_bb).unwrap();
+
+        // Set builder's position as preparation for following implementation.
+        self.builder().position_at_end(cont_bb);
     }
 
     /// Release `obj`: decrement the reference count of every boxed object it owns, destroying the
@@ -2231,121 +2265,88 @@ impl<'c, 'm> Generator<'c, 'm> {
     pub fn release(&mut self, obj: Object<'c>, state: RcState) {
         let prefix = format!("release{}", state.name_suffix());
         self.emit_rc_helper_call(obj, &prefix, "call_release", move |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::release(), state);
+            gc.build_traverser_work(obj, TraverserWorkType::release(), state);
         });
     }
 
-    // Release nonnull boxed object.
+    /// Decrement the reference count of a boxed object, releasing what it owns and freeing it
+    /// where the count reaches zero. The caller guarantees the object is a non-null boxed pointer.
     pub(crate) fn release_nonnull_boxed(&mut self, obj: &Object<'c>, state: RcState) {
-        self.build_release_mark_nonnull_boxed(obj, TraverserWorkType::release(), state)
+        self.build_traverser_work_nonnull_boxed(obj, TraverserWorkType::release(), state)
     }
 
-    // Mark all objects reachable from `obj` as global.
+    /// Put every boxed object `obj` owns into the global refcount state, in which an object is
+    /// neither retained, released nor freed, so that it lives for the rest of the program.
     pub fn mark_global(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_global", "call_mark_global", |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::mark_global(), RcState::Unknown);
+            gc.build_traverser_work(obj, TraverserWorkType::mark_global(), RcState::Unknown);
         });
     }
 
-    // Mark all objects reachable from `obj` as threaded.
+    /// Put every boxed object `obj` owns into the threaded refcount state, where a reference count
+    /// is updated atomically, so that an object can be held by several threads at once. An object
+    /// already in the global state keeps it.
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_threaded", "call_mark_threaded", |gc, obj| {
-            gc.build_release_mark(obj, TraverserWorkType::mark_threaded(), RcState::Unknown);
+            gc.build_traverser_work(obj, TraverserWorkType::mark_threaded(), RcState::Unknown);
         });
     }
 
-    /// Put the boxed object at `ptr` alone into the local reference counting state, leaving the
-    /// objects it owns as they are.
-    fn mark_local_one(&mut self, ptr: PointerValue<'c>) {
-        let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
-        // Store `REFCNT_STATE_LOCAL` to `ptr_refcnt_state`.
+    /// Load the reference-count state of the boxed object at `obj_ptr`, naming the loaded value
+    /// `name` in the emitted code.
+    fn build_load_refcnt_state(&mut self, obj_ptr: PointerValue<'c>, name: &str) -> IntValue<'c> {
+        let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
         self.builder()
-            .build_store(
-                ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-            )
-            .unwrap();
+            .build_load(refcnt_state_type(self.context), refcnt_state_ptr, name)
+            .unwrap()
+            .into_int_value()
     }
 
-    /// Put the boxed object at `obj_ptr` alone into the threaded reference counting state, leaving
-    /// the objects it owns as they are. An object that is already threaded or global keeps its
-    /// state, so a global object stays exempt from retain and release.
-    fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
-        let current_func = self.current_function();
-        let cont_bb = self
-            .context
-            .append_basic_block(current_func, "cont_bb@mark_threaded");
-
-        // Load refcnt state.
-        let ptr_refcnt_state = self.get_refcnt_state_ptr(obj_ptr);
-        let refcnt_state = self
-            .builder()
-            .build_load(
-                refcnt_state_type(self.context),
-                ptr_refcnt_state,
-                "refcnt_state",
+    /// Compare a loaded reference-count state against `state` under `predicate`, naming the result
+    /// `name` in the emitted code.
+    fn build_compare_refcnt_state(
+        &self,
+        refcnt_state: IntValue<'c>,
+        predicate: IntPredicate,
+        state: RefcntState,
+        name: &str,
+    ) -> IntValue<'c> {
+        self.builder()
+            .build_int_compare(
+                predicate,
+                refcnt_state,
+                refcnt_state_type(self.context).const_int(state.value() as u64, false),
+                name,
             )
             .unwrap()
-            .into_int_value();
-
-        // Branch by whether or not the refcnt state is `REFCNT_STATE_LOCAL`.
-        let local_bb = self
-            .context
-            .append_basic_block(current_func, "local_bb@mark_threaded");
-        let is_refcnt_state_local = self
-            .builder()
-            .build_int_compare(
-                IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                "is_refcnt_state_local",
-            )
-            .unwrap();
-        self.builder()
-            .build_conditional_branch(is_refcnt_state_local, local_bb, cont_bb)
-            .unwrap();
-
-        // Implement local_bb.
-        self.builder().position_at_end(local_bb);
-        // Store `REFCNT_STATE_THREADED` to `ptr_refcnt_state`.
-        self.builder()
-            .build_store(
-                ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
-            )
-            .unwrap();
-        self.builder().build_unconditional_branch(cont_bb).unwrap();
-
-        // Set builder's position as preparation for following implementation.
-        self.builder().position_at_end(cont_bb);
     }
 
-    // Mark object as global so that it will not be retained or released.
-    fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
+    /// Put the boxed object at `ptr` alone into `state`, leaving the objects it owns as they are.
+    pub(crate) fn set_refcnt_state(&mut self, ptr: PointerValue<'c>, state: RefcntState) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
-        // Store `REFCNT_STATE_GLOBAL` to `ptr_refcnt_state`.
         self.builder()
             .build_store(
                 ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
+                refcnt_state_type(self.context).const_int(state.value() as u64, false),
             )
             .unwrap();
     }
 
-    // Print Rust's &str to stderr.
+    /// Emit code writing `string` to stderr, followed by a newline.
     fn eprint(&mut self, string: &str) {
         let string_ptr = self.add_global_string(string);
         let string_ptr = string_ptr.as_pointer_value();
         self.call_runtime(RUNTIME_EPRINTLN, &[string_ptr.into()]);
     }
 
-    // Panic with Rust's &str (i.e, print string and abort.)
+    /// Emit code writing `string` to stderr and aborting the program.
     pub fn panic(&mut self, string: &str) {
         self.eprint(string);
         self.call_runtime(RUNTIME_ABORT, &[]);
     }
 
-    // Call a runtime function.
+    /// Emit a call to the runtime function named `func_name`, which the module must already
+    /// declare.
     pub fn call_runtime(
         &self,
         func_name: &str,
@@ -2448,6 +2449,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     // A funptr function is also registered as the value of `name`, because the bodies that call it
     // read it by name. Registering here is what leaves no way to declare one and reach it through a
     // name that resolves to nothing.
+    //
+    // The linkage decided here is also what decides the RC IR's reachability roots
+    // (`reachability_roots`): a function another unit may call has to be one dead-code elimination
+    // keeps. Narrowing the condition below narrows the root set with it.
     pub fn declare_lambda_function(
         &mut self,
         fn_ty: &Arc<TypeNode>,

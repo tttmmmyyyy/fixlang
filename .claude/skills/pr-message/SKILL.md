@@ -1,6 +1,6 @@
 ---
 name: pr-message
-description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain the role, the change, and the purpose of every function the diff touches, link every item the change adds or modifies to its implementation on GitHub, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
+description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain the role, the change, and the purpose of every item the diff touches, show the diff of each changed item, bounded to that item, link every item the change adds or modifies to its implementation on GitHub, cover the tests in a section of their own saying what each pins and what it does without the change, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
 ---
 
 # Writing a pull request body
@@ -22,18 +22,32 @@ GitHub closes an issue named this way when the pull request merges **into the de
 
 An issue that stays open after its work has shipped is the failure this prevents, and it is a quiet one: nothing about the merged branch says an issue was ever meant to close with it.
 
-## Every function the diff touches
+## Every item the diff touches
 
-The body is read before the diff, and it has to make the diff make sense. So the body covers the functions the diff touches:
+The body is read before the diff, and it has to make the diff make sense. So the body covers every item the diff touches — a function, a method, a type, a trait, a trait method, a field, an enum variant, a constant. Functions are the most numerous, not the most consequential: a type the change introduces settles more about the code than most of the functions around it, and a body that walks past it leaves the reader to reconstruct it from the places it is used.
 
-- **A changed function**: its **role** — the processing it performs, written for a reader who has never opened the file; the **change** — what the diff means for it, stated in prose, since the diff shows only the text; and the **purpose** — what the change contributes to the pull request.
-- **An added function**: its **role**, written the same way.
+**A test belongs to the tests section instead.** The items here are the ones the change puts into the program, and a test is read for the behavior it pins rather than for what it does — which is what *The tests the change adds* below says about it. An entry here would fill its three labels with one fact, that the harness runs it once, and carry a diff repeating the file its link already opens. This holds of everything a test file adds to serve its tests as well: a helper, a fixture, a builder.
 
-When one mechanical change lands identically in many functions — a renamed parameter, an argument threaded through a call chain — describe the change once and name the functions it lands in. Every function is still covered, without the repetition.
+- **A changed item**: its **role**, written for a reader who has never opened the file; the **change** — what the diff means for it, stated in prose, since the diff shows only the text; the **purpose** — what the change contributes to the pull request; and **its diff**, bounded to the item itself (see *Show a changed item's diff, bounded to the item*).
+- **An added item**: its **role**, written the same way, and its **callers** — the functions that call an added function. An item arrives in the body as a loose thing until the reader is told what reaches it; naming the callers puts it back in the flow it was written for, and it is also what says whether the function runs once per program, once per symbol, or once per node of a walk. An added item that is not called has the same part under the word that fits it: the code that builds an added type, the implementors of an added trait, the code that reads an added constant.
+
+  Naming the callers is the opposite of the rule a doc comment follows, and deliberately so: a doc comment is read for as long as the item lives, and a list of callers in it goes stale on the next caller added, while a pull request body is read once, against a diff that is fixed.
+
+**A labelled part opens its own line.** Run `**Role**:`, `**Change**:` and `**Purpose**:` together into one paragraph and the reader has to find where each ends before reading it; each on its own line is found at a glance, and the entry can then be read by label rather than front to back.
+
+**Role** is the one word that means something different per kind of item:
+
+- a function or a method — the processing it performs;
+- a type — what one of its values stands for, and the invariant it keeps across its fields;
+- a trait — the capability it names, and what having it lets a caller do;
+- a field or an enum variant — what it holds, and what relates it to its siblings;
+- a constant — what it decides, and what fixes its value at that one.
+
+When one mechanical change lands identically in many items — a renamed parameter, an argument threaded through a call chain — describe the change once and name the items it lands in. Every item is still covered, without the repetition.
 
 ## Link every item the change adds or modifies
 
-The body names functions for a reader who has never opened them, so it also says where each one lives. A link is written as a Markdown link whose visible text is the name:
+The body names items for a reader who has never opened them, so it also says where each one lives. A link is written as a Markdown link whose visible text is the name:
 
 > the pass [`request_inline_into_callers`](https://github.com/tttmmmyyyy/fixlang/blob/43883c7abbf8f3b19730f28f067093ec780b6372/src/optimization/inline.rs#L77-L85) marks each global whose body is small enough …
 
@@ -41,7 +55,7 @@ The visible text is the name alone, so the prose goes on referring to the code b
 
 The links sit where the body covers what the change did to the code, which is two places:
 
-- **Each entry of the function coverage above** — every changed function and every added one.
+- **Each entry of the item coverage above** — every changed item and every added one.
 - **Each other item the change adds or modifies**, where the body covers it: a type, a trait, a field, a constant.
 
 Those are the names the reader opens the source for, and each of them gets exactly one link. Every other mention stays plain text — a name the body brings in to explain the surroundings is read rather than opened.
@@ -49,7 +63,7 @@ Those are the names the reader opens the source for, and each of them gets exact
 - **Pin every link to a commit hash.** Push the branch, take `git rev-parse HEAD`, and build all of them on that hash. A hash names the same lines forever and keeps resolving after the branch is deleted; a branch name in the path drifts with the next commit and resolves to nothing once the branch is gone.
 - **Span the definition**: `#L<signature>-L<closing>`, from the signature line to the line that closes the body. GitHub highlights that span, so the click lands on the whole function.
 - **A function the change deletes is linked at the commit the branch forked from** (`git merge-base HEAD main`), where it still stands.
-- **Re-pin when the body is revised after further commits are pushed**, so the lines the links point at are the ones the body describes.
+- **Re-pin a link whose file the branch has changed since.** A hash keeps a link resolving, so no link ever breaks; what a later commit breaks is the agreement between the body and what the link opens, and only for a file that commit touched. So when the body is revised on a branch that has moved, re-pin the links into the files the branch changed in between (`git diff <pinned hash> HEAD -- <file>`), and leave the rest as they are.
 
 The two line numbers are mechanical — the signature line, then the first line closing a block at the signature's own indentation:
 
@@ -58,6 +72,58 @@ sha=$(git rev-parse HEAD)
 grep -n 'fn <name>' <file>
 awk -v n=<signature line> 'NR==n{match($0,/^ */); ind=RLENGTH} NR>=n && $0==sprintf("%*s}", ind, ""){print NR; exit}' <file>
 ```
+
+## Show a changed item's diff, bounded to the item
+
+The prose says what the change means; the diff says what it is. A reader who has both stops guessing which lines the prose is about, so each changed item carries its own diff.
+
+**Bounded to the item, not to the file.** A file-level diff is the wrong unit: it opens on whatever hunks the file happens to carry, splits one item across several of them, and brings the neighbours' changes along for the ride. The unit is the thing the prose is about — one function, one method, one struct, one enum, one constant — and it is obtained by extracting that item from both commits and diffing the two extracts:
+
+```
+base=$(git merge-base HEAD main); sha=$(git rev-parse HEAD)
+extract() {          # extract <ref> <file> <signature pattern>
+  git show "$1:$2" | awk -v pat="$3" '
+    $0 ~ pat && !found { found = 1; match($0, /^ */); ind = RLENGTH }
+    found { print }
+    found && $0 == sprintf("%*s}", ind, "") { exit }'
+}
+item_diff() {        # item_diff <file> <signature pattern>
+  diff -U 9999 --label "$1 (before)" --label "$1 (after)" \
+    <(extract "$base" "$1" "$2") <(extract "$sha" "$1" "$2")
+}
+item_diff src/foo.rs 'fn bar'
+```
+
+The result goes in a fenced `diff` block, under the prose for that item.
+
+**The whole item is the context.** A changed line means what the lines around it make it mean, so the diff carries the item entire, with the changed lines marked inside it — one line of a hundred is shown as that line inside its hundred, and a reader who wants to know where in the walk the new branch sits can see it. That is what `-U 9999` is for; the three lines of context `diff -u` gives by default answer a different question, the one a file-level diff answers.
+
+**Fold a diff that runs past about fifty lines.** Past that the entry stops being read at all, and the way to keep the whole item available without spending the reader's attention on it is a fold: put the fenced block inside `<details>`, with a `<summary>` naming the item and what changed in it, and leave a blank line after the `<summary>` so the block renders.
+
+**This one is embedded rather than linked.** GitHub renders a diff per file, never per item, so no URL bounds a diff the way the item needs. The link the section above requires still applies — it points at the item as it now stands, which is what a reader who wants the surroundings opens.
+
+**An added item carries no diff**, only its link: every line of it is new, so the diff would repeat the file the link already opens.
+
+## Where the coverage goes
+
+A pull request body is capped at 65,536 characters, and the per-item coverage — prose, links and diffs, one entry per item — is what grows fastest as a change touches more code. Growing it inside the body also costs the reader the argument: the case for the change stops being readable in one pass once the entries outweigh it.
+
+So the coverage moves out of the body and hangs below it, as **one or more comments on the same pull request**, whenever the body would otherwise carry more of it than the argument. The body keeps one line where the section stood, naming where the coverage is. A comment on the same page is a scroll rather than a journey, so the reader still meets the coverage where they are.
+
+Split across several comments at the boundaries the coverage already has — one subsystem, one file, one group of items per comment — and give each a heading that says which items it covers.
+
+## The tests the change adds
+
+A test is read for the behavior it pins, so the change's tests are covered together, in one section of their own.
+
+Per test:
+
+- **What it pins** — the behavior that would have to break for it to fail, in one sentence, and the file it lives in.
+- **What it does without the change** — that it goes red, and the message it goes red with. This is what says the test discriminates: a test written against the change is the one thing in the diff that nothing else checks, and the reader has no way to tell a discriminating test from a vacuous one by reading it.
+
+A test that passes with the change and without it pins something this change did not touch. That is worth adding where the point is to hold a neighbouring behavior still, and it is a weaker claim than the label "test" suggests, so say which of the two a test is rather than leaving the reader to assume.
+
+Where several tests pin one behavior between them, say what the set covers and name them, rather than repeating the sentence per test.
 
 ## Every text the change shows to a user
 

@@ -1,0 +1,11 @@
+module Main;
+
+// The function reaches the walk past the elements it declines as an argument, so the loop consuming
+// the iterator holds the whole chain.
+sum_of_doubled_even : Array I64 -> I64;
+sum_of_doubled_even = |arr| (
+    arr.to_iter.filter_map(|x| if x % 2 == 0 { some(x * 2) } else { none() }).fold(0, |x, acc| acc + x)
+);
+
+main : IO ();
+main = println $ sum_of_doubled_even(Array::from_map(1000, |i| i % 251)).to_string;

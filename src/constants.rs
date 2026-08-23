@@ -163,6 +163,12 @@ pub const ARRAY_STORAGE_IDX: u32 = 0;
 pub const ARRAY_SIZE_IDX: u32 = ARRAY_STORAGE_IDX + 1;
 pub const ARRAY_CAP_IDX: u32 = ARRAY_SIZE_IDX + 1;
 
+/// The index of the field of the unbox `Std::PunchedArray` value that holds the array.
+pub const PUNCHED_ARRAY_ARRAY_IDX: u32 = 0;
+/// The index of the field of the unbox `Std::PunchedArray` value that holds the index of the slot
+/// whose element was moved out of the array.
+pub const PUNCHED_ARRAY_HOLE_IDX: u32 = PUNCHED_ARRAY_ARRAY_IDX + 1;
+
 // Field layout of the internal `#ArrayStorage` object: a control block and the raw element buffer,
 // with no length or capacity (those live in the owning `Array` value).
 pub const STORAGE_CTRL_IDX: u32 = CONTROL_BLOCK_IDX;
@@ -222,13 +228,41 @@ pub const DEBUG_ARRAY_ASSUMED_LEN: u64 = 100;
 pub const DYNAMIC_OBJ_TRAVARSER_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 
-// REFCNT_STATE_* values are stored to a field of the control block of each boxed object.
-pub const REFCNT_STATE_LOCAL: u8 = 0; // This is local object in the sense that it is not shared with other threads but should be released since it is not global.
-pub const REFCNT_STATE_THREADED: u8 = 1; // This object is shared between multiple threads and should be released or retained atomically.
-pub const REFCNT_STATE_GLOBAL: u8 = 2; // This is global object and should not be released or retained.
+/// How the reference count of a boxed object is maintained, stored in a byte of its control block.
+///
+/// The values ascend with how far a state exempts an object from reference counting, and code
+/// generation reads that order: `LOCAL` is counted, `THREADED` is counted atomically, and `GLOBAL`
+/// is not counted at all, so a state covers every state below it. Marking asks exactly this
+/// question — an object whose state already reaches the mark being made has nothing left to
+/// receive, and neither has anything it owns.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct RefcntState(u8);
+
+impl RefcntState {
+    /// Reachable from one thread: the count is updated without atomics, and the object is freed
+    /// when it reaches zero.
+    pub const LOCAL: RefcntState = RefcntState(0);
+    /// Reachable from several threads at once: the count is updated atomically.
+    pub const THREADED: RefcntState = RefcntState(1);
+    /// Exempt from counting: the object is neither retained, released nor freed, and lives for as
+    /// long as the program does.
+    pub const GLOBAL: RefcntState = RefcntState(2);
+
+    /// The byte stored in the control block.
+    pub fn value(self) -> u8 {
+        self.0
+    }
+}
+
+/// The order the states are compared in, which is what lets a comparison against one state answer
+/// for the states beyond it.
+const _: () = assert!(
+    RefcntState::LOCAL.0 < RefcntState::THREADED.0
+        && RefcntState::THREADED.0 < RefcntState::GLOBAL.0
+);
 
 // Field layout of the control block every boxed object begins with: the reference count, then the
-// `REFCNT_STATE_*` value saying how that count is to be maintained.
+// `RefcntState` saying how that count is to be maintained.
 pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
 pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
 // How far the object sits above the base of its allocation. Nonzero where the object was placed
