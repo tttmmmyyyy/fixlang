@@ -65,7 +65,7 @@ pub fn eliminate_unreachable(prog: &mut RcProgram) {
 /// A name is mentioned as the reference of a closure value, or as a variable — the callee of a call,
 /// an operand, the value returned. Local variables are mentioned along with the rest; the caller
 /// decides which of the mentions can name a definition.
-fn collect_mentions(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
+pub(crate) fn collect_mentions(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
     grow_stack(|| collect_mentions_inner(node, mention))
 }
 

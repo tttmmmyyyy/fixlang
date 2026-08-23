@@ -89,6 +89,8 @@ fn test_split_limit_boundary() {
         config.clone(),
         type_env,
         Arc::new(Map::default()),
+    ,
+        Default::default(),
     );
 
     let limit = MAX_SPLIT_SCALARS;
@@ -394,6 +396,8 @@ fn test_field_part_ranges_tile_the_part_list() {
         config.clone(),
         type_env,
         Arc::new(Map::default()),
+    ,
+        Default::default(),
     );
 
     // A struct of `n` scalars of alternating class, led by a zero-sized member that yields no part.

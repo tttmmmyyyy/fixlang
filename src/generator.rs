@@ -29,6 +29,7 @@ use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
+use crate::misc::Set;
 use crate::object::build_free_boxed;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
@@ -548,6 +549,9 @@ pub struct Generator<'c, 'm> {
     /// The type of every global symbol of the program, by name — every compilation unit's, since a
     /// unit's code calls into the others. It is what a global is declared from on first use.
     global_types: Arc<Map<FullName, Arc<TypeNode>>>,
+    /// The symbols of the program that something outside their own compilation unit reaches, which
+    /// is what decides whether a symbol this module defines is published to the linker.
+    reached_from_outside_their_unit: Arc<Set<FullName>>,
     /// Type definitions of the program, used to resolve a Fix type to its layout.
     type_env: TypeEnv,
     /// Layout of the target the module is compiled for: sizes, alignments and struct offsets.
@@ -774,6 +778,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         config: Configuration,
         type_env: TypeEnv,
         global_types: Arc<Map<FullName, Arc<TypeNode>>>,
+        reached_from_outside_their_unit: Arc<Set<FullName>>,
     ) -> Self {
         let triple = module.get_triple().as_str().to_string_lossy().to_string();
         let gc = Self {
@@ -786,6 +791,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             debug_location: vec![],
             declared_globals: Default::default(),
             global_types,
+            reached_from_outside_their_unit,
             type_env,
             target_data: target_data,
             return_registers: return_registers_of_target(&triple),
@@ -2436,6 +2442,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         Object::from_parts(parts, ret_ty, self)
     }
 
+    /// Whether the global `name` is published to the linker, which it is when something outside its
+    /// own compilation unit reaches it. Every other global is internal to the unit defining it, and
+    /// no other unit declares it, so LLVM optimizes it knowing every call it has.
+    fn published_to_the_linker(&self, name: &FullName) -> bool {
+        self.reached_from_outside_their_unit.contains(name)
+    }
+
     // Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
     // A funptr function is one of the program's globals, so another compilation unit reaches it by
     // name and it is external; a closure function is internal to the unit that lifted it, so LLVM
@@ -2454,7 +2467,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         name: &FullName,
     ) -> FunctionValue<'c> {
         let llvm_fn_ty = lambda_function_type(fn_ty, self);
-        let linkage = if fn_ty.is_funptr() {
+        let linkage = if fn_ty.is_funptr() && self.published_to_the_linker(name) {
             Linkage::External
         } else {
             Linkage::Internal
@@ -2492,9 +2505,15 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             embedded_ty.fn_type(&[], false)
         };
-        let acc_fn = self
-            .module
-            .add_function(&acc_fn_name, acc_fn_ty, Some(Linkage::External));
+        let acc_fn = self.module.add_function(
+            &acc_fn_name,
+            acc_fn_ty,
+            Some(if self.published_to_the_linker(name) {
+                Linkage::External
+            } else {
+                Linkage::Internal
+            }),
+        );
         self.add_global_object(name.clone(), acc_fn, ty);
         Some(acc_fn)
     }

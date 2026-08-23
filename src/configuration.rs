@@ -880,11 +880,7 @@ impl Configuration {
     /// optimization still sees the program entire. Below that a unit is an object file, optimized
     /// on its own, and the linker puts the object files together.
     pub fn unit_output(&self) -> UnitOutput {
-        if self.runs_from(FixOptimizationLevel::Max) {
-            UnitOutput::Bitcode
-        } else {
-            UnitOutput::ObjectFile
-        }
+        UnitOutput::ObjectFile // PROBE: no merge
     }
 
     /// Give each global function a version taking one, two, ... arguments at once, and send every

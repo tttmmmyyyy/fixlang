@@ -369,10 +369,99 @@ pub fn build_object_files<'c>(
         units
     };
 
-    let reached_from_outside_their_unit = Arc::new(symbols_reached_from_outside_their_unit(
-        &units,
-        &program.root_value_names(),
-    ));
+    // PROBE: lower and optimize the whole program's RC IR, then divide it among the units.
+    let (mut unit_rc_programs, reached_from_outside_their_unit, global_types) = {
+        let type_env = program.type_env();
+        let all_symbols: Vec<Symbol> = units
+            .iter()
+            .flat_map(|unit| unit.symbols().iter().cloned())
+            .collect();
+        let root_value_names: Set<FullName> = program.root_value_names().into_iter().collect();
+        let rc_prog = lower_and_insert_rc(
+            &type_env,
+            &all_symbols,
+            &global_types,
+            root_value_names.clone(),
+            config,
+        );
+        let rc_prog = optimize_rc_program(rc_prog, &type_env, &global_types, config);
+
+        // Which unit a name belongs to. A function lifted or cloned out of a symbol is named by
+        // extending that symbol's name — with `#`-separated segments, and with the whole of it as
+        // the namespace of a lambda lifted out of it — so the symbol whose name is the longest
+        // prefix of the function's is the symbol it came from.
+        let mut symbol_units: Vec<(String, usize)> = vec![];
+        for (index, unit) in units.iter().enumerate() {
+            for symbol in unit.symbols() {
+                symbol_units.push((symbol.name.to_string(), index));
+            }
+        }
+        let unit_of = |name: &FullName| -> Option<usize> {
+            let text = name.to_string();
+            symbol_units
+                .iter()
+                .filter(|(symbol, _)| text.starts_with(symbol.as_str()))
+                .max_by_key(|(symbol, _)| symbol.len())
+                .map(|(_, index)| *index)
+        };
+
+        // The type of every global the program defines, the versions the optimizer synthesized
+        // included. A unit declares a name another unit defines from this, and a synthesized version
+        // is not among the program's symbols, so its own type is all there is to declare it from.
+        let mut synthesized_types: Map<FullName, Arc<TypeNode>> = (*global_types).clone();
+        for (fref, func) in &rc_prog.funcs {
+            // A closure function is reached by an indirect call through the capture the body it was
+            // lifted from builds, so its name is mentioned only in that body's own unit and it is
+            // declared where code generation reaches it. Naming it here would have the unit defining
+            // it declare an accessor instead, since only a funptr global is the function itself.
+            if func.fn_ty.is_funptr() {
+                synthesized_types.insert(fref.name.clone(), func.fn_ty.clone());
+            }
+        }
+        for global in &rc_prog.globals {
+            synthesized_types.insert(global.symbol.clone(), global.ty.clone());
+        }
+
+        let mut unit_rc_programs: Vec<RcProgram> = (0..units.len())
+            .map(|_| RcProgram {
+                funcs: Map::default(),
+                globals: vec![],
+                roots: Set::default(),
+            })
+            .collect();
+        for (fref, func) in rc_prog.funcs {
+            let index = unit_of(&fref.name)
+                .unwrap_or_else(|| panic!("no symbol owns `{}`", fref.name.to_string()));
+            unit_rc_programs[index].funcs.insert(fref, func);
+        }
+        for global in rc_prog.globals {
+            let index = unit_of(&global.symbol)
+                .unwrap_or_else(|| panic!("no symbol owns `{}`", global.symbol.to_string()));
+            unit_rc_programs[index].globals.push(global);
+        }
+
+        // A name is published to the linker when a body in another unit mentions it, or when the C
+        // world enters the program through it.
+        let mut published = root_value_names;
+        for (index, unit_prog) in unit_rc_programs.iter().enumerate() {
+            let bodies = unit_prog
+                .funcs
+                .values()
+                .map(|func| &func.body)
+                .chain(unit_prog.globals.iter().map(|global| &global.init));
+            for body in bodies {
+                dead_code_elim::collect_mentions(body, &mut |mentioned| {
+                    if mentioned.is_global() && unit_of(mentioned).is_some_and(|of| of != index) {
+                        published.insert(mentioned.clone());
+                    }
+                });
+            }
+        }
+        for unit_prog in unit_rc_programs.iter_mut() {
+            unit_prog.roots = published.clone();
+        }
+        (unit_rc_programs, Arc::new(published), Arc::new(synthesized_types))
+    };
 
     // Where each unit's generated code goes, and where the code this build hands the linker goes.
     // Merged units are linked as the one object file they are compiled into together; separate ones
@@ -430,6 +519,14 @@ pub fn build_object_files<'c>(
         let reached_from_outside_their_unit = reached_from_outside_their_unit.clone();
         let config = config.clone();
         let type_env = program.type_env();
+        let unit_rc_program = mem::replace(
+            &mut unit_rc_programs[i],
+            RcProgram {
+                funcs: Map::default(),
+                globals: vec![],
+                roots: Set::default(),
+            },
+        );
 
         let export_statements = if is_main_unit {
             // Export statements are only needed for the main unit.
@@ -454,6 +551,7 @@ pub fn build_object_files<'c>(
                 config.clone(),
                 type_env,
                 global_types.clone(),
+                reached_from_outside_their_unit.clone(),
             );
 
             // In debug mode, create debug infos.
@@ -464,16 +562,10 @@ pub fn build_object_files<'c>(
             // Declare runtime functions.
             runtime::build_runtime(&mut gc, BuildMode::Declare);
 
-            // Lower this unit's symbols to the RC IR, insert reference counting, and generate their
-            // LLVM. Only this unit's symbols are implemented; a symbol of another unit that this
-            // one calls is declared where code generation first reaches it, from the types of the
-            // program's globals the generator was given.
-            let unit_symbols = unit.symbols().to_vec();
-            let roots = reachability_roots(&unit_symbols, &reached_from_outside_their_unit);
-            let rc_prog =
-                lower_and_insert_rc(gc.type_env(), &unit_symbols, &global_types, roots, &config);
-            let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &global_types, &config);
-            gc.implement_rc_program(&rc_prog);
+            // Generate this unit's slice of the program's RC IR. A function of another unit that
+            // this one calls is declared where code generation first reaches it, from the types of
+            // the program's globals the generator was given.
+            gc.implement_rc_program(&unit_rc_program);
 
             if is_main_unit {
                 // Implement runtime functions.
