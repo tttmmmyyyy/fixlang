@@ -189,28 +189,32 @@ pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
     runs
 }
 
-/// Splits `v` into pieces of at most `max_size` elements, each piece holding at least one element
+/// Splits `v` into pieces averaging `mean_size` elements, each piece holding at least one element
 /// and the pieces read in order giving back `v`.
 ///
-/// Where a piece ends is decided by the text `name_of` gives an element: a piece ends after an
-/// element whose name hashes into a `1 / max_size` slice of the numbers, and after `max_size`
-/// elements regardless. An element inserted among the others therefore changes the piece it lands
-/// in and leaves the pieces after it holding the elements they held, so a consumer keyed on a
-/// piece's contents keeps them.
+/// A piece ends after an element whose name — the text `name_of` gives it — hashes into a
+/// `1 / mean_size` slice of the numbers. Every boundary is therefore attached to an element rather
+/// than to a count, so an element inserted among the others changes the piece it lands in and
+/// leaves every other piece holding the elements it held, and a consumer keyed on a piece's
+/// contents keeps them.
 ///
-/// The expected piece is shorter than `max_size`, since a piece also ends wherever a name says to.
-pub fn split_by_max_size<T>(
+/// The lengths follow a geometric distribution, so a piece several times `mean_size` long is
+/// uncommon rather than impossible.
+///
+/// # Examples
+/// `mean_size` of 1 puts a boundary after every element, since every number is in a `1 / 1` slice.
+pub fn split_at_name_boundaries<T>(
     v: Vec<T>,
-    max_size: usize,
+    mean_size: usize,
     name_of: impl Fn(&T) -> String,
 ) -> Vec<Vec<T>> {
-    assert!(max_size > 0, "a piece holds at least one element");
+    assert!(mean_size > 0, "a piece holds at least one element");
     let mut pieces = vec![];
     let mut piece = vec![];
     for elem in v {
-        let name_ends_piece = md5_u64(&name_of(&elem)) % max_size as u64 == 0;
+        let name_ends_piece = md5_u64(&name_of(&elem)) % mean_size as u64 == 0;
         piece.push(elem);
-        if name_ends_piece || piece.len() == max_size {
+        if name_ends_piece {
             pieces.push(mem::take(&mut piece));
         }
     }
@@ -492,9 +496,9 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        char_pos_to_utf16_pos, join_compiler_threads, spawn_compiler_thread, split_by_max_size,
-        split_string_by_space_not_quated, upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos,
-        Set,
+        char_pos_to_utf16_pos, join_compiler_threads, spawn_compiler_thread,
+        split_at_name_boundaries, split_string_by_space_not_quated, upper_camel_to_lower_snake,
+        utf16_pos_to_utf8_byte_pos, Set,
     };
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -561,28 +565,28 @@ mod tests {
         assert_eq!(join_compiler_threads(threads), vec!["first", "second"]);
     }
 
-    /// Every piece a split produces holds at least one element and at most `max_size` of them, and
-    /// the pieces read back as the input. A consumer turns each piece into a unit of work, so an
-    /// empty piece is a unit with nothing in it.
+    /// Every piece a split produces holds at least one element, and the pieces read back as the
+    /// input. A consumer turns each piece into a unit of work, so an empty piece is a unit with
+    /// nothing in it, and an element the split drops is work nobody does.
     #[test]
-    fn test_split_by_max_size_pieces_are_nonempty() {
-        for max_size in 1..=5 {
+    fn test_split_at_name_boundaries_pieces_are_nonempty() {
+        for mean_size in 1..=5 {
             for len in 0..=12 {
                 let v: Vec<usize> = (0..len).collect();
-                let pieces = split_by_max_size(v.clone(), max_size, |n| n.to_string());
+                let pieces = split_at_name_boundaries(v.clone(), mean_size, |n| n.to_string());
                 assert!(
                     pieces.iter().all(|piece| !piece.is_empty()),
-                    "max_size = {}, len = {}",
-                    max_size,
+                    "mean_size = {}, len = {}",
+                    mean_size,
                     len
                 );
-                assert!(
-                    pieces.iter().all(|piece| piece.len() <= max_size),
-                    "max_size = {}, len = {}",
-                    max_size,
+                assert_eq!(
+                    pieces.concat(),
+                    v,
+                    "mean_size = {}, len = {}",
+                    mean_size,
                     len
                 );
-                assert_eq!(pieces.concat(), v, "max_size = {}, len = {}", max_size, len);
             }
         }
     }
@@ -594,13 +598,12 @@ mod tests {
             .collect()
     }
 
-    /// An element inserted among the others changes the pieces around it and leaves the rest
-    /// holding the elements they held: the same insertion into a longer input changes no more
-    /// pieces than into a shorter one, so what an insertion disturbs stays within its
-    /// neighbourhood.
+    /// An element inserted among the others changes at most two pieces: the one it lands in, and —
+    /// when its own name ends a piece — the remainder that name cuts off. Every other piece holds
+    /// the elements it held, however long the input running after the insertion is.
     #[test]
-    fn test_split_by_max_size_survives_an_insertion() {
-        const MAX_SIZE: usize = 128;
+    fn test_split_at_name_boundaries_survives_an_insertion() {
+        const MEAN_SIZE: usize = 128;
 
         // How many pieces an element inserted at index 1000 changes, out of an input of `len`
         // elements. Both lengths hold the same elements around that index, so the counts are of one
@@ -611,48 +614,51 @@ mod tests {
             after.insert(1000, "Std::Array::value#0999b".to_string());
 
             let name_of = |s: &String| s.clone();
-            let pieces_before: Set<Vec<String>> = split_by_max_size(before, MAX_SIZE, name_of)
-                .into_iter()
-                .collect();
-            split_by_max_size(after, MAX_SIZE, name_of)
+            let pieces_before: Set<Vec<String>> =
+                split_at_name_boundaries(before, MEAN_SIZE, name_of)
+                    .into_iter()
+                    .collect();
+            split_at_name_boundaries(after, MEAN_SIZE, name_of)
                 .into_iter()
                 .filter(|piece| !pieces_before.contains(piece))
                 .count()
         };
 
-        let changed_in_short_input = changed_piece_count(2_000);
-        let changed_in_long_input = changed_piece_count(8_000);
-        assert!(
-            changed_in_short_input > 0,
-            "the inserted element landed in no piece the split changed"
-        );
-        assert!(
-            changed_in_long_input <= changed_in_short_input,
-            "an insertion changed {} pieces of a 2,000-element input and {} of an 8,000-element \
-             one, so what an insertion disturbs grows with what follows it",
-            changed_in_short_input,
-            changed_in_long_input
-        );
+        for len in [2_000, 8_000] {
+            let changed = changed_piece_count(len);
+            assert!(
+                changed > 0,
+                "the inserted element landed in no piece the split changed, out of {} elements",
+                len
+            );
+            assert!(
+                changed <= 2,
+                "an insertion changed {} pieces of a {}-element input",
+                changed,
+                len
+            );
+        }
     }
 
-    /// The pieces come out on the scale `max_size` names. A rule that ends a piece far more often
-    /// than one element in `max_size` — a `name_of` giving every element the same text, a slice
-    /// of the numbers wider than `1 / max_size` — leaves pieces of a few elements each, and a piece
-    /// is a unit of compilation.
+    /// The pieces come out on the scale `mean_size` names. A rule that ends a piece far more often
+    /// than one element in `mean_size` — a `name_of` giving every element the same text, a slice of
+    /// the numbers wider than `1 / mean_size` — leaves pieces of a few elements each, and a piece is
+    /// a unit of compilation.
     #[test]
-    fn test_split_by_max_size_pieces_are_of_the_size_asked_for() {
-        const MAX_SIZE: usize = 128;
+    fn test_split_at_name_boundaries_pieces_are_of_the_size_asked_for() {
+        const MEAN_SIZE: usize = 128;
         const LEN: usize = 2_000;
 
-        let pieces = split_by_max_size(element_names(LEN), MAX_SIZE, |s: &String| s.clone());
+        let pieces =
+            split_at_name_boundaries(element_names(LEN), MEAN_SIZE, |s: &String| s.clone());
         let mean_len = LEN / pieces.len();
         assert!(
-            mean_len >= MAX_SIZE / 4,
-            "{} elements came out as {} pieces of {} elements on average, against a maximum of {}",
+            mean_len >= MEAN_SIZE / 4,
+            "{} elements came out as {} pieces of {} elements on average, against a mean of {}",
             LEN,
             pieces.len(),
             mean_len,
-            MAX_SIZE
+            MEAN_SIZE
         );
     }
 

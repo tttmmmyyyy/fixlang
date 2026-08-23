@@ -341,7 +341,7 @@ fn test_wide_return_across_compilation_units() {
     );
     "#;
     let mut config = Configuration::develop_mode();
-    config.max_cu_size = 1;
+    config.cu_size = 1;
     test_source(source, config);
 }
 
