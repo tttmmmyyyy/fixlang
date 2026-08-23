@@ -187,12 +187,11 @@ pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
 /// Splits `v` into pieces of at most `max_size` elements, each piece holding at least one element
 /// and the pieces read in order giving back `v`.
 ///
-/// Where a piece ends is decided by `name_of`, the text naming an element, rather than by the
-/// element's position: a piece ends after an element whose name hashes into a `1 / max_size` slice
-/// of the numbers, and after `max_size` elements regardless. An element that appears among the
-/// others therefore changes the piece it lands in and leaves the pieces after it holding the
-/// elements they held, so a consumer keyed on a piece's contents keeps them. Cutting at fixed
-/// positions instead moves every boundary after the new element, which changes every piece.
+/// Where a piece ends is decided by the text `name_of` gives an element: a piece ends after an
+/// element whose name hashes into a `1 / max_size` slice of the numbers, and after `max_size`
+/// elements regardless. An element inserted among the others therefore changes the piece it lands
+/// in and leaves the pieces after it holding the elements they held, so a consumer keyed on a
+/// piece's contents keeps them.
 ///
 /// The expected piece is shorter than `max_size`, since a piece also ends wherever a name says to.
 pub fn split_by_max_size<T>(
@@ -590,10 +589,10 @@ mod tests {
             .collect()
     }
 
-    /// An element that appears among the others changes the pieces around it and leaves the rest
+    /// An element inserted among the others changes the pieces around it and leaves the rest
     /// holding the elements they held: the same insertion into a longer input changes no more
-    /// pieces than into a shorter one. Boundaries taken from the positions instead move with every
-    /// element after the new one, so what an insertion disturbs grows with what follows it.
+    /// pieces than into a shorter one, so what an insertion disturbs stays within its
+    /// neighbourhood.
     #[test]
     fn test_split_by_max_size_survives_an_insertion() {
         const MAX_SIZE: usize = 128;

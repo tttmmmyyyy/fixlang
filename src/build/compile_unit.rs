@@ -123,9 +123,10 @@ impl CompileUnit {
         let symbols = self.symbols;
         let dependent_modules = self.dependent_modules;
 
-        // A symbol is named by its name alone, so that editing a body leaves every boundary where
-        // it was: a boundary read off the symbol's hash would move whenever a body changed, and the
-        // pieces after it would lose their cached object files.
+        // The text naming a symbol is its `name` alone, so that editing a symbol's `expr` leaves
+        // every boundary where it was and the units holding no edited symbol keep their cached
+        // object files. `Symbol::hash` takes in the `expr` too, so a boundary read off it would
+        // move at every symbol whose `expr` changed.
         let split_symbols = split_by_max_size(symbols, max_size, |symbol| symbol.name.to_string());
         let mut units = vec![];
         for symbols in split_symbols {
@@ -204,10 +205,10 @@ mod tests {
         }
     }
 
-    /// Where a unit ends is decided by the names of the symbols, so editing an expression leaves
-    /// every boundary where it was and a unit holding no edited symbol keeps the object file it was
-    /// compiled into. A boundary read off `Symbol::hash`, which takes in the expression as well,
-    /// moves at every symbol whose expression changed.
+    /// Where a unit ends is decided by the names of the symbols, so editing a symbol's `expr`
+    /// leaves every boundary where it was and a unit holding no edited symbol keeps the object file
+    /// it was compiled into. A boundary read off `Symbol::hash`, which takes in the `expr` as well,
+    /// moves at every symbol whose `expr` changed.
     #[test]
     fn test_split_by_max_size_places_the_boundaries_by_the_symbol_names() {
         const SYMBOL_COUNT: usize = 200;

@@ -8,8 +8,8 @@ pub fn md5_hex(text: &str) -> String {
 
 /// The first eight bytes of the MD5 digest of `text`, as a number.
 ///
-/// It serves a decision that reads a hash instead of showing one, where the text a thing is named
-/// by has to decide the same way on every machine and every build.
+/// The number is the same on every machine and every build, so a decision taken from it comes out
+/// the same way everywhere.
 pub fn md5_u64(text: &str) -> u64 {
     u64::from_le_bytes(md5::compute(text).0[..8].try_into().unwrap())
 }
