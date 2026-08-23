@@ -153,6 +153,10 @@ pub const CONTROL_BLOCK_IDX: u32 = 0;
 pub const BOXED_TYPE_DATA_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const UNION_TAG_IDX: u32 = 0; // Should be added to `BOXED_TYPE_DATA_IDX` if the union is boxed.
 pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;
+/// The width of a union's tag, which holds the index of the variant the value was created as.
+pub const UNION_TAG_BITS: u32 = 8;
+/// How many variants a union may declare: the indices a tag of `UNION_TAG_BITS` bits tells apart.
+pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 /// How many fields a closure has: the function pointer and the capture.

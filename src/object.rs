@@ -6,9 +6,10 @@ use crate::constants::{
     ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME,
     BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
     DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
-    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, PUNCHED_ARRAY_ARRAY_IDX,
-    PUNCHED_ARRAY_HOLE_IDX, STD_NAME, STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL,
-    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
+    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, MAX_UNION_VARIANTS,
+    PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, STD_NAME, STORAGE_BUF_IDX,
+    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
+    UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
 };
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
@@ -255,7 +256,7 @@ impl ObjectFieldType {
             }
             ObjectFieldType::UnionTag => gc
                 .get_di_builder()
-                .create_basic_type("<union tag>", 8, DW_ATE_UNSIGNED, 0)
+                .create_basic_type("<union tag>", UNION_TAG_BITS as u64, DW_ATE_UNSIGNED, 0)
                 .unwrap()
                 .as_type(),
             // No object carries a bare `Array` field after the value-layout flip; an array's
@@ -904,7 +905,7 @@ impl ObjectFieldType {
             let mismatch_bb = gc
                 .context
                 .append_basic_block(current_func, &format!("mismatch_tag{}", i));
-            let expect_tag_val = union_tag_type(gc.context).const_int(i as u64, false);
+            let expect_tag_val = union_tag_value(gc.context, i);
             let is_match = gc
                 .builder()
                 .build_int_compare(
@@ -1417,8 +1418,19 @@ pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut Generator<'c, 'm>) -> DIType<'c>
 }
 
 /// The type of a union's tag, an index into the union's variants.
-pub fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
-    context.i8_type()
+fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
+    context.custom_width_int_type(UNION_TAG_BITS)
+}
+
+/// The tag of the variant a union declares at index `variant_idx`.
+pub fn union_tag_value<'c>(context: &'c Context, variant_idx: usize) -> IntValue<'c> {
+    assert!(
+        variant_idx < MAX_UNION_VARIANTS,
+        "A union declares at most {} variants, so index {} names no variant.",
+        MAX_UNION_VARIANTS,
+        variant_idx
+    );
+    union_tag_type(context).const_int(variant_idx as u64, false)
 }
 
 /// The parts a lambda of type `ty` returns, in `type_parts` order: a boxed result is the single

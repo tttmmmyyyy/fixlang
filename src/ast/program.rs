@@ -17,11 +17,11 @@ use crate::configuration::{
 };
 use crate::constants::{
     C_ENTRY_POINT_NAME, DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME,
-    MAIN_MODULE_NAME, MARK_THREADED_NAME, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL,
-    STRUCT_MODIFIER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
-    STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL,
-    TEST_FUNCTION_NAME, TEST_MODULE_NAME, TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL,
-    UNION_MOD_SYMBOL,
+    MAIN_MODULE_NAME, MARK_THREADED_NAME, MAX_UNION_VARIANTS, STD_NAME, STRUCT_ACT_SYMBOL,
+    STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL,
+    STRUCT_SETTER_SYMBOL, TEST_FUNCTION_NAME, TEST_MODULE_NAME, TUPLE_SIZE_BASE, UNION_AS_SYMBOL,
+    UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
 };
 use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
@@ -2729,6 +2729,17 @@ impl Program {
                     }
                 }
                 TypeDeclValue::Union(union) => {
+                    if union.fields.len() > MAX_UNION_VARIANTS {
+                        errors.append(Errors::from_msg_srcs(
+                            format!(
+                                "Union `{}` has {} variants, but a union can have at most {} variants.",
+                                type_name.to_string(),
+                                union.fields.len(),
+                                MAX_UNION_VARIANTS
+                            ),
+                            &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
+                        ));
+                    }
                     for field in &union.fields {
                         if !field.ty.is_assoc_ty_free() {
                             errors.append(Errors::from_msg_srcs(
