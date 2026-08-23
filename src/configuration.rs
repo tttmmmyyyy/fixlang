@@ -1,5 +1,5 @@
 use crate::ast::name::FullName;
-use crate::build::cpu_features::CpuFeatures;
+use crate::build::cpu_features::{CpuFeatures, HostCpu};
 use crate::constants::{
     CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
     C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_TYPES_JSON_PATH, C_UNSIGNED_CHAR_NAME,
@@ -428,12 +428,12 @@ impl ProjectSources {
 /// link it, what to produce, and how to run it. It is assembled from the command line and the
 /// project file, and then read by every stage of the build.
 ///
-/// A field whose value changes the generated code has to be added to `object_generation_hash`,
-/// which decides when a cached object file may be reused.
-///
-/// A field whose value changes what the elaborated program is — the definitions the compiler
-/// supplies itself, or the types the parser gives to what it reads — has to be added to
-/// `Program::module_dependency_hash`, which decides when a cached type-check result may be reused.
+/// `cache_hash_sources` sorts every field of this struct by what it reaches, and a field added here
+/// is sorted there before this compiles. A field whose value changes the generated code belongs to
+/// the hash deciding when a cached object file may be reused; one whose value changes what the
+/// elaborated program is — the definitions the compiler supplies itself, or the types the parser
+/// gives to what it reads — belongs to the hash deciding when a cached type-check result may be
+/// reused.
 #[derive(Clone)]
 pub struct Configuration {
     /// The source files no project supplies: the ones a `--file` option names, and the ones a
@@ -510,6 +510,10 @@ pub struct Configuration {
     /// The size of each C type on the target, read from the C compiler. The `Std::FFI` type
     /// aliases such as `CChar` are defined from it.
     pub c_type_sizes: CTypeSizes,
+    /// The CPU the build generates code for, read from the machine the compiler runs on.
+    /// `get_target_machine` compiles for it, minus the features `disable_cpu_features_regex` turns
+    /// off, so the object files a build produces hold the instructions this CPU has.
+    pub host_cpu: HostCpu,
     /// Regex patterns of the CPU features the generated code leaves unused; a feature the host
     /// supports and no pattern matches is used.
     pub disable_cpu_features_regex: Vec<String>,
@@ -636,6 +640,7 @@ impl Configuration {
             sanitizer: Sanitizer::None,
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
+            host_cpu: HostCpu::of_this_machine(),
             disable_cpu_features_regex: vec![],
             preliminary_commands: vec![],
             allow_preliminary_commands: false,
@@ -652,6 +657,18 @@ impl Configuration {
             deprecation_mode: DeprecationMode::default(),
         })
     }
+}
+
+/// The hash sources of a build's caches, one per cache, each holding the settings that cache has to
+/// tell apart. `Configuration::cache_hash_sources` fills them in one pass, since a setting reaching
+/// more than one of them is written into each.
+struct CacheHashSources {
+    /// The settings that decide what the elaborated program is.
+    elaboration: HashSource,
+    /// The settings that decide what code the compiler generates.
+    object_generation: HashSource,
+    /// The settings the runtime's own object file is compiled under.
+    runtime_object: HashSource,
 }
 
 impl Configuration {
@@ -1000,86 +1017,220 @@ impl Configuration {
         }
     }
 
-    /// A hash of the settings that decide what the elaborated program is.
+    /// The settings this configuration's caches are keyed by, sorted by what each field of it
+    /// reaches.
     ///
-    /// The fields are listed by hand, so every field of `Configuration` that changes the program
-    /// elaboration produces has to be hashed here: one left out makes a build reuse the type-check
-    /// results of a build that elaborated a different program.
-    ///
-    /// `Program::module_dependency_hash` folds this beside the sources the program is written in,
-    /// which is where the type-check cache reads it. A setting belongs here when it reaches the
-    /// elaborated program without passing through any source, as the sizes of the C types do: they
-    /// decide the Fix type the parser gives a `CInt` in an `FFI_CALL` signature, and the compiler
-    /// builds the trait implementations converting to a C type from them as data.
-    ///
-    /// `test_elaboration_hash_separates_elaboration_settings` gives each setting read here a value
-    /// of its own and checks that the hash follows, so its list must stay in sync with this one.
-    pub fn elaboration_hash(&self) -> String {
-        let mut hash_source = HashSource::default();
-        hash_source.push_text(&self.c_type_sizes.to_string());
-        hash_source.finish()
-    }
-
-    /// Get hash value of the configurations that affect the object file generation.
-    ///
-    /// The fields are listed by hand, so every field of `Configuration` that changes the generated
-    /// code has to be hashed here: one left out makes a build reuse the object files of a build that
-    /// generated different code.
-    ///
-    /// `test_object_generation_hash_separates_code_generation_settings` gives each setting read here
-    /// a value of its own and checks that the hash follows, so its list must stay in sync with this
-    /// one.
+    /// Every field of `Configuration` is written out here, so a field added to it stops this
+    /// compiling until it is sorted with the rest. That is what keeps a key from falling behind the
+    /// settings it covers: a setting reaching the elaborated program and left out of `elaboration`
+    /// makes a build serve a type-check result produced under a different setting, and one reaching
+    /// the generated code and left out of `object_generation` makes it reuse object files whose
+    /// code was generated under a different one.
     ///
     /// Every value goes in through `HashSource`, which gives it a length of its own, so where one
     /// value ends and the next begins never depends on what the values are.
-    pub fn object_generation_hash(&self) -> String {
-        let mut hash_source = HashSource::default();
-        hash_source.push_text(&self.fix_opt_level.to_string());
-        hash_source.push_text(&self.debug_info.to_string());
+    fn cache_hash_sources(&self) -> CacheHashSources {
+        let Configuration {
+            // What the compiler makes the program out of. Each is pushed below, into the hash of
+            // every cache that has to tell it apart.
+            c_type_sizes,
+            fix_opt_level,
+            debug_info,
+            compilation_directory,
+            threaded,
+            sanitizer,
+            backtrace,
+            no_runtime_check,
+            skip_eval,
+            develop_mode,
+            emit_symbols,
+            max_split_scalars,
+            output_file_type,
+            host_cpu,
+            disable_cpu_features_regex,
+
+            // Reach the generated code through what they decide, which is pushed in their place:
+            // `llvm_passes` is the pipeline `llvm_passes_override` gives where it gives one and the
+            // optimization level implies otherwise, and `entry_point_runs_tests` is what the
+            // subcommand decides about the code.
+            llvm_passes_override: _,
+            subcommand: _,
+
+            // What to compile. The sources themselves are hashed beside these hashes, by
+            // `Program::module_dependency_hash` and `build_object_files_cache_hash`, so what a
+            // preliminary command writes reaches a key as the source it wrote.
+            extra_source_files: _,
+            root_source_files: _,
+            project_sources: _,
+            preliminary_commands: _,
+            allow_preliminary_commands: _,
+
+            // How the compiler goes about its work, which leaves what it produces alone. How many
+            // symbols a compilation unit holds decides which object files a build has rather than
+            // what one of them holds, so `build_object_files_cache_hash` covers `cu_size`.
+            cu_size: _,
+            num_worker_thread: _,
+            type_check_cache: _,
+
+            // The macros the runtime is compiled with. The runtime is written in C rather than
+            // generated, so it has an object file and a key of its own.
+            runtime_c_macro,
+
+            // The link step, which runs once the object files are made, and where its result goes.
+            object_files: _,
+            linked_libraries: _,
+            library_search_paths: _,
+            ld_flags: _,
+            out_file_path: _,
+
+            // What the build writes beside the object files, and what it reports as it goes. A dump
+            // is written as the code is generated, so a build asked for one is keyed as any other
+            // build is and generates the code again (`dumps_generated_code`).
+            emit_llvm: _,
+            emit_rc_ir: _,
+            show_build_times: _,
+            verbose: _,
+            deprecation_mode: _,
+
+            // How the built program is run, once it is built.
+            valgrind_tool: _,
+            run_program_args: _,
+        } = self;
+
+        let mut elaboration = HashSource::default();
+        let mut object_generation = HashSource::default();
+        let mut runtime_object = HashSource::default();
+
+        // The sizes of the C types decide the Fix type the parser gives a `CInt` in an `FFI_CALL`
+        // signature, and the compiler builds the trait implementations converting to a C type from
+        // them as data, so they reach the elaborated program and the code generated from it alike.
+        elaboration.push_text(&c_type_sizes.to_string());
+        object_generation.push_text(&c_type_sizes.to_string());
+
+        object_generation.push_text(&fix_opt_level.to_string());
+        object_generation.push_text(&debug_info.to_string());
         // `Generator::create_debug_info` writes the compilation directory into the debug
         // information, which is the one way it reaches the generated code, so a build without debug
         // information takes objects generated in another directory. A second reader of the field
         // would make this condition wrong.
-        if self.debug_info {
-            hash_source.push_text(&self.compilation_directory.to_string_lossy());
+        if *debug_info {
+            object_generation.push_text(&compilation_directory.to_string_lossy());
         }
-        hash_source.push_text(&self.threaded.to_string());
+        object_generation.push_text(&threaded.to_string());
         // The instrumentation is part of the code that is generated, so an object built without it
         // cannot stand in for one built with it. Leaving this out would let a build reuse
         // uninstrumented objects and report a clean run of a program nothing was checking.
-        hash_source.push_text(&self.sanitizer.to_string());
-        hash_source.push_text(&self.backtrace.to_string());
-        hash_source.push_text(&self.no_runtime_check.to_string());
-        hash_source.push_text(&self.skip_eval.to_string());
-        hash_source.push_text(&self.c_type_sizes.to_string());
-        hash_source.push_text(&self.max_split_scalars.to_string());
+        object_generation.push_text(&sanitizer.to_string());
+        // The sanitizer decides which C compiler `build` compiles the runtime with, and the
+        // instrumentation it inserts is part of the object that comes out.
+        runtime_object.push_text(&sanitizer.to_string());
+        object_generation.push_text(&backtrace.to_string());
+        object_generation.push_text(&no_runtime_check.to_string());
+        object_generation.push_text(&skip_eval.to_string());
+        // Development mode puts the compiler's own consistency checks into the code it generates —
+        // the assertions of `Generator::build_assert_unique` and `build_assert_refcnt_state_local`,
+        // and the arm a dynamic traverser takes when it is called with work it does not know. The
+        // same reasoning as the sanitizer's applies: an object built without those checks cannot
+        // stand in for one built with them.
+        object_generation.push_text(&develop_mode.to_string());
+        // `simplify_symbol_names` runs where the symbols are asked for, and it renames the symbols
+        // of the program that is generated, which a backtrace of the built program shows.
+        object_generation.push_text(&emit_symbols.to_string());
+        object_generation.push_text(&max_split_scalars.to_string());
         // The kind of the output file reaches the code in two ways: a dynamic library is generated
         // with position-independent relocations (`get_target_machine`), and an executable is the
         // only kind that carries the entry point (`elaborate_via_config`). An object built for one
         // kind therefore fails to link into the other.
-        hash_source.push_text(self.output_file_type.to_str());
-        hash_source.push_list(&self.disable_cpu_features_regex);
+        object_generation.push_text(output_file_type.to_str());
+        // A dynamic library's runtime is compiled position-independent.
+        runtime_object.push_text(output_file_type.to_str());
+        // The CPU the code is generated for. The patterns are what the configuration says and the
+        // CPU is what the machine answers, and an object file holds the instructions of the CPU it
+        // was generated for, so a machine reading a cache another machine wrote needs both.
+        object_generation.push_text(&host_cpu.name);
+        object_generation.push_text(&host_cpu.features);
+        object_generation.push_list(disable_cpu_features_regex);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
         // implies, so the pipeline is hashed in full: were it left out, objects generated under
         // one pipeline would be reused under another, and a comparison of two pipelines would
         // measure whichever one compiled first.
-        hash_source.push_list(&self.llvm_passes());
+        object_generation.push_list(&self.llvm_passes());
 
-        // Command type.
-        // The implementation of the entry point function differs depending on the command type.
-        hash_source.push_text(self.subcommand.command_type_string());
+        // Which entry point the program is given, the one running the tests or the one running
+        // `Main::main`. This is the whole of what the subcommand decides about the generated code,
+        // so `fix build` and `fix run` share their object files.
+        object_generation.push_text(&self.entry_point_runs_tests().to_string());
 
-        // Build time of the compiler.
-        hash_source.push_text(build_time_utc!());
+        // Each macro turns on a part of the runtime, and they are passed to the C compiler as they
+        // are written.
+        runtime_object.push_list(runtime_c_macro);
+        // A build printing a backtrace compiles the runtime keeping the frame pointers a backtrace
+        // is walked along, where the platform walks them (`no_elim_frame_pointers`).
+        runtime_object.push_text(&backtrace.to_string());
 
-        hash_source.finish()
+        // The build of the compiler. Code generation is the compiler's own work, so a differently
+        // built compiler may do it differently, and the runtime's source is carried in the compiler
+        // rather than read from disk.
+        object_generation.push_text(build_time_utc!());
+        runtime_object.push_text(build_time_utc!());
+
+        CacheHashSources {
+            elaboration,
+            object_generation,
+            runtime_object,
+        }
     }
 
-    /// Apply this configuration's `disable_cpu_features_regex` to `features`, turning off every
-    /// feature a pattern matches.
-    pub fn edit_cpu_features(&self, features: &mut CpuFeatures) {
+    /// The hash of the settings that decide what the elaborated program is, which
+    /// `Program::module_dependency_hash` folds beside the sources the program is written in.
+    ///
+    /// `test_elaboration_hash_separates_elaboration_settings` gives each setting read here a value
+    /// of its own and checks that the hash follows.
+    pub fn elaboration_hash(&self) -> String {
+        self.cache_hash_sources().elaboration.finish()
+    }
+
+    /// The hash of the settings that decide what code the compiler generates: two builds sharing it
+    /// generate the same code, so either may reuse the object files of the other.
+    ///
+    /// `test_object_generation_hash_separates_code_generation_settings` gives each setting read
+    /// here a value of its own and checks that the hash follows.
+    pub fn object_generation_hash(&self) -> String {
+        self.cache_hash_sources().object_generation.finish()
+    }
+
+    /// The hash of the settings the runtime's object file is compiled under, which names that file:
+    /// a build finding it on disk compiles the runtime again only where the settings differ.
+    ///
+    /// `test_runtime_object_hash_separates_runtime_compilation_settings` gives each setting read
+    /// here a value of its own and checks that the hash follows.
+    pub fn runtime_object_hash(&self) -> String {
+        self.cache_hash_sources().runtime_object.finish()
+    }
+
+    /// Whether the entry point of the program runs the tests rather than `Main::main`, which is
+    /// what `elaborate_via_config` instantiates it from.
+    pub fn entry_point_runs_tests(&self) -> bool {
+        matches!(self.subcommand, SubCommand::Test)
+    }
+
+    /// Whether the build writes a dump of the code it generates: the symbols at each step of
+    /// optimization, the RC IR, or the LLVM IR.
+    ///
+    /// A dump is written as the code is generated, so a build that reused an object file would
+    /// write nothing for the symbols that object holds. A build asked for a dump therefore reads
+    /// neither the cache of a whole build's object files nor the cache of a single unit's.
+    pub fn dumps_generated_code(&self) -> bool {
+        self.emit_symbols || self.emit_rc_ir.is_some() || self.emit_llvm
+    }
+
+    /// The CPU features the generated code is compiled for: the ones the host supports, minus the
+    /// ones `disable_cpu_features_regex` turns off.
+    pub fn target_cpu_features(&self) -> String {
+        let mut features = CpuFeatures::parse(&self.host_cpu.features);
         features.disable_by_regexes(&self.disable_cpu_features_regex);
+        features.to_string()
     }
 
     /// The `valgrind` invocation to run a built program under, set up for the tool selected in this
@@ -1657,8 +1808,33 @@ mod tests {
                 }),
             ),
             (
+                "host_cpu.name",
+                Box::new(|config: &mut Configuration| {
+                    config.host_cpu.name += "-of-another-machine"
+                }),
+            ),
+            (
+                "host_cpu.features",
+                Box::new(|config: &mut Configuration| {
+                    config.host_cpu.features += ",+afeaturethismachinelacks"
+                }),
+            ),
+            (
+                "develop_mode",
+                Box::new(|config: &mut Configuration| config.develop_mode = true),
+            ),
+            (
+                "emit_symbols",
+                Box::new(|config: &mut Configuration| config.emit_symbols = true),
+            ),
+            (
                 "subcommand",
-                Box::new(|config: &mut Configuration| config.subcommand = SubCommand::Run),
+                Box::new(|config: &mut Configuration| {
+                    // What the subcommand decides about the generated code is which entry point the
+                    // program is given, so the subcommand that differs here is the one whose entry
+                    // point runs the tests.
+                    config.subcommand = SubCommand::Test
+                }),
             ),
         ];
 
@@ -1666,6 +1842,83 @@ mod tests {
             |config| config.object_generation_hash(),
             "code generation",
             settings,
+        );
+    }
+
+    /// Two builds compile the runtime once between them exactly when they agree on this hash, so
+    /// each setting the runtime is compiled under gives the hash a value of its own.
+    #[test]
+    fn test_runtime_object_hash_separates_runtime_compilation_settings() {
+        assert_each_setting_moves_the_hash(
+            |config| config.runtime_object_hash(),
+            "the compilation of the runtime",
+            vec![
+                (
+                    "runtime_c_macro",
+                    Box::new(|config: &mut Configuration| {
+                        config.runtime_c_macro.push("BACKTRACE".to_string())
+                    }),
+                ),
+                (
+                    "output_file_type",
+                    Box::new(|config: &mut Configuration| {
+                        config.output_file_type = OutputFileType::DynamicLibrary
+                    }),
+                ),
+                (
+                    "sanitizer",
+                    Box::new(|config: &mut Configuration| config.sanitizer = Sanitizer::Thread),
+                ),
+                (
+                    "backtrace",
+                    Box::new(|config: &mut Configuration| config.backtrace = true),
+                ),
+            ],
+        );
+    }
+
+    /// The code is generated for the CPU of the machine the compiler runs on, with the features
+    /// `--disable-cpu-feature` names turned off. The object file cache is keyed on the CPU and the
+    /// patterns together on the strength of that.
+    #[test]
+    fn test_the_target_cpu_features_are_the_hosts_minus_the_disabled_ones() {
+        let mut config = Configuration::develop_mode();
+        config.host_cpu.features = "+avx512f,+avx2,+sse2".to_string();
+        config.disable_cpu_features_regex = vec!["avx.*".to_string()];
+
+        let features = config.target_cpu_features();
+        assert!(
+            features.contains("+sse2"),
+            "a feature no pattern names is generated for as the host has it: {}",
+            features
+        );
+        assert!(
+            !features.contains("+avx512f") && !features.contains("+avx2"),
+            "a feature a pattern names is not generated for: {}",
+            features
+        );
+    }
+
+    /// `fix build` and `fix run` produce the same code from the same program, so they share the hash
+    /// naming the object files they may reuse. `fix test` gives the program another entry point,
+    /// which is what the subcommand decides about the code.
+    #[test]
+    fn test_the_object_generation_hash_separates_the_subcommands_by_their_entry_point() {
+        let hash_of = |subcommand: SubCommand| {
+            let mut config = Configuration::develop_mode();
+            config.subcommand = subcommand;
+            config.object_generation_hash()
+        };
+        assert_eq!(
+            hash_of(SubCommand::Build),
+            hash_of(SubCommand::Run),
+            "a build and a run generate one program, so each may take the object files of the other."
+        );
+        assert_ne!(
+            hash_of(SubCommand::Build),
+            hash_of(SubCommand::Test),
+            "a test build gives the program the entry point running the tests, so its object files \
+             are its own."
         );
     }
 }

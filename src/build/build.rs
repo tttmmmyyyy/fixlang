@@ -4,7 +4,6 @@ use crate::constants::INTERMEDIATE_PATH;
 use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
 use crate::misc::info_msg;
-use build_time::build_time_utc;
 use rand::Rng;
 use std::env;
 use std::fs;
@@ -135,18 +134,11 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         libs_opts.push(ld_flag.clone());
     }
 
-    // Build runtime.c to object file.
-    let mut runtime_obj_hash_source = "".to_string();
-    runtime_obj_hash_source += build_time_utc!();
-    runtime_obj_hash_source += &config.runtime_c_macro.join("_");
-    runtime_obj_hash_source += config.output_file_type.to_str();
-    // A sanitized build compiles the runtime with the instrumentation, so an object built without it
-    // is a different object.
-    runtime_obj_hash_source += &config.sanitizer.to_string();
-    let runtime_obj_path = PathBuf::from(INTERMEDIATE_PATH).join(format!(
-        "fixruntime.{:x}.o",
-        md5::compute(runtime_obj_hash_source)
-    ));
+    // Build runtime.c to object file. The object is named by the hash of the settings it is
+    // compiled under, so a setting the compilation below reads belongs in
+    // `Configuration::runtime_object_hash`.
+    let runtime_obj_path = PathBuf::from(INTERMEDIATE_PATH)
+        .join(format!("fixruntime.{}.o", config.runtime_object_hash()));
     if !runtime_obj_path.exists() {
         // Random number for temporary file name.
         // This is necessary to avoid confliction when multiple compilation processes are running in parallel.

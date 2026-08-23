@@ -5,7 +5,7 @@ use crate::ast::name::Name;
 use crate::ast::program::Symbol;
 use crate::configuration::Configuration;
 use crate::constants::COMPILATION_UNITS_PATH;
-use crate::hash::md5_hex;
+use crate::hash::{md5_hex, HashSource};
 use crate::misc::{split_at_name_boundaries, Map, Set};
 use rand::Rng;
 use std::fmt;
@@ -107,24 +107,22 @@ impl CompileUnit {
             .sort_by(|a, b| a.name.to_string().cmp(&b.name.to_string()));
         self.dependent_modules.sort();
 
-        // Add dependency to the configuration.
-        let mut hash_inputs = vec![];
-        hash_inputs.push("<configuration>".to_string());
-        hash_inputs.push(config.object_generation_hash());
+        let mut hash_source = HashSource::default();
 
-        // Add dependency to the symbols.
-        hash_inputs.push("<symbols>".to_string());
-        for symbol in &self.symbols {
-            hash_inputs.push(symbol.hash());
-        }
+        // The settings the code of this unit is generated under.
+        hash_source.push_text(&config.object_generation_hash());
 
-        // Add dependency to source codes of the dependent modules.
-        hash_inputs.push("<dependent modules>".to_string());
-        for name in &self.dependent_modules {
-            hash_inputs.push(module_dependency_hash[name].clone());
-        }
+        // The symbols this unit implements.
+        hash_source.push_list(self.symbols.iter().map(Symbol::hash));
 
-        self.unit_hash = md5_hex(&hash_inputs.join(", "));
+        // The sources of the modules this unit's symbols are made of.
+        hash_source.push_list(
+            self.dependent_modules
+                .iter()
+                .map(|name| &module_dependency_hash[name]),
+        );
+
+        self.unit_hash = hash_source.finish();
     }
 
     /// Sets this unit's hash to a random value, so that the build generates the unit's object file
