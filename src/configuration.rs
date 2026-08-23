@@ -4,7 +4,7 @@ use crate::constants::{
     CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
     C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_TYPES_JSON_PATH, C_UNSIGNED_CHAR_NAME,
     C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
-    DEFAULT_COMPILATION_UNIT_MAX_SIZE, MAX_SPLIT_SCALARS, OPTIMIZATION_LEVEL_BASIC,
+    DEFAULT_COMPILATION_UNIT_SIZE, MAX_SPLIT_SCALARS, OPTIMIZATION_LEVEL_BASIC,
     OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
 };
 use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
@@ -492,9 +492,11 @@ pub struct Configuration {
     pub show_build_times: bool,
     /// Whether the build reports what it is doing as it goes.
     pub verbose: bool,
-    /// The most symbols separate compilation puts into one compilation unit. Lowering it compiles
-    /// more units in parallel and gives the linker more to do.
-    pub max_cu_size: usize,
+    /// The average number of symbols separate compilation puts into one compilation unit. Where a
+    /// unit ends is decided by the names of the symbols it holds, so this sets how often a boundary
+    /// falls rather than bounding a unit. Lowering it compiles more units in parallel and gives the
+    /// linker more to do.
+    pub cu_size: usize,
     /// The most scalars a value is split into and carried as separate LLVM values; a type holding
     /// more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
     /// under the same treatment.
@@ -632,7 +634,7 @@ impl Configuration {
             runtime_c_macro: vec![],
             show_build_times: false,
             verbose: false,
-            max_cu_size: DEFAULT_COMPILATION_UNIT_MAX_SIZE,
+            cu_size: DEFAULT_COMPILATION_UNIT_SIZE,
             max_split_scalars: MAX_SPLIT_SCALARS,
             valgrind_tool: ValgrindTool::None,
             sanitizer: Sanitizer::None,
@@ -862,6 +864,14 @@ impl Configuration {
         false
     }
 
+    /// Whether a pass that runs from `level` upward runs in this build.
+    ///
+    /// # Arguments
+    /// * `level` — the lowest optimization level the pass is written to run at.
+    fn runs_from(&self, level: FixOptimizationLevel) -> bool {
+        self.force_all_optimizations() || self.fix_opt_level >= level
+    }
+
     /// Split the program's symbols into several compilation units, each hashed and cached on its
     /// own, so that a rebuild regenerates only the units whose inputs changed. A function of a unit
     /// is externally visible, since another unit calls it. Runs at `Basic` and below; above that the
@@ -874,7 +884,7 @@ impl Configuration {
     /// call to the version matching the number of arguments it supplies, so that a saturated call
     /// passes them directly instead of building a closure per argument. Runs at `Basic` and above.
     pub fn enable_uncurry_optimization(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Basic
+        self.runs_from(FixOptimizationLevel::Basic)
     }
 
     /// Defunctionalize `Std::fix` into a directly self-recursive global function. The self-call it
@@ -886,7 +896,7 @@ impl Configuration {
     /// why it runs from `Basic` up. Uncurrying, which flattens the produced self-call, shares that
     /// threshold.
     pub fn enable_defunctionalize_fix(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Basic
+        self.runs_from(FixOptimizationLevel::Basic)
     }
 
     /// Removing type annotations only unwraps annotation nodes — the annotated type is already
@@ -903,27 +913,41 @@ impl Configuration {
     /// typed as a closure can the inlining and the closure specialization below take hold of it, so
     /// it runs at `Max` and above alongside them.
     pub fn enable_unwrap_newtype_optimization(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        self.runs_from(FixOptimizationLevel::Max)
+    }
+
+    /// Give a function that takes an unboxed struct a twin taking one argument per field of it, so
+    /// that a closure a field holds becomes an argument the stages after it can follow. Runs at
+    /// `Max` and above, where the stages that make use of it run.
+    pub fn enable_split_struct_args(&self) -> bool {
+        self.runs_from(FixOptimizationLevel::Max)
+    }
+
+    /// Replace a destructuring that meets the construction it reads by what the construction put
+    /// there. Runs at `Max` and above: it is what carries a value through the `Option` an iterator's
+    /// `advance` builds, and closure specialization, which reads what it leaves, runs there.
+    pub fn enable_collapse_constructions(&self) -> bool {
+        self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// Substitute the definition of a global value into the places that name it, and discard a
     /// global that nothing names, repeating until the program stops changing. Runs at `Max` and
     /// above.
     pub fn enable_inline_optimization(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// Substitute a function bound to a local name into the place it is applied, turning
     /// `let f = |x| e; f(y)` into `e[x := y]`. Runs at `Max` and above.
     pub fn enable_inline_local_optimization(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// Copy a function for the closure it is handed, so that the copy calls that closure's body
     /// directly instead of reaching it through a function pointer and a capture list. Runs at `Max`
     /// and above.
     pub fn enable_closure_specialization(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// Replace an act-family function — `Std::Array::act(i)` and a struct's `act_{field}` — at the
@@ -931,7 +955,7 @@ impl Configuration {
     /// that functor. It rewrites the definitions of global symbols, so it is placed above the
     /// inlining that would otherwise dissolve them. Runs at `Max` and above.
     pub fn enable_act_optimization(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// Borrow-ification and cancellation of the RC IR: borrows a parameter a function only reads,
@@ -939,27 +963,27 @@ impl Configuration {
     /// closure specialization and inlining (which are also `Max`-only), and it adds compile-time
     /// analysis, so it runs only at `Max` and above; `Basic` stays lighter for faster compilation.
     pub fn enable_borrow_optimization(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// The RC-IR term simplifier (case-of-known-constructor, case-of-case) runs at `Max` and above.
     /// It composes with the same closure specialization that borrow-ification needs — a specialized
     /// loop's body is a known function whose union it can cancel — so it shares that threshold.
     pub fn enable_simplify(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// Shorten the compiler-added suffixes of global symbol names to serial numbers, so that a
     /// symbol dump shows `Std::func#0` where the name is `Std::func#{...}#{...}`. Runs at
     /// `Experimental`.
     pub fn enable_simplify_symbol_names(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
+        self.runs_from(FixOptimizationLevel::Experimental)
     }
 
     /// Discard the global values that nothing reachable from `main` or from an exported function
     /// uses. Runs at `Max` and above.
     pub fn enable_dead_symbol_elimination(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// Build the program so that it prints a backtrace when it aborts: define the runtime's
@@ -1041,10 +1065,10 @@ impl Configuration {
             preliminary_commands: _,
             allow_preliminary_commands: _,
 
-            // How the compiler goes about its work, which leaves what it produces alone. The most
+            // How the compiler goes about its work, which leaves what it produces alone. How many
             // symbols a compilation unit holds decides which object files a build has rather than
-            // what one of them holds, so `build_object_files_cache_hash` covers `max_cu_size`.
-            max_cu_size: _,
+            // what one of them holds, so `build_object_files_cache_hash` covers `cu_size`.
+            cu_size: _,
             num_worker_thread: _,
             type_check_cache: _,
 
@@ -1252,6 +1276,11 @@ impl Configuration {
 
     /// The linkage to give a symbol that other compilation units may call: external where each unit
     /// is compiled on its own, internal where the program is optimized as a whole.
+    ///
+    /// A symbol this makes external is one another unit may reach, so it is also a reachability root
+    /// of the RC IR (`reachability_roots`). Narrowing what gets external linkage narrows what that
+    /// root set may hold, and a symbol left out of it is one dead-code elimination drops while
+    /// another unit still calls it.
     pub fn external_if_separated(&self) -> Linkage {
         if self.enable_separated_compilation() {
             Linkage::External

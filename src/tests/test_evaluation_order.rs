@@ -24,6 +24,29 @@ mod tests {
         test_source_fail(source, Configuration::develop_mode(), "first argument");
     }
 
+    /// A call whose struct argument is taken apart by the function it calls evaluates the argument
+    /// written first. Handing that struct's fields over one by one puts the struct where the fields
+    /// are read from, and the arguments written before it keep their place.
+    #[test]
+    fn test_call_with_a_struct_argument_evaluates_the_argument_written_first() {
+        let source = r#"
+        module Main;
+
+        type T = unbox struct { x : I64, y : I64 };
+
+        g : I64 -> T -> I64;
+        g = |n, s| (
+            let T { x : a, y : b } = s;
+            if n <= 0 { a + b };
+            g(undefined("first argument"), T { x : undefined("second argument"), y : b })
+        );
+
+        main : IO ();
+        main = println $ g(1, T { x : 1, y : 2 }).to_string;
+        "#;
+        test_source_fail(source, Configuration::develop_mode(), "first argument");
+    }
+
     /// A call of three arguments, to a function that is called from itself and so keeps its call
     /// sites, evaluates the argument written first.
     #[test]

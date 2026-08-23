@@ -156,11 +156,11 @@ mod debug_info_tests {
         "#;
         const EXPECTED: &str = "hello 146 [3, 4, 7, 12, 19, 28, 39, 52]\n";
         for opt_level in ["none", "basic"] {
-            let dir = build_with_g(SOURCE, opt_level, &["--max-cu-size", "1"]);
+            let dir = build_with_g(SOURCE, opt_level, &["--cu-size", "1"]);
             assert_eq!(
                 run_built_program(dir.path()),
                 EXPECTED,
-                "built with -g -O {} --max-cu-size 1",
+                "built with -g -O {} --cu-size 1",
                 opt_level,
             );
         }

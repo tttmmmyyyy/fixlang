@@ -6,6 +6,14 @@ pub fn md5_hex(text: &str) -> String {
     format!("{:x}", md5::compute(text))
 }
 
+/// The first eight bytes of the MD5 digest of `text`, as a number.
+///
+/// The number is the same on every machine and every build, so a decision taken from it comes out
+/// the same way everywhere.
+pub fn md5_u64(text: &str) -> u64 {
+    u64::from_le_bytes(md5::compute(text).0[..8].try_into().unwrap())
+}
+
 /// The values a hash is taken over, appended one at a time.
 ///
 /// Each value goes in with its length in front of it, so a value cannot run into the one appended

@@ -181,7 +181,7 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
         );
     }
 
-    /// The most symbols a compilation unit holds decides how many object files a build produces, so
+    /// How many symbols a compilation unit holds decides how many object files a build produces, so
     /// a build asking for a different division makes them rather than taking the ones a previous
     /// build left.
     #[test]
@@ -217,7 +217,7 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
 
         let divided_output = run_in(
             fix_command_at_opt_level("build", "basic")
-                .args(["--max-cu-size", "1"])
+                .args(["--cu-size", "1"])
                 .arg("--verbose"),
             dir,
             "the build dividing itself into units of one symbol",

@@ -131,6 +131,15 @@ pub const CLOSURE_SPEC_SUFFIX: &str = "#closure_spec";
 /// The suffix of the local binding holding the call of a decaptured lambda, which an inline-LLVM
 /// expression reads in place of the variable that held the lambda's capture list.
 pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
+/// The prefix of the type constructor naming a capture list that closure specialization builds. A
+/// parameter of this type is a function whose identity the receiving body knows.
+pub const CAP_LIST_PREFIX: &str = "#CapList";
+/// The prefix of the name `collapse_constructions` binds a field value to, so that a reader of the
+/// struct is given a name rather than the expression that produced the value.
+pub const BOUND_FIELD_PREFIX: &str = "#field";
+/// The suffix, followed by a counter, of the global function taking one argument per field of a
+/// struct argument of the function it is named after.
+pub const SPLIT_ARG_SUFFIX: &str = "#split_arg";
 /// The prefix of the type variable standing for the concrete type behind an opaque type. The rest of
 /// the name is the name of the opaque type's TyCon, which the type checker reads back off it.
 pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";
@@ -368,8 +377,8 @@ pub fn pthread_once_init_flag_value<'c>(ctx: &'c Context) -> IntValue<'c> {
 pub const GLOBAL_VAR_NAME_ARGC: &str = "fixruntime_argc";
 pub const GLOBAL_VAR_NAME_ARGV: &str = "fixruntime_argv";
 
-pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE: usize = 128;
-pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR: &str = "128";
+pub const DEFAULT_COMPILATION_UNIT_SIZE: usize = 128;
+pub const DEFAULT_COMPILATION_UNIT_SIZE_STR: &str = "128";
 
 /// Stack size, in bytes, of each compiler worker thread. Parallel type checking and per-unit code
 /// generation recurse over the user program's expression tree, whose nesting depth (deeply nested

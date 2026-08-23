@@ -173,27 +173,30 @@ mod integration_tests {
     }
 
     /// Verifies which functions get a borrow version and what it buys: a function that only reads
-    /// its array is materialized in an owning and a borrowing version, one that consumes its array
-    /// stays single, a call site routes to the borrowing version, and that version performs no
-    /// reference counting on the borrowed parameter.
+    /// its array gets a borrowing version its call site routes to, one that consumes its array stays
+    /// single, and the borrowing version performs no reference counting on the borrowed parameter.
+    /// The owning baseline the borrowing version was cloned from is left with no caller, so it is
+    /// absent from the dump, which is taken after dead-code elimination.
     #[test]
     fn test_borrow_rewrite() {
         let (_temp_dir, project_dir) = setup_test_env("ownership");
         let dump = emit_main_rc_ir(&project_dir);
 
-        // `tally` only reads its array, so it is materialized in two versions: the all-`Own` baseline
-        // (its name unsuffixed) and a borrowing clone (`#borrow`) whose array parameter is `borrow`.
-        let tally_own = sig_line(&dump, "fn Main::tally", |n| !n.ends_with("#borrow"));
-        assert!(
-            tally_own.contains("Std::Array Std::I64 [arg0] {own}"),
-            "the tally own version should have an owned array parameter:\n{}",
-            tally_own
-        );
-        let tally_borrow_sig = sig_line(&dump, "fn Main::tally", |n| n.ends_with("#borrow"));
+        // `tally` only reads its array, so it gets a borrowing clone (`#borrow`) whose array
+        // parameter is `borrow`.
+        let tally_borrow_sig = sig_line(&dump, "fn Main::tally", |n| n.contains("#borrow"));
         assert!(
             tally_borrow_sig.contains("Std::Array Std::I64 [arg0] {borrow}"),
             "the tally borrow version should have a borrowed array parameter:\n{}",
             tally_borrow_sig
+        );
+        // The one call of `tally` routes to that clone, which leaves the owning baseline it was made
+        // from with no caller at all.
+        assert!(
+            !has_sig(&dump, "fn Main::tally", |n| !n.contains("#borrow")),
+            "the tally owning version has no caller once the call routes to the borrow version, so \
+             it should be gone:\n{}",
+            dump
         );
 
         // `echo_arr` returns its array argument, consuming it, so it stays a single all-`Own` version
@@ -204,7 +207,7 @@ mod integration_tests {
             "echo_arr should have an owned array parameter",
         );
         assert!(
-            !has_sig(&dump, "fn Main::echo_arr", |n| n.ends_with("#borrow")),
+            !has_sig(&dump, "fn Main::echo_arr", |n| n.contains("#borrow")),
             "echo_arr should not have a borrow version",
         );
 
@@ -223,7 +226,7 @@ mod integration_tests {
 
         // The borrow clone drops the reference counting on its borrowed parameter: its body performs
         // no retain or release.
-        let tally_borrow = func_block(&dump, "fn Main::tally", |n| n.ends_with("#borrow"));
+        let tally_borrow = func_block(&dump, "fn Main::tally", |n| n.contains("#borrow"));
         assert!(
             tally_borrow
                 .iter()
@@ -416,7 +419,7 @@ mod integration_tests {
         // `via_union` reads its array `p` (directly and through `some(p)`), so it has a borrow version
         // whose array parameter is `borrow`.
         assert!(
-            sig_line(&dump, "fn Main::via_union", |n| n.ends_with("#borrow"))
+            sig_line(&dump, "fn Main::via_union", |n| n.contains("#borrow"))
                 .contains("Std::Array Std::I64 [arg0] {borrow}"),
             "via_union should have a borrow version with a borrowed array parameter",
         );
@@ -425,7 +428,7 @@ mod integration_tests {
         // position. Because the union only lays the borrowed payload in place (it does not own it),
         // the version must perform no reference counting — in particular no release of the union,
         // which would free the caller's still-owned array.
-        let via_borrow = func_block(&dump, "fn Main::via_union", |n| n.ends_with("#borrow"));
+        let via_borrow = func_block(&dump, "fn Main::via_union", |n| n.contains("#borrow"));
         assert!(
             via_borrow.iter().any(|l| l.contains("union_make_1(")),
             "the via_union borrow version should build the union:\n{}",

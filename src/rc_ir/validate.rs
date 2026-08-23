@@ -8,11 +8,11 @@
 //!
 //! It checks the structural invariants of the RC IR: within each function every bound name is
 //! unique (no shadowing), every variable use resolves to a binding in scope, or to a global — a
-//! function or a global value, both referenceable by name (a direct call's callee is a function
-//! name, not a local binding) — every `Retain`/`Release` names one reference-counting unit of its
-//! variable; a function carries a capture parameter exactly for the closure ABI; every match has at
-//! least one arm, with any catch-all arm last; an `Llvm` operation's embedded operand names match
-//! its argument list; and a closure value stores the capture layout its target function projects.
+//! function or a global value, both referenceable by name (a direct call names its callee by that
+//! name) — every `Retain`/`Release` names one reference-counting unit of its variable; a function
+//! carries a capture parameter exactly for the closure ABI; every match has at least one arm, with
+//! any catch-all arm last; an `Llvm` operation's embedded operand names match its argument list;
+//! and a closure value stores the capture layout its target function projects.
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
@@ -457,9 +457,7 @@ mod tests {
         RcProgram {
             funcs: Map::default(),
             globals: vec![],
-            entry: FuncRef {
-                name: FullName::local("main"),
-            },
+            roots: Set::default(),
         }
     }
 
@@ -487,18 +485,19 @@ mod tests {
         }
     }
 
-    /// Validate a program made of `funcs`, the first of which is its entry point.
+    /// Validate a program made of `funcs`, the first of which is its reachability root.
     fn validate_prog(funcs: Vec<RcFunc>) {
-        let entry = funcs
+        let root = funcs
             .first()
             .expect("a program has at least one function")
+            .name
             .name
             .clone();
         let funcs = funcs.into_iter().map(|f| (f.name.clone(), f)).collect();
         let prog = RcProgram {
             funcs,
             globals: vec![],
-            entry,
+            roots: [root].into_iter().collect(),
         };
         validate(&prog, &Set::default(), &type_env(), "test");
     }
@@ -529,6 +528,8 @@ mod tests {
         v.check_expr(body);
     }
 
+    /// A body binding one variable to a parameter and returning it passes: every use resolves and
+    /// every name is bound once.
     #[test]
     fn accepts_well_formed() {
         // let x = p; ret x   (p is a parameter)
@@ -540,6 +541,8 @@ mod tests {
         check(&body, &["p"]);
     }
 
+    /// A use of a name that neither a binding nor a global provides is caught — the shape a rewrite
+    /// leaves behind when it drops the binding of a variable it still reads.
     #[test]
     #[should_panic(expected = "use of unbound variable")]
     fn rejects_unbound_use() {
@@ -547,6 +550,8 @@ mod tests {
         check(&node(RcExpr::Ret(var("y"))), &[]);
     }
 
+    /// A name bound a second time in one function is caught, so a name resolves its binding
+    /// uniquely and no binding shadows another.
     #[test]
     #[should_panic(expected = "duplicate binding")]
     fn rejects_duplicate_binding() {
@@ -560,9 +565,11 @@ mod tests {
         check(&body, &["p"]);
     }
 
+    /// A use that no binding in scope answers passes when it names a global, since a function or
+    /// global value is referenceable by name from anywhere.
     #[test]
     fn accepts_use_of_a_global_name() {
-        // let r = call g(); ret r   where g is a global (not a local binding)
+        // let r = call g(); ret r   where g is a global
         let body = node(RcExpr::Let(
             var("r"),
             RcRhs::App(var("g"), vec![]),
@@ -571,6 +578,8 @@ mod tests {
         check_with_globals(&body, &[], &["g"]);
     }
 
+    /// A closure-ABI function without the capture parameter is caught, one direction of the
+    /// agreement between a function's arrow type and its parameter list.
     #[test]
     #[should_panic(expected = "capture-present=false disagrees with closure-ABI=true")]
     fn rejects_capture_missing_for_closure_abi() {
@@ -584,6 +593,8 @@ mod tests {
         )]);
     }
 
+    /// A match with no arms is caught: it selects a body for no value, so the expression it binds
+    /// has none.
     #[test]
     #[should_panic(expected = "match with no arms")]
     fn rejects_empty_match_arms() {
@@ -596,6 +607,8 @@ mod tests {
         check(&body, &["s"]);
     }
 
+    /// A catch-all arm ahead of another arm is caught: code generation compiles it as the tag
+    /// switch's default case, which takes every value the arms after it were written for.
     #[test]
     #[should_panic(expected = "catch-all match arm precedes a later arm")]
     fn rejects_catch_all_before_a_later_arm() {
@@ -622,6 +635,8 @@ mod tests {
         check(&body, &["s"]);
     }
 
+    /// A funptr-ABI function carrying a capture parameter is caught, the other direction of the
+    /// agreement between a function's arrow type and its parameter list.
     #[test]
     #[should_panic(expected = "capture-present=true disagrees with closure-ABI=false")]
     fn rejects_capture_present_for_funptr_abi() {
@@ -635,6 +650,8 @@ mod tests {
         )]);
     }
 
+    /// An operation whose embedded operand names differ from its argument list is caught, so what
+    /// code generation reads and what the reference-counting analyses track stay the same names.
     #[test]
     #[should_panic(expected = "disagree with argument names")]
     fn rejects_llvm_operand_name_mismatch() {

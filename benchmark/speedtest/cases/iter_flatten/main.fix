@@ -1,0 +1,15 @@
+module Main;
+
+import Std::{Array, I64, IO, Array::{from_map, to_iter}, Debug::assert_eq, Iterator::{flatten, fold, map}, Monad::pure};
+
+iter_flatten : Array (Array I64) -> I64;
+iter_flatten = |rows| (
+    rows.to_iter.map(to_iter).flatten.fold(0, |x, acc| acc + x)
+);
+
+main : IO ();
+main = (
+    let rows = Array::from_map(1000, |r| Array::from_map(1000, |i| r + i));
+    assert_eq(|_|"iter_flatten", iter_flatten(rows), 999000000);;
+    pure()
+);
