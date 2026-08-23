@@ -2,15 +2,16 @@ use crate::{
     ast::name::Name,
     constants::{COMPILER_THREAD_STACK_SIZE, TEMPORARY_SRC_PATH},
     error::Errors,
-    hash::md5_hex,
+    hash::{md5_hex, md5_u64},
     parse::sourcefile::SourceFile,
 };
 use colored::{control, ColoredString, Colorize};
 use fxhash::{FxHashMap, FxHashSet};
 use std::{
-    cmp, env, fs,
+    env, fs,
     hash::Hash,
     io::{self, ErrorKind, IsTerminal, Write},
+    mem,
     panic::resume_unwind,
     path::{Path, PathBuf},
     thread::{self, JoinHandle},
@@ -185,16 +186,34 @@ pub fn nonempty_subsequences<T: Clone>(v: &Vec<T>) -> Vec<Vec<T>> {
 
 /// Splits `v` into pieces of at most `max_size` elements, each piece holding at least one element
 /// and the pieces read in order giving back `v`.
-pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
-    v.reverse();
-    let mut result = vec![];
-    while v.len() > 0 {
-        let len = cmp::min(max_size, v.len());
-        let mut chunk = v.split_off(v.len() - len);
-        chunk.reverse();
-        result.push(chunk);
+///
+/// Where a piece ends is decided by `identity`, the text naming an element, rather than by the
+/// element's position: a piece ends after an element whose name hashes into a `1 / max_size` slice
+/// of the numbers, and after `max_size` elements regardless. An element that appears among the
+/// others therefore changes the piece it lands in and leaves the pieces after it holding the
+/// elements they held, so a consumer keyed on a piece's contents keeps them. Cutting at fixed
+/// positions instead moves every boundary after the new element, which changes every piece.
+///
+/// The expected piece is shorter than `max_size`, since a piece also ends wherever a name says to.
+pub fn split_by_max_size<T>(
+    v: Vec<T>,
+    max_size: usize,
+    identity: impl Fn(&T) -> String,
+) -> Vec<Vec<T>> {
+    assert!(max_size > 0, "a piece holds at least one element");
+    let mut pieces = vec![];
+    let mut piece = vec![];
+    for elem in v {
+        let name_ends_piece = md5_u64(&identity(&elem)) % max_size as u64 == 0;
+        piece.push(elem);
+        if name_ends_piece || piece.len() == max_size {
+            pieces.push(mem::take(&mut piece));
+        }
     }
-    result
+    if !piece.is_empty() {
+        pieces.push(piece);
+    }
+    pieces
 }
 
 /// Appends `elem` to the vector `key` maps to, starting that vector when `key` maps to none.
@@ -471,6 +490,7 @@ mod tests {
     use super::{
         char_pos_to_utf16_pos, join_compiler_threads, spawn_compiler_thread, split_by_max_size,
         split_string_by_space_not_quated, upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos,
+        Set,
     };
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -545,7 +565,7 @@ mod tests {
         for max_size in 1..=5 {
             for len in 0..=12 {
                 let v: Vec<usize> = (0..len).collect();
-                let pieces = split_by_max_size(v.clone(), max_size);
+                let pieces = split_by_max_size(v.clone(), max_size, |n| n.to_string());
                 assert!(
                     pieces.iter().all(|piece| !piece.is_empty()),
                     "max_size = {}, len = {}",
@@ -561,6 +581,36 @@ mod tests {
                 assert_eq!(pieces.concat(), v, "max_size = {}, len = {}", max_size, len);
             }
         }
+    }
+
+    /// An element that appears among the others changes the piece it lands in and leaves the pieces
+    /// around it holding the elements they held. Boundaries taken from the positions instead move
+    /// with every element after the new one, which changes every piece from there on.
+    #[test]
+    fn test_split_by_max_size_survives_an_insertion() {
+        const MAX_SIZE: usize = 128;
+        let name = |i: usize| format!("Std::Array::value#{:04}", i);
+        let before: Vec<String> = (0..2000).map(name).collect();
+        let mut after = before.clone();
+        after.insert(1000, "Std::Array::value#0999b".to_string());
+
+        let identity = |s: &String| s.clone();
+        let pieces_before = split_by_max_size(before, MAX_SIZE, identity);
+        let pieces_after = split_by_max_size(after, MAX_SIZE, identity);
+
+        let kept: Set<&Vec<String>> = pieces_before.iter().collect();
+        let changed = pieces_after.iter().filter(|p| !kept.contains(p)).count();
+        assert!(
+            pieces_before.len() >= 10,
+            "the input is split into {} pieces, too few for the insertion to be anywhere but the ends",
+            pieces_before.len()
+        );
+        assert!(
+            changed <= 4,
+            "an inserted element changed {} of the {} pieces",
+            changed,
+            pieces_after.len()
+        );
     }
 
     /// Splitting a command line into words: a run of spaces separates words, a quoted run — single

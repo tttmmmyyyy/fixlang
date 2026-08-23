@@ -123,7 +123,10 @@ impl CompileUnit {
         let symbols = self.symbols;
         let dependent_modules = self.dependent_modules;
 
-        let split_symbols = split_by_max_size(symbols, max_size);
+        // A symbol is named by its name alone, so that editing a body leaves every boundary where
+        // it was: a boundary read off the symbol's hash would move whenever a body changed, and the
+        // pieces after it would lose their cached object files.
+        let split_symbols = split_by_max_size(symbols, max_size, |symbol| symbol.name.to_string());
         let mut units = vec![];
         for symbols in split_symbols {
             units.push(CompileUnit::new(symbols, dependent_modules.clone()));
