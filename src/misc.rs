@@ -583,33 +583,70 @@ mod tests {
         }
     }
 
-    /// An element that appears among the others changes the piece it lands in and leaves the pieces
-    /// around it holding the elements they held. Boundaries taken from the positions instead move
-    /// with every element after the new one, which changes every piece from there on.
+    /// An element that appears among the others changes the pieces around it and leaves the rest
+    /// holding the elements they held: the same insertion into a longer input changes no more
+    /// pieces than into a shorter one. Boundaries taken from the positions instead move with every
+    /// element after the new one, so what an insertion disturbs grows with what follows it.
     #[test]
     fn test_split_by_max_size_survives_an_insertion() {
         const MAX_SIZE: usize = 128;
-        let name = |i: usize| format!("Std::Array::value#{:04}", i);
-        let before: Vec<String> = (0..2000).map(name).collect();
-        let mut after = before.clone();
-        after.insert(1000, "Std::Array::value#0999b".to_string());
 
-        let identity = |s: &String| s.clone();
-        let pieces_before = split_by_max_size(before, MAX_SIZE, identity);
-        let pieces_after = split_by_max_size(after, MAX_SIZE, identity);
+        // The pieces an element inserted at index 1000 changes, out of an input of `len` elements.
+        // Both lengths hold the same elements around that index, so the counts are of one
+        // neighbourhood and differ only in how much follows it.
+        let changed_pieces = |len: usize| -> usize {
+            let before: Vec<String> = (0..len)
+                .map(|i| format!("Std::Array::value#{:04}", i))
+                .collect();
+            let mut after = before.clone();
+            after.insert(1000, "Std::Array::value#0999b".to_string());
 
-        let kept: Set<&Vec<String>> = pieces_before.iter().collect();
-        let changed = pieces_after.iter().filter(|p| !kept.contains(p)).count();
+            let identity = |s: &String| s.clone();
+            let kept: Set<Vec<String>> = split_by_max_size(before, MAX_SIZE, identity)
+                .into_iter()
+                .collect();
+            split_by_max_size(after, MAX_SIZE, identity)
+                .into_iter()
+                .filter(|piece| !kept.contains(piece))
+                .count()
+        };
+
+        let short = changed_pieces(2_000);
+        let long = changed_pieces(8_000);
         assert!(
-            pieces_before.len() >= 10,
-            "the input is split into {} pieces, too few for the insertion to be anywhere but the ends",
-            pieces_before.len()
+            short > 0,
+            "the inserted element landed in no piece the split changed"
         );
         assert!(
-            changed <= 4,
-            "an inserted element changed {} of the {} pieces",
-            changed,
-            pieces_after.len()
+            long <= short,
+            "an insertion changed {} pieces of a 2,000-element input and {} of an 8,000-element \
+             one, so what an insertion disturbs grows with what follows it",
+            short,
+            long
+        );
+    }
+
+    /// The pieces come out on the scale `max_size` names. A rule that ends a piece far more often
+    /// than one element in `max_size` — an `identity` giving every element the same text, a slice
+    /// of the numbers wider than `1 / max_size` — leaves pieces of a few elements each, and a piece
+    /// is a unit of compilation.
+    #[test]
+    fn test_split_by_max_size_pieces_are_of_the_size_asked_for() {
+        const MAX_SIZE: usize = 128;
+        const LEN: usize = 2_000;
+        let v: Vec<String> = (0..LEN)
+            .map(|i| format!("Std::Array::value#{:04}", i))
+            .collect();
+
+        let pieces = split_by_max_size(v, MAX_SIZE, |s: &String| s.clone());
+        let mean_len = LEN / pieces.len();
+        assert!(
+            mean_len >= MAX_SIZE / 4,
+            "{} elements came out as {} pieces of {} elements on average, against a maximum of {}",
+            LEN,
+            pieces.len(),
+            mean_len,
+            MAX_SIZE
         );
     }
 

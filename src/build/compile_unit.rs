@@ -183,3 +183,55 @@ impl CompileUnit {
         units
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::CompileUnit;
+    use crate::ast::expr::expr_var;
+    use crate::ast::name::FullName;
+    use crate::ast::program::Symbol;
+    use crate::fixstd::builtin::make_i64_ty;
+
+    /// A symbol named `Std::Test::value#{index}`, whose expression is the variable `body`.
+    fn symbol(index: usize, body: &str) -> Symbol {
+        let name = FullName::from_strs(&["Std", "Test"], &format!("value#{:04}", index));
+        Symbol {
+            name: name.clone(),
+            generic_name: name,
+            ty: make_i64_ty(),
+            expr: Some(expr_var(FullName::local(body), None)),
+            inline_into_callers: false,
+        }
+    }
+
+    /// Where a unit ends is decided by the names of the symbols, so editing an expression leaves
+    /// every boundary where it was and a unit holding no edited symbol keeps the object file it was
+    /// compiled into. A boundary read off `Symbol::hash`, which takes in the expression as well,
+    /// moves at every symbol whose expression changed.
+    #[test]
+    fn test_split_by_max_size_places_the_boundaries_by_the_symbol_names() {
+        const SYMBOL_COUNT: usize = 200;
+        const MAX_SIZE: usize = 8;
+
+        let unit_shape = |body: &str| -> Vec<Vec<String>> {
+            let symbols = (0..SYMBOL_COUNT).map(|i| symbol(i, body)).collect();
+            CompileUnit::new(symbols, vec![])
+                .split_by_max_size(MAX_SIZE)
+                .iter()
+                .map(|unit| unit.symbols().iter().map(|s| s.name.to_string()).collect())
+                .collect()
+        };
+
+        let before = unit_shape("before");
+        assert!(
+            before.len() > 1,
+            "{} symbols fell into a single unit, which holds no boundary to move",
+            SYMBOL_COUNT
+        );
+        assert_eq!(
+            before,
+            unit_shape("after"),
+            "editing the expression of every symbol moved the unit boundaries"
+        );
+    }
+}
