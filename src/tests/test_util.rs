@@ -1,7 +1,7 @@
 use crate::{
     commands::run::run,
     configuration::Configuration,
-    constants::{COMPILER_TEST_WORKING_PATH, MERGED_MODULE_NAME_PREFIX},
+    constants::COMPILER_TEST_WORKING_PATH,
     env_vars::MAX_OPT_LEVEL_VAR,
     error::{panic_if_err, panic_with_msg, Errors},
     misc::save_temporary_source,
@@ -243,16 +243,10 @@ pub fn build_and_run_within(
 pub enum EmittedIr {
     /// Every module, as the code generator wrote it and as the pass pipeline left it.
     All,
-    /// Each module as the code generator wrote it, before the LLVM pass pipeline ran. A build that
-    /// merges its compilation units writes each unit and the merged module, so a function of the
-    /// program appears twice.
+    /// Each module as the code generator wrote it, before the LLVM pass pipeline ran.
     BeforeOptimization,
     /// Each module as the LLVM pass pipeline left it.
     AfterOptimization,
-    /// The module holding the whole program, as the code generator wrote it: the one the
-    /// compilation units are merged into, which is what the pass pipeline then runs over. Only a
-    /// build that merges its units writes it (`Configuration::unit_output`).
-    WholeProgramBeforeOptimization,
 }
 
 impl EmittedIr {
@@ -263,19 +257,21 @@ impl EmittedIr {
             EmittedIr::All => name.ends_with(".ll"),
             EmittedIr::BeforeOptimization => is_generated,
             EmittedIr::AfterOptimization => name.ends_with("_optimized.ll"),
-            EmittedIr::WholeProgramBeforeOptimization => {
-                is_generated && name.starts_with(MERGED_MODULE_NAME_PREFIX)
-            }
         }
     }
 }
 
-/// The LLVM IR a `--emit-llvm` build wrote into `dir`, concatenated in file-name order.
+/// The LLVM IR a `--emit-llvm` build wrote into `dir`, one string per module, in file-name order.
 ///
 /// A build names its files after the compilation units it produced, so the files an earlier build
 /// left in the same directory survive it. Give each build a directory of its own where the IR is to
 /// be attributed to it.
-pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
+///
+/// Each compilation unit is optimized on its own, so what LLVM decides is decided within one
+/// module: a module numbers its attribute groups for itself, and a unit reading a global another
+/// unit owns carries a copy of that global's accessor. A test reading either takes the module it
+/// means out of this.
+pub fn emitted_llvm_ir_modules(dir: &Path, which: EmittedIr) -> Vec<String> {
     let mut paths = fs::read_dir(dir)
         .expect("Failed to read the build directory")
         .filter_map(|entry| {
@@ -293,8 +289,12 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
     paths
         .iter()
         .map(|path| fs::read_to_string(path).expect("Failed to read an emitted LLVM IR file"))
-        .collect::<Vec<_>>()
-        .join("\n")
+        .collect()
+}
+
+/// The LLVM IR a `--emit-llvm` build wrote into `dir`, the modules concatenated in file-name order.
+pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
+    emitted_llvm_ir_modules(dir, which).join("\n")
 }
 
 /// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.
@@ -322,37 +322,25 @@ mod tests {
     use super::EmittedIr;
 
     /// A build writes each module twice, once as generated and once as optimized, under names that
-    /// differ only by a suffix, and names the module holding the whole program apart from the
-    /// modules holding one compilation unit each. The selection reads both, so both are pinned
-    /// here: a selection that quietly widened would let a test asserting the absence of something
-    /// in the generated code pass on the optimized code instead, or let a test counting what one
-    /// module holds count a unit's copy of it as well.
+    /// differ only by a suffix. The selection reads them apart, and that is pinned here: a selection
+    /// that quietly widened would let a test asserting the absence of something in the generated
+    /// code pass on the optimized code instead.
     #[test]
-    fn test_emitted_ir_selects_by_the_optimization_suffix_and_the_module_name() {
+    fn test_emitted_ir_selects_by_the_optimization_suffix() {
         let generated = "Module-0123abcd.ll";
         let optimized = "Module-0123abcd_optimized.ll";
-        let whole_program = "Program-0123abcd.ll";
-        let whole_program_optimized = "Program-0123abcd_optimized.ll";
         let source_file = "generated.fix";
 
         assert!(EmittedIr::All.selects(generated) && EmittedIr::All.selects(optimized));
-        assert!(EmittedIr::All.selects(whole_program));
         assert!(!EmittedIr::All.selects(source_file));
 
         assert!(EmittedIr::BeforeOptimization.selects(generated));
-        assert!(EmittedIr::BeforeOptimization.selects(whole_program));
         assert!(!EmittedIr::BeforeOptimization.selects(optimized));
         assert!(!EmittedIr::BeforeOptimization.selects(source_file));
 
         assert!(EmittedIr::AfterOptimization.selects(optimized));
-        assert!(EmittedIr::AfterOptimization.selects(whole_program_optimized));
         assert!(!EmittedIr::AfterOptimization.selects(generated));
         assert!(!EmittedIr::AfterOptimization.selects(source_file));
-
-        assert!(EmittedIr::WholeProgramBeforeOptimization.selects(whole_program));
-        assert!(!EmittedIr::WholeProgramBeforeOptimization.selects(generated));
-        assert!(!EmittedIr::WholeProgramBeforeOptimization.selects(whole_program_optimized));
-        assert!(!EmittedIr::WholeProgramBeforeOptimization.selects(source_file));
     }
 }
 

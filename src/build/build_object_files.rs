@@ -496,9 +496,10 @@ pub fn build_object_files<'c>(
                     .chain(unit_prog.globals.iter().map(|global| &global.init));
                 for body in bodies {
                     dead_code_elim::collect_mentions(body, &mut |mentioned| {
-                        let defined_here = unit_prog.funcs.contains_key(&FuncRef {
-                            name: mentioned.clone(),
-                        }) || unit_prog.globals.iter().any(|g| &g.symbol == mentioned);
+                        let defined_here =
+                            unit_prog.funcs.contains_key(&FuncRef {
+                                name: mentioned.clone(),
+                            }) || unit_prog.globals.iter().any(|g| &g.symbol == mentioned);
                         if !defined_here
                             && (copyable_funcs.contains_key(mentioned)
                                 || all_globals.contains_key(mentioned))
@@ -562,9 +563,10 @@ pub fn build_object_files<'c>(
                 .chain(unit_prog.globals.iter().map(|global| &global.init));
             for body in bodies {
                 dead_code_elim::collect_mentions(body, &mut |mentioned| {
-                    let defined_here = unit_prog.funcs.contains_key(&FuncRef {
-                        name: mentioned.clone(),
-                    }) || unit_prog.globals.iter().any(|g| &g.symbol == mentioned);
+                    let defined_here =
+                        unit_prog.funcs.contains_key(&FuncRef {
+                            name: mentioned.clone(),
+                        }) || unit_prog.globals.iter().any(|g| &g.symbol == mentioned);
                     if mentioned.is_global() && !defined_here && unit_of(mentioned).is_some() {
                         published.insert(mentioned.clone());
                     }

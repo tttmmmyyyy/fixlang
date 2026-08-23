@@ -1,17 +1,17 @@
 //! What dividing a program into compilation units gives it: a build after an edit that regenerates
-//! only what the edit reaches, and — where the units are merged before the LLVM optimization runs —
-//! a module that publishes no more than a program compiled in one piece does.
+//! only what the edit reaches, and units that keep their code to themselves wherever the rest of
+//! the program does not name it.
 
 use crate::misc::Set;
 use crate::tests::test_util::{
-    emitted_llvm_ir, fix_build_source_command, fix_command_at_opt_level, EmittedIr,
+    emitted_llvm_ir_modules, fix_build_source_command, fix_command_at_opt_level, EmittedIr,
 };
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
 
-/// A program that exports a C function, so that the merged module has a name to publish beside
-/// the entry point.
+/// A program that exports a C function, so that a unit has a C name to publish beside the entry
+/// point.
 const EXPORTING_SOURCE: &str = r#"
     module Main;
 
@@ -24,7 +24,7 @@ const EXPORTING_SOURCE: &str = r#"
 "#;
 
 /// Build `source` at `-O max` with `--emit-llvm` in a directory of its own, and return that
-/// directory. `-O max` is where the compilation units are merged into one module.
+/// directory.
 fn build_at_max_emitting_llvm_ir(source: &str) -> TempDir {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let build = fix_build_source_command(temp_dir.path(), source, "max")
@@ -40,6 +40,16 @@ fn build_at_max_emitting_llvm_ir(source: &str) -> TempDir {
     temp_dir
 }
 
+/// The name an LLVM `define` or `declare` line gives its function.
+fn function_name(line: &str) -> Option<String> {
+    let after_at = line.split_once('@')?.1;
+    let name = match after_at.strip_prefix('"') {
+        Some(quoted) => quoted.split_once('"')?.0,
+        None => after_at.split('(').next()?,
+    };
+    Some(name.to_string())
+}
+
 /// The names of the functions `ir` defines under a linkage that publishes them to the linker.
 ///
 /// A definition LLVM keeps to its module is printed with `internal` or `private` between
@@ -51,49 +61,72 @@ fn published_function_names(ir: &str) -> Set<String> {
             let head = line.split('@').next().unwrap_or_default();
             !head.contains(" internal ") && !head.contains(" private ")
         })
-        .filter_map(|line| {
-            let after_at = line.split_once('@')?.1;
-            let name = match after_at.strip_prefix('"') {
-                Some(quoted) => quoted.split_once('"')?.0,
-                None => after_at.split('(').next()?,
-            };
-            Some(name.to_string())
-        })
+        .filter_map(function_name)
         .collect()
 }
 
-/// The merged module publishes only the names the C world enters the program through.
+/// The names of the functions `ir` declares without defining: the ones it calls in another module.
+fn declared_function_names(ir: &str) -> Set<String> {
+    ir.lines()
+        .filter(|line| line.starts_with("declare "))
+        .filter_map(function_name)
+        .collect()
+}
+
+/// A compilation unit publishes a symbol of the program only where another unit names it.
 ///
-/// A compilation unit publishes every symbol it holds, since another unit calls it by name, and
-/// a function LLVM must assume something outside the module calls is one it can neither delete
-/// after inlining into every call it sees nor specialize to the arguments those calls pass.
-/// Taking that linkage back once the units are merged is what makes the merged module optimize
-/// into the program a single unit would have produced, so a merge that internalized nothing
-/// would leave the whole program standing.
+/// A function LLVM must assume something outside the module calls is one it can neither delete
+/// after inlining it into every call it sees nor specialize to the arguments those calls pass. A
+/// unit that published every symbol it holds would lose both for the whole program, so what the
+/// rest of the program does not name stays inside the unit that holds it, and a unit optimized on
+/// its own reaches what one compiled in a single piece does.
+///
+/// The C world enters the program through names of its own — the entry point, the function an
+/// `FFI_EXPORT` statement builds, the runtime's — and those carry no `#`, which is what separates
+/// them here from the symbols the compiler mangles.
 #[test]
-fn test_the_merged_module_publishes_only_the_names_c_enters_the_program_through() {
+fn test_a_unit_publishes_a_symbol_only_where_another_unit_names_it() {
     let temp_dir = build_at_max_emitting_llvm_ir(EXPORTING_SOURCE);
-    let dir = temp_dir.path();
-
-    let merged = emitted_llvm_ir(dir, EmittedIr::WholeProgramBeforeOptimization);
-    let published = published_function_names(&merged);
-    let expected: Set<String> = ["main", "fixtest_triple"]
+    let modules = emitted_llvm_ir_modules(temp_dir.path(), EmittedIr::BeforeOptimization);
+    let published: Vec<Set<String>> = modules
         .iter()
-        .map(|name| name.to_string())
+        .map(|ir| published_function_names(ir))
         .collect();
-    assert_eq!(
-        published, expected,
-        "the merged module should publish the entry point and the exported C function alone"
+    let declared: Vec<Set<String>> = modules
+        .iter()
+        .map(|ir| declared_function_names(ir))
+        .collect();
+
+    // The units of this program do publish symbols to one another, so the rule below has something
+    // to hold of.
+    assert!(
+        published.iter().flatten().any(|name| name.contains('#')),
+        "the units of this program should publish symbols to one another"
     );
 
-    // The units the merged module is made of publish more than that, which is what the merge
-    // takes back. Read them together with the merged module, since a unit's module is named
-    // apart from it only by its name.
-    let generated = emitted_llvm_ir(dir, EmittedIr::BeforeOptimization);
-    assert!(
-        published_function_names(&generated).len() > published.len(),
-        "the compilation units should publish more than the module they are merged into"
-    );
+    for (index, names) in published.iter().enumerate() {
+        for name in names.iter().filter(|name| name.contains('#')) {
+            assert!(
+                declared
+                    .iter()
+                    .enumerate()
+                    .any(|(other, names)| other != index && names.contains(name)),
+                "no other unit names `{}`, which unit {} publishes",
+                name,
+                index
+            );
+        }
+    }
+
+    // The C world's own names are published, whatever the rule above does with the symbols.
+    let c_visible: Set<String> = published.iter().flatten().cloned().collect();
+    for name in ["main", "fixtest_triple"] {
+        assert!(
+            c_visible.contains(name),
+            "the program should publish `{}` for the C world to enter through",
+            name
+        );
+    }
 }
 
 /// A project of two modules: `Worker`, whose globals are compiled from `Std` alone, and `Main`,

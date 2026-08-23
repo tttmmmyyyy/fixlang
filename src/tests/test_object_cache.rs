@@ -257,8 +257,7 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
         let dir = project_dir();
         let dir = dir.path();
 
-        let count_generated_units =
-            |output: &str| output.matches("Generating code for").count();
+        let count_generated_units = |output: &str| output.matches("Generating code for").count();
 
         let first_output = run_in(
             fix_command_at_opt_level("build", "basic").arg("--verbose"),

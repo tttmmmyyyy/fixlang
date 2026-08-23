@@ -66,8 +66,8 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             symbol: g.symbol.clone(),
             ty: g.ty.clone(),
             init: spec.rewrite_expr(&g.init, &[]),
-                owns_storage: true,
-            })
+            owns_storage: true,
+        })
         .collect();
 
     // Materialize every requested clone; each materialization may request further clones.
