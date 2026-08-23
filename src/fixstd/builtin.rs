@@ -6593,7 +6593,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
 
         // Implement match_bb
         gc.builder().position_at_end(match_bb);
-        let field_ty = union_ty.field_types(gc.type_env())[self.field_idx as usize].clone();
+        let field_ty = union_ty.field_types(gc.type_env())[self.field_idx].clone();
         let value = ObjectFieldType::get_union_value(gc, obj.clone(), &field_ty, RcState::Unknown);
         let value = gc
             .apply_lambda(modifier.clone(), vec![value], false)
@@ -6664,9 +6664,10 @@ pub fn union_mod_function(
     const MODIFIER_NAME: &str = "modifier";
 
     let (field_idx, _) = union.get_field_by_name(&field_name).unwrap();
+    let field_idx = field_idx as usize;
 
     let union_ty = union.applied_type();
-    let field_ty = union.fields()[field_idx as usize].ty.clone();
+    let field_ty = union.fields()[field_idx].ty.clone();
 
     let expr = expr_abs(
         vec![var_local(MODIFIER_NAME)],
@@ -6676,7 +6677,7 @@ pub fn union_mod_function(
                 Box::new(InlineLLVMUnionModBody {
                     union_name: FullName::local(UNION_NAME),
                     modifier_name: FullName::local(MODIFIER_NAME),
-                    field_idx: field_idx as usize,
+                    field_idx,
                 }),
                 union_ty.clone(),
                 None,
