@@ -2,7 +2,6 @@
 //! only what the edit reaches, and — where the units are merged before the LLVM optimization runs —
 //! a module that publishes no more than a program compiled in one piece does.
 
-use crate::constants::COMPILATION_UNITS_PATH;
 use crate::misc::Set;
 use crate::tests::test_util::{
     emitted_llvm_ir, fix_build_source_command, fix_command_at_opt_level, EmittedIr,
@@ -97,23 +96,6 @@ fn test_the_merged_module_publishes_only_the_names_c_enters_the_program_through(
     );
 }
 
-/// The files the compilation units of a build in `dir` have been generated into.
-///
-/// A unit is named by a hash of everything its code is generated from, so a regenerated unit
-/// arrives as a file of its own rather than as a rewrite of the one it replaces, and what a build
-/// regenerated is what it added here.
-fn unit_files(dir: &Path) -> Set<String> {
-    let units = dir.join(COMPILATION_UNITS_PATH);
-    fs::read_dir(&units)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {}", units.display(), e))
-        .filter_map(|entry| {
-            let path = entry.expect("Failed to read a directory entry").path();
-            let name = path.file_name()?.to_str()?.to_string();
-            name.ends_with(".bc").then_some(name)
-        })
-        .collect()
-}
-
 /// A project of two modules: `Worker`, whose globals are compiled from `Std` alone, and `Main`,
 /// which calls into it. `argument` is what `Main` passes, and changing it is the edit.
 fn write_two_module_project(dir: &Path, argument: i64) {
@@ -175,10 +157,14 @@ main = println(Worker::report({}));
     .expect("Failed to write the main module");
 }
 
-/// Build the project in `dir` at `-O max`, with `cu_size` symbols to a compilation unit.
-fn build_at_max_in(dir: &Path, cu_size: &str) {
+/// Build the project in `dir` at `-O max`, with `cu_size` symbols to a compilation unit, and
+/// return how many compilation units the build generated and how many it took from the cache.
+///
+/// The two counts are read off what the build reports under `--verbose`, which is where it says
+/// what it did with each unit.
+fn build_at_max_in(dir: &Path, cu_size: &str) -> (usize, usize) {
     let build = fix_command_at_opt_level("build", "max")
-        .args(["--cu-size", cu_size])
+        .args(["--cu-size", cu_size, "--verbose"])
         .current_dir(dir)
         .output()
         .expect("Failed to execute fix build");
@@ -188,14 +174,28 @@ fn build_at_max_in(dir: &Path, cu_size: &str) {
         String::from_utf8_lossy(&build.stdout),
         String::from_utf8_lossy(&build.stderr),
     );
+    let reported = String::from_utf8_lossy(&build.stdout).to_string()
+        + &String::from_utf8_lossy(&build.stderr);
+    let count = |phrase: &str| reported.matches(phrase).count();
+    let (generated, cached) = (
+        count("Generating code for"),
+        count("Skipping generation of code for"),
+    );
+    assert!(
+        generated + cached > 0,
+        "the build should report what it did with each compilation unit:\n{}",
+        reported
+    );
+    (generated, cached)
 }
 
-/// A build after an edit regenerates only the compilation units the edit reaches.
+/// A build after an edit generates only the compilation units the edit reaches.
 ///
 /// This is what dividing the program is for. A unit is cached under a hash of the symbols it holds
 /// and the sources of the modules they are compiled from, so an edit to `Main` leaves the units
-/// holding `Worker`'s globals — whose code `Std` alone decides — where they are. Compiled in one
-/// piece, as `-O max` was, there is one unit and every build regenerates all of it.
+/// holding `Worker`'s globals — whose code `Std` alone decides — where they are, and the second
+/// build takes their code from the first. Compiled in one piece, as `-O max` was, there is one unit
+/// and every build generates all of it.
 #[test]
 fn test_an_edit_regenerates_only_the_units_it_reaches() {
     const CU_SIZE: &str = "2";
@@ -203,25 +203,21 @@ fn test_an_edit_regenerates_only_the_units_it_reaches() {
     let dir = temp_dir.path();
 
     write_two_module_project(dir, 120);
-    build_at_max_in(dir, CU_SIZE);
-    let before = unit_files(dir);
-
-    write_two_module_project(dir, 122);
-    build_at_max_in(dir, CU_SIZE);
-    let after = unit_files(dir);
-
+    let (units, _) = build_at_max_in(dir, CU_SIZE);
     assert!(
-        before.len() >= 10,
+        units >= 10,
         "{} symbols to a unit should divide this program into several units, and it made {}",
         CU_SIZE,
-        before.len()
+        units
     );
-    let regenerated = after.difference(&before).count();
+
+    write_two_module_project(dir, 122);
+    let (generated, cached) = build_at_max_in(dir, CU_SIZE);
     assert!(
-        (before.len() - regenerated) * 3 >= before.len(),
-        "the edit reaches `Main` alone, so at least a third of the {} units should keep the code \
-         the first build generated, and {} were regenerated",
-        before.len(),
-        regenerated
+        cached * 3 >= generated + cached,
+        "the edit reaches `Main` alone, so the second build should take at least a third of its \
+         {} units from the first, and it generated {} of them again",
+        generated + cached,
+        generated
     );
 }
