@@ -91,6 +91,8 @@ fn test_split_limit_boundary() {
         Arc::new(Map::default()),
     ,
         Default::default(),
+        Default::default(),
+        Default::default(),
     );
 
     let limit = MAX_SPLIT_SCALARS;
@@ -397,6 +399,8 @@ fn test_field_part_ranges_tile_the_part_list() {
         type_env,
         Arc::new(Map::default()),
     ,
+        Default::default(),
+        Default::default(),
         Default::default(),
     );
 

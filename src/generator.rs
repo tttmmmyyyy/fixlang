@@ -552,6 +552,15 @@ pub struct Generator<'c, 'm> {
     /// The symbols of the program that something outside their own compilation unit reaches, which
     /// is what decides whether a symbol this module defines is published to the linker.
     reached_from_outside_their_unit: Arc<Set<FullName>>,
+    /// The functions this module holds a copy of for its own calls, whose home is another unit. A
+    /// copy is internal however the original is published, so that a call here reaches the copy and
+    /// the linker sees one definition of the name.
+    imported: Arc<Set<FullName>>,
+    /// The globals a unit other than the one owning them reads. The owner publishes their storage,
+    /// their initialization flag and the function computing them, and a reader declares the three
+    /// and carries a copy of the accessor alone, so that one value is computed once and every read
+    /// of it still inlines.
+    pub(crate) shared_globals: Arc<Set<FullName>>,
     /// Type definitions of the program, used to resolve a Fix type to its layout.
     type_env: TypeEnv,
     /// Layout of the target the module is compiled for: sizes, alignments and struct offsets.
@@ -779,6 +788,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         type_env: TypeEnv,
         global_types: Arc<Map<FullName, Arc<TypeNode>>>,
         reached_from_outside_their_unit: Arc<Set<FullName>>,
+        imported: Arc<Set<FullName>>,
+        shared_globals: Arc<Set<FullName>>,
     ) -> Self {
         let triple = module.get_triple().as_str().to_string_lossy().to_string();
         let gc = Self {
@@ -792,6 +803,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             declared_globals: Default::default(),
             global_types,
             reached_from_outside_their_unit,
+            imported,
+            shared_globals,
             type_env,
             target_data: target_data,
             return_registers: return_registers_of_target(&triple),
@@ -2446,7 +2459,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// own compilation unit reaches it. Every other global is internal to the unit defining it, and
     /// no other unit declares it, so LLVM optimizes it knowing every call it has.
     fn published_to_the_linker(&self, name: &FullName) -> bool {
-        self.reached_from_outside_their_unit.contains(name)
+        !self.imported.contains(name) && self.reached_from_outside_their_unit.contains(name)
     }
 
     // Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
@@ -2505,15 +2518,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             embedded_ty.fn_type(&[], false)
         };
-        let acc_fn = self.module.add_function(
-            &acc_fn_name,
-            acc_fn_ty,
-            Some(if self.published_to_the_linker(name) {
-                Linkage::External
-            } else {
-                Linkage::Internal
-            }),
-        );
+        // The accessor is internal wherever it is: a unit reading a global carries a copy of it
+        // (`RcGlobalInit::owns_storage`), so no unit reaches another's.
+        let acc_fn = self
+            .module
+            .add_function(&acc_fn_name, acc_fn_ty, Some(Linkage::Internal));
         self.add_global_object(name.clone(), acc_fn, ty);
         Some(acc_fn)
     }

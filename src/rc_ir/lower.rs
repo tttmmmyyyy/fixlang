@@ -267,6 +267,7 @@ impl<'a> Lowerer<'a> {
                 symbol: sym.name.clone(),
                 ty: sym.ty.clone(),
                 init,
+                owns_storage: true,
             })
         }
     }

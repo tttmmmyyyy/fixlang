@@ -300,4 +300,9 @@ pub struct RcGlobalInit {
     pub ty: Arc<TypeNode>,
     /// The expression computing the value.
     pub init: RcExprNode,
+    /// Whether this program holds the value's storage, its initialization flag and the function
+    /// computing it. A compilation unit reading a global another unit owns carries a copy of the
+    /// accessor alone, so that its reads inline, and reaches the storage, the flag and the
+    /// initializer the owning unit publishes.
+    pub owns_storage: bool,
 }

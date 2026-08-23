@@ -63,6 +63,8 @@ fn test_union_memory_layout() {
         Arc::new(Map::default()),
     ,
         Default::default(),
+        Default::default(),
+        Default::default(),
     );
 
     // A union's payload buffer takes the ABI alignment of its payloads, so a small or empty
@@ -149,6 +151,8 @@ fn test_union_is_larger_than_a_payload_past_the_single_precision_significand() {
         type_env,
         Arc::new(Map::default()),
     ,
+        Default::default(),
+        Default::default(),
         Default::default(),
     );
 

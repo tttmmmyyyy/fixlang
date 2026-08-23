@@ -1042,7 +1042,8 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             symbol: g.symbol.clone(),
             ty: g.ty.clone(),
             init,
-        });
+                owns_storage: true,
+            });
     }
 
     // Materialize every requested clone; each materialization may request further clones.

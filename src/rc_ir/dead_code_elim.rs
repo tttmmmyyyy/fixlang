@@ -181,6 +181,7 @@ mod tests {
             symbol,
             ty: make_i64_ty(),
             init: body_mentioning(mentions),
+            owns_storage: true,
         }
     }
 

@@ -23,7 +23,7 @@ use crate::{
     misc::{info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
     rc_ir::{
-        ast::RcProgram,
+        ast::{FuncRef, RcFunc, RcGlobalInit, RcProgram},
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
         codegen::keep_initializers_out_of_shared_accessors,
         dead_code_elim, locality,
@@ -31,7 +31,7 @@ use crate::{
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
         rc_insert::insert_rc,
-        simplify::simplify,
+        simplify::{node_count, simplify},
         unique_check_elim, validate,
     },
     tool::stopwatch::StopWatch,
@@ -55,6 +55,19 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+
+/// The most RC IR nodes a function may hold for a unit calling it to take a copy of its own
+/// (`build_object_files`). A copy lets LLVM see the body at the call; past this size the call is
+/// what the body would compile into anyway, and the copy is compiled for nothing.
+const IMPORTED_FUNCTION_NODE_LIMIT: u64 = 200;
+
+/// PROBE: the limit this run uses, so a sweep does not rebuild the compiler per value.
+fn imported_function_node_limit() -> u64 {
+    std::env::var("FIX_IMPORT_LIMIT")
+        .ok()
+        .and_then(|text| text.parse().ok())
+        .unwrap_or(IMPORTED_FUNCTION_NODE_LIMIT)
+}
 
 /// What a build produced, as `build_object_files` reports it.
 #[derive(Clone, Serialize, Deserialize)]
@@ -370,7 +383,13 @@ pub fn build_object_files<'c>(
     };
 
     // PROBE: lower and optimize the whole program's RC IR, then divide it among the units.
-    let (mut unit_rc_programs, reached_from_outside_their_unit, global_types) = {
+    let (
+        mut unit_rc_programs,
+        reached_from_outside_their_unit,
+        global_types,
+        imported,
+        shared_globals,
+    ) = {
         let type_env = program.type_env();
         let all_symbols: Vec<Symbol> = units
             .iter()
@@ -422,6 +441,25 @@ pub fn build_object_files<'c>(
             synthesized_types.insert(global.symbol.clone(), global.ty.clone());
         }
 
+        let copyable_funcs: Map<FullName, RcFunc> = rc_prog
+            .funcs
+            .iter()
+            // A closure function is reached only through the closure value a body builds, and code
+            // generation reads that function out of the module building it, so a unit that took a
+            // copy of a body building one takes a copy of the function too, whatever its size.
+            .filter(|(_, func)| {
+                !func.fn_ty.is_funptr() || node_count(&func.body) <= imported_function_node_limit()
+            })
+            .map(|(fref, func)| (fref.name.clone(), func.clone()))
+            .collect();
+        // Every global, so that a unit reading one another unit owns can carry a copy of its
+        // accessor.
+        let all_globals: Map<FullName, RcGlobalInit> = rc_prog
+            .globals
+            .iter()
+            .map(|global| (global.symbol.clone(), global.clone()))
+            .collect();
+
         let mut unit_rc_programs: Vec<RcProgram> = (0..units.len())
             .map(|_| RcProgram {
                 funcs: Map::default(),
@@ -440,8 +478,81 @@ pub fn build_object_files<'c>(
             unit_rc_programs[index].globals.push(global);
         }
 
-        // A name is published to the linker when a body in another unit mentions it, or when the C
-        // world enters the program through it.
+        // Give each unit its own copy of every small funptr function of another unit that a body in
+        // it calls, so that LLVM sees the body at the call instead of a call to a symbol it must
+        // assume anything may reach. A global is not copied: its initializer runs once per copy, and
+        // a program reading one global would compute it twice.
+        let mut imported: Vec<Set<FullName>> = vec![Set::default(); units.len()];
+        let mut shared_globals: Set<FullName> = Set::default();
+        loop {
+            let mut copied = false;
+            for index in 0..unit_rc_programs.len() {
+                let mut wanted: Set<FullName> = Set::default();
+                let unit_prog = &unit_rc_programs[index];
+                let bodies = unit_prog
+                    .funcs
+                    .values()
+                    .map(|func| &func.body)
+                    .chain(unit_prog.globals.iter().map(|global| &global.init));
+                for body in bodies {
+                    dead_code_elim::collect_mentions(body, &mut |mentioned| {
+                        let defined_here = unit_prog.funcs.contains_key(&FuncRef {
+                            name: mentioned.clone(),
+                        }) || unit_prog.globals.iter().any(|g| &g.symbol == mentioned);
+                        if !defined_here
+                            && (copyable_funcs.contains_key(mentioned)
+                                || all_globals.contains_key(mentioned))
+                        {
+                            wanted.insert(mentioned.clone());
+                        }
+                    });
+                }
+                for name in wanted {
+                    match copyable_funcs.get(&name) {
+                        Some(func) => {
+                            unit_rc_programs[index]
+                                .funcs
+                                .insert(FuncRef { name: name.clone() }, func.clone());
+                        }
+                        None => {
+                            let mut global = all_globals[&name].clone();
+                            global.owns_storage = false;
+                            unit_rc_programs[index].globals.push(global);
+                            shared_globals.insert(name.clone());
+                        }
+                    }
+                    imported[index].insert(name);
+                    copied = true;
+                }
+            }
+            if !copied {
+                break;
+            }
+        }
+
+        // The main unit reads the values the C world enters the program through — the entry point
+        // and the exported ones — from the code it builds rather than from an RC IR body, so the
+        // copies it needs are given to it here.
+        let main_unit = unit_rc_programs.len() - 1;
+        for name in root_value_names.iter() {
+            if unit_rc_programs[main_unit]
+                .globals
+                .iter()
+                .any(|g| &g.symbol == name)
+            {
+                continue;
+            }
+            if let Some(global) = all_globals.get(name) {
+                let mut global = global.clone();
+                global.owns_storage = false;
+                unit_rc_programs[main_unit].globals.push(global);
+                imported[main_unit].insert(name.clone());
+                shared_globals.insert(name.clone());
+            }
+        }
+
+        // A name is published to the linker when a body in a unit that has no copy of it mentions
+        // it, or when the C world enters the program through it.
         let mut published = root_value_names;
         for (index, unit_prog) in unit_rc_programs.iter().enumerate() {
             let bodies = unit_prog
@@ -451,16 +562,26 @@ pub fn build_object_files<'c>(
                 .chain(unit_prog.globals.iter().map(|global| &global.init));
             for body in bodies {
                 dead_code_elim::collect_mentions(body, &mut |mentioned| {
-                    if mentioned.is_global() && unit_of(mentioned).is_some_and(|of| of != index) {
+                    let defined_here = unit_prog.funcs.contains_key(&FuncRef {
+                        name: mentioned.clone(),
+                    }) || unit_prog.globals.iter().any(|g| &g.symbol == mentioned);
+                    if mentioned.is_global() && !defined_here && unit_of(mentioned).is_some() {
                         published.insert(mentioned.clone());
                     }
                 });
             }
+            let _ = index;
         }
         for unit_prog in unit_rc_programs.iter_mut() {
             unit_prog.roots = published.clone();
         }
-        (unit_rc_programs, Arc::new(published), Arc::new(synthesized_types))
+        (
+            unit_rc_programs,
+            Arc::new(published),
+            Arc::new(synthesized_types),
+            imported,
+            Arc::new(shared_globals),
+        )
     };
 
     // Where each unit's generated code goes, and where the code this build hands the linker goes.
@@ -517,6 +638,8 @@ pub fn build_object_files<'c>(
 
         let global_types = global_types.clone();
         let reached_from_outside_their_unit = reached_from_outside_their_unit.clone();
+        let imported_here = Arc::new(imported[i].clone());
+        let shared_globals = shared_globals.clone();
         let config = config.clone();
         let type_env = program.type_env();
         let unit_rc_program = mem::replace(
@@ -552,6 +675,8 @@ pub fn build_object_files<'c>(
                 type_env,
                 global_types.clone(),
                 reached_from_outside_their_unit.clone(),
+                imported_here.clone(),
+                shared_globals,
             );
 
             // In debug mode, create debug infos.

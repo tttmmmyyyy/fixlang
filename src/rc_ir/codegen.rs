@@ -621,8 +621,20 @@ impl<'c, 'm> Generator<'c, 'm> {
             None,
             &format!("GlobalVar#{}", object_file_symbol_name(&global_init.symbol)),
         );
-        global_var.set_initializer(&obj_embed_ty.const_zero());
-        global_var.set_linkage(Linkage::Internal);
+        // The owner defines the storage; a reader of another unit's global declares it. The two
+        // reach one storage, so the value is computed once however many units read it.
+        let shared = self.shared_globals.contains(&global_init.symbol);
+        let owned_linkage = if shared {
+            Linkage::External
+        } else {
+            Linkage::Internal
+        };
+        if global_init.owns_storage {
+            global_var.set_initializer(&obj_embed_ty.const_zero());
+            global_var.set_linkage(owned_linkage);
+        } else {
+            global_var.set_linkage(Linkage::External);
+        }
         let global_var_ptr = global_var.as_basic_value_enum().into_pointer_value();
 
         let (flag_ty, flag_init_val) = if self.config.threaded {
@@ -639,8 +651,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             None,
             &format!("InitFlag#{}", object_file_symbol_name(&global_init.symbol)),
         );
-        init_flag.set_initializer(&flag_init_val);
-        init_flag.set_linkage(Linkage::Internal);
+        if global_init.owns_storage {
+            init_flag.set_initializer(&flag_init_val);
+            init_flag.set_linkage(owned_linkage);
+        } else {
+            init_flag.set_linkage(Linkage::External);
+        }
         let init_flag_ptr = init_flag.as_basic_value_enum().into_pointer_value();
 
         // The value is computed by a function of its own.
@@ -653,20 +669,26 @@ impl<'c, 'm> Generator<'c, 'm> {
         let init_value_fn = self.module.add_function(
             &format!("InitValue#{}", object_file_symbol_name(&global_init.symbol)),
             BasicType::fn_type(&obj_embed_ty, &[], false),
-            Some(Linkage::Internal),
+            Some(if global_init.owns_storage {
+                owned_linkage
+            } else {
+                Linkage::External
+            }),
         );
 
         // Name the accessor on the initializer, for `keep_initializers_out_of_shared_accessors` to
         // read back off the module the optimization runs over. That module holds every reader of
         // the global, which the module generating it need not: a reader in another compilation unit
         // arrives when the units are merged.
-        init_value_fn.add_attribute(
-            AttributeLoc::Function,
-            self.context.create_string_attribute(
-                GLOBAL_ACCESSOR_ATTRIBUTE,
-                &global_accessor_name(&global_init.symbol),
-            ),
-        );
+        if global_init.owns_storage {
+            init_value_fn.add_attribute(
+                AttributeLoc::Function,
+                self.context.create_string_attribute(
+                    GLOBAL_ACCESSOR_ATTRIBUTE,
+                    &global_accessor_name(&global_init.symbol),
+                ),
+            );
+        }
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
@@ -751,8 +773,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             end_bb
         };
 
-        // Evaluate the initializer and mark it global.
-        {
+        // Evaluate the initializer and mark it global. A unit reading another's global calls the
+        // owner's, which it has declared above.
+        if global_init.owns_storage {
             let _builder_guard = self.push_builder();
             let init_bb = self.context.append_basic_block(init_value_fn, "init_bb");
             self.builder().position_at_end(init_bb);
