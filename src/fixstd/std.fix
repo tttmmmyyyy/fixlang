@@ -2224,17 +2224,26 @@ namespace Iterator {
     map : [?out : Iterator, Item ?out = b, input : Iterator, Item input = a] (a -> b) -> input -> ?out;
     map = |f, iter| MapIterator { iter: iter, f: f };
 
+    // The next element of `iter` that `pred` accepts, with the iterator advanced past it. The
+    // predicate is handed over as an argument so that the loop skipping the rejected elements is a
+    // body of its own, which is what lets `advance` go into the loop consuming it.
+    _skip_until : [i : Iterator, Item i = a] (a -> Bool) -> i -> Option (i, a);
+    _skip_until = |pred, iter| (
+        loop(iter, |iter|
+            match iter.advance {
+                none() => break $ none(),
+                some((iter, a)) => if pred(a) { break $ some((iter, a)) } else { continue $ iter }
+            }
+        )
+    );
+
     type FilterIterator i a = unbox struct { iter : i, pred : a -> Bool };
     impl [i : Iterator, Item i = a] FilterIterator i a : Iterator {
         type Item (FilterIterator i a) = Item i;
         advance = |FilterIterator { iter : iter, pred : pred }| (
-            match iter.advance {
+            match _skip_until(pred, iter) {
                 none() => none(),
-                some((iter, a)) => if pred(a) { 
-                    some((FilterIterator { iter: iter, pred: pred }, a))
-                } else {
-                    FilterIterator { iter: iter, pred: pred }.advance
-                }
+                some((iter, a)) => some((FilterIterator { iter: iter, pred: pred }, a))
             }
         );
     }
@@ -2250,16 +2259,28 @@ namespace Iterator {
     filter : [?out : Iterator, Item ?out = a, input : Iterator, Item input = a] (a -> Bool) -> input -> ?out;
     filter = |pred, iter| FilterIterator { iter: iter, pred: pred };
 
+    // The next element of `iter` that `f` maps to `some`, with the iterator advanced past it, and
+    // the value `f` gave it. The function is handed over as an argument so that the loop skipping
+    // the elements it declines is a body of its own, which is what lets `advance` go into the loop
+    // consuming it.
+    _map_until : [i : Iterator, Item i = a] (a -> Option b) -> i -> Option (i, b);
+    _map_until = |f, iter| (
+        match iter.advance {
+            none() => none(),
+            some((iter, a)) => match f(a) {
+                none() => _map_until(f, iter),
+                some(b) => some((iter, b))
+            }
+        }
+    );
+
     type FilterMapIterator i a b = unbox struct { iter : i, f : a -> Option b };
     impl [i : Iterator, Item i = a] FilterMapIterator i a b : Iterator {
         type Item (FilterMapIterator i a b) = b;
         advance = |FilterMapIterator { iter : iter, f : f }| (
-            match iter.advance {
+            match _map_until(f, iter) {
                 none() => none(),
-                some((iter, a)) => match f(a) {
-                    none() => FilterMapIterator { iter: iter, f: f }.advance,
-                    some(b) => some((FilterMapIterator { iter: iter, f: f }, b))
-                }
+                some((iter, b)) => some((FilterMapIterator { iter: iter, f: f }, b))
             }
         );
     }
@@ -2275,23 +2296,34 @@ namespace Iterator {
     filter_map : [?out : Iterator, Item ?out = b, input : Iterator, Item input = a] (a -> Option b) -> input -> ?out;
     filter_map = |f, iter| FilterMapIterator { iter: iter, f: f };
 
+    // The next element any inner iterator yields, with both iterators advanced past it. The walk
+    // past the inner iterators that yield nothing is a body of its own, which is what lets
+    // `advance` go into the loop consuming it.
+    _inner_until : [i2 : Iterator, i1 : Iterator, Item i2 = i1] i2 -> Option i1 -> Option (i2, i1, Item i1);
+    _inner_until = |i2, i1| (
+        match i1 {
+            none() => (
+                match i2.advance {
+                    none() => none(),
+                    some((i2, i1)) => _inner_until(i2, some(i1))
+                }
+            ),
+            some(i1) => (
+                match i1.advance {
+                    none() => _inner_until(i2, none()),
+                    some((i1, a)) => some $ (i2, i1, a)
+                }
+            )
+        }
+    );
+
     type FlattenIterator i2 i1 = unbox struct { i2 : i2, i1 : Option i1 };
     impl [i2 : Iterator, i1: Iterator, Item i2 = i1] FlattenIterator i2 i1 : Iterator {
         type Item (FlattenIterator i2 i1) = Item i1;
         advance = |FlattenIterator { i2 : i2, i1 : i1 }| (
-            match i1 {
-                none() => (
-                    match i2.advance {
-                        none() => none(),
-                        some((i2, i1)) => FlattenIterator { i2: i2, i1: some(i1) }.advance
-                    }
-                ),
-                some(i1) => (
-                    match i1.advance {
-                        none() => FlattenIterator { i2: i2, i1: none() }.advance,
-                        some((i1, a)) => some $ (FlattenIterator { i2: i2, i1: some(i1) }, a)
-                    }
-                )
+            match _inner_until(i2, i1) {
+                none() => none(),
+                some((i2, i1, a)) => some $ (FlattenIterator { i2: i2, i1: some(i1) }, a)
             }
         );
     }

@@ -1,0 +1,15 @@
+module Main;
+
+import Std::{Array, I64, IO, Array::{from_map, to_iter}, Debug::assert_eq, Iterator::{fold, map}, Monad::pure};
+
+iter_map : Array I64 -> I64;
+iter_map = |arr| (
+    arr.to_iter.map(|x| x * 3).fold(0, |x, acc| acc + x)
+);
+
+main : IO ();
+main = (
+    let arr = Array::from_map(1000000, |i| i % 251);
+    assert_eq(|_|"iter_map", iter_map(arr), 374994360);;
+    pure()
+);

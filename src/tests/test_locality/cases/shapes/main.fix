@@ -10,13 +10,24 @@ g = [1, 2, 3];
 gtup : (Array I64, Array I64);
 gtup = ([4, 5], [6, 7]);
 
-// One parameter with two boxed leaves. A caller can make one leaf local and leave the other on the
-// global, so the two leaves of one argument carry different keys.
+// One parameter with two boxed leaves, read field by field so that the pair reaches the body as one
+// value. A caller can make one leaf local and leave the other on the global, so the two leaves of
+// one argument carry different keys.
 walk_tup : I64 -> (Array I64, Array I64) -> I64;
 walk_tup = |n, t| (
     if n <= 0 { 0 };
-    let (p, q) = t;
+    let p = t.@0;
+    let q = t.@1;
     p.@(0) + q.@(0) + walk_tup(n - 1, (p, q))
+);
+
+// The same pair, taken apart with a tuple pattern, which is the shape a struct argument is split on:
+// the body reaches the two leaves as arguments of its own.
+walk_pat : I64 -> (Array I64, Array I64) -> I64;
+walk_pat = |n, t| (
+    if n <= 0 { 0 };
+    let (p, q) = t;
+    p.@(0) + q.@(0) + walk_pat(n - 1, (p, q))
 );
 
 // An unboxed union parameter: one reference-counting node covers every variant's leaves at once.
@@ -75,10 +86,11 @@ main = (
     let mixedtup = ([70, 80], g);
 
     let a = walk_tup(2, localtup) + walk_tup(2, gtup) + walk_tup(2, mixedtup);
+    let ap = walk_pat(2, localtup) + walk_pat(2, gtup) + walk_pat(2, mixedtup);
     let b = walk_opt(2, Option::some(local)) + walk_opt(2, Option::some(g));
     let c = overwrite(2, [[90], [100]]) + overwrite(2, [g, g]);
     let d = FromGlobal { tag : 0 }.total + FromLocal { tag : 0 }.total;
     let e = *g.hold + *local.hold;
 
-    println $ (a + b + c + d + e).to_string
+    println $ (a + ap + b + c + d + e).to_string
 );
