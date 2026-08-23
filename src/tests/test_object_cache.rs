@@ -67,6 +67,74 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
         paths
     }
 
+    /// Every compilation unit's object file, as its name paired with a digest of its content, so
+    /// that what two builds generated can be compared.
+    fn unit_object_digests(dir: &Path) -> Vec<(String, String)> {
+        let units_dir = dir.join(".fixlang/intermediate/units");
+        let mut digests: Vec<(String, String)> = fs::read_dir(&units_dir)
+            .unwrap_or_else(|e| panic!("failed to read {}: {}", units_dir.display(), e))
+            .map(|entry| entry.expect("failed to read a directory entry").path())
+            .filter(|path| path.extension().map_or(false, |extension| extension == "o"))
+            .map(|path| {
+                let name = path.file_name().unwrap().to_string_lossy().to_string();
+                let content = fs::read(&path)
+                    .unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e));
+                (name, format!("{:x}", md5::compute(content)))
+            })
+            .collect();
+        digests.sort();
+        digests
+    }
+
+    /// A build asked for a dump generates the object files a build asked for nothing generates.
+    ///
+    /// This is what lets `--emit-llvm` and `--emit-rc-ir` stay out of the hash naming a build's
+    /// object files. A build asked for either generates the code again and writes it over the
+    /// object files the previous build left, under the names that build used, so a dump that
+    /// reached the generated code would leave every later build in the directory linking what the
+    /// dump build produced.
+    #[test]
+    fn test_a_build_asked_for_a_dump_generates_the_object_files_of_a_plain_build() {
+        let dir = project_dir();
+        let dir = dir.path();
+
+        run_in(
+            &mut fix_command_at_opt_level("build", "basic"),
+            dir,
+            "the build asked for nothing",
+        );
+        let plain = unit_object_digests(dir);
+        assert!(
+            !plain.is_empty(),
+            "the build asked for nothing should leave its object files behind"
+        );
+
+        let mut assert_dump_build_matches = |what: &str, command: &mut Command| {
+            let output = run_in(command.arg("--verbose"), dir, what);
+            assert!(
+                output.contains("Generating object file for"),
+                "{} should generate the code again, since a dump is written as it is generated.\n{}",
+                what,
+                output
+            );
+            assert_eq!(
+                plain,
+                unit_object_digests(dir),
+                "{} should generate the object files of a build asked for nothing",
+                what
+            );
+        };
+
+        assert_dump_build_matches(
+            "the build asked for the LLVM IR",
+            fix_command_at_opt_level("build", "basic").arg("--emit-llvm"),
+        );
+        assert_dump_build_matches(
+            "the build asked for the RC IR",
+            fix_command_at_opt_level("build", "basic").args(["--emit-rc-ir", "all"]),
+        );
+    }
+
     /// The RC IR, the LLVM IR and the symbols are written as the code they describe is generated,
     /// so a build that answered from the cache would write none of them. A build asked for a dump
     /// therefore generates the code again, and what it writes is of the build that was asked.
