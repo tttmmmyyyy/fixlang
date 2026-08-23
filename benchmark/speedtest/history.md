@@ -22,6 +22,23 @@ accesses the cache condition reads.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 30176a1ecd13001de31148dde1573928bcb172d9
+
+The first row carrying the five combinator-chain cases — `iter_map`, `iter_map_map`, `iter_filter`,
+`iter_filter_map` and `iter_flatten`, a million elements each. The corpus had no case where the
+function an iterator carries sits in a field, which is what #450 is about, so nothing here moved
+with the work on it.
+
+Built with the merge base instead, the same five cases read 17,083,788 / 25,084,087 / 19,091,760 /
+19,593,750 / 24,346,695 instructions, so this row stands at -75.00%, -81.98%, -39.30%, -38.29% and
+-28.73%.
+
+`iter_flatten` carries one split store per element (999,017 against the merge base's 15), and its
+cycles fall by 12.1% while its instructions fall by 28.7% — the straddling store is eating part of
+the win. The other four chains stay at 24 splits.
+
+`cp_lib_bipartite` and `push_back` came away without a cycle count under 0.65 cores of other work.
+
 ## dde0bf3c1af23804a56e5277e5fb5395c200b978
 
 Splitting a struct argument into one argument per field, and reading a construction where the code
