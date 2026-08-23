@@ -1,0 +1,9 @@
+module Main;
+
+// The predicate reaches the walk past the rejected elements as an argument, so the loop consuming
+// the iterator holds the whole chain.
+sum_of_even : Array I64 -> I64;
+sum_of_even = |arr| arr.to_iter.filter(|x| x % 2 == 0).fold(0, |x, acc| acc + x);
+
+main : IO ();
+main = println $ sum_of_even(Array::from_map(1000, |i| i % 251)).to_string;
