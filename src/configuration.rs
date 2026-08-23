@@ -659,7 +659,7 @@ impl Configuration {
 
 /// The hash sources of a build's caches, one per cache, each holding the settings that cache has to
 /// tell apart. `Configuration::cache_hash_sources` fills them in one pass, since a setting reaching
-/// both is written into both.
+/// more than one of them is written into each.
 struct CacheHashSources {
     /// The settings that decide what the elaborated program is.
     elaboration: HashSource,
@@ -1060,8 +1060,8 @@ impl Configuration {
             out_file_path: _,
 
             // What the build writes beside the object files, and what it reports as it goes. A dump
-            // is written as the code is generated, so a build asked for one generates the code
-            // again (`dumps_generated_code`) instead of keying its object files on the request.
+            // is written as the code is generated, so a build asked for one is keyed as any other
+            // build is and generates the code again (`dumps_generated_code`).
             emit_llvm: _,
             emit_rc_ir: _,
             show_build_times: _,
@@ -1893,4 +1893,3 @@ mod tests {
         );
     }
 }
-

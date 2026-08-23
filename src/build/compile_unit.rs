@@ -2,17 +2,15 @@
 Cache system for object (*.o) files.
 */
 
-use crate::hash::HashSource;
-use crate::misc::{split_by_max_size, Map, Set};
-use std::fmt;
-use std::path::PathBuf;
-
-use rand::Rng;
-
 use crate::ast::name::Name;
 use crate::ast::program::Symbol;
 use crate::configuration::Configuration;
 use crate::constants::COMPILATION_UNITS_PATH;
+use crate::hash::HashSource;
+use crate::misc::{split_by_max_size, Map, Set};
+use rand::Rng;
+use std::fmt;
+use std::path::PathBuf;
 
 pub struct CompileUnit {
     // Name of symbols in the module

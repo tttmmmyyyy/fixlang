@@ -10,12 +10,13 @@ pub fn md5_hex(text: &str) -> String {
 ///
 /// Each value goes in with its length in front of it, so a value cannot run into the one appended
 /// next: `"xy"` followed by `"z"` gives a different source from `"x"` followed by `"yz"`. Appending
-/// through this type is what holds that, and it takes the values as they come rather than keeping
-/// them, so a value as large as a whole source file costs nothing to append.
+/// through this type is what holds that, and it folds each value into the digest as the value is
+/// appended, so a value as large as a whole source file costs nothing to append.
 #[derive(Clone)]
 pub struct HashSource(md5::Context);
 
 impl Default for HashSource {
+    /// A hash source nothing has been appended to.
     fn default() -> Self {
         HashSource(md5::Context::new())
     }
@@ -29,8 +30,8 @@ impl HashSource {
         self.0.consume(text);
     }
 
-    /// Appends `items`. The count comes first, so a list's items cannot be read as the next list's,
-    /// which is what asks the items for a length known before they are appended.
+    /// Appends `items`. The count comes first, so a list's items cannot be read as the next
+    /// list's, which is why `items` is taken as an `ExactSizeIterator`.
     pub fn push_list<I>(&mut self, items: I)
     where
         I: IntoIterator,

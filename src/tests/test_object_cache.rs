@@ -39,6 +39,10 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
 
     /// Runs `command` in `dir` and returns what it wrote to its two streams, failing the test if the
     /// command does not succeed.
+    ///
+    /// # Arguments
+    /// * `what` — the invocation as a failure message names it, as a noun phrase that completes
+    ///   "... should succeed", so that a failure says which of a test's several builds it was.
     fn run_in(command: &mut Command, dir: &Path, what: &str) -> String {
         let output = command
             .current_dir(dir)
@@ -185,7 +189,8 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
         let dir = project_dir();
         let dir = dir.path();
 
-        let count_generated_units = |output: &str| output.matches("Generating object file for").count();
+        let count_generated_units =
+            |output: &str| output.matches("Generating object file for").count();
 
         let first_output = run_in(
             fix_command_at_opt_level("build", "basic").arg("--verbose"),
@@ -193,7 +198,11 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
             "the first build",
         );
         let default_units = count_generated_units(&first_output);
-        assert!(default_units > 0, "the first build should generate its units.\n{}", first_output);
+        assert!(
+            default_units > 0,
+            "the first build should generate its units.\n{}",
+            first_output
+        );
 
         let repeated_output = run_in(
             fix_command_at_opt_level("build", "basic").arg("--verbose"),
@@ -226,5 +235,4 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
             divided_output
         );
     }
-
 }
