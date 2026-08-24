@@ -28,7 +28,7 @@ use crate::constants::{
     PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, PUNCHED_ARRAY_NAME, STD_NAME, STORAGE_BUF_IDX,
     STRING_NAME, STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
     STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
-    TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
+    TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
@@ -4376,10 +4376,10 @@ impl LLVMGen for InlineLLVMStructGetBody {
         if container_boxed {
             Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
         } else {
-            let field = self.field_index();
-            Provenance::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
-                let mut p = vec![field];
-                p.extend_from_slice(sigma);
+            let field_idx = self.field_index();
+            Provenance::build_shape(result_ty, type_env, &|path: &FieldPath| {
+                let mut p = vec![field_idx];
+                p.extend_from_slice(path);
                 sole_origin(LeafOrigin::Arg(0, p))
             })
         }
@@ -6129,10 +6129,15 @@ pub fn struct_set(
     (expr, scm)
 }
 
+/// Constructs a union value holding a given variant: the tag names the variant, and the payload
+/// buffer takes the operand.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeUnionBody {
+    /// The local binding holding the payload the constructed variant carries.
     field_name: FullName,
+    /// The name the generated union value carries in the LLVM module.
     generated_union_name: String,
+    /// The variant constructed, as its index among the union's variants.
     field_idx: usize,
 }
 
@@ -6151,8 +6156,8 @@ impl InlineLLVMMakeUnionBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMakeUnionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get field values.
-        let field = gc.get_scoped_obj(&self.field_name);
+        // Get the payload the constructed variant carries.
+        let payload = gc.get_scoped_obj(&self.field_name);
 
         // Create union object.
         let obj = create_obj(
@@ -6168,7 +6173,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         let obj = ObjectFieldType::set_union_tag(gc, obj, tag_value);
 
         // Set value.
-        ObjectFieldType::set_union_value(gc, obj, field)
+        ObjectFieldType::set_union_value(gc, obj, payload)
     }
 
     fn name(&self) -> String {
@@ -6193,10 +6198,10 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         // union lays out its variants: the constructed variant's boxed leaves carry the sole operand,
         // the other variants' leaves are bottom (an empty set). The path's head is the variant index,
         // its tail the position within that variant's payload.
-        let active = self.variant_index();
+        let variant_idx = self.variant_index();
         Provenance::build_shape(result_ty, type_env, &|path| match path.split_first() {
             None => sole_origin(LeafOrigin::Fresh),
-            Some((k, rest)) if *k == active => sole_origin(LeafOrigin::Arg(0, rest.to_vec())),
+            Some((k, rest)) if *k == variant_idx => sole_origin(LeafOrigin::Arg(0, rest.to_vec())),
             Some(_) => Set::default(),
         })
     }
@@ -6213,12 +6218,12 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         if result_ty.is_box(type_env) {
             return ExtShape::fresh_holding(result_ty, arg_tys, type_env);
         }
-        let active = self.variant_index();
+        let variant_idx = self.variant_index();
         ExtShape::build_shape(result_ty, type_env, &|path| {
             let (k, rest) = path
                 .split_first()
                 .expect("a boxed leaf of an unboxed union has a non-empty path");
-            if *k == active {
+            if *k == variant_idx {
                 LeafCond::input_leaf(0, rest.to_vec())
             } else {
                 LeafCond::bottom()
@@ -6231,7 +6236,8 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
     }
 }
 
-// constructor function for a given union.
+/// The body of the constructor `{variant}`, which builds a union value holding the variant at
+/// `field_idx` out of the payload bound to `field_name`.
 pub fn union_new_body(
     union_name: &FullName,
     union_defn: &TypeDefn,
@@ -6252,7 +6258,8 @@ pub fn union_new_body(
     )
 }
 
-// `{field}` built-in function for a given union.
+/// The constructor `{variant}` of a union, which takes a payload to the union value holding that
+/// variant, with its type scheme.
 pub fn union_new(
     union_name: &FullName,
     field_name: &Name,
@@ -6276,7 +6283,8 @@ pub fn union_new(
     (expr, scm)
 }
 
-// `as_{field}` built-in function for a given union.
+/// The `as_{variant}` built-in of a union, which reads the payload of that variant out of a union
+/// value, with its type scheme.
 pub fn union_as(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let (field_idx, _) = union.get_field_by_name(field_name).unwrap();
@@ -6301,9 +6309,13 @@ pub fn union_as(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
     (expr, scm)
 }
 
+/// Reads the payload of a given variant out of a union value, aborting the program where the union
+/// holds another variant and runtime checks are on.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnionAsBody {
+    /// The local binding holding the union to read.
     union_arg_name: FullName,
+    /// The variant read, as its index among the union's variants.
     field_idx: usize,
     /// Whether the objects this op reference-counts inside `generate` are known to be in the local
     /// reference-counting state, so that those operations need no state dispatch.
@@ -6384,10 +6396,10 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         if union_boxed {
             Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
         } else {
-            let variant = self.variant_index();
-            Provenance::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
-                let mut p = vec![variant];
-                p.extend_from_slice(sigma);
+            let variant_idx = self.variant_index();
+            Provenance::build_shape(result_ty, type_env, &|path: &FieldPath| {
+                let mut p = vec![variant_idx];
+                p.extend_from_slice(path);
                 sole_origin(LeafOrigin::Arg(0, p))
             })
         }
@@ -6429,7 +6441,8 @@ impl LLVMGen for InlineLLVMUnionAsBody {
     }
 }
 
-// `as_{field}` built-in function for a given union.
+/// The body of `as_{variant}`, which reads the payload of the variant at `field_idx`, of type
+/// `field_ty`, out of the union bound to `union_arg_name`.
 pub fn union_as_body(
     union_arg_name: &Name,
     field_idx: usize,
@@ -6447,7 +6460,8 @@ pub fn union_as_body(
     )
 }
 
-// `is_{field}` built-in function for a given union.
+/// The `is_{variant}` built-in of a union, which tells whether a union value holds that variant,
+/// with its type scheme.
 pub fn union_is(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let (field_idx, _) = union.get_field_by_name(field_name).unwrap();
@@ -6541,7 +6555,8 @@ impl LLVMGen for InlineLLVMUnionIsBody {
     }
 }
 
-// `is_{field}` built-in function for a given union.
+/// The body of `is_{variant}`, which tells whether the union bound to `union_arg_name` holds the
+/// variant at `field_idx`.
 pub fn union_is_body(union_arg_name: &Name, field_idx: usize) -> Arc<ExprNode> {
     expr_llvm(
         Box::new(InlineLLVMUnionIsBody {
@@ -6553,9 +6568,13 @@ pub fn union_is_body(union_arg_name: &Name, field_idx: usize) -> Arc<ExprNode> {
     )
 }
 
+/// Applies a function to the payload of a given variant and puts the result back into the union.
+/// A union holding another variant comes back as it was.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnionModBody {
+    /// The local binding holding the union to modify.
     union_name: FullName,
+    /// The local binding holding the function applied to the payload.
     modifier_name: FullName,
     /// The variant modified, as its index among the union's variants.
     field_idx: usize,
@@ -6656,6 +6675,8 @@ impl LLVMGen for InlineLLVMUnionModBody {
     }
 }
 
+/// The `mod_{variant}` built-in of a union, which takes a function on the payload to a function on
+/// the union value, with its type scheme.
 pub fn union_mod_function(
     _union_name: &FullName,
     field_name: &Name,
@@ -7822,7 +7843,7 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
         BOXED_TYPE_DATA_IDX
     } else {
         assert!(val.ty.is_union(gc.type_env()));
-        BOXED_TYPE_DATA_IDX + UNION_DATA_IDX
+        ObjectFieldType::get_union_buf_idx(gc, val)
     };
 
     // Get pointer

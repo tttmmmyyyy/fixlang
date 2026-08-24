@@ -149,15 +149,23 @@ pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";
 pub const WRAP_OPAQUE_FUNC_NAME: &str = "#wrap_opaque";
 
 // Struct layout constants.
+/// The index of the control block, the field a boxed object's layout begins with.
 pub const CONTROL_BLOCK_IDX: u32 = 0;
+/// The index at which a boxed object's own fields begin, after its control block.
 pub const BOXED_TYPE_DATA_IDX: u32 = CONTROL_BLOCK_IDX + 1;
-pub const UNION_TAG_IDX: u32 = 0; // Should be added to `BOXED_TYPE_DATA_IDX` if the union is boxed.
+/// The index of a union's tag among the union's own fields. The fields of a boxed union begin at
+/// `BOXED_TYPE_DATA_IDX`, which `struct_field_idx` adds.
+pub const UNION_TAG_IDX: u32 = 0;
+/// The index of a union's payload buffer among the union's own fields, after the tag.
 pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;
 /// The width of a union's tag, which holds the index of the variant the value was created as.
 pub const UNION_TAG_BITS: u32 = 8;
 /// How many variants a union may declare: the indices a tag of `UNION_TAG_BITS` bits tells apart.
 pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
+/// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
+/// The index, among a closure's fields, of the pointer to the captured values the function is
+/// called with.
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 /// How many fields a closure has: the function pointer and the capture.
 pub const CLOSURE_FIELD_COUNT: usize = 2;

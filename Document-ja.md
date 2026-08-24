@@ -643,7 +643,7 @@ type LoopState s b = union { continue : s, break : b };
 - `is_continue : LoopState s b -> Bool`: `LoopState`値が`continue`によって作成されたかどうかを確認します。
 - `is_break : LoopState s b -> Bool`: `LoopState`値が`break`によって作成されたかどうかを確認します。
 - `as_continue : LoopState s b -> s`: `LoopState`値が`continue`によって作成された場合、型`s`の値を抽出します。それ以外の場合、この関数はプログラムを中止します。
-- `as_break : LoopState s b -> s`: `LoopState`値が`break`によって作成された場合、型`b`の値を抽出します。それ以外の場合、この関数はプログラムを中止します。
+- `as_break : LoopState s b -> b`: `LoopState`値が`break`によって作成された場合、型`b`の値を抽出します。それ以外の場合、この関数はプログラムを中止します。
 
 ユニオンの別の例として、値を「持たない可能性がある」値を表すために使用される`Option`があります。これは次のように定義されています。
 

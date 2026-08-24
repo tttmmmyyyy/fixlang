@@ -555,9 +555,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             );
             self.builder().build_unconditional_branch(else_bb).unwrap();
         } else {
-            let tag_val = ObjectFieldType::get_union_tag(self, &scrut_obj);
+            let scrut_tag = ObjectFieldType::get_union_tag(self, &scrut_obj);
             self.builder()
-                .build_switch(tag_val, else_bb, &cases)
+                .build_switch(scrut_tag, else_bb, &cases)
                 .unwrap();
         }
 

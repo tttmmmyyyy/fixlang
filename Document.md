@@ -583,18 +583,18 @@ Then what is the type `LoopState s b`? It is defined as an union with two type p
 type LoopState s b = union { continue : s, break : b };
 ```
 
-The above definition indicates that a `LoopState s b` value contains either of a value of type `s` or a value of type `b`. If you write the set of values of a type as `|type|`, then `|LoopState s b| = |s| ⨆ |b|`, where the symbol `⨆` is represents the disjoint union of sets.
+The above definition indicates that a `LoopState s b` value contains either of a value of type `s` or a value of type `b`. If you write the set of values of a type as `|type|`, then `|LoopState s b| = |s| ⨆ |b|`, where the symbol `⨆` represents the disjoint union of sets.
 
 A union can have at most 256 variants. A definition of more variants is rejected with an error.
 
 For each union type, some basic methods are automatically defined. For example, for `LoopState` as above, the following functions are defined in the namespace `LoopState`.
 
-- `continue : s -> LoopState s b`: converts an value of type `s` into a `LoopState` value.
-- `break : b -> LoopState s b`: converts an value of type `b` into a `LoopState` value.
+- `continue : s -> LoopState s b`: converts a value of type `s` into a `LoopState` value.
+- `break : b -> LoopState s b`: converts a value of type `b` into a `LoopState` value.
 - `is_continue : LoopState s b -> Bool`: checks if the `LoopState` value was created by `continue`.
 - `is_break : LoopState s b -> Bool`: checks if the `LoopState` value was created by `break`.
 - `as_continue : LoopState s b -> s`: extracts a value of type `s` from a `LoopState` value if it is created by `continue`. If not, this function aborts the program.
-- `as_break : LoopState s b -> s`: extracts a value of type `b` from a `LoopState` value if it is created by `break`. If not, this function aborts the program.
+- `as_break : LoopState s b -> b`: extracts a value of type `b` from a `LoopState` value if it is created by `break`. If not, this function aborts the program.
 
 Another example of union is `Option` which is used to represent a value "which may not contain a value". It is defined as follows: 
 
@@ -620,7 +620,7 @@ You can construct a struct value by the syntax `{struct_name} { {field_name}: {f
 let product = Product { price: 100, sold: false };
 ```
 
-As in the case of unions, there are methods that are automatically defined for structs. For `Price` as above, the following methods are defined in the namespace `Price`.
+As in the case of unions, there are methods that are automatically defined for structs. For `Product` as above, the following methods are defined in the namespace `Product`.
 
 - `@price : Product -> I64` and `@sold : Product -> Bool`
     - Extracts the value of a field from a `Product` value.
