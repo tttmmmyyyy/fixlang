@@ -2118,7 +2118,7 @@ impl TypeCheckContext {
                     }
                     let match_subst: Substitution = match_subst.unwrap();
                     let rhs = match_subst.substitute_type(&equality.value);
-                    reduction.enter(&ty, &ty_str, &equality.src);
+                    reduction.enter(&ty_str, &equality.src);
                     let reduced = self.reduce_type_by_equality_along(rhs, reduction);
                     reduction.leave();
                     return reduced;
@@ -3019,6 +3019,33 @@ impl PredicateDeduction {
     }
 }
 
+/// The steps of a search that does not end, as a report shows them: each step quoted, the way
+/// shortened in the middle where it is long, and the step the search comes back to last.
+///
+/// # Arguments
+/// * `way` — the steps as they are printed, the one the search fails on last.
+///
+/// # Examples
+/// A way of three steps reads ``` `A` -> `B` -> `A` ```.
+fn way_string(way: &[String]) -> String {
+    /// How many steps to show. Enough for one turn of a search that asks about ever larger types to
+    /// be visible, and short enough that the reader can read what is printed.
+    const SHOWN_STEPS: usize = 3;
+
+    // The last step is where the search shows what is wrong with it: the step it came back to, or
+    // the one on a type too deep to be one the program wrote.
+    let (last, rest) = way
+        .split_last()
+        .expect("a search carries the step it started from");
+    let quote = |step: &String| format!("`{}`", shorten_for_report(step.clone()));
+    let mut steps = rest.iter().take(SHOWN_STEPS).map(quote).collect::<Vec<_>>();
+    if rest.len() > SHOWN_STEPS {
+        steps.push("...".to_string());
+    }
+    steps.push(quote(last));
+    steps.join(" -> ")
+}
+
 /// What the reduction of a type carries as it descends into the values the equalities it applies
 /// give.
 ///
@@ -3027,26 +3054,25 @@ impl PredicateDeduction {
 /// has begun and has yet to end, so that a value naming one of them is seen for what it is.
 #[derive(Default)]
 struct TypeReduction {
-    /// The associated types whose reduction the current one is inside, outermost first: each with
-    /// its printed form, which is what tells one from another here, and with the source of the
-    /// equality applied to it, which is a step of the way round.
-    path: Vec<(Arc<TypeNode>, String, Option<Span>)>,
+    /// The associated types whose reduction the current one is inside, outermost first: each
+    /// printed, which is what tells one from another here, and with the source of the equality
+    /// applied to it, which is a step of the way round.
+    path: Vec<(String, Option<Span>)>,
     /// The printed form of each associated type on `path`.
     on_path: Set<String>,
 }
 
 impl TypeReduction {
-    /// Record that the reduction of `ty`, whose printed form is `ty_str`, has begun by applying the
-    /// equality written at `src`.
-    fn enter(&mut self, ty: &Arc<TypeNode>, ty_str: &str, src: &Option<Span>) {
+    /// Record that the reduction of the associated type printed as `ty_str` has begun by applying
+    /// the equality written at `src`.
+    fn enter(&mut self, ty_str: &str, src: &Option<Span>) {
         self.on_path.insert(ty_str.to_string());
-        self.path
-            .push((ty.clone(), ty_str.to_string(), src.clone()));
+        self.path.push((ty_str.to_string(), src.clone()));
     }
 
     /// Record that the reduction entered last has ended.
     fn leave(&mut self) {
-        let (_ty, ty_str, _src) = self
+        let (ty_str, _src) = self
             .path
             .pop()
             .expect("a reduction ends only after it has begun");
@@ -3059,15 +3085,15 @@ impl TypeReduction {
         let start = self
             .path
             .iter()
-            .position(|(_ty, ancestor_str, _src)| ancestor_str == ty_str)
+            .position(|(ancestor_str, _src)| ancestor_str == ty_str)
             .expect("the caller found the type among the reductions it is inside");
         let round = &self.path[start..];
-        let way: Vec<Arc<TypeNode>> = round
+        let way: Vec<String> = round
             .iter()
-            .map(|(ty, _ty_str, _src)| ty.clone())
-            .chain([round[0].0.clone()])
+            .map(|(ancestor_str, _src)| ancestor_str.clone())
+            .chain([ty_str.to_string()])
             .collect();
-        let srcs: Vec<&Option<Span>> = round.iter().map(|(_ty, _ty_str, src)| src).collect();
+        let srcs: Vec<&Option<Span>> = round.iter().map(|(_ty_str, src)| src).collect();
         let sentence = if way.len() <= 2 {
             format!(
                 "Reducing the type `{}` needs itself: the equality constraint that gives it a \
@@ -3078,7 +3104,7 @@ impl TypeReduction {
             format!(
                 "Reducing the type `{}` needs itself: {}.",
                 shorten_for_report(ty_str.to_string()),
-                Self::way_string(&way),
+                way_string(&way),
             )
         };
         Errors::from_msg_srcs(sentence, &srcs)
@@ -3090,7 +3116,7 @@ impl TypeReduction {
         let srcs: Vec<&Option<Span>> = self
             .path
             .last()
-            .map(|(_ty, _ty_str, src)| vec![src])
+            .map(|(_ty_str, src)| vec![src])
             .unwrap_or_default();
         Errors::from_msg_srcs(
             format!(
@@ -3102,34 +3128,6 @@ impl TypeReduction {
             ),
             &srcs,
         )
-    }
-
-    /// The steps of a reduction, as the report shows them.
-    fn way_string(way: &[Arc<TypeNode>]) -> String {
-        /// How many steps to show. Enough for one turn of the reduction to be visible, and short
-        /// enough that the reader can read what is printed.
-        const SHOWN_STEPS: usize = 3;
-
-        /// One step of the way, quoted and cut short where the type is too long to show whole.
-        fn shorten(ty: &Arc<TypeNode>) -> String {
-            format!("`{}`", shorten_for_report(ty.to_string()))
-        }
-
-        // The last step is where the reduction shows what is wrong with it: the type it came back
-        // to.
-        let (last, rest) = way
-            .split_last()
-            .expect("a reduction carries the type it started from");
-        let mut steps = rest
-            .iter()
-            .take(SHOWN_STEPS)
-            .map(shorten)
-            .collect::<Vec<_>>();
-        if rest.len() > SHOWN_STEPS {
-            steps.push("...".to_string());
-        }
-        steps.push(shorten(last));
-        steps.join(" -> ")
     }
 }
 
@@ -3188,7 +3186,7 @@ impl UnificationErr {
             ),
             UnificationErr::Circular(way) => Some(format!(
                 "Deducing it needs itself: {}.",
-                Self::way_string(way)
+                way_string(&way.iter().map(|pred| pred.to_string()).collect::<Vec<_>>())
             )),
             // A deduction that has yet to take a step reached the bound on the constraint it was
             // asked for, which says nothing about any instance.
@@ -3202,7 +3200,7 @@ impl UnificationErr {
                  end: {}. An instance whose context asks for what it gives, on a larger type, does \
                  this.",
                 MAX_TYPE_DEPTH,
-                Self::way_string(way)
+                way_string(&way.iter().map(|pred| pred.to_string()).collect::<Vec<_>>())
             )),
         }
     }
@@ -3227,34 +3225,6 @@ impl UnificationErr {
     fn reported_predicate(way: &[Predicate]) -> &Predicate {
         way.first()
             .expect("a deduction carries the predicate it started from")
-    }
-
-    /// The steps of a deduction, as the report shows them.
-    fn way_string(way: &[Predicate]) -> String {
-        /// How many steps to show. Enough for one turn of a deduction that asks about ever larger
-        /// types to be visible, and short enough that the reader can read what is printed.
-        const SHOWN_STEPS: usize = 3;
-
-        /// One step of the way, quoted and cut short where the predicate is too long to show whole.
-        fn shorten(pred: &Predicate) -> String {
-            format!("`{}`", shorten_for_report(pred.to_string()))
-        }
-
-        // The last step is where the deduction shows what is wrong with it: the predicate it came
-        // back to, or the one on a type too deep to be one the program wrote.
-        let (last, rest) = way
-            .split_last()
-            .expect("a deduction carries the predicate it started from");
-        let mut steps = rest
-            .iter()
-            .take(SHOWN_STEPS)
-            .map(shorten)
-            .collect::<Vec<_>>();
-        if rest.len() > SHOWN_STEPS {
-            steps.push("...".to_string());
-        }
-        steps.push(shorten(last));
-        steps.join(" -> ")
     }
 }
 
