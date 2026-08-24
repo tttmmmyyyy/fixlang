@@ -326,7 +326,8 @@ pub struct RcGlobalInit {
     /// The two are apart where a unit keeps a value another computes, which is what a global one
     /// unit reads becomes: that unit keeps the value, and nothing about the storage is published,
     /// so LLVM optimizes the reads knowing every write. The initializer follows the storage only
-    /// where it is small (`divide_program::MOVED_INITIALIZER_NODE_LIMIT`).
+    /// where moving it adds little code to that unit
+    /// (`divide_program::MOVED_INITIALIZER_NODE_LIMIT`).
     pub owns_storage: bool,
 }
 

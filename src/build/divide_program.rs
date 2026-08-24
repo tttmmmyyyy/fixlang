@@ -412,13 +412,11 @@ fn initializer_fits(
     reader: usize,
     copyable_funcs: &Map<FullName, RcFunc>,
 ) -> bool {
-    let Some(global) = unit_programs
+    let global = unit_programs
         .iter()
         .flat_map(|unit_program| unit_program.globals.iter())
         .find(|global| global.symbol == *name && global.owns_initializer)
-    else {
-        return false;
-    };
+        .unwrap_or_else(|| panic!("no unit computes the value of `{}`", name.to_string()));
     let held: Set<&FullName> = names_defined_here(&unit_programs[reader]).collect();
     let mut nodes = node_count(&global.init);
     let mut walked: Set<FullName> = Set::default();

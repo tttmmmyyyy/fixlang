@@ -169,9 +169,9 @@ fn build_at_max_emitting_llvm_ir_in(dir: &Path) {
 ///
 /// Storage published to the linker is storage LLVM has to assume a store anywhere in the unit
 /// writes: the test of the initialization flag and the load of the storage stay inside every loop
-/// that reads the global, and the bounds checks that what the initializer knows would have taken
-/// out stay with them. So a global the program reads from one unit is held by that unit, and none
-/// of the names it is built from is published.
+/// that reads the global, and so do the bounds checks the lifted load would have taken out. So a
+/// global the program reads from one unit is held by that unit, and none of the names it is built
+/// from is published.
 #[test]
 fn test_a_global_one_unit_reads_is_that_units_own() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
@@ -180,13 +180,12 @@ fn test_a_global_one_unit_reads_is_that_units_own() {
     let modules = emitted_llvm_ir_modules(temp_dir.path(), EmittedIr::BeforeOptimization);
 
     let storage_of_the_table = |name: &String| name.starts_with("GlobalVar#Worker::table");
-    let mut modules_defining = 0;
+    let mut units_holding_the_storage = 0;
     for module in &modules {
         let (defined, declared) = defined_and_declared_global_variables(module);
-        modules_defining += defined
-            .iter()
-            .filter(|name| storage_of_the_table(name))
-            .count();
+        if defined.iter().any(storage_of_the_table) {
+            units_holding_the_storage += 1;
+        }
         for name in declared.iter().filter(|name| storage_of_the_table(name)) {
             panic!(
                 "`{}` is declared, so a unit that does not hold it reads it",
@@ -195,9 +194,9 @@ fn test_a_global_one_unit_reads_is_that_units_own() {
         }
     }
     assert_eq!(
-        modules_defining, 1,
+        units_holding_the_storage, 1,
         "one unit should hold the storage of `Worker::table`, and {} do",
-        modules_defining
+        units_holding_the_storage
     );
 }
 
