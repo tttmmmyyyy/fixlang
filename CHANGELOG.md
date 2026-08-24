@@ -47,7 +47,7 @@
 - #188: The project file's `no_runtime_check` can now be set in the `build.test` section. `fix test` reads it from there, so a project that disables the checks for its program still runs its tests with them.
 - #243, #274: Every help message is now headed by the compiler's version, as `fix 1.5.0 (92a3989)` — the released version, followed by the revision the binary was built from — and `fix --version` and `fix -V` report the same line, which used to be an error. The line under the header says what `fix` is.
 - #499: The `--max-cu-size` option is now `--cu-size`, and its value is the average number of symbols a compilation unit holds rather than a bound on it. Where a unit ends is now decided by the names of the symbols it holds, so a symbol added to a project moves the boundaries of at most two units instead of every unit after it, and the units before and after keep their cached object files. A build passing `--max-cu-size` is warned and goes on.
-- `-O max` and `-O experimental` now build incrementally: they divide the program into compilation units, cache each one, and regenerate only the units whose code an edit changes, where an edit to one line used to cost as much as a build from nothing. `--cu-size` now sets the size of a unit at these levels too.
+- #517: `-O max` and `-O experimental` now build incrementally: they divide the program into compilation units, cache each one, and regenerate only the units whose code an edit changes, where an edit to one line used to cost as much as a build from nothing. `--cu-size` now sets the size of a unit at these levels too.
 
 ### Fixed
 
