@@ -3037,12 +3037,16 @@ fn way_string(way: &[String]) -> String {
     let (last, rest) = way
         .split_last()
         .expect("a search carries the step it started from");
-    let quote = |step: &String| format!("`{}`", shorten_for_report(step.clone()));
-    let mut steps = rest.iter().take(SHOWN_STEPS).map(quote).collect::<Vec<_>>();
+    let step_string = |step: &String| format!("`{}`", shorten_for_report(step.clone()));
+    let mut steps = rest
+        .iter()
+        .take(SHOWN_STEPS)
+        .map(step_string)
+        .collect::<Vec<_>>();
     if rest.len() > SHOWN_STEPS {
         steps.push("...".to_string());
     }
-    steps.push(quote(last));
+    steps.push(step_string(last));
     steps.join(" -> ")
 }
 
@@ -3066,9 +3070,9 @@ impl TypeReduction {
     /// Record that the reduction of the associated type printed as `ty_str` has begun by applying
     /// the equality written at `src`.
     fn enter(&mut self, ty_str: &str, src: &Option<Span>) {
-        let begun = self.on_path.insert(ty_str.to_string());
+        let newly_begun = self.on_path.insert(ty_str.to_string());
         assert!(
-            begun,
+            newly_begun,
             "the reduction of `{}` begins a second time while the first has yet to end",
             ty_str
         );
@@ -3098,7 +3102,7 @@ impl TypeReduction {
             .map(|(ancestor_str, _src)| ancestor_str.clone())
             .chain([ty_str.to_string()])
             .collect();
-        let srcs: Vec<&Option<Span>> = round.iter().map(|(_ty_str, src)| src).collect();
+        let srcs: Vec<&Option<Span>> = round.iter().map(|(_ancestor_str, src)| src).collect();
         let sentence = if way.len() <= 2 {
             format!(
                 "Reducing the type `{}` needs itself: the equality constraint that gives it a \
@@ -3121,7 +3125,7 @@ impl TypeReduction {
         // A reduction that has yet to apply an equality reached the bound on the type it was asked
         // about, which says nothing about any equality; one that has applied equalities reached it
         // by applying them, and the last is the one to draw the report at.
-        let Some((_ty_str, src)) = self.path.last() else {
+        let Some((_ancestor_str, src)) = self.path.last() else {
             return Errors::from_msg_srcs(
                 format!(
                     "The type `{}` nests more than {} deep, which is past the depth the compiler \
