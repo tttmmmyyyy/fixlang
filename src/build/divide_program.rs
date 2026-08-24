@@ -379,7 +379,9 @@ fn give_a_global_one_unit_reads_to_that_unit(
             };
             let reads = readers.contains(&index);
             global.owns_storage = reads;
-            if *initializer_travels {
+            // The initializer follows the storage where it travels, and where no unit reads the
+            // value there is nowhere for either of them to stay.
+            if *initializer_travels || readers.is_empty() {
                 global.owns_initializer = reads;
             }
             // A unit that neither keeps the value nor computes it holds no part of the global. A
