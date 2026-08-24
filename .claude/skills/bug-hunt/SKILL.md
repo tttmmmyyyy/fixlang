@@ -183,6 +183,15 @@ Two shapes recur. **The detector never ran on the code**: the probe compiled awa
 
 This applies with most force right after a change **tightens a bound that used to be loose** — an allocation sized exactly where it used to be over-approximate, a length that used to be padded, a timeout that used to be generous. The slack was hiding every violation smaller than itself; when it goes, the violations become reachable, and a detector proven to fire is how you find out whether any existed.
 
+**A test program is a detector, and a compiler is what makes it inert.** A test whose subject is a
+decision taken while the program runs — which branch, which variant, which element — measures that
+decision only if the compiler cannot take it first. Inputs the optimizer can fold (a literal, a
+length it knows, an arithmetic identity such as `x - x`, an index into an array of constants) let it
+answer while compiling, and what is left runs nothing the test claims to check. Draw the input from
+something the compiler has to leave alone — the program's arguments, a file, a value the run
+computes — and confirm the choice by mutating the mechanism the test names and watching it go red.
+Until that, a green run says only that the program compiled.
+
 #### Run the gatekeeper's predicate at the gate
 
 A pass that exists to guarantee something for a *later* stage — a validator that rejects what code
