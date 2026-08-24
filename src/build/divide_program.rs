@@ -108,7 +108,7 @@ pub fn divide_among_units(
         &root_value_names,
     );
 
-    let published = Arc::new(published_to_the_linker(
+    let published = Arc::new(names_published_to_the_linker(
         &unit_programs,
         &unit_of,
         &root_value_names,
@@ -344,7 +344,7 @@ fn give_the_main_unit_the_root_values(
 
 /// The names a unit gives external linkage: the values the C world enters the program through, and
 /// every name a unit that has no copy of it reaches.
-fn published_to_the_linker(
+fn names_published_to_the_linker(
     unit_programs: &[RcProgram],
     unit_of: &impl Fn(&FullName) -> Option<usize>,
     root_value_names: &Set<FullName>,
