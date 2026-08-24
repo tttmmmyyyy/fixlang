@@ -297,10 +297,11 @@ pub fn build_object_files<'c>(
         units
     };
 
+    let type_env = program.type_env();
+
     // The RC IR is built and optimized over the whole program, so that a pass sees every call of
     // every function it rewrites, and divided among the units afterwards.
     let division = {
-        let type_env = program.type_env();
         let all_symbols: Vec<Symbol> = units
             .iter()
             .flat_map(|unit| unit.symbols().iter().cloned())
@@ -319,9 +320,9 @@ pub fn build_object_files<'c>(
 
     // A unit is named by the code it generates, which is what its object file is cached under. The
     // main unit is the last, and it is the one that builds the entry point and the exported C
-    // functions.
+    // functions. Its digest reads the export statements here, while the program still holds them:
+    // the loop below hands them to the main unit's thread.
     let last_unit = units.len() - 1;
-    let type_env = program.type_env();
     for (index, unit) in units.iter_mut().enumerate() {
         let program_for_the_entry = (index == last_unit).then_some(&program);
         let hash = generated_code_hash(
@@ -378,14 +379,7 @@ pub fn build_object_files<'c>(
         let shared_globals = shared_globals.clone();
         let config = config.clone();
         let type_env = program.type_env();
-        let unit_program = mem::replace(
-            &mut unit_programs[i],
-            RcProgram {
-                funcs: Map::default(),
-                globals: vec![],
-                roots: Set::default(),
-            },
-        );
+        let unit_program = mem::take(&mut unit_programs[i]);
 
         let export_statements = if is_main_unit {
             // Export statements are only needed for the main unit.

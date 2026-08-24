@@ -2460,6 +2460,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// it and this module is the one defining it rather than one holding a copy. Every other global
     /// is internal to the unit defining it, and no other unit declares it, so LLVM optimizes it
     /// knowing every call it has.
+    ///
+    /// `DividedProgram::published_here` answers this for the names a unit defines, and the digest
+    /// naming the unit's object file reads it from there.
     fn published_to_the_linker(&self, name: &FullName) -> bool {
         !self.imported.contains(name) && self.published_names.contains(name)
     }

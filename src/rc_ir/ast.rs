@@ -43,7 +43,9 @@ pub struct FuncRef {
 }
 
 /// A whole program: the top-level functions, the global-value initializers, and the names reached
-/// from outside them.
+/// from outside them. The default is the empty program, which defines nothing and is reached
+/// nowhere.
+#[derive(Default)]
 pub struct RcProgram {
     /// The top-level functions, keyed by the name each is defined under.
     pub funcs: Map<FuncRef, RcFunc>,

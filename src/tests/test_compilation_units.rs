@@ -59,7 +59,10 @@ fn published_function_names(ir: &str) -> Set<String> {
     ir.lines()
         .filter(|line| line.starts_with("define "))
         .filter(|line| {
-            let head = line.split('@').next().unwrap_or_default();
+            let head = line
+                .split('@')
+                .next()
+                .expect("a line has a part before its first `@`");
             !head.contains(" internal ") && !head.contains(" private ")
         })
         .filter_map(function_name)

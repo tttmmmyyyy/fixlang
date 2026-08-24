@@ -42,8 +42,9 @@ pub struct DividedProgram {
     pub global_types: Arc<Map<FullName, Arc<TypeNode>>>,
     /// The names each unit holds a copy of rather than owning, one set per unit.
     pub imported: Vec<Set<FullName>>,
-    /// The names each unit gives external linkage: the ones it defines itself and `published` holds.
-    /// One set per unit.
+    /// The names each unit gives external linkage: the ones it defines itself and `published` holds,
+    /// which is the rule `Generator::published_to_the_linker` applies as it generates the code. One
+    /// set per unit.
     pub published_here: Vec<Set<FullName>>,
     /// The globals whose storage more than one unit reaches. The owning unit defines and publishes
     /// the storage, and the units holding a copy of the accessor declare it, so the value is
@@ -63,6 +64,17 @@ pub fn divide_among_units(
     global_types: &Map<FullName, Arc<TypeNode>>,
     root_value_names: Set<FullName>,
 ) -> DividedProgram {
+    // The main unit is the last, and it is the one holding no symbol of the program: it builds the
+    // entry point and the exported C functions, which is where the root values are read.
+    let main_unit_symbols = units
+        .last()
+        .expect("a program is divided into at least the main unit")
+        .symbols();
+    assert!(
+        main_unit_symbols.is_empty(),
+        "the last compilation unit holds {} symbols, and the main unit holds none",
+        main_unit_symbols.len()
+    );
     let unit_of = symbol_owner(units);
     let global_types = global_types_including_synthesized(&program, global_types);
     let copyable_funcs = copyable_funcs(&program);
@@ -73,13 +85,8 @@ pub fn divide_among_units(
         .map(|global| (global.symbol.clone(), global.clone()))
         .collect();
 
-    let mut unit_programs: Vec<RcProgram> = (0..units.len())
-        .map(|_| RcProgram {
-            funcs: Map::default(),
-            globals: vec![],
-            roots: Set::default(),
-        })
-        .collect();
+    let mut unit_programs: Vec<RcProgram> =
+        (0..units.len()).map(|_| RcProgram::default()).collect();
     for (fref, func) in program.funcs {
         let index = unit_of(&fref.name)
             .unwrap_or_else(|| panic!("no symbol owns `{}`", fref.name.to_string()));
@@ -147,19 +154,23 @@ pub fn divide_among_units(
 /// `#`-separated segments, and with the whole of it as the namespace of a lambda lifted out of it —
 /// so the symbol whose name is the longest prefix of the function's is the symbol it came from.
 fn symbol_owner(units: &[CompileUnit]) -> impl Fn(&FullName) -> Option<usize> {
-    let mut symbol_units: Vec<(String, usize)> = vec![];
+    let mut unit_of_symbol: Map<String, usize> = Map::default();
     for (index, unit) in units.iter().enumerate() {
         for symbol in unit.symbols() {
-            symbol_units.push((symbol.name.to_string(), index));
+            unit_of_symbol.insert(symbol.name.to_string(), index);
         }
     }
+    // A prefix that is a symbol's name is as long as that name, so the lengths the symbols have are
+    // the lengths to try, the longest first.
+    let mut symbol_lengths: Vec<usize> = unit_of_symbol.keys().map(|symbol| symbol.len()).collect();
+    symbol_lengths.sort_unstable_by(|a, b| b.cmp(a));
+    symbol_lengths.dedup();
     move |name: &FullName| {
         let text = name.to_string();
-        symbol_units
+        symbol_lengths
             .iter()
-            .filter(|(symbol, _)| text.starts_with(symbol.as_str()))
-            .max_by_key(|(symbol, _)| symbol.len())
-            .map(|(_, index)| *index)
+            .filter_map(|length| text.get(..*length))
+            .find_map(|prefix| unit_of_symbol.get(prefix).copied())
     }
 }
 
@@ -267,15 +278,15 @@ fn import_what_each_unit_reaches(
                         unit_programs[index]
                             .funcs
                             .insert(FuncRef { name: name.clone() }, func.clone());
+                        imported[index].insert(name);
                     }
-                    None => {
-                        unit_programs[index]
-                            .globals
-                            .push(accessor_copy(&all_globals[&name]));
-                        shared_globals.insert(name.clone());
-                    }
+                    None => take_a_copy_of_the_accessor(
+                        &mut unit_programs[index],
+                        &mut imported[index],
+                        &mut shared_globals,
+                        &all_globals[&name],
+                    ),
                 }
-                imported[index].insert(name);
                 copied = true;
             }
         }
@@ -285,12 +296,20 @@ fn import_what_each_unit_reaches(
     }
 }
 
-/// The copy of a global a unit that does not own it carries: the accessor, reading the owner's
-/// storage and calling the owner's initializer.
-fn accessor_copy(global: &RcGlobalInit) -> RcGlobalInit {
+/// Give `unit_program` the copy of `global` a unit that does not own it carries: the accessor,
+/// reading the owner's storage and calling the owner's initializer. The name is recorded as one the
+/// unit took, and as one whose storage more than one unit reaches.
+fn take_a_copy_of_the_accessor(
+    unit_program: &mut RcProgram,
+    imported: &mut Set<FullName>,
+    shared_globals: &mut Set<FullName>,
+    global: &RcGlobalInit,
+) {
     let mut copy = global.clone();
     copy.owns_storage = false;
-    copy
+    unit_program.globals.push(copy);
+    imported.insert(global.symbol.clone());
+    shared_globals.insert(global.symbol.clone());
 }
 
 /// Give the main unit a copy of every value the C world enters the program through.
@@ -314,9 +333,12 @@ fn give_the_main_unit_the_root_values(
         let Some(global) = all_globals.get(name) else {
             continue;
         };
-        unit_programs[main_unit].globals.push(accessor_copy(global));
-        imported[main_unit].insert(name.clone());
-        shared_globals.insert(name.clone());
+        take_a_copy_of_the_accessor(
+            &mut unit_programs[main_unit],
+            &mut imported[main_unit],
+            shared_globals,
+            global,
+        );
     }
 }
 
@@ -420,6 +442,8 @@ pub fn generated_code_hash(
 
     let mut declared_types: Vec<(FullName, Arc<TypeNode>)> = vec![];
     names_reached_elsewhere(unit_program, |mentioned| {
+        // The mentions naming a global of the program are the ones the unit declares; the rest are
+        // its local variables and the runtime functions, declared from the runtime's own signature.
         if let Some(ty) = division.global_types.get(mentioned) {
             declared_types.push((mentioned.clone(), ty.clone()));
         }
