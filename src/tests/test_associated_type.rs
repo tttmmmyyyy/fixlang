@@ -1444,6 +1444,37 @@ pub fn test_reduction_that_leads_round_after_a_first_step_reports_the_round() {
     );
 }
 
+/// An equality constraint on an associated type that takes an argument beyond the type it is on,
+/// whose value disagrees with what the implementation gives for those arguments. The arguments
+/// stand for themselves, so the constraint cannot be deduced and the use of the member is reported.
+#[test]
+pub fn test_equality_on_an_extra_argument_that_the_implementation_denies_is_reported() {
+    let source = r#"
+        module Main;
+
+        trait c : Paired {
+            type Pair c x y;
+            make_pair : c -> Pair c I64 Bool;
+        }
+
+        impl Array a : Paired {
+            type Pair (Array a) x y = (x, y);
+            make_pair = |_| (7, true);
+        }
+
+        swapped : [c : Paired, Pair c p q = (q, p)] c -> (Bool, I64);
+        swapped = |c| c.make_pair;
+
+        main : IO ();
+        main = println(swapped([1, 2, 3]).to_string);
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "cannot be deduced from assumptions",
+    );
+}
+
 /// A reduction asked about a type already nested past the depth the compiler reduces to says where
 /// that type is written. No equality has been applied, so the type itself is the only place the
 /// report can point at, and a report that points nowhere reaches the user attached to the project
