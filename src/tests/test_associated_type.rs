@@ -1039,9 +1039,9 @@ main = pure();
     test_source(source, Configuration::develop_mode());
 }
 
-/// A global value whose signature carries an equality on an associated type with a type variable on
-/// its right side. Both variables of the signature stand in its main type, so both are fixed and
-/// the signature is accepted.
+/// A global value whose signature carries an equality on an associated type with a type variable
+/// on its right side, and names that variable nowhere else. The right side of an equality fixes
+/// the variables it names, so the signature is accepted.
 #[test]
 pub fn test_fixv_global_value_fixed_via_equality_rhs() {
     let source = r#"
@@ -1055,7 +1055,7 @@ impl I64 : MyTrait {
     type S I64 = I64;
 }
 
-foo : [a : MyTrait, S a = b] (a, b) -> I64;
+foo : [a : MyTrait, S a = b] a -> I64;
 foo = |_| 0;
 
 main : IO ();
