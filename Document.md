@@ -585,7 +585,7 @@ type LoopState s b = union { continue : s, break : b };
 
 The above definition indicates that a `LoopState s b` value contains either of a value of type `s` or a value of type `b`. If you write the set of values of a type as `|type|`, then `|LoopState s b| = |s| ⨆ |b|`, where the symbol `⨆` is represents the disjoint union of sets.
 
-A union can have at most 256 variants, since a union value tells which variant it holds by the index of that variant in a tag of one byte. A definition of more variants is rejected with an error.
+A union can have at most 256 variants. A definition of more variants is rejected with an error.
 
 For each union type, some basic methods are automatically defined. For example, for `LoopState` as above, the following functions are defined in the namespace `LoopState`.
 
