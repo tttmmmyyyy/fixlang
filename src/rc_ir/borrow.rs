@@ -215,6 +215,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
                 symbol: g.symbol.clone(),
                 ty: g.ty.clone(),
                 init: ctx.rewrite(&g.init),
+                owns_initializer: true,
                 owns_storage: true,
             }
         })
@@ -964,6 +965,7 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
                 symbol: g.symbol.clone(),
                 ty: g.ty.clone(),
                 init: cancel_body(&vars, &g.init),
+                owns_initializer: true,
                 owns_storage: true,
             }
         })

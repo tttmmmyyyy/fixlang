@@ -2523,8 +2523,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             embedded_ty.fn_type(&[], false)
         };
-        // The accessor is internal wherever it is: a unit reading a global carries a copy of it
-        // (`RcGlobalInit::owns_storage`), so no unit reaches another's.
+        // The accessor is internal wherever it is: a unit reading a global carries one of its own,
+        // so no unit reaches another's.
         let acc_fn = self
             .module
             .add_function(&acc_fn_name, acc_fn_ty, Some(Linkage::Internal));

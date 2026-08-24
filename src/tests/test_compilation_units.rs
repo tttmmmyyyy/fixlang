@@ -77,6 +77,130 @@ fn declared_function_names(ir: &str) -> Set<String> {
         .collect()
 }
 
+/// The name an LLVM global-variable line gives its variable.
+fn global_variable_name(line: &str) -> Option<String> {
+    let after_at = line.strip_prefix('@')?;
+    let name = match after_at.strip_prefix('"') {
+        Some(quoted) => quoted.split_once('"')?.0,
+        None => after_at.split(' ').next()?,
+    };
+    Some(name.to_string())
+}
+
+/// The names of the global variables `ir` defines storage for, and the ones it declares as storage
+/// another module defines.
+///
+/// A global variable is printed as its name, `=`, the linkage where it carries one, and either the
+/// value it is initialized to or the word `external`.
+fn defined_and_declared_global_variables(ir: &str) -> (Set<String>, Set<String>) {
+    let mut defined = Set::default();
+    let mut declared = Set::default();
+    for line in ir.lines().filter(|line| line.starts_with('@')) {
+        let Some((_, definition)) = line.split_once(" = ") else {
+            continue;
+        };
+        let Some(name) = global_variable_name(line) else {
+            continue;
+        };
+        if definition.starts_with("external ") {
+            declared.insert(name);
+        } else {
+            defined.insert(name);
+        }
+    }
+    (defined, declared)
+}
+
+/// A project of two modules: `Worker`, which holds a table and a function reading one element of
+/// it, and `Main`, which calls that function. The function is small enough for the unit holding
+/// `Main` to take a copy of, and that copy is then the only code the program reads the table from.
+fn write_one_reader_global_project(dir: &Path) {
+    fs::write(
+        dir.join("fixproj.toml"),
+        r#"[general]
+name = "one-reader-global"
+version = "0.1.0"
+[build]
+files = ["main.fix", "worker.fix"]
+"#,
+    )
+    .expect("Failed to write the project file");
+    fs::write(
+        dir.join("worker.fix"),
+        r#"module Worker;
+
+table : Array I64;
+table = Array::from_map(64, |i| i * i + 1);
+
+lookup : I64 -> I64;
+lookup = |i| table.@(i % 64);
+"#,
+    )
+    .expect("Failed to write the worker module");
+    fs::write(
+        dir.join("main.fix"),
+        r#"module Main;
+
+import Worker::{lookup};
+
+main : IO ();
+main = println(lookup(1000).to_string);
+"#,
+    )
+    .expect("Failed to write the main module");
+}
+
+/// Build the project in `dir` at `-O max`, emitting the LLVM IR of every compilation unit.
+fn build_at_max_emitting_llvm_ir_in(dir: &Path) {
+    let build = fix_command_at_opt_level("build", "max")
+        .arg("--emit-llvm")
+        .current_dir(dir)
+        .output()
+        .expect("Failed to execute fix build");
+    assert!(
+        build.status.success(),
+        "the build should succeed.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+}
+
+/// A global one compilation unit reads is that unit's own, storage and all.
+///
+/// Storage published to the linker is storage LLVM has to assume a store anywhere in the unit
+/// writes: the test of the initialization flag and the load of the storage stay inside every loop
+/// that reads the global, and the bounds checks that what the initializer knows would have taken
+/// out stay with them. So a global the program reads from one unit is held by that unit, and none
+/// of the names it is built from is published.
+#[test]
+fn test_a_global_one_unit_reads_is_that_units_own() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    write_one_reader_global_project(temp_dir.path());
+    build_at_max_emitting_llvm_ir_in(temp_dir.path());
+    let modules = emitted_llvm_ir_modules(temp_dir.path(), EmittedIr::BeforeOptimization);
+
+    let storage_of_the_table = |name: &String| name.starts_with("GlobalVar#Worker::table");
+    let mut modules_defining = 0;
+    for module in &modules {
+        let (defined, declared) = defined_and_declared_global_variables(module);
+        modules_defining += defined
+            .iter()
+            .filter(|name| storage_of_the_table(name))
+            .count();
+        for name in declared.iter().filter(|name| storage_of_the_table(name)) {
+            panic!(
+                "`{}` is declared, so a unit that does not hold it reads it",
+                name
+            );
+        }
+    }
+    assert_eq!(
+        modules_defining, 1,
+        "one unit should hold the storage of `Worker::table`, and {} do",
+        modules_defining
+    );
+}
+
 /// A compilation unit publishes a symbol of the program only where another unit names it.
 ///
 /// A function LLVM must assume something outside the module calls is one it can neither delete

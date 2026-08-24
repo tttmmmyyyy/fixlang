@@ -1042,6 +1042,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             symbol: g.symbol.clone(),
             ty: g.ty.clone(),
             init,
+            owns_initializer: true,
             owns_storage: true,
         });
     }
