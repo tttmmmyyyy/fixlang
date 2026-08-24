@@ -322,9 +322,9 @@ pub fn build_object_files<'c>(
     // main unit is the last, and it is the one that builds the entry point and the exported C
     // functions. Its digest reads the export statements here, while the program still holds them:
     // the loop below hands them to the main unit's thread.
-    let last_unit = units.len() - 1;
+    let last_unit_index = units.len() - 1;
     for (index, unit) in units.iter_mut().enumerate() {
-        let program_for_the_entry = (index == last_unit).then_some(&program);
+        let program_for_the_entry = (index == last_unit_index).then_some(&program);
         let hash = generated_code_hash(
             unit,
             index,

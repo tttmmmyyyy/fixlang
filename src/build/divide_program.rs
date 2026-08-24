@@ -323,9 +323,9 @@ fn give_the_main_unit_the_root_values(
     all_globals: &Map<FullName, RcGlobalInit>,
     root_value_names: &Set<FullName>,
 ) {
-    let main_unit = unit_programs.len() - 1;
+    let main_unit_index = unit_programs.len() - 1;
     for name in root_value_names {
-        if defines(&unit_programs[main_unit], name) {
+        if defines(&unit_programs[main_unit_index], name) {
             continue;
         }
         // A root value of funptr type is a function rather than a global, so it has no accessor to
@@ -334,8 +334,8 @@ fn give_the_main_unit_the_root_values(
             continue;
         };
         take_a_copy_of_the_accessor(
-            &mut unit_programs[main_unit],
-            &mut imported[main_unit],
+            &mut unit_programs[main_unit_index],
+            &mut imported[main_unit_index],
             shared_globals,
             global,
         );
@@ -520,9 +520,9 @@ fn type_declarations_reached(
     let mut pending: Vec<TyCon> = tycons.iter().cloned().collect();
     while let Some(tycon) = pending.pop() {
         for field in &declaration_of(&tycon, type_env).fields {
-            let mut reached: Set<TyCon> = Set::default();
-            field.ty.collect_tycons(&mut reached);
-            for reached in reached {
+            let mut field_tycons: Set<TyCon> = Set::default();
+            field.ty.collect_tycons(&mut field_tycons);
+            for reached in field_tycons {
                 if tycons.insert(reached.clone()) {
                     pending.push(reached);
                 }

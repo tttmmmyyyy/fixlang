@@ -114,7 +114,7 @@ fn test_a_unit_publishes_a_symbol_only_where_another_unit_names_it() {
                 declared
                     .iter()
                     .enumerate()
-                    .any(|(other, names)| other != index && names.contains(name)),
+                    .any(|(other, declared_names)| other != index && declared_names.contains(name)),
                 "no other unit names `{}`, which unit {} publishes",
                 name,
                 index
@@ -123,10 +123,10 @@ fn test_a_unit_publishes_a_symbol_only_where_another_unit_names_it() {
     }
 
     // The C world's own names are published, whatever the rule above does with the symbols.
-    let c_visible: Set<String> = published.iter().flatten().cloned().collect();
+    let published_anywhere: Set<String> = published.iter().flatten().cloned().collect();
     for name in ["main", "fixtest_triple"] {
         assert!(
-            c_visible.contains(name),
+            published_anywhere.contains(name),
             "the program should publish `{}` for the C world to enter through",
             name
         );
@@ -240,12 +240,12 @@ fn test_an_edit_regenerates_only_the_units_it_reaches() {
     let dir = temp_dir.path();
 
     write_two_module_project(dir, 120);
-    let (units, _) = build_at_max_in(dir, CU_SIZE);
+    let (unit_count, _) = build_at_max_in(dir, CU_SIZE);
     assert!(
-        units >= 10,
+        unit_count >= 10,
         "{} symbols to a unit should divide this program into several units, and it made {}",
         CU_SIZE,
-        units
+        unit_count
     );
 
     write_two_module_project(dir, 122);
@@ -272,7 +272,7 @@ fn test_a_comment_added_to_a_module_regenerates_no_unit() {
     let dir = temp_dir.path();
 
     write_two_module_project(dir, 120);
-    let (units, _) = build_at_max_in(dir, CU_SIZE);
+    let (unit_count, _) = build_at_max_in(dir, CU_SIZE);
 
     let worker = dir.join("worker.fix");
     let commented = format!(
@@ -286,7 +286,7 @@ fn test_a_comment_added_to_a_module_regenerates_no_unit() {
         generated, 0,
         "the comment writes no code, so the build after it should take all {} units from the \
          first, and it generated {} of them again",
-        units, generated
+        unit_count, generated
     );
 }
 
