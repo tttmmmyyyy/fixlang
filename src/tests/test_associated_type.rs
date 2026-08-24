@@ -1301,7 +1301,7 @@ pub fn test_associated_type_implemented_as_itself_is_reported() {
 /// the reduction meets a type it has not met before at every step and ends at the depth the
 /// compiler reduces to.
 #[test]
-pub fn test_associated_type_implemented_on_a_larger_type_is_reported() {
+pub fn test_associated_type_implemented_as_itself_on_a_larger_type_is_reported() {
     let source = r##"
         module Main;
 
@@ -1335,7 +1335,7 @@ pub fn test_associated_type_implemented_on_a_larger_type_is_reported() {
 /// An implementation that gives an associated type a value carrying that same associated type
 /// inside a type constructor, so each replacement leaves a larger type to reduce.
 #[test]
-pub fn test_associated_type_implemented_inside_a_type_constructor_is_reported() {
+pub fn test_associated_type_implemented_as_itself_inside_a_type_constructor_is_reported() {
     let source = r##"
         module Main;
 

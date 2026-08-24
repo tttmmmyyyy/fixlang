@@ -2049,12 +2049,12 @@ impl TypeCheckContext {
     /// An associated type met on the way also requires the trait that declares it of its first
     /// argument, so that predicate joins the pending ones.
     fn reduce_type_by_equality(&mut self, ty: Arc<TypeNode>) -> Result<Arc<TypeNode>, Errors> {
-        self.reduce_type_by_equality_along(ty, &mut TypeReduction::default())
+        self.reduce_type_by_equality_inner(ty, &mut TypeReduction::default())
     }
 
     /// The body of `reduce_type_by_equality`, carrying the associated types whose reduction this
     /// one is inside.
-    fn reduce_type_by_equality_along(
+    fn reduce_type_by_equality_inner(
         &mut self,
         ty: Arc<TypeNode>,
         reduction: &mut TypeReduction,
@@ -2063,15 +2063,15 @@ impl TypeCheckContext {
             Type::TyVar(_) => Ok(ty),
             Type::TyCon(_) => Ok(ty),
             Type::TyApp(tyfun, tyarg) => {
-                let tyfun = self.reduce_type_by_equality_along(tyfun.clone(), reduction)?;
-                let tyarg = self.reduce_type_by_equality_along(tyarg.clone(), reduction)?;
+                let tyfun = self.reduce_type_by_equality_inner(tyfun.clone(), reduction)?;
+                let tyarg = self.reduce_type_by_equality_inner(tyarg.clone(), reduction)?;
                 Ok(ty.set_tyapp_fun(tyfun).set_tyapp_arg(tyarg))
             }
             Type::AssocTy(assoc_ty, args) => {
                 // Reduce each arguments.
                 let args = collect_results(
                     args.iter()
-                        .map(|arg| self.reduce_type_by_equality_along(arg.clone(), reduction)),
+                        .map(|arg| self.reduce_type_by_equality_inner(arg.clone(), reduction)),
                 )?;
 
                 // The first argument should implement the trait of the associated type.
@@ -2119,7 +2119,7 @@ impl TypeCheckContext {
                     let match_subst: Substitution = match_subst.unwrap();
                     let rhs = match_subst.substitute_type(&equality.value);
                     reduction.enter(&ty_str, &equality.src);
-                    let reduced = self.reduce_type_by_equality_along(rhs, reduction);
+                    let reduced = self.reduce_type_by_equality_inner(rhs, reduction);
                     reduction.leave();
                     return reduced;
                 }
@@ -3204,7 +3204,7 @@ impl UnificationErr {
             ),
             UnificationErr::Circular(way) => Some(format!(
                 "Deducing it needs itself: {}.",
-                way_string(&Self::way_steps(way))
+                way_string(&Self::printed_steps(way))
             )),
             // A deduction that has yet to take a step reached the bound on the constraint it was
             // asked for, which says nothing about any instance.
@@ -3218,7 +3218,7 @@ impl UnificationErr {
                  end: {}. An instance whose context asks for what it gives, on a larger type, does \
                  this.",
                 MAX_TYPE_DEPTH,
-                way_string(&Self::way_steps(way))
+                way_string(&Self::printed_steps(way))
             )),
         }
     }
@@ -3246,7 +3246,7 @@ impl UnificationErr {
     }
 
     /// The steps of a deduction, printed, as `way_string` takes them.
-    fn way_steps(way: &[Predicate]) -> Vec<String> {
+    fn printed_steps(way: &[Predicate]) -> Vec<String> {
         way.iter().map(|pred| pred.to_string()).collect()
     }
 }
