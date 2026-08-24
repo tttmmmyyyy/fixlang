@@ -19,7 +19,7 @@ use crate::generator::{
     Generator, Object,
 };
 use crate::misc::{grow_stack, Map};
-use crate::object::{create_obj, lambda_return_part_types, union_tag_type, ObjectFieldType};
+use crate::object::{create_obj, lambda_return_part_types, union_tag_value, ObjectFieldType};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
@@ -508,8 +508,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             let tag = arm
                 .tag
                 .expect("a non-final match arm must be a variant arm");
-            let tag_val = union_tag_type(self.context).const_int(tag as u64, false);
-            cases.push((tag_val, arm_bbs[i]));
+            let case_tag = union_tag_value(self.context, tag);
+            cases.push((case_tag, arm_bbs[i]));
         }
         if cases.is_empty() {
             // The only arm takes every value of the scrutinee: it is either a catch-all, or the one
@@ -521,9 +521,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             );
             self.builder().build_unconditional_branch(else_bb).unwrap();
         } else {
-            let tag_val = ObjectFieldType::get_union_tag(self, &scrut_obj);
+            let scrut_tag = ObjectFieldType::get_union_tag(self, &scrut_obj);
             self.builder()
-                .build_switch(tag_val, else_bb, &cases)
+                .build_switch(scrut_tag, else_bb, &cases)
                 .unwrap();
         }
 

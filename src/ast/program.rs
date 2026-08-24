@@ -17,11 +17,11 @@ use crate::configuration::{
 };
 use crate::constants::{
     C_ENTRY_POINT_NAME, DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME,
-    MAIN_MODULE_NAME, MARK_THREADED_NAME, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL,
-    STRUCT_MODIFIER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
-    STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL,
-    TEST_FUNCTION_NAME, TEST_MODULE_NAME, TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL,
-    UNION_MOD_SYMBOL,
+    MAIN_MODULE_NAME, MARK_THREADED_NAME, MAX_UNION_VARIANTS, STD_NAME, STRUCT_ACT_SYMBOL,
+    STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL,
+    STRUCT_SETTER_SYMBOL, TEST_FUNCTION_NAME, TEST_MODULE_NAME, TUPLE_SIZE_BASE, UNION_AS_SYMBOL,
+    UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
 };
 use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
@@ -185,9 +185,9 @@ impl TypeEnv {
         if name.is_local() {
             return None;
         }
-        let str_name = name.namespace.clone().to_fullname();
-        let str_name = TyCon { name: str_name };
-        match self.tycons.get(&str_name) {
+        let struct_name = name.namespace.clone().to_fullname();
+        let struct_tycon = TyCon { name: struct_name };
+        match self.tycons.get(&struct_tycon) {
             Some(tycon_info) => {
                 if tycon_info.variant != TyConVariant::Struct {
                     return None;
@@ -195,7 +195,7 @@ impl TypeEnv {
                 for field in &tycon_info.fields {
                     let act_func_name = format!("{}{}", STRUCT_ACT_SYMBOL, field.name);
                     if act_func_name == name.name {
-                        return Some((str_name, field.name.clone()));
+                        return Some((struct_tycon, field.name.clone()));
                     }
                 }
                 None
@@ -955,8 +955,8 @@ impl Program {
             let tycon = type_decl.tycon();
             if tycons.contains_key(&tycon) || aliases.contains_key(&tycon) {
                 let other_src = if tycons.contains_key(&tycon) {
-                    let tc = tycons.get(&tycon).unwrap();
-                    tc.source.clone()
+                    let ti = tycons.get(&tycon).unwrap();
+                    ti.source.clone()
                 } else {
                     let ta = aliases.get(&tycon).unwrap();
                     ta.source.clone()
@@ -1710,14 +1710,14 @@ impl Program {
         tc: &TypeCheckContext,
         test_mode: bool,
     ) -> Result<(), Errors> {
-        let main_func_name = if test_mode {
+        let entry_func_name = if test_mode {
             FullName::from_strs(&[TEST_MODULE_NAME], TEST_FUNCTION_NAME)
         } else {
             FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME)
         };
-        let main_ty = make_io_unit_ty();
+        let entry_ty = make_io_unit_ty();
         let (expr, _ty) =
-            self.instantiate_exported_value(&main_func_name, Some(main_ty), &None, tc)?;
+            self.instantiate_exported_value(&entry_func_name, Some(entry_ty), &None, tc)?;
         self.entry_io_value = Some(expr);
         Ok(())
     }
@@ -1731,8 +1731,8 @@ impl Program {
         for stmt in &mut export_stmts {
             errors.eat_err_or(
                 self.instantiate_exported_value(&stmt.value_name, None, &stmt.src, tc),
-                |(instantiated_expr, eft)| {
-                    stmt.function_type = Some(eft);
+                |(instantiated_expr, exported_ty)| {
+                    stmt.function_type = Some(exported_ty);
                     stmt.value_expr = Some(instantiated_expr);
                 },
             );
@@ -1768,7 +1768,7 @@ impl Program {
 
         // Validate the type of the value.
         let gv: &GlobalValue = gv.unwrap();
-        let (required_ty, eft) = if let Some(required_ty) = required_ty {
+        let (required_ty, exported_ty) = if let Some(required_ty) = required_ty {
             // If the type of the value is specified, check if it matches the required type.
             if gv.scm.to_string_normalize() != required_ty.to_string() {
                 let gv_src = gv.scm.ty.get_source();
@@ -1781,30 +1781,30 @@ impl Program {
                     &[gv_src, required_src],
                 ));
             }
-            let eft = ExportedFunctionType {
+            let exported_ty = ExportedFunctionType {
                 doms: vec![],
                 codom: make_unit_ty(),
                 io_type: IOType::IO,
             };
-            (required_ty, eft)
+            (required_ty, exported_ty)
         } else {
             // If the type of the value is not specified, check if it is good as the type of an exported value.
             let err_msg_prefix = format!(
                 "The type of the value `{}` is not suitable for export: ",
                 value_name.to_string(),
             );
-            let eft = ExportedFunctionType::validate(
+            let exported_ty = ExportedFunctionType::validate(
                 gv.scm.clone(),
                 &tc.type_env,
                 err_msg_prefix,
                 required_src,
             )?;
-            (gv.scm.ty.clone(), eft)
+            (gv.scm.ty.clone(), exported_ty)
         };
         let symbol_name = self.require_instantiation(&value_name, &required_ty)?;
         self.instantiate_symbols(tc)?;
         let expr = expr_var(symbol_name, None).set_type(required_ty);
-        Ok((expr, eft))
+        Ok((expr, exported_ty))
     }
 
     /// `expr` with every reference to a global value replaced by a reference to the symbol that
@@ -2668,84 +2668,85 @@ impl Program {
         errors.to_result()
     }
 
-    // Validate user-defined types
+    /// Validates the definition of every type the program declares: the type variables it writes,
+    /// the associated types written in the types it gives its fields, the field it declares twice,
+    /// and the number of variants a union declares.
     pub fn validate_type_defns(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for type_defn in &self.type_defns {
+            let type_name = &type_defn.name;
+            // The error `msg`, pointed at the head of the definition of `type_name`.
+            let error_at_defn = |msg: String| {
+                Errors::from_msg_srcs(
+                    msg,
+                    &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
+                )
+            };
+            // The error reporting the field that a type of the given `kind` ("struct" or "union")
+            // declares twice, and no error where every field carries its own name.
+            let duplicate_field_error =
+                |kind: &str, fields: &Vec<Field>| match Field::check_duplication(fields) {
+                    Some(field_name) => error_at_defn(format!(
+                        "Duplicate field `{}` in the definition of {} `{}`.",
+                        field_name,
+                        kind,
+                        type_name.to_string()
+                    )),
+                    None => Errors::empty(),
+                };
+
             // Check for opaque type variables in type definitions.
             for tv in &type_defn.tyvars {
                 if is_opaque_tyvar(&tv.name) {
-                    errors.append(Errors::from_msg_srcs(
-                        format!(
-                            "Opaque type variable `{}` is not allowed in a type definition.",
-                            tv.name,
-                        ),
-                        &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
-                    ));
+                    errors.append(error_at_defn(format!(
+                        "Opaque type variable `{}` is not allowed in a type definition.",
+                        tv.name,
+                    )));
                 }
             }
             errors.eat_err(type_defn.validate_tyvars());
             if errors.has_error() {
                 continue;
             }
-            let type_name = &type_defn.name;
             match &type_defn.value {
-                TypeDeclValue::Struct(str) => {
-                    for field in &str.fields {
+                TypeDeclValue::Struct(struct_defn) => {
+                    for field in &struct_defn.fields {
                         if !field.ty.is_assoc_ty_free() {
-                            errors.append(Errors::from_msg_srcs(
+                            errors.append(error_at_defn(
                                 "Associated type is not allowed in the field type of a struct."
                                     .to_string(),
-                                &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
                             ));
                         }
                     }
-                    match Field::check_duplication(&str.fields) {
-                        Some(field_name) => {
-                            errors.append(Errors::from_msg_srcs(
-                                format!(
-                                    "Duplicate field `{}` in the definition of struct `{}`.",
-                                    field_name,
-                                    type_name.to_string()
-                                ),
-                                &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
-                            ));
-                        }
-                        _ => {}
-                    }
+                    errors.append(duplicate_field_error("struct", &struct_defn.fields));
                 }
                 TypeDeclValue::Union(union) => {
+                    if union.fields.len() > MAX_UNION_VARIANTS {
+                        errors.append(error_at_defn(format!(
+                            "Union `{}` has {} variants, but a union can have at most {} variants.",
+                            type_name.to_string(),
+                            union.fields.len(),
+                            MAX_UNION_VARIANTS
+                        )));
+                    }
                     for field in &union.fields {
                         if !field.ty.is_assoc_ty_free() {
-                            errors.append(Errors::from_msg_srcs(
+                            errors.append(error_at_defn(
                                 "Associated type is not allowed in the field type of a union."
                                     .to_string(),
-                                &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
                             ));
                         }
                     }
-                    match Field::check_duplication(&union.fields) {
-                        Some(field_name) => {
-                            errors.append(Errors::from_msg_srcs(
-                                format!(
-                                    "Duplicate field `{}` in the definition of union `{}`.",
-                                    field_name,
-                                    type_name.to_string()
-                                ),
-                                &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
-                            ));
-                        }
-                        _ => {}
-                    }
+                    errors.append(duplicate_field_error("union", &union.fields));
                 }
-                TypeDeclValue::Alias(ta) => {
-                    if !ta.value.is_assoc_ty_free() {
-                        errors.append(Errors::from_msg_srcs(
-                            "Associated type is not allowed in the right-hand side of a type alias.".to_string(),
-                            &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
+                TypeDeclValue::Alias(alias) => {
+                    if !alias.value.is_assoc_ty_free() {
+                        errors.append(error_at_defn(
+                            "Associated type is not allowed in the right-hand side of a type alias."
+                                .to_string(),
                         ));
                     }
-                } // Nothing to do.
+                }
             }
         }
         errors.to_result()
@@ -2769,7 +2770,7 @@ impl Program {
 
         let types = self.tycon_names_with_aliases();
         let traits = self.trait_names_with_aliases();
-        let assc_tys = self.assoc_ty_to_arity();
+        let assoc_tys = self.assoc_ty_to_arity();
 
         // Check if there is a name confliction between types and traits.
         for name in types.iter() {
@@ -2783,7 +2784,7 @@ impl Program {
 
         // Check if there is a name confliction between types and traits.
         for name in types.iter() {
-            if assc_tys.contains_key(name) {
+            if assoc_tys.contains_key(name) {
                 errors.append(Errors::from_msg(format!(
                     "Name confliction: `{}` is both a type and an associated type.",
                     name.to_string()
@@ -2793,7 +2794,7 @@ impl Program {
 
         // Check if there is a name confliction between traits and associated types.
         for name in traits.iter() {
-            if assc_tys.contains_key(name) {
+            if assoc_tys.contains_key(name) {
                 errors.append(Errors::from_msg(format!(
                     "Name confliction: `{}` is both a trait and an associated type.",
                     name.to_string()
@@ -2808,9 +2809,9 @@ impl Program {
         let mut errors = Errors::empty();
         for defn in &self.type_defns.clone() {
             match &defn.value {
-                TypeDeclValue::Struct(str) => {
+                TypeDeclValue::Struct(struct_defn) => {
                     let struct_name = defn.name.clone();
-                    for field in &str.fields {
+                    for field in &struct_defn.fields {
                         // Add getter function
                         errors.eat_err(self.add_compiler_defined_method(
                             FullName::new(
@@ -2984,8 +2985,8 @@ impl Program {
     pub fn add_boxed_impls(&mut self) -> Result<(), Errors> {
         for defn in &self.type_defns {
             match &defn.value {
-                TypeDeclValue::Struct(str) => {
-                    if str.is_boxed() {
+                TypeDeclValue::Struct(struct_defn) => {
+                    if struct_defn.is_boxed() {
                         let ty = defn.applied_type();
                         self.trait_env.add_instance(boxed_trait_instance(&ty))?;
                     }
