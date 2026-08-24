@@ -1328,7 +1328,7 @@ pub fn test_associated_type_implemented_as_itself_on_a_larger_type_is_reported()
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "so the reduction does not end",
+        "does not end: every step gives a larger type",
     );
 }
 

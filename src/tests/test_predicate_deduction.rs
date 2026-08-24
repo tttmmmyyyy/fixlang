@@ -155,7 +155,7 @@ main = println(Wrap { data : Wrap { data : 42 } }.show);
     "##;
     let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
     assert!(
-        errmsg.contains("so the deduction does not end"),
+        errmsg.contains("does not end: every step asks about a larger type"),
         "the deduction that does not end went unreported:\n{}",
         errmsg
     );
@@ -276,7 +276,7 @@ main = (
     test_source_fail(
         &source_nesting(510),
         Configuration::develop_mode(),
-        "past the depth the compiler settles a constraint about",
+        "The compiler does not settle a constraint about a type that deep",
     );
 }
 

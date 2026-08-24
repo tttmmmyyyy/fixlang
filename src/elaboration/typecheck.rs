@@ -3107,8 +3107,7 @@ impl TypeReduction {
         let srcs: Vec<&Option<Span>> = round.iter().map(|(_ancestor, src)| src).collect();
         let sentence = if way.len() <= 2 {
             format!(
-                "Reducing the type `{}` needs itself: the equality constraint that gives it a \
-                 value names it again.",
+                "Reducing the type `{}` needs itself: the type it is equal to contains it.",
                 shorten_for_report(ty.to_string()),
             )
         } else {
@@ -3131,8 +3130,8 @@ impl TypeReduction {
         let Some((_ancestor_str, src)) = self.path.last() else {
             return Errors::from_msg_srcs(
                 format!(
-                    "The type `{}` nests more than {} deep, which is past the depth the compiler \
-                     reduces a type to.",
+                    "The type `{}` nests more than {} deep. The compiler does not reduce a type \
+                     that deep.",
                     shorten_for_report(ty.to_string()),
                     MAX_TYPE_DEPTH,
                 ),
@@ -3141,9 +3140,8 @@ impl TypeReduction {
         };
         Errors::from_msg_srcs(
             format!(
-                "Reducing the type `{}` asks about a type nested more than {} deep, so the \
-                 reduction does not end. An equality constraint whose value names the type it is \
-                 on, inside a larger type, does this.",
+                "Reducing the type `{}` does not end: every step gives a larger type. The \
+                 reduction stopped at a type nested more than {} deep.",
                 shorten_for_report(ty.to_string()),
                 MAX_TYPE_DEPTH,
             ),
@@ -3202,8 +3200,7 @@ impl UnificationErr {
             // A deduction that comes straight back to where it began is the whole story; a longer
             // one is told by the constraints it passes through.
             UnificationErr::Circular(way) if way.len() <= 2 => Some(
-                "Deducing it needs itself: the instance that gives it asks for it again."
-                    .to_string(),
+                "Deducing it needs itself: the instance that gives it requires it.".to_string(),
             ),
             UnificationErr::Circular(way) => Some(format!(
                 "Deducing it needs itself: {}.",
@@ -3212,14 +3209,13 @@ impl UnificationErr {
             // A deduction that has yet to take a step reached the bound on the constraint it was
             // asked for, which says nothing about any instance.
             UnificationErr::Endless(way) if way.len() <= 1 => Some(format!(
-                "The type it names nests more than {} deep, which is past the depth the compiler \
-                 settles a constraint about.",
+                "The type it names nests more than {} deep. The compiler does not settle a \
+                 constraint about a type that deep.",
                 MAX_TYPE_DEPTH
             )),
             UnificationErr::Endless(way) => Some(format!(
-                "Deducing it asks about types nested more than {} deep, so the deduction does not \
-                 end: {}. An instance whose context asks for what it gives, on a larger type, does \
-                 this.",
+                "Deducing it does not end: every step asks about a larger type. The deduction \
+                 stopped at a type nested more than {} deep: {}.",
                 MAX_TYPE_DEPTH,
                 way_string(&Self::printed_steps(way))
             )),
