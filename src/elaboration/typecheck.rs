@@ -2052,8 +2052,11 @@ impl TypeCheckContext {
         self.reduce_type_by_equality_inner(ty, &mut TypeReduction::default())
     }
 
-    /// The body of `reduce_type_by_equality`, carrying the associated types whose reduction this
-    /// one is inside.
+    /// The body of `reduce_type_by_equality`.
+    ///
+    /// # Arguments
+    /// * `reduction` — the associated types whose reduction this one is inside. Meeting one of
+    ///   them again is meeting a type whose reduction needs itself.
     fn reduce_type_by_equality_inner(
         &mut self,
         ty: Arc<TypeNode>,
@@ -2086,10 +2089,10 @@ impl TypeCheckContext {
                 let ty = ty.set_assocty_args(args);
 
                 // An equality gives a value that this reduction takes in the type's place, and that
-                // value can name the type again. Reducing the value then asks for the reduction the
-                // compiler is inside, which is where it ends: with a report naming the equalities
-                // that lead round, and with the depth bound below for a reduction that keeps
-                // finding types it has not met yet.
+                // value can name the type again. Reducing the value then asks for a reduction
+                // that has begun and has yet to end, and the report names the equalities that lead
+                // from the type back to itself. A reduction that instead keeps finding types it
+                // has not met yet ends at `MAX_TYPE_DEPTH`.
                 let ty_str = ty.to_string();
                 if reduction.on_path.contains(&ty_str) {
                     return Err(reduction.circular_error(&ty_str));
@@ -3050,8 +3053,8 @@ fn way_string(way: &[String]) -> String {
     steps.join(" -> ")
 }
 
-/// What the reduction of a type carries as it descends into the values the equalities it applies
-/// give.
+/// What the reduction of a type carries as it descends into the values that the equalities it
+/// applies give.
 ///
 /// An associated type is reduced by applying the equality whose left side it matches and reducing
 /// the value that equality gives in its place. `on_path` holds the associated types whose reduction
@@ -3245,7 +3248,7 @@ impl UnificationErr {
             .expect("a deduction carries the predicate it started from")
     }
 
-    /// The steps of a deduction, printed, as `way_string` takes them.
+    /// The steps of a deduction, each printed.
     fn printed_steps(way: &[Predicate]) -> Vec<String> {
         way.iter().map(|pred| pred.to_string()).collect()
     }
