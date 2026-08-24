@@ -11,8 +11,8 @@ use crate::fixstd::builtin::{
 };
 use crate::generator::Generator;
 use crate::misc::Map;
-use crate::object::ty_to_object_ty;
 use crate::tests::test_util::test_source;
+use crate::object::ty_to_object_ty;
 use inkwell::context::Context;
 use std::sync::Arc;
 
