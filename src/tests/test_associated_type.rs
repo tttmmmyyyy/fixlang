@@ -1443,3 +1443,48 @@ pub fn test_reduction_that_leads_round_after_a_first_step_reports_the_round() {
         errmsg
     );
 }
+
+/// A reduction asked about a type already nested past the depth the compiler reduces to says where
+/// that type is written. No equality has been applied, so the type itself is the only place the
+/// report can point at, and a report that points nowhere reaches the user attached to the project
+/// file rather than to the type.
+#[test]
+pub fn test_type_too_deep_to_reduce_is_reported_where_it_is_written() {
+    let mut deep_ty = "I64".to_string();
+    for _ in 0..499 {
+        deep_ty = format!("({},)", deep_ty);
+    }
+    let source = format!(
+        r##"
+        module Main;
+
+        trait a : C {{
+            type El a;
+            cval : a -> El a;
+        }}
+
+        impl I64 : C {{
+            type El I64 = I64;
+            cval = |x| x;
+        }}
+
+        f : El {} -> I64;
+        f = |_| 0;
+
+        main : IO ();
+        main = println("ok");
+    "##,
+        deep_ty
+    );
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("nests more than 500 deep"),
+        "the type too deep to reduce went unreported:\n{}",
+        errmsg
+    );
+    assert!(
+        errmsg.contains(" in \""),
+        "the report does not say where the type is written:\n{}",
+        errmsg
+    );
+}

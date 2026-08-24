@@ -3126,8 +3126,9 @@ impl TypeReduction {
     /// equality constraint it was applying.
     fn endless_error(&self, ty: &Arc<TypeNode>) -> Errors {
         // A reduction that has yet to apply an equality reached the bound on the type it was asked
-        // about, which says nothing about any equality; one that has applied equalities reached it
-        // by applying them, and the last is the one to draw the report at.
+        // about, which says nothing about any equality, so the report is drawn where that type is
+        // written; one that has applied equalities reached it by applying them, and the last is the
+        // one to draw the report at.
         let Some((_ancestor_str, src)) = self.path.last() else {
             return Errors::from_msg_srcs(
                 format!(
@@ -3136,7 +3137,7 @@ impl TypeReduction {
                     shorten_for_report(ty.to_string()),
                     MAX_TYPE_DEPTH,
                 ),
-                &[&None],
+                &[ty.get_source()],
             );
         };
         Errors::from_msg_srcs(
