@@ -109,7 +109,7 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
             "the build asked for nothing should leave its object files behind"
         );
 
-        let mut assert_dump_build_matches = |what: &str, command: &mut Command| {
+        let assert_dump_build_matches = |what: &str, command: &mut Command| {
             let output = run_in(command.arg("--verbose"), dir, what);
             assert!(
                 output.contains("Generating code for"),
