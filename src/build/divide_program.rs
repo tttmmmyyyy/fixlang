@@ -7,16 +7,19 @@
 //! to the linker only where a unit that has no copy of it names it.
 
 use crate::ast::name::FullName;
-use crate::ast::program::Program;
-use crate::ast::types::TypeNode;
+use crate::ast::program::{Program, TypeEnv};
+use crate::ast::types::{TyCon, TyConInfo, TypeNode};
 use crate::build::compile_unit::CompileUnit;
 use crate::configuration::Configuration;
 use crate::hash::HashSource;
 use crate::misc::{Map, Set};
-use crate::rc_ir::ast::{FuncRef, RcFunc, RcGlobalInit, RcProgram};
-use crate::rc_ir::dead_code_elim::collect_mentions;
+use crate::parse::sourcefile::Span;
+use crate::rc_ir::ast::{for_each_node, for_each_var, FuncRef, RcFunc, RcGlobalInit, RcProgram};
+use crate::rc_ir::dead_code_elim::{collect_mentions, eliminate_unreachable};
 use crate::rc_ir::simplify::node_count;
 use serde::Serialize;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 /// The most RC IR nodes a function may hold for a unit calling it to take a copy of its own. A copy
@@ -39,6 +42,9 @@ pub struct DividedProgram {
     pub global_types: Arc<Map<FullName, Arc<TypeNode>>>,
     /// The names each unit holds a copy of rather than owning, one set per unit.
     pub imported: Vec<Set<FullName>>,
+    /// The names each unit gives external linkage: the ones it defines itself and `published` holds.
+    /// One set per unit.
+    pub published_here: Vec<Set<FullName>>,
     /// The globals whose storage more than one unit reaches. The owning unit defines and publishes
     /// the storage, and the units holding a copy of the accessor declare it, so the value is
     /// computed once however many units read it.
@@ -98,13 +104,31 @@ pub fn divide_among_units(
     let published = Arc::new(published_to_the_linker(
         &unit_programs,
         &unit_of,
-        root_value_names,
+        &root_value_names,
     ));
+    let mut published_here: Vec<Set<FullName>> = vec![];
     for (index, unit_program) in unit_programs.iter_mut().enumerate() {
+        published_here.push(
+            names_defined_here(unit_program)
+                .filter(|name| !imported[index].contains(name) && published.contains(name))
+                .cloned()
+                .collect(),
+        );
+        // What the unit's code is reached by: the names another unit's code calls it through, the
+        // values the C world enters the program through, which the entry point and the exported C
+        // functions read through the accessor the unit holding them carries, and the globals whose
+        // storage another unit reads, whose owner emits that storage and the function computing it.
         unit_program.roots = names_defined_here(unit_program)
-            .filter(|name| !imported[index].contains(name) && published.contains(name))
+            .filter(|name| {
+                published_here[index].contains(*name)
+                    || root_value_names.contains(*name)
+                    || shared_globals.contains(*name)
+            })
             .cloned()
             .collect();
+        // A function every unit calling it took a copy of is left with no caller of its own, and
+        // generating it writes out a body that reaches nothing the program runs.
+        eliminate_unreachable(unit_program);
     }
 
     DividedProgram {
@@ -112,6 +136,7 @@ pub fn divide_among_units(
         published,
         global_types: Arc::new(global_types),
         imported,
+        published_here,
         shared_globals: Arc::new(shared_globals),
     }
 }
@@ -300,9 +325,9 @@ fn give_the_main_unit_the_root_values(
 fn published_to_the_linker(
     unit_programs: &[RcProgram],
     unit_of: &impl Fn(&FullName) -> Option<usize>,
-    root_value_names: Set<FullName>,
+    root_value_names: &Set<FullName>,
 ) -> Set<FullName> {
-    let mut published = root_value_names;
+    let mut published = root_value_names.clone();
     for unit_program in unit_programs {
         names_reached_elsewhere(unit_program, |mentioned| {
             // A mention no symbol of the program owns is a runtime function or a C declaration,
@@ -338,6 +363,11 @@ struct GeneratedCode<'a> {
     shared_globals: Vec<&'a FullName>,
     /// The type each name the unit declares is declared from, by identity.
     declared: Vec<(FullName, u64)>,
+    /// The declaration of each type the unit's code is laid out by, by name.
+    type_declarations: Vec<(String, u64)>,
+    /// Where the unit's code is written, for a build that compiles that into debug information.
+    /// `None` for a build that writes none.
+    debug_positions: Option<u64>,
     /// What the main unit builds beside its own code: the C entry point and the C function of each
     /// `FFI_EXPORT` statement. `None` for every other unit.
     ///
@@ -366,17 +396,19 @@ struct MainUnitEntry {
 /// file for code it no longer generates. This one is taken over the code itself.
 pub fn generated_code_hash(
     unit: &CompileUnit,
-    unit_program: &RcProgram,
+    unit_index: usize,
     division: &DividedProgram,
     program_for_the_entry: Option<&Program>,
+    type_env: &TypeEnv,
     config: &Configuration,
 ) -> String {
+    let unit_program = &division.unit_programs[unit_index];
     let by_name = |a: &&FullName, b: &&FullName| a.cmp(b);
     let mut funcs: Vec<&RcFunc> = unit_program.funcs.values().collect();
     funcs.sort_by(|a, b| a.name.name.cmp(&b.name.name));
     let mut globals: Vec<&RcGlobalInit> = unit_program.globals.iter().collect();
     globals.sort_by(|a, b| a.symbol.cmp(&b.symbol));
-    let mut published: Vec<&FullName> = unit_program.roots.iter().collect();
+    let mut published: Vec<&FullName> = division.published_here[unit_index].iter().collect();
     published.sort_by(by_name);
     let mut shared_globals: Vec<&FullName> = unit_program
         .globals
@@ -386,14 +418,20 @@ pub fn generated_code_hash(
         .collect();
     shared_globals.sort_by(by_name);
 
-    let mut declared: Vec<(FullName, u64)> = vec![];
+    let mut declared_types: Vec<(FullName, Arc<TypeNode>)> = vec![];
     names_reached_elsewhere(unit_program, |mentioned| {
         if let Some(ty) = division.global_types.get(mentioned) {
-            declared.push((mentioned.clone(), ty.type_hash()));
+            declared_types.push((mentioned.clone(), ty.clone()));
         }
     });
-    declared.sort_by(|a, b| a.0.cmp(&b.0));
-    declared.dedup_by(|a, b| a.0 == b.0);
+    declared_types.sort_by(|a, b| a.0.cmp(&b.0));
+    declared_types.dedup_by(|a, b| a.0 == b.0);
+    let declared: Vec<(FullName, u64)> = declared_types
+        .iter()
+        .map(|(name, ty)| (name.clone(), ty.type_hash()))
+        .collect();
+    let type_declarations = type_declarations_reached(unit_program, &declared_types, type_env);
+    let debug_positions = config.debug_info.then(|| debug_positions(&funcs, &globals));
 
     let settings = config.object_generation_hash();
     let code = GeneratedCode {
@@ -408,6 +446,8 @@ pub fn generated_code_hash(
         published,
         shared_globals,
         declared,
+        type_declarations,
+        debug_positions,
         entry: program_for_the_entry.map(main_unit_entry),
     };
     let mut hash_source = HashSource::default();
@@ -415,6 +455,138 @@ pub fn generated_code_hash(
         &postcard::to_allocvec(&code).expect("the generated code of a unit serializes"),
     );
     hash_source.finish()
+}
+
+/// The declaration of every type the unit's code is laid out by, each with a digest of what that
+/// declaration decides, ordered by the type's name.
+///
+/// A type reaches the RC IR as a type expression and a field of it as the index of that field, so
+/// how wide a value of the type is, where each of its fields sits, and whether it is a pointer are
+/// decided by the declarations `type_env` holds rather than by anything the IR carries. Widening a
+/// type that a body reads another type's field through moves no part of that body, so the digest
+/// reads the declarations beside the IR.
+///
+/// A declaration lays a value out through the types of its fields, so what those name is read as
+/// well, to the end of the chain.
+fn type_declarations_reached(
+    unit_program: &RcProgram,
+    declared: &[(FullName, Arc<TypeNode>)],
+    type_env: &TypeEnv,
+) -> Vec<(String, u64)> {
+    let mut tycons: Set<TyCon> = Set::default();
+    for func in unit_program.funcs.values() {
+        func.fn_ty.collect_tycons(&mut tycons);
+        func.ret_ty.collect_tycons(&mut tycons);
+        for param in &func.params {
+            param.ty.collect_tycons(&mut tycons);
+        }
+        if let Some(capture) = &func.capture {
+            capture.ty.collect_tycons(&mut tycons);
+        }
+        for_each_var(&func.body, &mut |var| var.ty.collect_tycons(&mut tycons));
+    }
+    for global in &unit_program.globals {
+        global.ty.collect_tycons(&mut tycons);
+        for_each_var(&global.init, &mut |var| var.ty.collect_tycons(&mut tycons));
+    }
+    for (_, ty) in declared {
+        ty.collect_tycons(&mut tycons);
+    }
+
+    let mut pending: Vec<TyCon> = tycons.iter().cloned().collect();
+    while let Some(tycon) = pending.pop() {
+        for field in &declaration_of(&tycon, type_env).fields {
+            let mut reached: Set<TyCon> = Set::default();
+            field.ty.collect_tycons(&mut reached);
+            for reached in reached {
+                if tycons.insert(reached.clone()) {
+                    pending.push(reached);
+                }
+            }
+        }
+    }
+
+    let mut declarations: Vec<(String, u64)> = tycons
+        .iter()
+        .map(|tycon| {
+            (
+                tycon.to_string(),
+                declaration_digest(declaration_of(tycon, type_env)),
+            )
+        })
+        .collect();
+    declarations.sort();
+    declarations
+}
+
+/// The digest of where the unit's code is written: the source of each function, of each expression
+/// node of its body, and of each variable it binds.
+///
+/// A build that writes debug information compiles these positions into it, so they decide the code
+/// it generates. A build that writes none generates the same code wherever the source sits, and a
+/// digest reading the positions there would regenerate a unit for an edit that inserts a byte ahead
+/// of them — a blank line, a comment, a longer name earlier in the file.
+fn debug_positions(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    let mut note = |source: &Option<Span>| {
+        source.is_some().hash(&mut hasher);
+        if let Some(span) = source {
+            span.input.file_path.to_string_lossy().hash(&mut hasher);
+            span.start.hash(&mut hasher);
+            span.end.hash(&mut hasher);
+        }
+    };
+    for func in funcs {
+        note(&func.source);
+        for param in &func.params {
+            note(&param.source);
+        }
+        if let Some(capture) = &func.capture {
+            note(&capture.source);
+        }
+        for_each_node(&func.body, &mut |node| note(&node.source));
+        for_each_var(&func.body, &mut |var| note(&var.source));
+    }
+    for global in globals {
+        for_each_node(&global.init, &mut |node| note(&node.source));
+        for_each_var(&global.init, &mut |var| note(&var.source));
+    }
+    hasher.finish()
+}
+
+/// The declaration `type_env` holds for `tycon`, which every type the generated code is laid out by
+/// has.
+fn declaration_of<'a>(tycon: &TyCon, type_env: &'a TypeEnv) -> &'a TyConInfo {
+    type_env.tycons().get(tycon).unwrap_or_else(|| {
+        panic!(
+            "the type `{}` the code is generated from is undeclared",
+            tycon.to_string()
+        )
+    })
+}
+
+/// The digest of what a declaration decides about the values of the type: how wide one is, where
+/// each of its fields sits, and whether it is a pointer. Where the declaration is written and what
+/// it documents decide none of that, and stay out.
+fn declaration_digest(info: &TyConInfo) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    info.kind.to_string().hash(&mut hasher);
+    info.variant.hash(&mut hasher);
+    info.is_unbox.hash(&mut hasher);
+    for tyvar in &info.tyvars {
+        tyvar.name.hash(&mut hasher);
+        tyvar.kind.to_string().hash(&mut hasher);
+    }
+    for field in &info.fields {
+        field.name.hash(&mut hasher);
+        field.ty.type_hash().hash(&mut hasher);
+        field.is_punched.hash(&mut hasher);
+    }
+    info.punched_from
+        .as_ref()
+        .map(|punched_from| punched_from.to_string())
+        .hash(&mut hasher);
+    hasher.finish()
 }
 
 /// What the main unit builds beside its own code, read off the program.

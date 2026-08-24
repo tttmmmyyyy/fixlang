@@ -3,7 +3,7 @@
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::{FullName, Name};
 use crate::ast::types::TypeNode;
-use crate::misc::{Map, Set};
+use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use serde::{Serialize, Serializer};
 use std::sync::Arc;
@@ -17,7 +17,9 @@ pub struct RcVar {
     /// The type of the value bound here, always concrete (monomorphic).
     #[serde(serialize_with = "serialize_type_identity")]
     pub ty: Arc<TypeNode>,
-    /// The source the value bound here is written at. `None` where no source spells it out.
+    /// The source the value bound here is written at. `None` where no source spells it out. Left
+    /// out of the serialized form; see `divide_program::debug_positions`.
+    #[serde(skip)]
     pub source: Option<Span>,
     /// The source-level name this variable denotes, when it is the binding of a `let`-pattern
     /// variable, a match-arm payload, or a projected capture. Code generation emits a debug local
@@ -80,7 +82,9 @@ pub struct RcFunc {
     /// function's value.
     pub body: RcExprNode,
     /// The source the lambda this function came from was written at, which code generation records
-    /// as the function's debug location. `None` where no source spells the function out.
+    /// as the function's debug location. `None` where no source spells the function out. Left out
+    /// of the serialized form; see `divide_program::debug_positions`.
+    #[serde(skip)]
     pub source: Option<Span>,
     /// The reference-counting units this version borrows among its parameters and capture — the units
     /// it does not own, one `(parameter-name, unit-path)` each. Everything not listed is owned, so the
@@ -110,7 +114,9 @@ pub struct RcExprNode {
     /// O(1). The continuation chain is thousands of nodes deep for a large body, and the simplifier
     /// clones whole bodies, so a deep-copying clone would overflow the stack.
     pub expr: Arc<RcExpr>,
-    /// The source the expression is written at. `None` where no source spells it out.
+    /// The source the expression is written at. `None` where no source spells it out. Left out of
+    /// the serialized form; see `divide_program::debug_positions`.
+    #[serde(skip)]
     pub source: Option<Span>,
 }
 
@@ -311,6 +317,91 @@ pub struct RcGlobalInit {
     /// accessor alone, so that its reads inline, and reaches the storage, the flag and the
     /// initializer the owning unit publishes.
     pub owns_storage: bool,
+}
+
+/// Visit every node of `node`: the continuation chain it heads, and the body of every arm of every
+/// `Match` along it.
+pub(crate) fn for_each_node(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
+    // A deep continuation chain recurses to its full depth here; grow the stack on demand.
+    grow_stack(|| for_each_node_inner(node, visit))
+}
+
+fn for_each_node_inner(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
+    visit(node);
+    match node.expr.as_ref() {
+        RcExpr::Let(_, rhs, k) => {
+            if let RcRhs::Match(_, arms) = rhs {
+                for arm in arms {
+                    for_each_node(&arm.body, visit);
+                }
+            }
+            for_each_node(k, visit);
+        }
+        RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k)
+        | RcExpr::Eval(_, k)
+        | RcExpr::Destructure(_, _, _, k) => for_each_node(k, visit),
+        RcExpr::Ret(_) => {}
+    }
+}
+
+/// Visit every variable `node` binds or reads, the payload of every arm of every `Match` included.
+///
+/// A variable carries the type of the value bound to it, so this is also the walk over the types a
+/// body is generated from.
+pub(crate) fn for_each_var(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
+    for_each_node(node, &mut |node| for_each_var_of_node(node, visit))
+}
+
+/// Visit the variables the node itself binds or reads, without following its continuation or the
+/// bodies of the arms of a `Match`.
+fn for_each_var_of_node(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
+    match node.expr.as_ref() {
+        RcExpr::Let(var, rhs, _) => {
+            visit(var);
+            for_each_var_of_rhs(rhs, visit);
+        }
+        RcExpr::Retain(var, _, _, _) | RcExpr::Release(var, _, _, _) | RcExpr::Eval(var, _) => {
+            visit(var)
+        }
+        RcExpr::Destructure(var, fields, _, _) => {
+            visit(var);
+            for (_, field) in fields {
+                visit(field);
+            }
+        }
+        RcExpr::Ret(var) => visit(var),
+    }
+}
+
+/// Visit the variables of a right-hand side: the payload variable of each arm of a `Match` among
+/// them, and not the arm bodies.
+fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
+    match rhs {
+        RcRhs::Var(var) => visit(var),
+        RcRhs::App(callee, args) => {
+            visit(callee);
+            for arg in args {
+                visit(arg);
+            }
+        }
+        RcRhs::Closure(_, captured) => {
+            for var in captured {
+                visit(var);
+            }
+        }
+        RcRhs::Llvm(_, operands) => {
+            for var in operands {
+                visit(var);
+            }
+        }
+        RcRhs::Match(scrutinee, arms) => {
+            visit(scrutinee);
+            for arm in arms {
+                visit(&arm.payload);
+            }
+        }
+    }
 }
 
 /// Serialize a set of variable paths in the order of the paths themselves, so that a digest taken

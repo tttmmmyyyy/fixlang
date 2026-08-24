@@ -8,6 +8,7 @@ use crate::tests::test_util::{
 };
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 use tempfile::TempDir;
 
 /// A program that exports a C function, so that a unit has a C name to publish beside the entry
@@ -252,5 +253,143 @@ fn test_an_edit_regenerates_only_the_units_it_reaches() {
          {} units from the first, and it generated {} of them again",
         generated + cached,
         generated
+    );
+}
+
+/// An edit that writes no code regenerates no compilation unit.
+///
+/// A comment is compiled into nothing, and the code every unit of the program generates is what it
+/// was, so every unit keeps the object file the build before the comment compiled it into. What
+/// moves is where the code after the comment is written, which a build asked for no debug
+/// information puts nowhere.
+#[test]
+fn test_a_comment_added_to_a_module_regenerates_no_unit() {
+    const CU_SIZE: &str = "2";
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir = temp_dir.path();
+
+    write_two_module_project(dir, 120);
+    let (units, _) = build_at_max_in(dir, CU_SIZE);
+
+    let worker = dir.join("worker.fix");
+    let commented = format!(
+        "// a comment the compiler generates no code from\n{}",
+        fs::read_to_string(&worker).expect("Failed to read the worker module")
+    );
+    fs::write(&worker, commented).expect("Failed to write the worker module");
+
+    let (generated, _) = build_at_max_in(dir, CU_SIZE);
+    assert_eq!(
+        generated, 0,
+        "the comment writes no code, so the build after it should take all {} units from the \
+         first, and it generated {} of them again",
+        units, generated
+    );
+}
+
+/// A project of three modules: `Types`, which declares the types; `Lib`, which reads the second
+/// field of one of them; and `Main`, which builds a value and prints what `Lib` reads out of it.
+///
+/// `Lib` names `Inner` nowhere, and `T` holds an `Inner` ahead of the field `Lib` reads, so a field
+/// added to `Inner` moves that field without moving any part of `Lib`'s code.
+///
+/// # Arguments
+/// * `inner_carries_two_fields` — whether `Inner` holds a second field, which is the edit.
+fn write_nested_type_project(dir: &Path, inner_carries_two_fields: bool) {
+    fs::write(
+        dir.join("fixproj.toml"),
+        r#"[general]
+name = "nested-type"
+version = "0.1.0"
+[build]
+files = ["main.fix", "lib.fix", "types.fix"]
+"#,
+    )
+    .expect("Failed to write the project file");
+
+    let (inner_fields, inner_literal) = if inner_carries_two_fields {
+        ("{x : I64, y : I64}", "Inner{x : 100, y : 200}")
+    } else {
+        ("{x : I64}", "Inner{x : 100}")
+    };
+    fs::write(
+        dir.join("types.fix"),
+        format!(
+            "module Types;\n\ntype Inner = unbox struct {};\n\ntype T = box struct {{a : Inner, b : I64}};\n",
+            inner_fields
+        ),
+    )
+    .expect("Failed to write the types module");
+
+    // A body long enough that the division leaves the call to it in place instead of copying it
+    // into the unit that calls it, so that the reader of the field and its caller are compiled into
+    // object files of their own. Each step carries the field's value forward, so the program prints
+    // what the field held.
+    const STEPS: usize = 120;
+    let mut lib = String::from(
+        "module Lib;\n\nimport Types;\n\nget_b : T -> I64;\nget_b = |t| (\n    let v0 = t.@b;\n",
+    );
+    for step in 1..=STEPS {
+        lib += &format!("    let v{} = v{} * 3 + {};\n", step, step - 1, step);
+    }
+    lib += &format!("    v{} % 1000000007\n);\n", STEPS);
+    fs::write(dir.join("lib.fix"), lib).expect("Failed to write the lib module");
+
+    fs::write(
+        dir.join("main.fix"),
+        format!(
+            "module Main;\n\nimport Types;\nimport Lib;\n\nmain : IO ();\nmain = println(Lib::get_b(T{{a : {}, b : 7}}).to_string);\n",
+            inner_literal
+        ),
+    )
+    .expect("Failed to write the main module");
+}
+
+/// Runs the program the build in `dir` produced and returns what it printed.
+fn printed_by_the_program(dir: &Path) -> String {
+    let run = Command::new(dir.join("a.out"))
+        .current_dir(dir)
+        .output()
+        .expect("Failed to run the program the build produced");
+    assert!(
+        run.status.success(),
+        "the program should run to completion.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr),
+    );
+    String::from_utf8_lossy(&run.stdout).trim().to_string()
+}
+
+/// A build after a type is widened reads the fields of it where they now sit.
+///
+/// A type reaches the RC IR as a type expression and a field of it as the index of that field, so
+/// widening `Inner` leaves every part of `Lib::get_b`, which reads the field of `T` that the
+/// `Inner` sits ahead of. What it moves is where that field sits, and the code reading it, so the
+/// unit holding `get_b` is generated again and the program answers as one built from nothing does.
+#[test]
+fn test_a_build_after_a_type_widens_reads_the_fields_where_they_now_sit() {
+    const CU_SIZE: &str = "1";
+
+    let edited = TempDir::new().expect("Failed to create temp directory");
+    write_nested_type_project(edited.path(), false);
+    build_at_max_in(edited.path(), CU_SIZE);
+
+    write_nested_type_project(edited.path(), true);
+    let (_, cached) = build_at_max_in(edited.path(), CU_SIZE);
+    assert!(
+        cached > 0,
+        "the build after the edit should take units from the one before it, or what it links is \
+         what it generated"
+    );
+    let after_the_edit = printed_by_the_program(edited.path());
+
+    let from_nothing = TempDir::new().expect("Failed to create temp directory");
+    write_nested_type_project(from_nothing.path(), true);
+    build_at_max_in(from_nothing.path(), CU_SIZE);
+
+    assert_eq!(
+        after_the_edit,
+        printed_by_the_program(from_nothing.path()),
+        "the build after the edit should print what a build of the edited sources from nothing does"
     );
 }

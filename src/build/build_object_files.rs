@@ -321,13 +321,15 @@ pub fn build_object_files<'c>(
     // main unit is the last, and it is the one that builds the entry point and the exported C
     // functions.
     let last_unit = units.len() - 1;
+    let type_env = program.type_env();
     for (index, unit) in units.iter_mut().enumerate() {
         let program_for_the_entry = (index == last_unit).then_some(&program);
         let hash = generated_code_hash(
             unit,
-            &division.unit_programs[index],
+            index,
             &division,
             program_for_the_entry,
+            &type_env,
             config,
         );
         unit.set_unit_hash(hash);
@@ -337,6 +339,7 @@ pub fn build_object_files<'c>(
         published,
         global_types,
         imported,
+        published_here: _,
         shared_globals,
     } = division;
 

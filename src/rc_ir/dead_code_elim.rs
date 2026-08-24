@@ -21,6 +21,9 @@ pub fn eliminate_unreachable(prog: &mut RcProgram) {
     let globals: Map<FullName, &RcExprNode> = prog
         .globals
         .iter()
+        // A global whose storage another program owns is carried here as the accessor alone: this
+        // program computes no value for it, so its initializer reaches nothing here.
+        .filter(|g| g.owns_storage)
         .map(|g| (g.symbol.clone(), &g.init))
         .collect();
 
