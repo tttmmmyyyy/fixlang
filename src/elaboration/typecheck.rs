@@ -549,6 +549,20 @@ pub struct TypeCheckContext {
     pub error_tolerant: bool,
 }
 
+/// How many times `reduce_type_by_equality` may replace an associated type by the value an assumed
+/// equality gives it before it reports that the reduction did not end.
+///
+/// A chain of replacements is as long as the delegation behind it: an associated type whose value
+/// is another associated type, as `type Elem (Wrapper c) = Elem c;` writes, adds one step per
+/// wrapper. The longest chain the standard library, the test suite and the minilib libraries ask
+/// for is 3, and sixteen such wrappers nested by hand ask for 17.
+///
+/// A replacement whose value carries the associated type again leaves a larger type to reduce, so
+/// the reduction descends into it and the stack grows with the number of replacements. The bound
+/// is therefore what keeps the reduction inside the stack of the smallest thread it runs on, and
+/// raising it has to be weighed against that.
+const TYPE_REDUCTION_BUDGET: usize = 500;
+
 impl TypeCheckContext {
     /// Print the entry count of each of the context's collections; a
     /// debugging aid for inspecting the context's growth.
@@ -2049,19 +2063,28 @@ impl TypeCheckContext {
     /// An associated type met on the way also requires the trait that declares it of its first
     /// argument, so that predicate joins the pending ones.
     fn reduce_type_by_equality(&mut self, ty: Arc<TypeNode>) -> Result<Arc<TypeNode>, Errors> {
+        self.reduce_type_by_equality_within(ty, TYPE_REDUCTION_BUDGET)
+    }
+
+    /// The body of `reduce_type_by_equality`, carrying how many replacements are left to it.
+    fn reduce_type_by_equality_within(
+        &mut self,
+        ty: Arc<TypeNode>,
+        budget: usize,
+    ) -> Result<Arc<TypeNode>, Errors> {
         match &ty.ty {
             Type::TyVar(_) => Ok(ty),
             Type::TyCon(_) => Ok(ty),
             Type::TyApp(tyfun, tyarg) => {
-                let tyfun = self.reduce_type_by_equality(tyfun.clone())?;
-                let tyarg = self.reduce_type_by_equality(tyarg.clone())?;
+                let tyfun = self.reduce_type_by_equality_within(tyfun.clone(), budget)?;
+                let tyarg = self.reduce_type_by_equality_within(tyarg.clone(), budget)?;
                 Ok(ty.set_tyapp_fun(tyfun).set_tyapp_arg(tyarg))
             }
             Type::AssocTy(assoc_ty, args) => {
                 // Reduce each arguments.
                 let args = collect_results(
                     args.iter()
-                        .map(|arg| self.reduce_type_by_equality(arg.clone())),
+                        .map(|arg| self.reduce_type_by_equality_within(arg.clone(), budget)),
                 )?;
 
                 // The first argument should implement the trait of the associated type.
@@ -2095,7 +2118,23 @@ impl TypeCheckContext {
                     }
                     let match_subst: Substitution = match_subst.unwrap();
                     let rhs = match_subst.substitute_type(&equality.value);
-                    return self.reduce_type_by_equality(rhs);
+                    if rhs == ty {
+                        // The equality gives the type back as it stands, so it says nothing about
+                        // it. Another equality may still have something to say.
+                        continue;
+                    }
+                    if budget == 0 {
+                        return Err(Errors::from_msg_srcs(
+                            format!(
+                                "Reducing the type `{}` by this equality constraint did not end \
+                                 after {} replacements.",
+                                ty.to_string(),
+                                TYPE_REDUCTION_BUDGET,
+                            ),
+                            &[&equality.src],
+                        ));
+                    }
+                    return self.reduce_type_by_equality_within(rhs, budget - 1);
                 }
                 Ok(ty)
             }

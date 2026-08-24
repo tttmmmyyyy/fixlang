@@ -1224,3 +1224,100 @@ pub fn test_equality_right_side_naming_an_associated_type_is_rejected() {
         "Right side of an equality constraint cannot contain an associated type.",
     );
 }
+
+/// An equality on an opaque type whose right side is the same associated type on the same opaque
+/// type. The equality gives the type back as it stands, so the reduction stops at it and the
+/// constraint the use site needs is reported. The test asserts a failure rather than a wording:
+/// what it pins is that the compiler reports instead of overflowing its stack.
+#[test]
+pub fn test_equality_on_an_opaque_type_naming_itself_is_reported() {
+    let source = r##"
+        module Main;
+
+        f : [?out : Iterator, Item ?out = Item ?out] I64 -> ?out;
+        f = |n| Iterator::range(0, n);
+
+        main : IO ();
+        main = println(f(3).to_array.to_string);
+    "##;
+    test_source_fail(&source, Configuration::develop_mode(), "");
+}
+
+/// Two equalities on opaque types, each naming the associated type the other is on. Neither gives
+/// its own type back, so the reduction moves between them without end.
+#[test]
+pub fn test_equalities_on_opaque_types_naming_each_other_are_reported() {
+    let source = r##"
+        module Main;
+
+        g : [?a : Iterator, ?b : Iterator, Item ?a = Item ?b, Item ?b = Item ?a] I64 -> (?a, ?b);
+        g = |n| (Iterator::range(0, n), Iterator::range(0, n));
+
+        main : IO ();
+        main = println(g(3).@0.to_array.to_string);
+    "##;
+    test_source_fail(&source, Configuration::develop_mode(), "did not end after");
+}
+
+/// An equality on an opaque type whose right side carries the associated type it is on inside a
+/// larger type, so each replacement leaves a larger type to reduce.
+#[test]
+pub fn test_equality_on_an_opaque_type_growing_at_each_step_is_reported() {
+    let source = r##"
+        module Main;
+
+        h : [?out : Iterator, Item ?out = (I64, Item ?out)] I64 -> ?out;
+        h = |n| Iterator::range(0, n).map(|x| (x, x));
+
+        main : IO ();
+        main = println(h(3).to_array.to_string);
+    "##;
+    test_source_fail(&source, Configuration::develop_mode(), "did not end after");
+}
+
+/// An implementation that gives an associated type itself as its value. As with an equality naming
+/// itself, the value says nothing about the type, so the reduction stops and the use site reports.
+#[test]
+pub fn test_associated_type_implemented_as_itself_is_reported() {
+    let source = r##"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait a : HasElem { type Elem a; }
+
+        impl Array a : HasElem {
+            type Elem (Array a) = Elem (Array a);
+        }
+
+        g : [c : HasElem, Elem c = e] c -> e;
+        g = |_| undefined("");
+
+        main : IO ();
+        main = ( let x : I64 = g([1, 2, 3]); println(x.to_string) );
+    "##;
+    test_source_fail(&source, Configuration::develop_mode(), "");
+}
+
+/// An implementation that gives an associated type a value carrying that same associated type
+/// inside a type constructor, so each replacement leaves a larger type to reduce.
+#[test]
+pub fn test_associated_type_implemented_inside_a_type_constructor_is_reported() {
+    let source = r##"
+        module Main;
+
+        trait a : C {
+            type El a;
+            cval : a -> El a;
+        }
+
+        impl I64 : C {
+            type El I64 = Array (El I64);
+            cval = |_x| [];
+        }
+
+        main : IO ();
+        main = ( let _r = (5).cval; println("ok") );
+    "##;
+    test_source_fail(&source, Configuration::develop_mode(), "did not end after");
+}
