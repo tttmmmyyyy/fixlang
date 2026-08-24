@@ -632,7 +632,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
 /// * `write` — writes the content to the temporary path it is handed.
 fn write_through_temporary_file(path: &Path, write: impl FnOnce(&Path) -> Result<(), String>) {
     let dir_path = path.parent().unwrap();
-    if let Err(e) = fs::create_dir_all(dir_path) {
+    if let Err(e) = create_dir_all(dir_path) {
         panic_with_msg(&format!(
             "Failed to create directory \"{}\": {}",
             dir_path.to_string_lossy(),
