@@ -1226,9 +1226,7 @@ pub fn test_equality_right_side_naming_an_associated_type_is_rejected() {
 }
 
 /// An equality on an opaque type whose right side is the same associated type on the same opaque
-/// type. The equality gives the type back as it stands, so the reduction stops at it and the
-/// constraint the use site needs is reported. The test asserts a failure rather than a wording:
-/// what it pins is that the compiler reports instead of overflowing its stack.
+/// type, so reducing that type asks for the reduction again.
 #[test]
 pub fn test_equality_on_an_opaque_type_naming_itself_is_reported() {
     let source = r##"
@@ -1240,7 +1238,7 @@ pub fn test_equality_on_an_opaque_type_naming_itself_is_reported() {
         main : IO ();
         main = println(f(3).to_array.to_string);
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "");
+    test_source_fail(&source, Configuration::develop_mode(), "needs itself");
 }
 
 /// Two equalities on opaque types, each naming the associated type the other is on. Neither gives
@@ -1256,7 +1254,7 @@ pub fn test_equalities_on_opaque_types_naming_each_other_are_reported() {
         main : IO ();
         main = println(g(3).@0.to_array.to_string);
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "did not end after");
+    test_source_fail(&source, Configuration::develop_mode(), "needs itself");
 }
 
 /// An equality on an opaque type whose right side carries the associated type it is on inside a
@@ -1272,11 +1270,11 @@ pub fn test_equality_on_an_opaque_type_growing_at_each_step_is_reported() {
         main : IO ();
         main = println(h(3).to_array.to_string);
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "did not end after");
+    test_source_fail(&source, Configuration::develop_mode(), "needs itself");
 }
 
-/// An implementation that gives an associated type itself as its value. As with an equality naming
-/// itself, the value says nothing about the type, so the reduction stops and the use site reports.
+/// An implementation that gives an associated type itself as its value, so reducing that type asks
+/// for the reduction again.
 #[test]
 pub fn test_associated_type_implemented_as_itself_is_reported() {
     let source = r##"
@@ -1296,7 +1294,42 @@ pub fn test_associated_type_implemented_as_itself_is_reported() {
         main : IO ();
         main = ( let x : I64 = g([1, 2, 3]); println(x.to_string) );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "");
+    test_source_fail(&source, Configuration::develop_mode(), "needs itself");
+}
+
+/// An implementation whose associated type asks for the same associated type on a larger type, so
+/// the reduction meets a type it has not met before at every step and ends at the depth the
+/// compiler reduces to.
+#[test]
+pub fn test_associated_type_implemented_on_a_larger_type_is_reported() {
+    let source = r##"
+        module Main;
+
+        trait a : C {
+            type El a;
+            cval : a -> El a;
+        }
+
+        type Wrap a = box struct { x : a };
+
+        impl I64 : C {
+            type El I64 = I64;
+            cval = |x| x;
+        }
+
+        impl [a : C] Wrap a : C {
+            type El (Wrap a) = El (Wrap (Wrap a));
+            cval = |_w| undefined("");
+        }
+
+        main : IO ();
+        main = ( let _r = Wrap { x : 1 }.cval; println("ok") );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "so the reduction does not end",
+    );
 }
 
 /// An implementation that gives an associated type a value carrying that same associated type
@@ -1319,5 +1352,5 @@ pub fn test_associated_type_implemented_inside_a_type_constructor_is_reported() 
         main : IO ();
         main = ( let _r = (5).cval; println("ok") );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "did not end after");
+    test_source_fail(&source, Configuration::develop_mode(), "needs itself");
 }
