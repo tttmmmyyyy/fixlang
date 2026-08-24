@@ -2093,9 +2093,8 @@ impl TypeCheckContext {
                 // that has begun and has yet to end, and the report names the equalities that lead
                 // from the type back to itself. A reduction that instead keeps finding types it
                 // has not met yet ends at `MAX_TYPE_DEPTH`.
-                let ty_str = ty.to_string();
-                if reduction.on_path.contains(&ty_str) {
-                    return Err(reduction.circular_error(&ty_str));
+                if reduction.on_path.contains(&ty) {
+                    return Err(reduction.circular_error(&ty));
                 }
                 if ty.depth() > MAX_TYPE_DEPTH {
                     return Err(reduction.endless_error(&ty));
@@ -2121,7 +2120,7 @@ impl TypeCheckContext {
                     }
                     let match_subst: Substitution = match_subst.unwrap();
                     let rhs = match_subst.substitute_type(&equality.value);
-                    reduction.enter(&ty_str, &equality.src);
+                    reduction.enter(&ty, &equality.src);
                     let reduced = self.reduce_type_by_equality_inner(rhs, reduction);
                     reduction.leave();
                     return reduced;
@@ -3061,61 +3060,61 @@ fn way_string(way: &[String]) -> String {
 /// has begun and has yet to end, so that a value naming one of them is seen for what it is.
 #[derive(Default)]
 struct TypeReduction {
-    /// The associated types whose reduction the current one is inside, outermost first: each
-    /// printed, which is what tells one from another here, and with the source of the equality
-    /// applied to it, which is a step of the way round.
-    path: Vec<(String, Option<Span>)>,
-    /// The printed form of each associated type on `path`.
-    on_path: Set<String>,
+    /// The associated types whose reduction the current one is inside, outermost first, each with
+    /// the source of the equality applied to it, which is a step of the way round.
+    path: Vec<(Arc<TypeNode>, Option<Span>)>,
+    /// Each associated type on `path`. A type carries the hash it answers with, so asking whether
+    /// one is here costs no walk of the type after the first.
+    on_path: Set<Arc<TypeNode>>,
 }
 
 impl TypeReduction {
-    /// Record that the reduction of the associated type printed as `ty_str` has begun by applying
-    /// the equality written at `src`.
-    fn enter(&mut self, ty_str: &str, src: &Option<Span>) {
-        let newly_begun = self.on_path.insert(ty_str.to_string());
+    /// Record that the reduction of the associated type `ty` has begun by applying the equality
+    /// written at `src`.
+    fn enter(&mut self, ty: &Arc<TypeNode>, src: &Option<Span>) {
+        let newly_begun = self.on_path.insert(ty.clone());
         assert!(
             newly_begun,
             "the reduction of `{}` begins a second time while the first has yet to end",
-            ty_str
+            ty.to_string()
         );
-        self.path.push((ty_str.to_string(), src.clone()));
+        self.path.push((ty.clone(), src.clone()));
     }
 
     /// Record that the reduction entered last has ended.
     fn leave(&mut self) {
-        let (ty_str, _src) = self
+        let (ty, _src) = self
             .path
             .pop()
             .expect("a reduction ends only after it has begun");
-        self.on_path.remove(&ty_str);
+        self.on_path.remove(&ty);
     }
 
-    /// The report that reducing the associated type printed as `ty_str` asks for that reduction
-    /// again, drawn at every equality constraint on the way round.
-    fn circular_error(&self, ty_str: &str) -> Errors {
+    /// The report that reducing the associated type `ty` asks for that reduction again, drawn at
+    /// every equality constraint on the way round.
+    fn circular_error(&self, ty: &Arc<TypeNode>) -> Errors {
         let start = self
             .path
             .iter()
-            .position(|(ancestor_str, _src)| ancestor_str == ty_str)
+            .position(|(ancestor, _src)| ancestor == ty)
             .expect("the caller found the type among the reductions it is inside");
         let round = &self.path[start..];
         let way: Vec<String> = round
             .iter()
-            .map(|(ancestor_str, _src)| ancestor_str.clone())
-            .chain([ty_str.to_string()])
+            .map(|(ancestor, _src)| ancestor.to_string())
+            .chain([ty.to_string()])
             .collect();
-        let srcs: Vec<&Option<Span>> = round.iter().map(|(_ancestor_str, src)| src).collect();
+        let srcs: Vec<&Option<Span>> = round.iter().map(|(_ancestor, src)| src).collect();
         let sentence = if way.len() <= 2 {
             format!(
                 "Reducing the type `{}` needs itself: the equality constraint that gives it a \
                  value names it again.",
-                shorten_for_report(ty_str.to_string()),
+                shorten_for_report(ty.to_string()),
             )
         } else {
             format!(
                 "Reducing the type `{}` needs itself: {}.",
-                shorten_for_report(ty_str.to_string()),
+                shorten_for_report(ty.to_string()),
                 way_string(&way),
             )
         };
