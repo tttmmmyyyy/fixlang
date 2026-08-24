@@ -226,12 +226,11 @@ fn dump_rc_ir(
     info_msg(&format!("RC IR written to {}.", path.display()));
 }
 
-/// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program as one unit,
-/// then write it before and after the optimizations, filtered to the requested module in each dump.
+/// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program, then write
+/// it before and after the optimizations, filtered to the requested module in each dump.
 ///
-/// The build divides the program into compilation units and optimizes the RC IR of each on its own,
-/// so what it generates is this dump split at the unit boundaries: a pass here may reach across a
-/// boundary the build does not let it cross.
+/// The build lowers and optimizes the same whole program and divides what the optimizations leave
+/// among the compilation units, so this dump is what every unit's code is generated from.
 fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let Some(filter) = &config.emit_rc_ir else {
         return;

@@ -315,7 +315,7 @@ fn take_a_copy_of_the_accessor(
 /// Give the main unit a copy of every value the C world enters the program through.
 ///
 /// It reads them from the entry point and the exported C functions it builds rather than from an RC
-/// IR body, so the fixed point above has no mention to find.
+/// IR body, so `import_what_each_unit_reaches` has no mention to find.
 fn give_the_main_unit_the_root_values(
     unit_programs: &mut [RcProgram],
     imported: &mut [Set<FullName>],
@@ -393,9 +393,9 @@ struct GeneratedCode<'a> {
     /// What the main unit builds beside its own code: the C entry point and the C function of each
     /// `FFI_EXPORT` statement. `None` for every other unit.
     ///
-    /// These are the only parts of a unit's code that the RC IR above does not carry, and the main
-    /// unit holds no symbol of the program, so without them two programs would give their main
-    /// units one digest and each would link the other's entry point.
+    /// These are the only parts of a unit's code that `funcs` and `globals` do not carry, and the
+    /// main unit holds no symbol of the program, so without them two programs would give their
+    /// main units one digest and each would link the other's entry point.
     entry: Option<MainUnitEntry>,
 }
 

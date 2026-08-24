@@ -491,6 +491,7 @@ impl TypeNode {
 }
 
 impl Hash for TypeNode {
+    /// Writes `type_hash`, so that two nodes `PartialEq` calls equal hash alike.
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.type_hash());
     }

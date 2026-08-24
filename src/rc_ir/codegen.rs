@@ -676,10 +676,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             }),
         );
 
-        // Name the accessor on the initializer, for `keep_initializers_out_of_shared_accessors` to
-        // read back off the module the optimization runs over. That module holds every reader of
-        // the global, which the module generating it need not: a reader in another compilation unit
-        // arrives when the units are merged.
+        // Name the accessor on the initializer, for `keep_initializers_out_of_shared_accessors`
+        // to read the pair back off the module once every reader of the global is in it.
         if global_init.owns_storage {
             init_value_fn.add_attribute(
                 AttributeLoc::Function,
@@ -817,7 +815,7 @@ fn carries_var_to_return(k: &RcExprNode, x: &FullName) -> bool {
 
 /// The name of the accessor of the global an initializer function computes, recorded on the
 /// initializer as a string attribute so that `keep_initializers_out_of_shared_accessors` finds the
-/// pair in whichever module the two end up in.
+/// pair by reading the module.
 const GLOBAL_ACCESSOR_ATTRIBUTE: &str = "fix-global-accessor";
 
 /// Keep each global's initializer out of the accessor that more than one reader takes.

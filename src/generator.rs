@@ -2468,9 +2468,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
-    // A funptr function is one of the program's globals, so another compilation unit reaches it by
-    // name and it is external; a closure function is internal to the unit that lifted it, so LLVM
-    // resolves a collision between two such names by renaming one of them.
+    // A funptr function is one of the program's globals, so it is external where another
+    // compilation unit reaches it by name; a closure function is internal to the unit that lifted
+    // it, so LLVM resolves a collision between two such names by renaming one of them.
     //
     // A funptr function is also registered as the value of `name`, because the bodies that call it
     // read it by name. Registering here is what leaves no way to declare one and reach it through a

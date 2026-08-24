@@ -328,6 +328,7 @@ pub(crate) fn for_each_node(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNod
     grow_stack(|| for_each_node_inner(node, visit))
 }
 
+/// Call `visit` on one node, then descend into its continuation and the body of each of its arms.
 fn for_each_node_inner(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
     visit(node);
     match node.expr.as_ref() {

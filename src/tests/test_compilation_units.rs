@@ -228,11 +228,10 @@ fn build_at_max_in(dir: &Path, cu_size: &str) -> (usize, usize) {
 
 /// A build after an edit generates only the compilation units the edit reaches.
 ///
-/// This is what dividing the program is for. A unit is cached under a hash of the symbols it holds
-/// and the sources of the modules they are compiled from, so an edit to `Main` leaves the units
-/// holding `Worker`'s globals — whose code `Std` alone decides — where they are, and the second
-/// build takes their code from the first. Compiled in one piece, as `-O max` was, there is one unit
-/// and every build generates all of it.
+/// This is what dividing the program is for. A unit is cached under a digest of the code it
+/// generates, so an edit to `Main` leaves the units holding `Worker`'s globals — whose code `Std`
+/// alone decides — where they are, and the second build takes their code from the first. A program
+/// compiled in one piece is one unit, and every build of it generates all of it.
 #[test]
 fn test_an_edit_regenerates_only_the_units_it_reaches() {
     const CU_SIZE: &str = "2";

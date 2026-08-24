@@ -332,9 +332,7 @@ pub fn test_reserve_capacity_byte_count_wraps_for_a_shared_array() {
 }
 
 /// The runtime function the check calls is declared in every compilation unit and defined in one, so
-/// a program split into one unit per symbol links and aborts where a program of one unit does. The
-/// optimization level comes down to `Basic`, where every unit is compiled into an object file of its
-/// own and the system linker is what resolves a call reaching from one unit into another.
+/// a program split into one unit per symbol links and aborts where a program of one unit does.
 #[test]
 pub fn test_capacity_byte_count_under_separate_compilation() {
     let source = r#"
