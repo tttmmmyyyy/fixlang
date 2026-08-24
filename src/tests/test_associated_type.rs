@@ -1,6 +1,6 @@
 use crate::{
     configuration::Configuration,
-    tests::test_util::{test_source, test_source_fail},
+    tests::test_util::{run_source_assert_failed, test_source, test_source_fail},
 };
 
 #[test]
@@ -1353,4 +1353,94 @@ pub fn test_associated_type_implemented_inside_a_type_constructor_is_reported() 
         main = ( let _r = (5).cval; println("ok") );
     "##;
     test_source_fail(&source, Configuration::develop_mode(), "needs itself");
+}
+
+/// The check that compares an implementation's type signature with the trait's reduces the types
+/// it compares, and a reduction that does not end is an error of its own. It is reported as
+/// itself: here the implementation's signature and the trait's are one and the same type, so
+/// reading the failure as a disagreement between them says that a type differs from itself.
+///
+/// `main` leaves `cval` alone on purpose. A use of it would report the same reduction from the use
+/// site, and the test would no longer say which check reported it.
+#[test]
+pub fn test_reduction_that_does_not_end_in_an_implementation_signature_is_reported() {
+    let source = r##"
+        module Main;
+
+        trait a : C {
+            type El a;
+            cval : a -> El a;
+        }
+
+        impl I64 : C {
+            type El I64 = Array (El I64);
+            cval : I64 -> El I64 = |_x| [];
+        }
+
+        main : IO ();
+        main = println("ok");
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("needs itself"),
+        "the reduction that does not end went unreported:\n{}",
+        errmsg
+    );
+    assert!(
+        !errmsg.contains("does not match trait definition"),
+        "the reduction that does not end was reported as a signature that disagrees:\n{}",
+        errmsg
+    );
+}
+
+/// A reduction that closes on a round after a first step reports the round alone. Reducing
+/// `Ta I64` leads to `Tb I64`, which leads back to itself through `Tc I64`; `Ta I64` is the step
+/// that led in, and is not on the round.
+#[test]
+pub fn test_reduction_that_leads_round_after_a_first_step_reports_the_round() {
+    let source = r##"
+        module Main;
+
+        trait a : A {
+            type Ta a;
+            aval : a -> Ta a;
+        }
+
+        trait a : B {
+            type Tb a;
+        }
+
+        trait a : C {
+            type Tc a;
+        }
+
+        impl I64 : A {
+            type Ta I64 = Tb I64;
+            aval = |_| undefined("");
+        }
+
+        impl I64 : B {
+            type Tb I64 = Tc I64;
+        }
+
+        impl I64 : C {
+            type Tc I64 = Tb I64;
+        }
+
+        main : IO ();
+        main = ( let _r = (5).aval; println("ok") );
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains(
+            "`Main::B::Tb Std::I64` -> `Main::C::Tc Std::I64` -> `Main::B::Tb Std::I64`"
+        ),
+        "the round the reduction closes on went unreported:\n{}",
+        errmsg
+    );
+    assert!(
+        !errmsg.contains("Main::A::Ta"),
+        "the step that led into the round was reported as part of it:\n{}",
+        errmsg
+    );
 }
