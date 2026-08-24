@@ -78,6 +78,7 @@ pub struct TypeEnv {
 }
 
 impl Default for TypeEnv {
+    /// An environment in which no type constructor and no type alias is declared.
     fn default() -> Self {
         Self {
             tycons: Arc::new(Default::default()),
@@ -240,7 +241,6 @@ pub struct Symbol {
     /// symbol leaves it `false`, so no request reaches the back end; the field and the path that
     /// carries it to code generation are here for a pass that decides to make one.
     pub inline_into_callers: bool,
-    // If you add new fields, be sure to update `hash()` method.
 }
 
 impl Symbol {
@@ -874,6 +874,9 @@ impl Program {
         Ok(())
     }
 
+    /// Records `import_statement` under the module importing it, as it stands.
+    /// `add_import_statement` is where a statement a source writes goes: it rejects a module
+    /// importing itself, and lets an explicit `Std` import replace the implicit one.
     pub fn add_import_statement_no_verify(&mut self, import_statement: ImportStatement) {
         let importer = &import_statement.importer;
         if let Some(stmts) = self.mod_to_import_stmts.get_mut(importer) {
@@ -919,6 +922,8 @@ impl Program {
         }
     }
 
+    /// Every import statement of the program, the implicit ones included, over all the modules
+    /// linked into it.
     pub fn import_statements(&self) -> Vec<ImportStatement> {
         self.mod_to_import_stmts
             .values()
@@ -997,9 +1002,9 @@ impl Program {
         self.type_env.clone()
     }
 
-    /// The type of every top-level symbol of the program, by name. Compiling one unit under separated
-    /// compilation needs the types of the symbols the other units define as well, since this unit's
-    /// code refers to them, so this covers the whole program rather than any one unit.
+    /// The type of every top-level symbol of the program, by name. Compiling one unit needs the
+    /// types of the symbols the other units define as well, since this unit's code refers to them,
+    /// so this covers the whole program rather than any one unit.
     pub fn global_types(&self) -> Map<FullName, Arc<TypeNode>> {
         self.symbols
             .iter()
@@ -1019,6 +1024,8 @@ impl Program {
         res
     }
 
+    /// How many type parameters each associated type declared in the program takes, by the full
+    /// name it is written under: the namespace of the trait declaring it, and its own name.
     pub fn assoc_ty_to_arity(&self) -> Map<FullName, usize> {
         self.trait_env.assoc_ty_to_arity()
     }
@@ -1028,6 +1035,7 @@ impl Program {
         self.trait_env.trait_names()
     }
 
+    /// Every trait the program declares, the trait aliases among them.
     pub fn traits_with_aliases(&self) -> Vec<TraitId> {
         self.trait_env.traits_with_aliases()
     }
@@ -2578,6 +2586,8 @@ impl Program {
         errors.to_result()
     }
 
+    /// Fills in the kind of every type variable the program's declarations leave implicit: those of
+    /// the traits and trait aliases, of the trait instances, and of the global values' schemes.
     pub fn set_kinds(&mut self) -> Result<(), Errors> {
         self.trait_env.set_kinds_in_trait_and_alias_defns()?;
         let kind_env = self.kind_env();
@@ -2589,6 +2599,8 @@ impl Program {
         errors.to_result()
     }
 
+    /// The kind of every type constructor, associated type, trait and trait alias the program
+    /// declares, which is what a written type is kind-checked against.
     pub fn kind_env(&self) -> KindEnv {
         KindEnv {
             tycons: self.type_env().kinds(),
@@ -2804,6 +2816,10 @@ impl Program {
         errors.to_result()
     }
 
+    /// Defines the global values a type declaration brings with it: a getter, a setter, a modifier
+    /// and the functorial actions for each field of a struct, and a constructor, an extractor, a
+    /// test and a modifier for each variant of a union. Each is defined in the namespace of the
+    /// type, under the name a source writes it by, with the documentation shown for it.
     pub fn add_methods(self: &mut Program) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for defn in &self.type_defns.clone() {

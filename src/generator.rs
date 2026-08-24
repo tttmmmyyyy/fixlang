@@ -223,10 +223,14 @@ impl<'c> Object<'c> {
         Object::new(val, ty.clone(), gc)
     }
 
+    /// Whether this object is carried as its value itself, laid out in registers or in the frame
+    /// holding it.
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.ty.is_unbox(type_env)
     }
 
+    /// Whether this object is carried as a pointer to a heap allocation with a control block, which
+    /// is what reference counting acts on.
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {
         self.ty.is_box(type_env)
     }
@@ -596,31 +600,43 @@ pub struct Generator<'c, 'm> {
     out_pointer_buffers: Map<Arc<TypeNode>, StructType<'c>>,
 }
 
+/// The lifetime of the builder `push_builder` pushed. Code generated while it is alive is written
+/// through that builder, and dropping it makes the builder underneath current again.
 pub struct PopBuilderGuard<'c> {
+    /// The stack the builder was pushed onto, shared with the `Generator` that owns it.
     builders: Arc<RefCell<Vec<Arc<Builder<'c>>>>>,
 }
 
 impl<'c> Drop for PopBuilderGuard<'c> {
+    /// Makes the builder underneath the pushed one current again.
     fn drop(&mut self) {
         self.builders.borrow_mut().pop().unwrap();
     }
 }
 
+/// The lifetime of the variable scope `push_scope` pushed. A local bound while it is alive is bound
+/// in that scope, and dropping it takes those locals out of scope.
 pub struct PopScopeGuard<'c> {
+    /// The stack the scope was pushed onto, shared with the `Generator` that owns it.
     scope: Arc<RefCell<Vec<Scope<'c>>>>,
 }
 
 impl<'c> Drop for PopScopeGuard<'c> {
+    /// Takes the locals bound in the pushed scope out of scope.
     fn drop(&mut self) {
         self.scope.borrow_mut().pop();
     }
 }
 
+/// The lifetime of the debug scope `push_debug_scope` pushed. Instructions generated while it is
+/// alive belong to that debug scope, and dropping it returns to the debug scope underneath.
 pub struct PopDebugScopeGuard<'c> {
+    /// The stack the debug scope was pushed onto, shared with the `Generator` that owns it.
     scope: Arc<RefCell<Vec<Option<DIScope<'c>>>>>,
 }
 
 impl<'c> Drop for PopDebugScopeGuard<'c> {
+    /// Returns to the debug scope underneath the pushed one.
     fn drop(&mut self) {
         self.scope.borrow_mut().pop();
     }
@@ -2476,9 +2492,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     // read it by name. Registering here is what leaves no way to declare one and reach it through a
     // name that resolves to nothing.
     //
-    // The linkage decided here is also what decides the RC IR's reachability roots
-    // (`reachability_roots`): a function another unit may call has to be one dead-code elimination
-    // keeps. Narrowing the condition below narrows the root set with it.
+    // The linkage decided here is also what decides the RC IR's reachability roots: a function
+    // another unit may call has to be one dead-code elimination keeps. `divide_among_units` takes a
+    // unit's roots from `DividedProgram::published_here`, which is what `published_to_the_linker`
+    // reads here, so narrowing the condition below narrows the root set with it.
     pub fn declare_lambda_function(
         &mut self,
         fn_ty: &Arc<TypeNode>,

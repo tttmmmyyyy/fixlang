@@ -53,7 +53,7 @@ enum LoweredSymbol {
 /// global referenced as an LLVM operand, so it must cover every symbol any lowered function might
 /// reference, including one another unit defines (`Program::global_types`). `roots` names what code
 /// generation reaches the lowered program from outside it; it becomes `RcProgram::roots`, and the
-/// build driver computes it (`reachability_roots`).
+/// build driver takes it from `Program::root_value_names`.
 pub fn lower_program(
     type_env: &TypeEnv,
     symbols: &[Symbol],

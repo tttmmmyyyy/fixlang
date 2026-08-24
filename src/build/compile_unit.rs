@@ -14,11 +14,11 @@ use std::path::PathBuf;
 pub struct CompileUnit {
     /// The symbols this unit compiles.
     symbols: Vec<Symbol>,
-    /// The modules whose source decides the code generated for `symbols`. A change to any of them
-    /// invalidates the unit.
+    /// The modules whose source decides the code generated for `symbols`. Symbols sharing this set
+    /// go into one unit.
     dependent_modules: Vec<Name>,
     /// The digest naming this unit and the file its object code is cached in. Empty until
-    /// `update_unit_hash` or `set_random_unit_hash` sets it.
+    /// `set_unit_hash` sets it.
     unit_hash: String,
 }
 
@@ -43,7 +43,7 @@ impl fmt::Display for CompileUnit {
 
 impl CompileUnit {
     /// A unit compiling `symbols`, whose generated code is decided by the source of
-    /// `dependent_modules`. `update_unit_hash` gives the unit its hash.
+    /// `dependent_modules`. `set_unit_hash` gives the unit its hash.
     pub fn new(symbols: Vec<Symbol>, dependent_modules: Vec<Name>) -> Self {
         CompileUnit {
             symbols,
@@ -58,7 +58,7 @@ impl CompileUnit {
         &self.unit_hash
     }
 
-    /// The symbols this unit compiles. Taking the unit's hash sorts them by name.
+    /// The symbols this unit compiles. `split_symbols` sorts them by name.
     pub fn symbols(&self) -> &[Symbol] {
         &self.symbols
     }

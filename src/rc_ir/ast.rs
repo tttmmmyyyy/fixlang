@@ -52,8 +52,8 @@ pub struct RcProgram {
     /// The initializer of each global value the program defines.
     pub globals: Vec<RcGlobalInit>,
     /// The functions and globals code generation reaches from outside this program: the entry
-    /// point, the values exported as C functions, and — where the program is one unit among
-    /// several — every symbol the unit publishes for the others.
+    /// point, the values exported as C functions, and — in a compilation unit's slice of the
+    /// program — the names the unit publishes for the others (`divide_among_units`).
     /// `dead_code_elim::eliminate_unreachable` keeps what they reach and drops the rest.
     pub roots: Set<FullName>,
 }
