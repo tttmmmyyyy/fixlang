@@ -7,6 +7,7 @@ use crate::generator::Generator;
 use crate::misc::Map;
 use crate::tests::test_util::{run_source_capture, test_source};
 use inkwell::context::Context;
+use inkwell::types::BasicTypeEnum;
 use std::sync::Arc;
 
 // A program that carries unboxed structs every way the two representations differ: it builds a
@@ -404,8 +405,7 @@ fn test_field_part_ranges_tile_the_part_list() {
 
     // A struct of `n` scalars of alternating class, led by a zero-sized member that yields no part.
     let mixed = |n: usize| {
-        let mut fields: Vec<inkwell::types::BasicTypeEnum> =
-            vec![context.i8_type().array_type(0).into()];
+        let mut fields: Vec<BasicTypeEnum> = vec![context.i8_type().array_type(0).into()];
         for i in 0..n {
             fields.push(if i % 2 == 0 {
                 context.i64_type().into()
