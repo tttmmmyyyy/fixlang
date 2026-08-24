@@ -3066,7 +3066,12 @@ impl TypeReduction {
     /// Record that the reduction of the associated type printed as `ty_str` has begun by applying
     /// the equality written at `src`.
     fn enter(&mut self, ty_str: &str, src: &Option<Span>) {
-        self.on_path.insert(ty_str.to_string());
+        let begun = self.on_path.insert(ty_str.to_string());
+        assert!(
+            begun,
+            "the reduction of `{}` begins a second time while the first has yet to end",
+            ty_str
+        );
         self.path.push((ty_str.to_string(), src.clone()));
     }
 
@@ -3113,11 +3118,20 @@ impl TypeReduction {
     /// The report that the reduction reached a type deeper than the compiler reduces, drawn at the
     /// equality constraint it was applying.
     fn endless_error(&self, ty: &Arc<TypeNode>) -> Errors {
-        let srcs: Vec<&Option<Span>> = self
-            .path
-            .last()
-            .map(|(_ty_str, src)| vec![src])
-            .unwrap_or_default();
+        // A reduction that has yet to apply an equality reached the bound on the type it was asked
+        // about, which says nothing about any equality; one that has applied equalities reached it
+        // by applying them, and the last is the one to draw the report at.
+        let Some((_ty_str, src)) = self.path.last() else {
+            return Errors::from_msg_srcs(
+                format!(
+                    "The type `{}` nests more than {} deep, which is past the depth the compiler \
+                     reduces a type to.",
+                    shorten_for_report(ty.to_string()),
+                    MAX_TYPE_DEPTH,
+                ),
+                &[&None],
+            );
+        };
         Errors::from_msg_srcs(
             format!(
                 "Reducing the type `{}` asks about a type nested more than {} deep, so the \
@@ -3126,7 +3140,7 @@ impl TypeReduction {
                 shorten_for_report(ty.to_string()),
                 MAX_TYPE_DEPTH,
             ),
-            &srcs,
+            &[src],
         )
     }
 }
@@ -3186,7 +3200,7 @@ impl UnificationErr {
             ),
             UnificationErr::Circular(way) => Some(format!(
                 "Deducing it needs itself: {}.",
-                way_string(&way.iter().map(|pred| pred.to_string()).collect::<Vec<_>>())
+                way_string(&Self::way_steps(way))
             )),
             // A deduction that has yet to take a step reached the bound on the constraint it was
             // asked for, which says nothing about any instance.
@@ -3200,7 +3214,7 @@ impl UnificationErr {
                  end: {}. An instance whose context asks for what it gives, on a larger type, does \
                  this.",
                 MAX_TYPE_DEPTH,
-                way_string(&way.iter().map(|pred| pred.to_string()).collect::<Vec<_>>())
+                way_string(&Self::way_steps(way))
             )),
         }
     }
@@ -3225,6 +3239,11 @@ impl UnificationErr {
     fn reported_predicate(way: &[Predicate]) -> &Predicate {
         way.first()
             .expect("a deduction carries the predicate it started from")
+    }
+
+    /// The steps of a deduction, printed, as `way_string` takes them.
+    fn way_steps(way: &[Predicate]) -> Vec<String> {
+        way.iter().map(|pred| pred.to_string()).collect()
     }
 }
 

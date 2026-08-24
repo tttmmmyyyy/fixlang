@@ -1432,9 +1432,8 @@ pub fn test_reduction_that_leads_round_after_a_first_step_reports_the_round() {
     "##;
     let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
     assert!(
-        errmsg.contains(
-            "`Main::B::Tb Std::I64` -> `Main::C::Tc Std::I64` -> `Main::B::Tb Std::I64`"
-        ),
+        errmsg
+            .contains("`Main::B::Tb Std::I64` -> `Main::C::Tc Std::I64` -> `Main::B::Tb Std::I64`"),
         "the round the reduction closes on went unreported:\n{}",
         errmsg
     );
