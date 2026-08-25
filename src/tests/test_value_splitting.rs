@@ -196,8 +196,8 @@ main = (
 /// Verifies that a value carried whole reaches the same answers when the function defining it and
 /// the function calling it are compiled as separate units.
 ///
-/// A `cu_size` of 1 puts each symbol in a compilation unit of its own, so every call the program
-/// makes crosses a unit boundary.
+/// A `cu_size` of 1 puts each of the program's entries in a compilation unit of its own, so every
+/// call the program makes crosses a unit boundary.
 #[test]
 fn test_wide_value_crosses_compilation_units() {
     let mut config = Configuration::develop_mode();

@@ -7,8 +7,9 @@ use crate::{
         types::TypeNode,
     },
     build::{
-        compile_unit::CompileUnit,
-        divide_program::{divide_among_units, generated_code_hash, DividedProgram},
+        divide_program::{
+            divide_among_units, divide_into_units, generated_code_hash, DividedProgram,
+        },
     },
     configuration::{Configuration, OutputFileType},
     constants::{
@@ -279,42 +280,26 @@ pub fn build_object_files<'c>(
 
     dump_rc_ir_stages(&program, config);
 
-    // Determine compilation units.
-    let mut symbols = program.symbols.values().cloned().collect::<Vec<_>>();
-    symbols.sort_by(|a, b| a.name.cmp(&b.name));
+    let type_env = program.type_env();
     // Every unit needs the types of the whole program's globals, so build them once and share.
     let global_types = Arc::new(program.global_types());
-    let mut units = {
-        let module_dependency_map = program.module_dependency_map();
-        let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
-        let mut units = CompileUnit::split_symbols(symbols, &module_dependency_map, &config);
-        // Also add main compilation unit.
-        // The main unit implements the entry point of exported functions.
-        // Therefore, the main unit is treated as depending on all modules.
-        units.push(CompileUnit::new(vec![], modules));
-        units
-    };
-
-    let type_env = program.type_env();
 
     // The RC IR is built and optimized over the whole program, so that a pass sees every call of
-    // every function it rewrites, and divided among the units afterwards.
-    let division = {
-        let all_symbols: Vec<Symbol> = units
-            .iter()
-            .flat_map(|unit| unit.symbols().iter().cloned())
-            .collect();
-        let root_value_names: Set<FullName> = program.root_value_names().into_iter().collect();
-        let rc_prog = lower_and_insert_rc(
-            &type_env,
-            &all_symbols,
-            &global_types,
-            root_value_names.clone(),
-            config,
-        );
-        let rc_prog = optimize_rc_program(rc_prog, &type_env, &global_types, config);
-        divide_among_units(rc_prog, &units, &global_types, root_value_names)
-    };
+    // every function it rewrites. The compilation units are cut out of what the optimizations
+    // leave, so that a unit is a set of the entries whose code it generates.
+    let mut symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
+    symbols.sort_by(|a, b| a.name.cmp(&b.name));
+    let root_value_names: Set<FullName> = program.root_value_names().into_iter().collect();
+    let rc_prog = lower_and_insert_rc(
+        &type_env,
+        &symbols,
+        &global_types,
+        root_value_names.clone(),
+        config,
+    );
+    let rc_prog = optimize_rc_program(rc_prog, &type_env, &global_types, config);
+    let mut units = divide_into_units(&rc_prog, config);
+    let division = divide_among_units(rc_prog, &units, &global_types, root_value_names);
 
     // A unit is named by the code it generates, which is what its object file is cached under. The
     // main unit is the last, and it is the one that builds the entry point and the exported C

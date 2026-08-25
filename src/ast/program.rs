@@ -243,24 +243,6 @@ pub struct Symbol {
     pub inline_into_callers: bool,
 }
 
-impl Symbol {
-    /// The set of modules that this symbol depends on directly.
-    /// If any of these modules, or any of their importee are changed, then they are required to be re-compiled.
-    /// The full set of modules a change can reach is obtained by walking the importing graph from
-    /// this set.
-    pub fn dependent_modules(&self) -> Set<Name> {
-        let mut dep_mods = Set::default();
-        dep_mods.insert(self.name.module());
-        self.ty.define_modules_of_tycons(&mut dep_mods);
-        dep_mods
-        // Even for implemented trait methods, it is enough to add the module where the trait is defined and the modules where the types of the symbol are defined.
-        // This is because,
-        // - By orphan rule, trait implementations are given in the module where the trait is defined, or the module where the type is defined.
-        // - Moreover, we forbid unrelated trait implementation (see `test_unrelated_trait_method()`),
-        // so the type the trait is implemented appears in the type of the symbol.
-    }
-}
-
 /// Declaration (name and its type) of global value.
 /// e.g., `main : IO()`
 pub struct GlobalValueDecl {
@@ -3160,17 +3142,6 @@ impl Program {
             .iter()
             .map(|idx| importing_graph.get(*idx).clone())
             .collect()
-    }
-
-    /// For each module linked into the program, every module a value defined in it can refer to.
-    pub fn module_dependency_map(&self) -> Map<Name, Set<Name>> {
-        // TODO: Improve time complexity.
-        let mods = self.linked_mods();
-        let mut dependency = Map::default();
-        for module in &mods {
-            dependency.insert(module.clone(), self.dependent_modules(&module));
-        }
-        dependency
     }
 
     /// A hash naming everything a value defined in `module` is type-checked from.

@@ -2,10 +2,10 @@
 //!
 //! The RC IR is built and optimized over the whole program, so that a pass sees every call of every
 //! function it rewrites. Code generation then runs per unit, so the optimized program is divided
-//! here: each function and global goes to the unit holding the symbol it came from, each unit takes
-//! a copy of the small functions and the accessors it reaches in another, a global one unit reads
-//! is given to that unit, and a name is published to the linker only where a unit that has no copy
-//! of it names it.
+//! here: its entries — the top-level functions and the global values — are dealt out among the
+//! units, each unit takes a copy of the small functions and the accessors it reaches in another, a
+//! global one unit reads is given to that unit, and a name is published to the linker only where a
+//! unit that has no copy of it names it.
 
 use crate::ast::name::FullName;
 use crate::ast::program::{Program, TypeEnv};
@@ -13,7 +13,7 @@ use crate::ast::types::{TyCon, TyConInfo, TypeNode};
 use crate::build::compile_unit::CompileUnit;
 use crate::configuration::Configuration;
 use crate::hash::HashSource;
-use crate::misc::{Map, Set};
+use crate::misc::{split_at_name_boundaries, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     for_each_node, for_each_var, FuncRef, RcExprNode, RcFunc, RcGlobalInit, RcProgram,
@@ -65,7 +65,8 @@ pub struct DividedProgram {
     pub shared_globals: Arc<Set<FullName>>,
 }
 
-/// Divide `program` — the whole program's RC IR, optimized — among `units`.
+/// Divide `program` — the whole program's RC IR, optimized — among `units`, which
+/// `divide_into_units` made out of the entries of that same program.
 ///
 /// # Arguments
 /// * `global_types` — the type of every symbol of the program, which the types of the versions the
@@ -77,18 +78,18 @@ pub fn divide_among_units(
     global_types: &Map<FullName, Arc<TypeNode>>,
     root_value_names: Set<FullName>,
 ) -> DividedProgram {
-    // The main unit is the last, and it is the one holding no symbol of the program: it builds the
+    // The main unit is the last, and it is the one holding no entry of the program: it builds the
     // entry point and the exported C functions, which is where the root values are read.
-    let main_unit_symbols = units
+    let main_unit_entries = units
         .last()
         .expect("a program is divided into at least the main unit")
-        .symbols();
+        .entries();
     assert!(
-        main_unit_symbols.is_empty(),
-        "the last compilation unit holds {} symbols, and the main unit holds none",
-        main_unit_symbols.len()
+        main_unit_entries.is_empty(),
+        "the last compilation unit holds {} entries, and the main unit holds none",
+        main_unit_entries.len()
     );
-    let unit_of = symbol_owner(units);
+    let unit_of = unit_of_each_entry(units);
     let global_types = global_types_including_synthesized(&program, global_types);
     let copyable_funcs = copyable_funcs(&program);
     // Every global, so that a unit reading one another unit owns can carry a copy of its accessor.
@@ -101,13 +102,11 @@ pub fn divide_among_units(
     let mut unit_programs: Vec<RcProgram> =
         (0..units.len()).map(|_| RcProgram::default()).collect();
     for (fref, func) in program.funcs {
-        let index = unit_of(&fref.name)
-            .unwrap_or_else(|| panic!("no symbol owns `{}`", fref.name.to_string()));
+        let index = unit_of[&fref.name];
         unit_programs[index].funcs.insert(fref, func);
     }
     for global in program.globals {
-        let index = unit_of(&global.symbol)
-            .unwrap_or_else(|| panic!("no symbol owns `{}`", global.symbol.to_string()));
+        let index = unit_of[&global.symbol];
         unit_programs[index].globals.push(global);
     }
 
@@ -175,30 +174,55 @@ pub fn divide_among_units(
     }
 }
 
-/// Which unit a name belongs to, by the symbol it came from.
+/// Divide the entries of `program` — its top-level functions and its global values — into
+/// compilation units averaging `config.cu_size` entries each, and add the main unit.
 ///
-/// A function lifted or cloned out of a symbol is named by extending that symbol's name — with
-/// `#`-separated segments, and with the whole of it as the namespace of a lambda lifted out of it —
-/// so the symbol whose name is the longest prefix of the function's is the symbol it came from.
-fn symbol_owner(units: &[CompileUnit]) -> impl Fn(&FullName) -> Option<usize> {
-    let mut unit_of_symbol: Map<String, usize> = Map::default();
+/// Where a unit ends is decided by the names of the entries it holds, so an entry the program gains
+/// moves the boundaries of at most two units and the rest keep their cached object files.
+///
+/// `FullName` orders by the rendered name, so the functions lifted or cloned out of one symbol,
+/// whose names extend that symbol's, sit beside it and land in the same unit as often as a boundary
+/// allows.
+///
+/// The main unit comes last and holds no entry: it builds the C entry point and the exported C
+/// functions, which are the code of nothing the program defines.
+pub fn divide_into_units(program: &RcProgram, config: &Configuration) -> Vec<CompileUnit> {
+    let mut entries: Vec<FullName> = program
+        .funcs
+        .keys()
+        .map(|fref| fref.name.clone())
+        .chain(program.globals.iter().map(|global| global.symbol.clone()))
+        .collect();
+    entries.sort();
+    // Each entry belongs to one unit, and `unit_of_each_entry` reads the division back by name, so
+    // one name standing for two entries would put one of them in the other's unit.
+    if let Some(pair) = entries.windows(2).find(|pair| pair[0] == pair[1]) {
+        panic!(
+            "the program defines `{}` twice, so no unit is the one it belongs to",
+            pair[0].to_string()
+        );
+    }
+    let mut units: Vec<CompileUnit> =
+        split_at_name_boundaries(entries, config.cu_size, FullName::to_string)
+            .into_iter()
+            .map(CompileUnit::new)
+            .collect();
+    units.push(CompileUnit::new(vec![]));
+    units
+}
+
+/// Which unit each of the program's entries belongs to, by name.
+///
+/// The keys are every name the program defines, so a mention this does not answer for is a runtime
+/// function or a C declaration, which carries the linkage its own definition gives it.
+fn unit_of_each_entry(units: &[CompileUnit]) -> Map<FullName, usize> {
+    let mut unit_of = Map::default();
     for (index, unit) in units.iter().enumerate() {
-        for symbol in unit.symbols() {
-            unit_of_symbol.insert(symbol.name.to_string(), index);
+        for entry in unit.entries() {
+            unit_of.insert(entry.clone(), index);
         }
     }
-    // A prefix that is a symbol's name is as long as that name, so the lengths the symbols have are
-    // the lengths to try, the longest first.
-    let mut symbol_lengths: Vec<usize> = unit_of_symbol.keys().map(|symbol| symbol.len()).collect();
-    symbol_lengths.sort_unstable_by(|a, b| b.cmp(a));
-    symbol_lengths.dedup();
-    move |name: &FullName| {
-        let text = name.to_string();
-        symbol_lengths
-            .iter()
-            .filter_map(|length| text.get(..*length))
-            .find_map(|prefix| unit_of_symbol.get(prefix).copied())
-    }
+    unit_of
 }
 
 /// The type of every global the program defines, the versions the optimizer synthesized included.
@@ -531,12 +555,13 @@ fn give_the_main_unit_the_root_values(
 /// of the names that unit defines under external linkage.
 fn publish_and_prune(
     unit_programs: &mut [RcProgram],
-    unit_of: &impl Fn(&FullName) -> Option<usize>,
+    defined_in_program: &Map<FullName, usize>,
     imported: &[Set<FullName>],
     shared_globals: &Set<FullName>,
     root_value_names: &Set<FullName>,
 ) -> (Set<FullName>, Vec<Set<FullName>>) {
-    let published = names_published_to_the_linker(unit_programs, unit_of, root_value_names);
+    let published =
+        names_published_to_the_linker(unit_programs, defined_in_program, root_value_names);
     let mut published_here: Vec<Set<FullName>> = vec![];
     for (index, unit_program) in unit_programs.iter_mut().enumerate() {
         published_here.push(
@@ -578,15 +603,15 @@ fn publish_and_prune(
 /// every name a unit that has no copy of it reaches.
 fn names_published_to_the_linker(
     unit_programs: &[RcProgram],
-    unit_of: &impl Fn(&FullName) -> Option<usize>,
+    defined_in_program: &Map<FullName, usize>,
     root_value_names: &Set<FullName>,
 ) -> Set<FullName> {
     let mut published = root_value_names.clone();
     for unit_program in unit_programs {
         names_reached_elsewhere(unit_program, |mentioned| {
-            // A mention no symbol of the program owns is a runtime function or a C declaration,
-            // which carries the linkage its own definition gives it.
-            if mentioned.is_global() && unit_of(mentioned).is_some() {
+            // A mention the program defines no entry for is a runtime function or a C
+            // declaration, which carries the linkage its own definition gives it.
+            if mentioned.is_global() && defined_in_program.contains_key(mentioned) {
                 published.insert(mentioned.clone());
             }
         });
@@ -604,8 +629,8 @@ fn names_published_to_the_linker(
 struct GeneratedCode<'a> {
     /// The settings the code is generated under: the target, the optimization level, the sanitizer.
     settings: &'a str,
-    /// The symbols this unit was given, so that two units generating no code are still two units.
-    symbols: Vec<String>,
+    /// The entries this unit was given, so that two units generating no code are still two units.
+    entries: Vec<String>,
     /// The functions the unit defines, its copies of other units' included.
     funcs: Vec<&'a RcFunc>,
     /// The globals the unit defines, its copies of other units' accessors included.
@@ -646,7 +671,7 @@ struct MainUnitEntry {
 /// module the unit does not depend on: a caller elsewhere asks for a clone of a function this unit
 /// holds, the whole-program ownership inference changes what one of its functions borrows, or the
 /// division hands it a copy of a body that changed. A digest taken over the sources the unit's
-/// symbols are compiled from would not move with any of those, and the build would link an object
+/// entries are compiled from would not move with any of those, and the build would link an object
 /// file for code it no longer generates. This one is taken over the code itself.
 pub fn generated_code_hash(
     unit: &CompileUnit,
@@ -692,11 +717,7 @@ pub fn generated_code_hash(
     let settings = config.object_generation_hash();
     let code = GeneratedCode {
         settings: &settings,
-        symbols: unit
-            .symbols()
-            .iter()
-            .map(|symbol| symbol.name.to_string())
-            .collect(),
+        entries: unit.entries().iter().map(FullName::to_string).collect(),
         funcs,
         globals,
         published,
