@@ -634,6 +634,8 @@ type LoopState s b = union { continue : s, break : b };
 上記の定義は、`LoopState s b`値が型`s`の値または型`b`の値のいずれかを含むことを示しています。
 型の値の集合を`|type|`と書くと、`|LoopState s b| = |s| ⨆ |b|`となります。ここで、記号`⨆`は集合の非交差和を表します。
 
+ユニオンが持てるバリアントは最大 256 個です。これを超える定義はエラーとして報告されます。
+
 各ユニオン型には、いくつかの基本的なメソッドが自動的に定義されます。たとえば、上記のような`LoopState`の場合、次の関数が名前空間`LoopState`に定義されます。
 
 - `continue : s -> LoopState s b`: 型`s`の値を`LoopState`値に変換します。
@@ -641,7 +643,7 @@ type LoopState s b = union { continue : s, break : b };
 - `is_continue : LoopState s b -> Bool`: `LoopState`値が`continue`によって作成されたかどうかを確認します。
 - `is_break : LoopState s b -> Bool`: `LoopState`値が`break`によって作成されたかどうかを確認します。
 - `as_continue : LoopState s b -> s`: `LoopState`値が`continue`によって作成された場合、型`s`の値を抽出します。それ以外の場合、この関数はプログラムを中止します。
-- `as_break : LoopState s b -> s`: `LoopState`値が`break`によって作成された場合、型`b`の値を抽出します。それ以外の場合、この関数はプログラムを中止します。
+- `as_break : LoopState s b -> b`: `LoopState`値が`break`によって作成された場合、型`b`の値を抽出します。それ以外の場合、この関数はプログラムを中止します。
 
 ユニオンの別の例として、値を「持たない可能性がある」値を表すために使用される`Option`があります。これは次のように定義されています。
 

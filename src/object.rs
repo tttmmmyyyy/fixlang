@@ -6,9 +6,10 @@ use crate::constants::{
     ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME,
     BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
     DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
-    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, PUNCHED_ARRAY_ARRAY_IDX,
-    PUNCHED_ARRAY_HOLE_IDX, STD_NAME, STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL,
-    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
+    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, MAX_UNION_VARIANTS,
+    PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, STD_NAME, STORAGE_BUF_IDX,
+    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
+    UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
 };
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
@@ -83,16 +84,16 @@ pub enum ObjectFieldType {
 /// largest variant.
 fn union_buf_type<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
-    field_tys: &[Arc<TypeNode>],
+    variant_tys: &[Arc<TypeNode>],
 ) -> BasicTypeEnum<'c> {
     let mut max_size = 0;
     let mut max_align = 1;
-    for field_ty in field_tys {
-        let struct_ty = gc.embedded_type_of(field_ty);
-        max_size = max_size.max(gc.sizeof(&struct_ty));
+    for variant_ty in variant_tys {
+        let embedded_ty = gc.embedded_type_of(variant_ty);
+        max_size = max_size.max(gc.sizeof(&embedded_ty));
         // The buffer needs the payloads' ABI alignment, not the preferred alignment: the
         // preferred alignment of a small or empty aggregate is 8, which would over-pad the union.
-        max_align = max_align.max(gc.abi_alignment(&struct_ty));
+        max_align = max_align.max(gc.abi_alignment(&embedded_ty));
     }
     let max_align_int = match max_align {
         1 => gc.context.i8_type(),
@@ -255,11 +256,11 @@ impl ObjectFieldType {
             }
             ObjectFieldType::UnionTag => gc
                 .get_di_builder()
-                .create_basic_type("<union tag>", 8, DW_ATE_UNSIGNED, 0)
+                .create_basic_type("<union tag>", UNION_TAG_BITS as u64, DW_ATE_UNSIGNED, 0)
                 .unwrap()
                 .as_type(),
-            // No object carries a bare `Array` field after the value-layout flip; an array's
-            // storage buffer uses `ArrayStorageBuf` below.
+            // An array lays its elements out as an `ArrayStorageBuf`, which is the only array
+            // field an object carries.
             ObjectFieldType::Array(_) => unreachable!(),
             ObjectFieldType::ArrayStorageBuf(elem_ty) => {
                 // The storage buffer's debug type is an array of `DEBUG_ARRAY_ASSUMED_LEN`
@@ -866,14 +867,10 @@ impl ObjectFieldType {
         let tag = ObjectFieldType::get_union_tag(gc, &src);
         let dst = ObjectFieldType::set_union_tag(gc, dst, tag);
 
-        // Clone the value.
-        let value_field_idx = if src.is_unbox(gc.type_env()) {
-            0
-        } else {
-            BOXED_TYPE_DATA_IDX
-        } + UNION_DATA_IDX;
-        let value = src.extract_field(gc, value_field_idx);
-        let dst = dst.insert_field(gc, value_field_idx, value);
+        // Clone the payload buffer.
+        let union_buf_idx = ObjectFieldType::get_union_buf_idx(gc, src);
+        let buf = src.extract_field(gc, union_buf_idx);
+        let dst = dst.insert_field(gc, union_buf_idx, buf);
 
         // Retain the value.
         let one = gc.context.i64_type().const_int(1, false);
@@ -882,11 +879,12 @@ impl ObjectFieldType {
         dst
     }
 
-    // Perform retain or release or mark global or mark threaded on an object included in a union buffer.
+    /// Emit the reference-counting work for the payload a union's buffer holds: a retain, a
+    /// release, a mark global or a mark threaded, on the variant the tag names.
     fn retain_release_mark_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
-        work_type: Option<TraverserWorkType>, // None for retain, and Some for release or mark global threaded.
+        work_type: Option<TraverserWorkType>, // `None` retains; `Some` gives the traverser work.
         amount: IntValue<'c>, // How many times to retain (retain path only); a constant 1 for release/mark.
         state: RcState,       // What is known about the payload's reference-counting state.
     ) {
@@ -895,7 +893,7 @@ impl ObjectFieldType {
         let current_func = gc.current_function();
         let end_bb = gc.context.append_basic_block(current_func, "end");
         let mut last_mismatch_bb: Option<BasicBlock> = None;
-        let tag = ObjectFieldType::get_union_tag(gc, &union);
+        let actual_tag = ObjectFieldType::get_union_tag(gc, &union);
         for (i, variant_ty) in variant_types.iter().enumerate() {
             // Compare tag and jump.
             let match_bb = gc
@@ -904,13 +902,13 @@ impl ObjectFieldType {
             let mismatch_bb = gc
                 .context
                 .append_basic_block(current_func, &format!("mismatch_tag{}", i));
-            let expect_tag_val = union_tag_type(gc.context).const_int(i as u64, false);
+            let expected_tag = union_tag_value(gc.context, i);
             let is_match = gc
                 .builder()
                 .build_int_compare(
                     IntPredicate::EQ,
-                    tag,
-                    expect_tag_val,
+                    actual_tag,
+                    expected_tag,
                     &format!("is_tag_{}", i),
                 )
                 .unwrap();
@@ -956,10 +954,15 @@ impl ObjectFieldType {
         ObjectFieldType::retain_release_mark_union(gc, union, None, amount, state);
     }
 
+    /// The index, among the fields of a union's struct type, of the tag telling which variant the
+    /// value holds.
+    fn get_union_tag_idx<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> u32 {
+        struct_field_idx(union.is_unbox(gc.type_env())) + UNION_TAG_IDX
+    }
+
     /// The tag of a union value: the index, among the union's variants, of the variant it holds.
     pub fn get_union_tag<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> IntValue<'c> {
-        let is_unbox = union.is_unbox(gc.type_env());
-        let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
+        let union_tag_idx = ObjectFieldType::get_union_tag_idx(gc, union);
         union.extract_field(gc, union_tag_idx).into_int_value()
     }
 
@@ -970,17 +973,14 @@ impl ObjectFieldType {
         union: Object<'c>,
         tag: IntValue<'c>,
     ) -> Object<'c> {
-        let is_unbox = union.is_unbox(gc.type_env());
-        let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
+        let union_tag_idx = ObjectFieldType::get_union_tag_idx(gc, &union);
         union.insert_field(gc, union_tag_idx, tag)
     }
 
     /// The index, among the fields of a union's struct type, of the buffer holding the value of the
-    /// variant it carries. A boxed union carries a control block ahead of that struct's fields.
+    /// variant it carries.
     pub fn get_union_buf_idx<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> u32 {
-        let is_unbox = union.is_unbox(gc.type_env());
-        let field_offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
-        field_offset + UNION_DATA_IDX
+        struct_field_idx(union.is_unbox(gc.type_env())) + UNION_DATA_IDX
     }
 
     /// The contents of a union's payload buffer, still typed as the buffer, which is wide enough for
@@ -993,15 +993,16 @@ impl ObjectFieldType {
         union.extract_field(gc, union_buf_idx)
     }
 
-    /// The value a union carries, read as `elem_ty`, owned by the caller: the value is retained and
-    /// the union released, which cancel each other out for an unboxed union.
+    /// The value a union carries, read as `variant_ty`, owned by the caller: the value is retained
+    /// and the union released, which cancel each other out for an unboxed union.
     pub fn get_union_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
-        elem_ty: &Arc<TypeNode>,
+        variant_ty: &Arc<TypeNode>,
         state: RcState,
     ) -> Object<'c> {
-        let value = ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), elem_ty);
+        let value =
+            ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), variant_ty);
         if union.is_box(gc.type_env()) {
             // If the union is boxed, retain the value and release the union.
             gc.retain(value.clone(), state);
@@ -1012,27 +1013,28 @@ impl ObjectFieldType {
         value
     }
 
-    /// The value a union carries, read as `elem_ty` and borrowed: the reference count of neither the
-    /// value nor the union moves, so the value lives only as long as the union does.
+    /// The value a union carries, read as `variant_ty` and borrowed: the reference count of neither
+    /// the value nor the union moves, so the value lives only as long as the union does.
     pub fn get_union_value_noretain_norelease<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
-        elem_ty: &Arc<TypeNode>,
+        variant_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let buf = ObjectFieldType::get_union_buf(gc, &union);
-        let value: BasicValueEnum<'_> = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
-        Object::new(value, elem_ty.clone(), gc)
+        let value: BasicValueEnum<'_> =
+            ObjectFieldType::get_value_from_union_buf(gc, buf, variant_ty);
+        Object::new(value, variant_ty.clone(), gc)
     }
 
-    /// The contents of a union's payload buffer read as `elem_ty`, by a bit cast: the buffer is at
-    /// least as wide as the variant, and the variant starts at its beginning.
+    /// The contents of a union's payload buffer read as `variant_ty`, by a bit cast: the buffer is
+    /// at least as wide as the variant, and the variant starts at its beginning.
     pub fn get_value_from_union_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buf: BasicValueEnum<'c>,
-        elem_ty: &Arc<TypeNode>,
+        variant_ty: &Arc<TypeNode>,
     ) -> BasicValueEnum<'c> {
-        let elem_ty = elem_ty.get_embedded_type(gc);
-        gc.bit_cast(buf, elem_ty)
+        let embedded_ty = variant_ty.get_embedded_type(gc);
+        gc.bit_cast(buf, embedded_ty)
     }
 
     /// The union with `value` bit cast into its payload buffer. The tag is left to `set_union_tag`,
@@ -1281,13 +1283,14 @@ impl ObjectType {
 }
 
 /// The integer type of the control block field holding an object's reference count. Its width is
-/// what bounds the number of references to one object a program can hold.
+/// what bounds the number of references to one object a program can hold, and `refcnt_di_type`
+/// states that width a second time.
 pub fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
     context.i32_type()
 }
 
 /// The debug info type of an object's reference count, which presents it to a debugger session as an
-/// unsigned integer.
+/// unsigned integer. Its width is the width of `refcnt_type`, stated a second time.
 pub fn refcnt_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
     builder
         .create_basic_type("<refcnt>", 32, DW_ATE_UNSIGNED, 0)
@@ -1417,8 +1420,19 @@ pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut Generator<'c, 'm>) -> DIType<'c>
 }
 
 /// The type of a union's tag, an index into the union's variants.
-pub fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
-    context.i8_type()
+fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
+    context.custom_width_int_type(UNION_TAG_BITS)
+}
+
+/// The tag of the variant a union declares at index `variant_idx`.
+pub fn union_tag_value<'c>(context: &'c Context, variant_idx: usize) -> IntValue<'c> {
+    assert!(
+        variant_idx < MAX_UNION_VARIANTS,
+        "A union declares at most {} variants, so index {} names no variant.",
+        MAX_UNION_VARIANTS,
+        variant_idx
+    );
+    union_tag_type(context).const_int(variant_idx as u64, false)
 }
 
 /// The parts a lambda of type `ty` returns, in `type_parts` order: a boxed result is the single
@@ -1484,8 +1498,9 @@ pub fn lambda_function_type<'c, 'm>(
     }
 }
 
-/// The index at which a struct's own fields begin in its layout. A boxed struct leads with its
-/// control block, which pushes them along by one.
+/// The index at which a value's own fields begin in its layout: those of a struct, and the tag and
+/// the payload buffer of a union. A boxed value leads with its control block, which pushes them
+/// along by one.
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0
@@ -2422,8 +2437,9 @@ fn build_traverse<'c, 'm>(
             ObjectFieldType::U64 => {}
             ObjectFieldType::F32 => {}
             ObjectFieldType::F64 => {}
-            // No object carries a bare `Array` field: an array's elements live in its
-            // `#ArrayStorage`, released by the `is_array()` branch above.
+            // The `is_array` branch of this function walks an array's elements through its
+            // `#ArrayStorage`, whose buffer is an `ArrayStorageBuf`: that is the only array field
+            // an object holds.
             ObjectFieldType::Array(_) => unreachable!(),
             // Reference-count-inert: the storage buffer has no length, and the owning `Array` value's
             // traverser drives element lifetime. Traversing the storage itself touches no element.

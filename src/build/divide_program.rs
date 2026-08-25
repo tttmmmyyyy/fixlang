@@ -3,8 +3,9 @@
 //! The RC IR is built and optimized over the whole program, so that a pass sees every call of every
 //! function it rewrites. Code generation then runs per unit, so the optimized program is divided
 //! here: each function and global goes to the unit holding the symbol it came from, each unit takes
-//! a copy of the small functions and the accessors it reaches in another, and a name is published
-//! to the linker only where a unit that has no copy of it names it.
+//! a copy of the small functions and the accessors it reaches in another, a global one unit reads
+//! is given to that unit, and a name is published to the linker only where a unit that has no copy
+//! of it names it.
 
 use crate::ast::name::FullName;
 use crate::ast::program::{Program, TypeEnv};
@@ -14,7 +15,9 @@ use crate::configuration::Configuration;
 use crate::hash::HashSource;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::{for_each_node, for_each_var, FuncRef, RcFunc, RcGlobalInit, RcProgram};
+use crate::rc_ir::ast::{
+    for_each_node, for_each_var, FuncRef, RcExprNode, RcFunc, RcGlobalInit, RcProgram,
+};
 use crate::rc_ir::dead_code_elim::{collect_mentions, eliminate_unreachable};
 use crate::rc_ir::simplify::node_count;
 use serde::Serialize;
@@ -26,6 +29,15 @@ use std::sync::Arc;
 /// lets LLVM see the body at the call; past this size the call is what the body would compile into
 /// anyway, and the copy is compiled for nothing.
 const IMPORTED_FUNCTION_NODE_LIMIT: u64 = 200;
+
+/// The most RC IR nodes a global's initializer may add to the unit that alone reads the value for
+/// the initializer to travel there with the storage. A unit generating the initializer of the value
+/// it reads optimizes the reads by what the initializer settles — the length of an array, the shape
+/// of a structure — which is what takes the bounds checks out of a loop reading the global. What it
+/// costs is the initializer and the bodies it reaches that the unit does not already hold, in the
+/// unit a program's own edits regenerate, so an initializer that would bring a graph of them along
+/// stays where it is.
+const MOVED_INITIALIZER_NODE_LIMIT: u64 = 200;
 
 /// The program's RC IR divided among the compilation units, and what a unit needs to know about the
 /// others to generate code from its own slice.
@@ -46,9 +58,10 @@ pub struct DividedProgram {
     /// which is the rule `Generator::published_to_the_linker` applies as it generates the code. One
     /// set per unit.
     pub published_here: Vec<Set<FullName>>,
-    /// The globals whose storage more than one unit reaches. The owning unit defines and publishes
-    /// the storage, and the units holding a copy of the accessor declare it, so the value is
-    /// computed once however many units read it.
+    /// The globals whose storage more than one unit reaches. The unit keeping the value defines
+    /// and publishes the storage, and the units holding a copy of the accessor declare it, so one
+    /// storage holds the value however many units read it. A global one unit reads is kept by that
+    /// unit and is not here, so nothing about it is published.
     pub shared_globals: Arc<Set<FullName>>,
 }
 
@@ -98,8 +111,15 @@ pub fn divide_among_units(
         unit_programs[index].globals.push(global);
     }
 
-    let (mut imported, mut shared_globals) =
-        import_what_each_unit_reaches(&mut unit_programs, &copyable_funcs, &all_globals);
+    let mut imported: Vec<Set<FullName>> = vec![Set::default(); units.len()];
+    let mut shared_globals: Set<FullName> = Set::default();
+    import_what_each_unit_reaches(
+        &mut unit_programs,
+        &mut imported,
+        &mut shared_globals,
+        &copyable_funcs,
+        &all_globals,
+    );
     give_the_main_unit_the_root_values(
         &mut unit_programs,
         &mut imported,
@@ -108,39 +128,46 @@ pub fn divide_among_units(
         &root_value_names,
     );
 
-    let published = Arc::new(names_published_to_the_linker(
-        &unit_programs,
+    // A unit reads a global through the code it generates, so which units read one is answered
+    // once the bodies no unit reaches are gone.
+    let (mut published, mut published_here) = publish_and_prune(
+        &mut unit_programs,
         &unit_of,
+        &imported,
+        &shared_globals,
         &root_value_names,
-    ));
-    let mut published_here: Vec<Set<FullName>> = vec![];
-    for (index, unit_program) in unit_programs.iter_mut().enumerate() {
-        published_here.push(
-            names_defined_here(unit_program)
-                .filter(|name| !imported[index].contains(name) && published.contains(name))
-                .cloned()
-                .collect(),
+    );
+    let moved = give_a_global_one_unit_reads_to_that_unit(
+        &mut unit_programs,
+        &mut shared_globals,
+        &root_value_names,
+        &copyable_funcs,
+    );
+    if moved.initializer {
+        // The unit an initializer moved to generates a body it used to declare, and the pruning
+        // above dropped what that body reaches: a unit carrying the accessor alone generates no
+        // initializer, so nothing there reached those bodies.
+        import_what_each_unit_reaches(
+            &mut unit_programs,
+            &mut imported,
+            &mut shared_globals,
+            &copyable_funcs,
+            &all_globals,
         );
-        // What the unit's code is reached by: the names another unit's code calls it through, the
-        // values the C world enters the program through, which the entry point and the exported C
-        // functions read through the accessor the unit holding them carries, and the globals whose
-        // storage another unit reads, whose owner emits that storage and the function computing it.
-        unit_program.roots = names_defined_here(unit_program)
-            .filter(|name| {
-                published_here[index].contains(*name)
-                    || root_value_names.contains(*name)
-                    || shared_globals.contains(*name)
-            })
-            .cloned()
-            .collect();
-        // A function every unit calling it took a copy of is left with no caller of its own, and
-        // generating it writes out a body that reaches nothing the program runs.
-        eliminate_unreachable(unit_program);
+    }
+    if moved.storage {
+        (published, published_here) = publish_and_prune(
+            &mut unit_programs,
+            &unit_of,
+            &imported,
+            &shared_globals,
+            &root_value_names,
+        );
     }
 
     DividedProgram {
         unit_programs,
-        published,
+        published: Arc::new(published),
         global_types: Arc::new(global_types),
         imported,
         published_here,
@@ -247,8 +274,9 @@ fn names_reached_elsewhere(unit_program: &RcProgram, mut visit: impl FnMut(&Full
     }
 }
 
-/// Give each unit its own copy of every function and global accessor it reaches in another, and
-/// return what each unit took and which globals ended up shared.
+/// Give each unit its own copy of every function and global accessor it reaches in another,
+/// recording in `imported` what each unit took and in `shared_globals` which globals ended up
+/// shared.
 ///
 /// A copy lets LLVM see the body at the call instead of a call to a symbol it must assume anything
 /// may reach. A global's copy is its accessor alone: the initializer stays where the owning unit
@@ -258,11 +286,11 @@ fn names_reached_elsewhere(unit_program: &RcProgram, mut visit: impl FnMut(&Full
 /// Copying is a fixed point, since a copied body reaches names of its own.
 fn import_what_each_unit_reaches(
     unit_programs: &mut [RcProgram],
+    imported: &mut [Set<FullName>],
+    shared_globals: &mut Set<FullName>,
     copyable_funcs: &Map<FullName, RcFunc>,
     all_globals: &Map<FullName, RcGlobalInit>,
-) -> (Vec<Set<FullName>>, Set<FullName>) {
-    let mut imported: Vec<Set<FullName>> = vec![Set::default(); unit_programs.len()];
-    let mut shared_globals: Set<FullName> = Set::default();
+) {
     loop {
         let mut copied = false;
         for index in 0..unit_programs.len() {
@@ -283,7 +311,7 @@ fn import_what_each_unit_reaches(
                     None => take_a_copy_of_the_accessor(
                         &mut unit_programs[index],
                         &mut imported[index],
-                        &mut shared_globals,
+                        shared_globals,
                         &all_globals[&name],
                     ),
                 }
@@ -291,14 +319,169 @@ fn import_what_each_unit_reaches(
             }
         }
         if !copied {
-            return (imported, shared_globals);
+            return;
         }
     }
 }
 
-/// Give `unit_program` the copy of `global` a unit that does not own it carries: the accessor,
-/// reading the owner's storage and calling the owner's initializer. The name is recorded as one the
-/// unit took, and as one whose storage more than one unit reaches.
+/// Give each global at most one unit reads to that unit, and report what moved.
+///
+/// A unit reading a global another unit keeps reads storage the linker publishes, and LLVM has to
+/// assume that a store anywhere in the unit writes it: the test of the initialization flag and the
+/// load of the storage stay inside every loop that reads the global, and so do the bounds checks
+/// that the lifted load would have taken out. A value one unit reads is kept by that unit, where
+/// nothing about it is published.
+///
+/// The initializer travels with the storage where moving it adds little code to that unit, so that
+/// the unit also optimizes its reads by what the initializer settles. One that would bring a graph
+/// of bodies along stays where it is, since that graph would land in the unit a program's own edits
+/// regenerate; `MOVED_INITIALIZER_NODE_LIMIT` says how much is little.
+///
+/// A global no unit reads computes a value nothing observes. Un-sharing it leaves it out of every
+/// unit's roots, and the pruning that follows drops it.
+fn give_a_global_one_unit_reads_to_that_unit(
+    unit_programs: &mut [RcProgram],
+    shared_globals: &mut Set<FullName>,
+    root_value_names: &Set<FullName>,
+    copyable_funcs: &Map<FullName, RcFunc>,
+) -> Moved {
+    let readers = units_reading_each_global(unit_programs, shared_globals);
+    // What each global that moves becomes: the unit that keeps it, and whether the initializer
+    // travels there with the storage.
+    let mut moves: Map<FullName, (Set<usize>, bool)> = Map::default();
+    let mut moved = Moved {
+        storage: false,
+        initializer: false,
+    };
+    for name in shared_globals.iter().cloned().collect::<Vec<FullName>>() {
+        // A root value is read by the entry point and by the exported C functions, which the main
+        // unit builds after the division out of no body this walk can read.
+        if root_value_names.contains(&name) {
+            continue;
+        }
+        let readers = &readers[&name];
+        if readers.len() > 1 {
+            continue;
+        }
+        let initializer_travels = readers
+            .iter()
+            .next()
+            .is_some_and(|reader| initializer_fits(unit_programs, &name, *reader, copyable_funcs));
+        moves.insert(name.clone(), (readers.clone(), initializer_travels));
+        shared_globals.remove(&name);
+        moved.storage = true;
+        moved.initializer |= initializer_travels;
+    }
+    for (index, unit_program) in unit_programs.iter_mut().enumerate() {
+        unit_program.globals.retain_mut(|global| {
+            let Some((readers, initializer_travels)) = moves.get(&global.symbol) else {
+                return true;
+            };
+            let reads = readers.contains(&index);
+            global.owns_storage = reads;
+            // The initializer follows the storage where it travels, and where no unit reads the
+            // value there is nowhere for either of them to stay.
+            if *initializer_travels || readers.is_empty() {
+                global.owns_initializer = reads;
+            }
+            // A unit that neither keeps the value nor computes it holds no part of the global. A
+            // body copied here later that reads it takes the accessor again, and the global is
+            // shared once more.
+            reads || global.owns_initializer
+        });
+    }
+    moved
+}
+
+/// What `give_a_global_one_unit_reads_to_that_unit` moved.
+struct Moved {
+    /// Whether the storage of any global moved, which changes what the units publish.
+    storage: bool,
+    /// Whether the initializer of any global moved, which leaves the unit it moved to generating a
+    /// body whose callees it holds no copy of.
+    initializer: bool,
+}
+
+/// Whether moving the initializer of the global `name` into unit `reader` adds no more than
+/// `MOVED_INITIALIZER_NODE_LIMIT` nodes to that unit.
+///
+/// What it adds is the initializer and the bodies it reaches that the unit does not already hold,
+/// which is what the copying would give it once the unit generates the initializer. The walk stops
+/// as soon as the total is past the limit, so a large graph costs a small walk.
+fn initializer_fits(
+    unit_programs: &[RcProgram],
+    name: &FullName,
+    reader: usize,
+    copyable_funcs: &Map<FullName, RcFunc>,
+) -> bool {
+    let global = unit_programs
+        .iter()
+        .flat_map(|unit_program| unit_program.globals.iter())
+        .find(|global| global.symbol == *name && global.owns_initializer)
+        .unwrap_or_else(|| panic!("no unit computes the value of `{}`", name.to_string()));
+    let held: Set<&FullName> = names_defined_here(&unit_programs[reader]).collect();
+    let mut nodes = node_count(&global.init);
+    let mut walked: Set<FullName> = Set::default();
+    let mut pending: Vec<&RcExprNode> = vec![&global.init];
+    while let Some(body) = pending.pop() {
+        if nodes > MOVED_INITIALIZER_NODE_LIMIT {
+            return false;
+        }
+        let mut reached: Vec<FullName> = vec![];
+        collect_mentions(body, &mut |mentioned| {
+            if !held.contains(mentioned) && !walked.contains(mentioned) {
+                reached.push(mentioned.clone());
+            }
+        });
+        for mentioned in reached {
+            let Some(func) = copyable_funcs.get(&mentioned) else {
+                continue;
+            };
+            if !walked.insert(mentioned) {
+                continue;
+            }
+            nodes += node_count(&func.body);
+            pending.push(&func.body);
+        }
+    }
+    nodes <= MOVED_INITIALIZER_NODE_LIMIT
+}
+
+/// Which units read each of `globals`, by name.
+///
+/// A unit reads a global when a body it generates mentions it: one of its functions, or the
+/// initializer of a global it computes. The initializer of a global another unit computes is
+/// carried here to say what the value is, and this unit generates none of it.
+fn units_reading_each_global(
+    unit_programs: &[RcProgram],
+    globals: &Set<FullName>,
+) -> Map<FullName, Set<usize>> {
+    let mut readers: Map<FullName, Set<usize>> = globals
+        .iter()
+        .map(|name| (name.clone(), Set::default()))
+        .collect();
+    for (index, unit_program) in unit_programs.iter().enumerate() {
+        let bodies = unit_program.funcs.values().map(|func| &func.body).chain(
+            unit_program
+                .globals
+                .iter()
+                .filter(|global| global.owns_initializer)
+                .map(|global| &global.init),
+        );
+        for body in bodies {
+            collect_mentions(body, &mut |mentioned| {
+                if let Some(units) = readers.get_mut(mentioned) {
+                    units.insert(index);
+                }
+            });
+        }
+    }
+    readers
+}
+
+/// Give `unit_program` the copy of `global` a unit that computes neither its value nor its storage
+/// carries: the accessor, reading the storage and calling the initializer another unit publishes.
+/// The name is recorded as one the unit took, and as one whose storage more than one unit reaches.
 fn take_a_copy_of_the_accessor(
     unit_program: &mut RcProgram,
     imported: &mut Set<FullName>,
@@ -306,6 +489,7 @@ fn take_a_copy_of_the_accessor(
     global: &RcGlobalInit,
 ) {
     let mut copy = global.clone();
+    copy.owns_initializer = false;
     copy.owns_storage = false;
     unit_program.globals.push(copy);
     imported.insert(global.symbol.clone());
@@ -340,6 +524,54 @@ fn give_the_main_unit_the_root_values(
             global,
         );
     }
+}
+
+/// Publish to the linker the names one unit's code reaches in another, drop from each unit what its
+/// own code cannot reach, and return both sets of published names: the program's, and one per unit
+/// of the names that unit defines under external linkage.
+fn publish_and_prune(
+    unit_programs: &mut [RcProgram],
+    unit_of: &impl Fn(&FullName) -> Option<usize>,
+    imported: &[Set<FullName>],
+    shared_globals: &Set<FullName>,
+    root_value_names: &Set<FullName>,
+) -> (Set<FullName>, Vec<Set<FullName>>) {
+    let published = names_published_to_the_linker(unit_programs, unit_of, root_value_names);
+    let mut published_here: Vec<Set<FullName>> = vec![];
+    for (index, unit_program) in unit_programs.iter_mut().enumerate() {
+        published_here.push(
+            names_defined_here(unit_program)
+                .filter(|name| !imported[index].contains(name) && published.contains(name))
+                .cloned()
+                .collect(),
+        );
+        // The initializer of a value another unit keeps is called from that unit, so the unit
+        // computing it generates it however little of its own code reads the value.
+        let initializers_another_unit_calls: Set<FullName> = unit_program
+            .globals
+            .iter()
+            .filter(|global| global.owns_initializer && !global.owns_storage)
+            .map(|global| global.symbol.clone())
+            .collect();
+        // What the unit's code is reached by: the names another unit's code calls it through, the
+        // values the C world enters the program through, which the entry point and the exported C
+        // functions read through the accessor the unit holding them carries, the globals whose
+        // storage another unit reads, whose keeper emits that storage, and the initializers
+        // another unit calls.
+        unit_program.roots = names_defined_here(unit_program)
+            .filter(|name| {
+                published_here[index].contains(*name)
+                    || root_value_names.contains(*name)
+                    || shared_globals.contains(*name)
+                    || initializers_another_unit_calls.contains(*name)
+            })
+            .cloned()
+            .collect();
+        // A function every unit calling it took a copy of is left with no caller of its own, and
+        // generating it writes out a body that reaches nothing the program runs.
+        eliminate_unreachable(unit_program);
+    }
+    (published, published_here)
 }
 
 /// The names a unit gives external linkage: the values the C world enters the program through, and

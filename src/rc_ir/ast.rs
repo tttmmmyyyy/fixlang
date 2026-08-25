@@ -314,10 +314,20 @@ pub struct RcGlobalInit {
     pub ty: Arc<TypeNode>,
     /// The expression computing the value.
     pub init: RcExprNode,
-    /// Whether this program holds the value's storage, its initialization flag and the function
-    /// computing it. A compilation unit reading a global another unit owns carries a copy of the
-    /// accessor alone, so that its reads inline, and reaches the storage, the flag and the
-    /// initializer the owning unit publishes.
+    /// Whether this program generates the function computing the value. A compilation unit reading
+    /// a global it does not compute calls the function the unit computing it publishes, so one
+    /// function computes the value however many units read it.
+    pub owns_initializer: bool,
+    /// Whether this program defines the storage the value is kept in and the flag saying it has
+    /// been computed. A compilation unit reading a global it does not keep reads the storage and
+    /// the flag the unit keeping it publishes, so one storage holds the value however many units
+    /// read it.
+    ///
+    /// The two are apart where a unit keeps a value another computes, which is what a global one
+    /// unit reads becomes: that unit keeps the value, and nothing about the storage is published,
+    /// so LLVM optimizes the reads knowing every write. The initializer follows the storage only
+    /// where moving it adds little code to that unit
+    /// (`divide_program::MOVED_INITIALIZER_NODE_LIMIT`).
     pub owns_storage: bool,
 }
 

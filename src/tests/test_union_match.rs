@@ -128,4 +128,40 @@ main : IO () = (
         config.set_valgrind(ValgrindTool::MemCheck);
         test_source(SCRUTINEE_READ_IN_ARM_SOURCE, config);
     }
+
+    /// The last arm of a `match` takes the variant the tag switch leaves to it. The switch carries
+    /// an explicit case for every arm but the last, so an arm list written in an order of its own,
+    /// ending in a variant arm rather than a catch-all, is where the case a tag reaches is decided.
+    #[test]
+    pub fn test_the_last_arm_takes_the_variant_the_switch_leaves() {
+        let source = r#"
+module Main;
+
+type Four = unbox union { a : I64, b : I64, c : I64, d : I64 };
+
+which : Four -> I64;
+which = |u| match u {
+    c(_) => 2,
+    a(_) => 0,
+    d(_) => 3,
+    b(_) => 1
+};
+
+main : IO ();
+main = (
+    // A program is given its own name as its first argument, so this is zero at run time and the
+    // compiler cannot fold it. The values are read out of an array at that index, so the tag is
+    // compared in the running program rather than decided while compiling.
+    let args = *IO::get_args;
+    let n = args.@size - 1;
+    let vals = [Four::a(10), Four::b(11), Four::c(12), Four::d(13)];
+    assert_eq(|_|"the arm of the first variant", which(vals.@(n + 0)), 0);;
+    assert_eq(|_|"the arm of the second variant", which(vals.@(n + 1)), 1);;
+    assert_eq(|_|"the arm of the third variant", which(vals.@(n + 2)), 2);;
+    assert_eq(|_|"the arm the switch leaves to the last case", which(vals.@(n + 3)), 3);;
+    pure()
+);
+"#;
+        test_source(source, Configuration::develop_mode());
+    }
 }

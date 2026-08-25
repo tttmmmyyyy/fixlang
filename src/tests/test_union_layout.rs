@@ -12,6 +12,7 @@ use crate::fixstd::builtin::{
 use crate::generator::Generator;
 use crate::misc::Map;
 use crate::object::ty_to_object_ty;
+use crate::tests::test_util::test_source;
 use inkwell::context::Context;
 use std::sync::Arc;
 
@@ -126,6 +127,46 @@ fn test_union_memory_layout() {
         (16, 8),
         "Result U8 I64"
     );
+
+    // A payload the buffer's elements do not divide: `(U32, U32, U32)` is twelve bytes at
+    // alignment four, and the `I64` beside it takes the elements to eight bytes, so covering the
+    // twelve takes two of them rather than the one and a half they divide into.
+    assert_eq!(
+        layout(
+            &mut gc,
+            result_ty(
+                make_tuple_ty(vec![make_u32_ty(), make_u32_ty(), make_u32_ty()]),
+                make_i64_ty()
+            )
+        ),
+        (24, 8),
+        "Result (U32, U32, U32) I64"
+    );
+}
+
+/// A payload the union's payload buffer's elements do not divide is read back whole. The buffer
+/// covers the payload in elements as wide as the widest alignment among the variants, and a buffer
+/// short of the payload leaves the bytes past its end out of the value.
+#[test]
+fn test_a_payload_the_buffer_elements_do_not_divide_round_trips() {
+    let source = r#"
+        module Main;
+
+        type Uneven = unbox union { wide : (U32, U32, U32), aligned : I64 };
+
+        main : IO ();
+        main = (
+            // The variant is chosen by a condition read from the program's arguments, which the
+            // compiler cannot fold away, so the payload survives into the running program.
+            let args = *IO::get_args;
+            let u = if args.@size > 1000 { Uneven::aligned(0) } else {
+                Uneven::wide((1_U32, 2_U32, 4000000000_U32))
+            };
+            assert_eq(|_|"the payload read back", u.as_wide, (1_U32, 2_U32, 4000000000_U32));;
+            pure()
+        );
+    "#;
+    test_source(source, Configuration::develop_mode());
 }
 
 /// A union is larger than its largest variant, whatever that variant's size: the payload buffer

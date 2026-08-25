@@ -8,21 +8,36 @@
    fun:fputs
 }
 
-# Iterator::advance reads uninitialised union padding speculatively at -O max /
-# -O experimental. An iterator whose state holds a union (such as a nested
-# flat_map's inner iterator) is passed to `advance` by value; when the active
-# variant is smaller than the union's payload buffer, the unused tail of the
-# buffer is uninitialised — Fix leaves union padding uninitialised, as C and Rust
-# do. LLVM hoists the payload read above the tag check and inserts a `freeze`, so
-# the branch is well-defined and the computed result is correct; valgrind still
-# reports it because `freeze` lowers to reading that uninitialised stack slot, so
-# the read is benign. (This also hides a genuine uninitialised read that lands in
-# an `advance` funptr, so drop it when auditing the iterator runtime itself.)
+# The iterator runtime reads uninitialised union padding speculatively. An
+# iterator whose state holds a union — a nested `flat_map`'s inner iterator, a
+# `flatten`'s `Option` of one — is passed by value; when the active variant is
+# smaller than the union's payload buffer, the unused tail of the buffer is
+# uninitialised, as C and Rust also leave union padding. LLVM computes the
+# comparison that payload feeds without waiting for the tag check, freezes the
+# result and combines it with the tag, so the branch is well-defined and the
+# computed result is correct; valgrind reports it because the frozen value is read
+# out of that uninitialised stack slot, so the read is benign. (These also hide a
+# genuine uninitialised read landing in the same function, so drop them when
+# auditing the iterator runtime itself.)
 #
-# Copy this entry into the `valgrind.supp` at the root of any project you check
+# Which function carries the read is decided by how far LLVM inlined the walk, so
+# it differs by optimization level, and there is one entry per function seen to
+# carry it.
+#
+# Copy these entries into the `valgrind.supp` at the root of any project you check
 # under memcheck; fix auto-loads that file (see `Configuration::valgrind_command`).
 {
    fix-iterator-advance-uninitialised-union-padding
    Memcheck:Cond
    fun:Std::Iterator::advance#*
+}
+{
+   fix-iterator-inner-until-uninitialised-union-padding
+   Memcheck:Cond
+   fun:Std::Iterator::_inner_until#*
+}
+{
+   fix-iterator-is-equal-uninitialised-union-padding
+   Memcheck:Cond
+   fun:Std::Iterator::is_equal#*
 }
