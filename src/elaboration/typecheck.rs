@@ -3090,8 +3090,8 @@ impl TypeReduction {
         self.on_path.remove(&ty);
     }
 
-    /// The report that reducing the associated type `ty` asks for that reduction again, drawn at
-    /// every equality constraint on the way round.
+    /// The report that the associated type `ty` is circular, drawn at every equality constraint on
+    /// the way round.
     fn circular_error(&self, ty: &Arc<TypeNode>) -> Errors {
         let start = self
             .path
@@ -3107,12 +3107,12 @@ impl TypeReduction {
         let srcs: Vec<&Option<Span>> = round.iter().map(|(_ancestor, src)| src).collect();
         let sentence = if way.len() <= 2 {
             format!(
-                "Reducing the type `{}` needs itself: the type it is equal to contains it.",
+                "The type `{}` is circular.",
                 shorten_for_report(ty.to_string()),
             )
         } else {
             format!(
-                "Reducing the type `{}` needs itself: {}.",
+                "The type `{}` is circular: {}.",
                 shorten_for_report(ty.to_string()),
                 way_string(&way),
             )
@@ -3121,7 +3121,7 @@ impl TypeReduction {
     }
 
     /// The report that the reduction reached a type deeper than the compiler reduces, drawn at the
-    /// equality constraint it was applying.
+    /// equality constraint that grew it.
     fn endless_error(&self, ty: &Arc<TypeNode>) -> Errors {
         // A reduction that has yet to apply an equality reached the bound on the type it was asked
         // about, which says nothing about any equality, so the report is drawn where that type is
@@ -3130,20 +3130,16 @@ impl TypeReduction {
         let Some((_ancestor_str, src)) = self.path.last() else {
             return Errors::from_msg_srcs(
                 format!(
-                    "The type `{}` nests more than {} deep. The compiler does not reduce a type \
-                     that deep.",
+                    "The type `{}` is nested too deep.",
                     shorten_for_report(ty.to_string()),
-                    MAX_TYPE_DEPTH,
                 ),
                 &[ty.get_source()],
             );
         };
         Errors::from_msg_srcs(
             format!(
-                "Reducing the type `{}` does not end: every step gives a larger type. The \
-                 reduction stopped at a type nested more than {} deep.",
+                "The type `{}` grew too large.",
                 shorten_for_report(ty.to_string()),
-                MAX_TYPE_DEPTH,
             ),
             &[src],
         )
@@ -3199,24 +3195,20 @@ impl UnificationErr {
             UnificationErr::Unsatisfiable(_) | UnificationErr::Disjoint(_, _) => None,
             // A deduction that comes straight back to where it began is the whole story; a longer
             // one is told by the constraints it passes through.
-            UnificationErr::Circular(way) if way.len() <= 2 => Some(
-                "Deducing it needs itself: the instance that gives it requires it.".to_string(),
-            ),
+            UnificationErr::Circular(way) if way.len() <= 2 => {
+                Some("The inference is circular.".to_string())
+            }
             UnificationErr::Circular(way) => Some(format!(
-                "Deducing it needs itself: {}.",
+                "The inference is circular: {}.",
                 way_string(&Self::printed_steps(way))
             )),
             // A deduction that has yet to take a step reached the bound on the constraint it was
             // asked for, which says nothing about any instance.
-            UnificationErr::Endless(way) if way.len() <= 1 => Some(format!(
-                "The type it names nests more than {} deep. The compiler does not settle a \
-                 constraint about a type that deep.",
-                MAX_TYPE_DEPTH
-            )),
+            UnificationErr::Endless(way) if way.len() <= 1 => {
+                Some("The type it names is nested too deep.".to_string())
+            }
             UnificationErr::Endless(way) => Some(format!(
-                "Deducing it does not end: every step asks about a larger type. The deduction \
-                 stopped at a type nested more than {} deep: {}.",
-                MAX_TYPE_DEPTH,
+                "The inference is too long: {}.",
                 way_string(&Self::printed_steps(way))
             )),
         }

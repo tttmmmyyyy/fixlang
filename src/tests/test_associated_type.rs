@@ -1238,7 +1238,7 @@ pub fn test_equality_on_an_opaque_type_naming_itself_is_reported() {
         main : IO ();
         main = println(f(3).to_array.to_string);
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "needs itself");
+    test_source_fail(&source, Configuration::develop_mode(), "is circular");
 }
 
 /// Two equalities on opaque types, each naming the associated type the other is on. Neither gives
@@ -1254,7 +1254,7 @@ pub fn test_equalities_on_opaque_types_naming_each_other_are_reported() {
         main : IO ();
         main = println(g(3).@0.to_array.to_string);
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "needs itself");
+    test_source_fail(&source, Configuration::develop_mode(), "is circular");
 }
 
 /// An equality on an opaque type whose right side carries the associated type it is on inside a
@@ -1270,7 +1270,7 @@ pub fn test_equality_on_an_opaque_type_growing_at_each_step_is_reported() {
         main : IO ();
         main = println(h(3).to_array.to_string);
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "needs itself");
+    test_source_fail(&source, Configuration::develop_mode(), "is circular");
 }
 
 /// An implementation that gives an associated type itself as its value, so reducing that type asks
@@ -1294,7 +1294,7 @@ pub fn test_associated_type_implemented_as_itself_is_reported() {
         main : IO ();
         main = ( let x : I64 = g([1, 2, 3]); println(x.to_string) );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "needs itself");
+    test_source_fail(&source, Configuration::develop_mode(), "is circular");
 }
 
 /// An implementation whose associated type asks for the same associated type on a larger type, so
@@ -1325,11 +1325,7 @@ pub fn test_associated_type_implemented_as_itself_on_a_larger_type_is_reported()
         main : IO ();
         main = ( let _r = Wrap { x : 1 }.cval; println("ok") );
     "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "does not end: every step gives a larger type",
-    );
+    test_source_fail(&source, Configuration::develop_mode(), "grew too large");
 }
 
 /// An implementation that gives an associated type a value carrying that same associated type
@@ -1352,7 +1348,7 @@ pub fn test_associated_type_implemented_as_itself_inside_a_type_constructor_is_r
         main : IO ();
         main = ( let _r = (5).cval; println("ok") );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "needs itself");
+    test_source_fail(&source, Configuration::develop_mode(), "is circular");
 }
 
 /// The check that compares an implementation's type signature with the trait's reduces the types
@@ -1382,7 +1378,7 @@ pub fn test_reduction_that_does_not_end_in_an_implementation_signature_is_report
     "##;
     let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
     assert!(
-        errmsg.contains("needs itself"),
+        errmsg.contains("is circular"),
         "the reduction that does not end went unreported:\n{}",
         errmsg
     );
@@ -1509,7 +1505,7 @@ pub fn test_type_too_deep_to_reduce_is_reported_where_it_is_written() {
     );
     let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
     assert!(
-        errmsg.contains("nests more than 500 deep"),
+        errmsg.contains("is nested too deep"),
         "the type too deep to reduce went unreported:\n{}",
         errmsg
     );
