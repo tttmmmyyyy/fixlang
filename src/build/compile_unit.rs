@@ -18,7 +18,7 @@ pub struct CompileUnit {
     /// invalidates the unit.
     dependent_modules: Vec<Name>,
     /// The digest naming this unit and the file its object code is cached in. Empty until
-    /// `update_unit_hash` or `set_random_unit_hash` sets it.
+    /// `set_unit_hash` sets it.
     unit_hash: String,
 }
 

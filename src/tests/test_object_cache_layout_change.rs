@@ -1,9 +1,8 @@
 //! A change to a type declaration reaches the code generated for every symbol that lays that type
-//! out, while leaving those symbols' names, types and expressions as they were. `Symbol::hash`,
-//! which the object-file cache key is built from, sees none of it; the source hashes of the
-//! dependent modules that `CompileUnit::update_unit_hash` adds beside it are what invalidate those
-//! symbols' object files. Separated compilation is where the object files are reused one unit at a
-//! time, so the build runs at `basic`.
+//! out, while leaving those symbols' names, types and expressions as they were. The digest naming a
+//! compilation unit's object file reads the declarations of the types the unit's code is laid out
+//! by (`divide_program::type_declarations_reached`), which is what invalidates those symbols'
+//! object files.
 
 #[cfg(test)]
 mod integration_tests {
