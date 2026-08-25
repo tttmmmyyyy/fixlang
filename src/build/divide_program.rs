@@ -194,6 +194,14 @@ pub fn divide_into_units(program: &RcProgram, config: &Configuration) -> Vec<Com
         .chain(program.globals.iter().map(|global| global.symbol.clone()))
         .collect();
     entries.sort();
+    // Each entry belongs to one unit, and `unit_of_each_entry` reads the division back by name, so
+    // one name standing for two entries would put one of them in the other's unit.
+    if let Some(pair) = entries.windows(2).find(|pair| pair[0] == pair[1]) {
+        panic!(
+            "the program defines `{}` twice, so no unit is the one it belongs to",
+            pair[0].to_string()
+        );
+    }
     let mut units: Vec<CompileUnit> =
         split_at_name_boundaries(entries, config.cu_size, FullName::to_string)
             .into_iter()
