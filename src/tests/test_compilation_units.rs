@@ -317,7 +317,7 @@ main = println(Worker::report({}));
     .expect("Failed to write the main module");
 }
 
-/// Build the project in `dir` at `-O max`, with `cu_size` symbols to a compilation unit, and
+/// Build the project in `dir` at `-O max`, with `cu_size` entries to a compilation unit, and
 /// return how many compilation units the build generated and how many it took from the cache.
 ///
 /// The two counts are read off what the build reports under `--verbose`, which is where it says

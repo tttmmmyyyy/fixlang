@@ -226,7 +226,8 @@ fn run_cli() {
         .default_value(DEFAULT_COMPILATION_UNIT_SIZE_STR)
         .value_parser(value_parser!(usize))
         .help(
-            "Average number of symbols in a compilation unit; a unit runs longer or shorter than this.\n\
+            "Average number of entries -- functions and global values whose code is generated -- in a\n\
+            compilation unit; a unit runs longer or shorter than this.\n\
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n",
         );
     let max_cu_size = Arg::new("max-cu-size")

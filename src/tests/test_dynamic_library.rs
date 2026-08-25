@@ -187,9 +187,8 @@ fn test_a_library_on_a_link_line_is_called() {
 /// spelling from the unit that defines it and from the unit that reads it.
 ///
 /// The getter symbol heads the name of a field's getter, and Fix takes it at the head of any value
-/// name, so a program can write one itself. Separate compilation, which `cu_size` divides, runs
-/// at `Basic` and below, so the level comes down to it: at a higher one the whole program is one
-/// unit and no read crosses a boundary.
+/// name, so a program can write one itself. A `cu_size` of 1 puts each of the program's entries in a
+/// compilation unit of its own, so every read of the value crosses a unit boundary.
 #[test]
 fn test_a_value_named_with_the_getter_symbol_crosses_compilation_units() {
     const SOURCE: &str = r#"
