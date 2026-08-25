@@ -22,6 +22,21 @@ accesses the cache condition reads.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 35a2da487c205d7a6d7facf1cf0bdd8dc8d6f6d1
+
+The row `v1.5.0-beta.1` was released from. Forty-nine of the fifty-six cases read to the instruction
+of `30176a1e` below it; the seven that differ are cp-library cases, by at most forty-five
+instructions out of the five billion `cp_lib_prime_list` executes.
+
+Resolving the corpus rewrote eleven of the case lock files during the run — `hash` 1.1.2 to 1.1.3
+and `hashmap` 2.0.1 to 2.1.0 under the eight cp-library cases, `random` 1.1.1 to 1.1.2 under
+`random_state`, `prime_table` and `gen_random_array` — which is what marks the commit dirty. The
+lock files stay uncommitted, so a run resolves them again.
+
+**Twenty-eight of the fifty-six came away without a cycle count**, with other work taking 2.58 cores
+while they ran; the row below carries fifty-four. The instruction, memory and split columns are read
+under cachegrind and do not move with the machine.
+
 ## 30176a1ecd13001de31148dde1573928bcb172d9
 
 The first row carrying the five combinator-chain cases — `iter_map`, `iter_map_map`, `iter_filter`,
