@@ -403,6 +403,59 @@ fn test_cu_size_inf_puts_the_whole_program_in_one_unit() {
     );
 }
 
+/// The `cu_size` field of the project file decides the size of a compilation unit, and `--cu-size`
+/// on the command line decides it over the field.
+///
+/// The field is what a project says about itself, and the option is what one build of it asks for,
+/// so the option is the one that answers where both are given.
+#[test]
+fn test_the_project_file_sets_the_unit_size_and_the_option_overrides_it() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir = temp_dir.path();
+    write_two_module_project(dir, 120);
+    let project_file = dir.join("fixproj.toml");
+    let text = fs::read_to_string(&project_file).expect("Failed to read the project file");
+    fs::write(&project_file, text.replace("[build]\n", "[build]\ncu_size = 2\n"))
+        .expect("Failed to write the project file");
+
+    // What the project file asks for, with no `--cu-size` on the command line.
+    let build = fix_command_at_opt_level("build", "max")
+        .arg("--verbose")
+        .current_dir(dir)
+        .output()
+        .expect("Failed to execute fix build");
+    let reported = String::from_utf8_lossy(&build.stdout).to_string()
+        + &String::from_utf8_lossy(&build.stderr);
+    assert!(
+        build.status.success(),
+        "the build reading `cu_size` from the project file failed:\n{}",
+        reported
+    );
+    let from_the_field = reported.matches("Generating code for").count();
+    assert!(
+        from_the_field >= 10,
+        "the project file asks for 2 entries to a unit, which divides this program into several \
+         units, and the build made {}:\n{}",
+        from_the_field,
+        reported
+    );
+
+    // What the option asks for, over what the project file says.
+    write_two_module_project(dir, 120);
+    let text = fs::read_to_string(&project_file).expect("Failed to read the project file");
+    fs::write(&project_file, text.replace("[build]\n", "[build]\ncu_size = 2\n"))
+        .expect("Failed to write the project file");
+    let (generated, cached) = build_at_max_in(dir, "inf");
+    assert_eq!(
+        generated + cached,
+        2,
+        "`--cu-size inf` decides over the `cu_size = 2` the project file gives, so the build is the \
+         whole program and the main unit; it made {} and took {} from the builds before it",
+        generated,
+        cached
+    );
+}
+
 /// An edit that writes no code regenerates no compilation unit.
 ///
 /// A comment is compiled into nothing, and the code every unit of the program generates is what it

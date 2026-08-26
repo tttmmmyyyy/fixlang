@@ -75,6 +75,14 @@ files = ["main.fix"]
 ## such as `Debug::debug_println` from the built program.
 # skip_eval = false
 
+## Average number of entries -- the top-level functions and the global values whose code is
+## generated -- in one compilation unit. A build regenerates the units whose code an edit changes
+## and takes the rest from the build before it, so a smaller value compiles more units in parallel
+## and reuses more of them, at the cost of giving the back end less to look at once.
+## "inf" puts the whole program in one unit, which gives up building it a unit at a time.
+## Overwritten by the command line argument.
+# cu_size = 128
+
 ## Preliminary commands to be executed before the Fix program is compiled.
 ## This is useful when you need to compile a object files / library before compiling the Fix program.
 ## (Experimental) Furthermore, you can change the Fix compiler options by outputting lines with specific formats in the preliminary commands.
