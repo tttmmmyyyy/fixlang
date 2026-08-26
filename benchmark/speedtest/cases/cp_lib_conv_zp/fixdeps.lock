@@ -1,4 +1,4 @@
-proj_file_hash = "c42ede766146b7e3f466b5d73c847785"
+proj_file_hash = "0e7f2ac077f20044c10019dbe4055cbd"
 
 [[dependencies]]
 name = "binary-heap"
@@ -29,21 +29,21 @@ rev = "c1844719ad86e4224d207bb41a8064f6e5751231"
 
 [[dependencies]]
 name = "hash"
-version = "1.1.2"
-path = ".fixlang/deps/hash_1.1.2"
+version = "1.1.3"
+path = ".fixlang/deps/hash_1.1.3"
 
 [dependencies.git]
 repo = "https://github.com/tttmmmyyyy/fixlang-hash.git"
-rev = "dbf95379b6ee7b26ec4858116f24c0251467cb83"
+rev = "089e73272bff2a97131736c54c07511425a69ed6"
 
 [[dependencies]]
 name = "hashmap"
-version = "2.0.1"
-path = ".fixlang/deps/hashmap_2.0.1"
+version = "2.1.0"
+path = ".fixlang/deps/hashmap_2.1.0"
 
 [dependencies.git]
 repo = "https://github.com/tttmmmyyyy/fixlang-hashmap.git"
-rev = "103595c593e92849be0b23df5cfee254da274a3e"
+rev = "718607174a1cd5afff619558718fc583d29434b8"
 
 [[dependencies]]
 name = "ring-buffer"

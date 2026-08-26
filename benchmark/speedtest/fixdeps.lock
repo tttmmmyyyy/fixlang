@@ -1,4 +1,4 @@
-proj_file_hash = "dd4c31b54ea5f98bbce8ac38dfd8188c"
+proj_file_hash = "1af2b55bcb195b8865aa2fbe0ffc026e"
 
 [[dependencies]]
 name = "ez-scripting"
