@@ -495,6 +495,9 @@ pub struct Configuration {
     /// generated — one compilation unit holds. Where a unit ends is decided by the names of the
     /// entries it holds, so this sets how often a boundary falls rather than bounding a unit.
     /// Lowering it compiles more units in parallel and gives the linker more to do.
+    ///
+    /// `constants::WHOLE_PROGRAM_IN_ONE_UNIT` puts every entry in one unit, which gives up building
+    /// the program a unit at a time and lets LLVM see every call it makes.
     pub cu_size: usize,
     /// The most scalars a value is split into and carried as separate LLVM values; a type holding
     /// more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
