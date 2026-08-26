@@ -381,6 +381,28 @@ fn test_an_edit_regenerates_only_the_units_it_reaches() {
     );
 }
 
+/// `--cu-size inf` puts the whole program in one unit beside the main unit.
+///
+/// The main unit holds no entry of the program: it builds the C entry point and the exported C
+/// functions. So a program asked for one unit generates two, and the program it generates runs.
+#[test]
+fn test_cu_size_inf_puts_the_whole_program_in_one_unit() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir = temp_dir.path();
+
+    write_two_module_project(dir, 120);
+    let (generated, cached) = build_at_max_in(dir, "inf");
+    assert_eq!(
+        (generated, cached),
+        (2, 0),
+        "the whole program is one unit, and the main unit is the other"
+    );
+    assert!(
+        !printed_by_the_program(dir).is_empty(),
+        "the program built as one unit should run and print what it computes"
+    );
+}
+
 /// An edit that writes no code regenerates no compilation unit.
 ///
 /// A comment is compiled into nothing, and the code every unit of the program generates is what it

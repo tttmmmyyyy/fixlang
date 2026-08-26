@@ -396,6 +396,18 @@ pub const GLOBAL_VAR_NAME_ARGV: &str = "fixruntime_argv";
 pub const DEFAULT_COMPILATION_UNIT_SIZE: usize = 128;
 pub const DEFAULT_COMPILATION_UNIT_SIZE_STR: &str = "128";
 
+/// The `cu_size` that puts the whole program in one compilation unit, which `--cu-size inf` asks
+/// for.
+///
+/// A boundary falls where the hash of an entry's name lands in a band one `cu_size` wide
+/// (`misc::split_at_name_boundaries`), so a size this large leaves one unit for all but two of the
+/// 2^64 hashes a name can take. `divide_program::divide_into_units` reads the value itself rather
+/// than the band, so a program divided this way is one unit whatever its names hash to.
+pub const WHOLE_PROGRAM_IN_ONE_UNIT: usize = usize::MAX;
+
+/// What `--cu-size` is given to ask for `WHOLE_PROGRAM_IN_ONE_UNIT`.
+pub const WHOLE_PROGRAM_IN_ONE_UNIT_STR: &str = "inf";
+
 /// Stack size, in bytes, of each compiler worker thread. Parallel type checking and per-unit code
 /// generation recurse over the user program's expression tree, whose nesting depth (deeply nested
 /// `let` or `;;` chains) is unbounded, so a worker needs far more stack than the default thread

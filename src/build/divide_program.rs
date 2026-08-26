@@ -12,6 +12,7 @@ use crate::ast::program::{Program, TypeEnv};
 use crate::ast::types::{TyCon, TyConInfo, TypeNode};
 use crate::build::compile_unit::CompileUnit;
 use crate::configuration::Configuration;
+use crate::constants::WHOLE_PROGRAM_IN_ONE_UNIT;
 use crate::hash::HashSource;
 use crate::misc::{split_at_name_boundaries, Map, Set};
 use crate::parse::sourcefile::Span;
@@ -186,6 +187,11 @@ pub fn divide_among_units(
 ///
 /// The main unit comes last and holds no entry: it builds the C entry point and the exported C
 /// functions, which are the code of nothing the program defines.
+///
+/// A `cu_size` of `WHOLE_PROGRAM_IN_ONE_UNIT` puts every entry in one unit, so that LLVM sees every
+/// call the program makes. The band a boundary falls in is one `cu_size` wide, so a size that large
+/// would leave one unit for all but two of the hashes a name can take; this answers for every name
+/// instead.
 pub fn divide_into_units(program: &RcProgram, config: &Configuration) -> Vec<CompileUnit> {
     let mut entries: Vec<FullName> = program
         .funcs
@@ -202,11 +208,12 @@ pub fn divide_into_units(program: &RcProgram, config: &Configuration) -> Vec<Com
             pair[0].to_string()
         );
     }
-    let mut units: Vec<CompileUnit> =
+    let pieces = if config.cu_size == WHOLE_PROGRAM_IN_ONE_UNIT {
+        vec![entries]
+    } else {
         split_at_name_boundaries(entries, config.cu_size, FullName::to_string)
-            .into_iter()
-            .map(CompileUnit::new)
-            .collect();
+    };
+    let mut units: Vec<CompileUnit> = pieces.into_iter().map(CompileUnit::new).collect();
     units.push(CompileUnit::new(vec![]));
     units
 }
