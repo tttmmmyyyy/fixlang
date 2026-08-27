@@ -348,6 +348,7 @@ mod tests {
     /// (`Lowerer::lower_var`), so any of these can be the one place a definition is named from.
     #[test]
     fn test_every_mention_site_is_followed() {
+        /// A node standing for `expr`, which no source spells out.
         fn node(expr: RcExpr) -> RcExprNode {
             RcExprNode {
                 expr: Arc::new(expr),

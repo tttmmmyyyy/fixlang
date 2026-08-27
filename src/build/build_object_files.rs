@@ -239,8 +239,7 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let type_env = program.type_env();
     let all_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
     let global_types = program.global_types();
-    // The whole program lowered as one unit, which nothing outside reaches but through the values
-    // the C world enters it through.
+    // The whole program is lowered here, and the C world enters it through its root values alone.
     let roots = program.root_value_names().into_iter().collect();
     let base = lower_and_insert_rc(&type_env, &all_symbols, &global_types, roots, config);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
