@@ -2049,19 +2049,32 @@ impl TypeCheckContext {
     /// An associated type met on the way also requires the trait that declares it of its first
     /// argument, so that predicate joins the pending ones.
     fn reduce_type_by_equality(&mut self, ty: Arc<TypeNode>) -> Result<Arc<TypeNode>, Errors> {
+        self.reduce_type_by_equality_inner(ty, &mut TypeReduction::default())
+    }
+
+    /// The body of `reduce_type_by_equality`.
+    ///
+    /// # Arguments
+    /// * `reduction` — the associated types whose reduction this one is inside. Meeting one of
+    ///   them again is meeting a type whose reduction needs itself.
+    fn reduce_type_by_equality_inner(
+        &mut self,
+        ty: Arc<TypeNode>,
+        reduction: &mut TypeReduction,
+    ) -> Result<Arc<TypeNode>, Errors> {
         match &ty.ty {
             Type::TyVar(_) => Ok(ty),
             Type::TyCon(_) => Ok(ty),
             Type::TyApp(tyfun, tyarg) => {
-                let tyfun = self.reduce_type_by_equality(tyfun.clone())?;
-                let tyarg = self.reduce_type_by_equality(tyarg.clone())?;
+                let tyfun = self.reduce_type_by_equality_inner(tyfun.clone(), reduction)?;
+                let tyarg = self.reduce_type_by_equality_inner(tyarg.clone(), reduction)?;
                 Ok(ty.set_tyapp_fun(tyfun).set_tyapp_arg(tyarg))
             }
             Type::AssocTy(assoc_ty, args) => {
                 // Reduce each arguments.
                 let args = collect_results(
                     args.iter()
-                        .map(|arg| self.reduce_type_by_equality(arg.clone())),
+                        .map(|arg| self.reduce_type_by_equality_inner(arg.clone(), reduction)),
                 )?;
 
                 // The first argument should implement the trait of the associated type.
@@ -2074,6 +2087,18 @@ impl TypeCheckContext {
                 self.predicates.push(pred);
 
                 let ty = ty.set_assocty_args(args);
+
+                // An equality gives a value that this reduction takes in the type's place, and that
+                // value can name the type again. Reducing the value then asks for a reduction
+                // that has begun and has yet to end, and the report names the equalities that lead
+                // from the type back to itself. A reduction that instead keeps finding types it
+                // has not met yet ends at `MAX_TYPE_DEPTH`.
+                if reduction.on_path.contains(&ty) {
+                    return Err(reduction.circular_error(&ty));
+                }
+                if ty.depth() > MAX_TYPE_DEPTH {
+                    return Err(reduction.endless_error(&ty));
+                }
 
                 // Try matching to assumed equality.
                 let assumed_eqs = self.assumed_eqs.clone();
@@ -2095,7 +2120,10 @@ impl TypeCheckContext {
                     }
                     let match_subst: Substitution = match_subst.unwrap();
                     let rhs = match_subst.substitute_type(&equality.value);
-                    return self.reduce_type_by_equality(rhs);
+                    reduction.enter(&ty, &equality.src);
+                    let reduced = self.reduce_type_by_equality_inner(rhs, reduction);
+                    reduction.leave();
+                    return reduced;
                 }
                 Ok(ty)
             }
@@ -2993,6 +3021,131 @@ impl PredicateDeduction {
     }
 }
 
+/// The steps of a search that does not end, as a report shows them: each step quoted, the way
+/// shortened in the middle where it is long, and the step the search comes back to last.
+///
+/// # Arguments
+/// * `way` — the steps as they are printed, the one the search fails on last.
+///
+/// # Examples
+/// A way of three steps reads ``` `A` -> `B` -> `A` ```.
+fn way_string(way: &[String]) -> String {
+    /// How many steps to show. Enough for one turn of a search that asks about ever larger types to
+    /// be visible, and short enough that the reader can read what is printed.
+    const SHOWN_STEPS: usize = 3;
+
+    // The last step is where the search shows what is wrong with it: the step it came back to, or
+    // the one on a type too deep to be one the program wrote.
+    let (last, rest) = way
+        .split_last()
+        .expect("a search carries the step it started from");
+    let step_string = |step: &String| format!("`{}`", shorten_for_report(step.clone()));
+    let mut steps = rest
+        .iter()
+        .take(SHOWN_STEPS)
+        .map(step_string)
+        .collect::<Vec<_>>();
+    if rest.len() > SHOWN_STEPS {
+        steps.push("...".to_string());
+    }
+    steps.push(step_string(last));
+    steps.join(" -> ")
+}
+
+/// What the reduction of a type carries as it descends into the values that the equalities it
+/// applies give.
+///
+/// An associated type is reduced by applying the equality whose left side it matches and reducing
+/// the value that equality gives in its place. `on_path` holds the associated types whose reduction
+/// has begun and has yet to end, so that a value naming one of them is seen for what it is.
+#[derive(Default)]
+struct TypeReduction {
+    /// The associated types whose reduction the current one is inside, outermost first, each with
+    /// the source of the equality applied to it, which is a step of the way round.
+    path: Vec<(Arc<TypeNode>, Option<Span>)>,
+    /// Each associated type on `path`. A type carries the hash it answers with, so asking whether
+    /// one is here costs no walk of the type after the first.
+    on_path: Set<Arc<TypeNode>>,
+}
+
+impl TypeReduction {
+    /// Record that the reduction of the associated type `ty` has begun by applying the equality
+    /// written at `src`.
+    fn enter(&mut self, ty: &Arc<TypeNode>, src: &Option<Span>) {
+        let newly_begun = self.on_path.insert(ty.clone());
+        assert!(
+            newly_begun,
+            "the reduction of `{}` begins a second time while the first has yet to end",
+            ty.to_string()
+        );
+        self.path.push((ty.clone(), src.clone()));
+    }
+
+    /// Record that the reduction entered last has ended.
+    fn leave(&mut self) {
+        let (ty, _src) = self
+            .path
+            .pop()
+            .expect("a reduction ends only after it has begun");
+        self.on_path.remove(&ty);
+    }
+
+    /// The report that the associated type `ty` is circular, drawn at every equality constraint on
+    /// the way round.
+    fn circular_error(&self, ty: &Arc<TypeNode>) -> Errors {
+        let start = self
+            .path
+            .iter()
+            .position(|(ancestor, _src)| ancestor == ty)
+            .expect("the caller found the type among the reductions it is inside");
+        let round = &self.path[start..];
+        let way: Vec<String> = round
+            .iter()
+            .map(|(ancestor, _src)| ancestor.to_string())
+            .chain([ty.to_string()])
+            .collect();
+        let srcs: Vec<&Option<Span>> = round.iter().map(|(_ancestor, src)| src).collect();
+        let sentence = if way.len() <= 2 {
+            format!(
+                "The type `{}` is circular.",
+                shorten_for_report(ty.to_string()),
+            )
+        } else {
+            format!(
+                "The type `{}` is circular: {}.",
+                shorten_for_report(ty.to_string()),
+                way_string(&way),
+            )
+        };
+        Errors::from_msg_srcs(sentence, &srcs)
+    }
+
+    /// The report that the reduction reached a type deeper than the compiler reduces, drawn at the
+    /// equality constraint that grew it.
+    fn endless_error(&self, ty: &Arc<TypeNode>) -> Errors {
+        // A reduction that has yet to apply an equality reached the bound on the type it was asked
+        // about, which says nothing about any equality, so the report is drawn where that type is
+        // written; one that has applied equalities reached it by applying them, and the last is the
+        // one to draw the report at.
+        let Some((_ancestor_str, src)) = self.path.last() else {
+            return Errors::from_msg_srcs(
+                format!(
+                    "The type `{}` is nested too deep.",
+                    shorten_for_report(ty.to_string()),
+                ),
+                &[ty.get_source()],
+            );
+        };
+        Errors::from_msg_srcs(
+            format!(
+                "The type `{}` grew too large.",
+                shorten_for_report(ty.to_string()),
+            ),
+            &[src],
+        )
+    }
+}
+
 /// A constraint that type checking required and could not settle.
 ///
 /// A report names the constraint, and adds what the deduction of it did where the deduction rather
@@ -3042,27 +3195,21 @@ impl UnificationErr {
             UnificationErr::Unsatisfiable(_) | UnificationErr::Disjoint(_, _) => None,
             // A deduction that comes straight back to where it began is the whole story; a longer
             // one is told by the constraints it passes through.
-            UnificationErr::Circular(way) if way.len() <= 2 => Some(
-                "Deducing it needs itself: the instance that gives it asks for it again."
-                    .to_string(),
-            ),
+            UnificationErr::Circular(way) if way.len() <= 2 => {
+                Some("The inference is circular.".to_string())
+            }
             UnificationErr::Circular(way) => Some(format!(
-                "Deducing it needs itself: {}.",
-                Self::way_string(way)
+                "The inference is circular: {}.",
+                way_string(&Self::printed_steps(way))
             )),
             // A deduction that has yet to take a step reached the bound on the constraint it was
             // asked for, which says nothing about any instance.
-            UnificationErr::Endless(way) if way.len() <= 1 => Some(format!(
-                "The type it names nests more than {} deep, which is past the depth the compiler \
-                 settles a constraint about.",
-                MAX_TYPE_DEPTH
-            )),
+            UnificationErr::Endless(way) if way.len() <= 1 => {
+                Some("The type it names is nested too deep.".to_string())
+            }
             UnificationErr::Endless(way) => Some(format!(
-                "Deducing it asks about types nested more than {} deep, so the deduction does not \
-                 end: {}. An instance whose context asks for what it gives, on a larger type, does \
-                 this.",
-                MAX_TYPE_DEPTH,
-                Self::way_string(way)
+                "The inference is too long: {}.",
+                way_string(&Self::printed_steps(way))
             )),
         }
     }
@@ -3089,32 +3236,9 @@ impl UnificationErr {
             .expect("a deduction carries the predicate it started from")
     }
 
-    /// The steps of a deduction, as the report shows them.
-    fn way_string(way: &[Predicate]) -> String {
-        /// How many steps to show. Enough for one turn of a deduction that asks about ever larger
-        /// types to be visible, and short enough that the reader can read what is printed.
-        const SHOWN_STEPS: usize = 3;
-
-        /// One step of the way, quoted and cut short where the predicate is too long to show whole.
-        fn shorten(pred: &Predicate) -> String {
-            format!("`{}`", shorten_for_report(pred.to_string()))
-        }
-
-        // The last step is where the deduction shows what is wrong with it: the predicate it came
-        // back to, or the one on a type too deep to be one the program wrote.
-        let (last, rest) = way
-            .split_last()
-            .expect("a deduction carries the predicate it started from");
-        let mut steps = rest
-            .iter()
-            .take(SHOWN_STEPS)
-            .map(shorten)
-            .collect::<Vec<_>>();
-        if rest.len() > SHOWN_STEPS {
-            steps.push("...".to_string());
-        }
-        steps.push(shorten(last));
-        steps.join(" -> ")
+    /// The steps of a deduction, each printed.
+    fn printed_steps(way: &[Predicate]) -> Vec<String> {
+        way.iter().map(|pred| pred.to_string()).collect()
     }
 }
 
