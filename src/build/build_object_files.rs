@@ -6,11 +6,15 @@ use crate::{
         program::{Program, Symbol, TypeEnv},
         types::TypeNode,
     },
-    build::compile_unit::CompileUnit,
+    build::{
+        divide_program::{
+            divide_among_units, divide_into_units, generated_code_hash, DividedProgram,
+        },
+    },
     configuration::{Configuration, OutputFileType},
     constants::{
         C_ENTRY_POINT_NAME, DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV,
-        UNITS_CACHE_PATH,
+        UNITS_CACHE_PATH, UNIT_MODULE_NAME_PREFIX,
     },
     error::{panic_with_msg, Errors},
     ffi::c_entry_point_signature,
@@ -25,6 +29,7 @@ use crate::{
     rc_ir::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
+        codegen::keep_initializers_out_of_shared_accessors,
         dead_code_elim, locality,
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
@@ -57,43 +62,8 @@ use std::{
 /// What a build produced, as `build_object_files` reports it.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BuildObjFilesResult {
-    /// The object files generated, one per compilation unit.
+    /// The object files the linker is to put together, one per compilation unit.
     pub obj_paths: Vec<PathBuf>,
-}
-
-/// The names through which code generation reaches this program's functions and globals from outside
-/// it. `dead_code_elim::eliminate_unreachable` keeps them and everything they reach.
-///
-/// Separated compilation publishes every symbol of a unit, so that another unit can call it: a
-/// funptr symbol becomes a function of external linkage, and any other symbol becomes a value
-/// reached through an accessor of external linkage (`Generator::declare_lambda_function`,
-/// `Configuration::external_if_separated`). Which of them the rest of the program uses is not
-/// knowable from the unit, so all of them are roots — decided by the rule that decides the linkage.
-///
-/// Compiled as one unit, every function and global is internal, and the C world enters the program
-/// in exactly two places: the entry point `build_main_function` runs, and the values
-/// `build_exported_c_functions` publishes under their C names — which together are what
-/// `Program::root_value_names` names.
-fn reachability_roots(
-    symbols: &[Symbol],
-    root_value_names: &[FullName],
-    config: &Configuration,
-) -> Set<FullName> {
-    if config.enable_separated_compilation() {
-        return symbols.iter().map(|sym| sym.name.clone()).collect();
-    }
-    // Compiled as one unit, `symbols` is the whole program, so every root value names one of its
-    // symbols. The walk starts at these names alone: one that names no definition reaches nothing,
-    // and the code behind that root value is dropped.
-    let symbol_names: Set<&FullName> = symbols.iter().map(|sym| &sym.name).collect();
-    for root_value_name in root_value_names {
-        assert!(
-            symbol_names.contains(root_value_name),
-            "the root value `{}` names no symbol of the program",
-            root_value_name.to_string()
-        );
-    }
-    root_value_names.iter().cloned().collect()
 }
 
 /// Lower `symbols` to the RC IR and insert reference counting. Reference counting is what the
@@ -103,10 +73,8 @@ fn reachability_roots(
 /// # Arguments
 /// * `symbols` — the set to lower and generate code for: one compilation unit, or the whole program.
 /// * `global_types` — the type of a global that a lowered function references as an LLVM operand.
-///   Under separated compilation such a global may be defined in another unit, so this covers the
-///   whole program.
-/// * `roots` — the names code generation reaches the lowered program through from outside it
-///   (`reachability_roots`).
+///   Such a global may be defined in another unit, so this covers the whole program.
+/// * `roots` — the names code generation reaches the lowered program through from outside it.
 fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -259,9 +227,11 @@ fn dump_rc_ir(
     info_msg(&format!("RC IR written to {}.", path.display()));
 }
 
-/// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program (as code
-/// generation does at `Max`), then write it before and after the optimizations, filtered to the
-/// requested module in each dump.
+/// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program, then write
+/// it before and after the optimizations, filtered to the requested module in each dump.
+///
+/// The build lowers and optimizes the same whole program and divides what the optimizations leave
+/// among the compilation units, so this dump is what every unit's code is generated from.
 fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let Some(filter) = &config.emit_rc_ir else {
         return;
@@ -269,7 +239,8 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let type_env = program.type_env();
     let all_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
     let global_types = program.global_types();
-    let roots = reachability_roots(&all_symbols, &program.root_value_names(), config);
+    // The whole program is lowered here, and the C world enters it through its root values alone.
+    let roots = program.root_value_names().into_iter().collect();
     let base = lower_and_insert_rc(&type_env, &all_symbols, &global_types, roots, config);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
     let optimized = optimize_rc_program(base, &type_env, &global_types, config);
@@ -309,69 +280,89 @@ pub fn build_object_files<'c>(
 
     dump_rc_ir_stages(&program, config);
 
-    // Determine compilation units.
-    let mut units = vec![];
-    let mut symbols = program.symbols.values().cloned().collect::<Vec<_>>();
-    symbols.sort_by(|a, b| a.name.cmp(&b.name));
+    let type_env = program.type_env();
     // Every unit needs the types of the whole program's globals, so build them once and share.
     let global_types = Arc::new(program.global_types());
-    // The names the C world enters the program through. Taken here, before the main unit moves the
-    // export statements out of the program, so that every unit is handed the same set.
-    let root_value_names = Arc::new(program.root_value_names());
-    {
-        let module_dependency_hash = program.module_dependency_hash_map(&config);
-        let module_dependency_map = program.module_dependency_map();
-        let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
-        if config.enable_separated_compilation() {
-            units = CompileUnit::split_symbols(
-                symbols,
-                &module_dependency_hash,
-                &module_dependency_map,
-                &config,
-            );
-            // Also add main compilation unit.
-            // The main unit implements the entry point of exported functions.
-            // Therefore, the main unit is treated as depending on all modules.
-            let mut main_unit = CompileUnit::new(vec![], modules);
-            main_unit.update_unit_hash(&module_dependency_hash, &config);
-            units.push(main_unit);
-        } else {
-            // Add main compilation unit, which includes all symbols.
-            let mut main_unit = CompileUnit::new(symbols, modules);
-            main_unit.update_unit_hash(&module_dependency_hash, &config);
-            units.push(main_unit);
-        }
+
+    // The RC IR is built and optimized over the whole program, so that a pass sees every call of
+    // every function it rewrites. The compilation units are cut out of what the optimizations
+    // leave, so that a unit is a set of the entries whose code it generates.
+    let mut symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
+    symbols.sort_by(|a, b| a.name.cmp(&b.name));
+    let root_value_names: Set<FullName> = program.root_value_names().into_iter().collect();
+    let rc_prog = lower_and_insert_rc(
+        &type_env,
+        &symbols,
+        &global_types,
+        root_value_names.clone(),
+        config,
+    );
+    let rc_prog = optimize_rc_program(rc_prog, &type_env, &global_types, config);
+    let mut units = divide_into_units(&rc_prog, config);
+    let division = divide_among_units(rc_prog, &units, &global_types, root_value_names);
+
+    // A unit is named by the code it generates, which is what its object file is cached under. The
+    // main unit is the last, and it is the one that builds the entry point and the exported C
+    // functions. Its digest reads the export statements here, while the program still holds them:
+    // the loop below hands them to the main unit's thread.
+    let last_unit_index = units.len() - 1;
+    for (index, unit) in units.iter_mut().enumerate() {
+        let program_for_the_entry = (index == last_unit_index).then_some(&program);
+        let hash = generated_code_hash(
+            unit,
+            index,
+            &division,
+            program_for_the_entry,
+            &type_env,
+            config,
+        );
+        unit.set_unit_hash(hash);
     }
+    let DividedProgram {
+        mut unit_programs,
+        published,
+        global_types,
+        imported,
+        published_here: _,
+        shared_globals,
+    } = division;
 
-    // Paths of object files to be linked.
-    let mut obj_paths = vec![];
+    // The object file each unit's generated code goes into, which is what the build hands the
+    // linker.
+    let unit_paths = units
+        .iter()
+        .map(|unit| unit.object_file_path())
+        .collect::<Vec<_>>();
+    let obj_files = BuildObjFilesResult {
+        obj_paths: unit_paths.clone(),
+    };
 
-    // Generate object files in parallel.
+    // Generate the code of each unit in parallel.
     let mut threads = vec![];
     let units_count = units.len();
     for (i, unit) in units.into_iter().enumerate() {
         // The main unit is generated last.
         let is_main_unit = i == units_count - 1;
 
-        obj_paths.push(unit.object_file_path());
-        // If the object file is cached, skip the generation.
-        if unit.is_cached() && !config.dumps_generated_code() {
+        let unit_path = unit_paths[i].clone();
+        // If the unit's generated code is cached, skip the generation.
+        if unit_path.exists() && !config.dumps_generated_code() {
             if config.verbose {
-                info_msg(&format!(
-                    "Skipping generation of object file for {}.",
-                    unit.to_string()
-                ));
+                info_msg(&format!("Skipping generation of code for {}.", unit));
             }
             continue;
         }
         if config.verbose {
-            info_msg(&format!("Generating object file for {}.", unit.to_string()));
+            info_msg(&format!("Generating code for {}.", unit));
         }
 
         let global_types = global_types.clone();
-        let root_value_names = root_value_names.clone();
+        let published = published.clone();
+        let imported_here = Arc::new(imported[i].clone());
+        let shared_globals = shared_globals.clone();
         let config = config.clone();
         let type_env = program.type_env();
+        let unit_program = mem::take(&mut unit_programs[i]);
 
         let export_statements = if is_main_unit {
             // Export statements are only needed for the main unit.
@@ -385,7 +376,7 @@ pub fn build_object_files<'c>(
             let context = Context::create();
             let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
             let module = Generator::create_module(
-                &format!("Module-{}", unit.unit_hash()),
+                &format!("{}{}", UNIT_MODULE_NAME_PREFIX, unit.unit_hash()),
                 &context,
                 &target_machine,
             );
@@ -396,6 +387,9 @@ pub fn build_object_files<'c>(
                 config.clone(),
                 type_env,
                 global_types.clone(),
+                published.clone(),
+                imported_here.clone(),
+                shared_globals,
             );
 
             // In debug mode, create debug infos.
@@ -406,16 +400,10 @@ pub fn build_object_files<'c>(
             // Declare runtime functions.
             runtime::build_runtime(&mut gc, BuildMode::Declare);
 
-            // Lower this unit's symbols to the RC IR, insert reference counting, and generate their
-            // LLVM. Only this unit's symbols are implemented; a symbol of another unit that this
-            // one calls is declared where code generation first reaches it, from the types of the
-            // program's globals the generator was given.
-            let unit_symbols = unit.symbols().to_vec();
-            let roots = reachability_roots(&unit_symbols, &root_value_names, &config);
-            let rc_prog =
-                lower_and_insert_rc(gc.type_env(), &unit_symbols, &global_types, roots, &config);
-            let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &global_types, &config);
-            gc.implement_rc_program(&rc_prog);
+            // Generate this unit's slice of the program's RC IR. A function of another unit that
+            // this one calls is declared where code generation first reaches it, from the types of
+            // the program's globals the generator was given.
+            gc.implement_rc_program(&unit_program);
 
             if is_main_unit {
                 // Implement runtime functions.
@@ -430,9 +418,6 @@ pub fn build_object_files<'c>(
                 }
             }
 
-            // Every reader of this unit's globals is in the module by now.
-            gc.keep_initializers_out_of_shared_accessors();
-
             gc.finalize_di();
 
             gc.assert_defined_symbols_fit_a_symbol_table();
@@ -441,6 +426,10 @@ pub fn build_object_files<'c>(
             if config.no_elim_frame_pointers() {
                 gc.add_frame_pointer_attribute_to_all_functions();
             }
+
+            // This module is the one the optimization runs over, so it holds every reader of every
+            // global it defines.
+            keep_initializers_out_of_shared_accessors(gc.module, &config);
 
             if config.emit_llvm {
                 // Print LLVM-IR to file before optimization.
@@ -454,13 +443,12 @@ pub fn build_object_files<'c>(
                 emit_llvm(gc.module, &config, true);
             }
 
-            write_to_object_file(gc.module, &target_machine, &unit.object_file_path());
+            write_to_object_file(gc.module, &target_machine, &unit_path);
         }));
     }
     join_compiler_threads(threads);
 
     // Save object files cache.
-    let obj_files = BuildObjFilesResult { obj_paths };
     save_build_object_files_cache(&program, config, &obj_files);
 
     Ok(obj_files)
@@ -553,8 +541,8 @@ fn build_object_files_cache_hash(
     hash_source.push_text(&config.object_generation_hash());
     // What this cache holds is the object files of a whole build, and how many of them there are is
     // decided by how many symbols one compilation unit holds. A unit's own object file is named by
-    // the symbols it holds (`CompileUnit::update_unit_hash`), so a build that divides itself
-    // differently still reuses each unit whose symbols it leaves together.
+    // the code it generates (`divide_program::generated_code_hash`), so a build that divides itself
+    // differently still reuses each unit whose code it leaves as it was.
     hash_source.push_text(&config.cu_size.to_string());
     for mi in &program.modules {
         hash_source.push_text(&mi.source.input.hash()?);
@@ -610,46 +598,45 @@ pub(crate) fn get_target_machine(
     }
 }
 
-/// Compile `module` into an object file at `obj_path`, creating the containing directory. The code
-/// goes to a uniquely named temporary file that is renamed into place, so `obj_path` exists only
-/// once it holds a complete object.
+/// Compile `module` into an object file at `obj_path`.
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
-    // Create directory if it doesn't exist.
-    let dir_path = obj_path.parent().unwrap();
-    match fs::create_dir_all(dir_path) {
-        Err(e) => {
-            panic_with_msg(&format!(
-                "Failed to create directory \"{}\": {}",
-                dir_path.to_string_lossy().to_string(),
-                e
-            ));
-        }
-        Ok(_) => {}
-    }
-    // Write to a temporary file.
-    let tmp_file_path = obj_path.with_extension(thread_rng().gen::<u64>().to_string() + ".tmp");
-    target_machine
-        .write_to_file(&module, FileType::Object, &tmp_file_path)
-        .map_err(|e| {
-            panic_with_msg(&format!(
-                "Failed to write to file \"{}\": {}",
-                obj_path.to_string_lossy().to_string(),
-                e
-            ))
-        })
-        .unwrap();
+    write_through_temporary_file(obj_path, |path| {
+        target_machine
+            .write_to_file(module, FileType::Object, path)
+            .map_err(|e| e.to_string())
+    });
+}
 
-    // Rename the temporary file to the final file.
-    match fs::rename(&tmp_file_path, obj_path) {
-        Err(e) => {
-            panic_with_msg(&format!(
-                "Failed to rename \"{}\" to \"{}\": {}",
-                tmp_file_path.to_string_lossy().to_string(),
-                obj_path.to_string_lossy().to_string(),
-                e
-            ));
-        }
-        Ok(_) => {}
+/// Write a file at `path` through a uniquely named temporary file in the same directory that is
+/// renamed into place, so that `path` exists only once it holds the whole of what was written.
+/// Creates the containing directory. A failure of any step aborts the compilation.
+///
+/// # Arguments
+/// * `write` — writes the content to the temporary path it is handed.
+fn write_through_temporary_file(path: &Path, write: impl FnOnce(&Path) -> Result<(), String>) {
+    let dir_path = path.parent().unwrap();
+    if let Err(e) = create_dir_all(dir_path) {
+        panic_with_msg(&format!(
+            "Failed to create directory \"{}\": {}",
+            dir_path.to_string_lossy(),
+            e
+        ));
+    }
+    let tmp_path = path.with_extension(thread_rng().gen::<u64>().to_string() + ".tmp");
+    if let Err(e) = write(&tmp_path) {
+        panic_with_msg(&format!(
+            "Failed to write to file \"{}\": {}",
+            path.to_string_lossy(),
+            e
+        ));
+    }
+    if let Err(e) = fs::rename(&tmp_path, path) {
+        panic_with_msg(&format!(
+            "Failed to rename \"{}\" to \"{}\": {}",
+            tmp_path.to_string_lossy(),
+            path.to_string_lossy(),
+            e
+        ));
     }
 }
 

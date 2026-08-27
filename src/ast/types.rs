@@ -445,6 +445,13 @@ pub struct TypeNode {
     /// The type expression, which is what equality and hashing of a node read.
     pub ty: Type,
     /// Where the type was written, for a type read from a source file.
+    ///
+    /// Left out of the serialized form, so that a node serializes to its type expression — the
+    /// same thing `PartialEq` compares and `Hash` hashes. A reader that must not follow an edit
+    /// shifting a position would otherwise have to take the type out of whatever holds it, and an
+    /// inline-LLVM op holds its types behind a trait object no reader can reach into
+    /// (`divide_program::generated_code_hash` reads one).
+    #[serde(skip)]
     pub info: TypeInfo,
     /// The hash of `ty`, kept once computed.
     ///
@@ -476,18 +483,24 @@ impl PartialEq for TypeNode {
 
 impl Eq for TypeNode {}
 
-impl Hash for TypeNode {
-    /// Hashes the type expression, which is what `PartialEq` compares; the source information the
-    /// node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing a
-    /// type that shares a subterm many times costs one visit per node rather than one per
+impl TypeNode {
+    /// The hash of the type expression, which is what `PartialEq` compares; the source information
+    /// the node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing
+    /// a type that shares a subterm many times costs one visit per node rather than one per
     /// occurrence.
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let hash = *self.hash_cache.get_or_init(|| {
+    pub fn type_hash(&self) -> u64 {
+        *self.hash_cache.get_or_init(|| {
             let mut hasher = DefaultHasher::new();
             self.ty.hash(&mut hasher);
             hasher.finish()
-        });
-        state.write_u64(hash);
+        })
+    }
+}
+
+impl Hash for TypeNode {
+    /// Writes `type_hash`, so that two nodes `PartialEq` calls equal hash alike.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.type_hash());
     }
 }
 
@@ -2791,8 +2804,58 @@ pub struct OpaqueTyConResolution {
 
 #[cfg(test)]
 mod tests {
-    use super::{kind_arrow, kind_star, make_tyvar};
+    use super::{kind_arrow, kind_star, make_tyvar, type_tyapp, TypeNode};
+    use crate::fixstd::builtin::{make_array_ty, make_i64_ty};
     use crate::misc::Set;
+    use crate::parse::sourcefile::{SourceFile, Span};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    /// A span over a source file held in memory, at `start`.
+    fn span_at(start: usize) -> Option<Span> {
+        let source = SourceFile::from_file_path_and_content(
+            PathBuf::from("written_here.fix"),
+            "type T = I64;\n".to_string(),
+        );
+        Some(Span {
+            input: source,
+            start,
+            end: start + 3,
+        })
+    }
+
+    /// `Array I64` with the element node written at `start`.
+    fn array_of_i64_written_at(start: usize) -> Arc<TypeNode> {
+        type_tyapp(make_array_ty(), make_i64_ty().set_source(span_at(start)))
+    }
+
+    /// A type serializes to its type expression, which is what `PartialEq` compares and `Hash`
+    /// hashes: two nodes for one type written at different places serialize alike.
+    ///
+    /// The digest naming a compilation unit's object file serializes the RC IR
+    /// (`divide_program::generated_code_hash`), and a type reaches it inside values that give no
+    /// way to take the type out — an inline-LLVM op holds the types of a closure's captures behind
+    /// a trait object. So a position in the serialized form of a type makes an edit that shifts it
+    /// regenerate a unit whose code that edit leaves as it was.
+    #[test]
+    fn test_a_type_serializes_to_its_expression() {
+        let bytes = |ty: &Arc<TypeNode>| postcard::to_allocvec(ty).unwrap();
+
+        let nowhere = type_tyapp(make_array_ty(), make_i64_ty());
+        let here = array_of_i64_written_at(0);
+        let further_down = array_of_i64_written_at(7);
+
+        assert_eq!(
+            bytes(&here),
+            bytes(&further_down),
+            "a type written further down its file serialized differently"
+        );
+        assert_eq!(
+            bytes(&here),
+            bytes(&nowhere),
+            "a type written in a source file serialized differently from one the compiler built"
+        );
+    }
 
     /// Two type variables of one name are one variable whatever kinds they carry, and hashing agrees
     /// with that.

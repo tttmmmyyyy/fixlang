@@ -18,7 +18,6 @@ use crate::misc::{
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
-use inkwell::module::Linkage;
 use inkwell::OptimizationLevel;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -492,10 +491,13 @@ pub struct Configuration {
     pub show_build_times: bool,
     /// Whether the build reports what it is doing as it goes.
     pub verbose: bool,
-    /// The average number of symbols separate compilation puts into one compilation unit. Where a
-    /// unit ends is decided by the names of the symbols it holds, so this sets how often a boundary
-    /// falls rather than bounding a unit. Lowering it compiles more units in parallel and gives the
-    /// linker more to do.
+    /// The average number of entries — the top-level functions and the global values whose code is
+    /// generated — one compilation unit holds. Where a unit ends is decided by the names of the
+    /// entries it holds, so this sets how often a boundary falls rather than bounding a unit.
+    /// Lowering it compiles more units in parallel and gives the linker more to do.
+    ///
+    /// `constants::WHOLE_PROGRAM_IN_ONE_UNIT` puts every entry in one unit, which gives up building
+    /// the program a unit at a time and lets LLVM see every call it makes.
     pub cu_size: usize,
     /// The most scalars a value is split into and carried as separate LLVM values; a type holding
     /// more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
@@ -870,14 +872,6 @@ impl Configuration {
     /// * `level` — the lowest optimization level the pass is written to run at.
     fn runs_from(&self, level: FixOptimizationLevel) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= level
-    }
-
-    /// Split the program's symbols into several compilation units, each hashed and cached on its
-    /// own, so that a rebuild regenerates only the units whose inputs changed. A function of a unit
-    /// is externally visible, since another unit calls it. Runs at `Basic` and below; above that the
-    /// program is one unit, which is what lets a pass see all of it at once.
-    pub fn enable_separated_compilation(&self) -> bool {
-        !self.force_all_optimizations() && self.fix_opt_level <= FixOptimizationLevel::Basic
     }
 
     /// Give each global function a version taking one, two, ... arguments at once, and send every
@@ -1272,21 +1266,6 @@ impl Configuration {
             }
         }
         Ok(command)
-    }
-
-    /// The linkage to give a symbol that other compilation units may call: external where each unit
-    /// is compiled on its own, internal where the program is optimized as a whole.
-    ///
-    /// A symbol this makes external is one another unit may reach, so it is also a reachability root
-    /// of the RC IR (`reachability_roots`). Narrowing what gets external linkage narrows what that
-    /// root set may hold, and a symbol left out of it is one dead-code elimination drops while
-    /// another unit still calls it.
-    pub fn external_if_separated(&self) -> Linkage {
-        if self.enable_separated_compilation() {
-            Linkage::External
-        } else {
-            Linkage::Internal
-        }
     }
 
     /// Instrument the generated program with `sanitizer`.

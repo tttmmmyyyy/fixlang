@@ -18,6 +18,7 @@ use crate::fixstd::builtin::{
     make_dynamic_object_ty, InlineLLVMArrayLitBody, InlineLLVMCaptureProjectBody,
     InlineLLVMFFICallBody, InlineLLVMMakeStructBody,
 };
+use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
@@ -48,11 +49,11 @@ enum LoweredSymbol {
 }
 
 /// Lower `symbols` to an `RcProgram`. Symbols reference one another by name, so the set need not be
-/// closed; passing a subset (e.g. one compilation unit) lowers just those. `global_types` types a
-/// global referenced as an LLVM operand, so it must cover every symbol any lowered function might
-/// reference, including one another unit defines (`Program::global_types`). `roots` names what code
-/// generation reaches the lowered program from outside it; it becomes `RcProgram::roots`, and the
-/// build driver computes it (`reachability_roots`).
+/// closed; passing a subset lowers just those. `global_types` types a global referenced as an LLVM
+/// operand, so it must cover every symbol any lowered function might reference, whether or not
+/// `symbols` holds it (`Program::global_types`). `roots` names what code generation reaches the
+/// lowered program from outside it; it becomes `RcProgram::roots`, and the build driver takes it
+/// from `Program::root_value_names`.
 pub fn lower_program(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -85,6 +86,14 @@ pub fn lower_program(
     }
 }
 
+/// How many hexadecimal characters of a symbol's digest tag the local names minted for it.
+///
+/// The tag is what makes the names of two symbols differ, so two symbols sharing one would put
+/// their local names in one space. Sixteen characters are sixty-four bits: a program of a million
+/// symbols shares a tag with probability under 3e-8, while eight characters would share one at
+/// around a hundred thousand symbols.
+const SYMBOL_TAG_LENGTH: usize = 16;
+
 /// The lowering context: a fresh-name counter, the accumulated top-level functions, and the scope
 /// mapping each AST local name to the RC IR variable currently bound to it. Because a fresh
 /// globally-unique name is minted at every binding, the scope resolves shadowing and the resulting
@@ -92,8 +101,18 @@ pub fn lower_program(
 struct Lowerer<'a> {
     /// The type definitions, for resolving a value's type to its layout and boxedness.
     type_env: &'a TypeEnv,
-    /// The source of the number that makes each minted local name unique across the program.
+    /// The source of the number that makes each minted local name unique within the symbol being
+    /// lowered. It restarts at each symbol, and `symbol_tag` is what makes the names of two symbols
+    /// differ.
     fresh_counter: u64,
+    /// The digest of the name of the symbol being lowered, carried by every local name minted for
+    /// it so that no two symbols mint the same name.
+    ///
+    /// A counter running across the whole program would give uniqueness too, and would move every
+    /// name minted after a symbol that an edit adds. A compilation unit is named by the code it
+    /// generates (`divide_program::generated_code_hash`), so a name that moves regenerates a unit
+    /// whose code the edit does not otherwise reach.
+    symbol_tag: String,
     /// The top-level functions lowered so far, the lifted lambda bodies among them.
     funcs: Map<FuncRef, RcFunc>,
     /// A shadow stack per AST name; the last entry is the current binding.
@@ -115,6 +134,7 @@ impl<'a> Lowerer<'a> {
         Lowerer {
             type_env,
             fresh_counter: 0,
+            symbol_tag: String::new(),
             funcs: Map::default(),
             scope: Map::default(),
             global_types,
@@ -125,15 +145,18 @@ impl<'a> Lowerer<'a> {
 
     // --- fresh names ---
 
-    /// A variable named `<hint>#<n>` with an `n` no other minted name carries, so the name alone
-    /// identifies the binding wherever the program reads it.
+    /// A variable named `<hint>#<symbol tag><n>`, which no other minted name carries, so the name
+    /// alone identifies the binding wherever the program reads it.
     ///
     /// # Arguments
     /// * `hint` — the readable part of the name, shown in an RC IR dump.
     /// * `source` — where the value the variable holds is written, for diagnostics and debug info.
     fn fresh_var(&mut self, hint: &str, ty: Arc<TypeNode>, source: Option<Span>) -> RcVar {
         self.fresh_counter += 1;
-        let name = FullName::local(&format!("{}#{}", hint, self.fresh_counter));
+        let name = FullName::local(&format!(
+            "{}#{}{}",
+            hint, self.symbol_tag, self.fresh_counter
+        ));
         RcVar {
             name,
             ty,
@@ -241,11 +264,13 @@ impl<'a> Lowerer<'a> {
 
     /// Lower one instantiated symbol: a funptr symbol becomes a top-level function under the
     /// symbol's own name, and a symbol of any other type becomes the initializer of a global value.
-    /// The counter naming the lambdas lifted out restarts here, so they are numbered within the
-    /// symbol they were written in.
+    /// The counters naming the lambdas lifted out and the local variables minted restart here, so
+    /// both are numbered within the symbol they were written in.
     fn lower_symbol(&mut self, sym: &Symbol) -> LoweredSymbol {
         self.current_symbol = Some(sym.name.clone());
         self.closure_counter = 0;
+        self.fresh_counter = 0;
+        self.symbol_tag = md5_hex(&sym.name.to_string())[..SYMBOL_TAG_LENGTH].to_string();
         let expr = sym.expr.as_ref().expect("symbol has no expression");
         if sym.ty.is_funptr() {
             // A funptr symbol is a top-level function whose expression is a (possibly multi-param)
@@ -267,6 +292,8 @@ impl<'a> Lowerer<'a> {
                 symbol: sym.name.clone(),
                 ty: sym.ty.clone(),
                 init,
+                owns_initializer: true,
+                owns_storage: true,
             })
         }
     }

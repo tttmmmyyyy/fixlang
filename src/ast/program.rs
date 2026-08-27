@@ -28,7 +28,7 @@ use crate::elaboration::desugar_opaque::{
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
-use crate::error::{panic_if_err, Error, Errors, WARN_DEPRECATED, WARN_UNDECLARED_DEPENDENCY};
+use crate::error::{Error, Errors, WARN_DEPRECATED, WARN_UNDECLARED_DEPENDENCY};
 use crate::ffi::{c_entry_point_signature, CSignature};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
@@ -78,6 +78,7 @@ pub struct TypeEnv {
 }
 
 impl Default for TypeEnv {
+    /// An environment in which no type constructor and no type alias is declared.
     fn default() -> Self {
         Self {
             tycons: Arc::new(Default::default()),
@@ -240,39 +241,6 @@ pub struct Symbol {
     /// symbol leaves it `false`, so no request reaches the back end; the field and the path that
     /// carries it to code generation are here for a pass that decides to make one.
     pub inline_into_callers: bool,
-    // If you add new fields, be sure to update `hash()` method.
-}
-
-impl Symbol {
-    /// The set of modules that this symbol depends on directly.
-    /// If any of these modules, or any of their importee are changed, then they are required to be re-compiled.
-    /// The full set of modules a change can reach is obtained by walking the importing graph from
-    /// this set.
-    pub fn dependent_modules(&self) -> Set<Name> {
-        let mut dep_mods = Set::default();
-        dep_mods.insert(self.name.module());
-        self.ty.define_modules_of_tycons(&mut dep_mods);
-        dep_mods
-        // Even for implemented trait methods, it is enough to add the module where the trait is defined and the modules where the types of the symbol are defined.
-        // This is because,
-        // - By orphan rule, trait implementations are given in the module where the trait is defined, or the module where the type is defined.
-        // - Moreover, we forbid unrelated trait implementation (see `test_unrelated_trait_method()`),
-        // so the type the trait is implemented appears in the type of the symbol.
-    }
-
-    /// The MD5 hash of everything about this symbol that decides the code generated for it — its
-    /// name, its type, its expression, and what it asks of the back end — in hexadecimal.
-    pub fn hash(&self) -> String {
-        let mut hash_source = HashSource::default();
-        hash_source.push_text(&self.name.to_string());
-        hash_source.push_text(&self.ty.to_string());
-        hash_source.push_text(&match &self.expr {
-            Some(expr) => expr.expr.stringify().to_string(),
-            None => "".to_string(),
-        });
-        hash_source.push_text(&self.inline_into_callers.to_string());
-        hash_source.finish()
-    }
 }
 
 /// Declaration (name and its type) of global value.
@@ -888,6 +856,9 @@ impl Program {
         Ok(())
     }
 
+    /// Records `import_statement` under the module importing it, as it stands.
+    /// `add_import_statement` is where a statement a source writes goes: it rejects a module
+    /// importing itself, and lets an explicit `Std` import replace the implicit one.
     pub fn add_import_statement_no_verify(&mut self, import_statement: ImportStatement) {
         let importer = &import_statement.importer;
         if let Some(stmts) = self.mod_to_import_stmts.get_mut(importer) {
@@ -933,6 +904,8 @@ impl Program {
         }
     }
 
+    /// Every import statement of the program, the implicit ones included, over all the modules
+    /// linked into it.
     pub fn import_statements(&self) -> Vec<ImportStatement> {
         self.mod_to_import_stmts
             .values()
@@ -1011,9 +984,9 @@ impl Program {
         self.type_env.clone()
     }
 
-    /// The type of every top-level symbol of the program, by name. Compiling one unit under separated
-    /// compilation needs the types of the symbols the other units define as well, since this unit's
-    /// code refers to them, so this covers the whole program rather than any one unit.
+    /// The type of every top-level symbol of the program, by name. Compiling one unit needs the
+    /// types of the symbols the other units define as well, since this unit's code refers to them,
+    /// so this covers the whole program rather than any one unit.
     pub fn global_types(&self) -> Map<FullName, Arc<TypeNode>> {
         self.symbols
             .iter()
@@ -1033,6 +1006,8 @@ impl Program {
         res
     }
 
+    /// How many type parameters each associated type declared in the program takes, by the full
+    /// name it is written under: the namespace of the trait declaring it, and its own name.
     pub fn assoc_ty_to_arity(&self) -> Map<FullName, usize> {
         self.trait_env.assoc_ty_to_arity()
     }
@@ -1042,6 +1017,7 @@ impl Program {
         self.trait_env.trait_names()
     }
 
+    /// Every trait the program declares, the trait aliases among them.
     pub fn traits_with_aliases(&self) -> Vec<TraitId> {
         self.trait_env.traits_with_aliases()
     }
@@ -2596,6 +2572,8 @@ impl Program {
         errors.to_result()
     }
 
+    /// Fills in the kind of every type variable the program's declarations leave implicit: those of
+    /// the traits and trait aliases, of the trait instances, and of the global values' schemes.
     pub fn set_kinds(&mut self) -> Result<(), Errors> {
         self.trait_env.set_kinds_in_trait_and_alias_defns()?;
         let kind_env = self.kind_env();
@@ -2607,6 +2585,8 @@ impl Program {
         errors.to_result()
     }
 
+    /// The kind of every type constructor, associated type, trait and trait alias the program
+    /// declares, which is what a written type is kind-checked against.
     pub fn kind_env(&self) -> KindEnv {
         KindEnv {
             tycons: self.type_env().kinds(),
@@ -2823,6 +2803,10 @@ impl Program {
         errors.to_result()
     }
 
+    /// Defines the global values a type declaration brings with it: a getter, a setter, a modifier
+    /// and the functorial actions for each field of a struct, and a constructor, an extractor, a
+    /// test and a modifier for each variant of a union. Each is defined in the namespace of the
+    /// type, under the name a source writes it by, with the documentation shown for it.
     pub fn add_methods(self: &mut Program) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for defn in &self.type_defns.clone() {
@@ -3164,17 +3148,6 @@ impl Program {
             .collect()
     }
 
-    /// For each module linked into the program, every module a value defined in it can refer to.
-    pub fn module_dependency_map(&self) -> Map<Name, Set<Name>> {
-        // TODO: Improve time complexity.
-        let mods = self.linked_mods();
-        let mut dependency = Map::default();
-        for module in &mods {
-            dependency.insert(module.clone(), self.dependent_modules(&module));
-        }
-        dependency
-    }
-
     /// A hash naming everything a value defined in `module` is type-checked from.
     ///
     /// It keys the type-checking cache, of the batch compiler and of the LSP alike, so it covers
@@ -3207,21 +3180,6 @@ impl Program {
         hash_source.push_text(&config.elaboration_hash());
         hash_source.push_text(build_time_utc!());
         Ok(hash_source.finish())
-    }
-
-    /// For each module linked into the program, a hash naming everything a value defined in that
-    /// module is type-checked from.
-    pub fn module_dependency_hash_map(&self, config: &Configuration) -> Map<Name, String> {
-        // TODO: Improve time complexity.
-        let mods = self.linked_mods();
-        let mut mod_to_hash = Map::default();
-        for module in &mods {
-            mod_to_hash.insert(
-                module.clone(),
-                panic_if_err(self.module_dependency_hash(&module, config)),
-            );
-        }
-        mod_to_hash
     }
 
     // Check if all items referred in import statements are defined.

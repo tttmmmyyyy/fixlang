@@ -29,6 +29,7 @@ use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
+use crate::misc::Set;
 use crate::object::build_free_boxed;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
@@ -222,10 +223,14 @@ impl<'c> Object<'c> {
         Object::new(val, ty.clone(), gc)
     }
 
+    /// Whether this object is carried as its value itself, laid out in registers or in the frame
+    /// holding it.
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.ty.is_unbox(type_env)
     }
 
+    /// Whether this object is carried as a pointer to a heap allocation with a control block, which
+    /// is what reference counting acts on.
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {
         self.ty.is_box(type_env)
     }
@@ -545,13 +550,22 @@ pub struct Generator<'c, 'm> {
     /// map when code generation first asks for it (`get_or_declare_global`), which is also where it
     /// is declared, so the module declares the globals it uses and no others.
     declared_globals: Map<FullName, ScopedValue<'c>>,
-    /// The functions this module emitted for each of its globals.
-    /// `keep_initializers_out_of_shared_accessors` reads it once every reader of every global is
-    /// in the module, and decides there which accessors keep their initializer.
-    pub(crate) emitted_globals: Vec<EmittedGlobal<'c>>,
     /// The type of every global symbol of the program, by name — every compilation unit's, since a
     /// unit's code calls into the others. It is what a global is declared from on first use.
     global_types: Arc<Map<FullName, Arc<TypeNode>>>,
+    /// The names some compilation unit publishes to the linker, over the whole program
+    /// (`DividedProgram::published`). A name this module defines and does not hold a copy of is
+    /// published exactly when it is in here.
+    published_names: Arc<Set<FullName>>,
+    /// The functions this module holds a copy of for its own calls, whose home is another unit. A
+    /// copy is internal however the original is published, so that a call here reaches the copy and
+    /// the linker sees one definition of the name.
+    imported: Arc<Set<FullName>>,
+    /// The globals a unit other than the one owning them reads. The owner publishes their storage,
+    /// their initialization flag and the function computing them, and a reader declares the three
+    /// and carries a copy of the accessor alone, so that one value is computed once and every read
+    /// of it still inlines.
+    pub(crate) shared_globals: Arc<Set<FullName>>,
     /// Type definitions of the program, used to resolve a Fix type to its layout.
     type_env: TypeEnv,
     /// Layout of the target the module is compiled for: sizes, alignments and struct offsets.
@@ -586,31 +600,43 @@ pub struct Generator<'c, 'm> {
     out_pointer_buffers: Map<Arc<TypeNode>, StructType<'c>>,
 }
 
+/// The lifetime of the builder `push_builder` pushed. Code generated while it is alive is written
+/// through that builder, and dropping it makes the builder underneath current again.
 pub struct PopBuilderGuard<'c> {
+    /// The stack the builder was pushed onto, shared with the `Generator` that owns it.
     builders: Arc<RefCell<Vec<Arc<Builder<'c>>>>>,
 }
 
 impl<'c> Drop for PopBuilderGuard<'c> {
+    /// Makes the builder underneath the pushed one current again.
     fn drop(&mut self) {
         self.builders.borrow_mut().pop().unwrap();
     }
 }
 
+/// The lifetime of the variable scope `push_scope` pushed. A local bound while it is alive is bound
+/// in that scope, and dropping it takes those locals out of scope.
 pub struct PopScopeGuard<'c> {
+    /// The stack the scope was pushed onto, shared with the `Generator` that owns it.
     scope: Arc<RefCell<Vec<Scope<'c>>>>,
 }
 
 impl<'c> Drop for PopScopeGuard<'c> {
+    /// Takes the locals bound in the pushed scope out of scope.
     fn drop(&mut self) {
         self.scope.borrow_mut().pop();
     }
 }
 
+/// The lifetime of the debug scope `push_debug_scope` pushed. Instructions generated while it is
+/// alive belong to that debug scope, and dropping it returns to the debug scope underneath.
 pub struct PopDebugScopeGuard<'c> {
+    /// The stack the debug scope was pushed onto, shared with the `Generator` that owns it.
     scope: Arc<RefCell<Vec<Option<DIScope<'c>>>>>,
 }
 
 impl<'c> Drop for PopDebugScopeGuard<'c> {
+    /// Returns to the debug scope underneath the pushed one.
     fn drop(&mut self) {
         self.scope.borrow_mut().pop();
     }
@@ -778,6 +804,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         config: Configuration,
         type_env: TypeEnv,
         global_types: Arc<Map<FullName, Arc<TypeNode>>>,
+        published_names: Arc<Set<FullName>>,
+        imported: Arc<Set<FullName>>,
+        shared_globals: Arc<Set<FullName>>,
     ) -> Self {
         let triple = module.get_triple().as_str().to_string_lossy().to_string();
         let gc = Self {
@@ -789,8 +818,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             debug_info: Default::default(),
             debug_location: vec![],
             declared_globals: Default::default(),
-            emitted_globals: Vec::new(),
             global_types,
+            published_names,
+            imported,
+            shared_globals,
             type_env,
             target_data: target_data,
             return_registers: return_registers_of_target(&triple),
@@ -2441,25 +2472,37 @@ impl<'c, 'm> Generator<'c, 'm> {
         Object::from_parts(parts, ret_ty, self)
     }
 
+    /// Whether the global `name` is published to the linker, which it is when another unit reaches
+    /// it and this module is the one defining it rather than one holding a copy. Every other global
+    /// is internal to the unit defining it, and no other unit declares it, so LLVM optimizes it
+    /// knowing every call it has.
+    ///
+    /// `DividedProgram::published_here` answers this for the names a unit defines, and the digest
+    /// naming the unit's object file reads it from there.
+    fn published_to_the_linker(&self, name: &FullName) -> bool {
+        !self.imported.contains(name) && self.published_names.contains(name)
+    }
+
     // Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
-    // A funptr function is reachable from another compilation unit when compilation is separated;
-    // a closure function is internal, so LLVM resolves a collision between two such names by
-    // renaming one of them.
+    // A funptr function is one of the program's globals, so it is external where another
+    // compilation unit reaches it by name; a closure function is internal to the unit that lifted
+    // it, so LLVM resolves a collision between two such names by renaming one of them.
     //
     // A funptr function is also registered as the value of `name`, because the bodies that call it
     // read it by name. Registering here is what leaves no way to declare one and reach it through a
     // name that resolves to nothing.
     //
-    // The linkage decided here is also what decides the RC IR's reachability roots
-    // (`reachability_roots`): a function another unit may call has to be one dead-code elimination
-    // keeps. Narrowing the condition below narrows the root set with it.
+    // The linkage decided here is also what decides the RC IR's reachability roots: a function
+    // another unit may call has to be one dead-code elimination keeps. `divide_among_units` takes a
+    // unit's roots from `DividedProgram::published_here`, which is what `published_to_the_linker`
+    // reads here, so narrowing the condition below narrows the root set with it.
     pub fn declare_lambda_function(
         &mut self,
         fn_ty: &Arc<TypeNode>,
         name: &FullName,
     ) -> FunctionValue<'c> {
         let llvm_fn_ty = lambda_function_type(fn_ty, self);
-        let linkage = if fn_ty.is_funptr() && self.config.enable_separated_compilation() {
+        let linkage = if fn_ty.is_funptr() && self.published_to_the_linker(name) {
             Linkage::External
         } else {
             Linkage::Internal
@@ -2497,11 +2540,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             embedded_ty.fn_type(&[], false)
         };
-        let acc_fn = self.module.add_function(
-            &acc_fn_name,
-            acc_fn_ty,
-            Some(self.config.external_if_separated()),
-        );
+        // The accessor is internal wherever it is: a unit reading a global carries one of its own,
+        // so no unit reaches another's.
+        let acc_fn = self
+            .module
+            .add_function(&acc_fn_name, acc_fn_ty, Some(Linkage::Internal));
         self.add_global_object(name.clone(), acc_fn, ty);
         Some(acc_fn)
     }
@@ -2936,16 +2979,6 @@ pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
         SYMBOL_VERSION_SEPARATOR,
         SYMBOL_VERSION_SEPARATOR_SUBSTITUTE,
     )
-}
-
-/// The two functions a module emits for one of its globals.
-#[derive(Clone, Copy)]
-pub(crate) struct EmittedGlobal<'c> {
-    /// Reads the global: tests the initialization flag, calls `init_value` and stores what it
-    /// returns on the first access, and loads the storage.
-    pub accessor: FunctionValue<'c>,
-    /// Computes the value of the global, and is called once in the program's life.
-    pub init_value: FunctionValue<'c>,
 }
 
 /// The name of the LLVM function through which the global `name`, of a type other than funptr, is

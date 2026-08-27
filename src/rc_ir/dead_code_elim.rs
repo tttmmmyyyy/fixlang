@@ -21,6 +21,9 @@ pub fn eliminate_unreachable(prog: &mut RcProgram) {
     let globals: Map<FullName, &RcExprNode> = prog
         .globals
         .iter()
+        // A global another program computes is carried here to be read: this program generates no
+        // initializer for it, so that initializer reaches nothing here.
+        .filter(|g| g.owns_initializer)
         .map(|g| (g.symbol.clone(), &g.init))
         .collect();
 
@@ -65,7 +68,7 @@ pub fn eliminate_unreachable(prog: &mut RcProgram) {
 /// A name is mentioned as the reference of a closure value, or as a variable — the callee of a call,
 /// an operand, the value returned. Local variables are mentioned along with the rest; the caller
 /// decides which of the mentions can name a definition.
-fn collect_mentions(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
+pub(crate) fn collect_mentions(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
     grow_stack(|| collect_mentions_inner(node, mention))
 }
 
@@ -181,6 +184,8 @@ mod tests {
             symbol,
             ty: make_i64_ty(),
             init: body_mentioning(mentions),
+            owns_initializer: true,
+            owns_storage: true,
         }
     }
 
@@ -343,6 +348,7 @@ mod tests {
     /// (`Lowerer::lower_var`), so any of these can be the one place a definition is named from.
     #[test]
     fn test_every_mention_site_is_followed() {
+        /// A node standing for `expr`, which no source spells out.
         fn node(expr: RcExpr) -> RcExprNode {
             RcExprNode {
                 expr: Arc::new(expr),

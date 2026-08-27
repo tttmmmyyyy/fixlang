@@ -8,9 +8,10 @@ line-crossing access, yet those cost real time -- an array whose elements start 
 nothing about how fast the machine gets through those instructions, which is where a change to
 code layout or branch density shows up.
 
-The split count is decided by the program and the environment it is given; the cycle count is
-not, so it is the minimum over `--windows` windows, and it is reported when nothing else could
-have moved it. Other work reaches it two ways. It runs on the other thread of the same core: the
+The cycle count is the minimum over `--windows` windows, and it is reported when nothing else
+could have moved it. The split count is read off the run that count came from, since where a
+program's data sits decides which of its accesses straddle a line and address-space randomization
+moves that from one run to the next. Other work reaches it two ways. It runs on the other thread of the same core: the
 measurement is pinned to one CPU, and how busy that thread was is read for every window. And it
 takes the cache every core shares: the caller answers for that by passing what cachegrind counted
 for this program. Where either of them could have moved a run, the cycle field comes back empty,
@@ -182,18 +183,25 @@ def read_counters(argv):
     return found, proc.stderr
 
 
-def read_window(argv, splits):
+def read_window(argv):
     """The lowest cycle count over a window of runs, how busy the sibling thread was through
-    it, and the split count the runs agreed on.
+    it, and the split count of the run that count came from.
 
     A window holds as many runs as `MINIMUM_WINDOW_SECONDS` needs, so that the sibling reading covers
-    enough ticks of `/proc/stat` to mean something. The split count comes from the same runs
-    and has to agree across them: the runs are given one environment, and from there nothing
-    about the machine's state reaches the addresses the program touches.
+    enough ticks of `/proc/stat` to mean something.
+
+    The two counts come from one run rather than from the window as a whole, so that the pair
+    describes the same execution. Which accesses straddle a cache line is decided by where the
+    program's data sits, and address-space randomization moves that from one run to the next: two
+    runs of one program under one environment differ by a few accesses, and sometimes by many, when
+    a buffer lands on the other side of a line. Reading the split count off the run whose cycles are
+    reported keeps the row consistent without asking the runs to agree on a figure the machine is
+    free to vary.
     """
     sibling_before = sibling_cpu_seconds()
     started = time.monotonic()
     cycles = None
+    splits = None
     while True:
         found, report = read_counters(argv)
         missing = [e for e in SPLIT_EVENTS + [CYCLE_EVENT.removesuffix(":u")]
@@ -203,14 +211,10 @@ def read_window(argv, splits):
             # of reach.
             sys.exit(f"perf reported none of {', '.join(missing)}. perf said:\n"
                      + report.strip())
-        run_splits = sum(found[e] for e in SPLIT_EVENTS)
-        if splits is None:
-            splits = run_splits
-        elif run_splits != splits:
-            sys.exit(f"the split count changed between runs of the same program "
-                     f"({splits} then {run_splits}), so one of them is not a measurement")
         run_cycles = found[CYCLE_EVENT.removesuffix(":u")]
-        cycles = run_cycles if cycles is None else min(cycles, run_cycles)
+        if cycles is None or run_cycles < cycles:
+            cycles = run_cycles
+            splits = sum(found[e] for e in SPLIT_EVENTS)
         elapsed = time.monotonic() - started
         if elapsed >= MINIMUM_WINDOW_SECONDS:
             break
@@ -233,9 +237,12 @@ def measure(argv, windows):
     splits = None
     cycles = None
     for _ in range(windows):
-        window_cycles, sibling_busy, splits = read_window(argv, splits)
-        if sibling_busy <= SIBLING_BUSY_LIMIT:
-            cycles = window_cycles if cycles is None else min(cycles, window_cycles)
+        window_cycles, sibling_busy, window_splits = read_window(argv)
+        if splits is None:
+            # A figure to report even where no window is the program's own to read.
+            splits = window_splits
+        if sibling_busy <= SIBLING_BUSY_LIMIT and (cycles is None or window_cycles < cycles):
+            cycles, splits = window_cycles, window_splits
     elapsed = time.monotonic() - started
     others = (cpu_seconds("cpu") - machine_before) - (own_cpu_seconds() - own_before)
     # `/proc/stat` counts in whole ticks and the rusage clocks round, so a short measurement
@@ -339,17 +346,19 @@ def self_check():
 
     # Only the windows the sibling stayed out of reach the cycle count, and where none did there is
     # no count to report. The window left out below carries the lowest count of the three, so
-    # `measure` letting it through would show up here as that count.
+    # `measure` letting it through would show up here as that count. The split count travels with
+    # the cycle count it was read beside, and where no window is the program's own it is the first
+    # window's.
     global read_window
     canned = []
-    real, read_window = read_window, lambda argv, splits: canned.pop(0)
+    real, read_window = read_window, lambda argv: canned.pop(0)
     try:
-        canned[:] = [(90, 0.0, 4), (70, 1.0, 4), (80, SIBLING_BUSY_LIMIT / 2, 4)]
+        canned[:] = [(90, 0.0, 9), (70, 1.0, 7), (80, SIBLING_BUSY_LIMIT / 2, 4)]
         splits, cycles, _contention = measure(None, 3)
         assert (splits, cycles) == (4, 80), (splits, cycles)
-        canned[:] = [(90, 1.0, 4), (70, 1.0, 4)]
-        _splits, cycles, _contention = measure(None, 2)
-        assert cycles is None, cycles
+        canned[:] = [(90, 1.0, 9), (70, 1.0, 7)]
+        splits, cycles, _contention = measure(None, 2)
+        assert (splits, cycles) == (9, None), (splits, cycles)
     finally:
         read_window = real
 
@@ -366,7 +375,8 @@ def main():
                  " <program> [args...]\n"
                  "       perf_counters.py --cpu")
     splits, cycles, contention = measure(argv, windows)
-    # The split count is deterministic, so it is reported whatever the machine was doing.
+    # The split count belongs to a run rather than to the machine's state, so it is reported
+    # whatever that state was.
     comparable = cycles_are_comparable(cycles, contention, ram_accesses, instructions)
     reported_cycles = str(cycles) if comparable else ""
     print(f"{splits},{reported_cycles},{contention:.2f}")

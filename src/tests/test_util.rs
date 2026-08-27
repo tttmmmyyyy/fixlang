@@ -252,21 +252,26 @@ pub enum EmittedIr {
 impl EmittedIr {
     /// Whether a file of the build directory named `name` is one this selection reads.
     fn selects(&self, name: &str) -> bool {
-        let is_optimized = name.ends_with("_optimized.ll");
+        let is_generated = name.ends_with(".ll") && !name.ends_with("_optimized.ll");
         match self {
             EmittedIr::All => name.ends_with(".ll"),
-            EmittedIr::BeforeOptimization => name.ends_with(".ll") && !is_optimized,
-            EmittedIr::AfterOptimization => is_optimized,
+            EmittedIr::BeforeOptimization => is_generated,
+            EmittedIr::AfterOptimization => name.ends_with("_optimized.ll"),
         }
     }
 }
 
-/// The LLVM IR a `--emit-llvm` build wrote into `dir`, concatenated in file-name order.
+/// The LLVM IR a `--emit-llvm` build wrote into `dir`, one string per module, in file-name order.
 ///
 /// A build names its files after the compilation units it produced, so the files an earlier build
 /// left in the same directory survive it. Give each build a directory of its own where the IR is to
 /// be attributed to it.
-pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
+///
+/// Each compilation unit is optimized on its own, so what LLVM decides is decided within one
+/// module: a module numbers its attribute groups for itself, and a unit reading a global another
+/// unit owns carries a copy of that global's accessor. A test reading either takes the module it
+/// means out of this.
+pub fn emitted_llvm_ir_modules(dir: &Path, which: EmittedIr) -> Vec<String> {
     let mut paths = fs::read_dir(dir)
         .expect("Failed to read the build directory")
         .filter_map(|entry| {
@@ -284,8 +289,12 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
     paths
         .iter()
         .map(|path| fs::read_to_string(path).expect("Failed to read an emitted LLVM IR file"))
-        .collect::<Vec<_>>()
-        .join("\n")
+        .collect()
+}
+
+/// The LLVM IR a `--emit-llvm` build wrote into `dir`, the modules concatenated in file-name order.
+pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
+    emitted_llvm_ir_modules(dir, which).join("\n")
 }
 
 /// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.
@@ -313,7 +322,7 @@ mod tests {
     use super::EmittedIr;
 
     /// A build writes each module twice, once as generated and once as optimized, under names that
-    /// differ only by a suffix. The selection reads that suffix, so it is pinned here: a selection
+    /// differ only by a suffix. The selection reads them apart, and that is pinned here: a selection
     /// that quietly widened would let a test asserting the absence of something in the generated
     /// code pass on the optimized code instead.
     #[test]

@@ -153,7 +153,7 @@ fn try_local(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExpr
 }
 
 /// The number of expression nodes in `node`.
-fn node_count(node: &RcExprNode) -> u64 {
+pub(crate) fn node_count(node: &RcExprNode) -> u64 {
     // A deep continuation chain recurses to its full depth here; grow the stack on demand.
     grow_stack(|| {
         let cont = match node.expr.as_ref() {

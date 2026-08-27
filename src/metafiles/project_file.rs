@@ -5,7 +5,7 @@ use crate::{
     },
     constants::{
         PROJECT_FILE_PATH, SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE,
-        TRY_FIX_DEPS_UPDATE_TEST,
+        TRY_FIX_DEPS_UPDATE_TEST, WHOLE_PROGRAM_IN_ONE_UNIT, WHOLE_PROGRAM_IN_ONE_UNIT_STR,
     },
     dependency::lockfile::{
         clone_git_repo, get_lock_file_path, get_versions_from_repo, DependecyLockFile,
@@ -123,10 +123,25 @@ pub struct ProjectFileBuild {
     /// Whether to compile `eval {side}; {main}` as `{main}`, leaving the effect of `{side}` out of
     /// the program. Unset evaluates `{side}`.
     skip_eval: Option<bool>,
+    /// The average number of entries — the top-level functions and the global values whose code is
+    /// generated — one compilation unit holds, or `"inf"` for the whole program in one unit. A
+    /// `fix test` build reads the same value, and `--cu-size` on the command line overrides it.
+    cu_size: Option<CompilationUnitSize>,
 
     /// The `build.test` sub-section, which supplies the settings a `fix test` build reads beside
     /// the ones this `build` section gives.
     test: Option<ProjectFileBuildTest>,
+}
+
+/// What a `cu_size` field of the project file is written as: a number of entries, or the word that
+/// asks for the whole program in one unit.
+#[derive(Deserialize, Clone)]
+#[serde(untagged)]
+pub enum CompilationUnitSize {
+    /// How many entries one compilation unit holds on average.
+    Entries(usize),
+    /// `constants::WHOLE_PROGRAM_IN_ONE_UNIT_STR`, which asks for one unit for the whole program.
+    Named(String),
 }
 
 /// The `build.test` section of the project file, holding the settings a `fix test` build reads.
@@ -685,6 +700,29 @@ impl ProjectFile {
         }
     }
 
+    /// The `Configuration::cu_size` a `cu_size` field of this project file asks for, or an error
+    /// pointing at the project file when it asks for neither a positive number of entries nor the
+    /// whole program in one unit.
+    fn read_cu_size(&self, cu_size: &CompilationUnitSize) -> Result<usize, Errors> {
+        let refused = |written: String| {
+            Errors::from_msg_srcs(
+                format!(
+                    "A `cu_size` is a positive number or \"{}\", and this one is {}",
+                    WHOLE_PROGRAM_IN_ONE_UNIT_STR, written
+                ),
+                &[&Some(self.project_file_span(0, 0))],
+            )
+        };
+        match cu_size {
+            CompilationUnitSize::Entries(0) => Err(refused("0".to_string())),
+            CompilationUnitSize::Entries(entries) => Ok(*entries),
+            CompilationUnitSize::Named(name) if name == WHOLE_PROGRAM_IN_ONE_UNIT_STR => {
+                Ok(WHOLE_PROGRAM_IN_ONE_UNIT)
+            }
+            CompilationUnitSize::Named(name) => Err(refused(format!("\"{}\"", name))),
+        }
+    }
+
     /// The optimization level an `opt_level` field of this project file names, or an error pointing
     /// at the project file when it names no level the compiler has.
     fn read_opt_level(&self, opt_level: &str) -> Result<FixOptimizationLevel, Errors> {
@@ -936,6 +974,12 @@ impl ProjectFile {
                     config.set_debug_info();
                 }
             }
+        }
+
+        // Set the size of a compilation unit. A test build reads the value the `build` section
+        // gives, since dividing a program is about how it is built rather than about what is built.
+        if let Some(cu_size) = self.build.cu_size.as_ref() {
+            config.cu_size = self.read_cu_size(cu_size)?;
         }
 
         // Set optimization level.

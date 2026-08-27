@@ -61,7 +61,7 @@ use configuration::{
 use constants::{
     DEFAULT_COMPILATION_UNIT_SIZE_STR, DEFAULT_REGISTRY, OPTIMIZATION_LEVEL_BASIC,
     OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
-    PROJECT_FILE_PATH,
+    PROJECT_FILE_PATH, WHOLE_PROGRAM_IN_ONE_UNIT, WHOLE_PROGRAM_IN_ONE_UNIT_STR,
 };
 use edit::edit_explict_import;
 use error::{panic_if_err, Errors};
@@ -93,6 +93,21 @@ const VERSION: &str = git_version!(
     prefix = concat!(env!("CARGO_PKG_VERSION"), " ("),
     suffix = ")"
 );
+
+/// The `cu_size` the text of a `--cu-size` value asks for: a number, or
+/// `WHOLE_PROGRAM_IN_ONE_UNIT_STR` for the whole program in one unit.
+fn compilation_unit_size(value: &str) -> Result<usize, String> {
+    if value == WHOLE_PROGRAM_IN_ONE_UNIT_STR {
+        return Ok(WHOLE_PROGRAM_IN_ONE_UNIT);
+    }
+    match value.parse::<usize>() {
+        Ok(size) if size > 0 => Ok(size),
+        _ => Err(format!(
+            "expected a positive number or `{}`",
+            WHOLE_PROGRAM_IN_ONE_UNIT_STR
+        )),
+    }
+}
 
 /// Run the `fix` command, exiting with status 1 when it fails.
 fn main() {
@@ -224,11 +239,12 @@ fn run_cli() {
         .long("cu-size")
         .takes_value(true)
         .default_value(DEFAULT_COMPILATION_UNIT_SIZE_STR)
-        .value_parser(value_parser!(usize))
+        .value_parser(compilation_unit_size)
         .help(
-            "Average number of symbols in a compilation unit; a unit runs longer or shorter than this.\n\
+            "Average number of entries -- functions and global values whose code is generated -- in a\n\
+            compilation unit; a unit runs longer or shorter than this.\n\
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n\
-            NOTE: Separate compilation is disabled under the default optimization level.\n",
+            `inf` puts the whole program in one unit, which gives up building it a unit at a time.\n",
         );
     let max_cu_size = Arg::new("max-cu-size")
         .long("max-cu-size")

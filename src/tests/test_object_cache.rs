@@ -109,10 +109,10 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
             "the build asked for nothing should leave its object files behind"
         );
 
-        let mut assert_dump_build_matches = |what: &str, command: &mut Command| {
+        let assert_dump_build_matches = |what: &str, command: &mut Command| {
             let output = run_in(command.arg("--verbose"), dir, what);
             assert!(
-                output.contains("Generating object file for"),
+                output.contains("Generating code for"),
                 "{} should generate the code again, since a dump is written as it is generated.\n{}",
                 what,
                 output
@@ -257,8 +257,7 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
         let dir = project_dir();
         let dir = dir.path();
 
-        let count_generated_units =
-            |output: &str| output.matches("Generating object file for").count();
+        let count_generated_units = |output: &str| output.matches("Generating code for").count();
 
         let first_output = run_in(
             fix_command_at_opt_level("build", "basic").arg("--verbose"),

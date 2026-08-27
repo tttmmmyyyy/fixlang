@@ -1,8 +1,8 @@
 //! Module-dependency-hash regression tests for absolute-path symbol
 //! references.
 //!
-//! `module_dependency_hash_map` (in `src/ast/program.rs`) walks only
-//! `import` statements when computing the set of dependent modules.
+//! `Program::module_dependency_hash` (in `src/ast/program.rs`) walks
+//! only `import` statements when computing the set of dependent modules.
 //! Absolute paths like `::Lib::message` let `Main` reach a symbol in
 //! `Lib` without importing it (see `FullName::is_absolute` and the
 //! corresponding skips in `src/elaboration/typecheck.rs`), so editing

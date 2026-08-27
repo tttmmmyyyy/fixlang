@@ -7,6 +7,7 @@
 
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
+use crate::configuration::Configuration;
 use crate::constants::{
     pthread_once_init_flag_type, pthread_once_init_flag_value, CLOSURE_CAPTURE_IDX,
     CLOSURE_FUNPTR_IDX, DYNAMIC_OBJ_CAP_IDX,
@@ -14,7 +15,8 @@ use crate::constants::{
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::generator::{
-    global_accessor_name, object_file_symbol_name, EmittedGlobal, Generator, Object,
+    enum_attribute_kind_id, global_accessor_name, module_functions, object_file_symbol_name,
+    Generator, Object,
 };
 use crate::misc::{grow_stack, Map};
 use crate::object::{create_obj, lambda_return_part_types, union_tag_value, ObjectFieldType};
@@ -24,11 +26,10 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::ownership::{held_field_type, unit_step, UnitStep};
 use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
-use inkwell::module::Linkage;
+use inkwell::module::{Linkage, Module};
 use inkwell::types::BasicType;
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
-use std::mem;
 use std::sync::Arc;
 
 impl<'c, 'm> Generator<'c, 'm> {
@@ -74,41 +75,6 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         for global_init in prog.globals.iter() {
             self.implement_rc_global(global_init, &func_vals);
-        }
-    }
-
-    /// Keep each global's initializer out of the accessor that more than one reader takes.
-    ///
-    /// The accessor is the initializer's only caller, so an inliner folds the initializer straight
-    /// back into it and the accessor grows to the size of the initializer. An inlining decided by
-    /// size then leaves the accessor a call at each reader — one per read, with the flag test and
-    /// the load stuck in the loop behind it.
-    ///
-    /// A global with one reader keeps its initializer where it is. That initializer has one place
-    /// to be either way, and the place that costs nothing is the one the reader can see: what the
-    /// initializer knows — the length of an array, the shape of a structure — reaches the code that
-    /// reads the global, where it takes bounds checks out of loops.
-    ///
-    /// Call this once the module holds every reader of every global — the last of them are the
-    /// exported C functions and the program's entry point, which `build_object_files` implements
-    /// after the units. A reader counted short leaves the initializer in an accessor that its
-    /// readers then pay a call for.
-    ///
-    /// A `--threaded` build reaches its initializer through `pthread_once`, so its accessor is a
-    /// call and a load whatever the initializer's size, and the attribute decides nothing.
-    pub(crate) fn keep_initializers_out_of_shared_accessors(&mut self) {
-        if self.config.threaded {
-            return;
-        }
-        for global in mem::take(&mut self.emitted_globals) {
-            let accessor = global.accessor.as_global_value();
-            let Some(first_use) = accessor.get_first_use() else {
-                continue;
-            };
-            if first_use.get_next_use().is_none() {
-                continue;
-            }
-            self.add_enum_attribute(global.init_value, "noinline", AttributeLoc::Function);
         }
     }
 
@@ -630,14 +596,86 @@ impl<'c, 'm> Generator<'c, 'm> {
         Some(merged)
     }
 
-    /// Implement a global: `InitValue#<name>`, which evaluates the initializer and marks the value
-    /// and its reachable graph global, and the accessor, which calls it once and stores what it
-    /// returns, then loads the storage on every read.
+    /// Implement the parts of a global this unit holds: `InitValue#<name>`, which evaluates the
+    /// initializer and marks the value and its reachable graph global; the storage the value is
+    /// kept in and the flag saying it has been computed; and the accessor, which calls the
+    /// initializer once and stores what it returns, then loads the storage on every read.
+    ///
+    /// A unit generates the initializer where it computes the value, the storage and the flag where
+    /// it keeps it, and the accessor where it reads it — which is where it keeps the value, and
+    /// where it reads the value another unit keeps and publishes. Whatever it does not generate it
+    /// declares.
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,
         func_vals: &Map<FuncRef, FunctionValue<'c>>,
     ) {
+        let obj_embed_ty = global_init.ty.get_embedded_type(self);
+
+        // The unit keeping the value defines the storage and the flag; a unit reading a value
+        // another keeps declares them. The two reach one storage, so the value is computed once
+        // however many units read it.
+        let shared = self.shared_globals.contains(&global_init.symbol);
+        // A unit keeping the value it alone reads reads it through an accessor of its own, and one
+        // computing a value another unit keeps has no read to serve.
+        let reads_the_value = global_init.owns_storage || shared;
+
+        // The value is computed by a function of its own.
+        //
+        // Reading the global tests the initialization flag and loads the storage, and a reader
+        // holding those two lifts them out of a loop that reads the global — the global becomes a
+        // pointer in a register. A reader holds them by taking the accessor, and takes the accessor
+        // when it is small; `keep_initializers_out_of_shared_accessors` says which globals keep it
+        // so.
+        //
+        // The initializer is internal to the unit that computes the value where that unit is also
+        // the only one reading it; every other unit computing one publishes the function, since the
+        // accessor calling it is in another unit.
+        let init_value_fn = self.module.add_function(
+            &format!("InitValue#{}", object_file_symbol_name(&global_init.symbol)),
+            BasicType::fn_type(&obj_embed_ty, &[], false),
+            Some(
+                if global_init.owns_initializer && global_init.owns_storage && !shared {
+                    Linkage::Internal
+                } else {
+                    Linkage::External
+                },
+            ),
+        );
+
+        // Evaluate the initializer and mark it global. A unit reading a value another computes
+        // calls the function that unit publishes, which it has declared above.
+        if global_init.owns_initializer {
+            // Name the accessor on the initializer, for `keep_initializers_out_of_shared_accessors`
+            // to read the pair back off the module once every reader of the global is in it. The
+            // two are in one module only where this unit reads the value it computes.
+            if reads_the_value {
+                init_value_fn.add_attribute(
+                    AttributeLoc::Function,
+                    self.context.create_string_attribute(
+                        GLOBAL_ACCESSOR_ATTRIBUTE,
+                        &global_accessor_name(&global_init.symbol),
+                    ),
+                );
+            }
+            let _builder_guard = self.push_builder();
+            let init_bb = self.context.append_basic_block(init_value_fn, "init_bb");
+            self.builder().position_at_end(init_bb);
+            let _di_guard =
+                self.push_debug_subprogram(init_value_fn, global_init.init.source.clone());
+            let _scope_guard = self.push_scope();
+            let obj = self
+                .eval_rc_expr(&global_init.init, false, func_vals)
+                .expect("an expression evaluated outside tail position yields a value");
+            self.mark_global(obj.clone());
+            let obj_val = obj.value(self);
+            self.builder().build_return(Some(&obj_val)).unwrap();
+            self.set_debug_location(None);
+        }
+
+        if !reads_the_value {
+            return;
+        }
         let acc_fn_name = global_accessor_name(&global_init.symbol);
         // The accessor is already declared when a function body generated before this point reads
         // the global, and is declared here when none does.
@@ -647,7 +685,12 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .declare_program_global(&global_init.symbol)
                 .expect("a global initializer's symbol is a global of the program"),
         };
-        let obj_embed_ty = global_init.ty.get_embedded_type(self);
+
+        let owned_linkage = if shared {
+            Linkage::External
+        } else {
+            Linkage::Internal
+        };
 
         // The storage for the initialized value, and the call-once flag.
         let global_var = self.module.add_global(
@@ -655,8 +698,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             None,
             &format!("GlobalVar#{}", object_file_symbol_name(&global_init.symbol)),
         );
-        global_var.set_initializer(&obj_embed_ty.const_zero());
-        global_var.set_linkage(Linkage::Internal);
+        if global_init.owns_storage {
+            global_var.set_initializer(&obj_embed_ty.const_zero());
+            global_var.set_linkage(owned_linkage);
+        } else {
+            global_var.set_linkage(Linkage::External);
+        }
         let global_var_ptr = global_var.as_basic_value_enum().into_pointer_value();
 
         let (flag_ty, flag_init_val) = if self.config.threaded {
@@ -673,27 +720,13 @@ impl<'c, 'm> Generator<'c, 'm> {
             None,
             &format!("InitFlag#{}", object_file_symbol_name(&global_init.symbol)),
         );
-        init_flag.set_initializer(&flag_init_val);
-        init_flag.set_linkage(Linkage::Internal);
+        if global_init.owns_storage {
+            init_flag.set_initializer(&flag_init_val);
+            init_flag.set_linkage(owned_linkage);
+        } else {
+            init_flag.set_linkage(Linkage::External);
+        }
         let init_flag_ptr = init_flag.as_basic_value_enum().into_pointer_value();
-
-        // The value is computed by a function of its own.
-        //
-        // Reading the global tests the initialization flag and loads the storage, and a reader
-        // holding those two lifts them out of a loop that reads the global — the global becomes a
-        // pointer in a register. A reader holds them by taking the accessor, and takes the accessor
-        // when it is small; `keep_initializers_out_of_shared_accessors` says which globals keep it
-        // so.
-        let init_value_fn = self.module.add_function(
-            &format!("InitValue#{}", object_file_symbol_name(&global_init.symbol)),
-            BasicType::fn_type(&obj_embed_ty, &[], false),
-            Some(Linkage::Internal),
-        );
-
-        self.emitted_globals.push(EmittedGlobal {
-            accessor: acc_fn,
-            init_value: init_value_fn,
-        });
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
@@ -778,23 +811,6 @@ impl<'c, 'm> Generator<'c, 'm> {
             end_bb
         };
 
-        // Evaluate the initializer and mark it global.
-        {
-            let _builder_guard = self.push_builder();
-            let init_bb = self.context.append_basic_block(init_value_fn, "init_bb");
-            self.builder().position_at_end(init_bb);
-            let _di_guard =
-                self.push_debug_subprogram(init_value_fn, global_init.init.source.clone());
-            let _scope_guard = self.push_scope();
-            let obj = self
-                .eval_rc_expr(&global_init.init, false, func_vals)
-                .expect("an expression evaluated outside tail position yields a value");
-            self.mark_global(obj.clone());
-            let obj_val = obj.value(self);
-            self.builder().build_return(Some(&obj_val)).unwrap();
-            self.set_debug_location(None);
-        }
-
         // Return the stored value.
         self.builder().position_at_end(end_bb);
         let value = self
@@ -816,5 +832,61 @@ fn carries_var_to_return(k: &RcExprNode, x: &FullName) -> bool {
         RcExpr::Ret(r) => r.name == *x,
         RcExpr::Let(y, RcRhs::Var(x2), k2) => x2.name == *x && carries_var_to_return(k2, &y.name),
         _ => false,
+    }
+}
+
+/// The name of the accessor of the global an initializer function computes, recorded on the
+/// initializer as a string attribute so that `keep_initializers_out_of_shared_accessors` finds the
+/// pair by reading the module.
+const GLOBAL_ACCESSOR_ATTRIBUTE: &str = "fix-global-accessor";
+
+/// Keep each global's initializer out of the accessor that more than one reader takes.
+///
+/// The accessor is the initializer's only caller, so an inliner folds the initializer straight back
+/// into it and the accessor grows to the size of the initializer. An inlining decided by size then
+/// leaves the accessor a call at each reader — one per read, with the flag test and the load stuck
+/// in the loop behind it.
+///
+/// A global with one reader keeps its initializer where it is. That initializer has one place to be
+/// either way, and the place that costs nothing is the one the reader can see: what the initializer
+/// knows — the length of an array, the shape of a structure — reaches the code that reads the
+/// global, where it takes bounds checks out of loops.
+///
+/// Call this on the module the LLVM optimization pipeline is about to run over, once it holds every
+/// reader of every global it defines — the last of them are the exported C functions and the
+/// program's entry point, which `build_object_files` implements after the unit's own code. A reader
+/// counted short leaves the initializer in an accessor that its readers then pay a call for.
+///
+/// A `--threaded` build reaches its initializer through `pthread_once`, so its accessor is a call
+/// and a load whatever the initializer's size, and the attribute decides nothing.
+pub(crate) fn keep_initializers_out_of_shared_accessors(module: &Module, config: &Configuration) {
+    let noinline = module
+        .get_context()
+        .create_enum_attribute(enum_attribute_kind_id("noinline"), 0);
+    for init_value in module_functions(module) {
+        let Some(attribute) =
+            init_value.get_string_attribute(AttributeLoc::Function, GLOBAL_ACCESSOR_ATTRIBUTE)
+        else {
+            continue;
+        };
+        let accessor_name = attribute.get_string_value().to_string_lossy().to_string();
+        init_value.remove_string_attribute(AttributeLoc::Function, GLOBAL_ACCESSOR_ATTRIBUTE);
+
+        let accessor = module.get_function(&accessor_name).unwrap_or_else(|| {
+            panic!(
+                "the accessor `{}` of a global whose initializer is in the module is missing from it",
+                accessor_name
+            )
+        });
+        let accessor = accessor.as_global_value();
+        let Some(first_use) = accessor.get_first_use() else {
+            continue;
+        };
+        if first_use.get_next_use().is_none() {
+            continue;
+        }
+        if !config.threaded {
+            init_value.add_attribute(AttributeLoc::Function, noinline);
+        }
     }
 }

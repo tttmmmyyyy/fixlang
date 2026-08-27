@@ -3,19 +3,23 @@
 use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::{FullName, Name};
 use crate::ast::types::TypeNode;
-use crate::misc::{Map, Set};
+use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
+use serde::{Serialize, Serializer};
 use std::sync::Arc;
 
 /// A variable of the RC IR. Because a fresh name is minted at every binding, a name resolves its
 /// binding uniquely, without scope tracking.
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct RcVar {
     /// The name this variable is bound under, unique across the program.
     pub name: FullName,
     /// The type of the value bound here, always concrete (monomorphic).
+    #[serde(serialize_with = "serialize_type_identity")]
     pub ty: Arc<TypeNode>,
-    /// The source the value bound here is written at. `None` where no source spells it out.
+    /// The source the value bound here is written at. `None` where no source spells it out. Left
+    /// out of the serialized form; see `divide_program::debug_positions`.
+    #[serde(skip)]
     pub source: Option<Span>,
     /// The source-level name this variable denotes, when it is the binding of a `let`-pattern
     /// variable, a match-arm payload, or a projected capture. Code generation emits a debug local
@@ -31,7 +35,7 @@ pub struct RcVar {
 
 /// A reference to a top-level RC IR function: a lifted lambda body, a global function, or an
 /// uncurried function-pointer version.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct FuncRef {
     /// The name the function is defined under. It is the whole of the reference: a function is
     /// identified by its name across the program.
@@ -39,22 +43,24 @@ pub struct FuncRef {
 }
 
 /// A whole program: the top-level functions, the global-value initializers, and the names reached
-/// from outside them.
+/// from outside them. The default is the empty program, which defines nothing and is reached
+/// nowhere.
+#[derive(Default)]
 pub struct RcProgram {
     /// The top-level functions, keyed by the name each is defined under.
     pub funcs: Map<FuncRef, RcFunc>,
     /// The initializer of each global value the program defines.
     pub globals: Vec<RcGlobalInit>,
     /// The functions and globals code generation reaches from outside this program: the entry
-    /// point, the values exported as C functions, and — where the program is one unit among
-    /// several — every symbol the unit publishes for the others.
+    /// point, the values exported as C functions, and — in a compilation unit's slice of the
+    /// program — the names the unit publishes for the others (`divide_among_units`).
     /// `dead_code_elim::eliminate_unreachable` keeps what they reach and drops the rest.
     pub roots: Set<FullName>,
 }
 
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and
 /// uncurried funptr versions.
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct RcFunc {
     /// The name this function is defined and called under, unique across the program: lowering mints
     /// a fresh one for each lambda it lifts, and a pass that copies a function appends a segment of
@@ -62,6 +68,7 @@ pub struct RcFunc {
     pub name: FuncRef,
     /// The lambda's arrow type (funptr or closure). It determines the LLVM function signature and
     /// distinguishes the funptr and closure ABIs.
+    #[serde(serialize_with = "serialize_type_identity")]
     pub fn_ty: Arc<TypeNode>,
     /// The parameters. A closure-ABI function takes its single arrow argument; a funptr-ABI
     /// function takes the uncurried arguments (at least one).
@@ -71,12 +78,15 @@ pub struct RcFunc {
     pub capture: Option<RcVar>,
     /// The type of the value the body returns. For a funptr-ABI function it is the result after all
     /// of its parameters.
+    #[serde(serialize_with = "serialize_type_identity")]
     pub ret_ty: Arc<TypeNode>,
     /// The body, evaluated with the parameters and the capture in scope. Its `Ret` returns the
     /// function's value.
     pub body: RcExprNode,
     /// The source the lambda this function came from was written at, which code generation records
-    /// as the function's debug location. `None` where no source spells the function out.
+    /// as the function's debug location. `None` where no source spells the function out. Left out
+    /// of the serialized form; see `divide_program::debug_positions`.
+    #[serde(skip)]
     pub source: Option<Span>,
     /// The reference-counting units this version borrows among its parameters and capture — the units
     /// it does not own, one `(parameter-name, unit-path)` each. Everything not listed is owned, so the
@@ -87,6 +97,7 @@ pub struct RcFunc {
     /// (the discipline `insert_rc` establishes), and a version that owns everything borrows nothing.
     /// `cancel` and the RC IR dump read the owned complement (via `all_owned_units`) for each call's
     /// consume sites and each parameter's ownership shape.
+    #[serde(serialize_with = "serialize_sorted_var_paths")]
     pub borrowed_units: Set<VarPath>,
     /// Whether the back end is asked to inline every call of this function. Code generation writes
     /// it out as the `alwaysinline` attribute; a version cloned from a function carries it.
@@ -99,19 +110,21 @@ pub type VarPath = (FullName, FieldPath);
 
 /// An RC IR expression together with its source span. An expression's value type is that of the
 /// variable its final `Ret` returns, so it is read from that variable.
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct RcExprNode {
     /// The expression this node stands for. It is shared through an `Arc`, so cloning a node is
     /// O(1). The continuation chain is thousands of nodes deep for a large body, and the simplifier
     /// clones whole bodies, so a deep-copying clone would overflow the stack.
     pub expr: Arc<RcExpr>,
-    /// The source the expression is written at. `None` where no source spells it out.
+    /// The source the expression is written at. `None` where no source spells it out. Left out of
+    /// the serialized form; see `divide_program::debug_positions`.
+    #[serde(skip)]
     pub source: Option<Span>,
 }
 
 /// The statement-nested form: `Let`, `Retain`, and `Release` each carry a continuation, and `Ret`
 /// is the only terminator.
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub enum RcExpr {
     /// `let x = rhs; k`: bind the result of a compound expression to a single variable (ANF).
     Let(RcVar, RcRhs, RcExprNode),
@@ -179,7 +192,7 @@ pub enum RcTarget {
 /// catch-all arm, whose payload is the whole scrutinee.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct MatchArm {
     /// The variant number this arm matches, or `None` for a catch-all arm.
     pub tag: Option<usize>,
@@ -205,7 +218,7 @@ impl MatchArm {
 
 /// A compound expression. It appears only as the right-hand side of a `Let`; the arguments of `App`
 /// and `Llvm` are atoms (variables).
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub enum RcRhs {
     /// Move / rename `y := x`, consuming `x`.
     Var(RcVar),
@@ -226,7 +239,7 @@ pub enum RcRhs {
 
 /// The reference-counting state dispatch of a `Retain` or `Release`. Lowering emits `Unknown`,
 /// which is always sound; locality inference specializes it.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 pub enum RcState {
     /// Read the object's refcount state at run time and dispatch three ways.
     Unknown,
@@ -292,12 +305,135 @@ pub enum OwnershipShape {
 
 /// The initializer of a global value, run once when a reader first asks for the value. The whole
 /// graph the value reaches is marked global (refcount-exempt) before it is stored.
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct RcGlobalInit {
     /// The name the global value is defined and read under.
     pub symbol: FullName,
     /// The type of the value, always concrete (monomorphic).
+    #[serde(serialize_with = "serialize_type_identity")]
     pub ty: Arc<TypeNode>,
     /// The expression computing the value.
     pub init: RcExprNode,
+    /// Whether this program generates the function computing the value. A compilation unit reading
+    /// a global it does not compute calls the function the unit computing it publishes, so one
+    /// function computes the value however many units read it.
+    pub owns_initializer: bool,
+    /// Whether this program defines the storage the value is kept in and the flag saying it has
+    /// been computed. A compilation unit reading a global it does not keep reads the storage and
+    /// the flag the unit keeping it publishes, so one storage holds the value however many units
+    /// read it.
+    ///
+    /// The two are apart where a unit keeps a value another computes, which is what a global one
+    /// unit reads becomes: that unit keeps the value, and nothing about the storage is published,
+    /// so LLVM optimizes the reads knowing every write. The initializer follows the storage only
+    /// where moving it adds little code to that unit
+    /// (`divide_program::MOVED_INITIALIZER_NODE_LIMIT`).
+    pub owns_storage: bool,
+}
+
+/// Visit every node of `node`: the continuation chain it heads, and the body of every arm of every
+/// `Match` along it.
+pub(crate) fn for_each_node(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
+    // A deep continuation chain recurses to its full depth here; grow the stack on demand.
+    grow_stack(|| for_each_node_inner(node, visit))
+}
+
+/// Call `visit` on one node, then descend into its continuation and the body of each of its arms.
+fn for_each_node_inner(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
+    visit(node);
+    match node.expr.as_ref() {
+        RcExpr::Let(_, rhs, k) => {
+            if let RcRhs::Match(_, arms) = rhs {
+                for arm in arms {
+                    for_each_node(&arm.body, visit);
+                }
+            }
+            for_each_node(k, visit);
+        }
+        RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k)
+        | RcExpr::Eval(_, k)
+        | RcExpr::Destructure(_, _, _, k) => for_each_node(k, visit),
+        RcExpr::Ret(_) => {}
+    }
+}
+
+/// Visit every variable `node` binds or reads, the payload of every arm of every `Match` included.
+///
+/// A variable carries the type of the value bound to it, so this is also the walk over the types a
+/// body is generated from.
+pub(crate) fn for_each_var(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
+    for_each_node(node, &mut |node| for_each_var_of_node(node, visit))
+}
+
+/// Visit the variables the node itself binds or reads, without following its continuation or the
+/// bodies of the arms of a `Match`.
+fn for_each_var_of_node(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
+    match node.expr.as_ref() {
+        RcExpr::Let(var, rhs, _) => {
+            visit(var);
+            for_each_var_of_rhs(rhs, visit);
+        }
+        RcExpr::Retain(var, _, _, _) | RcExpr::Release(var, _, _, _) | RcExpr::Eval(var, _) => {
+            visit(var)
+        }
+        RcExpr::Destructure(var, fields, _, _) => {
+            visit(var);
+            for (_, field) in fields {
+                visit(field);
+            }
+        }
+        RcExpr::Ret(var) => visit(var),
+    }
+}
+
+/// Visit the variables of a right-hand side: the payload variable of each arm of a `Match` among
+/// them, and not the arm bodies.
+fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
+    match rhs {
+        RcRhs::Var(var) => visit(var),
+        RcRhs::App(callee, args) => {
+            visit(callee);
+            for arg in args {
+                visit(arg);
+            }
+        }
+        RcRhs::Closure(_, captured) => {
+            for var in captured {
+                visit(var);
+            }
+        }
+        RcRhs::Llvm(_, operands) => {
+            for var in operands {
+                visit(var);
+            }
+        }
+        RcRhs::Match(scrutinee, arms) => {
+            visit(scrutinee);
+            for arm in arms {
+                visit(&arm.payload);
+            }
+        }
+    }
+}
+
+/// Serialize a set of variable paths in the order of the paths themselves, so that a digest taken
+/// over a function is the same whenever the function is.
+fn serialize_sorted_var_paths<S: Serializer>(
+    paths: &Set<VarPath>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let mut paths: Vec<&VarPath> = paths.iter().collect();
+    paths.sort();
+    paths.serialize(serializer)
+}
+
+/// Serialize a type by its identity — the type expression — rather than by everything the node
+/// carries. Where a type was written decides no code, and it moves whenever a byte is inserted
+/// before it in its file, so a digest reading it would follow an edit that changes nothing.
+pub(crate) fn serialize_type_identity<S: Serializer>(
+    ty: &Arc<TypeNode>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    ty.type_hash().serialize(serializer)
 }

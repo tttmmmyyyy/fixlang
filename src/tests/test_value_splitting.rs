@@ -7,6 +7,7 @@ use crate::generator::Generator;
 use crate::misc::Map;
 use crate::tests::test_util::{run_source_capture, test_source};
 use inkwell::context::Context;
+use inkwell::types::BasicTypeEnum;
 use std::sync::Arc;
 
 // A program that carries unboxed structs every way the two representations differ: it builds a
@@ -89,6 +90,9 @@ fn test_split_limit_boundary() {
         config.clone(),
         type_env,
         Arc::new(Map::default()),
+        Default::default(),
+        Default::default(),
+        Default::default(),
     );
 
     let limit = MAX_SPLIT_SCALARS;
@@ -192,8 +196,8 @@ main = (
 /// Verifies that a value carried whole reaches the same answers when the function defining it and
 /// the function calling it are compiled as separate units.
 ///
-/// Separate compilation, which `cu_size` divides, runs at `Basic` and below, so the level comes
-/// down to it: at a higher one the whole program is one unit and no call crosses a boundary.
+/// A `cu_size` of 1 puts each of the program's entries in a compilation unit of its own, so every
+/// call the program makes crosses a unit boundary.
 #[test]
 fn test_wide_value_crosses_compilation_units() {
     let mut config = Configuration::develop_mode();
@@ -394,12 +398,14 @@ fn test_field_part_ranges_tile_the_part_list() {
         config.clone(),
         type_env,
         Arc::new(Map::default()),
+        Default::default(),
+        Default::default(),
+        Default::default(),
     );
 
     // A struct of `n` scalars of alternating class, led by a zero-sized member that yields no part.
     let mixed = |n: usize| {
-        let mut fields: Vec<inkwell::types::BasicTypeEnum> =
-            vec![context.i8_type().array_type(0).into()];
+        let mut fields: Vec<BasicTypeEnum> = vec![context.i8_type().array_type(0).into()];
         for i in 0..n {
             fields.push(if i % 2 == 0 {
                 context.i64_type().into()

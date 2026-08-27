@@ -32,6 +32,7 @@ use crate::rc_ir::ast::{
 };
 use crate::rc_ir::leaf_map::{boxed_leaf_paths, LeafKey, LeafMap};
 use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneRegistry};
+use std::iter;
 use std::sync::Arc;
 
 /// What is proved about one boxed leaf, once the enclosing function's inputs are concrete. A
@@ -793,7 +794,7 @@ impl<'a> Walk<'a> {
     fn annotate_destructure(&mut self, container: &RcVar, fields: &[(usize, RcVar)]) -> RcState {
         let shape = self.shape_of(container);
         if container.ty.is_box(self.type_env) {
-            let Some(inputs) = self.site_inputs(std::iter::once(shape.leaf_at(&[]))) else {
+            let Some(inputs) = self.site_inputs(iter::once(shape.leaf_at(&[]))) else {
                 return RcState::Unknown;
             };
             return match shape.leaf_at(&[]).resolve(inputs) {
@@ -856,7 +857,7 @@ impl<'a> Walk<'a> {
             // catch-all arm binds the scrutinee itself and retains nothing.
             let payload_state = if arm.tag.is_some() && boxed {
                 let leaf = scrut_shape.leaf_at(&[]);
-                match self.site_inputs(std::iter::once(leaf)) {
+                match self.site_inputs(iter::once(leaf)) {
                     Some(inputs) if leaf.resolve(inputs) == Locality::DeepLocal => RcState::Local,
                     _ => RcState::Unknown,
                 }
@@ -1042,6 +1043,8 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             symbol: g.symbol.clone(),
             ty: g.ty.clone(),
             init,
+            owns_initializer: true,
+            owns_storage: true,
         });
     }
 

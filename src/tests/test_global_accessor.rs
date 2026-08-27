@@ -1,7 +1,9 @@
 use crate::env_vars::MAX_OPT_LEVEL_VAR;
 use crate::tests::test_util::{
-    emitted_llvm_ir, fix_build_source_command, llvm_function_bodies, EmittedIr,
+    emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command, llvm_function_bodies,
+    EmittedIr,
 };
+use std::path::Path;
 use tempfile::TempDir;
 
 /// A program with two globals the compiler decides differently about.
@@ -56,15 +58,13 @@ const EXPORTED_GLOBAL_SOURCE: &str = r#"
     main = println(counter.to_string);
 "#;
 
-/// The names the compiler gives the parts of `counter`, as the emitted LLVM IR quotes them.
+/// The name the compiler gives the accessor of `counter`, as the emitted LLVM IR quotes it.
 const COUNTER_ACCESSOR: &str = "@\"Get#Main::counter#";
-const COUNTER_INITIALIZER: &str = "@\"InitValue#Main::counter#";
 
 /// Build `source` with `--emit-llvm` in a directory of its own, and return that directory.
 ///
-/// The build works at `-O max` whatever level the suite runs at, which compiles the program as one
-/// compilation unit: the emitted IR is one module, holding the accessors, the initializers, the
-/// loop reading a global, and one numbering of the attribute groups.
+/// The build works at `-O max` whatever level the suite runs at, which is where a program is
+/// divided into compilation units optimized one by one.
 fn build_emitting_llvm_ir(source: &str) -> TempDir {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();
@@ -80,6 +80,29 @@ fn build_emitting_llvm_ir(source: &str) -> TempDir {
         String::from_utf8_lossy(&build.stderr),
     );
     temp_dir
+}
+
+/// The generated module that defines the function whose name starts with `name`.
+///
+/// A compilation unit is optimized on its own, so what LLVM decides about a function is decided in
+/// the module defining it: that module holds the function's callers, and it numbers the attribute
+/// groups the function's own signature names.
+fn module_defining(dir: &Path, name: &str) -> String {
+    let mut modules = emitted_llvm_ir_modules(dir, EmittedIr::BeforeOptimization)
+        .into_iter()
+        .filter(|ir| {
+            ir.lines()
+                .any(|line| line.starts_with("define ") && line.contains(name))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        modules.len(),
+        1,
+        "one compilation unit should define `{}`, and {} do",
+        name,
+        modules.len()
+    );
+    modules.remove(0)
 }
 
 /// The single body of the function whose name starts with `name`, out of `ir`.
@@ -133,7 +156,7 @@ fn count_calls_to(ir: &str, name: &str) -> usize {
 #[test]
 pub fn test_the_initializer_of_a_shared_global_sits_outside_the_accessor() {
     let temp_dir = build_emitting_llvm_ir(TWO_GLOBALS_SOURCE);
-    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::BeforeOptimization);
+    let ir = module_defining(temp_dir.path(), TABLE_INITIALIZER);
 
     // The readers the decision rests on.
     assert!(
@@ -161,7 +184,7 @@ pub fn test_the_initializer_of_a_shared_global_sits_outside_the_accessor() {
 #[test]
 pub fn test_the_initializer_of_a_global_read_once_stays_where_its_reader_sees_it() {
     let temp_dir = build_emitting_llvm_ir(TWO_GLOBALS_SOURCE);
-    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::BeforeOptimization);
+    let ir = module_defining(temp_dir.path(), READ_ONCE_INITIALIZER);
 
     // The reader the decision rests on.
     assert_eq!(
@@ -185,7 +208,7 @@ pub fn test_the_initializer_of_a_global_read_once_stays_where_its_reader_sees_it
 #[test]
 pub fn test_a_reader_of_a_global_sees_every_write_to_it() {
     let temp_dir = build_emitting_llvm_ir(TWO_GLOBALS_SOURCE);
-    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::BeforeOptimization);
+    let ir = module_defining(temp_dir.path(), TABLE_INITIALIZER);
     let accessor = sole_body(&ir, TABLE_ACCESSOR);
 
     for variable in [TABLE_STORAGE, TABLE_FLAG] {
@@ -243,27 +266,40 @@ pub fn test_reading_a_global_in_a_loop_costs_no_call() {
     );
 }
 
-/// A global read by an exported C function has that reader counted.
+/// A global read from a compilation unit that does not own it is read without a call.
 ///
-/// The C functions an `FFI_EXPORT` statement builds, and the program's entry point, are emitted
-/// after the program's symbols are, and each reads the value it exports through that value's
-/// accessor. Which accessors keep their initializer is decided once those readers are in the
-/// module: decided before them, a global read from there is counted short, and every reader of it
-/// pays a call.
+/// `counter` is read from two units: `Main::main` reads it in the unit its own code is compiled in,
+/// and the C function `FFI_EXPORT` builds reads it in the unit that carries the exported C
+/// functions and the program's entry point, which holds no symbol of the program. The reading unit
+/// is given a copy of the accessor — the flag test and the load, with the initializer left where
+/// the owning unit computes it — so a read across a unit boundary costs what a read within one
+/// does.
 #[test]
-pub fn test_a_global_read_from_an_exported_c_function_has_that_reader_counted() {
+pub fn test_a_global_read_from_another_unit_costs_no_call() {
     let temp_dir = build_emitting_llvm_ir(EXPORTED_GLOBAL_SOURCE);
-    let ir = emitted_llvm_ir(temp_dir.path(), EmittedIr::BeforeOptimization);
+    let dir = temp_dir.path();
 
-    // The readers the decision rests on: `main`, and the exported C function.
+    // The readers the property is about: a unit reading `counter` without a reader in another unit
+    // would satisfy the check below for free.
+    let reading_units = emitted_llvm_ir_modules(dir, EmittedIr::BeforeOptimization)
+        .iter()
+        .filter(|ir| count_calls_to(ir, COUNTER_ACCESSOR) > 0)
+        .count();
     assert_eq!(
-        count_calls_to(&ir, COUNTER_ACCESSOR),
-        2,
-        "the program should read `counter` from `main` and from the exported C function"
+        reading_units, 2,
+        "`counter` should be read from the unit holding `Main::main` and from the unit holding the \
+         exported C function"
     );
 
+    let optimized_ir = emitted_llvm_ir(dir, EmittedIr::AfterOptimization);
+    let remaining_calls: Vec<_> = optimized_ir
+        .lines()
+        .filter(|line| line.contains("call") && line.contains(COUNTER_ACCESSOR))
+        .collect();
     assert!(
-        stays_out_of_its_callers(&ir, COUNTER_INITIALIZER),
-        "the initializer of `counter` should stay out of the accessor"
+        remaining_calls.is_empty(),
+        "reading `counter` should cost no call, and the optimized IR holds {}:\n{}",
+        remaining_calls.len(),
+        remaining_calls.join("\n")
     );
 }
