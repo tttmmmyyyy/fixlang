@@ -27,7 +27,7 @@ use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
-use crate::elaboration::typecheck::TypeCheckContext;
+use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::error::{Error, Errors, WARN_DEPRECATED, WARN_UNDECLARED_DEPENDENCY};
 use crate::ffi::{c_entry_point_signature, CSignature};
 use crate::fixstd::builtin::{
@@ -1480,7 +1480,11 @@ impl Program {
                         let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                             // Check that the type signature given by implementor is equivalent to
                             // the type scheme obtained from the trait member definition.
-                            if tc.check_scheme_equivalent(&scm, &scm_via_defn).is_err() {
+                            if UnifOrOtherErr::extract_others(
+                                tc.check_scheme_equivalent(&scm, &scm_via_defn),
+                            )?
+                            .is_err()
+                            {
                                 return Err(Errors::from_msg_srcs(
                                     format!(
                                         "Type signature in implementation does not match trait definition.\nExpected: `{}`\nFound: `{}`",

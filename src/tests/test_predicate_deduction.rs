@@ -40,7 +40,7 @@ main = println(Wrap { data : Wrap { data : 42 } }.show);
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "Deducing it needs itself",
+        "The inference is circular",
     );
 }
 
@@ -155,7 +155,7 @@ main = println(Wrap { data : Wrap { data : 42 } }.show);
     "##;
     let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
     assert!(
-        errmsg.contains("so the deduction does not end"),
+        errmsg.contains("The inference is too long"),
         "the deduction that does not end went unreported:\n{}",
         errmsg
     );
@@ -191,7 +191,7 @@ main = println(need_marker(Foo { x : 42 }).to_string);
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "Deducing it needs itself",
+        "The inference is circular",
     );
 }
 
@@ -219,7 +219,7 @@ main = println(need_a(Foo { x : 42 }).to_string);
     "##;
     let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
     for named in [
-        "Deducing it needs itself",
+        "The inference is circular",
         "`Main::Foo Std::I64 : Main::A`",
         "`Main::Foo Std::I64 : Main::B`",
     ] {
@@ -276,7 +276,7 @@ main = (
     test_source_fail(
         &source_nesting(510),
         Configuration::develop_mode(),
-        "past the depth the compiler settles a constraint about",
+        "The type it names is nested too deep",
     );
 }
 
@@ -305,7 +305,7 @@ main = println(g(0).to_string);
     let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
     for named in [
         "`Main::Foo Std::I64 : Main::Marker`",
-        "Deducing it needs itself",
+        "The inference is circular",
     ] {
         assert!(
             errmsg.contains(named),
@@ -342,7 +342,7 @@ main = println(pick(Foo { x : 1 }, 5).to_string);
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "Deducing it needs itself",
+        "The inference is circular",
     );
 }
 
@@ -375,7 +375,7 @@ main = println(g(0).to_string);
     let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
     assert!(
         errmsg.contains(
-            "Deducing it needs itself: `Main::Foo Std::I64 : Main::B` -> \
+            "The inference is circular: `Main::Foo Std::I64 : Main::B` -> \
              `Main::Foo Std::I64 : Main::C` -> `Main::Foo Std::I64 : Main::B`."
         ),
         "the circle the deduction closes on went unreported:\n{}",
