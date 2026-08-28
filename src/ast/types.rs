@@ -7,7 +7,7 @@ use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
 use crate::constants::{
     TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
-    PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
+    PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME, TRAVERSER_WORK_MARK_GLOBAL,
     TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U16_NAME,
     U32_NAME, U64_NAME, U8_NAME,
 };
@@ -299,6 +299,11 @@ impl TyCon {
     // Whether this is the type `Bool` of `Std`.
     pub fn is_boolean(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
+    }
+
+    // Whether this is the type `String` of `Std`.
+    pub fn is_string(&self) -> bool {
+        return self.name == FullName::from_strs(&[STD_NAME], STRING_NAME);
     }
 
     /// Whether this is the type constructor `IO`.
@@ -1277,6 +1282,11 @@ impl TypeNode {
     // Whether this is the type `Bool`.
     pub fn is_boolean(&self) -> bool {
         self.toplevel_tycon_satisfies(TyCon::is_boolean)
+    }
+
+    // Whether this is the type `String`.
+    pub fn is_string(&self) -> bool {
+        self.toplevel_tycon_satisfies(TyCon::is_string)
     }
 
     // Whether the top-level type constructor of this type is `IO`, i.e. whether this is `IO` or

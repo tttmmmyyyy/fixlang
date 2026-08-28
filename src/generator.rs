@@ -22,7 +22,7 @@ use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
 use crate::constants::SYMBOL_VERSION_SEPARATOR;
 use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
 use crate::error::panic_with_msg;
-use crate::ffi::CSignature;
+use crate::ffi::{promote_through_ellipsis, CSignature};
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
 use crate::fixstd::runtime::RUNTIME_ABORT;
@@ -2655,14 +2655,28 @@ impl<'c, 'm> Generator<'c, 'm> {
         arg_objs: Vec<Object<'c>>,
         is_io: bool,
     ) -> Object<'c> {
+        assert!(
+            is_var_args || arg_objs.len() == param_tys.len(),
+            "a call of a C function that is not variadic passes one argument per declared parameter"
+        );
+
         // Get c function
         let c_fun = CSignature::of_ffi_call(ret_tycon, param_tys, is_var_args)
             .get_or_declare_in_module(fun_name, self);
 
-        // Get argment values
+        // Get argment values. An argument past the declared parameters travels through `...`, where
+        // C widens it before the function reads it.
         let args_vals = arg_objs
             .iter()
-            .map(|obj| obj.extract_field(self, 0).into())
+            .enumerate()
+            .map(|(i, obj)| {
+                let val = obj.extract_field(self, 0);
+                if i < param_tys.len() {
+                    val.into()
+                } else {
+                    promote_through_ellipsis(val, &obj.ty, self).into()
+                }
+            })
             .collect::<Vec<_>>();
 
         // Call c function

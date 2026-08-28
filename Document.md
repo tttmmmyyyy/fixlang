@@ -2213,6 +2213,10 @@ The following types can be used for `{return_type}` or `{arg_type_i}`:
 * C numeric types: `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble`
 * Substitute for `void`: `()`, available as `{return_type}`. Giving it as an `{arg_type_i}` is an error.
 
+An argument written past the declared parameters — one that goes through the `...` — is a value of one of the types an `{arg_type_i}` may be: a pointer or a number. C carries such an argument as one scalar, so write a `Bool` as a `U8` or a `CInt`, take a `Ptr` to a `String` with `Std::String::borrow_c_str`, and take a `Ptr` to a boxed value with `Std::FFI::boxed_to_retained_ptr` or `Std::FFI::borrow_boxed`.
+
+C's default argument promotions apply to an argument going through the `...`, as they do to a call written in C: an `F32` reaches the function as a `double`, and an integer narrower than `CInt` reaches it as a `CInt`. This is why the function reads them with `va_arg(ap, double)` and `va_arg(ap, int)`.
+
 Note that the function signature must match what is declared in the C language header.
 For example, `scanf` is declared as `int scanf(const char *format, ...);`.
 Suppose that the pointer to the format string is `format_ptr : Ptr` and the pointer to a buffer to store the read value is `buf_ptr : Ptr`.

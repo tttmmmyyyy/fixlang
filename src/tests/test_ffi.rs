@@ -446,6 +446,88 @@ pub fn test_ffi_calls_of_one_c_name_with_and_without_var_args_fails() {
     );
 }
 
+/// C's default argument promotions widen a `float` to a `double` and an integer narrower than `int`
+/// to an `int` on the way through `...`, which is why the C function reads its variadic arguments
+/// as `double` and `int`. A call writes the value the C function reads.
+///
+/// A value wide enough to travel unchanged is passed as it is: the `I64` and `F64` cases pin that
+/// the promotion stops where C stops it.
+#[test]
+pub fn test_ffi_call_promotes_its_variadic_arguments() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"F32", FFI_CALL[CDouble c_va_double(CInt, ...), 1.c_int, 2.5_F32], 2.5);;
+            assert_eq(|_|"F64", FFI_CALL[CDouble c_va_double(CInt, ...), 1.c_int, 2.5_F64], 2.5);;
+            assert_eq(|_|"I8", FFI_CALL[CInt c_va_int(CInt, ...), 1.c_int, -1_I8].i64, -1);;
+            assert_eq(|_|"I16", FFI_CALL[CInt c_va_int(CInt, ...), 1.c_int, -1_I16].i64, -1);;
+            assert_eq(|_|"U8", FFI_CALL[CInt c_va_int(CInt, ...), 1.c_int, 255_U8].i64, 255);;
+            assert_eq(|_|"U16", FFI_CALL[CInt c_va_int(CInt, ...), 1.c_int, 65535_U16].i64, 65535);;
+            assert_eq(|_|"I32", FFI_CALL[CInt c_va_int(CInt, ...), 1.c_int, -1_I32].i64, -1);;
+            assert_eq(|_|"I64", FFI_CALL[I64 c_va_i64(CInt, ...), 1.c_int, -4294967296_I64], -4294967296);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdarg.h>
+        #include <stdint.h>
+        double  c_va_double(int n, ...) { va_list ap; va_start(ap, n); double  d = va_arg(ap, double);  va_end(ap); return d; }
+        int     c_va_int(int n, ...)    { va_list ap; va_start(ap, n); int     i = va_arg(ap, int);     va_end(ap); return i; }
+        int64_t c_va_i64(int n, ...)    { va_list ap; va_start(ap, n); int64_t l = va_arg(ap, int64_t); va_end(ap); return l; }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// A declared parameter of an `FFI_CALL` is written as a C type, and an argument past them has to
+/// be one too: the call hands it to C as the one scalar the value is. Each rejected shape carries
+/// the way to pass it anyway.
+#[test]
+pub fn test_ffi_call_variadic_argument_of_a_non_c_type_fails() {
+    let call_with = |argument: &str| {
+        format!(
+            r##"
+        module Main;
+
+        type Wrap = unbox struct {{ v : I8 }};
+
+        main : IO ();
+        main = println(FFI_CALL[CInt c_report(CInt, ...), 1.c_int, {}].to_string);
+    "##,
+            argument
+        )
+    };
+
+    // `Bool` is one byte in Fix, and the width C gives `_Bool` is implementation-defined.
+    test_source_fail(
+        &call_with("true"),
+        Configuration::develop_mode(),
+        "`Std::Bool` cannot be passed through the `...` of an `FFI_CALL`. Use `U8` or `CInt`",
+    );
+
+    // A `String` holds its bytes in an array, and C reads them through a pointer.
+    test_source_fail(
+        &call_with(r#""hi""#),
+        Configuration::develop_mode(),
+        "`Std::String` cannot be passed through the `...` of an `FFI_CALL`. Use `Std::String::borrow_c_str`",
+    );
+
+    // A boxed value crosses to C as its address, which is not what the call would hand over.
+    test_source_fail(
+        &call_with("[1, 2, 3]"),
+        Configuration::develop_mode(),
+        "`Std::Array Std::I64` cannot be passed through the `...` of an `FFI_CALL`",
+    );
+
+    // A struct of one field is a struct, whatever `unwrap_newtype` later does with it.
+    test_source_fail(
+        &call_with("Wrap { v : -1_I8 }"),
+        Configuration::develop_mode(),
+        "`Main::Wrap` cannot be passed through the `...` of an `FFI_CALL`",
+    );
+}
+
 /// A parameter is a position like the result: the ABI carries a narrow integer in the low bits of a
 /// register and the sign says which side extends it, so the two calls ask the one declaration for
 /// opposite promises about the bits above the value.

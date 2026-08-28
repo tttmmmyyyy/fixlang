@@ -29,7 +29,7 @@ use crate::elaboration::desugar_opaque::{
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::error::{Error, Errors, WARN_DEPRECATED, WARN_UNDECLARED_DEPENDENCY};
-use crate::ffi::{c_entry_point_signature, CSignature};
+use crate::ffi::{c_entry_point_signature, unpassable_variadic_type_msg, CSignature};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
     struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,
@@ -48,6 +48,7 @@ use crate::printer::Text;
 use crate::type_size::{no_size_reason, LayoutWalk};
 use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Write;
 use std::mem::replace;
@@ -2181,8 +2182,11 @@ impl Program {
 
         // The symbols in name order, so that a program with two disagreements is rejected for the
         // same one every time. One name is reported once, since a generic function holding a call
-        // is instantiated at each of its types and every instantiation carries the same call.
+        // is instantiated at each of its types and every instantiation carries the same call. A
+        // variadic argument is reported once per type it is written at, since those instantiations
+        // are what give one argument more than one type.
         let mut reported: Set<Name> = Default::default();
+        let mut reported_variadic_args: BTreeSet<(Option<Span>, String)> = Default::default();
         let mut symbol_names: Vec<&FullName> = self.symbols.keys().collect();
         symbol_names.sort();
         for symbol_name in symbol_names {
@@ -2190,10 +2194,30 @@ impl Program {
                 continue;
             };
             expr.walk_nodes(&mut |node| {
-                let Expr::FFICall(fun_name, ret_ty, param_tys, is_var_args, _, _) = &*node.expr
+                let Expr::FFICall(fun_name, ret_ty, param_tys, is_var_args, args, is_io) =
+                    &*node.expr
                 else {
                     return;
                 };
+
+                // Every argument past the declared parameters travels through `...`, which carries
+                // only what C carries as one scalar. The trailing `IOState` token of an `IO` call
+                // is not passed to C, so it is not one of them.
+                let c_arg_count = args.len() - if *is_io { 1 } else { 0 };
+                for arg in args[..c_arg_count].iter().skip(param_tys.len()) {
+                    let arg_ty = arg
+                        .type_
+                        .as_ref()
+                        .expect("an instantiated expression carries its type");
+                    let Some(msg) = unpassable_variadic_type_msg(arg_ty) else {
+                        continue;
+                    };
+                    if !reported_variadic_args.insert((arg.source.clone(), arg_ty.to_string())) {
+                        continue;
+                    }
+                    errors.append(Errors::from_msg_srcs(msg, &[&arg.source]));
+                }
+
                 if reported.contains(fun_name) {
                     return;
                 }
