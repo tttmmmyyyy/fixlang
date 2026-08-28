@@ -529,7 +529,12 @@ fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
     let buffers = ir
         .lines()
         .filter(|line| line.contains(" = alloca ") && line.contains(OUT_POINTER_BUFFER_NAME))
-        .map(|line| line.trim().split_once(" = ").expect("an alloca binds a name").0)
+        .map(|line| {
+            line.trim()
+                .split_once(" = ")
+                .expect("an alloca binds a name")
+                .0
+        })
         .collect::<Vec<_>>();
     assert!(
         !buffers.is_empty(),
@@ -537,9 +542,9 @@ fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
     );
     for buffer in &buffers {
         for marker in ["llvm.lifetime.start", "llvm.lifetime.end"] {
-            let bounded = ir.lines().any(|line| {
-                line.contains(marker) && line.contains(&format!("{})", buffer))
-            });
+            let bounded = ir
+                .lines()
+                .any(|line| line.contains(marker) && line.contains(&format!("{})", buffer)));
             assert!(
                 bounded,
                 "the buffer {} should be bounded by {}, and it is not; the buffers are {:?}",
