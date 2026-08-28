@@ -150,6 +150,15 @@ Under `dev-docs/YYYY-MM-DD-<target>-soundness/`, following the `devdoc` skill fo
 6. **Main theorem.** The last proposition, and the shape of the chain that reaches it.
 7. **Verification status.** One row per proposition: the file, the last verifier round that examined it, its verdict, and the commit the proof was written against. This is what a re-run reads to know what to re-verify.
 
+### Check the skeleton before dispatching
+
+The definitions carry every proof in the document, so an undefined word in one costs as many rewrites as there are provers working under it. Run the verifier's checks over the skeleton itself first — `UNDEFINED` and `HEDGE` against the definitions, the assumptions, and the proposition statements — before any prover starts. One verifier subagent on the skeleton alone is cheap beside a layer of provers building on a definition that then has to change under them.
+
+Two rules keep definitions through that check:
+
+- **A definition that quantifies over constructs enumerates them.** "the constructs that read a value", "the ones that create a reference", "the ones that consume" — each is a closed list in the language under proof, and writing the list is what makes the definition checkable. Given as a property instead, every prover derives the list itself, and they derive different ones.
+- **A definition that names a function of the code says whether that function *is* the definition or merely implements it.** Where the two can differ — the function reports a superset, or answers for a case the definition leaves out — say so in the definition, and name the reader that depends on the difference. A prover told the function is the definition cannot see that gap, and the gap is where a bug sits.
+
 ## Calibrating the property
 
 Before any prover starts, check that the property is worth proving: **take a bug the code actually had, and check that the stated property is violated by the old code.** The most recent fixed bug in the target is the natural case; `git show` on its fix gives the old code, and the changelog and the issue tracker give the symptom.
