@@ -1269,8 +1269,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Abort when the boxed object at `obj_ptr` is not in the local reference-counting state.
     ///
-    /// It stands where the state dispatch a `RcState::Local` annotation removed used to be, so a
-    /// wrong annotation stops at the operation that made it instead of corrupting a reference count
+    /// It stands in place of the state dispatch a `RcState::Local` annotation removes, so a wrong
+    /// annotation stops at the operation that made it instead of corrupting a reference count
     /// somewhere else. Locality inference rests on a hand-written declaration per inline-LLVM
     /// operation, and this is the only check on those: the whole test suite is built in develop
     /// mode, so every annotated site is verified dynamically on every test program.

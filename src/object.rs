@@ -444,7 +444,8 @@ impl ObjectFieldType {
             gc.build_traverser_work(obj, work_type, state);
         };
 
-        // After loop, do nothing.
+        /// Runs once the loop over the buffer ends. Each element's work happens in the loop
+        /// body, so this stage has none of its own.
         fn after_loop<'c, 'm>(
             _gc: &mut Generator<'c, 'm>,
             _size: IntValue<'c>,
@@ -2176,6 +2177,18 @@ pub fn create_obj<'c, 'm>(
     obj
 }
 
+/// The address of the traverser function for an object of type `ty`, for a dynamic object to store
+/// and call indirectly.
+///
+/// # Arguments
+/// * `capture` — the captured types of a dynamic object, whose traverser disposes of them.
+/// * `work` — the job the traverser performs: `TraverserWorkType::release` selects the object's
+///   destructor, `mark_global` and `mark_threaded` the corresponding markers. `None` selects the
+///   dynamic traverser, which takes the job as a second argument and dispatches on it at run time.
+///
+/// # Returns
+/// Where the type leaves the traverser no work to do, the address of an empty function, so that a
+/// caller holding this pointer always has one to call.
 pub fn get_traverser_ptr<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
@@ -2451,8 +2464,8 @@ fn build_traverse<'c, 'm>(
     }
 }
 
-// Returns the debug type for how `ty` is embedded in a field: a pointer to the boxed layout when
-// `ty` is boxed, and the layout itself when it is unboxed.
+/// The debug type for how `ty` is embedded in a field: a pointer to the boxed layout when `ty` is
+/// boxed, and the layout itself when it is unboxed.
 pub fn ty_to_debug_embedded_ty<'c, 'm>(
     ty: Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
@@ -2476,16 +2489,16 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
     }
 }
 
-// Returns the debug type describing `ty`'s in-memory layout, caching each type by name so recursive
-// types terminate.
+/// The debug type describing `ty`'s in-memory layout, caching each type by name so recursive types
+/// terminate.
 pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let key = ty.to_string();
     gc.get_or_build_di_type(key, |gc| ty_to_debug_struct_ty_body(ty, gc))
 }
 
-// Builds the debug type describing `ty`'s in-memory layout by expanding its fields. The caching and
-// recursion-breaking that keep this finite on recursive types live in the wrapper
-// `ty_to_debug_struct_ty`.
+/// The debug type describing `ty`'s in-memory layout, built by expanding its fields. The caching
+/// and recursion-breaking that keep this finite on recursive types live in
+/// `ty_to_debug_struct_ty`.
 fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let name = &ty.to_string();
     let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());
@@ -2532,7 +2545,6 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
             obj_type.field_types[0].to_debug_type(gc)
         }
     } else {
-        // NOTE: Maybe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
         let struct_type = gc.struct_type_of(&ty);
         let size_in_bits = gc.target_data.get_bit_size(&struct_type);
         let align_in_bits = gc.target_data.get_abi_alignment(&struct_type) * 8;
