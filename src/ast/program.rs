@@ -2168,7 +2168,7 @@ impl Program {
         // is instantiated at each of its types and every instantiation carries the same call. A
         // variadic argument is reported once per type it is inferred to have, since those
         // instantiations are what give one argument more than one type.
-        let mut reported: Set<Name> = Default::default();
+        let mut reported_c_functions: Set<Name> = Default::default();
         let mut reported_variadic_args: BTreeSet<(Option<Span>, String)> = Default::default();
         let mut symbol_names: Vec<&FullName> = self.symbols.keys().collect();
         symbol_names.sort();
@@ -2205,7 +2205,7 @@ impl Program {
                     errors.append(Errors::from_msg_srcs(msg, &[&arg.source]));
                 }
 
-                if reported.contains(fun_name) {
+                if reported_c_functions.contains(fun_name) {
                     return;
                 }
                 let called = CSignature::of_ffi_call(ret_ty, param_tys, *is_var_args);
@@ -2216,7 +2216,7 @@ impl Program {
                 if known.agrees_with(&called) {
                     return;
                 }
-                reported.insert(fun_name.clone());
+                reported_c_functions.insert(fun_name.clone());
                 errors.append(Errors::from_msg_srcs(
                     format!(
                         "The C function `{}` is described as `{}` here and as `{}` elsewhere. One C function has one signature.",
