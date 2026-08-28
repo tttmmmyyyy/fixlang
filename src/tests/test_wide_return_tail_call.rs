@@ -1,4 +1,8 @@
-use crate::{configuration::Configuration, tests::test_util::test_source};
+use crate::{
+    configuration::Configuration,
+    tests::test_util::{emitted_llvm_ir, fix_build_source_command, test_source, EmittedIr},
+};
+use tempfile::TempDir;
 
 // `Std::IO`'s `bind` puts `(f(a).@runner)(iostate)` in tail position, so a monadic loop is a chain
 // of indirect tail calls and runs in constant stack only while the backend compiles them as jumps.
@@ -476,3 +480,74 @@ fn test_destructor_with_wide_resource_is_memory_safe() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+// A result too wide for the return registers travels through a buffer the caller allocates, and the
+// caller allocates it in its entry block, which it passes once however many times it reaches the
+// call. LLVM keeps what an allocation holds for the whole of the function that makes it unless the
+// code says otherwise, so a caller in a loop would carry the buffer's contents from one turn into
+// the next. Each buffer is therefore bounded by the call that fills it and the read that empties
+// it.
+//
+// The property is about what the compiler emits, so it is read off the generated code: the buffer
+// is a stack slot, which a program cannot observe.
+#[test]
+fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
+    let source = r#"
+    module Main;
+
+    mk4 : I64 -> (I64, I64, I64, I64);
+    mk4 = |n| (n, n + 1, n + 2, n + 3);
+
+    mk_arrays : I64 -> (Array I64, Array I64);
+    mk_arrays = |n| (Array::fill(n, 1), Array::fill(n + 1, 2));
+
+    main : IO ();
+    main = (
+        let total = Iterator::range(0, 4).fold(0, |n, acc|
+            let (a, b, c, d) = mk4(n);
+            let (xs, ys) = mk_arrays(n + 1);
+            acc + a + b + c + d + xs.@size + ys.@size
+        );
+        assert_eq(|_|"total", total, 74);;
+        pure()
+    );
+    "#;
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir = temp_dir.path();
+    let build = fix_build_source_command(dir, source, "none")
+        .arg("--emit-llvm")
+        .output()
+        .expect("Failed to execute fix build");
+    assert!(
+        build.status.success(),
+        "the build should succeed.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+
+    let ir = emitted_llvm_ir(dir, EmittedIr::BeforeOptimization);
+    let buffers = ir
+        .lines()
+        .filter(|line| line.contains(" = alloca ") && line.contains(OUT_POINTER_BUFFER_NAME))
+        .map(|line| line.trim().split_once(" = ").expect("an alloca binds a name").0)
+        .collect::<Vec<_>>();
+    assert!(
+        !buffers.is_empty(),
+        "a call whose result is too wide for the return registers should allocate a buffer"
+    );
+    for buffer in &buffers {
+        for marker in ["llvm.lifetime.start", "llvm.lifetime.end"] {
+            let bounded = ir.lines().any(|line| {
+                line.contains(marker) && line.contains(&format!("{})", buffer))
+            });
+            assert!(
+                bounded,
+                "the buffer {} should be bounded by {}, and it is not; the buffers are {:?}",
+                buffer, marker, buffers
+            );
+        }
+    }
+}
+
+// The name code generation gives the buffer a call's wide result travels in.
+const OUT_POINTER_BUFFER_NAME: &str = "out@call_lambda";
