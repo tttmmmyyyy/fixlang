@@ -357,8 +357,27 @@ resolve_callee_params`)。
 参照カウントを変えない。よってそれらのオブジェクトが解放されることはない。
 
 **A9 (`Match` はアームを持つ)** -- 果たす者: lowering。検査: `validate` の `check_rhs`
-(`CODE src/rc_ir/validate.rs: BodyCheck::check_rhs`)、ただし `develop_mode` のときだけ走る。
+(`CODE src/rc_ir/validate.rs: Validator::check_rhs`)、ただし `develop_mode` のときだけ走る。
 プログラムのすべての `Match` は 1 つ以上のアームを持つ。
+
+**A10 (型の well-formedness)** -- 果たす者: `validate_layouts` (elaboration で必ず走る)。ただし最適化が
+作る型を再検査するのは develop build だけである。
+プログラムに現れる型は ground であり、その tycon は `type_env` にあり、`no_size_in_place` の in-place の
+降下は有限である。これが無いと `boxed_leaf_paths` も `rc_units` も停止しない。
+
+**A11 (スコープの規律)** -- 果たす者: lowering。検査: `validate` の `check_expr_inner` と `check_rhs`
+(`CODE src/rc_ir/validate.rs: Validator::check_expr_inner`, `Validator::check_rhs`)、ただし
+`develop_mode` のときだけ走る。
+変数の使用は、その位置でスコープに入っている束縛に解決する。A6 は「同じ名前が 2 度束縛されない」までしか
+言わず、`x` の束縛が `x` 自身を参照しないことは言わない。`origin` の停止性はこの仮定に立つ
+(`VarTable::origins` の memo は答えを再帰から戻った後に記録するので、閉路があれば memo が当たる前に
+無限に潜る)。
+
+**A12 (束縛の形と型が合っている)** -- 果たす者: 誰も。
+move-bind の両辺の型、アームの結果と `Match` の束縛変数の型、payload と変位の型、`Destructure` の
+フィールド変数とフィールドの型、`Match` の scrutinee が union であること、`Destructure` の容器が構造体で
+あること、同じ名前の `RcVar` が持つ型が一致すること。**このコミットにこれを検査するコードは無い**
+(`validate` は構造だけを見る)。
 
 ## 5. 命題
 
@@ -369,9 +388,12 @@ resolve_callee_params`)。
 - **P1** (leaf と unit の対応)。任意の型 `τ` について、`boxed_leaf_paths(τ)` の各 leaf の
   `truncate_to_unit(τ, ・)` は `rc_units(τ)` の要素であり、`rc_units(τ)` の各 unit はある leaf の
   `truncate_to_unit(τ, ・)` である。
-- **P2** (`origin` の全域性と停止性)。`origin(x, π)` は、`x` がプログラムの束縛変数であり `π` が
-  `boxed_leaf_paths(ty(x))` の要素または `rc_units(ty(x))` の要素であるようなすべての `(x, π)` について、
-  panic せずに答えを返し、停止する。
+- **P2** (`origin` の全域性と停止性)。`origin(x, π)` は、`x` がプログラムの束縛変数であるようなすべての
+  `(x, π)` について、`π` を問わず panic せずに答えを返し、停止する。
+
+  `π` に制限を置かないのは、置いた制限が再帰について閉じないからである。`Result e (Option a)` を match して
+  payload に `Retain` を置くと、`origin` はその payload の `[]` から scrutinee の `[0]` を問い、`[0]` は
+  scrutinee の型の leaf でも unit でもない。
 - **P3** (`origin` の健全性 -- `Exactly`)。`origin(x, π) = Exactly(u, σ)` のとき、すべての実行路のすべての
   位置において、`π` の下の inhabited な各 leaf `λ` について、`obj(x, λ)` を指す参照は、`λ` に対応するスロット
   (D17) が持つ参照と同一である。
@@ -498,9 +520,22 @@ union (`Option` や `Result`) の payload を 2 回読むと、`-O max` で読�
 
 | 命題 | ファイル | 証明 | 検証 |
 |---|---|---|---|
-| P1, P2 | `p10-leaves-and-units.md` | 草稿 (定義の改訂前) | 未着手 |
+| P1, P2 | `p10-leaves-and-units.md` | 証明済み | 未着手 |
 | P3, P4 | `p11-origin-soundness.md` | **閉じない** -- P5 (c) がコードで偽 | 未着手 |
 | P5, P6, P7 | `p12-keys-and-consumes.md` | P6, P7 は証明済み。P5 は (a) を制限つきで証明し (c) は未 | 未着手 |
 | P8 - P14 | `p20-borrow-ify.md` | 未着手 | 未着手 |
 | P15 - P18 | `p30-cancel-walk.md` | 証明済み | 未着手 |
 | P19 - P24, T | `p40-cancel-soundness.md` | 未着手 | 未着手 |
+
+## 8. 発見
+
+**#529 (miscompile)。** P3/P4 の証明が閉じない原因はコードにあった。`origin_from_leaves_under` と
+`origin_inner` の `Binding::Join` の腕が、内側の `Origin` を `candidates()` で平坦化するとき、その
+`identity` を落とす。落ちた名前は `acted_unit_keys` に現れず、`cancel` の `Release` の腕がその名前の
+pending な `Retain` に印を付けないので、対でない retain と release が消える。`-O max` で解放後のメモリを
+読む Fix プログラムを作って確かめた (`-O none` と `-O basic` は正しい)。P5 (c) はこのコードでは偽であり、
+層 4 (P19-P24) はこれが直るまで着手しない。
+
+**測定の記録。** (c) を `develop_mode` の assertion にしたブランチが `n-probe` (`5245625a`) にある。
+#519 の修正を戻すと発火し (較正)、修正を入れた状態では全スイート 1,638 + 178 本で 1 度も発火せず、
+#529 の再現プログラムで発火する。
