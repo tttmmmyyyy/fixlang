@@ -109,6 +109,7 @@ fn no_size_reachable(
 /// `path` is the types the descent is inside, outermost first, and `on_path` is the same types as a
 /// set. A type met twice on one path is a value that contains itself. `root` names the report where
 /// the descent reaches a type too deep to be one the program wrote.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn no_size_in_place(
     root: &Arc<TypeNode>,
     ty: &Arc<TypeNode>,
@@ -195,6 +196,7 @@ fn depth_message(root: &Arc<TypeNode>, asked_for: &[Arc<TypeNode>]) -> String {
 /// The types a value of `ty` holds: the fields of a struct, the payloads of a union, and the
 /// elements an array storage holds. Read from the object the code generator builds, so that the
 /// walk asks for a layout of exactly what the code generator asks for one of.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn held_types(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
     let mut held = vec![];
     for field in ty_to_object_ty(ty, &vec![], type_env).field_types {

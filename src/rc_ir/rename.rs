@@ -14,6 +14,7 @@ use std::sync::Arc;
 /// rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
 /// callers use to remap side tables and to route recursive references. `pass_tag` distinguishes this
 /// cloning pass's fresh names from the others'.
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn fresh_rename_function(
     params: &[RcVar],
     cap: &Option<RcVar>,

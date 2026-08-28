@@ -241,7 +241,7 @@ boxed のとき、`Llvm` で `as_arg_projection` も `origin_from_leaves_under` 
 **補足 (入れ子の `Join` では identity が候補に残らない)**。`<1>3` が集めるのは各アームの `origin` の
 `candidates()` であって `identity()` ではない。よってアーム本体が返す変数の `origin` が `Join` のとき、その
 `identity` は外側の `candidates` に入らない。`CODE src/rc_ir/ownership.rs:
-tests::a_join_of_joins_may_be_any_of_their_results` がこれを表明している (内側の `Join` の束縛変数 `inner` は
+tests::a_join_of_joins_flattens_and_keeps_the_inner_name` がこれを表明している (内側の `Join` の束縛変数 `inner` は
 外側の候補 `{p, q, r}` に入らない)。`acted_unit_keys` は `Origin::acted_on` の像なので、この identity のキーを
 報告しない。
 
