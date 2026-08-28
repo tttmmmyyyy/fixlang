@@ -21,8 +21,8 @@ use crate::{
 // exercises the return rule on every target is
 // `test_return_wider_than_any_target_runs_in_constant_stack`.
 
-// The recursive call sits in tail position of a bind's continuation, and the result is an `Array`
-// plus a scalar. This is the shape a monadic loop over a growing or threaded array takes.
+/// The recursive call sits in tail position of a bind's continuation, and the result is an `Array`
+/// plus a scalar. This is the shape a monadic loop over a growing or threaded array takes.
 #[test]
 fn test_monadic_loop_with_array_result_runs_in_constant_stack() {
     let source = r#"
@@ -45,8 +45,8 @@ fn test_monadic_loop_with_array_result_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// `IOFail a` wraps `IO (Result ErrMsg a)`, and `ErrMsg` is a `String`, so the result is wide for
-// every element type. A loop in `IOFail` therefore needs the rule even when it threads no array.
+/// `IOFail a` wraps `IO (Result ErrMsg a)`, and `ErrMsg` is a `String`, so the result is wide for
+/// every element type. A loop in `IOFail` therefore needs the rule even when it threads no array.
 #[test]
 fn test_iofail_loop_runs_in_constant_stack() {
     let source = r#"
@@ -69,8 +69,8 @@ fn test_iofail_loop_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// `Std::loop_m` recurses on itself in tail position of a bind, so its own return width is what
-// decides whether the loop is constant-stack. Here `break_m` carries an array and a scalar.
+/// `Std::loop_m` recurses on itself in tail position of a bind, so its own return width is what
+/// decides whether the loop is constant-stack. Here `break_m` carries an array and a scalar.
 #[test]
 fn test_loop_m_with_wide_break_runs_in_constant_stack() {
     let source = r#"
@@ -89,9 +89,9 @@ fn test_loop_m_with_wide_break_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A user-defined monad transformer stacked on `IO`, the form a state-carrying library monad takes.
-// Its `bind` ends with `((f(a)).@run)(s)`, so the transformer's own return width — the state plus
-// the value — decides the stack behavior of a loop written in it.
+/// A user-defined monad transformer stacked on `IO`, the form a state-carrying library monad takes.
+/// Its `bind` ends with `((f(a)).@run)(s)`, so the transformer's own return width — the state plus
+/// the value — decides the stack behavior of a loop written in it.
 #[test]
 fn test_state_transformer_over_io_runs_in_constant_stack() {
     let source = r#"
@@ -131,9 +131,9 @@ fn test_state_transformer_over_io_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A state monad with no inner monad: its `run` carries the state in the tail call's arguments rather
-// than in a capture, so seven state leaves put the call at nine arguments — past both the return
-// registers and the six changing arguments an x86-64 sibcall can rewrite under the C convention.
+/// A state monad with no inner monad: its `run` carries the state in the tail call's arguments rather
+/// than in a capture, so seven state leaves put the call at nine arguments — past both the return
+/// registers and the six changing arguments an x86-64 sibcall can rewrite under the C convention.
 #[test]
 fn test_state_monad_carrying_state_in_arguments_runs_in_constant_stack() {
     let source = r#"
@@ -174,9 +174,9 @@ fn test_state_monad_carrying_state_in_arguments_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// The function called in tail position comes out of an array, so the call stays indirect at every
-// optimization level. Inlining and closure specialization cannot fold this chain into a
-// self-recursive loop; only turning the tail call into a jump keeps the stack flat.
+/// The function called in tail position comes out of an array, so the call stays indirect at every
+/// optimization level. Inlining and closure specialization cannot fold this chain into a
+/// self-recursive loop; only turning the tail call into a jump keeps the stack flat.
 #[test]
 fn test_dispatch_through_array_runs_in_constant_stack() {
     let source = r#"
@@ -211,8 +211,8 @@ fn test_dispatch_through_array_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Three arrays make nine leaves, above the largest return-register budget among supported targets,
-// so this loop needs the out-pointer on AArch64 as well as on x86-64.
+/// Three arrays make nine leaves, above the largest return-register budget among supported targets,
+/// so this loop needs the out-pointer on AArch64 as well as on x86-64.
 #[test]
 fn test_return_wider_than_any_target_runs_in_constant_stack() {
     let source = r#"
@@ -238,15 +238,16 @@ fn test_return_wider_than_any_target_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// The two functions carry different numbers of arguments, so the call from the narrow one to the wide
-// one has to grow the outgoing argument area. A sibcall may only reuse the caller's own argument
-// area, while a tail call under `tailcc` may grow it, which is what keeps this loop flat. Ten
-// arguments overflow the argument registers of both supported targets, and stay under the arity where
-// the compiler's own eta expansion blows up (fixlang issue #76).
-//
-// x86-64 alone, since that is where `lambda_calling_convention_of_target` gives Fix lambdas `tailcc`.
-// AArch64 keeps the C convention, where this call stays an ordinary one and the stack grows with the
-// recursion (fixlang issue #111).
+/// The two functions carry different numbers of arguments, so the call from the narrow one to the wide
+/// one has to grow the outgoing argument area. A sibcall may only reuse the caller's own argument
+/// area, while a tail call under `tailcc` may grow it, which is what keeps this loop flat. Ten
+/// arguments overflow the argument registers of both supported targets, and stay under the arity where
+/// the compiler's own eta expansion blows up (fixlang issue #76).
+///
+/// The test runs on x86-64 alone, since that is where `lambda_calling_convention_of_target` gives
+/// Fix lambdas `tailcc`.
+/// AArch64 keeps the C convention, where this call stays an ordinary one and the stack grows with the
+/// recursion (fixlang issue #111).
 #[cfg(target_arch = "x86_64")]
 #[test]
 fn test_growing_argument_area_mutual_recursion_runs_in_constant_stack() {
@@ -275,10 +276,10 @@ fn test_growing_argument_area_mutual_recursion_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// The result crosses the floating-point half of the register budget rather than the integer half.
-// `tailcc`, the convention x86-64 Fix lambdas use, returns five floating-point leaves in registers
-// and sends six to memory, so six is where the `float` entry of the budget decides the outcome.
-// Every other loop here carries pointers and integers only.
+/// The result crosses the floating-point half of the register budget rather than the integer half.
+/// `tailcc`, the convention x86-64 Fix lambdas use, returns five floating-point leaves in registers
+/// and sends six to memory, so six is where the `float` entry of the budget decides the outcome.
+/// Every other loop here carries pointers and integers only.
 #[test]
 fn test_float_wide_return_runs_in_constant_stack() {
     let source = r#"
@@ -301,11 +302,11 @@ fn test_float_wide_return_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Under separated compilation the unit that defines a function and the unit that calls it are
-// generated apart, so both sides derive the out-pointer decision and the calling convention from the
-// target alone. One symbol per unit puts a unit boundary on every call. The shapes cover an integer
-// result wider than the return registers, a result carrying arrays, a result mixing floating-point
-// and integer leaves, a wide global, and mutual recursion between two wide-returning functions.
+/// Under separated compilation the unit that defines a function and the unit that calls it are
+/// generated apart, so both sides derive the out-pointer decision and the calling convention from the
+/// target alone. One symbol per unit puts a unit boundary on every call. The shapes cover an integer
+/// result wider than the return registers, a result carrying arrays, a result mixing floating-point
+/// and integer leaves, a wide global, and mutual recursion between two wide-returning functions.
 #[test]
 fn test_wide_return_across_compilation_units() {
     let source = r#"
@@ -349,11 +350,11 @@ fn test_wide_return_across_compilation_units() {
     test_source(source, config);
 }
 
-// The out-pointer path must move the same bytes the register path did, for every leaf shape that
-// straddles the budget: three integer leaves against four, a union payload plus its tag, floating-
-// point leaves mixed with integer ones, a nested tuple with zero-sized members, and a boxed value.
-// Each is reached directly, in tail position, through a closure, and out of an array, so a value
-// crosses the out-pointer both as a forwarded parameter and as a caller-side buffer.
+/// The out-pointer path must move the same bytes the register path did, for every leaf shape that
+/// straddles the budget: three integer leaves against four, a union payload plus its tag, floating-
+/// point leaves mixed with integer ones, a nested tuple with zero-sized members, and a boxed value.
+/// Each is reached directly, in tail position, through a closure, and out of an array, so a value
+/// crosses the out-pointer both as a forwarded parameter and as a caller-side buffer.
 #[test]
 fn test_wide_return_shapes_compute_correctly() {
     let source = r#"
@@ -430,8 +431,8 @@ fn test_wide_return_shapes_compute_correctly() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Three integer and four floating-point leaves fill both halves of the budget at once, the widest
-// result the table still returns in registers on x86-64.
+/// Three integer and four floating-point leaves fill both halves of the budget at once, the widest
+/// result the table still returns in registers on x86-64.
 #[test]
 fn test_mixed_result_filling_both_register_classes_runs_in_constant_stack() {
     let source = r#"
@@ -457,11 +458,11 @@ fn test_mixed_result_filling_both_register_classes_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A `Destructor` holding a wide resource. Its destructor is applied from inside the reference-
-// counting helper that releases the value -- a function with the C convention, not a Fix lambda -- so
-// that helper's own frame holds the out-pointer buffer of the call. It is the one place outside a
-// Fix lambda where a buffer is allocated and handed to a call, which is what makes the call's
-// `tail` marker load-bearing there.
+/// A `Destructor` holding a wide resource. Its destructor is applied from inside the reference-
+/// counting helper that releases the value -- a function with the C convention, not a Fix lambda -- so
+/// that helper's own frame holds the out-pointer buffer of the call. It is the one place outside a
+/// Fix lambda where a buffer is allocated and handed to a call, which is what makes the call's
+/// `tail` marker load-bearing there.
 #[test]
 fn test_destructor_with_wide_resource_is_memory_safe() {
     let source = r#"

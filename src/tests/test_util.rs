@@ -92,7 +92,7 @@ pub fn fix_command() -> Command {
 ///
 /// The suite runs under the level `MAX_OPT_LEVEL_VAR` names, and that level caps the one `-O` asks
 /// for, so the variable is pinned to `opt_level` beside the argument. `-O` belongs to the
-/// subcommand, which is why the subcommand is given here rather than by the caller.
+/// subcommand, so the returned command carries `subcommand` with the level after it.
 pub fn fix_command_at_opt_level(subcommand: &str, opt_level: &str) -> Command {
     let mut command = fix_command();
     command

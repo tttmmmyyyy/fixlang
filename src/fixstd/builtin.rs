@@ -4349,9 +4349,9 @@ impl LLVMGen for InlineLLVMStructGetBody {
         } else {
             let field_idx = self.field_index();
             Provenance::build_shape(result_ty, type_env, &|path: &FieldPath| {
-                let mut p = vec![field_idx];
-                p.extend_from_slice(path);
-                sole_origin(LeafOrigin::Arg(0, p))
+                let mut arg_path = vec![field_idx];
+                arg_path.extend_from_slice(path);
+                sole_origin(LeafOrigin::Arg(0, arg_path))
             })
         }
     }
@@ -5103,9 +5103,9 @@ fn read_component_locality(
         return ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container));
     }
     ExtShape::build_shape(result_ty, type_env, &|path: &FieldPath| {
-        let mut p = vec![component];
-        p.extend_from_slice(path);
-        LeafCond::input_leaf(CONTAINER_ARG, p)
+        let mut arg_path = vec![component];
+        arg_path.extend_from_slice(path);
+        LeafCond::input_leaf(CONTAINER_ARG, arg_path)
     })
 }
 
@@ -6369,9 +6369,9 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         } else {
             let variant_idx = self.variant_index();
             Provenance::build_shape(result_ty, type_env, &|path: &FieldPath| {
-                let mut p = vec![variant_idx];
-                p.extend_from_slice(path);
-                sole_origin(LeafOrigin::Arg(0, p))
+                let mut arg_path = vec![variant_idx];
+                arg_path.extend_from_slice(path);
+                sole_origin(LeafOrigin::Arg(0, arg_path))
             })
         }
     }

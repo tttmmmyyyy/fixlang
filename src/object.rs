@@ -444,7 +444,8 @@ impl ObjectFieldType {
             gc.build_traverser_work(obj, work_type, state);
         };
 
-        // After loop, do nothing.
+        /// Runs once the loop over the buffer ends. Each element's work happens in the loop
+        /// body, so this stage has none of its own.
         fn after_loop<'c, 'm>(
             _gc: &mut Generator<'c, 'm>,
             _size: IntValue<'c>,
@@ -528,9 +529,9 @@ impl ObjectFieldType {
                              buf_ptr: PointerValue<'c>| {
                 let value_ty = value.ty.get_embedded_type(gc);
                 gc.retain(value.clone(), RcState::Unknown);
-                let elm_ptr =
+                let elem_ptr =
                     build_gep_array_elem(gc, value_ty, buf_ptr, idx, "ptr_to_elem_of_array");
-                gc.builder().build_store(elm_ptr, value.value(gc)).unwrap();
+                gc.builder().build_store(elem_ptr, value.value(gc)).unwrap();
             };
 
             // After loop, release value.
@@ -642,13 +643,13 @@ impl ObjectFieldType {
         }
 
         // Get element.
-        let elm_basic_ty = elem_ty.get_embedded_type(gc);
-        let elm_ptr = build_gep_array_elem(gc, elm_basic_ty, buffer, idx, "ptr_to_elem_of_array");
+        let elem_basic_ty = elem_ty.get_embedded_type(gc);
+        let elem_ptr = build_gep_array_elem(gc, elem_basic_ty, buffer, idx, "ptr_to_elem_of_array");
 
         // Get value
         let elem_val = gc
             .builder()
-            .build_load(elm_basic_ty, elm_ptr, "elem")
+            .build_load(elem_basic_ty, elem_ptr, "elem")
             .unwrap();
 
         // Return value
@@ -699,21 +700,21 @@ impl ObjectFieldType {
         }
 
         // Get ptr to the place at idx.
-        let elm_basic_ty = value.ty.get_embedded_type(gc);
-        let elm_ptr = build_gep_array_elem(gc, elm_basic_ty, buffer, idx, "ptr_to_elem_of_array");
+        let elem_basic_ty = value.ty.get_embedded_type(gc);
+        let elem_ptr = build_gep_array_elem(gc, elem_basic_ty, buffer, idx, "ptr_to_elem_of_array");
 
         // Release element that is already at the place (if required).
         if release_old_value {
-            let elm_val = gc
+            let elem_val = gc
                 .builder()
-                .build_load(elm_basic_ty, elm_ptr, "elem")
+                .build_load(elem_basic_ty, elem_ptr, "elem")
                 .unwrap();
-            let elem_obj = Object::new(elm_val, elem_ty, gc);
+            let elem_obj = Object::new(elem_val, elem_ty, gc);
             gc.release(elem_obj, state);
         }
 
         // Insert the given value to the place.
-        gc.builder().build_store(elm_ptr, value.value(gc)).unwrap();
+        gc.builder().build_store(elem_ptr, value.value(gc)).unwrap();
     }
 
     /// Copy `count` consecutive elements from `src_buffer` into `dst_buffer`, starting at index 0
@@ -729,7 +730,7 @@ impl ObjectFieldType {
         elem_ty: Arc<TypeNode>,
         state: RcState,
     ) {
-        let elm_basic_ty = elem_ty.get_embedded_type(gc);
+        let elem_basic_ty = elem_ty.get_embedded_type(gc);
         // In loop body, retain value and store it at idx. A fully unboxed element holds no
         // reference, so the copy of one is the store alone.
         let loop_body = |gc: &mut Generator<'c, 'm>,
@@ -737,12 +738,12 @@ impl ObjectFieldType {
                          _len: IntValue<'c>,
                          _ptr_to_buffer: PointerValue<'c>| {
             let src_ptr =
-                build_gep_array_elem(gc, elm_basic_ty, src_buffer, idx, "ptr_to_src_elem");
+                build_gep_array_elem(gc, elem_basic_ty, src_buffer, idx, "ptr_to_src_elem");
             let dst_ptr =
-                build_gep_array_elem(gc, elm_basic_ty, dst_buffer, idx, "ptr_to_dst_elem");
+                build_gep_array_elem(gc, elem_basic_ty, dst_buffer, idx, "ptr_to_dst_elem");
             let src_elem = gc
                 .builder()
-                .build_load(elm_basic_ty, src_ptr, "src_elem")
+                .build_load(elem_basic_ty, src_ptr, "src_elem")
                 .unwrap();
             gc.builder().build_store(dst_ptr, src_elem).unwrap();
             if !elem_ty.is_fully_unboxed(gc.type_env()) {
@@ -778,12 +779,12 @@ impl ObjectFieldType {
         match hole {
             None => Self::clone_array_range(gc, src_buffer, dst_buffer, len, elem_ty, state),
             Some(hole) => {
-                let elm_basic_ty = elem_ty.get_embedded_type(gc);
+                let elem_basic_ty = elem_ty.get_embedded_type(gc);
                 Self::clone_array_range(gc, src_buffer, dst_buffer, hole, elem_ty.clone(), state);
                 let (tail_src, tail_count) =
-                    Self::array_buf_after_hole(gc, elm_basic_ty, src_buffer, len, hole);
+                    Self::array_buf_after_hole(gc, elem_basic_ty, src_buffer, len, hole);
                 let (tail_dst, _) =
-                    Self::array_buf_after_hole(gc, elm_basic_ty, dst_buffer, len, hole);
+                    Self::array_buf_after_hole(gc, elem_basic_ty, dst_buffer, len, hole);
                 Self::clone_array_range(gc, tail_src, tail_dst, tail_count, elem_ty, state);
             }
         }
@@ -2179,6 +2180,18 @@ pub fn create_obj<'c, 'm>(
     obj
 }
 
+/// The address of the traverser function for an object of type `ty`, for a dynamic object to store
+/// and call indirectly.
+///
+/// # Arguments
+/// * `capture` — the captured types of a dynamic object, whose traverser disposes of them.
+/// * `work` — the job the traverser performs: `TraverserWorkType::release` selects the object's
+///   destructor, `mark_global` and `mark_threaded` the corresponding markers. `None` selects the
+///   dynamic traverser, which takes the job as a second argument and dispatches on it at run time.
+///
+/// # Returns
+/// Where the type leaves the traverser no work to do, the address of an empty function, so that a
+/// caller holding this pointer always has one to call.
 pub fn get_traverser_ptr<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
@@ -2454,8 +2467,8 @@ fn build_traverse<'c, 'm>(
     }
 }
 
-// Returns the debug type for how `ty` is embedded in a field: a pointer to the boxed layout when
-// `ty` is boxed, and the layout itself when it is unboxed.
+/// The debug type for how `ty` is embedded in a field: a pointer to the boxed layout when `ty` is
+/// boxed, and the layout itself when it is unboxed.
 pub fn ty_to_debug_embedded_ty<'c, 'm>(
     ty: Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
@@ -2479,16 +2492,16 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
     }
 }
 
-// Returns the debug type describing `ty`'s in-memory layout, caching each type by name so recursive
-// types terminate.
+/// The debug type describing `ty`'s in-memory layout, caching each type by name so recursive types
+/// terminate.
 pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let key = ty.to_string();
     gc.get_or_build_di_type(key, |gc| ty_to_debug_struct_ty_body(ty, gc))
 }
 
-// Builds the debug type describing `ty`'s in-memory layout by expanding its fields. The caching and
-// recursion-breaking that keep this finite on recursive types live in the wrapper
-// `ty_to_debug_struct_ty`.
+/// The debug type describing `ty`'s in-memory layout, built by expanding its fields. The caching
+/// and recursion-breaking that keep this finite on recursive types live in
+/// `ty_to_debug_struct_ty`.
 fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let name = &ty.to_string();
     let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());
@@ -2535,7 +2548,6 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
             obj_type.field_types[0].to_debug_type(gc)
         }
     } else {
-        // NOTE: Maybe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
         let struct_type = gc.struct_type_of(&ty);
         let size_in_bits = gc.target_data.get_bit_size(&struct_type);
         let align_in_bits = gc.target_data.get_abi_alignment(&struct_type) * 8;

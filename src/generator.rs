@@ -735,11 +735,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         ptr: PointerValue<'c>,
         ty: T,
     ) {
-        let intrinsic = Intrinsic::find(intrinsic_name).unwrap();
         let ptr_ty = self.context.ptr_type(AddressSpace::from(0));
-        let func = intrinsic
-            .get_declaration(&self.module, &[ptr_ty.into()])
-            .unwrap();
+        let func = self.intrinsic_function(intrinsic_name, &[ptr_ty.into()]);
         let size = self.context.i64_type().const_int(
             self.target_data.get_store_size(&ty.as_basic_type_enum()),
             false,
@@ -749,11 +746,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
     }
 
-    // Store stack pointer.
+    /// The address of the current top of the stack, which `restore_stack` takes back to.
     #[allow(dead_code)]
     pub fn save_stack(&mut self) -> PointerValue<'c> {
-        let intrinsic = Intrinsic::find("llvm.stacksave").unwrap();
-        let func = intrinsic.get_declaration(&self.module, &[]).unwrap();
+        let func = self.intrinsic_function("llvm.stacksave", &[]);
         self.builder()
             .build_call(func, &[], "save_stack")
             .unwrap()
@@ -763,15 +759,30 @@ impl<'c, 'm> Generator<'c, 'm> {
             .into_pointer_value()
     }
 
-    // Restore stack pointer.
+    /// Take the top of the stack back to `pos`, an address `save_stack` gave.
     #[allow(dead_code)]
     pub fn restore_stack(&mut self, pos: PointerValue<'c>) {
-        let intrinsic = Intrinsic::find("llvm.stackrestore").unwrap();
-        assert!(!intrinsic.is_overloaded()); // So we don't need to specify type parameters in the next line.
-        let func = intrinsic.get_declaration(&self.module, &[]).unwrap();
+        let func = self.intrinsic_function("llvm.stackrestore", &[]);
         self.builder()
             .build_call(func, &[pos.into()], "restore_stack")
             .unwrap();
+    }
+
+    /// The declaration of the LLVM intrinsic `name` in this module, instantiated at `overload_tys`.
+    ///
+    /// An overloaded intrinsic names one function per instantiation, so the types it is overloaded
+    /// on decide which of them this is; an intrinsic that takes none is asked for with an empty
+    /// list. LLVM knows the intrinsics by name, so a name it does not know is a mistake in the
+    /// compiler rather than in the program being compiled.
+    fn intrinsic_function(
+        &self,
+        name: &str,
+        overload_tys: &[BasicTypeEnum<'c>],
+    ) -> FunctionValue<'c> {
+        let intrinsic = Intrinsic::find(name).unwrap_or_else(|| panic!("LLVM has no `{}`", name));
+        intrinsic
+            .get_declaration(&self.module, overload_tys)
+            .unwrap_or_else(|| panic!("LLVM cannot declare `{}` at the types given", name))
     }
 
     /// The type definitions of the program, which a Fix type is resolved to its layout through.
@@ -1269,8 +1280,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Abort when the boxed object at `obj_ptr` is not in the local reference-counting state.
     ///
-    /// It stands where the state dispatch a `RcState::Local` annotation removed used to be, so a
-    /// wrong annotation stops at the operation that made it instead of corrupting a reference count
+    /// It stands in place of the state dispatch a `RcState::Local` annotation removes, so a wrong
+    /// annotation stops at the operation that made it instead of corrupting a reference count
     /// somewhere else. Locality inference rests on a hand-written declaration per inline-LLVM
     /// operation, and this is the only check on those: the whole test suite is built in develop
     /// mode, so every annotated site is verified dynamically on every test program.
