@@ -403,7 +403,7 @@ To apply a function `f` to a value `x`, write `f(x)`.
 neg(3) // -3 -- `neg` is a built-in function that takes a I64 value and returns negative of it.
 ```
 
-As I wrote before, there is no type of "two-variable functions" or "three-variable functions" in Fix. Instead, treat the value of type `a -> b -> c` (which is equal to `a -> (b -> c)`) as a thing like "two-variable function that takes a value of `a` and a value of `b`".　
+As I wrote before, there is no type of "two-variable functions" or "three-variable functions" in Fix. Instead, treat the value of type `a -> b -> c` (which is equal to `a -> (b -> c)`) as a thing like "two-variable function that takes a value of `a` and a value of `b`".
 
 Let's consider a "two-variable function" `multiply : I64 -> I64 -> I64` that multiplies two integers. Then `multiply(3) : I64 -> I64` is a function that multiplies 3 to the given integer. So `multiply(3)(5)` results in 15. Now, the last expression can be written as `multiply(3, 5)`, because we have a syntax sugar that `f(x, y)` is equivalent to `f(x)(y)`. 
 
@@ -503,7 +503,7 @@ Another way to apply a function is the `$` operator: `f $x = f(x)`. This operato
 
 The `$` operator is useful for reducing parentheses. In the Fibonacci program, here are examples of its usage:
 
-* `continue $ (idx+1, arr)`: This applies the `continue` function to the tuple value `(idx+1, arr)`. In Fix, `continue` and `break` are regular functions, not keywords. Therefore, this expression could also be written as `continue((idx+1, arr))` or `(idx+1, arr).continue`. A detailed explanation of the `continue` and `break` functions is provided later.
+* `continue $ (idx+1, arr)`: This applies the `continue` function to the tuple value `(idx+1, arr)`. In Fix, `continue` and `break` are regular functions, not keywords. Therefore, this expression could also be written as `continue((idx+1, arr))` or `(idx+1, arr).continue`. [The `loop`, `continue`, and `break` Functions](#the-loop-continue-and-break-functions) explains the `continue` and `break` functions in detail.
 * `println $ fib.to_iter.map(to_string).join(", ")`: This applies the `println` function to the string expression `fib.to_iter.map(to_string).join(", ")`. Since the `println` function has the type `String -> IO ()`, applying it to a string produces a value of type `IO ()`. This expression could also be written as `println(fib.to_iter.map(to_string).join(", "))`, but using the `$` operator can reduce parentheses around long string expressions.
 
 The precedence of the three function application methods is `f(x)` > `x.f` > `f $x`. For this reason, you cannot write `obj.method$ arg`. This would be equivalent to `method(obj) $arg == method(obj, arg)`, which tries to call the method with two arguments in the wrong order. On the other hand, you can write `method(arg)$ obj`, which reads as "apply `method` to `arg` to get a function of type `Obj -> Result`, and then apply that to `obj`."
@@ -1099,7 +1099,7 @@ If you put these two files in a same directory and execute `fix run -f main.fix 
 This program consists of two modules, `Lib` and `Main`.
 ```
 
-There is one special module: `Std`. This is a module of built-in entities. `Std` module is implicitly imported from all modules and you don't need to write `import Std` explicitly.
+There is one special module: `Std`. This is a module of built-in entities. The `Std` module is implicitly imported into every module.
 
 ## Namespaces and overloading
 
@@ -1493,7 +1493,7 @@ trait a : Greeter {
     greeting : a -> String;
 }
 
-// Let `I64` belong to the trait `MyToString`, where 
+// Let `I64` belong to the trait `Greeter`, where 
 impl I64 : Greeter {
     // the `greeting` member is defined as follows.
     greeting = |n| "Hi! I'm a 64-bit integer " + n.to_string + "!";
@@ -1745,7 +1745,7 @@ repeat = |x, n| Iterator::range(0, n).map(|_| x);
 In this example, instead of writing the concrete type of the iterator returned by `repeat` (a complex type like `MapIterator (CountUpIterator I64) I64 a`), the opaque type `?it` is used.
 The type constraint `[?it : Iterator, Item ?it = a]` declares that `?it` implements the `Iterator` trait and its element type is `a`.
 
-The caller does not need to know the concrete type of `?it`. It can be manipulated through trait methods.
+The caller works with a value of `?it` through the methods of the traits it is constrained by.
 
 ```
 main : IO ();
@@ -1793,7 +1793,7 @@ trait c : Make {
 ### Higher-Kinded Opaque Types
 
 Opaque types can have not only kind `*` (ordinary types) but also higher kinds such as `* -> *`.
-The kind of an opaque type is inferred from trait constraints, so there is no need to write the kind explicitly.
+The kind of an opaque type is inferred from its trait constraints.
 
 ```
 safe_div : [?m : Monad] I64 -> I64 -> ?m I64;
@@ -1973,9 +1973,9 @@ Here, `B(*x)` is the smallest **do block** that encloses the expression `*x`. A 
   - A lambda expression `|arg| ...` implicitly defines a do block `...`.
   - An if expression `if cond { ... } else { ... }` implicitly defines two do blocks `...`.
   - A match expression `match val { pat => ... }` implicitly defines a do block `...`.
-  - The double semicolon syntax (explained later) `act;; ...` implicitly defines a do block `...`.
+  - The double semicolon syntax `act;; ...` (see [Chaining monadic actions with the `;;` Syntax](#chaining-monadic-actions-with-the--syntax)) implicitly defines a do block `...`.
 
-In a previous section, we showed an example of creating `echo1 : IO ()` from `input_line : IO String` and `println : String -> IO ()` using `bind` in the stateful monad `IO`.
+[Stateful Monads](#stateful-monads) showed an example of creating `echo1 : IO ()` from `input_line : IO String` and `println : String -> IO ()` using `bind` in the stateful monad `IO`.
 
 ```
 echo1 : IO ();
@@ -2142,7 +2142,7 @@ pythagorean_triples = |limit| (
 As stated in [Dynamic Iterators](#dynamic-iterators), `DynIterator` has inferior performance compared to other iterators. Therefore, here's how to rewrite the code above without using `DynIterator`.
 
 As previously mentioned, `bind` in a sequence monad is known as the "flat map" operation. Fix's standard library provides `flat_map` for iterators. By recalling the definition of the `*` operator, rewriting the code above using explicit `bind`, and then replacing `bind` with `flat_map`, we can get a version of the code that doesn't use `DynIterator`.
-Using opaque types, there is no need to write the concrete type of the resulting iterator.
+The opaque type in the signature stands for the type of the resulting iterator.
 
 ```
 pythagorean_triples : [?it : Iterator, Item ?it = (I64, I64, I64)] I64 -> ?it;
@@ -3352,7 +3352,7 @@ In VSCode, you cannot put a breakpoint in *.fix files by default. As a workaroun
 Moreover, if you add `--backtrace` option to `fix build`, `fix run` or `fix test`, a stack trace will be printed when a panic occurs. If you use it with `-g` option, function names and line numbers will be shown in the stack trace.
 
 Other notes on debugging Fix program:
-- Unlike other languages, Fix does not release local variables at the end of their scope, but at the last point of use. So if you break after the last use of a local variable, the debugger may show an invalid value.
+- Fix releases a local variable at its last point of use, so a breakpoint after that point may show an invalid value for the variable.
 - The debug information records the element count of an `Array` (including the byte array inside a `String`) as a fixed value of 100, because the actual count is determined at run time and cannot be recorded. Debuggers display 100 elements, of which the first `<array size>` ones are the valid values: for an array shorter than 100, invalid values are displayed after the end, and for a longer one, elements after the 100th are hidden. The actual size can be checked by the `<array size>` member displayed together.
 
 ## Environment Variables

@@ -834,7 +834,8 @@ pub fn test_export_bool_argument_fails() {
     );
 }
 
-/// The reason `Bool` is refused does not depend on which side of the arrow it sits.
+/// `Bool` is refused as the result of an exported function for the reason it is refused as an
+/// argument: the width C gives `_Bool` is implementation-defined.
 #[test]
 pub fn test_export_bool_result_fails() {
     let source = r##"

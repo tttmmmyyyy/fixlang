@@ -81,15 +81,19 @@ impl TyVar {
     }
 }
 
+/// An associated type as a type names it, e.g. `Item` in `Item iter`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AssocType {
+    /// The name the associated type is declared under, whose namespace is the trait declaring it.
     pub name: FullName,
-    // Source span of the associated type name (e.g., `Item` in `Item iter`).
-    // Ignored in PartialEq, Eq, and Hash.
+    /// Where the name was written, e.g. the span of `Item` in `Item iter`. Left out of
+    /// `PartialEq`, `Eq` and `Hash`.
     pub src: Option<Span>,
 }
 
 impl PartialEq for AssocType {
+    /// Compares the name alone, which is what decides which associated type this is; where the
+    /// name was written stays out of the comparison.
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
     }
@@ -98,12 +102,18 @@ impl PartialEq for AssocType {
 impl Eq for AssocType {}
 
 impl Hash for AssocType {
+    /// Hashes the name alone, agreeing with the equality of `PartialEq`.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
     }
 }
 
 impl AssocType {
+    /// Gives this associated type's name its full name, read in the context `ctx` carries.
+    ///
+    /// # Arguments
+    /// * `span` — where the type this name stands in was written, which a report about a name
+    ///   nothing is found for points at.
     pub fn resolve_namespace(
         &mut self,
         ctx: &mut NameResolutionContext,
@@ -204,18 +214,24 @@ const C_SCALAR_NAMES: &[&str] = &[
     F64_NAME, PTR_NAME,
 ];
 
-// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
-// it. A type constructor is determined by its name.
+/// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
+/// it. A type constructor is determined by its name.
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
+    /// The name the type is declared under.
     pub name: FullName,
 }
 
 impl TyCon {
+    /// The type constructor named `fullname`.
     pub fn new(fullname: FullName) -> TyCon {
         TyCon { name: fullname }
     }
 
+    /// This type constructor written the way Fix source writes it.
+    ///
+    /// # Examples
+    /// `Std::Array` is written `Std::Array`, and the tuple of no element is written `()`.
     pub fn to_string(&self) -> String {
         if let Some(n) = get_tuple_n(&self.name) {
             if n == 0 {
@@ -225,6 +241,13 @@ impl TyCon {
         self.name.to_string()
     }
 
+    /// Gives this type constructor's name its full name, read in the context `ctx` carries. A name
+    /// that stands for an associated type resolves here too, and the caller reads it back out of
+    /// `ctx`.
+    ///
+    /// # Arguments
+    /// * `span` — where the type this name stands in was written, which a report about a name
+    ///   nothing is found for points at.
     pub fn resolve_namespace(
         &mut self,
         ctx: &mut NameResolutionContext,
@@ -238,15 +261,20 @@ impl TyCon {
         Ok(())
     }
 
-    // Convert all global FullNames to absolute paths.
+    /// This type constructor with its name spelled as an absolute path, so that it names the same
+    /// type from any namespace.
     pub fn global_to_absolute(&self) -> Arc<Self> {
         let mut ret = self.clone();
         ret.name.global_to_absolute();
         Arc::new(ret)
     }
 
-    // Get the type of struct / union value.
-    // If struct / union have type parameter, introduces new type arguments.
+    /// The type of a value of this struct or union: the type constructor applied to one type
+    /// variable new to `typechecker` per parameter the declaration takes.
+    ///
+    /// # Examples
+    /// A struct declared as `type Pair a b` gives `Pair` applied to two new type variables, and
+    /// one declared as `type Point` gives `Point`.
     pub fn get_struct_union_value_type(
         self: &TyCon,
         typechecker: &mut TypeCheckContext,
@@ -264,21 +292,21 @@ impl TyCon {
         apply_type_args(&Arc::new(self.clone()), &new_tyvars)
     }
 
-    // Whether this is the unit type `()`, i.e. the tuple of no element.
+    /// Whether this is the unit type `()`, i.e. the tuple of no element.
     pub fn is_unit(self: &TyCon) -> bool {
         self.name == make_tuple_name_abs(0)
     }
 
-    // Whether a value of this type crosses to C as one scalar: an integer, a floating point
-    // number, or a pointer, which C and Fix lay down the same way. These are the types a C
-    // function signature can name, and the types an exported Fix function can exchange.
+    /// Whether a value of this type crosses to C as one scalar: an integer, a floating point
+    /// number, or a pointer, which C and Fix lay down the same way. These are the types a C
+    /// function signature can name, and the types an exported Fix function can exchange.
     pub fn is_c_scalar(self: &TyCon) -> bool {
         self.name.namespace == NameSpace::from_strs(&[STD_NAME])
             && C_SCALAR_NAMES.contains(&self.name.name.as_str())
     }
 
-    // Whether this is an integer type that carries a sign. Panics for a type that is not an
-    // integer type of `Std`.
+    /// Whether this is an integer type that carries a sign. Panics for a type that is not an
+    /// integer type of `Std`.
     pub fn is_signed_integer(self: &TyCon) -> bool {
         if self.name.namespace != NameSpace::from_strs(&[STD_NAME]) {
             panic!("call is_signed_integer for {}", self.to_string())
@@ -296,7 +324,7 @@ impl TyCon {
         }
     }
 
-    // Whether this is the type `Bool` of `Std`.
+    /// Whether this is the type `Bool` of `Std`.
     pub fn is_boolean(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
     }
@@ -340,19 +368,27 @@ impl TyCon {
     }
 }
 
-// Information of type constructor.
-// For type alias, this struct is not used; use TyAliasInfo instead.
+/// The declaration a type constructor comes from: the kind of declaration it is, the parameters it
+/// takes, and what its values hold. A type alias is declared by `TyAliasInfo`.
 #[derive(Clone)]
 pub struct TyConInfo {
+    /// The kind of the type constructor, which follows from the parameters it takes.
     pub kind: Arc<Kind>,
+    /// What kind of declaration this is, which settles what `fields` holds.
     pub variant: TyConVariant,
+    /// Whether a value of this type is held in place, with its fields laid out where the value
+    /// sits.
     pub is_unbox: bool,
+    /// The parameters the declaration takes, in the order they are declared.
     pub tyvars: Vec<Arc<TyVar>>,
-    pub fields: Vec<Field>, // For an array type, this is `vec![{element_type}]`.
+    /// The fields of a struct or the variants of a union, in the order they are declared. An array
+    /// declares one field, the type its elements share.
+    pub fields: Vec<Field>,
+    /// Where the declaration was written.
     pub source: Option<Span>,
-    // The document of this type.
-    // If `def_src` is available, we can also get document from the source code.
-    // We use this field only when document is not available in the source code.
+    /// The documentation of this type, for a declaration the compiler builds itself. A declaration
+    /// read from a source file carries its documentation in the comment above it, which
+    /// `get_document` answers with.
     pub document: Option<String>,
     /// The struct this declaration punches a field out of, for a declaration that has one.
     ///
@@ -364,6 +400,8 @@ pub struct TyConInfo {
 }
 
 impl TyConInfo {
+    /// Gives every type name standing in the declared field types its full name, read in the
+    /// context `ctx` carries.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -372,6 +410,7 @@ impl TyConInfo {
         errors.to_result()
     }
 
+    /// Expands every type alias standing in the declared field types.
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -380,7 +419,9 @@ impl TyConInfo {
         errors.to_result()
     }
 
-    // Get the document of this type.
+    /// The documentation of this type: the comment written above the declaration in the source
+    /// where the declaration was read from one, and the `document` field otherwise. Documentation
+    /// with no text in it is answered as `None`.
     pub fn get_document(&self) -> Option<String> {
         // Try to get document from the source code.
         let docs = self.source.as_ref().and_then(|src| src.get_document().ok());
@@ -510,7 +551,7 @@ impl Hash for TypeNode {
 }
 
 impl Debug for TypeNode {
-    /// Writes the type in source syntax, with its free type variables renamed to `t0`, `t1`, ... in
+    /// Writes the type in source syntax, with its free type variables renamed `a`, `b`, ... in
     /// order of appearance, so that two types differing only in variable names print alike.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", Arc::new(self.clone()).to_string_normalize())
@@ -518,7 +559,7 @@ impl Debug for TypeNode {
 }
 
 impl TypeNode {
-    // Find the minimum node which includes the specified source code position.
+    /// The smallest node of this type covering `pos`, for a type read from a source file.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         if self.info.source.is_none() {
             return None;
@@ -559,15 +600,17 @@ impl TypeNode {
         }
     }
 
-    // Locate a `_` type wildcard at `pos` and return the type it was inferred to.
-    //
-    // `self` is the syntactic annotation (wildcards still present as
-    // `TYPE_WILDCARD_VAR_PREFIX` type variables, carrying the `_`'s source span);
-    // `resolved` is the same annotation after type inference, so the two trees
-    // have the same shape with each wildcard replaced by its inferred type. The
-    // walk descends both in lockstep and, on reaching the hovered wildcard, returns
-    // the matching node from `resolved`. A structural mismatch (possible when
-    // associated-type reduction reshaped `resolved`) yields `None`.
+    /// The type the `_` type wildcard at `pos` was inferred to.
+    ///
+    /// `self` is the annotation as it was written, where each `_` stands as a type variable named
+    /// with `TYPE_WILDCARD_VAR_PREFIX` carrying the `_`'s source span.
+    ///
+    /// # Arguments
+    /// * `resolved` — the same annotation after type inference, so that the two have the same
+    ///   shape with each wildcard replaced by the type it was inferred to. The walk descends both
+    ///   in lockstep and answers with the node of `resolved` under the wildcard. Where the two
+    ///   shapes differ, which reducing an associated type can leave them, there is nothing to
+    ///   answer with.
     pub fn find_wildcard_inferred_type(
         self: &Arc<TypeNode>,
         resolved: &Arc<TypeNode>,
@@ -597,7 +640,9 @@ impl TypeNode {
         }
     }
 
-    // The set of defining modules of type constructors that appear in this type.
+    /// Collects into `out_set` the module declaring each type constructor standing in this type.
+    /// Panics for a type carrying an associated type application, which is resolved away before
+    /// this is asked.
     pub fn define_modules_of_tycons(&self, out_set: &mut Set<Name>) {
         match &self.ty {
             Type::TyVar(_) => {}
@@ -614,19 +659,20 @@ impl TypeNode {
         }
     }
 
-    // Get source.
+    /// Where this type was written; a type the compiler builds itself carries none.
     pub fn get_source(&self) -> &Option<Span> {
         &self.info.source
     }
 
-    // Set source.
+    /// A copy of this type written at `src`, leaving this node as it is.
     pub fn set_source(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone();
         ret.info.source = src;
         Arc::new(ret)
     }
 
-    // Set source if only when self does not have source info.
+    /// A copy of this type written at `src` where it carries no source of its own, and this type
+    /// itself where it does.
     pub fn set_source_if_none(self: &Arc<TypeNode>, src: Option<Span>) -> Arc<TypeNode> {
         if self.info.source.is_none() {
             self.set_source(src)
@@ -635,7 +681,7 @@ impl TypeNode {
         }
     }
 
-    // Set kinds to type variables.
+    /// This type with each type variable carrying the kind `scope` gives its name.
     pub fn set_kinds(self: &Arc<TypeNode>, scope: &KindScope) -> Arc<TypeNode> {
         match &self.ty {
             Type::TyVar(tv) => self.set_tyvar(scope.set_tv(tv)),
@@ -653,7 +699,8 @@ impl TypeNode {
         }
     }
 
-    // Is this type constructed from type constructor, not from associated types?
+    /// Whether this type is built from type constructors and type variables alone, with no
+    /// associated type application standing anywhere in it.
     pub fn is_assoc_ty_free(&self) -> bool {
         match &self.ty {
             Type::TyVar(_) => true,
@@ -663,7 +710,7 @@ impl TypeNode {
         }
     }
 
-    // Is the head a type constructor?
+    /// Whether the head of this type is a type constructor, as `Array` heads `Array a`.
     fn is_head_tycon(&self) -> bool {
         match &self.ty {
             Type::TyVar(_) => false,
@@ -673,7 +720,8 @@ impl TypeNode {
         }
     }
 
-    // Is this type can be instance head of trait?
+    /// Checks that a trait implementation may be written for this type: a type constructor heads
+    /// it, and no associated type application stands in it.
     pub fn is_implementable(self: &Arc<TypeNode>) -> Result<(), Errors> {
         if !self.is_head_tycon() {
             return Err(Errors::from_msg_srcs(
@@ -699,6 +747,7 @@ impl TypeNode {
         return Ok(());
     }
 
+    /// Whether this type is a type variable standing on its own.
     pub fn is_tyvar(&self) -> bool {
         match &self.ty {
             Type::TyVar(_) => true,
@@ -706,6 +755,7 @@ impl TypeNode {
         }
     }
 
+    /// Whether this type is a type constructor standing on its own, with no argument applied.
     pub fn is_tycon(&self) -> bool {
         match &self.ty {
             Type::TyCon(_) => true,
@@ -713,6 +763,8 @@ impl TypeNode {
         }
     }
 
+    /// The type constructor this type is. Panics for a type that is not a type constructor
+    /// standing on its own.
     pub fn as_tycon(&self) -> &TyCon {
         match &self.ty {
             Type::TyCon(tc) => tc,
@@ -720,6 +772,11 @@ impl TypeNode {
         }
     }
 
+    /// The head of this type written out: the type constructor or the type variable being applied,
+    /// or the name of the associated type.
+    ///
+    /// # Examples
+    /// `Array I64` gives `Std::Array`, `f a` gives `f`, and `Item c` gives `Item`.
     pub fn get_head_string(self: &Arc<TypeNode>) -> String {
         match &self.ty {
             Type::TyVar(_) => self.to_string(),
@@ -729,6 +786,8 @@ impl TypeNode {
         }
     }
 
+    /// A copy of this type variable carrying `kind`, leaving this node as it is. Panics for a type
+    /// that is not a type variable.
     #[allow(dead_code)]
     pub fn set_tyvar_kind(&self, kind: Arc<Kind>) -> Arc<TypeNode> {
         let mut ret = self.clone();
@@ -741,6 +800,8 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    /// A copy of this type with `tv` as its type variable, leaving this node as it is. Panics for
+    /// a type that is not a type variable.
     pub fn set_tyvar(&self, tv: Arc<TyVar>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -750,6 +811,8 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    /// A copy of this application with `fun` as the type being applied, keeping the argument.
+    /// Panics for a type that is not a type application.
     pub fn set_tyapp_fun(&self, fun: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -759,6 +822,8 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    /// A copy of this application with `arg` as the argument, keeping the type being applied.
+    /// Panics for a type that is not a type application.
     pub fn set_tyapp_arg(&self, arg: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -768,6 +833,8 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    /// A copy of this associated type application named `name`, keeping the arguments. Panics for
+    /// a type that is not an associated type application.
     pub fn set_assocty_name(&self, name: AssocType) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -777,6 +844,8 @@ impl TypeNode {
         Arc::new(ret)
     }
 
+    /// A copy of this associated type application applied to `args`, keeping the name. Panics for
+    /// a type that is not an associated type application.
     pub fn set_assocty_args(&self, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -786,8 +855,10 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    // For a lambda type (i.e., a closure or a function pointer), return the source types.
-    // Returns an single element vector for a closure type.
+    /// The argument types of a closure type or a function pointer type. Panics for any other type.
+    ///
+    /// # Examples
+    /// `a -> b` gives `[a]`, and `#FunPtr2 a b c` gives `[a, b]`.
     pub fn get_lambda_srcs(self: &Arc<TypeNode>) -> Vec<Arc<TypeNode>> {
         if self.is_funptr() || self.is_closure() {
             let mut type_args = self.collect_type_arguments();
@@ -800,7 +871,10 @@ impl TypeNode {
         );
     }
 
-    // For a lambda type (i.e., a closure or a function pointer), return the destination type.
+    /// The result type of a closure type or a function pointer type. Panics for any other type.
+    ///
+    /// # Examples
+    /// `a -> b` gives `b`, and `#FunPtr2 a b c` gives `c`.
     pub fn get_lambda_dst(&self) -> Arc<TypeNode> {
         if self.is_funptr() || self.is_closure() {
             let mut type_args = self.collect_type_arguments();
@@ -810,6 +884,8 @@ impl TypeNode {
         }
     }
 
+    /// A copy of this type with `tc` as its type constructor, leaving this node as it is. Panics
+    /// for a type that is not a type constructor standing on its own.
     pub fn set_tycon_tc(&self, tc: Arc<TyCon>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -819,8 +895,12 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    // Resolve namespaces of tycons / type aliases / trait / trait aliases / associated types that appear in a type.
-    // Also, replaces TyCon node to an AssocTy node if necessary.
+    /// This type with every name standing in it — type constructors, type aliases and associated
+    /// types — given its full name, read in the context `ctx` carries.
+    ///
+    /// A name that stands for an associated type becomes a `Type::AssocTy` node holding as many of
+    /// the arguments it is applied to as the associated type's arity, and an occurrence given
+    /// fewer arguments than that is reported as an error.
     pub fn resolve_namespace(
         self: &Arc<TypeNode>,
         ctx: &mut NameResolutionContext,
@@ -1060,6 +1140,7 @@ impl TypeNode {
     /// This type split into the head being applied and the arguments applied to it: `f a b` gives
     /// `vec![f, a, b]`.
     pub fn flatten_type_application(&self) -> Vec<Arc<TypeNode>> {
+        /// Appends to `tys` the head of `ty`, then the arguments applied to it in order.
         fn flatten_type_application_inner(ty: &TypeNode, tys: &mut Vec<Arc<TypeNode>>) {
             match &ty.ty {
                 Type::TyApp(fun, arg) => {
@@ -1093,13 +1174,21 @@ impl TypeNode {
         ret
     }
 
-    // Given a type `A1 -> A2 -> ... -> An -> B`, returns `([A1, A2, ..., An], B)`.
-    // n = 0 is allowed. In this case, returns `([], B)`.
-    // - `vars_limit`: limits the number of type variables to be collected.
+    /// This function type split into its argument types and the result type they lead to.
+    ///
+    /// # Arguments
+    /// * `vars_limit` — how many argument types to take at most. The split stops before an arrow
+    ///   that would carry the count past it, leaving the remaining arrows in the result type.
+    ///
+    /// # Examples
+    /// `A -> B -> C` with a `vars_limit` of 2 gives `([A, B], C)`, and with a `vars_limit` of 1
+    /// gives `([A], B -> C)`. A type that is no function gives `([], B)`.
     pub fn collect_app_src(
         self: &Arc<TypeNode>,
         vars_limit: usize,
     ) -> (Vec<Arc<TypeNode>>, Arc<TypeNode>) {
+        /// Appends to `vars` the argument types of `ty` while `vars_limit` has room for them, and
+        /// answers with the type reached once it has not.
         fn collect_app_src_inner(
             ty: &Arc<TypeNode>,
             vars: &mut Vec<Arc<TypeNode>>,
@@ -1122,7 +1211,9 @@ impl TypeNode {
         (vars, dst_ty)
     }
 
-    // Remove type aliases in a type.
+    /// This type with every type alias standing in it expanded to the type it stands for. An alias
+    /// that leads back to itself, and one applied to fewer arguments than it takes, are reported
+    /// as errors.
     pub fn resolve_type_aliases(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
@@ -1132,9 +1223,13 @@ impl TypeNode {
         Ok(ty)
     }
 
-    // Remove type aliases in a type.
-    // * `type_name_path` - argument to detect circular aliasing.
-    // * `entry_type` - argument to show good error message.
+    /// One step of the `resolve_type_aliases` walk.
+    ///
+    /// # Arguments
+    /// * `type_name_path` — the types the walk has expanded on the way to this one, written out
+    ///   with normalized variable names; a type met twice is an alias leading back to itself.
+    /// * `entry_type_src` — where the type the walk started from was written, which a report about
+    ///   such an alias points at.
     fn resolve_type_aliases_internal(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
@@ -1215,7 +1310,8 @@ impl TypeNode {
         }
     }
 
-    // Get top-level type constructor of a type.
+    /// The type constructor at the head of this type, as `Array` heads `Array I64`. A type
+    /// variable and an associated type application have none.
     pub fn toplevel_tycon(&self) -> Option<Arc<TyCon>> {
         match &self.ty {
             Type::TyVar(_) => None,
@@ -1225,7 +1321,9 @@ impl TypeNode {
         }
     }
 
-    // Update top-level type constructor of a type.
+    /// This type with `tycon` at its head, keeping the arguments applied to it: `Array I64` with
+    /// `Option` given here becomes `Option I64`. Panics for a type headed by a type variable or by
+    /// an associated type application.
     pub fn set_toplevel_tycon(&self, tycon: Arc<TyCon>) -> Arc<TypeNode> {
         match &self.ty {
             Type::TyVar(_) => {
@@ -1260,11 +1358,12 @@ impl TypeNode {
         self.toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())
     }
 
+    /// Whether this type is `Std::Array`.
     pub fn is_array(&self) -> bool {
         self.toplevel_tycon_satisfies(is_array_tycon)
     }
 
-    // Whether this is the internal `#ArrayStorage` type.
+    /// Whether this is the internal `#ArrayStorage` type.
     pub fn is_array_storage(&self) -> bool {
         self.toplevel_tycon_satisfies(is_array_storage_tycon)
     }
@@ -1274,12 +1373,12 @@ impl TypeNode {
         self.toplevel_tycon_satisfies(is_punched_array_tycon)
     }
 
-    // Whether this is the unit type `()`, i.e. the tuple of no element.
+    /// Whether this is the unit type `()`, i.e. the tuple of no element.
     pub fn is_unit(&self) -> bool {
         self.toplevel_tycon_satisfies(TyCon::is_unit)
     }
 
-    // Whether this is the type `Bool`.
+    /// Whether this is the type `Bool`.
     pub fn is_boolean(&self) -> bool {
         self.toplevel_tycon_satisfies(TyCon::is_boolean)
     }
@@ -1289,8 +1388,8 @@ impl TypeNode {
         self.toplevel_tycon_satisfies(TyCon::is_string)
     }
 
-    // Whether the top-level type constructor of this type is `IO`, i.e. whether this is `IO` or
-    // `IO a`.
+    /// Whether the top-level type constructor of this type is `IO`, i.e. whether this is `IO` or
+    /// `IO a`.
     pub fn is_io(&self) -> bool {
         self.toplevel_tycon_satisfies(TyCon::is_io)
     }
@@ -1377,7 +1476,7 @@ impl TypeNode {
             .all(|(_, field_ty)| field_ty.is_fully_unboxed(type_env))
     }
 
-    // Create new type node with default info.
+    /// A node holding `ty`, written nowhere.
     fn new(ty: Type) -> Self {
         Self {
             ty,
@@ -1388,12 +1487,12 @@ impl TypeNode {
         }
     }
 
-    // Create shared new type node with default info.
+    /// A shared node holding `ty`, written nowhere.
     fn new_arc(ty: Type) -> Arc<Self> {
         Arc::new(Self::new(ty))
     }
 
-    // Set new info for shared instance.
+    /// A copy of this type carrying `info`, leaving this node as it is.
     #[allow(dead_code)]
     pub fn set_info(self: Arc<Self>, info: TypeInfo) -> Arc<Self> {
         let mut ret = (*self).clone();
@@ -1401,7 +1500,7 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    // Set new type for shared instance.
+    /// A copy of this node holding the type expression `ty`, keeping the source it was written at.
     #[allow(dead_code)]
     pub fn set_ty(self: &Arc<Self>, ty: Type) -> Arc<Self> {
         let mut ret = (**self).clone();
@@ -1409,10 +1508,12 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    // Calculate kind.
+    /// The kind of this type, read from the kinds `kind_env` gives the type constructors and the
+    /// associated types, and from the kinds the type variables carry. A type applied to an
+    /// argument whose kind its own kind does not take is reported as an error.
     pub fn kind(self: &Arc<TypeNode>, kind_env: &KindEnv) -> Result<Arc<Kind>, Errors> {
-        // The error reported where `application` applies `fun` of kind `fun_kind` to `arg` of kind
-        // `arg_kind`, which `fun_kind` does not accept.
+        /// The error reported where `application` applies `fun` of kind `fun_kind` to `arg` of
+        /// kind `arg_kind`, which `fun_kind` does not accept.
         fn kind_mismatch_error(
             application: &Arc<TypeNode>,
             fun: &Arc<TypeNode>,
@@ -1480,6 +1581,12 @@ impl TypeNode {
         }
     }
 
+    /// The layout of the object a value of this type lives in: its fields, their types, and
+    /// whether it is boxed.
+    ///
+    /// # Arguments
+    /// * `capture` — the types a dynamic object holds, which are its fields. Empty for every other
+    ///   type.
     pub fn get_object_type(
         self: &Arc<TypeNode>,
         capture: &Vec<Arc<TypeNode>>,
@@ -1505,18 +1612,30 @@ impl TypeNode {
         gc.embedded_type_of(self)
     }
 
-    // Check if the type takes the form of the definition of associated type.
-    // Definition of an associated type has to be of the form `type AssocTypeName ty1 tv2 ... tvN`,
-    // - where `{AssocTypeName}` is a local name,
-    // - `ty1` is equal to the implemented type.
-    // - type variables appears in the arguments are distinct.
-    // If ok, return an `AssocTypeDefnHead` with the parsed information.
+    /// Checks that this type is the head of an associated type definition or implementation, which
+    /// is written `{AssocTypeName} {impl_type} {tv1} ... {tvN}`: the name is a local one, the
+    /// first argument is the implemented type, and the arguments after it are type variables that
+    /// are distinct from one another and free from the implemented type.
+    ///
+    /// # Arguments
+    /// * `impl_type` — the type the trait is implemented for, which the first argument names.
+    /// * `src_for_err` — where to draw a report about the head.
+    /// * `is_impl` — whether the head belongs to an implementation (`type Item Foo = ...;`) rather
+    ///   than to a declaration in a trait (`type Item Foo;`). It decides the wording of the
+    ///   reports, and whether the first argument is compared against `impl_type` here; a name
+    ///   written with its namespace matches only once name resolution has run, so
+    ///   `validate_trait_impl` compares an implementation's.
+    ///
+    /// # Returns
+    /// The name, the parameters and the implemented type as written, read out of the head.
     pub fn validate_as_associated_type_impl_defn(
         &self,
         impl_type: &Arc<TypeNode>,
         src_for_err: &Option<Span>,
         is_impl: bool,
     ) -> Result<AssocTypeDefnHead, Errors> {
+        /// The report that the head is not of the form a definition or an implementation is
+        /// written in.
         fn general_err(
             is_impl: bool,
             imple_type: &Arc<TypeNode>,
@@ -1644,6 +1763,8 @@ pub struct AssocTypeDefnHead {
 }
 
 impl Clone for TypeNode {
+    /// Copies the type expression and where it was written, leaving the values kept on the node —
+    /// its hash, whether it is ground, how deeply it nests — to be computed again.
     fn clone(&self) -> Self {
         TypeNode {
             ty: self.ty.clone(),
@@ -1655,12 +1776,18 @@ impl Clone for TypeNode {
     }
 }
 
-// Variant of type
+/// A type expression, which is a type variable, a type constructor, or one of these applied to
+/// arguments.
 #[derive(Eq, Hash, Serialize, Deserialize, Clone)]
 pub enum Type {
+    /// A type variable, e.g. `a`.
     TyVar(Arc<TyVar>),
+    /// A type constructor with no argument applied, e.g. `Std::I64`.
     TyCon(Arc<TyCon>),
+    /// A type applied to one argument, so that `Array I64` is `Array` applied to `I64`.
     TyApp(Arc<TypeNode>, Arc<TypeNode>),
+    /// An associated type applied to as many arguments as its arity, e.g. `Item c`. The first
+    /// argument is the type the trait is implemented for.
     AssocTy(AssocType, Vec<Arc<TypeNode>>),
 }
 
@@ -1695,16 +1822,18 @@ impl PartialEq for Type {
 }
 
 impl TypeNode {
-    // Stringify a type.
-    // Name of type variables are normalized to names such as "t0", "t1", etc.
+    /// This type written in source syntax, with its type variables renamed `a`, `b`, ... in order
+    /// of appearance, so that two types differing only in the names of their variables are written
+    /// alike.
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
         TypeNode::to_string_normalize_many(&[self.clone()])
             .pop()
             .unwrap()
     }
 
-    // Stringify many types in a consistent way.
-    // Name of type variables are normalized to names such as "t0", "t1", etc.
+    /// The types written in source syntax under one renaming of their type variables to `a`, `b`,
+    /// ... in order of appearance across the whole list, so that a variable two of them share is
+    /// written with one name in both.
     pub fn to_string_normalize_many(tys: &[Arc<TypeNode>]) -> Vec<String> {
         // Collect free variables keeping the order of appearance.
         let mut free_vars = vec![];
@@ -1736,8 +1865,13 @@ impl TypeNode {
             .collect()
     }
 
-    // Stringify.
+    /// This type written in source syntax, under the names its own type variables carry.
+    ///
+    /// # Examples
+    /// A saturated tuple is written `(a, b)`, a saturated arrow `a -> b`, and an argument that is
+    /// itself an application stands in parentheses, as in `Array (Option a)`.
     pub fn to_string(self: &Arc<TypeNode>) -> String {
+        /// Whether `arg`, standing as the argument of an application, is written in parentheses.
         fn should_braced_as_arg(arg: &Arc<TypeNode>) -> bool {
             match &arg.ty {
                 Type::TyVar(_) => false,
@@ -1882,10 +2016,14 @@ impl TypeNode {
         format!("{:x}", md5::compute(type_string))
     }
 
-    // Returns the list of predicates for this type to be well-formed.
-    // See all associated type usages (for example, `Elem c`) in this type and returns a preducate `c : Collects`.
+    /// The trait constraints this type has to meet to be well-formed: each associated type
+    /// application standing in it asks that its first argument implement the trait declaring it.
+    ///
+    /// # Examples
+    /// `Elem c`, where `Collects` declares `Elem`, gives `c : Collects`.
     #[allow(dead_code)]
     pub fn predicates_from_associated_types(&self) -> Vec<Predicate> {
+        /// Appends to `buf` the constraint of each associated type application standing in `ty`.
         fn predicates_from_associated_types_internal(ty: &TypeNode, buf: &mut Vec<Predicate>) {
             match &ty.ty {
                 Type::TyVar(_) => {}
@@ -1914,14 +2052,17 @@ impl TypeNode {
     }
 }
 
+/// The kind `*`, of a type that has values of its own.
 pub fn kind_star() -> Arc<Kind> {
     Arc::new(Kind::Star)
 }
 
+/// The kind of a type constructor taking a type of kind `src` to a type of kind `dst`.
 pub fn kind_arrow(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
     Arc::new(Kind::Arrow(src, dst))
 }
 
+/// A type variable named `var_name`, standing for types of kind `kind`.
 pub fn make_tyvar(var_name: &str, kind: &Arc<Kind>) -> Arc<TyVar> {
     Arc::new(TyVar {
         name: String::from(var_name),
@@ -1929,23 +2070,32 @@ pub fn make_tyvar(var_name: &str, kind: &Arc<Kind>) -> Arc<TyVar> {
     })
 }
 
+/// The type that is the type variable named `var_name`, standing for types of kind `kind`.
 pub fn type_tyvar(var_name: &str, kind: &Arc<Kind>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyVar(make_tyvar(var_name, kind)))
 }
 
+/// The type that is the type variable named `var_name`, standing for types of kind `*`.
 pub fn type_tyvar_star(var_name: &str) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyVar(make_tyvar(var_name, &kind_star())))
 }
 
+/// The type that is the type variable `tyvar`.
 pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
     let ty = TypeNode::new(Type::TyVar(tyvar.clone()));
     Arc::new(ty)
 }
 
+/// The function type `src -> dst`.
 pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
     type_fun_with_arrow_src(src, dst, None)
 }
 
+/// The function type `src -> dst`, with the `->` itself written at `arrow_src`.
+///
+/// # Arguments
+/// * `arrow_src` — where the `->` itself was written, which a report drawn on the arrow points
+///   at.
 pub fn type_fun_with_arrow_src(
     src: Arc<TypeNode>,
     dst: Arc<TypeNode>,
@@ -1960,6 +2110,8 @@ pub fn type_fun_with_arrow_src(
     type_tyapp(partial, dst)
 }
 
+/// The function pointer type taking `srcs` to `dst`, i.e. `Std::#FunPtr{n}` applied to them,
+/// where `n` is the number of arguments.
 pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
     let mut ty = TypeNode::new_arc(Type::TyCon(Arc::new(make_funptr_tycon(srcs.len() as u32))));
     for src in srcs {
@@ -1969,18 +2121,23 @@ pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode
     ty
 }
 
+/// The type `tyfun` applied to `param`.
 pub fn type_tyapp(tyfun: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyApp(tyfun, param))
 }
 
+/// The associated type `assoc_ty` applied to `args`, the first of which is the type the trait is
+/// implemented for.
 pub fn type_assocty(assoc_ty: AssocType, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::AssocTy(assoc_ty, args))
 }
 
+/// The type that is the type constructor `tycon`, with no argument applied.
 pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyCon(tycon.clone()))
 }
 
+/// The type constructor named `name`.
 pub fn tycon(name: FullName) -> Arc<TyCon> {
     Arc::new(TyCon { name })
 }
@@ -2040,7 +2197,7 @@ impl TypeNode {
         })
     }
 
-    // Calculate free type variables.
+    /// The type variables standing in this type, under their names.
     pub fn free_vars(self: &Arc<TypeNode>) -> Map<Name, Arc<TyVar>> {
         let mut free_vars: Map<String, Arc<TyVar>> = Map::default();
         match &self.ty {
@@ -2181,7 +2338,8 @@ impl TypeNode {
         }
     }
 
-    // Convert all global FullNames to absolute paths.
+    /// This type with every name standing in it spelled as an absolute path, so that it names the
+    /// same entity from any namespace.
     pub fn global_to_absolute(&self) -> Arc<TypeNode> {
         match &self.ty {
             Type::TyVar(_) => Arc::new(self.clone()),
@@ -2266,7 +2424,8 @@ impl Scheme {
                 // The first argument of the left side of an equality constraint should be a type variable.
                 // If this condition is not satisified, then a type can be reduced in two ways, by this equality and by an instance of the associated type,
                 // which implies that there is no "normal form" of the type.
-                // An opaque type variable stands there too; such an equality is validated in the branch above.
+                // An opaque type variable stands there too; an equality on one is checked where
+                // `on_opaque_tyvar` holds.
                 if !eq.args[0].is_tyvar() {
                     return Err(Errors::from_msg_srcs(
                         "The first argument of the left side of an equality constraint should be a type variable or an opaque type.".to_string(),
