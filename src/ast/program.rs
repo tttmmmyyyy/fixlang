@@ -2203,6 +2203,10 @@ impl Program {
                 // Every argument past the declared parameters travels through `...`, which carries
                 // only what C carries as one scalar. The trailing `IOState` token of an `IO` call
                 // is not passed to C, so it is not one of them.
+                assert!(
+                    !*is_io || !args.is_empty(),
+                    "an `IO` call of a C function carries the `IOState` token as an argument"
+                );
                 let c_arg_count = args.len() - if *is_io { 1 } else { 0 };
                 for arg in args[..c_arg_count].iter().skip(param_tys.len()) {
                     let arg_ty = arg
