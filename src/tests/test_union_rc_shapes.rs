@@ -559,4 +559,89 @@ main = (
         }
         test_source(FIELD_READ_TWICE_SOURCE, Configuration::develop_mode());
     }
+
+    // A union built out of a payload that holds two boxed values from different sources, read
+    // twice. The union is one reference-counting unit and carries a name of its own — the name
+    // every path through it agrees on — while the two objects it holds keep their own names. A
+    // retain of the union and a release of one of the values read back out of it therefore name one
+    // object two ways, and both namings are right: the retain bumped a reference of each object,
+    // and the release un-bumps one of them.
+    //
+    // The reads take a scalar out of each array, so the union is live across them and a retain pays
+    // for the second read. `Option`, `Result` and a union of the program's own all take this shape,
+    // and the last of them is read a third time inside an arm.
+    const UNION_PAYLOAD_TWO_SOURCES_SOURCE: &str = r#"
+module Main;
+
+// A union of the program's own, whose payload holds two boxed values beside a scalar.
+type Two = unbox union { pair : (Array I64, Array I64), mark : I64 };
+
+read_both_option : Array I64 -> Array I64 -> I64;
+read_both_option = |a, b| (
+    let u = Option::some((a, b));
+    u.as_some.@0.@(0) + u.as_some.@1.@(0)
+);
+
+read_both_result : Array I64 -> Array I64 -> I64;
+read_both_result = |a, b| (
+    let r : Result String (Array I64, Array I64) = Result::ok((a, b));
+    r.as_ok.@0.@(0) + r.as_ok.@1.@(0)
+);
+
+read_both_own : Array I64 -> Array I64 -> I64;
+read_both_own = |a, b| (
+    let u = Two::pair((a, b));
+    u.as_pair.@0.@(0) + u.as_pair.@1.@(0)
+);
+
+// Reads the union three times, the third one an arm deeper.
+read_thrice : Array I64 -> Array I64 -> I64;
+read_thrice = |a, b| (
+    let u = Two::pair((a, b));
+    if u.is_mark { 0 } else {
+        u.as_pair.@0.@(0) + u.as_pair.@1.@(0) + u.as_pair.@0.@size
+    }
+);
+
+sum_over : (Array I64 -> Array I64 -> I64) -> I64;
+sum_over = |f| (
+    Iterator::range(0, 4).map(|k|
+        f(Array::fill(k + 2, k), Array::fill(k + 3, k * 10))
+    ).sum
+);
+
+main : IO ();
+main = (
+    assert_eq(|_|"an Option of a pair is read twice", sum_over(read_both_option), 66);;
+    assert_eq(|_|"a Result of a pair is read twice", sum_over(read_both_result), 66);;
+    assert_eq(|_|"an unboxed union of a pair is read twice", sum_over(read_both_own), 66);;
+    assert_eq(|_|"the union is read a third time inside an arm", sum_over(read_thrice), 80);;
+    pure()
+);
+"#;
+
+    /// Each array is read back as it was built, and the compiler accepts the program.
+    ///
+    /// A union whose payload holds two objects is the shape that tells the two namings apart, so a
+    /// check reading one object under two keys as a mistake aborts the build here.
+    #[test]
+    pub fn test_union_payload_from_two_sources_correctness() {
+        test_source_without_valgrind(UNION_PAYLOAD_TWO_SOURCES_SOURCE);
+    }
+
+    /// The arrays are freed exactly once and neither leaks, checked under Valgrind MemCheck.
+    #[test]
+    pub fn test_union_payload_from_two_sources_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(
+            UNION_PAYLOAD_TWO_SOURCES_SOURCE,
+            Configuration::develop_mode(),
+        );
+    }
 }

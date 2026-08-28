@@ -858,15 +858,6 @@ impl References {
         }
     }
 
-    /// Whether these and `other` name an object in common.
-    ///
-    /// Two operations that name one object are two operations on one reference count, so a reader
-    /// pairing brackets has to account for both. Where they key to different units, the pairing has
-    /// lost track of which object it is counting.
-    pub(crate) fn shares_an_object(&self, other: &References) -> bool {
-        self.0.keys().any(|object| other.0.contains_key(object))
-    }
-
     /// Whether the operation acts on no reference at all.
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
@@ -1435,37 +1426,6 @@ mod tests {
             ]
             .into_iter()
             .collect::<Set<VarPath>>()
-        );
-    }
-
-    /// Two reference-count operations share an object when one of them acts on a reference of an
-    /// object the other acts on, and share none when they act on different objects.
-    ///
-    /// This is what tells a release that un-bumps a pending retain from one that has nothing to do
-    /// with it, so a check reading it as always false would pass everything it is given.
-    #[test]
-    fn operations_share_an_object_when_they_act_on_one() {
-        let type_env = type_env();
-        let scrutinee = typed_var("u", test_ty("TwinChoice"));
-        let payload = typed_var("p", test_ty("Twins"));
-        let vars = table(vec![
-            (scrutinee.clone(), Binding::Param),
-            (
-                payload.clone(),
-                Binding::Payload(scrutinee.clone(), Some(0)),
-            ),
-        ]);
-
-        let whole_union = acted_references(&vars, &type_env, &scrutinee, &vec![]);
-        let first_field = acted_references(&vars, &type_env, &payload, &vec![0]);
-        let second_field = acted_references(&vars, &type_env, &payload, &vec![1]);
-        assert!(
-            whole_union.shares_an_object(&first_field),
-            "the union holds the reference the field acts on"
-        );
-        assert!(
-            !first_field.shares_an_object(&second_field),
-            "the two fields of the payload act on different objects"
         );
     }
 
