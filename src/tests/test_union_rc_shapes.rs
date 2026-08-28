@@ -539,6 +539,69 @@ main = (
 );
 "#;
 
+    // A union payload built from a value a match binding carries and a second value. The binding
+    // carries a name of its own -- the one every path through the match agrees on -- and that name
+    // is what a retain of the binding keys to. A release of the union has to name it as well: the
+    // union holds the reference that retain made, so a release of the union disposes it, and a
+    // retain left unnamed by that release pairs with a later release of the binding instead. The
+    // two of them then cancel, and the union's release frees the object the binding still reads.
+    //
+    // The callee reads both of its arguments and consumes neither, and its recursion is not in tail
+    // position, so a call of it is routed to the borrowing version and the caller releases the
+    // union after the call. The array argument is what makes that routing worth doing.
+    const JOIN_PAYLOAD_SOURCE: &str = r#"
+module Main;
+
+type Node = box struct { n : I64 };
+type Pair = unbox struct { fst : Node, snd : Node };
+type Choice = unbox union { nothing : (), both : Pair };
+
+peek : Choice -> Array I64 -> I64 -> I64;
+peek = |c, a, k| (
+    if k == 0 { (if c.is_both { 1 } else { 0 }) + a.@(0) };
+    peek(c, a, k - 1) + 1
+);
+
+read_back : I64 -> I64;
+read_back = |k| (
+    let m = if k % 2 == 0 { Node { n : k } } else { Node { n : k + 100 } };
+    let w = Node { n : k + 1000 };
+    let u = Choice::both(Pair { fst : m, snd : w });
+    let arr = [k, k + 1];
+    let seen = peek(u, arr, 2);
+    seen + m.@n + arr.@(1)
+);
+
+main : IO ();
+main = (
+    assert_eq(
+        |_|"a union payload taken from a match binding is read after the union is released",
+        Iterator::range(0, 6).map(read_back).sum, 369
+    );;
+    pure()
+);
+"#;
+
+    /// The scalar the read takes is the one the binding was built with. An object freed while the
+    /// binding still holds it gives a different scalar, so this catches it without Valgrind.
+    #[test]
+    pub fn test_join_payload_correctness() {
+        test_source_without_valgrind(JOIN_PAYLOAD_SOURCE);
+    }
+
+    /// The objects are freed exactly once and none of them leaks, checked under Valgrind MemCheck.
+    #[test]
+    pub fn test_join_payload_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(JOIN_PAYLOAD_SOURCE, Configuration::develop_mode());
+    }
+
     /// Each read of the field gets the payload as it was built. A payload freed while the struct
     /// still holds it changes the scalar the next read takes, so this catches it without Valgrind.
     #[test]
