@@ -675,6 +675,40 @@ impl<'c, 'm> Generator<'c, 'm> {
         ptr
     }
 
+    /// State that the `ty`-sized allocation `ptr` names begins to hold a value here (`start` true),
+    /// or stops holding one (`start` false).
+    ///
+    /// An allocation LLVM is told nothing about holds a value for the whole of the function that
+    /// makes it. What it holds then has to survive everything that follows, so a function that
+    /// fills it again on every turn of a loop carries its contents from one turn into the next.
+    ///
+    /// The two go in a pair: the memory is readable between a start and the end that follows it,
+    /// and undefined outside.
+    fn build_lifetime_marker<T: BasicType<'c>>(
+        &mut self,
+        ptr: PointerValue<'c>,
+        ty: T,
+        start: bool,
+    ) {
+        let name = if start {
+            "llvm.lifetime.start"
+        } else {
+            "llvm.lifetime.end"
+        };
+        let intrinsic = Intrinsic::find(name).unwrap();
+        let ptr_ty = self.context.ptr_type(AddressSpace::from(0));
+        let func = intrinsic
+            .get_declaration(&self.module, &[ptr_ty.into()])
+            .unwrap();
+        let size = self.context.i64_type().const_int(
+            self.target_data.get_store_size(&ty.as_basic_type_enum()),
+            false,
+        );
+        self.builder()
+            .build_call(func, &[size.into(), ptr.into()], "")
+            .unwrap();
+    }
+
     // Store stack pointer.
     #[allow(dead_code)]
     pub fn save_stack(&mut self) -> PointerValue<'c> {
@@ -1368,7 +1402,17 @@ impl<'c, 'm> Generator<'c, 'm> {
         // `lambda_function_type`).
         let ret_part_tys = lambda_return_part_types(&fun.ty, self);
         let out_ptr = if self.returns_through_out_pointer(&ret_part_tys) {
-            Some(self.build_out_pointer_argument(&ret_ty, &ret_part_tys, tail))
+            let out_ptr = self.build_out_pointer_argument(&ret_ty, &ret_part_tys, tail);
+            // The buffer holds the result from the call that writes it to the read that takes it
+            // back out, and no longer. Saying so is what keeps a caller that reaches this call on
+            // every turn of a loop from carrying the buffer's contents into the next turn. In tail
+            // position the buffer is an ancestor's, which outlives this frame, so its life is that
+            // ancestor's to bound.
+            if !tail {
+                let buf_ty = self.out_pointer_buffer_type(&ret_ty, &ret_part_tys);
+                self.build_lifetime_marker(out_ptr, buf_ty, true);
+            }
+            Some(out_ptr)
         } else {
             None
         };
@@ -1408,7 +1452,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             return None;
         }
         if let Some(out_ptr) = out_ptr {
-            return Some(self.load_out_pointer_buffer(out_ptr, &ret_part_tys, ret_ty));
+            let result = self.load_out_pointer_buffer(out_ptr, &ret_part_tys, ret_ty);
+            let buf_ty = self.out_pointer_buffer_type(&result.ty, &ret_part_tys);
+            self.build_lifetime_marker(out_ptr, buf_ty, false);
+            return Some(result);
         }
         Some(self.unpack_return(call_result, ret_ty))
     }
