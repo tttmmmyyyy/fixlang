@@ -510,7 +510,7 @@ const WIDE_RESULT_SOURCE: &str = r#"
 "#;
 
 /// The names an LLVM function body binds to allocations, in the order the body makes them.
-fn allocations_of(body: &str) -> Vec<&str> {
+fn allocation_names_of(body: &str) -> Vec<&str> {
     body.lines()
         .map(str::trim)
         .filter(|line| line.contains(" = alloca "))
@@ -547,7 +547,7 @@ fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
     // An empty name part selects every function of the module.
     for body in llvm_function_bodies(&ir, "") {
         let lines = body.lines().map(str::trim).collect::<Vec<_>>();
-        let buffers = allocations_of(&body)
+        let buffers = allocation_names_of(&body)
             .into_iter()
             .filter(|name| name.contains(OUT_POINTER_BUFFER_NAME))
             .collect::<Vec<_>>();
@@ -604,16 +604,16 @@ fn test_a_lifetime_marker_names_an_allocation_of_its_own_function() {
     let ir = generated_llvm_ir(WIDE_RESULT_SOURCE, "none");
     // An empty name part selects every function of the module.
     for body in llvm_function_bodies(&ir, "") {
-        let allocations = allocations_of(&body);
+        let allocations = allocation_names_of(&body);
         for line in body.lines().map(str::trim) {
             if !line.contains("@llvm.lifetime.") {
                 continue;
             }
-            let bounded = lifetime_marker_pointer(line);
+            let bounded_ptr = lifetime_marker_pointer(line);
             assert!(
-                allocations.contains(&bounded),
+                allocations.contains(&bounded_ptr),
                 "`{}` bounds {}, which the function it stands in does not allocate; it allocates {:?}:\n{}",
-                line, bounded, allocations, body
+                line, bounded_ptr, allocations, body
             );
         }
     }
@@ -621,7 +621,7 @@ fn test_a_lifetime_marker_names_an_allocation_of_its_own_function() {
     // `forward` ends in a call whose result is too wide for the return registers, so that call is
     // handed its own function's out-pointer. Without such a call in the program, the property above
     // holds for want of a case.
-    let forwarding = llvm_function_bodies(&ir, "Main::forward")
+    let forwarding_bodies = llvm_function_bodies(&ir, "Main::forward")
         .into_iter()
         .filter(|body| {
             // A function whose result travels through an out-pointer returns `void` and takes the
@@ -638,7 +638,7 @@ fn test_a_lifetime_marker_names_an_allocation_of_its_own_function() {
         })
         .count();
     assert!(
-        forwarding > 0,
+        forwarding_bodies > 0,
         "`forward` should end in a call handed its own function's out-pointer, and none does:\n{}",
         ir
     );

@@ -722,12 +722,18 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.build_lifetime_marker("llvm.lifetime.end", ptr, ty);
     }
 
-    /// Emit the lifetime intrinsic `name` over the bytes a value of type `ty` occupies at `ptr`.
+    /// Emit the lifetime intrinsic `intrinsic_name` over the bytes a value of type `ty` occupies at
+    /// `ptr`.
     ///
     /// The marker covers what a store of the value writes, which is the store size rather than the
     /// `sizeof` this module reports: the two differ for a type whose bits do not fill whole bytes.
-    fn build_lifetime_marker<T: BasicType<'c>>(&self, name: &str, ptr: PointerValue<'c>, ty: T) {
-        let intrinsic = Intrinsic::find(name).unwrap();
+    fn build_lifetime_marker<T: BasicType<'c>>(
+        &self,
+        intrinsic_name: &str,
+        ptr: PointerValue<'c>,
+        ty: T,
+    ) {
+        let intrinsic = Intrinsic::find(intrinsic_name).unwrap();
         let ptr_ty = self.context.ptr_type(AddressSpace::from(0));
         let func = intrinsic
             .get_declaration(&self.module, &[ptr_ty.into()])
@@ -1477,9 +1483,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             return None;
         }
         if let Some(OutPointer::Own { ptr, buf_ty }) = out_ptr {
-            let result = self.load_out_pointer_buffer(ptr, buf_ty, &ret_part_tys, ret_ty);
+            let ret_obj = self.load_out_pointer_buffer(ptr, buf_ty, &ret_part_tys, ret_ty);
             self.build_lifetime_end(ptr, buf_ty);
-            return Some(result);
+            return Some(ret_obj);
         }
         Some(self.unpack_return(call_result, ret_ty))
     }

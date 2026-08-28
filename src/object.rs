@@ -1887,8 +1887,8 @@ fn build_abort_if<'c, 'm>(
     gc.builder().position_at_end(continue_bb);
 }
 
-/// The address of the slot at `idx` in an array's element buffer, whose elements occupy `elem_ty`
-/// as they are embedded.
+/// The address of the slot at `idx` in an array's element buffer, whose elements occupy
+/// `elem_basic_ty` as they are embedded.
 ///
 /// The address is computed inside the buffer's allocation, and the emitted code says so. An address
 /// LLVM cannot place inside one allocation is one whose arithmetic it has to keep, and one whose
@@ -1899,14 +1899,14 @@ fn build_abort_if<'c, 'm>(
 /// runs to the number of elements.
 pub fn build_gep_array_elem<'c, 'm>(
     gc: &Generator<'c, 'm>,
-    elem_ty: BasicTypeEnum<'c>,
+    elem_basic_ty: BasicTypeEnum<'c>,
     buffer: PointerValue<'c>,
     idx: IntValue<'c>,
     name: &str,
 ) -> PointerValue<'c> {
     unsafe {
         gc.builder()
-            .build_in_bounds_gep(elem_ty, buffer, &[idx], name)
+            .build_in_bounds_gep(elem_basic_ty, buffer, &[idx], name)
     }
     .unwrap()
 }

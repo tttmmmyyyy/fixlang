@@ -10,8 +10,8 @@ use crate::tests::test_util::generated_llvm_ir;
 const ARRAY_ACCESS_SOURCE: &str = r#"
     module Main;
 
-    total : Array I64 -> I64;
-    total = |arr| Iterator::range(0, arr.@size).fold(0, |i, acc| acc + arr.@(i));
+    sum_array : Array I64 -> I64;
+    sum_array = |arr| Iterator::range(0, arr.@size).fold(0, |i, acc| acc + arr.@(i));
 
     main : IO ();
     main = (
@@ -23,8 +23,8 @@ const ARRAY_ACCESS_SOURCE: &str = r#"
         let nested = Array::from_map(4, |i| Array::fill(i + 1, i));
         let acted : Option (Array (Array I64)) =
             nested.act(2, |xs| if xs.@size == 0 { none() } else { some(xs.push_back(0)) });
-        println $ (total(shared) + total(written) + total(grown) + total(taken)
-                       + total(acted.as_some.@(2))).to_string
+        println $ (sum_array(shared) + sum_array(written) + sum_array(grown) + sum_array(taken)
+                       + sum_array(acted.as_some.@(2))).to_string
     );
 "#;
 
@@ -52,16 +52,16 @@ pub fn test_every_pointer_into_an_object_is_computed_inside_it() {
         !geps.is_empty(),
         "reading and writing an array should compute pointers into it"
     );
-    let unbounded = geps
+    let geps_without_inbounds = geps
         .iter()
         .filter(|line| !line.contains("= getelementptr inbounds"))
         .collect::<Vec<_>>();
     assert!(
-        unbounded.is_empty(),
+        geps_without_inbounds.is_empty(),
         "every `getelementptr` instruction should be `inbounds`, but {} of {} are not:\n{}",
-        unbounded.len(),
+        geps_without_inbounds.len(),
         geps.len(),
-        unbounded
+        geps_without_inbounds
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
