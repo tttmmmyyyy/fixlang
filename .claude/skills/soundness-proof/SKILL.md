@@ -158,6 +158,9 @@ Two rules keep definitions through that check:
 
 - **A definition that quantifies over constructs enumerates them.** "the constructs that read a value", "the ones that create a reference", "the ones that consume" — each is a closed list in the language under proof, and writing the list is what makes the definition checkable. Given as a property instead, every prover derives the list itself, and they derive different ones.
 - **A definition that names a function of the code says whether that function *is* the definition or merely implements it.** Where the two can differ — the function reports a superset, or answers for a case the definition leaves out — say so in the definition, and name the reader that depends on the difference. A prover told the function is the definition cannot see that gap, and the gap is where a bug sits.
+- **A definition drawn from an enumerating function says whether the enumeration is exact or an over-approximation, and of what.** A function that enumerates the positions a value *could* hold something enumerates, at run time, a superset of the positions it *does*. Writing "exactly one per enumerated position" turns a static possibility into a dynamic fact, and every proposition built on it then proves something that is not true. The passes themselves usually work on the over-approximation quite deliberately, so the definition has to carry both the static set and the dynamic subset, and each proposition has to say which one it means.
+
+Expect this first check to return findings on most items. That is the normal yield, not evidence the skeleton was written badly: the orchestrator is no better at writing definitions than a prover is at writing proofs, and the definitions are read by everyone.
 
 ## Calibrating the property
 
