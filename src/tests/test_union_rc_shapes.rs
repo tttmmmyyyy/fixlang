@@ -466,4 +466,97 @@ main = (
         }
         test_source(CATCH_ALL_REREAD_SOURCE, Configuration::develop_mode());
     }
+
+    // A union with a boxed payload sitting in a field of an unboxed struct, whose field is read
+    // twice: once to test the tag, and once inside the arm that test chose. Each read takes a
+    // reference of the union, so a retain pays for each one and a release disposes of each result.
+    //
+    // A retain and the release that un-bumps it are paired on the object they name, and the union
+    // here is named two ways: as the struct's field where the retain acts, and as the value the read
+    // produced where the release acts. Both have to resolve to one object. Resolving them to two
+    // objects pairs the first retain with the release of the struct at the end instead, and
+    // cancelling that pair leaves the read's own release to free the payload while the arm is still
+    // reading it.
+    //
+    // The construction is written out of line from the reads, so that the two meet only where
+    // inlining brings them together — a struct built and read in one function leaves the field with
+    // a single reader. The union is built by an `if`, so that the field's object is one of two and
+    // the resolution has to name the value that joins them.
+    const FIELD_READ_TWICE_SOURCE: &str = r#"
+module Main;
+
+// A boxed value a union carries, whose scalar the reads take.
+type Held = box struct { size : I64 };
+
+// A struct whose first field is a union holding that boxed value.
+type Slot = struct { held : Option Held, tag : I64 };
+
+// The same shape with `Result`, whose payload sits in the other variant.
+type Outcome = struct { done : Result I64 Held, tag : I64 };
+
+make_slot : I64 -> Slot;
+make_slot = |k| Slot {
+    held : if k % 3 == 0 { Option::none() } else { Option::some(Held { size : k }) },
+    tag : k
+};
+
+make_outcome : I64 -> Outcome;
+make_outcome = |k| Outcome {
+    done : if k % 3 == 0 { Result::err(k) } else { Result::ok(Held { size : k }) },
+    tag : k
+};
+
+// Reads the field twice: once to test the tag, once inside the arm that test chose.
+read_slot : Slot -> I64;
+read_slot = |s| (if s.@held.is_none { 0 } else { s.@held.as_some.@size }) + s.@tag;
+
+read_outcome : Outcome -> I64;
+read_outcome = |o| (if o.@done.is_err { 0 } else { o.@done.as_ok.@size }) + o.@tag;
+
+// A third read, one arm deeper than the second.
+read_slot_nested : Slot -> I64;
+read_slot_nested = |s| (
+    if s.@held.is_none { 0 } else {
+        if s.@held.as_some.@size == 0 { 0 } else { s.@held.as_some.@size * 10 }
+    }
+) + s.@tag;
+
+main : IO ();
+main = (
+    assert_eq(
+        |_|"the option in a struct field is read twice",
+        Iterator::range(0, 6).map(|k| read_slot(make_slot(k))).sum, 27
+    );;
+    assert_eq(
+        |_|"the result in a struct field is read twice",
+        Iterator::range(0, 6).map(|k| read_outcome(make_outcome(k))).sum, 27
+    );;
+    assert_eq(
+        |_|"the option in a struct field is read three times, each read an arm deeper",
+        Iterator::range(0, 6).map(|k| read_slot_nested(make_slot(k))).sum, 135
+    );;
+    pure()
+);
+"#;
+
+    /// Each read of the field gets the payload as it was built. A payload freed while the struct
+    /// still holds it changes the scalar the next read takes, so this catches it without Valgrind.
+    #[test]
+    pub fn test_field_read_twice_correctness() {
+        test_source_without_valgrind(FIELD_READ_TWICE_SOURCE);
+    }
+
+    /// The payloads are freed exactly once and none of them leaks, checked under Valgrind MemCheck,
+    /// which is what the read of a freed payload and the second free of it show up as.
+    #[test]
+    pub fn test_field_read_twice_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(FIELD_READ_TWICE_SOURCE, Configuration::develop_mode());
+    }
 }
