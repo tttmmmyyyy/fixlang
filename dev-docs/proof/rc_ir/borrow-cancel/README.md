@@ -2,6 +2,9 @@
 
 ## 1. 対象
 
+**この証明は書きかけである。** 第 7 節の表が、どの命題がどこまで進んでいるかを述べる。第 8 節が、証明を書く
+作業が見つけたコードの欠陥を述べる。
+
 証明の対象は、コミット `b81cc2c8e859a00cbf007e4f43483a514c813c73` の
 
 - `src/rc_ir/borrow.rs` の `borrow_ify` と `cancel`、およびこの 2 つが呼ぶ同ファイル内の関数
@@ -12,6 +15,10 @@
 
 この 2 つは、`src/build/build_object_files.rs` の `optimize_rc_program` の中で、`-O max` 以上のとき
 `split_rc_units` の直後にこの順で走る。
+
+**対象コミットの後に入った変更**: `be26b396` (PR #531) が、第 8 節の #529 を直した。`origin_inner` の
+`Binding::Join` の腕と `origin_from_leaves_under` が、内側の `Origin` を畳むときに `acted_on()` を使うように
+なっている。P3、P4、P5 (c) はこの変更の上で書き直す必要がある。他の命題の証明はこの 2 行に依らない。
 
 ## 2. 証明の記法
 
