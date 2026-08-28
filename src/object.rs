@@ -400,7 +400,7 @@ impl ObjectFieldType {
         let after_hole = gc.builder().build_int_add(hole, one, "after_hole").unwrap();
         let tail_buffer = unsafe {
             gc.builder()
-                .build_gep(elem_basic_ty, buffer, &[after_hole], "buf_after_hole")
+                .build_in_bounds_gep(elem_basic_ty, buffer, &[after_hole], "buf_after_hole")
                 .unwrap()
         };
         let tail_count = gc
@@ -438,7 +438,7 @@ impl ObjectFieldType {
                          ptr_to_buffer: PointerValue<'c>| {
             let ptr = unsafe {
                 gc.builder()
-                    .build_gep(value_ty, ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
+                    .build_in_bounds_gep(value_ty, ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
                     .unwrap()
             };
             let obj_val = gc
@@ -479,7 +479,7 @@ impl ObjectFieldType {
         let value_ty = elem_ty.get_embedded_type(gc);
         let slice_begin = unsafe {
             gc.builder()
-                .build_gep(value_ty, buffer, &[begin], "array_buf_slice_begin")
+                .build_in_bounds_gep(value_ty, buffer, &[begin], "array_buf_slice_begin")
                 .unwrap()
         };
         let count = gc
@@ -539,7 +539,7 @@ impl ObjectFieldType {
                 gc.retain(value.clone(), RcState::Unknown);
                 let elm_ptr = unsafe {
                     gc.builder()
-                        .build_gep(value_ty, buf_ptr, &[idx], "ptr_to_elem_of_array")
+                        .build_in_bounds_gep(value_ty, buf_ptr, &[idx], "ptr_to_elem_of_array")
                 }
                 .unwrap();
                 gc.builder().build_store(elm_ptr, value.value(gc)).unwrap();
@@ -580,7 +580,7 @@ impl ObjectFieldType {
         let value_ty = value.ty.get_embedded_type(gc);
         let dst = unsafe {
             gc.builder()
-                .build_gep(value_ty, buffer, &[begin], "array_append_begin")
+                .build_in_bounds_gep(value_ty, buffer, &[begin], "array_append_begin")
                 .unwrap()
         };
         let elem_val = value.value(gc);
@@ -590,7 +590,7 @@ impl ObjectFieldType {
                          buf_ptr: PointerValue<'c>| {
             let slot = unsafe {
                 gc.builder()
-                    .build_gep(value_ty, buf_ptr, &[idx], "array_append_slot")
+                    .build_in_bounds_gep(value_ty, buf_ptr, &[idx], "array_append_slot")
                     .unwrap()
             };
             gc.builder().build_store(slot, elem_val).unwrap();
@@ -665,7 +665,7 @@ impl ObjectFieldType {
         let elm_basic_ty = elem_ty.get_embedded_type(gc);
         let elm_ptr = unsafe {
             gc.builder()
-                .build_gep(elm_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
+                .build_in_bounds_gep(elm_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
         }
         .unwrap();
 
@@ -726,7 +726,7 @@ impl ObjectFieldType {
         let elm_basic_ty = value.ty.get_embedded_type(gc);
         let elm_ptr = unsafe {
             gc.builder()
-                .build_gep(elm_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
+                .build_in_bounds_gep(elm_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
         }
         .unwrap();
 
@@ -766,12 +766,12 @@ impl ObjectFieldType {
                          _ptr_to_buffer: PointerValue<'c>| {
             let src_ptr = unsafe {
                 gc.builder()
-                    .build_gep(elm_basic_ty, src_buffer, &[idx.into()], "ptr_to_src_elem")
+                    .build_in_bounds_gep(elm_basic_ty, src_buffer, &[idx.into()], "ptr_to_src_elem")
             }
             .unwrap();
             let dst_ptr = unsafe {
                 gc.builder()
-                    .build_gep(elm_basic_ty, dst_buffer, &[idx.into()], "ptr_to_dst_elem")
+                    .build_in_bounds_gep(elm_basic_ty, dst_buffer, &[idx.into()], "ptr_to_dst_elem")
             }
             .unwrap();
             let src_elem = gc
@@ -1972,7 +1972,7 @@ fn build_alloc_array_storage<'c, 'm>(
         .unwrap();
     let ptr = unsafe {
         gc.builder()
-            .build_gep(
+            .build_in_bounds_gep(
                 gc.context.i8_type(),
                 base,
                 &[alloc_offset],
@@ -1999,7 +1999,7 @@ pub fn build_free_boxed<'c, 'm>(
             .unwrap();
         unsafe {
             gc.builder()
-                .build_gep(gc.context.i8_type(), ptr, &[neg_alloc_offset], "alloc_base")
+                .build_in_bounds_gep(gc.context.i8_type(), ptr, &[neg_alloc_offset], "alloc_base")
                 .unwrap()
         }
     } else {

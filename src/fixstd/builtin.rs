@@ -2337,7 +2337,7 @@ fn realloc_array<'c, 'm>(
             .build_int_neg(old_alloc_offset, "neg_old_alloc_offset@realloc_array")
             .unwrap();
         gc.builder()
-            .build_gep(
+            .build_in_bounds_gep(
                 gc.context.i8_type(),
                 storage_ptr,
                 &[neg_old_alloc_offset],
@@ -2417,7 +2417,7 @@ fn realloc_array<'c, 'm>(
     gc.builder().position_at_end(move_bb);
     let old_ptr = unsafe {
         gc.builder()
-            .build_gep(
+            .build_in_bounds_gep(
                 gc.context.i8_type(),
                 new_base,
                 &[old_alloc_offset],
@@ -2427,7 +2427,7 @@ fn realloc_array<'c, 'm>(
     };
     let new_ptr = unsafe {
         gc.builder()
-            .build_gep(
+            .build_in_bounds_gep(
                 gc.context.i8_type(),
                 new_base,
                 &[new_alloc_offset],
@@ -2458,7 +2458,7 @@ fn realloc_array<'c, 'm>(
     gc.builder().position_at_end(end_bb);
     let storage_ptr = unsafe {
         gc.builder()
-            .build_gep(
+            .build_in_bounds_gep(
                 gc.context.i8_type(),
                 new_base,
                 &[new_alloc_offset],
@@ -2880,7 +2880,7 @@ impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
         let src_buf = get_array_storage_buf(gc, &src);
         let src_read = unsafe {
             gc.builder()
-                .build_gep(elem_value_ty, src_buf, &[begin], "copy_src_read")
+                .build_in_bounds_gep(elem_value_ty, src_buf, &[begin], "copy_src_read")
                 .unwrap()
         };
         ObjectFieldType::clone_array_buf(
@@ -8131,7 +8131,7 @@ fn array_tail_destination<'c, 'm>(
     let dst_buf = get_array_storage_buf(gc, &dst);
     let dst_write = unsafe {
         gc.builder()
-            .build_gep(elem_value_ty, dst_buf, &[dst_len], "dst_write")
+            .build_in_bounds_gep(elem_value_ty, dst_buf, &[dst_len], "dst_write")
             .unwrap()
     };
     (dst, dst_len, dst_write)
