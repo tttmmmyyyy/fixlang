@@ -642,6 +642,36 @@ impl<'c> Drop for PopDebugScopeGuard<'c> {
     }
 }
 
+/// The name code generation gives the buffer a call's wide result travels in.
+pub const OUT_POINTER_BUFFER_NAME: &str = "out@call_lambda";
+
+/// The pointer a call's wide result is written through, and which frame the buffer it names
+/// belongs to (see `return_abi`).
+///
+/// The two differ in what the caller may do with the buffer. One it allocated itself, so it reads
+/// the result back out of it and bounds how long it holds one; one it inherited names an ancestor's
+/// buffer, which outlives this frame and whose contents that ancestor takes.
+#[derive(Clone, Copy)]
+enum OutPointer<'c> {
+    /// A buffer this function allocated in its entry block, laid out as `buf_ty`.
+    Own {
+        ptr: PointerValue<'c>,
+        buf_ty: StructType<'c>,
+    },
+    /// This function's own out-pointer, forwarded to a call in tail position.
+    Inherited(PointerValue<'c>),
+}
+
+impl<'c> OutPointer<'c> {
+    /// The pointer to pass the call, whichever frame the buffer belongs to.
+    fn ptr(&self) -> PointerValue<'c> {
+        match self {
+            OutPointer::Own { ptr, .. } => *ptr,
+            OutPointer::Inherited(ptr) => *ptr,
+        }
+    }
+}
+
 impl<'c, 'm> Generator<'c, 'm> {
     /// The module-level constant holding `s` as a null-terminated string. One constant is created
     /// per distinct string, and every later call for that string returns it again.
@@ -675,26 +705,33 @@ impl<'c, 'm> Generator<'c, 'm> {
         ptr
     }
 
-    /// State that the `ty`-sized allocation `ptr` names begins to hold a value here (`start` true),
-    /// or stops holding one (`start` false).
+    /// State that the allocation `ptr` names begins to hold a value of type `ty` here.
     ///
     /// An allocation LLVM is told nothing about holds a value for the whole of the function that
     /// makes it. What it holds then has to survive everything that follows, so a function that
     /// fills it again on every turn of a loop carries its contents from one turn into the next.
+    fn build_lifetime_start<T: BasicType<'c>>(&mut self, ptr: PointerValue<'c>, ty: T) {
+        self.build_lifetime_marker("llvm.lifetime.start", ptr, ty);
+    }
+
+    /// State that the allocation `ptr` names stops holding the value of type `ty` it held.
     ///
-    /// The two go in a pair: the memory is readable between a start and the end that follows it,
-    /// and undefined outside.
+    /// This closes what `build_lifetime_start` opened: the memory holds a value between the two,
+    /// and holds nothing outside them.
+    fn build_lifetime_end<T: BasicType<'c>>(&mut self, ptr: PointerValue<'c>, ty: T) {
+        self.build_lifetime_marker("llvm.lifetime.end", ptr, ty);
+    }
+
+    /// Emit the lifetime intrinsic `name` over the bytes a value of type `ty` occupies at `ptr`.
+    ///
+    /// The marker covers what a store of the value writes, which is the store size rather than the
+    /// `sizeof` this module reports: the two differ for a type whose bits do not fill whole bytes.
     fn build_lifetime_marker<T: BasicType<'c>>(
         &mut self,
+        name: &str,
         ptr: PointerValue<'c>,
         ty: T,
-        start: bool,
     ) {
-        let name = if start {
-            "llvm.lifetime.start"
-        } else {
-            "llvm.lifetime.end"
-        };
         let intrinsic = Intrinsic::find(name).unwrap();
         let ptr_ty = self.context.ptr_type(AddressSpace::from(0));
         let func = intrinsic
@@ -1401,24 +1438,18 @@ impl<'c, 'm> Generator<'c, 'm> {
         // split into its parts to match the signature (see
         // `lambda_function_type`).
         let ret_part_tys = lambda_return_part_types(&fun.ty, self);
-        let out_ptr = if self.returns_through_out_pointer(&ret_part_tys) {
-            let out_ptr = self.build_out_pointer_argument(&ret_ty, &ret_part_tys, tail);
+        let out_ptr = self
+            .returns_through_out_pointer(&ret_part_tys)
+            .then(|| self.build_out_pointer_argument(&ret_ty, &ret_part_tys, tail));
+        if let Some(OutPointer::Own { ptr, buf_ty }) = out_ptr {
             // The buffer holds the result from the call that writes it to the read that takes it
             // back out, and no longer. Saying so is what keeps a caller that reaches this call on
-            // every turn of a loop from carrying the buffer's contents into the next turn. In tail
-            // position the buffer is an ancestor's, which outlives this frame, so its life is that
-            // ancestor's to bound.
-            if !tail {
-                let buf_ty = self.out_pointer_buffer_type(&ret_ty, &ret_part_tys);
-                self.build_lifetime_marker(out_ptr, buf_ty, true);
-            }
-            Some(out_ptr)
-        } else {
-            None
-        };
+            // every turn of a loop from carrying the buffer's contents into the next turn.
+            self.build_lifetime_start(ptr, buf_ty);
+        }
         let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
         if let Some(out_ptr) = out_ptr {
-            call_args.push(out_ptr.into());
+            call_args.push(out_ptr.ptr().into());
         }
         for arg in args {
             for part in arg.parts() {
@@ -1435,10 +1466,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
         call_site.set_call_convention(self.lambda_calling_convention());
         // `tail` asserts that the callee reaches no alloca of this function, which a call handed a
-        // buffer allocated here does. In tail position the pointer is this function's own parameter,
-        // naming an ancestor's buffer, so the assertion holds there.
-        let passes_local_buffer = out_ptr.is_some() && !tail;
-        call_site.set_tail_call(!passes_local_buffer);
+        // buffer allocated here does.
+        let passes_own_buffer = matches!(out_ptr, Some(OutPointer::Own { .. }));
+        call_site.set_tail_call(!passes_own_buffer);
         let call_result = call_site.try_as_basic_value().left();
         if tail {
             // The callee's flat return value already has this function's return type (a tail call
@@ -1451,31 +1481,33 @@ impl<'c, 'm> Generator<'c, 'm> {
             };
             return None;
         }
-        if let Some(out_ptr) = out_ptr {
-            let result = self.load_out_pointer_buffer(out_ptr, &ret_part_tys, ret_ty);
-            let buf_ty = self.out_pointer_buffer_type(&result.ty, &ret_part_tys);
-            self.build_lifetime_marker(out_ptr, buf_ty, false);
+        if let Some(OutPointer::Own { ptr, buf_ty }) = out_ptr {
+            let result = self.load_out_pointer_buffer(ptr, buf_ty, &ret_part_tys, ret_ty);
+            self.build_lifetime_end(ptr, buf_ty);
             return Some(result);
         }
         Some(self.unpack_return(call_result, ret_ty))
     }
 
-    // The pointer to pass as a call's out-pointer argument. In tail position it is this function's
-    // own out-pointer: a tail call returns what its caller returns, so the two share a return type
-    // and hence this ABI, and the buffer belongs to an ancestor frame that outlives the frame being
-    // replaced. Elsewhere it is a fresh buffer in this function's entry block, which the caller
-    // reads back with `load_out_pointer_buffer`.
+    // The pointer to pass as a call's out-pointer argument, and which frame the buffer it names
+    // belongs to. In tail position it is this function's own out-pointer: a tail call returns what
+    // its caller returns, so the two share a return type and hence this ABI, and the buffer belongs
+    // to an ancestor frame that outlives the frame being replaced. Elsewhere it is a fresh buffer in
+    // this function's entry block, which the caller reads back with `load_out_pointer_buffer`.
     fn build_out_pointer_argument(
         &mut self,
         ret_ty: &Arc<TypeNode>,
         ret_part_tys: &[BasicTypeEnum<'c>],
         tail: bool,
-    ) -> PointerValue<'c> {
+    ) -> OutPointer<'c> {
         if tail {
-            return self.own_out_pointer();
+            return OutPointer::Inherited(self.own_out_pointer());
         }
         let buf_ty = self.out_pointer_buffer_type(ret_ty, ret_part_tys);
-        self.build_alloca_at_entry(buf_ty, "out@call_lambda")
+        OutPointer::Own {
+            ptr: self.build_alloca_at_entry(buf_ty, OUT_POINTER_BUFFER_NAME),
+            buf_ty,
+        }
     }
 
     // The out-pointer parameter of the function being generated, the buffer its result is written
@@ -1495,14 +1527,14 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Read back the parts a callee wrote through the out-pointer, as the object of type `ret_ty`
-    // it returned.
+    // it returned. `buf_ty` is the layout the parts were written in (see `out_pointer_buffer_type`).
     fn load_out_pointer_buffer(
         &mut self,
         out_ptr: PointerValue<'c>,
+        buf_ty: StructType<'c>,
         ret_part_tys: &[BasicTypeEnum<'c>],
         ret_ty: Arc<TypeNode>,
     ) -> Object<'c> {
-        let buf_ty = self.out_pointer_buffer_type(&ret_ty, ret_part_tys);
         let parts: Vec<BasicValueEnum<'c>> = ret_part_tys
             .iter()
             .enumerate()

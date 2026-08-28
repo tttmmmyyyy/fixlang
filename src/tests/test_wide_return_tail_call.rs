@@ -1,5 +1,6 @@
 use crate::{
     configuration::Configuration,
+    generator::OUT_POINTER_BUFFER_NAME,
     tests::test_util::{
         emitted_llvm_ir, fix_build_source_command, llvm_function_bodies, test_source, EmittedIr,
     },
@@ -510,9 +511,6 @@ const WIDE_RESULT_SOURCE: &str = r#"
         println $ total.to_string
     );
 "#;
-
-// The name code generation gives the buffer a call's wide result travels in.
-const OUT_POINTER_BUFFER_NAME: &str = "out@call_lambda";
 
 /// The LLVM IR the code generator wrote for `WIDE_RESULT_SOURCE`, before the LLVM pass pipeline ran.
 ///
