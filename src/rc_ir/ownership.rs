@@ -199,7 +199,14 @@ impl Origin {
         }
     }
 
-    /// Every object the leaf may denote, for a reader whose answer has to hold on all paths.
+    /// What the leaf may denote, for a reader whose answer has to hold on all paths: every object,
+    /// and the name of every join folded in along the way.
+    ///
+    /// A join's name is there because an operation on the leaf acts on it. A retain of a join keys
+    /// to that name, the value built from the join holds the reference the retain made, and a
+    /// release of that value disposes it — so a candidate set that left the name out would let the
+    /// release pass over the retain and the two would pair with the wrong partners. Building one
+    /// candidate set out of several origins therefore folds in `acted_on`, not `candidates`.
     pub(crate) fn candidates(&self) -> Vec<&VarPath> {
         match self {
             Origin::Exactly(p) => vec![p],
@@ -274,10 +281,12 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
         Some(Binding::Move(y)) => origin(vars, type_env, &y.name, path),
         Some(Binding::Join(arm_results)) => {
             // The arms bind their values to one variable, so a path into it is a path into each of
-            // them. Arms that all reach the same object leave the value exact.
+            // them. Arms that all reach the same object leave the value exact. Each arm result
+            // contributes everything an operation on it acts on (`acted_on`), so that an arm result
+            // that is itself a join keeps the name its own retains and releases key to.
             let mut candidates = Set::default();
             for arm_result in arm_results {
-                for p in origin(vars, type_env, &arm_result.name, path).candidates() {
+                for p in origin(vars, type_env, &arm_result.name, path).acted_on() {
                     candidates.insert(p.clone());
                 }
             }
@@ -345,9 +354,13 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 ///
 /// Leaves that all reach one origin make this value an alias of it, so the answer is that origin
 /// whole, identity included — the same answer a leaf that is a plain projection gets. Where the
-/// leaves reach several origins, every object the value may denote is reported together under this
-/// value's own name, so that a reader whose answer has to hold on all paths — whether this version
-/// owns the value — sees them all. `None` where no leaf names an object.
+/// leaves reach several origins, everything an operation on any of them acts on (`acted_on`) is
+/// reported together under this value's own name, so that a reader whose answer has to hold on all
+/// paths — whether this version owns the value, and which units a release of it disposes — sees
+/// them all. A reached origin that is itself a join contributes its identity along with its
+/// candidates: that identity is the name its own retains and releases key to, and leaving it out
+/// makes a release of this value pass over a retain it un-bumps. `None` where no leaf names an
+/// object.
 ///
 /// # Arguments
 /// * `here` - the value's own identity, which is what it denotes on any path the leaves leave open.
@@ -402,7 +415,7 @@ fn origin_from_leaves_under(
     }
     let candidates = reached
         .iter()
-        .flat_map(|reached_origin| reached_origin.candidates())
+        .flat_map(|reached_origin| reached_origin.acted_on())
         .cloned()
         .collect();
     Some(Origin::of_candidates(candidates, here))
@@ -1475,9 +1488,11 @@ mod tests {
     }
 
     /// A join over another join flattens: every result the inner join could yield is among the outer
-    /// join's candidates.
+    /// join's candidates, and so is the inner join's own name. A reference-count operation on the
+    /// inner join keys to that name, and the outer join holds the reference such an operation made,
+    /// so a release of the outer join acts on it too.
     #[test]
-    fn a_join_of_joins_may_be_any_of_their_results() {
+    fn a_join_of_joins_flattens_and_keeps_the_inner_name() {
         let vars = table(vec![
             (var("p"), Binding::Producer),
             (var("q"), Binding::Producer),
@@ -1491,7 +1506,7 @@ mod tests {
                 .into_iter()
                 .cloned()
                 .collect::<Set<VarPath>>(),
-            vec![at("p"), at("q"), at("r")]
+            vec![at("inner"), at("p"), at("q"), at("r")]
                 .into_iter()
                 .collect::<Set<VarPath>>()
         );
