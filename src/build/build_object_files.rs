@@ -134,7 +134,7 @@ fn optimize_rc_program(
     if config.enable_borrow_optimization() {
         prog = borrow_ify(&prog, type_env);
         validate(&prog, "after borrow_ify");
-        prog = cancel(&prog, type_env, config.develop_mode);
+        prog = cancel(&prog, type_env);
         validate(&prog, "after cancel");
         prune(&mut prog, "after dce following cancel");
         prog = unique_check_elim::specialize(&prog, type_env);

@@ -343,12 +343,11 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// over; a leaf produced here rather than projected names this value itself. A leaf that records
 /// several sources holds one per path it can be reached by, and each of them names an object.
 ///
-/// Leaves that agree on one operand unit make this value an alias of that unit, so the answer is
-/// that unit's own origin, identity included — the same answer a leaf that is a plain projection
-/// gets. Where the leaves reach several units, or where one of them is a value produced here rather
-/// than a projection, every object the value may denote is reported together under this value's own
-/// name, so that a reader whose answer has to hold on all paths — whether this version owns the
-/// value — sees them all. `None` where no leaf names an object.
+/// Leaves that all reach one origin make this value an alias of it, so the answer is that origin
+/// whole, identity included — the same answer a leaf that is a plain projection gets. Where the
+/// leaves reach several origins, every object the value may denote is reported together under this
+/// value's own name, so that a reader whose answer has to hold on all paths — whether this version
+/// owns the value — sees them all. `None` where no leaf names an object.
 ///
 /// # Arguments
 /// * `here` - the value's own identity, which is what it denotes on any path the leaves leave open.
@@ -383,30 +382,29 @@ fn origin_from_leaves_under(
             }
         }
     }
-    // One operand unit and nothing produced here makes this value that unit: it holds the unit's
-    // references and no others, so it denotes what the unit denotes. Taking the unit's origin whole
-    // is what carries the identity along the alias chain — rebuilding the answer under `here` would
-    // give one object a second name, and a retain of the operand and a release of this value would
-    // key differently and never pair.
-    if !produced_here && operand_units.len() == 1 {
-        let (j, unit) = operand_units
-            .into_iter()
-            .next()
-            .expect("a one-element set has an element");
-        return Some(origin(vars, type_env, &args[j].name, &unit));
-    }
-    let mut candidates: Set<VarPath> = Set::default();
+    // The origins the leaves reach: one per operand unit, plus this value itself where a leaf was
+    // produced here rather than projected.
+    let mut reached: Vec<Origin> = operand_units
+        .into_iter()
+        .map(|(j, unit)| origin(vars, type_env, &args[j].name, &unit))
+        .collect();
     if produced_here {
-        candidates.insert(here.clone());
+        reached.push(Origin::Exactly(here.clone()));
     }
-    for (j, unit) in operand_units {
-        for p in origin(vars, type_env, &args[j].name, &unit).candidates() {
-            candidates.insert(p.clone());
-        }
+    let first = reached.first()?;
+    // Leaves that all reach one origin make this value that origin: it holds those references and
+    // no others, so it denotes what the origin denotes. Answering with the origin whole is what
+    // carries the identity along the alias chain — rebuilding it under `here` would give one object
+    // a second name, and a retain of the operand and a release of this value would key differently
+    // and never pair.
+    if reached.iter().all(|reached_origin| reached_origin == first) {
+        return Some(first.clone());
     }
-    if candidates.is_empty() {
-        return None;
-    }
+    let candidates = reached
+        .iter()
+        .flat_map(|reached_origin| reached_origin.candidates())
+        .cloned()
+        .collect();
     Some(Origin::of_candidates(candidates, here))
 }
 
@@ -865,7 +863,7 @@ impl References {
     /// Two operations that name one object are two operations on one reference count, so a reader
     /// pairing brackets has to account for both. Where they key to different units, the pairing has
     /// lost track of which object it is counting.
-    pub(crate) fn share_an_object(&self, other: &References) -> bool {
+    pub(crate) fn shares_an_object(&self, other: &References) -> bool {
         self.0.keys().any(|object| other.0.contains_key(object))
     }
 
@@ -1398,6 +1396,77 @@ mod tests {
         let field_of_m = origin(&vars, &type_env, &FullName::local("m"), &[0]);
         assert_eq!(field_of_m.identity(), &(FullName::local("m"), vec![0]));
         assert_eq!(read, Some(field_of_m));
+    }
+
+    /// A value whose leaves reach several origins is a join of them under this value's own name:
+    /// the leaves disagree about which object the value is, so no operand's name stands for it.
+    #[test]
+    fn a_value_whose_leaves_disagree_is_a_join_under_its_own_name() {
+        let type_env = type_env();
+        let twins = |name: &str| typed_var(name, test_ty("Twins"));
+        let vars = table(vec![
+            (twins("a"), Binding::Producer),
+            (twins("b"), Binding::Producer),
+        ]);
+        // The first field comes from `a` and the second from `b`, so the value as a whole is neither.
+        let one_field_from_each = Provenance::build_shape(&test_ty("Twins"), &type_env, &|leaf| {
+            let from_a = leaf.first() == Some(&0);
+            sole_origin(LeafOrigin::Arg(if from_a { 0 } else { 1 }, leaf.clone()))
+        });
+        let joined = origin_from_leaves_under(
+            &vars,
+            &type_env,
+            &one_field_from_each,
+            &[twins("a"), twins("b")],
+            &[],
+            &at("mixed"),
+        )
+        .expect("both leaves name an object");
+        assert_eq!(joined.identity(), &at("mixed"));
+        assert_eq!(
+            joined
+                .candidates()
+                .into_iter()
+                .cloned()
+                .collect::<Set<VarPath>>(),
+            vec![
+                (FullName::local("a"), vec![0]),
+                (FullName::local("b"), vec![1])
+            ]
+            .into_iter()
+            .collect::<Set<VarPath>>()
+        );
+    }
+
+    /// Two reference-count operations share an object when one of them acts on a reference of an
+    /// object the other acts on, and share none when they act on different objects.
+    ///
+    /// This is what tells a release that un-bumps a pending retain from one that has nothing to do
+    /// with it, so a check reading it as always false would pass everything it is given.
+    #[test]
+    fn operations_share_an_object_when_they_act_on_one() {
+        let type_env = type_env();
+        let scrutinee = typed_var("u", test_ty("TwinChoice"));
+        let payload = typed_var("p", test_ty("Twins"));
+        let vars = table(vec![
+            (scrutinee.clone(), Binding::Param),
+            (
+                payload.clone(),
+                Binding::Payload(scrutinee.clone(), Some(0)),
+            ),
+        ]);
+
+        let whole_union = acted_references(&vars, &type_env, &scrutinee, &vec![]);
+        let first_field = acted_references(&vars, &type_env, &payload, &vec![0]);
+        let second_field = acted_references(&vars, &type_env, &payload, &vec![1]);
+        assert!(
+            whole_union.shares_an_object(&first_field),
+            "the union holds the reference the field acts on"
+        );
+        assert!(
+            !first_field.shares_an_object(&second_field),
+            "the two fields of the payload act on different objects"
+        );
     }
 
     /// A retain of an unboxed union acts on every reference its payload holds, while a release of
