@@ -528,9 +528,9 @@ impl ObjectFieldType {
                              buf_ptr: PointerValue<'c>| {
                 let value_ty = value.ty.get_embedded_type(gc);
                 gc.retain(value.clone(), RcState::Unknown);
-                let elm_ptr =
+                let elem_ptr =
                     build_gep_array_elem(gc, value_ty, buf_ptr, idx, "ptr_to_elem_of_array");
-                gc.builder().build_store(elm_ptr, value.value(gc)).unwrap();
+                gc.builder().build_store(elem_ptr, value.value(gc)).unwrap();
             };
 
             // After loop, release value.
@@ -642,13 +642,13 @@ impl ObjectFieldType {
         }
 
         // Get element.
-        let elm_basic_ty = elem_ty.get_embedded_type(gc);
-        let elm_ptr = build_gep_array_elem(gc, elm_basic_ty, buffer, idx, "ptr_to_elem_of_array");
+        let elem_basic_ty = elem_ty.get_embedded_type(gc);
+        let elem_ptr = build_gep_array_elem(gc, elem_basic_ty, buffer, idx, "ptr_to_elem_of_array");
 
         // Get value
         let elem_val = gc
             .builder()
-            .build_load(elm_basic_ty, elm_ptr, "elem")
+            .build_load(elem_basic_ty, elem_ptr, "elem")
             .unwrap();
 
         // Return value
@@ -699,21 +699,21 @@ impl ObjectFieldType {
         }
 
         // Get ptr to the place at idx.
-        let elm_basic_ty = value.ty.get_embedded_type(gc);
-        let elm_ptr = build_gep_array_elem(gc, elm_basic_ty, buffer, idx, "ptr_to_elem_of_array");
+        let elem_basic_ty = value.ty.get_embedded_type(gc);
+        let elem_ptr = build_gep_array_elem(gc, elem_basic_ty, buffer, idx, "ptr_to_elem_of_array");
 
         // Release element that is already at the place (if required).
         if release_old_value {
-            let elm_val = gc
+            let elem_val = gc
                 .builder()
-                .build_load(elm_basic_ty, elm_ptr, "elem")
+                .build_load(elem_basic_ty, elem_ptr, "elem")
                 .unwrap();
-            let elem_obj = Object::new(elm_val, elem_ty, gc);
+            let elem_obj = Object::new(elem_val, elem_ty, gc);
             gc.release(elem_obj, state);
         }
 
         // Insert the given value to the place.
-        gc.builder().build_store(elm_ptr, value.value(gc)).unwrap();
+        gc.builder().build_store(elem_ptr, value.value(gc)).unwrap();
     }
 
     /// Copy `count` consecutive elements from `src_buffer` into `dst_buffer`, starting at index 0
@@ -729,7 +729,7 @@ impl ObjectFieldType {
         elem_ty: Arc<TypeNode>,
         state: RcState,
     ) {
-        let elm_basic_ty = elem_ty.get_embedded_type(gc);
+        let elem_basic_ty = elem_ty.get_embedded_type(gc);
         // In loop body, retain value and store it at idx. A fully unboxed element holds no
         // reference, so the copy of one is the store alone.
         let loop_body = |gc: &mut Generator<'c, 'm>,
@@ -737,12 +737,12 @@ impl ObjectFieldType {
                          _len: IntValue<'c>,
                          _ptr_to_buffer: PointerValue<'c>| {
             let src_ptr =
-                build_gep_array_elem(gc, elm_basic_ty, src_buffer, idx, "ptr_to_src_elem");
+                build_gep_array_elem(gc, elem_basic_ty, src_buffer, idx, "ptr_to_src_elem");
             let dst_ptr =
-                build_gep_array_elem(gc, elm_basic_ty, dst_buffer, idx, "ptr_to_dst_elem");
+                build_gep_array_elem(gc, elem_basic_ty, dst_buffer, idx, "ptr_to_dst_elem");
             let src_elem = gc
                 .builder()
-                .build_load(elm_basic_ty, src_ptr, "src_elem")
+                .build_load(elem_basic_ty, src_ptr, "src_elem")
                 .unwrap();
             gc.builder().build_store(dst_ptr, src_elem).unwrap();
             if !elem_ty.is_fully_unboxed(gc.type_env()) {
@@ -778,12 +778,12 @@ impl ObjectFieldType {
         match hole {
             None => Self::clone_array_range(gc, src_buffer, dst_buffer, len, elem_ty, state),
             Some(hole) => {
-                let elm_basic_ty = elem_ty.get_embedded_type(gc);
+                let elem_basic_ty = elem_ty.get_embedded_type(gc);
                 Self::clone_array_range(gc, src_buffer, dst_buffer, hole, elem_ty.clone(), state);
                 let (tail_src, tail_count) =
-                    Self::array_buf_after_hole(gc, elm_basic_ty, src_buffer, len, hole);
+                    Self::array_buf_after_hole(gc, elem_basic_ty, src_buffer, len, hole);
                 let (tail_dst, _) =
-                    Self::array_buf_after_hole(gc, elm_basic_ty, dst_buffer, len, hole);
+                    Self::array_buf_after_hole(gc, elem_basic_ty, dst_buffer, len, hole);
                 Self::clone_array_range(gc, tail_src, tail_dst, tail_count, elem_ty, state);
             }
         }
