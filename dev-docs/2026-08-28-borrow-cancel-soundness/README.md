@@ -136,6 +136,20 @@ leaf と unit がずれるのは 2 か所である。**unbox union** は 1 つ�
 
 ### 3.3 所有、参照、義務
 
+**D17 (対応するスロット)**
+`origin` が `(x, π)` から `(u, σ)` へ辿った別名の辺の列を、`π` の下の leaf `λ` について辿ったときに着く leaf の
+スロットを、`λ` に**対応するスロット**と呼ぶ。各辺での `λ` の写り方は次のとおりである
+(`CODE src/rc_ir/ownership.rs: origin_inner`, `origin_from_leaves_under`)。
+
+- `Binding::Move`、catch-all アームの payload、`Binding::Join`: `λ` を変えない。
+- unbox 容器の `Destructure` のフィールド、unbox union の変位アームの payload: `λ` の先頭に添字を足す。
+- `Binding::Llvm` の 2 つの道 (`leaf_origins_at(π)` が単一の `Arg` の場合と `origin_from_leaves_under` の
+  場合): `λ` を、`λ` 自身の宣言 `Arg(j, σ')` の `σ'` へ置き換える。
+
+path の連結ではなく宣言の辿り着く先で定義するのは、構築の演算 (`struct_make`、`union_make`) の宣言が接頭辞を
+**外す**からである。`struct_make(m, m)` を `union_make_1` で包んだ値の leaf `[1, 0]` は、宣言 `Arg(0, [0])` を
+経て `m` の leaf `[]` に対応する。path を連結する規則が指す `[1, 0]` は、boxed な `m` の leaf ではない。
+
 **D14 (所有と借用)**
 関数の各パラメータ・capture の各 unit は、その関数が**所有する**か**借用する**かのどちらかである。借用する
 ものの集合が `RcFunc::borrowed_units` であり、残りが所有するものである
@@ -169,6 +183,10 @@ leaf と unit がずれるのは 2 か所である。**unbox union** は 1 つ�
 **参照**とは、1 つのオブジェクトに対する処分義務の 1 単位である。参照は D10 の**生成**によって作られ、D10 の
 **消費**または `Release` によって処分される。オブジェクト `o` の参照カウント `H(o)` は、`o` への未処分の参照の
 総数に等しい。
+
+同じオブジェクトへの参照どうしは互いに区別されない。義務集合 (D10) はオブジェクトごとの個数を持つ多重集合で
+あり、「その `Retain` が作った参照」のような言い方は、オブジェクトごとの個数として読む。移動 (D9) は、どの
+参照が移ったかを決めない。
 
 **D9 (消費と移動)**
 関数の 1 回の活性化が保持する参照について、次の 2 つを区別する。
@@ -306,6 +324,12 @@ leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言�
 
 `borrows_operand(i)` が真のとき、生成コードは第 `i` オペランドの参照を処分しない。
 
+複数の元を宣言する op は、このコミットのプログラムには存在しない。`impl LLVMGen for` は 78 個あり、
+`result_prov` を override するのは 29 個、その 29 個が leaf に置く集合はすべて要素数 0 か 1 である
+(`sole_origin` / `Set::default()` / `uniform` / `uniform_bottom` / `fresh_under` のいずれかで作られる)。
+複数元を作るのは `Provenance::join` と `compose` であり、これらは解析の側であって宣言ではない。表がこの行を
+持つのは、`LLVMGen::result_prov` の型と doc がそれを許すからである。
+
 この仮定は誰も果たさない。宣言と実装の乖離は、証明ではなくテストと valgrind が捕まえる。
 `dev-docs/2026-06-28-unique-check-elim/audit-2026-07-20-op-declarations.md` が、ある時点での全 op の宣言を
 人手で照合した記録である。
@@ -332,6 +356,10 @@ resolve_callee_params`)。
 グローバル値が到達するオブジェクトは、記憶域に「グローバル」を表す状態を持ち、それらへの `Retain`/`Release` は
 参照カウントを変えない。よってそれらのオブジェクトが解放されることはない。
 
+**A9 (`Match` はアームを持つ)** -- 果たす者: lowering。検査: `validate` の `check_rhs`
+(`CODE src/rc_ir/validate.rs: BodyCheck::check_rhs`)、ただし `develop_mode` のときだけ走る。
+プログラムのすべての `Match` は 1 つ以上のアームを持つ。
+
 ## 5. 命題
 
 依存の順に並べる。各命題は自分より小さい番号の命題だけを引用してよい。
@@ -344,17 +372,25 @@ resolve_callee_params`)。
 - **P2** (`origin` の全域性と停止性)。`origin(x, π)` は、`x` がプログラムの束縛変数であり `π` が
   `boxed_leaf_paths(ty(x))` の要素または `rc_units(ty(x))` の要素であるようなすべての `(x, π)` について、
   panic せずに答えを返し、停止する。
-- **P3** (`origin` の健全性 -- `Exactly`)。`origin(x, π) = Exactly(u, σ)` のとき、`(x, π)` が意味を持つ
-  すべての実行路のすべての位置において、`π` の下の inhabited な各 leaf `λ` について、`obj(x, λ)` を指す
-  参照は、`σ` の下の対応する leaf のスロットが持つ参照と同一である。「対応する」とは、`λ` から `π` の接頭辞を
-  除いた残りを `σ` の後ろに繋いだ path をいう。
+- **P3** (`origin` の健全性 -- `Exactly`)。`origin(x, π) = Exactly(u, σ)` のとき、すべての実行路のすべての
+  位置において、`π` の下の inhabited な各 leaf `λ` について、`obj(x, λ)` を指す参照は、`λ` に対応するスロット
+  (D17) が持つ参照と同一である。
 - **P4** (`origin` の健全性 -- `Join`)。`origin(x, π) = Join { identity, candidates }` のとき、各実行路の
   各位置において、`π` の下の inhabited な各 leaf のスロットが持つ参照は、`candidates` のいずれかの下の
-  対応するスロットが持つ参照と同一である。さらに、その参照が同一である 2 つの実行路の位置において、
-  `identity` は同じ `VarPath` である。
-- **P5** (キーは参照の関数である)。1 つの実行路の 1 つの位置において同じ参照を持つ 2 つのスロットは、同じ
-  `unit_key` を持つ。
-- **P6** (`acted_references` は静的な上位近似である)。`acted_references(v, π)` が返す `Map` は、`π` の下の
+  対応するスロット (D17) が持つ参照と同一である。
+- **P5** (キーと参照の関係)。1 つの関数の 1 回の活性化について、次の 3 つが成り立つ。
+  - **(a)** 1 つの実行路の 1 つの位置において同じ参照を持つ 2 つのスロットで、一方から他方への別名の道が
+    `Match` のアーム本体の `Ret` の辺を含まないならば、両者の `unit_key` は等しい。
+  - **(b)** アーム本体の `Ret(x)` が `x` の参照を `Match` の束縛変数 `m` へ移す辺について、
+    `origin(x, λ).candidates()` は `origin(m, λ).candidates()` に含まれる。
+  - **(c)** (N) `acted_unit_keys(v, π)` は、`acted_references(v, π)` が名指すオブジェクトのうち inhabited な
+    leaf に由来するものを、`unit_of` で写した上ですべて含む。
+
+  (a) の制限は外せない。アーム本体の `Ret` の辺は identity を保たず、`m` と `x` が同じ参照を持つのに
+  `unit_key` が `(m, λ)` と `(x, λ)` に分かれる本体が作れる (`p12-keys-and-consumes.md` の反例 R1)。
+  `cancel` が要るのは (a) ではなく (b) と (c) である。
+  **(c) はこのコミットのコードでは偽であり、この命題は閉じない** (`p11-origin-soundness.md` の第 4 節)。
+- **P6** (`acted_references` は静的な上位近似である)。1 つの関数の 1 回の活性化について、`acted_references(v, π)` が返す `Map` は、`π` の下の
   すべての boxed leaf を `origin` の identity で名付けて数えたものである。実行時に `Retain(v, π)` が作る
   参照の多重集合は、この数え上げを inhabited な leaf に制限したものに等しく、`Release(v, π)` が処分する
   参照の多重集合も同じものに等しい。
@@ -383,22 +419,34 @@ resolve_callee_params`)。
 
 ### 層 3 -- `cancel` の走査
 
-- **P15** (節点と `NodeId`)。1 つの本体の木の相異なる位置は相異なる `NodeId` を持つ。また
-  `CancelAnalysis::walk` は本体の各位置をちょうど 1 回訪れる。
+- **P15** (節点と `NodeId`)。`cancel` の入力すなわち `borrow_ify` の出力の各本体について、相異なる位置は
+  相異なる `NodeId` を持つ。また `CancelAnalysis::walk` は本体の各位置をちょうど 1 回訪れる。
+
+  前半は `RcExprNode` 一般の性質ではない。`RcExprNode` は式を `Arc` で共有できるので、1 つの木の 2 つの位置が
+  同じ `Arc` を指す本体は表現できる。成り立つのは `RewriteCtx::rewrite` が出力の各位置に `expr_node`
+  (`Arc::new`) で新しい割り当てを作るからである (`CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner`)。
 - **P16** (`pending` の不変条件)。走査中の各位置において、`pending` は次を満たす。
   (a) `pending[k]` の各要素の `node` は、その位置までに訪れた `Retain` 節点であり、その `unit_key` は `k` で
   ある。(b) 各要素の `outstanding` は空でない。(c) 1 つの `Retain` 節点は `pending` 全体で高々 1 か所に
   現れる。(d) `pending[k]` の並びは、訪れた順である (後ろほど新しい)。(e) `pending` から取り除かれた
-  `Retain` は、`outstanding` が空になったか、`needed_retains` に入ったかのいずれかである。
+  `Retain` は、次の 3 つのいずれかである。(e1) `outstanding` が空になった。(e2) `needed_retains` に入った。
+  (e3) その除去は `merge` によるものであり、各アームへ渡った複製の側に同じ `Retain` の除去事象があって、
+  それらがすべて (e1)(e2)(e3) のいずれかである。
+
+  (e3) は落とせない。`Retain` の後の `Match` のすべてのアームがその `Retain` を完全に un-bump すると、
+  `merge` はそれを `uniform` にも `needed_retains` にも入れず、`merged` にも入れない。このとき
+  `pending_in` の側の `outstanding` は空でない (減ったのは各アームに渡った複製である)。A9 より アームは
+  1 つ以上あるので、(e3) の展開は有限で、葉は (e1) か (e2) である。
 - **P17** (`un_bump` の正しさ)。`un_bump(pending, k, R)` の返り値は次で決まる。`pending` にキー `k` の項目が
   無ければ `NoBracket` で、`pending` は変わらない。あって、最内の要素の `outstanding` が `R` を `covers`
   しなければ `OutsideBracket` で、`pending` は変わらない。covers すれば `InBracket(t)` で、`t` は最内の要素の
   `node` であり、その要素の `outstanding` から `R` が引かれ、空になればその要素が取り除かれ、スタックが空に
   なればキーが取り除かれる。
-- **P18** (`merge` の後に残るもの)。`merge` の返す `pending` に残る `Retain` は、`pending_in` に在り、かつ
-  すべてのアームの出口に同じ `outstanding` で現れるものだけである。いずれかのアームの出口に現れてこの条件を
-  満たさない `Retain` は `needed_retains` に入る。どのアームの出口にも現れない `Retain` は、`needed_retains`
-  にも返り値にも入らない。
+- **P18** (`merge` の後に残るもの)。`merge` の返す `pending` に残る `Retain` は、`pending_in` に在り、
+  いずれかのアームの出口に現れ、かつすべてのアームの出口に同じ `outstanding` で現れるものだけである。
+  いずれかのアームの出口に現れてこの条件を満たさない `Retain` は `needed_retains` に入る。どのアームの出口にも
+  現れない `Retain` は、この呼び出しでは `needed_retains` にも返り値にも入らない (走査の他の位置が
+  `needed_retains` に入れることは妨げない)。
 
 ### 層 4 -- `cancel` の健全性
 
@@ -450,9 +498,9 @@ union (`Option` や `Result`) の payload を 2 回読むと、`-O max` で読�
 
 | 命題 | ファイル | 証明 | 検証 |
 |---|---|---|---|
-| P1, P2 | `p10-leaves-and-units.md` | 未着手 | 未着手 |
-| P3, P4 | `p11-origin-soundness.md` | 未着手 | 未着手 |
-| P5, P6, P7 | `p12-keys-and-consumes.md` | 未着手 | 未着手 |
+| P1, P2 | `p10-leaves-and-units.md` | 草稿 (定義の改訂前) | 未着手 |
+| P3, P4 | `p11-origin-soundness.md` | **閉じない** -- P5 (c) がコードで偽 | 未着手 |
+| P5, P6, P7 | `p12-keys-and-consumes.md` | P6, P7 は証明済み。P5 は (a) を制限つきで証明し (c) は未 | 未着手 |
 | P8 - P14 | `p20-borrow-ify.md` | 未着手 | 未着手 |
-| P15 - P18 | `p30-cancel-walk.md` | 未着手 | 未着手 |
+| P15 - P18 | `p30-cancel-walk.md` | 証明済み | 未着手 |
 | P19 - P24, T | `p40-cancel-soundness.md` | 未着手 | 未着手 |
