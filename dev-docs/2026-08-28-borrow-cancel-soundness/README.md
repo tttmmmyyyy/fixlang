@@ -98,10 +98,36 @@ payload 変数、およびアーム本体を持つ。アーム本体もまた本
 容器からの読み出しによって作られ、`Release` または消費 (D9) によって処分される。`H(o)` は `o` への未処分の
 参照の総数である。
 
-**D9 (消費)**
-関数の活性化が保持する参照を、他所へ渡すか捨てるかして手放す構文を**消費**と呼ぶ。どの構文がどの leaf の参照を
-消費するかは `collect_consumes` / `rhs_consumes` / `destructure_consumes` が定める
-(`CODE src/rc_ir/ownership.rs: collect_consumes`, `rhs_consumes`, `destructure_consumes`)。
+**D9 (消費と移動)**
+関数の 1 回の活性化が保持する参照について、次の 2 つを区別する。
+
+**消費**とは、活性化が保持する参照を活性化の外へ渡すか、捨てる構文である。次のものがある。
+
+| 構文 | 消費される leaf |
+|---|---|
+| `App(callee, args)` | callee の全 boxed leaf、および呼び出し先がその位置を所有する引数の leaf |
+| `Closure(f, caps)` | 各 capture の全 boxed leaf |
+| `Llvm(gen, args)` | `borrows_operand(i)` が偽のオペランドのうち、`result_prov` が単一の `Arg(i, σ)` として素通しを宣言していない leaf |
+| `Destructure(c, fs)` (`c` が boxed) | `c` の全 boxed leaf |
+| `Destructure(c, fs)` (`c` が unbox) | 名前が付いていないフィールドの leaf |
+| 関数本体の終端の `Ret(x)` | `x` の全 boxed leaf (呼び出し元へ渡る) |
+
+**移動**とは、参照の持ち手が活性化の中で変わるだけの構文である。移動は義務集合 (D10) を変えない。次のものがある。
+
+| 構文 | 移動 |
+|---|---|
+| `Let(x, Var(y), k)` | `y` の参照が `x` へ |
+| `Match` のアームの `Ret(x)` | `x` の参照が `Match` の束縛変数へ |
+| `Destructure(c, fs)` (`c` が unbox) の名前付きフィールド | `c` のそのフィールドの参照がフィールド変数へ |
+| unbox union の変位アーム、および catch-all アームの payload 束縛 | scrutinee の参照が payload 変数へ |
+| `Llvm` の素通し leaf (`result_prov` が単一の `Arg(i, σ)`) | オペランド `i` の参照が結果へ |
+
+`collect_consumes` が報告するのは、消費に加えて**アームの `Ret` も含めた集合**である
+(`CODE src/rc_ir/ownership.rs: collect_consumes_go` の `RcExpr::Ret` の腕)。すなわち報告される集合は消費の
+上位集合である。この過剰報告の読み手は `infer_ownership` だけであり、そこでは所有を増やす向きに働くので安全側で
+ある。`cancel` はこの関数を読まず、`rhs_consumes` と `destructure_consumes`、および終端の `Ret` の扱いを
+自分で持つ (`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner` の `RcExpr::Ret` の腕の
+`returns_from_func`)。
 
 **D10 (義務集合)**
 関数の 1 回の活性化について、実行路上の各位置における**義務集合** `Obl` を、参照の多重集合として次で定める。
@@ -204,7 +230,8 @@ resolve_callee_params`)。
 - **P5** (キーは参照の関数である)。同じ参照を持つ 2 つのスロットは、同じ `unit_key` を持つ。
 - **P6** (`acted_references` の正しさ)。`acted_references(v, π)` が返す多重集合は、`Retain(v, π)` が作る
   参照の多重集合、および `Release(v, π)` が処分する参照の多重集合に一致する。
-- **P7** (消費の網羅性)。関数の活性化が保持する参照を手放す構文はすべて、`collect_consumes` が報告する。
+- **P7** (消費の網羅性)。D9 の意味で消費する構文はすべて `collect_consumes` が報告する。また `collect_consumes`
+  が報告して D9 が消費としないものは、アームの `Ret` に限る。
 
 ### 層 2 -- `borrow_ify`
 
