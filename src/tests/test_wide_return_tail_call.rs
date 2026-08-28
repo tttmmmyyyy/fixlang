@@ -1,11 +1,8 @@
 use crate::{
     configuration::Configuration,
     generator::OUT_POINTER_BUFFER_NAME,
-    tests::test_util::{
-        emitted_llvm_ir, fix_build_source_command, llvm_function_bodies, test_source, EmittedIr,
-    },
+    tests::test_util::{generated_llvm_ir, llvm_function_bodies, test_source},
 };
-use tempfile::TempDir;
 
 // `Std::IO`'s `bind` puts `(f(a).@runner)(iostate)` in tail position, so a monadic loop is a chain
 // of indirect tail calls and runs in constant stack only while the backend compiles them as jumps.
@@ -512,27 +509,6 @@ const WIDE_RESULT_SOURCE: &str = r#"
     );
 "#;
 
-/// The LLVM IR the code generator wrote for `WIDE_RESULT_SOURCE`, before the LLVM pass pipeline ran.
-///
-/// The buffer a wide result travels in is a stack slot, which a program cannot observe, so what is
-/// asserted of it is asserted of the generated code. It is read before LLVM has run: an optimized
-/// module holds what LLVM itself decided about that slot as well.
-fn generated_ir_of_wide_result_source() -> String {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let dir = temp_dir.path();
-    let build = fix_build_source_command(dir, WIDE_RESULT_SOURCE, "none")
-        .arg("--emit-llvm")
-        .output()
-        .expect("Failed to execute fix build");
-    assert!(
-        build.status.success(),
-        "the build should succeed.\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&build.stdout),
-        String::from_utf8_lossy(&build.stderr),
-    );
-    emitted_llvm_ir(dir, EmittedIr::BeforeOptimization)
-}
-
 /// The names an LLVM function body binds to allocations, in the order the body makes them.
 fn allocations_of(body: &str) -> Vec<&str> {
     body.lines()
@@ -566,7 +542,7 @@ fn lifetime_marker_pointer(line: &str) -> &str {
 /// order the instructions are written in is the order they run in.
 #[test]
 fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
-    let ir = generated_ir_of_wide_result_source();
+    let ir = generated_llvm_ir(WIDE_RESULT_SOURCE, "none");
     let mut buffers_seen = 0;
     // An empty name part selects every function of the module.
     for body in llvm_function_bodies(&ir, "") {
@@ -625,7 +601,7 @@ fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
 /// newly live. Every marker therefore names an allocation of the function it stands in.
 #[test]
 fn test_a_lifetime_marker_names_an_allocation_of_its_own_function() {
-    let ir = generated_ir_of_wide_result_source();
+    let ir = generated_llvm_ir(WIDE_RESULT_SOURCE, "none");
     // An empty name part selects every function of the module.
     for body in llvm_function_bodies(&ir, "") {
         let allocations = allocations_of(&body);

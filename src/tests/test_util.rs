@@ -297,6 +297,27 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
     emitted_llvm_ir_modules(dir, which).join("\n")
 }
 
+/// The LLVM IR the code generator wrote for `source`, compiled at `opt_level`, before the LLVM pass
+/// pipeline ran over it. Fails the test unless the build succeeds.
+///
+/// Use this for a property of the code the compiler emits. The optimized module holds what LLVM
+/// itself decided as well, which a test about code generation reads as the compiler's own doing.
+pub fn generated_llvm_ir(source: &str, opt_level: &str) -> String {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir = temp_dir.path();
+    let build = fix_build_source_command(dir, source, opt_level)
+        .arg("--emit-llvm")
+        .output()
+        .expect("Failed to execute fix build");
+    assert!(
+        build.status.success(),
+        "the build should succeed.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+    emitted_llvm_ir(dir, EmittedIr::BeforeOptimization)
+}
+
 /// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.
 pub fn llvm_function_bodies(ir: &str, name_part: &str) -> Vec<String> {
     let mut bodies = vec![];

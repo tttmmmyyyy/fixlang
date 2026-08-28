@@ -710,7 +710,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// An allocation LLVM is told nothing about holds a value for the whole of the function that
     /// makes it. What it holds then has to survive everything that follows, so a function that
     /// fills it again on every turn of a loop carries its contents from one turn into the next.
-    fn build_lifetime_start<T: BasicType<'c>>(&mut self, ptr: PointerValue<'c>, ty: T) {
+    fn build_lifetime_start<T: BasicType<'c>>(&self, ptr: PointerValue<'c>, ty: T) {
         self.build_lifetime_marker("llvm.lifetime.start", ptr, ty);
     }
 
@@ -718,7 +718,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// This closes what `build_lifetime_start` opened: the memory holds a value between the two,
     /// and holds nothing outside them.
-    fn build_lifetime_end<T: BasicType<'c>>(&mut self, ptr: PointerValue<'c>, ty: T) {
+    fn build_lifetime_end<T: BasicType<'c>>(&self, ptr: PointerValue<'c>, ty: T) {
         self.build_lifetime_marker("llvm.lifetime.end", ptr, ty);
     }
 
@@ -726,12 +726,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// The marker covers what a store of the value writes, which is the store size rather than the
     /// `sizeof` this module reports: the two differ for a type whose bits do not fill whole bytes.
-    fn build_lifetime_marker<T: BasicType<'c>>(
-        &mut self,
-        name: &str,
-        ptr: PointerValue<'c>,
-        ty: T,
-    ) {
+    fn build_lifetime_marker<T: BasicType<'c>>(&self, name: &str, ptr: PointerValue<'c>, ty: T) {
         let intrinsic = Intrinsic::find(name).unwrap();
         let ptr_ty = self.context.ptr_type(AddressSpace::from(0));
         let func = intrinsic

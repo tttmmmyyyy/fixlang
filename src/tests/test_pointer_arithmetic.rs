@@ -1,5 +1,4 @@
-use crate::tests::test_util::{emitted_llvm_ir, fix_build_source_command, EmittedIr};
-use tempfile::TempDir;
+use crate::tests::test_util::generated_llvm_ir;
 
 /// A program that reaches an array's elements every way the compiler computes a pointer into one:
 /// reading a slot, writing a slot in place, writing one of a shared array (which clones the
@@ -38,22 +37,9 @@ const ARRAY_ACCESS_SOURCE: &str = r#"
 /// whether that loop has a trip count it can unroll by.
 #[test]
 pub fn test_every_pointer_into_an_object_is_computed_inside_it() {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let dir = temp_dir.path();
     // The property is about what the compiler emits, so it is read before LLVM has run: an
     // optimized module also holds the pointer arithmetic LLVM itself introduced.
-    let build = fix_build_source_command(dir, ARRAY_ACCESS_SOURCE, "none")
-        .arg("--emit-llvm")
-        .output()
-        .expect("Failed to execute fix build");
-    assert!(
-        build.status.success(),
-        "the build should succeed.\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&build.stdout),
-        String::from_utf8_lossy(&build.stderr),
-    );
-
-    let ir = emitted_llvm_ir(dir, EmittedIr::BeforeOptimization);
+    let ir = generated_llvm_ir(ARRAY_ACCESS_SOURCE, "none");
     // A `getelementptr` instruction is one the program computes an address with. The same syntax
     // also appears as a constant expression that walks off a null pointer to name the size of a
     // type, which is a number rather than an address and stays outside every allocation.
