@@ -162,6 +162,8 @@ Two rules keep definitions through that check:
 
 Expect this first check to return findings on most items. That is the normal yield, not evidence the skeleton was written badly: the orchestrator is no better at writing definitions than a prover is at writing proofs, and the definitions are read by everyone.
 
+**The check is a gate, not a parallel task.** Running it beside the first provers saves nothing: a definition that changes underneath a prover costs that prover a full rewrite, and it costs one per prover. Wait for it.
+
 ## Calibrating the property
 
 Before any prover starts, check that the property is worth proving: **take a bug the code actually had, and check that the stated property is violated by the old code.** The most recent fixed bug in the target is the natural case; `git show` on its fix gives the old code, and the changelog and the issue tracker give the symptom.
@@ -179,6 +181,8 @@ Re-run the calibration whenever the property changes — above all when it chang
 
    **Show the skeleton to the user before dispatching provers.** A wrong definition wastes every prover that runs under it, and the decomposition is where a proof is won or lost.
 3. **Run the provers.** One subagent per proposition file, dispatched in dependency layers: a prover may cite an earlier proposition's *statement*, so a whole layer of independent propositions goes out in one parallel block. They write documents rather than code, so they share the working tree; file ownership is what keeps them apart. Brief each with the *Briefing a prover* section below.
+
+   A prover on a real subsystem is a long-running, expensive agent, so send a large layer out in batches rather than all at once — an interruption then costs one batch instead of the layer. When one is interrupted, its file is on disk: commit what is there and **resume that agent** rather than launching a fresh one, since the reading it has already done is most of what it spent.
 4. **Run the verifiers.** One subagent per proposition, all in parallel, each given only what the *Briefing a verifier* section allows. Wait for all.
 5. **Iterate.** Hand each verifier's findings to that file's prover. `NOT-OBVIOUS` is answered by inserting substeps, never by rewording the step to sound more certain. `FALSE`, `UNDEFINED`, `BAD-CITATION` and `HEDGE` are answered as the section below prescribes. Then verify again — with **fresh** verifier subagents, which have not seen the previous round's findings, so the check is never anchored to what it already accepted.
 6. **Stop at the fixed point.** The document is finished when one full round over every proposition returns no finding of any kind. Record the round in the status table.
