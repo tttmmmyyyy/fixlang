@@ -1,4 +1,8 @@
-use crate::{configuration::Configuration, tests::test_util::test_source};
+use crate::{
+    configuration::Configuration,
+    generator::OUT_POINTER_BUFFER_NAME,
+    tests::test_util::{generated_llvm_ir, llvm_function_bodies, test_source},
+};
 
 // `Std::IO`'s `bind` puts `(f(a).@runner)(iostate)` in tail position, so a monadic loop is a chain
 // of indirect tail calls and runs in constant stack only while the backend compiles them as jumps.
@@ -17,8 +21,8 @@ use crate::{configuration::Configuration, tests::test_util::test_source};
 // exercises the return rule on every target is
 // `test_return_wider_than_any_target_runs_in_constant_stack`.
 
-// The recursive call sits in tail position of a bind's continuation, and the result is an `Array`
-// plus a scalar. This is the shape a monadic loop over a growing or threaded array takes.
+/// The recursive call sits in tail position of a bind's continuation, and the result is an `Array`
+/// plus a scalar. This is the shape a monadic loop over a growing or threaded array takes.
 #[test]
 fn test_monadic_loop_with_array_result_runs_in_constant_stack() {
     let source = r#"
@@ -41,8 +45,8 @@ fn test_monadic_loop_with_array_result_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// `IOFail a` wraps `IO (Result ErrMsg a)`, and `ErrMsg` is a `String`, so the result is wide for
-// every element type. A loop in `IOFail` therefore needs the rule even when it threads no array.
+/// `IOFail a` wraps `IO (Result ErrMsg a)`, and `ErrMsg` is a `String`, so the result is wide for
+/// every element type. A loop in `IOFail` therefore needs the rule even when it threads no array.
 #[test]
 fn test_iofail_loop_runs_in_constant_stack() {
     let source = r#"
@@ -65,8 +69,8 @@ fn test_iofail_loop_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// `Std::loop_m` recurses on itself in tail position of a bind, so its own return width is what
-// decides whether the loop is constant-stack. Here `break_m` carries an array and a scalar.
+/// `Std::loop_m` recurses on itself in tail position of a bind, so its own return width is what
+/// decides whether the loop is constant-stack. Here `break_m` carries an array and a scalar.
 #[test]
 fn test_loop_m_with_wide_break_runs_in_constant_stack() {
     let source = r#"
@@ -85,9 +89,9 @@ fn test_loop_m_with_wide_break_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A user-defined monad transformer stacked on `IO`, the form a state-carrying library monad takes.
-// Its `bind` ends with `((f(a)).@run)(s)`, so the transformer's own return width — the state plus
-// the value — decides the stack behavior of a loop written in it.
+/// A user-defined monad transformer stacked on `IO`, the form a state-carrying library monad takes.
+/// Its `bind` ends with `((f(a)).@run)(s)`, so the transformer's own return width — the state plus
+/// the value — decides the stack behavior of a loop written in it.
 #[test]
 fn test_state_transformer_over_io_runs_in_constant_stack() {
     let source = r#"
@@ -127,9 +131,9 @@ fn test_state_transformer_over_io_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A state monad with no inner monad: its `run` carries the state in the tail call's arguments rather
-// than in a capture, so seven state leaves put the call at nine arguments — past both the return
-// registers and the six changing arguments an x86-64 sibcall can rewrite under the C convention.
+/// A state monad with no inner monad: its `run` carries the state in the tail call's arguments rather
+/// than in a capture, so seven state leaves put the call at nine arguments — past both the return
+/// registers and the six changing arguments an x86-64 sibcall can rewrite under the C convention.
 #[test]
 fn test_state_monad_carrying_state_in_arguments_runs_in_constant_stack() {
     let source = r#"
@@ -170,9 +174,9 @@ fn test_state_monad_carrying_state_in_arguments_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// The function called in tail position comes out of an array, so the call stays indirect at every
-// optimization level. Inlining and closure specialization cannot fold this chain into a
-// self-recursive loop; only turning the tail call into a jump keeps the stack flat.
+/// The function called in tail position comes out of an array, so the call stays indirect at every
+/// optimization level. Inlining and closure specialization cannot fold this chain into a
+/// self-recursive loop; only turning the tail call into a jump keeps the stack flat.
 #[test]
 fn test_dispatch_through_array_runs_in_constant_stack() {
     let source = r#"
@@ -207,8 +211,8 @@ fn test_dispatch_through_array_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Three arrays make nine leaves, above the largest return-register budget among supported targets,
-// so this loop needs the out-pointer on AArch64 as well as on x86-64.
+/// Three arrays make nine leaves, above the largest return-register budget among supported targets,
+/// so this loop needs the out-pointer on AArch64 as well as on x86-64.
 #[test]
 fn test_return_wider_than_any_target_runs_in_constant_stack() {
     let source = r#"
@@ -234,15 +238,16 @@ fn test_return_wider_than_any_target_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// The two functions carry different numbers of arguments, so the call from the narrow one to the wide
-// one has to grow the outgoing argument area. A sibcall may only reuse the caller's own argument
-// area, while a tail call under `tailcc` may grow it, which is what keeps this loop flat. Ten
-// arguments overflow the argument registers of both supported targets, and stay under the arity where
-// the compiler's own eta expansion blows up (fixlang issue #76).
-//
-// x86-64 alone, since that is where `lambda_calling_convention_of_target` gives Fix lambdas `tailcc`.
-// AArch64 keeps the C convention, where this call stays an ordinary one and the stack grows with the
-// recursion (fixlang issue #111).
+/// The two functions carry different numbers of arguments, so the call from the narrow one to the wide
+/// one has to grow the outgoing argument area. A sibcall may only reuse the caller's own argument
+/// area, while a tail call under `tailcc` may grow it, which is what keeps this loop flat. Ten
+/// arguments overflow the argument registers of both supported targets, and stay under the arity where
+/// the compiler's own eta expansion blows up (fixlang issue #76).
+///
+/// The test runs on x86-64 alone, since that is where `lambda_calling_convention_of_target` gives
+/// Fix lambdas `tailcc`.
+/// AArch64 keeps the C convention, where this call stays an ordinary one and the stack grows with the
+/// recursion (fixlang issue #111).
 #[cfg(target_arch = "x86_64")]
 #[test]
 fn test_growing_argument_area_mutual_recursion_runs_in_constant_stack() {
@@ -271,10 +276,10 @@ fn test_growing_argument_area_mutual_recursion_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// The result crosses the floating-point half of the register budget rather than the integer half.
-// `tailcc`, the convention x86-64 Fix lambdas use, returns five floating-point leaves in registers
-// and sends six to memory, so six is where the `float` entry of the budget decides the outcome.
-// Every other loop here carries pointers and integers only.
+/// The result crosses the floating-point half of the register budget rather than the integer half.
+/// `tailcc`, the convention x86-64 Fix lambdas use, returns five floating-point leaves in registers
+/// and sends six to memory, so six is where the `float` entry of the budget decides the outcome.
+/// Every other loop here carries pointers and integers only.
 #[test]
 fn test_float_wide_return_runs_in_constant_stack() {
     let source = r#"
@@ -297,11 +302,11 @@ fn test_float_wide_return_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Under separated compilation the unit that defines a function and the unit that calls it are
-// generated apart, so both sides derive the out-pointer decision and the calling convention from the
-// target alone. One symbol per unit puts a unit boundary on every call. The shapes cover an integer
-// result wider than the return registers, a result carrying arrays, a result mixing floating-point
-// and integer leaves, a wide global, and mutual recursion between two wide-returning functions.
+/// Under separated compilation the unit that defines a function and the unit that calls it are
+/// generated apart, so both sides derive the out-pointer decision and the calling convention from the
+/// target alone. One symbol per unit puts a unit boundary on every call. The shapes cover an integer
+/// result wider than the return registers, a result carrying arrays, a result mixing floating-point
+/// and integer leaves, a wide global, and mutual recursion between two wide-returning functions.
 #[test]
 fn test_wide_return_across_compilation_units() {
     let source = r#"
@@ -345,11 +350,11 @@ fn test_wide_return_across_compilation_units() {
     test_source(source, config);
 }
 
-// The out-pointer path must move the same bytes the register path did, for every leaf shape that
-// straddles the budget: three integer leaves against four, a union payload plus its tag, floating-
-// point leaves mixed with integer ones, a nested tuple with zero-sized members, and a boxed value.
-// Each is reached directly, in tail position, through a closure, and out of an array, so a value
-// crosses the out-pointer both as a forwarded parameter and as a caller-side buffer.
+/// The out-pointer path must move the same bytes the register path did, for every leaf shape that
+/// straddles the budget: three integer leaves against four, a union payload plus its tag, floating-
+/// point leaves mixed with integer ones, a nested tuple with zero-sized members, and a boxed value.
+/// Each is reached directly, in tail position, through a closure, and out of an array, so a value
+/// crosses the out-pointer both as a forwarded parameter and as a caller-side buffer.
 #[test]
 fn test_wide_return_shapes_compute_correctly() {
     let source = r#"
@@ -426,8 +431,8 @@ fn test_wide_return_shapes_compute_correctly() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Three integer and four floating-point leaves fill both halves of the budget at once, the widest
-// result the table still returns in registers on x86-64.
+/// Three integer and four floating-point leaves fill both halves of the budget at once, the widest
+/// result the table still returns in registers on x86-64.
 #[test]
 fn test_mixed_result_filling_both_register_classes_runs_in_constant_stack() {
     let source = r#"
@@ -453,11 +458,11 @@ fn test_mixed_result_filling_both_register_classes_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A `Destructor` holding a wide resource. Its destructor is applied from inside the reference-
-// counting helper that releases the value -- a function with the C convention, not a Fix lambda -- so
-// that helper's own frame holds the out-pointer buffer of the call. It is the one place outside a
-// Fix lambda where a buffer is allocated and handed to a call, which is what makes the call's
-// `tail` marker load-bearing there.
+/// A `Destructor` holding a wide resource. Its destructor is applied from inside the reference-
+/// counting helper that releases the value -- a function with the C convention, not a Fix lambda -- so
+/// that helper's own frame holds the out-pointer buffer of the call. It is the one place outside a
+/// Fix lambda where a buffer is allocated and handed to a call, which is what makes the call's
+/// `tail` marker load-bearing there.
 #[test]
 fn test_destructor_with_wide_resource_is_memory_safe() {
     let source = r#"
@@ -475,4 +480,167 @@ fn test_destructor_with_wide_resource_is_memory_safe() {
     );
     "#;
     test_source(source, Configuration::develop_mode());
+}
+
+/// A result too wide for the return registers travels through a buffer the caller allocates in its
+/// entry block, which it passes once however many times it reaches the call.
+///
+/// Each result is three arrays, which is nine scalar leaves — a storage pointer, a size and a
+/// capacity each — and more than the return registers of any target in the table, so the result
+/// travels through a buffer wherever the suite runs.
+const WIDE_RESULT_SOURCE: &str = r#"
+    module Main;
+
+    triple : I64 -> (Array I64, Array I64, Array I64);
+    triple = |n| (Array::fill(n, 1), Array::fill(n + 1, 2), Array::fill(n + 2, 3));
+
+    // A wide result computed by a call in tail position, which is handed the out-pointer this
+    // function was given rather than a buffer of its own.
+    forward : I64 -> (Array I64, Array I64, Array I64);
+    forward = |n| triple(n);
+
+    main : IO ();
+    main = (
+        let total = Iterator::range(0, 4).fold(0, |n, acc|
+            let (xs, ys, zs) = triple(n + 1);
+            let (ps, qs, rs) = forward(n + 2);
+            acc + xs.@size + ys.@size + zs.@size + ps.@size + qs.@size + rs.@size
+        );
+        println $ total.to_string
+    );
+"#;
+
+/// The names an LLVM function body binds to allocations, in the order the body makes them.
+fn allocation_names_of(body: &str) -> Vec<&str> {
+    body.lines()
+        .map(str::trim)
+        .filter(|line| line.contains(" = alloca "))
+        .map(|line| line.split_once(" = ").expect("an alloca binds a name").0)
+        .collect()
+}
+
+/// The pointer a `llvm.lifetime` marker bounds: the last argument of the call it is written as.
+fn lifetime_marker_pointer(line: &str) -> &str {
+    let arguments = line
+        .rsplit_once('(')
+        .expect("a call writes its arguments in parentheses")
+        .1
+        .trim_end_matches(')');
+    arguments
+        .rsplit_once(", ")
+        .expect("a lifetime marker takes a size and a pointer")
+        .1
+        .strip_prefix("ptr ")
+        .expect("a lifetime marker takes a pointer")
+}
+
+/// Each buffer holds its call's result from the call that writes it to the read that takes it back
+/// out, and the pair of lifetime markers around that stretch says so. Outside the stretch the
+/// memory holds nothing, so an instruction reaching the buffer before the start or after the end
+/// reads a value LLVM is free to call undefined.
+///
+/// The stretch is straight-line code — a call and the loads that take its result back out — so the
+/// order the instructions are written in is the order they run in.
+#[test]
+fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
+    let ir = generated_llvm_ir(WIDE_RESULT_SOURCE, "none");
+    let mut buffers_seen = 0;
+    // An empty name part selects every function of the module.
+    for body in llvm_function_bodies(&ir, "") {
+        let lines = body.lines().map(str::trim).collect::<Vec<_>>();
+        let buffers = allocation_names_of(&body)
+            .into_iter()
+            .filter(|name| name.contains(OUT_POINTER_BUFFER_NAME))
+            .collect::<Vec<_>>();
+        buffers_seen += buffers.len();
+        for buffer in buffers {
+            // A buffer's name carries the `@` of the call it is named after, so LLVM writes it
+            // quoted and no buffer's name is a prefix of another's.
+            let mut holds_a_value = false;
+            for line in lines.iter().filter(|line| line.contains(buffer)) {
+                if line.contains("@llvm.lifetime.start") {
+                    assert!(
+                        !holds_a_value,
+                        "the buffer {} is said to begin holding a value while it already holds one:\n{}",
+                        buffer, body
+                    );
+                    holds_a_value = true;
+                } else if line.contains("@llvm.lifetime.end") {
+                    assert!(
+                        holds_a_value,
+                        "the buffer {} is said to stop holding a value while it holds none:\n{}",
+                        buffer, body
+                    );
+                    holds_a_value = false;
+                } else if !line.contains(" = alloca ") {
+                    // The allocation itself precedes every stretch; everything else reaches the
+                    // buffer, and may only do so while it holds a value.
+                    assert!(
+                        holds_a_value,
+                        "`{}` reaches the buffer {} outside the stretch its lifetime markers bound:\n{}",
+                        line, buffer, body
+                    );
+                }
+            }
+            assert!(
+                !holds_a_value,
+                "the buffer {} is left holding a value where the function ends:\n{}",
+                buffer, body
+            );
+        }
+    }
+    assert!(
+        buffers_seen > 0,
+        "a call whose result is too wide for the return registers should allocate a buffer"
+    );
+}
+
+/// A lifetime marker bounds one allocation, and the frame that makes the allocation is the frame
+/// entitled to say when it begins and stops holding a value. A call in tail position writes its
+/// result through the out-pointer this function was handed, which names a buffer an ancestor frame
+/// allocated and which outlives this one, so nothing here declares that buffer's contents dead or
+/// newly live. Every marker therefore names an allocation of the function it stands in.
+#[test]
+fn test_a_lifetime_marker_names_an_allocation_of_its_own_function() {
+    let ir = generated_llvm_ir(WIDE_RESULT_SOURCE, "none");
+    // An empty name part selects every function of the module.
+    for body in llvm_function_bodies(&ir, "") {
+        let allocations = allocation_names_of(&body);
+        for line in body.lines().map(str::trim) {
+            if !line.contains("@llvm.lifetime.") {
+                continue;
+            }
+            let bounded_ptr = lifetime_marker_pointer(line);
+            assert!(
+                allocations.contains(&bounded_ptr),
+                "`{}` bounds {}, which the function it stands in does not allocate; it allocates {:?}:\n{}",
+                line, bounded_ptr, allocations, body
+            );
+        }
+    }
+
+    // `forward` ends in a call whose result is too wide for the return registers, so that call is
+    // handed its own function's out-pointer. Without such a call in the program, the property above
+    // holds for want of a case.
+    let forwarding_bodies = llvm_function_bodies(&ir, "Main::forward")
+        .into_iter()
+        .filter(|body| {
+            // A function whose result travels through an out-pointer returns `void` and takes the
+            // pointer before every other parameter, and the call it ends with passes that same
+            // pointer first.
+            let signature = body
+                .lines()
+                .next()
+                .expect("a body opens with its signature");
+            signature.contains(" void @")
+                && body
+                    .lines()
+                    .any(|line| line.contains("call ") && line.contains("(ptr %0,"))
+        })
+        .count();
+    assert!(
+        forwarding_bodies > 0,
+        "`forward` should end in a call handed its own function's out-pointer, and none does:\n{}",
+        ir
+    );
 }

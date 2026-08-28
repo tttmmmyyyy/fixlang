@@ -35,8 +35,9 @@ use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
     alloc_array_storage, build_array_storage_shift, build_capacity_check, build_elems_bytes,
-    build_storage_is_aligned, create_obj, get_array_storage, get_array_storage_buf,
-    read_alloc_offset, union_tag_value, write_alloc_offset, CapacityCheck, ObjectFieldType,
+    build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned, create_obj,
+    get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
+    write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -2331,19 +2332,17 @@ fn realloc_array<'c, 'm>(
     let sizeof = object_type.size_of(gc, Some(new_cap));
 
     let old_alloc_offset = read_alloc_offset(gc, storage_ptr);
-    let old_base = unsafe {
+    let old_base = {
         let neg_old_alloc_offset = gc
             .builder()
             .build_int_neg(old_alloc_offset, "neg_old_alloc_offset@realloc_array")
             .unwrap();
-        gc.builder()
-            .build_gep(
-                gc.context.i8_type(),
-                storage_ptr,
-                &[neg_old_alloc_offset],
-                "old_base@realloc_array",
-            )
-            .unwrap()
+        build_gep_within_allocation(
+            gc,
+            storage_ptr,
+            neg_old_alloc_offset,
+            "old_base@realloc_array",
+        )
     };
 
     // A storage worth aligning keeps room to be placed off the base of its block; one below the
@@ -2415,26 +2414,10 @@ fn realloc_array<'c, 'm>(
     // Carry the control block and the live elements to where the object now sits. The two ranges
     // overlap, being at most `ARRAY_BUF_ALIGNMENT` apart.
     gc.builder().position_at_end(move_bb);
-    let old_ptr = unsafe {
-        gc.builder()
-            .build_gep(
-                gc.context.i8_type(),
-                new_base,
-                &[old_alloc_offset],
-                "old_ptr@realloc_array",
-            )
-            .unwrap()
-    };
-    let new_ptr = unsafe {
-        gc.builder()
-            .build_gep(
-                gc.context.i8_type(),
-                new_base,
-                &[new_alloc_offset],
-                "new_ptr@realloc_array",
-            )
-            .unwrap()
-    };
+    let old_ptr =
+        build_gep_within_allocation(gc, new_base, old_alloc_offset, "old_ptr@realloc_array");
+    let new_ptr =
+        build_gep_within_allocation(gc, new_base, new_alloc_offset, "new_ptr@realloc_array");
     let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
     let elems_bytes = build_elems_bytes(gc, &elem_ty, len, "elems_size@realloc_array");
     let header_size = gc
@@ -2456,16 +2439,8 @@ fn realloc_array<'c, 'm>(
     gc.builder().build_unconditional_branch(end_bb).unwrap();
 
     gc.builder().position_at_end(end_bb);
-    let storage_ptr = unsafe {
-        gc.builder()
-            .build_gep(
-                gc.context.i8_type(),
-                new_base,
-                &[new_alloc_offset],
-                "storage_ptr@realloc_array",
-            )
-            .unwrap()
-    };
+    let storage_ptr =
+        build_gep_within_allocation(gc, new_base, new_alloc_offset, "storage_ptr@realloc_array");
     write_alloc_offset(gc, storage_ptr, new_alloc_offset);
     let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_ptr.as_basic_value_enum());
     array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
@@ -2878,11 +2853,7 @@ impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
         // Retain each element of `src[begin, end)` into `dst`'s tail. `src` keeps its elements and
         // its reference for its caller.
         let src_buf = get_array_storage_buf(gc, &src);
-        let src_read = unsafe {
-            gc.builder()
-                .build_gep(elem_value_ty, src_buf, &[begin], "copy_src_read")
-                .unwrap()
-        };
+        let src_read = build_gep_array_elem(gc, elem_value_ty, src_buf, begin, "copy_src_read");
         ObjectFieldType::clone_array_buf(
             gc,
             n,
@@ -4378,9 +4349,9 @@ impl LLVMGen for InlineLLVMStructGetBody {
         } else {
             let field_idx = self.field_index();
             Provenance::build_shape(result_ty, type_env, &|path: &FieldPath| {
-                let mut p = vec![field_idx];
-                p.extend_from_slice(path);
-                sole_origin(LeafOrigin::Arg(0, p))
+                let mut arg_path = vec![field_idx];
+                arg_path.extend_from_slice(path);
+                sole_origin(LeafOrigin::Arg(0, arg_path))
             })
         }
     }
@@ -5132,9 +5103,9 @@ fn read_component_locality(
         return ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container));
     }
     ExtShape::build_shape(result_ty, type_env, &|path: &FieldPath| {
-        let mut p = vec![component];
-        p.extend_from_slice(path);
-        LeafCond::input_leaf(CONTAINER_ARG, p)
+        let mut arg_path = vec![component];
+        arg_path.extend_from_slice(path);
+        LeafCond::input_leaf(CONTAINER_ARG, arg_path)
     })
 }
 
@@ -6398,9 +6369,9 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         } else {
             let variant_idx = self.variant_index();
             Provenance::build_shape(result_ty, type_env, &|path: &FieldPath| {
-                let mut p = vec![variant_idx];
-                p.extend_from_slice(path);
-                sole_origin(LeafOrigin::Arg(0, p))
+                let mut arg_path = vec![variant_idx];
+                arg_path.extend_from_slice(path);
+                sole_origin(LeafOrigin::Arg(0, arg_path))
             })
         }
     }
@@ -8129,11 +8100,7 @@ fn array_tail_destination<'c, 'm>(
     let dst = force_unique_or_assert(gc, dst, force_unique, state);
     let dst_len = dst.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
     let dst_buf = get_array_storage_buf(gc, &dst);
-    let dst_write = unsafe {
-        gc.builder()
-            .build_gep(elem_value_ty, dst_buf, &[dst_len], "dst_write")
-            .unwrap()
-    };
+    let dst_write = build_gep_array_elem(gc, elem_value_ty, dst_buf, dst_len, "dst_write");
     (dst, dst_len, dst_write)
 }
 
