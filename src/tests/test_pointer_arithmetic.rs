@@ -52,9 +52,7 @@ pub fn test_every_pointer_into_an_object_is_computed_inside_it() {
     let geps = ir
         .lines()
         .map(|line| line.trim())
-        .filter(|line| {
-            line.starts_with('%') && line.contains(" = getelementptr")
-        })
+        .filter(|line| line.starts_with('%') && line.contains(" = getelementptr"))
         .collect::<Vec<_>>();
     assert!(
         !geps.is_empty(),

@@ -538,8 +538,12 @@ impl ObjectFieldType {
                 let value_ty = value.ty.get_embedded_type(gc);
                 gc.retain(value.clone(), RcState::Unknown);
                 let elm_ptr = unsafe {
-                    gc.builder()
-                        .build_in_bounds_gep(value_ty, buf_ptr, &[idx], "ptr_to_elem_of_array")
+                    gc.builder().build_in_bounds_gep(
+                        value_ty,
+                        buf_ptr,
+                        &[idx],
+                        "ptr_to_elem_of_array",
+                    )
                 }
                 .unwrap();
                 gc.builder().build_store(elm_ptr, value.value(gc)).unwrap();
@@ -664,8 +668,12 @@ impl ObjectFieldType {
         // Get element.
         let elm_basic_ty = elem_ty.get_embedded_type(gc);
         let elm_ptr = unsafe {
-            gc.builder()
-                .build_in_bounds_gep(elm_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
+            gc.builder().build_in_bounds_gep(
+                elm_basic_ty,
+                buffer,
+                &[idx.into()],
+                "ptr_to_elem_of_array",
+            )
         }
         .unwrap();
 
@@ -725,8 +733,12 @@ impl ObjectFieldType {
         // Get ptr to the place at idx.
         let elm_basic_ty = value.ty.get_embedded_type(gc);
         let elm_ptr = unsafe {
-            gc.builder()
-                .build_in_bounds_gep(elm_basic_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
+            gc.builder().build_in_bounds_gep(
+                elm_basic_ty,
+                buffer,
+                &[idx.into()],
+                "ptr_to_elem_of_array",
+            )
         }
         .unwrap();
 
@@ -765,13 +777,21 @@ impl ObjectFieldType {
                          _len: IntValue<'c>,
                          _ptr_to_buffer: PointerValue<'c>| {
             let src_ptr = unsafe {
-                gc.builder()
-                    .build_in_bounds_gep(elm_basic_ty, src_buffer, &[idx.into()], "ptr_to_src_elem")
+                gc.builder().build_in_bounds_gep(
+                    elm_basic_ty,
+                    src_buffer,
+                    &[idx.into()],
+                    "ptr_to_src_elem",
+                )
             }
             .unwrap();
             let dst_ptr = unsafe {
-                gc.builder()
-                    .build_in_bounds_gep(elm_basic_ty, dst_buffer, &[idx.into()], "ptr_to_dst_elem")
+                gc.builder().build_in_bounds_gep(
+                    elm_basic_ty,
+                    dst_buffer,
+                    &[idx.into()],
+                    "ptr_to_dst_elem",
+                )
             }
             .unwrap();
             let src_elem = gc
