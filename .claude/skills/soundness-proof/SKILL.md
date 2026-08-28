@@ -125,6 +125,14 @@ The failure this guards against is a proof that reads as though it understands t
 - **Hedges**: 適切に, うまく, 基本的に, 通常, ほとんどの場合, essentially, in practice, should. A hedge marks the place where the writer does not know. The sentence is deleted or proved.
 - **An appeal to intent**: "この関数は … するつもりで書かれている", "設計上 … のはず". The proof is about what the code does. Intent belongs to the definitions section, as the property being proved.
 
+## What the proof talks about
+
+Before the definitions can be written, one thing has to be settled: **what the proof takes as given about the layer below.** Code sits on other code — a compiler pass on the semantics of the program it rewrites, a data structure on its allocator, a protocol on its transport. A proof that tries to reach all the way down never gets written; one that never says where it stops is proving nothing about anything.
+
+So the skeleton names the boundary, as assumptions with no discharger. One pattern recurs: the code under proof reads a **declared model** of the layer below — a table of what each primitive does, an interface's contract, an invariant a type promises — and reasons from that. The proof is then about the declared model, and one assumption says the declaration is faithful to what the layer actually does. That assumption is the proof's largest hole, and writing it down is what makes it a known hole rather than an assumed truth. Say beside it what does check it — a test, an audit, a runtime detector — so a reader can see what the proof stands on.
+
+The definitions also have to say what an **execution** is and what **state** it moves, because soundness is a statement about executions and is undefined without them. For a transformation, that means saying what a run of the input looks like, what a run of the output looks like, and what has to correspond between the two.
+
 ## The document
 
 Under `dev-docs/YYYY-MM-DD-<target>-soundness/`, following the `devdoc` skill for everything the conventions below leave open — in particular, written in the implementers' language, self-contained for a reader who knows the project thinly and has never opened the code under proof, and readable front to back.
@@ -166,7 +174,11 @@ Re-run the calibration whenever the property changes — above all when it chang
 
 ## Briefing a prover
 
-Give it: the target commit; `README.md` in full; the proposition it owns and the file to write; the statements (not the proofs) of the propositions it may cite; the *proof language* and *words that are not allowed* sections of this file, inline; and, on a later round, the verifier findings against its file.
+Give it: the target commit; `README.md` in full; the proposition it owns and the file to write; the statements (not the proofs) of the propositions it may cite; the *proof language*, *how fine a step must be* and *words that are not allowed* sections of this file, **inline**; and, on a later round, the verifier findings against its file.
+
+Inline, because the subagent may be working on a branch where this skill file does not exist — a briefing that sends it off to read the conventions is a briefing whose conventions it may not find.
+
+The orchestrator may point a prover at the parts it expects to be hard — the alias chain whose identity has to survive, the case split that is easy to leave incomplete. A prover is proving a fixed statement rather than searching, so a hint changes where it spends its time and not what counts as an answer. It must not point at **how the question came out before**: naming the commit that fixed a bug in the very property under proof invites the prover to re-derive that fix's own reasoning and hand it back as a proof. Describe the shape that is hard, and leave out what was concluded about it.
 
 Require of it:
 
