@@ -1,12 +1,12 @@
 ---
-name: soundness-proof
-description: "Prove that a piece of code is sound — that inputs satisfying a stated precondition produce outputs satisfying a stated postcondition — and write the proof as a dev doc: definitions, then a sequence of numbered propositions whose every leaf step cites exactly the facts, definitions and code it rests on, in Lamport's structured-proof style. The orchestrator fixes the target commit, states the property and calibrates it against a bug the code actually had, then alternates prover subagents that write the proof with verifier subagents that check one step at a time and report every step that is false, non-obvious, hedged, or built on an undefined word. Use when: asked to prove that a pass, a function, or a subsystem is sound or correct; or to re-verify an existing proof after the code changed."
-argument-hint: "The processing to prove sound (a pass, a function, a module), and optionally the property to prove. If omitted, the skill asks."
+name: code-proof
+description: "Prove that a piece of code has a stated property — that inputs satisfying a precondition produce outputs satisfying a postcondition — and write the proof as a dev doc: definitions, then a sequence of numbered propositions whose every leaf step cites exactly the facts, definitions and code it rests on, in Lamport's structured-proof style. The orchestrator fixes the target commit, states the property and calibrates it against a bug the code actually had, then alternates prover subagents that write the proof with verifier subagents that check one step at a time and report every step that is false, non-obvious, hedged, or built on an undefined word. Use when: asked to prove that a pass, a function, or a subsystem is correct, sound, safe, or otherwise satisfies a property; or to re-verify an existing proof after the code changed."
+argument-hint: "The processing to prove something about (a pass, a function, a module), and optionally the property to prove. If omitted, the skill asks."
 ---
 
-# Soundness proof
+# Proving a property of code
 
-The deliverable is a document: **definitions, then a sequence of propositions, each with a proof**, ending in the theorem that the target is sound. It is written for a reader who checks it rather than one who is persuaded by it, so every inference step must be obvious from the items it cites alone.
+The deliverable is a document: **definitions, then a sequence of propositions, each with a proof**, ending in the theorem that the target has the property. It is written for a reader who checks it rather than one who is persuaded by it, so every inference step must be obvious from the items it cites alone.
 
 The work is done by two kinds of subagent under this orchestrator: **provers**, who write proofs, and **verifiers**, who check one step at a time and are forbidden to think. The document is finished when a fresh round of verifiers returns nothing.
 
@@ -131,11 +131,11 @@ Before the definitions can be written, one thing has to be settled: **what the p
 
 So the skeleton names the boundary, as assumptions with no discharger. One pattern recurs: the code under proof reads a **declared model** of the layer below — a table of what each primitive does, an interface's contract, an invariant a type promises — and reasons from that. The proof is then about the declared model, and one assumption says the declaration is faithful to what the layer actually does. That assumption is the proof's largest hole, and writing it down is what makes it a known hole rather than an assumed truth. Say beside it what does check it — a test, an audit, a runtime detector — so a reader can see what the proof stands on.
 
-The definitions also have to say what an **execution** is and what **state** it moves, because soundness is a statement about executions and is undefined without them. For a transformation, that means saying what a run of the input looks like, what a run of the output looks like, and what has to correspond between the two.
+The definitions also have to say what an **execution** is and what **state** it moves, because the property is a statement about executions and is undefined without them. For a transformation, that means saying what a run of the input looks like, what a run of the output looks like, and what has to correspond between the two.
 
 ## The document
 
-Under `dev-docs/YYYY-MM-DD-<target>-soundness/`, following the `devdoc` skill for everything the conventions below leave open — in particular, written in the implementers' language, self-contained for a reader who knows the project thinly and has never opened the code under proof, and readable front to back.
+Under `dev-docs/YYYY-MM-DD-<target>-<property>/`, following the `devdoc` skill for everything the conventions below leave open — in particular, written in the implementers' language, self-contained for a reader who knows the project thinly and has never opened the code under proof, and readable front to back.
 
 - `README.md` — target and commit, definitions, assumptions, the proposition list in dependency order, the calibration, the main theorem, and the verification status table.
 - `p<NN>-<slug>.md` — one file per proposition, or per tightly coupled group. One file has one owner, so two provers never edit one file.
@@ -143,8 +143,8 @@ Under `dev-docs/YYYY-MM-DD-<target>-soundness/`, following the `devdoc` skill fo
 `README.md` holds, in this order:
 
 1. **Target.** The commit hash the proof is about, in full, and the files and top-level symbols covered. A proof is about one state of the code and says which.
-2. **Definitions** `D1`, `D2`, … Every notion the propositions use, including the soundness property itself. A definition is precise enough that two readers cannot disagree about whether a given program satisfies it. Where the notion is already a Rust type or function, define it by naming that item and stating what it means, so the document stays self-contained.
-3. **Assumptions** `A1`, `A2`, … Facts the proof uses and does not prove. Each carries **who discharges it**: the caller (name the call site), an earlier pass (name it), a language rule (name it), or *nobody*. The soundness of the input is normally `A1` — a pass is proved to *preserve* soundness, and the composition of the passes is a separate proposition at the end that chains the preservations. An assumption discharged by nobody is a hole in the guarantee; it stays in the list, it appears in the main theorem's hypotheses, and the closing report names it.
+2. **Definitions** `D1`, `D2`, … Every notion the propositions use, including the property itself. A definition is precise enough that two readers cannot disagree about whether a given program satisfies it. Where the notion is already a Rust type or function, define it by naming that item and stating what it means, so the document stays self-contained.
+3. **Assumptions** `A1`, `A2`, … Facts the proof uses and does not prove. Each carries **who discharges it**: the caller (name the call site), an earlier pass (name it), a language rule (name it), or *nobody*. For a transformation, the input having the property is normally `A1` — the transformation is proved to *preserve* it, and the composition of the transformations is a separate proposition at the end that chains the preservations. An assumption discharged by nobody is a hole in the guarantee; it stays in the list, it appears in the main theorem's hypotheses, and the closing report names it.
 4. **Propositions.** Every `P<n>` **statement** (not its proof), in an order where each depends only on earlier ones, with the dependency edges written down. Typically one proposition per function or per loop body, stated as its contract.
 5. **Calibration** — see below.
 6. **Main theorem.** The last proposition, and the shape of the chain that reaches it.
@@ -170,7 +170,11 @@ Before any prover starts, check that the property is worth proving: **take a bug
 
 A property that the buggy code also satisfies is too weak, and a proof of it proves nothing while looking like it proves everything. Widen the property until the old bug violates it, and record in `README.md` which bug was used and which clause of the definition it breaks.
 
-This is the `bug-hunt` rule "show the detector fires before trusting its silence", applied to a specification: a soundness property is a detector, and its silence is worth exactly as much as any other detector's.
+This is the `bug-hunt` rule "show the detector fires before trusting its silence", applied to a specification: a stated property is a detector, and its silence is worth exactly as much as any other detector's.
+
+**A property with several clauses needs a bug per clause.** One bug that breaks two clauses at once leaves the rest uncalibrated, and an uncalibrated clause is where a missing clause hides: nothing ever tested whether the property notices that kind of wrongness, because nothing of that kind was ever tried against it. Where no past bug breaks a clause on its own, break it by hand — mutate the code so that only that clause fails, and check the property catches it.
+
+**Then write down what the property does not cover.** Beside the definition, name the class of wrong behaviour it permits. A transformation proved to preserve an invariant may still compute the wrong answer; a transformation proved to compute the right answer may still leak. A document that states only what it proves reads as though it proved more, and the reader who most needs the limit — the one deciding whether the proof lets them stop worrying — is the one who will not find it.
 
 Re-run the calibration whenever the property changes — above all when it changes because a proof would not close otherwise.
 
@@ -242,7 +246,7 @@ Three cases, and they are told apart before anything is written:
 
 1. **The proof is wrong.** The decomposition, or a step. Fix it and continue. This is the common case and needs no ceremony.
 2. **The statement is wrong** — the proposition needs a precondition nobody wrote down. The precondition is promoted to an `A<n>` **only with a named discharger**: the caller that establishes it, the earlier pass that guarantees it, the language rule that makes it impossible to violate. Adding an assumption nobody discharges does not close the proof; it moves the hole, and it must be reported as such rather than buried in the list.
-3. **The code is wrong.** The property genuinely fails for some input. Stop and report it as `bug-hunt` does: the input, the path it takes, the wrong output, and a fix proposal. Do not fix the code, and do not prove the pass sound "modulo that case".
+3. **The code is wrong.** The property genuinely fails for some input. Stop and report it as `bug-hunt` does: the input, the path it takes, the wrong output, and a fix proposal. Do not fix the code, and do not prove the property "modulo that case".
 
    The orchestrator stops with it. It refutes the claim first, the way `bug-hunt` verifies a candidate — can any input reach that path, is the result genuinely wrong, does it reproduce on the commit under proof — and then holds the layer: the propositions that depend on the stuck one are not dispatched, because their statements rest on a contract the code does not meet, and proofs written against a contract that is about to change are proofs written twice. Work that depends on nothing stuck carries on.
 
