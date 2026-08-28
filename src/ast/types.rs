@@ -768,7 +768,10 @@ impl TypeNode {
     pub fn as_tycon(&self) -> &TyCon {
         match &self.ty {
             Type::TyCon(tc) => tc,
-            _ => panic!("`as_tycon` called for a type that is not a type constructor: {:?}", self),
+            _ => panic!(
+                "`as_tycon` called for a type that is not a type constructor: {:?}",
+                self
+            ),
         }
     }
 
@@ -795,7 +798,10 @@ impl TypeNode {
             Type::TyVar(tv) => {
                 ret.ty = Type::TyVar(tv.set_kind(kind));
             }
-            _ => panic!("`set_tyvar_kind` called for a type that is not a type variable: {:?}", self),
+            _ => panic!(
+                "`set_tyvar_kind` called for a type that is not a type variable: {:?}",
+                self
+            ),
         }
         Arc::new(ret)
     }
@@ -806,7 +812,10 @@ impl TypeNode {
         let mut ret = self.clone();
         match &self.ty {
             Type::TyVar(_) => ret.ty = Type::TyVar(tv),
-            _ => panic!("`set_tyvar` called for a type that is not a type variable: {:?}", self),
+            _ => panic!(
+                "`set_tyvar` called for a type that is not a type variable: {:?}",
+                self
+            ),
         }
         Arc::new(ret)
     }
@@ -817,7 +826,10 @@ impl TypeNode {
         let mut ret = self.clone();
         match &self.ty {
             Type::TyApp(_, arg) => ret.ty = Type::TyApp(fun, arg.clone()),
-            _ => panic!("`set_tyapp_fun` called for a type that is not a type application: {:?}", self),
+            _ => panic!(
+                "`set_tyapp_fun` called for a type that is not a type application: {:?}",
+                self
+            ),
         }
         Arc::new(ret)
     }
@@ -828,7 +840,10 @@ impl TypeNode {
         let mut ret = self.clone();
         match &self.ty {
             Type::TyApp(fun, _) => ret.ty = Type::TyApp(fun.clone(), arg),
-            _ => panic!("`set_tyapp_arg` called for a type that is not a type application: {:?}", self),
+            _ => panic!(
+                "`set_tyapp_arg` called for a type that is not a type application: {:?}",
+                self
+            ),
         }
         Arc::new(ret)
     }
@@ -839,7 +854,10 @@ impl TypeNode {
         let mut ret = self.clone();
         match &self.ty {
             Type::AssocTy(_, args) => ret.ty = Type::AssocTy(name, args.clone()),
-            _ => panic!("`set_assocty_name` called for a type that is not an associated type: {:?}", self),
+            _ => panic!(
+                "`set_assocty_name` called for a type that is not an associated type: {:?}",
+                self
+            ),
         }
         Arc::new(ret)
     }
@@ -850,7 +868,10 @@ impl TypeNode {
         let mut ret = self.clone();
         match &self.ty {
             Type::AssocTy(assoc_ty, _) => ret.ty = Type::AssocTy(assoc_ty.clone(), args),
-            _ => panic!("`set_assocty_args` called for a type that is not an associated type: {:?}", self),
+            _ => panic!(
+                "`set_assocty_args` called for a type that is not an associated type: {:?}",
+                self
+            ),
         }
         Arc::new(ret)
     }
@@ -890,7 +911,10 @@ impl TypeNode {
         let mut ret = self.clone();
         match &self.ty {
             Type::TyCon(_) => ret.ty = Type::TyCon(tc),
-            _ => panic!("`set_tycon_tc` called for a type that is not a type constructor: {:?}", self),
+            _ => panic!(
+                "`set_tycon_tc` called for a type that is not a type constructor: {:?}",
+                self
+            ),
         }
         Arc::new(ret)
     }

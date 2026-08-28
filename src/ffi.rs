@@ -361,7 +361,8 @@ pub fn unpassable_variadic_type_msg(ty: &Arc<TypeNode>) -> Option<String> {
     }
     if ty.is_string() {
         return Some(
-            msg_head + ". Use `Std::String::borrow_c_str` to get a `Ptr` to its bytes, and pass that.",
+            msg_head
+                + ". Use `Std::String::borrow_c_str` to get a `Ptr` to its bytes, and pass that.",
         );
     }
     Some(msg_head + ". An argument passing through `...` is an integer (`I8` to `I64`, `U8` to `U64`), a floating point number (`F32`, `F64`), or a pointer (`Ptr`). The C types in `Std::FFI` such as `CInt` are aliases of these. To pass a boxed value, take a `Ptr` to it with `Std::FFI::boxed_to_retained_ptr` or `borrow_boxed`.")
