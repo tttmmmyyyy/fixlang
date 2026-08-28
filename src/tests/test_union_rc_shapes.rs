@@ -644,4 +644,44 @@ main = (
             Configuration::develop_mode(),
         );
     }
+
+    /// CALIBRATION PROBE: the shape p11-origin-soundness.md claims breaks (N) -- a union payload
+    /// built from a match binding whose arms disagree and a second producer, read out after the
+    /// union is released.
+    const CE_SOURCE: &str = r#"
+module Main;
+
+type Node = box struct { n : I64 };
+type Pair = unbox struct { fst : Node, snd : Node };
+type Choice = unbox union { nothing : (), both : Pair };
+
+// Reads both arguments and consumes neither. The recursion is not in tail position, so a call of
+// it can be routed to the borrow version.
+peek : Choice -> Array I64 -> I64 -> I64;
+peek = |c, a, k| (
+    if k == 0 { (if c.is_both { 1 } else { 0 }) + a.@(0) };
+    peek(c, a, k - 1) + 1
+);
+
+probe : I64 -> I64;
+probe = |k| (
+    let m = if k % 2 == 0 { Node { n : k } } else { Node { n : k + 100 } };
+    let w = Node { n : k + 1000 };
+    let u = Choice::both(Pair { fst : m, snd : w });
+    let arr = [k, k + 1];
+    let seen = peek(u, arr, 2);
+    seen + m.@n + arr.@(1)
+);
+
+main : IO ();
+main = (
+    assert_eq(|_|"probe", Iterator::range(0, 6).map(probe).sum, 369);;
+    pure()
+);
+"#;
+
+    #[test]
+    pub fn test_ce_shape() {
+        test_source(CE_SOURCE, Configuration::develop_mode());
+    }
 }

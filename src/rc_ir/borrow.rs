@@ -1099,6 +1099,14 @@ impl<'a> CancelAnalysis<'a> {
     ) -> PendingRetains {
         match node.expr.as_ref() {
             RcExpr::Retain(v, path, _, k) => {
+                if self.develop_mode {
+                    let _disabled = || crate::rc_ir::ownership::probe_acted_keys_cover_references(
+                        self.vars,
+                        self.type_env,
+                        v,
+                        path,
+                    );
+                }
                 let retain = node_id(node);
                 self.all_retains.push(retain);
                 self.un_bump_releases.entry(retain).or_default();
@@ -1125,6 +1133,12 @@ impl<'a> CancelAnalysis<'a> {
                 let un_bumped = self.acted_references(v, path);
                 if self.develop_mode {
                     check_one_key_per_object(&pending, &key, &un_bumped, v, path);
+                    let _disabled = || crate::rc_ir::ownership::probe_acted_keys_cover_references(
+                        self.vars,
+                        self.type_env,
+                        v,
+                        path,
+                    );
                 }
                 match un_bump(&mut pending, &key, &un_bumped) {
                     UnBump::InBracket(retain) => self

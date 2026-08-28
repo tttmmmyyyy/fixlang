@@ -914,6 +914,58 @@ fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPa
     (root.clone(), truncated)
 }
 
+/// PROBE: assert that every object a reference-count node acts on is named by `acted_unit_keys`.
+///
+/// `cancel` marks a pending retain load-bearing by calling `consume_unit` for each key
+/// `acted_unit_keys` reports. A reference whose object is not among those keys is disposed without
+/// marking the retain that made it, so the retain pairs with a later release and both are removed.
+pub(crate) fn probe_acted_keys_cover_references(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    v: &RcVar,
+    path: &FieldPath,
+) {
+    let keys: Set<VarPath> = acted_unit_keys(vars, type_env, &v.name, path)
+        .into_iter()
+        .collect();
+    let refs = acted_references(vars, type_env, v, path);
+    for object in refs.0.keys() {
+        let key = unit_of(vars, type_env, object);
+        if keys.contains(&key) {
+            continue;
+        }
+        // A leaf of a union variant the value does not hold names no reference: its declaration is
+        // the empty set, so it resolves to the value itself. Those are the names this node acts on
+        // statically and not at run time, and they root at the node's own variable.
+        if object.0 == v.name {
+            continue;
+        }
+        let leaves: Vec<String> = boxed_leaf_paths(&v.ty, type_env)
+            .into_iter()
+            .filter(|l| l.starts_with(path))
+            .map(|l| {
+                let o = origin(vars, type_env, &v.name, &l);
+                format!("{:?} -> {:?}", l, o)
+            })
+            .collect();
+        panic!(
+            "PROBE(N)\n  node      : `{}`{:?} : {}\n  origin    : {:?}\n               acted_keys: {:?}\n  missing   : `{}`{:?} (unit `{}`{:?})\n  leaves    : {:#?}",
+            v.name.to_string(),
+            path,
+            v.ty.to_string(),
+            origin(vars, type_env, &v.name, path),
+            keys.iter()
+                .map(|k| format!("{}{:?}", k.0.to_string(), k.1))
+                .collect::<Vec<_>>(),
+            object.0.to_string(),
+            object.1,
+            key.0.to_string(),
+            key.1,
+            leaves,
+        );
+    }
+}
+
 /// The owned parameter/capture units of every function: each version's units minus the ones it
 /// borrows (`RcFunc::borrowed_units`, the annotation borrow-ification writes).
 pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {
