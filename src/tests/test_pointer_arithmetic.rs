@@ -42,7 +42,7 @@ pub fn test_every_pointer_into_an_object_is_computed_inside_it() {
     let ir = generated_llvm_ir(ARRAY_ACCESS_SOURCE, "none");
     // A `getelementptr` instruction is one the program computes an address with. The same syntax
     // also appears as a constant expression that walks off a null pointer to name the size of a
-    // type, which is a number rather than an address and stays outside every allocation.
+    // type; that expression yields a number, and it lies outside every allocation.
     let geps = ir
         .lines()
         .map(|line| line.trim())

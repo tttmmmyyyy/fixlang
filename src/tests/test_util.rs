@@ -300,8 +300,8 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
 /// The LLVM IR the code generator wrote for `source`, compiled at `opt_level`, before the LLVM pass
 /// pipeline ran over it. Fails the test unless the build succeeds.
 ///
-/// Use this for a property of the code the compiler emits. The optimized module holds what LLVM
-/// itself decided as well, which a test about code generation reads as the compiler's own doing.
+/// Use this for a property of the code the compiler emits. The optimized module also holds code
+/// LLVM itself introduced, which such a test would take for the compiler's own work.
 pub fn generated_llvm_ir(source: &str, opt_level: &str) -> String {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();

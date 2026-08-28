@@ -653,9 +653,11 @@ pub const OUT_POINTER_BUFFER_NAME: &str = "out@call_lambda";
 /// buffer, which outlives this frame and whose contents that ancestor takes.
 #[derive(Clone, Copy)]
 enum OutPointer<'c> {
-    /// A buffer this function allocated in its entry block, laid out as `buf_ty`.
+    /// A buffer this function allocated in its entry block.
     Own {
+        /// The address of the buffer.
         ptr: PointerValue<'c>,
+        /// The layout the result's parts are written in (see `out_pointer_buffer_type`).
         buf_ty: StructType<'c>,
     },
     /// This function's own out-pointer, forwarded to a call in tail position.
@@ -725,8 +727,8 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Emit the lifetime intrinsic `intrinsic_name` over the bytes a value of type `ty` occupies at
     /// `ptr`.
     ///
-    /// The marker covers what a store of the value writes, which is the store size rather than the
-    /// `sizeof` this module reports: the two differ for a type whose bits do not fill whole bytes.
+    /// The marker covers what a store of the value writes, which is its store size. For a type
+    /// whose bits do not fill whole bytes, that store size exceeds the size `sizeof` reports.
     fn build_lifetime_marker<T: BasicType<'c>>(
         &self,
         intrinsic_name: &str,
@@ -1490,11 +1492,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         Some(self.unpack_return(call_result, ret_ty))
     }
 
-    // The pointer to pass as a call's out-pointer argument, and which frame the buffer it names
-    // belongs to. In tail position it is this function's own out-pointer: a tail call returns what
-    // its caller returns, so the two share a return type and hence this ABI, and the buffer belongs
-    // to an ancestor frame that outlives the frame being replaced. Elsewhere it is a fresh buffer in
-    // this function's entry block, which the caller reads back with `load_out_pointer_buffer`.
+    /// The pointer to pass as a call's out-pointer argument, and which frame the buffer it names
+    /// belongs to. In tail position it is this function's own out-pointer: a tail call returns what
+    /// its caller returns, so the two share a return type and hence this ABI, and the buffer belongs
+    /// to an ancestor frame that outlives the frame being replaced. Elsewhere it is a fresh buffer
+    /// in this function's entry block, which the caller reads back with `load_out_pointer_buffer`.
     fn build_out_pointer_argument(
         &mut self,
         ret_ty: &Arc<TypeNode>,
@@ -1527,8 +1529,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         func.get_nth_param(0).unwrap().into_pointer_value()
     }
 
-    // Read back the parts a callee wrote through the out-pointer, as the object of type `ret_ty`
-    // it returned. `buf_ty` is the layout the parts were written in (see `out_pointer_buffer_type`).
+    /// Read back the parts a callee wrote through the out-pointer, as the object of type `ret_ty`
+    /// it returned. `buf_ty` is the layout the parts were written in (see
+    /// `out_pointer_buffer_type`).
     fn load_out_pointer_buffer(
         &mut self,
         out_ptr: PointerValue<'c>,

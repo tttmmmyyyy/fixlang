@@ -1890,9 +1890,9 @@ fn build_abort_if<'c, 'm>(
 /// The address of the slot at `idx` in an array's element buffer, whose elements occupy
 /// `elem_basic_ty` as they are embedded.
 ///
-/// The address is computed inside the buffer's allocation, and the emitted code says so. An address
-/// LLVM cannot place inside one allocation is one whose arithmetic it has to keep, and one whose
-/// index it cannot bound where a loop's check reads it.
+/// The address is computed inside the buffer's allocation, and the emitted code says so. Saying so
+/// lets LLVM fold the address arithmetic into an addressing mode, and bound the index where a
+/// loop's bounds check reads it.
 ///
 /// `idx` names a slot of the buffer, or the one past its last. Every caller establishes that: an
 /// index a program supplies is bounds-checked before it arrives here, and one the compiler counts

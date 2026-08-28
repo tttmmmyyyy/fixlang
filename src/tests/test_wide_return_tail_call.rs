@@ -481,8 +481,8 @@ fn test_destructor_with_wide_resource_is_memory_safe() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A result too wide for the return registers travels through a buffer the caller allocates in its
-// entry block, which it passes once however many times it reaches the call.
+/// A result too wide for the return registers travels through a buffer the caller allocates in its
+/// entry block, which it passes once however many times it reaches the call.
 const WIDE_RESULT_SOURCE: &str = r#"
     module Main;
 
@@ -493,7 +493,7 @@ const WIDE_RESULT_SOURCE: &str = r#"
     mk_arrays = |n| (Array::fill(n, 1), Array::fill(n + 1, 2));
 
     // A wide result computed by a call in tail position, which is handed the out-pointer this
-    // function was given rather than a buffer of its own.
+    // function was given.
     forward : I64 -> (Array I64, Array I64);
     forward = |n| mk_arrays(n);
 
