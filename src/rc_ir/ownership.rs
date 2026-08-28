@@ -860,6 +860,15 @@ impl References {
         }
     }
 
+    /// Whether these and `other` name an object in common.
+    ///
+    /// Two operations that name one object are two operations on one reference count, so a reader
+    /// pairing brackets has to account for both. Where they key to different units, the pairing has
+    /// lost track of which object it is counting.
+    pub(crate) fn share_an_object(&self, other: &References) -> bool {
+        self.0.keys().any(|object| other.0.contains_key(object))
+    }
+
     /// Whether the operation acts on no reference at all.
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
