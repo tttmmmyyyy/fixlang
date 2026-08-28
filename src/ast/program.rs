@@ -359,29 +359,12 @@ impl GlobalValue {
     /// where the declaration was written in one, and the `document` field otherwise. Documentation
     /// with no text in it is answered as `None`.
     pub fn get_document(&self) -> Option<String> {
-        // Try to get document from the source code.
-        let docs = self
-            .decl_src
+        self.decl_src
             .as_ref()
-            .and_then(|src| src.get_document().ok());
-
-        // If the documentation is empty, treat it as None.
-        let docs = match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
-        };
-
-        // If the document is not available in the source code, use the document field.
-        let docs = match docs {
-            Some(_) => docs,
-            None => self.document.clone(),
-        };
-
-        // Again, if the documentation is empty, treat it as None.
-        match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
-        }
+            .and_then(|src| src.get_document().ok())
+            .filter(|docs| !docs.is_empty())
+            .or_else(|| self.document.clone())
+            .filter(|docs| !docs.is_empty())
     }
 
     /// The smallest node of this value covering `pos`: a node of the defining expression, a node of

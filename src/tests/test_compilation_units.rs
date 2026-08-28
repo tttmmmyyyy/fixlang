@@ -317,6 +317,18 @@ main = println(Worker::report({}));
     .expect("Failed to write the main module");
 }
 
+/// Write `cu_size` into the `[build]` section of the project file in `dir`, which is how a project
+/// says how many entries go into one compilation unit.
+fn set_cu_size_in_project_file(dir: &Path, cu_size: usize) {
+    let project_file = dir.join("fixproj.toml");
+    let text = fs::read_to_string(&project_file).expect("Failed to read the project file");
+    fs::write(
+        &project_file,
+        text.replace("[build]\n", &format!("[build]\ncu_size = {}\n", cu_size)),
+    )
+    .expect("Failed to write the project file");
+}
+
 /// Build the project in `dir` at `-O max`, with `cu_size` entries to a compilation unit, and
 /// return how many compilation units the build generated and how many it took from the cache.
 ///
@@ -413,13 +425,7 @@ fn test_the_project_file_sets_the_unit_size_and_the_option_overrides_it() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();
     write_two_module_project(dir, 120);
-    let project_file = dir.join("fixproj.toml");
-    let text = fs::read_to_string(&project_file).expect("Failed to read the project file");
-    fs::write(
-        &project_file,
-        text.replace("[build]\n", "[build]\ncu_size = 2\n"),
-    )
-    .expect("Failed to write the project file");
+    set_cu_size_in_project_file(dir, 2);
 
     // What the project file asks for, with no `--cu-size` on the command line.
     let build = fix_command_at_opt_level("build", "max")
@@ -445,12 +451,7 @@ fn test_the_project_file_sets_the_unit_size_and_the_option_overrides_it() {
 
     // What the option asks for, over what the project file says.
     write_two_module_project(dir, 120);
-    let text = fs::read_to_string(&project_file).expect("Failed to read the project file");
-    fs::write(
-        &project_file,
-        text.replace("[build]\n", "[build]\ncu_size = 2\n"),
-    )
-    .expect("Failed to write the project file");
+    set_cu_size_in_project_file(dir, 2);
     let (generated, cached) = build_at_max_in(dir, "inf");
     assert_eq!(
         generated + cached,
