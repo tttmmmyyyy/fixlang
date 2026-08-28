@@ -173,7 +173,8 @@ Require of it:
 - It reads the code it cites. A `CODE` citation is a claim about the source, and a prover that cites a symbol it did not open is the failure mode this whole procedure exists to catch.
 - It writes only its own file.
 - It does not modify the code under proof, and it does not modify `README.md` — a definition or assumption it finds it needs is **reported to the orchestrator**, not added. Definitions are global, and a prover that adds one silently breaks the propositions proved under the old set.
-- When it cannot prove its proposition, it says so, with the step it got stuck at and which of the three cases below it believes it is in. A prover that cannot prove something and writes a plausible paragraph instead has done the worst available thing.
+- **It stops at a bug.** The moment a step will not close because the code does not do what the proposition needs, the prover returns — right then, with the step it got stuck at, the input that breaks it, and which of the three cases below it believes it is in. It does not prove the rest of the file first, it does not prove the proposition "modulo that case", and it does not add an assumption to route around it. A bug is the most valuable thing a prover can return, and it is worth much less buried under a proof of everything else, written after the writer already knew the subject was broken.
+- A prover that cannot prove something and writes a plausible paragraph instead has done the worst available thing.
 
 ## Briefing a verifier
 
@@ -214,6 +215,8 @@ Three cases, and they are told apart before anything is written:
 1. **The proof is wrong.** The decomposition, or a step. Fix it and continue. This is the common case and needs no ceremony.
 2. **The statement is wrong** — the proposition needs a precondition nobody wrote down. The precondition is promoted to an `A<n>` **only with a named discharger**: the caller that establishes it, the earlier pass that guarantees it, the language rule that makes it impossible to violate. Adding an assumption nobody discharges does not close the proof; it moves the hole, and it must be reported as such rather than buried in the list.
 3. **The code is wrong.** The property genuinely fails for some input. Stop and report it as `bug-hunt` does: the input, the path it takes, the wrong output, and a fix proposal. Do not fix the code, and do not prove the pass sound "modulo that case".
+
+   The orchestrator stops with it. It refutes the claim first, the way `bug-hunt` verifies a candidate — can any input reach that path, is the result genuinely wrong, does it reproduce on the commit under proof — and then holds the layer: the propositions that depend on the stuck one are not dispatched, because their statements rest on a contract the code does not meet, and proofs written against a contract that is about to change are proofs written twice. Work that depends on nothing stuck carries on.
 
 The rule that binds all three: **never weaken the property to make the proof close.** A property is weakened only deliberately, and when it is, the calibration is re-run; if the old bug now satisfies the weakened property, the weakening is rejected and the case is (2) or (3) instead.
 
