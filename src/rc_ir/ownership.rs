@@ -343,10 +343,11 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// over; a leaf produced here rather than projected names this value itself. A leaf that records
 /// several sources holds one per path it can be reached by, and each of them names an object.
 ///
-/// The answer is exact where the leaves agree on one unit. Where they reach several, or where one
-/// of them is a value produced here rather than a projection, every object the value may denote is
-/// reported together, so that a reader whose answer has to hold on all paths — whether this
-/// version owns the value — sees them all. `None` where no leaf names an object.
+/// Leaves that all reach one origin make this value an alias of it, so the answer is that origin
+/// whole, identity included — the same answer a leaf that is a plain projection gets. Where the
+/// leaves reach several origins, every object the value may denote is reported together under this
+/// value's own name, so that a reader whose answer has to hold on all paths — whether this version
+/// owns the value — sees them all. `None` where no leaf names an object.
 ///
 /// # Arguments
 /// * `here` - the value's own identity, which is what it denotes on any path the leaves leave open.
@@ -354,8 +355,8 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// # Examples
 /// Asked for `unbox union { wait : Guard, pair : (Guard, Guard), mark : I64 }` itself, read out of one
 /// borrowed node, the `wait` leaf is `⊥` and both `pair` leaves project out of that node, so the
-/// answer is `Exactly` the node's object. Give one of those two leaves a second operand and the
-/// answer becomes a `Join` naming both.
+/// answer is that node's origin. Give one of those two leaves a second operand and the answer
+/// becomes a `Join` naming both under this value's name.
 fn origin_from_leaves_under(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -381,18 +382,29 @@ fn origin_from_leaves_under(
             }
         }
     }
-    let mut candidates: Set<VarPath> = Set::default();
+    // The origins the leaves reach: one per operand unit, plus this value itself where a leaf was
+    // produced here rather than projected.
+    let mut reached: Vec<Origin> = operand_units
+        .into_iter()
+        .map(|(j, unit)| origin(vars, type_env, &args[j].name, &unit))
+        .collect();
     if produced_here {
-        candidates.insert(here.clone());
+        reached.push(Origin::Exactly(here.clone()));
     }
-    for (j, unit) in operand_units {
-        for p in origin(vars, type_env, &args[j].name, &unit).candidates() {
-            candidates.insert(p.clone());
-        }
+    let first = reached.first()?;
+    // Leaves that all reach one origin make this value that origin: it holds those references and
+    // no others, so it denotes what the origin denotes. Answering with the origin whole is what
+    // carries the identity along the alias chain — rebuilding it under `here` would give one object
+    // a second name, and a retain of the operand and a release of this value would key differently
+    // and never pair.
+    if reached.iter().all(|reached_origin| reached_origin == first) {
+        return Some(first.clone());
     }
-    if candidates.is_empty() {
-        return None;
-    }
+    let candidates = reached
+        .iter()
+        .flat_map(|reached_origin| reached_origin.candidates())
+        .cloned()
+        .collect();
     Some(Origin::of_candidates(candidates, here))
 }
 
@@ -957,8 +969,8 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 #[cfg(test)]
 mod tests {
     use super::{
-        acted_references, as_arg_projection, held_field_type, origin, rc_units, truncate_to_unit,
-        unit_step, Binding, Origin, UnitStep, VarTable,
+        acted_references, as_arg_projection, held_field_type, origin, origin_from_leaves_under,
+        rc_units, truncate_to_unit, unit_step, Binding, Origin, UnitStep, VarTable,
     };
     use crate::ast::name::FullName;
     use crate::ast::program::TypeEnv;
@@ -976,7 +988,7 @@ mod tests {
     use crate::object::{ty_to_object_ty, ObjectFieldType};
     use crate::rc_ir::ast::{FieldPath, RcVar, VarPath};
     use crate::rc_ir::leaf_map::boxed_leaf_paths;
-    use crate::rc_ir::provenance::{sole_origin, LeafOrigin};
+    use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
     use std::sync::Arc;
 
     /// The type `Test::<name>`, of a declaration these tests make themselves. It takes no type
@@ -1339,6 +1351,82 @@ mod tests {
             (var("n"), Binding::Move(var("m"))),
         ]);
         assert_eq!(origin_of(&vars, "n").identity(), &at("m"));
+    }
+
+    /// A value read out of one unit of a container is that unit: its origin is the container's,
+    /// identity included, so reading the union field of a struct a match binding joins names the
+    /// binding.
+    ///
+    /// The identity has to survive an alias chain here just as it does across a move-bind. Naming
+    /// the value read out instead would key a retain of the struct and a release of the union to two
+    /// different objects, the retain would pair with a later release of the struct rather than with
+    /// that one, and cancelling that pair would free the payload while the union still holds it.
+    #[test]
+    fn a_unit_read_out_of_a_container_keeps_the_containers_origin() {
+        let type_env = type_env();
+        let nested = |name: &str| typed_var(name, test_ty("Nested"));
+        let vars = table(vec![
+            (nested("p"), Binding::Producer),
+            (nested("q"), Binding::Producer),
+            (nested("m"), Binding::Join(vec![nested("p"), nested("q")])),
+        ]);
+        // The read's result is the union field of `m`, so each of its leaves comes from that field.
+        let read_union_field = Provenance::build_shape(&test_ty("Choice"), &type_env, &|leaf| {
+            let mut in_container = vec![0];
+            in_container.extend_from_slice(leaf);
+            sole_origin(LeafOrigin::Arg(0, in_container))
+        });
+        let read = origin_from_leaves_under(
+            &vars,
+            &type_env,
+            &read_union_field,
+            &[nested("m")],
+            &[],
+            &at("read"),
+        );
+        let field_of_m = origin(&vars, &type_env, &FullName::local("m"), &[0]);
+        assert_eq!(field_of_m.identity(), &(FullName::local("m"), vec![0]));
+        assert_eq!(read, Some(field_of_m));
+    }
+
+    /// A value whose leaves reach several origins is a join of them under this value's own name:
+    /// the leaves disagree about which object the value is, so no operand's name stands for it.
+    #[test]
+    fn a_value_whose_leaves_disagree_is_a_join_under_its_own_name() {
+        let type_env = type_env();
+        let twins = |name: &str| typed_var(name, test_ty("Twins"));
+        let vars = table(vec![
+            (twins("a"), Binding::Producer),
+            (twins("b"), Binding::Producer),
+        ]);
+        // The first field comes from `a` and the second from `b`, so the value as a whole is neither.
+        let one_field_from_each = Provenance::build_shape(&test_ty("Twins"), &type_env, &|leaf| {
+            let from_a = leaf.first() == Some(&0);
+            sole_origin(LeafOrigin::Arg(if from_a { 0 } else { 1 }, leaf.clone()))
+        });
+        let joined = origin_from_leaves_under(
+            &vars,
+            &type_env,
+            &one_field_from_each,
+            &[twins("a"), twins("b")],
+            &[],
+            &at("mixed"),
+        )
+        .expect("both leaves name an object");
+        assert_eq!(joined.identity(), &at("mixed"));
+        assert_eq!(
+            joined
+                .candidates()
+                .into_iter()
+                .cloned()
+                .collect::<Set<VarPath>>(),
+            vec![
+                (FullName::local("a"), vec![0]),
+                (FullName::local("b"), vec![1])
+            ]
+            .into_iter()
+            .collect::<Set<VarPath>>()
+        );
     }
 
     /// A retain of an unboxed union acts on every reference its payload holds, while a release of

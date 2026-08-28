@@ -888,6 +888,49 @@ enum UnBump {
     NoBracket,
 }
 
+/// Check that a release un-bumping exactly what a pending retain bumped keys to that retain: two
+/// operations that act on the same references act on the same object, and one object is counted
+/// under one unit key.
+///
+/// The key is read off the object's `origin`, so two keys here mean an alias chain lost the
+/// object's identity along the way. The pairing then walks past this release, the retain closes
+/// against a later release of the value it was taken from, and cancelling that pair leaves this
+/// release to free an object still in use — which nothing downstream can tell from a correct
+/// cancellation.
+///
+/// Equality of the references is what makes the two operations comparable. A retain of an unboxed
+/// union bumps every reference its payload holds, and a release of one of those payload values
+/// un-bumps one of them under that value's own key: two keys, one shared object, and both namings
+/// right. Such a release un-bumps a strict subset, which is the case `un_bump` reports as
+/// `OutsideBracket`, so only the equal case is a disagreement.
+fn check_one_key_per_object(
+    pending: &PendingRetains,
+    key: &VarPath,
+    un_bumped: &References,
+    v: &RcVar,
+    path: &FieldPath,
+) {
+    for (pending_key, stack) in pending {
+        if pending_key == key {
+            continue;
+        }
+        for retain in stack {
+            assert!(
+                &retain.outstanding != un_bumped,
+                "the release of `{}`{:?} keys to `{}`{:?} and un-bumps {:?}, which is exactly what \
+                 a retain pending under `{}`{:?} bumped: one object, two keys",
+                v.name.to_string(),
+                path,
+                key.0.to_string(),
+                key.1,
+                un_bumped,
+                pending_key.0.to_string(),
+                pending_key.1,
+            );
+        }
+    }
+}
+
 /// Take a release's references off the innermost retain pending for `key`, where that retain bumped
 /// all of them. A retain left with nothing outstanding is un-bumped whole, and stops being pending.
 fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) -> UnBump {
@@ -930,7 +973,7 @@ fn node_id(node: &RcExprNode) -> NodeId {
 /// value is consumed. Cancelling it (and the releases that un-bump it) keeps the value `Unique` for
 /// the uniqueness analysis. Each call's consume sites are decided by the parameter/capture units the
 /// functions own — the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
-pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
+pub fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
     let cancel_body = |vars: &VarTable, body: &RcExprNode| {
         let mut analysis = CancelAnalysis {
@@ -938,6 +981,7 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             prog,
             owned_units: &owned_units,
             type_env,
+            develop_mode,
             needed_retains: Set::default(),
             un_bump_releases: Map::default(),
             all_retains: vec![],
@@ -989,6 +1033,10 @@ struct CancelAnalysis<'a> {
     owned_units: &'a Set<VarPath>,
     /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
+    /// Whether to check that a retain and the release un-bumping it key to one object
+    /// (`check_one_key_per_object`). Stating that invariant wrongly aborts a build that should
+    /// succeed, so it is checked where the test suite runs it rather than in a user's build.
+    develop_mode: bool,
     /// Retains that are load-bearing on some path, so they cannot be cancelled.
     needed_retains: Set<NodeId>,
     /// The releases each retain is un-bumped by; they are deleted together with the retain.
@@ -1075,6 +1123,9 @@ impl<'a> CancelAnalysis<'a> {
                     }
                 }
                 let un_bumped = self.acted_references(v, path);
+                if self.develop_mode {
+                    check_one_key_per_object(&pending, &key, &un_bumped, v, path);
+                }
                 match un_bump(&mut pending, &key, &un_bumped) {
                     UnBump::InBracket(retain) => self
                         .un_bump_releases
