@@ -483,27 +483,27 @@ fn test_destructor_with_wide_resource_is_memory_safe() {
 
 /// A result too wide for the return registers travels through a buffer the caller allocates in its
 /// entry block, which it passes once however many times it reaches the call.
+///
+/// Each result is three arrays, which is nine scalar leaves — a storage pointer, a size and a
+/// capacity each — and more than the return registers of any target in the table, so the result
+/// travels through a buffer wherever the suite runs.
 const WIDE_RESULT_SOURCE: &str = r#"
     module Main;
 
-    mk4 : I64 -> (I64, I64, I64, I64);
-    mk4 = |n| (n, n + 1, n + 2, n + 3);
-
-    mk_arrays : I64 -> (Array I64, Array I64);
-    mk_arrays = |n| (Array::fill(n, 1), Array::fill(n + 1, 2));
+    triple : I64 -> (Array I64, Array I64, Array I64);
+    triple = |n| (Array::fill(n, 1), Array::fill(n + 1, 2), Array::fill(n + 2, 3));
 
     // A wide result computed by a call in tail position, which is handed the out-pointer this
-    // function was given.
-    forward : I64 -> (Array I64, Array I64);
-    forward = |n| mk_arrays(n);
+    // function was given rather than a buffer of its own.
+    forward : I64 -> (Array I64, Array I64, Array I64);
+    forward = |n| triple(n);
 
     main : IO ();
     main = (
         let total = Iterator::range(0, 4).fold(0, |n, acc|
-            let (a, b, c, d) = mk4(n);
-            let (xs, ys) = mk_arrays(n + 1);
-            let (ps, qs) = forward(n + 2);
-            acc + a + b + c + d + xs.@size + ys.@size + ps.@size + qs.@size
+            let (xs, ys, zs) = triple(n + 1);
+            let (ps, qs, rs) = forward(n + 2);
+            acc + xs.@size + ys.@size + zs.@size + ps.@size + qs.@size + rs.@size
         );
         println $ total.to_string
     );
