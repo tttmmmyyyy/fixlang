@@ -415,11 +415,8 @@ fn test_the_project_file_sets_the_unit_size_and_the_option_overrides_it() {
     write_two_module_project(dir, 120);
     let project_file = dir.join("fixproj.toml");
     let text = fs::read_to_string(&project_file).expect("Failed to read the project file");
-    fs::write(
-        &project_file,
-        text.replace("[build]\n", "[build]\ncu_size = 2\n"),
-    )
-    .expect("Failed to write the project file");
+    fs::write(&project_file, text.replace("[build]\n", "[build]\ncu_size = 2\n"))
+        .expect("Failed to write the project file");
 
     // What the project file asks for, with no `--cu-size` on the command line.
     let build = fix_command_at_opt_level("build", "max")
@@ -446,11 +443,8 @@ fn test_the_project_file_sets_the_unit_size_and_the_option_overrides_it() {
     // What the option asks for, over what the project file says.
     write_two_module_project(dir, 120);
     let text = fs::read_to_string(&project_file).expect("Failed to read the project file");
-    fs::write(
-        &project_file,
-        text.replace("[build]\n", "[build]\ncu_size = 2\n"),
-    )
-    .expect("Failed to write the project file");
+    fs::write(&project_file, text.replace("[build]\n", "[build]\ncu_size = 2\n"))
+        .expect("Failed to write the project file");
     let (generated, cached) = build_at_max_in(dir, "inf");
     assert_eq!(
         generated + cached,

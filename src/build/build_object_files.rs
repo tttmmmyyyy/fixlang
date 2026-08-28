@@ -6,8 +6,10 @@ use crate::{
         program::{Program, Symbol, TypeEnv},
         types::TypeNode,
     },
-    build::divide_program::{
-        divide_among_units, divide_into_units, generated_code_hash, DividedProgram,
+    build::{
+        divide_program::{
+            divide_among_units, divide_into_units, generated_code_hash, DividedProgram,
+        },
     },
     configuration::{Configuration, OutputFileType},
     constants::{
