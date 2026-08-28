@@ -314,8 +314,6 @@ impl GlobalValue {
         &mut self,
         ctx: &mut NameResolutionContext,
     ) -> Result<(), Errors> {
-        // Currently, global values generated from member implementations do not come here.
-        // This is because name resolution is performed on TraitEnv, and then global values are generated from trait member implementations.
         assert!(matches!(self.expr, SymbolExpr::Simple(_)));
         self.scm = self.scm.resolve_namespace(ctx)?;
         Ok(())
@@ -359,29 +357,12 @@ impl GlobalValue {
     /// where the declaration was written in one, and the `document` field otherwise. Documentation
     /// with no text in it is answered as `None`.
     pub fn get_document(&self) -> Option<String> {
-        // Try to get document from the source code.
-        let docs = self
-            .decl_src
+        self.decl_src
             .as_ref()
-            .and_then(|src| src.get_document().ok());
-
-        // If the documentation is empty, treat it as None.
-        let docs = match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
-        };
-
-        // If the document is not available in the source code, use the document field.
-        let docs = match docs {
-            Some(_) => docs,
-            None => self.document.clone(),
-        };
-
-        // Again, if the documentation is empty, treat it as None.
-        match docs {
-            Some(docs) if docs.is_empty() => None,
-            _ => docs,
-        }
+            .and_then(|src| src.get_document().ok())
+            .filter(|docs| !docs.is_empty())
+            .or_else(|| self.document.clone())
+            .filter(|docs| !docs.is_empty())
     }
 
     /// The smallest node of this value covering `pos`: a node of the defining expression, a node of
@@ -396,9 +377,8 @@ impl GlobalValue {
         if node.is_some() {
             return node;
         }
-        // Walk the syntactic scheme if available so that type aliases written
-        // in source resolve back to the alias name (rather than the expanded
-        // type, which is what `scm` carries).
+        // `syn_scm` holds the scheme as the source writes it, so a type alias written there is
+        // found under the name of the alias. `scm` holds the type the alias stands for.
         let scm_for_lookup = self.syn_scm.as_ref().unwrap_or(&self.scm);
         let node = scm_for_lookup.find_node_at(pos);
         if node.is_some() {
@@ -815,7 +795,9 @@ impl Program {
         self.mod_to_import_stmts.contains_key(mod_name)
     }
 
-    // Add import statements.
+    /// Records each statement of `imports` under the module importing it, rejecting a module that
+    /// imports itself and letting an explicit `Std` import take the place of the implicit one. Every
+    /// statement is looked at, so a rejected one leaves the rest recorded.
     pub fn add_import_statements(&mut self, imports: Vec<ImportStatement>) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for stmt in imports {
@@ -824,7 +806,9 @@ impl Program {
         errors.to_result()
     }
 
-    // Add an import statement.
+    /// Records `import_statement` under the module importing it. A module importing itself is
+    /// rejected, and an explicit `Std` import takes the place of the implicit `Std` import that
+    /// module was given.
     pub fn add_import_statement(
         &mut self,
         import_statement: ImportStatement,
@@ -870,14 +854,13 @@ impl Program {
         }
     }
 
-    /// Materialize implicit imports for every absolute-path `FullName`
-    /// (`::Mod::Ns::name`, value or type position) the parser collected
-    /// in `abs_path_uses`. Each becomes an
-    /// `ImportStatement { implicit: true, ... }` carrying the span of
-    /// each path token, mirroring the shape a user-written
-    /// `import Mod::Ns::name;` would produce — so the rest of the
-    /// pipeline sees the dependency without the user having to write
-    /// the import.
+    /// Records an implicit import for every absolute path — `::Mod::Ns::name`, in a value or in a
+    /// type position — that `abs_path_uses` carries, so that writing the path is what makes the
+    /// module it names reachable from `current_module`.
+    ///
+    /// Each import takes the shape a written `import Mod::Ns::name;` gives, with `implicit` set and
+    /// the span of every token of the path. A path into `current_module`, and one the module's
+    /// existing imports already reach, is left as it stands.
     pub fn inject_abs_path_implicit_imports(
         &mut self,
         current_module: &Name,
@@ -888,9 +871,8 @@ impl Program {
                 // Self-imports are already added unconditionally.
                 continue;
             }
-            // `current_module`'s entry is established by
-            // `Program::single_module` (implicit self/std imports), so
-            // a missing entry would be a bug, not a normal path.
+            // `Program::single_module` gives `current_module` its entry, holding the implicit
+            // imports of the module itself and of `Std`, so the entry is there to read.
             let existing = self.mod_to_import_stmts.get(current_module).unwrap();
             if is_accessible(existing, &abs_path) {
                 continue;
@@ -915,7 +897,8 @@ impl Program {
             .collect()
     }
 
-    // Add traits.
+    /// Adds the trait definitions, the trait implementations and the trait aliases to what the
+    /// program declares about its traits.
     pub fn add_traits(
         &mut self,
         trait_infos: Vec<TraitDefn>,
@@ -925,12 +908,16 @@ impl Program {
         self.trait_env.add(trait_infos, trait_impls, trait_aliases)
     }
 
-    // Register declarations of user-defined types.
+    /// Adds `type_defns` to the type definitions the program declares, keeping the ones it already
+    /// holds.
     pub fn add_type_defns(&mut self, mut type_defns: Vec<TypeDefn>) {
         self.type_defns.append(&mut type_defns);
     }
 
-    // Calculate list of type constructors including user-defined types.
+    /// Builds `type_env` from the program's type definitions and the built-in type constructors,
+    /// giving each type variable written on the right-hand side of a definition its kind. A name
+    /// two definitions declare is reported as an error, and the second definition is left out of
+    /// the environment.
     pub fn calculate_type_env(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let mut tycons = bulitin_tycons();
@@ -980,7 +967,8 @@ impl Program {
         errors.to_result()
     }
 
-    // Get list of type constructors including user-defined types.
+    /// What the program declares about its types. A `TypeEnv` holds its tables behind shared
+    /// pointers, so the copy this hands out reads the tables the program holds.
     pub fn type_env(&self) -> TypeEnv {
         self.type_env.clone()
     }
@@ -995,7 +983,8 @@ impl Program {
             .collect()
     }
 
-    // Get of list of tycons that can be used for namespace resolution.
+    /// The name of every type constructor and of every type alias the program declares, which are
+    /// the names a type written in a source can resolve to.
     pub fn tycon_names_with_aliases(&self) -> Set<FullName> {
         let mut res: Set<FullName> = Default::default();
         for (k, _) in self.type_env().tycons.iter() {
@@ -1013,7 +1002,8 @@ impl Program {
         self.trait_env.assoc_ty_to_arity()
     }
 
-    // Get of list of traits that can be used for namespace resolution.
+    /// The name of every trait and of every trait alias the program declares, which are the names a
+    /// constraint written in a source can resolve to.
     pub fn trait_names_with_aliases(&self) -> Set<FullName> {
         self.trait_env.trait_names()
     }
@@ -1023,7 +1013,13 @@ impl Program {
         self.trait_env.traits_with_aliases()
     }
 
-    // Add a global value.
+    /// Registers a global value a source defines, whose body is `expr` and whose type is `scm`.
+    ///
+    /// # Arguments
+    /// * `decl_src` — where the value's type signature is written.
+    /// * `defn_src` — where the left hand side of the value's definition is written.
+    /// * `document` — the documentation of the value, for a value whose `decl_src` is unavailable;
+    ///   otherwise the documentation is read from the source code.
     pub fn add_global_value(
         &mut self,
         name: FullName,
@@ -1048,7 +1044,13 @@ impl Program {
         });
     }
 
-    // Add a compiler-defined method.
+    /// Registers a method the compiler defines for a type, such as `@{field}` or `set_{field}`,
+    /// whose body is `expr` and whose type is `scm`. Such a method is left out of the documentation
+    /// `fix docs` writes.
+    ///
+    /// # Arguments
+    /// * `document` — the documentation shown for the method, which has no declaration in a source
+    ///   to carry one.
     pub fn add_compiler_defined_method(
         &mut self,
         name: FullName,
@@ -1244,8 +1246,9 @@ impl Program {
     /// * `val_name` — the name of the expression, e.g., `Std::ToString::to_string`.
     /// * `def_mod` — the module where the expression is defined. For a
     ///   trait method implementation this may differ from `val_name.module()`.
-    /// * `nrctx` — the name resolution context. Pass one created by
-    ///   `program.create_name_resolution_context(define_module)`.
+    /// * `nrctx` — the name resolution context. Pass one built by
+    ///   `NameResolutionContext::new` on the module the expression is defined in and the
+    ///   environment `create_name_resolution_env` gives.
     /// * `version_hash` — hash of everything `te` is type-checked from, used
     ///   to detect or invalidate the cache file. Pass one created by
     ///   `program.module_dependency_hash(define_module, config)`.
@@ -2185,7 +2188,7 @@ impl Program {
         // is instantiated at each of its types and every instantiation carries the same call. A
         // variadic argument is reported once per type it is inferred to have, since those
         // instantiations are what give one argument more than one type.
-        let mut reported: Set<Name> = Default::default();
+        let mut reported_c_functions: Set<Name> = Default::default();
         let mut reported_variadic_args: BTreeSet<(Option<Span>, String)> = Default::default();
         let mut symbol_names: Vec<&FullName> = self.symbols.keys().collect();
         symbol_names.sort();
@@ -2222,7 +2225,7 @@ impl Program {
                     errors.append(Errors::from_msg_srcs(msg, &[&arg.source]));
                 }
 
-                if reported.contains(fun_name) {
+                if reported_c_functions.contains(fun_name) {
                     return;
                 }
                 let called = CSignature::of_ffi_call(ret_ty, param_tys, *is_var_args);
@@ -2233,7 +2236,7 @@ impl Program {
                 if known.agrees_with(&called) {
                     return;
                 }
-                reported.insert(fun_name.clone());
+                reported_c_functions.insert(fun_name.clone());
                 errors.append(Errors::from_msg_srcs(
                     format!(
                         "The C function `{}` is described as `{}` here and as `{}` elsewhere. One C function has one signature.",
@@ -2623,8 +2626,12 @@ impl Program {
         }
     }
 
-    // Infer namespaces of traits and types that appear in declarations and associated type implementations.
-    // NOTE: names in the lhs of definition of types/traits/global_values have to be full-named already when this function called.
+    /// Makes every type and trait written in the program's declarations a full name: in the type
+    /// constructors and the type aliases, in the traits with their implementations and associated
+    /// types, in the type definitions, and in the type signatures of the global values.
+    ///
+    /// The name on the left-hand side of a type, of a trait and of a global value is a full name by
+    /// the time this runs, so what is resolved here is the names written to the right of them.
     pub fn resolve_namespace_not_in_expr(&mut self) -> Result<(), Errors> {
         let env = self.create_name_resolution_env();
         let mut ctx = NameResolutionContext::new("NA".to_string(), env.clone());
@@ -2667,7 +2674,10 @@ impl Program {
         Ok(())
     }
 
-    // Resolve type aliases in types that appear NOT in expressions.
+    /// Replaces every type alias written outside an expression by the type it stands for: in the
+    /// type constructors, in the traits, in the type definitions, and in the type signatures of the
+    /// global values. A type alias written inside an expression is replaced while that expression is
+    /// type-checked.
     pub fn resolve_type_aliases_not_in_expr(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
@@ -3011,7 +3021,7 @@ impl Program {
         Ok(())
     }
 
-    // Add `Std::Boxed` implementations for all user-defined boxed types.
+    /// Implements `Std::Boxed` for every boxed struct and every boxed union the program declares.
     pub fn add_boxed_impls(&mut self) -> Result<(), Errors> {
         for defn in &self.type_defns {
             match &defn.value {
@@ -3057,12 +3067,12 @@ impl Program {
             if let Some(linked_idx) = self.modules.iter().position(|mi| mi.name == mod_info.name) {
                 // If the module is already defined,
                 if extend {
-                    // If extending mode, this is not a problem.
+                    // In extending mode, the declarations join the module already linked.
                     continue;
                 }
                 let linked_file = self.modules[linked_idx].source.input.file_path.clone();
                 if to_absolute_path(&linked_file)? == to_absolute_path(&joining_file)? {
-                    // If the module is defined in the same file, this is not a problem.
+                    // Two paths lead to one file, which is the declaration already linked.
                     continue;
                 }
                 let msg = format!(
@@ -3124,7 +3134,8 @@ impl Program {
         errors.to_result()
     }
 
-    // Check that all imported modules are linked.
+    /// Reports an import statement naming a module that is not linked into the program, pointing at
+    /// the module name where it is written.
     pub fn check_imports(&mut self) -> Result<(), Errors> {
         let mut unresolved_imports = self.import_statements();
 
@@ -3140,11 +3151,9 @@ impl Program {
                 continue;
             }
 
-            // `module.1` carries the span of the `Mod` token wherever
-            // the user wrote it — inside an `import Mod;` line for
-            // user imports, or inside a `::Mod::name` expression for
-            // the parser-synthesised per-absolute-path imports — so a
-            // single field gives us a good error location for both.
+            // `module_span` carries the span of the `Mod` token wherever the user wrote it —
+            // inside an `import Mod;` line, or inside a `::Mod::name` expression, whose import
+            // the parser synthesises — so one field locates both.
             return Err(Errors::from_msg_srcs(
                 format!("Cannot find module `{}`.", module),
                 &[&import_stmt.module_span],
@@ -3210,7 +3219,8 @@ impl Program {
         Ok(hash_source.finish())
     }
 
-    // Check if all items referred in import statements are defined.
+    /// Reports each item an import statement names that the program does not have: a value, a type
+    /// or a trait, and a namespace holding none of the three.
     pub fn validate_import_statements(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
@@ -3406,25 +3416,36 @@ impl Program {
     }
 }
 
+/// What the smallest node covering a source position is, as `find_node_at` answers it. Hover,
+/// goto-definition, references and rename each read the position they are asked about from here.
 #[derive(Serialize, Deserialize)]
 pub enum EndNode {
+    /// A name used in an expression, with the type the name was inferred to have. The type is
+    /// `None` where the name stands outside an expression: the value an `FFI_EXPORT` or a
+    /// `DEPRECATED` pragma names, and a value written as an item of an import statement.
     Expr(Var, Option<Arc<TypeNode>>),
+    /// A name a pattern binds, with the type the name was inferred to have.
     Pattern(Var, Option<Arc<TypeNode>>),
+    /// A type name written in a type.
     Type(TyCon),
+    /// A trait name.
     Trait(TraitId),
-    TypeOrTrait(FullName), // Unknown whether Type or Trait
+    /// A name written as an item of an import statement, which names a type or a trait; the
+    /// statement is written the same way for either.
+    TypeOrTrait(FullName),
+    /// A module name written in an import statement.
     Module(Name),
-    // The definition name (left-hand side) of a global value declaration.
+    /// The name on the left-hand side of a global value's declaration or definition.
     ValueDecl(FullName),
-    // An associated type name (e.g., `Item` in `Item iter`).
+    /// An associated type name, such as `Item` in `Item iter`.
     AssocType(AssocType),
-    // A struct field name; the cursor is on the bare name in the type
-    // definition or on a MakeStruct / Pattern::Struct field-name use.
+    /// A struct field name: the bare name written in the type definition, or the one written in an
+    /// `Expr::MakeStruct` or a `Pattern::Struct`.
     Field(TyCon, Name),
-    // A union variant name; the cursor is on the bare name in the type
-    // definition or on a Pattern::Union variant-name use.
+    /// A union variant name: the bare name written in the type definition, or the one written in a
+    /// `Pattern::Union`.
     Variant(TyCon, Name),
-    // The type inferred for a `_` type wildcard; the cursor is on the wildcard
-    // in a type annotation. Carries the resolved type so hover can display it.
+    /// The type a `_` type wildcard written in a type annotation was inferred to, which hover
+    /// displays.
     InferredType(Arc<TypeNode>),
 }

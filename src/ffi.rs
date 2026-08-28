@@ -352,19 +352,20 @@ pub fn unpassable_variadic_type_msg(ty: &Arc<TypeNode>) -> Option<String> {
     if ty.toplevel_tycon().map_or(false, |head| head.is_c_scalar()) {
         return None;
     }
-    let head = format!(
+    let msg_head = format!(
         "`{}` cannot be passed through the `...` of an `FFI_CALL`",
         ty.to_string()
     );
     if ty.is_boolean() {
-        return Some(head + ". Use `U8` or `CInt`, and convert it on the Fix side.");
+        return Some(msg_head + ". Use `U8` or `CInt`, and convert it on the Fix side.");
     }
     if ty.is_string() {
         return Some(
-            head + ". Use `Std::String::borrow_c_str` to get a `Ptr` to its bytes, and pass that.",
+            msg_head
+                + ". Use `Std::String::borrow_c_str` to get a `Ptr` to its bytes, and pass that.",
         );
     }
-    Some(head + ". An argument passing through `...` is an integer (`I8` to `I64`, `U8` to `U64`), a floating point number (`F32`, `F64`), or a pointer (`Ptr`). The C types in `Std::FFI` such as `CInt` are aliases of these. To pass a boxed value, take a `Ptr` to it with `Std::FFI::boxed_to_retained_ptr` or `borrow_boxed`.")
+    Some(msg_head + ". An argument passing through `...` is an integer (`I8` to `I64`, `U8` to `U64`), a floating point number (`F32`, `F64`), or a pointer (`Ptr`). The C types in `Std::FFI` such as `CInt` are aliases of these. To pass a boxed value, take a `Ptr` to it with `Std::FFI::boxed_to_retained_ptr` or `borrow_boxed`.")
 }
 
 /// Widen `val`, the value of Fix type `ty` a call has marshalled, the way C widens an argument going

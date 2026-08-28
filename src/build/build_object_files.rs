@@ -538,7 +538,7 @@ fn build_object_files_cache_hash(
     let mut hash_source = HashSource::default();
     hash_source.push_text(&config.object_generation_hash());
     // What this cache holds is the object files of a whole build, and how many of them there are is
-    // decided by how many symbols one compilation unit holds. A unit's own object file is named by
+    // decided by how many entries one compilation unit holds. A unit's own object file is named by
     // the code it generates (`divide_program::generated_code_hash`), so a build that divides itself
     // differently still reuses each unit whose code it leaves as it was.
     hash_source.push_text(&config.cu_size.to_string());
