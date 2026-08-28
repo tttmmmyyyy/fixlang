@@ -485,7 +485,7 @@ pub fn test_ffi_call_promotes_its_variadic_arguments() {
 /// the way to pass it anyway.
 #[test]
 pub fn test_ffi_call_variadic_argument_of_a_non_c_type_fails() {
-    let call_with = |argument: &str| {
+    let source_calling_with = |argument: &str| {
         format!(
             r##"
         module Main;
@@ -501,28 +501,28 @@ pub fn test_ffi_call_variadic_argument_of_a_non_c_type_fails() {
 
     // `Bool` is one byte in Fix, and the width C gives `_Bool` is implementation-defined.
     test_source_fail(
-        &call_with("true"),
+        &source_calling_with("true"),
         Configuration::develop_mode(),
         "`Std::Bool` cannot be passed through the `...` of an `FFI_CALL`. Use `U8` or `CInt`",
     );
 
     // A `String` holds its bytes in an array, and C reads them through a pointer.
     test_source_fail(
-        &call_with(r#""hi""#),
+        &source_calling_with(r#""hi""#),
         Configuration::develop_mode(),
         "`Std::String` cannot be passed through the `...` of an `FFI_CALL`. Use `Std::String::borrow_c_str`",
     );
 
     // A boxed value crosses to C as its address, which is not what the call would hand over.
     test_source_fail(
-        &call_with("[1, 2, 3]"),
+        &source_calling_with("[1, 2, 3]"),
         Configuration::develop_mode(),
         "`Std::Array Std::I64` cannot be passed through the `...` of an `FFI_CALL`",
     );
 
     // A struct of one field is a struct, whatever `unwrap_newtype` later does with it.
     test_source_fail(
-        &call_with("Wrap { v : -1_I8 }"),
+        &source_calling_with("Wrap { v : -1_I8 }"),
         Configuration::develop_mode(),
         "`Main::Wrap` cannot be passed through the `...` of an `FFI_CALL`",
     );
@@ -539,8 +539,8 @@ pub fn test_ffi_call_passes_a_variadic_pointer_unchanged() {
 
         main : IO ();
         main = (
-            let first = "hi".borrow_c_str(|p| FFI_CALL[CInt c_va_first_byte(CInt, ...), 1.c_int, p]);
-            assert_eq(|_|"the byte at the address the call wrote", first.i64, 'h'.i64);;
+            let first_byte = "hi".borrow_c_str(|p| FFI_CALL[CInt c_va_first_byte(CInt, ...), 1.c_int, p]);
+            assert_eq(|_|"the byte at the address the call wrote", first_byte.i64, 'h'.i64);;
             pure()
         );
     "##;
@@ -567,10 +567,10 @@ pub fn test_ffi_call_io_promotes_its_variadic_arguments() {
 
         main : IO ();
         main = (
-            let d = *FFI_CALL_IO[CDouble c_va_double(CInt, ...), 1.c_int, 2.5_F32];
-            assert_eq(|_|"F32 through the `...` of an `FFI_CALL_IO`", d, 2.5);;
-            let i = *IO::from_runner(|ios| FFI_CALL_IOS[CInt c_va_int(CInt, ...), 1.c_int, -1_I8, ios]);
-            assert_eq(|_|"I8 through the `...` of an `FFI_CALL_IOS`", i.i64, -1);;
+            let promoted_f32 = *FFI_CALL_IO[CDouble c_va_double(CInt, ...), 1.c_int, 2.5_F32];
+            assert_eq(|_|"F32 through the `...` of an `FFI_CALL_IO`", promoted_f32, 2.5);;
+            let promoted_i8 = *IO::from_runner(|ios| FFI_CALL_IOS[CInt c_va_int(CInt, ...), 1.c_int, -1_I8, ios]);
+            assert_eq(|_|"I8 through the `...` of an `FFI_CALL_IOS`", promoted_i8.i64, -1);;
             pure()
         );
     "##;

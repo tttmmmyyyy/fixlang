@@ -2669,12 +2669,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         let args_vals = arg_objs
             .iter()
             .enumerate()
-            .map(|(i, obj)| {
-                let val = obj.extract_field(self, 0);
+            .map(|(i, arg_obj)| {
+                let val = arg_obj.extract_field(self, 0);
                 if i < param_tys.len() {
                     val.into()
                 } else {
-                    promote_through_ellipsis(val, &obj.ty, self).into()
+                    promote_through_ellipsis(val, &arg_obj.ty, self).into()
                 }
             })
             .collect::<Vec<_>>();
