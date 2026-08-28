@@ -301,7 +301,7 @@ impl TyCon {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
     }
 
-    // Whether this is the type `String` of `Std`.
+    /// Whether this is the type `String` of `Std`.
     pub fn is_string(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], STRING_NAME);
     }
@@ -1284,7 +1284,7 @@ impl TypeNode {
         self.toplevel_tycon_satisfies(TyCon::is_boolean)
     }
 
-    // Whether this is the type `String`.
+    /// Whether this is the type `String`.
     pub fn is_string(&self) -> bool {
         self.toplevel_tycon_satisfies(TyCon::is_string)
     }

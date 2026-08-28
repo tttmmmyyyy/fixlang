@@ -480,9 +480,9 @@ pub fn test_ffi_call_promotes_its_variadic_arguments() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// A declared parameter of an `FFI_CALL` is written as a C type, and an argument past them has to
-/// be one too: the call hands it to C as the one scalar the value is. Each rejected shape carries
-/// the way to pass it anyway.
+/// The declared parameters of an `FFI_CALL` are written as C types, and an argument past them has
+/// to be a C type too: the call hands it to C as the one scalar the value is. The error for each
+/// rejected type names the way to pass the value instead.
 #[test]
 pub fn test_ffi_call_variadic_argument_of_a_non_c_type_fails() {
     let source_calling_with = |argument: &str| {

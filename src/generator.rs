@@ -2664,7 +2664,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let c_fun = CSignature::of_ffi_call(ret_tycon, param_tys, is_var_args)
             .get_or_declare_in_module(fun_name, self);
 
-        // Get argment values. An argument past the declared parameters travels through `...`, where
+        // Get argument values. An argument past the declared parameters travels through `...`, where
         // C widens it before the function reads it.
         let args_vals = arg_objs
             .iter()

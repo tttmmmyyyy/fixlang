@@ -2183,8 +2183,8 @@ impl Program {
         // The symbols in name order, so that a program with two disagreements is rejected for the
         // same one every time. One name is reported once, since a generic function holding a call
         // is instantiated at each of its types and every instantiation carries the same call. A
-        // variadic argument is reported once per type it is written at, since those instantiations
-        // are what give one argument more than one type.
+        // variadic argument is reported once per type it is inferred to have, since those
+        // instantiations are what give one argument more than one type.
         let mut reported: Set<Name> = Default::default();
         let mut reported_variadic_args: BTreeSet<(Option<Span>, String)> = Default::default();
         let mut symbol_names: Vec<&FullName> = self.symbols.keys().collect();
@@ -2201,8 +2201,8 @@ impl Program {
                 };
 
                 // Every argument past the declared parameters travels through `...`, which carries
-                // only what C carries as one scalar. The trailing `IOState` token of an `IO` call
-                // is not passed to C, so it is not one of them.
+                // only what C carries as one scalar. An `IO` call carries the `IOState` token as
+                // its last argument, and that token stays on the Fix side.
                 assert!(
                     !*is_io || !args.is_empty(),
                     "an `IO` call of a C function carries the `IOState` token as an argument"

@@ -69,8 +69,9 @@ impl CIntegerExtension {
     }
 }
 
-/// The unit a C signature carries an integer in. An integer narrower than this travels in the low
-/// bits of one, and C's default argument promotions widen one to it on the way through `...`.
+/// The unit a C signature carries an integer in. An integer narrower than this width travels in the
+/// low bits of the unit, and C's default argument promotions widen such an integer to this width on
+/// the way through `...`.
 ///
 /// The width holds for the targets Fix builds for; an ABI that extends a 32-bit integer to the width
 /// of a register — RISC-V 64 does — raises it.
@@ -341,8 +342,8 @@ pub fn c_boundary_tycon(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<Ty
 ///
 /// A call hands a variadic argument to C as the one scalar the value is, and C's default argument
 /// promotions are stated over C types, so the argument has to be a value C carries as one scalar. A
-/// declared parameter is written as such a type; past the `...` nothing writes one, which is why
-/// this is checked against the type the argument was inferred to.
+/// declared parameter is written as such a type; past the `...` the type comes from inference alone,
+/// which is why this checks the type the argument was inferred to.
 ///
 /// A boxed value is admitted at an exported signature, where it crosses as an opaque pointer, and
 /// refused here, where the call would hand C the first word of the heap block instead of the address
@@ -366,14 +367,14 @@ pub fn unpassable_variadic_type_msg(ty: &Arc<TypeNode>) -> Option<String> {
     Some(head + ". An argument passing through `...` is an integer (`I8` to `I64`, `U8` to `U64`), a floating point number (`F32`, `F64`), or a pointer (`Ptr`). The C types in `Std::FFI` such as `CInt` are aliases of these. To pass a boxed value, take a `Ptr` to it with `Std::FFI::boxed_to_retained_ptr` or `borrow_boxed`.")
 }
 
-/// Widen `val`, the value of Fix type `ty` a call has marshalled, the way C widens an argument on
-/// its way through the `...` of a call.
+/// Widen `val`, the value of Fix type `ty` a call has marshalled, the way C widens an argument going
+/// through the `...`.
 ///
-/// C's default argument promotions turn a `float` into a `double`, and an integer narrower than the
-/// unit a signature carries an integer in into that unit, filled the way the value's sign asks. This
-/// is why a C function reads its variadic arguments as `double` and `int`: a narrower value never
-/// arrives, so a call has to write the value the function reads. A value that already fills the unit
-/// is handed over as it stands.
+/// C's default argument promotions turn a `float` into a `double`, and widen an integer narrower
+/// than `C_INTEGER_UNIT_BITS` to that width, filling the bits above the value the way its sign asks.
+/// This is why a C function reads its variadic arguments as `double` and `int`: a narrower value
+/// never arrives, so a call has to write the value the function reads. A value that already fills
+/// that width is handed over as it stands.
 pub fn promote_through_ellipsis<'c, 'm>(
     val: BasicValueEnum<'c>,
     ty: &Arc<TypeNode>,
