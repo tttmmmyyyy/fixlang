@@ -17,7 +17,9 @@
    `origin_inner` の `Llvm` の腕の一部 (`origin_from_leaves_under`) には当てはまらない。union の構築が
    反例である。
 3. **突き合わせ 2 つ (第 2 節、第 3 節)。** D9 の「移動」と `origin_inner` の別名の辺、D10 の「生成」と
-   `origin_inner` の `here()` の腕。移動の表に対応の無い辺が 1 つある。
+   `origin_inner` の `here()` の腕。移動の表に対応の無い辺が 1 つある。A3 が挙げる leaf の宣言の 5 つの形を
+   `Llvm` の腕がどう扱うかは 2.1 に場合分けして書いた。複数元の宣言が現在のプログラムに存在しないことは
+   2.2 で数えた。
 4. **README への要望 (第 7 節)。**
 
 ## 1. 記法
@@ -85,16 +87,88 @@ D9 の移動の 6 行との対応:
 - **(b) 単一でない宣言の `Arg` を辿る。** `origin_from_leaves_under` の `for src in sources` のループは、
   leaf の宣言の要素数によらずすべての `Arg(j, σ)` を辿る。A3 の表では複数元の宣言は「いずれの路でも
   新しい参照」であり、D9 の移動ではなく D10 の生成である。すなわちこの辺は A3 が許していない。
-  ただし現在のコードでは発火しない。全 29 個の `result_prov` を読んだ結果、複数元の集合を宣言する op は
-  存在しない (宣言に使われているのは `sole_origin`、`Set::default()`、`Provenance::uniform`、
-  `Provenance::fresh_under`、`Provenance::build_shape` の 5 つで、どれも単一集合か空集合しか作らない。
-  `CODE src/fixstd/builtin.rs` の全 `result_prov`、`CODE src/ast/inline_llvm.rs: LLVMGen::result_prov` の
-  既定、`CODE src/rc_ir/provenance.rs: Provenance::uniform`, `Provenance::fresh_under`,
-  `Provenance::arg_passthrough`, `Provenance::uniform_bottom`)。複数元の集合を作るのは
-  `Provenance::join` (アームの合流) であり、これは解析の側であって宣言ではない。`origin_inner` が読むのは
-  宣言なので、この辺には到達しない。
+  ただし**現在のプログラムでは到達しない**。2.2 で数える。
 - **(c) 形が変わる宣言。** E4 は答えの path をオペランドの unit path にするので、結果の leaf と
   オペランドの leaf の対応は path の接頭辞の書き換えにならない。第 5 節 (発見 2)。
+
+### 2.1 `Llvm` の腕を宣言の形で場合分けする
+
+A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返すとし、空集合・単一の
+`Arg`・単一の `Fresh`・単一の `Unknown`・複数元の 5 行を持つ。`origin_inner` の `Llvm` の腕がその 5 つを
+どう扱うかを書き下す。以下 `decl = llvm_gen.result_prov(result_ty, &arg_tys, type_env)` とする。
+
+<1>1. `decl.leaf_origins_at(π)` の値は次の 5 つで尽きている。`None`、`Some` の空集合、`Some` の単一の
+      `Arg(j, σ)`、`Some` の単一の `Fresh` または単一の `Unknown`、`Some` の要素数 2 以上。
+  <2>1. `leaf_origins_at(π)` は、`π` が `decl` の記録する leaf でなければ `None`、そうでなければその leaf の
+        `LeafOrigins` を `Some` で返す。
+    BY CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, CODE src/rc_ir/leaf_map.rs: LeafMap::get
+  <2>2. `LeafOrigins` は `Set<LeafOrigin>` であり、`LeafOrigin` の構成子は `Fresh`、`Unknown`、`Arg` の
+        3 つである。
+    BY CODE src/rc_ir/provenance.rs: LeafOrigin, LeafOrigins
+  <2>3. QED
+    BY <2>1, <2>2 -- 集合を要素数 0、1、2 以上で分け、要素数 1 を構成子で分けた。
+
+<1>2. `as_arg_projection(sources)` が `Some` を返すのは <1>1 の第 3 の場合だけである。
+  BY CODE src/rc_ir/ownership.rs: as_arg_projection -- `sources.len() != 1` で `None`、要素が `Fresh` か
+     `Unknown` でも `None`。
+
+<1>3. 第 3 の場合、答えは `origin(args[j], σ)` である (辺 E3)。これは D9 の移動の表の `Llvm` の行と
+      A3 の「単一の `Arg(j, σ)`」の行に一致する。
+  BY <1>2, CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Llvm(..))` の腕の `Some((j, σ))` の枝
+
+<1>4. 残る 4 つの場合は `origin_from_leaves_under(vars, type_env, &decl, args, π, &here_identity)` に入り、
+      それぞれ次の答えになる。
+  <2>1. `None` の場合。P2 が `origin` の定義域とする `(x, π)` では、`π` は `ty(x)` の boxed leaf か
+        `rc_units(ty(x))` の要素であり、前者は `None` にならないので、この場合の `π` は leaf でない unit
+        path である。D5 より leaf と unit がずれるのは unbox union と punched array の 2 か所なので、`π` は
+        そのどちらかである。`leaf_origins_under(π)` は `π` で始まる各 leaf の宣言を返し、以下の 3 つの場合が
+        その各 leaf について適用される。
+    BY P2, D5, CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under
+  <2>2. 空集合の場合。`for src in sources` のループは 1 度も回らないので、その leaf は `operand_units` にも
+        `produced_here` にも寄与しない。`π` 自身が空集合の leaf であるときは `reached` が空になり、
+        `reached.first()?` が `None` を返して、`origin_inner` の `unwrap_or_else(here)` が `here()` を
+        答える (第 3 節の H7)。A3 の空集合の行よりこの leaf は inhabited にならないので、この答えが名付ける
+        参照は存在しない。
+    BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under の `for sources` と `reached.first()?`,
+       CODE src/rc_ir/ownership.rs: origin_inner の `None =>` の枝, A3, D16
+  <2>3. 単一の `Fresh` または単一の `Unknown` の場合。`produced_here` が真になり、`Exactly(here)` が
+        `reached` に積まれる。`π` 自身がその leaf であるときは `reached` が 1 要素なのでそれが答えであり、
+        `here()` に等しい (第 3 節の H6)。A3 の対応する 2 行はどちらも新しい参照なので、D10 の生成の
+        `Llvm` の行に一致する。
+    BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under の `LeafOrigin::Fresh | LeafOrigin::Unknown`
+       の腕と `produced_here`, A3, D10 の生成の表
+  <2>4. 要素数 2 以上の場合。ループは要素ごとに回り、`Arg(j, σ)` は `operand_units` に入って別名として
+        辿られ、`Fresh` と `Unknown` は `produced_here` を立てる。A3 の複数元の行は「いずれの路でも
+        新しい参照」なので、`Arg` を別名として辿るのはこの行と食い違う ((b))。
+    BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under の `for src in sources` のループ, A3
+  <2>5. QED
+    BY <2>1, <2>2, <2>3, <2>4
+
+### 2.2 複数元の宣言は現在のプログラムに存在しない
+
+<1>1. `LLVMGen` の実装は 78 個あり、そのうち 29 個が `result_prov` を override し、49 個は既定を使う。
+  BY CODE src/fixstd/builtin.rs の `impl LLVMGen for` (78 個、すべてこのファイルにある),
+     CODE src/ast/inline_llvm.rs: LLVMGen::result_prov (既定)
+
+<1>2. 既定は `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` であり、各 leaf に単一の
+      `Unknown` を置く。
+  BY CODE src/ast/inline_llvm.rs: LLVMGen::result_prov,
+     CODE src/rc_ir/provenance.rs: Provenance::uniform, sole_origin
+
+<1>3. 29 個の override が leaf に置く集合は、`sole_origin(..)` (単一)、`Set::default()` (空)、
+      `Provenance::uniform` (単一)、`Provenance::uniform_bottom` (空)、`Provenance::fresh_under` (単一) の
+      いずれかで作られる。
+  BY CODE src/fixstd/builtin.rs の 29 個の `result_prov` の本体、および
+     CODE src/fixstd/builtin.rs: replaced_field_prov (2 個の op が共有する),
+     CODE src/rc_ir/provenance.rs: Provenance::uniform, uniform_bottom, fresh_under, sole_origin
+
+<1>4. QED
+  BY <1>1, <1>2, <1>3 -- どの宣言も要素数 0 か 1 の集合しか持たない。複数元の集合を作るのは
+     `Provenance::join` (アームの合流) と `Provenance::compose` (呼び出し先の効果の代入) だけであり
+     (`CODE src/rc_ir/provenance.rs: Provenance::join`, `Provenance::compose`)、どちらも解析の側である。
+     `origin_inner` が読むのは `llvm_gen.result_prov(..)` の返り値そのもの、すなわち宣言なので、2.1 の
+     <1>4 の <2>4 の場合には到達しない。
 
 ## 3. 突き合わせ 2 -- D10 の「生成」と `here()` の腕
 
@@ -515,7 +589,9 @@ origin が `Join` のとき、その `identity` は答えのどこにも残ら�
 - **(N) を命題として立てること**。第 4 節より、P19 から P21 が要るのは P4 の後半ではなく (N) である。
   (N) は `origin` と `acted_references` と `acted_unit_keys` だけで書けるので、実行路を量化せずに述べられる。
   現在のコードでは偽なので、立てた上で「コードを直すまで閉じない」と記録するのが正確である。
-- **A3 の複数元の行の到達可能性**。第 2 節の (b) より、複数元の宣言を持つ op は現在存在しない。A3 が
-  複数元の行を持つのは仮定として正しいが、`origin_from_leaves_under` はその行の意味 (いずれの路でも
-  新しい参照) と食い違う扱いをする。A3 の下では、この食い違いは「宣言が実在しないので発火しない」という
-  形でしか埋まらない。命題としてどこかに書き留めるなら P2 か P4 の付帯事項になる。
+- **A3 の複数元の行の到達可能性**。2.2 より、複数元の集合を宣言する op は現在存在しない。A3 が複数元の行を
+  持つのは仮定として正しいが、`origin_from_leaves_under` はその行の意味 (いずれの路でも新しい参照) と
+  食い違う扱いをする (2.1 の <1>4 の <2>4)。A3 の下では、この食い違いは「宣言が実在しないので発火しない」と
+  いう形でしか埋まらない。命題としてどこかに書き留めるなら P2 か P4 の付帯事項になる。なお空集合の宣言は
+  実在し (`InlineLLVMUndefinedInternalBody` の `uniform_bottom`、union 構築の非構築変位)、その扱いは
+  2.1 の <1>4 の <2>2 で閉じている。
