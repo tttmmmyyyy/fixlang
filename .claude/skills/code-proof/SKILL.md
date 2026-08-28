@@ -1,6 +1,6 @@
 ---
 name: code-proof
-description: "Prove that a piece of code has a stated property — that inputs satisfying a precondition produce outputs satisfying a postcondition — and write the proof as a dev doc: definitions, then a sequence of numbered propositions whose every leaf step cites exactly the facts, definitions and code it rests on, in Lamport's structured-proof style. The orchestrator fixes the target commit, states the property and calibrates it against a bug the code actually had, then alternates prover subagents that write the proof with verifier subagents that check one step at a time and report every step that is false, non-obvious, hedged, or built on an undefined word. Use when: asked to prove that a pass, a function, or a subsystem is correct, sound, safe, or otherwise satisfies a property; or to re-verify an existing proof after the code changed."
+description: "Prove that a piece of code has a stated property — that inputs satisfying a precondition produce outputs satisfying a postcondition — and write the proof as a dev doc: definitions, then a sequence of numbered propositions whose every leaf step cites exactly the facts, definitions and code it rests on, in Lamport's structured-proof style. The orchestrator fixes the target commit, states the property and calibrates it against a bug the code actually had, has a critic subagent judge whether the property is the right one and strong enough, then alternates prover subagents that write the proof with verifier subagents that check one step at a time and report every step that is false, non-obvious, hedged, or built on an undefined word. Use when: asked to prove that a pass, a function, or a subsystem is correct, sound, safe, or otherwise satisfies a property; or to re-verify an existing proof after the code changed."
 argument-hint: "The processing to prove something about (a pass, a function, a module), and optionally the property to prove. If omitted, the skill asks."
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "The processing to prove something about (a pass, a function, a m
 
 The deliverable is a document: **definitions, then a sequence of propositions, each with a proof**, ending in the theorem that the target has the property. It is written for a reader who checks it rather than one who is persuaded by it, so every inference step must be obvious from the items it cites alone.
 
-The work is done by two kinds of subagent under this orchestrator: **provers**, who write proofs, and **verifiers**, who check one step at a time and are forbidden to think. The document is finished when a fresh round of verifiers returns nothing.
+The work is done by three kinds of subagent under this orchestrator: a **critic**, who judges whether the property and the decomposition are the right ones; **provers**, who write proofs; and **verifiers**, who check one step at a time and are forbidden to think. The document is finished when a fresh round of verifiers returns nothing.
 
 This skill **never modifies the code under proof**. A step that cannot be proved because the code does not do what it should is a bug, and it is reported the way `bug-hunt` reports one — a failing scenario, a reproduction, a fix proposal for the author to weigh. Fixing it is a separate change.
 
@@ -164,6 +164,16 @@ Expect this first check to return findings on most items. That is the normal yie
 
 **The check is a gate, not a parallel task.** Running it beside the first provers saves nothing: a definition that changes underneath a prover costs that prover a full rewrite, and it costs one per prover. Wait for it.
 
+### Link the proof and the code both ways
+
+A citation runs one way: the proof names the code it rests on, and the code says nothing back. Someone editing a cited item has no way to learn a proof stands on it, and nobody can answer "what changed under this proof since it was written" without reading the whole diff.
+
+So each cited item carries a comment naming the propositions that rest on it, and the proof carries the digest of each cited item's source text. **Generate both from the citations** rather than writing either by hand: two hand-kept sides drift, and a digest that stops matching is what turns "did anything change" into "re-verify exactly these propositions".
+
+`dev-docs/proof/proof_links.py` does this for this repository — `--write` to regenerate, no argument to check. Show the check fires before trusting its silence: rename a cited item, and mutate one's body, and see it report each.
+
+Do not transcribe the code into the proof instead. **An unchecked copy is worse than a citation**: it looks authoritative, it drifts silently, and a verifier checking a step against the copy will pass a step that is false against the real code — which is the one thing the whole procedure exists to prevent. Quote the few lines a step's inference turns on, inside that step; cite the symbol for everything else. Quote small, cite large.
+
 ## Calibrating the property
 
 Before any prover starts, check that the property is worth proving: **take a bug the code actually had, and check that the stated property is violated by the old code.** The most recent fixed bug in the target is the natural case; `git show` on its fix gives the old code, and the changelog and the issue tracker give the symptom.
@@ -178,19 +188,41 @@ This is the `bug-hunt` rule "show the detector fires before trusting its silence
 
 Re-run the calibration whenever the property changes — above all when it changes because a proof would not close otherwise.
 
+## Briefing a critic
+
+A verifier works inside the frame: does this step follow from what it cites? A critic asks whether the frame is the right one. The two disciplines are opposite — a verifier is told not to think, and a critic has to — so they are separate passes with separate subagents, and neither is asked to do the other's job.
+
+The orchestrator wrote the skeleton, which makes it the worst judge of whether the skeleton is right. That is why this is a subagent and not a self-review.
+
+Give it: `README.md` in full; the target and what the requester asked for, in their own words; and the calibration. Not the proofs — it is judging the statements.
+
+Have it answer these, in order, and rank what it finds:
+
+- **Adequacy.** If every proposition were proved, what would the reader be entitled to conclude? State it in the requester's words rather than the document's. Is that what was asked for?
+- **Strength.** **Name a wrong program that satisfies the property.** If one comes easily, the property is too weak, and every proof built on it will prove less than it appears to. This is the sharpest of the questions and the cheapest to answer, and it catches the failure the others miss: a property that is internally consistent, precisely stated, well-calibrated against one past bug, and still permits the thing the reader most fears.
+- **Assumption load.** Which assumption, dropped, would make the theorem false? Is one of them doing so much work that the theorem is nearly vacuous? An assumption nobody discharges that carries the whole result is a hole wearing a proof's clothes.
+- **Decomposition.** Does any proposition exist to make its own proof easy rather than to say something about the code? Does the chain from the propositions to the main theorem actually close, or does it close only under a step nobody has written?
+- **Terminology.** Does the property's name mean, in the field this code belongs to, what the document uses it to mean? A pass is called *correct* when it preserves semantics; *sound* is what an analysis or a logic is. A name borrowed wrongly invites every reader to assume a result the document does not prove.
+
+Run it twice, and only twice. Running it continuously produces churn against a frame that is fine.
+
+- **After the skeleton, before any prover.** The highest-leverage moment: everything downstream is built on the frame, and a frame corrected here costs nothing while one corrected later costs every proof above it.
+- **After the main theorem closes.** The moment the reader will over-read the result. What the theorem lets them stop worrying about, and what it does not, belongs in the document in the critic's words.
+
 ## Procedure
 
 1. **Resolve the target and the property.** Ask with `AskUserQuestion` when either was left open. Confirm `git status --porcelain` is empty and record `git rev-parse HEAD`; that hash goes in the document. If the code changes while the work runs, re-verify every proposition whose `CODE` citations name a changed symbol.
 2. **Write the skeleton, inline.** Read the target end to end — not by grep — and write `README.md`: definitions, assumptions, the decomposition into propositions with their statements and dependency order, the calibration, and the main theorem. This is the design of the proof and it needs the whole target in one head, so the orchestrator does it rather than a subagent.
 
    **Show the skeleton to the user before dispatching provers.** A wrong definition wastes every prover that runs under it, and the decomposition is where a proof is won or lost.
-3. **Run the provers.** One subagent per proposition file, dispatched in dependency layers: a prover may cite an earlier proposition's *statement*, so a whole layer of independent propositions goes out in one parallel block. They write documents rather than code, so they share the working tree; file ownership is what keeps them apart. Brief each with the *Briefing a prover* section below.
+3. **Run the critic on the skeleton, and wait.** One subagent, briefed as *Briefing a critic* says. Act on what it returns before dispatching anything: a property the critic can name a wrong program for is a property to widen now, not after the proofs are written against it.
+4. **Run the provers.** One subagent per proposition file, dispatched in dependency layers: a prover may cite an earlier proposition's *statement*, so a whole layer of independent propositions goes out in one parallel block. They write documents rather than code, so they share the working tree; file ownership is what keeps them apart. Brief each with the *Briefing a prover* section below.
 
    A prover on a real subsystem is a long-running, expensive agent, so send a large layer out in batches rather than all at once — an interruption then costs one batch instead of the layer. When one is interrupted, its file is on disk: commit what is there and **resume that agent** rather than launching a fresh one, since the reading it has already done is most of what it spent.
-4. **Run the verifiers.** One subagent per proposition, all in parallel, each given only what the *Briefing a verifier* section allows. Wait for all.
-5. **Iterate.** Hand each verifier's findings to that file's prover. `NOT-OBVIOUS` is answered by inserting substeps, never by rewording the step to sound more certain. `FALSE`, `UNDEFINED`, `BAD-CITATION` and `HEDGE` are answered as the section below prescribes. Then verify again — with **fresh** verifier subagents, which have not seen the previous round's findings, so the check is never anchored to what it already accepted.
-6. **Stop at the fixed point.** The document is finished when one full round over every proposition returns no finding of any kind. Record the round in the status table.
-7. **Report.** What was proved; under which assumptions; which assumptions nobody discharges; how many rounds it took; and every code bug the attempt turned up, in `bug-hunt` shape. Then update the hunt log's neighbours in memory if the proof changed what is known about the subsystem.
+5. **Run the verifiers.** One subagent per proposition, all in parallel, each given only what the *Briefing a verifier* section allows. Wait for all.
+6. **Iterate.** Hand each verifier's findings to that file's prover. `NOT-OBVIOUS` is answered by inserting substeps, never by rewording the step to sound more certain. `FALSE`, `UNDEFINED`, `BAD-CITATION` and `HEDGE` are answered as the section below prescribes. Then verify again — with **fresh** verifier subagents, which have not seen the previous round's findings, so the check is never anchored to what it already accepted.
+7. **Stop at the fixed point.** The document is finished when one full round over every proposition returns no finding of any kind. Record the round in the status table.
+8. **Report.** Run the critic a second time before this, on the closed document, and carry what it says about the result's limits into the report. What was proved; under which assumptions; which assumptions nobody discharges; how many rounds it took; and every code bug the attempt turned up, in `bug-hunt` shape. Then update the hunt log's neighbours in memory if the proof changed what is known about the subsystem.
 
 ## Briefing a prover
 
