@@ -26,74 +26,130 @@
 
 ## 3. 定義
 
+定義は依存の順に並べる。番号は導入の順ではなく、文書中で固定された名札である。
+
 ### 3.1 中間表現
 
 **D1 (プログラム)**
-RC IR のプログラムとは、名前から関数への写像 `funcs`、グローバル値の初期化子の列 `globals`、外から到達される
-名前の集合 `roots` の 3 つ組である (`CODE src/rc_ir/ast.rs: RcProgram`)。関数は、名前、パラメータの列
-`params`、capture (無い場合がある)、本体 `body`、および借用する単位の集合 `borrowed_units` を持つ
-(`CODE src/rc_ir/ast.rs: RcFunc`)。グローバル初期化子は、パラメータも capture も持たない本体である。
+RC IR のプログラムとは、次の 3 つ組である (`CODE src/rc_ir/ast.rs: RcProgram`)。
+
+- `funcs`: 名前 (`FuncRef`) から関数への写像。
+- `globals`: グローバル値の初期化子の列。
+- `roots`: 外から到達される名前の集合。
+
+関数 `RcFunc` は 9 個のフィールドを持つ (`CODE src/rc_ir/ast.rs: RcFunc`)。`name`、`fn_ty`、`params`
+(パラメータの列)、`capture` (無い場合がある)、`ret_ty`、`body` (本体)、`source`、`borrowed_units` (借用する
+unit の集合)、`inline_into_callers`。グローバル初期化子 `RcGlobalInit` は 5 個のフィールドを持つ
+(`CODE src/rc_ir/ast.rs: RcGlobalInit`)。`symbol`、`ty`、`init` (パラメータも capture も持たない本体)、
+`owns_initializer`、`owns_storage`。
+
+`borrow_ify` と `cancel` は、出力のすべてのグローバル初期化子の `owns_initializer` と `owns_storage` に
+無条件に `true` を書く (`CODE src/rc_ir/borrow.rs: borrow_ify`, `cancel`)。この 2 つのフィールドに意味を
+与える `divide_among_units` は、この 2 つのパスの**後**に走る (`CODE src/build/build_object_files.rs:
+build_object_files` -- `optimize_rc_program` の呼び出しが `divide_among_units` の呼び出しより前にある)。
+分割前のプログラムは 1 つであり、その 1 つがすべての初期化子と記憶域を持つので、`true` が正しい値である。
 
 **D2 (本体の木)**
-本体は式の木である。節点は次の 6 種である (`CODE src/rc_ir/ast.rs: RcExpr`)。
+本体は式の節点 `RcExprNode` の木である。節点は式 `RcExpr` と source span からなり、式は次の 6 種である
+(`CODE src/rc_ir/ast.rs: RcExpr`)。`s` はいずれも `RcState` 型の値で、コード生成が参照カウント操作をどう
+特殊化するかを指示する (`CODE src/rc_ir/ast.rs: RcState`)。健全性 (D11) は `RcState` を読まないので、以下では
+`s` を運ぶだけで参照しない。
 
 | 節点 | 意味 | 継続 |
 |---|---|---|
 | `Let(x, rhs, k)` | `rhs` の値を `x` に束縛する | `k` |
-| `Retain(v, π, s, k)` | `v` の `π` の下の各 boxed leaf の参照カウントを 1 上げる | `k` |
-| `Release(v, π, s, k)` | `v` の `π` の下の各 boxed leaf の参照カウントを 1 下げる | `k` |
+| `Retain(v, π, s, k)` | 参照を作る (D10) | `k` |
+| `Release(v, π, s, k)` | 参照を処分する (D10) | `k` |
 | `Destructure(c, fs, s, k)` | 容器 `c` をフィールドに分解し、各 `(i, x)` の `x` に第 `i` フィールドを束縛する | `k` |
 | `Eval(v, k)` | `v` を効果のために評価して捨てる | `k` |
 | `Ret(v)` | この式の値は `v` である | 無し |
 
-`Let` の右辺 `rhs` は、`Var`、`App`、`Closure`、`Llvm`、`Match` の 5 種である
-(`CODE src/rc_ir/ast.rs: RcRhs`)。`Match(scrut, arms)` の各アームは、変位番号 (catch-all のときは無し)、
-payload 変数、およびアーム本体を持つ。アーム本体もまた本体の木で、その `Ret` はアームの値を `Match` の
-束縛変数へ渡す。
+`Ret` を除く 5 種はちょうど 1 つの継続を持ち、`Ret` は継続を持たない。`Ret` は唯一の終端子である。
 
-節点の継続はどれも 1 つで、分岐は `Match` のアームだけである。よって本体は木であり、繰り返しは呼び出しでしか
-作れない。
+`Let` の右辺 `rhs` は次の 5 種である (`CODE src/rc_ir/ast.rs: RcRhs`)。`Var(y)`、`App(callee, args)`、
+`Closure(f, caps)`、`Llvm(gen, args)`、`Match(scrut, arms)`。`Match` の各アーム `MatchArm` は 4 個の
+フィールドを持つ (`CODE src/rc_ir/ast.rs: MatchArm`)。`tag` (変位番号、catch-all のときは無し)、`payload`
+(payload 変数)、`payload_state` (`RcState`、上と同じ理由で以下では参照しない)、`body` (アーム本体)。
+
+分岐は `Match` のアームだけであり、節点が自分自身を含むことはない。よって本体は有限の木であり、繰り返しは
+関数呼び出しでしか作れない。
+
+`RcExprNode` は式を `Arc` で共有するので、1 つの木の相異なる位置が同じ `Arc` を指すことがありうる。**この
+文書では、本体の木の位置を「節点」と呼び、位置が相異なれば節点も相異なるものとする。** `Arc` のアドレスが
+位置を一意に決めるかどうかは P15 が扱う。
 
 **D3 (実行路)**
-本体 `B` の**実行路**とは、`B` の根から始まり、各節点でその継続へ進み、`Let(x, Match(v, arms), k)` に
-出会ったときはアームを 1 つ選んでそのアーム本体の路を辿ってから `k` へ進む、という節点の有限列である。
-`Ret` に着いたら終わる。D2 より `B` は木なので、実行路は有限であり、その本数はアームの選び方の個数である。
+本体 `B` の**実行路**とは、次の規則で `B` の根から辿って得られる節点の有限列である。
 
-「**`n` の後**」とは、`n` を含む実行路の上で `n` より後ろにある位置をいう。「**すべての路で**」とは、
-その節点を含むすべての実行路について、という意味である。
+- `Ret` を除く 5 種の節点では、その継続へ進む。
+- `Let(x, Match(v, arms), k)` では、アームを 1 つ選び、そのアーム本体の実行路を辿り、その後 `k` へ進む。
+- 関数本体の根から辿ってきて `Ret` に着いたら、そこで終わる。
+
+アーム本体の `Ret` はそのアーム本体の実行路を終えるだけであり、関数本体の実行路は続く。関数本体の実行路の
+最後の節点を**終端の `Ret`** と呼ぶ。D2 より `B` は有限の木なので、実行路は有限であり、その本数は有限である。
+
+「**節点 `n` の後**」とは、`n` を含む実行路の上で `n` より後ろにある位置をいう。「**すべての路で**」とは、その
+節点を含むすべての実行路について、という意味である。
 
 ### 3.2 値の構造
 
 **D4 (boxed leaf)**
-型 `τ` の値が保持する参照の位置を **boxed leaf** と呼び、その全体を `boxed_leaf_paths(τ)` が列挙する
-(`CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`)。leaf は、値の根からの
-フィールド添字の列 (`FieldPath`) で表す。列挙の規則は、参照を持たない値は leaf を持たず、クロージャは capture の
-1 つ、boxed な値は自分自身の 1 つ、unbox 集約 (構造体・タプル・union) は各フィールド (union は各変位の payload)
-の下へ降りる、`Array` は自分自身の 1 つ、である。
+型 `τ` の値が参照を持ちうる位置を **boxed leaf** と呼び、その全体を `boxed_leaf_paths(τ)` が列挙する
+(`CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`)。leaf は値の根からのフィールド添字の列 (`FieldPath`) で
+表す。列挙の規則は次のとおりで、上から順に判定する。
+
+1. `is_fully_unboxed` が真の型は leaf を持たない。
+2. クロージャは capture の位置 1 つを leaf とする。
+3. `is_box` が真の型は、自分自身の位置 1 つを leaf とする。
+4. `is_array` が真の型は、自分自身の位置 1 つを leaf とする。
+5. それ以外 (unbox の構造体・タプル・union) は、`unpunched_field_types` が返すフィールドの下へ降りる。
+   union のときは各変位の payload へ降りる。**穴 (punched field) は `unpunched_field_types` が返さないので
+   降りない。**
+
+**D16 (inhabited leaf)**
+実行のある時点における値 `v` について、leaf `λ ∈ boxed_leaf_paths(ty(v))` が **inhabited** であるとは、
+`λ` が通る unbox union の各節において、`λ` がその節で選ぶ変位番号が、その時点の `v` のその節のタグに等しい
+ことをいう。unbox union を 1 つも通らない leaf は常に inhabited である。
+
+unbox union は 1 つのタグしか持たないので、1 つの union の複数の変位の leaf が同時に inhabited になることは
+ない。
 
 **D5 (RC unit)**
-1 回の参照カウント操作が対象にできる位置を **RC unit** と呼び、型の全体を `rc_units(τ)` が列挙する
+1 回の参照カウント操作が対象にできる位置を **RC unit** と呼び、型 `τ` のすべてを `rc_units(τ)` が列挙する
 (`CODE src/rc_ir/ownership.rs: rc_units`)。どの型が unit を担うかは `unit_step` が 1 か所で決める
-(`CODE src/rc_ir/ownership.rs: unit_step`)。leaf と unit の違いは union にある。unbox union は
-**1 つの unit** であり (物理的な操作はタグで分岐しなければならない)、しかしその leaf は各変位の payload の中に
-ある。
+(`CODE src/rc_ir/ownership.rs: unit_step`)。判定は上から順に、`is_fully_unboxed` なら unit 無し、
+クロージャなら capture が 1 unit、`is_box` / `is_union` / `is_array` / `is_punched_array` のいずれかなら
+自分自身が 1 unit、それ以外は unbox 集約としてフィールドの下へ降りる。
 
-`truncate_to_unit(τ, π)` は leaf path `π` をそれが属する unit の path へ切り詰める
-(`CODE src/rc_ir/ownership.rs: truncate_to_unit`)。`units_under(τ, π)` は path `π` の下にある unit を
-列挙する (`CODE src/rc_ir/ownership.rs: units_under`)。
+leaf と unit がずれるのは 2 か所である。**unbox union** は 1 つの unit だが、その leaf は各変位の payload の
+中にある。**punched array** は 1 つの unit (`[]`) だが、その leaf は内側の配列 (`[0]`) である。
+
+`truncate_to_unit(τ, π)` は path `π` をそれが属する unit の path へ切り詰める
+(`CODE src/rc_ir/ownership.rs: truncate_to_unit`)。`units_under(τ, π)` は、`subtree_type(τ, π)` が型を
+返すときはその型の unit を `π` の下に並べたものを返し、`None` を返すときは `π` 自身だけからなる列を返す
+(`CODE src/rc_ir/ownership.rs: units_under`, `subtree_type`)。
 
 **D6 (スロット)**
 実行のある時点における**スロット**とは、対 `(x, λ)` である。ここで `x` はその時点で束縛されている変数、
-`λ ∈ boxed_leaf_paths(ty(x))` である。スロットが指すオブジェクトを `obj(x, λ)` と書く。
+`λ` は `ty(x)` の inhabited な boxed leaf である。`ty(x)` は `x` に束縛された値の型を表す。スロットが指す
+オブジェクトを `obj(x, λ)` と書く。inhabited でない leaf にスロットは無い。
 
-### 3.3 参照と義務
+### 3.3 所有、参照、義務
 
-**D7 (オブジェクトと参照カウント)**
+**D14 (所有と借用)**
+関数の各パラメータ・capture の各 unit は、その関数が**所有する**か**借用する**かのどちらかである。借用する
+ものの集合が `RcFunc::borrowed_units` であり、残りが所有するものである
+(`CODE src/rc_ir/ownership.rs: all_owned_units`)。所有する unit の参照はその関数が処分し、借用する unit の
+参照は呼び出し元が処分する。
+
+**D7 (オブジェクトと参照カウント、読み)**
 実行時のヒープは**オブジェクト**の集合であり、各オブジェクト `o` は**参照カウント** `H(o) ≥ 0` を持つ。
-`H(o)` が 0 になったオブジェクトは**解放される**。オブジェクトを**読む**とは、そのオブジェクトが占める記憶域を
-読むことをいう。解放されたオブジェクトを読むことを**解放後の読み**と呼ぶ。
+`H(o)` が 0 になったオブジェクトは**解放される**。オブジェクトを**読む**とは、そのオブジェクトが占める記憶域の
+うち、参照カウントと状態バイトを除いた部分を読むことをいう。解放されたオブジェクトを読むことを**解放後の読み**
+と呼ぶ。
 
-値を**読む構文**とは、次の 6 つである。読む構文は、名指した値の各 boxed leaf が指すオブジェクトを読みうる。
+値を**読む構文**とは、次の 6 つである。読む構文は、名指した値の inhabited な各 boxed leaf が指すオブジェクトを
+読みうる。
 
 | 構文 | 読まれる値 |
 |---|---|
@@ -104,13 +160,15 @@ payload 変数、およびアーム本体を持つ。アーム本体もまた本
 | `Destructure(c, fs, s, k)` | 容器 `c` |
 | `Eval(v, k)` | `v` |
 
-`Retain`/`Release`/`Ret` と `Let(x, Var(y), k)` は読む構文ではない。`Retain`/`Release` は参照カウントの記憶域を
-触るが、これは D8 の参照の操作であって値の読みではない。`Ret` と `Var` は値を渡すだけである。
+残る 4 種 (`Let(x, Var(y), k)`、`Retain`、`Release`、`Ret`) は読む構文ではない。`Var` と `Ret` は値を渡す
+だけである。`Retain` と `Release` は参照カウントと状態バイトを触り、`Release` はカウントが 0 になったときに
+オブジェクトを走査するが、走査するのはそのオブジェクトが解放される時であって、D11 の (S-c) が禁じるのは他の
+オブジェクトの解放後の読みである。
 
 **D8 (参照)**
-**参照**とは、1 つのオブジェクトに対する処分義務の 1 単位である。参照は、割り当て、`Retain`、または boxed な
-容器からの読み出しによって作られ、`Release` または消費 (D9) によって処分される。`H(o)` は `o` への未処分の
-参照の総数である。
+**参照**とは、1 つのオブジェクトに対する処分義務の 1 単位である。参照は D10 の**生成**によって作られ、D10 の
+**消費**または `Release` によって処分される。オブジェクト `o` の参照カウント `H(o)` は、`o` への未処分の参照の
+総数に等しい。
 
 **D9 (消費と移動)**
 関数の 1 回の活性化が保持する参照について、次の 2 つを区別する。
@@ -119,24 +177,30 @@ payload 変数、およびアーム本体を持つ。アーム本体もまた本
 
 | 構文 | 消費される leaf |
 |---|---|
-| `App(callee, args)` | callee の全 boxed leaf、および呼び出し先がその位置を所有する引数の leaf |
+| `App(callee, args)` | callee の全 boxed leaf、および呼び出し先がその位置の unit を所有する (D14) 引数の leaf |
 | `Closure(f, caps)` | 各 capture の全 boxed leaf |
-| `Llvm(gen, args)` | `borrows_operand(i)` が偽のオペランドのうち、`result_prov` が単一の `Arg(i, σ)` として素通しを宣言していない leaf |
+| `Llvm(gen, args)` | `borrows_operand(i)` が偽のオペランドのうち、`result_prov` が**単一の** `Arg(i, σ)` として素通しを宣言していない leaf |
 | `Destructure(c, fs)` (`c` が boxed) | `c` の全 boxed leaf |
 | `Destructure(c, fs)` (`c` が unbox) | 名前が付いていないフィールドの leaf |
 | 関数本体の終端の `Ret(x)` | `x` の全 boxed leaf (呼び出し元へ渡る) |
 
-**移動**とは、参照の持ち手が活性化の中で変わるだけの構文である。移動は義務集合 (D10) を変えない。次のものがある。
+**移動**とは、参照の持ち手が活性化の中で変わるだけの構文である。移動は義務集合 (D10) を変えない。次のものが
+ある。
 
 | 構文 | 移動 |
 |---|---|
 | `Let(x, Var(y), k)` | `y` の参照が `x` へ |
-| `Match` のアームの `Ret(x)` | `x` の参照が `Match` の束縛変数へ |
+| `Match` のアーム本体の `Ret(x)` | `x` の参照が `Match` の束縛変数へ |
 | `Destructure(c, fs)` (`c` が unbox) の名前付きフィールド | `c` のそのフィールドの参照がフィールド変数へ |
-| unbox union の変位アーム、および catch-all アームの payload 束縛 | scrutinee の参照が payload 変数へ |
+| unbox union の変位アームの payload 束縛 | scrutinee の活性変位の参照が payload 変数へ |
+| catch-all アームの payload 束縛 | scrutinee の参照が payload 変数へ |
 | `Llvm` の素通し leaf (`result_prov` が単一の `Arg(i, σ)`) | オペランド `i` の参照が結果へ |
 
-`collect_consumes` が報告するのは、消費に加えて**アームの `Ret` も含めた集合**である
+上の 2 つの表と D10 の生成の表で、参照を作る・移す・手放す構文はすべてである。`Eval(v, k)` と
+`Let(x, Match(v, arms), k)` の `Match` 節点自身は、参照を作らず、移さず、手放さない。`Retain` と `Release` は
+D10 が直接扱う。
+
+`collect_consumes` が報告するのは、消費に加えて**アーム本体の `Ret` も含めた集合**である
 (`CODE src/rc_ir/ownership.rs: collect_consumes_go` の `RcExpr::Ret` の腕)。すなわち報告される集合は消費の
 上位集合である。この過剰報告の読み手は `infer_ownership` だけであり、そこでは所有を増やす向きに働くので安全側で
 ある。`cancel` はこの関数を読まず、`rhs_consumes` と `destructure_consumes`、および終端の `Ret` の扱いを
@@ -146,94 +210,127 @@ payload 変数、およびアーム本体を持つ。アーム本体もまた本
 **D10 (義務集合)**
 関数の 1 回の活性化について、実行路上の各位置における**義務集合** `Obl` を、参照の多重集合として次で定める。
 
-- 初期値: 所有するパラメータ・capture の unit (D14) の各 leaf につき 1 つ。借用する unit の leaf は入れない。
-- `Retain(v, π)`: `π` の下の各 leaf `λ` につき `obj(v, λ)` への参照を 1 つ加える。同時に `H` を 1 上げる。
-- `Release(v, π)`: `π` の下の各 leaf `λ` につき `obj(v, λ)` への参照を 1 つ取り除く。同時に `H` を 1 下げる。
-- **生成**: 次の構文が新しい参照を作る。生じた各 leaf につき参照を 1 つ加える。`H` はその場で上がる
-  (割り当てなら 1 から始まり、読み出しなら 1 上がる)。
+- 初期値: 所有する (D14) パラメータ・capture の unit の下の inhabited な各 leaf につき 1 つ。借用する unit の
+  下の leaf は入れない。
+- `Retain(v, π)`: `π` の下の inhabited な各 leaf `λ` につき `obj(v, λ)` への参照を 1 つ加える。同時に
+  `H(obj(v, λ))` を 1 上げる。
+- `Release(v, π)`: `π` の下の inhabited な各 leaf `λ` につき `obj(v, λ)` への参照を 1 つ取り除く。同時に
+  `H(obj(v, λ))` を 1 下げる。
+- **生成**: 次の構文が新しい参照を作る。生じた inhabited な各 leaf につき参照を 1 つ加える。`H` はその場で
+  上がる (割り当てなら 1 から始まり、読み出しなら 1 上がる)。
 
   | 構文 | 生じる参照 |
   |---|---|
-  | `Llvm(gen, args)` の結果のうち、`result_prov` が `Fresh` または `Unknown` と宣言する leaf | 各 1 つ |
+  | `Llvm(gen, args)` の結果の leaf のうち、`result_prov` の宣言が単一の `Arg(j, σ)` **でない**もの | 各 1 つ |
   | `App(callee, args)` の結果の各 boxed leaf | 各 1 つ |
   | `Closure(f, caps)` の結果 (capture object) | 1 つ |
   | boxed 容器の `Destructure` の各名前付きフィールドの各 leaf | 各 1 つ |
   | boxed union の変位アームの payload の各 leaf | 各 1 つ |
 
-- **消費** (D9): 消費される各 leaf につき参照を 1 つ取り除く。`H` は変わらない (参照は渡された先が持つ)。
+  `Llvm` の行は、宣言が空集合 (bottom) のとき、`Fresh` や `Unknown` を含むとき、複数の元を持つときのすべてを
+  含む。空集合と宣言された leaf は inhabited にならないので、参照は生じない (A3)。
+
+- **消費** (D9): 消費される inhabited な各 leaf につき参照を 1 つ取り除く。`H` は変わらない (参照は渡された
+  先が持つ)。
 - **移動** (D9): `Obl` を変えない。
 
 ### 3.4 健全性
 
 **D11 (健全な本体)**
-本体 `B` が、所有権の割り当て (D14) の下で**健全**であるとは、`B` のすべての実行路について次の 3 つが
+本体 `B` が、所有と借用の割り当て (D14) の下で**健全**であるとは、`B` のすべての実行路について次の 3 つが
 成り立つことをいう。
 
 - **(S-a) 過剰処分が無い**: `Obl` から参照を取り除くすべての操作について、取り除かれる参照はその時点の `Obl` に
   入っている。
-- **(S-b) 漏れが無い**: 実行路の終端の `Ret(v)` において、`Ret` 自身の消費を行った後の `Obl` は空である。
+- **(S-b) 漏れが無い**: 実行路の終端の `Ret(v)` において、その `Ret` の消費を行った後の `Obl` は空である。
 - **(S-c) 解放後の読みが無い**: D7 の読む構文がその位置で読みうる各オブジェクトは、その時点で解放されていない。
 
 **D12 (健全なプログラム)**
-プログラムが**健全**であるとは、そのすべての関数の本体とすべてのグローバル初期化子が、そのプログラムが定める
-所有権の割り当て (D14) の下で健全であることをいう。
+プログラム `P` が**健全**であるとは、`P` のすべての関数の本体と、すべてのグローバル初期化子の `init` が、`P` の
+`borrowed_units` が定める所有と借用の割り当て (D14) の下で健全 (D11) であることをいう。
+
+健全性は `RcProgram` の残りの部分について何も言わない。`roots`、`RcFunc` の `fn_ty` / `ret_ty` / `source` /
+`inline_into_callers`、`RcGlobalInit` の `symbol` / `ty` / `owns_initializer` / `owns_storage` である。
+これらを `borrow_ify` と `cancel` がどう扱うかは P13 と P24 が扱う。
 
 ### 3.5 同一性のモデル
 
 **D13 (origin)**
 `origin(vars, τenv, x, π)` は、変数 `x` の path `π` にある値が、どの変数のどの path で作られた参照を持つかを
-答える (`CODE src/rc_ir/ownership.rs: origin`)。答えは `Exactly(u, σ)` (ちょうど 1 つのオブジェクト) か
-`Join { identity, candidates }` (通った路によって変わり、`identity` はどの路でも一致する 1 つの名前) の
-どちらかである (`CODE src/rc_ir/ownership.rs: Origin`)。
+答える関数である (`CODE src/rc_ir/ownership.rs: origin`)。返り値は `Exactly(u, σ)` か
+`Join { identity, candidates }` のどちらかである (`CODE src/rc_ir/ownership.rs: Origin`)。`identity` は
+`VarPath` を 1 つ、`candidates` は `VarPath` の空でない集合を持つ。以下では `vars` と `τenv` が文脈から
+定まるとき `origin(x, π)` と書く。
 
-**D14 (所有と借用、unit key)**
-関数の各パラメータ・capture の各 unit は、その関数が**所有する**か**借用する**かのどちらかである。借用する
-ものの集合が `RcFunc::borrowed_units` であり、残りが所有するものである
-(`CODE src/rc_ir/ownership.rs: all_owned_units`)。
+D13 は `origin` が何を返すかを述べるだけであり、その返り値が実行時の参照とどう対応するかは P3 と P4 が述べる。
 
+**D15 (キーと触れる参照)**
 `unit_key(x, π) = unit_of(origin(x, π).identity())` を、その leaf の参照が数えられる**キー**と呼ぶ
-(`CODE src/rc_ir/ownership.rs: unit_key`)。`acted_references(v, π)` は、`(v, π)` への RC 操作が触れる
-参照を、オブジェクトごとの個数として返す (`CODE src/rc_ir/ownership.rs: acted_references`)。
+(`CODE src/rc_ir/ownership.rs: unit_key`, `unit_of`)。`unit_of(root, path)` は、`root` の型が `vars` に
+記録されていればその型で `path` を `truncate_to_unit` し、記録されていなければ `path` をそのまま返す。
+
+`acted_references(v, π)` は、`π` の下の**すべての** boxed leaf (inhabited でないものを含む) について、その
+leaf の `origin(v, leaf).identity()` を数えた `Map<VarPath, usize>` を返す
+(`CODE src/rc_ir/ownership.rs: acted_references`)。これは静的な数え上げであり、実行時に触れる参照との関係は
+P6 が述べる。
+
+`acted_unit_keys(x, π)` は、`origin(x, π).acted_on()` の各要素を `unit_of` で写したものである
+(`CODE src/rc_ir/ownership.rs: acted_unit_keys`, `Origin::acted_on`)。
 
 ## 4. 仮定
 
 各仮定には、それを果たす者を書く。
 
-**A1 (入力の健全性)** -- 果たす者: 前段のパス (`insert_rc` と `split_rc_units`)。
-`borrow_ify` に渡されるプログラムは D12 の意味で健全である。そのときすべてのパラメータ・capture の unit は
-所有される (`borrowed_units` が空である)。
+**A1 (入力の健全性)** -- 果たす者: 前段のパス (`insert_rc`)。
+`borrow_ify` に渡されるプログラムは D12 の意味で健全である。またそのプログラムのすべての関数の
+`borrowed_units` は空である。すなわちすべてのパラメータ・capture の unit が所有される。
 
-**A2 (単位への正規化)** -- 果たす者: `split_rc_units` (`CODE src/rc_ir/borrow.rs: split_rc_units`)。
+**A2 (単位への正規化)** -- 果たす者: `insert_rc` と `split_rc_units`。
 `borrow_ify` に渡されるプログラムのすべての `Retain`/`Release` 節点の path は、その変数の型の `rc_units` の
-要素である。
+要素である。`insert_rc` が出す `Retain`/`Release` の path はすべて空列であり、`split_rc_units` はそれを
+`units_under(τ, [])` で分解する (`CODE src/rc_ir/borrow.rs: split_rc`)。`subtree_type(τ, [])` は常に
+`Some(τ)` を返すので、この分解が返すのは `rc_units(τ)` そのものである。
 
 **A3 (宣言されたモデルの忠実さ)** -- 果たす者: 誰も。
-各 `LLVMGen` の `result_prov` と `borrows_operand` は、その演算が生成するコードを正しく述べている。すなわち、
-`result_prov` が結果の leaf を `Arg(j, σ)` と宣言するとき、生成コードはその leaf に第 `j` オペランドの
-leaf `σ` と**同じ参照**を置き、新しい参照を作らない。`Fresh` と宣言するときは新しいオブジェクトを割り当て、
-`Unknown` と宣言するときは新しい参照を作る。`borrows_operand(i)` が真のとき、生成コードは第 `i` オペランドの
-参照を処分しない。
+各 `LLVMGen` の `result_prov` と `borrows_operand` は、その演算が生成するコードを正しく述べている
+(`CODE src/ast/inline_llvm.rs: LLVMGen::result_prov`, `LLVMGen::borrows_operand`)。`result_prov` は結果の
+leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言と生成コードの対応は次のとおりである。
+
+| 宣言 | 生成コードが結果のその leaf に置くもの |
+|---|---|
+| 空集合 | 何も置かない。その leaf は inhabited にならない (存在しない union 変位、または中断する演算の結果) |
+| 単一の `Arg(j, σ)` | 第 `j` オペランドの leaf `σ` と**同じ参照**。新しい参照を作らない |
+| 単一の `Fresh` | 新しく割り当てたオブジェクトへの新しい参照 |
+| 単一の `Unknown` | 既存のオブジェクトへの新しい参照 (retain を伴う読み出し) |
+| 複数の元 | 実行路ごとにそのいずれか。いずれの路でも新しい参照 |
+
+`borrows_operand(i)` が真のとき、生成コードは第 `i` オペランドの参照を処分しない。
 
 この仮定は誰も果たさない。宣言と実装の乖離は、証明ではなくテストと valgrind が捕まえる。
-`dev-docs/2026-06-28-unique-check-elim/audit-2026-07-20-op-declarations.md` が、ある時点での全 op の
-宣言を人手で照合した記録である。
+`dev-docs/2026-06-28-unique-check-elim/audit-2026-07-20-op-declarations.md` が、ある時点での全 op の宣言を
+人手で照合した記録である。
 
 **A4 (コード生成の忠実さ)** -- 果たす者: 誰も。
-コード生成は、`Retain(v, π)` / `Release(v, π)` を、`π` の下の各 boxed leaf の参照カウントの ±1 として実装し、
-`Destructure` と `Match` を D9 の消費モデルの通りに実装する。
+コード生成は、`Retain(v, π)` / `Release(v, π)` を、`π` の下の **inhabited な** 各 boxed leaf の参照カウントの
+±1 として実装する。unbox union に対しては実行時のタグで分岐し、活性な変位の payload だけを数える
+(`CODE src/object.rs: ObjectFieldType::retain_release_mark_union`)。`Destructure` と `Match` の変位アームに
+ついては、D9 の消費・移動の表と D10 の生成の表のとおりに実装する。
 
-**A5 (型が leaf の権威)** -- 果たす者: `leaf_map.rs` の設計。
-値が保持する参照は、その型の `boxed_leaf_paths` が列挙する leaf にちょうど 1 つずつある。
+**A5 (型が leaf の上位近似)** -- 果たす者: `leaf_map.rs` の設計。
+値が保持する参照は、その型の `boxed_leaf_paths` が列挙する leaf のうち inhabited (D16) なものにちょうど
+1 つずつある。inhabited でない leaf は参照を持たない。
 
 **A6 (名前の一意性)** -- 果たす者: lowering と `fresh_rename_function`。
 プログラム中のすべての束縛変数の名前は相異なる。よって変数名は束縛を一意に決める。
 
 **A7 (呼び出し先の解決)** -- 果たす者: `resolve_callee_params` の設計 (`CODE src/rc_ir/ownership.rs:
 resolve_callee_params`)。
-`prog.funcs` に無い呼び出し先は、全パラメータを所有するものとして扱われる。これは安全側の近似である。
+`prog.funcs` に無い呼び出し先は、全パラメータの全 unit を所有するものとして扱われる。これは所有を増やす向きの
+近似である。
 
 **A8 (グローバルは線形規律の外)** -- 果たす者: `mark_global`。
-グローバル値が到達するオブジェクトは参照カウントの対象外であり、それらへの `Retain`/`Release` は何もしない。
+グローバル値が到達するオブジェクトは、記憶域に「グローバル」を表す状態を持ち、それらへの `Retain`/`Release` は
+参照カウントを変えない。よってそれらのオブジェクトが解放されることはない。
 
 ## 5. 命題
 
@@ -242,67 +339,89 @@ resolve_callee_params`)。
 ### 層 1 -- 所有権モデル (`ownership.rs`)
 
 - **P1** (leaf と unit の対応)。任意の型 `τ` について、`boxed_leaf_paths(τ)` の各 leaf の
-  `truncate_to_unit` は `rc_units(τ)` の要素であり、`rc_units(τ)` の各 unit はある leaf の
-  `truncate_to_unit` である。
-- **P2** (`origin` の全域性と停止性)。`origin` はすべての `(x, π)` に対して答えを返し、停止する。
-- **P3** (`origin` の健全性 -- `Exactly`)。`origin(x, π) = Exactly(u, σ)` のとき、すべての実行路の
-  その位置において、スロット `(x, π)` の下の各 leaf が持つ参照は、スロット `(u, σ)` の対応する leaf が持つ
-  参照と同一である。
-- **P4** (`origin` の健全性 -- `Join`)。`origin(x, π) = Join { identity, candidates }` のとき、各実行路に
-  おいてスロット `(x, π)` が持つ参照は `candidates` のいずれかのスロットが持つ参照と同一であり、かつ
-  `identity` は、その参照に対してどの実行路でも同じ名前である。
+  `truncate_to_unit(τ, ・)` は `rc_units(τ)` の要素であり、`rc_units(τ)` の各 unit はある leaf の
+  `truncate_to_unit(τ, ・)` である。
+- **P2** (`origin` の全域性と停止性)。`origin(x, π)` は、`x` がプログラムの束縛変数であり `π` が
+  `boxed_leaf_paths(ty(x))` の要素または `rc_units(ty(x))` の要素であるようなすべての `(x, π)` について、
+  panic せずに答えを返し、停止する。
+- **P3** (`origin` の健全性 -- `Exactly`)。`origin(x, π) = Exactly(u, σ)` のとき、`(x, π)` が意味を持つ
+  すべての実行路のすべての位置において、`π` の下の inhabited な各 leaf `λ` について、`obj(x, λ)` を指す
+  参照は、`σ` の下の対応する leaf のスロットが持つ参照と同一である。「対応する」とは、`λ` から `π` の接頭辞を
+  除いた残りを `σ` の後ろに繋いだ path をいう。
+- **P4** (`origin` の健全性 -- `Join`)。`origin(x, π) = Join { identity, candidates }` のとき、各実行路の
+  各位置において、`π` の下の inhabited な各 leaf のスロットが持つ参照は、`candidates` のいずれかの下の
+  対応するスロットが持つ参照と同一である。さらに、その参照が同一である 2 つの実行路の位置において、
+  `identity` は同じ `VarPath` である。
 - **P5** (キーは参照の関数である)。1 つの実行路の 1 つの位置において同じ参照を持つ 2 つのスロットは、同じ
   `unit_key` を持つ。
-- **P6** (`acted_references` の正しさ)。`acted_references(v, π)` が返す多重集合は、`Retain(v, π)` が作る
-  参照の多重集合、および `Release(v, π)` が処分する参照の多重集合に一致する。
-- **P7** (消費の網羅性)。D9 の意味で消費する構文はすべて `collect_consumes` が報告する。また `collect_consumes`
-  が報告して D9 が消費としないものは、アームの `Ret` に限る。
+- **P6** (`acted_references` は静的な上位近似である)。`acted_references(v, π)` が返す `Map` は、`π` の下の
+  すべての boxed leaf を `origin` の identity で名付けて数えたものである。実行時に `Retain(v, π)` が作る
+  参照の多重集合は、この数え上げを inhabited な leaf に制限したものに等しく、`Release(v, π)` が処分する
+  参照の多重集合も同じものに等しい。
+- **P7** (消費の網羅性)。D9 の意味で消費する構文はすべて `collect_consumes` が報告する。また
+  `collect_consumes` が報告して D9 が消費としないものは、アーム本体の `Ret` に限る。
 
 ### 層 2 -- `borrow_ify`
 
-- **P8** (推論の停止性と安全性)。`infer_ownership` は停止し、その不動点において、ある実行路で消費される
-  パラメータ leaf はすべて `Own` である。
+- **P8** (推論の停止性と安全性)。`infer_ownership` は停止する。その不動点が返す集合 `owned_leaves` は、
+  次を満たす。ある関数のあるパラメータ leaf の参照が、その関数のある実行路で D9 の意味で消費されるならば、
+  その leaf は `owned_leaves` に入っている。
 - **P9** (複製は名前替えである)。`clone_func` が作る借用版の本体は、元の本体の束縛変数を一斉に付け替えた
   ものであり、それ以外の違いを持たない。
-- **P10** (借用版が落とす RC 節点)。借用版の `rewrite_rc` は、その版が所有しない unit の `Retain`/`Release`
-  だけを落とし、所有する unit のものは残す。
+- **P10** (借用版が落とす RC 節点)。借用版の `rewrite_rc` は、`Retain(v, π)` / `Release(v, π)` を、
+  `units_under(ty(v), π)` のうち `owns_unit(v, ・)` が真である unit の節点の列に置き換える。所有しない unit の
+  節点は残らない。
 - **P11** (呼び出し側の補正)。`call_rc` が置く前後の RC 節点は、呼び出し元と呼び出し先の所有権の食い違いを
   ちょうど埋める。すなわち、呼び出し元が借用し呼び出し先が所有する unit には前に `Retain` を、呼び出し元が
-  所有し呼び出し先が借用する unit には後に `Release` を置く。
-- **P12** (振り分けの安全性)。`route` が借用版へ回すのは、末尾位置でない呼び出しか、所有する引数を 1 つも
-  持たない呼び出しだけである。よって後置の `Release` が末尾呼び出しの末尾性を壊すことはない。
-- **P13** (注釈の一致)。出力の各版の `borrowed_units` は、その版が実際に処分しない unit の集合に一致する。
-- **P14** (`borrow_ify` の健全性)。健全なプログラムを入力とすると、`borrow_ify` の出力は健全である。
+  所有し呼び出し先が借用する unit には後に `Release` を置き、それ以外には何も置かない。
+- **P12** (振り分けの安全性)。`route` が借用版へ回すのは、末尾位置でない呼び出しか、所有する unit を持つ引数を
+  1 つも持たない呼び出しだけである。
+- **P13** (注釈の一致)。出力の各版の `borrowed_units` は、その版のパラメータ・capture の unit のうち
+  `owned_units` に入らないものの集合に一致する。
+- **P14** (`borrow_ify` の健全性)。D12 の意味で健全で、かつ A1 と A2 を満たすプログラムを入力とすると、
+  `borrow_ify` の出力は D12 の意味で健全である。
 
 ### 層 3 -- `cancel` の走査
 
-- **P15** (走査は各節点を 1 度だけ訪れる)。`CancelAnalysis::walk` は本体の各節点をちょうど 1 回訪れる。
-- **P16** (`pending` の不変条件)。走査中の各位置において、`pending[k]` は、キー `k` の下でその位置までに
-  実行され、まだ完全には un-bump されていない `Retain` の列であり、内側のものほど後ろにある。各要素の
-  `outstanding` は、その `Retain` が作った参照のうちまだ処分されていないものの多重集合である。
-- **P17** (`un_bump` の正しさ)。`un_bump(pending, k, R)` が `InBracket(t)` を返すとき、`t` は `R` の各参照を
-  作った `Retain` であり、`pending` から `R` の分だけが引かれる。`OutsideBracket` を返すとき、その
-  `Release` は最内の `Retain` が作っていない参照に触れる。`NoBracket` を返すとき、キー `k` の下に
-  pending な `Retain` は無い。
-- **P18** (`merge` の安全性)。`merge` の後に `pending` に残る `Retain` は、すべてのアームの出口で
-  同じ `outstanding` を持つものだけである。それ以外はすべて `needed_retains` に入る。
+- **P15** (節点と `NodeId`)。1 つの本体の木の相異なる位置は相異なる `NodeId` を持つ。また
+  `CancelAnalysis::walk` は本体の各位置をちょうど 1 回訪れる。
+- **P16** (`pending` の不変条件)。走査中の各位置において、`pending` は次を満たす。
+  (a) `pending[k]` の各要素の `node` は、その位置までに訪れた `Retain` 節点であり、その `unit_key` は `k` で
+  ある。(b) 各要素の `outstanding` は空でない。(c) 1 つの `Retain` 節点は `pending` 全体で高々 1 か所に
+  現れる。(d) `pending[k]` の並びは、訪れた順である (後ろほど新しい)。(e) `pending` から取り除かれた
+  `Retain` は、`outstanding` が空になったか、`needed_retains` に入ったかのいずれかである。
+- **P17** (`un_bump` の正しさ)。`un_bump(pending, k, R)` の返り値は次で決まる。`pending` にキー `k` の項目が
+  無ければ `NoBracket` で、`pending` は変わらない。あって、最内の要素の `outstanding` が `R` を `covers`
+  しなければ `OutsideBracket` で、`pending` は変わらない。covers すれば `InBracket(t)` で、`t` は最内の要素の
+  `node` であり、その要素の `outstanding` から `R` が引かれ、空になればその要素が取り除かれ、スタックが空に
+  なればキーが取り除かれる。
+- **P18** (`merge` の後に残るもの)。`merge` の返す `pending` に残る `Retain` は、`pending_in` に在り、かつ
+  すべてのアームの出口に同じ `outstanding` で現れるものだけである。いずれかのアームの出口に現れてこの条件を
+  満たさない `Retain` は `needed_retains` に入る。どのアームの出口にも現れない `Retain` は、`needed_retains`
+  にも返り値にも入らない。
 
 ### 層 4 -- `cancel` の健全性
 
-- **P19** (削除される retain の性質)。`cancelled()` が返す集合に含まれる `Retain` `t` は、`t` を含むすべての
-  実行路において、`t` のキーの消費より前、かつ関数からの復帰より前に、削除される `Release` 群によって
-  完全に un-bump される。
-- **P20** (削除は収支を保つ)。各実行路において、削除される `Retain` が作る参照の多重集合は、その路で実行される
-  削除される `Release` が処分する参照の多重集合に一致する。
-- **P21** (削除は解放後の読みを作らない)。`Retain` `t` とそれを un-bump する `Release` 群を削除しても、
-  削除の前後で解放されるオブジェクトの集合と時点は変わらない。
-- **P22** (`drop_nodes` の正しさ)。`drop_nodes` は、記録された節点をちょうど取り除き、他は変えない。
-- **P23** (`cancel` の健全性)。健全なプログラムを入力とすると、`cancel` の出力は健全である。
+- **P19** (削除される retain の性質)。`cancelled()` が返す集合に含まれる `Retain` `t` について、`t` を含む
+  すべての実行路において、`t` の `unit_key` を `acted_unit_keys` に含む消費より前、かつ終端の `Ret` より前に、
+  削除される `Release` 群が `t` の `outstanding` を空にする。
+- **P20** (削除は収支を保つ)。各実行路において、削除される `Retain` が実行時に作る参照の多重集合は、その路で
+  実行される削除される `Release` が実行時に処分する参照の多重集合に一致する。
+- **P21** (削除は解放後の読みを作らない)。削除の前後で、各読む構文の各位置において解放されているオブジェクトの
+  集合は変わらない。
+- **P22** (`drop_nodes` の正しさ)。`drop_nodes(B, S)` は、`B` の `NodeId` が `S` に入る `Retain`/`Release`
+  節点だけを取り除いた木を返し、他の節点の種類・変数・path・並びを変えない。
+- **P23** (`cancel` の健全性)。D12 の意味で健全なプログラムを入力とすると、`cancel` の出力は D12 の意味で
+  健全である。
+- **P24** (健全性が見ない部分の保存)。`borrow_ify` と `cancel` は、D12 が見ない部分について次を満たす。
+  `roots` を変えない。各関数の `fn_ty` / `ret_ty` / `params` の型 / `inline_into_callers` を変えない。
+  各グローバル初期化子の `symbol` と `ty` を変えず、`owns_initializer` と `owns_storage` に `true` を書く。
+  D1 が述べる呼び出し順により、この書き込みは正しい値を書く。
 
 ### 主定理
 
-- **T** (パイプラインの健全性)。`split_rc_units` の出力が健全であるとき、`cancel(borrow_ify(・))` の出力は
-  健全である。P14 と P23 の合成である。
+- **T** (パイプラインの健全性)。`split_rc_units` の出力が A1 と A2 を満たすとき、`cancel(borrow_ify(・))` の
+  出力は D12 の意味で健全であり、D12 が見ない部分について P24 を満たす。P14、P23、P24 の合成である。
 
 ## 6. 較正
 
@@ -321,6 +440,10 @@ union (`Option` や `Result`) の payload を 2 回読むと、`-O max` で読�
 **この定義が弾く先**: 同じ形の誤りは (S-a) にも現れる。参照が 2 度処分されれば (S-a) が破れる。#519 の症状に
 二重解放が含まれていたのはこのためである。
 
+**実行できる形**: この違反を捕まえるテストが `src/tests/test_union_rc_shapes.rs` にある。
+`test_field_read_twice_memory_safety` (valgrind の下で走る) と `test_field_read_twice_correctness` である。
+`853f9756` の `src/rc_ir/ownership.rs` への変更を戻すと、この 2 つが落ちる。
+
 較正をやり直す条件: D11 を変えたとき。変えた定義の下で修正前のコードが健全になるなら、その変更は却下する。
 
 ## 7. 検証状況
@@ -332,4 +455,4 @@ union (`Option` や `Result`) の payload を 2 回読むと、`-O max` で読�
 | P5, P6, P7 | `p12-keys-and-consumes.md` | 未着手 | 未着手 |
 | P8 - P14 | `p20-borrow-ify.md` | 未着手 | 未着手 |
 | P15 - P18 | `p30-cancel-walk.md` | 未着手 | 未着手 |
-| P19 - P23, T | `p40-cancel-soundness.md` | 未着手 | 未着手 |
+| P19 - P24, T | `p40-cancel-soundness.md` | 未着手 | 未着手 |
