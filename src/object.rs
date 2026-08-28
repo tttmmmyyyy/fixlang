@@ -1894,9 +1894,12 @@ fn build_abort_if<'c, 'm>(
 /// lets LLVM fold the address arithmetic into an addressing mode, and bound the index where a
 /// loop's bounds check reads it.
 ///
-/// `idx` names a slot of the buffer, or the one past its last. Every caller establishes that: an
-/// index a program supplies is bounds-checked before it arrives here, and one the compiler counts
-/// runs to the number of elements.
+/// `idx` names a slot of the buffer, or the one past its last, and who owes that varies with the
+/// caller. An index the compiler itself counts runs to the number of elements. An index a program
+/// supplies is bounds-checked against the array's size on the way here, except through the
+/// `_unsafe_` primitives and in a build whose runtime checks are off, where the obligation is the
+/// Fix program's own -- the same obligation those two already carry for the read or the write that
+/// follows.
 pub fn build_gep_array_elem<'c, 'm>(
     gc: &Generator<'c, 'm>,
     elem_basic_ty: BasicTypeEnum<'c>,
