@@ -3,12 +3,16 @@ use tempfile::TempDir;
 
 /// A program that reaches an array's elements every way the compiler computes a pointer into one:
 /// reading a slot, writing a slot in place, writing one of a shared array (which clones the
-/// buffer), growing an array, and taking a range out of one.
+/// buffer), growing an array, taking a range out of one, and moving an element out of one, which
+/// leaves a hole that the walk over the rest of the buffer steps around.
+///
+/// The elements of the last array are themselves arrays, so the buffer owns references: releasing
+/// it and cloning it walk the elements, which a buffer of a fully unboxed element type never does.
 const ARRAY_ACCESS_SOURCE: &str = r#"
     module Main;
 
     total : Array I64 -> I64;
-    total = |arr| Iterator::range(0, arr.get_size).fold(0, |i, acc| acc + arr.@(i));
+    total = |arr| Iterator::range(0, arr.@size).fold(0, |i, acc| acc + arr.@(i));
 
     main : IO ();
     main = (
@@ -17,7 +21,11 @@ const ARRAY_ACCESS_SOURCE: &str = r#"
         let written = arr.set(3, 100);
         let grown = written.push_back(9);
         let taken = grown.get_sub(1, 5);
-        println $ (total(shared) + total(written) + total(grown) + total(taken)).to_string
+        let nested = Array::from_map(4, |i| Array::fill(i + 1, i));
+        let acted : Option (Array (Array I64)) =
+            nested.act(2, |xs| if xs.@size == 0 { none() } else { some(xs.push_back(0)) });
+        println $ (total(shared) + total(written) + total(grown) + total(taken)
+                       + total(acted.as_some.@(2))).to_string
     );
 "#;
 

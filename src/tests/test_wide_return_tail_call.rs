@@ -1,6 +1,8 @@
 use crate::{
     configuration::Configuration,
-    tests::test_util::{emitted_llvm_ir, fix_build_source_command, test_source, EmittedIr},
+    tests::test_util::{
+        emitted_llvm_ir, fix_build_source_command, llvm_function_bodies, test_source, EmittedIr,
+    },
 };
 use tempfile::TempDir;
 
@@ -481,18 +483,9 @@ fn test_destructor_with_wide_resource_is_memory_safe() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A result too wide for the return registers travels through a buffer the caller allocates, and the
-// caller allocates it in its entry block, which it passes once however many times it reaches the
-// call. LLVM keeps what an allocation holds for the whole of the function that makes it unless the
-// code says otherwise, so a caller in a loop would carry the buffer's contents from one turn into
-// the next. Each buffer is therefore bounded by the call that fills it and the read that empties
-// it.
-//
-// The property is about what the compiler emits, so it is read off the generated code: the buffer
-// is a stack slot, which a program cannot observe.
-#[test]
-fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
-    let source = r#"
+// A result too wide for the return registers travels through a buffer the caller allocates in its
+// entry block, which it passes once however many times it reaches the call.
+const WIDE_RESULT_SOURCE: &str = r#"
     module Main;
 
     mk4 : I64 -> (I64, I64, I64, I64);
@@ -501,20 +494,35 @@ fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
     mk_arrays : I64 -> (Array I64, Array I64);
     mk_arrays = |n| (Array::fill(n, 1), Array::fill(n + 1, 2));
 
+    // A wide result computed by a call in tail position, which is handed the out-pointer this
+    // function was given rather than a buffer of its own.
+    forward : I64 -> (Array I64, Array I64);
+    forward = |n| mk_arrays(n);
+
     main : IO ();
     main = (
         let total = Iterator::range(0, 4).fold(0, |n, acc|
             let (a, b, c, d) = mk4(n);
             let (xs, ys) = mk_arrays(n + 1);
-            acc + a + b + c + d + xs.@size + ys.@size
+            let (ps, qs) = forward(n + 2);
+            acc + a + b + c + d + xs.@size + ys.@size + ps.@size + qs.@size
         );
-        assert_eq(|_|"total", total, 74);;
-        pure()
+        println $ total.to_string
     );
-    "#;
+"#;
+
+// The name code generation gives the buffer a call's wide result travels in.
+const OUT_POINTER_BUFFER_NAME: &str = "out@call_lambda";
+
+/// The LLVM IR the code generator wrote for `WIDE_RESULT_SOURCE`, before the LLVM pass pipeline ran.
+///
+/// The buffer a wide result travels in is a stack slot, which a program cannot observe, so what is
+/// asserted of it is asserted of the generated code. It is read before LLVM has run: an optimized
+/// module holds what LLVM itself decided about that slot as well.
+fn generated_ir_of_wide_result_source() -> String {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();
-    let build = fix_build_source_command(dir, source, "none")
+    let build = fix_build_source_command(dir, WIDE_RESULT_SOURCE, "none")
         .arg("--emit-llvm")
         .output()
         .expect("Failed to execute fix build");
@@ -524,35 +532,140 @@ fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
         String::from_utf8_lossy(&build.stdout),
         String::from_utf8_lossy(&build.stderr),
     );
+    emitted_llvm_ir(dir, EmittedIr::BeforeOptimization)
+}
 
-    let ir = emitted_llvm_ir(dir, EmittedIr::BeforeOptimization);
-    let buffers = ir
-        .lines()
-        .filter(|line| line.contains(" = alloca ") && line.contains(OUT_POINTER_BUFFER_NAME))
-        .map(|line| {
-            line.trim()
-                .split_once(" = ")
-                .expect("an alloca binds a name")
-                .0
-        })
-        .collect::<Vec<_>>();
-    assert!(
-        !buffers.is_empty(),
-        "a call whose result is too wide for the return registers should allocate a buffer"
-    );
-    for buffer in &buffers {
-        for marker in ["llvm.lifetime.start", "llvm.lifetime.end"] {
-            let bounded = ir
-                .lines()
-                .any(|line| line.contains(marker) && line.contains(&format!("{})", buffer)));
+/// The names an LLVM function body binds to allocations, in the order the body makes them.
+fn allocations_of(body: &str) -> Vec<&str> {
+    body.lines()
+        .map(str::trim)
+        .filter(|line| line.contains(" = alloca "))
+        .map(|line| line.split_once(" = ").expect("an alloca binds a name").0)
+        .collect()
+}
+
+/// The pointer a `llvm.lifetime` marker bounds: the last argument of the call it is written as.
+fn lifetime_marker_pointer(line: &str) -> &str {
+    let arguments = line
+        .rsplit_once('(')
+        .expect("a call writes its arguments in parentheses")
+        .1
+        .trim_end_matches(')');
+    arguments
+        .rsplit_once(", ")
+        .expect("a lifetime marker takes a size and a pointer")
+        .1
+        .strip_prefix("ptr ")
+        .expect("a lifetime marker takes a pointer")
+}
+
+/// Each buffer holds its call's result from the call that writes it to the read that takes it back
+/// out, and the pair of lifetime markers around that stretch says so. Outside the stretch the
+/// memory holds nothing, so an instruction reaching the buffer before the start or after the end
+/// reads a value LLVM is free to call undefined.
+///
+/// The stretch is straight-line code — a call and the loads that take its result back out — so the
+/// order the instructions are written in is the order they run in.
+#[test]
+fn test_the_buffer_of_a_wide_result_is_bounded_by_its_call() {
+    let ir = generated_ir_of_wide_result_source();
+    let mut buffers_seen = 0;
+    // An empty name part selects every function of the module.
+    for body in llvm_function_bodies(&ir, "") {
+        let lines = body.lines().map(str::trim).collect::<Vec<_>>();
+        let buffers = allocations_of(&body)
+            .into_iter()
+            .filter(|name| name.contains(OUT_POINTER_BUFFER_NAME))
+            .collect::<Vec<_>>();
+        buffers_seen += buffers.len();
+        for buffer in buffers {
+            // A buffer's name carries the `@` of the call it is named after, so LLVM writes it
+            // quoted and no buffer's name is a prefix of another's.
+            let mut holds_a_value = false;
+            for line in lines.iter().filter(|line| line.contains(buffer)) {
+                if line.contains("@llvm.lifetime.start") {
+                    assert!(
+                        !holds_a_value,
+                        "the buffer {} is said to begin holding a value while it already holds one:\n{}",
+                        buffer, body
+                    );
+                    holds_a_value = true;
+                } else if line.contains("@llvm.lifetime.end") {
+                    assert!(
+                        holds_a_value,
+                        "the buffer {} is said to stop holding a value while it holds none:\n{}",
+                        buffer, body
+                    );
+                    holds_a_value = false;
+                } else if !line.contains(" = alloca ") {
+                    // The allocation itself precedes every stretch; everything else reaches the
+                    // buffer, and may only do so while it holds a value.
+                    assert!(
+                        holds_a_value,
+                        "`{}` reaches the buffer {} outside the stretch its lifetime markers bound:\n{}",
+                        line, buffer, body
+                    );
+                }
+            }
             assert!(
-                bounded,
-                "the buffer {} should be bounded by {}, and it is not; the buffers are {:?}",
-                buffer, marker, buffers
+                !holds_a_value,
+                "the buffer {} is left holding a value where the function ends:\n{}",
+                buffer, body
             );
         }
     }
+    assert!(
+        buffers_seen > 0,
+        "a call whose result is too wide for the return registers should allocate a buffer"
+    );
 }
 
-// The name code generation gives the buffer a call's wide result travels in.
-const OUT_POINTER_BUFFER_NAME: &str = "out@call_lambda";
+/// A lifetime marker bounds one allocation, and the frame that makes the allocation is the frame
+/// entitled to say when it begins and stops holding a value. A call in tail position writes its
+/// result through the out-pointer this function was handed, which names a buffer an ancestor frame
+/// allocated and which outlives this one, so nothing here declares that buffer's contents dead or
+/// newly live. Every marker therefore names an allocation of the function it stands in.
+#[test]
+fn test_a_lifetime_marker_names_an_allocation_of_its_own_function() {
+    let ir = generated_ir_of_wide_result_source();
+    // An empty name part selects every function of the module.
+    for body in llvm_function_bodies(&ir, "") {
+        let allocations = allocations_of(&body);
+        for line in body.lines().map(str::trim) {
+            if !line.contains("@llvm.lifetime.") {
+                continue;
+            }
+            let bounded = lifetime_marker_pointer(line);
+            assert!(
+                allocations.contains(&bounded),
+                "`{}` bounds {}, which the function it stands in does not allocate; it allocates {:?}:\n{}",
+                line, bounded, allocations, body
+            );
+        }
+    }
+
+    // `forward` ends in a call whose result is too wide for the return registers, so that call is
+    // handed its own function's out-pointer. Without such a call in the program, the property above
+    // holds for want of a case.
+    let forwarding = llvm_function_bodies(&ir, "Main::forward")
+        .into_iter()
+        .filter(|body| {
+            // A function whose result travels through an out-pointer returns `void` and takes the
+            // pointer before every other parameter, and the call it ends with passes that same
+            // pointer first.
+            let signature = body
+                .lines()
+                .next()
+                .expect("a body opens with its signature");
+            signature.contains(" void @")
+                && body
+                    .lines()
+                    .any(|line| line.contains("call ") && line.contains("(ptr %0,"))
+        })
+        .count();
+    assert!(
+        forwarding > 0,
+        "`forward` should end in a call handed its own function's out-pointer, and none does:\n{}",
+        ir
+    );
+}
