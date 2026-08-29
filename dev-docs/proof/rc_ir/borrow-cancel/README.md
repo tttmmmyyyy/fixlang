@@ -1057,7 +1057,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 
 | P8 | `p20-borrow-ify.md` | 有 | 証明済み (`App` の引数の位置を除く形に狭めた) | 検証済み (指摘 1 件) |
 | P9 - P13 | `p20-borrow-ify.md` | 有 | 証明済み | 検証済み (P12 (d) の 1 段が旧版のコードを述べている) |
-| P14 | `p20-borrow-ify.md` | 有 | **証明されていない** -- 4 段が偽または不完全 (第 9 節) | 検証済み (指摘 26 件) |
+| P14 | `p20-borrow-ify.md` | 有 | 証明済み (A19 (ii-a) と A20 の下で。指摘 26 件を反映) | 検証済み。**2 周目が要る** |
 | P15 - P18 | `p30-cancel-walk.md` | 有 | 証明済み | 検証済み (指摘 9 件を反映) |
 | P18b | `p13-disposals-and-pending.md` | 有 | 証明済み | 検証済み |
 | P18c | `p40-cancel-soundness.md` | 有 | **証明されていない** -- P18a と同じ誤読 (`L42`) | 検証済み |

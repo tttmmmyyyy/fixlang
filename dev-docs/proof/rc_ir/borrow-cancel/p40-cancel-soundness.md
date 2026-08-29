@@ -559,3 +559,347 @@ source、`Match` のアームの本数と並び、および継続の順序は変
      L36, <1>2
 <1>4. QED
   BY <1>3, L35
+
+### L38 (`t` が pending である区間)
+
+**言明** --- `t ∈ CT` と、`t` を含む実行路 `ρ` を取る。`ρ` の上の節点 `n` について「`t` が `n` で pending
+である」が成り立つ `n` の全体は、`ρ` の上の空でない連続する区間であり、その最初の節点は `ρ` の上で `t` の
+直後にある節点である。この区間を `I_ρ(t)`、その最後の節点を `n*(ρ)` と書くと、次の 4 つが成り立つ。
+
+1. `n*(ρ)` は `Release` 節点であり、その訪問の `un_bump` は `InBracket(t)` を返し、`subtract` の後に
+   由来が `t` の要素の `outstanding` が空になってその要素が取り除かれる。よって
+   `n*(ρ) ∈ un_bump_releases[t]` である。
+2. `n*(ρ)` は `ρ` の終端の `Ret` より真に前にある。
+3. `I_ρ(t)` に入る `Release` 節点のうち、その訪問の `un_bump` が `InBracket(t)` を返すもの全体を
+   `R_ρ(t)` と書くと、`n*(ρ) ∈ R_ρ(t) ⊆ un_bump_releases[t] ⊆ Del` であり、
+   `Σ_{r ∈ R_ρ(t)} ActRefs(r) = ActRefs(t)` である。
+4. `I_ρ(t)` に入る節点の訪問の中で、由来が `t` の要素が走査の `pending` に在る時点に走る
+   `consume_objects(pending, objects)` の呼び出しはどれも、その時点のその要素の `outstanding` が名指す
+   名前を `objects` に含まない。よってその要素は `consume_objects` に取り除かれない。
+
+**証明**
+
+<1>1. `t` の訪問は `pending` の末尾に `PendingRetain { node: node_id(t), outstanding: ActRefs(t) }` を
+      積んでから継続へ進む。よって `ρ` の上で `t` の直後にある節点 `n0` について `t` は `n0` で pending で
+      あり、`out(t, n0) = ActRefs(t)` である。`t` は `Retain` 節点なので継続を持ち、`ρ` の上で `n0` は
+      存在する。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
+     DEF 節点の量, L34, D2
+<1>2. `ρ` の上で `t` より後の 2 つの節点 `n`、`n'` が `ρ` の上で隣り合い、`t` が `n` で pending でない
+      ならば、`t` は `n'` でも pending でない。
+  <2>1. CASE L34 の 1。`pending(n')` は `pending(n)` に `push`・`consume_objects`・`un_bump` を施した
+        ものである。要素を加えるのは `push` だけであり、そこで加わる要素の `node` は `n` 自身の
+        `NodeId` である。`n` は `Retain` 節点 `t` とは相異なる位置なので、P15 の前半よりその `NodeId` は
+        `t` の `NodeId` と異なる。`consume_objects` と `un_bump` は要素を加えない。
+    BY L34, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
+       P15, L36, p30 の L5
+  <2>2. CASE L34 の 2。`pending(n')` は `pending(n)` の複製であり、要素の `node` の集合は等しい。
+    BY L34
+  <2>3. CASE L34 の 3。P18 の第 1 の主張より、`merge` の返り値に残る `Retain` は、いずれのアームの出口
+        にも現れるものだけである。`arm_exits[i] = pending(n)` は由来が `t` の要素を持たないので、`t` は
+        `merge` の返り値にも入らない。
+    BY L34, P18
+  <2>4. QED
+    BY <2>1, <2>2, <2>3, L34
+<1>3. `t` が pending である `ρ` の上の節点の全体は、<1>1 の `n0` から始まる連続する区間である。
+  BY <1>1, <1>2
+<1>4. `t` は `ρ` の終端の `Ret` では pending でない。
+  <2>1. `cancel_body` は `analysis.walk(body, ・, true)` を呼び、`walk_inner` は `Match` のアーム本体に
+        だけ `false` を渡し、ほかの継続には自分が受け取った `returns_from_func` をそのまま渡す。よって
+        `returns_from_func` が真である節点の全体は、`B` の根から継続だけをたどって得られる鎖であり、
+        その鎖に入る唯一の `Ret` 節点は `ret(B の根)` である。
+    BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+       DEF 訪問
+  <2>2. L33a より、`ρ` の最後の節点は `ret(B の根)` である。
+    BY L33a
+  <2>3. `walk_inner` の `RcExpr::Ret(_)` の腕は、`returns_from_func` が真のとき `pending` の全要素の
+        `node` を `self.needed_retains` に入れる。
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Ret(_)` の腕
+  <2>4. QED
+    `t` がそこで pending なら <2>3 より `t` が `needed_retains` に入り、`p30` の `L10` より走査の終わりまで
+    残る。これは `t ∈ CT` (DEF 削除集合) に反する。
+    BY <2>1, <2>2, <2>3, p30 の L10, DEF 削除集合
+<1>5. 4 が成り立つ。
+  <2>1. `I_ρ(t)` に入る節点 `n` の訪問の中で `consume_objects(pending, objects)` が走る時点に、由来が
+        `t` の要素 `e` が走査の `pending` に在り、`objects` のいずれかの名前を `e.outstanding` が名指す
+        と仮定する。
+    BY 仮定
+  <2>2. L36 よりこの呼び出しは `e` を取り除き、`t` を `self.needed_retains` に入れる。
+    BY L36, <2>1
+  <2>3. QED
+    `p30` の `L10` より `t` は走査の終わりまで `needed_retains` に残り、`t ∈ CT` に反する。よって <2>1 の
+    仮定は成り立たない。L36 より `consume_objects` が要素を取り除くのはその条件が成り立つときだけなので、
+    `e` は `consume_objects` に取り除かれない。
+    BY <2>2, p30 の L10, DEF 削除集合, L36
+<1>6. 1 が成り立つ。
+  <2>1. <1>3 と <1>4 より区間は `ρ` の終端の `Ret` より前で終わるので、区間の最後の節点 `n*` があり、
+        `ρ` の上でその直後の節点 `n'` について `t` は `n'` で pending でない。
+    BY <1>3, <1>4
+  <2>2. CASE L34 の 3 (`n*` がアーム本体の終端の `Ret`)。`arm_exits[i] = pending(n*)` が由来 `t` の要素を
+        持ち、`merge` の返り値が持たない。P18 の第 2 の主張より、この `merge` の呼び出しは `t` を
+        `self.needed_retains` に入れる。`p30` の `L10` よりそれは走査の終わりまで残るので `t ∈ CT` に
+        反する。よってこの場合は起こらない。
+    BY L34, P18, p30 の L10, DEF 削除集合
+  <2>3. CASE L34 の 2 (`n*` が `Match` 節点)。`pending(n')` は `pending(n*)` の複製なので `t` は `n'` で
+        pending であり、`n*` が区間の最後であることに反する。よってこの場合は起こらない。
+    BY L34
+  <2>4. CASE L34 の 1。`walk_inner` のこれらの腕が `pending` から要素を取り除くのは、`consume_objects` と
+        `un_bump` の 2 つだけである。<1>5 より `consume_objects` は由来 `t` の要素を取り除かない。よって
+        取り除いたのは `un_bump` である。`p30` の `L5` より `un_bump` が要素を取り除くのは第 3 の場合、
+        すなわち `InBracket` を返し、選んだ要素の `outstanding` から `un_bumped` を引いた結果が空に
+        なったときだけであり、そのとき返る `NodeId` は取り除かれた要素の `node` すなわち `t` である。
+        `un_bump` を呼ぶのは `RcExpr::Release(v, path, _, k)` の腕だけなので、`n*` は `Release` 節点で
+        ある。
+    BY L34, <1>5, p30 の L5, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
+  <2>5. QED
+    `n*` は `ρ` の上に直後の節点を持つので、L34 の 3 つの場合のいずれかである。<2>2 と <2>3 がそのうち
+    2 つを排除する。L32 の 4 より `n*(ρ) ∈ un_bump_releases[t]` である。
+    BY <2>1, <2>2, <2>3, <2>4, L34, L32
+<1>7. 2 が成り立つ。
+  BY <1>3, <1>4, <1>6
+<1>8. 3 が成り立つ。
+  <2>1. `R_ρ(t)` の各要素は L32 の 4 より `un_bump_releases[t]` の要素であり、`t ∈ CT` なので L32 の 3 より
+        `Del` の要素である。<1>6 より `n*(ρ) ∈ R_ρ(t)` である。
+    BY L32, <1>6
+  <2>2. `I_ρ(t)` の上で、由来が `t` の要素の `outstanding` は、区間の最初の節点で `ActRefs(t)` であり
+        (<1>1)、`ρ` の上で隣り合う 2 つの節点 `n`、`n'` (どちらも区間に入る) の間で次のように変わる。
+        L34 の 1 では、`consume_objects` は残る要素の値を変えず (L36)、`un_bump` は `InBracket` で選んだ
+        要素の `outstanding` からだけ引く (`p30` の `L5`)。よって `un_bump` が `InBracket(t)` を返す
+        遷移では `ActRefs(n)` が引かれ、それ以外の遷移では変わらない。L34 の 2 では複製なので変わらない。
+        L34 の 3 では、`n` はアーム `arm_i` の本体の終端の `Ret` であり、`merge` が
+        `uniform.get(&retain.node)` の複製を新しい `outstanding` に据える。P18 よりその値はすべての
+        アームの出口に現れる共通の値であり、L34 の 3 より `arm_exits[i] = pending(n)` なので、その共通の
+        値は `out(t, n)` に等しい。よって変わらない。
+    BY <1>1, L34, L36, p30 の L5, P18, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF 節点の量
+  <2>3. 区間の最後で、`n*(ρ)` の `subtract` の後にこの `outstanding` は空になる。
+    BY <1>6
+  <2>4. QED
+    <2>2 より、`ActRefs(t)` から `R_ρ(t)` の各要素の `ActRefs` を順に引いた結果が <2>3 で空になる。
+    多重集合の差なので `Σ_{r ∈ R_ρ(t)} ActRefs(r) = ActRefs(t)` である。
+    BY <2>1, <2>2, <2>3
+<1>9. QED
+  BY <1>3, <1>5, <1>6, <1>7, <1>8
+
+### L39 (静的な収支は実行時の収支である)
+
+**言明** --- 実行路 `ρ` と、`ρ` を辿る 1 回の活性化を固定する。`t ∈ CT` が `ρ` の上にあるとき、名前の
+多重集合として
+
+`ActRefs^inh_ρ(t) = Σ_{r ∈ R_ρ(t)} ActRefs^inh_ρ(r)`
+
+である (`ActRefs^inh_ρ` は `p13` の `DEF 実行時の作用`)。したがって、`t` が `ρ` で実際に作る参照の
+多重集合は、`R_ρ(t)` の各要素が `ρ` で実際に処分する参照の多重集合の和に等しい。
+
+**証明**
+
+<1>1. `Σ_{r ∈ R_ρ(t)} ActRefs(r) = ActRefs(t)` である。`R_ρ(t)` の各要素は `I_ρ(t)` に入るので `ρ` の上に
+      あり、`ρ` の上で実行される。
+  BY L38
+<1>2. `ρ` の上の各 `Retain`/`Release` 節点 `m` と各名前 `o` について、`o` が `ρ` で活性 (`p13` の
+      `DEF 名前の活性`) ならば `ActRefs(m)[o] = ActRefs^inh_ρ(m)[o]` であり、活性でなければ
+      `ActRefs^inh_ρ(m)[o] = 0` である。
+  BY p13 の L10a
+<1>3. 活性な名前 `o` について、<1>1 の等式の両辺の `o` の個数は <1>2 より `ActRefs^inh_ρ` の側の個数と
+      等しいので、`ActRefs^inh_ρ(t)[o] = Σ_{r ∈ R_ρ(t)} ActRefs^inh_ρ(r)[o]` である。活性でない名前に
+      ついては <1>2 より両辺とも 0 である。よって言明の第 1 の等式が成り立つ。
+  BY <1>1, <1>2
+<1>4. QED
+  `p13` の `DEF 実行時の作用` より、`Retain` 節点 `m` について `ActRefs^inh_ρ(m)` は `m` が `ρ` で実際に
+  作る参照の多重集合であり、`Release` 節点 `m` について `m` が `ρ` で実際に処分する参照の多重集合で
+  ある。`p13` の `DEF 名前の活性` より、活性な名前 `o` の参照はオブジェクト `obj_ρ(o)` への参照である。
+  よって <1>3 の名前ごとの等式は、参照の多重集合の等式である。
+  BY <1>3, p13 の DEF 実行時の作用, p13 の DEF 名前の活性, P6
+
+### L40 (`N` は類ごとの bump の和である) --- H1 として置く
+
+**言明** --- 実行路 `ρ` と、`ρ` を辿る 1 回の活性化を固定する。`ρ` の上の節点 `q` と計数下 (D26) の
+オブジェクト `O` について、`N(q, O) = Σ_{C : obj(C) = O} bumps_ρ(q, C)` である。ここで `bumps_ρ` と
+`obj(C)` は `p13` の `DEF 類ごとの参照` と `DEF 別名類` のものである。
+
+**この文書はこれを証明しない。** 第 2 節の H1 として置き、`L42` だけが読む。同じ言明は
+`p13-disposals-and-pending.md` の第 7.5.4 節の <1>2 が述べて示しているが、それは別の命題の証明の内部の
+ステップであり、記法の規約はそれを引用することを禁じる。第 10 節の 差し戻し 1 が、これを `p13` の
+名前付きの補題に上げることを求める。
+
+### L41 (余りの下界)
+
+**言明** --- 実行路 `ρ` と、`ρ` を辿る 1 回の活性化を固定する。`ρ` の上の節点 `q` と計数下のオブジェクト
+`O` について、`N(q, O) ≥ 1` ならば、`q` の位置での参照カウントは `H(q, O) ≥ N(q, O) + 1` である。
+
+**証明**
+
+<1>1. P18a の「走査中の位置」を節点 `q` の訪問の入口に取ると、その `n(O)` は `N(q, O)` である。
+  BY P18a, D27, DEF N
+  D27 は `B(p, ρ)` を節点の訪問の入口で定め、P18a はその `B(p, ρ)` を使って
+  `n(O) = Σ_p Σ_{o : obj(o) = O} B(p, ρ)[o]` と置く。DEF N がその和である。
+<1>2. QED
+  BY P18a, <1>1
+  P18a は `n(O) ≥ 1` のとき `H(O) ≥ n(O) + 1` を述べる。
+
+### L42 (義務は pending の bump を覆う) --- H1 と H2 の下で
+
+**言明** --- H1 と H2 の下で、実行路 `ρ` を辿る活性化の各時点 `τ` と各計数下オブジェクト `O` について、
+`Obl(τ, O) ≥ Σ_{C : obj(C) = O} bumps_ρ(τ, C)` である。とくに `ρ` の上の節点 `q` の入口では
+`Obl(q, O) ≥ N(q, O)` である。**これは README の P18c である。**
+
+時点と走査の状態の対応は、`p13` の `DEF 類ごとの参照` と A19 が置くものを使う。すなわち、実行時の 1 つの
+事象 (D10 の行が定める参照の作成・処分) の直後の時点には、走査がその事象に対応する操作を行った直後の
+`pending` が対応する。
+
+**局所の定義 (類ごとの義務)**。別名類 `C` について、`β(C)` を、`C` の ρ-終端が借用する (D14) パラメータ・
+capture の leaf であるとき 1、そうでないとき 0 と定め、各時点 `τ` について
+`obl_ρ(τ, C) := held_ρ(τ, C) - β(C)` と置く。
+
+**証明**
+
+<1>1. 計数下のオブジェクト `O` と各時点 `τ` について `Obl(τ, O) = Σ_{C : obj(C) = O} obl_ρ(τ, C)` である。
+  <2>1. D10 が `Obl` を変える事象は、初期値、`Retain`、`Release`、生成、消費の 5 種である。移動は `Obl` を
+        変えない。D26 より、数えるのは計数下のオブジェクトへの参照だけである。
+    BY D10, D26
+  <2>2. これらの事象はいずれも 1 つの inhabited な leaf に紐づき、その leaf は `ρ` の上のスロット (D6)
+        であって、ちょうど 1 つの別名類に属する。
+    BY D6, D10, p13 の DEF 別名類
+  <2>3. `p13` の `DEF 類ごとの参照` の表の 6 行は、この 5 種の事象と次のように対応する。第 1 行が生成、
+        第 2 行と第 3 行が初期値 (所有する場合と借用する場合)、第 4 行が `Retain`、第 5 行が `Release`、
+        第 6 行が消費である。
+    BY p13 の DEF 類ごとの参照, D10
+  <2>4. D10 の生成の表の 5 行が名指す leaf は、いずれもその類の ρ-終端 (`p13` の `DEF ρ-歩みと ρ-終端`)
+        である。
+    <3>1. D10 の生成の 5 行が名指す値の束縛は順に、`Binding::Llvm` (宣言が単一の `Arg` でない leaf)、
+          `RcRhs::App` の `Binding::Producer`、`RcRhs::Closure` の `Binding::Producer`、boxed 容器の
+          `Binding::Field`、boxed scrutinee の `Binding::Payload(_, Some(tag))` である。
+      BY D10, CODE src/rc_ir/ownership.rs: collect_bindings
+    <3>2. `Binding::Producer` の腕、`container.ty.is_box` が真の `Binding::Field` の腕、
+          `scrut.ty.is_box` が真の `Binding::Payload(_, Some(_))` の腕は、いずれも `here()` を返し
+          `origin` を呼ばない。
+      BY CODE src/rc_ir/ownership.rs: origin_inner
+    <3>3. `Binding::Llvm` の腕は、boxed leaf `λ` について
+          `decl.leaf_origins_at(λ).and_then(as_arg_projection)` が `None` のとき
+          `origin_from_leaves_under(vars, type_env, &decl, args, λ, &here_identity)` を呼ぶ。この呼び
+          出しは `origin` を呼ばない。
+      <4>1. A3 より、このコミットのすべての op の宣言は結果の各 leaf に元数 0 か 1 の `LeafOrigins` を
+            与える。元数 1 でその元が `LeafOrigin::Arg` ならば `as_arg_projection` は `Some` を返すので、
+            この場合の `λ` の宣言は空集合か、`Fresh` か `Unknown` ただ 1 つである。
+        BY A3, CODE src/rc_ir/ownership.rs: as_arg_projection
+      <4>2. `decl.leaf_origins_under(λ)` が渡す集合は `λ` 自身の宣言だけである。
+        BY p13 の L7, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+           CODE src/rc_ir/provenance.rs: Provenance::build_shape
+        `build_shape` は型の各 boxed leaf を鍵に値を置き、`leaf_origins_under(path)` は鍵が `path` を
+        前置に持つ元を渡す (その doc が「A path that is itself a leaf yields that leaf」と述べる)。
+        `p13` の `L7` より boxed leaf の路は反鎖をなすので、`λ` を前置に持つ boxed leaf は `λ` 自身
+        だけである。
+      <4>3. QED
+        BY <4>1, <4>2, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+        <4>1 と <4>2 より `operand_units` は空である。`origin_from_leaves_under` が `origin` を呼ぶのは
+        `operand_units` の各元についてだけである。
+    <3>4. QED
+      BY <3>1, <3>2, <3>3, p13 の DEF ρ-歩みと ρ-終端
+      `p13` の `DEF ρ-終端` は「`origin_inner` が `origin` を呼ばないとき」を ρ-終端という。
+  <2>5. 計数下の `O` について `obj(C) = O` である類 `C` の ρ-終端は、D10 の生成が作る leaf か、パラメータ・
+        capture の leaf である。
+    <3>1. ρ-終端に当たる `origin_inner` の腕は、`None`/`Param`/`Producer` の腕、`Binding::Llvm` の
+          宣言が単一の `Arg` でない腕、`container.ty.is_box` が真の `Binding::Field` の腕、
+          `scrut.ty.is_box` が真の `Binding::Payload(_, Some(_))` の腕の 4 つである。残る腕 --
+          `Move`、`Join`、単一 `Arg` の `Llvm`、`is_box` が偽の `Field`、catch-all と `is_box` が偽の
+          変位の `Payload` -- はいずれも `origin` を呼ぶ。`Join` の腕が `origin` を呼ぶことは A9 が
+          与える (アームが 1 つ以上あるので `arm_results` は空でない)。
+      BY CODE src/rc_ir/ownership.rs: origin_inner, A9, <2>4, p13 の DEF ρ-歩みと ρ-終端
+    <3>2. `None` の腕に当たるのは束縛表が持たない名前、すなわちグローバル値である。A8 と D26 より、その
+          leaf が指すオブジェクトはグローバル状態であり、計数下ではない。
+      BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: VarTable::of, A8, D26
+    <3>3. QED
+      BY <3>1, <3>2, <2>4, CODE src/rc_ir/ownership.rs: VarTable::of
+      `Binding::Param` を置くのは `VarTable::of` がパラメータと capture について行う 1 か所だけなので、
+      `Param` の腕に当たるのはパラメータ・capture の leaf である。残る 3 つの腕は <2>4 の生成の leaf で
+      ある。
+  <2>6. QED
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, D10, D14, 本補題の局所の定義
+    <2>3 の対応で、D10 の各事象は `held_ρ` と `Obl` に同じ増減を起こす。違うのは初期値の 2 行だけで
+    ある。所有する (D14) パラメータ・capture の leaf では、D10 の初期値が参照を 1 つ入れ、`held_ρ` の
+    第 2 行も 1 から始まるので、両者は等しい (`β = 0`)。借用する leaf では、D10 は参照を入れないのに
+    `held_ρ` の第 3 行は 1 から始まるので、`Obl` の側は 1 少ない (`β = 1`)。生成の leaf では D10 が
+    参照を 1 つ入れ、`held_ρ` の第 1 行も 1 から始まる (`β = 0`)。<2>5 より計数下の `O` を指す類の
+    ρ-終端はこの 3 つのいずれかなので、`obl_ρ = held_ρ - β` の総和が `Obl` である。
+<1>2. 各時点 `τ` と、`obj(C) = O` である各別名類 `C` について `obl_ρ(τ, C) ≥ bumps_ρ(τ, C)` である。
+  <2>1. `bumps_ρ(τ, C) ≥ 0` である。
+    BY p13 の DEF 類ごとの参照, p13 の L11
+    `bumps_ρ(τ, C)` は `B_ρ` の個数の総和であり、`p13` の `L11` より各個数は 0 以上である。
+  <2>2. CASE `β(C) = 0`。A19 の (ii-b) より `held_ρ(τ, C) ≥ bumps_ρ(τ, C)` であり、局所の定義より
+        `obl_ρ(τ, C) = held_ρ(τ, C)` である。
+    BY A19, 本補題の局所の定義
+  <2>3. CASE `β(C) = 1` かつ `bumps_ρ(τ, C) ≥ 1`。A19 が (ii-b) の脇に書く導かれた形 --「bump が 1 以上
+        ある時点では、参照は bump より 1 つ多い」-- より `held_ρ(τ, C) ≥ 1 + bumps_ρ(τ, C)` であり、
+        局所の定義より `obl_ρ(τ, C) = held_ρ(τ, C) - 1 ≥ bumps_ρ(τ, C)` である。
+    BY A19, 本補題の局所の定義
+  <2>4. CASE `β(C) = 1` かつ `bumps_ρ(τ, C) = 0`。H2 より `held_ρ(τ, C) ≥ 1` であり、局所の定義より
+        `obl_ρ(τ, C) = held_ρ(τ, C) - 1 ≥ 0 = bumps_ρ(τ, C)` である。
+    BY H2, 本補題の局所の定義
+  <2>5. QED
+    局所の定義より `β(C)` は 0 か 1 であり、<2>1 より `bumps_ρ(τ, C)` は 0 か 1 以上である。<2>2、
+    <2>3、<2>4 はこの 3 つの場合を尽くす。
+    BY <2>1, <2>2, <2>3, <2>4
+<1>3. QED
+  BY <1>1, <1>2, H1
+  <1>1 と <1>2 より `Obl(τ, O) = Σ_C obl_ρ(τ, C) ≥ Σ_C bumps_ρ(τ, C)` である。節点 `q` の入口では
+  H1 よりこの右辺は `N(q, O)` である。
+
+#### H2 が要る所
+
+<1>2 の 3 つの場合のうち、A19 だけで閉じるのは <2>2 と <2>3 である。<2>4 -- 借用する終端を持つ類で、
+その時点に pending な bump が 1 つも無い場合 -- が残る。A19 の (ii-a) はその類の `held_ρ` が非負であることしか
+言わないので、`held_ρ(τ, C) = 0` が許される。そのとき `obl_ρ(τ, C) = -1` である。
+
+**それが総和を割るのは 1 つの形である。** 1 つの計数下オブジェクト `O` を指す類が 3 つあり、2 つは借用する
+終端を持って `held_ρ = 0` に落ちており、1 つは `bumps_ρ = 1`、`held_ρ = 2` であるとする。このとき
+`Obl(τ, O) = (-1) + (-1) + 2 = 0` であるのに `Σ_C bumps_ρ(τ, C) = 1` であり、言明が破れる。`bumps ≥ 1` の
+類を 1 つ選んで残りに `held ≥ bumps` だけを使う場合分け (`p13` の第 7.5.4 節の <1>3 がとる形) では、
+この差は埋まらない -- そこでの余りは 1 つだけで、`β` が 1 の類の個数だけ引かれるからである。
+
+**H2 は `borrow_ify` の出力についての言明として証明できる見込みがある。** 借用する終端を持つ類の
+`held_ρ` を減らす事象は 2 つしかない -- その類のスロットを名指す `Release` と、その類のスロットの消費で
+ある。前者は借用版では `rewrite_rc` が丸ごと落とし (P10、P7a)、後者には `call_rc` が直前に `Retain` を
+置く (P11、`p13` の `L16`)。第 10 節の 差し戻し 2 が、これをどこに置くかを述べる。
+
+### L43 (欠損は pending の bump の一部である)
+
+**言明** --- 対応する活性化を固定する。`ρ` の上の位置 `q` と計数下のオブジェクト `O` について
+
+`d(q, O) = Σ_{t} Σ_{o : obj_ρ(o) = O} B_ρ(q, e_t(q))[o]`
+
+である。ここで外側の和は、`CT` に属し `q` で pending である `Retain` 節点 `t` を渡り、内側の和は `ρ` で
+活性な名前 `o` を渡る。とくに `0 ≤ d(q, O) ≤ N(q, O)` である。
+
+**証明**
+
+<1>1. `q` より前に実行された `Del` の `Retain` 節点は、`ρ` の上で `q` より前にある `CT` の要素である。
+  BY L32, DEF 欠損
+<1>2. `q` より前に実行された `Del` の `Release` 節点 `r` は、ある `t ∈ CT` について `r ∈ R_ρ(t)` であり、
+      その `t` は `ρ` の上で `r` より前にある。
+  BY L32, L37, L38
+  L32 の 3 より `r` はちょうど 1 つの `t ∈ CT` の `un_bump_releases[t]` に属する。L37 より `t` は `ρ` の
+  上で `r` より真に前にあり、`t` は `r` で pending である。よって `r ∈ I_ρ(t)` であり、L32 の 4 より
+  `r` の訪問の `un_bump` は `InBracket(t)` を返すので、L38 の 3 の定義より `r ∈ R_ρ(t)` である。
+<1>3. `t ∈ CT` が `ρ` の上で `q` より前にあり、`q` で pending でないとき、`R_ρ(t)` の全要素は `q` より前に
+      実行されており、`t` と `R_ρ(t)` の寄与の和は 0 である。
+  BY L38, L39, <1>2
+  L38 より `I_ρ(t)` は `t` の直後から始まる連続した区間であり、`t` が `q` で pending でないので区間は
+  `q` より前で終わる。`R_ρ(t) ⊆ I_ρ(t)` なのでその全要素は `q` より前にある。L39 より
+  `ActRefs^inh_ρ(t) = Σ_{r ∈ R_ρ(t)} ActRefs^inh_ρ(r)` なので、作った参照と処分した参照は打ち消し合う。
+<1>4. `t ∈ CT` が `q` で pending であるとき、`t` と、`q` より前に実行された `R_ρ(t)` の要素の寄与の和は、
+      名前ごとに `ActRefs^inh_ρ(t) - Σ_{r ∈ R_ρ(t), r は q より前} ActRefs^inh_ρ(r)` であり、これは
+      `B_ρ(q, e_t(q))` に等しい。
+  BY D27, L38, <1>2
+  D27 は、`Retain` の訪問で押し込まれた要素の `B` を `ActRefs^inh_ρ(t)` と定め、`un_bump` が
+  `InBracket` でその要素を選ぶ `Release` の訪問でだけ `ActRefs^inh_ρ` を引き、複製・`merge`・その他の
+  節点では値を運ぶだけである。その要素を選ぶ `Release` は L38 の 3 の `R_ρ(t)` の要素である。
+<1>5. 名前ごとの寄与をオブジェクトごとの寄与に直す。`Retain`/`Release` が実際に作る (処分する) 参照は、
+      その名前 `o` について、オブジェクト `obj_ρ(o)` への参照である。よって `O` への寄与は
+      `obj_ρ(o) = O` である名前 `o` の分の和である。
+  BY p13 の DEF 名前の活性, p13 の DEF 実行時の作用, P5
+<1>6. 言明の等式が成り立つ。
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, DEF 欠損
+<1>7. QED
+  BY <1>6, p13 の L11, DEF N
+  `p13` の `L11` より、活性な `o` について `B_ρ(q, e)[o] = e.outstanding[o] ≥ 0` であり、活性でない `o`
+  について `B_ρ(q, e)[o] = 0` である。よって <1>6 の和は 0 以上である。DEF N の `N(q, O)` は同じ内側の和を
+  `pending(q)` の**すべての**要素について取ったものなので、`d(q, O) ≤ N(q, O)` である。
