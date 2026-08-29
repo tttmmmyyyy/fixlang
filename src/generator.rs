@@ -1,6 +1,5 @@
-// generator module
-// --
-// GenerationContext struct, code generation and convenient functions.
+//! Code generation into an LLVM module: the `Generator` holding the state of the module being
+//! written, and the `Object` a Fix value takes while it is generated.
 
 use crate::ast::name::FullName;
 use crate::ast::name::Name;
@@ -22,7 +21,7 @@ use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
 use crate::constants::SYMBOL_VERSION_SEPARATOR;
 use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
 use crate::error::panic_with_msg;
-use crate::ffi::CSignature;
+use crate::ffi::{promote_through_ellipsis, CSignature};
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
 use crate::fixstd::runtime::RUNTIME_ABORT;
@@ -83,9 +82,11 @@ use inkwell::{
 };
 use std::{cell::RefCell, iter::successors, sync::Arc};
 
-// A value bound to a name in the current scope.
+/// A value bound to a name in the current scope.
 #[derive(Clone)]
 pub struct ScopedValue<'c> {
+    /// Where reading the name finds its value: a local object already in registers, or the getter
+    /// function of a global.
     accessor: ValueAccessor<'c>,
     /// Whether `get_scoped_obj` retains the value's boxed subobjects when reading it. True only for
     /// unboxed globals, which keep their own reference and so must hand out a retained copy; a boxed
@@ -93,16 +94,20 @@ pub struct ScopedValue<'c> {
     retain_on_read: bool,
 }
 
-// How a scoped value's `Object` is obtained: an in-register local object, or a global read through
-// its getter function.
+/// How a scoped value's `Object` is obtained: an in-register local object, or a global read through
+/// its getter function.
 #[derive(Clone)]
 pub enum ValueAccessor<'c> {
+    /// The object itself, held in the registers of the function being generated.
     Local(Object<'c>),
+    /// The getter function of a global, and the Fix type of the value it answers with.
     Global(FunctionValue<'c>, Arc<TypeNode>),
 }
 
 impl<'c> ValueAccessor<'c> {
-    // Get the object.
+    /// The object this accessor names: a local's object as it stands, or the value a global's
+    /// getter returns. A global of funptr type is the function itself, so its address is taken
+    /// without a call.
     pub fn get<'m>(&self, gc: &mut Generator<'c, 'm>) -> Object<'c> {
         match self {
             ValueAccessor::Local(ptr) => ptr.clone(),
@@ -129,25 +134,27 @@ impl<'c> ValueAccessor<'c> {
     }
 }
 
-// A Fix value being generated, living in LLVM registers, together with the Fix type that gives it
-// its layout and reference-counting behavior.
+/// A Fix value being generated, living in LLVM registers, together with the Fix type that gives it
+/// its layout and reference-counting behavior.
 #[derive(Clone)]
 pub struct Object<'c> {
-    // The object's value, held as the list of parts it splits into, in `type_parts` order. A boxed
-    // object is the single heap pointer, a funcptr the single function pointer, an unboxed scalar
-    // the value itself; an unbox struct is its fields spread out here rather than kept as one
-    // aggregate, so a loop-carried field (an `Array`'s `@size`) stays visible to LLVM instead of
-    // hiding inside an aggregate phi. A struct too wide to split is one part holding the whole
-    // aggregate. The aggregate is reassembled on demand by `value`, only at memory and ABI
-    // boundaries.
+    /// The object's value, held as the list of parts it splits into, in `type_parts` order. A boxed
+    /// object is the single heap pointer, a funcptr the single function pointer, an unboxed scalar
+    /// the value itself; an unbox struct is its fields spread out here rather than kept as one
+    /// aggregate, so a loop-carried field (an `Array`'s `@size`) stays visible to LLVM instead of
+    /// hiding inside an aggregate phi. A struct too wide to split is one part holding the whole
+    /// aggregate. The aggregate is reassembled on demand by `value`, only at memory and ABI
+    /// boundaries.
     data: Vec<BasicValueEnum<'c>>,
+    /// The Fix type of the value, which decides how it is laid out and what retaining, releasing
+    /// and marking it reach.
     pub ty: Arc<TypeNode>,
 }
 
 impl<'c> Object<'c> {
-    // Construct an object from its assembled value: the heap pointer of a boxed object, the
-    // function pointer of a funptr, or the embedded value of an unboxed one. The value is split
-    // into parts on the way in.
+    /// Construct an object from its assembled value: the heap pointer of a boxed object, the
+    /// function pointer of a funptr, or the embedded value of an unboxed one. The value is split
+    /// into parts on the way in.
     pub fn new<'m>(
         value: BasicValueEnum<'c>,
         ty: Arc<TypeNode>,
@@ -162,9 +169,9 @@ impl<'c> Object<'c> {
         Object { data, ty }
     }
 
-    // Construct an object directly from its parts, in `type_parts` order. This is the fast path at
-    // ABI and phi boundaries, where the parts are already in hand and reforming the aggregate only
-    // to split it again in `new` would be wasted work.
+    /// Construct an object directly from its parts, in `type_parts` order. This is the fast path at
+    /// ABI and phi boundaries, where the parts are already in hand and reforming the aggregate only
+    /// to split it again in `new` would be wasted work.
     pub fn from_parts<'m>(
         data: Vec<BasicValueEnum<'c>>,
         ty: Arc<TypeNode>,
@@ -186,20 +193,20 @@ impl<'c> Object<'c> {
         Object { data, ty }
     }
 
-    // The parts of this object, in `type_parts` order.
+    /// The parts of this object, in `type_parts` order.
     pub fn parts(&self) -> &[BasicValueEnum<'c>] {
         &self.data
     }
 
-    // The object's parts as call arguments, for a callee that takes the object split into them.
+    /// The object's parts as call arguments, for a callee that takes the object split into them.
     pub fn part_call_args(&self) -> Vec<BasicMetadataValueEnum<'c>> {
         self.data.iter().map(|v| (*v).into()).collect()
     }
 
-    // Reassemble the object's value from its parts. Free for a boxed object, a funcptr, an unboxed
-    // scalar, or a struct too wide to split (the single part is returned as is); a split unbox
-    // struct is rebuilt with one `insertvalue` per field, which SROA folds away wherever the
-    // aggregate is not truly needed.
+    /// Reassemble the object's value from its parts. Free for a boxed object, a funcptr, an unboxed
+    /// scalar, or a struct too wide to split (the single part is returned as is); a split unbox
+    /// struct is rebuilt with one `insertvalue` per field, which SROA folds away wherever the
+    /// aggregate is not truly needed.
     pub fn value<'m>(&self, gc: &mut Generator<'c, 'm>) -> BasicValueEnum<'c> {
         if self.ty.is_box(gc.type_env()) || self.ty.is_funptr() {
             return self.data[0];
@@ -209,8 +216,8 @@ impl<'c> Object<'c> {
         gc.assemble_from_parts(embedded, &mut parts)
     }
 
-    // An object of type `ty` whose value is `undef`, for an unreachable point that still has to
-    // produce a value of the type.
+    /// An object of type `ty` whose value is `undef`, for an unreachable point that still has to
+    /// produce a value of the type.
     pub fn undef<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
         let val = if ty.is_unbox(gc.type_env()) {
             ty.get_struct_type(gc).get_undef().as_basic_value_enum()
@@ -249,8 +256,8 @@ impl<'c> Object<'c> {
         self.ty.is_dynamic()
     }
 
-    // Whether this object is carried as one aggregate rather than split into its fields' parts, so
-    // that its single part holds the whole struct (see `Generator::is_carried_whole`).
+    /// Whether this object is carried as one aggregate rather than split into its fields' parts, so
+    /// that its single part holds the whole struct (see `Generator::is_carried_whole`).
     pub fn is_carried_whole<'m>(&self, gc: &mut Generator<'c, 'm>) -> bool {
         let embedded = self.ty.get_embedded_type(gc);
         gc.is_carried_whole(embedded)
@@ -274,7 +281,7 @@ impl<'c> Object<'c> {
         self.ty.get_struct_type(gc)
     }
 
-    // Get the pointer to the field of an boxed object.
+    /// The address of field `field_idx` within the heap block of this boxed object.
     pub fn gep_boxed<'m>(&self, gc: &mut Generator<'c, 'm>, field_idx: u32) -> PointerValue<'c> {
         assert!(self.ty.is_box(gc.type_env()));
         let struct_ty = self.struct_ty(gc);
@@ -284,9 +291,13 @@ impl<'c> Object<'c> {
             .unwrap()
     }
 
-    // Extract a field value of an object.
-    // This cannot be used to get field of dynamic objects. Use `load_field_dynamic` instead.
-    // This function does not support funptr type since in that case the `value` is not a struct.
+    /// The value of field `field_idx`, sliced out of the parts of an unboxed object or loaded from
+    /// the heap block of a boxed one.
+    ///
+    /// The field is addressed by the layout the object's type alone gives, which asks for a struct:
+    /// a funptr is carried as its bare function pointer, and a `#DynamicObject`'s captured values
+    /// lie beyond the fields its type names, so a capture is read by `extract_field_as` under the
+    /// struct type the capture types build.
     pub fn extract_field<'m>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -315,9 +326,10 @@ impl<'c> Object<'c> {
         }
     }
 
-    // Extract a field value of an object.
-    // You can specify the struct type of the boxed object, ignoring the `ty` field of the object.
-    // Can be used only for boxed objects, because currently there is no use case of this function for unboxed objects.
+    /// The value of field `field_idx` of this boxed object, loaded under the struct layout `ty`
+    /// rather than the one the object's own type gives. A `#DynamicObject` is read this way: `ty`
+    /// is built from the types of the values it captures, which is what puts its fields at their
+    /// offsets.
     pub fn extract_field_as<'m>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -332,12 +344,12 @@ impl<'c> Object<'c> {
             .unwrap()
     }
 
-    // Extract a field of an object as an `Object`, keeping its value in the part domain: for an
-    // unbox object the field's parts are sliced straight out with no aggregate formed, so a struct
-    // field never round-trips through an `insertvalue`/`extractvalue` that a later pass could sink
-    // into an aggregate phi. `field_ty` is the field's Fix type; for a boxed object the field is
-    // loaded from the heap and its (materialized) value split back into parts. The field is
-    // moved out, not retained.
+    /// Extract a field of an object as an `Object`, keeping its value in the part domain: for an
+    /// unbox object the field's parts are sliced straight out with no aggregate formed, so a struct
+    /// field never round-trips through an `insertvalue`/`extractvalue` that a later pass could sink
+    /// into an aggregate phi. `field_ty` is the field's Fix type; for a boxed object the field is
+    /// loaded from the heap and its (materialized) value split back into parts. The field is
+    /// moved out, not retained.
     pub fn extract_field_object<'m>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -360,9 +372,13 @@ impl<'c> Object<'c> {
         }
     }
 
-    // Insert a field value into an object.
-    // This cannot be used to set field of dynamic objects. Use `store_field_dynamic` instead.
-    // This function does not support funptr type since in that case the `value` is not a struct.
+    /// This object with `val` in field `field_idx`: spliced into the parts of an unboxed object, or
+    /// stored into the heap block of a boxed one.
+    ///
+    /// The field is addressed by the layout the object's type alone gives, which asks for a struct:
+    /// a funptr is carried as its bare function pointer, and a `#DynamicObject`'s captured values
+    /// lie beyond the fields its type names, so a capture is written by `insert_field_as` under the
+    /// struct type the capture types build.
     pub fn insert_field<'m, V>(
         mut self,
         gc: &mut Generator<'c, 'm>,
@@ -403,10 +419,10 @@ impl<'c> Object<'c> {
         self
     }
 
-    // Insert an `Object` into a field, keeping the value in the part domain: for an unbox object the
-    // source object's parts are spliced straight into the field's range with no aggregate formed on
-    // either side. For a boxed object the field is stored to the heap, where the value must be
-    // materialized. The counterpart of `extract_field_object`.
+    /// Insert an `Object` into a field, keeping the value in the part domain: for an unbox object the
+    /// source object's parts are spliced straight into the field's range with no aggregate formed on
+    /// either side. For a boxed object the field is stored to the heap, where the value must be
+    /// materialized. The counterpart of `extract_field_object`.
     pub fn insert_field_object<'m>(
         mut self,
         gc: &mut Generator<'c, 'm>,
@@ -432,9 +448,10 @@ impl<'c> Object<'c> {
         self
     }
 
-    // Insert a field value into an object.
-    // You can specify the struct type of the boxed object, ignoring the `ty` field of the object.
-    // Can be used only for boxed objects, because currently there is no use case of this function for unboxed objects.
+    /// Store `value` into field `field_idx` of this boxed object, under the struct layout `ty`
+    /// rather than the one the object's own type gives. A `#DynamicObject` is written this way:
+    /// `ty` is built from the types of the values it captures, which is what puts its fields at
+    /// their offsets.
     pub fn insert_field_as<'m, V>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -449,32 +466,32 @@ impl<'c> Object<'c> {
         gc.builder().build_store(ptr_to_field, value).unwrap();
     }
 
-    // Get the pointer to traverser function from a dynamic object.
+    /// The traverser function a `#DynamicObject` carries, which is what drives the lifetimes of the
+    /// values it captures: their types vary with the closure, so the object holds its traverser
+    /// instead of one generated for its type.
     pub fn extract_trav_from_dynamic<'m>(&self, gc: &mut Generator<'c, 'm>) -> PointerValue<'c> {
         assert!(self.ty.is_dynamic());
         self.extract_field(gc, DYNAMIC_OBJ_TRAVARSER_IDX)
             .into_pointer_value()
     }
 
-    // Check if the pointer is null.
-    // Can be used for boxed objects.
+    /// Whether this boxed object's pointer is null, which the capture object of a closure that
+    /// captures nothing is.
     pub fn is_null<'m>(&self, gc: &mut Generator<'c, 'm>) -> IntValue<'c> {
         assert!(self.is_box(gc.type_env()));
         let ptr = self.value(gc).into_pointer_value();
         gc.builder().build_is_null(ptr, "is_null").unwrap()
     }
 
-    // Get the pointer to the field of an boxed object.
-    // Can be used only for boxed objects.
+    /// The address of field `field_idx` within the heap block of this boxed object.
     pub fn ptr_to_field<'m>(&self, gc: &mut Generator<'c, 'm>, field_idx: u32) -> PointerValue<'c> {
         assert!(self.is_box(&gc.type_env));
         let ty = self.struct_ty(gc);
         self.ptr_to_field_as(gc, ty, field_idx)
     }
 
-    // Get the pointer to the field of an boxed object.
-    // You can specify the struct type of the boxed object, ignoring the `ty` field of the object.
-    // Can be used only for boxed objects.
+    /// The address of field `field_idx` within the heap block of this boxed object, under the
+    /// struct layout `ty` rather than the one the object's own type gives.
     pub fn ptr_to_field_as<'m>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -689,7 +706,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         gv
     }
 
-    // Build alloca at current function's entry bb.
+    /// A stack slot holding a value of `ty`, allocated in the entry block of the function being
+    /// generated so that the allocation happens once however often control reaches the code asking
+    /// for it. The builder is left where it stood.
     pub fn build_alloca_at_entry<T: BasicType<'c>>(
         &mut self,
         ty: T,
@@ -853,7 +872,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.target_data.get_bit_size(ty) / 8
     }
 
-    // The minimum alignment required to store or load a value of this type; an empty aggregate is 1.
+    /// The minimum alignment required to store or load a value of this type; an empty aggregate is 1.
     pub fn abi_alignment(&mut self, ty: &dyn AnyType<'c>) -> u64 {
         self.target_data.get_abi_alignment(ty) as u64
     }
@@ -867,8 +886,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         ptr_size
     }
 
-    // An empty LLVM module called `name`, carrying the triple and data layout of `target_machine`
-    // so that the types built in it get that target's sizes, alignments and offsets.
+    /// An empty LLVM module called `name`, carrying the triple and data layout of `target_machine`
+    /// so that the types built in it get that target's sizes, alignments and offsets.
     pub fn create_module(
         name: &str,
         ctx: &'c Context,
@@ -880,8 +899,17 @@ impl<'c, 'm> Generator<'c, 'm> {
         module
     }
 
-    // Create new gc. `global_types` gives the type of every global symbol of the program, from which
-    // a global is declared the first time this module reaches it.
+    /// The state for generating `module`, holding one empty builder and one empty scope, with the
+    /// return ABI and calling convention read from the module's target triple.
+    ///
+    /// # Arguments
+    /// * `global_types` — the type of every global symbol of the program, which a global is
+    ///   declared from the first time this module reaches it.
+    /// * `published_names` — the names some compilation unit publishes to the linker, over the
+    ///   whole program.
+    /// * `imported` — the names whose home is another unit and which this module holds a copy of
+    ///   for its own calls.
+    /// * `shared_globals` — the globals a unit other than the one owning them reads.
     pub fn new(
         ctx: &'c Context,
         module: &'m Module<'c>,
@@ -956,12 +984,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.debug_info = Some((dib, dicu));
     }
 
-    // Get builder.
+    /// The builder instructions are appended through, which is the innermost one pushed.
     pub fn builder(&self) -> Arc<Builder<'c>> {
         self.builders.borrow().last().unwrap().clone()
     }
 
-    // Push a new builder.
+    /// Write the code that follows through a builder of its own, so that generating a nested
+    /// function leaves the position of the code around it as it was. The returned guard makes the
+    /// builder underneath current again when it is dropped.
     pub fn push_builder(&mut self) -> PopBuilderGuard<'c> {
         self.builders
             .borrow_mut()
@@ -971,7 +1001,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Add a global object.
+    /// Register `function` as what this module reads the global `name`, of Fix type `ty`, through:
+    /// the lambda itself for a funptr global, and the accessor function for any other. A name
+    /// registered twice aborts the compiler, since the second registration would decide which of
+    /// two definitions every later read reaches.
     pub fn add_global_object(
         &mut self,
         name: FullName,
@@ -994,7 +1027,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Push a new scope.
+    /// Open the scope the locals of a function body being generated are bound in. A local name is
+    /// looked up in the innermost scope alone, so a body sees its own locals and the globals. The
+    /// returned guard closes the scope when it is dropped.
     pub fn push_scope(&mut self) -> PopScopeGuard<'c> {
         self.scope.borrow_mut().push(Default::default());
         PopScopeGuard {
@@ -1018,7 +1053,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         flatten_opt(self.debug_scope.borrow().last().cloned())
     }
 
-    // Get a variable.
+    /// The value `var` names: its innermost local binding, or the global of that name, which the
+    /// module declares here if it has not reached it yet.
     pub fn get_scoped_value(&mut self, var: &FullName) -> ScopedValue<'c> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
@@ -1027,9 +1063,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // The value the global `var` is reached through, declared here on the module's first use of it.
-    // Declaring on use is what keeps a module's declarations to the globals its code reaches: the
-    // program's globals number in the hundreds and a module calls a handful of them.
+    /// The value the global `var` is reached through, declared here on the module's first use of it.
+    /// Declaring on use is what keeps a module's declarations to the globals its code reaches: the
+    /// program's globals number in the hundreds and a module calls a handful of them.
     fn get_or_declare_global(&mut self, var: &FullName) -> ScopedValue<'c> {
         if let Some(value) = self.declared_globals.get(var).cloned() {
             return value;
@@ -1039,15 +1075,17 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.declared_globals[var].clone()
     }
 
-    // Get an object on the scope (or global).
-    // This function does not retain the object.
+    /// The object `name` is bound to, handed over as it stands: the reference counts are left
+    /// untouched, so the caller owns whatever reference the binding already carried.
     pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
         self.get_scoped_value(name).accessor.get(self)
     }
 
-    // Get an object on the scope (or global).
-    // Retains the object's boxed subobjects when the value's `retain_on_read` is set, i.e. when
-    // reading an unboxed global (which keeps its own reference); other reads are plain.
+    /// The object `var_name` is bound to, as a reference the caller owns.
+    ///
+    /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
+    /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
+    /// copy. Every other read is plain.
     pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var_name);
         let obj = val.accessor.get(self);
@@ -1060,8 +1098,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj
     }
 
-    // Get field of object on the scope.
-    // This function retains the object if it will be used later.
+    /// The value of field `field_idx` of the object `var` is bound to, read the way
+    /// `get_scoped_obj` reads it.
     pub fn get_scoped_obj_field(
         self: &mut Self,
         var: &FullName,
@@ -1411,7 +1449,16 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Apply objects to a lambda.
+    /// Call the lambda `fun` on `args`, which are its arguments in order and are consumed by the
+    /// call.
+    ///
+    /// # Arguments
+    /// * `tail` — build the call in tail position, where the callee's result is returned from the
+    ///   function being generated instead of being handed back.
+    ///
+    /// # Returns
+    /// The result of the call, and `None` in tail position, where the call ends the function and
+    /// there is nothing left to generate.
     pub fn apply_lambda(
         &mut self,
         fun: Object<'c>,
@@ -1524,10 +1571,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // The out-pointer parameter of the function being generated, the buffer its result is written
-    // through. A function whose result goes through an out-pointer returns `void` and takes the
-    // pointer before every other parameter (see `lambda_function_type`). Checked under develop mode
-    // (the unit tests).
+    /// The out-pointer parameter of the function being generated, the buffer its result is written
+    /// through. A function whose result goes through an out-pointer returns `void` and takes the
+    /// pointer before every other parameter (see `lambda_function_type`). Checked under develop mode
+    /// (the unit tests).
     fn own_out_pointer(&self) -> PointerValue<'c> {
         let func = self.current_function();
         if self.config.develop_mode {
@@ -1566,13 +1613,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         Object::from_parts(parts, ret_ty, self)
     }
 
-    // Whether a function returning `part_tys` takes an out-pointer for its result on this module's
-    // target (see `return_abi`).
+    /// Whether a function returning `part_tys` takes an out-pointer for its result on this module's
+    /// target (see `return_abi`).
     pub fn returns_through_out_pointer(&self, part_tys: &[BasicTypeEnum<'c>]) -> bool {
         returns_through_out_pointer(part_tys, self.return_registers)
     }
 
-    // The convention every Fix lambda in this module is defined and called with (see `return_abi`).
+    /// The convention every Fix lambda in this module is defined and called with (see `return_abi`).
     pub fn lambda_calling_convention(&self) -> u32 {
         self.lambda_calling_convention
     }
@@ -1586,7 +1633,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
     }
 
-    // Build an `undef` constant of the given basic type.
+    /// Build an `undef` constant of the given basic type.
     pub fn get_undef(ty: &BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
         match ty {
             BasicTypeEnum::IntType(ty) => ty.get_undef().as_basic_value_enum(),
@@ -1598,27 +1645,27 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Whether `ty` occupies no storage, such as an empty union's `[0 x i8]` payload. A zero-sized
-    // value carries no information, so the part helpers drop it: it yields no part (no phi, no ABI
-    // slot) and is rebuilt as `undef`. A phi of a zero-sized aggregate also crashes LLVM's
-    // AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
+    /// Whether `ty` occupies no storage, such as an empty union's `[0 x i8]` payload. A zero-sized
+    /// value carries no information, so the part helpers drop it: it yields no part (no phi, no ABI
+    /// slot) and is rebuilt as `undef`. A phi of a zero-sized aggregate also crashes LLVM's
+    /// AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
     fn is_zero_sized(&self, ty: BasicTypeEnum<'c>) -> bool {
         self.target_data.get_bit_size(&ty) == 0
     }
 
-    // Whether `ty` holds more than `limit` scalars, counting through nested structs. A non-struct
-    // type is one scalar -- an array included, however many elements it holds -- and a zero-sized
-    // type is none; see `MAX_SPLIT_SCALARS` for what that count is of.
-    //
-    // A type whose fields nest holds a number of scalars exponential in the nesting depth, so the
-    // count stops as soon as it settles the answer: counting the rest would cost what the limit is
-    // there to bound.
+    /// Whether `ty` holds more than `limit` scalars, counting through nested structs. A non-struct
+    /// type is one scalar -- an array included, however many elements it holds -- and a zero-sized
+    /// type is none; see `MAX_SPLIT_SCALARS` for what that count is of.
+    ///
+    /// A type whose fields nest holds a number of scalars exponential in the nesting depth, so the
+    /// count stops as soon as it settles the answer: counting the rest would cost what the limit is
+    /// there to bound.
     fn holds_more_scalars_than(&self, ty: BasicTypeEnum<'c>, limit: usize) -> bool {
         self.scalar_count_until_over(ty, limit) > limit
     }
 
-    // The number of scalars `ty` holds, or some number above `limit` once the count passes it: the
-    // descent stops as soon as the limit is settled.
+    /// The number of scalars `ty` holds, or some number above `limit` once the count passes it: the
+    /// descent stops as soon as the limit is settled.
     fn scalar_count_until_over(&self, ty: BasicTypeEnum<'c>, limit: usize) -> usize {
         if self.is_zero_sized(ty) {
             return 0;
@@ -1639,12 +1686,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Whether a value of `ty` is carried as one aggregate rather than split into the parts of its
-    // fields: it holds more scalars than `Configuration::max_split_scalars`.
-    //
-    // A value of one scalar is carried as that scalar however low the limit is set: there is no
-    // aggregate to keep together, and a funptr is carried as its bare function pointer rather than
-    // as the one-field struct it is laid out as.
+    /// Whether a value of `ty` is carried as one aggregate rather than split into the parts of its
+    /// fields: it holds more scalars than `Configuration::max_split_scalars`.
+    ///
+    /// A value of one scalar is carried as that scalar however low the limit is set: there is no
+    /// aggregate to keep together, and a funptr is carried as its bare function pointer rather than
+    /// as the one-field struct it is laid out as.
     pub fn is_carried_whole(&self, ty: BasicTypeEnum<'c>) -> bool {
         let limit = self.config.max_split_scalars.max(1);
         matches!(ty, BasicTypeEnum::StructType(_))
@@ -1652,15 +1699,15 @@ impl<'c, 'm> Generator<'c, 'm> {
             && self.holds_more_scalars_than(ty, limit)
     }
 
-    // Split an embedded type into the parts a value of it is carried as: the scalars of its nested
-    // structs, except that a struct wide enough for `is_carried_whole` is one part of its own. A
-    // non-struct type is one part, and a zero-sized type is none.
-    //
-    // Splitting an unbox struct across a function boundary, rather than passing one aggregate, keeps
-    // a loop-carried field (such as an `Array`'s `@size`) visible to LLVM's value analyses: the
-    // recursive `fold`/`loop` tail call then carries scalar phis instead of an opaque aggregate phi,
-    // so the per-element bounds check folds away and the loop vectorizes. The limit is what stops a
-    // deeply nested type from paying one LLVM value per scalar; see `Configuration::max_split_scalars`.
+    /// Split an embedded type into the parts a value of it is carried as: the scalars of its nested
+    /// structs, except that a struct wide enough for `is_carried_whole` is one part of its own. A
+    /// non-struct type is one part, and a zero-sized type is none.
+    ///
+    /// Splitting an unbox struct across a function boundary, rather than passing one aggregate, keeps
+    /// a loop-carried field (such as an `Array`'s `@size`) visible to LLVM's value analyses: the
+    /// recursive `fold`/`loop` tail call then carries scalar phis instead of an opaque aggregate phi,
+    /// so the per-element bounds check folds away and the loop vectorizes. The limit is what stops a
+    /// deeply nested type from paying one LLVM value per scalar; see `Configuration::max_split_scalars`.
     pub fn type_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
         if self.is_carried_whole(ty) {
             return vec![ty];
@@ -1668,9 +1715,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.split_type_parts(ty)
     }
 
-    // The parts of a type the caller has found to be split. Its fields are split as well, so the
-    // descent asks no further: a struct holds the scalars of its fields and no fewer, so a field of
-    // a type within the limit is within it too.
+    /// The parts of a type the caller has found to be split. Its fields are split as well, so the
+    /// descent asks no further: a struct holds the scalars of its fields and no fewer, so a field of
+    /// a type within the limit is within it too.
     fn split_type_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
         if self.is_zero_sized(ty) {
             return vec![];
@@ -1683,8 +1730,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // The number of parts `ty` splits into under `type_parts`, without allocating the list of their
-    // types.
+    /// The number of parts `ty` splits into under `type_parts`, without allocating the list of their
+    /// types.
     pub fn part_count(&self, ty: BasicTypeEnum<'c>) -> usize {
         if self.is_carried_whole(ty) {
             return 1;
@@ -1692,7 +1739,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.split_part_count(ty)
     }
 
-    // The part count of a type the caller has found to be split; see `split_type_parts`.
+    /// The part count of a type the caller has found to be split; see `split_type_parts`.
     fn split_part_count(&self, ty: BasicTypeEnum<'c>) -> usize {
         if self.is_zero_sized(ty) {
             return 0;
@@ -1705,11 +1752,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // The half-open range `[offset, offset + count)` of parts that field `field_idx` of `struct_ty`
-    // occupies within the struct's part list, so a split value can address one field without
-    // materializing the aggregate. `offset` is the part count of the preceding fields. A struct
-    // carried whole has no such range -- its fields live inside its one part -- so this is for a
-    // struct `is_carried_whole` rejects.
+    /// The half-open range `[offset, offset + count)` of parts that field `field_idx` of `struct_ty`
+    /// occupies within the struct's part list, so a split value can address one field without
+    /// materializing the aggregate. `offset` is the part count of the preceding fields. A struct
+    /// carried whole has no such range -- its fields live inside its one part -- so this is for a
+    /// struct `is_carried_whole` rejects.
     pub fn field_part_range(&self, struct_ty: StructType<'c>, field_idx: u32) -> (usize, usize) {
         let offset: usize = (0..field_idx)
             .map(|i| self.part_count(struct_ty.get_field_type_at_index(i).unwrap()))
@@ -1718,9 +1765,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         (offset, count)
     }
 
-    // The parts a value is carried as, in the order of `type_parts` on its type, emitting an
-    // `extractvalue` per struct field at the current insert position. A zero-sized value yields no
-    // part, and a value carried whole is one part already.
+    /// The parts a value is carried as, in the order of `type_parts` on its type, emitting an
+    /// `extractvalue` per struct field at the current insert position. A zero-sized value yields no
+    /// part, and a value carried whole is one part already.
     pub fn value_parts(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
         if self.is_carried_whole(val.get_type()) {
             return vec![val];
@@ -1728,7 +1775,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.split_value_parts(val)
     }
 
-    // The parts of a value whose type the caller has found to be split; see `split_type_parts`.
+    /// The parts of a value whose type the caller has found to be split; see `split_type_parts`.
     fn split_value_parts(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
         if self.is_zero_sized(val.get_type()) {
             return vec![];
@@ -1747,10 +1794,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Reassemble a value of `ty` from a part iterator produced in `type_parts` order, emitting an
-    // `insertvalue` per struct field. The inverse of `value_parts`. A zero-sized type consumes
-    // no part and is rebuilt as `undef`; a type carried whole consumes the one part that is its
-    // value.
+    /// Reassemble a value of `ty` from a part iterator produced in `type_parts` order, emitting an
+    /// `insertvalue` per struct field. The inverse of `value_parts`. A zero-sized type consumes
+    /// no part and is rebuilt as `undef`; a type carried whole consumes the one part that is its
+    /// value.
     pub fn assemble_from_parts(
         &self,
         ty: BasicTypeEnum<'c>,
@@ -1762,7 +1809,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.assemble_split_parts(ty, parts)
     }
 
-    // Reassemble a value whose type the caller has found to be split; see `split_type_parts`.
+    /// Reassemble a value whose type the caller has found to be split; see `split_type_parts`.
     fn assemble_split_parts(
         &self,
         ty: BasicTypeEnum<'c>,
@@ -1789,18 +1836,18 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Merge objects of one type across predecessor edges as one phi per part, rather than as a
-    // single aggregate phi. LLVM's value analyses see through the per-part phis where they cannot see
-    // through an aggregate one, so a loop-carried field (an `Array`'s `@size`) exposed this way lets
-    // the bounds check fold and the loop vectorize. Each incoming object holds its parts directly, so
-    // no aggregate is ever formed here. Every incoming's parts must be available on its edge (defined
-    // in, or dominating, its predecessor block), and every predecessor must already have its
-    // terminator; the phis are placed at the current insert block.
-    //
-    // A zero-sized part (an empty union's `[0 x i8]` payload) never reaches here: `parts()` excludes
-    // it, since `value_parts` drops it. So no per-part phi is ever a zero-sized one
-    // (which would crash AArch64 GlobalISel), and a wholly zero-sized value has no part and merges
-    // to an empty object with no phi at all — the zero-sized part is rebuilt on materialization.
+    /// Merge objects of one type across predecessor edges as one phi per part, rather than as a
+    /// single aggregate phi. LLVM's value analyses see through the per-part phis where they cannot see
+    /// through an aggregate one, so a loop-carried field (an `Array`'s `@size`) exposed this way lets
+    /// the bounds check fold and the loop vectorize. Each incoming object holds its parts directly, so
+    /// no aggregate is ever formed here. Every incoming's parts must be available on its edge (defined
+    /// in, or dominating, its predecessor block), and every predecessor must already have its
+    /// terminator; the phis are placed at the current insert block.
+    ///
+    /// A zero-sized part (an empty union's `[0 x i8]` payload) never reaches here: `parts()` excludes
+    /// it, since `value_parts` drops it. So no per-part phi is ever a zero-sized one
+    /// (which would crash AArch64 GlobalISel), and a wholly zero-sized value has no part and merges
+    /// to an empty object with no phi at all — the zero-sized part is rebuilt on materialization.
     pub fn build_object_phi(
         &mut self,
         incomings: &[(Object<'c>, BasicBlock<'c>)],
@@ -2154,7 +2201,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else if obj.is_funptr() {
             // Nothing to do for function pointers.
         } else {
-            // Unboxed case (inlude lambda object).
+            // Unboxed case (includes a lambda object).
             match create_traverser(&obj.ty, &vec![], self, Some(work), state) {
                 Some(trav) => {
                     // Pass the object as its parts, matching `traverser_type`.
@@ -2486,7 +2533,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
     }
 
-    // Build return instruction if `tail` is true.
+    /// Return `obj` from the function being generated when `tail` is set, and hand it back
+    /// otherwise, so that a body ending in a value can be generated the same way in both positions.
+    ///
+    /// # Returns
+    /// The object, and `None` in tail position, where it has been returned already.
     pub fn build_tail(&mut self, obj: Object<'c>, tail: bool) -> Option<Object<'c>> {
         if tail {
             self.build_return_object(obj);
@@ -2496,10 +2547,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Return `obj` from the current function under the split return ABI (see
-    // `lambda_function_type`): its parts are packed into the flat return value — `void` for none, the
-    // bare part for one, a flat struct built with one `insertvalue` per part for several. Parts too
-    // wide for the return registers are stored through the function's out-pointer instead.
+    /// Return `obj` from the current function under the split return ABI (see
+    /// `lambda_function_type`): its parts are packed into the flat return value — `void` for none, the
+    /// bare part for one, a flat struct built with one `insertvalue` per part for several. Parts too
+    /// wide for the return registers are stored through the function's out-pointer instead.
     pub fn build_return_object(&mut self, obj: Object<'c>) {
         let parts: Vec<BasicValueEnum<'c>> = obj.parts().to_vec();
         let part_tys: Vec<BasicTypeEnum<'c>> = parts.iter().map(|p| p.get_type()).collect();
@@ -2538,11 +2589,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Reconstruct the object a call returns under the split return ABI: a `void` result carries no
-    // part, a single part is the result itself, and several are the fields of the flat struct it
-    // returned. Which of the three applies follows from the return type's part count, which the
-    // shape of the returned value would answer wrongly for a type carried whole. The inverse of
-    // `build_return_object`.
+    /// Reconstruct the object a call returns under the split return ABI: a `void` result carries no
+    /// part, a single part is the result itself, and several are the fields of the flat struct it
+    /// returned. Which of the three applies follows from the return type's part count, which the
+    /// shape of the returned value would answer wrongly for a type carried whole. The inverse of
+    /// `build_return_object`.
     pub fn unpack_return(
         &mut self,
         call_result: Option<BasicValueEnum<'c>>,
@@ -2577,19 +2628,19 @@ impl<'c, 'm> Generator<'c, 'm> {
         !self.imported.contains(name) && self.published_names.contains(name)
     }
 
-    // Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
-    // A funptr function is one of the program's globals, so it is external where another
-    // compilation unit reaches it by name; a closure function is internal to the unit that lifted
-    // it, so LLVM resolves a collision between two such names by renaming one of them.
-    //
-    // A funptr function is also registered as the value of `name`, because the bodies that call it
-    // read it by name. Registering here is what leaves no way to declare one and reach it through a
-    // name that resolves to nothing.
-    //
-    // The linkage decided here is also what decides the RC IR's reachability roots: a function
-    // another unit may call has to be one dead-code elimination keeps. `divide_among_units` takes a
-    // unit's roots from `DividedProgram::published_here`, which is what `published_to_the_linker`
-    // reads here, so narrowing the condition below narrows the root set with it.
+    /// Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
+    /// A funptr function is one of the program's globals, so it is external where another
+    /// compilation unit reaches it by name; a closure function is internal to the unit that lifted
+    /// it, so LLVM resolves a collision between two such names by renaming one of them.
+    ///
+    /// A funptr function is also registered as the value of `name`, because the bodies that call it
+    /// read it by name. Registering here is what leaves no way to declare one and reach it through a
+    /// name that resolves to nothing.
+    ///
+    /// The linkage decided here is also what decides the RC IR's reachability roots: a function
+    /// another unit may call has to be one dead-code elimination keeps. `divide_among_units` takes a
+    /// unit's roots from `DividedProgram::published_here`, which is what `published_to_the_linker`
+    /// reads here, so narrowing the condition below narrows the root set with it.
     pub fn declare_lambda_function(
         &mut self,
         fn_ty: &Arc<TypeNode>,
@@ -2611,17 +2662,17 @@ impl<'c, 'm> Generator<'c, 'm> {
         func
     }
 
-    // Declare the function the program's global `name` is obtained through, register it as that
-    // global's value, and return it — or `None` where the program has no global of that name. A
-    // global of funptr type is the lambda's own function; any other global is reached through an
-    // accessor function taking no argument and returning its value.
-    //
-    // The signature is built from the program's global types, which is what makes this the only way
-    // to declare a global: the module that defines one and every module that calls into it read the
-    // same entry, so a global has one signature everywhere it is declared. That agreement is load
-    // bearing and unchecked — an accessor is reached by a direct call, so a module that declared it
-    // to return a value while the defining module returns none reads an undefined value, and neither
-    // the LLVM verifier nor the linker looks at it.
+    /// Declare the function the program's global `name` is obtained through, register it as that
+    /// global's value, and return it — or `None` where the program has no global of that name. A
+    /// global of funptr type is the lambda's own function; any other global is reached through an
+    /// accessor function taking no argument and returning its value.
+    ///
+    /// The signature is built from the program's global types, which is what makes this the only way
+    /// to declare a global: the module that defines one and every module that calls into it read the
+    /// same entry, so a global has one signature everywhere it is declared. That agreement is load
+    /// bearing and unchecked — an accessor is reached by a direct call, so a module that declared it
+    /// to return a value while the defining module returns none reads an undefined value, and neither
+    /// the LLVM verifier nor the linker looks at it.
     pub fn declare_program_global(&mut self, name: &FullName) -> Option<FunctionValue<'c>> {
         let ty = self.global_types.get(name).cloned()?;
         if ty.is_funptr() {
@@ -2749,14 +2800,28 @@ impl<'c, 'm> Generator<'c, 'm> {
         arg_objs: Vec<Object<'c>>,
         is_io: bool,
     ) -> Object<'c> {
+        assert!(
+            is_var_args || arg_objs.len() == param_tys.len(),
+            "a call of a C function that is not variadic passes one argument per declared parameter"
+        );
+
         // Get c function
         let c_fun = CSignature::of_ffi_call(ret_tycon, param_tys, is_var_args)
             .get_or_declare_in_module(fun_name, self);
 
-        // Get argment values
+        // Get argument values. An argument past the declared parameters travels through `...`, where
+        // C widens it before the function reads it.
         let args_vals = arg_objs
             .iter()
-            .map(|obj| obj.extract_field(self, 0).into())
+            .enumerate()
+            .map(|(i, arg_obj)| {
+                let val = arg_obj.extract_field(self, 0);
+                if i < param_tys.len() {
+                    val.into()
+                } else {
+                    promote_through_ellipsis(val, &arg_obj.ty, self).into()
+                }
+            })
             .collect::<Vec<_>>();
 
         // Call c function
