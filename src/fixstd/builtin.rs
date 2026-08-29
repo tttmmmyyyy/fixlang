@@ -7067,6 +7067,12 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         vec![&mut self.var_name]
     }
 
+    // This op returns the answer to the program: `Debug::assert_unique` turns it into a halt and
+    // `Destructor::mutate_unique_io` into a copy of the resource.
+    fn observes_uniqueness(&self) -> bool {
+        !self.assume_unique
+    }
+
     fn unique_check_operand(
         &self,
         arg_tys: &[Arc<TypeNode>],
@@ -7252,6 +7258,12 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
+    }
+
+    // This op returns the answer to the program: `Debug::assert_unique` turns it into a halt and
+    // `Destructor::mutate_unique_io` into a copy of the resource.
+    fn observes_uniqueness(&self) -> bool {
+        !self.assume_unique
     }
 
     fn unique_check_operand(

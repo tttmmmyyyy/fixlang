@@ -756,6 +756,50 @@ main = (
         test_source(ONE_VARIANT_OWNED_SOURCE, Configuration::develop_mode());
     }
 
+    // Borrowing must not change the answer a uniqueness observation gives.
+    //
+    // A parameter the body never consumes is inferred borrowed, so the borrowing version drops its
+    // release and the caller holds that reference until after the call. Where the observed value is
+    // the same object under another name, the count the observation reads is one higher than it was,
+    // and a value that was unique reads as shared. `Std::unsafe_is_unique` documents the opposite
+    // change -- shared to unique, as optimization drops a use -- and not this one.
+    //
+    // The third argument is what makes the call worth routing to the borrowing version, and it is
+    // neither the borrowed parameter nor the observed one: the routing test is an `any` over the
+    // arguments, so one argument alone can enable the routing that breaks another.
+    const OBSERVED_UNIQUENESS_SOURCE: &str = r#"
+module Main;
+
+type B = box struct { v : I64 };
+
+// `x` is never consumed, so it is inferred borrowed. `y` is observed. `w` is used after the call.
+observe : I64 -> B -> B -> B -> I64;
+observe = |n, x, y, w| (
+    if n > 0 { observe(n - 1, x, y, w) };
+    let y = y.Debug::assert_unique(|_| "the observed value is shared");
+    y.@v
+);
+
+main : IO ();
+main = (
+    let p = B { v : 1 };
+    let w = B { v : 2 };
+    // The same object reaches both `x` and `y`, under two names `origin` does not connect.
+    let r = observe(0, p, p, w);
+    eval w.@v;
+    assert_eq(|_|"observe returned the wrong value", r, 1);;
+    pure()
+);
+"#;
+
+    /// `Debug::assert_unique` halts the program when the value it is given is shared, so a run that
+    /// completes is the whole check. Valgrind is off: nothing here is a memory error, and the
+    /// observation is what the test is about.
+    #[test]
+    pub fn test_observed_uniqueness_survives_borrowing() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_SOURCE);
+    }
+
     // A union payload built from a value a match binding carries and a second value. The binding
     // carries a name of its own -- the one every path through the match agrees on -- and that name
     // is what a retain of the binding keys to. A release of the union has to name it as well: the

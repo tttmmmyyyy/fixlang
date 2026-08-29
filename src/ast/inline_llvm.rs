@@ -70,6 +70,18 @@ pub trait LLVMGen: DynClone + Send + Sync {
         false
     }
 
+    /// Whether this op hands the program the answer to a uniqueness question, rather than acting on
+    /// it internally. Default: it does not.
+    ///
+    /// A `true` here is what makes a reference count observable. An op that branches on uniqueness to
+    /// decide whether to clone (`unique_check_operand`) keeps the answer to itself and computes the
+    /// same result either way, so a count one higher costs it a copy and nothing more. An op that
+    /// returns the answer lets the program's meaning depend on the count, so a pass that raises one
+    /// changes what the program does.
+    fn observes_uniqueness(&self) -> bool {
+        false
+    }
+
     /// The container operand and boxed-leaf path whose runtime uniqueness this op branches on, for
     /// the operand types the op is instantiated at. Default: the op carries no such branch.
     ///

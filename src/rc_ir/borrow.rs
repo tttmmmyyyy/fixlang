@@ -243,7 +243,11 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> R
     // functions are considered: a closure is reached only by an indirect call, which keeps the
     // all-`Own` original, so a borrow clone of it would never be routed to.
     let mut borrow_versions: Map<FuncRef, FuncRef> = Map::default();
+    let observing = funcs_observing_uniqueness(prog, type_env);
     for func in prog.funcs.values() {
+        if observing.contains(&func.name) {
+            continue;
+        }
         if func.capture.is_none() && func_has_borrowable_param(func, &owned_leaves, type_env) {
             borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name));
         }
@@ -436,6 +440,59 @@ fn func_has_borrowable_param(
             .iter()
             .any(|leaf| !owned_leaves.owns(&p.name, &leaf))
     })
+}
+
+/// The functions whose body can reach an op that reports a reference count to the program
+/// (`LLVMGen::observes_uniqueness`) — directly, or through a direct call to another such function.
+///
+/// Borrowing changes what such an op reports. A borrowed parameter's reference is disposed of by the
+/// caller after the call rather than by this function before the op runs, so the count the op reads
+/// is one higher than it was without borrowing, and a value that was unique reads as shared.
+/// `Debug::assert_unique` then halts a program that ran, and `Destructor::mutate_unique_io` copies a
+/// resource it did not need to. `Std::unsafe_is_unique` documents the opposite change — a value
+/// going from shared to unique as optimization removes a use — and not this one.
+///
+/// Only these functions are held back. A function that never reaches such an op computes the same
+/// result at either count, so borrowing is free to change it.
+fn funcs_observing_uniqueness(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncRef> {
+    let _ = type_env;
+    let mut observing: Set<FuncRef> = Set::default();
+    let mut callees: Map<FuncRef, Vec<FuncRef>> = Map::default();
+    for (fref, func) in &prog.funcs {
+        let mut cs = vec![];
+        for_each_node(&func.body, &mut |node| {
+            let RcExpr::Let(_, rhs, _) = node.expr.as_ref() else {
+                return;
+            };
+            match rhs {
+                RcRhs::Llvm(llvm_gen, _) => {
+                    if llvm_gen.observes_uniqueness() {
+                        observing.insert(fref.clone());
+                    }
+                }
+                // A closure's target is reached by an indirect call, which keeps the all-owning
+                // version, so its body is not a way for a borrow version to reach the op.
+                RcRhs::App(callee, _) => cs.push(FuncRef {
+                    name: callee.name.clone(),
+                }),
+                RcRhs::Var(..) | RcRhs::Closure(..) | RcRhs::Match(..) => {}
+            }
+        });
+        callees.insert(fref.clone(), cs);
+    }
+    // Least fixed point over the direct-call graph: a caller of an observing function reaches the op.
+    loop {
+        let mut grew = false;
+        for (fref, cs) in &callees {
+            if !observing.contains(fref) && cs.iter().any(|c| observing.contains(c)) {
+                observing.insert(fref.clone());
+                grew = true;
+            }
+        }
+        if !grew {
+            return observing;
+        }
+    }
 }
 
 /// The name/type of each parameter and capture, in order.
@@ -1087,6 +1144,13 @@ struct PendingRetain {
     node: NodeId,
     /// The references the retain bumped that are still bumped here.
     outstanding: References,
+    /// The other objects the bumped references may belong to: for a leaf whose origin is a join, the
+    /// candidates other than the one `outstanding` counts it under.
+    ///
+    /// `outstanding` names one object per reference, and for a join that name is the join's own,
+    /// which no consume of an arm's value mentions. Without these, a consume of the object the
+    /// retain actually bumped passes the retain by, and the pair is cancelled across it.
+    others: Vec<VarPath>,
 }
 
 /// What a release does to the retains pending where it happens.
@@ -1260,9 +1324,11 @@ impl<'a> CancelAnalysis<'a> {
                 self.all_retains.push(retain);
                 self.un_bump_releases.entry(retain).or_default();
                 let outstanding = self.acted_references(v, path);
+                let others = self.other_objects(v, path);
                 pending.push(PendingRetain {
                     node: retain,
                     outstanding,
+                    others,
                 });
                 self.walk(k, pending, returns_from_func)
             }
@@ -1364,11 +1430,16 @@ impl<'a> CancelAnalysis<'a> {
 
     /// A consume of some objects: every retain pending on one of them is load-bearing here, so it
     /// leaves the pending list without having been un-bumped.
+    ///
+    /// A retain is pending on an object when it counts a reference under that object's name, and also
+    /// when the object is one the counted reference may belong to (`PendingRetain::others`). The
+    /// second is what a join needs: the reference is counted under the match binding's name, while a
+    /// consume of the value an arm produced names that arm's variable.
     fn consume_objects(&mut self, pending: &mut PendingRetains, objects: &[VarPath]) {
         pending.retain(|retain| {
             if objects
                 .iter()
-                .any(|object| retain.outstanding.names(object))
+                .any(|object| retain.outstanding.names(object) || retain.others.contains(object))
             {
                 self.needed_retains.insert(retain.node);
                 return false;
@@ -1444,6 +1515,7 @@ impl<'a> CancelAnalysis<'a> {
                 uniform.get(&retain.node).map(|outstanding| PendingRetain {
                     node: retain.node,
                     outstanding: outstanding.clone(),
+                    others: retain.others.clone(),
                 })
             })
             .collect()
