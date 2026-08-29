@@ -671,10 +671,16 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
      真である。
   3. `Λ(u)` の**すべての inhabited な** leaf のすべての候補について `owns_object` が真である。
 
+  成り立つのは **1 ⟹ 3** と **2 ⟹ 1** の 2 つであり、この 2 つで足りる。1 ⟹ 3 が「節点を残すのが安全で
+  ある」を、2 ⟹ 1 の対偶が「節点を落とすのが安全である」を与える。**3 ⟹ 2 と 3 ⟹ 1 は偽である。**
+  `Λ(u)` に inhabited な leaf が 1 つも無い活性化では節 3 が空虚に真になり、そこから何も出ない
+  (`p15-ownership-uniformity.md` の反例 R2)。`Inh(v, u) ≠ ∅` を足せば 3 つは同値になるが、下流はそれを
+  要らない。
+
   節 2 と節 3 が inhabited (D16) な leaf に限るのは、inhabited でない leaf が参照を持たないからである
   (A5)。限定を外すと節 2 が偽になる本体が作れる: `unbox union` の変位のうち、`result_prov` が `⊥` と
   宣言する側の leaf は `origin` が自分自身を名指すので、`owns_object` はそれを所有と答える。その leaf は
-  実行時に存在せず、`Retain`/`Release` は触れない。
+  実行時に存在せず、`Retain`/`Release` は触れない (同ファイルの反例 R1)。
 
   1 ⟺ 3 は「節点を残すのが安全である」を与え、¬1 ⟹ ¬2 は「節点を落とすのが安全である」を与える。借用版の
   `rewrite_rc` は `owns_unit` が偽の unit の `Retain`/`Release` を丸ごと落とすので (P10)、落とした先に所有
@@ -962,7 +968,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 検証済み |
 | P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み (P6 は A16 の下で) | 検証済み |
 | P7e, P7d | `p15-ownership-uniformity.md` | 有 | 証明済み | 未着手 |
-| P7a | `p15-ownership-uniformity.md` | 有 | **書き直し待ち** (言明を 3 度目に直した -- inhabited への限定) | 未着手 |
+| P7a | `p15-ownership-uniformity.md` | 有 | 証明済み (1 ⟹ 3 と 2 ⟹ 1。言明は 3 度書き直した) | 未着手 |
 | P7c, P7f | `p13-disposals-and-pending.md` | 有 | 証明済み (P7c の言明は 1 度書き直した) | 未着手 |
 
 | P8 | `p20-borrow-ify.md` | 有 | 証明済み。`infer_ownership` に `level_ownership` の周回が加わったので、停止性の段を書き直す必要がある | 未着手 |
