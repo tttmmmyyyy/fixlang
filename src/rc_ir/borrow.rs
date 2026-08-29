@@ -311,6 +311,9 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> R
             &callee_params,
             type_env,
         );
+        if develop_mode {
+            ctx.check_ownership_is_levelled(&clone);
+        }
         clone.body = ctx.rewrite(&clone.body);
         funcs.insert(borrow_version, clone);
     }
@@ -794,6 +797,37 @@ impl<'a> RewriteCtx<'a> {
             .candidates()
             .iter()
             .all(|(root, path)| self.owns_object(root, path))
+    }
+
+    /// Check that every site the inference levelled has one ownership answer for all the objects the
+    /// site may act on.
+    ///
+    /// `owns_unit` returns one boolean for a unit, while the node it decides acts on every boxed leaf
+    /// under that unit. Where the leaves come from roots this version owns differently, neither
+    /// answer is right: `Borrow` drops the release the owned leaf needed, and `Own` disposes a
+    /// reference the borrowed leaf was only lent. `level_ownership` is what makes the answers agree,
+    /// and this states that agreement where the rewrite reads it.
+    ///
+    /// Only the borrow version needs checking. The all-owning original holds every parameter and
+    /// capture unit in `owned_units`, so `owns_object` is true of each of its objects.
+    fn check_ownership_is_levelled(&self, func: &RcFunc) {
+        for (v, unit) in levelled_sites(func, self.type_env) {
+            let where_from = origin(&self.vars, self.type_env, &v.name, &unit);
+            let mut answers = where_from
+                .candidates()
+                .into_iter()
+                .map(|(root, path)| self.owns_object(root, path));
+            let first = answers
+                .next()
+                .expect("an origin reaches at least one object");
+            assert!(
+                answers.all(|answer| answer == first),
+                "in `{}`, the ownership of `{}`{:?} splits across the objects it may act on",
+                func.name.name.to_string(),
+                v.name.to_string(),
+                unit
+            );
+        }
     }
 
     /// Whether this version owns the object a leaf comes from.

@@ -1112,8 +1112,8 @@ mod tests {
     /// over one type, and `truncate_to_unit` is the bridge between them: a consume is recorded at a
     /// leaf while the retain that pays for it is keyed at a unit, so a leaf whose truncation names
     /// no unit leaves a retain that no release pairs with, and the object is freed while it is
-    /// still held. `unit_of` asserts this of each key it makes; here it is asserted of the
-    /// classification itself, over one type of every kind the walks distinguish.
+    /// still held. Here that bridge is asserted of the classification itself, over one type of every
+    /// kind the walks distinguish.
     #[test]
     fn the_leaves_of_a_type_truncate_onto_its_units() {
         let type_env = type_env();
