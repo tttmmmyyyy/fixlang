@@ -761,7 +761,8 @@ D7 が読みから除いているもの -- 参照カウントと状態バイト 
 **A3 (宣言されたモデルの忠実さ)** -- 果たす者: 誰も。ただし `applies_a_function_operand` については
 `Generator::apply_lambda` の develop mode の検査が果たす。
 各 `LLVMGen` の `result_prov`、`borrows_operand`、`applies_a_function_operand` は、その演算が生成する
-コードを正しく述べている (`CODE src/ast/inline_llvm.rs: LLVMGen::result_prov`,
+コードを正しく述べている。**`result_prov` の呼び出しは abort せず `Provenance` を返す** (A12 の
+`Llvm` 節点の型についての 3 つが、その前提を与える) (`CODE src/ast/inline_llvm.rs: LLVMGen::result_prov`,
 `LLVMGen::borrows_operand`, `LLVMGen::applies_a_function_operand`)。`result_prov` は結果の
 leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言と生成コードの対応は次のとおりである。
 
@@ -1013,7 +1014,9 @@ resolve_callee_params`)。
 **A10 (型の well-formedness)** -- 果たす者: `validate_layouts` (elaboration で必ず走る)。ただし最適化が
 作る型を再検査するのは develop build だけである。
 プログラムに現れる型は ground であり、その tycon は `type_env` にあり、`no_size_in_place` の in-place の
-降下は有限である。これが無いと `boxed_leaf_paths` も `rc_units` も停止しない。
+降下は有限である。**その降下で到達する型も ground であり、tycon が `type_env` にある。**
+`is_fully_unboxed` はその降下の上の再帰であり、途中の各型で `toplevel_tycon_info` を呼ぶので、
+到達する型の側にも同じことが要る。これが無いと `boxed_leaf_paths` も `rc_units` も停止しない。
 
 **A11 (スコープの規律)** -- 果たす者: lowering。検査: `validate` の `check_expr_inner` と `check_rhs`
 (`CODE src/rc_ir/validate.rs: Validator::check_expr_inner`, `Validator::check_rhs`)、ただし
@@ -1029,7 +1032,20 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 呼び出し先の対応するパラメータの型**、`Match` の scrutinee が union であること、`Destructure` の容器が
 構造体であること、**`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が実際に持つ
 (punched でない) ものであること**、同じ名前の `RcVar` が持つ型が一致すること、**束縛を持たない `RcVar` の
-型が、その名前の記号の型であること**。
+型が、その名前の記号の型であること**、そして次の **`Llvm` 節点の型についての 3 つ**。
+
+- `Let(x, Llvm(gen, args), k)` の `args` の名前の列は `gen.free_vars()` に等しい。果たす者: 演算を作る側。
+  検査: `validate` の `check_rhs` が develop mode で行う。
+- `InlineLLVMStructPunchBody` の `ty(x)` は `is_box` も `is_array` も偽で、`field_types` が長さ 2 であり、
+  その第 `PUNCHED_STRUCT_FIELD` 成分は A10 を満たす構造体であって第 `field_idx` フィールドが穴である。
+  果たす者: `struct_punch` が結果の型を `make_tuple_ty(vec![field.ty, str_ty.to_punched_struct(field_idx)])`
+  に取ること。
+- `InlineLLVMStructSetBody` と `InlineLLVMStructPlugInBody` の `ty(x)` は `is_array` が偽である。
+  果たす者: `struct_set` と `struct_plug_in` が結果の型を `definition.applied_type()` に取ること。
+
+**この 3 つが無いと P2 が偽になる。** `result_prov` を override する 29 個のうち 5 個が、これらの型で
+`expect` か添字か `assert_ne!` で abort する (`CODE src/fixstd/builtin.rs: replaced_field_prov`,
+`InlineLLVMStructPunchBody`)。abort する `result_prov` は `origin_inner` の `Llvm` の腕を通らせない。
 
 punched でないことが要るのは、`held_field_type` が持たないフィールドを問われると panic するからである
 (`CODE src/rc_ir/ownership.rs: held_field_type`)。**このコミットにこれを検査するコードは無い**
@@ -1046,7 +1062,7 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
 
 ### 層 1 -- 所有権モデル (`ownership.rs`)
 
-- **P1** (leaf と unit の対応)。任意の型 `τ` について、`boxed_leaf_paths(τ)` の各 leaf の
+- **P1** (leaf と unit の対応)。**A10 を満たす**任意の型 `τ` について、`boxed_leaf_paths(τ)` の各 leaf の
   `truncate_to_unit(τ, ・)` は `rc_units(τ)` の要素であり、`rc_units(τ)` の各 unit はある leaf の
   `truncate_to_unit(τ, ・)` である。
 - **P2** (`origin` の全域性と停止性)。`origin(x, π)` は、`x` がプログラムの束縛変数であるようなすべての
@@ -1531,7 +1547,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 
 | 命題 | ファイル | T への寄与 | 証明 | 検証 |
 |---|---|---|---|---|
-| P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み | 未着手 |
+| P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み (P1 は A10 を満たす型について) | 検証済み (指摘 17 件を反映)。**2 周目が要る** |
 | P3, P4 | `p11-origin-soundness.md` | 有 | 証明済み | 未着手 |
 | P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み (A16 の下で) | 検証済み (指摘 26 件を反映) |
 | P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 検証済み |
