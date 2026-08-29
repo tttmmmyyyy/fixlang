@@ -38,6 +38,7 @@
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
+use crate::ast::types::Type;
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
@@ -248,7 +249,11 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> R
     // functions are considered: a closure is reached only by an indirect call, which keeps the
     // all-`Own` original, so a borrow clone of it would never be routed to.
     let mut borrow_versions: Map<FuncRef, FuncRef> = Map::default();
+    let observing = funcs_observing_uniqueness(prog);
     for func in prog.funcs.values() {
+        if observing.contains(&func.name) {
+            continue;
+        }
         if func.capture.is_none() && func_has_borrowable_param(func, &owned_leaves, type_env) {
             borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name));
         }
@@ -443,6 +448,181 @@ fn func_has_borrowable_param(
             .iter()
             .any(|leaf| !owned_leaves.owns(&p.name, &leaf))
     })
+}
+
+/// Whether this program builds a `Std::FFI::Destructor`.
+///
+/// Releasing such an object runs the destructor function it holds, on the way out and before its
+/// references are released (`Generator::build_run_destructor`). A release sits in every body, so
+/// where the answer here is `true` every function can reach code decided at run time.
+///
+/// A `Destructor` value exists only where `Destructor::_make` built one, and the binding that
+/// operation writes has the type `(IOState, Destructor a)`, so walking the type expression of every
+/// binding finds it without expanding type definitions.
+fn builds_a_destructor(prog: &RcProgram) -> bool {
+    let mut found = false;
+    for func in prog.funcs.values() {
+        for p in func.params.iter().chain(func.capture.iter()) {
+            found |= mentions_a_destructor(&p.ty);
+        }
+        found |= mentions_a_destructor(&func.ret_ty);
+        for_each_node(&func.body, &mut |node| found |= binds_a_destructor(node));
+    }
+    for global in &prog.globals {
+        found |= mentions_a_destructor(&global.ty);
+        for_each_node(&global.init, &mut |node| found |= binds_a_destructor(node));
+    }
+    found
+}
+
+/// Whether the type expression `ty` mentions a `Destructor`.
+fn mentions_a_destructor(ty: &Arc<TypeNode>) -> bool {
+    if ty.is_destructor_object() {
+        return true;
+    }
+    match &ty.ty {
+        Type::TyVar(_) | Type::TyCon(_) => false,
+        Type::TyApp(fun, arg) => mentions_a_destructor(fun) || mentions_a_destructor(arg),
+        Type::AssocTy(_, args) => args.iter().any(mentions_a_destructor),
+    }
+}
+
+/// Whether one node binds a variable whose type mentions a `Destructor`.
+fn binds_a_destructor(node: &RcExprNode) -> bool {
+    match node.expr.as_ref() {
+        RcExpr::Let(x, rhs, _) => {
+            mentions_a_destructor(&x.ty)
+                || match rhs {
+                    RcRhs::Match(_, arms) => arms
+                        .iter()
+                        .any(|arm| mentions_a_destructor(&arm.payload.ty)),
+                    RcRhs::Var(..) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => false,
+                }
+        }
+        RcExpr::Destructure(_, fields, _, _) => fields
+            .iter()
+            .any(|(_, field)| mentions_a_destructor(&field.ty)),
+        RcExpr::Retain(..) | RcExpr::Release(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => false,
+    }
+}
+
+/// The functions whose body can reach an op that reports a reference count to the program
+/// (`LLVMGen::observes_uniqueness`) — directly, or through a direct call to another such function.
+///
+/// Reaching one is over-approximated where the callee is not named: a body that can apply a function
+/// value without naming it — a call through a local holding a closure, or an inline-LLVM op that
+/// applies one of its operands (`LLVMGen::applies_a_function_operand`) — is given an edge to every
+/// function a closure can carry, since which one it holds is decided at run time. A release runs a
+/// destructor function the same way, and sits in every body, so every function is given an edge to
+/// the closures a `Destructor` of a type this program mentions can carry.
+///
+/// Borrowing changes what such an op reports. A borrowed parameter's reference is disposed of by the
+/// caller after the call rather than by this function before the op runs, so the count the op reads
+/// is one higher than it was without borrowing, and a value that was unique reads as shared.
+/// `Debug::assert_unique` then halts a program that ran, and `Destructor::mutate_unique_io` copies a
+/// resource it did not need to. `Std::unsafe_is_unique` documents the opposite change — a value
+/// going from shared to unique as optimization removes a use — and not this one.
+///
+/// Only these functions are held back. A function that never reaches such an op computes the same
+/// result at either count, so borrowing is free to change it.
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
+    let mut observing: Set<FuncRef> = Set::default();
+    let mut callees: Map<FuncRef, Vec<FuncRef>> = Map::default();
+    // The functions a closure can carry, and the functions that call one without naming it.
+    let mut closure_targets: Set<FuncRef> = Set::default();
+    let mut calls_indirectly: Set<FuncRef> = Set::default();
+    // One body's contribution. `owner` is the function the body belongs to, and `None` for a global
+    // initializer — an initializer gets no borrow version, so nothing is recorded against it, but the
+    // closures it builds are ones an indirect call anywhere can arrive at.
+    let mut scan = |body: &RcExprNode, owner: Option<&FuncRef>| {
+        let mut cs = vec![];
+        for_each_node(body, &mut |node| {
+            let RcExpr::Let(_, rhs, _) = node.expr.as_ref() else {
+                return;
+            };
+            match rhs {
+                RcRhs::Llvm(llvm_gen, _) => {
+                    if llvm_gen.observes_uniqueness() {
+                        if let Some(owner) = owner {
+                            observing.insert(owner.clone());
+                        }
+                    }
+                    // An op that applies an operand reaches whichever function that operand holds,
+                    // exactly as a call through a local does.
+                    if llvm_gen.applies_a_function_operand() {
+                        if let Some(owner) = owner {
+                            calls_indirectly.insert(owner.clone());
+                        }
+                    }
+                }
+                RcRhs::App(callee, _) => {
+                    let target = FuncRef {
+                        name: callee.name.clone(),
+                    };
+                    // A callee the program does not define is a local holding a closure, and which
+                    // function it holds is decided at run time.
+                    if prog.funcs.contains_key(&target) {
+                        cs.push(target);
+                    } else if let Some(owner) = owner {
+                        calls_indirectly.insert(owner.clone());
+                    }
+                }
+                RcRhs::Closure(target, _) => {
+                    closure_targets.insert(target.clone());
+                }
+                RcRhs::Var(..) | RcRhs::Match(..) => {}
+            }
+        });
+        if let Some(owner) = owner {
+            callees.insert(owner.clone(), cs);
+        }
+    };
+    // Every body the program has, so a closure built anywhere is a closure an indirect call can
+    // arrive at. Missing one is missing an edge, which is what makes the gate let a version through.
+    for (fref, func) in &prog.funcs {
+        scan(&func.body, Some(fref));
+    }
+    for global in &prog.globals {
+        scan(&global.init, None);
+    }
+    // An indirect call reaches whichever function the closure holds, so give it an edge to every
+    // function a closure can carry.
+    for fref in &calls_indirectly {
+        callees
+            .entry(fref.clone())
+            .or_default()
+            .extend(closure_targets.iter().cloned());
+    }
+    // A release runs the destructor function of a `Destructor` object it takes to a count of zero,
+    // and a release sits in every body, so every function reaches whatever that run reaches. It
+    // reaches more than the destructor function: that function returns an `IO` action, the release
+    // runs it, and the action can return another. Which functions those are is decided at run time
+    // and the chain has no bound, so the edge goes to every function a closure can carry.
+    //
+    // What keeps this from costing anything is the guard: a program that builds no `Destructor` has
+    // no such release, and gets no edge at all.
+    if builds_a_destructor(prog) {
+        for fref in prog.funcs.keys() {
+            callees
+                .entry(fref.clone())
+                .or_default()
+                .extend(closure_targets.iter().cloned());
+        }
+    }
+    // Least fixed point over that graph: a caller of an observing function reaches the op.
+    loop {
+        let mut grew = false;
+        for (fref, cs) in &callees {
+            if !observing.contains(fref) && cs.iter().any(|c| observing.contains(c)) {
+                observing.insert(fref.clone());
+                grew = true;
+            }
+        }
+        if !grew {
+            return observing;
+        }
+    }
 }
 
 /// The name/type of each parameter and capture, in order.
@@ -645,16 +825,6 @@ struct RewriteCtx<'a> {
     vars: VarTable,
 }
 
-/// What routing one call to a borrow version does to the reference counting (`routing_effect`).
-#[derive(Default)]
-struct RoutingEffect {
-    /// Some unit the borrow version borrows loses a retain the call would otherwise need.
-    saves_a_retain: bool,
-    /// Some unit the borrow version borrows keeps a reference standing from the callee's last use
-    /// of it to just after the call, where the original version disposes of it at that last use.
-    delays_a_release: bool,
-}
-
 impl<'a> RewriteCtx<'a> {
     /// The rewrite state of one output version of `func`. `is_borrow_version` marks the borrow
     /// clone, the version whose reference counting on its borrowed parameter leaves is dropped.
@@ -743,8 +913,7 @@ impl<'a> RewriteCtx<'a> {
             name: callee.name.clone(),
         };
         if let Some(borrow_version) = self.borrow_versions.get(&orig) {
-            let effect = self.routing_effect(borrow_version, args, k);
-            if self.routing_is_safe(x, args) && effect.saves_a_retain && !effect.delays_a_release {
+            if self.routing_is_safe(x, args) && self.routing_saves_retain(borrow_version, args, k) {
                 let mut routed = callee.clone();
                 routed.name = borrow_version.name.clone();
                 return routed;
@@ -760,57 +929,35 @@ impl<'a> RewriteCtx<'a> {
         !self.tail.contains(&x.name) || !args.iter().any(|a| self.any_owned_unit(a))
     }
 
-    /// What routing this call to the borrow version does to the reference counting, over the units
-    /// of its arguments.
-    ///
-    /// Three shapes reach a unit the borrow version borrows, and the first two are why routing is
-    /// worth doing. Where the caller borrows the unit too, an owning callee makes it retain before
-    /// the call, and routing removes that retain. Where the caller owns the unit and its object
-    /// outlives the call, the caller retains ahead of the call for the same reason, and routing
-    /// cancels that retain.
-    ///
-    /// The third shape is where the caller owns the unit and its object ends at the call. Nothing is
-    /// retained either way — the caller hands over its only reference — so routing removes no count
-    /// and instead moves the disposal, from the callee's last use of the value to just after the
-    /// call. The reference standing over that stretch is observable: `Std::unsafe_is_unique` reads a
-    /// reference count and hands the answer to the program, and its documentation allows the
-    /// opposite change — a value going from shared to unique as optimization removes a use — and not
-    /// this one. So a call with such a unit is left on the original version.
-    ///
-    /// Reporting both keeps the decision local. Whether the callee reaches an operation that reads a
-    /// count does not enter it: over the units of a routed call the count is never higher than it
-    /// was, so there is nothing for an operation anywhere inside to see.
+    /// Whether routing this call to the borrow version removes a reference count it would otherwise
+    /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows
+    /// and that would otherwise be retained. Two kinds qualify: a borrowed value, which an owning
+    /// callee makes the caller retain before the call, and an owned value whose object outlives the
+    /// call, where the borrow cancels the retain made ahead of it. An owned value whose object ends
+    /// at the call is moved either way, so borrowing it removes no retain and only delays its
+    /// release.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn routing_effect(
+    fn routing_saves_retain(
         &self,
         borrow_version: &FuncRef,
         args: &[RcVar],
         k: &RcExprNode,
-    ) -> RoutingEffect {
+    ) -> bool {
         // `borrow_ify` registers the parameters of every version, so a borrow version is a key here.
         let borrow_params = &self.callee_params[borrow_version];
-        let mut effect = RoutingEffect::default();
-        for (arg_idx, arg) in args.iter().enumerate() {
+        args.iter().enumerate().any(|(arg_idx, arg)| {
             let arg_used_later = used_later(&arg.name, k);
-            for unit in rc_units(&arg.ty, self.type_env) {
+            rc_units(&arg.ty, self.type_env).iter().any(|unit| {
                 // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
                     .owned_units
                     .contains(&(borrow_params[arg_idx].0.clone(), unit.clone()));
-                if !callee_borrows {
-                    continue;
-                }
-                let dies_at_the_call = self.owns_unit(arg, &unit)
-                    && !arg_used_later
-                    && !self.comes_from_a_value_used_later(arg, &unit, k);
-                if dies_at_the_call {
-                    effect.delays_a_release = true;
-                } else {
-                    effect.saves_a_retain = true;
-                }
-            }
-        }
-        effect
+                callee_borrows
+                    && !(self.owns_unit(arg, unit)
+                        && !arg_used_later
+                        && !self.comes_from_a_value_used_later(arg, unit, k))
+            })
+        })
     }
 
     /// Whether `arg@unit` was read out of a value this function uses after the call. Such a leaf
