@@ -539,6 +539,57 @@ main = (
 );
 "#;
 
+    // A union whose payload holds two boxed values the function owns differently. `x` is returned,
+    // so ownership inference makes it owned; `y` only goes into the union, which a `Release` node
+    // then drops, and a `Release` is not a consume, so `y` stays borrowed. The union is one
+    // reference-counting unit, and the ownership of its two leaves therefore disagrees.
+    //
+    // The borrowing version has to answer for that unit once. Dropping its `Release` leaks the
+    // reference the owned leaf carried; keeping it disposes the reference the borrowed leaf was
+    // only lent. The recursion keeps the function out of its caller so that a borrowing version is
+    // built at all, and the caller's own use of the array after the call is what routes to it.
+    const SPLIT_OWNERSHIP_UNIT_SOURCE: &str = r#"
+module Main;
+
+type Twins = unbox union { twins : (Array I64, Array I64), none : () };
+
+f : Array I64 -> Array I64 -> I64 -> (Array I64, I64);
+f = |x, y, n| (
+    if n == 0 {
+        let a = Twins::twins((x, y));
+        (x, if a.is_twins { 1 } else { 0 })
+    };
+    let (r, k) = f(x, y, n - 1);
+    (r, k)
+);
+
+main : IO ();
+main = (
+    let arr = Array::fill(3, 7);
+    let brr = Array::fill(4, 9);
+    let (r, k) = f(arr, brr, 2);
+    assert_eq(
+        |_|"a union unit whose leaves differ in ownership",
+        r.@size + k + brr.@size, 8
+    );;
+    pure()
+);
+"#;
+
+    /// Every array is freed exactly once and none of them leaks, checked under Valgrind MemCheck.
+    /// The answer is right either way, so only the leak check catches this.
+    #[test]
+    pub fn test_split_ownership_unit_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(SPLIT_OWNERSHIP_UNIT_SOURCE, Configuration::develop_mode());
+    }
+
     // A union payload built from a value a match binding carries and a second value. The binding
     // carries a name of its own -- the one every path through the match agrees on -- and that name
     // is what a retain of the binding keys to. A release of the union has to name it as well: the

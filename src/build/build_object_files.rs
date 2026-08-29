@@ -133,7 +133,7 @@ fn optimize_rc_program(
     split_rc_units(&mut prog, type_env);
     validate(&prog, "after split_rc_units");
     if config.enable_borrow_optimization() {
-        prog = borrow_ify(&prog, type_env);
+        prog = borrow_ify(&prog, type_env, config.develop_mode);
         validate(&prog, "after borrow_ify");
         prog = cancel(&prog, type_env, config.develop_mode);
         validate(&prog, "after cancel");
