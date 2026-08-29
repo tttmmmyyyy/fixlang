@@ -1,22 +1,31 @@
 # P7e、P7d、P7a -- 所有の unit 粒度と一様性
 
-この文書は `README.md` の P7e と P7d を証明し、P7a の 2 つの向き -- **節 1 から節 3** と
-**節 2 から節 1** -- を証明する。立つのは `README.md` の定義 D1-D26、仮定 A1-A18、および命題 P1-P7 の
-**言明**である。
+この文書は `README.md` の P7d を証明し、P7e については下の**言明の訂正**が述べる形を証明し、P7a の
+2 つの向き -- **節 1 から節 3** と **節 2 から節 1** -- を証明する。立つのは `README.md` の定義と仮定、
+および命題 P1-P7 の**言明**である。
 
 P7a の残る向き (節 3 から節 2、節 3 から節 1) は偽である。`Λ(u)` に inhabited (D16) な leaf が 1 つも
 無い site では節 3 が空虚に真になるからで、第 6 節の R2 がその本体を挙げる。`Inh(v, u) ≠ ∅` を仮定に
 足せば 3 つは同値になる。
 
-読んだコードは作業ツリーの版である。README の対象コミット
-`39c41033cb436ea752b3a1231f67321a45dd1f87` との差分は `README.md` だけであり、この文書が引用する記号の
-本文は対象コミットと一致する。
+**P7e の言明の訂正。** README の P7e は「任意の root `r` と path `p` について
+`owns_object(r, p) = owns_object(r, truncate_to_unit(ty(r), p))`」と述べる。第 1 節が定める `=` は
+「両辺が値を返してその値が等しいか、両辺が中断するか」なので、左辺が値を返して右辺が中断する `(r, p)` が
+1 つでもあればこの等式は偽である。そのような `(r, p)` は在る。`pty(r) = None` である `r` -- 例えば
+`I64` の値を束縛する `Binding::Producer` の変数 -- と `p = [0]` を取ると、左辺は `owns_object` の
+`None` の腕が真を返し、右辺は `truncate_to_unit(I64, [0])` が `unit_step(I64) = NoUnit` の腕で `panic!`
+する (`CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object`,
+`CODE src/rc_ir/ownership.rs: truncate_to_unit`, `unit_step`)。第 3 節が証明するのは `pty(r)` で場合を
+分けた形であり、その言明は第 3 節の冒頭に置く。この文書の中で P7e を読む 2 か所 (L21 の `<1>1`、
+L22 の `<1>2`) は、どちらも訂正した形で足りる。
+
+この文書が読んだコードは、コミット `fa6c9ca31910082266b2907431ab71b350a97a5f` の版である。
 
 ## 0. 結論
 
 | 命題 | 結果 |
 |---|---|
-| P7e (`owns_object` は unit ごとに答える) | 証明した (第 3 節) |
+| P7e (`owns_object` は unit ごとに答える) | **訂正した形**を証明した (第 3 節)。README の形は偽である |
 | P7d (所有は site ごとに一様である) | 証明した (第 5 節) |
 | P7a、節 1 から節 3 | 証明した (第 6 節) |
 | P7a、節 2 から節 1 | 証明した (第 6 節) |
@@ -196,6 +205,56 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
   言明の対応する行を与える。
   BY <1>6, <1>7, <1>8, <1>9, <1>10, <1>11, <1>5, CODE src/rc_ir/ownership.rs: UnitStep
 
+### L1a (`unit_step` の 4 つの答えと、2 つの走査の降下)
+
+**言明**。型 `σ` を取り、`boxed_leaf_paths` の内部関数 `go` と `rc_units_go` が `σ` に着いた時点の path を
+`path` とする。`step(σ)` の 4 つの答えは、型についての述語と 2 つの走査の振る舞いを次のように決める。
+
+| `step(σ)` | 成り立つ述語 | `go` の振る舞い | `rc_units_go` の振る舞い |
+|---|---|---|---|
+| `NoUnit` | `is_fully_unboxed(σ)` が真 | 何も積まずに戻る | 何も積まない |
+| `Capture { capture_idx, .. }` | `is_fully_unboxed(σ)` が偽、`is_closure(σ)` が真。`capture_idx = CLOSURE_CAPTURE_IDX` | `path ++ [CLOSURE_CAPTURE_IDX]` を積んで戻る | `path ++ [capture_idx]` を積む |
+| `Unit` | `is_fully_unboxed(σ)` と `is_closure(σ)` が偽、`is_box(σ) ∨ is_union(σ) ∨ is_array(σ) ∨ is_punched_array(σ)` が真 | `is_box(σ) ∨ is_array(σ)` なら `path` を積んで戻り、そうでなければ `unpunched_field_types(σ)` の各対 `(i, φ)` について `path ++ [i]` から `φ` へ降りる | `path` を積む |
+| `Fields { held_fields, .. }` | 上の 3 行の述語がどれも偽。`held_fields = unpunched_field_types(σ)` | `unpunched_field_types(σ)` の各対について降りる | `held_fields` の各対について降りる |
+
+とくに次の 2 つが成り立つ。
+
+- **(a)** `step(σ) = Fields { held_fields, .. }` のとき `held_fields = unpunched_field_types(σ)` であり、
+  `go` と `rc_units_go` はどちらも `held_fields` の各対の下へ降りる。
+- **(b)** `go` が `σ` の位置で降りるのは、`step(σ)` が `Fields` であるか、`Unit` であって `is_box(σ)` も
+  `is_array(σ)` も偽であるかのどちらかのときに限る。すなわち `go` が降りる位置では `step(σ)` は `NoUnit`
+  でも `Capture` でもない。
+
+**leaf と unit がずれるのはここである。**`is_union(σ)` または `is_punched_array(σ)` が真で `is_box(σ)` も
+`is_array(σ)` も偽のとき、`step(σ) = Unit` なので `rc_units_go` は `path` を積んで止まるのに、`go` は
+`unpunched_field_types(σ)` の下へ降りる。`Std::PunchedArray a` は `unbox struct { _arr : Array a, _idx : I64 }`
+であり (`CODE src/fixstd/std.fix: PunchedArray`)、`is_punched_array` が真なのでこの形になる。
+
+<1>1. `unit_step` は上から順に、`is_fully_unboxed(σ)` で `NoUnit` を、`is_closure(σ)` で
+      `Capture { capture_idx: CLOSURE_CAPTURE_IDX, field_count: CLOSURE_FIELD_COUNT }` を、
+      `is_box(σ) || is_union(σ) || is_array(σ) || is_punched_array(σ)` で `Unit` を、それ以外で
+      `Fields { field_count: .., held_fields: unpunched_field_types(σ) }` を返す。
+  BY CODE src/rc_ir/ownership.rs: unit_step
+
+<1>2. `go` は上から順に、`is_fully_unboxed(σ)` で何も積まずに戻り、`is_closure(σ)` で
+      `path ++ [CLOSURE_CAPTURE_IDX]` を積んで戻り、`is_box(σ)` で `path` を積んで戻り、`is_array(σ)` で
+      `path` を積んで戻り、それ以外で `unpunched_field_types(σ)` の各対 `(i, φ)` について `path` に `i` を
+      積んで `φ` へ降りる。
+  BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+
+<1>3. `rc_units_go` は `step(σ)` で分岐し、`NoUnit` で何も積まず、`Capture { capture_idx, .. }` で
+      `path ++ [capture_idx]` を積み、`Unit` で `path` を積み、`Fields { held_fields, .. }` で
+      `held_fields` の各対 `(i, φ)` について `path` に `i` を積んで `φ` へ降りる。
+  BY CODE src/rc_ir/ownership.rs: rc_units_go
+
+<1>4. QED
+  表の 4 行は、`<1>1` が与える述語と、`<1>2` および `<1>3` の分岐を突き合わせたものである。(a) は
+  `<1>1` の第 4 行、`<1>2` の最後の腕、`<1>3` の `Fields` の腕による。(b) は `<1>1` と `<1>2` による --
+  `go` が降りるのは `is_fully_unboxed(σ)`・`is_closure(σ)`・`is_box(σ)`・`is_array(σ)` がどれも偽の
+  ときであり、そのとき `<1>1` の第 1 行と第 2 行の述語は偽なので `step(σ)` は `NoUnit` でも `Capture` でも
+  なく、`Unit` (`is_union(σ) ∨ is_punched_array(σ)` による) か `Fields` である。
+  BY <1>1, <1>2, <1>3
+
 ### L2 (`units_under` の 2 つの形)
 
 **言明**。`sub(τ, π)` が `Some(σ)` を返すとき `under(τ, π) = { π ++ u : u ∈ units(σ) }` であり、`None` を
@@ -306,20 +365,20 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
   BY <1>1, <1>2, L1, CODE src/rc_ir/ownership.rs: truncate_to_unit
 
 <1>5. `leaves(τ)` のうち `p` を前置に持つものの全体は `{ p ++ λ : λ ∈ leaves(σ) }` である。
-  `boxed_leaf_paths` の内部関数 `go` は、`is_fully_unboxed` でも `is_closure` でも `is_box` でも
-  `is_array` でもない型についてだけ `unpunched_field_types` の下へ降り、それ以外では `path` を延ばさずに
-  終わる。`unit_step` が `Fields { held_fields, .. }` を返すのはこの 4 つがどれも成り立たないときで
-  あり、そのとき `held_fields` は `unpunched_field_types` そのものである。`sub(τ, p)` が `Some` を返す
-  ので、`τ` の `p` に沿う歩みの各段で `unit_step` は `Fields` であり、`go` はその段で同じフィールドの
-  下へ降りる。よって `go` が `p` を前置に持つ path を積むのは、`σ` から始めた `go` が積む path の前に
+  `sub(τ, p) = Some(σ)` なので L1 の場合 (a) が `(τ, p)` に当てはまり、`τ` の `p` に沿う歩みの長さは
+  `|p|` で `cur_{|p|} = σ` である。DEF 歩み より `i < |p|` の各段で `step(cur_i)` は
+  `Fields { held_fields, .. }` であって `held_fields` は添字 `p[i]` の対を含む。L1a (a) より `go` は
+  その各段で `held_fields` の同じ対の下へ降りるので、`go` は `path = p` で `σ` に着く。`go` はその位置で
+  `σ` について走るので、`p` を前置に持つ path として積むのは、`σ` から始めた `go` が積む path の前に
   `p` を置いたものに限る。
-  BY L1, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step
+  BY L1, L1a, DEF 歩み, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
 <1>6. `units(τ) ⊇ { p ++ u : u ∈ units(σ) }` である。
-  `rc_units_go` は `unit_step` が `Fields { held_fields, .. }` のとき `held_fields` の各フィールドの下へ
-  `path` を延ばして降りる。`<1>5` と同じく、`τ` の `p` に沿う歩みの各段で `unit_step` は `Fields` なので、
-  `rc_units_go` は `path = p` で `σ` に達し、そこから `units(σ)` の各要素を `p` の後ろに積む。
-  BY L1, CODE src/rc_ir/ownership.rs: rc_units_go, unit_step
+  L1 の場合 (a) と DEF 歩み より、`τ` の `p` に沿う歩みの各段 `i < |p|` で `step(cur_i)` は
+  `Fields { held_fields, .. }` であって `held_fields` は添字 `p[i]` の対を含む。L1a (a) より
+  `rc_units_go` はその各段で同じ対の下へ降りるので、`path = p` で `cur_{|p|} = σ` に達し、そこから
+  `units(σ)` の各要素を `p` の後ろに積む。
+  BY L1, L1a, DEF 歩み, CODE src/rc_ir/ownership.rs: rc_units_go
 
 <1>7. QED
   BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6
@@ -371,9 +430,10 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
 
 <1>7. QED
   `<1>1` の 2 つの場合を `<1>3`/`<1>4` と `<1>6` が扱った。言明の (i) は `<1>2` と `<1>3`、(ii) は
-  `<1>5` である。この 2 つは排他である -- 前者では `unit_step(cur_{|u|})` が `Unit`、後者では
-  `unit_step(cur_{|u|-1})` が `Capture` であって、`unit_step` は 1 つの型に 1 つの答えを返す。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6
+  `<1>5` である。この 2 つは排他である。`<1>2` は場合 (i) で `τ` の `u` に沿う歩みの長さが `|u|` だと
+  述べ、`<1>5` は場合 (ii) でその長さが `|u| - 1` だと述べる。DEF 歩み は 1 つの `(τ, u)` に 1 つの長さを
+  与え、`|u| ≠ |u| - 1` なので、2 つが同時に成り立つことはない。
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, DEF 歩み
 
 ### L7 (unit の下の leaf はその unit へ切り詰まる)
 
@@ -388,10 +448,14 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
   BY L1, L6, DEF 歩み
 
 <1>2. L6 の (ii) のとき、`trunc(τ, λ) = u` である。
-  `u = q ++ [capture_idx]` であり、`u ⊑ λ` なので `λ[|q|] = capture_idx` である。L6 の (ii) より
-  `unit_step(cur_{|q|})` は `Capture { capture_idx, .. }` である。`|λ| ≥ |u| = |q| + 1 > |q|` なので
-  L1 の場合 (b) の `Capture` の行より `trunc(τ, λ) = λ[0..|q|+1] = u` である。
-  BY L1, L6
+  `u = q ++ [capture_idx]` であり、`u ⊑ λ` なので `λ[|q|] = capture_idx` である。L6 の (ii) より `τ` の
+  `u` に沿う歩みの長さは `|q|` であり、`unit_step(cur_{|q|})` は `Capture { capture_idx, .. }` である。
+  DEF 歩み が `cur_1, ..., cur_{|q|}` を定めるのに読むのは添字 `i < |q|` の要素だけであり、`q ⊑ u ⊑ λ`
+  よりその範囲で `λ[i] = u[i]` なので、`τ` の `λ` に沿う歩みの最初の `|q| + 1` 個の型は `τ` の `u` に
+  沿う歩みのものと一致する。`unit_step(cur_{|q|})` が `Fields` でないので、`τ` の `λ` に沿う歩みの長さも
+  `|q|` である。`|λ| ≥ |u| = |q| + 1 > |q|` なので L1 の場合 (b) の `Capture` の行が当てはまり、
+  `trunc(τ, λ) = λ[0..|q|+1] = u` である。
+  BY L1, L6, DEF 歩み
 
 <1>3. `Λ_τ(u)` は空でない。
   P1 の後半より、`u` はある `λ ∈ leaves(τ)` の `trunc(τ, λ)` である。`trunc` が `out` に積むのは
@@ -423,12 +487,31 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
         `Capture { capture_idx: CLOSURE_CAPTURE_IDX, .. }` を返して `rc_units_go` は
         `path ++ [CLOSURE_CAPTURE_IDX]` を積む。
     BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step, rc_units_go
-  <2>4. 上の 3 つでも `is_funptr` でもないとき、`<2>1` より `unpunched_field_types(τ)` のあるフィールド
-        `fty` について `is_fully_unboxed(fty)` は偽である。`go` も `rc_units_go` もそのフィールドの下へ
-        降りるので、型の高さについての帰納で `leaves(τ) ≠ ∅` かつ `units(τ) ≠ ∅` が出る。
-    A10 より型の in-place の降下は有限なので、この帰納は基底に着く。
-    BY <2>1, <2>2, <2>3, A10, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
-       CODE src/rc_ir/ownership.rs: unit_step, rc_units_go
+  <2>4. `is_box(τ)`、`is_array(τ)`、`is_closure(τ)`、`is_funptr(τ)` がどれも偽のとき、
+        `leaves(τ) ≠ ∅` かつ `units(τ) ≠ ∅` である。
+    <3>1. `unpunched_field_types(τ)` のある対 `(idx, fty)` について `is_fully_unboxed(fty)` は偽である。
+      `<2>1` より、この場合 `is_fully_unboxed(τ)` は `unpunched_field_types(τ)` の全対についての全称で
+      あり、`<1>2` の仮定よりそれは偽である。
+      BY <2>1
+    <3>2. `go` は `τ` の位置で `unpunched_field_types(τ)` の各対の下へ降りる。
+      `is_fully_unboxed(τ)` は `<1>2` の仮定より偽であり、`is_closure(τ)`・`is_box(τ)`・`is_array(τ)` は
+      `<2>4` の場合の条件より偽である。L1a の `go` の欄はこの 4 つがどれも偽のとき
+      `unpunched_field_types(τ)` の各対の下へ降りると述べる。
+      BY L1a
+    <3>3. `leaves(τ) ≠ ∅` である。
+      `<3>1` と型の in-place の降下についての帰納法の仮定より `leaves(fty) ≠ ∅` である。`<3>2` より
+      `go` は `path` に `idx` を積んで `fty` へ降りるので、`fty` から始めた走査が積む path の前に `idx` を
+      置いたものが `leaves(τ)` に入る。
+      BY <3>1, <3>2, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+    <3>4. `units(τ) ≠ ∅` である。
+      `<3>2` と L1a (b) より `step(τ)` は `Unit` か `Fields` である。`Unit` のとき `rc_units_go` は
+      `path` を積むので `units(τ) ≠ ∅` である。`Fields { held_fields, .. }` のとき L1a (a) より
+      `held_fields = unpunched_field_types(τ)` であり `rc_units_go` は対 `(idx, fty)` の下へ降りるので、
+      `<3>1` と帰納法の仮定 `units(fty) ≠ ∅` から `units(τ) ≠ ∅` が出る。
+      BY <3>1, <3>2, L1a, CODE src/rc_ir/ownership.rs: rc_units_go
+    <3>5. QED
+      A10 より型の in-place の降下は有限なので、この帰納は基底に着く。
+      BY <3>3, <3>4, A10
   <2>5. QED
     `is_funptr(τ)` のときは `is_fully_unboxed(τ)` が真なので、この場合は仮定に反する。残りを `<2>2`、
     `<2>3`、`<2>4` が扱った。
@@ -449,57 +532,143 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
 <1>2. CASE `sub(τ, p) = None`
   L2 より `under(τ, p) = [p]` である。L1 の場合 (b) より、`trunc(τ, p)` が値を返すのは `Unit` の行か
   `Capture` (`p[m] = capture_idx`) の行であり、値はそれぞれ `p[0..m]`、`p[0..m+1]` である。
-  <2>1. `Unit` の行では `p[0..m] ∈ units(τ)` である。
-    `i < m` の各位置で `unit_step(cur_i)` は `Fields` であって `p[i]` は `held_fields` に含まれる
-    (DEF 歩み)。`rc_units_go` はその各段で同じフィールドの下へ降りるので `path = p[0..m]` で `cur_m` に
-    達し、`unit_step(cur_m) = Unit` なので `path` を積む。
-    BY L1, DEF 歩み, CODE src/rc_ir/ownership.rs: rc_units_go
+  <2>1. `rc_units_go` は `path = p[0..m]` で `cur_m` に達する。
+    `i < m` の各位置で `unit_step(cur_i)` は `Fields { held_fields, .. }` であって `p[i]` は
+    `held_fields` に含まれる (DEF 歩み)。L1a (a) より `rc_units_go` はその各段で同じ対の下へ降りる。
+    BY L1a, DEF 歩み, CODE src/rc_ir/ownership.rs: rc_units_go
+  <2>1a. `Unit` の行では `p[0..m] ∈ units(τ)` である。
+    `<2>1` より `rc_units_go` は `path = p[0..m]` で `cur_m` に達し、`unit_step(cur_m) = Unit` なので
+    `path` を積む。
+    BY <2>1, L1a
   <2>2. `Capture` の行では `p[0..m+1] ∈ units(τ)` である。
-    `<2>1` と同じ降下で `rc_units_go` は `path = p[0..m]` で `cur_m` に達し、
+    `<2>1` より `rc_units_go` は `path = p[0..m]` で `cur_m` に達し、
     `unit_step(cur_m) = Capture { capture_idx, .. }` なので `path ++ [capture_idx]` を積む。
     `p[m] = capture_idx` なのでこれは `p[0..m+1]` である。
-    BY L1, DEF 歩み, CODE src/rc_ir/ownership.rs: rc_units_go
+    BY <2>1, L1a
   <2>3. QED
-    BY L1, <2>1, <2>2
+    BY L1, <2>1a, <2>2
 
 <1>3. QED
   `sub(τ, p)` は `Some` か `None` を返すか中断する。中断するとき `under(τ, p)` も中断する (L2) ので
   言明の仮定が成り立たない。
   BY <1>1, <1>2, L2
 
+### L9a (leaf に沿う歩みの終わり方)
+
+**言明**。`λ ∈ leaves(τ)` とし、`m_λ` を `τ` の `λ` に沿う歩みの長さ、`cur_0, ..., cur_{m_λ}` をその型の
+列とする。このとき `m_λ ≤ |λ|` であり、`i < m_λ` の各位置で `step(cur_i)` は `Fields { held_fields, .. }`
+であって `held_fields` は添字 `λ[i]` の対を含み、さらに次のどちらかが成り立つ。
+
+- **(A)** `step(cur_{m_λ}) = Unit`。
+- **(B)** `m_λ < |λ|` であり、`step(cur_{m_λ}) = Capture { capture_idx, .. }` かつ
+  `λ[m_λ] = capture_idx` である。
+
+すなわち `NoUnit` で止まることも、`Fields` であって次の添字を held に持たないために止まることもない。
+
+<1>1. `go` が `λ` を積むのは次の 2 つの場合だけである。(i) `path = λ` の位置で `is_box` または
+      `is_array` が真であるとき。(ii) `λ = μ ++ [CLOSURE_CAPTURE_IDX]` であり、`path = μ` の位置で
+      `is_closure` が真であるとき。
+  L1a の表より、`go` が path を積むのは `Capture` の行 (`path ++ [CLOSURE_CAPTURE_IDX]` を積む) と、
+  `Unit` の行のうち `is_box(σ) ∨ is_array(σ)` の側 (`path` を積む) だけである。
+  BY L1a
+
+<1>2. `go` が `λ` を積む位置に至るまでの各位置で `go` は降りている。その位置の型を順に
+      `g_0 = τ, g_1, ...` と書くと、`g_{i+1}` は `unpunched_field_types(g_i)` の添字 `λ[i]` の対の第 2
+      成分である。降りる位置は、場合 (i) では `i < |λ|` の各 `i`、場合 (ii) では `i < |μ|` の各 `i` で
+      ある。
+  `go` が `path` を伸ばすのは降りるときだけであり、積む位置の `path` は場合 (i) では `λ`、場合 (ii) では
+  `μ` である。よってそこに至るまでの各位置で `go` はその path の次の添字の対の下へ降りている。L1a より、
+  降りる先は `unpunched_field_types` の対である。
+  BY <1>1, L1a, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+
+<1>3. `i ≤ m_λ` について `cur_i = g_i` であり、`i < m_λ` の各位置で `step(cur_i)` は
+      `Fields { held_fields, .. }` であって `held_fields` は添字 `λ[i]` の対を含む。また `m_λ ≤ |λ|` で
+      ある。
+  DEF 歩み は `i < m_λ` の各位置で `step(cur_i) = Fields { held_fields, .. }` かつ `held_fields` が添字
+  `λ[i]` の対を含むことを要求し、`cur_{i+1} = held_field_type(held_fields, λ[i], _)` と定める。L1a (a) より
+  `held_fields = unpunched_field_types(cur_i)` なので、これは `<1>2` の `g` の漸化式と同じである。基底は
+  `cur_0 = g_0 = τ` である。`m_λ ≤ |λ|` は DEF 歩み が `i < |λ|` のときにしか次の型を定めないことによる。
+  BY <1>2, L1a, DEF 歩み, CODE src/rc_ir/ownership.rs: held_field_type
+
+<1>4. CASE `<1>1` の場合 (i)
+  <2>1. `m_λ < |λ|` のとき `step(cur_{m_λ}) = Unit` である。
+    `<1>3` より `cur_{m_λ} = g_{m_λ}` であり、`<1>2` より `g_{m_λ}` は `go` が降りる位置なので、L1a (b)
+    より `step(g_{m_λ})` は `Fields` か `Unit` である。`Fields { held_fields, .. }` だとすると、L1a (a)
+    より `held_fields = unpunched_field_types(g_{m_λ})` であり、`<1>2` よりそれは添字 `λ[m_λ]` の対を
+    含むので、DEF 歩み は `cur_{m_λ+1}` を定める。これは `m_λ` が歩みの長さであることに反する。
+    BY <1>2, <1>3, L1a, DEF 歩み
+  <2>2. `m_λ = |λ|` のとき `step(cur_{m_λ}) = Unit` である。
+    `<1>3` より `cur_{|λ|} = g_{|λ|}` であり、場合 (i) の条件よりその位置で `is_box` か `is_array` が
+    真なので、L1a より `step(cur_{m_λ}) = Unit` である。
+    BY <1>3, L1a
+  <2>3. QED
+    `<1>3` より `m_λ ≤ |λ|` なので `<2>1` と `<2>2` が場を尽くし、どちらも (A) を与える。
+    BY <1>3, <2>1, <2>2
+
+<1>5. CASE `<1>1` の場合 (ii)
+  <2>1. `m_λ < |μ|` のとき `step(cur_{m_λ}) = Unit` であり、(A) が成り立つ。
+    `<1>3` より `cur_{m_λ} = g_{m_λ}` であり、`<1>2` より `g_{m_λ}` は `go` が降りる位置なので、L1a (b)
+    より `step(g_{m_λ})` は `Fields` か `Unit` である。`Fields { held_fields, .. }` だとすると、L1a (a) と
+    `<1>2` より `held_fields` は添字 `λ[m_λ]` の対を含むので DEF 歩み が `cur_{m_λ+1}` を定め、`m_λ` が
+    歩みの長さであることに反する。
+    BY <1>2, <1>3, L1a, DEF 歩み
+  <2>2. `m_λ = |μ|` のとき (B) が成り立つ。
+    `<1>3` より `cur_{|μ|} = g_{|μ|}` であり、場合 (ii) の条件よりその位置で `is_closure` が真なので、
+    L1a より `step(cur_{m_λ}) = Capture { capture_idx: CLOSURE_CAPTURE_IDX, .. }` である。
+    `λ = μ ++ [CLOSURE_CAPTURE_IDX]` より `m_λ = |μ| = |λ| - 1 < |λ|` かつ
+    `λ[m_λ] = CLOSURE_CAPTURE_IDX = capture_idx` である。
+    BY <1>3, L1a
+  <2>3. QED
+    `<1>3` より `m_λ ≤ |λ| = |μ| + 1` である。`m_λ = |μ| + 1` だとすると DEF 歩み より
+    `step(cur_{|μ|}) = Fields` だが、`<1>3` より `cur_{|μ|} = g_{|μ|}` であり、場合 (ii) の条件より
+    その位置で `is_closure` が真なので L1a より `step(cur_{|μ|}) = Capture` である。よって `m_λ ≤ |μ|` で
+    あり、`<2>1` と `<2>2` が場を尽くす。
+    BY <1>3, <2>1, <2>2, L1a, DEF 歩み
+
+<1>6. QED
+  `<1>1` の 2 つの場合を `<1>4` と `<1>5` が扱った。`i < m_λ` についての主張と `m_λ ≤ |λ|` は `<1>3` で
+  ある。
+  BY <1>1, <1>3, <1>4, <1>5
+
 ### L10 (leaf に届く path では歩みが中断しない)
 
 **言明**。`covered(τ, p) ≠ ∅` のとき、`trunc(τ, p)` と `sub(τ, p)` は値を返し、`under(τ, p)` の各要素
 `unit` について `trunc(τ, unit)` も値を返す。
 
-<1>1. `λ ∈ leaves(τ)` について、`boxed_leaf_paths` の `go` が `λ` を積むのは次の 2 つの場合だけであり、
-      どちらでも `τ` の `λ` に沿う歩みは次のとおりである。
-      (i) `path = λ` の位置で `is_box` または `is_array` が真: `i < |λ|` の各位置で `unit_step(cur_i)` は
-      `Fields { held_fields, .. }` で `held_fields` は `λ[i]` を含み、`unit_step(cur_{|λ|}) = Unit`。
-      (ii) `λ = μ ++ [CLOSURE_CAPTURE_IDX]` で `path = μ` の位置で `is_closure` が真: `i < |μ|` の各位置で
-      `unit_step(cur_i)` は `Fields` で `held_fields` は `λ[i]` を含み、
-      `unit_step(cur_{|μ|}) = Capture { capture_idx: CLOSURE_CAPTURE_IDX, .. }`。
-  `go` は `is_fully_unboxed` で何も積まずに戻り、`is_closure` で `path ++ [CLOSURE_CAPTURE_IDX]` を積んで
-  戻り、`is_box` と `is_array` で `path` を積んで戻り、それ以外で `unpunched_field_types` の下へ降りる。
-  降りた各位置ではこの 4 つがどれも成り立たないので `unit_step` は `Fields` を返し、その `held_fields` は
-  `unpunched_field_types` そのものである。`unit_step` は `is_fully_unboxed` で `NoUnit`、`is_closure` で
-  `Capture`、`is_box`/`is_array` で `Unit` を返す。
-  BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step, DEF 歩み
+<1>1. `λ ∈ leaves(τ)` とし、`m_λ` を `τ` の `λ` に沿う歩みの長さとする。このとき `m_λ ≤ |λ|` であり、
+      `i < m_λ` の各位置で `step(cur_i)` は `Fields { held_fields, .. }` であって `held_fields` は添字
+      `λ[i]` の対を含み、さらに (A) `step(cur_{m_λ}) = Unit` であるか、(B) `m_λ < |λ|` かつ
+      `step(cur_{m_λ}) = Capture { capture_idx, .. }` かつ `λ[m_λ] = capture_idx` であるかの
+      どちらかである。
+  BY L9a
 
-<1>2. `p ⊑ λ` のとき、`trunc(τ, p)` と `sub(τ, p)` は値を返す。
-  `<1>1` より、`τ` の `λ` に沿う歩みで `NoUnit` の位置は無く、`Fields` の位置では次の添字が
-  `held_fields` に含まれ、`Capture` の位置では次の添字が `capture_idx` に等しい。`p` は `λ` の接頭辞なので
-  `τ` の `p` に沿う歩みはこの歩みの先頭部分であり、L1 の場合 (b) の中断する 3 行 (`Fields` で添字が
-  held でない行、`Capture` で添字が `capture_idx` でない行、`NoUnit` の行) のどれにも当たらない。
-  BY <1>1, L1
+<1>2. `p` が `λ` と比較可能 (`p ⊑ λ` または `λ ⊑ p`) のとき、`trunc(τ, p)` と `sub(τ, p)` は値を返す。
+  <2>1. `k = min(m_λ, |p|)` と置くと、`i < k` の各位置で `p[i] = λ[i]` であり、`τ` の `p` に沿う歩みの
+        最初の `k + 1` 個の型は `τ` の `λ` に沿う歩みのものと一致する。
+    `i < k` のとき `i < m_λ ≤ |λ|` かつ `i < |p|` であり、`p` と `λ` は比較可能なので短い方が長い方の
+    接頭辞であって `p[i] = λ[i]` である。`<1>1` より `i < m_λ` の各位置で `step(cur_i)` は `Fields` で
+    あって `held_fields` は添字 `λ[i] = p[i]` の対を含むので、DEF 歩み は `p` についても同じ型を定める。
+    BY <1>1, DEF 歩み
+  <2>2. CASE `|p| ≤ m_λ`
+    `<2>1` より `k = |p|` であり、`τ` の `p` に沿う歩みの長さは `|p|` である。L1 の場合 (a) より
+    `sub(τ, p) = Some(cur_{|p|})` かつ `trunc(τ, p) = p` であり、どちらも値である。
+    BY <2>1, L1
+  <2>3. CASE `m_λ < |p|`
+    `<2>1` より `k = m_λ` であり、`τ` の `p` に沿う歩みの `cur_{m_λ}` は `λ` のものと同じである。
+    `<1>1` の (A) では `step(cur_{m_λ}) = Unit` なので、`τ` の `p` に沿う歩みの長さは `m_λ < |p|` で
+    あり、L1 の場合 (b) の `Unit` の行より `sub(τ, p) = None`、`trunc(τ, p) = p[0..m_λ]` である。(B) では
+    `step(cur_{m_λ}) = Capture { capture_idx, .. }` かつ `λ[m_λ] = capture_idx` であり、`m_λ < |p|` かつ
+    `m_λ < |λ|` で `p` と `λ` は比較可能なので `p[m_λ] = λ[m_λ] = capture_idx` である。L1 の場合 (b) の
+    `Capture` (`p[m] = capture_idx`) の行より `sub(τ, p) = None`、`trunc(τ, p) = p[0..m_λ+1]` である。
+    どちらも値である。
+    BY <1>1, <2>1, L1
+  <2>4. QED
+    `|p| ≤ m_λ` と `m_λ < |p|` が場を尽くす。
+    BY <2>2, <2>3
 
 <1>3. `λ ⊑ p` のとき、`trunc(τ, p)` と `sub(τ, p)` は値を返す。
-  `<1>1` の場合 (i) では `unit_step(cur_{|λ|}) = Unit` であり、`i < |λ|` の各位置は `Fields` で添字は
-  held である。`|λ| ≤ |p|` なので、`τ` の `p` に沿う歩みは位置 `|λ|` までは中断せず、`|λ| < |p|` なら
-  そこで L1 の `Unit` の行に入り、`|λ| = |p|` なら L1 の場合 (a) になる。場合 (ii) では
-  `unit_step(cur_{|μ|}) = Capture` であり、`|μ| < |λ| ≤ |p|` なので位置 `|μ|` で `Capture` の行に入り、
-  `p[|μ|] = λ[|μ|] = CLOSURE_CAPTURE_IDX = capture_idx` なので中断しない。
-  BY <1>1, L1
+  `λ ⊑ p` は「`p` が `λ` と比較可能」の一方の場合である。
+  BY <1>2
 
 <1>4. `under(τ, p)` の各要素について `trunc(τ, ・)` は値を返す。
   `<1>2` と `<1>3` より `sub(τ, p)` は値を返す。`None` のとき L2 より `under(τ, p) = [p]` であり、
@@ -552,19 +721,25 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
         `unit_step(cur_m)` は `Unit` か `Capture` (`p[m] = capture_idx`) であり、`key` はそれぞれ
         `p[0..m]`、`p[0..m+1]` である。
     BY L1
-  <2>3. `covered(τ, p)` の各要素 `λ` について `|λ| > m` である。
-    `λ ∈ leaves(τ)` かつ `λ ⊑ p` かつ `|λ| ≤ m` と仮定する。`boxed_leaf_paths` の `go` が `λ` を積むのは、
-    `path = λ` の位置で `is_box` か `is_array` が成り立つときか、`λ = μ ++ [CLOSURE_CAPTURE_IDX]` で
-    `path = μ` の位置で `is_closure` が成り立つときである。前者では `unit_step(cur_{|λ|})` が `Unit` に
-    なるので DEF 歩み より `m ≤ |λ|`、あわせて `|λ| = m`。後者では `unit_step(cur_{|μ|})` が `Capture` に
-    なるので `m ≤ |μ| = |λ| - 1 ≤ m - 1` となり矛盾する。よって `|λ| = m` かつ `unit_step(cur_m) = Unit`
-    であり、`λ = p[0..m] = key`。この `λ` は `|λ| > m` を満たさないが、`trunc(τ, λ) = λ = key` である。
-    BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step, DEF 歩み, L1
+  <2>3. `covered(τ, p)` の要素 `λ` で `|λ| ≤ m` であるものについては、`unit_step(cur_m) = Unit` であり、
+        `λ = p[0..m] = key` かつ `trunc(τ, λ) = key` である。
+    `<2>2` より `m < |p|` なので `|λ| ≤ m < |p|` であり、`λ` と `p` が比較可能であることは `λ ⊑ p` を
+    意味して、`i < |λ|` について `λ[i] = p[i]` である。DEF 歩み より `i < m` の各位置で
+    `unit_step(cur_i)` は `Fields { held_fields, .. }` であって `held_fields` は添字 `p[i]` の対を含むので、
+    `i < |λ| ≤ m` の範囲で `τ` の `λ` に沿う歩みも同じ型を辿り、その長さは `|λ|` である。L9a を `λ` に
+    当てると、長さが `|λ|` なので (B) は起こらず、(A) すなわち `unit_step(cur_{|λ|}) = Unit` である。
+    `|λ| < m` だとすると DEF 歩み より `unit_step(cur_{|λ|}) = Fields` になって矛盾するので `|λ| = m` で
+    あり、`λ = p[0..m]` である。`<2>2` よりこの場合 `key = p[0..m]` なので `λ = key` である。`τ` の `λ` に
+    沿う歩みの長さは `|λ|` なので、L1 の場合 (a) より `trunc(τ, λ) = λ = key` である。
+    BY <2>2, L1, L9a, DEF 歩み, CODE src/rc_ir/borrow.rs: covered_leaves
   <2>4. `covered(τ, p)` の各要素 `λ` について `trunc(τ, λ) = key` である。
-    `<2>3` は `|λ| ≤ m` のとき `λ = key` かつ `trunc(τ, λ) = key` を与える。`|λ| > m` のとき、`λ` は `p` と
-    比較可能なので `λ[0..m] = p[0..m]` であり、`λ[m] = p[m]` である (`|λ| > m` かつ `|p| > m` で、短い方が
-    長い方の接頭辞)。よって `τ` の `λ` に沿う歩みも長さ `m` で止まり、`unit_step(cur_m)` は `<2>2` と同じ
-    ものである。L1 より `trunc(τ, λ)` は `<2>2` と同じ式で与えられ、`key` に等しい。
+    `|λ| ≤ m` のときは `<2>3` による。`|λ| > m` のとき、`λ` は `p` と比較可能なので `λ[0..m] = p[0..m]`
+    であり、`λ[m] = p[m]` である (`|λ| > m` かつ `|p| > m` で、短い方が長い方の接頭辞)。DEF 歩み より
+    `i < m` の各位置で `unit_step(cur_i)` は `Fields` であって `held_fields` は添字 `p[i] = λ[i]` の対を
+    含むので、`τ` の `λ` に沿う歩みも同じ型を辿り、`unit_step(cur_m)` は `<2>2` と同じものであるから、
+    その長さは `m` であって `m < |λ|` である。L1 の場合 (b) より `trunc(τ, λ)` は `Unit` の行なら
+    `λ[0..m] = p[0..m]`、`Capture` の行なら `λ[0..m+1] = p[0..m+1]` であり、`<2>2` よりどちらも `key` に
+    等しい。
     BY <2>2, <2>3, L1, DEF 歩み
   <2>5. QED
     仮定より `covered(τ, p) ≠ ∅` なので、`<2>4` の `λ` が 1 つ取れて `trunc(τ, λ) = key` であり、
@@ -572,30 +747,38 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
     BY <1>1, <2>1, <2>4
 
 <1>5. QED
-  `under(τ, p) = []` の場合を `<1>2` が、`under(τ, p) ≠ []` の場合を `sub` の答えで分けて `<1>3` と
-  `<1>4` が扱った。
-  BY <1>2, <1>3, <1>4
+  `<1>0` より `under(τ, p)` は中断せず、L2 より `sub(τ, p)` が中断すれば `under(τ, p)` も中断するので、
+  `sub(τ, p)` は `Some` を返すか `None` を返すかのどちらかである。`under(τ, p) = []` の場合を `<1>2` が、
+  `under(τ, p) ≠ []` の場合を `sub` の答えで分けて `<1>3` と `<1>4` が扱った (`sub(τ, p) = None` のとき
+  L2 より `under(τ, p) = [p]` であり、これは `[]` ではない)。
+  BY <1>0, <1>2, <1>3, <1>4, L2
 
 ## 3. P7e の証明
 
-**言明** (README の P7e)。任意の root `r` と path `p` について、
-`owns(r, p) = owns(r, trunc(ty(r), p))` である。`r` がこの版のパラメータ・capture でないときは、両辺とも
-真である。
+**言明** (README の P7e を訂正した形)。任意の root `r` と path `p` について、次の 2 つが成り立つ。
 
-**読み方**。`r` がこの版のパラメータ・capture でないとき、`owns(r, q)` は `q` によらず真を返す
-(`<1>1`)。このとき等式は、右辺の引数 `trunc(ty(r), p)` が値を持つ限りで成り立つ。`r` がこの版の
-パラメータ・capture のときは `ty(r) = pty(r)` であり、両辺は同時に値を返すか同時に中断する。
+- **(a)** `pty(r) = Some(τ)` のとき `τ = ty(r)` であり、`owns(r, p) = owns(r, trunc(ty(r), p))` である。
+  すなわち両辺は同時に値を返してその値が等しいか、同時に中断する。
+- **(b)** `pty(r) = None` のとき、`owns(r, p)` は `p` によらず真である。さらに `trunc(ty(r), p)` が値 `t`
+  を返すならば `owns(r, t)` も真である。
 
-<1>1. CASE `pty(r) = None`
+**README の形との違い**。README の P7e は (a) と (b) を 1 つの等式にまとめて述べる。その形は
+`pty(r) = None` かつ `trunc(ty(r), p)` が中断する `(r, p)` で偽である -- 左辺は値 (真) を返し、右辺は
+引数の評価で中断するので、第 1 節の `=` の条件をどちらの向きにも満たさない。第 0 節の冒頭がその `(r, p)` を
+挙げる。この文書の中で P7e を読むのは L21 の `<1>1` と L22 の `<1>2` であり、どちらも (a) と (b) で
+足りる。
+
+<1>1. CASE `pty(r) = None` -- 言明の (b)
   <2>1. `owns(r, q)` は、任意の `q` について真を返す。
     `owns_object` は `self.vars.param_tys.get(root)` で分岐し、`None` の腕で `true` を返す。この腕は
     `path` を読まない。
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object の `None` の腕
   <2>2. QED
-    `<2>1` より左辺は真であり、右辺も、その引数 `trunc(ty(r), p)` が値を持つならば真である。
+    `<2>1` を `q = p` に当てると `owns(r, p)` は真である。`trunc(ty(r), p)` が値 `t` を返すならば、
+    `<2>1` を `q = t` に当てて `owns(r, t)` も真である。
     BY <2>1
 
-<1>2. CASE `pty(r) = Some(τ)`
+<1>2. CASE `pty(r) = Some(τ)` -- 言明の (a)
   <2>1. `τ = ty(r)` である。
     `VarTable::of` は各パラメータ・capture について `param_tys` と `var_tys` に同じ型 `p.ty` を入れ、
     `collect_bindings` は `param_tys` に何も入れない。よって `pty(r) = Some(τ)` なら `r` はこの版の
@@ -647,8 +830,8 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
     BY <2>3, <2>4, <2>5, L1
 
 <1>3. QED
-  `pty(r)` は `Option` なので `None` か `Some(τ)` のどちらかである。`<1>1` が前者を、`<1>2` が後者を
-  扱った。
+  `pty(r)` は `Option` なので `None` か `Some(τ)` のどちらかである。`<1>1` が前者について言明の (b) を、
+  `<1>2` が後者について言明の (a) を与えた。
   BY <1>1, <1>2
 
 
