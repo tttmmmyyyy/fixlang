@@ -1144,13 +1144,6 @@ struct PendingRetain {
     node: NodeId,
     /// The references the retain bumped that are still bumped here.
     outstanding: References,
-    /// The other objects the bumped references may belong to: for a leaf whose origin is a join, the
-    /// candidates other than the one `outstanding` counts it under.
-    ///
-    /// `outstanding` names one object per reference, and for a join that name is the join's own,
-    /// which no consume of an arm's value mentions. Without these, a consume of the object the
-    /// retain actually bumped passes the retain by, and the pair is cancelled across it.
-    others: Vec<VarPath>,
 }
 
 /// What a release does to the retains pending where it happens.
@@ -1324,11 +1317,9 @@ impl<'a> CancelAnalysis<'a> {
                 self.all_retains.push(retain);
                 self.un_bump_releases.entry(retain).or_default();
                 let outstanding = self.acted_references(v, path);
-                let others = self.other_objects(v, path);
                 pending.push(PendingRetain {
                     node: retain,
                     outstanding,
-                    others,
                 });
                 self.walk(k, pending, returns_from_func)
             }
@@ -1431,15 +1422,11 @@ impl<'a> CancelAnalysis<'a> {
     /// A consume of some objects: every retain pending on one of them is load-bearing here, so it
     /// leaves the pending list without having been un-bumped.
     ///
-    /// A retain is pending on an object when it counts a reference under that object's name, and also
-    /// when the object is one the counted reference may belong to (`PendingRetain::others`). The
-    /// second is what a join needs: the reference is counted under the match binding's name, while a
-    /// consume of the value an arm produced names that arm's variable.
     fn consume_objects(&mut self, pending: &mut PendingRetains, objects: &[VarPath]) {
         pending.retain(|retain| {
             if objects
                 .iter()
-                .any(|object| retain.outstanding.names(object) || retain.others.contains(object))
+                .any(|object| retain.outstanding.names(object))
             {
                 self.needed_retains.insert(retain.node);
                 return false;
@@ -1515,7 +1502,6 @@ impl<'a> CancelAnalysis<'a> {
                 uniform.get(&retain.node).map(|outstanding| PendingRetain {
                     node: retain.node,
                     outstanding: outstanding.clone(),
-                    others: retain.others.clone(),
                 })
             })
             .collect()
