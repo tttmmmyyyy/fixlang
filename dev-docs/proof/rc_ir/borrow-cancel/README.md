@@ -237,6 +237,27 @@ path の連結ではなく宣言の辿り着く先で定義するのは、構築
 あり、「その `Retain` が作った参照」のような言い方は、オブジェクトごとの個数として読む。移動 (D9) は、どの
 参照が移ったかを決めない。
 
+**D26 (計数下のオブジェクトとグローバル状態のオブジェクト)**
+オブジェクトは**計数下**か**グローバル状態**かのどちらかである。割り当てられたオブジェクトは計数下であり、
+グローバル値が到達するグラフに `mark_global` が印を付けた時点でグローバル状態になる。逆向きの遷移は無い。
+A8 より、グローバル状態のオブジェクトへの `Retain`/`Release` は `H` を変えず、それが解放されることは無い
+(`CODE src/generator.rs: Generator::build_release_boxed_with` -- `global_bb` はカウントを下げず
+`destruction_bb` へも行かず `end_bb` へ跳ぶ)。
+
+**D8 の参照、D10 の義務集合、D11 の (S-a) と (S-b) は、どれも計数下のオブジェクトへの参照だけを対象と
+する。** グローバル状態のオブジェクトを指す leaf は、D8 の意味の参照を持たない。
+
+この制限は無いと矛盾する。グローバル値 `g` を所有位置の引数として関数に渡す本体を考える。RC IR では `g` は
+束縛を持たない `RcVar` として現れる (`CODE src/rc_ir/lower.rs: Lowerer::lower_var`)。D10 の初期値は
+パラメータと capture だけを入れるので `g` の leaf の参照は `Obl` に入らず、D10 の生成の表にもグローバルの
+行は無い。ところが `App(f, [g])` は D9 の `App` の行によって `g` の leaf を消費し、消費は `Obl` から参照を
+取り除くので、制限が無いと (S-a) が破れる。**この形は実プログラムにいくらでもある。**
+
+コード生成もこの読みと合っている。boxed なグローバルの読みは retain を伴わず
+(`CODE src/generator.rs: Generator::add_global_object`)、呼び出し先が出す `Release` はグローバル状態の
+オブジェクトに対して何もしない。カウントの上でも義務の上でも、グローバル状態のオブジェクトは勘定の外に居る。
+A8 が言っているのはこのことであり、D26 はそれを D10 と D11 の本文に届く形に書き直したものである。
+
 **D9 (消費と移動)**
 関数の 1 回の活性化が保持する参照について、次の 2 つを区別する。
 
@@ -289,7 +310,7 @@ D10 が直接扱う。
   | 構文 | 生じる参照 |
   |---|---|
   | `Llvm(gen, args)` の結果の leaf のうち、`result_prov` の宣言が単一の `Arg(j, σ)` **でない**もの | 各 1 つ |
-  | `App(callee, args)` の結果の各 boxed leaf | 各 1 つ |
+  | `App(callee, args)` の結果の各 boxed leaf | 各 1 つ。ただし `H` はここでは動かない -- その参照は呼び出し先の中で作られており、返りで持ち手が移るだけである |
   | `Closure(f, caps)` の結果 (capture object) | 1 つ |
   | boxed 容器の `Destructure` の各名前付きフィールドの各 leaf | 各 1 つ |
   | boxed union の変位アームの payload の各 leaf | 各 1 つ |
@@ -297,8 +318,11 @@ D10 が直接扱う。
   `Llvm` の行は、宣言が空集合 (bottom) のとき、`Fresh` や `Unknown` を含むとき、複数の元を持つときのすべてを
   含む。空集合と宣言された leaf は inhabited にならないので、参照は生じない (A3)。
 
-- **消費** (D9): 消費される inhabited な各 leaf につき参照を 1 つ取り除く。`H` は変わらない (参照は渡された
-  先が持つ)。
+- **消費** (D9): 消費される inhabited な各 leaf につき参照を 1 つ取り除く。渡す先のある消費 (`App` の引数、
+  `Closure` の capture、終端の `Ret`) では `H` は変わらず、参照は渡された先が持つ。**捨てる**消費 --
+  boxed 容器の `Destructure` は容器の参照を捨て (`CODE src/object.rs:
+  ObjectFieldType::get_struct_fields`)、unbox 容器の `Destructure` は名前の付いていないフィールドの leaf を
+  捨てる -- では `H` が 1 下がる。D9 は消費を「外へ渡すか、捨てる」と定めており、この行はその 2 つを分ける。
 - **移動** (D9): `Obl` を変えない。
 
 ### 3.4 RC 規律
@@ -399,7 +423,7 @@ leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言�
 | 空集合 | 何も置かない。その leaf は inhabited にならない (存在しない union 変位、または中断する演算の結果) |
 | 単一の `Arg(j, σ)` | 第 `j` オペランドの leaf `σ` と**同じ参照**。新しい参照を作らない。結果のその leaf が inhabited であることと、第 `j` オペランドの leaf `σ` が inhabited であることは同値である |
 | 単一の `Fresh` | 新しく割り当てたオブジェクトへの新しい参照 |
-| 単一の `Unknown` | 既存のオブジェクトへの新しい参照 (retain を伴う読み出し) |
+| 単一の `Unknown` | 既存のオブジェクトへの新しい参照 (retain を伴う読み出し)。そのオブジェクトは、この op のオペランドの leaf が指すオブジェクトから到達できるか、グローバル値が到達する (`CODE src/rc_ir/provenance.rs: LeafOrigin`) |
 | 複数の元 | 実行路ごとにそのいずれか。いずれの路でも新しい参照 |
 
 `borrows_operand(i)` が真のとき、生成コードは第 `i` オペランドの参照を処分しない。
@@ -430,6 +454,11 @@ path から `origin_from_leaves_under` の `truncate_to_unit` を通る枝に入
 値が保持する参照は、その型の `boxed_leaf_paths` が列挙する leaf のうち inhabited (D16) なものにちょうど
 1 つずつある。inhabited でない leaf は参照を持たない。
 
+例外が 1 つある。capture が空のクロージャの capture の leaf は null ポインタであり、そこにオブジェクトも
+参照も無い (`CODE src/rc_ir/codegen.rs: Generator::build_rc_closure`, `CODE src/generator.rs:
+Generator::build_traverser_work` -- boxed の腕は `build_if_nonnull` で包む)。この文書は null の leaf を
+inhabited でない leaf と同じに扱う。
+
 **A6 (名前の一意性)** -- 果たす者: lowering。
 `borrow_ify` の入力のすべての束縛変数の名前は相異なる。よって変数名は束縛を一意に決める。出力についての同じ
 性質は仮定ではなく P9 が示す -- `fresh_rename_function` を呼ぶのは証明対象の `borrow_ify` 自身なので、
@@ -452,6 +481,21 @@ path から `origin_from_leaves_under` の `truncate_to_unit` を通る枝に入
 `grow_stack(f)` は `f` をちょうど 1 回呼び、その返り値を返す (`CODE src/misc.rs: grow_stack`)。`origin`、
 `CancelAnalysis::walk`、`RewriteCtx::rewrite`、`drop_nodes`、`rename_expr` はいずれも本体を `grow_stack` で
 包むので、これが無いと「各位置をちょうど 1 回訪れる」がどれも言えない。
+
+**A17 (環境の契約)** -- 果たす者: 環境のコード (`build_main_function`、`ExportStatement::implement`、
+`implement_rc_global`)。検査: 無し。
+環境とは、RC IR プログラムの外側にあってその本体を起動するコードである。環境について次の 3 つを仮定する。
+(i) 環境が活性化を作るとき、D10 の初期値が要求する参照を渡し、それ以後それを持たない。(ii) 環境が読む
+オブジェクトは、その時点で環境が持つ参照が指すオブジェクトか、そこから到達できるオブジェクトである。
+(iii) 環境が動くのは、生きている活性化がどれも動いていないときだけである。
+
+**A18 (残るものについての 2 つの仮定)** -- 果たす者: 誰も。
+(a) **生きているオブジェクトのグラフは非巡回である。** 検査: valgrind の下で走るテスト (閉路になった
+計数下のオブジェクトは `definitely lost` として報告される)。
+(b) **グローバル状態のオブジェクトは計数下のオブジェクトへの参照を持たない。** 検査: 無し。`mark_global` は
+印を付ける時点で到達できるグラフ全体に印を付ける (`CODE src/generator.rs: Generator::mark_global`)。
+
+この 2 つを使うのは P27 の (R3) だけである。(R1) と (R2) はどちらにも依らない。
 
 **A7 (呼び出し先の解決)** -- 果たす者: `resolve_callee_params` の設計 (`CODE src/rc_ir/ownership.rs:
 resolve_callee_params`)。
