@@ -58,7 +58,7 @@ use std::sync::Arc;
 // The type constructors the compiler provides itself — the primitive types, the function arrow,
 // `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
 // a user-defined type would get from its declaration.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
@@ -699,6 +699,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
     }
 }
 
+// PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntLit {
     val: u64,
@@ -979,6 +980,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
 /// Inline-LLVM body of `Std::fix`, which computes `fix(f, x)`. It rebuilds the closure `fix(f)` from
 /// the function being generated and that function's own capture, passes it to `f` as the recursive
 /// `self`, and applies the result to `x`.
+// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFixBody {
     /// The variable holding the argument the recursion is applied to.
@@ -994,6 +996,7 @@ pub struct InlineLLVMFixBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMFixBody {
     /// This op applies an operand: `f` is applied to build the fixed point, and the result of that is applied to `x`.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -1002,6 +1005,7 @@ impl LLVMGen for InlineLLVMFixBody {
         self.generate_tail(gc, ty, false).unwrap()
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate_tail<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -1054,6 +1058,7 @@ impl LLVMGen for InlineLLVMFixBody {
     }
 }
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_name = FullName::local(f);
     let x_name = FullName::local(x);
@@ -4436,7 +4441,7 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
 // Allocate a struct/tuple and fill it with the operand values, in field-declaration order. The
 // struct type is the value type of the enclosing expression. This is the RC IR counterpart of the
 // `Expr::MakeStruct` AST node, reading its operands as pre-evaluated atoms.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeStructBody {
     pub field_names: Vec<FullName>,
@@ -6115,7 +6120,7 @@ pub fn struct_set(
 
 /// Constructs a union value holding a given variant: the tag names the variant, and the payload
 /// buffer takes the operand.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeUnionBody {
     /// The local binding holding the payload the constructed variant carries.
@@ -6571,6 +6576,7 @@ pub struct InlineLLVMUnionModBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnionModBody {
     /// This op applies an operand: the modifier is applied to the payload the variant holds.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -6670,6 +6676,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
 
 /// The `mod_{variant}` built-in of a union, which takes a function on the payload to a function on
 /// the union value, with its type scheme.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn union_mod_function(
     _union_name: &FullName,
     field_name: &Name,
@@ -6722,7 +6729,6 @@ pub struct InlineLLVMUndefinedInternalBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUndefinedInternalBody {
-    // PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         if gc.config.runtime_check() {
             // Runtime check is enabled.
@@ -7837,6 +7843,7 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
 
 /// Applies `io_act` to `data_ptr` wrapped as a Fix `Ptr` value, and returns the IO action it
 /// yields.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn apply_io_act_to_data_ptr<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     io_act: Object<'c>,
@@ -8840,6 +8847,7 @@ pub fn make_iostate_unsafe_create() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMDestructorMake {
     value: FullName,
@@ -8967,7 +8975,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Run either an IO or an IOState runner based on the type of the given value.
-// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
         run_io(gc, io)
@@ -8990,7 +8998,7 @@ pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object
 
 /// Given a value of type `IOState -> (IOState, a)`, runs it on `ios`, or on a fresh `IOState` when
 /// `ios` is `None`, and returns the resulting `IOState` and `a`.
-// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_ios_runner<'b, 'm, 'c>(
     gc: &mut Generator<'c, 'm>,
     runner: &Object<'c>,

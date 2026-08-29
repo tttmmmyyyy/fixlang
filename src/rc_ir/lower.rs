@@ -266,7 +266,7 @@ impl<'a> Lowerer<'a> {
     /// symbol's own name, and a symbol of any other type becomes the initializer of a global value.
     /// The counters naming the lambdas lifted out and the local variables minted restart here, so
     /// both are numbered within the symbol they were written in.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P26, P27 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_symbol(&mut self, sym: &Symbol) -> LoweredSymbol {
         self.current_symbol = Some(sym.name.clone());
         self.closure_counter = 0;
@@ -311,7 +311,7 @@ impl<'a> Lowerer<'a> {
     /// stores them; for a funptr (no captures) it is empty. `inline_into_callers` says whether the
     /// back end is asked to inline every call of the function. The body is lowered under a fresh
     /// environment holding only the parameters and the projected captures.
-    // PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lambda_as_function(
         &mut self,
         lam: &ExprNode,
@@ -424,7 +424,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a variable reference to the atom holding its value: a local is the RC IR variable
     /// currently bound to it, and a global is an atom carrying the symbol's name, which code
     /// generation materializes.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_var(&mut self, v: &Arc<Var>, ty: &Arc<TypeNode>, source: &Option<Span>) -> RcVar {
         match self.resolve(&v.name) {
             // A local: reuse the variable already bound (it is already an atom).
@@ -451,6 +451,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an inline-LLVM operation: its free variables become its operands, in the fixed order
     /// the generator reads them, and the appended binding holds the value the operation produces.
+    // PROOF: P26, P27 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_llvm(
         &mut self,
         inline: &Arc<InlineLLVM>,
@@ -509,6 +510,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower a function application: the callee and then the arguments become variables, and the
     /// appended binding calls the one on the others.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_app(
         &mut self,
         fun: &ExprNode,

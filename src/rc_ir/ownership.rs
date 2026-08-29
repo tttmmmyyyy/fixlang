@@ -249,7 +249,7 @@ impl Origin {
 
     /// Every object an operation on the leaf acts on: the reference the leaf holds, which `identity`
     /// names, and the object that reference belongs to, which is any of `candidates`.
-    // PROOF: P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn acted_on(&self) -> Vec<&VarPath> {
         let mut out = vec![self.identity()];
         out.extend(
@@ -283,7 +283,7 @@ pub(crate) fn origin(
 
 /// One step of `origin`: the alias edge the variable's binding offers, followed to the object at the
 /// far end, or the variable itself where the chain stops.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24, P26, P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
     let here = || Origin::Exactly((var.clone(), path.to_vec()));
     match vars.bindings.get(var) {
@@ -539,7 +539,7 @@ pub(crate) fn destructure_consumes(
 /// (`owns` decides, for the callee's parameter leaf), a captured value, and the closure callee. A
 /// `Var` move and a `Match` consume nothing here — a move is an alias, and a match's consumes live in
 /// its arms. `result_ty` is the type the right-hand side binds, needed to read an op's passthrough.
-// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
     rhs: &RcRhs,
     result_ty: &Arc<TypeNode>,
@@ -702,7 +702,7 @@ pub(crate) enum UnitStep {
 /// # Examples
 /// `unit_step` of `Array I64` is `Unit`, of `I64` is `NoUnit`, and of `(Array I64, I64)` is `Fields`
 /// whose two fields are both held.
-// PROOF: P1, P2, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
     if ty.is_fully_unboxed(type_env) {
         return UnitStep::NoUnit;
@@ -727,7 +727,7 @@ pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
 /// Unit and leaf enumerations both leave a punched field out, so every path that reference counting
 /// works with names a held field. An index naming a punched field, or one out of range, aborts the
 /// walk `walk_name` names.
-// PROOF: P1, P2, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn held_field_type(
     held_fields: &[(usize, Arc<TypeNode>)],
     idx: usize,
@@ -753,7 +753,7 @@ pub(crate) fn held_field_type(
 /// expanding it into the boxed leaves inside (an unboxed union is one unit, since only its active
 /// variant is live and a refcount operation must dispatch on the tag rather than name a variant's
 /// leaf).
-// PROOF: P1, P2, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     let mut out = vec![];
     rc_units_go(ty, type_env, &mut vec![], &mut out);
@@ -762,7 +762,7 @@ pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath>
 
 /// Descend a type, pushing onto `out` the path of each unit reached. `path` is the field path from
 /// the whole value down to `ty`, which each pushed unit is named relative to.
-// PROOF: P1, P2, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -790,7 +790,7 @@ fn rc_units_go(
 /// Truncate a leaf path to its reference-counting unit: the path down to the first unit `unit_step`
 /// reaches, whose whole subtree is that one unit. A path that stays within unboxed structs is
 /// unchanged.
-// PROOF: P1, P2, P3, P4, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn truncate_to_unit(
     ty: &Arc<TypeNode>,
     path: &[usize],
@@ -845,7 +845,7 @@ impl References {
     /// # Examples
     /// References holding one reference of `a` and two of `b` cover one holding one of each, and do
     /// not cover one holding three of `b`. Every `References` covers itself and covers an empty one.
-    // PROOF: P3, P4, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn covers(&self, other: &References) -> bool {
         other.0.iter().all(|(object, count)| {
             self.0
@@ -855,7 +855,7 @@ impl References {
     }
 
     /// Whether these act on the object.
-    // PROOF: P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn names(&self, object: &VarPath) -> bool {
         self.0.contains_key(object)
     }
@@ -1119,7 +1119,6 @@ mod tests {
     /// no unit leaves a retain that no release pairs with, and the object is freed while it is
     /// still held. Here that bridge is asserted of the classification itself, over one type of every
     /// kind the walks distinguish.
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     #[test]
     fn the_leaves_of_a_type_truncate_onto_its_units() {
         let type_env = type_env();

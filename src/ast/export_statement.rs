@@ -103,7 +103,7 @@ impl ExportStatement {
 
     // Implement the exported C function.
     // Requires `self.function_type` and `self.value_expr` to already be set.
-    // PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn implement<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) {
         let function_type = self.function_type.as_ref().unwrap();
         let ExportedFunctionType {

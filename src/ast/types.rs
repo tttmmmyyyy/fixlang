@@ -1145,7 +1145,7 @@ impl TypeNode {
     ///
     /// This is what a walk over the values a type holds descends: reference counting reaches a hole's
     /// slot through no path, and reading one would read a value that has moved on.
-    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unpunched_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
         let tycon_info = self.toplevel_tycon_info(type_env);
         self.instance_field_types(tycon_info, type_env)
@@ -1454,6 +1454,7 @@ impl TypeNode {
 
     /// Whether this type is `Std::FFI::Destructor`, which runs the destructor function it holds
     /// over its value as it is destroyed.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_destructor_object(&self) -> bool {
         self.toplevel_tycon_satisfies(is_destructor_object_tycon)
     }

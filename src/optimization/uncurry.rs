@@ -28,6 +28,7 @@ use std::{mem, sync::Arc, usize};
 /// Defines a function pointer version of each global for one, two, ... arguments, then rewrites the
 /// calls, export statements and entry IO value of the program onto the version matching the number
 /// of arguments they supply.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
     let syms = mem::replace(&mut fix_mod.symbols, Default::default());
@@ -214,6 +215,7 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
 /// # Arguments
 /// * `symbol_names` — the names of every global defined in the program, including the uncurried
 ///   ones. A call is rewritten only when the uncurried version it would name is among them.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn replace_closure_call_to_funptr_call(
     expr: &Arc<ExprNode>,
     symbol_names: &Set<FullName>,

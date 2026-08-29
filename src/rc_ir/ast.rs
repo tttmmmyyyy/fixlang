@@ -226,7 +226,7 @@ impl MatchArm {
 
 /// A compound expression. It appears only as the right-hand side of a `Let`; the arguments of `App`
 /// and `Llvm` are atoms (variables).
-// PROOF: P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub enum RcRhs {
     /// Move / rename `y := x`, consuming `x`.
@@ -315,6 +315,7 @@ pub enum OwnershipShape {
 
 /// The initializer of a global value, run once when a reader first asks for the value. The whole
 /// graph the value reaches is marked global (refcount-exempt) before it is stored.
+// PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcGlobalInit {
     /// The name the global value is defined and read under.
@@ -343,7 +344,7 @@ pub struct RcGlobalInit {
 
 /// Visit every node of `node`: the continuation chain it heads, and the body of every arm of every
 /// `Match` along it.
-// PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn for_each_node(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
     // A deep continuation chain recurses to its full depth here; grow the stack on demand.
     grow_stack(|| for_each_node_inner(node, visit))
@@ -374,6 +375,7 @@ fn for_each_node_inner(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
 ///
 /// A variable carries the type of the value bound to it, so this is also the walk over the types a
 /// body is generated from.
+// PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn for_each_var(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
     for_each_node(node, &mut |node| for_each_var_of_node(node, visit))
 }

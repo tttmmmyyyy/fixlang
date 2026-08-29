@@ -956,6 +956,7 @@ impl Configuration {
     /// then cancels the reference counting the borrow makes net-zero. Its full benefit relies on
     /// closure specialization and inlining (which are also `Max`-only), and it adds compile-time
     /// analysis, so it runs only at `Max` and above; `Basic` stays lighter for faster compilation.
+    // PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn enable_borrow_optimization(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }

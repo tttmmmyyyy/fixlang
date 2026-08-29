@@ -982,6 +982,7 @@ impl ObjectFieldType {
 
     /// The value a union carries, read as `variant_ty` and borrowed: the reference count of neither
     /// the value nor the union moves, so the value lives only as long as the union does.
+    // PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_union_value_noretain_norelease<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -1081,7 +1082,7 @@ impl ObjectFieldType {
     /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
     /// the struct: each returned field owns its reference and so outlives the struct it came from,
     /// and the fields left behind are dropped.
-    // PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P27 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
@@ -1990,7 +1991,6 @@ fn build_alloc_array_storage<'c, 'm>(
 }
 
 /// Free the allocation a boxed object of type `ty` lives in.
-// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_free_boxed<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ptr: PointerValue<'c>,

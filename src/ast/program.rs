@@ -2846,6 +2846,7 @@ impl Program {
     /// and the functorial actions for each field of a struct, and a constructor, an extractor, a
     /// test and a modifier for each variant of a union. Each is defined in the namespace of the
     /// type, under the name a source writes it by, with the documentation shown for it.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_methods(self: &mut Program) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for defn in &self.type_defns.clone() {
