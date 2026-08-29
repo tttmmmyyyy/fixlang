@@ -832,6 +832,45 @@ main = (
 );
 "#;
 
+    // The same, where the closure the indirect call arrives at was built in a global's initializer.
+    //
+    // A global initializer is not a function of the program and gets no borrowing version, so nothing
+    // about the gate is recorded against it — but the closures it builds are ones an indirect call
+    // anywhere can arrive at, so its body has to be scanned all the same.
+    const OBSERVED_UNIQUENESS_THROUGH_A_GLOBAL_CLOSURE_SOURCE: &str = r#"
+module Main;
+
+type B = box struct { v : I64 };
+
+// The `Closure` node that names the observing function is in this initializer's body.
+checkers : Array (B -> Bool);
+checkers = [ |b| ( let (u, b) = b.unsafe_is_unique; eval b; u ) ];
+
+relay : I64 -> B -> B -> B -> (B -> Bool) -> Bool;
+relay = |n, x, y, w, cl| (
+    if n > 0 { relay(n - 1, x, y, w, cl) };
+    cl(y)
+);
+
+main : IO ();
+main = (
+    let o = B { v : 1 };
+    let w = B { v : 2 };
+    let cl = checkers.@(0);
+    // The same object reaches `x` and `y`, under two names `origin` does not connect.
+    let u = relay(0, o, o, w, cl);
+    eval w.@v;
+    assert_eq(|_|"the observed value read as shared", u, true);;
+    pure()
+);
+"#;
+
+    /// As the two above, where the closure comes from a global's initializer.
+    #[test]
+    pub fn test_observed_uniqueness_survives_borrowing_through_a_global_closure() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_GLOBAL_CLOSURE_SOURCE);
+    }
+
     /// As `test_observed_uniqueness_survives_borrowing`, reached through an indirect call.
     #[test]
     pub fn test_observed_uniqueness_survives_borrowing_through_a_closure() {

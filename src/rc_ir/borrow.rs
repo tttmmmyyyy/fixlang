@@ -465,16 +465,21 @@ fn funcs_observing_uniqueness(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncR
     // The functions a closure can carry, and the functions that call one without naming it.
     let mut closure_targets: Set<FuncRef> = Set::default();
     let mut calls_indirectly: Set<FuncRef> = Set::default();
-    for (fref, func) in &prog.funcs {
+    // One body's contribution. `owner` is the function the body belongs to, and `None` for a global
+    // initializer — an initializer gets no borrow version, so nothing is recorded against it, but the
+    // closures it builds are ones an indirect call anywhere can arrive at.
+    let mut scan = |body: &RcExprNode, owner: Option<&FuncRef>| {
         let mut cs = vec![];
-        for_each_node(&func.body, &mut |node| {
+        for_each_node(body, &mut |node| {
             let RcExpr::Let(_, rhs, _) = node.expr.as_ref() else {
                 return;
             };
             match rhs {
                 RcRhs::Llvm(llvm_gen, _) => {
                     if llvm_gen.observes_uniqueness() {
-                        observing.insert(fref.clone());
+                        if let Some(owner) = owner {
+                            observing.insert(owner.clone());
+                        }
                     }
                 }
                 RcRhs::App(callee, _) => {
@@ -485,8 +490,8 @@ fn funcs_observing_uniqueness(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncR
                     // function it holds is decided at run time.
                     if prog.funcs.contains_key(&target) {
                         cs.push(target);
-                    } else {
-                        calls_indirectly.insert(fref.clone());
+                    } else if let Some(owner) = owner {
+                        calls_indirectly.insert(owner.clone());
                     }
                 }
                 RcRhs::Closure(target, _) => {
@@ -495,7 +500,17 @@ fn funcs_observing_uniqueness(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncR
                 RcRhs::Var(..) | RcRhs::Match(..) => {}
             }
         });
-        callees.insert(fref.clone(), cs);
+        if let Some(owner) = owner {
+            callees.insert(owner.clone(), cs);
+        }
+    };
+    // Every body the program has, so a closure built anywhere is a closure an indirect call can
+    // arrive at. Missing one is missing an edge, which is what makes the gate let a version through.
+    for (fref, func) in &prog.funcs {
+        scan(&func.body, Some(fref));
+    }
+    for global in &prog.globals {
+        scan(&global.init, None);
     }
     // An indirect call reaches whichever function the closure holds, so give it an edge to every
     // function a closure can carry. Resolving which one is what `A7` declines to do.
