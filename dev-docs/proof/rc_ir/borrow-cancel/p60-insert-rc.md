@@ -539,17 +539,39 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   ある。
 
 <1>4. CASE `t` が `L8` の 2 で作られた。
-  BY L8, <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の
-     `RcExpr::Ret(x)` の腕, CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live
-  `retain_if_live(&x, live_after, ret)` の `ret` は `Ret(x)` であり、`v = x` である。`n_t` はこの `Ret`
-  である。この腕の `live_after` は、関数本体の終端の `Ret` では空集合である -- `insert_into_func` は
-  `&Set::default()` を渡し (`CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func`)、
-  `insert_into_operation_let`・`insert_into_destructure`・`insert_into_eval` は受け取った `live_after` を
-  そのまま継続へ渡し (それぞれの `self.insert_into_expr(cont, live_after)`)、`insert_into_match` も
-  継続には `live_after` をそのまま渡す。`retain_if_live` は `live.contains(&var.name)` が偽なら節点を
-  そのまま返すので、関数本体の終端の `Ret` では発火しない。アーム本体には
-  `self.insert_into_expr(arm.body, &live_after_match)` が渡されるので、発火しうるのはアーム本体の終端の
-  `Ret` である。これが (b) である。
+  <2>1. `n_t` は `Ret(v)` である。
+    BY L8, <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の
+       `RcExpr::Ret(x)` の腕
+    `retain_if_live(&x, live_after, ret)` に渡る `ret` はこの腕が作った `Ret(x)` であり、`v = x` で
+    ある。
+  <2>2. 本体の根を書き換える呼び出しの `live_after` は空集合である。
+    BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func, CODE src/rc_ir/rc_insert.rs: insert_rc
+    関数については `insert_into_func` が `self.insert_into_expr(func.body, &Set::default())` を呼び、
+    グローバル初期化子については `insert_rc` が `inserter.insert_into_expr(glob.init, &Set::default())` を
+    呼ぶ。
+  <2>3. `Let`(`Match` でない右辺)、`Destructure`、`Eval`、`Let(x, Match(..), k)` のいずれについても、
+        継続を書き換える呼び出しの `live_after` は、その節点を書き換える呼び出しの `live_after` に
+        等しい。
+    BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
+    4 つとも `self.insert_into_expr(cont, live_after)` を呼ぶ。
+  <2>4. 本体の終端の `Ret` を書き換える呼び出しの `live_after` は空集合である。
+    BY <2>2, <2>3
+    本体の終端の `Ret` は、根から継続を辿って着く節点である (D2 -- `Ret` を除く 5 種はちょうど 1 つの
+    継続を持ち、アーム本体はそのアーム本体の終端の `Ret` で終わる)。継続の鎖の長さについての帰納で、
+    鎖の各節点を書き換える呼び出しの `live_after` は根のもの、すなわち空集合である。
+  <2>5. 本体の終端の `Ret` では `retain_if_live` は節点をそのまま返す。
+    BY <2>4, CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live
+    `live.contains(&var.name)` は空集合について偽である。
+  <2>6. QED
+    BY <2>1, <2>5, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
+    `retain_if_live` がこの位置で発火する `Ret` は、本体の終端の `Ret` ではない。`Ret` を書き換える
+    呼び出しに空でない `live_after` が渡るのは、`insert_into_match` が
+    `self.insert_into_expr(arm.body, &live_after_match)` でアーム本体を書き換える枝を経由したときだけで
+    あり (<2>2 と <2>3 より、他の枝は根の空集合を運ぶ)、その枝の下で終端になる `Ret` はアーム本体の
+    終端の `Ret` である。これが (b) である。
 
 <1>5. CASE `t` が `L8` の 3 で作られた。
   BY L8, <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure
