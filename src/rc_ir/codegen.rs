@@ -185,7 +185,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Generate the code for an RC IR expression, dispatching on the kind of node and following its
     /// continuation. The node's debug location is already in effect. Returns the produced object
     /// when `tail` is false; when `tail` is true the return has been built and `None` is returned.
-    // PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P27 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_expr_inner(
         &mut self,
         node: &RcExprNode,

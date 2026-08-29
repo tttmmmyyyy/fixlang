@@ -65,7 +65,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// retains an unboxed global's boxed subobjects, and a borrow has no matching release.
     ///
     /// The default is the conservative answer; see `result_prov` for what an op that keeps it records.
-    // PROOF: P7, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_operand(&self, _i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         false
     }
@@ -78,7 +78,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// same result either way, so a count one higher costs it a copy and nothing more. An op that
     /// returns the answer lets the program's meaning depend on the count, so a pass that raises one
     /// changes what the program does.
-    // PROOF: P7, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn observes_uniqueness(&self) -> bool {
         false
     }

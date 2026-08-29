@@ -108,7 +108,7 @@ fn assign_fresh_names_to_binders_inner(
 
 /// A variable with its name rewritten through `renaming`. A name `renaming` leaves out, such as a
 /// global's, stays as it is.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
     let mut v = var.clone();
     if let Some(n) = renaming.get(&var.name) {

@@ -247,7 +247,7 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
 }
 
 /// Compile the program into object files, and return their paths for the linker.
-// PROOF: P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_object_files<'c>(
     mut program: Program,
     config: &Configuration,
