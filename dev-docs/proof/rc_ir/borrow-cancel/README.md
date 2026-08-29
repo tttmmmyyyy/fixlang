@@ -1279,8 +1279,9 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   が `O` への参照を持つ間、`O` は解放されない。D11 の (S-c) を空虚でない形で読む議論はこれを引く。
 
 - **P29** (静的に決めた呼び出し先は実行時の呼び出し先である)。`borrow_ify` の入力の `Let(x, App(callee, args), k)`
-  について、`resolve_callee_params` が `Some(params)` を返すならば、`params` はその段の実行時の呼び出し先
-  (D23) のパラメータの列である。
+  について、`resolve_callee_params` が解決する関数が `Some` であるならば、**それはその段の実行時の
+  呼び出し先 (D23) と同じ `RcFunc` である**。したがってその `params` も `borrowed_units` も、実行時の
+  呼び出し先のものである。
 
   D23 は「D9 の `App` の行と D10 の生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数である」と
   定めるのに対し、`rhs_consumes` が引くのは `closure_targets` と `prog.funcs` から静的に引いた関数の
@@ -1565,8 +1566,14 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
 
 - **P18b** (`outstanding` は実行時の bump の上界である)。走査中の各位置と、その位置に至る各実行路 `ρ` に
   ついて、`pending` の各要素 `p` を考える。`p.node` の `Retain` が `ρ` で実際に作った参照のうち、`ρ` 上で
-  まだ処分されていないものの多重集合を `B(p, ρ)` とする。このとき `p.outstanding` は `B(p, ρ)` を
-  `covers` する。とくに `p.outstanding` が空ならば `B(p, ρ)` も空である。
+  まだ処分されていないものを、それを作った leaf の `origin` の identity で名付けた多重集合を `B(p, ρ)` と
+  する (D27)。このとき `p.outstanding` は `B(p, ρ)` を `covers` する。とくに `p.outstanding` が空ならば
+  `B(p, ρ)` も空である。
+
+  **数えるのは名前であってオブジェクトではない。** `outstanding` と `covers` は `VarPath` を鍵とする多重
+  集合を扱う (`CODE src/rc_ir/ownership.rs: References`)。1 つのオブジェクトを 2 つの identity が名指す
+  本体では、名前ごとの多重集合とオブジェクトごとの多重集合は別のものである (D8)。P6 が等号を与えるのも
+  オブジェクトへ写した後の像についてである。
 
   `outstanding` は静的な数え上げ (`ActRefs`、D15) から始まり、`un_bump` が静的な数え上げを引く。実行時に
   bump され un-bump されるのは inhabited な leaf の分だけである (P6)。unbox union は 1 つの unit なので、
@@ -1658,6 +1665,10 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   - 出力のグローバル初期化子の列は入力と同じ長さで、第 `i` 要素の `symbol` と `ty` は入力の第 `i` 要素の
     ものに等しい。`owns_initializer` と `owns_storage` には `true` を書き、D1 が述べる呼び出し順により
     この書き込みは正しい値を書く。
+  - **本体について書き換えが変えるのは、`Retain`/`Release` の節点と、`App` の callee の名前だけである。**
+    節点の種類・その順序・`Let` の束縛変数・`Match` のアームの構成・`Llvm` の op とオペランド・`Destructure`
+    のフィールドは、いずれも元の本体のものに等しい (複製の名前替えを P9 で戻したうえで)。`origin` が
+    書き換えの前後で対応することを言う議論がこれを読む。
 
 ### 層 5 -- 観測の保存
 
