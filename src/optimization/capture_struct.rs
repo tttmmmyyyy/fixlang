@@ -43,6 +43,7 @@ impl CaptureStruct {
     // * `owner` - the function this capture struct is built for. It is a global name of its own, so
     //   it alone tells one capture struct from another.
     // * `fields` - the captured names paired with their types, in the order the struct holds them.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(prefix: &str, owner: &FullName, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
         let tycon = Arc::new(TyCon {
             name: FullName::new(&owner.namespace, &format!("{}@{}", prefix, owner.name)),

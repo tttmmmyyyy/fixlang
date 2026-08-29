@@ -1479,7 +1479,6 @@ fn parse_struct_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TypeDeclValue 
     TypeDeclValue::Struct(Struct { fields, is_unbox })
 }
 
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn parse_union_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> TypeDeclValue {
     assert_eq!(pair.as_rule(), Rule::union_defn);
     let mut pairs = pair.into_inner();
