@@ -22,13 +22,42 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# `CODE src/rc_ir/ownership.rs: origin_inner` and `CODE ...: Origin::identity`. The symbol stops at
-# the first character a path cannot hold, so a citation that trails prose keeps only its symbol.
-CITATION = re.compile(
-    r"CODE\s+([A-Za-z0-9_/.]+\.(?:rs|fix))\s*:\s*`?"
-    r"(impl\s+[A-Za-z_][A-Za-z0-9_]*\s+for\s+[A-Za-z_][A-Za-z0-9_]*"
-    r"|[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)"
+# `CODE src/rc_ir/ownership.rs: origin, origin_inner`. One citation names a file and then a
+# comma-separated list of that file's symbols, so the head and the symbol are matched separately and
+# the list is walked by `citations_in`.
+CITATION_HEAD = re.compile(r"CODE\s+([A-Za-z0-9_/.]+\.(?:rs|fix))\s*:\s*")
+CITATION_SYMBOL = re.compile(
+    r"\s*`?(impl\s+[A-Za-z_][A-Za-z0-9_]*\s+for\s+[A-Za-z_][A-Za-z0-9_]*"
+    r"|[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)`?"
 )
+
+# What ends a citation's list of symbols: the next citation of any kind. A `BY` line runs the groups
+# together with the same comma the list uses, so a name shaped like a label closes the list rather
+# than being read as one more symbol of the file.
+CITATION_LABEL = re.compile(
+    r"(?:[A-Z]\d+[a-z]?|p\d+|CODE|DEF|BY|PROVE|ASSUME|QED|CASE|DEFINE)\Z"
+)
+
+
+def citations_in(text):
+    """Every `(source file, symbol)` a proof's text cites.
+
+    A citation names one file and as many of its symbols as the step relies on. Reading only the
+    first would leave the rest of them out of both directions of the link -- the cited item would
+    carry no `// PROOF:` comment, and `citations.tsv` would not notice it changing."""
+    for head in CITATION_HEAD.finditer(text):
+        source, at = head.group(1), head.end()
+        while True:
+            hit = CITATION_SYMBOL.match(text, at)
+            if hit is None:
+                break
+            symbol, at = hit.group(1), hit.end()
+            if CITATION_LABEL.match(symbol):
+                break
+            yield source, symbol
+            if not text.startswith(",", at):
+                break
+            at += 1
 
 # `| P1, P2 | `p10-leaves-and-units.md` | ... |` in a proof README's status table. The main theorem's
 # row names it `T`, so a cell holding that alone counts as well.
@@ -79,8 +108,8 @@ def citations_of(directory):
         if props is None:
             print(f"{os.path.relpath(path, REPO)}: no row in the README's status table")
             continue
-        for hit in CITATION.finditer(open(path, encoding="utf-8").read()):
-            cited.setdefault((hit.group(1), hit.group(2)), set()).update(props)
+        for citation in citations_in(open(path, encoding="utf-8").read()):
+            cited.setdefault(citation, set()).update(props)
     return cited
 
 
