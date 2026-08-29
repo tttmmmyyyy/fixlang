@@ -828,11 +828,11 @@ pub(crate) fn truncate_to_unit(
 /// The references a reference-count operation acts on: how many references of each object it bumps
 /// or un-bumps. A value holding one object's reference twice contributes two of it.
 ///
-/// Two operations that key to one `unit_key` need not act on the same references, so the key alone
-/// does not say whether a release un-bumps a retain. An unboxed union is one unit, counted on the
-/// union itself, and a retain of it bumps every reference its payload holds; a projection of that
-/// payload names those references one by one, so a release of the projection un-bumps only part of
-/// what the retain bumped.
+/// Two operations on one unit need not act on the same references, so naming the unit does not say
+/// whether a release un-bumps a retain. An unboxed union is one unit, counted on the union itself,
+/// and a retain of it bumps every reference its payload holds; a projection of that payload names
+/// those references one by one, so a release of the projection un-bumps only part of what the retain
+/// bumped. Counting the references themselves is what lets the two be compared.
 // PROOF: P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct References(Map<VarPath, usize>);
@@ -1112,8 +1112,8 @@ mod tests {
     /// over one type, and `truncate_to_unit` is the bridge between them: a consume is recorded at a
     /// leaf while the retain that pays for it is keyed at a unit, so a leaf whose truncation names
     /// no unit leaves a retain that no release pairs with, and the object is freed while it is
-    /// still held. `unit_of` asserts this of each key it makes; here it is asserted of the
-    /// classification itself, over one type of every kind the walks distinguish.
+    /// still held. Here that bridge is asserted of the classification itself, over one type of every
+    /// kind the walks distinguish.
     #[test]
     fn the_leaves_of_a_type_truncate_onto_its_units() {
         let type_env = type_env();

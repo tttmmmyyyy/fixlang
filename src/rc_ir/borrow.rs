@@ -246,7 +246,11 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> R
     // functions are considered: a closure is reached only by an indirect call, which keeps the
     // all-`Own` original, so a borrow clone of it would never be routed to.
     let mut borrow_versions: Map<FuncRef, FuncRef> = Map::default();
+    let observing = funcs_observing_uniqueness(prog, type_env);
     for func in prog.funcs.values() {
+        if observing.contains(&func.name) {
+            continue;
+        }
         if func.capture.is_none() && func_has_borrowable_param(func, &owned_leaves, type_env) {
             borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name));
         }
@@ -314,6 +318,9 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> R
             &callee_params,
             type_env,
         );
+        if develop_mode {
+            ctx.check_ownership_is_levelled(&clone);
+        }
         clone.body = ctx.rewrite(&clone.body);
         funcs.insert(borrow_version, clone);
     }
@@ -362,9 +369,9 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> R
 ///
 /// `fresh_rename_function` makes a name by appending its pass tag and a counter, reading none of the
 /// program's names, so the name it makes is new only because no binder the earlier passes mint ends
-/// in that shape. Nothing establishes that, and a collision would put two bindings under one
-/// `unit_key`, which is read by name: cancellation would then pair a retain of one with a release of
-/// the other and delete both.
+/// in that shape. Nothing establishes that, and a collision would give two bindings one name, which
+/// is what `origin` follows a value back to: cancellation would then pair a retain of one with a
+/// release of the other and delete both.
 ///
 /// Walking every binder costs a pass over the program, so this runs where the test suite runs it.
 // PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -438,6 +445,59 @@ fn func_has_borrowable_param(
             .iter()
             .any(|leaf| !owned_leaves.owns(&p.name, &leaf))
     })
+}
+
+/// The functions whose body can reach an op that reports a reference count to the program
+/// (`LLVMGen::observes_uniqueness`) — directly, or through a direct call to another such function.
+///
+/// Borrowing changes what such an op reports. A borrowed parameter's reference is disposed of by the
+/// caller after the call rather than by this function before the op runs, so the count the op reads
+/// is one higher than it was without borrowing, and a value that was unique reads as shared.
+/// `Debug::assert_unique` then halts a program that ran, and `Destructor::mutate_unique_io` copies a
+/// resource it did not need to. `Std::unsafe_is_unique` documents the opposite change — a value
+/// going from shared to unique as optimization removes a use — and not this one.
+///
+/// Only these functions are held back. A function that never reaches such an op computes the same
+/// result at either count, so borrowing is free to change it.
+fn funcs_observing_uniqueness(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncRef> {
+    let _ = type_env;
+    let mut observing: Set<FuncRef> = Set::default();
+    let mut callees: Map<FuncRef, Vec<FuncRef>> = Map::default();
+    for (fref, func) in &prog.funcs {
+        let mut cs = vec![];
+        for_each_node(&func.body, &mut |node| {
+            let RcExpr::Let(_, rhs, _) = node.expr.as_ref() else {
+                return;
+            };
+            match rhs {
+                RcRhs::Llvm(llvm_gen, _) => {
+                    if llvm_gen.observes_uniqueness() {
+                        observing.insert(fref.clone());
+                    }
+                }
+                // A closure's target is reached by an indirect call, which keeps the all-owning
+                // version, so its body is not a way for a borrow version to reach the op.
+                RcRhs::App(callee, _) => cs.push(FuncRef {
+                    name: callee.name.clone(),
+                }),
+                RcRhs::Var(..) | RcRhs::Closure(..) | RcRhs::Match(..) => {}
+            }
+        });
+        callees.insert(fref.clone(), cs);
+    }
+    // Least fixed point over the direct-call graph: a caller of an observing function reaches the op.
+    loop {
+        let mut grew = false;
+        for (fref, cs) in &callees {
+            if !observing.contains(fref) && cs.iter().any(|c| observing.contains(c)) {
+                observing.insert(fref.clone());
+                grew = true;
+            }
+        }
+        if !grew {
+            return observing;
+        }
+    }
 }
 
 /// The name/type of each parameter and capture, in order.
@@ -804,6 +864,37 @@ impl<'a> RewriteCtx<'a> {
             .all(|(root, path)| self.owns_object(root, path))
     }
 
+    /// Check that every site the inference levelled has one ownership answer for all the objects the
+    /// site may act on.
+    ///
+    /// `owns_unit` returns one boolean for a unit, while the node it decides acts on every boxed leaf
+    /// under that unit. Where the leaves come from roots this version owns differently, neither
+    /// answer is right: `Borrow` drops the release the owned leaf needed, and `Own` disposes a
+    /// reference the borrowed leaf was only lent. `level_ownership` is what makes the answers agree,
+    /// and this states that agreement where the rewrite reads it.
+    ///
+    /// Only the borrow version needs checking. The all-owning original holds every parameter and
+    /// capture unit in `owned_units`, so `owns_object` is true of each of its objects.
+    fn check_ownership_is_levelled(&self, func: &RcFunc) {
+        for (v, unit) in levelled_sites(func, self.type_env) {
+            let where_from = origin(&self.vars, self.type_env, &v.name, &unit);
+            let mut answers = where_from
+                .candidates()
+                .into_iter()
+                .map(|(root, path)| self.owns_object(root, path));
+            let first = answers
+                .next()
+                .expect("an origin reaches at least one object");
+            assert!(
+                answers.all(|answer| answer == first),
+                "in `{}`, the ownership of `{}`{:?} splits across the objects it may act on",
+                func.name.name.to_string(),
+                v.name.to_string(),
+                unit
+            );
+        }
+    }
+
     /// Whether this version owns the object a leaf comes from.
     // PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     fn owns_object(&self, root: &FullName, path: &FieldPath) -> bool {
@@ -1061,6 +1152,13 @@ struct PendingRetain {
     node: NodeId,
     /// The references the retain bumped that are still bumped here.
     outstanding: References,
+    /// The other objects the bumped references may belong to: for a leaf whose origin is a join, the
+    /// candidates other than the one `outstanding` counts it under.
+    ///
+    /// `outstanding` names one object per reference, and for a join that name is the join's own,
+    /// which no consume of an arm's value mentions. Without these, a consume of the object the
+    /// retain actually bumped passes the retain by, and the pair is cancelled across it.
+    others: Vec<VarPath>,
 }
 
 /// What a release does to the retains pending where it happens.
@@ -1169,8 +1267,8 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
 /// The forward must-analysis for one function: it decides which retain and release nodes to delete.
 struct CancelAnalysis<'a> {
-    /// This function's variables: what binds each one and its type, which decide the unit key a
-    /// retain and a release pair on.
+    /// This function's variables: what binds each one and its type, which decide the objects a
+    /// retain and a release act on, and so which of them pair.
     vars: &'a VarTable,
     /// The whole program, so a call resolves to its callee's parameters.
     prog: &'a RcProgram,
@@ -1236,9 +1334,11 @@ impl<'a> CancelAnalysis<'a> {
                 self.all_retains.push(retain);
                 self.un_bump_releases.entry(retain).or_default();
                 let outstanding = self.acted_references(v, path);
+                let others = self.other_objects(v, path);
                 pending.push(PendingRetain {
                     node: retain,
                     outstanding,
+                    others,
                 });
                 self.walk(k, pending, returns_from_func)
             }
@@ -1341,11 +1441,16 @@ impl<'a> CancelAnalysis<'a> {
 
     /// A consume of some objects: every retain pending on one of them is load-bearing here, so it
     /// leaves the pending list without having been un-bumped.
+    ///
+    /// A retain is pending on an object when it counts a reference under that object's name, and also
+    /// when the object is one the counted reference may belong to (`PendingRetain::others`). The
+    /// second is what a join needs: the reference is counted under the match binding's name, while a
+    /// consume of the value an arm produced names that arm's variable.
     fn consume_objects(&mut self, pending: &mut PendingRetains, objects: &[VarPath]) {
         pending.retain(|retain| {
             if objects
                 .iter()
-                .any(|object| retain.outstanding.names(object))
+                .any(|object| retain.outstanding.names(object) || retain.others.contains(object))
             {
                 self.needed_retains.insert(retain.node);
                 return false;
@@ -1421,6 +1526,7 @@ impl<'a> CancelAnalysis<'a> {
                 uniform.get(&retain.node).map(|outstanding| PendingRetain {
                     node: retain.node,
                     outstanding: outstanding.clone(),
+                    others: retain.others.clone(),
                 })
             })
             .collect()
