@@ -248,7 +248,11 @@ Give it, and only it:
 - The **statements** of every proposition — never their proofs, except the one it is checking. A verifier that has read the whole argument starts reconstructing it, and a reconstructed argument is exactly what it is supposed to fail to do.
 - The one proposition file it checks.
 - The *proof language* and *words that are not allowed* sections of this file, inline.
-- Read access to the repository, for one purpose only: opening a symbol named in a `CODE` citation to check that the code says what the step claims.
+- Read access to the repository, for one purpose only: opening every symbol named in a `CODE` citation to check that the code says what the step claims.
+
+**Every `CODE` citation is opened, not only the suspicious ones.** A proof of a program is a claim about source text, and the reader who never opens the source is checking the argument's grammar rather than its subject — which is the failure the whole procedure exists to catch. So the verifier's report opens with a **citation ledger**: one row per distinct `CODE` citation, naming the file and symbol and quoting the lines the citing steps rely on. A symbol that cannot be found is a `BAD-CITATION` against every step that cites it. **A step whose `CODE` citations are not all in the ledger may not be given `OK`.**
+
+The ledger costs the verifier one read per symbol and it buys the one thing the orchestrator otherwise cannot recover: the difference between a citation that was checked and a citation that was assumed. Both look like `OK`.
 
 Instruct it in these terms:
 
@@ -259,6 +263,8 @@ Instruct it in these terms:
 > Do not edit the document. Do not propose fixes, do not rewrite steps, do not suggest wording. Report.
 >
 > Give a verdict for **every** step, in document order, including the ones that pass. Silence is not OK; a step you did not mention is a step you did not check, and the orchestrator has no way to tell the two apart. Then detail every non-OK verdict.
+>
+> Build the citation ledger first, by opening every symbol any `CODE` line names. Quote what you found. Then grade, and grade a step's `CODE` citations against your ledger rather than against what you expect the code to say.
 
 The verdicts:
 
@@ -266,7 +272,7 @@ The verdicts:
 - **`FALSE`** — does not follow, or is false. Give the counterexample or name the broken inference.
 - **`NOT-OBVIOUS`** — may well be true, but reaching it from the cited items required you to supply something. Say exactly what you had to supply.
 - **`UNDEFINED`** — the step leans on a word or symbol that is not in the definitions, not an identifier of the cited code, and not introduced by an earlier step in scope. Name the word.
-- **`BAD-CITATION`** — a cited item does not exist, is out of scope by the numbering rule, or does not say what the step claims. For a `CODE` citation, open the file and compare; report the mismatch in the code's own words.
+- **`BAD-CITATION`** — a cited item does not exist, is out of scope by the numbering rule, or does not say what the step claims. For a `CODE` citation, compare the step against the ledger row and report the mismatch in the code's own words. A citation that names a symbol the repository does not have is this verdict even when the step's claim is true of some other symbol.
 - **`HEDGE`** — the step's argument rests on a word from *Words that are not allowed*. Quote it.
 - **`INCOMPLETE`** — a `CASE` split whose cases are not exhaustive (name the missing case, by the arm of the type or the condition it corresponds to), a `QED` that does not cite everything its conclusion needs, a step with neither a `BY` nor a subproof, or a calculational chain whose relations do not compose.
 
