@@ -95,7 +95,7 @@ impl VarTable {
     }
 
     /// The vars of a param-less body (a global initializer).
-    // PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn body_only(body: &RcExprNode) -> VarTable {
         let mut vars = VarTable::empty();
         collect_bindings(body, &mut vars);

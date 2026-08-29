@@ -465,7 +465,7 @@ fn func_has_borrowable_param(
 ///
 /// Only these functions are held back. A function that never reaches such an op computes the same
 /// result at either count, so borrowing is free to change it.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn funcs_observing_uniqueness(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncRef> {
     let _ = type_env;
     let mut observing: Set<FuncRef> = Set::default();
@@ -731,7 +731,7 @@ struct RewriteCtx<'a> {
 impl<'a> RewriteCtx<'a> {
     /// The rewrite state of one output version of `func`. `is_borrow_version` marks the borrow
     /// clone, the version whose reference counting on its borrowed parameter leaves is dropped.
-    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn new(
         func: &RcFunc,
         is_borrow_version: bool,
@@ -926,7 +926,7 @@ impl<'a> RewriteCtx<'a> {
     }
 
     /// Whether this version owns the object a leaf comes from.
-    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn owns_object(&self, root: &FullName, path: &FieldPath) -> bool {
         match self.vars.param_tys.get(root) {
             // The value is owned only when every reference-counting unit the path covers is owned.
@@ -1246,7 +1246,7 @@ fn node_id(node: &RcExprNode) -> NodeId {
 /// value is consumed. Cancelling it (and the releases that un-bump it) keeps the value `Unique` for
 /// the uniqueness analysis. Each call's consume sites are decided by the parameter/capture units the
 /// functions own — the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
-// PROOF: P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
     let cancel_body = |vars: &VarTable, body: &RcExprNode| {
@@ -1351,7 +1351,7 @@ impl<'a> CancelAnalysis<'a> {
     }
 
     /// One node of the walk, threading the pending-retain state through its continuation and arms.
-    // PROOF: P3, P4, P5, P6, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P5, P6, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn walk_inner(
         &mut self,
         node: &RcExprNode,
@@ -1559,7 +1559,7 @@ impl<'a> CancelAnalysis<'a> {
 
     /// The nodes to delete: every cancellable retain (one never marked needed and un-bumped by at
     /// least one release) together with the group of releases that un-bump it.
-    // PROOF: P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn cancelled(&self) -> Set<NodeId> {
         let mut out = Set::default();
         for &retain in &self.all_retains {

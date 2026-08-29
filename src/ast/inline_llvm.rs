@@ -78,7 +78,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// same result either way, so a count one higher costs it a copy and nothing more. An op that
     /// returns the answer lets the program's meaning depend on the count, so a pass that raises one
     /// changes what the program does.
-    // PROOF: P7, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn observes_uniqueness(&self) -> bool {
         false
     }
@@ -89,6 +89,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// Whether the branch exists depends on those types, so an op that emits one declares it through
     /// `unique_check_on_boxed_leaf`, which is where that dependence is stated. Readers may then take
     /// a declared check to be one the op really emits.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unique_check_operand(
         &self,
         _arg_tys: &[Arc<TypeNode>],

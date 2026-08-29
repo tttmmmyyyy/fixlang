@@ -3231,6 +3231,7 @@ fn build_punched_array<'c, 'm>(
 /// # Arguments
 /// * `hole` — `Some(idx)` makes the clone skip the element at `idx`, leaving that slot
 ///   uninitialized for the caller to fill.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn make_array_unique_with_hole<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
@@ -7073,6 +7074,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
 
     // This op returns the answer to the program: `Debug::assert_unique` turns it into a halt and
     // `Destructor::mutate_unique_io` into a copy of the resource.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn observes_uniqueness(&self) -> bool {
         !self.assume_unique
     }

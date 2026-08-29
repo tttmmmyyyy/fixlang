@@ -599,6 +599,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an `if` to a match on the two variants of the `Bool` union, the branches becoming its
     /// arms. Each arm's payload holds the variant's unit contents.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_if(
         &mut self,
         cond: &ExprNode,
