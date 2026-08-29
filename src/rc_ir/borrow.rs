@@ -248,7 +248,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> R
     // functions are considered: a closure is reached only by an indirect call, which keeps the
     // all-`Own` original, so a borrow clone of it would never be routed to.
     let mut borrow_versions: Map<FuncRef, FuncRef> = Map::default();
-    let observing = funcs_observing_uniqueness(prog, type_env);
+    let observing = funcs_observing_uniqueness(prog);
     for func in prog.funcs.values() {
         if observing.contains(&func.name) {
             continue;
@@ -454,7 +454,7 @@ fn func_has_borrowable_param(
 ///
 /// Reaching one is over-approximated where the callee is not named: a call through a local holding a
 /// closure is given an edge to every function a closure can carry, since which one it holds is
-/// decided at run time (A7 declines to resolve it).
+/// decided at run time.
 ///
 /// Borrowing changes what such an op reports. A borrowed parameter's reference is disposed of by the
 /// caller after the call rather than by this function before the op runs, so the count the op reads
@@ -466,8 +466,7 @@ fn func_has_borrowable_param(
 /// Only these functions are held back. A function that never reaches such an op computes the same
 /// result at either count, so borrowing is free to change it.
 // PROOF: P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
-fn funcs_observing_uniqueness(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncRef> {
-    let _ = type_env;
+fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
     let mut observing: Set<FuncRef> = Set::default();
     let mut callees: Map<FuncRef, Vec<FuncRef>> = Map::default();
     // The functions a closure can carry, and the functions that call one without naming it.
@@ -521,7 +520,7 @@ fn funcs_observing_uniqueness(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncR
         scan(&global.init, None);
     }
     // An indirect call reaches whichever function the closure holds, so give it an edge to every
-    // function a closure can carry. Resolving which one is what `A7` declines to do.
+    // function a closure can carry.
     for fref in &calls_indirectly {
         callees
             .entry(fref.clone())

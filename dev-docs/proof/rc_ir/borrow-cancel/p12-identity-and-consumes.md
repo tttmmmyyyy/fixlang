@@ -1,14 +1,14 @@
 # P5, P6, P7 -- identity とオブジェクト、`acted_references`、消費の網羅性
 
 この文書は `README.md` の P5 (a)、P5 (b)、P5 (c)、P6、P7 を証明する。立つのは `README.md` の定義 D1-D21、
-仮定 A1-A15、および命題 P1-P4 の**言明**である。P1-P4 の証明は `p10-leaves-and-units.md` と
+仮定 A1-A16、および命題 P1-P4 の**言明**である。P1-P4 の証明は `p10-leaves-and-units.md` と
 `p11-origin-soundness.md` にあり、この文書はその言明だけを使う。
 
-これに加えて、この文書は `README.md` に無い前提 **H1 (`Match` の網羅性)** を第 1 節で置く。H1 が要るのは
-L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b) である。第 9 節が、H1 を仮定として `README.md` へ足すことを提案する。
+`README.md` の A16 (`Match` の網羅性) は、この文書では `H1` と書く。H1 が要るのは
+L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b) である。
 
-読んだコードは作業ツリーの版である。README の対象コミット `a924f115` との差分は、生成される `// PROOF:` の
-注釈行だけであり、この文書が引用する記号の本文は対象コミットと一致する。
+読んだコードは作業ツリーの版である。この文書が `CODE` で引用する記号は、どれも本文が README の「対象」の
+節が挙げるコミットの版と一致する。
 
 ## 0. 結論
 
@@ -63,21 +63,20 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 付け、`L5 (c)` のように引用する。同じ規則を P6 (a)、P6 (b)、P7 (a)、P7 (b) にも使う -- これらは
 この文書が P6 と P7 を分けた主張であり、引用してよいのはその言明である。
 
-### この文書が置く前提
+### `H1` -- README の A16
 
 **H1 (`Match` の網羅性)** -- 果たす者: lowering (`CODE src/rc_ir/lower.rs: Lowerer::lower_match`,
 `Lowerer::lower_if`) と、アームの列を保つ後段のパス。検査: 無し。
 すべての `Match(s, arms)` について、次のどちらかが成り立つ。`arms` が catch-all アーム (`tag` が `None`) を
 持つか、`s` の値が取りうる実行時のタグがいずれかのアームの `tag` である。
 
-`README.md` はこの前提を持たない。`validate` が見るのは、アームが 1 つ以上あること、catch-all アームが
-最後にあること、2 つのアームが同じ変位を担わないことだけである
-(`CODE src/rc_ir/validate.rs: Validator::check_rhs`)。網羅しない `Match` -- 3 変位の union に対する
-`[tag 0, tag 1]` -- では、実行時のタグが 2 のとき、コード生成は `tag = Some(1)` のアームへ入る
+この前提は `README.md` の A16 である。`validate` が見るのは、
+アームが 1 つ以上あること、catch-all アームが最後にあること、2 つのアームが同じ変位を担わないことだけ
+である (`CODE src/rc_ir/validate.rs: Validator::check_rhs`)。網羅しない `Match` -- 3 変位の union に
+対する `[tag 0, tag 1]` -- では、実行時のタグが 2 のとき、コード生成は `tag = Some(1)` のアームへ入る
 (最後のアームが switch の default である)。そのとき D9 の移動の表の「unbox union の変位アームの payload
 束縛」の行が名指す活性変位と、`origin` が辿る静的な変位番号が食い違い、L1b、L4、P5 (a)、P6 (b) が偽に
 なる。
-第 9 節が、この前提を仮定として `README.md` へ足すことを提案する。
 
 ### DEF 路のスロット
 
@@ -1492,26 +1491,7 @@ P7 の 2 つの主張を次のように書く。
   README の P7 は (a) と (b) からなる。
   BY <1>1, <1>2
 
-## 9. `README.md` へ差し戻す点
-
-### `Match` の網羅性 -- 仮定 A16 の提案
-
-第 1 節の H1 を仮定として `README.md` へ足すことを提案する。案文は次のとおりである。
-
-> **A16 (`Match` のアームは scrutinee のタグを尽くす)** -- 果たす者: lowering
-> (`CODE src/rc_ir/lower.rs: Lowerer::lower_match`, `Lowerer::lower_if`) と、アームの列を保つ後段の
-> パス。検査: 無し。
-> すべての `Match(s, arms)` について、`arms` が catch-all アーム (`tag` が `None`) を持つか、`s` の値が
-> 取りうる実行時のタグがいずれかのアームの `tag` である。
-
-これが要るのは、D21 が「`v` の値の実行時のタグに `tag` が等しいアームが無ければコード生成の振る舞いに
-従う」と書いており、コード生成は最後のアームのブロックを switch の default とするからである
-(`CODE src/rc_ir/codegen.rs: Generator::eval_rc_match`)。最後のアームが変位アームで、どのアームも
-名指さない変位が在ると、実行はその変位の値をもって `tag = Some(t)` のアームに入る。そのとき D9 の移動の
-表の「unbox union の変位アームの payload 束縛」の行が名指す**活性**変位と、`origin_inner` の
-`Binding::Payload(scrut, Some(t))` の腕が辿る静的な変位番号 `t` が食い違い、L1b、L4、P5 (a)、P6 (b) が
-偽になる。`validate` が見るのは、アームが 1 つ以上あること、catch-all アームが最後にあること、2 つの
-アームが同じ変位を担わないことだけである (`CODE src/rc_ir/validate.rs: Validator::check_rhs`)。
+## 9. `README.md` との突き合わせ
 
 ### D9 の移動の表を leaf の粒度で読む規則
 
@@ -1535,23 +1515,13 @@ P5 (a) の証明は L4 を通り、L4 は `result_prov` が leaf に置く集合
 その union の unit path へ切り詰められ、`identity` が 1 つに潰れる。潰れた 2 つの leaf は別々の
 オブジェクトを指しうるので、P5 (a) は破れる。`Std::Option (a, b)` の payload がこの形の値である。
 
-A3 は「この仮定は誰も果たさない」と書いており、`LLVMGen` の型と doc は元数 2 以上の宣言を許す。P5 (a) が
-この事実に載っていることは、A3 の脇に書いておく価値がある。
+A3 は「この仮定は誰も果たさない」と書いており、`LLVMGen` の型と doc は元数 2 以上の宣言を許す。
+`README.md` の A3 は、P5 (a) がこの数え上げに載っていることを本文に持つ。
 
 ### D9 の `App` の行と `collect_consumes` の粒度が違う
 
 D9 の `App` の行は「呼び出し先がその位置の **unit** を所有する引数の leaf」と unit 粒度で述べ、
 `collect_consumes` の `owns` は leaf 粒度の集合への所属である
 (`CODE src/rc_ir/ownership.rs: collect_consumes`, `CODE src/rc_ir/borrow.rs: OwnedLeaves`)。P7 は
-DEF leaf 粒度の所有 でこの 2 つを橋渡ししたが、`infer_ownership` が渡す `owned_leaves` が不動点でその形に
-なることは P8 が示す必要がある。
-
-### コードに残っている `unit_key` / `unit_of` への言及
-
-`a924f115` が取り除いた `unit_key` と `unit_of` を、次の 3 か所の doc がまだ名指している。証明の引用先では
-ないが、読み手を存在しない記号へ送る。
-
-- `CODE src/rc_ir/borrow.rs: check_clone_names_are_fresh` の doc (「two bindings under one `unit_key`」)。
-- `CODE src/rc_ir/ownership.rs: References` の doc (「Two operations that key to one `unit_key`」)。
-- `CODE src/rc_ir/ownership.rs: tests::the_leaves_of_a_type_truncate_onto_its_units` の doc
-  (「`unit_of` asserts this of each key it makes」)。
+DEF leaf 粒度の所有 でこの 2 つを橋渡ししている。`README.md` の P8 は、同じ食い違いのために `App` の
+引数の位置を言明から除き、その位置は `call_rc` が置く節点で扱うとしている。

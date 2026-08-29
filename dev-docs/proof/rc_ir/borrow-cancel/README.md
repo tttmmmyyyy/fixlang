@@ -225,6 +225,19 @@ scrutinee から payload 変数へ、`Llvm` の素通し leaf のオペランド
 - `Binding::Llvm` の 2 つの道 (`leaf_origins_at(π)` が単一の `Arg` の場合と `origin_from_leaves_under` の
   場合): `λ` を、`λ` 自身の宣言 `Arg(j, σ')` の `σ'` へ置き換える。
 
+辺の**行き先**については次のとおりである。
+
+- `Binding::Join` の辺は、その活性化が選んだアームの結果へ辿る。`origin_inner` はアームを静的に列挙して
+  候補を集めるが (D3)、1 つの活性化では 1 つのアームが選ばれ (D21)、対応するスロットはその結果の側にある。
+- `Binding::Llvm` の leaf の宣言が単一の `Fresh` または単一の `Unknown` であるとき、鎖はそこで止まり、
+  対応するスロットはその位置の `(u, λ)` である。`as_arg_projection` はその 2 つに `None` を返し、
+  `origin_from_leaves_under` はその leaf を `Exactly(here)` として積む
+  (`CODE src/rc_ir/ownership.rs: as_arg_projection`, `origin_from_leaves_under`)。
+- `origin_from_leaves_under` が辿る辺の行き先の path は、宣言の `σ'` ではなく
+  `truncate_to_unit(ty(args[j]), σ')` である。leaf は `σ'` のままで、`truncate_to_unit` は path を降りる
+  だけなので、leaf は行き先の path の下に留まる
+  (`CODE src/rc_ir/ownership.rs: origin_from_leaves_under`, `truncate_to_unit`)。
+
 path の連結ではなく宣言の辿り着く先で定義するのは、構築の演算 (`struct_make`、`union_make`) の宣言が接頭辞を
 **外す**からである。`struct_make(m, m)` を `union_make_1` で包んだ値の leaf `[1, 0]` は、宣言 `Arg(0, [0])` を
 経て `m` の leaf `[]` に対応する。path を連結する規則が指す `[1, 0]` は、boxed な `m` の leaf ではない。
@@ -692,8 +705,9 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   payload に `Retain` を置くと、`origin` はその payload の `[]` から scrutinee の `[0]` を問い、`[0]` は
   scrutinee の型の leaf でも unit でもない。
 - **P3** (`origin` の健全性 -- `Exactly`)。`origin(x, π) = Exactly(u, σ)` のとき、すべての実行路のすべての
-  位置において、`π` の下の inhabited な各 leaf `λ` について、`obj(x, λ)` を指す参照は、`λ` に対応するスロット
-  (D17) が持つ参照と同一である。
+  位置において、`π` の下の inhabited な各 leaf `λ` について、`obj(x, λ)` を指す参照は、`(u, σ)` の下の
+  `λ` に対応するスロット (D17) が持つ参照と同一である。対応するスロットの path は `σ` そのものではなく
+  `σ` の下の leaf である。
 - **P4** (`origin` の健全性 -- `Join`)。`origin(x, π) = Join { identity, candidates }` のとき、各実行路の
   各位置において、`π` の下の inhabited な各 leaf のスロットが持つ参照は、`candidates` のいずれかの下の
   対応するスロット (D17) が持つ参照と同一である。
@@ -1111,13 +1125,13 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 
 | 命題 | ファイル | T への寄与 | 証明 | 検証 |
 |---|---|---|---|---|
-| P1, P2 | `p10-leaves-and-units.md` | 有 | **走行中** -- 対象を失った引用の取り除き | 未着手 |
-| P3, P4 | `p11-origin-soundness.md` | 有 | **走行中** -- 対象を失った引用の取り除き | 未着手 |
+| P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み | 未着手 |
+| P3, P4 | `p11-origin-soundness.md` | 有 | 証明済み | 未着手 |
 | P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み (A16 の下で) | 検証済み (指摘 26 件を反映) |
 | P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 検証済み |
 | P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み (P6 は A16 の下で) | 検証済み |
-| P7e, P7d | `p15-ownership-uniformity.md` | 有 | 証明済み | **走行中** |
-| P7a | `p15-ownership-uniformity.md` | 有 | 証明済み (1 ⟹ 3 と 2 ⟹ 1。言明は 3 度書き直した) | **走行中** |
+| P7e, P7d | `p15-ownership-uniformity.md` | 有 | **書き直し待ち** -- `unit_step` の `Unit` の腕の見落とし (4 か所) と、P7e の QED が言明を弱めていること | 検証済み |
+| P7a | `p15-ownership-uniformity.md` | 有 | 証明済み (1 ⟹ 3 と 2 ⟹ 1。言明は 3 度書き直した)。**QED が無い** | 検証済み (指摘 30 件超) |
 | P7c, P7f | `p13-disposals-and-pending.md` | 有 | 証明済み (P7c の言明は 1 度書き直した) | 検証済み (指摘を反映)。**2 周目が要る** |
 
 | P8 | `p20-borrow-ify.md` | 有 | 証明済み (`App` の引数の位置を除く形に狭めた) | 検証済み (指摘 1 件) |

@@ -150,10 +150,9 @@ mod union_rc_shapes_tests {
     // call returns, so that the simplifier leaves it standing as a value reference counting acts
     // on. The payload it was built from stays live beside it and is read back at the end. For the
     // shapes whose payload holds two units, freeing that payload early changes the answer. For the
-    // shape whose unit sits one level down the answer stays right either way, and the assertion in
-    // `unit_of` catches a key made for it. That payload arrives as a parameter, so the union is
-    // resolved from a value whose own unit sits a level below it; it carries a second field so that
-    // the struct around the boxed value survives to the RC IR.
+    // shape whose unit sits one level down the answer stays right either way. That payload arrives
+    // as a parameter, so the union is resolved from a value whose own unit sits a level below it; it
+    // carries a second field so that the struct around the boxed value survives to the RC IR.
     const UNION_PAYLOAD_UNITS_SOURCE: &str = r#"
 module Main;
 
@@ -865,10 +864,12 @@ main = (
 );
 "#;
 
-    /// As the two above, where the closure comes from a global's initializer.
+    /// `Debug::assert_unique` halts the program when the value it is given is shared, so a run that
+    /// completes is the whole check. Valgrind is off: nothing here is a memory error, and the
+    /// observation is what the test is about.
     #[test]
-    pub fn test_observed_uniqueness_survives_borrowing_through_a_global_closure() {
-        test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_GLOBAL_CLOSURE_SOURCE);
+    pub fn test_observed_uniqueness_survives_borrowing() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_SOURCE);
     }
 
     /// As `test_observed_uniqueness_survives_borrowing`, reached through an indirect call.
@@ -877,12 +878,11 @@ main = (
         test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_CLOSURE_SOURCE);
     }
 
-    /// `Debug::assert_unique` halts the program when the value it is given is shared, so a run that
-    /// completes is the whole check. Valgrind is off: nothing here is a memory error, and the
-    /// observation is what the test is about.
+    /// As `test_observed_uniqueness_survives_borrowing_through_a_closure`, where the closure the
+    /// indirect call arrives at was built in a global's initializer.
     #[test]
-    pub fn test_observed_uniqueness_survives_borrowing() {
-        test_source_without_valgrind(OBSERVED_UNIQUENESS_SOURCE);
+    pub fn test_observed_uniqueness_survives_borrowing_through_a_global_closure() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_GLOBAL_CLOSURE_SOURCE);
     }
 
     // A union payload built from a value a match binding carries and a second value. The binding
