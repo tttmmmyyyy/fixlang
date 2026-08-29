@@ -452,9 +452,10 @@ fn func_has_borrowable_param(
 /// The functions whose body can reach an op that reports a reference count to the program
 /// (`LLVMGen::observes_uniqueness`) — directly, or through a direct call to another such function.
 ///
-/// Reaching one is over-approximated where the callee is not named: a call through a local holding a
-/// closure is given an edge to every function a closure can carry, since which one it holds is
-/// decided at run time.
+/// Reaching one is over-approximated where the callee is not named: a body that can apply a function
+/// value without naming it — a call through a local holding a closure, or an inline-LLVM op that
+/// applies one of its operands (`LLVMGen::applies_a_function_operand`) — is given an edge to every
+/// function a closure can carry, since which one it holds is decided at run time.
 ///
 /// Borrowing changes what such an op reports. A borrowed parameter's reference is disposed of by the
 /// caller after the call rather than by this function before the op runs, so the count the op reads
@@ -486,6 +487,13 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
                     if llvm_gen.observes_uniqueness() {
                         if let Some(owner) = owner {
                             observing.insert(owner.clone());
+                        }
+                    }
+                    // An op that applies an operand reaches whichever function that operand holds,
+                    // exactly as a call through a local does.
+                    if llvm_gen.applies_a_function_operand() {
+                        if let Some(owner) = owner {
+                            calls_indirectly.insert(owner.clone());
                         }
                     }
                 }

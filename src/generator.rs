@@ -616,6 +616,10 @@ pub struct Generator<'c, 'm> {
     embedded_types: Map<Arc<TypeNode>, BasicTypeEnum<'c>>,
     /// The out-pointer buffer of each Fix type returned through one.
     out_pointer_buffers: Map<Arc<TypeNode>, StructType<'c>>,
+    /// While an inline-LLVM op is being generated in develop mode, that op's name and whether it
+    /// declared that it applies one of its operands (`LLVMGen::applies_a_function_operand`). `None`
+    /// outside such an op, and outside develop mode, where nothing is checked.
+    pub(crate) generating_llvm_op: Option<(String, bool)>,
 }
 
 /// The lifetime of the builder `push_builder` pushed. Code generated while it is alive is written
@@ -947,6 +951,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             struct_types: Map::default(),
             embedded_types: Map::default(),
             out_pointer_buffers: Map::default(),
+            generating_llvm_op: None,
         };
         gc
     }
@@ -1471,6 +1476,18 @@ impl<'c, 'm> Generator<'c, 'm> {
         args: Vec<Object<'c>>,
         tail: bool,
     ) -> Option<Object<'c>> {
+        // An inline-LLVM op that applies a function has to declare it, so that a pass asking what a
+        // body can reach gives that body the edges an indirect call gets. Losing one edge is what
+        // lets `borrow_ify` borrow a parameter across an observation of a reference count.
+        if let Some((name, declares)) = &self.generating_llvm_op {
+            assert!(
+                declares,
+                "the inline-LLVM op `{}` applies a function without declaring \
+                 `LLVMGen::applies_a_function_operand`",
+                name
+            );
+        }
+
         let src_tys = fun.ty.get_lambda_srcs();
         let ret_ty = fun.ty.get_lambda_dst();
 

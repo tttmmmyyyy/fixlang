@@ -993,6 +993,11 @@ pub struct InlineLLVMFixBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMFixBody {
+    /// This op applies an operand: `f` is applied to build the fixed point, and the result of that is applied to `x`.
+    fn applies_a_function_operand(&self) -> bool {
+        true
+    }
+
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         self.generate_tail(gc, ty, false).unwrap()
     }
@@ -6565,6 +6570,11 @@ pub struct InlineLLVMUnionModBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnionModBody {
+    /// This op applies an operand: the modifier is applied to the payload the variant holds.
+    fn applies_a_function_operand(&self) -> bool {
+        true
+    }
+
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, union_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments
         let obj = gc.get_scoped_obj(&self.union_name);
@@ -6882,6 +6892,11 @@ pub struct InlineLLVMWithRetainedFunctionBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
+    /// This op applies an operand: `f` is applied to `x` while `x` is held retained.
+    fn applies_a_function_operand(&self) -> bool {
+        true
+    }
+
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the argument "f".
         let f = gc.get_scoped_obj(&self.f_name);
@@ -7893,6 +7908,11 @@ pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
+    /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
+    fn applies_a_function_operand(&self) -> bool {
+        true
+    }
+
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments.
         let io_act = gc.get_scoped_obj(&self.io_act_name);
@@ -8204,6 +8224,11 @@ pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
+    /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
+    fn applies_a_function_operand(&self) -> bool {
+        true
+    }
+
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments.
         let io_act = gc.get_scoped_obj(&self.io_act_name);
@@ -8381,6 +8406,11 @@ pub struct InlineLLVMArrayBorrowElementsBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayBorrowElementsBody {
+    /// This op applies an operand: the borrower is applied to the pointer to the elements.
+    fn applies_a_function_operand(&self) -> bool {
+        true
+    }
+
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // The array is borrowed: its pointer stays valid through the callback without a retain here.
         let borrower = gc.get_scoped_obj(&self.borrower_name);
@@ -8475,6 +8505,11 @@ pub struct InlineLLVMArrayMutateElementsInternalBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
+    /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
+    fn applies_a_function_operand(&self) -> bool {
+        true
+    }
+
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let io_act = gc.get_scoped_obj(&self.io_act_name);
         let array = gc.get_scoped_obj(&self.arr_name);
@@ -8616,6 +8651,11 @@ pub struct InlineLLVMArrayMutateElementsIosInternalBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
+    /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
+    fn applies_a_function_operand(&self) -> bool {
+        true
+    }
+
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let io_act = gc.get_scoped_obj(&self.io_act_name);
         let array = gc.get_scoped_obj(&self.arr_name);

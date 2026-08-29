@@ -277,7 +277,16 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // yields no value. A diverging op (`undefined`) does not: it emits `unreachable` and
                 // yields an undef value, so the continuation is generated as dead code.
                 let llvm_tail = self.binding_fuses_into_return(x, k, tail);
-                match llvm_gen.generate_tail(self, &x.ty, llvm_tail) {
+                // What the op says about applying its operands, for `apply_lambda` to check it by.
+                let outer_op = self.config.develop_mode.then(|| {
+                    self.generating_llvm_op
+                        .replace((llvm_gen.name(), llvm_gen.applies_a_function_operand()))
+                });
+                let generated = llvm_gen.generate_tail(self, &x.ty, llvm_tail);
+                if let Some(outer_op) = outer_op {
+                    self.generating_llvm_op = outer_op;
+                }
+                match generated {
                     None => {
                         // Yielding no value says the op built the return, which it may only do in
                         // tail position; elsewhere the continuation below would be dropped and the

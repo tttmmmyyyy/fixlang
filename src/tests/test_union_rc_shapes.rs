@@ -864,6 +864,41 @@ main = (
 );
 "#;
 
+    // The same, where the observation is reached by an inline-LLVM operation applying an operand.
+    //
+    // `Option::mod_some` names no function: the modifier arrives as an operand and the operation's
+    // generated code applies it. A call graph built from the callees of `App` alone stops there, and
+    // the observation sits in the modifier, one edge past the stop.
+    const OBSERVED_UNIQUENESS_THROUGH_AN_APPLIED_OPERAND_SOURCE: &str = r#"
+module Main;
+
+type B = box struct { v : I64 };
+
+// `x` is never consumed, so it is inferred borrowed. `w` is used after the call, which is what makes
+// the call worth routing. The observation is inside the modifier `mod_some` applies.
+relay : I64 -> B -> B -> B -> Bool;
+relay = |n, x, y, w| (
+    if n > 0 { relay(n - 1, x, y, w) };
+    let opt : Option B = Option::some(y);
+    let opt = opt.mod_some(|b| (
+        let b = b.Debug::assert_unique(|_| "the observed value is shared");
+        B { v : b.@v }
+    ));
+    opt.as_some.@v == 1
+);
+
+main : IO ();
+main = (
+    let o = B { v : 1 };
+    let w = B { v : 2 };
+    // The same object reaches `x` and `y`, under two names `origin` does not connect.
+    let u = relay(0, o, o, w);
+    eval w.@v;
+    assert_eq(|_|"relay returned the wrong value", u, true);;
+    pure()
+);
+"#;
+
     /// `Debug::assert_unique` halts the program when the value it is given is shared, so a run that
     /// completes is the whole check. Valgrind is off: nothing here is a memory error, and the
     /// observation is what the test is about.
@@ -883,6 +918,13 @@ main = (
     #[test]
     pub fn test_observed_uniqueness_survives_borrowing_through_a_global_closure() {
         test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_GLOBAL_CLOSURE_SOURCE);
+    }
+
+    /// As `test_observed_uniqueness_survives_borrowing`, reached by an inline-LLVM operation that
+    /// applies one of its operands rather than by a call.
+    #[test]
+    pub fn test_observed_uniqueness_survives_borrowing_through_an_applied_operand() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_AN_APPLIED_OPERAND_SOURCE);
     }
 
     // A union payload built from a value a match binding carries and a second value. The binding

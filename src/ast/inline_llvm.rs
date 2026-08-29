@@ -83,6 +83,21 @@ pub trait LLVMGen: DynClone + Send + Sync {
         false
     }
 
+    /// Whether the code this op generates applies one of its operands as a function. Default: it
+    /// does not.
+    ///
+    /// An op that answers `true` reaches whatever function the operand holds, and which one that is
+    /// is decided at run time. A pass asking what a body can reach — `funcs_observing_uniqueness` —
+    /// has to give such a body the same edges it gives a call through a local. The operand list
+    /// cannot answer for it: an operand of function type may be stored or returned rather than
+    /// applied, and one that carries a function inside it (`IO a`) is not of function type at all.
+    ///
+    /// `Generator::apply_lambda` checks this in develop mode, so an op that starts applying an
+    /// operand and does not say so here fails the test suite rather than quietly losing an edge.
+    fn applies_a_function_operand(&self) -> bool {
+        false
+    }
+
     /// The container operand and boxed-leaf path whose runtime uniqueness this op branches on, for
     /// the operand types the op is instantiated at. Default: the op carries no such branch.
     ///
