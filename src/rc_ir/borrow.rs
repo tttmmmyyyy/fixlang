@@ -47,9 +47,8 @@ use crate::rc_ir::ast::{
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
-    acted_references, acted_unit_keys, all_owned_units, collect_consumes, destructure_consumes,
-    origin, rc_units, rhs_consumes, truncate_to_unit, unit_key, unit_step, units_under, Origin,
-    References, UnitStep, VarTable,
+    acted_references, all_owned_units, collect_consumes, destructure_consumes, origin, rc_units,
+    rhs_consumes, truncate_to_unit, unit_step, units_under, References, UnitStep, VarTable,
 };
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
@@ -1032,10 +1031,15 @@ fn split_rc(
 
 // --- retain/release cancellation ---
 
-/// The pending retains at a program point: for each object (a reference-counting unit, keyed by
-/// `unit_key`), the stack of retains that have bumped it and not yet been un-bumped. A release
-/// un-bumps the most recent — the innermost bracket, which keeps the un-bump non-zeroing.
-type PendingRetains = Map<VarPath, Vec<PendingRetain>>;
+/// The retains that have bumped references nothing has un-bumped yet, in the order the walk met
+/// them, so the innermost bracket is last.
+///
+/// A retain is not filed under a name. `origin` has no one name for a value whose boxed leaves reach
+/// several objects — an `Option (a, b)` holds two — so filing one would mean making a name up, and a
+/// release of one of those objects, named after the object, would be filed elsewhere and never meet
+/// the retain. What decides whether a release closes a retain is the objects the two act on, which
+/// `References` already carries.
+type PendingRetains = Vec<PendingRetain>;
 
 /// A retain whose bump is still outstanding, and the references of it that no release has un-bumped
 /// yet.
@@ -1051,84 +1055,40 @@ struct PendingRetain {
     outstanding: References,
 }
 
-/// What a release does to the retains pending for the unit it is counted under.
+/// What a release does to the retains pending where it happens.
 enum UnBump {
-    /// It un-bumps part or all of the innermost bracket, whose retain this is.
+    /// It un-bumps part or all of the innermost bracket that acts on what it acts on, whose retain
+    /// this is.
     InBracket(NodeId),
-    /// It reaches references the innermost bracket did not bump.
+    /// The innermost such bracket did not bump everything it disposes.
     OutsideBracket,
-    /// No retain is pending for the unit.
+    /// No pending retain acts on any object it acts on.
     NoBracket,
 }
 
-/// Check that a release un-bumping exactly what a pending retain bumped keys to that retain: two
-/// operations that act on the same references act on the same object, and one object is counted
-/// under one unit key.
+/// Take a release's references off the innermost pending retain that acts on an object it acts on.
 ///
-/// The key is read off the object's `origin`, so two keys here mean an alias chain lost the
-/// object's identity along the way. The pairing then walks past this release, the retain closes
-/// against a later release of the value it was taken from, and cancelling that pair leaves this
-/// release to free an object still in use — which nothing downstream can tell from a correct
-/// cancellation.
-///
-/// Equality of the references is what makes the two operations comparable. A retain of an unboxed
-/// union bumps every reference its payload holds, and a release of one of those payload values
-/// un-bumps one of them under that value's own key: two keys, one shared object, and both namings
-/// right. Such a release un-bumps a strict subset, which is the case `un_bump` reports as
-/// `OutsideBracket`, so only the equal case is a disagreement.
-// PROOF: P3, P4, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
-fn check_one_key_per_object(
-    pending: &PendingRetains,
-    key: &VarPath,
-    un_bumped: &References,
-    v: &RcVar,
-    path: &FieldPath,
-) {
-    for (pending_key, stack) in pending {
-        if pending_key == key {
-            continue;
-        }
-        for retain in stack {
-            assert!(
-                &retain.outstanding != un_bumped,
-                "the release of `{}`{:?} keys to `{}`{:?} and un-bumps {:?}, which is exactly what \
-                 a retain pending under `{}`{:?} bumped: one object, two keys",
-                v.name.to_string(),
-                path,
-                key.0.to_string(),
-                key.1,
-                un_bumped,
-                pending_key.0.to_string(),
-                pending_key.1,
-            );
-        }
-    }
-}
-
-/// Take a release's references off the innermost retain pending for `key`, where that retain bumped
-/// all of them. A retain left with nothing outstanding is un-bumped whole, and stops being pending.
-// PROOF: P3, P4, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
-fn un_bump(pending: &mut PendingRetains, key: &VarPath, un_bumped: &References) -> UnBump {
-    // A release with nothing pending for `key` disposes of a reference the walk did not add — an
-    // owned parameter, or a value produced here — so it un-bumps no retain.
-    let Some(stack) = pending.get_mut(key) else {
+/// Innermost first, so the un-bump closes the tightest bracket around the release and leaves the
+/// ones outside it bumped. A retain that shares an object with the release without carrying
+/// everything it disposes is the release reaching past that bracket. A retain left with nothing
+/// outstanding is un-bumped whole and stops being pending.
+fn un_bump(pending: &mut PendingRetains, un_bumped: &References) -> UnBump {
+    // A release no pending retain shares an object with disposes of a reference the walk did not
+    // add — an owned parameter, or a value produced here — so it un-bumps no retain.
+    let Some(index) = pending
+        .iter()
+        .rposition(|retain| retain.outstanding.shares_an_object(un_bumped))
+    else {
         return UnBump::NoBracket;
     };
-    // `un_bump` removes a stack it empties, so a stack kept in `pending` holds a pending retain to
-    // un-bump.
-    let innermost = stack
-        .last_mut()
-        .expect("a stack kept in `pending` is non-empty");
+    let innermost = &mut pending[index];
     if !innermost.outstanding.covers(un_bumped) {
         return UnBump::OutsideBracket;
     }
     innermost.outstanding.subtract(un_bumped);
     let retain = innermost.node;
     if innermost.outstanding.is_empty() {
-        stack.pop();
-    }
-    if stack.is_empty() {
-        pending.remove(key);
+        pending.remove(index);
     }
     UnBump::InBracket(retain)
 }
@@ -1150,7 +1110,7 @@ fn node_id(node: &RcExprNode) -> NodeId {
 /// the uniqueness analysis. Each call's consume sites are decided by the parameter/capture units the
 /// functions own — the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
 // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
-pub fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
+pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
     let cancel_body = |vars: &VarTable, body: &RcExprNode| {
         let mut analysis = CancelAnalysis {
@@ -1158,7 +1118,6 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcPro
             prog,
             owned_units: &owned_units,
             type_env,
-            develop_mode,
             needed_retains: Set::default(),
             un_bump_releases: Map::default(),
             all_retains: vec![],
@@ -1210,10 +1169,6 @@ struct CancelAnalysis<'a> {
     owned_units: &'a Set<VarPath>,
     /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
-    /// Whether to check that a retain and the release un-bumping it key to one object
-    /// (`check_one_key_per_object`). Stating that invariant wrongly aborts a build that should
-    /// succeed, so it is checked where the test suite runs it rather than in a user's build.
-    develop_mode: bool,
     /// Retains that are load-bearing on some path, so they cannot be cancelled.
     needed_retains: Set<NodeId>,
     /// The releases each retain is un-bumped by; they are deleted together with the retain.
@@ -1223,20 +1178,6 @@ struct CancelAnalysis<'a> {
 }
 
 impl<'a> CancelAnalysis<'a> {
-    /// The unit key a leaf of this function is counted under, which a retain and a release pair on
-    /// (`ownership::unit_key`).
-    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn unit_key(&self, var: &FullName, path: &[usize]) -> VarPath {
-        unit_key(self.vars, self.type_env, var, path)
-    }
-
-    /// Every unit an operation on a leaf of this function acts on: a pending retain on any of them
-    /// is load-bearing across the operation (`ownership::acted_unit_keys`).
-    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn acted_unit_keys(&self, var: &FullName, path: &[usize]) -> Vec<VarPath> {
-        acted_unit_keys(self.vars, self.type_env, var, path)
-    }
-
     /// The references a reference-count node of this function acts on, which decide whether a
     /// release un-bumps a retain (`ownership::acted_references`).
     // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -1284,34 +1225,22 @@ impl<'a> CancelAnalysis<'a> {
                 let retain = node_id(node);
                 self.all_retains.push(retain);
                 self.un_bump_releases.entry(retain).or_default();
-                if self.names_itself(v, path) {
-                    self.needed_retains.insert(retain);
-                }
                 let outstanding = self.acted_references(v, path);
-                pending
-                    .entry(self.unit_key(&v.name, path))
-                    .or_default()
-                    .push(PendingRetain {
-                        node: retain,
-                        outstanding,
-                    });
+                pending.push(PendingRetain {
+                    node: retain,
+                    outstanding,
+                });
                 self.walk(k, pending, returns_from_func)
             }
             RcExpr::Release(v, path, _, k) => {
-                let key = self.unit_key(&v.name, path);
                 // A release of a value whose object is path-dependent un-bumps a retain of that same
-                // value, so it pairs on the identity. On the other objects it may be, it is a drop:
-                // a retain of one of them that is still pending cannot be cancelled across it.
-                for other in self.acted_unit_keys(&v.name, path) {
-                    if other != key {
-                        self.consume_unit(&mut pending, other);
-                    }
-                }
+                // value, so it pairs on the reference it names. On the other objects it may be, it
+                // is a drop: a retain of one of them that is still pending cannot be cancelled
+                // across it.
+                let others = self.other_objects(v, path);
+                self.consume_objects(&mut pending, &others);
                 let un_bumped = self.acted_references(v, path);
-                if self.develop_mode {
-                    check_one_key_per_object(&pending, &key, &un_bumped, v, path);
-                }
-                match un_bump(&mut pending, &key, &un_bumped) {
+                match un_bump(&mut pending, &un_bumped) {
                     UnBump::InBracket(retain) => self
                         .un_bump_releases
                         .entry(retain)
@@ -1319,8 +1248,11 @@ impl<'a> CancelAnalysis<'a> {
                         .push(node_id(node)),
                     // A release that reaches references the innermost bracket did not bump closes
                     // no bracket here. It un-bumps part of what retains outside that bracket
-                    // bumped, so no retain pending for the unit can be cancelled as a whole.
-                    UnBump::OutsideBracket => self.consume_unit(&mut pending, key),
+                    // bumped, so no retain acting on those objects can be cancelled as a whole.
+                    UnBump::OutsideBracket => {
+                        let objects = un_bumped.objects();
+                        self.consume_objects(&mut pending, &objects)
+                    }
                     UnBump::NoBracket => {}
                 }
                 self.walk(k, pending, returns_from_func)
@@ -1349,31 +1281,12 @@ impl<'a> CancelAnalysis<'a> {
             RcExpr::Ret(_) => {
                 if returns_from_func {
                     // A retain still pending at the function's return closes no bracket on this path.
-                    for stack in pending.values() {
-                        for retain in stack {
-                            self.needed_retains.insert(retain.node);
-                        }
+                    for retain in &pending {
+                        self.needed_retains.insert(retain.node);
                     }
                 }
                 pending
             }
-        }
-    }
-
-    /// Whether the value at `(v, path)` answers with a name of its own rather than a name of what it
-    /// holds: the leaves under it reach several objects, and `origin` has no one name for them.
-    ///
-    /// A retain of such a value is counted under that made-up name, while a construct consuming one
-    /// of the objects it holds is counted under the object's own name. The two never meet, so the
-    /// consume leaves the retain cancellable and the pair is removed across it. Keeping the retain
-    /// costs the pair; removing it frees an object the consume has already disposed of.
-    ///
-    /// `Std::Option (a, b)` and `Std::Result e (a, b)` take this shape: the payload holds two
-    /// reference-counting units, and the union built from it holds both.
-    fn names_itself(&self, v: &RcVar, path: &FieldPath) -> bool {
-        match origin(self.vars, self.type_env, &v.name, path) {
-            Origin::Exactly(_) => false,
-            Origin::Join { identity, .. } => identity == (v.name.clone(), path.to_vec()),
         }
     }
 
@@ -1404,22 +1317,52 @@ impl<'a> CancelAnalysis<'a> {
         }
     }
 
-    /// A consume of a leaf: every retain pending for a unit it may belong to is load-bearing here.
-    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    /// A consume of a leaf: every retain pending on an object the leaf may belong to is
+    /// load-bearing here.
     fn consume(&mut self, pending: &mut PendingRetains, var: &FullName, path: &[usize]) {
-        for key in self.acted_unit_keys(var, path) {
-            self.consume_unit(pending, key);
-        }
+        let objects: Vec<VarPath> = origin(self.vars, self.type_env, var, path)
+            .acted_on()
+            .into_iter()
+            .cloned()
+            .collect();
+        self.consume_objects(pending, &objects);
     }
 
-    /// A consume of one unit: every retain pending for it is load-bearing here.
-    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn consume_unit(&mut self, pending: &mut PendingRetains, key: VarPath) {
-        if let Some(stack) = pending.remove(&key) {
-            for retain in stack {
+    /// A consume of some objects: every retain pending on one of them is load-bearing here, so it
+    /// leaves the pending list without having been un-bumped.
+    fn consume_objects(&mut self, pending: &mut PendingRetains, objects: &[VarPath]) {
+        pending.retain(|retain| {
+            if objects
+                .iter()
+                .any(|object| retain.outstanding.names(object))
+            {
                 self.needed_retains.insert(retain.node);
+                return false;
             }
+            true
+        });
+    }
+
+    /// The objects a reference-count node on `(v, path)` may act on besides the ones it names: for
+    /// each boxed leaf under the path, the candidates of its origin other than the one the leaf's
+    /// reference is counted under.
+    fn other_objects(&self, v: &RcVar, path: &FieldPath) -> Vec<VarPath> {
+        let mut out = vec![];
+        for leaf in boxed_leaf_paths(&v.ty, self.type_env) {
+            if !leaf.starts_with(path) {
+                continue;
+            }
+            let where_from = origin(self.vars, self.type_env, &v.name, &leaf);
+            let identity = where_from.identity().clone();
+            out.extend(
+                where_from
+                    .candidates()
+                    .into_iter()
+                    .filter(|candidate| **candidate != identity)
+                    .cloned(),
+            );
         }
+        out
     }
 
     /// Merge match arms into their continuation. A retain the match was entered with continues when
@@ -1439,17 +1382,12 @@ impl<'a> CancelAnalysis<'a> {
         let arm_states: Vec<Map<NodeId, &References>> = arm_exits
             .iter()
             .map(|exit| {
-                exit.values()
-                    .flatten()
+                exit.iter()
                     .map(|retain| (retain.node, &retain.outstanding))
                     .collect()
             })
             .collect();
-        let entered_with: Set<NodeId> = pending_in
-            .values()
-            .flatten()
-            .map(|retain| retain.node)
-            .collect();
+        let entered_with: Set<NodeId> = pending_in.iter().map(|retain| retain.node).collect();
         let mut uniform: Map<NodeId, References> = Map::default();
         for states in &arm_states {
             for (&retain, &outstanding) in states {
@@ -1466,22 +1404,15 @@ impl<'a> CancelAnalysis<'a> {
         }
         // Keep the retains the arms agree on, in the pre-match order so release pairing stays
         // innermost-first.
-        let mut merged = PendingRetains::default();
-        for (key, stack) in pending_in {
-            let kept: Vec<PendingRetain> = stack
-                .iter()
-                .filter_map(|retain| {
-                    uniform.get(&retain.node).map(|outstanding| PendingRetain {
-                        node: retain.node,
-                        outstanding: outstanding.clone(),
-                    })
+        pending_in
+            .iter()
+            .filter_map(|retain| {
+                uniform.get(&retain.node).map(|outstanding| PendingRetain {
+                    node: retain.node,
+                    outstanding: outstanding.clone(),
                 })
-                .collect();
-            if !kept.is_empty() {
-                merged.insert(key.clone(), kept);
-            }
-        }
-        merged
+            })
+            .collect()
     }
 
     /// The nodes to delete: every cancellable retain (one never marked needed and un-bumped by at

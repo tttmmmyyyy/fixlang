@@ -825,41 +825,6 @@ pub(crate) fn truncate_to_unit(
     out
 }
 
-/// The reference-counting unit a leaf belongs to, as an object identity: its `origin`'s identity,
-/// truncated to the unit. A leaf below an unboxed union keys to the union itself, so a whole-union
-/// retain and a consume of the payload get the same key: the consume marks that retain as needed,
-/// and cancellation keeps it together with the union release that un-bumps it.
-///
-/// This is the key a retain and a release are paired on, and the key a reference count is kept
-/// under, so it must name one object: a leaf whose object is path-dependent keys to the match
-/// binding that joins the paths, which every alias chain through it agrees on. The units an
-/// operation on it really touches are `acted_unit_keys`.
-// PROOF: P1, P2, P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
-pub(crate) fn unit_key(
-    vars: &VarTable,
-    type_env: &TypeEnv,
-    var: &FullName,
-    path: &[usize],
-) -> VarPath {
-    unit_of(vars, type_env, origin(vars, type_env, var, path).identity())
-}
-
-/// Every reference-counting unit an operation on a leaf acts on: the one its reference is counted
-/// under, and the ones the object it belongs to may be counted under.
-// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
-pub(crate) fn acted_unit_keys(
-    vars: &VarTable,
-    type_env: &TypeEnv,
-    var: &FullName,
-    path: &[usize],
-) -> Vec<VarPath> {
-    origin(vars, type_env, var, path)
-        .acted_on()
-        .into_iter()
-        .map(|p| unit_of(vars, type_env, p))
-        .collect()
-}
-
 /// The references a reference-count operation acts on: how many references of each object it bumps
 /// or un-bumps. A value holding one object's reference twice contributes two of it.
 ///
@@ -885,6 +850,24 @@ impl References {
                 .get(object)
                 .is_some_and(|held_count| held_count >= count)
         })
+    }
+
+    /// Whether these act on the object.
+    pub(crate) fn names(&self, object: &VarPath) -> bool {
+        self.0.contains_key(object)
+    }
+
+    /// The objects these act on, each once however many of its references they carry.
+    pub(crate) fn objects(&self) -> Vec<VarPath> {
+        self.0.keys().cloned().collect()
+    }
+
+    /// Whether these and `other` act on an object in common.
+    ///
+    /// This is what tells a release which pending retain it may be closing. A retain and a release
+    /// that name no object in common act on different things, however their values are written.
+    pub(crate) fn shares_an_object(&self, other: &References) -> bool {
+        other.0.keys().any(|object| self.0.contains_key(object))
     }
 
     /// Drop `other`'s references from these, where `covers` holds of the two.
@@ -927,38 +910,6 @@ pub(crate) fn acted_references(
         *references.entry(object).or_default() += 1;
     }
     References(references)
-}
-
-/// The unit key of an object identity: the root it names, with its path truncated to the
-/// reference-counting unit that holds it. The returned path is always one of that root's units.
-// PROOF: P1, P2, P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
-fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPath {
-    let Some(ty) = vars.var_tys.get(root) else {
-        // A root with no type here is a global: the table holds the function's own variables.
-        // Reference counting is inserted for locals only and a global's reachable graph is
-        // refcount-exempt, so no retain or release keys to it and there is nothing to line up.
-        assert!(
-            !root.is_local(),
-            "local `{}` has no recorded type",
-            root.to_string()
-        );
-        return (root.clone(), path.clone());
-    };
-    let truncated = truncate_to_unit(ty, path, type_env);
-    // Truncation only descends, so an identity whose path stops above every unit of its type
-    // comes out naming no unit at all. A retain under such a key pairs with no release of the
-    // object, so cancellation drops it and the object is freed while it is still held. The check
-    // sits here, where every key is made.
-    let units = rc_units(ty, type_env);
-    assert!(
-        units.contains(&truncated),
-        "the key `{}{:?}` names no reference-counting unit of `{}`, whose units are {:?}",
-        root.to_string(),
-        truncated,
-        ty.to_string(),
-        units,
-    );
-    (root.clone(), truncated)
 }
 
 /// The owned parameter/capture units of every function: each version's units minus the ones it
