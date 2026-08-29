@@ -429,7 +429,7 @@ pub fn param_ownership_shapes(
 
 /// The name of a function's borrow version: its name with a `#borrow` suffix. No lowered name ends in
 /// `#borrow`, so this stays globally unique.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P26, T (dev-docs/proof/rc_ir/borrow-cancel)
 fn borrow_funcref(name: &FuncRef) -> FuncRef {
     let mut borrow_name = name.name.clone();
     borrow_name.name.push_str("#borrow");
@@ -639,7 +639,7 @@ fn param_names_and_types(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
 
 /// Every reference-counting unit of a function's parameters and capture, each as the
 /// `(variable, unit path)` pair the owned and borrowed unit sets are keyed by.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn param_capture_units(func: &RcFunc, type_env: &TypeEnv) -> Vec<VarPath> {
     func.params
         .iter()
@@ -775,7 +775,7 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
 /// capture, `let` bindings, destructure fields, match-arm payloads) and rewrite all occurrences,
 /// keeping global name uniqueness. References to top-level functions stay free here, for routing to
 /// retarget. Returns the clone and the binder renaming.
-// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 fn clone_func(
     func: &RcFunc,
     new_ref: FuncRef,
@@ -1191,6 +1191,7 @@ pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
 
 /// Rebuild a body with every `Retain`/`Release` in it replaced by one node per reference-counting
 /// unit its path covers.
+// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
 fn split_body(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
     grow_stack(|| split_body_inner(node, type_env))
 }
@@ -1271,7 +1272,7 @@ fn split_rc(
 /// release of one of those objects, named after the object, would be filed elsewhere and never meet
 /// the retain. What decides whether a release closes a retain is the objects the two act on, which
 /// `References` already carries.
-// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 type PendingRetains = Vec<PendingRetain>;
 
 /// A retain whose bump is still outstanding, and the references of it that no release has un-bumped

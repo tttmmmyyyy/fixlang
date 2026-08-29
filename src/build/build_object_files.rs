@@ -73,6 +73,7 @@ pub struct BuildObjFilesResult {
 /// * `global_types` — the type of a global that a lowered function references as an LLVM operand.
 ///   Such a global may be defined in another unit, so this covers the whole program.
 /// * `roots` — the names code generation reaches the lowered program through from outside it.
+// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
 fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],

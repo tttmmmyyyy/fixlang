@@ -123,6 +123,7 @@ impl<'a> RcInserter<'a> {
 
     /// Process one expression, given the set of local variables live *after* it. Returns the
     /// rewritten expression and the set of local variables live *before* it (at its entry).
+    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_expr(
         &self,
         node: RcExprNode,
@@ -417,6 +418,7 @@ impl<'a> RcInserter<'a> {
 
     /// The local variables an arm references from the enclosing scope (its free locals minus the
     /// payload the arm binds).
+    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
     fn arm_free_locals(&self, arm: &MatchArm) -> Set<FullName> {
         let mut free = free_locals(&arm.body);
         free.remove(&arm.payload.name);
@@ -502,6 +504,7 @@ fn build_releases(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     })
 }
 
+// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
 fn insert_if_local(set: &mut Set<FullName>, name: &FullName) {
     if name.is_local() {
         set.insert(name.clone());
@@ -510,6 +513,7 @@ fn insert_if_local(set: &mut Set<FullName>, name: &FullName) {
 
 /// Returns the free local variables of `node`: the local names it references but does not itself
 /// bind. Names are globally unique, so referenced-minus-bound is exact.
+// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
 fn free_locals(node: &RcExprNode) -> Set<FullName> {
     let mut refs = Set::default();
     let mut bound = Set::default();
@@ -521,6 +525,7 @@ fn free_locals(node: &RcExprNode) -> Set<FullName> {
 /// The traversal behind `free_locals`: record into `refs` every local name `node` references and
 /// into `bound` every local name it binds — a `Let` variable, a `Match` arm's payload variable, or
 /// a `Destructure` field — descending through the continuation and match arms.
+// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_referenced_and_bound(
     node: &RcExprNode,
     refs: &mut Set<FullName>,

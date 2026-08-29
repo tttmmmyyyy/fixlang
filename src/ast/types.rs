@@ -182,7 +182,7 @@ impl Kind {
 
 /// What kind of declaration a type constructor comes from, which settles how its values are laid out
 /// and what the fields recorded for it mean.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone, Hash)]
 pub enum TyConVariant {
     /// A built-in type laid out as a single machine scalar, such as `Std::I64` or `Std::Ptr`.
@@ -1375,19 +1375,20 @@ impl TypeNode {
 
     /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
     /// the values it captured.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_closure(&self) -> bool {
         self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())
     }
 
     /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
     /// arguments that carries no captured value.
+    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_funptr(&self) -> bool {
         self.toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())
     }
 
     /// Whether this type is `Std::Array`.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_array(&self) -> bool {
         self.toplevel_tycon_satisfies(is_array_tycon)
     }
@@ -1489,7 +1490,7 @@ impl TypeNode {
     /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
     /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
     /// runs.
-    // PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
         if self.is_box(type_env) {
             return false;

@@ -58,7 +58,7 @@ use std::sync::Arc;
 // The type constructors the compiler provides itself — the primitive types, the function arrow,
 // `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
 // a user-defined type would get from its declaration.
-// PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
@@ -980,7 +980,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
 /// Inline-LLVM body of `Std::fix`, which computes `fix(f, x)`. It rebuilds the closure `fix(f)` from
 /// the function being generated and that function's own capture, passes it to `f` as the recursive
 /// `self`, and applies the result to `x`.
-// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P27 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFixBody {
     /// The variable holding the argument the recursion is applied to.
@@ -4348,6 +4348,7 @@ impl LLVMGen for InlineLLVMStructGetBody {
             && Self::borrows_container(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
     }
 
+    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -6370,6 +6371,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         vec![&mut self.union_arg_name]
     }
 
+    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
         // `as` takes exactly the union, so `arg_tys[0]` is it; its variant `field_idx` is the payload.
         i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)

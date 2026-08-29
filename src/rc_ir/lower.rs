@@ -311,7 +311,7 @@ impl<'a> Lowerer<'a> {
     /// stores them; for a funptr (no captures) it is empty. `inline_into_callers` says whether the
     /// back end is asked to inline every call of the function. The body is lowered under a fresh
     /// environment holding only the parameters and the projected captures.
-    // PROOF: P26, P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P26, P27 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lambda_as_function(
         &mut self,
         lam: &ExprNode,

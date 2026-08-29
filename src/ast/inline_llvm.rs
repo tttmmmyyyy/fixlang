@@ -78,7 +78,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// same result either way, so a count one higher costs it a copy and nothing more. An op that
     /// returns the answer lets the program's meaning depend on the count, so a pass that raises one
     /// changes what the program does.
-    // PROOF: P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn observes_uniqueness(&self) -> bool {
         false
     }

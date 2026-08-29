@@ -1063,7 +1063,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The value `var` names: its innermost local binding, or the global of that name, which the
     /// module declares here if it has not reached it yet.
-    // PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P27 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_value(&mut self, var: &FullName) -> ScopedValue<'c> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
@@ -1095,6 +1095,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
     /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
     /// copy. Every other read is plain.
+    // PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var_name);
         let obj = val.accessor.get(self);
@@ -2705,7 +2706,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// bearing and unchecked — an accessor is reached by a direct call, so a module that declared it
     /// to return a value while the defining module returns none reads an undefined value, and neither
     /// the LLVM verifier nor the linker looks at it.
-    // PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P27 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn declare_program_global(&mut self, name: &FullName) -> Option<FunctionValue<'c>> {
         let ty = self.global_types.get(name).cloned()?;
         if ty.is_funptr() {

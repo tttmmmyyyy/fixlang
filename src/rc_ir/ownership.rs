@@ -33,7 +33,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 enum Binding {
     /// A parameter or capture — the origin of a leaf.
     Param,
@@ -265,7 +265,7 @@ impl Origin {
 /// payloads, catch-all payloads) back to the variable that produced it. The variable is a parameter
 /// when the leaf ultimately comes from an input, and a `Join` when a match forwards several arms'
 /// values to one binding.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn origin(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -383,7 +383,7 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// borrowed node, the `wait` leaf is `⊥` and both `pair` leaves project out of that node, so the
 /// answer is that node's origin. Give one of those two leaves a second operand and the answer
 /// becomes a `Join` naming both under this value's name.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn origin_from_leaves_under(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -436,7 +436,7 @@ fn origin_from_leaves_under(
 }
 
 /// The single `Arg(j, p)` a leaf source consists of, if it is exactly that.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
     if sources.len() != 1 {
         return None;
@@ -702,7 +702,7 @@ pub(crate) enum UnitStep {
 /// # Examples
 /// `unit_step` of `Array I64` is `Unit`, of `I64` is `NoUnit`, and of `(Array I64, I64)` is `Fields`
 /// whose two fields are both held.
-// PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
     if ty.is_fully_unboxed(type_env) {
         return UnitStep::NoUnit;
@@ -753,7 +753,7 @@ pub(crate) fn held_field_type(
 /// expanding it into the boxed leaves inside (an unboxed union is one unit, since only its active
 /// variant is live and a refcount operation must dispatch on the tag rather than name a variant's
 /// leaf).
-// PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     let mut out = vec![];
     rc_units_go(ty, type_env, &mut vec![], &mut out);
@@ -762,7 +762,7 @@ pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath>
 
 /// Descend a type, pushing onto `out` the path of each unit reached. `path` is the field path from
 /// the whole value down to `ty`, which each pushed unit is named relative to.
-// PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -790,7 +790,7 @@ fn rc_units_go(
 /// Truncate a leaf path to its reference-counting unit: the path down to the first unit `unit_step`
 /// reaches, whose whole subtree is that one unit. A path that stays within unboxed structs is
 /// unchanged.
-// PROOF: P1, P2, P3, P4, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn truncate_to_unit(
     ty: &Arc<TypeNode>,
     path: &[usize],
@@ -958,7 +958,7 @@ pub(crate) fn units_under(
 
 /// The type of the subtree a path names, descending only unboxed structs; `None` once the path
 /// reaches a value the walk stops at — a closure, a unit, or a value holding no reference.
-// PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Option<Arc<TypeNode>> {
     let mut cur = ty.clone();
     for &idx in path {

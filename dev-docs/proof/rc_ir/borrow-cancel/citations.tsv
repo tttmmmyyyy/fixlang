@@ -3,7 +3,7 @@ file	symbol	propositions	digest
 src/ast/export_statement.rs	ExportStatement::implement	P26	5804532d9127
 src/ast/inline_llvm.rs	LLVMGen::applies_a_function_operand	P26,P27	f689627e06f1
 src/ast/inline_llvm.rs	LLVMGen::borrows_operand	P7,P26	24aaf8c4764a
-src/ast/inline_llvm.rs	LLVMGen::observes_uniqueness	P7,P26	b3c76bd06dac
+src/ast/inline_llvm.rs	LLVMGen::observes_uniqueness	P7,P8,P9,P10,P11,P12,P13,P14,P26	b3c76bd06dac
 src/ast/inline_llvm.rs	LLVMGen::result_prov	P1,P2,P3,P4,P7	84846b9c9d85
 src/ast/inline_llvm.rs	LLVMGen::unique_check_operand	P26	8b4dc048a673
 src/ast/name.rs	FullName	P8,P9,P10,P11,P12,P13,P14	e2c09889359d
@@ -11,25 +11,30 @@ src/ast/name.rs	FullName::is_local		42fc496e725b
 src/ast/program.rs	Program::add_methods	P26	f83b77a0035b
 src/ast/program.rs	Program::validate_layouts	P1,P2	afd5670a4fe7
 src/ast/typedecl.rs	TypeDefn::tycon_info	P1,P2	f04fd919ce0d
-src/ast/types.rs	TyConVariant	P1,P2	18d30eb4b988
+src/ast/types.rs	TyConVariant	P1,P2,P7,P18	18d30eb4b988
 src/ast/types.rs	TypeNode::field_types	P1,P2	f3b4b3ad1075
-src/ast/types.rs	TypeNode::is_array	P1,P2	d430c390ceb3
+src/ast/types.rs	TypeNode::is_array	P1,P2,P7,P18	d430c390ceb3
 src/ast/types.rs	TypeNode::is_box	P1,P2	f364e8b05513
-src/ast/types.rs	TypeNode::is_closure	P1,P2	938ff5f09f64
+src/ast/types.rs	TypeNode::is_closure	P1,P2,P7,P8,P9,P10,P11,P12,P13,P14,P18	938ff5f09f64
 src/ast/types.rs	TypeNode::is_destructor_object	P26	9f611c3452a1
-src/ast/types.rs	TypeNode::is_fully_unboxed	P1,P2,P7,P8,P9,P10,P11,P12,P13,P14	8b7f69faf6d2
+src/ast/types.rs	TypeNode::is_fully_unboxed	P1,P2,P7,P8,P9,P10,P11,P12,P13,P14,P18	8b7f69faf6d2
+src/ast/types.rs	TypeNode::is_funptr	P7,P18	2c9fa9ac23a2
 src/ast/types.rs	TypeNode::is_unbox	P1,P2	9260dc476785
 src/ast/types.rs	TypeNode::is_union	P7	eaa9230b88af
 src/ast/types.rs	TypeNode::toplevel_tycon_info	P1,P2	ae62bc398a0a
 src/ast/types.rs	TypeNode::unpunched_field_types	P1,P2,P3,P4,P7,P18	ecae1220e285
 src/build/build_object_files.rs	build_main_function	P26	ac9bcf7f4d89
 src/build/build_object_files.rs	build_object_files	P18,P19,P20,P21,P22,P23,P24	db59d512862f
+src/build/build_object_files.rs	lower_and_insert_rc		c4246127c77f
 src/build/build_object_files.rs	optimize_rc_program	P15,P16,P17,P18,P19,P20,P21,P22,P23,P24,P26,T	ef3141f56ac1
 src/configuration.rs	Configuration::enable_borrow_optimization	T	23c6af072902
+src/configuration.rs	Configuration::force_all_optimizations	T	98585398a522
+src/configuration.rs	Configuration::runs_from	T	ddc1ffa30c40
 src/constants.rs	CLOSURE_CAPTURE_IDX	P1,P2	8ac4c663fef1
+src/constants.rs	CLOSURE_FUNPTR_IDX	P8,P9,P10,P11,P12,P13,P14	a29f0dc747fe
 src/elaboration/desugar_opaque.rs	register_opaque_tycon	P1,P2	fc5202f8b47e
 src/fixstd/builtin.rs	InlineLLVMDestructorMake	P26	b6b1801a74c5
-src/fixstd/builtin.rs	InlineLLVMFixBody	P27	60fdab56c3bc
+src/fixstd/builtin.rs	InlineLLVMFixBody	P8,P9,P10,P11,P12,P13,P14,P27	60fdab56c3bc
 src/fixstd/builtin.rs	InlineLLVMFixBody::applies_a_function_operand	P26	2aaa91f7d7c6
 src/fixstd/builtin.rs	InlineLLVMFixBody::generate_tail	P26	b42d29e5682c
 src/fixstd/builtin.rs	InlineLLVMIntLit	P7	b8126e10483f
@@ -42,10 +47,12 @@ src/fixstd/builtin.rs	InlineLLVMMakeUnionBody	P7	fabb9c76bdf4
 src/fixstd/builtin.rs	InlineLLVMMakeUnionBody::result_prov	P7	89f1790a61f1
 src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody	P27	a0d4955d7f54
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_operand	P26	7374525f2b11
+src/fixstd/builtin.rs	InlineLLVMStructGetBody::result_prov		82a455b22cda
+src/fixstd/builtin.rs	InlineLLVMUnionAsBody::borrows_operand		9cf13ce7dc5a
 src/fixstd/builtin.rs	InlineLLVMUnionAsBody::result_prov	P7	c6fd4d8d28d7
 src/fixstd/builtin.rs	InlineLLVMUnionModBody::applies_a_function_operand	P26	2aaa91f7d7c6
 src/fixstd/builtin.rs	apply_io_act_to_data_ptr	P26	d938bb5ef06b
-src/fixstd/builtin.rs	bulitin_tycons	P1,P2,P7	4dc11f509041
+src/fixstd/builtin.rs	bulitin_tycons	P1,P2,P7,P18	4dc11f509041
 src/fixstd/builtin.rs	fix_body	P26	a45709f796ae
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMIsUniqueFunctionBody	P26	fc2a36fe628b
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeStructBody	P3,P4	c4dab170b90d
@@ -67,9 +74,10 @@ src/generator.rs	Generator::apply_lambda	P8,P9,P10,P11,P12,P13,P14,P26,P27	53f3b
 src/generator.rs	Generator::build_branch_by_is_unique	P26	86f1e644d331
 src/generator.rs	Generator::build_run_destructor	P26,P27	add7538c029f
 src/generator.rs	Generator::build_traverser_work_nonnull_boxed_with	P26,P27	f6637e5ceb38
-src/generator.rs	Generator::declare_program_global	P27	ba2a67ad0c2e
+src/generator.rs	Generator::declare_program_global	P8,P9,P10,P11,P12,P13,P14,P27	ba2a67ad0c2e
 src/generator.rs	Generator::get_lambda_func_ptr	P27	7fb0c56a5446
-src/generator.rs	Generator::get_scoped_value	P27	c6a7bbca6b83
+src/generator.rs	Generator::get_scoped_obj	P8,P9,P10,P11,P12,P13,P14	8931a2ab6068
+src/generator.rs	Generator::get_scoped_value	P8,P9,P10,P11,P12,P13,P14,P27	c6a7bbca6b83
 src/generator.rs	Generator::mark_threaded	P27	0a998e05aae3
 src/generator.rs	ValueAccessor::get	P26,P27	52839bab1d27
 src/misc.rs	Map	P15,P16,P17,P18	acc6b79589ac
@@ -90,7 +98,8 @@ src/rc_ir/ast.rs	Ownership	P27	416ca080ba04
 src/rc_ir/ast.rs	RcExpr	P1,P2,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	d1fa97d4a7df
 src/rc_ir/ast.rs	RcExprNode	P15,P16,P17,P18	815e164e90eb
 src/rc_ir/ast.rs	RcFunc	P27	cc81ec93e7b4
-src/rc_ir/ast.rs	RcGlobalInit	P7,P18	a8273109dc41
+src/rc_ir/ast.rs	RcGlobalInit	P7,P8,P9,P10,P11,P12,P13,P14,P18	a8273109dc41
+src/rc_ir/ast.rs	RcProgram	T	8d1268887ec1
 src/rc_ir/ast.rs	RcRhs	P1,P2,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24,P26	2498ff434862
 src/rc_ir/ast.rs	RcVar	P1,P2,P7,P15,P16,P17,P18	f263e9675e35
 src/rc_ir/ast.rs	VarPath	P5,P6,P7,P18	5642ca105edf
@@ -110,7 +119,7 @@ src/rc_ir/borrow.rs	CancelAnalysis::walk_inner	P5,P6,P7,P15,P16,P17,P18,P19,P20,
 src/rc_ir/borrow.rs	OwnedLeaves	P5,P6,P7,P8,P9,P10,P11,P12,P13,P14	f66eae318265
 src/rc_ir/borrow.rs	OwnedLeaves::owns	P7	15bb97f7d30e
 src/rc_ir/borrow.rs	PendingRetain	P7,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	c7d1878a1882
-src/rc_ir/borrow.rs	PendingRetains	P15,P16,P17,P18	fae59c2ec13d
+src/rc_ir/borrow.rs	PendingRetains	P7,P15,P16,P17,P18	fae59c2ec13d
 src/rc_ir/borrow.rs	RewriteCtx	P7	b774f9eadb68
 src/rc_ir/borrow.rs	RewriteCtx::any_owned_unit	P8,P9,P10,P11,P12,P13,P14	c49b82677dd3
 src/rc_ir/borrow.rs	RewriteCtx::call_rc	P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P26	b05f4a24511a
@@ -125,13 +134,13 @@ src/rc_ir/borrow.rs	RewriteCtx::route	P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,
 src/rc_ir/borrow.rs	RewriteCtx::routing_is_safe	P8,P9,P10,P11,P12,P13,P14	7d9bcdfcaf7e
 src/rc_ir/borrow.rs	UnBump	P18,P19,P20,P21,P22,P23,P24	9ee9a87502a0
 src/rc_ir/borrow.rs	binds_a_destructor	P26	dc1545cfa9ab
-src/rc_ir/borrow.rs	borrow_funcref	P8,P9,P10,P11,P12,P13,P14,P26	db31fb39070c
+src/rc_ir/borrow.rs	borrow_funcref	P8,P9,P10,P11,P12,P13,P14,P26,T	db31fb39070c
 src/rc_ir/borrow.rs	borrow_ify	P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24,P26,P27,T	bb83d2c2dd52
 src/rc_ir/borrow.rs	builds_a_destructor	P26	8492b1a24ed5
 src/rc_ir/borrow.rs	call_rc	P26	b05f4a24511a
 src/rc_ir/borrow.rs	cancel	P7,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24,P26,T	5548e3ee0dd6
 src/rc_ir/borrow.rs	check_clone_names_are_fresh	P7,P8,P9,P10,P11,P12,P13,P14,T	aa605276d3fa
-src/rc_ir/borrow.rs	clone_func	P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	c6a5f2c80a44
+src/rc_ir/borrow.rs	clone_func	P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24,T	c6a5f2c80a44
 src/rc_ir/borrow.rs	covered_leaves	P7,P8,P9,P10,P11,P12,P13,P14	95bb7b49e4a1
 src/rc_ir/borrow.rs	drop_nodes	P18,P19,P20,P21,P22,P23,P24	4a4d43cb3f4a
 src/rc_ir/borrow.rs	drop_nodes_inner	P18,P19,P20,P21,P22,P23,P24	a208018d5cf5
@@ -144,40 +153,41 @@ src/rc_ir/borrow.rs	levelled_sites	P7,P8,P9,P10,P11,P12,P13,P14,P18,P26	d1e9b606
 src/rc_ir/borrow.rs	node_id	P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	9ad61698cba0
 src/rc_ir/borrow.rs	owns_object_yet	P7	dbfdbdfa53ce
 src/rc_ir/borrow.rs	owns_unit	P26	5ec3f1aaa85c
-src/rc_ir/borrow.rs	param_capture_units	P8,P9,P10,P11,P12,P13,P14	4ae533d6a014
+src/rc_ir/borrow.rs	param_capture_units	P7,P8,P9,P10,P11,P12,P13,P14,P18	4ae533d6a014
 src/rc_ir/borrow.rs	param_names_and_types	P8,P9,P10,P11,P12,P13,P14	a545d427cb66
 src/rc_ir/borrow.rs	prepend_rc	P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P26	c9525f349a7c
 src/rc_ir/borrow.rs	rc_node	P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18	5d543479e186
 src/rc_ir/borrow.rs	route	P26	a2c829b25466
 src/rc_ir/borrow.rs	routing_is_safe	P26	7d9bcdfcaf7e
 src/rc_ir/borrow.rs	routing_saves_retain	P3,P4,P26	d0cd17bb5277
+src/rc_ir/borrow.rs	split_body		3ab6d7ce07a2
 src/rc_ir/borrow.rs	split_body_inner		92207d0e6252
 src/rc_ir/borrow.rs	split_rc		e9aa346a4628
 src/rc_ir/borrow.rs	split_rc_units		193595e82164
 src/rc_ir/borrow.rs	un_bump	P5,P6,P7,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	ab59e200bd66
 src/rc_ir/borrow.rs	used_later	P26	2efecf89721b
-src/rc_ir/codegen.rs	Generator::build_rc_closure	P26,P27	0a833fde2c28
+src/rc_ir/codegen.rs	Generator::build_rc_closure	P8,P9,P10,P11,P12,P13,P14,P26,P27	0a833fde2c28
 src/rc_ir/codegen.rs	Generator::eval_rc_expr_inner	P7,P8,P9,P10,P11,P12,P13,P14,P26,P27	7eb323ab25c9
-src/rc_ir/codegen.rs	Generator::eval_rc_match	P5,P6,P7,P27	6e49f545164d
+src/rc_ir/codegen.rs	Generator::eval_rc_match	P5,P6,P7,P18,P27	6e49f545164d
 src/rc_ir/codegen.rs	Generator::eval_rc_rhs	P7	bdc976128ed9
 src/rc_ir/codegen.rs	Generator::implement_rc_function	P27	c52d57516388
 src/rc_ir/codegen.rs	Generator::implement_rc_global	P7,P18,P26,P27	188a23cf64a9
-src/rc_ir/codegen.rs	Generator::implement_rc_program	P27	3966bbffa8f8
+src/rc_ir/codegen.rs	Generator::implement_rc_program	P8,P9,P10,P11,P12,P13,P14,P27	3966bbffa8f8
 src/rc_ir/dead_code_elim.rs	eliminate_unreachable	T	7c5805fda609
-src/rc_ir/leaf_map.rs	LeafMap::build_shape	P7,P18	cf8bc406897e
-src/rc_ir/leaf_map.rs	LeafMap::get	P1,P2,P3,P4,P5,P6,P7,P18	77cdac496950
-src/rc_ir/leaf_map.rs	LeafMap::leaves_under	P1,P2,P3,P4,P5,P6,P7,P18	c261b1b68e02
+src/rc_ir/leaf_map.rs	LeafMap::build_shape	P7,P18,P19,P20,P21,P22,P23,P24	cf8bc406897e
+src/rc_ir/leaf_map.rs	LeafMap::get	P1,P2,P3,P4,P5,P6,P7,P18,P19,P20,P21,P22,P23,P24	77cdac496950
+src/rc_ir/leaf_map.rs	LeafMap::leaves_under	P1,P2,P3,P4,P5,P6,P7,P18,P19,P20,P21,P22,P23,P24	c261b1b68e02
 src/rc_ir/leaf_map.rs	LeafMap::uniform	P1,P2	1f351bcd0c72
 src/rc_ir/leaf_map.rs	boxed_leaf_paths	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P18	2c7e9466715b
 src/rc_ir/locality.rs	specialize	T	537f3c5581c4
 src/rc_ir/lower.rs	Lowerer::lower_app	P26	1a9a9663ec85
 src/rc_ir/lower.rs	Lowerer::lower_if	P26	af1795e4c197
-src/rc_ir/lower.rs	Lowerer::lower_lambda_as_function	P26,P27	05076bfd9b47
+src/rc_ir/lower.rs	Lowerer::lower_lambda_as_function	P8,P9,P10,P11,P12,P13,P14,P26,P27	05076bfd9b47
 src/rc_ir/lower.rs	Lowerer::lower_llvm	P26,P27	4107324b7a5d
 src/rc_ir/lower.rs	Lowerer::lower_match	P5,P6,P7	c6447f9c6d40
 src/rc_ir/lower.rs	Lowerer::lower_symbol	P8,P9,P10,P11,P12,P13,P14,P26,P27	fe2a3c83ab94
 src/rc_ir/lower.rs	Lowerer::lower_var	P8,P9,P10,P11,P12,P13,P14	36b5f9576f3c
-src/rc_ir/ownership.rs	Binding	P1,P2,P3,P4,P5,P6,P7,P18	3405ca6e1797
+src/rc_ir/ownership.rs	Binding	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P18,P19,P20,P21,P22,P23,P24	3405ca6e1797
 src/rc_ir/ownership.rs	Origin	P1,P2,P3,P4,P7,P8,P9,P10,P11,P12,P13,P14,P18	787c5a1a8407
 src/rc_ir/ownership.rs	Origin::acted_on	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	8aa26a04d152
 src/rc_ir/ownership.rs	Origin::candidates	P1,P2,P3,P4,P7,P8,P9,P10,P11,P12,P13,P14	d7c5753b621d
@@ -196,36 +206,38 @@ src/rc_ir/ownership.rs	VarTable::body_only	P1,P2,P7,P8,P9,P10,P11,P12,P13,P14,P1
 src/rc_ir/ownership.rs	VarTable::of	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P18,P19,P20,P21,P22,P23,P24,P26	63b85a2cb761
 src/rc_ir/ownership.rs	acted_references	P3,P4,P5,P6,P7,P15,P16,P17,P18	385b3a4bb1f7
 src/rc_ir/ownership.rs	all_owned_units	P7,P18,P19,P20,P21,P22,P23,P24	21137d3cea07
-src/rc_ir/ownership.rs	as_arg_projection	P1,P2,P3,P4,P5,P6,P7,P18,P19,P20,P21,P22,P23,P24	5e0d113e21ae
+src/rc_ir/ownership.rs	as_arg_projection	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P18,P19,P20,P21,P22,P23,P24	5e0d113e21ae
 src/rc_ir/ownership.rs	collect_bindings	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P18,P19,P20,P21,P22,P23,P24,P26,P27	46f68bab2b5a
 src/rc_ir/ownership.rs	collect_consumes	P5,P6,P7	94acbeecb576
 src/rc_ir/ownership.rs	collect_consumes_go	P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P18,P26	686b59c00dc7
 src/rc_ir/ownership.rs	destructure_consumes	P5,P6,P7,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24,P26	414d76c55318
 src/rc_ir/ownership.rs	held_field_type	P1,P2,P7	3374a9d37f08
-src/rc_ir/ownership.rs	origin	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18	f65df1c34bff
-src/rc_ir/ownership.rs	origin_from_leaves_under	P1,P2,P3,P4,P5,P6,P7,P18,P19,P20,P21,P22,P23,P24	73ba5e3257da
+src/rc_ir/ownership.rs	origin	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	f65df1c34bff
+src/rc_ir/ownership.rs	origin_from_leaves_under	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P18,P19,P20,P21,P22,P23,P24	73ba5e3257da
 src/rc_ir/ownership.rs	origin_inner	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P18,P19,P20,P21,P22,P23,P24,P26	4f6dcf9b624e
 src/rc_ir/ownership.rs	passthrough_arg_leaves	P5,P6,P7,P18,P19,P20,P21,P22,P23,P24,P26	11fcc306bc59
 src/rc_ir/ownership.rs	push_boxed_leaves	P7,P18,P19,P20,P21,P22,P23,P24	88b8617ed661
-src/rc_ir/ownership.rs	rc_units	P1,P2,P7,P8,P9,P10,P11,P12,P13,P14	f23cbde1c5c9
-src/rc_ir/ownership.rs	rc_units_go	P1,P2,P7,P8,P9,P10,P11,P12,P13,P14	42fb02779ce3
+src/rc_ir/ownership.rs	rc_units	P1,P2,P7,P8,P9,P10,P11,P12,P13,P14,P18	f23cbde1c5c9
+src/rc_ir/ownership.rs	rc_units_go	P1,P2,P7,P8,P9,P10,P11,P12,P13,P14,P18	42fb02779ce3
 src/rc_ir/ownership.rs	resolve_callee_params	P5,P6,P7,P18,P19,P20,P21,P22,P23,P24,P27	bab7e354b1c4
 src/rc_ir/ownership.rs	returned_var	P1,P2,P5,P6,P7,P18	daef4068cd20
 src/rc_ir/ownership.rs	rhs_consumes	P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24,P26	9a3dab868847
-src/rc_ir/ownership.rs	subtree_type	P7,P8,P9,P10,P11,P12,P13,P14	a346ea90da40
-src/rc_ir/ownership.rs	truncate_to_unit	P1,P2,P3,P4,P7	98e485874758
-src/rc_ir/ownership.rs	unit_step	P1,P2,P7,P8,P9,P10,P11,P12,P13,P14	1c3deca47fa6
+src/rc_ir/ownership.rs	subtree_type	P7,P8,P9,P10,P11,P12,P13,P14,P18	a346ea90da40
+src/rc_ir/ownership.rs	truncate_to_unit	P1,P2,P3,P4,P7,P18	98e485874758
+src/rc_ir/ownership.rs	unit_step	P1,P2,P7,P8,P9,P10,P11,P12,P13,P14,P18	1c3deca47fa6
 src/rc_ir/ownership.rs	units_under	P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18	14af2908a2ff
 src/rc_ir/provenance.rs	LeafOrigin	P3,P4,P5,P6,P7,P26,P27	ad82eadb5f65
 src/rc_ir/provenance.rs	Provenance	P1,P2	222264990c44
 src/rc_ir/provenance.rs	Provenance::build_shape	P7,P18,P19,P20,P21,P22,P23,P24	b35342f7ac15
 src/rc_ir/provenance.rs	Provenance::join	P3,P4	2392529a73d2
-src/rc_ir/provenance.rs	Provenance::leaf_origins_at	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P18	0f5932407146
-src/rc_ir/provenance.rs	Provenance::leaf_origins_under	P1,P2,P3,P4,P5,P6,P7,P18,P19,P20,P21,P22,P23,P24	06bbc45ec504
+src/rc_ir/provenance.rs	Provenance::leaf_origins_at	P1,P2,P3,P4,P5,P6,P7,P18,P19,P20,P21,P22,P23,P24	0f5932407146
+src/rc_ir/provenance.rs	Provenance::leaf_origins_under	P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P18,P19,P20,P21,P22,P23,P24	06bbc45ec504
 src/rc_ir/provenance.rs	Provenance::leaves	P5,P6,P7,P18	2b9d265dedae
 src/rc_ir/provenance.rs	Provenance::uniform	P1,P2,P3,P4	b868bec59aed
+src/rc_ir/rc_insert.rs	RcInserter::arm_free_locals		5b7c599cd710
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_destructure	P7,P18	0a43269d0fec
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_eval		e5d132af2294
+src/rc_ir/rc_insert.rs	RcInserter::insert_into_expr		1a267de15e8b
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_expr_inner	P7,P18	eeb257d5edee
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_func		ae9e1a3c5466
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_match	P7,P18	45e21b5870b7
@@ -234,6 +246,9 @@ src/rc_ir/rc_insert.rs	RcInserter::needs_rc		532c01d554aa
 src/rc_ir/rc_insert.rs	RcInserter::retain_if_live	P7,P18	a4dad5564dd6
 src/rc_ir/rc_insert.rs	build_releases		b6bfc13f7211
 src/rc_ir/rc_insert.rs	build_retains		16167d750f5b
+src/rc_ir/rc_insert.rs	collect_referenced_and_bound		a5ae29f0e853
+src/rc_ir/rc_insert.rs	free_locals		fa0ab50a0fe8
+src/rc_ir/rc_insert.rs	insert_if_local		98666b6f345e
 src/rc_ir/rc_insert.rs	insert_rc		ddc722babbda
 src/rc_ir/rc_insert.rs	rhs_operands		1d8e7e575c71
 src/rc_ir/rename.rs	assign_fresh_name	P8,P9,P10,P11,P12,P13,P14	e52d71f7810c

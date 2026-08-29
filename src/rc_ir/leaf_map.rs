@@ -87,7 +87,7 @@ impl<T: Clone> LeafMap<T> {
 
     /// The fact of each boxed leaf of a value of type `ty`. `leaf` is called once per boxed leaf,
     /// with that path, so no leaf of the type can be left out.
-    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_shape(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -112,7 +112,7 @@ impl<T: Clone> LeafMap<T> {
 
     /// The fact recorded at `path`, or `None` where `path` is not a boxed leaf of this value — a
     /// scalar, or an aggregate queried at a non-leaf path such as its root.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get(&self, path: &[usize]) -> Option<&T> {
         self.0.get(path)
     }
@@ -132,7 +132,7 @@ impl<T: Clone> LeafMap<T> {
 
     /// The facts of the boxed leaves under `path` — the leaves one reference-counting operation on
     /// that subtree touches. The empty path covers the whole value.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn leaves_under<'a>(&'a self, path: &'a [usize]) -> impl Iterator<Item = &'a T> {
         self.0
             .iter()

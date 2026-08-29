@@ -46,6 +46,7 @@ pub struct FuncRef {
 /// A whole program: the top-level functions, the global-value initializers, and the names reached
 /// from outside them. The default is the empty program, which defines nothing and is reached
 /// nowhere.
+// PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Default)]
 pub struct RcProgram {
     /// The top-level functions, keyed by the name each is defined under.
@@ -315,7 +316,7 @@ pub enum OwnershipShape {
 
 /// The initializer of a global value, run once when a reader first asks for the value. The whole
 /// graph the value reaches is marked global (refcount-exempt) before it is stored.
-// PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcGlobalInit {
     /// The name the global value is defined and read under.
