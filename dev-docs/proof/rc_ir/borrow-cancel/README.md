@@ -542,7 +542,11 @@ resolve_callee_params`)。
 move-bind の両辺の型、アームの結果と `Match` の束縛変数の型、payload と変位の型、**catch-all アームの
 payload と scrutinee の型**、`Destructure` のフィールド変数とフィールドの型、**`App(callee, args)` の各引数と
 呼び出し先の対応するパラメータの型**、`Match` の scrutinee が union であること、`Destructure` の容器が
-構造体であること、同じ名前の `RcVar` が持つ型が一致すること。**このコミットにこれを検査するコードは無い**
+構造体であること、**`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が実際に持つ
+(punched でない) ものであること**、同じ名前の `RcVar` が持つ型が一致すること。
+
+punched でないことが要るのは、`held_field_type` が持たないフィールドを問われると panic するからである
+(`CODE src/rc_ir/ownership.rs: held_field_type`)。**このコミットにこれを検査するコードは無い**
 (`validate` は構造だけを見る)。
 
 引数とパラメータの型の一致は、`rhs_consumes` が引数の leaf を呼び出し先のパラメータの型で
@@ -641,8 +645,14 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
   `Λ(u)` を `u` の下の boxed leaf の集合とする。`infer_ownership` の不動点の下で、次の 3 つは同値である。
 
   1. `owns_unit(v, u)` が真である。
-  2. `Λ(u)` の**ある** leaf `λ` の**すべての**候補 `(r, p)` について `owns_object(r, p)` が真である。
-  3. `Λ(u)` の**すべての** leaf のすべての候補について `owns_object` が真である。
+  2. `Λ(u)` の**ある inhabited な** leaf `λ` の**すべての**候補 `(r, p)` について `owns_object(r, p)` が
+     真である。
+  3. `Λ(u)` の**すべての inhabited な** leaf のすべての候補について `owns_object` が真である。
+
+  節 2 と節 3 が inhabited (D16) な leaf に限るのは、inhabited でない leaf が参照を持たないからである
+  (A5)。限定を外すと節 2 が偽になる本体が作れる: `unbox union` の変位のうち、`result_prov` が `⊥` と
+  宣言する側の leaf は `origin` が自分自身を名指すので、`owns_object` はそれを所有と答える。その leaf は
+  実行時に存在せず、`Retain`/`Release` は触れない。
 
   1 ⟺ 3 は「節点を残すのが安全である」を与え、¬1 ⟹ ¬2 は「節点を落とすのが安全である」を与える。借用版の
   `rewrite_rc` は `owns_unit` が偽の unit の `Retain`/`Release` を丸ごと落とすので (P10)、落とした先に所有
@@ -912,10 +922,10 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み (A16 の下で) | 検証済み (指摘 26 件を反映) |
 | P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 検証済み |
 | P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み (P6 は A16 の下で) | 検証済み |
-| P7e | `p15-ownership-uniformity.md` | 有 | 証明済み | 未着手 |
-| P7a | `p15-ownership-uniformity.md` | 有 | **未着手** (言明は 2 度書き直した) | 未着手 |
+| P7e, P7d | `p15-ownership-uniformity.md` | 有 | 証明済み | 未着手 |
+| P7a | `p15-ownership-uniformity.md` | 有 | **書き直し待ち** (言明を 3 度目に直した -- inhabited への限定) | 未着手 |
 | P7c, P7f | `p13-disposals-and-pending.md` | 有 | 証明済み (P7c の言明は 1 度書き直した) | 未着手 |
-| P7d | `p15-ownership-uniformity.md` | 有 | **未着手** (#530 の 2 件を閉じる性質) | 未着手 |
+
 | P8 | `p20-borrow-ify.md` | 有 | 証明済み。`infer_ownership` に `level_ownership` の周回が加わったので、停止性の段を書き直す必要がある | 未着手 |
 | P9 - P13 | `p20-borrow-ify.md` | 有 | 証明済み。P10/P11 は `owns_object_yet` の追加を読み直す必要がある | 未着手 |
 | P14 | `p20-borrow-ify.md` | 有 | **未着手** (原因だった #530 の残穴は直った) | 未着手 |

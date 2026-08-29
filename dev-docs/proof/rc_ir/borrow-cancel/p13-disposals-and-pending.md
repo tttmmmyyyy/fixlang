@@ -284,8 +284,10 @@ D9 の行が意味を持つのは 2 つの型が対応するときだけであ�
       オブジェクトも名指さない。またこの呼び出しは `pending` の要素を落とすだけで、残る要素の
       `outstanding` を変えない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects
-  本体は `pending.retain(...)` であり、述語は `objects` のいずれかを `outstanding.names` が真とする要素に
-  ついて `false` を返す。`retain` は `false` を返した要素を落とし、他の要素はそのまま残す。
+  本体は `pending.retain(...)` であり、述語は `objects` のいずれかについて
+  `retain.outstanding.names(object) || retain.others.contains(object)` が真である要素について `false` を
+  返す。この選言の第 1 肢だけで、`objects` のいずれかを `outstanding` が名指す要素は落ちる。`retain` は
+  `false` を返した要素を落とし、他の要素はそのまま残す。
 
 <1>2. `Obj(n) ⊆ ActRefs(v, π).objects() ∪ Others(v, π)` である。
   BY P5, DEF 処分 leaf, DEF 触れうるオブジェクト
@@ -730,8 +732,10 @@ A12 に足すことを提案する。
 実行路 `ρ` と、`ρ` の上の節点 `n` を固定する。`n` が `Retain(v, π, s, k)` または `Release(v, π, s, k)`
 であるとき、
 
-- `Inh_ρ(v, π, n)` を、`L(v, π)` の元のうち、`n` の時点で `v` の値の inhabited (D16) な leaf であるもの
-  全体とする。
+- `Inh_ρ(v, π, n)` を、`L(v, π)` の元のうち、`n` の時点で `v` の値の inhabited (D16) な leaf であって、
+  その leaf が指すオブジェクトが D26 の意味で**計数下**であるもの全体とする。グローバル状態のオブジェクトを
+  指す leaf を外すのは、D26 より、そこに D8 の参照が無く、`Retain`/`Release` が `H` を動かさないから
+  である。
 - `ActRefs^inh_ρ(n)` を、`Inh_ρ(v, π, n)` の各 `λ` を `origin(v, λ).identity()` で名付けて数えた多重集合
   とする。
 
@@ -1168,8 +1172,10 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
 
 実行路 `ρ` を固定する。オブジェクト `o ∈ VarPath` が `ρ` で**活性**であるとは、
 `origin(x, λ).identity() = o` を満たす対 `(x, λ)` で、`λ ∈ boxed_leaf_paths(ty(x))` であり `ρ` の上で
-`x` が値を得ているものが在って、`λ` が `x` の値の inhabited な leaf であることをいう。L10 より、この
-定義は対 `(x, λ)` の選び方によらない。
+`x` が値を得ているものが在って、`λ` が `x` の値の inhabited な leaf であり、かつ `obj(x, λ)` が D26 の
+意味で計数下であることをいう。inhabited であるかどうかが対の選び方によらないことは L10 が、`obj(x, λ)` が
+対の選び方によらないことは P5 (a) が与える (identity が等しい 2 つの leaf のスロットは同じオブジェクトを
+指す)。活性な名前 `o` が指すオブジェクトを `obj_ρ(o)` と書く。
 
 値は束縛の後に変わらない -- D2 より本体は木であり、D3 の実行路は根から各節点を高々 1 度通るので、
 1 つの束縛は 1 つの実行路の上で高々 1 回実行される。よって活性かどうかは `ρ` の上の時点によらない。
@@ -1241,24 +1247,28 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
   `cancel_body` は `analysis.walk(body, PendingRetains::default(), true)` を呼ぶ。要素が無いので (i) と
   (ii) は空虚に成り立つ。
 
-<1>1a. `consume_objects(pending, objects)` は、`objects` のいずれかについて `outstanding.names` が真で
-       ある要素を取り除き、残る要素の `node` と `outstanding` と並びを変えない。
+<1>1a. `consume_objects(pending, objects)` は、`objects` のいずれかについて
+       `outstanding.names(object) || others.contains(object)` が真である要素を取り除いてその `node` を
+       `self.needed_retains` に入れ、残る要素の `node`・`outstanding`・`others`・並びを変えない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
      DEF `Vec::retain` (Rust 標準ライブラリの規約: 閉包が偽を返した要素を取り除き、残る要素の値と
      相対順序を保つ)
-  本体は `pending.retain(|retain| { if objects.iter().any(|object| retain.outstanding.names(object))
-  { self.needed_retains.insert(retain.node); return false; } true })` である。
+  本体は `pending.retain(|retain| { if objects.iter().any(|object| retain.outstanding.names(object)
+  || retain.others.contains(object)) { self.needed_retains.insert(retain.node); return false; } true })`
+  である。
 
 <1>2. 帰納段。`ρ` の上の節点 `n` について (i) と (ii) が成り立つとし、`ρ` の上の `n` の直後の節点 `n'` に
       ついて示す。`n` の式で場合を分ける。
 
   <2>1. CASE `n` の式が `RcExpr::Retain(v, path, _, k)` である。`n'` は `k` である。
     <3>1. `pending(k)` は `pending(n)` の末尾に `PendingRetain { node: node_id(n), outstanding:
-          ActRefs(v, path) }` を足したものである。
+          ActRefs(v, path), others: Others(v, path) }` を足したものである。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-         CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references, L2, 第 1 節の記法
-      この腕は `pending.push(PendingRetain { node: retain, outstanding })` を行い、`outstanding` は
-      `self.acted_references(v, path)` である。L2 (i) よりこの腕は `walk(k, pending, ·)` を 1 回呼ぶ。
+         CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
+         CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, L2, 第 1 節の記法
+      この腕は `pending.push(PendingRetain { node: retain, outstanding, others })` を行い、`outstanding`
+      は `self.acted_references(v, path)`、`others` は `self.other_objects(v, path)` である。L2 (i) より
+      この腕は `walk(k, pending, ·)` を 1 回呼ぶ。
     <3>2. 元からあった要素については (i) と (ii) が成り立つ。
       BY 帰納法の仮定, DEF bump の帰属, <3>1
       表の第 1 行より、これらの要素の `B_ρ` は変わらない。<3>1 より `outstanding` も変わらない。
@@ -1331,8 +1341,8 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
 
   <2>4. CASE `n` の式が `RcExpr::Let(x, RcRhs::Match(v, arms), k)` である。D3 より `n'` は `ρ` が選んだ
         アーム `arm_j` の本体である。
-    <3>1. `pending(arm_j.body)` は `pending(n).clone()` であり、要素の `node` と `outstanding` と
-          並びは `pending(n)` と等しい。
+    <3>1. `pending(arm_j.body)` は `pending(n).clone()` であり、要素の `node`・`outstanding`・
+          `others`・並びは `pending(n)` と等しい。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の
          `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, CODE src/rc_ir/borrow.rs: PendingRetain, L2
       この腕は各 `arm` について `self.walk(&arm.body, pending.clone(), false)` を呼ぶ。
@@ -1364,7 +1374,8 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
           と等しい。とくに `arm_exits[j]` にそのような要素 `p^{(j)}` が在る。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, P18
       `merge` の返り値は `pending_in.iter().filter_map(|retain| uniform.get(&retain.node).map(
-      |outstanding| PendingRetain { node: retain.node, outstanding: outstanding.clone() }))` であり、
+      |outstanding| PendingRetain { node: retain.node, outstanding: outstanding.clone(),
+      others: retain.others.clone() }))` であり、
       `uniform` に `retain` が入るのは `is_uniform` すなわち
       `entered_with.contains(&retain) && arm_states.iter().all(|other| other.get(&retain) ==
       Some(&outstanding))` が真のときだけで、入る値は `outstanding.clone()` である。P18 も、残る
