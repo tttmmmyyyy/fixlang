@@ -15,13 +15,17 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 **この証明は書きかけである。** 第 7 節の表が、どの命題がどこまで進んでいるかを述べる。第 8 節が、証明を書く
 作業が見つけたコードの欠陥を述べる。
 
-証明の対象は、コミット `a8dab6e04bdc82916b6a1296e4ab186027347ef3` の
+証明の対象は、コミット `b6c51fb892746e493e155d9d59ea05d02d7357db` の
 
 - `src/rc_ir/borrow.rs` の `borrow_ify` と `cancel`、およびこの 2 つが呼ぶ同ファイル内の関数
 - `src/rc_ir/ownership.rs` の全体 (この 2 つが参照の同一性と消費を決めるのに使うモデル)
 
 である。`split_rc_units` は同じファイルに住むが、`borrow_ify` の前段であって対象ではない。その出力の性質は
 仮定 A3 として置く。
+
+**対象のコードは、証明を書く作業の中で 1 度動いた。** `borrow_ify` と `cancel` が `pub` から `pub(crate)` に
+なった。P15 がその可視性を引く -- クレートの外から呼べないので、`cancel` の入力が `borrow_ify` の出力である
+ことが `optimize_rc_program` の 1 か所を読めば決まる。`src/` の差はこの 4 行だけである。
 
 この 2 つは、`src/build/build_object_files.rs` の `optimize_rc_program` の中で、`-O max` 以上のとき
 `split_rc_units` の直後にこの順で走る。
