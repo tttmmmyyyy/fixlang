@@ -2198,11 +2198,39 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
   `if !self.is_borrow_version { return rc_node(...); }` である。
 
+<1>1a. 任意の型 `τ` と `t ∈ rc_units(τ, type_env)` について、`t` は次のどちらかの形であり、どちらでも
+       `truncate_to_unit(τ, t, type_env) = t` である。
+       - **(α)** `t` の各添字の位置で `unit_step` が `UnitStep::Fields` を返し、`t` が名指す型 `sty` に
+         ついて `unit_step(sty) = UnitStep::Unit` である。
+       - **(β)** `t` の最後の添字より前の各位置で `unit_step` が `UnitStep::Fields` を返し、最後の添字の
+         位置の型について `unit_step` が `UnitStep::Capture { capture_idx, .. }` を返して `t` の最後の
+         添字が `capture_idx` である。
+  BY CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
+     CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/ownership.rs: unit_step
+  `rc_units_go` が `out` に積むのは 2 か所である。`UnitStep::Unit` の枝は `path` をそのまま積み、
+  `UnitStep::Capture` の枝は `capture_idx` を 1 つ足して積む。どちらの `path` も、`UnitStep::Fields` の枝が
+  添字を 1 つずつ足しながら下って作ったものである。これが (α) と (β) である。`truncate_to_unit(τ, t)` は
+  `t` の添字を順に見て、`UnitStep::Fields` のときその添字を `out` に積んで下り、`UnitStep::Capture` の
+  ときその添字を積んで打ち切り、`UnitStep::Unit` のときは何も積まずに打ち切る。(α) では全添字が
+  `Fields` の枝を通って積まれるので `out = t`、(β) では最後の添字で `Capture` に来てそれも積まれるので
+  `out = t` である。
+
+<1>1b. 任意の型 `τ` と `t ∈ rc_units(τ, type_env)` について `units_under(τ, t, type_env) = [t]` である。
+  BY <1>1a, CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
+     CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go
+  `units_under(τ, t)` は、`subtree_type(τ, t)` が `Some(sty)` のとき `rc_units(sty)` の各元を `t` の後ろに
+  繋いだ列、`None` のとき `[t]` である。`subtree_type` は path の添字を順に見て `UnitStep::Fields` の
+  ときだけ下り、それ以外では `None` を返す。<1>1a の (α) では全添字が `Fields` を通るので `subtree_type` は
+  `Some(sty)` を返し、`unit_step(sty) = UnitStep::Unit` より `rc_units_go` は空の `path` を 1 つだけ積むので
+  `rc_units(sty) = [[]]` であり、`units_under(τ, t) = [t]` である。(β) では最後の添字の位置で
+  `UnitStep::Capture` に来るので `subtree_type` は `None` を返し、`units_under(τ, t) = [t]` である。
+
 <1>2. 以下 `V` が借用版であるとする。`rewrite_rc` が `Retain(p, u)` を落とすのは `owns_unit(p, u)` が
       偽のときに限る。
-  BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
-  `units_under(&v.ty, path, type_env)` を `self.owns_unit(v, unit)` で絞る。A2 より `path` は `ty(p)` の
-  unit なので `units_under` はその 1 元であり、絞りが落とすのは `owns_unit` が偽のときである。
+  BY <1>1b, A2, P1, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
+  `rewrite_rc` は `units_under(&v.ty, path, type_env)` を `self.owns_unit(v, unit)` で絞り、残った各 unit に
+  ついて節点を積む。A2 より `Retain(p, u)` 節点の `path` は `ty(p)` の `rc_units` の元なので、<1>1b より
+  `units_under(ty(p), u) = [u]` であり、絞りが落とすのは `owns_unit(p, u)` が偽のときである。
 
 <1>3. `V` の本体に `Retain(p, u)` 節点が在るとき、`(p, u)` は `levelled_sites(V の本体, type_env)` の
       元である。また消費が `App(callee, args)` の引数 `p` の位置であるとき、`(p, u)` は `u` が
@@ -2221,29 +2249,42 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
     `collect_consumes_go` と `rhs_consumes` の判定は `own` を読まないので (`rhs_consumes` の
     `RcRhs::App` の腕は `callee` の leaf を無条件に `out` に入れ、`RcRhs::Closure` の腕は各 capture の
     leaf を無条件に入れる)、報告はどの所有の割り当てでも起きる。
-  <2>1a. `V` を原本の関数 `F` の版とし、`rename` を `V` の本体が `F` の本体から受けた名前替え (P9)
-         とする。`V` が原本の版であるときは `rename` は恒等写像であり (`borrow_ify` が `clone_func` を
-         呼ぶのは借用版についてだけである)、`F = V` である。次の 2 つが成り立つ。
+  <2>0a. `V` は入力のちょうど 1 つの関数から作られる。その関数を `F` と書き、`rename` を `V` の本体が
+         `F` の本体から受けた名前替え (P9) とする。`V` が原本の版であるときは `rename` は恒等写像で
+         あり (`borrow_ify` が `clone_func` を呼ぶのは借用版についてだけである)、`F = V` である。
+    BY P24, P9, CODE src/rc_ir/borrow.rs: borrow_ify
+    P24 は「**出力の各関数は入力のちょうど 1 つの関数から作られ**、その `fn_ty` / `ret_ty` / `params` の
+    型 / `inline_into_callers` は元の関数のものに等しい」と述べる。P9 は「`clone_func` が作る借用版の
+    本体は、元の本体の束縛変数を一斉に付け替えたものであり、それ以外の違いを持たない」と述べる。
+  <2>0b. `V` の本体は、`F` の本体を `rename` で写したものに `RewriteCtx::rewrite` を当てたものであり、
+         その書き換えが変えるのは `Retain`/`Release` 節点 (P10、P11) と `App` の callee の名前 (P12) だけ
+         である。ほかの節点は種・変数・path・並びを変えずに組み直される。
+    BY <2>0a, P10, P11, P12, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+       CODE src/rc_ir/borrow.rs: borrow_ify
+    `rewrite_inner` の 7 つの腕を読む。`RcExpr::Retain` と `RcExpr::Release` の腕は `rewrite_rc` へ行く。
+    `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕は `callee` を `route` の結果に差し替え、`call_rc` が
+    返す `before` と `after` の節点を前後に置き、`x` と `args` はそのまま複製する。残る腕 --
+    `Let` の `Match` とそれ以外、`Destructure`、`Eval`、`Ret` -- は、束縛変数・右辺・容器・フィールド・
+    scrutinee・返す変数をそのまま複製し、継続とアーム本体を書き換えた木で組み直す。
+  <2>1a. 次の 2 つが成り立つ。
          - `p` が `rename` の像に無いとき、`V` の本体で `p` は束縛を持たず、`origin_V(p, μ)` は
            `Origin::Exactly((p, μ))` であり、`p` は `V` の `vars.param_tys` の鍵ではない。
          - `p = rename[p0]` であるとき、`F` の本体でも `(p0, μ)` が D9 の意味で消費され、
            `origin_V(p, μ)` の候補の全体は `origin_F(p0, μ)` の候補を `rename` で写したものである。
            `V` のパラメータ `r = rename[r0]` を根に持つ候補 `(r, q)` には、`F` のパラメータ `r0` を
            根に持つ候補 `(r0, q)` が対応し、`ty(r) = ty(r0)` である。
-    BY P9, A6, A13, P10, P11, P12, <2>1,
+    BY <2>0a, <2>0b, <2>1, P9, A6, A13,
        CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: VarTable::of
-    P9 より複製の本体は原本の本体の束縛変数を `rename` で一斉に付け替えたものであり、複製が導入する
-    名前は入力のどの束縛名とも異なる。複製の後に本体を動かすのは書き換えだけであり、それが変えるのは
-    `Retain`/`Release` 節点 (P10、P11) と `App` の callee の名前 (P12) である。`collect_bindings` は
-    `Retain`/`Release` の腕で束縛を作らず、`RcRhs::App(..)` にはその callee によらず
-    `Binding::Producer` を置くので、`V` の束縛表は `F` の束縛表を `rename` で写したものである
-    (`VarTable::of` はこれにパラメータ・capture の `Binding::Param` を足す)。`origin_inner` は変数を
-    名前で引くだけなので、`origin` の答えも同じ写像で写る。`rename` の像に無い名前は `V` の本体で
-    束縛を持たないので、`origin_inner` の `None` の腕が `here()` すなわち `Exactly((p, μ))` を返す。
-    `V` のパラメータ名と capture 名 -- `vars.param_tys` の鍵 -- はどれも `rename` の像なので、
-    像に無い名前はその鍵ではない。この CASE の 5 種の消費は `own` を読まずに本体の形だけで決まる
-    (<2>1) ので、名前替えで保たれる。
+    `collect_bindings` は `Retain`/`Release` の腕で束縛を作らず、`RcRhs::App(..)` にはその callee に
+    よらず `Binding::Producer` を置くので、<2>0b の 2 つの違いは束縛表を動かさない。よって `V` の束縛表は
+    `F` の束縛表を `rename` で写したものである (`VarTable::of` はこれにパラメータ・capture の
+    `Binding::Param` を足す)。`origin_inner` は変数を名前で引くだけなので、`origin` の答えも同じ写像で
+    写る。A6 と A13 より複製の名前は原本のどの名前とも衝突しないので、この写しは単射である。`rename` の
+    像に無い名前は `V` の本体で束縛を持たないので、`origin_inner` の `None` の腕が `here()` すなわち
+    `Exactly((p, μ))` を返す。`V` のパラメータ名と capture 名 -- `vars.param_tys` の鍵 -- はどれも
+    `rename` の像なので、像に無い名前はその鍵ではない。この CASE の 5 種の消費は `own` を読まずに本体の
+    形だけで決まる (<2>1) ので、名前替えで保たれる。
 
   <2>2. `p = rename[p0]` であるとき、`origin_F(p0, μ)` の候補であるパラメータ leaf はすべて
         `owned_leaves` に入っている。ここで `owned_leaves = infer_ownership(prog, type_env)` であり、
@@ -2315,41 +2356,14 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
         L16 の仮定より `(p, μ)` は D9 の意味で消費される leaf であり、D9 の消費の表が挙げるのは
         boxed leaf なので `μ ∈ boxed_leaf_paths(ty(p))` である。D15 より候補は `acted_on()` の元で
         あるから、<4>1 が結論を与える。
-    <3>3b. 任意の型 `τ` と `t ∈ rc_units(τ, type_env)` について、`t` は次のどちらかの形であり、
-           どちらでも `truncate_to_unit(τ, t, type_env) = t` である。
-           - **(α)** `t` の各添字の位置で `unit_step` が `UnitStep::Fields` を返し、`t` が名指す型
-             `sty` について `unit_step(sty) = UnitStep::Unit` である。
-           - **(β)** `t` の最後の添字より前の各位置で `unit_step` が `UnitStep::Fields` を返し、
-             最後の添字の位置の型について `unit_step` が `UnitStep::Capture { capture_idx, .. }` を
-             返して `t` の最後の添字が `capture_idx` である。
-      BY CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
-         CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/ownership.rs: unit_step
-      `rc_units_go` が `out` に積むのは 2 か所である。`UnitStep::Unit` の枝は `path` をそのまま積み、
-      `UnitStep::Capture` の枝は `capture_idx` を 1 つ足して積む。どちらの `path` も、
-      `UnitStep::Fields` の枝が添字を 1 つずつ足しながら下って作ったものである。これが (α) と (β) で
-      ある。`truncate_to_unit(τ, t)` は `t` の添字を順に見て、`UnitStep::Fields` のときその添字を
-      `out` に積んで下り、`UnitStep::Capture` のときその添字を積んで打ち切り、`UnitStep::Unit` の
-      ときは何も積まずに打ち切る。(α) では全添字が `Fields` の枝を通って積まれるので `out = t`、
-      (β) では最後の添字で `Capture` に来てそれも積まれるので `out = t` である。
-    <3>3c. 任意の型 `τ` と `t ∈ rc_units(τ, type_env)` について
-           `units_under(τ, t, type_env) = [t]` である。
-      BY <3>3b, CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
-         CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go
-      `units_under(τ, t)` は、`subtree_type(τ, t)` が `Some(sty)` のとき `rc_units(sty)` の各元を `t` の
-      後ろに繋いだ列、`None` のとき `[t]` である。`subtree_type` は path の添字を順に見て
-      `UnitStep::Fields` のときだけ下り、それ以外では `None` を返す。<3>3b の (α) では全添字が
-      `Fields` を通るので `subtree_type` は `Some(sty)` を返し、`unit_step(sty) = UnitStep::Unit` より
-      `rc_units_go` は空の `path` を 1 つだけ積むので `rc_units(sty) = [[]]` であり、
-      `units_under(τ, t) = [t]` である。(β) では最後の添字の位置で `UnitStep::Capture` に来るので
-      `subtree_type` は `None` を返し、`units_under(τ, t) = [t]` である。
     <3>4. QED
-      BY <2>1a, <2>2, <3>1, <3>2, <3>3, <3>3a, <3>3b, <3>3c, P1, P7e, P9
+      BY <1>1a, <1>1b, <2>1a, <2>2, <3>1, <3>2, <3>3, <3>3a, P1, P7e, P9
       `origin_V(p, μ)` の候補 `(r, q)` を取る。`r` が `V` の `vars.param_tys` の鍵でないときは
       <3>1 が結論を与える。以下 `r` がその鍵であるとし、`t = truncate_to_unit(ty(r), q, type_env)` と
       置く。<3>3a より `q ∈ boxed_leaf_paths(ty(r))` なので、P1 より `t ∈ rc_units(ty(r))` である。
       P7e (a) より `owns_object(r, q) = owns_object(r, t)` であり、<3>2 より `owns_object(r, t)` は
       `units_under(ty(r), t)` の各 unit `q'` について `(r, truncate_to_unit(ty(r), q'))` が
-      `owned_units` に入るかを見る。<3>3c より `units_under(ty(r), t) = [t]`、<3>3b より
+      `owned_units` に入るかを見る。<1>1b より `units_under(ty(r), t) = [t]`、<1>1a より
       `truncate_to_unit(ty(r), t) = t` なので、検査は `(r, t) ∈ owned_units` の 1 件である。
       `V` が借用版でないときは、`owned_units` がその版の各パラメータ・capture `p'` と各
       `unit ∈ rc_units(ty(p'))` の対を含むので (`CODE src/rc_ir/borrow.rs: borrow_ify` の
@@ -2359,59 +2373,73 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
       `origin_F(p0, μ)` の候補、`ty(r) = ty(r0)` である。<3>3a より `q ∈ boxed_leaf_paths(ty(r0))` で
       あり、<2>2 より `(r0, q)` は `owned_leaves` に入るので、<3>3 の繰り返しは `leaf = q` の回で
       `(rename[r0], truncate_to_unit(ty(r0), q)) = (r, t)` を `owned_units` に入れる。
+  <2>3a. `μ` は `u` を前置に持つ。すなわち `μ` は `u` の下の leaf である。
+    BY CODE src/rc_ir/ownership.rs: truncate_to_unit
+    `truncate_to_unit(ty(p), μ)` は `μ` の添字を先頭から順に見て `out` に積み、`UnitStep::Capture` か
+    `UnitStep::Unit` で打ち切る。積む添字は `μ` の添字を順に取ったものなので、返る `u` は `μ` の前置で
+    ある。
   <2>4. QED
-    BY <2>3, <1>3, P7a, <1>2
+    BY <2>3, <2>3a, <1>3, P7a, <1>2
     この CASE の仮定より `V` の本体に `Retain(p, u)` 節点が在るので、<1>3 より `(p, u)` は
-    `levelled_sites` の元である。`μ` は inhabited であり、`u` の下の leaf である
-    (`u = truncate_to_unit(ty(p), μ)` と P1)。よって <2>3 は P7a の節 2 である。P7a より
-    `owns_unit(p, u)` は真であり、<1>2 より節点は落ちない。これが (A) である。
+    `levelled_sites` の元である。`μ` は inhabited であり、<2>3a より `u` の下の leaf である。よって
+    <2>3 は P7a の節 2 である。P7a より `owns_unit(p, u)` は真であり、<1>2 より節点は落ちない。これが
+    (A) である。
 
 <1>5. CASE 消費が `App(callee, args)` の引数の位置である。
-  <2>1. `p` を第 `i` 引数とし、`u = truncate_to_unit(ty(p), μ, type_env)` と置く。次が成り立つ。
-        呼び出し先が `borrow_ify` の出力の `funcs` の関数であるとき、この位置で `(p, μ)` の消費が
-        起きることと、`(p_i.name, u)` が `all_owned_units(borrow_ify の出力, type_env)` に入ることは
-        同値である (`p_i` は呼び出し先の第 `i` パラメータ)。呼び出し先が `funcs` に無いときは、
-        消費は無条件に起きる。
-    <3>1. D9 の `App` の行より、引数 `p` の leaf `μ` が消費されるのは、呼び出し先がその位置の unit を
-          D14 の意味で所有するときであり、unit は**呼び出し先のパラメータの型**で取る。
-      BY D9
+  <2>0. `p` を第 `i` 引数とし、`u = truncate_to_unit(ty(p), μ, type_env)` と置く。`V` の本体のこの `App`
+        の段の実行時の呼び出し先 (D23) を `g`、`g` の第 `i` パラメータを `p_i` と書く。`g` は
+        `borrow_ify` の出力の `funcs` の関数である。また `call_rc` が引く `params` が `Some` であるとき、
+        `params[i]` は `p_i` の名前と型である。
+    BY D23, P29, P9, P12, A6, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+       CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/ownership.rs: resolve_callee_params
+    D23 は `App` の呼び出し先を実行時に `callee` の値が指す関数と定め、「**D9 の `App` の行と D10 の
+    生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数である。**」と述べたうえで、「D9 の
+    `App` の行が読む所有は D14 が `RcFunc::borrowed_units` から定めるものなので、**その呼び出し先は
+    プログラムの `funcs` の関数である**」と続ける。`call_rc` は
+    `self.callee_params.get(&FuncRef { name: callee.name })` を引き、`borrow_ify` は出力の各版 `func` に
+    ついて `callee_params.insert(func.name, param_names_and_types(func))` を行うので、`Some` が返るのは
+    `callee.name` が出力の `funcs` の鍵であるときであり、返るのはその関数のパラメータの名前と型の列で
+    ある。そのとき A6 より `callee.name` は束縛名ではないので `resolve_callee_params` の
+    `closure_targets` の枝は当たらず、`resolve_callee_params` も同じ関数の `params` を返す。P29 は
+    「`resolve_callee_params` が `Some(params)` を返すならば、`params` はその段の実行時の呼び出し先
+    (D23) のパラメータの列である」を `borrow_ify` の入力について述べ、README の P29 は「出力についての
+    同じ性質は、P9 と P12 と合わせて読む」と続ける。
+  <2>1. この位置で `(p, μ)` の消費が起きるならば、`(p_i.name, u)` は
+        `all_owned_units(borrow_ify の出力, type_env)` に入る。
+    <3>1. D9 の `App` の行より、引数 `p` の leaf `μ` が消費されるのは、`g` がその位置の unit を D14 の
+          意味で所有するときであり、unit は**呼び出し先のパラメータの型**で取る。
+      BY D9, D23, <2>0
     <3>2. その unit は `u` であり、`u ∈ rc_units(ty(p_i), type_env)` である。
       BY A12, P1, <3>1
       A12 の第 6 項より `ty(p) = ty(p_i)` なので
       `truncate_to_unit(ty(p_i), μ) = truncate_to_unit(ty(p), μ) = u` である。P1 より、boxed leaf の
       `truncate_to_unit` は `rc_units` の元である。
-    <3>3. 呼び出し先が `funcs` の関数であるとき、それが `u` を所有することと
-          `(p_i.name, u) ∈ all_owned_units(borrow_ify の出力, type_env)` は同値である。
-      BY D14, <3>2, CODE src/rc_ir/ownership.rs: all_owned_units
-      D14 より、呼び出し先が `u` を所有するとは `(p_i.name, u)` がその関数の `borrowed_units` に
-      入らないことである。`all_owned_units` は、各関数の各パラメータ・capture `p'` と各
-      `unit ∈ rc_units(ty(p'))` について、`(p'.name, unit)` が `borrowed_units` に入らないときに
-      それを集合に入れる。<3>2 より `u` はその `unit` の 1 つである。
-    <3>4. 呼び出し先が `funcs` に無いとき、消費は無条件に起きる。
-      BY A7, D9, <3>1
-      A7 より、`prog.funcs` に無い呼び出し先は全パラメータの全 unit を所有するものとして扱われる。
+    <3>3. `g` が `u` を所有することと `(p_i.name, u) ∈ all_owned_units(borrow_ify の出力, type_env)` は
+          同値である。
+      BY D14, <2>0, <3>2, CODE src/rc_ir/ownership.rs: all_owned_units
+      D14 より、`g` が `u` を所有するとは `(p_i.name, u)` が `g` の `borrowed_units` に入らないことで
+      ある。`all_owned_units` は、各関数の各パラメータ・capture `p'` と各 `unit ∈ rc_units(ty(p'))` に
+      ついて、`(p'.name, unit)` が `borrowed_units` に入らないときにそれを集合に入れる。<2>0 より `g` は
+      出力の `funcs` の関数であり、<3>2 より `u` はその `unit` の 1 つである。
     <3>5. QED
-      BY <3>1, <3>2, <3>3, <3>4
-  <2>2. `V` の本体の `App` の呼び出し先は `route` が決めた版であり、`call_rc` の `callee_owns` は
-        <2>1 の判定と同じものである -- 呼び出し先が出力の `funcs` の関数であるときは
-        `(p_i.name, u) ∈ all_owned_units(出力)`、`funcs` に無いときは無条件に真である。
-    BY A7, P12, P13, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+      BY <3>1, <3>2, <3>3
+  <2>2. この位置で `(p, μ)` の消費が起きるならば、`call_rc` の `callee_owns` は真である。
+    BY <2>0, <2>1, P13, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/ownership.rs: all_owned_units
-    `call_rc` は `params = self.callee_params.get(&FuncRef { name: callee.name })` が `None` のとき
-    `callee_owns` を真とし、`Some(params)` のとき
-    `self.owned_units.contains(&(params[arg_idx].0.clone(), unit.clone()))` を見る。`callee_params` は
-    出力の各版のパラメータ名と型を持つので、その鍵はちょうど出力の `funcs` の名前であり (P12 より
-    `route` が返す名前は、入力の関数を名指すときは出力の `funcs` の鍵、局所変数を経由する間接呼び出しの
-    ときはどちらの `funcs` の鍵でもない)、`None` の場合は A7 が扱う場合と同じである。`owned_units` は
-    出力の各版のパラメータ・capture の所有 unit を持ち、P13 よりそれは出力の `borrowed_units` に
-    入らない unit の全体、すなわち `all_owned_units(出力)` のパラメータ・capture の部分に一致する。
+    `call_rc` は `params` が `None` のとき `callee_owns` を真とし、`Some(params)` のとき
+    `self.owned_units.contains(&(params[arg_idx].0.clone(), unit.clone()))` を見る。`None` の場合は
+    無条件に真である。`Some` の場合は <2>0 より `params[i].0 = p_i.name` であり、`owned_units` は出力の
+    各版のパラメータ・capture の所有 unit を持ち、P13 よりそれは出力の `borrowed_units` に入らない
+    unit の全体、すなわち `all_owned_units(出力)` のパラメータ・capture の部分に一致するので、
+    <2>1 の所属がその検査を真にする。
   <2>3. CASE `owns_unit(p, u)` が真である。`V` の本体に `Retain(p, u)` 節点が在れば <1>2 より落ちない
         ので (A) であり、無ければ (C) である。
     BY <1>2
   <2>4. CASE `owns_unit(p, u)` が偽である。このとき `call_rc` は `(p, u)` を `before` に入れる。
-    BY <2>1, <2>2, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
-    `call_rc` は `callee_owns && !arg_owned` のとき `before.push((arg.clone(), unit))` を行う。
-    <2>1 と <2>2 より `callee_owns` は真であり、仮定より `arg_owned = owns_unit(p, u)` は偽である。
+    BY <2>2, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
+    `call_rc` は `callee_owns && !arg_owned` のとき `before.push((arg.clone(), unit))` を行う。L16 の
+    仮定よりこの位置で `(p, μ)` の消費は起きるので、<2>2 より `callee_owns` は真であり、この CASE の
+    仮定より `arg_owned = owns_unit(p, u)` は偽である。
   <2>5. QED
     BY <2>3, <2>4, P11
     <2>4 の場合、`call_rc` が `before` に入れた `(p, u)` について、P11 よりこの呼び出しの前に
