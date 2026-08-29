@@ -58,7 +58,7 @@ use std::sync::Arc;
 // The type constructors the compiler provides itself — the primitive types, the function arrow,
 // `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
 // a user-defined type would get from its declaration.
-// PROOF: P1, P2, P7, P18, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P18, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
@@ -4365,7 +4365,7 @@ impl LLVMGen for InlineLLVMStructGetBody {
             && Self::borrows_container(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -4775,7 +4775,7 @@ impl InlineLLVMStructPunchBody {
     /// The path of the argument's boxed leaf that the result's boxed leaf at `path` carries, where
     /// the struct is unboxed. A leaf of the punched-struct component sits at the path it had in the
     /// argument; a leaf of the moved-out field sits under the punched field.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn arg_leaf_path(&self, path: &FieldPath) -> FieldPath {
         // A boxed leaf of the result descends through the field or through the punched struct.
         let (head, rest) = path
@@ -4862,7 +4862,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -5047,7 +5047,7 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -6048,7 +6048,7 @@ impl LLVMGen for InlineLLVMStructSetBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,

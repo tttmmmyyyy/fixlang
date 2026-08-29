@@ -1516,7 +1516,7 @@ fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
 /// # Arguments
 /// * `capture` - the types a `#DynamicObject` holds captured, which become its trailing fields.
 ///   It is empty for every other type, whose fields follow from the type alone.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn ty_to_object_ty(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>,

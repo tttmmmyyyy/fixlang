@@ -326,6 +326,7 @@ impl CSignature {
 /// eightbytes (System V AMD64), or by whether it is a homogeneous floating-point aggregate
 /// (AAPCS64), and the shapes on which that agrees with Fix's element-wise layout differ from target
 /// to target.
+// PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn c_boundary_tycon(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon>> {
     let head = ty.toplevel_tycon()?;
     if ty.is_box(type_env) {

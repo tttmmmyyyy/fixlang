@@ -37,6 +37,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     }
 
     /// The mutable free-variable references (for renaming).
+    // PROOF: D/A, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn free_vars_mut(&mut self) -> Vec<&mut FullName>;
 
     /// The free variables by value.
