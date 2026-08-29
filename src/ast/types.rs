@@ -1550,6 +1550,7 @@ impl TypeNode {
     /// The kind of this type, read from the kinds `kind_env` gives the type constructors and the
     /// associated types, and from the kinds the type variables carry. A type applied to an
     /// argument whose kind its own kind does not take is reported as an error.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn kind(self: &Arc<TypeNode>, kind_env: &KindEnv) -> Result<Arc<Kind>, Errors> {
         /// The error reported where `application` applies `fun` of kind `fun_kind` to `arg` of
         /// kind `arg_kind`, which `fun_kind` does not accept.
@@ -2807,6 +2808,7 @@ impl Scheme {
     }
 
     /// Check that the kinds the constraints and the type demand of each type variable agree.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn check_kinds(&self, kind_env: &KindEnv) -> Result<(), Errors> {
         for p in &self.predicates {
             p.check_kinds(kind_env)?;

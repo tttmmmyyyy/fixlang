@@ -853,6 +853,18 @@ D7 が読みから除いているもの -- 参照カウントと状態バイト 
 
 各仮定には、それを果たす者を書く。
 
+**「果たす者」と「検査」の読み方。** 仮定が守られる強さは 3 段ある。
+
+- **構成上そうなる。** 文法・kind の体系・型の定義から、破れた入力が作れない。A10 の飽和と A13 の名前の形が
+  これである。
+- **検査して診断を出す。** 破れた入力は利用者へのエラーになる。A10 の大きさの部分 (`validate_layouts`) が
+  これである。
+- **表明だけが支える。** 破れると利用者のプログラムのコンパイルが panic で落ちる。miscompile よりはましだが、
+  利用者にとっては同じく不具合である。**表明は不変条件の出どころであって、仮定を果たす者ではない。**
+
+**`develop_mode` でだけ走る表明は 3 段目より弱い。** 利用者が使うコンパイラでは走らないので、破れても落ちず、
+そのまま先へ進む。A9・A11・A13・A21 の「検査」はこれであり、テストの信号として読む。
+
 **A1 (入力が RC 規律を満たす)** -- 果たす者: 前段のパス (`insert_rc`)。
 `borrow_ify` に渡されるプログラムは D12 の意味で RC 規律を満たす。またそのプログラムのすべての関数の
 `borrowed_units` は空である。すなわちすべてのパラメータ・capture の unit が所有される。
@@ -1206,7 +1218,13 @@ tycon は `type_env` にあり、`no_size_in_place` の in-place の降下は有
 TypeNode::is_ground`)、部分適用された tycon は ground である。`declared_field_types` はそこで
 `assert_eq!(args.len(), tycon_info.tyvars.len())` に当たって止まる
 (`CODE src/ast/types.rs: TypeNode::declared_field_types`)。`unpunched_field_types` を呼ぶ歩みが abort
-しないことを言う議論はこの節を読む。**その降下で到達する型も ground であり、tycon が `type_env` にある。**
+しないことを言う議論はこの節を読む。
+
+**飽和を果たすのは kind の体系であって `validate_layouts` ではない。** 宣言された型の kind は
+`check_kinds` が検査して診断を出し (`CODE src/ast/types.rs: TypeNode::check_kinds`,
+`TypeNode::kind` -- `TyApp` の腕が関数側の kind と引数の kind を突き合わせる)、式の型は kind `*` を持つ。
+`validate_layouts` はこの節を**検査しない** -- その走査自身が `no_size_reason` から `held_types` を経て
+`declared_field_types` に入るので、飽和していない型に出会えば診断を出さずに同じ `assert` で止まる。**その降下で到達する型も ground であり、tycon が `type_env` にある。**
 `is_fully_unboxed` はその降下の上の再帰であり、途中の各型で `toplevel_tycon_info` を呼ぶので、
 到達する型の側にも同じことが要る。これが無いと `boxed_leaf_paths` も `rc_units` も停止しない。
 

@@ -18,6 +18,7 @@ src/ast/program.rs	Program::validate_layouts	P1,P2	afd5670a4fe7
 src/ast/typedecl.rs	TypeDefn::tycon_info	P1,P2	f04fd919ce0d
 src/ast/types.rs	TyConInfo	P1,P2	e2f309478269
 src/ast/types.rs	TyConVariant	P1,P2,P5,P6,P7,P7c,P7f,P18a,P18b	18d30eb4b988
+src/ast/types.rs	TypeNode::check_kinds	D/A	8a88faed2aa7
 src/ast/types.rs	TypeNode::declared_field_types	D/A	eda5fdc86a3c
 src/ast/types.rs	TypeNode::field_types	P1,P2	f3b4b3ad1075
 src/ast/types.rs	TypeNode::is_array	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b	d430c390ceb3
@@ -30,6 +31,7 @@ src/ast/types.rs	TypeNode::is_punched_array	P7a,P7d,P7e	426c57ec3ba1
 src/ast/types.rs	TypeNode::is_struct	P5,P6,P7,P7a,P7d,P7e	bae105c4d2f0
 src/ast/types.rs	TypeNode::is_unbox	P1,P2	9260dc476785
 src/ast/types.rs	TypeNode::is_union	P5,P6,P7,P7a,P7d,P7e	eaa9230b88af
+src/ast/types.rs	TypeNode::kind	D/A	a08211f10d71
 src/ast/types.rs	TypeNode::toplevel_tycon_info	P1,P2,P5,P6,P7	ae62bc398a0a
 src/ast/types.rs	TypeNode::unpunched_field_types	P1,P2,P3,P4,P5,P6,P7,P7c,P7f,P18a,P18b	ecae1220e285
 src/ast/types.rs	type_funptr	P26	3c1291d61de1
