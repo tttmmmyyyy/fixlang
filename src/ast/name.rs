@@ -232,7 +232,7 @@ impl NameSpace {
 
 /// An entity's name together with the path it is written under: `Std::Iterator::empty` is the name
 /// `empty` under the namespace `Std::Iterator`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FullName {
     /// The path the entity is written under.
@@ -297,7 +297,7 @@ impl FullName {
     }
 
     /// Whether the name is written with no namespace, as a local variable's is.
-    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         return self.namespace.is_local();
     }

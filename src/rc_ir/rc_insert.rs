@@ -27,7 +27,7 @@ use std::mem;
 use std::sync::Arc;
 
 /// Insert explicit `Retain`/`Release` nodes into every function and global initializer of `prog`.
-// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
     let funcs = mem::take(&mut prog.funcs);
     let mut new_funcs = Map::default();
@@ -88,7 +88,7 @@ impl<'a> RcInserter<'a> {
     }
 
     /// Rewrite a function body, then release any parameter or capture that the body never uses.
-    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_func(&self, mut func: RcFunc) -> RcFunc {
         let (body, live) = self.insert_into_expr(func.body, &Set::default());
 
@@ -123,7 +123,7 @@ impl<'a> RcInserter<'a> {
 
     /// Process one expression, given the set of local variables live *after* it. Returns the
     /// rewritten expression and the set of local variables live *before* it (at its entry).
-    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_expr(
         &self,
         node: RcExprNode,
@@ -134,7 +134,7 @@ impl<'a> RcInserter<'a> {
         grow_stack(|| self.insert_into_expr_inner(node, live_after))
     }
 
-    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_expr_inner(
         &self,
         node: RcExprNode,
@@ -176,7 +176,7 @@ impl<'a> RcInserter<'a> {
     /// An `eval x; cont`. `Eval` observes `x` without consuming it (a borrow), so — like a borrowed
     /// operand at its last use — `x` is released after the eval iff it is a local that needs reference
     /// counting and is dead in the continuation.
-    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_eval(
         &self,
         x: RcVar,
@@ -200,7 +200,7 @@ impl<'a> RcInserter<'a> {
     }
 
     /// A `let x = rhs; cont` whose `rhs` is not a `Match` (the `Match` case is `insert_into_match`).
-    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_operation_let(
         &self,
         x: RcVar,
@@ -264,7 +264,7 @@ impl<'a> RcInserter<'a> {
     /// and releases the container; an unboxed container moves the fields out and drops the fields not
     /// named here. So the field retains, the container release, and the dropped-field releases are not
     /// emitted here.
-    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_destructure(
         &self,
         container: RcVar,
@@ -306,7 +306,7 @@ impl<'a> RcInserter<'a> {
     }
 
     /// A `let x = match scrut { arms }; cont`.
-    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_match(
         &self,
         x: RcVar,
@@ -418,7 +418,7 @@ impl<'a> RcInserter<'a> {
 
     /// The local variables an arm references from the enclosing scope (its free locals minus the
     /// payload the arm binds).
-    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn arm_free_locals(&self, arm: &MatchArm) -> Set<FullName> {
         let mut free = free_locals(&arm.body);
         free.remove(&arm.payload.name);
@@ -427,7 +427,7 @@ impl<'a> RcInserter<'a> {
 
     /// Whether a variable needs reference counting: a fully-unboxed value has no boxed leaf, so its
     /// `Retain`/`Release` would generate no code and is omitted.
-    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn needs_rc(&self, var: &RcVar) -> bool {
         !var.ty.is_fully_unboxed(self.type_env)
     }
@@ -435,7 +435,7 @@ impl<'a> RcInserter<'a> {
     /// Wrap `node` in a `Retain` of `var` iff `var` is a local that needs reference counting and is
     /// live in `live` — the owned-operand rule for a variable a consuming construct (a `Ret`, a
     /// `Destructure`, or a `Match` scrutinee) uses, when it is still live afterward.
-    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn retain_if_live(&self, var: &RcVar, live: &Set<FullName>, node: RcExprNode) -> RcExprNode {
         if var.name.is_local() && live.contains(&var.name) && self.needs_rc(var) {
             build_retains(vec![var.clone()], node)
@@ -448,7 +448,7 @@ impl<'a> RcInserter<'a> {
 /// The operands of a compound expression together with how each is taken, in evaluation order
 /// (callee before arguments). A `Match` rhs never reaches here; it is handled by
 /// `insert_into_match`.
-// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn rhs_operands(rhs: &RcRhs, type_env: &TypeEnv) -> Vec<(RcVar, Ownership)> {
     match rhs {
         RcRhs::Var(v) => vec![(v.clone(), Ownership::Own)],
@@ -481,7 +481,7 @@ fn rhs_operands(rhs: &RcRhs, type_env: &TypeEnv) -> Vec<(RcVar, Ownership)> {
 }
 
 /// Wrap `cont` in a chain of `Retain` nodes (the first element outermost).
-// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_retains(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     vars.into_iter().rev().fold(cont, |c, v| {
         let source = v.source.clone();
@@ -493,7 +493,7 @@ fn build_retains(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
 }
 
 /// Wrap `cont` in a chain of `Release` nodes (the first element outermost).
-// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_releases(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     vars.into_iter().rev().fold(cont, |c, v| {
         let source = v.source.clone();
@@ -504,7 +504,7 @@ fn build_releases(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     })
 }
 
-// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn insert_if_local(set: &mut Set<FullName>, name: &FullName) {
     if name.is_local() {
         set.insert(name.clone());
@@ -513,7 +513,7 @@ fn insert_if_local(set: &mut Set<FullName>, name: &FullName) {
 
 /// Returns the free local variables of `node`: the local names it references but does not itself
 /// bind. Names are globally unique, so referenced-minus-bound is exact.
-// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn free_locals(node: &RcExprNode) -> Set<FullName> {
     let mut refs = Set::default();
     let mut bound = Set::default();
@@ -525,7 +525,7 @@ fn free_locals(node: &RcExprNode) -> Set<FullName> {
 /// The traversal behind `free_locals`: record into `refs` every local name `node` references and
 /// into `bound` every local name it binds — a `Let` variable, a `Match` arm's payload variable, or
 /// a `Destructure` field — descending through the continuation and match arms.
-// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_referenced_and_bound(
     node: &RcExprNode,
     refs: &mut Set<FullName>,

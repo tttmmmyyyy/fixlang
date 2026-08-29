@@ -49,7 +49,7 @@ pub fn make_set<T: Eq + Hash>(iter: impl IntoIterator<Item = T>) -> Set<T> {
 /// Run `f` on a stack grown on demand, so a deeply recursive traversal — the RC IR passes over a
 /// continuation chain, type checking over a nested expression — does not overflow the stack on a
 /// deeply nested input.
-// PROOF: D/A, P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn grow_stack<R>(f: impl FnOnce() -> R) -> R {
     // Allocate another 1 MiB of stack whenever less than 64 KiB of it remains.
     stacker::maybe_grow(64 * 1024, 1024 * 1024, f)

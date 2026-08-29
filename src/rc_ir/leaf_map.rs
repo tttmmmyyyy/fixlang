@@ -25,7 +25,7 @@ use std::sync::Arc;
 /// tuple, or union) recurses into the fields that hold a value (a union's variants' payloads); a
 /// fully unboxed value has none. It is the single source of truth for which of a type's paths are
 /// boxed leaves.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     /// Descend a type, pushing onto `out` the path of each boxed leaf reached. `path` is the field
     /// path from the value's root down to `ty`, which each pushed leaf is named relative to.
@@ -87,7 +87,7 @@ impl<T: Clone> LeafMap<T> {
 
     /// The fact of each boxed leaf of a value of type `ty`. `leaf` is called once per boxed leaf,
     /// with that path, so no leaf of the type can be left out.
-    // PROOF: P1, P2, P3, P4, P7, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_shape(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -112,7 +112,7 @@ impl<T: Clone> LeafMap<T> {
 
     /// The fact recorded at `path`, or `None` where `path` is not a boxed leaf of this value — a
     /// scalar, or an aggregate queried at a non-leaf path such as its root.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get(&self, path: &[usize]) -> Option<&T> {
         self.0.get(path)
     }
@@ -132,7 +132,7 @@ impl<T: Clone> LeafMap<T> {
 
     /// The facts of the boxed leaves under `path` — the leaves one reference-counting operation on
     /// that subtree touches. The empty path covers the whole value.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn leaves_under<'a>(&'a self, path: &'a [usize]) -> impl Iterator<Item = &'a T> {
         self.0
             .iter()

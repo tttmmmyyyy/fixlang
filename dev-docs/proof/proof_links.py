@@ -69,7 +69,12 @@ PROOF_COMMENT = re.compile(r"^\s*// PROOF: ")
 
 
 def propositions_of(text):
-    """The propositions a status-table cell names, expanding `P8 - P14` into each of its members."""
+    """The propositions a status-table cell names, expanding `P8 - P14` into each of its members.
+
+    A cell may also carry a name that is not a numbered proposition -- the main theorem's `T`, or a
+    label like `(P-insert)` for a file whose obligation is an assumption rather than a proposition.
+    Such a name is kept as it stands, so that the items only that file cites still get a comment
+    saying which part of the proof rests on them."""
     out = []
     for part in re.split(r"[、,]", text):
         part = part.strip().strip("*")
@@ -77,11 +82,18 @@ def propositions_of(text):
         if span:
             out.extend(f"P{n}" for n in range(int(span.group(1)), int(span.group(2)) + 1))
             continue
-        one = re.match(r"(P\d+)", part)
+        # The letter is part of the name: `P7a` and `P7e` are different propositions in different
+        # files, and dropping it would give six of them one comment.
+        one = re.match(r"(P\d+[a-z]?)", part)
         if one:
             out.append(one.group(1))
             continue
-        if part == "T":
+        # A bare name (the main theorem's `T`) or a parenthesised label of more than one letter
+        # (`(P-insert)`). One letter in parentheses is a clause of the proposition beside it --
+        # the `(b)` of `P5 (a), (b)` -- and names no file of its own.
+        if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", part) or re.fullmatch(
+            r"\([A-Za-z][A-Za-z0-9_-]+\)", part
+        ):
             out.append(part)
     return out
 
@@ -175,10 +187,17 @@ def digest(lines, span):
 
 
 def proposition_order(name):
-    """Sort key: the frame first, then `P<n>` in numeric order, then the ones carrying no number."""
+    """Sort key: the frame first, then `P<n>` and its lettered variants, then everything else.
+
+    The key orders the names totally. A set of them iterates in an order that varies from run to
+    run, so a key that leaves two names tied would write the comment one way and then the other,
+    and the comments would never settle."""
     if name == FRAME:
-        return (-1, 0)
-    return (0, int(name[1:])) if re.fullmatch(r"P\d+", name) else (1, 0)
+        return (-1, 0, "")
+    numbered = re.fullmatch(r"P(\d+)([a-z]?)", name)
+    if numbered:
+        return (0, int(numbered.group(1)), numbered.group(2))
+    return (1, 0, name)
 
 
 def comment_for(props, directory):

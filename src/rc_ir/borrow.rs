@@ -61,12 +61,12 @@ use std::sync::Arc;
 /// beside them are **units**, one per reference-count operation, and `truncate_to_unit` turns a leaf
 /// into the unit it keys to. Both are sets of `VarPath`, so the name is what tells one from the
 /// other.
-// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 struct OwnedLeaves(Set<VarPath>);
 
 impl OwnedLeaves {
     /// Whether the leaf `path` of the parameter `var` is owned.
-    // PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn owns(&self, var: &FullName, path: &FieldPath) -> bool {
         self.0.contains(&(var.clone(), path.clone()))
     }
@@ -75,7 +75,7 @@ impl OwnedLeaves {
 /// Infer parameter ownership for every function of `prog` by a fixed point: start every parameter
 /// leaf `Borrow`, then repeatedly demote to `Own` any leaf that a consume site traces back to, until
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
-// PROOF: D/A, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
     let var_tables: Map<FuncRef, VarTable> = prog
         .funcs
@@ -133,7 +133,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
 /// `owns_unit` answers once for such a pair, while the node it decides acts on each boxed leaf under
 /// the unit. Where those leaves come from roots the version owns differently, no single answer is
 /// right, so the leaves are levelled (`level_ownership`) before any of them is read.
-// PROOF: D/A, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> {
     let mut sites = vec![];
     for_each_node(&func.body, &mut |node| match node.expr.as_ref() {
@@ -159,7 +159,7 @@ fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> 
 /// and `Own` disposes a reference the borrowed leaf was only lent. Owning all of them is the answer
 /// the reference counting can express, and a value owned where it could have been borrowed costs a
 /// count rather than correctness. Ownership only grows here, so the fixed point still terminates.
-// PROOF: D/A, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 fn level_ownership(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -197,7 +197,7 @@ fn level_ownership(
 /// leaves into `owned_units`, so a unit's other leaves are owned by that step whether or not the
 /// inference ever named them. Reading the leaves directly here would miss exactly those, and the
 /// unit would be rewritten as owned while the levelling never fired.
-// PROOF: D/A, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 fn owns_object_yet(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -227,7 +227,7 @@ fn owns_object_yet(
 ///
 /// A path reaches a leaf from either side. A unit path stops above the leaves of an unboxed union's
 /// variants, and a path into a variant runs below the leaf a punched array holds.
-// PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 fn covered_leaves(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Vec<FieldPath> {
     boxed_leaf_paths(ty, type_env)
         .into_iter()
@@ -241,7 +241,7 @@ fn covered_leaves(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> V
 /// parameter, route each direct call to a version, rewrite the reference counting accordingly, and
 /// annotate every output version with the parameter/capture units it borrows
 /// (`RcFunc::borrowed_units`).
-// PROOF: D/A, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26, P27, P29, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
     let owned_leaves = infer_ownership(prog, type_env);
 
@@ -377,7 +377,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
 /// release of the other and delete both.
 ///
 /// Walking every binder costs a pass over the program, so this runs where the test suite runs it.
-// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, T (dev-docs/proof/rc_ir/borrow-cancel)
 fn check_clone_names_are_fresh<'a>(
     prog: &RcProgram,
     renames: impl Iterator<Item = &'a Map<FullName, FullName>>,
@@ -429,7 +429,7 @@ pub fn param_ownership_shapes(
 
 /// The name of a function's borrow version: its name with a `#borrow` suffix. No lowered name ends in
 /// `#borrow`, so this stays globally unique.
-// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P26, P27, P29, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29, T (dev-docs/proof/rc_ir/borrow-cancel)
 fn borrow_funcref(name: &FuncRef) -> FuncRef {
     let mut borrow_name = name.name.clone();
     borrow_name.name.push_str("#borrow");
@@ -437,7 +437,7 @@ fn borrow_funcref(name: &FuncRef) -> FuncRef {
 }
 
 /// Whether borrow inference left any of a function's parameter leaves `Borrow`.
-// PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 fn func_has_borrowable_param(
     func: &RcFunc,
     owned_leaves: &OwnedLeaves,
@@ -459,7 +459,7 @@ fn func_has_borrowable_param(
 /// A `Destructor` value exists only where `Destructor::_make` built one, and the binding that
 /// operation writes has the type `(IOState, Destructor a)`, so walking the type expression of every
 /// binding finds it without expanding type definitions.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn builds_a_destructor(prog: &RcProgram) -> bool {
     let mut found = false;
     for func in prog.funcs.values() {
@@ -528,7 +528,7 @@ fn binds_a_destructor(node: &RcExprNode) -> bool {
 ///
 /// Only these functions are held back. A function that never reaches such an op computes the same
 /// result at either count, so borrowing is free to change it.
-// PROOF: D/A, P7, P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
     let mut observing: Set<FuncRef> = Set::default();
     let mut callees: Map<FuncRef, Vec<FuncRef>> = Map::default();
@@ -629,7 +629,7 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
 }
 
 /// The name/type of each parameter and capture, in order.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn param_names_and_types(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
     func.params
         .iter()
@@ -640,7 +640,7 @@ fn param_names_and_types(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
 
 /// Every reference-counting unit of a function's parameters and capture, each as the
 /// `(variable, unit path)` pair the owned and borrowed unit sets are keyed by.
-// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 fn param_capture_units(func: &RcFunc, type_env: &TypeEnv) -> Vec<VarPath> {
     func.params
         .iter()
@@ -776,7 +776,7 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
 /// capture, `let` bindings, destructure fields, match-arm payloads) and rewrite all occurrences,
 /// keeping global name uniqueness. References to top-level functions stay free here, for routing to
 /// retarget. Returns the clone and the binder renaming.
-// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P27, P29, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P27, P29, T (dev-docs/proof/rc_ir/borrow-cancel)
 fn clone_func(
     func: &RcFunc,
     new_ref: FuncRef,
@@ -804,7 +804,7 @@ fn clone_func(
 
 /// The per-version state the body rewrite reads: this version's aliasing vars and tail calls,
 /// whether it is the borrow clone, and the whole-program ownership and version tables.
-// PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 struct RewriteCtx<'a> {
     /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
@@ -831,7 +831,7 @@ struct RewriteCtx<'a> {
 impl<'a> RewriteCtx<'a> {
     /// The rewrite state of one output version of `func`. `is_borrow_version` marks the borrow
     /// clone, the version whose reference counting on its borrowed parameter leaves is dropped.
-    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn new(
         func: &RcFunc,
         is_borrow_version: bool,
@@ -854,13 +854,13 @@ impl<'a> RewriteCtx<'a> {
     /// Rewrite a body for this version: route each direct call to a callee version, bracket a call
     /// with the reference counting the routed callee no longer does, and drop the counting this
     /// version's borrowed parameters no longer need.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn rewrite(&self, node: &RcExprNode) -> RcExprNode {
         grow_stack(|| self.rewrite_inner(node))
     }
 
     /// One node of the rewrite, rebuilt over its rewritten continuation.
-    // PROOF: D/A, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P26, P27, P29, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn rewrite_inner(&self, node: &RcExprNode) -> RcExprNode {
         match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
@@ -910,7 +910,7 @@ impl<'a> RewriteCtx<'a> {
     /// routing to it is both safe and beneficial; otherwise keep the original (the all-`Own` version,
     /// or an indirect callee this leaves untouched). `k` is the call's continuation, which the
     /// benefit test reads to tell an argument's last use from a use that outlives the call.
-    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn route(&self, x: &RcVar, callee: &RcVar, args: &[RcVar], k: &RcExprNode) -> RcVar {
         let orig = FuncRef {
             name: callee.name.clone(),
@@ -927,7 +927,7 @@ impl<'a> RewriteCtx<'a> {
 
     /// A call is safe to route to the borrow version when it is not in tail position, or it passes no
     /// owned argument — so the after-call release the borrow version needs never lands on a tail call.
-    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
     fn routing_is_safe(&self, x: &RcVar, args: &[RcVar]) -> bool {
         !self.tail.contains(&x.name) || !args.iter().any(|a| self.any_owned_unit(a))
     }
@@ -939,7 +939,7 @@ impl<'a> RewriteCtx<'a> {
     /// call, where the borrow cancels the retain made ahead of it. An owned value whose object ends
     /// at the call is moved either way, so borrowing it removes no retain and only delays its
     /// release.
-    // PROOF: P3, P4, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn routing_saves_retain(
         &self,
         borrow_version: &FuncRef,
@@ -974,7 +974,7 @@ impl<'a> RewriteCtx<'a> {
     }
 
     /// Whether this version owns the value at any of `arg`'s reference-counting units.
-    // PROOF: D/A, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
     fn any_owned_unit(&self, arg: &RcVar) -> bool {
         rc_units(&arg.ty, self.type_env)
             .iter()
@@ -985,7 +985,7 @@ impl<'a> RewriteCtx<'a> {
     /// or from a producer (a fresh value, a call result, a boxed-container read), is owned; a leaf
     /// that comes from a borrowed parameter is not. A leaf that may be one of several objects is
     /// owned only when it is owned whichever it is.
-    // PROOF: P3, P4, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn owns_unit(&self, arg: &RcVar, unit: &FieldPath) -> bool {
         origin(&self.vars, self.type_env, &arg.name, unit)
             .candidates()
@@ -1004,7 +1004,7 @@ impl<'a> RewriteCtx<'a> {
     ///
     /// Only the borrow version needs checking. The all-owning original holds every parameter and
     /// capture unit in `owned_units`, so `owns_object` is true of each of its objects.
-    // PROOF: P3, P4, P7, P8, P9, P10, P11, P12, P13, P14, T (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, T (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_ownership_is_levelled(&self, func: &RcFunc) {
         for (v, unit) in levelled_sites(func, self.type_env) {
             let where_from = origin(&self.vars, self.type_env, &v.name, &unit);
@@ -1026,7 +1026,7 @@ impl<'a> RewriteCtx<'a> {
     }
 
     /// Whether this version owns the object a leaf comes from.
-    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn owns_object(&self, root: &FullName, path: &FieldPath) -> bool {
         match self.vars.param_tys.get(root) {
             // The value is owned only when every reference-counting unit the path covers is owned.
@@ -1048,7 +1048,7 @@ impl<'a> RewriteCtx<'a> {
     /// The reference-count operations a call site takes over: for each argument unit, a release after
     /// the call when an owned value is passed to a borrowed position, and a retain before the call
     /// when a borrowed value is passed to an owning position.
-    // PROOF: D/A, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn call_rc(
         &self,
         callee: &RcVar,
@@ -1082,7 +1082,7 @@ impl<'a> RewriteCtx<'a> {
 
     /// Rewrite a `Retain`/`Release`: in the borrow clone, drop the units that root at a borrowed
     /// parameter (the callee no longer counts them); otherwise keep the node unchanged.
-    // PROOF: D/A, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn rewrite_rc(
         &self,
         v: &RcVar,
@@ -1107,7 +1107,7 @@ impl<'a> RewriteCtx<'a> {
 }
 
 /// An expression node with the given source span.
-// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P15, P16, P17, P18, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn expr_node(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
     RcExprNode {
         expr: Arc::new(expr),
@@ -1116,7 +1116,7 @@ fn expr_node(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
 }
 
 /// A `Release` (when `is_release`) or `Retain` of `var` at `path` wrapping continuation `k`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn rc_node(
     is_release: bool,
     var: RcVar,
@@ -1134,7 +1134,7 @@ fn rc_node(
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn prepend_rc(units: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
     units.into_iter().rev().fold(k, |cont, (var, path)| {
         rc_node(is_release, var, path, RcState::Unknown, cont, &None)
@@ -1179,7 +1179,7 @@ fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
 /// Decompose every `Retain`/`Release` into one node per reference-counting unit its path covers, so
 /// that every later pass sees reference counting at unit granularity. A path that already names a
 /// single unit is unchanged; a whole-value retain on a fully-unboxed value (a no-op) disappears.
-// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
     for func in prog.funcs.values_mut() {
         func.body = split_body(&func.body, type_env);
@@ -1191,13 +1191,13 @@ pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
 
 /// Rebuild a body with every `Retain`/`Release` in it replaced by one node per reference-counting
 /// unit its path covers.
-// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn split_body(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
     grow_stack(|| split_body_inner(node, type_env))
 }
 
 /// One node of `split_body`'s rebuild, over its rebuilt continuation.
-// PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
     match node.expr.as_ref() {
         RcExpr::Retain(v, path, state, k) => {
@@ -1244,7 +1244,7 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
 }
 
 /// Rebuild a `Retain`/`Release` as one node per unit under its path, preserving the state and span.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn split_rc(
     v: &RcVar,
     path: &FieldPath,
@@ -1272,7 +1272,7 @@ fn split_rc(
 /// release of one of those objects, named after the object, would be filed elsewhere and never meet
 /// the retain. What decides whether a release closes a retain is the objects the two act on, which
 /// `References` already carries.
-// PROOF: P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 type PendingRetains = Vec<PendingRetain>;
 
 /// A retain whose bump is still outstanding, and the references of it that no release has un-bumped
@@ -1281,7 +1281,7 @@ type PendingRetains = Vec<PendingRetain>;
 /// A retain of an unboxed union bumps every reference its payload holds, while a release of a
 /// projection of that payload un-bumps one of them, so a group of releases un-bumps one retain.
 /// Cancelling it takes the whole group, and only once the group leaves nothing outstanding.
-// PROOF: P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 struct PendingRetain {
     /// The retain node. The releases that un-bump it are recorded under this id.
@@ -1291,7 +1291,7 @@ struct PendingRetain {
 }
 
 /// What a release does to the retains pending where it happens.
-// PROOF: P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 enum UnBump {
     /// It un-bumps part or all of the innermost bracket that acts on what it acts on, whose retain
     /// this is.
@@ -1308,7 +1308,7 @@ enum UnBump {
 /// ones outside it bumped. A retain that shares an object with the release without carrying
 /// everything it disposes is the release reaching past that bracket. A retain left with nothing
 /// outstanding is un-bumped whole and stops being pending.
-// PROOF: P5, P6, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn un_bump(pending: &mut PendingRetains, un_bumped: &References) -> UnBump {
     // A release no pending retain shares an object with disposes of a reference the walk did not
     // add — an owned parameter, or a value produced here — so it un-bumps no retain.
@@ -1336,7 +1336,7 @@ fn un_bump(pending: &mut PendingRetains, un_bumped: &References) -> UnBump {
 type NodeId = usize;
 
 /// The `NodeId` of a node: the address of its boxed `RcExpr`.
-// PROOF: P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn node_id(node: &RcExprNode) -> NodeId {
     node.expr.as_ref() as *const RcExpr as NodeId
 }
@@ -1346,7 +1346,7 @@ fn node_id(node: &RcExprNode) -> NodeId {
 /// value is consumed. Cancelling it (and the releases that un-bump it) keeps the value `Unique` for
 /// the uniqueness analysis. Each call's consume sites are decided by the parameter/capture units the
 /// functions own — the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
-// PROOF: D/A, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26, P27, P29, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, (P-insert), T (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
     let cancel_body = |vars: &VarTable, body: &RcExprNode| {
@@ -1418,7 +1418,7 @@ struct CancelAnalysis<'a> {
 impl<'a> CancelAnalysis<'a> {
     /// The references a reference-count node of this function acts on, which decide whether a
     /// release un-bumps a retain (`ownership::acted_references`).
-    // PROOF: P5, P6, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn acted_references(&self, v: &RcVar, path: &FieldPath) -> References {
         let references = acted_references(self.vars, self.type_env, v, path);
         // Reference counting is inserted only for a value that holds a reference, and
@@ -1440,7 +1440,7 @@ impl<'a> CancelAnalysis<'a> {
     /// `Ret` here returns from the function — consuming its value and closing no bracket; inside a
     /// match arm it is false, since the arm's `Ret` flows its value to the match binding. Returns the
     /// pending state at the node's exit, so a match arm's exit can be merged into its continuation.
-    // PROOF: P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     fn walk(
         &mut self,
         node: &RcExprNode,
@@ -1451,7 +1451,7 @@ impl<'a> CancelAnalysis<'a> {
     }
 
     /// One node of the walk, threading the pending-retain state through its continuation and arms.
-    // PROOF: D/A, P5, P6, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn walk_inner(
         &mut self,
         node: &RcExprNode,
@@ -1529,7 +1529,7 @@ impl<'a> CancelAnalysis<'a> {
     }
 
     /// Mark every retain the right-hand side consumes as needed.
-    // PROOF: P5, P6, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn consume_rhs(
         &mut self,
         pending: &mut PendingRetains,
@@ -1557,7 +1557,7 @@ impl<'a> CancelAnalysis<'a> {
 
     /// A consume of a leaf: every retain pending on an object the leaf may belong to is
     /// load-bearing here.
-    // PROOF: P3, P4, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn consume(&mut self, pending: &mut PendingRetains, var: &FullName, path: &[usize]) {
         let objects: Vec<VarPath> = origin(self.vars, self.type_env, var, path)
             .acted_on()
@@ -1570,7 +1570,7 @@ impl<'a> CancelAnalysis<'a> {
     /// A consume of some objects: every retain pending on one of them is load-bearing here, so it
     /// leaves the pending list without having been un-bumped.
     ///
-    // PROOF: P5, P6, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn consume_objects(&mut self, pending: &mut PendingRetains, objects: &[VarPath]) {
         pending.retain(|retain| {
             if objects
@@ -1587,7 +1587,7 @@ impl<'a> CancelAnalysis<'a> {
     /// The objects a reference-count node on `(v, path)` may act on besides the ones it names: for
     /// each boxed leaf under the path, the candidates of its origin other than the one the leaf's
     /// reference is counted under.
-    // PROOF: D/A, P3, P4, P5, P6, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P3, P4, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn other_objects(&self, v: &RcVar, path: &FieldPath) -> Vec<VarPath> {
         let mut out = vec![];
         for leaf in boxed_leaf_paths(&v.ty, self.type_env) {
@@ -1613,7 +1613,7 @@ impl<'a> CancelAnalysis<'a> {
     /// leave in different states, whose fate is non-uniform, and a retain an arm created itself,
     /// which the merged state has no place for — that state is built over the retains the match was
     /// entered with.
-    // PROOF: P5, P6, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn merge(
         &mut self,
         pending_in: &PendingRetains,
@@ -1659,7 +1659,7 @@ impl<'a> CancelAnalysis<'a> {
 
     /// The nodes to delete: every cancellable retain (one never marked needed and un-bumped by at
     /// least one release) together with the group of releases that un-bump it.
-    // PROOF: P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn cancelled(&self) -> Set<NodeId> {
         let mut out = Set::default();
         for &retain in &self.all_retains {
@@ -1682,13 +1682,13 @@ impl<'a> CancelAnalysis<'a> {
 }
 
 /// Rebuild a body with the analysis's cancelled retain and release nodes spliced out.
-// PROOF: P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn drop_nodes(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     grow_stack(|| drop_nodes_inner(node, to_delete))
 }
 
 /// One node of `drop_nodes`'s rebuild, over its rebuilt continuation.
-// PROOF: P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     match node.expr.as_ref() {
         RcExpr::Retain(v, path, state, k) => {

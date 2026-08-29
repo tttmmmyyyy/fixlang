@@ -164,7 +164,7 @@ pub const UNION_TAG_BITS: u32 = 8;
 /// How many variants a union may declare: the indices a tag of `UNION_TAG_BITS` bits tells apart.
 pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
 /// The index of the function pointer among a closure's fields.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 /// The index, among a closure's fields, of the pointer to the captured values the function is
 /// called with.
