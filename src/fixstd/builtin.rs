@@ -4296,13 +4296,11 @@ impl InlineLLVMStructGetBody {
     /// A field that does hold one is read by taking ownership of the container instead: as a borrow
     /// the result would alias the container's leaf, and reference-count insertion releases a
     /// *variable* at its last use without following aliases, so that leaf would be released twice.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_container(field_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
         field_ty.is_fully_unboxed(type_env)
     }
 }
 
-// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructGetBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {

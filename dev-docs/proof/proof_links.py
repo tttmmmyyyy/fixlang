@@ -133,8 +133,23 @@ def comment_for(props, directory):
     return f"// PROOF: {', '.join(ordered)} ({os.path.relpath(directory, REPO)})\n"
 
 
+def strip_comments():
+    """Take every `// PROOF:` line out of the sources, so the comments are rebuilt from nothing.
+
+    A citation the proof stops making leaves its comment behind, and rebuilding around the leftovers
+    would keep it. Stripping first also keeps the line positions the spans are computed at true."""
+    for source in rust_files_with_comments():
+        path = os.path.join(REPO, source)
+        lines = open(path, encoding="utf-8").readlines()
+        open(path, "w", encoding="utf-8").writelines(
+            line for line in lines if not PROOF_COMMENT.match(line)
+        )
+
+
 def main():
     write = "--write" in sys.argv[1:]
+    if write:
+        strip_comments()
     findings = []
     for directory in proof_dirs():
         cited = citations_of(directory)
