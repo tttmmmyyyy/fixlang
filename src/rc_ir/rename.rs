@@ -39,6 +39,7 @@ pub(crate) fn fresh_rename_function(
 }
 
 /// Assign `name` a fresh globally-unique name, suffixed with `pass_tag` and a counter.
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_name(
     name: &FullName,
     pass_tag: &str,
@@ -69,6 +70,7 @@ fn assign_fresh_names_to_binders(
 }
 
 /// Record the fresh name of every binder of one node, then descend into its continuation and arms.
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_names_to_binders_inner(
     node: &RcExprNode,
     pass_tag: &str,
@@ -106,6 +108,7 @@ fn assign_fresh_names_to_binders_inner(
 
 /// A variable with its name rewritten through `renaming`. A name `renaming` leaves out, such as a
 /// global's, stays as it is.
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
     let mut v = var.clone();
     if let Some(n) = renaming.get(&var.name) {
@@ -121,6 +124,7 @@ fn rename_expr(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprN
 }
 
 /// Rebuild one node with its variable occurrences rewritten, over its rewritten continuation.
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     let expr = match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => RcExpr::Let(
@@ -207,6 +211,7 @@ pub(crate) fn substitute_expr(node: &RcExprNode, subst: &Map<FullName, FullName>
 /// A deep clone of an arbitrary expression with every bound variable given a fresh globally-unique
 /// name. Free variables — those bound outside `node` — are left unchanged. `pass_tag` distinguishes
 /// this clone's fresh names from the ones other passes mint.
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn clone_fresh(node: &RcExprNode, pass_tag: &str, counter: &mut u64) -> RcExprNode {
     let mut rename: Map<FullName, FullName> = Map::default();
     assign_fresh_names_to_binders(node, pass_tag, &mut rename, counter);

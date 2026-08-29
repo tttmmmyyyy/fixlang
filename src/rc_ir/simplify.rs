@@ -42,6 +42,7 @@ use crate::rc_ir::rename::{clone_fresh, substitute_expr};
 use std::sync::Arc;
 
 /// The tag on the fresh names the case-of-case move mints, keeping them distinct from other passes'.
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 const PASS_TAG: &str = "cc";
 
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
