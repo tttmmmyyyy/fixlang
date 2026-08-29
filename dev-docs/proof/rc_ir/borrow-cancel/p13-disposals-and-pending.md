@@ -284,10 +284,8 @@ D9 の行が意味を持つのは 2 つの型が対応するときだけであ�
       オブジェクトも名指さない。またこの呼び出しは `pending` の要素を落とすだけで、残る要素の
       `outstanding` を変えない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects
-  本体は `pending.retain(...)` であり、述語は `objects` のいずれかについて
-  `retain.outstanding.names(object) || retain.others.contains(object)` が真である要素について `false` を
-  返す。この選言の第 1 肢だけで、`objects` のいずれかを `outstanding` が名指す要素は落ちる。`retain` は
-  `false` を返した要素を落とし、他の要素はそのまま残す。
+  本体は `pending.retain(...)` であり、述語は `objects` のいずれかを `outstanding.names` が真とする要素に
+  ついて `false` を返す。`retain` は `false` を返した要素を落とし、他の要素はそのまま残す。
 
 <1>2. `Obj(n) ⊆ ActRefs(v, π).objects() ∪ Others(v, π)` である。
   BY P5, DEF 処分 leaf, DEF 触れうるオブジェクト
@@ -1238,28 +1236,26 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
   `cancel_body` は `analysis.walk(body, PendingRetains::default(), true)` を呼ぶ。要素が無いので (i) と
   (ii) は空虚に成り立つ。
 
-<1>1a. `consume_objects(pending, objects)` は、`objects` のいずれかについて
-       `outstanding.names(object) || others.contains(object)` が真である要素を取り除いてその `node` を
-       `self.needed_retains` に入れ、残る要素の `node`・`outstanding`・`others`・並びを変えない。
+<1>1a. `consume_objects(pending, objects)` は、`objects` のいずれかについて `outstanding.names(object)`
+       が真である要素を取り除いてその `node` を `self.needed_retains` に入れ、残る要素の `node`・
+       `outstanding`・並びを変えない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
      DEF `Vec::retain` (Rust 標準ライブラリの規約: 閉包が偽を返した要素を取り除き、残る要素の値と
      相対順序を保つ)
-  本体は `pending.retain(|retain| { if objects.iter().any(|object| retain.outstanding.names(object)
-  || retain.others.contains(object)) { self.needed_retains.insert(retain.node); return false; } true })`
-  である。
+  本体は `pending.retain(|retain| { if objects.iter().any(|object| retain.outstanding.names(object))
+  { self.needed_retains.insert(retain.node); return false; } true })` である。
 
 <1>2. 帰納段。`ρ` の上の節点 `n` について (i) と (ii) が成り立つとし、`ρ` の上の `n` の直後の節点 `n'` に
       ついて示す。`n` の式で場合を分ける。
 
   <2>1. CASE `n` の式が `RcExpr::Retain(v, path, _, k)` である。`n'` は `k` である。
     <3>1. `pending(k)` は `pending(n)` の末尾に `PendingRetain { node: node_id(n), outstanding:
-          ActRefs(v, path), others: Others(v, path) }` を足したものである。
+          ActRefs(v, path) }` を足したものである。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-         CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
-         CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, L2, 第 1 節の記法
-      この腕は `pending.push(PendingRetain { node: retain, outstanding, others })` を行い、`outstanding`
-      は `self.acted_references(v, path)`、`others` は `self.other_objects(v, path)` である。L2 (i) より
-      この腕は `walk(k, pending, ·)` を 1 回呼ぶ。
+         CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references, L2, 第 1 節の記法
+      この腕は `pending.push(PendingRetain { node: retain, outstanding })` を行い、`outstanding` は
+      `self.acted_references(v, path)` である。`PendingRetain` はこの 2 つのフィールドだけを持つ
+      (`CODE src/rc_ir/borrow.rs: PendingRetain`)。L2 (i) よりこの腕は `walk(k, pending, ·)` を 1 回呼ぶ。
     <3>2. 元からあった要素については (i) と (ii) が成り立つ。
       BY 帰納法の仮定, DEF bump の帰属, <3>1
       表の第 1 行より、これらの要素の `B_ρ` は変わらない。<3>1 より `outstanding` も変わらない。
@@ -1332,8 +1328,8 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
 
   <2>4. CASE `n` の式が `RcExpr::Let(x, RcRhs::Match(v, arms), k)` である。D3 より `n'` は `ρ` が選んだ
         アーム `arm_j` の本体である。
-    <3>1. `pending(arm_j.body)` は `pending(n).clone()` であり、要素の `node`・`outstanding`・
-          `others`・並びは `pending(n)` と等しい。
+    <3>1. `pending(arm_j.body)` は `pending(n).clone()` であり、要素の `node`・`outstanding`・並びは
+          `pending(n)` と等しい。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の
          `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, CODE src/rc_ir/borrow.rs: PendingRetain, L2
       この腕は各 `arm` について `self.walk(&arm.body, pending.clone(), false)` を呼ぶ。
@@ -1365,8 +1361,7 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
           と等しい。とくに `arm_exits[j]` にそのような要素 `p^{(j)}` が在る。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, P18
       `merge` の返り値は `pending_in.iter().filter_map(|retain| uniform.get(&retain.node).map(
-      |outstanding| PendingRetain { node: retain.node, outstanding: outstanding.clone(),
-      others: retain.others.clone() }))` であり、
+      |outstanding| PendingRetain { node: retain.node, outstanding: outstanding.clone() }))` であり、
       `uniform` に `retain` が入るのは `is_uniform` すなわち
       `entered_with.contains(&retain) && arm_states.iter().all(|other| other.get(&retain) ==
       Some(&outstanding))` が真のときだけで、入る値は `outstanding.clone()` である。P18 も、残る
@@ -1451,7 +1446,10 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
   2 つ目の名前を与える形) と 7.5.8 の `C2` (呼び出しに渡した参照が返り値として別の名前で戻る形) である。
   どちらも D12 を満たし、どちらでも `cancel` が対を消して解放後の読みを作る。
 - 足りない前提は 1 つの形にまとまる。7.5.3 の **`A19`** -- 「別名類は、走査が `pending` に持っている
-  bump より 1 つ多い参照を持つ」-- である。7.5.4 が `A19` から P18a を出す。
+  bump より 1 つ多い参照を持つ」-- である。7.5.4 が `A19` から P18a を出す。出る形は
+  **オブジェクトごとの形** -- 計数下オブジェクト `O` について `n(O) = Σ_p Σ_{o : obj(o) = O} B(p, ρ)[o]`
+  として `H(O) ≥ n(O) + 1` -- であり、README の P18a の言明そのものである。名前ごとの弱い形を経由しない
+  (7.5.1 と 7.5.4 の <1>3)。
 - `A19` を果たす者は `insert_rc` と `borrow_ify` である。**この文書が示せるのは `borrow_ify` の側だけで
   ある。** 7.5.5 がそれを示す -- `rewrite_rc` が借用版で落とす `Retain` は、その leaf を消費する構文が
   残っている限り落ちない (P8 と P7a)。落ちる場合には `call_rc` が消費の直前に同じ `Retain` を置く。
@@ -1469,9 +1467,15 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
 **INV(n)**。`ρ` の上の節点 `n` の訪問の入口において、計数下の各オブジェクト `O` について、
 `N_ρ(n, O) ≥ 1` ならば `H(O) ≥ N_ρ(n, O) + 1` である。
 
-**INV から P18a が出る**。P18a の `n(o) = Σ_p B_ρ(n, p)[o]` が 1 以上ならば、L11 (ii) より `o` は活性で
-あり、DEF 名前の活性より `O = obj_ρ(o)` は計数下である。`n(o)` は `N_ρ(n, O)` の内側の和の 1 項なので
-`n(o) ≤ N_ρ(n, O)` であり、INV(n) より `H(o) = H(O) ≥ N_ρ(n, O) + 1 ≥ n(o) + 1` である。
+**INV は P18a そのものである。** P18a の `n(O) = Σ_p Σ_{o : obj(o) = O} B(p, ρ)[o]` は、走査中の位置を
+節点の訪問の入口に取り、`B(p, ρ)` を D27 の帰属 (第 7.1 節の DEF bump の帰属) で読むと `N_ρ(n, O)` で
+ある。内側の和を活性な名前に制限してよいのは、L11 (ii) より活性でない名前の `B_ρ` が 0 だからであり、
+`obj_ρ(o)` が定まるのは DEF 名前の活性による。よって 7.5.4 が INV を示せば P18a が出る。
+
+**オブジェクトごとに和を取るところは落とせない。** 名前ごとの `H(o) ≥ n(o) + 1` を足し合わせても
+`H(O) ≥ Σ_o n(o) + 1` は出ない -- `+1` が名前の個数だけ立つからである。7.5.4 の <1>3 は、余りを
+別名類ごとに 1 つ数えたうえで、`bumps` が正である類が 1 つあれば足りるという形で和を取るので、
+オブジェクトごとの形をそのまま与える。
 
 #### 7.5.2 別名の歩みと別名類
 
@@ -1611,9 +1615,12 @@ L9 より、1 つの別名類のスロットはすべて同じオブジェクト
 <1>7. QED
   BY <1>4, <1>5, <1>6
 
-**この補題は `PendingRetain::others` を使わない。** <1>4 が使うのは `consume_objects` の述語の第 1 の
-選言肢だけである。第 2 の選言肢 (`retain.others.contains(object)`) は要素をさらに落とすので、
-それが在っても無くてもこの補題は成り立つ。
+**この補題が使うのは `outstanding` の鍵だけである。** `consume_objects` の述語は
+`retain.outstanding.names(object)` であり、`pending` の要素はこの 1 つの名前の集合でしか照合されない。
+`Retain(v, π)` の訪問は `other_objects` を呼ばないので、その `Retain` が触れうる他の名前 -- `Join` の
+候補 -- は `pending` の要素に残らない (`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner` の
+`RcExpr::Retain(v, path, _, k)` の腕、`CODE src/rc_ir/borrow.rs: PendingRetain`)。7.5.7 の `C1` が
+その帰結である。
 
 #### 7.5.3 要る前提
 
@@ -1883,14 +1890,13 @@ Ret(u)))))))
 `held_ρ(·, C_o) = 1 < 2` である。
 
 **`cancel` は対を消す。** `App(f, [y])` の消費が渡す `acted_on(y, []) = {(y, [])}` は
-`t.outstanding = {(o, []): 1}` の鍵ではなく、`Others(o, []) = ∅` なので `PendingRetain::others` にも
-入らない。よって要素は残り、`Release(o, [])` が `un_bump` で `InBracket` を返し、対が消える。消した後は
+`t.outstanding = {(o, []): 1}` の鍵ではない。よって要素は残り、`Release(o, [])` が `un_bump` で `InBracket` を返し、対が消える。消した後は
 `App(f, [y])` の中で `f` の `Release(b, [])` が `O` を解放し、`Eval(o)` が解放済みの `O` を読む。
 
 **`C2` が示すこと。** ずれを作っているのは `Join` ではなく `App` である。`o` の参照は `id` の活性化を
 通って `y` に戻り、`origin` は `y` を `Producer` として `Exactly((y, []))` と答えるので、同じ参照が
-呼び出しの前と後で別の別名類に属する。`PendingRetain::others` は `Join` の候補しか集めないので、
-この形には触れない。**`C2` も実際の入力には現れない** -- `insert_rc` は変数が live な位置にしか `Retain` を
+呼び出しの前と後で別の別名類に属する。`Join` の候補を `pending` の要素に持たせても、この形には
+触れない -- `Others(o, [])` は空だからである。**`C2` も実際の入力には現れない** -- `insert_rc` は変数が live な位置にしか `Retain` を
 置かず (`CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live`)、消費された変数はその消費より後では
 live でないので、`App(id, [o])` の後に `Retain(o, [])` は置かれない。`borrow_ify` の `call_rc` が足す
 `Retain` も呼び出しの直前に置かれる (P11)。
