@@ -1199,8 +1199,14 @@ resolve_callee_params`)。
 
 **A10 (型の well-formedness)** -- 果たす者: `validate_layouts` (elaboration で必ず走る)。ただし最適化が
 作る型を再検査するのは develop build だけである。
-プログラムに現れる型は ground であり、その tycon は `type_env` にあり、`no_size_in_place` の in-place の
-降下は有限である。**その降下で到達する型も ground であり、tycon が `type_env` にある。**
+プログラムに現れる型は ground であり、**その tycon に kind の要求するだけの引数が与えられており**、その
+tycon は `type_env` にあり、`no_size_in_place` の in-place の降下は有限である。
+
+**飽和は ground から出ない。** `is_ground` は裸の `TyCon` に真を返すので (`CODE src/ast/types.rs:
+TypeNode::is_ground`)、部分適用された tycon は ground である。`declared_field_types` はそこで
+`assert_eq!(args.len(), tycon_info.tyvars.len())` に当たって止まる
+(`CODE src/ast/types.rs: TypeNode::declared_field_types`)。`unpunched_field_types` を呼ぶ歩みが abort
+しないことを言う議論はこの節を読む。**その降下で到達する型も ground であり、tycon が `type_env` にある。**
 `is_fully_unboxed` はその降下の上の再帰であり、途中の各型で `toplevel_tycon_info` を呼ぶので、
 到達する型の側にも同じことが要る。これが無いと `boxed_leaf_paths` も `rc_units` も停止しない。
 

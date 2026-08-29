@@ -1125,6 +1125,7 @@ impl TypeNode {
     /// substituted for the declaration's type variables. The types are as the declaration writes
     /// them, so one can name a newtype the program has unwrapped; `instance_field_types` answers
     /// with the types values are built at.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     fn declared_field_types(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_arguments();
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
@@ -2207,6 +2208,7 @@ impl TypeNode {
     /// `free_vars` answers the same question by collecting the variables, which walks a type that
     /// shares a subterm once per occurrence rather than once per node. Every type reaching code
     /// generation is asked this, so it is answered here and kept on the node.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_ground(&self) -> bool {
         *self.ground_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) => false,
