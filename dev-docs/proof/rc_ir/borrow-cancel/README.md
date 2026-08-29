@@ -13,7 +13,7 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 **この証明は書きかけである。** 第 7 節の表が、どの命題がどこまで進んでいるかを述べる。第 8 節が、証明を書く
 作業が見つけたコードの欠陥を述べる。
 
-証明の対象は、コミット `a924f115ab551cb8ccb0b90d195889abfd3f8804` の
+証明の対象は、コミット `11abca7e83ed8d52cdd0161f22f74b43447134d4` の
 
 - `src/rc_ir/borrow.rs` の `borrow_ify` と `cancel`、およびこの 2 つが呼ぶ同ファイル内の関数
 - `src/rc_ir/ownership.rs` の全体 (この 2 つが参照の同一性と消費を決めるのに使うモデル)
@@ -24,7 +24,8 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 この 2 つは、`src/build/build_object_files.rs` の `optimize_rc_program` の中で、`-O max` 以上のとき
 `split_rc_units` の直後にこの順で走る。
 
-対象コミットは、第 8 節が述べる 4 件の欠陥をすべて直した後のものである。
+対象コミットは、第 8 節が述べる 6 件の欠陥をすべて直した後のものである。うち 2 件 (#551、#552) の修正は
+`levelling-assert` ブランチにあり、まだ main に入っていない。
 
 ## 2. 証明の記法
 
