@@ -359,9 +359,9 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> R
 ///
 /// `fresh_rename_function` makes a name by appending its pass tag and a counter, reading none of the
 /// program's names, so the name it makes is new only because no binder the earlier passes mint ends
-/// in that shape. Nothing establishes that, and a collision would put two bindings under one
-/// `unit_key`, which is read by name: cancellation would then pair a retain of one with a release of
-/// the other and delete both.
+/// in that shape. Nothing establishes that, and a collision would give two bindings one name, which
+/// is what `origin` follows a value back to: cancellation would then pair a retain of one with a
+/// release of the other and delete both.
 ///
 /// Walking every binder costs a pass over the program, so this runs where the test suite runs it.
 fn check_clone_names_are_fresh<'a>(
@@ -1159,8 +1159,8 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
 /// The forward must-analysis for one function: it decides which retain and release nodes to delete.
 struct CancelAnalysis<'a> {
-    /// This function's variables: what binds each one and its type, which decide the unit key a
-    /// retain and a release pair on.
+    /// This function's variables: what binds each one and its type, which decide the objects a
+    /// retain and a release act on, and so which of them pair.
     vars: &'a VarTable,
     /// The whole program, so a call resolves to its callee's parameters.
     prog: &'a RcProgram,
