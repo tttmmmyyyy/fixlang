@@ -45,6 +45,7 @@ use std::sync::Arc;
 const PASS_TAG: &str = "cc";
 
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn simplify(prog: &mut RcProgram, config: &Configuration) {
     let mut counter = 0;
     for func in prog.funcs.values_mut() {

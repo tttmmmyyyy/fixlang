@@ -1179,7 +1179,7 @@ fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
 /// Decompose every `Retain`/`Release` into one node per reference-counting unit its path covers, so
 /// that every later pass sees reference counting at unit granularity. A path that already names a
 /// single unit is unchanged; a whole-value retain on a fully-unboxed value (a no-op) disappears.
-// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
     for func in prog.funcs.values_mut() {
         func.body = split_body(&func.body, type_env);

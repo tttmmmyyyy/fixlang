@@ -456,7 +456,7 @@ fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
 /// decide which argument positions consume: an owning argument position, a captured value, or a
 /// returned value. Alias edges are not consumes here — the consume of an alias is attributed to its
 /// `origin`. Explicit `Release` nodes are own-then-release drops, not consumes.
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn collect_consumes(
     node: &RcExprNode,
     vars: &VarTable,

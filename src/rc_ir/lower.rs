@@ -54,6 +54,7 @@ enum LoweredSymbol {
 /// `symbols` holds it (`Program::global_types`). `roots` names what code generation reaches the
 /// lowered program from outside it; it becomes `RcProgram::roots`, and the build driver takes it
 /// from `Program::root_value_names`.
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lower_program(
     type_env: &TypeEnv,
     symbols: &[Symbol],

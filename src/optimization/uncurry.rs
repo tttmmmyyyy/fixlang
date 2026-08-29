@@ -28,7 +28,7 @@ use std::{mem, sync::Arc, usize};
 /// Defines a function pointer version of each global for one, two, ... arguments, then rewrites the
 /// calls, export statements and entry IO value of the program onto the version matching the number
 /// of arguments they supply.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
     let syms = mem::replace(&mut fix_mod.symbols, Default::default());
@@ -151,7 +151,7 @@ fn convert_to_funptr_name(name: &mut Name, n_args: usize) {
 /// # Arguments
 /// * `generic_name` — the name of the global `expr` defines, before instantiation. `Std::fix` is
 ///   identified by it, since that global has no function pointer version.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn funptr_lambda(
     generic_name: &FullName,
     expr: &Arc<ExprNode>,
