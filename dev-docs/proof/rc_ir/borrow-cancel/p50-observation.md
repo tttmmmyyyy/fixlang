@@ -1,38 +1,44 @@
 # P26 -- 一意性は悪化しない
 
 この文書は `README.md` の P26 を扱う。立つのは `README.md` の定義と仮定、および命題 P1-P24、P27 の**言明**で
-ある。実行の水準の定義 -- 環境 D22、活性化 D23、実行 D24、参照の持ち手 D25、対応する活性化 D29、実行の
-終わり方 D31、実行の読み D32 -- は README の第 3.6 節にある。
+ある。実行の水準の定義 -- 環境 D22、活性化 D23、実行 D24、参照の持ち手 D25、対応する活性化 D29、対応する
+2 つの実行と共通接頭 D30、実行の終わり方 D31、実行の読み D32 -- は README の第 3.6 節にある。
 
 ## 0. 結論
 
-| 半分 | 結果 |
-|---|---|
-| P26 (`cancel` について) | **証明済み** (第 4 節) |
-| P26 (`borrow_ify` について) | **証明済み** (第 5 節)。1 つの制御の流れからなる実行について |
+P26 の言明は 2 文からなる。第 1 文は共通接頭の上の各観測点についての主張、第 2 文は共通接頭が終わる 2 つの
+出口の向きについての主張である。
+
+| 半分 | 第 1 文 | 第 2 文 (出口の向き) |
+|---|---|---|
+| P26 (`cancel` について) | **証明済み** (L7) | **証明済み** (L7a) |
+| P26 (`borrow_ify` について) | **証明済み** (L13)。1 つの制御の流れからなる実行について、かつ第 12 節の項目 3 の下で | **閉じない** (第 11.3 節、第 12 節の項目 7) |
+
+`borrow_ify` については第 1 文が**等号の形**で出る -- 共通接頭の上の各観測点で、2 つの実行の観測値は等しい
+(L13)。よって D30 の (X1) の出口は `borrow_ify` では起こらない。残る出口の向きは示せていない。
 
 `borrow_ify` の側の鎖は次のとおりである。
 
-- **L8a、L8b、L8、L9**。`borrow_ify` が参照カウントを変えうる場所は 3 つしかなく、その 3 つはどれも
-  「`route` が借用版へ回した呼び出しの窓」の中にある。よって**関数ごとに借用版を作らない門は、正しい梃子で
-  ある** -- 借用版を作らなければ、別名の解析を一切せずに、その関数の実行の間の計数は入力と一致する。L9 は
-  門の広さを読まないので、門をどう広げてもこの段は動かない。
+- **L8a、L8b、L8、L8c**。`borrow_ify` が入力の本体に加える違いは 4 つ (L8) であり、そのうち `H` を動かすの
+  は `Retain`/`Release` の 3 種だけで、どれも「`route` が借用版へ回した呼び出しの窓」の中にある。よって
+  **関数ごとに借用版を作らない門は、正しい梃子である** -- 借用版を作らなければ、別名の解析を一切せずに、
+  その関数の実行の間の計数は入力と一致する。L9 は門の広さを読まないので、門をどう広げてもこの段は動かない。
 - **L9a、L9b、L10**。窓の中で新しい活性化を作る段は 6 種あり (L9a)、そのうち関数の値を適用する 3 種 --
   局所変数を経た `App`、オペランドを適用する `Llvm` の op、解放が走らせるデストラクタ -- については、
   適用される値が名指す関数が `closure_targets` の元であること (L9b) から、門の辺が張られる。よって窓の中の
   到達の列がグローバルの初期化の段を持たないとき、その列の上に観測点は現れない (L10)。
 - **L11**。グローバルの初期化子の活性化とその子孫が名指す計数下 (D26) のオブジェクトは、すべてその広がりの
   中で割り当てられたものである。これで、窓の中でグローバルの最初の読みが起きる場合が閉じる。
-- **L12、L13**。窓が開いている間の観測点は入力と同じ参照カウントを読み (L12)、よって観測値も同じである
-  (L13)。
+- **L12、L13**。窓が開いている間の観測点は入力と同じ参照カウントを読み (L12)、よって観測値も等しい (L13)。
 
-**前提として残るもの。** 1 つの制御の流れからなる実行であること (第 12 節の項目 1) と、A3 に
-`applies_a_function_operand` の宣言が入ること (同 項目 2) である。
+**前提として残るもの。** 1 つの制御の流れからなる実行であること (第 12 節の項目 1) と、グローバル初期化子の
+広がりの中に `InlineLLVMBoxedFromRetainedPtrIOS` の段が無いこと (同 項目 3) である。
 
 第 6 節から第 10 節は、直った 5 つの反例を 1 つの列として記録する -- 門が無かったとき、門が直接呼び出し
 だけを閉じていたとき、門がクロージャを `prog.funcs` の本体からだけ集めていたとき、門が関数を適用する仕組みを
 `App` だけだと数えていたとき、門が解放の走らせるデストラクタを数えていなかったとき。README 第 6 節の較正表が
-第 6 節の反例を引く。
+第 6 節の反例を引く。この 5 節は、対象コミットに無いコードについての記録であるから、構造化証明の形 (`<k>n` の
+段と `CODE` の引用) を取らず、散文で書く。
 
 ## 1. 記法
 
@@ -46,133 +52,159 @@
 
 ## 2. 何と何を比べるか
 
-P26 の言明は次である。
+P26 は**実行** (D24) の水準の言明である。観測値は参照カウントであり、参照カウントは 1 つの本体の量ではなく
+ヒープの量だからである。比べる 2 つの実行と、その**共通接頭**は README の D30 が定める。この文書は D30 の
+記号をそのまま使う -- パスを `π`、その入力を `P`、出力を `P' = π(P)`、`P` の実行を `X`、`P'` の実行を `X'`
+と書く。
 
-> 入力の一意性の観測点 (D18) で観測値が真であるすべての**実際の**実行について、出力の対応する観測点 (D19)
-> の観測値も真である。「実際の実行」とは、観測点が返す値がその時点の参照カウントと一致する活性化の木の
-> ことである (D21)。
-
-観測値は参照カウントであり、参照カウントは 1 つの本体の量ではなくヒープの量なので、この言明は**実行**
-(D24) の水準にある。「対応する観測点」は D19 が構文の上で定め、「対応する活性化」は D29 が定める。この節は
-その対応を**段の列**の上で読み直し、どこまで伸びるかを言う量 -- 共通接頭 -- を置く。
-
-**D-CP (対応する 2 つの実行と、その共通接頭)**
-`T` を `borrow_ify` か `cancel` とし、`P` をその入力、`P' = T(P)` をその出力とする。`P` の実行 `X` と `P'` の
-実行 `X'` を、環境 (D22) が与える入力 -- C のエントリ点の `argc` と `argv`、`FFI_EXPORT` の引数、FFI の
-呼び出しが返す値 -- を同じにし、複数の制御の流れがある場合は段の並び方を同じにして取る。
-
-`X` の段と `X'` の段を、`T` が消した節点と入れた節点の段を除いて、節点の対応 (D19 と P22) で 1 対 1 に
-並べる。並んだ 2 つの段が同じ位置の節点を実行し、その段が作る値が等しく、その段が名指すオブジェクトが
-同じであるとき、対応は次の段へ伸びる。伸びる限りの部分を**共通接頭**と呼ぶ。
-
-**この対応の根拠は 2 つの半分で別である。**
+D30 が対応の根拠を 2 つの半分で分けていることを、この文書の側から言い直しておく。
 
 - **`cancel` について**は D29 が与える。D29 は、`cancel` が写した本体 `B'` の活性化 `α'` に対応する `B` の
   活性化がちょうど 1 つ存在することを、D21 のデータ -- パラメータ・capture の値、オペランドから結果が
   決まらない 4 種の各位置での結果、および活性化の最初の時点で対応する計数下オブジェクトの参照カウントが
-  等しいこと -- の共有として構成する。D-CP はその対応を実行の段の列の上に並べたものであり、対応する活性化の
-  対ごとに D29 の全単射を使う。
-- **`borrow_ify` について**は D29 を置かない。README の D29 は「**`borrow_ify` にはこの対応を置かない。**
-  借用版は呼び出し元が借りている参照を処分しないので、対応する 2 つの活性化が参照カウントに与える変化は
-  設計上ずれる」と書く。この半分で対応を与えるのは L8 である -- `H` の動きが違う節点は 3 つに限られ、その
-  3 つはどれも `Retain` / `Release` 節点か callee の名前の付け替えなので、対応する段が作る値は等しい。
-  節点どうしの対応は P9 (複製は名前替えである) と P12 (`route` が返すのは同じ入力関数の版である) が与える。
+  等しいこと -- の共有として構成する。D30 はその対応を実行の段の列の上に並べたものである。
+- **`borrow_ify` について**は D29 を置かない。D30 が「`H` の動きが違う節点が 3 つに限られること
+  (`p50-observation.md` の `L8`) と、節点どうしの対応を P9 と P12 が与えること」と書くのがこの半分である。
+  **L8 の言明は 2 つの実行の対応を読まない** -- 出力の本体と入力の本体の間の、節点についての静的な言明で
+  ある。よって D30 が L8 を引き、L8 が D30 を引くことは無い。
 
-**共通接頭が終わる点は 2 種類しかない。**
-
-- **(X1)** 一意性の観測点 (D18) で観測値が違う。
-- **(X2)** 参照カウントを内部で読む op -- `LLVMGen::unique_check_operand` が一意性検査を宣言する op -- の
-  分岐が違う。カウントが 1 のときこの op は複製を作らず、そうでないとき複製を作るので、分岐が違えば以後の
-  段が名指すオブジェクトが違う
-  (`CODE src/ast/inline_llvm.rs: LLVMGen::unique_check_operand`,
-  `CODE src/fixstd/builtin.rs: make_array_unique_with_hole`,
-  `CODE src/generator.rs: Generator::build_branch_by_is_unique`)。
-
-ほかの節点は、同じ値と同じオブジェクトを与えられれば同じ値を作り、同じオブジェクトを名指す。2 つの実行の
-オブジェクトは物として同じではないので、「同じオブジェクト」は、それを割り当てた段の対応で読む -- 対応する
-2 つの段が割り当てた 2 つのオブジェクトが対応し、対応するオブジェクトを名指す leaf が対応する。生成コードが
-`RcExpr` と `LLVMGen` の宣言のとおりに動くことは A3 と A4 であり、環境と FFI が同じ値を返すことは D-CP の
-取り方である。
-
-**A3 の `Fresh` の行が字義どおりでない op について。**A3 は「`unique_check_operand` を宣言する op の
-`Fresh` の行は、オブジェクトの同一性については字義どおりではない」と書き、一意の腕ではオペランドの
-オブジェクトをそのまま返すとする。その op が (X2) の op そのものであり、分岐が同じである限り 2 つの実行は
-同じ腕を取って同じオブジェクトを名指す。分岐が違えば共通接頭は (X2) で終わる。よってこの読みは共通接頭の
-定義と整合している。
+**この文書が D30 の「その段が名指すオブジェクトが同じ」を読む読み方。** 段が名指すオブジェクトには、その段の
+中で解放される (D24 の (F)) オブジェクトを含める。(F) は段ではなく段の中で起きる動作であり、解放される
+オブジェクトの走査はそのオブジェクトを読み (D32 の (読み-2))、そのオブジェクトが `Destructor` であれば
+活性化を作る (L9a の (vi))。片方の実行だけがある段でオブジェクトを解放するならば、2 つの段の動作は違うので、
+対応はそこで伸びない。**D30 の「共通接頭が終わる点は 2 種類しかない」は、この読みの下では尽くしていない**
+-- 第 12 節の項目 7 が、`borrow_ify` について第 3 の出口を書き出す。
 
 P26 は共通接頭の上の観測点についての主張として読む。共通接頭が終わった後の 2 つの実行は違う節点列を辿るので、
-D19 の観測点の対応が実行の上の対応を与えない。**共通接頭がどちら向きに終わりうるかは、P26 が答えるべき事柄で
-ある** -- 第 4 節の L7a がそれを述べる。
+D19 の観測点の対応が実行の上の対応を与えない。**共通接頭がどちら向きに終わりうるかは、P26 の第 2 文が
+答えるべき事柄である** -- `cancel` については L7a がそれを述べ、`borrow_ify` については閉じない
+(第 11.3 節)。
+
 ## 3. 観測点が読む量
 
-## L0 (観測値は `H(o) = 1` である)
+## L0 (観測値は「グローバル状態でなく `H(o) = 1`」と同値である)
 
-**言明**。`Llvm(gen, [a])` が `unsafe_is_unique` の演算であり、`a` の leaf `[]` が指すオブジェクトが `o` で
-あるとき、その位置での観測値は、`o` の参照カウント状態が local か threaded ならば `H(o) = 1` と同値であり、
-global ならば偽である。
+**言明**。`q` を一意性の観測点 (D18) とし、`o` を、その位置の `Llvm` の演算の第 0 オペランドの boxed leaf
+`[]` が指すオブジェクトとする。`q` が `borrow_ify` の入力・出力・`cancel` の出力のいずれかの本体にあるとき、
+`q` の観測値は次で決まる。`o` の参照カウント状態が `RefcntState::GLOBAL` (D26 のグローバル状態) ならば偽で
+あり、そうでなければ `H(o) = 1` と同値である。
 
-<1>1. `Std::unsafe_is_unique` の本体は、`InlineLLVMIsUniqueFunctionBody` を 1 つ持つ `Llvm` 式である。
-      `make_std_mod` は `FullName::from_strs(&[STD_NAME], "unsafe_is_unique")` に `is_unique_function()` を
-      登録し、`is_unique_function` は `expr_abs(vec![var_local("x")], expr_llvm(Box::new(
-      InlineLLVMIsUniqueFunctionBody { assume_local: false, var_name: FullName::local("x"),
-      assume_unique: false }), ret_type, None), None)` を返す。
-  BY CODE src/fixstd/stdlib.rs: make_std_mod, CODE src/fixstd/builtin.rs: is_unique_function
+<1>1. D18 の観測点の演算は `InlineLLVMIsUniqueFunctionBody` か `InlineLLVMArrayIsStorageUniqueBody` の
+      どちらかである。`make_std_mod` は `Std::unsafe_is_unique` に `is_unique_function()` を、
+      `Std::Array::_unsafe_is_storage_unique` に `array_is_storage_unique_function()` を登録し、前者は
+      `InlineLLVMIsUniqueFunctionBody { assume_local: false, assume_unique: false, .. }` を 1 つ持つ
+      `Llvm` 式を、後者は `InlineLLVMArrayIsStorageUniqueBody { assume_local: false, assume_unique: false,
+      .. }` を 1 つ持つ `Llvm` 式を返す。
+  BY D18, CODE src/fixstd/stdlib.rs: make_std_mod,
+     CODE src/fixstd/builtin.rs: is_unique_function, array_is_storage_unique_function
 
-<1>2. `assume_unique` が偽のとき、`InlineLLVMIsUniqueFunctionBody::generate` が返す組の第 0 成分は、
-      `gc.build_branch_by_is_unique(obj_ptr, assumed_state(self.assume_local))` が返す `unique_bb` から
-      来る辺で `1`、`shared_bb` から来る辺で `0` となる phi である。ここで `obj_ptr` はオペランドの値である。
-  BY CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate
+<1>2. `q` が `borrow_ify` の入力・出力・`cancel` の出力のいずれかの本体にあるとき、その演算の
+      `assume_unique` と `assume_local` はどちらも偽である。`assume_unique` を真にするのは
+      `LLVMGen::assuming_unique` を呼ぶ `unique_check_elim::specialize` だけであり、`assume_local` を
+      真にするのは `LLVMGen::assuming_local` を呼ぶ `locality::specialize` だけである。
+      `optimize_rc_program` はこの 2 つを `borrow_ify` と `cancel` の後に走らせる。
+  BY <1>1, CODE src/build/build_object_files.rs: optimize_rc_program,
+     CODE src/rc_ir/unique_check_elim.rs: specialize, CODE src/rc_ir/locality.rs: specialize,
+     CODE src/ast/inline_llvm.rs: LLVMGen::assuming_unique, LLVMGen::assuming_local
 
-<1>3. `build_branch_by_is_unique(obj_ptr, state)` は、`build_branch_by_refcnt_state` が返す 3 つの
-      基本ブロックのそれぞれについて次のように分岐する。local のとき
-      `build_is_refcnt_one(obj_ptr, false, "")` の真偽で `unique_bb` と `shared_bb` へ、threaded のとき
-      `build_is_refcnt_one(obj_ptr, true, "")` の真偽で `unique_threaded_bb` (そこから `unique_bb`) と
-      `shared_bb` へ、global のとき `shared_bb` へ無条件に。
-  BY CODE src/generator.rs: Generator::build_branch_by_is_unique
+<1>3. `assume_unique` が偽のとき、`InlineLLVMIsUniqueFunctionBody::generate` が返す組の第 0 成分は、
+      `gc.build_branch_by_is_unique(obj_ptr, assumed_state(self.assume_local))` が返す 2 つの基本ブロック
+      `unique_bb`/`shared_bb` のどちらから来る辺かで `1`/`0` に決まる phi である。ここで `obj_ptr` は
+      オペランドの値である。`assume_unique` が偽のとき、`InlineLLVMArrayIsStorageUniqueBody::generate` が
+      返す組の第 0 成分は、`gc.build_branch_by_is_unique(storage_ptr, assumed_state(self.assume_local))` が
+      返す 2 つの基本ブロック `unique_bb`/`shared_bb` のどちらから来る辺かで `1`/`0` に決まる phi である。
+      ここで `storage_ptr` は `get_array_storage(gc, &array)` の値である。
+  BY CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate,
+     InlineLLVMArrayIsStorageUniqueBody::generate
 
-<1>4. QED
-  `<1>1` より観測点の演算は `InlineLLVMIsUniqueFunctionBody` であり、`<1>2` よりその `Bool` は
-  `build_branch_by_is_unique` の 2 つの出口のどちらを通ったかで決まる。`<1>3` の 3 つの状態が
-  `build_branch_by_refcnt_state` が返す全体であり、local と threaded では
-  `build_is_refcnt_one` すなわちカウントが 1 であるかが選択を決め、global では `shared_bb` に決まる。
-  D7 より `H(o)` はその参照カウントである。
-  BY <1>1, <1>2, <1>3, D7
+<1>3a. どちらの op についても、`build_branch_by_is_unique` に渡る `obj_ptr` は、第 0 オペランドの boxed
+      leaf `[]` が指すオブジェクト `o` の番地である。`unsafe_is_unique` の引数は `[a : Boxed]` の制約に
+      より boxed であり (D4 の規則 3 よりその leaf は `[]` だけ)、渡るのはその値そのものである。
+      `_unsafe_is_storage_unique` の引数は `Array a` であり (D4 の規則 4 よりその leaf も `[]` だけ)、
+      渡るのは `get_array_storage` が `ARRAY_STORAGE_IDX` の欄から取り出す記憶域オブジェクトである。
+      配列の leaf `[]` が指すオブジェクトはその記憶域である -- 参照カウントを持つのは記憶域の側だからで
+      ある。
+  BY D4, <1>3, CODE src/object.rs: get_array_storage,
+     CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate
+
+<1>4. `assumed_state(false)` は `RcState::Unknown` であり、`RcState::Unknown.dispatches()` は真である。
+  BY <1>2, CODE src/fixstd/builtin.rs: assumed_state, CODE src/rc_ir/ast.rs: RcState::dispatches
+
+<1>5. `dispatches()` が真のとき、`build_branch_by_refcnt_state(obj_ptr, state)` は状態の欄を読んで分岐し、
+      `(local_bb, threaded_bb, Some(global_bb))` を返す。`threaded_bb` は `config.threaded` のときだけ
+      `Some` である。単一スレッドのビルドでは状態が `LOCAL` なら `local_bb`、そうでなければ `global_bb` へ
+      跳ぶ。複数スレッドのビルドでは `LOCAL` なら `local_bb`、`THREADED` なら `threaded_bb`、そのどちらでも
+      なければ `global_bb` へ跳ぶ。
+  BY <1>4, CODE src/generator.rs: Generator::build_branch_by_refcnt_state
+
+<1>5a. 状態は `LOCAL`、`THREADED`、`GLOBAL` の 3 つで尽きる。
+  BY CODE src/constants.rs: RefcntState
+
+<1>6. `build_branch_by_is_unique` は、`local_bb` では `build_is_refcnt_one(obj_ptr, false, "")` の真偽で
+      `unique_bb`/`shared_bb` へ、`threaded_bb` が在るときはそこで `build_is_refcnt_one(obj_ptr, true, "")`
+      の真偽で `unique_threaded_bb` (そこから無条件に `unique_bb`)/`shared_bb` へ、`global_bb` が在ると
+      きはそこから無条件に `shared_bb` へ跳ぶ。`build_is_refcnt_one` は参照カウントの欄を読んで `1` と
+      比べる。
+  BY CODE src/generator.rs: Generator::build_branch_by_is_unique, Generator::build_is_refcnt_one
+
+<1>7. D26 のグローバル状態のオブジェクトとは、`mark_global` が印を付けたものであり、その印は
+      `RefcntState::GLOBAL` である。
+  BY D26, CODE src/generator.rs: Generator::build_mark_boxed_with, Generator::mark_global
+
+<1>8. QED
+  `<1>1` と `<1>2` より演算は 2 つのどちらかであって `assume_unique` は偽であり、`<1>3` よりその `Bool` は
+  `build_branch_by_is_unique` の 2 つの出口のどちらを通ったかで決まる。`<1>3a` よりその op が読むのは `o`
+  である。`<1>4`・`<1>5`・`<1>5a` より状態は 3 つで尽き、`<1>6` より `GLOBAL` の腕は `shared_bb` に決まり、
+  `LOCAL` と `THREADED` の腕はどちらも参照カウントが `1` であるかで決まる。D7 より `H(o)` はその参照カウント
+  であり、`<1>7` より `GLOBAL` は D26 のグローバル状態である。
+  BY D7, D26, <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>5a, <1>6, <1>7
+
+**観測値は local と threaded を区別しない。** `<1>6` の threaded の腕は、カウントが 1 であるとき
+`set_refcnt_state(obj_ptr, RefcntState::LOCAL)` を行ってから `unique_bb` へ跳ぶ
+(`CODE src/generator.rs: Generator::build_branch_by_is_unique`)。すなわち**観測そのものがオブジェクトの
+状態を threaded から local へ動かす**。`<1>8` の答えは local と threaded で同じなので、この書き込みは
+観測値を変えない。状態の一致を要る L7 と L13 が問うのが「グローバル状態であるか」だけなのはこのためである。
+
+**オブジェクトの状態を書き換える段は 3 つである。** 割り当て (`create_obj` が `LOCAL` を書く)、
+`build_mark_boxed_with` (`mark_global` が `GLOBAL` を、`Std::mark_threaded` が `THREADED` を書く)、そして
+上の threaded の腕 (`LOCAL` を書く) である (`CODE src/object.rs: create_obj`,
+`CODE src/generator.rs: Generator::build_mark_boxed_with, Generator::build_branch_by_is_unique`)。
+`GLOBAL` を書くのは 2 つ目だけであり、`build_branch_by_is_unique` の状態の比較は `EQ THREADED` なので
+グローバル状態のオブジェクトが 3 つ目の腕に入ることはない。D26 が「逆向きの遷移は無い」と言うのはこの形で
+ある。
 
 **観測値が振る舞いを変えること。** `Debug::assert_unique` は `let (unique, x) = x.unsafe_is_unique;
 if !unique { undefined(...) }; x` であり、観測値が偽のときプログラムを止める。
 `Destructor::mutate_unique_io` は `let (unique, dtor) = dtor.unsafe_is_unique;` の後、真のときは資源を
 そのまま使い、偽のときは `ctor` を走らせて資源を複製する
-(`CODE src/fixstd/std.fix: assert_unique`, `mutate_unique_io`)。
+(`CODE src/fixstd/std.fix: assert_unique, mutate_unique_io`)。
 
-**コードは D18 より広い集合を観測点として扱う。** `LLVMGen::observes_uniqueness` を override するのは
-`InlineLLVMIsUniqueFunctionBody` と `InlineLLVMArrayIsStorageUniqueBody` の 2 つであり、どちらも
-`!assume_unique` を返す (`CODE src/ast/inline_llvm.rs: LLVMGen::observes_uniqueness`,
-`CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::observes_uniqueness`,
-`InlineLLVMArrayIsStorageUniqueBody::observes_uniqueness`)。後者は
-`Std::Array::_unsafe_is_storage_unique` の本体であり (`CODE src/fixstd/stdlib.rs: make_std_mod`)、D18 は
-これを名指していない。この文書は D18 の集合について証明する。コードが押さえるのは上位集合なので、押さえる
-向きではこの差は効かない。第 12 節が D18 の穴として書き出す。
-
-**この文書の反例は `_unsafe_is_storage_unique` でも書ける。**第 6 節の `observe` の本体の
+**第 2 の op についても第 6 節の反例が書けることを測った。** 第 6 節の `observe` の本体の
 `y.unsafe_is_unique` を `Array I64` の `y._unsafe_is_storage_unique` に置き換え、`B` を `Array I64` に
 置き換えたプログラムを 3 水準で走らせた (`.fixlang` は各水準の前に消した)。返る値は `unsafe_is_unique` と
 同じ量に反応する -- 同じ配列にもう 1 つ束縛を作ってから問うと、3 水準のいずれでも `alone = true,
-shared = false` になる。今のコードではこのプログラムは 3 水準すべてで `unique = true` を印字し、`-O max` の
-出力に `observe#borrow` は現れない。観測点を `y.@(0)` に置き換えた同じ形のプログラムでは `observe#borrow`
-が 3 か所に現れる。すなわち門はこの op も断っており、狭いのは D18 の集合の側である。
+shared = false` になる。対象コミットの二値ではこのプログラムは 3 水準すべてで `unique = true` を印字し、
+`-O max` の出力に `observe#borrow` は現れない。観測点を `y.@(0)` に置き換えた同じ形のプログラムでは
+`observe#borrow` が 3 か所に現れる。すなわち門はこの op も断っている。
 
-**`assume_unique` が真の op について P26 は自明である。** `assume_unique` を真にするのは
-`unique_check_elim::specialize` であり、それが走るのは `borrow_ify` と `cancel` の後である
-(`CODE src/build/build_object_files.rs: optimize_rc_program`)。`assume_unique` が真のとき
-`InlineLLVMIsUniqueFunctionBody::generate` は分岐を作らず定数 `1` を返すので、観測値は入力でも出力でも
-真である (`CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate`)。
+**`assume_unique` が真の op について P26 は自明である。** `<1>2` の `unique_check_elim::specialize` は
+`borrow_ify` と `cancel` の後に走るので、この文書が比べる 4 つのプログラムにその op は無い。仮に在れば、
+`InlineLLVMIsUniqueFunctionBody::generate` は分岐を作らず定数 `1` を返すので、観測値は入力でも出力でも真で
+ある (`CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate`)。
 
 ## 4. `cancel` の半分
 
 ## L6 (`cancel` は参照カウントを上げない)
 
-**言明**。`cancel` の入力 `P` が D12 を満たすとする。D-CP の共通接頭の各時点 `p` と各計数下オブジェクト
+**言明**。`cancel` の入力 `P` を `borrow_ify` の出力とする。D30 の共通接頭の各時点 `p` と各計数下オブジェクト
 (D26) `O` について `H'(p, O) ≤ H(p, O)` である。
+
+**入力を `borrow_ify` の出力に限るのは、L7 がこの命題を P23 と併せて読むからである。**P23 の言明は
+`borrow_ify` の出力を入力とする場合についてのものであり、D12 を満たすだけのプログラムについては何も言わない。
+`cancel` を呼ぶのは `optimize_rc_program` の 1 か所であり、そこで渡るのはまさに `borrow_ify` の出力である
+(`cancel` も `borrow_ify` も `pub(crate)` なのでクレートの外から呼べない、
+`CODE src/rc_ir/borrow.rs: cancel, borrow_ify`, `CODE src/build/build_object_files.rs:
+optimize_rc_program`)。
 
 <1>1. `P'` の各本体は、`P` の対応する本体から `cancelled()` が返す `Retain`/`Release` 節点だけを取り除いた
       ものであり、他の節点の種類・変数・path・並びを変えない。
@@ -186,24 +218,48 @@ shared = false` になる。今のコードではこのプログラムは 3 水�
       D10 の同じ生成を行い、活性化の初期 `Obl` は同じである。
   BY <1>1, <1>2, D9, D10, D14
 
-<1>4. `H` を動かす段は、`Retain`、`Release`、D10 の生成の表の各行、および D10 の消費のうち捨てる 2 行
-      (boxed 容器の `Destructure`、unbox 容器の名前の付いていないフィールド) である。呼び出しの段 (E3) と
-      返りの段 (E4) は `H` を変えない。
-  BY D10, D24 (E2)(E3)(E4)
+<1>4. `H` を動かす動作は次で尽きる。`Retain` (各 leaf につき +1)、`Release` (各 leaf につき −1)、D10 の
+      生成の表の各行、D10 の消費のうち捨てる 2 行 (boxed 容器の `Destructure`、unbox 容器の名前の付いて
+      いないフィールド)、および **(F) の解放** -- 解放されるオブジェクトが持つ参照がすべて処分されるので、
+      それが指すオブジェクトの `H` が下がる。呼び出しの段 (E3) と返りの段 (E4) は `H` を変えない。
+  BY D10, D24
 
-<1>5. 共通接頭の各時点 `p` と各計数下オブジェクト `O` について
-      `H'(p, O) − H(p, O) = Σ_r d_r(O) − Σ_t b_t(O)` である。ここで `t` は `p` までに `X` が実行した
-      削除される `Retain`、`r` は `p` までに `X` が実行した削除される `Release` を渡り、`b_t(O)` と
-      `d_r(O)` はその節点が `X` で実際に作る / 処分する `O` への参照の個数である。
-  `<1>3` と `<1>4` より、削除された節点以外のすべての段は 2 つの実行で `H` を同じだけ動かす。削除された
-  節点は `X` だけが実行する。実際に作る / 処分する参照の個数が `inhabited` な leaf の分であることは P6 で
-  ある。
-  BY <1>1, <1>3, <1>4, P6
+<1>4a. 共通接頭の各時点で、`X` の生きている活性化と `X'` の生きている活性化は D30 の対応で 1 対 1 であり、
+      対応する 2 つの活性化は D21 のデータ -- パラメータ・capture の値と、オペランドから結果が決まらない
+      4 種の各位置での結果 -- を共有する。とくに対応する 2 つの活性化の対応する位置で、対応する値の
+      inhabited (D16) な leaf は一致する。
+  D29 が本体ごとにこの対応を構成し、D30 がそれを実行の段の列の上に並べる。値が対応することから、その値の
+  各 unbox union の節のタグも対応し、D16 の inhabited は実行時のタグだけで決まる。
+  BY D16, D21, D29, D30
 
-<1>6. 削除される `Release` は、削除される `Retain` によって分割される。
+<1>5. `p` までに `X` が実行した削除される `Retain` の実行 (活性化と節点の対) の全体を `T(p)`、削除される
+      `Release` の実行の全体を `R(p)` とすると、共通接頭の各時点 `p` と各計数下オブジェクト `O` について
+      `H'(p, O) − H(p, O) = Σ_{r ∈ R(p)} d_r(O) − Σ_{t ∈ T(p)} b_t(O)` である。`b_t(O)` と `d_r(O)` は
+      その実行が実際に作る / 処分する `O` への参照の個数である。
+  <2>1. `<1>1` と `<1>3` より、削除された節点以外の各段は 2 つの実行で同じ節点を同じ値に対して実行し、
+        D10 の同じ生成と消費を行うので、`H` を同じだけ動かす。
+    BY <1>1, <1>3, <1>4
+  <2>2. 実際に作る / 処分する参照の個数が inhabited な leaf の分であることは P6 である。
+    BY P6
+  <2>3. (F) の解放が動かす分は 2 つの実行で一致する。P21 (b) は、対応する 2 つの活性化が同じ位置で同じ
+        オブジェクトを解放することを言う。D30 は `cancel` について D29 の対応を実行の段の列の上に並べる
+        ので、共通接頭の上の各活性化の対にこれが当たる。
+    BY P21, D29, D30
+  <2>4. QED
+    BY <2>1, <2>2, <2>3
+
+<1>5a. 1 つの活性化は各節点を高々 1 回しか実行しない。D21 より活性化が節点を訪れる順序は D3 の意味の実行路
+      の 1 つであり、D2 より本体は有限の木であって節点が自分自身を含むことはないので、実行路は各位置を
+      高々 1 回通る。よって `T(p)` と `R(p)` を活性化ごとに分けると、1 つの活性化の分は節点の集合である。
+  BY D2, D3, D21
+
+<1>5b. 共通接頭の各時点で、`X` の生きている活性化と `X'` の生きている活性化は D30 の対応で 1 対 1 である。
+  BY D29, D30
+
+<1>6. 削除される `Release` 節点は、削除される `Retain` 節点によって分割される。
   <2>1. `walk_inner` の `RcExpr::Release` の腕は、`un_bump` が `InBracket(t)` を返したときにだけ、その
         `Release` の `NodeId` を `un_bump_releases` の `t` の項目に push する。
-    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の RcExpr::Release の腕
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
   <2>2. 走査は本体の各位置をちょうど 1 回訪れる。
     BY P15
   <2>3. `<2>1` と `<2>2` より、1 つの `Release` 節点は高々 1 つの項目に入る。
@@ -214,91 +270,144 @@ shared = false` になる。今のコードではこのプログラムは 3 水�
   <2>5. QED
     BY <2>3, <2>4
 
-<1>6a. 以下、`ρ` を `X` の活性化が辿る実行路 (D21) とし、`t` を削除される `Retain` の 1 つとし、
-      「`t` の群」を `<1>6` の分割で `t` に属する削除される `Release` の集合とする。`<1>7` から `<1>9` は
-      この `ρ` と、すべての `t` についての主張である。
+<1>6a. 以下、`a` を `X` の 1 つの活性化、`ρ` を `a` が辿る実行路 (D21) とし、`t` を削除される `Retain`
+      節点の 1 つとし、「`t` の群」を `<1>6` の分割で `t` に属する削除される `Release` 節点の集合とする。
+      `<1>7` から `<1>9` はこの `a` と、すべての `t` についての主張である。
 
-<1>7. `t` を含まない実行路の上には、`t` の群の `Release` は 1 つも無い。
-  BY P19, <1>6a
+<1>7. `t` の群の `Release` 節点 `r` を含むどの実行路も `t` を含み、その路の上で `r` は `t` より後ろにある。
+      とくに `t` を含まない実行路の上には `t` の群の `Release` は 1 つも無い。
+  <2>1. `r ∈ 群(t)` であるとき、`r` の訪問で `un_bump` は `InBracket(t)` を返した。P17 より、そのとき `t`
+        はその時点の `pending` の要素である。
+    BY <1>6, P17
+  <2>2. P16 (a) より、`pending` の各要素の `node` は、その位置までに走査が訪れた `Retain` 節点である。
+        `t` が `pending` に入るのは `t` 自身の訪問であり (`walk_inner` の `RcExpr::Retain` の腕)、`walk`
+        は本体の各位置をちょうど 1 回訪れる (P15)。
+    BY P15, P16, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
+  <2>3. 走査が節点 `r` を訪れるときの `pending` の要素は、本体の根から `r` へ至る道 -- 継続の鎖と `Match`
+        のアーム本体への降下からなる -- の上の `Retain` 節点だけである。`Match` のアーム本体の中で
+        `pending` に入った `Retain` は、そのアームの外へ出ない。P18 より `merge` の返す `pending` に残る
+        `Retain` は `pending_in` に在るものだけであり、`pending_in` は `Match` の入口の `pending` である。
+    BY P18, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, merge
+  <2>4. `r` を含む D3 の実行路は、本体の根から `r` へ至るその道をそのまま含む。`Match` を含む位置では、
+        `r` を含む実行路は `r` を含むアームを選ぶからである。
+    BY D3, <2>3
+  <2>5. QED
+    BY <2>1, <2>2, <2>3, <2>4
 
 <1>8. `t` が `ρ` の上にあるとき、`t` の群の `Release` のうち `ρ` の上にあるものが `ρ` で処分する参照の
       多重集合の総和は、`t` が `ρ` で作る参照の多重集合 `b_t` に等しい。
-  P19 より、`ρ` の上で群は `t` の `outstanding` を空にする。D27 の `B(t, ρ)` は `b_t` から群の処分を引いた
-  ものであり、P18b より `outstanding` が空ならば `B(t, ρ)` も空である。
-  BY P19, P18b, D27, <1>6a
+  <2>1. P19 より、`ρ` の上で `t` の群は `t` の `outstanding` を空にする。
+    BY P19, <1>6a
+  <2>2. D27 の `B(t, ρ)` は、`t` が `ρ` で作る参照の多重集合から、`un_bump` が `InBracket` で `t` を選ぶ
+        `Release` -- すなわち `t` の群 -- が `ρ` で処分する参照を引いたものである。P18b より
+        `outstanding` が空ならば `B(t, ρ)` も空である。よって群の処分の総和は `b_t` を含む。
+    BY D27, P18b, <2>1
+  <2>3. P20 より、`ρ` の上で削除される `Retain` が作る参照の多重集合の総和は、`ρ` の上で実行される削除
+        される `Release` が処分する参照の多重集合の総和に等しい。
+    BY P20
+  <2>4. `<1>6` の分割と `<1>7` より、`ρ` の上で実行される削除される `Release` は、`ρ` の上にある `t` の
+        群へちょうど 1 つずつ分けられる。よって `<2>3` の右辺は、`ρ` の上の各 `t` について群の処分を
+        足したものである。
+    BY <1>6, <1>7
+  <2>5. QED
+    `<2>2` より各 `t` について「群の処分 ⊇ `b_t`」であり、`<2>3` と `<2>4` より両辺の総和が等しいので、
+    各 `t` について等号が成り立つ。
+    BY <2>2, <2>3, <2>4
 
-<1>9. `t` が `p` までに実行されたとき、`p` までに `X` が実行した `t` の群の `Release` の処分の総和は、
-      各オブジェクト `O` について `b_t(O)` 以下である。
-  `p` までに実行された群の `Release` は `ρ` の上の群の `Release` の部分集合であり、各 `d_r(O)` は 0 以上
-  なので、部分集合についての和は `<1>8` の総和以下である。
-  BY <1>8, <1>6a
+<1>9. `t` が `p` までに `a` によって実行されたとき、`p` までに `a` が実行した `t` の群の `Release` の
+      処分の総和は、各オブジェクト `O` について `b_t(O)` 以下である。
+  `p` までに実行された群の `Release` は `ρ` の上の群の `Release` の部分集合であり (`<1>5a` より 1 つの
+  活性化は各節点を高々 1 回しか実行しない)、各 `d_r(O)` は 0 以上なので、部分集合についての和は `<1>8` の
+  総和以下である。
+  BY <1>5a, <1>8, <1>6a
 
 <1>10. QED
-  `<1>5` の右辺を `<1>6` の分割で群ごとにまとめると、群 `t` の項は
-  `Σ_{p までの r ∈ 群(t)} d_r(O) − (t が p までに実行されたならば b_t(O)、さもなくば 0)` である。
-  `t` が実行されていない群では `<1>7` より第 1 項が 0 なので項は 0 である。`t` が実行された群では `<1>9`
-  より項は 0 以下である。総和も 0 以下である。
-  BY <1>5, <1>6, <1>7, <1>9
+  `<1>5` の右辺を活性化ごとに分け、活性化 `a` の分を `<1>6` の分割で群ごとにまとめると、群 `t` の項は
+  `Σ_{p までに a が実行した r ∈ 群(t)} d_r(O) − (t が p までに a によって実行されたならば b_t(O)、
+  さもなくば 0)` である。`t` が `a` に実行されていない群では `<1>7` より第 1 項が 0 なので項は 0 である。
+  `t` が実行された群では `<1>9` より項は 0 以下である。活性化ごとの総和も、活性化を渡る総和も 0 以下で
+  ある。
+  BY <1>5, <1>5a, <1>6, <1>7, <1>9
 
-## L7 (P26 は `cancel` について成り立つ)
+## L7 (P26 の第 1 文は `cancel` について成り立つ)
 
-**言明**。`cancel` の入力 `P` が D12 を満たすとする。D-CP の共通接頭の上の一意性の観測点 (D18) `q` に
+**言明**。`cancel` の入力 `P` を `borrow_ify` の出力とする。D30 の共通接頭の上の一意性の観測点 (D18) `q` に
 ついて、`X` の `q` での観測値が真ならば、`X'` の `q` での観測値も真である。
 
-<1>1. `q` のオペランドの leaf が指すオブジェクトは `X` と `X'` で同じ `O` である。
-  D-CP より、共通接頭の対応する段は同じオブジェクトを名指す。
-  BY D-CP
+<1>1. `q` のオペランドの leaf `[]` が指すオブジェクトは `X` と `X'` で同じ `O` である。
+  D30 より、共通接頭の対応する段は同じオブジェクトを名指す。
+  BY D30
 
-<1>2. `O` の参照カウント状態は `X` と `X'` で同じである。
-  <2>1. 状態を global にするのは (E5) の段だけであり、印を付けるのはグローバル初期化子の活性化が返した値が
-        到達するグラフである。
-    BY D24 (E5), A8
+<1>1a. `O` は計数下 (D26) である。`X` の `q` での観測値は真であり、L0 よりグローバル状態のオブジェクトの
+      観測値は偽なので、`O` はグローバル状態ではない。D26 よりオブジェクトは計数下かグローバル状態かの
+      どちらかである。
+  BY D26, L0, <1>1
+
+<1>2. `O` がグローバル状態であるかどうかは `X` と `X'` で同じである。
+  <2>1. 状態を `GLOBAL` にするのは (E5) の段だけであり、印を付けるのはグローバル初期化子の活性化が返した値
+        が到達するグラフである。逆向きの遷移は無い (D26、L0 の後の注)。
+    BY D24, D26, A8, L0
   <2>2. `cancel` はグローバル初期化子の `init` から `Retain`/`Release` 節点を取り除くだけで、他の節点の
-        種類・変数・path・並びを変えない。よって `init` の活性化が返す値は `X` と `X'` で同じであり、
-        その値が到達するオブジェクトのグラフも同じである。
-    BY P22, D-CP, CODE src/rc_ir/borrow.rs: cancel
+        種類・変数・path・並びを変えない (`<1>1`)。よって `init` の活性化が返す値は `X` と `X'` で対応し
+        (D30)、その値が到達するオブジェクトのグラフも対応する。
+    BY <1>1, D30
   <2>3. QED
     BY <2>1, <2>2
 
-<1>3. `X` の `q` での観測値が真なので、`O` の状態は local か threaded であり、`H(q, O) = 1` である。
-  BY L0, <1>1
+<1>3. `X` の `q` での観測値が真なので、`H(q, O) = 1` である。
+  BY L0, <1>1, <1>1a
 
-<1>4. `H'(q, O) ≤ 1` である。
-  BY L6, <1>3
+<1>4. `H'(q, O) ≤ 1` である。`<1>1a` より `O` は計数下であり、`q` は共通接頭の上の時点である。
+  BY L6, <1>1a, <1>3
 
 <1>5. `H'(q, O) ≥ 1` である。
   `q` は D7 の読む構文の表の `Llvm` の行であり、`O` は `q` のオペランドの inhabited な leaf が指す
-  オブジェクトである。P23 より `P'` は D12 を満たすので、(S-c) より `O` は `q` の時点で解放されていない。
-  D7 より、解放されるのはカウントが 0 になったオブジェクトである。
-  BY P23, D7, D11, <1>1
+  オブジェクトである。この命題の前提より `cancel` の入力は `borrow_ify` の出力なので、P23 より `P'` は
+  D12 を満たす。D11 の (S-c) より `O` は `q` の時点で解放されていない。D7 より、解放されるのはカウントが
+  0 になったオブジェクトである。
+  BY P23, D7, D11, D12, <1>1
 
 <1>6. QED
-  `<1>4` と `<1>5` より `H'(q, O) = 1` である。`<1>2` と `<1>3` より `O` の状態は `X'` でも local か
-  threaded なので、L0 より `X'` の `q` での観測値は真である。
-  BY L0, <1>2, <1>3, <1>4, <1>5
+  `<1>4` と `<1>5` より `H'(q, O) = 1` である。`<1>1a` と `<1>2` より `O` は `X'` でもグローバル状態では
+  ないので、L0 より `X'` の `q` での観測値は真である。
+  BY L0, <1>1a, <1>2, <1>4, <1>5
 
 ## L7a (共通接頭の 2 つの出口は、どちらも許された向きである)
 
-**言明**。`cancel` について、D-CP の共通接頭が終わるとき、(X1) では `X` の観測値が偽で `X'` の観測値が真で
-ある。(X2) では `X` が複製を作り `X'` が作らない。
+**言明**。`cancel` の入力を `borrow_ify` の出力とする。D30 の共通接頭が終わるとき、(X1) では `X` の観測値が
+偽で `X'` の観測値が真である。(X2) では `X` が複製を作り `X'` が作らない。
+
+<1>0. 共通接頭が終わる段の直前の時点は共通接頭の上にある。D30 は、並んだ 2 つの段が同じ位置の節点を実行し、
+      同じ値を作り、同じオブジェクトを名指す限り対応が次の段へ伸びると定める。よって共通接頭が終わる段まで
+      の各段は対応しており、その直前の時点について L6 と L7 が読める。
+  BY D30
 
 <1>1. (X1) について。観測値が違い、かつ `X` の観測値が真であるとすると、L7 より `X'` の観測値も真になり、
       違うことに反する。よって `X` の観測値は偽であり、違うのだから `X'` の観測値は真である。
-  BY L7
+  BY L7, <1>0
 
-<1>2. (X2) について。分岐が違う点を `p`、その op が参照カウントを読むオブジェクトを `O` とする。この op の
-      分岐はカウントが 1 であるかで決まり、1 のとき複製を作らない
-      (`CODE src/generator.rs: Generator::build_branch_by_is_unique`,
-      `CODE src/fixstd/builtin.rs: make_array_unique_with_hole`)。L6 より
-      `H'(p, O) ≤ H(p, O)` なので、分岐が違うのは `H(p, O) > 1` かつ `H'(p, O) = 1` のときだけである。
-  BY L6, CODE src/generator.rs: Generator::build_branch_by_is_unique,
-     CODE src/fixstd/builtin.rs: make_array_unique_with_hole
+<1>2. (X2) について。分岐が違う点を `p`、その op が参照カウントを読むオブジェクトを `O` とする。
+  <2>1. `O` は計数下 (D26) である。`unique_check_operand` が宣言する一意性検査は
+        `build_branch_by_is_unique` が実装し (A3、`CODE src/fixstd/builtin.rs:
+        make_array_unique_with_hole, make_struct_union_unique`)、その `global_bb` の腕は無条件に
+        `shared_bb` へ跳ぶ。よってグローバル状態のオブジェクトはどちらの実行でも共有の腕を取り、分岐は
+        違わない。D26 よりオブジェクトは計数下かグローバル状態かのどちらかである。
+    BY A3, D26, CODE src/generator.rs: Generator::build_branch_by_is_unique,
+       CODE src/fixstd/builtin.rs: make_array_unique_with_hole, make_struct_union_unique
+  <2>2. この op の分岐はカウントが 1 であるかで決まり、1 のとき複製を作らない。
+    BY A3, CODE src/generator.rs: Generator::build_branch_by_is_unique,
+       CODE src/fixstd/builtin.rs: make_array_unique_with_hole, make_struct_union_unique
+  <2>3. QED
+    `<2>1` と `<1>0` より L6 が読めて `H'(p, O) ≤ H(p, O)` である。`<2>2` より分岐が違うのは一方だけが
+    `H = 1` のときであり、不等式よりそれは `H(p, O) > 1` かつ `H'(p, O) = 1` の場合だけである。すなわち
+    `X` は複製を作り `X'` は作らない。
+    BY L6, <1>0, <2>1, <2>2
 
 <1>3. QED
   BY <1>1, <1>2
 
 `unsafe_is_unique` の doc が認めているのは共有から一意への向きである
-(`CODE src/fixstd/std.fix: unsafe_is_unique` の doc)。`<1>1` と `<1>2` の出口はどちらもその向きである。
+(`CODE src/docs/std_unsafe_is_unique.md`)。`<1>1` と `<1>2` の出口はどちらもその向きである。
 
 ## 5. `borrow_ify` の半分
 
@@ -334,10 +443,15 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 
 ## L8a (原本の版とグローバル初期化子では `owns_unit` はつねに真である)
 
-**言明**。`f_own` の `RewriteCtx` とグローバル初期化子の `RewriteCtx` では、どの `(arg, unit)` についても
-`owns_unit(arg, unit)` は真である。
+**言明**。次の 2 つが成り立つ。
 
-<1>1. `owns_unit(arg, unit)` は `origin(arg, unit)` の候補すべてについて `owns_object(root, path)` を問う。
+- **(a)** `borrow_ify` の `owned_units` は、入力の各関数の各パラメータ・capture `p` と各
+  `u ∈ rc_units(p.ty)` について `(p.name, u)` を含む。
+- **(b)** `f_own` の `RewriteCtx` とグローバル初期化子の `RewriteCtx` では、`owns_object(root, path)` と
+  `owns_unit(arg, unit)` は、値を返すならば真を返す。
+
+<1>1. `owns_unit(arg, unit)` は `origin(arg, unit)` の候補すべてについて `owns_object(root, path)` を問い、
+      すべてが真のときだけ真を返す。
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
 
 <1>2. `owns_object(root, path)` は `self.vars.param_tys` に `root` が無いとき真を返す。
@@ -351,20 +465,49 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       パラメータと capture だけを持つ。
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::new, CODE src/rc_ir/ownership.rs: VarTable::of
 
-<1>5. `borrow_ify` は入力の各関数について `owned_units.extend(param_capture_units(func, type_env))` を
-      行う。`f_own` は入力の関数のパラメータ名と型をそのまま持つので、`f_own` のパラメータ・capture の
-      各 `p` と各 `u ∈ rc_units(p.ty)` について `(p.name, u) ∈ owned_units` である。
+<1>5. (a) が成り立つ。`borrow_ify` は入力の各関数について `owned_units.extend(param_capture_units(func,
+      type_env))` を行い、`param_capture_units` は各パラメータ・capture `p` の各 `u ∈ rc_units(p.ty)` に
+      ついて `(p.name, u)` を返す。
   BY CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
 
-<1>6. `root` が `f_own` のパラメータ・capture のとき、`owns_object(root, path)` は
-      `units_under(root_ty, path, type_env)` の各 `unit` について
-      `owned_units.contains(&(root, truncate_to_unit(root_ty, unit, type_env)))` を問う。D5 より
-      `truncate_to_unit(root_ty, ・)` の値は `rc_units(root_ty)` の元であり、`<1>5` よりそれらはすべて
+<1>5a. A10 を満たす任意の型 `τ` と任意の path `π` について、`units_under(τ, π, type_env)` の各元 `u` に
+      対する `truncate_to_unit(τ, u, type_env)` は、値を返すならば `u` に等しく、`rc_units(τ)` の元で
+      ある。
+  <2>1. CASE `subtree_type(τ, π) = Some(σ)`。`units_under` が返すのは `π ++ w` (`w ∈ rc_units(σ)`) の
+        列である。`subtree_type` の降下は `π` の各添字で `unit_step` が `Fields` を返すことを要求するので、
+        `truncate_to_unit(τ, π ++ w)` の walk は `π` の各添字で `Fields` の腕を取って `out` に積み、
+        `cur = σ` に着く。`rc_units_go(τ, ・)` も同じ `unit_step` の答えで同じ添字を辿って `σ` に着く。
+        続きは `truncate_to_unit(σ, w)` と `rc_units_go(σ, ・)` の walk であり、`w ∈ rc_units(σ)` なので
+        `rc_units_go` は `w` を積む -- すなわち `w` の各添字で `Fields` の腕を取り、最後に `Unit` の腕
+        (path はそこまで) か `Capture` の腕 (最後の添字を積む) に着く。`truncate_to_unit` は同じ判定で
+        同じ添字を積み、`Unit` と `Capture` で break する。よって返り値は `π ++ w` であり、それは
+        `rc_units(τ)` の元である。
+    BY CODE src/rc_ir/ownership.rs: units_under, subtree_type, truncate_to_unit, rc_units, rc_units_go,
+       unit_step
+  <2>2. CASE `subtree_type(τ, π) = None`。`units_under` が返すのは `[π]` である。`subtree_type` の walk が
+        `π` の途中で `NoUnit`、`Capture`、`Unit` のいずれかに当たったということなので、
+        `truncate_to_unit(τ, π)` の walk も同じ位置で同じ腕を取る。`NoUnit` では panic するので値を返さ
+        ない。`Unit` では break し、`Capture` では最後の添字を積んで break する。どちらでも返り値はそこ
+        までの `Fields` の添字列 (と `Capture` の添字) であり、`rc_units_go` が同じ道で積むものと一致
+        する。
+    BY CODE src/rc_ir/ownership.rs: units_under, subtree_type, truncate_to_unit, rc_units_go, unit_step
+  <2>3. QED
+    `subtree_type` の返り値は `Some` か `None` かのどちらかである。
+    BY <2>1, <2>2
+
+<1>6. `root` が `f_own` のパラメータ・capture であるとき、`owns_object(root, path)` は、値を返すならば
+      真を返す。`owns_object` は `units_under(root_ty, path, type_env)` の各 `unit` について
+      `owned_units.contains(&(root, truncate_to_unit(root_ty, unit, type_env)))` を問う。`<1>5a` より
+      その `truncate_to_unit` の値は `rc_units(root_ty)` の元であり、`<1>5` よりそれらはすべて
       `owned_units` にある。
-  BY D5, <1>5, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+  BY <1>5, <1>5a, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
 
 <1>7. QED
-  BY <1>1, <1>2, <1>3, <1>4, <1>6
+  (a) は `<1>5` である。(b) について、グローバル初期化子では `<1>3` と `<1>2` より `owns_object` はつねに
+  真であり、`f_own` では `<1>4` により `root` がパラメータ・capture であるかで場合が割れ、そうでなければ
+  `<1>2`、そうであれば `<1>6` が真を与える。`owns_unit` は `<1>1` より候補すべての `owns_object` の連言で
+  ある。
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6
 
 ## L8b (原本の版とグローバル初期化子は借用しない)
 
@@ -374,8 +517,8 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 
 <1>1. `borrow_ify` は最後に各出力関数について
       `func.borrowed_units = param_capture_units(func, type_env).filter(|u| !owned_units.contains(u))` を
-      置く。`f_own` については L8a の `<1>5` が挙げる unit がすべて `owned_units` にあるので、この集合は
-      空である。
+      置く。`f_own` は入力の関数のパラメータ名と型をそのまま持つので、`param_capture_units(f_own)` が
+      挙げる unit は L8a の (a) が挙げるものであり、すべて `owned_units` にある。よってこの集合は空である。
   BY L8a, CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
 
 <1>2. グローバル初期化子 `RcGlobalInit` はパラメータも capture も持たない。
@@ -386,55 +529,99 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   ある。`<1>1` と `<1>2` より出力の側の所有は全 unit であり、A1 より入力の側の所有も全 unit である。
   BY A1, D10, D14, <1>1, <1>2
 
-## L8 (`borrow_ify` が参照カウントを変えうる場所は 3 つである)
+## L8 (`borrow_ify` が本体に加える違いは 4 つである)
 
-**言明**。`borrow_ify` の入力の実行と出力の実行を D-CP で比べるとき、`H` の動きが違う節点は次の 3 つだけで
-ある。
+**言明**。次の 2 つが成り立つ。
 
-- **(a)** 借用版の `rewrite_rc` が落とした `Retain` / `Release`。
-- **(b)** 借用版の本体に `call_rc` が入れた `before` の `Retain`。
-- **(c)** 呼び出し先が借用版である呼び出しの直後に `call_rc` が入れた `after` の `Release`。
+- **(1)** `borrow_ify` の出力の関数は、入力の各関数 `f` について `f_own` (`f.clone()` の `body` を
+  `is_borrow_version` が偽の `RewriteCtx::rewrite` に掛けたもの) と、`borrow_versions` が像を持つ `f` に
+  ついて `f#borrow` (`clone_func` の複製の `body` を `is_borrow_version` が真の `RewriteCtx::rewrite` に
+  掛けたもの) で尽きる。出力のグローバル初期化子は、入力の初期化子の `init` を `is_borrow_version` が偽の
+  `RewriteCtx` で書き換えたものである。
+- **(2)** 出力の各本体と、それが作られた入力の本体との違いは次の 4 つだけである。
+  - **(a)** 借用版の `rewrite_rc` が落とした `Retain` / `Release` 節点。
+  - **(b)** 借用版の本体に `call_rc` が入れた `before` の `Retain` 節点。
+  - **(c)** 呼び出し先が借用版である呼び出しの継続の先頭に `call_rc` が入れた `after` の `Release` 節点。
+  - **(d)** `route` が `App` の callee の名前を借用版の名前に替えたこと、および借用版の本体で `clone_func`
+    が束縛変数の名前を一斉に付け替えたこと。
 
-<1>1. 出力の関数は、入力の各関数 `f` について `f_own` (`f.clone()` の `body` を `is_borrow_version` が偽の
-      `RewriteCtx::rewrite` に掛けたもの) と、`borrow_versions` が像を持つ `f` について `f#borrow`
-      (`clone_func` の複製の `body` を `is_borrow_version` が真の `RewriteCtx::rewrite` に掛けたもの) で
-      ある。グローバル初期化子は `is_borrow_version` が偽の `RewriteCtx` で書き換えられる。
+  すなわち、(a)(b)(c) の節点を除くと、出力の本体の節点と入力の本体の節点は 1 対 1 に対応し、対応する節点は
+  同じ種類・同じ path・同じ並びを持ち、名指す変数は (d) の名前替えの下で対応する。
+
+**この言明は 2 つの実行を読まない。**節点についての静的な言明であり、D30 が `borrow_ify` の半分でこれを引く
+のはこの形でである。
+
+<1>1. (1) が成り立つ。`borrow_ify` は `prog.funcs` の各 `func` について `f_own` を作って `funcs` に入れ、
+      `clones` の各要素について借用版を作って `funcs` に入れる。`clones` に入るのは `borrow_versions` が
+      鍵として持つ関数だけである。`globals` は各 `g` について `RewriteCtx { is_borrow_version: false, .. }`
+      で `g.init` を書き換える。
   BY CODE src/rc_ir/borrow.rs: borrow_ify
 
 <1>2. `rewrite_inner` が節点に行うのは次の 3 つだけである。(i) `Let(x, App(callee, args), k)` で callee を
       `route` の答えに替え、`call_rc` の `before` を呼び出しの前に、`after` を継続の先頭に置く。
       (ii) `Retain` / `Release` を `rewrite_rc` に掛ける。(iii) 残る節点は種類・変数・path・並びを変えずに
-      継続を書き換える。
-  BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
+      継続 (と `Match` のアーム本体) を書き換える。
+  BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, prepend_rc
 
-<1>3. (i) の付け替えと `clone_func` の名前替えは、本体が計算する値と作るオブジェクトを変えない。`route` が
-      返す呼び出し先は元の呼び出し先と同じ入力関数の版であり (P12)、借用版の本体は原本の本体の束縛変数を
-      一斉に付け替えたものである (P9)。
+<1>3. (d) は値を計算する構文の種類・オペランド・並びを変えない。`route` が返す呼び出し先は元の呼び出し先と
+      同じ入力関数の版であり (P12)、借用版の本体は原本の本体の束縛変数を一斉に付け替えたものであって
+      それ以外の違いを持たない (P9)。
   BY P9, P12
 
 <1>4. `rewrite_rc` が節点を落とすのは `is_borrow_version` が真のときだけである。偽のときは
       `rc_node(is_release, v.clone(), path.clone(), state, k, source)` をそのまま返す。
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
 
+<1>4a. `is_borrow_version` が真のとき、`rewrite_rc` は `Retain(v, π)` / `Release(v, π)` を、そのまま残すか
+      丸ごと落とすかのどちらかにする。A2 より `π` は `rc_units(v.ty)` の元であり、そのとき
+      `units_under(v.ty, π, type_env)` は `[π]` の 1 元である -- `π` が unit の path なら
+      `subtree_type(v.ty, π)` の walk は `Unit` か `Capture` で止まって `None` を返すか、`π` の末尾で
+      `unit_step` が `Unit` を返す型に着いて `Some` を返し、前者では `units_under` が `[π]` を、後者では
+      `rc_units` が `[[]]` を返すので `units_under` はやはり `[π]` を返す。よって `kept` は `[π]` か `[]`
+      である。
+  BY A2, D5, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc,
+     CODE src/rc_ir/ownership.rs: units_under, subtree_type, rc_units, unit_step
+
 <1>5. `call_rc` の `before` に要素が入るのは `callee_owns && !arg_owned` のときであり、`arg_owned` は
-      `owns_unit(arg, unit)` である。L8a より、`before` に要素が入るのは借用版の本体だけである。
+      `owns_unit(arg, unit)` である。L8a の (b) より、`f_own` の `RewriteCtx` とグローバル初期化子の
+      `RewriteCtx` では `owns_unit` は真なので、`before` に要素が入るのは借用版の本体だけである。
   BY L8a, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
 
 <1>6. `call_rc` の `after` に要素が入るのは `!callee_owns && arg_owned` のときである。`callee_owns` は、
       `callee_params` に呼び出し先が無いとき真であり、あるときは
-      `owned_units.contains(&(params[arg_idx].0, unit))` である。`borrow_ify` は入力の各関数について
-      `owned_units.extend(param_capture_units(func, type_env))` を行い、`callee_params` には原本について
-      `param_names_and_types(func)` すなわち入力の関数のパラメータ名をそのまま入れるので、呼び出し先が
-      原本 `g_own` のとき `callee_owns` は真である。よって `callee_owns` が偽になるのは呼び出し先が
-      借用版のときだけである。
-  BY CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc, borrow_ify, param_capture_units,
-     param_names_and_types
+      `owned_units.contains(&(params[arg_idx].0, unit))` である。`callee_params` には原本について
+      `param_names_and_types(func)` すなわち入力の関数のパラメータ名と型をそのまま入れるので、呼び出し先が
+      原本 `g_own` のとき、問われる unit は L8a の (a) が挙げるものであり `callee_owns` は真である。よって
+      `callee_owns` が偽になるのは呼び出し先が借用版のときだけである。
+  BY L8a, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc, borrow_ify, param_names_and_types
 
 <1>7. QED
-  `<1>2` の (iii) の節点は `H` を同じだけ動かす。(i) のうち呼び出し先の付け替えは `<1>3` より `H` を
-  動かさず、入れた節点は `<1>5` の (b) と `<1>6` の (c) である。(ii) は `<1>4` より借用版の中でだけ
-  節点を落とし、それが (a) である。
-  BY <1>2, <1>3, <1>4, <1>5, <1>6
+  `<1>2` の (iii) の節点は種類・変数・path・並びを変えない。(i) のうち callee の付け替えは (d) であり、
+  `<1>3` より値を計算する構文を変えない。入れる節点は `<1>5` の (b) と `<1>6` の (c) である。(ii) は
+  `<1>4` と `<1>4a` より、借用版の中でだけ節点を丸ごと落とし、それが (a) である。
+  BY <1>2, <1>3, <1>4, <1>4a, <1>5, <1>6
+
+## L8c (対応するオブジェクトが保持する値は対応する)
+
+**言明**。`borrow_ify` について、D30 の共通接頭の各時点で、対応する 2 つのオブジェクトは対応する値を保持
+する -- 対応する各位置において、inhabited (D16) な各 boxed leaf が対応するオブジェクトを指し、計数下か
+グローバル状態か (D26) の区別も一致する。
+
+<1>1. オブジェクトの記憶域へ書き込む段は、その段の節点と、オペランドの値と、D21 の 4 種の結果だけで書き込む
+      内容を決める。参照カウントも、ほかの活性化の状態も読まない。
+  BY A4
+
+<1>2. L8 の (a)(b)(c) の節点 -- `Retain` と `Release` -- はオブジェクトの記憶域へ書き込まない。D7 より
+      この 2 つが触れるのは参照カウントと状態バイトだけであり、それは D7 の意味でオブジェクトを読むこと
+      でも書き込むことでもない。
+  BY D7, L8
+
+<1>3. QED
+  L8 の (2) より、(a)(b)(c) を除く出力の節点と入力の節点は 1 対 1 に対応し、対応する節点は同じ種類・同じ
+  path・同じ並びを持つ。D30 より共通接頭の上で対応する段は同じ値を与えられ、同じオブジェクトを名指す。
+  `<1>1` よりその 2 つの段が書き込む内容は等しい。`<1>2` より (a)(b)(c) の段は記憶域を書き換えないので、
+  一方の実行にしか無いこれらの段が対応を崩すことはない。
+  BY A4, D30, L8, <1>1, <1>2
 
 ## L9a (活性化を作る段は 6 種である)
 
@@ -443,7 +630,11 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 - **(i)** callee の名前が `prog.funcs` の鍵である `App` の呼び出しの段 ((E3))。
 - **(ii)** callee の名前が `prog.funcs` の鍵でない `App` の呼び出しの段 ((E3))。
 - **(iii)** `Let(x, Llvm(gen, args), k)` の節点の段 ((E2)) のうち、`gen` の
-  `LLVMGen::applies_a_function_operand` が真を宣言するもの。
+  `LLVMGen::applies_a_function_operand` が真を宣言するもの。**そう宣言する op は 8 つで尽きる** --
+  `InlineLLVMFixBody`、`InlineLLVMUnionModBody`、`InlineLLVMWithRetainedFunctionBody`、
+  `InlineLLVMArrayBorrowElementsBody`、`InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、
+  `InlineLLVMUnsafeMutateBoxedIOSInternalBody`、`InlineLLVMArrayMutateElementsInternalBody`、
+  `InlineLLVMArrayMutateElementsIosInternalBody` である。
 - **(iv)** C のエントリ点または `FFI_EXPORT` のエントリ点が林の根を作る段 ((E1))。
 - **(v)** グローバルのアクセサが初期化子の活性化を作る段 ((E7))。
 - **(vi)** `Std::FFI::Destructor` のオブジェクトの解放 ((F)) が、そのオブジェクトの `_dtor` の欄の関数を
@@ -454,12 +645,11 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 アクセサが初期化子の関数を直に呼ぶ段である。
 
 <1>1. D24 が挙げる 7 種の段のうち、新しい活性化を作ると D24 が述べるのは (E1)、(E3)、(E7)、および (E2) の
-      うちオペランドを適用する `Llvm` の段である。D24 の「活性化の林」の段落が
-      「(E1) が作る活性化を**根**、(E3) と (E7)、および (E2) のうちオペランドを適用する `Llvm` の段が作る
-      活性化を、それを作った活性化の**子**と呼ぶ」と書く。(E4) は活性化が終わる段、(E5) は `mark_global` の
-      段、(E6) はプロセスが終わる段である。D24 はこのほかに (F) の解放が活性化を作ることを述べる --
-      「**解放される `o` が `Std::FFI::Destructor` のオブジェクトであるとき、解放は活性化を作る。**」--
-      解放は段ではなく、参照を処分するどの段の中でも起きる動作である。
+      うちオペランドを適用する `Llvm` の段である。D24 の「活性化の林」の段落は
+      「(E1) が作る活性化を**根**、(E3) と (E7)、(E2) のうちオペランドを適用する `Llvm` の段、および (F) の
+      解放が `Destructor` について作る段が作る活性化を、それを作った活性化の**子**と呼ぶ。**活性化を作る段は
+      この 5 種で尽きる。**」と書く。(E4) は活性化が終わる段、(E5) は `mark_global` の段、(E6) はプロセスが
+      終わる段である。
   BY D24
 
 <1>2. (E3) は (i) と (ii) に割れる。`RcRhs::App` の callee は `RcVar` 1 つなので、その名前が
@@ -474,22 +664,62 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       書く。残る 2 つが (E1) である。
   BY D22, D24
 
-<1>4. (E2) のうちオペランドを適用する `Llvm` の段が (iii) である。D24 は「その op の生成コードがオペランドを
-      関数として適用するとき (`LLVMGen::applies_a_function_operand` が真を宣言する op)、適用された関数の
-      本体の活性化が作られ、`a` はそれが終わるまで中断中である」と書く。この宣言を真にする op は 8 つで
-      ある -- `InlineLLVMFixBody`、`InlineLLVMUnionModBody`、`InlineLLVMWithRetainedFunctionBody`、
+<1>3a. 新しい活性化が作られるのは Fix の関数の本体のコードへ制御が入るときであり、それは
+      `Generator::apply_lambda` の呼び出しか、グローバルのアクセサが初期化子の関数を呼ぶことかの
+      どちらかである ((E7)、`CODE src/rc_ir/codegen.rs: Generator::implement_rc_global`)。`src/` の中で
+      `Generator::apply_lambda` を呼ぶ位置は 10 か所あり、それを囲む記号は 9 つである。
+
+      - `CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner` の
+        `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕 (1 か所)。
+      - `CODE src/ast/export_statement.rs: ExportStatement::implement` (1 か所)。
+      - `CODE src/generator.rs: Generator::build_run_destructor` (1 か所)。
+      - `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail` (2 か所)、
+        `InlineLLVMUnionModBody::generate` (1 か所)、
+        `InlineLLVMWithRetainedFunctionBody::generate` (1 か所)、
+        `InlineLLVMArrayBorrowElementsBody::generate` (1 か所)、
+        `apply_io_act_to_data_ptr` (1 か所)、`run_ios_runner` (1 か所)。
+
+      最後の 2 つは op ではないので、どの op がそれらへ届くかを数える。`apply_io_act_to_data_ptr` を呼ぶのは
       `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、`InlineLLVMUnsafeMutateBoxedIOSInternalBody`、
-      `InlineLLVMArrayBorrowElementsBody`、`InlineLLVMArrayMutateElementsInternalBody`、
-      `InlineLLVMArrayMutateElementsIosInternalBody`。既定は偽である。
-  BY D24, CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand,
-     CODE src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand,
-     InlineLLVMUnionModBody::applies_a_function_operand,
-     InlineLLVMWithRetainedFunctionBody::applies_a_function_operand,
-     InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand,
-     InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand,
-     InlineLLVMArrayBorrowElementsBody::applies_a_function_operand,
-     InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand,
-     InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand
+      `InlineLLVMArrayMutateElementsInternalBody`、`InlineLLVMArrayMutateElementsIosInternalBody` の 4 つで
+      ある。`run_ios_runner` を呼ぶのはその同じ 4 つと、`run_io_or_ios_runner` と `run_io` である。
+      `run_io` を呼ぶのは `run_io_or_ios_runner` だけであり、`run_io_or_ios_runner` を呼ぶのは
+      `CODE src/build/build_object_files.rs: build_main_function` と
+      `CODE src/generator.rs: Generator::build_run_destructor` である。
+  BY CODE src/generator.rs: Generator::apply_lambda, Generator::build_run_destructor,
+     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::implement_rc_global,
+     CODE src/ast/export_statement.rs: ExportStatement::implement,
+     CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail, InlineLLVMUnionModBody::generate,
+     InlineLLVMWithRetainedFunctionBody::generate, InlineLLVMArrayBorrowElementsBody::generate,
+     apply_io_act_to_data_ptr, run_ios_runner, run_io_or_ios_runner, run_io,
+     CODE src/build/build_object_files.rs: build_main_function
+
+<1>4. (E2) のうちオペランドを適用する `Llvm` の段が (iii) であり、その op は 8 つで尽きる --
+      `InlineLLVMFixBody`、`InlineLLVMUnionModBody`、`InlineLLVMWithRetainedFunctionBody`、
+      `InlineLLVMArrayBorrowElementsBody`、`InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、
+      `InlineLLVMUnsafeMutateBoxedIOSInternalBody`、`InlineLLVMArrayMutateElementsInternalBody`、
+      `InlineLLVMArrayMutateElementsIosInternalBody` である。
+  <2>1. `Llvm` の段が活性化を作るのは、その op の生成コードが `apply_lambda` を呼ぶときである。`<1>3a` の
+        数え上げより、op の生成コードから `apply_lambda` へ届くのはこの 8 つだけである -- 残る 2 か所
+        (`eval_rc_expr_inner` の `App` の腕、`ExportStatement::implement`) は op の生成コードではなく、
+        `build_run_destructor` は解放の側であり、`run_io_or_ios_runner` から `run_ios_runner` へ届く経路の
+        呼び元は `build_main_function` と `build_run_destructor` である。
+    BY <1>3a
+  <2>2. この 8 つはいずれも `applies_a_function_operand` に `true` を返す。既定は偽である。
+    BY CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand,
+       CODE src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand,
+       InlineLLVMUnionModBody::applies_a_function_operand,
+       InlineLLVMWithRetainedFunctionBody::applies_a_function_operand,
+       InlineLLVMArrayBorrowElementsBody::applies_a_function_operand,
+       InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand,
+       InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand,
+       InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand,
+       InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand
+  <2>3. QED
+    D24 は「その op の生成コードがオペランドを関数として適用するとき
+    (`LLVMGen::applies_a_function_operand` が真を宣言する op)、適用された関数の本体の活性化が作られる」と
+    書く。`<2>1` がその op の集合を与え、`<2>2` がその 8 つが宣言を真にすることを与える。
+    BY D24, <2>1, <2>2
 
 <1>5. (F) の解放が作る活性化が (vi) である。`build_traverser_work_nonnull_boxed_with` は、`work` が
       release であり `obj.is_destructor_object()` が真のとき、`build_release_boxed_with` に渡す仕事の先頭で
@@ -500,31 +730,121 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   BY D24, CODE src/generator.rs: Generator::build_traverser_work_nonnull_boxed_with,
      Generator::build_run_destructor, CODE src/fixstd/builtin.rs: run_io_or_ios_runner
 
-<1>6. この 6 種で尽きる。新しい活性化が作られるのは Fix の関数の本体のコードへ制御が入るときであり、
-      それは `Generator::apply_lambda` の呼び出しか、グローバルのアクセサが初期化子の関数を呼ぶ
-      ((E7)、`CODE src/rc_ir/codegen.rs: Generator::implement_rc_global`) かのどちらかである。`src/` の中で
-      `Generator::apply_lambda` を呼ぶ位置は 7 つあり、それぞれ上の種に当たる。
+<1>6. QED
+  `<1>1` が活性化を作る段を 5 種に分け、`<1>2` がそのうち (E3) を (i) と (ii) に、`<1>3` が (E1) と (E7) を
+  (iv) と (v) に、`<1>4` が (E2) の分を (iii) に、`<1>5` が (F) の分を (vi) に写す。`<1>3a` が、これらが
+  `apply_lambda` の呼び出しか初期化子の関数の呼び出しかのどちらかであることを与える。
+  BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5
 
-      - `CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner` の
-        `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕 -- (i) と (ii)。
-      - `CODE src/ast/export_statement.rs: ExportStatement::implement` -- (iv)。
-      - `CODE src/generator.rs: Generator::build_run_destructor` -- (vi)。
-      - `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail` (2 か所)、
-        `InlineLLVMUnionModBody::generate`、`InlineLLVMWithRetainedFunctionBody::generate`、
-        `InlineLLVMArrayBorrowElementsBody::generate`、`apply_io_act_to_data_ptr` -- (iii)。
-        `apply_io_act_to_data_ptr` を呼ぶのは `<1>4` の 4 つの mutate 系の op である。
-      - `CODE src/fixstd/builtin.rs: run_ios_runner` -- 呼ぶのは 4 つの mutate 系の op ((iii)) と
-        `run_io_or_ios_runner` であり、後者を呼ぶのは
-        `CODE src/build/build_object_files.rs: build_main_function` ((iv)) と
-        `Generator::build_run_destructor` ((vi)) である。
-  BY <1>2, <1>3, <1>4, <1>5, CODE src/generator.rs: Generator::apply_lambda,
-     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::implement_rc_global,
-     CODE src/ast/export_statement.rs: ExportStatement::implement,
-     CODE src/fixstd/builtin.rs: apply_io_act_to_data_ptr, run_ios_runner, run_io_or_ios_runner,
-     CODE src/build/build_object_files.rs: build_main_function
+**(F) の解放は参照を作る。** `build_run_destructor` は `_dtor` 欄の関数に適用の分の参照を与える
+`build_retain(dtor, one, RcState::Unknown)` を `apply_lambda` の前に置き、`_value` 欄と `_dtor` 欄の値を
+`move_out_struct_field` で取り出す (`CODE src/generator.rs: Generator::build_run_destructor`)。D24 が
+「新しい参照を作るのは (E2) だけではない」と書き、活性化を作る段を 5 種と数えるのはこの動作を含めてである。
+
+## L9b (適用される関数の値が名指す関数は `closure_targets` の元である)
+
+**言明**。L9a の (ii)、(iii)、(vi) のいずれかの段が作る活性化の本体の関数を `G` とすると、`G` は
+`funcs_observing_uniqueness` が集める `closure_targets` の元である。
+
+<1>1. `closure_targets` は、走査したどの本体の `Let(_, Closure(target, _), _)` が名指す `target` も含む。
+      走査は 1 つの閉包 `scan(body, owner)` であり、`prog.funcs` の各 `body` と `prog.globals` の各 `init` の
+      両方に適用される。`RcRhs::Closure(target, _)` の腕は `owner` を見ずに
+      `closure_targets.insert(target.clone())` を行う。`for_each_node` は節点の継続と `Match` の各アームの
+      本体へ降りるので、本体のすべての節点を訪れる。
+  BY CODE src/rc_ir/borrow.rs: funcs_observing_uniqueness, CODE src/rc_ir/ast.rs: for_each_node
+
+<1>2. funptr 型の値は、関数の本体の中では `App` の callee の位置にしか現れず、その名前は `prog.funcs` の
+      鍵である。
+  <2>1. 型が funptr であるとは `TypeNode::is_funptr` が真であること、すなわちその型の toplevel tycon が
+        `make_funptr_tycon` の作る `Std::#FunPtr{n}` であることである。その tycon を型に組むのは
+        `type_funptr` だけであり、Fix のソースに書かれた型がこの tycon を持つことはない -- 識別子は `#` を
+        含めないからである。
+    BY CODE src/ast/types.rs: TypeNode::is_funptr, type_funptr,
+       CODE src/fixstd/builtin.rs: make_funptr_tycon, is_funptr_tycon,
+       CODE src/parse/grammer.pest: name_char
+  <2>2. 生産コードで `type_funptr` を呼ぶのは 2 か所である。`funptr_lambda` は
+        `expr_abs(args, body, None).set_type(funptr_ty)` を作り、これは記号そのものの式 (`Lam`) である。
+        `replace_closure_call_to_funptr_call` は `expr_var(f_funptr.name, None).set_type(funptr_ty)` を
+        作り、それを `expr_app(f_funptr, args, None)` の関数の位置に置く。`args` が空のときこの関数は元の
+        式をそのまま返すので、`args` は空でない。残る `type_funptr` の呼び出しは `src/rc_ir/validate.rs`
+        と `src/rc_ir/dead_code_elim.rs` の `#[cfg(test)]` のモジュールにある。
+    BY CODE src/optimization/uncurry.rs: funptr_lambda, replace_closure_call_to_funptr_call,
+       replace_closure_call_to_funptr_call_subexprs
+  <2>3. `uncurry::run` は export statement の `value_expr` と `entry_io_value` も funptr 記号の `Var` に
+        差し替える。この 2 つは関数の本体ではなく、環境が読むものである (D22)。
+    BY D22, CODE src/optimization/uncurry.rs: run
+  <2>4. `uncurry` の後に式を書き換えるパスは無い。`optimization::run` が `uncurry` の後に走らせるのは
+        `dead_symbol_elimination` (到達しない記号を落とすだけで、残す記号の式を書き換えない) と、
+        `emit_symbols` のときの `simplify_symbol_names` (名前を替える) である。
+    BY CODE src/optimization/optimization.rs: run,
+       CODE src/optimization/dead_symbol_elimination.rs: run
+  <2>5. `Lowerer::lower_symbol` は `sym.ty.is_funptr()` の記号を `LoweredSymbol::Func` に、すなわち
+        `prog.funcs` のエントリにする。`Lowerer::lower_app` は callee を `lower_to_var` に掛け、
+        `lower_var` はグローバルの名前をそのまま `RcVar` にする。よって `App(callee, args)` の
+        `callee.name` はその funptr 記号の名前であり、`<2>1` と `<2>2` よりそれは `prog.funcs` の鍵で
+        ある。
+    BY CODE src/rc_ir/lower.rs: Lowerer::lower_symbol, Lowerer::lower_app, lower_var
+  <2>6. QED
+    BY <2>1, <2>2, <2>3, <2>4, <2>5
+
+<1>3. (ii)、(iii)、(vi) の段が適用する値はクロージャ型である。`apply_lambda` が受け取るのはクロージャ型か
+      funptr 型だけである (`assert!(fun.ty.is_closure() || fun.ty.is_funptr())`)。(ii) の段は callee の名前が
+      `prog.funcs` の鍵でない `App` なので、`<1>2` よりその値は funptr 型ではない。(iii) の段が適用するのは
+      その op のオペランドであって `App` の callee ではないので、`<1>2` よりその値も funptr 型ではない。
+      (vi) の段が適用するのは `Destructor` のオブジェクトの `_dtor` 欄の値と、それが返す `IO` の動作の
+      runner であって、どちらも `App` の callee ではないので、`<1>2` よりその値も funptr 型ではない。
+  BY <1>2, CODE src/generator.rs: Generator::apply_lambda, Generator::build_run_destructor
+
+<1>4. クロージャの値の funptr 欄 (`CLOSURE_FUNPTR_IDX`) に書き込むコードは 2 か所だけである。
+  <2>1. `Generator::build_rc_closure` は `func_vals[func]` の番地を入れる。`func` は `Closure(func, caps)`
+        節点が名指す `FuncRef` である。
+    BY CODE src/rc_ir/codegen.rs: Generator::build_rc_closure
+  <2>2. `InlineLLVMFixBody::generate_tail` は `gc.current_function()` の番地を入れる。
+    BY CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail
+  <2>3. Fix の関数型の値に LLVM 関数の番地を書き込むのは、クロージャを作る段 (`build_rc_closure`)、funptr の
+        グローバルを読む段 (`ValueAccessor::get` の `is_funptr` の枝)、そして `InlineLLVMFixBody` の
+        3 か所だけである。ほかのどの構文も op も、既にある関数の値を写すだけである。
+    BY A21, CODE src/generator.rs: ValueAccessor::get
+  <2>4. funptr 型のグローバルの読みが返すのは関数そのものであって、クロージャの値ではない。
+        `ValueAccessor::get` の `ty.is_funptr()` の枝は `fun.as_global_value().as_basic_value_enum()` を
+        返す。
+    BY CODE src/generator.rs: ValueAccessor::get
+  <2>5. QED
+    BY <2>1, <2>2, <2>3, <2>4
+
+<1>5. `G` を名指すクロージャの値の funptr 欄に書き込む段は少なくとも 1 つある。そのうち実行の中で最も早い
+      ものを `s` とする。
+  BY <1>3, <1>4
+
+<1>6. `s` は `InlineLLVMFixBody` の段ではない。
+  <2>1. `s` が `InlineLLVMFixBody` の段だとすると、その段が入れるのは `gc.current_function()` の番地であり、
+        それが `G` なのだから、`s` は `G` の本体の 1 つの活性化 `b` の段である。
+    BY <1>4
+  <2>2. `G` は capture を持つ。`InlineLLVMFixBody` はオペランドとして `#CAP` を名指し (`fix_body` が
+        `cap_name` に `CAP_NAME` を置く)、`#CAP` を束縛するのは `lower_lambda_as_function` の
+        `lam_ty.is_closure()` の枝だけで、その枝は `capture` を `Some` にする。D23 より活性化が受け取る入力の
+        束縛はその関数のパラメータと capture である。
+    BY D23, CODE src/fixstd/builtin.rs: fix_body,
+       CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function
+  <2>3. `b` を作った段は L9a の 6 種のいずれかである。(v) ではない -- (E7) が作る活性化の本体はグローバル
+        初期化子であり (D24 の (E7))、`G` の本体は関数の本体である。残る (i)(ii)(iii)(iv)(vi) はどれも関数の
+        値を `apply_lambda` に渡す段である (L9a)。
+    BY L9a, D24
+  <2>4. その値が funptr 型ならば、`<1>2` より `G` は funptr 記号であり、`lower_symbol` はそれを
+        `lower_lambda_as_function(&expr, func_ref, vec![], ..)` で作る。`lower_lambda_as_function` は
+        `lam_ty.is_closure()` が偽のとき `capture` を `None` にする。これは `<2>2` に反する。
+    BY <1>2, <2>2, CODE src/rc_ir/lower.rs: Lowerer::lower_symbol, lower_lambda_as_function
+  <2>5. その値がクロージャ型ならば、その funptr 欄は `G` を名指し、その欄に書き込む段は `b` が作られるより
+        前にある。`s` は `b` の段なので `b` が作られた後にあり、`<1>5` の最小性に反する。
+    BY <1>5
+  <2>6. QED
+    BY <2>1, <2>2, <2>3, <2>4, <2>5
 
 <1>7. QED
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6
+  `<1>4` と `<1>6` より `s` は `build_rc_closure` の段であり、それは `Closure(G, caps)` 節点の評価である。
+  その節点は `prog.funcs` のある本体か `prog.globals` のある初期化子の中にあるので、`<1>1` より
+  `G ∈ closure_targets` である。
+  BY <1>1, <1>4, <1>6
 
 ## L9 (差が出るのは借用版の呼び出しの窓の中だけである)
 
@@ -532,7 +852,11 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 その呼び出しの `call_rc` の `after` の `Release` 節点をすべて実行し終える段までである。その間その窓は
 **開いている**。
 
-**言明**。D-CP の共通接頭の時点 `p` と計数下オブジェクト `O` について、`Δ(p, O) := H'(p, O) − H(p, O)` は、
+**DEF 対応する活性化**。D30 が対応させる 2 つの段が活性化を作るとき、作られた 2 つの活性化を**対応する**と
+呼ぶ。L9a より活性化を作る段は 6 種であり、共通接頭の上ではそれらが 1 対 1 に並ぶ。`a` に対応する `X` の
+活性化を `a_in` と書く。
+
+**言明**。D30 の共通接頭の時点 `p` と計数下オブジェクト `O` について、`Δ(p, O) := H'(p, O) − H(p, O)` は、
 `p` で生きている活性化の対 `(a, a_in)` を渡る和 `Σ_a (Obl'(a)(O) − Obl(a_in)(O))` に等しい。さらに、その項が
 0 でない対 `(a, a_in)` については、`B(a)` が借用版であるか、`a` が借用版へ回した呼び出しで中断中であるか、
 `a` がその呼び出しの `call_rc` の入れた `after` の `Release` 節点の位置にいるかのいずれかである。
@@ -540,23 +864,38 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 とくに `Δ(p, O) ≠ 0` ならば、`p` で生きている出力側の活性化に借用版の本体を持つものがあるか、`p` で走って
 いる活性化の位置が `call_rc` の入れた `after` の `Release` 節点である。
 
+<1>0. 共通接頭の各時点で、`X` で生きている計数下オブジェクトと `X'` で生きている計数下オブジェクトは
+      D30 の対応で 1 対 1 であり、`X` で生きている活性化と `X'` で生きている活性化も 1 対 1 である。
+  第 2 節の読みより、共通接頭の上で並んだ 2 つの段は同じオブジェクトを名指し、そこには段の中で解放される
+  オブジェクトを含む。よって片方の実行だけがオブジェクトを解放する段があれば対応はそこで終わっており、
+  共通接頭の上では解放が一致する。割り当ての側は D30 が「対応する 2 つの段が割り当てた 2 つのオブジェクトが
+  対応する」と定める。活性化については上の DEF が同じことを与える。
+  BY D30, L9a
+
 <1>1. 参照の持ち手 (D25) のうち、生きているオブジェクトが持つ分と環境が持つ分は、2 つの実行で
       一致する。
-  <2>1. オブジェクトが持つ分。A5 より、生きているオブジェクトの inhabited な各 boxed leaf がちょうど 1 つの
-        参照を持つ。D-CP より対応するオブジェクトは対応する値を持つ。
-    BY A5, D-CP
-  <2>2. 環境が持つ分。環境が活性化を作るのは `roots` が名指す関数についてである (A17 (i))。P24 より `roots`
-        は変わらず、`borrow_funcref` が付ける `#borrow` の名前は入力に無いので `roots` に無い。よって環境が
-        作る活性化の本体は `f_own` かグローバル初期化子であり、L8b よりその D10 の初期値は入力の対応する
-        活性化の初期値に一致する。(E4) が `E` へ渡す参照は D9 の終端の `Ret` の行が決め、返る値は D-CP より
+  <2>1. オブジェクトが持つ分。A5 より、生きているオブジェクトの inhabited な各 boxed leaf のうち計数下の
+        オブジェクトを指すものが、ちょうど 1 つの参照を持つ。`<1>0` より生きているオブジェクトは 1 対 1 で
+        あり、L8c より対応するオブジェクトは対応する値を保持し、inhabited であるかと計数下であるかの区別も
         一致する。
-    BY A17, D9, D-CP, L8b, P24, CODE src/rc_ir/borrow.rs: borrow_funcref
+    BY A5, D26, L8c, <1>0
+  <2>2. 環境が持つ分。環境が作る活性化の本体は `f_own` かグローバル初期化子である -- 環境が名指す関数の名前
+        は入力のプログラムに在る名前であり (D22 は C のエントリ点がグローバル `main` を読み、`FFI_EXPORT`
+        のエントリ点が書き出された Fix の値を読むと定める)、P24 より `roots` は変わらず、`borrow_funcref`
+        が付ける借用版の名前は `<元の名前>#borrow` であって、A13 より入力のどの名前もこの形ではない。
+        L8b よりその D10 の初期値は入力の対応する活性化の初期値に一致する。(E4) が `E` へ渡す参照は D9 の
+        終端の `Ret` の行が決め、返る値は D30 より一致する。A17 (i) より環境は D10 の初期値が要求する参照を
+        渡し、それ以後それを持たない。
+    BY A13, A17, D9, D22, D30, L8b, P24, CODE src/rc_ir/borrow.rs: borrow_funcref
   <2>3. QED
     BY <2>1, <2>2
 
 <1>2. `Δ(p, O) := H'(p, O) − H(p, O)` は、対応する生きている活性化の対 `(a, a_in)` を渡る和
       `Σ_a (Obl'(a)(O) − Obl(a_in)(O))` に等しい。
-  BY <1>1, D25, D8
+  D25 は持ち手を 3 種に分け、P28 は処分されていない各参照がそのちょうど 1 つに属することを言う。D8 より
+  `H(O)` は `O` への処分されていない参照の総数であり、`<1>1` より 3 種のうち 2 種の分は一致するので、
+  差は残る 1 種 -- 生きている活性化の義務集合 -- の分である。`<1>0` より対はちょうど 1 対 1 である。
+  BY D8, D25, P28, <1>0, <1>1
 
 <1>3. 対応する生きている活性化の対 `(a, a_in)` について、`B(a)` が借用版でないならば次が成り立つ。
       `a` が借用版へ回した呼び出し `c` で中断中でも、`c` の `after` の `Release` 節点の位置にいるのでも
@@ -568,22 +907,25 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
     BY L8b
   <2>2. L8 の (a) と (b) の節点は借用版の本体にしかないので、`B(a)` が借用版でない `a` は実行しない。
     BY L8
-  <2>3. L8 の (a)(b)(c) 以外の節点の段。L8 よりこの段は 2 つの実行で同じ節点であり、D-CP より同じ値を
-        与えられるので、D10 の生成と消費は同じ参照を作り同じ参照を処分する。`Obl'(a) − Obl(a_in)` は
-        変わらない。
-    BY L8, D-CP, D10
+  <2>3. L8 の (a)(b)(c) 以外の節点の段。L8 よりこの段は 2 つの実行で同じ種類・同じ path の節点であり、
+        D30 より同じ値を与えられるので、D10 の生成と消費は同じ参照を作り同じ参照を処分する。
+        `Obl'(a) − Obl(a_in)` は変わらない。
+    BY L8, D30, D10
   <2>4. 呼び出しの段 (E3)。D9 の `App` の行が消費する leaf は呼び出し先の所有 (D14) で決まる。呼び出し先が
         借用版でないとき、L8b より出力の呼び出し先は全 unit を所有し、A1 より入力の呼び出し先も全 unit を
-        所有するので、消費は一致し差は変わらない。呼び出し先が借用版のとき、入力は借用される unit の参照を
-        渡し出力は渡さないので、差はその unit の参照ちょうど 1 つずつ増える。`call_rc` はその unit を
-        `after` に入れる -- `callee_owns` は偽であり、`arg_owned` は `B(a)` が借用版でないので L8a より
-        真である。よって差は `after` が処分する参照に一致し、`a` は中断中になる。
-    BY A1, D9, D10, D14, L8a, L8b, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
-  <2>5. 返りの段 (E4)。呼び出し先が返す値は 2 つの実行で同じであり (D-CP)、D9 の終端の `Ret` の行が渡す
+        所有するので、消費は一致し差は変わらない。呼び出し先が借用版のとき、P13 より借用版の
+        `borrowed_units` はその版のパラメータ・capture の unit のうち `owned_units` に入らないものであり、
+        `borrow_ify` が借用版について `owned_units` に入れるのは `owned_leaves.owns` が真である leaf の
+        unit だけである。D14 より借用する unit の参照は呼び出し元が処分するので、入力は借用される unit の
+        参照を渡し出力は渡さず、差はその unit の参照ちょうど 1 つずつ増える。`call_rc` はその unit を
+        `after` に入れる -- `callee_owns` は偽であり、`arg_owned` は `B(a)` が借用版でないので L8a の (b)
+        より真である。よって差は `after` が処分する参照に一致し、`a` は中断中になる。
+    BY A1, D9, D10, D14, L8a, L8b, P13, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc, borrow_ify
+  <2>5. 返りの段 (E4)。呼び出し先が返す値は 2 つの実行で同じであり (D30)、D9 の終端の `Ret` の行が渡す
         参照の個数も同じなので、差は変わらない。`a` は `c` の `after` の `Release` 節点の位置へ進む。
         `prepend_rc` が `after` を継続の先頭に置くので、`a` は `after` を実行し終えるまで他の節点を
         実行しない。
-    BY D9, D-CP, CODE src/rc_ir/borrow.rs: prepend_rc, RewriteCtx::rewrite_inner
+    BY D9, D30, CODE src/rc_ir/borrow.rs: prepend_rc, RewriteCtx::rewrite_inner
   <2>6. `after` の `Release` の段 (L8 の (c))。出力だけがこれを実行し、`c` の `after` の参照を 1 つずつ
         処分する。最後の 1 つを実行し終えた時点で差は 0 に戻り、`a` は中断中でも `after` の位置でも
         なくなる。
@@ -595,10 +937,12 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
     BY A8, D24, D26
   <2>6b. デストラクタを走らせる動作 (L9a の (vi))。`a` の段が参照を処分して `Std::FFI::Destructor` の
         オブジェクトの `H` が 0 になると、その動作が新しい活性化を作り、`a` はそれが終わるまで段を持たない。
-        `Obl(a)` を離れる参照はその段の D10 の消費が決めるものであり、L9a の (vi) は `Obl(a)` に何も加えず
-        何も取り除かない -- `build_run_destructor` が動かすのはそのオブジェクトの `_value` と `_dtor` の欄で
-        あって `a` の束縛ではない。よって `Obl'(a) − Obl(a_in)` は変わらない。
-    BY L9a, D10, CODE src/generator.rs: Generator::build_run_destructor
+        この動作は `_dtor` 欄の関数に `build_retain` で参照を 1 つ作り、`_value` 欄と `_dtor` 欄の値を
+        取り出して適用する。作られた参照の持ち手はこの段を実行している活性化であり、`_dtor` の適用が
+        それを消費する。**`<1>0` より共通接頭の上では 2 つの実行が同じ段で同じオブジェクトを解放するので、
+        この動作は 2 つの実行で同じ段で起こり、同じ参照を作り同じ参照を消費する。**よって
+        `Obl'(a) − Obl(a_in)` は変わらない。
+    BY L9a, D10, D24, <1>0, CODE src/generator.rs: Generator::build_run_destructor
   <2>7. QED
     `<2>1` が基底であり、`<2>2` から `<2>6b` が `a` の段の全種を尽くす。活性化を作る段の種は L9a の 6 種で
     あり、そのうち (i)(ii) が `<2>4`、(iii) は `a` の節点の段なので `<2>3`、(iv) は `a` を作らず `a` の段でも
@@ -630,105 +974,10 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 スレッドに属するとき、この命題の結論は「観測点を実行している活性化がその借用版の子孫である」を与えない。
 第 12 節に前提として書き出す。
 
-## L9b (適用される関数の値が名指す関数は `closure_targets` の元である)
-
-**言明**。L9a の (ii)、(iii)、(vi) のいずれかの段が作る活性化の本体の関数を `G` とすると、`G` は
-`funcs_observing_uniqueness` が集める `closure_targets` の元である。
-
-<1>1. `closure_targets` は、走査したどの本体の `Let(_, Closure(target, _), _)` が名指す `target` も含む。
-      走査は 1 つの閉包 `scan(body, owner)` であり、`prog.funcs` の各 `body` と `prog.globals` の各 `init` の
-      両方に適用される。`RcRhs::Closure(target, _)` の腕は `owner` を見ずに
-      `closure_targets.insert(target.clone())` を行う。`for_each_node` は節点の継続と `Match` の各アームの
-      本体へ降りるので、本体のすべての節点を訪れる。
-  BY CODE src/rc_ir/borrow.rs: funcs_observing_uniqueness, CODE src/rc_ir/ast.rs: for_each_node
-
-<1>2. funptr 型の値は、関数の本体の中では `App` の callee の位置にしか現れず、その名前は `prog.funcs` の
-      鍵である。
-  <2>1. funptr 型の記号を作るのは `uncurry::run` だけであり、`funptr_lambda` が作る。
-        `Lowerer::lower_symbol` は `sym.ty.is_funptr()` の記号を `LoweredSymbol::Func` に、すなわち
-        `prog.funcs` のエントリにする。
-    BY CODE src/optimization/uncurry.rs: run, funptr_lambda,
-       CODE src/rc_ir/lower.rs: Lowerer::lower_symbol
-  <2>2. 記号の式の中に funptr 型の `Var` を置くのは `replace_closure_call_to_funptr_call` だけであり、それが
-        作るのは `expr_app(f_funptr, args)` である。`args` が空のときはこの関数は元の式をそのまま返すので、
-        `args` は空でない。すなわち funptr 型の `Var` は適用される位置にしか置かれない。
-    BY CODE src/optimization/uncurry.rs: replace_closure_call_to_funptr_call,
-       replace_closure_call_to_funptr_call_subexprs
-  <2>3. `uncurry::run` は export statement の `value_expr` と `entry_io_value` も funptr 記号の `Var` に
-        差し替える。この 2 つは関数の本体ではなく、環境が読むものである (D22)。
-    BY D22, CODE src/optimization/uncurry.rs: run
-  <2>4. `uncurry` の後に式を書き換えるパスは無い。`optimization::run` が `uncurry` の後に走らせるのは
-        `dead_symbol_elimination` (到達しない記号を落とすだけで、残す記号の式を書き換えない) と、
-        `emit_symbols` のときの `simplify_symbol_names` (名前を替える) である。
-    BY CODE src/optimization/optimization.rs: run,
-       CODE src/optimization/dead_symbol_elimination.rs: run
-  <2>5. `Lowerer::lower_app` は callee を `lower_to_var` に掛け、`lower_var` はグローバルの名前をそのまま
-        `RcVar` にする。よって `App(callee, args)` の `callee.name` はその funptr 記号の名前であり、`<2>1`
-        よりそれは `prog.funcs` の鍵である。
-    BY CODE src/rc_ir/lower.rs: Lowerer::lower_app, lower_var
-  <2>6. QED
-    BY <2>1, <2>2, <2>3, <2>4, <2>5
-
-<1>3. (ii)、(iii)、(vi) の段が適用する値はクロージャ型である。`apply_lambda` が受け取るのはクロージャ型か
-      funptr 型だけである (`assert!(fun.ty.is_closure() || fun.ty.is_funptr())`)。(ii) の段は callee の名前が
-      `prog.funcs` の鍵でない `App` なので、`<1>2` よりその値は funptr 型ではない。(iii) の段が適用するのは
-      その op のオペランドであって `App` の callee ではないので、`<1>2` よりその値も funptr 型ではない。
-      (vi) の段が適用するのは `Destructor` のオブジェクトの `_dtor` 欄の値と、それが返す `IO` の動作の
-      runner であって、どちらも `App` の callee ではないので、`<1>2` よりその値も funptr 型ではない。
-  BY <1>2, CODE src/generator.rs: Generator::apply_lambda, Generator::build_run_destructor
-
-<1>4. クロージャの値の funptr 欄 (`CLOSURE_FUNPTR_IDX`) に書き込むコードは 2 か所だけである。
-  <2>1. `Generator::build_rc_closure` は `func_vals[func]` の番地を入れる。`func` は `Closure(func, caps)`
-        節点が名指す `FuncRef` である。
-    BY CODE src/rc_ir/codegen.rs: Generator::build_rc_closure
-  <2>2. `InlineLLVMFixBody::generate_tail` は `gc.current_function()` の番地を入れる。
-    BY CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail
-  <2>3. `impl LLVMGen for` の 78 個のうち、Fix の関数型の値を自ら作るのは `InlineLLVMFixBody` の 1 つだけで
-        あり、残る 77 個は関数型の値を作らないか、受け取った値を写すだけである。`builtin.rs` の外で Fix の
-        関数型の値を作るのは、`build_rc_closure` と、funptr 型のグローバルの読み
-        (`ValueAccessor::get` の `ty.is_funptr()` の枝) の 2 つである。この数え上げは
-        `llvmgen-function-values.md` が 78 個すべてとそれらが呼ぶヘルパを読んで行ったものである。
-    BY `llvmgen-function-values.md`, CODE src/generator.rs: ValueAccessor::get
-  <2>4. funptr 型のグローバルの読みが返すのは関数そのものであって、クロージャの値ではない。
-        `ValueAccessor::get` の `ty.is_funptr()` の枝は `fun.as_global_value().as_basic_value_enum()` を
-        返す。
-    BY CODE src/generator.rs: ValueAccessor::get
-  <2>5. QED
-    BY <2>1, <2>2, <2>3, <2>4
-
-<1>5. `G` を名指すクロージャの値の funptr 欄に書き込む段は少なくとも 1 つある。そのうち実行の中で最も早い
-      ものを `s` とする。
-  BY <1>3, <1>4
-
-<1>6. `s` は `InlineLLVMFixBody` の段ではない。
-  <2>1. `s` が `InlineLLVMFixBody` の段だとすると、その段が入れるのは `gc.current_function()` の番地であり、
-        それが `G` なのだから、`s` は `G` の本体の 1 つの活性化 `b` の段である。
-    BY <1>4
-  <2>2. `G` は capture を持つ。`InlineLLVMFixBody` はオペランドとして `#CAP` を名指し (`fix_body` が
-        `cap_name` に `CAP_NAME` を置く)、`#CAP` を束縛するのは `lower_lambda_as_function` の
-        `lam_ty.is_closure()` の枝だけで、その枝は `capture` を `Some` にする。D23 より活性化が受け取る入力の
-        束縛はその関数のパラメータと capture である。
-    BY D23, CODE src/fixstd/builtin.rs: fix_body,
-       CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function
-  <2>3. `b` を作った段は L9a の 6 種のいずれかである。(v) ではない -- (E7) が作る活性化の本体はグローバル
-        初期化子であり (D24 の (E7))、`G` の本体は関数の本体である。残る (i)(ii)(iii)(iv)(vi) はどれも関数の
-        値を `apply_lambda` に渡す段である (L9a)。
-    BY L9a, D24
-  <2>4. その値が funptr 型ならば、`<1>2` の `<2>1` より `G` は funptr 記号であり、`lower_symbol` はそれを
-        `lower_lambda_as_function(&expr, func_ref, vec![], ..)` で作る。`lower_lambda_as_function` は
-        `lam_ty.is_closure()` が偽のとき `capture` を `None` にする。これは `<2>2` に反する。
-    BY <2>2, CODE src/rc_ir/lower.rs: Lowerer::lower_symbol, lower_lambda_as_function
-  <2>5. その値がクロージャ型ならば、その funptr 欄は `G` を名指し、その欄に書き込む段は `b` が作られるより
-        前にある。`s` は `b` の段なので `b` が作られた後にあり、`<1>5` の最小性に反する。
-    BY <1>5
-  <2>6. QED
-    BY <2>1, <2>2, <2>3, <2>4, <2>5
-
-<1>7. QED
-  `<1>4` と `<1>6` より `s` は `build_rc_closure` の段であり、それは `Closure(G, caps)` 節点の評価である。
-  その節点は `prog.funcs` のある本体か `prog.globals` のある初期化子の中にあるので、`<1>1` より
-  `G ∈ closure_targets` である。
-  BY <1>1, <1>4, <1>6
+**`<1>0` が読む「共通接頭の上では解放が一致する」は、D30 の言明を強く読んだものである。** D30 が挙げる
+出口は (X1) と (X2) の 2 つだけであり、片方の実行だけがオブジェクトを解放する段はそこに無い。
+`borrow_ify` は解放の時点を動かすので、この第 3 の出口は実際に起こりうる。第 12 節の項目 7 が、
+D30 の側で要る変更として書き出す。
 
 ## L10 (門が閉じた関数の到達の列に観測点は現れない)
 
@@ -749,6 +998,17 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       各鍵から `closure_targets` の各元へ辺が張られる。
   BY CODE src/rc_ir/borrow.rs: funcs_observing_uniqueness
 
+<1>1a. `observes_uniqueness()` を真にする op は `InlineLLVMIsUniqueFunctionBody` と
+      `InlineLLVMArrayIsStorageUniqueBody` の 2 つであり、どちらも `!assume_unique` を返す。既定は偽で
+      ある。この 2 つは D18 が名指す 2 つの std の関数の本体である -- `make_std_mod` が
+      `Std::unsafe_is_unique` に `is_unique_function()` を、`Std::Array::_unsafe_is_storage_unique` に
+      `array_is_storage_unique_function()` を登録し、その 2 つがそれぞれこの op を 1 つ持つ `Llvm` 式を
+      返す。よって規則 (a) の種は「本体に D18 の観測点を持つ関数」である。
+  BY D18, CODE src/ast/inline_llvm.rs: LLVMGen::observes_uniqueness,
+     CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::observes_uniqueness,
+     InlineLLVMArrayIsStorageUniqueBody::observes_uniqueness, is_unique_function,
+     array_is_storage_unique_function, CODE src/fixstd/stdlib.rs: make_std_mod
+
 <1>2. `borrow_ify` は `observing` の元に借用版を作らない。`for func in prog.funcs.values()` の先頭で
       `if observing.contains(&func.name) { continue; }` が回る。
   BY CODE src/rc_ir/borrow.rs: borrow_ify
@@ -757,7 +1017,7 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       どちらも `g` の本体の束縛変数を付け替えたものである。列の最初は `f#borrow` であって `f` の本体の
       名前替えである (P9)。グローバル初期化子の本体は列に現れない -- その活性化を作るのは (v) の段だけで
       あり (L9a)、到達の列は (v) の段を持たない。よって列の各活性化の本体は関数の本体である。
-  BY L9a, P9, CODE src/rc_ir/borrow.rs: borrow_ify
+  BY L8, L9a, P9
 
 <1>4. 出力の `Closure` 節点が名指す関数は入力の関数であり、入力について計算した `closure_targets` の元で
       ある。`rewrite_inner` が rhs を書き換えるのは `RcRhs::App` の腕だけで、他の腕は rhs をそのまま複製
@@ -771,27 +1031,63 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   BY P12, <1>3
 
 <1>6. (ii) の段と (iii) の段は `<1>1` の (e) の辺を与える。(ii) の段を持つ本体の `owner` は `<1>1` の (c)
-      により、(iii) の段を持つ本体の `owner` は `<1>1` の (d) により `calls_indirectly` に入る。L9b より
-      到達される活性化の本体の関数は `closure_targets` の元であり、`<1>4` よりそれは入力の関数 `h` である。
-  BY L9b, <1>1, <1>3, <1>4
+      により、(iii) の段を持つ本体の `owner` は `<1>1` の (d) により `calls_indirectly` に入る。(iii) の
+      段の op が (d) の宣言を真にすることは L9a の言明の (iii) が与える。L9b より到達される活性化の本体の
+      関数は `closure_targets` の元であり、`<1>4` よりそれは入力の関数 `h` である。P12 の後半より、
+      `route` が呼び出し先をそのまま返す間接呼び出しの名前はどちらの `funcs` の鍵でもないので、(ii) の段の
+      callee は入力についても `prog.funcs` の鍵ではなく、規則 (c) が当たる。
+  BY L9a, L9b, P12, <1>1, <1>3, <1>4
 
 <1>6a. 実行が (vi) の段を持つならば `builds_a_destructor(prog)` は真である。
   <2>1. (vi) の段があるならば、実行時に `Std::FFI::Destructor` のオブジェクトが在る (L9a の (vi) の言明)。
     BY L9a
-  <2>2. `Destructor` のオブジェクトを割り当てる op は `InlineLLVMDestructorMake` だけである。これは
-        `Std::FFI::Destructor::_make` の本体であり、結果の型は `(IOState, Destructor a)` である。
-    BY CODE src/fixstd/builtin.rs: InlineLLVMDestructorMake, destructor_make,
-       CODE src/fixstd/stdlib.rs: make_std_mod
-  <2>3. lowering はこの op を `Let(x, Llvm(destructor_make, args), k)` に写し、`x.ty` は
-        `(IOState, Destructor a)` である。`binds_a_destructor` は `RcExpr::Let(x, _, _)` について
-        `mentions_a_destructor(&x.ty)` を問い、`mentions_a_destructor` は型の式を `TyApp` に沿って辿って
-        `is_destructor_object()` が真の節を探すので、この `x.ty` について真を返す。
-    BY CODE src/rc_ir/lower.rs: Lowerer::lower_llvm, CODE src/rc_ir/borrow.rs: binds_a_destructor,
-       mentions_a_destructor, CODE src/ast/types.rs: TypeNode::is_destructor_object
+  <2>2. そのオブジェクトを割り当てた段がある。D24 の (E2) の `H` の表より、オブジェクトを新しく割り当てる
+        段は `Closure(f, caps)` 節点の capture object と、`result_prov` が単一の `Fresh` を宣言する
+        `Llvm` の結果の leaf である。capture object の型は `Std::#DynamicObject` であって `Destructor`
+        ではない。よってその段は `Let(x, Llvm(gen, args), k)` であり、割り当てられたオブジェクトの型
+        `Destructor a` は `x.ty` のある boxed leaf の型である。
+    BY D24, CODE src/rc_ir/codegen.rs: Generator::build_rc_closure
+  <2>3. `mentions_a_destructor(&x.ty)` は真である。`result_prov` の既定は `Unknown` であり、A3 より
+        override するのは 29 個である。そのうち `Fresh` を宣言するのは次の形に尽きる。
+        (α) `InlineLLVMMakeStructBody`、`InlineLLVMMakeUnionBody`、`replaced_field_prov`
+        (`InlineLLVMStructSetBody`、`InlineLLVMStructPunchBody`、`InlineLLVMStructPlugInBody` が使う) は、
+        結果が boxed のときにだけ根の path に `Fresh` を置き、そうでないときは各 leaf に `Arg` を置く。
+        (β) `InlineLLVMDestructorMake`、`InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、
+        `InlineLLVMUnsafeMutateBoxedIOSInternalBody`、`InlineLLVMArrayMutateElementsInternalBody`、
+        `InlineLLVMArrayMutateElementsIosInternalBody`、`InlineLLVMArrayPunchBody` は、結果のタプルの
+        1 つの成分の下に `Fresh` を置く。(γ) 残る `InlineLLVMStringBuf`、`InlineLLVMArrayUnsafeEmpty`、
+        `InlineLLVMArrayTruncateBoundsUnchecked`、`InlineLLVMArrayAppendValueCapacityUnchecked`、
+        `InlineLLVMArraySetCapacityBoundsUnchecked`、`InlineLLVMArrayAppendCapacityUnchecked`、
+        `InlineLLVMArrayCopyCapacityBoundsUnchecked`、`InlineLLVMArrayGrowSizeBody`、
+        `InlineLLVMArraySetBody`、`InlineLLVMArraySwapBody`、`InlineLLVMArrayLitBody`、
+        `InlineLLVMPunchedArrayPlugBody` は、結果が `Std::String` か `Array a` か `PunchedArray a` で
+        あり、その `Fresh` の leaf の型は配列かその記憶域であって `Destructor` ではない。
+        (α) では `x.ty` 自身が `Destructor a` であり、(β) ではタプルの型式が `Destructor a` を成分として
+        含む。`mentions_a_destructor` は型式を `TyApp` に沿って辿るので、どちらでも真を返す。
+    BY A3, CODE src/rc_ir/borrow.rs: mentions_a_destructor,
+       CODE src/ast/inline_llvm.rs: LLVMGen::result_prov,
+       CODE src/fixstd/builtin.rs: InlineLLVMMakeStructBody::result_prov,
+       InlineLLVMMakeUnionBody::result_prov, replaced_field_prov,
+       InlineLLVMDestructorMake::result_prov, InlineLLVMArrayPunchBody::result_prov,
+       InlineLLVMUnsafeMutateBoxedInternalFunctionBody::result_prov,
+       InlineLLVMUnsafeMutateBoxedIOSInternalBody::result_prov,
+       InlineLLVMArrayMutateElementsInternalBody::result_prov,
+       InlineLLVMArrayMutateElementsIosInternalBody::result_prov,
+       InlineLLVMStringBuf::result_prov, InlineLLVMArrayUnsafeEmpty::result_prov,
+       InlineLLVMArrayTruncateBoundsUnchecked::result_prov,
+       InlineLLVMArrayAppendValueCapacityUnchecked::result_prov,
+       InlineLLVMArraySetCapacityBoundsUnchecked::result_prov,
+       InlineLLVMArrayAppendCapacityUnchecked::result_prov,
+       InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov,
+       InlineLLVMArrayGrowSizeBody::result_prov, InlineLLVMArraySetBody::result_prov,
+       InlineLLVMArraySwapBody::result_prov, InlineLLVMArrayLitBody::result_prov,
+       InlineLLVMPunchedArrayPlugBody::result_prov
   <2>4. `builds_a_destructor` は `prog.funcs` の各本体と `prog.globals` の各初期化子の全節点に
-        `binds_a_destructor` を当てる (`for_each_node`)。`<2>3` の `Let` はそのいずれかの本体にあるので、
-        `builds_a_destructor(prog)` は真である。
-    BY <2>3, CODE src/rc_ir/borrow.rs: builds_a_destructor, CODE src/rc_ir/ast.rs: for_each_node
+        `binds_a_destructor` を当て (`for_each_node`)、`binds_a_destructor` は `Let(x, _, _)` について
+        `mentions_a_destructor(&x.ty)` を問う。`<2>2` の `Let` はそのいずれかの本体にあるので、
+        `<2>3` より `builds_a_destructor(prog)` は真である。
+    BY <2>2, <2>3, CODE src/rc_ir/borrow.rs: builds_a_destructor, binds_a_destructor,
+       CODE src/rc_ir/ast.rs: for_each_node
   <2>5. QED
     BY <2>1, <2>2, <2>3, <2>4
 
@@ -801,17 +1097,26 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   BY L9b, <1>1, <1>3, <1>4, <1>6a
 
 <1>7. QED
-  到達される活性化の本体に観測点があるとすると、`<1>3` よりその本体は入力の関数 `h` の版であり、`h` は
-  `<1>1` の (a) により `observing` の種である。`<1>5`、`<1>6`、`<1>6b` より、到達の列の各段は入力の関数の
-  対の間に `<1>1` の辺を与えるので、辺の個数について繰り返して `f ∈ observing` である。これは `<1>2` に
-  反する。
-  BY <1>1, <1>2, <1>3, <1>5, <1>6, <1>6b
+  到達される活性化の本体に観測点があるとすると、`<1>3` よりその本体は入力の関数 `h` の版であり、`<1>1a` と
+  `<1>1` の (a) より `h` は `observing` の種である。`<1>5`、`<1>6`、`<1>6b` より、到達の列の各段は入力の
+  関数の対の間に `<1>1` の辺を与えるので、辺の個数について繰り返して `f ∈ observing` である。これは
+  `<1>2` に反する。
+  BY <1>1, <1>1a, <1>2, <1>3, <1>5, <1>6, <1>6b
 
 ## L11 (初期化子の広がりが名指す計数下オブジェクトは、その広がりの中で割り当てられている)
 
 **言明**。`b` を L9a の (v) の段が作るグローバル初期化子の活性化とし、`b` が作られた時点を `t0` とする。
-`b` の**広がり**とは、`b` と、`b` から活性化を作る段の列で到達される活性化の全体である。広がりの中のどの
-活性化のどのスロット (D6) が指す計数下 (D26) のオブジェクトも、`t0` より後の段が割り当てたものである。
+`b` の**広がり**とは、`b` と、`b` から活性化を作る段の列で到達される活性化の全体である。**広がりの中の段に
+`InlineLLVMBoxedFromRetainedPtrIOS` の段が無いとき**、広がりの中のどの活性化のどのスロット (D6) が指す
+計数下 (D26) のオブジェクトも、`t0` より後の段が割り当てたものである。
+
+**仮定を置く理由。** A3 は、単一の `Unknown` を宣言する leaf のオブジェクトが「この op のオペランドの leaf が
+指すオブジェクトから到達できるか、グローバル値が到達する」と述べたうえで、**この限定が成り立たない op を 2 種
+挙げる**。1 つはオペランドを適用する op であり、これは `<1>2` の `<2>1` が別に扱う。もう 1 つが
+`InlineLLVMBoxedFromRetainedPtrIOS` であり、A3 は「オペランドは `Std::Ptr` で boxed leaf を持たないので、
+到達できる元が無い -- そのオブジェクトは C の側から渡された番地が指すものである。どちらの leaf についても、
+主張する命題はこの行を読まずに書く」と書く。その番地が指すオブジェクトが `t0` より後に割り当てられたことを
+言う材料はこの文書に無いので、仮定として書き出す。第 12 節の項目 3 が報告する。
 
 次の 2 つを同時に、広がりの中の段の列についての帰納で示す。
 
@@ -833,12 +1138,12 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         そのまま返す」と書くので、そのオブジェクトは帰納の仮定 (I1) より `t0` より後に割り当てられている。
         単一の `Unknown` のオブジェクトは、A3 より「この op のオペランドの leaf が指すオブジェクトから
         到達できるか、グローバル値が到達する」。前者は帰納の仮定 (I1) と (I2) による。後者はグローバル状態
-        (D26) であって計数下ではない。A3 はこの限定に但し書きを置き、「オペランドを適用する op
-        (`LLVMGen::applies_a_function_operand`) では、この限定は成り立たない -- 適用した関数の中で新しく
-        割り当てられたオブジェクトが結果に出る」と書く。その op の段は L9a の (iii) であり、適用された関数の
-        活性化も広がりの中にあるので、その活性化が返す参照が指すオブジェクトは帰納の仮定 (I1) による。単一の
-        `Arg(j, σ)` はオペランドの leaf そのものなので (I1) による。空集合と宣言された leaf は inhabited に
-        ならない。
+        (D26) であって計数下ではない。A3 はこの限定に但し書きを置き、そこで除かれる 2 種の op のうち、
+        オペランドを適用する op (`LLVMGen::applies_a_function_operand`) の段は L9a の (iii) であり、
+        適用された関数の活性化も広がりの中にあるので、その活性化が返す参照が指すオブジェクトは帰納の仮定
+        (I1) による。もう 1 種の `InlineLLVMBoxedFromRetainedPtrIOS` は、この命題の仮定により広がりの中に
+        現れない。単一の `Arg(j, σ)` はオペランドの leaf そのものなので (I1) による。空集合と宣言された
+        leaf は inhabited にならない。
     BY A3, D10, D26, L9a
   <2>2. `Closure(f, caps)` の結果の capture object は、この段が新しく割り当てる。
     BY D10, D24
@@ -879,7 +1184,7 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 起こすプログラムを 3 水準で走らせた (`.fixlang` は各水準の前に消した)。`relay#borrow` は作られ、その 3 つの
 `B` 型パラメータはすべて `{borrow}` と注釈され、両方のグローバルの最初の読みはその活性化の中で起きる。
 自分で割り当てたオブジェクトを観測する初期化子は 3 水準すべてで `own = true`、別のグローバルから読んだ
-オブジェクトを観測する初期化子は 3 水準すべてで `glob = false` を返した。後者は L0 の global の腕
+オブジェクトを観測する初期化子は 3 水準すべてで `glob = false` を返した。後者は L0 のグローバル状態の場合
 (グローバル状態のオブジェクトの観測値は偽) である。
 
 ```fix
@@ -912,14 +1217,16 @@ main = (
 
 ## L12 (窓の下の観測は差を見ない)
 
-**言明**。1 つの制御の流れからなる実行について、D-CP の共通接頭の時点 `q` が一意性の観測点 (D18) であり、
-その観測が読むオブジェクト `O` が計数下 (D26) であるとき、`Δ(q, O) := H'(q, O) − H(q, O) = 0` である。
+**言明**。1 つの制御の流れからなる実行について、また L11 の仮定 (グローバル初期化子の広がりの中に
+`InlineLLVMBoxedFromRetainedPtrIOS` の段が無いこと) の下で、D30 の共通接頭の時点 `q` が一意性の観測点
+(D18) であり、その観測が読むオブジェクト `O` が計数下 (D26) であるとき、
+`Δ(q, O) := H'(q, O) − H(q, O) = 0` である。
 
 <1>1. `Δ(q, O) ≠ 0` と仮定する。L9 より、`q` で生きている出力側の活性化に借用版の本体を持つものがあるか、
       `q` で走っている活性化の位置が `call_rc` の入れた `after` の `Release` 節点である。
   BY L9
 
-<1>2. 後者ではない。`q` は `Let(x, Llvm(gen, args), k)` の節点の位置であり (D18 は観測点を 1 つの `Llvm` の
+<1>2. 後者ではない。`q` は `Let(x, Llvm(gen, args), k)` の節点の位置であり (D18 は観測点を 2 つの `Llvm` の
       演算が現れる位置と定める)、`Release` 節点の位置ではない。D2 より節点の種類は 6 つで、`Let` と
       `Release` は別の種類である。
   BY D2, D18
@@ -929,17 +1236,21 @@ main = (
       子孫か `c` 自身である。
   BY D24, <1>1, <1>2
 
+<1>3a. 出力の本体が借用版である活性化はどれも、入力のある関数 `f` について本体が `f#borrow` であり、`f` は
+      `borrow_versions` の鍵である。L8 の (1) より出力の関数は `f_own` か `f#borrow` であり、`f#borrow` が
+      あるのは `f` が `borrow_versions` の鍵であるときだけである。
+  BY L8
+
 <1>4. `c` から `a_q` への親子の道の各段は L9a の (i)(ii)(iii)(v)(vi) のいずれかである。(iv) は林の根を作る
       段であり、親を持つ活性化を作らない (D24 の「活性化の林」の段落)。
   BY D24, L9a
 
 <1>5. CASE 道が (v) の段を持たない。この場合 `Δ(q, O) = 0` である。
-  L8 の `<1>1` より出力の関数は `f_own` か `f#borrow` であり、`f#borrow` があるのは `f` が
-  `borrow_versions` の鍵であるときだけである。`c` の本体は借用版なので、その `f` は `borrow_versions` の
-  鍵である。`<1>4` よりこの場合の道は (v) の段を持たないので、`a_q` は L10 の到達の列の上にあり、`a_q` の
-  本体に観測点は無い。`q` は `a_q` の本体の観測点の位置なので、これは矛盾である。よって `<1>1` の仮定が
-  偽であり、`Δ(q, O) = 0` である。
-  BY L8, L10, <1>3, <1>4
+  `<1>3` の `c` は借用版の本体を持つので、`<1>3a` より `c` の本体は `f#borrow` であって `f` は
+  `borrow_versions` の鍵である。この場合の道は (v) の段を
+  持たないので、`a_q` は L10 の到達の列の上にあり、`a_q` の本体に観測点は無い。`q` は `a_q` の本体の
+  観測点の位置なので、これは矛盾である。よって `<1>1` の仮定が偽であり、`Δ(q, O) = 0` である。
+  BY L10, <1>3, <1>3a, <1>4
 
 <1>6. CASE 道が (v) の段を持つ。この場合 `Δ(q, O) = 0` である。
   <2>1. 道の上で最後の (v) の段が作る初期化子の活性化を `b` とし、その広がり (L11) を `E`、`b` が作られた
@@ -957,10 +1268,11 @@ main = (
   <2>4. よって L9 の和の分解は `Δ(q, O) = Σ_{a ∈ E} (Obl'(a)(O) − Obl(a_in)(O))` になる。
     BY L9, <2>3
   <2>5. `E` の中に、`q` の時点で生きている借用版の活性化は無い。あるとしてそれを `c'` とすると、`c'` は
-        生きているので `<1>3` の 1 本の道の上にあり、`a_q` の祖先か `a_q` 自身である。`b` から `a_q` への
+        生きているので `<1>3` の 1 本の道の上にあり、`a_q` の祖先か `a_q` 自身である。`<1>3a` より `c'` の
+        本体は `f'#borrow` であって `f'` は `borrow_versions` の鍵である。`b` から `a_q` への
         道は (v) を持たないので、`c'` から `a_q` への道も持たない。すると L10 より `a_q` の本体に観測点は
         無く、`q` がその位置であることに矛盾する。
-    BY L10, <2>1, <1>3
+    BY L10, <1>3, <1>3a, <2>1
   <2>6. `E` の中に、`after` の `Release` 節点の位置にいる活性化は無い。あるとしてそれを `a` とすると、
         `prepend_rc` が `after` を継続の先頭に置くので `a` は `after` を実行し終えるまで他の節点を実行せず、
         `Release` 節点は活性化を作らない (L9a)。よって `a` は中断中ではなく、走っている活性化である。走って
@@ -979,45 +1291,52 @@ main = (
   `Δ(q, O) = 0` である。
   BY <1>4, <1>5, <1>6
 
-## L13 (P26 は `borrow_ify` について成り立つ)
+## L13 (P26 の第 1 文は `borrow_ify` について成り立つ。しかも等号で)
 
 **言明**。`borrow_ify` の入力 `P` が D12 と A1 と A2 を満たすとする。1 つの制御の流れからなる実行について、
-D-CP の共通接頭の上の一意性の観測点 (D18) `q` で `X` の観測値が真ならば、`X'` の `q` での観測値も真である。
+また L11 の仮定の下で、D30 の共通接頭の上の一意性の観測点 (D18) `q` において、`X` の観測値と `X'` の観測値は
+**等しい**。とくに `X` の観測値が真ならば `X'` の観測値も真であり、D30 の (X1) の出口は起こらない。
 
-<1>1. `q` の観測が読むオブジェクトを `O` とする。`X` の観測値が真なので、L0 より `O` の参照カウント状態は
-      local か threaded であり `H(q, O) = 1` である。とくに `O` は計数下 (D26) である -- グローバル状態の
-      オブジェクトの状態は global であり、L0 よりその観測値は偽である。
-  BY L0, D26
+<1>1. `q` のオペランドの leaf `[]` が指すオブジェクトは `X` と `X'` で同じ `O` である。
+  BY D30
 
-<1>2. `O` の参照カウント状態は `X` と `X'` で同じである。
-  <2>1. 状態を global にするのは (E5) の段だけであり、印を付けるのはグローバル初期化子の活性化が返した値が
-        到達するグラフである。
-    BY D24, A8
-  <2>2. `borrow_ify` はグローバル初期化子の本体を `is_borrow_version` が偽の `RewriteCtx` で書き換える。
-        L8 より、その本体で `H` の動きが違う節点は借用版の中にしか無く、初期化子の活性化が返す値は D-CP より
-        `X` と `X'` で同じである。よってその値が到達するオブジェクトのグラフも同じである。
-    BY L8, D-CP, CODE src/rc_ir/borrow.rs: borrow_ify
-  <2>3. 状態を threaded にするのは `Std::mark_threaded` の走査であり、起点の値とその到達するグラフは
-        `<2>2` と同じ理由で `X` と `X'` で同じである。
-    BY D32, L8, D-CP
-  <2>4. QED
-    BY <2>1, <2>2, <2>3
+<1>2. `O` がグローバル状態 (D26) であるかどうかは `X` と `X'` で同じである。
+  <2>1. オブジェクトの状態を `GLOBAL` にするのは (E5) の `mark_global` の走査だけであり、逆向きの遷移は
+        無い (D26、L0 の後の注が状態を書き換える 3 か所を挙げる)。印を付けるのはグローバル初期化子の
+        活性化が返した値が到達するグラフである。
+    BY D24, D26, A8, L0
+  <2>2. `borrow_ify` はグローバル初期化子の本体を `is_borrow_version` が偽の `RewriteCtx` で書き換える
+        (L8 の (1))。初期化子の活性化が返す値は D30 より `X` と `X'` で対応し、L8c より対応する
+        オブジェクトは対応する値を保持するので、その値が到達するオブジェクトのグラフも対応する。
+    BY D30, L8, L8c
+  <2>3. QED
+    `<2>1` と `<2>2` より、`mark_global` が印を付けるオブジェクトの集合は 2 つの実行で対応する。
+    BY <2>1, <2>2
 
-<1>3. L12 より `Δ(q, O) = 0` である。`<1>1` より `O` は計数下であり、`q` は共通接頭の上の一意性の観測点で
-      ある。
-  BY L12, <1>1
+<1>3. CASE `O` がグローバル状態である。L0 より 2 つの観測値はどちらも偽であり、等しい。
+  BY L0, <1>1, <1>2
 
-<1>4. QED
-  `<1>3` より `H'(q, O) = H(q, O) = 1` である。`<1>2` より `O` の参照カウント状態は `X'` でも local か
-  threaded なので、L0 より `X'` の `q` での観測値は真である。
-  BY L0, <1>1, <1>2, <1>3
+<1>4. CASE `O` がグローバル状態でない。この場合 `O` は計数下 (D26) であり、L12 より `Δ(q, O) = 0`、すなわち
+      `H'(q, O) = H(q, O)` である。L0 より 2 つの観測値はどちらも `H(q, O) = 1` と同値であり、等しい。
+  BY D26, L0, L12, <1>1, <1>2
+
+<1>5. QED
+  D26 よりオブジェクトは計数下かグローバル状態かのどちらかなので、`<1>3` と `<1>4` は場合を尽くす。
+  観測値が等しいことから、`X` の観測値が真ならば `X'` の観測値も真である。D30 の (X1) は 2 つの観測値が
+  違う点なので、共通接頭の上ではそれが起こらない。
+  BY D26, D30, <1>3, <1>4
 
 ## 6. 記録 (1) -- 門が無かったときの反例 (#551)
 
 この節は、`LLVMGen::observes_uniqueness` と `funcs_observing_uniqueness` が入る前のコード (issue #551) に
-対する反証である。**その欠陥は直っている** -- L2 の `<1>1` (`borrow_versions` が `observe` を含むこと) が、
-今のコードでは `borrow_ify` の `if observing.contains(&func.name) { continue; }` によって偽になる。
+対する反証である。**その欠陥は直っている** -- 今のコードでは `observe` の本体が `observes_uniqueness()` の
+真な op を持つので `observe ∈ observing` となり、`borrow_ify` の
+`if observing.contains(&func.name) { continue; }` がこの関数を飛ばして借用版を作らない。
 README 第 6 節の較正表が、P26 の節を較正するバグとしてこの反証を引く。
+
+**この節から第 10 節までは、対象コミットに無いコードについての記録である。**よって構造化証明の形 --
+`<k>n` の段と `CODE` の引用 -- を取らず、散文で書く。判定を与えるのは、そのときの二値で測った出力
+(第 13 節が二値の版を挙げる) である。
 
 ### 6.1 入力
 
@@ -1092,293 +1411,68 @@ fn observe(n, x, y, w) -> Bool:
 
 以下、`observe` の第 1・第 2・第 3・第 4 パラメータをそれぞれ `n`、`x`、`y`、`w` と書く。
 
-## L1 (推論の不動点は `y` だけを所有する)
+**推論の不動点は `y` だけを所有する。** `observe` の本体で `collect_consumes` が報告するのは、`arm0` の
+`Llvm(is_unique, [y])` についての `(y, [])` と、`arm1` の `App(observe, [n2, x, y, w])` について所有される
+位置の引数の leaf だけである。`is_unique` の op は `borrows_operand` を override せず既定の偽を返し、その
+`result_prov` は結果の全 leaf を `Unknown` と宣言するので素通しの leaf を持たない。よって
+`rhs_consumes` はオペランド `y` の leaf `[]` を報告する。`arm0` の 2 つの `Release`、`Destructure`、
+`Eval`、3 つの `Ret`、`int_lt`/`int_sub` の op、`Match` 自身はいずれも何も報告しない -- `Release` と
+`Eval` の腕は継続へ降りるだけ、`Destructure` の容器 `(Bool, B)` は unbox で両フィールドに名前が付いており、
+`Ret` の変数の型は `Std::Bool` で boxed leaf を持たず、`I64` のオペランドも leaf を持たない。
+`App` の再帰呼び出しは `owned_leaves` に既に在る位置しか報告しないので、不動点で `observe` のパラメータに
+ついて `owned_leaves` に入るのは `(y, [])` だけである。`main` の本体を歩いた分は `main` の `VarTable` の
+`param_tys` で濾されるので `observe` のパラメータを入れない。`level_ownership` も、`x` と `w` を主語にする
+site の候補が自分自身だけで `owns_object_yet` が偽になるので何も挿入しない。
 
-**言明**。`infer_ownership` が返す `OwnedLeaves` は、`observe` のパラメータについては `(y, [])` だけを含み、
-`(x, [])` と `(w, [])` を含まない。
+**`main` の呼び出しは借用版へ振り分けられる。** 修正前のコードでは `observe` は `capture` を持たず、`x` の
+leaf が所有されないので `func_has_borrowable_param` が真になり、`borrow_versions` が `observe` を含んだ。
+`owned_units` は原本について `(x, [])`、`(y, [])`、`(w, [])` を持ち、借用版については `(y', [])` だけを
+持つ (`'` は `clone_func` の付けた名前を表す。`I64` は `rc_units` が空なので `n` の unit は無い)。
+`main` の呼び出しは末尾位置にないので `routing_is_safe` が真であり、引数 `w` の unit を借用版が借用し、かつ
+`w` が呼び出しの後で使われるので `routing_saves_retain` も真になる。よって `route` は `observe#borrow` を
+返し、`call_rc` は `before` を空、`after` を `[(o, []), (w, [])]` として返す -- `main` は `o` も `w` も
+パラメータとして取らないので `owns_unit` はどちらも真であり、借用版はその 2 つの位置を借用するからである。
+出力の `main` は `Retain(w, []) ; Retain(o, []) ; Let(u, App(observe#borrow, [n, o, o, w]),
+Release(o, []) ; Release(w, []) ; k')` になる。
 
-<1>1. `observe` の本体について `collect_consumes` が報告するのは、`arm0` の `Llvm(is_unique, [y])` に
-      ついての `(y, [])` と、`arm1` の `App(observe, [n2, x, y, w])` について `owns` が真である位置の
-      引数の leaf だけである。ほかのどの節点も何も報告しない。
-  <2>1. `arm0` の `Llvm(is_unique, [y])` について、`rhs_consumes` の `RcRhs::Llvm` の腕は、
-        `borrows_operand(i)` が偽で `passthrough_arg_leaves` に入らない各オペランド leaf を報告する。
-    BY CODE src/rc_ir/ownership.rs: rhs_consumes の `RcRhs::Llvm` の腕
-  <2>2. `InlineLLVMIsUniqueFunctionBody` は `borrows_operand` を override しないので、既定の `false` を
-        返す。
-    BY CODE src/fixstd/builtin.rs: `impl LLVMGen for InlineLLVMIsUniqueFunctionBody`,
-       CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand
-  <2>3. `InlineLLVMIsUniqueFunctionBody::result_prov` は
-        `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` を返す。`passthrough_arg_leaves` は
-        結果の leaf の宣言が単一の `Arg(j, σ)` であるものだけを集めるので、この op については空である。
-    BY CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::result_prov,
-       CODE src/rc_ir/ownership.rs: passthrough_arg_leaves, as_arg_projection
-  <2>4. よって `Llvm(is_unique, [y])` は `(y, [])` を報告する。
-    BY <2>1, <2>2, <2>3
-  <2>5. `arm0` の `Release(x, [])` と `Release(w, [])` は何も報告しない。`collect_consumes_go` の
-        `RcExpr::Retain | RcExpr::Release | RcExpr::Eval` の腕は継続へ降りるだけである。
-    BY CODE src/rc_ir/ownership.rs: collect_consumes_go の `RcExpr::Retain(..) | RcExpr::Release(..) |
-       RcExpr::Eval(..)` の腕
-  <2>6. `arm0` の `Destructure(p, [(0, u), (1, y2)], ...)` は何も報告しない。`p` の型は unbox のタプル
-        `(Bool, B)` であり、`destructure_consumes` は unbox 容器について、名前が付いていないフィールドの
-        leaf だけを返す。両フィールドに名前が付いているので空である。
-    BY CODE src/rc_ir/ownership.rs: destructure_consumes
-  <2>7. `arm0` の `Ret(u)`、`arm1` の `Ret(a)`、本体の `Ret(r)` は何も報告しない。
-        `collect_consumes_go` の `RcExpr::Ret(x)` の腕は `push_boxed_leaves(&x.name, &x.ty, ...)` を呼び、
-        `u`、`a`、`r` の型はいずれも `Std::Bool` で、`boxed_leaf_paths` は空である。
-    BY CODE src/rc_ir/ownership.rs: collect_consumes_go の `RcExpr::Ret` の腕, D4
-  <2>7a. `Llvm(int_lt, [zero, n])` と `Llvm(int_sub, [n, one])` は何も報告しない。`rhs_consumes` の
-        `RcRhs::Llvm` の腕はオペランドの `boxed_leaf_paths` を渡るが、`Std::I64` は
-        `is_fully_unboxed` が真なので leaf を持たない。
-    BY D4, CODE src/rc_ir/ownership.rs: rhs_consumes の `RcRhs::Llvm` の腕
-  <2>7b. `Let(r, Match(c, [arm1, arm0]), k)` の `Match` 自身は何も報告しない。`collect_consumes_go` の
-        `RcRhs::Match(_, arms)` の場合は各アームの本体へ降りるだけである。
-    BY CODE src/rc_ir/ownership.rs: collect_consumes_go の `RcRhs::Match` の場合
-  <2>8. `arm1` の `App(observe, [n2, x, y, w])` が報告するもののうち、`observe` のパラメータ leaf を
-        `owned_leaves` に入れうるのは、`resolve_callee_params` で解決した各位置について
-        `owns(&params[i], &leaf)` が真である引数の leaf だけである。`rhs_consumes` の `RcRhs::App` の腕は
-        これに先立って `push_boxed_leaves(&callee.name, &callee.ty, ...)` も報告するが、その主語は名前
-        `observe` であり、`origin_inner` の `vars.bindings.get(var)` が `None` を返す腕により
-        `Exactly((observe, ・))` になる。`observe` は `vars.param_tys` に無いので `infer_ownership` は
-        これについて何も挿入しない。
-    BY CODE src/rc_ir/ownership.rs: rhs_consumes の `RcRhs::App` の腕, resolve_callee_params,
-       origin_inner の `None` の腕, CODE src/rc_ir/borrow.rs: infer_ownership
-  <2>9. QED
-    `<2>4`、`<2>5`、`<2>6`、`<2>7`、`<2>7a`、`<2>7b`、`<2>8` が `observe` の本体のすべての節点を尽くす。
-    `main` の本体については `<1>2` で扱う。
-    BY <2>4, <2>5, <2>6, <2>7, <2>7a, <2>7b, <2>8
-
-<1>2. `infer_ownership` の不動点で `owned_leaves` に入る `observe` のパラメータ leaf は `(y, [])` だけで
-      ある。
-  <2>1. `owned_leaves` の初期値は空である。
-    BY CODE src/rc_ir/borrow.rs: infer_ownership
-  <2>2. 1 周目、`<1>1` より `Llvm(is_unique, [y])` が `(y, [])` を報告し、`origin(y, [])` は
-        `Exactly((y, []))` である (`y` は `Binding::Param`)。`y` は `vars.param_tys` にあるので
-        `(y, [])` が挿入される。
-    BY <1>1, CODE src/rc_ir/borrow.rs: infer_ownership, CODE src/rc_ir/ownership.rs: origin_inner の
-       `Binding::Param` の腕
-  <2>3. `<1>1` より `App(observe, [n2, x, y, w])` は、`owns` が真である位置の引数だけを報告する。
-        `owns` は `owned_leaves` を読むので、`(x, [])` と `(w, [])` が `owned_leaves` に入っていない限り
-        位置 1 と位置 3 は報告されない。位置 2 は `(y, [])` が入っているので `(y, [])` を報告し、これは
-        すでに入っている。
-    BY <1>1, <2>2, CODE src/rc_ir/borrow.rs: infer_ownership
-  <2>4. `main` の本体を歩いた分は `observe` のパラメータ leaf を `owned_leaves` に入れない。
-        `infer_ownership` が `owned_leaves` に入れるのは `(root_var, root_path)` のうち
-        `vars.param_tys.contains_key(root_var)` を満たすものだけであり、ここでの `vars` は `main` の
-        `VarTable` である。`main` のパラメータは `Std::IO::IOState` 型の 1 つだけなので、`observe` の
-        パラメータ名はその `param_tys` に無い。
-    BY CODE src/rc_ir/borrow.rs: infer_ownership, CODE src/rc_ir/ownership.rs: VarTable::of
-  <2>5. `level_ownership` は `(x, [])` と `(w, [])` を挿入しない。`levelled_sites` が挙げる site のうち
-        `x` を主語にするのは `arm0` の `Release(x, [])` と `arm1` の `App` の位置 1 であり、どちらも
-        `origin(x, [])` の候補は `{(x, [])}` である。`owns_object_yet(vars, type_env, x, [], owned_leaves)`
-        は、`x` が `param_tys` にあるので `units_under(B, [], type_env) = [[]]` の各 unit について
-        `truncate_to_unit(B, [], type_env) = []` を鍵として `(x, []) ∈ owned_leaves` を問い、`<2>2` と
-        `<2>3` よりこれは偽である。よって `owns_a_candidate` が偽になり、`level_ownership` は `false` を
-        返して何も挿入しない。`w` についても同じ形の site で同じ答えになる。
-    BY <2>2, <2>3, CODE src/rc_ir/borrow.rs: levelled_sites, level_ownership, owns_object_yet
-  <2>6. QED
-    `<2>1` から `<2>5` より、不動点に達したときの `owned_leaves` は `observe` のパラメータについて
-    `(y, [])` だけを持つ。
-    BY <2>1, <2>2, <2>3, <2>4, <2>5
-
-<1>3. QED
-  BY <1>2
-
-## L2 (`main` の呼び出しは借用版へ振り分けられる)
-
-**言明**。修正前のコードでは、`borrow_ify` は `observe#borrow` を作り、`main` の
-`App(observe, [n, o, o, w])` をその借用版へ振り分け、呼び出しの後に `Release(o, [])` と `Release(w, [])` を
-置く。
-
-<1>1. `borrow_versions` は `observe` を含む。`observe` は `capture` を持たず、
-      `func_has_borrowable_param(observe, owned_leaves, type_env)` は、`x` の leaf `[]` が
-      `owned_leaves.owns(x, [])` を偽にするので真である。
-  **今のコードではこの段が偽である。** `observe` の本体は `observes_uniqueness()` が真の op を持つので
-  `observe ∈ observing` であり、`borrow_ify` は `continue` でこの関数を飛ばす。
-  BY L1, CODE src/rc_ir/borrow.rs: borrow_ify, func_has_borrowable_param, funcs_observing_uniqueness
-
-<1>2. `owned_units` は、`observe` の原本について `(n, ・)` を除く全 unit すなわち `(x, [])`、`(y, [])`、
-      `(w, [])` を含み、借用版 `observe#borrow` については `(y', [])` だけを含む。ここで `y'` は
-      `clone_func` が `y` に付けた新しい名前である。
-  `borrow_ify` は各関数について `owned_units.extend(param_capture_units(func, type_env))` を行い、
-  借用版については `owned_leaves.owns(&p.name, &leaf)` が真である leaf だけを `truncate_to_unit` で
-  unit にして入れる。`I64` は `rc_units` が空なので `n` の unit は無い。
-  BY L1, <1>1, CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
-
-<1>3. `routing_is_safe(u, [n, o, o, w])` は真である。`main` の本体は呼び出しの後に
-      `Llvm(struct_get_0, [w])` を持つので、`trivially_returns(k, u)` は `RcExpr::Let(..)` の腕で偽になり、
-      `u` は `tail_result_vars(main.body)` に入らない。
-  BY CODE src/rc_ir/borrow.rs: routing_is_safe, tail_result_vars, mark_tail, trivially_returns
-
-<1>4. `routing_saves_retain(observe#borrow, [n, o, o, w], k)` は真である。
-  <2>1. 引数 3 (`w`) の unit `[]` について `callee_borrows` は真である。
-        `!self.owned_units.contains(&(borrow_params[3].0.clone(), []))` であり、`<1>2` より借用版の
-        `owned_units` は `w` の複製名を含まない。
-    BY <1>2, CODE src/rc_ir/borrow.rs: routing_saves_retain
-  <2>2. `arg_used_later = used_later(&w.name, k)` は真である。`k` は呼び出しの継続であり、その中の
-        `Let(t, Llvm(struct_get_0, [w]), ...)` について `used_later` の `RcExpr::Let(_, rhs, k)` の腕が
-        `rhs_uses(name, rhs)` を真にする。
-    BY CODE src/rc_ir/borrow.rs: used_later
-  <2>3. QED
-        `<2>2` より `!arg_used_later` は偽であり、`self.owns_unit(arg, unit) && !arg_used_later && ...` は
-        偽になる。その否定は真なので、`<2>1` と合わせて引数 3 の unit `[]` が
-        `callee_borrows && !(...)` を真にし、`any` が真を返す。
-    BY <2>1, <2>2, CODE src/rc_ir/borrow.rs: routing_saves_retain
-
-<1>5. `route(u, observe, [n, o, o, w], k)` は `observe#borrow` を返す。
-  BY <1>1, <1>3, <1>4, CODE src/rc_ir/borrow.rs: route
-
-<1>6. `call_rc(observe#borrow, [n, o, o, w])` は `before = []`、`after = [(o, []), (w, [])]` を返す。
-  <2>1. 引数 0 (`n : I64`) は `rc_units(I64, type_env)` が空なので、どちらにも入らない。
-    BY D5, CODE src/rc_ir/borrow.rs: call_rc
-  <2>2. `main` はパラメータとして `o` も `w` も取らないので、`owns_object` の
-        `self.vars.param_tys.get(root)` は `None` を返し、`owns_unit(o, [])` と `owns_unit(w, [])` は
-        ともに真である。
-    BY CODE src/rc_ir/borrow.rs: owns_unit, owns_object
-  <2>3. 引数 1 (`o`、位置は `x`) について `callee_owns` は偽である (`<1>2`)。`<2>2` より `arg_owned` は
-        真なので、`!callee_owns && arg_owned` の枝が取られ `after` に `(o, [])` が入る。
-    BY <1>2, <2>2, CODE src/rc_ir/borrow.rs: call_rc
-  <2>4. 引数 2 (`o`、位置は `y`) について `callee_owns` は真である (`<1>2`)。`<2>2` より `arg_owned` も
-        真なので、どちらの枝も取られない。
-    BY <1>2, <2>2, CODE src/rc_ir/borrow.rs: call_rc
-  <2>5. 引数 3 (`w`、位置は `w`) について `callee_owns` は偽 (`<1>2`)、`arg_owned` は真 (`<2>2`) なので
-        `after` に `(w, [])` が入る。
-    BY <1>2, <2>2, CODE src/rc_ir/borrow.rs: call_rc
-  <2>6. QED
-    BY <2>1, <2>3, <2>4, <2>5
-
-<1>7. QED
-  `rewrite_inner` の `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕は、`route` の答えを callee にし、
-  `call_rc` の `after` を `prepend_rc(after, true, ...)` で継続の先頭に置き、`before` を
-  `prepend_rc(before, false, ...)` で呼び出しの前に置く。`<1>5` と `<1>6` より、`main` の出力は
-  `Retain(w, []) ; Retain(o, []) ; Let(u, App(observe#borrow, [n, o, o, w]), Release(o, []) ;
-  Release(w, []) ; k')` である。
-  BY <1>5, <1>6, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, prepend_rc
-
-## L3 (借用版は `Release(x, [])` を落とす)
-
-**言明**。`observe#borrow` の本体の `arm0` には `Release(x', [])` も `Release(w', [])` も無く、
-`Release(y2', [])` はある。ここで `'` は `clone_func` の付けた名前を表す。
-
-<1>1. `observe#borrow` の本体は `observe` の本体の束縛変数を一斉に付け替えたものであり、それ以外の違いを
-      持たない。
-  BY P9
-
-<1>2. `RewriteCtx::rewrite_rc` は、`is_borrow_version` が真のとき、`units_under(&v.ty, path, type_env)` の
-      うち `self.owns_unit(v, unit)` が真である unit だけを節点として残す。
-  BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
-
-<1>3. `owns_unit(x', [])` は偽である。
-  `origin(x', [])` は `x'` が `Binding::Param` なので `Exactly((x', []))` を返し、候補は `{(x', [])}` で
-  ある。`owns_object(x', [])` は `param_tys` に `x'` があるので
-  `units_under(B, [], type_env) = [[]]` の各 unit について
-  `owned_units.contains(&(x', truncate_to_unit(B, [], type_env)))` すなわち
-  `owned_units.contains(&(x', []))` を問い、L2 の `<1>2` よりこれは偽である。
-  BY L2, CODE src/rc_ir/ownership.rs: origin_inner の `Binding::Param` の腕,
-     CODE src/rc_ir/borrow.rs: owns_unit, owns_object
-
-<1>4. `owns_unit(w', [])` は偽である。理由は `<1>3` と同じ形で、`owned_units.contains(&(w', []))` が
-      L2 の `<1>2` より偽である。
-  BY L2, CODE src/rc_ir/ownership.rs: origin_inner の `Binding::Param` の腕,
-     CODE src/rc_ir/borrow.rs: owns_unit, owns_object
-
-<1>5. `owns_unit(y2', [])` は真である。
-  <2>1. `y2'` は `Destructure(p', [(0, u'), (1, y2')], ...)` が束縛するので `Binding::Field(p', 1)` を
-        持つ。`p'` の型 `(Std::Bool, B)` は unbox のタプルなので `is_box` は偽であり、`origin_inner` の
-        `Binding::Field` の腕は `origin(p', [1])` へ帰着する。
-    BY CODE src/rc_ir/ownership.rs: collect_bindings, origin_inner の `Binding::Field` の腕
-  <2>2. `origin(p', [1])` は `Exactly((p', [1]))` である。`p'` は `Binding::Llvm(is_unique, [y'],
-        (Std::Bool, B))` を持つ。`InlineLLVMIsUniqueFunctionBody::result_prov` は
-        `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` を返すので、
-        `decl.leaf_origins_at([1])` は `{Unknown}` であり `as_arg_projection` は `None` を返す。よって
-        `origin_from_leaves_under(..., path = [1], here = (p', [1]))` に入り、そこでは `[1]` の下の唯一の
-        leaf の源が `Unknown` なので `operand_units` は空、`produced_here` は真、`reached` は
-        `[Exactly((p', [1]))]` の 1 元になり、その 1 元がそのまま返る。
-    BY CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::result_prov,
-       CODE src/rc_ir/ownership.rs: origin_inner の `Binding::Llvm` の腕, as_arg_projection,
-       origin_from_leaves_under
-  <2>3. QED
-    `<2>1` と `<2>2` より `origin(y2', [])` の候補は `{(p', [1])}` である。`p'` は `param_tys` に無いので
-    `owns_object(p', [1])` は `None` の枝で真を返す。
-    BY <2>1, <2>2, CODE src/rc_ir/borrow.rs: owns_unit, owns_object
-
-<1>6. QED
-  `<1>2` と `<1>3` より `Release(x', [])` の `kept` は空になり、節点は継続に置き換わる。`<1>4` より
-  `Release(w', [])` も同じである。`<1>5` より `Release(y2', [])` は残る。`<1>1` より本体の他の部分は
-  原本と同じ形である。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5
+**借用版は `Release(x, [])` を落とす。** 借用版の本体は原本の本体の束縛変数を付け替えたものであり (P9)、
+`rewrite_rc` は借用版で `owns_unit` が真の unit の節点だけを残す。`x'` と `w'` は `Binding::Param` なので
+`origin` の候補が自分自身だけであり、借用版の `owned_units` がその 2 つを含まないので `owns_unit` は偽に
+なる。`y2'` は `Destructure` が束縛するので `origin` は `(p', [1])` へ辿り、`p'` はパラメータではないので
+`owns_object` が真を返す。よって `arm0` からは `Release(x', [])` と `Release(w', [])` が落ち、
+`Release(y2', [])` が残る。
 
 ### 6.4 2 つの実行の参照カウント
 
 以下、`main` の 1 回の活性化を `M`、`observe` (または `observe#borrow`) の 1 回の活性化を `F` と書く。
 `n = 0` なので `Match` は `arm0` を選ぶ。`o` が指すオブジェクトを `o*` と書く。
 
-## L4 (入力の実行では観測値が真である)
+`o*` はグローバル状態ではない。D26 より計数下のオブジェクトがグローバル状態になるのは `mark_global` が
+印を付けた時点であり、`mark_global` が走るのはグローバル初期化子の活性化が返した値が到達するグラフに対して
+だけである。`o*` は `main` の `Llvm(struct_make, [c1])` が割り当てたオブジェクトで、どのグローバル値の
+初期化子もこれを返さない。
 
-**言明**。入力プログラムの実行において、観測点 `Llvm(is_unique, [y])` の位置で `H(o*) = 1` である。
+**入力の実行では観測値が真である。** `Llvm(struct_make, [c1])` の結果の leaf `[]` は新しい参照を 1 つ作り
+(`InlineLLVMMakeStructBody::result_prov` は boxed な結果の根に `Fresh` を置く)、`H(o*)` は 1 から始まる。
+`Retain(o, [])` の後 `H(o*) = 2` であり、`M` の `Obl` は `o*` への参照を 2 つ持つ。A1 より入力の `observe`
+は全パラメータを所有するので、`App(observe, [n, o, o, w])` は位置 1 と位置 2 の引数の leaf を消費する。
+消費は `H` を変えないので `H(o*) = 2` のままで、`F` の初期 `Obl` が `o*` への参照を 2 つ持つ。`arm0` の
+`Release(x, [])` の後 `H(o*) = 1` であり、その直後が観測点である。L0 より観測値は `H(o*) = 1` と同値なので
+真である。
 
-<1>1. `Llvm(struct_make, [c1])` の結果の leaf `[]` は新しい参照を 1 つ作り、`H(o*)` は 1 から始まる。
-      `M` の `Obl` に参照が 1 つ入る。`InlineLLVMMakeStructBody::result_prov` は、boxed な結果の根の path に
-      `sole_origin(LeafOrigin::Fresh)` を置く。`B` は `is_box` が真なのでその leaf は根の path `[]` だけで
-      あり (D4 の規則 3)、宣言は単一の `Arg(j, σ)` ではない。D10 の生成の表の `Llvm` の行がこれに当たり、
-      A3 の表の `Fresh` の行が「新しく割り当てたオブジェクトへの新しい参照」と述べる。
-  BY A3, D4, D10, CODE src/fixstd/builtin.rs: InlineLLVMMakeStructBody::result_prov
-
-<1>2. `Retain(o, [])` の後、`H(o*) = 2` であり、`M` の `Obl` は `o*` への参照を 2 つ持つ。
-  BY D10, <1>1
-
-<1>3. `App(observe, [n, o, o, w])` は、A1 より `observe` が全パラメータを所有するので、位置 1 と位置 2 の
-      引数 `o` の leaf `[]` を消費する。消費は `H` を変えないので `H(o*) = 2` のままであり、`M` の `Obl` は
-      `o*` について空になり、`F` の初期 `Obl` は `x` の leaf と `y` の leaf の分で `o*` への参照を 2 つ持つ。
-  BY A1, D9, D10, <1>2
-
-<1>4. `arm0` の `Release(x, [])` の後、`H(o*) = 1` である。
-  BY D10, <1>3
-
-<1>4a. `o*` の参照カウント状態は global ではない。A8 より global の状態を持つのはグローバル値が到達する
-      オブジェクトであり、`o*` は `main` の `Llvm(struct_make, [c1])` が実行時に作ったオブジェクトで、
-      どのグローバル値からも到達されない。
-  BY A8
-
-<1>5. QED
-  `<1>4` の直後の節点が観測点である。`<1>4a` と L0 より観測値は `H(o*) = 1` と同値であり、`<1>4` より
-  それは真である。
-  BY L0, <1>4, <1>4a
-
-## L5 (修正前の出力の実行では観測値が偽である)
-
-**言明**。修正前のコードの `borrow_ify` の出力の実行において、対応する観測点の位置で `H(o*) = 2` である。
-
-<1>1. 観測点の対応。L3 の `<1>1` より `observe#borrow` の本体は `observe` の本体の名前替えであり、D19 より
-      借用版の本体の観測点は複製元の本体の同じ位置の観測点に対応する。`main` の本体の他の節点は L2 の
-      `<1>7` が述べる 2 つの `Release` の挿入と callee の付け替えだけを受ける。
-  BY D19, L2, L3
-
-<1>2. `Llvm(struct_make, [c1])` から `Retain(o, [])` までは入力と同じ節点であり、`H(o*) = 2` であって
-      `M` の `Obl` は `o*` への参照を 2 つ持つ。
-  BY L4, <1>1
-
-<1>3. `App(observe#borrow, [n, o, o, w])` は、位置 2 の引数 `o` の leaf を消費し、位置 1 の引数 `o` の
-      leaf を消費しない。L2 の `<1>2` より `owned_units` は `(y', [])` を含み `(x', [])` を含まないので、
-      P13 より `observe#borrow` の `borrowed_units` は `(x', [])` を含み `(y', [])` を含まない。D14 が
-      その集合で所有と借用を定め、D9 の `App` の行が消費される leaf をそれで決める。消費は `H` を変えない
-      ので `H(o*) = 2` のままであり、`M` の `Obl` は `o*` への参照を 1 つ残し、`F` の初期 `Obl` は `y'` の
-      分の 1 つだけを持つ (D10 の初期値は借用する unit の下の leaf を入れない)。
-  BY D9, D10, D14, P13, L2, <1>2
-
-<1>4. `arm0` に `Release(x', [])` は無いので、観測点の位置で `H(o*) = 2` である。
-  BY L3, <1>3
-
-<1>5. QED
-  L4 の `<1>4a` と同じ理由で `o*` の状態は global ではない。L0 より観測値は `H(o*) = 1` と同値であり、
-  `<1>4` よりそれは偽である。
-  BY L0, L4, <1>4
+**修正前の出力の実行では観測値が偽である。** 借用版の本体の観測点は複製元の本体の同じ位置の観測点に対応する
+(D19)。`Llvm(struct_make, [c1])` から `Retain(o, [])` までは入力と同じ節点なので `H(o*) = 2` である。
+`App(observe#borrow, [n, o, o, w])` は、P13 より `observe#borrow` の `borrowed_units` が `(x', [])` を
+含み `(y', [])` を含まないので、位置 2 の引数の leaf だけを消費する。よって `M` の `Obl` は `o*` への参照を
+1 つ残し、`F` の初期 `Obl` は 1 つだけを持つ。借用版の `arm0` に `Release(x', [])` は無いので、観測点の
+位置で `H(o*) = 2` である。L0 より観測値は偽である。
 
 ### 6.5 この記録が P26 の節を較正すること
 
-L4 と L5 は、修正前のコードが P26 を破ることを示す。同じ出力は D11 を満たす -- 出力の実行で `o*` の参照は、
-`M` が 1 つ (呼び出しの後の `Release(o, [])` が処分する)、`F` の `y'` が 1 つ (`Release(y2', [])` が処分
-する) であり、過剰処分 (S-a) も漏れ (S-b) も解放後の読み (S-c) も起きない。すなわちこれは、D11 を満たした
-まま P26 だけを破る入力であり、README 第 6 節が求めた「この節だけを破る例」である。
+修正前のコードは P26 を破る。同じ出力は D11 を満たす -- 出力の実行で `o*` の参照は、`M` が 1 つ (呼び出しの
+後の `Release(o, [])` が処分する)、`F` の `y'` が 1 つ (`Release(y2', [])` が処分する) であり、過剰処分
+(S-a) も漏れ (S-b) も解放後の読み (S-c) も起きない。すなわちこれは、D11 を満たしたまま P26 だけを破る入力で
+あり、README 第 6 節が求めた「この節だけを破る例」である。
 
 ## 7. 記録 (2) -- 門が直接呼び出しだけを閉じていたときの反例
 
@@ -2046,16 +2140,36 @@ README の D21 は、活性化が運ぶ割り当てに**オペランドから結
 D29 の「対応する活性化」は前提ではなく構成になる。観測値は活性化の側のデータなので、対応する 2 つの
 活性化は同じアームを選ぶ。P21 はもはや P26 を必要としない。
 
-この文書の D-CP は、同じ対応を実行の段の列の上に並べたものである。`cancel` の側では対応の根拠が D29 で
-あり、`borrow_ify` の側では L8 と P9 と P12 である (第 2 節)。README の D29 が
+D30 は、同じ対応を実行の段の列の上に並べたものである。`cancel` の側では対応の根拠が D29 であり、
+`borrow_ify` の側では L8 と P9 と P12 である (第 2 節)。README の D29 が
 「**`borrow_ify` にはこの対応を置かない。**」と書いているのはこの分担のことである。
 
-### 11.3 P26 の側に残るもの
+### 11.3 P26 の第 2 文について残るもの
 
-P26 は D11 と D12 が言わないことを言う命題として残る -- 実際の実行の観測値についての保証である。この文書は
-それを共通接頭の上の主張として述べ、`cancel` については L7 と L7a で、`borrow_ify` については L13 で閉じた。
-L13 は共通接頭の上の各観測点で 2 つの観測値が一致することを示すので、`borrow_ify` について D-CP の (X1) の
-出口は起こらない。残る出口は (X2) だけである。
+P26 は 2 文からなる。第 1 文は共通接頭の上の各観測点についての主張であり、第 2 文は
+「**共通接頭が終わる 2 つの出口はどちらも許された向きである** -- (X1) では入力の観測値が偽で出力の観測値が
+真であり、(X2) では入力が複製を作り出力が作らない」である。
+
+**`cancel` については 2 文とも閉じた。** 第 1 文が L7、第 2 文が L7a である。
+
+**`borrow_ify` については第 1 文だけが閉じた。** L13 は共通接頭の上の各観測点で 2 つの観測値が**等しい**
+ことを示すので、第 1 文が出るうえに (X1) の出口が起こらないことも出る。残るのは (X2) の出口と、第 2 節が
+書いた第 3 の出口である。この 2 つについて、この文書は向きを示していない。
+
+- **(X2) の向きは自由ではなく、`cancel` と逆になりうる。** L7a の `<1>2` が `cancel` について使ったのは
+  L6 の `H' ≤ H` である。`borrow_ify` にはその向きの不等式が無い。README の第 9 節は、`routing_saves_retain`
+  の判定を「1 つでも得をする unit が在る、かつ C の unit が 1 つも無い」に変えれば「振り替えた呼び出しの
+  どの計数下オブジェクトについても出力のカウントが入力以下になる」と書いており、**いまの判定ではそれが
+  成り立たない**ことをそこで述べている。C の場合 (所有していて呼び出しで死ぬ unit) では出力のカウントの方が
+  高い。`unique_check_operand` を宣言する op は `funcs_observing_uniqueness` の門が閉じる対象ではないので
+  (門が読むのは `observes_uniqueness` である)、窓の中でカウントの高い側が複製を作る形は排除されていない。
+- **第 3 の出口 -- 片方の実行だけがある段でオブジェクトを解放する。** `borrow_ify` は借用した参照の処分を
+  呼び出しの後へ動かすので、窓の中では 2 つの実行が同じオブジェクトを違う段で解放しうる。解放される
+  オブジェクトが `Destructor` であれば、その段はデストラクタ関数を走らせる (L9a の (vi)) ので、2 つの実行の
+  段の列はそこで分かれる。D30 の「共通接頭が終わる点は 2 種類しかない」はこれを数えていない。
+
+**第 2 文を閉じるには、言明を変えるか、命題を足すかのどちらかが要る。**第 12 節の項目 7 が、その 2 つの形を
+オーケストレータへの報告として書く。
 
 ## 12. オーケストレータへ報告する定義と仮定の穴
 
@@ -2065,58 +2179,74 @@ L13 は共通接頭の上の各観測点で 2 つの観測値が一致するこ�
    持ち上げたまま、こちらの流れが観測しうる。そのとき入力の観測値そのものが段の並べ方で決まるので、
    性質の言明の側で扱う事柄である。果たす者: 無し。
 
-2. **A3 が `applies_a_function_operand` を覆っていない。** A3 は「各 `LLVMGen` の `result_prov` と
-   `borrows_operand` は、その演算が生成するコードを正しく述べている」と書き、`Unknown` の行の中で
-   `applies_a_function_operand` に触れるが、その宣言自体の忠実さは表に無い。L9a の `<1>4` と L10 の `<1>6`
-   はこの宣言の忠実さに立つので、A3 の第 1 文にこの宣言を足す必要がある。**この宣言には果たす者が居る** --
-   `Generator::apply_lambda` が、生成中の op がそれを宣言しているかを develop モードで検査する
-   (`CODE src/generator.rs: Generator::apply_lambda`,
-   `CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`)。A3 の他の宣言と違って、乖離はテストが
-   捕まえる。
+2. **A3 の `Unknown` の行が `InlineLLVMBoxedFromRetainedPtrIOS` を覆っていないので、L11 が仮定を負う。**
+   A3 はこの op を但し書きで除き、「そのオブジェクトは C の側から渡された番地が指すものである。どちらの
+   leaf についても、主張する命題はこの行を読まずに書く」と書く。L11 は「広がりの中のスロットが指す計数下の
+   オブジェクトは `t0` より後に割り当てられた」を帰納で示す命題であり、この op の結果はその帰納の外に
+   出る -- C の側が保っていた番地は `t0` より前に割り当てられたオブジェクトを指しうる。よって L11 は
+   「広がりの中の段に `InlineLLVMBoxedFromRetainedPtrIOS` の段が無い」を仮定として負い、それを L12 と L13 が
+   運ぶ。**要るのは仮定ではなく命題である** -- 「`unsafe_get_retained_ptr_of_boxed_value` が渡した参照は
+   環境 (D25) が持ち、`boxed_from_retained_ptr` はそれを活性化へ移す」を示せば、L12 の `<2>3` は
+   「`E` の外の活性化は `O` への参照を持たない」を別の道で得る。果たす者: 誰も。
 
-3. **A3 の `Unknown` の行が、生の番地から値を組み直す op に当てはまらない。** A3 は
-   「単一の `Unknown` … 既存のオブジェクトへの新しい参照 (retain を伴う読み出し)。そのオブジェクトは、
-   この op のオペランドの leaf が指すオブジェクトから到達できるか、グローバル値が到達する」と書き、
-   `applies_a_function_operand` の op を但し書きで除く。`InlineLLVMBoxedFromRetainedPtrIOS` は
-   `result_prov` を override せず既定の `Unknown` を取るが、その op はオペランドを適用せず、オペランドは
-   `Std::Ptr` であって boxed leaf を持たない。すなわち結果のオブジェクトはオペランドの leaf から到達できる
-   ものでもグローバル値が到達するものでもなく、但し書きにも当たらない。コードの側の doc はこの行を到達
-   可能性ではなく共有の度合いについて書いている -- 「Of unknown sharing: read out of a boxed container, a
-   global, or duplicated by a `Retain`」(`CODE src/rc_ir/provenance.rs: LeafOrigin`)。L11 の `<1>2` の
-   `<2>1` は A3 の到達可能性の読みに立つので、この差はそこに届く。果たす者: 誰も。
+3. **`unique_check_operand` が宣言しない一意性検査が 1 つある。** D30 の (X2) は
+   「`LLVMGen::unique_check_operand` が一意性検査を宣言する op の分岐が違う」と定めるが、
+   `InlineLLVMArrayAppendCapacityUnchecked` は `dst` についての検査だけを宣言し、`src` についても
+   `build_branch_by_is_unique(src_ptr, RcState::Unknown)` で分岐する
+   (`CODE src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked`)。この分岐は要素を移すか
+   複製するかを決めるので、2 つの実行のカウントが違えば分岐も違いうる。D30 の (X2) はそれを数えていない。
+   L7a の `<1>2` と L13 はこの分岐を読まないので、この差はこの文書の結論を動かさない。
 
-4. **D18 が `Std::Array::_unsafe_is_storage_unique` を覆っていない。** コードが観測として扱うのは
-   `LLVMGen::observes_uniqueness` が真を返す op であり、それは `InlineLLVMIsUniqueFunctionBody` と
-   `InlineLLVMArrayIsStorageUniqueBody` の 2 つである。後者は `Std::Array::_unsafe_is_storage_unique` の
-   本体である。コードが押さえる集合は D18 の集合の上位集合なので、押さえる向きではこの差は効かない。
-   **破る向きの反例もこの op で書ける** -- 第 3 節が測ったとおり、この op が返す値は `unsafe_is_unique` と
-   同じ量に反応し、第 6 節の形の入力を `Array I64` で書くと、いまのコードでは門が借用版を止め、観測を消すと
-   借用版が作られる。狭いのは D18 の集合の側である。
+4. **D18 の第 2 の関数の引用先が違う。** README の D18 は
+   「`Array::_unsafe_is_storage_unique` は配列の記憶域について同じことを返す
+   (`CODE src/fixstd/std.fix: _unsafe_is_storage_unique`)」と書くが、この記号は `std.fix` に無い。登録は
+   `CODE src/fixstd/stdlib.rs: make_std_mod`、本体は `CODE src/fixstd/builtin.rs:
+   array_is_storage_unique_function`、doc は `src/docs/std_array_is_storage_unique.md` である。同じ形の
+   引用が D18 の第 1 の関数にもある -- `unsafe_is_unique` も `std.fix` には無く、登録は `make_std_mod`、
+   本体は `CODE src/fixstd/builtin.rs: is_unique_function`、doc は `src/docs/std_unsafe_is_unique.md` で
+   ある。README の P26 が引く「最適化の水準によって返り値は変わりうる」の一文も、`std.fix` ではなく
+   `src/docs/std_unsafe_is_unique.md` にある。D18 が 2 つの関数を名指していること自体は正しく、L0 は
+   その 2 つについて証明する。
 
 5. **(X2) の内部の一意性検査は A3 が扱っている。** `LLVMGen::unique_check_operand` が宣言する一意性検査は、
    参照カウントを読んで複製を作るかどうかを決める。A3 は「`unique_check_operand` を宣言する op の `Fresh` の
    行は、オブジェクトの同一性については字義どおりではない … 一意の腕ではオペランドのオブジェクトをそのまま
    返す」と書き、「オブジェクトの同一性を読む主張は、この行の上には立てられない」と続ける。この文書で
-   `Fresh` を読むのは L4 の `<1>1` (`InlineLLVMMakeStructBody`) と L11 の `<1>2` の `<2>1` である。前者の op は
-   `unique_check_operand` を override しないので既定の `None` を返し、A3 の但し書きに当たらない
-   (`CODE src/fixstd/builtin.rs: InlineLLVMMakeStructBody`)。後者は但し書きの場合を別に扱っている。D-CP の
-   (X2) は、この分岐が食い違う点を共通接頭の終わりとして数えている (第 2 節)。
+   `Fresh` を読むのは L10 の `<1>6a` の `<2>3` と L11 の `<1>2` の `<2>1` である。前者は宣言される leaf の
+   型だけを読むのでこの但し書きに当たらず、後者は但し書きの場合を別に扱っている。
 
 6. **引用と `// PROOF:` の対応を作り直す必要がある。** この文書は `dev-docs/proof/proof_links.py` が
-   `citations.tsv` に持たない記号を新しく引用する -- `LLVMGen::applies_a_function_operand`、
-   `Generator::build_run_destructor`、`Generator::build_traverser_work_nonnull_boxed_with`、
-   `ValueAccessor::get`、`Lowerer::lower_llvm`、`InlineLLVMFixBody::generate_tail`、
-   `InlineLLVMDestructorMake`、`destructor_make` などである。`--write` は `src/` のコメントを書き換えるので、
+   `citations.tsv` に持たない記号を新しく引用する。`--write` は `src/` のコメントを書き換えるので、
    この文書はそれを走らせていない。
+
+7. **P26 の第 2 文が `borrow_ify` について閉じない。**第 11.3 節が理由を述べる。閉じるには次の 2 つの
+   どちらかが要る。オーケストレータの判断である。
+
+   - **(あ) D30 と P26 の言明を変える。** D30 の「共通接頭が終わる点は 2 種類しかない」に第 3 の出口 --
+     片方の実行だけがある段でオブジェクトを解放する -- を足し、P26 の第 2 文を、`cancel` については今の
+     ままとし、`borrow_ify` については (X2) と第 3 の出口について「値の計算を変えない向きである」の形に
+     弱める。弱める根拠は README の第 1 節が既に持っている -- そこは**評価順の保存**と**FFI の副作用の列の
+     保存**を証明しないものとして名前で挙げており、デストラクタが走る時点の変化はその列に入る。ただし
+     (X2) の向き自体は値を変えないので、この弱め方でも P26 は「一意だったものが共有として**観測される**
+     ことは無い」を言い続ける -- それを言うのは第 1 文であり、L13 が等号で閉じている。
+   - **(い) 命題を足す。** 「共通接頭の上で、開いている窓が 1 つも無い時点では、`X` と `X'` の状態 --
+     生きている活性化とその `Obl`、生きている計数下オブジェクトとその `H` と中身 -- が D30 の対応の下で
+     一致する」を新しい命題として置き、窓についての帰納で示す。窓が閉じる時点で一致が戻ることは、借用版が
+     落とした `Release` と `call_rc` が置いた `after` の `Release` がちょうど対応することであり、その材料は
+     P11 と P14 が持つ。この命題があれば、第 3 の出口が窓の外に出ないことが言え、(X2) の向きも窓の中の
+     カウントの向きの問題に帰着する。ただし (X2) の向きそのものは、README の第 9 節の C の場合が在る限り
+     出力の側が高くなりうるので、(あ) の弱めが別に要る。
 
 ## 13. この文書が読んだコードの版
 
-対象コミット `deb3b0eac2b0f53d05f39c3560c685758e9a6e81` の `src/` を読んだ。
+対象コミット `ee24309c0b88de967773bf06cd0ab9de45275174` の `src/` を読んだ。
 
-第 3 節・第 9 節・第 10 節・L11 の測定に使った二値は、そのコミットだけを持つ `git worktree` からビルドした
-ものである (`fix 1.5.0 (deb3b0e)`)。同じ二値で第 6 節・第 7 節・第 8 節のプログラムも走らせ、3 つとも
-`-O none`、`-O basic`、`-O max` のいずれでも `unique = true` を印字することを確かめた。各実行の前に
-`.fixlang` を消した。
+第 3 節・第 9 節・第 10 節・L11 の測定に使った二値は、`deb3b0eac2b0f53d05f39c3560c685758e9a6e81` だけを持つ
+`git worktree` からビルドしたものである (`fix 1.5.0 (deb3b0e)`)。そのコミットと対象コミットの間で
+`src/rc_ir/borrow.rs` に入った変更は、`borrow_ify` と `cancel` を `pub fn` から `pub(crate) fn` に替えた
+ことと `// PROOF:` のコメントだけであり、生成されるコードは同じである。同じ二値で第 6 節・第 7 節・第 8 節の
+プログラムも走らせ、3 つとも `-O none`、`-O basic`、`-O max` のいずれでも `unique = true` を印字することを
+確かめた。各実行の前に `.fixlang` を消した。
 
 第 6 節の表の実行は門が無かった版の二値、第 7 節の表の実行は門が直接呼び出しだけを閉じていた版の二値
 (`fix 1.5.0 (b617052)`)、第 8 節の表の実行は門がクロージャを `prog.funcs` の本体からだけ集めていた版の二値

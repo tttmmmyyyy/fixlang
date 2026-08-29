@@ -168,7 +168,7 @@ impl<'a> Lowerer<'a> {
 
     /// Name a lifted lambda `<current top-level symbol>::closure{N}`, so its name carries the source
     /// module (matching how a top-level function's name does) and a debugger shows a meaningful name.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn fresh_closure_ref(&mut self) -> FuncRef {
         let ns = self
             .current_symbol
@@ -426,7 +426,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a variable reference to the atom holding its value: a local is the RC IR variable
     /// currently bound to it, and a global is an atom carrying the symbol's name, which code
     /// generation materializes.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_var(&mut self, v: &Arc<Var>, ty: &Arc<TypeNode>, source: &Option<Span>) -> RcVar {
         match self.resolve(&v.name) {
             // A local: reuse the variable already bound (it is already an atom).
@@ -453,7 +453,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an inline-LLVM operation: its free variables become its operands, in the fixed order
     /// the generator reads them, and the appended binding holds the value the operation produces.
-    // PROOF: P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_llvm(
         &mut self,
         inline: &Arc<InlineLLVM>,
@@ -539,7 +539,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a lambda written in place to a closure value: its body becomes a top-level function
     /// under a fresh name, and the binding appended builds the closure from that function and the
     /// values it captures, in the order the closure stores them.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lam(
         &mut self,
         expr: &ExprNode,
@@ -604,7 +604,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an `if` to a match on the two variants of the `Bool` union, the branches becoming its
     /// arms. Each arm's payload holds the variant's unit contents.
-    // PROOF: P5, P6, P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P5, P6, P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_if(
         &mut self,
         cond: &ExprNode,
@@ -641,7 +641,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a `match`: the matched value becomes a variable, each arm is lowered against it, and
     /// the appended binding selects one arm on that value. The result variable holds the value of
     /// whichever arm is taken.
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_match(
         &mut self,
         cond: &ExprNode,

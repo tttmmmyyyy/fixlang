@@ -94,8 +94,17 @@ def proof_dirs():
             yield directory
 
 
+# What a `// PROOF:` comment names when the citation comes from the README rather than from a
+# proof of some proposition -- the definitions and the assumptions the whole proof is framed in.
+FRAME = "D/A"
+
+
 def citations_of(directory):
-    """Map each cited `(source file, symbol)` to the propositions that cite it, for one proof."""
+    """Map each cited `(source file, symbol)` to the propositions that cite it, for one proof.
+
+    The README cites code too, in its definitions and its assumptions, and those citations carry the
+    same weight: an item a definition rests on has moved out from under the whole proof when it
+    changes. They are collected under `FRAME`."""
     readme = open(os.path.join(directory, "README.md"), encoding="utf-8").read()
     by_file = {}
     for row in STATUS_ROW.finditer(readme):
@@ -110,6 +119,8 @@ def citations_of(directory):
             continue
         for citation in citations_in(open(path, encoding="utf-8").read()):
             cited.setdefault(citation, set()).update(props)
+    for citation in citations_in(readme):
+        cited.setdefault(citation, set()).add(FRAME)
     return cited
 
 
@@ -164,7 +175,9 @@ def digest(lines, span):
 
 
 def proposition_order(name):
-    """Sort key for a proposition name: `P<n>` in numeric order, then the ones carrying no number."""
+    """Sort key: the frame first, then `P<n>` in numeric order, then the ones carrying no number."""
+    if name == FRAME:
+        return (-1, 0)
     return (0, int(name[1:])) if re.fullmatch(r"P\d+", name) else (1, 0)
 
 

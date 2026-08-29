@@ -14,7 +14,7 @@ use std::sync::Arc;
 /// rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
 /// callers use to remap side tables and to route recursive references. `pass_tag` distinguishes this
 /// cloning pass's fresh names from the others'.
-// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn fresh_rename_function(
     params: &[RcVar],
     cap: &Option<RcVar>,
@@ -39,7 +39,7 @@ pub(crate) fn fresh_rename_function(
 }
 
 /// Assign `name` a fresh globally-unique name, suffixed with `pass_tag` and a counter.
-// PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7, P8, P9, P10, P11, P12, P13, P14, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_name(
     name: &FullName,
     pass_tag: &str,

@@ -96,7 +96,7 @@ fn lower_and_insert_rc(
 /// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
 /// borrowed parameters on the functions (`RcFunc::borrowed_units`), which `param_ownership_shapes`
 /// reads back as the owned complement.
-// PROOF: P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26, T (dev-docs/proof/rc_ir/borrow-cancel)
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
@@ -248,7 +248,7 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
 }
 
 /// Compile the program into object files, and return their paths for the linker.
-// PROOF: P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_object_files<'c>(
     mut program: Program,
     config: &Configuration,
@@ -738,7 +738,7 @@ fn build_exported_c_functions<'c, 'm>(
 /// The body goes onto the declaration an `FFI_CALL` of `main` has left, where a program calls its
 /// own entry point. `Program::validate_c_function_calls` has held that call to
 /// `c_entry_point_signature`, so the declaration found here is the one this function builds.
-// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNode>) {
     let main_function =
         c_entry_point_signature().get_or_declare_in_module(&C_ENTRY_POINT_NAME.to_string(), gc);

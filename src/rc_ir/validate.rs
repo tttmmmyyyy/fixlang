@@ -272,7 +272,7 @@ impl<'a> Validator<'a> {
     }
 
     /// One node of the walk: the uses it makes, the bindings it introduces, and its continuation.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_expr_inner(&mut self, node: &RcExprNode) {
         match node.expr.as_ref() {
             RcExpr::Let(x, rhs, k) => {
@@ -308,7 +308,7 @@ impl<'a> Validator<'a> {
     /// Check a right-hand side: the variables it uses, and the invariants its own form carries — a
     /// closure's target function and stored capture layout, an `Llvm` operation's operand names, and
     /// a match's arms.
-    // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_rhs(&mut self, rhs: &RcRhs) {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),

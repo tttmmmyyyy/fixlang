@@ -46,7 +46,7 @@ pub struct FuncRef {
 /// A whole program: the top-level functions, the global-value initializers, and the names reached
 /// from outside them. The default is the empty program, which defines nothing and is reached
 /// nowhere.
-// PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Default)]
 pub struct RcProgram {
     /// The top-level functions, keyed by the name each is defined under.
@@ -62,7 +62,7 @@ pub struct RcProgram {
 
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and
 /// uncurried funptr versions.
-// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcFunc {
     /// The name this function is defined and called under, unique across the program: lowering mints
@@ -129,7 +129,7 @@ pub struct RcExprNode {
 
 /// The statement-nested form: `Let`, `Retain`, and `Release` each carry a continuation, and `Ret`
 /// is the only terminator.
-// PROOF: P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub enum RcExpr {
     /// `let x = rhs; k`: bind the result of a compound expression to a single variable (ANF).
@@ -199,7 +199,7 @@ pub enum RcTarget {
 /// catch-all arm, whose payload is the whole scrutinee.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
-// PROOF: P1, P2, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct MatchArm {
     /// The variant number this arm matches, or `None` for a catch-all arm.
@@ -227,7 +227,7 @@ impl MatchArm {
 
 /// A compound expression. It appears only as the right-hand side of a `Let`; the arguments of `App`
 /// and `Llvm` are atoms (variables).
-// PROOF: P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub enum RcRhs {
     /// Move / rename `y := x`, consuming `x`.
@@ -249,6 +249,7 @@ pub enum RcRhs {
 
 /// The reference-counting state dispatch of a `Retain` or `Release`. Lowering emits `Unknown`,
 /// which is always sound; locality inference specializes it.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 pub enum RcState {
     /// Read the object's refcount state at run time and dispatch three ways.
@@ -266,6 +267,7 @@ pub enum RcState {
 
 impl RcState {
     /// Whether code generation must read the object's state byte to decide how to count it.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn dispatches(self) -> bool {
         match self {
             RcState::Unknown => true,
@@ -316,7 +318,7 @@ pub enum OwnershipShape {
 
 /// The initializer of a global value, run once when a reader first asks for the value. The whole
 /// graph the value reaches is marked global (refcount-exempt) before it is stored.
-// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcGlobalInit {
     /// The name the global value is defined and read under.

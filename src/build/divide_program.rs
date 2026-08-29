@@ -236,6 +236,7 @@ fn unit_of_each_entry(units: &[CompileUnit]) -> Map<FullName, usize> {
 ///
 /// A unit declares a name another unit defines from this, and a synthesized version is not among
 /// the program's symbols, so its own type is all there is to declare it from.
+// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 fn global_types_including_synthesized(
     program: &RcProgram,
     global_types: &Map<FullName, Arc<TypeNode>>,

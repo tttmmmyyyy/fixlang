@@ -1383,7 +1383,7 @@ impl TypeNode {
 
     /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
     /// arguments that carries no captured value.
-    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_funptr(&self) -> bool {
         self.toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())
     }
@@ -1458,7 +1458,6 @@ impl TypeNode {
 
     /// Whether this type is `Std::FFI::Destructor`, which runs the destructor function it holds
     /// over its value as it is destroyed.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_destructor_object(&self) -> bool {
         self.toplevel_tycon_satisfies(is_destructor_object_tycon)
     }
@@ -1493,7 +1492,7 @@ impl TypeNode {
     /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
     /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
     /// runs.
-    // PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P18, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
         if self.is_box(type_env) {
             return false;
@@ -2151,6 +2150,7 @@ pub fn type_fun_with_arrow_src(
 
 /// The function pointer type taking `srcs` to `dst`, i.e. `Std::#FunPtr{n}` applied to them,
 /// where `n` is the number of arguments.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
     let mut ty = TypeNode::new_arc(Type::TyCon(Arc::new(make_funptr_tycon(srcs.len() as u32))));
     for src in srcs {

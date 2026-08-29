@@ -58,7 +58,7 @@ use std::sync::Arc;
 // The type constructors the compiler provides itself — the primitive types, the function arrow,
 // `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
 // a user-defined type would get from its declaration.
-// PROOF: P1, P2, P7, P18, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P18, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
@@ -366,6 +366,7 @@ pub fn make_funptr_name(arity: u32) -> Name {
     format!("{}{}", FUNPTR_NAME, arity)
 }
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_funptr_tycon(arity: u32) -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))
 }
@@ -379,6 +380,7 @@ pub fn make_array_name() -> FullName {
 }
 
 // If given tycon is function pointer, returns its arity
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
     if tc.name.namespace != NameSpace::new(vec![STD_NAME.to_string()]) {
         return None;
@@ -601,6 +603,7 @@ pub fn make_numeric_ty(name: &str) -> (Option<Arc<TypeNode>>, bool) {
 }
 
 // Get dynamic object type.
+// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(
         &[STD_NAME],
@@ -933,7 +936,7 @@ impl LLVMGen for InlineLLVMStringBuf {
         true
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -981,7 +984,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
 /// Inline-LLVM body of `Std::fix`, which computes `fix(f, x)`. It rebuilds the closure `fix(f)` from
 /// the function being generated and that function's own capture, passes it to `f` as the recursive
 /// `self`, and applies the result to `x`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFixBody {
     /// The variable holding the argument the recursion is applied to.
@@ -1059,7 +1062,7 @@ impl LLVMGen for InlineLLVMFixBody {
     }
 }
 
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_name = FullName::local(f);
     let x_name = FullName::local(x);
@@ -1828,7 +1831,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
         vec![&mut self.capacity_name]
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -2078,7 +2081,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -2243,7 +2246,7 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -2588,7 +2591,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -2654,6 +2657,7 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// The code generator for `Array::_unsafe_append_capacity_unchecked`, which consumes `src` into the
 /// slots past `dst`'s length.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayAppendCapacityUnchecked {
     dst_name: FullName,
@@ -2768,7 +2772,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -2941,7 +2945,7 @@ impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -3103,7 +3107,7 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -3398,7 +3402,7 @@ impl LLVMGen for InlineLLVMArraySetBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -3576,7 +3580,7 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -3738,7 +3742,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -3914,7 +3918,7 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -4455,7 +4459,6 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
 // Allocate a struct/tuple and fill it with the operand values, in field-declaration order. The
 // struct type is the value type of the enclosing expression. This is the RC IR counterpart of the
 // `Expr::MakeStruct` AST node, reading its operands as pre-evaluated atoms.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeStructBody {
     pub field_names: Vec<FullName>,
@@ -4577,7 +4580,7 @@ impl LLVMGen for InlineLLVMArrayLitBody {
         self.elem_names.iter_mut().collect()
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -4752,6 +4755,7 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
 
 /// The body of a struct's `punch_x`: field `field_idx` is moved out of the struct bound to
 /// `var_name`, and is returned together with the punched struct, whose type records the hole.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPunchBody {
     /// The operand: the struct the field is moved out of.
@@ -5099,7 +5103,7 @@ const PLUG_IN_FIELD_ARG: usize = 1;
 /// with what is known about it intact. The struct operand's leaf at the replaced field reaches no
 /// result path and so stays consumed, which is what `set` does with it: it releases the value it
 /// replaces. A punched struct holds nothing at that field, so a `plug_in` operand has no leaf there.
-// PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn replaced_field_prov(
     result_ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -5901,6 +5905,7 @@ pub fn struct_act_const(
 
 /// Force a struct or union object to be unique: an unboxed or unique object is returned as it is,
 /// and a shared boxed one is cloned.
+// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn make_struct_union_unique<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     mut obj: Object<'c>,
@@ -5963,7 +5968,7 @@ fn make_struct_union_unique<'c, 'm>(
 
 /// The body of a struct's `set_x`: the value bound to `value_name` takes the place of field
 /// `field_idx` of the struct bound to `struct_name`, and the value it displaces is released.
-// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructSetBody {
     pub value_name: FullName,
@@ -6200,7 +6205,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         vec![&mut self.field_name]
     }
 
-    // PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -6398,7 +6403,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
     }
 
-    // PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -6605,6 +6610,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
         true
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, union_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments
         let obj = gc.get_scoped_obj(&self.union_name);
@@ -6753,6 +6759,7 @@ pub struct InlineLLVMUndefinedInternalBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUndefinedInternalBody {
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         if gc.config.runtime_check() {
             // Runtime check is enabled.
@@ -6929,6 +6936,7 @@ impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
         true
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the argument "f".
         let f = gc.get_scoped_obj(&self.f_name);
@@ -7014,6 +7022,7 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// Tests whether a boxed value is the only reference to its object, by reading the object's
 /// reference count in place, and returns that flag paired with the value handed back unchanged.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIsUniqueFunctionBody {
     /// The local binding holding the value to test.
@@ -7045,7 +7054,6 @@ fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> E
     })
 }
 
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -7164,7 +7172,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -7202,7 +7210,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
 // `Array::_unsafe_is_storage_unique`, which reads the storage refcount. The generated field `act`
 // on an unbox struct emits its unique branch directly instead of this op, so it does not need the
 // bound (see `struct_act`).
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
@@ -7237,6 +7245,7 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// unique. The attributes mirror the generic op so the borrow pass treats the array as consumed and
 /// reports sharing correctly. Provenance recognizes this op alongside the generic one (see
 /// `provenance.rs`).
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayIsStorageUniqueBody {
     var_name: FullName,
@@ -7250,6 +7259,7 @@ pub struct InlineLLVMArrayIsStorageUniqueBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
 
@@ -7387,6 +7397,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
 }
 
 // Std::Array::_unsafe_is_storage_unique : Array a -> (Bool, Array a)
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const VAR_NAME: &str = "array";
     let elem_ty = type_tyvar_star("a");
@@ -7477,6 +7488,7 @@ impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
     }
 }
 
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAL_NAME: &str = "val";
@@ -7507,7 +7519,7 @@ pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBoxedFromRetainedPtrIOS {
     ptr_name: FullName,
@@ -7566,6 +7578,7 @@ impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS {
     }
 }
 
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const PTR_NAME: &str = "ptr";
@@ -8017,7 +8030,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -8101,6 +8114,7 @@ const COPY_SRC_ARG: usize = 1;
 
 /// The reference-counting state an op's own checks and reference counting run under: `Local` where
 /// locality inference proved the objects they touch local, `Unknown` otherwise.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assumed_state(assume_local: bool) -> RcState {
     if assume_local {
         RcState::Local
@@ -8132,6 +8146,7 @@ fn force_unique_or_assert<'c, 'm>(
 
 /// `force_unique_or_assert`, where `Some(hole)` makes a clone of the array `val` leave the element
 /// at that index uninitialized for the caller to fill.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 fn force_unique_or_assert_with_hole<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,
@@ -8350,7 +8365,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -8452,6 +8467,7 @@ impl LLVMGen for InlineLLVMArrayBorrowElementsBody {
         true
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // The array is borrowed: its pointer stays valid through the callback without a retain here.
         let borrower = gc.get_scoped_obj(&self.borrower_name);
@@ -8616,7 +8632,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -8779,7 +8795,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -8885,7 +8901,6 @@ pub fn make_iostate_unsafe_create() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMDestructorMake {
     value: FullName,
@@ -8946,7 +8961,7 @@ impl LLVMGen for InlineLLVMDestructorMake {
         vec![&mut self.value, &mut self.dtor, &mut self.ios]
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -8971,7 +8986,6 @@ impl LLVMGen for InlineLLVMDestructorMake {
 }
 
 // Std::FFI::Destructor::_make : a -> (a -> IOState -> (IOState, a)) -> IOState -> (IOState, Destructor a);
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
 
@@ -9015,7 +9029,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Run either an IO or an IOState runner based on the type of the given value.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
         run_io(gc, io)
@@ -9025,6 +9039,7 @@ pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<
 }
 
 /// Runs the action held by a value of type `IO a` and returns its result.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     let res_ty = io.ty.collect_type_arguments().into_iter().next().unwrap();
     let runner = io.extract_field(gc, 0);
@@ -9038,7 +9053,7 @@ pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object
 
 /// Given a value of type `IOState -> (IOState, a)`, runs it on `ios`, or on a fresh `IOState` when
 /// `ios` is `None`, and returns the resulting `IOState` and `a`.
-// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_ios_runner<'b, 'm, 'c>(
     gc: &mut Generator<'c, 'm>,
     runner: &Object<'c>,

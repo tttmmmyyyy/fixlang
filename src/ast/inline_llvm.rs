@@ -66,7 +66,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// retains an unboxed global's boxed subobjects, and a borrow has no matching release.
     ///
     /// The default is the conservative answer; see `result_prov` for what an op that keeps it records.
-    // PROOF: P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_operand(&self, _i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         false
     }
@@ -95,7 +95,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     ///
     /// `Generator::apply_lambda` checks this in develop mode, so an op that starts applying an
     /// operand and does not say so here fails the test suite rather than quietly losing an edge.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         false
     }
@@ -106,7 +106,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// Whether the branch exists depends on those types, so an op that emits one declares it through
     /// `unique_check_on_boxed_leaf`, which is where that dependence is stated. Readers may then take
     /// a declared check to be one the op really emits.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     fn unique_check_operand(
         &self,
         _arg_tys: &[Arc<TypeNode>],
@@ -122,6 +122,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     ///
     /// A `generate` that emits a check or a reference count it does not declare leaves that one
     /// reading the state, so the declarations stay honest about what the annotation covers.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn assuming_local(&self) -> Box<dyn LLVMGen> {
         unreachable!("assuming_local called on an op that declares no uniqueness check and no reference counting")
     }
@@ -134,6 +135,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// This op with its runtime uniqueness branch dropped. Only an op that reports a branch through
     /// `unique_check_operand` is asked to drop it, and every such op overrides this method; an op with
     /// no branch is never routed here.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         unreachable!("assuming_unique called on an op that carries no uniqueness branch")
     }
@@ -151,7 +153,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// must not (see `InlineLLVMIsUniqueFunctionBody` and `InlineLLVMMarkThreadedFunctionBody`, which
     /// say why). A leaf that joins an argument with another source says only where the result's
     /// sharing comes from: the op consumes that argument like any other.
-    // PROOF: P1, P2, P3, P4, P7, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P3, P4, P7, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,

@@ -109,7 +109,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// the scope as plain objects, then evaluate the body in tail position. Capture read-back and the
     /// release of unused parameters/captures are already explicit in the body, so nothing extra is
     /// done here.
-    // PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn implement_rc_function(
         &mut self,
         func: &RcFunc,
@@ -440,7 +440,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Build a closure value `{funptr, capture-object pointer}` for `Closure(func, captures)`.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_rc_closure(
         &mut self,
         func: &FuncRef,
@@ -491,7 +491,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// yields the match value. The scrutinee's per-arm container release and dead-branch releases are
     /// already explicit `Release` nodes in the arm bodies; here only the payload retain-getter is
     /// baked in (mirroring `get_union_value`).
-    // PROOF: P5, P6, P7, P18, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P5, P6, P7, P18, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_match(
         &mut self,
         result: &RcVar,
@@ -621,7 +621,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// it keeps it, and the accessor where it reads it — which is where it keeps the value, and
     /// where it reads the value another unit keeps and publishes. Whatever it does not generate it
     /// declares.
-    // PROOF: P7, P18, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P7, P18, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,

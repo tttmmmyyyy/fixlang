@@ -469,7 +469,7 @@ D11 と D12 は `RcProgram` の残りの部分について何も言わない。`
 **D18 (一意性の観測点)**
 参照カウントを読んでその答えを `Bool` としてプログラムへ返す std の公開関数は 2 つある。
 `unsafe_is_unique` は boxed な値がただ 1 つの名前から参照されているかを返し
-(`CODE src/fixstd/stdlib.rs: unsafe_is_unique`)、`Array::_unsafe_is_storage_unique` は配列の記憶域について
+(`CODE src/fixstd/stdlib.rs: make_std_mod`, `CODE src/fixstd/builtin.rs: is_unique_function`)、`Array::_unsafe_is_storage_unique` は配列の記憶域について
 同じことを返す (`CODE src/fixstd/std.fix: _unsafe_is_storage_unique`)。RC IR ではそれぞれ 1 つの `Llvm`
 演算として現れる。この 2 つが現れる位置を**一意性の観測点**と呼び、その位置でその演算が返す `Bool` を
 **観測値**と呼ぶ。
@@ -534,6 +534,10 @@ RC IR プログラムの外側にあって、その本体を起動するコー�
   `CODE src/fixstd/builtin.rs: run_io_or_ios_runner`, `run_ios_runner`)。
 - **`FFI_EXPORT` のエントリ点**。C の呼び出し元から引数を受け取り、書き出された Fix の値に `apply_lambda` で
   渡す (`CODE src/ast/export_statement.rs: ExportStatement::implement`)。
+- **`FFI_CALL` が呼ぶ C のコード**。Fix の側から番地を渡され、その番地の指すものを読み書きする。
+  `boxed_to_retained_ptr` は参照を持ったまま番地を渡すので、その参照の持ち手はこの C のコード、すなわち
+  環境である (`CODE src/fixstd/builtin.rs: boxed_to_retained_ptr_ios`)。`boxed_from_retained_ptr` は
+  その参照を Fix の側へ返す (`CODE src/fixstd/builtin.rs: boxed_from_retained_ptr_ios`)。
 - **グローバルのアクセサ**。初期化済みの旗を見て、まだならグローバル初期化子の本体を持つ関数
   `InitValue#<symbol>` を呼び、返った値を記憶域へ格納する。`mark_global` で印を付けるのは
   `InitValue#<symbol>` の側であり、本体を評価した直後、値を返す前に行う。以後の読みは記憶域を読むだけで
@@ -647,6 +651,10 @@ op の生成コードであること、**呼び出し先に渡る値がオペラ
 inhabited な全 boxed leaf の参照 -- が `Obl(b)` を離れ、`b` を作った (E3) の呼び出し元 `a` の `Obl(a)` に
 入る。`a` は `k` の位置で再開する。`b` を作ったのが環境 (E1) であれば、それらの参照は `E` に入る。
 
+`b` を作ったのが (F) の解放であれば、それらの参照はその解放を含む段を実行している活性化の `Obl` に入り、
+その段は続けてそれを `o` の `_value` の欄へ書き込む
+(`CODE src/generator.rs: Generator::build_run_destructor` の `move_into_struct_field`)。
+
 `b` を作ったのが (E2) のうちオペランドを適用する `Llvm` の段であれば、それらの参照は同じくその段を実行して
 いる活性化の `Obl` に入り、その活性化は同じ位置で続きを実行する。**このとき (E2) の生成の表の `Llvm` の行は
 その leaf について読まない** -- `App` の行と同じ理由で、その参照は呼び出し先の中で作られてここへ渡って
@@ -662,6 +670,11 @@ inhabited な全 boxed leaf の参照 -- が `Obl(b)` を離れ、`b` を作っ�
 **(F) が作る活性化はその段の中で終わるので、その内側に D24 の時点は無い。** 解放が段ではなく段の一部で
 あるのは、そうしないと「`H` が 0 になったが解放されていない」時点ができてしまうからである。コードもそうなっている -- `Release` が呼ぶ `build_release_boxed_with` は、`destruction_bb` の
 中で子の release を呼び、その入れ子の呼び出しが終わってから戻る。
+
+**(F) が作る活性化の中で起きる割り当て・`Retain`・`Release`・入れ子の解放も、この段の一部である。**
+その活性化の節点は D24 の時点を持たないので、そこでの勘定は時点の列の帰納では追えない。追うには段を
+不可分な動作の有限列へ分解する -- 参照の受け渡し、生成、割り当て、処分、解放、グローバル化の 6 種であり、
+`p05-holders.md` がその形で P28 を示す。
 
 **解放される `o` が `Std::FFI::Destructor` のオブジェクトであるとき、解放は活性化を作る。** `o` の参照を
 処分する**前に**、`o` が `_dtor` の欄に持つ関数が `_value` の欄の値に適用され、返った `IO` の動作が走る
@@ -916,6 +929,11 @@ inhabited でない leaf と同じに扱う。
 `CODE src/rc_ir/specialization.rs: request`) から出る。**束縛名に限らない** -- 直接呼び出しが名指す関数の名前と、
 グローバル値を読む `RcVar` の名前 (`origin_inner` の束縛を持たない腕が扱う) も含む。それらと衝突しても
 `origin` は複製の変数を原本の束縛へ辿る。
+
+**最上位の記号の名前は局所名ではない。** `FullName::is_local` が偽であり、`prog.funcs` の鍵と
+`global_types` の鍵はどちらもそのような名前である。`get_scoped_value` が局所か大域かをこれで振り分け、
+`resolve_callee_params` が `prog.funcs` を名前で引くので、この形が要る
+(`CODE src/generator.rs: Generator::get_scoped_value`, `CODE src/rc_ir/lower.rs: Lowerer::lower_var`)。
 
 `clone_func` が導入する名前が入力のどの名前とも異なること (P9 の後半) は、これが無いと言えない。
 `fresh_rename_function` は入力の名前を 1 つも読まないので、衝突しないことは入力の名前の形からしか出ない
@@ -1588,7 +1606,7 @@ D12 だけから出す。主定理の鎖は A1 -> P14 -> P23 -> P27 であって
 
   逆向きは許す。`unsafe_is_unique` の doc が「最適化の水準によって返り値は変わりうる。最適化が不要な計算を
   取り除き、共有されていた値が一意になることがあるため」と述べており、共有から一意への変化は言語が認めて
-  いる (`CODE src/fixstd/std.fix: unsafe_is_unique` の doc)。認められていないのは逆で、一意だったものが
+  いる (`CODE src/docs/std_unsafe_is_unique.md`)。認められていないのは逆で、一意だったものが
   共有になることである。これは `cancel` の逆写像 -- 観測点を `Retain`/`Release` の対で囲むだけのパス -- が
   D11 を満たしてしまうことへの歯止めである。そのパスはすべての観測値を偽に固定し、`Debug::assert_unique` を
   持つプログラムを止める。

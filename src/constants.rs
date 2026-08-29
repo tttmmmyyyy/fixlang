@@ -120,6 +120,7 @@ pub const STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL: &str = "#plug_in_fu_";
 pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 /// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
 /// it is the one local name that the free variables of an expression leave out.
+// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const CAP_NAME: &str = "#CAP";
 /// The name of the parameter through which a decaptured lambda receives its capture list.
 pub const CLOSURE_CAP_NAME: &str = "#closure_cap";
@@ -249,6 +250,7 @@ pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 /// is not counted at all, so a state covers every state below it. Marking asks exactly this
 /// question — an object whose state already reaches the mark being made has nothing left to
 /// receive, and neither has anything it owns.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct RefcntState(u8);
 

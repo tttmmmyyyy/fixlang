@@ -1023,7 +1023,7 @@ fn clone_gate(
 
 /// Annotate the reference-counting operations of `prog` whose target is provably local, cloning a
 /// function per input locality its callers reach it with where that proof depends on the inputs.
-// PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let summaries = summarize(prog, type_env);
     let gate = clone_gate(prog, type_env, &summaries);

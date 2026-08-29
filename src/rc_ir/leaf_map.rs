@@ -25,7 +25,7 @@ use std::sync::Arc;
 /// tuple, or union) recurses into the fields that hold a value (a union's variants' payloads); a
 /// fully unboxed value has none. It is the single source of truth for which of a type's paths are
 /// boxed leaves.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     /// Descend a type, pushing onto `out` the path of each boxed leaf reached. `path` is the field
     /// path from the value's root down to `ty`, which each pushed leaf is named relative to.
