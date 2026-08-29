@@ -2,7 +2,7 @@
 
 この文書は README の層 4 の 6 命題 P19, P20, P21, P22, P23, P24 と、主定理 T を扱う。README の定義
 D1 - D19、仮定 A1 - A14、および命題 P1 - P18 の**言明**の上に立つ。P1 - P14 の証明は
-`p10-leaves-and-units.md`、`p11-origin-soundness.md`、`p12-keys-and-consumes.md`、`p20-borrow-ify.md`
+`p10-leaves-and-units.md`、`p11-origin-soundness.md`、`p12-identity-and-consumes.md`、`p20-borrow-ify.md`
 にあり、P15 - P18 の証明は `p30-cancel-walk.md` にある。この文書はそれらの言明だけを使う。
 
 ## 0. 到達した所
@@ -1182,7 +1182,7 @@ P5 (a) はこれを、2 つのスロットが**同じ参照**を持ち、かつ�
 `Release` が処分する参照と、pending な `Retain` が bump した参照は、同じオブジェクトを指すが同じ参照とは
 限らないからである (retain がまさに 2 つ目の参照を作っている)。
 
-P5 (a) の反例 R1 (`p12-keys-and-consumes.md`) が E6 の辺で `unit_key` が分かれることを示しているので、
+P5 (a) の反例 R1 (`p12-identity-and-consumes.md`) が E6 の辺で `unit_key` が分かれることを示しているので、
 L21 をそのままの強さで置くことはできない。置くなら、`cancel` が実際に必要とする形 --- 「pending な
 `Retain` の `outstanding` に在るオブジェクトを処分する構文は、その `Retain` の鍵の下で `consume_unit` か
 `un_bump` を呼ぶ」--- を、`origin` と `acted_unit_keys` の言葉で述べた命題として置くのがよい。

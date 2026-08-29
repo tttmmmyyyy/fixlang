@@ -918,7 +918,7 @@ P8 の後半は「D9 の意味で消費される」と言う。D9 の `App` の�
 **言明**。H1 の下で、各パラメータ・capture `p` と各 `λ ∈ leaves(ty(p))` について、
 `owned_leaves.owns(p.name, λ)` は「`p` を持つ関数が `(p, truncate_to_unit(ty(p), λ, type_env))` を推論の
 意味で所有する」ことと同値である。すなわち `owned_leaves` は、DEF 推論の割り当て についての
-`p12-keys-and-consumes.md` の DEF leaf 粒度の所有 である。
+`p12-identity-and-consumes.md` の DEF leaf 粒度の所有 である。
 
 <1>1. `u = truncate_to_unit(ty(p), λ, type_env)` は `units(ty(p))` の元である。
   BY P1
@@ -1491,7 +1491,7 @@ producer が 1 つでも混ざればパラメータの候補はすべて所有�
 
 **足りない命題**。上の議論は「`u` の下の各 leaf の `origin` が指す root が、`origin(v, u).candidates()` に
 含まれる」ことを使う。`README.md` の P1 から P7 にこれを述べるものは無い。
-`p12-keys-and-consumes.md` の末尾も同じ穴を「unit path の `origin` と、その下の leaf の `origin` の関係を
+`p12-identity-and-consumes.md` の末尾も同じ穴を「unit path の `origin` と、その下の leaf の `origin` の関係を
 述べる命題が要る」として記録している。この命題が入るまで、H2 を成り立たせる直し方が本当に H2 を
 成り立たせるかは決まらない。
 
@@ -1567,7 +1567,7 @@ H1 を成り立たせる直し方は、`infer_ownership` の不動点に「あ�
 この 2 つは、1 つの unit の下に leaf が 2 つ以上あるとき (第 3.9 節より unbox union のとき) 食い違う。
 `owned_leaves` がその unit の leaf の一部だけを持つと、`infer_ownership` はその位置を「消費しない」と読み、
 `owned_units` を読む後段はすべて「消費する」と読む。P7 が `DEF leaf 粒度の所有` で 2 つを橋渡ししているのは
-まさにこの点であり、`p12-keys-and-consumes.md` の「D9 の `App` の行と `collect_consumes` の粒度が違う」は
+まさにこの点であり、`p12-identity-and-consumes.md` の「D9 の `App` の行と `collect_consumes` の粒度が違う」は
 この橋渡しが不動点で成り立つことを P8 に委ねている。**その委ねられた条件が H1 である** (L8)。
 
 反例 `R2` はこの食い違いを使っていない。`R2` の `f` には呼び出しが無く、`owned_leaves` の粒度は
@@ -1646,7 +1646,7 @@ H1 を成り立たせる直し方は、`infer_ownership` の不動点に「あ�
 
 第 11.2 節の直し方が H2 を成り立たせるかどうかは、「`u` の下の各 leaf の `origin` が指す root が
 `origin(v, u).candidates()` に含まれる」に依る。`README.md` の P1 から P7 にこれを述べるものは無い。
-`p12-keys-and-consumes.md` の末尾も、`check_one_key_per_object` の表明が発火しないことを示すのに同じ命題が
+`p12-identity-and-consumes.md` の末尾も、`check_one_key_per_object` の表明が発火しないことを示すのに同じ命題が
 要ると記録している。P7 と P8 の間に置くのがよい。
 
 ### P8 の言明が読む所有権の割り当て

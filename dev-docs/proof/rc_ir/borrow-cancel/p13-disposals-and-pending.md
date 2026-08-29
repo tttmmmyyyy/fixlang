@@ -2,7 +2,7 @@
 
 この文書は README の P7b, P7c, P18a を扱う。README の定義 D1 - D19、仮定 A1 - A14、および命題
 P1 - P7, P15 - P18 の**言明**の上に立つ。それらの証明は
-`p10-leaves-and-units.md`、`p11-origin-soundness.md`、`p12-keys-and-consumes.md`、
+`p10-leaves-and-units.md`、`p11-origin-soundness.md`、`p12-identity-and-consumes.md`、
 `p30-cancel-walk.md` にあり、この文書はそれらの言明だけを使う。
 
 ## 0. 到達した所
@@ -1012,7 +1012,7 @@ P5 (a) の言明は「1 つの実行路の 1 つの位置において**同じ参
    D8 は同じオブジェクトへの参照を互いに区別しないので、「同じ参照を持つ」は「同じオブジェクトを
    指す」より真に強い条件である。
 2. **アーム本体の `Ret` の辺。** P5 (a) は別名の道がその辺を含まないときにだけ成り立ち、
-   `p12-keys-and-consumes.md` の反例 R1 が、その辺をまたぐと `unit_key` が 2 つに分かれる本体を
+   `p12-identity-and-consumes.md` の反例 R1 が、その辺をまたぐと `unit_key` が 2 つに分かれる本体を
    与えている。P7c はその制限を置けない。`cancel` の走査は `Match` をまたいで `pending` を運ぶ
    (`merge`) ので、`Retain` と、それが bump した参照を処分する構文とのあいだにその辺が入りうる。
 

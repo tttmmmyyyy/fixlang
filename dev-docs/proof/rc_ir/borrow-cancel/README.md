@@ -465,7 +465,7 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
   あり、(a) が成り立たなければ対でないものを対にする。(b) は有効性 (対が実際に見つかること) の側であり、
   破れても `Retain` が `needed_retains` に入るだけである。制限は外せない。アーム本体の `Ret` の辺は
   identity を保たず、`m` と `x` が同じオブジェクトを指すのに identity が `(m, λ)` と `(x, λ)` に分かれる
-  本体が作れる (`p12-keys-and-consumes.md` の反例 R1)。走査はこの辺を `merge` で扱う (P18)。
+  本体が作れる (`p12-identity-and-consumes.md` の反例 R1)。走査はこの辺を `merge` で扱う (P18)。
 
   (c) は `Release` の 2 つの腕の役割分担を述べる。`origin` が `Join` を返す leaf について、実行時に処分
   される参照が属するオブジェクトは `candidates` のどれでもありうるが、`ActRefs` は `identity` しか名指さ
@@ -696,16 +696,16 @@ P26 が未較正であることは記録しておく価値がある。この節�
 |---|---|---|---|---|
 | P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み。`<1>35`/`<1>36` (`unit_key` についての観察) は対象を失った | 未着手 |
 | P3, P4 | `p11-origin-soundness.md` | 有 | 証明済み | 未着手 |
-| P5 (a), (b) | `p12-keys-and-consumes.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
-| P5 (c) | -- | 有 | **未着手** (新しい言明) | 未着手 |
-| P6, P7 | `p12-keys-and-consumes.md` | 有 | 証明済み | 未着手 |
-| P7a | -- | 有 | **未着手** (P8, P14 が使う) | 未着手 |
-| P7c | -- | 有 | **未着手** (新しい言明) | 未着手 |
-| P7d | -- | 有 | **未着手** (新しい言明。#530 の 2 件を閉じる性質) | 未着手 |
+| P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
+| P5 (c) | `p12-identity-and-consumes.md` | 有 | **未着手** (新しい言明) | 未着手 |
+| P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
+| P7a | `p15-ownership-uniformity.md` | 有 | **未着手** (P8, P14 が使う) | 未着手 |
+| P7c | `p13-disposals-and-pending.md` | 有 | **未着手** (新しい言明) | 未着手 |
+| P7d | `p15-ownership-uniformity.md` | 有 | **未着手** (新しい言明。#530 の 2 件を閉じる性質) | 未着手 |
 | P8 - P13 | `p20-borrow-ify.md` | 有 | 証明済み。P10/P11 は `owns_object_yet` の追加を読み直す必要がある | 未着手 |
 | P14 | `p20-borrow-ify.md` | 有 | **未着手** (原因だった #530 の残穴は直った) | 未着手 |
 | P15 - P18 | `p30-cancel-walk.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
-| P18a | -- | 有 | **未着手** (新しい言明。層 4 の実質) | 未着手 |
+| P18a | `p13-disposals-and-pending.md` | 有 | **未着手** (新しい言明。層 4 の実質) | 未着手 |
 | P19 - P24 | `p40-cancel-soundness.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
 | P26, P27, T | `p50-observation-and-runs.md` | 有 | 未着手 | 未着手 |
 
