@@ -13,7 +13,7 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 **この証明は書きかけである。** 第 7 節の表が、どの命題がどこまで進んでいるかを述べる。第 8 節が、証明を書く
 作業が見つけたコードの欠陥を述べる。
 
-証明の対象は、コミット `b81cc2c8e859a00cbf007e4f43483a514c813c73` の
+証明の対象は、コミット `a924f115ab551cb8ccb0b90d195889abfd3f8804` の
 
 - `src/rc_ir/borrow.rs` の `borrow_ify` と `cancel`、およびこの 2 つが呼ぶ同ファイル内の関数
 - `src/rc_ir/ownership.rs` の全体 (この 2 つが参照の同一性と消費を決めるのに使うモデル)
@@ -24,9 +24,7 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 この 2 つは、`src/build/build_object_files.rs` の `optimize_rc_program` の中で、`-O max` 以上のとき
 `split_rc_units` の直後にこの順で走る。
 
-**対象コミットの後に入った変更**: `be26b396` (PR #531) が、第 8 節の #529 を直した。`origin_inner` の
-`Binding::Join` の腕と `origin_from_leaves_under` が、内側の `Origin` を畳むときに `acted_on()` を使うように
-なっている。P3、P4、P5 (c) はこの変更の上で書き直す必要がある。他の命題の証明はこの 2 行に依らない。
+対象コミットは、第 8 節が述べる 4 件の欠陥をすべて直した後のものである。
 
 ## 2. 証明の記法
 
@@ -313,18 +311,25 @@ D11 と D12 は `RcProgram` の残りの部分について何も言わない。`
 
 D13 は `origin` が何を返すかを述べるだけであり、その返り値が実行時の参照とどう対応するかは P3 と P4 が述べる。
 
-**D15 (キーと触れる参照)**
-`unit_key(x, π) = unit_of(origin(x, π).identity())` を、その leaf の参照が数えられる**キー**と呼ぶ
-(`CODE src/rc_ir/ownership.rs: unit_key`, `unit_of`)。`unit_of(root, path)` は、`root` の型が `vars` に
-記録されていればその型で `path` を `truncate_to_unit` し、記録されていなければ `path` をそのまま返す。
-
+**D15 (触れる参照)**
 `acted_references(v, π)` は、`π` の下の**すべての** boxed leaf (inhabited でないものを含む) について、その
-leaf の `origin(v, leaf).identity()` を数えた `Map<VarPath, usize>` を返す
-(`CODE src/rc_ir/ownership.rs: acted_references`)。これは静的な数え上げであり、実行時に触れる参照との関係は
-P6 が述べる。
+leaf の `origin(v, leaf).identity()` を数えた多重集合を返す (`CODE src/rc_ir/ownership.rs: acted_references`)。
+以下ではこれを `ActRefs(v, π)` と書く。これは静的な数え上げであり、実行時に触れる参照との関係は P6 が述べる。
 
-`acted_unit_keys(x, π)` は、`origin(x, π).acted_on()` の各要素を `unit_of` で写したものである
-(`CODE src/rc_ir/ownership.rs: acted_unit_keys`, `Origin::acted_on`)。
+返り値の型 `References` は `VarPath` から個数への写像であり、次の演算を持つ
+(`CODE src/rc_ir/ownership.rs: References`)。`covers(R)` は各オブジェクトについて自分の個数が `R` 以上か。
+`names(o)` は `o` を含むか。`objects()` は含むオブジェクトの列 (個数は落ちる)。`shares_an_object(R)` は
+`R` と共通のオブジェクトを持つか。`subtract(R)` は `R` の個数を引く (`covers(R)` が成り立つときにだけ
+呼ばれる)。`is_empty()` は空か。
+
+`Origin::acted_on()` は、`identity()` を先頭に、それと異なる `candidates()` の元を続けた列である
+(`CODE src/rc_ir/ownership.rs: Origin::acted_on`)。すなわち
+`acted_on() = {identity()} ∪ candidates()` であり、`Exactly(u, σ)` のときは 1 元の列 `[(u, σ)]` である。
+
+**この文書はオブジェクトの名前を `VarPath` の水準で扱う。**`cancel` が `Retain` と `Release` を対にする
+のは、両者が触れるオブジェクトが共通するかどうかによる。かつてこの位置に置かれていた `unit_key` --
+`origin` の identity を `truncate_to_unit` で unit へ丸めた名前 -- は、第 8 節が述べる 3 件の
+miscompile の共通の根であり、コミット `a924f115` で取り除かれた。
 
 ## 4. 仮定
 
@@ -386,8 +391,8 @@ leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言�
 
 `clone_func` が導入する名前が入力のどの束縛名とも異なること (P9 の後半) は、これが無いと言えない。
 `fresh_rename_function` は入力の名前を 1 つも読まないので、衝突しないことは入力の名前の形からしか出ない
-(`CODE src/rc_ir/rename.rs: fresh_rename_function`)。名前が衝突すると `unit_key` が名前で引くので、複製と
-原本のキーが混ざり、`cancel` は誤った対を消す。
+(`CODE src/rc_ir/rename.rs: fresh_rename_function`)。名前が衝突すると `origin` が複製の変数を原本の束縛へ
+辿り、`cancel` が誤った対を消す。
 
 **A14 (過適用が無い)** -- 果たす者: 型検査と lowering。
 `App(callee, args)` の `args` の個数は、呼び出し先のパラメータの個数以下である。`call_rc` と `rhs_consumes` は
@@ -447,18 +452,25 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
 - **P4** (`origin` の健全性 -- `Join`)。`origin(x, π) = Join { identity, candidates }` のとき、各実行路の
   各位置において、`π` の下の inhabited な各 leaf のスロットが持つ参照は、`candidates` のいずれかの下の
   対応するスロット (D17) が持つ参照と同一である。
-- **P5** (キーと参照の関係)。1 つの関数の 1 回の活性化について、次の 3 つが成り立つ。
-  - **(a)** 1 つの実行路の 1 つの位置において同じ参照を持つ 2 つのスロットで、一方から他方への別名の道が
-    `Match` のアーム本体の `Ret` の辺を含まないならば、両者の `unit_key` は等しい。
-  - **(b)** アーム本体の `Ret(x)` が `x` の参照を `Match` の束縛変数 `m` へ移す辺について、
-    `origin(x, λ).candidates()` は `origin(m, λ).candidates()` に含まれる。
-  - **(c)** (N) `acted_unit_keys(v, π)` は、`acted_references(v, π)` が名指すオブジェクトのうち inhabited な
-    leaf に由来するものを、`unit_of` で写した上ですべて含む。
+- **P5** (identity とオブジェクトの関係)。1 つの関数の 1 回の活性化について、次の 3 つが成り立つ。
+  - **(a)** (対の健全性) 1 つの実行路の 1 つの位置において `origin` の `identity` が等しい 2 つの leaf の
+    スロットは、同じオブジェクトを指す。
+  - **(b)** (対の有効性) 同じオブジェクトを指す 2 つの leaf のスロットで、一方から他方への別名の道が
+    `Match` のアーム本体の `Ret` の辺を含まないならば、両者の `identity` は等しい。
+  - **(c)** (被覆) `Release(v, π)` の走査が `un_bump` と `consume_objects` に渡すオブジェクトの和 --
+    すなわち `ActRefs(v, π).objects()` と `other_objects(v, π)` の和 -- は、`π` の下の各 boxed leaf `λ` に
+    ついて `origin(v, λ).acted_on()` をすべて含む。
 
-  (a) の制限は外せない。アーム本体の `Ret` の辺は identity を保たず、`m` と `x` が同じ参照を持つのに
-  `unit_key` が `(m, λ)` と `(x, λ)` に分かれる本体が作れる (`p12-keys-and-consumes.md` の反例 R1)。
-  `cancel` が要るのは (a) ではなく (b) と (c) である。
-  **(c) はこのコミットのコードでは偽であり、この命題は閉じない** (`p11-origin-soundness.md` の第 4 節)。
+  (a) が `cancel` の健全性を支える。`un_bump` が対にするのは identity が共通する `Retain` と `Release` で
+  あり、(a) が成り立たなければ対でないものを対にする。(b) は有効性 (対が実際に見つかること) の側であり、
+  破れても `Retain` が `needed_retains` に入るだけである。制限は外せない。アーム本体の `Ret` の辺は
+  identity を保たず、`m` と `x` が同じオブジェクトを指すのに identity が `(m, λ)` と `(x, λ)` に分かれる
+  本体が作れる (`p12-keys-and-consumes.md` の反例 R1)。走査はこの辺を `merge` で扱う (P18)。
+
+  (c) は `Release` の 2 つの腕の役割分担を述べる。`origin` が `Join` を返す leaf について、実行時に処分
+  される参照が属するオブジェクトは `candidates` のどれでもありうるが、`ActRefs` は `identity` しか名指さ
+  ない。残る `candidates \ {identity}` を `other_objects` が拾い、`consume_objects` へ渡す
+  (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 - **P6** (`acted_references` は静的な上位近似である)。1 つの関数の 1 回の活性化について、`acted_references(v, π)` が返す `Map` は、`π` の下の
   すべての boxed leaf を `origin` の identity で名付けて数えたものである。実行時に `Retain(v, π)` が作る
   参照の多重集合は、この数え上げを inhabited な leaf に制限したものに等しく、`Release(v, π)` が処分する
@@ -472,21 +484,25 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
   各 boxed leaf `λ` について、`origin(v, λ)` の候補はすべて `origin(v, u)` の候補に含まれる。
 
   `owns_unit` は unit の `origin` の候補を見て真偽値を 1 つ返し、`Retain`/`Release` はその unit の下の各 leaf の
-  参照に作用する。両者を突き合わせるにはこの包含が要る。`check_one_key_per_object` の表明が発火しないことを
-  示すのにも同じ包含が要る (`p12-keys-and-consumes.md` の末尾)。
+  参照に作用する。両者を突き合わせるにはこの包含が要る。P7d の一様性を leaf の水準へ降ろすのにも同じ包含が
+  要る。
 
-- **P7b** (unit の鍵は、その下の leaf の鍵である)。`π` が `ty(v)` の RC unit であり、`λ` が `π` の下の
-  inhabited な boxed leaf であるとき、`unit_of(origin(v, λ).identity()) = unit_key(v, π)` である。
+- **P7d** (所有は site ごとに一様である)。`infer_ownership` の不動点において、`levelled_sites` が挙げる
+  各 site `(v, u)` について、`origin(v, u)` の候補は、すべて `owns_object` が真であるか、すべて偽であるかの
+  どちらかである。
 
-  `cancel` の走査は `Retain`/`Release` を unit の path で鍵付けし、消費を leaf の path で鍵付けする。この
-  2 つが同じ鍵に着かなければ、消費が pending な `Retain` に印を付けない。`unit_key` の doc が散文で述べて
-  いることの形式化である。
+  `owns_unit(v, u)` は候補すべてに `owns_object` を要求して真偽値を 1 つ返し、`rewrite_rc` と `call_rc` は
+  その 1 つの答えで unit 全体の `Retain`/`Release` を決める。答えが候補ごとに割れる site があると、真の側
+  では借りている参照を処分し、偽の側では所有している参照を処分しない。どちらも誤りであり、それが #530 で
+  ある。`level_ownership` はこの一様性を、候補が 1 つでも所有されていれば候補すべての leaf を所有へ倒す
+  ことで作る (`CODE src/rc_ir/borrow.rs: level_ownership`, `owns_object_yet`)。
 
-- **P7c** (1 つのオブジェクトは 1 つの鍵の下で処分される)。pending な `Retain` の `outstanding` にある
-  オブジェクトへの参照を処分する構文は、その `Retain` の鍵の下で `consume_unit` または `un_bump` を呼ぶ。
+- **P7c** (処分はすべて走査に届く)。実行時に参照を処分するか、処分の義務を活性化の外へ渡す構文 --
+  D9 の消費、`Release`、終端の `Ret` -- はすべて、`cancel` の走査で `consume_objects` または `un_bump` を
+  呼ぶ。その引数は、その構文が触れうるオブジェクト (D13 の `acted_on`) をすべて含む。
 
-  P5 (a) では足りない。P5 (a) は**同じ参照**を持つ 2 つのスロットについての主張だが、`cancel` が要るのは
-  **同じオブジェクトを指す相異なる 2 つの参照**についてであり、こちらの方が広い。
+  P5 (a) では足りない。P5 (a) は同じ identity を持つ 2 つのスロットについての主張だが、`cancel` が要るのは
+  **1 つのオブジェクトを指す相異なる 2 つの参照**についてであり、こちらの方が広い。
 
 - **P8** (推論の停止性と安全性)。`infer_ownership` は停止する。その不動点が返す集合 `owned_leaves` は、
   次を満たす。ある関数のある leaf の参照が、その関数のある実行路で D9 の意味で消費されるならば、その leaf の
@@ -502,8 +518,8 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
 
   後半が要るのは、A6 (名前の一意性) の果たす者が `fresh_rename_function` であり、それを呼ぶのが証明対象の
   `borrow_ify` 自身だからである。A6 は `borrow_ify` の入力にかかる仮定であり、その出力について名前が一意で
-  あることは、ここで示すべき事柄である。`unit_key` は名前で引くので、複製と原本の名前が衝突すればキーが
-  混ざり、`cancel` は誤った対を消す。
+  あることは、ここで示すべき事柄である。オブジェクトの名前 (`VarPath`) は束縛名を含むので、複製と原本の
+  名前が衝突すれば別のオブジェクトが 1 つの名前を共有し、`cancel` は誤った対を消す。
 - **P10** (借用版が落とす RC 節点)。借用版の `rewrite_rc` は、`Retain(v, π)` / `Release(v, π)` を、
   `units_under(ty(v), π)` のうち `owns_unit(v, ・)` が真である unit の節点の列に置き換える。所有しない unit の
   節点は残らない。
@@ -512,7 +528,7 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
 
   この節点が義務集合 (D10) の食い違いを**ちょうど**埋めることは、別の主張であり、P14 が示す。`Retain(a, u)` は
   `u` の下の inhabited なすべての leaf の参照を作るので、`owns_unit` が返す 1 つの真偽値が leaf ごとの所有と
-  食い違うと収支が合わない。それが #530 である。
+  食い違うと収支が合わない。それが #530 であり、P7d がその食い違いが起きないことを述べる。
 - **P12** (振り分けの安全性)。`route` が借用版へ回すのは、末尾位置でない呼び出しか、所有する unit を持つ引数を
   1 つも持たない呼び出しだけである。また `route` が返す呼び出し先は、元の呼び出し先と同じ関数の版である
   (元の版そのものか、その `borrow_versions` の像)。呼び出し先が入力の関数を名指すとき、返る名前は出力の
@@ -532,10 +548,10 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
   同じ `Arc` を指す本体は表現できる。成り立つのは `RewriteCtx::rewrite` が出力の各位置に `expr_node`
   (`Arc::new`) で新しい割り当てを作るからである (`CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner`)。
 - **P16** (`pending` の不変条件)。走査中の各位置において、`pending` は次を満たす。
-  (a) `pending[k]` の各要素の `node` は、その位置までに訪れた `Retain` 節点であり、その `unit_key` は `k` で
-  ある。(b) 各要素の `outstanding` は空でない。(c) 1 つの `Retain` 節点は `pending` 全体で高々 1 か所に
-  現れる。(d) `pending[k]` の並びは、訪れた順である (後ろほど新しい)。(e) `pending` から取り除かれた
-  `Retain` は、次の 3 つのいずれかである。(e1) `outstanding` が空になった。(e2) `needed_retains` に入った。
+  (a) 各要素の `node` は、その位置までに訪れた `Retain` 節点である。(b) 各要素の `outstanding` は空でなく、
+  その `Retain` の `ActRefs` に含まれる。(c) 1 つの `Retain` 節点は `pending` に高々 1 回現れる。
+  (d) `pending` の並びは、訪れた順である (後ろほど新しい)。(e) `pending` から取り除かれた `Retain` は、
+  次の 3 つのいずれかである。(e1) `outstanding` が空になった。(e2) `needed_retains` に入った。
   (e3) その除去は `merge` によるものであり、各アームへ渡った複製の側に同じ `Retain` の除去事象があって、
   それらがすべて (e1)(e2)(e3) のいずれかである。
 
@@ -543,20 +559,26 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
   `merge` はそれを `uniform` にも `needed_retains` にも入れず、`merged` にも入れない。このとき
   `pending_in` の側の `outstanding` は空でない (減ったのは各アームに渡った複製である)。A9 より アームは
   1 つ以上あるので、(e3) の展開は有限で、葉は (e1) か (e2) である。
-- **P17** (`un_bump` の正しさ)。`un_bump(pending, k, R)` の返り値は次で決まる。`pending` にキー `k` の項目が
-  無ければ `NoBracket` で、`pending` は変わらない。あって、最内の要素の `outstanding` が `R` を `covers`
-  しなければ `OutsideBracket` で、`pending` は変わらない。covers すれば `InBracket(t)` で、`t` は最内の要素の
-  `node` であり、その要素の `outstanding` から `R` が引かれ、空になればその要素が取り除かれ、スタックが空に
-  なればキーが取り除かれる。
+- **P17** (`un_bump` の正しさ)。`un_bump(pending, R)` の返り値は次で決まる。`R` とオブジェクトを共有する
+  要素が `pending` に無ければ `NoBracket` で、`pending` は変わらない。あって、そのうち最も後ろの要素
+  (最内) の `outstanding` が `R` を `covers` しなければ `OutsideBracket` で、`pending` は変わらない。
+  covers すれば `InBracket(t)` で、`t` はその要素の `node` であり、その要素の `outstanding` から `R` が
+  引かれ、空になればその要素が取り除かれる。他の要素は変わらない。
 - **P18** (`merge` の後に残るもの)。`merge` の返す `pending` に残る `Retain` は、`pending_in` に在り、
   いずれかのアームの出口に現れ、かつすべてのアームの出口に同じ `outstanding` で現れるものだけである。
   いずれかのアームの出口に現れてこの条件を満たさない `Retain` は `needed_retains` に入る。どのアームの出口にも
   現れない `Retain` は、この呼び出しでは `needed_retains` にも返り値にも入らない (走査の他の位置が
   `needed_retains` に入れることは妨げない)。
 
-- **P18a** (pending と実行時のカウントの関係)。走査中の各位置において、`pending` に載っている各 `Retain` の
-  `outstanding` の各参照は、実行時にその位置で未処分である。すなわち pending な `Retain` の bump は、値自身が
-  もともと持っていた参照の上に積まれている。
+- **P18a** (pending の bump は値自身の参照の上に積まれている)。走査中の各位置とそこへ至る各実行路に
+  ついて、各オブジェクト `o` を考える。`pending` の各要素の `outstanding` が `o` について持つ個数の総和を
+  `n(o)` とし、`n(o) ≥ 1` とする。このとき、その位置での実行時の参照カウントは `H(o) ≥ n(o) + 1` である。
+
+  `+1` が主張の要である。`n(o)` 個の bump を消しても `H(o) ≥ 1` が残る、すなわち削除がオブジェクトの解放を
+  早めないこと (P21) は、この `+1` からしか出ない。`+1` の出どころは、`Retain(v, π)` が bump するのが
+  `v` の leaf が**すでに持っている**参照だということである。その参照が処分される構文はすべて走査に届き
+  (P7c)、届いた先で bump は `un_bump` で降りるか `consume_objects` で pending を離れるので、`n(o)` は
+  同時に下がる。
 
   P16 は `pending` の形についての主張で、実行時の参照カウントに触れない。P21 は「削除しても解放が早まらない」
   を示すので、この 2 つを結ぶ段が要る。層 4 の実質はここにある。
@@ -564,9 +586,9 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
 ### 層 4 -- `cancel` が RC 規律を保存すること
 
 - **P19** (削除される retain の性質)。`cancelled()` が返す集合に含まれる `Retain` `t` について、`t` を含む
-  すべての実行路において、`t` より後にある、`t` の `unit_key` を `acted_unit_keys` に含む消費より前、かつ
-  終端の `Ret` より前に、削除される `Release` 群が `t` の `outstanding` を空にする。さらに、`t` とともに
-  削除される各 `Release` は、実行路の上で `t` より後ろにある。
+  すべての実行路において、`t` より後にある、`t` の `outstanding` のオブジェクトを `acted_on` に含む消費より
+  前、かつ終端の `Ret` より前に、削除される `Release` 群が `t` の `outstanding` を空にする。さらに、`t` と
+  ともに削除される各 `Release` は、実行路の上で `t` より後ろにある。
 
   「`t` より後にある」の限定が要る。`t` が `pending` に入るのは `t` の訪問なので、`t` より前にある消費に
   ついては un-bump が起きようがない。
@@ -648,12 +670,12 @@ union (`Option` や `Result`) の payload を 2 回読むと、`-O max` で読�
 **節ごとの較正。** 性質は 4 つの節を持つ -- (S-a)(S-b)(S-c) と P26 の観測。節ごとに、その節**だけ**を破る
 バグで較正しなければ、較正されていない節が残る。現状は次のとおりである。
 
-| 節 | 較正するバグ | 状態 |
-|---|---|---|
-| (S-c) 解放後の読み | #519、#529 | 較正済み |
-| (S-a) 過剰処分 | #519 (二重解放の症状) | 較正済み。ただし #519 は (S-c) も破るので、この節だけを破る例ではない |
-| (S-b) 漏れ | #530 | 較正済み |
-| P26 観測 | 無し | **未較正。** この節だけを破るバグをまだ持っていない |
+| 節 | 較正するバグ | 較正するテスト | 状態 |
+|---|---|---|---|
+| (S-c) 解放後の読み | #519、#529、#545 | `test_field_read_twice_*`、`test_join_payload_*`、`test_union_payload_two_units_*` | 較正済み |
+| (S-a) 過剰処分 | #519 (二重解放の症状) | 同上 | 較正済み。ただし #519 は (S-c) も破るので、この節だけを破る例ではない |
+| (S-b) 漏れ | #530、#530 の残穴 | `test_split_ownership_unit_memory_safety`、`test_one_variant_owned_memory_safety` | 較正済み |
+| P26 観測 | 無し | -- | **未較正。** この節だけを破るバグをまだ持っていない |
 
 P26 が未較正であることは記録しておく価値がある。この節は critic が「D11 を満たす間違ったパス」を挙げたことで
 足されたもので、実在のバグから来ていない。実在のバグが 1 件出るまでは、この節が強すぎるか弱すぎるかを測る
@@ -666,59 +688,65 @@ P26 が未較正であることは記録しておく価値がある。この節�
 
 `T への寄与`は、その命題が主定理の鎖に入るかどうかである。入らない命題は、証明できていても T を進めない。
 
+`証明` の欄は**対象コミット `a924f115` に対する**状態である。第 8 節の 4 件の修正 -- とくに `unit_key` を
+取り除いた設計変更 -- で、キーを主語にしていた命題は言明ごと書き換わった。書き換わった言明の証明は、その
+時点で書き直しになる。
+
 | 命題 | ファイル | T への寄与 | 証明 | 検証 |
 |---|---|---|---|---|
-| P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み | 未着手 |
+| P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み。`<1>35`/`<1>36` (`unit_key` についての観察) は対象を失った | 未着手 |
 | P3, P4 | `p11-origin-soundness.md` | 有 | 証明済み | 未着手 |
-| P5 (c) | `p11-origin-soundness.md` | 有 | **偽** -- 反例あり。miscompile は作れていない | 未着手 |
-| P5 (a) | `p12-keys-and-consumes.md` | **無** (キーの意味の較正のための観察) | 制限つきで証明済み | 未着手 |
-| P5 (b), P6, P7 | `p12-keys-and-consumes.md` | 有 | 証明済み | 未着手 |
+| P5 (a), (b) | `p12-keys-and-consumes.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
+| P5 (c) | -- | 有 | **未着手** (新しい言明) | 未着手 |
+| P6, P7 | `p12-keys-and-consumes.md` | 有 | 証明済み | 未着手 |
 | P7a | -- | 有 | **未着手** (P8, P14 が使う) | 未着手 |
-| P7b, P7c, P18a | `p13-keys-and-pending.md` | 有 | **偽** -- コードが誤り (#545)。制限つきの形は証明済み | 未着手 |
-| P8 - P13 | `p20-borrow-ify.md` | 有 | 証明済み | 未着手 |
-| P14 | `p20-borrow-ify.md` | 有 | **閉じない** -- コードが誤り (#530 の残穴) | 未着手 |
-| P15 - P18 | `p30-cancel-walk.md` | 有 | 証明済み | 未着手 |
-| P19, P20, P22, P24 | `p40-cancel-soundness.md` | 有 | 証明済み | 未着手 |
-| P21, P23 | `p40-cancel-soundness.md` | 有 | **閉じない** -- P7b, P7c, P18a が偽 | 未着手 |
+| P7c | -- | 有 | **未着手** (新しい言明) | 未着手 |
+| P7d | -- | 有 | **未着手** (新しい言明。#530 の 2 件を閉じる性質) | 未着手 |
+| P8 - P13 | `p20-borrow-ify.md` | 有 | 証明済み。P10/P11 は `owns_object_yet` の追加を読み直す必要がある | 未着手 |
+| P14 | `p20-borrow-ify.md` | 有 | **未着手** (原因だった #530 の残穴は直った) | 未着手 |
+| P15 - P18 | `p30-cancel-walk.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
+| P18a | -- | 有 | **未着手** (新しい言明。層 4 の実質) | 未着手 |
+| P19 - P24 | `p40-cancel-soundness.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
 | P26, P27, T | `p50-observation-and-runs.md` | 有 | 未着手 | 未着手 |
 
-**証明済みの命題は、どれも T をまだ 1 歩も進めていない。** 「節点を消しても RC 規律が保たれる」という
-この証明の唯一の実質的な主張は P19-P21 にあり、そこが空である。
+**証明済みの命題は、どれも T をまだ 1 歩も進めていない。**「節点を消しても RC 規律が保たれる」という
+この証明の唯一の実質的な主張は P18a-P21 にあり、そこが空である。
 
 ## 8. 発見
 
-**#529 (miscompile)。** P3/P4 の証明が閉じない原因はコードにあった。`origin_from_leaves_under` と
-`origin_inner` の `Binding::Join` の腕が、内側の `Origin` を `candidates()` で平坦化するとき、その
-`identity` を落とす。落ちた名前は `acted_unit_keys` に現れず、`cancel` の `Release` の腕がその名前の
-pending な `Retain` に印を付けないので、対でない retain と release が消える。`-O max` で解放後のメモリを
-読む Fix プログラムを作って確かめた (`-O none` と `-O basic` は正しい)。P5 (c) はこのコードでは偽であり、
-層 4 (P19-P24) はこれが直るまで着手しない。
+証明を書く作業が、対象のコードに 4 件の欠陥を見つけた。3 件は miscompile であり、いずれもバグハントでは
+見つかっていなかった。4 件はすべて修正済みである。
 
-**測定の記録。** (c) を `develop_mode` の assertion にしたブランチが `n-probe` (`5245625a`) にある。
-#519 の修正を戻すと発火し (較正)、修正を入れた状態では全スイート 1,638 + 178 本で 1 度も発火せず、
-#529 の再現プログラムで発火する。
+**#529 (miscompile、修正 `be26b396`、PR #531)。** P3/P4 の証明が閉じない原因はコードにあった。
+`origin_from_leaves_under` と `origin_inner` の `Binding::Join` の腕が、内側の `Origin` を `candidates()` で
+平坦化するとき、その `identity` を落とす。落ちた名前は消費の側の名前に現れず、`cancel` の `Release` の腕が
+その名前の pending な `Retain` に印を付けないので、対でない retain と release が消える。`-O max` で解放後の
+メモリを読む Fix プログラムを作って確かめた (`-O none` と `-O basic` は正しい)。
 
-**#530 (漏れ)。** P14 の証明が閉じない原因もコードにあった。`owns_unit` は unit ごとに真偽値を 1 つ答えるが、
-所有は leaf ごとの性質である。1 つの unit の下の leaf が別々の root に由来して所有が分かれると、
-`rewrite_rc` は `Release` を丸ごと落とすか、借りている参照まで処分するかの二択になり、どちらも誤りである。
-leaf を 2 つ以上持つ unit は unbox union だけであり、`-O max` で 32 バイトが漏れる Fix プログラムを作って
-確かめた (`-O basic` は漏れない)。#529 とは別の原因である。
+**#530 (漏れ、修正 `211b2d3c`、PR #544)。** P14 の証明が閉じない原因もコードにあった。`owns_unit` は unit
+ごとに真偽値を 1 つ答えるが、所有は leaf ごとの性質である。1 つの unit の下の leaf が別々の root に由来して
+所有が分かれると、`rewrite_rc` は `Release` を丸ごと落とすか、借りている参照まで処分するかの二択になり、
+どちらも誤りである。leaf を 2 つ以上持つ unit は unbox union だけであり、`-O max` で 32 バイトが漏れる Fix
+プログラムを作って確かめた (`-O basic` は漏れない)。修正は `level_ownership`: 割れた候補を所有の側へ倒す。
 
-**層 4 (P19-P24) と、層 2 の残り (P8 - P13) は、#529 と #530 が直るまで着手しない。** どちらも命題の
-言明は変えない -- 直すべきはコードである。
+**#530 の残穴 (漏れ、修正 `50e7712d`、PR #546)。** `level_ownership` の発火判定は leaf 粒度で所有を読み、
+書き換えが読む `owns_object` は unit 粒度で読む。パラメータの unbox union の一方の変位の leaf だけが所有
+されているときに食い違い、`Release` が落ちて参照が漏れる。修正は `owns_object_yet`: 発火判定を
+`owns_object` と同じ粒度で書き、`level_ownership` がそれを読む。
 
-**#545 (miscompile、未修正)。** `origin_from_leaves_under` は、unit の path の下の leaf が別々のオペランド
-unit に辿り着くとき、答えを「読み出した値自身の名前」を identity とする `Join` にする。すると union 自身の
-`unit_key` はその値の名前になり、payload の leaf を消費する構文の鍵は payload の元の名前になる。1 つの
-オブジェクトが 2 つの名前を持ち、`Retain` と消費が別の鍵に分かれるので、`cancel` が消費をまたいで対を消す。
-`Std::Option (a, b)` と `Std::Result e (a, b)` がこの形である。P7b、P7c、P18a はいずれもこれで偽になる。
+**#545 (miscompile、修正 `a924f115`、PR #546)。** `origin_from_leaves_under` は、unit の path の下の leaf が
+別々のオペランド unit に辿り着くとき、答えを「読み出した値自身の名前」を identity とする `Join` にする。
+すると union 自身のキーはその値の名前になり、payload の leaf を消費する構文のキーは payload の元の名前に
+なる。1 つのオブジェクトが 2 つのキーを持ち、`Retain` と消費が別のキーに分かれるので、`cancel` が消費を
+またいで対を消す。`Std::Option (a, b)` と `Std::Result e (a, b)` がこの形である。
 
-**#530 の残穴 (未修正)。** `level_ownership` の発火判定は leaf 粒度 (`covered_leaves` と `owned_leaves`) で
-所有を読み、書き換えが読む `owns_object` は unit 粒度 (`units_under` を `truncate_to_unit` で写して
-`owned_units`) で読む。パラメータの unbox union の一方の変位の leaf だけが所有されているときに食い違い、
-`Release` が落ちて参照が漏れる。P14 はこれで閉じない。
+**同じ族の 3 件目が設計をやり直させた。** #519、#529、#545 はどれも「1 つのオブジェクトが道ごとに 2 つ以上の
+名前を持ち、`Retain` と `Release` が別のキーに分かれる」形である。3 件目の応急処置は、`Etc::Works` を
++6.40% 遅くした。根は、キー -- `origin` の identity を unit へ丸めた名前 -- が何を名指す量なのか定まって
+いなかったことである。`a924f115` はキーを取り除いた。`cancel` は `Retain` を 1 本の `Vec<PendingRetain>` に
+積み、`Release` はオブジェクトを共有する最内の要素と対になる。**対にするのに要る情報は最初から
+`outstanding` にあり、キーがそれを潰していた。** LangArena のコーパスで RC 操作は 28 減り、速度は雑音の中で
+ある。
 
-**同じ族の 3 件目。** #519、#529、#545 はどれも「1 つのオブジェクトが道ごとに 2 つ以上の名前を持ち、`Retain`
-と `Release` が別の鍵に分かれる」形である。#519 は読み出した値自身の名前で組み直していたこと、#529 は `Join`
-を畳むときに内側の identity を落としていたこと、#545 は `reached` が 2 元以上のときに identity を `here` へ
-置き換えることによる。**`unit_key` が何を名指す量なのかという設計が定まっていない**のが根である。
+**この設計変更で言明が変わった命題。** P5、P7c、P16、P17、P18a、P19。いずれもキーを主語にしていた。
+新しい言明はオブジェクト (`VarPath`) を主語にする。
