@@ -2657,7 +2657,7 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// The code generator for `Array::_unsafe_append_capacity_unchecked`, which consumes `src` into the
 /// slots past `dst`'s length.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayAppendCapacityUnchecked {
     dst_name: FullName,
@@ -7397,7 +7397,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
 }
 
 // Std::Array::_unsafe_is_storage_unique : Array a -> (Bool, Array a)
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const VAR_NAME: &str = "array";
     let elem_ty = type_tyvar_star("a");
