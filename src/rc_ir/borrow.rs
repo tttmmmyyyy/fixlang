@@ -242,7 +242,7 @@ fn covered_leaves(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> V
 /// annotate every output version with the parameter/capture units it borrows
 /// (`RcFunc::borrowed_units`).
 // PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26, P27, T (dev-docs/proof/rc_ir/borrow-cancel)
-pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
+pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
     let owned_leaves = infer_ownership(prog, type_env);
 
     // The funptr functions that get a borrow version, and the name of that version. Only funptr
@@ -1347,7 +1347,7 @@ fn node_id(node: &RcExprNode) -> NodeId {
 /// the uniqueness analysis. Each call's consume sites are decided by the parameter/capture units the
 /// functions own — the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
 // PROOF: P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26, T (dev-docs/proof/rc_ir/borrow-cancel)
-pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
+pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
     let cancel_body = |vars: &VarTable, body: &RcExprNode| {
         let mut analysis = CancelAnalysis {

@@ -1082,7 +1082,8 @@ resolve_callee_params`)。
 
 **A9 (`Match` はアームを持つ)** -- 果たす者: lowering。検査: `validate` の `check_rhs`
 (`CODE src/rc_ir/validate.rs: Validator::check_rhs`)、ただし `develop_mode` のときだけ走る。
-プログラムのすべての `Match` は 1 つ以上のアームを持つ。
+`borrow_ify` の入力プログラムのすべての `Match` は 1 つ以上のアームを持つ。`borrow_ify` と `cancel` は
+アームを持たない `Match` を作らないので (P22、P24)、`cancel` の入力と出力についても同じことが言える。
 
 **A10 (型の well-formedness)** -- 果たす者: `validate_layouts` (elaboration で必ず走る)。ただし最適化が
 作る型を再検査するのは develop build だけである。
@@ -1366,6 +1367,10 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
 
 - **P15** (節点と `NodeId`)。`cancel` の入力すなわち `borrow_ify` の出力の各本体について、相異なる位置は
   相異なる `NodeId` を持つ。また `CancelAnalysis::walk` は本体の各位置をちょうど 1 回訪れる。
+
+  **`cancel` の入力が `borrow_ify` の出力であることは、`optimize_rc_program` の 1 か所を読めば決まる。**
+  どちらもクレートの外から呼べないからである (`CODE src/rc_ir/borrow.rs: cancel`, `borrow_ify` -- どちらも
+  `pub(crate)`)。
 
   前半は `RcExprNode` 一般の性質ではない。`RcExprNode` は式を `Arc` で共有できるので、1 つの木の 2 つの位置が
   同じ `Arc` を指す本体は表現できる。成り立つのは `RewriteCtx::rewrite` が出力の各位置に `expr_node`
