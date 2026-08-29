@@ -219,6 +219,7 @@ impl<'a> Validator<'a> {
     }
 
     /// Introduce a binding: it must be unique within the function, and it enters scope.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn bind(&mut self, name: &FullName) {
         if !self.seen.insert(name.clone()) {
             panic!(
@@ -251,6 +252,7 @@ impl<'a> Validator<'a> {
     }
 
     /// A variable use must resolve to a binding in scope or to a global (a function or global value).
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn use_var(&self, name: &FullName) {
         if !self.scope.contains(name) && !self.globals.contains(name) {
             panic!(
@@ -269,6 +271,7 @@ impl<'a> Validator<'a> {
     }
 
     /// One node of the walk: the uses it makes, the bindings it introduces, and its continuation.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_expr_inner(&mut self, node: &RcExprNode) {
         match node.expr.as_ref() {
             RcExpr::Let(x, rhs, k) => {
@@ -304,6 +307,7 @@ impl<'a> Validator<'a> {
     /// Check a right-hand side: the variables it uses, and the invariants its own form carries — a
     /// closure's target function and stored capture layout, an `Llvm` operation's operand names, and
     /// a match's arms.
+    // PROOF: P1, P2, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_rhs(&mut self, rhs: &RcRhs) {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),
