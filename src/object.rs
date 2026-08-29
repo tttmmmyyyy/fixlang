@@ -996,6 +996,7 @@ impl ObjectFieldType {
 
     /// The contents of a union's payload buffer read as `variant_ty`, by a bit cast: the buffer is
     /// at least as wide as the variant, and the variant starts at its beginning.
+    // PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_value_from_union_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buf: BasicValueEnum<'c>,
@@ -1082,7 +1083,7 @@ impl ObjectFieldType {
     /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
     /// the struct: each returned field owns its reference and so outlives the struct it came from,
     /// and the fields left behind are dropped.
-    // PROOF: P7, P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,

@@ -39,7 +39,7 @@ pub(crate) fn fresh_rename_function(
 }
 
 /// Assign `name` a fresh globally-unique name, suffixed with `pass_tag` and a counter.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_name(
     name: &FullName,
     pass_tag: &str,
@@ -60,6 +60,7 @@ fn assign_fresh_name(
 }
 
 /// Record a fresh name for every variable bound in a function body.
+// PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_names_to_binders(
     node: &RcExprNode,
     pass_tag: &str,
@@ -70,7 +71,7 @@ fn assign_fresh_names_to_binders(
 }
 
 /// Record the fresh name of every binder of one node, then descend into its continuation and arms.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_names_to_binders_inner(
     node: &RcExprNode,
     pass_tag: &str,
@@ -108,7 +109,7 @@ fn assign_fresh_names_to_binders_inner(
 
 /// A variable with its name rewritten through `renaming`. A name `renaming` leaves out, such as a
 /// global's, stays as it is.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
     let mut v = var.clone();
     if let Some(n) = renaming.get(&var.name) {
@@ -165,7 +166,7 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
 
 /// A right-hand side with every variable occurrence (including `Llvm` operand names) rewritten
 /// through `renaming`.
-// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
     match rhs {
         RcRhs::Var(v) => RcRhs::Var(rename_var(v, renaming)),

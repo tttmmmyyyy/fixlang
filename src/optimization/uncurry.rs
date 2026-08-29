@@ -151,6 +151,7 @@ fn convert_to_funptr_name(name: &mut Name, n_args: usize) {
 /// # Arguments
 /// * `generic_name` — the name of the global `expr` defines, before instantiation. `Std::fix` is
 ///   identified by it, since that global has no function pointer version.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn funptr_lambda(
     generic_name: &FullName,
     expr: &Arc<ExprNode>,
@@ -256,6 +257,7 @@ fn replace_closure_call_to_funptr_call(
 }
 
 /// Replace all "call closure" subexpressions to "call function pointer" expression.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn replace_closure_call_to_funptr_call_subexprs(
     expr: &Arc<ExprNode>,
     symbol_names: &Set<FullName>,

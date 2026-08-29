@@ -566,8 +566,8 @@ RC IR プログラムの外側にあって、その本体を起動するコー�
 クロージャならその funptr の指す関数、funptr ならそれ自身である
 (`CODE src/generator.rs: Generator::apply_lambda` -- `get_lambda_func_ptr` が返す関数ポインタを
 `build_indirect_call` で呼ぶ)。**D9 の `App` の行と D10 の生成の `App` の行が「呼び出し先」と言うのは、この
-実行時の関数である。**すなわち D10 の義務集合、したがって D11 は、実行時に決まる呼び出し先を読む。L0 が、
-`cancel` と `borrow_ify` が静的に決める呼び出し先がこれと食い違わないことを述べる。
+実行時の関数である。**すなわち D10 の義務集合、したがって D11 は、実行時に決まる呼び出し先を読む。P29 が、
+静的に決める呼び出し先がこれと食い違わないことを述べる。
 
 **D24 (実行)**
 
@@ -1157,6 +1157,18 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   言う節であり、それを運ぶのは 2 つの生きている活性化の義務集合が交わらないことである。交わらないのは
   参照の持ち手が 1 つだからで、それがこの命題である。
 
+- **P29** (静的に決めた呼び出し先は実行時の呼び出し先である)。`borrow_ify` の入力の `Let(x, App(callee, args), k)`
+  について、`resolve_callee_params` が `Some(params)` を返すならば、`params` はその段の実行時の呼び出し先
+  (D23) のパラメータの列である。
+
+  D23 は「D9 の `App` の行と D10 の生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数である」と
+  定めるのに対し、`rhs_consumes` が引くのは `closure_targets` と `prog.funcs` から静的に引いた関数の
+  パラメータである (`CODE src/rc_ir/ownership.rs: resolve_callee_params`, `rhs_consumes`)。**この 2 つが
+  一致することを述べる者が要る。** P7 の `App` の場合と、D14 の借用の位置がこれを読む。
+
+  `resolve_callee_params` が `None` を返す場合について何も言わないのは、そのとき `rhs_consumes` が全位置を
+  所有として扱う -- 安全側 -- からである。出力についての同じ性質は、P9 と P12 と合わせて読む。
+
 ### 層 1 -- 所有権モデル (`ownership.rs`)
 
 - **P1** (leaf と unit の対応)。**A10 を満たす**任意の型 `τ` について、`boxed_leaf_paths(τ)` の各 leaf の
@@ -1199,11 +1211,17 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   ない。残る `candidates \ {identity}` を `other_objects` が拾い、`consume_objects` へ渡す
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 - **P6** (`acted_references` は静的な上位近似である)。1 つの関数の 1 回の活性化について、`acted_references(v, π)` が返す `Map` は、`π` の下の
-  すべての boxed leaf を `origin` の identity で名付けて数えたものである。実行時に `Retain(v, π)` が作る
-  参照の多重集合は、この数え上げを inhabited な leaf に制限したものに等しく、`Release(v, π)` が処分する
-  参照の多重集合も同じものに等しい。
-- **P7** (消費の網羅性)。D9 の意味で消費する構文はすべて `collect_consumes` が報告する。また
-  `collect_consumes` が報告して D9 が消費としないものは、アーム本体の `Ret` に限る。
+  すべての boxed leaf を `origin` の identity で名付けて数えたものである。この数え上げを **inhabited (D16)
+  かつ計数下 (D26)** の leaf に制限し、**各名前をそれが指すオブジェクトへ写して**得られる多重集合は、実行時に
+  `Retain(v, π)` が作る参照の多重集合に等しく、`Release(v, π)` が処分する参照の多重集合にも等しい。
+
+  制限と写しの 2 つが要る。計数下に限るのは、グローバル状態のオブジェクトを指す leaf が D8 の意味の参照を
+  持たないからである (D26)。オブジェクトへ写すのは、参照の多重集合がオブジェクトごとなのに対し、数え上げは
+  `VarPath` ごとだからである (D8)。**D27 は既にこの形で P6 を読んでいる。**
+- **P7** (消費の網羅性)。関数の本体を第 1 引数に渡した `collect_consumes` の呼び出しについて、D9 の意味で
+  消費する構文はすべてそれが報告する。また報告して D9 が消費としないものは、アーム本体の `Ret` に限る。
+
+  呼び出しを限定するのは、D9 の消費の表の最後の行が「**関数本体の**終端の `Ret(x)`」だからである。
 
 ### 層 2 -- `borrow_ify` が RC 規律を保存すること
 
@@ -1678,10 +1696,11 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P14a | `p20-borrow-ify.md` | 有 | 証明済み (A20 の下で) | 検証済み (指摘 27 件を反映)。**3 周目が要る** |
 | P21, P23 | `p40-cancel-soundness.md` | 有 | 証明済み (D29 と D21 の上で。局所の仮説は無い) | 検証済み (指摘 10 件を反映)。**3 周目が要る** |
 | P26 (`cancel` の半分) | `p50-observation.md` | 有 | 証明済み (D29 の上で) | 未着手 |
-| P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | 証明済み。場合分けは D24 の段の種と `apply_lambda` の呼び出し位置の 2 通りから導いた | 未着手 |
+| P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | **第 1 文のみ証明済み。** 出口の向きを述べる第 2 文は `borrow_ify` について示されていない (`cancel` については `L7a`)。場合分けは D24 の段の種と `apply_lambda` の呼び出し位置の 2 通りから導いた | 検証済み (指摘 37 件)。**修復が要る** |
 | P27 | `p51-runs.md` | 有 | 証明済み。(R1)(R2)(R3) が立ち、`L0` の数え上げは `llvmgen-function-values.md` が片付けた | 未着手 |
 | (P-insert) | `p60-insert-rc.md` | 有 (A19 の (ii-a) と (ii-b)) | 証明済み。(O1) は無条件、(O2) は前提 (N) の下、`split_rc_units` の段は第 13 節、(i) は第 14 節 (P28 の上で) | 未着手 |
 | P28 | `p05-holders.md` | -- | **未着手。** D24 の段の種類の上の帰納 | 未着手 |
+| P29 | `p51-runs.md` | -- | **未着手。** `p51` の `L0` がこの内容を持つが、`borrow_ify` の出力について述べており P9・P12 を引く。入力についての形へ切り出す | 未着手 |
 | T | `p70-main-theorem.md` | -- | 証明済み。(T1) から (T4) まで、引用する命題の言明の上で閉じる | 未着手 |
 
 **T が閉じることは、T が引く命題が閉じることを意味しない。**各命題の状態はこの表が述べる。誰も果たさない

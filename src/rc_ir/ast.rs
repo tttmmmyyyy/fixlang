@@ -62,7 +62,7 @@ pub struct RcProgram {
 
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and
 /// uncurried funptr versions.
-// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcFunc {
     /// The name this function is defined and called under, unique across the program: lowering mints
@@ -199,7 +199,7 @@ pub enum RcTarget {
 /// catch-all arm, whose payload is the whole scrutinee.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
-// PROOF: P1, P2, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct MatchArm {
     /// The variant number this arm matches, or `None` for a catch-all arm.
@@ -292,7 +292,7 @@ impl RcState {
 }
 
 /// The ownership of a single reference-counting unit.
-// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Ownership {
     /// The callee receives ownership: it consumes the unit, by releasing it or by moving it into
@@ -383,6 +383,7 @@ pub(crate) fn for_each_var(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
 
 /// Visit the variables the node itself binds or reads, without following its continuation or the
 /// bodies of the arms of a `Match`.
+// PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn for_each_var_of_node(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
     match node.expr.as_ref() {
         RcExpr::Let(var, rhs, _) => {
@@ -404,6 +405,7 @@ fn for_each_var_of_node(node: &RcExprNode, visit: &mut impl FnMut(&RcVar)) {
 
 /// Visit the variables of a right-hand side: the payload variable of each arm of a `Match` among
 /// them, and not the arm bodies.
+// PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
     match rhs {
         RcRhs::Var(var) => visit(var),

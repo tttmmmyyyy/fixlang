@@ -44,7 +44,7 @@ use crate::rc_ir::leaf_map::{LeafKey, LeafMap};
 use std::sync::Arc;
 
 /// The origin of one boxed leaf.
-// PROOF: P3, P4, P5, P6, P7, P26, P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P5, P6, P7, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum LeafOrigin {
     /// A newly produced value: an allocation, or a force-unique op's result. Resolves to `Unique`.
@@ -58,10 +58,11 @@ pub enum LeafOrigin {
 
 /// The origin of one boxed leaf as a set of `LeafOrigin`s: usually a singleton, several after a
 /// branch join, empty for an absent union variant (the bottom of the lattice).
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type LeafOrigins = Set<LeafOrigin>;
 
 /// The origins of a leaf that has just the one.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn sole_origin(src: LeafOrigin) -> LeafOrigins {
     let mut origins = Set::default();
     origins.insert(src);
@@ -97,14 +98,14 @@ impl Provenance {
     }
 
     /// The provenance whose every boxed leaf is bottom (the empty set) — an absent union variant.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn uniform_bottom(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Provenance {
         Provenance::build_shape(ty, type_env, &|_| Set::default())
     }
 
     /// The provenance of the result of an operation that produces one uniquely owned value among
     /// values of unknown sharing: every boxed leaf under `path` is `Fresh`, every other leaf `Unknown`.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn fresh_under(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &[usize]) -> Provenance {
         Provenance::uniform(ty, type_env, LeafOrigin::Unknown)
             .set_leaves_under(path, LeafOrigin::Fresh)
@@ -133,7 +134,7 @@ impl Provenance {
     /// query at the root answers whether the whole value is a single boxed leaf. A recorded `⊥` is the
     /// empty set, which is a different answer: it is the bottom of the lattice and resolves to
     /// `Unique`.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn leaf_origins_at(&self, path: &[usize]) -> Option<&LeafOrigins> {
         self.0.get(path)
     }
@@ -158,6 +159,7 @@ impl Provenance {
     /// Substitute the `Arg(j, σ)` symbols of a declared provenance with the operands' provenance:
     /// `Arg(j, σ)` becomes operand `j`'s leaf source at `σ`. `Fresh`/`Unknown` stay. Used to compose a
     /// primitive's declared `result_prov` (and, later, a callee's effect) with its actual operands.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn compose(&self, operand_provs: &[Provenance]) -> Provenance {
         Provenance(self.0.map_leaves(|_, origins| {
             let mut out = Set::default();
@@ -203,7 +205,7 @@ impl Provenance {
     }
 
     /// Give every boxed leaf under `path` the source `src`. An empty path covers the whole value.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn set_leaves_under(&self, path: &[usize], src: LeafOrigin) -> Provenance {
         Provenance(self.0.map_leaves_under(path, |_| sole_origin(src.clone())))
     }

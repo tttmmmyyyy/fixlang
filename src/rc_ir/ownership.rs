@@ -95,7 +95,7 @@ impl VarTable {
     }
 
     /// The vars of a param-less body (a global initializer).
-    // PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn body_only(body: &RcExprNode) -> VarTable {
         let mut vars = VarTable::empty();
         collect_bindings(body, &mut vars);
@@ -103,6 +103,7 @@ impl VarTable {
     }
 
     /// An empty table, which a constructor fills.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn empty() -> VarTable {
         VarTable {
             bindings: Map::default(),
@@ -116,7 +117,7 @@ impl VarTable {
 
 /// Record every local variable's `Binding` and type (and any closure value's target function) in a
 /// function body.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24, P26, P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
     match node.expr.as_ref() {
         RcExpr::Ret(_) => {}
@@ -167,7 +168,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
 /// The variable an expression returns: the one that its final `Ret` names. Every construct of the RC
 /// IR has a single continuation, so a body has exactly one such `Ret` (a match's arms each have their
 /// own, which return the arm's value to the match binding).
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn returned_var(node: &RcExprNode) -> &RcVar {
     grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(v) => v,
@@ -215,7 +216,7 @@ impl Origin {
     /// release of that value disposes it — so a candidate set that left the name out would let the
     /// release pass over the retain and the two would pair with the wrong partners. Building one
     /// candidate set out of several origins therefore folds in `acted_on`, not `candidates`.
-    // PROOF: P1, P2, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn candidates(&self) -> Vec<&VarPath> {
         match self {
             Origin::Exactly(p) => vec![p],
@@ -226,7 +227,7 @@ impl Origin {
     /// The origin a set of candidate objects amounts to: exactly the object they agree on, and a
     /// join under `identity` where they name several. `identity` is the one name every alias chain
     /// through the value agrees on.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn of_candidates(candidates: Set<VarPath>, identity: &VarPath) -> Origin {
         assert!(
             !candidates.is_empty(),
@@ -436,7 +437,7 @@ fn origin_from_leaves_under(
 }
 
 /// The single `Arg(j, p)` a leaf source consists of, if it is exactly that.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
     if sources.len() != 1 {
         return None;
@@ -512,7 +513,7 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
 /// leaf of it goes; an unboxed container moves each named field's leaves into that field's variable,
 /// an alias whose consume is attributed to the field variable, so only a dropped (unnamed) field's
 /// leaves go. This is the model code generation implements (`ObjectFieldType::get_struct_fields`).
-// PROOF: P5, P6, P7, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn destructure_consumes(
     container: &RcVar,
     fields: &[(usize, RcVar)],
@@ -597,7 +598,7 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
 
 /// The parameters of a directly-called callee: a closure value built in this function, or a
 /// top-level function referenced by name. `None` for an indirect call (an owning, all-`Own` ABI).
-// PROOF: P5, P6, P7, P18, P19, P20, P21, P22, P23, P24, P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 fn resolve_callee_params<'a>(
     callee: &RcVar,
     vars: &VarTable,
@@ -644,7 +645,7 @@ fn passthrough_arg_leaves(
 }
 
 /// Push every boxed leaf of a value onto `out`.
-// PROOF: P7, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn push_boxed_leaves(
     var: &FullName,
     ty: &Arc<TypeNode>,
@@ -727,7 +728,7 @@ pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
 /// Unit and leaf enumerations both leave a punched field out, so every path that reference counting
 /// works with names a held field. An index naming a punched field, or one out of range, aborts the
 /// walk `walk_name` names.
-// PROOF: P1, P2, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn held_field_type(
     held_fields: &[(usize, Arc<TypeNode>)],
     idx: usize,
@@ -790,7 +791,7 @@ fn rc_units_go(
 /// Truncate a leaf path to its reference-counting unit: the path down to the first unit `unit_step`
 /// reaches, whose whole subtree is that one unit. A path that stays within unboxed structs is
 /// unchanged.
-// PROOF: P1, P2, P3, P4, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn truncate_to_unit(
     ty: &Arc<TypeNode>,
     path: &[usize],
@@ -855,7 +856,7 @@ impl References {
     }
 
     /// Whether these act on the object.
-    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn names(&self, object: &VarPath) -> bool {
         self.0.contains_key(object)
     }

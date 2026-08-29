@@ -981,7 +981,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
 /// Inline-LLVM body of `Std::fix`, which computes `fix(f, x)`. It rebuilds the closure `fix(f)` from
 /// the function being generated and that function's own capture, passes it to `f` as the recursive
 /// `self`, and applies the result to `x`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFixBody {
     /// The variable holding the argument the recursion is applied to.
@@ -6922,6 +6922,7 @@ pub struct InlineLLVMWithRetainedFunctionBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
     /// This op applies an operand: `f` is applied to `x` while `x` is held retained.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -7314,6 +7315,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
 
     // This op returns the answer to the program: `Debug::assert_unique` turns it into a halt and
     // `Destructor::mutate_unique_io` into a copy of the resource.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn observes_uniqueness(&self) -> bool {
         !self.assume_unique
     }
@@ -7940,6 +7942,7 @@ pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -8257,6 +8260,7 @@ pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -8440,6 +8444,7 @@ pub struct InlineLLVMArrayBorrowElementsBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayBorrowElementsBody {
     /// This op applies an operand: the borrower is applied to the pointer to the elements.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -8539,6 +8544,7 @@ pub struct InlineLLVMArrayMutateElementsInternalBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -8686,6 +8692,7 @@ pub struct InlineLLVMArrayMutateElementsIosInternalBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -8961,6 +8968,7 @@ impl LLVMGen for InlineLLVMDestructorMake {
 }
 
 // Std::FFI::Destructor::_make : a -> (a -> IOState -> (IOState, a)) -> IOState -> (IOState, Destructor a);
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
 
@@ -9048,7 +9056,7 @@ pub fn run_ios_runner<'b, 'm, 'c>(
 
 /// Inline-LLVM body of `Std::mark_threaded`, which puts the reference counters of all values
 /// reachable from the given value into multi-threaded mode and hands the value back.
-// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMarkThreadedFunctionBody {
     /// The name the value to be marked is bound to in the scope of this body.
