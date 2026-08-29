@@ -131,7 +131,6 @@ impl<'a> RcInserter<'a> {
         grow_stack(|| self.insert_into_expr_inner(node, live_after))
     }
 
-    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_expr_inner(
         &self,
         node: RcExprNode,
@@ -196,6 +195,7 @@ impl<'a> RcInserter<'a> {
     }
 
     /// A `let x = rhs; cont` whose `rhs` is not a `Match` (the `Match` case is `insert_into_match`).
+    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_operation_let(
         &self,
         x: RcVar,
@@ -426,6 +426,7 @@ impl<'a> RcInserter<'a> {
     /// Wrap `node` in a `Retain` of `var` iff `var` is a local that needs reference counting and is
     /// live in `live` — the owned-operand rule for a variable a consuming construct (a `Ret`, a
     /// `Destructure`, or a `Match` scrutinee) uses, when it is still live afterward.
+    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn retain_if_live(&self, var: &RcVar, live: &Set<FullName>, node: RcExprNode) -> RcExprNode {
         if var.name.is_local() && live.contains(&var.name) && self.needs_rc(var) {
             build_retains(vec![var.clone()], node)

@@ -95,7 +95,7 @@ impl VarTable {
     }
 
     /// The vars of a param-less body (a global initializer).
-    // PROOF: P1, P2, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn body_only(body: &RcExprNode) -> VarTable {
         let mut vars = VarTable::empty();
         collect_bindings(body, &mut vars);
@@ -215,7 +215,7 @@ impl Origin {
     /// release of that value disposes it — so a candidate set that left the name out would let the
     /// release pass over the retain and the two would pair with the wrong partners. Building one
     /// candidate set out of several origins therefore folds in `acted_on`, not `candidates`.
-    // PROOF: P1, P2, P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn candidates(&self) -> Vec<&VarPath> {
         match self {
             Origin::Exactly(p) => vec![p],
@@ -702,7 +702,7 @@ pub(crate) enum UnitStep {
 /// # Examples
 /// `unit_step` of `Array I64` is `Unit`, of `I64` is `NoUnit`, and of `(Array I64, I64)` is `Fields`
 /// whose two fields are both held.
-// PROOF: P1, P2, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
     if ty.is_fully_unboxed(type_env) {
         return UnitStep::NoUnit;
@@ -762,7 +762,7 @@ pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath>
 
 /// Descend a type, pushing onto `out` the path of each unit reached. `path` is the field path from
 /// the whole value down to `ty`, which each pushed unit is named relative to.
-// PROOF: P1, P2, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -855,7 +855,7 @@ impl References {
     }
 
     /// Whether these act on the object.
-    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn names(&self, object: &VarPath) -> bool {
         self.0.contains_key(object)
     }
@@ -876,7 +876,7 @@ impl References {
     }
 
     /// Drop `other`'s references from these, where `covers` holds of the two.
-    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn subtract(&mut self, other: &References) {
         for (object, count) in &other.0 {
             let held_count = self

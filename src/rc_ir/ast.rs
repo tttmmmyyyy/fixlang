@@ -343,7 +343,7 @@ pub struct RcGlobalInit {
 
 /// Visit every node of `node`: the continuation chain it heads, and the body of every arm of every
 /// `Match` along it.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn for_each_node(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
     // A deep continuation chain recurses to its full depth here; grow the stack on demand.
     grow_stack(|| for_each_node_inner(node, visit))

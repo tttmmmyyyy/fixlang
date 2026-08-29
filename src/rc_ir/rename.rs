@@ -14,7 +14,7 @@ use std::sync::Arc;
 /// rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
 /// callers use to remap side tables and to route recursive references. `pass_tag` distinguishes this
 /// cloning pass's fresh names from the others'.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn fresh_rename_function(
     params: &[RcVar],
     cap: &Option<RcVar>,
@@ -39,7 +39,7 @@ pub(crate) fn fresh_rename_function(
 }
 
 /// Assign `name` a fresh globally-unique name, suffixed with `pass_tag` and a counter.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_name(
     name: &FullName,
     pass_tag: &str,
@@ -119,7 +119,7 @@ fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
 
 /// A deep clone of an expression with every variable occurrence rewritten through `renaming`. The
 /// operand names embedded in an `Llvm` generator are rewritten too, since they name the same locals.
-// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_expr(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     grow_stack(|| rename_expr_inner(node, renaming))
 }
