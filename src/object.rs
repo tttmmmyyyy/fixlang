@@ -1081,6 +1081,7 @@ impl ObjectFieldType {
     /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
     /// the struct: each returned field owns its reference and so outlives the struct it came from,
     /// and the fields left behind are dropped.
+    // PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
@@ -1989,6 +1990,7 @@ fn build_alloc_array_storage<'c, 'm>(
 }
 
 /// Free the allocation a boxed object of type `ty` lives in.
+// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_free_boxed<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ptr: PointerValue<'c>,

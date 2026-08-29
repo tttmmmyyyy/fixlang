@@ -32,6 +32,7 @@ use std::sync::Arc;
 /// compilation unit may not define, since separated compilation splits the program across units — and
 /// code generation materializes it, so it is always in scope. Local names are globally-unique fresh
 /// names, so admitting the symbol names never masks a dangling local.
+// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeEnv, stage: &str) {
     // The globally-referenceable names: every program symbol, plus this program's own functions and
     // globals — which include the clones borrow-ification and specialization mint (not program
@@ -307,7 +308,7 @@ impl<'a> Validator<'a> {
     /// Check a right-hand side: the variables it uses, and the invariants its own form carries — a
     /// closure's target function and stored capture layout, an `Llvm` operation's operand names, and
     /// a match's arms.
-    // PROOF: P1, P2, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_rhs(&mut self, rhs: &RcRhs) {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),

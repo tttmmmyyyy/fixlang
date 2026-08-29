@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 /// A variable of the RC IR. Because a fresh name is minted at every binding, a name resolves its
 /// binding uniquely, without scope tracking.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcVar {
     /// The name this variable is bound under, unique across the program.
@@ -61,6 +61,7 @@ pub struct RcProgram {
 
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and
 /// uncurried funptr versions.
+// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcFunc {
     /// The name this function is defined and called under, unique across the program: lowering mints
@@ -107,11 +108,12 @@ pub struct RcFunc {
 
 /// A variable together with a path into its value. Where the path is truncated to a reference-
 /// counting unit, the pair names one unit of that variable — the form the ownership tables hold.
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type VarPath = (FullName, FieldPath);
 
 /// An RC IR expression together with its source span. An expression's value type is that of the
 /// variable its final `Ret` returns, so it is read from that variable.
+// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcExprNode {
     /// The expression this node stands for. It is shared through an `Arc`, so cloning a node is
@@ -163,7 +165,7 @@ pub enum RcExpr {
 /// the whole value. A `Retain`/`Release` path stops at the root of an unboxed-union subtree (a
 /// physical refcount operation must be tag-safe), whereas an analysis path may descend past a known
 /// tag.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type FieldPath = Vec<usize>;
 
 /// The boxed leaf whose runtime uniqueness an inline-LLVM op branches on: which operand carries the
@@ -196,7 +198,7 @@ pub enum RcTarget {
 /// catch-all arm, whose payload is the whole scrutinee.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct MatchArm {
     /// The variant number this arm matches, or `None` for a catch-all arm.
@@ -289,6 +291,7 @@ impl RcState {
 }
 
 /// The ownership of a single reference-counting unit.
+// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Ownership {
     /// The callee receives ownership: it consumes the unit, by releasing it or by moving it into
@@ -347,6 +350,7 @@ pub(crate) fn for_each_node(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNod
 }
 
 /// Call `visit` on one node, then descend into its continuation and the body of each of its arms.
+// PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn for_each_node_inner(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
     visit(node);
     match node.expr.as_ref() {

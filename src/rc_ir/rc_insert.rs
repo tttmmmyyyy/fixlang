@@ -131,6 +131,7 @@ impl<'a> RcInserter<'a> {
         grow_stack(|| self.insert_into_expr_inner(node, live_after))
     }
 
+    // PROOF: P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_expr_inner(
         &self,
         node: RcExprNode,

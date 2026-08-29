@@ -4331,6 +4331,7 @@ impl LLVMGen for InlineLLVMStructGetBody {
         vec![&mut self.var_name]
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
         // A field getter takes exactly the container, so `arg_tys[0]` is it.
         i == 0
@@ -4436,7 +4437,7 @@ pub struct InlineLLVMMakeStructBody {
     pub field_names: Vec<FullName>,
 }
 
-// PROOF: P3, P4, P5, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMakeStructBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -4464,6 +4465,7 @@ impl LLVMGen for InlineLLVMMakeStructBody {
         self.field_names.iter_mut().collect()
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -5068,7 +5070,7 @@ const PLUG_IN_FIELD_ARG: usize = 1;
 /// with what is known about it intact. The struct operand's leaf at the replaced field reaches no
 /// result path and so stays consumed, which is what `set` does with it: it releases the value it
 /// replaces. A punched struct holds nothing at that field, so a `plug_in` operand has no leaf there.
-// PROOF: P3, P4, P5 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 fn replaced_field_prov(
     result_ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -6108,7 +6110,7 @@ pub fn struct_set(
 
 /// Constructs a union value holding a given variant: the tag names the variant, and the payload
 /// buffer takes the operand.
-// PROOF: P1, P2, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeUnionBody {
     /// The local binding holding the payload the constructed variant carries.
@@ -6131,7 +6133,7 @@ impl InlineLLVMMakeUnionBody {
     }
 }
 
-// PROOF: P3, P4, P5, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMakeUnionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -6167,7 +6169,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         vec![&mut self.field_name]
     }
 
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -6358,11 +6360,13 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         vec![&mut self.union_arg_name]
     }
 
+    // PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
         // `as` takes exactly the union, so `arg_tys[0]` is it; its variant `field_idx` is the payload.
         i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
     }
 
+    // PROOF: P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -6709,6 +6713,7 @@ pub struct InlineLLVMUndefinedInternalBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUndefinedInternalBody {
+    // PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         if gc.config.runtime_check() {
             // Runtime check is enabled.
@@ -6994,8 +6999,10 @@ fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> E
     })
 }
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
 
@@ -7110,6 +7117,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         Box::new(c)
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -7147,6 +7155,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
 // `Array::_unsafe_is_storage_unique`, which reads the storage refcount. The generated field `act`
 // on an unbox struct emits its unique branch directly instead of this op, so it does not need the
 // bound (see `struct_act`).
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
@@ -8918,6 +8927,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Run either an IO or an IOState runner based on the type of the given value.
+// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
         run_io(gc, io)
@@ -8940,6 +8950,7 @@ pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object
 
 /// Given a value of type `IOState -> (IOState, a)`, runs it on `ios`, or on a fresh `IOState` when
 /// `ios` is `None`, and returns the resulting `IOState` and `a`.
+// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_ios_runner<'b, 'm, 'c>(
     gc: &mut Generator<'c, 'm>,
     runner: &Object<'c>,
@@ -8960,6 +8971,7 @@ pub fn run_ios_runner<'b, 'm, 'c>(
 
 /// Inline-LLVM body of `Std::mark_threaded`, which puts the reference counters of all values
 /// reachable from the given value into multi-threaded mode and hands the value back.
+// PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMarkThreadedFunctionBody {
     /// The name the value to be marked is bound to in the scope of this body.

@@ -14,7 +14,7 @@ use std::sync::Arc;
 /// rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
 /// callers use to remap side tables and to route recursive references. `pass_tag` distinguishes this
 /// cloning pass's fresh names from the others'.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn fresh_rename_function(
     params: &[RcVar],
     cap: &Option<RcVar>,
@@ -119,12 +119,13 @@ fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
 
 /// A deep clone of an expression with every variable occurrence rewritten through `renaming`. The
 /// operand names embedded in an `Llvm` generator are rewritten too, since they name the same locals.
+// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_expr(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     grow_stack(|| rename_expr_inner(node, renaming))
 }
 
 /// Rebuild one node with its variable occurrences rewritten, over its rewritten continuation.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     let expr = match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => RcExpr::Let(
@@ -164,6 +165,7 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
 
 /// A right-hand side with every variable occurrence (including `Llvm` operand names) rewritten
 /// through `renaming`.
+// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
     match rhs {
         RcRhs::Var(v) => RcRhs::Var(rename_var(v, renaming)),
