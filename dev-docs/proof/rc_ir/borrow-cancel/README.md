@@ -82,6 +82,11 @@ build_object_files` -- `optimize_rc_program` の呼び出しが `divide_among_un
 
 `Ret` を除く 5 種はちょうど 1 つの継続を持ち、`Ret` は継続を持たない。`Ret` は唯一の終端子である。
 
+**束縛の及ぶ範囲 (スコープ)** も節点が決める。`Let(x, rhs, k)` が束縛する `x` のスコープは `k` の部分木、
+`Destructure(c, fs, s, k)` が束縛する各 `x` のスコープは `k` の部分木、`Match` のアームの `payload` の
+スコープはそのアームの `body` の部分木である。パラメータと capture のスコープは本体の全体である。
+変数の使用がどの束縛に解決するかは A11 が定める。
+
 `Let` の右辺 `rhs` は次の 5 種である (`CODE src/rc_ir/ast.rs: RcRhs`)。`Var(y)`、`App(callee, args)`、
 `Closure(f, caps)`、`Llvm(gen, args)`、`Match(scrut, arms)`。`Match` の各アーム `MatchArm` は 4 個の
 フィールドを持つ (`CODE src/rc_ir/ast.rs: MatchArm`)。`tag` (変位番号、catch-all のときは無し)、`payload`
@@ -685,7 +690,8 @@ InlineLLVMUndefinedInternalBody::generate`)。`FFI_CALL` が呼ぶ C の関数�
 処分されていない各参照は、ちょうど 1 つの**持ち手**を持つ。持ち手は次の 3 つのいずれかである。
 
 - **生きている活性化** `a`。`Obl(a)` の元がそれである。
-- **生きているオブジェクト** `o'`。A5 より、`o'` が保持する値の inhabited な各 boxed leaf が 1 つずつ持つ。
+- **生きているオブジェクト** `o'`。A5 より、`o'` が保持する値の boxed leaf のうち、inhabited であって計数下の
+  オブジェクト (D26) を指すものが 1 つずつ持つ。
   ただしその leaf が null ポインタのときは、そこにオブジェクトも参照も無い
   (`CODE src/generator.rs: Generator::build_traverser_work` -- boxed の腕は `build_if_nonnull` で包む
   ので、null の leaf には何の操作も届かない)。
@@ -826,8 +832,15 @@ path から `origin_from_leaves_under` の `truncate_to_unit` を通る枝に入
 余地が残る。
 
 **A5 (型が leaf の上位近似)** -- 果たす者: `leaf_map.rs` の設計。
-値が保持する参照は、その型の `boxed_leaf_paths` が列挙する leaf のうち inhabited (D16) なものにちょうど
-1 つずつある。inhabited でない leaf は参照を持たない。
+値が保持する参照は、その型の `boxed_leaf_paths` が列挙する leaf のうち、inhabited (D16) であって計数下の
+オブジェクト (D26) を指すものにちょうど 1 つずつある。inhabited でない leaf は参照を持たず、グローバル状態
+のオブジェクトを指す leaf も参照を持たない (D26)。
+
+**この計数下への限定は、A5 と D26 が両立するために要る。** グローバル状態のオブジェクトを指す leaf は D8 の
+意味の参照を持たない (D26) ので、限定を外すと 2 つが正面から食い違う。したがって A5 を「同じ参照を持つ
+2 つの leaf は同じオブジェクトを指す」の形で使う議論は、両端が計数下であるときにだけ通る。両端がグローバル
+状態のときに 2 つの leaf が同じオブジェクトを指すことは、参照ではなく**値**の運び (D9 の値の水準の行) が
+与える。
 
 例外が 1 つある。capture が空のクロージャの capture の leaf は null ポインタであり、そこにオブジェクトも
 参照も無い (`CODE src/rc_ir/codegen.rs: Generator::build_rc_closure`, `CODE src/generator.rs:
@@ -1035,6 +1048,11 @@ resolve_callee_params`)。
 `is_fully_unboxed` はその降下の上の再帰であり、途中の各型で `toplevel_tycon_info` を呼ぶので、
 到達する型の側にも同じことが要る。これが無いと `boxed_leaf_paths` も `rc_units` も停止しない。
 
+**`unpunched_field_types` を繰り返し取って到達する型についても同じことが成り立つ。** `no_size_in_place` の
+降下は unbox のフィールドだけを辿るのに対し、`unit_step` の `Fields` の腕と `subtree_type` /
+`truncate_to_unit` はフィールドの型を boxed であっても取るので、こちらの方が広い。P1 の定義域はこの広い方
+であり、型の歩みを扱う命題が P1 を部分木の型に当てるのはこの節による。
+
 **A11 (スコープの規律)** -- 果たす者: lowering。検査: `validate` の `check_expr_inner` と `check_rhs`
 (`CODE src/rc_ir/validate.rs: Validator::check_expr_inner`, `Validator::check_rhs`)、ただし
 `develop_mode` のときだけ走る。
@@ -1127,6 +1145,18 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
 
 ### 層 2 -- `borrow_ify` が RC 規律を保存すること
 
+- **P9** (複製は名前替えである)。`clone_func` が作る借用版の本体は、元の本体の束縛変数を一斉に付け替えた
+  ものであり、それ以外の違いを持たない。さらに、複製が導入する名前は、入力プログラムのどの束縛名とも異なる。
+
+  **層 2 の先頭に置くのは、`owns_object` と `owns_unit` の命題 (P7e, P7d, P7a) がこれを引くからである。**
+  それらは出力の版を 1 つ固定して読む命題であり、固定した版が借用版のときは、A2 と A6 が語る入力の本体では
+  なく複製された本体の節点を見る。P9 がその 2 つを繋ぐ。P9 自身の証明は `clone_func` と
+  `fresh_rename_function` のコード、A6、A11、A13 だけに立つので、この順で循環は生じない。
+
+  後半が要るのは、A6 (名前の一意性) の果たす者が `fresh_rename_function` であり、それを呼ぶのが証明対象の
+  `borrow_ify` 自身だからである。A6 は `borrow_ify` の入力にかかる仮定であり、その出力について名前が一意で
+  あることは、ここで示すべき事柄である。オブジェクトの名前 (`VarPath`) は束縛名を含むので、複製と原本の
+  名前が衝突すれば別のオブジェクトが 1 つの名前を共有し、`cancel` は誤った対を消す。
 - **P7e** (`owns_object` は unit ごとに答える)。任意の root `r` と path `p` について次が成り立つ。
 
   - **(a)** `r` がこの版のパラメータ・capture であるとき、
@@ -1234,13 +1264,6 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   **消費のうち `App` の引数の位置は除く。** そこは `rhs_consumes` が leaf の粒度で `owned_leaves` を引く
   のに D14 の所有は unit の粒度なので、leaf を 2 つ以上持つ unit -- unbox union -- で 2 つが食い違う。
   P14 も `p13-disposals-and-pending.md` の `L16` も、この位置を P8 では扱わず、`call_rc` が置く節点で扱う。
-- **P9** (複製は名前替えである)。`clone_func` が作る借用版の本体は、元の本体の束縛変数を一斉に付け替えた
-  ものであり、それ以外の違いを持たない。さらに、複製が導入する名前は、入力プログラムのどの束縛名とも異なる。
-
-  後半が要るのは、A6 (名前の一意性) の果たす者が `fresh_rename_function` であり、それを呼ぶのが証明対象の
-  `borrow_ify` 自身だからである。A6 は `borrow_ify` の入力にかかる仮定であり、その出力について名前が一意で
-  あることは、ここで示すべき事柄である。オブジェクトの名前 (`VarPath`) は束縛名を含むので、複製と原本の
-  名前が衝突すれば別のオブジェクトが 1 つの名前を共有し、`cancel` は誤った対を消す。
 - **P10** (借用版が落とす RC 節点)。借用版の `rewrite_rc` は、`Retain(v, π)` / `Release(v, π)` を、
   `units_under(ty(v), π)` のうち `owns_unit(v, ・)` が真である unit の節点の列に置き換える。所有しない unit の
   節点は残らない。
