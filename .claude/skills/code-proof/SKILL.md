@@ -53,6 +53,14 @@ A `BY` line lists **everything** the step rests on, in these four groups (omit a
 
 The rule behind the format: **a reader who is handed only the cited items must reach the step's conclusion**. Anything they would additionally need is missing from the `BY`.
 
+**An assertion in the code is not a fact a step may cite.** `assert!`, `assert_eq!`, `expect`, an `unwrap` whose message names a condition, a `panic!` in an arm the author called unreachable — each records what someone believed, and none of them makes it so. A step that reads one as having established its condition has assumed the very thing the proof exists to establish, in the place the code is least examined.
+
+What an assertion is worth is a hint: it names an invariant someone meant to hold, which is where to look for the argument. So a `CODE` citation may quote one to say *what* is claimed, and the step still owes a reason the claim holds — the type system, a check that rejects the input with a diagnostic, or an earlier proposition.
+
+Getting this wrong costs more than an incomplete proof. An assumption whose only support is an assertion means a program that violates it aborts the compiler while compiling the user's code: better than a miscompile, still a defect, and it belongs in the report as one rather than passing as a discharged assumption. An assertion behind a development-mode flag is weaker again — it does not run in the compiler a user has, so a violation is not caught at all and the program is miscompiled after all.
+
+**The prover watches for this and the verifier checks it.** A step whose conclusion needs an assertion's condition is a finding: `NOT-OBVIOUS` where the reason is merely absent, `BAD-CITATION` where the assertion is offered as the reason.
+
 ### `ASSUME` / `PROVE`
 
 A proposition about "any input satisfying …" is stated as an assume/prove, which is also the natural shape of a function's contract:
@@ -280,7 +288,7 @@ The verdicts:
 - **`FALSE`** — does not follow, or is false. Give the counterexample or name the broken inference.
 - **`NOT-OBVIOUS`** — may well be true, but reaching it from the cited items required you to supply something. Say exactly what you had to supply.
 - **`UNDEFINED`** — the step leans on a word or symbol that is not in the definitions, not an identifier of the cited code, and not introduced by an earlier step in scope. Name the word.
-- **`BAD-CITATION`** — a cited item does not exist, is out of scope by the numbering rule, or does not say what the step claims. For a `CODE` citation, open the file and compare; report the mismatch in the code's own words.
+- **`BAD-CITATION`** — a cited item does not exist, is out of scope by the numbering rule, or does not say what the step claims. For a `CODE` citation, open the file and compare; report the mismatch in the code's own words. **An assertion offered as the reason its own condition holds is this verdict** — see *`BY` — the citation*.
 - **`HEDGE`** — the step's argument rests on a word from *Words that are not allowed*. Quote it.
 - **`INCOMPLETE`** — a `CASE` split whose cases are not exhaustive (name the missing case, by the arm of the type or the condition it corresponds to), a `QED` that does not cite everything its conclusion needs, a step with neither a `BY` nor a subproof, or a calculational chain whose relations do not compose.
 
