@@ -2032,6 +2032,7 @@ impl Program {
     /// needs endlessly many layouts. `no_size_reason` decides the first and bounds the second. Code
     /// generation would meet either as a descent through the fields that never ends, so this runs
     /// once the program's types are instantiated and before any of them is laid out.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate_layouts(&self) -> Result<(), Errors> {
         let type_env = self.type_env();
 

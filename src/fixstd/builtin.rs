@@ -58,6 +58,7 @@ use std::sync::Arc;
 // The type constructors the compiler provides itself — the primitive types, the function arrow,
 // `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
 // a user-defined type would get from its declaration.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
@@ -404,6 +405,7 @@ pub fn is_destructor_object_tycon(tc: &TyCon) -> bool {
 }
 
 // Returns whether given tycon is array
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_array_tycon(tc: &TyCon) -> bool {
     *tc == make_array_tycon()
 }
@@ -4293,11 +4295,13 @@ impl InlineLLVMStructGetBody {
     /// A field that does hold one is read by taking ownership of the container instead: as a borrow
     /// the result would alias the container's leaf, and reference-count insertion releases a
     /// *variable* at its last use without following aliases, so that leaf would be released twice.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_container(field_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
         field_ty.is_fully_unboxed(type_env)
     }
 }
 
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructGetBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -4427,11 +4431,13 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
 // Allocate a struct/tuple and fill it with the operand values, in field-declaration order. The
 // struct type is the value type of the enclosing expression. This is the RC IR counterpart of the
 // `Expr::MakeStruct` AST node, reading its operands as pre-evaluated atoms.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeStructBody {
     pub field_names: Vec<FullName>,
 }
 
+// PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMakeStructBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -5063,6 +5069,7 @@ const PLUG_IN_FIELD_ARG: usize = 1;
 /// with what is known about it intact. The struct operand's leaf at the replaced field reaches no
 /// result path and so stays consumed, which is what `set` does with it: it releases the value it
 /// replaces. A punched struct holds nothing at that field, so a `plug_in` operand has no leaf there.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 fn replaced_field_prov(
     result_ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -6102,6 +6109,7 @@ pub fn struct_set(
 
 /// Constructs a union value holding a given variant: the tag names the variant, and the payload
 /// buffer takes the operand.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeUnionBody {
     /// The local binding holding the payload the constructed variant carries.
@@ -6124,6 +6132,7 @@ impl InlineLLVMMakeUnionBody {
     }
 }
 
+// PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMakeUnionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -6159,6 +6168,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         vec![&mut self.field_name]
     }
 
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,

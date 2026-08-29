@@ -44,6 +44,7 @@ use crate::rc_ir::leaf_map::{LeafKey, LeafMap};
 use std::sync::Arc;
 
 /// The origin of one boxed leaf.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum LeafOrigin {
     /// A newly produced value: an allocation, or a force-unique op's result. Resolves to `Unique`.
@@ -67,6 +68,7 @@ pub fn sole_origin(src: LeafOrigin) -> LeafOrigins {
 }
 
 /// The provenance of a whole value: the source of each of its boxed leaves.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Provenance(LeafMap<LeafOrigins>);
 
@@ -78,6 +80,7 @@ impl Provenance {
 
     /// The source of each boxed leaf of a value of type `ty`, keyed by its path. `leaf` is called once
     /// per boxed leaf with that path, so it can describe the leaf (e.g. record `Arg(i, path)`).
+    // PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_shape(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -87,6 +90,7 @@ impl Provenance {
     }
 
     /// The provenance whose every boxed leaf is `src`.
+    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: LeafOrigin) -> Provenance {
         Provenance(LeafMap::uniform(ty, type_env, sole_origin(src)))
     }
@@ -113,6 +117,7 @@ impl Provenance {
 
     /// Pointwise join (branch merge): the leaf origins are unioned per path. Both operands have the
     /// same type, hence the same boxed-leaf paths.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn join(&self, other: &Provenance) -> Provenance {
         Provenance(
             self.0
@@ -125,11 +130,13 @@ impl Provenance {
     /// query at the root answers whether the whole value is a single boxed leaf. A recorded `⊥` is the
     /// empty set, which is a different answer: it is the bottom of the lattice and resolves to
     /// `Unique`.
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn leaf_origins_at(&self, path: &[usize]) -> Option<&LeafOrigins> {
         self.0.get(path)
     }
 
     /// The source of every boxed leaf, in no particular order (the paths are not reported).
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn leaves(&self) -> impl Iterator<Item = &LeafOrigins> {
         self.0.leaves()
     }
@@ -137,6 +144,7 @@ impl Provenance {
     /// The source of every boxed leaf under `path`, in no particular order. A path that is itself a
     /// leaf yields that leaf; one that names an aggregate — the root of an unboxed union, say —
     /// yields the leaves beneath it.
+    // PROOF: P1, P2, P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn leaf_origins_under<'a>(
         &'a self,
         path: &'a [usize],
