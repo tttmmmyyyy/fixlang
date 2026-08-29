@@ -482,6 +482,20 @@ inhabited でない leaf と同じに扱う。
 `CancelAnalysis::walk`、`RewriteCtx::rewrite`、`drop_nodes`、`rename_expr` はいずれも本体を `grow_stack` で
 包むので、これが無いと「各位置をちょうど 1 回訪れる」がどれも言えない。
 
+**A16 (`Match` のアームは scrutinee のタグを尽くす)** -- 果たす者: lowering
+(`CODE src/rc_ir/lower.rs: Lowerer::lower_match`, `Lowerer::lower_if`) と、アームの列を保つ後段のパス。
+検査: 無し。
+すべての `Match(s, arms)` について、`arms` が catch-all アーム (`tag` が `None`) を持つか、`s` の値が
+取りうる実行時のタグがいずれかのアームの `tag` である。
+
+D21 は「タグが等しいアームが無ければコード生成の振る舞いに従う」と書いており、コード生成は最後のアームの
+ブロックを switch の default とする (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_match`)。最後の
+アームが変位アームで、どのアームも名指さない変位が在ると、実行はその変位の値をもって `tag = Some(t)` の
+アームに入る。そのとき D9 の移動の表の「unbox union の変位アームの payload 束縛」の行が名指す**活性**変位と、
+`origin_inner` の `Binding::Payload(scrut, Some(t))` の腕が辿る静的な変位番号 `t` が食い違い、P5 (a) と
+P6 が偽になる。`validate` が見るのは、アームが 1 つ以上あること、catch-all アームが最後にあること、
+2 つのアームが同じ変位を担わないことだけである (`CODE src/rc_ir/validate.rs: Validator::check_rhs`)。
+
 **A17 (環境の契約)** -- 果たす者: 環境のコード (`build_main_function`、`ExportStatement::implement`、
 `implement_rc_global`)。検査: 無し。
 環境とは、RC IR プログラムの外側にあってその本体を起動するコードである。環境について次の 3 つを仮定する。
@@ -894,9 +908,9 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 |---|---|---|---|---|
 | P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み。`<1>35`/`<1>36` (`unit_key` についての観察) は対象を失った | 未着手 |
 | P3, P4 | `p11-origin-soundness.md` | 有 | 証明済み | 未着手 |
-| P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
-| P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
-| P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
+| P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み (A16 の下で) | 検証済み (指摘 26 件を反映) |
+| P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 検証済み |
+| P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み (P6 は A16 の下で) | 検証済み |
 | P7e | `p15-ownership-uniformity.md` | 有 | 証明済み | 未着手 |
 | P7a | `p15-ownership-uniformity.md` | 有 | **未着手** (言明は 2 度書き直した) | 未着手 |
 | P7c, P7f | `p13-disposals-and-pending.md` | 有 | 証明済み (P7c の言明は 1 度書き直した) | 未着手 |
@@ -904,8 +918,9 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P8 | `p20-borrow-ify.md` | 有 | 証明済み。`infer_ownership` に `level_ownership` の周回が加わったので、停止性の段を書き直す必要がある | 未着手 |
 | P9 - P13 | `p20-borrow-ify.md` | 有 | 証明済み。P10/P11 は `owns_object_yet` の追加を読み直す必要がある | 未着手 |
 | P14 | `p20-borrow-ify.md` | 有 | **未着手** (原因だった #530 の残穴は直った) | 未着手 |
-| P15 - P18 | `p30-cancel-walk.md` | 有 | 証明済み | 未着手 |
-| P18a, P18b | `p13-disposals-and-pending.md` | 有 | **未着手** (新しい言明。層 4 の実質) | 未着手 |
+| P15 - P18 | `p30-cancel-walk.md` | 有 | 証明済み | 検証済み (指摘 9 件を反映) |
+| P18b | `p13-disposals-and-pending.md` | 有 | 証明済み | 未着手 |
+| P18a | `p13-disposals-and-pending.md` | 有 | **閉じない** -- 反例 `C1`。コードを直した (第 8 節) | 未着手 |
 | P19 - P24 | `p40-cancel-soundness.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
 | P26 | `p50-observation.md` | 有 | **偽** -- コードが誤り (#551、未修正)。反例は実行で確認済み | 未着手 |
 | P27 | `p51-runs.md` | 有 | 証明済み (言明を 1 度書き直した。実行のモデル D22-D28 は同ファイル) | 未着手 |
