@@ -429,7 +429,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Build a closure value `{funptr, capture-object pointer}` for `Closure(func, captures)`.
-    // PROOF: P27 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_rc_closure(
         &mut self,
         func: &FuncRef,

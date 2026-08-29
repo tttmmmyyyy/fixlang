@@ -428,7 +428,7 @@ pub fn param_ownership_shapes(
 
 /// The name of a function's borrow version: its name with a `#borrow` suffix. No lowered name ends in
 /// `#borrow`, so this stays globally unique.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn borrow_funcref(name: &FuncRef) -> FuncRef {
     let mut borrow_name = name.name.clone();
     borrow_name.name.push_str("#borrow");
@@ -1049,7 +1049,7 @@ fn rc_node(
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn prepend_rc(units: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
     units.into_iter().rev().fold(k, |cont, (var, path)| {
         rc_node(is_release, var, path, RcState::Unknown, cont, &None)
