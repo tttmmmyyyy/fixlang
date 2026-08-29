@@ -216,13 +216,27 @@ Run it twice, and only twice. Running it continuously produces churn against a f
 
    **Show the skeleton to the user before dispatching provers.** A wrong definition wastes every prover that runs under it, and the decomposition is where a proof is won or lost.
 3. **Run the critic on the skeleton, and wait.** One subagent, briefed as *Briefing a critic* says. Act on what it returns before dispatching anything: a property the critic can name a wrong program for is a property to widen now, not after the proofs are written against it.
-4. **Run the provers.** One subagent per proposition file, dispatched in dependency layers: a prover may cite an earlier proposition's *statement*, so a whole layer of independent propositions goes out in one parallel block. They write documents rather than code, so they share the working tree; file ownership is what keeps them apart. Brief each with the *Briefing a prover* section below.
+4. **Run the provers.** One subagent per proposition file, dispatched in dependency layers: a prover may cite an earlier proposition's *statement*, so a whole layer of independent propositions goes out in one parallel block. **Each one gets its own git worktree** — see *Give every agent its own worktree*. Brief each with the *Briefing a prover* section below.
 
    A prover on a real subsystem is a long-running, expensive agent, so send a large layer out in batches rather than all at once — an interruption then costs one batch instead of the layer. When one is interrupted, its file is on disk: commit what is there and **resume that agent** rather than launching a fresh one, since the reading it has already done is most of what it spent.
 5. **Run the verifiers.** One subagent per proposition, all in parallel, each given only what the *Briefing a verifier* section allows. Wait for all.
 6. **Iterate.** Hand each verifier's findings to that file's prover. `NOT-OBVIOUS` is answered by inserting substeps, never by rewording the step to sound more certain. `FALSE`, `UNDEFINED`, `BAD-CITATION` and `HEDGE` are answered as the section below prescribes. Then verify again — with **fresh** verifier subagents, which have not seen the previous round's findings, so the check is never anchored to what it already accepted.
 7. **Stop at the fixed point.** The document is finished when one full round over every proposition returns no finding of any kind. Record the round in the status table.
 8. **Report.** Run the critic a second time before this, on the closed document, and carry what it says about the result's limits into the report. What was proved; under which assumptions; which assumptions nobody discharges; how many rounds it took; and every code bug the attempt turned up, in `bug-hunt` shape. Then update the hunt log's neighbours in memory if the proof changed what is known about the subsystem.
+
+### Give every agent its own worktree
+
+Dispatch provers and verifiers with `isolation: "worktree"`. A worktree of a source tree is small — measure it, but it is the tracked files and not the build directory, so a proof agent that never compiles costs almost nothing.
+
+**File ownership does not keep agents apart in a shared tree.** Each brief already says which one file the agent owns, and that is not what breaks. What breaks is a git command that writes the whole working tree: `git stash` to set work aside, `git checkout -- <path>` to undo a probe, `git reset --hard` to drop a commit. Each of those silently discards every other agent's uncommitted work, and the agent that ran it had no idea anyone else was there. Forbidding them by name does not hold either — the list has a next member, and the orchestrator is as likely to run one as any subagent.
+
+So the brief carries both: the worktree, and the line that no agent runs a git command which writes the working tree. Reads — `git rev-parse HEAD`, `git log`, `git diff` of its own file — stay open.
+
+**Name the commit in the brief.** A worktree is created from the repository's default branch, which during a proof effort is far behind the frame. An agent that reads that README grades against definitions that were replaced hours ago. So the brief opens with the commit to sync to and the command to do it, and the agent reports which commit it actually read — that report is what lets the orchestrator tell a stale finding from a live one.
+
+**The agent commits its own file** on its own branch, naming the path (never `git add -A`), and reports the branch. The orchestrator merges. Since the agents own disjoint files and only the orchestrator writes `README.md`, the merges are clean.
+
+**Hold frame changes until the round returns.** Each agent's `README.md` is frozen where it started, so a definition the orchestrator edits mid-round reaches nobody and turns every report that touches it into a claim about a document that no longer exists. Collect the frame edits a round asks for, apply them between rounds, and dispatch the next round from the new commit. This is the structural half of the rule under *Briefing a prover* that a report quoting the document must re-read it first: the rule catches a stale claim, and the batching stops most of them from being written.
 
 ## Briefing a prover
 
@@ -277,6 +291,8 @@ The verdicts:
 - **`INCOMPLETE`** — a `CASE` split whose cases are not exhaustive (name the missing case, by the arm of the type or the condition it corresponds to), a `QED` that does not cite everything its conclusion needs, a step with neither a `BY` nor a subproof, or a calculational chain whose relations do not compose.
 
 A verifier that returns `OK` for everything on its first pass over a proof of any size has almost certainly been persuaded rather than convinced; the orchestrator treats that as a signal to re-run with a fresh verifier before believing it.
+
+A verifier edits nothing, so it makes no commit, but it still reports the commit its worktree ended up on. A finding of the form "the document claims the frame lacks X, and the frame has X" is only worth acting on when the verifier read the frame the orchestrator meant.
 
 ## When the proof will not close
 
