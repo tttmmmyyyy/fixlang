@@ -64,7 +64,9 @@ def citations_of(directory):
     readme = open(os.path.join(directory, "README.md"), encoding="utf-8").read()
     by_file = {}
     for row in STATUS_ROW.finditer(readme):
-        by_file[row.group(2)] = propositions_of(row.group(1))
+        # A file may hold several rows -- one per group of propositions whose state differs -- and
+        # every one of them names propositions the file proves.
+        by_file.setdefault(row.group(2), []).extend(propositions_of(row.group(1)))
     cited = {}
     for path in sorted(glob.glob(os.path.join(directory, "p*.md"))):
         props = by_file.get(os.path.basename(path))
