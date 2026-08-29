@@ -143,11 +143,23 @@ leaf と unit がずれるのは 2 か所である。**unbox union** は 1 つ�
 (`CODE src/rc_ir/ownership.rs: units_under`, `subtree_type`)。
 
 **D6 (スロット)**
-実行のある時点における**スロット**とは、対 `(x, λ)` である。ここで `x` はその時点で束縛されている変数、
-`λ` は `ty(x)` の inhabited な boxed leaf である。`ty(x)` は `x` に束縛された値の型を表す。スロットが指す
-オブジェクトを `obj(x, λ)` と書く。inhabited でない leaf にスロットは無い。
+実行のある時点における**スロット**とは、対 `(x, λ)` である。ここで `x` はその実行路の上でその時点までに
+値を得た変数、`λ` は `ty(x)` の inhabited な boxed leaf である。`ty(x)` は `x` に束縛された値の型を表す。
+スロットが指すオブジェクトを `obj(x, λ)` と書く。inhabited でない leaf にスロットは無い。
+
+`x` を「その時点で束縛されている変数」に限らないのは、`origin` の答えがスコープを出た変数を名指すから
+である。1 つのアームを持つ `Match` の本体 `Let(m, Match(s, [Let(a, App(f, []), Ret(a))]), k)` では
+`origin(m, [])` の identity は `(a, [])` であり、`a` は `k` の位置ではスコープに無い。D17 の対応するスロットも
+この広さを要求する。
 
 ### 3.3 所有、参照、義務
+
+**D20 (別名の辺と別名の道)**
+D9 の移動の表の 6 行を、スロットの間の**別名の辺**と呼ぶ。すなわち、`Let(x, Var(y), k)` の `y` から `x` へ、
+アーム本体の `Ret(x)` の `x` から `Match` の束縛変数へ、unbox 容器の `Destructure` の名前付きフィールドの
+容器からフィールド変数へ、unbox union の変位アームの scrutinee から payload 変数へ、catch-all アームの
+scrutinee から payload 変数へ、`Llvm` の素通し leaf のオペランドから結果へ。**別名の道**とは、この辺を
+向きを無視して辿る道である。
 
 **D17 (対応するスロット)**
 `origin` が `(x, π)` から `(u, σ)` へ辿った別名の辺の列を、`π` の下の leaf `λ` について辿ったときに着く leaf の
@@ -208,7 +220,7 @@ path の連結ではなく宣言の辿り着く先で定義するのは、構築
 
 | 構文 | 消費される leaf |
 |---|---|
-| `App(callee, args)` | callee の全 boxed leaf、および呼び出し先がその位置の unit を所有する (D14) 引数の leaf |
+| `App(callee, args)` | callee の全 boxed leaf、および呼び出し先がその位置の unit を所有する (D14) 引数の leaf。unit は**呼び出し先のパラメータの型**で取る (`CODE src/rc_ir/ownership.rs: rhs_consumes`) |
 | `Closure(f, caps)` | 各 capture の全 boxed leaf |
 | `Llvm(gen, args)` | `borrows_operand(i)` が偽のオペランドのうち、`result_prov` が**単一の** `Arg(i, σ)` として素通しを宣言していない leaf |
 | `Destructure(c, fs)` (`c` が boxed) | `c` の全 boxed leaf |
@@ -366,6 +378,12 @@ leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言�
 複数元を作るのは `Provenance::join` と `compose` であり、これらは解析の側であって宣言ではない。表がこの行を
 持つのは、`LLVMGen::result_prov` の型と doc がそれを許すからである。
 
+**P5 (a) はこの数え上げに載っている。** 元数 2 以上の宣言を持つ op が現れると、`origin` は boxed leaf の
+path から `origin_from_leaves_under` の `truncate_to_unit` を通る枝に入りうる。そのとき 1 つの unbox union の
+下の 2 つの leaf がどちらもその union の unit path へ切り詰められ、`identity` が 1 つに潰れる。潰れた
+2 つの leaf は別々のオブジェクトを指しうるので、P5 (a) が破れる。`Std::Option (a, b)` の payload が
+この形の値である。すなわち、複数元を宣言する op を足すことは、`cancel` の対の健全性を壊す変更である。
+
 この仮定は誰も果たさない。宣言と実装の乖離は、証明ではなくテストと valgrind が捕まえる。
 `dev-docs/2026-06-28-unique-check-elim/audit-2026-07-20-op-declarations.md` が、ある時点での全 op の宣言を
 人手で照合した記録である。
@@ -398,6 +416,11 @@ leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言�
 `App(callee, args)` の `args` の個数は、呼び出し先のパラメータの個数以下である。`call_rc` と `rhs_consumes` は
 `params[arg_idx]` を引くので、これが無いと範囲外になる。
 
+**A15 (`grow_stack` は閉包をちょうど 1 回呼ぶ)** -- 果たす者: `stacker` crate。
+`grow_stack(f)` は `f` をちょうど 1 回呼び、その返り値を返す (`CODE src/misc.rs: grow_stack`)。`origin`、
+`CancelAnalysis::walk`、`RewriteCtx::rewrite`、`drop_nodes`、`rename_expr` はいずれも本体を `grow_stack` で
+包むので、これが無いと「各位置をちょうど 1 回訪れる」がどれも言えない。
+
 **A7 (呼び出し先の解決)** -- 果たす者: `resolve_callee_params` の設計 (`CODE src/rc_ir/ownership.rs:
 resolve_callee_params`)。
 `prog.funcs` に無い呼び出し先は、全パラメータの全 unit を所有するものとして扱われる。これは所有を増やす向きの
@@ -425,10 +448,15 @@ resolve_callee_params`)。
 無限に潜る)。
 
 **A12 (束縛の形と型が合っている)** -- 果たす者: 誰も。
-move-bind の両辺の型、アームの結果と `Match` の束縛変数の型、payload と変位の型、`Destructure` の
-フィールド変数とフィールドの型、`Match` の scrutinee が union であること、`Destructure` の容器が構造体で
-あること、同じ名前の `RcVar` が持つ型が一致すること。**このコミットにこれを検査するコードは無い**
+move-bind の両辺の型、アームの結果と `Match` の束縛変数の型、payload と変位の型、**catch-all アームの
+payload と scrutinee の型**、`Destructure` のフィールド変数とフィールドの型、**`App(callee, args)` の各引数と
+呼び出し先の対応するパラメータの型**、`Match` の scrutinee が union であること、`Destructure` の容器が
+構造体であること、同じ名前の `RcVar` が持つ型が一致すること。**このコミットにこれを検査するコードは無い**
 (`validate` は構造だけを見る)。
+
+引数とパラメータの型の一致は、`rhs_consumes` が引数の leaf を呼び出し先のパラメータの型で
+`truncate_to_unit` に掛けるので、停止性にも要る -- 型に合わない path は panic する
+(`CODE src/rc_ir/ownership.rs: rhs_consumes`, `truncate_to_unit`)。
 
 ## 5. 命題
 
@@ -510,11 +538,28 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
   ことで作る (`CODE src/rc_ir/borrow.rs: level_ownership`, `owns_object_yet`)。
 
 - **P7c** (処分はすべて走査に届く)。実行時に参照を処分するか、処分の義務を活性化の外へ渡す構文 --
-  D9 の消費、`Release`、終端の `Ret` -- はすべて、`cancel` の走査で `consume_objects` または `un_bump` を
-  呼ぶ。その引数は、その構文が触れうるオブジェクト (D13 の `acted_on`) をすべて含む。
+  D9 の消費、`Release`、終端の `Ret` -- はすべて、`cancel` の走査で次のどちらかを行う。
+
+  - **(a)** 終端の `Ret` 以外では、`consume_objects` または `un_bump` を、その構文が触れうるオブジェクト
+    (D15 の `acted_on`) をすべて含む引数で呼ぶ。
+  - **(b)** 終端の `Ret` では、その時点の `pending` のすべての要素を `needed_retains` に入れる。
+
+  (b) を別に書くのは、`walk_inner` の `RcExpr::Ret` の腕がそのどちらの関数も呼ばず、`needed_retains` へ
+  直接入れるからである (`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`)。印を付ける範囲は
+  `consume_objects` より広く、要素を `pending` から取り除かない点だけが狭い。取り除かないことが後段に
+  響かないのは、終端の `Ret` の訪問が返す `pending` が走査全体の返り値であり、`cancel` がそれを捨てるから
+  である (`CODE src/rc_ir/borrow.rs: cancel`)。
 
   P5 (a) では足りない。P5 (a) は同じ identity を持つ 2 つのスロットについての主張だが、`cancel` が要るのは
   **1 つのオブジェクトを指す相異なる 2 つの参照**についてであり、こちらの方が広い。
+
+- **P7f** (処分の後、pending はそのオブジェクトを名指さない)。`Release` の訪問について、`un_bump` が
+  `NoBracket` か `OutsideBracket` を返したとき、その訪問の後の `pending` のどの要素の `outstanding` も、
+  その `Release` が触れうるオブジェクトのどれも名指さない。
+
+  P7c は「走査が呼んだ」までしか言わない。P18a が要るのは「pending から消えた」であり、その 1 段が
+  ここにある。`Release` の腕は `other_objects` を先に `consume_objects` へ渡してから `un_bump` を呼ぶので、
+  この 2 つの順序が load-bearing である。
 
 - **P8** (推論の停止性と安全性)。`infer_ownership` は停止する。その不動点が返す集合 `owned_leaves` は、
   次を満たす。ある関数のある leaf の参照が、その関数のある実行路で D9 の意味で消費されるならば、その leaf の
@@ -719,16 +764,16 @@ P26 が未較正であることは記録しておく価値がある。この節�
 |---|---|---|---|---|
 | P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み。`<1>35`/`<1>36` (`unit_key` についての観察) は対象を失った | 未着手 |
 | P3, P4 | `p11-origin-soundness.md` | 有 | 証明済み | 未着手 |
-| P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
-| P5 (c) | `p12-identity-and-consumes.md` | 有 | **未着手** (新しい言明) | 未着手 |
+| P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
+| P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
 | P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
 | P7a, P7e | `p15-ownership-uniformity.md` | 有 | **未着手** (P8, P14 が使う。言明は 1 度書き直した) | 未着手 |
-| P7c | `p13-disposals-and-pending.md` | 有 | **未着手** (新しい言明) | 未着手 |
+| P7c, P7f | `p13-disposals-and-pending.md` | 有 | 証明済み (P7c の言明は 1 度書き直した) | 未着手 |
 | P7d | `p15-ownership-uniformity.md` | 有 | **未着手** (新しい言明。#530 の 2 件を閉じる性質) | 未着手 |
 | P8 | `p20-borrow-ify.md` | 有 | 証明済み。`infer_ownership` に `level_ownership` の周回が加わったので、停止性の段を書き直す必要がある | 未着手 |
 | P9 - P13 | `p20-borrow-ify.md` | 有 | 証明済み。P10/P11 は `owns_object_yet` の追加を読み直す必要がある | 未着手 |
 | P14 | `p20-borrow-ify.md` | 有 | **未着手** (原因だった #530 の残穴は直った) | 未着手 |
-| P15 - P18 | `p30-cancel-walk.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
+| P15 - P18 | `p30-cancel-walk.md` | 有 | 証明済み | 未着手 |
 | P18a, P18b | `p13-disposals-and-pending.md` | 有 | **未着手** (新しい言明。層 4 の実質) | 未着手 |
 | P19 - P24 | `p40-cancel-soundness.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
 | P26 | `p50-observation.md` | 有 | **未着手** | 未着手 |
