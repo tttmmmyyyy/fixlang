@@ -15,7 +15,7 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 **この証明は書きかけである。** 第 7 節の表が、どの命題がどこまで進んでいるかを述べる。第 8 節が、証明を書く
 作業が見つけたコードの欠陥を述べる。
 
-証明の対象は、コミット `PLACEHOLDER_HEAD` の
+証明の対象は、コミット `a614a9f84ef0965dbbcb46b1a75068971a0103c5` の
 
 - `src/rc_ir/borrow.rs` の `borrow_ify` と `cancel`、およびこの 2 つが呼ぶ同ファイル内の関数
 - `src/rc_ir/ownership.rs` の全体 (この 2 つが参照の同一性と消費を決めるのに使うモデル)
