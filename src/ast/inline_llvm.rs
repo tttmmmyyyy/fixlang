@@ -120,7 +120,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// must not (see `InlineLLVMIsUniqueFunctionBody` and `InlineLLVMMarkThreadedFunctionBody`, which
     /// say why). A leaf that joins an argument with another source says only where the result's
     /// sharing comes from: the op consumes that argument like any other.
-    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,

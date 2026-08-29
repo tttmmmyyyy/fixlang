@@ -669,16 +669,17 @@ P26 が未較正であることは記録しておく価値がある。この節�
 | 命題 | ファイル | T への寄与 | 証明 | 検証 |
 |---|---|---|---|---|
 | P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み | 未着手 |
-| P3, P4 | `p11-origin-soundness.md` | 有 | **閉じない** -- P5 (c) がコードで偽 | 未着手 |
+| P3, P4 | `p11-origin-soundness.md` | 有 | 証明済み | 未着手 |
+| P5 (c) | `p11-origin-soundness.md` | 有 | **偽** -- 反例あり。miscompile は作れていない | 未着手 |
 | P5 (a) | `p12-keys-and-consumes.md` | **無** (キーの意味の較正のための観察) | 制限つきで証明済み | 未着手 |
-| P5 (b), (c), P6, P7 | `p12-keys-and-consumes.md` | 有 | P6, P7 は証明済み。(c) は未 | 未着手 |
-| P7a, P7b, P7c | -- | 有 | **未着手** (P8, P14, P21 が使う) | 未着手 |
+| P5 (b), P6, P7 | `p12-keys-and-consumes.md` | 有 | 証明済み | 未着手 |
+| P7a | -- | 有 | **未着手** (P8, P14 が使う) | 未着手 |
+| P7b, P7c, P18a | `p13-keys-and-pending.md` | 有 | **偽** -- コードが誤り (#545)。制限つきの形は証明済み | 未着手 |
 | P8 - P13 | `p20-borrow-ify.md` | 有 | 証明済み | 未着手 |
-| P14 | `p20-borrow-ify.md` | 有 | **閉じない** -- コードで偽 (#530) | 未着手 |
+| P14 | `p20-borrow-ify.md` | 有 | **閉じない** -- コードが誤り (#530 の残穴) | 未着手 |
 | P15 - P18 | `p30-cancel-walk.md` | 有 | 証明済み | 未着手 |
-| P18a | -- | 有 | **未着手** (P21 が使う) | 未着手 |
 | P19, P20, P22, P24 | `p40-cancel-soundness.md` | 有 | 証明済み | 未着手 |
-| P21, P23 | `p40-cancel-soundness.md` | 有 | **閉じない** -- P7b, P7c, P18a が要る | 未着手 |
+| P21, P23 | `p40-cancel-soundness.md` | 有 | **閉じない** -- P7b, P7c, P18a が偽 | 未着手 |
 | P26, P27, T | `p50-observation-and-runs.md` | 有 | 未着手 | 未着手 |
 
 **証明済みの命題は、どれも T をまだ 1 歩も進めていない。** 「節点を消しても RC 規律が保たれる」という
@@ -705,3 +706,19 @@ leaf を 2 つ以上持つ unit は unbox union だけであり、`-O max` で 3
 
 **層 4 (P19-P24) と、層 2 の残り (P8 - P13) は、#529 と #530 が直るまで着手しない。** どちらも命題の
 言明は変えない -- 直すべきはコードである。
+
+**#545 (miscompile、未修正)。** `origin_from_leaves_under` は、unit の path の下の leaf が別々のオペランド
+unit に辿り着くとき、答えを「読み出した値自身の名前」を identity とする `Join` にする。すると union 自身の
+`unit_key` はその値の名前になり、payload の leaf を消費する構文の鍵は payload の元の名前になる。1 つの
+オブジェクトが 2 つの名前を持ち、`Retain` と消費が別の鍵に分かれるので、`cancel` が消費をまたいで対を消す。
+`Std::Option (a, b)` と `Std::Result e (a, b)` がこの形である。P7b、P7c、P18a はいずれもこれで偽になる。
+
+**#530 の残穴 (未修正)。** `level_ownership` の発火判定は leaf 粒度 (`covered_leaves` と `owned_leaves`) で
+所有を読み、書き換えが読む `owns_object` は unit 粒度 (`units_under` を `truncate_to_unit` で写して
+`owned_units`) で読む。パラメータの unbox union の一方の変位の leaf だけが所有されているときに食い違い、
+`Release` が落ちて参照が漏れる。P14 はこれで閉じない。
+
+**同じ族の 3 件目。** #519、#529、#545 はどれも「1 つのオブジェクトが道ごとに 2 つ以上の名前を持ち、`Retain`
+と `Release` が別の鍵に分かれる」形である。#519 は読み出した値自身の名前で組み直していたこと、#529 は `Join`
+を畳むときに内側の identity を落としていたこと、#545 は `reached` が 2 元以上のときに identity を `here` へ
+置き換えることによる。**`unit_key` が何を名指す量なのかという設計が定まっていない**のが根である。
