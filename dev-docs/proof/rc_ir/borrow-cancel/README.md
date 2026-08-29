@@ -890,6 +890,14 @@ path から `origin_from_leaves_under` の `truncate_to_unit` を通る枝に入
 2 つの leaf は別々のオブジェクトを指しうるので、P5 (a) が破れる。`Std::Option (a, b)` の payload が
 この形の値である。すなわち、複数元を宣言する op を足すことは、`cancel` の対の健全性を壊す変更である。
 
+**`result_prov` は自分の `FullName` の欄を読まない。** `LLVMGen::result_prov` は `&self` を取るので op が
+持つ変数名を読めるが、どの op もそうしない -- `result_prov` を override する 29 個のうち `self` の欄を読む
+のは 6 つで、読む欄はいずれも `usize` か `u32` の添字である。この性質が要るのは、`rename_rhs` の `Llvm` の
+腕が `llvm_gen` を clone して `free_vars_mut()` が挙げる名前を書き替えるからで
+(`CODE src/rc_ir/rename.rs: rename_rhs`, `CODE src/ast/inline_llvm.rs: LLVMGen::free_vars_mut`)、破れると
+複製の `result_prov` が原本と違う宣言を返し、借用版の `origin` が原本と食い違う。**名前の欄を読む op を
+足すことも、`cancel` の対の健全性を壊す変更である。**
+
 この仮定は誰も果たさない。宣言と実装の乖離は、証明ではなくテストと valgrind が捕まえる。
 `dev-docs/2026-06-28-unique-check-elim/audit-2026-07-20-op-declarations.md` が、ある時点での全 op の宣言を
 人手で照合した記録である。
