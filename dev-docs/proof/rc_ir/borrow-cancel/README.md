@@ -480,12 +480,24 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
 
 ### 層 2 -- `borrow_ify` が RC 規律を保存すること
 
-- **P7a** (unit の origin は、その下の leaf の origin を覆う)。`u` が `ty(v)` の RC unit であるとき、`u` の下の
-  各 boxed leaf `λ` について、`origin(v, λ)` の候補はすべて `origin(v, u)` の候補に含まれる。
+- **P7e** (`owns_object` は unit ごとに答える)。任意の root `r` と path `p` について、
+  `owns_object(r, p) = owns_object(r, truncate_to_unit(ty(r), p))` である。`r` がこの版のパラメータ・
+  capture でないときは、両辺とも真である。
+
+- **P7a** (unit の所有と leaf の所有は一致する)。`u` を `ty(v)` の RC unit とし、`Λ(u)` を `u` の下の
+  boxed leaf の集合とする。次の 2 つは同値である。
+
+  - `owns_unit(v, u)` が真である。
+  - `Λ(u)` の各 leaf `λ` について、`origin(v, λ)` の各候補 `(r, p)` の `owns_object(r, p)` が真である。
 
   `owns_unit` は unit の `origin` の候補を見て真偽値を 1 つ返し、`Retain`/`Release` はその unit の下の各 leaf の
-  参照に作用する。両者を突き合わせるにはこの包含が要る。P7d の一様性を leaf の水準へ降ろすのにも同じ包含が
-  要る。
+  参照に作用する。両者を突き合わせるにはこの同値が要る。**候補の包含では言えない。** `origin_inner` は
+  `Binding::Param` の腕で path を降りずに `Exactly((v, path))` を返すので、`v` がパラメータのとき
+  `origin(v, u) = Exactly((v, u))` と `origin(v, λ) = Exactly((v, λ))` は候補が別である。両者が一致するのは
+  `truncate_to_unit` を掛けた後であり、`owns_object` がその truncate を内側で行う (P7e)。`Llvm` の腕でも
+  同じずれが出る。unit の側は `origin_from_leaves_under` がオペランドの leaf を
+  `truncate_to_unit(args[j].ty, ・)` で unit へ丸めてから辿り、leaf の側は `as_arg_projection` が leaf の
+  ままオペランドを辿る (`CODE src/rc_ir/ownership.rs: origin_from_leaves_under`, `as_arg_projection`)。
 
 - **P7d** (所有は site ごとに一様である)。`infer_ownership` の不動点において、`levelled_sites` が挙げる
   各 site `(v, u)` について、`origin(v, u)` の候補は、すべて `owns_object` が真であるか、すべて偽であるかの
@@ -699,7 +711,7 @@ P26 が未較正であることは記録しておく価値がある。この節�
 | P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
 | P5 (c) | `p12-identity-and-consumes.md` | 有 | **未着手** (新しい言明) | 未着手 |
 | P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
-| P7a | `p15-ownership-uniformity.md` | 有 | **未着手** (P8, P14 が使う) | 未着手 |
+| P7a, P7e | `p15-ownership-uniformity.md` | 有 | **未着手** (P8, P14 が使う。言明は 1 度書き直した) | 未着手 |
 | P7c | `p13-disposals-and-pending.md` | 有 | **未着手** (新しい言明) | 未着手 |
 | P7d | `p15-ownership-uniformity.md` | 有 | **未着手** (新しい言明。#530 の 2 件を閉じる性質) | 未着手 |
 | P8 - P13 | `p20-borrow-ify.md` | 有 | 証明済み。P10/P11 は `owns_object_yet` の追加を読み直す必要がある | 未着手 |
