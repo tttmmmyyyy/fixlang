@@ -445,6 +445,10 @@ fn func_has_borrowable_param(
 /// The functions whose body can reach an op that reports a reference count to the program
 /// (`LLVMGen::observes_uniqueness`) — directly, or through a direct call to another such function.
 ///
+/// Reaching one is over-approximated where the callee is not named: a call through a local holding a
+/// closure is given an edge to every function a closure can carry, since which one it holds is
+/// decided at run time (A7 declines to resolve it).
+///
 /// Borrowing changes what such an op reports. A borrowed parameter's reference is disposed of by the
 /// caller after the call rather than by this function before the op runs, so the count the op reads
 /// is one higher than it was without borrowing, and a value that was unique reads as shared.
@@ -458,6 +462,9 @@ fn funcs_observing_uniqueness(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncR
     let _ = type_env;
     let mut observing: Set<FuncRef> = Set::default();
     let mut callees: Map<FuncRef, Vec<FuncRef>> = Map::default();
+    // The functions a closure can carry, and the functions that call one without naming it.
+    let mut closure_targets: Set<FuncRef> = Set::default();
+    let mut calls_indirectly: Set<FuncRef> = Set::default();
     for (fref, func) in &prog.funcs {
         let mut cs = vec![];
         for_each_node(&func.body, &mut |node| {
@@ -470,17 +477,35 @@ fn funcs_observing_uniqueness(prog: &RcProgram, type_env: &TypeEnv) -> Set<FuncR
                         observing.insert(fref.clone());
                     }
                 }
-                // A closure's target is reached by an indirect call, which keeps the all-owning
-                // version, so its body is not a way for a borrow version to reach the op.
-                RcRhs::App(callee, _) => cs.push(FuncRef {
-                    name: callee.name.clone(),
-                }),
-                RcRhs::Var(..) | RcRhs::Closure(..) | RcRhs::Match(..) => {}
+                RcRhs::App(callee, _) => {
+                    let target = FuncRef {
+                        name: callee.name.clone(),
+                    };
+                    // A callee the program does not define is a local holding a closure, and which
+                    // function it holds is decided at run time.
+                    if prog.funcs.contains_key(&target) {
+                        cs.push(target);
+                    } else {
+                        calls_indirectly.insert(fref.clone());
+                    }
+                }
+                RcRhs::Closure(target, _) => {
+                    closure_targets.insert(target.clone());
+                }
+                RcRhs::Var(..) | RcRhs::Match(..) => {}
             }
         });
         callees.insert(fref.clone(), cs);
     }
-    // Least fixed point over the direct-call graph: a caller of an observing function reaches the op.
+    // An indirect call reaches whichever function the closure holds, so give it an edge to every
+    // function a closure can carry. Resolving which one is what `A7` declines to do.
+    for fref in &calls_indirectly {
+        callees
+            .entry(fref.clone())
+            .or_default()
+            .extend(closure_targets.iter().cloned());
+    }
+    // Least fixed point over that graph: a caller of an observing function reaches the op.
     loop {
         let mut grew = false;
         for (fref, cs) in &callees {

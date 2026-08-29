@@ -792,6 +792,52 @@ main = (
 );
 "#;
 
+    // The same, where the observation is reached by an indirect call.
+    //
+    // A call through a local holding a closure names no function, so a call graph built from named
+    // callees alone stops there. The observation sits in the closure's body, one edge past the stop,
+    // and the function making the indirect call is the one whose parameters get borrowed.
+    //
+    // Which closure the local holds is decided from the program's arguments, so no pass can resolve
+    // it and specialize the call away.
+    const OBSERVED_UNIQUENESS_THROUGH_A_CLOSURE_SOURCE: &str = r#"
+module Main;
+
+type B = box struct { v : I64 };
+
+// `x` is never consumed, so it is inferred borrowed. `w` is used after the call, which is what makes
+// the call worth routing. The observation is inside `cl`, which this function only calls indirectly.
+relay : I64 -> B -> B -> (() -> I64) -> I64;
+relay = |n, x, w, cl| (
+    if n > 0 { relay(n - 1, x, w, cl) };
+    cl()
+);
+
+main : IO ();
+main = (
+    let args = *IO::get_args;
+    let p = B { v : 1 };
+    let w = B { v : 2 };
+    let observing = |_| (
+        let p = p.Debug::assert_unique(|_| "the observed value is shared");
+        p.@v
+    );
+    let other : () -> I64 = |_| 0;
+    // The argument count decides which one, so the call stays indirect.
+    let cl = if args.@size > 100 { other } else { observing };
+    let r = relay(0, p, w, cl);
+    eval w.@v;
+    assert_eq(|_|"relay returned the wrong value", r, 1);;
+    pure()
+);
+"#;
+
+    /// As `test_observed_uniqueness_survives_borrowing`, reached through an indirect call.
+    #[test]
+    pub fn test_observed_uniqueness_survives_borrowing_through_a_closure() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_CLOSURE_SOURCE);
+    }
+
     /// `Debug::assert_unique` halts the program when the value it is given is shared, so a run that
     /// completes is the whole check. Valgrind is off: nothing here is a memory error, and the
     /// observation is what the test is about.
