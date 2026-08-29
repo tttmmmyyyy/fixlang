@@ -30,8 +30,11 @@ CITATION = re.compile(
     r"|[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)"
 )
 
-# `| P1, P2 | `p10-leaves-and-units.md` | ... |` in a proof README's status table.
-STATUS_ROW = re.compile(r"^\|\s*([^|]*P[0-9A-Za-z-][^|]*?)\s*\|\s*`([^`]+\.md)`\s*\|", re.M)
+# `| P1, P2 | `p10-leaves-and-units.md` | ... |` in a proof README's status table. The main theorem's
+# row names it `T`, so a cell holding that alone counts as well.
+STATUS_ROW = re.compile(
+    r"^\|\s*((?:[^|]*P[0-9A-Za-z-][^|]*?)|T)\s*\|\s*`([^`]+\.md)`\s*\|", re.M
+)
 
 PROOF_COMMENT = re.compile(r"^\s*// PROOF: ")
 
@@ -48,6 +51,9 @@ def propositions_of(text):
         one = re.match(r"(P\d+)", part)
         if one:
             out.append(one.group(1))
+            continue
+        if part == "T":
+            out.append(part)
     return out
 
 
@@ -128,8 +134,13 @@ def digest(lines, span):
     return hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
 
 
+def proposition_order(name):
+    """Sort key for a proposition name: `P<n>` in numeric order, then the ones carrying no number."""
+    return (0, int(name[1:])) if re.fullmatch(r"P\d+", name) else (1, 0)
+
+
 def comment_for(props, directory):
-    ordered = sorted(props, key=lambda p: int(p[1:]))
+    ordered = sorted(props, key=proposition_order)
     return f"// PROOF: {', '.join(ordered)} ({os.path.relpath(directory, REPO)})\n"
 
 
@@ -258,7 +269,7 @@ def check_table(directory, rows):
         if was is None:
             yield f"{source}: `{symbol}` is cited and absent from citations.tsv"
         elif was != dig:
-            names = ",".join(sorted(props, key=lambda p: int(p[1:])))
+            names = ",".join(sorted(props, key=proposition_order))
             yield f"{source}: `{symbol}` changed since the proof was written; re-verify {names}"
 
 

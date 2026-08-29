@@ -435,9 +435,18 @@ D11 と D12 は `RcProgram` の残りの部分について何も言わない。`
 これらを `borrow_ify` と `cancel` がどう扱うかは P13 と P24 が扱う。
 
 **D18 (一意性の観測点)**
-`unsafe_is_unique` は、boxed な値がただ 1 つの名前から参照されているかを `Bool` として返す std の公開関数で
-ある (`CODE src/fixstd/stdlib.rs: unsafe_is_unique`)。RC IR では 1 つの `Llvm` 演算として現れる。この演算が
-現れる位置を**一意性の観測点**と呼び、その位置でその演算が返す `Bool` を**観測値**と呼ぶ。
+参照カウントを読んでその答えを `Bool` としてプログラムへ返す std の公開関数は 2 つある。
+`unsafe_is_unique` は boxed な値がただ 1 つの名前から参照されているかを返し
+(`CODE src/fixstd/stdlib.rs: unsafe_is_unique`)、`Array::_unsafe_is_storage_unique` は配列の記憶域について
+同じことを返す (`CODE src/fixstd/std.fix: _unsafe_is_storage_unique`)。RC IR ではそれぞれ 1 つの `Llvm`
+演算として現れる。この 2 つが現れる位置を**一意性の観測点**と呼び、その位置でその演算が返す `Bool` を
+**観測値**と呼ぶ。
+
+**2 つを同じ集合に入れるのは、どちらも同じ量に反応するからである。** `p50-observation.md` の第 6 節の
+反例は `Array I64` を使って `_unsafe_is_storage_unique` でも書ける。コードが観測として扱う集合は
+`LLVMGen::observes_uniqueness` が真を返す op であり、それはちょうどこの 2 つの本体である
+(`CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody`,
+`InlineLLVMArrayIsStorageUniqueBody`)。
 
 観測値はプログラムの振る舞いを変える。`Debug::assert_unique` は観測値が偽のとき `undefined` を呼んで
 プログラムを止め、`Destructor::mutate_unique_io` は偽のとき資源の複製 (`ctor : a -> IO a`) を走らせる
@@ -706,9 +715,11 @@ D7 が読みから除いているもの -- 参照カウントと状態バイト 
 `units_under(τ, [])` で分解する (`CODE src/rc_ir/borrow.rs: split_rc`)。`subtree_type(τ, [])` は常に
 `Some(τ)` を返すので、この分解が返すのは `rc_units(τ)` そのものである。
 
-**A3 (宣言されたモデルの忠実さ)** -- 果たす者: 誰も。
-各 `LLVMGen` の `result_prov` と `borrows_operand` は、その演算が生成するコードを正しく述べている
-(`CODE src/ast/inline_llvm.rs: LLVMGen::result_prov`, `LLVMGen::borrows_operand`)。`result_prov` は結果の
+**A3 (宣言されたモデルの忠実さ)** -- 果たす者: 誰も。ただし `applies_a_function_operand` については
+`Generator::apply_lambda` の develop mode の検査が果たす。
+各 `LLVMGen` の `result_prov`、`borrows_operand`、`applies_a_function_operand` は、その演算が生成する
+コードを正しく述べている (`CODE src/ast/inline_llvm.rs: LLVMGen::result_prov`,
+`LLVMGen::borrows_operand`, `LLVMGen::applies_a_function_operand`)。`result_prov` は結果の
 leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言と生成コードの対応は次のとおりである。
 
 | 宣言 | 生成コードが結果のその leaf に置くもの |
@@ -716,7 +727,7 @@ leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言�
 | 空集合 | 何も置かない。その leaf は inhabited にならない (存在しない union 変位、または中断する演算の結果) |
 | 単一の `Arg(j, σ)` | 第 `j` オペランドの leaf `σ` と**同じ参照**。新しい参照を作らない。結果のその leaf が inhabited であることと、第 `j` オペランドの leaf `σ` が inhabited であることは同値である |
 | 単一の `Fresh` | 新しく割り当てたオブジェクトへの新しい参照 |
-| 単一の `Unknown` | 既存のオブジェクトへの新しい参照 (retain を伴う読み出し)。そのオブジェクトは、この op のオペランドの leaf が指すオブジェクトから到達できるか、グローバル値が到達する (`CODE src/rc_ir/provenance.rs: LeafOrigin`)。**オペランドを適用する op (`LLVMGen::applies_a_function_operand`) では、この限定は成り立たない** -- 適用した関数の中で新しく割り当てられたオブジェクトが結果に出る。その leaf について主張する命題は、この行を読まずに書く |
+| 単一の `Unknown` | 既存のオブジェクトへの新しい参照 (retain を伴う読み出し)。そのオブジェクトは、この op のオペランドの leaf が指すオブジェクトから到達できるか、グローバル値が到達する (`CODE src/rc_ir/provenance.rs: LeafOrigin`)。**この限定が成り立たない op が 2 種ある。** オペランドを適用する op (`LLVMGen::applies_a_function_operand`) では、適用した関数の中で新しく割り当てられたオブジェクトが結果に出る。`InlineLLVMBoxedFromRetainedPtrIOS` は `result_prov` を override せず既定の `Unknown` を取るが、オペランドは `Std::Ptr` で boxed leaf を持たないので、到達できる元が無い -- そのオブジェクトは C の側から渡された番地が指すものである。どちらの leaf についても、主張する命題はこの行を読まずに書く |
 | 複数の元 | 実行路ごとにそのいずれか。いずれの路でも新しい参照 |
 
 `borrows_operand(i)` が真のとき、生成コードは第 `i` オペランドの参照を処分しない。
@@ -1255,8 +1266,14 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   持ち、同じアームを選ぶ。同じ理由で `App` の結果も共有される。
 - **P22** (`drop_nodes` の正しさ)。`drop_nodes(B, S)` は、`B` の `NodeId` が `S` に入る `Retain`/`Release`
   節点だけを取り除いた木を返し、他の節点の種類・変数・path・並びを変えない。
-- **P23** (`cancel` は RC 規律を保存する)。D12 の意味で RC 規律を満たすプログラムを入力とすると、`cancel` の
-  出力も D12 の意味で RC 規律を満たす。出力の各活性化に対応する入力の活性化が在ることは D29 が与える。
+- **P23** (`cancel` は RC 規律を保存する)。**`borrow_ify` の出力**を入力とすると、`cancel` の出力も D12 の
+  意味で RC 規律を満たす。出力の各活性化に対応する入力の活性化が在ることは D29 が与える。
+
+  入力を `borrow_ify` の出力に限るのは、この命題の証明が読む 2 つがそこにしか無いからである。A19 (ii-b) の
+  範囲は「`borrow_ify` の入力の各本体と、`borrow_ify` がそれを写した各本体」であり、P14a の範囲は
+  「`borrow_ify` の出力の各本体」である。D12 を満たすだけのプログラムにはどちらも付いてこない。T が
+  `cancel` に渡すのはまさに `borrow_ify` の出力なので (`CODE src/build/build_object_files.rs:
+  optimize_rc_program`)、この限定は主定理の鎖を切らない。
 - **P24** (D12 が見ない部分の保存)。`borrow_ify` と `cancel` は、D12 が見ない部分について次を満たす。
   `roots` を変えない。各関数の `fn_ty` / `ret_ty` / `params` の型 / `inline_into_callers` を変えない。
   各グローバル初期化子の `symbol` と `ty` を変えず、`owns_initializer` と `owns_storage` に `true` を書く。
@@ -1416,18 +1433,18 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P19, P20, P22, P24 | `p40-cancel-soundness.md` | 有 | 証明済み | 検証済み。**2 周目が要る** |
 | P14a | `p20-borrow-ify.md` | 有 | 証明済み (A20 の下で) | 未着手 |
 | P21, P23 | `p40-cancel-soundness.md` | 有 | 証明済み (D29 の上で) | 検証済み (指摘 18 件を反映)。**2 周目が要る** |
-| P26 (`cancel` の半分) | `p50-observation.md` | 有 | 証明済み (局所の `D-CP` の上で。D29 へ置き直し中) | 未着手 |
-| P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | **走行中** -- 4 件目の欠陥が直ったので再開 | 未着手 |
+| P26 (`cancel` の半分) | `p50-observation.md` | 有 | 証明済み (D29 の上で) | 未着手 |
+| P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | 証明済み。場合分けは D24 の段の種と `apply_lambda` の呼び出し位置の 2 通りから導いた | 未着手 |
 | P27 | `p51-runs.md` | 有 | 証明済み。(R1)(R2)(R3) が立ち、`L0` の数え上げは `llvmgen-function-values.md` が片付けた | 未着手 |
 | (P-insert) | `p60-insert-rc.md` | 有 (A19 の残る半分) | 部分的に証明済み。`L9`-`L11` が `C1`/`C2` を弾き、`L7` が (ii-b) の台帳形を与える。残る義務は (O1) と (O2) (第 4 節の A19) | 未着手 |
-| T | `p70-main-theorem.md` | -- | 未着手 | 未着手 |
+| T | `p70-main-theorem.md` | -- | 証明済み。(T1)(T2)(T4) は引用する命題の言明の上で閉じる | 未着手 |
 
-**この証明の唯一の実質的な主張 -- 「節点を消しても RC 規律が保たれる」-- は、まだ証明されていない。**
-一度は証明済みと記録したが、検証が覆した。第 9 節が経緯を述べる。
+**T が閉じることは、T が引く命題が閉じることを意味しない。**各命題の状態はこの表が述べる。誰も果たさない
+仮定は A3、A4、A12、A18 の 4 つであり、A19 は `insert_rc` の側が半分残る。
 
 ## 8. 発見
 
-証明を書く作業が、対象のコードに 6 件の欠陥を見つけた。4 件は miscompile であり、いずれもバグハントでは
+証明を書く作業が、対象のコードに 7 件の欠陥を見つけた。4 件は miscompile であり、いずれもバグハントでは
 見つかっていなかった。すべて修正済みである。
 
 **#529 (miscompile、修正 `be26b396`、PR #531)。** P3/P4 の証明が閉じない原因はコードにあった。
