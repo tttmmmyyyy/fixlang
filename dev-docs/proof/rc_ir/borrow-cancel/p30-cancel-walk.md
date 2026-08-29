@@ -98,7 +98,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 |---|---|
 | 初期 | `cancel` の `cancel_body` の `analysis.walk(body, PendingRetains::default(), true)` の第 2 引数 |
 | 複製 | `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕の `pending.clone()` |
-| 追加 | `RcExpr::Retain(v, path, _, k)` の腕の `pending.push(PendingRetain { node, outstanding })` |
+| 追加 | `RcExpr::Retain(v, path, _, k)` の腕の `pending.push(PendingRetain { node: retain, outstanding })` |
 | 消費 | `CancelAnalysis::consume_objects` の `pending.retain(...)` |
 | 引き | `RcExpr::Release(v, path, _, k)` の腕の `un_bump(&mut pending, &un_bumped)` |
 | 併合 | `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕の `self.merge(&pending, &arm_exits)` |
@@ -841,3 +841,359 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
   DEF 基本操作 と L8 より、状態の作られ方は「初期」「複製」「追加」「消費」「引き」「併合」の 6 種で
   尽きる。
   BY <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, DEF 基本操作, L8
+
+## 6. P16 (`pending` の不変条件)
+
+**言明** --- 走査中の各位置において、`pending` は次を満たす。(a) 各要素の `node` は、その位置までに
+訪れた `Retain` 節点である。(b) 各要素の `outstanding` は空でなく、その `Retain` の `ActRefs` に含まれる。
+(c) 1 つの `Retain` 節点は `pending` に高々 1 回現れる。(d) `pending` の並びは、訪れた順である (後ろほど
+新しい)。(e) `pending` から取り除かれた `Retain` は、次の 3 つのいずれかである。(e1) `outstanding` が
+空になった。(e2) `needed_retains` に入った。(e3) その除去は `merge` によるものであり、各アームへ渡った
+複製の側に同じ `Retain` の除去事象があって、それらがすべて (e1)(e2)(e3) のいずれかである。
+
+(a) から (d) は、走査が作る各状態についての主張として読む。(b) の「その `Retain` の `ActRefs` に含まれる」
+は、DEF 参照の多重集合 の `⊆` で読む。(e) は次の形にして示す。**各除去事象 (DEF 除去事象) について、
+次の 3 つのいずれかが成り立つ。(e1) その事象は「引き」であり、取り除かれた要素の `outstanding` はその
+事象の直前に空になった。(e2) その事象は、取り除かれた `node` を `self.needed_retains` に入れる。
+(e3) その事象は「併合」であり、各アームの状態の鎖 (L8) の中に、同じ `node` の除去事象がある。そして
+(e3) の展開は有限で終わり、その葉は (e1) か (e2) である。**
+
+**証明**
+
+<1>1. (a) が成り立つ。
+  BY L9 の (i), DEF INV
+<1>2. (b) が成り立つ。
+  BY L9 の (ii), DEF INV, DEF 参照の多重集合
+<1>3. (c) が成り立つ。
+  BY L9 の (iii), DEF INV
+<1>4. (d) が成り立つ。
+  BY L9 の (iv), DEF INV
+<1>5. 除去事象を起こしうる基本操作は「消費」「引き」「併合」の 3 つだけである。
+  <2>1. 「初期」は入力の状態を持たないので、除去事象ではない。
+    BY DEF 除去事象, DEF 基本操作
+  <2>2. 「複製」で作られた状態は入力の状態と等しいので、要素を失わない。
+    BY DEF 基本操作 (`pending.clone()`)
+  <2>3. 「追加」は `Vec` の末尾に要素を 1 つ加えるだけで、要素を取り除かない。
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
+       DEF `Vec::push` (Rust 標準ライブラリの規約)
+  <2>4. QED
+    L8 より基本操作は 6 種で尽きる。
+    BY <2>1, <2>2, <2>3, DEF 基本操作, L8
+<1>6. CASE 除去事象が「消費」である。L6 より、`consume_objects` は取り除いた各要素の `node` を
+      `self.needed_retains` に入れる。よって (e2) が成り立つ。
+  BY L6
+<1>7. CASE 除去事象が「引き」である。
+  <2>1. L5 の 1 と 2 では `pending` が変わらないので、除去事象は L5 の 3 の場合に限る。
+    BY L5
+  <2>2. L5 の 3 で要素が取り除かれるのは、`pending[i].outstanding` が `un_bumped` を引いた結果が空に
+        なったとき、かつそのときに限る。
+    BY L5
+  <2>3. QED (e1) が成り立つ。
+    BY <2>1, <2>2
+<1>8. CASE 除去事象が「併合」である。取り除かれた `node` を `x` とする。すなわち、`pending_in` と各
+      `arm_exits[j]` のいずれかに `node` が `x` の要素があり、`merged` にはそれが無い。
+  <2>1. L9 の (iii) を各 `arm_exits[j]` に適用すると、L7 の仮定が満たされる。
+    BY L9
+  <2>2. CASE ある `j` について `arm_states[j]` が `x` を鍵に持つ。
+    <3>1. L7 の 3 の条件 `U(x)` は成り立たない。
+      <4>1. `U(x)` が成り立つと仮定する。
+        BY 背理法の仮定
+      <4>2. L7 の 4 より、呼び出しの終わりに `uniform` は `x` を鍵に持つ。
+        BY L7, <2>1, <2>2, <4>1
+      <4>3. `U(x)` の第 1 の連言肢より `x` は `entered_with` の要素であり、L7 の 2 より `pending_in` に
+            `node` が `x` の要素がある。
+        BY L7, <2>1, <4>1
+      <4>4. QED (矛盾)
+        <4>2 と <4>3 と L7 の 6 より、`merged` に `node` が `x` の要素がある。これは本場合の仮定
+        (`merged` にそれが無い) に反する。
+        BY L7, <2>1, <4>2, <4>3
+    <3>2. QED (e2) が成り立つ。
+      L7 の 5 より、この呼び出しは `x` を `self.needed_retains` に入れる。
+      BY L7, <2>1, <2>2, <3>1
+  <2>3. CASE どの `j` についても `arm_states[j]` が `x` を鍵に持たない。
+    <3>1. `pending_in` に `node` が `x` の要素がある。L7 の 1 より、どの `arm_exits[j]` にも `node` が
+          `x` の要素は無いので、本場合の仮定 (入力のいずれかにその要素がある) を満たすのは `pending_in`
+          だけである。
+      BY L7, <2>1, <2>3, DEF 除去事象
+    <3>2. 各アーム `j` の入口状態 `pending(arm_j.body)` は `pending_in` の「複製」なので、`node` が `x`
+          の要素を持つ。
+      BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
+         DEF 基本操作, <3>1
+    <3>3. L8 より `arm_exits[j] = pending_out(arm_j.body)` は入口状態から基本操作の有限列 (状態の鎖) で
+          得られる。<3>2 でその鎖の最初の状態は `node` が `x` の要素を持ち、L7 の 1 と本場合の仮定より
+          その鎖の最後の状態は持たない。よってその鎖の中に、`node` が `x` の要素を持つ状態を入力とし、
+          持たない状態を作る操作、すなわち `x` の除去事象がある。
+      BY L8, L7, <2>1, <2>3, <3>2, DEF 除去事象
+    <3>4. QED (e3) が成り立つ。
+      BY <3>3
+  <2>4. QED
+    <2>2 と <2>3 は場合を尽くす。
+    BY <2>2, <2>3
+<1>9. (e3) の展開は有限で終わり、その葉は (e1) か (e2) である。
+  <2>1. (e3) が指す除去事象は、`Match` 節点 `n` のアームの走査の中で起きる。その走査は `n` の訪問の中で
+        `self.merge` の呼び出しより前に完了しているので、そこで作られる状態は `merged` より前に作られて
+        いる。よって (e3) の各子は、生成順序について親より真に前にある。
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
+       DEF 基本操作, <1>8
+  <2>2. (e3) の子はアームごとに 1 つずつ選べるので有限個であり、L4 と A9 より 1 つ以上ある。
+    BY L4, <1>8
+  <2>3. QED
+    <2>1 より展開に無限の道は無く、<2>2 より分岐は有限なので、展開は有限の木である。<1>6、<1>7、<1>8 より
+    各除去事象は (e1)、(e2)、(e3) のいずれかであり、<2>2 より (e3) の節点は子を 1 つ以上持つので、葉は
+    (e1) か (e2) である。
+    BY <2>1, <2>2, <1>6, <1>7, <1>8
+<1>10. QED
+  <1>5 より除去事象は「消費」「引き」「併合」のいずれかであり、<1>6、<1>7、<1>8 がそれぞれ (e2)、(e1)、
+  (e2) または (e3) を与える。<1>9 が (e3) の展開について述べる。
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, <1>9
+
+## 7. P17 (`un_bump` の正しさ)
+
+**言明** --- `un_bump(pending, R)` の返り値は次で決まる。`R` とオブジェクトを共有する要素が `pending` に
+無ければ `NoBracket` で、`pending` は変わらない。あって、そのうち最も後ろの要素 (最内) の `outstanding`
+が `R` を `covers` しなければ `OutsideBracket` で、`pending` は変わらない。covers すれば `InBracket(t)`
+で、`t` はその要素の `node` であり、その要素の `outstanding` から `R` が引かれ、空になればその要素が
+取り除かれる。他の要素は変わらない。
+
+ここで「`R` とオブジェクトを共有する要素」とは、`e.outstanding.shares_an_object(R)` が真である要素で
+ある (L5 の冒頭)。判定に使われるのはその要素の現在の `outstanding` であって、由来の `Retain` が作った
+`ActRefs` ではない。
+
+**証明**
+
+<1>1. `un_bump` を呼ぶのは `walk_inner` の `RcExpr::Release(v, path, _, k)` の腕 1 か所だけであり、その
+      第 1 引数はその時点の走査の状態、第 2 引数は `un_bumped = self.acted_references(v, path)` である。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
+     CODE src/rc_ir/borrow.rs: un_bump
+<1>2. L5 の 1 は、言明の第 1 の場合と条件も結論も一致する。
+  BY L5
+<1>3. L5 の 2 と 3 の添字 `i` の要素は、言明の「最も後ろの要素 (最内)」である。L5 の `i` は、`R` と
+      オブジェクトを共有する要素の添字のうち最大のものだからである。
+  BY L5
+<1>4. L5 の 2 は言明の第 2 の場合と、L5 の 3 は言明の第 3 の場合と、条件も結論も一致する。L5 の 3 の
+      「`pending[i].outstanding` は `pending[i].outstanding - un_bumped` になる」は言明の
+      「`outstanding` から `R` が引かれ」であり (DEF 参照の多重集合)、L5 の 3 の最後の文が言明の
+      「他の要素は変わらない」である。
+  BY L5, <1>3, DEF 参照の多重集合
+<1>5. QED
+  L5 の 3 つの場合は場合を尽くし、言明の 3 つの場合と一致する。
+  BY L5, <1>1, <1>2, <1>3, <1>4
+
+「最内」の名は P16 の (d) が支える。走査の状態では、`pending` の並びは由来の訪問順なので、`R` と
+オブジェクトを共有する要素のうち添字が最大のものは、その中で由来が最も後に訪問された要素である。
+
+## 8. P18 (`merge` の後に残るもの)
+
+**言明** --- `merge` の返す `pending` に残る `Retain` は、`pending_in` に在り、いずれかのアームの出口に
+現れ、かつすべてのアームの出口に同じ `outstanding` で現れるものだけである。いずれかのアームの出口に
+現れてこの条件を満たさない `Retain` は `needed_retains` に入る。どのアームの出口にも現れない `Retain` は、
+この呼び出しでは `needed_retains` にも返り値にも入らない (走査の他の位置が `needed_retains` に入れる
+ことは妨げない)。
+
+`NodeId` の値 `x` について、言明の条件を `C(x)` と書く。すなわち `C(x)` とは、`pending_in` に `node` が
+`x` の要素があり、ある `j` について `arm_exits[j]` に `node` が `x` の要素があり、すべての `j'` に
+ついて `arm_exits[j']` に `node` が `x` の要素があってそれらの `outstanding` が互いに等しいことである。
+「`Retain` が `pending` に在る/現れる」は「その `NodeId` を `node` とする要素がある」と読む。
+
+**証明**
+
+<1>1. L9 の (iii) を各 `arm_exits[j]` に適用すると、L7 の仮定が満たされる。以下 L7 の 1 から 6 を使う。
+  BY L9, L7
+<1>1a. `arm_states[j]` が `x` を鍵に持つことと、`arm_exits[j]` に `node` が `x` の要素があることは
+       同値であり、そのときの値はその要素の `outstanding` である。
+  BY L7 の 1, <1>1
+<1>1b. `x` が `entered_with` の要素であることと、`pending_in` に `node` が `x` の要素があることは同値で
+       ある。
+  BY L7 の 2, <1>1
+<1>2. `C(x)` は「ある `j` について `arm_states[j]` が `x` を鍵に持つ」と `U(x)` (L7 の 3) の連言と同値で
+      ある。`U(x)` は「`x` が `entered_with` の要素であり、すべての `j'` について `arm_states[j']` が
+      `x` を鍵に持ち、それらの値が互いに等しい」である。<1>1a と <1>1b でこれを言い換えると、`C(x)` の
+      第 1 と第 3 の連言肢になる。`C(x)` の第 2 の連言肢は「ある `j` について `arm_states[j]` が `x` を
+      鍵に持つ」である。
+  BY L7, <1>1, <1>1a, <1>1b
+<1>3. 呼び出しの終わりに `uniform` が `x` を鍵に持つことと `C(x)` は同値である。
+  BY L7 の 4, <1>1, <1>2
+<1>4. 第 1 の主張が成り立つ。L7 の 6 より、返り値の要素の `node` は `pending_in` の要素の `node` のうち
+      `uniform` が鍵に持つものだけである。<1>3 よりそれは `C(x)` を満たすものだけである。
+  BY L7, <1>1, <1>3
+<1>5. 逆に、`C(x)` を満たす `x` は返り値に残り、その要素の `outstanding` は各アームの出口での共通の値と
+      等しい。`C(x)` より `pending_in` に `node` が `x` の要素があり、<1>3 より `uniform` は `x` を鍵に
+      持つので、L7 の 6 よりその要素は返り値に残る。その `outstanding` は `uniform[x]` と等しく、L7 の 4
+      よりそれは各 `arm_states[j']` の共通の値と等しい。
+  BY L7, <1>1, <1>3
+<1>6. 第 2 の主張が成り立つ。`x` がいずれかの `arm_exits[j]` の要素の `node` であり、`C(x)` を満たさない
+      とする。<1>1a より `x` はその `arm_states[j]` の鍵であり、<1>2 より `U(x)` は成り立たない。
+      よって L7 の 5 より、この呼び出しは `x` を `self.needed_retains` に入れる。
+  BY L7, <1>1, <1>1a, <1>2
+<1>7. 第 3 の主張が成り立つ。`x` がどの `arm_exits[j]` の要素の `node` でもないとする。<1>1a より
+      `x` はどの `arm_states[j]` の鍵でもない。よって L7 の 5 より、この呼び出しは `x` を
+      `self.needed_retains` に入れない。また <1>2 より `C(x)` は成り立たないので、<1>3 より `uniform` は
+      `x` を鍵に持たず、L7 の 6 より返り値に `node` が `x` の要素は無い。
+  BY L7, <1>1, <1>1a, <1>2, <1>3
+<1>8. QED
+  BY <1>4, <1>5, <1>6, <1>7
+
+## 9. 層 4 へ渡す補題
+
+次の 3 つは P15 - P18 の証明には使わないが、`cancel` の走査の性質なのでここで示す。
+
+### L10 (記録は増えるだけ)
+
+走査の実行中、`self.needed_retains` は要素を失わず、`self.all_retains` は要素を失わず、
+`self.un_bump_releases` は鍵を失わず、その各値の `Vec` も要素を失わない。また、`Retain` 節点 `t` の訪問の
+後、走査が終わるまで、`node_id(t)` は `self.all_retains` の要素であり、`self.un_bump_releases` は
+`node_id(t)` を鍵に持つ。
+
+**証明**
+
+<1>1. `self.needed_retains` に触れるのは、`walk_inner` の `RcExpr::Ret(_)` の腕、`consume_objects`、
+      `merge` の 3 か所であり、どれも `insert` だけである。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Ret(_)` の腕,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::merge
+<1>2. `self.all_retains` に触れるのは、`walk_inner` の `RcExpr::Retain(v, path, _, k)` の腕の
+      `self.all_retains.push(retain)` だけである。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕
+<1>3. `self.un_bump_releases` に触れるのは、`walk_inner` の `RcExpr::Retain(v, path, _, k)` の腕の
+      `self.un_bump_releases.entry(retain).or_default()` と、`RcExpr::Release(v, path, _, k)` の腕の
+      `self.un_bump_releases.entry(retain).or_default().push(node_id(node))` の 2 か所だけである。
+      どちらも鍵を取り除かず、値の `Vec` から要素を取り除かない。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕
+<1>4. `Retain` 節点 `t` の訪問は `self.all_retains.push(node_id(t))` と
+      `self.un_bump_releases.entry(node_id(t)).or_default()` を実行する。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
+     CODE src/rc_ir/borrow.rs: node_id
+<1>5. QED
+  BY <1>1, <1>2, <1>3, <1>4
+
+### L11 (訪問順序は実行路の順序を含む)
+
+実行路 `p` (D3) の上で節点 `m` が節点 `n` より真に前にあるならば、走査は `m` を `n` より前に訪問する。
+
+**証明**
+
+<1>1. 「`p` の上で真に前」は「`p` の上で直後」の推移閉包である。よって、`p` の上で `m'` が `m` の直後に
+      あるすべての対について「走査は `m` を `m'` より前に訪問する」を示せば足りる。
+  BY D3 (実行路は節点の有限列である)
+<1>2. CASE `m` の式が `RcExpr::Let(_, RcRhs::Match(_, arms), k)` である。
+  <2>1. D3 より、`p` の上の `m` の直後の節点 `m'` は、`p` が選んだアーム `arm_i` の本体 `arm_i.body` で
+        ある。
+    BY D3
+  <2>2. `m` の訪問は `self.walk(&arm_i.body, pending.clone(), false)` を呼び、その呼び出しの中で
+        `arm_i.body` が訪問される。
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
+       L1
+  <2>3. QED
+    BY <2>1, <2>2
+<1>3. CASE `m` の式が `RcExpr::Retain(..)`、`RcExpr::Release(..)`、`RcExpr::Destructure(..)`、
+      `RcExpr::Eval(..)`、または `RcExpr::Let(x, rhs, k)` で `rhs` が `RcRhs::Match(..)` でないもの、の
+      いずれかである。
+  <2>1. D3 より、`p` の上の `m` の直後の節点は `m` の継続 `k` である。
+    BY D3
+  <2>2. `m` の訪問は `self.walk(k, ・, ・)` を呼び、その呼び出しの中で `k` が訪問される。
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
+       CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
+       CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Destructure(container, fields, _state, k)` の腕,
+       CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Eval(_, k)` の腕,
+       CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(x, rhs, k)` の腕, L1
+  <2>3. QED
+    BY <2>1, <2>2
+<1>4. CASE `m` の式が `RcExpr::Ret(_)` であり、`p` の上に `m` の直後の節点 `m'` がある。
+  <2>1. D3 より、`Ret` の後に実行路が続くのは、`m` が、その実行路が入ったアームの本体の実行路を終える
+        `Ret` であるときに限る。そのアームを `arm_i`、その `Match` 節点を `M` とすると、
+        `m = ret(arm_i.body)` であり、`m'` は `M` の継続 `k_M` である。
+    BY D3, DEF 継続終端
+  <2>2. `M` の訪問は、まず `arms` の各アームについて `self.walk(&arm.body, pending.clone(), false)` を
+        呼び、それらが返った後で `self.merge` を呼び、その後で
+        `self.walk(k_M, merged, returns_from_func)` を呼ぶ。
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕
+  <2>3. `m` は `N(arm_i.body)` の要素なので、<2>2 の `self.walk(&arm_i.body, ・, ・)` の呼び出しの中で
+        訪問される。`k_M` は <2>2 の `self.walk(k_M, ・, ・)` の呼び出しの中で訪問される。前者は後者
+        より前に完了する。
+    BY P15, DEF 部分木, <2>2
+  <2>4. QED
+    BY <2>1, <2>2, <2>3
+<1>5. QED
+  <1>2、<1>3、<1>4 は、`p` の上に直後の節点がある場合を尽くす。`RcExpr` の 6 変位のうち `Ret` 以外の
+  5 つを <1>2 と <1>3 が尽くし、`Ret` を <1>4 が扱う。
+  BY <1>1, <1>2, <1>3, <1>4, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs
+
+### L12 (`OutsideBracket` の後始末)
+
+`un_bump` が `OutsideBracket` を返したとき、`walk_inner` の `RcExpr::Release(v, path, _, k)` の腕は、
+`un_bumped` とオブジェクトを共有する `pending` の要素をすべて取り除き、その `node` を
+`self.needed_retains` に入れる。取り除かれるのは `un_bump` が調べた最内の要素だけではない。
+
+**証明**
+
+<1>1. この腕の `match un_bump(...)` の `UnBump::OutsideBracket` の枝は、`let objects = un_bumped.objects();`
+      の後に `self.consume_objects(&mut pending, &objects)` を実行する。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕
+<1>2. L2 の 3 より `un_bumped.objects()` は `un_bumped` が参照を持つオブジェクトを 1 度ずつ並べた列で
+      ある。L6 より `consume_objects` はそのいずれかについて `outstanding.names` が真である要素をすべて
+      取り除き、その `node` を `needed_retains` に入れる。L2 の 3 より、その条件は
+      `outstanding.shares_an_object(un_bumped)` が真であること、すなわち L5 の意味で `un_bumped` と
+      オブジェクトを共有することと同値である。
+  BY L2, L5, L6, <1>1
+<1>3. L5 の 2 より、`un_bump` が `OutsideBracket` を返すとき `pending` は変わらないので、<1>2 が見る
+      `pending` は `un_bump` が見たものと同じである。`un_bump` が `covers` を検査したのはそのうち最内の
+      要素だけである。
+  BY L5
+<1>4. QED
+  BY <1>1, <1>2, <1>3
+
+## 10. 言明についての注記
+
+**注記 1 (P16 の (e) に第 3 の場合が要ること)**。(e) を「取り除かれた要素の `outstanding` がその時点で
+空である」か「取り除かれた要素の `node` がその時点で `needed_retains` に入っている」かの二択にすると、
+次の形で偽になる。`Retain` 節点 `t` が `pending` に入り、その後の `Match` のすべてのアームが `t` を完全に
+un-bump する (各アームの中の `Release` が P17 の第 3 の場合で `t` の `outstanding` を空にする) 場合で
+ある。このとき `arm_exits` のどれも `t` の要素を持たないので、P18 の第 3 の主張より `merge` は `t` を
+`needed_retains` にも返り値にも入れない。この「併合」は `pending_in` の要素の除去事象だが、その要素の
+`outstanding` は (`pending_in` の中では減っていないので) 空でなく、`t` は `needed_retains` にも入って
+いない。P16 の (e3) は、この除去がどこで解消されたか --- 各アームの状態の鎖の中の除去事象 --- を名指す。
+この展開が終わる先は P16 の証明の <1>9 が示す。
+
+**注記 2 (P17 の 2 つの限定)**。第 1 に、`un_bump` が検査するのは `innermost.outstanding.covers(un_bumped)`
+であって、最内の要素の由来である `Retain` が作った参照 (`ActRefs`) と `un_bumped` の関係ではない。この
+2 つは食い違いうる。ある `Release` が P17 の第 3 の場合で最内の要素の `outstanding` を減らした後、
+`ActRefs` は覆うが `outstanding` は覆わない `un_bumped` を持つ `Release` が来ると、`covers` は偽になる。
+最内の要素を選ぶ `shares_an_object` の判定も同じく現在の `outstanding` で行われるので、部分的に un-bump
+された要素は、残った `outstanding` が名指すオブジェクトについてしか後続の `Release` と共有しない。
+
+第 2 に、`un_bump` はオブジェクトを共有する要素のうち最内のものしか調べないので、より外側の要素の
+`outstanding` が `un_bumped` を覆っていても `OutsideBracket` を返す。この場合の後始末は L12 が述べる ---
+`un_bumped` とオブジェクトを共有する要素は 1 つ残らず `needed_retains` に入る。`InBracket` の場合は、
+外側の共有する要素は触られずに `pending` に残る。
+
+**注記 3 (`consume_objects` は列の途中からも取り除く)**。`consume_objects` は `Vec::retain` で、消費された
+オブジェクトを名指す要素を列のどの位置からも取り除く (L6)。取り除かれた要素の `node` は
+`needed_retains` に入るので、それらは打ち消しの対象から外れる。残る要素の相対順序は変わらないので、
+P16 の (d) は保たれ、P17 の「最内」はその後も由来の訪問順で決まる。
+
+**注記 4 (P16 の (c) を支えるもの)**。1 つの `Retain` 節点が `pending` に高々 1 回しか現れないことは、
+2 つの事実から出る。「追加」の場面では P15 (相異なる位置は相異なる `NodeId` を持ち、各位置はちょうど
+1 回訪問される) が、すでに `pending` に在る要素の `node` が今の `Retain` の `node_id` と異なることを
+与える (L9 の「追加」の場合)。「併合」の場面では、`merge` が返り値を `pending_in` から `filter_map` で
+作ること (L7 の 6) が、`pending_in` の (c) をそのまま返り値へ運ぶ。`merge` は `arm_exits` の側から
+要素を作らない。
+
+**注記 5 (P15 の前半が何の性質か)**。D2 が述べるとおり `RcExprNode` は式を `Arc` で共有できるので、1 つの
+木の相異なる位置が同じ `NodeId` を持つ木は作れる。P15 の前半が成り立つのは、`cancel` に渡される木が
+`RewriteCtx::rewrite` の出力だからである (L3 と P15 の 3.1)。`rewrite` は入力の節点を出力にそのまま置かず、
+出力の各位置に `expr_node` で新しい割り当てを作る。したがって P15 の前半は `borrow_ify` が保つべき性質で
+あり、`borrow_ify` の実装を変えるときはこの性質を壊さないことを確かめる必要がある。
+
+**注記 6 (アームが 0 個の `Match`)**。P18 の第 1 の主張の「いずれかのアームの出口に現れ」は、`arms` が
+空のときに偽になり、そのとき返り値は空である。走査する本体にアームが 0 個の `Match` が無いことは L4 が
+述べ、その根拠は A9 である。P16 の (e3) の展開が (e1) か (e2) で終わることも A9 に依る。
+
+**注記 7 (層 4 が必要とする形)**。P19 は実行路で量化した言明である。P16 は実行路を量化しないので、P19 を
+示すには次の 2 つを繋ぐ必要がある。第 1 に、L11 (訪問順序は実行路の順序を含む) が、走査が状態を作る順序と
+実行路の順序を繋ぐ。第 2 に、P16 の (e) の (e3) の展開が `Match` のアームごとに分かれるので、「すべての
+実行路について」の場合分けの構造をそのまま与える。1 つの実行路は各 `Match` でアームを 1 つ選ぶので、
+(e3) の展開のうちその選択に沿った枝が、その実行路の上でどこで解消されたかを名指す。
+
+`merge` を越えて残る要素については、P18 の証明の <1>5 が、その `outstanding` が各アームの出口での共通の
+値と等しいことを述べる。P16 の (b) と合わせると、それは由来の `ActRefs` に含まれ、空でない。

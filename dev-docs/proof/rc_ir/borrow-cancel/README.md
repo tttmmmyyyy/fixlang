@@ -725,7 +725,8 @@ P26 が未較正であることは記録しておく価値がある。この節�
 | P7a, P7e | `p15-ownership-uniformity.md` | 有 | **未着手** (P8, P14 が使う。言明は 1 度書き直した) | 未着手 |
 | P7c | `p13-disposals-and-pending.md` | 有 | **未着手** (新しい言明) | 未着手 |
 | P7d | `p15-ownership-uniformity.md` | 有 | **未着手** (新しい言明。#530 の 2 件を閉じる性質) | 未着手 |
-| P8 - P13 | `p20-borrow-ify.md` | 有 | 証明済み。P10/P11 は `owns_object_yet` の追加を読み直す必要がある | 未着手 |
+| P8 | `p20-borrow-ify.md` | 有 | 証明済み。`infer_ownership` に `level_ownership` の周回が加わったので、停止性の段を書き直す必要がある | 未着手 |
+| P9 - P13 | `p20-borrow-ify.md` | 有 | 証明済み。P10/P11 は `owns_object_yet` の追加を読み直す必要がある | 未着手 |
 | P14 | `p20-borrow-ify.md` | 有 | **未着手** (原因だった #530 の残穴は直った) | 未着手 |
 | P15 - P18 | `p30-cancel-walk.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
 | P18a, P18b | `p13-disposals-and-pending.md` | 有 | **未着手** (新しい言明。層 4 の実質) | 未着手 |
