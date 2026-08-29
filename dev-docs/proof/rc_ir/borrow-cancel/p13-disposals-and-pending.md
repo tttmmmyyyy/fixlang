@@ -684,7 +684,3 @@ L6 をこの文書の補題のまま置くか、README の命題に上げるか�
 述べた。`p20-borrow-ify.md`、`p30-cancel-walk.md`、`p40-cancel-soundness.md` も同じ事実を各自で述べて
 いるので、README の第 3 節に 1 度だけ置くほうがよい。
 
-## 7. P18a
-
-未着手。README 第 5 節の言明を、第 3 節の P7c′ と第 4 節の L6 の上に置く。README 第 7 節の表がその状態を
-持つ。
