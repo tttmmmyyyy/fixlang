@@ -297,6 +297,7 @@ impl FullName {
     }
 
     /// Whether the name is written with no namespace, as a local variable's is.
+    // PROOF:  (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         return self.namespace.is_local();
     }

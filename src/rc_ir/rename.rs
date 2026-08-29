@@ -213,7 +213,6 @@ pub(crate) fn substitute_expr(node: &RcExprNode, subst: &Map<FullName, FullName>
 /// A deep clone of an arbitrary expression with every bound variable given a fresh globally-unique
 /// name. Free variables — those bound outside `node` — are left unchanged. `pass_tag` distinguishes
 /// this clone's fresh names from the ones other passes mint.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn clone_fresh(node: &RcExprNode, pass_tag: &str, counter: &mut u64) -> RcExprNode {
     let mut rename: Map<FullName, FullName> = Map::default();
     assign_fresh_names_to_binders(node, pass_tag, &mut rename, counter);

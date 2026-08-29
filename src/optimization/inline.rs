@@ -21,7 +21,6 @@ use std::{mem, sync::Arc};
 /// What the count weighs is what a copy of the body costs at a call site against the call it saves.
 /// It measures the expression the optimizer holds; the instructions the body finally generates
 /// exceed it, as reference counting and the bounds checks still to be inserted feed them too.
-// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 const INLINE_COST_THRESHOLD: i32 = 30;
 
 /// How many times `run` rewrites the program before it stops asking for more.
