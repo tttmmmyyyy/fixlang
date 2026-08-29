@@ -31,7 +31,7 @@ CITATION = re.compile(
 )
 
 # `| P1, P2 | `p10-leaves-and-units.md` | ... |` in a proof README's status table.
-STATUS_ROW = re.compile(r"^\|\s*([^|]*P[0-9][^|]*?)\s*\|\s*`([^`]+\.md)`\s*\|", re.M)
+STATUS_ROW = re.compile(r"^\|\s*([^|]*P[0-9A-Za-z-][^|]*?)\s*\|\s*`([^`]+\.md)`\s*\|", re.M)
 
 PROOF_COMMENT = re.compile(r"^\s*// PROOF: ")
 
