@@ -2135,19 +2135,21 @@ A19 (i) の総和は `C_b` を渡らないので、呼び出し元の類が持�
 **`<1>3a` を与える形。** 各類 `C` について `d(C) = held_ρ(n, C) - [C の ρ-終端が借用する leaf ならば 1]`
 と置く。次の 1 つが `<1>3a` の代わりを果たす。
 
-> **(i')** 各時点、各計数下オブジェクト `O`、その時点で生きている各活性化 `a` について、
-> `H(O) ≥ Σ_{C ∈ a の計数下別名類, obj(C) = O} d(C) + [a が obj(C) = O である借用終端の類を持つならば 1]`
-> である。
+> **(i')** 各時点、各計数下オブジェクト `O`、その時点で生きている各活性化 `a` について、`a` の計数下の
+> 別名類のうち `obj(C) = O` であり開始の時点がその時点以前であるものの全体を `S` とすると、
+> `H(O) ≥ Σ_{C ∈ S} d(C) + [S に借用終端の類が在るならば 1]` である。
 
 **(i') から `<1>1` の PROVE が出る。** `C0` を `<1>3` が取った類とする。
+
+ここで `S = S(n, O)` である (<1>2)。
 
 - `C0` の ρ-終端が借用する leaf でないとき。借用終端の各類 `C` については `d(C) ≥ bumps_ρ(n, C)` である --
   `bumps_ρ(n, C) ≥ 1` なら A19 (ii-b) が `held_ρ(n, C) ≥ 1 + bumps_ρ(n, C)` を、`bumps_ρ(n, C) = 0` なら
   P14a が `held_ρ(n, C) ≥ 1` を与える。借用終端でない各類については `d(C) = held_ρ(n, C)` であり、L14b が
   `≥ bumps_ρ(n, C)` を、`C0` については A19 (ii-b) が `≥ 1 + bumps_ρ(n, C0)` を与える。足すと
   `Σ d(C) ≥ N_ρ(n, O) + 1` であり、(i') の角括弧は非負なので `H(O) ≥ N_ρ(n, O) + 1` である。
-- `C0` の ρ-終端が借用する leaf であるとき。上と同じ per-class の不等式で `Σ d(C) ≥ N_ρ(n, O)` が出る。
-  `C0` が借用終端の類なので (i') の角括弧は 1 であり、`H(O) ≥ N_ρ(n, O) + 1` である。
+- `C0` の ρ-終端が借用する leaf であるとき。上と同じ類ごとの不等式で `Σ d(C) ≥ N_ρ(n, O)` が出る。
+  `C0 ∈ S(n, O)` が借用終端の類なので (i') の角括弧は 1 であり、`H(O) ≥ N_ρ(n, O) + 1` である。
 
 **(i') が真であることの筋。** `Σ_C d(C)` はその活性化の義務集合 `Obl` が持つ `O` への参照の個数である --
 D10 の初期値は借用する unit の leaf を入れないので、借用終端の類の開始の 1 だけが `Obl` の外にあり、
@@ -2245,12 +2247,6 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
 
 <1>4. CASE 消費が `App` の所有位置の引数以外 -- `App` の callee、`Closure` の capture、
       boxed/unbox の `Destructure`、終端の `Ret` -- であり、かつ `V` の本体に `Retain(p, u)` 節点が在る。
-  <2>1. `collect_consumes` は `(p, μ)` を報告する。
-    BY P7, CODE src/rc_ir/ownership.rs: collect_consumes_go, CODE src/rc_ir/ownership.rs: rhs_consumes
-    P7 より D9 の意味で消費する構文はすべて `collect_consumes` が報告する。この 5 種について
-    `collect_consumes_go` と `rhs_consumes` の判定は `own` を読まないので (`rhs_consumes` の
-    `RcRhs::App` の腕は `callee` の leaf を無条件に `out` に入れ、`RcRhs::Closure` の腕は各 capture の
-    leaf を無条件に入れる)、報告はどの所有の割り当てでも起きる。
   <2>0a. `V` は入力のちょうど 1 つの関数から作られる。その関数を `F` と書き、`rename` を `V` の本体が
          `F` の本体から受けた名前替え (P9) とする。`V` が原本の版であるときは `rename` は恒等写像で
          あり (`borrow_ify` が `clone_func` を呼ぶのは借用版についてだけである)、`F = V` である。
@@ -2268,6 +2264,13 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
     返す `before` と `after` の節点を前後に置き、`x` と `args` はそのまま複製する。残る腕 --
     `Let` の `Match` とそれ以外、`Destructure`、`Eval`、`Ret` -- は、束縛変数・右辺・容器・フィールド・
     scrutinee・返す変数をそのまま複製し、継続とアーム本体を書き換えた木で組み直す。
+  <2>1. `collect_consumes` は `(p, μ)` を報告する。
+    BY P7, CODE src/rc_ir/ownership.rs: collect_consumes_go, CODE src/rc_ir/ownership.rs: rhs_consumes
+    P7 より D9 の意味で消費する構文はすべて `collect_consumes` が報告する。この 5 種について
+    `collect_consumes_go` と `rhs_consumes` の判定は `own` を読まないので (`rhs_consumes` の
+    `RcRhs::App` の腕は `callee` の leaf を無条件に `out` に入れ、`RcRhs::Closure` の腕は各 capture の
+    leaf を無条件に入れる)、報告はどの所有の割り当てでも起きる。
+
   <2>1a. 次の 2 つが成り立つ。
          - `p` が `rename` の像に無いとき、`V` の本体で `p` は束縛を持たず、`origin_V(p, μ)` は
            `Origin::Exactly((p, μ))` であり、`p` は `V` の `vars.param_tys` の鍵ではない。
@@ -2287,7 +2290,6 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
     `Exactly((p, μ))` を返す。`V` のパラメータ名と capture 名 -- `vars.param_tys` の鍵 -- はどれも
     `rename` の像なので、像に無い名前はその鍵ではない。この CASE の 5 種の消費は `own` を読まずに本体の
     形だけで決まる (<2>1) ので、名前替えで保たれる。
-
   <2>2. `p = rename[p0]` であるとき、`origin_F(p0, μ)` の候補であるパラメータ leaf はすべて
         `owned_leaves` に入っている。ここで `owned_leaves = infer_ownership(prog, type_env)` であり、
         その鍵は原本の名前である (`CODE src/rc_ir/borrow.rs: borrow_ify`)。
