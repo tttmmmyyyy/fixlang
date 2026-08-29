@@ -1361,7 +1361,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み (A16 の下で) | 検証済み (指摘 26 件を反映) |
 | P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 検証済み |
 | P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み (P6 は A16 の下で) | 検証済み |
-| P7e, P7d | `p15-ownership-uniformity.md` | 有 | **走行中** -- `unit_step` の `Unit` の腕の見落とし (4 か所) と、P7e の QED が言明を弱めていること | 検証済み |
+| P7e, P7d | `p15-ownership-uniformity.md` | 有 | **走行中** | 検証済み (指摘 30 件超) |
 | P7a | `p15-ownership-uniformity.md` | 有 | **走行中** -- 証明の中身は立つが QED が無い | 検証済み (指摘 30 件超) |
 | P7c, P7f | `p13-disposals-and-pending.md` | 有 | 証明済み (P7c の言明は 1 度書き直した) | 検証済み (指摘を反映)。**2 周目が要る** |
 
@@ -1370,15 +1370,15 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P14 | `p20-borrow-ify.md` | 有 | 証明済み (A19 (ii-a) と A20 の下で。指摘 26 件を反映) | 検証済み。**2 周目が要る** |
 | P15 - P18 | `p30-cancel-walk.md` | 有 | 証明済み | 検証済み (指摘 9 件を反映) |
 | P18b | `p13-disposals-and-pending.md` | 有 | 証明済み | 検証済み (指摘を反映)。**2 周目が要る** |
-| P18c | `p40-cancel-soundness.md` | 有 | **書き直し待ち** -- A19 (ii-b) の形が変わった | 検証済み |
+| P18c | `p40-cancel-soundness.md` | 有 | **走行中** | 検証済み |
 | P18a | `p13-disposals-and-pending.md` | 有 | 証明済み (A19 の下で)。A19 (ii-b) は、この証明が要る条件付きの形に書き直した | 検証済み (指摘 30 件超を反映)。**2 周目が要る** |
 
-| P19, P20, P22, P24 | `p40-cancel-soundness.md` | 有 | 証明済み (指摘を反映) | 検証済み。**2 周目が要る** |
+| P19, P20, P22, P24 | `p40-cancel-soundness.md` | 有 | **走行中** | 検証済み。**2 周目が要る** |
 | P14a | `p20-borrow-ify.md` | 有 | 証明済み (A20 の下で) | 未着手 |
 | P21, P23 | `p40-cancel-soundness.md` | 有 | **走行中** -- 言明が D29 の上に載る形に変わった | 検証済み (指摘 18 件を反映) |
-| P26 (`cancel` の半分) | `p50-observation.md` | 有 | 証明済み | 未着手 |
-| P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | **走行中** | 未着手 |
-| P27 | `p51-runs.md` | 有 | **走行中** -- 実行のモデルが README へ移り、提案した A16 が (S-c) に置き換わった | 未着手 |
+| P26 (`cancel` の半分) | `p50-observation.md` | 有 | 証明済み (局所の `D-CP` の上で。D29 へ置き直し中) | 未着手 |
+| P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | **走行中** -- 4 件目の欠陥が直ったので再開 | 未着手 |
+| P27 | `p51-runs.md` | 有 | **走行中** | 未着手 |
 | (P-insert) | `p60-insert-rc.md` | 有 (A19 の残る半分) | 部分的に証明済み。`L9`-`L11` が `C1`/`C2` を弾き、`L7` が (ii-b) の台帳形を与える。残る義務は (O1) と (O2) (第 4 節の A19) | 未着手 |
 | T | `p70-main-theorem.md` | -- | 未着手 | 未着手 |
 
