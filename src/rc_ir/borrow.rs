@@ -48,8 +48,8 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
     acted_references, acted_unit_keys, all_owned_units, collect_consumes, destructure_consumes,
-    origin, rc_units, rhs_consumes, truncate_to_unit, unit_key, unit_step, units_under, References,
-    UnitStep, VarTable,
+    origin, rc_units, rhs_consumes, truncate_to_unit, unit_key, unit_step, units_under, Origin,
+    References, UnitStep, VarTable,
 };
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
@@ -168,16 +168,9 @@ fn level_ownership(
         .into_iter()
         .cloned()
         .collect();
-    let owns_a_candidate = candidates.iter().any(|(root, path)| {
-        match vars.param_tys.get(root) {
-            // A root this version takes no parameter for is a producer or a global, and the version
-            // owns what it produced.
-            None => true,
-            Some(ty) => covered_leaves(ty, path, type_env)
-                .iter()
-                .any(|leaf| owned_leaves.contains(&(root.clone(), leaf.clone()))),
-        }
-    });
+    let owns_a_candidate = candidates
+        .iter()
+        .any(|(root, path)| owns_object_yet(vars, type_env, root, path, owned_leaves));
     if !owns_a_candidate {
         return false;
     }
@@ -191,6 +184,39 @@ fn level_ownership(
         }
     }
     changed
+}
+
+/// Whether the ownership decided so far already gives this version the object at `(root, path)`.
+///
+/// This is `RewriteCtx::owns_object` asked of the inference's own state. The two have to answer
+/// alike, because `level_ownership` fires on this answer and the rewrite acts on that one. A unit is
+/// owned once **any** leaf truncating to it is owned, which is how `borrow_ify` turns the inferred
+/// leaves into `owned_units`, so a unit's other leaves are owned by that step whether or not the
+/// inference ever named them. Reading the leaves directly here would miss exactly those, and the
+/// unit would be rewritten as owned while the levelling never fired.
+fn owns_object_yet(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    root: &FullName,
+    path: &FieldPath,
+    owned_leaves: &Set<VarPath>,
+) -> bool {
+    // A root this version takes no parameter for is a producer or a global, and the version owns
+    // what it produced.
+    let Some(ty) = vars.param_tys.get(root) else {
+        return true;
+    };
+    let leaves = boxed_leaf_paths(ty, type_env);
+    units_under(ty, path, type_env).iter().all(|unit| {
+        // `units_under` answers with the path itself where the path runs below a unit -- into a
+        // variant of an unboxed union, say -- so the answer is truncated before it is a key, as
+        // `owns_object` truncates it.
+        let key = truncate_to_unit(ty, unit, type_env);
+        leaves.iter().any(|leaf| {
+            truncate_to_unit(ty, leaf, type_env) == key
+                && owned_leaves.contains(&(root.clone(), leaf.clone()))
+        })
+    })
 }
 
 /// The boxed leaves of `ty` that `path` covers: the ones beneath it, and the one it lies beneath.
@@ -1258,6 +1284,9 @@ impl<'a> CancelAnalysis<'a> {
                 let retain = node_id(node);
                 self.all_retains.push(retain);
                 self.un_bump_releases.entry(retain).or_default();
+                if self.names_itself(v, path) {
+                    self.needed_retains.insert(retain);
+                }
                 let outstanding = self.acted_references(v, path);
                 pending
                     .entry(self.unit_key(&v.name, path))
@@ -1328,6 +1357,23 @@ impl<'a> CancelAnalysis<'a> {
                 }
                 pending
             }
+        }
+    }
+
+    /// Whether the value at `(v, path)` answers with a name of its own rather than a name of what it
+    /// holds: the leaves under it reach several objects, and `origin` has no one name for them.
+    ///
+    /// A retain of such a value is counted under that made-up name, while a construct consuming one
+    /// of the objects it holds is counted under the object's own name. The two never meet, so the
+    /// consume leaves the retain cancellable and the pair is removed across it. Keeping the retain
+    /// costs the pair; removing it frees an object the consume has already disposed of.
+    ///
+    /// `Std::Option (a, b)` and `Std::Result e (a, b)` take this shape: the payload holds two
+    /// reference-counting units, and the union built from it holds both.
+    fn names_itself(&self, v: &RcVar, path: &FieldPath) -> bool {
+        match origin(self.vars, self.type_env, &v.name, path) {
+            Origin::Exactly(_) => false,
+            Origin::Join { identity, .. } => identity == (v.name.clone(), path.to_vec()),
         }
     }
 

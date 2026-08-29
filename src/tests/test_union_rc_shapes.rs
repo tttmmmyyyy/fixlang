@@ -590,6 +590,172 @@ main = (
         test_source(SPLIT_OWNERSHIP_UNIT_SOURCE, Configuration::develop_mode());
     }
 
+    // A union whose payload is an unboxed aggregate holding two reference-counting units, as
+    // `Option (a, b)` and `Result e (a, b)` do. The leaves under the union reach two different
+    // objects, so `origin` has no one name for the union and answers with a name of the union's
+    // own. A retain of the union is then counted under that made-up name while a construct
+    // consuming one of the objects is counted under the object's own name, and the two never meet:
+    // the consume leaves the retain cancellable and the pair goes away across it.
+    //
+    // `drain` consumes the payload, `peek2` reads the union afterwards, and the arrays allocated in
+    // between take the freed memory, so the answer changes.
+    const UNION_PAYLOAD_TWO_UNITS_SOURCE: &str = r#"
+module Main;
+
+// An unboxed union whose `pair` payload holds the references of two distinct objects.
+type Action = unbox union { pair : (Array I64, Array I64), mark : I64 };
+
+// Reads both arrays the payload holds and disposes of no reference: the destructure names both
+// fields (a move) and element access borrows.
+read_both : Action -> I64;
+read_both = |x| match x {
+    pair(p) => (let (a, b) = p; a.@(0) * 10 + b.@(0)),
+    mark(m) => m
+};
+
+// Borrows both unions. The recursion keeps the call out of line.
+peek2 : Action -> Action -> I64 -> I64;
+peek2 = |a, b, n| (
+    if n == 0 { read_both(a) + read_both(b) };
+    peek2(a, b, n - 1)
+);
+
+// Consumes the payload: both arrays go into a fresh array, which is then dropped.
+consume_pair : (Array I64, Array I64) -> I64;
+consume_pair = |p| (
+    let (x, y) = p;
+    let z = [x, y];
+    z.@size
+);
+
+// Owns its union: the payload it takes out goes to an owning position.
+drain : Action -> I64 -> I64;
+drain = |a, n| (
+    if n == 0 {
+        match a {
+            pair(p) => consume_pair(p),
+            mark(m) => m
+        }
+    };
+    drain(a, n - 1)
+);
+
+run : I64 -> (Array I64, Array I64) -> Action -> I64;
+run = |k, payload, other| (
+    let action = Action::pair(payload);
+    let u1 = drain(action, 1);
+    // Two arrays of the sizes the payload had, allocated after `drain` disposed of it.
+    let f1 = Array::fill(k + 2, 111);
+    let f2 = Array::fill(k + 3, 222);
+    let u2 = peek2(action, other, 2);
+    let u3 = drain(other, 1);
+    u1 * 10000 + u2 * 10 + u3 + (f1.@(0) - 111) + (f2.@(0) - 222)
+);
+
+main : IO ();
+main = (
+    // The sizes come from the command line, so the arrays are not constant-folded away.
+    let args = *get_args;
+    let k = args.@size;
+    let payload = (Array::fill(k + 2, 7), Array::fill(k + 3, 9));
+    let other = Action::pair((Array::fill(k + 4, 1), Array::fill(k + 5, 2)));
+    let r = run(k, payload, other);
+    assert_eq(|_|"a union payload holding two units, retained across a consume", r, 20912);;
+    pure()
+);
+"#;
+
+    /// The reads after the consume see the payload the union was built with.
+    #[test]
+    pub fn test_union_payload_two_units_correctness() {
+        test_source_without_valgrind(UNION_PAYLOAD_TWO_UNITS_SOURCE);
+    }
+
+    /// The same under Valgrind MemCheck, which is what the read of the freed payload shows up as.
+    #[test]
+    pub fn test_union_payload_two_units_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(
+            UNION_PAYLOAD_TWO_UNITS_SOURCE,
+            Configuration::develop_mode(),
+        );
+    }
+
+    // A parameter that is an unboxed union whose variants each hold one array, where only one
+    // variant's leaf is consumed. Ownership is inferred per leaf and read per unit, and a unit
+    // counts as owned once any leaf under it is, so the union's unit is owned while the other
+    // variant's leaf was never named. A borrowing version then has to answer for the unit built
+    // from that variant's payload and a borrowed array, and the answer it gives decides whether the
+    // owned reference is disposed at all.
+    const ONE_VARIANT_OWNED_SOURCE: &str = r#"
+module Main;
+
+type U = union { a : Array I64, b : Array I64 };
+type V = union { twins : (Array I64, Array I64), nothing : () };
+
+f : I64 -> U -> Array I64 -> Array I64;
+f = |n, p, q| (
+    let m = n + 1;
+    let m = m + 2;
+    let m = m + 3;
+    let m = m + 4;
+    let m = m + 5;
+    let m = m + 6;
+    let m = m + 7;
+    let m = m + 8;
+    let m = m * 9;
+    let m = m * 10;
+    let m = m * 11;
+    let m = m * 12;
+    let m = m * 13;
+    let m = m * 14;
+    let m = m - 15;
+    let m = m - 16;
+    let m = m - 17;
+    let m = m - 18;
+    let m = m - 19;
+    let m = m - 20;
+    match p {
+        a(y0) => y0,
+        b(y1) => (
+            let v = V::twins((y1, q));
+            eval v;
+            Array::fill(1, m)
+        )
+    }
+);
+
+main : IO ();
+main = (
+    let arr1 = Array::fill(3, 1);
+    let arr2 = Array::fill(3, 2);
+    let u = U::b(arr1);
+    let r = f(0, u, arr2);
+    assert_eq(|_|"one variant of a parameter union owned", r.@size + arr2.@(0), 3);;
+    pure()
+);
+"#;
+
+    /// The array the union carried is freed exactly once. The answer is right either way, so only
+    /// the leak check catches this.
+    #[test]
+    pub fn test_one_variant_owned_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        test_source(ONE_VARIANT_OWNED_SOURCE, Configuration::develop_mode());
+    }
+
     // A union payload built from a value a match binding carries and a second value. The binding
     // carries a name of its own -- the one every path through the match agrees on -- and that name
     // is what a retain of the binding keys to. A release of the union has to name it as well: the
