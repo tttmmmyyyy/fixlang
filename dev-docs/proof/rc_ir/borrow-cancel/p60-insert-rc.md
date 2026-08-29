@@ -28,15 +28,13 @@ D1-D27、仮定 A1-A19、命題 P1-P27 の**言明**の上に立つ。加えて 
 ## 1. 記法
 
 `insert_rc(prog, type_env)` は `prog` の各関数の `body` と各グローバル初期化子の `init` を書き換える
-(`CODE src/rc_ir/rc_insert.rs: insert_rc`)。以下ではその 1 つの入力を**骨格**、出力を**本体**と呼ぶ。
+(`CODE src/rc_ir/rc_insert.rs: insert_rc`)。
 
 - **骨格**とは `insert_rc` の入力の本体である。`RcExpr::Retain` と `RcExpr::Release` を含まない --
   含むと `insert_into_expr_inner` が panic する (`CODE src/rc_ir/rc_insert.rs:
   RcInserter::insert_into_expr_inner` の `RcExpr::Retain(..) | RcExpr::Release(..)` の腕)。
 - `ty(x)`、`origin(x, π)`、`acted_on(x, π)`、`L(v, π)`、`ActRefs(v, π)` は
   `p13-disposals-and-pending.md` の第 1 節と同じ意味で使う。
-- `live(n)` は、`insert_rc` の再帰が節点 `n` を書き換えるときに受け取る `live_after` の値、`live_before(n)`
-  はそのとき返す第 2 成分である (`CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr`)。
 - `needs_rc(v)` は `RcInserter::needs_rc(v)`、すなわち `!v.ty.is_fully_unboxed(type_env)`
   (`CODE src/rc_ir/rc_insert.rs: RcInserter::needs_rc`)。
 
@@ -232,12 +230,18 @@ Ret(w)))))
   BY D3
   D3 の規則で分岐が生じるのは `Let(x, Match(v, arms), k)` の行だけである。
 
-<1>2. `ρ_0` の上のスロットは `(p, [])` だけである。
-  BY D4, D6, <1>1
-  `ρ_0` の上で値を得る変数は `p`、`u`、`w` である (`f` は変数として値を得ず、`App` の callee として
-  現れる)。D4 より `boxed_leaf_paths(Arr) = {[]}` (`Arr` は `is_box` が真なので自分自身の位置 1 つ) で
-  あり、`boxed_leaf_paths(I) = ∅` (`is_fully_unboxed` が真なので leaf を持たない) である。よってスロットは
-  `(p, [])` だけである。
+<1>2. `ρ_0` の上のスロットのうち、変数が `p`、`u`、`w` のいずれかであるものは `(p, [])` だけである。
+  BY D4, D6
+  D4 より `boxed_leaf_paths(Arr) = {[]}` (`Arr` は `is_box` が真なので自分自身の位置 1 つ) であり、
+  `boxed_leaf_paths(I) = ∅` (`is_fully_unboxed` が真なので leaf を持たない) である。`ty(u) = ty(w) = I`
+  なので、この 2 つは leaf を持たない。
+
+<1>2a. `B_0` に現れる残りの `RcVar` は `App` の callee `f` であり、その各 boxed leaf `λ` について
+       `(f, λ)` は ρ-終端である。
+  BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin_inner,
+     p13 の DEF ρ-歩みと ρ-終端
+  `collect_bindings` は `f` に束縛を入れない (`f` は `B_0` のどの `Let`、`Destructure`、`Match` の
+  束縛変数でもない)。`origin_inner` の `None` の腕は `here()` を返し、`origin` を呼ばない。
 
 <1>3. `origin(p, []) = Origin::Exactly((p, []))` である。
   BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin_inner,
@@ -251,10 +255,12 @@ Ret(w)))))
   すべて等しいので、その値がそのまま返る。
 
 <1>4. `(p, [])` は ρ-終端であり、`C_p = {(p, [])}` である。
-  BY <1>3, <1>2, p13 の DEF ρ-歩みと ρ-終端, p13 の DEF 別名類
+  BY <1>3, <1>2, <1>2a, p13 の DEF ρ-歩みと ρ-終端, p13 の DEF 別名類
   <1>3 の計算で `origin_inner` は `origin` を 1 度も呼ばない (`operand_units` が空なので
   `origin_from_leaves_under` の中の `origin` の呼び出しも起きない)。よって `(p, [])` は ρ-終端である。
-  <1>2 よりスロットは 1 つなので、それだけからなる類が別名類である。
+  別名類は ρ-終端が等しいスロットの集まりなので、`(p, [])` を ρ-終端とするスロットを数えればよい。
+  <1>2 より `p`、`u`、`w` の側にはそれは `(p, [])` だけであり、<1>2a より `f` の側のスロットの
+  ρ-終端は `(f, λ)` であって `(p, [])` ではない。
 
 <1>5. `obj(C_p)` は計数下である。
   BY A3, D26
@@ -323,10 +329,12 @@ Ret(w)))))
 boxed leaf が無いので、(S-c) は最初の `App` が `H(O_p) = 2`、2 番目の `App` が `H(O_p) = 1`、
 `Retain(p, [])` が `H(O_p) = 1` の下で読み・触れるので、それぞれ成り立つ。
 
-`B_0` は A19 (ii) も満たす。`Retain(p, [])` の要素の `outstanding` は `ActRefs(p, []) = {(p, []): 1}` で
-あり、最初の `App(f, [p])` の消費が渡す `acted_on(p, []) = {(p, [])}` はその鍵なので、
-`consume_objects` がその要素を取り除く (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`)。
-各節点の入口で `(held, bumps)` は `(1, 0)`、`(2, 1)`、`(1, 0)`、`(0, 0)` と動く。
+`B_0` は A19 (ii) の弱い形 -- 「`held ≥ bumps` であり、`bumps ≥ 1` のときは `held ≥ 1 + bumps`」、
+第 9 節の差し戻し B -- を満たす。`Retain(p, [])` の要素の `outstanding` は
+`ActRefs(p, []) = {(p, []): 1}` であり、最初の `App(f, [p])` の消費が渡す
+`acted_on(p, []) = {(p, [])}` はその鍵なので、`consume_objects` がその要素を取り除く
+(`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`)。`Retain(p, [])` の入口から順に、
+`(held, bumps)` は `(1, 0)`、`(2, 1)`、`(1, 0)`、`(0, 0)` と動く。
 
 **破れているのは言明の側である。** `Fut_ρ(n, C)` は `n` より後の処分だけを数え、`n` より後の `Retain` が
 作る参照を数えない。`held_ρ(n, C)` はその時点の参照の個数なので、後で `Retain` が増やす分を先取りして
@@ -527,9 +535,10 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func
-  これらの関数は `RcExprNode` を新しく作って返すだけであり、`RcExprNode` の `expr` は `Arc` の
-  中にあって書き換えられない。`build_releases` と `build_retains` も、渡された節点を継続として
-  **包む**だけである。よって出力の `Retain` 節点の継続は、それが作られた時点の継続である。
+  これらの関数は `RcExprNode` を作って返すだけで、返した節点の継続を差し替える式を持たない。呼び出し元が
+  するのは、返された節点を別の構成子の継続 (`cont` または `node`) として渡すことだけであり、
+  `build_releases` と `build_retains` も渡された節点を継続として**包む**。よって出力の `Retain` 節点の
+  継続は、それが作られた時点の継続である。
 
 <1>3. CASE `t` が `L8` の 1 で作られた。
   BY L8, <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let
@@ -672,7 +681,7 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
 
 ### 7.5 `L11` (`L9` の形は `cancel` の入力まで残る)
 
-**言明**。`cancel` の入力の各本体の各 `Retain` 節点 `t = Retain(v, u, s, k)` について、`k` から継続を
+**言明**。`cancel` の入力の各本体の各 `Retain` 節点 `t = Retain(v, π, s, k)` について、`k` から継続を
 辿って最初に現れる `RcExpr::Retain` でない節点 `n_t` は `v` を名指し、`L9` の (a)-(d) のいずれかの形で
 ある。
 
@@ -723,12 +732,14 @@ A1 (入力が RC 規律を満たす) を `insert_rc` について示す作業の
 `insert_rc` と書いており、その証明は無い。
 
 **(O2) 帳簿の遅れが無いこと。** 各別名類の各処分について、`U + X` が同時に増えるか、増えない分が
-それより前の `X` の余剰で埋まっていること。`L9` と `L11` はこのうち 1 つの場合を閉じる -- `Retain(v)` の
-直後の構文が `v` の leaf を**消費**するとき、その消費が `consume` に渡す `acted_on(v, μ)` は
-`identity(v, μ)` を含み、その `Retain` の要素の `outstanding = ActRefs(v, [])` はその名前を鍵に持つので、
-`consume_objects` がその要素を落とす (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume`,
+それより前の `X` の余剰で埋まっていること。`L9` と `L11` はこのうち 1 つの場合を閉じる -- `Retain(v, π)` の
+直後の構文が `v` の leaf `μ ∈ L(v, π)` を**消費**するとき、その消費が `consume` に渡す `acted_on(v, μ)` は
+`identity(v, μ)` を含み、その `Retain` の要素の `outstanding = ActRefs(v, π)` はその名前を鍵に持つ
+(`ActRefs` は `π` の下の各 boxed leaf を `origin` の `identity` で数える) ので、`consume_objects` が
+その要素を落とす (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume`,
 `CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`, `CODE src/rc_ir/ownership.rs:
-acted_references`)。閉じないのは、直後の構文が `v` の leaf を**移動**させる場合 -- `L9` の (b)、
+acted_references`)。消費される leaf は、`split_rc_units` が作った鎖のちょうど 1 つの節点の `π` の下に
+ある (P1)。閉じないのは、直後の構文が `v` の leaf を**移動**させる場合 -- `L9` の (b)、
 (c) の名前付きフィールド、(d) の payload 束縛、(a) の `Var` と `Llvm` の素通し -- であり、移動の先の
 スロットの `identity` が `v` の側と異なりうるのは `Binding::Join` の腕が候補を 2 つ以上持つとき
 だけである (`CODE src/rc_ir/ownership.rs: origin_inner` -- `Binding::Move`、`Binding::Field` の unbox の
