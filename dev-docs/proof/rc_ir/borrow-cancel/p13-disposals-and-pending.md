@@ -1,20 +1,21 @@
 # P7c: 処分はすべて走査に届く
 
-この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義 D1-D27 と仮定 A1-A20、および命題
-P1、P2、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P17、P18 の**言明**の上に立つ。それらの証明は
-`p10-leaves-and-units.md`、`p12-identity-and-consumes.md`、`p20-borrow-ify.md`、`p30-cancel-walk.md` に
-あり、この文書はその言明だけを使う。
+**対象コミット**: `e0d4f255bdd52ef6f3a5d63b59f687dbb15f00ac`
 
-**結論を先に書く。P7c は README の言明より弱い形 `P7c′` で証明できた。P7f と P18b は証明できた。
-P18a は A19 の上で証明できた。**
+この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義 D1-D32 と仮定 A1-A21、および命題
+P1、P2、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P16、P17、P18、P24、P28、P29 の**言明**の
+上に立つ。それらの証明は `p05-holders.md`、`p10-leaves-and-units.md`、`p12-identity-and-consumes.md`、
+`p20-borrow-ify.md`、`p30-cancel-walk.md`、`p40-cancel-soundness.md`、`p51-runs.md` にあり、この文書は
+その言明だけを使う。
 
-第 3 節が P7c を `P7c′` として書き直す。**書き直しは表記だけではない。** README の P7c (a) は
-「`consume_objects` または `un_bump` を、その構文が触れうるオブジェクトをすべて含む引数で呼ぶ」--
-すなわち 1 回の呼び出しの引数がそれをすべて含む -- という形であり、この形は偽である。`P7c′` (a) は
-訪問が行う呼び出しが名指すオブジェクトの**和**についての言明であり、第 3 節がこの差と、README の
-言明が偽になる 2 つの形を述べる。(b) は一致する。第 5 節が `P7c′` を証明する。第 4 節の `L6` が P7f を
-与え、その直後の段がその一致を述べる。第 7 節が P18b (第 7.4 節) と P18a (第 7.5 節) を扱う。
-第 6 節と第 7.6 節が README への差し戻しをまとめる。
+**結論を先に書く。P7c、P7f、P18b は証明できた。P18a は閉じていない。** README の A19 (i) は、ρ-終端が
+借用する (D14) パラメータ・capture の leaf である別名類を総和から除く。第 7.5.4 節の `<1>3a` が要るのは
+除かない形の総和についての上界なので、その段はこの (i) からは出ない。第 7.5.4 節がそこで止まり、何が
+要るかを述べる。
+
+第 3 節が P7c の言明を README から引き、第 5 節がそれを証明する。第 4 節の `L6` が P7f を与え、その直後の
+段がその一致を述べる。第 7 節が P18b (第 7.4 節) と P18a (第 7.5 節) を扱う。第 6 節と第 7.6 節が、
+かつてこの文書が README へ差し戻した点の現状をまとめる。
 
 ## 1. 記法
 
@@ -36,11 +37,18 @@ P18a は A19 の上で証明できた。**
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 
 `VarPath` は対 `(FullName, FieldPath)` である (`CODE src/rc_ir/ast.rs: VarPath`)。変数 `v` (`RcVar`) と
-leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す。この文書が「オブジェクト」と書くのは
-`VarPath` の水準の名前であり、README の第 3.5 節の最後の段落がそう定める。
+leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す。**`VarPath` はオブジェクトの名前で
+ある** -- README の第 3.5 節の最後の段落が「この文書はオブジェクトの名前を `VarPath` の水準で扱う」と
+定める。`origin` の identity、`acted_references`、`PendingRetain::outstanding`、`consume_objects` の引数は
+どれも `VarPath` を要素とする。第 6 節までがそれらについて「オブジェクト」と書くとき指すのはこの名前で
+あり、走査が読む量はどれもこの水準にある。
 
-この文書は補題を `L1` から `L6`、証明する形の命題を `P7c′` と呼ぶ。`BY` の行ではそれらを名前で引用する。
-補題の証明の内部のステップは引用しない。
+第 7 節からは実行時のオブジェクト (D7) を相手にするので、2 つを**名前**と**オブジェクト**に書き分ける。
+名前が指すオブジェクトは `obj(x, λ)` (D6) と `obj_ρ(o)` (第 7.2 節の DEF 名前の活性) が与える。1 つの
+オブジェクトを 2 つの名前が指す本体は在る (第 7.5.8 節の `C2`) ので、この区別は表記だけのものではない。
+
+この文書は補題を `L1` から `L6` と呼ぶ。`BY` の行ではそれらを名前で引用する。補題の証明の内部のステップは
+引用しない。
 
 外部の結果を 2 つ使う。
 
@@ -109,7 +117,14 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
 
 ## 3. 証明する形
 
-**P7c′**。`B` の各節点 `n` の各訪問について、次が成り立つ。
+**P7c** (README 第 5 節)。
+
+> - **(a)** 終端の `Ret` 以外では、その節点の訪問が行う `consume_objects` と `un_bump` の呼び出しが名指す
+>   オブジェクトの**和**が、その構文が触れうるオブジェクト (D15 の `acted_on`) をすべて含む。とくに触れうる
+>   オブジェクトが在れば、訪問はこの 2 つのどちらかを少なくとも 1 回呼ぶ。
+> - **(b)** 終端の `Ret` では、その時点の `pending` のすべての要素を `needed_retains` に入れる。
+
+この文書の記法で書くと次のとおりである。第 5 節が示すのはこの形である。
 
 - **(a)** `n` が `B` の終端の `Ret` でないとき。その訪問が行う `consume_objects` と `un_bump` の呼び出しが
   名指すオブジェクトの和は、`Obj(n)` を含む。とくに `Obj(n)` が空でなければ、その訪問はこの 2 つの
@@ -117,12 +132,11 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
 - **(b)** `n` が `B` の終端の `Ret` のとき。その訪問は、渡された `pending` の**すべての**要素を
   `needed_retains` に入れる。とくに `Obj(n)` のオブジェクトを名指す `outstanding` を持つ要素はすべて入る。
 
-(b) は README の P7c (b) そのものである。
+「その構文が触れうるオブジェクト (D15 の `acted_on`)」が `Obj(n)` であることは DEF 触れうるオブジェクトが、
+「その時点の `pending`」が `pending(n)` であることは DEF 訪問が定める。
 
-**(a) は README の P7c (a) と違う。** README の P7c (a) は「終端の `Ret` 以外では、`consume_objects`
-または `un_bump` を、その構文が触れうるオブジェクト (D15 の `acted_on`) をすべて含む引数で呼ぶ」であり、
-**1 回の呼び出しの引数**が `Obj(n)` をすべて含むことを要求する。この形は偽である。破れる形が 2 つあり、
-どちらもこの文書の中に実例がある。
+**和で述べる 2 つの場所。** README は「**和で述べるのは、1 回の呼び出しでは足りないからである。**」と書く。
+その 2 つはこれであり、どちらも第 5 節の証明に現れる。
 
 - **leaf ごとに呼ぶ構文。** `App`、`Closure`、`Destructure` の訪問は、`rhs_consumes` /
   `destructure_consumes` が挙げる leaf の 1 つずつについて `consume` を呼び、`consume` の 1 回の
@@ -142,10 +156,6 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
   `ActRefs(m, []).objects() = {(m, [])}`、`Others(m, []) = {(p, []), (q, [])}` であり、どちらの
   引数も `Obj(n)` を含まない。両者の**和**が含むことを述べるのが P5 (c) であり、`Release` の腕は
   その分担の上に立っている。
-
-すなわち、走査が `Obj(n)` に届く仕組みは「1 回の呼び出し」ではなく「その訪問が行う呼び出しの和」で
-ある。`P7c′` (a) はその形で書いてある。第 5 節が示すのはこの形であり、README の P7c (a) は
-この形へ書き直す必要がある (第 6 節)。
 
 ## 4. 予備の補題
 
@@ -406,16 +416,16 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
 **証明**
 
 <1>1. QED
-  BY L6, L5, DEF 触れうるオブジェクト, DEF 処分 leaf, P7c′
+  BY L6, L5, DEF 触れうるオブジェクト, DEF 処分 leaf, P7c
   L6 の言明は「`n = Release(v, π, s, k)` の訪問において、`un_bump` の呼び出しが `UnBump::NoBracket` または
   `UnBump::OutsideBracket` を返すならば、訪問がその後 `self.walk(k, pending, ·)` に渡す `pending` の
   どの要素も、`Obj(n)` のどのオブジェクトも名指さない」である。「訪問の後の `pending`」とは `walk(k, ·, ·)`
   に渡すものである (L5 の 4)。「その `Release` が触れうるオブジェクト」とは、DEF 触れうるオブジェクトと
-  DEF 処分 leaf の `Release` の行より `Obj(n) = ⋃_{λ ∈ L(v, π)} acted_on(v, λ)` である。これは P7c′ の
+  DEF 処分 leaf の `Release` の行より `Obj(n) = ⋃_{λ ∈ L(v, π)} acted_on(v, λ)` である。これは P7c の
   言明が「その構文が触れうるオブジェクト」と呼ぶものと同じ量である。「要素が名指す」とは
   `outstanding.names` が真であることである (L6 の <1>1)。よって 2 つの言明は同じことを述べている。
 
-## 5. P7c′ の証明
+## 5. P7c の証明
 
 <1>1. `B` の各節点 `n` の訪問はちょうど 1 回起こる。
   BY L2
@@ -429,7 +439,7 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
     BY D2
     D2 より `Retain` と `Ret` は `RcExpr` の相異なる種である。
   <2>3. QED
-    空集合はどんな和にも含まれる。よって P7c′ (a) が成り立つ。
+    空集合はどんな和にも含まれる。よって P7c (a) が成り立つ。
     BY <2>1, <2>2
 
 <1>3. CASE `n` の式が `RcExpr::Eval(v, k)` である。
@@ -494,7 +504,7 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
   <2>3. QED
     <2>1 と <2>2 より、渡された `pending` のすべての要素が `needed_retains` に入る。部分集合として、
-    `Obj(n)` のオブジェクトを名指す `outstanding` を持つ要素も入る。これが P7c′ (b) である。
+    `Obj(n)` のオブジェクトを名指す `outstanding` を持つ要素も入る。これが P7c (b) である。
     BY <2>1, <2>2
 
 <1>8. CASE `n` の式が `RcExpr::Let(x, RcRhs::App(callee, args), k)` である。
@@ -533,15 +543,30 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
         `Disp(n)` の引数の側はその部分集合である。
         BY <4>1, DEF 処分 leaf
     <3>3. CASE `resolve_callee_params` が `Some(params)` を返す。
-      <4>1. `params` は呼び出し先の関数 `prog.funcs[fref]` の `params` である。
+      <4>1. `params` は、`resolve_callee_params` が `vars.closure_targets` か `prog.funcs` の鍵から
+            静的に引いた関数 `prog.funcs[fref]` の `params` である。
         BY CODE src/rc_ir/ownership.rs: resolve_callee_params
-      <4>2. `Disp(n)` の引数の側の元 `(a_i, λ)` とは、`λ ∈ L(a_i)` であって、呼び出し先が
-            `p_i = params[i]` の unit `u = truncate_to_unit(ty(p_i), λ, type_env)` を所有するもので
-            ある。また A12 より `ty(a_i) = ty(p_i)` であり、`λ` は `ty(p_i)` の boxed leaf である。
-        BY DEF 処分 leaf, A12, <4>1
-        A12 は「`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型」の一致を挙げる。
-      <4>3. D14 より、呼び出し先が `u` を所有するとは、`u` が `rc_units(ty(p_i))` の元であって
-            `(p_i.name, u)` が呼び出し先の `borrowed_units` に入らないことである。
+      <4>1a. `n` の段の**実行時の**呼び出し先 (D23) を `g` と書くと、`g` は `prog` の `funcs` の関数で
+             あり、そのパラメータの列は `params` である。
+        BY D23, P29, P9, P12
+        D23 は `App` の呼び出し先を実行時に `callee` の値が指す関数と定め、「**D9 の `App` の行と D10 の
+        生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数である。**」と述べたうえで、
+        「D9 の `App` の行が読む所有は D14 が `RcFunc::borrowed_units` から定めるものなので、**その
+        呼び出し先はプログラムの `funcs` の関数である**」と続ける。P29 は「`resolve_callee_params` が
+        `Some(params)` を返すならば、`params` はその段の実行時の呼び出し先 (D23) のパラメータの列で
+        ある」を `borrow_ify` の入力について述べ、README の P29 は「出力についての同じ性質は、P9 と
+        P12 と合わせて読む」と続ける。第 1 節より `B` は `cancel` の入力、すなわち `borrow_ify` の
+        出力の本体である。
+      <4>2. `Disp(n)` の引数の側の元 `(a_i, λ)` とは、`λ ∈ L(a_i)` であって、`g` が `g` の第 `i`
+            パラメータ `p_i = params[i]` の unit `u = truncate_to_unit(ty(p_i), λ, type_env)` を所有する
+            ものである。また A12 より `ty(a_i) = ty(p_i)` であり、`λ` は `ty(p_i)` の boxed leaf である。
+        BY DEF 処分 leaf, A12, <4>1a
+        DEF 処分 leaf の `App` の行は D9 の `App` の行を読んだものであり、そこで言う「呼び出し先」は
+        実行時のもの `g` である (D23)。<4>1a より `g` のパラメータの列は `params` なので、その第 `i`
+        パラメータは `params[i]` である。A12 は「`App(callee, args)` の各引数と呼び出し先の対応する
+        パラメータの型」の一致を挙げる。
+      <4>3. D14 より、`g` が `u` を所有するとは、`u` が `rc_units(ty(p_i))` の元であって
+            `(p_i.name, u)` が `g` の `borrowed_units` に入らないことである。
         BY D14
       <4>4. `u = truncate_to_unit(ty(p_i), λ, type_env)` は `rc_units(ty(p_i))` の元である。
         BY P1, <4>2
@@ -552,11 +577,11 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
             ならばそれを集合に入れる。
         BY CODE src/rc_ir/ownership.rs: all_owned_units
       <4>6. `Disp(n)` の引数の側の元 `(a_i, λ)` について `owns(&params[i], &λ)` は真である。
-        呼び出し先は `prog.funcs` の関数であり (<4>1)、`p_i` はそのパラメータである。<4>3 と <4>4 より
-        `u ∈ rc_units(ty(p_i))` かつ `(p_i.name, u) ∉ borrowed_units` なので、<4>5 より
-        `(p_i.name, u) ∈ all_owned_units(prog, type_env)` である。<2>2 と <2>3 より `owns(&params[i], &λ)`
-        はまさにこの所属を検査する。
-        BY <2>2, <2>3, <4>1, <4>2, <4>3, <4>4, <4>5
+        <4>1a より `g` は `prog.funcs` の関数であり、`p_i = params[i]` はそのパラメータである。<4>3 と
+        <4>4 より `u ∈ rc_units(ty(p_i))` かつ `(p_i.name, u)` は `g` の `borrowed_units` に入らないので、
+        <4>5 より `(p_i.name, u) ∈ all_owned_units(prog, type_env)` である。<2>2 と <2>3 より
+        `owns(&params[i], &λ)` はまさにこの所属を検査する。
+        BY <2>2, <2>3, <4>1a, <4>2, <4>3, <4>4, <4>5
       <4>7. QED
         BY <2>4, <4>6
         `is_owning_position` が真になるので、`(a_i.name, λ)` は `out` に入る。
@@ -574,7 +599,7 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
     BY D2
   <2>8. QED
     <2>5 より `Disp(n)` は <2>4 の集合に含まれるので、`Obj(n) = ⋃_{(w, λ) ∈ Disp(n)} acted_on(w, λ)` は
-    <2>6 の和に含まれる。これが P7c′ (a) である。
+    <2>6 の和に含まれる。これが P7c (a) である。
     BY <2>5, <2>6, <2>7, DEF 触れうるオブジェクト
 
 <1>9. CASE `n` の式が `RcExpr::Let(x, RcRhs::Closure(f, caps), k)` である。
@@ -671,7 +696,7 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
   <2>6. QED
     <2>1 の 2 つの呼び出しは、訪問が行う `consume_objects` と `un_bump` の呼び出しのうちの 2 つである
     (L5 によれば 3 つ目がありうる)。よって訪問が行う呼び出しが名指すオブジェクトの和は <2>2 の集合を
-    含み、<2>4 よりその集合は `Obj(n)` を含む。これが P7c′ (a) である。
+    含み、<2>4 よりその集合は `Obj(n)` を含む。これが P7c (a) である。
     BY <2>1, <2>2, <2>4, <2>5, L5
 
 <1>13. QED
@@ -689,18 +714,19 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
     BY <1>6, <1>7
   <2>6. QED
     <1>1 より `B` の各節点の訪問が起こり、<2>1 から <2>5 より、どの訪問も <1>2 から <1>12 のちょうど
-    1 つの場合に入る。`n` が `B` の終端の `Ret` である場合 (<1>7) は P7c′ (b) を、他の場合は
-    P7c′ (a) を示している。
+    1 つの場合に入る。`n` が `B` の終端の `Ret` である場合 (<1>7) は P7c (b) を、他の場合は
+    P7c (a) を示している。
     BY <1>1, <2>1, <2>2, <2>3, <2>4, <2>5
 
 ## 6. README を読み直した結果
 
-**この文書がかつて差し戻した 5 点は、どれも README にすでに在る。** 対象コミット
-`a8dab6e04bdc82916b6a1296e4ab186027347ef3` の README を読み直して確かめた。
+**この文書がかつて差し戻した 6 点は、どれも README にすでに在る。** 対象コミット
+`e0d4f255bdd52ef6f3a5d63b59f687dbb15f00ac` の README を読み直して確かめた。
 
 | かつての差し戻し | 主張 | README の現在の文 |
 |---|---|---|
-| 1 | P7c の言明が名指す仕組みは 2 つで足りない | P7c は「**(a)** 終端の `Ret` 以外では、`consume_objects` または `un_bump` を … 呼ぶ。**(b)** 終端の `Ret` では、その時点の `pending` のすべての要素を `needed_retains` に入れる」と 2 節に分けている |
+| 1 | P7c の言明が名指す仕組みは 2 つで足りない | P7c は「**(a)** 終端の `Ret` 以外では … **(b)** 終端の `Ret` では、その時点の `pending` のすべての要素を `needed_retains` に入れる」と 2 節に分けている |
+| 9 | P7c (a) が「1 回の呼び出しの引数がすべて含む」形であり、その形は偽である | P7c (a) は「その節点の訪問が行う `consume_objects` と `un_bump` の呼び出しが名指すオブジェクトの**和**が … すべて含む」と和の形で書き、「**和で述べるのは、1 回の呼び出しでは足りないからである。**」と理由も添えている。第 5 節が示すのはこの文そのものである |
 | 2 | P7c が `acted_on` の出典を D13 と書いている | P7c (a) は「その構文が触れうるオブジェクト (**D15 の `acted_on`**)」と書いている |
 | 3 | D9 の `App` の行が unit を取る型を書いていない / A12 に引数とパラメータの型の一致が無い | D9 の `App` の行は「unit は**呼び出し先のパラメータの型**で取る」と書き、A12 は「**`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型**」を挙げている |
 | 4 | L6 を README の命題に上げるか | **P7f** として在る。この文書の第 4 節が L6 を証明し、その直後の段が L6 と P7f の一致を述べる |
@@ -710,24 +736,6 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
 そのまま読んだものであり、第 5 節の `<1>8` はその 2 つを引く。第 1 節が外部の結果として述べた
 `stacker::maybe_grow` は A15 と同じ事実だが、A15 は `grow_stack` の水準で述べるので、`L1` は A15 を
 直接引ける形にしてある。
-
-### 新しく差し戻す点 -- P7c (a) の形
-
-**README の P7c (a) は、示せる形へ書き直す必要がある。** README の現在の文は次のとおりである。
-
-> **(a)** 終端の `Ret` 以外では、`consume_objects` または `un_bump` を、その構文が触れうるオブジェクト
-> (D15 の `acted_on`) をすべて含む引数で呼ぶ。
-
-これは 1 回の呼び出しの引数が `Obj(n)` をすべて含むことを要求しており、第 3 節が挙げる 2 つの形で
-偽になる。示せるのは和の形であり、書き直しの案は次のとおりである。
-
-> **(a)** 終端の `Ret` 以外では、その節点の訪問が行う `consume_objects` と `un_bump` の呼び出しが
-> 名指すオブジェクトの**和**が、その構文が触れうるオブジェクト (D15 の `acted_on`) をすべて含む。
-> とくにそのオブジェクトが在れば、訪問はこの 2 つのどちらかを少なくとも 1 回呼ぶ。
-
-和が要る理由は 2 つあり、どちらも P5 (c) と `L4`/`L5` が述べる分担そのものである。`App`・`Closure`・
-`Destructure` の訪問は leaf ごとに `consume` を呼び、1 回の呼び出しは 1 つの leaf の `acted_on` しか
-名指さない。`Release` の訪問は `identity` を `un_bump` へ、残る候補を `consume_objects` へ分けて渡す。
 
 ## 7. P18b と P18a
 
