@@ -1903,11 +1903,11 @@ boxed scrutinee の `Binding::Payload` である (`CODE src/rc_ir/ownership.rs: 
 - `Binding::Param` は第 2 行と第 3 行が扱う。D14 より、パラメータ・capture の各 unit はその関数が所有するか
   借用するかのどちらかであり、この 2 行がその 2 つである。
 - 残る 4 つの腕は第 1 行が扱う。`collect_bindings` は `RcRhs::App(..)` と `RcRhs::Closure(..)` にだけ
-  `Binding::Producer` を置き (`CODE src/rc_ir/ownership.rs: collect_bindings`)、D10 の生成の表は 4 つの腕が
-  名指す位置にちょうど 1 行ずつを持つ -- 「`App(callee, args)` の結果の各 boxed leaf」「`Closure(f, caps)` の
-  結果 (capture object)」「`Llvm(gen, args)` の結果の leaf のうち、`result_prov` の宣言が単一の
-  `Arg(j, σ)` **でない**もの」「boxed 容器の `Destructure` の各名前付きフィールドの各 leaf」「boxed union の
-  変位アームの payload の各 leaf」である。`Llvm` の行がこの腕に対応するのは、`as_arg_projection` が `None` を
+  `Binding::Producer` を置くので (`CODE src/rc_ir/ownership.rs: collect_bindings`)、この 4 つの腕が名指す
+  位置は 5 つあり、D10 の生成の表はそのそれぞれに 1 行を持つ -- 「`App(callee, args)` の結果の各 boxed
+  leaf」「`Closure(f, caps)` の結果 (capture object)」「`Llvm(gen, args)` の結果の leaf のうち、
+  `result_prov` の宣言が単一の `Arg(j, σ)` **でない**もの」「boxed 容器の `Destructure` の各名前付き
+  フィールドの各 leaf」「boxed union の変位アームの payload の各 leaf」である。`Llvm` の行がこの腕に対応するのは、`as_arg_projection` が `None` を
   返すことと宣言が単一の `Arg(j, σ)` でないことが同値だからである (第 5 節の `<2>3`)。
 - **束縛を持たない名前 (`None` の腕) を ρ-終端とする類は、計数下ではない。** `vars.bindings` に束縛を持たない
   `RcVar` の名前は最上位の記号の名前である -- A13 が「**束縛名に限らない** -- 直接呼び出しが名指す関数の
