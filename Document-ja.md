@@ -2320,8 +2320,6 @@ consumed_time_while_io = |io| (
 
 `...`を通る引数、つまり宣言した仮引数より後ろに書いた実引数の型は、`<arg_type_i>`に使える型、すなわちポインタか数値型です。C言語はこの引数を1つのスカラとして運ぶため、`Bool`は`U8`か`CInt`として書き、`String`は`Std::String::borrow_c_str`で`Ptr`を取って渡し、ボックス化された値は`Std::FFI::boxed_to_retained_ptr`または`Std::FFI::borrow_boxed`で`Ptr`を取って渡してください。
 
-`...`を通る引数には、C言語で書かれた呼び出しと同様に、C言語の既定の実引数昇格が適用されます。`F32`は`double`として、`CInt`より狭い整数は`CInt`として関数に届きます。関数側が`va_arg(ap, double)`や`va_arg(ap, int)`で読むのはこのためです。
-
 関数のシグネチャは、C言語のヘッダで宣言されているものに一致する必要があることに注意してください。
 例えば、`scanf`は`int scanf(const char *format, ...);`として宣言されています。
 フォーマット文字列へのポインタが`format_ptr : Ptr`、読み取った値を格納するバッファへのポインタが`buf_ptr : Ptr`であるとします。
