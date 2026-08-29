@@ -33,7 +33,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
-// PROOF: P1, P2, P3, P4, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 enum Binding {
     /// A parameter or capture — the origin of a leaf.
     Param,
@@ -82,7 +82,7 @@ pub(crate) struct VarTable {
 impl VarTable {
     /// The variable table of a function: its parameters and capture as `Param` bindings, plus the `Binding` and
     /// type of every variable bound in its body.
-    // PROOF: P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn of(func: &RcFunc) -> VarTable {
         let mut vars = VarTable::empty();
         for p in func.params.iter().chain(func.capture.iter()) {
@@ -199,7 +199,7 @@ impl Origin {
     /// The one name for the value, for a reader that pairs two operations on it — a retain with the
     /// release that un-bumps it — which only a single name can decide. Two leaves with the same
     /// identity hold the same reference.
-    // PROOF: P5, P6, P7, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P5, P6, P7, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn identity(&self) -> &VarPath {
         match self {
             Origin::Exactly(p) => p,
@@ -265,7 +265,7 @@ impl Origin {
 /// payloads, catch-all payloads) back to the variable that produced it. The variable is a parameter
 /// when the leaf ultimately comes from an input, and a `Join` when a match forwards several arms'
 /// values to one binding.
-// PROOF: P1, P2, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn origin(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -539,7 +539,7 @@ pub(crate) fn destructure_consumes(
 /// (`owns` decides, for the callee's parameter leaf), a captured value, and the closure callee. A
 /// `Var` move and a `Match` consume nothing here — a move is an alias, and a match's consumes live in
 /// its arms. `result_ty` is the type the right-hand side binds, needed to read an op's passthrough.
-// PROOF: P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
     rhs: &RcRhs,
     result_ty: &Arc<TypeNode>,
@@ -631,7 +631,7 @@ fn resolve_callee_params<'a>(
 /// Dropping an argument leaf's consume is sound exactly when the result aliases that leaf, and a
 /// result leaf with a single argument leaf behind it aliases it. A leaf that joins an argument with
 /// another source aliases nothing, so it keeps its consume.
-// PROOF: P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn passthrough_arg_leaves(
     llvm_gen: &dyn LLVMGen,
     result_ty: &Arc<TypeNode>,
@@ -751,7 +751,7 @@ pub(crate) fn held_field_type(
 /// expanding it into the boxed leaves inside (an unboxed union is one unit, since only its active
 /// variant is live and a refcount operation must dispatch on the tag rather than name a variant's
 /// leaf).
-// PROOF: P1, P2, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     let mut out = vec![];
     rc_units_go(ty, type_env, &mut vec![], &mut out);
@@ -760,7 +760,7 @@ pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath>
 
 /// Descend a type, pushing onto `out` the path of each unit reached. `path` is the field path from
 /// the whole value down to `ty`, which each pushed unit is named relative to.
-// PROOF: P1, P2, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -834,7 +834,7 @@ pub(crate) fn truncate_to_unit(
 /// under, so it must name one object: a leaf whose object is path-dependent keys to the match
 /// binding that joins the paths, which every alias chain through it agrees on. The units an
 /// operation on it really touches are `acted_unit_keys`.
-// PROOF: P1, P2, P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn unit_key(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -878,7 +878,7 @@ impl References {
     /// # Examples
     /// References holding one reference of `a` and two of `b` cover one holding one of each, and do
     /// not cover one holding three of `b`. Every `References` covers itself and covers an empty one.
-    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn covers(&self, other: &References) -> bool {
         other.0.iter().all(|(object, count)| {
             self.0
@@ -963,7 +963,7 @@ fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPa
 
 /// The owned parameter/capture units of every function: each version's units minus the ones it
 /// borrows (`RcFunc::borrowed_units`, the annotation borrow-ification writes).
-// PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {
     let mut owned = Set::default();
     for func in prog.funcs.values() {

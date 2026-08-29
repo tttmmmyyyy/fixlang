@@ -90,7 +90,7 @@ impl Provenance {
     }
 
     /// The provenance whose every boxed leaf is `src`.
-    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: LeafOrigin) -> Provenance {
         Provenance(LeafMap::uniform(ty, type_env, sole_origin(src)))
     }

@@ -65,7 +65,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// retains an unboxed global's boxed subobjects, and a borrow has no matching release.
     ///
     /// The default is the conservative answer; see `result_prov` for what an op that keeps it records.
-    // PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_operand(&self, _i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         false
     }

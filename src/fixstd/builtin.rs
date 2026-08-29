@@ -1781,6 +1781,7 @@ pub struct InlineLLVMArrayUnsafeEmpty {
     capacity_name: FullName,
 }
 
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, arr_ty: &Arc<TypeNode>) -> Object<'c> {
