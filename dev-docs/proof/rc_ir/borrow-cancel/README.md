@@ -997,7 +997,8 @@ move-bind の両辺の型、アームの結果と `Match` の束縛変数の型�
 payload と scrutinee の型**、`Destructure` のフィールド変数とフィールドの型、**`App(callee, args)` の各引数と
 呼び出し先の対応するパラメータの型**、`Match` の scrutinee が union であること、`Destructure` の容器が
 構造体であること、**`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が実際に持つ
-(punched でない) ものであること**、同じ名前の `RcVar` が持つ型が一致すること。
+(punched でない) ものであること**、同じ名前の `RcVar` が持つ型が一致すること、**束縛を持たない `RcVar` の
+型が、その名前の記号の型であること**。
 
 punched でないことが要るのは、`held_field_type` が持たないフィールドを問われると panic するからである
 (`CODE src/rc_ir/ownership.rs: held_field_type`)。**このコミットにこれを検査するコードは無い**
@@ -1110,8 +1111,13 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   ここにある。`Release` の腕は `other_objects` を先に `consume_objects` へ渡してから `un_bump` を呼ぶので、
   この 2 つの順序が load-bearing である。
 
-- **P7a** (site の所有は、その leaf の所有と一致する)。`(v, u)` を `levelled_sites` が挙げる site とし、
-  `Λ(u)` を `u` の下の boxed leaf の集合とする。`infer_ownership` の不動点の下で、次の 3 つは同値である。
+- **P7a** (site の所有は、その leaf の所有と一致する)。**出力の版 `V` を 1 つ固定し、`owns_unit` と
+  `owns_object` は `V` の `RewriteCtx` のもの、site は `V` の本体について `levelled_sites` が挙げるものと
+  する。** `infer_ownership` は入力の関数の本体から site を作り、`RewriteCtx` は出力の各版につき作られる
+  ので、この 2 つは別でありうる。
+
+  `(v, u)` をその site とし、`Λ(u)` を `u` の下の boxed leaf の集合とする。`infer_ownership` の不動点の
+  下で、次の 3 つは同値である。
 
   1. `owns_unit(v, u)` が真である。
   2. `Λ(u)` の**ある inhabited な** leaf `λ` の**すべての**候補 `(r, p)` について `owns_object(r, p)` が
@@ -1502,16 +1508,16 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P7a | `p15-ownership-uniformity.md` | 有 | 証明済み (1 ⟹ 3 と 2 ⟹ 1) | 検証済み (指摘 30 件超を反映)。**2 周目が要る** |
 | P7c, P7f | `p13-disposals-and-pending.md` | 有 | 証明済み (P7c の言明は 2 度書き直した) | 検証済み (指摘 17 件を反映)。**3 周目が要る** |
 
-| P8 | `p20-borrow-ify.md` | 有 | 証明済み (`App` の引数の位置を除く形に狭めた) | 検証済み (指摘 1 件) |
-| P9 - P13 | `p20-borrow-ify.md` | 有 | 証明済み | 検証済み (P12 (d) の 1 段が旧版のコードを述べている) |
-| P14 | `p20-borrow-ify.md` | 有 | 証明済み (A19 (ii-a) と A20 の下で。指摘 26 件を反映) | 検証済み。**2 周目が要る** |
+| P8 | `p20-borrow-ify.md` | 有 | 証明済み (`App` の引数の位置を除く形に狭めた) | 検証済み (指摘 27 件を反映)。**3 周目が要る** |
+| P9 - P13 | `p20-borrow-ify.md` | 有 | 証明済み | 検証済み (指摘 27 件を反映)。**3 周目が要る** |
+| P14 | `p20-borrow-ify.md` | 有 | 証明済み (A19 (ii-a) と A20 の下で) | 検証済み (指摘 27 件を反映)。**3 周目が要る** |
 | P15 - P18 | `p30-cancel-walk.md` | 有 | 証明済み | 検証済み (指摘 9 件を反映) |
 | P18b | `p13-disposals-and-pending.md` | 有 | 証明済み | 検証済み (指摘 17 件を反映)。**3 周目が要る** |
 | P18c | `p40-cancel-soundness.md` | 有 | 証明済み (A19、P14a、`p13` の `L17` の下で) | 検証済み (指摘 10 件を反映)。**3 周目が要る** |
 | P18a | `p13-disposals-and-pending.md` | 有 | 証明済み (A19 の下で)。A19 (ii-b) は、この証明が要る条件付きの形に書き直した | 検証済み (指摘 17 件を反映)。**3 周目が要る** |
 
 | P19, P20, P22, P24 | `p40-cancel-soundness.md` | 有 | 証明済み | 検証済み (指摘 10 件を反映)。**3 周目が要る** |
-| P14a | `p20-borrow-ify.md` | 有 | 証明済み (A20 の下で) | 未着手 |
+| P14a | `p20-borrow-ify.md` | 有 | 証明済み (A20 の下で) | 検証済み (指摘 27 件を反映)。**3 周目が要る** |
 | P21, P23 | `p40-cancel-soundness.md` | 有 | 証明済み (D29 と D21 の上で。局所の仮説は無い) | 検証済み (指摘 10 件を反映)。**3 周目が要る** |
 | P26 (`cancel` の半分) | `p50-observation.md` | 有 | 証明済み (D29 の上で) | 未着手 |
 | P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | 証明済み。場合分けは D24 の段の種と `apply_lambda` の呼び出し位置の 2 通りから導いた | 未着手 |
