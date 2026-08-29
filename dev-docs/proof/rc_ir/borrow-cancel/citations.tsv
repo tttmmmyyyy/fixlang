@@ -16,7 +16,7 @@ src/ast/types.rs	TypeNode::is_union	P8,P9,P10,P11,P12,P13,P14	eaa9230b88af
 src/ast/types.rs	TypeNode::toplevel_tycon_info	P1,P2	ae62bc398a0a
 src/ast/types.rs	TypeNode::unpunched_field_types	P1,P2,P8,P9,P10,P11,P12,P13,P14	ecae1220e285
 src/build/build_object_files.rs	build_object_files	P19,P20,P21,P22,P23,P24	db59d512862f
-src/build/build_object_files.rs	optimize_rc_program	P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	0b814dd4d947
+src/build/build_object_files.rs	optimize_rc_program	P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	d86ac5d5129e
 src/constants.rs	CLOSURE_CAPTURE_IDX	P1,P2	8ac4c663fef1
 src/elaboration/desugar_opaque.rs	register_opaque_tycon	P1,P2	fc5202f8b47e
 src/fixstd/builtin.rs	InlineLLVMMakeStructBody	P1,P2	6b2ac61a32df
@@ -65,7 +65,7 @@ src/rc_ir/borrow.rs	RewriteCtx::routing_is_safe	P3,P4,P8,P9,P10,P11,P12,P13,P14	
 src/rc_ir/borrow.rs	RewriteCtx::routing_saves_retain	P3,P4,P8,P9,P10,P11,P12,P13,P14	d0cd17bb5277
 src/rc_ir/borrow.rs	UnBump	P19,P20,P21,P22,P23,P24	3e12cea01cc1
 src/rc_ir/borrow.rs	borrow_funcref	P8,P9,P10,P11,P12,P13,P14	db31fb39070c
-src/rc_ir/borrow.rs	borrow_ify	P3,P4,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	4ef86d9de122
+src/rc_ir/borrow.rs	borrow_ify	P3,P4,P8,P9,P10,P11,P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	cb0d27d9ea78
 src/rc_ir/borrow.rs	cancel	P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	30860362e665
 src/rc_ir/borrow.rs	check_one_key_per_object	P3,P4,P5,P6,P7,P15,P16,P17,P18	2cfa436ba21d
 src/rc_ir/borrow.rs	clone_func	P8,P9,P10,P11,P12,P13,P14,P19,P20,P21,P22,P23,P24	c6a5f2c80a44
@@ -73,7 +73,7 @@ src/rc_ir/borrow.rs	drop_nodes	P19,P20,P21,P22,P23,P24	4a4d43cb3f4a
 src/rc_ir/borrow.rs	drop_nodes_inner	P19,P20,P21,P22,P23,P24	a208018d5cf5
 src/rc_ir/borrow.rs	expr_node	P15,P16,P17,P18	bace42aa8264
 src/rc_ir/borrow.rs	func_has_borrowable_param	P8,P9,P10,P11,P12,P13,P14	e7c889e3f8d6
-src/rc_ir/borrow.rs	infer_ownership	P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14	20f10bf514d4
+src/rc_ir/borrow.rs	infer_ownership	P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14	915dec92acac
 src/rc_ir/borrow.rs	node_id	P15,P16,P17,P18,P19,P20,P21,P22,P23,P24	9ad61698cba0
 src/rc_ir/borrow.rs	param_capture_units	P8,P9,P10,P11,P12,P13,P14	4ae533d6a014
 src/rc_ir/borrow.rs	param_names_and_types	P8,P9,P10,P11,P12,P13,P14	a545d427cb66
