@@ -2,24 +2,30 @@
 
 この文書は `README.md` の P26 を扱う。立つのは `README.md` の定義 D1-D27、仮定 A1-A19、および命題 P1-P24 の
 **言明**である。実行 (プログラム全体の 1 回の計算) の水準の定義は README に無いので、`p51-runs.md` の第 1 節が
-提案する D22-D26 を使う。第 9 節がこれを穴として書き出す。
+提案する D22-D26 を使う。第 10 節がこれを穴として書き出す。
 
 ## 0. 結論
 
 | 半分 | 結果 |
 |---|---|
 | P26 (`cancel` について) | **証明済み** (第 4 節)。共通接頭 (D-CP) の上で |
-| P26 (`borrow_ify` について) | **偽。反例あり** (第 5 節・第 6 節) |
-| P21 と P26 の関係 | **相互依存**。P26 の言明は P21 の前提 (路の対応) を果たさない (第 8 節) |
+| P26 (`borrow_ify` について) | **偽。第 3 の反例** (L10、第 6 節) |
+| P21 と P26 の関係 | **相互依存。P26 の言明だけでは閉じない** (第 9 節) |
 
-`borrow_ify` の側が偽である理由を 1 行で書く。`funcs_observing_uniqueness` は「観測点に到達する関数」を
-**直接呼び出しのグラフ**の上の最小不動点で取る。借用版の本体にある間接呼び出し -- 局所変数への
-`App` -- はそのグラフに辺を持たないので、借用版が上げた参照カウントを、間接に呼ばれたクロージャの本体の
-観測点が読む。`-O none` と `-O basic` で走り `-O max` で `Debug::assert_unique` が止まるプログラムを第 6 節に
-挙げる。
+`borrow_ify` の側について、この文書が新しく閉じたものと閉じないものを分けて書く。
 
-第 7 節は、`funcs_observing_uniqueness` が入る前のコードに対する反証を記録する。README 第 6 節の較正表が
-その反証を引く。
+- **閉じた (L8a、L8b、L8、L9)**。`borrow_ify` が参照カウントを変えうる場所は 3 つしかなく、その 3 つは
+  どれも「`route` が借用版へ回した呼び出しの窓」の中にある。よって**関数ごとに借用版を作らない門は、
+  正しい梃子である** -- 借用版を作らなければ、別名の解析を一切せずに、その関数の実行の間の計数は入力と
+  一致する。L9 は門の広さを読まないので、門をどう広げてもこの段は動かない。
+- **閉じない (L10)**。門が数える到達可能性が、窓の中で走りうる関数を尽くしていない。今の
+  `funcs_observing_uniqueness` は `closure_targets` を **`prog.funcs` の本体だけ**から集めるので、
+  グローバル初期化子の本体が作ったクロージャへ間接に呼ぶ関数が門を通り抜ける。`-O none` と `-O basic` で
+  `true`、`-O max` で `false` を印字するプログラムを第 6 節に挙げる。
+
+すなわち**広げた門はまだ必要条件どまりであり、十分ではない**。修正が動かしたのは L10 であって L9 ではない。
+
+第 7 節と第 8 節は、直った 2 つの反例を記録する。README 第 6 節の較正表が第 7 節の反例を引く。
 
 ## 1. 記法
 
@@ -69,7 +75,7 @@ README が定めていない。この節がそれを定める。
 
 P26 は共通接頭の上の観測点についての主張として読む。共通接頭が終わった後の 2 つの実行は違う節点列を辿るので、
 D19 の観測点の対応が実行の上の対応を与えない。**共通接頭がどちら向きに終わりうるかは、P26 が答えるべき事柄で
-ある** -- 第 4 節の L7a と第 8 節がそれを述べる。
+ある** -- 第 4 節の L7a と第 9 節がそれを述べる。
 
 ## 3. 観測点が読む量
 
@@ -119,7 +125,7 @@ if !unique { undefined(...) }; x` であり、観測値が偽のときプログ�
 `InlineLLVMArrayIsStorageUniqueBody::observes_uniqueness`)。後者は
 `Std::Array::_unsafe_is_storage_unique` の本体であり (`CODE src/fixstd/stdlib.rs: make_std_mod`)、D18 は
 これを名指していない。この文書は D18 の集合について証明する。コードが押さえるのは上位集合なので、押さえる
-向きではこの差は効かない。第 9 節が D18 の穴として書き出す。
+向きではこの差は効かない。第 10 節が D18 の穴として書き出す。
 
 **`assume_unique` が真の op について P26 は自明である。** `assume_unique` を真にするのは
 `unique_check_elim::specialize` であり、それが走るのは `borrow_ify` と `cancel` の後である
@@ -262,32 +268,89 @@ if !unique { undefined(...) }; x` であり、観測値が偽のときプログ�
 
 ## 5. `borrow_ify` の半分
 
-### 5.1 3 つの条件と、修正がどれを断つか
+### 5.1 3 つの条件と、門がどれを断つか
 
-P26 が破れる形は、次の 3 つが揃うことである。第 6 節の反例と第 7 節の反例はどちらもこの形である。
+P26 が破れる形は、次の 3 つが揃うことである。第 6 節・第 7 節・第 8 節の 3 つの反例は、どれもこの形である。
 
 1. ある関数 `f` のパラメータ leaf `x` が、`f` の本体のどこでも D9 の意味で消費されない。`infer_ownership` は
    これを借用に倒す (`Release` は消費ではないので、`x` を捨てるだけの本体は借用に倒れる)。
 2. `f` の本体の、入力での `Release(x)` より後ろの位置から到達される一意性の観測点があり、その観測点の
-   オペランドが実行時に `x` と同じオブジェクトを指す。第 7 節の反例では観測点が `f` の本体そのものにあり、
-   第 6 節の反例では `f` が間接に呼ぶクロージャの本体にある。
+   オペランドが実行時に `x` と同じオブジェクトを指す。
 3. `f` を呼ぶ側で `routing_saves_retain` が真になる。これは引数についての `any` なので、条件 1 と 2 に
    関わらない別の引数が単独で満たしてよい。
 
-`funcs_observing_uniqueness` が断つのは**条件 2 だけ**である。条件 1 の推論 (`infer_ownership`、
+`funcs_observing_uniqueness` の門が断つのは**条件 2 だけ**である。条件 1 の推論 (`infer_ownership`、
 `level_ownership`) にも、条件 3 の判定 (`routing_is_safe`、`routing_saves_retain`) にも、この関数は触れない
-(`CODE src/rc_ir/borrow.rs: borrow_ify` -- `observing.contains(&func.name)` を見るのは
-`borrow_versions` を作る `for` だけである)。
+(`CODE src/rc_ir/borrow.rs: borrow_ify` -- `observing.contains(&func.name)` を見るのは `borrow_versions` を
+作る `for` だけである)。
 
-**版を止めるのが十分条件になりうる理由**は、差の出どころが条件 2 の細部に依らないことである。L8 が示すとおり
-`borrow_ify` が参照カウントを変えうる場所は 3 つしかなく、その 3 つはどれも借用版に結び付いている。よって
-借用版を作らなければ、どの `Release` が落ちたか、どの引数がどのオブジェクトと別名になっているかを問わずに、
-その関数の実行の間の計数は入力と一致する。条件 2 を「観測点がその本体の中にあるか」で判定しようとすると
-別名の解析が要るのに対し、「その版を作らない」は解析を要らない。
+**門の広さが動かすのは L10 であって L9 ではない。** L9 は「差が出るのは借用版の呼び出しの窓の中だけである」
+と述べ、その証明は `rewrite_rc` と `call_rc` だけを読み、どの関数に借用版を作るかを読まない。L10 は「その窓の
+中に観測点は現れない」と述べ、これが門の広さを読む。L9 が**関数ごとの門が正しい梃子であること**を与え、
+L10 が**その梃子が実際に届いているか**を問う。
 
-**十分でないのは、断ち方が狭いからである。** 差が観測されうる範囲は借用版の活性化の**動的な広がり**
-(その活性化から呼び出しの列で到達される活性化の全体) であり、`funcs_observing_uniqueness` が閉じるのは
-**直接呼び出しのグラフ**だけである。L10 がその差を示す。
+**関数ごとの門は十分になりうる。** L9 より、借用版を作らなければ、どの `Release` が落ちたか、どの引数が
+どのオブジェクトと別名になっているかを問わず、その関数の実行の間の計数は入力と一致する。条件 2 を
+「観測点がその本体の中にあるか」で判定すると別名の解析が要るのに対し、「その版を作らない」は解析を要らない。
+
+**広げた門はまだ十分でない。** L10 の場合分けのうち、直接呼び出しの場合と、`prog.funcs` のどれかの本体が
+作ったクロージャへの間接呼び出しの場合は閉じる。**グローバル初期化子の本体が作ったクロージャ**への間接
+呼び出しの場合は閉じない -- `funcs_observing_uniqueness` は `closure_targets` を `prog.funcs` だけから
+集める。第 6 節がその反例である。
+
+## L8a (原本の版とグローバル初期化子では `owns_unit` はつねに真である)
+
+**言明**。`f_own` の `RewriteCtx` とグローバル初期化子の `RewriteCtx` では、どの `(arg, unit)` についても
+`owns_unit(arg, unit)` は真である。
+
+<1>1. `owns_unit(arg, unit)` は `origin(arg, unit)` の候補すべてについて `owns_object(root, path)` を問う。
+  BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
+
+<1>2. `owns_object(root, path)` は `self.vars.param_tys` に `root` が無いとき真を返す。
+  BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+
+<1>3. グローバル初期化子の `RewriteCtx` の `vars` は `VarTable::body_only(&g.init)` であり、`param_tys` は
+      空である。よって `<1>2` の腕がつねに取られる。
+  BY CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/ownership.rs: VarTable::body_only
+
+<1>4. `f_own` の `RewriteCtx` の `vars` は `VarTable::of(&f_own)` であり、`param_tys` は `f_own` の
+      パラメータと capture だけを持つ。
+  BY CODE src/rc_ir/borrow.rs: RewriteCtx::new, CODE src/rc_ir/ownership.rs: VarTable::of
+
+<1>5. `borrow_ify` は入力の各関数について `owned_units.extend(param_capture_units(func, type_env))` を
+      行う。`f_own` は入力の関数のパラメータ名と型をそのまま持つので、`f_own` のパラメータ・capture の
+      各 `p` と各 `u ∈ rc_units(p.ty)` について `(p.name, u) ∈ owned_units` である。
+  BY CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
+
+<1>6. `root` が `f_own` のパラメータ・capture のとき、`owns_object(root, path)` は
+      `units_under(root_ty, path, type_env)` の各 `unit` について
+      `owned_units.contains(&(root, truncate_to_unit(root_ty, unit, type_env)))` を問う。D5 より
+      `truncate_to_unit(root_ty, ・)` の値は `rc_units(root_ty)` の元であり、`<1>5` よりそれらはすべて
+      `owned_units` にある。
+  BY D5, <1>5, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+
+<1>7. QED
+  BY <1>1, <1>2, <1>3, <1>4, <1>6
+
+## L8b (原本の版とグローバル初期化子は借用しない)
+
+**言明**。出力の各 `f_own` の `borrowed_units` は空である。出力の各グローバル初期化子はパラメータも capture も
+持たない。よって `f_own` の活性化とグローバル初期化子の活性化の D10 の初期値は、入力の対応する本体の活性化の
+初期値に一致する。
+
+<1>1. `borrow_ify` は最後に各出力関数について
+      `func.borrowed_units = param_capture_units(func, type_env).filter(|u| !owned_units.contains(u))` を
+      置く。`f_own` については L8a の `<1>5` が挙げる unit がすべて `owned_units` にあるので、この集合は
+      空である。
+  BY L8a, CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
+
+<1>2. グローバル初期化子 `RcGlobalInit` はパラメータも capture も持たない。
+  BY D1
+
+<1>3. QED
+  D10 の初期値は、所有する (D14) パラメータ・capture の unit の下の inhabited な各 leaf につき 1 つで
+  ある。`<1>1` と `<1>2` より出力の側の所有は全 unit であり、A1 より入力の側の所有も全 unit である。
+  BY A1, D10, D14, <1>1, <1>2
 
 ## L8 (`borrow_ify` が参照カウントを変えうる場所は 3 つである)
 
@@ -319,36 +382,11 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節の反�
       `rc_node(is_release, v.clone(), path.clone(), state, k, source)` をそのまま返す。
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
 
-<1>5. `f_own` とグローバル初期化子の `RewriteCtx` では、`owns_unit(arg, unit)` はつねに真である。
-  <2>1. `owns_unit(arg, unit)` は `origin(arg, unit)` の候補すべてについて `owns_object(root, path)` を
-        問う。
-    BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
-  <2>2. `owns_object(root, path)` は `self.vars.param_tys` に `root` が無いとき真を返す。
-    BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
-  <2>3. グローバル初期化子の `RewriteCtx` の `vars` は `VarTable::body_only(&g.init)` であり、`param_tys`
-        は空である。よって `<2>2` の腕がつねに取られる。
-    BY CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/ownership.rs: VarTable::body_only
-  <2>4. `f_own` の `RewriteCtx` の `vars` は `VarTable::of(&f_own)` であり、`param_tys` は `f_own` の
-        パラメータと capture だけを持つ。
-    BY CODE src/rc_ir/borrow.rs: RewriteCtx::new, CODE src/rc_ir/ownership.rs: VarTable::of
-  <2>5. `borrow_ify` は入力の各関数について `owned_units.extend(param_capture_units(func, type_env))` を
-        行う。`f_own` は入力の関数のパラメータ名と型をそのまま持つので、`f_own` のパラメータ・capture の
-        各 `p` と各 `u ∈ rc_units(p.ty)` について `(p.name, u) ∈ owned_units` である。
-    BY CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
-  <2>6. `root` が `f_own` のパラメータ・capture のとき、`owns_object(root, path)` は
-        `units_under(root_ty, path, type_env)` の各 `unit` について
-        `owned_units.contains(&(root, truncate_to_unit(root_ty, unit, type_env)))` を問う。D5 より
-        `truncate_to_unit(root_ty, ・)` の値は `rc_units(root_ty)` の元であり、`<2>5` よりそれらはすべて
-        `owned_units` にある。
-    BY D5, <2>5, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
-  <2>7. QED
-    BY <2>1, <2>2, <2>3, <2>4, <2>6
+<1>5. `call_rc` の `before` に要素が入るのは `callee_owns && !arg_owned` のときであり、`arg_owned` は
+      `owns_unit(arg, unit)` である。L8a より、`before` に要素が入るのは借用版の本体だけである。
+  BY L8a, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
 
-<1>6. `call_rc` の `before` に要素が入るのは `callee_owns && !arg_owned` のときであり、`arg_owned` は
-      `owns_unit(arg, unit)` である。`<1>5` より、`before` に要素が入るのは借用版の本体だけである。
-  BY <1>5, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
-
-<1>7. `call_rc` の `after` に要素が入るのは `!callee_owns && arg_owned` のときである。`callee_owns` は、
+<1>6. `call_rc` の `after` に要素が入るのは `!callee_owns && arg_owned` のときである。`callee_owns` は、
       `callee_params` に呼び出し先が無いとき真であり、あるときは
       `owned_units.contains(&(params[arg_idx].0, unit))` である。`borrow_ify` は入力の各関数について
       `owned_units.extend(param_capture_units(func, type_env))` を行い、`callee_params` には原本について
@@ -358,76 +396,170 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節の反�
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc, borrow_ify, param_capture_units,
      param_names_and_types
 
-<1>8. QED
+<1>7. QED
   `<1>2` の (iii) の節点は `H` を同じだけ動かす。(i) のうち呼び出し先の付け替えは `<1>3` より `H` を
-  動かさず、入れた節点は `<1>6` の (b) と `<1>7` の (c) である。(ii) は `<1>4` より借用版の中でだけ
+  動かさず、入れた節点は `<1>5` の (b) と `<1>6` の (c) である。(ii) は `<1>4` より借用版の中でだけ
   節点を落とし、それが (a) である。
-  BY <1>2, <1>3, <1>4, <1>6, <1>7
+  BY <1>2, <1>3, <1>4, <1>5, <1>6
 
-## L9 (差の出る観測点は借用版の動的な広がりの中にある) -- 認める段
+## L9 (差が出るのは借用版の呼び出しの窓の中だけである)
 
-**言明**。D-CP の共通接頭の観測点 `q` と計数下オブジェクト `O` について `H'(q, O) > H(q, O)` ならば、`q` を
-実行する活性化は、ある `f#borrow` (`borrow_versions` の像) の本体の活性化であるか、その活性化から呼び出しの
-段 (E3) の列で到達される活性化である。
+**DEF 窓**。出力の実行における**窓**とは、`route` が借用版へ回した呼び出しの (E3) の段から、その呼び出し元が
+その呼び出しの `call_rc` の `after` の `Release` 節点をすべて実行し終える段までである。その間その窓は
+**開いている**。
 
-**この段はこの文書では証明しない。** L8 の 3 か所はどれも借用版に結び付いており、(a) の窓は落とされた
-`Release` の位置から呼び出し元の `after` の `Release` まで、(b) の窓は `before` の `Retain` から呼び出し先が
-その参照を処分するまでであって、いずれも呼び出しの入れ子の中にある -- という形の帰納がこの段の内容である。
+**言明**。D-CP の共通接頭の時点 `p` で `H'(p, O) ≠ H(p, O)` となる計数下オブジェクト `O` があるならば、`p` で
+生きている出力側の活性化に借用版の本体を持つものがあるか、`p` で走っている活性化の位置が `call_rc` の入れた
+`after` の `Release` 節点である。
 
-次の L10 が偽なので、L9 を認めても `borrow_ify` の側は閉じない。L9 を認めることは主張を強めるので、L10 の
-反証はいっそう強い。
+<1>1. 参照の持ち手 (p51 の D25) のうち、生きているオブジェクトが持つ分と環境が持つ分は、2 つの実行で
+      一致する。
+  <2>1. オブジェクトが持つ分。A5 より、生きているオブジェクトの inhabited な各 boxed leaf がちょうど 1 つの
+        参照を持つ。D-CP より対応するオブジェクトは対応する値を持つ。
+    BY A5, D-CP
+  <2>2. 環境が持つ分。環境が活性化を作るのは `roots` が名指す関数についてである (A17 (i))。P24 より `roots`
+        は変わらず、`borrow_funcref` が付ける `#borrow` の名前は入力に無いので `roots` に無い。よって環境が
+        作る活性化の本体は `f_own` かグローバル初期化子であり、L8b よりその D10 の初期値は入力の対応する
+        活性化の初期値に一致する。(E4) が `E` へ渡す参照は D9 の終端の `Ret` の行が決め、返る値は D-CP より
+        一致する。
+    BY A17, D9, D-CP, L8b, P24, CODE src/rc_ir/borrow.rs: borrow_funcref
+  <2>3. QED
+    BY <2>1, <2>2
+
+<1>2. `Δ(p, O) := H'(p, O) − H(p, O)` は、対応する生きている活性化の対 `(a, a_in)` を渡る和
+      `Σ_a (Obl'(a)(O) − Obl(a_in)(O))` に等しい。
+  BY <1>1, p51 の D25, D8
+
+<1>3. 対応する生きている活性化の対 `(a, a_in)` について、`B(a)` が借用版でないならば次が成り立つ。
+      `a` が借用版へ回した呼び出し `c` で中断中でも、`c` の `after` の `Release` 節点の位置にいるのでも
+      ないとき、`Obl'(a) = Obl(a_in)` である。そのどちらかであるときは、`Obl'(a) − Obl(a_in)` は `c` の
+      `after` のうちまだ実行されていない `Release` が処分する参照の多重集合である。
+  `a` の段についての帰納で示す。
+  <2>1. `a` が作られた段。`B(a)` が借用版でないので、L8b より D10 の初期値が一致する。`a` はまだどの
+        呼び出しでも中断していない。
+    BY L8b
+  <2>2. L8 の (a) と (b) の節点は借用版の本体にしかないので、`B(a)` が借用版でない `a` は実行しない。
+    BY L8
+  <2>3. L8 の (a)(b)(c) 以外の節点の段。L8 よりこの段は 2 つの実行で同じ節点であり、D-CP より同じ値を
+        与えられるので、D10 の生成と消費は同じ参照を作り同じ参照を処分する。`Obl'(a) − Obl(a_in)` は
+        変わらない。
+    BY L8, D-CP, D10
+  <2>4. 呼び出しの段 (E3)。D9 の `App` の行が消費する leaf は呼び出し先の所有 (D14) で決まる。呼び出し先が
+        借用版でないとき、L8b より出力の呼び出し先は全 unit を所有し、A1 より入力の呼び出し先も全 unit を
+        所有するので、消費は一致し差は変わらない。呼び出し先が借用版のとき、入力は借用される unit の参照を
+        渡し出力は渡さないので、差はその unit の参照ちょうど 1 つずつ増える。`call_rc` はその unit を
+        `after` に入れる -- `callee_owns` は偽であり、`arg_owned` は `B(a)` が借用版でないので L8a より
+        真である。よって差は `after` が処分する参照に一致し、`a` は中断中になる。
+    BY A1, D9, D10, D14, L8a, L8b, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
+  <2>5. 返りの段 (E4)。呼び出し先が返す値は 2 つの実行で同じであり (D-CP)、D9 の終端の `Ret` の行が渡す
+        参照の個数も同じなので、差は変わらない。`a` は `c` の `after` の `Release` 節点の位置へ進む。
+        `prepend_rc` が `after` を継続の先頭に置くので、`a` は `after` を実行し終えるまで他の節点を
+        実行しない。
+    BY D9, D-CP, CODE src/rc_ir/borrow.rs: prepend_rc, RewriteCtx::rewrite_inner
+  <2>6. `after` の `Release` の段 (L8 の (c))。出力だけがこれを実行し、`c` の `after` の参照を 1 つずつ
+        処分する。最後の 1 つを実行し終えた時点で差は 0 に戻り、`a` は中断中でも `after` の位置でも
+        なくなる。
+    BY <2>4, <2>5, D10
+  <2>7. QED
+    `<2>1` が基底、`<2>2` から `<2>6` が段の全種である。段の種は p51 の D24 の (E1)-(E6) であり、
+    (E5) は `Obl` を動かさず、(E6) の後に段は無い。
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, p51 の D24
+
+<1>4. 借用版の活性化が作られるのは、`route` が借用版へ回した呼び出しの (E3) の段だけである。
+  <2>1. 借用版の名前を `App` の callee に置くのは `route` だけである。`rewrite_inner` の他の腕は rhs を
+        そのまま複製し、`RcRhs::Closure(target, caps)` の `target` も書き換えない。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, route
+  <2>2. よってクロージャの値が指す関数が借用版であることは無く、D23 の意味の呼び出し先が借用版になるのは、
+        `route` が置いた名前を callee に持つ呼び出しのときだけである。
+    BY <2>1, p51 の D23, P12
+  <2>3. QED
+    BY <2>1, <2>2
+
+<1>5. QED
+  `<1>2` より `Δ(p, O) ≠ 0` ならば、ある対 `(a, a_in)` で `Obl'(a) ≠ Obl(a_in)` である。`<1>3` より、
+  `B(a)` が借用版であるか、`a` が借用版へ回した呼び出しで中断中であるか、`a` がその呼び出しの `after` の
+  `Release` 節点の位置にいるかのいずれかである。第 1 の場合は `a` 自身が生きている借用版の活性化である。
+  第 2 の場合は `<1>4` よりその呼び出しが作った活性化が生きている借用版の活性化である。第 3 の場合が
+  言明の後半である。
+  BY <1>2, <1>3, <1>4
+
+**この命題は 1 つの制御の流れを前提にする。** `p` で走っている活性化と、生きている借用版の活性化が別の
+スレッドに属するとき、この命題の結論は「観測点を実行している活性化がその借用版の子孫である」を与えない。
+第 10 節に前提として書き出す。
 
 ## L10 (借用版の動的な広がりに一意性の観測点は現れない) -- **偽**
 
 **言明** (`funcs_observing_uniqueness` が果たそうとしているもの)。`f` が `borrow_versions` の鍵であるとき、
 `f#borrow` の活性化から呼び出しの段 (E3) の列で到達される活性化の本体に、一意性の観測点は無い。
 
-<1>1. `funcs_observing_uniqueness` が返す集合 `observing` は、次の 2 つの規則の最小不動点である。
+<1>1. `funcs_observing_uniqueness` が返す集合 `observing` は、次の 3 つの規則の最小不動点である。
       (i) `prog.funcs` の関数 `g` の本体に `observes_uniqueness()` が真の `Llvm` の op があれば
-      `g ∈ observing`。(ii) `g` の本体の `Let(_, App(callee, _), _)` について
-      `FuncRef { name: callee.name }` が `observing` の元であれば `g ∈ observing`。
+      `g ∈ observing`。(ii) `g` の本体の `Let(_, App(callee, _), _)` の `FuncRef { name: callee.name }` が
+      `prog.funcs` の鍵であり、かつ `observing` の元であれば `g ∈ observing`。(iii) `g` の本体に
+      `prog.funcs` の鍵でない callee への `App` があり (`calls_indirectly`)、`closure_targets` の元に
+      `observing` の元があれば `g ∈ observing`。ここで `closure_targets` は、`prog.funcs` の**どれかの
+      関数の本体**の `Let(_, Closure(target, _), _)` が名指す `target` の集合である。
   BY CODE src/rc_ir/borrow.rs: funcs_observing_uniqueness
 
 <1>2. `borrow_ify` は `observing` の元に借用版を作らない。`for func in prog.funcs.values()` の先頭で
       `if observing.contains(&func.name) { continue; }` が回る。
   BY CODE src/rc_ir/borrow.rs: borrow_ify
 
-<1>3. CASE 呼び出しの列がすべて直接呼び出し (呼び出し先の名前が `prog.funcs` の鍵) である場合。この場合
-      L10 は成り立つ。
+<1>3. CASE 到達の列がすべて直接呼び出し (callee の名前が `prog.funcs` の鍵) である場合。この場合 L10 は
+      成り立つ。
   <2>1. `f#borrow` の本体は `f` の本体の名前替えであり (P9)、`route` が返す呼び出し先は元の呼び出し先と
-        同じ入力関数の版である (P12)。よって出力の直接呼び出しの辺は、入力の直接呼び出しの辺と同じ入力関数
-        の対を結ぶ。
+        同じ入力関数の版である (P12)。よって出力の直接呼び出しの辺は、入力の直接呼び出しの辺と同じ入力
+        関数の対を結ぶ。
     BY P9, P12
   <2>2. 到達される活性化の本体に観測点があるとすると、その本体の入力関数 `g` は `<1>1` の (i) により
         `observing` の元である。`<2>1` より `f` から `g` へ入力の直接呼び出しの辺の列があるので、`<1>1` の
         (ii) を辺の個数について繰り返して `f ∈ observing` である。
     BY <1>1, <2>1
   <2>3. QED
-    `<2>2` は `<1>2` に反するので、到達される活性化の本体に観測点は無い。
+    `<2>2` は `<1>2` に反する。
     BY <1>2, <2>2
 
-<1>4. CASE 呼び出しの列に間接呼び出し (呼び出し先が局所変数) がある場合。この場合 L10 は**偽**である。
-  <2>1. `funcs_observing_uniqueness` は `RcRhs::App(callee, _)` について
-        `FuncRef { name: callee.name.clone() }` を辺に積む。呼び出し先が局所変数 -- パラメータ、`Let` の
-        束縛、`Match` の束縛 -- であるとき、その名前は `prog.funcs` の鍵ではないので、`observing` の元でも
-        `callees` の鍵でもない。よってこの辺は `<1>1` の (ii) を発火させない。
-    BY CODE src/rc_ir/borrow.rs: funcs_observing_uniqueness
-  <2>2. `RcRhs::Closure(..)` の腕は辺を積まない。よって、クロージャを作る関数は、そのクロージャの本体が
-        観測点を持っても `observing` に入らない。
-    BY CODE src/rc_ir/borrow.rs: funcs_observing_uniqueness
-  <2>3. QED (反証)
-    第 6 節のプログラムがこの形である。`relay` の本体は `observes_uniqueness()` が真の op を持たず、その
-    `App` の呼び出し先は自分自身と、パラメータ `cl` である。`<2>1` より `relay ∉ observing` であり、
-    `<1>2` の門を通って `relay#borrow` が作られる。`relay#borrow` の `arm0` の `App(cl, ...)` が呼ぶ
-    クロージャの本体に観測点があり、その位置で `H' = 2`、`H = 1` である。
-    BY <2>1, <2>2, 第 6 節
+<1>4. CASE 到達の列に間接呼び出しがあり、その呼び出し先のクロージャを作った `Closure` 節点が
+      `prog.funcs` のどれかの本体にある場合。この場合 L10 は成り立つ。
+  <2>1. 間接呼び出しの呼び出し先は、その時点で callee の値が持つクロージャの funptr が指す関数である。
+    BY p51 の D23
+  <2>2. クロージャの値を作る節点は `Let(x, Closure(target, caps), k)` だけである。`Llvm` の op や容器から
+        読み出したクロージャの値も、どこかの `Closure` 節点が作ったオブジェクトである -- A3 の宣言の表で
+        `Unknown` は「既存のオブジェクト」であり、`Fresh` はその op が割り当てるオブジェクトである。
+        `Closure` 以外に capture object を割り当てる節点は D10 の生成の表に無い。
+    BY A3, D10, CODE src/rc_ir/codegen.rs: Generator::build_rc_closure
+  <2>3. その `Closure` 節点が `prog.funcs` のどれかの本体にあるとき、`target` は `closure_targets` の元で
+        ある。
+    BY <1>1, CODE src/rc_ir/borrow.rs: funcs_observing_uniqueness
+  <2>4. 間接呼び出しを持つ関数は `calls_indirectly` に入り、`closure_targets` のすべての元への辺を得る。
+    BY <1>1
+  <2>5. QED
+    到達される活性化の本体に観測点があるとすると、`<2>1` から `<2>4` と `<1>1` の (i)(ii)(iii) により
+    `f ∈ observing` となり、`<1>2` に反する。
+    BY <1>1, <1>2, <2>1, <2>2, <2>3, <2>4
 
-<1>5. QED
-  `<1>3` と `<1>4` は呼び出しの列に間接呼び出しがあるかどうかで尽きている。`<1>4` が反例を与えるので
-  L10 は偽である。
-  BY <1>3, <1>4
+<1>5. CASE 到達の列に間接呼び出しがあり、その呼び出し先のクロージャを作った `Closure` 節点が
+      **グローバル初期化子の `init` の本体**にある場合。この場合 L10 は**偽**である。
+  <2>1. `funcs_observing_uniqueness` は `prog.funcs` の関数の本体だけを歩く。`prog.globals` の `init` は
+        歩かない。よってグローバル初期化子の本体の `Closure` 節点の `target` は `closure_targets` に
+        入らない。
+    BY CODE src/rc_ir/borrow.rs: funcs_observing_uniqueness
+  <2>2. QED (反証)
+    第 6 節のプログラムがこの形である。グローバル `Main::checkers` の `init` の本体が `closure closure#0[]`
+    で観測点を持つ関数のクロージャを作り、`relay` はそれを間接に呼ぶ。`<2>1` より `relay ∉ observing` で
+    あり、`<1>2` の門を通って `relay#borrow` が作られる。その位置で `H' = 2`、`H = 1` である。
+    BY <2>1, 第 6 節
 
-## 6. 欠陥の報告 -- 借用版が間接呼び出しを通して観測を倒す
+<1>6. QED
+  `<1>5` が反例を与えるので L10 は偽である。
+  BY <1>5
+
+**場合分けに残る 1 つ。** 環境がグローバルのアクセサ経由で初期化子の活性化を作る段 (p51 の D24 の (E1)) は
+呼び出しの段 (E3) ではないので、L10 の言明はこれを覆っていない。窓が開いている間にグローバルの最初の読みが
+起きると、初期化子の本体が窓の中で走る。`funcs_observing_uniqueness` は `prog.globals` の `init` の観測 op を
+種にもしない。この経路が持ち上がった計数を読みうるかどうかは、この文書は決めていない。第 10 節に報告する。
+
+## 6. 欠陥の報告 -- グローバル初期化子が作ったクロージャに門が届かない
 
 ### 6.1 入力
 
@@ -436,92 +568,95 @@ module Main;
 
 type B = box struct { v : I64 };
 
-// 再帰があるので呼び出し元へインライン化されない。
-// `x` と `w` は本体で消費されないので、借用推論はこの 2 つを借用に倒す。
-// 観測点へは間接呼び出し `cl()` だけが届く。
-relay : I64 -> B -> B -> (() -> Bool) -> Bool;
-relay = |n, x, w, cl| (
-    if n > 0 { relay(n - 1, x, w, cl) };
-    cl()
+// 観測点を持つ関数のクロージャを、グローバル初期化子の本体が作る。
+// `closure_targets` は `prog.funcs` の本体だけから集めるので、この target を含まない。
+checkers : Array (B -> Bool);
+checkers = [ |b| ( let (u, b) = b.unsafe_is_unique; eval b; u ) ];
+
+// `x` と `w` は消費されないので借用に倒れる。`y` は `cl(y)` が消費するので所有のまま残る。
+// 観測点へは間接呼び出し `cl(y)` だけが届く。
+relay : I64 -> B -> B -> B -> (B -> Bool) -> Bool;
+relay = |n, x, y, w, cl| (
+    if n > 0 { relay(n - 1, x, y, w, cl) };
+    cl(y)
 );
 
 main : IO ();
 main = (
-    let args = *get_args;
     let o = B { v : 1 };
     let w = B { v : 2 };
-    let f1 = |_| (
-        let (u, o) = o.unsafe_is_unique;      // <- 観測点。`o` は capture から読む
-        eval o;
-        u
-    );
-    let f2 : () -> Bool = |_| false;
-    // 実行時の値で選ぶので、クロージャ特殊化が `cl()` を直接呼び出しに変えられない。
-    let cl = if args.@size > 100 { f2 } else { f1 };
-    let u = relay(0, o, w, cl);
-    eval w.@v;                                 // `w` を呼び出しの後で使う
+    let cl = checkers.@(0);
+    let u = relay(0, o, o, w, cl);   // 同じオブジェクトを借用位置 `x` と所有位置 `y` に渡す
+    eval w.@v;                       // `w` を呼び出しの後で使う
     println("unique = " + u.to_string)
 );
 ```
 
-3 つの成分がそれぞれ役目を持つ。
+各成分の役目は次のとおりである。
 
-- **`x`**: `relay` の本体で消費されないので借用に倒れ、その `Release` が借用版で落ちる。実行時には
-  `f1` の capture が指すオブジェクトと同じ `o` である。
-- **`w`**: `main` が呼び出しの後で使うので `routing_saves_retain` が真になる。`w` を落とすと振り分けが
-  起きない。
-- **`if args.@size > 100`**: 呼び出し先のクロージャを実行時に決めるので、間接呼び出しが RC IR まで残る。
-  この分岐を落として `f1` を直に渡すと、クロージャ特殊化が `relay` を `f1` について特殊化し、観測点が
-  `relay` の本体に入るので `relay ∈ observing` となり、欠陥は現れない。
+- **`x`**: `relay` の本体で消費されないので借用に倒れ、その `Release` が借用版で落ちる。
+- **`y`**: `cl(y)` が消費するので所有のまま残る。実行時には `x` と同じオブジェクトを指し、観測点の
+  オペランドになる。
+- **`w`**: `main` が呼び出しの後で使うので `routing_saves_retain` が真になる。
+- **`checkers`**: クロージャをグローバル初期化子の本体で作らせる。`|b| ...` を `relay` の呼び出しに直接
+  書くと、その `Closure` 節点は `main` の本体に入るので `closure_targets` に載り、門が閉じる。
 
 ### 6.2 経路
 
 `--emit-rc-ir Main` が書く `rc_ir.Main.pre.txt` (`insert_rc` の直後) は次を含む。名前は短くしてある。
 
 ```
-fn relay(n, x, w, cl) -> Bool:
+fn Main::checkers::closure#0(#param : Main::B), cap cap : Std::#DynamicObject -> Std::Bool:
+    ...
+    let v : (Std::Bool, Main::B) = is_unique(#param)     // <- 観測点
+    ...
+
+global Main::checkers:
+    let closure : Main::B -> Std::Bool = closure closure#0[]     // <- ここが唯一の Closure 節点
+    ret closure
+
+fn relay(n, x, y, w, cl) -> Bool:
   ...
   case 0(n <= 0):
       release x
       release w
-      let s : () = struct_make()
-      let a : Bool = cl(s)          // <- 間接呼び出し
+      let a : Bool = cl(y)          // <- 間接呼び出し
       ret a
-
-fn main(...):
-  let o : B = struct_make(1)
-  let w : B = struct_make(2)
-  retain o
-  let f1 : CapList = struct_make(o)        // capture が o を持つ
-  ...
-  retain w
-  let u : Bool = relay(0, o, w, cl)
-  let t : I64 = struct_get_0(w)
-  release w
-  ...
-
-fn main::closure_lam0::closure#0(param), cap cap -> Bool:
-  let c : CapList = capture_project_0(cap)
-  release_nonnull cap
-  destructure c { .0 -> o : B }
-  let v : (Bool, B) = is_unique(o)          // <- 観測点
-  destructure v { .0 -> u : Bool, .1 -> o2 : B }
-  eval o2
-  release o2
-  ret u
 ```
 
-`rc_ir.Main.post.txt` は `relay#borrow` を含み、そのパラメータは
-`(#v0 : I64 {u}, #v1 : B {borrow}, #v2 : B {borrow}, #v3 : () -> Bool {(u, own)})` と注釈され、その
-`case 0` は `release` を 1 つも持たずに `cl(s)` を呼ぶ。`main` は `relay#borrow(...)` を呼び、その直後に
-`release o` を持つ。
+`funcs_observing_uniqueness` は `for (fref, func) in &prog.funcs` の中でだけ `RcRhs::Closure` を見る。
+`global Main::checkers` の本体はこのループを通らないので、`Main::checkers::closure#0` は
+`closure_targets` に入らない。`relay` は `cl` への `App` で `calls_indirectly` に入るが、そこから伸びる辺は
+`closure_targets` の元だけなので、観測点を持つ関数へ届かない。よって `relay ∉ observing` である。
 
-入力の実行での `o` の参照カウントは、観測点で 1 である。`main` は `retain o` で 2 にしてから 1 つを `f1` の
-capture へ渡し、もう 1 つを `relay` の `x` へ渡す (`relay` は入力では全パラメータを所有する)。`relay` の
-`release x` が 1 つを処分し、capture の 1 つだけが残る。
+`rc_ir.Main.post.txt` は次を含む。
+
+```
+fn Main::relay#...#borrow#l1(#v0 : I64 {u}, #v1 : B {borrow}, #v2 : B {own}, #v3 : B {borrow},
+                             #v4 : B -> Bool {(u, own)}) -> Bool:
+```
+
+`main` は `relay#...#borrow#l1(...)` を呼び、その直後に `release o` を持つ。
+
+入力の実行での `o` の参照カウントは、観測点で 1 である。`main` は `o` を 2 つの位置に渡すために retain して
+2 にし、両方を `relay` へ渡す (`relay` は入力では全パラメータを所有する)。`relay` の `release x` が 1 つを
+処分し、`cl(y)` が残る 1 つをクロージャの本体へ渡す。
 
 出力の実行では 2 である。`relay#borrow` は `x` を借用するので `release x` を持たず、`main` はその参照を
 呼び出しの後まで持つ。`main` の `release o` は呼び出しの直後にあるが、観測点はそれより前にある。
+
+**差が `Closure` 節点の居場所だけであることを測った。** 上のプログラムの `checkers.@(0)` を、`main` の本体で
+作った 2 つのクロージャの実行時の選択
+
+```fix
+    let f1 = |b| ( let (u, b) = b.unsafe_is_unique; eval b; u );
+    let f2 : B -> Bool = |b| ( eval b; false );
+    let cl = if args.@size > 100 { f2 } else { f1 };
+```
+
+に置き換えると、`-O max` でも `unique = true` になる。間接呼び出しであることも、観測点も、借用に倒れる
+パラメータも、振り分けの条件も同じで、違うのは `Closure` 節点が `main` の本体にあるか
+`global Main::checkers` の本体にあるかだけである。
 
 ### 6.3 誤った出力
 
@@ -531,46 +666,34 @@ capture へ渡し、もう 1 つを `relay` の `x` へ渡す (`relay` は入力
 | `-O basic` | `true` |
 | `-O max` | `false` |
 
-`unsafe_is_unique` を `Debug::assert_unique` に置き換えた同じ形のプログラム -- `f1` の本体を
-`let o = o.assert_unique(|_| "o is shared"); eval o.@v; true` にしたもの -- は、`-O none` と `-O basic` で
-`done = true` を印字し、`-O max` では次を出して止まる。
-
-```
-Value is not unique: o is shared
-error: Program terminated by signal 6
-```
-
-`unsafe_is_unique` の doc が認めているのは共有から一意への向きだけなので、この向きは認められていない。
+各水準の前に `.fixlang` を消して測った。
 
 ### 6.4 この入力は D11 を破らない
 
-出力の実行で `o` の参照は、`main` が 1 つ (呼び出しの後の `release o` が処分する)、`f1` の capture が
-1 つ (クロージャの本体の `release o2` が処分する) である。過剰処分 (S-a) も漏れ (S-b) も解放後の読み (S-c) も
+出力の実行で `o` の参照は、`main` が 1 つ (呼び出しの後の `release o` が処分する)、`relay#borrow` の `y` が
+1 つ (クロージャの本体へ渡り、そこで処分される) である。過剰処分 (S-a) も漏れ (S-b) も解放後の読み (S-c) も
 起きない。すなわちこれは、D11 を満たしたまま P26 だけを破る入力である。
 
 ### 6.5 修正の候補
 
-どれを採るかは言語の契約に関わる判断なので、候補と代償を並べる。
+**候補 A -- `closure_targets` をグローバル初期化子の本体からも集める。** `funcs_observing_uniqueness` の
+最初のループの後に `for global in &prog.globals { for_each_node(&global.init, ...) }` を置き、
+`RcRhs::Closure(target, _)` の `target` を `closure_targets` に入れる。`prog.globals` の `init` は
+`calls_indirectly` の側には要らない -- グローバル初期化子は借用版を持たないので、門はそれを判定しない。
+L10 の `<1>5` が閉じ、`<1>4` と合わせて間接呼び出しの場合が尽きる。
 
-**候補 A -- 到達可能性に間接呼び出しの辺を入れる。** `funcs_observing_uniqueness` が `RcRhs::App` で
-呼び出し先が `prog.funcs` の鍵でないとき、その呼び出し元を `observing` に入れる。すなわち「間接呼び出しを
-持つ関数はすべて観測に到達しうる」とみなす。代償は、間接呼び出しを持つ関数がすべて借用版を失うことであり、
-反復子とクロージャを使う経路の広い範囲がこれに当たる。
+**候補 B -- 種もグローバル初期化子から取る。** 候補 A に加えて、`prog.globals` の `init` の本体の
+`observes_uniqueness()` が真の op を `observing` の種にする。これは L10 の場合分けに残る 1 つ -- 環境が
+グローバルのアクセサ経由で初期化子の活性化を作る経路 -- を扱う向きの変更だが、初期化子はどの関数の
+`observing` にも属さないので、種にするだけでは何も止まらない。止めるには、初期化子が観測点に到達するとき、
+その初期化子の**最初の読みが起きうる関数**に借用版を作らないという別の判定が要る。この経路が実際に
+持ち上がった計数を読みうるかどうかは第 10 節の報告のとおり未決である。
 
-**候補 B -- クロージャの本体を辺で結ぶ。** `RcRhs::Closure(f, caps)` の腕で `f` への辺を積み、さらに
-`VarTable::closure_targets` が追える範囲で間接呼び出しの呼び出し先を解決する。追えない呼び出しは候補 A の
-扱いにする。代償は、`funcs_observing_uniqueness` が `VarTable` を作る必要が出ること
-(現在この関数は `type_env` すら使っていない) と、追えない呼び出しが残る限り候補 A の代償を部分的に払うこと。
+**候補 C -- 走査を 1 か所にまとめる。** 本体の列挙を `prog.funcs` の `body` と `prog.globals` の `init` の
+両方を渡る 1 つの反復子にし、`funcs_observing_uniqueness` がそれを使う。同じ落ち方は
+`dead_code_elim` など、本体を数え上げる他のパスにも起こりうる。
 
-**候補 C -- 観測点を持つ関数を、呼び出しグラフでなくオブジェクトの側で押さえる。** 借用版が落とす
-`Release` の対象になりうるオブジェクトを、観測点のオペランドが指しうるオブジェクトから遠ざける。これは
-別名の解析であり、`origin` は関数の内側しか見ないので、関数をまたぐ解析が要る。
-
-**候補 D -- 契約を広げる。** `unsafe_is_unique` の doc を、一意から共有への変化も認めるように書き換え、
-P26 を落とす。代償は `Debug::assert_unique` が最適化水準によって止まることと、
-`Destructor::mutate_unique_io` が一意な資源を複製することを言語が認める点である。
-
-## 7. 記録 -- `funcs_observing_uniqueness` が入る前のコードに対する反証
+## 7. 記録 (1) -- 門が無かったときの反例 (#551)
 
 この節は、`LLVMGen::observes_uniqueness` と `funcs_observing_uniqueness` が入る前のコード (issue #551) に
 対する反証である。**その欠陥は直っている** -- L2 の `<1>1` (`borrow_versions` が `observe` を含むこと) が、
@@ -655,7 +778,9 @@ fn observe(n, x, y, w) -> Bool:
 **言明**。`infer_ownership` が返す `OwnedLeaves` は、`observe` のパラメータについては `(y, [])` だけを含み、
 `(x, [])` と `(w, [])` を含まない。
 
-<1>1. `observe` の本体が D9 の意味で消費する leaf を `collect_consumes` は次のように報告する。
+<1>1. `observe` の本体について `collect_consumes` が報告するのは、`arm0` の `Llvm(is_unique, [y])` に
+      ついての `(y, [])` と、`arm1` の `App(observe, [n2, x, y, w])` について `owns` が真である位置の
+      引数の leaf だけである。ほかのどの節点も何も報告しない。
   <2>1. `arm0` の `Llvm(is_unique, [y])` について、`rhs_consumes` の `RcRhs::Llvm` の腕は、
         `borrows_operand(i)` が偽で `passthrough_arg_leaves` に入らない各オペランド leaf を報告する。
     BY CODE src/rc_ir/ownership.rs: rhs_consumes の `RcRhs::Llvm` の腕
@@ -707,11 +832,12 @@ fn observe(n, x, y, w) -> Bool:
       ある。
   <2>1. `owned_leaves` の初期値は空である。
     BY CODE src/rc_ir/borrow.rs: infer_ownership
-  <2>2. 1 周目、`<1>1` の `<2>4` が `(y, [])` を報告し、`origin(y, [])` は `Exactly((y, []))` である
-        (`y` は `Binding::Param`)。`y` は `vars.param_tys` にあるので `(y, [])` が挿入される。
+  <2>2. 1 周目、`<1>1` より `Llvm(is_unique, [y])` が `(y, [])` を報告し、`origin(y, [])` は
+        `Exactly((y, []))` である (`y` は `Binding::Param`)。`y` は `vars.param_tys` にあるので
+        `(y, [])` が挿入される。
     BY <1>1, CODE src/rc_ir/borrow.rs: infer_ownership, CODE src/rc_ir/ownership.rs: origin_inner の
        `Binding::Param` の腕
-  <2>3. `<1>1` の `<2>8` の `App(observe, [n2, x, y, w])` は、`owns` が真である位置の引数だけを報告する。
+  <2>3. `<1>1` より `App(observe, [n2, x, y, w])` は、`owns` が真である位置の引数だけを報告する。
         `owns` は `owned_leaves` を読むので、`(x, [])` と `(w, [])` が `owned_leaves` に入っていない限り
         位置 1 と位置 3 は報告されない。位置 2 は `(y, [])` が入っているので `(y, [])` を報告し、これは
         すでに入っている。
@@ -935,67 +1061,228 @@ L4 と L5 は、修正前のコードが P26 を破ることを示す。同じ�
 する) であり、過剰処分 (S-a) も漏れ (S-b) も解放後の読み (S-c) も起きない。すなわちこれは、D11 を満たした
 まま P26 だけを破る入力であり、README 第 6 節が求めた「この節だけを破る例」である。
 
-## 8. P21 と P26 の関係
+## 8. 記録 (2) -- 門が直接呼び出しだけを閉じていたときの反例
 
-**P26 の言明は P21 の前提を果たさない。2 つは相互依存であり、その依存は閉じない。**
+この節は、`funcs_observing_uniqueness` が到達可能性を直接呼び出しのグラフだけで取っていたときのコードに
+対する反証である。**その欠陥は直っている** -- 今のコードは `calls_indirectly` と `closure_targets` を
+集め、間接呼び出しを持つ関数からクロージャの target すべてへ辺を張るので、下の `relay` は `observing` に
+入り借用版を持たない。下のプログラムは 3 つの水準すべてで `unique = true` を印字する。
 
-P21 は「対応する 2 つの活性化」を「同じ実行路を辿る 2 つの活性化」と定め、それを前提に置く。README は倒れうる
-経路として D18 の観測を挙げ、「P26 がその観測が悪化しないことを述べるが、P26 は改善の向き (偽から真へ) を
-許すので、路の対応そのものは別に前提される」と書く。この節はその「別に前提される」ものが何かを言う。
+
+### 8.1 入力
+
+```fix
+module Main;
+
+type B = box struct { v : I64 };
+
+// 再帰があるので呼び出し元へインライン化されない。
+// `x` と `w` は本体で消費されないので、借用推論はこの 2 つを借用に倒す。
+// 観測点へは間接呼び出し `cl()` だけが届く。
+relay : I64 -> B -> B -> (() -> Bool) -> Bool;
+relay = |n, x, w, cl| (
+    if n > 0 { relay(n - 1, x, w, cl) };
+    cl()
+);
+
+main : IO ();
+main = (
+    let args = *get_args;
+    let o = B { v : 1 };
+    let w = B { v : 2 };
+    let f1 = |_| (
+        let (u, o) = o.unsafe_is_unique;      // <- 観測点。`o` は capture から読む
+        eval o;
+        u
+    );
+    let f2 : () -> Bool = |_| false;
+    // 実行時の値で選ぶので、クロージャ特殊化が `cl()` を直接呼び出しに変えられない。
+    let cl = if args.@size > 100 { f2 } else { f1 };
+    let u = relay(0, o, w, cl);
+    eval w.@v;                                 // `w` を呼び出しの後で使う
+    println("unique = " + u.to_string)
+);
+```
+
+3 つの成分がそれぞれ役目を持つ。
+
+- **`x`**: `relay` の本体で消費されないので借用に倒れ、その `Release` が借用版で落ちる。実行時には
+  `f1` の capture が指すオブジェクトと同じ `o` である。
+- **`w`**: `main` が呼び出しの後で使うので `routing_saves_retain` が真になる。`w` を落とすと振り分けが
+  起きない。
+- **`if args.@size > 100`**: 呼び出し先のクロージャを実行時に決めるので、間接呼び出しが RC IR まで残る。
+  この分岐を落として `f1` を直に渡すと、クロージャ特殊化が `relay` を `f1` について特殊化し、観測点が
+  `relay` の本体に入るので `relay ∈ observing` となり、欠陥は現れない。
+
+### 8.2 経路
+
+`--emit-rc-ir Main` が書く `rc_ir.Main.pre.txt` (`insert_rc` の直後) は次を含む。名前は短くしてある。
+
+```
+fn relay(n, x, w, cl) -> Bool:
+  ...
+  case 0(n <= 0):
+      release x
+      release w
+      let s : () = struct_make()
+      let a : Bool = cl(s)          // <- 間接呼び出し
+      ret a
+
+fn main(...):
+  let o : B = struct_make(1)
+  let w : B = struct_make(2)
+  retain o
+  let f1 : CapList = struct_make(o)        // capture が o を持つ
+  ...
+  retain w
+  let u : Bool = relay(0, o, w, cl)
+  let t : I64 = struct_get_0(w)
+  release w
+  ...
+
+fn main::closure_lam0::closure#0(param), cap cap -> Bool:
+  let c : CapList = capture_project_0(cap)
+  release_nonnull cap
+  destructure c { .0 -> o : B }
+  let v : (Bool, B) = is_unique(o)          // <- 観測点
+  destructure v { .0 -> u : Bool, .1 -> o2 : B }
+  eval o2
+  release o2
+  ret u
+```
+
+`rc_ir.Main.post.txt` は `relay#borrow` を含み、そのパラメータは
+`(#v0 : I64 {u}, #v1 : B {borrow}, #v2 : B {borrow}, #v3 : () -> Bool {(u, own)})` と注釈され、その
+`case 0` は `release` を 1 つも持たずに `cl(s)` を呼ぶ。`main` は `relay#borrow(...)` を呼び、その直後に
+`release o` を持つ。
+
+入力の実行での `o` の参照カウントは、観測点で 1 である。`main` は `retain o` で 2 にしてから 1 つを `f1` の
+capture へ渡し、もう 1 つを `relay` の `x` へ渡す (`relay` は入力では全パラメータを所有する)。`relay` の
+`release x` が 1 つを処分し、capture の 1 つだけが残る。
+
+出力の実行では 2 である。`relay#borrow` は `x` を借用するので `release x` を持たず、`main` はその参照を
+呼び出しの後まで持つ。`main` の `release o` は呼び出しの直後にあるが、観測点はそれより前にある。
+
+### 8.3 誤った出力
+
+門が直接呼び出しだけを閉じていたときの二値での結果である。
+
+| 最適化水準 | `unique = ` |
+|---|---|
+| `-O none` | `true` |
+| `-O basic` | `true` |
+| `-O max` | `false` |
+
+`unsafe_is_unique` を `Debug::assert_unique` に置き換えた同じ形のプログラム -- `f1` の本体を
+`let o = o.assert_unique(|_| "o is shared"); eval o.@v; true` にしたもの -- は、`-O none` と `-O basic` で
+`done = true` を印字し、`-O max` では次を出して止まる。
+
+```
+Value is not unique: o is shared
+error: Program terminated by signal 6
+```
+
+`unsafe_is_unique` の doc が認めているのは共有から一意への向きだけなので、この向きは認められていない。
+
+### 8.4 この入力は D11 を破らない
+
+出力の実行で `o` の参照は、`main` が 1 つ (呼び出しの後の `release o` が処分する)、`f1` の capture が
+1 つ (クロージャの本体の `release o2` が処分する) である。過剰処分 (S-a) も漏れ (S-b) も解放後の読み (S-c) も
+起きない。すなわちこれは、D11 を満たしたまま P26 だけを破る入力である。
+
+## 9. P21 と P26 の関係 -- D-CP は P26 の側だけを閉じる
+
+**答えを先に書く。D-CP は P26 の循環を閉じるが、P21 の側は閉じない。** 2 つは相互依存であり、その依存は
+P26 を強めても閉じない。これは 2 つの言明についての発見であって、証明の書き方の問題ではない。
+
+### 9.1 循環が何であったか
+
+P21 は「対応する 2 つの活性化」を「同じ実行路を辿る 2 つの活性化」と定め、それを**前提**に置く。README は
+倒れうる経路として D18 の観測を挙げ、「P26 がその観測が悪化しないことを述べるが、P26 は改善の向き (偽から
+真へ) を許すので、路の対応そのものは別に前提される」と書く。循環はここにある。
 
 1. 路の対応が保たれるには、2 つの実行の観測値が**等しい**ことが要る。観測値が違えば、その値を scrutinee に
    する `Match` で選ばれるアームが違い、以後の節点列が違う。D18 の観測値は `Bool` であり、
    `Debug::assert_unique` はそれを `if` に掛け、`if` は RC IR では `Match` になる
    (`CODE src/fixstd/std.fix: assert_unique`, `CODE src/rc_ir/lower.rs: Lowerer::lower_if`)。
-
 2. P26 が言うのは「入力が真ならば出力も真」であって、等しいことではない。L7a の `<1>1` が示すとおり、
-   `cancel` では「入力が偽、出力が真」が実際に起きうる。これは `unsafe_is_unique` の doc が認めている
-   向きなので、P26 を強めて等号にすることはできない。
+   `cancel` では「入力が偽、出力が真」が実際に起きうる。`unsafe_is_unique` の doc が認めているのがその
+   向きなので、P26 を等号に強めることはできない。
+3. よって P21 の前提は P26 から出ない。
 
-3. よって P21 の前提は P26 から出ない。P21 の前提が破れる点は、L7a が示すとおり (X1) と (X2) の 2 つで
-   あり、(X2) は P21 も P26 も名指していない -- 内部の一意性検査は D18 の観測点ではないが、参照カウントを
-   読み、分岐によって作るオブジェクトを変える。
+### 9.2 P26 の側は閉じた
 
-4. 依存は循環する。P21 の前提 (路の対応) は P26 の結論 (観測値の関係) を要し、P26 の証明は
-   「対応する観測点」を言うために路の対応を要する。この文書は D-CP でその循環を切った -- 路の対応を
-   前提に置くのでなく、**共通接頭**として定義し、P26 を共通接頭の上の主張として述べ、共通接頭が終わる
-   点でどちら向きに終わるかを L7a で述べた。
+D-CP は路の対応を**前提に置くのでなく定義する**。共通接頭は、対応する段が同じ節点を実行し同じ値を作る
+限りの部分であり、そこまでは対応が定義から成り立つ。P26 を共通接頭の上の主張として述べれば、循環は無い --
+L6 と L7 は共通接頭の各時点についての帰納であり、路の対応を前提にしない。
 
-**この切り方で何が残るか。** 共通接頭が終わった後について、D-CP の下でも P21 も P26 も何も言わない。それで
-足りるのは、D11 が静的な実行路 (D3) すべてについての述語だからである -- (S-a)(S-b)(S-c) は 1 つの実行の
-比較ではなく、出力の本体の全実行路についての条件である。**足りないのは P21 の証明の側である。** P21 は
-「入力が D12 を満たす」から出力の解放を導くのに 2 つの活性化の比較を使っており、共通接頭が終わった後の
-出力の実行路については、対応する入力の実行路を辿る活性化が存在するとは限らない。D21 は「1 つの実行路を辿る
-活性化が存在しないこともある」と書いており、存在しない実行路について D12 は空虚に成り立つので、そこから
-出力についての事実は出ない。
+さらに L7a が、`cancel` について共通接頭の終わり方を尽くす。出口は (X1) と (X2) の 2 つであり、どちらも
+`unsafe_is_unique` の doc が認めている向きに倒れる。**すなわち `cancel` について、P26 は共通接頭の上で
+成り立ち、共通接頭が終わる点でも認められた向きにしか終わらない。** P26 の側に残るものは無い。
 
-**オーケストレータへの報告**。P21 の言明は、前提を「同じ実行路を辿る」でなく「共通接頭の上で」と読み替えるか、
-(S-c) を出力の本体について直接示す形に組み替えるかのどちらかが要る。この文書は README を書き換えないので、
-判断は残す。
+`borrow_ify` についてはこれが言えない。第 6 節の入力では、共通接頭は (X1) で終わり、その向きは
+「入力が真、出力が偽」である。門が正しくなるまで、L7a に対応する言明は `borrow_ify` について偽である。
 
-## 9. オーケストレータへ報告する定義と仮定の穴
+### 9.3 P21 の側は閉じない
 
-1. **実行の水準の定義が README に無い。** P26 は参照カウントについての主張であり、参照カウントはヒープの量
-   なので、活性化 (D21) の水準では述べられない。この文書は `p51-runs.md` の第 1 節が提案する D22-D26
-   (環境・活性化・実行・参照の持ち手) を使った。これらを README へ移すかどうかは判断が要る。
+P21 の結論が要るのは P23 -- `cancel` の出力が D12 を満たすこと -- である。D12 は D11 を全関数の本体に
+課し、D11 は本体の**すべての静的な実行路** (D3) についての述語であって、D21 はそれを「その路を辿るすべての
+活性化についての主張」と読む。よって P23 を示すには、出力の本体の各静的な実行路 `ρ'` と、`ρ'` を辿る各
+活性化について (S-a)(S-b)(S-c) を示す必要がある。
 
-2. **「対応する実行」が定義されていない。** D19 は観測点の構文の対応を定めるだけである。この文書は D-CP を
+共通接頭が終わった後の出力の活性化は、`ρ'` を辿りながら、入力の対応する静的な実行路 `ρ` を辿る活性化を
+相手に持たない。D21 は「1 つの実行路を辿る活性化が存在しないこともある」と書いており、存在しない路に
+ついて D12 は空虚に成り立つので、そこから出力についての事実は出ない。P21 はその活性化について何も言わず、
+P23 はその活性化について (S-c) を持たない。
+
+**この穴は P26 を強めても塞がらない。** 塞ぐには P26 を等号にする必要があり、9.1 の 2 がそれを禁じる。
+
+### 9.4 出口の候補 (判断はオーケストレータに残す)
+
+- **(a) P21 から 2 つの実行の比較を外す。** 出力の本体について (S-c) を直接示す。走査が持つ量 --
+  `pending`、`outstanding`、P18a と P18c の不等式 -- はどれも 1 つの本体の 1 つの実行路についての量で
+  あって、入力の実行を参照しない。この道なら、共通接頭が終わった後の活性化も他と同じに扱える。
+- **(b) P21 の前提を「共通接頭の上で」と読み替える。** そのとき P23 は共通接頭の上でしか言えないので、
+  D12 の全称と食い違う。この道を採るなら D11 か D12 の側を書き換えることになる。
+
+この文書は README を書き換えないので、どちらを採るかは残す。**同じ問いは、2 つの実行を比べる他の命題
+すべてに掛かる。**
+
+## 10. オーケストレータへ報告する定義と仮定の穴
+
+1. **1 つの制御の流れという前提 (L9)。** L9 は「差が出ているならば生きている借用版の活性化がある」までを
+   示す。観測点を実行している活性化がその借用版の**子孫である**ことは、生きている活性化が 1 本の鎖を
+   なすときにだけ従う。`FFI_EXPORT` を通じて外から入るスレッドがある実行 (p51 の D24) では、借用版が
+   別のスレッドで計数を持ち上げたまま、こちらのスレッドが観測しうる。その形では、入力の観測値そのものが
+   段の並べ方で決まるので、性質の言明の側で扱うべき事柄だと考える。果たす者: 無し。
+
+2. **環境がグローバル初期化子の活性化を作る経路。** 窓が開いている間にグローバルの最初の読みが起きると、
+   初期化子の本体が窓の中で走る。この活性化は呼び出しの段 (E3) が作るものではないので、L10 の言明は
+   これを覆っていない。`funcs_observing_uniqueness` は `prog.globals` の `init` の観測 op を種にもしない。
+   初期化子はパラメータを持たず、グローバル値が到達するオブジェクトはグローバル状態 (D26) なので、
+   持ち上がった計数を読む経路をこの文書は見つけていないが、無いことも示していない。
+
+3. **実行の水準の定義が README に無い。** P26 は参照カウントについての主張であり、参照カウントはヒープの
+   量なので、活性化 (D21) の水準では述べられない。この文書は `p51-runs.md` の第 1 節が提案する D22-D26
+   (環境・活性化・実行・参照の持ち手) を使った。
+
+4. **「対応する実行」が定義されていない。** D19 は観測点の構文の対応を定めるだけである。この文書は D-CP を
    置いた。D-CP は定義であり、README の定義ではない。
 
-3. **D18 が `Std::Array::_unsafe_is_storage_unique` を覆っていない。** D18 は観測点を `unsafe_is_unique` の
-   演算が現れる位置と定めるが、コードが観測として扱うのは `LLVMGen::observes_uniqueness` が真を返す op で
-   あり、それは `InlineLLVMIsUniqueFunctionBody` と `InlineLLVMArrayIsStorageUniqueBody` の 2 つである。
-   後者は `Std::Array::_unsafe_is_storage_unique` の本体である。コードが押さえる集合は D18 の集合の上位
-   集合なので、押さえる向きではこの差は効かない。破る向き -- 第 6 節の反例 -- を
-   `_unsafe_is_storage_unique` で書けるかどうかは調べていない。
+5. **D18 が `Std::Array::_unsafe_is_storage_unique` を覆っていない。** コードが観測として扱うのは
+   `LLVMGen::observes_uniqueness` が真を返す op であり、それは `InlineLLVMIsUniqueFunctionBody` と
+   `InlineLLVMArrayIsStorageUniqueBody` の 2 つである。後者は `Std::Array::_unsafe_is_storage_unique` の
+   本体である。コードが押さえる集合は D18 の集合の上位集合なので、押さえる向きではこの差は効かない。
+   破る向き -- 第 6 節から第 8 節の反例 -- を `_unsafe_is_storage_unique` で書けるかどうかは調べていない。
 
-4. **内部の一意性検査 ((X2)) をどの命題も名指していない。** `LLVMGen::unique_check_operand` が宣言する
+6. **内部の一意性検査 ((X2)) をどの命題も名指していない。** `LLVMGen::unique_check_operand` が宣言する
    一意性検査は、参照カウントを読んで複製を作るかどうかを決める。カウントを変える変換はこの分岐を倒し、
    2 つの実行のオブジェクトを違える。P21 の但し書きは D18 の観測だけを数えている。
 
-## 10. この文書が読んだコードの版
+## 11. この文書が読んだコードの版
 
-対象コミット `8e47c1b5` の作業ツリーを読んだ。第 6 節の実行に使った二値は、`src/` の内容が対象コミットと
-`// PROOF:` の注釈行を除いて一致するコミット `b6170522` からビルドされたものである
-(`.claude/worktrees/rc-stats/target/release/fix`、`fix 1.5.0 (b617052)`)。第 7 節の実行 (今のコードで
-`unique = true` になること) にも同じ二値を使った。
+対象コミット `8c4117d9` に `funcs_observing_uniqueness` の広げた門をマージした作業ツリーを読んだ。第 6 節と
+第 7 節の実行に使った二値は、`src/` の内容がその作業ツリーと `// PROOF:` の注釈行を除いて一致するコミット
+`2e5d2f0d` からビルドされたものである
+(`.claude/worktrees/rc-stats/target/release/fix`、`fix 1.5.0 (2e5d2f0)`)。第 8 節の表の実行は、門が直接
+呼び出しだけを閉じていた版の二値 (`fix 1.5.0 (b617052)`) による。各実行の前に `.fixlang` を消した。
