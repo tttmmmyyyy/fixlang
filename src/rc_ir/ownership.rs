@@ -33,7 +33,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
-// PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 enum Binding {
     /// A parameter or capture — the origin of a leaf.
     Param,
@@ -82,7 +82,7 @@ pub(crate) struct VarTable {
 impl VarTable {
     /// The variable table of a function: its parameters and capture as `Param` bindings, plus the `Binding` and
     /// type of every variable bound in its body.
-    // PROOF: P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn of(func: &RcFunc) -> VarTable {
         let mut vars = VarTable::empty();
         for p in func.params.iter().chain(func.capture.iter()) {
@@ -95,7 +95,7 @@ impl VarTable {
     }
 
     /// The vars of a param-less body (a global initializer).
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn body_only(body: &RcExprNode) -> VarTable {
         let mut vars = VarTable::empty();
         collect_bindings(body, &mut vars);
@@ -180,7 +180,7 @@ fn returned_var(node: &RcExprNode) -> &RcVar {
 }
 
 /// Where the object at a leaf comes from.
-// PROOF: P1, P2, P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Origin {
     /// The leaf denotes exactly this object.
@@ -199,7 +199,7 @@ impl Origin {
     /// The one name for the value, for a reader that pairs two operations on it — a retain with the
     /// release that un-bumps it — which only a single name can decide. Two leaves with the same
     /// identity hold the same reference.
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P5, P6, P7, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn identity(&self) -> &VarPath {
         match self {
             Origin::Exactly(p) => p,
@@ -226,7 +226,7 @@ impl Origin {
     /// The origin a set of candidate objects amounts to: exactly the object they agree on, and a
     /// join under `identity` where they name several. `identity` is the one name every alias chain
     /// through the value agrees on.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     fn of_candidates(candidates: Set<VarPath>, identity: &VarPath) -> Origin {
         assert!(
             !candidates.is_empty(),
@@ -249,7 +249,7 @@ impl Origin {
 
     /// Every object an operation on the leaf acts on: the reference the leaf holds, which `identity`
     /// names, and the object that reference belongs to, which is any of `candidates`.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn acted_on(&self) -> Vec<&VarPath> {
         let mut out = vec![self.identity()];
         out.extend(
@@ -283,7 +283,7 @@ pub(crate) fn origin(
 
 /// One step of `origin`: the alias edge the variable's binding offers, followed to the object at the
 /// far end, or the variable itself where the chain stops.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
     let here = || Origin::Exactly((var.clone(), path.to_vec()));
     match vars.bindings.get(var) {
@@ -383,7 +383,7 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// borrowed node, the `wait` leaf is `⊥` and both `pair` leaves project out of that node, so the
 /// answer is that node's origin. Give one of those two leaves a second operand and the answer
 /// becomes a `Join` naming both under this value's name.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn origin_from_leaves_under(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -436,7 +436,7 @@ fn origin_from_leaves_under(
 }
 
 /// The single `Arg(j, p)` a leaf source consists of, if it is exactly that.
-// PROOF: P1, P2, P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
     if sources.len() != 1 {
         return None;
@@ -470,7 +470,7 @@ pub(crate) fn collect_consumes(
 
 /// Collect the leaves an expression and its continuation consume. `owns` answers whether a callee's
 /// parameter leaf is owned, which decides whether the argument at that position is consumed.
-// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
     node: &RcExprNode,
     vars: &VarTable,
@@ -868,7 +868,7 @@ pub(crate) fn acted_unit_keys(
 /// union itself, and a retain of it bumps every reference its payload holds; a projection of that
 /// payload names those references one by one, so a release of the projection un-bumps only part of
 /// what the retain bumped.
-// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P15, P16, P17, P18, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct References(Map<VarPath, usize>);
 
@@ -931,7 +931,7 @@ pub(crate) fn acted_references(
 
 /// The unit key of an object identity: the root it names, with its path truncated to the
 /// reference-counting unit that holds it. The returned path is always one of that root's units.
-// PROOF: P1, P2, P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPath {
     let Some(ty) = vars.var_tys.get(root) else {
         // A root with no type here is a global: the table holds the function's own variables.
