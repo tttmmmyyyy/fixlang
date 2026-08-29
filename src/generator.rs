@@ -2190,6 +2190,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             "`{}` holds its fields in an order the field indices do not name.",
             obj.ty.to_string(),
         );
+        // The function applied below comes out of the object's field, not from an operand of
+        // whatever operation this release sits inside, so the declaration `apply_lambda` checks
+        // says nothing about it. Every release path can reach here.
+        let outer_op = self.generating_llvm_op.take();
         let value =
             ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX);
         let dtor =
@@ -2206,6 +2210,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
             &res,
         );
+        self.generating_llvm_op = outer_op;
     }
 
     /// Perform `work` — release, mark-global or mark-threaded — on `obj` itself: on its own count

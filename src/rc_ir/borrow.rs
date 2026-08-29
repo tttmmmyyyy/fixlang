@@ -38,6 +38,7 @@
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
+use crate::ast::types::Type;
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
@@ -449,13 +450,71 @@ fn func_has_borrowable_param(
     })
 }
 
+/// Whether this program builds a `Std::FFI::Destructor`.
+///
+/// Releasing such an object runs the destructor function it holds, on the way out and before its
+/// references are released (`Generator::build_run_destructor`). A release sits in every body, so
+/// where the answer here is `true` every function can reach code decided at run time.
+///
+/// A `Destructor` value exists only where `Destructor::_make` built one, and the binding that
+/// operation writes has the type `(IOState, Destructor a)`, so walking the type expression of every
+/// binding finds it without expanding type definitions.
+fn builds_a_destructor(prog: &RcProgram) -> bool {
+    let mut found = false;
+    for func in prog.funcs.values() {
+        for p in func.params.iter().chain(func.capture.iter()) {
+            found |= mentions_a_destructor(&p.ty);
+        }
+        found |= mentions_a_destructor(&func.ret_ty);
+        for_each_node(&func.body, &mut |node| found |= binds_a_destructor(node));
+    }
+    for global in &prog.globals {
+        found |= mentions_a_destructor(&global.ty);
+        for_each_node(&global.init, &mut |node| found |= binds_a_destructor(node));
+    }
+    found
+}
+
+/// Whether the type expression `ty` mentions a `Destructor`.
+fn mentions_a_destructor(ty: &Arc<TypeNode>) -> bool {
+    if ty.is_destructor_object() {
+        return true;
+    }
+    match &ty.ty {
+        Type::TyVar(_) | Type::TyCon(_) => false,
+        Type::TyApp(fun, arg) => mentions_a_destructor(fun) || mentions_a_destructor(arg),
+        Type::AssocTy(_, args) => args.iter().any(mentions_a_destructor),
+    }
+}
+
+/// Whether one node binds a variable whose type mentions a `Destructor`.
+fn binds_a_destructor(node: &RcExprNode) -> bool {
+    match node.expr.as_ref() {
+        RcExpr::Let(x, rhs, _) => {
+            mentions_a_destructor(&x.ty)
+                || match rhs {
+                    RcRhs::Match(_, arms) => arms
+                        .iter()
+                        .any(|arm| mentions_a_destructor(&arm.payload.ty)),
+                    RcRhs::Var(..) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => false,
+                }
+        }
+        RcExpr::Destructure(_, fields, _, _) => fields
+            .iter()
+            .any(|(_, field)| mentions_a_destructor(&field.ty)),
+        RcExpr::Retain(..) | RcExpr::Release(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => false,
+    }
+}
+
 /// The functions whose body can reach an op that reports a reference count to the program
 /// (`LLVMGen::observes_uniqueness`) — directly, or through a direct call to another such function.
 ///
 /// Reaching one is over-approximated where the callee is not named: a body that can apply a function
 /// value without naming it — a call through a local holding a closure, or an inline-LLVM op that
 /// applies one of its operands (`LLVMGen::applies_a_function_operand`) — is given an edge to every
-/// function a closure can carry, since which one it holds is decided at run time.
+/// function a closure can carry, since which one it holds is decided at run time. A release runs a
+/// destructor function the same way, and sits in every body, so every function is given an edge to
+/// the closures a `Destructor` of a type this program mentions can carry.
 ///
 /// Borrowing changes what such an op reports. A borrowed parameter's reference is disposed of by the
 /// caller after the call rather than by this function before the op runs, so the count the op reads
@@ -534,6 +593,22 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
             .entry(fref.clone())
             .or_default()
             .extend(closure_targets.iter().cloned());
+    }
+    // A release runs the destructor function of a `Destructor` object it takes to a count of zero,
+    // and a release sits in every body, so every function reaches whatever that run reaches. It
+    // reaches more than the destructor function: that function returns an `IO` action, the release
+    // runs it, and the action can return another. Which functions those are is decided at run time
+    // and the chain has no bound, so the edge goes to every function a closure can carry.
+    //
+    // What keeps this from costing anything is the guard: a program that builds no `Destructor` has
+    // no such release, and gets no edge at all.
+    if builds_a_destructor(prog) {
+        for fref in prog.funcs.keys() {
+            callees
+                .entry(fref.clone())
+                .or_default()
+                .extend(closure_targets.iter().cloned());
+        }
     }
     // Least fixed point over that graph: a caller of an observing function reaches the op.
     loop {

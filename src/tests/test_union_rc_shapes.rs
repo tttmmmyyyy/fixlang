@@ -899,6 +899,47 @@ main = (
 );
 "#;
 
+    // The same, where the observation is reached by releasing a `Destructor`.
+    //
+    // A release runs the destructor function of the object it takes to a count of zero, before that
+    // object's own references are released. The function names no call site: it comes out of the
+    // object's field, and the `IO` action it returns is run by the release as well. A call graph
+    // built from what a body calls stops at the release.
+    const OBSERVED_UNIQUENESS_THROUGH_A_DESTRUCTOR_SOURCE: &str = r#"
+module Main;
+
+type B = box struct { v : I64 };
+
+// `x` is never consumed, so it is inferred borrowed. `d` is consumed by the array literal, so the
+// release of that array runs the destructor inside this activation, on the same object `x` borrows.
+// `w` is used after the call, which is what makes the call worth routing.
+relay : I64 -> B -> Destructor B -> B -> I64;
+relay = |n, x, d, w| (
+    if n > 0 { relay(n - 1, x, d, w) };
+    let arr : Array (Destructor B) = [d];
+    eval arr.@size;
+    0
+);
+
+main : IO ();
+main = (
+    let args = *IO::get_args;
+    // The argument count decides the depth, so the call survives to run time.
+    let n = if args.@size > 100 { 1 } else { 0 };
+    let o = B { v : 1 };
+    let w = B { v : 2 };
+    // The destructor holds the same object `main` passes to the borrowed position `x`.
+    let d = *Destructor::make(o, |v| (
+        let v = v.Debug::assert_unique(|_| "the observed value is shared");
+        pure(v)
+    ));
+    let r = relay(n, o, d, w);
+    eval w.@v;
+    eval r;
+    pure()
+);
+"#;
+
     /// `Debug::assert_unique` halts the program when the value it is given is shared, so a run that
     /// completes is the whole check. Valgrind is off: nothing here is a memory error, and the
     /// observation is what the test is about.
@@ -925,6 +966,12 @@ main = (
     #[test]
     pub fn test_observed_uniqueness_survives_borrowing_through_an_applied_operand() {
         test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_AN_APPLIED_OPERAND_SOURCE);
+    }
+
+    /// As `test_observed_uniqueness_survives_borrowing`, reached by the release of a `Destructor`.
+    #[test]
+    pub fn test_observed_uniqueness_survives_borrowing_through_a_destructor() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_DESTRUCTOR_SOURCE);
     }
 
     // A union payload built from a value a match binding carries and a second value. The binding
