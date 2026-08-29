@@ -95,6 +95,7 @@ fn lower_and_insert_rc(
 /// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
 /// borrowed parameters on the functions (`RcFunc::borrowed_units`), which `param_ownership_shapes`
 /// reads back as the owned complement.
+// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
@@ -132,7 +133,7 @@ fn optimize_rc_program(
     if config.enable_borrow_optimization() {
         prog = borrow_ify(&prog, type_env);
         validate(&prog, "after borrow_ify");
-        prog = cancel(&prog, type_env);
+        prog = cancel(&prog, type_env, config.develop_mode);
         validate(&prog, "after cancel");
         prune(&mut prog, "after dce following cancel");
         prog = unique_check_elim::specialize(&prog, type_env);

@@ -195,6 +195,7 @@ impl<'a> RcInserter<'a> {
     }
 
     /// A `let x = rhs; cont` whose `rhs` is not a `Match` (the `Match` case is `insert_into_match`).
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_operation_let(
         &self,
         x: RcVar,
@@ -437,6 +438,7 @@ impl<'a> RcInserter<'a> {
 /// The operands of a compound expression together with how each is taken, in evaluation order
 /// (callee before arguments). A `Match` rhs never reaches here; it is handled by
 /// `insert_into_match`.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rhs_operands(rhs: &RcRhs, type_env: &TypeEnv) -> Vec<(RcVar, Ownership)> {
     match rhs {
         RcRhs::Var(v) => vec![(v.clone(), Ownership::Own)],

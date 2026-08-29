@@ -33,6 +33,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
+// PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 enum Binding {
     /// A parameter or capture — the origin of a leaf.
     Param,
@@ -54,6 +55,7 @@ enum Binding {
 
 /// The variables of one function, enough to trace a leaf back to the object it belongs to and to
 /// resolve a call to its callee's parameters.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) struct VarTable {
     /// What binds each variable, which `origin` follows back to the object a leaf belongs to.
     bindings: Map<FullName, Binding>,
@@ -80,6 +82,7 @@ pub(crate) struct VarTable {
 impl VarTable {
     /// The variable table of a function: its parameters and capture as `Param` bindings, plus the `Binding` and
     /// type of every variable bound in its body.
+    // PROOF: P1, P2, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn of(func: &RcFunc) -> VarTable {
         let mut vars = VarTable::empty();
         for p in func.params.iter().chain(func.capture.iter()) {
@@ -92,6 +95,7 @@ impl VarTable {
     }
 
     /// The vars of a param-less body (a global initializer).
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn body_only(body: &RcExprNode) -> VarTable {
         let mut vars = VarTable::empty();
         collect_bindings(body, &mut vars);
@@ -112,6 +116,7 @@ impl VarTable {
 
 /// Record every local variable's `Binding` and type (and any closure value's target function) in a
 /// function body.
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
     match node.expr.as_ref() {
         RcExpr::Ret(_) => {}
@@ -162,6 +167,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
 /// The variable an expression returns: the one that its final `Ret` names. Every construct of the RC
 /// IR has a single continuation, so a body has exactly one such `Ret` (a match's arms each have their
 /// own, which return the arm's value to the match binding).
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn returned_var(node: &RcExprNode) -> &RcVar {
     grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(v) => v,
@@ -174,6 +180,7 @@ fn returned_var(node: &RcExprNode) -> &RcVar {
 }
 
 /// Where the object at a leaf comes from.
+// PROOF: P1, P2, P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Origin {
     /// The leaf denotes exactly this object.
@@ -192,6 +199,7 @@ impl Origin {
     /// The one name for the value, for a reader that pairs two operations on it — a retain with the
     /// release that un-bumps it — which only a single name can decide. Two leaves with the same
     /// identity hold the same reference.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn identity(&self) -> &VarPath {
         match self {
             Origin::Exactly(p) => p,
@@ -199,7 +207,15 @@ impl Origin {
         }
     }
 
-    /// Every object the leaf may denote, for a reader whose answer has to hold on all paths.
+    /// What the leaf may denote, for a reader whose answer has to hold on all paths: every object,
+    /// and the name of every join folded in along the way.
+    ///
+    /// A join's name is there because an operation on the leaf acts on it. A retain of a join keys
+    /// to that name, the value built from the join holds the reference the retain made, and a
+    /// release of that value disposes it — so a candidate set that left the name out would let the
+    /// release pass over the retain and the two would pair with the wrong partners. Building one
+    /// candidate set out of several origins therefore folds in `acted_on`, not `candidates`.
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn candidates(&self) -> Vec<&VarPath> {
         match self {
             Origin::Exactly(p) => vec![p],
@@ -210,6 +226,7 @@ impl Origin {
     /// The origin a set of candidate objects amounts to: exactly the object they agree on, and a
     /// join under `identity` where they name several. `identity` is the one name every alias chain
     /// through the value agrees on.
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
     fn of_candidates(candidates: Set<VarPath>, identity: &VarPath) -> Origin {
         assert!(
             !candidates.is_empty(),
@@ -232,6 +249,7 @@ impl Origin {
 
     /// Every object an operation on the leaf acts on: the reference the leaf holds, which `identity`
     /// names, and the object that reference belongs to, which is any of `candidates`.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn acted_on(&self) -> Vec<&VarPath> {
         let mut out = vec![self.identity()];
         out.extend(
@@ -247,6 +265,7 @@ impl Origin {
 /// payloads, catch-all payloads) back to the variable that produced it. The variable is a parameter
 /// when the leaf ultimately comes from an input, and a `Join` when a match forwards several arms'
 /// values to one binding.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn origin(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -264,6 +283,7 @@ pub(crate) fn origin(
 
 /// One step of `origin`: the alias edge the variable's binding offers, followed to the object at the
 /// far end, or the variable itself where the chain stops.
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
     let here = || Origin::Exactly((var.clone(), path.to_vec()));
     match vars.bindings.get(var) {
@@ -274,10 +294,12 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
         Some(Binding::Move(y)) => origin(vars, type_env, &y.name, path),
         Some(Binding::Join(arm_results)) => {
             // The arms bind their values to one variable, so a path into it is a path into each of
-            // them. Arms that all reach the same object leave the value exact.
+            // them. Arms that all reach the same object leave the value exact. Each arm result
+            // contributes everything an operation on it acts on (`acted_on`), so that an arm result
+            // that is itself a join keeps the name its own retains and releases key to.
             let mut candidates = Set::default();
             for arm_result in arm_results {
-                for p in origin(vars, type_env, &arm_result.name, path).candidates() {
+                for p in origin(vars, type_env, &arm_result.name, path).acted_on() {
                     candidates.insert(p.clone());
                 }
             }
@@ -343,10 +365,15 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// over; a leaf produced here rather than projected names this value itself. A leaf that records
 /// several sources holds one per path it can be reached by, and each of them names an object.
 ///
-/// The answer is exact where the leaves agree on one unit. Where they reach several, or where one
-/// of them is a value produced here rather than a projection, every object the value may denote is
-/// reported together, so that a reader whose answer has to hold on all paths — whether this
-/// version owns the value — sees them all. `None` where no leaf names an object.
+/// Leaves that all reach one origin make this value an alias of it, so the answer is that origin
+/// whole, identity included — the same answer a leaf that is a plain projection gets. Where the
+/// leaves reach several origins, everything an operation on any of them acts on (`acted_on`) is
+/// reported together under this value's own name, so that a reader whose answer has to hold on all
+/// paths — whether this version owns the value, and which units a release of it disposes — sees
+/// them all. A reached origin that is itself a join contributes its identity along with its
+/// candidates: that identity is the name its own retains and releases key to, and leaving it out
+/// makes a release of this value pass over a retain it un-bumps. `None` where no leaf names an
+/// object.
 ///
 /// # Arguments
 /// * `here` - the value's own identity, which is what it denotes on any path the leaves leave open.
@@ -354,8 +381,9 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// # Examples
 /// Asked for `unbox union { wait : Guard, pair : (Guard, Guard), mark : I64 }` itself, read out of one
 /// borrowed node, the `wait` leaf is `⊥` and both `pair` leaves project out of that node, so the
-/// answer is `Exactly` the node's object. Give one of those two leaves a second operand and the
-/// answer becomes a `Join` naming both.
+/// answer is that node's origin. Give one of those two leaves a second operand and the answer
+/// becomes a `Join` naming both under this value's name.
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn origin_from_leaves_under(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -381,22 +409,34 @@ fn origin_from_leaves_under(
             }
         }
     }
-    let mut candidates: Set<VarPath> = Set::default();
+    // The origins the leaves reach: one per operand unit, plus this value itself where a leaf was
+    // produced here rather than projected.
+    let mut reached: Vec<Origin> = operand_units
+        .into_iter()
+        .map(|(j, unit)| origin(vars, type_env, &args[j].name, &unit))
+        .collect();
     if produced_here {
-        candidates.insert(here.clone());
+        reached.push(Origin::Exactly(here.clone()));
     }
-    for (j, unit) in operand_units {
-        for p in origin(vars, type_env, &args[j].name, &unit).candidates() {
-            candidates.insert(p.clone());
-        }
+    let first = reached.first()?;
+    // Leaves that all reach one origin make this value that origin: it holds those references and
+    // no others, so it denotes what the origin denotes. Answering with the origin whole is what
+    // carries the identity along the alias chain — rebuilding it under `here` would give one object
+    // a second name, and a retain of the operand and a release of this value would key differently
+    // and never pair.
+    if reached.iter().all(|reached_origin| reached_origin == first) {
+        return Some(first.clone());
     }
-    if candidates.is_empty() {
-        return None;
-    }
+    let candidates = reached
+        .iter()
+        .flat_map(|reached_origin| reached_origin.acted_on())
+        .cloned()
+        .collect();
     Some(Origin::of_candidates(candidates, here))
 }
 
 /// The single `Arg(j, p)` a leaf source consists of, if it is exactly that.
+// PROOF: P1, P2, P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
     if sources.len() != 1 {
         return None;
@@ -415,6 +455,7 @@ fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
 /// decide which argument positions consume: an owning argument position, a captured value, or a
 /// returned value. Alias edges are not consumes here — the consume of an alias is attributed to its
 /// `origin`. Explicit `Release` nodes are own-then-release drops, not consumes.
+// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn collect_consumes(
     node: &RcExprNode,
     vars: &VarTable,
@@ -429,6 +470,7 @@ pub(crate) fn collect_consumes(
 
 /// Collect the leaves an expression and its continuation consume. `owns` answers whether a callee's
 /// parameter leaf is owned, which decides whether the argument at that position is consumed.
+// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
     node: &RcExprNode,
     vars: &VarTable,
@@ -470,6 +512,7 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
 /// leaf of it goes; an unboxed container moves each named field's leaves into that field's variable,
 /// an alias whose consume is attributed to the field variable, so only a dropped (unnamed) field's
 /// leaves go. This is the model code generation implements (`ObjectFieldType::get_struct_fields`).
+// PROOF: P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn destructure_consumes(
     container: &RcVar,
     fields: &[(usize, RcVar)],
@@ -496,6 +539,7 @@ pub(crate) fn destructure_consumes(
 /// (`owns` decides, for the callee's parameter leaf), a captured value, and the closure callee. A
 /// `Var` move and a `Match` consume nothing here — a move is an alias, and a match's consumes live in
 /// its arms. `result_ty` is the type the right-hand side binds, needed to read an op's passthrough.
+// PROOF: P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
     rhs: &RcRhs,
     result_ty: &Arc<TypeNode>,
@@ -553,6 +597,7 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
 
 /// The parameters of a directly-called callee: a closure value built in this function, or a
 /// top-level function referenced by name. `None` for an indirect call (an owning, all-`Own` ABI).
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn resolve_callee_params<'a>(
     callee: &RcVar,
     vars: &VarTable,
@@ -586,6 +631,7 @@ fn resolve_callee_params<'a>(
 /// Dropping an argument leaf's consume is sound exactly when the result aliases that leaf, and a
 /// result leaf with a single argument leaf behind it aliases it. A leaf that joins an argument with
 /// another source aliases nothing, so it keeps its consume.
+// PROOF: P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn passthrough_arg_leaves(
     llvm_gen: &dyn LLVMGen,
     result_ty: &Arc<TypeNode>,
@@ -654,6 +700,7 @@ pub(crate) enum UnitStep {
 /// # Examples
 /// `unit_step` of `Array I64` is `Unit`, of `I64` is `NoUnit`, and of `(Array I64, I64)` is `Fields`
 /// whose two fields are both held.
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
     if ty.is_fully_unboxed(type_env) {
         return UnitStep::NoUnit;
@@ -678,6 +725,7 @@ pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
 /// Unit and leaf enumerations both leave a punched field out, so every path that reference counting
 /// works with names a held field. An index naming a punched field, or one out of range, aborts the
 /// walk `walk_name` names.
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn held_field_type(
     held_fields: &[(usize, Arc<TypeNode>)],
     idx: usize,
@@ -703,6 +751,7 @@ pub(crate) fn held_field_type(
 /// expanding it into the boxed leaves inside (an unboxed union is one unit, since only its active
 /// variant is live and a refcount operation must dispatch on the tag rather than name a variant's
 /// leaf).
+// PROOF: P1, P2, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     let mut out = vec![];
     rc_units_go(ty, type_env, &mut vec![], &mut out);
@@ -711,6 +760,7 @@ pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath>
 
 /// Descend a type, pushing onto `out` the path of each unit reached. `path` is the field path from
 /// the whole value down to `ty`, which each pushed unit is named relative to.
+// PROOF: P1, P2, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -738,6 +788,7 @@ fn rc_units_go(
 /// Truncate a leaf path to its reference-counting unit: the path down to the first unit `unit_step`
 /// reaches, whose whole subtree is that one unit. A path that stays within unboxed structs is
 /// unchanged.
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn truncate_to_unit(
     ty: &Arc<TypeNode>,
     path: &[usize],
@@ -783,6 +834,7 @@ pub(crate) fn truncate_to_unit(
 /// under, so it must name one object: a leaf whose object is path-dependent keys to the match
 /// binding that joins the paths, which every alias chain through it agrees on. The units an
 /// operation on it really touches are `acted_unit_keys`.
+// PROOF: P1, P2, P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn unit_key(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -794,6 +846,7 @@ pub(crate) fn unit_key(
 
 /// Every reference-counting unit an operation on a leaf acts on: the one its reference is counted
 /// under, and the ones the object it belongs to may be counted under.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn acted_unit_keys(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -815,6 +868,7 @@ pub(crate) fn acted_unit_keys(
 /// union itself, and a retain of it bumps every reference its payload holds; a projection of that
 /// payload names those references one by one, so a release of the projection un-bumps only part of
 /// what the retain bumped.
+// PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct References(Map<VarPath, usize>);
 
@@ -824,6 +878,7 @@ impl References {
     /// # Examples
     /// References holding one reference of `a` and two of `b` cover one holding one of each, and do
     /// not cover one holding three of `b`. Every `References` covers itself and covers an empty one.
+    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn covers(&self, other: &References) -> bool {
         other.0.iter().all(|(object, count)| {
             self.0
@@ -833,6 +888,7 @@ impl References {
     }
 
     /// Drop `other`'s references from these, where `covers` holds of the two.
+    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn subtract(&mut self, other: &References) {
         for (object, count) in &other.0 {
             let held_count = self
@@ -847,6 +903,7 @@ impl References {
     }
 
     /// Whether the operation acts on no reference at all.
+    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -854,6 +911,7 @@ impl References {
 
 /// The references an operation on the subtree of `v` that `path` names acts on: the reference each
 /// boxed leaf under `path` holds, named by the object its `origin` identifies.
+// PROOF: P3, P4, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn acted_references(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -873,6 +931,7 @@ pub(crate) fn acted_references(
 
 /// The unit key of an object identity: the root it names, with its path truncated to the
 /// reference-counting unit that holds it. The returned path is always one of that root's units.
+// PROOF: P1, P2, P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPath {
     let Some(ty) = vars.var_tys.get(root) else {
         // A root with no type here is a global: the table holds the function's own variables.
@@ -904,6 +963,7 @@ fn unit_of(vars: &VarTable, type_env: &TypeEnv, (root, path): &VarPath) -> VarPa
 
 /// The owned parameter/capture units of every function: each version's units minus the ones it
 /// borrows (`RcFunc::borrowed_units`, the annotation borrow-ification writes).
+// PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {
     let mut owned = Set::default();
     for func in prog.funcs.values() {
@@ -921,6 +981,7 @@ pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPa
 
 /// The reference-counting units under a path of a value's type: the units of the subtree the path
 /// names, or the path itself when it already names a unit (a boxed value, a union, or a leaf).
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn units_under(
     ty: &Arc<TypeNode>,
     path: &FieldPath,
@@ -941,6 +1002,7 @@ pub(crate) fn units_under(
 
 /// The type of the subtree a path names, descending only unboxed structs; `None` once the path
 /// reaches a value the walk stops at — a closure, a unit, or a value holding no reference.
+// PROOF: P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Option<Arc<TypeNode>> {
     let mut cur = ty.clone();
     for &idx in path {
@@ -957,8 +1019,8 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 #[cfg(test)]
 mod tests {
     use super::{
-        acted_references, as_arg_projection, held_field_type, origin, rc_units, truncate_to_unit,
-        unit_step, Binding, Origin, UnitStep, VarTable,
+        acted_references, as_arg_projection, held_field_type, origin, origin_from_leaves_under,
+        rc_units, truncate_to_unit, unit_step, Binding, Origin, UnitStep, VarTable,
     };
     use crate::ast::name::FullName;
     use crate::ast::program::TypeEnv;
@@ -976,7 +1038,7 @@ mod tests {
     use crate::object::{ty_to_object_ty, ObjectFieldType};
     use crate::rc_ir::ast::{FieldPath, RcVar, VarPath};
     use crate::rc_ir::leaf_map::boxed_leaf_paths;
-    use crate::rc_ir::provenance::{sole_origin, LeafOrigin};
+    use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
     use std::sync::Arc;
 
     /// The type `Test::<name>`, of a declaration these tests make themselves. It takes no type
@@ -1279,6 +1341,7 @@ mod tests {
     }
 
     /// A variable bound by the op that produced the value is the origin of that value.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     #[test]
     fn a_producer_is_exactly_itself() {
         let vars = table(vec![(var("p"), Binding::Producer)]);
@@ -1297,6 +1360,7 @@ mod tests {
 
     /// A match binding whose arms produce different objects is one of them: its candidates are the
     /// arms' results, and the join itself is the name every alias chain through it agrees on.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     #[test]
     fn a_match_binding_may_be_any_arm_result() {
         let vars = table(vec![
@@ -1339,6 +1403,82 @@ mod tests {
             (var("n"), Binding::Move(var("m"))),
         ]);
         assert_eq!(origin_of(&vars, "n").identity(), &at("m"));
+    }
+
+    /// A value read out of one unit of a container is that unit: its origin is the container's,
+    /// identity included, so reading the union field of a struct a match binding joins names the
+    /// binding.
+    ///
+    /// The identity has to survive an alias chain here just as it does across a move-bind. Naming
+    /// the value read out instead would key a retain of the struct and a release of the union to two
+    /// different objects, the retain would pair with a later release of the struct rather than with
+    /// that one, and cancelling that pair would free the payload while the union still holds it.
+    #[test]
+    fn a_unit_read_out_of_a_container_keeps_the_containers_origin() {
+        let type_env = type_env();
+        let nested = |name: &str| typed_var(name, test_ty("Nested"));
+        let vars = table(vec![
+            (nested("p"), Binding::Producer),
+            (nested("q"), Binding::Producer),
+            (nested("m"), Binding::Join(vec![nested("p"), nested("q")])),
+        ]);
+        // The read's result is the union field of `m`, so each of its leaves comes from that field.
+        let read_union_field = Provenance::build_shape(&test_ty("Choice"), &type_env, &|leaf| {
+            let mut in_container = vec![0];
+            in_container.extend_from_slice(leaf);
+            sole_origin(LeafOrigin::Arg(0, in_container))
+        });
+        let read = origin_from_leaves_under(
+            &vars,
+            &type_env,
+            &read_union_field,
+            &[nested("m")],
+            &[],
+            &at("read"),
+        );
+        let field_of_m = origin(&vars, &type_env, &FullName::local("m"), &[0]);
+        assert_eq!(field_of_m.identity(), &(FullName::local("m"), vec![0]));
+        assert_eq!(read, Some(field_of_m));
+    }
+
+    /// A value whose leaves reach several origins is a join of them under this value's own name:
+    /// the leaves disagree about which object the value is, so no operand's name stands for it.
+    #[test]
+    fn a_value_whose_leaves_disagree_is_a_join_under_its_own_name() {
+        let type_env = type_env();
+        let twins = |name: &str| typed_var(name, test_ty("Twins"));
+        let vars = table(vec![
+            (twins("a"), Binding::Producer),
+            (twins("b"), Binding::Producer),
+        ]);
+        // The first field comes from `a` and the second from `b`, so the value as a whole is neither.
+        let one_field_from_each = Provenance::build_shape(&test_ty("Twins"), &type_env, &|leaf| {
+            let from_a = leaf.first() == Some(&0);
+            sole_origin(LeafOrigin::Arg(if from_a { 0 } else { 1 }, leaf.clone()))
+        });
+        let joined = origin_from_leaves_under(
+            &vars,
+            &type_env,
+            &one_field_from_each,
+            &[twins("a"), twins("b")],
+            &[],
+            &at("mixed"),
+        )
+        .expect("both leaves name an object");
+        assert_eq!(joined.identity(), &at("mixed"));
+        assert_eq!(
+            joined
+                .candidates()
+                .into_iter()
+                .cloned()
+                .collect::<Set<VarPath>>(),
+            vec![
+                (FullName::local("a"), vec![0]),
+                (FullName::local("b"), vec![1])
+            ]
+            .into_iter()
+            .collect::<Set<VarPath>>()
+        );
     }
 
     /// A retain of an unboxed union acts on every reference its payload holds, while a release of
@@ -1387,9 +1527,12 @@ mod tests {
     }
 
     /// A join over another join flattens: every result the inner join could yield is among the outer
-    /// join's candidates.
+    /// join's candidates, and so is the inner join's own name. A reference-count operation on the
+    /// inner join keys to that name, and the outer join holds the reference such an operation made,
+    /// so a release of the outer join acts on it too.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     #[test]
-    fn a_join_of_joins_may_be_any_of_their_results() {
+    fn a_join_of_joins_flattens_and_keeps_the_inner_name() {
         let vars = table(vec![
             (var("p"), Binding::Producer),
             (var("q"), Binding::Producer),
@@ -1403,7 +1546,7 @@ mod tests {
                 .into_iter()
                 .cloned()
                 .collect::<Set<VarPath>>(),
-            vec![at("p"), at("q"), at("r")]
+            vec![at("inner"), at("p"), at("q"), at("r")]
                 .into_iter()
                 .collect::<Set<VarPath>>()
         );

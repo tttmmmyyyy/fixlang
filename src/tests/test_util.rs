@@ -92,7 +92,7 @@ pub fn fix_command() -> Command {
 ///
 /// The suite runs under the level `MAX_OPT_LEVEL_VAR` names, and that level caps the one `-O` asks
 /// for, so the variable is pinned to `opt_level` beside the argument. `-O` belongs to the
-/// subcommand, which is why the subcommand is given here rather than by the caller.
+/// subcommand, so the returned command carries `subcommand` with the level after it.
 pub fn fix_command_at_opt_level(subcommand: &str, opt_level: &str) -> Command {
     let mut command = fix_command();
     command
@@ -295,6 +295,27 @@ pub fn emitted_llvm_ir_modules(dir: &Path, which: EmittedIr) -> Vec<String> {
 /// The LLVM IR a `--emit-llvm` build wrote into `dir`, the modules concatenated in file-name order.
 pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
     emitted_llvm_ir_modules(dir, which).join("\n")
+}
+
+/// The LLVM IR the code generator wrote for `source`, compiled at `opt_level`, before the LLVM pass
+/// pipeline ran over it. Fails the test unless the build succeeds.
+///
+/// Use this for a property of the code the compiler emits. The optimized module also holds code
+/// LLVM itself introduced, which such a test would take for the compiler's own work.
+pub fn generated_llvm_ir(source: &str, opt_level: &str) -> String {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir = temp_dir.path();
+    let build = fix_build_source_command(dir, source, opt_level)
+        .arg("--emit-llvm")
+        .output()
+        .expect("Failed to execute fix build");
+    assert!(
+        build.status.success(),
+        "the build should succeed.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+    emitted_llvm_ir(dir, EmittedIr::BeforeOptimization)
 }
 
 /// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.

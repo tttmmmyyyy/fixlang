@@ -179,6 +179,7 @@ impl Program {
 
     /// Add the TyCon that stands for an opaque type variable to the type environment, taking the
     /// scheme's other generalized variables as its type arguments.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn register_opaque_tycon(&mut self, info: &OpaqueInfo) {
         let ti = TyConInfo {
             punched_from: None,

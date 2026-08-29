@@ -35,8 +35,9 @@ use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
     alloc_array_storage, build_array_storage_shift, build_capacity_check, build_elems_bytes,
-    build_storage_is_aligned, create_obj, get_array_storage, get_array_storage_buf,
-    read_alloc_offset, union_tag_value, write_alloc_offset, CapacityCheck, ObjectFieldType,
+    build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned, create_obj,
+    get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
+    write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -57,6 +58,7 @@ use std::sync::Arc;
 // The type constructors the compiler provides itself — the primitive types, the function arrow,
 // `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
 // a user-defined type would get from its declaration.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
@@ -403,6 +405,7 @@ pub fn is_destructor_object_tycon(tc: &TyCon) -> bool {
 }
 
 // Returns whether given tycon is array
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_array_tycon(tc: &TyCon) -> bool {
     *tc == make_array_tycon()
 }
@@ -2331,19 +2334,17 @@ fn realloc_array<'c, 'm>(
     let sizeof = object_type.size_of(gc, Some(new_cap));
 
     let old_alloc_offset = read_alloc_offset(gc, storage_ptr);
-    let old_base = unsafe {
+    let old_base = {
         let neg_old_alloc_offset = gc
             .builder()
             .build_int_neg(old_alloc_offset, "neg_old_alloc_offset@realloc_array")
             .unwrap();
-        gc.builder()
-            .build_gep(
-                gc.context.i8_type(),
-                storage_ptr,
-                &[neg_old_alloc_offset],
-                "old_base@realloc_array",
-            )
-            .unwrap()
+        build_gep_within_allocation(
+            gc,
+            storage_ptr,
+            neg_old_alloc_offset,
+            "old_base@realloc_array",
+        )
     };
 
     // A storage worth aligning keeps room to be placed off the base of its block; one below the
@@ -2415,26 +2416,10 @@ fn realloc_array<'c, 'm>(
     // Carry the control block and the live elements to where the object now sits. The two ranges
     // overlap, being at most `ARRAY_BUF_ALIGNMENT` apart.
     gc.builder().position_at_end(move_bb);
-    let old_ptr = unsafe {
-        gc.builder()
-            .build_gep(
-                gc.context.i8_type(),
-                new_base,
-                &[old_alloc_offset],
-                "old_ptr@realloc_array",
-            )
-            .unwrap()
-    };
-    let new_ptr = unsafe {
-        gc.builder()
-            .build_gep(
-                gc.context.i8_type(),
-                new_base,
-                &[new_alloc_offset],
-                "new_ptr@realloc_array",
-            )
-            .unwrap()
-    };
+    let old_ptr =
+        build_gep_within_allocation(gc, new_base, old_alloc_offset, "old_ptr@realloc_array");
+    let new_ptr =
+        build_gep_within_allocation(gc, new_base, new_alloc_offset, "new_ptr@realloc_array");
     let len = array.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
     let elems_bytes = build_elems_bytes(gc, &elem_ty, len, "elems_size@realloc_array");
     let header_size = gc
@@ -2456,16 +2441,8 @@ fn realloc_array<'c, 'm>(
     gc.builder().build_unconditional_branch(end_bb).unwrap();
 
     gc.builder().position_at_end(end_bb);
-    let storage_ptr = unsafe {
-        gc.builder()
-            .build_gep(
-                gc.context.i8_type(),
-                new_base,
-                &[new_alloc_offset],
-                "storage_ptr@realloc_array",
-            )
-            .unwrap()
-    };
+    let storage_ptr =
+        build_gep_within_allocation(gc, new_base, new_alloc_offset, "storage_ptr@realloc_array");
     write_alloc_offset(gc, storage_ptr, new_alloc_offset);
     let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_ptr.as_basic_value_enum());
     array.insert_field(gc, ARRAY_CAP_IDX, new_cap)
@@ -2878,11 +2855,7 @@ impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
         // Retain each element of `src[begin, end)` into `dst`'s tail. `src` keeps its elements and
         // its reference for its caller.
         let src_buf = get_array_storage_buf(gc, &src);
-        let src_read = unsafe {
-            gc.builder()
-                .build_gep(elem_value_ty, src_buf, &[begin], "copy_src_read")
-                .unwrap()
-        };
+        let src_read = build_gep_array_elem(gc, elem_value_ty, src_buf, begin, "copy_src_read");
         ObjectFieldType::clone_array_buf(
             gc,
             n,
@@ -4322,11 +4295,13 @@ impl InlineLLVMStructGetBody {
     /// A field that does hold one is read by taking ownership of the container instead: as a borrow
     /// the result would alias the container's leaf, and reference-count insertion releases a
     /// *variable* at its last use without following aliases, so that leaf would be released twice.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_container(field_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
         field_ty.is_fully_unboxed(type_env)
     }
 }
 
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructGetBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -4378,9 +4353,9 @@ impl LLVMGen for InlineLLVMStructGetBody {
         } else {
             let field_idx = self.field_index();
             Provenance::build_shape(result_ty, type_env, &|path: &FieldPath| {
-                let mut p = vec![field_idx];
-                p.extend_from_slice(path);
-                sole_origin(LeafOrigin::Arg(0, p))
+                let mut arg_path = vec![field_idx];
+                arg_path.extend_from_slice(path);
+                sole_origin(LeafOrigin::Arg(0, arg_path))
             })
         }
     }
@@ -4456,11 +4431,13 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
 // Allocate a struct/tuple and fill it with the operand values, in field-declaration order. The
 // struct type is the value type of the enclosing expression. This is the RC IR counterpart of the
 // `Expr::MakeStruct` AST node, reading its operands as pre-evaluated atoms.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeStructBody {
     pub field_names: Vec<FullName>,
 }
 
+// PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMakeStructBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -5092,6 +5069,7 @@ const PLUG_IN_FIELD_ARG: usize = 1;
 /// with what is known about it intact. The struct operand's leaf at the replaced field reaches no
 /// result path and so stays consumed, which is what `set` does with it: it releases the value it
 /// replaces. A punched struct holds nothing at that field, so a `plug_in` operand has no leaf there.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 fn replaced_field_prov(
     result_ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -5132,9 +5110,9 @@ fn read_component_locality(
         return ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container));
     }
     ExtShape::build_shape(result_ty, type_env, &|path: &FieldPath| {
-        let mut p = vec![component];
-        p.extend_from_slice(path);
-        LeafCond::input_leaf(CONTAINER_ARG, p)
+        let mut arg_path = vec![component];
+        arg_path.extend_from_slice(path);
+        LeafCond::input_leaf(CONTAINER_ARG, arg_path)
     })
 }
 
@@ -6131,6 +6109,7 @@ pub fn struct_set(
 
 /// Constructs a union value holding a given variant: the tag names the variant, and the payload
 /// buffer takes the operand.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeUnionBody {
     /// The local binding holding the payload the constructed variant carries.
@@ -6153,6 +6132,7 @@ impl InlineLLVMMakeUnionBody {
     }
 }
 
+// PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMakeUnionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -6188,6 +6168,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         vec![&mut self.field_name]
     }
 
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -6398,9 +6379,9 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         } else {
             let variant_idx = self.variant_index();
             Provenance::build_shape(result_ty, type_env, &|path: &FieldPath| {
-                let mut p = vec![variant_idx];
-                p.extend_from_slice(path);
-                sole_origin(LeafOrigin::Arg(0, p))
+                let mut arg_path = vec![variant_idx];
+                arg_path.extend_from_slice(path);
+                sole_origin(LeafOrigin::Arg(0, arg_path))
             })
         }
     }
@@ -8129,11 +8110,7 @@ fn array_tail_destination<'c, 'm>(
     let dst = force_unique_or_assert(gc, dst, force_unique, state);
     let dst_len = dst.extract_field(gc, ARRAY_SIZE_IDX).into_int_value();
     let dst_buf = get_array_storage_buf(gc, &dst);
-    let dst_write = unsafe {
-        gc.builder()
-            .build_gep(elem_value_ty, dst_buf, &[dst_len], "dst_write")
-            .unwrap()
-    };
+    let dst_write = build_gep_array_elem(gc, elem_value_ty, dst_buf, dst_len, "dst_write");
     (dst, dst_len, dst_write)
 }
 
