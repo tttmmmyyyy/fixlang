@@ -920,9 +920,9 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P14 | `p20-borrow-ify.md` | 有 | **未着手** (原因だった #530 の残穴は直った) | 未着手 |
 | P15 - P18 | `p30-cancel-walk.md` | 有 | 証明済み | 検証済み (指摘 9 件を反映) |
 | P18b | `p13-disposals-and-pending.md` | 有 | 証明済み | 未着手 |
-| P18a | `p13-disposals-and-pending.md` | 有 | **閉じない** -- 反例 `C1`。コードを直した (第 8 節) | 未着手 |
+| P18a | `p13-disposals-and-pending.md` | 有 | **書き直し待ち** -- 反例 `C1` が出てコードを直した (第 8 節) | 未着手 |
 | P19 - P24 | `p40-cancel-soundness.md` | 有 | 言明が変わった -- 書き直し待ち | 未着手 |
-| P26 | `p50-observation.md` | 有 | **偽** -- コードが誤り (#551、未修正)。反例は実行で確認済み | 未着手 |
+| P26 | `p50-observation.md` | 有 | **書き直し待ち** -- 反例が出てコードを直した (#551) | 未着手 |
 | P27 | `p51-runs.md` | 有 | 証明済み (言明を 1 度書き直した。実行のモデル D22-D28 は同ファイル) | 未着手 |
 | T | `p60-main-theorem.md` | -- | 未着手 | 未着手 |
 
@@ -931,8 +931,8 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 
 ## 8. 発見
 
-証明を書く作業が、対象のコードに 5 件の欠陥を見つけた。4 件は miscompile であり、いずれもバグハントでは
-見つかっていなかった。4 件は修正済みで、1 件 (#551) は未修正である。
+証明を書く作業が、対象のコードに 6 件の欠陥を見つけた。4 件は miscompile であり、いずれもバグハントでは
+見つかっていなかった。すべて修正済みである。
 
 **#529 (miscompile、修正 `be26b396`、PR #531)。** P3/P4 の証明が閉じない原因はコードにあった。
 `origin_from_leaves_under` と `origin_inner` の `Binding::Join` の腕が、内側の `Origin` を `candidates()` で
@@ -980,6 +980,21 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 
 修正の候補と、そのうち 1 つの代償の実測は issue #551 にある。「一意性の観測点に到達する関数の借用版を
 作らない」案は、LangArena と speedtest のどちらでも借用版を 1 つも止めない (実測 0/373 と 0/27)。
+
+**#552 (`cancel` の対の判定の非対称、修正済み)。** P18a の証明が閉じない原因はコードにあった。`Release` の
+訪問は `other_objects` -- その節点が触れうる、identity 以外の候補 -- を `consume_objects` へ渡すのに、
+`Retain` の訪問はそれを記録しない。よって `Join` の値の `Retain` は identity (`Match` の束縛変数の名前) だけを
+名指し、アームが作った値を名指す消費がその `Retain` を素通りする。括弧の中で消費が起きたまま対が消え、
+消費先が解放したオブジェクトを束縛変数が読む形になる。反例 `C1` は `p13-disposals-and-pending.md` の
+第 7.5 節にある。
+
+**実在の入力にこの形が現れることは測った。** `cancel` が消した retain のうち、pending の間に候補を消費された
+ものは、LangArena で 11 件ある (`HashMap::insert` の 5 つの特殊化、`Std::loop` のクロージャ特殊化、
+`CompressArith::_code`)。**ただし観測可能な障害は再現できていない。** `insert_rc` はアーム本体の値が
+`Match` の後で live なら、そのアームの中に `Retain` を置く。その参照が P18a の `+1` を与えるので、
+`C1` の形をそのまま Fix のソースから作ることはできなかった (2 通り試した)。修正を採ったのは、証明が閉じない
+ことと、この族が既に 3 件の miscompile を出していることによる。代償は LangArena で retain と release が
+19 対増えることである。
 
 **定義の側の欠陥も 2 件出た。** どちらも P27 を証明する作業が見つけた。1 つは (S-c) が `Retain` の触れる先を
 見ておらず、3 つの節をすべて満たしながら二重解放する本体が書けたこと (第 6 節)。もう 1 つは D10 と D11 が
