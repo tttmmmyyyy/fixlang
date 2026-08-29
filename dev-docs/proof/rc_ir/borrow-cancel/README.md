@@ -512,21 +512,6 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
   `owns_object(r, p) = owns_object(r, truncate_to_unit(ty(r), p))` である。`r` がこの版のパラメータ・
   capture でないときは、両辺とも真である。
 
-- **P7a** (unit の所有と leaf の所有は一致する)。`u` を `ty(v)` の RC unit とし、`Λ(u)` を `u` の下の
-  boxed leaf の集合とする。次の 2 つは同値である。
-
-  - `owns_unit(v, u)` が真である。
-  - `Λ(u)` の各 leaf `λ` について、`origin(v, λ)` の各候補 `(r, p)` の `owns_object(r, p)` が真である。
-
-  `owns_unit` は unit の `origin` の候補を見て真偽値を 1 つ返し、`Retain`/`Release` はその unit の下の各 leaf の
-  参照に作用する。両者を突き合わせるにはこの同値が要る。**候補の包含では言えない。** `origin_inner` は
-  `Binding::Param` の腕で path を降りずに `Exactly((v, path))` を返すので、`v` がパラメータのとき
-  `origin(v, u) = Exactly((v, u))` と `origin(v, λ) = Exactly((v, λ))` は候補が別である。両者が一致するのは
-  `truncate_to_unit` を掛けた後であり、`owns_object` がその truncate を内側で行う (P7e)。`Llvm` の腕でも
-  同じずれが出る。unit の側は `origin_from_leaves_under` がオペランドの leaf を
-  `truncate_to_unit(args[j].ty, ・)` で unit へ丸めてから辿り、leaf の側は `as_arg_projection` が leaf の
-  ままオペランドを辿る (`CODE src/rc_ir/ownership.rs: origin_from_leaves_under`, `as_arg_projection`)。
-
 - **P7d** (所有は site ごとに一様である)。`infer_ownership` の不動点において、`levelled_sites` が挙げる
   各 site `(v, u)` について、`origin(v, u)` の候補は、すべて `owns_object` が真であるか、すべて偽であるかの
   どちらかである。
@@ -560,6 +545,31 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
   P7c は「走査が呼んだ」までしか言わない。P18a が要るのは「pending から消えた」であり、その 1 段が
   ここにある。`Release` の腕は `other_objects` を先に `consume_objects` へ渡してから `un_bump` を呼ぶので、
   この 2 つの順序が load-bearing である。
+
+- **P7a** (site の所有は、その leaf の所有と一致する)。`(v, u)` を `levelled_sites` が挙げる site とし、
+  `Λ(u)` を `u` の下の boxed leaf の集合とする。`infer_ownership` の不動点の下で、次の 3 つは同値である。
+
+  1. `owns_unit(v, u)` が真である。
+  2. `Λ(u)` の**ある** leaf `λ` の**すべての**候補 `(r, p)` について `owns_object(r, p)` が真である。
+  3. `Λ(u)` の**すべての** leaf のすべての候補について `owns_object` が真である。
+
+  1 ⟺ 3 は「節点を残すのが安全である」を与え、¬1 ⟹ ¬2 は「節点を落とすのが安全である」を与える。借用版の
+  `rewrite_rc` は `owns_unit` が偽の unit の `Retain`/`Release` を丸ごと落とすので (P10)、落とした先に所有
+  している leaf が 1 つでも残っていれば参照が漏れる。**包含では言えない。** `origin_inner` は
+  `Binding::Param` の腕で path を降りずに `Exactly((v, path))` を返すので、`v` がパラメータのとき
+  `origin(v, u) = Exactly((v, u))` と `origin(v, λ) = Exactly((v, λ))` は候補が別である。両者が一致するのは
+  `truncate_to_unit` を掛けた後であり、`owns_object` がその truncate を内側で行う (P7e)。
+
+  **site と不動点に限るのは、この同値が `level_ownership` が作るものだからである。** 任意の `(v, u)` に
+  ついては成り立たない。`origin_inner` の `Binding::Llvm` の腕で、unit の側は
+  `origin_from_leaves_under` がオペランドの leaf を `truncate_to_unit(args[j].ty, ・)` で unit へ丸めてから
+  辿るのに対し、leaf の側は `as_arg_projection` が leaf のままオペランドを辿る。オペランドの unit の下に、
+  どの結果 leaf も名指さない leaf があると、2 と 3 が離れる。`union_as` が unbox union に対してその形の
+  宣言を出す -- 結果の各 leaf を `Arg(0, [variant_idx] ++ path)` と宣言し、他の変位の leaf をどこにも
+  名指さない (`CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov`)。
+
+  `owns_unit` を呼ぶ位置が `levelled_sites` の挙げる site を出ないことは、この命題の証明の中で示す
+  (`CODE src/rc_ir/borrow.rs: levelled_sites`, `RewriteCtx::rewrite_rc`, `call_rc`, `any_owned_unit`)。
 
 - **P8** (推論の停止性と安全性)。`infer_ownership` は停止する。その不動点が返す集合 `owned_leaves` は、
   次を満たす。ある関数のある leaf の参照が、その関数のある実行路で D9 の意味で消費されるならば、その leaf の
@@ -767,9 +777,10 @@ P26 が未較正であることは記録しておく価値がある。この節�
 | P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
 | P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
 | P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み | 未着手 |
-| P7a, P7e | `p15-ownership-uniformity.md` | 有 | **未着手** (P8, P14 が使う。言明は 1 度書き直した) | 未着手 |
+| P7e | `p15-ownership-uniformity.md` | 有 | 証明済み | 未着手 |
+| P7a | `p15-ownership-uniformity.md` | 有 | **未着手** (言明は 2 度書き直した) | 未着手 |
 | P7c, P7f | `p13-disposals-and-pending.md` | 有 | 証明済み (P7c の言明は 1 度書き直した) | 未着手 |
-| P7d | `p15-ownership-uniformity.md` | 有 | **未着手** (新しい言明。#530 の 2 件を閉じる性質) | 未着手 |
+| P7d | `p15-ownership-uniformity.md` | 有 | **未着手** (#530 の 2 件を閉じる性質) | 未着手 |
 | P8 | `p20-borrow-ify.md` | 有 | 証明済み。`infer_ownership` に `level_ownership` の周回が加わったので、停止性の段を書き直す必要がある | 未着手 |
 | P9 - P13 | `p20-borrow-ify.md` | 有 | 証明済み。P10/P11 は `owns_object_yet` の追加を読み直す必要がある | 未着手 |
 | P14 | `p20-borrow-ify.md` | 有 | **未着手** (原因だった #530 の残穴は直った) | 未着手 |
