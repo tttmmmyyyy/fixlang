@@ -108,9 +108,10 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 `CODE src/rc_ir/borrow.rs: CancelAnalysis::merge`)
 
 走査が作る `PendingRetains` の値を**状態**と呼ぶ。「追加」「消費」「引き」は直前の状態をその場で書き換え、
-「複製」と「併合」は新しい値を作る。状態には**生成順序** (走査がそれを作る時間順) があり、初期状態を除く各
-状態は、それより前に作られた 1 つ以上の状態から上の操作 1 つで作られる。走査は有限回で終わるので、
-生成順序は有限の全順序である。
+「複製」と「併合」は新しい値を作る。状態には**生成順序** (走査がそれを作る時間順) があり、L8 より、初期
+状態を除く各状態は、それより前に作られた 1 つ以上の状態から上の操作 1 つで作られる。走査は 1 つの本体の
+各位置をちょうど 1 回訪問し (P15)、本体は有限の木なので (D2)、1 回の `cancel_body` の実行が作る状態は
+有限個である。走査は逐次に走るので、生成順序は有限の全順序である。
 
 ### DEF 除去事象
 
@@ -198,7 +199,9 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
      (`innermost.outstanding.subtract(un_bumped)`), CODE src/rc_ir/borrow.rs: CancelAnalysis::merge
      (`outstanding.clone()`)
 <1>8. QED
-  BY <1>2, <1>3, <1>4, <1>5, <1>6, <1>7
+  <1>7 が走査の扱う値の出どころを尽くし、<1>1、<1>2、<1>3 がそのどれについても各鍵の値が 1 以上である
+  ことを与える。1 から 4 は <1>4、<1>5、<1>6 が与える。
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7
 
 ### L3 (走査する本体は `RewriteCtx::rewrite` の出力である)
 
@@ -207,8 +210,9 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 **証明**
 
-<1>1. `cancel` を呼ぶのは `optimize_rc_program` の 1 か所だけであり、その第 1 引数 `prog` は直前の文
-      `prog = borrow_ify(&prog, type_env, config.develop_mode)` の値である。間にあるのは
+<1>1. `cancel` を呼ぶのは `optimize_rc_program` の 1 か所だけであり、その呼び出し `cancel(&prog, type_env)`
+      の第 1 引数が指すのは、直前の文 `prog = borrow_ify(&prog, type_env, config.develop_mode)` が
+      束縛した値である。間にあるのは
       `validate(&prog, "after borrow_ify")` の呼び出しだけであり、`validate` は `prog` を共有参照で
       受け取るので `prog` を変えない。
   BY CODE src/build/build_object_files.rs: optimize_rc_program, CODE src/rc_ir/validate.rs: validate
@@ -367,27 +371,35 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 ### 3.2 後半 (`walk` は各位置をちょうど 1 回訪れる)
 
-<1>1. `CancelAnalysis::walk` を呼ぶのは、`cancel` の中の
-      `analysis.walk(body, PendingRetains::default(), true)` と、`walk_inner` の中の 7 か所だけである。
-      その 7 か所は、`Retain` の腕、`Release` の腕、`Match` の腕の 2 か所 (アームと継続)、
-      右辺が `Match` でない `Let` の腕、`Destructure` の腕、`Eval` の腕である。
-  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
-<1>2. `walk_inner` が呼ぶ `walk` 以外の関数 --- `node_id`, `CancelAnalysis::acted_references`,
-      `CancelAnalysis::other_objects`, `CancelAnalysis::consume_objects`, `CancelAnalysis::consume`,
-      `CancelAnalysis::consume_rhs`, `CancelAnalysis::merge`, `un_bump`, `destructure_consumes` ---
-      はどれも `walk` を呼ばない。
-  <2>1. `walk` は `CancelAnalysis` の非公開のメソッドであり、`CancelAnalysis` は `borrow.rs` の非公開の型
-        である。よって `ownership.rs` の関数 (`destructure_consumes`) はこれを呼べない。
-    BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/ownership.rs: destructure_consumes
-  <2>2. 残る 8 つの本体はどれも `self.walk` も `walk` も含まない。
-    BY CODE src/rc_ir/borrow.rs: node_id, CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
+<1>1. `CancelAnalysis::walk` は `CancelAnalysis` の非公開のメソッドであり、`CancelAnalysis` は
+      `borrow.rs` の非公開の型である。よって `walk` の呼び出しは `borrow.rs` の中にしか書けない。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk
+<1>1a. `borrow.rs` の中で `CancelAnalysis::walk` を呼ぶのは、`cancel` の中の
+       `analysis.walk(body, PendingRetains::default(), true)` と、`walk_inner` の中の 7 か所だけである。
+       その 7 か所は、`Retain` の腕、`Release` の腕、`Match` の腕の 2 か所 (アームと継続)、
+       右辺が `Match` でない `Let` の腕、`Destructure` の腕、`Eval` の腕である。
+  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis
+<1>2. `walk_inner` が呼ぶ `walk` 以外の関数はどれも `walk` を呼ばない。それらは `node_id`,
+      `CancelAnalysis::acted_references`, `CancelAnalysis::other_objects`,
+      `CancelAnalysis::consume_objects`, `CancelAnalysis::consume`, `CancelAnalysis::consume_rhs`,
+      `CancelAnalysis::merge`, `un_bump`, `References::objects`, `destructure_consumes`、および
+      標準ライブラリの容器の操作 (`Vec::push`, `Set::insert`, `Map::entry`, `Iterator::map` と
+      `collect`) である。
+  <2>1. `borrow.rs` の外の関数 (`References::objects`, `destructure_consumes`、標準ライブラリの操作) は
+        <1>1 より `walk` を呼べない。
+    BY <1>1, CODE src/rc_ir/ownership.rs: destructure_consumes,
+       CODE src/rc_ir/ownership.rs: References::objects
+  <2>2. `borrow.rs` の中の残る 8 つは、<1>1a が挙げる 8 か所のどれも本体に持たない。
+    BY <1>1a, CODE src/rc_ir/borrow.rs: node_id,
+       CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, CODE src/rc_ir/borrow.rs: un_bump
   <2>3. QED
-    BY <1>1, <2>1, <2>2
+    BY <1>1, <1>1a, <2>1, <2>2
 <1>3. 任意の節点 `n`、任意の `pending`、任意の `returns_from_func` について、
       `walk(n, pending, returns_from_func)` の 1 回の呼び出しの実行中、`N(n)` の各節点はちょうど 1 回
       訪問され、`N(n)` の外の節点は訪問されない。
@@ -572,8 +584,8 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
    それらの値が互いに等しい。**
 4. 呼び出しの終わりに `uniform` が `x` を鍵に持つことは、「ある `j` について `arm_states[j]` が `x` を鍵に
    持ち、かつ `U(x)`」と同値である。このとき `uniform[x]` は、その共通の値と等しい `References` である。
-5. この呼び出しが `self.needed_retains` に入れる `NodeId` は、「ある `j` について `arm_states[j]` が鍵に
-   持ち、かつ `U(x)` が成り立たない」もの全部である。
+5. `NodeId` の値 `x` について、この呼び出しが `x` を `self.needed_retains` に入れることは、「ある `j` に
+   ついて `arm_states[j]` が `x` を鍵に持ち、かつ `U(x)` が成り立たない」ことと同値である。
 6. 返り値は、`pending_in` の要素のうち `node` を `uniform` が鍵に持つものを、その並びのまま、`node` は
    そのまま、`outstanding` を `uniform[node]` と等しい値に差し替えて並べた `Vec` である。ほかの要素を
    持たない。
@@ -626,7 +638,8 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
       `j` について `arm_states[j]` が `x` を鍵に持つときに限り、<1>3 よりその反復の `is_uniform` が真で
       あることは `U(x)` と同値である。真の反復で `uniform` に入るのは `outstanding.clone()` であり、
       `uniform` の値の型は `References` なので、これは `outstanding` と等しい `References` の値である。
-      <1>3 の `U(x)` よりそれは各 `arm_states[j']` の共通の値である。
+      <1>3 の `U(x)` よりそれは各 `arm_states[j']` の共通の値であり、`x` を `retain` とする真の反復が
+      複数あってもどれも同じ値を入れるので、上書きの後も `uniform[x]` はその共通の値と等しい。
   BY <1>3, <1>4, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge
 <1>6. 5 が成り立つ。<1>4 より `self.needed_retains` に入るのは `is_uniform` が偽の反復の `retain` で
       あり、`retain` はある `j` について `arm_states[j]` が鍵に持つ `NodeId` の全体を渡る。<1>3 より
@@ -743,10 +756,11 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
   <2>1. この操作は `Vec` の末尾に要素を 1 つ加えるだけであり、既存の要素の値と並びを変えない。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
        DEF `Vec::push` (Rust 標準ライブラリの規約)
-  <2>2. `P0` は `t` の訪問が始まる前に作られた状態である。よって <1>1 の (i) より、`P0` の各要素の由来は
-        `t` の訪問が始まる前に訪問されており、P15 の後半 (各位置はちょうど 1 回訪問される) よりそれは
-        `t` ではない。
-    BY <1>1, P15, DEF 訪問,
+  <2>2. `P0` は `t` の訪問が始まる前に作られた状態である。この腕は `pending.push` より前に `pending` に
+        触れないので、`P0` は `walk_inner` に引数として渡された値 `pending(t)` であり、それは呼び出しの
+        前に作られている。よって <1>1 の (i) より、`P0` の各要素の由来は `t` の訪問が始まる前に訪問されて
+        おり、P15 の後半 (各位置はちょうど 1 回訪問される) よりそれは `t` ではない。
+    BY <1>1, P15, DEF 訪問, DEF 基本操作,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕
   <2>3. (i) が成り立つ。新しい要素の `node` は `node_id(t)` であり、`t` の訪問はこの時点で始まっている。
         既存の要素は <1>1 の (i) のままで、由来も変わらない。
@@ -854,7 +868,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 (a) から (d) は、走査が作る各状態についての主張として読む。(b) の「その `Retain` の `ActRefs` に含まれる」
 は、DEF 参照の多重集合 の `⊆` で読む。(e) は次の形にして示す。**各除去事象 (DEF 除去事象) について、
 次の 3 つのいずれかが成り立つ。(e1) その事象は「引き」であり、取り除かれた要素の `outstanding` はその
-事象の直前に空になった。(e2) その事象は、取り除かれた `node` を `self.needed_retains` に入れる。
+事象の中で空になった。(e2) その事象は、取り除かれた `node` を `self.needed_retains` に入れる。
 (e3) その事象は「併合」であり、各アームの状態の鎖 (L8) の中に、同じ `node` の除去事象がある。そして
 (e3) の展開は有限で終わり、その葉は (e1) か (e2) である。**
 
@@ -929,7 +943,9 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
   <2>4. QED
     <2>2 と <2>3 は場合を尽くす。
     BY <2>2, <2>3
-<1>9. (e3) の展開は有限で終わり、その葉は (e1) か (e2) である。
+<1>9. (e3) の展開は有限で終わり、その葉は (e1) か (e2) である。ここで**展開**とは、次の木をいう。根は
+      いま考えている除去事象である。(e3) が成り立つ除去事象の子は、各アームについてその (e3) が名指す
+      除去事象を 1 つずつ選んだものである。(e1) または (e2) が成り立つ除去事象に子は付けない。
   <2>1. (e3) が指す除去事象は、`Match` 節点 `n` のアームの走査の中で起きる。その走査は `n` の訪問の中で
         `self.merge` の呼び出しより前に完了しているので、そこで作られる状態は `merged` より前に作られて
         いる。よって (e3) の各子は、生成順序について親より真に前にある。
@@ -1044,17 +1060,20 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 後、走査が終わるまで、`node_id(t)` は `self.all_retains` の要素であり、`self.un_bump_releases` は
 `node_id(t)` を鍵に持つ。
 
-**証明**
+**証明** 以下、`CancelAnalysis` を構築するときの初期化 (`Set::default()`、`Map::default()`、`vec![]`) と、
+`cancelled()` の読み出しは走査の実行の外なので、数えない
+(`CODE src/rc_ir/borrow.rs: cancel`, `CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled`)。
 
-<1>1. `self.needed_retains` に触れるのは、`walk_inner` の `RcExpr::Ret(_)` の腕、`consume_objects`、
-      `merge` の 3 か所であり、どれも `insert` だけである。
+<1>1. 走査の実行中に `self.needed_retains` に触れるのは、`walk_inner` の `RcExpr::Ret(_)` の腕、
+      `consume_objects`、`merge` の 3 か所であり、どれも `insert` だけである。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Ret(_)` の腕,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::merge
-<1>2. `self.all_retains` に触れるのは、`walk_inner` の `RcExpr::Retain(v, path, _, k)` の腕の
+<1>2. 走査の実行中に `self.all_retains` に触れるのは、`walk_inner` の `RcExpr::Retain(v, path, _, k)` の腕の
       `self.all_retains.push(retain)` だけである。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕
-<1>3. `self.un_bump_releases` に触れるのは、`walk_inner` の `RcExpr::Retain(v, path, _, k)` の腕の
+<1>3. 走査の実行中に `self.un_bump_releases` に触れるのは、`walk_inner` の
+      `RcExpr::Retain(v, path, _, k)` の腕の
       `self.un_bump_releases.entry(retain).or_default()` と、`RcExpr::Release(v, path, _, k)` の腕の
       `self.un_bump_releases.entry(retain).or_default().push(node_id(node))` の 2 か所だけである。
       どちらも鍵を取り除かず、値の `Vec` から要素を取り除かない。
@@ -1151,8 +1170,8 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 un-bump する (各アームの中の `Release` が P17 の第 3 の場合で `t` の `outstanding` を空にする) 場合で
 ある。このとき `arm_exits` のどれも `t` の要素を持たないので、P18 の第 3 の主張より `merge` は `t` を
 `needed_retains` にも返り値にも入れない。この「併合」は `pending_in` の要素の除去事象だが、その要素の
-`outstanding` は (`pending_in` の中では減っていないので) 空でなく、`t` は `needed_retains` にも入って
-いない。P16 の (e3) は、この除去がどこで解消されたか --- 各アームの状態の鎖の中の除去事象 --- を名指す。
+`outstanding` は P16 の (b) より空でなく (減ったのは各アームに渡った複製の側である)、`t` は
+`needed_retains` にも入っていない。P16 の (e3) は、この除去がどこで解消されたか --- 各アームの状態の鎖の中の除去事象 --- を名指す。
 この展開が終わる先は P16 の証明の <1>9 が示す。
 
 **注記 2 (P17 の 2 つの限定)**。第 1 に、`un_bump` が検査するのは `innermost.outstanding.covers(un_bumped)`
@@ -1169,7 +1188,8 @@ un-bump する (各アームの中の `Release` が P17 の第 3 の場合で `t
 
 **注記 3 (`consume_objects` は列の途中からも取り除く)**。`consume_objects` は `Vec::retain` で、消費された
 オブジェクトを名指す要素を列のどの位置からも取り除く (L6)。取り除かれた要素の `node` は
-`needed_retains` に入るので、それらは打ち消しの対象から外れる。残る要素の相対順序は変わらないので、
+`needed_retains` に入るので、それらは打ち消しの対象から外れる
+(`CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled` は `needed_retains` の要素を飛ばす)。残る要素の相対順序は変わらないので、
 P16 の (d) は保たれ、P17 の「最内」はその後も由来の訪問順で決まる。
 
 **注記 4 (P16 の (c) を支えるもの)**。1 つの `Retain` 節点が `pending` に高々 1 回しか現れないことは、

@@ -32,8 +32,9 @@ CancelAnalysis::walk_inner` の `RcExpr::Ret` の腕)。第 3 節がこの 3 つ
 - `Others(v, π)` は `CancelAnalysis::other_objects(v, π)` の返す列を集合とみなしたもの
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 
-`VarPath` は対 `(FullName, FieldPath)` である (`CODE src/rc_ir/ast.rs: VarPath`)。この文書が
-「オブジェクト」と書くのは `VarPath` の水準の名前であり、README の第 3.5 節の最後の段落がそう定める。
+`VarPath` は対 `(FullName, FieldPath)` である (`CODE src/rc_ir/ast.rs: VarPath`)。変数 `v` (`RcVar`) と
+leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す。この文書が「オブジェクト」と書くのは
+`VarPath` の水準の名前であり、README の第 3.5 節の最後の段落がそう定める。
 
 この文書は補題を `L1` から `L6`、証明する形の命題を `P7c′` と呼ぶ。`BY` の行ではそれらを名前で引用する。
 補題の証明の内部のステップは引用しない。
@@ -247,8 +248,8 @@ D9 の行が意味を持つのは 2 つの型が対応するときだけであ�
 2. `un_bumped = self.acted_references(v, π)` を求め、`un_bump(&mut pending, &un_bumped)` を呼ぶ。
    `un_bumped` は `ActRefs(v, π)` である。
 3. `un_bump` が `UnBump::OutsideBracket` を返したときにかぎり、`self.consume_objects(&mut pending,
-   &un_bumped.objects())` を呼ぶ。`UnBump::InBracket` と `UnBump::NoBracket` のときは、`un_bump_releases`
-   への記録のほかに `consume_objects` も `un_bump` も呼ばない。
+   &un_bumped.objects())` を呼ぶ。`UnBump::InBracket` と `UnBump::NoBracket` のときは `consume_objects` も
+   `un_bump` もこれ以上呼ばない (`InBracket` の腕が行うのは `un_bump_releases` への記録だけである)。
 4. `self.walk(k, pending, returns_from_func)` を呼ぶ。
 
 **証明**
@@ -397,12 +398,27 @@ D9 の行が意味を持つのは 2 つの型が対応するときだけであ�
     BY <2>1, <2>2
 
 <1>6. CASE `n` の式が `RcExpr::Ret(v)` であり、`n` が `B` の終端の `Ret` でない。
-  <2>1. `Disp(n)` は空であり、よって `Obj(n)` も空である。
-    BY DEF 処分 leaf, DEF 触れうるオブジェクト, D3, D9
-    DEF 処分 leaf の `Ret` の行は `B` の終端の `Ret` だけを挙げる。D3 より、`B` の終端でない `Ret` は
-    アーム本体の中の `Ret` である。D9 の移動の表の第 2 行がアーム本体の `Ret(x)` を移動とする。
-  <2>2. QED
-    BY <2>1
+  <2>1. `B` の継続の鎖 -- `B` の根から始まる鎖と、各 `Match` の各アーム本体の根から始まる鎖 -- は、
+        どれもちょうど 1 つの `Ret` で終わり、その鎖の他の節点は `Ret` ではない。`B` の各 `Ret` 節点は、
+        ちょうど 1 つの鎖の最後の節点である。
+    BY D2
+    D2 より `Ret` は継続を持たない唯一の種であり、他の 5 種はちょうど 1 つの継続を持つ。D2 より `B` は
+    有限なので、各鎖は有限であり、`Ret` で終わる。
+  <2>2. `B` の根から始まる鎖の最後の `Ret` が `B` の終端の `Ret` である。
+    BY D3, <2>1
+    D3 の第 1 の規則が継続へ進み、第 2 の規則がアーム本体を辿った後に `Match` の継続へ戻るので、実行路の
+    最後の節点は `B` の根から始まる鎖の最後の節点である。
+  <2>3. `n` はあるアーム本体の根から始まる鎖の最後の `Ret` である。
+    BY <2>1, <2>2
+    仮定より `n` は `B` の終端の `Ret` ではないので、<2>2 より `B` の根から始まる鎖の最後の節点ではなく、
+    <2>1 よりその鎖の他の位置にも `Ret` は無い。<2>1 より `n` はどれか 1 つの鎖の最後の節点なので、
+    その鎖はアーム本体の根から始まる鎖である。
+  <2>4. `Disp(n)` は空であり、よって `Obj(n)` も空である。
+    BY DEF 処分 leaf, DEF 触れうるオブジェクト, D9, <2>3
+    DEF 処分 leaf の `Ret` の行は `B` の終端の `Ret` だけを挙げる。D9 の移動の表の第 2 行が、アーム本体の
+    `Ret(x)` を移動とする。
+  <2>5. QED
+    BY <2>4
 
 <1>7. CASE `n` の式が `RcExpr::Ret(v)` であり、`n` が `B` の終端の `Ret` である。
   <2>1. `n` の訪問 `walk_inner(n, P, r)` では `r` が真である。
@@ -420,9 +436,10 @@ D9 の行が意味を持つのは 2 つの型が対応するときだけであ�
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
     `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕が先に置かれているので、右辺が `Match` でない `Let` は
     次の `RcExpr::Let(x, rhs, k)` の腕に来る。
-  <2>2. `consume_rhs(pending, rhs, result_ty)` は、`rhs_consumes(rhs, result_ty, self.vars, self.prog,
-        self.type_env, &owns, &mut consumed)` を呼び、`consumed` の各元 `(var, leaf)` について
-        `self.consume(pending, &var, &leaf)` を呼ぶ。ここで `owns` は
+  <2>2. `consume_rhs(pending, rhs, result_ty)` は、空の `consumed` を作り、`rhs_consumes(rhs, result_ty,
+        self.vars, self.prog, self.type_env, &owns, &mut consumed)` を呼び、`consumed` の各元
+        `(var, leaf)` について `self.consume(pending, &var, &leaf)` を呼ぶ。`consumed` は `rhs_consumes`
+        の `out` 引数なので、その元の全体は `rhs_consumes` が `out` に入れた元の全体である。ここで `owns` は
         `|p, leaf| self.owned_units.contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))`
         である。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs
@@ -495,8 +512,9 @@ D9 の行が意味を持つのは 2 つの型が対応するときだけであ�
     BY <2>5, <2>6, <2>7, DEF 触れうるオブジェクト
 
 <1>9. CASE `n` の式が `RcExpr::Let(x, RcRhs::Closure(f, caps), k)` である。
-  <2>1. `n` の訪問は `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼び、`consume_rhs` は
-        `rhs_consumes` が `consumed` に入れた各元 `(var, leaf)` について `self.consume` を呼ぶ。
+  <2>1. `n` の訪問は `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼び、`consume_rhs` は空の
+        `consumed` を `rhs_consumes` の `out` 引数として渡した後、`consumed` の各元 `(var, leaf)` に
+        ついて `self.consume(pending, &var, &leaf)` を呼ぶ。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs
   <2>2. `rhs_consumes` の `RcRhs::Closure(_, caps)` の腕は、`caps` の各 `c` の各 boxed leaf `λ` について
@@ -515,9 +533,9 @@ D9 の行が意味を持つのは 2 つの型が対応するときだけであ�
     BY <2>3, <2>4, <2>5, DEF 触れうるオブジェクト
 
 <1>10. CASE `n` の式が `RcExpr::Let(x, RcRhs::Llvm(gen, args), k)` である。
-  <2>1. `n` の訪問は `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼び、`consume_rhs` は
-        `rhs_consumes` に `result_ty` として `x.ty` を渡し、`consumed` に入った各元 `(var, leaf)` に
-        ついて `self.consume` を呼ぶ。
+  <2>1. `n` の訪問は `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼ぶ。`consume_rhs` は
+        `rhs_consumes` に `result_ty` として `x.ty` を渡し、空の `consumed` を `out` 引数として渡した
+        後、`consumed` の各元 `(var, leaf)` について `self.consume(pending, &var, &leaf)` を呼ぶ。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs
   <2>2. `rhs_consumes` の `RcRhs::Llvm(llvm_gen, args)` の腕は、
@@ -585,7 +603,10 @@ D9 の行が意味を持つのは 2 つの型が対応するときだけであ�
   <2>5. `n` は `B` の終端の `Ret` ではない。
     BY D2
   <2>6. QED
-    BY <2>2, <2>4, <2>5
+    <2>1 の 2 つの呼び出しは、訪問が行う `consume_objects` と `un_bump` の呼び出しのうちの 2 つである
+    (L5 によれば 3 つ目がありうる)。よって訪問が行う呼び出しが名指すオブジェクトの和は <2>2 の集合を
+    含み、<2>4 よりその集合は `Obj(n)` を含む。これが P7c′ (a) である。
+    BY <2>1, <2>2, <2>4, <2>5, L5
 
 <1>13. QED
   <2>1. `RcExpr` はちょうど 6 種を持つ。`Let`、`Retain`、`Release`、`Destructure`、`Eval`、`Ret`。
