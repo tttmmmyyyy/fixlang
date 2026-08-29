@@ -1058,6 +1058,7 @@ impl ObjectFieldType {
     /// The field of a struct at `field_idx`, taken at the struct's own reference to it: nothing is
     /// retained, so the caller either reads it while the struct is alive or takes the reference over
     /// by dropping the struct without releasing that field.
+    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn move_out_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
@@ -1070,6 +1071,7 @@ impl ObjectFieldType {
 
     /// The struct with `field` stored at `field_idx`, taking over the caller's reference to `field`.
     /// The value the field held before stays live and is the caller's to account for.
+    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn move_into_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: Object<'c>,
@@ -1992,6 +1994,7 @@ fn build_alloc_array_storage<'c, 'm>(
 }
 
 /// Free the allocation a boxed object of type `ty` lives in.
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_free_boxed<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ptr: PointerValue<'c>,
@@ -2072,6 +2075,7 @@ pub fn write_alloc_offset<'c, 'm>(
 /// A fresh object of type `ty`, with its control block initialized and its remaining fields left
 /// undefined for the caller to fill in. A boxed type is allocated on the heap and comes back as a
 /// pointer to it; an unboxed type comes back as an undefined aggregate value.
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
     // Captured values. Used only for creating dynamic object.

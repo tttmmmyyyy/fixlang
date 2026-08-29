@@ -518,6 +518,7 @@ pub struct Scope<'c> {
 
 impl<'c> Scope<'c> {
     /// Bind `var` to `obj`, shadowing whatever the name is bound to until the binding is popped.
+    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn push_local(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         // TODO: add assertion that var is local (or change var to Name).
         self.data.entry(var.clone()).or_default().push(ScopedValue {
@@ -1012,7 +1013,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// the lambda itself for a funptr global, and the accessor function for any other. A name
     /// registered twice aborts the compiler, since the second registration would decide which of
     /// two definitions every later read reaches.
-    // PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_global_object(
         &mut self,
         name: FullName,
@@ -1472,7 +1473,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// # Returns
     /// The result of the call, and `None` in tail position, where the call ends the function and
     /// there is nothing left to generate.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn apply_lambda(
         &mut self,
         fun: Object<'c>,
@@ -2150,7 +2151,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// # Arguments
     /// * `state` — what is known of the object's refcount state, which the release path dispatches
     ///   on. A mark reads the state from the object itself, whatever the caller knows of it.
-    // PROOF: P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn build_traverser_work_nonnull_boxed_with(
         &mut self,
         obj: &Object<'c>,
@@ -2179,7 +2180,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Run a `Std::FFI::Destructor` object's destructor function on the resource it holds, leaving
     /// what the run returns in the value field for the release that follows.
-    // PROOF: P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_run_destructor(&mut self, obj: &Object<'c>) {
         let fields = &obj.ty.toplevel_tycon_info(self.type_env()).fields;
         assert_eq!(
@@ -2286,6 +2287,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Release a non-null boxed object, emitting `traverse_refs` to release the references it owns
     /// once the refcount reaches zero, before the object is freed.
+    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_release_boxed_with(
         &mut self,
         obj: &Object<'c>,
@@ -2482,6 +2484,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Put every boxed object `obj` owns into the global refcount state, in which an object is
     /// neither retained, released nor freed, so that it lives for the rest of the program.
+    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn mark_global(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_global", "call_mark_global", |gc, obj| {
             gc.build_traverser_work(obj, TraverserWorkType::mark_global(), RcState::Unknown);

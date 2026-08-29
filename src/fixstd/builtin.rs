@@ -58,7 +58,7 @@ use std::sync::Arc;
 // The type constructors the compiler provides itself — the primitive types, the function arrow,
 // `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
 // a user-defined type would get from its declaration.
-// PROOF: P1, P2, P7, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7, P18, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
@@ -981,7 +981,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
 /// Inline-LLVM body of `Std::fix`, which computes `fix(f, x)`. It rebuilds the closure `fix(f)` from
 /// the function being generated and that function's own capture, passes it to `f` as the recursive
 /// `self`, and applies the result to `x`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFixBody {
     /// The variable holding the argument the recursion is applied to.
@@ -5963,6 +5963,7 @@ fn make_struct_union_unique<'c, 'm>(
 
 /// The body of a struct's `set_x`: the value bound to `value_name` takes the place of field
 /// `field_idx` of the struct bound to `struct_name`, and the value it displaces is released.
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructSetBody {
     pub value_name: FullName,
@@ -6585,6 +6586,7 @@ pub fn union_is_body(union_arg_name: &Name, field_idx: usize) -> Arc<ExprNode> {
 
 /// Applies a function to the payload of a given variant and puts the result back into the union.
 /// A union holding another variant comes back as it was.
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnionModBody {
     /// The local binding holding the union to modify.
@@ -7505,6 +7507,7 @@ pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBoxedFromRetainedPtrIOS {
     ptr_name: FullName,
@@ -9035,7 +9038,7 @@ pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object
 
 /// Given a value of type `IOState -> (IOState, a)`, runs it on `ios`, or on a fresh `IOState` when
 /// `ios` is `None`, and returns the resulting `IOState` and `a`.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_ios_runner<'b, 'm, 'c>(
     gc: &mut Generator<'c, 'm>,
     runner: &Object<'c>,

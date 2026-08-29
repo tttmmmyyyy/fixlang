@@ -440,7 +440,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Build a closure value `{funptr, capture-object pointer}` for `Closure(func, captures)`.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_rc_closure(
         &mut self,
         func: &FuncRef,
@@ -621,7 +621,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// it keeps it, and the accessor where it reads it — which is where it keeps the value, and
     /// where it reads the value another unit keeps and publishes. Whatever it does not generate it
     /// declares.
-    // PROOF: P7, P18, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7, P18, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,
