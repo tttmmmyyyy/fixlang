@@ -1,19 +1,20 @@
 # P15 - P18: `cancel` の走査
 
-この文書は README の層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の定義 D1 - D19 と仮定
-A1 - A14 の上に立つ。層 1 と層 2 の命題は引用しない。
+この文書は README の層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の定義 D1 - D21 と仮定
+A1 - A15 の上に立つ。層 1 と層 2 の命題は引用しない。
 
 ## 0. この文書が使う記法
 
-README の第 2 節の記法に、次の 2 つを加える。
+README の第 2 節の記法に、次の 3 つを加える。
 
 - **局所の定義**。この文書の中だけで使う語を第 1 節と第 5 節で定める。`BY` の行では `DEF <名前>` で引用する。
 - **局所の補題**。この文書の中だけで使う補題を `L1` - `L12` と番号を付けて述べ、`BY` の行では
   `L<n>` で引用する。各補題は、それより小さい番号の補題と、その補題より前に置かれた命題と、README の
   D/A だけを引用する。
+- **外部の結果**。Rust の言語と標準ライブラリの契約のうちこの文書が使うものを、第 1 節の「外部の結果」で
+  完全な言明とともに述べる。`BY` の行では局所の定義と同じく `DEF <名前>` で引用する。
 
-`CODE` の引用はファイル名と記号の道で書く。1 か所だけこのリポジトリの外のコードを引用する
-(`stacker` crate の `maybe_grow`)。
+`CODE` の引用はファイル名と記号の道で書く。引用するコードはすべてこのリポジトリの中にある。
 
 ## 1. 局所の定義
 
@@ -87,8 +88,61 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 ### DEF 割り当て
 
-`Arc::new` は 1 つの**割り当て**を作る。その `Arc` またはその複製が 1 つでも生きている間、その割り当ては
-生きている。生きている 2 つの相異なる割り当ては記憶域を共有しないので、それらの先頭アドレスは相異なる。
+`Arc::new(v)` は、アロケータから 1 つのメモリブロックを取る。このブロックを**割り当て**と呼び、その先頭
+アドレスをその割り当ての**アドレス**と呼ぶ。`Arc::new` が返した値と、`Arc::clone` がそれから作った値を、
+その割り当ての**ハンドル**と呼ぶ。ハンドルの個数は `Arc::clone` で 1 増え、ハンドルが drop されるたびに
+1 減る (DEF Arc の契約)。
+
+ハンドルの個数が 1 以上である間、その割り当ては**生存している**という。ブロックがアロケータへ返ることを、
+その**割り当てが解放される**という。DEF Arc の契約 より、生存している割り当ては解放されていない。よって
+DEF アロケータの契約 より、同時に生存している相異なる 2 つの割り当ては記憶域を共有せず、したがって
+アドレスが相異なる。
+
+**この 2 つの語は D7 の語とは別の概念を指す。**「割り当てが解放される」「生存している」は、コンパイラの
+プロセスの中の Rust の `Arc` についての語である。D7 の「オブジェクトが解放される」は、コンパイルされた
+プログラムを実行したときのヒープオブジェクトの参照カウントが 0 になることをいう。この文書に現れるのは
+前者だけである。
+
+### 外部の結果
+
+この文書が使う Rust の言語と標準ライブラリの契約を、名前を付けて述べる。
+
+**DEF Arc の契約**
+`Arc::new(v)` は、`v` を保持するメモリブロックをアロケータから取り、そのブロックへのハンドルを 1 つ返す。
+`<Arc<T> as Clone>::clone` は同じブロックへのハンドルをもう 1 つ作り、強参照カウントを 1 増やす。
+`<Arc<T> as Drop>::drop` は強参照カウントを 1 減らす。ブロックがアロケータへ返るのは強参照カウントが 0 に
+なった後なので、ハンドルが 1 つでも在る間、そのブロックはアロケータへ返らない。
+
+**DEF アロケータの契約**
+アロケータが返した 2 つのメモリブロックが同時に *currently allocated* である (どちらもまだアロケータへ
+返っていない) とき、その 2 つは記憶域を共有しない。すなわち、一方の占める番地の集合と他方の占める番地の
+集合は交わらず、とくに先頭アドレスが相異なる。
+
+**DEF Vec::push**
+`v.push(x)` は `v` の末尾に要素 `x` を 1 つ加える。既存の要素の値と添字は変わらず、長さは 1 増える。
+
+**DEF Vec::remove**
+`v.remove(i)` は添字 `i` の要素を取り除いて返し、それより後ろの要素を 1 つずつ前へ詰める。残る要素の値と
+相対順序は変わらない。`i` が長さ以上のとき panic する。
+
+**DEF Vec::retain**
+`v.retain(f)` は、`f(&e)` が偽を返す要素 `e` をすべて取り除く。`f` は元の並びの順に各要素についてちょうど
+1 回呼ばれ、残る要素の値と相対順序は変わらない。
+
+**DEF Iterator::map と collect**
+`it.map(f)` は、`it` の各要素に `f` を適用した結果を並べる反復子である。`Vec` への `collect` は反復子の
+要素をすべて順に取り出して `Vec` に並べるので、`it.map(f).collect::<Vec<_>>()` の長さは `it` の要素数に
+等しく、第 `i` 要素は `it` の第 `i` 要素に `f` を適用した値であり、`f` は各要素についてちょうど 1 回、
+先頭から順に呼ばれる。
+
+**DEF Iterator::filter_map**
+`it.filter_map(f)` は、`it` の各要素 `x` について `f(x)` が `Some(y)` のとき `y` を、`None` のとき何も
+生じない反復子である。`f` は各要素についてちょうど 1 回、先頭から順に呼ばれ、生じる要素の順序は `it` の
+順序である。
+
+**DEF Iterator::rposition**
+`it.rposition(f)` は、`f` を満たす要素が在るとき、そのうち先頭から数えた添字が最大のものの添字を `Some` で
+返し、無いとき `None` を返す。判定は後ろから行われ、最初に真を返した時点で止まる。
 
 ### DEF 基本操作
 
@@ -108,10 +162,11 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 `CODE src/rc_ir/borrow.rs: CancelAnalysis::merge`)
 
 走査が作る `PendingRetains` の値を**状態**と呼ぶ。「追加」「消費」「引き」は直前の状態をその場で書き換え、
-「複製」と「併合」は新しい値を作る。状態には**生成順序** (走査がそれを作る時間順) があり、L8 より、初期
-状態を除く各状態は、それより前に作られた 1 つ以上の状態から上の操作 1 つで作られる。走査は 1 つの本体の
-各位置をちょうど 1 回訪問し (P15)、本体は有限の木なので (D2)、1 回の `cancel_body` の実行が作る状態は
-有限個である。走査は逐次に走るので、生成順序は有限の全順序である。
+「複製」と「併合」は新しい値を作る。各状態は、それを作る基本操作が実行される時点で生じる。状態 `Q` が
+状態 `P` より**前に作られた**とは、`Q` の生じる時点が `P` の生じる時点より前であることをいい、この関係を
+**生成順序**と呼ぶ。時点の前後関係なので、生成順序は狭義の半順序である。1 回の `cancel_body` の実行が作る
+状態が有限個であることと、初期状態を除く各状態がそれより前に作られた状態から上の操作 1 つで作られることは、
+L9 の証明の <1>0a と <1>0b が示す。
 
 ### DEF 除去事象
 
@@ -122,9 +177,8 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 ## 2. 予備の補題
 
-### L1 (`grow_stack` は閉包を 1 回呼ぶ)
+### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ)
 
-`grow_stack(f)` は `f` をちょうど 1 回呼び、その値を返す。よって
 `CancelAnalysis::walk(node, pending, returns_from_func)` の 1 回の呼び出しは
 `CancelAnalysis::walk_inner(node, pending, returns_from_func)` をちょうど 1 回呼んでその値を返し、
 `RewriteCtx::rewrite(node)` の 1 回の呼び出しは `RewriteCtx::rewrite_inner(node)` をちょうど 1 回呼んで
@@ -132,23 +186,19 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 **証明**
 
-<1>1. `grow_stack(f)` の本体は `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` である。
-  BY CODE src/misc.rs: grow_stack
-<1>2. `maybe_grow(red_zone, stack_size, callback)` は、`enough_space` が真のとき `callback()` を、偽の
-      とき `grow(stack_size, callback)` を評価し、その値を返す。どちらの枝も `callback` をちょうど 1 回
-      呼ぶ (`callback` の型は `FnOnce` なので 2 回は呼べない)。
-  BY CODE stacker-0.1.23/src/lib.rs: maybe_grow
 <1>3. `walk` の本体は `grow_stack(|| self.walk_inner(node, pending, returns_from_func))` である。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk
 <1>4. `rewrite` の本体は `grow_stack(|| self.rewrite_inner(node))` である。
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite
 <1>5. QED
-  BY <1>1, <1>2, <1>3, <1>4
+  A15 より `grow_stack(f)` は `f` をちょうど 1 回呼び、その返り値を返す。<1>3 の閉包は `walk_inner` を
+  1 回呼んでその値を返し、<1>4 の閉包は `rewrite_inner` を 1 回呼んでその値を返す。
+  BY A15, <1>3, <1>4
 
 ### L2 (`References` の表現)
 
-`CancelAnalysis` の走査が扱う `References` の値は、どのオブジェクトについても個数が 1 以上である。よって
-この 4 つが成り立つ。
+`CancelAnalysis` の走査が扱う `References` の値は、どのオブジェクトについても個数が 1 以上である。さらに
+`CancelAnalysis::acted_references` が返す値は空でない。よってこの 5 つが成り立つ。
 
 1. `R.is_empty()` が真であることと `R` が空 (DEF 参照の多重集合) であることは同値である。
 2. `R1.covers(&R2)` が真であることと `R2 ⊆ R1` であることは同値である。
@@ -157,6 +207,8 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
    `R1.objects()` は `R1` が参照を持つオブジェクトをちょうど 1 度ずつ並べた列である。
 4. `R2 ⊆ R1` のとき `R1.subtract(&R2)` は `R1` を `R1 - R2` に書き換え、panic しない。また
    `R1 - R2 ⊆ R1` である。
+5. `CancelAnalysis::acted_references(v, path)` が値を返すとき、その値は空でない。すなわち、DEF 節点の量 の
+   `ActRefs(t)` と `ActRefs(r)` はどちらも空でない。
 
 **証明**
 
@@ -165,8 +217,8 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
       その場で作られるので、値が 0 の鍵は残らない。
   BY CODE src/rc_ir/ownership.rs: acted_references
 <1>2. `CancelAnalysis::acted_references(v, path)` は `ownership::acted_references` の値を返す。ただし
-      その値が空のときは `assert!` が発火してコンパイラが停止する。よってこの関数が値を返すとき、その値は
-      空でなく、各鍵の値は 1 以上である。
+      その値が空のときは `assert!(!references.is_empty(), ...)` が発火してコンパイラが停止する。よって
+      この関数が値を返すとき、その値は空でなく、各鍵の値は 1 以上である。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references, <1>1
 <1>3. `References::subtract(other)` は `other` の各鍵について自分の値をその分だけ減らし、0 になった鍵を
       取り除く。よって、各鍵の値が 1 以上の `References` を `subtract` した結果も、各鍵の値が 1 以上で
@@ -200,7 +252,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
      (`outstanding.clone()`)
 <1>8. QED
   <1>7 が走査の扱う値の出どころを尽くし、<1>1、<1>2、<1>3 がそのどれについても各鍵の値が 1 以上である
-  ことを与える。1 から 4 は <1>4、<1>5、<1>6 が与える。
+  ことを与える。1 から 4 は <1>4、<1>5、<1>6 が与える。5 は <1>2 の `assert!` が与える。
   BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7
 
 ### L3 (走査する本体は `RewriteCtx::rewrite` の出力である)
@@ -240,7 +292,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
         `Iterator::map` と `collect` は要素数を保ち、`MatchArm::with_body` は `body` だけを差し替えた
         `MatchArm` を返す。
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
-       CODE src/rc_ir/ast.rs: MatchArm::with_body
+       CODE src/rc_ir/ast.rs: MatchArm::with_body, DEF Iterator::map と collect
   <2>2. ほかの腕は `RcRhs::Match` を作らない。`RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕が作る
         右辺は `RcRhs::App` であり、`RcExpr::Let(x, rhs, k)` の腕は `rhs.clone()` をそのまま運ぶ。
         `match` の腕はこの順に並んでいるので、この第 3 の腕に落ちる `rhs` は `RcRhs::Match` ではなく、
@@ -258,12 +310,36 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
       `clone.body`、または入力プログラムのグローバル初期化子 `g.init` である。`f_own` は
       `func.clone()` であり、`clone` は `clone_func` の値である。
   BY CODE src/rc_ir/borrow.rs: borrow_ify
-<1>3. `clone_func` が作る本体は `fresh_rename_function` が返す `body` であり、それは
-      `rename_expr(body, &renaming)` の値である。`rename_expr_inner` は各 `Match` を、`rename_rhs` の
-      `RcRhs::Match(scrut, arms)` の腕が `arms.iter().map(...).collect()` で作ったアームの列を持つ
-      `Match` に写す。この写像は要素数を保つので、アームの個数は等しい。
-  BY CODE src/rc_ir/borrow.rs: clone_func, CODE src/rc_ir/rename.rs: fresh_rename_function,
-     CODE src/rc_ir/rename.rs: rename_expr_inner, CODE src/rc_ir/rename.rs: rename_rhs
+<1>3. `clone_func` が作る本体の `Match` は、入力の本体の `Match` と 1 対 1 に対応し、対応する 2 つの
+      `Match` のアームの個数は等しい。
+  <2>1. `clone_func` が作る本体は `fresh_rename_function` が返す第 3 の値であり、それは
+        `rename_expr(body, &renaming)` の値である。ここで `body` は入力の関数の本体である。
+    BY CODE src/rc_ir/borrow.rs: clone_func, CODE src/rc_ir/rename.rs: fresh_rename_function
+  <2>2. `rename_expr(node, renaming)` の本体は `grow_stack(|| rename_expr_inner(node, renaming))` で
+        ある。A15 より、この呼び出しは `rename_expr_inner(node, renaming)` をちょうど 1 回呼んでその値を
+        返す。
+    BY CODE src/rc_ir/rename.rs: rename_expr, A15
+  <2>3. `rename_expr_inner(node, renaming)` が返す節点の式は、`node` の式と同じ `RcExpr` の変位である。
+        `RcExpr::Let(x, rhs, k)` の腕は右辺を `rename_rhs(rhs, renaming)`、継続を
+        `rename_expr(k, renaming)` にする。`Retain`、`Release`、`Destructure`、`Eval` の 4 つの腕は
+        右辺を持たず、継続を `rename_expr(k, renaming)` にする。`Ret` の腕は継続を持たない。
+    BY CODE src/rc_ir/rename.rs: rename_expr_inner, CODE src/rc_ir/ast.rs: RcExpr
+  <2>4. `rename_rhs(rhs, renaming)` が返す右辺は、`rhs` と同じ `RcRhs` の変位である。
+        `RcRhs::Match(scrut, arms)` の腕は、アームの列を
+        `arms.iter().map(|arm| MatchArm { ..., body: rename_expr(&arm.body, renaming) }).collect()` で
+        作る。DEF Iterator::map と collect よりこの列の要素数は `arms` の要素数に等しく、第 `i` アームの
+        本体は `arms[i].body` について `rename_expr` が返した木である。残る 4 変位 (`Var`、`App`、
+        `Closure`、`Llvm`) は `Match` を作らず、アームを持たない。
+    BY CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/ast.rs: RcRhs,
+       DEF Iterator::map と collect
+  <2>5. QED
+    木 `N(body)` の構造についての帰納法で示す。DEF 部分木 より子は真の部分木なので、この帰納法は整礎で
+    ある。<2>2 より `rename_expr(n, renaming)` は `rename_expr_inner(n, renaming)` の値である。<2>3 と
+    <2>4 より、その値の節点は `n` と同じ式の変位を持ち、その子 (`Match` のアーム本体と継続) は、`n` の
+    対応する子について `rename_expr` が返した木である。よって帰納法の仮定と合わせて、返る木の位置は `n` の
+    木の位置と 1 対 1 に対応し、対応する位置の式は同じ変位であり、<2>4 より `Match` のアームの個数は
+    等しい。<2>1 でこれを `body` に適用する。
+    BY <2>1, <2>2, <2>3, <2>4, DEF 部分木
 <1>4. `borrow_ify` の入力プログラムのすべての `Match` は 1 つ以上のアームを持つ。
   BY A9
 <1>5. QED
@@ -285,11 +361,11 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 <1>1. `node_id(node)` は `node.expr` が指す `RcExpr` の割り当てのアドレスである。
   BY CODE src/rc_ir/borrow.rs: node_id, CODE src/rc_ir/ast.rs: RcExprNode
-<1>2. 同時に生きている相異なる割り当てはアドレスが相異なる。
-  BY DEF 割り当て
+<1>2. 同時に生存している相異なる割り当てはアドレスが相異なる。
+  BY DEF 割り当て, DEF アロケータの契約
 <1>3. `RewriteCtx::rewrite(node)` の 1 回の呼び出しが返す木の各位置は、その呼び出しの間に `expr_node` が
       `Arc::new` で作った割り当てを持ち、相異なる位置は相異なる割り当てを持つ。さらに、それらの割り当ては
-      その呼び出しが返るまで 1 つも解放されない。
+      その呼び出しが返るまですべて生存している。
   <2>1. `expr_node(expr, source)` は `Arc::new(expr)` を 1 つ作り、それを `expr` フィールドに持つ
         `RcExprNode` を返す。
     BY CODE src/rc_ir/borrow.rs: expr_node
@@ -298,31 +374,73 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
         を 1 回呼ぶ。`units` が空なら `k` をそのまま返す。
     BY CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: prepend_rc, <2>1
   <2>3. `RewriteCtx::rewrite_rc(v, path, state, is_release, k, source)` は `self.rewrite(k)` を 1 回呼び、
-        その値の上に `rc_node` で 0 個以上の節点を積んだものを返す。ほかに `RcExprNode` を作らない。
-    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, <2>2
+        その値の上に `rc_node` で 0 個以上の節点を積んだものを返す。返す木は、その `self.rewrite(k)` が
+        返した木と、`rc_node` が積んだ節点だけからなる。
+    <3>1. 本体は最初に `let k = self.rewrite(k);` を実行する。`self.is_borrow_version` が偽のときは
+          `rc_node(is_release, v.clone(), path.clone(), state, k, source)` を返す。真のときは
+          `kept.into_iter().rev().fold(k, |cont, unit| rc_node(is_release, v.clone(), unit, state, cont, source))`
+          を返す。この `fold` の値は、`k` の上に `kept` の要素ごとに `rc_node` の節点を 1 つ積んだ木で
+          ある。
+      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
+    <3>2. `kept` は `units_under(&v.ty, path, self.type_env)` を `self.owns_unit(v, unit)` で絞った
+          `Vec<FieldPath>` である。`units_under` の返り値の型は `Vec<FieldPath>`、`owns_unit` の返り値の
+          型は `bool`、`FieldPath` は `Vec<usize>` であり、どれも `RcExprNode` を含まない。よって `kept`
+          は木の節点を持ち込まない。
+      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, CODE src/rc_ir/ownership.rs: units_under,
+         CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit, CODE src/rc_ir/ast.rs: FieldPath
+    <3>3. QED
+      <3>1 の 2 つの枝はどちらも、`self.rewrite(k)` が返した木の上に `rc_node` の節点を 0 個以上積んだ木を
+      返す。<2>2 より `rc_node` は `expr_node` で 1 節点を作る。<3>2 よりほかの値は木の節点にならない。
+      BY <2>2, <3>1, <3>2
   <2>4. `rewrite_inner(node)` の 8 つの腕はいずれも、`self.rewrite` を `node` の各子についてちょうど
         1 回ずつ呼び、その戻り値の上に `expr_node` / `rc_node` / `prepend_rc` で有限個の節点を積んだ木を
-        返す。ほかに `RcExprNode` を作らない。
+        返す。返す木は、それらの `self.rewrite` の呼び出しが返した木と、この呼び出しの中で `expr_node`
+        (`rc_node` と `prepend_rc` が呼ぶものを含む) が作った節点だけからなる。
     <3>1. `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕は `self.rewrite(k)` を 1 回呼び、その上に
           `prepend_rc(after, true, ...)`、`expr_node(RcExpr::Let(...))`、`prepend_rc(before, false, ...)`
-          で節点を積む。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕
+          で節点を積む。返す木は、その `self.rewrite(k)` が返した木と、これらが積んだ節点だけからなる。
+      <4>1. この腕の本体は 5 つの文である。`let callee = self.route(x, callee, args, k);`、
+            `let (before, after) = self.call_rc(&callee, args);`、
+            `let k = prepend_rc(after, true, self.rewrite(k));`、
+            `let app = expr_node(RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k), &node.source);`、
+            `prepend_rc(before, false, app)`。
+        BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕
+      <4>2. `route` の返り値の型は `RcVar` であり、`call_rc` の返り値の型は
+            `(Vec<(RcVar, FieldPath)>, Vec<(RcVar, FieldPath)>)` である。`RcVar` の 5 つのフィールドの型は
+            `FullName`、`Arc<TypeNode>`、`Option<Span>`、`Option<Name>`、`bool` であり、`FieldPath` は
+            `Vec<usize>` である。いずれの型も `RcExprNode` を含まないので、`callee`、`before`、`after`、
+            `x.clone()`、`args.clone()` は木の節点を持ち込まない。
+        BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+           CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath
+      <4>3. QED
+        <4>1 の第 3 文から第 5 文が木を組み立て、その材料は `self.rewrite(k)` が返した木と、`prepend_rc`
+        と `expr_node` が作る節点だけである (<2>2、<4>2)。
+        BY <2>2, <4>1, <4>2
     <3>2. `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕は、`arms` の各 `arm` について
           `self.rewrite(&arm.body)` を 1 回ずつ呼び、`self.rewrite(k)` を 1 回呼び、`expr_node` で
           1 節点を積む。`arm.with_body(body)` は `body` をそのアームの本体に据えたアームを返す。
+          `MatchArm` の残る 3 フィールド `tag`、`payload`、`payload_state` は `RcExprNode` を持たないので、
+          この節点の子は `self.rewrite` の各呼び出しが返した木の根だけである (DEF 部分木)。
       BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
-         CODE src/rc_ir/ast.rs: MatchArm::with_body
+         CODE src/rc_ir/ast.rs: MatchArm::with_body, CODE src/rc_ir/ast.rs: MatchArm, DEF 部分木
     <3>3. `RcExpr::Let(x, rhs, k)` の腕は `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, rhs, k)` の腕
+          `rhs.clone()` は木の位置を持ち込まない。この腕に落ちる `rhs` は `RcRhs::Match` ではなく
+          (`match` の腕はこの順に並んでいる)、`Match` でない右辺を持つ `Let` 節点の子は継続だけだから
+          である (DEF 部分木)。
+      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, rhs, k)` の腕,
+         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, DEF 部分木
     <3>4. `RcExpr::Retain(v, path, state, k)` の腕と `RcExpr::Release(v, path, state, k)` の腕は
           `self.rewrite_rc` を 1 回呼び、その値を返す。
       BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Retain(v, path, state, k)` の腕,
          CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Release(v, path, state, k)` の腕,
          <2>3
     <3>5. `RcExpr::Destructure(container, fields, state, k)` の腕と `RcExpr::Eval(v, k)` の腕は
-          `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。
+          `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。この 2 種の節点の子は継続だけで
+          あり (DEF 部分木)、腕が複製する `container`、`fields`、`v` は `RcVar` と `Vec<(usize, RcVar)>`
+          なので木の位置を持ち込まない。
       BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Destructure(container, fields, state, k)` の腕,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Eval(v, k)` の腕
+         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Eval(v, k)` の腕,
+         CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, DEF 部分木
     <3>6. `RcExpr::Ret(v)` の腕は `expr_node` で 1 節点を作って返す。この節点に子は無い。
       BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Ret(v)` の腕, DEF 部分木
     <3>7. QED
@@ -332,40 +450,46 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
       `Destructure`、`Eval`、`Ret` の 8 つを尽くし、これは `rewrite_inner` の `match` の 8 つの腕である。
       BY <3>1, <3>2, <3>3, <3>4, <3>5, <3>6, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
          CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
-  <2>5. `rewrite` の 1 回の呼び出しが作る `Arc<RcExpr>` は、その呼び出しが返るまで 1 つも解放されない。
-    <3>1. <2>4 の各腕が作った `RcExprNode` は、直後にその上に積む節点の継続として、または戻り値として
-          保持される。どの腕も、作った `RcExprNode` を捨てない。
-      BY <2>4, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
-    <3>2. `arm.with_body(body)` の中の `self.clone()` は入力側のアームの本体の `Arc` を複製し、その複製は
-          `MatchArm` の構築で `body` に置き換えられて捨てられる。捨てられるのは入力の木の節点への参照で
-          あり、入力の木は `rewrite` の引数として借用されている間ずっと生きているので、解放は起きない。
+  <2>5. `rewrite` の 1 回の呼び出しの実行中、その呼び出しとその下の呼び出しが `expr_node` で作った割り当ては
+        1 つも解放されない。
+    <3>1. <2>4 の各腕が `expr_node` で作った `RcExprNode` は、直後にその上に積む節点の継続として、または
+          戻り値として保持される。どの腕も、作った `RcExprNode` を捨てない。よってそのハンドルの個数は
+          この呼び出しの実行中 1 以上のままであり、DEF 割り当て よりその割り当ては生存している。
+      BY <2>4, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, DEF 割り当て
+    <3>2. `arm.with_body(body)` の中の `self.clone()` は入力側のアームの本体の `Arc` のハンドルを 1 つ作り、
+          そのハンドルは `MatchArm` の構築で `body` に置き換えられて drop される。drop されるのは入力の木の
+          節点のハンドルであり、`expr_node` が作った割り当てのものではない。
       BY CODE src/rc_ir/ast.rs: MatchArm::with_body,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕
+         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
+         <2>4, DEF 割り当て
     <3>3. QED
       BY <3>1, <3>2
   <2>6. QED
     木 `N(node)` の構造についての帰納法で示す。DEF 部分木より子は真の部分木なので、この帰納法は整礎で
     ある。帰納法の仮定より、各子について `rewrite` が返す木の相異なる位置は相異なる割り当てを持ち、それらは
-    その子の呼び出しが返るまで解放されない。<2>5 よりそれらは `rewrite(node)` が返るまで解放されない。
+    その子の呼び出しが返るまで生存している。<2>5 よりそれらは `rewrite(node)` が返るまで生存している。
     <2>4 より `rewrite_inner(node)` が返す木は、各子について `rewrite` が返した木と、新しく `expr_node`
-    で作った有限個の節点からなる。相異なる子の木は相異なる呼び出しの中で作られ、<2>5 よりそれらは同時に
-    生きているので、<1>2 より全体として相異なる割り当てを持つ。新しく作った節点は `Arc::new` の新しい
-    割り当てなので、そのとき生きている他のどの割り当てとも相異なる。
-    BY <2>1, <2>2, <2>3, <2>4, <2>5, <1>2, L1, DEF 部分木
-<1>4. `cancel_body(vars, body)` の実行中、`body` の木の割り当てはすべて生きている。
+    で作った有限個の節点だけからなる。相異なる子の木は相異なる呼び出しの中で作られ、<2>5 よりそれらは同時に
+    生存しているので、<1>2 より全体として相異なる割り当てを持つ。新しく作った節点は `Arc::new` の新しい
+    割り当てであり、DEF Arc の契約 よりそのブロックはそのときアロケータへ返っていないので、そのとき生存して
+    いる他のどの割り当てとも <1>2 よりアドレスが相異なる。
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, <1>2, L1, DEF 部分木, DEF Arc の契約
+<1>4. `cancel_body(vars, body)` の実行中、`body` の木の割り当てはすべて生存している。
   <2>1. `cancel` の `funcs` を作る閉包は、`prog.funcs.values()` の各 `f` について
         `clone.body = cancel_body(&vars, &f.body)` を実行する。`cancel_body` の実行中、`f` は `prog` から
-        借用されており、`f.body` の木は `f` から到達可能である。
-    BY CODE src/rc_ir/borrow.rs: cancel
+        借用されており、`f.body` の木は `f` から到達可能である。よってその木の各位置の `Arc` のハンドルが
+        1 つ以上存在し、DEF 割り当て よりその割り当ては生存している。
+    BY CODE src/rc_ir/borrow.rs: cancel, DEF 割り当て
   <2>2. `cancel` の `globals` を作る閉包は、`prog.globals` の各 `g` について
         `cancel_body(&vars, &g.init)` を実行する。`cancel_body` の実行中、`g` は `prog` から借用されて
-        おり、`g.init` の木は `g` から到達可能である。
-    BY CODE src/rc_ir/borrow.rs: cancel
+        おり、`g.init` の木は `g` から到達可能である。よってその木の各位置の `Arc` のハンドルが 1 つ以上
+        存在し、DEF 割り当て よりその割り当ては生存している。
+    BY CODE src/rc_ir/borrow.rs: cancel, DEF 割り当て
   <2>3. QED
     BY <2>1, <2>2
 <1>5. QED
   L3 より、`cancel` が走査する各本体は `RewriteCtx::rewrite` の 1 回の呼び出しが返した木である。<1>3 より
-  その木の相異なる位置は相異なる割り当てを持ち、<1>4 よりそれらは走査の間ずっと生きている。<1>1 と <1>2 より
+  その木の相異なる位置は相異なる割り当てを持ち、<1>4 よりそれらは走査の間ずっと生存している。<1>1 と <1>2 より
   それらの `NodeId` は相異なる。
   BY L3, <1>1, <1>2, <1>3, <1>4
 
@@ -380,26 +504,40 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
        右辺が `Match` でない `Let` の腕、`Destructure` の腕、`Eval` の腕である。
   BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
      CODE src/rc_ir/borrow.rs: CancelAnalysis
-<1>2. `walk_inner` が呼ぶ `walk` 以外の関数はどれも `walk` を呼ばない。それらは `node_id`,
-      `CancelAnalysis::acted_references`, `CancelAnalysis::other_objects`,
-      `CancelAnalysis::consume_objects`, `CancelAnalysis::consume`, `CancelAnalysis::consume_rhs`,
-      `CancelAnalysis::merge`, `un_bump`, `References::objects`, `destructure_consumes`、および
-      標準ライブラリの容器の操作 (`Vec::push`, `Set::insert`, `Map::entry`, `Iterator::map` と
-      `collect`) である。
-  <2>1. `borrow.rs` の外の関数 (`References::objects`, `destructure_consumes`、標準ライブラリの操作) は
-        <1>1 より `walk` を呼べない。
-    BY <1>1, CODE src/rc_ir/ownership.rs: destructure_consumes,
-       CODE src/rc_ir/ownership.rs: References::objects
-  <2>2. `borrow.rs` の中の残る 8 つは、<1>1a が挙げる 8 か所のどれも本体に持たない。
+<1>2. `walk_inner` が呼ぶ `walk` 以外の関数はどれも `walk` を呼ばない。
+  <2>1. `walk_inner` の本体が呼ぶ関数のうち、`borrow.rs` で定義されているのは次の 9 つである。
+        `node_id`、`CancelAnalysis::acted_references`、`CancelAnalysis::other_objects`、
+        `CancelAnalysis::consume_objects`、`CancelAnalysis::consume`、`CancelAnalysis::consume_rhs`、
+        `CancelAnalysis::merge`、`un_bump`、および `PendingRetain` が derive する `Clone::clone`
+        (`Match` の腕の `pending.clone()` が `Vec` の要素ごとに呼ぶ)。
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, CODE src/rc_ir/borrow.rs: PendingRetain
+  <2>1a. `walk_inner` の本体が呼ぶ残りの関数は、`borrow.rs` の外で定義されている。`References::objects`
+         (`OutsideBracket` の枝の `un_bumped.objects()`) と `destructure_consumes`
+         (`Destructure` の腕) は `ownership.rs` にある。`Arc::as_ref` (`node.expr.as_ref()`)、
+         `Vec::push` (`all_retains.push`、`pending.push`、`un_bump_releases` の値への `push`)、
+         `Vec::clone` (`pending.clone()`)、`<&Vec<T> as IntoIterator>::into_iter`
+         (`Ret` の腕の `for retain in &pending`)、`slice::iter`、`Iterator::map`、`collect`
+         (`Match` の腕の `arm_exits`)、`Map::entry` と `Entry::or_default`
+         (`un_bump_releases.entry(retain).or_default()`)、`Set::insert` (`needed_retains.insert`) は
+         標準ライブラリの操作である (`Map` と `Set` は `FxHashMap` と `FxHashSet` の別名である)。
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+       CODE src/rc_ir/ownership.rs: References::objects,
+       CODE src/rc_ir/ownership.rs: destructure_consumes, CODE src/misc.rs: Map, CODE src/misc.rs: Set
+  <2>2. <2>1 の 9 つは、<1>1a が挙げる 8 か所のどれも本体に持たない。`PendingRetain` が derive する
+        `Clone::clone` の本体はフィールドごとの `clone` である。
     BY <1>1a, CODE src/rc_ir/borrow.rs: node_id,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
-       CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, CODE src/rc_ir/borrow.rs: un_bump
+       CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, CODE src/rc_ir/borrow.rs: un_bump,
+       CODE src/rc_ir/borrow.rs: PendingRetain
+  <2>2a. <2>1a の関数は <1>1 より `walk` を呼べない。
+    BY <1>1, <2>1a
   <2>3. QED
-    BY <1>1, <1>1a, <2>1, <2>2
+    <2>1 と <2>1a が `walk_inner` の呼ぶ関数を尽くす。
+    BY <1>1, <1>1a, <2>1, <2>1a, <2>2, <2>2a
 <1>3. 任意の節点 `n`、任意の `pending`、任意の `returns_from_func` について、
       `walk(n, pending, returns_from_func)` の 1 回の呼び出しの実行中、`N(n)` の各節点はちょうど 1 回
       訪問され、`N(n)` の外の節点は訪問されない。
@@ -432,7 +570,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
          <1>2
     <3>2. `Iterator::map` の閉包は `collect` によって各要素についてちょうど 1 回、先頭から順に呼ばれる。
           よって <3>1 の `self.walk(&arm.body, ・, ・)` は `arms` の各要素についてちょうど 1 回である。
-      BY DEF `Iterator::map` と `collect` (Rust 標準ライブラリの規約)
+      BY DEF Iterator::map と collect
     <3>3. `n` の子は `arms` の各 `arm.body` と `k` であり、`N(n)` は `{n}` とそれらの部分木の非交和で
           ある。
       BY DEF 部分木
@@ -504,9 +642,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
       満たす要素の添字のうち最大のものを `Some` で返し、そのような要素が無ければ `None` を返す。
       `let Some(index) = ... else { return UnBump::NoBracket; };` により、`None` のとき `NoBracket` を
       返す。この文までに `pending` を変える操作は無い。
-  BY CODE src/rc_ir/borrow.rs: un_bump,
-     DEF `Iterator::rposition` (Rust 標準ライブラリの規約: 後ろから探して最初に述語を満たす要素の添字を
-     返す)
+  BY CODE src/rc_ir/borrow.rs: un_bump, DEF Iterator::rposition
 <1>2. `let innermost = &mut pending[index];` は添字 `index` の要素への可変参照である。
       `if !innermost.outstanding.covers(un_bumped) { return UnBump::OutsideBracket; }` により、`covers`
       が偽のとき `OutsideBracket` を返す。この文までに `pending` を変える操作は無い。
@@ -521,7 +657,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 <1>5. `if innermost.outstanding.is_empty() { pending.remove(index); }` は、L2 の 1 より <1>3 の差が空の
       ときちょうど添字 `index` の要素を取り除き、空でないとき何もしない。`Vec::remove` は後続の要素を
       1 つずつ前へ詰めるだけなので、残る要素の値と相対順序は変わらない。
-  BY CODE src/rc_ir/borrow.rs: un_bump, L2, DEF `Vec::remove` (Rust 標準ライブラリの規約)
+  BY CODE src/rc_ir/borrow.rs: un_bump, L2, DEF Vec::remove
 <1>6. `UnBump::InBracket(retain)` を返す。
   BY CODE src/rc_ir/borrow.rs: un_bump, <1>4
 <1>7. <1>1 から <1>6 の間に `pending` に触れるのは <1>3 と <1>5 だけであり、どちらも添字 `index` の
@@ -535,8 +671,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 `CancelAnalysis::consume_objects(pending, objects)` が `pending` に対して行うのは次のことである。
 `objects` のいずれかについて `outstanding.names` が真である要素をすべて取り除き、取り除いた各要素の
-`node` を `self.needed_retains` に入れる。残る要素の値と並びは変わらず、残る要素の `node` はこの呼び出しで
-`needed_retains` に入らない。
+`node` を `self.needed_retains` に入れる。残る要素の値と並びは変わらない。
 
 さらに、`CancelAnalysis::consume`、`CancelAnalysis::consume_rhs`、および `walk_inner` の
 `RcExpr::Destructure(container, fields, _state, k)` の腕が `pending` に対して行うのは、
@@ -550,8 +685,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
       `self.needed_retains` に入れるのは偽を返す枝でだけであり、その枝を通るのは
       `objects.iter().any(...)` が真の要素である。この関数はほかに `pending` にも `needed_retains` にも
       触れない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
-     DEF `Vec::retain` (Rust 標準ライブラリの規約)
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, DEF Vec::retain
 <1>2. `consume(pending, var, path)` は `origin(self.vars, self.type_env, var, path).acted_on()` から
       `objects` を作り、`self.consume_objects(pending, &objects)` を 1 回呼ぶ。ほかに `pending` に
       触れない。`origin` と `Origin::acted_on` は `pending` を引数に取らない。
@@ -650,8 +784,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
       である。`Iterator::filter_map` は要素の順序を保ち、`uniform.get` が `Some` を返す要素だけを残す。
       作られる要素は `node` が元の要素の `node`、`outstanding` が `uniform[node]` と等しい `References`
       である。`merge` はほかに返り値を作らない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
-     DEF `Iterator::filter_map` (Rust 標準ライブラリの規約)
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF Iterator::filter_map
 <1>8. `arm_states` の各表と `pending_in` の反復について、`arm_states` の表は `Map` (ハッシュ表) なので
       反復の順序は定まらないが、<1>3 により `is_uniform` は反復の順序によらず、<1>4 により `uniform` は
       要素を失わないので、`uniform` の最終的な内容は反復の順序によらない。返り値は `pending_in` の順序で
@@ -736,9 +869,37 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 `cancel_body` の 1 回の実行の中で走査が作るすべての状態 `P` について、`INV(P)` が成り立つ。
 
-**証明** 状態の生成順序 (DEF 基本操作) についての帰納法で示す。生成順序は有限の全順序であり、初期状態を
-除く各状態は、それより前に作られた状態から基本操作 1 つで作られるので、この帰納法は整礎である。
+**証明** 1 回の `cancel_body` の実行を固定し、状態の生成順序 (DEF 基本操作) についての帰納法で示す。
+この帰納法が整礎であることは <1>0c が与える。
 
+<1>0a. 1 回の `cancel_body` の実行が作る状態は有限個である。
+  <2>1. 走査は 1 つの本体の各位置をちょうど 1 回訪問し (P15)、本体は有限の木である (D2)。よって 1 回の
+        `cancel_body` の実行における訪問は有限回である。
+    BY P15, D2
+  <2>2. 1 回の訪問が実行する基本操作は有限個である。「初期」は訪問の中では実行されない。「追加」は
+        `Retain` の腕で 1 回、「引き」は `Release` の腕で 1 回、「複製」は `Match` の腕でアームごとに
+        1 回、「併合」は `Match` の腕で 1 回である。「消費」は `consume_objects` の呼び出しごとに 1 回で、
+        その呼び出しは `Release` の腕で高々 2 回、`Let` (右辺が `Match` でない) の腕で `rhs_consumes` が
+        返す `Vec` の要素ごとに 1 回、`Destructure` の腕で `destructure_consumes` が返す `Vec` の要素
+        ごとに 1 回である (L6)。`Vec` の長さは有限であり、`arms` も `Vec` である。
+    BY L6, DEF 基本操作, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+       CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume
+  <2>3. QED
+    L8 より、走査が `PendingRetains` の値を作るのは DEF 基本操作 の 6 種だけである。「初期」は
+    `cancel_body` の実行につき 1 回であり (`cancel` の `analysis.walk(body, PendingRetains::default(), true)`)、
+    残る 5 種は <2>2 より 1 回の訪問につき有限個で、<2>1 より訪問は有限回である。よって状態は有限個である。
+    BY <2>1, <2>2, L8, DEF 基本操作, CODE src/rc_ir/borrow.rs: cancel
+<1>0b. 初期状態を除く各状態は、それより前に作られた 1 つ以上の状態から基本操作 1 つで作られる。
+  L8 より、走査が `PendingRetains` の値を作るのは DEF 基本操作 の 6 種だけである。「初期」以外の 5 種は、
+  DEF 除去事象 が述べるとおり既に在る状態を入力に取る --- 「複製」「追加」「消費」「引き」は 1 つ、
+  「併合」は `pending_in` と各 `arm_exits[j]` である。入力はその操作が走る時点で既に在るので、生成順序で
+  その操作が作る状態より前にある。
+  BY L8, DEF 基本操作, DEF 除去事象
+<1>0c. 生成順序についての帰納法は整礎である。生成順序は狭義の半順序であり (DEF 基本操作)、<1>0a より
+       この実行が作る状態は有限個なので、その上に無限の下降列は無い。<1>0b より、初期状態でない各状態に
+       ついて、その状態を作った基本操作の入力はすべて生成順序でそれより前にあるので、帰納法の仮定はその
+       入力すべてに使える。初期状態には入力が無いので、その場合は <1>1 を使わずに示す。
+  BY <1>0a, <1>0b, DEF 基本操作
 <1>1. 帰納法の仮定: この状態より前に作られたすべての状態について `INV` が成り立つ。
   BY 帰納法の仮定
 <1>2. CASE 状態が「初期」で作られた。`PendingRetains::default()` は `Vec` の `default()` すなわち空の
@@ -755,7 +916,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
       すなわち `ActRefs(t)` である。書き換え前の状態を `P0` とする。
   <2>1. この操作は `Vec` の末尾に要素を 1 つ加えるだけであり、既存の要素の値と並びを変えない。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-       DEF `Vec::push` (Rust 標準ライブラリの規約)
+       DEF Vec::push
   <2>2. `P0` は `t` の訪問が始まる前に作られた状態である。この腕は `pending.push` より前に `pending` に
         触れないので、`P0` は `walk_inner` に引数として渡された値 `pending(t)` であり、それは呼び出しの
         前に作られている。よって <1>1 の (i) より、`P0` の各要素の由来は `t` の訪問が始まる前に訪問されて
@@ -765,10 +926,11 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
   <2>3. (i) が成り立つ。新しい要素の `node` は `node_id(t)` であり、`t` の訪問はこの時点で始まっている。
         既存の要素は <1>1 の (i) のままで、由来も変わらない。
     BY <1>1, <2>1, DEF 訪問
-  <2>4. (ii) が成り立つ。新しい要素の由来は <2>3 より `t` であり、その `outstanding` は `ActRefs(t)` で
-        ある。L2 よりそれは空でなく、`ActRefs(t) ⊆ ActRefs(t)` である。既存の要素は <1>1 の (ii) のまま
-        である。
-    BY <1>1, <2>1, <2>3, L2, DEF 節点の量
+  <2>4. (ii) が成り立つ。新しい要素の由来は <2>3 より `t` であり、その `outstanding` は
+        `self.acted_references(v, path)` すなわち `ActRefs(t)` である (DEF 節点の量)。L2 の 5 よりそれは
+        空でなく、`ActRefs(t) ⊆ ActRefs(t)` である (DEF 参照の多重集合)。既存の要素は <1>1 の (ii) の
+        ままである。
+    BY <1>1, <2>1, <2>3, L2, DEF 節点の量, DEF 参照の多重集合
   <2>5. (iii) が成り立つ。
     <3>1. `P0` のどの要素も `node` が `node_id(t)` と等しくない。
       <4>1. `P0` のある要素 `e` が `e.node = node_id(t)` を満たすと仮定する。
@@ -853,8 +1015,9 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
     BY <2>3, <2>4, <2>5, <2>6
 <1>8. QED
   DEF 基本操作 と L8 より、状態の作られ方は「初期」「複製」「追加」「消費」「引き」「併合」の 6 種で
-  尽きる。
-  BY <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, DEF 基本操作, L8
+  尽きるので、<1>2 から <1>7 が場合を尽くす。<1>0c より、この場合分けを生成順序についての帰納法の
+  1 段として使ってよい。
+  BY <1>0a, <1>0b, <1>0c, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, DEF 基本操作, L8
 
 ## 6. P16 (`pending` の不変条件)
 
@@ -889,7 +1052,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
     BY DEF 基本操作 (`pending.clone()`)
   <2>3. 「追加」は `Vec` の末尾に要素を 1 つ加えるだけで、要素を取り除かない。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-       DEF `Vec::push` (Rust 標準ライブラリの規約)
+       DEF Vec::push
   <2>4. QED
     L8 より基本操作は 6 種で尽きる。
     BY <2>1, <2>2, <2>3, DEF 基本操作, L8
@@ -951,7 +1114,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
         いる。よって (e3) の各子は、生成順序について親より真に前にある。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
        DEF 基本操作, <1>8
-  <2>2. (e3) の子はアームごとに 1 つずつ選べるので有限個であり、L4 と A9 より 1 つ以上ある。
+  <2>2. (e3) の子はアームごとに 1 つずつ選べるので有限個であり、L4 より 1 つ以上ある。
     BY L4, <1>8
   <2>3. QED
     <2>1 より展開に無限の道は無く、<2>2 より分岐は有限なので、展開は有限の木である。<1>6、<1>7、<1>8 より
