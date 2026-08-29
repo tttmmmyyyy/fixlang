@@ -42,8 +42,8 @@ use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    FieldPath, FuncRef, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc, RcGlobalInit,
-    RcProgram, RcRhs, RcState, RcVar, VarPath,
+    for_each_node, for_each_var, FieldPath, FuncRef, Ownership, OwnershipShape, RcExpr, RcExprNode,
+    RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
@@ -82,6 +82,12 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
         .map(|f| (f.name.clone(), VarTable::of(f)))
         .collect();
 
+    let sites: Map<FuncRef, Vec<(RcVar, FieldPath)>> = prog
+        .funcs
+        .values()
+        .map(|f| (f.name.clone(), levelled_sites(f, type_env)))
+        .collect();
+
     let mut owned_leaves: Set<VarPath> = Set::default();
     loop {
         let mut changed = false;
@@ -108,6 +114,9 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
                     }
                 }
             }
+            for site in &sites[&func.name] {
+                changed |= level_ownership(vars, type_env, site, &mut owned_leaves);
+            }
         }
         if !changed {
             break;
@@ -117,6 +126,84 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
     OwnedLeaves(owned_leaves)
 }
 
+/// The `(value, unit)` pairs whose ownership this pass reads as a single truth value: the target of
+/// every reference-count node, and every argument unit of every call.
+///
+/// `owns_unit` answers once for such a pair, while the node it decides acts on each boxed leaf under
+/// the unit. Where those leaves come from roots the version owns differently, no single answer is
+/// right, so the leaves are levelled (`level_ownership`) before any of them is read.
+fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> {
+    let mut sites = vec![];
+    for_each_node(&func.body, &mut |node| match node.expr.as_ref() {
+        RcExpr::Retain(v, path, _, _) | RcExpr::Release(v, path, _, _) => {
+            sites.push((v.clone(), path.clone()))
+        }
+        RcExpr::Let(_, RcRhs::App(_, args), _) => {
+            for arg in args {
+                for unit in rc_units(&arg.ty, type_env) {
+                    sites.push((arg.clone(), unit));
+                }
+            }
+        }
+        RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => {}
+    });
+    sites
+}
+
+/// Own every parameter leaf a site's candidate objects reach, where the version owns any of them.
+///
+/// A unit whose leaves come from different roots gets one ownership answer for all of them. Where
+/// the roots disagree, neither answer is right: `Borrow` drops the release the owned leaf needed,
+/// and `Own` disposes a reference the borrowed leaf was only lent. Owning all of them is the answer
+/// the reference counting can express, and a value owned where it could have been borrowed costs a
+/// count rather than correctness. Ownership only grows here, so the fixed point still terminates.
+fn level_ownership(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    (v, unit): &(RcVar, FieldPath),
+    owned_leaves: &mut Set<VarPath>,
+) -> bool {
+    let candidates: Vec<VarPath> = origin(vars, type_env, &v.name, unit)
+        .candidates()
+        .into_iter()
+        .cloned()
+        .collect();
+    let owns_a_candidate = candidates.iter().any(|(root, path)| {
+        match vars.param_tys.get(root) {
+            // A root this version takes no parameter for is a producer or a global, and the version
+            // owns what it produced.
+            None => true,
+            Some(ty) => covered_leaves(ty, path, type_env)
+                .iter()
+                .any(|leaf| owned_leaves.contains(&(root.clone(), leaf.clone()))),
+        }
+    });
+    if !owns_a_candidate {
+        return false;
+    }
+    let mut changed = false;
+    for (root, path) in &candidates {
+        let Some(ty) = vars.param_tys.get(root) else {
+            continue;
+        };
+        for leaf in covered_leaves(ty, path, type_env) {
+            changed |= owned_leaves.insert((root.clone(), leaf));
+        }
+    }
+    changed
+}
+
+/// The boxed leaves of `ty` that `path` covers: the ones beneath it, and the one it lies beneath.
+///
+/// A path reaches a leaf from either side. A unit path stops above the leaves of an unboxed union's
+/// variants, and a path into a variant runs below the leaf a punched array holds.
+fn covered_leaves(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Vec<FieldPath> {
+    boxed_leaf_paths(ty, type_env)
+        .into_iter()
+        .filter(|leaf| leaf.starts_with(path) || path.starts_with(leaf))
+        .collect()
+}
+
 // --- borrow-ification ---
 
 /// Borrow-ify a program: materialize a borrowing version of every function with a borrowable
@@ -124,7 +211,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
 /// annotate every output version with the parameter/capture units it borrows
 /// (`RcFunc::borrowed_units`).
 // PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
-pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
+pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
     let owned_leaves = infer_ownership(prog, type_env);
 
     // The funptr functions that get a borrow version, and the name of that version. Only funptr
@@ -159,6 +246,10 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             }
             clones.push((borrow_version.clone(), clone, rename));
         }
+    }
+
+    if develop_mode {
+        check_clone_names_are_fresh(prog, clones.iter().map(|(_, _, rename)| rename));
     }
 
     // The parameter names and types of every output version, so a call site can read the ownership
@@ -236,6 +327,44 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         funcs,
         globals,
         roots: prog.roots.clone(),
+    }
+}
+
+/// Check that the names a clone mints are names the program does not already bind.
+///
+/// `fresh_rename_function` makes a name by appending its pass tag and a counter, reading none of the
+/// program's names, so the name it makes is new only because no binder the earlier passes mint ends
+/// in that shape. Nothing establishes that, and a collision would put two bindings under one
+/// `unit_key`, which is read by name: cancellation would then pair a retain of one with a release of
+/// the other and delete both.
+///
+/// Walking every binder costs a pass over the program, so this runs where the test suite runs it.
+fn check_clone_names_are_fresh<'a>(
+    prog: &RcProgram,
+    renames: impl Iterator<Item = &'a Map<FullName, FullName>>,
+) {
+    let mut bound: Set<FullName> = Set::default();
+    for func in prog.funcs.values() {
+        for p in func.params.iter().chain(func.capture.iter()) {
+            bound.insert(p.name.clone());
+        }
+        for_each_var(&func.body, &mut |v| {
+            bound.insert(v.name.clone());
+        });
+    }
+    for global in &prog.globals {
+        for_each_var(&global.init, &mut |v| {
+            bound.insert(v.name.clone());
+        });
+    }
+    for rename in renames {
+        for fresh in rename.values() {
+            assert!(
+                !bound.contains(fresh),
+                "the clone's fresh name `{}` is already bound in the program",
+                fresh.to_string()
+            );
+        }
     }
 }
 
