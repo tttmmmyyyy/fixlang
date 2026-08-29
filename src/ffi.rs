@@ -17,7 +17,7 @@ use crate::generator::Generator;
 use inkwell::attributes::AttributeLoc;
 use inkwell::context::Context;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
-use inkwell::values::FunctionValue;
+use inkwell::values::{BasicValueEnum, FunctionValue};
 use inkwell::AddressSpace;
 use std::sync::Arc;
 
@@ -69,6 +69,14 @@ impl CIntegerExtension {
     }
 }
 
+/// The unit a C signature carries an integer in. An integer narrower than this width travels in the
+/// low bits of the unit, and C's default argument promotions widen such an integer to this width on
+/// the way through `...`.
+///
+/// The width holds for the targets Fix builds for; an ABI that extends a 32-bit integer to the width
+/// of a register — RISC-V 64 does — raises it.
+const C_INTEGER_UNIT_BITS: u32 = 32;
+
 /// How a Fix type constructor crosses to C.
 impl TyCon {
     /// The shape of the C type this type constructor stands for.
@@ -86,10 +94,6 @@ impl TyCon {
             "call c_type_shape for {}",
             self.to_string()
         );
-        // The unit a C signature carries an integer in. The threshold holds for the targets Fix
-        // builds for; an ABI that extends a 32-bit integer to the width of a register — RISC-V 64
-        // does — raises it.
-        const C_INTEGER_UNIT_BITS: u32 = 32;
         let integer = |bits| CTypeShape::Integer {
             bits,
             extension: if bits < C_INTEGER_UNIT_BITS {
@@ -331,6 +335,91 @@ pub fn c_boundary_tycon(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<Ty
         return None;
     }
     Some(head)
+}
+
+/// The message reporting that a value of `ty` cannot be passed through the `...` of an `FFI_CALL`,
+/// and `None` for a type that can.
+///
+/// A call hands a variadic argument to C as the one scalar the value is, and C's default argument
+/// promotions are stated over C types, so the argument has to be a value C carries as one scalar. A
+/// declared parameter is written as such a type; past the `...` the type comes from inference alone,
+/// which is why this checks the type the argument was inferred to.
+///
+/// A boxed value is admitted at an exported signature, where it crosses as an opaque pointer, and
+/// refused here, where the call would hand C the first word of the heap block instead of the address
+/// of it.
+pub fn unpassable_variadic_type_msg(ty: &Arc<TypeNode>) -> Option<String> {
+    if ty.toplevel_tycon().map_or(false, |head| head.is_c_scalar()) {
+        return None;
+    }
+    let msg_head = format!(
+        "`{}` cannot be passed through the `...` of an `FFI_CALL`",
+        ty.to_string()
+    );
+    if ty.is_boolean() {
+        return Some(msg_head + ". Use `U8` or `CInt`, and convert it on the Fix side.");
+    }
+    if ty.is_string() {
+        return Some(
+            msg_head
+                + ". Use `Std::String::borrow_c_str` to get a `Ptr` to its bytes, and pass that.",
+        );
+    }
+    Some(msg_head + ". An argument passing through `...` is an integer (`I8` to `I64`, `U8` to `U64`), a floating point number (`F32`, `F64`), or a pointer (`Ptr`). The C types in `Std::FFI` such as `CInt` are aliases of these. To pass a boxed value, take a `Ptr` to it with `Std::FFI::boxed_to_retained_ptr` or `borrow_boxed`.")
+}
+
+/// Widen `val`, the value of Fix type `ty` a call has marshalled, the way C widens an argument going
+/// through the `...`.
+///
+/// C's default argument promotions turn a `float` into a `double`, and widen an integer narrower
+/// than `C_INTEGER_UNIT_BITS` to that width, filling the bits above the value the way its sign asks.
+/// This is why a C function reads its variadic arguments as `double` and `int`: a narrower value
+/// never arrives, so a call has to write the value the function reads. A value that already fills
+/// that width is handed over as it stands.
+pub fn promote_through_ellipsis<'c, 'm>(
+    val: BasicValueEnum<'c>,
+    ty: &Arc<TypeNode>,
+    gc: &Generator<'c, 'm>,
+) -> BasicValueEnum<'c> {
+    let head = ty
+        .toplevel_tycon()
+        .filter(|head| head.is_c_scalar())
+        .unwrap_or_else(|| {
+            panic!(
+                "`{}` reached a variadic argument, which `Program::validate_c_function_calls` \
+                 admits only as a C scalar",
+                ty.to_string()
+            )
+        });
+    match head
+        .c_type_shape()
+        .expect("a C scalar is carried by a C type")
+    {
+        CTypeShape::Integer {
+            extension: Some(extension),
+            ..
+        } => {
+            let unit_ty = gc.context.custom_width_int_type(C_INTEGER_UNIT_BITS);
+            let val = val.into_int_value();
+            let builder = gc.builder();
+            match extension {
+                CIntegerExtension::Sign => builder.build_int_s_extend(val, unit_ty, "promoted"),
+                CIntegerExtension::Zero => builder.build_int_z_extend(val, unit_ty, "promoted"),
+            }
+            .unwrap()
+            .into()
+        }
+        CTypeShape::Float32 => gc
+            .builder()
+            .build_float_ext(val.into_float_value(), gc.context.f64_type(), "promoted")
+            .unwrap()
+            .into(),
+        CTypeShape::Integer {
+            extension: None, ..
+        }
+        | CTypeShape::Float64
+        | CTypeShape::Pointer => val,
+    }
 }
 
 /// Assert that a value of Fix type `ty` travels as the one scalar the C type `c_ty` names, which is

@@ -446,6 +446,172 @@ pub fn test_ffi_calls_of_one_c_name_with_and_without_var_args_fails() {
     );
 }
 
+/// C's default argument promotions widen a `float` to a `double` and an integer narrower than `int`
+/// to an `int` on the way through `...`, which is why the C function reads its variadic arguments
+/// as `double` and `int`. A call writes the value the C function reads.
+///
+/// A value wide enough to travel unchanged is passed as it is: the `I64` and `F64` cases pin that
+/// the promotion stops where C stops it.
+#[test]
+pub fn test_ffi_call_promotes_its_variadic_arguments() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"F32", FFI_CALL[CDouble c_va_double(CInt, ...), 1.c_int, 2.5_F32], 2.5);;
+            assert_eq(|_|"F64", FFI_CALL[CDouble c_va_double(CInt, ...), 1.c_int, 2.5_F64], 2.5);;
+            assert_eq(|_|"I8", FFI_CALL[CInt c_va_int(CInt, ...), 1.c_int, -1_I8].i64, -1);;
+            assert_eq(|_|"I16", FFI_CALL[CInt c_va_int(CInt, ...), 1.c_int, -1_I16].i64, -1);;
+            assert_eq(|_|"U8", FFI_CALL[CInt c_va_int(CInt, ...), 1.c_int, 255_U8].i64, 255);;
+            assert_eq(|_|"U16", FFI_CALL[CInt c_va_int(CInt, ...), 1.c_int, 65535_U16].i64, 65535);;
+            assert_eq(|_|"I32", FFI_CALL[CInt c_va_int(CInt, ...), 1.c_int, -1_I32].i64, -1);;
+            assert_eq(|_|"I64", FFI_CALL[I64 c_va_i64(CInt, ...), 1.c_int, -4294967296_I64], -4294967296);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdarg.h>
+        #include <stdint.h>
+        double  c_va_double(int n, ...) { va_list ap; va_start(ap, n); double  d = va_arg(ap, double);  va_end(ap); return d; }
+        int     c_va_int(int n, ...)    { va_list ap; va_start(ap, n); int     i = va_arg(ap, int);     va_end(ap); return i; }
+        int64_t c_va_i64(int n, ...)    { va_list ap; va_start(ap, n); int64_t l = va_arg(ap, int64_t); va_end(ap); return l; }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// The declared parameters of an `FFI_CALL` are written as C types, and an argument past them has
+/// to be a C type too: the call hands it to C as the one scalar the value is. The error for each
+/// rejected type names the way to pass the value instead.
+#[test]
+pub fn test_ffi_call_variadic_argument_of_a_non_c_type_fails() {
+    let source_calling_with = |argument: &str| {
+        format!(
+            r##"
+        module Main;
+
+        type Wrap = unbox struct {{ v : I8 }};
+
+        main : IO ();
+        main = println(FFI_CALL[CInt c_report(CInt, ...), 1.c_int, {}].to_string);
+    "##,
+            argument
+        )
+    };
+
+    // `Bool` is one byte in Fix, and the width C gives `_Bool` is implementation-defined.
+    test_source_fail(
+        &source_calling_with("true"),
+        Configuration::develop_mode(),
+        "`Std::Bool` cannot be passed through the `...` of an `FFI_CALL`. Use `U8` or `CInt`",
+    );
+
+    // A `String` holds its bytes in an array, and C reads them through a pointer.
+    test_source_fail(
+        &source_calling_with(r#""hi""#),
+        Configuration::develop_mode(),
+        "`Std::String` cannot be passed through the `...` of an `FFI_CALL`. Use `Std::String::borrow_c_str`",
+    );
+
+    // A boxed value crosses to C as its address, which is not what the call would hand over.
+    test_source_fail(
+        &source_calling_with("[1, 2, 3]"),
+        Configuration::develop_mode(),
+        "`Std::Array Std::I64` cannot be passed through the `...` of an `FFI_CALL`",
+    );
+
+    // A struct of one field is a struct, whatever `unwrap_newtype` later does with it.
+    test_source_fail(
+        &source_calling_with("Wrap { v : -1_I8 }"),
+        Configuration::develop_mode(),
+        "`Main::Wrap` cannot be passed through the `...` of an `FFI_CALL`",
+    );
+}
+
+/// A pointer is one of the types an argument going through the `...` may be, and the `scanf` example
+/// in the FFI section of `Document.md` writes one there. A `Ptr` travels through as it stands, so the
+/// C function reads the bytes at the address the call wrote. This is also the route the diagnostic
+/// for a `String` names: a `Ptr` taken with `Std::String::borrow_c_str`.
+#[test]
+pub fn test_ffi_call_passes_a_variadic_pointer_unchanged() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            let first_byte = "hi".borrow_c_str(|p| FFI_CALL[CInt c_va_first_byte(CInt, ...), 1.c_int, p]);
+            assert_eq(|_|"the byte at the address the call wrote", first_byte.i64, 'h'.i64);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdarg.h>
+        int c_va_first_byte(int n, ...) {
+            va_list ap; va_start(ap, n);
+            unsigned char *p = va_arg(ap, unsigned char *);
+            va_end(ap);
+            return p[0];
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// The `IO` forms of an `FFI_CALL` carry the `IOState` token as one further argument, past the
+/// declared parameters, and C never receives it. The promotions land on the arguments before it: an
+/// `F32` written in an `FFI_CALL_IO` reaches the function as a `double`, and an `I8` written in an
+/// `FFI_CALL_IOS` reaches it as an `int`.
+#[test]
+pub fn test_ffi_call_io_promotes_its_variadic_arguments() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            let promoted_f32 = *FFI_CALL_IO[CDouble c_va_double(CInt, ...), 1.c_int, 2.5_F32];
+            assert_eq(|_|"F32 through the `...` of an `FFI_CALL_IO`", promoted_f32, 2.5);;
+            let promoted_i8 = *IO::from_runner(|ios| FFI_CALL_IOS[CInt c_va_int(CInt, ...), 1.c_int, -1_I8, ios]);
+            assert_eq(|_|"I8 through the `...` of an `FFI_CALL_IOS`", promoted_i8.i64, -1);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdarg.h>
+        double c_va_double(int n, ...) { va_list ap; va_start(ap, n); double d = va_arg(ap, double); va_end(ap); return d; }
+        int    c_va_int(int n, ...)    { va_list ap; va_start(ap, n); int    i = va_arg(ap, int);    va_end(ap); return i; }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// The `...` begins after the declared parameters: the last declared parameter travels as the C type
+/// the signature gives it, and only what follows is widened. A variadic function may also be called
+/// with nothing past the declared parameters.
+#[test]
+pub fn test_ffi_call_promotes_only_what_follows_the_declared_parameters() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"the declared parameter and the argument after it", FFI_CALL[CInt c_va_after_i8(I8, ...), -2_I8, -1_I8].i64, -3);;
+            assert_eq(|_|"no argument past the declared parameters", FFI_CALL[CInt c_va_after_i8(I8, ...), 7_I8].i64, 7);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdarg.h>
+        #include <stdint.h>
+        // Reads one further argument only where `n` is negative, so the call that writes none reads none.
+        int c_va_after_i8(int8_t n, ...) {
+            if (n >= 0) { return n; }
+            va_list ap; va_start(ap, n);
+            int v = va_arg(ap, int);
+            va_end(ap);
+            return (int)n + v;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
 /// A parameter is a position like the result: the ABI carries a narrow integer in the low bits of a
 /// register and the sign says which side extends it, so the two calls ask the one declaration for
 /// opposite promises about the bits above the value.
@@ -668,7 +834,8 @@ pub fn test_export_bool_argument_fails() {
     );
 }
 
-/// The reason `Bool` is refused does not depend on which side of the arrow it sits.
+/// `Bool` is refused as the result of an exported function for the reason it is refused as an
+/// argument: the width C gives `_Bool` is implementation-defined.
 #[test]
 pub fn test_export_bool_result_fails() {
     let source = r##"

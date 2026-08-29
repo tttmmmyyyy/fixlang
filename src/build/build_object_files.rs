@@ -6,10 +6,8 @@ use crate::{
         program::{Program, Symbol, TypeEnv},
         types::TypeNode,
     },
-    build::{
-        divide_program::{
-            divide_among_units, divide_into_units, generated_code_hash, DividedProgram,
-        },
+    build::divide_program::{
+        divide_among_units, divide_into_units, generated_code_hash, DividedProgram,
     },
     configuration::{Configuration, OutputFileType},
     constants::{
@@ -135,7 +133,7 @@ fn optimize_rc_program(
     if config.enable_borrow_optimization() {
         prog = borrow_ify(&prog, type_env, config.develop_mode);
         validate(&prog, "after borrow_ify");
-        prog = cancel(&prog, type_env, config.develop_mode);
+        prog = cancel(&prog, type_env);
         validate(&prog, "after cancel");
         prune(&mut prog, "after dce following cancel");
         prog = unique_check_elim::specialize(&prog, type_env);
@@ -542,7 +540,7 @@ fn build_object_files_cache_hash(
     let mut hash_source = HashSource::default();
     hash_source.push_text(&config.object_generation_hash());
     // What this cache holds is the object files of a whole build, and how many of them there are is
-    // decided by how many symbols one compilation unit holds. A unit's own object file is named by
+    // decided by how many entries one compilation unit holds. A unit's own object file is named by
     // the code it generates (`divide_program::generated_code_hash`), so a build that divides itself
     // differently still reuses each unit whose code it leaves as it was.
     hash_source.push_text(&config.cu_size.to_string());
