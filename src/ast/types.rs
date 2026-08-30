@@ -2972,6 +2972,7 @@ pub fn unfixed_type_variable_error(
 
 /// Whether a type variable name represents an opaque type variable, which a source line writes
 /// with a leading `?`.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_opaque_tyvar(name: &str) -> bool {
     name.starts_with('?')
 }

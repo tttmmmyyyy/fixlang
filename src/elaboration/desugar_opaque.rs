@@ -73,6 +73,7 @@ use std::sync::Arc;
 ///   tycon = Std::repeat::?it
 ///   tycon_vars = [a]
 ///   tycon_kind = * -> *
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 struct OpaqueInfo {
     /// The opaque type variable.
     tyvar: Arc<TyVar>,
@@ -453,6 +454,7 @@ fn opaque_tycon_arity(resolutions: &[OpaqueTyConResolution]) -> usize {
 ///
 /// Example: `Std::repeat` with scheme `[?it : Iterator, Item ?it = a] a -> I64 -> ?it`
 /// yields one OpaqueInfo with tycon `Std::repeat::?it`, tycon_vars `[a]`, tycon_kind `* -> *`.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo> {
     // Find all opaque type variables in the scheme.
     let all_vars = collect_free_vars(&scm.predicates, &scm.equalities, &scm.ty);

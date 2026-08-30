@@ -494,6 +494,7 @@ struct LiftedLambdas {
 
 impl LiftedLambdas {
     // Record a lambda just lifted, under the name of the global function it became.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert(&mut self, name: FullName, cap: CaptureStruct, func_ty: Arc<TypeNode>) {
         self.record_capture_list(&cap, &ClosureTree::leaf(name.clone()));
         self.lambdas.insert(name, LiftedLambda { cap, func_ty });
@@ -527,6 +528,7 @@ impl LiftedLambdas {
     // The capture struct a value of `tree` is: the lifted lambda's, with each known field narrowed
     // to the capture struct of what it holds. The type constructor is named after the copy that
     // receives it, so the type and the tree determine each other.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn capture_struct_of(&mut self, tree: &ClosureTree) -> CaptureStruct {
         if let Some(cap) = self.caps.get(tree) {
             return cap.clone();
@@ -1472,6 +1474,7 @@ impl ClosureSpecializationVisitor {
     // Decapture a lambda expression.
     //
     // Returns the value the lambda is, and the expression that generates its capture list.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn decapture_lambda(
         &mut self,
         lam: Arc<ExprNode>,

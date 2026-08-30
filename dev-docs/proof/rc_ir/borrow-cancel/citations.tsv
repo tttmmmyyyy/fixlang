@@ -46,6 +46,7 @@ src/ast/types.rs	TypeNode::toplevel_tycon	P1,P2	9c1d47a34349
 src/ast/types.rs	TypeNode::toplevel_tycon_info	P1,P2,P5,P6,P7	ae62bc398a0a
 src/ast/types.rs	TypeNode::toplevel_tycon_satisfies	P1,P2	704a2f7f7d60
 src/ast/types.rs	TypeNode::unpunched_field_types	P1,P2,P3,P4,P5,P6,P7,P7c,P7f,P18a,P18b	ecae1220e285
+src/ast/types.rs	is_opaque_tyvar	P1,P2	6a391148be06
 src/ast/types.rs	type_funptr	P26	3c1291d61de1
 src/build/build_object_files.rs	build_main_function	D/A,P26,P28	ac9bcf7f4d89
 src/build/build_object_files.rs	build_object_files	D/A,P18c,P19,P20,P21,P22,P23,P24	db59d512862f
@@ -62,6 +63,8 @@ src/constants.rs	FUNPTR_ARGS_MAX	P1,P2	5054470d6f01
 src/constants.rs	FUNPTR_NAME	P1,P2	5f81220a51a7
 src/constants.rs	PUNCHED_TYPE_SYMBOL	P1,P2	866c661bcaee
 src/constants.rs	RefcntState	P26	192fb7a3bcd5
+src/elaboration/desugar_opaque.rs	OpaqueInfo	P1,P2	1585b0e1c670
+src/elaboration/desugar_opaque.rs	collect_opaque_infos	P1,P2	a060a45a2d95
 src/elaboration/desugar_opaque.rs	register_opaque_tycon	P1,P2	fc5202f8b47e
 src/elaboration/mod.rs	elaborate	P1,P2	cd448f6a71aa
 src/elaboration/typecheck.rs	Substitution::merge	P1,P2	d19740bbbe67
@@ -206,6 +209,9 @@ src/object.rs	create_obj	P26,P28	55a56677f8db
 src/object.rs	get_array_storage	P26	a417e5ff90d9
 src/object.rs	ty_to_object_ty	P28	bd40ee79d08f
 src/optimization/capture_struct.rs	CaptureStruct::new	P1,P2	79b12cf140d7
+src/optimization/closure_specialization.rs	ClosureSpecializationVisitor::decapture_lambda	P1,P2	36c2dc7a5422
+src/optimization/closure_specialization.rs	LiftedLambdas::capture_struct_of	P1,P2	b1b391b33646
+src/optimization/closure_specialization.rs	LiftedLambdas::insert	P1,P2	de476953b13f
 src/optimization/closure_specialization.rs	lift_all	P1,P2	a18af9cfea16
 src/optimization/closure_specialization.rs	realize_all	P1,P2	5b170eb58830
 src/optimization/closure_specialization.rs	record_capture_list	P1,P2	df63a1a79d1e
