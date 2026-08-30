@@ -1,10 +1,10 @@
 # P28 (参照の持ち手はちょうど 1 つ) の証明
 
-対象コミットは `5aa87f26c246919eadcb3f1c3ce0252366c2aed8` である。
+対象コミットは `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` である。
 
-この文書が立つのは README の定義 D1、D2、D3、D4、D6、D7、D8、D9、D10、D11、D12、D16、D21、D22、D23、
-D24、D25、D26、D31 と仮定 A3、A5、A8、A10、A12、A17、A23、A24 の上である。証明は 1 本の構造化証明で、
-その QED が P28 である。
+この文書が立つのは README の定義 D1、D2、D3、D4、D6、D7、D8、D9、D10、D11、D12、D14、D16、D21、D22、
+D23、D24、D25、D26、D31 と仮定 A3、A5、A8、A10、A12、A17、A23、A24 の上である。証明は 1 本の構造化
+証明で、その QED が P28 である。
 
 P28 は依存の順の先頭 (層 0) にあるので、この文書は命題を 1 つも引用しない。引用するのは定義と仮定と
 コードだけである。
@@ -65,6 +65,13 @@ initialized and its remaining fields left undefined for the caller to fill in」
 (`CODE src/generator.rs: Generator::build_release_boxed_with` -- `destruction_bb` が `traverse_refs` を
 走らせてから `build_free_boxed` を呼ぶ)、その 2 つの間に点を置かなければ、どちらの順に並べても段の
 入口と出口の状態は同じである。
+
+**活性化が `Liv` に入る位置と出る位置も、この順序の中に取る。**活性化は、自分の初期 `Obl`
+(D10 の初期値) を作る (α) の列の**直前**に `Liv` に入り、終端の `Ret` の消費を行う (α) の列の
+**直後**に `Liv` を出る。この位置は (α) の定義が決める -- (α) は 1 つの参照が 1 つの持ち手を離れて
+別の 1 つの持ち手に入る動作なので、その参照が入る側の活性化はその時点で持ち手、すなわち生きて
+いる活性化 (D25) でなければならない。どちらかの列が空のときは、それぞれ、その段が活性化を作る位置と、
+終端の `Ret` の消費を行う位置を取る。`Liv` への出入りは素動作ではないので点を作らない。
 
 ### 1.4 点と量
 
@@ -229,9 +236,12 @@ initialized and its remaining fields left undefined for the caller to fill in」
     素動作は (α) から (ζ) の 6 種で尽きる。
     BY `<2>1`, `<2>2`, `<2>3`, `<2>4`, `<2>5`, `<2>6` DEF 素動作
 
-`<1>5.` ASSUME NEW `b`: `X` の活性化 (D23)、`b` は始まって終わる
-        PROVE  `b` の実行が `H`、`A`、`B`、`C`、`Obj`、`Cnt` を動かす変化は、`b` が辿る実行路 (D21) の
-               上の節点の実行の有限列である
+`<1>5.` ASSUME NEW `b`: `X` の活性化 (D23)
+        PROVE  `b` が `H`、`A`、`B`、`C`、`Obj`、`Cnt` に与える変化は次の 3 つで尽きる。
+               (a) `b` が `Liv` に入ること。その位置で `Obl(b)` は空なので、`A` は動かない。
+               (b) `b` が辿る実行路 (D21) の上の節点の実行の有限列。
+               (c) `b` が終わる場合、`b` が `Liv` を出ること。終端の `Ret` の消費を行った後の
+                   `Obl(b)` は空なので (D11 の (S-b))、`A` は動かない。
 
   `<2>1.` `b` が節点を訪れる順序は `B(b)` の実行路 (D3) の 1 つであり、その路は有限である。
     BY D21 (辿る実行路), D3 (実行路は有限である), D2 (本体は有限の木である)
@@ -240,11 +250,33 @@ initialized and its remaining fields left undefined for the caller to fill in」
     列は同じ形である。
     BY D23 (位置の行 -- 「**進むのは節点ごとであって、D24 の段ごとではない。** ... それでも節点を順に
     実行するので、位置は進む」), D21 (「活性化は各節点で D3 と同じ規則で進む」)
-  `<2>3.` `b` が終わるのは、位置が `B(b)` の終端の `Ret` に着き、その `Ret` の消費 (D9) を行うときで
-    ある。終わった活性化はそれ以後の段を持たない。
-    BY D23 (活性化が終わることの定義)
-  `<2>4.` QED
-    BY `<2>1`, `<2>2`, `<2>3`
+  `<2>3.` `b` が `Liv` に入るのは `b` が始まる時点であり、`Liv` を出るのは `b` が終わる時点である。
+    `b` が終わるのは、位置が `B(b)` の終端の `Ret` に着き、その `Ret` の消費 (D9) を行うときである。
+    終わった活性化はそれ以後の段を持たない。
+    BY D23 (活性化が終わることの定義と、「生きている活性化とは、始まって終わっていない活性化である」)
+    DEF `Liv`
+  `<2>4.` `b` が `Liv` に入る位置で `Obl(b)` は空である。その位置は `b` の初期 `Obl` を作る (α) の列の
+    直前だからである。
+    BY 第 1.3 節 (活性化が `Liv` に入る位置と出る位置の取り決め), `<2>3`
+  `<2>5.` `b` が終わる場合、`b` が `Liv` を出る位置で `Obl(b)` は空である。
+    `<3>1.` `B(b)` は `P` のある関数の `body` か、あるグローバル初期化子の `init` であり、`P` の
+      `borrowed_units` が定める割り当て (D14) の下で D11 を満たす。
+      BY D23 (本体の行), D12 (「`P` のすべての関数の本体と、すべてのグローバル初期化子の `init` が
+      ... RC 規律を満たす (D11)」), P28 の ASSUME (`P` は D12 の意味で RC 規律を満たす)
+    `<3>2.` `b` が辿る実行路は `B(b)` の実行路 (D3) の 1 つである。
+      BY `<2>1`, D21
+    `<3>3.` `b` が終端の `Ret` の消費を行った後の `Obl(b)` は空である。
+      BY `<3>1`, `<3>2`, D11 の (S-b) (「実行路の終端の `Ret(v)` において、その `Ret` の消費を行った
+      後の `Obl` は空である」)
+    `<3>4.` QED
+      `b` が `Liv` を出るのは、その消費を行う (α) の列の直後である。
+      BY `<2>3`, `<3>3`, 第 1.3 節 (活性化が `Liv` を出る位置の取り決め)
+  `<2>6.` (a) と (c) は `A` を動かさず、`H`、`B`、`C`、`Obj`、`Cnt` も動かさない。`A_p` は `Liv(p)` を
+    渡る `Obl` の総和なので、空の `Obl` を持つ活性化が `Liv` に出入りしてもその総和は変わらない。
+    `H`、`B`、`C`、`Obj`、`Cnt` の定義はどれも `Liv` を読まない。
+    BY `<2>4`, `<2>5` DEF `A_p`, `B_p`, `C_p`, `Obj`, `Cnt`
+  `<2>7.` QED
+    BY `<2>1`, `<2>2`, `<2>3`, `<2>4`, `<2>5`, `<2>6`
 
 `<1>6.` ASSUME NEW `o`: ある素動作が `H(o)` を 0 にした計数下のオブジェクト
         PROVE  D24 の (F) が同じ段の中で `o` について行う変化は、素動作と、この解放が作る活性化の実行
@@ -276,7 +308,10 @@ initialized and its remaining fields left undefined for the caller to fill in」
     (f) (ε) 1 つ。処分するのは、この往復の後に `o` が持つ参照 -- (e) が `_value` へ入れた参照と、
         `_dtor` の欄の参照 -- である。
 
-    BY D24 の (F) の `Destructor` の 3 つの段落 ((a) は「**この段は参照も作る。** `_dtor` の欄の関数に
+    `b1` と `b2` が `Liv` に出入りすることは `H`、`A`、`B`、`C`、`Obj`、`Cnt` を動かさない
+    (`<1>5` の (a) と (c))。
+
+    BY `<1>5`, D24 の (F) の `Destructor` の 3 つの段落 ((a) は「**この段は参照も作る。** `_dtor` の欄の関数に
     適用の分の参照を与える retain がそれである ... 作られた参照の持ち手は、この解放を含む段を実行して
     いる活性化である」、(b)(c)(d)(e) は「**この段は `_value` の欄の参照を動かす。** `o` の `_value` の
     leaf が持つ参照は `o` を離れ、適用が作る活性化 `b` の `Obl(b)` の初期値に入る (D9 の `App` の行の
@@ -444,21 +479,19 @@ initialized and its remaining fields left undefined for the caller to fill in」
       - 環境。
       - この実行が作る活性化の `Obl`。
       - 処分。
-      - **結果の値の leaf。**一意性で分岐する op の一意の腕は、消費されたオペランドのオブジェクトを
-        そのまま結果として返す (A3 の但し書き)。A3 は `unique_check_operand` を宣言する op の `Fresh`
-        の行をオブジェクトの同一性については字義どおりに読ませないので、この読みが取れる。D8 は同じ
-        オブジェクトへの参照を区別しないので、消費されるこのオペランドの leaf の参照と、`result_prov`
-        が単一の `Fresh` を宣言する結果の leaf の参照とは、同じオブジェクトについての **1 つの**参照
-        であり、その持ち手は `Obl(a)` のままである。
+      - **結果の値の leaf。**`unique_check_operand` を宣言する op の一意の腕がこれである。その腕は
+        `create_obj` を呼ばずオペランドのオブジェクトをそのまま返すので、消費されたオペランドの参照は
+        そのまま結果の leaf の参照になる -- 処分でも新しい割り当てでもない。その持ち手は `Obl(a)` の
+        ままである。
 
       BY D9 (消費の表の `Llvm` の行), D24 の (E2) の行き先の表 (`Llvm` の行) と、その直後の
-      「行き先には 2 つ書き足すものがある。**この段が作る活性化の `Obl`** -- オペランドを適用する
-      `Llvm` の段が渡す参照がそれである -- と、**既に在るオブジェクトの leaf** である」の段落,
-      A3 (`Fresh` の行の但し書き -- 「そうした op は実行時に参照カウントで分岐し、一意の腕では
-      オペランドのオブジェクトをそのまま返す ... 宣言が言うのは「結果のその leaf の参照は、この op が
-      新しく作ったものであって、オペランドと共有していない」ことであり、その参照が指すオブジェクトが
-      新しく割り当てられたものだとは言わない。**参照の勘定 (D8、D10、D11) はこの読みで足りる。**」),
-      D8, D12 の (S-a)
+      「行き先には 3 つ書き足すものがある。**この段が作る活性化の `Obl`** -- オペランドを適用する
+      `Llvm` の段が渡す参照がそれである --、**既に在るオブジェクトの leaf**、そして**結果の値の
+      leaf** である」の段落と、その次の段落 (「最後のものは、`unique_check_operand` を宣言する op の
+      **一意の腕**が示す。その腕は `create_obj` を呼ばずオペランドのオブジェクトをそのまま返すので
+      (A3 の但し書き)、消費されたオペランドの参照はそのまま結果の leaf の参照になる -- 処分でも
+      新しい割り当てでもない。**この行き先が無いと、その参照が処分に落ちて `H` が 0 になり、起きない
+      解放がモデルに現れる。**後者は `struct_set` の一意の腕が示す」), D12 の (S-a)
       `CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody` (`force_unique_or_assert` の結果に
       `ObjectFieldType::move_into_struct_field` で `value` オペランドの参照を書き込む)
       `CODE src/fixstd/builtin.rs: InlineLLVMUnionModBody` (タグが合う腕は `apply_lambda(modifier, ...)`
@@ -488,12 +521,13 @@ initialized and its remaining fields left undefined for the caller to fill in」
       - 空集合と宣言された leaf は inhabited にならないので、素動作は無い。
       - 単一の `Arg(j, σ)` と宣言された leaf は D9 の移動の行であり、素動作は無い。オペランドと結果は
         どちらも `a` のスロット (D6) である。
-      - 単一の `Fresh` と宣言された leaf には、参照が 1 つ作られる。A3 の但し書きより、この行から
-        読めるのは参照の勘定だけであって、その参照が指すオブジェクトの同一性ではない。オブジェクトに
+      - 単一の `Fresh` と宣言された leaf には、参照が 1 つ作られる。宣言が言うのは「結果のその leaf の
+        参照は、この op が新しく作ったものであって、オペランドと共有していない」ことであり、その参照が
+        指すオブジェクトが新しく割り当てられたものだとは言わない (A3 の但し書き)。オブジェクトに
         ついては 2 通りある。**この実行が新しく割り当てるオブジェクトであるとき**は、そのオブジェクト
-        の (γ) の割り当ての分である。**消費されたオペランドのオブジェクトであるとき**は、`<3>1` の
-        行き先「結果の値の leaf」がそれであり、その参照は消費されるオペランドの leaf の参照と同じ
-        1 つの参照なので、素動作は無い。
+        の (γ) の割り当ての分である。**`unique_check_operand` を宣言する op の一意の腕が消費された
+        オペランドのオブジェクトをそのまま返すとき**は、`<3>1` の行き先「結果の値の leaf」がそれで
+        あり、消費されたオペランドの参照がそのまま結果の leaf の参照になるので、素動作は無い。
       - 単一の `Unknown` と宣言された leaf のうち、その op が `InlineLLVMBoxedFromRetainedPtrIOS` で
         あるものは (α) 1 つである (`E` から `Obl(a)` へ)。`H` は変わらない。
       - 単一の `Unknown` と宣言された残りの leaf は、指す先が計数下ならば (β) 1 つ、グローバル状態
@@ -518,57 +552,113 @@ initialized and its remaining fields left undefined for the caller to fill in」
       行はその leaf について読まない**」) DEF (α)
     `<3>4a.` `<3>4` で `Obl(a)` に入った参照を、この実行が続けて別の適用へ渡すことがある。その参照は
       `<3>4` の直後の `Obl(a)` に在り、この適用でそれを離れて渡した先の活性化の `Obl` に入るので、
-      (α) 1 つである。`InlineLLVMFixBody` の 2 回目の適用の callee がこれである -- 1 回目の適用が
-      返す値はこの節点のどのオペランドでもない。
-      BY `<3>4`, D24 の (E2) の「`Let(x, Llvm(gen, args), k)` の段は、活性化を作りうる」の段落
-      (「**1 つの段が活性化を 2 つ以上作りうる**」), D9 (`App` の行が callee の全 boxed leaf を消費
-      する) DEF (α)
-      `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
-      `let f_fixf = gc.apply_lambda(f, vec![fixf], false).unwrap();` の結果を
-      `gc.apply_lambda(f_fixf, vec![x], tail)` の callee に据える)
+      (α) 1 つである。2 回目の適用の callee がこれである -- 1 回目の適用が返す値はこの節点のどの
+      オペランドでもない。この形を取る op は 5 種であり、下の `CODE` がその 5 種である。
+      `<4>1.` この実行が渡す参照の行き先は、この実行が作る活性化の `Obl` である。D24 の (E2) は、
+        行き先「**この段が作る活性化の `Obl`**」に入る参照を「オペランドを適用する `Llvm` の段が
+        渡す参照」と述べる。この文はオペランドの参照に限っていない。
+        BY D24 の (E2) の「行き先には 3 つ書き足すものがある」の段落 (「**この段が作る活性化の
+        `Obl`** -- オペランドを適用する `Llvm` の段が渡す参照がそれである」)
+      `<4>2.` この実行は、1 回目の適用が返した関数を 2 回目の適用の呼び出し先として渡す。
+        BY D24 の (E2) の「オペランドを適用する」の段落 (「この op は `fix(f)` のクロージャをその場で
+        組み立てて `f` に渡し、**返った関数に改めてオペランド `x` を渡す**ので、`apply_lambda` を
+        2 回呼び」、「**1 つの段が活性化を 2 つ以上作りうる**」)
+      `<4>3.` 渡された関数の値の boxed leaf は capture の位置 1 つであり、その参照は 2 回目の適用が
+        作る活性化 `b` の初期 `Obl` に入る。capture の unit は必ず所有されるので (D14)、D10 の初期値は
+        その leaf の参照を含む。
+        BY D4 (規則 2 -- クロージャは capture の位置 1 つを leaf とする), D14 (「capture の unit は
+        必ず所有される」), D10 (初期値の行)
+      `<4>4.` QED
+        `<4>1` より参照は `Obl(a)` を離れ、`<4>2` と `<4>3` よりその行き先は `Obl(b)` である。
+        BY `<4>1`, `<4>2`, `<4>3`, `<3>4` DEF (α)
+        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
+        `let f_fixf = gc.apply_lambda(f, vec![fixf], false).unwrap();` の結果を
+        `gc.apply_lambda(f_fixf, vec![x], tail)` の callee に据える)
+        `CODE src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody`,
+        `InlineLLVMUnsafeMutateBoxedIOSInternalBody`, `InlineLLVMArrayMutateElementsInternalBody`,
+        `InlineLLVMArrayMutateElementsIosInternalBody` (どれも `generate` が
+        `apply_io_act_to_data_ptr` の結果を `run_ios_runner` へ渡す)
+        `CODE src/fixstd/builtin.rs: apply_io_act_to_data_ptr` (`gc.apply_lambda(io_act,
+        vec![data_ptr_obj], false)` を返す)
+        `CODE src/fixstd/builtin.rs: run_ios_runner` (渡された `runner` を
+        `gc.apply_lambda(runner.clone(), vec![ios], false)` の callee に据える)
     `<3>5.` その op がオペランドを関数として適用するとき (`LLVMGen::applies_a_function_operand` が真を
       宣言する op)、この実行は活性化を作る。作られる各活性化へ渡る参照は `<3>1` と `<3>4a` が挙げる
       ものである。
-      `<4>1.` この形の op について、`Obl(a)` から作られた活性化へ渡る参照は `<3>1` が挙げるもので
-        ある。D24 の (E2) が、この形の op の `Obl(a)` の動きを D9 の `Llvm` の行と A3 の宣言が決めると
-        述べる。同じ形の op はこのコミットに 8 種ある -- `Std::fix`、各 union の `mod_{変位}`、
-        `with_retained`、`Array::borrow_elements`、`mutate_boxed` 系、`Array::mutate_elements` 系で
-        ある。
+      `<4>1.` この形の op について、`Obl(a)` から作られた活性化へ渡るオペランドの参照は `<3>1` が
+        挙げるものである。D24 の (E2) が、この形の op の `Obl(a)` の動きを D9 の `Llvm` の行と A3 の
+        宣言が決めると述べる。`applies_a_function_operand` を override する op は、このコミットに
+        8 種ある。既定は偽なので、残る op はこの形ではない。
         BY D24 の (E2) の「オペランドを適用する」の段落 (「`Obl(a)` の動きは D9 の `Llvm` の行と A3 の
         宣言が決めるので、この表の行はそのままである」), A3, D9 (消費の表の `Llvm` の行), `<3>1`
-      `<4>2.` `InlineLLVMFixBody` について、D24 の (E2) は 2 つの外れを名指す -- 1 回目の適用が渡す
-        `fix(f)` はこの節点が組み立てた値でありどのオペランドでもないこと、そしてこの 1 つの段が
-        活性化を 2 つ作ることである。2 回目の適用の callee は 1 回目の結果であり、その参照は `<3>4a`
-        が扱う。
+        `CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand` (既定は `false`)
+        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand` (`true`)
+        `CODE src/fixstd/builtin.rs: InlineLLVMUnionModBody::applies_a_function_operand` (`true`)
+        `CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::applies_a_function_operand`
+        (`true`)
+        `CODE src/fixstd/builtin.rs:
+        InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand` (`true`)
+        `CODE src/fixstd/builtin.rs:
+        InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand` (`true`)
+        `CODE src/fixstd/builtin.rs: InlineLLVMArrayBorrowElementsBody::applies_a_function_operand`
+        (`true`)
+        `CODE src/fixstd/builtin.rs:
+        InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand` (`true`)
+        `CODE src/fixstd/builtin.rs:
+        InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand` (`true`)
+      `<4>2.` 渡す値がオペランドでない場合を、D24 の (E2) は `InlineLLVMFixBody` で名指す -- 1 回目の
+        適用が渡す `fix(f)` はこの節点が組み立てた値でありどのオペランドでもないこと、そしてこの
+        1 つの段が活性化を 2 つ作ることである。2 回目の適用の callee は 1 回目の結果であり、その参照は
+        `<3>4a` が扱う。
         BY D24 の (E2) の「オペランドを適用する」の段落 (「**呼び出し先に渡る値がオペランドとは
         限らない**」、「この op は `fix(f)` のクロージャをその場で組み立てて `f` に渡し、返った関数に
         改めてオペランド `x` を渡すので、`apply_lambda` を 2 回呼び、1 回目に渡す値はどのオペランドでも
         ない」), `<3>4a`
-      `<4>3.` `fix(f)` の組み立ては (γ) ではない。組み立てる型 `fixf_ty` は `f` の型の
-        `get_lambda_dst()` であり、これはこの op を本体に持つ、持ち上げられた lambda の型である。
-        A23 よりその型は closure 型であり、A24 よりその関数は capture を持つ。closure 型の object type
-        は `is_unbox` が真なので、`create_obj` は割り当てを行わず undef の集約を返す。
-        BY A23 (持ち上げた lambda は closure 型である), A24 (`fix` の op は capture を持つ本体にだけ
-        在る), A12 (`Llvm` 節点の型についての節)
-        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
-        `create_obj(fixf_ty, ...)` で `fix(f)` を作り、`insert_field(CLOSURE_CAPTURE_IDX, cap_obj_ptr)`
-        に `get_scoped_obj(cap_name)` の値を入れる。`free_vars_mut` は `[x_name, f_name, cap_name]` を
-        返すので `cap` はこの節点のオペランドである)
-        `CODE src/object.rs: ty_to_object_ty` (`ty.is_closure()` の枝は `is_unbox` を真にする)
-        `CODE src/object.rs: create_obj` (`object_type.is_unbox` の枝は割り当てをせず
-        `struct_type.get_undef()` を返す)
+      `<4>3.` `fix(f)` の組み立ては (γ) ではない。
+        `<5>1.` `Std::fix` の値は `\f -> \x -> fix_body(b, f, x)` であり、その型は
+          `((a -> b) -> (a -> b)) -> (a -> b)` である。型変数の代入はこの形を保つので、どの実体に
+          おいても `f` の型は `τ -> τ` であり、`τ` は内側の lambda `\x -> fix_body(b, f, x)` の型で
+          ある。この op はその内側の lambda の本体である。よって `f.ty.get_lambda_dst()` すなわち
+          `fixf_ty` は、この op を本体に持つ、持ち上げられた lambda の型である。
+          BY A12 (同じ名前の `RcVar` が持つ型が、その束縛の型と一致すること)
+          `CODE src/fixstd/builtin.rs: fix` (`expr_abs(vec![var_local("f")],
+          expr_abs(vec![var_local("x")], fix_body("b", "f", "x"), None), None)` を値とし、
+          `fixed_ty = type_fun(a, b)` として
+          `type_fun(type_fun(fixed_ty, fixed_ty), fixed_ty)` を scheme の型に取る)
+          `CODE src/fixstd/builtin.rs: fix_body` (内側の lambda の本体は `InlineLLVMFixBody` の
+          `expr_llvm` である)
+          `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
+          `let fixf_ty = f.ty.get_lambda_dst();` を取る)
+        `<5>2.` `fixf_ty` は closure 型である。
+          BY `<5>1`, A23 (持ち上げた lambda は closure 型である)
+        `<5>3.` closure 型の object type は `is_unbox` が真なので、`create_obj` は割り当てを行わず
+          undef の集約を返す。
+          BY `<5>2`
+          `CODE src/object.rs: ty_to_object_ty` (`ty.is_closure()` の枝は `is_unbox` を真にする)
+          `CODE src/object.rs: create_obj` (`object_type.is_unbox` の枝は割り当てをせず
+          `struct_type.get_undef()` を返す)
+        `<5>4.` QED
+          割り当てが無いので (γ) ではない。
+          BY `<5>3` DEF (γ)
       `<4>4.` `fix(f)` の boxed leaf は capture の位置 1 つであり、そこに入るのはオペランド `cap` の
-        値である。局所の束縛の読みは retain を伴わないので、この組み立てで参照は作られない。よって
-        1 回目の適用が渡すのはオペランド `cap` の参照であり、`<3>1` の 4 つ目の行き先の (α) である。
-        2 回目の適用が渡すのは、callee については `<3>4a` の参照、引数についてはオペランド `x` の
-        参照である。
-        BY D4 (規則 2 -- クロージャは capture の位置 1 つを leaf とする), `<3>1`, `<3>4a`
+        値である。この組み立てで参照は作られない。よって 1 回目の適用が渡すのはオペランド `cap` の
+        参照であり、`<3>1` の 4 つ目の行き先の (α) である。2 回目の適用が渡すのは、callee については
+        `<3>4a` の参照、引数についてはオペランド `x` の参照である。
+        BY D24 の (E2) の「**作る活性化の初期 `Obl` は、この段が離した参照とは限らない。**」の段落
+        (「`InlineLLVMFixBody` の 1 回目の適用に渡る `fix(f)` はこの段が組み立てた値であって
+        オペランドではない。その capture の欄が持つのはオペランド `cap` の参照であり、読みが retain を
+        伴わない ... ので、この組み立てで参照は作られない」),
+        D4 (規則 2 -- クロージャは capture の位置 1 つを leaf とする),
+        A24 (`fix` の op は capture を持つ本体にだけ在るので、`cap_name` の束縛が在る), `<3>1`, `<3>4a`
+        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
+        `insert_field(CLOSURE_CAPTURE_IDX, cap_obj_ptr)` に `get_scoped_obj(cap_name)` の値を入れる。
+        `free_vars_mut` は `[x_name, f_name, cap_name]` を返すので `cap` はこの節点のオペランドである)
         `CODE src/generator.rs: Scope::push_local` (局所の束縛は `retain_on_read: false` で積まれる)
         `CODE src/generator.rs: Generator::get_scoped_obj` (`retain_on_read` が偽のとき retain を
         出さない)
       `<4>5.` QED
-        `<4>1` が 8 種すべてについて `Obl(a)` から渡る参照を `<3>1` に帰し、`<4>2` から `<4>4` が
-        `InlineLLVMFixBody` の 2 つの外れを `<3>1` と `<3>4a` に帰する。
+        `<4>1` が 8 種すべてについてオペランドの参照を `<3>1` に帰し、`<4>2` から `<4>4` が、渡す値が
+        オペランドでない場合を `<3>1` と `<3>4a` に帰する。
         BY `<4>1`, `<4>2`, `<4>3`, `<4>4`
     `<3>6.` QED
       `<3>1` から `<3>5` が、この実行が `H`、`A`、`B`、`C`、`Obj`、`Cnt` を動かす経路を尽くす --
@@ -605,12 +695,19 @@ initialized and its remaining fields left undefined for the caller to fill in」
 
   `<2>1.` `s` の中の素動作と、`s` の中で走る活性化の実行はどちらも有限個であり、`s` の中で作られた
     活性化の入れ子の深さも有限である。
-    `<3>1.` `s` の中で走る活性化は、`s` が終わるまでに終わる。`s` の中で走るのは、(F) の解放が作る
-      活性化と、第 4.1 節の読みの下ではオペランドを適用する `Llvm` の段が作る活性化である。**(E3) と
-      (E7) が作る活性化は `s` の中で走らない** -- 作る側はそれが終わるまで中断中であるが、作られた
-      活性化の段はこの段の後の段であり、その返りは (E4) の段である。
-      BY D24 の (F) (「(F) が作る活性化はその段の中で終わるので、その内側に D24 の時点は無い」),
-      D24 の (E2) の「オペランドを適用する」の段落, D24 の (E3), D24 の (E4), D24 の (E7), 第 4.1 節
+    `<3>1.` `s` の中で走る活性化は、`s` が終わるまでに終わる。活性化を作る段は (E1)、(E3)、(E7)、
+      オペランドを適用する `Llvm` の (E2) の段、`Destructor` の解放を含む段の 5 種で尽きる。この
+      5 種のうち、`s` の中で活性化が走るのは後の 2 種だけである。
+      - **(E1)**: この段は活性化 `a` を作り、`a` の初期 `Obl` の各参照を `E` から渡すだけである。
+        `a` が自分の位置の節点を実行するのは (E2) の段であり、それはこの段の後の段である。
+      - **(E3) と (E7)**: 作る側はそれが終わるまで中断中であるが、作られた活性化の段はこの段の後の
+        段であり、その返りは (E4) の段である。
+      - **オペランドを適用する `Llvm` の (E2) の段と、`Destructor` の解放を含む段**: 作られた活性化は
+        その段の中で終わる。
+      BY D24 の「活性化の林」(「**活性化を作る段はこの 5 種で尽きる。**」),
+      D24 の (F) (「(F) が作る活性化はその段の中で終わるので、その内側に D24 の時点は無い」),
+      D24 の (E1), D24 の (E2) (節点の段は生きている活性化が自分の位置の節点を実行する段である。
+      「オペランドを適用する」の段落), D24 の (E3), D24 の (E4), D24 の (E7), 第 4.1 節
     `<3>2.` よって `s` が無限個の素動作を行うか、`s` の中で無限個の活性化を走らせるか、無限に深い
       入れ子を作るならば、`s` は終わらない。
       BY `<3>1`, D31 (「ある段が終わらない」) DEF 段が終わる
@@ -622,11 +719,15 @@ initialized and its remaining fields left undefined for the caller to fill in」
       BY D24 の (E1)
     `<3>2.` 渡した後、環境はそれを持たない。
       BY A17 (i)
-    `<3>3.` QED
-      この段は、`a` の初期 `Obl` の各参照についての (α) (`E` から `Obl(a)` へ) の有限列である。`a` は
-      段の後に生きている活性化になり、その `Obl` は D10 の初期値である。個数が有限であることは
-      `<2>1` が与える。
-      BY `<3>1`, `<3>2`, `<2>1`, D23 (活性化が始まった時点での `Obl` は D10 の初期値である) DEF (α)
+    `<3>3.` `a` が `Liv` に入ることは `H`、`A`、`B`、`C`、`Obj`、`Cnt` を動かさない。その位置は
+      初期 `Obl` を作る (α) の列の直前であり、そこで `Obl(a)` は空である。
+      BY `<1>5` の (a)
+    `<3>4.` QED
+      `a` が `Liv` に入ることは変化を起こさないので (`<3>3`)、この段が起こす変化は、`a` の初期 `Obl`
+      の各参照についての (α) (`E` から `Obl(a)` へ) の有限列である。段の後の `Obl(a)` は D10 の
+      初期値である。個数が有限であることは `<2>1` が与える。
+      BY `<3>1`, `<3>2`, `<3>3`, `<2>1`, D23 (活性化が始まった時点での `Obl` は D10 の初期値である)
+      DEF (α)
   `<2>3.` CASE (E2) 節点の段。
     `<3>1.` この段は、生きている活性化 `a` が自分の位置の節点を実行するものである。
       BY D24 の (E2)
@@ -636,7 +737,8 @@ initialized and its remaining fields left undefined for the caller to fill in」
     `<3>3.` (F) の解放が動かす変化は、素動作と、その解放が作る活性化の実行と、その解放が `H` を 0 に
       した各オブジェクトについての同じ結論の有限列のほかに無い。
       BY `<1>6`
-    `<3>4.` 活性化の実行が動かす変化は、その活性化が辿る実行路の上の節点の実行の有限列である。
+    `<3>4.` 活性化が動かす変化は、その活性化が辿る実行路の上の節点の実行の有限列である。その活性化が
+      `Liv` に入ることと出ることは `H`、`A`、`B`、`C`、`Obj`、`Cnt` を動かさない。
       BY `<1>5`
     `<3>5.` QED
       `<3>2` から `<3>4` を、`<2>1` が有限と言う入れ子の深さについて繰り返し当てると、この段の変化は
@@ -648,9 +750,10 @@ initialized and its remaining fields left undefined for the caller to fill in」
     `<3>2.` その実行が動かす変化は、素動作 (と `<1>6` の解放)、およびこの実行が作る活性化 `b` の
       実行のほかに無い。
       BY `<3>1`, `<1>7`
-    `<3>3.` `b` の実行はこの段に属さない。`a` は `b` が終わるまで中断中であり、その間 `a` は段を持た
-      ない。`b` の段はこの段の後の段であり、その返りは (E4) の段である。
-      BY D24 の (E3), D24 の (E4)
+    `<3>3.` `b` が `Liv` に入ることはこの段に属し、`H`、`A`、`B`、`C`、`Obj`、`Cnt` を動かさない。
+      `b` の節点の実行はこの段に属さない -- `a` は `b` が終わるまで中断中であり、その間 `a` は段を
+      持たない。`b` の段はこの段の後の段であり、その返りは (E4) の段である。
+      BY `<1>5` の (a), D24 の (E3), D24 の (E4)
     `<3>4.` QED
       この段は素動作の有限列である。`<1>6` の解放が動かす変化は `<1>6` が与え、その中で作られる活性化の
       実行は `<1>5` が与える。個数が有限であることは `<2>1` が与える。
@@ -661,10 +764,9 @@ initialized and its remaining fields left undefined for the caller to fill in」
     `<3>2.` その実行が動かす変化は、素動作 (と `<1>6` の解放) のほかに無い。終端の `Ret` は
       活性化を作らない。
       BY `<3>1`, `<1>7`
-    `<3>3.` この消費の後の `Obl(b)` は空である。よって `b` がこの段で終わって `Liv` を出ることで、
-      `A` が失うものは無い。
-      BY D12 の (S-b) (D11: 「実行路の終端の `Ret(v)` において、その `Ret` の消費を行った後の `Obl` は
-      空である」), D23 DEF `A_p`
+    `<3>3.` `b` がこの段で終わって `Liv` を出ることは `H`、`A`、`B`、`C`、`Obj`、`Cnt` を動かさない。
+      この消費の後の `Obl(b)` が空だからである。
+      BY `<1>5` の (c)
     `<3>4.` QED
       BY `<3>2`, `<3>3`, `<1>5`, `<1>6`, `<2>1`
   `<2>6.` CASE (E5) グローバル化の段。
@@ -698,8 +800,11 @@ initialized and its remaining fields left undefined for the caller to fill in」
       BY D24 の (E7) の最後の段落, A8, D26
       `CODE src/generator.rs: Generator::add_global_object` (「A boxed global is moved out when read,
       so it needs no retain」 -- `retain_on_read` は boxed のとき偽)
-    `<3>4.` QED
-      BY `<3>1`, `<3>2`, `<3>3`
+    `<3>4.` `b` が `Liv` に入ることは `H`、`A`、`B`、`C`、`Obj`、`Cnt` を動かさない。`<3>1` より
+      `Obl(b)` は空で始まる。
+      BY `<1>5` の (a), `<3>1`
+    `<3>5.` QED
+      BY `<3>1`, `<3>2`, `<3>3`, `<3>4`
   `<2>9.` QED
     D24 は段を (E1) から (E7) の 7 種と定める。(F) は段ではなく、参照を処分するどの段の中でも起きる
     動作であり、`<1>6` がその形を与える。`<2>3` から `<2>5` は (F) を `<1>7` と `<1>6` を通して
@@ -762,31 +867,22 @@ D24 は「段は不可分であり」と書き、(E2) の「オペランドを�
 「段であるかどうか」を読まない形に書いてあるので、README がもう一方の読みを取るなら、`<1>8` の
 `<2>1` と `<2>3` が数える範囲が変わるだけで、素動作への分解はそのまま立つ。
 
-### 4.2 D9 の終端の `Ret` の行が関数本体だけを名指している
+### 4.2 オペランドを適用する `Llvm` の段が、オペランドでない値を渡すときの `Obl(a)` の動き
 
-D9 の消費の表の最後の行は「関数本体の終端の `Ret(x)`」である。D23 は活性化の本体を「ある関数の `body`
-か、あるグローバル初期化子の `init`」と定め、活性化が終わることを「終端の `Ret` に着き、その `Ret` の
-消費 (D9) を行うこと」と定めるので、グローバル初期化子の `init` の終端の `Ret` もこの行を読む。D24 の
-(E7) が「(E4) と同じく `b` の終端の `Ret` が消費する参照が `Obl(b)` を離れる」と書いて、その読みを
-与えている。`<1>7` の `<2>8` はこの 2 つを引いて初期化子の場合を扱う。D9 の行の主語を「本体の終端の
-`Ret(x)`」に直すと、引く先が 1 つで済む。
+D24 の (E2) の行き先の表は、`Llvm` の節点について `Obl(a)` を離れる参照を「D9 の `Llvm` の行」とする。
+その行が挙げるのはオペランドの leaf だけである。ところがこの段は、**オペランドでない値**を適用の
+呼び出し先として渡す -- 1 回目の適用が返した関数がそれであり、`applies_a_function_operand` を宣言する
+8 種の op のうち 5 種がこの形を取る (`InlineLLVMFixBody`、
+`InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、`InlineLLVMUnsafeMutateBoxedIOSInternalBody`、
+`InlineLLVMArrayMutateElementsInternalBody`、`InlineLLVMArrayMutateElementsIosInternalBody`)。
+その関数の値の capture の leaf の参照は `Obl(a)` に在り (D24 の (E4))、渡された先の活性化の初期 `Obl`
+に入る (D10 の初期値、D14)。
 
-### 4.3 (E2) の行き先の表に「結果の値の leaf」が無い
+この文書はこれを、行き先を書き足す段落の「**この段が作る活性化の `Obl`** -- オペランドを適用する
+`Llvm` の段が渡す参照がそれである」から読む。その文は「この段が渡す参照」と言うだけで、オペランドの
+参照に限っていないからである。読むのは `<1>7` の `<2>14` の `<3>4a` である。
 
-D24 の (E2) の行き先の表の `Llvm` の行は、行き先を「その op が書き込む先 (この段が割り当てる
-オブジェクト、または環境)、あるいは処分」とし、直後の段落が「この段が作る活性化の `Obl`」と「既に在る
-オブジェクトの leaf」の 2 つを書き足す。**一意性で分岐する op の一意の腕はこのどれでもない** --
-A3 の但し書きが言うとおり、消費されたオペランドのオブジェクトがそのまま結果の値になる。この行き先を
-数え落とすと、その参照は「処分」に落ちて `H` が 1 下がり、オペランドが一意 (`H = 1`) の場合に (F) の
-解放が起きる -- 実行時には起きない解放である。
-
-**要る形**: 行き先の表に 6 つ目の行き先「結果の値の leaf」を書き足すこと。読むのは `<1>7` の `<2>14` の
-`<3>1`、`<3>2`、`<3>3` である。A3 の但し書き -- 「`unique_check_operand` を宣言する op の `Fresh` の
-行は、オブジェクトの同一性については字義どおりではない」-- がその読みを許すので、この文書はそれを
-引いて閉じている。
-
-**A3 の `Fresh` の行と P28 のオブジェクト水準の言明が両立するのは、この読みの下だけである。**`Fresh` の
-行をオブジェクトの同一性まで字義どおりに読むと、一意の腕で消費されたオペランドのオブジェクトが解放され
-(`H = 1` なら (F) が走る)、代わりに割り当てられたオブジェクトの欄が、誰も作っていない参照を持つことに
-なる -- A3 の但し書きが言うとおり、一意の腕は割り当ても retain も行わないからである。字義どおりの読みは
-実行のモデルとして閉じておらず、A3 が但し書きで退けているのはまさにその読みである。
+**要る形**: 同じ段落の「`Obl(a)` の動きは D9 の `Llvm` の行と A3 の宣言が決めるので、この表の行は
+そのままである」を、オペランドの側についての文だと限ること。この文を網羅の主張として読むと、
+オペランドでない値の参照は `Obl(a)` を離れないことになり、その参照を渡された先の活性化の `Obl` と
+`Obl(a)` の両方が持つ。そのとき `A` が `H` を超え、`INV` が破れる。
