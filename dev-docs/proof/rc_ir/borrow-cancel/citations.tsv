@@ -10,7 +10,7 @@ src/ast/inline_llvm.rs	LLVMGen::free_vars	P1,P2	3f221f4f0c3d
 src/ast/inline_llvm.rs	LLVMGen::free_vars_mut	D/A,P7a,P7d,P7e	b61e043f01c5
 src/ast/inline_llvm.rs	LLVMGen::observes_uniqueness	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26	b3c76bd06dac
 src/ast/inline_llvm.rs	LLVMGen::result_prov	D/A,P1,P2,P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P28,(P-insert)	84846b9c9d85
-src/ast/inline_llvm.rs	LLVMGen::unique_check_operand	D/A,P5,P6,P7	8b4dc048a673
+src/ast/inline_llvm.rs	LLVMGen::unique_check_operand	D/A	8b4dc048a673
 src/ast/name.rs	FullName	P8,P9,P10,P11,P12,P13,P14,P14a,P14b	e2c09889359d
 src/ast/name.rs	FullName::is_local	(P-insert)	42fc496e725b
 src/ast/name.rs	FullName::local	(P-insert)	47c06982e039
@@ -213,7 +213,7 @@ src/fixstd/stdlib.rs	make_std_mod	D/A,P26	6da374621d89
 src/generator.rs	Generator::add_global_object	D/A,P3,P4,P27,P28,P29,P30	c05ffb02bb44
 src/generator.rs	Generator::apply_lambda	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P28,P29,P30	53f3b45ec98b
 src/generator.rs	Generator::build_assert_unique	P26	0ebdad575d3d
-src/generator.rs	Generator::build_branch_by_is_unique	P26	86f1e644d331
+src/generator.rs	Generator::build_branch_by_is_unique	P5,P6,P7,P26	86f1e644d331
 src/generator.rs	Generator::build_branch_by_refcnt_state	P26	d75157785307
 src/generator.rs	Generator::build_ffi_call_core	P26	45120916e63b
 src/generator.rs	Generator::build_if_nonnull	P26	38a3eb268753
@@ -254,10 +254,12 @@ src/object.rs	ObjectFieldType::loop_over_array_buf	D/A,P18c,P19,P20,P21,P22,P23,
 src/object.rs	ObjectFieldType::move_into_struct_field	D/A,P28	27199880c508
 src/object.rs	ObjectFieldType::move_out_struct_field	D/A,P28	afb4eb515286
 src/object.rs	ObjectFieldType::retain_release_mark_union	D/A	242591ac0c77
+src/object.rs	alloc_array_storage	P5,P6,P7	796523185fe2
+src/object.rs	build_capacity_check	P5,P6,P7	b0467e397ca5
 src/object.rs	build_free_boxed	D/A,P28	d79415db8029
 src/object.rs	build_malloc	P26	57f5c494571d
 src/object.rs	build_traverse	P26	90e003680ea6
-src/object.rs	create_obj	P26,P28	55a56677f8db
+src/object.rs	create_obj	P5,P6,P7,P26,P28	55a56677f8db
 src/object.rs	get_array_storage	P26	a417e5ff90d9
 src/object.rs	lambda_function_type	P27,P29,P30	12512f00c4bd
 src/object.rs	lambda_return_part_types	P27,P29,P30	e5804412a933
@@ -383,11 +385,11 @@ src/rc_ir/locality.rs	specialize	P26,T	537f3c5581c4
 src/rc_ir/lower.rs	Lowerer::fresh_closure_ref	P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P30	1f412392eb8f
 src/rc_ir/lower.rs	Lowerer::fresh_var	D/A,(P-insert)	2c6e8c219840
 src/rc_ir/lower.rs	Lowerer::lower_app	P26	1a9a9663ec85
-src/rc_ir/lower.rs	Lowerer::lower_if	D/A,P5,P6,P7,P26	af1795e4c197
+src/rc_ir/lower.rs	Lowerer::lower_if	D/A,P26	af1795e4c197
 src/rc_ir/lower.rs	Lowerer::lower_lam	P8,P9,P10,P11,P12,P13,P14,P14a,P14b	c6644cbfeb9c
 src/rc_ir/lower.rs	Lowerer::lower_lambda_as_function	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P30,(P-insert)	05076bfd9b47
 src/rc_ir/lower.rs	Lowerer::lower_llvm	D/A,P27,P29,P30	4107324b7a5d
-src/rc_ir/lower.rs	Lowerer::lower_match	D/A,P5,P6,P7	c6447f9c6d40
+src/rc_ir/lower.rs	Lowerer::lower_match	D/A	c6447f9c6d40
 src/rc_ir/lower.rs	Lowerer::lower_symbol	P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P29,P30	fe2a3c83ab94
 src/rc_ir/lower.rs	Lowerer::lower_to_var	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26	b538c361ee64
 src/rc_ir/lower.rs	Lowerer::lower_var	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,(P-insert)	36b5f9576f3c
@@ -480,6 +482,6 @@ src/rc_ir/specialization.rs	request	D/A	ab18cf61ff78
 src/rc_ir/unique_check_elim.rs	specialize	P26,T	008baf2ff41e
 src/rc_ir/validate.rs	Validator::bind	P1,P2	0a5f461a6982
 src/rc_ir/validate.rs	Validator::check_expr_inner	D/A,P1,P2	e5773a3c9ccf
-src/rc_ir/validate.rs	Validator::check_rhs	D/A,P1,P2,P5,P6,P7	2aae57955a93
+src/rc_ir/validate.rs	Validator::check_rhs	D/A,P1,P2	2aae57955a93
 src/rc_ir/validate.rs	Validator::use_var	P1,P2	3e2474264149
 src/rc_ir/validate.rs	validate	P1,P2,P2a,P15,P16,P17,P18,T	998d88676f1b

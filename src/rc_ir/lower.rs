@@ -606,7 +606,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an `if` to a match on the two variants of the `Bool` union, the branches becoming its
     /// arms. Each arm's payload holds the variant's unit contents.
-    // PROOF: D/A, P5, P6, P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_if(
         &mut self,
         cond: &ExprNode,
@@ -643,7 +643,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a `match`: the matched value becomes a variable, each arm is lowered against it, and
     /// the appended binding selects one arm on that value. The result variable holds the value of
     /// whichever arm is taken.
-    // PROOF: D/A, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_match(
         &mut self,
         cond: &ExprNode,
