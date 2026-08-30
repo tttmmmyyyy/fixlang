@@ -153,6 +153,13 @@ D6 のスロット、D7 の参照カウント `H`、D10 の義務集合はいず
 決まり、辿る実行路もそれで決まる。この 4 種を与えない限り活性化は決まらないので、これらは活性化の側の
 データであって、状態から導かれる量ではない。
 
+**活性化は、開始の時点で A19 (i) の不等式を満たすものに限る。** 開始の参照カウントは活性化の側のデータで
+あって (D29 もそう扱う)、それを縛らないと呼び出し元が持っていない参照を持つ活性化が入り、A19 (i) を読む
+命題がどれも立たなくなる。**この節は 1 つの本体だけから出る** -- 開始の時点で始まっている類はパラメータ・
+capture の leaf を終端とするものだけであり、各 `held` は 1、`d` は所有なら 1・借用なら 0 である。A5 が
+leaf ごとに参照を 1 つ与え、D8 が `H` を未処分参照の総数と定め、相異なる leaf は相異なる類なので、
+`H(O)` は `Σ d(C) + [借用終端が在れば 1]` 以上になる。**残る義務は、活性化の間それが保たれることである。**
+
 **D11 と D12 は、この意味のすべての活性化について条件を課す。** 実際の実行が作る活性化はその部分集合で
 ある -- 観測点が返す値がその時点の参照カウントと一致し、`App` の結果が呼び出し先の実際の実行と一致する
 ものだけが実現する。実行路について D11 が安全側の近似を取るのと同じ理由であり、同じ帰結を持つ。この意味で
@@ -965,13 +972,15 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 ない path を歩く。表のこの行が「第 `j` オペランドの leaf `σ`」と書くのは、そのオペランドとその leaf が
 実在することを含んでいる。
 
-**`result_prov` は自分の `FullName` の欄を読まない。** `LLVMGen::result_prov` は `&self` を取るので op が
+**`result_prov` と `borrows_operand` は自分の `FullName` の欄を読まない。** `LLVMGen::result_prov` は `&self` を取るので op が
 持つ変数名を読めるが、どの op もそうしない -- `result_prov` を override する 29 個のうち `self` の欄を読む
 のは 6 つで、読む欄はいずれも `usize` か `u32` の添字である。この性質が要るのは、`rename_rhs` の `Llvm` の
 腕が `llvm_gen` を clone して `free_vars_mut()` が挙げる名前を書き替えるからで
 (`CODE src/rc_ir/rename.rs: rename_rhs`, `CODE src/ast/inline_llvm.rs: LLVMGen::free_vars_mut`)、破れると
 複製の `result_prov` が原本と違う宣言を返し、借用版の `origin` が原本と食い違う。**名前の欄を読む op を
-足すことも、`cancel` の対の健全性を壊す変更である。**
+足すことも、`cancel` の対の健全性を壊す変更である。** `borrows_operand` に同じことが要るのは、D9 の消費の
+表の `Llvm` の行がそれを読むからである -- 複製の借用の宣言が原本と食い違えば、消費の集合が食い違う。その
+13 個の override が読むのは `i`・`arg_tys`・`type_env` と 2 つの `usize` の欄だけである。
 
 この仮定は誰も果たさない。宣言と実装の乖離は、証明ではなくテストと valgrind が捕まえる。
 `dev-docs/2026-06-28-unique-check-elim/audit-2026-07-20-op-declarations.md` が、ある時点での全 op の宣言を
@@ -1529,8 +1538,8 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   この 2 つの順序が load-bearing である。
 
 - **P7a** (site の所有は、その leaf の所有と一致する)。**出力の版 `V` を 1 つ固定し、`owns_unit` と
-  `owns_object` は `V` の `RewriteCtx` のもの、site は `V` の本体について `levelled_sites` が挙げるものと
-  する。** `infer_ownership` は入力の関数の本体から site を作り、`RewriteCtx` は出力の各版につき作られる
+  `owns_object` は `V` の `RewriteCtx` のもの、site は `V` の `RewriteCtx` が読む本体 -- 書き換えの入力 --
+  について `levelled_sites` が挙げるものとする。** `infer_ownership` は入力の関数の本体から site を作り、`RewriteCtx` は出力の各版につき作られる
   ので、この 2 つは別でありうる。
 
   `(v, u)` をその site とし、`Λ(u)` を `u` の下の boxed leaf の集合とする。`infer_ownership` の不動点の
