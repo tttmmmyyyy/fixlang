@@ -294,7 +294,6 @@ impl RcState {
 }
 
 /// The ownership of a single reference-counting unit.
-// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Ownership {
     /// The callee receives ownership: it consumes the unit, by releasing it or by moving it into

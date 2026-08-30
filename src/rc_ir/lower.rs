@@ -427,7 +427,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a variable reference to the atom holding its value: a local is the RC IR variable
     /// currently bound to it, and a global is an atom carrying the symbol's name, which code
     /// generation materializes.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_var(&mut self, v: &Arc<Var>, ty: &Arc<TypeNode>, source: &Option<Span>) -> RcVar {
         match self.resolve(&v.name) {
             // A local: reuse the variable already bound (it is already an atom).
@@ -540,7 +540,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a lambda written in place to a closure value: its body becomes a top-level function
     /// under a fresh name, and the binding appended builds the closure from that function and the
     /// values it captures, in the order the closure stores them.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lam(
         &mut self,
         expr: &ExprNode,

@@ -70,7 +70,7 @@ impl<K: Clone + Eq + Hash> CloneRegistry<K> {
     /// name, minted once per key, until the function has as many as `MAX_CLONES_PER_FUNCTION`
     /// allows — past that the answer is the canonical name, which is always available and proves
     /// nothing, so the call it routes keeps every dispatch it had.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn request(&mut self, fref: &FuncRef, key: K, is_canonical: bool) -> FuncRef {
         if is_canonical {
             self.enqueue(fref, key);

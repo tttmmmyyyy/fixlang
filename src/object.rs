@@ -1427,6 +1427,7 @@ pub fn lambda_return_part_types<'c, 'm>(
 /// The LLVM signature every lambda of type `ty` is defined and called with: the arguments, then the
 /// CAP pointer when the lambda is a closure, and the result either returned directly or written
 /// through an out-pointer that precedes them all.
+// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lambda_function_type<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,

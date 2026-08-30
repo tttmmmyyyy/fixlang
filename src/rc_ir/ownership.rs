@@ -55,7 +55,7 @@ enum Binding {
 
 /// The variables of one function, enough to trace a leaf back to the object it belongs to and to
 /// resolve a call to its callee's parameters.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) struct VarTable {
     /// What binds each variable, which `origin` follows back to the object a leaf belongs to.
     bindings: Map<FullName, Binding>,

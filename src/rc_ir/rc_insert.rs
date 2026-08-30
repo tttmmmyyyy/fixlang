@@ -27,7 +27,7 @@ use std::mem;
 use std::sync::Arc;
 
 /// Insert explicit `Retain`/`Release` nodes into every function and global initializer of `prog`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P27, P29, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
     let funcs = mem::take(&mut prog.funcs);
     let mut new_funcs = Map::default();
