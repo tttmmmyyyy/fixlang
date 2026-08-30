@@ -1309,7 +1309,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       0 と 1 を渡り、`ρ_j` は変位 `j` のアームを選ぶ実行路を表す。
   BY A1, A3, A6, A9, A12, A16, D2,
      CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStringBuf, make_byte_array_copy,
-     CODE src/object.rs: alloc_array_storage, create_obj,
+     CODE src/object.rs: alloc_array_storage, build_capacity_check, create_obj,
      CODE src/fixstd/std.fix: Bool
 
 <1>2. `boxed_leaf_paths(T, type_env)` は `{[]}` であり、`[]` は `T` の値で inhabited である。`p_0` と
