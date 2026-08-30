@@ -283,8 +283,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          CODE src/ast/types.rs: TypeNode::is_punched_array,
          CODE src/fixstd/builtin.rs: is_array_tycon,
          CODE src/fixstd/builtin.rs: is_punched_array_tycon
-    <3>2. `is_array_tycon` と `is_punched_array_tycon` と `is_closure` の述語は `TyCon` の等値比較
-       だけを行い、abort する場所を持たない。
+    <3>2. `is_closure` の述語は `TyCon` の名前と `make_arrow_name_abs()` の等値比較、
+       `is_array_tycon` と `is_punched_array_tycon` は `TyCon` の等値比較だけを行い、abort する
+       場所を持たない。
       BY CODE src/fixstd/builtin.rs: is_array_tycon,
          CODE src/fixstd/builtin.rs: is_punched_array_tycon,
          CODE src/ast/types.rs: TypeNode::is_closure
@@ -294,7 +295,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
       BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME
     <3>4. `E.tycons()` の鍵のうち `<3>3` の形の名前を持つのは、`bulitin_tycons` が
        `make_funptr_tycon(n)` (`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下の `u32`) の下に入れる 100 個
-       だけである。`E` の鍵は次の 4 か所から来る。
+       だけである。`E` の鍵は次の 4 か所から来る。`TypeEnv` を作るのは `calculate_type_env` の
+       `TypeEnv::new` であり、鍵を足すのは `TypeEnv::add_tycons` だけで、それを呼ぶのは
+       `closure_specialization` の 2 か所と `defunctionalize_fix` の 1 か所と
+       `register_opaque_tycon` の 1 か所である。
        - `Program::calculate_type_env` が置く `bulitin_tycons()` の鍵。`<1>3b` の表の 5 行が
          挙げるもので、`#FunPtr` で始まるのは `make_funptr_tycon(n)` だけである。
        - `Program::calculate_type_env` が置く `type_decl.tycon()` と、構造体についてその名前に
