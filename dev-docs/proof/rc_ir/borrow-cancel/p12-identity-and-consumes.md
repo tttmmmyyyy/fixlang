@@ -67,8 +67,8 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 `ActRefs(v, π)` は D15 の `acted_references(v, π)` である。`VarPath` は対 `(FullName, FieldPath)` である
 (`CODE src/rc_ir/ast.rs: VarPath`)。等号はこの対の等号である。
 
-この文書は補題を `L0`、`L0a`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L4`、`L5`、`L6` (この順に並べる)、反例を
-`R1` と呼ぶ。**`BY` の行で
+この文書は補題を `L0`、`L0a`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L4`、`L5`、`L5a`、`L6` (この順に並べる)、
+反例を `R1` と呼ぶ。**`BY` の行で
 引用してよいのは、それぞれの言明だけである。** 言明が複数の主張からなる補題は主張に (a)、(b)、… の名札を
 付け、`L5 (c)` のように引用する。同じ規則を P6 (a)、P6 (b)、P7 (a)、P7 (b) にも使う -- これらは
 この文書が P6 と P7 を分けた主張であり、引用してよいのはその言明である。
@@ -1721,8 +1721,11 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
 述べるので、ここで併せて示す。L6 は (a) と同じく DEF leaf 粒度の所有 を満たす `own` についての言明で
 ある。
 
-第 1 引数を関数の本体に限るのは、D9 の消費の表の最後の行が「**関数本体の**終端の `Ret(x)`」だから
-である。`collect_consumes` の呼び出しがその形であることは `L5 (b')` と `L5 (n)` が与える。
+第 1 引数を関数の本体に限るのは、`collect_consumes` の呼び出しがその形のものだけだからであり、それを
+与えるのは `L5 (b')` と `L5 (n)` である。**D9 の消費の表の最後の行は「本体 (D23) の終端の `Ret(x)`」で
+あり、D23 の「本体」は関数の `body` とグローバル初期化子の `init` の両方を指す。** この文書が示すのは
+関数の `body` を渡した呼び出しについてであり、グローバル初期化子の `init` については `collect_consumes` が
+呼ばれない。
 
 **D9 の `App` の行が言う「呼び出し先」は実行時の関数であり、`rhs_consumes` が読むのは
 `resolve_callee_params` が静的に決める呼び出し先である。** D23 が前者を定め、後者が前者と食い違わない
@@ -1772,7 +1775,7 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
   ときは `owns(&params[i], &leaf)` が真のときだけ、`None` を返したときは常に `(args[i].name, leaf)` を
   積む。
 - **(j)** `resolve_callee_params` が `None` を返すのは、`callee.name` が `vars.closure_targets` にも
-  `prog.funcs` にも無いとき、すなわち間接呼び出しのときである。
+  `prog.funcs` にも無いときである。
 - **(k)** `rhs_consumes` の `RcRhs::Llvm(llvm_gen, args)` の腕は、`llvm_gen.borrows_operand(i, ..)` が真の
   オペランドを飛ばし、それ以外の各オペランド `args[i]` の各 boxed leaf `leaf` について、
   `passthrough_arg_leaves(llvm_gen, result_ty, args, type_env)` が `(i, leaf)` を含まないときだけ
@@ -1870,7 +1873,7 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
   BY A14, CODE src/rc_ir/ownership.rs: rhs_consumes の `RcRhs::App(callee, args)` の腕, push_boxed_leaves
 
 <1>18. (j) が成り立つ。`resolve_callee_params` が `None` を返すのは、`callee.name` が
-       `vars.closure_targets` にも `prog.funcs` にも無いとき、すなわち間接呼び出しのときである。
+       `vars.closure_targets` にも `prog.funcs` にも無いときである。
   BY CODE src/rc_ir/ownership.rs: resolve_callee_params
 
 <1>19. (k) が成り立つ。`RcRhs::Llvm(llvm_gen, args)` の腕は、`llvm_gen.borrows_operand(i, &arg_tys,
@@ -1905,6 +1908,44 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
   (`<1>19`) であり、`Var | Match` は積まない (`<1>15`)。
   BY <1>1, <1>3, <1>7, <1>7a, <1>8, <1>9, <1>10, <1>11, <1>12, <1>14, <1>15, <1>16, <1>17, <1>18,
      <1>19, <1>20, <1>20a
+
+### L5a (unbox 容器の 2 つの記述は同じ leaf を指す)
+
+**言明**。`Destructure(c, fs, s, k)` の節点で `c.ty.is_box(type_env)` が偽であるとする。このとき、
+D9 の `Destructure` (unbox) の行が消費とする**名前が付いていないフィールドの leaf**の全体は、
+`boxed_leaf_paths(ty(c), type_env)` の元のうち**先頭の添字が `fs` の名前付きフィールドの添字でない**
+ものの全体に等しい。すなわち `L5 (e)` の `is_box` が偽の場合が返す集合である。
+
+この 2 つが同じ集合であるのは D4 の規則 5 による -- unbox 集約の leaf は、フィールドの添字をその
+フィールドの型の leaf に前置したものだからである。
+
+<1>1. `ty(c)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Struct` である。したがって
+      `is_array(ty(c))` は偽である。
+  A12 の「`Destructure` の容器が構造体であること」の行が `is_struct(ty(c))` を与え、`is_struct` は
+  `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、構造体で
+  あることが `is_closure()` が偽であることを含むと明記する -- `toplevel_tycon_info` が
+  `assert!(!self.is_closure())` で始まるからである (A12 の `InlineLLVMStructPunchBody` の行の括弧書き)。
+  `is_array` は tycon が `Std::Array` であることであり、その `TyConInfo` の `variant` は `Array` なので、
+  `variant` が `Struct` である `ty(c)` には当たらない。
+  BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
+     TypeNode::is_array, TyConVariant
+
+<1>2. CASE `is_fully_unboxed(ty(c))` が真。
+  D4 の規則 1 より `boxed_leaf_paths(ty(c), type_env)` は空なので、2 つの集合はどちらも空である。
+  BY D4
+
+<1>3. CASE `is_fully_unboxed(ty(c))` が偽。
+  D4 の規則 1 は当たらず、`<1>1` より規則 2 (クロージャ) と規則 4 (`is_array`) も当たらず、前提より
+  規則 3 (`is_box`) も当たらない。よって規則 5 が当たり、`ty(c)` の各 leaf は `unpunched_field_types` が
+  返すフィールドの添字を、そのフィールドの型の leaf に前置したものである。すなわち各 leaf は空でない
+  path を持ち、その先頭の添字はその leaf が属するフィールドの添字である。よって「名前が付いていない
+  フィールドの leaf」と「先頭の添字が名前付きフィールドの添字でない leaf」は同じ集合である。
+  BY D4, <1>1
+
+<1>4. QED
+  `<1>2` と `<1>3` は `is_fully_unboxed(ty(c))` の真偽の 2 つの場合で尽きており、どちらでも 2 つの集合が
+  等しい。`L5 (e)` の `is_box` が偽の場合が返すのが後者である。
+  BY L5 (e), <1>2, <1>3
 
 ### P7 (a) D9 の消費はすべて報告される
 
@@ -1944,29 +1985,33 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
     `<2>2` が D9 の行の前半を、`<2>3` と `<2>4` が後半を、`resolve_callee_params` の 2 つの場合ごとに
     与える。
     BY <2>1, <2>2, <2>2a, <2>2b, <2>3, <2>4
-<1>2. CASE D9 の `Closure(f, caps)` の行。D9 の行「各 capture の全 boxed leaf」は `L5 (h)` が積む。
+<1>2. CASE D9 の `Closure(f, caps)` の行。D9 のこの行「各 capture の全 boxed leaf」は `L5 (h)` が積む。
       `Closure` は `RcRhs` の 1 種なので `L5 (f)` より `rhs_consumes` が呼ばれる。
-  BY D2, L5 (f), L5 (h)
-<1>3. CASE D9 の `Llvm(gen, args)` の行。D9 の行「`borrows_operand(i)` が偽のオペランドのうち、
+  BY D2, D9, L5 (f), L5 (h)
+<1>3. CASE D9 の `Llvm(gen, args)` の行。D9 のこの行「`borrows_operand(i)` が偽のオペランドのうち、
       `result_prov` が単一の `Arg(i, σ)` として素通しを宣言していない leaf」は `L5 (k)` の条件そのもので
       あり、その「単一の `Arg(i, σ)`」は `L5 (l)` の条件そのものである。`Llvm` は `RcRhs` の 1 種なので
       `L5 (f)` より `rhs_consumes` が呼ばれる。
-  BY D2, L5 (f), L5 (k), L5 (l)
-<1>4. CASE D9 の `Destructure(c, fs)` (`c` が boxed) の行。D9 の行「`c` の全 boxed leaf」は
+  BY D2, D9, L5 (f), L5 (k), L5 (l)
+<1>4. CASE D9 の `Destructure(c, fs)` (`c` が boxed) の行。D9 のこの行「`c` の全 boxed leaf」は
       `L5 (e)` の `is_box` が真の場合が返し、`L5 (d)` が積む。
-  BY L5 (d), L5 (e)
-<1>5. CASE D9 の `Destructure(c, fs)` (`c` が unbox) の行。D9 の行「名前が付いていないフィールドの leaf」は
-      `L5 (e)` の `is_box` が偽の場合が返し、`L5 (d)` が積む。
-  BY L5 (d), L5 (e)
-<1>6. CASE D9 の「関数本体の終端の `Ret(x)`」の行。
-  <2>1. 関数本体の終端の `Ret(x)` は `RcExpr::Ret` の節点であり、`L5 (b)` より走査はそれを訪れる。
-        P7 の前提より `collect_consumes` に渡された式は関数本体そのものなので、`L5 (b)` の 2 つの場合の
-        うち第 1 の場合 (渡された式の終端の `Ret`) がこの節点である。
-    BY D3, L5 (b)
-  <2>2. D9 の行「`x` の全 boxed leaf」は `L5 (c)` が積む。
-    BY L5 (c)
-  <2>3. QED
-    BY <2>1, <2>2
+  BY D9, L5 (d), L5 (e)
+<1>5. CASE D9 の `Destructure(c, fs)` (`c` が unbox) の行。D9 のこの行「名前が付いていない
+      フィールドの leaf」の全体は、L5a より `L5 (e)` の `is_box` が偽の場合が返す集合に等しく、それを
+      `L5 (d)` が積む。
+  BY D9, L5 (d), L5 (e), L5a
+<1>6. CASE D9 の「本体 (D23) の終端の `Ret(x)`」の行。
+  <2>1. `collect_consumes` に渡された式は関数の `body` であり、D23 よりそれは本体である。
+    P7 の前提が第 1 引数を関数の本体に限り、`L5 (b')` と `L5 (n)` が `collect_consumes` の呼び出しが
+    その形のものだけであることを与える。
+    BY D23, L5 (b'), L5 (n)
+  <2>2. その本体の終端の `Ret(x)` は `RcExpr::Ret` の節点であり、`L5 (b)` より走査はそれを訪れる。
+        `L5 (b)` の 2 つの場合のうち第 1 の場合 (渡された式の終端の `Ret`) がこの節点である。
+    BY D3, L5 (b), <2>1
+  <2>3. D9 のこの行「`x` の全 boxed leaf」は `L5 (c)` が積む。
+    BY D9, L5 (c)
+  <2>4. QED
+    BY <2>1, <2>2, <2>3
 <1>7. QED
   D9 の消費の表は 6 行からなり、`<1>1` から `<1>6` がその 6 行である。
   BY D9, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6
@@ -1977,9 +2022,10 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
 その出どころについて `own` を渡って主張する。
 
 <1>1. `L5 (m)` の出どころ (d) が積むものは D9 の `Destructure` の 2 行のいずれかである。`L5 (e)` の
-      2 つの場合は `container.ty.is_box(type_env)` の真偽で尽きており、それぞれ D9 の `Destructure`
-      (boxed) と `Destructure` (unbox) の行に等しい。
-  BY D9, L5 (d), L5 (e), L5 (m)
+      2 つの場合は `container.ty.is_box(type_env)` の真偽で尽きている。真の場合が返すのは `ty(c)` の
+      全 boxed leaf であって D9 の `Destructure` (boxed) の行に等しく、偽の場合が返す集合が D9 の
+      `Destructure` (unbox) の行が指す leaf に等しいことは L5a である。
+  BY D9, L5 (d), L5 (e), L5 (m), L5a
 
 <1>2. 出どころ (h) が積むものは D9 の `Closure` の行である。`L5 (h)` が積むのは各 capture の全 boxed
       leaf であり、D9 の `Closure` の行と同じである。
@@ -2089,10 +2135,12 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
       作らないと述べる。D9 の移動の表の最後の行がこれを移動とし、D10 の移動の行より `Obl` は変わらない。
   BY A3, D9, D10, L5 (k), L5 (l)
 
-<1>8. `destructure_consumes` が unbox 容器について落とす名前付きフィールドの leaf (`L5 (e)`)。D9 の
-      `Destructure` (unbox) の行は消費を名前が付いていないフィールドの leaf に限るので、これは消費では
-      ない。D9 の移動の表の第 3 行がこれを移動とし、D10 の移動の行より `Obl` は変わらない。
-  BY D9, D10, L5 (e)
+<1>8. `destructure_consumes` が unbox 容器について落とす名前付きフィールドの leaf (`L5 (e)`)。L5a より
+      `L5 (e)` が返す集合は D9 の `Destructure` (unbox) の行が指す leaf に等しいので、落とされる leaf は
+      名前が付いたフィールドの leaf である。D9 のその行は消費を名前が付いていないフィールドの leaf に
+      限るので、これは消費ではない。D9 の移動の表の第 3 行がこれを移動とし、D10 の移動の行より `Obl` は
+      変わらない。
+  BY D9, D10, L5 (e), L5a
 
 <1>8a. `rhs_consumes` の `RcRhs::App` の腕が、`resolve_callee_params` が `Some(params)` を返し
        `owns(&params[i], &leaf)` が偽のときに積まない引数 leaf (`L5 (i)`)。D23 は D9 の `App` の行が言う
@@ -2195,3 +2243,20 @@ D9 の `App` の行は「呼び出し先がその位置の **unit** を所有す
 (`CODE src/rc_ir/ownership.rs: collect_consumes`, `CODE src/rc_ir/borrow.rs: OwnedLeaves`)。P7 は
 DEF leaf 粒度の所有 でこの 2 つを橋渡ししている。`README.md` の P8 は、同じ食い違いのために `App` の
 引数の位置を言明から除き、その位置は `call_rc` が置く節点で扱うとしている。
+
+### D9 の最後の行が言う「本体」は D23 の本体である
+
+D9 の消費の表の最後の行は「**本体 (D23) の**終端の `Ret(x)`」であり、D23 の「本体」は関数の `body` と
+グローバル初期化子の `init` の両方を指す。**`README.md` の P7 の項は同じ行を「関数本体の終端の
+`Ret(x)`」と書いて、それを第 1 引数の限定の根拠に挙げている。**この文書は D9 の本文どおりに引き、
+第 1 引数が関数の本体であることは `L5 (b')` と `L5 (n)` -- `collect_consumes` の呼び出しは
+`infer_ownership` が `prog.funcs` の各関数の `func.body` について行うものだけである -- から取る。
+
+### A16 は catch-all アームの位置を述べない
+
+`README.md` の A16 は `Match` のアームがタグを尽くすことだけを述べ、catch-all アームが `arms` の最後に
+あることは述べない。L1b の CASE `<1>3` -- 実行時のタグに `tag` が等しいアームが無い場合 -- は、コード
+生成が最後のアームを switch の default とすることと合わせてその節を要るので、この文書は `H2` として
+別に置いた。`H2` を果たすのは lowering であり、検査は `validate` の `check_rhs` だけで、それは
+`develop_mode` のときしか走らない。**`L1b` を支える `H2` が落ちると、`L1` の E3 の場合、`L4`、
+`P5 (a)`、`P6 (b)` が閉じない。**
