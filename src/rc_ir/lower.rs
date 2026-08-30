@@ -152,7 +152,7 @@ impl<'a> Lowerer<'a> {
     /// # Arguments
     /// * `hint` — the readable part of the name, shown in an RC IR dump.
     /// * `source` — where the value the variable holds is written, for diagnostics and debug info.
-    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn fresh_var(&mut self, hint: &str, ty: Arc<TypeNode>, source: Option<Span>) -> RcVar {
         self.fresh_counter += 1;
         let name = FullName::local(&format!(

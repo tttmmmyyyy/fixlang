@@ -281,6 +281,12 @@ capture (D23 の入力の束縛、D2 のスコープ) はスロットを持つ�
 数え落とす向きと数え過ぎる向きの両方に害がある。この 3 つ目を数え落とすと、`Let(x, Var(g), k)` の形で
 「名前は節点が束縛する」を前提にした議論が偽になる。
 
+**逆に、`vars.bindings` に束縛を持つ名前は局所名である。** `VarTable::of` と `VarTable::body_only` が
+その表に入れる鍵は、パラメータ・capture の名前と節点が束縛する変数の名前だけで、どれも
+`Lowerer::fresh_var` が `FullName::local` で作ったものである (`CODE src/rc_ir/ownership.rs: VarTable::of`,
+`VarTable::body_only`, `collect_bindings`, `CODE src/rc_ir/lower.rs: Lowerer::fresh_var`)。A13 が言う
+「最上位の記号の名前は局所名ではない」と合わせて、**局所名であることと束縛を持つことは同値である**。
+
 **その対を記号の位置と呼ぶ。** `g` を束縛を持たない名前、`λ` を `ty(g)` の inhabited な boxed leaf と
 するとき、対 `(g, λ)` を**記号の位置**と呼び、それが指すオブジェクトも `obj(g, λ)` と書く。記号の位置は
 **値とオブジェクトを持ち、参照を持たない**。スロットと記号の位置を合わせて**位置**と呼ぶ。
