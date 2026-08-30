@@ -1712,11 +1712,36 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
     BY 3.7 の系, <2>1, <2>2
 
 <1>4. `identity(a, λ)` について `ctx.owns_object` は真である。
-  `origin(a, λ)` が `Origin::Exactly(p)` のとき `identity` は `p` であり `cand(a, λ)` の元なので `<1>3` に
-  よる。`Origin::Join` のとき、`L13` (`p15-ownership-uniformity.md`) より `Join` の `identity` の変数は
-  `collect_bindings` が入れる `Binding` を持つので `param_tys` の鍵ではなく、L4 より `owns_object` は
-  真である。
-  BY L4, <1>3, p15-ownership-uniformity.md の L13, CODE src/rc_ir/ownership.rs: Origin::identity
+  <2>1. `origin(a, λ)` が `Origin::Exactly(p)` であるとき、`identity(a, λ) = p` であり、それは
+        `cand(a, λ)` の元である。
+    `Origin::identity` は `Exactly(p)` に `p` を返し、`Origin::candidates` は `Exactly(p)` に `{p}` を
+    返す。
+    BY CODE src/rc_ir/ownership.rs: Origin::identity, Origin::candidates
+  <2>2. `origin(vars, type_env, y, π)` が返す `Origin::Join` の `identity` を `(w, σ)` とすると、
+        `vars.bindings.get(w)` は `Some(Binding::Join(..))` か `Some(Binding::Llvm(..))` である。
+    P2 より `origin` の再帰は有限なので、その再帰の上の帰納で示す。`Origin::Join` の値を作るのは
+    `Origin::of_candidates` の `candidates.len() ≥ 2` の腕だけであり、その `identity` は引数として
+    渡された `VarPath` である。`of_candidates` の呼び出しは 2 か所ある。1 つは `origin_inner` の
+    `Binding::Join(arm_results)` の腕で、渡すのは `(var, path)` であり、その `var` は `bindings` が
+    `Binding::Join` を持つ変数である。もう 1 つは `origin_from_leaves_under` の末尾で、渡すのは引数
+    `here` であり、その唯一の呼び出し元は `origin_inner` の `Binding::Llvm` の腕で
+    `here_identity = (var, path)` を渡すので、その `var` は `bindings` が `Binding::Llvm` を持つ変数で
+    ある。`origin_inner` の残る腕は、`Origin` を新しく作らずに再帰の返り値をそのまま返すか
+    (`Binding::Move`、catch-all の `Payload`、unbox の `Field` と `Payload`、単一の `Arg` を宣言する
+    `Llvm`)、`Origin::Exactly` を返すかである。`origin_from_leaves_under` の「`reached` の全元が
+    等しい」腕も再帰の返り値をそのまま返し、`reached` に自分で積むのは `Origin::Exactly(here)` だけで
+    ある。`origin` の memo は答えをそのまま記録して返す。よって返る `Join` は上の 2 か所のどちらかが
+    作ったものか、再帰の返り値をそのまま運んだものであり、帰納法の仮定と合わせて `identity` は
+    上の 2 種のどちらかである。
+    BY P2, CODE src/rc_ir/ownership.rs: origin, origin_inner, origin_from_leaves_under,
+       Origin::of_candidates, Origin::identity
+  <2>3. QED
+    `<2>1` の場合は `<1>3` による。`Origin::Join` の場合、`<2>2` の `Binding::Join` と `Binding::Llvm` は
+    どちらも `collect_bindings` が入れる `Binding` なので、第 1 節に写した `p15` の `L13` より
+    `ctx.vars.param_tys` は `w` を鍵に持たず、L4 より `ctx.owns_object(w, σ)` は真である。`Origin` は
+    `Exactly` と `Join` の 2 つの構成子を持つ。
+    BY L4, p15-ownership-uniformity.md の L13, <1>3, <2>1, <2>2,
+       CODE src/rc_ir/ownership.rs: Origin, collect_bindings
 
 <1>5. QED
   `Origin::acted_on` より `act(a, λ) = cand(a, λ) ∪ {identity(a, λ)}` である。
