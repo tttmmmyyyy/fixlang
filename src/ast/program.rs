@@ -58,6 +58,7 @@ use std::vec;
 
 /// What a program declares about its types: the type constructors and the type aliases it can name,
 /// and which of the newtypes among them a value has stopped being built at.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TypeEnv {
     /// The declaration of every type constructor, built-in and user-defined, by its name.
@@ -80,6 +81,7 @@ pub struct TypeEnv {
 
 impl Default for TypeEnv {
     /// An environment in which no type constructor and no type alias is declared.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn default() -> Self {
         Self {
             tycons: Arc::new(Default::default()),
@@ -92,6 +94,7 @@ impl Default for TypeEnv {
 impl TypeEnv {
     /// An environment holding `tycons` and `aliases` as declared, with every newtype among them
     /// still a type values are built at.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(tycons: Map<TyCon, TyConInfo>, aliases: Map<TyCon, TyAliasInfo>) -> TypeEnv {
         TypeEnv {
             tycons: Arc::new(tycons),
@@ -109,6 +112,7 @@ impl TypeEnv {
     ///
     /// Every newtype recorded is one this environment declares, which is what lets
     /// `unwrapped_newtype_info` answer with a declaration rather than with the possibility of one.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unwrap_newtypes(&mut self, newtypes: Set<TyCon>) {
         for tycon in &newtypes {
             assert!(
@@ -209,6 +213,7 @@ impl TypeEnv {
 
     /// Replace every type alias written in the definition of a type constructor of this environment
     /// by the type it stands for, so that a stage reading a field or variant type meets no alias.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases_in_tycons(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let type_env = self.clone();
@@ -2637,6 +2642,7 @@ impl Program {
     ///
     /// The name on the left-hand side of a type, of a trait and of a global value is a full name by
     /// the time this runs, so what is resolved here is the names written to the right of them.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace_not_in_expr(&mut self) -> Result<(), Errors> {
         let env = self.create_name_resolution_env();
         let mut ctx = NameResolutionContext::new("NA".to_string(), env.clone());
