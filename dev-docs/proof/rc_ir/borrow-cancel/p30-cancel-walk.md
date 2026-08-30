@@ -15,7 +15,7 @@ P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P1
 README の第 2 節の記法に、次の 3 つを加える。
 
 - **局所の定義**。この文書の中だけで使う語を第 1 節と第 5 節で定める。`BY` の行では `DEF <名前>` で引用する。
-- **局所の補題**。この文書の中だけで使う補題を `L1` - `L12` と番号を付けて述べ、`BY` の行では
+- **局所の補題**。この文書の中だけで使う補題を `L0` - `L12` と番号を付けて述べ、`BY` の行では
   `L<n>` で引用する。あいだに挟む補題には `L8a` のように枝番を振り、既存の番号は振り直さない。各補題は、
   それより前に置かれた補題と命題と、README の D/A だけを引用する。
 - **外部の結果**。Rust の言語と標準ライブラリの契約のうちこの文書が使うものを、第 1 節の「外部の結果」で
@@ -74,13 +74,10 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 `CancelAnalysis::acted_references(v, path)` は `ownership::acted_references(self.vars, self.type_env, v, path)`
 の値を返す (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。すなわち `ActRefs(t)` は D15 の
-`ActRefs(v, path)` である。`ownership::acted_references` の値は `vars`、`type_env`、`v`、`path` だけから
-定まる (`CODE src/rc_ir/ownership.rs: acted_references`)。`origin` は答えを `vars.origins` に記録するが、
-記録するのは計算した答えそのものであり、記録の有無は返り値を変えない
-(`CODE src/rc_ir/ownership.rs: origin`)。`other_objects` も `self.vars`、`self.type_env`、`v`、`path` だけ
-から値が決まる (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。よって上の 3 つの量は、走査の
-どの時点で読んでも同じ値である。`self.vars` と `self.type_env` は `CancelAnalysis` の構築のときに置かれ、
-走査はこれらを共有参照でしか持たない (`CODE src/rc_ir/borrow.rs: CancelAnalysis`)。
+`ActRefs(v, path)` である。`self.vars` と `self.type_env` は `CancelAnalysis` の構築のときに置かれ、走査は
+この 2 つの欄を差し替えない (`CODE src/rc_ir/borrow.rs: CancelAnalysis`,
+`CODE src/rc_ir/borrow.rs: cancel`)。**上の 3 つの量が、走査のどの時点で読んでも同じ値であることは
+L0 が示す。**
 
 ### DEF 参照の多重集合
 
@@ -122,6 +119,29 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 ### 外部の結果
 
 この文書が使う Rust の言語と標準ライブラリの契約を、名前を付けて述べる。
+
+**DEF 呼び出しの入れ子**
+関数の呼び出しは入れ子である。呼び出し `c` の中で始まった呼び出しは、`c` が返るより前に返る。よって
+2 つの呼び出しの実行区間は、交わらないか、一方が他方に含まれるかのどちらかである。また、返る呼び出しの
+中で始まる呼び出しは有限個である。
+
+**DEF 引数で決まる関数**
+関数の返り値が**引数で決まる**とは、引数の値が等しい 2 回の呼び出しが同じ値を返すことをいう。
+
+`origin_inner` と `origin_from_leaves_under` の本体が呼ぶ関数は、`origin` と次のもので尽きる ---
+`Map::get`、`TypeNode::is_box`、`LLVMGen::result_prov`、`Provenance::leaf_origins_at`、
+`Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`Origin::acted_on`、
+`Origin::of_candidates`、`Set`・`Vec`・`Map` の操作、`Clone::clone`、および `Option` と `Iterator` の
+組み合わせ子 (`CODE src/rc_ir/ownership.rs: origin_inner`,
+`CODE src/rc_ir/ownership.rs: origin_from_leaves_under`)。**この一覧のどれも `origin` を呼ばない。**
+`acted_references` と `CancelAnalysis::other_objects` の本体が `origin` のほかに呼ぶのは、
+`boxed_leaf_paths`、`FieldPath::starts_with`、`Origin::identity`、`Origin::candidates`、および `Map` と
+`Vec` の操作であり、これらも `origin` を呼ばない (`CODE src/rc_ir/ownership.rs: acted_references`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
+
+この文書は、**上に挙げたすべての関数の返り値が引数で決まること**を外部の結果として使う。どれも
+`VarTable` の `origins` の欄を引数に取らないので、この欄の状態はその返り値に届かない。`Set` の反復の
+順序は定めないので、`Set` から作られるのは要素の集合であって並びではない。
 
 **DEF 型のサイズ**
 型の値が占める記憶域の大きさを、その型の**サイズ**という。構造体の各フィールドと、enum の 1 つの変位が
@@ -262,6 +282,138 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 
 ## 2. 予備の補題
 
+### L0 (`origin` の返り値は memo に依らない)
+
+1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値 `type_env` を固定する。`vars` が構築された後に
+この 2 つを第 1・第 2 引数として行われる `origin` の呼び出しについて、次が成り立つ。
+
+**鍵 `(x, π)` が等しい 2 つの呼び出しがどちらも値を返すならば、その 2 つの返り値は等しい。**
+
+したがって `ownership::acted_references(vars, type_env, v, π)` と `CancelAnalysis::other_objects(v, π)` の
+返り値も、走査のどの時点で読んでも同じである。
+
+**証明**
+
+<1>1. `origin(vars, type_env, x, π)` の本体は 3 つの文である。`key` を `(x.clone(), π.to_vec())` として、
+      `if let Some(known) = vars.origins.borrow().get(&key) { return known.clone(); }`、
+      `let answer = grow_stack(|| origin_inner(vars, type_env, x, π));`、
+      `vars.origins.borrow_mut().insert(key, answer.clone()); answer` である。第 1 の文で返る呼び出しを
+      **当たり**、返らない呼び出しを**外れ**と呼ぶ。当たりの呼び出しは `vars.origins` の鍵 `key` の値の
+      複製を返し、`origin` も `origin_inner` も呼ばない。外れの呼び出しは A15 より `origin_inner` を
+      ちょうど 1 回呼び、その値を鍵 `key` に `insert` してから返す。
+  BY CODE src/rc_ir/ownership.rs: origin, A15, DEF Map と Set
+<1>2. `vars.origins` の鍵の集合は増えるだけであり、鍵 `k` が入るのは、鍵が `k` である外れの呼び出しが
+      `origin_inner` から戻った後に限る。`origins` は `VarTable` の非公開の欄であり、`ownership.rs` の
+      中で --- その `#[cfg(test)] mod tests` を含めて --- この欄に触れるのは `VarTable::empty` の
+      `RefCell::default()` と <1>1 の `get` と `insert` の 3 か所だけである。DEF Map と Set より
+      `insert` は鍵を失わせない。
+  BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
+     CODE src/rc_ir/ownership.rs: origin, <1>1, DEF Map と Set
+<1>3. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが直に行う `origin` の呼び出しの鍵の集合は、
+      `vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの集合は `vars.origins` の状態にも、
+      その呼び出しが受け取る `origin` の返り値にも依らない。
+  <2>0. `origin_inner` の 1 回の呼び出しの中で `origin` の呼び出しが直に起きるのは、`origin_inner` の
+        本体に書かれた `origin(...)` と、それが呼ぶ `origin_from_leaves_under` の本体に書かれた
+        `origin(...)` を通ってだけである。DEF 引数で決まる関数 より、この 2 つの本体が呼ぶほかの関数は
+        どれも `origin` を呼ばない。
+    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       DEF 引数で決まる関数, DEF 本体
+  <2>1. 本体は `vars.bindings.get(x)` による場合分けである。`None`、`Binding::Param`、
+        `Binding::Producer` の腕、`Binding::Field(container, idx)` の `container` が boxed の枝、
+        `Binding::Payload(scrut, Some(_))` の `scrut` が boxed の枝は、いずれも `here()` を返して
+        `origin` を呼ばない。
+    BY CODE src/rc_ir/ownership.rs: origin_inner
+  <2>2. `Binding::Move(y)` の腕は鍵 `(y.name, π)` について、`Binding::Join(arm_results)` の腕は
+        各 `arm_result` について鍵 `(arm_result.name, π)` について、`Binding::Field(container, idx)` の
+        unbox の枝は鍵 `(container.name, [idx] ++ π)` について、`Binding::Payload(scrut, None)` の枝は
+        鍵 `(scrut.name, π)` について、`Binding::Payload(scrut, Some(tag))` の unbox の枝は鍵
+        `(scrut.name, [tag] ++ π)` について、`origin` を呼ぶ。どの鍵も `vars.bindings.get(x)` が返した
+        束縛と `π` から作られ、`origin` の返り値を読まない。`Binding::Join` の腕は各 `arm_result` に
+        ついて必ず 1 回呼び、返り値は `candidates` を積むのに使うだけである。
+    BY CODE src/rc_ir/ownership.rs: origin_inner
+  <2>3. `Binding::Llvm(gen, args, result_ty)` の腕は、`args` の各要素の `ty` を並べた `arg_tys` と
+        `decl = gen.result_prov(result_ty, &arg_tys, type_env)` を作る。`decl.leaf_origins_at(π)` に
+        `as_arg_projection` を掛けた結果が `Some((j, p))` のときは鍵 `(args[j].name, p)` について
+        `origin` を 1 回呼び、`None` のときは `origin_from_leaves_under(vars, type_env, &decl, args, π, ・)`
+        を呼ぶ。後者は `decl.leaf_origins_under(π)` と `args` と `type_env` から `Set` の値
+        `operand_units` を作り、その各元 `(j, unit)` について鍵 `(args[j].name, unit)` の `origin` を
+        1 回呼ぶ。DEF 引数で決まる関数 より、`decl` も `operand_units` も `vars.bindings.get(x)` が返した
+        束縛と `type_env` と `π` で決まる。`operand_units` は `Set` なので反復の順序は定まらないが、
+        呼ぶ鍵の集合は定まる。どの鍵も `origin` の返り値を読まない。
+    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       CODE src/rc_ir/ownership.rs: as_arg_projection, DEF 引数で決まる関数
+  <2>4. QED
+    DEF 引数で決まる関数 より `vars.bindings.get(x)` の値は `vars.bindings` と `x` で決まる。`Binding` の
+    変位は `Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、`Join` の 7 つであり、<2>1 から
+    <2>3 がこの 7 つと、`get` が `None` を返す場合を尽くす。<2>0 より、直に起きる `origin` の呼び出しは
+    この 2 つの本体に書かれたものだけである。
+    BY <2>0, <2>1, <2>2, <2>3, CODE src/rc_ir/ownership.rs: Binding, DEF 引数で決まる関数
+<1>4. 値を返す `origin` の呼び出し `c` について、`c` の中には、鍵が等しく一方が他方に真に含まれる 2 つの
+      外れの `origin` の呼び出しは無い。ここで外側の候補には `c` 自身も数える。この 2 つ組を**入れ子の対**
+      と呼ぶ。
+  <2>1. `c` の中に入れ子の対が在ると仮定する。
+    BY 背理法の仮定
+  <2>2. DEF 呼び出しの入れ子 より `c` の中で始まる呼び出しは有限個なので、`c` の中の入れ子の対も有限個で
+        ある。<2>1 よりそれは空でないので、外側の呼び出しが始まる時刻が最も遅い対を取れる。それを
+        `(a, b)` とし、その鍵を `k` とする。
+    BY <2>1, DEF 呼び出しの入れ子
+  <2>3. `a` から `b` へ至る `origin` の呼び出しの鎖 `a = d_0, d_1, ..., d_m = b` (`m ≥ 1`) が在る。
+        DEF 呼び出しの入れ子 より、`b` を含み `a` に含まれる `origin` の呼び出しは包含について線形に
+        並ぶので、それを外側から並べたものがこの鎖であり、各 `d_{i+1}` は `d_i` の中で、間に別の
+        `origin` の呼び出しを挟まずに始まる。<1>1 より当たりの呼び出しは `origin` を呼ばないので、
+        `origin` の呼び出しを中に持つ `d_0` から `d_{m-1}` までは外れである。`d_m = b` も入れ子の対の
+        定義より外れである。よって `d_1` は外れであり (`m = 1` なら `d_1 = b`、`m > 1` なら
+        `1 ≤ m - 1`)、`a` の中で始まるので `a` より始まる時刻が遅い。
+    BY <1>1, <2>2, DEF 呼び出しの入れ子
+  <2>4. `b` の中で、鍵が `d_1` の鍵 `k_1` である `origin` の呼び出し `b_1` が直に始まる。`a` と `b` は
+        どちらも外れであり鍵が `k` なので、<1>3 より 2 つが直に呼ぶ `origin` の鍵の集合は等しい。`d_1` は
+        `a` が直に呼ぶものなので、`k_1` はその集合の元であり、したがって `b` も鍵 `k_1` の `origin` を
+        直に呼ぶ。`b_1` は `b` に真に含まれ、`b` は `d_1` に含まれる (`m = 1` のとき `b = d_1`) ので、
+        `b_1` は `d_1` に真に含まれる。
+    BY <1>3, <2>2, <2>3, DEF 呼び出しの入れ子
+  <2>5. CASE `b_1` が外れである。`(d_1, b_1)` は `c` の中の入れ子の対であり、<2>3 よりその外側 `d_1` が
+        始まる時刻は `a` より遅い。これは <2>2 の取り方に反する。
+    BY <2>2, <2>3, <2>4
+  <2>6. CASE `b_1` が当たりである。<1>1 より、`b_1` が始まる時点で `vars.origins` は鍵 `k_1` を持つ。
+        <2>3 より `d_1` は外れなので、`d_1` が始まる時点で `vars.origins` は `k_1` を持たない。<1>2 より
+        鍵 `k_1` が入るのは鍵 `k_1` の外れの呼び出しが `insert` を実行するときだけなので、そのような
+        呼び出し `f` の `insert` が `d_1` の始まりと `b_1` の始まりの間にある。<1>1 より `insert` は `f` が
+        返る直前の文なので、`f` は `d_1` の実行区間の中で返る。DEF 呼び出しの入れ子 より `f` と `d_1` の
+        実行区間は交わらないか一方が他方に含まれるかであり、交わるので後者である。`d_1` が `f` に含まれる
+        なら `f` は `d_1` より後に返るが、`f` は `d_1` の実行区間の中で返るのでそれは無い。よって `f` は
+        `d_1` に含まれ、`b_1` が始まる時点で `d_1` はまだ返っていないので `f ≠ d_1`、すなわち `f` は
+        `d_1` に真に含まれる。よって `(d_1, f)` は `c` の中の入れ子の対であり、<2>5 と同じく <2>2 の
+        取り方に反する。
+    BY <1>1, <1>2, <2>2, <2>3, <2>4, DEF 呼び出しの入れ子
+  <2>7. QED (矛盾)
+    <2>5 と <2>6 は `b_1` について場合を尽くす。
+    BY <2>5, <2>6
+<1>5. 鍵 `k` について、値を返す外れの呼び出しは高々 1 つである。
+  <2>1. 値を返す外れの呼び出しが 2 つ在るとし、`c_1`、`c_2` とする。DEF 呼び出しの入れ子 より、2 つの
+        実行区間は交わらないか、一方が他方に含まれる。
+    BY 背理法の仮定, DEF 呼び出しの入れ子
+  <2>2. 一方が他方に真に含まれることは無い。含まれるとすると、外側の呼び出しは値を返すのに、その中に
+        入れ子の対を持つことになり、<1>4 に反する。
+    BY <1>4, <2>1
+  <2>3. QED (矛盾)
+    <2>1 と <2>2 より 2 つの実行区間は交わらないので、一方 --- `c_1` としてよい --- が他方より前に返る。
+    <1>1 より `c_1` は返る前に鍵 `k` を `vars.origins` に入れ、<1>2 より鍵は失われないので、`c_2` が
+    始まる時点で `vars.origins` は `k` を持つ。よって `c_2` は当たりであり、外れであることに反する。
+    BY <1>1, <1>2, <2>1, <2>2
+<1>6. QED
+  鍵 `k` について値を返す呼び出しを考える。<1>5 より外れのものは高々 1 つであり、在るならその返り値を
+  `A` とする。当たりのものは <1>1 より `vars.origins` の鍵 `k` の値の複製を返し、<1>2 よりその値は鍵 `k` の
+  外れの呼び出しが `insert` で入れたもの、すなわち `A` である。よって鍵 `k` について値を返す呼び出しの
+  返り値はどれも `A` である。当たりのものが在って外れのものが無いことは、<1>2 より無い。
+
+  `ownership::acted_references(vars, type_env, v, π)` は、`boxed_leaf_paths(&v.ty, type_env)` のうち
+  `π` を接頭辞に持つ各 leaf について `origin(vars, type_env, &v.name, &leaf)` の `identity` を数えたもので
+  あり、`CancelAnalysis::other_objects(v, π)` は同じ leaf について同じ `origin` を呼び、その `identity` と
+  `candidates` から値を作る。DEF 引数で決まる関数 より `boxed_leaf_paths`、`Origin::identity`、
+  `Origin::candidates` は引数で決まるので、この 2 つの返り値も `vars`、`type_env`、`v`、`π` だけで決まる。
+  BY <1>1, <1>2, <1>5, CODE src/rc_ir/ownership.rs: acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数
+
 ### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ)
 
 `CancelAnalysis::walk(node, pending, returns_from_func)` の 1 回の呼び出しは
@@ -355,8 +507,9 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 <1>8. QED
   <1>7 が走査の扱う値の出どころを尽くし、<1>1、<1>2 が `acted_references` の値について、<1>3 と <1>7a が
   `subtract` で減らした値について、各鍵の値が 1 以上であることを与える。複製は DEF Clone より元と同じ鍵と
-  値を持つ。1 から 4 は <1>4、<1>5、<1>6 が与える。5 は <1>2 の `assert!` が与える。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>7a, DEF Clone
+  値を持つ。1 から 4 は <1>4、<1>5、<1>6 が与える。5 は <1>2 の `assert!` と、L0 が与える
+  `CancelAnalysis::acted_references(v, path)` の値の時点によらなさが与える (DEF 節点の量)。
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>7a, L0, DEF Clone, DEF 節点の量
 
 ### L2a (根の値が在るあいだ、木の割り当てはすべて生存している)
 
@@ -1232,7 +1385,8 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 <1>4. CASE 状態が「追加」で作られた。すなわち `Retain` 節点 `t = Retain(v, path, _, k)` の訪問が
       `pending.push(PendingRetain { node: retain, outstanding })` を実行した。ここで
       `retain = node_id(node)` であり `node` は `t` の節点、`outstanding = self.acted_references(v, path)`
-      すなわち `ActRefs(t)` である。書き換え前の状態を `P0` とする。
+      である。L0 よりこの値は走査のどの時点で読んでも同じなので、DEF 節点の量 の `ActRefs(t)` である。
+      書き換え前の状態を `P0` とする。
   <2>1. この操作は `Vec` の末尾に要素を 1 つ加えるだけであり、既存の要素の値と並びを変えない。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
        DEF Vec::push
@@ -1249,7 +1403,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
         `self.acted_references(v, path)` すなわち `ActRefs(t)` である (DEF 節点の量)。L2 の 5 よりそれは
         空でなく、`ActRefs(t) ⊆ ActRefs(t)` である (DEF 参照の多重集合)。既存の要素は <1>1 の (ii) の
         ままである。
-    BY <1>1, <2>1, <2>3, L2, DEF 節点の量, DEF 参照の多重集合
+    BY <1>1, <2>1, <2>3, L0, L2, DEF 節点の量, DEF 参照の多重集合
   <2>5. (iii) が成り立つ。
     <3>1. `P0` のどの要素も `node` が `node_id(t)` と等しくない。
       <4>1. `P0` のある要素 `e` が `e.node = node_id(t)` を満たすと仮定する。
