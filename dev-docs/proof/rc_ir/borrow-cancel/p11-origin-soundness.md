@@ -131,7 +131,7 @@ leaf である場合、E4 はその path の下の leaf が単一の `Arg` を�
 | E1 | `Let(x, Var(y), k)` |
 | E2 | `Match` のアーム本体の `Ret(x)` |
 | E3 | `Llvm` の素通し leaf (`result_prov` が単一の `Arg(i, σ)`) |
-| E4 | `Llvm` の素通し leaf (同じ行を leaf ごとに読む) |
+| E4 | `Llvm` の素通し leaf (同じ行を leaf ごとに読む。宣言が単一であることは L7 が与える) |
 | E5 | unbox 容器の `Destructure` の名前付きフィールド |
 | E6 | catch-all アームの payload 束縛 |
 | E7 | unbox union の変位アームの payload 束縛 |
@@ -1290,6 +1290,9 @@ leaf `[1]` の宣言が単一の `Arg(0, [])`、leaf `[0]` の宣言が空集合
 `act(x, [0]) ∪ act(y, [0]) = {(node, []), (y, [0])}` が 2 要素で
 `origin(m, [0]) = Join { identity: (m, [0]), candidates: {(node, []), (y, [0])} }` となる。`(m, [0])` は
 `origin(m, [])` の答えのどこにも現れない。
+
+`origin(m, []) = Exactly((node, []))` は、`Origin::of_candidates` の `1 =>` の腕が返す `Exactly` の
+`VarPath` が呼び出し自身の `(var, path)` とは限らないことの実例である (L9 の `<2>3a` の `<3>1b`)。
 
 この形は普通の Fix のソースから出る。boxed 構造体を 1 つ作り、`if` の 2 つの枝でそれぞれ別の変位の union
 を作って、その union を関数に渡すプログラムを `-O max --emit-rc-ir all` でコンパイルすると、
