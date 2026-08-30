@@ -2725,7 +2725,7 @@ DEF 対応する位置 の位置についての言明なので、そこからそ
   からコードを作り、tail の位置が変えるのはその節点が作る値を返す形にするかどうか -- `build_tail` を
   呼ぶか、`apply_lambda` に tail を渡すか -- だけであって、オペランドの読みと D9・D10 の事象の並びを
   変えない。節点と値は両側で同じなので (L16、L16a)、両側のこの節点は同じ順に同じ読みと同じ事象を行う。
-  BY A3, A4, D9, D10, D16, DEF 所有を読まない消費, DEF 時点, L16, L16a, 9.1 の言明,
+  BY A3, A4, D9, D10, D16, DEF 所有を読まない消費, DEF 時点, L16, L16a, 第 9.1 節,
      CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_match,
      CODE src/ast/inline_llvm.rs: LLVMGen::generate_tail
 
