@@ -621,7 +621,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// it keeps it, and the accessor where it reads it — which is where it keeps the value, and
     /// where it reads the value another unit keeps and publishes. Whatever it does not generate it
     /// declares.
-    // PROOF: D/A, P7c, P7f, P18a, P18b, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,
