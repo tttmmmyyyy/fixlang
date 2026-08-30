@@ -2275,6 +2275,7 @@ impl Program {
     /// Only the calls a program reaches are reported, so the symbols have to be instantiated by the
     /// time this runs. Run it before the program is optimized, while each expression still carries
     /// the source it came from.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn check_multi_threading_requirement(&self, config: &Configuration) -> Result<(), Errors> {
         if config.threaded {
             return Ok(());
@@ -3028,6 +3029,7 @@ impl Program {
     }
 
     /// Implements `Std::Boxed` for every boxed struct and every boxed union the program declares.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_boxed_impls(&mut self) -> Result<(), Errors> {
         for defn in &self.type_defns {
             match &defn.value {

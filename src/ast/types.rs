@@ -1483,14 +1483,14 @@ impl TypeNode {
 
     /// Whether a value of this type is held in place, with its fields laid out where the value
     /// sits. A closure is unboxed: it is a function pointer beside the object its captures live in.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox
     }
 
     /// Whether a value of this type is a pointer to a heap block that holds its fields, so that the
     /// value costs one pointer wherever it is stored and its lifetime is reference-counted.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {
         !self.is_unbox(type_env)
     }
@@ -2850,6 +2850,7 @@ impl Scheme {
     /// An opaque type variable stays free, and so does a variable serving as a formal parameter of
     /// an equality on one: the definition determines those, and a use site chooses nothing for
     /// them.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn generalize(
         kind_signs: &[KindSignature],
         preds: Vec<Predicate>,

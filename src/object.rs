@@ -1712,6 +1712,7 @@ pub fn alloc_array_storage<'c, 'm>(
 /// within the header, at a fixed low address, and no capacity or index the program computed reaches
 /// it. Deferring that initialization would put a value the program chose into the faulting address
 /// and turn this into a wild write.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_malloc<'c, 'm>(
     gc: &Generator<'c, 'm>,
     sizeof: IntValue<'c>,

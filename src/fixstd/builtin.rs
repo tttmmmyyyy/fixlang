@@ -426,6 +426,7 @@ pub fn is_punched_array_tycon(tc: &TyCon) -> bool {
 }
 
 // Make `Std::Boxed` trait.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_boxed_trait() -> TraitId {
     TraitId::from_fullname(FullName::from_strs(&[STD_NAME], BOXED_TRAIT_NAME))
 }
@@ -2343,6 +2344,7 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// comes back starts wherever the allocator put it, so the object is placed in it afresh, and the
 /// contents move only in the case where that lands the object somewhere other than `realloc` left
 /// it.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn realloc_array<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
@@ -2666,7 +2668,7 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// The code generator for `Array::_unsafe_append_capacity_unchecked`, which consumes `src` into the
 /// slots past `dst`'s length.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayAppendCapacityUnchecked {
     dst_name: FullName,
@@ -9094,7 +9096,7 @@ pub fn run_ios_runner<'b, 'm, 'c>(
 
 /// Inline-LLVM body of `Std::mark_threaded`, which puts the reference counters of all values
 /// reachable from the given value into multi-threaded mode and hands the value back.
-// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMarkThreadedFunctionBody {
     /// The name the value to be marked is bound to in the scope of this body.
@@ -9155,6 +9157,7 @@ impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
 }
 
 /// Expression and scheme of `Std::mark_threaded : a -> a`.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";

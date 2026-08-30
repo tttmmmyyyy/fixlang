@@ -80,7 +80,7 @@ impl TypeDefn {
         TyCon::new(self.name.clone())
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycon_info(&self, punched_struct_fields: &[usize]) -> TyConInfo {
         let kind = self.kind();
         let (variant, is_unbox, fields) = match &self.value {

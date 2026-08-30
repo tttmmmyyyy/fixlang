@@ -1159,7 +1159,7 @@ impl TypeCheckContext {
     /// later stage — as the `Expr::MakeStruct` arm holds them in the
     /// struct's declaration order for code generation — reorders them
     /// after the walk rather than before it.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unify_type_of_expr_inner(
         &mut self,
         ei: &Arc<ExprNode>,

@@ -754,6 +754,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// The marker covers what a store of the value writes, which is its store size. For a type
     /// whose bits do not fill whole bytes, that store size exceeds the size `sizeof` reports.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_lifetime_marker<T: BasicType<'c>>(
         &self,
         intrinsic_name: &str,
@@ -772,6 +773,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// The address of the current top of the stack, which `restore_stack` takes back to.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     #[allow(dead_code)]
     pub fn save_stack(&mut self) -> PointerValue<'c> {
         let func = self.intrinsic_function("llvm.stacksave", &[]);
@@ -785,6 +787,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Take the top of the stack back to `pos`, an address `save_stack` gave.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     #[allow(dead_code)]
     pub fn restore_stack(&mut self, pos: PointerValue<'c>) {
         let func = self.intrinsic_function("llvm.stackrestore", &[]);
@@ -1917,6 +1920,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// object is passed as its parts rather than as one aggregate (see `lambda_function_type`), so
     /// no aggregate is materialized across the call; `build_body` emits the retain / release / mark
     /// work on the object reassembled from those parts inside the helper.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn emit_rc_helper_call(
         &mut self,
         obj: Object<'c>,
@@ -1971,6 +1975,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// # Arguments
     /// * `tag` — suffix distinguishing the two basic blocks the null check adds from those of
     ///   another null check in the same function.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_if_nonnull(&mut self, obj: &Object<'c>, tag: &str, body: impl FnOnce(&mut Self)) {
         if !obj.is_dynamic_object() {
             body(self);
@@ -2136,6 +2141,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Perform a traverser's work on a non-null boxed object, processing the references it owns
     /// with the traverser generated for its type.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_traverser_work_nonnull_boxed(
         &mut self,
         obj: &Object<'c>,
@@ -2227,7 +2233,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Perform `work` — release, mark-global or mark-threaded — on `obj` itself: on its own count
     /// where it is boxed, and on the boxed objects it holds where it is not. What it owns is
     /// reached through the traverser generated for its type, which `build_traverse` writes.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_traverser_work(
         &mut self,
         obj: Object<'c>,
@@ -2258,6 +2264,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Traverse a non-null boxed object's owned references (its elements / fields) for `work`
     /// (release / mark). A dynamic object carries its traverser and is called through it; any other
     /// object is traversed by the function generated for its type.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn traverse_boxed_refs(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
         let obj_ptr = obj.value(self).into_pointer_value();
         if obj.is_dynamic_object() {
@@ -2501,7 +2508,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Put every boxed object `obj` owns into the threaded refcount state, where a reference count
     /// is updated atomically, so that an object can be held by several threads at once. An object
     /// already in the global state keeps it.
-    // PROOF: D/A, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_threaded", "call_mark_threaded", |gc, obj| {
             gc.build_traverser_work(obj, TraverserWorkType::mark_threaded(), RcState::Unknown);
@@ -2564,6 +2571,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Emit a call to the runtime function named `func_name`, which the module must already
     /// declare.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn call_runtime(
         &self,
         func_name: &str,
@@ -2837,6 +2845,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// return object. Each argument is marshalled to its C scalar (field 0), the function is called,
     /// and the result is written back into the return object (field 1 of the `(IOState, ret)` tuple
     /// when `is_io`, else field 0). A void return writes nothing.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_ffi_call_core(
         &mut self,
         mut obj: Object<'c>,
