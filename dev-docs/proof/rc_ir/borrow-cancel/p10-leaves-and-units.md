@@ -160,10 +160,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      CODE src/rc_ir/ast.rs: RcVar (`ty` の doc「always concrete (monomorphic)」),
      CODE src/ast/program.rs: Program::validate_layouts
 
-<1>2. **(H2: 変数のスコープ規律)** 関数本体の各節点 `n` について、`n` が使う変数はどれも、`Scope(n)`
-   (下の `DEF Scope`) の要素であるか、この関数のどの束縛でもない名前 (グローバル) である。ここで
-   `Let(x, rhs, k)` の `rhs` が使う変数は、`Scope` に `x` が入る**前**の集合、すなわち
-   `Scope(Let(x, rhs, k) の節点)` で解決される。
+<1>2. **(H2: 変数のスコープ規律)** 本体 -- 関数の `body` またはグローバル初期化子の `init` -- を 1 つ
+   取り、`vars` をそれについて `VarTable::of` または `VarTable::body_only` が作る表とする。その本体の
+   各節点 `n` が使う変数はどれも、`Scope(n)` (下の `DEF Scope`) の要素であるか、`vars.bindings` の
+   定義域に無い名前である。ここで `Let(x, rhs, k)` の `rhs` が使う変数は、`Scope` に `x` が入る**前**の
+   集合、すなわち `Scope(Let(x, rhs, k) の節点)` で解決される。
 
    **DEF Scope** -- 本体の各節点 `n` に対する名前の集合 `Scope(n)` を次で定める。
    - `VarTable::of(func)` が作る表では、`Scope(根)` は `func.params` と `func.capture` の名前の集合。
@@ -176,7 +177,16 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    - `n` が `Retain(v, p, s, k)`、`Release(v, p, s, k)`、`Eval(v, k)` のとき、`Scope(k)` は
      `Scope(n)` に等しい。
 
-   主張そのものは A11 である。**スコープを定めるのは D2 であり、`DEF Scope` はその規則を節点の種類
+   **示すのは、`vars.bindings` の定義域にある名前が `Scope(n)` の要素であることである。**`n` が使う
+   変数 `v` がその定義域にあるとする。D6 より `v` は局所名である。A11 の第 2 文は、関数の本体の自由な
+   局所名がその関数のパラメータと capture に限ることと、グローバル初期化子の `init` が自由な局所名を
+   持たないことを述べる。よって `v` は、この本体のパラメータ・capture であるか、この本体のある節点が
+   束縛するものである。前者なら `DEF Scope` の根の行が `v` を `Scope(根)` に入れ、`DEF Scope` の
+   残る 3 行はどれも子の集合を親の集合に名前を 0 個以上加えたものと定めるので、`v` は `Scope(n)` の
+   要素である。後者なら、A6 より `v` の束縛はプログラム全体で 1 つなので、A11 の第 1 文が言う解決先は
+   その束縛であり、その束縛のスコープが `n` を含む、すなわち `v` は `Scope(n)` の要素である。
+
+   **スコープを定めるのは D2 であり、`DEF Scope` はその規則を節点の種類
    ごとに書き下したものである。**D2 は `Let` が束縛する `x` のスコープを `k` の部分木、`Destructure`
    が束縛する各変数のスコープを `k` の部分木、`Match` のアームの `payload` のスコープをそのアームの
    `body` の部分木、パラメータと capture のスコープを本体の全体と定める。上の 4 行はこれを、根から
@@ -186,7 +196,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    この形であり、関数ごとに `func.params` と `func.capture` を `bind` してから `check_expr` を呼び、
    グローバル初期化子については `bind` を 1 度も呼ばずに `check_expr` を呼ぶ。**`validate` は
    `develop_mode` のときだけ走る** -- A11 の但し書きがこれを言う。
-  BY A11, D1, D2, CODE src/rc_ir/validate.rs: validate,
+  BY A6, A11, D1, D2, D6, CODE src/rc_ir/validate.rs: validate,
      CODE src/rc_ir/validate.rs: Validator::check_expr_inner,
      CODE src/rc_ir/validate.rs: Validator::check_rhs,
      CODE src/rc_ir/validate.rs: Validator::use_var,
@@ -196,7 +206,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   BY A9, CODE src/rc_ir/validate.rs: Validator::check_rhs (`RcRhs::Match` の腕の `arms.is_empty()`
      検査)
 
-<1>3a. **(H4: 束縛の形と型が合っている)** 関数本体について次の 8 つが成り立つ。
+<1>3a. **(H4: 束縛の形と型が合っている)** 関数の `body` とグローバル初期化子の `init` のどちらに
+   ついても、次の 8 つが成り立つ。
    - (i) `Let(x, RcRhs::Var(y), k)` について `ty(y)` は `ty(x)` に等しい。
    - (ii) `Let(x, RcRhs::Match(scrut, arms), k)` の各アームについて、`returned_var(&arm.body)` の型は
      `ty(x)` に等しい。
@@ -205,7 +216,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      等しい。
    - (iv) 同じ `Match` の `ty(scrut)` は union の型である。すなわち
      `ty(scrut).toplevel_tycon_info(E).variant` は `TyConVariant::Union` である。
-   - (v) `Destructure(cont, fields, s, k)` について `ty(cont)` は構造体 (タプルを含む) の型であり、
+   - (v) `Destructure(cont, fields, s, k)` について `ty(cont)` は構造体 (タプルを含む) の型である。
+     すなわち `ty(cont).toplevel_tycon_info(E).variant` は `TyConVariant::Struct` である。また
      各 `(i, fv)` について `(i, ty(fv))` は `F(ty(cont))` の要素である。
    - (vi) 同じ名前を持つ `RcVar` の出現はどれも同じ型を持つ。したがって `vars.var_tys` が記録する型は、
      その名前を使う側の `RcVar` の `ty` に等しい。以下ではこの型を `ty(名前)` と書く。
@@ -234,6 +246,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    `toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、この項が立つとき
    `pt.is_closure()` は偽である。
 
+   **(iv) と (v) は、A12 の「`Match` の scrutinee が union であること」と「`Destructure` の容器が
+   構造体であること」を、その型の `TyConInfo` の `variant` として書いたものである。**タプルもこの形に
+   入る -- `tuple_defn` はタプルを `TypeDeclValue::Struct` の `TypeDefn` として宣言し、
+   `TypeDefn::tycon_info` はその腕で `TyConVariant::Struct` を置く。
+
    (viii) は A3 の「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字で
    あり、`σ` はその型の boxed leaf である」の段落である。「その型」は第 `j` オペランドの型
    `ty(args[j])`、
@@ -249,7 +266,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
      CODE src/rc_ir/ownership.rs: returned_var,
      CODE src/rc_ir/ownership.rs: VarTable::of,
-     CODE src/rc_ir/ownership.rs: collect_bindings
+     CODE src/rc_ir/ownership.rs: collect_bindings,
+     CODE src/ast/types.rs: TyConVariant,
+     CODE src/ast/typedecl.rs: TypeDefn::tycon_info,
+     CODE src/fixstd/builtin.rs: tuple_defn
 
 <1>3b. 製品のコードが `TyConInfo` の値を作る場所は、次の 4 つの関数だけである (`ownership.rs` に残る
    2 か所は `#[cfg(test)] mod tests` の中にある)。各関数が置く `variant` と、この証明が読むフィールドは
