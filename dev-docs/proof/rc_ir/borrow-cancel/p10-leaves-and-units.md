@@ -2,7 +2,7 @@
 
 対象コミットは `33d0e5d72d8414e5748175fb35c5572fb1bcd432` である。
 
-この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A3、A6、A9、A10、A11、A12、A13、A15 の
+この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A3、A6、A9、A10、A11、A12、A15 の
 上である。証明は 1 本の構造化証明で、その QED が次の 3 つである。
 
 - **P1** (leaf と unit の対応)。README の P1 が量化する型、すなわち **A10 を満たす**任意の型に
@@ -371,8 +371,17 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      - `Program::calculate_type_env` が置く `bulitin_tycons()` の鍵。`<1>3b` の表の 5 行が
        挙げるもので、`#FunPtr` で始まるのは `make_funptr_tycon(n)` だけである。
      - `Program::calculate_type_env` が置く `type_decl.tycon()` と、構造体についてその名前に
-       `PUNCHED_TYPE_SYMBOL` (`"#PunchedAt"`) と添字を継いだ穴つきの形。A13 より Fix の識別子は
-       `#` を含まないので、どちらも `#FunPtr` では始まらない。
+       `PUNCHED_TYPE_SYMBOL` (`"#PunchedAt"`) と添字を継いだ穴つきの形。`self.type_defns` に
+       `TypeDefn` を積むのは `Program::add_type_defns` と `Program::add_tuple_defn` の 2 つで
+       あり、前者を呼ぶのは `parse_module`、`make_std_mod`、`Program::link` の 3 つである。
+       `Program::link` が渡すのは別の `Program` の `type_defns` なので、名前の出どころは次の 3 つで
+       尽きる。`parse_type_defn` が作る宣言の名前は文法の `type_name`、すなわち `capital_name` に
+       当たる文字列なので、ASCII の大文字で始まる。`add_tuple_defn` が積む `tuple_defn(n)` の名前は
+       `Std::Tuple{n}` である。`make_std_mod` が `Std::FFI` の下に積むのは `TypeDeclValue::Alias` で
+       あり、`calculate_type_env` はそれを `aliases` に入れる。積んだ後に `TypeDefn` を書き替える
+       `TypeDefn::resolve_namespace` と `TypeDefn::resolve_type_aliases` はどちらも `self.value` に
+       しか触れないので、名前はこの 3 つのままである。穴つきの形はもとの名前を接頭辞に持つ。よって
+       どれも `#FunPtr` では始まらない。
      - `lift_all` と `realize_all` が `add_tycons` に渡す capture 構造体の型構成子。この 2 つが
        渡すのは `LiftedLambdas::take_new_tycons()` の返り値であり、その `new_tycons` へ入れるのは
        `record_capture_list` だけで、入れる鍵は `CaptureStruct` の `tycon` である。`run_one` が
@@ -391,7 +400,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `is_opaque_tyvar(&tv.name)` が真である型変数に限られ、`is_opaque_tyvar(name)` は
        `name.starts_with('?')` である。よってこの鍵の `name.name` は `?` で始まり、`#FunPtr` では
        始まらない。
-    BY A13, <1>3b, CODE src/ast/program.rs: Program::calculate_type_env,
+    BY <1>3b, CODE src/ast/program.rs: Program::calculate_type_env,
+       CODE src/ast/program.rs: Program::add_type_defns,
+       CODE src/ast/program.rs: Program::add_tuple_defn, CODE src/ast/program.rs: Program::link,
+       CODE src/parse/parser.rs: parse_module, CODE src/parse/parser.rs: parse_type_defn,
+       CODE src/parse/grammer.pest: type_name, CODE src/parse/grammer.pest: capital_name,
+       CODE src/fixstd/builtin.rs: tuple_defn, CODE src/fixstd/stdlib.rs: make_std_mod,
+       CODE src/ast/typedecl.rs: TypeDefn::resolve_namespace,
+       CODE src/ast/typedecl.rs: TypeDefn::resolve_type_aliases,
        CODE src/ast/program.rs: TypeEnv::add_tycons,
        CODE src/ast/types.rs: TyCon::into_punched_type_name,
        CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, CODE src/constants.rs: CAP_LIST_PREFIX,
@@ -2046,7 +2062,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     `<2>2` から `<2>7` が尽くしている。
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, <2>8, CODE src/rc_ir/ownership.rs: Binding
 
-<1>31. **P2 が成り立つ。** すなわち、A3、A6、A9、A10、A11、A12、A13、A15 を満たすプログラムに
+<1>31. **P2 が成り立つ。** すなわち、A3、A6、A9、A10、A11、A12、A15 を満たすプログラムに
    ついて、`vars` をその 1 つの本体 -- 関数の `body` またはグローバル初期化子の `init` -- について
    `VarTable::of` または `VarTable::body_only` が作る表、`x` を任意の `FullName`、`pi` を任意の
    `FieldPath` とすると、`origin(vars, E, x, pi)` は panic せずに `Origin` の値を返し、停止する。
@@ -2056,10 +2072,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    置き、その表で `RewriteCtx` と `CancelAnalysis` を作る。README の P7a も、site を関数に限らない
    形で書く理由を「`owns_unit` がグローバル初期化子の版でも呼ばれるからである」と述べる。
 
-   条件節がこの 8 つを挙げるのは、`<1>29` と `<1>30` がその全部の上に立つからである。`<1>1` は
+   条件節がこの 7 つを挙げるのは、`<1>29` と `<1>30` がその全部の上に立つからである。`<1>1` は
    A10、`<1>2` は A11 を A6 と D6 と合わせたもの、`<1>3a` は A12 と A3 の 1 段をこの文書の記法で
    述べたものであり (第 3 節)、A3 の残りは `<1>28` と `<1>28a`、A6 は `<1>2` と `<1>21`、A9 は
-   `<1>3`、A13 は `<1>3ba` の `<2>2`、A15 は `<1>29` が読む。
+   `<1>3`、A15 は `<1>29` が読む。
 
    P2 が量化するのは、`x` がプログラムの束縛変数である場合と、`x` が `vars.bindings` に束縛を
    持たない名前 (D6 の第 3 の形) である場合であり、どちらもこの主張の特別な場合である。
@@ -2087,9 +2103,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     BY <1>2, <1>21, <1>22, <1>23, <1>25, <1>26, <1>28, <1>28a, <1>29, <1>30
   <2>3. QED
     P2 が量化する 2 つの場合はどちらも `<2>2a` の範囲に入り、`pi` についての一般性は `<2>1` と
-    `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 8 つの仮定は `<1>29` と
+    `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 7 つの仮定は `<1>29` と
     `<1>30` が読むものである。
-    BY A3, A6, A9, A10, A11, A12, A13, A15, <1>29, <1>30, <2>1, <2>2, <2>2a, <2>2b,
+    BY A3, A6, A9, A10, A11, A12, A15, <1>29, <1>30, <2>1, <2>2, <2>2a, <2>2b,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel,
        CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
 
@@ -2139,8 +2155,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     `U(t)` の要素である。
     BY <2>1, <2>3, <2>4, DEF unit に届く
 
-<1>33. **(P1 の系 1: `origin` が辿る path はどれも unit に届く)** `<1>31` と同じ 8 つの仮定 --
-   A3、A6、A9、A10、A11、A12、A13、A15 -- を満たす
+<1>33. **(P1 の系 1: `origin` が辿る path はどれも unit に届く)** `<1>31` と同じ 7 つの仮定 --
+   A3、A6、A9、A10、A11、A12、A15 -- を満たす
    プログラムについて、`pi` が `L(ty(x))` の要素または `U(ty(x))` の要素であるとき、`(x, pi)` の
    呼び出しの下流 (`DEF 呼び出しの下流`) にあるすべての対 `(u, sig)` について、`u` が
    `vars.var_tys` に型を持つならば `sig` は `ty(u)` の unit に届く (`DEF unit に届く`)。
@@ -2337,7 +2353,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     ので、道の長さは有限で上から抑えられる。よって帰納法は呼び出しの下流の全体に届く。
     BY <1>21, <1>25, <2>5, <2>6
 
-<1>34. **(P1 の系 2: `origin` が返す path も unit に届く)** `<1>33` と同じ 8 つの仮定を満たす
+<1>34. **(P1 の系 2: `origin` が返す path も unit に届く)** `<1>33` と同じ 7 つの仮定を満たす
    プログラムについて、`pi` が `L(ty(x))` の要素または `U(ty(x))` の要素であるとき、
    `origin(vars, E, x, pi)` の返り値に現れる各 `VarPath` `(u, sig)` (identity と candidates の両方)
    について、`u` が `vars.var_tys` に型を持つならば `sig` は `ty(u)` の unit に届く。すなわち
