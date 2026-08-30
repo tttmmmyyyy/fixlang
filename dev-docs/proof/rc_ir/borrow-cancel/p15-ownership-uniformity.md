@@ -363,6 +363,98 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
   `param_tys` に何も入れないので空である。
   BY <1>1, A12
 
+### L1d (`type_env` は組み込みの宣言をそのまま持つ)
+
+**言明**。プログラムの `type_env` について、`type_env.tycons()` が `make_array_tycon()` に与える
+`TyConInfo` の `variant` は `TyConVariant::Array` であり、各 `make_funptr_tycon(n)` に与える `TyConInfo` の
+`variant` は `TyConVariant::Primitive` である。したがって、型 `σ` の最上位 tycon の `TyConInfo` の
+`variant` が `TyConVariant::Struct` または `TyConVariant::Union` であるとき、`is_array(σ)` も
+`is_funptr(σ)` も偽である。
+
+**この補題が要るのは、`is_array` と `is_funptr` が名前の比較だからである。** `is_array(σ)` は `σ` の最上位
+tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs: TypeNode::is_array`,
+`CODE src/fixstd/builtin.rs: is_array_tycon`)、`is_funptr(σ)` はその名前が namespace `Std` を持ち
+`#FunPtr` に 10 進表記が続く形かを問う (`CODE src/ast/types.rs: TypeNode::is_funptr`,
+`CODE src/fixstd/builtin.rs: is_funptr_tycon`)。どちらも `variant` を読まないので、`variant` が
+`Struct` である tycon がこの 2 つの名前を持たないことを別に述べる者が要る。
+
+<1>1. `TypeEnv` の `tycons` の欄には `pub` が付かず、`src/ast/program.rs` は下位モジュールを宣言しない
+      ので、この欄への書き込みはそのファイルの中の 6 か所に限る -- `TypeEnv::default`、`TypeEnv::new`、
+      `TypeEnv::unwrap_newtypes`、`TypeEnv::add_tycons`、`TypeEnv::resolve_type_aliases_in_tycons`、
+      `Program::resolve_namespace_not_in_expr` である。
+  BY CODE src/ast/program.rs: TypeEnv, TypeEnv::default, TypeEnv::new, TypeEnv::unwrap_newtypes,
+     TypeEnv::add_tycons, TypeEnv::resolve_type_aliases_in_tycons,
+     Program::resolve_namespace_not_in_expr
+
+<1>2. `<1>1` のどの書き込みも `TyConInfo` の `variant` の欄に代入しない。よって表に在る各 `TyConInfo` の
+      `variant` は、その `TyConInfo` を作った式が与えた値である。
+  `TypeEnv::default` は空の表を、`TypeEnv::new` は引数の表をそのまま置く。`unwrap_newtypes` と
+  `add_tycons` は `fields[..].ty` に `unwrap_newtypes` を掛けるだけである。
+  `resolve_type_aliases_in_tycons` は各 `TyConInfo` に `TyConInfo::resolve_type_aliases` を掛け、それは
+  各 `Field` の `ty` だけを書き替える。`Program::resolve_namespace_not_in_expr` は各 `TyConInfo` に
+  `TyConInfo::resolve_namespace` を掛け、それは各 `Field` の `syn_ty` と `ty` だけを書き替える。
+  BY <1>1, CODE src/ast/program.rs: TypeEnv::default, TypeEnv::new, TypeEnv::unwrap_newtypes,
+     TypeEnv::add_tycons, TypeEnv::resolve_type_aliases_in_tycons,
+     Program::resolve_namespace_not_in_expr,
+     CODE src/ast/types.rs: TyConInfo::resolve_type_aliases, TyConInfo::resolve_namespace,
+     CODE src/ast/typedecl.rs: Field::resolve_type_aliases, Field::resolve_namespace
+
+<1>3. `Program` の `type_env` の表に鍵と値の対を入れるのは、`Program::calculate_type_env` の
+      `TypeEnv::new` の呼び出しと、`TypeEnv::add_tycons` の 3 つの呼び出し元 --
+      `Program::register_opaque_tycon`、`defunctionalize_fix::run_one`、
+      `closure_specialization` の `lift_all` と `realize_all` -- だけである。
+  `<1>1` の 6 か所のうち、鍵の集合を変えるのは `TypeEnv::default`、`TypeEnv::new`、`TypeEnv::add_tycons`
+  である。`Program` の `type_env` の欄に `TypeEnv` を据えるのは、`Program::single_module` の
+  `Default::default()` (空の表) と `calculate_type_env` の `TypeEnv::new` である。
+  BY <1>1, CODE src/ast/program.rs: Program::single_module, Program::calculate_type_env,
+     TypeEnv::add_tycons,
+     CODE src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon,
+     CODE src/optimization/defunctionalize_fix.rs: run_one,
+     CODE src/optimization/closure_specialization.rs: lift_all, realize_all
+
+<1>4. `calculate_type_env` が `TypeEnv::new` に渡す表では、`make_array_tycon()` の値は
+      `variant: TyConVariant::Array` の `TyConInfo`、各 `make_funptr_tycon(n)` の値は
+      `variant: TyConVariant::Primitive` の `TyConInfo` である。
+  `calculate_type_env` は `bulitin_tycons()` から始める。`bulitin_tycons()` は `make_array_tycon()` に
+  `variant: TyConVariant::Array` を、`1..=FUNPTR_ARGS_MAX` の各 `arity` について `make_funptr_tycon(arity)`
+  に `variant: TyConVariant::Primitive` を置く。続く繰り返しが入れる鍵は 2 種である。第 1 種は型宣言の
+  `tycon()` であり、その鍵が既に在れば診断を出して `continue` するので、`bulitin_tycons()` が置いた鍵の
+  値は動かない。第 2 種は `tycon().into_punched_type_name(i)` であり、`PUNCHED_TYPE_SYMBOL`
+  (`#PunchedAt`) と 10 進表記を末尾に足した名前である。文法の `type_defn` は型の名前を `type_name`、
+  すなわち `capital_name` (ASCII の大文字で始まり英数字だけが続く形) として読むので、第 1 種の鍵の名前は
+  `#` を含まず、第 2 種の鍵の名前は大文字で始まって `#PunchedAt` と 10 進表記で終わる。よってどちらも
+  `#FunPtr` に 10 進表記を続けた名前と異なり、第 2 種は `Array` とも異なる。
+  BY CODE src/ast/program.rs: Program::calculate_type_env,
+     CODE src/fixstd/builtin.rs: bulitin_tycons, make_array_tycon, make_funptr_tycon,
+     CODE src/ast/types.rs: TyCon::into_punched_type_name,
+     CODE src/parse/grammer.pest: type_defn, type_name, capital_name
+
+<1>5. `add_tycons` の 3 つの呼び出し元が渡す鍵は、`make_array_tycon()` とも `make_funptr_tycon(n)` とも
+      異なる。
+  `register_opaque_tycon` が渡す鍵は `FullName::new(&gv_name.to_namespace(), &opq_var.name)` であり、
+  `opq_var` は `is_opaque_tyvar` が真の型変数なので、その名前は `?` で始まる。残る 2 つが渡すのは
+  `CaptureStruct::new` が作る tycon であり、その名前は `format!("{}@{}", prefix, owner.name)` なので
+  `@` を含む。`Array` も、`#FunPtr` に 10 進表記を続けた名前も、`?` で始まらず `@` を含まない。
+  BY CODE src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon,
+     collect_opaque_infos, CODE src/ast/types.rs: is_opaque_tyvar,
+     CODE src/optimization/capture_struct.rs: CaptureStruct::new,
+     CODE src/optimization/defunctionalize_fix.rs: run_one,
+     CODE src/optimization/closure_specialization.rs: lift_all, realize_all,
+     CODE src/fixstd/builtin.rs: make_array_name, make_funptr_name
+
+<1>6. QED
+  `<1>3` から `<1>5` より、`type_env.tycons()` が `make_array_tycon()` と各 `make_funptr_tycon(n)` に
+  与える `TyConInfo` は `bulitin_tycons()` が作ったものであり、`<1>2` よりその `variant` は作られたときの
+  ままである。`<1>4` よりそれは `TyConVariant::Array` と `TyConVariant::Primitive` である。
+  `σ` の最上位 tycon の `TyConInfo` の `variant` が `TyConVariant::Struct` か `TyConVariant::Union` で
+  あれば、その tycon は `make_array_tycon()` と異なり、どの `make_funptr_tycon(n)` とも異なる。
+  `is_array(σ)` はその tycon が `make_array_tycon()` に等しいかを問うので偽である。`is_funptr(σ)` が真で
+  あれば、その tycon の名前は namespace `Std` を持ち `#FunPtr` に 10 進表記が続く形であり、
+  `<1>4` と `<1>5` よりそのような鍵は `bulitin_tycons()` からしか表に入らないので、その `variant` は
+  `TyConVariant::Primitive` であって仮定に反する。よって `is_funptr(σ)` も偽である。
+  BY <1>2, <1>3, <1>4, <1>5, CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr,
+     CODE src/fixstd/builtin.rs: is_array_tycon, is_funptr_tycon
+
 ### L2 (`units_under` の 2 つの形)
 
 **言明**。`sub(τ, π)` が `Some(σ)` を返すとき `under(τ, π) = { π ++ u : u ∈ units(σ) }` であり、`None` を
@@ -1193,10 +1285,9 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     BY CODE src/rc_ir/borrow.rs: covered_leaves
   <2>2. `μ ∈ leaves(ty(y))` ならば `[idx] ++ μ ∈ leaves(ty(c))` である。
     A12 より `ty(c)` は構造体であり、この腕の条件より boxed ではない。`is_struct` は
-    `toplevel_tycon_info` を読むので `is_closure(ty(c))` は偽であり、構造体の `TyConInfo` の `variant` は
-    `TyConVariant::Struct` で、`Std::Array` の tycon の `variant` は `TyConVariant::Array`、
-    `Std::#FunPtr{n}` の tycon の `variant` は `TyConVariant::Primitive` なので、`is_array(ty(c))` も
-    `is_funptr(ty(c))` も偽である。`μ ∈ leaves(ty(y))` より `leaves(ty(y)) ≠ ∅` なので L8 より
+    `toplevel_tycon_info` を読むので `is_closure(ty(c))` は偽であり、その `TyConInfo` の `variant` は
+    `TyConVariant::Struct` であるから、L1d より `is_array(ty(c))` も `is_funptr(ty(c))` も偽である。
+    `μ ∈ leaves(ty(y))` より `leaves(ty(y)) ≠ ∅` なので L8 より
     `is_fully_unboxed(ty(y))` は偽であり、A12 より `ty(y)` は `ty(c)` の第 `idx` フィールドの型であって、
     そのフィールドは `ty(c)` が持つフィールド (`unpunched_field_types` が返すもの) である。
     `is_fully_unboxed` は `is_box` / `is_closure` / `is_array` で偽を、`is_funptr` で真を返し、それ以外
@@ -1204,8 +1295,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     ので全称の腕に入る。よって `is_fully_unboxed(ty(c))` も偽である。
     よって `boxed_leaf_paths` の `go` は `ty(c)` について `unpunched_field_types` の下へ降り、第 `idx`
     フィールドについて `ty(y)` から始めた `go` の結果の前に `idx` を置いたものを積む。
-    BY A12, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
-       TypeNode::is_array, TypeNode::is_funptr, CODE src/fixstd/builtin.rs: bulitin_tycons,
+    BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>3. QED
     この step の ASSUME より `covered(ty(y), ρ)` の元 `λ` が取れる。`covered(ty(y), ρ) ⊆ leaves(ty(y))`
@@ -1225,9 +1315,8 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   <2>2. `μ ∈ leaves(ty(y))` ならば `[t] ++ μ ∈ leaves(ty(s))` である。
     A12 より `ty(s)` は union であり、`Match` が名指す変位はその型が実際に持つものであって、`ty(y)` は
     その第 `t` 変位の型である。`is_union` は `toplevel_tycon_info` を読むので `is_closure(ty(s))` は偽で
-    ある。union の `TyConInfo` の `variant` は `TyConVariant::Union` であり、`Std::Array` の tycon の
-    `variant` は `TyConVariant::Array`、`Std::#FunPtr{n}` の tycon の `variant` は
-    `TyConVariant::Primitive` なので、`is_array(ty(s))` も `is_funptr(ty(s))` も偽である。
+    あり、その `TyConInfo` の `variant` は `TyConVariant::Union` であるから、L1d より `is_array(ty(s))` も
+    `is_funptr(ty(s))` も偽である。
     この腕の条件より `ty(s)` は boxed ではない。`μ ∈ leaves(ty(y))` より `leaves(ty(y)) ≠ ∅` なので L8 より
     `is_fully_unboxed(ty(y))` は偽である。`is_fully_unboxed` は `is_box` / `is_closure` / `is_array` で
     偽を、`is_funptr` で真を返し、それ以外では `unpunched_field_types` の全対についての全称である。
@@ -1235,8 +1324,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `is_fully_unboxed(ty(s))` も偽である。よって `boxed_leaf_paths` の
     `go` は `ty(s)` について `unpunched_field_types` の下へ降り、第 `t` 変位について `ty(y)` から始めた
     `go` の結果の前に `t` を置いたものを積む。
-    BY A12, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union,
-       TypeNode::is_array, TypeNode::is_funptr, CODE src/fixstd/builtin.rs: bulitin_tycons,
+    BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>3. QED
     この step の ASSUME より `covered(ty(y), ρ)` の元 `λ` が取れる。`covered(ty(y), ρ) ⊆ leaves(ty(y))`
@@ -1811,9 +1899,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
       `held_fields = unpunched_field_types(ty(c))` は添字 `idx` の対を含む。
   A12 より `ty(c)` は構造体であり、`Destructure` が名指すフィールドはその型が実際に持つ (punched でない)
   ものであって、`ty(x)` はその第 `idx` フィールドの型である。`is_struct` は `toplevel_tycon_info` を読む
-  ので `is_closure(ty(c))` は偽である。構造体の `TyConInfo` の `variant` は `TyConVariant::Struct` なので
-  `is_union(ty(c))` は偽であり、`Std::Array` の tycon の `variant` は `TyConVariant::Array`、
-  `Std::#FunPtr{n}` の tycon の `variant` は `TyConVariant::Primitive` なので、`is_array(ty(c))` も
+  ので `is_closure(ty(c))` は偽である。その `TyConInfo` の `variant` は `TyConVariant::Struct` なので
+  `is_union(ty(c))` は偽であり、L1d より `is_array(ty(c))` も
   `is_funptr(ty(c))` も偽である。この腕の条件より `ty(c)` は boxed ではない。`Λ_{ty(x)}(π) ≠ ∅` より
   `leaves(ty(x)) ≠ ∅` なので L8 より `is_fully_unboxed(ty(x))` は偽である。`is_fully_unboxed` は
   `is_box` / `is_closure` / `is_array` で偽を、`is_funptr` で真を返し、それ以外では
@@ -1823,9 +1910,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   残る分かれ目は `is_punched_array(ty(c))` だけである。**`Std::PunchedArray a` は
   `unbox struct { _arr : Array a, _idx : I64 }` なので、この場合は実際に起こりうる**
   (`CODE src/fixstd/std.fix: PunchedArray`)。
-  BY A12, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct, TypeNode::is_union,
-     TypeNode::is_array, TypeNode::is_funptr, TypeNode::is_punched_array,
-     CODE src/fixstd/builtin.rs: bulitin_tycons, CODE src/rc_ir/ownership.rs: unit_step
+  BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
+     TypeNode::is_union, TypeNode::is_punched_array, CODE src/rc_ir/ownership.rs: unit_step
 
 <1>3a. unbox 容器の `Field(c, idx)` について、`leaves(ty(c))` のうち `[idx]` を前置に持つものは
        `{ [idx] ++ μ : μ ∈ leaves(ty(x)) }` であり、したがって
@@ -1860,9 +1946,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>5. unbox union の `Payload(s, Some(t))` について、`(s, [t] ++ π)` は unit を覆い、`Λ` は表のとおりに
       写る。
   A12 より `ty(s)` は union であり、`Match` が名指す変位はその型が実際に持つものであって、`ty(x)` はその
-  第 `t` 変位の型である。`is_union` は `toplevel_tycon_info` を読むので `is_closure(ty(s))` は偽である。
-  union の `TyConInfo` の `variant` は `TyConVariant::Union` であり、`Std::Array` の tycon の `variant` は
-  `TyConVariant::Array`、`Std::#FunPtr{n}` の tycon の `variant` は `TyConVariant::Primitive` なので、
+  第 `t` 変位の型である。`is_union` は `toplevel_tycon_info` を読むので `is_closure(ty(s))` は偽であり、
+  その `TyConInfo` の `variant` は `TyConVariant::Union` であるから、L1d より
   `is_array(ty(s))` も `is_funptr(ty(s))` も偽である。この腕の条件より `ty(s)` は boxed ではない。
   `Λ_{ty(x)}(π) ≠ ∅` より `leaves(ty(x)) ≠ ∅` なので L8 より `is_fully_unboxed(ty(x))` は偽である。
   `is_fully_unboxed` は `is_box` / `is_closure` / `is_array` で偽を、`is_funptr` で真を返し、それ以外では
@@ -1876,10 +1961,9 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `unpunched_field_types` の下へ降り、第 `t` 変位について `ty(x)` から始めた `go` の結果の前に `t` を
   置いたものを積む。よって `Λ_{ty(s)}([t] ++ π) = { [t] ++ λ : λ ∈ Λ_{ty(x)}(π) }` であり、これは
   空でない。
-  BY A12, L1a, L8, CODE src/rc_ir/ownership.rs: unit_step, truncate_to_unit,
+  BY A12, L1a, L1d, L8, CODE src/rc_ir/ownership.rs: unit_step, truncate_to_unit,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
-     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union, TypeNode::is_array,
-     TypeNode::is_funptr, CODE src/fixstd/builtin.rs: bulitin_tycons
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union
 
 <1>6. 単一 `Arg(j, σ)` の `(args[j], σ)` は unit を覆い、`Λ_{ty(args[j])}(σ) = { σ }` である。
   A3 より `σ ∈ leaves(ty(args[j]))` である。`boxed_leaf_paths` の `go` は leaf を積んだ位置で戻るので、
