@@ -594,9 +594,13 @@ RC IR プログラムの外側にあって、その本体を起動するコー�
   (`CODE src/rc_ir/codegen.rs: Generator::implement_rc_function` -- `func.params` と `func.capture` を
   `scope_push` する)。`B(a)` がグローバル初期化子の `init` なら無い (D1 より `init` はパラメータも
   capture も持たない)。
-- **位置**。`B(a)` の 1 つの実行路 (D3) の上の位置。活性化が始まった時点では `B(a)` の根であり、段 (D24)
-  ごとにその路に沿って 1 つ進む。D21 より、活性化が節点を訪れる順序は `B(a)` の実行路の 1 つであり、それを
-  `a` が**辿る実行路**と呼ぶ。
+- **位置**。`B(a)` の 1 つの実行路 (D3) の上の位置。活性化が始まった時点では `B(a)` の根であり、節点を
+  1 つ実行するごとにその路に沿って 1 つ進む。D21 より、活性化が節点を訪れる順序は `B(a)` の実行路の 1 つ
+  であり、それを `a` が**辿る実行路**と呼ぶ。
+
+  **進むのは節点ごとであって、D24 の段ごとではない。** (F) の解放が作る活性化 -- デストラクタの本体と、
+  それが返す `IO` の動作 -- は、それを起こした段の**中**で走るので、自分の段を 1 つも持たない。それでも
+  節点を順に実行するので、位置は進む。
 - **義務集合** `Obl(a)`。D10 が定める参照の多重集合。始まった時点での値は D10 の初期値であり、以後は D24 の
   段が動かす。
 
@@ -649,6 +653,12 @@ C の呼び出し元が持っていたオブジェクトがそれで、`c_bounda
 渡す参照がそれである -- と、**既に在るオブジェクトの leaf** である。後者は `struct_set` の一意の腕が示す:
 消費した値の参照を、この段が割り当てたのではないオブジェクトへ書き込む
 (`CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody`)。
+
+**書き込まれた leaf がそれまで持っていた参照は、同じ段が処分する。** `struct_set` は書き込む前に古い値を
+取り出して release する (`CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody`,
+`CODE src/object.rs: ObjectFieldType::move_out_struct_field`)。その参照の持ち手はその構造体オブジェクト
+(D25 の 2 つ目) であり、この段が離す `Obl` の参照でも、結果の leaf に作られる参照でもない。**既に在る
+オブジェクトの leaf へ書き込む段は、この処分を伴う。**
 
 **作る活性化の初期 `Obl` は、この段が離した参照とは限らない。** `InlineLLVMFixBody` の 1 回目の適用に渡る
 `fix(f)` はこの段が組み立てた値であってオペランドではない。その capture の欄が持つのはオペランド `cap` の
@@ -758,6 +768,10 @@ Generator::build_run_destructor`)。適用される関数も、それが返す `
 とき、この op はメッセージを書いて `abort` を呼ぶ (`CODE src/fixstd/builtin.rs:
 InlineLLVMUndefinedInternalBody::generate`)。`FFI_CALL` が呼ぶ C の関数がプロセスを終えるときも同じで
 ある。この段の後に段は無い。
+
+**この段は参照を作らず、渡さず、処分しない。** プロセスが終わるので、`Obl` も `H` も以後読まれない。
+D9 の消費の表の `Llvm` の行がこの節点について挙げる leaf も、この段では処分されない -- `abort` を呼ぶ
+op は release を 1 つも出さない (`CODE src/fixstd/builtin.rs: InlineLLVMUndefinedInternalBody`)。
 
 実行時検査を切ってビルドしたとき、`undefined` は `unreachable` を出す。そこへ制御が届くプログラムの
 振る舞いは LLVM の定めるところで未定義であり、この文書のモデルの外にある。
@@ -1025,8 +1039,15 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 状態のときに 2 つの leaf が同じオブジェクトを指すことは、参照ではなく**値**の運び (D9 の値の水準の行) が
 与える。
 
-例外が 1 つある。capture が空のクロージャの capture の leaf は null ポインタであり、そこにオブジェクトも
-参照も無い (`CODE src/rc_ir/codegen.rs: Generator::build_rc_closure`, `CODE src/generator.rs:
+**配列の記憶域は例外である。** `#ArrayStorage a` のオブジェクトは、その時点の `size` 個の要素の参照を
+持ち、解放の走査はそれを 1 つずつ処分する (`CODE src/object.rs: ObjectFieldType::loop_over_array_buf`)。
+`boxed_leaf_paths` は `Array` にも `#ArrayStorage` にも leaf を 1 つしか返さない
+(`CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`) ので、**この 1 つのオブジェクトについては、持ち手の
+単位は leaf ではなく要素の位置である。** `0` から `size - 1` までの各位置が、その要素の型の
+`boxed_leaf_paths` が列挙する leaf を 1 組ずつ持つ。D25 の 2 つ目の持ち手はこの読みで数える。
+
+例外がもう 1 つある。capture が空のクロージャの capture の leaf は null ポインタであり、そこに
+オブジェクトも参照も無い (`CODE src/rc_ir/codegen.rs: Generator::build_rc_closure`, `CODE src/generator.rs:
 Generator::build_traverser_work` -- boxed の腕は `build_if_nonnull` で包む)。この文書は null の leaf を
 inhabited でない leaf と同じに扱う。
 
