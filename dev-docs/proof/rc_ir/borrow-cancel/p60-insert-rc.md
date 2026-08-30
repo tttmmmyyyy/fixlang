@@ -1253,14 +1253,21 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
 
 ### 10.1 塊、検査点、live 集合、割り当て
 
-`insert_rc` は骨格 (第 1 節) の各節点を、次の 3 つを並べた列へ写す
+`insert_rc` は骨格 (第 1 節) の各節点 `m` を、次の 4 つの部分へ写す
 (`CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner`)。
 
-- **前置 `Retain` 鎖**: `build_retains` が積む `Retain` 節点の列 (空のこともある)。
+- **前置 `Retain` 鎖**: `build_retains` が積む `Retain` 節点の列 (空のこともある)。核節点の外側に立つ。
 - **核節点**: 骨格節点と同じ種類の節点 (`Let`、`Destructure`、`Eval`、`Ret`)。
-- **後置 `Release` 鎖**: `build_releases` が積む `Release` 節点の列 (空のこともある)。
+- **アームの頭の `Release` 鎖**: `m` が `Let(x, Match(scrut, arms), cont)` であるとき、
+  `insert_into_match` が各アームの本体の頭に `build_releases(head, body)` で積む `Release` 節点の列
+  (空のこともある) (`CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match`)。他の 5 種の骨格節点は
+  この部分を持たない。
+- **後置 `Release` 鎖**: `build_releases` が積む `Release` 節点の列 (空のこともある)。核節点と `m` の
+  継続の写しの間に立つ。`Ret` はこの部分を持たない (`insert_into_expr_inner` の `RcExpr::Ret` の腕は
+  `build_releases` を呼ばない)。
 
-骨格節点 `m` の**検査点**とは、`m` の前置 `Retain` 鎖の最初の節点 (鎖が空なら核節点) の入口をいう。
+骨格節点 `m` の**塊**とは、この 4 つの部分の節点の全体をいう。骨格節点 `m` の**検査点**とは、`m` の前置
+`Retain` 鎖の最初の節点 (鎖が空なら核節点) の入口をいう。
 
 **DEF `Λ(m)`、`A(m)`**。骨格節点 `m` を書き換える `insert_into_expr(m, live_after)` の呼び出しが返す
 第 2 成分 (`live_before`) を `Λ(m)`、渡された `live_after` を `A(m)` と書く
@@ -1726,6 +1733,42 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
 1 つの参照が結果へ移りながら呼び出し元にも残ることになり、`insert_rc` が置く「借用オペランドの最後の
 使用の後の `Release`」がその参照を二重に処分する。`L16` はその形が無いことを言う。
 
+### 10.4a `L16a` (終端の `Ret` を書き換える呼び出しの `live_after` は空である)
+
+**言明**。関数本体・グローバル初期化子の終端の `Ret` を書き換える呼び出しの `live_after` は空集合で
+あり、その骨格節点の前置 `Retain` 鎖は空である。
+
+**証明**
+
+<1>1. 本体の根を書き換える呼び出しの `live_after` は空集合である。
+  BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func, CODE src/rc_ir/rc_insert.rs: insert_rc
+  関数については `insert_into_func` が `self.insert_into_expr(func.body, &Set::default())` を呼び、
+  グローバル初期化子については `insert_rc` が `inserter.insert_into_expr(glob.init, &Set::default())` を
+  呼ぶ。
+
+<1>2. 骨格節点 `m` が `Ret` でないとき、`m` の継続を書き換える呼び出しの `live_after` は、`m` を
+      書き換える呼び出しの `live_after` に等しい。
+  BY A25, D2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
+  D2 より `RcExpr` は 6 種であり、A25 より骨格は `Retain` と `Release` を含まないので、`Ret` でない
+  骨格節点は `Let`(`Match` でない右辺)、`Let`(`Match` の右辺)、`Destructure`、`Eval` の 4 種である。
+  4 つの関数はいずれも継続について `self.insert_into_expr(cont, live_after)` を呼ぶ。
+
+<1>3. 関数本体・初期化子の終端の `Ret` を書き換える呼び出しの `live_after` は空集合である。
+  BY <1>1, <1>2, D2, D3
+  D2 より `Ret` 以外の 5 種はちょうど 1 つの継続を持つので、関数本体・初期化子の終端の `Ret` (D3) は
+  本体の根から継続だけを辿って着く節点である。その継続の鎖の長さについての帰納で、鎖の各節点を
+  書き換える呼び出しの `live_after` は根のもの、すなわち空集合である。
+
+<1>4. QED
+  BY <1>3, CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の `RcExpr::Ret(x)` の腕
+  `Ret` の腕が前置 `Retain` 鎖を作るのは `retain_if_live(&x, live_after, ret)` の 1 か所だけであり、
+  その条件 `live.contains(&var.name)` は空集合について偽である。
+
 ### 10.5 `L17` (遷移は割り当てを liveness の指示関数へ運ぶ)
 
 `ρ` の上で連続する 2 つの検査点の間に在る節点の列を**遷移**と呼ぶ。
@@ -1776,16 +1819,42 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match, D3
     D3 より、アーム本体の実行路を辿り終えると `k` へ進む。`insert_into_match` は
     `!live_cont.contains(&x.name) && self.needs_rc(&x)` のとき `build_releases(vec![x], cont)` を置く。
-  <2>4. QED
-    BY D2, D3, A25, <2>1, <2>2, <2>3, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func
-    出力の各節点は、`insert_into_func` が積む `unused` の解放鎖に属するか、いずれかの骨格節点の塊に
-    属する (10.1 節)。塊は検査点で始まるので、各塊は 1 つの検査点を持ち、その検査点から次の検査点
-    までが遷移である。
-    D2 より骨格節点は 6 種であり、A25 より `Retain` と `Release` は骨格に無い。残る 4 種のうち
-    `Let`(非 `Match`)、`Destructure`、`Eval` は (T1)、`Let`(`Match`) は (T2) である。`Ret` は木の中の
-    位置で 2 つに分かれる -- アーム本体の終端は (T3) であり (D3 より、アーム本体の実行路を辿り終えると
-    `Match` の継続へ進む)、関数本体・初期化子の終端は `ρ` の最後の節点なので (D3) 後続の検査点を持たず、
-    遷移を成さない。
+  <2>4. 出力の各節点は、`insert_into_func` が積む `unused` の解放鎖に属するか、いずれかの骨格節点の
+        塊 (10.1 節) に属する。
+    BY A15, A25, CODE src/rc_ir/rc_insert.rs: insert_rc,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
+    `insert_rc` が節点を作るのは、`insert_into_func` の `build_releases(unused, body)` と、
+    `insert_into_expr_inner` が骨格節点 1 つを受け取って走る 5 つの腕だけである (A15 より
+    `insert_into_expr` は `insert_into_expr_inner` をちょうど 1 回呼び、A25 より
+    `Retain`/`Release` の腕は通らない)。その 5 つの腕が作る節点は、10.1 節が挙げる 4 つの部分 --
+    前置 `Retain` 鎖、核節点、アームの頭の `Release` 鎖、後置 `Release` 鎖 -- で尽きる。継続と
+    アーム本体の節点は、それぞれについての `insert_into_expr` の呼び出しが作るものである。
+  <2>4a. QED
+    BY D2, D3, A25, L16a, <2>1, <2>2, <2>3, <2>4,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の `RcExpr::Ret(x)` の腕
+    D2 より骨格節点は 6 種であり、A25 より `Retain` と `Release` は骨格に無い。残る 4 種について、
+    塊の節点が `ρ` の上でどの遷移に入るかを見る。
+    `Let`(非 `Match`)、`Destructure`、`Eval` の塊はアームの頭の `Release` 鎖を持たないので、
+    前置 `Retain` 鎖・核節点・後置 `Release` 鎖の 3 つであり、<2>1 よりそれがそのまま (T1) の遷移で
+    ある。
+    `Let(x, Match(scrut, arms), cont)` の塊は 2 つに分かれる。前置 `Retain` 鎖・核節点・`ρ` が選んだ
+    アーム `j` の頭の `Release` 鎖は <2>2 より (T2) の遷移をなし、後置 `Release` 鎖は <2>3 より
+    アーム `j` の本体の終端の `Ret` から始まる (T3) の遷移の末尾に入る。D3 より `ρ` は選ばれなかった
+    アームの頭の `Release` 鎖を訪れない。
+    `Ret` は木の中の位置で 2 つに分かれる。アーム本体の終端の `Ret` の塊は前置 `Retain` 鎖と核節点で
+    あり (`Ret` の腕は `build_releases` を呼ばないので後置 `Release` 鎖が無い)、<2>3 よりその 2 つは
+    その `Match` の後置 `Release` 鎖と合わせて (T3) の遷移をなす。関数本体・初期化子の終端の `Ret` は
+    `ρ` の最後の骨格節点であって後続の検査点を持たないので遷移を成さないが、`L16a` よりその前置
+    `Retain` 鎖は空であり、後置 `Release` 鎖も無いので、その塊は核節点 1 つ -- すなわちその検査点
+    1 点 -- である。
+    よって `ρ` の上の各節点の入口は、`unused` の解放鎖の中の点か、(T1)・(T2)・(T3) のいずれかの
+    遷移の中の点か、関数本体・初期化子の終端の `Ret` の検査点かのいずれかであり、遷移はこの 3 種で
+    尽きる。
 
 <1>2. **CASE (T1)** で `m = Let(x, rhs, cont)`、`rhs` は `Match` でない。
   <2>1. `Λ(m) = (Λ(m') \ {x}) ∪ ops` である。ここで `ops` は `rhs_operands(rhs)` が挙げるオペランドの
@@ -2089,23 +2158,9 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
 
 **証明**
 
-<1>1. 関数本体・初期化子の終端の `Ret(x)` を書き換える呼び出しの `live_after` は空集合である。
-  BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
-     CODE src/rc_ir/rc_insert.rs: insert_rc,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match, D2
-  根を書き換える呼び出しの `live_after` は空集合である (`insert_into_func` は
-  `insert_into_expr(func.body, &Set::default())`、`insert_rc` は
-  `inserter.insert_into_expr(glob.init, &Set::default())` を呼ぶ)。継続を書き換える 4 つの関数は
-  いずれも `self.insert_into_expr(cont, live_after)` を呼び、`live_after` をそのまま渡す。D2 より
-  `Ret` 以外の 5 種はちょうど 1 つの継続を持つので、関数本体・初期化子の終端の `Ret` は根から継続
-  だけを辿って着く節点である。継続の鎖の長さについての帰納で `live_after` は空集合である。
-
-<1>2. その検査点の前置 `Retain` 鎖は空である。
-  BY <1>1, CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live
-  `retain_if_live` の条件 `live.contains(&var.name)` は空集合について偽である。
+<1>1. 関数本体・初期化子の終端の `Ret(x)` を書き換える呼び出しの `live_after` は空集合であり、
+      その検査点の前置 `Retain` 鎖は空である。
+  BY L16a
 
 <1>3. 本体の根の検査点より前の `Release` 鎖に `Retain` 節点は無い。
   BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
@@ -2114,10 +2169,10 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
   `RcExpr::Release` の節点しか作らない。
 
 <1>4. QED
-  BY <1>2, <1>3, L17
+  BY <1>1, <1>3, L17
   `L17` (a) より、出力の各節点の入口は、根の検査点より前の `Release` 鎖の中の点か、連続する 2 つの
   検査点の間の遷移の中の点か、終端の `Ret` の検査点かのいずれかである。<1>3 より第 1 の場所に
-  `Retain` 節点は無い。第 3 の場所は 1 点であり、<1>2 より前置 `Retain` 鎖が空なのでその点は核節点
+  `Retain` 節点は無い。第 3 の場所は 1 点であり、<1>1 より前置 `Retain` 鎖が空なのでその点は核節点
   `Ret` の入口であって `Retain` 節点の入口ではない。よって `Retain` 節点の入口は第 2 の場所にある。
 
 ### 10.7 `L19` ((O1))
