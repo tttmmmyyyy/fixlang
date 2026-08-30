@@ -249,8 +249,8 @@ src/rc_ir/borrow.rs	PendingRetains	P7c,P7f,P15,P16,P17,P18,P18a,P18b	fae59c2ec13
 src/rc_ir/borrow.rs	RewriteCtx	P7a,P7d,P7e	b774f9eadb68
 src/rc_ir/borrow.rs	RewriteCtx::any_owned_unit	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	c49b82677dd3
 src/rc_ir/borrow.rs	RewriteCtx::call_rc	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18a,P18b,P26,(P-insert)	b05f4a24511a
-src/rc_ir/borrow.rs	RewriteCtx::check_ownership_is_levelled	P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,T	85ff56fd5ae4
-src/rc_ir/borrow.rs	RewriteCtx::new	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P26	bfca5e3f2335
+src/rc_ir/borrow.rs	RewriteCtx::check_ownership_is_levelled	P3,P4,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,T	85ff56fd5ae4
+src/rc_ir/borrow.rs	RewriteCtx::new	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P26	bfca5e3f2335
 src/rc_ir/borrow.rs	RewriteCtx::owns_object	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P26	8d339a540e72
 src/rc_ir/borrow.rs	RewriteCtx::owns_unit	P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P26	5ec3f1aaa85c
 src/rc_ir/borrow.rs	RewriteCtx::rewrite	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18	19a938d13f94
@@ -275,7 +275,7 @@ src/rc_ir/borrow.rs	drop_nodes_inner	P18c,P19,P20,P21,P22,P23,P24	a208018d5cf5
 src/rc_ir/borrow.rs	expr_node	P15,P16,P17,P18,(P-insert)	bace42aa8264
 src/rc_ir/borrow.rs	func_has_borrowable_param	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	e7c889e3f8d6
 src/rc_ir/borrow.rs	funcs_observing_uniqueness	D/A,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P26	bc386fc09dae
-src/rc_ir/borrow.rs	infer_ownership	D/A,P3,P4,P5,P6,P7,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	915dec92acac
+src/rc_ir/borrow.rs	infer_ownership	D/A,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b	915dec92acac
 src/rc_ir/borrow.rs	level_ownership	D/A,P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	0b4d0e075297
 src/rc_ir/borrow.rs	levelled_sites	D/A,P3,P4,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b	d1e9b606d33a
 src/rc_ir/borrow.rs	mentions_a_destructor	P26	7743aab5a4a5
@@ -406,7 +406,7 @@ src/rc_ir/rename.rs	assign_fresh_names_to_binders_inner	P7a,P7d,P7e,P8,P9,P10,P1
 src/rc_ir/rename.rs	fresh_rename_function	D/A,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,P27,P29	592cc4b5a304
 src/rc_ir/rename.rs	rename_expr	P7a,P7d,P7e,P15,P16,P17,P18	5c684036c35a
 src/rc_ir/rename.rs	rename_expr_inner	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18	5bebcb3ee0f7
-src/rc_ir/rename.rs	rename_rhs	D/A,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18	0f15930e08dc
+src/rc_ir/rename.rs	rename_rhs	D/A,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18a,P18b	0f15930e08dc
 src/rc_ir/rename.rs	rename_var	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P18c,P19,P20,P21,P22,P23,P24	022b66f7191a
 src/rc_ir/simplify.rs	simplify	P8,P9,P10,P11,P12,P13,P14,P14a	1afff04e2a88
 src/rc_ir/specialization.rs	request	D/A	ab18cf61ff78

@@ -75,7 +75,7 @@ impl OwnedLeaves {
 /// Infer parameter ownership for every function of `prog` by a fixed point: start every parameter
 /// leaf `Borrow`, then repeatedly demote to `Own` any leaf that a consume site traces back to, until
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
-// PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
     let var_tables: Map<FuncRef, VarTable> = prog
         .funcs
@@ -831,7 +831,7 @@ struct RewriteCtx<'a> {
 impl<'a> RewriteCtx<'a> {
     /// The rewrite state of one output version of `func`. `is_borrow_version` marks the borrow
     /// clone, the version whose reference counting on its borrowed parameter leaves is dropped.
-    // PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn new(
         func: &RcFunc,
         is_borrow_version: bool,
@@ -1004,7 +1004,7 @@ impl<'a> RewriteCtx<'a> {
     ///
     /// Only the borrow version needs checking. The all-owning original holds every parameter and
     /// capture unit in `owned_units`, so `owns_object` is true of each of its objects.
-    // PROOF: P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, T (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, T (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_ownership_is_levelled(&self, func: &RcFunc) {
         for (v, unit) in levelled_sites(func, self.type_env) {
             let where_from = origin(&self.vars, self.type_env, &v.name, &unit);
