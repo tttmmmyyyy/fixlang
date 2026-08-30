@@ -1247,15 +1247,16 @@ boxed な引数を取る実行では在る**と書く。3 つが内容を持つ�
 
 <1>0. 共通接頭の各時点で、`X` で生きている計数下オブジェクトと `X'` で生きている計数下オブジェクトは
       D30 の対応で 1 対 1 であり、`X` で生きている活性化と `X'` で生きている活性化も 1 対 1 である。
-  前提 (解放の一致) より、共通接頭の上では 2 つの実行は対応する段で同じオブジェクトを解放する。割り当ての
+  D30 の (X3) より、共通接頭の上では 2 つの実行は対応する段で同じオブジェクトを解放する。割り当ての
   側は D30 が「対応する 2 つの段が割り当てた 2 つのオブジェクトが対応する」と定める。活性化については
   L5 が 1 対 1 を与える。
-  BY D30, L5, 前提 (解放の一致)
+  BY D30, L5
 
 <1>0a. 借用版の活性化が作られるのは、`route` が借用版へ回した呼び出しの (E3) の段だけである。
-  <2>1. 借用版の名前を `App` の callee に置くのは `route` だけである。`rewrite_inner` の他の腕は rhs を
-        そのまま複製し、`RcRhs::Closure(target, caps)` の `target` も書き換えない。
-    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, route
+  <2>1. 借用版の名前を `App` の callee に置くのは `route` だけである。書き換えが `App` の callee に入れる
+        名前は `route` の返り値であり (P12)、`rewrite_inner` の他の腕は rhs をそのまま複製して
+        `RcRhs::Closure(target, caps)` の `target` も書き換えない。
+    BY P12, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, route
   <2>2. `apply_lambda` が受け取るのはクロージャ型か funptr 型の値だけである。`<2>1` よりクロージャの値が
         指す関数が借用版であることは無い。funptr の値が名指す関数の名前は入力のプログラムに在る名前で
         あり、借用版の名前は `borrow_funcref` が付ける `<元の名前>#borrow` であって、A13 より入力のどの
@@ -1345,10 +1346,12 @@ boxed な引数を取る実行では在る**と書く。3 つが内容を持つ�
     `<2>1` が基底であり、`<2>2` から `<2>6b` が `a` の段の全種を尽くす。活性化を作る段の種は L9a の 6 種で
     あり、そのうち (i)(ii) が `<2>4`、(iii) は `a` の節点の段なので `<2>3`、(iv) は `a` を作らず `a` の段でも
     ない、(v) が `<2>6a`、(vi) が `<2>6b` である。活性化を作らない段のうち (E4) が `<2>5`、(E2) の残りが
-    `<2>3` であり、(E5) は `Obl` を動かさず、(E6) の後に段は無い。`a` が作った子は (i)(ii)(iii)(v)(vi) の
-    いずれかの段が作ったものであり、(v) の返りは `<2>6a`、(vi) の返りは `<2>6b` が扱うので、`<2>5` に残るのは
-    (i)(ii) の子と (iii) の子である。L8 の (a) と (b) が `<2>2`、(c) が `<2>6` である。
-    BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>6a, <2>6b, D24, L9a
+    `<2>3` であり、(E5) は `Obl` を動かさず、(E6) の後に段は無く、(E8) は環境の段であって `a` の段ではない
+    -- その段は参照を作らず、渡さず、処分しないので `Obl` を動かさない (D24 の (E8)、A17 (ii-b))。`a` が
+    作った子は (i)(ii)(iii)(v)(vi) のいずれかの段が作ったものであり、(v) の返りは `<2>6a`、(vi) の返りは
+    `<2>6b` が扱うので、`<2>5` に残るのは (i)(ii) の子と (iii) の子である。L8 の (a) と (b) が `<2>2`、
+    (c) が `<2>6` である。
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>6a, <2>6b, A17, D24, L9a
 
 <1>4. QED
   言明の第 1 文 (和の分解) は `<1>2` である。第 2 文 (項が 0 でない対の形) は `<1>3` である。第 3 文は次で
@@ -1363,9 +1366,10 @@ boxed な引数を取る実行では在る**と書く。3 つが内容を持つ�
 スレッドに属するとき、この命題の結論は「観測点を実行している活性化がその借用版の子孫である」を与えない。
 第 12 節に前提として書き出す。
 
-**`<1>0` が読む「共通接頭の上では解放が一致する」は前提 (解放の一致) である。** `borrow_ify` は借用した
-参照の処分を呼び出しの後へ動かすので、2 つの実行が同じオブジェクトを違う段で解放する形は実際に起こりうる。
-D30 はそれを (X3) の出口に数え、「(X3) は `π` が `borrow_ify` のときに開く」と書く。
+**`<1>0` が読む「共通接頭の上では解放が一致する」は D30 の (X3) である。** `borrow_ify` は借用した参照の
+処分を呼び出しの後へ動かすので、2 つの実行が同じオブジェクトを違う段で解放する形は実際に起こりうる。
+D30 はそれを (X3) の出口に数え、「(X3) は `π` が `borrow_ify` のときに開く」と書く。すなわちこの命題が
+語るのは、その出口より手前の段だけである。
 
 ## L10 (門が閉じた関数の到達の列に観測点は現れない)
 
@@ -1412,11 +1416,12 @@ D30 はそれを (X3) の出口に数え、「(X3) は `π` が `borrow_ify` の
       する。`clone_func` が作る複製は束縛変数の付け替えであって `FuncRef` を替えない (P9)。
   BY P9, <1>1, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
 
-<1>5. (i) の段は `<1>1` の (b) の辺を与える。`route` が返す呼び出し先は元の呼び出し先と同じ入力関数の版で
-      あり、呼び出し先が入力の関数を名指すとき返る名前は出力の `funcs` の鍵である (P12)。よって `g` の本体の
-      位置にある (i) の段は、入力の関数の対 `g -> h` の辺を与える。ここで `h` は到達される活性化の本体の
-      入力関数である。
-  BY P12, <1>3
+<1>5. (i) の段は `<1>1` の (b) の辺を与える。(i) の段の callee の名前は出力の `prog.funcs` の鍵なので、
+      `resolve_callee_params` はその名前で関数を引いて `Some` を返し、P30 よりその関数はその段の実行時の
+      呼び出し先 (D23) である。`route` が返す呼び出し先は元の呼び出し先と同じ入力関数の版であり、呼び出し先が
+      入力の関数を名指すとき返る名前は出力の `funcs` の鍵である (P12)。よって `g` の本体の位置にある (i) の
+      段は、入力の関数の対 `g -> h` の辺を与える。ここで `h` は到達される活性化の本体の入力関数である。
+  BY D23, P12, P30, <1>3, CODE src/rc_ir/ownership.rs: resolve_callee_params
 
 <1>6. (ii) の段と (iii) の段は `<1>1` の (e) の辺を与える。(ii) の段を持つ本体の `owner` は `<1>1` の (c)
       により、(iii) の段を持つ本体の `owner` は `<1>1` の (d) により `calls_indirectly` に入る。(iii) の
@@ -1429,21 +1434,21 @@ D30 はそれを (X3) の出口に数え、「(X3) は `π` が `borrow_ify` の
 <1>6a. 実行が (vi) の段を持つならば `builds_a_destructor(prog)` は真である。
   <2>1. (vi) の段があるならば、実行時に `Std::FFI::Destructor` のオブジェクトが在る (L9a の (vi) の言明)。
     BY L9a
-  <2>2. そのオブジェクトを割り当てた段がある。前提 (実行の最初の時点に参照が無い) より、実行の最初の
-        時点に環境が持ち込んだオブジェクトは無い。環境が持つ参照は、(E1) が渡した分を環境が持たない
-        (A17 (i)) ので、(E4) と (E7) がこの実行の段から渡した分と `boxed_to_retained_ptr` が渡した分に
-        限り、`InlineLLVMBoxedFromRetainedPtrIOS` が環境から受け取る参照はその最後のものである
-        (A17 (i-b))。よって実行に現れる計数下のオブジェクトはどれも、この実行のある段が割り当てたもので
-        ある。D24 の (E2) の `H` の表より、オブジェクトを新しく割り当てる
-        段は `Closure(f, caps)` 節点の capture object と、`result_prov` が単一の `Fresh` を宣言する
-        `Llvm` の結果の leaf である。capture object の型は `Std::#DynamicObject` であって `Destructor`
-        ではない。よってその段は出力の本体のある `Let(x, Llvm(gen, args), k)` であり、割り当てられた
-        オブジェクトの型 `Destructor a` は `x.ty` のある boxed leaf の型である。**その `Let` は入力の
-        本体にも在って `x.ty` は同じである** -- L8 の (2) より、出力の本体と入力の本体の節点は
-        `Retain`/`Release` の 3 種を除いて 1 対 1 に対応し、対応する節点は同じ種類・同じ path・同じ並びを
-        持ち、名指す変数は名前替えの下で対応する。名前替えは型を替えない (P9)。
-    BY A17, D24, L8, P9, 前提 (実行の最初の時点に参照が無い),
-       CODE src/rc_ir/codegen.rs: Generator::build_rc_closure
+  <2>2. そのオブジェクトは、この実行のある段が割り当てたものか、実行の最初の時点に環境が持ち込んだ
+        オブジェクトから到達できる (D25) ものかのどちらかである。A17 (i-c) より、最初の時点に生きている
+        各計数下オブジェクトは少なくとも 1 つの持ち手を持ち、その時点に在る参照は環境が持つか、環境が
+        持ち込んだオブジェクトの leaf が持つので、持ち手を辿ると環境が持つ参照に着く。最初の時点に無かった
+        計数下のオブジェクトは、この実行のある段が割り当てたものである。
+    BY A17, D25
+  <2>2a. この実行のある段が割り当てた場合、出力の本体のある `Let(x, Llvm(gen, args), k)` があって、
+        `Destructor a` は `x.ty` のある boxed leaf の型である。D24 の (E2) の `H` の表より、オブジェクトを
+        新しく割り当てる段は `Closure(f, caps)` 節点の capture object と、`result_prov` が単一の `Fresh` を
+        宣言する `Llvm` の結果の leaf である。capture object の型は `Std::#DynamicObject` であって
+        `Destructor` ではない。**その `Let` は入力の本体にも在って `x.ty` は同じである** -- L8 の (2) より、
+        出力の本体と入力の本体の節点は `Retain`/`Release` の 3 種を除いて 1 対 1 に対応し、対応する節点は
+        同じ種類・同じ path・同じ並びを持ち、名指す変数は名前替えの下で対応する。名前替えは型を替えない
+        (P9)。
+    BY D24, L8, P9, <2>2, CODE src/rc_ir/codegen.rs: Generator::build_rc_closure
   <2>3. `mentions_a_destructor(&x.ty)` は真である。`result_prov` の既定は `Unknown` であり、A3 より
         override するのは 29 個である。そのうち `Fresh` を宣言するのは次の形に尽きる。
         (α) `InlineLLVMMakeStructBody`、`InlineLLVMMakeUnionBody`、`replaced_field_prov`
@@ -1488,15 +1493,19 @@ D30 はそれを (X3) の出口に数え、「(X3) は `π` が `borrow_ify` の
        InlineLLVMArrayGrowSizeBody::result_prov, InlineLLVMArraySetBody::result_prov,
        InlineLLVMArraySwapBody::result_prov, InlineLLVMArrayLitBody::result_prov,
        InlineLLVMPunchedArrayPlugBody::result_prov
-  <2>4. `builds_a_destructor` は `prog.funcs` の各本体と `prog.globals` の各初期化子の全節点に
-        `binds_a_destructor` を当て (`for_each_node`)、`binds_a_destructor` は `Let(x, _, _)` について
-        `mentions_a_destructor(&x.ty)` を問う。`funcs_observing_uniqueness` が読む `prog` は `borrow_ify`
-        の入力であり、`<2>2` の後半よりその `Let` は入力の本体にも在って `x.ty` は同じなので、`<2>3` より
-        `builds_a_destructor(prog)` は真である。
-    BY <2>2, <2>3, CODE src/rc_ir/borrow.rs: builds_a_destructor, binds_a_destructor,
+  <2>4. `<2>2a` の場合、`builds_a_destructor(prog)` は真である。`builds_a_destructor` は `prog.funcs` の
+        各本体と `prog.globals` の各初期化子の全節点に `binds_a_destructor` を当て (`for_each_node`)、
+        `binds_a_destructor` は `Let(x, _, _)` について `mentions_a_destructor(&x.ty)` を問う。
+        `funcs_observing_uniqueness` が読む `prog` は `borrow_ify` の入力であり、`<2>2a` よりその `Let` は
+        入力の本体にも在って `x.ty` は同じなので、`<2>3` より真である。
+    BY <2>2a, <2>3, CODE src/rc_ir/borrow.rs: builds_a_destructor, binds_a_destructor,
        CODE src/rc_ir/ast.rs: for_each_node
+  <2>4a. 環境が持ち込んだオブジェクトから到達できる場合も、`builds_a_destructor(prog)` は真である。
+        そのオブジェクトの型は `Std::FFI::Destructor` を含む。
+    BY 前提 (P-2), <2>1, <2>2
   <2>5. QED
-    BY <2>1, <2>2, <2>3, <2>4
+    `<2>2` の 2 つの場合を `<2>4` と `<2>4a` が尽くす。
+    BY <2>1, <2>2, <2>2a, <2>3, <2>4, <2>4a
 
 <1>6b. (vi) の段は `<1>1` の (f) の辺を与える。`<1>6a` より `builds_a_destructor(prog)` は真なので、
       (vi) の段を持つ活性化の本体の入力関数 `g` から `closure_targets` の各元へ辺が張られる。L9b より
