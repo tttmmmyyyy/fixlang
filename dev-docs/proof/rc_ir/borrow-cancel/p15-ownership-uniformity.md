@@ -43,9 +43,9 @@ P7a の 2 つの向きは、`origin` の再帰についての 2 つの帰納で�
 「その位置までに値を得ている」は L20a が与える -- A11 は使用がどの束縛に解決するかしか言わず、その
 束縛の変数が既に値を得ていることは D2 のスコープの規則と D3 の実行路の進み方から出る。この 2 つと
 L12 が回す帰納の尺度は `|Reach(・)|` であり、それが狭義に減ることは L11a が与える -- 減るのは
-`origin` の再帰に閉路が無いからであり、閉路があれば `origin` は停止しない。**`union_as` が作る隔たりはこの 2 つの帰納の
-どちらにも現れない** -- 前の版の言明が要求していた「宣言についての仮定」(前稿の (★)) は要らない。
-第 6 節の最後の 2 つの小節がその答えと、見つかった点を述べる。
+`origin` の再帰に閉路が無いからであり、閉路があれば `origin` は停止しない。**`union_as` が作る隔たりは
+この 2 つの帰納のどちらにも現れない**ので、宣言についての追加の仮定は要らない。第 6 節の最後の小節が
+その理由を述べる。
 
 L22 が inhabited に限るのは 1 か所である。`Binding::Llvm` の腕で、`result_prov` が `⊥` (空集合) と宣言した
 leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` の場合)。inhabited でない leaf が参照を持たないことを
@@ -1486,7 +1486,8 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `InlineLLVMStructPlugInBody` は欄 `field_idx : usize`、`InlineLLVMStructSetBody` は欄
     `field_idx : u32`、`InlineLLVMMakeUnionBody` と `InlineLLVMUnionAsBody` は `variant_index()`
     (欄 `field_idx : usize`) である。残る 23 個の本体は `self` の欄を読まない。
-    BY A3, CODE src/fixstd/builtin.rs, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov,
+    BY A3, CODE src/fixstd/builtin.rs: impl LLVMGen for の各 result_prov,
+       CODE src/ast/inline_llvm.rs: LLVMGen::result_prov,
        CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov,
        InlineLLVMStructPunchBody::result_prov, InlineLLVMStructPunchBody::arg_leaf_path,
        InlineLLVMStructPlugInBody::result_prov, InlineLLVMStructSetBody::result_prov,
@@ -1833,7 +1834,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `rc_units(&arg.ty, ..).iter().any(|unit| self.owns_unit(arg, unit))`、`routing_saves_retain` の
   `!(self.owns_unit(arg, unit) && ..)`、`call_rc` の `let arg_owned = self.owns_unit(arg, &unit);`、
   `rewrite_rc` の `.filter(|unit| self.owns_unit(v, unit))`、および 2 つの doc コメントである。
-  BY CODE src/rc_ir/borrow.rs, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+  BY CODE src/rc_ir/borrow.rs: 識別子 owns_unit の全出現, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
      RewriteCtx::any_owned_unit, RewriteCtx::routing_saves_retain,
      RewriteCtx::call_rc, RewriteCtx::rewrite_rc
 
@@ -1891,7 +1892,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 - **(a)** `u ∈ units(ty(v))` のとき `(v, u)` は unit を覆う。
 - **(b)** `(x, π)` が unit を覆うとき、DEF 再帰で訪れる対 の表が `(x, π)` から進む各相手も unit を覆う。
-  さらに `Λ` は次のように写る。
+  さらに、`origin_from_leaves_under` が進む相手 `(args[j], w)` については `w ∈ units(ty(args[j]))` で
+  あり、残る 4 種の相手については `Λ` が次のように写る。
 
   | 進む相手 | `Λ` の写り方 |
   |---|---|
@@ -1899,7 +1901,6 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   | unbox 容器の `Field(c, idx)` の `(c, [idx] ++ π)` | `Λ_{ty(c)}([idx] ++ π) = { [idx] ++ λ : λ ∈ Λ_{ty(x)}(π) }` |
   | unbox union の `Payload(s, Some(t))` の `(s, [t] ++ π)` | `Λ_{ty(s)}([t] ++ π) = { [t] ++ λ : λ ∈ Λ_{ty(x)}(π) }` |
   | 単一 `Arg(j, σ)` の `(args[j], σ)` | `Λ_{ty(args[j])}(σ) = { σ }` |
-  | `origin_from_leaves_under` の `(args[j], w)` | `w ∈ units(ty(args[j]))` |
 
 <1>1. (a) が成り立つ。
   L7 より `Λ_{ty(v)}(u) ≠ ∅` であり、その各 leaf `λ` について `trunc(ty(v), λ) = u` である。L6 より
@@ -2002,8 +2003,9 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   BY A3, P1, L1b, L6, L7, DEF 扱う型, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
 
 <1>8. QED
-  `<1>1` が (a) を、`<1>2` から `<1>7` が (b) の表の 5 行を尽くして扱った (DEF 再帰で訪れる対 の表の
-  うち「呼ぶ相手」が無い 3 行は新しい対を作らない)。
+  `<1>1` が (a) を扱った。(b) については、`<1>2` から `<1>6` が表の 4 行を、`<1>7` が
+  `origin_from_leaves_under` の相手の `w ∈ units(ty(args[j]))` を与え、この 5 種が
+  DEF 再帰で訪れる対 の表の進む相手を尽くす (「呼ぶ相手」が無い 3 行は新しい対を作らない)。
   BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>6, <1>7, DEF 再帰で訪れる対
 
 ### L19 (`Llvm` が束縛する値の leaf の `origin`)
@@ -2672,9 +2674,10 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   BY <1>4
 
 <1>6. QED
-  README の P7a は「成り立つのは **1 ⟹ 3** と **2 ⟹ 1** の 2 つであり、この 2 つで足りる」と述べる。
-  この節が閉じるのはその 2 つの含意である -- `<1>2` が 1 ⟹ 3 を、`<1>5` が 2 ⟹ 1 を与える。残る
-  3 ⟹ 2 と 3 ⟹ 1 は偽であり (R2)、README も偽であると述べる。
+  README の P7a は「成り立つのは **1 ⟹ 3** と **2 ⟹ 1** である。」と述べ、続けて
+  「`Inh(v, u) ≠ ∅` を足せば 3 つは同値になるが、下流はそれを要らない。」と述べる。この節が閉じるのは
+  その 2 つの含意である -- `<1>2` が 1 ⟹ 3 を、`<1>5` が 2 ⟹ 1 を与える。残る 3 ⟹ 2 と 3 ⟹ 1 は
+  偽であり (R2)、README も「**3 ⟹ 2 と 3 ⟹ 1 は偽である。**」と述べる。
   BY <1>2, <1>5
 
 **証明しないもの**。節 3 から節 2 と、節 3 から節 1 である。`Inh(v, u) = ∅` のとき節 3 は空虚に真になり、
@@ -3059,29 +3062,12 @@ A5 より inhabited でない leaf は参照を持たず、A4 よりコード生
 
 ### `level_ownership` と `union_as` の隔たり
 
-**`union_as` の形の隔たりは、いまの言明の証明義務に現れない。**前の版の P7a は候補集合についての双条件で
-あり、`Λ(u)` の leaf の側から unit の側へ**直接**渡ることを要求していた。その向きは `union_as` の宣言で
-破れる -- `union_as_k` は unbox union のオペランドについて変位 `k` の leaf だけを名指すので
+**`Λ(u)` の leaf の側から unit の側へ直接渡る形は、`union_as` の宣言で破れる。** `union_as_k` は
+unbox union のオペランドについて変位 `k` の leaf だけを名指すので
 (`CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov`)、unit の側が `truncate_to_unit` で
 辿り着くオペランドの unit には、どの結果 leaf も名指さない leaf が残る。
 
-いまの言明はその向きを通らない。節 2 から節 1 へは対偶で渡り (`P7a の 2 つの向き` の `<1>4`)、そこで
-読むのは P7d である。`union_as` の場合、節 1 が偽ならば P7d より site の候補はすべて偽であり、L22 の
-`<1>8` はオペランドの unit へ降りて帰納法の仮定を使う。名指されない leaf の所有はどこでも問われない。
-**前稿が (★) と呼んだ「宣言についての仮定」は要らない。**
-
-### 記録
-
-この文書が対象のコードに見つけたものは無い。見つかったのは言明の側の 4 点である。README を書き換えるのは
-オーケストレータである。
-
-- **R1**: 節 2 と節 3 が inhabited な leaf に限らなければならないこと。この限定は README に入っている。
-- **R2**: `Inh(v, u) = ∅` のとき節 3 から節 2 と節 1 へ渡れないこと。要る形は「次の 2 つが成り立つ:
-  1 ⟹ 3、2 ⟹ 1。`Inh(v, u) ≠ ∅` を足せば 3 つは同値になる」である。
-- **節 2 と節 3 の量化**。この 2 つは活性化と位置を伴わなければ読めない。要る形は「節 2 と節 3 は、
-  1 つの活性化 (D21) と、その活性化が訪れる site の節点の位置に相対的である」であり、その位置で `v` が
-  値を得ていることは前提ではなく L20a の帰結である (第 6 節の読み方と `P7a の 2 つの向き` の `<1>1a`)。
-- **site の主語**。`levelled_sites` は `&RcFunc` を取り、`owns_unit` はグローバル初期化子の版でも
-  呼ばれる (L17)。要る形は DEF site -- 本体を `for_each_node` で歩いて
-  `Retain`/`Release` の `(v, path)` と `App` の各引数の各 unit を挙げたもの -- であり、関数の版では
-  `levelled_sites` が挙げる集合と一致する。
+**この節が証明する 2 つの向きはその形を通らない。** 節 2 から節 1 へは対偶で渡り
+(`P7a の 2 つの向き` の `<1>4`)、そこで読むのは P7d である。`union_as` の場合、節 1 が偽ならば P7d より
+site の候補はすべて偽であり、L22 の `<1>8` はオペランドの unit へ降りて帰納法の仮定を使う。名指されない
+leaf の所有はどこでも問われない。**したがって宣言についての追加の仮定は要らない。**
