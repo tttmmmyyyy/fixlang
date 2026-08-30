@@ -1168,28 +1168,42 @@ README の A19 は 2 種の読み手を持つ。P18a・P18c・P19・P21 が読�
 **証明**
 
 <1>1. その実行路の計数下の別名類は `C_1 = {(p, []), (m, [])}` と `C_2 = {(q, [])}` である。
-  BY p13 の第 7.5.7 節 (`m` と `p` が 1 つの別名類に属すること), D4, D6, D26
-  `ty(c)` と payload の型 `Bl` の変位は boxed leaf を持たないので、`c`、`y0`、`y1` はスロットを持たない。
-  `ty(u)` は `I` で leaf を持たない。`App` の callee は束縛を持たない名前なので、その boxed leaf との対は
-  D6 の記号の位置であってスロットではない。それが指すオブジェクトはグローバル状態であり
-  (p13 の第 7.5.7 節)、D26 より計数下ではない。
+  BY 第 1 節の `C1` の本体, p13 の第 7.5.7 節 (`m` と `p` が 1 つの別名類に属すること), D4, D6, D26,
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_unbox
+  第 1 節が書き写した `C1` の `main` が名指す変数は `p`、`q`、`c`、`m`、`u`、`w` と、アームの payload
+  `y0`・`y1` と、`App` の callee `f` である。`ty(p) = ty(q) = ty(m) = Arr` は boxed なので
+  `is_fully_unboxed` は偽であり (`if self.is_box(type_env) { return false; }` で始まる)、`is_unbox` は
+  `self.is_closure() || toplevel_tycon_info(type_env).is_unbox` で `is_box` はその否定なので
+  `is_closure` も偽である。よって D4 の判定は第 1 規則と第 2 規則を抜けて第 3 規則に着き、
+  `boxed_leaf_paths(Arr) = {[]}` である。`ty(c) = Bl` は 2 つの変位がどちらも payload を持たない
+  unbox union なので boxed leaf を持たず、payload `y0`・`y1` も同じである。`ty(u) = ty(w) = I` は
+  `is_fully_unboxed` が真なので D4 の第 1 規則より leaf を持たない。`App` の callee `f` は束縛を持たない
+  名前なので、その boxed leaf との対は D6 の記号の位置であってスロットではない。それが指すオブジェクトは
+  グローバル状態であり (p13 の第 7.5.7 節)、D26 より計数下ではない。
+  よってスロットは `(p, [])`、`(q, [])`、`(m, [])` の 3 つであり、p13 の第 7.5.7 節より `m` と `p` は
+  1 つの類に属する。
 
 <1>2. `held(C_1)` は、割り当ての後 1、`Retain(m, [])` の後 2、`App(f, [p])` の消費の後 1、
       `Release(m, [])` の後 0 である。`held(C_2)` は、割り当ての後 1、`App(f, [q])` の消費の後 0 で
       ある。
-  BY <1>1, L4, D34
-  `p` と `q` の割り当ては D10 の生成であり、開始値 1 を与える。`Retain(m, [])` は `(m, []) ∈ C_1` を
-  名指し、`Release(m, [])` も同じである。`App(f, [p])` は `(p, []) ∈ C_1` を、`App(f, [q])` は
-  `(q, []) ∈ C_2` を消費する (D9、`f` は `b` を所有する)。
+  BY <1>1, 第 1 節の `C1` の本体, L4, D34, D9, D10
+  第 1 節が書き写した `C1` の `main` の節点を `ρ` の順に見る。`p` と `q` の割り当ては D10 の生成で
+  あり、開始値 1 を与える。`Let(m, Match(c, ...), ·)` は変位 0 のアームを選び、そのアーム本体の
+  `Ret(p)` が D9 の移動を行うが、移動は `held` を変えない (D34 の表に移動の行は無い)。
+  `Retain(m, [])` は `(m, []) ∈ C_1` を名指し、`Release(m, [])` も同じである。`App(f, [p])` は
+  `(p, []) ∈ C_1` を、`App(f, [q])` は `(q, []) ∈ C_2` を消費する (D9、`f` は `b` を所有する)。
+  `Eval(m, ·)` は D9 の消費でも移動でもない。終端の `Ret(u)` は `ty(u) = I` に boxed leaf が無いので
+  何も消費しない。
 
 <1>3. 由来の形の (a) が成り立つ。
   BY <1>2
   <1>2 の値はすべて 0 以上である。
 
 <1>4. 由来の形の (b) が成り立つ。
-  BY <1>1, <1>2, D7
-  読む構文と `Retain`/`Release` を順に見る。`Let(m, Match(c, ...))` が読むのは `c` であり、<1>1 より
-  `c` はスロットを持たない。`Retain(m, [])` は `(m, [])` に触れ、その時点の `held(C_1) = 1` である。
+  BY <1>1, <1>2, 第 1 節の `C1` の本体, D7
+  第 1 節が書き写した `C1` の `main` の読む構文と `Retain`/`Release` を順に見る (D7 の表)。
+  `Let(m, Match(c, ...))` が読むのは scrutinee `c` であり、<1>1 より `c` はスロットを持たない。
+  `Retain(m, [])` は `(m, [])` に触れ、その時点の `held(C_1) = 1` である。
   `Let(u, App(f, [p]), ·)` は callee と `p` を読み、`p` の側は `held(C_1) = 2` である
   (callee の側は <1>1 より計数下でない)。`Let(w, App(f, [q]), ·)` は `q` を読み `held(C_2) = 1` で
   ある。`Eval(m)` は `m` を読み `held(C_1) = 1` である。`Release(m, [])` は `(m, [])` に触れ
