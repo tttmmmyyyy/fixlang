@@ -788,9 +788,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          先頭 `|p|` 要素は `p` に等しいので `lam[j] = p[j]` であり、`p` が `t` の UNST-道であることから
          `(lam[j], s_{j+1})` は `F(s_j)` の要素である。
         BY <2>1, DEF UNST-道, DEF fld
-      <4>5. `<1>12`、`<4>3`、`<4>4` より `held_field_type(&F(s_j), lam[j], "truncate_to_unit")` は
-         abort せず `s_{j+1}` を返す。
-        BY <1>12, <4>3, <4>4
+      <4>5. `s_j` は `t` からフィールドの辺を `j` 回辿って着く型なので `<1>1` (ii) より `<1>1` を
+         満たす。`<1>12`、`<4>3`、`<4>4` より
+         `held_field_type(&F(s_j), lam[j], "truncate_to_unit")` は abort せず `s_{j+1}` を返す。
+        BY <1>1, <1>12, <4>3, <4>4
       <4>6. QED
         `<2>3` の `Fields` の腕により、第 `j` 周の後 `out` は `lam[0..j] ++ [lam[j]] = lam[0..j+1]`
         になり、`cur` は `s_{j+1}` になる。
@@ -1756,9 +1757,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          `UnitStep::Fields { held_fields: F(s_j), .. }` である。
         BY <1>10, <2>1, DEF ST-道
       <4>3. 第 `j` 周の `idx` は `u[j] = p[j]` であり、`p` が `t` の ST-道であることから
-         `(p[j], s_{j+1})` は `F(s_j)` の要素である。`<1>12` より
+         `(p[j], s_{j+1})` は `F(s_j)` の要素である。`s_j` は `t` からフィールドの辺を `j` 回辿って
+         着く型なので `<1>1` (ii) より `<1>1` を満たし、`<1>12` より
          `held_field_type(&F(s_j), p[j], "truncate_to_unit")` は abort せず `s_{j+1}` を返す。
-        BY <1>12, <2>1, DEF ST-道, DEF fld
+        BY <1>1, <1>12, <2>1, DEF ST-道, DEF fld
       <4>4. QED
          `Fields` の腕は `out.push(idx)` と `cur = held_field_type(...)` を行うので、`out` は
          `u[0..j+1]`、`cur` は `s_{j+1}` になる。
@@ -1797,23 +1799,25 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>1. `T(t', [i] ++ q)` のループの第 0 周は、`<1>10` より
        `unit_step(t') = UnitStep::Fields { held_fields: F(t'), .. }` を見て `out.push(i)` を行い、
        `<1>12` より `held_field_type(&F(t'), i, "truncate_to_unit")` が abort せず `t` を返すので
-       `cur = t` になる。
+       `cur = t` になる。`<1>10` と `<1>12` を `t'` に当てられるのは、この場合の仮定が `t'` は
+       `<1>1` を満たすと置いているからである。
       BY <1>10, <1>12, CODE src/rc_ir/ownership.rs: truncate_to_unit
     <3>2. ループの各周の振る舞いは `cur` と `idx` だけで決まり、`out` には後ろに継ぎ足すことしか
        しない。`<3>1` の後の状態は `cur = t`、残りの入力が `q`、`out = [i]` であり、`T(t, q)` の
        初期状態は `cur = t`、残りの入力が `q`、`out = []` である。よって `T(t', [i] ++ q)` は abort
        せず、その値は `[i] ++ T(t, q)` である。
       BY <3>1, CODE src/rc_ir/ownership.rs: truncate_to_unit
-    <3>3. `T(t, q)` は `U(t)` の要素なので、`<1>13` より `T(t, q) = r` (`r` は `t` の ST-道で
+    <3>3. `t` は `t'` からフィールドの辺で着く型なので `<1>1` (ii) より `<1>1` を満たす。`T(t, q)`
+       は `U(t)` の要素なので、`<1>13` を `t` に適用すると `T(t, q) = r` (`r` は `t` の ST-道で
        `cls(end(t, r))` が `BX`、`AR`、`UN` のどれか) か `T(t, q) = r ++ [c]` (`r` は `t` の ST-道で
        `cls(end(t, r)) = CL`) である。
-      BY <1>13, DEF unit に届く
+      BY <1>1, <1>13, DEF unit に届く
     <3>4. `[i] ++ r` は `t'` の ST-道であり `end(t', [i] ++ r) = end(t, r)` である。`cls(t') = ST`
        であり `fld(t', i) = t` だからである。
       BY <3>3, DEF ST-道, DEF fld
     <3>5. QED
-      `<3>3` と `<3>4` を `<1>13` に当てはめると `[i] ++ T(t, q)` は `U(t')` の要素である。`<3>2` と
-      合わせて `[i] ++ q` は `t'` の unit に届く。
+      `<3>3` と `<3>4` を `t'` についての `<1>13` に当てはめると `[i] ++ T(t, q)` は `U(t')` の
+      要素である。`<3>2` と合わせて `[i] ++ q` は `t'` の unit に届く。
       BY <1>13, <3>2, <3>3, <3>4, DEF unit に届く
   <2>3. `t'` が `<1>1` を満たし、`cls(t')` が `BX`、`AR`、`UN` のどれかで `q'` が空でない path で
      あるとき、`q'` は `t'` の unit に届き `T(t', q') = []` である。
