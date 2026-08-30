@@ -629,17 +629,45 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
   `boxed_leaf_paths` は有限である。
   BY A10, D1, CODE src/rc_ir/borrow.rs: level_ownership, covered_leaves
 
+<1>4a. `collect_consumes` の 1 回の呼び出しの再帰は有限回で終わり、その中で走る `boxed_leaf_paths` と
+      `result_prov` はどちらも abort せず値を返し、`rhs_consumes` の `App` の腕が引く `params[i]` は
+      範囲内である。
+  <2>1. `collect_consumes_go` の再帰は本体の木の上の走査であり、各節点をちょうど 1 度訪れる。
+        `RcExpr::Let(x, rhs, k)` の腕は `rhs` が `Match(_, arms)` のとき各 `arm.body` へ降りてから `k` へ
+        降り、`Destructure`・`Retain`・`Release`・`Eval` の腕は `k` へ降り、`Ret` の腕は降りない。
+        D2 より本体は有限の木なので、走査は有限回で終わる。
+    BY D2, CODE src/rc_ir/ownership.rs: collect_consumes, collect_consumes_go,
+       CODE src/rc_ir/ast.rs: RcExpr
+  <2>2. 1 つの節点で走る `push_boxed_leaves`・`destructure_consumes`・`rhs_consumes` の `Closure` と
+        `App` の腕は `boxed_leaf_paths` を呼ぶ。A10 より `boxed_leaf_paths` は有限の列を返して停止する。
+    BY A10, CODE src/rc_ir/ownership.rs: rhs_consumes, push_boxed_leaves, destructure_consumes,
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+  <2>3. `rhs_consumes` の `Llvm` の腕は `passthrough_arg_leaves` を呼び、`passthrough_arg_leaves` は
+        `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を呼んでその宣言の leaf を走る。A3 より
+        `result_prov` の呼び出しは abort せず `Provenance` を返す。同じ腕が読む `borrows_operand(i, ..)`
+        の真偽値も、A3 がその演算の宣言として読むものである。
+    BY A3, CODE src/rc_ir/ownership.rs: rhs_consumes, passthrough_arg_leaves,
+       CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, LLVMGen::borrows_operand
+  <2>4. `rhs_consumes` の `App` の腕が `resolve_callee_params` から `Some(params)` を受け取るとき、
+        `params[i]` は範囲内である。A14 は `App(callee, args)` の `args` の個数を、
+        `resolve_callee_params` が静的に引く関数のパラメータの個数に等しいとし、`i` は `args` の
+        添字である。
+    BY A14, CODE src/rc_ir/ownership.rs: rhs_consumes, resolve_callee_params
+  <2>5. QED
+    BY <2>1, <2>2, <2>3, <2>4
+
 <1>5. 1 周回の仕事は有限である。
   `var_tables` と `sites` はループの外で 1 度だけ作られる。`levelled_sites` は本体の節点を
   `for_each_node` で 1 度ずつ歩き、有限の列を返す (D2 より本体は有限の木)。各周回は、各関数について
-  `collect_consumes` を 1 回 (`<1>3` より、積む対の全体は `own` によらない有限集合に含まれる)、その
+  `collect_consumes` を 1 回 (`<1>4a` よりその呼び出しは有限回の再帰で終わり、`<1>3` より、積む対の
+  全体は `own` によらない有限集合に含まれる)、その
   各元について `origin` を 1 回、各 site について `level_ownership` を 1 回呼ぶ。`level_ownership` は
   `origin` を 1 回呼び、各候補について `owns_object_yet` と `covered_leaves` を呼ぶ。`origin` の停止は、
   第 1 成分がプログラムの束縛変数であるとき P2 が、`vars.bindings` が鍵に持たない名前 (D6 の第 3 の形)
   であるとき L6c が与える。`owns_object_yet` は `under` と
   `boxed_leaf_paths` を呼び、A10 よりどちらも有限で停止する。`collect_consumes` が積む対の全体が有限で
   あることは `<1>3` が与える。
-  BY A10, D2, D6, L6c, P2, <1>3, CODE src/rc_ir/borrow.rs: infer_ownership, levelled_sites,
+  BY A10, D2, D6, L6c, P2, <1>3, <1>4a, CODE src/rc_ir/borrow.rs: infer_ownership, levelled_sites,
      level_ownership, owns_object_yet, covered_leaves, CODE src/rc_ir/ast.rs: for_each_node
 
 <1>6. QED
