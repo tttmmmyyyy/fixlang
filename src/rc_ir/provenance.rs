@@ -62,7 +62,7 @@ pub enum LeafOrigin {
 pub type LeafOrigins = Set<LeafOrigin>;
 
 /// The origins of a leaf that has just the one.
-// PROOF: P1, P2, P3, P4, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn sole_origin(src: LeafOrigin) -> LeafOrigins {
     let mut origins = Set::default();
     origins.insert(src);
@@ -121,7 +121,6 @@ impl Provenance {
 
     /// Pointwise join (branch merge): the leaf origins are unioned per path. Both operands have the
     /// same type, hence the same boxed-leaf paths.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn join(&self, other: &Provenance) -> Provenance {
         Provenance(
             self.0
@@ -159,7 +158,6 @@ impl Provenance {
     /// Substitute the `Arg(j, σ)` symbols of a declared provenance with the operands' provenance:
     /// `Arg(j, σ)` becomes operand `j`'s leaf source at `σ`. `Fresh`/`Unknown` stay. Used to compose a
     /// primitive's declared `result_prov` (and, later, a callee's effect) with its actual operands.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn compose(&self, operand_provs: &[Provenance]) -> Provenance {
         Provenance(self.0.map_leaves(|_, origins| {
             let mut out = Set::default();
