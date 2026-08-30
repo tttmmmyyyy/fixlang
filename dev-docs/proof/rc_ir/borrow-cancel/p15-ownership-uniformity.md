@@ -1040,9 +1040,10 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 
 <1>2. `(x, π) ∉ Reach(y, ρ)` である。
   <2>1. DEF 再帰で訪れる対 の表が相手を持つ行の変数は、この本体の束縛変数である。
-    表で「呼ぶ相手」が無いのは `vars.bindings.get(・)` が `None` / `Param` / `Producer` の行なので、
-    相手を持つ行の変数の `vars.bindings` は `Move` / `Join` / `Field` / `Payload` / `Llvm` のいずれかで
-    ある。`VarTable::of` が `bindings` に入れるのはパラメータ・capture についての `Binding::Param` だけで
+    表の第 1 列は `vars.bindings.get(・)` の場合分けであり、相手を持つ行の第 1 列は `Move` / `Join` /
+    unbox 容器の `Field` / `Payload` / `Llvm` の 2 行のいずれかである。すなわち相手を持つ行の変数の
+    `vars.bindings` は `Move` / `Join` / `Field` / `Payload` / `Llvm` のいずれかである。
+    `VarTable::of` が `bindings` に入れるのはパラメータ・capture についての `Binding::Param` だけで
     あり、残る 6 種を入れるのは `collect_bindings` である。`collect_bindings` が名前を入れるのは、本体の
     `Let` の束縛変数、`Destructure` のフィールド変数、`Match` のアームの payload 変数についてである。
     BY DEF 再帰で訪れる対, CODE src/rc_ir/ownership.rs: VarTable::of, collect_bindings, origin_inner
