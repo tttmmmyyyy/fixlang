@@ -135,7 +135,7 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 組み合わせ子 (`CODE src/rc_ir/ownership.rs: origin_inner`,
 `CODE src/rc_ir/ownership.rs: origin_from_leaves_under`)。**この一覧のどれも `origin` を呼ばない。**
 `acted_references` と `CancelAnalysis::other_objects` の本体が `origin` のほかに呼ぶのは、
-`boxed_leaf_paths`、`FieldPath::starts_with`、`Origin::identity`、`Origin::candidates`、および `Map` と
+`boxed_leaf_paths`、`<[usize]>::starts_with`、`Origin::identity`、`Origin::candidates`、および `Map` と
 `Vec` の操作であり、これらも `origin` を呼ばない (`CODE src/rc_ir/ownership.rs: acted_references`,
 `CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 
@@ -382,8 +382,8 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
         実行区間は交わらないか一方が他方に含まれるかであり、交わるので後者である。`d_1` が `f` に含まれる
         なら `f` は `d_1` より後に返るが、`f` は `d_1` の実行区間の中で返るのでそれは無い。よって `f` は
         `d_1` に含まれ、`b_1` が始まる時点で `d_1` はまだ返っていないので `f ≠ d_1`、すなわち `f` は
-        `d_1` に真に含まれる。よって `(d_1, f)` は `c` の中の入れ子の対であり、<2>5 と同じく <2>2 の
-        取り方に反する。
+        `d_1` に真に含まれる。よって `(d_1, f)` は `c` の中の入れ子の対であり、<2>3 よりその外側 `d_1` が
+        始まる時刻は `a` より遅い。これは <2>2 の取り方に反する。
     BY <1>1, <1>2, <2>2, <2>3, <2>4, DEF 呼び出しの入れ子
   <2>7. QED (矛盾)
     <2>5 と <2>6 は `b_1` について場合を尽くす。
