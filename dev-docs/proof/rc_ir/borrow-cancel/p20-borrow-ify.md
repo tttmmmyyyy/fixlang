@@ -1124,28 +1124,44 @@ Let(x, App(callee', args),
 
 <1>4a. `params` が `Some(ps)` であるとき `args.len() ≤ |ps|` であり、各引数の添字は `ps` の範囲内で
        ある。
-  <2>0. `ctx.rewrite` が受け取る本体のこの `App` について、`args` の個数と `callee` の名前は、
-        `borrow_ify` の入力の対応する `App` のものに等しい。とくに `callee.name` は借用版の名前では
-        ない。
+  <2>0. `ctx.rewrite` が受け取る本体のこの `App` について、次の 3 つが成り立つ。(a) `args` の個数は
+        `borrow_ify` の入力の対応する `App` のものに等しい。(b) `callee.name` の `name` フィールドを
+        `#` で区切った最後の断片は `borrow` ではないので、`callee.name` は借用版の名前ではない。
+        (c) `callee.name` が入力の関数の名前であるならば、入力の対応する `App` の callee の名前も
+        `callee.name` である。
     `ctx.rewrite` が受け取る本体は、入力の関数の本体か入力のグローバル初期化子の `init` (`f_own` と
     グローバル初期化子) か、入力の関数の本体を `clone_func` が一斉に付け替えたもの (`f_borrow`) である。
-    後者について、P9 の前半より付け替えは節点の種類・並び・変数の型を変えず、変数の出現だけを写す。
-    直接呼び出しの callee の名前は関数の名前であり、A6 よりどの束縛名とも異なるので付け替えの鍵では
-    なく、`rename_var` は鍵を持たない名前をそのまま残す。借用版の名前は `borrow_ify` 自身が
-    `borrow_funcref` で作るので、その入力の本体には現れない。
-    BY A6, P9, CODE src/rc_ir/borrow.rs: borrow_ify, borrow_funcref,
-       CODE src/rc_ir/rename.rs: rename_var
+    前の 2 つでは本体が入力のものそのものであり、この `App` が入力の対応する `App` そのものなので
+    (a) と (c) が出る。A13 より入力に現れるすべての
+    名前の最後の断片は `borrow` ではないので (b) が出る。後者について、P9 の前半より付け替えは節点の
+    種類・並び・変数の型を変えず、変数の出現だけを `ρ_f` で写すので、`args` の列の長さは変わらず (a) が
+    出る。`ρ_f` は名前を 2 通りに写す -- 鍵でない名前はそのまま残し (`rename_var` は鍵を持たない名前を
+    そのまま残す)、鍵である名前は 4.2 の言明より最後の断片が `b` の後に 10 進数字が続く形の名前へ写す。
+    前者は入力に現れる名前なので A13 より最後の断片が `borrow` ではなく、後者の `b<10 進数字>` も
+    `borrow` と異なるので、(b) が出る。**局所変数を経由する間接呼び出しの callee は後者である** --
+    `rename_rhs` の `App` の腕は callee を `rename_var` で写すので、その名前は複製が導入したものになる。
+    (c) はその形から出る -- `callee.name` が入力の関数の名前ならば、A13 よりその最後の断片は
+    `b<10 進数字>` の形ではないので `ρ_f` の像ではなく、よって `ρ_f` が写す前の名前がそのまま残った
+    ものである。借用版の名前の最後の断片が `borrow` であるのは、`borrow_funcref` が借用版の名前を
+    元の名前に `#borrow` を足して作り、`borrow` が `#` を含まないからである。
+    BY A13, P9, 4.2 の言明, CODE src/rc_ir/borrow.rs: borrow_funcref,
+       CODE src/rc_ir/rename.rs: rename_var, rename_rhs
   <2>1. `params` が `Some(ps)` であるとき、`callee.name` は `borrow_ify` の入力の `prog.funcs` の鍵で
-        ある。その関数を `f` とすると `args.len() ≤ |f.params|` である。
+        ある。その関数を `f` とすると `args.len() = |f.params|` である。
     `params` は `callee_params` を `callee'.name` で引いた値である (`<1>4`)。L6b より `callee'` は
     `callee` そのものか、`borrow_versions` が `FuncRef { name: callee.name }` に対応させる借用版の名前を
     持つ複製かのどちらかである。前者のとき、L6 より `callee_params` の鍵は入力の関数の名前か借用版の
-    名前であり、`<2>0` より `callee.name` は借用版の名前ではないので、入力の関数の名前である。後者の
-    とき、L6 より `borrow_versions` の鍵は入力の関数の名前なので `callee.name` はやはり入力の関数の
-    名前である。A14 は `App(callee, args)` の `args` の個数を呼び出し先のパラメータの個数で抑え、その
-    「呼び出し先」は `rhs_consumes` と `call_rc` が `params[arg_idx]` を引く相手、すなわち名前で引いた
-    関数である (A14 の但し書き)。`<2>0` より A14 はこの `App` に当たる。
-    BY A14, L6, L6b, <1>4, <2>0, CODE src/rc_ir/ownership.rs: resolve_callee_params
+    名前であり、`<2>0` の (b) より `callee.name` は借用版の名前ではないので、入力の関数の名前である。
+    後者のとき、L6 より `borrow_versions` の鍵は入力の関数の名前なので `callee.name` はやはり入力の
+    関数の名前である。A22 よりそれは入力の `prog.funcs` の鍵であり、その関数が `f` である。
+    `<2>0` の (c) より入力の対応する `App` の callee の名前も `callee.name` である。A6 より入力の
+    どの束縛名も関数の名前と異なるので、その `App` について `resolve_callee_params` は
+    `closure_targets` の枝で外れ (その鍵は `RcRhs::Closure` を右辺に持つ `Let` の束縛変数の名前で
+    ある)、`prog.funcs` の枝で `f` を引く。A14 はその `App` の `args` の個数を、
+    `resolve_callee_params` が静的に引く関数のパラメータの個数に等しいとするので
+    `args.len() = |f.params|` であり、`<2>0` の (a) よりその個数はこの `App` の `args` の個数である。
+    BY A6, A14, A22, L6, L6b, <1>4, <2>0, CODE src/rc_ir/ownership.rs: resolve_callee_params,
+       collect_bindings
   <2>2. CASE `route` が名前を差し替えなかった。
     `ps = param_names_and_types(f)` は `f.params` に `f.capture` を鎖にした列なので
     `|ps| ≥ |f.params|` であり、`<2>1` より `args.len() ≤ |ps|` である。
