@@ -672,17 +672,22 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         列である。`subtree_type` の降下は `π` の各添字で `unit_step` が `Fields` を返すことを要求するので、
         `truncate_to_unit(τ, π ++ w)` の walk は `π` の各添字で `Fields` の腕を取って `out` に積み、
         `cur = σ` に着く。`rc_units_go(τ, ・)` も同じ `unit_step` の答えで同じ添字を辿って `σ` に着く。
-        続きは `truncate_to_unit(σ, w)` と `rc_units_go(σ, ・)` の walk であり、`w ∈ rc_units(σ)` なので
-        `rc_units_go` は `w` を積む -- すなわち `w` の各添字で `Fields` の腕を取り、最後に `Unit` の腕
-        (path はそこまで) か `Capture` の腕 (最後の添字を積む) に着く。`truncate_to_unit` は同じ判定で
-        同じ添字を積み、`Unit` と `Capture` で break する。よって返り値は `π ++ w` であり、それは
-        `rc_units(τ)` の元である。
+        続きは `truncate_to_unit(σ, w)` と `rc_units_go(σ, ・)` の walk である。`w ∈ rc_units(σ)` なので
+        `rc_units_go` は `w` を積み、積み方は 2 つある。**`Unit` の腕で積む場合**、`w` の各添字で
+        `unit_step` は `Fields` を返し、`w` を辿り着いた型で `Unit` を返す。`truncate_to_unit(σ, w)` は
+        `w` の各添字で同じ `Fields` の腕を取って積み、**添字を使い切ってループを抜ける** -- `Unit` の腕に
+        入ることも break することもない。返り値は `w` である。**`Capture` の腕で積む場合**、`w` の最後の
+        添字は capture の添字であり、その 1 つ前までの添字で `unit_step` は `Fields` を返す。
+        `truncate_to_unit(σ, w)` は最後の添字で `Capture` の腕を取り、その添字を積んで break する。
+        返り値はやはり `w` である。よって `truncate_to_unit(τ, π ++ w)` の返り値は `π ++ w` であり、
+        それは `rc_units(τ)` の元である。
     BY CODE src/rc_ir/ownership.rs: units_under, subtree_type, truncate_to_unit, rc_units, rc_units_go,
        unit_step
   <2>2. CASE `subtree_type(τ, π) = None`。`units_under` が返すのは `[π]` である。`subtree_type` の walk が
         `π` の途中で `NoUnit`、`Capture`、`Unit` のいずれかに当たったということなので、
         `truncate_to_unit(τ, π)` の walk も同じ位置で同じ腕を取る。`NoUnit` では panic するので値を返さ
-        ない。`Unit` では break し、`Capture` では最後の添字を積んで break する。どちらでも返り値はそこ
+        ない。`Unit` では break し、`Capture` ではその添字を積んで break する -- ただし `Capture` の腕は
+        その添字が capture の添字でなければ表明で止まるので、そのときも値を返さない。どちらでも返り値はそこ
         までの `Fields` の添字列 (と `Capture` の添字) であり、`rc_units_go` は同じ `unit_step` の答えで
         同じ添字を辿って同じ型に着き、`Unit` の腕ではその添字列を、`Capture` の腕ではその添字列に capture
         の添字を足したものを `out` に積む。よって返り値は `rc_units(τ)` の元である。
@@ -770,13 +775,16 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
 
 <1>4a. `is_borrow_version` が真のとき、`rewrite_rc` は `Retain(v, π)` / `Release(v, π)` を、そのまま残すか
-      丸ごと落とすかのどちらかにする。A2 より `π` は `rc_units(v.ty)` の元であり、そのとき
+      丸ごと落とすかのどちらかにする。A2 が語るのは `borrow_ify` の入力の節点であり、`is_borrow_version`
+      が真の `rewrite_rc` が歩くのは `clone_func` が作った複製の本体であるが、P9 よりその複製は元の本体の
+      束縛変数を一斉に付け替えたものであってそれ以外の違いを持たない -- 節点の種類も path も、名指す変数の
+      型も元のものである。よって A2 より `π` は `rc_units(v.ty)` の元であり、そのとき
       `units_under(v.ty, π, type_env)` は `[π]` の 1 元である -- `π` が unit の path なら
       `subtree_type(v.ty, π)` の walk は `Unit` か `Capture` で止まって `None` を返すか、`π` の末尾で
       `unit_step` が `Unit` を返す型に着いて `Some` を返し、前者では `units_under` が `[π]` を、後者では
       `rc_units` が `[[]]` を返すので `units_under` はやはり `[π]` を返す。よって `kept` は `[π]` か `[]`
       である。
-  BY A2, D5, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc,
+  BY A2, D5, P9, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc,
      CODE src/rc_ir/ownership.rs: units_under, subtree_type, rc_units, unit_step
 
 <1>5. `call_rc` の `before` に要素が入るのは `callee_owns && !arg_owned` のときであり、`arg_owned` は
@@ -808,39 +816,50 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       内容を決める。参照カウントも、ほかの活性化の状態も読まない。
   BY A4
 
-<1>2. L8 の (a)(b)(c) の節点 -- `Retain` と `Release` -- はオブジェクトの記憶域へ書き込まない。D7 より
-      この 2 つが触れるのは参照カウントと状態バイトだけであり、それは D7 の意味でオブジェクトを読むこと
-      でも書き込むことでもない。
-  BY D7, L8
+<1>2. L8 の (a)(b)(c) の節点 -- `Retain` と `Release` -- の段がオブジェクトの保持する値を書き換えるのは、
+      その段がオブジェクトを解放するときに限る。A4 よりこの 2 種の節点の生成コードは `π` の下の inhabited
+      な各 boxed leaf の参照カウントの ±1 であり、参照カウントと状態バイトは、オブジェクトが保持する値
+      -- 記憶域のうち D7 が読みから除いた部分 -- の外にある。**参照を処分する段は (F) の解放を起こしうる**
+      (D24 の (F))。解放されるオブジェクトが `Std::FFI::Destructor` であるとき、その段はデストラクタの
+      活性化を作り、返った値を `_value` の欄へ書き戻す (D24 の (F)、`build_run_destructor` の
+      `move_into_struct_field`)。その活性化は任意のコードを走らせるので、ほかのオブジェクトの保持する値も
+      書き換えうる。`Retain` の段は参照を処分しないので、(F) の解放を起こさない (D10、D24 の (F))。
+  BY A4, D7, D10, D24, L8, CODE src/generator.rs: Generator::build_run_destructor
 
 <1>2a. 節点の実行以外にオブジェクトの記憶域へ書き込む動作は 2 つであり、共通接頭の上ではどちらも 2 つの
       実行の対応する段で起きて対応する内容を書き込む。
 
-      1 つは **(F) の解放が `Destructor` について走らせるデストラクタの動作**である (D24 の (F))。
-      `build_run_destructor` は `_value` 欄と `_dtor` 欄を `move_out_struct_field` で取り出し、走らせた
-      結果を `move_into_struct_field` で `_value` 欄へ戻す。第 2 節の読みより、段が名指すオブジェクトには
-      段の中で解放されるオブジェクトを含むので、片方の実行だけがある段でオブジェクトを解放するならば
-      対応はそこで伸びず、共通接頭の上では解放が一致する。よってこの動作は 2 つの実行の対応する段で起き、
-      走らせる関数と渡す値は `<1>1` より対応する。
+      1 つは **(F) の解放が `Std::FFI::Destructor` について走らせるデストラクタの動作**である
+      (D24 の (F))。`build_run_destructor` は `_value` 欄と `_dtor` 欄を `move_out_struct_field` で
+      取り出し、走らせた結果を `move_into_struct_field` で `_value` 欄へ戻す。前提 (解放の一致) より、
+      共通接頭の上では 2 つの実行は対応する段で同じオブジェクトを解放するので、この動作は 2 つの実行の
+      対応する段で起きる。走らせる関数と渡す値は `<1>1` より対応する。
 
       もう 1 つは **`FFI_CALL` が呼ぶ C のコード**である (D22 の第 3 の箇条)。それは Fix の側から番地を
       渡され、その番地の指すものを読み書きする。A17 (iii) よりその動作も段としてこの実行の 1 つの列に
       並び、A17 (ii) よりそれが読むのは環境が持つ参照が指すオブジェクトとそこから到達できるオブジェクト
       である。D30 は 2 つの実行を、環境が与える入力を同じにして取る -- 対応する 2 つの `FFI_CALL` の段は
       同じ C のコードを、対応するオブジェクトの番地と等しいスカラを与えられて実行し、Fix の側へ同じものを
-      渡す。番地を通じて書き込む内容もそれに含めて読む。第 12 節の項目 3 が、その読みを報告する。
+      渡す。D30 が同じにして取る入力の 4 つ目が、渡された番地を通じて書き込む内容である。
 
       D22 の残る 3 つ -- C のエントリ点、`FFI_EXPORT` のエントリ点、グローバルのアクセサ -- が書き込むのは
       グローバル変数の記憶域である。C のエントリ点は `argc` と `argv` をそこへ格納し、アクセサは初期化子が
       返した値をそこへ格納する。`FFI_EXPORT` のエントリ点は値を渡すだけである。
-  BY A4, A17, D22, D24, D30, <1>1, CODE src/generator.rs: Generator::build_run_destructor
+  BY A4, A17, D22, D24, D30, <1>1, 前提 (解放の一致),
+     CODE src/generator.rs: Generator::build_run_destructor
+
+<1>2b. 共通接頭の上では、(a)(b)(c) の節点の段はオブジェクトを解放しない。これらの節点は `π` が消した節点
+      と入れた節点であり (L8)、D30 はその段を段の対応から除くので、これらの段は対を持たない。前提
+      (解放の一致) より、対を持たない段がオブジェクトを解放するならば対応はその手前で終わっている。
+  BY D30, L8, 前提 (解放の一致)
 
 <1>3. QED
   L8 の (2) より、(a)(b)(c) を除く出力の節点と入力の節点は 1 対 1 に対応し、対応する節点は同じ種類・同じ
   path・同じ並びを持つ。D30 より共通接頭の上で対応する段は同じ値を与えられ、同じオブジェクトを名指す。
-  `<1>1` よりその 2 つの段が書き込む内容は等しい。`<1>2` より (a)(b)(c) の段は記憶域を書き換えないので、
-  一方の実行にしか無いこれらの段が対応を崩すことはない。`<1>2a` が、節点の実行以外の書き込みを尽くす。
-  BY A4, D30, L8, <1>1, <1>2, <1>2a
+  `<1>1` よりその 2 つの段が書き込む内容は等しい。`<1>2` と `<1>2b` より、共通接頭の上では (a)(b)(c) の
+  段はオブジェクトの保持する値を書き換えないので、一方の実行にしか無いこれらの段が対応を崩すことはない。
+  `<1>2a` が、節点の実行以外の書き込みを尽くす。
+  BY A4, D30, L8, <1>1, <1>2, <1>2a, <1>2b
 
 ## L9a (活性化を作る段は 6 種である)
 
