@@ -141,8 +141,9 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 参照と値を渡す構文を述べる D9 の移動の表の行は、第 2 の表のとおりである。**E3 と E4 はどちらも
 D9 の `Llvm` の素通し leaf の行の下にある** -- E3 は問うた path 自身が単一の `Arg` を宣言された
 leaf である場合、E4 はその path の下の leaf が単一の `Arg` を宣言されている場合であり、どちらもその行が
-述べる素通しである。**E4 の側で宣言が単一であることは L7 が与える** -- コードは宣言の集合の各元を辿るので、
-要素数 2 以上の宣言を持つ leaf も辿りうる形をしている。
+述べる素通しである。**E4 の側で宣言が単一であることは A3 が与える** -- コードは宣言の集合の各元を辿るので
+要素数 2 以上の宣言を持つ leaf も辿りうる形をしているが、A3 の「**複数の元を宣言する op は存在しない。**」が
+それを排除する。
 
 | 辺 | 腕 | 行き先 |
 |---|---|---|
@@ -159,7 +160,7 @@ leaf である場合、E4 はその path の下の leaf が単一の `Arg` を�
 | E1 | `Let(x, Var(y), k)` |
 | E2 | `Match` のアーム本体の `Ret(x)` |
 | E3 | `Llvm` の素通し leaf (`result_prov` が単一の `Arg(i, σ)`) |
-| E4 | `Llvm` の素通し leaf (同じ行を leaf ごとに読む。宣言が単一であることは L7 が与える) |
+| E4 | `Llvm` の素通し leaf (同じ行を leaf ごとに読む。宣言が単一であることは A3 が与える) |
 | E5 | unbox 容器の `Destructure` の名前付きフィールド |
 | E6 | catch-all アームの payload 束縛 |
 | E7 | unbox union の変位アームの payload 束縛 |
@@ -188,7 +189,7 @@ leaf である場合、E4 はその path の下の leaf が単一の `Arg` を�
      (`CODE src/rc_ir/ownership.rs: origin_from_leaves_under`)。
 
 <1>2c. 第 2 の表の 7 行はそれぞれ正しい。
-  BY D9 の移動の表, D10 の生成の表, L7, <1>2,
+  BY D9 の移動の表, D10 の生成の表, A3, <1>2,
      CODE src/rc_ir/ownership.rs: collect_bindings -- `RcRhs::Var(y)` に `Binding::Move(y)` を作るので、
      `Binding::Move(y)` を持つ変数を束縛する構文は `Let(x, Var(y), k)` であり、E1 が辿る先はその `y` で
      ある。`RcRhs::Match` の腕に `Binding::Join(arm_results)` を作り、`arm_results` は各アーム
@@ -205,13 +206,13 @@ leaf である場合、E4 はその path の下の leaf が単一の `Arg` を�
      `Arg(i, σ)`」を宣言された素通し leaf である。E4 は `origin_from_leaves_under` が path の下の各 leaf の
      宣言の**各**元を辿る枝であり (`CODE src/rc_ir/ownership.rs: origin_from_leaves_under` --
      `for sources in decl.leaf_origins_under(path)` の内側の `for src in sources` が、集合の元 1 つずつに
-     ついて `operand_units` を積む)、単一でない宣言も辿りうる形をしている。L7 より、このプログラムに
-     現れるどの宣言も要素数は 0 か 1 であり、`Arg(j, σ')` を含む leaf の宣言はその 1 元だけからなる。
-     よって E4 が辿る leaf も D9 の行が言う「単一の `Arg(i, σ)`」を宣言された素通し leaf である。
-     **L7 が要るのは、要素数 2 以上の宣言を持つ leaf が D9 の移動の行ではなく D10 の生成の `Llvm` の行
-     (「`result_prov` の宣言が単一の `Arg(j, σ)` **でない**もの」) に当たるからである** -- L7 が無いと
-     E4 の辺は D9 の移動の表に行を持たない。**L7 の証明は L6 に依らず、A3 とコードだけに立つ**
-     (第 2.1 節) ので、ここで引いても循環しない。
+     ついて `operand_units` を積む)、単一でない宣言も辿りうる形をしている。A3 の「**複数の元を宣言する
+     op は存在しない。**」より、このプログラムに現れるどの宣言も要素数は 0 か 1 であり、`Arg(j, σ')` を
+     含む leaf の宣言はその 1 元だけからなる。よって E4 が辿る leaf も D9 の行が言う「単一の
+     `Arg(i, σ)`」を宣言された素通し leaf である。
+     **この節が要るのは、要素数 2 以上の宣言を持つ leaf が D9 の移動の行ではなく D10 の生成の `Llvm` の行
+     (「`result_prov` の宣言が単一の `Arg(j, σ)` **でない**もの」) に当たるからである** -- 無いと
+     E4 の辺は D9 の移動の表に行を持たない。
 
 <1>3. QED
   BY <1>1, <1>2, <1>2c
@@ -219,38 +220,7 @@ leaf である場合、E4 はその path の下の leaf が単一の `Arg` を�
 E4 を leaf ごとに分解した形が、第 5 節の DEF-1 の段 E4a と停止条件 S2 である。その各段が D9 と A3 の
 どの行に当たるかは第 6 節が述べる。E4 が答えを作る規則そのものの性質は L3 と L4 に置く。
 
-### 2.1 L7 -- 複数元の宣言は現在のプログラムに存在しない
-
-**L7 (宣言の要素数は 1 以下である)**: このコミットのプログラムに現れるどの `LLVMGen` についても、
-`result_prov` が結果の各 leaf に置く `LeafOrigins` の要素数は 0 か 1 である。
-
-この事実は第 5 節の DEF-1 と第 6 節の補題 Q が使う。leaf ごとの宣言の要素数が 1 以下でなければ、leaf の
-辿る先が 1 つに決まらず、DEF-1 の鎖が定義できない。README の A3 の本文が同じ数え上げを持つ。
-
-<1>1. `LLVMGen` の実装は 78 個あり、そのうち 29 個が `result_prov` を override し、49 個は既定を使う。
-      どの呼び出しも abort せず `Provenance` を返す (A3)。
-  BY A3, CODE src/fixstd/builtin.rs の `impl LLVMGen for` (78 個、すべてこのファイルにある),
-     CODE src/ast/inline_llvm.rs: LLVMGen::result_prov (既定、このファイルにある 1 個)
-
-<1>2. 既定は `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` であり、各 leaf に単一の
-      `Unknown` を置く。
-  BY CODE src/ast/inline_llvm.rs: LLVMGen::result_prov,
-     CODE src/rc_ir/provenance.rs: Provenance::uniform, sole_origin
-
-<1>3. 29 個の override が leaf に置く集合は、`sole_origin(..)` (単一)、`Set::default()` (空)、
-      `Provenance::uniform` (単一)、`Provenance::uniform_bottom` (空)、`Provenance::fresh_under` (単一) の
-      いずれかで作られる。
-  BY CODE src/fixstd/builtin.rs の 29 個の `result_prov` の本体、および
-     CODE src/fixstd/builtin.rs: replaced_field_prov (2 個の op が共有する),
-     CODE src/rc_ir/provenance.rs: Provenance::uniform, uniform_bottom, fresh_under, sole_origin
-
-<1>4. QED
-  BY <1>1, <1>2, <1>3 -- どの宣言も要素数 0 か 1 の集合しか持たない。複数元の集合を作るのは
-     `Provenance::join` (アームの合流) と `Provenance::compose` (呼び出し先の効果の代入) だけであり
-     (`CODE src/rc_ir/provenance.rs: Provenance::join`, `Provenance::compose`)、どちらも解析の側である。
-     `origin_inner` が読むのは `llvm_gen.result_prov(..)` の返り値そのもの、すなわち宣言である。
-
-### 2.2 L8 -- `Llvm` の腕が答えるもの
+### 2.1 L8 -- `Llvm` の腕が答えるもの
 
 A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返すとし、空集合・単一の
 `Arg`・単一の `Fresh`・単一の `Unknown`・複数元の 5 行を持つ。`origin_inner` の `Llvm` の腕がその 5 つを
@@ -361,7 +331,7 @@ A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返
 A3 の 5 行との突き合わせは次のとおりである。空集合と宣言された leaf は inhabited にならないので、L8 (d2)
 が答える `Exactly((x, π))` が名付ける参照は存在しない。単一の `Fresh` と単一の `Unknown` はどちらも
 新しい参照であり、L8 (d1) が `Exactly((x, π))` を `reached` に積むことは D10 の生成の `Llvm` の行に一致
-する。要素数 2 以上の宣言は L7 よりこのプログラムに無い。
+する。要素数 2 以上の宣言は A3 よりこのプログラムに無い。
 
 ## 3. L9 -- D10 の「生成」と `here()` の腕
 
@@ -1081,7 +1051,7 @@ DEF-1 は、この 2 つの箇条書きを、Q の帰納法が 1 段ずつ辿れ
 | S2 | `Llvm` かつ E3 でなく、`λ_cur` の宣言が単一の `Fresh` または単一の `Unknown` | 行き先の第 2 行 |
 
 `λ_cur` の宣言が空集合である場合は、A3 よりその leaf は inhabited でないので、補題 Q の量化から外れる。
-`λ_cur` の宣言が 2 元以上である場合は、L7 より現在のプログラムには存在しない。`λ_cur` に宣言が無い場合は
+`λ_cur` の宣言が 2 元以上である場合は、A3 より現在のプログラムには存在しない。`λ_cur` に宣言が無い場合は
 L8 (a) より起きない。よってこの表と停止条件は尽きている。
 
 止まった位置の 3 つ組を `(u, σ_end, μ)` とし、`(u, μ)` を `λ` の**対応する位置**と呼ぶ。補題 Q の (ii)
@@ -1521,7 +1491,7 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
       BY L8 (a), L8 (b), L8 (c), L8 (d), 補題 Q の前提 (`λ` は `ty(x)` の boxed leaf である)
     <3>4. 空集合と要素数 2 以上は起きない。
       BY A3 (空集合と宣言された leaf は inhabited にならない), 補題 Q の前提 (`λ` は `P` で inhabited で
-         ある), L7 (要素数 2 以上の宣言はこのプログラムに無い)
+         ある), A3 (「**複数の元を宣言する op は存在しない。**」)
     <3>5. QED
       BY <3>1, <3>2, <3>3, <3>4
   <2>2. 鎖は有限で止まる。
