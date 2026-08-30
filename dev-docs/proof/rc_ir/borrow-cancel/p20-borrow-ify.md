@@ -3623,10 +3623,11 @@ README の P14a が「計数下の別名類」と書き、D34 が計数下の類
     「`cancel` は `RcFunc` の `body` 以外の欄を 1 つも変えない。とくに `borrowed_units` と `capture` は
     入力のものに等しい」と述べる。`cancel` は `prog.funcs` の各値について `f.clone()` の `body` だけを
     `drop_nodes(body, analysis.cancelled())` に差し替えて `f.name` を鍵に積み、`prog.globals` の各要素に
-    ついて `symbol` と `ty` を写して `init` を同じ形に差し替え、`roots` を clone する。P22 は
-    「`drop_nodes(B, S)` は、`B` の `NodeId` が `S` に入る `Retain`/`Release` 節点だけを取り除いた木を
-    返し、他の節点の種類・変数・path・並びを変えない」と述べる。
-    BY P22, P24, CODE src/rc_ir/borrow.rs: cancel
+    ついて `symbol` と `ty` を写して `init` を同じ形に差し替え、`roots` を clone する。A22 より
+    `prog.funcs` の各鍵はその `RcFunc` の `name` に等しいので、鍵の集合はこの積み直しで変わらない。
+    P22 は「`drop_nodes(B, S)` は、`B` の `NodeId` が `S` に入る `Retain`/`Release` 節点だけを取り除いた
+    木を返し、他の節点の種類・変数・path・並びを変えない」と述べる。
+    BY A22, P22, P24, CODE src/rc_ir/borrow.rs: cancel
 
   <2>2. `cancel` の出力の本体のうち、D14 の意味で借用する unit を持つのは借用版の `body` だけである。
     D14 の所有と借用の割り当ては、その本体を持つ関数のパラメータ・capture と `borrowed_units` だけから
