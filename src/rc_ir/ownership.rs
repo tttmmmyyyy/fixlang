@@ -33,7 +33,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 enum Binding {
     /// A parameter or capture — the origin of a leaf.
     Param,
@@ -55,7 +55,7 @@ enum Binding {
 
 /// The variables of one function, enough to trace a leaf back to the object it belongs to and to
 /// resolve a call to its callee's parameters.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) struct VarTable {
     /// What binds each variable, which `origin` follows back to the object a leaf belongs to.
     bindings: Map<FullName, Binding>,
@@ -103,7 +103,7 @@ impl VarTable {
     }
 
     /// An empty table, which a constructor fills.
-    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn empty() -> VarTable {
         VarTable {
             bindings: Map::default(),
@@ -284,7 +284,7 @@ pub(crate) fn origin(
 
 /// One step of `origin`: the alias edge the variable's binding offers, followed to the object at the
 /// far end, or the variable itself where the chain stops.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
     let here = || Origin::Exactly((var.clone(), path.to_vec()));
     match vars.bindings.get(var) {
@@ -384,7 +384,7 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// borrowed node, the `wait` leaf is `⊥` and both `pair` leaves project out of that node, so the
 /// answer is that node's origin. Give one of those two leaves a second operand and the answer
 /// becomes a `Join` naming both under this value's name.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn origin_from_leaves_under(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -437,7 +437,7 @@ fn origin_from_leaves_under(
 }
 
 /// The single `Arg(j, p)` a leaf source consists of, if it is exactly that.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
     if sources.len() != 1 {
         return None;
