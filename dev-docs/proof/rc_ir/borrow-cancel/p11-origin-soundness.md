@@ -54,7 +54,7 @@ path に別の答えを与え、leaf の側の `identity` が unit の側の答�
 あり、その名前は `vars.bindings` に束縛を持つ (そのときプログラムの束縛変数である) か、持たないかの
 どちらかである (L10 (a'))。P2 はその 2 種の `x` について、`π` を問わず `origin(x, π)` が panic せずに答えを
 返して停止することを述べる。**よって、この文書が扱う `origin` の呼び出しの中で走る `assert!` はどれも
-発火しない。** L2 (c) と L9 の `<2>3` がこれを読む。
+発火しない。** L2 (c) と L9 の `<2>3` の `<3>3` がこれを読む。
 
 **DEF-0 (`RcVar` が位置 `P` で持つ値)**。活性化 `α`、それが辿る実行路 `ρ`、`ρ` 上の位置 `P` を固定する。
 本体に現れる `RcVar` `v` が `P` で**値を持つ**とは、次の 3 つのいずれかである。
@@ -1651,10 +1651,17 @@ let seen : Std::I64 = Main::peek(m, two)
 <1>1. P3 と P4 の言明が読む関数は `origin` であり、D17 の対応するスロットを決めるのは `origin_inner` と
       `origin_from_leaves_under` である。
   BY README の P3 と P4 の言明, D13, D17
-<1>2. この 3 つが読むのは `VarTable` (`bindings`、`var_tys`、`param_tys`、`origins` の memo)、`TypeEnv`、
-      および `bindings` が持つ `LLVMGen` の `result_prov` の返り値だけである。
-  BY CODE src/rc_ir/ownership.rs: origin, origin_inner, origin_from_leaves_under, as_arg_projection,
-     truncate_to_unit
+<1>2. この 3 つが読むのは `VarTable` の `bindings` と `origins` の memo、`TypeEnv`、および `bindings` が
+      持つ `LLVMGen` の `result_prov` の返り値だけである。**`var_tys` と `param_tys` は読まない** --
+      `Llvm` の腕が使うオペランドの型は、`Binding::Llvm` が持つ `Vec<RcVar>` の要素の `ty` の欄から来る。
+  BY CODE src/rc_ir/ownership.rs: origin (`vars` について読み書きするのは `origins` だけである),
+     CODE src/rc_ir/ownership.rs: origin_inner (`vars.bindings.get(var)` のほかに `vars` の欄を読まない。
+     `Llvm` の腕の `arg_tys` は `args.iter().map(|a| a.ty.clone())` であり、`args` は `Binding::Llvm` の
+     欄である),
+     CODE src/rc_ir/ownership.rs: origin_from_leaves_under (型を取るのは `args[*j].ty` からである),
+     CODE src/rc_ir/ownership.rs: as_arg_projection (`VarTable` を引数に取らない),
+     CODE src/rc_ir/ownership.rs: truncate_to_unit (引数は型・path・`TypeEnv` であり `VarTable` を
+     取らない)
 <1>3. `level_ownership` が書くのは 2 つである -- `infer_ownership` の局所変数 `owned_leaves` と、
       それが呼ぶ `origin` を通じて `VarTable` の `origins` の memo である。`VarTable` の残りの欄
       (`bindings`、`closure_targets`、`param_tys`、`var_tys`) にも `TypeEnv` にも書かない。
@@ -1665,21 +1672,19 @@ let seen : Std::I64 = Main::peek(m, two)
      CODE src/rc_ir/ownership.rs: origin -- `vars.origins.borrow_mut().insert(key, answer.clone())` が
      memo を書く。`origins` は `RefCell` なので `&VarTable` からでも書ける,
      CODE src/rc_ir/ownership.rs: VarTable -- 5 つの欄のうち `RefCell` を持つのは `origins` だけである
-<1>3a. memo への書き込みは `origin` の答えを変えない。
-  <2>1. `origin(v, q)` が memo に入れるのは、同じ鍵について `origin_inner` が返した値そのものであり、
-        memo が当たるときに返すのはその複製である。
-    BY CODE src/rc_ir/ownership.rs: origin
-  <2>2. `origin_inner` が返す値は、`vars.bindings`、`vars.var_tys` (`args` の型を通じて)、`type_env`、
-        `bindings` が持つ `LLVMGen` の `result_prov` の返り値、および `origin` の再帰呼び出しの返り値
-        だけで決まる。
+<1>3a. memo への書き込みは鍵の答えを変えない。
+  <2>1. 鍵の答えは、その鍵についての cold な呼び出しの `origin_inner` が返した値であり、memo が当たる
+        呼び出しはその複製を返す。すなわち memo は答えを決めるのではなく、決まった答えを配る。
+    BY L15, L1 (複製は `identity` と `candidates` をそのまま運ぶ)
+  <2>2. `origin_inner` が返す値は、`vars.bindings`、`type_env`、`bindings` が持つ `LLVMGen` の
+        `result_prov` の返り値、および `origin` の再帰呼び出しが返す鍵の答えだけで決まる。
     BY <1>2, A3 (`result_prov` の呼び出しは abort せず `Provenance` を返す),
        CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under, as_arg_projection,
        truncate_to_unit
   <2>3. QED
-    BY <2>1, <2>2, <1>3 (`level_ownership` は <2>2 が挙げるもののどれにも書かない),
-       L1 (複製は `identity` と `candidates` をそのまま運ぶ), L14 -- 鍵の再帰の辺の関係は整礎である
-       (L14)。その関係の上の整礎帰納で、memo が当たる場合の答えと `origin_inner` を走らせた場合の答えは
-       等しい。
+    BY <2>1, <2>2, <1>3 (`level_ownership` は <2>2 が挙げるもののどれにも書かない), L14 -- 鍵の再帰の辺の
+       関係は整礎である (L14)。その関係の上の整礎帰納で、どの鍵の答えも `level_ownership` が memo を
+       埋めたかどうかで変わらない。
 <1>4. QED
   BY <1>1, <1>2, <1>3, <1>3a -- `owned_leaves` は <1>2 が挙げる入力に入らず、memo への書き込みは答えを
      変えない (<1>3a) ので、P3 と P4 の真偽は `level_ownership` の有無で変わらない。
