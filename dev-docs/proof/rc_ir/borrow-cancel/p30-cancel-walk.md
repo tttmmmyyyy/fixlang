@@ -298,7 +298,8 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
       `if let Some(known) = vars.origins.borrow().get(&key) { return known.clone(); }`、
       `let answer = grow_stack(|| origin_inner(vars, type_env, x, π));`、
       `vars.origins.borrow_mut().insert(key, answer.clone()); answer` である。第 1 の文で返る呼び出しを
-      **当たり**、返らない呼び出しを**外れ**と呼ぶ。当たりの呼び出しは `vars.origins` の鍵 `key` の値の
+      **当たり**、第 1 の文で返らずに第 2 の文へ進む呼び出しを**外れ**と呼ぶ。この 2 つは呼び出しを
+      尽くす。当たりの呼び出しは `vars.origins` の鍵 `key` の値の
       複製を返し、`origin` も `origin_inner` も呼ばない。外れの呼び出しは A15 より `origin_inner` を
       ちょうど 1 回呼び、その値を鍵 `key` に `insert` してから返す。
   BY CODE src/rc_ir/ownership.rs: origin, A15, DEF Map と Set
