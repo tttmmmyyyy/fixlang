@@ -25,6 +25,16 @@ README の第 2 節の記法に、次の 3 つを加える。
 
 ## 1. 局所の定義
 
+### DEF 本体
+
+関数 (またはメソッド) の**本体**とは、その定義に書かれた式と文の全体をいう。**ある本体の中に書かれた
+クロージャ式の本体は、その本体の一部である。** 「関数 `f` が関数 `g` を**呼ぶ**」とは、`f` の本体に `g` の
+呼び出しが書かれていることをいう。
+
+この約束のもとでは、`borrow.rs` の中で書かれたクロージャを標準ライブラリの関数へ渡しても、その
+クロージャの本体は `borrow.rs` の関数の本体の一部のままであって、受け取った標準ライブラリの関数の本体の
+一部にはならない。「呼び出しが `borrow.rs` の中にしか書けない」も、この意味の本体について読む。
+
 ### DEF 部分木
 
 D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**子**を次で定める。
@@ -699,17 +709,20 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       ある (DEF 訪問) ので、閉じるべきなのは `walk` の呼び出し元だけではなく `walk_inner` の呼び出し元でも
       ある。**
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, DEF 訪問
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, DEF 訪問, DEF 本体
 <1>1a. `borrow.rs` の中で `CancelAnalysis::walk` を呼ぶのは、`cancel` の中の
        `analysis.walk(body, PendingRetains::default(), true)` と、`walk_inner` の中の 7 か所だけである。
        その 7 か所は、`Retain` の腕、`Release` の腕、`Match` の腕の 2 か所 (アームと継続)、
-       右辺が `Match` でない `Let` の腕、`Destructure` の腕、`Eval` の腕である。また `borrow.rs` の中で
+       右辺が `Match` でない `Let` の腕、`Destructure` の腕、`Eval` の腕である。`Match` の腕のアームの側の
+       1 か所は `.map(|arm| self.walk(&arm.body, pending.clone(), false))` のクロージャの中に書かれて
+       いるが、DEF 本体 よりそれは `walk_inner` の本体の一部である。また `borrow.rs` の中で
        `CancelAnalysis::walk_inner` を呼ぶのは、`walk` の本体の `grow_stack` に渡す閉包の 1 か所だけで
        ある。
   BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, CODE src/rc_ir/borrow.rs: CancelAnalysis
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, CODE src/rc_ir/borrow.rs: CancelAnalysis,
+     DEF 本体
 <1>2. `walk_inner` の 1 回の呼び出しの中で `walk` と `walk_inner` の呼び出しが起きるのは、`walk_inner` の
-      本体に直接書かれた `self.walk(...)` の 7 か所を通ってだけである。すなわち、`walk_inner` が呼ぶ
+      本体に書かれた (DEF 本体) `self.walk(...)` の 7 か所を通ってだけである。すなわち、`walk_inner` が呼ぶ
       `walk` 以外の関数は、それが直接呼ぶものも、その先で呼ばれるものも、`walk` も `walk_inner` も
       呼ばない。
   <2>1. `walk_inner` の本体が呼ぶ関数のうち、`self.walk` 以外で `borrow.rs` で定義されているのは次の
@@ -719,7 +732,8 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
         (`Match` の腕の `pending.clone()` が `Vec` の要素ごとに呼ぶ)。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, CODE src/rc_ir/borrow.rs: PendingRetain
   <2>1a. `walk_inner` の本体に現れる呼び出しのうち、`self.walk` と <2>1 の 9 つ以外はすべて `borrow.rs` の
-         外で定義されている。本体に現れる呼び出しは次で尽きる。
+         外で定義されている。本体に現れる呼び出しは次で尽きる。DEF 本体 より、`.map(|arm| ...)` に渡す
+         クロージャの中に書かれた呼び出しもこの数え上げに入っている。
 
          | 式 | 解決する項目 | 定義の場所 |
          |---|---|---|
@@ -751,13 +765,16 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
        CODE src/rc_ir/ownership.rs: References::objects,
        CODE src/rc_ir/ownership.rs: destructure_consumes, CODE src/misc.rs: Map, CODE src/misc.rs: Set,
-       DEF IntoIterator と for, DEF Vec::iter と slice::iter
+       DEF IntoIterator と for, DEF Vec::iter と slice::iter, DEF 本体
   <2>2. <2>1 の 9 つの本体は、`self.walk(...)` も `self.walk_inner(...)` も持たない。さらに、`borrow.rs`
         で定義された関数としてはこの 9 つしか呼ばない --- `consume` が `consume_objects` を、`consume_rhs`
-        が `consume` を呼ぶほかは、9 つの本体が呼ぶのはすべて `borrow.rs` の外の項目である。
+        が `consume` を呼ぶほかは、9 つの本体が呼ぶのはすべて `borrow.rs` の外の項目である。DEF 本体 より、
+        この 9 つが標準ライブラリの関数へ渡すクロージャ --- `consume_objects` が `Vec::retain` へ、
+        `un_bump` が `Iterator::rposition` へ、`merge` が `Iterator::all` と `Iterator::filter_map` へ
+        渡すもの --- の本体もこの数え上げに入っている。
         `PendingRetain` が derive する `Clone::clone` の本体はフィールドごとの `clone` であり、その
         フィールドの型は `usize` と `References` で、どちらの `Clone` の実装も `borrow.rs` の外にある。
-    BY <1>1a, CODE src/rc_ir/borrow.rs: node_id,
+    BY <1>1a, DEF 本体, CODE src/rc_ir/borrow.rs: node_id,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
@@ -766,15 +783,19 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
        CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, CODE src/rc_ir/borrow.rs: un_bump,
        CODE src/rc_ir/borrow.rs: PendingRetain, CODE src/rc_ir/ownership.rs: References
   <2>2a. `borrow.rs` の外で定義された関数の本体は `borrow.rs` の中に無いので、<1>1 より `walk` も
-         `walk_inner` も呼べない。
-    BY <1>1, <2>1a
+         `walk_inner` も呼べない。DEF 本体 より、`borrow.rs` の中に書かれたクロージャを引数に取る
+         標準ライブラリの関数についても同じである --- そのクロージャの本体は、それを書いた `borrow.rs` の
+         関数の本体の一部であって、受け取った側の本体の一部ではない。そうしたクロージャを持つ本体は
+         `walk_inner` の本体 (<2>1a) と <2>1 の 9 つ (<2>2) で尽きており、どちらの数え上げもそれを
+         含んでいる。
+    BY <1>1, <2>1, <2>1a, <2>2, DEF 本体
   <2>3. QED
     `walk_inner` の 1 回の呼び出しから始まる呼び出しの閉包は、`walk_inner` の本体、<2>1 の 9 つの本体、
-    および `borrow.rs` の外で定義された関数の本体だけからなる (<2>1、<2>1a、<2>2)。<2>2 よりその 9 つの
-    どれも `walk` も `walk_inner` も呼ばず、<2>2a より `borrow.rs` の外の関数はどちらも呼べない。よって
-    `walk` と `walk_inner` の呼び出しは、`walk_inner` の本体に直接書かれた `self.walk(...)` の 7 か所
-    (<1>1a) を通ってだけ起きる。
-    BY <1>1, <1>1a, <2>1, <2>1a, <2>2, <2>2a
+    および `borrow.rs` の外で定義された関数の本体だけからなる (<2>1、<2>1a、<2>2、DEF 本体)。<2>2 より
+    その 9 つのどれも `walk` も `walk_inner` も呼ばず、<2>2a より `borrow.rs` の外の関数はどちらも
+    呼べない。よって `walk` と `walk_inner` の呼び出しは、`walk_inner` の本体に書かれた
+    `self.walk(...)` の 7 か所 (<1>1a) を通ってだけ起きる。
+    BY <1>1, <1>1a, <2>1, <2>1a, <2>2, <2>2a, DEF 本体
 <1>3. 任意の節点 `n`、任意の `pending`、任意の `returns_from_func` について、
       `walk(n, pending, returns_from_func)` の 1 回の呼び出しの実行中、`N(n)` の各節点はちょうど 1 回
       訪問され、`N(n)` の外の節点は訪問されない。
@@ -788,10 +809,10 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
   <2>2a. `walk(n, pending, returns_from_func)` の 1 回の呼び出しの中で起きる訪問 (DEF 訪問、すなわち
          `walk_inner` の 1 回の呼び出し) は、<2>2 のこの呼び出し自身の 1 回と、この呼び出しの中で起きる
          `walk` の呼び出しの中で起きる訪問だけである。<1>2 より、`walk_inner` の本体から `walk` と
-         `walk_inner` の呼び出しが起きるのは本体に直接書かれた `self.walk(...)` を通ってだけであり、
+         `walk_inner` の呼び出しが起きるのは本体に書かれた (DEF 本体) `self.walk(...)` を通ってだけであり、
          L1 と <1>1a より `walk` はその本体の 1 か所で `walk_inner` を 1 回呼ぶほかは `walk` も
          `walk_inner` も呼ばない。
-    BY <1>1a, <1>2, L1, DEF 訪問
+    BY <1>1a, <1>2, L1, DEF 訪問, DEF 本体
   <2>3. CASE `n` の式が `RcExpr::Retain(v, path, _, k)` である。
     <3>1. この腕は `self.walk(k, pending, returns_from_func)` を 1 回呼び、ほかに `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕, <1>2
