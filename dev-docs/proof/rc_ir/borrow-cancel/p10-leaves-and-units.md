@@ -2,8 +2,8 @@
 
 対象コミットは `02805734f81a8ed842a614cd952494e954770aaa` である。
 
-この文書が立つのは README の定義 D1、D2、D4、D5 と仮定 A3、A6、A9、A10、A11、A12、A15 の上である。証明は
-1 本の構造化証明で、その QED が次の 3 つである。
+この文書が立つのは README の定義 D1、D2、D4、D5 と仮定 A3、A6、A9、A10、A11、A12、A13、A15 の上で
+ある。証明は 1 本の構造化証明で、その QED が次の 3 つである。
 
 - **P1** (leaf と unit の対応)。成り立つのは `<1>1` を満たす型についてである。README の P1 は
   「A10 を満たす任意の型 `τ` について」と書いており、`<1>1` は A10 に前提を 1 つ足したものである。
@@ -271,17 +271,57 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    - (d) `t.is_closure()` と `t.is_box(E)` がどちらも偽であるとき、`t.unpunched_field_types(E)` と
      `t.field_types(E)` は abort せず停止する。この 2 つの列は長さが等しく、`F(t)` の各要素 `(i, f)`
      について `i` は `t.field_types(E)` の長さ未満であり `f` は `t.field_types(E)[i]` である。
-  <2>1. (a) が成り立つ。この 4 つはいずれも `toplevel_tycon_satisfies(pred)` の 1 行であり、
-     `toplevel_tycon_satisfies` は `self.toplevel_tycon()` の `Option` を見て `Some` なら `pred` を、
-     `None` なら偽を返す。渡される `pred` は `make_arrow_name_abs()` との名前の比較、
-     `is_array_tycon`、`is_funptr_tycon`、`is_punched_array_tycon` であり、どれも `TyCon` の名前を
-     比べるだけで `E` を引かない。
-    BY CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
-       CODE src/ast/types.rs: TypeNode::is_closure, CODE src/ast/types.rs: TypeNode::is_array,
-       CODE src/ast/types.rs: TypeNode::is_funptr,
-       CODE src/ast/types.rs: TypeNode::is_punched_array,
-       CODE src/fixstd/builtin.rs: is_array_tycon, CODE src/fixstd/builtin.rs: is_funptr_tycon,
-       CODE src/fixstd/builtin.rs: is_punched_array_tycon
+  <2>1. (a) が成り立つ。
+    <3>1. この 4 つはいずれも `toplevel_tycon_satisfies(pred)` の 1 行であり、
+       `toplevel_tycon_satisfies` は `self.toplevel_tycon()` の `Option` を見て `Some` なら `pred` を、
+       `None` なら偽を返す。渡される `pred` は `is_closure` が `make_arrow_name_abs()` との名前の
+       等値検査、残り 3 つが `is_array_tycon`、`is_funptr_tycon`、`is_punched_array_tycon` であり、
+       どれも `TyCon` の名前だけを見て `E` を引かない。
+      BY CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+         CODE src/ast/types.rs: TypeNode::is_closure, CODE src/ast/types.rs: TypeNode::is_array,
+         CODE src/ast/types.rs: TypeNode::is_funptr,
+         CODE src/ast/types.rs: TypeNode::is_punched_array,
+         CODE src/fixstd/builtin.rs: is_array_tycon,
+         CODE src/fixstd/builtin.rs: is_punched_array_tycon
+    <3>2. `is_array_tycon` と `is_punched_array_tycon` と `is_closure` の述語は `TyCon` の等値比較
+       だけを行い、abort する場所を持たない。
+      BY CODE src/fixstd/builtin.rs: is_array_tycon,
+         CODE src/fixstd/builtin.rs: is_punched_array_tycon,
+         CODE src/ast/types.rs: TypeNode::is_closure
+    <3>3. `is_funptr_tycon(tc)` が abort しうるのは末尾の `number.parse::<u32>().unwrap()` だけで
+       ある。そこに達するのは、`tc.name.namespace` が `Std` の 1 段でありかつ `tc.name.name` が
+       `FUNPTR_NAME` (`"#FunPtr"`) で始まるときに限る。
+      BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME
+    <3>4. `E.tycons()` の鍵のうち `<3>3` の形の名前を持つのは、`bulitin_tycons` が
+       `make_funptr_tycon(n)` (`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下の `u32`) の下に入れる 100 個
+       だけである。`E` の鍵は次の 4 か所から来る。
+       - `Program::calculate_type_env` が置く `bulitin_tycons()` の鍵。`<1>3b` の表の 5 行が
+         挙げるもので、`#FunPtr` で始まるのは `make_funptr_tycon(n)` だけである。
+       - `Program::calculate_type_env` が置く `type_decl.tycon()` と、構造体についてその名前に
+         `PUNCHED_TYPE_SYMBOL` (`"#PunchedAt"`) と添字を継いだ穴つきの形。A13 より Fix の識別子は
+         `#` を含まないので、どちらも `#FunPtr` では始まらない。
+       - `TypeEnv::add_tycons` が置く capture 構造体の型構成子。その名前は
+         `CaptureStruct::new` が `format!("{}@{}", prefix, owner.name)` で作り、`prefix` は
+         `"#FixCap"` か `CAP_LIST_PREFIX` (`"#CapList"`) である。
+       - `TypeEnv::add_tycons` が置く不透明型の型構成子。その名前は不透明型変数の名前であり、
+         `?` で始まる。
+      BY A13, <1>3b, CODE src/ast/program.rs: Program::calculate_type_env,
+         CODE src/ast/program.rs: TypeEnv::add_tycons,
+         CODE src/ast/types.rs: TyCon::into_punched_type_name,
+         CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, CODE src/constants.rs: CAP_LIST_PREFIX,
+         CODE src/optimization/capture_struct.rs: CaptureStruct::new,
+         CODE src/optimization/defunctionalize_fix.rs: run,
+         CODE src/optimization/closure_specialization.rs: record_capture_list,
+         CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon,
+         CODE src/fixstd/builtin.rs: make_funptr_tycon,
+         CODE src/fixstd/builtin.rs: make_funptr_name
+    <3>5. QED
+      `<1>1` (i) より `t.toplevel_tycon()` が返す型構成子は `E.tycons()` の鍵である。`<3>4` より
+      それが `<3>3` の形であるのは `make_funptr_tycon(n)` のときだけで、そのとき
+      `make_funptr_name(n)` は `#FunPtr` に `n` の 10 進表記を継いだものなので `parse::<u32>()` は
+      成功する。`<3>1` と `<3>2` と合わせて 4 つとも abort しない。
+      BY <1>1, <3>1, <3>2, <3>3, <3>4,
+         CODE src/fixstd/builtin.rs: make_funptr_name
   <2>2. (c) が成り立つ。`toplevel_tycon_info` は `assert!(!self.is_closure())` を置き、
      `self.toplevel_tycon().unwrap()` と `type_env.tycons().get(&tycon).unwrap()` を行う。この場合の
      仮定より `assert!` は通り、`<1>1` (i) より 2 つの `unwrap` は成功する。`is_union` は
