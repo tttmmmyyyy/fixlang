@@ -1290,6 +1290,11 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 は呼び出し先の返り値の型である。呼び出しの結果の leaf が呼び出し先の終端の `Ret` が渡す参照を受け取ると
 言うには、両者の `boxed_leaf_paths` が同じ列であることが要る。
 
+**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` はその型の boxed
+leaf である。これが無いと `origin_inner` が `args[j]` で添字を外し、`truncate_to_unit` がその型の leaf で
+ない path を歩く。表のこの行が「第 `j` オペランドの leaf `σ`」と書くのは、そのオペランドとその leaf が
+実在することを含んでいる。
+
 **この 3 つが無いと P2 が偽になる。** `result_prov` を override する 29 個のうち 5 個が、これらの型で
 `expect` か添字か `assert_ne!` で abort する (`CODE src/fixstd/builtin.rs: replaced_field_prov`,
 `InlineLLVMStructPunchBody`)。abort する `result_prov` は `origin_inner` の `Llvm` の腕を通らせない。
