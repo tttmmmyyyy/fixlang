@@ -2043,11 +2043,25 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
     BY <2>1, <2>2, <2>3
 
 <1>4. `ty(c)` は funptr 型である。
-  <2>1. `c` は束縛変数の出現ではなく、`Lowerer::lower_var` の `None` の腕が作る atom である。
-    `<1>1` と `<1>2` より `c.name` は入力の関数の名前であり、A6 より入力のすべての束縛変数の名前は
-    どの関数の名前とも異なる。`lower_var` は、局所に解決する名前については束縛済みの `RcVar` を返し、
-    しない名前については記号を名指す atom を作る。
-    BY A6, <1>1, <1>2, CODE src/rc_ir/lower.rs: Lowerer::lower_var
+  <2>1. `c.name` は `ctx.vars.bindings` の鍵ではない。よって D6 より `c` は束縛を持たない `RcVar` で
+        あり、`c.name` は最上位の記号の名前である。
+    `<1>1` と `<1>2` より `c.name` は入力の関数の名前である。`ctx.vars.bindings` の鍵は、`V` の
+    パラメータ・capture の名前と `B_V` が束縛する変数の名前ちょうどである (`VarTable::of` が前者を、
+    `collect_bindings` が後者を入れ、グローバル初期化子の `VarTable::body_only` は後者だけを入れる)。
+    `V` が `f_own` かグローバル初期化子であるとき、`B_V` は入力の本体なのでそれらはどれも入力の束縛名
+    であり、A6 より入力のすべての束縛変数の名前はどの関数の名前とも異なる。`V = f_borrow` であるとき、
+    それらはどれも `clone_func` が導入した名前である -- 4.1 の言明より `rename_f` の定義域は `func` の
+    パラメータ・capture の名前と `func.body` が束縛する名前の全体であり、`fresh_rename_function` は
+    `clone` の `params` と `capture` を `rename_var` でその像に写し、`B_V` の各束縛子も同じ写像で写る。
+    4.2 の言明よりその `name` フィールドを `#` で区切った最後の断片は `b` の後に 10 進数字が続く形で
+    あり、A13 より入力に現れるどの名前 -- `prog.funcs` の鍵を含む -- の最後の断片もその形ではないので、
+    それらは `c.name` と異なる。D6 は、`vars.bindings` に束縛を持たない名前は最上位の記号の名前であり、
+    lowering がそのような `RcVar` を作るのは `Lowerer::lower_var` と `Lowerer::lower_llvm` の
+    `resolve` が `None` を返す 2 つの腕だけであると述べる。
+    BY A6, A13, D6, <1>1, <1>2, 4.1 の言明, 4.2 の言明,
+       CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings,
+       CODE src/rc_ir/rename.rs: fresh_rename_function, rename_var,
+       CODE src/rc_ir/lower.rs: Lowerer::lower_var
   <2>2. `c.name` は記号の名前であり、その記号の型は funptr 型である。
     `<2>1` より `c` は束縛を持たない `RcVar` であり、A12 の「束縛を持たない `RcVar` の型が、その名前の
     記号の型であること」より `c.name` の記号が在る。`<1>1` と `<1>2` より `c.name` は `borrow_ify` の
