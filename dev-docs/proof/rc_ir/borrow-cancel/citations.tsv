@@ -264,9 +264,9 @@ src/rc_ir/borrow.rs	RewriteCtx::check_ownership_is_levelled	P3,P4,P7a,P7c,P7d,P7
 src/rc_ir/borrow.rs	RewriteCtx::new	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P26	bfca5e3f2335
 src/rc_ir/borrow.rs	RewriteCtx::owns_object	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P26	8d339a540e72
 src/rc_ir/borrow.rs	RewriteCtx::owns_unit	P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P26	5ec3f1aaa85c
-src/rc_ir/borrow.rs	RewriteCtx::rewrite	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18	19a938d13f94
-src/rc_ir/borrow.rs	RewriteCtx::rewrite_inner	D/A,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18a,P18b,P26,P27,P29,(P-insert)	60b96fdb051d
-src/rc_ir/borrow.rs	RewriteCtx::rewrite_rc	D/A,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18a,P18b,P26,(P-insert)	bb650d544cce
+src/rc_ir/borrow.rs	RewriteCtx::rewrite	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24	19a938d13f94
+src/rc_ir/borrow.rs	RewriteCtx::rewrite_inner	D/A,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P26,P27,P29,(P-insert)	60b96fdb051d
+src/rc_ir/borrow.rs	RewriteCtx::rewrite_rc	D/A,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P26,(P-insert)	bb650d544cce
 src/rc_ir/borrow.rs	RewriteCtx::route	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P27,P29	a2c829b25466
 src/rc_ir/borrow.rs	RewriteCtx::routing_is_safe	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	7d9bcdfcaf7e
 src/rc_ir/borrow.rs	RewriteCtx::routing_saves_retain	P7a,P7d,P7e	d0cd17bb5277
@@ -283,7 +283,7 @@ src/rc_ir/borrow.rs	clone_func	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P1
 src/rc_ir/borrow.rs	covered_leaves	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	95bb7b49e4a1
 src/rc_ir/borrow.rs	drop_nodes	P18c,P19,P20,P21,P22,P23,P24	4a4d43cb3f4a
 src/rc_ir/borrow.rs	drop_nodes_inner	P18c,P19,P20,P21,P22,P23,P24	a208018d5cf5
-src/rc_ir/borrow.rs	expr_node	P15,P16,P17,P18,(P-insert)	bace42aa8264
+src/rc_ir/borrow.rs	expr_node	P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	bace42aa8264
 src/rc_ir/borrow.rs	func_has_borrowable_param	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	e7c889e3f8d6
 src/rc_ir/borrow.rs	funcs_observing_uniqueness	D/A,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P26	bc386fc09dae
 src/rc_ir/borrow.rs	infer_ownership	D/A,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b	915dec92acac
@@ -295,8 +295,8 @@ src/rc_ir/borrow.rs	node_id	P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24	9ad6169
 src/rc_ir/borrow.rs	owns_object_yet	D/A,P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	dbfdbdfa53ce
 src/rc_ir/borrow.rs	param_capture_units	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P26,P27,P29	4ae533d6a014
 src/rc_ir/borrow.rs	param_names_and_types	P8,P9,P10,P11,P12,P13,P14,P14a,P26	a545d427cb66
-src/rc_ir/borrow.rs	prepend_rc	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P26,(P-insert)	c9525f349a7c
-src/rc_ir/borrow.rs	rc_node	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,(P-insert)	5d543479e186
+src/rc_ir/borrow.rs	prepend_rc	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,P26,(P-insert)	c9525f349a7c
+src/rc_ir/borrow.rs	rc_node	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	5d543479e186
 src/rc_ir/borrow.rs	route	P26	a2c829b25466
 src/rc_ir/borrow.rs	routing_saves_retain	P3,P4	d0cd17bb5277
 src/rc_ir/borrow.rs	split_body	(P-insert)	3ab6d7ce07a2
