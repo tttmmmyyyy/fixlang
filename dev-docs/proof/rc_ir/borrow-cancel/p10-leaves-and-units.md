@@ -1,13 +1,14 @@
 # P1 (leaf と unit の対応) と P2 (`origin` の全域性と停止性) の証明
 
-対象コミットは `921d0473ac523171df56ce78f49de3e3ba480484` である。
+対象コミットは `5aa87f26c246919eadcb3f1c3ce0252366c2aed8` である。
 
-この文書が立つのは README の定義 D1、D2、D4、D5 と仮定 A3、A6、A9、A10、A11、A12、A13、A15 の上で
-ある。証明は 1 本の構造化証明で、その QED が次の 3 つである。
+この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A3、A6、A9、A10、A11、A12、A13、A15 の
+上である。証明は 1 本の構造化証明で、その QED が次の 3 つである。
 
 - **P1** (leaf と unit の対応)。README の P1 が量化する型、すなわち **A10 を満たす**任意の型に
   ついて成り立つ。`<1>1` は A10 をこの文書の記法で述べたものである。第 3 節がその対応を述べる。
-- **P2** (`origin` の全域性と停止性)。
+- **P2** (`origin` の全域性と停止性)。README の P2 が量化する 2 つの形 -- プログラムの束縛変数と、
+  `vars.bindings` に束縛を持たない名前 (D6 の第 3 の形) -- は、どちらも `<1>31` の範囲に入る。
 - **P1 の系** (`<1>33`, `<1>34`)。`origin` の再帰が辿る path も、`origin` が返す `VarPath` の path も、
   どれも「その型の unit に届く」。すなわちそれらに `truncate_to_unit` を当てると abort せず、値は
   `rc_units` の要素である。これは「unit path の `origin` と、その下の leaf の `origin` の関係」に
@@ -19,8 +20,8 @@ P1 と P2 は共通の補題 (型の上の walk が停止すること、`unit_st
 P1 は 2 つの静的な列挙 (`boxed_leaf_paths` と `rc_units`) の対応についての主張なので、D16 の
 inhabited は現れない。実行時にどの leaf が参照を持つかは P1 の主張に入らない。
 
-`<1>1`、`<1>2`、`<1>3a` は、README の A10、A11、A12 をこの文書の記法で述べたものである。README の
-文面との差と、P1 の定義域については第 3 節に書く。
+`<1>1` は README の A10、`<1>2` は A11、`<1>3a` は A12 と A3 の 1 段を、この文書の記法で述べた
+ものである。README の文面との差と、P1 の定義域については第 3 節に書く。
 
 ## 1. 記法
 
@@ -222,7 +223,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      ある leaf の宣言として単一の `LeafOrigin::Arg(j, sigma)` を置くとき、`j` は `args` の添字で
      あり (すなわち `args.len()` 未満であり)、`sigma` は `L(ty(args[j]))` の要素である。
 
-   8 つはどれも A12 である。(iii) と (v) が `F`、すなわち `unpunched_field_types` の要素で
+   **(i) から (vii) は A12 であり、(viii) は A3 である。**(iii) と (v) が `F`、すなわち
+   `unpunched_field_types` の要素で
    あることを言うのは、A12 の「`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が
    実際に持つ (punched でない) ものであること」を述べたものである。(vii) の 3 つは A12 の
    「`Llvm` 節点の型についての 3 つ」である。A12 の第 2 項は punched struct の成分を「A10 を満たす
@@ -232,11 +234,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    `toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、この項が立つとき
    `pt.is_closure()` は偽である。
 
-   (viii) は A12 の「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字で
-   あり、`σ` はその型の boxed leaf である」である。「その型」は第 `j` オペランドの型 `ty(args[j])`、
+   (viii) は A3 の「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字で
+   あり、`σ` はその型の boxed leaf である」の段落である。「その型」は第 `j` オペランドの型
+   `ty(args[j])`、
    「boxed leaf」は D4 の意味、すなわち `boxed_leaf_paths(ty(args[j]))` が列挙する path であり、
-   この文書の記法では `L(ty(args[j]))` の要素である。
-  BY A12, CODE src/rc_ir/ast.rs: RcRhs (`Var` の doc「Move / rename `y := x`, consuming `x`」),
+   この文書の記法では `L(ty(args[j]))` の要素である。宣言の well-formedness は、`LLVMGen` の
+   宣言についての仮定 A3 が述べる。
+  BY A3, A12, CODE src/rc_ir/ast.rs: RcRhs (`Var` の doc「Move / rename `y := x`, consuming `x`」),
      CODE src/rc_ir/ast.rs: MatchArm (`tag` と `payload` の doc),
      CODE src/rc_ir/ast.rs: RcExpr (`Destructure` の doc「Destructure a struct/tuple container into
        its fields at once ... Each `(index, var)` binds field `index` to `var`」),
@@ -332,10 +336,20 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          渡すのは `LiftedLambdas::take_new_tycons()` の返り値であり、その `new_tycons` へ入れるのは
          `record_capture_list` だけで、入れる鍵は `CaptureStruct` の `tycon` である。`run_one` が
          `add_tycons` に渡す鍵も、`FixDefunctionalizer::lift` が作った `CaptureStruct` の `tycon` で
-         ある。その名前は `CaptureStruct::new` が `format!("{}@{}", prefix, owner.name)` で作り、
-         `prefix` は `"#FixCap"` か `CAP_LIST_PREFIX` (`"#CapList"`) である。
-       - `register_opaque_tycon` が `add_tycons` に渡す不透明型の型構成子。その名前は不透明型変数の
-         名前であり、`?` で始まる。
+         ある。その名前は `CaptureStruct::new` が `format!("{}@{}", prefix, owner.name)` で作る。
+         **製品のコードで `CaptureStruct::new` を呼ぶのは 3 か所であり、`prefix` はそのどれかが
+         渡す値である。**`LiftedLambdas::capture_struct_of` と
+         `ClosureSpecializationVisitor::decapture_lambda` は `CAP_LIST_PREFIX` (`"#CapList"`) を、
+         `FixDefunctionalizer::lift` は `"#FixCap"` を渡す。`decapture_lambda` が作る
+         `CaptureStruct` が `new_tycons` に届くのは `LiftedLambdas::insert` を経由してであり、
+         それも `record_capture_list` を呼ぶ。よって `prefix` は `"#FixCap"` か `CAP_LIST_PREFIX` の
+         どちらかであり、どちらも `#FunPtr` では始まらない。
+       - `register_opaque_tycon` が `add_tycons` に渡す不透明型の型構成子。その鍵は
+         `OpaqueInfo` の `tycon` であり、その名前を作るのは `collect_opaque_infos` の
+         `FullName::new(&gv_name.to_namespace(), &opq_var.name)` である。`opq_var` は
+         `is_opaque_tyvar(&tv.name)` が真である型変数に限られ、`is_opaque_tyvar(name)` は
+         `name.starts_with('?')` である。よってこの鍵の `name.name` は `?` で始まり、`#FunPtr` では
+         始まらない。
       BY A13, <1>3b, CODE src/ast/program.rs: Program::calculate_type_env,
          CODE src/ast/program.rs: TypeEnv::add_tycons,
          CODE src/ast/types.rs: TyCon::into_punched_type_name,
@@ -343,8 +357,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          CODE src/optimization/capture_struct.rs: CaptureStruct::new,
          CODE src/optimization/defunctionalize_fix.rs: run_one, FixDefunctionalizer::lift,
          CODE src/optimization/closure_specialization.rs: lift_all, realize_all,
-             record_capture_list, take_new_tycons,
-         CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon,
+             record_capture_list, take_new_tycons, LiftedLambdas::insert,
+             LiftedLambdas::capture_struct_of,
+             ClosureSpecializationVisitor::decapture_lambda,
+         CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon, collect_opaque_infos,
+             OpaqueInfo,
+         CODE src/ast/types.rs: is_opaque_tyvar,
          CODE src/fixstd/builtin.rs: make_funptr_tycon,
          CODE src/fixstd/builtin.rs: make_funptr_name
     <3>5. QED
@@ -514,7 +532,19 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 <1>8. `<1>1` を満たす型の上で `DESC` は整礎である。すなわち `<1>1` を満たす型 `t_0` から始まる
    無限列 `t_0 DESC t_1 DESC t_2 ...` は存在しない。
-  BY <1>3d, <1>7
+  <2>1. そのような無限列があるとすると、各 `t_j` は `<1>1` を満たす。`DEF DESC` より
+     `t_j DESC t_{j+1}` はある `i` について `(i, t_{j+1})` が `F(t_j)` の要素であることを含むので、
+     `t_{j+1}` は `t_j` からフィールドの辺で到達できる型である。`<1>1` (ii) は `<1>1` を満たす型
+     からフィールドの辺で到達できる型も `<1>1` を満たすと述べるので、`j` についての帰納で全項に
+     届く。
+    BY <1>1, DEF DESC
+  <2>2. 各 `j` について `t_j REC t_{j+1}` である。`<2>1` より `t_j` は `<1>1` を満たし、
+     `DEF DESC` より `cls(t_j)` は `UN` か `ST` なので、`<1>7` (c) を `t := t_j`、`f := t_{j+1}` に
+     適用できる。
+    BY <1>7, <2>1, DEF DESC
+  <2>3. QED
+    `<2>2` は `<1>1` を満たす型 `t_0` から始まる無限の `REC` の列であり、`<1>3d` に反する。
+    BY <1>3d, <2>1, <2>2
 
 <1>9. `<1>1` を満たす型 `t` について、`is_fully_unboxed(t)`、`unit_step(t)`、`rc_units(t)`、
    `boxed_leaf_paths(t)` は abort せず停止し、`L(t)` と `U(t)` は有限集合である。また
@@ -1161,29 +1191,34 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>6. QED
     BY <2>1, <2>2, <2>3, <2>4, <2>5
 
-<1>23. 本体の各節点 `n` について、`Scope(n)` の要素であり `<1>21` の列に現れる名前はどれも、`Ins(n)`
-   が始まるより前に挿入されている。
+<1>23. 本体の各節点 `n` について、`Scope(n)` の各名前は `<1>21` の列に現れ、その挿入は `Ins(n)` が
+   始まるより前である。とくに `Scope(n)` の各名前は `vars.bindings` の定義域にあり、`ord` の値は
+   0 以上である。
   <2>1. `n` が根のとき。`VarTable::of` の場合 `Scope(根)` はパラメータと capture の名前で、これらは
-     `collect_bindings` を呼ぶ前に挿入される。`VarTable::body_only` の場合 `Scope(根)` は空集合で
-     ある。
-    BY <1>21, DEF Scope, CODE src/rc_ir/ownership.rs: VarTable::of,
+     `collect_bindings` を呼ぶ前に `vars.bindings` へ挿入される。`Ins(根)` は
+     `collect_bindings` の呼び出しが行う挿入の全体なので、どれも `Ins(根)` の開始より前である。
+     `VarTable::body_only` の場合 `Scope(根)` は空集合であり、主張は空虚に成り立つ。
+    BY <1>21, <1>22, DEF Scope, CODE src/rc_ir/ownership.rs: VarTable::of,
        CODE src/rc_ir/ownership.rs: VarTable::body_only
   <2>2. ASSUME: `n` について主張が成り立ち、`n'` は `DEF Scope` が `Scope(n')` を `Scope(n)` から
      定める子である
      PROVE: `n'` について主張が成り立つ
     <3>1. CASE `n = Let(x, rhs, k)` かつ `n' = k`。`Scope(k)` は `Scope(n)` に `x` を加えたもので
-       ある。`Scope(n)` の名前は帰納法の仮定より `Ins(n)` の開始より前に挿入されており、`Ins(n)` の
-       開始は `Ins(k)` の開始より前である。`x` は `<1>22` より `Ins(k)` が始まる直前に挿入される。
+       ある。`Scope(n)` の各名前は帰納法の仮定より `<1>21` の列に現れ、`Ins(n)` の開始より前に
+       挿入されており、`Ins(n)` の開始は `Ins(k)` の開始より前である。`x` は `<1>22` より
+       `Ins(k)` が始まる直前に挿入されるので、これも列に現れる。
       BY <1>22, DEF Scope
     <3>2. CASE `n = Let(x, Match(scrut, arms), k)` かつ `n'` が `arms` のあるアームの `body`。
-       `Scope(arm.body)` は `Scope(n)` に `arm.payload` を加えたものである。`Scope(n)` の名前は
-       帰納法の仮定より `Ins(n)` の開始より前に挿入されており、`Ins(n)` の開始は `Ins(arm.body)` の
-       開始より前である。`arm.payload` は `<1>22` より `Ins(arm.body)` が始まる直前に挿入される。
+       `Scope(arm.body)` は `Scope(n)` に `arm.payload` を加えたものである。`Scope(n)` の各名前は
+       帰納法の仮定より `<1>21` の列に現れ、`Ins(n)` の開始より前に挿入されており、`Ins(n)` の開始は
+       `Ins(arm.body)` の開始より前である。`arm.payload` は `<1>22` より `Ins(arm.body)` が始まる
+       直前に挿入されるので、これも列に現れる。
       BY <1>22, DEF Scope
     <3>3. CASE `n = Destructure(cont, fields, s, k)` かつ `n' = k`。`Scope(k)` は `Scope(n)` に
-       `fields` の各変数を加えたものである。`Scope(n)` の名前は帰納法の仮定より `Ins(n)` の開始より
+       `fields` の各変数を加えたものである。`Scope(n)` の各名前は帰納法の仮定より `<1>21` の列に
+       現れ、`Ins(n)` の開始より
        前に挿入されており、`Ins(n)` の開始は `Ins(k)` の開始より前である。`fields` の各変数は
-       `<1>22` より `Ins(k)` が始まる前に挿入される。
+       `<1>22` より `Ins(k)` が始まる前に挿入されるので、これも列に現れる。
       BY <1>22, DEF Scope
     <3>4. CASE `n` が `Retain(v, p, s, k)`、`Release(v, p, s, k)`、`Eval(v, k)` のどれかで `n' = k`。
        `Scope(k)` は `Scope(n)` に等しく `Ins(n)` は `Ins(k)` に等しいので、帰納法の仮定がそのまま
@@ -1241,10 +1276,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>4. CASE `y.name` が `vars.bindings` の定義域に無い。このとき `ord(y.name) = -1` であり、
        `ord(x)` は 0 以上なので `ord(y.name) < ord(x)` である。
       BY <1>21
-    <3>5. CASE `y.name` が `Scope(m(x))` の要素である。`<1>23` より `y.name` は `Ins(m(x))` が
-       始まるより前に挿入されている。`<1>22` より `x` は `Ins(m(x))` の中で挿入される。よって
-       `ord(y.name) < ord(x)` である。
-      BY <1>22, <1>23
+    <3>5. CASE `y.name` が `Scope(m(x))` の要素である。`<1>23` より `y.name` は `<1>21` の列に
+       現れ、その挿入は `Ins(m(x))` が始まるより前である。`<1>22` より `x` は `Ins(m(x))` の中で
+       挿入される。よって `ord(y.name) < ord(x)` である。
+      BY <1>21, <1>22, <1>23
     <3>6. QED
       BY <3>1, <3>3, <3>4, <3>5
   <2>4. CASE `vars.bindings[x]` が `Binding::Llvm(llvm_gen, args, result_ty)` である。
@@ -1265,10 +1300,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>4. CASE `args[j].name` が `vars.bindings` の定義域に無い。`ord(args[j].name) = -1` であり
        `ord(x)` は 0 以上なので `ord(args[j].name) < ord(x)` である。
       BY <1>21
-    <3>5. CASE `args[j].name` が `Scope(m(x))` の要素である。`<1>23` より `Ins(m(x))` の開始より前に
-       挿入されており、`<1>22` より `x` は `Ins(m(x))` の中で挿入される。よって
-       `ord(args[j].name) < ord(x)` である。
-      BY <1>22, <1>23
+    <3>5. CASE `args[j].name` が `Scope(m(x))` の要素である。`<1>23` より `args[j].name` は
+       `<1>21` の列に現れ、その挿入は `Ins(m(x))` の開始より前である。`<1>22` より `x` は
+       `Ins(m(x))` の中で挿入される。よって `ord(args[j].name) < ord(x)` である。
+      BY <1>21, <1>22, <1>23
     <3>6. QED
       BY <3>1, <3>3, <3>4, <3>5
   <2>5. CASE `vars.bindings[x]` が `Binding::Field(container, idx)` である。
@@ -1286,10 +1321,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>4. CASE `container.name` が `vars.bindings` の定義域に無い。`ord(container.name) = -1` であり
        `ord(x)` は 0 以上なので `ord(container.name) < ord(x)` である。
       BY <1>21
-    <3>5. CASE `container.name` が `Scope(m(x))` の要素である。`<1>23` より `Ins(m(x))` の開始より前
-       に挿入されており、`<1>22` より `x` は `Ins(m(x))` の中で挿入される。よって
-       `ord(container.name) < ord(x)` である。
-      BY <1>22, <1>23
+    <3>5. CASE `container.name` が `Scope(m(x))` の要素である。`<1>23` より `container.name` は
+       `<1>21` の列に現れ、その挿入は `Ins(m(x))` の開始より前である。`<1>22` より `x` は
+       `Ins(m(x))` の中で挿入される。よって `ord(container.name) < ord(x)` である。
+      BY <1>21, <1>22, <1>23
     <3>6. QED
       BY <3>1, <3>3, <3>4, <3>5
   <2>6. CASE `vars.bindings[x]` が `Binding::Payload(scrut, variant)` である。
@@ -1309,10 +1344,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>4. CASE `scrut.name` が `vars.bindings` の定義域に無い。`ord(scrut.name) = -1` であり
        `ord(x)` は 0 以上なので `ord(scrut.name) < ord(x)` である。
       BY <1>21
-    <3>5. CASE `scrut.name` が `Scope(m(x))` の要素である。`<1>23` より `Ins(m(x))` の開始より前に
-       挿入されており、`<1>22` より `x`、すなわち `arm.payload.name` は `Ins(m(x))` の中で挿入
-       される。よって `ord(scrut.name) < ord(x)` である。
-      BY <1>22, <1>23
+    <3>5. CASE `scrut.name` が `Scope(m(x))` の要素である。`<1>23` より `scrut.name` は `<1>21` の
+       列に現れ、その挿入は `Ins(m(x))` の開始より前である。`<1>22` より `x`、すなわち
+       `arm.payload.name` は `Ins(m(x))` の中で挿入される。よって `ord(scrut.name) < ord(x)` で
+       ある。
+      BY <1>21, <1>22, <1>23
     <3>6. QED
       BY <3>1, <3>3, <3>4, <3>5
   <2>7. CASE `vars.bindings[x]` が `Binding::Join(arm_results)` である。
@@ -1339,10 +1375,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
       <4>2. `<1>22` より `x` の挿入は、すべてのアームの `arm.payload` の挿入と `Ins(arm.body)` が
          済んだ後に行われる。
         BY <1>22
-      <4>3. CASE `arm_result.name` が `Scope(arm.body)` の要素である。`<1>23` より `Ins(arm.body)` の
-         開始より前に挿入されている。`<4>2` より `x` の挿入は `Ins(arm.body)` が済んだ後なので、
+      <4>3. CASE `arm_result.name` が `Scope(arm.body)` の要素である。`<1>23` より
+         `arm_result.name` は `<1>21` の列に現れ、その挿入は `Ins(arm.body)` の開始より前である。
+         `<4>2` より `x` の挿入は `Ins(arm.body)` が済んだ後なので、
          `ord(arm_result.name) < ord(x)` である。
-        BY <1>23, <4>2
+        BY <1>21, <1>23, <4>2
       <4>4. CASE `arm_result.name` が `Ins(arm.body)` の中で挿入される。`<4>2` より `x` の挿入は
          `Ins(arm.body)` が済んだ後なので、`ord(arm_result.name) < ord(x)` である。
         BY <4>2
@@ -1377,25 +1414,6 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>6. QED
     BY <2>1, <2>2, <2>3, <2>4, <2>5
 
-<1>27. `Origin` 型の任意の値 `o` について、`o.candidates()` は空でない列を返す。
-  <2>1. `Origin::Exactly(p)` について `candidates()` は `vec![p]` を返す。これは長さ 1 である。
-    BY CODE src/rc_ir/ownership.rs: Origin::candidates
-  <2>2. `Origin::Join { candidates, .. }` について `candidates()` は `candidates` の要素を集めた列を
-     返す。
-    BY CODE src/rc_ir/ownership.rs: Origin::candidates
-  <2>3. `Origin::Join` を作る場所は `Origin::of_candidates` の `_ => Origin::Join { .. }` の腕だけで
-     ある。
-    BY CODE src/rc_ir/ownership.rs: Origin::of_candidates, CODE src/rc_ir/ownership.rs: Origin
-  <2>4. `of_candidates` はまず `assert!(!candidates.is_empty(), ...)` を置き、そののち
-     `candidates.len()` で場合分けし、1 のとき `Origin::Exactly`、それ以外のとき `Origin::Join` を
-     作る。`assert!` を通った時点で長さは 1 以上なので、`Origin::Join` を作るとき `candidates` の
-     長さは 2 以上である。
-    BY CODE src/rc_ir/ownership.rs: Origin::of_candidates
-  <2>5. QED
-    `Origin` の値は `Exactly` と `Join` の 2 つで、`<2>1` が前者を、`<2>2` から `<2>4` が後者を
-    尽くしている。
-    BY <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/ownership.rs: Origin
-
 <1>27a. `Origin` 型の任意の値 `o` について、`o.acted_on()` は空でない列を返す。
   `acted_on` は `let mut out = vec![self.identity()];` で始め、そののち `out` を伸ばすだけなので、
   返り値は `o.identity()` を必ず含む。
@@ -1406,9 +1424,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    呼ぶとき、abort しうるのは `build_shape` に渡された閉包の中だけであり、その閉包が受け取る
    `path` は `L(ty)` の要素である。閉包を引数に取らない残りの 3 つは abort せず停止する。
 
-   **`Provenance` はこの 4 つのほかに `empty`、`arg_passthrough`、`join`、`compose`、`project`、
-   `set_leaves_under`、`demote` を持つ。**`result_prov` の呼び出しが `Provenance` を作るのにこの
-   4 つしか使わないことは、既定の実装と 29 個の override を 1 つずつ開く `<1>28` が数え上げる。
+   **`impl Provenance` のメソッドは 14 個であり、この 4 つのほかに `empty`、`arg_passthrough`、
+   `join`、`leaf_origins_at`、`leaves`、`leaf_origins_under`、`compose`、`project`、
+   `set_leaves_under`、`demote` の 10 個を持つ。**`result_prov` の呼び出しが `Provenance` を作るのに
+   この 4 つしか使わないことは、既定の実装と 29 個の override を 1 つずつ開く `<1>28` が数え上げる。
   <2>1. `Provenance::build_shape(ty, E, leaf)` は `LeafMap::build_shape(ty, E, leaf)` を呼ぶ。
      `LeafMap::build_shape` は `boxed_leaf_paths(ty, E)` を 1 度呼び、返った各 `path` について
      `leaf(&path)` を呼び、対 `(path, fact)` を `Map` に積む。`<1>9` より `boxed_leaf_paths(ty)` は
@@ -1435,10 +1454,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        CODE src/rc_ir/provenance.rs: Provenance::set_leaves_under,
        CODE src/rc_ir/leaf_map.rs: LeafMap::map_leaves_under
   <2>5. QED
-    `<2>1` が `build_shape` を、`<2>2` から `<2>4` が残る 3 つを尽くしている。`Provenance` が
-    `empty`、`arg_passthrough`、`join`、`compose`、`project`、`set_leaves_under`、`demote` も
-    持つことは、`impl Provenance` の本体が挙げている。
-    BY <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/provenance.rs: Provenance
+    `<2>1` が `build_shape` を、`<2>2` から `<2>4` が残る 3 つを尽くしている。`impl Provenance` の
+    本体が持つメソッドは 14 個であり、この 4 つのほかは `empty`、`arg_passthrough`、`join`、
+    `leaf_origins_at`、`leaves`、`leaf_origins_under`、`compose`、`project`、`set_leaves_under`、
+    `demote` である。
+    BY <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/provenance.rs: Provenance (`impl Provenance` の
+       14 個のメソッド)
 
 <1>27c. `<1>1` を満たす型 `t` について、`t.is_unbox(E)` と `t.is_box(E)` は abort せずに真偽値を
    返す。
@@ -1904,10 +1925,18 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     `<2>2` から `<2>7` が尽くしている。
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, <2>8, CODE src/rc_ir/ownership.rs: Binding
 
-<1>31. **P2 が成り立つ。** すなわち `<1>1`、`<1>2`、`<1>3a` を満たすプログラムについて、`vars` を
+<1>31. **P2 が成り立つ。** すなわち、A3、A6、A9、A10、A11、A12、A13、A15 を満たすプログラムに
+   ついて、`vars` を
    その関数の `VarTable`、`x` を任意の `FullName`、`pi` を任意の `FieldPath` とすると、
-   `origin(vars, E, x, pi)` は panic せずに `Origin` の値を返し、停止する。P2 が量化するのは `x` が
-   プログラムの束縛変数である場合であり、それはこの主張の特別な場合である。
+   `origin(vars, E, x, pi)` は panic せずに `Origin` の値を返し、停止する。
+
+   条件節がこの 8 つを挙げるのは、`<1>29` と `<1>30` がその全部の上に立つからである。`<1>1` は
+   A10、`<1>2` は A11、`<1>3a` は A12 と A3 の 1 段をこの文書の記法で述べたものであり (第 3 節)、
+   A3 の残りは `<1>28` と `<1>28a`、A6 は `<1>21`、A9 は `<1>3`、A13 は `<1>3c` の `<2>1`、
+   A15 は `<1>29` が読む。
+
+   P2 が量化するのは、`x` がプログラムの束縛変数である場合と、`x` が `vars.bindings` に束縛を
+   持たない名前 (D6 の第 3 の形) である場合であり、どちらもこの主張の特別な場合である。
   <2>1. `<1>29` (停止性) と `<1>30` (abort しないこと) の主張も証明も、`pi` に条件を置いていない。
      P2 の「`π` を問わず」が要求するのはこれである。
     BY <1>29, <1>30
@@ -1918,8 +1947,16 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      ある。
     BY <1>30, CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+  <2>2a. `<1>29` と `<1>30` の主張も証明も、`x` に条件を置いていない。とくに `x` が
+     `vars.bindings` に束縛を持たない名前 (D6 の第 3 の形) である場合も範囲に入る。`<1>29` の
+     `<2>3` はその節点を葉として扱い、`<1>30` の `<2>2` は `origin_inner` の `None` の腕が
+     `Origin::Exactly` を作るだけであることを述べる。すなわち `origin_inner` はその腕で即座に
+     `here()` を返し、`origin` はその値を返す。
+    BY D6, <1>29, <1>30, CODE src/rc_ir/ownership.rs: origin_inner
   <2>3. QED
-    BY <1>29, <1>30, <2>1, <2>2
+    P2 が量化する 2 つの場合はどちらも `<2>2a` の範囲に入り、`pi` についての一般性は `<2>1` と
+    `<2>2` が与える。条件節の 8 つの仮定は `<1>29` と `<1>30` が読むものである。
+    BY A3, A6, A9, A10, A11, A12, A13, A15, <1>29, <1>30, <2>1, <2>2, <2>2a
 
 <1>32a. `t` が `<1>1` を満たし `u` が `U(t)` の要素であるとき、`u` は `t` の unit に届き
    `T(t, u) = u` である。
@@ -1967,7 +2004,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     `U(t)` の要素である。
     BY <2>1, <2>3, <2>4, DEF unit に届く
 
-<1>33. **(P1 の系 1: `origin` が辿る path はどれも unit に届く)** `<1>1`、`<1>2`、`<1>3a` を満たす
+<1>33. **(P1 の系 1: `origin` が辿る path はどれも unit に届く)** `<1>31` と同じ 8 つの仮定 --
+   A3、A6、A9、A10、A11、A12、A13、A15 -- を満たす
    プログラムについて、`pi` が `L(ty(x))` の要素または `U(ty(x))` の要素であるとき、`(x, pi)` の
    呼び出しの下流 (`DEF 呼び出しの下流`) にあるすべての対 `(u, sig)` について、`u` が
    `vars.var_tys` に型を持つならば `sig` は `ty(u)` の unit に届く (`DEF unit に届く`)。
@@ -2130,7 +2168,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     ので、道の長さは有限で上から抑えられる。よって帰納法は呼び出しの下流の全体に届く。
     BY <1>21, <1>25, <2>5, <2>6
 
-<1>34. **(P1 の系 2: `origin` が返す path も unit に届く)** `<1>33` の条件の下で、
+<1>34. **(P1 の系 2: `origin` が返す path も unit に届く)** `<1>33` と同じ 8 つの仮定の下で、
    `origin(vars, E, x, pi)` の返り値に現れる各 `VarPath` `(u, sig)` (identity と candidates の両方)
    について、`u` が `vars.var_tys` に型を持つならば `sig` は `ty(u)` の unit に届く。すなわち
    `T(ty(u), sig)` は abort せず、その値は `U(ty(u))` の要素である。
@@ -2202,9 +2240,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 ## 3. 入力についての 3 つの前提と README の仮定、および P1 の定義域
 
-`<1>1` (H1)、`<1>2` (H2)、`<1>3a` (H4) は、README の A10 (型の well-formedness)、A11 (スコープの
-規律)、A12 (束縛の形と型が合っている) である。README の文面とこの文書の記法との対応は、3 つの
-前提のそれぞれについて次のとおりである。
+`<1>1` (H1) は README の A10 (型の well-formedness)、`<1>2` (H2) は A11 (スコープの規律)、
+`<1>3a` (H4) は A12 (束縛の形と型が合っている) と A3 (宣言されたモデルの忠実さ) の 1 段である。
+README の文面とこの文書の記法との対応は、3 つの前提のそれぞれについて次のとおりである。
 
 - **`<1>1` の 3 つはどれも A10 である。**(i) は A10 の第 1 文 --「プログラムに現れる型は ground で
   あり、その tycon に kind の要求するだけの引数が与えられており、その tycon は `type_env` にある」--
@@ -2229,10 +2267,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   ない」から出る。A11 の検査 `validate` の `scope` の推移も同じ形で、関数ごとに `func.params` と
   `func.capture` を `bind` してから本体を検査し、グローバル初期化子については何も `bind` せずに
   本体を検査する。
-- `<1>3a` は A12 の項目のうちこの文書が使う 8 つを (i) から (viii) として述べる。**8 つはどれも
-  A12 に在る。**(vii) の 3 つは A12 の「`Llvm` 節点の型についての 3 つ」であり、(viii) は A12 の
+- `<1>3a` は、この文書が使う 8 つを (i) から (viii) として述べる。**(i) から (vii) は A12 に、
+  (viii) は A3 に在る。**(vii) の 3 つは A12 の「`Llvm` 節点の型についての 3 つ」であり、(viii) は
+  A3 の
   「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` はその型の
-  boxed leaf である」の段落である。
+  boxed leaf である」の段落である。宣言の well-formedness は `LLVMGen` の宣言についての仮定であり、
+  それを置くのは A3 である。`<1>28a` の `<2>3` も同じ段を A3 から引く。
 
   A12 の「`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が実際に持つ (punched
   でない) ものであること」は (iii) と (v) が述べており、この文書はそれを読む -- (iii) と (v) が
