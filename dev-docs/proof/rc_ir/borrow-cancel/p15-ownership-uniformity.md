@@ -371,7 +371,7 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
 
 **言明**。プログラムの `type_env` について、`type_env.tycons()` が `make_array_tycon()` に与える
 `TyConInfo` の `variant` は `TyConVariant::Array` であり、各 `make_funptr_tycon(n)` に与える `TyConInfo` の
-`variant` は `TyConVariant::Primitive` である。したがって、型 `σ` の最上位 tycon の `TyConInfo` の
+`variant` は `TyConVariant::Primitive` である。したがって、扱う型 `σ` の最上位 tycon の `TyConInfo` の
 `variant` が `TyConVariant::Struct` または `TyConVariant::Union` であるとき、`is_array(σ)` も
 `is_funptr(σ)` も偽である。
 
@@ -433,31 +433,36 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
      CODE src/ast/types.rs: TyCon::into_punched_type_name,
      CODE src/parse/grammer.pest: type_defn, type_name, capital_name
 
-<1>5. `add_tycons` の 3 つの呼び出し元が渡す鍵は、`make_array_tycon()` とも `make_funptr_tycon(n)` とも
-      異なる。
+<1>5. `add_tycons` の 3 つの呼び出し元が渡す鍵の名前は、`Array` ではなく、`#FunPtr` でも始まらない。
   `register_opaque_tycon` が渡す鍵は `FullName::new(&gv_name.to_namespace(), &opq_var.name)` であり、
   `opq_var` は `is_opaque_tyvar` が真の型変数なので、その名前は `?` で始まる。残る 2 つが渡すのは
-  `CaptureStruct::new` が作る tycon であり、その名前は `format!("{}@{}", prefix, owner.name)` なので
-  `@` を含む。`Array` も、`#FunPtr` に 10 進表記を続けた名前も、`?` で始まらず `@` を含まない。
+  `CaptureStruct::new` が作る tycon であり、その名前は `format!("{}@{}", prefix, owner.name)` である。
+  `prefix` に渡るのは `defunctionalize_fix` の `"#FixCap"` と `closure_specialization` の
+  `CAP_LIST_PREFIX` (`"#CapList"`) の 2 つなので、その名前は `#FixCap` か `#CapList` で始まる。
   BY CODE src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon,
      collect_opaque_infos, CODE src/ast/types.rs: is_opaque_tyvar,
      CODE src/optimization/capture_struct.rs: CaptureStruct::new,
      CODE src/optimization/defunctionalize_fix.rs: run_one,
      CODE src/optimization/closure_specialization.rs: lift_all, realize_all,
+     CODE src/constants.rs: CAP_LIST_PREFIX,
      CODE src/fixstd/builtin.rs: make_array_name, make_funptr_name
 
 <1>6. QED
-  `<1>3` から `<1>5` より、`type_env.tycons()` が `make_array_tycon()` と各 `make_funptr_tycon(n)` に
-  与える `TyConInfo` は `bulitin_tycons()` が作ったものであり、`<1>2` よりその `variant` は作られたときの
-  ままである。`<1>4` よりそれは `TyConVariant::Array` と `TyConVariant::Primitive` である。
-  `σ` の最上位 tycon の `TyConInfo` の `variant` が `TyConVariant::Struct` か `TyConVariant::Union` で
-  あれば、その tycon は `make_array_tycon()` と異なり、どの `make_funptr_tycon(n)` とも異なる。
-  `is_array(σ)` はその tycon が `make_array_tycon()` に等しいかを問うので偽である。`is_funptr(σ)` が真で
-  あれば、その tycon の名前は namespace `Std` を持ち `#FunPtr` に 10 進表記が続く形であり、
-  `<1>4` と `<1>5` よりそのような鍵は `bulitin_tycons()` からしか表に入らないので、その `variant` は
-  `TyConVariant::Primitive` であって仮定に反する。よって `is_funptr(σ)` も偽である。
-  BY <1>2, <1>3, <1>4, <1>5, CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr,
-     CODE src/fixstd/builtin.rs: is_array_tycon, is_funptr_tycon
+  `<1>3` から `<1>5` より、`type_env.tycons()` の鍵のうち名前が `Array` であるもの、および名前が
+  `#FunPtr` で始まるものは、`bulitin_tycons()` が置いた `make_array_tycon()` と、
+  `1..=FUNPTR_ARGS_MAX` の各 `arity` についての `make_funptr_tycon(arity)` だけである -- `<1>4` の
+  第 1 種の鍵の名前は `#` を含まず、第 2 種のそれは大文字で始まり、`<1>5` の 3 つは `?` か `#FixCap` か
+  `#CapList` で始まる。それらの値は `bulitin_tycons()` が作った `TyConInfo` であり、`<1>2` より
+  `variant` は作られたときのままなので、`<1>4` よりそれぞれ `TyConVariant::Array` と
+  `TyConVariant::Primitive` である。これが言明の前半である。
+  `σ` を扱う型とし、その最上位 tycon の `TyConInfo` の `variant` が `TyConVariant::Struct` か
+  `TyConVariant::Union` であるとする。L1b より `σ` は A10 を満たすので、その tycon は `type_env` の鍵で
+  あり、上より `make_array_tycon()` とも各 `make_funptr_tycon(arity)` とも異なり、その名前は `#FunPtr` で
+  始まらない。`is_array(σ)` はその tycon が `make_array_tycon()` に等しいかを問うので偽である。
+  `is_funptr(σ)` は `is_funptr_tycon` に問い、それは名前が `#FunPtr` で始まらないので `None` を返すから、
+  やはり偽である。
+  BY <1>2, <1>3, <1>4, <1>5, A10, L1b, DEF 扱う型, CODE src/ast/types.rs: TypeNode::is_array,
+     TypeNode::is_funptr, CODE src/fixstd/builtin.rs: is_array_tycon, is_funptr_tycon
 
 ### L2 (`units_under` の 2 つの形)
 
