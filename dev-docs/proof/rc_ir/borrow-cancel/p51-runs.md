@@ -494,11 +494,12 @@ P29 は層 0 の命題であり、その証明はどの命題も引かない。P
 <1>2a. 呼び出しが使う署名は `lambda_function_type(ty(callee))` であり、実行時の呼び出し先 `g` の LLVM
        関数の署名は `lambda_function_type(g.fn_ty)` である。2 つは等しい。
   `apply_lambda` は `func_ty = lambda_function_type(&fun.ty, self)` を作って `build_indirect_call` に
-  渡す。`g` の LLVM 関数は `implement_rc_program` が `declare_program_global` か
-  `declare_lambda_function` から得たものであり、どちらも `lambda_function_type` をその関数の型に掛けて
-  署名を作る。`implement_rc_function` はその関数のパラメータを `g.params` と `g.capture` に順に
-  割り当てる。2 つの署名が違えば、その間接呼び出しの振る舞いは LLVM の定めるところで未定義であり、
-  この文書のモデルの外にある。
+  渡す。`g` の LLVM 関数は `implement_rc_program` が `module.get_function`、`declare_program_global`、
+  `declare_lambda_function` の 3 つの枝のどれかから得たものであり、`declare_lambda_function` は
+  `lambda_function_type` をその関数の型に掛けて署名を作る。`implement_rc_function` はその関数の
+  パラメータを `g.params` と `g.capture` に順に割り当てる。得られた署名が
+  `lambda_function_type(g.fn_ty)` でないとき、または呼び出しの側の署名と違うとき、その間接呼び出しの
+  振る舞いは LLVM の定めるところで未定義であり、この文書のモデルの外にある。
   BY CODE src/generator.rs: Generator::apply_lambda, Generator::declare_lambda_function,
      Generator::declare_program_global, CODE src/object.rs: lambda_function_type,
      CODE src/rc_ir/codegen.rs: Generator::implement_rc_program, Generator::implement_rc_function
