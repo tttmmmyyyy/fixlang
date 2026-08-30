@@ -6758,6 +6758,7 @@ pub fn union_mod_function(
 /// Inline-LLVM body of the `_undefined_internal` builtin: with runtime checks on it prints the
 /// message and aborts, and with them off it emits an `unreachable` instruction. Either way the
 /// expression stands for a value of the result type that is never produced.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUndefinedInternalBody {
     /// The variable holding the message printed before aborting.

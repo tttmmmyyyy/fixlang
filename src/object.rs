@@ -292,6 +292,7 @@ impl ObjectFieldType {
     /// * `loop_body` — receives the current index, `size` and `buffer`.
     /// * `after_loop` — receives `size` and `buffer`, and runs once, including when `size` is
     ///   zero.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     fn loop_over_array_buf<'c, 'm, F, G>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -1059,7 +1060,7 @@ impl ObjectFieldType {
     /// The field of a struct at `field_idx`, taken at the struct's own reference to it: nothing is
     /// retained, so the caller either reads it while the struct is alive or takes the reference over
     /// by dropping the struct without releasing that field.
-    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn move_out_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
