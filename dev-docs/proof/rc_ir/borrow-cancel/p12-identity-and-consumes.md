@@ -1,25 +1,24 @@
 # P5, P6, P7 -- identity とオブジェクト、`acted_references`、消費の網羅性
 
 この文書は `README.md` の P5 (a)、P5 (b)、P5 (c)、P6、P7 を証明する。立つのは `README.md` の定義
-(D1 から D11、D14 から D17、D20 から D24、D26)、仮定 (A1、A3、A5、A6、A8 から A16)、および命題 P1、P2、
-P29 の**言明**である。P1 と P2 の証明は `p10-leaves-and-units.md`、P29 の証明は `p51-runs.md` にあり、
-この文書はその 3 つの言明だけを使う。
+(D1、D2、D3、D4、D6、D7、D8、D9、D10、D11、D14、D15、D16、D17、D20、D21、D23、D26)、仮定 (A1、A3、
+A5、A6、A9、A10、A11、A12、A14、A15、A16)、および命題 P1、P2、P29 の**言明**である。P1 と P2 の証明は
+`p10-leaves-and-units.md`、P29 の証明は `p51-runs.md` にあり、この文書はその 3 つの言明だけを使う。
 
-`README.md` の A16 (`Match` の網羅性) は、この文書では `H1` と書く。H1 が要るのは
-L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b)、R1 である。**`H2` (catch-all アームは `arms` の最後に
-ある) は、この文書が別に置く仮説である。** H2 が要るのは L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b) で
-ある。
+A16 が要るのは L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b)、R1 である。読むのは A16 の 2 つの節 --
+`Match` のアームが scrutinee のタグを尽くすことと、catch-all アームが `arms` の最後にあること --
+であり、どちらも L1b が読む。
 
-読んだコードはコミット `68fe840881b67d6cd28ed573785003a313acb5e1` の版である。
+読んだコードはコミット `787a7db8e0b09afa4a2a7095ac90ddf8376b9229` の版である。
 
 ## 0. 結論
 
 | 命題 | 結果 |
 |---|---|
-| P5 (a) 対の健全性 | 証明した (H1 と H2 の下で) |
+| P5 (a) 対の健全性 | 証明した (A16 の下で) |
 | P5 (b) 対の有効性 | 証明した |
 | P5 (c) 被覆 | 証明した |
-| P6 (`acted_references` は静的な上位近似である) | 証明した (H1 と H2 の下で) |
+| P6 (`acted_references` は静的な上位近似である) | 証明した (A16 の下で) |
 | P7 (消費の網羅性) | 証明した (前半は D14 の所有をちょうど報告する `own` について、後半はどの `own` についても) |
 | L6 (報告しない箇所は D9 の消費ではない) | 証明した (P7 に添える補題。D14 の所有をちょうど報告する `own` について) |
 
@@ -73,39 +72,23 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 付け、`L5 (c)` のように引用する。同じ規則を P6 (a)、P6 (b)、P7 (a)、P7 (b) にも使う -- これらは
 この文書が P6 と P7 を分けた主張であり、引用してよいのはその言明である。
 
-### `H1` -- README の A16
+### A16 の 2 つの節
 
-**H1 (`Match` の網羅性)** -- 果たす者: lowering (`CODE src/rc_ir/lower.rs: Lowerer::lower_match`,
-`Lowerer::lower_if`) と、アームの列を保つ後段のパス。検査: 無し。
-すべての `Match(s, arms)` について、次のどちらかが成り立つ。`arms` が catch-all アーム (`tag` が `None`) を
-持つか、`s` の値が取りうる実行時のタグがいずれかのアームの `tag` である。
+この文書が読む A16 の節を、引用の形で書き出す。
 
-この前提は `README.md` の A16 である。`validate` が見るのは、
-アームが 1 つ以上あること、catch-all アームが最後にあること、2 つのアームが同じ変位を担わないことだけ
-である (`CODE src/rc_ir/validate.rs: Validator::check_rhs`)。網羅しない `Match` -- 3 変位の union に
-対する `[tag 0, tag 1]` -- では、実行時のタグが 2 のとき、コード生成は `tag = Some(1)` のアームへ入る
-(最後のアームが switch の default である)。そのとき D9 の移動の表の「unbox union の変位アームの payload
-束縛」の行が名指す活性変位と、`origin` が辿る静的な変位番号が食い違い、L1b、L4、P5 (a)、P6 (b) が偽に
-なる。
+- **(網羅)** すべての `Match(s, arms)` について、`arms` が catch-all アーム (`tag` が `None`) を持つか、
+  `s` の値が取りうる実行時のタグがいずれかのアームの `tag` である。
+- **(位置)** catch-all アームは `arms` の最後にある。
 
-### `H2` -- catch-all アームの位置
+(位置) を果たすのはコード生成である -- `Generator::eval_rc_match` は最後でない各アームについて
+`arm.tag.expect(..)` を無条件に評価するので、最後でない位置に catch-all を持つプログラムはコード生成で
+止まり、その本体の活性化は存在しない (A16)。`validate` の `check_rhs` も同じことを検査するが、そちらは
+`develop_mode` の門を持つ。
 
-**H2 (catch-all アームは最後にある)** -- 果たす者: lowering
-(`CODE src/rc_ir/lower.rs: Lowerer::lower_match`, `Lowerer::lower_if`) と、アームの列を保つ後段のパス。
-検査: `validate` の `check_rhs` (`CODE src/rc_ir/validate.rs: Validator::check_rhs` -- 最後のアームを
-除くどれかの `tag` が `None` であれば panic する)。ただしこの検査が `develop_mode` のときだけ走ることは
-`README.md` の A9 と A11 が同じ `check_rhs` について述べており、**第 4 節の格付けでは、`develop_mode` で
-だけ走る表明は 3 段のどれよりも弱い。**
-すべての `Match(s, arms)` について、`arms` が catch-all アーム (`tag` が `None`) を持つならば、それは
-`arms` の最後の元である。
-
-この前提は `README.md` の A16 の言明が節として持たないものである。A16 の本文は `validate` の
-`check_rhs` がこれを検査すると述べるが、仮定の言明はタグを尽くすことだけを述べる。H1 と別に置くのは
-そのためである。L1b の CASE `<1>3` -- 実行時のタグに `tag` が等しいアームが無い場合 -- は、コード生成が
-最後のアームを switch の default とすること (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_match`) と
-H2 を合わせて、実行が入るのが catch-all アームであることを出す。H2 が無いと、`tag = Some(t)` の
-アームがタグの合わない値をもって選ばれる場合を排除できず、E3 の辺の両端が同じ値の同じ位置を名指すことが
-言えない。
+読む者は L1b であり、L1b を通じて L1 の E3 の場合、L4、P5 (a)、P6 (b) が載る。(網羅) が落ちると、
+3 変位の union に対する `[tag 0, tag 1]` のような `Match` で、実行時のタグが 2 のときコード生成は
+`tag = Some(1)` のアームへ入る。そのとき D9 の移動の表の「unbox union の変位アームの payload 束縛」の
+行が名指す活性変位と、`origin` が辿る静的な変位番号が食い違う。
 
 ### DEF 路の位置
 
@@ -432,15 +415,16 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
 
 <1>3. CASE `arms` に、`s` の値の実行時のタグに `tag` が等しいアームが無い。
   <2>1. `arms` は catch-all アームを持つ。
-    H1 より、`arms` が catch-all アームを持つか、`s` の値の実行時のタグがいずれかのアームの `tag` で
-    ある。後者はこの CASE の前提に反する。
-    BY H1
+    A16 の (網羅) より、`arms` が catch-all アームを持つか、`s` の値の実行時のタグがいずれかのアームの
+    `tag` である。後者はこの CASE の前提に反する。
+    BY A16
   <2>2. catch-all アームは `arms` の最後である。
-    `<2>1` の catch-all アームについて H2 がこれを与える。
-    BY H2, <2>1
+    `<2>1` の catch-all アームについて A16 の (位置) がこれを与える。
+    BY A16, <2>1
   <2>3. QED
-    コード生成は、最後のアームのブロックを switch の default とし、それ以外の各アームをその `tag` の
-    case とする。よって `<1>1` の第 2 の場合に実行が入るのは最後のアームであり、`<2>1` と `<2>2` より
+    コード生成は、最後のアームのブロックを `else_bb` とし、アームが 1 つのときはそこへ無条件に分岐し、
+    2 つ以上のときは最後を除く各アームをその `tag` の case とする switch の default にそれを据える。
+    どちらでも `<1>1` の第 2 の場合に実行が入るのは最後のアームであり、`<2>1` と `<2>2` より
     それは catch-all アーム、すなわち `tag` が `None` のアームである。これは前提の `Some(t)` に反するので、
     この CASE は起きない。
     BY <1>1, <2>1, <2>2, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
@@ -1297,18 +1281,21 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       - `gen`: `InlineLLVMStringBuf`。**この op はこのコンパイラの `impl LLVMGen for` の 1 つである**
         (A3 がその全体を 78 個と数え上げている)。`free_vars_mut` は空の列を返すのでオペランドを 1 つも
         取らない。`result_prov` は `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返す
-        ので、結果の型の各 boxed leaf に**単一の `Fresh`** を宣言する。**`unique_check_operand` を
-        override しないので、その宣言は既定の `None` である。** `generate` は `make_byte_array_copy` を
-        呼び、`alloc_array_storage` で記憶域を割り当ててバイト列を写す。
+        ので、結果の型の各 boxed leaf に**単一の `Fresh`** を宣言する。`generate` は
+        `make_byte_array_copy` を呼び、それは `alloc_array_storage` (`build_capacity_check` と
+        `create_obj`) で記憶域を、`create_obj` で `Array U8` のオブジェクトを新しく割り当て、
+        `build_memcpy` でバイト列を写す。
       - `T`: `gen` の結果の型 `Array U8` (`make_byte_array_copy` が `type_tyapp(make_array_ty(),
         make_u8_ty())` として組む型)。
       - `Bool`: `Std::Bool`。`unbox union { _false : (), _true : () }` であり、2 つの変位の payload の
         型はどちらも `()` である。
 
       A3 の表の「単一の `Fresh`」の行より、`gen` が結果のその leaf に置くのは、新しく割り当てた
-      オブジェクトへの新しい参照である。**A3 が同じ節に置く但し書き -- `unique_check_operand` を宣言する
+      オブジェクトへの新しい参照である。**A3 が同じ節に置く但し書き -- 実行時に参照カウントで分岐する
       op の `Fresh` の行は、オブジェクトの同一性については字義どおりではない -- は `gen` に当たらない。**
-      `gen` はその宣言を持たない。
+      `gen` の生成コードは `build_branch_by_is_unique` を 1 つも呼ばず、参照カウントを読む分岐を
+      持たない -- 上の 3 つの経路 (`build_capacity_check`、`create_obj`、`build_memcpy`) のどれも
+      参照カウントを読まない。
 
       `f` のパラメータは `c : Bool` の 1 つ、capture は無く、`borrowed_units` は空 (A1) である。本体は
       次のとおりで、`m`・`x_0`・`x_1` は型 `T`、`p_0`・`p_1` は `()` である。
@@ -1320,12 +1307,12 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 
       これは D2 の形の本体であり、A6 (`c`・`m`・`x_0`・`x_1`・`p_0`・`p_1` は相異なる名前)、
       A9 (アームは 2 つ)、A12 (アームの結果と `Match` の束縛変数の型、payload と変位の型、`Llvm` 節点の
-      `args` の名前の列が `gen.free_vars()` -- 空の列 -- に等しいこと)、H1 (2 つのアームが `Bool` の
-      2 変位を尽くす)、H2 (catch-all アームが無いので空虚に真) を満たす。以下、`j` は 0 と 1 を渡り、
-      `ρ_j` は変位 `j` のアームを選ぶ実行路を表す。
-  BY A1, A3, A6, A9, A12, D2, H1, H2,
+      `args` の名前の列が `gen.free_vars()` -- 空の列 -- に等しいこと)、A16 の (網羅) (2 つのアームが
+      `Bool` の 2 変位を尽くす) と (位置) (catch-all アームが無いので空虚に真) を満たす。以下、`j` は
+      0 と 1 を渡り、`ρ_j` は変位 `j` のアームを選ぶ実行路を表す。
+  BY A1, A3, A6, A9, A12, A16, D2,
      CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStringBuf, make_byte_array_copy,
-     CODE src/ast/inline_llvm.rs: LLVMGen::unique_check_operand,
+     CODE src/object.rs: alloc_array_storage, create_obj,
      CODE src/fixstd/std.fix: Bool
 
 <1>2. `boxed_leaf_paths(T, type_env)` は `{[]}` であり、`[]` は `T` の値で inhabited である。`p_0` と
@@ -1380,8 +1367,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
     `Ret(x_j)` は `ρ_j` の上にあるので、DEF `ρ` の上で実行された辺 の第 3 の場合よりその辺は実行された。
     BY DEF 辺の leaf 対応, DEF `ρ` の上で実行された辺, <1>1, <1>3, <2>1, <2>2
   <2>4. QED
-    L1 より `<2>3` の辺の両端は同じオブジェクトを指す。`<1>1` より `gen` は `unique_check_operand` を
-    宣言しないので、A3 の但し書き -- その宣言を持つ op の `Fresh` の行はオブジェクトの同一性については
+    L1 より `<2>3` の辺の両端は同じオブジェクトを指す。`<1>1` より `gen` は実行時に参照カウントで
+    分岐しないので、A3 の但し書き -- そうした op の `Fresh` の行はオブジェクトの同一性については
     字義どおりでない -- は当たらず、A3 の「単一の `Fresh`」の行を字義どおりに読める。すなわち
     `obj(x_j, [])` はこの op が新しく割り当てたオブジェクトであり、D26 より割り当てられたオブジェクトは
     計数下である。
