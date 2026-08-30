@@ -2038,9 +2038,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, <2>8, CODE src/rc_ir/ownership.rs: Binding
 
 <1>31. **P2 が成り立つ。** すなわち、A3、A6、A9、A10、A11、A12、A13、A15 を満たすプログラムに
-   ついて、`vars` を
-   その関数の `VarTable`、`x` を任意の `FullName`、`pi` を任意の `FieldPath` とすると、
-   `origin(vars, E, x, pi)` は panic せずに `Origin` の値を返し、停止する。
+   ついて、`vars` をその 1 つの本体 -- 関数の `body` またはグローバル初期化子の `init` -- について
+   `VarTable::of` または `VarTable::body_only` が作る表、`x` を任意の `FullName`、`pi` を任意の
+   `FieldPath` とすると、`origin(vars, E, x, pi)` は panic せずに `Origin` の値を返し、停止する。
+
+   **`VarTable::body_only` が作る表を範囲に入れるのは、`origin` がその上でも走るからである。**
+   `borrow_ify` と `cancel` はどちらもグローバル初期化子について `VarTable::body_only(&g.init)` を
+   置き、その表で `RewriteCtx` と `CancelAnalysis` を作る。README の P7a も、site を関数に限らない
+   形で書く理由を「`owns_unit` がグローバル初期化子の版でも呼ばれるからである」と述べる。
 
    条件節がこの 8 つを挙げるのは、`<1>29` と `<1>30` がその全部の上に立つからである。`<1>1` は
    A10、`<1>2` は A11、`<1>3a` は A12 と A3 の 1 段をこの文書の記法で述べたものであり (第 3 節)、
@@ -2065,10 +2070,19 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `Origin::Exactly` を作るだけであることを述べる。すなわち `origin_inner` はその腕で即座に
      `here()` を返し、`origin` はその値を返す。
     BY D6, <1>29, <1>30, CODE src/rc_ir/ownership.rs: origin_inner
+  <2>2b. `<1>29` と `<1>30` の主張も証明も、`vars` が `VarTable::of(func)` の作る表か
+     `VarTable::body_only(body)` の作る表かを問わない。この 2 つが読む `<1>21`、`<1>23`、`<1>25` は
+     どちらの表についても述べられており -- `<1>21` は 2 つの構成子を並べ、`<1>23` の `<2>1` は根の
+     場合をその 2 つに分け、`<1>25` は `<1>2` を経てそれを引く --、残る `<1>22`、`<1>26`、`<1>28`、
+     `<1>28a` は表の作り方を読まない。
+    BY <1>2, <1>21, <1>22, <1>23, <1>25, <1>26, <1>28, <1>28a, <1>29, <1>30
   <2>3. QED
     P2 が量化する 2 つの場合はどちらも `<2>2a` の範囲に入り、`pi` についての一般性は `<2>1` と
-    `<2>2` が与える。条件節の 8 つの仮定は `<1>29` と `<1>30` が読むものである。
-    BY A3, A6, A9, A10, A11, A12, A13, A15, <1>29, <1>30, <2>1, <2>2, <2>2a
+    `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 8 つの仮定は `<1>29` と
+    `<1>30` が読むものである。
+    BY A3, A6, A9, A10, A11, A12, A13, A15, <1>29, <1>30, <2>1, <2>2, <2>2a, <2>2b,
+       CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel,
+       CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
 
 <1>32a. `t` が `<1>1` を満たし `u` が `U(t)` の要素であるとき、`u` は `t` の unit に届き
    `T(t, u) = u` である。
