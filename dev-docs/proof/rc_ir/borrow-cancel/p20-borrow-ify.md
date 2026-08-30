@@ -893,7 +893,7 @@ D9 の `App` の引数の行は「呼び出し先がその位置の **unit** を
 
 <1>5. `owns_object_yet(vars_f, type_env, r, p, OL)` は真である。
   第 1 節に写した `p15` の `L11` は、「`r` を `vars.param_tys` が型 `τ` で持つ名前とし、
-  `covered_leaves(τ, p) ⊆ { λ' : (r, λ') ∈ OL }` であり、かつ `covered_leaves(τ, p) ≠ ∅` または
+  `covered_leaves(τ, p) ⊆ { λ : (r, λ) ∈ OL }` であり、かつ `covered_leaves(τ, p) ≠ ∅` または
   `under(τ, p) = []` であるとき、`owns_object_yet(vars, type_env, r, p, OL)` は真である」と述べる。
   `<1>2` の `r` は `vars_f.param_tys` が型 `τ` で持つ名前である。`<1>4` より
   `covered_leaves(τ, p) = {p}` であり、これは空でない。`<1>2` より `(r, p) ∈ OL` なので包含も
@@ -2712,11 +2712,15 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
   `tag` と `payload`・`Destructure` のフィールドを共有する同じ節点である。L16a より対応する位置で対応
   する変数が得る値は等しいので、D16 の inhabited な leaf の集合も両側で等しい。この節点が行う D9 の消費は
   DEF 所有を読まない消費 の行であり、それも D10 の生成の行も、節点の形と変数の型と op の宣言だけで決まる
-  (A3)。よって両側の事象は同じ leaf の集合を取り、L9 より動かす由来 `T_ρ` も同じである。並びと読みの
-  位置は、DEF 時点 よりその節点についてコード生成が出すコードが決めるものであり、両側の節点は同じ
-  `RcExpr` なのでコードも同じである (A4)。
-  BY A3, A4, D9, D10, D16, DEF 所有を読まない消費, DEF 時点, L9, L16, L16a,
-     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner
+  (A3、A4)。よって両側の事象は同じ leaf の集合を取る。由来 `T_ρ` は `ctx.vars` について定まる 1 つの量で
+  あり、第 9.1 節よりどちらの側で読んでも同じものを指す。事象と読みの並びは、DEF 時点 よりその節点に
+  ついてコード生成が出すコードが決める。`eval_rc_expr_inner` はその節点・束縛されている値・tail の位置
+  からコードを作り、tail の位置が変えるのはその節点が作る値を返す形にするかどうか -- `build_tail` を
+  呼ぶか、`apply_lambda` に tail を渡すか -- だけであって、オペランドの読みと D9・D10 の事象の並びを
+  変えない。節点と値は両側で同じなので (L16、L16a)、両側のこの節点は同じ順に同じ読みと同じ事象を行う。
+  BY A3, A4, D9, D10, D16, DEF 所有を読まない消費, DEF 時点, L16, L16a, 9.1 の言明,
+     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_match,
+     CODE src/ast/inline_llvm.rs: LLVMGen::generate_tail
 
 <1>3. (a) の空の場合を除き、`n` の事象が動かす由来はすべて所有される。
   D10 の生成の表の 5 行が値を与えるのは `Let` の束縛変数、`Destructure` のフィールド変数、`Match` の
@@ -3678,10 +3682,11 @@ README の P14a が「計数下の別名類」と書き、D34 が計数下の類
 <1>1. 出力の版のうち、D14 の意味で借用する unit を持つのは借用版 `f_borrow` の `body` だけである。
   DEF 出力の版 より出力の版は各 `f_own`、各 `f_borrow`、各グローバル初期化子で尽きる。第 8 節の系 1 より
   `f_own` の `borrowed_units` は空なので、D14 より `f_own` は自分のパラメータ・capture の全 unit を
-  所有する。P13 の言明は「出力のグローバル初期化子については、`RcGlobalInit` が `borrowed_units` の欄を
-  持たず、パラメータも capture も持たない (D1) ので、この命題が述べる集合は無い」と述べるので、
-  グローバル初期化子の `init` は D14 の意味の unit を 1 つも持たない。
-  BY D1, D14, DEF 出力の版, P13, 第 8 節の系 1
+  所有する。グローバル初期化子の `init` は D14 の意味の unit を 1 つも持たない -- D1 より
+  `RcGlobalInit` は `symbol`・`ty`・`init`・`owns_initializer`・`owns_storage` の 5 つのフィールドを
+  持って `borrowed_units` の欄を持たず、その `init` はパラメータも capture も持たないので、D14 が
+  所有と借用を割り当てる先が無い。
+  BY D1, D14, DEF 出力の版, 第 8 節の系 1, CODE src/rc_ir/ast.rs: RcGlobalInit
 
 <1>2. 実行が活性化を作る段は 5 種で尽きる -- (E1) 環境が活性化を作る段、(E3) 呼び出しの段、(E7) グローバル
       の初期化の段、(E2) のうちオペランドを適用する `Llvm` の段、(F) の解放が `Destructor` について作る段
