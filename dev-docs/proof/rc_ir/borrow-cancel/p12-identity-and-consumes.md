@@ -6,18 +6,20 @@ P29 の**言明**である。P1 と P2 の証明は `p10-leaves-and-units.md`、
 この文書はその 3 つの言明だけを使う。
 
 `README.md` の A16 (`Match` の網羅性) は、この文書では `H1` と書く。H1 が要るのは
-L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b)、R1 である。
+L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b)、R1 である。**`H2` (catch-all アームは `arms` の最後に
+ある) は、この文書が別に置く仮説である。** H2 が要るのは L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b) で
+ある。
 
-読んだコードはコミット `5aa87f26c246919eadcb3f1c3ce0252366c2aed8` の版である。
+読んだコードはコミット `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` の版である。
 
 ## 0. 結論
 
 | 命題 | 結果 |
 |---|---|
-| P5 (a) 対の健全性 | 証明した (H1 の下で) |
+| P5 (a) 対の健全性 | 証明した (H1 と H2 の下で) |
 | P5 (b) 対の有効性 | 証明した |
 | P5 (c) 被覆 | 証明した |
-| P6 (`acted_references` は静的な上位近似である) | 証明した (H1 の下で) |
+| P6 (`acted_references` は静的な上位近似である) | 証明した (H1 と H2 の下で) |
 | P7 (消費の網羅性) | 証明した (前半は D14 の所有をちょうど報告する `own` について、後半はどの `own` についても) |
 | L6 (報告しない箇所は D9 の消費ではない) | 証明した (P7 に添える補題。D14 の所有をちょうど報告する `own` について) |
 
@@ -65,7 +67,7 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 `ActRefs(v, π)` は D15 の `acted_references(v, π)` である。`VarPath` は対 `(FullName, FieldPath)` である
 (`CODE src/rc_ir/ast.rs: VarPath`)。等号はこの対の等号である。
 
-この文書は補題を `L0`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L4`、`L5`、`L6` (この順に並べる)、反例を
+この文書は補題を `L0`、`L0a`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L4`、`L5`、`L6` (この順に並べる)、反例を
 `R1` と呼ぶ。**`BY` の行で
 引用してよいのは、それぞれの言明だけである。** 言明が複数の主張からなる補題は主張に (a)、(b)、… の名札を
 付け、`L5 (c)` のように引用する。同じ規則を P6 (a)、P6 (b)、P7 (a)、P7 (b) にも使う -- これらは
@@ -85,6 +87,24 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 (最後のアームが switch の default である)。そのとき D9 の移動の表の「unbox union の変位アームの payload
 束縛」の行が名指す活性変位と、`origin` が辿る静的な変位番号が食い違い、L1b、L4、P5 (a)、P6 (b) が偽に
 なる。
+
+### `H2` -- catch-all アームの位置
+
+**H2 (catch-all アームは最後にある)** -- 果たす者: lowering
+(`CODE src/rc_ir/lower.rs: Lowerer::lower_match`, `Lowerer::lower_if`) と、アームの列を保つ後段のパス。
+検査: `validate` の `check_rhs` (`CODE src/rc_ir/validate.rs: Validator::check_rhs` -- 最後のアームを
+除くどれかの `tag` が `None` であれば panic する)。ただしこの検査は `config.develop_mode` のときだけ走る
+(`CODE src/build/build_object_files.rs: optimize_rc_program`)。**`README.md` の第 4 節の格付けでは、
+`develop_mode` でだけ走る表明は 3 段のどれよりも弱い。**
+すべての `Match(s, arms)` について、`arms` が catch-all アーム (`tag` が `None`) を持つならば、それは
+`arms` の最後の元である。
+
+この前提は `README.md` の A16 が持っていない節である。H1 と別に置くのは、H1 が「タグを尽くす」ことだけを
+述べ、catch-all アームの位置には触れないからである。L1b の CASE `<1>3` -- 実行時のタグに `tag` が等しい
+アームが無い場合 -- は、コード生成が最後のアームを switch の default とすること
+(`CODE src/rc_ir/codegen.rs: Generator::eval_rc_match`) と H2 を合わせて、実行が入るのが catch-all
+アームであることを出す。H2 が無いと、`tag = Some(t)` のアームがタグの合わない値をもって選ばれる場合を
+排除できず、E3 の辺の両端が同じ値の同じ位置を名指すことが言えない。
 
 ### DEF 路の位置
 
@@ -320,19 +340,8 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
     ある。後者はこの CASE の前提に反する。
     BY H1
   <2>2. catch-all アームは `arms` の最後である。
-    <3>1. コード生成は、最後のアームを除く各アームについて
-          `arm.tag.expect("a non-final match arm must be a variant arm")` を評価する。
-      BY CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
-    <3>2. `<3>1` の `expect` が発火するならば、この本体を持つプログラムの実行は 1 つも存在しない。
-          `expect` の発火はコンパイラを panic させ、コンパイルはそこで終わるので、実行可能な二値が
-          作られない。実行はその二値の実行である。
-      BY <3>1
-    <3>3. 最後のアーム以外のすべてのアームは `tag` を持つ。前提より `ρ` を辿る実行が在るので、`<3>2` の
-          対偶よりこの `expect` は発火しない。
-      BY <3>1, <3>2
-    <3>4. QED
-      `<2>1` の catch-all アームは `tag` を持たないので、`<3>3` より最後のアームである。
-      BY <2>1, <3>3
+    `<2>1` の catch-all アームについて H2 がこれを与える。
+    BY H2, <2>1
   <2>3. QED
     コード生成は、最後のアームのブロックを switch の default とし、それ以外の各アームをその `tag` の
     case とする。よって `<1>1` の第 2 の場合に実行が入るのは最後のアームであり、`<2>1` と `<2>2` より
