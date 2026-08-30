@@ -298,18 +298,22 @@
 ### L6 (`callee_params` と出力の `funcs` が持つ鍵)
 
 **言明**。`borrow_ify` の `callee_params` の鍵の集合と、出力の `funcs` の鍵の集合は、どちらも
-「入力の各関数の名前」と「`borrow_versions` の各値」の合併である。
+「入力の各関数の名前」と「`borrow_versions` の各値」の合併である。**また `borrow_versions` の鍵は
+どれも入力の関数の名前であり、A22 よりそれは入力の `prog.funcs` の鍵である。**
 
 <1>1. `callee_params` に元を入れるのは 2 か所である。入力の各関数について
       `callee_params.insert(func.name.clone(), ..)`、`clones` の各元について
       `callee_params.insert(borrow_version.clone(), ..)` である。
   BY CODE src/rc_ir/borrow.rs: borrow_ify
 
-<1>2. `borrow_versions` の鍵は入力の関数の名前だけである。1 番目のループは、`observing` が
+<1>2. `borrow_versions` の鍵は入力の関数の名前だけであり、それは入力の `prog.funcs` の鍵である。
+      1 番目のループは `prog.funcs.values()` を回り、`observing` が
       `func.name` を含むとき `continue` し、含まず `func.capture.is_none()` かつ
       `func_has_borrowable_param(func, &owned_leaves, type_env)` のときに
-      `borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name))` を行う。
-  BY CODE src/rc_ir/borrow.rs: borrow_ify, funcs_observing_uniqueness, func_has_borrowable_param
+      `borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name))` を行う。A22 より
+      `prog.funcs` の各エントリの鍵はその `RcFunc` の `name` に等しいので、`func.name` はそのエントリの
+      鍵である。
+  BY A22, CODE src/rc_ir/borrow.rs: borrow_ify, funcs_observing_uniqueness, func_has_borrowable_param
 
 <1>3. `borrow_versions` の値はすべて `clones` の第 1 成分として現れる。2 番目のループは入力の各関数に
       ついて `borrow_versions.get(&func.name)` を引き、`Some` のとき `clones.push((borrow_version, ..))` を
@@ -323,7 +327,8 @@
   BY CODE src/rc_ir/borrow.rs: borrow_ify
 
 <1>5. QED
-  BY <1>1, <1>3, <1>4
+  第 1 文は `<1>1`・`<1>3`・`<1>4` による。第 2 文は `<1>2` である。
+  BY A22, <1>1, <1>2, <1>3, <1>4
 
 ### L6a (leaf の path では、`Arg` を宣言しない `Llvm` の腕は `here()` を返して再帰しない)
 
@@ -957,7 +962,8 @@ D9 の `App` の引数の行は「呼び出し先がその位置の **unit** を
 
 **言明**。A13 の下で、`borrow_ify` の実行中に `clone_func` が導入する名前は、どの入力の束縛名とも異なる。
 導入される名前は `M ++ "#b" ++ dec(c)` の形であり、`M` は元の束縛名の `name` フィールド、`c` は 1 以上の
-整数で、1 回の `borrow_ify` の実行の中で 2 度使われることはない。
+整数で、1 回の `borrow_ify` の実行の中で 2 度使われることはない。**その `name` フィールドを `#` で
+区切った最後の断片は、`b` の後に 10 進数字が 1 個以上続く形である。**
 
 <1>1. `clone_func` が導入する名前は、`assign_fresh_name(&name, "b", &mut renaming, counter)` が作る
       `FullName` であり、その `namespace` は `name.namespace` のまま、`name` フィールドは
