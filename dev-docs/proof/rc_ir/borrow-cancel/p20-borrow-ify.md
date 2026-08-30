@@ -476,9 +476,10 @@ P8 の後半は「D9 の意味で消費される」と言う。D9 の `App` の�
     `closure_targets` は空である。`gv.name` は `g` の名前であり、`Q` の `funcs` はそれを鍵に持つ。
     BY CODE src/rc_ir/ownership.rs: resolve_callee_params, VarTable::of, collect_bindings
   <2>2. QED
-    P29 (a) より、`resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の
-    呼び出し先 (D23) と同じ `RcFunc` である。`<2>1` よりそれは `g` である。
-    BY P29, <2>1
+    `Q` は `borrow_ify` の入力のプログラムである (この補題の言明がそう置く)。P29 (a) より、
+    `borrow_ify` の入力の `App` について `resolve_callee_params` が解決する関数が `Some` であるならば、
+    それはその段の実行時の呼び出し先 (D23) と同じ `RcFunc` である。`<2>1` よりそれは `g` である。
+    BY D23, P29, <2>1
 
 <1>4. `f` の本体は D11 の意味で RC 規律を満たす。またその唯一の実行路で、`App(gv, [x, m])` は
       パラメータ leaf `(x, [])` の参照を A1 の割り当ての下で D9 の意味で消費する。
@@ -1841,9 +1842,9 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
   オペランドの値と D21 の 4 種の結果だけで決まる)。D24 の「活性化の林」より活性化を作る段は 5 種で
   尽きる。(E1) は環境が持つ値から活性化を作り、`<1>3` より環境が読む `roots` も変わらない。
   (E3) の呼び出しの段は callee の値が呼び出し先を決め (D23)、callee が局所変数であればその値は
-  `<1>4` より借用版の関数値ではない。(E2) のオペランドを適用する `Llvm` の段は、op の生成コードが
-  適用する値から呼び出し先を決めるので、やはり `<1>4` の値である。(E7) はグローバル初期化子の活性化
-  しか作らない。**(F) の解放が `Destructor` について作る段**は、`o` の `_dtor` の欄が持つ関数を
+  `<1>4` より借用版の関数値ではない。(E2) のオペランドを適用する `Llvm` の段が適用するのは、その op の
+  オペランドの値か、その段が組み立てた値である (D24 の (E2))。どちらもプログラムが持つ関数値なので、
+  `<1>4` より借用版の関数値ではない。(E7) はグローバル初期化子の活性化しか作らない。**(F) の解放が `Destructor` について作る段**は、`o` の `_dtor` の欄が持つ関数を
   `_value` の欄の値に適用し、返った `IO` の動作を走らせる (D24 の (F)) -- どちらもオブジェクトの欄が
   保持する Fix の関数型の値であり、`<1>4` よりそれは借用版の関数値ではない。よって借用版の本体の
   活性化を作るのは、その名前を callee に持つ `App` の段 (E3) だけである。
@@ -1863,19 +1864,20 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
 
 <1>1. CASE `callee'.name` が `ctx.callee_params` の鍵である。
   <2>1. `W` は出力の `funcs` が `callee'.name` を鍵として持つ関数である。
-    <3>1. `resolve_callee_params(callee', ctx.vars, 出力プログラム)` は
+    <3>1. `resolve_callee_params(callee', VarTable::of(V), 出力プログラム)` は
           `Some(出力の funcs[callee'.name].params)` を返す。
       `resolve_callee_params` は `vars.closure_targets` を `callee'.name` で引き、外れたときは
       `FuncRef { name: callee'.name }` が `prog.funcs` の鍵かを見る。`closure_targets` に元を入れるのは
-      `collect_bindings` の `RcRhs::Closure` の腕だけで、鍵はその `Let` の束縛変数の名前である。
+      `collect_bindings` の `RcRhs::Closure` の腕だけで、鍵はその本体の `Let` の束縛変数の名前である。
       L6 より `callee_params` の鍵は出力の `funcs` の鍵ちょうどであり、それは入力の関数の名前か借用版の
       名前である。前者は A6 よりどの入力の束縛名とも異なり、4.2 の言明より複製が導入する名前とも異なる。
       後者は A13 より、入力のどの名前も `name` フィールドの最後の断片が `borrow` でないので入力の
       束縛名と異なり、4.2 の言明より複製が導入する名前 (最後の断片が `b<10 進数字>`) とも異なる。
-      4.3 の系 より出力の束縛名はこの 2 種で尽きるので、`callee'.name` は出力のどの束縛変数の名前とも
-      異なり、`closure_targets` の鍵ではない。よって第 2 の枝が当たる。
+      4.3 の系 より出力の束縛名はこの 2 種で尽きるので、`callee'.name` は `V` の本体が束縛するどの
+      変数の名前とも異なり、`closure_targets` の鍵ではない。よって第 2 の枝が当たり、`callee'.name` は
+      出力の `funcs` の鍵なので `Some` が返る。
       BY A6, A13, L6, 4.2 の言明, 4.3 の系, CODE src/rc_ir/ownership.rs: resolve_callee_params,
-         collect_bindings
+         VarTable::of, collect_bindings
     <3>2. QED
       P29 (b) より、`borrow_ify` の出力の `App` について `resolve_callee_params` が解決する関数が
       `Some` であるならば、それはその段の実行時の呼び出し先 (D23) と同じ `RcFunc` である。`<3>1` より
@@ -2460,7 +2462,7 @@ leaf に 1、偽である leaf に 0 を与える規則である。
     `borrowed_units` は空なので、D14 より全パラメータの全 unit を所有する。A12 より `u` は呼び出し先の
     対応するパラメータの型でも同じ unit なので、D9 の `App` の行より `u` の下の inhabited な各 leaf が
     消費される。
-    BY A1, A12, D9, D14, D23, 10.2 の言明
+    BY A1, A12, D9, D14, D23, P9, 10.2 の言明, CODE src/rc_ir/borrow.rs: borrow_ify
   <2>5. `B'_V` の `App` は、`callee_owns(i, u)` が真のとき `u` の下の inhabited なすべての leaf を消費し、
         偽のとき 1 つも消費しない。
     L15 より `callee_owns(i, u)` は呼び出し先が `u` を D14 の意味で所有することと同値であり、A12 より
