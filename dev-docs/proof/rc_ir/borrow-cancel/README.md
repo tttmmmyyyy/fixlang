@@ -242,6 +242,10 @@ D21 より、これらのデータを与えれば本体の活性化は 1 つに�
 unbox union は 1 つのタグしか持たないので、1 つの union の複数の変位の leaf が同時に inhabited になることは
 ない。
 
+**null ポインタの leaf は inhabited でない。** capture が空のクロージャの capture の leaf がこれである
+(`CODE src/rc_ir/codegen.rs: Generator::build_rc_closure`)。そこにオブジェクトも参照も無いので、
+A5 の数え上げも D25 の持ち手もこの leaf を数えない。
+
 **D5 (RC unit)**
 1 回の参照カウント操作が対象にできる位置を **RC unit** と呼び、型 `τ` のすべてを `rc_units(τ)` が列挙する
 (`CODE src/rc_ir/ownership.rs: rc_units`)。どの型が unit を担うかは `unit_step` が 1 か所で決める
@@ -1467,8 +1471,13 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
 - **P1** (leaf と unit の対応)。**A10 を満たす**任意の型 `τ` について、`boxed_leaf_paths(τ)` の各 leaf の
   `truncate_to_unit(τ, ・)` は `rc_units(τ)` の要素であり、`rc_units(τ)` の各 unit はある leaf の
   `truncate_to_unit(τ, ・)` である。
-- **P2** (`origin` の全域性と停止性)。`origin(x, π)` は、`x` がプログラムの束縛変数であるようなすべての
-  `(x, π)` について、`π` を問わず panic せずに答えを返し、停止する。
+- **P2** (`origin` の全域性と停止性)。`origin(x, π)` は、`x` がプログラムの束縛変数であるか、
+  `vars.bindings` に束縛を持たない名前 (D6 の第 3 の形) であるようなすべての `(x, π)` について、
+  `π` を問わず panic せずに答えを返し、停止する。
+
+  **束縛を持たない名前を範囲に入れるのは、`origin` が実際にそれについて呼ばれるからである。**
+  `acted_references`・`other_objects`・`CancelAnalysis::consume`・`infer_ownership` はどれも節点が
+  名指す変数をそのまま渡す。その場合 `origin_inner` は `None` の腕に入り、即座に `here()` を返す。
 
   `π` に制限を置かないのは、置いた制限が再帰について閉じないからである。`Result e (Option a)` を match して
   payload に `Retain` を置くと、`origin` はその payload の `[]` から scrutinee の `[0]` を問い、`[0]` は
@@ -1480,6 +1489,11 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
 
   条件が要るのは D26 による -- グローバル状態のオブジェクトを指す leaf は D8 の意味の参照を持たないので、
   条件を落とすと `Let(x, Var(g), k)` (`g` はグローバル値) で両端が参照を持たず、言明が意味を失う。
+
+  **条件を外した形では、2 つのスロットは同じオブジェクトを指す。** 参照を持つ場合はそれが D8 の意味の
+  参照の同一から出るが (D8 は参照を 1 つのオブジェクトに対する処分義務と定める)、両端がグローバル状態を
+  指す場合は D9 の値の水準の行が与える。この節を読むのは `p12-identity-and-consumes.md` の P5 (a) で
+  ある。
 - **P4** (`origin` の健全性 -- `Join`)。`origin(x, π) = Join { identity, candidates }` のとき、各実行路の
   各位置において、`π` の下の inhabited な各 leaf のスロットが **D8 の意味の参照を持つとき**、その参照は
   `candidates` のいずれかの下の対応するスロット (D17) が持つ参照と同一である。条件が要る理由は P3 と
