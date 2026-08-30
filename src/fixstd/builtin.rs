@@ -682,6 +682,7 @@ pub fn get_tuple_n(name: &FullName) -> Option<u32> {
     number_str.parse::<u32>().ok()
 }
 
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn tuple_defn(size: u32) -> TypeDefn {
     let tyvars = (0..size)
         .map(|i| make_tyvar(&("t".to_string() + &i.to_string()), &kind_star()))
@@ -873,6 +874,7 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
 }
 
 /// An `Array U8` of `len` bytes, holding a copy of the `len` bytes at `buf`.
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_byte_array_copy<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     buf: PointerValue<'c>,
@@ -917,6 +919,7 @@ pub struct InlineLLVMStringBuf {
     string: String,
 }
 
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStringBuf {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {

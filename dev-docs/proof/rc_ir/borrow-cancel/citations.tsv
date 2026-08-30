@@ -9,7 +9,7 @@ src/ast/inline_llvm.rs	LLVMGen::free_vars	P1,P2	3f221f4f0c3d
 src/ast/inline_llvm.rs	LLVMGen::free_vars_mut	D/A,P7a,P7d,P7e	b61e043f01c5
 src/ast/inline_llvm.rs	LLVMGen::observes_uniqueness	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P26	b3c76bd06dac
 src/ast/inline_llvm.rs	LLVMGen::result_prov	D/A,P1,P2,P3,P4,P7a,P7d,P7e,P26,P28,(P-insert)	84846b9c9d85
-src/ast/inline_llvm.rs	LLVMGen::unique_check_operand	D/A	8b4dc048a673
+src/ast/inline_llvm.rs	LLVMGen::unique_check_operand	D/A,P5,P6,P7	8b4dc048a673
 src/ast/name.rs	FullName	P8,P9,P10,P11,P12,P13,P14,P14a	e2c09889359d
 src/ast/name.rs	FullName::is_local	(P-insert)	42fc496e725b
 src/ast/name.rs	FullName::local	(P-insert)	47c06982e039
@@ -31,7 +31,7 @@ src/ast/types.rs	TypeNode::field_types	P1,P2	f3b4b3ad1075
 src/ast/types.rs	TypeNode::instance_field_types	D/A,P1,P2	27064fdf0a46
 src/ast/types.rs	TypeNode::is_array	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b	d430c390ceb3
 src/ast/types.rs	TypeNode::is_box	P1,P2	f364e8b05513
-src/ast/types.rs	TypeNode::is_closure	P1,P2,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b	938ff5f09f64
+src/ast/types.rs	TypeNode::is_closure	P1,P2,P5,P6,P7,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b	938ff5f09f64
 src/ast/types.rs	TypeNode::is_fully_unboxed	P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P27,P29,(P-insert)	8b7f69faf6d2
 src/ast/types.rs	TypeNode::is_funptr	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P26	2c9fa9ac23a2
 src/ast/types.rs	TypeNode::is_ground	D/A	b2b0748bba35
@@ -64,6 +64,7 @@ src/constants.rs	FUNPTR_ARGS_MAX	P1,P2	5054470d6f01
 src/constants.rs	FUNPTR_NAME	P1,P2	5f81220a51a7
 src/constants.rs	PUNCHED_TYPE_SYMBOL	P1,P2	866c661bcaee
 src/constants.rs	RefcntState	P26	192fb7a3bcd5
+src/constants.rs	TUPLE_UNBOX	P5,P6,P7	15f3c49df732
 src/elaboration/desugar_opaque.rs	OpaqueInfo	P1,P2	1585b0e1c670
 src/elaboration/desugar_opaque.rs	collect_opaque_infos	P1,P2	a060a45a2d95
 src/elaboration/desugar_opaque.rs	register_opaque_tycon	P1,P2	fc5202f8b47e
@@ -159,6 +160,7 @@ src/fixstd/builtin.rs	fix_body	D/A,P26,P27,P28,P29	a45709f796ae
 src/fixstd/builtin.rs	force_unique_or_assert_with_hole	D/A	d343a7084e1d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeStructBody	P3,P4,(P-insert)	c4dab170b90d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeUnionBody	P3,P4	5ba9e8112ba7
+src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMStringBuf	P5,P6,P7	f40ea3f1cbb7
 src/fixstd/builtin.rs	is_array_tycon	P1,P2	b0eefd8bc04d
 src/fixstd/builtin.rs	is_funptr_tycon	P1,P2,P26	d27235989faf
 src/fixstd/builtin.rs	is_punched_array_tycon	P1,P2	86bb2a262fc0
@@ -166,6 +168,7 @@ src/fixstd/builtin.rs	is_unique_function	D/A,P26	46c96d982dfb
 src/fixstd/builtin.rs	make_array_unique_with_hole	P26	112d914f574b
 src/fixstd/builtin.rs	make_arrow_name_abs	P1,P2	c751172b9601
 src/fixstd/builtin.rs	make_arrow_tycon	P1,P2	b1d03c9ddab2
+src/fixstd/builtin.rs	make_byte_array_copy	P5,P6,P7	3c01f8f7d776
 src/fixstd/builtin.rs	make_dynamic_object_ty	P27,P29	2a58de9d63f1
 src/fixstd/builtin.rs	make_funptr_name	P1,P2	34284cce7fb0
 src/fixstd/builtin.rs	make_funptr_tycon	P1,P2,P26	c0fafed01fb9
@@ -174,7 +177,9 @@ src/fixstd/builtin.rs	replaced_field_prov	D/A,P1,P2,P3,P4,P26	9cbd41e96b65
 src/fixstd/builtin.rs	run_io	P26	025574675c27
 src/fixstd/builtin.rs	run_io_or_ios_runner	D/A,P26	facee6a5f8e4
 src/fixstd/builtin.rs	run_ios_runner	D/A,P26,P28	6dbd7e735631
+src/fixstd/builtin.rs	tuple_defn	P5,P6,P7	87c0549cd2d4
 src/fixstd/builtin.rs	union_mod_function	P26	c707b908e27e
+src/fixstd/std.fix	Bool	P5,P6,P7	-
 src/fixstd/std.fix	PunchedArray	P7a,P7d,P7e	-
 src/fixstd/std.fix	assert_unique	D/A,P26	-
 src/fixstd/std.fix	boxed_from_retained_ptr	P27,P29	-

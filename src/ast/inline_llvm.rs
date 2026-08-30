@@ -107,7 +107,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// Whether the branch exists depends on those types, so an op that emits one declares it through
     /// `unique_check_on_boxed_leaf`, which is where that dependence is stated. Readers may then take
     /// a declared check to be one the op really emits.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unique_check_operand(
         &self,
         _arg_tys: &[Arc<TypeNode>],

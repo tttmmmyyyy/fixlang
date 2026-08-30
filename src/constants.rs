@@ -380,6 +380,7 @@ pub const FUNPTR_ARGS_MAX: u32 = 100;
 // Any bigger tuples are defined on demand.
 pub const TUPLE_SIZE_BASE: u32 = 3;
 // Is tuple unboxed?
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const TUPLE_UNBOX: bool = true;
 
 // The type in LLVM corresponding to `pthread_once_t` of this system.
