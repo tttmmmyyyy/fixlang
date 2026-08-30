@@ -58,7 +58,7 @@ pub enum LeafOrigin {
 
 /// The origin of one boxed leaf as a set of `LeafOrigin`s: usually a singleton, several after a
 /// branch join, empty for an absent union variant (the bottom of the lattice).
-// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type LeafOrigins = Set<LeafOrigin>;
 
 /// The origins of a leaf that has just the one.

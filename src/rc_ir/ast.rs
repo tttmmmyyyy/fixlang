@@ -109,7 +109,7 @@ pub struct RcFunc {
 
 /// A variable together with a path into its value. Where the path is truncated to a reference-
 /// counting unit, the pair names one unit of that variable — the form the ownership tables hold.
-// PROOF: P5, P6, P7, P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 pub type VarPath = (FullName, FieldPath);
 
 /// An RC IR expression together with its source span. An expression's value type is that of the

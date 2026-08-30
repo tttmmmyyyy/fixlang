@@ -1347,6 +1347,7 @@ impl TypeNode {
 
     /// The type constructor at the head of this type, as `Array` heads `Array I64`. A type
     /// variable and an associated type application have none.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn toplevel_tycon(&self) -> Option<Arc<TyCon>> {
         match &self.ty {
             Type::TyVar(_) => None,

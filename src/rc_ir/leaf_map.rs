@@ -61,6 +61,7 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
 }
 
 /// One fact of type `T` per boxed leaf of a value, keyed by the leaf's path.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LeafMap<T>(Map<FieldPath, T>);
 
