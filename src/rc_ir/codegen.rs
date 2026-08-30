@@ -36,7 +36,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Generate LLVM code for the functions and global initializers of `prog` — one compilation
     /// unit's worth. A function this module already declared (because its body refers to it) is
     /// reused; the rest are declared here, and every one of them is implemented.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn implement_rc_program(&mut self, prog: &RcProgram) {
         let mut func_vals: Map<FuncRef, FunctionValue<'c>> = Map::default();
         for (fref, func) in prog.funcs.iter() {

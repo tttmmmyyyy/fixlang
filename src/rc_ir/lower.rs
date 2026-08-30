@@ -395,7 +395,7 @@ impl<'a> Lowerer<'a> {
     /// Lower `expr` to the single variable holding its value, appending to `bindings` everything
     /// that must be evaluated to reach it. An expression that is already an atom — a local variable,
     /// a global name — becomes that atom and appends nothing.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_to_var(&mut self, expr: &ExprNode, bindings: &mut Vec<PendingBinding>) -> RcVar {
         // A deeply nested expression recurses deeply here (as it does in RC insertion and code
         // generation); grow the stack on demand so a large program does not overflow it.

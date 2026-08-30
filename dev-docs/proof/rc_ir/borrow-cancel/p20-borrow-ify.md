@@ -810,10 +810,10 @@ D9 の `App` の引数の行は「呼び出し先がその位置の **unit** を
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>5. CASE `Some(Binding::Llvm(gen, args, _))` で `decl.leaf_origins_at(ρ')` が単一の `Arg(j, σ)` で
         ある。
-    この腕は `origin(args[j], σ)` を返す。A12 の「単一の `Arg(j, σ)` の宣言は well-formed である。
+    この腕は `origin(args[j], σ)` を返す。A3 の「単一の `Arg(j, σ)` の宣言は well-formed である。
     `j` は `args` の添字であり、`σ` はその型の boxed leaf である」より、`args[j]` は存在し
     `σ ∈ leaves(ty(args[j]))` である。帰納法の仮定による。
-    BY A12, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner, as_arg_projection
+    BY A3, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner, as_arg_projection
   <2>6. CASE `Some(Binding::Join(arm_results))`。
     この腕は各 `a ∈ arm_results` について `act_f(a, ρ')` を集めた集合 `S` を作り、
     `Origin::of_candidates(S, (y, ρ'))` を返す。A12 よりアームの結果と `Match` の束縛変数の型は等しいので
@@ -1482,10 +1482,10 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
   <2>1. `x'` は `ρ` の上でこの位置までに値を得ている。
     <3>1. `Move(y)`、`Payload(s, ・)`、`Field(c, idx)`、`Llvm(gen, args, ・)` の行では、名指される
           `y`・`s`・`c`・`args[j]` は `x` を束縛する節点のオペランドである。`Llvm` の行の `j` が `args` の
-          添字であることは、A12 の「単一の `Arg(j, σ)` の宣言は well-formed である。`j` は `args` の
+          添字であることは、A3 の「単一の `Arg(j, σ)` の宣言は well-formed である。`j` は `args` の
           添字であり、`σ` はその型の boxed leaf である」による。A11 より変数の使用はその
           位置でスコープに入っている束縛に解決するので、これらはその節点より前に値を得ている。
-      BY A11, A12, D6, <1>1
+      BY A3, A11, D6, <1>1
     <3>2. `Join(arm_results)` の行の `a_ρ` は、`x` を束縛する節点 `Let(x, Match(s, arms), k)` の、`ρ` が
           選んだアームの本体の終端の `Ret` が名指す変数である。`a_ρ` が値を得るのはこの節点より前では
           なく、この節点の中である。D3 より `ρ` はそのアーム本体を辿ってから `k` へ進むので、`a_ρ` は
@@ -1498,9 +1498,9 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
     `Move` と `Payload(s, None)` では A12 より `ty(x') = ty(x)`。`Field` の unbox の行と
     `Payload(s, Some(t))` の unbox の行では、A12 より `ty(x)` は `ty(x')` の第 `idx` (resp. 第 `t` 変位の)
     フィールドの型であり、D4 の第 5 の規則より `[idx] ++ λ` (resp. `[t] ++ λ`) は `ty(x')` の leaf で
-    ある。`Llvm` の行では A12 の「単一の `Arg(j, σ)` の宣言は well-formed である」より
+    ある。`Llvm` の行では A3 の「単一の `Arg(j, σ)` の宣言は well-formed である」より
     `σ ∈ leaves(ty(args[j]))` である。`Join` では A12 より `ty(a_ρ) = ty(x)` である。
-    BY A12, D4, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+    BY A3, A12, D4, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>3. `λ'` はその時点で inhabited (D16) である。
     `Move`・`Payload(s, None)`・`Join` では 2 つのスロットの値が同じなので、D16 の条件も同じである。
     値が同じであることは D9 の値の水準の行が与える -- `Let(x, Var(y), k)` の行は「`x` の値は `y` の値で
@@ -1770,15 +1770,6 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
 
 ### 9.5 `App` の呼び出し先の所有
 
-**この文書が置く 2 つの事実。** どちらも `README.md` に無い。第 12 節の差し戻し 10 が、置くべき形と
-果たす者を述べる。
-
-- **(持ち上げた lambda の型)** `Lowerer::lower_lam` が `prog.funcs` に入れる関数の `fn_ty` は
-  closure 型である (`TypeNode::is_closure` が真)。よって `lower_lambda_as_function` はその関数に
-  `capture` を与える (`Some`)。読む者は L18 の `<1>4` である。
-- **(fix の op が住む関数)** `borrow_ify` の入力の関数の本体に `InlineLLVMFixBody` の `Llvm` 節点が
-  在るならば、その関数の `capture` は `Some` である。読む者は L18a の `<1>4` である。
-
 #### L18a (借用版の関数値はどこにも作られない)
 
 **言明**。出力プログラムの本体において、借用版の名前 (`borrow_versions` の値) が現れるのは
@@ -1822,10 +1813,10 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
       BY P9, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, CODE src/rc_ir/rename.rs: rename_rhs
     <3>2. QED
       `borrow_ify` の 1 番目のループが `borrow_versions` に元を入れるのは `func.capture.is_none()` で
-      ある関数についてだけである。`<3>1` とこの文書が置く事実 (fix の op が住む関数) より、その op を
+      ある関数についてだけである。`<3>1` とこの文書が置く事実 A24 より、その op を
       本体に持つ借用版が在れば `func.capture` は `Some` であり、これに反する。よってこの op を本体に
       持つ関数は借用版ではなく、その本体を生成中の `gc.current_function()` も借用版ではない。
-      BY (fix の op が住む関数), <3>1, CODE src/fixstd/builtin.rs: InlineLLVMFixBody,
+      BY A24, <3>1, CODE src/fixstd/builtin.rs: InlineLLVMFixBody,
          CODE src/rc_ir/borrow.rs: borrow_ify
   <2>4. QED
     A21 は「Fix の関数型の値に LLVM 関数の番地を書き込むのは、クロージャを作る段 (`build_rc_closure`)、
@@ -1982,10 +1973,10 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
     `<2>1` より `c` は束縛を持たない `RcVar` であり、A12 の「束縛を持たない `RcVar` の型が、その名前の
     記号の型であること」より `c.name` の記号が在る。`<1>1` と `<1>2` より `c.name` は `borrow_ify` の
     入力の `prog.funcs` の鍵であり、`<1>3a` よりその鍵は 2 種のどちらかである。後者であるとすると、
-    この文書が置く事実 (持ち上げた lambda の型) よりその関数の `fn_ty` は closure 型であり、`<1>3a` より
+    A23 よりその関数の `fn_ty` は closure 型であり、`<1>3a` より
     その `capture` は `Some` である。これは `<1>3` に反する。よって `c.name` は `sym.ty.is_funptr()` を
     満たす記号 `sym` の名前である。
-    BY A12, (持ち上げた lambda の型), <1>1, <1>2, <1>3, <1>3a, <2>1
+    BY A12, A23, <1>1, <1>2, <1>3, <1>3a, <2>1
   <2>3. QED
     A12 の「束縛を持たない `RcVar` の型が、その名前の記号の型であること」より `ty(c)` は `c.name` の
     記号の型であり、`<2>2` よりそれは funptr 型である。
@@ -3348,55 +3339,3 @@ README の P14a が「計数下の別名類」と書き、D34 が計数下の類
 **等式** (`= 0`) で追う。増やす事象は (A-前) の `Retain` だけで、それは同じ塊の `App` の消費とちょうど
 釣り合う (L26) からである。よって P14a は A19 のどの節にも立たない。第 11.7 節の `<1>2a` が A19 の
 一文を引くのは、中断中の `held` の読み方が同じであることを言うためであり、その `BY` は A19 を挙げない。
-
-## 12. `README.md` へ差し戻す点
-
-前の版が挙げた 4 点のうち、別名類と `held` の定義は D33 と D34 が、A19 (ii-a) の非負性が終端の `Ret` の
-消費を行った直後の時点まで届くことは A19 (ii-a) の最後の一文が、P7a がどの版のどの本体についての同値かは
-P7a の第 1 文が、束縛を持たない `RcVar` の型がその名前の記号の型であることは A12 の一覧が、それぞれ
-書いている。残るのは第 9.5 節が置く 2 つの事実である。
-
-### 差し戻し 10 (持ち上げた lambda の型と、fix の op が住む関数)
-
-第 9.5 節の冒頭が置く 2 つの事実は `README.md` に無い。A12 が型について挙げるのは束縛と構文の間の一致で
-あって、lowering が式に与える型の形ではない。
-
-**(持ち上げた lambda の型)。** 読む者は L18 の `<1>4` である。L18 の `<1>3a` より `borrow_ify` の入力の
-`prog.funcs` の鍵は 2 種 -- `sym.ty.is_funptr()` を満たす記号の名前と、持ち上げた lambda に
-`fresh_closure_ref` が付ける名前 -- であり、振り分けられる直接呼び出しの callee がそのうち前者を名指す
-ことが、その callee が funptr 型で boxed leaf を持たないことの根拠である。後者を名指しうるなら `ty(c)` は
-funptr とは限らず、`route` が差し替えた callee の消費が両側でずれる。この文書が持っているのは「その関数は
-capture を持たない」(L18 の `<1>3`) までであり、持ち上げた lambda の関数が capture を持つことが、その
-2 つを繋ぐ。
-
-> **A<n> (持ち上げた lambda は closure 型である)** -- 果たす者: 型検査と `uncurry`。検査: 無し。
-> `Lowerer::lower_to_var` が `Expr::Lam` の節点に与える型は closure 型である
-> (`TypeNode::is_closure` が真)。したがって `Lowerer::lower_lam` が `prog.funcs` に入れる関数の
-> `fn_ty` は closure 型であり、`lower_lambda_as_function` はその関数に `capture` を与える。
-
-果たす者の内訳。型検査は `Expr::Lam` に `type_fun(arg_ty, body_ty)` を与える
-(`CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner` の `Expr::Lam` の腕)。
-`type_fun` が作るのは `->` の型であり、`is_closure` はその tycon を見る
-(`CODE src/ast/types.rs: TypeNode::is_closure`)。funptr 型の lambda を作るのは
-`uncurry::funptr_lambda` だけで、その式は `uncurry::run` が新しい記号 `Symbol` の `expr` **全体**に
-据えるので、`Lowerer::lower_symbol` が `sym.ty.is_funptr()` の枝で直に受け取り `lower_to_var` を
-通らない (`CODE src/optimization/uncurry.rs: run`, `funptr_lambda`,
-`CODE src/rc_ir/lower.rs: Lowerer::lower_symbol`)。**この 2 人の間に、funptr 型の `Expr::Lam` を式の
-内側へ移す変換が無いことは、この文書が確かめていない。**
-
-**(fix の op が住む関数)。** 読む者は L18a の `<1>4` である。`InlineLLVMFixBody` は
-`gc.current_function()` の番地を持つクロージャを作って `f` に渡すので、この op を借用版が持つと借用版の
-関数値が外へ出て、L18a の言明が偽になる。
-
-> **A<n+1> (`InlineLLVMFixBody` は capture を持つ関数の本体にだけ在る)** -- 果たす者: 誰も。
-> 検査: `Lowerer::lower_llvm` の panic。
-> `borrow_ify` の入力の各関数について、その本体に `InlineLLVMFixBody` の `Llvm` 節点が在るならば、
-> その関数の `capture` は `Some` である。
-
-検査の内訳。`InlineLLVMFixBody` を作るのは `fix_body` だけで、その `cap_name` は局所名 `#CAP` である
-(`CODE src/fixstd/builtin.rs: InlineLLVMFixBody`, `fix_body`, `fix`)。`Lowerer::lower_llvm` は op の
-`free_vars` を `resolve` で写し、外れた名前を `global_types` で引いて、そこにも無ければ panic する
-(`CODE src/rc_ir/lower.rs: Lowerer::lower_llvm`)。`#CAP` は局所名なので `global_types` の鍵ではなく、
-それを束縛するのは `lower_lambda_as_function` の `lam_ty.is_closure()` の枝 -- すなわちその関数に
-`capture` を与える枝 -- だけである (`CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function`)。
-**panic は仮定を果たす者ではない** (`README.md` の第 4 節) ので、果たす者の欄は「誰も」である。

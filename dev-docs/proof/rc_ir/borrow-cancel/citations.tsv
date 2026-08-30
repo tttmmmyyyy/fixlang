@@ -67,6 +67,7 @@ src/elaboration/mod.rs	elaborate	P1,P2	cd448f6a71aa
 src/elaboration/typecheck.rs	Substitution::merge	P1,P2	d19740bbbe67
 src/elaboration/typecheck.rs	Substitution::single	P1,P2	40a589023dbf
 src/elaboration/typecheck.rs	Substitution::substitute_type	P1,P2	a0820f8e8059
+src/elaboration/typecheck.rs	TypeCheckContext::unify_type_of_expr_inner	D/A	c3b65b0be2be
 src/ffi.rs	c_boundary_tycon	D/A,P28	2c5a42247af5
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked	D/A,P26	6b9afb59394d
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::result_prov	P1,P2,P26	1937952562a5
@@ -140,7 +141,7 @@ src/fixstd/builtin.rs	assumed_state	P26	94231012a564
 src/fixstd/builtin.rs	boxed_from_retained_ptr_ios	D/A	767a95dce0ce
 src/fixstd/builtin.rs	boxed_to_retained_ptr_ios	D/A	65a4511404e3
 src/fixstd/builtin.rs	bulitin_tycons	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b,P27,P28,P29	4dc11f509041
-src/fixstd/builtin.rs	fix_body	P26,P27,P29	a45709f796ae
+src/fixstd/builtin.rs	fix_body	D/A,P26,P27,P29	a45709f796ae
 src/fixstd/builtin.rs	force_unique_or_assert_with_hole	D/A	d343a7084e1d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeStructBody	P3,P4,(P-insert)	c4dab170b90d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeUnionBody	P3,P4	5ba9e8112ba7
@@ -209,10 +210,10 @@ src/optimization/dead_symbol_elimination.rs	run	P26	86c915702e45
 src/optimization/defunctionalize_fix.rs	FixDefunctionalizer::lift	P1,P2	aaf9f08bf64e
 src/optimization/defunctionalize_fix.rs	run_one	P1,P2	e44ddb2d9ced
 src/optimization/optimization.rs	run	P26	8d2f94fffa57
-src/optimization/uncurry.rs	funptr_lambda	P8,P9,P10,P11,P12,P13,P14,P14a,P26	ab312f11d72b
+src/optimization/uncurry.rs	funptr_lambda	D/A,P26	ab312f11d72b
 src/optimization/uncurry.rs	replace_closure_call_to_funptr_call	P26	a87d49aea6e4
 src/optimization/uncurry.rs	replace_closure_call_to_funptr_call_subexprs	P26	bdde19a58810
-src/optimization/uncurry.rs	run	P8,P9,P10,P11,P12,P13,P14,P14a,P26	57b93136a0b4
+src/optimization/uncurry.rs	run	D/A,P26	57b93136a0b4
 src/rc_ir/ast.rs	FieldPath	P1,P2,P7a,P7d,P7e,P15,P16,P17,P18	dd85d967b3d7
 src/rc_ir/ast.rs	MatchArm	D/A,P1,P2,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18	8fb0b636664e
 src/rc_ir/ast.rs	MatchArm::with_body	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	5b7fed80948d
@@ -300,7 +301,7 @@ src/rc_ir/codegen.rs	Generator::eval_rc_match	D/A,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P
 src/rc_ir/codegen.rs	Generator::eval_rc_rhs	P7a,P7d,P7e	bdc976128ed9
 src/rc_ir/codegen.rs	Generator::implement_rc_function	D/A,P27,P29	c52d57516388
 src/rc_ir/codegen.rs	Generator::implement_rc_global	D/A,P7c,P7f,P18a,P18b,P26,P27,P28,P29	188a23cf64a9
-src/rc_ir/codegen.rs	Generator::implement_rc_program	P8,P9,P10,P11,P12,P13,P14,P14a,P27,P29	3966bbffa8f8
+src/rc_ir/codegen.rs	Generator::implement_rc_program	P27,P29	3966bbffa8f8
 src/rc_ir/dead_code_elim.rs	eliminate_unreachable	T	7c5805fda609
 src/rc_ir/leaf_map.rs	LeafMap	P1,P2	043ac6e87ce4
 src/rc_ir/leaf_map.rs	LeafMap::build_shape	P1,P2,P3,P4,P7a,P7c,P7d,P7e,P7f,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	cf8bc406897e
@@ -320,7 +321,7 @@ src/rc_ir/lower.rs	Lowerer::lower_lambda_as_function	P8,P9,P10,P11,P12,P13,P14,P
 src/rc_ir/lower.rs	Lowerer::lower_llvm	D/A,P27,P29	4107324b7a5d
 src/rc_ir/lower.rs	Lowerer::lower_match	D/A,P5,P6,P7	c6447f9c6d40
 src/rc_ir/lower.rs	Lowerer::lower_symbol	P8,P9,P10,P11,P12,P13,P14,P14a,P26,P27,P29	fe2a3c83ab94
-src/rc_ir/lower.rs	Lowerer::lower_to_var	P8,P9,P10,P11,P12,P13,P14,P14a	b538c361ee64
+src/rc_ir/lower.rs	Lowerer::lower_to_var	D/A,P8,P9,P10,P11,P12,P13,P14,P14a	b538c361ee64
 src/rc_ir/lower.rs	Lowerer::lower_var	D/A,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P27,P29,(P-insert)	36b5f9576f3c
 src/rc_ir/lower.rs	lower_lambda_as_function	P26	05076bfd9b47
 src/rc_ir/lower.rs	lower_program	P8,P9,P10,P11,P12,P13,P14,P14a	f83dc3d6d8d6
@@ -401,7 +402,7 @@ src/rc_ir/rc_insert.rs	insert_if_local	(P-insert)	98666b6f345e
 src/rc_ir/rc_insert.rs	insert_rc	P8,P9,P10,P11,P12,P13,P14,P14a,(P-insert)	ddc722babbda
 src/rc_ir/rc_insert.rs	rhs_operands	(P-insert)	1d8e7e575c71
 src/rc_ir/rename.rs	assign_fresh_name	D/A,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P27,P29	e52d71f7810c
-src/rc_ir/rename.rs	assign_fresh_names_to_binders	P7a,P7d,P7e	2696c8cd590a
+src/rc_ir/rename.rs	assign_fresh_names_to_binders	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	2696c8cd590a
 src/rc_ir/rename.rs	assign_fresh_names_to_binders_inner	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	c2f0b830f73f
 src/rc_ir/rename.rs	fresh_rename_function	D/A,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,P27,P29	592cc4b5a304
 src/rc_ir/rename.rs	rename_expr	P7a,P7d,P7e,P15,P16,P17,P18	5c684036c35a

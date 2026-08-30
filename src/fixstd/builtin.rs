@@ -1066,7 +1066,7 @@ impl LLVMGen for InlineLLVMFixBody {
     }
 }
 
-// PROOF: P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_name = FullName::local(f);
     let x_name = FullName::local(x);
