@@ -560,7 +560,8 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
       `Join(arm_results)` で `arm_results` は各アームの `returned_var(&arm.body)` の列。
       `Destructure(c, fs, _, k)` の各 `(i, fv)`: `fv` について `Field(c, i)`。
       `Let(m, Match(s, arms), k)` の各アーム: `arm.payload` について `Payload(s, arm.tag)`。
-  BY CODE src/rc_ir/ownership.rs: collect_bindings, returned_var
+      `returned_var` の本体は `grow_stack` に包まれているので、その値を読むのに A15 が要る。
+  BY A15, CODE src/rc_ir/ownership.rs: collect_bindings, returned_var
 
 <1>3. (a) が成り立つ。
   <2>1. CASE `vars` が `VarTable::of` で作られた (本体が関数の `body` である)。
@@ -612,10 +613,11 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
     BY DEF `ρ` の上で実行された辺, <1>6
   <2>3. `Join(rs)` の場合、`<1>6` の節点は `Let(x, Match(s, arms), k)` であって `ρ` の上にあり、`ρ` は
         アーム `a` を通る。D3 より `ρ` は `a.body` の実行路を辿り、その終端は `a.body` の終端の `Ret` で
-        ある。D2 より `Ret` は唯一の終端子であり `Ret` 以外の 5 種は継続を 1 つ持つので、`returned_var`
+        ある。`returned_var` は本体を `grow_stack` に包み (A15)、`Ret` に着くまで継続を辿る。D2 より
+        `Ret` は唯一の終端子であり `Ret` 以外の 5 種は継続を 1 つ持つので、`returned_var`
         が着く `Ret` はその終端の `Ret` であり、それが名指す変数が `r_0` である。DEF `ρ` の上で実行された辺
         の第 3 の場合より、E6 の辺は在れば `ρ` の上で実行された。
-    BY D2, D3, DEF `ρ` の上で実行された辺, CODE src/rc_ir/ownership.rs: returned_var, <1>6
+    BY A15, D2, D3, DEF `ρ` の上で実行された辺, CODE src/rc_ir/ownership.rs: returned_var, <1>6
   <2>4. QED
     BY <2>1, <2>2, <2>3
 
@@ -842,8 +844,9 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
         `ρ` の上にあり、その形は `Binding` の構成子で決まる。`collect_bindings` はこれらの変数を
         その節点から取る。`Move` と `Llvm` は `Let(x, rhs, k)` の
         `rhs` から、`Field` は `Destructure` の容器から、`Payload` は `Match` の scrutinee から、
-        `Join` の元は各アーム本体の `returned_var` から取る。
-    BY L1a, CODE src/rc_ir/ownership.rs: collect_bindings, returned_var
+        `Join` の元は各アーム本体の `returned_var` から取る。`returned_var` の本体は `grow_stack` に
+        包まれているので、その値を読むのに A15 が要る。
+    BY A15, L1a, CODE src/rc_ir/ownership.rs: collect_bindings, returned_var
   <2>2. 節点に現れる変数の使用は、その節点でスコープに入っている束縛に解決する。
     BY A11
   <2>3. D2 の「束縛の及ぶ範囲 (スコープ)」より、`Let(x, rhs, k)` と `Destructure(c, fs, s, k)` が束縛する
@@ -1432,8 +1435,9 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   <2>1. `m` の `Binding` は `Join([x_0, x_1])` である。`collect_bindings` は `Let(m, Match(s, arms), k)` に
         対し `m` の `Binding` を `Join(arm_results)` とし、`arm_results` は各アームの
         `returned_var(&arm.body)` の列である。`<1>1` より 2 つのアーム本体の終端はそれぞれ `Ret(x_0)`、
-        `Ret(x_1)` なので、`returned_var` が返すのは `x_0` と `x_1` である。
-    BY <1>1, CODE src/rc_ir/ownership.rs: collect_bindings, returned_var
+        `Ret(x_1)` なので、`returned_var` が返すのは `x_0` と `x_1` である。`returned_var` の本体は
+        `grow_stack` に包まれているので、その値を読むのに A15 が要る。
+    BY A15, <1>1, CODE src/rc_ir/ownership.rs: collect_bindings, returned_var
   <2>2. `origin_inner` の `Join` の腕が集める候補集合は `{(x_0, []), (x_1, [])}` であり、`<1>1` の A6 より
         `x_0` と `x_1` は相異なる名前なので 2 元である。
     BY <1>1, <1>6a, <1>7, <2>1, CODE src/rc_ir/ownership.rs: origin_inner
