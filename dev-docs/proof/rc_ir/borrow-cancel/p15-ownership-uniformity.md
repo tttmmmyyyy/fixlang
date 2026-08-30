@@ -2847,13 +2847,16 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   空に成り立つ。(i): 開始の時点で `Σ d(C) = 1`、借用終端の類は無いので、要求は `H(obj(C)) ≥ 1` であり、
   これは D21 が活性化に課す条件そのものである。`obj(z, [])` がグローバル状態である活性化では計数下の
   別名類が 1 つも無いので、3 つの節は空に成り立つ。`borrow_ify` がこの本体を写した本体は、束縛名を付け替え
-  (P9)、`owns_unit` が偽の unit の `Retain`/`Release` を落とした (P10) ものなので、元の本体か、そこから
+  (P9)、`RewriteCtx::rewrite` を掛けたものである。`rewrite_inner` が `Retain`/`Release` の腕で呼ぶ
+  `rewrite_rc` は、その節点を `units_under(ty(v), path)` のうち `owns_unit` が真である unit の節点の列に
+  置き換える。A2 と L6 より `under(ty(x), []) = [[]]` なので、写した本体は元の本体か、そこから
   唯一の `Release(x, [])` を落としたものである。落とした本体では `held` は 1 のまま終端に着き、`bumps` は
   0 のままなので、3 つの節はやはり成り立つ。
   A20: この本体に `App` は無く、`f` を呼ぶ本体もこのプログラムに無いので、この節は空に成り立つ。
   A22: `funcs` の唯一の鍵は `f` であり、その `RcFunc` の `name` に等しい。
   A24: この本体に `InlineLLVMFixBody` の `Llvm` 節点は無い。
-  BY <1>1, <1>2, D14, D20, D21, D26, D33, D34, P9, P10,
+  BY <1>1, <1>2, A2, D14, D20, D21, D26, D33, D34, L6, P9,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
      CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody, InlineLLVMIntLit
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空である。
@@ -3014,14 +3017,17 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   構文は `Release(x, [])` だけで、その時点では 1 である。終端の `Ret(w)` の消費の直後も 0 である。
   (ii-b): この本体に `Retain` は無いので `bumps` はどの時点でも 0 であり、条件は空に成り立つ。(i): 開始の
   時点で `Σ d(C) = 1`、借用終端の類は無いので、要求は `H(obj(C)) ≥ 1` であり、これは D21 が活性化に課す
-  条件そのものである。`borrow_ify` がこの本体を写した本体は、束縛名を付け替え (P9)、`owns_unit` が偽の
-  unit の `Retain`/`Release` を落とした (P10) ものなので、元の本体か、そこから唯一の `Release(x, [])` を
-  落としたものである。落とした本体では `held` は 1 のまま終端に着き、`bumps` は 0 のままなので、3 つの節は
-  やはり成り立つ。
+  条件そのものである。`borrow_ify` がこの本体を写した本体は、束縛名を付け替え (P9)、
+  `RewriteCtx::rewrite` を掛けたものである。`rewrite_inner` が `Retain`/`Release` の腕で呼ぶ
+  `rewrite_rc` は、その節点を `units_under(ty(v), path)` のうち `owns_unit` が真である unit の節点の列に
+  置き換える。A2 と L6 より `under(ty(x), []) = [[]]` なので、写した本体は元の本体か、そこから唯一の
+  `Release(x, [])` を落としたものである。落とした本体では `held` は 1 のまま終端に着き、`bumps` は
+  0 のままなので、3 つの節はやはり成り立つ。
   A20: この本体に `App` は無く、`f` を呼ぶ本体もこのプログラムに無いので、この節は空に成り立つ。
   A22: `funcs` の唯一の鍵は `f` であり、その `RcFunc` の `name` に等しい。
   A24: この本体に `InlineLLVMFixBody` の `Llvm` 節点は無い。
-  BY <1>1, <1>2, D14, D16, D20, D21, D26, D33, D34, P9, P10,
+  BY <1>1, <1>2, A2, D14, D16, D20, D21, D26, D33, D34, L6, P9,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
      CODE src/fixstd/builtin.rs: InlineLLVMIntLit
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空であり、`f` は借用版を持ち、そこで
