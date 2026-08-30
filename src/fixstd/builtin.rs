@@ -1004,7 +1004,7 @@ pub struct InlineLLVMFixBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMFixBody {
     /// This op applies an operand: `f` is applied to build the fixed point, and the result of that is applied to `x`.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -1066,7 +1066,7 @@ impl LLVMGen for InlineLLVMFixBody {
     }
 }
 
-// PROOF: D/A, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_name = FullName::local(f);
     let x_name = FullName::local(x);
@@ -1083,6 +1083,7 @@ fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
 }
 
 // fix = \f: ((a -> b) -> (a -> b)) -> \x: a -> fix_body(b, f, x): b
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("f")],
@@ -6616,7 +6617,7 @@ pub struct InlineLLVMUnionModBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnionModBody {
     /// This op applies an operand: the modifier is applied to the payload the variant holds.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -6943,7 +6944,7 @@ pub struct InlineLLVMWithRetainedFunctionBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
     /// This op applies an operand: `f` is applied to `x` while `x` is held retained.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -7897,7 +7898,7 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
 
 /// Applies `io_act` to `data_ptr` wrapped as a Fix `Ptr` value, and returns the IO action it
 /// yields.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 fn apply_io_act_to_data_ptr<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     io_act: Object<'c>,
@@ -7955,6 +7956,7 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// Evaluates `Std::FFI::_mutate_boxed_internal`: makes the boxed value unique, runs the action on a
 /// pointer to the value's payload, and evaluates to the value paired with the action's result.
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     val_name: FullName,
@@ -7970,7 +7972,7 @@ pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -8275,6 +8277,7 @@ pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// Evaluates `Std::FFI::_mutate_boxed_ios_internal`: makes the boxed value unique, runs the action on
 /// a pointer to the value's payload while threading the caller's `IOState`, and evaluates to that
 /// state paired with the value and the action's result.
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     val_name: FullName,
@@ -8290,7 +8293,7 @@ pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -8474,7 +8477,7 @@ pub struct InlineLLVMArrayBorrowElementsBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayBorrowElementsBody {
     /// This op applies an operand: the borrower is applied to the pointer to the elements.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -8560,6 +8563,7 @@ pub fn array_borrow_elements() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayMutateElementsInternalBody {
     arr_name: FullName,
@@ -8575,7 +8579,7 @@ pub struct InlineLLVMArrayMutateElementsInternalBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
@@ -8708,6 +8712,7 @@ pub fn array_mutate_elements_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayMutateElementsIosInternalBody {
     arr_name: FullName,
@@ -8723,7 +8728,7 @@ pub struct InlineLLVMArrayMutateElementsIosInternalBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         true
     }
