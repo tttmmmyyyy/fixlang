@@ -632,7 +632,7 @@ fn resolve_callee_params<'a>(
 /// Dropping an argument leaf's consume is sound exactly when the result aliases that leaf, and a
 /// result leaf with a single argument leaf behind it aliases it. A leaf that joins an argument with
 /// another source aliases nothing, so it keeps its consume.
-// PROOF: P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn passthrough_arg_leaves(
     llvm_gen: &dyn LLVMGen,
     result_ty: &Arc<TypeNode>,
