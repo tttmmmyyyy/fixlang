@@ -192,8 +192,8 @@ P23 の言明は入力を **`borrow_ify` の出力**に限る。第 1 節の `p1
 
 P23 がその限定の理由に挙げる 2 つも、同じ理由で `p1` について読める。A19 が (ii-a) と (ii-b) を
 仮定する範囲は「`borrow_ify` の入力の各本体と、`borrow_ify` がそれを写した各本体 (すなわち
-`cancel` の入力) の両方」であり、`p1` は後者である。P14a の量化範囲は「`borrow_ify` の出力の各本体」であり、`p1` は
-それである。
+`cancel` の入力) の両方」であり、`p1` は後者である。P14a の量化範囲は「`borrow_ify` の出力の
+各本体」であり、`p1` はそれである。
 
     BY <1>1, P23, H3, A19, P14a
 
@@ -636,7 +636,7 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 |---|---|---|---|
 | A1 | 入力が RC 規律を満たす | 前段のパス (`insert_rc`) | P14 と T の言明の前提。A19 (i) の量化範囲に D12 を与える (P28 の項) |
 | A2 | 単位への正規化 | `insert_rc` と `split_rc_units` | P14 と T の言明の前提。P9 の項 |
-| **A3** | 宣言されたモデルの忠実さ | **誰も**。ただし `applies_a_function_operand` については `Generator::apply_lambda` の develop mode の検査が、`result_prov` の元数については `validate` の `check_rhs` の develop mode の検査が果たす | D10、D21、D24、D29、D30、P5 (a)。元数の節は前提 (N) (第 7 節) |
+| **A3** | 宣言されたモデルの忠実さ | **誰も**。ただし `applies_a_function_operand` については `Generator::apply_lambda` の develop mode の検査が、`result_prov` の元数については `validate` の `check_rhs` の develop mode の検査が果たす | D10、D21、D24、D29、D30、P5 (a)。元数の節を読むのは前提 (N) である (第 7 節) |
 | **A4** | コード生成の忠実さ | **誰も** | D29、D30 |
 | A5 | 型が leaf の上位近似 | `leaf_map.rs` の設計 | D25、P7a、A19 (i) |
 | A6 | 名前の一意性 | lowering | D6、P9、A11 |
