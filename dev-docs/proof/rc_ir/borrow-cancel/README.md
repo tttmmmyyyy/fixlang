@@ -1674,20 +1674,26 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   この 2 つの順序が load-bearing である。
 
 - **P7a** (site の所有は、その leaf の所有と一致する)。**出力の版 `V` を 1 つ固定し、`owns_unit` と
-  `owns_object` は `V` の `RewriteCtx` のもの、site は `V` の `RewriteCtx` が読む本体 -- 書き換えの入力 --
-  について `levelled_sites` が挙げるものとする。** `infer_ownership` は入力の関数の本体から site を作り、`RewriteCtx` は出力の各版につき作られる
-  ので、この 2 つは別でありうる。
+  `owns_object` は `V` の `RewriteCtx` のものとする。**`infer_ownership` は入力の関数の本体から site を
+  作り、`RewriteCtx` は出力の各版につき作られるので、この 2 つは別でありうる。
 
-  `(v, u)` をその site とし、`Λ(u)` を `u` の下の boxed leaf の集合とする。`infer_ownership` の不動点の
-  下で、次の 3 つは同値である。
+  **site とは、その版が書き換える本体 -- 関数の `body` かグローバル初期化子の `init` -- を
+  `for_each_node` で歩いて挙げた、`Retain`/`Release` 節点の `(v, path)` と、`App` の各引数 `arg` と各
+  `unit ∈ rc_units(ty(arg))` の対である。** 関数の版ではこれは `levelled_sites` が挙げる集合と一致する
+  (`CODE src/rc_ir/borrow.rs: levelled_sites`)。**関数に限らない形で書くのは、`owns_unit` が
+  グローバル初期化子の版でも呼ばれるからである** -- `rewrite_inner` の `App` の腕がそこを通る。
+
+  `(v, u)` をその site とし、`Λ(u)` を `u` の下の boxed leaf の集合とする。**節 2 と節 3 は、1 つの
+  活性化 (D21) と、その活性化がその site の節点を訪れる位置に相対的である** (inhabited は D16 の意味で、
+  時点を固定しないと定まらない)。`infer_ownership` の不動点の下で、次の 2 つが成り立つ。
 
   1. `owns_unit(v, u)` が真である。
   2. `Λ(u)` の**ある inhabited な** leaf `λ` の**すべての**候補 `(r, p)` について `owns_object(r, p)` が
      真である。
   3. `Λ(u)` の**すべての inhabited な** leaf のすべての候補について `owns_object` が真である。
 
-  成り立つのは **1 ⟹ 3** と **2 ⟹ 1** の 2 つであり、この 2 つで足りる。1 ⟹ 3 が「節点を残すのが安全で
-  ある」を、2 ⟹ 1 の対偶が「節点を落とすのが安全である」を与える。**3 ⟹ 2 と 3 ⟹ 1 は偽である。**
+  成り立つのは **1 ⟹ 3** と **2 ⟹ 1** である。1 ⟹ 3 が「節点を残すのが安全である」を、2 ⟹ 1 の対偶が
+  「節点を落とすのが安全である」を与える。**3 ⟹ 2 と 3 ⟹ 1 は偽である。**
   `Λ(u)` に inhabited な leaf が 1 つも無い活性化では節 3 が空虚に真になり、そこから何も出ない
   (`p15-ownership-uniformity.md` の反例 R2)。`Inh(v, u) ≠ ∅` を足せば 3 つは同値になるが、下流はそれを
   要らない。
@@ -1697,7 +1703,7 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   宣言する側の leaf は `origin` が自分自身を名指すので、`owns_object` はそれを所有と答える。その leaf は
   実行時に存在せず、`Retain`/`Release` は触れない (同ファイルの反例 R1)。
 
-  1 ⟺ 3 は「節点を残すのが安全である」を与え、¬1 ⟹ ¬2 は「節点を落とすのが安全である」を与える。借用版の
+  借用版の
   `rewrite_rc` は `owns_unit` が偽の unit の `Retain`/`Release` を丸ごと落とすので (P10)、落とした先に所有
   している leaf が 1 つでも残っていれば参照が漏れる。**包含では言えない。** `origin_inner` は
   `Binding::Param` の腕で path を降りずに `Exactly((v, path))` を返すので、`v` がパラメータのとき
