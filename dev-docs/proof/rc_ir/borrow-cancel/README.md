@@ -9,7 +9,7 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 
 証明しないものを名前で挙げておく。**評価順の保存**、**FFI の副作用の列の保存**、**返り値の一致**。
 これらは D11 の軸の上に無い。返り値の一致は、`cancel` についても主張しない -- カウントが下がると
-`unique_check_operand` を宣言する op が別の腕を取り、割り当てるオブジェクトの個数が変わる。この向きの
+参照カウントで分岐する op が別の腕を取り、割り当てるオブジェクトの個数が変わる。この向きの
 変化は言語が認めている (P26)。
 
 **この証明は書きかけである。** 第 7 節の表が、どの命題がどこまで進んでいるかを述べる。第 8 節が、証明を書く
@@ -145,8 +145,9 @@ D6 のスロット、D7 の参照カウント `H`、D10 の義務集合はいず
 
 - **一意性の観測点** (D18)。返す `Bool` はその時点の参照カウントで決まり、オペランドでは決まらない。
 - **外部の状態を読む `Llvm` の演算**。環境 (A17) を読む。
-- **`unique_check_operand` を宣言する `Llvm` の演算**。実行時の参照カウントで分岐し、一意の腕は
-  オペランドのオブジェクトをそのまま返す (A3)。返る値も、参照カウントに与える変化も、オペランドからは
+- **実行時の参照カウントで分岐する `Llvm` の演算**。一意の腕は
+  オペランドのオブジェクトをそのまま返す (A3)。分岐する op と `LLVMGen::unique_check_operand` を宣言する
+  op は一致しない (D30 の (X2))。返る値も、参照カウントに与える変化も、オペランドからは
   決まらない。
 - **子の活性化を作る段** (D24 の「活性化の林」)。`App` の段 (E3)、オペランドを適用する `Llvm` の段 (E2)、
   グローバルの初期化の段 (E7)、そして `Destructor` のオブジェクトを解放する段 (F) である。返る値と、
@@ -211,8 +212,8 @@ D21 より、これらのデータを与えれば本体の活性化は 1 つに�
 
 **子の活性化を作る段の結果を共有することが実際の実行で成り立つかは、この定義の主張ではないし、どの命題の
 主張でもない。** D11 と D12 は D21 の意味のすべての活性化について条件を課すので、`α` が実現するかどうかを問う
-必要がそもそも無い。実際、2 つの実行は分かれうる -- `cancel` がカウントを下げると `unique_check_operand`
-を宣言する op の分岐が別の腕を取り、一意の腕はオペランドのオブジェクトをそのまま返すので、2 つの実行が
+必要がそもそも無い。実際、2 つの実行は分かれうる -- `cancel` がカウントを下げると参照カウントで分岐する
+op が別の腕を取り、一意の腕はオペランドのオブジェクトをそのまま返すので、2 つの実行が
 割り当てるオブジェクトの個数が食い違う (A3)。言語はその向きの変化を認めている (P26)。
 
 **`borrow_ify` にはこの対応を置かない。**借用版は呼び出し元が借りている参照を処分しないので、対応する
@@ -676,7 +677,7 @@ C の呼び出し元が持っていたオブジェクトがそれで、`c_bounda
 行き先には 3 つ書き足すものがある。**この段が作る活性化の `Obl`** -- オペランドを適用する `Llvm` の段が
 渡す参照がそれである --、**既に在るオブジェクトの leaf**、そして**結果の値の leaf** である。
 
-最後のものは、`unique_check_operand` を宣言する op の**一意の腕**が示す。その腕は `create_obj` を呼ばず
+最後のものは、参照カウントで分岐する op の**一意の腕**が示す。その腕は `create_obj` を呼ばず
 オペランドのオブジェクトをそのまま返すので (A3 の但し書き)、消費されたオペランドの参照はそのまま結果の
 leaf の参照になる -- 処分でも新しい割り当てでもない。**この行き先が無いと、その参照が処分に落ちて `H` が
 0 になり、起きない解放がモデルに現れる。**後者は `struct_set` の一意の腕が示す:
@@ -894,7 +895,7 @@ P22) で 1 対 1 に並べる。並んだ 2 つの段が同じ位置の節点を
   列」と同じ側にある。
 
 ほかの節点は、同じ値と同じオブジェクトを与えられれば同じ値を作り、同じオブジェクトを名指す。A3 が
-「`unique_check_operand` を宣言する op の `Fresh` の行はオブジェクトの同一性については字義どおりでない」と
+「実行時に参照カウントで分岐する op の `Fresh` の行はオブジェクトの同一性については字義どおりでない」と
 言うのは (X2) の op そのものであり、分岐が同じである限り 2 つの実行は同じ腕を取って同じオブジェクトを
 名指すので、この読みは共通接頭の定義と整合する。
 
@@ -1012,8 +1013,8 @@ leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言�
 
 `borrows_operand(i)` が真のとき、生成コードは第 `i` オペランドの参照を処分しない。
 
-**`unique_check_operand` を宣言する op の `Fresh` の行は、オブジェクトの同一性については字義どおりでは
-ない。** そうした op は実行時に参照カウントで分岐し、一意の腕ではオペランドのオブジェクトをそのまま返す
+**実行時に参照カウントで分岐する op の `Fresh` の行は、オブジェクトの同一性については字義どおりでは
+ない。** そうした op の一意の腕はオペランドのオブジェクトをそのまま返す
 (`CODE src/fixstd/builtin.rs: make_struct_union_unique`, `force_unique_or_assert_with_hole`)。それでも
 `result_prov` は `Fresh` を宣言する (`CODE src/fixstd/builtin.rs: replaced_field_prov`)。宣言が言うのは
 「結果のその leaf の参照は、この op が新しく作ったものであって、オペランドと共有していない」ことであり、
@@ -1101,7 +1102,8 @@ inhabited でない leaf と同じに扱う。
 が挙げる全変数を集め、複製の各名前がそこに入らないことを検査する。
 
 `borrow_ify` の入力に現れる**すべての名前**について -- 束縛名、直接呼び出しが名指す関数の名前、グローバル
-値を読む `RcVar` の名前、**`prog.funcs` の鍵**、**各 `RcFunc` の `name`** を含む -- その `name` フィールドを
+値を読む `RcVar` の名前、**`prog.funcs` の鍵**、**各 `RcFunc` の `name`**、**`prog.globals` の各エントリの
+`symbol`**、**`Program::global_types` の鍵**を含む -- その `name` フィールドを
 `#` で区切った最後の断片は、
 文字 `b` の後に 10 進数字だけが続く形ではなく、`borrow` でもない。後者は `borrow_funcref` が借用版の名前を
 `<元の名前>#borrow` として作るからで (`CODE src/rc_ir/borrow.rs: borrow_funcref`)、これが無いと借用版の
@@ -1128,6 +1130,12 @@ inhabited でない leaf と同じに扱う。
 `FuncRef` を組んで `prog.funcs` を引き、`call_rc` は `callee_params` を同じ形で引くので、この一致が無いと
 静的に引いた関数が呼び出し先のものでなくなる。
 
+**`RcRhs::Closure(fref, caps)` の `fref` も `prog.funcs` の鍵である。** `collect_bindings` は
+`RcRhs::Closure` の腕でこの `FuncRef` を `closure_targets` に入れ、`resolve_callee_params` はそこから
+引いた `FuncRef` が `prog.funcs` の鍵でないとき `unreachable!` で落ちる
+(`CODE src/rc_ir/ownership.rs: collect_bindings`, `resolve_callee_params`)。これが無いと
+`infer_ownership` の停止性 (P8 (a)) が言えない。
+
 **A14 (適用は飽和している)** -- 果たす者: 型検査と lowering。検査: `Generator::apply_lambda` の
 `assert_eq!(args.len(), src_tys.len())` (`CODE src/generator.rs: Generator::apply_lambda`)。
 `App(callee, args)` の `args` の個数は、呼び出し先のパラメータの個数に**等しい**。**「呼び出し先」は
@@ -1139,23 +1147,36 @@ P29 が 2 つを一致させ、間接呼び出しでは静的な相手が居な�
 `params[arg_idx]` を引くので、これが無いと範囲外になる。
 
 **A15 (`grow_stack` は閉包をちょうど 1 回呼ぶ)** -- 果たす者: `stacker` crate。
-`grow_stack(f)` は `f` をちょうど 1 回呼び、その返り値を返す (`CODE src/misc.rs: grow_stack`)。`origin`、
-`CancelAnalysis::walk`、`RewriteCtx::rewrite`、`drop_nodes`、`rename_expr` はいずれも本体を `grow_stack` で
-包むので、これが無いと「各位置をちょうど 1 回訪れる」がどれも言えない。
+`grow_stack(f)` は `f` をちょうど 1 回呼び、その返り値を返す (`CODE src/misc.rs: grow_stack`)。よって
+本体を `grow_stack` で包む再帰関数は、包まない場合と同じ回数だけ各位置を訪れる。これが無いと「各位置を
+ちょうど 1 回訪れる」がどれも言えない。**どの関数がこれに当たるかは、`src/` の `grow_stack(` の呼び出し元を
+数え上げて決める** -- 名前を書き写した列挙は、この証明が新しい関数を読むたびに落ちる。
 
 **A16 (`Match` のアームは scrutinee のタグを尽くす)** -- 果たす者: lowering
 (`CODE src/rc_ir/lower.rs: Lowerer::lower_match`, `Lowerer::lower_if`) と、アームの列を保つ後段のパス。
-検査: 無し。
+catch-all の位置についてはコード生成が果たす (下記)。検査: 無し。
 すべての `Match(s, arms)` について、`arms` が catch-all アーム (`tag` が `None`) を持つか、`s` の値が
 取りうる実行時のタグがいずれかのアームの `tag` である。
 
-D21 は「タグが等しいアームが無ければコード生成の振る舞いに従う」と書いており、コード生成は最後のアームの
-ブロックを switch の default とする (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_match`)。最後の
-アームが変位アームで、どのアームも名指さない変位が在ると、実行はその変位の値をもって `tag = Some(t)` の
-アームに入る。そのとき D9 の移動の表の「unbox union の変位アームの payload 束縛」の行が名指す**活性**変位と、
-`origin_inner` の `Binding::Payload(scrut, Some(t))` の腕が辿る静的な変位番号 `t` が食い違い、P5 (a) と
-P6 が偽になる。`validate` が見るのは、アームが 1 つ以上あること、catch-all アームが最後にあること、
-2 つのアームが同じ変位を担わないことだけである (`CODE src/rc_ir/validate.rs: Validator::check_rhs`)。
+**catch-all アームは `arms` の最後にある。** これを果たすのはコード生成である --
+`Generator::eval_rc_match` は最後でない各アームについて
+`arm.tag.expect("a non-final match arm must be a variant arm")` を**無条件に**評価するので、最後でない
+位置に catch-all を持つプログラムはコード生成で止まり、その本体の活性化は存在しない
+(`CODE src/rc_ir/codegen.rs: Generator::eval_rc_match`)。`validate` も同じことを検査するが、そちらは
+develop mode の門を持つ。
+
+**活性化が `tag = Some(t)` のアームに入るのは、`s` の実行時のタグが `t` であるときに限る。** D21 は
+「タグが等しいアームが無ければコード生成の振る舞いに従う」と書き、そのフォールバックは最後のアームの
+ブロックを switch の default とするので、この節が無いと、どのアームも名指さない変位を持つ値が
+`tag = Some(t)` のアームに入りうる。読む者は P3、P4、P5 (a)、P6 である。
+
+節が無いと倒れるのは次の形である。コード生成は最後のアームのブロックを switch の default とするので、
+最後のアームが変位アームで、どのアームも名指さない変位が在ると、実行はその変位の値をもって
+`tag = Some(t)` のアームに入る。そのとき D9 の移動の表の「unbox union の変位アームの payload 束縛」の行が
+名指す**活性**変位と、`origin_inner` の `Binding::Payload(scrut, Some(t))` の腕が辿る静的な変位番号 `t` が
+食い違い、P5 (a) と P6 が偽になる。`validate` が見るのは、アームが 1 つ以上あること、catch-all アームが
+最後にあること、2 つのアームが同じ変位を担わないことだけである
+(`CODE src/rc_ir/validate.rs: Validator::check_rhs`)。
 
 **A19 (bump の下に余りが在る)** -- 果たす者: (ii-a) と (ii-b) については `insert_rc` (使用回数の勘定)、
 `split_rc_units` (粗い `Retain` を unit ごとの鎖へ割る段)、`borrow_ify` (`rewrite_rc` が落とさないこと、
@@ -1458,13 +1479,14 @@ RcInserter::insert_into_expr_inner`)。
 読む者は `p60-insert-rc.md` の `L8`・`L14`・`L28` である。これが無いと、`insert_rc` の出力の
 `Retain`/`Release` 節点が `build_retains`/`build_releases` の作ったものに限らない。
 
-**A12 (束縛の形と型が合っている)** -- 果たす者: 誰も。
+**A12 (束縛の形と型が合っている)** -- 果たす者: 誰も。ただし `RcFunc` の欄の整合については
+`Lowerer::lower_lambda_as_function` が果たす。
 move-bind の両辺の型、アームの結果と `Match` の束縛変数の型、payload と変位の型、**catch-all アームの
 payload と scrutinee の型**、`Destructure` のフィールド変数とフィールドの型、**`App(callee, args)` の各引数と
 呼び出し先の対応するパラメータの型**、`Match` の scrutinee が union であること、`Destructure` の容器が
 構造体であること、**`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が実際に持つ
 (punched でない) ものであること**、同じ名前の `RcVar` が持つ型が一致すること、**束縛を持たない `RcVar` の
-型が、その名前の記号の型であること**、そして次の **`Llvm` 節点の型についての 3 つ**。
+型が、その名前の記号の型であること**、そして次の **`Llvm` 節点の型についての 4 つ**。
 
 - `Let(x, Llvm(gen, args), k)` の `args` の名前の列は `gen.free_vars()` に等しい。果たす者: 演算を作る側。
   検査: `validate` の `check_rhs` が develop mode で行う。
@@ -1485,9 +1507,23 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 
 **`App` については引数とパラメータのほかに、結果の型も一致する。** `Let(x, App(callee, args), k)` の `ty(x)`
 は呼び出し先の返り値の型である。呼び出しの結果の leaf が呼び出し先の終端の `Ret` が渡す参照を受け取ると
-言うには、両者の `boxed_leaf_paths` が同じ列であることが要る。
+言うには、両者の `boxed_leaf_paths` が同じ列であることが要る。さらに `ty(callee)` は実行時の呼び出し先の
+`fn_ty` である。
 
-**この 3 つが無いと P2 が偽になる。** `result_prov` を override する 29 個のうち 5 個が、これらの型で
+**`RcFunc` の欄どうしも整合している。** 各 `RcFunc` について、`params` の型の列は `fn_ty` の lambda src の
+列に等しく、`capture` が `Some` であることと `fn_ty.is_closure()` が真であることは同値であり、コード生成が
+その関数に与える署名は `lambda_function_type(fn_ty)` である。この 3 つについては果たす者が居る --
+`Lowerer::lower_lambda_as_function` が `params` を `lam_ty.get_lambda_srcs()` と zip して作り
+(`assert_eq!(params.len(), src_tys.len())` を伴う)、`capture` を `lam_ty.is_closure()` の腕でだけ `Some` に
+する。後段のパスはこの 3 つの欄を写すだけである
+(`CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function`)。
+
+**署名の側からは補えない。** 大きさ 0 の部分は LLVM の署名に現れないので、closure の `IOState -> I64` と
+funptr の `Ptr -> I64` はどちらも `(ptr) -> i64` になる。署名の一致は `is_closure` の一致を与えない。
+`fn_ty` が closure で `capture` が `None` のとき、署名は一致し panic も起きず、`App` が消費した capture の
+参照が義務集合に入らないまま通る。
+
+**この 4 つが無いと P2 が偽になる。** `result_prov` を override する 29 個のうち 5 個が、これらの型で
 `expect` か添字か `assert_ne!` で abort する (`CODE src/fixstd/builtin.rs: replaced_field_prov`,
 `InlineLLVMStructPunchBody`)。abort する `result_prov` は `origin_inner` の `Llvm` の腕を通らせない。
 
@@ -1614,9 +1650,10 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   `collect_consumes` の呼び出しについて、D9 の意味で消費する構文はすべてそれが報告する。また報告して
   D9 が消費としないものは、アーム本体の `Ret` に限る。
 
-  呼び出しを限定するのは、D9 の消費の表の最後の行が「**関数本体の**終端の `Ret(x)`」だからである。
-  `own` を限定するのは、`collect_consumes` の唯一の呼び出し元 `infer_ownership` が不動点計算の**途中の**
-  集合を渡すからである (`CODE src/rc_ir/borrow.rs: infer_ownership`)。まだ空の反復では `App` の引数の
+  呼び出しと `own` を限定するのは、`collect_consumes` の唯一の呼び出し元 `infer_ownership` が
+  `prog.funcs` の各 `body` だけを渡し、しかも `own` に不動点計算の**途中の**集合を渡すからである
+  (`CODE src/rc_ir/borrow.rs: infer_ownership`)。D9 の消費の表の最後の行は「本体 (D23) の終端の `Ret(x)`」
+  であってグローバル初期化子の `init` も覆うが、その本体はこの呼び出しに渡らない。まだ空の反復では `App` の引数の
   leaf が 1 つも報告されず、そのとき前半は偽になる。**途中の集合が D14 の所有へ達することは P8 が扱う。**
 
   **途中の呼び出しについて言えるのは後半だけである** -- どの `own` についても、報告して D9 が消費と
@@ -1649,9 +1686,16 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   `truncate_to_unit` は panic する。等式の形で書くと、左辺が真を返して右辺が中断するこの `(r, p)` で
   言明が偽になる。
 
-- **P7d** (所有は site ごとに一様である)。`infer_ownership` の不動点において、`levelled_sites` が挙げる
-  各 site `(v, u)` について、`origin(v, u)` の候補は、すべて `owns_object` が真であるか、すべて偽であるかの
+- **P7d** (所有は site ごとに一様である)。`infer_ownership` の不動点において、P7a の意味の各 site
+  `(v, u)` について、`origin(v, u)` の候補は、すべて `owns_object` が真であるか、すべて偽であるかの
   どちらかである。
+
+  **主語を P7a と同じ site に取るのは、`owns_unit` がグローバル初期化子の版でも呼ばれるからである。**
+  `levelled_sites` は `&RcFunc` を取るので、初期化子の版については site を 1 つも挙げない。その版では
+  `vars` が `VarTable::body_only(&g.init)` であり `param_tys` が空なので、`owns_object` は
+  `param_tys.get(root)` が `None` の腕を通って任意の `(r, p)` について真であり、候補は自明にすべて真で
+  ある (`CODE src/rc_ir/ownership.rs: VarTable::body_only`, `CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object`)。
+  関数の版では site は `levelled_sites` が挙げる集合と一致する。
 
   `owns_unit(v, u)` は候補すべてに `owns_object` を要求して真偽値を 1 つ返し、`rewrite_rc` と `call_rc` は
   その 1 つの答えで unit 全体の `Retain`/`Release` を決める。答えが候補ごとに割れる site があると、真の側
@@ -1734,7 +1778,7 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   宣言を出す -- 結果の各 leaf を `Arg(0, [variant_idx] ++ path)` と宣言し、他の変位の leaf をどこにも
   名指さない (`CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov`)。
 
-  `owns_unit` を呼ぶ位置が `levelled_sites` の挙げる site を出ないことは、この命題の証明の中で示す
+  `owns_unit` を呼ぶ位置がこの site の集合を出ないことは、この命題の証明の中で示す
   (`CODE src/rc_ir/borrow.rs: levelled_sites`, `RewriteCtx::rewrite_rc`, `call_rc`, `any_owned_unit`)。
 
 - **P8** (推論の停止性と安全性)。`infer_ownership` は停止する。その不動点が返す集合 `owned_leaves` は、
@@ -2188,7 +2232,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | T | `p70-main-theorem.md` | -- | 証明済み。(T1) から (T4) まで、引用する命題の言明の上で閉じる | 未着手 |
 
 **T が閉じることは、T が引く命題が閉じることを意味しない。**各命題の状態はこの表が述べる。誰も果たさない
-仮定は A3、A4、A12、A18、A24 の 5 つである。A23 は果たす者を 2 人持つが、その 2 人の間を funptr 型の
+仮定は A3、A4、A12、A18、A24 の 5 つである。A12 は `RcFunc` の欄の整合についてだけ果たす者を持つ。A23 は果たす者を 2 人持つが、その 2 人の間を funptr 型の
 `Expr::Lam` が式の内側へ移らずに通ることは、まだ誰も確かめていない。A10 は newtype を剥がす節を持ち、
 その節は誰も示していない。
 
@@ -2471,14 +2515,14 @@ and only delays its release」と述べているのがこの場合である。�
 要求しており、1 つの本体についての帰納では閉じない。
 
 **D21 に、活性化が運ぶ割り当てはオペランドから結果が決まらない 4 種の結果を含む、と書いた。**
-一意性の観測点、外部の状態を読む `Llvm` の演算、`unique_check_operand` を宣言する演算、そして子の活性化を
+一意性の観測点、外部の状態を読む `Llvm` の演算、参照カウントで分岐する演算、そして子の活性化を
 作る段である。これで 1 つの本体の活性化はその 2 つの
 データで決まり、D29 の「対応する活性化」は前提でなく**構成**になった。
 
 **`App` の結果が実際の実行で一致することは、示す必要が無い。** D11 と D12 は D21 の意味のすべての活性化に
 ついて条件を課すので、D29 が作る入力の活性化が実現するかどうかを問わない。2 つの実行を突き合わせる命題を
 一度置いたが、要らないと分かって取り下げた。実際、2 つの実行は分かれうる -- `cancel` がカウントを下げると
-`unique_check_operand` を宣言する op が別の腕を取り、割り当てるオブジェクトの個数が食い違う (A3)。
+参照カウントで分岐する op が別の腕を取り、割り当てるオブジェクトの個数が食い違う (A3)。
 
 この読み方には副産物が 2 つある。**P21 は P26 に載らなくなった** -- 観測値は活性化の側のデータなので、
 対応する 2 つの活性化は同じアームを選ぶ。P26 は実際の実行についての別の保証として残る。また **P23 の
