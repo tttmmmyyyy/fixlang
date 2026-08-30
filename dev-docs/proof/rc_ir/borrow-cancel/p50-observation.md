@@ -29,7 +29,8 @@ P26 の言明は 2 文からなる。第 1 文は共通接頭の上の各観測�
   は `Retain`/`Release` の 3 種だけで、どれも「`route` が借用版へ回した呼び出しの窓」の中にある。よって
   **関数ごとに借用版を作らない門は、正しい梃子である** -- 借用版を作らなければ、別名の解析を一切せずに、
   その関数の実行の間の計数は入力と一致する。L9 は門の広さを読まないので、門をどう広げてもこの段は動かない。
-- **L9a、L9b、L10**。実行の中で新しい活性化を作る段は 6 種あり (L9a)、そのうち関数の値を適用する 3 種 --
+- **L9a、L9b、L10**。実行の中で新しい活性化を作る段は 6 種あり (L9a が README の 5 種のうち (E3) を
+  callee の名前で 2 つに割る)、そのうち関数の値を適用する 3 種 --
   局所変数を経た `App`、オペランドを適用する `Llvm` の op、解放が走らせるデストラクタ -- については、
   適用される値が名指す関数が `closure_targets` の元であること (L9b) から、門の辺が張られる。よって窓の中の
   到達の列がグローバルの初期化の段を持たないとき、その列の上に観測点は現れない (L10)。
@@ -358,7 +359,8 @@ shared = false` になる。対象コミットの二値ではこのプログラ�
 `observe#borrow` が 3 か所に現れる。すなわち門はこの op も断っている。
 
 **`assume_unique` が真の op について P26 は自明である。** `<1>2` の `unique_check_elim::specialize` は
-`borrow_ify` と `cancel` の後に走るので、この文書が比べる 4 つのプログラムにその op は無い。仮に在れば、
+`borrow_ify` と `cancel` の後に走るので、L0 が範囲に取る 3 つの本体 -- `borrow_ify` の入力・出力と
+`cancel` の出力 -- にその op は無い。仮に在れば、
 `InlineLLVMIsUniqueFunctionBody::generate` は分岐を作らず定数 `1` を返すので、観測値は入力でも出力でも真で
 ある (`CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate`)。
 
@@ -713,8 +715,10 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       すべてが真のときだけ真を返す。
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
 
-<1>2. `owns_object(root, path)` は `self.vars.param_tys` に `root` が無いとき真を返す。
-  BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+<1>2. `owns_object(root, path)` は `self.vars.param_tys` に `root` が無いとき真を返す。これは P7e の (b)
+      が「`r` がこの版のパラメータ・capture でないとき、`owns_object(r, p)` は `p` によらず真である」と
+      述べるものである。
+  BY P7e, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
 
 <1>3. グローバル初期化子の `RewriteCtx` の `vars` は `VarTable::body_only(&g.init)` であり、`param_tys` は
       空である。よって `<1>2` の腕がつねに取られる。
@@ -730,7 +734,8 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   BY CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
 
 <1>5a. A10 を満たす任意の型 `τ` と任意の path `π` について、`units_under(τ, π, type_env)` の各元 `u` に
-      対する `truncate_to_unit(τ, u, type_env)` は、値を返すならば `rc_units(τ)` の元である。
+      対する `truncate_to_unit(τ, u, type_env)` は、値を返すならば `rc_units(τ)` の元である。unit を
+      担う型と `unit_step` の判定は D5 が、型の歩みが有限であることは A10 が定める。
       **返り値が `u` に等しいとは言えない** -- `τ` が boxed 型で `π = [0]` のとき `subtree_type(τ, [0])` は
       `unit_step(τ) = Unit` により `None` を返すので `units_under(τ, [0]) = [[0]]` であり、
       `truncate_to_unit(τ, [0])` は同じ `Unit` の腕で break して `[]` を返す。`τ` がクロージャで `π` が
@@ -763,14 +768,14 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
        unit_step
   <2>3. QED
     `subtree_type` の返り値は `Some` か `None` かのどちらかである。
-    BY <2>1, <2>2
+    BY A10, D5, <2>1, <2>2
 
 <1>6. `root` が `f_own` のパラメータ・capture であるとき、`owns_object(root, path)` は、値を返すならば
       真を返す。`owns_object` は `units_under(root_ty, path, type_env)` の各 `unit` について
-      `owned_units.contains(&(root, truncate_to_unit(root_ty, unit, type_env)))` を問う。`<1>5a` より
-      その `truncate_to_unit` の値は `rc_units(root_ty)` の元であり、`<1>5` よりそれらはすべて
-      `owned_units` にある。
-  BY <1>5, <1>5a, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+      `owned_units.contains(&(root, truncate_to_unit(root_ty, unit, type_env)))` を問う -- P7e の (a) が
+      この unit ごとの答え方を述べる。`<1>5a` よりその `truncate_to_unit` の値は `rc_units(root_ty)` の元で
+      あり、`<1>5` よりそれらはすべて `owned_units` にある。
+  BY P7e, <1>5, <1>5a, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
 
 <1>7. QED
   (a) は `<1>5` である。(b) について、グローバル初期化子では `<1>3` と `<1>2` より `owns_object` はつねに
@@ -789,7 +794,9 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       `func.borrowed_units = param_capture_units(func, type_env).filter(|u| !owned_units.contains(u))` を
       置く。`f_own` は入力の関数のパラメータ名と型をそのまま持つので、`param_capture_units(f_own)` が
       挙げる unit は L8a の (a) が挙げるものであり、すべて `owned_units` にある。よってこの集合は空である。
-  BY L8a, CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
+      P13 が同じことを述べる -- 出力の各版の `borrowed_units` は、その版のパラメータ・capture の unit の
+      うち `owned_units` に入らないものの集合に一致する。
+  BY L8a, P13, CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
 
 <1>2. グローバル初期化子 `RcGlobalInit` はパラメータも capture も持たない。
   BY D1
@@ -854,21 +861,25 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       `unit_step` が `Unit` を返す型に着いて `Some` を返し、前者では `units_under` が `[π]` を、後者では
       `rc_units` が `[[]]` を返すので `units_under` はやはり `[π]` を返す。よって `kept` は `[π]` か `[]`
       である。
-  BY A2, D5, P9, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc,
+      P10 が同じことを述べる -- 借用版の `rewrite_rc` は `Retain`/`Release` を、`units_under(ty(v), π)` の
+      うち `owns_unit(v, ・)` が真である unit の節点の列に置き換える。
+  BY A2, D5, P9, P10, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc,
      CODE src/rc_ir/ownership.rs: units_under, subtree_type, rc_units, unit_step
 
 <1>5. `call_rc` の `before` に要素が入るのは `callee_owns && !arg_owned` のときであり、`arg_owned` は
       `owns_unit(arg, unit)` である。L8a の (b) より、`f_own` の `RewriteCtx` とグローバル初期化子の
-      `RewriteCtx` では `owns_unit` は真なので、`before` に要素が入るのは借用版の本体だけである。
-  BY L8a, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
+      `RewriteCtx` では `owns_unit` は真なので、`before` に要素が入るのは借用版の本体だけである。この
+      向き -- 呼び出し元が借用し呼び出し先が所有する unit の前に `Retain` -- は P11 が述べるものである。
+  BY L8a, P11, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
 
 <1>6. `call_rc` の `after` に要素が入るのは `!callee_owns && arg_owned` のときである。`callee_owns` は、
       `callee_params` に呼び出し先が無いとき真であり、あるときは
       `owned_units.contains(&(params[arg_idx].0, unit))` である。`callee_params` には原本について
       `param_names_and_types(func)` すなわち入力の関数のパラメータ名と型をそのまま入れるので、呼び出し先が
       原本 `g_own` のとき、問われる unit は L8a の (a) が挙げるものであり `callee_owns` は真である。よって
-      `callee_owns` が偽になるのは呼び出し先が借用版のときだけである。
-  BY L8a, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc, borrow_ify, param_names_and_types
+      `callee_owns` が偽になるのは呼び出し先が借用版のときだけである。この向き -- 呼び出し元が所有し
+      呼び出し先が借用する unit の後に `Release` -- は P11 が述べるものである。
+  BY L8a, P11, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc, borrow_ify, param_names_and_types
 
 <1>6a. (3) が成り立つ。(d) が変えるのは `App` の callee の名前と束縛変数の名前だけである。名前替えは
       P9 より値を変えない。callee の付け替えについては、その節点の段が `H` に与える変化は 0 である --
