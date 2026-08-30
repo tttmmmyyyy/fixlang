@@ -2683,6 +2683,13 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
 
 ### 10.3a INV は `App` 以外の塊の中の各時点へ延びる
 
+**読みの点は節点の入口とは限らない。** unbox 容器の `Destructure(c, fs, s, k)` について、
+`get_struct_fields` は名前の付いていないフィールドを 1 つずつ取り出しては release するので、第 `j`
+フィールドの leaf を処分する事象は、第 `j+1` フィールドの leaf を取り出す点より前にある
+(`CODE src/object.rs: ObjectFieldType::get_struct_fields`)。D7 はこの節点が `c` の inhabited な各 boxed
+leaf のオブジェクトを読みうるとするので、その読みの点はこの節点の事象の間に来る。第 10.3 節の INV は
+DEF 対応する位置 の位置についての言明なので、そこからその点へ渡す補題が要る。
+
 #### L29 (`App` 以外の塊では、事象と読みが対応し、INV が塊の中の各時点へ延びる)
 
 **言明**。`B_V` の節点 `n` が `Let(x, App(callee, args), k)` でないとする。
