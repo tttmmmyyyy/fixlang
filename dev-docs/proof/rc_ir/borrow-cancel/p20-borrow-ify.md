@@ -724,8 +724,8 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
 
 ### 3.5 P8 (c) -- D9 の消費との対応
 
-**DEF 所有を読まない消費** -- D9 の消費の表のうち、`App` の行の「呼び出し先がその位置の unit を所有する (D14)
-引数の leaf」を除いた部分をいう。すなわち `App` の callee の全 boxed leaf、`Closure` の各 capture の全
+**DEF 所有を読まない消費** -- D9 の消費の表のうち、`App` の行の「呼び出し先がその位置の unit を
+所有する (D14) 引数の leaf」を除いた部分をいう。すなわち `App` の callee の全 boxed leaf、`Closure` の各 capture の全
 boxed leaf、`Llvm` の消費する leaf、boxed 容器の `Destructure`、unbox 容器の `Destructure`、関数本体の
 終端の `Ret` の 6 つである。D9 の消費の表でこの割り当てを読むのは `App` の引数の位置だけである。
 
@@ -1805,8 +1805,8 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
   する。**」と書き、site を「**その版が書き換える本体 -- 関数の `body` かグローバル初期化子の `init` --
   を `for_each_node` で歩いて挙げた、`Retain`/`Release` 節点の `(v, path)` と、`App` の各引数 `arg` と各
   `unit ∈ rc_units(ty(arg))` の対である。**」と定め、「関数の版ではこれは `levelled_sites` が挙げる集合と
-  一致する」と述べる。この文書が固定しているのは第 9.1 節の `V` であり、その `RewriteCtx` が `ctx`、その本体が `B_V` である。`V = f_borrow` の
-  ときその本体は `clone_func` が返した `B_V` であり、`ctx` は `RewriteCtx::new(&clone, true, ..)` が
+  一致する」と述べる。この文書が固定しているのは第 9.1 節の `V` であり、その `RewriteCtx` が `ctx`、
+  その本体が `B_V` である。`V = f_borrow` の ときその本体は `clone_func` が返した `B_V` であり、`ctx` は `RewriteCtx::new(&clone, true, ..)` が
   作ったものである。`owns_unit` を呼ぶ位置がその版の `levelled_sites` の挙げる site を出ないことは
   `p15` の `L17` が述べる。
   BY P7a, p15 の L17, CODE src/rc_ir/borrow.rs: borrow_ify, RewriteCtx::new
@@ -1817,9 +1817,9 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
   BY P7a, <1>0
 
 <1>2. `ctx.owns_unit(v, u)` が偽ならば、`cand(v, λ)` に `owns_object` が偽である元がある。
-  P7a の節 2 から節 1 への含意の対偶より、節 2 が偽である。節 2 は「`Λ(u)` の**ある inhabited な** leaf `λ` の**すべての**候補 `(r, p)` について
-  `owns_object(r, p)` が真である」なので、その否定は「`Λ(u)` のどの inhabited な leaf にも
-  `owns_object` が偽である候補がある」である。`<1>0` より、読む P7a は `ctx` と `B_V` についてのもので
+  P7a の節 2 から節 1 への含意の対偶より、節 2 が偽である。節 2 は「`Λ(u)` の**ある inhabited な**
+  leaf `λ` の**すべての**候補 `(r, p)` について `owns_object(r, p)` が真である」なので、その否定は
+  「`Λ(u)` のどの inhabited な leaf にも `owns_object` が偽である候補がある」である。`<1>0` より、読む P7a は `ctx` と `B_V` についてのもので
   ある。
   BY P7a, <1>0
 
@@ -2344,7 +2344,8 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
     始まる、`Retain(v, π)` が `(v, λ) ∈ C` である `λ` を `π` の下に持つとき `λ` 1 つにつき +1、
     `Release(v, π)` について同じく -1、`(w, μ) ∈ C` の D9 の消費で -1、である。DEF 由来ごとの義務 は
     パラメータ・capture の leaf に初期値 `ι(p, σ)` を、それ以外の由来に「D10 の生成の表のいずれかの行が
-    `u` に値を与える事象で 1 になる。その前は 0 である」を置き、`Retain`・`Release`・消費について同じ 3 行を持つ。
+    `u` に値を与える事象で 1 になる。その前は 0 である」を置き、`Retain`・`Release`・消費について同じ
+    3 行を持つ。
     `ι_全` はすべての leaf に 1 を与えるので、第 2 行と第 3 行の開始値 1 が両方とも出る。A1 より
     `borrow_ify` の入力のすべての関数の `borrowed_units` は空なので、第 3 行に当たる類は入力の本体には
     無い。D6 より `(v, λ)` がスロットであることは `λ` がその時点で inhabited であることであり、
@@ -3032,8 +3033,8 @@ capture であり `ctx.owns_object(p, σ)` が偽であるとき 1、そうで�
 
 **示す形**。P14a が言う「ρ-終端が借用する (D14) パラメータ・capture の leaf である**計数下**の別名類
 (D26)」の ρ-終端の側は、L20 より `ctx.owns_object(T)` が偽である `ρ`-由来 `T` である。よって
-`ctx.owns_object(T)` が偽であり `obj(C_T)` が計数下である `T` を 1 つ固定して、次の 3 つを示す。`held` も `n_out` も、その `T` についてだけ定まる (DEF 類の参照、
-DEF 由来ごとの義務)。
+`ctx.owns_object(T)` が偽であり `obj(C_T)` が計数下である `T` を 1 つ固定して、次の 3 つを示す。
+`held` も `n_out` も、その `T` についてだけ定まる (DEF 類の参照、DEF 由来ごとの義務)。
 
 - **(A)** そのような類が在るのは `V` が借用版であるときだけであり、そのとき `T` は `V` のパラメータの
   leaf である (第 11.2 節の L20)。
