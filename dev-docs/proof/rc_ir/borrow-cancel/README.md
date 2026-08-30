@@ -1776,7 +1776,14 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   **条件を外した形では、2 つの位置 (D6) は同じオブジェクトを指す。** 鎖は記号の位置で止まりうるので、
   主語はスロットではなく位置である。参照を持つ場合はそれが D8 の意味の参照の同一から出るが (D8 は参照を
   1 つのオブジェクトに対する処分義務と定める)、両端がグローバル状態を指す場合は D9 の値の水準の行が
-  与える。この節を読むのは `p12-identity-and-consumes.md` の P5 (a) である。
+  与える。
+
+  **この節は P5 (a) を支えない。** P5 (a) が要るのは `identity` の側についてのオブジェクトの一致であり、
+  この節が名指すのは対応する位置である。`Exactly(u, σ)` の場合でも、対応する位置の path は `σ` の下の
+  leaf であって `σ` そのものとは限らない。`Join` の場合はさらに届かない -- `Origin::of_candidates` は
+  `identity` を引数から据えるので、`identity` が `candidates` に入るとは限らない
+  (`CODE src/rc_ir/ownership.rs: Origin::of_candidates`)。P5 (a) は
+  `p12-identity-and-consumes.md` の `L4` が `identity` について直に示す。
 - **P4** (`origin` の健全性 -- `Join`)。`origin(x, π) = Join { identity, candidates }` のとき、各実行路の
   各位置において、`π` の下の inhabited な各 leaf のスロットが **D8 の意味の参照を持つとき**、その参照は
   `candidates` のいずれかの下の対応するスロット (D17) が持つ参照と同一である。条件が要る理由は P3 と

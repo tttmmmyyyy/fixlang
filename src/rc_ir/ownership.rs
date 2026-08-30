@@ -227,7 +227,7 @@ impl Origin {
     /// The origin a set of candidate objects amounts to: exactly the object they agree on, and a
     /// join under `identity` where they name several. `identity` is the one name every alias chain
     /// through the value agrees on.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn of_candidates(candidates: Set<VarPath>, identity: &VarPath) -> Origin {
         assert!(
             !candidates.is_empty(),
