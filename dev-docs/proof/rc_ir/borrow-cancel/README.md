@@ -1796,8 +1796,10 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   グローバル初期化子の版でも呼ばれるからである** -- `rewrite_inner` の `App` の腕がそこを通る。
 
   `(v, u)` をその site とし、`Λ(u)` を `u` の下の boxed leaf の集合とする。**節 2 と節 3 は、1 つの
-  活性化 (D21) と、その活性化がその site の節点を訪れる位置に相対的である** (inhabited は D16 の意味で、
-  時点を固定しないと定まらない)。`infer_ownership` の不動点の下で、次の 2 つが成り立つ。
+  活性化 (D21) と、その活性化の上で `v` が値を得ている任意の位置に相対的である** (inhabited は D16 の
+  意味で、時点を固定しないと定まらない)。位置がどれでもよいのは、値が束縛の後に変わらないからである
+  (D6)。**site の節点を訪れる位置に限れない** -- その節点は `Pre(V)` の側に在り、借用版の `rewrite_rc` は
+  それを落としうる (P10)。`infer_ownership` の不動点の下で、次の 2 つが成り立つ。
 
   1. `owns_unit(v, u)` が真である。
   2. `Λ(u)` の**ある inhabited な** leaf `λ` の**すべての**候補 `(r, p)` について `owns_object(r, p)` が
@@ -1860,6 +1862,11 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   (元の版そのものか、その `borrow_versions` の像)。呼び出し先が入力の関数を名指すとき、返る名前は出力の
   `funcs` の鍵である。局所変数を経由する間接呼び出しでは `route` は呼び出し先をそのまま返し、その名前は
   どちらの `funcs` の鍵でもない。
+
+  **書き換えが `App` の callee に入れる名前は、`route` の返り値である。** `RewriteCtx::rewrite_inner` の
+  `App` の腕は `route` を呼び、その返り値をそのまま callee に据える
+  (`CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner`, `route`)。この節が無いと、`route` についての
+  上の 3 文から出力の `App` について何も出ない。T の第 4 項がこれを読む。
 - **P13** (注釈の一致)。出力の各版の `borrowed_units` は、その版のパラメータ・capture の unit のうち
   `owned_units` に入らないものの集合に一致する。
 - **P14** (`borrow_ify` は RC 規律を保存する)。D12 の意味で RC 規律を満たし、かつ A1 と A2 を満たすプログラムを
