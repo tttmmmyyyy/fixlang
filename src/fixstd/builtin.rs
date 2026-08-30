@@ -364,26 +364,28 @@ pub fn make_functor_name() -> FullName {
     FullName::from_strs(&[STD_NAME], FUNCTOR_NAME)
 }
 
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_funptr_name(arity: u32) -> Name {
     format!("{}{}", FUNPTR_NAME, arity)
 }
 
-// PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_funptr_tycon(arity: u32) -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))
 }
 
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_array_tycon() -> TyCon {
     TyCon::new(make_array_name())
 }
 
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_array_name() -> FullName {
     FullName::from_strs(&[STD_NAME], ARRAY_NAME)
 }
 
 // If given tycon is function pointer, returns its arity
-// PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
     if tc.name.namespace != NameSpace::new(vec![STD_NAME.to_string()]) {
         return None;
@@ -410,7 +412,7 @@ pub fn is_destructor_object_tycon(tc: &TyCon) -> bool {
 }
 
 // Returns whether given tycon is array
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_array_tycon(tc: &TyCon) -> bool {
     *tc == make_array_tycon()
 }

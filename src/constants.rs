@@ -136,7 +136,7 @@ pub const CLOSURE_SPEC_SUFFIX: &str = "#closure_spec";
 pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
 /// The prefix of the type constructor naming a capture list that closure specialization builds. A
 /// parameter of this type is a function whose identity the receiving body knows.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub const CAP_LIST_PREFIX: &str = "#CapList";
 /// The prefix of the name `collapse_constructions` binds a field value to, so that a reader of the
 /// struct is given a name rather than the expression that produced the value.
