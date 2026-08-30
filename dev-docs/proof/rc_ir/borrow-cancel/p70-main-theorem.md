@@ -1,17 +1,17 @@
 # T -- パイプラインが保存するもの
 
-対象コミット: `e8eda471`
+対象コミット: `30ef78ce`
 
 このファイルは主定理 T を証明する。T は合成であり、引用する命題の**言明**だけを使う (証明は
 読まない)。第 2 節の `BY` の行が引くのは次のものである。
 
-- **命題**: P9・P12・P14・P14a・P22・P23・P24・P26・P27。
-- **定義**: D1・D12・D14・D18・D19・D23・D24・D30。
-- **仮定**: A1・A2 (前提 H1・H2 として)、A13・A17・A18・A19 (前提 H3 が束ねる第 4 節の仮定の中から
-  名指す)。
+- **命題**: P9・P12・P14・P14a・P14b・P22・P23・P24・P26・P27。
+- **定義**: D1・D11・D12・D14・D18・D19・D23・D24・D30。
+- **仮定**: A1・A2 (前提 H1・H2 として)、A13・A17・A18・A19・A20 (前提 H3 が束ねる第 4 節の仮定の
+  中から名指す)。
 - **コード**: `optimize_rc_program` が 2 つのパスを呼ぶ順序、`validate`、`borrow_ify` と `cancel` が
-  `RcProgram` を組み立てる 3 つの欄、`RewriteCtx::rewrite_inner` の `App` の腕、`cancel` の本体の
-  書き換えが `drop_nodes` を呼ぶこと、`clone_func`、`borrow_funcref`、`RcProgram` の型。
+  `RcProgram` を組み立てる 3 つの欄、`cancel` の本体の書き換えが `drop_nodes` を呼ぶこと、
+  `clone_func`、`borrow_funcref`、`RcProgram` の型。
 
 T の言明はこのほかに、D7・D21・D25・D26・D31 を名前で引く。
 
