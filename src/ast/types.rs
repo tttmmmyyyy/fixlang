@@ -1485,7 +1485,7 @@ impl TypeNode {
 
     /// Whether a value of this type is held in place, with its fields laid out where the value
     /// sits. A closure is unboxed: it is a function pointer beside the object its captures live in.
-    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox
     }

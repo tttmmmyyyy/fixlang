@@ -53,7 +53,7 @@ src/ast/types.rs	TypeNode::is_funptr	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P1
 src/ast/types.rs	TypeNode::is_ground	D/A	b2b0748bba35
 src/ast/types.rs	TypeNode::is_punched_array	P1,P2,P7a,P7d,P7e	426c57ec3ba1
 src/ast/types.rs	TypeNode::is_struct	P5,P6,P7,P7a,P7d,P7e	bae105c4d2f0
-src/ast/types.rs	TypeNode::is_unbox	P1,P2,P26	9260dc476785
+src/ast/types.rs	TypeNode::is_unbox	P1,P2,P26,(P-insert)	9260dc476785
 src/ast/types.rs	TypeNode::is_union	P1,P2,P5,P6,P7,P7a,P7d,P7e	eaa9230b88af
 src/ast/types.rs	TypeNode::kind	D/A	a08211f10d71
 src/ast/types.rs	TypeNode::set_assocty_args	P1,P2	24abf982807a
