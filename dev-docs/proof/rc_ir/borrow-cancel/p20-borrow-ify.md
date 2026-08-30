@@ -1485,7 +1485,11 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
 
 <1>3. `param_tys` が `r` を鍵に持つとき (その型を `τ`)、`under(τ, p)` の各 `unit` について
       `trunc(τ, unit) ∈ units(τ)` である。
-  BY p15-ownership-uniformity.md の L9
+  第 1 節に写した `p15` の `L9` は仮説つきである -- 「`trunc(τ, ・)` が `under(τ, p)` の各要素について
+  値を返すとき、その値は `units(τ)` の要素である」。言明は `ctx.owns_object(r, p)` が値を返す `(r, p)` に
+  限っており、L4 より `owns_object` のこの場合の腕は `under(τ, p)` の各 `unit` について
+  `trunc(τ, unit)` を計算して `owned_units` を引くので、値を返すことがその仮説を与える。
+  BY L4, p15-ownership-uniformity.md の L9, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
 
 <1>4. QED
   `borrow_ify` は入力の各関数について `owned_units.extend(param_capture_units(func, type_env))` を行い、
