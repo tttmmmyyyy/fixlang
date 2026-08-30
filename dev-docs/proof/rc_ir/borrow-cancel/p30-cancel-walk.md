@@ -129,6 +129,9 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 返っていない) とき、その 2 つは記憶域を共有しない。すなわち、一方の占める番地の集合と他方の占める番地の
 集合は交わらず、とくに先頭アドレスが相異なる。
 
+**DEF Vec::default**
+`<Vec<T> as Default>::default()` は、要素を 1 つも持たない `Vec` を返す。
+
 **DEF Vec::push**
 `v.push(x)` は `v` の末尾に要素 `x` を 1 つ加える。既存の要素の値と添字は変わらず、長さは 1 増える。
 
@@ -139,6 +142,15 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 **DEF Vec::retain**
 `v.retain(f)` は、`f(&e)` が偽を返す要素 `e` をすべて取り除く。`f` は元の並びの順に各要素についてちょうど
 1 回呼ばれ、残る要素の値と相対順序は変わらない。
+
+**DEF Vec::iter と slice::iter**
+`v.iter()` は、`Vec<T>` またはスライス `&[T]` の値 `v` の各要素への共有参照を、先頭から順にちょうど
+1 度ずつ渡す反復子である。
+
+**DEF Iterator::all と any**
+`it.all(f)` は、`it` が渡すすべての要素について `f` が真を返すとき真であり、`f` が偽を返す要素が 1 つでも
+あれば偽である。`it.any(f)` は、`it` が渡すいずれかの要素について `f` が真を返すとき真であり、どの要素に
+ついても偽なら偽である。どちらも判定を先頭から順に行い、答えが決まった時点で止める。
 
 **DEF Iterator::map と collect**
 `it.map(f)` は、`it` の各要素に `f` を適用した結果を並べる反復子である。`Vec` への `collect` は反復子の
@@ -171,9 +183,15 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 - `m.contains_key(&k)`、`s.contains(&k)` は、その鍵 (要素) を持つことと同値である。
 - `s.insert(k)` は、`s` が `k` を持たないときそれを加え、持つとき何もしない。どちらの場合も、ほかの要素は
   変わらず、要素が失われることはない。
+- `m.get_mut(&k)` は、`m` が鍵 `k` を持つときその値への可変参照を `Some` で返し、持たないとき `None` を
+  返す。
+- `m.remove(&k)` は、`m` が鍵 `k` を持つときその鍵とその値を取り除き、持たないとき何も変えない。どちらの
+  場合も、`k` 以外の鍵とその値は変わらない。
 - `m.entry(k).or_default()` は、`m` が鍵 `k` を持たないとき `(k, V::default())` を加え、いずれの場合も
   `k` の値への可変参照を返す。ほかの鍵とその値は変わらず、鍵が失われることはない。
-- `&m` の反復は `m` の各 (鍵, 値) の対をちょうど 1 度ずつ渡す。順序は定めない。
+- `m.keys()` は `m` の各鍵への共有参照をちょうど 1 度ずつ渡す反復子であり、`m.keys().cloned()` は
+  その各鍵の複製をちょうど 1 度ずつ渡す。順序は定めない。
+- `&m` の反復と `m.iter()` はどちらも `m` の各 (鍵, 値) の対をちょうど 1 度ずつ渡す。順序は定めない。
 
 **DEF collect into Map と Set**
 `it.collect::<Map<K, V>>()` は、空の `Map` に `it` の各要素 `(k, v)` を `insert` で順に加えたものである。
@@ -283,23 +301,25 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
       要求する理由である。** `covers` を落とすと、`R1` が持たない鍵を `R2` が持つとき `expect` が発火し、
       `R2` の値が `R1` の値を超えるとき減算が underflow する。
   BY CODE src/rc_ir/ownership.rs: References::subtract, CODE src/rc_ir/ownership.rs: References::covers,
-     DEF Map と Set
+     DEF Map と Set, DEF Iterator::all と any
 <1>4. `References::covers(other)` は、`other` のどの鍵についても、自分がその鍵を持ちその値以上であることを
       言う。各鍵の値が 1 以上のとき、これは各オブジェクトの個数の不等式、すなわち `other ⊆ self` と同値で
       ある (`other` が持たないオブジェクトの個数は 0 で、不等式は自動的に成り立つ)。よって 2 が成り立つ。
       また `covers` が真のとき、<1>3 より引き算は panic せず結果は `self - other` である。`R1 - R2` の各
       オブジェクトの個数は `R1` のそれ以下なので `R1 - R2 ⊆ R1` である。よって 4 が成り立つ。
-  BY CODE src/rc_ir/ownership.rs: References::covers, <1>3, DEF Map と Set
+  BY CODE src/rc_ir/ownership.rs: References::covers, <1>3, DEF Map と Set, DEF Iterator::all と any
 <1>5. `References::is_empty()` は内側の `Map` が空であることを言う。各鍵の値が 1 以上の `References` に
       ついて、これは参照を 1 つも持たないことと同値である。よって 1 が成り立つ。
   BY CODE src/rc_ir/ownership.rs: References::is_empty, <1>1, <1>3
-<1>6. `References::shares_an_object(other)` は `other` の鍵のいずれかが自分の鍵であることを言い、
-      `References::names(object)` は `object` が自分の鍵であることを言い、`References::objects()` は
-      自分の鍵を 1 度ずつ並べた列を返す。各鍵の値が 1 以上の `References` について、鍵であることと
-      その参照を 1 つ以上持つことは同値である。よって 3 が成り立つ。
+<1>6. `References::shares_an_object(other)` の本体は `other.0.keys().any(|object| self.0.contains_key(object))`
+      であり、`other` の鍵のいずれかが自分の鍵であることを言う。`References::names(object)` の本体は
+      `self.0.contains_key(object)` であり、`object` が自分の鍵であることを言う。`References::objects()` の
+      本体は `self.0.keys().cloned().collect()` であり、DEF Map と Set より自分の各鍵の複製をちょうど
+      1 度ずつ渡す反復子を `Vec` に並べたもの、すなわち自分の鍵を 1 度ずつ並べた列を返す。各鍵の値が 1 以上の
+      `References` について、鍵であることとその参照を 1 つ以上持つことは同値である。よって 3 が成り立つ。
   BY CODE src/rc_ir/ownership.rs: References::shares_an_object,
      CODE src/rc_ir/ownership.rs: References::names, CODE src/rc_ir/ownership.rs: References::objects,
-     <1>1, <1>3
+     <1>1, <1>3, DEF Map と Set, DEF Iterator::all と any, DEF Iterator::map と collect
 <1>7. 走査が扱う `References` の値は、`CancelAnalysis::acted_references` が返したもの、それを `subtract`
       で減らしたもの、およびそれらの複製だけである。
   BY CODE src/rc_ir/ownership.rs: References (フィールドは非公開なので `ownership` の外では作れない),
@@ -406,7 +426,8 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
         `Iterator::map` と `collect` は要素数を保ち、`MatchArm::with_body` は `body` だけを差し替えた
         `MatchArm` を返す。
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
-       CODE src/rc_ir/ast.rs: MatchArm::with_body, DEF Iterator::map と collect
+       CODE src/rc_ir/ast.rs: MatchArm::with_body, DEF Vec::iter と slice::iter,
+       DEF Iterator::map と collect
   <2>2. ほかの腕は `RcRhs::Match` を作らない。`RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕が作る
         右辺は `RcRhs::App` であり、`RcExpr::Let(x, rhs, k)` の腕は `rhs.clone()` をそのまま運ぶ。
         `match` の腕はこの順に並んでいるので、この第 3 の腕に落ちる `rhs` は `RcRhs::Match` ではなく、
@@ -445,7 +466,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
         本体は `arms[i].body` について `rename_expr` が返した木である。残る 4 変位 (`Var`、`App`、
         `Closure`、`Llvm`) は `Match` を作らず、アームを持たない。
     BY CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/ast.rs: RcRhs,
-       DEF Iterator::map と collect
+       DEF Vec::iter と slice::iter, DEF Iterator::map と collect
   <2>5. QED
     木 `N(body)` の構造についての帰納法で示す。DEF 部分木 より子は真の部分木なので、この帰納法は整礎で
     ある。<2>2 より `rename_expr(n, renaming)` は `rename_expr_inner(n, renaming)` の値である。<2>3 と
@@ -565,7 +586,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
           `self.rewrite` の各呼び出しが返した木の根だけである (DEF 部分木)。
       BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
          CODE src/rc_ir/ast.rs: MatchArm::with_body, CODE src/rc_ir/ast.rs: MatchArm, DEF 部分木,
-         DEF Iterator::map と collect
+         DEF Vec::iter と slice::iter, DEF Iterator::map と collect
     <3>3. `RcExpr::Let(x, rhs, k)` の腕は `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。
           `rhs.clone()` は木の位置を持ち込まない。この腕に落ちる `rhs` は `RcRhs::Match` ではなく
           (`match` の腕はこの順に並んでいる)、`Match` でない右辺を持つ `Let` 節点の子は継続だけだから
@@ -720,7 +741,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
        CODE src/rc_ir/ownership.rs: References::objects,
        CODE src/rc_ir/ownership.rs: destructure_consumes, CODE src/misc.rs: Map, CODE src/misc.rs: Set,
-       DEF IntoIterator と for
+       DEF IntoIterator と for, DEF Vec::iter と slice::iter
   <2>2. <2>1 の 9 つの本体は、`self.walk(...)` も `self.walk_inner(...)` も持たない。さらに、`borrow.rs`
         で定義された関数としてはこの 9 つしか呼ばない --- `consume` が `consume_objects` を、`consume_rhs`
         が `consume` を呼ぶほかは、9 つの本体が呼ぶのはすべて `borrow.rs` の外の項目である。
@@ -783,7 +804,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
          <1>2
     <3>2. `Iterator::map` の閉包は `collect` によって各要素についてちょうど 1 回、先頭から順に呼ばれる。
           よって <3>1 の `self.walk(&arm.body, ・, ・)` は `arms` の各要素についてちょうど 1 回である。
-      BY DEF Iterator::map と collect
+      BY DEF Vec::iter と slice::iter, DEF Iterator::map と collect
     <3>3. `n` の子は `arms` の各 `arm.body` と `k` であり、`N(n)` は `{n}` とそれらの部分木の非交和で
           ある。
       BY DEF 部分木
@@ -855,7 +876,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       満たす要素の添字のうち最大のものを `Some` で返し、そのような要素が無ければ `None` を返す。
       `let Some(index) = ... else { return UnBump::NoBracket; };` により、`None` のとき `NoBracket` を
       返す。この文までに `pending` を変える操作は無い。
-  BY CODE src/rc_ir/borrow.rs: un_bump, DEF Iterator::rposition
+  BY CODE src/rc_ir/borrow.rs: un_bump, DEF Vec::iter と slice::iter, DEF Iterator::rposition
 <1>2. `let innermost = &mut pending[index];` は添字 `index` の要素への可変参照である。
       `if !innermost.outstanding.covers(un_bumped) { return UnBump::OutsideBracket; }` により、`covers`
       が偽のとき `OutsideBracket` を返す。この文までに `pending` を変える操作は無い。
@@ -898,7 +919,8 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       `self.needed_retains` に入れるのは偽を返す枝でだけであり、その枝を通るのは
       `objects.iter().any(...)` が真の要素である。この関数はほかに `pending` にも `needed_retains` にも
       触れない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, DEF Vec::retain
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, DEF Vec::retain,
+     DEF Vec::iter と slice::iter, DEF Iterator::all と any
 <1>2. `consume(pending, var, path)` は `origin(self.vars, self.type_env, var, path).acted_on()` から
       `objects` を作り、`self.consume_objects(pending, &objects)` を 1 回呼ぶ。ほかに `pending` に
       触れない。`origin` と `Origin::acted_on` は `pending` を引数に取らない。
@@ -949,12 +971,12 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       よって 1 が成り立つ。外側の `collect` の行き先は `Vec` なので、DEF Iterator::map と collect より
       `arm_states` は `arm_exits` と同じ長さで、第 `j` 要素は `arm_exits[j]` から作られる。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, 本補題の仮定, DEF collect into Map と Set,
-     DEF Iterator::map と collect
+     DEF Vec::iter と slice::iter, DEF Iterator::map と collect
 <1>2. `entered_with` は `pending_in.iter().map(|retain| retain.node).collect()` である。行き先は
       `Set<NodeId>` なので、DEF collect into Map と Set より `entered_with` の要素の集合は
       `pending_in` の各要素の `node` の集合に等しい。よって 2 が成り立つ。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF collect into Map と Set,
-     DEF Iterator::map と collect
+     DEF Vec::iter と slice::iter, DEF Iterator::map と collect
 <1>3. 3 が成り立つ。
   <2>1. 反復は `for states in &arm_states { for (&retain, &outstanding) in states { ... } }` であり、
         `outstanding` は `states` すなわちある `arm_states[j]` の `retain` の値である。`is_uniform` は
@@ -963,7 +985,8 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
         この等式は `References` の `PartialEq` による値の比較である (DEF 参照の多重集合)。`other.get`
         は、`other` がその鍵を持つときその値への共有参照を `Some` で、持たないとき `None` を返す
         (DEF Map と Set)。
-    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF 参照の多重集合, DEF Map と Set
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF 参照の多重集合, DEF Map と Set,
+       DEF Vec::iter と slice::iter, DEF Iterator::all と any
   <2>2. 第 1 の連言肢 `entered_with.contains(&retain)` は `retain` だけで決まる。
     BY <2>1
   <2>3. CASE すべての `j'` について `arm_states[j']` が `retain` を鍵に持ち、その値が互いに等しい。
@@ -1012,7 +1035,8 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       あり、そのときの値は `uniform` のその鍵の値である。作られる要素は `node` が元の要素の `node`、
       `outstanding` が `uniform[node]` と等しい `References` である (DEF Clone)。`merge` はほかに返り値を
       作らない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF Iterator::filter_map, DEF Map と Set, DEF Clone
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF Vec::iter と slice::iter,
+     DEF Iterator::filter_map, DEF Map と Set, DEF Clone
 <1>8. `arm_states` の各表と `pending_in` の反復について、`arm_states` の表は `Map` (ハッシュ表) なので
       反復の順序は定まらないが、<1>3 により `is_uniform` は反復の順序によらず、<1>4 により `uniform` は
       要素を失わないので、`uniform` の最終的な内容は反復の順序によらない。返り値は `pending_in` の順序で
@@ -1153,9 +1177,11 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
   BY L8a, <1>0a, <1>0b, DEF 基本操作
 <1>1. 帰納法の仮定: この状態より前に作られたすべての状態について `INV` が成り立つ。
   BY 帰納法の仮定
-<1>2. CASE 状態が「初期」で作られた。`PendingRetains::default()` は `Vec` の `default()` すなわち空の
-      `Vec` である。(i) から (iv) はどれも `P` の要素についての全称なので、空虚に成り立つ。
-  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: PendingRetains, DEF INV
+<1>2. CASE 状態が「初期」で作られた。`PendingRetains` は `Vec<PendingRetain>` の別名なので、
+      `PendingRetains::default()` は DEF Vec::default より要素を 1 つも持たない `Vec` である。
+      (i) から (iv) はどれも `P` の要素についての全称なので、空虚に成り立つ。
+  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: PendingRetains, DEF Vec::default,
+     DEF INV
 <1>3. CASE 状態が「複製」で作られた。DEF Clone より `pending.clone()` は元の状態と同じ長さで、第 `i`
       要素の `node` は元の第 `i` 要素の `node` と等しく、第 `i` 要素の `outstanding` は元の
       `outstanding` と等しい。(ii)、(iii)、(iv) は値だけで決まるので、<1>1 より成り立つ。(i) は
@@ -1373,16 +1399,21 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
        DEF 基本操作, <1>8
   <2>2. (e3) の子はアームごとに 1 つずつ選べるので有限個であり、L4 より 1 つ以上ある。
     BY L4, <1>8
-  <2>2a. 展開に無限の道は無い。除去事象 `E` にその事象が作る状態 `P'(E)` を対応させると、<2>1 より
-         (e3) の各子 `E'` について `P'(E')` は `P'(E)` より生成順序で真に前にある。展開の無限の道が
-         在れば、生成順序の無限の下降列ができる。L8a の 3 より生成順序は整礎なので、そのような列は無い。
+  <2>2a. 除去事象 `E` にその事象が作る状態 `P'(E)` を対応させると、<2>1 より (e3) の各子 `E'` について
+         `P'(E')` は `P'(E)` より生成順序で真に前にある。L8a の 3 よりこの実行が作る状態の上の生成順序は
+         整礎なので、この対応を通した整礎帰納法が展開の節点の上で使える。
     BY L8a, <2>1
+  <2>2b. 各除去事象 `E` について、`E` を根とする展開は有限の木である。<2>2a の整礎帰納法による。`E` に
+         子が付かないとき、展開は 1 節点の木である。子が付くとき、<2>2 よりその個数は有限であり、<2>1 と
+         <2>2a よりどの子も `E` より生成順序で真に前にあるので、帰納法の仮定より各子を根とする展開は
+         有限の木である。有限個の有限の木の上に根を 1 つ置いたものは有限の木である。
+    BY <2>1, <2>2, <2>2a
   <2>3. QED
-    <2>2a より展開に無限の道は無く、<2>2 より分岐は有限なので、展開は有限の木である。<1>5 より除去事象を
-    起こしうる基本操作は「消費」「引き」「併合」の 3 つで尽き、<1>6、<1>7、<1>8 がその 3 つについて
-    それぞれ (e2)、(e1)、(e2) または (e3) を与えるので、各除去事象は (e1)、(e2)、(e3) のいずれかである。
-    <2>2 より (e3) の節点は子を 1 つ以上持つので、葉は (e1) か (e2) である。
-    BY <2>1, <2>2, <2>2a, <1>5, <1>6, <1>7, <1>8
+    <1>5 より除去事象を起こしうる基本操作は「消費」「引き」「併合」の 3 つで尽き、<1>6、<1>7、<1>8 が
+    その 3 つについてそれぞれ (e2)、(e1)、(e2) または (e3) を与えるので、各除去事象は (e1)、(e2)、(e3) の
+    いずれかである。<2>2b より展開は有限の木であり、<2>2 より (e3) の節点は子を 1 つ以上持つので、葉は
+    (e1) か (e2) である。
+    BY <2>1, <2>2, <2>2a, <2>2b, <1>5, <1>6, <1>7, <1>8
 <1>10. QED
   <1>5 より除去事象は「消費」「引き」「併合」のいずれかであり、<1>6、<1>7、<1>8 がそれぞれ (e2)、(e1)、
   (e2) または (e3) を与える。<1>9 が (e3) の展開について述べる。
@@ -1454,7 +1485,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
       `cancel_body` の 1 回の実行の中で走査が作った状態である (DEF 基本操作)。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
-     DEF 訪問, DEF 基本操作, DEF Iterator::map と collect
+     DEF 訪問, DEF 基本操作, DEF Vec::iter と slice::iter, DEF Iterator::map と collect
 <1>1. L9 の (iii) を各 `arm_exits[j]` に適用すると、L7 の仮定が満たされる。<1>0 より各 `arm_exits[j]` は
       走査が作った状態なので、L9 が当たる。以下 L7 の 1 から 6 を使う。
   BY <1>0, L9, L7
