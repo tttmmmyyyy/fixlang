@@ -547,6 +547,7 @@ impl LiftedLambdas {
 
     // Remember the value a capture list of `cap`'s type constructor carries, and hold that type
     // constructor until it is registered.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn record_capture_list(&mut self, cap: &CaptureStruct, tree: &ClosureTree) {
         self.trees.insert(cap.tycon.name.clone(), tree.clone());
         self.new_tycons

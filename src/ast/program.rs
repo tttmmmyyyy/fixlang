@@ -146,6 +146,7 @@ impl TypeEnv {
     /// Adds each declaration of `new_tycons` to this environment, replacing the one already held
     /// under the same name, each with its field types unwrapped, so that a declaration minted after
     /// the newtype-unwrapping pass answers as the ones that were there before it do.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
         let declared_type_env = self.clone();
         let mut tycons = self.tycons.as_ref().clone();
@@ -918,6 +919,7 @@ impl Program {
     /// giving each type variable written on the right-hand side of a definition its kind. A name
     /// two definitions declare is reported as an error, and the second definition is left out of
     /// the environment.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn calculate_type_env(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let mut tycons = bulitin_tycons();
@@ -2709,6 +2711,7 @@ impl Program {
     /// Validates the definition of every type the program declares: the type variables it writes,
     /// the associated types written in the types it gives its fields, the field it declares twice,
     /// and the number of variants a union declares.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate_type_defns(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for type_defn in &self.type_defns {

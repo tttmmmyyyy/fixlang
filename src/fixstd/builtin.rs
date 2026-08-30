@@ -313,6 +313,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret
 }
 
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_arrow_name_abs() -> FullName {
     let mut name = FullName::from_strs(&[STD_NAME], ARROW_NAME);
     name.set_absolute();
@@ -320,6 +321,7 @@ pub fn make_arrow_name_abs() -> FullName {
 }
 
 // The type constructor of function types: `a -> b` is this constructor applied to `a` and `b`.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_arrow_tycon() -> TyCon {
     TyCon::new(make_arrow_name_abs())
 }
@@ -362,11 +364,12 @@ pub fn make_functor_name() -> FullName {
     FullName::from_strs(&[STD_NAME], FUNCTOR_NAME)
 }
 
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_funptr_name(arity: u32) -> Name {
     format!("{}{}", FUNPTR_NAME, arity)
 }
 
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_funptr_tycon(arity: u32) -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))
 }
@@ -380,7 +383,7 @@ pub fn make_array_name() -> FullName {
 }
 
 // If given tycon is function pointer, returns its arity
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
     if tc.name.namespace != NameSpace::new(vec![STD_NAME.to_string()]) {
         return None;
@@ -417,6 +420,7 @@ pub fn make_punched_array_tycon() -> TyCon {
 }
 
 // Returns whether given tycon is a punched array (`Std::PunchedArray`).
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_punched_array_tycon(tc: &TyCon) -> bool {
     *tc == make_punched_array_tycon()
 }
@@ -4312,6 +4316,7 @@ pub struct InlineLLVMStructGetBody {
 
 impl InlineLLVMStructGetBody {
     /// The index of the field this operation reads.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn field_index(&self) -> usize {
         self.field_idx
     }
@@ -6159,6 +6164,7 @@ pub struct InlineLLVMMakeUnionBody {
 
 impl InlineLLVMMakeUnionBody {
     /// The index of the variant this operation constructs.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn variant_index(&self) -> usize {
         self.field_idx
     }
@@ -6342,6 +6348,7 @@ pub struct InlineLLVMUnionAsBody {
 
 impl InlineLLVMUnionAsBody {
     /// The index of the variant whose payload this operation reads.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn variant_index(&self) -> usize {
         self.field_idx
     }

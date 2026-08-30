@@ -1237,7 +1237,18 @@ TypeNode::is_ground`)、部分適用された tycon は ground である。`decl
 `is_fully_unboxed` はその降下の上の再帰であり、途中の各型で `toplevel_tycon_info` を呼ぶので、
 到達する型の側にも同じことが要る。これが無いと `boxed_leaf_paths` も `rc_units` も停止しない。
 
-**`unpunched_field_types` を繰り返し取って到達する型についても同じことが成り立ち、その歩みは有限である。**
+**`declared_field_types` の `assert!(merge_ok)` を通しているのは `TypeDefn::validate_tyvars` である。**
+`Program::validate_type_defns` がすべての型宣言に掛け、`elaborate` が `?` で無条件に呼ぶので新しい仮定は
+要らないが、この節が立つのはそこである。
+
+**`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が
+`type_env` にある -- がすべて成り立ち、その歩みは有限である。さらに、到達する各型について
+`instance_field_types` が行う newtype の展開 (`unwrap_newtypes_memoized`) は abort せず停止する。**
+最後の節が別に要るのは、その展開が ground・飽和・`type_env` の 3 つからは出ない abort の面を持つから
+である -- 添字付け、`declared_field_types` の第 0 成分、`Type::AssocTy` の `unimplemented!`、そして再帰の
+停止性である。展開が走るのは tycon が kind `*` でない型変数を持つときに限る
+(`CODE src/ast/types.rs: TypeNode::instance_field_types`)。果たしうるのは `unwrap_newtype` パスと
+`validate_type_defns` だが、**証明していない**。
 `no_size_in_place` の降下は unbox のフィールドだけを辿るのに対し、`unit_step` の `Fields` の腕と
 `subtree_type` / `truncate_to_unit` はフィールドの型を boxed であっても取るので、こちらの方が広い。
 P1 の定義域はこの広い方であり、型の歩みを扱う命題が P1 を部分木の型に当てるのはこの節による。有限性を

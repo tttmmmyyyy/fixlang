@@ -181,6 +181,7 @@ impl TypeDefn {
         ret
     }
 
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate_tyvars(&self) -> Result<(), Errors> {
         // Check if type variables are not duplicated.
         let mut names = Set::<String>::default();

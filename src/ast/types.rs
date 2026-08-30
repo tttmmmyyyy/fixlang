@@ -352,6 +352,7 @@ impl TyCon {
     /// # Arguments
     /// * `punched_at` — the position of the field made the hole, counted from 0 in the order the
     ///   fields are declared.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn into_punched_type_name(&mut self, punched_at: usize) {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
@@ -824,6 +825,7 @@ impl TypeNode {
 
     /// A copy of this application with `fun` as the type being applied, keeping the argument.
     /// Panics for a type that is not a type application.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_tyapp_fun(&self, fun: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -838,6 +840,7 @@ impl TypeNode {
 
     /// A copy of this application with `arg` as the argument, keeping the type being applied.
     /// Panics for a type that is not a type application.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_tyapp_arg(&self, arg: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -866,6 +869,7 @@ impl TypeNode {
 
     /// A copy of this associated type application applied to `args`, keeping the name. Panics for
     /// a type that is not an associated type application.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_assocty_args(&self, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -1105,6 +1109,7 @@ impl TypeNode {
     /// applied to arguments and substituting for one leaves every application spine as it stands;
     /// the field types a declaration is stored with are unwrapped once, by the pass that unwraps
     /// newtypes.
+    // PROOF: D/A, P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn instance_field_types(
         &self,
         tycon_info: &TyConInfo,
@@ -1125,7 +1130,7 @@ impl TypeNode {
     /// substituted for the declaration's type variables. The types are as the declaration writes
     /// them, so one can name a newtype the program has unwrapped; `instance_field_types` answers
     /// with the types values are built at.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn declared_field_types(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_arguments();
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
@@ -1190,6 +1195,7 @@ impl TypeNode {
 
     /// The arguments applied to this type's head, in the order they are applied: `f a b c` gives
     /// `vec![a, b, c]`.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn collect_type_arguments(&self) -> Vec<Arc<TypeNode>> {
         let mut ret: Vec<Arc<TypeNode>> = vec![];
         match &self.ty {
@@ -1368,6 +1374,7 @@ impl TypeNode {
 
     /// Whether the top-level type constructor of this type satisfies `pred`. A type variable and an
     /// associated type application have no such constructor, and satisfy nothing.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn toplevel_tycon_satisfies(&self, pred: impl FnOnce(&TyCon) -> bool) -> bool {
         match self.toplevel_tycon() {
             Some(tc) => pred(tc.as_ref()),
@@ -1384,7 +1391,7 @@ impl TypeNode {
 
     /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
     /// arguments that carries no captured value.
-    // PROOF: P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_funptr(&self) -> bool {
         self.toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())
     }
@@ -1401,7 +1408,7 @@ impl TypeNode {
     }
 
     /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_punched_array(&self) -> bool {
         self.toplevel_tycon_satisfies(is_punched_array_tycon)
     }
@@ -1441,7 +1448,7 @@ impl TypeNode {
     /// Whether the top-level type constructor of this type is a union, so that a value of it
     /// carries one of the declared fields and a tag saying which.
     /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
-    // PROOF: P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_union(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
