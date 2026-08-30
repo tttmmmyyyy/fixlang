@@ -653,6 +653,9 @@ initialized and its remaining fields left undefined for the caller to fill in」
         `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
         `insert_field(CLOSURE_CAPTURE_IDX, cap_obj_ptr)` に `get_scoped_obj(cap_name)` の値を入れる。
         `free_vars_mut` は `[x_name, f_name, cap_name]` を返すので `cap` はこの節点のオペランドである)
+        `CODE src/generator.rs: Scope::push_local` (局所の束縛は `retain_on_read: false` で積まれる)
+        `CODE src/generator.rs: Generator::get_scoped_obj` (`retain_on_read` が偽のとき retain を
+        出さない)
       `<4>5.` QED
         `<4>1` が 8 種すべてについてオペランドの参照を `<3>1` に帰し、`<4>2` から `<4>4` が、渡す値が
         オペランドでない場合を `<3>1` と `<3>4a` に帰する。
