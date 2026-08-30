@@ -374,8 +374,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `PUNCHED_TYPE_SYMBOL` (`"#PunchedAt"`) と添字を継いだ穴つきの形。`self.type_defns` に
        `TypeDefn` を積むのは `Program::add_type_defns` と `Program::add_tuple_defn` の 2 つで
        あり、前者を呼ぶのは `parse_module`、`make_std_mod`、`Program::link` の 3 つである。
-       `Program::link` が渡すのは別の `Program` の `type_defns` なので、名前の出どころは次の 3 つで
-       尽きる。`parse_type_defn` が作る宣言の名前は文法の `type_name`、すなわち `capital_name` に
+       `Program::link` が渡すのは別の `Program` の `type_defns` なので、リンクの回数についての
+       帰納で、名前の出どころは次の 3 つで尽きる。`type_decl.tycon()` はその名前を包むだけで
+       ある。`parse_type_defn` が作る宣言の名前は文法の `type_name`、すなわち `capital_name` に
        当たる文字列なので、ASCII の大文字で始まる。`add_tuple_defn` が積む `tuple_defn(n)` の名前は
        `Std::Tuple{n}` である。`make_std_mod` が `Std::FFI` の下に積むのは `TypeDeclValue::Alias` で
        あり、`calculate_type_env` はそれを `aliases` に入れる。積んだ後に `TypeDefn` を書き替える
@@ -408,6 +409,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        CODE src/fixstd/builtin.rs: tuple_defn, CODE src/fixstd/stdlib.rs: make_std_mod,
        CODE src/ast/typedecl.rs: TypeDefn::resolve_namespace,
        CODE src/ast/typedecl.rs: TypeDefn::resolve_type_aliases,
+       CODE src/ast/typedecl.rs: TypeDefn::tycon,
        CODE src/ast/program.rs: TypeEnv::add_tycons,
        CODE src/ast/types.rs: TyCon::into_punched_type_name,
        CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, CODE src/constants.rs: CAP_LIST_PREFIX,
