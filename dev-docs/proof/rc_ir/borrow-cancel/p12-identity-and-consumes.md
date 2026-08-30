@@ -198,8 +198,14 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
 
 ## L0 (`origin` は `origin_inner` の値を返す)
 
-**言明**。`vars` と `type_env` を固定すると、`origin(vars, type_env, x, π)` は `(x, π)` の関数として定まり、
-その値は `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが返した値である。
+**言明**。`vars` と `type_env` を固定すると、次の 2 つが成り立つ。**鍵**とは `origin` の第 3・第 4 引数の
+対 `(x, π)` であり、鍵 `(x, π)` の **cold な呼び出し**とは、`origin(vars, type_env, x, π)` の呼び出しの
+うち `origin_inner` を評価するものである。
+
+- **(a)** `origin(vars, type_env, x, π)` は `(x, π)` の関数として定まり、その値は
+  `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが返した値である。
+- **(b)** 鍵 `(x, π)` について `origin` の呼び出しが 1 つでも在るならば、その鍵の cold な呼び出しは
+  ちょうど 1 つ在る。
 
 <1>1. `origin` は、`vars.origins` に鍵 `(x, π)` の記録があればその値を返し、無ければ
       `grow_stack(|| origin_inner(vars, type_env, x, π))` の値を鍵 `(x, π)` で記録して返す。
@@ -224,9 +230,21 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
     記録である。
     BY <2>1, <2>2
 
-<1>3a. 鍵 `(x, π)` について `<1>1` の記録は高々 1 度しか書かれない。
+<1>3a. 鍵 `(x, π)` について、cold な呼び出しは高々 1 つであり、`<1>1` の記録も高々 1 度しか書かれない。
   <2>1. 記録は取り除かれない。`<1>3` より `origins` を変更するのは `<1>1` の `insert` だけである。
     BY <1>3
+  <2>1a. P2 は、この `vars` を引数に取る `origin` のどの呼び出しについても停止を与える。
+    P2 は、`x` がプログラムの束縛変数であるか `vars.bindings` に束縛を持たない名前であるような
+    すべての `(x, π)` について、`π` を問わず `origin(vars, type_env, x, π)` が停止すると述べる。
+    `vars.bindings` に記録を持つ名前は `VarTable::of` と `collect_bindings` が記録する名前、すなわち
+    この本体のパラメータ・capture と束縛変数であって、どれもプログラムの束縛変数である。記録を持たない
+    名前は P2 の第 2 の節に当たる。
+    BY P2, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+  <2>1b. 鍵 `(x, π)` の cold な呼び出しの全体は、その鍵の記録を書く呼び出しの全体に等しい。
+    `<1>1` より、記録を書くのは自分の検査で記録を見つけなかった呼び出し、すなわち `origin_inner` を
+    評価する呼び出しであり、書き込みは `origin_inner` が返った後、その呼び出しが返る直前にある。
+    `<2>1a` より cold な呼び出しは返るので、その書き込みに着く。
+    BY <1>1, <2>1a
   <2>2. 1 つの `vars` を引数に取る 2 つの `origin` の呼び出しが別々のスレッドの上にあるならば、その
         2 つの実行区間は互いに素である。
     <3>1. 1 つの `VarTable` への参照を 2 つのスレッドが同時に持つことはない。`VarTable` は
@@ -318,23 +336,81 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
     段からなり、その中で始まる呼び出しは有限個なので、`A` は返らない。
     BY <2>4a
   <2>5. QED
-    鍵 `(x, π)` の記録を書く呼び出しが 2 つあるとすると、`<2>4` より一方 `C` が他方 `C'` の
-    `origin_inner` の評価の中で始まり、どちらも記録を見つけない同じ鍵の呼び出しである。すなわち
-    `(C', C)` は `<2>4a` の意味の対であり、`<2>4b` より `C'` は返らない。P2 は、`x` がプログラムの
-    束縛変数であるか `vars.bindings` に束縛を持たない名前であるようなすべての `(x, π)` について、
-    `π` を問わず `origin(vars, type_env, x, π)` が停止すると述べる。`vars.bindings` に記録を持つ名前は
-    `VarTable::of` と `collect_bindings` が記録する名前、すなわちこの本体のパラメータ・capture と
-    束縛変数であって、どれもプログラムの束縛変数である。記録を持たない名前は P2 の第 2 の節に当たる。
-    よって P2 はどの `(x, π)` にも当たり、`C'` は返る。ゆえに記録を書く呼び出しは高々 1 つである。
-    BY P2, <2>4, <2>4a, <2>4b,
-       CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+    鍵 `(x, π)` の cold な呼び出しが 2 つあるとすると、`<2>1b` よりどちらも記録を書くので、`<2>4` より
+    一方 `C` が他方 `C'` の `origin_inner` の評価の中で始まり、どちらも記録を見つけない同じ鍵の
+    呼び出しである。すなわち `(C', C)` は `<2>4a` の意味の対であり、`<2>4b` より `C'` は返らない。
+    これは `<2>1a` に反する。ゆえに cold な呼び出しは高々 1 つであり、`<2>1b` より記録を書く呼び出しも
+    高々 1 つである。
+    BY <2>1a, <2>1b, <2>4, <2>4a, <2>4b
+
+<1>3b. 鍵 `(x, π)` について `origin` の呼び出しが 1 つでも在るならば、その鍵の cold な呼び出しは
+       少なくとも 1 つ在る。
+  `<1>1` より、鍵 `(x, π)` の記録を書くのはその鍵についての `origin` の呼び出しのうち検査で記録を
+  見つけなかったものだけであり、`<1>3` より `origins` を変更するのはその書き込みだけである。よって、
+  その鍵の `origin` の呼び出しのうち時間の上で最初のものの検査の時点には、その鍵の記録が無い。`<1>1` より
+  その呼び出しは `origin_inner` を評価する、すなわち cold である。
+  BY <1>1, <1>3
 
 <1>4. QED
-  `<1>1` より返り値は、記録の値か、いま行った `grow_stack(|| origin_inner(..))` の値である。`<1>2` より
-  後者は `origin_inner(vars, type_env, x, π)` の値であり、`<1>3` より前者もある時点の同じ呼び出しの値で
-  ある。`<1>3a` より鍵 `(x, π)` について記録は高々 1 度しか書かれないので、同じ `(x, π)` についてどの
-  呼び出しも同じ値を返す。
-  BY <1>1, <1>2, <1>3, <1>3a
+  (a) について。`<1>1` より返り値は、記録の値か、いま行った `grow_stack(|| origin_inner(..))` の値で
+  ある。`<1>2` より後者は `origin_inner(vars, type_env, x, π)` の値であり、`<1>3` より前者もある時点の
+  同じ呼び出しの値である。`<1>3a` より鍵 `(x, π)` について記録は高々 1 度しか書かれないので、同じ
+  `(x, π)` についてどの呼び出しも同じ値を返す。(b) について。`<1>3a` が高々 1 つを、`<1>3b` が
+  少なくとも 1 つを与える。
+  BY <1>1, <1>2, <1>3, <1>3a, <1>3b
+
+## L0a (鍵の関係は整礎である)
+
+**DEF 鍵の関係**
+鍵 `k = (x, π)` と `k' = (y, σ)` について、**`k ⇝ k'`** とは、`origin_inner(vars, type_env, x, π)` の
+評価が `origin(vars, type_env, y, σ)` の呼び出しを**直接**行うことをいう。「直接」とは、その呼び出しが
+`origin_inner` の本体 (それが呼ぶ `origin_from_leaves_under` の中を含む) が行うものであって、別の
+`origin` の呼び出しの実行区間の中で始まるものではないことをいう。
+
+**言明**。鍵 `k_0` について `origin` の呼び出しが在るとき、`k_0` から始まる `⇝` の無限列
+`k_0 ⇝ k_1 ⇝ k_2 ⇝ …` は無い。すなわち `k_0` から `⇝` で到達できる鍵の上で `⇝` は整礎であり、それに
+ついての帰納法が使える。
+
+**この補題が要るのは `origin` が memo を持つからである。** `origin(y, σ)` が memo に当たれば
+`origin_inner` を評価せず、下位の呼び出しを 1 つも始めない。よって「呼び出しの中で始まる呼び出し」と
+いう動的な関係は `⇝` と一致せず、動的な関係の整礎性からは `⇝` の整礎性が出ない。
+
+<1>1. `origin(vars, type_env, x, π)` は、`vars.origins` に鍵 `(x, π)` の記録があればその値を返し、
+      無ければ `origin_inner` を評価し、その値を鍵 `(x, π)` で記録してから返す。すなわち鍵 `(x, π)` の
+      記録を書くのはその鍵の cold な呼び出しだけであり、書き込みはその呼び出しが返る直前にある。
+  BY CODE src/rc_ir/ownership.rs: origin
+
+<1>2. `k ⇝ k'` であり `k` の cold な呼び出し `C(k)` が在るならば、`k'` の cold な呼び出し `C(k')` が
+      ちょうど 1 つ在り、`C(k')` は `C(k)` より前に返る。
+  <2>1. `C(k)` は `origin_inner` を評価し、DEF 鍵の関係 よりその評価は `origin(k')` の呼び出し `B` を
+        直接行う。`B` の実行区間は `C(k)` の実行区間に含まれる。
+    BY DEF 鍵の関係, L0 (b)
+  <2>2. `k'` の cold な呼び出し `C(k')` がちょうど 1 つ在る。`<2>1` より `origin(k')` の呼び出しが
+        在るので L0 (b) が当たる。
+    BY L0 (b), <2>1
+  <2>3. CASE `B` が記録を見つけない。
+    `<1>1` より `B` は `origin_inner` を評価するので `B` は `k'` の cold な呼び出しであり、`<2>2` の
+    一意性より `B = C(k')` である。`<2>1` より `B` は `C(k)` の実行区間に含まれるので、`C(k)` より前に
+    返る。
+    BY L0 (b), <1>1, <2>1, <2>2
+  <2>4. CASE `B` が記録を見つける。
+    `B` の検査の時点に鍵 `k'` の記録が在るので、それを書いた呼び出しが在る。`<1>1` よりそれは `k'` の
+    cold な呼び出しであり、`<2>2` の一意性よりそれは `C(k')` である。`<1>1` より書き込みは `C(k')` が
+    返る直前にあるので、`C(k')` は `B` の検査より前に返る。`<2>1` より `B` は `C(k)` の実行区間に
+    含まれるので、`B` の検査は `C(k)` が返るより前にある。よって `C(k')` は `C(k)` より前に返る。
+    BY L0 (b), <1>1, <2>1, <2>2
+  <2>5. QED
+    `<2>3` と `<2>4` は `B` が記録を見つけるか否かの 2 つの場合で尽きている。
+    BY <2>2, <2>3, <2>4
+
+<1>3. QED
+  無限列 `k_0 ⇝ k_1 ⇝ k_2 ⇝ …` が在るとする。前提より `k_0` について `origin` の呼び出しが在るので、
+  L0 (b) より `k_0` の cold な呼び出し `C(k_0)` が在る。`<1>2` を繰り返すと、各 `k_i` の cold な
+  呼び出し `C(k_i)` の無限列であって、`C(k_{i+1})` が `C(k_i)` より前に返るものが得られる。返る時点は
+  狭義に早くなっていくので、この列の呼び出しは互いに相異なる。ところが `C(k_0)` が返る時点までに
+  プロセスが実行した段は有限であり、1 つの呼び出しが返るのはそのうちの 1 つの段なので、`C(k_0)` が
+  返るより前に返る呼び出しは有限個である。矛盾。
+  BY L0 (b), <1>2
 
 ## L1b (変位アームは scrutinee の活性変位のアームである)
 
@@ -585,7 +661,7 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
 
 <1>4a. `origin(x, π)` の値は `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが返した値である。
       よって `origin_inner` の腕が返す式を読めば `origin` の値が決まる。
-  BY L0
+  BY L0 (a)
 
 <1>5. (E1) が成り立つ。
   <2>1. `origin_inner` の `Some(Binding::Move(y))` の腕は `origin(vars, type_env, &y.name, path)` を
@@ -743,18 +819,15 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 `Let(x, Var(g), k)` (`g` はグローバル値) の `(g, λ)` がそれであり、そこがこの再帰の終端の 1 つである
 (D6)。
 
-証明は、`origin` が `(x, λ)` から行う再帰呼び出しの関係の上の帰納法による。P2 は、`x` がプログラムの
-束縛変数であるか `vars.bindings` に束縛を持たない名前であるようなすべての `(x, π)` について `origin` が
-停止すると述べる。`vars.bindings` に記録を持つ名前は `VarTable::of` と `collect_bindings` が記録する
-名前、すなわちこの本体のパラメータ・capture と束縛変数であって、どれもプログラムの束縛変数である
-(`CODE src/rc_ir/ownership.rs: VarTable::of`, `VarTable::body_only`, `collect_bindings`)。記録を持たない
-名前は P2 の第 2 の節に当たる。よってこの再帰が渡るどの `(x, π)` についても `origin` は停止する。返る
-呼び出しの計算は有限の段からなり、その中で始まる呼び出しは有限個なので、無限に降りる呼び出しの列は無く、
-この関係は整礎である。
-以下、帰納法の仮定を「IH」と書く。
+証明は、DEF 鍵の関係 の `⇝` の上の帰納法による。`id(x, λ)` は `origin(x, λ)` の値であり、L0 (a) より
+その値はこの鍵についての `origin` の 1 回の呼び出しが返したものなので、この鍵について `origin` の
+呼び出しが在る。L0a より、この鍵から始まる `⇝` の無限列は無い。
+以下、帰納法の仮定を「IH」と書く。**IH を当てる各段は、当てる先の鍵が `(x, λ)` の `⇝` の像に入ることを
+併せて述べる。** `origin` は memo を持つので、`origin_inner` の腕が行う `origin` の呼び出しが下位の
+計算を始めるとは限らず、動的な呼び出しの入れ子ではこの帰納法は立たない。
 
 <1>1. `origin(x, λ)` の値は `origin_inner(vars, type_env, x, λ)` の 1 回の呼び出しが返した値である。
-  BY L0
+  BY L0 (a)
 
 <1>2. `origin_inner` の腕は、`vars.bindings.get(x)` の値について次の 6 本で尽きている。
       `None | Some(Param) | Some(Producer)`、`Some(Move(y))`、`Some(Join(arm_results))`、
@@ -842,9 +915,13 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     BY <1>5a, <2>1
 
 <1>7. CASE `Some(Move(y))`。
-  <2>1. `origin(x, λ) = origin(y, λ)` であり、よって `id(x, λ) = id(y, λ)` である。
-    この CASE の前提は `vars.bindings.get(x) = Some(Move(y))` である。
-    BY L2 (E1)
+  <2>1. `origin(x, λ) = origin(y, λ)` であり、よって `id(x, λ) = id(y, λ)` である。また
+        `(x, λ) ⇝ (y, λ)` である。
+    この CASE の前提は `vars.bindings.get(x) = Some(Move(y))` である。`origin_inner` の
+    `Some(Binding::Move(y))` の腕は `origin(vars, type_env, &y.name, path)` を直接呼ぶので、
+    DEF 鍵の関係 よりこの鍵は `(x, λ)` の `⇝` の像に入る。
+    BY DEF 鍵の関係, L2 (E1),
+       CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Move(y))` の腕
   <2>2. `(y, λ)` は `ρ` の位置である。
     A12 の move-bind の行より `ty(y) = ty(x)` なので `λ` は `ty(y)` の boxed leaf である。D9 の値の水準の
     第 1 行より `x` の値は `y` の値であり、D16 の inhabited は値で決まるので `λ` は `y` の値でも
@@ -855,7 +932,8 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     (DEF 辺の leaf 対応)。L1a (b) の `Move(y)` の行より、それは `ρ` の上で実行された辺である。
     BY L1, L1a, DEF 辺の leaf 対応, <2>2
   <2>4. QED
-    IH を `(y, λ)` に適用すると、`id(y, λ) = (w, σ)` について (i) と `obj(y, λ) = obj(w, σ)` が出る。
+    `<2>1` より `(y, λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。IH を `(y, λ)` に適用
+    すると、`id(y, λ) = (w, σ)` について (i) と `obj(y, λ) = obj(w, σ)` が出る。
     BY <2>1, <2>2, <2>3, IH
 
 <1>8. CASE `Some(Field(c, i))` で `c` が boxed。
@@ -866,10 +944,14 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     BY <1>5a, <2>1
 
 <1>9. CASE `Some(Field(c, i))` で `c` が unbox。
-  <2>1. `origin(x, λ) = origin(c, [i] ++ λ)` であり、よって `id(x, λ) = id(c, [i] ++ λ)` である。
+  <2>1. `origin(x, λ) = origin(c, [i] ++ λ)` であり、よって `id(x, λ) = id(c, [i] ++ λ)` である。また
+        `(x, λ) ⇝ (c, [i] ++ λ)` である。
     この CASE の前提は `vars.bindings.get(x) = Some(Field(c, i))` かつ `c.ty.is_box(type_env)` が偽で
-    ある。
-    BY L2 (E2)
+    ある。`origin_inner` の `Some(Binding::Field(container, idx))` の腕は
+    `origin(vars, type_env, &container.name, &container_path)` を直接呼ぶので、DEF 鍵の関係 より
+    この鍵は `(x, λ)` の `⇝` の像に入る。
+    BY DEF 鍵の関係, L2 (E2),
+       CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Field(container, idx))` の腕
   <2>2. フィールド `i` は `ty(c)` が実際に持つ (穴でない) フィールドである。
     L1a (b) の `Field(c, i)` の行より、`x` を束縛する節点は `Destructure(c, fs, s, k)` であって
     `(i, x) ∈ fs` である。A12 の「`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が
@@ -921,13 +1003,19 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     (DEF 辺の leaf 対応)。L1a (b) の `Field(c, i)` の行より、それは `ρ` の上で実行された辺である。
     BY L1, L1a, DEF 辺の leaf 対応, <2>5
   <2>7. QED
-    IH を `(c, [i] ++ λ)` に適用する。
+    `<2>1` より `(c, [i] ++ λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。IH を
+    `(c, [i] ++ λ)` に適用する。
     BY <2>1, <2>5, <2>6, IH
 
 <1>10. CASE `Some(Payload(s, None))` (catch-all)。
-  <2>1. `origin(x, λ) = origin(s, λ)` であり、よって `id(x, λ) = id(s, λ)` である。
-    この CASE の前提は `vars.bindings.get(x) = Some(Payload(s, None))` である。
-    BY L2 (E4)
+  <2>1. `origin(x, λ) = origin(s, λ)` であり、よって `id(x, λ) = id(s, λ)` である。また
+        `(x, λ) ⇝ (s, λ)` である。
+    この CASE の前提は `vars.bindings.get(x) = Some(Payload(s, None))` である。`origin_inner` の
+    `Some(Binding::Payload(scrut, variant))` の腕の `None` の場合は
+    `origin(vars, type_env, &scrut.name, path)` を直接呼ぶので、DEF 鍵の関係 よりこの鍵は `(x, λ)` の
+    `⇝` の像に入る。
+    BY DEF 鍵の関係, L2 (E4),
+       CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Payload(scrut, variant))` の腕
   <2>2. `(s, λ)` は `ρ` の位置である。
     A12 の catch-all アームの payload と scrutinee の行より `ty(s) = ty(x)` なので `λ` は `ty(s)` の
     boxed leaf である。D9 の値の水準の第 5 行より、payload 変数 `x` が得る値は scrutinee `s` の値
@@ -940,6 +1028,7 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     ある。
     BY L1, L1a, DEF 辺の leaf 対応, <2>2
   <2>4. QED
+    `<2>1` より `(s, λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。
     BY <2>1, <2>2, <2>3, IH
 
 <1>11. CASE `Some(Payload(s, Some(t)))` で `s` が boxed。
@@ -950,10 +1039,14 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     BY <1>5a, <2>1
 
 <1>12. CASE `Some(Payload(s, Some(t)))` で `s` が unbox。
-  <2>1. `origin(x, λ) = origin(s, [t] ++ λ)` であり、よって `id(x, λ) = id(s, [t] ++ λ)` である。
+  <2>1. `origin(x, λ) = origin(s, [t] ++ λ)` であり、よって `id(x, λ) = id(s, [t] ++ λ)` である。また
+        `(x, λ) ⇝ (s, [t] ++ λ)` である。
     この CASE の前提は `vars.bindings.get(x) = Some(Payload(s, Some(t)))` かつ `s.ty.is_box(type_env)` が
-    偽である。
-    BY L2 (E3)
+    偽である。`origin_inner` の `Some(Binding::Payload(scrut, variant))` の腕の
+    `Some(tag) if !scrut.ty.is_box(type_env)` の場合は `origin(vars, type_env, &scrut.name, &scrut_path)`
+    を直接呼ぶので、DEF 鍵の関係 よりこの鍵は `(x, λ)` の `⇝` の像に入る。
+    BY DEF 鍵の関係, L2 (E3),
+       CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Payload(scrut, variant))` の腕
   <2>2. `[t] ++ λ` は `ty(s)` の boxed leaf である。
     <3>1. `ty(s)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Union` である。
       A12 の「`Match` の scrutinee が union であること」の行が `is_union(ty(s))` を与え、`is_union` は
@@ -1007,14 +1100,19 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     ある。
     BY L1, L1a, DEF 辺の leaf 対応, <2>5
   <2>7. QED
-    IH を `(s, [t] ++ λ)` に適用する。
+    `<2>1` より `(s, [t] ++ λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。IH を
+    `(s, [t] ++ λ)` に適用する。
     BY <2>1, <2>5, <2>6, IH
 
 <1>13. CASE `Some(Llvm(gen, args, result_ty))` で `<1>4` の `S` が単一の `Arg(j, σ')`。
-  <2>1. `origin(x, λ) = origin(args[j], σ')` であり、よって `id(x, λ) = id(args[j], σ')` である。
+  <2>1. `origin(x, λ) = origin(args[j], σ')` であり、よって `id(x, λ) = id(args[j], σ')` である。また
+        `(x, λ) ⇝ (args[j], σ')` である。
     この CASE の前提は `vars.bindings.get(x) = Some(Llvm(gen, args, result_ty))` かつ
-    `decl.leaf_origins_at(λ) = Some({Arg(j, σ')})` である (`<1>4`)。
-    BY L2 (E5), <1>4
+    `decl.leaf_origins_at(λ) = Some({Arg(j, σ')})` である (`<1>4`)。`origin_inner` の
+    `Some(Binding::Llvm(llvm_gen, args, result_ty))` の腕は `origin(vars, type_env, &args[j].name, &p)` を
+    直接呼ぶので、DEF 鍵の関係 よりこの鍵は `(x, λ)` の `⇝` の像に入る。
+    BY DEF 鍵の関係, L2 (E5), <1>4,
+       CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Llvm(llvm_gen, args, result_ty))` の腕
   <2>2. `σ'` は `ty(args[j])` の boxed leaf であり、`args[j]` の値で inhabited である。
     A3 の「単一の `Arg(j, σ)`」の行は、宣言が第 `j` オペランドの leaf `σ` を名指すこと、および結果の
     その leaf が inhabited であることと第 `j` オペランドの leaf `σ` が inhabited であることが同値である
@@ -1028,6 +1126,7 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     ある。
     BY L1, L1a, DEF 辺の leaf 対応, <2>3
   <2>5. QED
+    `<2>1` より `(args[j], σ')` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。
     BY <2>1, <2>3, <2>4, IH
 
 <1>14. CASE `Some(Llvm(gen, args, result_ty))` で `<1>4` の `S` が空集合。
@@ -1063,8 +1162,12 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 <1>17. CASE `Some(Join(arm_results))`。
   <2>1. 答えは `Origin::of_candidates(C, (x, λ))` である。ここで `C` は各 `r ∈ arm_results` についての
-        `act(r, λ)` の合併である。
-    BY <1>1, CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Join(arm_results))` の腕
+        `act(r, λ)` の合併である。また各 `r ∈ arm_results` について `(x, λ) ⇝ (r, λ)` である。
+    `origin_inner` の `Some(Binding::Join(arm_results))` の腕は、各 `r` について
+    `origin(vars, type_env, &r.name, path)` を直接呼び、その `acted_on()` を集める。DEF 鍵の関係 より
+    その鍵は `(x, λ)` の `⇝` の像に入る。
+    BY DEF 鍵の関係, <1>1,
+       CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Join(arm_results))` の腕
   <2>2. `r_0` を `ρ` が通ったアームの結果とすると、`(r_0, λ)` は `ρ` の位置であり
         `obj(x, λ) = obj(r_0, λ)` である。
     A12 のアームの結果と `Match` の束縛変数の行より両者の型は一致するので `λ` は `ty(r_0)` の boxed leaf
@@ -1095,9 +1198,10 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
       `id(r_0, λ) = c` である。
       BY L1a, <2>1, <2>2a
     <3>3. QED
-      IH を `(r_0, λ)` に適用すると、(i) は `c` について成り立ち、`obj(r_0, λ) = obj(c)` が出る。
-      `<2>2` と合わせて `obj(x, λ) = obj(c)` である。
-      BY <2>2, <3>1, <3>2, IH
+      L1a (b) の `Join(rs)` の行より `r_0 ∈ arm_results` なので、`<2>1` より `(r_0, λ)` は `(x, λ)` の
+      `⇝` の像に入り、IH を当てられる。IH を `(r_0, λ)` に適用すると、(i) は `c` について成り立ち、
+      `obj(r_0, λ) = obj(c)` が出る。`<2>2` と合わせて `obj(x, λ) = obj(c)` である。
+      BY L1a, <2>1, <2>2, <3>1, <3>2, IH
   <2>6. QED
     `<2>3` より `|C| ≥ 1` であり、`<2>4` と `<2>5` がその 2 つの場合を尽くす。
     BY <2>3, <2>4, <2>5
@@ -1304,7 +1408,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
     BY D3, <2>1, <2>2, <2>3
 
 <1>6a. `origin(x, π)` の値は `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが返した値である。
-  BY L0
+  BY L0 (a)
 
 <1>7. `id(x_j, []) = (x_j, [])` であり、`act(x_j, []) = {(x_j, [])}` である。
   <2>1. `x_j` の `Binding` は `Llvm(gen, [c], T)` である。`collect_bindings` は
