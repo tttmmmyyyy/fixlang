@@ -2340,8 +2340,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
    **`pi` についての条件は落とせない。**`x` を型 `Std::I64` のパラメータ、`pi = [0]` とする。
    `origin_inner` の `Some(Binding::Param)` の腕は `here()` を返すので返り値は `Exactly((x, [0]))`
-   であり、`VarTable::of` は各パラメータを `var_tys` に入れるので `u = x` は型を持つ。`<1>3b` の表より
-   `Std::I64` の `TyConInfo` は `variant: Primitive`、`is_unbox: true`、`fields: vec![]` を持つので、
+   であり、`VarTable::of` は各パラメータを `var_tys` に入れるので `u = x` は型を持つ。`bulitin_tycons`
+   が `Std::I64` に与える `TyConInfo` は `variant: Primitive`、`is_unbox: true`、`fields: vec![]` なので、
    `is_box`、`is_closure`、`is_array`、`is_funptr` はすべて偽で `F(I64)` は空であり、
    `is_fully_unboxed(I64)` は空の連言として真になる。すなわち `cls(I64) = NB` であり、`<1>10` より
    `unit_step(I64, E)` は `UnitStep::NoUnit` で、`T(I64, [0])` はループの第 0 周で `panic!` に達する。
