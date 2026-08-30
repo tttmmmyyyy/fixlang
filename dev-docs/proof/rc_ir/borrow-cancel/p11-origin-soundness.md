@@ -1125,7 +1125,8 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
 <1>3. CASE: 段 E1 (`Move(y)`)。
   <2>1. `origin(x, π) = origin(y, π)` であり `cand(x, π) = cand(y, π)`。
     BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Move(y))` の腕 (この腕は
-       `origin(vars, type_env, &y.name, path)` の返り値をそのまま返す), P2a (`origin(・, ・)` の記法は鍵の答えを指す)
+       `origin(vars, type_env, &y.name, path)` の返り値をそのまま返す),
+       P2a (`origin(・, ・)` の記法は鍵の答えを指す)
   <2>1a. `y` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E1 (`x` の束縛は `Move(y)` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>2. `P` における `x` の値は `y` の値であり、`ty(y) = ty(x)` であり、`λ` は `ty(y)` の boxed leaf で
@@ -1155,7 +1156,8 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
 <1>4. CASE: 段 E6 (`Payload(s, None)`、catch-all)。
   <2>1. `origin(x, π) = origin(s, π)` であり `cand(x, π) = cand(s, π)`。
     BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Payload(..))` の `None =>` の枝
-       (この枝は `origin(vars, type_env, &scrut.name, path)` の返り値をそのまま返す), P2a (`origin(・, ・)` の記法は鍵の答えを指す)
+       (この枝は `origin(vars, type_env, &scrut.name, path)` の返り値をそのまま返す),
+       P2a (`origin(・, ・)` の記法は鍵の答えを指す)
   <2>1a. `s` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E6 (`x` の束縛は `Payload(s, None)` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>2. `P` における `x` の値は `s` の値であり、`ty(s) = ty(x)` であり、`λ` は `ty(s)` の boxed leaf で
