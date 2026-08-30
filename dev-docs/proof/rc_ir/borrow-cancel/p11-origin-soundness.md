@@ -1602,18 +1602,8 @@ let seen : Std::I64 = Main::peek(m, two)
      memo を書く。`origins` は `RefCell` なので `&VarTable` からでも書ける,
      CODE src/rc_ir/ownership.rs: VarTable -- 5 つの欄のうち `RefCell` を持つのは `origins` だけである
 <1>3a. memo への書き込みは鍵の答えを変えない。
-  <2>1. 鍵の答えは、その鍵についての cold な呼び出しの `origin_inner` が返した値であり、memo が当たる
-        呼び出しはその複製を返す。すなわち memo は答えを決めるのではなく、決まった答えを配る。
-    BY P2a, L1 (複製は `identity` と `candidates` をそのまま運ぶ)
-  <2>2. `origin_inner` が返す値は、`vars.bindings`、`type_env`、`bindings` が持つ `LLVMGen` の
-        `result_prov` の返り値、および `origin` の再帰呼び出しが返す鍵の答えだけで決まる。
-    BY <1>2, A3 (`result_prov` の呼び出しは abort せず `Provenance` を返す),
-       CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under, as_arg_projection,
-       truncate_to_unit
-  <2>3. QED
-    BY <2>1, <2>2, <1>3 (`level_ownership` は <2>2 が挙げるもののどれにも書かない), L14 -- 鍵の再帰の辺の
-       関係は整礎である (L14)。その関係の上の整礎帰納で、どの鍵の答えも `level_ownership` が memo を
-       埋めたかどうかで変わらない。
+  BY P2a (「答えは `vars.bindings`・`type_env`・`(x, π)` だけで決まり、`vars.origins` が保持する memo の
+     状態に依らない」), <1>3 (`level_ownership` が書くのは `owned_leaves` と memo の 2 つだけである)
 <1>4. QED
   BY <1>1, <1>2, <1>3, <1>3a -- `owned_leaves` は <1>2 が挙げる入力に入らず、memo への書き込みは答えを
      変えない (<1>3a) ので、P3 と P4 の真偽は `level_ownership` の有無で変わらない。
