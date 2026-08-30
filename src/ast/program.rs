@@ -3036,7 +3036,7 @@ impl Program {
     }
 
     /// Implements `Std::Boxed` for every boxed struct and every boxed union the program declares.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_boxed_impls(&mut self) -> Result<(), Errors> {
         for defn in &self.type_defns {
             match &defn.value {

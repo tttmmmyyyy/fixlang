@@ -108,7 +108,7 @@ impl<'c> ValueAccessor<'c> {
     /// The object this accessor names: a local's object as it stands, or the value a global's
     /// getter returns. A global of funptr type is the function itself, so its address is taken
     /// without a call.
-    // PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P3, P4, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get<'m>(&self, gc: &mut Generator<'c, 'm>) -> Object<'c> {
         match self {
             ValueAccessor::Local(ptr) => ptr.clone(),

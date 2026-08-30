@@ -124,13 +124,19 @@ def citations_of(directory):
         # every one of them names propositions the file proves.
         by_file.setdefault(row.group(2), []).extend(propositions_of(row.group(1)))
     cited = {}
-    for path in sorted(glob.glob(os.path.join(directory, "p*.md"))):
-        props = by_file.get(os.path.basename(path))
-        if props is None:
+    for path in sorted(glob.glob(os.path.join(directory, "*.md"))):
+        name = os.path.basename(path)
+        if name == "README.md":
+            continue
+        props = by_file.get(name)
+        if props is None and name.startswith("p"):
             print(f"{os.path.relpath(path, REPO)}: no row in the README's status table")
             continue
+        # A document that proves no proposition discharges an assumption instead, so its citations
+        # carry the frame's weight: the enumeration behind an assumption has moved out from under
+        # the whole proof when the code it reads changes.
         for citation in citations_in(open(path, encoding="utf-8").read()):
-            cited.setdefault(citation, set()).update(props)
+            cited.setdefault(citation, set()).update(props or {FRAME})
     for citation in citations_in(readme):
         cited.setdefault(citation, set()).add(FRAME)
     return cited

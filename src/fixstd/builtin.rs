@@ -1019,7 +1019,7 @@ impl LLVMGen for InlineLLVMFixBody {
         self.generate_tail(gc, ty, false).unwrap()
     }
 
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate_tail<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,

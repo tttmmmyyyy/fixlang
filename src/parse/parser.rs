@@ -2624,6 +2624,7 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
 // Parses one type written in a C function signature into the Fix type constructor that represents
 // it. A C type name such as `CInt` becomes the sized type it has on the target, and `()` becomes
 // the unit type, which stands for `void`.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     assert_eq!(pair.as_rule(), Rule::ffi_c_fun_ty);
     let mut name = if pair.as_str() == "()" {
