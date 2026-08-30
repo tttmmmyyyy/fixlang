@@ -1087,7 +1087,7 @@ impl ObjectFieldType {
     /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
     /// the struct: each returned field owns its reference and so outlives the struct it came from,
     /// and the fields left behind are dropped.
-    // PROOF: D/A, P7a, P7d, P7e, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P7a, P7d, P7e, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
@@ -1412,7 +1412,7 @@ pub fn union_tag_value<'c>(context: &'c Context, variant_idx: usize) -> IntValue
 /// The parts a lambda of type `ty` returns, in `type_parts` order: a boxed result is the single
 /// heap pointer, an unboxed one its parts. These are exactly the parts of the `Object` the lambda's
 /// body returns, so a call site and a `return` agree on them.
-// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lambda_return_part_types<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
@@ -1428,7 +1428,7 @@ pub fn lambda_return_part_types<'c, 'm>(
 /// The LLVM signature every lambda of type `ty` is defined and called with: the arguments, then the
 /// CAP pointer when the lambda is a closure, and the result either returned directly or written
 /// through an out-pointer that precedes them all.
-// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lambda_function_type<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,

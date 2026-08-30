@@ -36,7 +36,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Generate LLVM code for the functions and global initializers of `prog` — one compilation
     /// unit's worth. A function this module already declared (because its body refers to it) is
     /// reused; the rest are declared here, and every one of them is implemented.
-    // PROOF: P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn implement_rc_program(&mut self, prog: &RcProgram) {
         let mut func_vals: Map<FuncRef, FunctionValue<'c>> = Map::default();
         for (fref, func) in prog.funcs.iter() {
@@ -110,7 +110,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// the scope as plain objects, then evaluate the body in tail position. Capture read-back and the
     /// release of unused parameters/captures are already explicit in the body, so nothing extra is
     /// done here.
-    // PROOF: D/A, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn implement_rc_function(
         &mut self,
         func: &RcFunc,
@@ -186,7 +186,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Generate the code for an RC IR expression, dispatching on the kind of node and following its
     /// continuation. The node's debug location is already in effect. Returns the produced object
     /// when `tail` is false; when `tail` is true the return has been built and `None` is returned.
-    // PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_expr_inner(
         &mut self,
         node: &RcExprNode,
@@ -384,7 +384,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Bind `obj` to `x` on the scope, emit its debug local variable, evaluate the continuation `k`,
     /// then pop the binding.
-    // PROOF: P7a, P7d, P7e, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7d, P7e, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn bind_and_continue(
         &mut self,
         x: &RcVar,
@@ -422,7 +422,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Evaluate a `Var` or `Closure` right-hand side to an object. `App`, `Match`, and `Llvm` are
     /// handled directly in `eval_rc_expr_inner`.
-    // PROOF: P7a, P7d, P7e, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7d, P7e, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_rhs(
         &mut self,
         rhs: &RcRhs,
@@ -441,7 +441,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Build a closure value `{funptr, capture-object pointer}` for `Closure(func, captures)`.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_rc_closure(
         &mut self,
         func: &FuncRef,
@@ -492,7 +492,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// yields the match value. The scrutinee's per-arm container release and dead-branch releases are
     /// already explicit `Release` nodes in the arm bodies; here only the payload retain-getter is
     /// baked in (mirroring `get_union_value`).
-    // PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_match(
         &mut self,
         result: &RcVar,
@@ -622,7 +622,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// it keeps it, and the accessor where it reads it — which is where it keeps the value, and
     /// where it reads the value another unit keeps and publishes. Whatever it does not generate it
     /// declares.
-    // PROOF: D/A, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,

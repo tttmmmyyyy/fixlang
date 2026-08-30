@@ -44,7 +44,7 @@ use crate::rc_ir::leaf_map::{LeafKey, LeafMap};
 use std::sync::Arc;
 
 /// The origin of one boxed leaf.
-// PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7d, P7e, P27, P29, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7d, P7e, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum LeafOrigin {
     /// A newly produced value: an allocation, or a force-unique op's result. Resolves to `Unique`.

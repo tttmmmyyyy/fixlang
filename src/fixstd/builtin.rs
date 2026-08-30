@@ -58,7 +58,7 @@ use std::sync::Arc;
 // The type constructors the compiler provides itself — the primitive types, the function arrow,
 // `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
 // a user-defined type would get from its declaration.
-// PROOF: P1, P2, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
@@ -608,7 +608,7 @@ pub fn make_numeric_ty(name: &str) -> (Option<Arc<TypeNode>>, bool) {
 }
 
 // Get dynamic object type.
-// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(
         &[STD_NAME],
@@ -992,7 +992,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
 /// Inline-LLVM body of `Std::fix`, which computes `fix(f, x)`. It rebuilds the closure `fix(f)` from
 /// the function being generated and that function's own capture, passes it to `f` as the recursive
 /// `self`, and applies the result to `x`.
-// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFixBody {
     /// The variable holding the argument the recursion is applied to.
@@ -1070,7 +1070,7 @@ impl LLVMGen for InlineLLVMFixBody {
     }
 }
 
-// PROOF: D/A, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_name = FullName::local(f);
     let x_name = FullName::local(x);
@@ -7537,7 +7537,7 @@ pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// PROOF: P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBoxedFromRetainedPtrIOS {
     ptr_name: FullName,
@@ -9096,7 +9096,7 @@ pub fn run_ios_runner<'b, 'm, 'c>(
 
 /// Inline-LLVM body of `Std::mark_threaded`, which puts the reference counters of all values
 /// reachable from the given value into multi-threaded mode and hands the value back.
-// PROOF: P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMarkThreadedFunctionBody {
     /// The name the value to be marked is bound to in the scope of this body.

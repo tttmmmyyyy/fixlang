@@ -33,7 +33,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 enum Binding {
     /// A parameter or capture — the origin of a leaf.
     Param,
@@ -55,7 +55,7 @@ enum Binding {
 
 /// The variables of one function, enough to trace a leaf back to the object it belongs to and to
 /// resolve a call to its callee's parameters.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) struct VarTable {
     /// What binds each variable, which `origin` follows back to the object a leaf belongs to.
     bindings: Map<FullName, Binding>,
@@ -103,7 +103,7 @@ impl VarTable {
     }
 
     /// An empty table, which a constructor fills.
-    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn empty() -> VarTable {
         VarTable {
             bindings: Map::default(),
@@ -117,7 +117,7 @@ impl VarTable {
 
 /// Record every local variable's `Binding` and type (and any closure value's target function) in a
 /// function body.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
     match node.expr.as_ref() {
         RcExpr::Ret(_) => {}
@@ -250,7 +250,7 @@ impl Origin {
 
     /// Every object an operation on the leaf acts on: the reference the leaf holds, which `identity`
     /// names, and the object that reference belongs to, which is any of `candidates`.
-    // PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn acted_on(&self) -> Vec<&VarPath> {
         let mut out = vec![self.identity()];
         out.extend(
@@ -266,7 +266,7 @@ impl Origin {
 /// payloads, catch-all payloads) back to the variable that produced it. The variable is a parameter
 /// when the leaf ultimately comes from an input, and a `Join` when a match forwards several arms'
 /// values to one binding.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn origin(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -284,7 +284,7 @@ pub(crate) fn origin(
 
 /// One step of `origin`: the alias edge the variable's binding offers, followed to the object at the
 /// far end, or the variable itself where the chain stops.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
     let here = || Origin::Exactly((var.clone(), path.to_vec()));
     match vars.bindings.get(var) {
@@ -384,7 +384,7 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// borrowed node, the `wait` leaf is `⊥` and both `pair` leaves project out of that node, so the
 /// answer is that node's origin. Give one of those two leaves a second operand and the answer
 /// becomes a `Join` naming both under this value's name.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn origin_from_leaves_under(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -437,7 +437,7 @@ fn origin_from_leaves_under(
 }
 
 /// The single `Arg(j, p)` a leaf source consists of, if it is exactly that.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
     if sources.len() != 1 {
         return None;
@@ -513,7 +513,7 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
 /// leaf of it goes; an unboxed container moves each named field's leaves into that field's variable,
 /// an alias whose consume is attributed to the field variable, so only a dropped (unnamed) field's
 /// leaves go. This is the model code generation implements (`ObjectFieldType::get_struct_fields`).
-// PROOF: P3, P4, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P3, P4, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn destructure_consumes(
     container: &RcVar,
     fields: &[(usize, RcVar)],
@@ -540,7 +540,7 @@ pub(crate) fn destructure_consumes(
 /// (`owns` decides, for the callee's parameter leaf), a captured value, and the closure callee. A
 /// `Var` move and a `Match` consume nothing here — a move is an alias, and a match's consumes live in
 /// its arms. `result_ty` is the type the right-hand side binds, needed to read an op's passthrough.
-// PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
     rhs: &RcRhs,
     result_ty: &Arc<TypeNode>,
@@ -598,7 +598,7 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
 
 /// The parameters of a directly-called callee: a closure value built in this function, or a
 /// top-level function referenced by name. `None` for an indirect call (an owning, all-`Own` ABI).
-// PROOF: D/A, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn resolve_callee_params<'a>(
     callee: &RcVar,
     vars: &VarTable,
@@ -836,7 +836,7 @@ pub(crate) fn truncate_to_unit(
 /// and a retain of it bumps every reference its payload holds; a projection of that payload names
 /// those references one by one, so a release of the projection un-bumps only part of what the retain
 /// bumped. Counting the references themselves is what lets the two be compared.
-// PROOF: D/A, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct References(Map<VarPath, usize>);
 
@@ -846,7 +846,7 @@ impl References {
     /// # Examples
     /// References holding one reference of `a` and two of `b` cover one holding one of each, and do
     /// not cover one holding three of `b`. Every `References` covers itself and covers an empty one.
-    // PROOF: P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn covers(&self, other: &References) -> bool {
         other.0.iter().all(|(object, count)| {
             self.0
@@ -856,13 +856,13 @@ impl References {
     }
 
     /// Whether these act on the object.
-    // PROOF: P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn names(&self, object: &VarPath) -> bool {
         self.0.contains_key(object)
     }
 
     /// The objects these act on, each once however many of its references they carry.
-    // PROOF: P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn objects(&self) -> Vec<VarPath> {
         self.0.keys().cloned().collect()
     }
@@ -871,13 +871,13 @@ impl References {
     ///
     /// This is what tells a release which pending retain it may be closing. A retain and a release
     /// that name no object in common act on different things, however their values are written.
-    // PROOF: P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn shares_an_object(&self, other: &References) -> bool {
         other.0.keys().any(|object| self.0.contains_key(object))
     }
 
     /// Drop `other`'s references from these, where `covers` holds of the two.
-    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn subtract(&mut self, other: &References) {
         for (object, count) in &other.0 {
             let held_count = self
@@ -892,7 +892,7 @@ impl References {
     }
 
     /// Whether the operation acts on no reference at all.
-    // PROOF: P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -900,7 +900,7 @@ impl References {
 
 /// The references an operation on the subtree of `v` that `path` names acts on: the reference each
 /// boxed leaf under `path` holds, named by the object its `origin` identifies.
-// PROOF: D/A, P3, P4, P5, P6, P7, P15, P16, P17, P18, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn acted_references(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -920,7 +920,7 @@ pub(crate) fn acted_references(
 
 /// The owned parameter/capture units of every function: each version's units minus the ones it
 /// borrows (`RcFunc::borrowed_units`, the annotation borrow-ification writes).
-// PROOF: D/A, P7c, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7c, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {
     let mut owned = Set::default();
     for func in prog.funcs.values() {
@@ -938,7 +938,7 @@ pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPa
 
 /// The reference-counting units under a path of a value's type: the units of the subtree the path
 /// names, or the path itself when it already names a unit (a boxed value, a union, or a leaf).
-// PROOF: D/A, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn units_under(
     ty: &Arc<TypeNode>,
     path: &FieldPath,

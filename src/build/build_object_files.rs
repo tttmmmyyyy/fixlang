@@ -73,7 +73,7 @@ pub struct BuildObjFilesResult {
 /// * `global_types` — the type of a global that a lowered function references as an LLVM operand.
 ///   Such a global may be defined in another unit, so this covers the whole program.
 /// * `roots` — the names code generation reaches the lowered program through from outside it.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P27, P29, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -96,7 +96,7 @@ fn lower_and_insert_rc(
 /// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
 /// borrowed parameters on the functions (`RcFunc::borrowed_units`), which `param_ownership_shapes`
 /// reads back as the owned complement.
-// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, (P-insert), T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, P30, (P-insert), T (dev-docs/proof/rc_ir/borrow-cancel)
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,

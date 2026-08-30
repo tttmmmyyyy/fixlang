@@ -96,7 +96,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     ///
     /// `Generator::apply_lambda` checks this in develop mode, so an op that starts applying an
     /// operand and does not say so here fails the test suite rather than quietly losing an edge.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P28, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
         false
     }

@@ -170,7 +170,7 @@ impl<'a> Lowerer<'a> {
 
     /// Name a lifted lambda `<current top-level symbol>::closure{N}`, so its name carries the source
     /// module (matching how a top-level function's name does) and a debugger shows a meaningful name.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn fresh_closure_ref(&mut self) -> FuncRef {
         let ns = self
             .current_symbol
@@ -269,7 +269,7 @@ impl<'a> Lowerer<'a> {
     /// symbol's own name, and a symbol of any other type becomes the initializer of a global value.
     /// The counters naming the lambdas lifted out and the local variables minted restart here, so
     /// both are numbered within the symbol they were written in.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_symbol(&mut self, sym: &Symbol) -> LoweredSymbol {
         self.current_symbol = Some(sym.name.clone());
         self.closure_counter = 0;
@@ -314,7 +314,7 @@ impl<'a> Lowerer<'a> {
     /// stores them; for a funptr (no captures) it is empty. `inline_into_callers` says whether the
     /// back end is asked to inline every call of the function. The body is lowered under a fresh
     /// environment holding only the parameters and the projected captures.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lambda_as_function(
         &mut self,
         lam: &ExprNode,
@@ -455,7 +455,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an inline-LLVM operation: its free variables become its operands, in the fixed order
     /// the generator reads them, and the appended binding holds the value the operation produces.
-    // PROOF: D/A, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_llvm(
         &mut self,
         inline: &Arc<InlineLLVM>,

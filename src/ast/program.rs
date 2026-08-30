@@ -983,7 +983,7 @@ impl Program {
     /// The type of every top-level symbol of the program, by name. Compiling one unit needs the
     /// types of the symbols the other units define as well, since this unit's code refers to them,
     /// so this covers the whole program rather than any one unit.
-    // PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn global_types(&self) -> Map<FullName, Arc<TypeNode>> {
         self.symbols
             .iter()
