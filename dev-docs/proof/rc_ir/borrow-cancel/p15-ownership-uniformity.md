@@ -1118,22 +1118,22 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   `<1>4` を `(y, ρ) = (x, π)` に当てる。`cand ⊆ act` は `<1>2` による。
   BY <1>2, <1>4
 
-### L13 (本体が束縛する変数はパラメータではない)
+### L13 (`Binding::Param` を持たない名前は `param_tys` の鍵でない)
 
-**言明**。`vars.bindings.get(w)` が `Some(Binding::Move(..))`、`Some(Binding::Producer)`、
-`Some(Binding::Llvm(..))`、`Some(Binding::Field(..))`、`Some(Binding::Payload(..))`、
-`Some(Binding::Join(..))` のいずれかであるとき、`pty(w)` は `None` である。したがって `owns(w, σ)` と
-`yet(w, σ)` はどちらも、任意の `σ` について真である。
+**言明**。`vars.bindings.get(w)` が `None` であるか、`Some(Binding::Move(..))`、
+`Some(Binding::Producer)`、`Some(Binding::Llvm(..))`、`Some(Binding::Field(..))`、
+`Some(Binding::Payload(..))`、`Some(Binding::Join(..))` のいずれかであるとき、`pty(w)` は `None` で
+ある。したがって `owns(w, σ)` と `yet(w, σ)` はどちらも、任意の `σ` について真である。
 
 とくに `Origin::Join` の `identity` の変数はこの形である。`Origin::Join` を作るのは `of_candidates` だけで
 あり、その第 2 引数を渡すのは `Binding::Join` の腕の `(var, path)` と、`Binding::Llvm` の腕が
 `origin_from_leaves_under` へ渡す `here_identity = (var, path)` の 2 か所だからである。
 
-<1>1. `vars.param_tys` の鍵は、この本体のパラメータ・capture の名前ちょうどであり、その各名前の
-      `vars.bindings` は `Binding::Param` である。
+<1>1. `vars.param_tys` の鍵は、この本体のパラメータ・capture の名前ちょうどである。また
+      `vars.bindings` はその各名前を鍵に持つ。
   `VarTable::of` は各パラメータ・capture について `bindings` に `Binding::Param` を、`param_tys` にその型を
-  入れる。`collect_bindings` は `bindings` と `var_tys` にしか入れず、`Binding::Param` を作らない。
-  `VarTable::body_only` はパラメータを持たないので `param_tys` は空である。
+  入れる。`collect_bindings` は `bindings` と `var_tys` と `closure_targets` にしか入れず、鍵を取り除か
+  ない。`VarTable::body_only` はパラメータを持たないので `param_tys` は空である。
   BY CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
 
 <1>2. `<1>1` のパラメータ・capture の名前は、`collect_bindings` が記録する束縛名と異なる。
@@ -1151,12 +1151,17 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
      CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
 
 <1>3. QED
-  言明の 6 つの `Binding` はいずれも `collect_bindings` が入れるものであり、`Binding::Param` ではない。
-  `<1>1` と `<1>2` より `w` は `param_tys` の鍵ではない。`owns_object` は `param_tys.get(root)` が
-  `None` のとき真を返し、`owns_object_yet` も同じ条件で真を返す。`Origin::Join` の `identity` については、
+  言明が挙げる場合を 2 つに分ける。`vars.bindings.get(w)` が `None` のとき、`<1>1` の後半より `w` は
+  この本体のパラメータ・capture ではなく、`<1>1` の前半より `param_tys` の鍵でもない。
+  `Some` の 6 つの `Binding` はいずれも `collect_bindings` が入れるものなので、そのとき `w` は
+  `collect_bindings` が記録する束縛名であり、`<1>2` よりパラメータ・capture の名前と異なるので、
+  `<1>1` の前半より `param_tys` の鍵ではない。どちらの場合も `pty(w)` は `None` である。
+  `owns_object` は `param_tys.get(root)` が `None` のとき真を返し、`owns_object_yet` も同じ条件で
+  真を返す。`Origin::Join` の `identity` については、
   `of_candidates` を呼ぶ 2 か所がどちらも `vars.bindings.get(var)` の `match` の `Binding::Join` /
   `Binding::Llvm` の腕の中にある。
-  BY <1>1, <1>2, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, owns_object_yet,
+  BY <1>1, <1>2, CODE src/rc_ir/ownership.rs: collect_bindings,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, owns_object_yet,
      CODE src/rc_ir/ownership.rs: Origin::of_candidates, origin_inner, origin_from_leaves_under
 
 ### L14 (訪れた対は leaf に届く)
@@ -2349,14 +2354,10 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
       `Some(Binding::Field(c, idx))` で `c` が boxed / `Some(Binding::Payload(s, Some(t)))` で `s` が
       boxed のいずれか
   この場合は仮定と両立しない。これらの腕は `here()` を返すので `cand(x, π) = {(x, π)}` である。
-  `bindings.get(x)` が `None` のとき、`x` は `param_tys` の鍵でない -- `VarTable::of` は各パラメータ・
-  capture について `bindings` に `Binding::Param` を、`param_tys` にその型を入れ、`collect_bindings` は
-  `param_tys` に何も入れないので、`param_tys` の鍵はどれも `bindings` に `Binding::Param` を持つから
-  である。`owns_object` は `param_tys.get(root)` が `None` の腕で真を返すので `owns(x, π)` は真である。
-  残る 3 つの binding (`Producer`、boxed 容器の `Field`、boxed scrutinee の `Payload`) は
-  `collect_bindings` が入れるものなので L13 より `owns(x, π)` は真である。どちらも「全部偽」に反する。
-  BY L13, CODE src/rc_ir/ownership.rs: origin_inner, VarTable::of, collect_bindings,
-     CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+  この 4 つの場合 -- `bindings.get(x)` が `None`、`Producer`、boxed 容器の `Field`、boxed scrutinee の
+  `Payload` -- はどれも L13 の言明が挙げるものなので、L13 より `owns(x, π)` は真である。これは
+  「全部偽」に反する。
+  BY L13, CODE src/rc_ir/ownership.rs: origin_inner
 
 <1>2. CASE `Some(Binding::Param)`
   この腕は `path` を読まずに `here()` を返すので `cand(x, π) = {(x, π)}` かつ
