@@ -1722,11 +1722,12 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
 **注記 1 (P16 の (e) に第 3 の場合が要ること)**。(e) を「取り除かれた要素の `outstanding` がその時点で
 空である」か「取り除かれた要素の `node` がその時点で `needed_retains` に入っている」かの二択にすると、
 次の形で偽になる。`Retain` 節点 `t` が `pending` に入り、その後の `Match` のすべてのアームが `t` を完全に
-un-bump する (各アームの中の `Release` が P17 の第 3 の場合で `t` の `outstanding` を空にする) 場合で
-ある。このとき `arm_exits` のどれも `t` の要素を持たないので、P18 の第 3 の主張より `merge` は `t` を
-`needed_retains` にも返り値にも入れない。この「併合」は `pending_in` の要素の除去事象だが、その要素の
-`outstanding` は P16 の (b) より空でなく (減ったのは各アームに渡った複製の側である)、`t` は
-`needed_retains` にも入っていない。P16 の (e3) は、この除去がどこで解消されたか --- 各アームの状態の鎖の中の除去事象 --- を名指す。
+un-bump する (各アームの中の `Release` が L5 の 3 の場合で `t` の `outstanding` を空にする) 場合である。
+このとき `arm_exits` のどれも `t` の要素を持たないので、L7 の 1 よりどの `arm_states[j]` も `t` の
+`NodeId` を鍵に持たず、L7 の 5 より `merge` は `t` を `needed_retains` に入れず、L7 の 4 と 6 より
+返り値にも入れない。この「併合」は `pending_in` の要素の除去事象だが、その要素の `outstanding` は
+L9 の (ii) より空でなく (減ったのは各アームに渡った複製の側である)、`t` は `needed_retains` にも
+入っていない。(e3) は、この除去がどこで解消されたか --- 各アームの状態の鎖の中の除去事象 --- を名指す。
 この展開が終わる先は P16 の証明の <1>9 が示す。
 
 **注記 2 (P17 の 2 つの限定)**。第 1 に、`un_bump` が検査するのは `innermost.outstanding.covers(un_bumped)`
