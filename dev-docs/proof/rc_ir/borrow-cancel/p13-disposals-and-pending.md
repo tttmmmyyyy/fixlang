@@ -869,7 +869,8 @@ leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が
      CODE src/ast/types.rs: TypeNode::unpunched_field_types
   A10 が `go` の再帰の停止性を与える -- 「`unpunched_field_types` を繰り返し取って到達する型についても、
   上の 3 つ -- ground、飽和、tycon が `type_env` にある -- がすべて成り立ち、その歩みは有限である」
-  「これが無いと `boxed_leaf_paths` も `rc_units` も停止しない」。最初の呼び出しの `path` は空である。`unpunched_field_types` は
+  「これが無いと `boxed_leaf_paths` も `rc_units` も停止しない」。最初の呼び出しの `path` は空である。
+  `unpunched_field_types` は
   `instance_field_types(...).into_iter().enumerate().filter(...)` を返すので、返る添字は相異なる。<1>2 より、子の呼び出しの入口の `path` は親の入口の `path` に
   添字を 1 つ足したものであり、1 つの親が子に足す添字は `unpunched_field_types` が返す相異なる添字で
   ある。よって呼び出しと入口の `path` は 1 対 1 に対応する。
@@ -2922,8 +2923,8 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
 #### 7.5.7 反例 `C1` (A19 (ii-b) が A1・A2・D12 から出ないことを示す)
 
 A19 (ii-b) を仮定として置かねばならないこと -- すなわち A1・A2・D12 では P18a が出ないこと -- を、
-D12 を満たす本体で示す。`Arr` を boxed な型、`I` を `is_fully_unboxed` が真の型、`Bl` を 2 つの変位がどちらも payload を
-持たない unbox union とする。`alloc : () -> Arr`、`mkbl : () -> Bl`、`zero : () -> I` はそれぞれ結果の
+D12 を満たす本体で示す。`Arr` を boxed な型、`I` を `is_fully_unboxed` が真の型、`Bl` を 2 つの変位が
+どちらも payload を持たない unbox union とする。`alloc : () -> Arr`、`mkbl : () -> Bl`、`zero : () -> I` はそれぞれ結果の
 leaf を `Fresh` と宣言する / boxed leaf を持たない `Llvm` 演算とする。
 
 関数 `f` (パラメータ `b : Arr`、`borrowed_units` は空、返り値の型 `I`):
