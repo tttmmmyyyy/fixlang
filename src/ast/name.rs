@@ -292,6 +292,7 @@ impl FullName {
     }
 
     /// The name `name` written with no namespace.
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn local(name: &str) -> Self {
         Self::new(&NameSpace::local(), name)
     }

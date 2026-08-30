@@ -1501,7 +1501,7 @@ impl TypeNode {
     /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
     /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
     /// runs.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P27, P29, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
         if self.is_box(type_env) {
             return false;

@@ -1418,7 +1418,7 @@ struct CancelAnalysis<'a> {
 impl<'a> CancelAnalysis<'a> {
     /// The references a reference-count node of this function acts on, which decide whether a
     /// release un-bumps a retain (`ownership::acted_references`).
-    // PROOF: P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     fn acted_references(&self, v: &RcVar, path: &FieldPath) -> References {
         let references = acted_references(self.vars, self.type_env, v, path);
         // Reference counting is inserted only for a value that holds a reference, and
