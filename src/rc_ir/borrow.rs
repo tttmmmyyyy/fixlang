@@ -1333,6 +1333,7 @@ fn un_bump(pending: &mut PendingRetains, un_bumped: &References) -> UnBump {
 /// A node's identity within one tree: the address of its expression, stable while the tree is
 /// borrowed. Nodes to drop are recorded under this identity and recognized by it again in a later
 /// walk over the same borrowed tree.
+// PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 type NodeId = usize;
 
 /// The `NodeId` of a node: the address of its boxed `RcExpr`.

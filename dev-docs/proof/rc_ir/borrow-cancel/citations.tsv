@@ -212,7 +212,7 @@ src/misc.rs	grow_stack	D/A,P1,P2,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18
 src/object.rs	ObjectFieldType::get_struct_fields	D/A,P7a,P7d,P7e,P27,P29	adccf6cb3234
 src/object.rs	ObjectFieldType::get_union_value_noretain_norelease	P7a,P7d,P7e	03f0071fff84
 src/object.rs	ObjectFieldType::get_value_from_union_buf	P7a,P7d,P7e	03431b5850ca
-src/object.rs	ObjectFieldType::loop_over_array_buf	D/A	5c3548419bc8
+src/object.rs	ObjectFieldType::loop_over_array_buf	D/A,P18c,P19,P20,P21,P22,P23,P24	5c3548419bc8
 src/object.rs	ObjectFieldType::move_into_struct_field	D/A,P28	27199880c508
 src/object.rs	ObjectFieldType::move_out_struct_field	D/A,P28	afb4eb515286
 src/object.rs	ObjectFieldType::retain_release_mark_union	D/A	242591ac0c77
@@ -243,7 +243,7 @@ src/rc_ir/ast.rs	FieldPath	P1,P2,P7a,P7d,P7e,P15,P16,P17,P18	dd85d967b3d7
 src/rc_ir/ast.rs	MatchArm	D/A,P1,P2,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18	8fb0b636664e
 src/rc_ir/ast.rs	MatchArm::with_body	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	5b7fed80948d
 src/rc_ir/ast.rs	RcExpr	D/A,P1,P2,P5,P6,P7,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	d1fa97d4a7df
-src/rc_ir/ast.rs	RcExprNode	P15,P16,P17,P18	815e164e90eb
+src/rc_ir/ast.rs	RcExprNode	P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24	815e164e90eb
 src/rc_ir/ast.rs	RcFunc	D/A,P27,P29	cc81ec93e7b4
 src/rc_ir/ast.rs	RcGlobalInit	D/A,P8,P9,P10,P11,P12,P13,P14,P14a	a8273109dc41
 src/rc_ir/ast.rs	RcProgram	D/A,T	8d1268887ec1
@@ -267,6 +267,7 @@ src/rc_ir/borrow.rs	CancelAnalysis::merge	P5,P6,P7,P7c,P7f,P15,P16,P17,P18,P18a,
 src/rc_ir/borrow.rs	CancelAnalysis::other_objects	D/A,P3,P4,P5,P6,P7,P7c,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	01cf32dc9733
 src/rc_ir/borrow.rs	CancelAnalysis::walk	P7c,P7f,P15,P16,P17,P18,P18a,P18b	c6e1b25b4807
 src/rc_ir/borrow.rs	CancelAnalysis::walk_inner	D/A,P5,P6,P7,P7c,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P26,(P-insert)	8466ce6e8ebe
+src/rc_ir/borrow.rs	NodeId	P18c,P19,P20,P21,P22,P23,P24	aab1a39a6ee3
 src/rc_ir/borrow.rs	OwnedLeaves	P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a	f66eae318265
 src/rc_ir/borrow.rs	OwnedLeaves::owns	P7a,P7d,P7e	15bb97f7d30e
 src/rc_ir/borrow.rs	PendingRetain	P7c,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	c7d1878a1882
@@ -356,7 +357,7 @@ src/rc_ir/ownership.rs	Origin	D/A,P1,P2,P3,P4,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,
 src/rc_ir/ownership.rs	Origin::acted_on	D/A,P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	8aa26a04d152
 src/rc_ir/ownership.rs	Origin::candidates	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a	d7c5753b621d
 src/rc_ir/ownership.rs	Origin::identity	P3,P4,P5,P6,P7,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P18c,P19,P20,P21,P22,P23,P24	a3086fd270ed
-src/rc_ir/ownership.rs	Origin::of_candidates	P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,(P-insert)	74615a999595
+src/rc_ir/ownership.rs	Origin::of_candidates	P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	74615a999595
 src/rc_ir/ownership.rs	References	D/A,P5,P6,P7,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	38b3c3ed8fcb
 src/rc_ir/ownership.rs	References::covers	P7c,P7f,P15,P16,P17,P18,P18a,P18b	828ed77c7cf4
 src/rc_ir/ownership.rs	References::is_empty	P15,P16,P17,P18	c4648d14ca22
