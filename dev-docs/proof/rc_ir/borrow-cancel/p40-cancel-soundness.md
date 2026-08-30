@@ -304,11 +304,25 @@ source、`Match` のアームの本数と並び、および継続の順序は変
 <1>1. `drop_nodes(node, to_delete)` は `grow_stack(|| drop_nodes_inner(node, to_delete))` であり、A15 より
       `drop_nodes_inner` をちょうど 1 回呼んでその値を返す。
   BY CODE src/rc_ir/borrow.rs: drop_nodes, A15
-<1>2. `drop_nodes` が読む `NodeId` は入力の木のものであり、走査が読んだものと同じである。`cancel_body` は
-      `drop_nodes(body, &analysis.cancelled())` を呼び、その `body` は走査が訪問した木そのものである。
-      `cancel` の閉包の実行中、`body` は `prog` から借用されているので、その木の `Arc` の割り当てはすべて
-      生存しており、`node_id` の値は走査のときと同じである。
-  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: node_id
+<1>2. `drop_nodes` が読む `NodeId` は入力の木のものであり、走査が読んだものと同じである。すなわち、木の
+      1 つの位置について、走査が計算した `node_id` の値と `drop_nodes` が計算する値は等しい。
+  <2>1. `cancel_body` は 1 つの共有参照 `body: &RcExprNode` について `analysis.walk(body, ・, ・)` を
+        呼び、その値から作った集合を持って `drop_nodes(body, &analysis.cancelled())` を呼ぶ。`body` は
+        `prog: &RcProgram` から借用したものであり、この 2 つの呼び出しの間に木を変える操作は無い --
+        `cancel` が持つのは共有参照だけで、`funcs` と `globals` を作る写像はそれぞれの `f.body` /
+        `g.init` を読むだけである。
+    BY CODE src/rc_ir/borrow.rs: cancel
+  <2>2. `node_id(n)` は `n.expr` が指す `RcExpr` の番地である。`Arc<T>` は `T` をヒープの 1 つの割り当ての
+        中に置き、`Arc::as_ref` はその割り当ての中の `T` の番地を返す。その番地は割り当てが生きている間
+        変わらない -- `Arc` の値を動かして動くのはポインタだけであり、割り当てが返るのは最後の強参照が
+        落ちたときである (Rust 標準ライブラリの `std::sync::Arc` の契約)。`NodeId` の doc がこの性質を
+        「the address of its expression, stable while the tree is borrowed」と述べる。
+    BY CODE src/rc_ir/borrow.rs: node_id, CODE src/rc_ir/borrow.rs: NodeId,
+       CODE src/rc_ir/ast.rs: RcExprNode
+  <2>3. QED
+    BY <2>1, <2>2
+    <2>1 より 2 つの走査は同じ木の同じ `Arc` を読み、その間 `body` の借用が生きているので、<2>2 より
+    どの位置についても 2 つの `node_id` の値は等しい。
 <1>3. 木 `N(node)` の構造についての帰納法で、`drop_nodes_inner(node, to_delete)` が言明のとおりの木を返す
       ことを示す。DEF 子と親 より子は真の部分木なので整礎である。
   <2>1. CASE `node` の式が `RcExpr::Retain(v, path, state, k)` である。この腕は `drop_nodes(k, to_delete)`
