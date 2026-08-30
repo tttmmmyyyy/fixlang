@@ -54,7 +54,7 @@ enum LoweredSymbol {
 /// `symbols` holds it (`Program::global_types`). `roots` names what code generation reaches the
 /// lowered program from outside it; it becomes `RcProgram::roots`, and the build driver takes it
 /// from `Program::root_value_names`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lower_program(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -170,7 +170,7 @@ impl<'a> Lowerer<'a> {
 
     /// Name a lifted lambda `<current top-level symbol>::closure{N}`, so its name carries the source
     /// module (matching how a top-level function's name does) and a debugger shows a meaningful name.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn fresh_closure_ref(&mut self) -> FuncRef {
         let ns = self
             .current_symbol
@@ -269,7 +269,7 @@ impl<'a> Lowerer<'a> {
     /// symbol's own name, and a symbol of any other type becomes the initializer of a global value.
     /// The counters naming the lambdas lifted out and the local variables minted restart here, so
     /// both are numbered within the symbol they were written in.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_symbol(&mut self, sym: &Symbol) -> LoweredSymbol {
         self.current_symbol = Some(sym.name.clone());
         self.closure_counter = 0;
@@ -314,7 +314,7 @@ impl<'a> Lowerer<'a> {
     /// stores them; for a funptr (no captures) it is empty. `inline_into_callers` says whether the
     /// back end is asked to inline every call of the function. The body is lowered under a fresh
     /// environment holding only the parameters and the projected captures.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lambda_as_function(
         &mut self,
         lam: &ExprNode,
@@ -396,7 +396,7 @@ impl<'a> Lowerer<'a> {
     /// Lower `expr` to the single variable holding its value, appending to `bindings` everything
     /// that must be evaluated to reach it. An expression that is already an atom — a local variable,
     /// a global name — becomes that atom and appends nothing.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_to_var(&mut self, expr: &ExprNode, bindings: &mut Vec<PendingBinding>) -> RcVar {
         // A deeply nested expression recurses deeply here (as it does in RC insertion and code
         // generation); grow the stack on demand so a large program does not overflow it.
@@ -428,7 +428,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a variable reference to the atom holding its value: a local is the RC IR variable
     /// currently bound to it, and a global is an atom carrying the symbol's name, which code
     /// generation materializes.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_var(&mut self, v: &Arc<Var>, ty: &Arc<TypeNode>, source: &Option<Span>) -> RcVar {
         match self.resolve(&v.name) {
             // A local: reuse the variable already bound (it is already an atom).
@@ -541,7 +541,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a lambda written in place to a closure value: its body becomes a top-level function
     /// under a fresh name, and the binding appended builds the closure from that function and the
     /// values it captures, in the order the closure stores them.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lam(
         &mut self,
         expr: &ExprNode,

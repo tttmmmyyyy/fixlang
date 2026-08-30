@@ -129,7 +129,7 @@ pub struct RcExprNode {
 
 /// The statement-nested form: `Let`, `Retain`, and `Release` each carry a continuation, and `Ret`
 /// is the only terminator.
-// PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub enum RcExpr {
     /// `let x = rhs; k`: bind the result of a compound expression to a single variable (ANF).
@@ -199,7 +199,7 @@ pub enum RcTarget {
 /// catch-all arm, whose payload is the whole scrutinee.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
-// PROOF: D/A, P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct MatchArm {
     /// The variant number this arm matches, or `None` for a catch-all arm.
@@ -216,7 +216,7 @@ pub struct MatchArm {
 impl MatchArm {
     /// This arm with `body` in place of its own: it matches the same variant and binds the same
     /// payload, and evaluates to what `body` gives.
-    // PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn with_body(&self, body: RcExprNode) -> MatchArm {
         MatchArm {
             body,
@@ -227,7 +227,7 @@ impl MatchArm {
 
 /// A compound expression. It appears only as the right-hand side of a `Let`; the arguments of `App`
 /// and `Llvm` are atoms (variables).
-// PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub enum RcRhs {
     /// Move / rename `y := x`, consuming `x`.
@@ -317,7 +317,7 @@ pub enum OwnershipShape {
 
 /// The initializer of a global value, run once when a reader first asks for the value. The whole
 /// graph the value reaches is marked global (refcount-exempt) before it is stored.
-// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcGlobalInit {
     /// The name the global value is defined and read under.
@@ -346,7 +346,7 @@ pub struct RcGlobalInit {
 
 /// Visit every node of `node`: the continuation chain it heads, and the body of every arm of every
 /// `Match` along it.
-// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn for_each_node(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
     // A deep continuation chain recurses to its full depth here; grow the stack on demand.
     grow_stack(|| for_each_node_inner(node, visit))

@@ -108,7 +108,7 @@ impl<'c> ValueAccessor<'c> {
     /// The object this accessor names: a local's object as it stands, or the value a global's
     /// getter returns. A global of funptr type is the function itself, so its address is taken
     /// without a call.
-    // PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get<'m>(&self, gc: &mut Generator<'c, 'm>) -> Object<'c> {
         match self {
             ValueAccessor::Local(ptr) => ptr.clone(),
@@ -1099,7 +1099,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
     /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
     /// copy. Every other read is plain.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var_name);
         let obj = val.accessor.get(self);
@@ -1479,7 +1479,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// # Returns
     /// The result of the call, and `None` in tail position, where the call ends the function and
     /// there is nothing left to generate.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn apply_lambda(
         &mut self,
         fun: Object<'c>,

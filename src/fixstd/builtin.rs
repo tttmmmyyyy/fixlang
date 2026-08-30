@@ -994,7 +994,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
 /// Inline-LLVM body of `Std::fix`, which computes `fix(f, x)`. It rebuilds the closure `fix(f)` from
 /// the function being generated and that function's own capture, passes it to `f` as the recursive
 /// `self`, and applies the result to `x`.
-// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFixBody {
     /// The variable holding the argument the recursion is applied to.

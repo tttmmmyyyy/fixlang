@@ -134,7 +134,7 @@ impl Provenance {
     /// query at the root answers whether the whole value is a single boxed leaf. A recorded `⊥` is the
     /// empty set, which is a different answer: it is the bottom of the lattice and resolves to
     /// `Unique`.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn leaf_origins_at(&self, path: &[usize]) -> Option<&LeafOrigins> {
         self.0.get(path)
     }
@@ -148,7 +148,7 @@ impl Provenance {
     /// The source of every boxed leaf under `path`, in no particular order. A path that is itself a
     /// leaf yields that leaf; one that names an aggregate — the root of an unboxed union, say —
     /// yields the leaves beneath it.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn leaf_origins_under<'a>(
         &'a self,
         path: &'a [usize],
