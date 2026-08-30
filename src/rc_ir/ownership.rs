@@ -168,7 +168,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
 /// The variable an expression returns: the one that its final `Ret` names. Every construct of the RC
 /// IR has a single continuation, so a body has exactly one such `Ret` (a match's arms each have their
 /// own, which return the arm's value to the match binding).
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn returned_var(node: &RcExprNode) -> &RcVar {
     grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(v) => v,
