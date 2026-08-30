@@ -1310,6 +1310,16 @@ type is none」と述べるので、クロージャ型 `IOState -> I64` の署�
 その lambda src から作り、`capture` を `lam_ty.is_closure()` の枝でだけ作る) と、その 3 つを写すだけの
 後段のパスである。
 
+**枠は同じ内容を 2 か所で部分的に持っている。** A23 は「`Lowerer::lower_lam` が `prog.funcs` に入れる
+関数の `fn_ty` は closure 型であり、`lower_lambda_as_function` はその関数に `capture` を与える」と述べ、
+A24 は `InlineLLVMFixBody` を持つ本体の関数が `capture` を持つと述べる。どちらも `borrow_ify` の入力に
+かかる仮定であり、P27 が量化するのは D12 を満たす任意の `RcProgram` なので、L1 の仮説をこの 2 つで
+果たすことはできない。**L1 (a) を `borrow_ify` の出力に限る形へ狭めれば、この 2 つと `clone_func` の
+コードで果たせる余地がある。**その道は、`capture` の欄が `simplify`・`insert_rc`・`split_rc_units`・
+`borrow_ify` を通って保たれること (P24 は `fn_ty`・`ret_ty`・`params` の型・`inline_into_callers` は
+挙げるが `capture` を挙げない) と、`Closure(fref, caps)` 節点の `fref` が `Lowerer::lower_lam` が
+入れた項目を名指すことを、それぞれ示すことを要求する。
+
 **(2) (S-c) の量化が D24 の段内の点へ届いていない。** D11 の (S-c) は節点の位置について
 「その時点で解放されていない」を言い、D24 は 1 つの節点の段の素動作の列の中で読みと処分がどう並ぶかを
 定めない。この文書は (S-c) をその節点の段のどの段内の点についても読む (DEF 段の素動作と段内の点)。
