@@ -627,7 +627,7 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
 - **(E5)** `vars.bindings.get(u) = Some(Llvm(gen, args, ty))` であって、
   `decl := gen.result_prov(ty, arg_tys, type_env)` の `decl.leaf_origins_at(λ)` が単一の `Arg(j, σ)` から
   なる集合であるとき `origin(u, λ) = origin(args[j], σ)`。
-- **(N)** 本体の節点が E1 から E5 のいずれかの辺を定めるとき、その辺の終点の変数の `vars.bindings` の
+- **(B)** 本体の節点が E1 から E5 のいずれかの辺を定めるとき、その辺の終点の変数の `vars.bindings` の
   記録は、その辺の種に応じてそれぞれ `Some(Move(y))`、`Some(Field(c, i))`、`Some(Payload(s, Some(t)))`、
   `Some(Payload(s, None))`、`Some(Llvm(gen, args, ty(x)))` である。
 
@@ -696,11 +696,11 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
   <2>4. QED
     BY <1>4a, <2>1, <2>3
 
-<1>9a. (N) が成り立つ。
+<1>9a. (B) が成り立つ。
   E1 から E5 の辺を定める節点は、第 2 節の一覧より、それぞれ `Let(x, Var(y), k)`、
   `Destructure(c, fs, s, k)` で `(i, f) ∈ fs`、`Let(m, Match(s, arms), k)` の `tag = Some(t)` のアーム、
   同じ節点の catch-all アーム、`Let(x, Llvm(gen, args), k)` である。`<1>1` から `<1>4` より
-  `collect_bindings` はそのそれぞれについて、辺の終点の変数に (N) の構成子を記録する。辺の終点の変数は
+  `collect_bindings` はそのそれぞれについて、辺の終点の変数に (B) の構成子を記録する。辺の終点の変数は
   この本体が束縛する変数であり、A6 より束縛変数の名前は相異なるので、`collect_bindings` の他の記録も
   `VarTable::of` が作る `Param` の記録も、同じ名前に別の値を入れない。
   BY A6, <1>1, <1>2, <1>3, <1>4
@@ -1247,9 +1247,9 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   `Match` のアーム本体の `Ret` の辺は E6 であり、D20 の別名の辺は E1 から E6 である。
   BY D20
 
-<1>1a. 道の各辺について、その辺の終点の変数の `vars.bindings` の記録は、L2 (N) が挙げる構成子である。
-  `<1>1` より各辺は E1 から E5 のいずれかであり、L2 (N) がその 5 種について記録を与える。
-  BY L2 (N), <1>1
+<1>1a. 道の各辺について、その辺の終点の変数の `vars.bindings` の記録は、L2 (B) が挙げる構成子である。
+  `<1>1` より各辺は E1 から E5 のいずれかであり、L2 (B) がその 5 種について記録を与える。
+  BY L2 (B), <1>1
 
 <1>2. 道の各辺の両端の位置は同じ `origin` を持つ。
   `<1>1a` の記録に L2 の (E1) から (E5) を当てる。E2 と E3 が要る「容器が unbox」「scrutinee が unbox」は
@@ -1494,9 +1494,16 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 和 -- すなわち `ActRefs(v, π).objects()` と `other_objects(v, π)` の和 -- は、`π` の下の各 boxed leaf `λ` に
 ついて `origin(v, λ).acted_on()` をすべて含む。
 
+**この節が「オブジェクト」と呼ぶものは位置 (`VarPath`) である。** `References::objects` と
+`References::names` と `References::shares_an_object` の鍵、`CancelAnalysis::other_objects` の返り値、
+`consume_objects` の第 2 引数は、いずれも `VarPath` である
+(`CODE src/rc_ir/ownership.rs: References`, `CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`,
+`CancelAnalysis::consume_objects`)。`VarPath` は D6 の位置であって D7 の実行時のオブジェクトではなく、
+2 つが `obj(・)` で写り合うことは P5 (a) が述べる。以下、この節の各集合は `VarPath` の集合である。
+
 <1>1. `walk_inner` の `RcExpr::Release(v, path, _, k)` の腕は、`other_objects(v, path)` を
       `consume_objects` に渡し、`acted_references(v, path)` を `un_bump` に渡す。`un_bump` が読むのは
-      その `References` が名指すオブジェクト、すなわち `ActRefs(v, π).objects()` である。
+      その `References` の鍵、すなわち `ActRefs(v, π).objects()` である。
   <2>1. 腕は `let others = self.other_objects(v, path); self.consume_objects(&mut pending, &others);` の
         のち `let un_bumped = self.acted_references(v, path);` を `un_bump(&mut pending, &un_bumped)` に
         渡す。`UnBump::OutsideBracket` の枝はさらに `un_bumped.objects()` を `consume_objects` に渡す。
@@ -1505,7 +1512,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
         の値である (空でないことを表明するほかに何もしない)。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references
   <2>3. `un_bump(pending, un_bumped)` が `un_bumped` から読むのは `shares_an_object`、`covers`、
-        `subtract` であり、いずれも `un_bumped` が名指すオブジェクトについての演算である。
+        `subtract` であり、いずれも `un_bumped` の鍵 (`VarPath`) ごとの個数についての演算である。
     BY D15, CODE src/rc_ir/borrow.rs: un_bump, CODE src/rc_ir/ownership.rs: References
   <2>4. QED
     BY <2>1, <2>2, <2>3
