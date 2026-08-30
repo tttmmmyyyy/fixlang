@@ -1,6 +1,6 @@
 # P1 (leaf と unit の対応) と P2 (`origin` の全域性と停止性) の証明
 
-対象コミットは `5aa87f26c246919eadcb3f1c3ce0252366c2aed8` である。
+対象コミットは `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` である。
 
 この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A3、A6、A9、A10、A11、A12、A13、A15 の
 上である。証明は 1 本の構造化証明で、その QED が次の 3 つである。
@@ -9,10 +9,11 @@
   ついて成り立つ。`<1>1` は A10 をこの文書の記法で述べたものである。第 3 節がその対応を述べる。
 - **P2** (`origin` の全域性と停止性)。README の P2 が量化する 2 つの形 -- プログラムの束縛変数と、
   `vars.bindings` に束縛を持たない名前 (D6 の第 3 の形) -- は、どちらも `<1>31` の範囲に入る。
-- **P1 の系** (`<1>33`, `<1>34`)。`origin` の再帰が辿る path も、`origin` が返す `VarPath` の path も、
-  どれも「その型の unit に届く」。すなわちそれらに `truncate_to_unit` を当てると abort せず、値は
-  `rc_units` の要素である。これは「unit path の `origin` と、その下の leaf の `origin` の関係」に
-  ついての要望への答えである。
+- **P1 の系** (`<1>33`, `<1>34`)。`pi` が `ty(x)` の boxed leaf か RC unit であるとき、
+  `origin(vars, E, x, pi)` の再帰が辿る対も、その返り値に現れる `VarPath` も、第 1 成分が
+  `vars.var_tys` に型を持つ限り、第 2 成分が「その型の unit に届く」。すなわちそれに
+  `truncate_to_unit` を当てると abort せず、値は `rc_units` の要素である。これは「unit path の
+  `origin` と、その下の leaf の `origin` の関係」についての要望への答えである。
 
 P1 と P2 は共通の補題 (型の上の walk が停止すること、`unit_step` と `boxed_leaf_paths` の内部関数
 `go` の分類) を使うので、その補題を先頭の `<1>` ステップに置き、P1 と P2 をその後ろに置く。
@@ -20,8 +21,8 @@ P1 と P2 は共通の補題 (型の上の walk が停止すること、`unit_st
 P1 は 2 つの静的な列挙 (`boxed_leaf_paths` と `rc_units`) の対応についての主張なので、D16 の
 inhabited は現れない。実行時にどの leaf が参照を持つかは P1 の主張に入らない。
 
-`<1>1` は README の A10、`<1>2` は A11、`<1>3a` は A12 と A3 の 1 段を、この文書の記法で述べた
-ものである。README の文面との差と、P1 の定義域については第 3 節に書く。
+`<1>1` は README の A10 を、`<1>2` は A11 を A6 と D6 と合わせて、`<1>3a` は A12 と A3 の 1 段を、
+この文書の記法で述べたものである。README の文面との差と、P1 の定義域については第 3 節に書く。
 
 ## 1. 記法
 
@@ -160,10 +161,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      CODE src/rc_ir/ast.rs: RcVar (`ty` の doc「always concrete (monomorphic)」),
      CODE src/ast/program.rs: Program::validate_layouts
 
-<1>2. **(H2: 変数のスコープ規律)** 関数本体の各節点 `n` について、`n` が使う変数はどれも、`Scope(n)`
-   (下の `DEF Scope`) の要素であるか、この関数のどの束縛でもない名前 (グローバル) である。ここで
-   `Let(x, rhs, k)` の `rhs` が使う変数は、`Scope` に `x` が入る**前**の集合、すなわち
-   `Scope(Let(x, rhs, k) の節点)` で解決される。
+<1>2. **(H2: 変数のスコープ規律)** 本体 -- 関数の `body` またはグローバル初期化子の `init` -- を 1 つ
+   取り、`vars` をそれについて `VarTable::of` または `VarTable::body_only` が作る表とする。その本体の
+   各節点 `n` が使う変数はどれも、`Scope(n)` (下の `DEF Scope`) の要素であるか、`vars.bindings` の
+   定義域に無い名前である。ここで `Let(x, rhs, k)` の `rhs` が使う変数は、`Scope` に `x` が入る**前**の
+   集合、すなわち `Scope(Let(x, rhs, k) の節点)` で解決される。
 
    **DEF Scope** -- 本体の各節点 `n` に対する名前の集合 `Scope(n)` を次で定める。
    - `VarTable::of(func)` が作る表では、`Scope(根)` は `func.params` と `func.capture` の名前の集合。
@@ -176,7 +178,16 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    - `n` が `Retain(v, p, s, k)`、`Release(v, p, s, k)`、`Eval(v, k)` のとき、`Scope(k)` は
      `Scope(n)` に等しい。
 
-   主張そのものは A11 である。**スコープを定めるのは D2 であり、`DEF Scope` はその規則を節点の種類
+   **示すのは、`vars.bindings` の定義域にある名前が `Scope(n)` の要素であることである。**`n` が使う
+   変数 `v` がその定義域にあるとする。D6 より `v` は局所名である。A11 の第 2 文は、関数の本体の自由な
+   局所名がその関数のパラメータと capture に限ることと、グローバル初期化子の `init` が自由な局所名を
+   持たないことを述べる。よって `v` は、この本体のパラメータ・capture であるか、この本体のある節点が
+   束縛するものである。前者なら `DEF Scope` の根の行が `v` を `Scope(根)` に入れ、`DEF Scope` の
+   残る 3 行はどれも子の集合を親の集合に名前を 0 個以上加えたものと定めるので、`v` は `Scope(n)` の
+   要素である。後者なら、A6 より `v` の束縛はプログラム全体で 1 つなので、A11 の第 1 文が言う解決先は
+   その束縛であり、その束縛のスコープが `n` を含む、すなわち `v` は `Scope(n)` の要素である。
+
+   **スコープを定めるのは D2 であり、`DEF Scope` はその規則を節点の種類
    ごとに書き下したものである。**D2 は `Let` が束縛する `x` のスコープを `k` の部分木、`Destructure`
    が束縛する各変数のスコープを `k` の部分木、`Match` のアームの `payload` のスコープをそのアームの
    `body` の部分木、パラメータと capture のスコープを本体の全体と定める。上の 4 行はこれを、根から
@@ -186,7 +197,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    この形であり、関数ごとに `func.params` と `func.capture` を `bind` してから `check_expr` を呼び、
    グローバル初期化子については `bind` を 1 度も呼ばずに `check_expr` を呼ぶ。**`validate` は
    `develop_mode` のときだけ走る** -- A11 の但し書きがこれを言う。
-  BY A11, D1, D2, CODE src/rc_ir/validate.rs: validate,
+  BY A6, A11, D1, D2, D6, CODE src/rc_ir/validate.rs: validate,
      CODE src/rc_ir/validate.rs: Validator::check_expr_inner,
      CODE src/rc_ir/validate.rs: Validator::check_rhs,
      CODE src/rc_ir/validate.rs: Validator::use_var,
@@ -196,7 +207,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   BY A9, CODE src/rc_ir/validate.rs: Validator::check_rhs (`RcRhs::Match` の腕の `arms.is_empty()`
      検査)
 
-<1>3a. **(H4: 束縛の形と型が合っている)** 関数本体について次の 8 つが成り立つ。
+<1>3a. **(H4: 束縛の形と型が合っている)** 関数の `body` とグローバル初期化子の `init` のどちらに
+   ついても、次の 8 つが成り立つ。
    - (i) `Let(x, RcRhs::Var(y), k)` について `ty(y)` は `ty(x)` に等しい。
    - (ii) `Let(x, RcRhs::Match(scrut, arms), k)` の各アームについて、`returned_var(&arm.body)` の型は
      `ty(x)` に等しい。
@@ -205,7 +217,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      等しい。
    - (iv) 同じ `Match` の `ty(scrut)` は union の型である。すなわち
      `ty(scrut).toplevel_tycon_info(E).variant` は `TyConVariant::Union` である。
-   - (v) `Destructure(cont, fields, s, k)` について `ty(cont)` は構造体 (タプルを含む) の型であり、
+   - (v) `Destructure(cont, fields, s, k)` について `ty(cont)` は構造体 (タプルを含む) の型である。
+     すなわち `ty(cont).toplevel_tycon_info(E).variant` は `TyConVariant::Struct` である。また
      各 `(i, fv)` について `(i, ty(fv))` は `F(ty(cont))` の要素である。
    - (vi) 同じ名前を持つ `RcVar` の出現はどれも同じ型を持つ。したがって `vars.var_tys` が記録する型は、
      その名前を使う側の `RcVar` の `ty` に等しい。以下ではこの型を `ty(名前)` と書く。
@@ -234,6 +247,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    `toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、この項が立つとき
    `pt.is_closure()` は偽である。
 
+   **(iv) と (v) は、A12 の「`Match` の scrutinee が union であること」と「`Destructure` の容器が
+   構造体であること」を、その型の `TyConInfo` の `variant` として書いたものである。**タプルもこの形に
+   入る -- `tuple_defn` はタプルを `TypeDeclValue::Struct` の `TypeDefn` として宣言し、
+   `TypeDefn::tycon_info` はその腕で `TyConVariant::Struct` を置く。
+
    (viii) は A3 の「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字で
    あり、`σ` はその型の boxed leaf である」の段落である。「その型」は第 `j` オペランドの型
    `ty(args[j])`、
@@ -249,12 +267,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
      CODE src/rc_ir/ownership.rs: returned_var,
      CODE src/rc_ir/ownership.rs: VarTable::of,
-     CODE src/rc_ir/ownership.rs: collect_bindings
+     CODE src/rc_ir/ownership.rs: collect_bindings,
+     CODE src/ast/types.rs: TyConVariant,
+     CODE src/ast/typedecl.rs: TypeDefn::tycon_info,
+     CODE src/fixstd/builtin.rs: tuple_defn
 
 <1>3b. 製品のコードが `TyConInfo` の値を作る場所は、次の 4 つの関数だけである (`ownership.rs` に残る
-   2 か所は `#[cfg(test)] mod tests` の中にある)。よって `E` に登録されている `TyConInfo` はどれも
-   この 4 つのいずれかが作ったものである。各関数が置く `variant` と、この証明が読むフィールドは次の
-   とおりである。
+   2 か所は `#[cfg(test)] mod tests` の中にある)。各関数が置く `variant` と、この証明が読むフィールドは
+   次のとおりである。
 
    | 作る関数 | `variant` | 個数と、この証明が読むフィールド |
    |---|---|---|
@@ -278,14 +298,121 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    穴つきの形 `type_decl.tycon_info(&[i])` を入れる。`Program::validate_type_defns` は同じ
    `self.type_defns` を渡って `validate_tyvars` を呼び、`elaborate` はそれを `?` で呼ぶので、
    elaboration を通ったプログラムではどの行の名前も相異なる。
+
+   **`E` に登録されている各 `TyConInfo` の `variant`、`tyvars`、`is_unbox`、`fields` の長さ、
+   および各 `fields[i].is_punched` は、上の 4 つのいずれかがそれを作ったときの値である。**この 5 つが、
+   この証明が `TyConInfo` から値として読むものである。**`fields[i].ty` は `F(t)` の第 2 成分として
+   現れるが、この証明はその値を主張せず、それが `<1>1` を満たすことだけを使う。`TypeEnv` の `tycons`
+   は非公開のフィールドなので、それに書けるのは `src/ast/program.rs` の中の 6 か所であり、次の
+   とおりである。
+
+   - `TypeEnv::default`。空の `Map` を置く。
+   - `TypeEnv::new`。`Program::calculate_type_env` が、`bulitin_tycons()` に各型宣言の
+     `type_decl.tycon_info(&[])` と、構造体についてはフィールドごとの穴つきの形
+     `type_decl.tycon_info(&[i])` を足した `Map` を渡す。
+   - `TypeEnv::add_tycons`。渡された各 `TyConInfo` の `fields` を走って `field.ty` を
+     `unwrap_newtypes` の像に置き替えてから、`tycons` に入れる。
+   - `TypeEnv::unwrap_newtypes`。既に在る各 `TyConInfo` の `fields` を走って `field.ty` を
+     同じように置き替える。
+   - `TypeEnv::resolve_type_aliases_in_tycons`。既に在る各 `TyConInfo` に
+     `TyConInfo::resolve_type_aliases` を当てる。それは各 `Field` に `Field::resolve_type_aliases` を
+     当て、その本体は `self.ty` への 1 つの代入である。
+   - `Program::resolve_namespace_not_in_expr`。既に在る各 `TyConInfo` に
+     `TyConInfo::resolve_namespace` を当てる。それは各 `Field` に `Field::resolve_namespace` を
+     当て、その本体は `self.syn_ty` と `self.ty` への 2 つの代入である。
+
+   最初の 2 つが `Map` を丸ごと置き、残る 4 つが書き替えるのは `fields[..].ty` と `fields[..].syn_ty`
+   だけである。どれも `fields` の長さを変えず、`variant`、`tyvars`、`is_unbox`、`fields[i].is_punched`
+   にも触れない。`TyConInfo` は `Serialize` も `Deserialize` も導出しないので、キャッシュから読まれる
+   `TyConInfo` も無い。
   BY CODE src/ast/types.rs: TyConInfo, CODE src/fixstd/builtin.rs: bulitin_tycons,
      CODE src/constants.rs: FUNPTR_ARGS_MAX, CODE src/ast/typedecl.rs: TypeDefn::tycon_info,
      CODE src/ast/typedecl.rs: TypeDefn::validate_tyvars,
+     CODE src/ast/typedecl.rs: Field (`ty` / `syn_ty` / `is_punched` の宣言),
+     CODE src/ast/typedecl.rs: Field::resolve_namespace,
+     CODE src/ast/typedecl.rs: Field::resolve_type_aliases,
      CODE src/ast/program.rs: Program::validate_type_defns,
      CODE src/ast/program.rs: Program::calculate_type_env,
+     CODE src/ast/program.rs: TypeEnv (`tycons` の宣言),
+     CODE src/ast/program.rs: TypeEnv::default, CODE src/ast/program.rs: TypeEnv::new,
+     CODE src/ast/program.rs: TypeEnv::add_tycons,
+     CODE src/ast/program.rs: TypeEnv::unwrap_newtypes,
+     CODE src/ast/program.rs: TypeEnv::resolve_type_aliases_in_tycons,
+     CODE src/ast/program.rs: Program::resolve_namespace_not_in_expr,
+     CODE src/ast/types.rs: TyConInfo::resolve_namespace,
+     CODE src/ast/types.rs: TyConInfo::resolve_type_aliases,
      CODE src/elaboration/mod.rs: elaborate,
      CODE src/optimization/capture_struct.rs: CaptureStruct::new,
      CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon
+
+<1>3ba. `is_funptr_tycon` について次の 2 つが成り立つ。
+   - (a) `is_funptr_tycon(tc)` が abort しうるのは末尾の `number.parse::<u32>().unwrap()` だけで
+     ある。そこに達するのは、`tc.name.namespace` が `Std` の 1 段でありかつ `tc.name.name` が
+     `FUNPTR_NAME` (`"#FunPtr"`) で始まるときに限る。
+   - (b) `E.tycons()` の鍵のうち (a) の形の名前を持つのは、`bulitin_tycons` が
+     `make_funptr_tycon(n)` (`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下の `u32`) の下に入れる 100 個だけで
+     ある。その鍵に対して `E.tycons()` が持つ `TyConInfo` の `variant` は `TyConVariant::Primitive` で
+     あり、その鍵に対する (a) の `parse::<u32>()` は成功する。
+  <2>1. (a) が成り立つ。`is_funptr_tycon` は、`tc.name.namespace` が `Std` の 1 段でなければ `None`、
+     `tc.name.name` が `FUNPTR_NAME` で始まらなければ `None` を返し、そのどちらでもないときにだけ
+     残りの文字を `parse::<u32>()` に掛ける。ほかに abort する場所を持たない。
+    BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME
+  <2>2. (b) の第 1 文が成り立つ。`<1>3b` が挙げる `tycons` への 6 つの書き込みのうち、鍵を置くのは
+     `TypeEnv::default` (空の `Map`)、`Program::calculate_type_env` が呼ぶ `TypeEnv::new`、
+     `TypeEnv::add_tycons` の 3 つであり、残る 3 つは既に在る値を書き替えるだけである。よって
+     `E` の鍵は次の 4 か所から来る。`add_tycons` を呼ぶ場所は `closure_specialization::lift_all`、
+     `closure_specialization::realize_all`、`defunctionalize_fix::run_one`、
+     `desugar_opaque::register_opaque_tycon` の 4 つである。
+     - `Program::calculate_type_env` が置く `bulitin_tycons()` の鍵。`<1>3b` の表の 5 行が
+       挙げるもので、`#FunPtr` で始まるのは `make_funptr_tycon(n)` だけである。
+     - `Program::calculate_type_env` が置く `type_decl.tycon()` と、構造体についてその名前に
+       `PUNCHED_TYPE_SYMBOL` (`"#PunchedAt"`) と添字を継いだ穴つきの形。A13 より Fix の識別子は
+       `#` を含まないので、どちらも `#FunPtr` では始まらない。
+     - `lift_all` と `realize_all` が `add_tycons` に渡す capture 構造体の型構成子。この 2 つが
+       渡すのは `LiftedLambdas::take_new_tycons()` の返り値であり、その `new_tycons` へ入れるのは
+       `record_capture_list` だけで、入れる鍵は `CaptureStruct` の `tycon` である。`run_one` が
+       `add_tycons` に渡す鍵も、`FixDefunctionalizer::lift` が作った `CaptureStruct` の `tycon` で
+       ある。その名前は `CaptureStruct::new` が `format!("{}@{}", prefix, owner.name)` で作る。
+       **製品のコードで `CaptureStruct::new` を呼ぶのは 3 か所であり、`prefix` はそのどれかが
+       渡す値である。**`LiftedLambdas::capture_struct_of` と
+       `ClosureSpecializationVisitor::decapture_lambda` は `CAP_LIST_PREFIX` (`"#CapList"`) を、
+       `FixDefunctionalizer::lift` は `"#FixCap"` を渡す。`decapture_lambda` が作る
+       `CaptureStruct` が `new_tycons` に届くのは `LiftedLambdas::insert` を経由してであり、
+       それも `record_capture_list` を呼ぶ。よって `prefix` は `"#FixCap"` か `CAP_LIST_PREFIX` の
+       どちらかであり、どちらも `#FunPtr` では始まらない。
+     - `register_opaque_tycon` が `add_tycons` に渡す不透明型の型構成子。その鍵は
+       `OpaqueInfo` の `tycon` であり、その名前を作るのは `collect_opaque_infos` の
+       `FullName::new(&gv_name.to_namespace(), &opq_var.name)` である。`opq_var` は
+       `is_opaque_tyvar(&tv.name)` が真である型変数に限られ、`is_opaque_tyvar(name)` は
+       `name.starts_with('?')` である。よってこの鍵の `name.name` は `?` で始まり、`#FunPtr` では
+       始まらない。
+    BY A13, <1>3b, CODE src/ast/program.rs: Program::calculate_type_env,
+       CODE src/ast/program.rs: TypeEnv::add_tycons,
+       CODE src/ast/types.rs: TyCon::into_punched_type_name,
+       CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, CODE src/constants.rs: CAP_LIST_PREFIX,
+       CODE src/optimization/capture_struct.rs: CaptureStruct::new,
+       CODE src/optimization/defunctionalize_fix.rs: run_one, FixDefunctionalizer::lift,
+       CODE src/optimization/closure_specialization.rs: lift_all, realize_all,
+           record_capture_list, take_new_tycons, LiftedLambdas::insert,
+           LiftedLambdas::capture_struct_of,
+           ClosureSpecializationVisitor::decapture_lambda,
+       CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon, collect_opaque_infos,
+           OpaqueInfo,
+       CODE src/ast/types.rs: is_opaque_tyvar,
+       CODE src/fixstd/builtin.rs: make_funptr_tycon,
+       CODE src/fixstd/builtin.rs: make_funptr_name
+  <2>3. (b) の第 2 文が成り立つ。`<2>2` より `make_funptr_tycon(n)` を `E.tycons()` の鍵に置くのは
+     `Program::calculate_type_env` が渡す `bulitin_tycons()` だけであり、`<1>3b` の表よりその
+     `TyConInfo` の `variant` は `TyConVariant::Primitive` である。`<1>3b` の最後の節より、`E` に
+     入った後の書き替えは `variant` を動かさない。
+    BY <1>3b, <2>2, CODE src/fixstd/builtin.rs: bulitin_tycons
+  <2>4. (b) の第 3 文が成り立つ。`make_funptr_tycon(n)` の名前は `make_funptr_name(n)`、すなわち
+     `#FunPtr` に `n` の 10 進表記を継いだものなので、`FUNPTR_NAME` の分を落とした残りは `n` の
+     10 進表記であり、`parse::<u32>()` は成功する。
+    BY <2>1, <2>2, CODE src/fixstd/builtin.rs: make_funptr_name,
+       CODE src/fixstd/builtin.rs: make_funptr_tycon
+  <2>5. QED
+    BY <2>1, <2>2, <2>3, <2>4
 
 <1>3c. `<1>1` を満たす型 `t` について、次の 4 つが成り立つ。
    - (a) `t.is_closure()`、`t.is_array()`、`t.is_funptr()`、`t.is_punched_array()` は abort せず
@@ -317,61 +444,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
       BY CODE src/fixstd/builtin.rs: is_array_tycon,
          CODE src/fixstd/builtin.rs: is_punched_array_tycon,
          CODE src/ast/types.rs: TypeNode::is_closure
-    <3>3. `is_funptr_tycon(tc)` が abort しうるのは末尾の `number.parse::<u32>().unwrap()` だけで
-       ある。そこに達するのは、`tc.name.namespace` が `Std` の 1 段でありかつ `tc.name.name` が
-       `FUNPTR_NAME` (`"#FunPtr"`) で始まるときに限る。
-      BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME
-    <3>4. `E.tycons()` の鍵のうち `<3>3` の形の名前を持つのは、`bulitin_tycons` が
-       `make_funptr_tycon(n)` (`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下の `u32`) の下に入れる 100 個
-       だけである。`E` の鍵は次の 4 か所から来る。`TypeEnv` を作るのは `calculate_type_env` の
-       `TypeEnv::new` であり、鍵を足すのは `TypeEnv::add_tycons` だけである。`add_tycons` を呼ぶ
-       場所は `closure_specialization::lift_all`、`closure_specialization::realize_all`、
-       `defunctionalize_fix::run_one`、`desugar_opaque::register_opaque_tycon` の 4 つである。
-       - `Program::calculate_type_env` が置く `bulitin_tycons()` の鍵。`<1>3b` の表の 5 行が
-         挙げるもので、`#FunPtr` で始まるのは `make_funptr_tycon(n)` だけである。
-       - `Program::calculate_type_env` が置く `type_decl.tycon()` と、構造体についてその名前に
-         `PUNCHED_TYPE_SYMBOL` (`"#PunchedAt"`) と添字を継いだ穴つきの形。A13 より Fix の識別子は
-         `#` を含まないので、どちらも `#FunPtr` では始まらない。
-       - `lift_all` と `realize_all` が `add_tycons` に渡す capture 構造体の型構成子。この 2 つが
-         渡すのは `LiftedLambdas::take_new_tycons()` の返り値であり、その `new_tycons` へ入れるのは
-         `record_capture_list` だけで、入れる鍵は `CaptureStruct` の `tycon` である。`run_one` が
-         `add_tycons` に渡す鍵も、`FixDefunctionalizer::lift` が作った `CaptureStruct` の `tycon` で
-         ある。その名前は `CaptureStruct::new` が `format!("{}@{}", prefix, owner.name)` で作る。
-         **製品のコードで `CaptureStruct::new` を呼ぶのは 3 か所であり、`prefix` はそのどれかが
-         渡す値である。**`LiftedLambdas::capture_struct_of` と
-         `ClosureSpecializationVisitor::decapture_lambda` は `CAP_LIST_PREFIX` (`"#CapList"`) を、
-         `FixDefunctionalizer::lift` は `"#FixCap"` を渡す。`decapture_lambda` が作る
-         `CaptureStruct` が `new_tycons` に届くのは `LiftedLambdas::insert` を経由してであり、
-         それも `record_capture_list` を呼ぶ。よって `prefix` は `"#FixCap"` か `CAP_LIST_PREFIX` の
-         どちらかであり、どちらも `#FunPtr` では始まらない。
-       - `register_opaque_tycon` が `add_tycons` に渡す不透明型の型構成子。その鍵は
-         `OpaqueInfo` の `tycon` であり、その名前を作るのは `collect_opaque_infos` の
-         `FullName::new(&gv_name.to_namespace(), &opq_var.name)` である。`opq_var` は
-         `is_opaque_tyvar(&tv.name)` が真である型変数に限られ、`is_opaque_tyvar(name)` は
-         `name.starts_with('?')` である。よってこの鍵の `name.name` は `?` で始まり、`#FunPtr` では
-         始まらない。
-      BY A13, <1>3b, CODE src/ast/program.rs: Program::calculate_type_env,
-         CODE src/ast/program.rs: TypeEnv::add_tycons,
-         CODE src/ast/types.rs: TyCon::into_punched_type_name,
-         CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, CODE src/constants.rs: CAP_LIST_PREFIX,
-         CODE src/optimization/capture_struct.rs: CaptureStruct::new,
-         CODE src/optimization/defunctionalize_fix.rs: run_one, FixDefunctionalizer::lift,
-         CODE src/optimization/closure_specialization.rs: lift_all, realize_all,
-             record_capture_list, take_new_tycons, LiftedLambdas::insert,
-             LiftedLambdas::capture_struct_of,
-             ClosureSpecializationVisitor::decapture_lambda,
-         CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon, collect_opaque_infos,
-             OpaqueInfo,
-         CODE src/ast/types.rs: is_opaque_tyvar,
-         CODE src/fixstd/builtin.rs: make_funptr_tycon,
-         CODE src/fixstd/builtin.rs: make_funptr_name
     <3>5. QED
-      `<1>1` (i) より `t.toplevel_tycon()` が返す型構成子は `E.tycons()` の鍵である。`<3>4` より
-      それが `<3>3` の形であるのは `make_funptr_tycon(n)` のときだけで、そのとき
-      `make_funptr_name(n)` は `#FunPtr` に `n` の 10 進表記を継いだものなので `parse::<u32>()` は
-      成功する。`<3>1` と `<3>2` と合わせて 4 つとも abort しない。
-      BY <1>1, <3>1, <3>2, <3>3, <3>4,
-         CODE src/fixstd/builtin.rs: make_funptr_name
+      `<1>1` (i) より `t.toplevel_tycon()` が返す型構成子は `E.tycons()` の鍵である。`<1>3ba` (a) より
+      `is_funptr_tycon` が abort しうるのはその名前が `#FunPtr` で始まる `Std` の 1 段の名前のときだけで
+      あり、`<1>3ba` (b) より `E.tycons()` の鍵でその形を持つのは `make_funptr_tycon(n)` に限られて、
+      そこでは `parse::<u32>()` が成功する。`<3>1` と `<3>2` と合わせて 4 つとも abort しない。
+      BY <1>1, <1>3ba, <3>1, <3>2
   <2>2. (c) が成り立つ。`toplevel_tycon_info` は `assert!(!self.is_closure())` を置き、
      `self.toplevel_tycon().unwrap()` と `type_env.tycons().get(&tycon).unwrap()` を行う。この場合の
      仮定より `assert!` は通り、`<1>1` (i) より 2 つの `unwrap` は成功する。`is_union` は
@@ -460,6 +538,25 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     未満で `f` は `t.field_types(E)[i]` である。
     BY <2>1, <2>2, <2>3, <2>7, CODE src/ast/types.rs: TypeNode::unpunched_field_types,
        CODE src/ast/types.rs: TypeNode::field_types
+
+<1>3ca. `<1>1` を満たす型 `t` について `t.is_closure()` が偽であるとき、`t.is_funptr()` が真ならば
+   `t.toplevel_tycon_info(E).variant` は `TyConVariant::Primitive` である。対偶をとると、
+   `t.toplevel_tycon_info(E).variant` が `Primitive` でなければ `t.is_funptr()` は偽である。
+  <2>1. `t.is_funptr()` は `toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())` である。
+     それが真であるのは `t.toplevel_tycon()` が `Some(tc)` を返し、かつ `is_funptr_tycon(tc)` が
+     `Some` を返すときに限る。
+    BY CODE src/ast/types.rs: TypeNode::is_funptr,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies
+  <2>2. `is_funptr_tycon(tc)` が `Some` を返すとき、`tc` の名前は `<1>3ba` (a) の形である。
+     `is_funptr_tycon` は 2 つの検査のどちらかに落ちたら `None` を返すからである。
+    BY <1>3ba, <2>1, CODE src/fixstd/builtin.rs: is_funptr_tycon
+  <2>3. `<1>1` (i) より `tc` は `E.tycons()` の鍵であり、`<1>3ba` (b) よりその `TyConInfo` の
+     `variant` は `TyConVariant::Primitive` である。
+    BY <1>1, <1>3ba, <2>2
+  <2>4. QED
+    `t.is_closure()` が偽なので `<1>3c` (c) より `t.toplevel_tycon_info(E)` は abort せず値を返し、
+    その値は `E.tycons()[tc]` である。`<2>3` よりその `variant` は `Primitive` である。
+    BY <1>1, <1>3c, <2>1, <2>3, CODE src/ast/types.rs: TypeNode::toplevel_tycon_info
 
 <1>3d. `<1>1` を満たす型 `t_0` から始まる無限列 `t_0 REC t_1 REC t_2 ...` は存在しない。
   <2>1. `t REC f` であるとき、ある `i` について `(i, f)` は `F(t)` の要素である。すなわち `REC` の辺は
@@ -1741,13 +1838,28 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 <1>29a. 1 つの表 `vars` と型環境 `E` を固定する。`origin(vars, E, u, sig)` が値を返すとき、その値は
    `(u, sig)` で決まる。すなわち、`vars.origins` の状態がどうであれ、同じ `(u, sig)` についての
    2 回の呼び出しは等しい値を返す。
-  <2>1. `vars.bindings` と `vars.var_tys` は、表を作り終えたのちは変わらない。この 2 つは
-     `VarTable` の非公開フィールドであり、書き込むのは `VarTable::of`、`VarTable::body_only`、
-     `collect_bindings` だけで、どれも表を作る間にしか走らない。`origin` は `&VarTable` を取るので、
-     内部可変性を持つ `origins` 以外を書き換えられない。
-    BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::of,
-       CODE src/rc_ir/ownership.rs: VarTable::body_only,
-       CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin
+  <2>1. `vars.bindings` と `vars.var_tys` は、表を作り終えたのちは変わらない。
+    <3>1. `bindings` は `VarTable` の非公開フィールドなので、それに書けるのは
+       `src/rc_ir/ownership.rs` の中だけである。同ファイルで `bindings` に書くのは、
+       `VarTable::empty` の初期化と、`VarTable::of` の 1 か所と、`collect_bindings` の 3 か所で
+       ある (残る 1 か所は `#[cfg(test)] mod tests` の中の `table` である)。`VarTable::body_only` は
+       `VarTable::empty` と `collect_bindings` を呼ぶだけである。どれも表を作る間にしか走らない。
+      BY CODE src/rc_ir/ownership.rs: VarTable (`bindings` の宣言),
+         CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
+         CODE src/rc_ir/ownership.rs: VarTable::body_only,
+         CODE src/rc_ir/ownership.rs: collect_bindings
+    <3>2. `var_tys` は `pub(crate)` なので、クレート全体を見る。`src/` のうち
+       `src/rc_ir/ownership.rs` の外に `var_tys` の出現は 1 つも無く、同ファイルの中で `var_tys` に
+       書くのは `VarTable::empty` の初期化と、`VarTable::of` の 1 か所と、`collect_bindings` の
+       3 か所である (残る 1 か所は `#[cfg(test)] mod tests` の中の `table` である)。どれも表を作る
+       間にしか走らない。
+      BY CODE src/rc_ir/ownership.rs: VarTable (`var_tys` の宣言),
+         CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
+         CODE src/rc_ir/ownership.rs: collect_bindings
+    <3>3. `origin` は `&VarTable` を取るので、内部可変性を持つ `origins` 以外を書き換えられない。
+      BY CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: VarTable
+    <3>4. QED
+      BY <3>1, <3>2, <3>3
   <2>1a. `origin_from_leaves_under(vars, E, decl, args, path, here)` の返り値は、`decl`、`args`、
      `path`、`here`、`E`、および自分が行う `origin` の呼び出しの返り値だけで決まる。とくに
      `operand_units` の反復の順序には依らない。
@@ -1779,8 +1891,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `reached.iter().all(|o| o == first)` は偽である -- 真だとすると `a == first` かつ
        `b == first` であり、`<3>3` の同値関係から `a == b` になって仮定に反する。よって返り値は
        `Some(Origin::of_candidates(candidates, here))` である。`candidates` は `reached` の各要素の
-       `acted_on()` を集めた `Set<VarPath>` であり、集合としては並び順に依らない。`of_candidates` が
-       読むのは `candidates.len()` と、それが 1 のときのただ 1 つの要素と、`here` だけである。
+       `acted_on()` を集めた `Set<VarPath>` であり、集合としては並び順に依らない。`of_candidates` は
+       `candidates.is_empty()` を表明で見たのち `candidates.len()` で場合を分け、1 のときは
+       `into_iter().next()` が返す元を `Origin::Exactly` に置き、それ以外のときは `candidates`
+       そのものを `Origin::Join` の同名の欄に、`here` の複製を `identity` の欄に置く。要素数が 1 の
+       集合の `into_iter().next()` はその元であり、要素数 2 以上のときに置かれる `Set` は並び順に
+       依らず等しいので、`<3>3` の `Origin` の等価性のもとで返り値はどちらの場合も並び順に依らない。
       BY <3>2, <3>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
          CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::acted_on
     <3>7. QED
@@ -1926,14 +2042,19 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, <2>8, CODE src/rc_ir/ownership.rs: Binding
 
 <1>31. **P2 が成り立つ。** すなわち、A3、A6、A9、A10、A11、A12、A13、A15 を満たすプログラムに
-   ついて、`vars` を
-   その関数の `VarTable`、`x` を任意の `FullName`、`pi` を任意の `FieldPath` とすると、
-   `origin(vars, E, x, pi)` は panic せずに `Origin` の値を返し、停止する。
+   ついて、`vars` をその 1 つの本体 -- 関数の `body` またはグローバル初期化子の `init` -- について
+   `VarTable::of` または `VarTable::body_only` が作る表、`x` を任意の `FullName`、`pi` を任意の
+   `FieldPath` とすると、`origin(vars, E, x, pi)` は panic せずに `Origin` の値を返し、停止する。
+
+   **`VarTable::body_only` が作る表を範囲に入れるのは、`origin` がその上でも走るからである。**
+   `borrow_ify` と `cancel` はどちらもグローバル初期化子について `VarTable::body_only(&g.init)` を
+   置き、その表で `RewriteCtx` と `CancelAnalysis` を作る。README の P7a も、site を関数に限らない
+   形で書く理由を「`owns_unit` がグローバル初期化子の版でも呼ばれるからである」と述べる。
 
    条件節がこの 8 つを挙げるのは、`<1>29` と `<1>30` がその全部の上に立つからである。`<1>1` は
-   A10、`<1>2` は A11、`<1>3a` は A12 と A3 の 1 段をこの文書の記法で述べたものであり (第 3 節)、
-   A3 の残りは `<1>28` と `<1>28a`、A6 は `<1>21`、A9 は `<1>3`、A13 は `<1>3c` の `<2>1`、
-   A15 は `<1>29` が読む。
+   A10、`<1>2` は A11 を A6 と D6 と合わせたもの、`<1>3a` は A12 と A3 の 1 段をこの文書の記法で
+   述べたものであり (第 3 節)、A3 の残りは `<1>28` と `<1>28a`、A6 は `<1>2` と `<1>21`、A9 は
+   `<1>3`、A13 は `<1>3ba` の `<2>2`、A15 は `<1>29` が読む。
 
    P2 が量化するのは、`x` がプログラムの束縛変数である場合と、`x` が `vars.bindings` に束縛を
    持たない名前 (D6 の第 3 の形) である場合であり、どちらもこの主張の特別な場合である。
@@ -1953,10 +2074,19 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `Origin::Exactly` を作るだけであることを述べる。すなわち `origin_inner` はその腕で即座に
      `here()` を返し、`origin` はその値を返す。
     BY D6, <1>29, <1>30, CODE src/rc_ir/ownership.rs: origin_inner
+  <2>2b. `<1>29` と `<1>30` の主張も証明も、`vars` が `VarTable::of(func)` の作る表か
+     `VarTable::body_only(body)` の作る表かを問わない。この 2 つが読む `<1>21`、`<1>23`、`<1>25` は
+     どちらの表についても述べられており -- `<1>21` は 2 つの構成子を並べ、`<1>23` の `<2>1` は根の
+     場合をその 2 つに分け、`<1>25` は `<1>2` を経てそれを引く --、残る `<1>22`、`<1>26`、`<1>28`、
+     `<1>28a` は表の作り方を読まない。
+    BY <1>2, <1>21, <1>22, <1>23, <1>25, <1>26, <1>28, <1>28a, <1>29, <1>30
   <2>3. QED
     P2 が量化する 2 つの場合はどちらも `<2>2a` の範囲に入り、`pi` についての一般性は `<2>1` と
-    `<2>2` が与える。条件節の 8 つの仮定は `<1>29` と `<1>30` が読むものである。
-    BY A3, A6, A9, A10, A11, A12, A13, A15, <1>29, <1>30, <2>1, <2>2, <2>2a
+    `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 8 つの仮定は `<1>29` と
+    `<1>30` が読むものである。
+    BY A3, A6, A9, A10, A11, A12, A13, A15, <1>29, <1>30, <2>1, <2>2, <2>2a, <2>2b,
+       CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel,
+       CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
 
 <1>32a. `t` が `<1>1` を満たし `u` が `U(t)` の要素であるとき、`u` は `t` の unit に届き
    `T(t, u) = u` である。
@@ -2070,75 +2200,109 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `pi` が `L(ty(x))` の要素なら `<2>1` が、`U(ty(x))` の要素なら `<1>32a` が、`pi` が `ty(x)` の
      unit に届くことを与える。
     BY <1>1, <1>32a, <2>1
+  <2>5a. `u` が `vars.bindings` の定義域にあるならば、`u` は `vars.var_tys` に型を持ち、その型は
+     `<1>3a` (vi) の `ty(u)` である。
+    BY <1>21a
   <2>6. ASSUME: 対 `(u, sig)` は `(x, pi)` の呼び出しの下流にあり、`u` が `vars.var_tys` に型を
      持つならば `sig` は `ty(u)` の unit に届く
      PROVE: `(u, sig)` から呼び出しの辺で着く各対 `(u', sig')` についても、`u'` が `vars.var_tys` に
      型を持つならば `sig'` は `ty(u')` の unit に届く
-    <3>1. CASE `vars.bindings[u]` が `Binding::Move(y)` である。辺の先は `(y, sig)` であり、
-       `<1>3a` (i) と (vi) より `ty(y) = ty(u)` なので、帰納法の仮定がそのまま主張である。
-      BY <1>3a, CODE src/rc_ir/ownership.rs: origin_inner
+    <3>1. CASE `vars.bindings[u]` が `Binding::Move(y)` である。辺の先は `(y, sig)` である。この
+       場合の仮定より `u` は `vars.bindings` の定義域にあるので、`<2>5a` より帰納法の仮定の前件が
+       満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (i) と (vi) より `ty(y) = ty(u)` なので、
+       `y` が `vars.var_tys` に型を持つならばその型は `ty(u)` であり、`sig` はその unit に届く。
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
     <3>2. CASE `vars.bindings[u]` が `Binding::Join(arm_results)` である。辺の先は
-       `(arm_result, sig)` であり、`<1>3a` (ii) と (vi) より `ty(arm_result) = ty(u)` なので、
-       帰納法の仮定がそのまま主張である。
-      BY <1>3a, CODE src/rc_ir/ownership.rs: origin_inner
+       `(arm_result, sig)` である。この場合の仮定より `u` は `vars.bindings` の定義域にあるので、
+       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (ii) と
+       (vi) より `ty(arm_result) = ty(u)` なので、`arm_result` が `vars.var_tys` に型を持つならば
+       その型は `ty(u)` であり、`sig` はその unit に届く。
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
     <3>3. CASE `vars.bindings[u]` が `Binding::Payload(scrut, None)` である。辺の先は
-       `(scrut, sig)` であり、`<1>3a` (iii) と (vi) より `ty(u) = ty(scrut)` なので、帰納法の仮定が
-       そのまま主張である。
-      BY <1>3a, CODE src/rc_ir/ownership.rs: origin_inner
+       `(scrut, sig)` である。この場合の仮定より `u` は `vars.bindings` の定義域にあるので、
+       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (iii) と
+       (vi) より `ty(u) = ty(scrut)` なので、`scrut` が `vars.var_tys` に型を持つならばその型は
+       `ty(u)` であり、`sig` はその unit に届く。
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
     <3>4. CASE `vars.bindings[u]` が `Binding::Payload(scrut, Some(tag))` で `scrut.ty.is_box(E)` が
        偽である。
       <4>1. 辺の先は `(scrut, [tag] ++ sig)` である。
         BY CODE src/rc_ir/ownership.rs: origin_inner
       <4>2. `<1>3a` (iii) と (vi) より `(tag, ty(u))` は `F(ty(scrut))` の要素であり、`<1>3a` (iv)
-         より `ty(scrut)` は union の型である。
+         より `ty(scrut).toplevel_tycon_info(E).variant` は `TyConVariant::Union` である。
         BY <1>3a
-      <4>3. `cls(ty(scrut))` は `NB` でない。`ty(scrut)` は union の型なので `is_closure()` は偽
-         (union の型構成子の variant は `Union`、closure の型構成子の variant は `Arrow`)、
-         `is_array()` は偽 (`Std::Array` の variant は `Array`)、`is_funptr()` は偽 (`#FunPtr{n}` の
-         variant は `Primitive`) であり、この場合の仮定より `is_box(E)` も偽である。よって
-         `is_fully_unboxed(ty(scrut))` の値は `F(ty(scrut))` の各要素の第 2 成分についての
-         `is_fully_unboxed` の連言である。`<4>2` より `ty(u)` はその 1 つである。この場合の仮定は
-         `vars.bindings[u]` が `Binding::Payload(scrut, Some(tag))` であることなので `u` は
-         `vars.bindings` の定義域にあり、`<1>21a` より `vars.var_tys` にも型 `ty(u)` を持つ。
-         したがって帰納法の仮定の前件が満たされ、その帰結と `<2>4` より `cls(ty(u))` は `NB` で
-         ない、すなわち `is_fully_unboxed(ty(u))` は偽なので、連言は偽である。
-        BY <1>21a, <2>4, <4>2, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
-           CODE src/ast/types.rs: TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
-      <4>4. `cls(ty(scrut)) = UN` である。`<4>3` より `NB` でなく、`<4>3` の中で `is_closure`、
-         `is_box`、`is_array` が偽であることを示したので `CL`、`BX`、`AR` でもない。`ty(scrut)` は
-         union の型なので `is_union(E)` が真であり、`DEF cls` より `UN` である。
-        BY <4>2, <4>3, DEF cls
+      <4>2a. `ty(scrut).is_closure()` は偽であり、`ty(scrut).is_funptr()` も偽である。`<4>2` は
+         `ty(scrut).toplevel_tycon_info(E)` が値を返し、その `variant` が `TyConVariant::Union` で
+         あると述べる。`toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、値を
+         返したことが `is_closure()` の偽を与える。`Union` は `TyConVariant::Primitive` ではないので、
+         `<1>3ca` の対偶より `is_funptr()` は偽である。
+        BY <1>3ca, <4>2, CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+           CODE src/ast/types.rs: TyConVariant
+      <4>2b. `sig` は `ty(u)` の unit に届き、`cls(ty(u))` は `NB` でない。この場合の仮定より `u` は
+         `vars.bindings` の定義域にあるので、`<2>5a` より帰納法の仮定の前件が満たされ、`sig` は
+         `ty(u)` の unit に届く。`ty(u)` は `vars.var_tys` が記録する型なので `<1>1` を満たし、
+         `<2>4` よりそのとき `cls(ty(u))` は `NB` でなく、`DEF cls` より `is_fully_unboxed(ty(u))` は
+         偽である。
+        BY <1>1, <2>4, <2>5a, DEF cls
+      <4>3. `cls(ty(scrut))` は `NB` でない。`is_fully_unboxed` の本体は、`is_box` が真なら偽を返し、
+         `is_closure` が真なら偽を返し、`is_array` が真なら偽を返し、`is_funptr` が真なら真を返し、
+         そのどれでもなければ `F` の各要素の第 2 成分についての `is_fully_unboxed` の連言を返す。
+         この場合の仮定より `ty(scrut).is_box(E)` は偽、`<4>2a` より `is_closure()` と `is_funptr()`
+         も偽である。`is_array()` が真ならその段で偽が返る。偽なら値は連言であり、`<4>2` より
+         `ty(u)` はその 1 つで、`<4>2b` よりその `is_fully_unboxed` は偽なので、連言も偽である。
+         どちらでも `is_fully_unboxed(ty(scrut))` は偽であり、`DEF cls` より `cls(ty(scrut))` は
+         `NB` でない。
+        BY <4>2, <4>2a, <4>2b, DEF cls, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+      <4>4. `cls(ty(scrut))` は `AR` か `UN` である。`<4>3` より `NB` でなく、`<4>2a` より `CL` でも
+         なく、この場合の仮定より `is_box(E)` が偽なので `BX` でもない。`<4>2` より
+         `ty(scrut).toplevel_tycon_info(E).variant` は `Union` なので `is_union(E)` は真であり、
+         `DEF cls` の `ST` の行はそれが偽であることを要求するので `ST` でもない。
+        BY <4>2, <4>2a, <4>3, DEF cls, CODE src/ast/types.rs: TypeNode::is_union
       <4>5. QED
         `ty(scrut)` は `<1>1` を満たし、`[tag] ++ sig` は空でないので、`<2>3` を
-        `t' := ty(scrut)` に適用すると `[tag] ++ sig` は `ty(scrut)` の unit に届く。
+        `t' := ty(scrut)` に適用すると `[tag] ++ sig` は `ty(scrut)` の unit に届く。`<2>3` の仮定は
+        `cls(t')` が `BX`、`AR`、`UN` のどれかであることで、`<4>4` がそれを与える。
         BY <1>1, <2>3, <4>1, <4>4
     <3>5. CASE `vars.bindings[u]` が `Binding::Field(cont, idx)` で `cont.ty.is_box(E)` が偽で
        ある。
       <4>1. 辺の先は `(cont, [idx] ++ sig)` である。
         BY CODE src/rc_ir/ownership.rs: origin_inner
-      <4>2. `<1>3a` (v) と (vi) より `(idx, ty(u))` は `F(ty(cont))` の要素であり、`ty(cont)` は
-         構造体の型である。
+      <4>2. `<1>3a` (v) と (vi) より `(idx, ty(u))` は `F(ty(cont))` の要素であり、
+         `ty(cont).toplevel_tycon_info(E).variant` は `TyConVariant::Struct` である。
         BY <1>3a
-      <4>3. `cls(ty(cont))` は `NB` でない。`ty(cont)` は構造体の型なので `is_closure()` は偽
-         (構造体の型構成子の variant は `Struct`)、`is_array()` は偽、`is_funptr()` は偽であり、この
-         場合の仮定より `is_box(E)` も偽である。よって `is_fully_unboxed(ty(cont))` の値は
-         `F(ty(cont))` の各要素の第 2 成分についての `is_fully_unboxed` の連言である。`<4>2` より
-         `ty(u)` はその 1 つである。この場合の仮定は `vars.bindings[u]` が
-         `Binding::Field(cont, idx)` であることなので `u` は `vars.bindings` の定義域にあり、
-         `<1>21a` より `vars.var_tys` にも型 `ty(u)` を持つ。したがって帰納法の仮定の前件が
-         満たされ、その帰結と `<2>4` より `is_fully_unboxed(ty(u))` は偽なので、連言は偽である。
-        BY <1>21a, <2>4, <4>2, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
-           CODE src/ast/types.rs: TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
-      <4>4. `cls(ty(cont))` は `UN` か `ST` である。`<4>3` より `NB`、`CL`、`BX`、`AR` のどれでも
-         ない。
-        BY <4>3, DEF cls
+      <4>2a. `ty(cont).is_closure()` は偽であり、`ty(cont).is_funptr()` も偽である。`<4>2` は
+         `ty(cont).toplevel_tycon_info(E)` が値を返し、その `variant` が `TyConVariant::Struct` で
+         あると述べる。`toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、値を
+         返したことが `is_closure()` の偽を与える。`Struct` は `TyConVariant::Primitive` では
+         ないので、`<1>3ca` の対偶より `is_funptr()` は偽である。
+        BY <1>3ca, <4>2, CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+           CODE src/ast/types.rs: TyConVariant
+      <4>2b. `sig` は `ty(u)` の unit に届き、`cls(ty(u))` は `NB` でない。この場合の仮定より `u` は
+         `vars.bindings` の定義域にあるので、`<2>5a` より帰納法の仮定の前件が満たされ、`sig` は
+         `ty(u)` の unit に届く。`ty(u)` は `vars.var_tys` が記録する型なので `<1>1` を満たし、
+         `<2>4` よりそのとき `cls(ty(u))` は `NB` でなく、`DEF cls` より `is_fully_unboxed(ty(u))` は
+         偽である。
+        BY <1>1, <2>4, <2>5a, DEF cls
+      <4>3. `cls(ty(cont))` は `NB` でない。`is_fully_unboxed` の本体は、`is_box` が真なら偽を返し、
+         `is_closure` が真なら偽を返し、`is_array` が真なら偽を返し、`is_funptr` が真なら真を返し、
+         そのどれでもなければ `F` の各要素の第 2 成分についての `is_fully_unboxed` の連言を返す。
+         この場合の仮定より `ty(cont).is_box(E)` は偽、`<4>2a` より `is_closure()` と `is_funptr()`
+         も偽である。`is_array()` が真ならその段で偽が返る。偽なら値は連言であり、`<4>2` より
+         `ty(u)` はその 1 つで、`<4>2b` よりその `is_fully_unboxed` は偽なので、連言も偽である。
+         どちらでも `is_fully_unboxed(ty(cont))` は偽であり、`DEF cls` より `cls(ty(cont))` は
+         `NB` でない。
+        BY <4>2, <4>2a, <4>2b, DEF cls, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+      <4>4. `cls(ty(cont))` は `AR`、`UN`、`ST` のどれかである。`<4>3` より `NB` でなく、`<4>2a` より
+         `CL` でもなく、この場合の仮定より `is_box(E)` が偽なので `BX` でもない。
+        BY <4>2a, <4>3, DEF cls
       <4>5. CASE `cls(ty(cont)) = ST`。`ty(cont)` は `<1>1` を満たすので `<2>2` を
          `t' := ty(cont)`、`t := ty(u)`、`i := idx`、`q := sig` に適用できる。`<4>2` が
-         `(idx, ty(u))` が `F(ty(cont))` の要素であることを、帰納法の仮定が `sig` が `ty(u)` の
+         `(idx, ty(u))` が `F(ty(cont))` の要素であることを、`<4>2b` が `sig` が `ty(u)` の
          unit に届くことを与える。
-        BY <1>1, <2>2, <4>1, <4>2
-      <4>6. CASE `cls(ty(cont)) = UN`。`ty(cont)` は `<1>1` を満たし `[idx] ++ sig` は空でないので
-         `<2>3` を `t' := ty(cont)` に適用する。
+        BY <1>1, <2>2, <4>1, <4>2, <4>2b
+      <4>6. CASE `cls(ty(cont))` が `AR` か `UN`。`ty(cont)` は `<1>1` を満たし `[idx] ++ sig` は
+         空でないので、`<2>3` を `t' := ty(cont)` に適用する。`<2>3` の仮定は `cls(t')` が `BX`、
+         `AR`、`UN` のどれかであることで、この場合の仮定がそれを与える。
         BY <1>1, <2>3, <4>1
       <4>7. QED
         BY <4>4, <4>5, <4>6
@@ -2168,10 +2332,22 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     ので、道の長さは有限で上から抑えられる。よって帰納法は呼び出しの下流の全体に届く。
     BY <1>21, <1>25, <2>5, <2>6
 
-<1>34. **(P1 の系 2: `origin` が返す path も unit に届く)** `<1>33` と同じ 8 つの仮定の下で、
+<1>34. **(P1 の系 2: `origin` が返す path も unit に届く)** `<1>33` と同じ 8 つの仮定を満たす
+   プログラムについて、`pi` が `L(ty(x))` の要素または `U(ty(x))` の要素であるとき、
    `origin(vars, E, x, pi)` の返り値に現れる各 `VarPath` `(u, sig)` (identity と candidates の両方)
    について、`u` が `vars.var_tys` に型を持つならば `sig` は `ty(u)` の unit に届く。すなわち
    `T(ty(u), sig)` は abort せず、その値は `U(ty(u))` の要素である。
+
+   **`pi` についての条件は落とせない。**`x` を型 `Std::I64` のパラメータ、`pi = [0]` とする。
+   `origin_inner` の `Some(Binding::Param)` の腕は `here()` を返すので返り値は `Exactly((x, [0]))`
+   であり、`VarTable::of` は各パラメータを `var_tys` に入れるので `u = x` は型を持つ。`bulitin_tycons`
+   が `Std::I64` に与える `TyConInfo` は `variant: Primitive`、`is_unbox: true`、`fields: vec![]` なので、
+   `is_box`、`is_closure`、`is_array`、`is_funptr` はすべて偽で `F(I64)` は空であり、
+   `is_fully_unboxed(I64)` は空の連言として真になる。すなわち `cls(I64) = NB` であり、`<1>10` より
+   `unit_step(I64, E)` は `UnitStep::NoUnit` で、`T(I64, [0])` はループの第 0 周で `panic!` に達する。
+   `origin` の答えに `T` を当てる読み手は `owns_object` であり、そこへ対を渡す `owns_unit` と
+   `check_ownership_is_levelled` が問うのは site の unit についての `origin(v, u)` なので、この条件を
+   満たす。
   <2>1. `origin(vars, E, u, sig)` が返す値に現れる各 `VarPath` は、`(u, sig)` の呼び出しの下流
      (`DEF 呼び出しの下流`) にある対である。
     <3>1. `origin_inner` の `None`、`Binding::Param`、`Binding::Producer` の腕、`Binding::Field` で
@@ -2224,8 +2400,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
       BY <1>21, <1>25, <3>1, <3>2, <3>3, <3>4, <3>5,
          CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding
   <2>2. `<2>1` を `(u, sig) := (x, pi)` に読むと、`origin(vars, E, x, pi)` の返り値に現れる各
-     `VarPath` は `(x, pi)` の呼び出しの下流にある。`<1>33` はその各対について、第 1 成分が
-     `vars.var_tys` に型を持つならば第 2 成分がその型の unit に届くことを与える。
+     `VarPath` は `(x, pi)` の呼び出しの下流にある。この言明の仮定は `pi` が `L(ty(x))` の要素か
+     `U(ty(x))` の要素であることなので、`<1>33` を同じ `(x, pi)` に適用でき、その各対について、
+     第 1 成分が `vars.var_tys` に型を持つならば第 2 成分がその型の unit に届く。
     BY <1>33, <2>1
   <2>3. 「`sig` が `ty(u)` の unit に届く」とは、`DEF unit に届く` より「`T(ty(u), sig)` は abort
      せず、その値は `U(ty(u))` の要素である」ことである。
@@ -2240,9 +2417,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 ## 3. 入力についての 3 つの前提と README の仮定、および P1 の定義域
 
-`<1>1` (H1) は README の A10 (型の well-formedness)、`<1>2` (H2) は A11 (スコープの規律)、
-`<1>3a` (H4) は A12 (束縛の形と型が合っている) と A3 (宣言されたモデルの忠実さ) の 1 段である。
-README の文面とこの文書の記法との対応は、3 つの前提のそれぞれについて次のとおりである。
+`<1>1` (H1) は README の A10 (型の well-formedness)、`<1>2` (H2) は A11 (スコープの規律) を A6 と
+D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が合っている) と A3 (宣言されたモデルの
+忠実さ) の 1 段である。README の文面とこの文書の記法との対応は、3 つの前提のそれぞれについて次の
+とおりである。
 
 - **`<1>1` の 3 つはどれも A10 である。**(i) は A10 の第 1 文 --「プログラムに現れる型は ground で
   あり、その tycon に kind の要求するだけの引数が与えられており、その tycon は `type_env` にある」--
@@ -2260,13 +2438,21 @@ README の文面とこの文書の記法との対応は、3 つの前提のそ�
 
   この文書は A10 の第 1 文のうち `no_size_in_place` の降下についての節を読まない。`REC` の辺も
   `DESC` の辺も `unpunched_field_types` の辺なので、整礎性は (ii) から直に出る (`<1>3d`、`<1>8`)。
-- `<1>2` は A11 の「スコープに入っている束縛」を `DEF Scope` で節点の種類ごとに書き下し、さらに
-  この関数のどの束縛でもない名前 (グローバル) を許す。`origin_inner` の `None` の腕がその名前を
-  受ける (`CODE src/rc_ir/ownership.rs: origin_inner`)。書き下しそのものの根拠は D2 のスコープ規則
-  であり、根の場合の 2 つ目 (グローバル初期化子) は D1 の「`init` はパラメータも capture も持た
-  ない」から出る。A11 の検査 `validate` の `scope` の推移も同じ形で、関数ごとに `func.params` と
+- `<1>2` は A11 の「スコープに入っている束縛」を `DEF Scope` で節点の種類ごとに書き下し、その上で
+  `vars.bindings` の定義域に無い名前を許す。`origin_inner` の `None` の腕がその名前を受ける
+  (`CODE src/rc_ir/ownership.rs: origin_inner`)。書き下しそのものの根拠は D2 のスコープ規則であり、
+  根の場合の 2 つ目 (グローバル初期化子) は D1 の「`init` はパラメータも capture も持たない」から
+  出る。A11 の検査 `validate` の `scope` の推移も同じ形で、関数ごとに `func.params` と
   `func.capture` を `bind` してから本体を検査し、グローバル初期化子については何も `bind` せずに
   本体を検査する。
+
+  **`<1>2` は本体を関数の `body` に限らない。**`origin` はグローバル初期化子の `init` について
+  `VarTable::body_only` が作る表の上でも走る (`<1>31`)。A11 は本体の 2 つの形をどちらも述べる --
+  「関数の本体の自由な局所名は、その関数のパラメータと capture に限る。グローバル初期化子の `init` は
+  自由な局所名を持たない。」`<1>2` が「定義域に無い名前」の側を `vars.bindings` で述べるのは、D6 の
+  「局所名であることと束縛を持つことは同値である」による。使われる局所名がその本体の束縛に解決すると
+  言うのに A6 (名前の一意性) が要るのは、A11 が解決先を「スコープに入っている束縛」としか言わず、
+  同じ名前の束縛が 2 つあればどちらとも読めるからである。
 - `<1>3a` は、この文書が使う 8 つを (i) から (viii) として述べる。**(i) から (vii) は A12 に、
   (viii) は A3 に在る。**(vii) の 3 つは A12 の「`Llvm` 節点の型についての 3 つ」であり、(viii) は
   A3 の
@@ -2280,6 +2466,14 @@ README の文面とこの文書の記法との対応は、3 つの前提のそ�
   `<3>4` と `<3>5` がそこから穴の下へ降りないことを引く。A12 の残り -- `App` の引数と呼び出し先の
   パラメータの型が合っていること、`App` の結果の型が呼び出し先の返り値の型であること、束縛を持たない
   `RcVar` の型がその名前の記号の型であること -- は、この文書のどのステップも読まない。
+
+  **A12 の「`Match` の scrutinee が union であること」と「`Destructure` の容器が構造体であること」
+  を、(iv) と (v) はその型の `TyConInfo` の `variant` として書く。**`<1>33` の `<2>6` の `<3>4` と
+  `<3>5` が読むのはこの形であり、`variant` から `is_closure()` と `is_funptr()` の偽を出す
+  (`<1>3ca`)。
+
+  `<1>3a` の言明は関数の `body` とグローバル初期化子の `init` の両方に掛かる。A12 が本体の形を
+  限っていないのと同じである。
 
   A12 の第 2 の `Llvm` 節点の条件は punched struct の成分を「A10 を満たす構造体」と書く。`<1>1` は
   A10 をこの文書の記法で述べたものなので、(vii) はそこを `<1>1` と書く。同じ条件の「第 `field_idx`
@@ -2337,8 +2531,10 @@ leaf を持つ、という 2 つの事実の上に立っている。どちらか
 `Retain`/`Release` の path が leaf でない unit (unbox union、punched array) のとき、その unit の
 `origin` と、その下の各 leaf の `origin` について言えるのは次の 1 つである。
 
-**`<1>33` と `<1>34`。** どちらの `origin` についても、その計算の中で起きる呼び出しの `(u, sig)` も、
-返り値に現れる `VarPath` `(u, sig)` も、`sig` が `ty(u)` の unit に届く。すなわち
+**`<1>33` と `<1>34`。**その unit も、その下の各 leaf も、`U(ty(v))` か `L(ty(v))` の要素なので、
+どちらを `pi` に取っても `<1>33` と `<1>34` の条件を満たす。そのとき、`origin(vars, E, v, pi)` の
+計算の中で起きる呼び出しの `(u, sig)` も、返り値に現れる `VarPath` `(u, sig)` も、`u` が
+`vars.var_tys` に型を持つ限り `sig` が `ty(u)` の unit に届く。すなわち
 `truncate_to_unit(ty(u), sig)` は abort せず `rc_units(ty(u))` の要素になる。この性質は `origin` の
 再帰の各辺 (move-bind、`Match` のアームの結果、変位アームの payload、catch-all の payload、
 unbox 容器のフィールド、`Llvm` の 2 つの道) が保つ。
@@ -2346,6 +2542,6 @@ unbox 容器のフィールド、`Llvm` の 2 つの道) が保つ。
 `origin` の答えに `truncate_to_unit` を当てるコードは `borrow.rs` の `owns_object` である。
 `owns_unit` と `check_ownership_is_levelled` が `origin(v, unit).candidates()` の各 `(root, path)` を
 `owns_object` に渡し、`owns_object` は `root` が `vars.param_tys` にあるとき `path` を `units_under`
-と `truncate_to_unit` に掛ける。`param_tys` に入る名前は `var_tys` にも同じ型で入るので、`<1>34` が
-その `path` について「`ty(root)` の unit に届く」を与える。`owns_object` を主語とする命題は P7e で
-ある。
+と `truncate_to_unit` に掛ける。その `unit` が `U(ty(v))` の要素であることは site の作り方が与える
+(README の P7a)。`param_tys` に入る名前は `var_tys` にも同じ型で入るので、`<1>34` がその `path` に
+ついて「`ty(root)` の unit に届く」を与える。`owns_object` を主語とする命題は P7e である。
