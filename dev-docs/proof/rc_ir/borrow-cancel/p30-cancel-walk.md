@@ -113,6 +113,14 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 
 この文書が使う Rust の言語と標準ライブラリの契約を、名前を付けて述べる。
 
+**DEF 型のサイズ**
+型の値が占める記憶域の大きさを、その型の**サイズ**という。構造体の各フィールドと、enum の 1 つの変位が
+保持する各値は、その値の記憶域の中に互いに重ならずに置かれる。よって、構造体のサイズはその各フィールドの
+型のサイズ以上であり、enum のサイズはその各変位が保持する各値の型のサイズ以上である。
+
+**DEF bool のサイズ**
+`bool` のサイズは 1 である。
+
 **DEF Arc の契約**
 `Arc::new(v)` は、`v` を保持するメモリブロックをアロケータから取り、そのブロックへのハンドルを 1 つ返す。
 `<Arc<T> as Clone>::clone` は同じブロックへのハンドルをもう 1 つ作り、強参照カウントを 1 増やす。
@@ -499,10 +507,12 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       `node.expr.as_ref() as *const RcExpr as NodeId` であり、`node.expr` の型は `Arc<RcExpr>` である。
       DEF Arc の契約 の最後の行より、`as_ref` が返す参照の番地は、先頭アドレスから強・弱カウントの分だけ
       ずれた、そのブロックの占める番地の 1 つである。この行の仮説
-      「`T` のサイズが 0 でない」は満たされる --- `RcExpr` の変位 `Ret(RcVar)` は `RcVar` を保持し、
-      `RcVar` は `FullName` を含む 5 個のフィールドを持つので、`RcExpr` のサイズは 0 でない。
+      「`T` のサイズが 0 でない」は満たされる --- `RcExpr` の変位 `Ret(RcVar)` は `RcVar` の値を保持し、
+      `RcVar` は `skip_null_check: bool` のフィールドを持つ。DEF bool のサイズ より `bool` のサイズは
+      1 であり、DEF 型のサイズ より `RcVar` のサイズは 1 以上、`RcExpr` のサイズも 1 以上である。
   BY CODE src/rc_ir/borrow.rs: node_id, CODE src/rc_ir/ast.rs: RcExprNode,
-     CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, DEF Arc の契約, DEF 割り当て
+     CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, DEF Arc の契約, DEF 割り当て,
+     DEF 型のサイズ, DEF bool のサイズ
 <1>2. 同時に生存している相異なる 2 つの割り当てについて、一方の占める番地はどれも他方の占める番地と
       相異なる。
   BY DEF 割り当て, DEF アロケータの契約
