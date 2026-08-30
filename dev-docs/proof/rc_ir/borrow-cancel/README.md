@@ -968,7 +968,9 @@ inhabited でない leaf と同じに扱う。
 まさにこの集合について表明する -- 全関数・全グローバル初期化子のパラメータと capture、および `for_each_var`
 が挙げる全変数を集め、複製の各名前がそこに入らないことを検査する。
 
-`borrow_ify` の入力に現れる**すべての名前**について、その `name` フィールドを `#` で区切った最後の断片は、
+`borrow_ify` の入力に現れる**すべての名前**について -- 束縛名、直接呼び出しが名指す関数の名前、グローバル
+値を読む `RcVar` の名前、**`prog.funcs` の鍵**、**各 `RcFunc` の `name`** を含む -- その `name` フィールドを
+`#` で区切った最後の断片は、
 文字 `b` の後に 10 進数字だけが続く形ではなく、`borrow` でもない。後者は `borrow_funcref` が借用版の名前を
 `<元の名前>#borrow` として作るからで (`CODE src/rc_ir/borrow.rs: borrow_funcref`)、これが無いと借用版の
 名前が入力の名前と衝突しうる。どちらの形も、Fix の識別子が `#` を含まないこと
@@ -987,6 +989,12 @@ inhabited でない leaf と同じに扱う。
 `fresh_rename_function` は入力の名前を 1 つも読まないので、衝突しないことは入力の名前の形からしか出ない
 (`CODE src/rc_ir/rename.rs: fresh_rename_function`)。名前が衝突すると `origin` が複製の変数を原本の束縛へ
 辿り、`cancel` が誤った対を消す。
+
+**A22 (`funcs` の鍵は関数の名前)** -- 果たす者: lowering。検査: 無し。
+`prog.funcs` の各エントリについて、鍵の `FullName` はその `RcFunc` の `name` に等しい
+(`CODE src/rc_ir/ast.rs: RcProgram` の doc がそう述べる)。`resolve_callee_params` は `callee.name` から
+`FuncRef` を組んで `prog.funcs` を引き、`call_rc` は `callee_params` を同じ形で引くので、この一致が無いと
+静的に引いた関数が呼び出し先のものでなくなる。
 
 **A14 (過適用が無い)** -- 果たす者: 型検査と lowering。
 `App(callee, args)` の `args` の個数は、呼び出し先のパラメータの個数以下である。`call_rc` と `rhs_consumes` は
@@ -1126,7 +1134,8 @@ P18a・P18c・P19・P21 は `cancel` の**入力**について (ii-b) を読む�
 
 **果たす者の 2 人のうち、`borrow_ify` の側は示されている** (`p13-disposals-and-pending.md` の `L16`)。借用版が `Retain` を落と
 すのは `owns_unit` が偽のときだけで、`App` の引数以外の消費では P8 と P7a がそれを真にし、`App` の引数では
-`call_rc` が同じ `Retain` を呼び出しの直前に置き直す。**`insert_rc` の側は部分的に示されている** (`p60-insert-rc.md`)。示されたのは次の 2 つである。
+`call_rc` が同じ `Retain` を呼び出しの直前に置き直す。**`insert_rc` の側も示されている** (`p60-insert-rc.md`)。その途中で立つ次の 2 つが、`C1` と `C2` の形を
+弾く。
 
 - **`insert_rc` が出す `Retain` は、間に `Retain` 以外の節点を挟まず、同じ変数を名指す構文の直前に立つ**
   (`L9`)。その構文は D9 の消費か移動を行う。この形は `split_rc_units` と `borrow_ify` を通って `cancel` の
@@ -2020,9 +2029,9 @@ speedtest のどちらでも借用版を 1 つも止めず、命令数はベー�
 別名類へ移すこと -- であり、候補を記録しても届かない。**すなわち外した修正は、代償を払ったうえで問題を
 閉じもしなかった。**
 
-P18a が要る前提は A19 として書き、その半分 (`borrow_ify` の側) は証明されている。残る半分は `insert_rc`
-についての命題であり、この証明の対象の外にある。**この issue は「コードを直す」ではなく「A19 の
-`insert_rc` の側を示す」に置き換わる。**
+P18a が要る前提は A19 として書いた。**その 3 節とも果たす者を持つ** -- (ii-a) と (ii-b) は `insert_rc`・
+`split_rc_units`・`borrow_ify` の 3 人、(i) は P28 と A20 である。**この issue は「コードを直す」ではなく
+「A19 を示す」に置き換わり、それは済んだ。** 残っているのは (O2) が立つ前提 (N) だけである。
 
 **定義の側の欠陥も 3 件出た。** 最初の 2 件はどちらも P27 を証明する作業が見つけた。1 つは (S-c) が
 `Retain` の触れる先を見ておらず、3 つの節をすべて満たしながら二重解放する本体が書けたこと (第 6 節)。
