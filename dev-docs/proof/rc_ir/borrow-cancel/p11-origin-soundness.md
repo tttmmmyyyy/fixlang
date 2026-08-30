@@ -88,9 +88,9 @@ path に別の答えを与え、leaf の側の `identity` が unit の側の答�
   (D6 の「**束縛を持たない名前は、必ず最上位の記号の名前である。**」)、その値はその記号の値である。
   A12 の「束縛を持たない `RcVar` の型が、その名前の記号の型であること」がその型を与える。
 
-  **節点を通ったことを条件に置くのは、その記号の値が在るのがそれ以後だからである。** その節点の実行が
-  その記号を読み、まだ初期化されていなければ (E7) の段がその初期化子の活性化を作る (D24 の (E7))。
-  初期化子が返る前に記憶域が持つものは、その記号の値ではない。L13 の `<1>4` がこの条件を読み、
+  **節点を通ったことを条件に置くのは、記憶域を通る記号の値が在るのがそれ以後だからである。** その節点の
+  実行がその記号を読み、まだ初期化されていなければ (E7) の段がその初期化子の活性化を作る (D24 の (E7))。
+  初期化子が返る前にその記憶域が持つものは、その記号の値ではない。L13 の `<1>4` がこの条件を読み、
   L11 の `<1>1a` がこの条件を満たす形で行き先の `RcVar` を扱う。
 
 `v` が (v-1) か (v-2) であり `λ` がその値の `P` で inhabited な boxed leaf であるとき、`(v, λ)` は
@@ -727,14 +727,17 @@ README の定義・仮定とコードだけである。よって第 2 節と第 
          `get_or_declare_global` が返す `ScopedValue` で読む),
          CODE src/generator.rs: ValueAccessor::get (`is_funptr` の枝は `fun.as_global_value()` を
          返すだけで、`build_call` の枝へ行かない)
-    <3>2. `fun` は `v` の名前について `declare_lambda_function` が宣言した 1 つの関数であり、`v` の
-          名前だけで決まる。
+    <3>2. `fun` は `v` の名前が `declared_globals` に持つ 1 つの欄から来るので、`v` の名前だけで
+          決まる。
       BY <1>1c ((d) の funptr の枝),
-         CODE src/generator.rs: Generator::declare_program_global (`ty.is_funptr()` の枝は
-         `declare_lambda_function(&ty, name)` を返す),
-         CODE src/generator.rs: Generator::declare_lambda_function (名前から
-         `object_file_symbol_name(name)` の関数を宣言し、funptr のときそれを `add_global_object` で
-         その名前に登録する)
+         CODE src/generator.rs: Generator::get_or_declare_global (`declared_globals` に在ればその
+         `ScopedValue` を返し、無ければ `declare_program_global` で用意してからその欄を返す),
+         CODE src/generator.rs: Generator::declare_program_global (`ty.is_funptr()` の枝が用意するのは
+         その名前の 1 つの関数である),
+         CODE src/generator.rs: Generator::add_global_object (`declared_globals` へ入れるのはここだけで
+         あり、同じ名前を 2 度入れようとすると `panic_with_msg` で止まる。**表明が発火するならその
+         プログラムは走らず、その本体の活性化は存在しない**ので、走る本体では 1 つの名前の欄は 1 つで
+         ある)
     <3>3. QED
       BY <3>1, <3>2, D24 -- `v` の値は `v` の名前と、読み込まれた像がその関数に与える番地だけで決まる
          (<3>1、<3>2)。D24 の各段が書くのは参照カウント、状態バイト、オブジェクトの記憶域、および
