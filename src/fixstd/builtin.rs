@@ -2489,6 +2489,7 @@ pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let array = gc.get_scoped_obj(&self.arr_name);
         let new_cap = gc.get_scoped_obj_field(&self.cap_name, 0).into_int_value();
@@ -2661,7 +2662,7 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// The code generator for `Array::_unsafe_append_capacity_unchecked`, which consumes `src` into the
 /// slots past `dst`'s length.
-// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayAppendCapacityUnchecked {
     dst_name: FullName,
@@ -2676,6 +2677,7 @@ pub struct InlineLLVMArrayAppendCapacityUnchecked {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let dst = gc.get_scoped_obj(&self.dst_name);
         let src = gc.get_scoped_obj(&self.src_name);
@@ -4868,7 +4870,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,

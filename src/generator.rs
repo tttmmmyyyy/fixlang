@@ -1388,6 +1388,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// withdrawn declaration therefore says nothing about the object here.
     ///
     /// Development mode only: this restores the cost the proof exists to remove.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_assert_unique(&mut self, obj_ptr: PointerValue<'c>) {
         if !self.config.develop_mode {
             return;
@@ -2534,6 +2535,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Put the boxed object at `ptr` alone into `state`, leaving the objects it owns as they are.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn set_refcnt_state(&mut self, ptr: PointerValue<'c>, state: RefcntState) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         self.builder()
