@@ -2229,7 +2229,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
       <4>1. 辺の先は `(scrut, [tag] ++ sig)` である。
         BY CODE src/rc_ir/ownership.rs: origin_inner
       <4>2. `<1>3a` (iii) と (vi) より `(tag, ty(u))` は `F(ty(scrut))` の要素であり、`<1>3a` (iv)
-         より `ty(scrut)` は union の型である。
+         より `ty(scrut).toplevel_tycon_info(E).variant` は `TyConVariant::Union` である。
         BY <1>3a
       <4>2a. `ty(scrut).is_closure()` は偽であり、`ty(scrut).is_funptr()` も偽である。`<4>2` は
          `ty(scrut).toplevel_tycon_info(E)` が値を返し、その `variant` が `TyConVariant::Union` で
@@ -2340,10 +2340,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
    **`pi` についての条件は落とせない。**`x` を型 `Std::I64` のパラメータ、`pi = [0]` とする。
    `origin_inner` の `Some(Binding::Param)` の腕は `here()` を返すので返り値は `Exactly((x, [0]))`
-   であり、`VarTable::of` は各パラメータを `var_tys` に入れるので `u = x` は型を持つ。`I64` の
-   `TyConInfo` は `fields: vec![]` を持つので `<1>11` の `NB` の行に当たり、`<1>10` より
-   `unit_step(I64, E)` は `UnitStep::NoUnit` であって、`T(I64, [0])` はループの第 0 周で `panic!` に
-   達する。`origin` の答えに `T` を当てる読み手は `owns_object` であり、そこへ対を渡す `owns_unit` と
+   であり、`VarTable::of` は各パラメータを `var_tys` に入れるので `u = x` は型を持つ。`<1>3b` の表より
+   `Std::I64` の `TyConInfo` は `variant: Primitive`、`is_unbox: true`、`fields: vec![]` を持つので、
+   `is_box`、`is_closure`、`is_array`、`is_funptr` はすべて偽で `F(I64)` は空であり、
+   `is_fully_unboxed(I64)` は空の連言として真になる。すなわち `cls(I64) = NB` であり、`<1>10` より
+   `unit_step(I64, E)` は `UnitStep::NoUnit` で、`T(I64, [0])` はループの第 0 周で `panic!` に達する。
+   `origin` の答えに `T` を当てる読み手は `owns_object` であり、そこへ対を渡す `owns_unit` と
    `check_ownership_is_levelled` が問うのは site の unit についての `origin(v, u)` なので、この条件を
    満たす。
   <2>1. `origin(vars, E, u, sig)` が返す値に現れる各 `VarPath` は、`(u, sig)` の呼び出しの下流
