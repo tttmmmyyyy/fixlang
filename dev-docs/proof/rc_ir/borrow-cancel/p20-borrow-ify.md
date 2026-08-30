@@ -643,8 +643,9 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
         D2 より本体は有限の木なので、走査は有限回で終わる。
     BY D2, CODE src/rc_ir/ownership.rs: collect_consumes, collect_consumes_go,
        CODE src/rc_ir/ast.rs: RcExpr
-  <2>2. 1 つの節点で走る `push_boxed_leaves`・`destructure_consumes`・`rhs_consumes` の `Closure` と
-        `App` の腕は `boxed_leaf_paths` を呼ぶ。A10 より `boxed_leaf_paths` は有限の列を返して停止する。
+  <2>2. 1 つの節点で走る `push_boxed_leaves`・`destructure_consumes` と、`rhs_consumes` の
+        `Closure`・`App`・`Llvm` の腕は `boxed_leaf_paths` を呼ぶ。A10 より `boxed_leaf_paths` は
+        有限の列を返して停止する。
     BY A10, CODE src/rc_ir/ownership.rs: rhs_consumes, push_boxed_leaves, destructure_consumes,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>3. `rhs_consumes` の `Llvm` の腕は `passthrough_arg_leaves` を呼び、`passthrough_arg_leaves` は
