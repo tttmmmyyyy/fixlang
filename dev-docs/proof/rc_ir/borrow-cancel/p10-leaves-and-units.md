@@ -1977,8 +1977,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `reached` を、各辺の先の返り値と、`produced_here` が真のときの
        `Origin::Exactly(here.clone())` (`here` は `(u, sig)` 自身) から作る。`reached` が空なら
        `None` を返し、`origin_inner` は `here()` を返す (`(u, sig)` 自身)。`reached` の要素が
-       すべて等しければその 1 つを返す。そうで
-       なければ `Origin::of_candidates(candidates, here)` を返し、`candidates` は各 `reached` の
+       すべて等しければその 1 つを返す。そうでなければ `Origin::of_candidates(candidates, here)` を
+       返し、`candidates` は各 `reached` の
        `acted_on()` の合併である。`acted_on()` が返すのは `identity()` と `candidates()` の元、
        すなわちその `Origin` に現れる `VarPath` だけである。いずれの場合も現れる `VarPath` は、
        辺の先の下流にある対か `(u, sig)` 自身であり、どちらも `(u, sig)` の下流にある。
