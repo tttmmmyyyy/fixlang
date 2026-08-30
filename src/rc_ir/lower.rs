@@ -454,7 +454,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an inline-LLVM operation: its free variables become its operands, in the fixed order
     /// the generator reads them, and the appended binding holds the value the operation produces.
-    // PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_llvm(
         &mut self,
         inline: &Arc<InlineLLVM>,

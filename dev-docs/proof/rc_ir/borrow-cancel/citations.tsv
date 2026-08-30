@@ -317,7 +317,7 @@ src/rc_ir/lower.rs	Lowerer::lower_app	P26	1a9a9663ec85
 src/rc_ir/lower.rs	Lowerer::lower_if	D/A,P5,P6,P7,P26	af1795e4c197
 src/rc_ir/lower.rs	Lowerer::lower_lam	P8,P9,P10,P11,P12,P13,P14,P14a,P27,P29	c6644cbfeb9c
 src/rc_ir/lower.rs	Lowerer::lower_lambda_as_function	P8,P9,P10,P11,P12,P13,P14,P14a,P26,P27,P29	05076bfd9b47
-src/rc_ir/lower.rs	Lowerer::lower_llvm	P27,P29	4107324b7a5d
+src/rc_ir/lower.rs	Lowerer::lower_llvm	D/A,P27,P29	4107324b7a5d
 src/rc_ir/lower.rs	Lowerer::lower_match	D/A,P5,P6,P7	c6447f9c6d40
 src/rc_ir/lower.rs	Lowerer::lower_symbol	P8,P9,P10,P11,P12,P13,P14,P14a,P26,P27,P29	fe2a3c83ab94
 src/rc_ir/lower.rs	Lowerer::lower_to_var	P8,P9,P10,P11,P12,P13,P14,P14a	b538c361ee64
