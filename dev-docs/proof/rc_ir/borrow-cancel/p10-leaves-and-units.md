@@ -2196,21 +2196,30 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `pi` が `L(ty(x))` の要素なら `<2>1` が、`U(ty(x))` の要素なら `<1>32a` が、`pi` が `ty(x)` の
      unit に届くことを与える。
     BY <1>1, <1>32a, <2>1
+  <2>5a. `u` が `vars.bindings` の定義域にあるならば、`u` は `vars.var_tys` に型を持ち、その型は
+     `<1>3a` (vi) の `ty(u)` である。
+    BY <1>21a
   <2>6. ASSUME: 対 `(u, sig)` は `(x, pi)` の呼び出しの下流にあり、`u` が `vars.var_tys` に型を
      持つならば `sig` は `ty(u)` の unit に届く
      PROVE: `(u, sig)` から呼び出しの辺で着く各対 `(u', sig')` についても、`u'` が `vars.var_tys` に
      型を持つならば `sig'` は `ty(u')` の unit に届く
-    <3>1. CASE `vars.bindings[u]` が `Binding::Move(y)` である。辺の先は `(y, sig)` であり、
-       `<1>3a` (i) と (vi) より `ty(y) = ty(u)` なので、帰納法の仮定がそのまま主張である。
-      BY <1>3a, CODE src/rc_ir/ownership.rs: origin_inner
+    <3>1. CASE `vars.bindings[u]` が `Binding::Move(y)` である。辺の先は `(y, sig)` である。この
+       場合の仮定より `u` は `vars.bindings` の定義域にあるので、`<2>5a` より帰納法の仮定の前件が
+       満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (i) と (vi) より `ty(y) = ty(u)` なので、
+       `y` が `vars.var_tys` に型を持つならばその型は `ty(u)` であり、`sig` はその unit に届く。
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
     <3>2. CASE `vars.bindings[u]` が `Binding::Join(arm_results)` である。辺の先は
-       `(arm_result, sig)` であり、`<1>3a` (ii) と (vi) より `ty(arm_result) = ty(u)` なので、
-       帰納法の仮定がそのまま主張である。
-      BY <1>3a, CODE src/rc_ir/ownership.rs: origin_inner
+       `(arm_result, sig)` である。この場合の仮定より `u` は `vars.bindings` の定義域にあるので、
+       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (ii) と
+       (vi) より `ty(arm_result) = ty(u)` なので、`arm_result` が `vars.var_tys` に型を持つならば
+       その型は `ty(u)` であり、`sig` はその unit に届く。
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
     <3>3. CASE `vars.bindings[u]` が `Binding::Payload(scrut, None)` である。辺の先は
-       `(scrut, sig)` であり、`<1>3a` (iii) と (vi) より `ty(u) = ty(scrut)` なので、帰納法の仮定が
-       そのまま主張である。
-      BY <1>3a, CODE src/rc_ir/ownership.rs: origin_inner
+       `(scrut, sig)` である。この場合の仮定より `u` は `vars.bindings` の定義域にあるので、
+       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (iii) と
+       (vi) より `ty(u) = ty(scrut)` なので、`scrut` が `vars.var_tys` に型を持つならばその型は
+       `ty(u)` であり、`sig` はその unit に届く。
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
     <3>4. CASE `vars.bindings[u]` が `Binding::Payload(scrut, Some(tag))` で `scrut.ty.is_box(E)` が
        偽である。
       <4>1. 辺の先は `(scrut, [tag] ++ sig)` である。
@@ -2218,53 +2227,78 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
       <4>2. `<1>3a` (iii) と (vi) より `(tag, ty(u))` は `F(ty(scrut))` の要素であり、`<1>3a` (iv)
          より `ty(scrut)` は union の型である。
         BY <1>3a
-      <4>3. `cls(ty(scrut))` は `NB` でない。`ty(scrut)` は union の型なので `is_closure()` は偽
-         (union の型構成子の variant は `Union`、closure の型構成子の variant は `Arrow`)、
-         `is_array()` は偽 (`Std::Array` の variant は `Array`)、`is_funptr()` は偽 (`#FunPtr{n}` の
-         variant は `Primitive`) であり、この場合の仮定より `is_box(E)` も偽である。よって
-         `is_fully_unboxed(ty(scrut))` の値は `F(ty(scrut))` の各要素の第 2 成分についての
-         `is_fully_unboxed` の連言である。`<4>2` より `ty(u)` はその 1 つである。この場合の仮定は
-         `vars.bindings[u]` が `Binding::Payload(scrut, Some(tag))` であることなので `u` は
-         `vars.bindings` の定義域にあり、`<1>21a` より `vars.var_tys` にも型 `ty(u)` を持つ。
-         したがって帰納法の仮定の前件が満たされ、その帰結と `<2>4` より `cls(ty(u))` は `NB` で
-         ない、すなわち `is_fully_unboxed(ty(u))` は偽なので、連言は偽である。
-        BY <1>21a, <2>4, <4>2, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
-           CODE src/ast/types.rs: TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
-      <4>4. `cls(ty(scrut)) = UN` である。`<4>3` より `NB` でなく、`<4>3` の中で `is_closure`、
-         `is_box`、`is_array` が偽であることを示したので `CL`、`BX`、`AR` でもない。`ty(scrut)` は
-         union の型なので `is_union(E)` が真であり、`DEF cls` より `UN` である。
-        BY <4>2, <4>3, DEF cls
+      <4>2a. `ty(scrut).is_closure()` は偽であり、`ty(scrut).is_funptr()` も偽である。`<4>2` は
+         `ty(scrut).toplevel_tycon_info(E)` が値を返し、その `variant` が `TyConVariant::Union` で
+         あると述べる。`toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、値を
+         返したことが `is_closure()` の偽を与える。`Union` は `TyConVariant::Primitive` ではないので、
+         `<1>3ca` の対偶より `is_funptr()` は偽である。
+        BY <1>3ca, <4>2, CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+           CODE src/ast/types.rs: TyConVariant
+      <4>2b. `sig` は `ty(u)` の unit に届き、`cls(ty(u))` は `NB` でない。この場合の仮定より `u` は
+         `vars.bindings` の定義域にあるので、`<2>5a` より帰納法の仮定の前件が満たされ、`sig` は
+         `ty(u)` の unit に届く。`ty(u)` は `vars.var_tys` が記録する型なので `<1>1` を満たし、
+         `<2>4` よりそのとき `cls(ty(u))` は `NB` でなく、`DEF cls` より `is_fully_unboxed(ty(u))` は
+         偽である。
+        BY <1>1, <2>4, <2>5a, DEF cls
+      <4>3. `cls(ty(scrut))` は `NB` でない。`is_fully_unboxed` の本体は、`is_box` が真なら偽を返し、
+         `is_closure` が真なら偽を返し、`is_array` が真なら偽を返し、`is_funptr` が真なら真を返し、
+         そのどれでもなければ `F` の各要素の第 2 成分についての `is_fully_unboxed` の連言を返す。
+         この場合の仮定より `ty(scrut).is_box(E)` は偽、`<4>2a` より `is_closure()` と `is_funptr()`
+         も偽である。`is_array()` が真ならその段で偽が返る。偽なら値は連言であり、`<4>2` より
+         `ty(u)` はその 1 つで、`<4>2b` よりその `is_fully_unboxed` は偽なので、連言も偽である。
+         どちらでも `is_fully_unboxed(ty(scrut))` は偽であり、`DEF cls` より `cls(ty(scrut))` は
+         `NB` でない。
+        BY <4>2, <4>2a, <4>2b, DEF cls, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+      <4>4. `cls(ty(scrut))` は `AR` か `UN` である。`<4>3` より `NB` でなく、`<4>2a` より `CL` でも
+         なく、この場合の仮定より `is_box(E)` が偽なので `BX` でもない。`<4>2` より
+         `ty(scrut).toplevel_tycon_info(E).variant` は `Union` なので `is_union(E)` は真であり、
+         `DEF cls` の `ST` の行はそれが偽であることを要求するので `ST` でもない。
+        BY <4>2, <4>2a, <4>3, DEF cls, CODE src/ast/types.rs: TypeNode::is_union
       <4>5. QED
         `ty(scrut)` は `<1>1` を満たし、`[tag] ++ sig` は空でないので、`<2>3` を
-        `t' := ty(scrut)` に適用すると `[tag] ++ sig` は `ty(scrut)` の unit に届く。
+        `t' := ty(scrut)` に適用すると `[tag] ++ sig` は `ty(scrut)` の unit に届く。`<2>3` の仮定は
+        `cls(t')` が `BX`、`AR`、`UN` のどれかであることで、`<4>4` がそれを与える。
         BY <1>1, <2>3, <4>1, <4>4
     <3>5. CASE `vars.bindings[u]` が `Binding::Field(cont, idx)` で `cont.ty.is_box(E)` が偽で
        ある。
       <4>1. 辺の先は `(cont, [idx] ++ sig)` である。
         BY CODE src/rc_ir/ownership.rs: origin_inner
-      <4>2. `<1>3a` (v) と (vi) より `(idx, ty(u))` は `F(ty(cont))` の要素であり、`ty(cont)` は
-         構造体の型である。
+      <4>2. `<1>3a` (v) と (vi) より `(idx, ty(u))` は `F(ty(cont))` の要素であり、
+         `ty(cont).toplevel_tycon_info(E).variant` は `TyConVariant::Struct` である。
         BY <1>3a
-      <4>3. `cls(ty(cont))` は `NB` でない。`ty(cont)` は構造体の型なので `is_closure()` は偽
-         (構造体の型構成子の variant は `Struct`)、`is_array()` は偽、`is_funptr()` は偽であり、この
-         場合の仮定より `is_box(E)` も偽である。よって `is_fully_unboxed(ty(cont))` の値は
-         `F(ty(cont))` の各要素の第 2 成分についての `is_fully_unboxed` の連言である。`<4>2` より
-         `ty(u)` はその 1 つである。この場合の仮定は `vars.bindings[u]` が
-         `Binding::Field(cont, idx)` であることなので `u` は `vars.bindings` の定義域にあり、
-         `<1>21a` より `vars.var_tys` にも型 `ty(u)` を持つ。したがって帰納法の仮定の前件が
-         満たされ、その帰結と `<2>4` より `is_fully_unboxed(ty(u))` は偽なので、連言は偽である。
-        BY <1>21a, <2>4, <4>2, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
-           CODE src/ast/types.rs: TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
-      <4>4. `cls(ty(cont))` は `UN` か `ST` である。`<4>3` より `NB`、`CL`、`BX`、`AR` のどれでも
-         ない。
-        BY <4>3, DEF cls
+      <4>2a. `ty(cont).is_closure()` は偽であり、`ty(cont).is_funptr()` も偽である。`<4>2` は
+         `ty(cont).toplevel_tycon_info(E)` が値を返し、その `variant` が `TyConVariant::Struct` で
+         あると述べる。`toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、値を
+         返したことが `is_closure()` の偽を与える。`Struct` は `TyConVariant::Primitive` では
+         ないので、`<1>3ca` の対偶より `is_funptr()` は偽である。
+        BY <1>3ca, <4>2, CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+           CODE src/ast/types.rs: TyConVariant
+      <4>2b. `sig` は `ty(u)` の unit に届き、`cls(ty(u))` は `NB` でない。この場合の仮定より `u` は
+         `vars.bindings` の定義域にあるので、`<2>5a` より帰納法の仮定の前件が満たされ、`sig` は
+         `ty(u)` の unit に届く。`ty(u)` は `vars.var_tys` が記録する型なので `<1>1` を満たし、
+         `<2>4` よりそのとき `cls(ty(u))` は `NB` でなく、`DEF cls` より `is_fully_unboxed(ty(u))` は
+         偽である。
+        BY <1>1, <2>4, <2>5a, DEF cls
+      <4>3. `cls(ty(cont))` は `NB` でない。`is_fully_unboxed` の本体は、`is_box` が真なら偽を返し、
+         `is_closure` が真なら偽を返し、`is_array` が真なら偽を返し、`is_funptr` が真なら真を返し、
+         そのどれでもなければ `F` の各要素の第 2 成分についての `is_fully_unboxed` の連言を返す。
+         この場合の仮定より `ty(cont).is_box(E)` は偽、`<4>2a` より `is_closure()` と `is_funptr()`
+         も偽である。`is_array()` が真ならその段で偽が返る。偽なら値は連言であり、`<4>2` より
+         `ty(u)` はその 1 つで、`<4>2b` よりその `is_fully_unboxed` は偽なので、連言も偽である。
+         どちらでも `is_fully_unboxed(ty(cont))` は偽であり、`DEF cls` より `cls(ty(cont))` は
+         `NB` でない。
+        BY <4>2, <4>2a, <4>2b, DEF cls, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+      <4>4. `cls(ty(cont))` は `AR`、`UN`、`ST` のどれかである。`<4>3` より `NB` でなく、`<4>2a` より
+         `CL` でもなく、この場合の仮定より `is_box(E)` が偽なので `BX` でもない。
+        BY <4>2a, <4>3, DEF cls
       <4>5. CASE `cls(ty(cont)) = ST`。`ty(cont)` は `<1>1` を満たすので `<2>2` を
          `t' := ty(cont)`、`t := ty(u)`、`i := idx`、`q := sig` に適用できる。`<4>2` が
-         `(idx, ty(u))` が `F(ty(cont))` の要素であることを、帰納法の仮定が `sig` が `ty(u)` の
+         `(idx, ty(u))` が `F(ty(cont))` の要素であることを、`<4>2b` が `sig` が `ty(u)` の
          unit に届くことを与える。
-        BY <1>1, <2>2, <4>1, <4>2
-      <4>6. CASE `cls(ty(cont)) = UN`。`ty(cont)` は `<1>1` を満たし `[idx] ++ sig` は空でないので
-         `<2>3` を `t' := ty(cont)` に適用する。
+        BY <1>1, <2>2, <4>1, <4>2, <4>2b
+      <4>6. CASE `cls(ty(cont))` が `AR` か `UN`。`ty(cont)` は `<1>1` を満たし `[idx] ++ sig` は
+         空でないので、`<2>3` を `t' := ty(cont)` に適用する。`<2>3` の仮定は `cls(t')` が `BX`、
+         `AR`、`UN` のどれかであることで、この場合の仮定がそれを与える。
         BY <1>1, <2>3, <4>1
       <4>7. QED
         BY <4>4, <4>5, <4>6
