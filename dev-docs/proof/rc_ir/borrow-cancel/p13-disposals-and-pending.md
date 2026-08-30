@@ -2,11 +2,11 @@
 
 **対象コミット**: `5aa87f26c246919eadcb3f1c3ce0252366c2aed8`
 
-この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義 D1-D34 と仮定 A1-A24、および命題
-P1、P2、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P16、P17、P18、P28、P29 の**言明**の
-上に立つ。それらの証明は `p05-holders.md`、`p10-leaves-and-units.md`、`p12-identity-and-consumes.md`、
-`p20-borrow-ify.md`、`p30-cancel-walk.md`、`p40-cancel-soundness.md`、`p51-runs.md` にあり、この文書は
-その言明だけを使う。
+この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義 D1-D34 と仮定 A1-A25、および命題
+P1、P2、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P16、P17、P18、P29 の**言明**の
+上に立つ。それらの証明は `p10-leaves-and-units.md`、`p12-identity-and-consumes.md`、
+`p15-ownership-uniformity.md`、`p20-borrow-ify.md`、`p30-cancel-walk.md`、`p51-runs.md` にあり、
+この文書はその言明だけを使う。
 
 **別名類は D33 が、`held` は D34 が定める。この 2 つがこの文書に残す 4 つを、第 7.5 節が果たす。**
 歩みの各段が D20 の別名の辺であること (第 7.5.2 節の `DEF ρ-歩みと ρ-終端` の直後の段)、`obj(C)` が
@@ -2542,17 +2542,17 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
   も `ty(p)` の `rc_units` の元である。<1>1b より `units_under(ty(p), u) = [u]` なので、絞りが落とすのは
   `owns_unit(p, u)` が偽のときであり、落とさないときは `Retain(p, u)` 1 つが積まれる。
 
-<1>3. `Pre(V)` に `Retain(p, u)` 節点が在るとき、`(p, u)` は `levelled_sites(Pre(V), type_env)` の
-      元である。また消費が `App(callee, args)` の引数 `p` の位置であるとき、`(p, u)` は `u` が
-      `rc_units(ty(p))` の元であるかぎり `levelled_sites(Pre(V), type_env)` の元である。
-  BY <1>1c, <1>1d, CODE src/rc_ir/borrow.rs: levelled_sites, A2, P1, P9, A10
-  `levelled_sites` は `RcExpr::Retain(v, path, _, _) | RcExpr::Release(v, path, _, _)` の腕で
-  `(v, path)` を、`RcExpr::Let(_, RcRhs::App(_, args), _)` の腕で各 `arg` と各
-  `unit ∈ rc_units(&arg.ty, type_env)` について `(arg, unit)` を挙げる。`ty(p)` はプログラムに現れる型
-  なので A10 を満たし、`u = truncate_to_unit(ty(p), μ)` は P1 より `rc_units(ty(p))` の元である。
-  `Pre(V)` の `Retain(p, u)` 節点の `path` が `u` であることは A2 と P9 による (<1>2 と同じ)。
-  `App` の側は <1>1d による -- `V` の本体の `App` 節点は `Pre(V)` の同じ位置の `App` 節点と `args` を
-  共有するので、`p` は `Pre(V)` の `App` 節点の引数でもある。
+<1>3. `Pre(V)` に `Retain(p, u)` 節点が在るとき、`(p, u)` は P7a の意味の `V` の site である。また
+      消費が `App(callee, args)` の引数 `p` の位置であるとき、`(p, u)` は `u` が `rc_units(ty(p))` の
+      元であるかぎり `V` の site である。
+  BY <1>1c, <1>1d, P7a, CODE src/rc_ir/borrow.rs: levelled_sites, A2, P1, P9, A10
+  P7a は site を「その版が書き換える本体を `for_each_node` で歩いて挙げた、`Retain`/`Release` 節点の
+  `(v, path)` と、`App` の各引数 `arg` と各 `unit ∈ rc_units(ty(arg))` の対」と定め、関数の版では
+  それが `levelled_sites` の挙げる集合に一致すると述べる。<1>1d よりその本体は `Pre(V)` である。
+  `ty(p)` はプログラムに現れる型なので A10 を満たし、`u = truncate_to_unit(ty(p), μ)` は P1 より
+  `rc_units(ty(p))` の元である。`Pre(V)` の `Retain(p, u)` 節点の `path` が `u` であることは A2 と
+  P9 による (<1>2 と同じ)。`App` の側は <1>1d による -- `V` の本体の `App` 節点は `Pre(V)` の同じ
+  位置の `App` 節点と `args` を共有するので、`p` は `Pre(V)` の `App` 節点の引数でもある。
 
 <1>4. CASE 消費が `App` の所有位置の引数以外 -- `App` の callee、`Closure` の capture、`Llvm` の
       オペランド、boxed/unbox の `Destructure`、終端の `Ret` -- であり、かつ `Pre(V)` に `Retain(p, u)`
@@ -2690,12 +2690,11 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
     ある。
   <2>4. QED
     BY <2>3, <2>3a, <1>3, P7a, <1>1, <1>2
-    この CASE の仮定より `Pre(V)` に `Retain(p, u)` 節点が在るので、<1>3 より `(p, u)` は
-    `levelled_sites(Pre(V), type_env)` の元である。`μ` は L16 が固定した活性化において inhabited で
-    あり、<2>3a より `u` の下の leaf である。よって <2>3 は P7a の節 2 である -- P7a は `owns_unit` と
-    `owns_object` を `V` の `RewriteCtx` のものに取り、site を「`V` の `RewriteCtx` が読む本体 --
-    書き換えの入力 -- について `levelled_sites` が挙げるもの」に取る。その本体が `Pre(V)` であることは
-    <1>1d である。P7a より `owns_unit(p, u)` は真であり、
+    この CASE の仮定より `Pre(V)` に `Retain(p, u)` 節点が在るので、<1>3 より `(p, u)` は P7a の意味の
+    `V` の site である。`μ` は L16 が固定した活性化において inhabited であり、<2>3a より `u` の下の
+    leaf である。よって <2>3 は P7a の節 2 である -- P7a は `owns_unit` と `owns_object` を `V` の
+    `RewriteCtx` のものに取り、節 2 と節 3 を 1 つの活性化とその site の節点を訪れる位置に相対的な
+    ものとして述べる。P7a より `owns_unit(p, u)` は真であり、
     `V` が借用版であるときは <1>2 より節点は落ちず `V` の本体に残る。`V` が借用版でないときは <1>1 より
     `rewrite_rc` が節点をそのまま返すので、やはり `V` の本体に残る。これが (A) である。
 
