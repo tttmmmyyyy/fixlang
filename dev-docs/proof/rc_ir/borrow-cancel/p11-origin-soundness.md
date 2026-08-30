@@ -1113,6 +1113,10 @@ PROVE: DEF-1 の鎖は有限で止まり、その停止点 `(u, σ_end, μ)` は
 L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 つに一致する (L6) ので、鎖の各段で
 帰納法の仮定が使える。
 
+**各 CASE の第 1 の段は L15 を経る。** `origin_inner` の腕が返すのは再帰呼び出しの返り値であり、それを
+`origin(v, π')` という**鍵の答え**の等式として読むには、答えが鍵ごとに 1 つに決まることが要る。
+`origin` は memo が当たると `origin_inner` を走らせないので、L15 がその一段を与える。
+
 **各段の形は共通である。** 段が `(x, π, λ)` から `(v, π', λ')` へ進むとき、次の 5 つをこの順に置く。
 
 1. `v` は `P` で値を持つ (L11)。
@@ -1143,7 +1147,7 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
   <2>1. `origin(x, π) = Exactly((x, π))` であり `cand(x, π) = {(x, π)}`。
     BY CODE src/rc_ir/ownership.rs: origin_inner の `None | Some(Binding::Param) | Some(Binding::Producer)`
        の腕、`Some(Binding::Field(..))` の `container.ty.is_box` の枝、`Some(Binding::Payload(..))` の
-       `Some(_)` の枝, L9, L2 (b)
+       `Some(_)` の枝, L9, L2 (b), L15 (`origin(・, ・)` の記法は鍵の答えを指す)
   <2>2. 停止点は `(x, π, λ)` である。
     BY DEF-1 の S1
   <2>3. QED
@@ -1156,11 +1160,13 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
   <2>1. `Exactly((x, π))` は `reached` の要素である。
     BY L8 (d1)
   <2>2. `(x, π) ∈ cand(x, π)`。
-    <3>1. `reached` の全要素が等しいとき、答えは `Exactly((x, π))` であり `cand(x, π) = {(x, π)}`。
-      BY <2>1, L4 (b), L2 (b)
-    <3>2. そうでないとき、答えは `of_candidates(C, (x, π))` であり `C ⊇ act(Exactly((x, π))) = {(x, π)}`
-          である。`of_candidates` の `candidates()` は `C` そのものである。
-      BY <2>1, L4 (b), L3, L2 (b),
+    <3>1. `reached` の全要素が等しいとき、鍵 `(x, π)` の答えは `Exactly((x, π))` であり
+          `cand(x, π) = {(x, π)}`。
+      BY <2>1, L4 (b), L2 (b), L15 (`origin(・, ・)` の記法は鍵の答えを指す)
+    <3>2. そうでないとき、鍵 `(x, π)` の答えは `of_candidates(C, (x, π))` であり
+          `C ⊇ act(Exactly((x, π))) = {(x, π)}` である。`of_candidates` の `candidates()` は `C` そのもの
+          である。
+      BY <2>1, L4 (b), L3, L2 (b), L15 (`origin(・, ・)` の記法は鍵の答えを指す),
          CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::candidates
     <3>3. QED
       BY <3>1, <3>2
@@ -1172,7 +1178,8 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
 
 <1>3. CASE: 段 E1 (`Move(y)`)。
   <2>1. `origin(x, π) = origin(y, π)` であり `cand(x, π) = cand(y, π)`。
-    BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Move(y))` の腕
+    BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Move(y))` の腕 (この腕は
+       `origin(vars, type_env, &y.name, path)` の返り値をそのまま返す), L15 (`origin(・, ・)` の記法は鍵の答えを指す)
   <2>1a. `y` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E1 (`x` の束縛は `Move(y)` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>2. `P` における `x` の値は `y` の値であり、`ty(y) = ty(x)` であり、`λ` は `ty(y)` の boxed leaf で
@@ -1202,6 +1209,7 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
 <1>4. CASE: 段 E6 (`Payload(s, None)`、catch-all)。
   <2>1. `origin(x, π) = origin(s, π)` であり `cand(x, π) = cand(s, π)`。
     BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Payload(..))` の `None =>` の枝
+       (この枝は `origin(vars, type_env, &scrut.name, path)` の返り値をそのまま返す), L15 (`origin(・, ・)` の記法は鍵の答えを指す)
   <2>1a. `s` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E6 (`x` の束縛は `Payload(s, None)` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>2. `P` における `x` の値は `s` の値であり、`ty(s) = ty(x)` であり、`λ` は `ty(s)` の boxed leaf で
@@ -1232,7 +1240,9 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
 
 <1>5. CASE: 段 E5 (`Field(c, i)`、`c` が unbox)。
   <2>1. `origin(x, π) = origin(c, [i] ++ π)` であり `cand(x, π) = cand(c, [i] ++ π)`。
-    BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Field(..))` の `else` の枝
+    BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Field(..))` の `else` の枝 (この枝は
+       `origin(vars, type_env, &container.name, &container_path)` の返り値をそのまま返す),
+       L15 (`origin(・, ・)` の記法は鍵の答えを指す)
   <2>1a. `c` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E5 (`x` の束縛は `Field(c, i)` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>2. `[i] ++ λ` は `ty(c)` の boxed leaf であり、`[i] ++ λ ⊒ [i] ++ π` である。
@@ -1269,7 +1279,9 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
 <1>6. CASE: 段 E7 (`Payload(s, Some(t))`、`s` が unbox)。
   <2>1. `origin(x, π) = origin(s, [t] ++ π)` であり `cand(x, π) = cand(s, [t] ++ π)`。
     BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Payload(..))` の
-       `Some(tag) if !scrut.ty.is_box(type_env)` の枝
+       `Some(tag) if !scrut.ty.is_box(type_env)` の枝 (この枝は
+       `origin(vars, type_env, &scrut.name, &scrut_path)` の返り値をそのまま返す),
+       L15 (`origin(・, ・)` の記法は鍵の答えを指す)
   <2>1a. `s` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E7 (`x` の束縛は `Payload(s, Some(t))` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>2. `[t] ++ λ` は `ty(s)` の boxed leaf であり、`[t] ++ λ ⊒ [t] ++ π` である。
@@ -1289,9 +1301,27 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
          L10 (a), L10 (c1), A6,
          CODE src/rc_ir/ownership.rs: collect_bindings -- `x` に `Binding::Payload(s, Some(t))` を
          与えるのは `tag = Some(t)` のアームの payload 束縛だけである
+    <3>1a. この `Match` が catch-all アーム (`tag` が `None`) を持つならば、それは最後のアームである。
+      BY 補題 Q の前提 (活性化 `α` が在る -- すなわちこの本体はコード生成を経て走っている),
+         CODE src/rc_ir/codegen.rs: Generator::eval_rc_match -- 最後のアーム以外の各アームについて
+         `arm.tag.expect("a non-final match arm must be a variant arm")` を評価するので、最後でない
+         位置に catch-all アームが在ればコード生成が止まる。**この向き -- 表明が発火するならその
+         プログラムは走らず、その本体の活性化は存在しない -- で読む。**
     <3>2. そのアームに入った時点で、`s` の値の実行時のタグは `t` である。
-      BY <3>1, A16 (`Match` のアームは scrutinee のタグを尽くす), D21 (活性化は実行時のタグに `tag` が
-         等しいアームを選ぶ)
+      <4>1. CASE: `s` の値の実行時のタグが、いずれかのアームの `tag` に等しい。D21 より `α` はそのような
+            アームを選ぶ。`α` が選んだのは `A` であり (<3>1)、`A` の `tag` は `Some(t)` なので、その
+            タグは `t` である。
+        BY <3>1, D21
+      <4>2. CASE: `s` の値の実行時のタグが、どのアームの `tag` とも等しくない。この場合は起きない。
+        BY <3>1, <3>1a, A16 (`Match` のアームは scrutinee のタグを尽くす -- この場合 `arms` は
+           catch-all アームを持つ), D21 (タグが等しいアームが無ければコード生成の振る舞いに従う),
+           README の A16 の本文 (「コード生成は最後のアームのブロックを switch の default とする」),
+           CODE src/rc_ir/codegen.rs: Generator::eval_rc_match (`else_bb` は最後のアームのブロックで
+           あり、`build_switch` の default であって、`cases` が空のときの無条件の分岐先でもある)
+           -- catch-all アームは最後のアームなので (<3>1a) `α` はそこへ進む。その `tag` は `None` で
+           あり `A` の `tag` は `Some(t)` なので、`α` が `A` を選んだこと (<3>1) に反する。
+      <4>3. QED
+        BY <4>1, <4>2 -- 2 つの場合は尽きている。
     <3>3. `s` の値は、`s` が値を得た後の `ρ` 上のすべての位置で同じである。
       BY L10 (b)
     <3>4. QED
@@ -1329,7 +1359,7 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
     BY L8 (a) (`leaf_origins_at` が `Some` を返すのは `π ∈ leaves(ty(x))` のときである), L5, 前提の
        `λ ⊒ π`
   <2>2. `origin(x, π) = origin(args[j], σ)` であり `cand(x, π) = cand(args[j], σ)`。
-    BY L8 (c)
+    BY L8 (c), L15 (`origin(・, ・)` の記法は鍵の答えを指す)
   <2>2a. `args[j]` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E3 (`x` の束縛は `Llvm(gen, args, ・)` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>3. `σ` は `ty(args[j])` の boxed leaf であり、`P` で inhabited である。
@@ -1366,11 +1396,12 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
   <2>1. `u_j := t_{ty(args[j])}(σ')` とおくと、`origin(args[j], u_j)` は `reached` の要素である。
     BY L8 (a) (`λ` は `ty(x)` の boxed leaf なので `decl` に宣言を持つ), L8 (d3)
   <2>2. `cand(x, π) ⊇ cand(args[j], u_j)`。
-    <3>1. `reached` の全要素が等しいとき、答えは `origin(args[j], u_j)` そのものである。
-      BY <2>1, L4 (b)
-    <3>2. そうでないとき、答えは `of_candidates(C, (x, π))` であり、`C ⊇ act(origin(args[j], u_j))`
-          である。`of_candidates` の `candidates()` は `C` そのものであり、`act ⊇ cand` (L2 (a)) である。
-      BY <2>1, L4 (b), L3, L2 (a),
+    <3>1. `reached` の全要素が等しいとき、鍵 `(x, π)` の答えは `origin(args[j], u_j)` そのものである。
+      BY <2>1, L4 (b), L15 (`origin(・, ・)` の記法は鍵の答えを指す)
+    <3>2. そうでないとき、鍵 `(x, π)` の答えは `of_candidates(C, (x, π))` であり、
+          `C ⊇ act(origin(args[j], u_j))` である。`of_candidates` の `candidates()` は `C` そのもので
+          あり、`act ⊇ cand` (L2 (a)) である。
+      BY <2>1, L4 (b), L3, L2 (a), L15 (`origin(・, ・)` の記法は鍵の答えを指す),
          CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::candidates
     <3>3. QED
       BY <3>1, <3>2
@@ -1437,7 +1468,8 @@ L14 が与える。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 
   <2>4. `C_π := ∪_{r ∈ rs} act(r, π)` とおくと、`origin(x, π) = of_candidates(C_π, (x, π))` であり、
         `cand(x, π) ⊇ cand(r_0, π)`。
     <3>1. `origin(x, π) = of_candidates(C_π, (x, π))`。
-      BY L4 (a), CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Join(arm_results))` の腕
+      BY L4 (a), CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Join(arm_results))` の腕,
+         L15 (`origin(・, ・)` の記法は鍵の答えを指す)
     <3>2. `C_π` は空でない。
       BY A9 (`Match` は 1 つ以上のアームを持つ), L2 (a) (`act` は `identity` を含むので空でない)
     <3>3. `|C_π| ≥ 2` のとき `cand(x, π) = C_π ⊇ act(r_0, π) ⊇ cand(r_0, π)`。
