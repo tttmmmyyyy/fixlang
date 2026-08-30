@@ -3240,26 +3240,40 @@ capture の leaf であるとき 1、そうでないとき 0 -- であり、A19 
 <1>3. (c)。
   <2>0. `B` の `Retain`/`Release` 節点を実行する段は、D24 の (E7) -- グローバルの初期化の段 -- を
         含まない。
-    BY D22, D24, D7, D3, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+    BY D22, D24, D7, D3, A25, L8, L15,
+       CODE src/rc_ir/rc_insert.rs: build_retains, CODE src/rc_ir/rc_insert.rs: build_releases,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
        CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
-       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
+       CODE src/rc_ir/ownership.rs: collect_bindings
     (E7) が走るのは、まだ初期化されていないグローバルを読む者が居るときである (D22 の
     「グローバルのアクセサ」は初期化済みの旗を見る)。局所名の変数を名指す `Retain`/`Release` は
     グローバルの記憶域を読まないので、(E7) を起こしうるのは局所名でない変数を名指す節点だけである。
-    `insert_rc` がそれを置きうる位置は 1 か所しかない -- `insert_into_operation_let` の
-    `retains_before` と `releases_after` は `if v.name.is_local()` の門の中に在り、`retain_if_live` は
-    `var.name.is_local()` を要求し、`insert_into_eval` の `Release` も `x.name.is_local()` を要求し、
+    `src/rc_ir/rc_insert.rs` で `RcExpr::Retain` と `RcExpr::Release` を構成する式は `build_retains` と
+    `build_releases` の中の 1 つずつであり、A25 より骨格はこの 2 種を含まないので、`insert_rc` の出力の
+    `Retain`/`Release` 節点はこの 2 つが作ったものに限る。`L8` より `build_retains` の呼び出し元は
+    4 か所であり、`build_releases` の呼び出し元は 6 か所である。
+    そのうち門を持つのは次である -- `insert_into_operation_let` の `retains_before` と
+    `releases_after` は `if v.name.is_local()` の門の中に在り、`retain_if_live` は
+    `var.name.is_local()` を要求し、`insert_into_eval` の `Release` も `x.name.is_local()` を要求する。
     `insert_into_destructure` の `dead` はフィールド変数、`insert_into_func` の `unused` は
-    パラメータと capture、`insert_into_match` の dead-branch の `Release` と payload の `Release` は
-    live 集合の名前とアームの payload である。残る 1 か所は、`insert_into_match` が boxed union の
-    変位アームの頭に置く `Release(scrut, [])` -- `release_container && arm.tag.is_some() &&
-    needs_rc(&scrut)` の枝 -- であり、ここに `is_local()` の門は無い。その `scrut` が局所名でない
-    グローバルであるとき、D7 の読む構文の表の `Let(x, Match(v, arms), k)` の行よりその `Match` の
-    写し節点が `scrut` を読み、D3 よりその節点は `ρ` の上でこの `Release` より前にあるので、
-    そのグローバルの初期化はその写しの段で済んでいる。
+    パラメータと capture、`insert_into_match` の dead-branch の `Release` は
+    `live_at_arm_head` の名前 (`insert_if_local` が作る集合なので局所名) 、payload の `Release` は
+    アームの payload である。
+    `is_local()` の門を持たない位置は 3 つある。`insert_into_operation_let` の
+    `if !live_cont.contains(&x.name) && self.needs_rc(&x) { after.push(x.clone()); }` と、
+    `insert_into_match` の
+    `if !live_cont.contains(&x.name) && self.needs_rc(&x) { build_releases(vec![x.clone()], cont) }` は
+    どちらも `Let` の束縛変数 `x` を名指す。`collect_bindings` は `Let`・`Destructure`・`Match` の
+    束縛変数を `vars.bindings` に入れるので、`L15` (d) の対偶より `x` は局所名である。
+    残る 1 つは、`insert_into_match` が boxed union の変位アームの頭に置く `Release(scrut, [])` --
+    `release_container && arm.tag.is_some() && needs_rc(&scrut)` の枝 -- である。その `scrut` が
+    局所名でないグローバルであるとき、D7 の読む構文の表の `Let(x, Match(v, arms), k)` の行より
+    その `Match` の写し節点が `scrut` を読み、D3 よりその節点は `ρ` の上でこの `Release` より前に
+    あるので、そのグローバルの初期化はその写しの段で済んでいる。
   <2>1. `B` の活性化は、言明の 3 項が与えるデータで 1 つに決まる。
     BY <2>0, D21, D24, D2, L26
     D21 は「1 つの本体の活性化は、パラメータ・capture の値と、この 4 種の各位置での結果を与えると
