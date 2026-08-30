@@ -634,7 +634,7 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 |---|---|---|---|
 | A1 | 入力が RC 規律を満たす | 前段のパス (`insert_rc`) | P14 と T の言明の前提。A19 (i) の量化範囲に D12 を与える (P28 の項) |
 | A2 | 単位への正規化 | `insert_rc` と `split_rc_units` | P14 と T の言明の前提。P9 の項 |
-| **A3** | 宣言されたモデルの忠実さ | **誰も**。ただし `applies_a_function_operand` については `Generator::apply_lambda` の develop mode の検査が果たす | D10、D21、D24、D29、D30、P5 (a) |
+| **A3** | 宣言されたモデルの忠実さ | **誰も**。ただし `applies_a_function_operand` については `Generator::apply_lambda` の develop mode の検査が、`result_prov` の元数については `validate` の `check_rhs` の develop mode の検査が果たす | D10、D21、D24、D29、D30、P5 (a)。元数の節は前提 (N) (第 7 節) |
 | **A4** | コード生成の忠実さ | **誰も** | D29、D30 |
 | A5 | 型が leaf の上位近似 | `leaf_map.rs` の設計 | D25、P7a、A19 (i) |
 | A6 | 名前の一意性 | lowering | D6、P9、A11 |
@@ -643,24 +643,26 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 | A9 | `Match` はアームを持つ | lowering (検査は develop mode の `validate`) | P16 |
 | A10 | 型の well-formedness | `validate_layouts` (最適化が作る型の再検査は develop build だけ) | P1 の言明、A12。A10 自身の項が `boxed_leaf_paths` と `rc_units` の停止性を挙げる |
 | A11 | スコープの規律 | lowering (検査は develop mode の `validate`) | D2、P9。A11 自身の項が `origin` の停止性を挙げる |
-| **A12** | 束縛の形と型が合っている | **誰も** (項の見出し)。ただし箇条ごとには果たす者が居る -- `Llvm` 節点の `args` の名前の列は演算を作る側 (検査: develop mode の `validate` の `check_rhs`)、`Llvm` 節点の型についての残る 3 つは `struct_punch`・`struct_set` と `struct_plug_in`・`struct_get` と `union_as` が結果の型に取る形。punched でないことを検査するコードは無い | A3。A12 自身の項が P2 と `held_field_type`、`rhs_consumes` の停止性を挙げる |
-| A13 | 名前の形 | `Lowerer::fresh_var` と `clone_fresh` (検査は develop mode の `check_clone_names_are_fresh`) | P9 の後半。このファイルの `<1>10` の `<2>1a` |
+| **A12** | 束縛の形と型が合っている | **誰も** (項の見出し)。ただし `RcFunc` の欄の整合については `Lowerer::lower_lambda_as_function` が果たし、箇条ごとにも果たす者が居る -- `Llvm` 節点の `args` の名前の列は演算を作る側 (検査: develop mode の `validate` の `check_rhs`)、`Llvm` 節点の型についての残る 3 つは `struct_punch`・`struct_set` と `struct_plug_in`・`struct_get` と `union_as` が結果の型に取る形。punched でないことを検査するコードは無い | A3。A12 自身の項が P2 と `held_field_type`、`rhs_consumes` の停止性を挙げる |
+| A13 | 名前の形 | `Lowerer::fresh_var` と `clone_fresh` (検査は develop mode の `check_clone_names_are_fresh`) | P9 の後半、P14b。このファイルの `<1>10` の `<2>1a` |
 | A14 | 適用は飽和している (`App` の `args` の個数は呼び出し先のパラメータの個数に**等しい**) | 型検査と lowering (検査は `Generator::apply_lambda` の `assert_eq!`) | A14 自身の項が両向きの読み手を挙げる -- 以下は `call_rc` と `rhs_consumes` の `params[arg_idx]`、以上は D10 の初期値 |
-| A15 | `grow_stack` は閉包をちょうど 1 回呼ぶ | `stacker` crate | A15 自身の項が `origin`、`CancelAnalysis::walk`、`RewriteCtx::rewrite`、`drop_nodes`、`rename_expr` を挙げる |
-| A16 | `Match` のアームは scrutinee のタグを尽くす | lowering と、アームの列を保つ後段のパス (**検査: 無し**) | P5 (a)、P6 |
-| A17 | 環境の契約 | 環境のコード (**検査: 無し**) | D21、D24 の (i-c)、P27 の言明 |
-| **A18** | 生きているオブジェクトのグラフの非巡回性と、グローバル状態のオブジェクトが計数下の参照を持たないこと | **誰も** | P27 の言明と (R3) |
-| A19 | bump の下に余りが在る | (ii-a) と (ii-b) は `insert_rc`・`split_rc_units`・`borrow_ify` の 3 人、(i) は同じ 3 人が P28 と A20 の上で (**検査: 無し**) | (ii-a) は P14・P18c、(ii-b) は P18a・P18c・P19・P21、(i) は P28 の項 |
-| A20 | 借りた参照は活性化の間 生きている | 呼び出し元 (**検査: 無し**) | A19 (i)、P14 の (S-c)、P14a |
-| A21 | 関数の値を作る演算 | `builtin.rs` の op の集合 (**検査: 無し**) | P27 (第 7 節: 「`L0` の数え上げは A21 が片付けた」)。A21 自身の項が「実行時の呼び出し先を静的な名前から決める議論」を挙げる |
-| A22 | `funcs` の鍵は関数の名前 | lowering (**検査: 無し**) | A22 自身の項が `resolve_callee_params` と `call_rc` を挙げる |
+| A15 | `grow_stack` は閉包をちょうど 1 回呼ぶ | `stacker` crate | A15 自身の項が「`src/` の `grow_stack(` の呼び出し元を数え上げて決める」と述べる |
+| A16 | `Match` のアームは scrutinee のタグを尽くす | lowering と、アームの列を保つ後段のパス。catch-all の位置についてはコード生成 (**検査: 無し**) | P3、P4、P5 (a)、P6 |
+| A17 | 環境の契約 | 環境のコード (**検査: 無し**) | D21 (`H` の外から来る増減)、D24 の「実行の最初の時点」と (E8)、P27 の言明。(i-d) は `p50-observation.md` の `L9b`・`L10` |
+| **A18** | 生きているオブジェクトのグラフの非巡回性と、グローバル状態のオブジェクトが計数下の参照を持たないこと | **誰も** | P27 の言明の前提。使うのは (R3) だけ (A18 自身の項) |
+| A19 | bump の下に余りが在る | (ii-a) と (ii-b) は `insert_rc`・`split_rc_units`・`borrow_ify` の 3 人 (**検査: 無し**)。(i) は仮定ではなく D21 が活性化に課す制限であり、実行が作る活性化がそれを満たすことを P28 (b) が示す | (ii-a) は P14・P18c、(ii-b) は P18a・P18c・P19・P21。(i) の不等式は D21 が活性化への制限として読み、P28 (b) がそれを実行の作る活性化について示す |
+| A20 | 借りた参照は活性化の間 生きている | 呼び出し元 (**検査: 無し**) | A19 (i)、P14 の (S-c)、P14a、P14b の項、P27 と P28 の言明の前提 |
+| A21 | 関数の値を作る演算 | `builtin.rs` の op の集合 (**検査: 無し**) | P14b、P27 (第 7 節: 「`L0` の数え上げは A21 が片付けた」)。A21 自身の項が「実行時の呼び出し先を静的な名前から決める議論」を挙げる |
+| A22 | `funcs` の鍵は関数の名前 | lowering (**検査: 無し**) | A22 自身の項が `resolve_callee_params` と `call_rc` を挙げ、`RcRhs::Closure` の `FuncRef` の節が `infer_ownership` の停止性 (P8 (a)) を挙げる |
 | A23 | 持ち上げた lambda は closure 型である | 型検査と `uncurry` (**検査: 無し**) | `p20-borrow-ify.md` の `L18` |
-| **A24** | `fix` の op は capture を持つ本体にだけ在る | **誰も** (検査は `Lowerer::lower_llvm` の panic) | `p20-borrow-ify.md` の `L18a` |
+| **A24** | `fix` の op は capture を持つ本体にだけ在る | **誰も** (検査は `Lowerer::lower_llvm` の panic) | P14b、`p20-borrow-ify.md` の `L18a` |
 | A25 | 骨格は `Retain`/`Release` を持たない | lowering と `simplify` (検査は `RcInserter::insert_into_expr_inner` の `panic!`) | `p60-insert-rc.md` の `L8`・`L14`・`L28` |
 
 **README 第 7 節が「誰も果たさない仮定」に挙げるのは A3・A4・A12・A18・A24 の 5 つである。**この
-うち A3 は、`applies_a_function_operand` の宣言についてだけ果たす者を持つ --
-`Generator::apply_lambda` の develop mode の検査である。**T の証明はこの 5 つの上に立っている。**
+うち A3 は 2 つの節についてだけ果たす者を持つ -- `applies_a_function_operand` の宣言については
+`Generator::apply_lambda` の develop mode の検査、`result_prov` の元数については `validate` の
+`check_rhs` の develop mode の検査である。A12 は `RcFunc` の欄の整合について
+`Lowerer::lower_lambda_as_function` を持つ。**T の証明はこの 5 つの上に立っている。**
 どれか 1 つが偽であれば、T の結論はこの文書では支えられていない。5 つのどれかが偽になったときに
 T の結論が実際に破れるかどうかは別の問いであり、この文書はそれに答えない。README 第 4 節が、
 A3 については人手の照合の記録
@@ -681,12 +683,13 @@ op が関数を**適用**するか -- であって、A21 が述べる「関数�
 果たす者を 2 人持つが、その 2 人の間を funptr 型の `Expr::Lam` が式の内側へ移らずに通ることは、まだ
 誰も確かめていない。A10 は newtype を剥がす節を持ち、その節は誰も示していない。
 
-**A19 の 3 つの節はどれも果たす者を持つ。** README 第 8 節が「その 3 節とも果たす者を持つ --
-(ii-a) と (ii-b) は `insert_rc`・`split_rc_units`・`borrow_ify` の 3 人、(i) は P28 と A20 で
-ある」と述べる。README 第 7 節の「A19 の果たす者」の項は、そこに 1 つ足す。
+**A19 が仮定するのは (ii-a) と (ii-b) の 2 節である。** (i) は同じ項に置かれているが、README 第 4 節
+がそれを「仮定ではなく D21 が活性化に課す制限である」と述べる。README 第 7 節の「A19 の果たす者」の
+項が、3 つの節の状態をまとめている。
 
-> (ii-a) は `insert_rc`・`split_rc_units`・`borrow_ify` の 3 人が果たす。(i) は同じ 3 人が P28 の
-> 上で果たす。**(ii-b) は前提 (N) -- 名前は別名類を決める -- の下でしか閉じていない。**
+> (ii-a) は `insert_rc`・`split_rc_units`・`borrow_ify` の 3 人が果たす。(i) は仮定ではなく D21 が
+> 活性化に課す制限であり (第 4 節)、実行が作る活性化がそれを満たすことを P28 (b) が示す。
+> **(ii-b) は前提 (N) -- 名前は別名類を決める -- の下でしか閉じていない。**
 
 README 第 4 節が、果たす作業の状態として次の 4 つを述べる。
 
@@ -694,10 +697,12 @@ README 第 4 節が、果たす作業の状態として次の 4 つを述べる�
 - (O2) は「名前は別名類を決める」という前提 (N) の下で閉じており、その (N) について README は
   「`p60-insert-rc.md` はそれを証明していない」と書く。
 - 「**`split_rc_units` の段も閉じた**」。
-- 「**(i) も閉じた**」。
+- 「**(i) も閉じた**」。README はその括弧に P28 (b) を置く。
 
-**残っているのは前提 (N) である。** A19 は T の前提 H3 に入っているので、**(T1) から (T4) までの
-すべては、(N) をそこに持つ。**
+**残っているのは (ii-b) が立つ前提 (N) である。** README 第 7 節は、(N) を
+`p13-disposals-and-pending.md` の `L14` の後半が与えると述べ、「**(N) を前提として残す理由は無い**」と
+書くが、その後半を `p60-insert-rc.md` が読んでいないことも同じ節が述べる。A19 は T の前提 H3 に
+入っているので、**(T1) から (T4) までのすべては、(N) をそこに持つ。**
 
 ## 4. T が届かないところ
 
