@@ -1234,6 +1234,34 @@ Fix の関数型の値に LLVM 関数の番地を書き込むのは、クロー�
 Fix の関数型の leaf に新しい番地を書き込むのが `InlineLLVMFixBody` の 1 つだけであることを確かめたもので
 ある。実行時の呼び出し先がどの `RcFunc` かを静的な名前から決める議論がこれを読む。
 
+**A23 (持ち上げた lambda は closure 型である)** -- 果たす者: 型検査と `uncurry`。検査: 無し。
+`Lowerer::lower_to_var` が `Expr::Lam` の節点に与える型は closure 型である
+(`CODE src/rc_ir/lower.rs: Lowerer::lower_to_var`)。したがって `Lowerer::lower_lam` が `prog.funcs` に
+入れる関数の `fn_ty` は closure 型であり、`lower_lambda_as_function` はその関数に `capture` を与える。
+
+型検査は `Expr::Lam` に `type_fun(arg_ty, body_ty)` を与える
+(`CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner`)。funptr 型の lambda を
+作るのは `uncurry::funptr_lambda` だけで、その式は新しい記号の `expr` 全体に据わるので
+`Lowerer::lower_symbol` の funptr の枝が直に受け取り、`lower_to_var` を通らない
+(`CODE src/optimization/uncurry.rs: run`, `funptr_lambda`)。**確かめていない点が 1 つ残る** -- その 2 人の
+間の変換が funptr 型の `Expr::Lam` を式の内側へ移さないこと。
+
+読む者は `p20-borrow-ify.md` の `L18` である。これが無いと、振り分けられた callee の型が funptr とは限らず、
+`route` が差し替えた callee の消費が両側でずれる。
+
+**A24 (`fix` の op は capture を持つ本体にだけ在る)** -- 果たす者: 誰も。検査: `Lowerer::lower_llvm` の
+panic (`CODE src/rc_ir/lower.rs: Lowerer::lower_llvm`)。
+`borrow_ify` の入力の各関数について、その本体に `InlineLLVMFixBody` の `Llvm` 節点が在るならば、その関数の
+`capture` は `Some` である。
+
+`fix_body` は op の `cap_name` を局所名 `#CAP` に置き (`CODE src/fixstd/builtin.rs: fix_body`)、`lower_llvm`
+は外れた名前を `global_types` で引いて無ければ panic する。`#CAP` は局所名なので `global_types` の鍵では
+なく、それを束縛するのは `lower_lambda_as_function` の closure の枝だけである。**支えているのは表明だけ
+なので、果たす者は居ない** -- 第 4 節冒頭の 3 段のうち最も弱いものである。
+
+読む者は `p20-borrow-ify.md` の `L18a` である。これが無いと、`gc.current_function()` の番地を持つ
+クロージャを借用版が作りうる。
+
 **A20 (借りた参照は活性化の間 生きている)** -- 果たす者: 呼び出し元。検査: 無し。
 `borrow_ify` の出力の関数が借用する (D14) unit について、呼び出し元はその参照を、呼び出しが返るまで
 処分しない。
