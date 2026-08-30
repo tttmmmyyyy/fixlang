@@ -345,10 +345,11 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
 
 <1>3b. 鍵 `(x, π)` について `origin` の呼び出しが 1 つでも在るならば、その鍵の cold な呼び出しは
        少なくとも 1 つ在る。
-  `<1>1` より、鍵 `(x, π)` の記録を書くのはその鍵についての `origin` の呼び出しのうち検査で記録を
-  見つけなかったものだけであり、`<1>3` より `origins` を変更するのはその書き込みだけである。よって、
-  その鍵の `origin` の呼び出しのうち時間の上で最初のものの検査の時点には、その鍵の記録が無い。`<1>1` より
-  その呼び出しは `origin_inner` を評価する、すなわち cold である。
+  その鍵の呼び出しのどれかが検査で記録を見つけなければ、`<1>1` よりその呼び出しは `origin_inner` を
+  評価するので cold である。どれもが記録を見つけるとすると、`<1>3` より `origins` を変更するのは
+  `<1>1` の `insert` だけで、初期値は空の写像なので、その鍵の記録を書いた呼び出しが在る。`<1>1` より
+  記録を書くのは検査で記録を見つけなかった呼び出しであり、それはその鍵の呼び出しなので、どれもが記録を
+  見つけるという仮定に反する。
   BY <1>1, <1>3
 
 <1>4. QED
@@ -1342,11 +1343,12 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   <2>3. `[]` は `T` の値で inhabited である。`[]` は unbox union の節を 1 つも通らない。
     BY D16, <2>2
   <2>4. `p_0` と `p_1` の型 `()` は leaf を持たない。`()` は `tuple_defn(0)` が定める型、すなわち
-        フィールドを 1 つも持たない unbox の構造体なので、`is_box`・`is_closure`・`is_array`・`is_funptr`
-        がいずれも偽であり、`unpunched_field_types` は空の列を返す。よって `is_fully_unboxed` は空の
-        連言として真であり、D4 の規則 1 より leaf を持たない。
+        フィールドを 1 つも持たない構造体であり、その `is_unbox` は `TUPLE_UNBOX` すなわち真である。
+        よって `is_box`・`is_closure`・`is_array`・`is_funptr` がいずれも偽であり、
+        `unpunched_field_types` は空の列を返す。よって `is_fully_unboxed` は空の連言として真であり、
+        D4 の規則 1 より leaf を持たない。
     BY D4, <1>1, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
-       CODE src/fixstd/builtin.rs: tuple_defn
+       CODE src/fixstd/builtin.rs: tuple_defn, CODE src/constants.rs: TUPLE_UNBOX
   <2>5. `boxed_leaf_paths(Bool, type_env)` は空である。`<1>1` より `Bool` は unbox union なので
         `is_box` が偽であり、`is_closure`・`is_array`・`is_funptr` も偽なので、`is_fully_unboxed(Bool)` は
         `unpunched_field_types(Bool)` が返す各型の `is_fully_unboxed` の連言である。`<1>1` よりそれは
