@@ -10,31 +10,7 @@ D1-D34、仮定 A1-A25、命題 P1-P29 の**言明**の上に立つ。加えて 
 - 第 7.5.7 節の反例 `C1` と第 7.5.8 節の反例 `C2` -- その実行路の上の別名類 (`C1` では `m` と `p` が
   1 つの類に属し、`C2` では `o` と `y` が別の類に属すること)、callee の leaf が指すオブジェクトが
   グローバル状態であること、この 2 つが D12 を満たすこと、そして A19 (ii) を破る時点と、その時点での
-  `held` と `bumps` の値。**本体はこの文書が書き写す** -- `C1` は下に、`C2` は 5.2 節の `L5` に。
-
-**`C1` の道具立てと本体。** `Arr` を boxed な型、`I` を `is_fully_unboxed` が真の型、`Bl` を 2 つの変位が
-どちらも payload を持たない unbox union とする。`Llvm` 演算 `alloc : () -> Arr` と `mkbl : () -> Bl` は
-結果の leaf を単一の `Fresh` と宣言し、`zero : () -> I` は boxed leaf を持たない結果を返す。どれも
-オペランドを持たない。関数 `f` (パラメータ `b : Arr`、`borrowed_units` は空、返り値の型 `I`) の本体は
-`Let(z, Llvm(zero, []), Release(b, [], s, Ret(z)))` であり、関数 `main` (パラメータ無し、capture 無し、
-返り値の型 `I`) の本体は次である。
-
-```
-Let(p, Llvm(alloc, []),
-Let(q, Llvm(alloc, []),
-Let(c, Llvm(mkbl, []),
-Let(m, Match(c, [ MatchArm { tag: Some(0), payload: y0, body: Ret(p) },
-                  MatchArm { tag: Some(1), payload: y1, body: Ret(q) } ]),
-Retain(m, [], s,
-Let(u, App(f, [p]),
-Let(w, App(f, [q]),
-Eval(m,
-Release(m, [], s,
-Ret(u))))))))))
-```
-
-`main` の束縛変数 `p`・`q`・`c`・`m`・`u`・`w`・`y0`・`y1` と `f` のパラメータ `b`・束縛変数 `z` は
-いずれも名前空間を持たない名前であり、`f` と `main` は `prog.funcs` の鍵である。
+  `held` と `bumps` の値。**本体はこの文書が書き写す** -- `C1` は第 1 節に、`C2` は 5.2 節の `L5` に。
 
 証明対象のコードは `src/rc_ir/rc_insert.rs` の全体と、
 `src/rc_ir/borrow.rs` の `split_rc_units`・`split_body`・`split_body_inner`・`split_rc`、およびこれらが
@@ -122,6 +98,30 @@ Ret(u))))))))))
 `L13a` のように枝番を振る。`L30` の番号は使わない。他のファイルの補題を引くときは
 `p13 の L16` のように書く。
 
+**`C1` の道具立てと本体。** `Arr` を boxed な型、`I` を `is_fully_unboxed` が真の型、`Bl` を 2 つの変位が
+どちらも payload を持たない unbox union とする。`Llvm` 演算 `alloc : () -> Arr` と `mkbl : () -> Bl` は
+結果の leaf を単一の `Fresh` と宣言し、`zero : () -> I` は boxed leaf を持たない結果を返す。どれも
+オペランドを持たない。関数 `f` (パラメータ `b : Arr`、`borrowed_units` は空、返り値の型 `I`) の本体は
+`Let(z, Llvm(zero, []), Release(b, [], s, Ret(z)))` であり、関数 `main` (パラメータ無し、capture 無し、
+返り値の型 `I`) の本体は次である。
+
+```
+Let(p, Llvm(alloc, []),
+Let(q, Llvm(alloc, []),
+Let(c, Llvm(mkbl, []),
+Let(m, Match(c, [ MatchArm { tag: Some(0), payload: y0, body: Ret(p) },
+                  MatchArm { tag: Some(1), payload: y1, body: Ret(q) } ]),
+Retain(m, [], s,
+Let(u, App(f, [p]),
+Let(w, App(f, [q]),
+Eval(m,
+Release(m, [], s,
+Ret(u))))))))))
+```
+
+`main` の束縛変数 `p`・`q`・`c`・`m`・`u`・`w`・`y0`・`y1` と `f` のパラメータ `b`・束縛変数 `z` は
+いずれも名前空間を持たない名前であり、`f` と `main` は `prog.funcs` の鍵である。
+
 ## 2. 言明
 
 `p13-disposals-and-pending.md` の第 7.5.6 節が書き出した言明はこれである。
@@ -162,7 +162,8 @@ Ret(u))))))))))
 - **L9**、**L10** (第 7 節)。`insert_rc` の出力の `Retain` の位置の形と、それが `C1` と `C2` を弾くこと。
 - **L12**、**L13** (第 9 節)。A19 を読む 2 つの形が、どちらも他方を導かないこと。
 - **L13a** - **L20** (第 10 節)。(O1)。移動の辺の両端が同じ別名類に属し `held` がスロットごとの割り当ての
-  和であること (`L13a`)、`insert_rc` の liveness と実行時の参照の分布が一致すること
+  和であること (`L13a`)、終端の `Ret` を書き換える呼び出しの `live_after` が空であること (`L16a`)、
+  `insert_rc` の liveness と実行時の参照の分布が一致すること
   (`L18`)、終端の `Ret` の前に `Retain` が立たないこと (`L18a`)、そこから出る別名類の粒度の RC 規律
   (`L19`)、および開始事象の一意性 (`L20`)。
 - **L20a** - **L25** (第 11 節)。(O2)。第 11 節が本体について読む 4 つを前提 (S) として括り出し、
@@ -182,7 +183,7 @@ Ret(u))))))))))
 
 ### 4.1 反例のプログラム
 
-`p13-disposals-and-pending.md` の第 7.5.7 節と同じ道具立てを使う。`Arr` を boxed な型、`I` を
+第 1 節の `C1` の道具立てのうち `Bl` と `mkbl` を除いたものを使う。`Arr` を boxed な型、`I` を
 `is_fully_unboxed` が真の型とする。`Llvm` 演算 `alloc : () -> Arr` は結果の leaf を単一の `Fresh` と
 宣言し、`zero : () -> I` は boxed leaf を持たない結果を返す。どちらもオペランドを持たない。
 
