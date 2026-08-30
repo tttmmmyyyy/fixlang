@@ -3,7 +3,7 @@
 この文書は README の層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の定義 D1 - D34 と仮定
 A1 - A25 の上に立つ。層 1 と層 2 の命題は引用しない。
 
-対象コミットは `58b67143dc6370d9b78bdccbc1e9431b5f5f8f03` である。
+対象コミットは `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` である。
 
 P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P16 - P18 もその入力に対する走査についての
 言明なので、この文書は全体を通じて、`cancel` の引数 `prog` が `borrow_ify` の 1 回の呼び出しの返り値で
@@ -348,10 +348,12 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 
 **証明**
 
-<1>1. `cancel` は `pub(crate)` なので、その呼び出しはこのクレートの中にしか書けない。クレートの中で
-      `cancel` を呼ぶのは、`build_object_files.rs` の `optimize_rc_program` の 1 か所だけである。
-  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/build/build_object_files.rs: optimize_rc_program,
-     クレートの全ソースにわたる `cancel` の呼び出しの数え上げ
+<1>1. `cancel` は `pub(crate)` なので、その呼び出しはこのクレートの中にしか書けない。クレートのモジュールは
+      `src/lib.rs` の `pub mod` の宣言から辿れるものですべてであり、そのどのモジュールにも `cancel` の
+      呼び出しは無い --- ただ 1 つ、`build_object_files.rs` の `optimize_rc_program` を除いてである。
+  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/lib.rs: pub mod の宣言 (クレートのモジュールはここから
+     辿れるものですべてであり、その各ファイルが `cancel` の呼び出しを持つかどうかを読んだ),
+     CODE src/build/build_object_files.rs: optimize_rc_program
 <1>2. QED
   <1>1 の唯一の呼び出しに渡る `prog` は `borrow_ify` の 1 回の呼び出しが返した値である。
   `optimize_rc_program` は `prog = borrow_ify(&prog, type_env, config.develop_mode)` の後に
