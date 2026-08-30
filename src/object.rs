@@ -1087,7 +1087,7 @@ impl ObjectFieldType {
     /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
     /// the struct: each returned field owns its reference and so outlives the struct it came from,
     /// and the fields left behind are dropped.
-    // PROOF: D/A, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P7a, P7d, P7e, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
