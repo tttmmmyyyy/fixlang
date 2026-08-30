@@ -301,8 +301,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
    **`E` に登録されている各 `TyConInfo` の `variant`、`tyvars`、`is_unbox`、`fields` の長さ、
    および各 `fields[i].is_punched` は、上の 4 つのいずれかがそれを作ったときの値である。**この 5 つが、
-   この証明が `TyConInfo` から読むものである。`TypeEnv` の `tycons` は非公開のフィールドなので、
-   それに書けるのは `src/ast/program.rs` の中の 6 か所であり、次のとおりである。
+   この証明が `TyConInfo` から値として読むものである。**`fields[i].ty` は `F(t)` の第 2 成分として
+   現れるが、この証明はその値を主張せず、それが `<1>1` を満たすことだけを使う。`TypeEnv` の `tycons`
+   は非公開のフィールドなので、それに書けるのは `src/ast/program.rs` の中の 6 か所であり、次の
+   とおりである。
 
    - `TypeEnv::default`。空の `Map` を置く。
    - `TypeEnv::new`。`Program::calculate_type_env` が、`bulitin_tycons()` に各型宣言の
@@ -355,9 +357,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `tc.name.name` が `FUNPTR_NAME` で始まらなければ `None` を返し、そのどちらでもないときにだけ
      残りの文字を `parse::<u32>()` に掛ける。ほかに abort する場所を持たない。
     BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME
-  <2>2. (b) の第 1 文が成り立つ。`E` の鍵は次の 4 か所から来る。`TypeEnv` を作るのは
-     `calculate_type_env` の `TypeEnv::new` であり、鍵を足すのは `TypeEnv::add_tycons` だけである。
-     `add_tycons` を呼ぶ場所は `closure_specialization::lift_all`、
+  <2>2. (b) の第 1 文が成り立つ。`<1>3b` が挙げる `tycons` への 6 つの書き込みのうち、鍵を置くのは
+     `TypeEnv::default` (空の `Map`)、`Program::calculate_type_env` が呼ぶ `TypeEnv::new`、
+     `TypeEnv::add_tycons` の 3 つであり、残る 3 つは既に在る値を書き替えるだけである。よって
+     `E` の鍵は次の 4 か所から来る。`add_tycons` を呼ぶ場所は `closure_specialization::lift_all`、
      `closure_specialization::realize_all`、`defunctionalize_fix::run_one`、
      `desugar_opaque::register_opaque_tycon` の 4 つである。
      - `Program::calculate_type_env` が置く `bulitin_tycons()` の鍵。`<1>3b` の表の 5 行が
