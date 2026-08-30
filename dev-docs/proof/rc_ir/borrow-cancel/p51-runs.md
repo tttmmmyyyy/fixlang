@@ -532,15 +532,17 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 **言明**。`LLVMGen::applies_a_function_operand` が真を宣言する op を持つ節点
 `Let(x, Llvm(gen, args), k)` の段 (以下**適用する `Llvm` の段**と呼ぶ) について、次が成り立つ。
 
-- **(a)** その段は 1 つ以上の活性化を作り、その段を持つ活性化 `a` は、作った活性化のそれぞれが終わるまで
-  中断中である。
+- **(a)** その段はちょうど 1 つの活性化を作り、その段を持つ活性化 `a` は、その活性化が終わるまで中断中で
+  ある。1 つの節点が活性化を 2 つ作るときは、この種の段がその節点について 2 つ在る。
 - **(b)** その段が作った活性化 `b` が終わる (E4) の段で `Obl(b)` を離れる参照は `Obl(a)` に入り、その段で
   `H` は変わらない。
 
 <1>1. (a) が成り立つ。
   D24 の (E2) の `Llvm` の段の段落が「その op の生成コードがオペランドを関数として適用するとき
-  (`LLVMGen::applies_a_function_operand` が真を宣言する op)、適用された関数の本体の活性化が作られ、
-  `a` はそれが終わるまで中断中である」と述べ、続けて「**1 つの段が活性化を 2 つ以上作りうる**」と述べる。
+  (`LLVMGen::applies_a_function_operand` が真を宣言する op)、適用された関数の本体の活性化が作られる」と
+  述べ、続けて「**この段は活性化を 1 つ作るごとに区切られる。** `a` はその活性化が終わるまで中断中で
+  あり、(E4) の後、同じ位置で次の段を実行する。1 つの節点が活性化を 2 つ作るときは、この種の段がその節点に
+  ついて 2 つ在る」と述べる。
   宣言と生成コードが一致することは A3 が言う -- `applies_a_function_operand` は A3 が名指す 3 つの宣言の
   1 つである。
   BY A3, D24 (E2 の `Llvm` の段の段落),
@@ -548,7 +550,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 
 <1>2. (b) が成り立つ。
   D24 の (E4) が「`b` を作ったのが (E2) のうちオペランドを適用する `Llvm` の段であれば、それらの参照は
-  同じくその段を実行している活性化の `Obl` に入り、その活性化は同じ位置で続きを実行する。**このとき
+  その段を実行した活性化の `Obl` に入り、その活性化は同じ位置で続きを実行する。**このとき
   (E2) の生成の表の `Llvm` の行はその leaf について読まない** -- `App` の行と同じ理由で、その参照は
   呼び出し先の中で作られてここへ渡ってくるものであり、`H` は動かない」と述べる。
   BY D24 (E4)
@@ -557,10 +559,10 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   BY <1>1, <1>2
 
 **注 (`Obl(a)` を離れる参照の行き先)**。L0a は (E3) の受け渡しの形を主張しない。D24 の (E2) の
-`Llvm` の段の段落は「(E3) と違うのは 3 点である。呼び出し先を決めるのが `callee` の値ではなく op の
-生成コードであること、**呼び出し先に渡る値がオペランドとは限らない**こと、そして **1 つの段が活性化を
-2 つ以上作りうる**ことである」と述べ、続けて「`Obl(a)` の動きは D9 の `Llvm` の行と A3 の宣言が決めるので、
-この表の行はそのままである」と述べる。`InlineLLVMFixBody` がその形を示す -- `fix(f)` のクロージャをその場で
+`Llvm` の段の段落は「(E3) と違うのは 2 点である。呼び出し先を決めるのが `callee` の値ではなく op の
+生成コードであること、**呼び出し先に渡る値がオペランドとは限らない**ことである」と述べ、続けて
+「`Obl(a)` からオペランドの参照が離れる動きは D9 の `Llvm` の行が、結果の leaf に参照が生じる動きは
+A3 の宣言が決めるので、上の表の行はそのままである」と述べる。`InlineLLVMFixBody` がその形を示す -- `fix(f)` のクロージャをその場で
 組み立てて `f` に渡し、返った関数に改めてオペランド `x` を渡すので、1 回目の活性化の第 1 引数は
 どのオペランドでもなく、その段が作った参照である
 (`CODE src/fixstd/builtin.rs: InlineLLVMFixBody` -- `create_obj` で `fix(f)` を作り、`apply_lambda` を
@@ -568,15 +570,12 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 
 ### L1 (呼び出しと返りの受け渡しが釣り合う)
 
-**言明**。(a) は次の仮説の下で述べる。
+**言明**。(a) は A12 の下で述べる。A12 は各 `RcFunc` について「`params` の型の列は `fn_ty` の lambda src の
+列に等しく、`capture` が `Some` であることと `fn_ty.is_closure()` が真であることは同値であり、コード生成が
+その関数に与える署名は `lambda_function_type(fn_ty)` である」と述べ、`App(callee, args)` について
+「`ty(callee)` は実行時の呼び出し先の `fn_ty` である」と述べる。
 
-> **(ABI)** 実行するプログラムの各関数 `f` について、`f.params` の型の列は `f.fn_ty` の lambda src の列に
-> 等しく、`f.capture` が `Some` であることと `f.fn_ty.is_closure()` が真であることは同値であり、コード
-> 生成が `f` に与える LLVM 関数の署名は `lambda_function_type(f.fn_ty)` である。さらに各
-> `Let(x, App(callee, args), k)` の段について、`ty(callee)` はその段の実行時の呼び出し先 (D23) の
-> `fn_ty` に等しい。
-
-- **(a)** (ABI) の下で、(E3) の段で `Obl(a)` を離れる参照の多重集合は、`Obl(b)` の初期値に一致する。
+- **(a)** (E3) の段で `Obl(a)` を離れる参照の多重集合は、`Obl(b)` の初期値に一致する。
 - **(b)** (E4) の段で `Obl(b)` を離れる参照の多重集合は、その段の行き先 -- `b` を (E3) が作ったならその
   親の `Obl(a)`、適用する `Llvm` の段 (L0a) が作ったならその段を実行している活性化の `Obl`、(F) の解放が
   作ったならその解放を含む段を実行している活性化の `Obl`、(E1) か (E7) が作ったなら `E` -- が得る参照の
@@ -585,7 +584,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 **(a) は、D24 の (E3) と D10 の初期値が同じ多重集合を指すことの検算である。**D24 の (E3) は `Obl(a)` を
 離れた参照がそのまま `Obl(b)` の初期値になると定め、D10 は `Obl(b)` の初期値を所有するパラメータ・
 capture の leaf から独立に定める。L3 が (E3) の段について読むのは D24 の (E3) の定めだけなので、P27 は
-(a) を読まない。**(ABI) を果たす節は枠に無い** -- 第 6 節がその形を述べる。(b) は (ABI) を要らない。
+(a) を読まない。(b) は A12 を要らない。
 
 <1>1. (E3) の段で `Obl(a)` を離れるのは、D9 の `App` の行が挙げる leaf の参照である。すなわち `callee` の
       inhabited な全 boxed leaf と、呼び出し先がその位置の unit を所有する (D14) 引数の inhabited な leaf で
@@ -599,14 +598,14 @@ capture の leaf から独立に定める。L3 が (E3) の段について読む
 <1>2a. 呼び出しが使う署名と、実行時の呼び出し先 `g` の LLVM 関数の署名は、どちらも
        `lambda_function_type(g.fn_ty)` である。
   `apply_lambda` は `func_ty = lambda_function_type(&fun.ty, self)` を作って `build_indirect_call` に
-  渡し、`fun.ty` は `ty(callee)` である。(ABI) より `ty(callee)` は `g.fn_ty` に等しく、コード生成が
+  渡し、`fun.ty` は `ty(callee)` である。A12 より `ty(callee)` は `g.fn_ty` に等しく、コード生成が
   `g` に与える LLVM 関数の署名も `lambda_function_type(g.fn_ty)` である。
-  BY (ABI), CODE src/generator.rs: Generator::apply_lambda, CODE src/object.rs: lambda_function_type
+  BY A12, CODE src/generator.rs: Generator::apply_lambda, CODE src/object.rs: lambda_function_type
 
 <1>2b. `ty(callee)` がクロージャ型であることと、`g.capture` が `Some` であることは同値である。
-  (ABI) より `ty(callee)` は `g.fn_ty` に等しく、`g.capture` が `Some` であることと
+  A12 より `ty(callee)` は `g.fn_ty` に等しく、`g.capture` が `Some` であることと
   `g.fn_ty.is_closure()` が真であることは同値である。
-  BY (ABI)
+  BY A12
 
 <1>2c. `apply_lambda` が置く LLVM の実引数の列と、`implement_rc_function` が LLVM パラメータを読む列は、
        位置ごとに一致する。すなわち、結果が out-pointer で返るときの先頭の pointer、続く第 `i` 引数の
@@ -618,10 +617,10 @@ capture の leaf から独立に定める。L3 が (E3) の段について読む
   `implement_rc_function` は、`returns_through_out_pointer` が真のとき第 0 パラメータを飛ばし、
   `g.params` の各 `param` について `param.ty` の parts の個数だけ LLVM パラメータを順に取り、
   `g.capture` が `Some` のとき次の 1 つを取る。どちらの `returns_through_out_pointer` も
-  `lambda_return_part_types` を掛けた結果を読み、(ABI) より `ty(callee)` は `g.fn_ty` に等しいので
-  真偽は一致する。(ABI) より `g.params` の型の列は `g.fn_ty` の lambda src の列、すなわち `ty(callee)` の
+  `lambda_return_part_types` を掛けた結果を読み、A12 より `ty(callee)` は `g.fn_ty` に等しいので
+  真偽は一致する。A12 より `g.params` の型の列は `g.fn_ty` の lambda src の列、すなわち `ty(callee)` の
   lambda src の列に等しいので、parts の列も一致する。CAP の有無は `<1>2b` より一致する。
-  BY (ABI), <1>2a, <1>2b, CODE src/generator.rs: Generator::apply_lambda,
+  BY A12, <1>2a, <1>2b, CODE src/generator.rs: Generator::apply_lambda,
      Generator::returns_through_out_pointer, CODE src/object.rs: lambda_function_type,
      lambda_return_part_types, CODE src/rc_ir/codegen.rs: Generator::implement_rc_function
 
@@ -666,10 +665,10 @@ capture の leaf から独立に定める。L3 が (E3) の段について読む
   <2>1a. `args` の個数は実行時の呼び出し先 `g` の `params` の個数に等しい。
     `apply_lambda` は `assert_eq!(args.len(), src_tys.len())` を持ち、`src_tys` は `fun.ty` すなわち
     `ty(callee)` の lambda src の列である。この表明が発火するプログラムはコンパイルされず、その場合の
-    段は存在しない。(ABI) より `ty(callee)` は `g.fn_ty` に等しく、`g.params` の型の列は `g.fn_ty` の
+    段は存在しない。A12 より `ty(callee)` は `g.fn_ty` に等しく、`g.params` の型の列は `g.fn_ty` の
     lambda src の列なので、`args` の個数は `g.params` の個数に等しい。A14 が「呼び出し先」を D23 の
     実行時の関数についても読むと述べるのがこの一致である。
-    BY (ABI), A14, CODE src/generator.rs: Generator::apply_lambda
+    BY A12, A14, CODE src/generator.rs: Generator::apply_lambda
   <2>2. 第 `i` 引数の型は `g.params[i]` の型に等しいので、両者の `boxed_leaf_paths` は同じ列であり、
         `<2>1` より同じ値の同じ leaf を指す。よって inhabited (D16) であることも一致する。
     A12 の「`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型」の行がこれを与える。
@@ -682,7 +681,7 @@ capture の leaf から独立に定める。L3 が (E3) の段について読む
     BY D9, D10, D14, D23, <2>1, <2>1a, <2>2
 
 <1>5. (a) が成り立つ。
-  BY (ABI), <1>1, <1>2, <1>3, <1>4
+  BY A12, <1>1, <1>2, <1>3, <1>4
 
 <1>6. (b) が成り立つ。
   <2>1. (E4) で `Obl(b)` を離れるのは `x` の inhabited な全 boxed leaf の参照である。
