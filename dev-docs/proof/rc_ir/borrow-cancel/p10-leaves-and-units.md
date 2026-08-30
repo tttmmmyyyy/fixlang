@@ -9,10 +9,11 @@
   ついて成り立つ。`<1>1` は A10 をこの文書の記法で述べたものである。第 3 節がその対応を述べる。
 - **P2** (`origin` の全域性と停止性)。README の P2 が量化する 2 つの形 -- プログラムの束縛変数と、
   `vars.bindings` に束縛を持たない名前 (D6 の第 3 の形) -- は、どちらも `<1>31` の範囲に入る。
-- **P1 の系** (`<1>33`, `<1>34`)。`origin` の再帰が辿る path も、`origin` が返す `VarPath` の path も、
-  どれも「その型の unit に届く」。すなわちそれらに `truncate_to_unit` を当てると abort せず、値は
-  `rc_units` の要素である。これは「unit path の `origin` と、その下の leaf の `origin` の関係」に
-  ついての要望への答えである。
+- **P1 の系** (`<1>33`, `<1>34`)。`pi` が `ty(x)` の boxed leaf か RC unit であるとき、
+  `origin(vars, E, x, pi)` の再帰が辿る対も、その返り値に現れる `VarPath` も、第 1 成分が
+  `vars.var_tys` に型を持つ限り、第 2 成分が「その型の unit に届く」。すなわちそれに
+  `truncate_to_unit` を当てると abort せず、値は `rc_units` の要素である。これは「unit path の
+  `origin` と、その下の leaf の `origin` の関係」についての要望への答えである。
 
 P1 と P2 は共通の補題 (型の上の walk が停止すること、`unit_step` と `boxed_leaf_paths` の内部関数
 `go` の分類) を使うので、その補題を先頭の `<1>` ステップに置き、P1 と P2 をその後ろに置く。
@@ -2328,10 +2329,20 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     ので、道の長さは有限で上から抑えられる。よって帰納法は呼び出しの下流の全体に届く。
     BY <1>21, <1>25, <2>5, <2>6
 
-<1>34. **(P1 の系 2: `origin` が返す path も unit に届く)** `<1>33` と同じ 8 つの仮定の下で、
+<1>34. **(P1 の系 2: `origin` が返す path も unit に届く)** `<1>33` と同じ 8 つの仮定を満たす
+   プログラムについて、`pi` が `L(ty(x))` の要素または `U(ty(x))` の要素であるとき、
    `origin(vars, E, x, pi)` の返り値に現れる各 `VarPath` `(u, sig)` (identity と candidates の両方)
    について、`u` が `vars.var_tys` に型を持つならば `sig` は `ty(u)` の unit に届く。すなわち
    `T(ty(u), sig)` は abort せず、その値は `U(ty(u))` の要素である。
+
+   **`pi` についての条件は落とせない。**`x` を型 `Std::I64` のパラメータ、`pi = [0]` とする。
+   `origin_inner` の `Some(Binding::Param)` の腕は `here()` を返すので返り値は `Exactly((x, [0]))`
+   であり、`VarTable::of` は各パラメータを `var_tys` に入れるので `u = x` は型を持つ。`I64` の
+   `TyConInfo` は `fields: vec![]` を持つので `<1>11` の `NB` の行に当たり、`<1>10` より
+   `unit_step(I64, E)` は `UnitStep::NoUnit` であって、`T(I64, [0])` はループの第 0 周で `panic!` に
+   達する。`origin` の答えに `T` を当てる読み手は `owns_object` であり、そこへ対を渡す `owns_unit` と
+   `check_ownership_is_levelled` が問うのは site の unit についての `origin(v, u)` なので、この条件を
+   満たす。
   <2>1. `origin(vars, E, u, sig)` が返す値に現れる各 `VarPath` は、`(u, sig)` の呼び出しの下流
      (`DEF 呼び出しの下流`) にある対である。
     <3>1. `origin_inner` の `None`、`Binding::Param`、`Binding::Producer` の腕、`Binding::Field` で
@@ -2384,8 +2395,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
       BY <1>21, <1>25, <3>1, <3>2, <3>3, <3>4, <3>5,
          CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding
   <2>2. `<2>1` を `(u, sig) := (x, pi)` に読むと、`origin(vars, E, x, pi)` の返り値に現れる各
-     `VarPath` は `(x, pi)` の呼び出しの下流にある。`<1>33` はその各対について、第 1 成分が
-     `vars.var_tys` に型を持つならば第 2 成分がその型の unit に届くことを与える。
+     `VarPath` は `(x, pi)` の呼び出しの下流にある。この言明の仮定は `pi` が `L(ty(x))` の要素か
+     `U(ty(x))` の要素であることなので、`<1>33` を同じ `(x, pi)` に適用でき、その各対について、
+     第 1 成分が `vars.var_tys` に型を持つならば第 2 成分がその型の unit に届く。
     BY <1>33, <2>1
   <2>3. 「`sig` が `ty(u)` の unit に届く」とは、`DEF unit に届く` より「`T(ty(u), sig)` は abort
      せず、その値は `U(ty(u))` の要素である」ことである。
@@ -2497,8 +2509,10 @@ leaf を持つ、という 2 つの事実の上に立っている。どちらか
 `Retain`/`Release` の path が leaf でない unit (unbox union、punched array) のとき、その unit の
 `origin` と、その下の各 leaf の `origin` について言えるのは次の 1 つである。
 
-**`<1>33` と `<1>34`。** どちらの `origin` についても、その計算の中で起きる呼び出しの `(u, sig)` も、
-返り値に現れる `VarPath` `(u, sig)` も、`sig` が `ty(u)` の unit に届く。すなわち
+**`<1>33` と `<1>34`。**その unit も、その下の各 leaf も、`U(ty(v))` か `L(ty(v))` の要素なので、
+どちらを `pi` に取っても `<1>33` と `<1>34` の条件を満たす。そのとき、`origin(vars, E, v, pi)` の
+計算の中で起きる呼び出しの `(u, sig)` も、返り値に現れる `VarPath` `(u, sig)` も、`u` が
+`vars.var_tys` に型を持つ限り `sig` が `ty(u)` の unit に届く。すなわち
 `truncate_to_unit(ty(u), sig)` は abort せず `rc_units(ty(u))` の要素になる。この性質は `origin` の
 再帰の各辺 (move-bind、`Match` のアームの結果、変位アームの payload、catch-all の payload、
 unbox 容器のフィールド、`Llvm` の 2 つの道) が保つ。
@@ -2506,6 +2520,6 @@ unbox 容器のフィールド、`Llvm` の 2 つの道) が保つ。
 `origin` の答えに `truncate_to_unit` を当てるコードは `borrow.rs` の `owns_object` である。
 `owns_unit` と `check_ownership_is_levelled` が `origin(v, unit).candidates()` の各 `(root, path)` を
 `owns_object` に渡し、`owns_object` は `root` が `vars.param_tys` にあるとき `path` を `units_under`
-と `truncate_to_unit` に掛ける。`param_tys` に入る名前は `var_tys` にも同じ型で入るので、`<1>34` が
-その `path` について「`ty(root)` の unit に届く」を与える。`owns_object` を主語とする命題は P7e で
-ある。
+と `truncate_to_unit` に掛ける。その `unit` が `U(ty(v))` の要素であることは site の作り方が与える
+(README の P7a)。`param_tys` に入る名前は `var_tys` にも同じ型で入るので、`<1>34` がその `path` に
+ついて「`ty(root)` の unit に届く」を与える。`owns_object` を主語とする命題は P7e である。
