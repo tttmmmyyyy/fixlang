@@ -857,8 +857,8 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     `u` を `x` の `Binding` が名指す変数の 1 つとする。`<2>1` より `u` は `ρ` の上のある節点 `N` に現れる
     (`Join(rs)` の元については `<2>5` がその `N` を与える)。`<2>2` より `u` のその出現は `N` でスコープに
     入っている束縛に解決する。`u` が `vars.bindings` に無い名前であれば、`u` は `ρ` の上の節点 `N` に
-    現れるので `<2>6` の (S4) である。在る場合、
-    `<2>3` よりその束縛はパラメータ・capture か、`N` の祖先の節点が作ったものである。前者は
+    現れるので `<2>6` の (S4) である。在る場合、`<2>3` よりその束縛はパラメータ・capture か、`N` の
+    祖先の節点が作ったものである。前者は
     DEF 路の位置 の (S1) であり、`<2>4` より本体の最初の節点の時点で値を持つ。後者について、D2 の
     束縛節点は `Let`・`Destructure`・`Match` のアームの `payload` の 3 種であり、`<2>4` よりその節点は
     `ρ` の上にある。`Let(u, rhs, k)` と `Destructure(c, fs, s, k)` は (S2) である。`Match` のアームの
@@ -885,8 +885,8 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 <1>5. `<1>4` の `S` の元数は 0 か 1 である。
   A3 は「複数の元を宣言する op は存在しない」と述べ、`result_prov` を override する 29 個が leaf に置く
-  集合はすべて要素数 0 か 1 であるとする。`origin_inner` が読む `decl` は
-  `llvm_gen.result_prov(..)` の返り値そのものであって、`Provenance::join` や `compose` を通していない。
+  集合はすべて要素数 0 か 1 であるとする。`origin_inner` が読む `decl` は `llvm_gen.result_prov(..)` の
+  返り値そのものであって、`Provenance::join` や `compose` を通していない。
   BY A3, CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Llvm(..))` の腕
 
 <1>5a. `id(x, λ) = (x, λ)` であるとき、(i) と (ii) が成り立つ。
@@ -1281,7 +1281,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
         ので、結果の型の各 boxed leaf に**単一の `Fresh`** を宣言する。`generate` は
         `make_byte_array_copy` を呼び、それは `alloc_array_storage` (`build_capacity_check` と
         `create_obj`) で記憶域を、`create_obj` で `Array U8` のオブジェクトを新しく割り当て、
-        `build_memcpy` でバイト列を写す。
+        バイト列をその記憶域へ写す。
       - `T`: `gen` の結果の型 `Array U8` (`make_byte_array_copy` が `type_tyapp(make_array_ty(),
         make_u8_ty())` として組む型)。
       - `Bool`: `Std::Bool`。`unbox union { _false : (), _true : () }` であり、2 つの変位の payload の
@@ -1290,9 +1290,12 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       A3 の表の「単一の `Fresh`」の行より、`gen` が結果のその leaf に置くのは、新しく割り当てた
       オブジェクトへの新しい参照である。**A3 が同じ節に置く但し書き -- 実行時に参照カウントで分岐する
       op の `Fresh` の行は、オブジェクトの同一性については字義どおりではない -- は `gen` に当たらない。**
-      `gen` の生成コードは `build_branch_by_is_unique` を 1 つも呼ばず、参照カウントを読む分岐を
-      持たない -- 上の 3 つの経路 (`build_capacity_check`、`create_obj`、`build_memcpy`) のどれも
-      参照カウントを読まない。
+      参照カウントを読んで分岐する経路は `Generator::build_branch_by_is_unique` を通り、その呼び出しは
+      `src/fixstd/builtin.rs` の中にしか無い (この列挙は、リポジトリの全体について識別子
+      `build_branch_by_is_unique` を検索して得られる)。`gen` の生成コードは `make_byte_array_copy` を
+      呼ぶだけであり、その本体も、そこから呼ばれる `alloc_array_storage`・`build_capacity_check`・
+      `create_obj` も `src/object.rs` に在ってその呼び出しを持たない。`create_obj` が参照カウントに
+      触れるのは、新しいオブジェクトの制御ブロックに 1 を書き込む 1 か所だけである。
 
       `f` のパラメータは `c : Bool` の 1 つ、capture は無く、`borrowed_units` は空 (A1) である。本体は
       次のとおりで、`m`・`x_0`・`x_1` は型 `T`、`p_0`・`p_1` は `()` である。
@@ -1310,6 +1313,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   BY A1, A3, A6, A9, A12, A16, D2,
      CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStringBuf, make_byte_array_copy,
      CODE src/object.rs: alloc_array_storage, build_capacity_check, create_obj,
+     CODE src/generator.rs: Generator::build_branch_by_is_unique,
      CODE src/fixstd/std.fix: Bool
 
 <1>2. `boxed_leaf_paths(T, type_env)` は `{[]}` であり、`[]` は `T` の値で inhabited である。`p_0` と
