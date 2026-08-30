@@ -73,6 +73,10 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
 `FieldPath` は `Vec<usize>` である (`CODE src/rc_ir/ast.rs: FieldPath`)。`π[0..k]` は `π` の先頭 `k` 個の
 要素からなる path、`|π|` は `π` の長さである。
 
+**ファイル全体についての数え上げを引くときは、`CODE <ファイル>: <数え上げた集合の名前>` と書く。**
+主張がそのファイルの中のある集合の全体についてのものであることを、この形が示す。L15 の `<1>5` と L17 の
+`<1>1` がこの形を使う。
+
 関数呼び出しについて、**値を返す**とその **中断する** (`panic!` / `assert!` / `unreachable!` に到達する) を
 区別する。等式「`f = g`」は、両辺が値を返してその値が等しいか、両辺が中断するかのどちらかであることを
 いう。
@@ -1486,7 +1490,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `InlineLLVMStructPlugInBody` は欄 `field_idx : usize`、`InlineLLVMStructSetBody` は欄
     `field_idx : u32`、`InlineLLVMMakeUnionBody` と `InlineLLVMUnionAsBody` は `variant_index()`
     (欄 `field_idx : usize`) である。残る 23 個の本体は `self` の欄を読まない。
-    BY A3, CODE src/fixstd/builtin.rs: impl LLVMGen for の各 result_prov,
+    BY A3, CODE src/fixstd/builtin.rs: 全 result_prov の override,
        CODE src/ast/inline_llvm.rs: LLVMGen::result_prov,
        CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov,
        InlineLLVMStructPunchBody::result_prov, InlineLLVMStructPunchBody::arg_leaf_path,
