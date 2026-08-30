@@ -585,10 +585,11 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
         BY P1, A10, <4>2
         P1 は、**A10 を満たす**任意の型 `τ` の各 boxed leaf の `truncate_to_unit(τ, ・)` が
         `rc_units(τ)` の元であると述べる。`ty(p_i)` は `prog` の関数のパラメータの型、すなわち
-        プログラムに現れる型なので A10 を満たす -- A10 は「プログラムに現れる型は ground であり、その
-        tycon は `type_env` にあり、`no_size_in_place` の in-place の降下は有限である」と述べ、
-        「P1 の定義域はこの広い方であり、型の歩みを扱う命題が P1 を部分木の型に当てるのはこの節に
-        よる」と続ける。<4>2 より `λ` は `ty(p_i)` の boxed leaf である。
+        プログラムに現れる型なので A10 を満たす -- A10 は「プログラムに現れる型は ground であり、**その
+        tycon に kind の要求するだけの引数が与えられており**、その tycon は `type_env` にあり、
+        `no_size_in_place` の in-place の降下は有限である」と述べ、「P1 の定義域はこの広い方であり、
+        型の歩みを扱う命題が P1 を部分木の型に当てるのはこの節による」と続ける。<4>2 より `λ` は
+        `ty(p_i)` の boxed leaf である。
       <4>5. `all_owned_units(prog, type_env)` は、`prog` の各関数の各パラメータ・capture `p` と各
             `u' ∈ rc_units(ty(p))` について、`(p.name, u')` がその関数の `borrowed_units` に入らない
             ならばそれを集合に入れる。
@@ -862,9 +863,9 @@ leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が
       呼び出しの入口の `path` は相異なる。
   BY A10, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::unpunched_field_types
-  A10 が `go` の再帰の停止性を与える -- 「`unpunched_field_types` を繰り返し取って到達する型についても
-  同じことが成り立ち、その歩みは有限である」「これが無いと `boxed_leaf_paths` も `rc_units` も停止
-  しない」。最初の呼び出しの `path` は空である。`unpunched_field_types` は
+  A10 が `go` の再帰の停止性を与える -- 「`unpunched_field_types` を繰り返し取って到達する型についても、
+  上の 3 つ -- ground、飽和、tycon が `type_env` にある -- がすべて成り立ち、その歩みは有限である」
+  「これが無いと `boxed_leaf_paths` も `rc_units` も停止しない」。最初の呼び出しの `path` は空である。`unpunched_field_types` は
   `instance_field_types(...).into_iter().enumerate().filter(...)` を返すので、返る添字は相異なる。<1>2 より、子の呼び出しの入口の `path` は親の入口の `path` に
   添字を 1 つ足したものであり、1 つの親が子に足す添字は `unpunched_field_types` が返す相異なる添字で
   ある。よって呼び出しと入口の `path` は 1 対 1 に対応する。
@@ -1912,9 +1913,9 @@ DEF 名前の活性による。よって 7.5.4 が INV を示せば P18a が出�
 
 ##### 別名類 (D33)
 
-**別名類は D33 が定める** -- 「1 つの実行路 `ρ` の上のスロット (D6) を、`ρ` を辿って着く終端が等しいと
-いう関係で分けた同値類を**別名類**と呼ぶ。スロット `(x, λ)` が属する別名類を `C_ρ(x, λ)` と書き、その
-終端を `T_ρ(C)` と書く。」D33 の「`ρ` を辿って着く終端」は DEF ρ-歩みと ρ-終端 の ρ-終端であり、
+**別名類は D33 が定める** -- 「1 つの実行路 `ρ` の上のスロット (D6) を、`ρ` 終端が等しいという関係で
+分けた同値類を**別名類**と呼ぶ。スロット `(x, λ)` が属する別名類を `C_ρ(x, λ)` と書き、その
+終端を `T_ρ(C)` と書く。」D33 の「`ρ` 終端」は DEF ρ-歩みと ρ-終端 の ρ-終端であり、
 スロット `(x, λ)` についてそれが 1 つに定まることは `L12` (i) が与える。
 
 **D33 がこの文書に残す 2 つ目は `obj(C)` が定まることである。** `L12a` がそれを与える。
@@ -2537,7 +2538,8 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
   BY A10, CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
      CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/ownership.rs: unit_step
   A10 は `rc_units` と `truncate_to_unit` が辿る型の歩みが有限であることを与える -- 「`unpunched_field_types`
-  を繰り返し取って到達する型についても同じことが成り立ち、その歩みは有限である」。
+  を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が `type_env` にある -- が
+  すべて成り立ち、その歩みは有限である」。
   `rc_units_go` が `out` に積むのは 2 か所である。`UnitStep::Unit` の枝は `path` をそのまま積み、
   `UnitStep::Capture` の枝は `capture_idx` を 1 つ足して積む。どちらの `path` も、`UnitStep::Fields` の枝が
   添字を 1 つずつ足しながら下って作ったものである。これが (α) と (β) である。`truncate_to_unit(τ, t)` は
