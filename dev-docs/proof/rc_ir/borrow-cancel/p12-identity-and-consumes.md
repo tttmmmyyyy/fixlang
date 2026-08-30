@@ -1032,12 +1032,11 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   <2>2. `[t] ++ λ` は `ty(s)` の boxed leaf である。
     <3>1. `ty(s)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Union` である。
       A12 の「`Match` の scrutinee が union であること」の行が `is_union(ty(s))` を与え、`is_union` は
-      `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Union` であることである。`is_closure()` が
-      偽であることは A12 が 2 か所で与える。**A12 は、tycon の `variant` を述べる節が `is_closure()` が
-      偽であることを含むと明記する** -- `toplevel_tycon_info` が `assert!(!self.is_closure())` で始まる
-      からである (A12 の `InlineLLVMStructPunchBody` の行の括弧書き)。また A12 の「`Match` が名指す変位が、
-      その型が実際に持つ (punched でない) ものであること」の行は `ty(s)` の `TyConInfo` の変位を読む節で
-      あり、`toplevel_tycon_info(ty(s))` が `TyConInfo` を返すことを含む。
+      `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Union` であることである。
+      `toplevel_tycon_info` は `is_closure()` が真の型について `assert!(!self.is_closure())` で止まるので、
+      その型について `is_union` は値を返さない。A12 が `is_union(ty(s))` を真と述べる以上その呼び出しは
+      値を返しているので、`is_closure(ty(s))` は偽である。**A12 が構造体について同じことを明記するのも
+      同じ理由による** (A12 の `InlineLLVMStructPunchBody` の行の括弧書き)。
       BY A12, CODE src/ast/types.rs: TypeNode::is_union, TypeNode::toplevel_tycon_info
     <3>2. `is_array(ty(s))` と `is_funptr(ty(s))` は偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
@@ -2231,13 +2230,14 @@ develop mode の検査である。第 4 節の格付けでは、`develop_mode` �
 
 ### A12 の「構造体である」「union である」の読み
 
-L4 の `<1>9` と `<1>12` は、`ty(c)` と `ty(s)` がクロージャでないことを A12 から出す。A12 は
-`InlineLLVMStructPunchBody` の行で、構造体であることが `is_closure()` が偽であることを含むと明記し、
-その理由を `toplevel_tycon_info` が `assert!(!self.is_closure())` で始まることに置く。同じ理由は
-`is_union` にも当たる -- `is_union` もその関数を通るからである。この文書は「`Match` の scrutinee が
-union であること」の行をその読みで引いた。加えて A12 の「`Match` が名指す変位が、その型が実際に持つ
-(punched でない) ものであること」の行が `ty(s)` の `TyConInfo` の変位を読む節なので、その行だけからも
-`toplevel_tycon_info(ty(s))` が返ることが出る。
+L4 の `<1>9` と `<1>12` は、`ty(c)` と `ty(s)` がクロージャでないことを A12 から出す。構造体の側は
+A12 が明記する -- `InlineLLVMStructPunchBody` の行が、構造体であることが `is_closure()` が偽であることを
+含むと書き、その理由を `toplevel_tycon_info` が `assert!(!self.is_closure())` で始まることに置く。
+union の側は A12 が明記しないので、この文書は同じ理由を次の向きで使う。`is_union` はその
+`toplevel_tycon_info` を通るので、`is_closure()` が真の型について値を返さない。A12 が
+`is_union(ty(s))` を真と述べる以上その呼び出しは値を返しており、`is_closure(ty(s))` は偽である。
+**表明を「発火しないから性質が成り立つ」の向きに読んではいない** -- 読んでいるのは「値が返っている以上
+その型はここへ来られる型である」の向きである。
 
 ### D9 の `App` の行と `collect_consumes` の粒度が違う
 
