@@ -825,16 +825,32 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
   `Some` を返しており、L5 と L6 よりその要素の `trunc` も中断しない -- 要素が無いので空に成り立つ。
   BY L2, L5, L6, L10
 
-<1>1. `owns_object_yet(V, type_env, r, p, OL)` は、`under(τ, p)` の各要素 `unit` について
-      「`trunc(τ, unit)` を鍵 `key` とし、`leaves(τ)` のうち `trunc(τ, ・) = key` を満たし `(r, ・) ∈ OL`
-      である leaf が存在する」を要求する。`owns_object_yet` が第 1 引数の表を読むのは
+<1>0a. `leaves(τ)` の計算と、その各 `leaf` についての `trunc(τ, leaf)` は中断しない。
+  `τ` は扱う型なので L1b より A10 を満たす。`leaves(τ)` を計算する `go` が呼ぶのは
+  `is_fully_unboxed`・`is_closure`・`is_box`・`is_array` と `unpunched_field_types` であり、
+  `unpunched_field_types` と `is_fully_unboxed` は最上位 tycon の宣言を `type_env` から引く。A10 より、
+  `τ` から `unpunched_field_types` を繰り返し取る歩みは有限であり、その各段の型は ground で飽和していて
+  tycon が `type_env` にあるので、この降下は中断せずに終わる (`is_unbox` は `is_closure()` を先に見て
+  短絡し、`go` は `unpunched_field_types` を呼ぶ前に `is_closure` を見るので、`toplevel_tycon_info` の
+  `assert!(!self.is_closure())` も通る)。`leaf ∈ leaves(τ)` については、L9a より `τ` の `leaf` に沿う
+  歩みは (A) `Unit` で終わるか、(B) `Capture` で終わり、そこで `leaf` が選ぶ添字が `capture_idx` に
+  等しいかのどちらかである。(A) で歩みの長さが `|leaf|` ならば L1 の場合 (a)、それより短ければ場合 (b) の
+  `Unit` の行、(B) ならば場合 (b) の `Capture` (`π[m] = capture_idx`) の行が当てはまり、どれも `trunc` は
+  値を返す。
+  BY A10, L1, L1b, L9a, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+
+<1>1. `owns_object_yet(V, type_env, r, p, OL)` は、まず `leaves(τ)` を計算し、続けて `under(τ, p)` の
+      各要素 `unit` について「`trunc(τ, unit)` を鍵 `key` とし、`leaves(τ)` のうち `trunc(τ, ・) = key` を
+      満たし `(r, ・) ∈ OL` である leaf が存在する」を要求する。`owns_object_yet` が第 1 引数の表を読むのは
       `vars.param_tys.get(root)` の 1 か所だけであり、その値が `Some(ty)` のときこの `ty` が `τ` で
       ある。以後の計算は `ty`・`type_env`・`root`・`path`・`owned_leaves` だけを読む。
   BY CODE src/rc_ir/borrow.rs: owns_object_yet
 
 <1>2. CASE `under(τ, p) = []`
-  `<1>1` の全称は空なので真である。
-  BY <1>1
+  `<1>0a` より `leaves(τ)` の計算とその各 leaf についての `trunc` は中断しない。`<1>1` の全称は空なので
+  真である。
+  BY <1>0a, <1>1
 
 <1>3. CASE `sub(τ, p) = Some(σ)` かつ `under(τ, p) ≠ []`
   <2>1. `under(τ, p)` の要素は `p ++ w` (`w ∈ units(σ)`) の形であり、`trunc(τ, p ++ w) = p ++ w` である。
@@ -848,9 +864,10 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
     L5 と `<2>2` より `trunc(τ, p ++ λ_w) = p ++ trunc(σ, λ_w) = p ++ w` である。
     BY L5, <2>2, CODE src/rc_ir/borrow.rs: covered_leaves
   <2>4. QED
-    `<2>1` の各 `unit = p ++ w` について、`<2>3` の `p ++ λ_w` が `<1>1` の要求する leaf である。仮定より
+    `<1>0a` より `leaves(τ)` の計算とその各 leaf についての `trunc` は中断しない。`<2>1` の各
+    `unit = p ++ w` について、`<2>3` の `p ++ λ_w` が `<1>1` の要求する leaf である。仮定より
     `covered(τ, p) ⊆ { λ : (r, λ) ∈ OL }` なので `(r, p ++ λ_w) ∈ OL` である。
-    BY <1>1, <2>1, <2>3
+    BY <1>0a, <1>1, <2>1, <2>3
 
 <1>4. CASE `sub(τ, p) = None`
   <2>1. `under(τ, p) = [p]` であり、`key = trunc(τ, p)` である。
@@ -883,17 +900,20 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
     等しい。
     BY <2>2, <2>3, L1, DEF 歩み
   <2>5. QED
-    `<2>1` より `under(τ, p) = [p]` は空でないので、言明の仮定の 2 つの選言肢のうち成り立つのは
+    `<1>0a` より `leaves(τ)` の計算とその各 leaf についての `trunc` は中断しない。`<2>1` より
+    `under(τ, p) = [p]` は空でないので、言明の仮定の 2 つの選言肢のうち成り立つのは
     `covered(τ, p) ≠ ∅` の側である。よって `<2>4` の `λ` が 1 つ取れて `trunc(τ, λ) = key` であり、
     仮定より `(r, λ) ∈ OL` である。これが `<1>1` が `unit = p` について要求するものである。
-    BY <1>1, <2>1, <2>4
+    BY <1>0a, <1>1, <2>1, <2>4
 
 <1>5. QED
-  `<1>0` より `under(τ, p)` は中断せず、L2 より `sub(τ, p)` が中断すれば `under(τ, p)` も中断するので、
+  `<1>0` より `under(τ, p)` は中断せず、`<1>0a` より `leaves(τ)` とその各 leaf についての `trunc` も
+  中断しないので、`owns_object_yet` の評価は値を返す。L2 より `sub(τ, p)` が中断すれば `under(τ, p)` も
+  中断するので、
   `sub(τ, p)` は `Some` を返すか `None` を返すかのどちらかである。`under(τ, p) = []` の場合を `<1>2` が、
   `under(τ, p) ≠ []` の場合を `sub` の答えで分けて `<1>3` と `<1>4` が扱った (`sub(τ, p) = None` のとき
   L2 より `under(τ, p) = [p]` であり、これは `[]` ではない)。
-  BY <1>0, <1>2, <1>3, <1>4, L2
+  BY <1>0, <1>0a, <1>2, <1>3, <1>4, L2
 
 ## 3. P7e の証明
 
