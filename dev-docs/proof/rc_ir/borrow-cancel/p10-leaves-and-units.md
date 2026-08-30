@@ -213,8 +213,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      - `args` の名前の列は `llvm_gen.free_vars()` に等しい。
      - `llvm_gen` が `InlineLLVMStructPunchBody` であるとき、`ty(x).is_box(E)` と
        `ty(x).is_array()` はどちらも偽であり、`ty(x).field_types(E)` は長さ 2 の列を返す。その第
-       `PUNCHED_STRUCT_FIELD` 成分の型を `s` と書くと、`s` は `<1>1` を満たす構造体であり、
-       `s.is_closure()` は偽であって、`s.toplevel_tycon_info(E).fields[llvm_gen.field_idx]` の
+       `PUNCHED_STRUCT_FIELD` 成分の型を `pt` と書くと、`pt` は `<1>1` を満たす構造体であり、
+       `pt.is_closure()` は偽であって、`pt.toplevel_tycon_info(E).fields[llvm_gen.field_idx]` の
        `is_punched` は真である。
      - `llvm_gen` が `InlineLLVMStructSetBody` か `InlineLLVMStructPlugInBody` であるとき、
        `ty(x).is_array()` は偽である。
@@ -227,10 +227,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    実際に持つ (punched でない) ものであること」を述べたものである。(vii) の 3 つは A12 の
    「`Llvm` 節点の型についての 3 つ」である。A12 の第 2 項は punched struct の成分を「A10 を満たす
    構造体」と書く。`<1>1` は A10 をこの文書の記法で述べたものなので (第 3 節)、(vii) はそこを
-   `<1>1` と書く。**同じ項が「第 `field_idx` フィールドが穴である」と言うのは、`s` の `TyConInfo` の
-   `fields` の第 `field_idx` 成分の `is_punched` についてである。**その `TyConInfo` を返す
+   `<1>1` と書く。**同じ項が「第 `field_idx` フィールドが穴である」と言うのは、`pt` の `TyConInfo`
+   の `fields` の第 `field_idx` 成分の `is_punched` についてである。**その `TyConInfo` を返す
    `toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、この項が立つとき
-   `s.is_closure()` は偽である。
+   `pt.is_closure()` は偽である。
 
    (viii) は A12 の「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字で
    あり、`σ` はその型の boxed leaf である」である。「その型」は第 `j` オペランドの型 `ty(args[j])`、
@@ -1406,10 +1406,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    呼ぶとき、abort しうるのは `build_shape` に渡された閉包の中だけであり、その閉包が受け取る
    `path` は `L(ty)` の要素である。閉包を引数に取らない残りの 3 つは abort せず停止する。
 
-   **この 4 つが `Provenance` の構成子の全部だとは、このステップは言わない。**`Provenance` は
-   ほかに `empty`、`arg_passthrough`、`join`、`compose`、`project`、`set_leaves_under`、`demote` を
-   持つ。`result_prov` の呼び出しが `Provenance` を作るのにこの 4 つしか使わないことは、既定の実装と
-   29 個の override を 1 つずつ開く `<1>28` が数え上げる。
+   **`Provenance` はこの 4 つのほかに `empty`、`arg_passthrough`、`join`、`compose`、`project`、
+   `set_leaves_under`、`demote` を持つ。**`result_prov` の呼び出しが `Provenance` を作るのにこの
+   4 つしか使わないことは、既定の実装と 29 個の override を 1 つずつ開く `<1>28` が数え上げる。
   <2>1. `Provenance::build_shape(ty, E, leaf)` は `LeafMap::build_shape(ty, E, leaf)` を呼ぶ。
      `LeafMap::build_shape` は `boxed_leaf_paths(ty, E)` を 1 度呼び、返った各 `path` について
      `leaf(&path)` を呼び、対 `(path, fact)` を `Map` に積む。`<1>9` より `boxed_leaf_paths(ty)` は
@@ -1561,7 +1560,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>4. `s` を `<3>1` が取り出す型 `result_ty.field_types(E)[PUNCHED_STRUCT_FIELD]` とすると、
        `L(s)` の要素で `self.field_idx` で始まるものは無い。
       <4>1. `s` は `<1>1` を満たし、`s.is_closure()` は偽であり、
-         `s.toplevel_tycon_info(E).fields[self.field_idx]` の `is_punched` は真である。
+         `s.toplevel_tycon_info(E).fields[self.field_idx]` の `is_punched` は真である。`<1>28` の
+         前置きより `result_ty` はこの `Llvm` 節点の `ty(x)` なので、`s` は `<1>3a` (vii) の
+         `pt` である。
         BY <1>3a
       <4>2. `cls(s)` は `CL` ではない。`DEF cls` の `CL` の行は `s.is_closure()` が真であることを
          要求し、`<4>1` はそれが偽だと述べる。
@@ -2202,8 +2203,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 ## 3. 入力についての 3 つの前提と README の仮定、および P1 の定義域
 
 `<1>1` (H1)、`<1>2` (H2)、`<1>3a` (H4) は、README の A10 (型の well-formedness)、A11 (スコープの
-規律)、A12 (束縛の形と型が合っている) である。README の文面との差は、3 つの前提のそれぞれに
-ついて次のとおりである。
+規律)、A12 (束縛の形と型が合っている) である。README の文面とこの文書の記法との対応は、3 つの
+前提のそれぞれについて次のとおりである。
 
 - **`<1>1` の 3 つはどれも A10 である。**(i) は A10 の第 1 文 --「プログラムに現れる型は ground で
   あり、その tycon に kind の要求するだけの引数が与えられており、その tycon は `type_env` にある」--
