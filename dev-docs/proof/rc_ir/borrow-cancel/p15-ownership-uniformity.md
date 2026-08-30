@@ -1095,7 +1095,13 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 ## 4. `origin` の候補についての補題
 
 **DEF 再帰で訪れる対**
-1 つの本体とその `vars` を固定する。対 `(x, π)` について、集合 `Reach(x, π)` を、`(x, π)` を含み次の規則で
+1 つの本体と、その `VarTable::of` を固定する。**固定する表は第 1 節の `vars` に限らない** -- A6・A11・
+A12 を満たす本体とその `VarTable::of` ならどれでもよく、この定義と、これを主語にする L11a・L12・L14 の
+言明と証明は、そのどれについても同じ文言で読む。以下では固定した表を `vars` と書き、`origin` と
+同じ規約で、別の表について読むときは `Reach(vars', x, π)` のように表を明示する。L14a は入力の関数
+`func` とその `vars_f` について述べる。
+
+対 `(x, π)` について、集合 `Reach(x, π)` を、`(x, π)` を含み次の規則で
 閉じた最小の集合とする。`(y, ρ) ∈ Reach(x, π)` のとき、`origin_inner(vars, type_env, y, ρ)` が `origin` を
 呼ぶ相手を `Reach(x, π)` に入れる。その相手は、`vars.bindings.get(y)` に応じて次のとおりである
 (`CODE src/rc_ir/ownership.rs: origin_inner`, `origin_from_leaves_under`)。
@@ -1114,6 +1120,12 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 | `Llvm(gen, args, rty)`、それ以外 | `origin_from_leaves_under` が集める各 `(j, w) ∈ operand_units` について `(args[j], w)` |
 
 P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限である。
+
+**`vars_f` について読む者。** 入力の関数 `func` は `borrow_ify` の入力の関数なので A6・A11・A12 を
+満たし、`ty(・)` も `func` に現れる名前について A12 が定める。よって L11a・L12・L14 を
+`vars_f = VarTable::of(func)` と `func.body` について読んでよく、そのとき `Reach` は
+`Reach(vars_f, ・, ・)`、`cand` と `act` と `id` は `cand(vars_f, ・, ・)` などである。読む者は L15 の
+`<1>6`、P7d の `<1>1a` と `<1>7` の `<2>2` である。L14a はこの読み方の下で立つ補題である。
 
 ### L11a (`Reach` の要素数は整礎な尺度である)
 
@@ -1355,8 +1367,9 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 
 ### L14a (訪れた対の変数は本体に現れる)
 
-**言明**。`x` を `func` に現れる名前 (第 1 節の DEF 現れる名前) とする。`Reach(x, π)` の各要素
-`(y, ρ)` について、`y` も `func` に現れる名前である。
+**言明**。`func` を入力の関数、`vars_f = VarTable::of(func)` とし、`x` を `func` に現れる名前
+(第 1 節の DEF 現れる名前) とする。`Reach(vars_f, x, π)` の各要素 `(y, ρ)` について、`y` も `func` に
+現れる名前である。
 
 <1>1. `collect_bindings` が `Binding` に入れる `RcVar` は、いずれも `for_each_var` が訪れる変数である。
   `collect_bindings` が `Binding` に入れる `RcVar` は、`Binding::Move(y)` の `y` (`RcRhs::Var(y)` の
@@ -1373,11 +1386,13 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
      for_each_var_of_rhs
 
 <1>2. QED
-  L11a の `Reach` についての帰納。基底は `(x, π)` であり、`x` は仮定より `func` に現れる。段では、
-  DEF 再帰で訪れる対 の表が `(y, ρ)` から進む相手の変数は、`vars.bindings.get(y)` が持つ `RcVar`
+  L11a の `Reach` についての帰納 (DEF 再帰で訪れる対 より `vars_f` と `func.body` について読む)。基底は
+  `(x, π)` であり、`x` は仮定より `func` に現れる。段では、
+  DEF 再帰で訪れる対 の表が `(y, ρ)` から進む相手の変数は、`vars_f.bindings.get(y)` が持つ `RcVar`
   (`Move` の `w`、`Join` の各アーム結果、`Field` の容器、`Payload` の scrutinee、`Llvm` の `args[j]`) の
-  名前であり、`<1>1` よりそれは `func` に現れる名前である。
-  BY <1>1, L11a, DEF 再帰で訪れる対
+  名前であり、`<1>1` よりそれは `for_each_var` が訪れる変数の名前、すなわち DEF 現れる名前 が挙げる
+  `func` に現れる名前である。
+  BY <1>1, L11a, DEF 再帰で訪れる対, DEF 現れる名前
 
 ### L15 (借用版は名前替えである)
 
@@ -1485,16 +1500,16 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 
 <1>6. `func` に現れる名前 `x` と任意の path `π` について
       `origin(vars_c, type_env, ρ(x), π) = ρ(origin(vars_f, type_env, x, π))` である。
-      `Reach` を `vars_f` について読み、L11a の `Reach` についての帰納で示す。すなわち、
-      DEF 再帰で訪れる対 の表が `(x, π)` から進む各相手について結論が成り立つことを帰納法の仮定と
-      する。
+      DEF 再帰で訪れる対 より `Reach` を `vars_f` について読み、L11a の `Reach` についての帰納で示す。
+      すなわち、DEF 再帰で訪れる対 の表が `(x, π)` から進む各相手について結論が成り立つことを帰納法の
+      仮定とする。
   <2>1. この証明が比べる `VarPath` の変数はすべて `func` に現れる名前であり、`ρ` はその上で単射で
         ある。
-    L12 より `act(vars_f, x, π) ⊆ Reach(x, π)` であり、L11a より表が進む相手 `(y, ρ')` について
-    `Reach(y, ρ') ⊆ Reach(x, π)` なので、この帰納の中で作られる `VarPath` の変数はすべて
-    `Reach(x, π)` の要素の変数である。L14a よりそれらは `func` に現れる名前であり、`<1>2` より `ρ` は
-    その上で単射である。
-    BY <1>2, L11a, L12, L14a
+    L12 より `act(vars_f, x, π) ⊆ Reach(vars_f, x, π)` であり、L11a より表が進む相手 `(y, ρ')` に
+    ついて `Reach(vars_f, y, ρ') ⊆ Reach(vars_f, x, π)` なので、この帰納の中で作られる `VarPath` の
+    変数はすべて `Reach(vars_f, x, π)` の要素の変数である。L14a よりそれらは `func` に現れる名前であり、
+    `<1>2` より `ρ` はその上で単射である。
+    BY <1>2, DEF 再帰で訪れる対, L11a, L12, L14a
   <2>2. `vars_f.bindings.get(x)` が `None` / `Some(Binding::Param)` / `Some(Binding::Producer)` /
         boxed 容器の `Some(Binding::Field(c, idx))` / boxed scrutinee の
         `Some(Binding::Payload(s, Some(t)))` のいずれかであるとき、両側の `origin_inner` は
@@ -1649,9 +1664,10 @@ site を、借用版については `levelled_sites(clone)` の site を主語�
   `levelled_sites` は `for_each_node` で本体を歩き、`Retain`/`Release` の名指す変数と `RcRhs::App` の各
   引数を積む。`for_each_var` は同じ `for_each_node` の歩きの各節点について `for_each_var_of_node` と
   `for_each_var_of_rhs` を呼び、この 2 つは `Retain`/`Release` の名指す変数と `App` の各引数を訪れるので、
-  `v.name` は `func` に現れる名前である。L12 より `cand(vars_f, v, u) ⊆ Reach(v.name, u)` であり、L14a より
-  `Reach(v.name, u)` の各要素の変数は `func` に現れる名前である。
-  BY L12, L14a, CODE src/rc_ir/borrow.rs: levelled_sites,
+  `v.name` は `func` に現れる名前である。DEF 再帰で訪れる対 より L12 と L14a を `vars_f` について読んで
+  よい。L12 より `cand(vars_f, v, u) ⊆ Reach(vars_f, v.name, u)` であり、L14a より
+  `Reach(vars_f, v.name, u)` の各要素の変数は `func` に現れる名前である。
+  BY DEF 再帰で訪れる対, L12, L14a, CODE src/rc_ir/borrow.rs: levelled_sites,
      CODE src/rc_ir/ast.rs: for_each_node, for_each_var, for_each_var_of_node, for_each_var_of_rhs
 
 <1>2. グローバル初期化子の `RewriteCtx` では、`owns_object` は任意の `(r, p)` について真を返す。
@@ -1669,12 +1685,15 @@ site を、借用版については `levelled_sites(clone)` の site を主語�
     `<1>2` と同じ腕である。
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
   <2>3. `pty(r) = Some(τ)` のとき、`owns_object(r, p)` は中断しない。
+    `<2>1` よりこの `RewriteCtx` の `vars` は `VarTable::of(f_own)` であり、`f_own` は `func` の複製な
+    ので A6・A11・A12 を満たす。DEF 再帰で訪れる対 よりこの表について L12 と L14 を読んでよい。
     `<1>1` より `u ∈ units(ty(v))` であり、L12 より `(r, p) ∈ Reach(v, u)`、L14 より
-    `covered(ty(r), p) ≠ ∅` である。`<2>1` よりこの `RewriteCtx` の `vars` は `VarTable::of(f_own)` な
-    ので、L1c より `τ = ty(r)` であり、`covered(τ, p) ≠ ∅` である。L10 より `under(τ, p)` もその各要素に
+    `covered(ty(r), p) ≠ ∅` である。L1c より `τ = ty(r)` であり、`covered(τ, p) ≠ ∅` である。
+    L10 より `under(τ, p)` もその各要素に
     ついての `trunc(τ, ・)` も中断しない。`owns_object` が呼ぶのはこの 2 つと `owned_units.contains` だけ
     である。
-    BY <1>1, <2>1, L1c, L10, L12, L14, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+    BY <1>1, <2>1, DEF 再帰で訪れる対, L1c, L10, L12, L14,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
   <2>4. `pty(r) = Some(τ)` のとき、`owns_object(r, p)` は真である。
     `owns_object` は `under(τ, p)` の各要素 `unit` について `(r, trunc(τ, unit)) ∈ owned_units` を
     要求する。L9 より `trunc(τ, unit) ∈ units(τ)` である。`borrow_ify` は入力の各関数について
@@ -1729,10 +1748,11 @@ site を、借用版については `levelled_sites(clone)` の site を主語�
     加えなかった。すなわちすべての `leaf` はすでに `OL` に在った。
     BY <1>5, CODE src/rc_ir/borrow.rs: level_ownership
   <2>2. その各元について `covered(τ, p) ≠ ∅` である。
-    `<1>1` より `u ∈ units(ty(v))` であり、L12 より `(r, p) ∈ Reach(v, u)` である。L14 より
+    DEF 再帰で訪れる対 より L12 と L14 を `vars_f` について読んでよい。`<1>1` より `u ∈ units(ty(v))` で
+    あり、L12 より `(r, p) ∈ Reach(vars_f, v, u)` である。L14 より
     `covered(ty(r), p) ≠ ∅` である。`vars_f = VarTable::of(func)` であり `pty_f(r) = Some(τ)` なので、
     L1c より `τ = ty(r)` であり、`covered(τ, p) ≠ ∅` である。
-    BY <1>1, L1c, L12, L14
+    BY <1>1, DEF 再帰で訪れる対, L1c, L12, L14
   <2>3. その各元について `yet_f(r, p)` は真である。
     L11 は任意の `VarTable` `V` について `owns_object_yet(V, type_env, r, p, OL)` を扱うので、
     `V = vars_f` に当てる。`pty_f(r) = Some(τ)` はその仮定 `V.param_tys.get(r) = Some(τ)` であり、
