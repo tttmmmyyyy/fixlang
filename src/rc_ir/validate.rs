@@ -276,7 +276,7 @@ impl<'a> Validator<'a> {
     fn check_expr_inner(&mut self, node: &RcExprNode) {
         match node.expr.as_ref() {
             RcExpr::Let(x, rhs, k) => {
-                self.check_rhs(rhs);
+                self.check_rhs(x, rhs);
                 self.bind(&x.name);
                 self.check_expr(k);
                 self.scope.remove(&x.name);
@@ -309,7 +309,7 @@ impl<'a> Validator<'a> {
     /// closure's target function and stored capture layout, an `Llvm` operation's operand names, and
     /// a match's arms.
     // PROOF: D/A, P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn check_rhs(&mut self, rhs: &RcRhs) {
+    fn check_rhs(&mut self, x: &RcVar, rhs: &RcRhs) {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),
             RcRhs::App(callee, args) => {
@@ -367,6 +367,23 @@ impl<'a> Validator<'a> {
                         arg_names.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
                         self.location,
                     );
+                }
+                // Each result leaf comes from at most one place. The reference-counting analyses
+                // read the declaration leaf by leaf and follow the single source back to the object
+                // the leaf belongs to; a leaf declaring two sources would let one name stand for two
+                // objects, and `cancel` pairs a release with a retain by name.
+                let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+                let prov = llvm_gen.result_prov(&x.ty, &arg_tys, self.type_env);
+                for origins in prov.leaves() {
+                    if origins.len() > 1 {
+                        panic!(
+                            "[RC IR validate] {}: `{}` declares {} sources for one result leaf in `{}`",
+                            self.stage,
+                            llvm_gen.name(),
+                            origins.len(),
+                            self.location,
+                        );
+                    }
                 }
                 for a in args {
                     self.use_var(&a.name);

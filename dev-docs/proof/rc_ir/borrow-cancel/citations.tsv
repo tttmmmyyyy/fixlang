@@ -478,7 +478,7 @@ src/rc_ir/simplify.rs	simplify	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P
 src/rc_ir/specialization.rs	request	D/A	ab18cf61ff78
 src/rc_ir/unique_check_elim.rs	specialize	P26,T	008baf2ff41e
 src/rc_ir/validate.rs	Validator::bind	P1,P2	0a5f461a6982
-src/rc_ir/validate.rs	Validator::check_expr_inner	D/A,P1,P2	934f3f1a8af8
-src/rc_ir/validate.rs	Validator::check_rhs	D/A,P1,P2,P5,P6,P7	3d5c66000b2c
+src/rc_ir/validate.rs	Validator::check_expr_inner	D/A,P1,P2	e5773a3c9ccf
+src/rc_ir/validate.rs	Validator::check_rhs	D/A,P1,P2,P5,P6,P7	2aae57955a93
 src/rc_ir/validate.rs	Validator::use_var	P1,P2	3e2474264149
 src/rc_ir/validate.rs	validate	P1,P2,P2a,P15,P16,P17,P18,T	998d88676f1b
