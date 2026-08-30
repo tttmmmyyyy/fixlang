@@ -338,9 +338,13 @@ Ret(w)))))
   D3 の規則で分岐が生じるのは `Let(x, Match(v, arms), k)` の行だけである。
 
 <1>2. `ρ_0` の上のスロットのうち、変数が `p`、`u`、`w` のいずれかであるものは `(p, [])` だけである。
-  BY D4, D6, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+  BY D4, D6, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+     CODE src/ast/types.rs: TypeNode::is_unbox
   `is_fully_unboxed` は `if self.is_box(type_env) { return false; }` で始まるので、boxed な `Arr` では
-  偽である。よって D4 の判定は第 1 規則を抜けて第 3 規則に着き、`boxed_leaf_paths(Arr) = {[]}` である。
+  偽である。`is_unbox` は `self.is_closure() || toplevel_tycon_info(type_env).is_unbox` であり
+  `is_box` はその否定なので、`is_box` が真の `Arr` では `is_closure` が偽である。よって D4 の判定は
+  第 1 規則 (`is_fully_unboxed`) と第 2 規則 (クロージャ) を抜けて第 3 規則 (`is_box`) に着き、
+  `boxed_leaf_paths(Arr) = {[]}` である。
   `ty(u) = ty(w) = I` は 4.1 の仮定より `is_fully_unboxed` が真なので、D4 の第 1 規則より leaf を
   持たない。
 
@@ -1179,21 +1183,38 @@ Ret(u)))))
   BY D3, D4, D6, D26, A3, CODE src/rc_ir/ownership.rs: collect_bindings,
      CODE src/rc_ir/ownership.rs: origin_inner,
      CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-     CODE src/rc_ir/ownership.rs: as_arg_projection
+     CODE src/rc_ir/ownership.rs: as_arg_projection,
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_unbox
   `Match` が無いので実行路は 1 本である。`collect_bindings` は `Let(o, Llvm(alloc, []), ・)` に
   `Binding::Llvm(alloc, [], Arr)` を入れる。A3 と 4.1 より `alloc` の宣言は単一の `Fresh` なので
   `as_arg_projection` は `None` を返し、`origin_from_leaves_under` はオペランドを持たないこの op に
   ついて `Exactly((o, []))` を返す。よって `origin(o, []) = Exactly((o, []))` である。`y` は `RcRhs::App` に束縛されるので `collect_bindings` は `Binding::Producer` を入れ、
   `origin_inner` の `Producer` の腕は `here()` を返して `origin` を呼ばない。よって `(o, [])` と
-  `(y, [])` はどちらも ρ-終端であり、別々の類である。`ty(u) = I` は leaf を持たない。
+  `(y, [])` はどちらも ρ-終端であり、別々の類である。
+  `ty(o) = ty(y) = Arr` の leaf が `[]` の 1 つであることは D4 の判定から出る -- `is_fully_unboxed` は
+  `if self.is_box(type_env) { return false; }` で始まるので boxed な `Arr` では偽であり、`is_unbox` は
+  `self.is_closure() || toplevel_tycon_info(type_env).is_unbox` で `is_box` はその否定なので `Arr` では
+  `is_closure` が偽である。よって判定は第 1 規則と第 2 規則を抜けて第 3 規則に着き、
+  `boxed_leaf_paths(Arr) = {[]}` である。`ty(u) = I` は 4.1 の仮定より `is_fully_unboxed` が真なので
+  D4 の第 1 規則より leaf を持たない。
   `B_1` に現れる残りの `RcVar` は `App` の callee `id` と `f` であり、どちらも `collect_bindings` が
   束縛を入れない名前なので、その boxed leaf との対は D6 の記号の位置であってスロットではない。
+  D6 よりそこが指すのは funptr かグローバル状態のオブジェクトであり、D26 よりグローバル状態の
+  オブジェクトは計数下ではない。
 
 <1>2. `Obl` と `H(O)` は、割り当ての後 `{O}, 1`、`App(id, [o])` が返った後 `{O}, 1`、
       `App(f, [y])` が返った後 `{}, 0` である。
-  BY D9, D10, A1
-  `App(id, [o])` は `(o, [])` を消費し (`id` は `a` を所有する)、`H` を動かさない。同じ節点の
-  D10 の生成の表の `App` の行が結果の leaf `(y, [])` の参照を作り、`H` はここでも動かない。
+  BY <1>1, A1, D6, D8, D9, D10, D14, D26,
+     CODE src/rc_ir/borrow.rs: split_rc_units, CODE src/rc_ir/rc_insert.rs: insert_rc
+  A1 の後半より `borrow_ify` の入力のすべての関数の `borrowed_units` は空である。`borrow_ify` の入力は
+  `split_rc_units` の出力であり、`split_rc_units` も `insert_rc` も各関数の `body` と各グローバル
+  初期化子の `init` しか書き換えないので、`insert_rc` の出力でも `borrowed_units` は空であり、D14 より
+  `id` の `a` も `f` の `b` も所有される。
+  `App(id, [o])` は `(o, [])` を消費し、`H` を動かさない。同じ節点について D9 の `App` の行は callee の
+  全 boxed leaf も消費として挙げるが、<1>1 より `(id, ・)` と `(f, ・)` は記号の位置であってスロットでは
+  なく、D6 よりそこが指すのは funptr かグローバル状態のオブジェクトである。D26 よりそれらは D8 の意味の
+  参照を持たないので、この消費は `Obl` から何も取り除かない。
+  同じ節点の D10 の生成の表の `App` の行が結果の leaf `(y, [])` の参照を作り、`H` はここでも動かない。
   `App(f, [y])` は `(y, [])` を消費し、`f` の `Release(b, [])` が `H` を 1 下げる。
 
 <1>3. `B_1` は D11 を満たす。
@@ -2893,11 +2914,15 @@ Ret(x)))
       `obj(C)` は計数下であり、`id` はどのスロットについても `(m, [])` である。
   BY D3, D4, D26, A3, CODE src/rc_ir/ownership.rs: collect_bindings,
      CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: as_arg_projection,
-     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, D33
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_unbox,
+     D33
   `Match` が無いので実行路は 1 本である。`is_fully_unboxed` は
   `if self.is_box(type_env) { return false; }` で始まるので boxed な `Arr` では偽であり、`Pair` は
-  boxed なフィールドを持つのでその再帰でも偽である。よって D4 の判定はどちらの型でも第 1 規則を
-  抜け、`boxed_leaf_paths(Arr) = {[]}` (第 3 規則)、`boxed_leaf_paths(Pair) = {[0], [1]}` (第 5 規則) で
+  boxed なフィールドを持つのでその再帰でも偽である。`is_unbox` は
+  `self.is_closure() || toplevel_tycon_info(type_env).is_unbox` であり `is_box` はその否定なので、
+  `is_box` が真の `Arr` では `is_closure` が偽である。`Pair` は 12.1 節より unbox 構造体であって
+  クロージャではない。よって D4 の判定はどちらの型でも第 1 規則と第 2 規則を抜け、
+  `boxed_leaf_paths(Arr) = {[]}` (第 3 規則)、`boxed_leaf_paths(Pair) = {[0], [1]}` (第 5 規則) で
   ある。`collect_bindings` は `x` に
   `Binding::Llvm(make_pair, [m, m], Pair)` を入れ、12.1 節の宣言と `as_arg_projection` より
   `origin(x, [0])` は `origin(m, [])`、`origin(x, [1])` も `origin(m, [])` である。`m` はパラメータ
