@@ -1056,11 +1056,17 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 <1>1. 帰納法の仮定: `n` の各子 `c` について、`pending_out(c)` は `pending(c)` から有限個の基本操作の列で
       得られ、その走査が `PendingRetains` の値を作るのは DEF 基本操作 の 6 種だけである。
   BY 帰納法の仮定
+<1>1a. 任意の節点 `m` について、`self.walk(m, q, ・)` の 1 回の呼び出しに渡る `q` は `pending(m)` であり、
+       その呼び出しの戻り値は `pending_out(m)` である。L1 よりこの呼び出しは
+       `walk_inner(m, q, ・)` をちょうど 1 回呼んでその値を返し、DEF 訪問 より `walk_inner` のその
+       呼び出しが `m` の訪問であって、その `pending` 引数が `pending(m)`、その戻り値が `pending_out(m)`
+       である。
+  BY L1, DEF 訪問
 <1>2. CASE `n` の式が `RcExpr::Retain(v, path, _, k)` である。この腕は `pending` に「追加」を 1 回行い、
       `self.walk(k, pending, returns_from_func)` の値を返す。よって `pending(k)` は `pending(n)` に
       「追加」を 1 回行ったものであり、`pending_out(n) = pending_out(k)` である。この腕はほかに
       `PendingRetains` の値を作らない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕, <1>1
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕, <1>1, <1>1a
 <1>3. CASE `n` の式が `RcExpr::Release(v, path, _, k)` である。この腕は `self.other_objects` の値を
       `others` として `self.consume_objects(&mut pending, &others)` を 1 回呼び (「消費」)、
       `un_bump(&mut pending, &un_bumped)` を 1 回呼び (「引き」)、その返り値が `OutsideBracket` のとき
@@ -1069,26 +1075,30 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       `self.un_bump_releases` だけである。よって `pending(k)` は `pending(n)` に有限個の基本操作を
       行ったものであり、`pending_out(n) = pending_out(k)` である。この腕はほかに `PendingRetains` の値を
       作らない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕, L6, <1>1
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕, L6, <1>1, <1>1a
 <1>4. CASE `n` の式が `RcExpr::Let(_, RcRhs::Match(_, arms), k)` である。この腕は各アームについて
       `pending.clone()` (「複製」) を渡して `walk` を呼び、`pending` 自身は変えない。その後
       `self.merge(&pending, &arm_exits)` (「併合」) で `merged` を作り、
       `self.walk(k, merged, returns_from_func)` の値を返す。よって `pending(k)` は `pending(n)` に
       「併合」を 1 回行ったものであり、`pending_out(n) = pending_out(k)` である。アーム本体の入口状態は
       「複製」で作られた別の値であり、この列には現れない。この腕はほかに `PendingRetains` の値を作らない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, <1>1
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, <1>1, <1>1a
 <1>5. CASE `n` の式が `RcExpr::Let(x, rhs, k)` で `rhs` が `RcRhs::Match(..)` でない。この腕は
       `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼び (L6 より 0 個以上の「消費」)、
-      `self.walk(k, pending, returns_from_func)` の値を返す。ほかに `PendingRetains` の値を作らない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(x, rhs, k)` の腕, L6, <1>1
+      `self.walk(k, pending, returns_from_func)` の値を返す。よって `pending(k)` は `pending(n)` に
+      0 個以上の「消費」を行ったものであり、`pending_out(n) = pending_out(k)` である。ほかに
+      `PendingRetains` の値を作らない。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(x, rhs, k)` の腕, L6, <1>1, <1>1a
 <1>6. CASE `n` の式が `RcExpr::Destructure(container, fields, _state, k)` である。この腕は
       `self.consume` を 0 回以上呼び (L6 より「消費」)、`self.walk(k, pending, returns_from_func)` の
-      値を返す。ほかに `PendingRetains` の値を作らない。
+      値を返す。よって `pending(k)` は `pending(n)` に 0 個以上の「消費」を行ったものであり、
+      `pending_out(n) = pending_out(k)` である。ほかに `PendingRetains` の値を作らない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Destructure(container, fields, _state, k)` の腕,
-     L6, <1>1
+     L6, <1>1, <1>1a
 <1>7. CASE `n` の式が `RcExpr::Eval(_, k)` である。この腕は `pending` を変えずに
-      `self.walk(k, pending, returns_from_func)` の値を返す。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Eval(_, k)` の腕, <1>1
+      `self.walk(k, pending, returns_from_func)` の値を返す。よって `pending(k) = pending(n)` であり、
+      `pending_out(n) = pending_out(k)` である。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Eval(_, k)` の腕, <1>1, <1>1a
 <1>8. CASE `n` の式が `RcExpr::Ret(_)` である。この腕は `returns_from_func` が真のとき `pending` の各
       要素の `node` を `self.needed_retains` に入れるが、`pending` を変えずに `pending` を返す。よって
       `pending_out(n) = pending(n)` であり、鎖は空である。
@@ -1258,11 +1268,12 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
     BY L5, <2>1, <2>2
 <1>7. CASE 状態が「併合」で作られた。すなわち `Match` 節点の訪問が `self.merge(&pending, &arm_exits)` を
       実行し、その返り値 `merged` が新しい状態である。`pending_in` を `&pending` の指す状態とする。
-  <2>1. 各 `arm_exits[j]` は `pending_out(arm_j.body)` であり、`merged` より前に作られた状態である。
-        よって <1>1 より `INV(arm_exits[j])` が成り立ち、その (iii) より `arm_exits[j]` の相異なる要素は
-        相異なる `node` を持つ。すなわち L7 の仮定が満たされる。
+  <2>1. 各 `arm_exits[j]` は `self.walk(&arms[j].body, ・, false)` の戻り値であり、L1 と DEF 訪問 より
+        それは `pending_out(arms[j].body)`、すなわち `merged` より前に作られた状態である。よって <1>1 より
+        `INV(arm_exits[j])` が成り立ち、その (iii) より `arm_exits[j]` の相異なる要素は相異なる `node` を
+        持つ。すなわち L7 の仮定が満たされる。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
-       <1>1, DEF 基本操作
+       <1>1, L1, DEF 訪問, DEF 基本操作
   <2>2. `pending_in` は `merged` より前に作られた状態なので、<1>1 より `INV(pending_in)` が成り立つ。
     BY <1>1
   <2>3. (i) が成り立つ。L7 の 6 より、`merged` の各要素の `node` は `pending_in` のある要素の `node` で
@@ -1350,9 +1361,10 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 <1>8. CASE 除去事象が「併合」である。取り除かれた `node` を `x` とする。すなわち、`pending_in` と各
       `arm_exits[j]` のいずれかに `node` が `x` の要素があり、`merged` にはそれが無い。
   <2>1. DEF 基本操作 より「併合」は `walk_inner` の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕の
-        `self.merge(&pending, &arm_exits)` であり、各 `arm_exits[j]` は `pending_out(arm_j.body)`、
-        すなわちこの走査が作った状態である。よって L9 の (iii) がそれに当たり、L7 の仮定が満たされる。
-    BY L9, DEF 基本操作, DEF 訪問
+        `self.merge(&pending, &arm_exits)` であり、各 `arm_exits[j]` は `self.walk(&arms[j].body, ・, false)`
+        の戻り値である。L1 と DEF 訪問 よりそれは `pending_out(arms[j].body)`、すなわちこの走査が作った
+        状態である。よって L9 の (iii) がそれに当たり、L7 の仮定が満たされる。
+    BY L9, L1, DEF 基本操作, DEF 訪問
   <2>2. CASE ある `j` について `arm_states[j]` が `x` を鍵に持つ。
     <3>1. L7 の 3 の条件 `U(x)` は成り立たない。
       <4>1. `U(x)` が成り立つと仮定する。
@@ -1481,11 +1493,11 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
       `pending_in` はその時点の走査の状態であり、`arm_exits[j]` は同じ腕の
       `arms.iter().map(|arm| self.walk(&arm.body, pending.clone(), false)).collect()` が作った `Vec` の
       第 `j` 要素、すなわち `self.walk(&arms[j].body, ・, false)` の返り値 `pending_out(arms[j].body)`
-      である (DEF 訪問、DEF Iterator::map と collect)。よって `pending_in` と各 `arm_exits[j]` は、この
+      である (L1、DEF 訪問、DEF Iterator::map と collect)。よって `pending_in` と各 `arm_exits[j]` は、この
       `cancel_body` の 1 回の実行の中で走査が作った状態である (DEF 基本操作)。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
-     DEF 訪問, DEF 基本操作, DEF Vec::iter と slice::iter, DEF Iterator::map と collect
+     L1, DEF 訪問, DEF 基本操作, DEF Vec::iter と slice::iter, DEF Iterator::map と collect
 <1>1. L9 の (iii) を各 `arm_exits[j]` に適用すると、L7 の仮定が満たされる。<1>0 より各 `arm_exits[j]` は
       走査が作った状態なので、L9 が当たる。以下 L7 の 1 から 6 を使う。
   BY <1>0, L9, L7
