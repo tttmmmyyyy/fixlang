@@ -383,7 +383,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Bind `obj` to `x` on the scope, emit its debug local variable, evaluate the continuation `k`,
     /// then pop the binding.
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7d, P7e, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn bind_and_continue(
         &mut self,
         x: &RcVar,
@@ -421,7 +421,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Evaluate a `Var` or `Closure` right-hand side to an object. `App`, `Match`, and `Llvm` are
     /// handled directly in `eval_rc_expr_inner`.
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7d, P7e, P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_rhs(
         &mut self,
         rhs: &RcRhs,

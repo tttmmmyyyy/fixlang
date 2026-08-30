@@ -1121,6 +1121,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Bind `var` to `obj` in the innermost scope, shadowing any binding `var` already has there.
+    // PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn scope_push(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         self.scope
             .borrow_mut()
@@ -1644,6 +1645,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Whether a function returning `part_tys` takes an out-pointer for its result on this module's
     /// target (see `return_abi`).
+    // PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn returns_through_out_pointer(&self, part_tys: &[BasicTypeEnum<'c>]) -> bool {
         returns_through_out_pointer(part_tys, self.return_registers)
     }
@@ -1654,6 +1656,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// The function the builder is positioned in, which is the one being generated.
+    // PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn current_function(&self) -> FunctionValue<'c> {
         self.builder()
             .get_insert_block()

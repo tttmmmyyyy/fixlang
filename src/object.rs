@@ -1412,6 +1412,7 @@ pub fn union_tag_value<'c>(context: &'c Context, variant_idx: usize) -> IntValue
 /// The parts a lambda of type `ty` returns, in `type_parts` order: a boxed result is the single
 /// heap pointer, an unboxed one its parts. These are exactly the parts of the `Object` the lambda's
 /// body returns, so a call site and a `return` agree on them.
+// PROOF: P27, P29 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lambda_return_part_types<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
