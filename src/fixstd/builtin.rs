@@ -4305,6 +4305,7 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructGetBody {
     pub var_name: FullName,
@@ -6335,6 +6336,7 @@ pub fn union_as(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
 
 /// Reads the payload of a given variant out of a union value, aborting the program where the union
 /// holds another variant and runtime checks are on.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnionAsBody {
     /// The local binding holding the union to read.

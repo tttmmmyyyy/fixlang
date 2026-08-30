@@ -109,6 +109,7 @@ src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody	P27,P29	a0d4955d7f54
 src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody::result_prov	P1,P2	65b3bcb09139
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMStringBuf::result_prov	P1,P2,P26	1937952562a5
+src/fixstd/builtin.rs	InlineLLVMStructGetBody	D/A	428475e589a9
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_operand	P26,(P-insert)	7374525f2b11
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::field_index	P1,P2	2aef725958cb
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::free_vars_mut	P1,P2	bf6eba8581e8
@@ -122,6 +123,7 @@ src/fixstd/builtin.rs	InlineLLVMStructSetBody::result_prov	P1,P2,P7a,P7d,P7e	3c8
 src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody	D/A	a09aabcd9fc7
 src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody::generate	D/A	69c9033e7624
 src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody::result_prov	P1,P2	5d9a24bc427b
+src/fixstd/builtin.rs	InlineLLVMUnionAsBody	D/A	ce678df6dc50
 src/fixstd/builtin.rs	InlineLLVMUnionAsBody::borrows_operand	(P-insert)	9cf13ce7dc5a
 src/fixstd/builtin.rs	InlineLLVMUnionAsBody::free_vars_mut	P1,P2	09050cb74009
 src/fixstd/builtin.rs	InlineLLVMUnionAsBody::result_prov	D/A,P1,P2,P7a,P7d,P7e,(P-insert)	c6fd4d8d28d7
@@ -319,7 +321,7 @@ src/rc_ir/lower.rs	Lowerer::fresh_closure_ref	P8,P9,P10,P11,P12,P13,P14,P14a,P27
 src/rc_ir/lower.rs	Lowerer::lower_app	P26	1a9a9663ec85
 src/rc_ir/lower.rs	Lowerer::lower_if	D/A,P5,P6,P7,P26	af1795e4c197
 src/rc_ir/lower.rs	Lowerer::lower_lam	P8,P9,P10,P11,P12,P13,P14,P14a,P27,P29	c6644cbfeb9c
-src/rc_ir/lower.rs	Lowerer::lower_lambda_as_function	P8,P9,P10,P11,P12,P13,P14,P14a,P26,P27,P29	05076bfd9b47
+src/rc_ir/lower.rs	Lowerer::lower_lambda_as_function	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P26,P27,P29	05076bfd9b47
 src/rc_ir/lower.rs	Lowerer::lower_llvm	D/A,P27,P29	4107324b7a5d
 src/rc_ir/lower.rs	Lowerer::lower_match	D/A,P5,P6,P7	c6447f9c6d40
 src/rc_ir/lower.rs	Lowerer::lower_symbol	P8,P9,P10,P11,P12,P13,P14,P14a,P26,P27,P29	fe2a3c83ab94
@@ -390,7 +392,7 @@ src/rc_ir/rc_insert.rs	RcInserter::arm_free_locals	(P-insert)	5b7c599cd710
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_destructure	P7c,P7f,P18a,P18b,(P-insert)	0a43269d0fec
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_eval	(P-insert)	e5d132af2294
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_expr	(P-insert)	1a267de15e8b
-src/rc_ir/rc_insert.rs	RcInserter::insert_into_expr_inner	P7c,P7f,P18a,P18b,(P-insert)	eeb257d5edee
+src/rc_ir/rc_insert.rs	RcInserter::insert_into_expr_inner	D/A,P7c,P7f,P18a,P18b,(P-insert)	eeb257d5edee
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_func	(P-insert)	ae9e1a3c5466
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_match	P7c,P7f,P18a,P18b,(P-insert)	45e21b5870b7
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_operation_let	P7c,P7f,P18a,P18b,(P-insert)	d7e64d3a040b
@@ -411,7 +413,7 @@ src/rc_ir/rename.rs	rename_expr	P7a,P7d,P7e,P15,P16,P17,P18	5c684036c35a
 src/rc_ir/rename.rs	rename_expr_inner	P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18	5bebcb3ee0f7
 src/rc_ir/rename.rs	rename_rhs	D/A,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P15,P16,P17,P18,P18a,P18b	0f15930e08dc
 src/rc_ir/rename.rs	rename_var	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P18c,P19,P20,P21,P22,P23,P24	022b66f7191a
-src/rc_ir/simplify.rs	simplify	P8,P9,P10,P11,P12,P13,P14,P14a	1afff04e2a88
+src/rc_ir/simplify.rs	simplify	D/A,P8,P9,P10,P11,P12,P13,P14,P14a	1afff04e2a88
 src/rc_ir/specialization.rs	request	D/A	ab18cf61ff78
 src/rc_ir/unique_check_elim.rs	specialize	P26,T	008baf2ff41e
 src/rc_ir/validate.rs	Validator::bind	P1,P2	0a5f461a6982

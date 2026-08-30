@@ -276,7 +276,9 @@ capture (D23 の入力の束縛、D2 のスコープ) はスロットを持つ�
 `Lowerer::lower_llvm`)。A13 が「直接呼び出しが名指す関数の名前と、グローバル値を読む `RcVar` の名前」を
 挙げるのは**この 2 種で尽きる**という意味であり、A13 と A12 が「その名前の記号」と言い、A13 が
 「最上位の記号」と言うのは**同じもの**である。そこが指すのは funptr かグローバル状態のオブジェクト (A8、D26) であり、
-どちらも D8 の意味の参照を持たないからである。この 3 つ目を数え落とすと、`Let(x, Var(g), k)` の形で
+どちらも D8 の意味の参照を持たないからである。**この 3 つ目をスロットに数えると勘定が破れる** --
+グローバル値を所有位置の引数に渡す `App` の消費が、参照を持たない位置から参照を引くことになる。
+数え落とす向きと数え過ぎる向きの両方に害がある。この 3 つ目を数え落とすと、`Let(x, Var(g), k)` の形で
 「名前は節点が束縛する」を前提にした議論が偽になる。
 
 **その対を記号の位置と呼ぶ。** `g` を束縛を持たない名前、`λ` を `ty(g)` の inhabited な boxed leaf と
@@ -1417,9 +1419,28 @@ P1 の定義域はこの広い方であり、型の歩みを扱う命題が P1 �
 (`CODE src/rc_ir/validate.rs: Validator::check_expr_inner`, `Validator::check_rhs`)、ただし
 `develop_mode` のときだけ走る。
 変数の使用は、その位置でスコープに入っている束縛に解決する。A6 は「同じ名前が 2 度束縛されない」までしか
-言わず、`x` の束縛が `x` 自身を参照しないことは言わない。`origin` の停止性はこの仮定に立つ
+言わず、`x` の束縛が `x` 自身を参照しないことは言わない。
+
+**関数の本体の自由な局所名は、その関数のパラメータと capture に限る。グローバル初期化子の `init` は
+自由な局所名を持たない。** lowering は本体を新しいスコープの下で降ろす -- `lower_lambda_as_function` が
+`mem::take(&mut self.scope)` でスコープを空にし、パラメータと capture だけを積む
+(`CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function`)。`insert_rc` の 2 つの `assert!` が
+これを検査するが、**表明は仮定を果たす者ではない**。`origin` の停止性はこの仮定に立つ
 (`VarTable::origins` の memo は答えを再帰から戻った後に記録するので、閉路があれば memo が当たる前に
 無限に潜る)。
+
+**A25 (骨格は `Retain`/`Release` を持たない)** -- 果たす者: lowering と `simplify`。検査:
+`RcInserter::insert_into_expr_inner` の `panic!` (`CODE src/rc_ir/rc_insert.rs:
+RcInserter::insert_into_expr_inner`)。
+`insert_rc` に渡されるプログラムのすべての本体は、`RcExpr::Retain` と `RcExpr::Release` を含まない。
+
+`lower.rs` はこの 2 つの構成子を 1 度も作らない。`simplify` の `Retain`/`Release` の腕はどれも既に在る
+節点を組み直すだけで、新しい節点を作らない (`CODE src/rc_ir/simplify.rs: simplify`)。**支えているのは
+`develop_mode` の門を持たない素の `panic!` なので、破れると利用者のプログラムのコンパイルが落ちる** --
+第 4 節冒頭の 3 段のうち 3 段目である。
+
+読む者は `p60-insert-rc.md` の `L8`・`L14`・`L28` である。これが無いと、`insert_rc` の出力の
+`Retain`/`Release` 節点が `build_retains`/`build_releases` の作ったものに限らない。
 
 **A12 (束縛の形と型が合っている)** -- 果たす者: 誰も。
 move-bind の両辺の型、アームの結果と `Match` の束縛変数の型、payload と変位の型、**catch-all アームの
@@ -1439,6 +1460,12 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
   に取ること。
 - `InlineLLVMStructSetBody` と `InlineLLVMStructPlugInBody` の `ty(x)` は `is_array` が偽である。
   果たす者: `struct_set` と `struct_plug_in` が結果の型を `definition.applied_type()` に取ること。
+- `InlineLLVMStructGetBody` の `ty(x)` は `ty(args[0])` の第 `field_idx` フィールドの型であり、
+  `InlineLLVMUnionAsBody` の `ty(x)` は `ty(args[0])` の第 `field_idx` 変位の payload の型である。
+  果たす者: `struct_get` と `union_as` が結果の型をそのフィールド・変位の型に取ること。
+  **この 2 つの `borrows_operand` はその型の `is_fully_unboxed` を読むので、この節が無いと、その真偽が
+  結果について何を言うのかが決まらない** (`CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody`,
+  `InlineLLVMUnionAsBody`)。
 
 **`App` については引数とパラメータのほかに、結果の型も一致する。** `Let(x, App(callee, args), k)` の `ty(x)`
 は呼び出し先の返り値の型である。呼び出しの結果の leaf が呼び出し先の終端の `Ret` が渡す参照を受け取ると
