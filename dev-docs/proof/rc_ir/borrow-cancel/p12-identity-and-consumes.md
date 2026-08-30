@@ -751,20 +751,10 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
         をすべて外れた型についてだけであり、その再帰先は `unpunched_field_types` が返す各フィールドの
         型である。
     BY <1>1, <1>2
-  <2>2. `is_fully_unboxed` は、`is_box`・`is_closure`・`is_array` が偽で `is_funptr` も偽である型に
-        ついて、`unpunched_field_types` が返す各フィールドの型の `is_fully_unboxed` を問う。`is_funptr`
-        が真でこの 3 つが偽である型については、フィールドを見ずに真を返す。
-    BY CODE src/ast/types.rs: TypeNode::is_fully_unboxed
-  <2>3. `<2>1` が再帰する型について、`<2>2` の再帰も同じ辺を辿る。`<2>1` の型は `is_box`・`is_closure`・
-        `is_array` が偽であり、`is_fully_unboxed` も偽なので、`<2>2` の第 2 文より `is_funptr` は偽で
-        ある。よって `<2>2` の第 1 文が当たり、辿る辺はどちらも `unpunched_field_types` が返す各
-        フィールドの型への辺である。
-    BY <2>1, <2>2
-  <2>4. QED
-    A10 は、A10 を満たす型について `no_size_in_place` の in-place の降下が有限であり、`is_fully_unboxed`
-    がその降下の上の再帰であるとする。`<2>3` より `go` の再帰の辺はその再帰の辺なので、`go` の再帰
-    呼び出しの列も有限である。
-    BY A10, <2>3
+  <2>2. QED
+    A10 は、A10 を満たす型について「`unpunched_field_types` を繰り返し取って到達する型」の歩みが有限で
+    あるとする。`<2>1` より `go` の再帰の辺はその歩みの辺なので、`go` の再帰呼び出しの列も有限である。
+    BY A10, <2>1
 
 <1>2b. `Push(q)` の各成分は `q` を前置に持つ。
   `<1>2aa` より `<1>2a` の再帰は整礎であり、それについての帰納法が使える。
@@ -2043,11 +2033,10 @@ D9 の `Destructure` (unbox) の行が消費とする**名前が付いていな�
         あり、`prog` はその入力である。
     BY L5 (b'), L5 (n)
   <2>4. D9 の `App` の行の後半が指すのは、各引数の**全** boxed leaf である。
-    <3>1. D9 の `App` の行の後半が読む所有は、D14 が呼び出し先の `RcFunc::borrowed_units` から定める
-          ものである。D1 より `borrowed_units` は `RcFunc` の 9 個の欄の 1 つであり、プログラムが持つ
-          `RcFunc` は `funcs` の値である。よって D9 の行が「呼び出し先」と言うもの -- D23 より、その段の
-          実行時の関数 -- は、プログラムの `funcs` の関数の 1 つである。
-      BY D1, D9, D14, D23
+    <3>1. D9 の `App` の行が言う呼び出し先 -- D23 より、その段の実行時の関数 -- は、プログラムの
+          `funcs` の関数である。D23 は、D9 の `App` の行が読む所有を D14 が `RcFunc::borrowed_units` から
+          定めることを理由に、これを本文で述べる。
+      BY D9, D14, D23
     <3>2. `<2>3` と A1 より、そのプログラムのすべての関数の `borrowed_units` は空である。D14 より
           借用する unit の集合が `borrowed_units` で残りが所有する unit なので、どの関数もその全
           パラメータの全 unit を所有する。
