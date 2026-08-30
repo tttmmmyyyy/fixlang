@@ -954,6 +954,11 @@ path から `origin_from_leaves_under` の `truncate_to_unit` を通る枝に入
 2 つの leaf は別々のオブジェクトを指しうるので、P5 (a) が破れる。`Std::Option (a, b)` の payload が
 この形の値である。すなわち、複数元を宣言する op を足すことは、`cancel` の対の健全性を壊す変更である。
 
+**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` はその型の boxed
+leaf である。これが無いと `origin_inner` が `args[j]` で添字を外し、`truncate_to_unit` がその型の leaf で
+ない path を歩く。表のこの行が「第 `j` オペランドの leaf `σ`」と書くのは、そのオペランドとその leaf が
+実在することを含んでいる。
+
 **`result_prov` は自分の `FullName` の欄を読まない。** `LLVMGen::result_prov` は `&self` を取るので op が
 持つ変数名を読めるが、どの op もそうしない -- `result_prov` を override する 29 個のうち `self` の欄を読む
 のは 6 つで、読む欄はいずれも `usize` か `u32` の添字である。この性質が要るのは、`rename_rhs` の `Llvm` の
@@ -1313,7 +1318,9 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 - `Let(x, Llvm(gen, args), k)` の `args` の名前の列は `gen.free_vars()` に等しい。果たす者: 演算を作る側。
   検査: `validate` の `check_rhs` が develop mode で行う。
 - `InlineLLVMStructPunchBody` の `ty(x)` は `is_box` も `is_array` も偽で、`field_types` が長さ 2 であり、
-  その第 `PUNCHED_STRUCT_FIELD` 成分は A10 を満たす構造体であって第 `field_idx` フィールドが穴である。
+  その第 `PUNCHED_STRUCT_FIELD` 成分は A10 を満たす構造体であって第 `field_idx` フィールドが穴である -- すなわちその成分の `TyConInfo` の `fields[field_idx].is_punched` が真であり、`is_closure()` は
+  偽である (`toplevel_tycon_info` が `assert!(!self.is_closure())` で始まるので、構造体であることが
+  それを含む)。
   果たす者: `struct_punch` が結果の型を `make_tuple_ty(vec![field.ty, str_ty.to_punched_struct(field_idx)])`
   に取ること。
 - `InlineLLVMStructSetBody` と `InlineLLVMStructPlugInBody` の `ty(x)` は `is_array` が偽である。
@@ -1322,11 +1329,6 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 **`App` については引数とパラメータのほかに、結果の型も一致する。** `Let(x, App(callee, args), k)` の `ty(x)`
 は呼び出し先の返り値の型である。呼び出しの結果の leaf が呼び出し先の終端の `Ret` が渡す参照を受け取ると
 言うには、両者の `boxed_leaf_paths` が同じ列であることが要る。
-
-**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` はその型の boxed
-leaf である。これが無いと `origin_inner` が `args[j]` で添字を外し、`truncate_to_unit` がその型の leaf で
-ない path を歩く。表のこの行が「第 `j` オペランドの leaf `σ`」と書くのは、そのオペランドとその leaf が
-実在することを含んでいる。
 
 **この 3 つが無いと P2 が偽になる。** `result_prov` を override する 29 個のうち 5 個が、これらの型で
 `expect` か添字か `assert_ne!` で abort する (`CODE src/fixstd/builtin.rs: replaced_field_prov`,
