@@ -17,7 +17,7 @@ P7a の残る向き (節 3 から節 2、節 3 から節 1) は偽である。`�
 `unit_step`)。第 3 節は (a) と (b) をこの形のまま証明する。この文書の中で P7e を読むのは L21 の `<1>1`
 の中と L22 の `<1>2` であり、どちらも (a) と (b) で足りる。
 
-この文書が読んだコードは、コミット `004c365acf516c68f9fc7c9ff5cbd34b4775715b` の版である。
+この文書が読んだコードは、コミット `5aa87f26c246919eadcb3f1c3ce0252366c2aed8` の版である。
 
 ## 0. 結論
 
@@ -299,13 +299,27 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
   DEF 扱う型 より根の型はパラメータ・capture の `RcVar` の型か、本体に現れる `RcVar` の型か、
   `Llvm` 節点の結果の型であり、どれもプログラムに現れる型である (D1 より `RcFunc` はパラメータの列と
   capture を持ち、その各 `RcVar` は型を持つ)。A10 は、プログラムに現れる型が ground であり、その
-  tycon が `type_env` にあり、`no_size_in_place` の in-place の降下が有限であると述べる。
+  tycon に kind の要求するだけの引数が与えられており、その tycon が `type_env` にあり、
+  `no_size_in_place` の in-place の降下が有限であると述べる。
   BY A10, D1, DEF 扱う型
 
 <1>2. 扱う型はすべて A10 を満たす。
-  A10 は、`unpunched_field_types` を繰り返し取って到達する型についても同じことが成り立つと述べる。
-  DEF 扱う型 の第 2 の種はまさにその型である。
-  BY <1>1, A10, DEF 扱う型
+  <2>1. DEF 扱う型 の第 2 の種 -- 根の型から `unpunched_field_types` の対の第 2 成分を有限回取って
+        到達する型 -- は、ground であり、その tycon に kind の要求するだけの引数が与えられており、
+        その tycon は `type_env` にある。またその歩みは有限である。
+    A10 の到達型の節がこの 4 つを述べ、DEF 扱う型 の第 2 の種はまさにその節が名指す型である。
+    BY A10, DEF 扱う型
+  <2>2. その各型 `σ` について、`no_size_in_place` の in-place の降下は有限である。
+    A10 は「`no_size_in_place` の降下は unbox のフィールドだけを辿るのに対し、`unit_step` の `Fields` の
+    腕と `subtree_type` / `truncate_to_unit` はフィールドの型を boxed であっても取るので、こちらの方が
+    広い」と述べる。すなわち `σ` からの in-place の降下で到達する型は、`σ` から
+    `unpunched_field_types` を繰り返し取って到達する型でもある。`σ` 自身が根の型からその歩みで到達する
+    型なので、`σ` からの降下は根の型からのその歩みの部分であり、`<2>1` よりその歩みは有限である。
+    BY <2>1, A10
+  <2>3. QED
+    `<1>1` が根の型について A10 の 4 つを与える。第 2 の種については `<2>1` が前の 3 つを、`<2>2` が
+    4 つ目を与える。
+    BY <1>1, <2>1, <2>2, DEF 扱う型
 
 <1>3. DEF 歩み の `cur_{i+1}` は、`cur_i` から `unpunched_field_types` の対の第 2 成分を取ったもので
       ある。
@@ -575,13 +589,25 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
   <2>1. `is_fully_unboxed` は、`is_box` / `is_closure` / `is_array` のいずれかで偽を返し、`is_funptr` で
         真を返し、それ以外では `unpunched_field_types` の全フィールドについての再帰の全称である。
     BY CODE src/ast/types.rs: TypeNode::is_fully_unboxed
-  <2>2. `is_box(τ)` または `is_array(τ)` のとき、`go` は `path` を積み、`unit_step` は `Unit` を返して
-        `rc_units_go` は `path` を積む。
-    BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step, rc_units_go
+  <2>2. `is_closure(τ)` が偽で、`is_box(τ)` または `is_array(τ)` であるとき、`go` は `path` を積み、
+        `unit_step` は `Unit` を返して `rc_units_go` は `path` を積む。
+    `is_fully_unboxed` は `is_box`、`is_closure`、`is_array` の順に見て、そのいずれかが真ならば偽を返す。
+    `is_box(τ)` ならば最初の行で、`is_box(τ)` が偽で `is_array(τ)` ならば -- この場合の条件より
+    `is_closure(τ)` は偽なので -- `is_array` の行で偽を返す。よって `is_fully_unboxed(τ)` は偽である。
+    `go` と `unit_step` はどちらも `is_fully_unboxed`、`is_closure`、`is_box`、`is_array` の順に見るので、
+    最初の 2 つを抜けて、`go` は `is_box` の腕か `is_array` の腕で `path` を積んで戻り、`unit_step` は
+    `is_box || is_union || is_array || is_punched_array` の行で `Unit` を返す。`rc_units_go` は `Unit` の
+    腕で `path` を積む。
+    BY CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step,
+       rc_units_go
   <2>3. `is_closure(τ)` のとき、`go` は `path ++ [CLOSURE_CAPTURE_IDX]` を積み、`unit_step` は
         `Capture { capture_idx: CLOSURE_CAPTURE_IDX, .. }` を返して `rc_units_go` は
         `path ++ [CLOSURE_CAPTURE_IDX]` を積む。
-    BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step, rc_units_go
+    `is_fully_unboxed` は `is_closure` の行で偽を返すので、`go` と `unit_step` はどちらも 1 つ目の検査を
+    抜けて `is_closure` の腕に入る。
+    BY CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step, rc_units_go
   <2>4. `is_box(τ)`、`is_array(τ)`、`is_closure(τ)`、`is_funptr(τ)` がどれも偽のとき、
         `leaves(τ) ≠ ∅` かつ `units(τ) ≠ ∅` である。
     <3>1. `unpunched_field_types(τ)` のある対 `(idx, fty)` について `is_fully_unboxed(fty)` は偽である。
@@ -608,9 +634,14 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
       A10 より型の in-place の降下は有限なので、この帰納は基底に着く。
       BY <3>3, <3>4, A10
   <2>5. QED
-    `is_funptr(τ)` のときは `is_fully_unboxed(τ)` が真なので、この場合は仮定に反する。残りを `<2>2`、
-    `<2>3`、`<2>4` が扱った。
-    BY <2>1, <2>2, <2>3, <2>4
+    まず `is_closure(τ)` の真偽で場を分ける。真のときは `<2>3` が当てはまる。偽のときは残る 3 つの述語で
+    分ける -- `is_box(τ) ∨ is_array(τ)` ならば `<2>2` が当てはまり、どちらも偽で `is_funptr(τ)` ならば
+    `<2>1` より `is_fully_unboxed(τ)` が真になって `<1>2` の仮定に反し、4 つがどれも偽ならば `<2>4` が
+    結論を与える。この分け方は場を尽くし、各場は他と重ならない。`leaves(τ)` は `path` を空列として
+    始めた `go` が積んだものの全体、`units(τ)` は同じく `rc_units_go` が積んだものの全体なので、`<2>2` と
+    `<2>3` の場合はどちらも 1 つ以上積まれて空でない。
+    BY <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+       CODE src/rc_ir/ownership.rs: rc_units
 
 <1>3. QED
   BY <1>1, <1>2
@@ -1446,14 +1477,33 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `OwnedLeaves::owns(var, path)` は `(var, path) ∈ OL` である。
     BY <2>1, CODE src/rc_ir/borrow.rs: OwnedLeaves::owns
 
+<1>3a. `pty_f(r) = Some(τ)` のとき、`leaves(τ)` の計算と、その各 `leaf` についての `trunc(τ, leaf)` は
+       中断しない。
+  `<1>2` より `τ` は固定した出力版のパラメータ・capture の型でもあるので、DEF 扱う型 の根の型であり、
+  L1b より A10 を満たす。`leaves(τ)` を計算する `go` が呼ぶのは `is_fully_unboxed`・`is_closure`・
+  `is_box`・`is_array` と `unpunched_field_types` であり、`unpunched_field_types` と `is_fully_unboxed` は
+  最上位 tycon の宣言を `type_env` から引く。A10 より、`τ` から `unpunched_field_types` を繰り返し取る
+  歩みは有限であり、その各段の型は ground で飽和していて tycon が `type_env` にあるので、この降下は
+  中断せずに終わる (`is_unbox` は `is_closure()` を先に見て短絡し、`go` は `unpunched_field_types` を
+  呼ぶ前に `is_closure` を見るので、`toplevel_tycon_info` の `assert!(!self.is_closure())` も通る)。
+  `leaf ∈ leaves(τ)` については、L9a より `τ` の `leaf` に沿う歩みは (A) `Unit` で終わるか、(B) `Capture`
+  で終わって `leaf[m] = capture_idx` であるかのどちらかである。(A) で歩みの長さが `|leaf|` ならば L1 の
+  場合 (a)、それより短ければ場合 (b) の `Unit` の行、(B) ならば場合 (b) の `Capture`
+  (`π[m] = capture_idx`) の行が当てはまり、どれも `trunc` は値を返す。
+  BY <1>2, A10, L1, L1b, L9a, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+
 <1>4. QED
   `pty_f(r)` は `Option` なので `None` か `Some(τ)` のどちらかである。`None` の場合は `<1>1` が両辺とも
   真であることを与える。`Some(τ)` の場合、`<1>2` より `owns_object(ρ(r), p)` は「`under(τ, p)` の各
   `unit` について `(ρ(r), trunc(τ, unit)) ∈ owned_units`」であり、`<1>3` よりこれは「各 `unit` について、
   `trunc(τ, leaf) = trunc(τ, unit)` かつ `(r, leaf) ∈ OL` である `leaf ∈ leaves(τ)` が在る」に等しい。
-  これが `owns_object_yet(vars_f, type_env, r, p, OL)` の定義そのものである。両辺は `under(τ, p)` と
-  `trunc(τ, ・)` を同じ引数で呼ぶので、中断も同時である。
-  BY <1>1, <1>2, <1>3, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, owns_object_yet
+  これが `owns_object_yet(vars_f, type_env, r, p, OL)` の定義そのものである。
+  中断も同時である。`owns_object` が評価するのは `under(τ, p)` と、その各要素についての `trunc(τ, ・)`
+  と、`owned_units.contains` だけである。`owns_object_yet` はこれに加えて `leaves(τ)` と、その各 `leaf`
+  についての `trunc(τ, leaf)` を評価するが、`<1>3a` よりその 2 つは中断しない。残る呼び出しは両辺で
+  同じ引数のものである。
+  BY <1>1, <1>2, <1>3, <1>3a, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, owns_object_yet
 
 ## 5. P7d の証明
 
@@ -1594,19 +1644,34 @@ site を、借用版については `levelled_sites(clone)` の site を主語�
 
 ## 6. P7a の証明
 
-README の P7a は、**出力の版 `V` を 1 つ固定し、`owns_unit` と `owns_object` は `V` の `RewriteCtx` の
-もの、site は `V` の本体について `levelled_sites` が挙げるものとする**、と断ったうえで、その site
-`(v, u)` と `Λ(u) = Λ_{ty(v)}(u)` について、`infer_ownership` の不動点の下で次の 3 つが同値である、と
-いう言明である。第 1 節が固定する出力版がその `V` である。
+**設定**。第 1 節が固定する出力版を `V` とする。`owns_unit` と `owns_object` は `V` の `RewriteCtx` の
+ものであり、`infer_ownership` の不動点の下で読む。
+
+**DEF site**
+版 `V` の **site** とは、`V` が書き換える本体 -- 関数の版ならその関数の `body`、グローバル初期化子の版なら
+その `init` -- を `for_each_node` で歩いて集めた次の対である
+(`CODE src/rc_ir/ast.rs: for_each_node`)。
+
+- `Retain(v, path, ..)` / `Release(v, path, ..)` の節点について、対 `(v, path)`。
+- `Let(_, App(_, args), _)` の節点について、各引数 `arg` と各 `unit ∈ units(ty(arg))` の対 `(arg, unit)`。
+
+`levelled_sites(func, type_env)` は `&RcFunc` を取り、この歩きを `func.body` について行ったものである
+(`CODE src/rc_ir/borrow.rs: levelled_sites`)。上の DEF は同じ歩きを本体一般 -- グローバル初期化子の
+`init` を含む -- について述べたものであり、関数の版では `levelled_sites` が挙げる集合と一致する。
+`owns_unit` はグローバル初期化子の版でも呼ばれるので (L17)、主語をこの形で取る。
+
+site `(v, u)` と `Λ(u) = Λ_{ty(v)}(u)` について、次の 3 つの節を考える。
 
 1. `owns_unit(v, u)` が真である。
 2. `Λ(u)` の**ある inhabited な** leaf `λ` の**すべての**候補 `(r, p)` について `owns_object(r, p)` が
    真である。
 3. `Λ(u)` の**すべての inhabited な** leaf のすべての候補について `owns_object` が真である。
 
-**読み方**。節 1 は静的である。節 2 と節 3 は inhabited (D16) を含むので、1 回の活性化 (D21) とその
-実行路の 1 つの位置に相対的である。以下では活性化とその位置を固定し、`v` がその位置までに値を得ている
-ものとする。その位置で inhabited な `Λ(u)` の leaf の集合を `Inh(v, u)` と書く。
+**読み方**。節 1 は静的である。節 2 と節 3 は inhabited (D16) を含むので、1 回の活性化 (D21) と、その
+活性化が辿る実行路の上の位置に相対的である。**その位置は site の節点の位置に取る** -- 以下では 1 つの
+活性化と、それが訪れるその site の節点の位置を固定する。その位置で `v` が値を得ていることは L20a が
+与える (site の節点は `v` を使用する)。その位置で inhabited な `Λ(u)` の leaf の集合を `Inh(v, u)` と
+書く。
 
 **この節が証明するもの**。L17 (`owns_unit` を呼ぶ位置は site を出ない)、**節 1 から節 3**、および
 **節 2 から節 1** である。この 2 つが README の解説が挙げる 2 つの役割 -- 「節点を残すのが安全である」と
@@ -1619,9 +1684,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 ### L17 (`owns_unit` を呼ぶ位置は site を出ない)
 
-**言明**。ある出力版の `RewriteCtx` が `owns_unit(v, u)` を呼ぶとき、その版が関数の版であれば `(v, u)` は
-その版の本体について `levelled_sites` が挙げる site である。その版がグローバル初期化子のものであれば、
-`owns_unit(v, u)` は真を返す。
+**言明**。ある出力版の `RewriteCtx` が `owns_unit(v, u)` を呼ぶとき、`(v, u)` はその版の site
+(DEF site) である。その版がグローバル初期化子のものであれば、さらに `owns_unit(v, u)` は真を返す。
 
 <1>1. `owns_unit` を呼ぶのは `any_owned_unit`、`routing_saves_retain`、`call_rc`、`rewrite_rc` の 4 か所で
       ある。
@@ -1658,12 +1722,14 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `under(ty(v), path) = [path]` である。
   BY A2, L6, P9, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc, borrow_ify
 
-<1>4. 関数の版では、`<1>2` と `<1>3` の `(v, u)` は `levelled_sites` が挙げる site である。
-  `levelled_sites` は `for_each_node` で本体の全節点を歩き、`Retain(v, path, ..)` / `Release(v, path, ..)`
-  について `(v, path)` を、`Let(_, App(_, args), _)` について各 `arg` と各
-  `unit ∈ rc_units(arg.ty, type_env)` の対を積む。`for_each_node` は継続とアーム本体の両方へ降りるので、
-  本体のすべての節点を訪れる。`rewrite_inner` は同じ木を継続とアーム本体へ降りて歩く。
-  BY <1>2, <1>3, CODE src/rc_ir/borrow.rs: levelled_sites, RewriteCtx::rewrite_inner,
+<1>4. `<1>2` と `<1>3` の `(v, u)` は、その版が書き換える本体の site (DEF site) である。
+  `rewrite_inner` は本体の木を継続とアーム本体へ降りて歩くので、`<1>2` と `<1>3` の呼び出しが起きる節点は
+  その本体の節点である。DEF site の歩き `for_each_node` も継続とアーム本体の両方へ降りるので、その節点を
+  訪れる。`<1>2` の `(arg, unit)` は `Let(_, App(_, args), _)` の節点の引数と
+  `rc_units(arg.ty, type_env) = units(ty(arg))` の元の対、`<1>3` の `(v, path)` は
+  `Retain(v, path, ..)` / `Release(v, path, ..)` 節点の変数と path であり、DEF site はその節点について
+  ちょうどこの対を挙げる。関数の版ではこの集合は `levelled_sites` が挙げるものである。
+  BY <1>2, <1>3, DEF site, CODE src/rc_ir/borrow.rs: levelled_sites, RewriteCtx::rewrite_inner,
      CODE src/rc_ir/ast.rs: for_each_node
 
 <1>5. グローバル初期化子の版では `owns_unit(v, u)` は真を返す。
@@ -2351,9 +2417,12 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   この腕は `π` が `rty` の leaf であることを要求する (`leaf_origins_at` は leaf の path にだけ `Some` を
   返す)。`boxed_leaf_paths` の `go` は leaf を積んだ位置で戻るので、`π` を前置に持つ leaf は `π` だけで
   あり、`Λ_{ty(x)}(π) = {π}` である。`Inh_x(π) ⊆ {π}` であり、`λ = π` のとき
-  `cand(x, λ) = cand(x, π)` は仮定より全部偽なので、偽の元がある (`cand` は空でない -- `Exactly` は
-  1 元を持ち、`of_candidates` は空集合に `assert!` で中断する)。
-  BY CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, Provenance::build_shape,
+  `cand(x, λ) = cand(x, π)` は仮定より全部偽である。`cand(x, π)` は空でない -- `x` は `vars.bindings` に
+  `Binding::Llvm` を持つ束縛変数なので、P2 (固定した版が借用版のときは P9 と合わせて読む) より
+  `origin(x, π)` は panic せずに答えを返し、その答えが `Exactly` ならば `candidates()` は 1 元の列、
+  `Join` ならばそれを作った `of_candidates` の `assert!` が通っているので `candidates` は空でない。
+  よって `cand(x, λ)` に `owns` が偽である元がある。
+  BY P2, P9, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, Provenance::build_shape,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, LeafMap::get, LeafMap::build_shape,
      CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::candidates
 
@@ -2404,21 +2473,28 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 ### P7a の 2 つの向き
 
-**証明するもの**。第 1 節が固定する出力版 `V`、`V` の本体について `levelled_sites` が挙げる site
-`(v, u)`、`infer_ownership` の不動点、1 つの活性化とその実行路の 1 つの位置を固定する。このとき
-**節 1 から節 3** と **節 2 から節 1** が成り立つ。
+**証明するもの**。第 1 節が固定する出力版 `V`、`V` の site `(v, u)` (DEF site)、`infer_ownership` の
+不動点、1 つの活性化と、それが訪れるその site の節点の位置を固定する。このとき **節 1 から節 3** と
+**節 2 から節 1** が成り立つ。
 
 <1>1. `(v, u)` は unit を覆う。
-  site は `V` の本体について `levelled_sites` が挙げるものである。`V` が `f_own` の版かグローバル初期化子
-  の版であれば、その本体は入力の本体そのものである -- `borrow_ify` は `func.clone()` を写し、グローバル
-  は `g.init` を写す。`V` が借用版であれば、その本体は入力の関数の本体の束縛変数を一斉に付け替えたもので
-  あって、それ以外の違いを持たない (P9)。よってどちらでも、`Retain`/`Release` 節点の `path` と `App` の
-  各引数の型は入力の本体のものと同じである。`levelled_sites` は `Retain(v, path)` / `Release(v, path)`
-  について `(v, path)` を積み、A2 より入力の本体ではその `path` は `units(ty(v))` の元なので、`V` の
-  本体でもそうである。`Let(_, App(_, args), _)` については各 `arg` と各
-  `unit ∈ rc_units(arg.ty, type_env)` の対を積むので、これも定義から `units(ty(arg))` の元である。
+  DEF site より `(v, u)` は、`V` が書き換える本体の `Retain(v, path, ..)` / `Release(v, path, ..)` 節点の
+  対 `(v, path)` か、`App` の引数 `arg` と `unit ∈ units(ty(arg))` の対 `(arg, unit)` である。後者では
+  `u` は DEF site から `units(ty(v))` の元である。前者について、`V` が `f_own` の版かグローバル初期化子の
+  版であれば、その本体は入力の本体そのものである -- `borrow_ify` は `func.clone()` を写し、グローバルは
+  `g.init` を写す。`V` が借用版であれば、その本体は入力の関数の本体の束縛変数を一斉に付け替えたもので
+  あって、それ以外の違いを持たない (P9)。よってどちらでも、`Retain`/`Release` 節点の `path` と名指す
+  変数の型は入力の本体のものと同じであり、A2 より入力のその `path` は `units(ty(v))` の元なので、`V` の
+  本体でもそうである。
   L18 (a) より `(v, u)` は unit を覆う。
-  BY A2, P9, L18, CODE src/rc_ir/borrow.rs: levelled_sites, borrow_ify, clone_func
+  BY A2, P9, L18, DEF site, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
+
+<1>1a. 固定した位置で `v` は値を得ている。
+  DEF site より site の節点は `Retain(v, path, ..)` / `Release(v, path, ..)` か、`v` を引数に持つ
+  `Let(_, App(_, args), _)` である。L20a が使用する変数として挙げる列に、この 2 つ -- 「`Retain` /
+  `Release` が名指す変数」と「`App` の各引数」-- はどちらも入っている。読み方より固定した位置はその節点の
+  位置であり、活性化はその位置を訪れているので、L20a より `v` はそこまでに値を得ている。
+  BY L20a, DEF site
 
 <1>2. 節 1 から節 3 へ渡る。
   節 1 は「`cand(v, u)` のすべての元について `owns` が真」である (`owns_unit` の定義)。`<1>1` と L21 より
@@ -2427,19 +2503,26 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   BY <1>1, L18, L21, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
 
 <1>3. 節 1 が偽ならば、`cand(v, u)` のすべての元について `owns` は偽である。
-  `cand(v, u)` は空でない -- `Origin::Exactly` の `candidates()` は 1 元の列であり、`of_candidates` は
-  空集合に `assert!` で中断する。`(v, u)` は `levelled_sites` が挙げる site であり、いまは
-  `infer_ownership` の不動点なので、P7d よりその候補はすべて真かすべて偽である。節 1 が偽とは
-  「すべて真」が成り立たないことなので、「すべて偽」である。
-  BY P7d, CODE src/rc_ir/ownership.rs: Origin::candidates, Origin::of_candidates,
+  `cand(v, u)` は空でない。`v` は `V` が書き換える本体に現れる `RcVar` の名前なので、その名前は
+  `vars.bindings` に束縛を持つ (パラメータ・capture の `Binding::Param` か、`collect_bindings` が節点から
+  記録した束縛) か、持たない (D6 の第 3 の形) かのどちらかであり、どちらも P2 の範囲である (固定した版が
+  借用版のときは P9 と合わせて読む)。よって `origin(v, u)` は panic せずに答えを返し、その答えが
+  `Exactly` ならば `candidates()` は 1 元の列、`Join` ならばそれを作った `of_candidates` の `assert!` が
+  通っているので `candidates` は空でない。
+  `V` が関数の版ならば `(v, u)` は DEF site より `levelled_sites` が挙げる site であり、グローバル
+  初期化子の版ならば第 5 節の読み方より P7d は任意の `(v, u)` について答える。いまは `infer_ownership` の
+  不動点なので、いずれも P7d よりその候補はすべて真かすべて偽である。節 1 が偽とは「すべて真」が
+  成り立たないことなので、「すべて偽」である。
+  BY P2, P7d, P9, D6, DEF site, CODE src/rc_ir/ownership.rs: Origin::candidates,
+     Origin::of_candidates, VarTable::of, collect_bindings,
      CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
 
 <1>4. 節 1 が偽ならば節 2 も偽である。
-  `<1>3` より `(v, u)` は L22 の意味で全部偽である。`v` はこの位置までに値を得ている (節 2 と節 3 を読む
-  前提)。`<1>1` より `(v, u)` は unit を覆う。L22 より、`Inh(v, u)` の各 `λ` について `cand(v, λ)` に
+  `<1>3` より `(v, u)` は L22 の意味で全部偽である。`<1>1a` より `v` はこの位置までに値を得ており、
+  `<1>1` より `(v, u)` は unit を覆う。L22 より、`Inh(v, u)` の各 `λ` について `cand(v, λ)` に
   `owns` が偽の元がある。節 2 は「`Inh(v, u)` のある `λ` の**すべての**候補について `owns` が真」なので、
   これは節 2 の否定である。
-  BY <1>1, <1>3, L18, L22
+  BY <1>1, <1>1a, <1>3, L18, L22
 
 <1>5. 節 2 から節 1 へ渡る。
   `<1>4` の対偶である。
@@ -2703,8 +2786,16 @@ A5 より inhabited でない leaf は参照を持たず、A4 よりコード生
 
 ### 記録
 
-この文書が対象のコードに見つけたものは無い。見つかったのは言明の側の 2 点である。
+この文書が対象のコードに見つけたものは無い。見つかったのは言明の側の 4 点である。README を書き換えるのは
+オーケストレータである。
 
 - **R1**: 節 2 と節 3 が inhabited な leaf に限らなければならないこと。この限定は README に入っている。
-- **R2**: `Inh(v, u) = ∅` のとき節 3 から節 2 と節 1 へ渡れないこと。3 つを同値と述べるには
-  `Inh(v, u) ≠ ∅` が要る。README を書き換えるのはオーケストレータである。
+- **R2**: `Inh(v, u) = ∅` のとき節 3 から節 2 と節 1 へ渡れないこと。要る形は「次の 2 つが成り立つ:
+  1 ⟹ 3、2 ⟹ 1。`Inh(v, u) ≠ ∅` を足せば 3 つは同値になる」である。
+- **節 2 と節 3 の量化**。この 2 つは活性化と位置を伴わなければ読めない。要る形は「節 2 と節 3 は、
+  1 つの活性化 (D21) と、その活性化が訪れる site の節点の位置に相対的である」であり、その位置で `v` が
+  値を得ていることは前提ではなく L20a の帰結である (第 6 節の読み方と `P7a の 2 つの向き` の `<1>1a`)。
+- **site の主語**。`levelled_sites` は `&RcFunc` を取り、`owns_unit` はグローバル初期化子の版でも
+  呼ばれる (L17)。要る形は DEF site -- 本体を `for_each_node` で歩いて
+  `Retain`/`Release` の `(v, path)` と `App` の各引数の各 unit を挙げたもの -- であり、関数の版では
+  `levelled_sites` が挙げる集合と一致する。
