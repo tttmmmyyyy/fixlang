@@ -351,6 +351,7 @@ impl<'c> Object<'c> {
     /// into an aggregate phi. `field_ty` is the field's Fix type; for a boxed object the field is
     /// loaded from the heap and its (materialized) value split back into parts. The field is
     /// moved out, not retained.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn extract_field_object<'m>(
         &self,
         gc: &mut Generator<'c, 'm>,

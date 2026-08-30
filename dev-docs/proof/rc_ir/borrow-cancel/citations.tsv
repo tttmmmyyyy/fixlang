@@ -249,6 +249,7 @@ src/generator.rs	Generator::save_stack	P26	c69d52342edf
 src/generator.rs	Generator::scope_push	P27,P29,P30	4441bcaf1b56
 src/generator.rs	Generator::set_refcnt_state	P26	940b5ba1b600
 src/generator.rs	Generator::traverse_boxed_refs	P26	3272a267c4e1
+src/generator.rs	Object::extract_field_object	D/A	715dee0ef5a4
 src/generator.rs	Scope::push_local	D/A,P28	fd57787daef2
 src/generator.rs	ValueAccessor::get	D/A,P3,P4,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P29,P30	52839bab1d27
 src/misc.rs	Map	P2a,P15,P16,P17,P18	acc6b79589ac

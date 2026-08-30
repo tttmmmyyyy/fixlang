@@ -1607,6 +1607,25 @@ P1 の定義域はこの広い方であり、型の歩みを扱う命題が P1 �
 (`VarTable::origins` の memo は答えを再帰から戻った後に記録するので、閉路があれば memo が当たる前に
 無限に潜る)。
 
+**A26 (節点の段は、読んでから処分する)** -- 果たす者: コード生成。検査: 無し。
+1 つの節点の段において、D7 の読む構文がオブジェクトの**記憶域から読む**動作は、その段が行うどの参照の
+処分よりも前に起きる。
+
+**unbox 集約のフィールドの取り出しは、記憶域の読みではない。** `Object::extract_field_object` は unbox の
+とき値の parts を切り出すだけで、ヒープからの load を出さない
+(`CODE src/generator.rs: Object::extract_field_object`)。よって `get_struct_fields` の unbox の枝が
+名前の無いフィールドを 1 つずつ取り出して処分する形は、この節に反しない -- 取り出しはどのオブジェクトの
+記憶域も読まない。boxed の枝は、要求されたフィールドを**全部**取り出してから struct を release する
+(`CODE src/object.rs: ObjectFieldType::get_struct_fields`)。
+
+**この節が要るのは (S-c) の点の取り方による。** (S-c) は「その読み・その触れる動作が実際に起きる瞬間の
+直前の点」で解放されていないことを求めるが、証明が持っている不変条件は節点の入口のものである。この節が
+無いと、その 2 つを結ぶのに節点の中の各点へ不変条件を延ばす議論が要り、`App` の節点ではそれが立たない
+(前置の `Retain` が消費より前に立つので、塊の中で `n_out` が `n_in` を上回りうる)。
+
+**自由度を狭める向きの節である。** `Llvm` の op は原理的には処分と読みを任意の順に出せるが、
+想定されている使い方はその自由度を要らない。
+
 **A25 (骨格は `Retain`/`Release` を持たない)** -- 果たす者: lowering と `simplify`。検査:
 `RcInserter::insert_into_expr_inner` の `panic!` (`CODE src/rc_ir/rc_insert.rs:
 RcInserter::insert_into_expr_inner`)。
