@@ -948,11 +948,89 @@ source、`Match` のアームの本数と並び、および継続の順序は変
   D33 より `C` のスロットはどれも `ρ` を辿って同じ終端に着く。ρ-終端は `(u, σ)` から始まる ρ-歩みの
   最後の位置であり、歩みの各段は `origin_inner` が呼ぶ `origin` の引数へ進む。<1>1 をその段数について
   繰り返す。
+<1>2a. 変数 `v` と `ty(v)` の boxed leaf `λ` について、`id(v, λ)` は `(v, λ)` から始まる ρ-歩み
+      (`p13` の `DEF ρ-歩みと ρ-終端`) の上の位置である。とくに <1>1 より、その変数は `v` より後に値を
+      得ることがない。
+  <2>0. ρ-歩みの残りの長さについての帰納法で示す。L40 より歩みの各位置 `(u, σ)` の `σ` は `ty(u)` の
+        boxed leaf であり、歩みは `origin_inner` が `origin` を呼ばない位置で終わるので、この帰納法は
+        整礎である。
+    BY L40, p13 の DEF ρ-歩みと ρ-終端
+  <2>1. CASE 位置 `(u, σ)` で `origin_inner` が `origin` を呼ばない。このとき `identity` は `(u, σ)` で
+        ある。
+    <3>1. `None`/`Param`/`Producer` の腕、`container.ty.is_box` が真の `Binding::Field` の腕、
+          `scrut.ty.is_box` が真の `Binding::Payload(_, Some(_))` の腕は `here() = Exactly((u, σ))` を
+          返す。
+      BY CODE src/rc_ir/ownership.rs: origin_inner
+    <3>2. `Binding::Llvm` で `decl.leaf_origins_at(σ).and_then(as_arg_projection)` が `None` である腕は、
+          `origin_from_leaves_under(...)` の値を返し、`None` のときは `here()` を返す。L40 の 1 より
+          この呼び出しは `origin` を呼ばず、`reached` は `operand_units` の各元について `origin` を
+          呼んで作られるので `operand_units` は空である。よって `reached` は空であるか
+          (`produced_here` が真のとき) `[Exactly(here_identity)]` である。空のときは `first?` が `None`
+          を返して `here()` に落ち、1 元のときは全要素が `first` に等しいのでその元を返す。どちらでも
+          値は `Exactly((u, σ))` である。
+      BY L40, CODE src/rc_ir/ownership.rs: origin_inner,
+         CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+    <3>3. QED
+      BY <3>1, <3>2, CODE src/rc_ir/ownership.rs: Origin::identity
+  <2>2. CASE 位置 `(u, σ)` の腕が、次の位置の `origin` の値をそのまま返す。すなわち `Binding::Move(y)`、
+        `Binding::Payload(scrut, None)`、`container.ty.is_box` が偽の `Binding::Field`、
+        `scrut.ty.is_box` が偽の `Binding::Payload(_, Some(tag))`、`as_arg_projection` が `Some((j, p))`
+        を返す `Binding::Llvm` である。`identity` は次の位置のものであり、その位置は ρ-歩みの次の位置で
+        あるから、帰納法の仮定が当たる。
+    BY CODE src/rc_ir/ownership.rs: origin_inner, p13 の DEF ρ-歩みと ρ-終端, 帰納法の仮定
+  <2>3. CASE 位置 `(u, σ)` の腕が `Binding::Join(arm_results)` である。この腕は
+        `Origin::of_candidates(candidates, (u, σ))` を返す。ここで `candidates` は各アームの結果 `w` に
+        ついての `origin(w, σ).acted_on()` の合併である。
+    <3>1. `candidates` の元が 2 つ以上のとき、`of_candidates` は `Join { identity: (u, σ), .. }` を
+          返すので `identity` は `(u, σ)` である。
+      BY CODE src/rc_ir/ownership.rs: Origin::of_candidates, CODE src/rc_ir/ownership.rs: Origin::identity
+    <3>2. `candidates` がただ 1 つの元 `c` を持つとき、`of_candidates` は `Exactly(c)` を返す。`w` を
+          その活性化が選んだアームの結果とすると、`origin(w, σ).acted_on()` は空でなく `candidates` に
+          含まれるので `{c}` である。D15 より `acted_on()` は `identity()` を先頭に持つので
+          `c = id(w, σ)` である。ρ-歩みは `Binding::Join` の位置から選んだアームの結果へ進む (D17、D21)
+          ので、帰納法の仮定より `c` は `(w, σ)` から始まる歩みの上の位置であり、したがって `(u, σ)` から
+          始まる歩みの上の位置である。
+      BY CODE src/rc_ir/ownership.rs: Origin::of_candidates, CODE src/rc_ir/ownership.rs: origin_inner,
+         D15, D17, D21, p13 の DEF ρ-歩みと ρ-終端, 帰納法の仮定
+    <3>3. QED
+      BY <3>1, <3>2
+  <2>4. QED
+    `origin_inner` の腕は <2>1、<2>2、<2>3 が尽くす (L40 の <1>3 の QED と同じ数え上げである)。歩みの
+    最初の位置は `(v, λ)` なので、`id(v, λ)` はその歩みの上の位置である。「とくに」は <1>1 を歩みの
+    段数について繰り返したものである。
+    BY <2>1, <2>2, <2>3, <1>1, CODE src/rc_ir/ownership.rs: origin_inner,
+       CODE src/rc_ir/ownership.rs: Binding
 <1>3. 1 が成り立つ。
-  BY <1>2, DEF 類ごとの義務, D27, p13 の L11, 第 1 節の記法, D6
-  DEF 類ごとの義務 より `bumps_ρ(τ, C) ≥ 1` ならば、`C` に属するある名前 `o` と `pending` のある要素 `p`
-  について `B_ρ(τ, p)[o] ≥ 1` である。`p13` の `L11` より、そのような `o` は `ρ` で活性であり、第 1 節の
-  記法 より活性な名前は `ρ` の上のスロットである。D6 よりその変数は `τ` までに値を得ている。
+  <2>1. `bumps_ρ(τ, C) ≥ 1` とする。DEF 類ごとの義務 より、`τ` に対応する走査の状態 (DEF 実行時の量) の
+        `pending` のある要素 `p` と、`C` に属するある名前 `o` について `B_ρ(τ, p)[o] ≥ 1` である。
+    BY DEF 類ごとの義務, DEF 実行時の量, D27
+  <2>2. `p` の由来 (DEF 訪問) を `t = Retain(v, π)` とすると、`o = id(v, λ)` である `λ ∈ L(v, π)` が
+        在り、`λ` は `ty(v)` の boxed leaf である。
+    BY D27, P16, 第 1 節の記法, D4
+    D27 は、`p` が `pending` に入るときの `B_ρ` を、`π` の下の inhabited かつ計数下の各 leaf を
+    `origin` の identity で名付けて数えたものと定め、以後の操作はその多重集合から引くか、値をそのまま
+    運ぶだけである。よって `B_ρ(τ, p)` が 1 以上を与える名前はその数え上げに現れる名前であり、`L(v, π)`
+    の元の `id` である。P16 の (a) より `p` の由来は `Retain` 節点である。
+  <2>3. `α` が `τ` に実行している節点を `q` とすると、`t` は `ρ` の上で `q` より前にあるか `q` 自身で
+        ある。
+    BY L35, L34, DEF 実行時の量, DEF 訪問
+    DEF 実行時の量 より、`τ` に対応する走査の状態は `q` の訪問の中の `pending` である。L34 の 1 より
+    `q` の訪問が `pending` に施すのは `push`・`consume_objects`・`un_bump` であり、要素を加えるのは
+    `push` だけで、その要素の由来は `q` 自身である (`q` が `Retain` のとき)。それ以外の要素は
+    `pending(q)` の要素であり、L35 よりその由来は `ρ` の上で `q` より真に前にある。
+  <2>4. `v` は `τ` までに値を得ている。
+    BY <2>3, A11, D2, D3, D23
+    `t` は `v` を名指す節点である。A11 より `v` の使用はその位置でスコープに入っている束縛に解決し、
+    D2 のスコープの規則よりその束縛は `t` の祖先であるか、パラメータ・capture である。D3 より実行路は
+    祖先を先に通り、パラメータ・capture は活性化が始まる時点で値を持つ (D23)。<2>3 より `t` の位置は
+    `τ` 以前である。
+  <2>5. QED
+    BY <1>2, <1>1, <1>2a, <2>1, <2>2, <2>3, <2>4, D6, P18b, DEF 類ごとの義務
+    <2>2 と <1>2a より `o` は `(v, λ)` から始まる ρ-歩みの上の位置であり、その変数は `v` より後に値を
+    得ることがないので (<1>1)、<2>4 と合わせて `τ` までに値を得ている。D6 より `o` は `τ` における
+    スロットであり、<2>1 より `o ∈ C` なので、<1>2 より `C` は `τ` で開始している。P18b より `B_ρ` の
+    個数は 0 以上なので `bumps_ρ(τ, ・)` も 0 以上であり、`Σ_{C : obj(C) = O} bumps_ρ(τ, C)` の 0 でない
+    項はすべて `S(τ, O)` の類のものである。よってその和は `b(τ, O)` に等しい。
 <1>4. 2 が成り立つ。
   BY <1>2, D10, D6
   D10 の各行が名指すのは inhabited な leaf であり、その leaf を持つ値の変数はその事象の時点で値を得て
