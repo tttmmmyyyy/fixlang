@@ -2586,7 +2586,9 @@ leaf `(p, μ)` が D9 の意味で消費されるとし、`u = truncate_to_unit(
     この CASE の仮定より `Pre(V)` に `Retain(p, u)` 節点が在るので、<1>3 より `(p, u)` は
     `levelled_sites(Pre(V), type_env)` の元である。`μ` は inhabited であり、<2>3a より `u` の下の leaf で
     ある。よって <2>3 は P7a の節 2 である -- P7a は `owns_unit` と `owns_object` を `V` の `RewriteCtx` の
-    ものに取り、site を `levelled_sites` が挙げるものに取る。P7a より `owns_unit(p, u)` は真であり、
+    ものに取り、site を `levelled_sites` が挙げるものに取る。その `levelled_sites` の引数が `Pre(V)` で
+    あることは <1>1d であり、P7a の文面がその読みであることを第 7.5.9 節の (3) が差し戻す。
+    P7a より `owns_unit(p, u)` は真であり、
     `V` が借用版であるときは <1>2 より節点は落ちず `V` の本体に残る。`V` が借用版でないときは <1>1 より
     `rewrite_rc` が節点をそのまま返すので、やはり `V` の本体に残る。これが (A) である。
 
