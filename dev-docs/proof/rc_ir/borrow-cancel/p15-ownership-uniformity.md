@@ -17,7 +17,7 @@ P7a の残る向き (節 3 から節 2、節 3 から節 1) は偽である。`�
 `unit_step`)。第 3 節は (a) と (b) をこの形のまま証明する。この文書の中で P7e を読むのは L21 の `<1>1`
 の中と L22 の `<1>2` であり、どちらも (a) と (b) で足りる。
 
-この文書が読んだコードは、コミット `5aa87f26c246919eadcb3f1c3ce0252366c2aed8` の版である。
+この文書が読んだコードは、コミット `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` の版である。
 
 ## 0. 結論
 
@@ -586,6 +586,10 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
   BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step, rc_units_go
 
 <1>2. `is_fully_unboxed(τ)` が偽ならば `leaves(τ) ≠ ∅` かつ `units(τ) ≠ ∅` である。
+      `τ` から `unpunched_field_types(・)` の対の第 2 成分を取る歩みについての帰納で示す。すなわち
+      `unpunched_field_types(τ)` の各対の第 2 成分について結論が成り立つことを帰納法の仮定とする。
+      L1b よりその第 2 成分も扱う型であり、DEF 扱う型 と A10 よりその歩みは有限なので、この帰納は
+      整礎である。
   <2>1. `is_fully_unboxed` は、`is_box` / `is_closure` / `is_array` のいずれかで偽を返し、`is_funptr` で
         真を返し、それ以外では `unpunched_field_types` の全フィールドについての再帰の全称である。
     BY CODE src/ast/types.rs: TypeNode::is_fully_unboxed
@@ -620,7 +624,8 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
       `unpunched_field_types(τ)` の各対の下へ降りると述べる。
       BY L1a
     <3>3. `leaves(τ) ≠ ∅` である。
-      `<3>1` と型の in-place の降下についての帰納法の仮定より `leaves(fty) ≠ ∅` である。`<3>2` より
+      `<3>1` の `fty` は `unpunched_field_types(τ)` の対の第 2 成分なので、`<3>1` と帰納法の仮定より
+      `leaves(fty) ≠ ∅` である。`<3>2` より
       `go` は `path` に `idx` を積んで `fty` へ降りるので、`fty` から始めた走査が積む path の前に `idx` を
       置いたものが `leaves(τ)` に入る。
       BY <3>1, <3>2, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
@@ -631,8 +636,7 @@ A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- �
       `<3>1` と帰納法の仮定 `units(fty) ≠ ∅` から `units(τ) ≠ ∅` が出る。
       BY <3>1, <3>2, L1a, CODE src/rc_ir/ownership.rs: rc_units_go
     <3>5. QED
-      A10 より型の in-place の降下は有限なので、この帰納は基底に着く。
-      BY <3>3, <3>4, A10
+      BY <3>3, <3>4
   <2>5. QED
     まず `is_closure(τ)` の真偽で場を分ける。真のときは `<2>3` が当てはまる。偽のときは残る 3 つの述語で
     分ける -- `is_box(τ) ∨ is_array(τ)` ならば `<2>2` が当てはまり、どちらも偽で `is_funptr(τ)` ならば
