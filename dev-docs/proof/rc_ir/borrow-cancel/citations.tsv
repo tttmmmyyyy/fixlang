@@ -31,7 +31,7 @@ src/ast/types.rs	TypeNode::instance_field_types	D/A,P1,P2	27064fdf0a46
 src/ast/types.rs	TypeNode::is_array	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b	d430c390ceb3
 src/ast/types.rs	TypeNode::is_box	P1,P2	f364e8b05513
 src/ast/types.rs	TypeNode::is_closure	P1,P2,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b	938ff5f09f64
-src/ast/types.rs	TypeNode::is_fully_unboxed	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P27,P29	8b7f69faf6d2
+src/ast/types.rs	TypeNode::is_fully_unboxed	P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P27,P29	8b7f69faf6d2
 src/ast/types.rs	TypeNode::is_funptr	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P26	2c9fa9ac23a2
 src/ast/types.rs	TypeNode::is_ground	D/A	b2b0748bba35
 src/ast/types.rs	TypeNode::is_punched_array	P1,P2,P7a,P7d,P7e	426c57ec3ba1
@@ -166,7 +166,7 @@ src/fixstd/std.fix	boxed_from_retained_ptr	P27,P29	-
 src/fixstd/std.fix	boxed_to_retained_ptr	P27,P29	-
 src/fixstd/std.fix	mutate_unique_io	D/A,P26	-
 src/fixstd/stdlib.rs	make_std_mod	D/A,P26	6da374621d89
-src/generator.rs	Generator::add_global_object	D/A,P27,P28,P29	c05ffb02bb44
+src/generator.rs	Generator::add_global_object	D/A,P3,P4,P27,P28,P29	c05ffb02bb44
 src/generator.rs	Generator::apply_lambda	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P26,P27,P28,P29	53f3b45ec98b
 src/generator.rs	Generator::build_branch_by_is_unique	P26	86f1e644d331
 src/generator.rs	Generator::build_branch_by_refcnt_state	P26	d75157785307
@@ -177,11 +177,11 @@ src/generator.rs	Generator::build_run_destructor	D/A,P26,P27,P28,P29	add7538c029
 src/generator.rs	Generator::build_traverser_work	D/A	7f44d98475e9
 src/generator.rs	Generator::build_traverser_work_nonnull_boxed_with	D/A,P26,P27,P28,P29	f6637e5ceb38
 src/generator.rs	Generator::declare_lambda_function	P27,P29	e091531ab3d5
-src/generator.rs	Generator::declare_program_global	P27,P29	ba2a67ad0c2e
+src/generator.rs	Generator::declare_program_global	P3,P4,P27,P29	ba2a67ad0c2e
 src/generator.rs	Generator::get_lambda_func_ptr	P27,P29	7fb0c56a5446
-src/generator.rs	Generator::get_or_declare_global	P27,P29	528a6fcc3916
+src/generator.rs	Generator::get_or_declare_global	P3,P4,P27,P29	528a6fcc3916
 src/generator.rs	Generator::get_scoped_obj	P8,P9,P10,P11,P12,P13,P14,P14a,P27,P28,P29	8931a2ab6068
-src/generator.rs	Generator::get_scoped_value	D/A,P27,P29	c6a7bbca6b83
+src/generator.rs	Generator::get_scoped_value	D/A,P3,P4,P27,P29	c6a7bbca6b83
 src/generator.rs	Generator::mark_global	D/A,P26,P28	a286105176a5
 src/generator.rs	Generator::mark_threaded	D/A,P27,P29	0a998e05aae3
 src/generator.rs	Scope::push_local	D/A,P28	fd57787daef2
@@ -315,7 +315,7 @@ src/rc_ir/lower.rs	Lowerer::lower_llvm	P27,P29	4107324b7a5d
 src/rc_ir/lower.rs	Lowerer::lower_match	D/A,P5,P6,P7	c6447f9c6d40
 src/rc_ir/lower.rs	Lowerer::lower_symbol	P8,P9,P10,P11,P12,P13,P14,P14a,P26,P27,P29	fe2a3c83ab94
 src/rc_ir/lower.rs	Lowerer::lower_to_var	P8,P9,P10,P11,P12,P13,P14,P14a	b538c361ee64
-src/rc_ir/lower.rs	Lowerer::lower_var	D/A,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P27,P29,(P-insert)	36b5f9576f3c
+src/rc_ir/lower.rs	Lowerer::lower_var	D/A,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P27,P29,(P-insert)	36b5f9576f3c
 src/rc_ir/lower.rs	lower_lambda_as_function	P26	05076bfd9b47
 src/rc_ir/lower.rs	lower_program	P8,P9,P10,P11,P12,P13,P14,P14a	f83dc3d6d8d6
 src/rc_ir/lower.rs	lower_var	P26	36b5f9576f3c
@@ -334,7 +334,7 @@ src/rc_ir/ownership.rs	References::shares_an_object	P7c,P7f,P15,P16,P17,P18,P18a
 src/rc_ir/ownership.rs	References::subtract	P15,P16,P17,P18	9bb51508f153
 src/rc_ir/ownership.rs	UnitStep	P7a,P7d,P7e,(P-insert)	05df4edabb67
 src/rc_ir/ownership.rs	VarTable	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e	8cc52d7bb86a
-src/rc_ir/ownership.rs	VarTable::body_only	P1,P2,P5,P6,P7,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P18c,P19,P20,P21,P22,P23,P24,P26,(P-insert)	4a2b012dec05
+src/rc_ir/ownership.rs	VarTable::body_only	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P18c,P19,P20,P21,P22,P23,P24,P26,(P-insert)	4a2b012dec05
 src/rc_ir/ownership.rs	VarTable::empty	P5,P6,P7,P7a,P7d,P7e	4337c70ec267
 src/rc_ir/ownership.rs	VarTable::of	P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P26,(P-insert)	63b85a2cb761
 src/rc_ir/ownership.rs	acted_references	D/A,P3,P4,P5,P6,P7,P15,P16,P17,P18,(P-insert)	385b3a4bb1f7
