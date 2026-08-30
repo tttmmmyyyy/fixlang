@@ -1834,13 +1834,28 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 <1>29a. 1 つの表 `vars` と型環境 `E` を固定する。`origin(vars, E, u, sig)` が値を返すとき、その値は
    `(u, sig)` で決まる。すなわち、`vars.origins` の状態がどうであれ、同じ `(u, sig)` についての
    2 回の呼び出しは等しい値を返す。
-  <2>1. `vars.bindings` と `vars.var_tys` は、表を作り終えたのちは変わらない。この 2 つは
-     `VarTable` の非公開フィールドであり、書き込むのは `VarTable::of`、`VarTable::body_only`、
-     `collect_bindings` だけで、どれも表を作る間にしか走らない。`origin` は `&VarTable` を取るので、
-     内部可変性を持つ `origins` 以外を書き換えられない。
-    BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::of,
-       CODE src/rc_ir/ownership.rs: VarTable::body_only,
-       CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin
+  <2>1. `vars.bindings` と `vars.var_tys` は、表を作り終えたのちは変わらない。
+    <3>1. `bindings` は `VarTable` の非公開フィールドなので、それに書けるのは
+       `src/rc_ir/ownership.rs` の中だけである。同ファイルで `bindings` に書くのは、
+       `VarTable::empty` の初期化と、`VarTable::of` の 1 か所と、`collect_bindings` の 3 か所で
+       ある (残る 1 か所は `#[cfg(test)] mod tests` の中の `table` である)。`VarTable::body_only` は
+       `VarTable::empty` と `collect_bindings` を呼ぶだけである。どれも表を作る間にしか走らない。
+      BY CODE src/rc_ir/ownership.rs: VarTable (`bindings` の宣言),
+         CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
+         CODE src/rc_ir/ownership.rs: VarTable::body_only,
+         CODE src/rc_ir/ownership.rs: collect_bindings
+    <3>2. `var_tys` は `pub(crate)` なので、クレート全体を見る。`src/` のうち
+       `src/rc_ir/ownership.rs` の外に `var_tys` の出現は 1 つも無く、同ファイルの中で `var_tys` に
+       書くのは `VarTable::empty` の初期化と、`VarTable::of` の 1 か所と、`collect_bindings` の
+       3 か所である (残る 1 か所は `#[cfg(test)] mod tests` の中の `table` である)。どれも表を作る
+       間にしか走らない。
+      BY CODE src/rc_ir/ownership.rs: VarTable (`var_tys` の宣言),
+         CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
+         CODE src/rc_ir/ownership.rs: collect_bindings
+    <3>3. `origin` は `&VarTable` を取るので、内部可変性を持つ `origins` 以外を書き換えられない。
+      BY CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: VarTable
+    <3>4. QED
+      BY <3>1, <3>2, <3>3
   <2>1a. `origin_from_leaves_under(vars, E, decl, args, path, here)` の返り値は、`decl`、`args`、
      `path`、`here`、`E`、および自分が行う `origin` の呼び出しの返り値だけで決まる。とくに
      `operand_units` の反復の順序には依らない。
@@ -1872,8 +1887,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `reached.iter().all(|o| o == first)` は偽である -- 真だとすると `a == first` かつ
        `b == first` であり、`<3>3` の同値関係から `a == b` になって仮定に反する。よって返り値は
        `Some(Origin::of_candidates(candidates, here))` である。`candidates` は `reached` の各要素の
-       `acted_on()` を集めた `Set<VarPath>` であり、集合としては並び順に依らない。`of_candidates` が
-       読むのは `candidates.len()` と、それが 1 のときのただ 1 つの要素と、`here` だけである。
+       `acted_on()` を集めた `Set<VarPath>` であり、集合としては並び順に依らない。`of_candidates` は
+       `candidates.is_empty()` を表明で見たのち `candidates.len()` で場合を分け、1 のときは
+       `into_iter().next()` が返す元を `Origin::Exactly` に置き、それ以外のときは `candidates`
+       そのものを `Origin::Join` の同名の欄に、`here` の複製を `identity` の欄に置く。要素数が 1 の
+       集合の `into_iter().next()` はその元であり、要素数 2 以上のときに置かれる `Set` は並び順に
+       依らず等しいので、`<3>3` の `Origin` の等価性のもとで返り値はどちらの場合も並び順に依らない。
       BY <3>2, <3>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
          CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::acted_on
     <3>7. QED
