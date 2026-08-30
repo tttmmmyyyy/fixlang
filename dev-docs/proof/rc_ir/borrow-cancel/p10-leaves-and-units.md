@@ -1,13 +1,12 @@
 # P1 (leaf と unit の対応) と P2 (`origin` の全域性と停止性) の証明
 
-対象コミットは `02805734f81a8ed842a614cd952494e954770aaa` である。
+対象コミットは `921d0473ac523171df56ce78f49de3e3ba480484` である。
 
 この文書が立つのは README の定義 D1、D2、D4、D5 と仮定 A3、A6、A9、A10、A11、A12、A13、A15 の上で
 ある。証明は 1 本の構造化証明で、その QED が次の 3 つである。
 
-- **P1** (leaf と unit の対応)。成り立つのは `<1>1` を満たす型についてである。README の P1 は
-  「A10 を満たす任意の型 `τ` について」と書いており、`<1>1` は A10 に前提を 1 つ足したものである。
-  第 3 節がこの差を述べる。
+- **P1** (leaf と unit の対応)。README の P1 が量化する型、すなわち **A10 を満たす**任意の型に
+  ついて成り立つ。`<1>1` は A10 をこの文書の記法で述べたものである。第 3 節がその対応を述べる。
 - **P2** (`origin` の全域性と停止性)。
 - **P1 の系** (`<1>33`, `<1>34`)。`origin` の再帰が辿る path も、`origin` が返す `VarPath` の path も、
   どれも「その型の unit に届く」。すなわちそれらに `truncate_to_unit` を当てると abort せず、値は
@@ -64,6 +63,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 > blocks are dropped immediately after the tail expression is evaluated.
 
 一時値はその temporary scope の終わりで drop される。
+
+**外部の結果 (`HashSet` の等価性)** -- 標準ライブラリの `HashSet<T, S>` の `PartialEq` は、両者の
+要素数が等しく、かつ一方のすべての要素が他方に含まれるときにだけ真を返す。すなわち `==` は集合と
+しての等価性であり、反復の順序に依らない。`<1>29a` の `<2>1a` の `<3>3` がこれを引く。`crate::misc` の
+`Set<T>` は `FxHashSet<T>`、すなわちハッシャだけを差し替えた `HashSet<T, S>` である
+(`CODE src/misc.rs: Set`)。
 
 **DEF 呼び出しの辺** -- 表 `vars` と型環境 `E` を固定する。対 `(u, sig)` から対 `(u', sig')` への
 **呼び出しの辺**とは、`origin_inner(vars, E, u, sig)` の実行が `origin(vars, E, u', sig')` を呼ぶことを
@@ -136,9 +141,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    できるならば、`t'` からフィールドの辺で到達できる型は `t` からも到達できるので、`t'` も `<1>1` を
    満たす。以下で `<1>1` を部分木の型に当てるのはこれによる。
 
-   (i) と (ii) は A10 である。A10 の第 1 文が (i) を、第 3 段落「`unpunched_field_types` を繰り返し
-   取って到達する型についても同じことが成り立ち、その歩みは有限である」が (ii) を与える。**(iii) は
-   A10 に無く、この文書が足す前提である** (第 3 節)。
+   **3 つはどれも A10 である。** A10 の第 1 文「プログラムに現れる型は ground であり、その tycon に
+   kind の要求するだけの引数が与えられており、その tycon は `type_env` にある」が (i) を、
+   「`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が
+   `type_env` にある -- がすべて成り立ち、その歩みは有限である」が (ii) を、それに続く「さらに、到達
+   する各型について `instance_field_types` が行う newtype の展開 (`unwrap_newtypes_memoized`) は
+   abort せず停止する」が (iii) を与える。第 3 節がこの対応を述べる。
 
    **A10 を果たす `validate_layouts` は elaboration で必ず走るが、最適化が作る型を再検査するのは
    develop build だけである。**これは A10 の但し書きである。`borrow_ify` と `cancel` は最適化の後に
@@ -187,7 +195,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   BY A9, CODE src/rc_ir/validate.rs: Validator::check_rhs (`RcRhs::Match` の腕の `arms.is_empty()`
      検査)
 
-<1>3a. **(H4: 束縛の形と型が合っている)** 関数本体について次の 7 つが成り立つ。
+<1>3a. **(H4: 束縛の形と型が合っている)** 関数本体について次の 8 つが成り立つ。
    - (i) `Let(x, RcRhs::Var(y), k)` について `ty(y)` は `ty(x)` に等しい。
    - (ii) `Let(x, RcRhs::Match(scrut, arms), k)` の各アームについて、`returned_var(&arm.body)` の型は
      `ty(x)` に等しい。
@@ -204,24 +212,37 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `ty(x)` の上で定義されている。この文書が読むのはそのうち次の 3 つである。
      - `args` の名前の列は `llvm_gen.free_vars()` に等しい。
      - `llvm_gen` が `InlineLLVMStructPunchBody` であるとき、`ty(x).is_box(E)` と
-       `ty(x).is_array()` はどちらも偽であり、`ty(x).field_types(E)` は長さ 2 の列を返し、その第
-       `PUNCHED_STRUCT_FIELD` 成分の型は `<1>1` を満たす構造体であって、第 `llvm_gen.field_idx`
-       フィールドが穴である。
+       `ty(x).is_array()` はどちらも偽であり、`ty(x).field_types(E)` は長さ 2 の列を返す。その第
+       `PUNCHED_STRUCT_FIELD` 成分の型を `pt` と書くと、`pt` は `<1>1` を満たす構造体であり、
+       `pt.is_closure()` は偽であって、`pt.toplevel_tycon_info(E).fields[llvm_gen.field_idx]` の
+       `is_punched` は真である。
      - `llvm_gen` が `InlineLLVMStructSetBody` か `InlineLLVMStructPlugInBody` であるとき、
        `ty(x).is_array()` は偽である。
+   - (viii) `Let(x, RcRhs::Llvm(llvm_gen, args), k)` について、`llvm_gen` の `result_prov` が結果の
+     ある leaf の宣言として単一の `LeafOrigin::Arg(j, sigma)` を置くとき、`j` は `args` の添字で
+     あり (すなわち `args.len()` 未満であり)、`sigma` は `L(ty(args[j]))` の要素である。
 
-   7 つはどれも A12 である。(iii) と (v) が `F`、すなわち `unpunched_field_types` の要素で
+   8 つはどれも A12 である。(iii) と (v) が `F`、すなわち `unpunched_field_types` の要素で
    あることを言うのは、A12 の「`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が
    実際に持つ (punched でない) ものであること」を述べたものである。(vii) の 3 つは A12 の
    「`Llvm` 節点の型についての 3 つ」である。A12 の第 2 項は punched struct の成分を「A10 を満たす
-   構造体」と書く。(vii) がそこを `<1>1` と書くのは、`<1>1` が A10 に (iii) を足したものだからで
-   あり、この差は `<1>1` の (iii) と同じ 1 つの差である (第 3 節)。
+   構造体」と書く。`<1>1` は A10 をこの文書の記法で述べたものなので (第 3 節)、(vii) はそこを
+   `<1>1` と書く。**同じ項が「第 `field_idx` フィールドが穴である」と言うのは、`pt` の `TyConInfo`
+   の `fields` の第 `field_idx` 成分の `is_punched` についてである。**その `TyConInfo` を返す
+   `toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、この項が立つとき
+   `pt.is_closure()` は偽である。
+
+   (viii) は A12 の「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字で
+   あり、`σ` はその型の boxed leaf である」である。「その型」は第 `j` オペランドの型 `ty(args[j])`、
+   「boxed leaf」は D4 の意味、すなわち `boxed_leaf_paths(ty(args[j]))` が列挙する path であり、
+   この文書の記法では `L(ty(args[j]))` の要素である。
   BY A12, CODE src/rc_ir/ast.rs: RcRhs (`Var` の doc「Move / rename `y := x`, consuming `x`」),
      CODE src/rc_ir/ast.rs: MatchArm (`tag` と `payload` の doc),
      CODE src/rc_ir/ast.rs: RcExpr (`Destructure` の doc「Destructure a struct/tuple container into
        its fields at once ... Each `(index, var)` binds field `index` to `var`」),
      CODE src/rc_ir/ast.rs: RcVar,
      CODE src/ast/types.rs: TypeNode::unpunched_field_types,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
      CODE src/rc_ir/ownership.rs: returned_var,
      CODE src/rc_ir/ownership.rs: VarTable::of,
      CODE src/rc_ir/ownership.rs: collect_bindings
@@ -236,8 +257,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    | `bulitin_tycons` | `Primitive` | 112 個。名前つきの 12 個 (`IOState`、`Ptr`、`U8`、`I8`、`U16`、`I16`、`I32`、`U32`、`I64`、`U64`、`F32`、`F64`) と、`1..=FUNPTR_ARGS_MAX` の各 arity についての `#FunPtr{n}` -- `FUNPTR_ARGS_MAX` は 100 である。名前つきの 12 個は `fields: vec![]` と `tyvars: vec![]` を持ち、`#FunPtr{n}` は `fields: vec![]` と `tyvars` が `a0` から `a{n-1}` までの相異なる名前の列である |
    | `bulitin_tycons` | `Array` | 1 個 (`Std::Array`)。`tyvars: vec![make_tyvar("a", ...)]` |
    | `bulitin_tycons` | `Arrow` | 1 個。`tyvars` は `a` と `b` |
-   | `bulitin_tycons` | `DynamicObject` | 1 個 (`#DynamicObject`)。`is_unbox: false` |
-   | `bulitin_tycons` | `ArrayStorage` | 1 個 (`#ArrayStorage`)。`is_unbox: false` |
+   | `bulitin_tycons` | `DynamicObject` | 1 個 (`#DynamicObject`)。`is_unbox: false`、`tyvars: vec![]` |
+   | `bulitin_tycons` | `ArrayStorage` | 1 個 (`#ArrayStorage`)。`is_unbox: false`、`tyvars: vec![make_tyvar("a", ...)]` |
    | `TypeDefn::tycon_info` | `Struct` か `Union` | 宣言ごとに 1 個 (穴つきの形を含む)。`tyvars` は `self.tyvars` |
    | `CaptureStruct::new` | `Struct` | capture 構造体ごとに 1 個。`tyvars: vec![]` |
    | `register_opaque_tycon` | `Opaque` | 不透明型ごとに 1 個。`is_unbox: false` |
@@ -269,8 +290,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    - (c) `t.is_closure()` が偽であるとき、`t.toplevel_tycon_info(E)` と `t.is_union(E)` は abort せず
      値を返す。
    - (d) `t.is_closure()` と `t.is_box(E)` がどちらも偽であるとき、`t.unpunched_field_types(E)` と
-     `t.field_types(E)` は abort せず停止する。この 2 つの列は長さが等しく、`F(t)` の各要素 `(i, f)`
-     について `i` は `t.field_types(E)` の長さ未満であり `f` は `t.field_types(E)[i]` である。
+     `t.field_types(E)` は abort せず停止する。`t.field_types(E)` の長さは
+     `t.toplevel_tycon_info(E).fields` の長さに等しい。`F(t)` は `t.field_types(E)` の要素のうち、
+     `fields` の同じ添字の成分の `is_punched` が偽であるものを、その添字とともに並べた列である。
+     とくに `F(t)` の各要素 `(i, f)` について `i` は `t.field_types(E)` の長さ未満であり、`f` は
+     `t.field_types(E)[i]` である。
   <2>1. (a) が成り立つ。
     <3>1. この 4 つはいずれも `toplevel_tycon_satisfies(pred)` の 1 行であり、
        `toplevel_tycon_satisfies` は `self.toplevel_tycon()` の `Option` を見て `Some` なら `pred` を、
@@ -296,26 +320,30 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>4. `E.tycons()` の鍵のうち `<3>3` の形の名前を持つのは、`bulitin_tycons` が
        `make_funptr_tycon(n)` (`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下の `u32`) の下に入れる 100 個
        だけである。`E` の鍵は次の 4 か所から来る。`TypeEnv` を作るのは `calculate_type_env` の
-       `TypeEnv::new` であり、鍵を足すのは `TypeEnv::add_tycons` だけで、それを呼ぶのは
-       `closure_specialization` の 2 か所と `defunctionalize_fix` の 1 か所と
-       `register_opaque_tycon` の 1 か所である。
+       `TypeEnv::new` であり、鍵を足すのは `TypeEnv::add_tycons` だけである。`add_tycons` を呼ぶ
+       場所は `closure_specialization::lift_all`、`closure_specialization::realize_all`、
+       `defunctionalize_fix::run_one`、`desugar_opaque::register_opaque_tycon` の 4 つである。
        - `Program::calculate_type_env` が置く `bulitin_tycons()` の鍵。`<1>3b` の表の 5 行が
          挙げるもので、`#FunPtr` で始まるのは `make_funptr_tycon(n)` だけである。
        - `Program::calculate_type_env` が置く `type_decl.tycon()` と、構造体についてその名前に
          `PUNCHED_TYPE_SYMBOL` (`"#PunchedAt"`) と添字を継いだ穴つきの形。A13 より Fix の識別子は
          `#` を含まないので、どちらも `#FunPtr` では始まらない。
-       - `TypeEnv::add_tycons` が置く capture 構造体の型構成子。その名前は
-         `CaptureStruct::new` が `format!("{}@{}", prefix, owner.name)` で作り、`prefix` は
-         `"#FixCap"` か `CAP_LIST_PREFIX` (`"#CapList"`) である。
-       - `TypeEnv::add_tycons` が置く不透明型の型構成子。その名前は不透明型変数の名前であり、
-         `?` で始まる。
+       - `lift_all` と `realize_all` が `add_tycons` に渡す capture 構造体の型構成子。この 2 つが
+         渡すのは `LiftedLambdas::take_new_tycons()` の返り値であり、その `new_tycons` へ入れるのは
+         `record_capture_list` だけで、入れる鍵は `CaptureStruct` の `tycon` である。`run_one` が
+         `add_tycons` に渡す鍵も、`FixDefunctionalizer::lift` が作った `CaptureStruct` の `tycon` で
+         ある。その名前は `CaptureStruct::new` が `format!("{}@{}", prefix, owner.name)` で作り、
+         `prefix` は `"#FixCap"` か `CAP_LIST_PREFIX` (`"#CapList"`) である。
+       - `register_opaque_tycon` が `add_tycons` に渡す不透明型の型構成子。その名前は不透明型変数の
+         名前であり、`?` で始まる。
       BY A13, <1>3b, CODE src/ast/program.rs: Program::calculate_type_env,
          CODE src/ast/program.rs: TypeEnv::add_tycons,
          CODE src/ast/types.rs: TyCon::into_punched_type_name,
          CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, CODE src/constants.rs: CAP_LIST_PREFIX,
          CODE src/optimization/capture_struct.rs: CaptureStruct::new,
-         CODE src/optimization/defunctionalize_fix.rs: run,
-         CODE src/optimization/closure_specialization.rs: record_capture_list,
+         CODE src/optimization/defunctionalize_fix.rs: run_one, FixDefunctionalizer::lift,
+         CODE src/optimization/closure_specialization.rs: lift_all, realize_all,
+             record_capture_list, take_new_tycons,
          CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon,
          CODE src/fixstd/builtin.rs: make_funptr_tycon,
          CODE src/fixstd/builtin.rs: make_funptr_name
@@ -401,12 +429,17 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>8. QED
     (a) は `<2>1`、(b) は `<2>3`、(c) は `<2>2` である。(d) を示す。仮定は `t.is_closure()` と
     `t.is_box(E)` がどちらも偽であることで、これは `<2>4` から `<2>7` が置いた仮定である。
+    `<2>7` より `t.field_types(E)` は abort せず停止し、その長さは `ti.fields` の長さに等しい。
     `unpunched_field_types` は `self.toplevel_tycon_info(type_env)` を `ti` に取り、
     `self.instance_field_types(ti, type_env)` の結果に `into_iter().enumerate()` を当ててから
-    `filter(|(i, _)| !ti.fields[*i].is_punched)` で絞る。`<2>7` よりその列の長さは `ti.fields` の
+    `filter(|(i, _)| !ti.fields[*i].is_punched)` で絞る。`field_types` は
+    `self.instance_field_types(self.toplevel_tycon_info(type_env), type_env)` の 1 文なので、
+    `unpunched_field_types` が絞る列は `t.field_types(E)` そのものである。その長さは `ti.fields` の
     長さに等しいので `enumerate` が渡す `i` はどれも `ti.fields` の添字として範囲内であり、
-    `ti.fields[*i]` は abort しない。`filter` は要素を落とすだけなので、残った `(i, f)` の `f` は
-    `instance_field_types` の結果の第 `i` 要素、すなわち `field_types` の第 `i` 要素である。
+    `ti.fields[*i]` は abort しない。`filter` は要素を落とすだけなので、`F(t)` は
+    `t.field_types(E)` の要素のうち `ti.fields` の同じ添字の成分の `is_punched` が偽であるものを、
+    その添字とともに並べた列であり、その各要素 `(i, f)` について `i` は `t.field_types(E)` の長さ
+    未満で `f` は `t.field_types(E)[i]` である。
     BY <2>1, <2>2, <2>3, <2>7, CODE src/ast/types.rs: TypeNode::unpunched_field_types,
        CODE src/ast/types.rs: TypeNode::field_types
 
@@ -1045,16 +1078,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>5. QED
     BY <2>3, <2>4
 
-<1>20. **P1 が `<1>1` を満たす型について成り立つ。** すなわちそのような型 `t` について、`L(t)` の各
-   要素 `lam` の `T(t, lam)` は `U(t)` の要素であり、`U(t)` の各要素 `u` はある `L(t)` の要素の
-   `T(t, ・)` である。
+<1>20. **P1 が成り立つ。** すなわち `<1>1` を満たす型 `t` について、`L(t)` の各要素 `lam` の
+   `T(t, lam)` は `U(t)` の要素であり、`U(t)` の各要素 `u` はある `L(t)` の要素の `T(t, ・)` で
+   ある。`<1>1` は A10 をこの文書の記法で述べたものなので (第 3 節)、これは README の P1
+   --「**A10 を満たす**任意の型 `τ` について」-- そのものである。
 
-   何らかの制限が要ることは `<1>19a` が言う。`t.is_closure()` が偽で型構成子が `E` に無い型に
-   ついては `L(t)` も `U(t)` も定まらず、P1 の言明の 2 つの辺が意味を持たない。
-
-   README の P1 は「A10 を満たす任意の型 `τ` について」と書く。`<1>1` は A10 の (i)(ii) に (iii) を
-   足したものなので、README の P1 が量化する型のうち (iii) を満たすものについて、`<1>20` は README の
-   P1 そのものを与える。第 3 節がこの差を述べる。
+   A10 が型に条件を置くことが空虚でないのは `<1>19a` による。`t.is_closure()` が偽で型構成子が `E`
+   に無い型については `L(t)` も `U(t)` も定まらず、P1 の言明の 2 つの辺が意味を持たない。
   BY <1>18, <1>19, <1>19a
 
 <1>21. `VarTable::of(func)` または `VarTable::body_only(body)` が作る表 `vars` について、
@@ -1371,10 +1401,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   返り値は `o.identity()` を必ず含む。
   BY CODE src/rc_ir/ownership.rs: Origin::acted_on
 
-<1>27b. `Provenance` を作る 4 つの関数 -- `Provenance::build_shape`、`Provenance::uniform`、
+<1>27b. 次の 4 つの関数 -- `Provenance::build_shape`、`Provenance::uniform`、
    `Provenance::uniform_bottom`、`Provenance::fresh_under` -- を `<1>1` を満たす型 `ty` に対して
    呼ぶとき、abort しうるのは `build_shape` に渡された閉包の中だけであり、その閉包が受け取る
    `path` は `L(ty)` の要素である。閉包を引数に取らない残りの 3 つは abort せず停止する。
+
+   **`Provenance` はこの 4 つのほかに `empty`、`arg_passthrough`、`join`、`compose`、`project`、
+   `set_leaves_under`、`demote` を持つ。**`result_prov` の呼び出しが `Provenance` を作るのにこの
+   4 つしか使わないことは、既定の実装と 29 個の override を 1 つずつ開く `<1>28` が数え上げる。
   <2>1. `Provenance::build_shape(ty, E, leaf)` は `LeafMap::build_shape(ty, E, leaf)` を呼ぶ。
      `LeafMap::build_shape` は `boxed_leaf_paths(ty, E)` を 1 度呼び、返った各 `path` について
      `leaf(&path)` を呼び、対 `(path, fact)` を `Map` に積む。`<1>9` より `boxed_leaf_paths(ty)` は
@@ -1401,8 +1435,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        CODE src/rc_ir/provenance.rs: Provenance::set_leaves_under,
        CODE src/rc_ir/leaf_map.rs: LeafMap::map_leaves_under
   <2>5. QED
-    `<2>1` が `build_shape` を、`<2>2` から `<2>4` が残る 3 つを尽くしている。
-    BY <2>1, <2>2, <2>3, <2>4
+    `<2>1` が `build_shape` を、`<2>2` から `<2>4` が残る 3 つを尽くしている。`Provenance` が
+    `empty`、`arg_passthrough`、`join`、`compose`、`project`、`set_leaves_under`、`demote` も
+    持つことは、`impl Provenance` の本体が挙げている。
+    BY <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/provenance.rs: Provenance
 
 <1>27c. `<1>1` を満たす型 `t` について、`t.is_unbox(E)` と `t.is_box(E)` は abort せずに真偽値を
    返す。
@@ -1521,23 +1557,56 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        添字は相異なるので、`PUNCHED_STRUCT_FIELD` で始まる要素はその添字を持つ 1 つの `(i, f)` から
        だけ来る。
       BY <1>1, <1>11, <1>12, <1>14a, <3>3a
-    <3>4. `arg_leaf_path` の `assert_ne!` が発火するのは、`path` が
+    <3>4. `s` を `<3>1` が取り出す型 `result_ty.field_types(E)[PUNCHED_STRUCT_FIELD]` とすると、
+       `L(s)` の要素で `self.field_idx` で始まるものは無い。
+      <4>1. `s` は `<1>1` を満たし、`s.is_closure()` は偽であり、
+         `s.toplevel_tycon_info(E).fields[self.field_idx]` の `is_punched` は真である。`<1>28` の
+         前置きより `result_ty` はこの `Llvm` 節点の `ty(x)` なので、`s` は `<1>3a` (vii) の
+         `pt` である。
+        BY <1>3a
+      <4>2. `cls(s)` は `CL` ではない。`DEF cls` の `CL` の行は `s.is_closure()` が真であることを
+         要求し、`<4>1` はそれが偽だと述べる。
+        BY <4>1, DEF cls
+      <4>3. 長さ 1 以上の `s` の UNST-道が在れば、`cls(s)` は `UN` か `ST` である。`DEF UNST-道` の
+         条件を `j = 0` に読むとそれである。
+        BY DEF UNST-道
+      <4>4. CASE `cls(s) = NB`。`<4>1` より `<1>14` を `s` に当てられる。`<4>3` より `s` の UNST-道は
+         `[]` だけであり、`end(s, []) = s` のクラスは `NB` なので、`<1>14` の第 1 の集合の条件
+         (`BX` か `AR`) にも第 2 の集合の条件 (`CL`) にも当たらない。よって `L(s)` は空であり、
+         主張は空虚に成り立つ。
+        BY <1>14, <4>1, <4>3, DEF UNST-道
+      <4>5. CASE `cls(s)` が `BX` か `AR`。`<4>3` より `s` の UNST-道は `[]` だけであり、
+         `end(s, []) = s` のクラスはこの場合の仮定より `BX` か `AR` なので、`<1>14` の第 1 の集合が
+         `[]` を、第 2 の集合が何も与えない。よって `L(s)` は `{[]}` であり、空の path はどの添字でも
+         始まらない。
+        BY <1>14, <4>1, <4>3, DEF UNST-道
+      <4>6. CASE `cls(s)` が `UN` か `ST`。`<1>11` より `go(s, [], out)` が積むのは `F(s)` の各
+         `(i, f)` についての `go(f, [i], out)` が積むものの合併であり、`<1>1` (ii) より `f` も
+         `<1>1` を満たすので、`<1>14a` よりそれは `{ [i] ++ r : r は L(f) の要素 }` である。よって
+         `L(s)` の空でない要素はどれも `F(s)` のある添字で始まる。この場合の仮定と `DEF cls` より
+         `s.is_box(E)` は偽であり、`<4>1` より `s.is_closure()` も偽なので、`<1>3c` (d) を `s` に
+         当てられる。それより `F(s)` の添字は、`s.toplevel_tycon_info(E).fields` の同じ添字の成分の
+         `is_punched` が偽であるものに限る。`<4>1` より第 `self.field_idx` 成分の `is_punched` は
+         真なので、`self.field_idx` は `F(s)` の添字ではない。`L(s)` の空の要素はどの添字でも
+         始まらない。
+        BY <1>1, <1>3c, <1>11, <1>14a, <4>1, DEF cls
+      <4>7. QED
+        `<1>4` より `cls(s)` は 6 つのどれかであり、`<4>2` が `CL` を退け、`<4>4`、`<4>5`、`<4>6` が
+        残る `NB`、`BX`、`AR`、`UN`、`ST` を尽くしている。
+        BY <1>4, <4>2, <4>4, <4>5, <4>6
+    <3>4a. `arg_leaf_path` の `assert_ne!` は発火しない。`assert_ne!` が発火するのは、`path` が
        `[PUNCHED_STRUCT_FIELD, self.field_idx] ++ ・` の形のときだけである。`<3>3b` より、そのような
-       `path` が `L(result_ty)` に在るのは `(PUNCHED_STRUCT_FIELD, s)` が `F(result_ty)` の要素で
-       あって `L(s)` が `self.field_idx` で始まる要素を持つときに限る。`<1>3c` (d) より `s` は
-       `result_ty.field_types(E)[PUNCHED_STRUCT_FIELD]`、すなわち `<3>1` が取り出す型であり、
-       `<1>3a` (vii) より `s` は構造体であって第 `self.field_idx` フィールドが穴である。
-       `<1>1` (ii) より `s` は `<1>1` を満たすので `<1>11` を `s` に当てられる。`L(s)` の要素で
-       空でないものは、`cls(s)` が `CL` なら `[c]` だけ (`s` は構造体なので `is_closure()` は偽で
-       あり、この場合は起きない)、`UN` か `ST` なら `F(s)`、すなわち `unpunched_field_types` が返す
-       フィールドの添字で始まる。穴はそこに入らない。よって `L(s)` に `self.field_idx` で始まる要素は
-       無く、`assert_ne!` は発火しない。
-      BY <1>1, <1>3a, <1>3c, <1>11, <3>1, <3>3b, DEF cls,
-         CODE src/ast/types.rs: TypeNode::unpunched_field_types,
+       `path` が `L(result_ty)` に在るのは `(PUNCHED_STRUCT_FIELD, s')` が `F(result_ty)` の要素で
+       あって `L(s')` が `self.field_idx` で始まる要素を持つときに限る。`<3>3a` より
+       `result_ty.is_closure()` は偽であり、`<1>3a` (vii) より `result_ty.is_box(E)` も偽なので、
+       `<1>3c` (d) を `result_ty` に当てられる。それよりその `s'` は
+       `result_ty.field_types(E)[PUNCHED_STRUCT_FIELD]`、すなわち `<3>4` の `s` である。`<3>4` より
+       そのような要素は無い。
+      BY <1>3a, <1>3c, <3>1, <3>3a, <3>3b, <3>4,
          CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
     <3>5. QED
       閉包の残りは `Vec` の連結と `sole_origin` だけである。
-      BY <1>1, <1>27b, <3>1, <3>2, <3>3, <3>3a, <3>3b, <3>4,
+      BY <1>1, <1>27b, <3>1, <3>2, <3>3, <3>3a, <3>3b, <3>4, <3>4a,
          CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::result_prov
   <2>2g. 2 個 (`InlineLLVMStructSetBody`、`InlineLLVMStructPlugInBody`) の本体は
      `replaced_field_prov(result_ty, type_env, field_idx, struct_arg, value_arg)` の 1 文である。
@@ -1561,8 +1630,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          CODE src/fixstd/builtin.rs: InlineLLVMStructPlugInBody::result_prov
   <2>3. QED
     `<2>1` より場合は既定の実装と 29 個の override で尽きている。`<2>2` が既定を、`<2>2a` から
-    `<2>2g` が 16 + 1 + 5 + 2 + 2 + 1 + 2 = 29 個を尽くしている。
-    BY <2>1, <2>2, <2>2a, <2>2b, <2>2c, <2>2d, <2>2e, <2>2f, <2>2g
+    `<2>2g` が 16 + 1 + 5 + 2 + 2 + 1 + 2 = 29 個を尽くしている。**`<1>27b` を 4 つの関数に
+    ついてだけ述べて足りるのは、この数え上げによる** -- `<2>2` から `<2>2g` はどれも本体を 1 つずつ
+    読んでおり、そこで `Provenance` を作るのに使われるのは `build_shape`、`uniform`、
+    `uniform_bottom`、`fresh_under` の 4 つだけである。
+    BY <1>27b, <2>1, <2>2, <2>2a, <2>2b, <2>2c, <2>2d, <2>2e, <2>2f, <2>2g
 
 <1>28a. `origin_inner` の `Llvm` の腕が得る `decl` は、各 leaf に要素数 0 か 1 の `LeafOrigins` を
    置く。したがって `decl.leaf_origins_at(path)` が返す集合と `decl.leaf_origins_under(path)` が
@@ -1581,11 +1653,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        CODE src/rc_ir/provenance.rs: sole_origin
   <2>3. QED
     `<2>1` と `<2>2` より、どの op の `decl` も leaf ごとに要素数 0 か 1 の集合を置く。要素数が 1 で
-    その元が `Arg(j, leaf)` である leaf は、A3 の表の「単一の `Arg(j, σ)`」の行が扱うものであり、
-    その行が「第 `j` オペランドの leaf `σ`」と述べる。第 `j` オペランドが存在しなければこの宣言は
-    意味を持たないので `j` は `args.len()` 未満であり、`leaf` は第 `j` オペランドの leaf、すなわち
-    `L(ty(args[j]))` の要素である。
-    BY A3, <2>1, <2>2
+    その元が `Arg(j, leaf)` である leaf は、A3 の表の「単一の `Arg(j, σ)`」の行が扱うものである。
+    その `j` が `args` の添字であり (すなわち `args.len()` 未満であり)、`leaf` が
+    `L(ty(args[j]))` の要素であることは `<1>3a` (viii) が述べる。
+    BY A3, <1>3a, <2>1, <2>2
 
 <1>29. `origin(vars, E, x, pi)` の**呼び出しの木** -- 根をその呼び出しとし、各節点の子をその実行が
    行う `origin` の呼び出しとする木 -- は有限である。したがって `origin` は停止する。
@@ -1609,12 +1680,40 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>5. `<1>26` より木の各節点の子は有限個であり、`<2>4` より木の深さは有限である。有限分岐で深さが
      有限の木は有限なので、`origin` の呼び出しは有限回で終わる。
     BY <1>26, <2>4
-  <2>6. `origin` の 1 回の実行が行う、`origin` 以外の計算は有限時間で終わる。`vars.origins` の探索と
-     挿入、`Origin` の複製、`result_prov` の呼び出し (`<1>28`)、`origin_inner` の中の `unit_step` と
-     `truncate_to_unit` の呼び出し (`<1>9` より停止する)、`Provenance` の有限の `Map` と `Set` の
-     走査 (`<1>26`)、`args` の添字付けがその全部である。
-    BY <1>9, <1>26, <1>28, CODE src/rc_ir/ownership.rs: origin_inner,
-       CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+  <2>6. `origin` の 1 回の実行が行う、`origin` の呼び出し以外の計算は有限時間で終わる。行うのは
+     次のもので尽きている。
+     - `origin` の中: 鍵 `(var.clone(), path.to_vec())` の構成、`vars.origins` (`Map`) の 1 回の
+       探索と 1 回の挿入、`Origin` の複製、`grow_stack` の 1 段 (A15)。
+     - `origin_inner` のどの腕にも共通するもの: `vars.bindings` (`Map`) の 1 回の探索、`here()` が
+       作る `Origin::Exactly` の構成、`Vec` の複製・連結・添字付け。
+     - `Binding::Field` の腕の `container.ty.is_box(E)` と `Binding::Payload` の腕の
+       `scrut.ty.is_box(E)`。`is_box` は `is_unbox` の否定、`is_unbox` は
+       `is_closure() || toplevel_tycon_info(E).is_unbox` であり、`is_closure` は
+       `toplevel_tycon_satisfies` を経て `toplevel_tycon()` を 1 回呼んで名前を 1 回比べるだけ、
+       `toplevel_tycon_info` は `toplevel_tycon()` を 1 回呼んで `E.tycons()` を 1 回引くだけで
+       ある。`toplevel_tycon()` は `Type::TyApp` の関数側への再帰であり、型は有限の項なので停止する。
+     - `Binding::Join` の腕の `origin(...).acted_on()` と `candidates` (`Set`) への挿入。
+       `acted_on` は `identity()` と `candidates()` を呼んで有限の `Vec` を作り、`candidates()` は
+       `Origin::Join` が持つ有限の `Set` を 1 回走査する。`arm_results` は有限である (`<1>26`)。
+     - `Origin::of_candidates`。`assert!`、`candidates.len()`、および要素数 1 のときの
+       `into_iter().next()` か `identity` の複製だけを行う。
+     - `Binding::Llvm` の腕の `result_prov` の呼び出し (`<1>28` より abort せず `Provenance` を
+       返す)、`decl.leaf_origins_at(path)` (`LeafMap::get`、`Map` の 1 回の探索)、
+       `as_arg_projection` (`Set` の大きさを見て、高々 1 要素を複製する)。
+     - `origin_from_leaves_under` の中: `decl.leaf_origins_under(path)` (`LeafMap::leaves_under`、
+       `Provenance` が包む有限の `Map` の 1 回の走査)、渡される各 `LeafOrigins` (有限の `Set`) の
+       走査、`truncate_to_unit` の呼び出し (`<1>1` と `<1>9` より停止する)、`operand_units` (`Set`)
+       への挿入、`reached` (有限の `Vec`) の走査と `Origin` どうしの等価比較、各 `Origin` の
+       `acted_on()` の呼び出し、`candidates` (`Set`) の構成、`Origin::of_candidates`。
+    BY A15, <1>1, <1>9, <1>26, <1>28,
+       CODE src/rc_ir/ownership.rs: origin, origin_inner, origin_from_leaves_under,
+          as_arg_projection, Origin::acted_on, Origin::candidates, Origin::of_candidates,
+       CODE src/ast/types.rs: TypeNode::is_box, TypeNode::is_unbox, TypeNode::is_closure,
+          TypeNode::toplevel_tycon_satisfies, TypeNode::toplevel_tycon,
+          TypeNode::toplevel_tycon_info,
+       CODE src/rc_ir/provenance.rs: Provenance, LeafOrigins, Provenance::leaf_origins_at,
+          Provenance::leaf_origins_under,
+       CODE src/rc_ir/leaf_map.rs: LeafMap, LeafMap::get, LeafMap::leaves_under
   <2>7. QED
     BY <2>5, <2>6
 
@@ -1628,12 +1727,51 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::of,
        CODE src/rc_ir/ownership.rs: VarTable::body_only,
        CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin
+  <2>1a. `origin_from_leaves_under(vars, E, decl, args, path, here)` の返り値は、`decl`、`args`、
+     `path`、`here`、`E`、および自分が行う `origin` の呼び出しの返り値だけで決まる。とくに
+     `operand_units` の反復の順序には依らない。
+    <3>1. `operand_units` は `Set<(usize, FieldPath)>` であり、その要素は
+       `decl.leaf_origins_under(path)` が渡す各 `LeafOrigins` の各 `LeafOrigin::Arg(j, leaf)` に
+       ついての `(j, truncate_to_unit(&args[j].ty, leaf, E))` である。集合としての `operand_units`
+       は `decl`、`args`、`path`、`E` で決まる。`produced_here` も同じ 4 つで決まる。
+      BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+    <3>2. `reached` は、`operand_units` の各 `(j, unit)` についての
+       `origin(vars, E, &args[j].name, &unit)` の返り値を並べ、`produced_here` が真ならさらに
+       `Origin::Exactly(here.clone())` を末尾に置いた `Vec` である。反復の順序が変わって変わるのは、
+       この `Vec` の要素の並び順だけである。
+      BY <3>1, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+    <3>3. `Origin` の `==` は値としての等価性であり、同値関係である。`Origin` の宣言は
+       `#[derive(Clone, Debug, PartialEq, Eq)]` を持つので、`==` は変位が一致することと、
+       `Exactly` なら `VarPath` (= `(FullName, FieldPath)`) が等しいこと、`Join` なら `identity` が
+       等しくかつ `candidates` (`Set<VarPath>`) が等しいことである。`Set<T>` は `FxHashSet<T>` で
+       あり、その等価性は外部の結果 (`HashSet` の等価性) より集合としての等価性である。
+      BY 外部の結果 (`HashSet` の等価性), CODE src/rc_ir/ownership.rs: Origin,
+         CODE src/rc_ir/ast.rs: VarPath, CODE src/misc.rs: Set
+    <3>4. CASE `reached` が空。`reached.first()?` が `None` を返すので、
+       `origin_from_leaves_under` は `None` を返す。空であるかどうかは並び順に依らない。
+      BY <3>2, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+    <3>5. CASE `reached` が空でなく、その要素がすべて互いに等しい。どの並び順でも `first` はその
+       共通の値であり、`reached.iter().all(|o| o == first)` は真になるので、返り値は
+       `Some(その共通の値)` である。
+      BY <3>2, <3>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+    <3>6. CASE `reached` が空でなく、互いに等しくない 2 つの要素 `a`、`b` を持つ。どの並び順でも
+       `reached.iter().all(|o| o == first)` は偽である -- 真だとすると `a == first` かつ
+       `b == first` であり、`<3>3` の同値関係から `a == b` になって仮定に反する。よって返り値は
+       `Some(Origin::of_candidates(candidates, here))` である。`candidates` は `reached` の各要素の
+       `acted_on()` を集めた `Set<VarPath>` であり、集合としては並び順に依らない。`of_candidates` が
+       読むのは `candidates.len()` と、それが 1 のときのただ 1 つの要素と、`here` だけである。
+      BY <3>2, <3>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+         CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::acted_on
+    <3>7. QED
+      `<3>4` から `<3>6` は `reached` についての 3 つの場合を尽くしている。
+      BY <3>4, <3>5, <3>6
   <2>2. `origin_inner(vars, E, u, sig)` の返り値は、`vars.bindings`、`E`、`u`、`sig`、および自分が
      行う `origin` の呼び出しの返り値だけで決まる。この関数が読むのは `vars.bindings.get(var)`、
      その `Binding` が持つ `RcVar` の名前と型と `llvm_gen` と `result_ty`、および `E` であり、
      `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` と `truncate_to_unit` はその引数の関数で
-     ある。`vars.origins` も `vars.var_tys` も読まない。
-    BY <2>1, CODE src/rc_ir/ownership.rs: origin_inner,
+     ある。`vars.origins` も `vars.var_tys` も読まない。`Llvm` の腕が
+     `origin_from_leaves_under` を呼ぶ道については `<2>1a` がこれを与える。
+    BY <2>1, <2>1a, CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   <2>3. `vars.origins` に記録される `(u, sig)` の値は、その位置で計算した
      `origin_inner(vars, E, u, sig)` の返り値である。`origin` が `insert` するのはその値だけで
@@ -1675,7 +1813,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        body of `if` (2024 Edition)」をこの一覧に足すので、走査対象の一時値は `else` ブロックより
        前で落ちる。`Cargo.toml` の `[package]` は `edition = "2021"` を書いており、この `if let` は
        `else` を持たないので、どちらの規則でも落ちる点は同じ `if let` 文の終わりである。
-      BY <3>1, 外部の結果 (Rust の一時値のスコープ)
+      BY <3>1, 外部の結果 (Rust の一時値のスコープ), CODE Cargo.toml: [package] の edition
     <3>3. `borrow_mut()` が作る一時値はその文の終わりで落ちる。その文の中で `origin` は呼ばれない
        (`answer.clone()` は既に得た `Origin` の複製である)。
       BY <3>1
@@ -1743,9 +1881,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `leaf_origins_under` の絞り込みに使われるだけで、`truncate_to_unit` には渡らない。
       BY <1>28a, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
          CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under
-    <3>5. `<1>17` (iii) と `<3>4` より `truncate_to_unit(&args[j].ty, leaf, E)` は abort しない。
-       とくに `UnitStep::NoUnit` の腕の `panic!` (「holds no reference」) には達しない。
-      BY <1>17, <3>4
+    <3>5. `ty(args[j])` は RC IR に現れる型なので `<1>1` を満たす。`<3>4` より `leaf` は
+       `L(ty(args[j]))` の要素なので、`<1>17` (iii) を `t := ty(args[j])`、`lam := leaf` に適用でき、
+       `truncate_to_unit(&args[j].ty, leaf, E)` は abort しない。とくに `UnitStep::NoUnit` の腕の
+       `panic!` (「holds no reference」) には達しない。
+      BY <1>1, <1>17, <3>4
     <3>6. `origin_from_leaves_under` の残りは、`Set` への挿入、`origin` の呼び出し、
        `reached.first()?` (空なら `None` を返す)、`Origin` の等価比較、そして `reached` が空でない
        ときの `Origin::of_candidates(candidates, here)` である。`candidates` は各 `reached` の
@@ -2063,29 +2203,25 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 ## 3. 入力についての 3 つの前提と README の仮定、および P1 の定義域
 
 `<1>1` (H1)、`<1>2` (H2)、`<1>3a` (H4) は、README の A10 (型の well-formedness)、A11 (スコープの
-規律)、A12 (束縛の形と型が合っている) である。README の文面との差は、3 つの前提のそれぞれに
-ついて次のとおりである。
+規律)、A12 (束縛の形と型が合っている) である。README の文面とこの文書の記法との対応は、3 つの
+前提のそれぞれについて次のとおりである。
 
-- `<1>1` の (i) と (ii) は A10 である。(i) は A10 の第 1 文 --「プログラムに現れる型は ground で
+- **`<1>1` の 3 つはどれも A10 である。**(i) は A10 の第 1 文 --「プログラムに現れる型は ground で
   あり、その tycon に kind の要求するだけの引数が与えられており、その tycon は `type_env` にある」--
-  そのものであり、(ii) は A10 の第 3 段落 --「`unpunched_field_types` を繰り返し取って到達する型に
-  ついても同じことが成り立ち、その歩みは有限である」-- である。**「同じこと」は第 1 文の 3 つ、
-  すなわち ground であることと飽和していることと tycon が `type_env` にあること、と読む。**
-  A10 の第 2 段落は `no_size_in_place` の in-place 降下について 2 つ (ground と `type_env`) しか
-  挙げていないが、`unpunched_field_types` の歩みは到達する各型で `declared_field_types` を呼び、
-  その `assert_eq!(args.len(), tycon_info.tyvars.len())` が飽和を要求するので、飽和を落とすと
-  A10 が「abort しないことを言う議論はこの節を読む」と書いた役目を果たせない。
+  そのものである。(ii) と (iii) は A10 の
+  「`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が
+  `type_env` にある -- がすべて成り立ち、その歩みは有限である。さらに、到達する各型について
+  `instance_field_types` が行う newtype の展開 (`unwrap_newtypes_memoized`) は abort せず停止する」
+  の、前半と後半である。
 
-  `<1>1` は A10 に (iii) を足す。(ii) が挙げる各型について、`instance_field_types` が行う newtype の
-  展開 (`unwrap_newtypes_memoized`) が abort せず停止すること。`field_types` は tycon が kind が
-  `*` でない型変数を持つときにこの展開を走らせ、その中の `tycon_info.fields[0]` の添字付けと
-  `Type::AssocTy` の `unimplemented!` と展開の停止性は、A10 の 3 つからは出ない。
+  A10 は (iii) の果たす者について「果たしうるのは `unwrap_newtype` パスと `validate_type_defns` だが、
+  **証明していない**」と書く。この文書も (iii) を仮定として使い、`<1>3c` の `<2>7` がそれを読む。
 
   A10 の但し書き -- 果たす者 `validate_layouts` は elaboration で必ず走るが、最適化が作る型を
   再検査するのは develop build だけである -- は `<1>1` の 3 つすべてに掛かる。
 
-  この文書は A10 の第 1 文の `no_size_in_place` の節と第 2 段落を読まない。`REC` の辺も `DESC` の
-  辺も `unpunched_field_types` の辺なので、整礎性は (ii) から直に出る (`<1>3d`、`<1>8`)。
+  この文書は A10 の第 1 文のうち `no_size_in_place` の降下についての節を読まない。`REC` の辺も
+  `DESC` の辺も `unpunched_field_types` の辺なので、整礎性は (ii) から直に出る (`<1>3d`、`<1>8`)。
 - `<1>2` は A11 の「スコープに入っている束縛」を `DEF Scope` で節点の種類ごとに書き下し、さらに
   この関数のどの束縛でもない名前 (グローバル) を許す。`origin_inner` の `None` の腕がその名前を
   受ける (`CODE src/rc_ir/ownership.rs: origin_inner`)。書き下しそのものの根拠は D2 のスコープ規則
@@ -2093,8 +2229,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   ない」から出る。A11 の検査 `validate` の `scope` の推移も同じ形で、関数ごとに `func.params` と
   `func.capture` を `bind` してから本体を検査し、グローバル初期化子については何も `bind` せずに
   本体を検査する。
-- `<1>3a` は A12 の項目のうちこの文書が使う 7 つを (i) から (vii) として述べる。**7 つはどれも
-  A12 に在る。**(vii) の 3 つは A12 の「`Llvm` 節点の型についての 3 つ」である。
+- `<1>3a` は A12 の項目のうちこの文書が使う 8 つを (i) から (viii) として述べる。**8 つはどれも
+  A12 に在る。**(vii) の 3 つは A12 の「`Llvm` 節点の型についての 3 つ」であり、(viii) は A12 の
+  「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` はその型の
+  boxed leaf である」の段落である。
 
   A12 の「`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が実際に持つ (punched
   でない) ものであること」は (iii) と (v) が述べており、この文書はそれを読む -- (iii) と (v) が
@@ -2103,8 +2241,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   パラメータの型が合っていること、`App` の結果の型が呼び出し先の返り値の型であること、束縛を持たない
   `RcVar` の型がその名前の記号の型であること -- は、この文書のどのステップも読まない。
 
-  A12 の第 2 の `Llvm` 節点の条件は punched struct の成分を「A10 を満たす構造体」と書くが、(vii) は
-  そこを `<1>1` と書く。差は `<1>1` の (iii) の 1 つであり、上に挙げたものと同じである。
+  A12 の第 2 の `Llvm` 節点の条件は punched struct の成分を「A10 を満たす構造体」と書く。`<1>1` は
+  A10 をこの文書の記法で述べたものなので、(vii) はそこを `<1>1` と書く。同じ条件の「第 `field_idx`
+  フィールドが穴である」を、(vii) はその成分の `TyConInfo` の `fields` の `is_punched` として書き、
+  そこから `is_closure()` が偽であることを合わせて挙げる。その `TyConInfo` を返す
+  `toplevel_tycon_info` が `assert!(!self.is_closure())` から始まるからである。`<1>28` の `<2>2f` の
+  `<3>4` がこの 2 つを読む。
 
   (vii) が要る理由は、これが無いと `result_prov` の 29 個の override のうち 5 個が abort しうるので
   P2 が偽になることである。`InlineLLVMStructGetBody` と `InlineLLVMUnionAsBody` は `arg_tys[0]`
@@ -2113,12 +2255,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   `replaced_field_prov` は、boxed でない結果の boxed leaf の path が空でないことを `expect` で
   要求する (`Array a` を結果に持てば発火する)。
 
-**P1 の定義域。** `<1>20` が示すのは、`<1>1` を満たす型についての P1 である。README の P1 は
-「**A10 を満たす**任意の型 `τ` について」と書く。`<1>1` は A10 の (i)(ii) に (iii) を足したもの
-なので、A10 を満たし (iii) も満たす型については `<1>20` が README の P1 そのものを与える。何らかの
-制限が要ること自体は空虚ではない -- `<1>19a` が、`<1>1` の (i) を満たさない型については
-`boxed_leaf_paths` も `rc_units` も `toplevel_tycon_info` の `unwrap` で abort し、P1 の言明の
-2 つの辺が意味を持たないことを示す。
+**P1 の定義域。** `<1>20` が示すのは `<1>1` を満たす型についての P1 であり、`<1>1` は A10 を
+この文書の記法で述べたものなので、それは README の P1 --「**A10 を満たす**任意の型 `τ` について」--
+そのものである。A10 が型に条件を置くことが空虚でないのは `<1>19a` による -- `<1>1` の (i) を
+満たさない型については `boxed_leaf_paths` も `rc_units` も `toplevel_tycon_info` の `unwrap` で
+abort し、P1 の言明の 2 つの辺が意味を持たない。
 
 ## 4. leaf と unit がずれる 2 か所が P1 に効いた場所
 
