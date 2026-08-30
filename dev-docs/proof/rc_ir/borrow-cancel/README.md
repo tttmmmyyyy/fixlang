@@ -23,9 +23,10 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 である。`split_rc_units` は同じファイルに住むが、`borrow_ify` の前段であって対象ではない。その出力の性質は
 仮定 A3 として置く。
 
-**対象のコードは、証明を書く作業の中で 1 度動いた。** `borrow_ify` と `cancel` が `pub` から `pub(crate)` に
+**証明のために動いたコードが 1 か所ある。** `borrow_ify` と `cancel` が `pub` から `pub(crate)` に
 なった。P15 がその可視性を引く -- クレートの外から呼べないので、`cancel` の入力が `borrow_ify` の出力である
-ことが `optimize_rc_program` の 1 か所を読めば決まる。`src/` の差はこの 4 行だけである。
+ことが `optimize_rc_program` の 1 か所を読めば決まる。対象コミットが持つ他の `src/` の変更は、第 8 節が
+述べる欠陥の修正である。
 
 この 2 つは、`src/build/build_object_files.rs` の `optimize_rc_program` の中で、`-O max` 以上のとき
 `split_rc_units` の直後にこの順で走る。
@@ -2018,8 +2019,9 @@ P14 がそれを与える。
 
 ## 8. 発見
 
-証明を書く作業が、対象のコードに 7 件の欠陥を見つけた。4 件は miscompile であり、いずれもバグハントでは
-見つかっていなかった。すべて修正済みである。
+証明を書く作業が、対象のコードに 6 件の欠陥を見つけた。3 件は miscompile、2 件は漏れ、1 件は一意な値が
+共有として観測されることであり、いずれもバグハントでは見つかっていなかった。5 件は修正済みで、#552 は
+「A19 を示す」に置き換わった (この節の末尾)。
 
 **#529 (miscompile、修正 `be26b396`、PR #531)。** P3/P4 の証明が閉じない原因はコードにあった。
 `origin_from_leaves_under` と `origin_inner` の `Binding::Join` の腕が、内側の `Origin` を `candidates()` で
