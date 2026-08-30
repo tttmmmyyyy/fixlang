@@ -93,9 +93,9 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 **H2 (catch-all アームは最後にある)** -- 果たす者: lowering
 (`CODE src/rc_ir/lower.rs: Lowerer::lower_match`, `Lowerer::lower_if`) と、アームの列を保つ後段のパス。
 検査: `validate` の `check_rhs` (`CODE src/rc_ir/validate.rs: Validator::check_rhs` -- 最後のアームを
-除くどれかの `tag` が `None` であれば panic する)。ただしこの検査は `config.develop_mode` のときだけ走る
-(`CODE src/build/build_object_files.rs: optimize_rc_program`)。**`README.md` の第 4 節の格付けでは、
-`develop_mode` でだけ走る表明は 3 段のどれよりも弱い。**
+除くどれかの `tag` が `None` であれば panic する)。ただしこの検査が `develop_mode` のときだけ走ることは
+`README.md` の A9 と A11 が同じ `check_rhs` について述べており、**第 4 節の格付けでは、`develop_mode` で
+だけ走る表明は 3 段のどれよりも弱い。**
 すべての `Match(s, arms)` について、`arms` が catch-all アーム (`tag` が `None`) を持つならば、それは
 `arms` の最後の元である。
 
@@ -1290,60 +1290,81 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 **両端がスロットであることが要点である。** P5 (b) が量化するのはスロットなので、記号の位置 (D6) を端に
 持つ組はこの限定の反例にならない。下の本体はアームの中で値を作り、その変数を返す。
 
-<1>1. 次の関数 `f` を考える。型は 2 つ使う。
+<1>1. 次の関数 `f` を考える。op と型は、このコンパイラが実在に持つものを取る。
 
-      - `T`: `is_box` が真で `is_closure` が偽の型。
-      - `Bool`: `is_box`・`is_closure`・`is_array`・`is_funptr` がいずれも偽で、
-        `unpunched_field_types` が 2 つの変位の payload の型を返す union。その 2 つの payload の型は
-        どちらも `is_fully_unboxed` が真であるとする。
+      - `gen`: `InlineLLVMStringBuf`。**この op はこのコンパイラの `impl LLVMGen for` の 1 つである**
+        (A3 がその全体を 78 個と数え上げている)。`free_vars_mut` は空の列を返すのでオペランドを 1 つも
+        取らない。`result_prov` は `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返す
+        ので、結果の型の各 boxed leaf に**単一の `Fresh`** を宣言する。**`unique_check_operand` を
+        override しないので、その宣言は既定の `None` である。** `generate` は `make_byte_array_copy` を
+        呼び、`alloc_array_storage` で記憶域を割り当ててバイト列を写す。
+      - `T`: `gen` の結果の型 `Array U8` (`make_byte_array_copy` が `type_tyapp(make_array_ty(),
+        make_u8_ty())` として組む型)。
+      - `Bool`: `Std::Bool`。`unbox union { _false : (), _true : () }` であり、2 つの変位の payload の
+        型はどちらも `()` である。
 
-      `gen` は、オペランドを 1 つ取り、結果の型 `T` の唯一の leaf `[]` に**単一の `Fresh`** を宣言する
-      `Llvm` の op とする。A3 の表の「単一の `Fresh`」の行より、その op が結果のその leaf に置くのは、
-      新しく割り当てたオブジェクトへの新しい参照である。`f` のパラメータは `c : Bool` の 1 つ、capture は
-      無く、`borrowed_units` は空 (A1) である。本体は次のとおりで、`m`・`x_0`・`x_1` は型 `T`、`p_0`・`p_1`
-      は `Bool` の変位 0・1 の payload の型を持つ。
+      A3 の表の「単一の `Fresh`」の行より、`gen` が結果のその leaf に置くのは、新しく割り当てた
+      オブジェクトへの新しい参照である。**A3 が同じ節に置く但し書き -- `unique_check_operand` を宣言する
+      op の `Fresh` の行は、オブジェクトの同一性については字義どおりではない -- は `gen` に当たらない。**
+      `gen` はその宣言を持たない。
+
+      `f` のパラメータは `c : Bool` の 1 つ、capture は無く、`borrowed_units` は空 (A1) である。本体は
+      次のとおりで、`m`・`x_0`・`x_1` は型 `T`、`p_0`・`p_1` は `()` である。
 
       ```
-      Let(m, Match(c, [ arm(tag=0, payload=p_0, body=Let(x_0, Llvm(gen, [c]), Ret(x_0))),
-                        arm(tag=1, payload=p_1, body=Let(x_1, Llvm(gen, [c]), Ret(x_1))) ]), Ret(m))
+      Let(m, Match(c, [ arm(tag=0, payload=p_0, body=Let(x_0, Llvm(gen, []), Ret(x_0))),
+                        arm(tag=1, payload=p_1, body=Let(x_1, Llvm(gen, []), Ret(x_1))) ]), Ret(m))
       ```
 
       これは D2 の形の本体であり、A6 (`c`・`m`・`x_0`・`x_1`・`p_0`・`p_1` は相異なる名前)、
       A9 (アームは 2 つ)、A12 (アームの結果と `Match` の束縛変数の型、payload と変位の型、`Llvm` 節点の
-      `args` の名前の列が `gen.free_vars()` に等しいこと)、H1 (2 つのアームが `Bool` の 2 変位を尽くす) を
-      満たす。以下、`j` は 0 と 1 を渡り、`ρ_j` は変位 `j` のアームを選ぶ実行路を表す。
-  BY A1, A3, A6, A9, A12, D2, H1
+      `args` の名前の列が `gen.free_vars()` -- 空の列 -- に等しいこと)、H1 (2 つのアームが `Bool` の
+      2 変位を尽くす)、H2 (catch-all アームが無いので空虚に真) を満たす。以下、`j` は 0 と 1 を渡り、
+      `ρ_j` は変位 `j` のアームを選ぶ実行路を表す。
+  BY A1, A3, A6, A9, A12, D2, H1, H2,
+     CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStringBuf, make_byte_array_copy,
+     CODE src/ast/inline_llvm.rs: LLVMGen::unique_check_operand,
+     CODE src/fixstd/std.fix: Bool
 
 <1>2. `boxed_leaf_paths(T, type_env)` は `{[]}` であり、`[]` は `T` の値で inhabited である。`p_0` と
       `p_1` の型の `boxed_leaf_paths` は空であり、`boxed_leaf_paths(Bool, type_env)` も空である。
-  <2>1. `is_fully_unboxed(T)` は偽である。`is_fully_unboxed` は `is_box` が真の型に対して偽を返す。
-    BY <1>1, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
-  <2>2. `boxed_leaf_paths(T, type_env) = {[]}` である。D4 の規則 1 は `<2>1` より、規則 2 は `<1>1`
-        (`is_closure(T)` が偽) より当たらない。`is_box(T)` が真なので規則 3 が当たり、自分自身の位置
-        1 つ、すなわち `[]` が leaf である。
-    BY D4, <1>1, <2>1
+  <2>1. `is_array(T)` は真、`is_closure(T)` は偽、`is_fully_unboxed(T)` は偽である。
+    `<1>1` より `T = Array U8` であり、その tycon は `Std::Array` である。`is_array` は tycon が
+    `Std::Array` であること、`is_closure` は tycon が関数型のものであることなので、前者は真、後者は
+    偽である。`is_fully_unboxed` は `is_array` が真の型に対して偽を返す。
+    BY <1>1, CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_closure,
+       TypeNode::is_fully_unboxed
+  <2>2. `boxed_leaf_paths(T, type_env) = {[]}` である。D4 の規則 1 は `<2>1` より、規則 2 も `<2>1`
+        (`is_closure(T)` が偽) より当たらない。残る規則 3 (`is_box`) と規則 4 (`is_array`) は、どちらも
+        自分自身の位置 1 つを leaf とする。`<2>1` より `is_array(T)` は真なので、規則 3 が当たっても
+        規則 4 が当たっても leaf は `[]` 1 つである。
+    BY D4, <2>1
   <2>3. `[]` は `T` の値で inhabited である。`[]` は unbox union の節を 1 つも通らない。
     BY D16, <2>2
-  <2>4. `p_0` と `p_1` の型は `is_fully_unboxed` が真なので (`<1>1`)、D4 の規則 1 より leaf を持たない。
-    BY D4, <1>1
-  <2>5. `boxed_leaf_paths(Bool, type_env)` は空である。`<1>1` より `Bool` は `is_box`・`is_closure`・
-        `is_array`・`is_funptr` がいずれも偽なので、`is_fully_unboxed(Bool)` は
-        `unpunched_field_types(Bool)` が返す各型の `is_fully_unboxed` の連言であり、`<1>1` よりそれは
-        2 つの payload の型についての連言で、どちらも真である。よって `is_fully_unboxed(Bool)` は真で
-        あり、D4 の規則 1 より `Bool` は leaf を持たない。
-    BY D4, <1>1, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+  <2>4. `p_0` と `p_1` の型 `()` は leaf を持たない。`()` は `tuple_defn(0)` が定める型、すなわち
+        フィールドを 1 つも持たない unbox の構造体なので、`is_box`・`is_closure`・`is_array`・`is_funptr`
+        がいずれも偽であり、`unpunched_field_types` は空の列を返す。よって `is_fully_unboxed` は空の
+        連言として真であり、D4 の規則 1 より leaf を持たない。
+    BY D4, <1>1, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/fixstd/builtin.rs: tuple_defn
+  <2>5. `boxed_leaf_paths(Bool, type_env)` は空である。`<1>1` より `Bool` は unbox union なので
+        `is_box` が偽であり、`is_closure`・`is_array`・`is_funptr` も偽なので、`is_fully_unboxed(Bool)` は
+        `unpunched_field_types(Bool)` が返す各型の `is_fully_unboxed` の連言である。`<1>1` よりそれは
+        2 つの payload の型 `()` についての連言であり、`<2>4` よりどちらも真である。よって
+        `is_fully_unboxed(Bool)` は真であり、D4 の規則 1 より `Bool` は leaf を持たない。
+    BY D4, <1>1, <2>4, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
   <2>6. QED
     BY <2>2, <2>3, <2>4, <2>5
 
 <1>3. `ρ_j` の上の節点は `Let(m, Match(c, arms), Ret(m))`、アーム `j` の本体の
-      `Let(x_j, Llvm(gen, [c]), Ret(x_j))`、そのアーム本体の終端の `Ret(x_j)`、関数本体の終端の `Ret(m)` の
+      `Let(x_j, Llvm(gen, []), Ret(x_j))`、そのアーム本体の終端の `Ret(x_j)`、関数本体の終端の `Ret(m)` の
       4 つである。本体は `Retain`・`Release`・`Destructure`・`Eval` の節点を持たず、`Let` の右辺は
       `Match` 1 つと `Llvm` 2 つだけである。
   BY D3, <1>1
 
 <1>4. `ρ_j` について、`(x_j, [])` と `(m, [])` はどちらも `ρ_j` のスロットであり、同じオブジェクトを
       指す。そのオブジェクトは計数下 (D26) である。
-  <2>1. `(x_j, [])` は `ρ_j` のスロットである。`x_j` は `ρ_j` の上の節点 `Let(x_j, Llvm(gen, [c]), Ret(x_j))`
+  <2>1. `(x_j, [])` は `ρ_j` のスロットである。`x_j` は `ρ_j` の上の節点 `Let(x_j, Llvm(gen, []), Ret(x_j))`
         が束縛するので DEF 路の位置 の (S2) で値を得ており、`<1>2` より `[]` は `ty(x_j) = T` の
         inhabited な boxed leaf である。
     BY DEF 路の位置, <1>1, <1>2, <1>3
@@ -1356,11 +1377,14 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
     `Ret(x_j)` は `ρ_j` の上にあるので、DEF `ρ` の上で実行された辺 の第 3 の場合よりその辺は実行された。
     BY DEF 辺の leaf 対応, DEF `ρ` の上で実行された辺, <1>1, <1>3, <2>1, <2>2
   <2>4. QED
-    L1 より `<2>3` の辺の両端は同じオブジェクトを指す。A3 の「単一の `Fresh`」の行より `obj(x_j, [])` は
-    この op が新しく割り当てたオブジェクトであり、D26 より割り当てられたオブジェクトは計数下である。
+    L1 より `<2>3` の辺の両端は同じオブジェクトを指す。`<1>1` より `gen` は `unique_check_operand` を
+    宣言しないので、A3 の但し書き -- その宣言を持つ op の `Fresh` の行はオブジェクトの同一性については
+    字義どおりでない -- は当たらず、A3 の「単一の `Fresh`」の行を字義どおりに読める。すなわち
+    `obj(x_j, [])` はこの op が新しく割り当てたオブジェクトであり、D26 より割り当てられたオブジェクトは
+    計数下である。
     BY A3, D26, L1, <1>1, <2>1, <2>2, <2>3
 
-<1>5. `ρ_j` を辿る活性化について次が成り立つ。`Obl` は `Let(x_j, Llvm(gen, [c]), Ret(x_j))` の実行までは
+<1>5. `ρ_j` を辿る活性化について次が成り立つ。`Obl` は `Let(x_j, Llvm(gen, []), Ret(x_j))` の実行までは
       空で、その実行の後は `obj(x_j, [])` への参照 1 つだけからなり、終端の `Ret(m)` の消費を行った後は
       再び空である。`Obl` から参照を取り除く操作は終端の `Ret(m)` の消費だけである。
   <2>1. 初期値は空である。D10 の初期値は、所有するパラメータ・capture の unit の下の inhabited な各 leaf に
@@ -1371,12 +1395,12 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
         `Match` 節点自身が参照を作らず、移さず、手放さないと述べる。アーム本体の `Ret(x_j)` は D9 の
         移動の表の第 2 行であり、D10 の移動の行より `Obl` を変えない。
     BY D9, D10, <1>3
-  <2>3. `Let(x_j, Llvm(gen, [c]), Ret(x_j))` は `Obl` に `obj(x_j, [])` への参照を 1 つ加え、取り除かない。
+  <2>3. `Let(x_j, Llvm(gen, []), Ret(x_j))` は `Obl` に `obj(x_j, [])` への参照を 1 つ加え、取り除かない。
     D10 の生成の表の `Llvm` の行は、`result_prov` の宣言が単一の `Arg(j, σ)` でない結果の leaf につき
     参照を 1 つ加える。`<1>1` より宣言は単一の `Fresh` であり、`<1>2` より `T` の leaf は `[]` 1 つで
     inhabited であり、`<1>4` よりそのオブジェクトは計数下である。D9 の `Llvm` の行が消費するのは
-    `borrows_operand(i)` が偽のオペランドの leaf であり、`<1>2` より唯一のオペランド `c` は boxed leaf を
-    持たないので、消費される leaf は無い。
+    `borrows_operand(i)` が偽のオペランドの leaf であり、`<1>1` より `gen` はオペランドを 1 つも
+    取らないので、消費される leaf は無い。
     BY D9, D10, D26, <1>1, <1>2, <1>4
   <2>4. 終端の `Ret(m)` の消費は `obj(m, []) = obj(x_j, [])` への参照を 1 つ取り除く。D9 の終端の `Ret` の
         行が消費するのは `m` の inhabited な全 boxed leaf であり、`<1>2` と `<1>4` よりそれは `[]` 1 つで、
@@ -1400,11 +1424,11 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   <2>2. (S-b) が成り立つ。`<1>5` より終端の `Ret(m)` の消費を行った後の `Obl` は空である。
     BY D11, <1>5
   <2>3. (S-c) が成り立つ。`<1>3` より、この本体に現れる D7 の読む構文は `Let(x, Llvm(gen, args), k)` の
-        行と `Let(x, Match(v, arms), k)` の行だけであり、前者が読むのはオペランド `c`、後者が読むのは
-        scrutinee `c` である。`<1>2` より `c` は boxed leaf を持たないので、読まれうるオブジェクトは
-        無い。`<1>3` より `Retain` と `Release` の節点は無いので、触れるオブジェクトも無い。よって条件は
-        空虚に成り立つ。
-    BY D7, D11, <1>2, <1>3
+        行と `Let(x, Match(v, arms), k)` の行だけである。前者が読むのは各オペランドであり、`<1>1` より
+        `gen` はオペランドを 1 つも取らない。後者が読むのは scrutinee `c` であり、`<1>2` より `c` は
+        boxed leaf を持たない。よって読まれうるオブジェクトは無い。`<1>3` より `Retain` と `Release` の
+        節点は無いので、触れるオブジェクトも無い。よって条件は空虚に成り立つ。
+    BY D7, D11, <1>1, <1>2, <1>3
   <2>4. QED
     D3 より実行路はアームの選び方で尽くされ、`<2>1` から `<2>3` は `j` について量化した主張なので
     どちらのアームについても成り立つ。
@@ -1414,7 +1438,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   BY L0 (a)
 
 <1>7. `id(x_j, []) = (x_j, [])` であり、`act(x_j, []) = {(x_j, [])}` である。
-  <2>1. `x_j` の `Binding` は `Llvm(gen, [c], T)` である。`collect_bindings` は
+  <2>1. `x_j` の `Binding` は `Llvm(gen, [], T)` である。`collect_bindings` は
         `Let(x, Llvm(llvm_gen, args), k)` に対し `x` の `Binding` を `Llvm(llvm_gen, args, x.ty)` と
         する。
     BY <1>1, CODE src/rc_ir/ownership.rs: collect_bindings
