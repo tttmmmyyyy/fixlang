@@ -1080,7 +1080,7 @@ D6 のスロットではなく、両端の leaf はどちらも D8 の意味の�
   <2>2a. `args[j]` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E3 (`x` の束縛は `Llvm(gen, args, ・)` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>3. `σ` は `ty(args[j])` の boxed leaf であり、`P` で inhabited である。
-    BY A12 (「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` は
+    BY A3 (「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` は
        その型の boxed leaf である」),
        A3 の「単一の `Arg(j, σ)`」の行 -- 結果のその leaf が inhabited であることと第 `j` オペランドの
        leaf `σ` が inhabited であることは同値である。<2>1 より
@@ -1120,7 +1120,7 @@ D6 のスロットではなく、両端の leaf はどちらも D8 の意味の�
   <2>2a. `args[j]` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E4a (`x` の束縛は `Llvm(gen, args, ・)` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>3. `σ'` は `ty(args[j])` の boxed leaf であり、`σ' ⊒ u_j` であり、`P` で inhabited である。
-    BY A12 (「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` は
+    BY A3 (「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` は
        その型の boxed leaf である」),
        A3 の「単一の `Arg(j, σ)`」の行 (inhabited の同値),
        CODE src/rc_ir/ownership.rs: truncate_to_unit (`out` は `path` の接頭辞である),
