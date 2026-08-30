@@ -1613,11 +1613,13 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
 
 <1>4. (d)。
   BY D6, CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: VarTable::of,
+     CODE src/rc_ir/ownership.rs: VarTable::body_only,
      CODE src/rc_ir/lower.rs: Lowerer::fresh_var, CODE src/rc_ir/lower.rs:
      Lowerer::lower_lambda_as_function, CODE src/ast/name.rs: FullName::is_local,
      CODE src/ast/name.rs: FullName::local
   `vars.bindings` に鍵が入るのは 2 か所である -- `VarTable::of` が入れる関数のパラメータと capture の
-  名前と、`collect_bindings` が入れる `Let`・`Destructure`・`Match` の束縛変数の名前である。lowering は
+  名前と、`collect_bindings` が入れる `Let`・`Destructure`・`Match` の束縛変数の名前である
+  (グローバル初期化子については `VarTable::body_only` が後者だけを入れる)。lowering は
   この両方を `Lowerer::fresh_var` で作り (パラメータと capture は `lower_lambda_as_function` が、
   残りは各 `lower_*` が)、`fresh_var` は名前を `FullName::local(...)` で組む。`FullName::local` が作る
   名前の名前空間は空であり、`is_local` は名前空間が空かを答えるので、束縛を持つ名前は局所名である。
