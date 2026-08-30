@@ -590,12 +590,14 @@ optimize_rc_program`)。
         (`InlineLLVMIsUniqueFunctionBody`、`InlineLLVMArrayIsStorageUniqueBody`) であって、そちらは
         (X1) が扱う。残る 4 か所は、`make_array_unique_with_hole`、`make_struct_union_unique`、
         `InlineLLVMArraySetCapacityBoundsUnchecked` の `force_unique` の枝、および
-        `InlineLLVMArrayAppendCapacityUnchecked` が `src` について立てる分岐である。
+        `InlineLLVMArrayAppendCapacityUnchecked` が `src` について立てる分岐である。最後の op の
+        `force_unique` の欄が門とするのは `dst` の側だけで、`src` はどちらでも読まれる
+        (`InlineLLVMArrayAppendCapacityUnchecked` の欄の doc)。
     BY D18, D30, CODE src/generator.rs: Generator::build_branch_by_is_unique,
        Generator::build_is_refcnt_one, Generator::build_assert_unique,
        CODE src/fixstd/builtin.rs: make_array_unique_with_hole, make_struct_union_unique,
        InlineLLVMArraySetCapacityBoundsUnchecked::generate,
-       InlineLLVMArrayAppendCapacityUnchecked::generate,
+       InlineLLVMArrayAppendCapacityUnchecked, InlineLLVMArrayAppendCapacityUnchecked::generate,
        InlineLLVMIsUniqueFunctionBody::generate, InlineLLVMArrayIsStorageUniqueBody::generate
   <2>1. `O` は計数下 (D26) である。`<2>0` の 4 か所はいずれも `build_branch_by_is_unique` を通り、その
         `global_bb` の腕は無条件に `shared_bb` へ跳ぶ。よってグローバル状態のオブジェクトはどちらの実行
@@ -1081,9 +1083,9 @@ boxed な引数を取る実行では在る**と書く。3 つが内容を持つ�
 
 ## L9b (適用される関数の値が名指す関数は `closure_targets` の元である)
 
-**言明**。L9a の (ii)、(iii)、(vi) のいずれかの段が作る活性化の本体の関数を `G` とし、その `FuncRef` を
-`g` とすると、`g` は `funcs_observing_uniqueness` が `borrow_ify` の入力について集める `closure_targets`
-の元である。
+**言明**。前提 (環境が持ち込む値) の下で、L9a の (ii)、(iii)、(vi) のいずれかの段が作る活性化の本体の関数を
+`G` とし、その `FuncRef` を `g` とすると、`g` は `funcs_observing_uniqueness` が `borrow_ify` の入力に
+ついて集める `closure_targets` の元である。
 
 <1>1. `closure_targets` は、走査したどの本体の `Let(_, Closure(target, _), _)` が名指す `target` も含む。
       走査は 1 つの閉包 `scan(body, owner)` であり、`prog.funcs` の各 `body` と `prog.globals` の各 `init` の
@@ -1380,9 +1382,10 @@ D30 はそれを (X3) の出口に数え、「(X3) は `π` が `borrow_ify` の
 
 ## L10 (門が閉じた関数の到達の列に観測点は現れない)
 
-**言明**。`f` が `borrow_versions` の鍵であるとき、`f#borrow` の活性化から L9a の (v) の段を含まない列で
-到達される活性化の本体に、一意性の観測点 (D18) は無い。以下この列を**到達の列**と呼ぶ。(iv) の段は親を持つ
-活性化を作らないので、到達の列の段は (i)(ii)(iii)(vi) のいずれかである。
+**言明**。前提 (環境が持ち込む値) の下で、`f` が `borrow_versions` の鍵であるとき、`f#borrow` の活性化から
+L9a の (v) の段を含まない列で到達される活性化の本体に、一意性の観測点 (D18) は無い。以下この列を
+**到達の列**と呼ぶ。(iv) の段は親を持つ活性化を作らないので、到達の列の段は (i)(ii)(iii)(vi) のいずれかで
+ある。
 
 <1>1. `funcs_observing_uniqueness` が返す集合 `observing` は、次の 6 つの規則が作る辺の上の最小不動点で
       ある。走査は 1 つの閉包 `scan(body, owner)` であり、`prog.funcs` の各関数の `body` に
@@ -1668,8 +1671,8 @@ main = (
 ## L12 (窓の下の観測は差を見ない)
 
 **言明**。1 つの制御の流れからなる実行について、また L11 の仮定 (グローバル初期化子の広がりの中に
-`InlineLLVMBoxedFromRetainedPtrIOS` の段が無いこと) の下で、D30 の共通接頭の時点 `q` が一意性の観測点
-(D18) であり、その観測が読むオブジェクト `O` が計数下 (D26) であるとき、
+`InlineLLVMBoxedFromRetainedPtrIOS` の段が無いこと) と 前提 (環境が持ち込む値) の下で、D30 の共通接頭の
+時点 `q` が一意性の観測点 (D18) であり、その観測が読むオブジェクト `O` が計数下 (D26) であるとき、
 `Δ(q, O) := H'(q, O) − H(q, O) = 0` である。
 
 <1>1. `Δ(q, O) ≠ 0` と仮定する。L9 より、`q` で生きている出力側の活性化に借用版の本体を持つものがあるか、
@@ -1748,8 +1751,9 @@ main = (
 ## L13 (P26 の第 1 文は `borrow_ify` について成り立つ。しかも等号で)
 
 **言明**。`borrow_ify` の入力 `P` が D12 と A1 と A2 を満たすとする。1 つの制御の流れからなる実行について、
-また L11 の仮定の下で、D30 の共通接頭の上の一意性の観測点 (D18) `q` において、`X` の観測値と `X'` の観測値は
-**等しい**。とくに `X` の観測値が真ならば `X'` の観測値も真であり、D30 の (X1) の出口は起こらない。
+また L11 の仮定と 前提 (環境が持ち込む値) の下で、D30 の共通接頭の上の一意性の観測点 (D18) `q` において、
+`X` の観測値と `X'` の観測値は**等しい**。とくに `X` の観測値が真ならば `X'` の観測値も真であり、D30 の
+(X1) の出口は起こらない。
 
 <1>1. `q` のオペランドの leaf `[]` が指すオブジェクトは `X` と `X'` で同じ `O` である。
   BY D30
