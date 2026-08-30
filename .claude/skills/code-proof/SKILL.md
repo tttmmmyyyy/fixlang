@@ -218,8 +218,8 @@ Run it twice, and only twice. Running it continuously produces churn against a f
 3. **Run the critic on the skeleton, and wait.** One subagent, briefed as *Briefing a critic* says. Act on what it returns before dispatching anything: a property the critic can name a wrong program for is a property to widen now, not after the proofs are written against it.
 4. **Run the provers.** One subagent per proposition file, dispatched in dependency layers: a prover may cite an earlier proposition's *statement*, so a whole layer of independent propositions goes out in one parallel block. **Each one gets its own git worktree** — see *Give every agent its own worktree*. Brief each with the *Briefing a prover* section below.
 
-   A prover on a real subsystem is a long-running, expensive agent, so send a large layer out in batches rather than all at once — an interruption then costs one batch instead of the layer. When one is interrupted, its file is on disk: commit what is there and **resume that agent** rather than launching a fresh one, since the reading it has already done is most of what it spent.
-5. **Run the verifiers.** One subagent per proposition, all in parallel, each given only what the *Briefing a verifier* section allows. Wait for all.
+   A prover on a real subsystem is a long-running, expensive agent, so send a layer out a couple at a time — see *Two agents at a time*. When one is interrupted, its file is on disk: commit what is there and **resume that agent** rather than launching a fresh one, since the reading it has already done is most of what it spent.
+5. **Run the verifiers.** One subagent per proposition, each given only what the *Briefing a verifier* section allows, dispatched a couple at a time — see *Two agents at a time*. Wait for all.
 6. **Iterate.** Hand each verifier's findings to that file's prover. `NOT-OBVIOUS` is answered by inserting substeps, never by rewording the step to sound more certain. `FALSE`, `UNDEFINED`, `BAD-CITATION` and `HEDGE` are answered as the section below prescribes. Then verify again — with **fresh** verifier subagents, which have not seen the previous round's findings, so the check is never anchored to what it already accepted.
 7. **Stop at the fixed point.** The document is finished when one full round over every proposition returns no finding of any kind. Record the round in the status table.
 8. **Report.** Run the critic a second time before this, on the closed document, and carry what it says about the result's limits into the report. What was proved; under which assumptions; which assumptions nobody discharges; how many rounds it took; and every code bug the attempt turned up, in `bug-hunt` shape. Then update the hunt log's neighbours in memory if the proof changed what is known about the subsystem.
@@ -237,6 +237,16 @@ So the brief carries both: the worktree, and the line that no agent runs a git c
 **The agent commits its own file** on its own branch, naming the path (never `git add -A`), and reports the branch. The orchestrator merges. Since the agents own disjoint files and only the orchestrator writes `README.md`, the merges are clean.
 
 **Hold frame changes until the round returns.** Each agent's `README.md` is frozen where it started, so a definition the orchestrator edits mid-round reaches nobody and turns every report that touches it into a claim about a document that no longer exists. Collect the frame edits a round asks for, apply them between rounds, and dispatch the next round from the new commit. This is the structural half of the rule under *Briefing a prover* that a report quoting the document must re-read it first: the rule catches a stale claim, and the batching stops most of them from being written.
+
+### Two agents at a time
+
+Keep about two of these agents in flight. They are the expensive kind — each reads a whole proof file, the frame, and every symbol its citations name — and the ceiling that matters is not the machine's but the session's.
+
+**A rate limit is session-wide, and it kills every agent in flight at the same moment.** Ten agents dispatched together do not fail one at a time as capacity tightens; they all stop mid-sentence on the same request. What survives is only what each had already committed, so a wide fan-out converts a transient limit into the loss of a whole round's reading — the reading being most of what the round cost. Two at a time turns the same limit into a pause.
+
+So the brief tells the agent to **commit as it goes** rather than once at the end: a finished section is worth committing even though the file is not done. Then an interrupted agent has something to resume onto, and *resume* it — the transcript holds the citations it has already opened.
+
+The orchestrator's own work fills the gaps: while two agents run, edit the frame, read the reports that have landed, and prepare the next brief. Waiting is not the cost; re-reading is.
 
 ## Briefing a prover
 
