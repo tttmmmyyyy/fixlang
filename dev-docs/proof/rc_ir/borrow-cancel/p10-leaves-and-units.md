@@ -2566,6 +2566,7 @@ unbox 容器のフィールド、`Llvm` の 2 つの道) が保つ。
 `origin` の答えに `truncate_to_unit` を当てるコードは `borrow.rs` の `owns_object` である。
 `owns_unit` と `check_ownership_is_levelled` が `origin(v, unit).candidates()` の各 `(root, path)` を
 `owns_object` に渡し、`owns_object` は `root` が `vars.param_tys` にあるとき `path` を `units_under`
-と `truncate_to_unit` に掛ける。その `unit` が `U(ty(v))` の要素であることは site の作り方が与える
-(README の P7a)。`param_tys` に入る名前は `var_tys` にも同じ型で入るので、`<1>34` がその `path` に
+と `truncate_to_unit` に掛ける。その `unit` が `U(ty(v))` の要素であることは、`App` の引数の site に
+ついては P7a の site の定義が、`Retain`/`Release` 節点の site については A2 (単位への正規化) と P9
+(複製は名前替えである) が与える。`param_tys` に入る名前は `var_tys` にも同じ型で入るので、`<1>34` がその `path` に
 ついて「`ty(root)` の unit に届く」を与える。`owns_object` を主語とする命題は P7e である。
