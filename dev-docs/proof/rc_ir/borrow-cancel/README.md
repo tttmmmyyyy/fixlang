@@ -1112,7 +1112,7 @@ payload は、どれも D10 の生成の表が行を持つ位置なので第 1 �
 `check_rhs` の develop mode の検査が果たす。
 各 `LLVMGen` の `result_prov`、`borrows_operand`、`applies_a_function_operand` は、その演算が生成する
 コードを正しく述べている。**`result_prov` の呼び出しは abort せず `Provenance` を返す** (A12 の
-`Llvm` 節点の型についての 3 つが、その前提を与える) (`CODE src/ast/inline_llvm.rs: LLVMGen::result_prov`,
+`Llvm` 節点の型についての 4 つが、その前提を与える) (`CODE src/ast/inline_llvm.rs: LLVMGen::result_prov`,
 `LLVMGen::borrows_operand`, `LLVMGen::applies_a_function_operand`)。`result_prov` は結果の
 leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言と生成コードの対応は次のとおりである。
 

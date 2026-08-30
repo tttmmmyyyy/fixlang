@@ -66,16 +66,19 @@ impl TypeDefn {
         self.value.find_node_at(pos)
     }
 
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.value.resolve_namespace(ctx)?;
         Ok(())
     }
 
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.value.resolve_type_aliases(type_env)?;
         Ok(())
     }
 
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycon(&self) -> TyCon {
         TyCon::new(self.name.clone())
     }
