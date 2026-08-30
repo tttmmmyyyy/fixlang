@@ -330,6 +330,13 @@ path の連結ではなく宣言の辿り着く先で定義するのは、構築
 (`CODE src/rc_ir/ownership.rs: all_owned_units`)。所有する unit の参照はその関数が処分し、借用する unit の
 参照は呼び出し元が処分する。
 
+**capture の unit は必ず所有される。** `borrowed_units` に書き込むのは `borrow_ify` の末尾ただ 1 か所で
+あり (`CODE src/rc_ir/borrow.rs: borrow_ify`)、そこが借用に落とすのは `owned_units` に無い unit だけで
+ある。入力の各関数については `owned_units.extend(param_capture_units(func, type_env))` がパラメータと
+capture の全 unit を入れ、借用版は `func.capture.is_none()` の関数からしか作られないので capture を
+持たない。**この節が無いと、D9 の `App` の行が callee の全 boxed leaf を無条件に消費するのに、D10 の
+初期値がその参照を呼び出し先に渡さず、収支が合わない。**
+
 **D7 (オブジェクトと参照カウント、読み)**
 実行時のヒープは**オブジェクト**の集合であり、各オブジェクト `o` は**参照カウント** `H(o) ≥ 0` を持つ。
 `H(o)` が 0 になったオブジェクトは**解放される**。オブジェクトを**読む**とは、そのオブジェクトが占める記憶域の
@@ -564,7 +571,7 @@ P27 がこの水準の命題である。
 
 **D22 (環境)**
 
-RC IR プログラムの外側にあって、その本体を起動するコードを**環境**と呼ぶ。環境は次の 3 つからなる。
+RC IR プログラムの外側にあって、その本体を起動するコードを**環境**と呼ぶ。環境は次の 4 つからなる。
 
 - **C のエントリ点**。`argc` と `argv` をグローバル変数へ格納し、グローバル `main` を読み、その `IO` の
   runner に `apply_lambda` で `IOState` を渡す (`CODE src/build/build_object_files.rs: build_main_function`,
@@ -793,6 +800,9 @@ op は release を 1 つも出さない (`CODE src/fixstd/builtin.rs: InlineLLVM
 
 **活性化の林。** (E1) が作る活性化を**根**、(E3) と (E7)、(E2) のうちオペランドを適用する `Llvm` の段、
 および (F) の解放が `Destructor` について作る段が作る活性化を、それを作った活性化の**子**と呼ぶ。
+**(F) の解放が作る活性化は 2 つである** -- `_dtor` の欄の関数を `_value` の欄の値へ適用するものと、それが
+返した `IO` の動作の runner を適用するものであり、2 つ目の入力は 1 つ目の結果である
+(`CODE src/generator.rs: Generator::build_run_destructor`, `CODE src/fixstd/builtin.rs: run_ios_runner`)。
 **活性化を作る段はこの 5 種で尽きる。**
 1 つの実行の活性化はこの親子関係で**林**をなす -- (E1) は 1 つの実行で何度も起きうるので、根は 1 つとは
 限らない。子は親が中断中の間だけ段を持ち、親は子が終わってから再開するので、1 つの制御の流れの中で生きて
