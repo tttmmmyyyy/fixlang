@@ -880,8 +880,8 @@ leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が
 
 #### L7 (boxed leaf の路は反鎖をなす)
 
-**言明**。任意の型 `τ` について、`boxed_leaf_paths(τ, type_env)` の相異なる 2 元は、一方が他方の前置に
-なることが無い。
+**言明**。A10 を満たす任意の型 `τ` について、`boxed_leaf_paths(τ, type_env)` の相異なる 2 元は、
+一方が他方の前置になることが無い。
 
 **証明**
 
@@ -897,9 +897,11 @@ leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が
 
 <1>3. `go` の各呼び出しの入口の `path` は、その祖先の呼び出しが足した添字の列である。相異なる 2 つの
       呼び出しの入口の `path` は相異なる。
-  BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+  BY A10, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::unpunched_field_types
-  最初の呼び出しの `path` は空である。`unpunched_field_types` は
+  A10 が `go` の再帰の停止性を与える -- 「`unpunched_field_types` を繰り返し取って到達する型についても
+  同じことが成り立ち、その歩みは有限である」「これが無いと `boxed_leaf_paths` も `rc_units` も停止
+  しない」。最初の呼び出しの `path` は空である。`unpunched_field_types` は
   `instance_field_types(...).into_iter().enumerate().filter(...)` を返すので、返る添字は相異なる。<1>2 より、子の呼び出しの入口の `path` は親の入口の `path` に
   添字を 1 つ足したものであり、1 つの親が子に足す添字は `unpunched_field_types` が返す相異なる添字で
   ある。よって呼び出しと入口の `path` は 1 対 1 に対応する。
