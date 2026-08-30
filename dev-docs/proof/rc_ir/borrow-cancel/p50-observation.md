@@ -132,10 +132,18 @@ README の P26 は出口の向きを主張しない。
      InlineLLVMArrayIsStorageUniqueBody::generate
 
 <1>3a. どちらの op についても、`build_branch_by_is_unique` に渡る `obj_ptr` は、第 0 オペランドの boxed
-      leaf `[]` が指すオブジェクト `o` の番地である。`unsafe_is_unique` の引数は `[a : Boxed]` の制約に
-      より boxed であり (D4 の規則 3 よりその leaf は `[]` だけ)、渡るのはその値そのものである。
-      `_unsafe_is_storage_unique` の引数は `Array a` であり (D4 の規則 4 よりその leaf も `[]` だけ)、
-      渡るのは `get_array_storage` が `ARRAY_STORAGE_IDX` の欄から取り出す記憶域オブジェクトである。
+      leaf `[]` が指すオブジェクト `o` の番地である。`is_unique_function` が `Std::unsafe_is_unique` に
+      与える scheme は `Scheme::generalize` に `Predicate::make(make_boxed_trait(), a)` を渡すので、
+      その引数の型には `[a : Boxed]` の制約が掛かる。`Std::Boxed` の実装は、`is_boxed()` が真の struct と
+      union について `Program::add_boxed_impls` が、`Std::#DynamicObject` について `make_std_mod` が
+      入れるものに限り、利用者が書いた実装は `TraitEnv::validate_trait_impl` が拒否する。
+      `TypeDefn::tycon_info` は宣言の `is_unbox` の欄をそのまま `TyConInfo` へ写し、`TypeNode::is_unbox`
+      はその欄を読むので、この 3 種はいずれも `TypeNode::is_box` が真である。よって D4 の規則 3 より
+      その引数の leaf は `[]` だけであり、渡るのはその値そのものである。
+      `array_is_storage_unique_function` が `Std::Array::_unsafe_is_storage_unique` に与える scheme の
+      引数の型は `type_tyapp(make_array_ty(), a)` すなわち `Array a` であり (D4 の規則 4 よりその leaf も
+      `[]` だけ)、渡るのは `get_array_storage` が `ARRAY_STORAGE_IDX` の欄から取り出す記憶域
+      オブジェクトである。
       **配列の値の leaf `[]` が指すオブジェクトはその記憶域である。** A4 より `Retain(v, π)` /
       `Release(v, π)` は `π` の下の各 boxed leaf の参照カウントの ±1 として実装される。型ごとに生成される
       走査関数の本体は `build_traverse` であり、その `is_array` の腕は `work` を `get_array_storage` が
@@ -144,7 +152,12 @@ README の P26 は出口の向きを主張しない。
       参照カウントである。A5 も、配列の要素の参照を持つのは `#ArrayStorage a` のオブジェクトの側だと
       述べる。
   BY A4, A5, D4, D7, <1>3, CODE src/object.rs: get_array_storage, build_traverse,
-     CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate
+     CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate, is_unique_function,
+     array_is_storage_unique_function, make_boxed_trait,
+     CODE src/fixstd/stdlib.rs: make_std_mod, CODE src/ast/types.rs: Scheme::generalize,
+     TypeNode::is_box, TypeNode::is_unbox, CODE src/ast/program.rs: Program::add_boxed_impls,
+     CODE src/ast/traits.rs: TraitEnv::validate_trait_impl,
+     CODE src/ast/typedecl.rs: TypeDefn::tycon_info
 
 <1>4. `assumed_state(false)` は `RcState::Unknown` であり、`RcState::Unknown.dispatches()` は真である。
   BY <1>2, CODE src/fixstd/builtin.rs: assumed_state, CODE src/rc_ir/ast.rs: RcState::dispatches
@@ -176,6 +189,22 @@ README の P26 は出口の向きを主張しない。
      Generator::build_branch_by_refcnt_state, Generator::build_branch_by_is_unique,
      CODE src/object.rs: create_obj
 
+<1>5c. `config.threaded` が偽のビルドでは、状態の欄が `THREADED` を持つオブジェクトは実行のどの時点にも
+      無い。`<1>5a` より `THREADED` を書くのは `build_mark_boxed_with` の `mark_threaded` の側だけで
+      あり、そこへ届くのは `Generator::mark_threaded` であり、それを呼ぶのは
+      `InlineLLVMMarkThreadedFunctionBody::generate` だけである。この op を持つ式を組むのは
+      `mark_threaded_function` だけで、それは `Std::mark_threaded` の本体である。
+      `Program::check_multi_threading_requirement` は、`config.threaded` が偽のとき
+      `Std::mark_threaded` の実体化がプログラムに 1 つでも在れば診断を出して `Err` を返し、`build` は
+      それを `build_object_files` の呼び出しより前に `?` で伝播する。`build_object_files` を呼ぶのは
+      `build` だけである。よって、単一スレッドのビルドでは、`Std::mark_threaded` を持つプログラムは
+      二値にならず実行が存在せず、二値になるプログラムはこの op を持たないので `THREADED` を書く
+      コードを 1 命令も生成しない。
+  BY <1>5a, CODE src/generator.rs: Generator::mark_threaded, Generator::build_mark_boxed_with,
+     CODE src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody, mark_threaded_function,
+     CODE src/ast/program.rs: Program::check_multi_threading_requirement,
+     CODE src/build/build.rs: build
+
 <1>6. `build_branch_by_is_unique` は、`local_bb` では `build_is_refcnt_one(obj_ptr, false, "")` の真偽で
       `unique_bb`/`shared_bb` へ、`threaded_bb` が在るときはそこで `build_is_refcnt_one(obj_ptr, true, "")`
       の真偽で `unique_threaded_bb` (そこから無条件に `unique_bb`)/`shared_bb` へ、`global_bb` が在ると
@@ -184,16 +213,28 @@ README の P26 は出口の向きを主張しない。
   BY CODE src/generator.rs: Generator::build_branch_by_is_unique, Generator::build_is_refcnt_one
 
 <1>7. D26 のグローバル状態のオブジェクトとは、`mark_global` が印を付けたものであり、その印は
-      `RefcntState::GLOBAL` である。
-  BY D26, CODE src/generator.rs: Generator::build_mark_boxed_with, Generator::mark_global
+      `RefcntState::GLOBAL` である。`Generator::mark_global` は `emit_rc_helper_call` で型ごとの
+      補助関数を作り、その本体に `build_traverser_work(obj, TraverserWorkType::mark_global(), ..)` を
+      置く。`build_traverser_work` の boxed の腕は `build_if_nonnull` を通って
+      `build_traverser_work_nonnull_boxed` へ入り、そこから
+      `build_traverser_work_nonnull_boxed_with` へ入る。仕事が release でないので、その関数は
+      `build_mark_boxed_with` を呼ぶ。`build_mark_boxed_with` は
+      `set_refcnt_state(obj_ptr, RefcntState::GLOBAL)` を置き、続いて `traverse_refs` を走らせる。
+  BY D26, CODE src/generator.rs: Generator::build_mark_boxed_with, Generator::mark_global,
+     Generator::emit_rc_helper_call, Generator::build_traverser_work,
+     Generator::build_traverser_work_nonnull_boxed,
+     Generator::build_traverser_work_nonnull_boxed_with, Generator::build_if_nonnull
 
 <1>8. QED
   `<1>1` と `<1>2` より演算は 2 つのどちらかであって `assume_unique` は偽であり、`<1>3` よりその `Bool` は
   `build_branch_by_is_unique` の 2 つの出口のどちらを通ったかで決まる。`<1>3a` よりその op が読むのは `o`
-  である。`<1>4`・`<1>5`・`<1>5a` より状態は 3 つで尽き、`<1>6` より `GLOBAL` の腕は `shared_bb` に決まり、
-  `LOCAL` と `THREADED` の腕はどちらも参照カウントが `1` であるかで決まる。D7 より `H(o)` はその参照カウント
-  であり、`<1>7` より `GLOBAL` は D26 のグローバル状態である。言明の後半は `<1>5a` と `<1>5b` である。
-  BY D7, D26, <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>5a, <1>5b, <1>6, <1>7
+  である。`<1>4`・`<1>5`・`<1>5a` より状態は 3 つで尽きる。`<1>6` より `GLOBAL` の腕は `shared_bb` に
+  決まり、`LOCAL` と `THREADED` の腕はどちらも参照カウントが `1` であるかで決まる。複数スレッドの
+  ビルドでは `<1>5` の 3 つの腕がその 3 つの状態に当たり、単一スレッドのビルドでは `<1>5c` より
+  `THREADED` のオブジェクトが無いので、`<1>5` の 2 つの腕が `LOCAL` と `GLOBAL` に当たる。D7 より
+  `H(o)` はその参照カウントであり、`<1>7` より `GLOBAL` は D26 のグローバル状態である。言明の後半は
+  `<1>5a` と `<1>5b` である。
+  BY D7, D26, <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>5a, <1>5b, <1>5c, <1>6, <1>7
 
 **観測値は local と threaded を区別しない。** `<1>6` の threaded の腕は、カウントが 1 であるとき
 `set_refcnt_state(obj_ptr, RefcntState::LOCAL)` を行ってから `unique_bb` へ跳ぶ
