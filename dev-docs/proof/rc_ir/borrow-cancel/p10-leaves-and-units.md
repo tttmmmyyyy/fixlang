@@ -1,6 +1,6 @@
 # P1 (leaf と unit の対応) と P2 (`origin` の全域性と停止性) の証明
 
-対象コミットは `5aa87f26c246919eadcb3f1c3ce0252366c2aed8` である。
+対象コミットは `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` である。
 
 この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A3、A6、A9、A10、A11、A12、A13、A15 の
 上である。証明は 1 本の構造化証明で、その QED が次の 3 つである。
@@ -252,9 +252,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      CODE src/rc_ir/ownership.rs: collect_bindings
 
 <1>3b. 製品のコードが `TyConInfo` の値を作る場所は、次の 4 つの関数だけである (`ownership.rs` に残る
-   2 か所は `#[cfg(test)] mod tests` の中にある)。よって `E` に登録されている `TyConInfo` はどれも
-   この 4 つのいずれかが作ったものである。各関数が置く `variant` と、この証明が読むフィールドは次の
-   とおりである。
+   2 か所は `#[cfg(test)] mod tests` の中にある)。各関数が置く `variant` と、この証明が読むフィールドは
+   次のとおりである。
 
    | 作る関数 | `variant` | 個数と、この証明が読むフィールド |
    |---|---|---|
@@ -278,14 +277,118 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    穴つきの形 `type_decl.tycon_info(&[i])` を入れる。`Program::validate_type_defns` は同じ
    `self.type_defns` を渡って `validate_tyvars` を呼び、`elaborate` はそれを `?` で呼ぶので、
    elaboration を通ったプログラムではどの行の名前も相異なる。
+
+   **`E` に登録されている各 `TyConInfo` の `variant`、`tyvars`、`is_unbox`、`fields` の長さ、
+   および各 `fields[i].is_punched` は、上の 4 つのいずれかがそれを作ったときの値である。**この 5 つが、
+   この証明が `TyConInfo` から読むものである。`TypeEnv` の `tycons` は非公開のフィールドなので、
+   それに書けるのは `src/ast/program.rs` の中の 6 か所であり、次のとおりである。
+
+   - `TypeEnv::default`。空の `Map` を置く。
+   - `TypeEnv::new`。`Program::calculate_type_env` が、`bulitin_tycons()` に各型宣言の
+     `type_decl.tycon_info(&[])` と、構造体についてはフィールドごとの穴つきの形
+     `type_decl.tycon_info(&[i])` を足した `Map` を渡す。
+   - `TypeEnv::add_tycons`。渡された各 `TyConInfo` の `fields` を走って `field.ty` を
+     `unwrap_newtypes` の像に置き替えてから、`tycons` に入れる。
+   - `TypeEnv::unwrap_newtypes`。既に在る各 `TyConInfo` の `fields` を走って `field.ty` を
+     同じように置き替える。
+   - `TypeEnv::resolve_type_aliases_in_tycons`。既に在る各 `TyConInfo` に
+     `TyConInfo::resolve_type_aliases` を当てる。それは各 `Field` に `Field::resolve_type_aliases` を
+     当て、その本体は `self.ty` への 1 つの代入である。
+   - `Program::resolve_namespace_not_in_expr`。既に在る各 `TyConInfo` に
+     `TyConInfo::resolve_namespace` を当てる。それは各 `Field` に `Field::resolve_namespace` を
+     当て、その本体は `self.syn_ty` と `self.ty` への 2 つの代入である。
+
+   最初の 2 つが `Map` を丸ごと置き、残る 4 つが書き替えるのは `fields[..].ty` と `fields[..].syn_ty`
+   だけである。どれも `fields` の長さを変えず、`variant`、`tyvars`、`is_unbox`、`fields[i].is_punched`
+   にも触れない。`TyConInfo` は `Serialize` も `Deserialize` も導出しないので、キャッシュから読まれる
+   `TyConInfo` も無い。
   BY CODE src/ast/types.rs: TyConInfo, CODE src/fixstd/builtin.rs: bulitin_tycons,
      CODE src/constants.rs: FUNPTR_ARGS_MAX, CODE src/ast/typedecl.rs: TypeDefn::tycon_info,
      CODE src/ast/typedecl.rs: TypeDefn::validate_tyvars,
+     CODE src/ast/typedecl.rs: Field (`ty` / `syn_ty` / `is_punched` の宣言),
+     CODE src/ast/typedecl.rs: Field::resolve_namespace,
+     CODE src/ast/typedecl.rs: Field::resolve_type_aliases,
      CODE src/ast/program.rs: Program::validate_type_defns,
      CODE src/ast/program.rs: Program::calculate_type_env,
+     CODE src/ast/program.rs: TypeEnv (`tycons` の宣言),
+     CODE src/ast/program.rs: TypeEnv::default, CODE src/ast/program.rs: TypeEnv::new,
+     CODE src/ast/program.rs: TypeEnv::add_tycons,
+     CODE src/ast/program.rs: TypeEnv::unwrap_newtypes,
+     CODE src/ast/program.rs: TypeEnv::resolve_type_aliases_in_tycons,
+     CODE src/ast/program.rs: Program::resolve_namespace_not_in_expr,
+     CODE src/ast/types.rs: TyConInfo::resolve_namespace,
+     CODE src/ast/types.rs: TyConInfo::resolve_type_aliases,
      CODE src/elaboration/mod.rs: elaborate,
      CODE src/optimization/capture_struct.rs: CaptureStruct::new,
      CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon
+
+<1>3ba. `is_funptr_tycon` について次の 2 つが成り立つ。
+   - (a) `is_funptr_tycon(tc)` が abort しうるのは末尾の `number.parse::<u32>().unwrap()` だけで
+     ある。そこに達するのは、`tc.name.namespace` が `Std` の 1 段でありかつ `tc.name.name` が
+     `FUNPTR_NAME` (`"#FunPtr"`) で始まるときに限る。
+   - (b) `E.tycons()` の鍵のうち (a) の形の名前を持つのは、`bulitin_tycons` が
+     `make_funptr_tycon(n)` (`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下の `u32`) の下に入れる 100 個だけで
+     ある。その鍵に対して `E.tycons()` が持つ `TyConInfo` の `variant` は `TyConVariant::Primitive` で
+     あり、その鍵に対する (a) の `parse::<u32>()` は成功する。
+  <2>1. (a) が成り立つ。`is_funptr_tycon` は、`tc.name.namespace` が `Std` の 1 段でなければ `None`、
+     `tc.name.name` が `FUNPTR_NAME` で始まらなければ `None` を返し、そのどちらでもないときにだけ
+     残りの文字を `parse::<u32>()` に掛ける。ほかに abort する場所を持たない。
+    BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME
+  <2>2. (b) の第 1 文が成り立つ。`E` の鍵は次の 4 か所から来る。`TypeEnv` を作るのは
+     `calculate_type_env` の `TypeEnv::new` であり、鍵を足すのは `TypeEnv::add_tycons` だけである。
+     `add_tycons` を呼ぶ場所は `closure_specialization::lift_all`、
+     `closure_specialization::realize_all`、`defunctionalize_fix::run_one`、
+     `desugar_opaque::register_opaque_tycon` の 4 つである。
+     - `Program::calculate_type_env` が置く `bulitin_tycons()` の鍵。`<1>3b` の表の 5 行が
+       挙げるもので、`#FunPtr` で始まるのは `make_funptr_tycon(n)` だけである。
+     - `Program::calculate_type_env` が置く `type_decl.tycon()` と、構造体についてその名前に
+       `PUNCHED_TYPE_SYMBOL` (`"#PunchedAt"`) と添字を継いだ穴つきの形。A13 より Fix の識別子は
+       `#` を含まないので、どちらも `#FunPtr` では始まらない。
+     - `lift_all` と `realize_all` が `add_tycons` に渡す capture 構造体の型構成子。この 2 つが
+       渡すのは `LiftedLambdas::take_new_tycons()` の返り値であり、その `new_tycons` へ入れるのは
+       `record_capture_list` だけで、入れる鍵は `CaptureStruct` の `tycon` である。`run_one` が
+       `add_tycons` に渡す鍵も、`FixDefunctionalizer::lift` が作った `CaptureStruct` の `tycon` で
+       ある。その名前は `CaptureStruct::new` が `format!("{}@{}", prefix, owner.name)` で作る。
+       **製品のコードで `CaptureStruct::new` を呼ぶのは 3 か所であり、`prefix` はそのどれかが
+       渡す値である。**`LiftedLambdas::capture_struct_of` と
+       `ClosureSpecializationVisitor::decapture_lambda` は `CAP_LIST_PREFIX` (`"#CapList"`) を、
+       `FixDefunctionalizer::lift` は `"#FixCap"` を渡す。`decapture_lambda` が作る
+       `CaptureStruct` が `new_tycons` に届くのは `LiftedLambdas::insert` を経由してであり、
+       それも `record_capture_list` を呼ぶ。よって `prefix` は `"#FixCap"` か `CAP_LIST_PREFIX` の
+       どちらかであり、どちらも `#FunPtr` では始まらない。
+     - `register_opaque_tycon` が `add_tycons` に渡す不透明型の型構成子。その鍵は
+       `OpaqueInfo` の `tycon` であり、その名前を作るのは `collect_opaque_infos` の
+       `FullName::new(&gv_name.to_namespace(), &opq_var.name)` である。`opq_var` は
+       `is_opaque_tyvar(&tv.name)` が真である型変数に限られ、`is_opaque_tyvar(name)` は
+       `name.starts_with('?')` である。よってこの鍵の `name.name` は `?` で始まり、`#FunPtr` では
+       始まらない。
+    BY A13, <1>3b, CODE src/ast/program.rs: Program::calculate_type_env,
+       CODE src/ast/program.rs: TypeEnv::add_tycons,
+       CODE src/ast/types.rs: TyCon::into_punched_type_name,
+       CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, CODE src/constants.rs: CAP_LIST_PREFIX,
+       CODE src/optimization/capture_struct.rs: CaptureStruct::new,
+       CODE src/optimization/defunctionalize_fix.rs: run_one, FixDefunctionalizer::lift,
+       CODE src/optimization/closure_specialization.rs: lift_all, realize_all,
+           record_capture_list, take_new_tycons, LiftedLambdas::insert,
+           LiftedLambdas::capture_struct_of,
+           ClosureSpecializationVisitor::decapture_lambda,
+       CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon, collect_opaque_infos,
+           OpaqueInfo,
+       CODE src/ast/types.rs: is_opaque_tyvar,
+       CODE src/fixstd/builtin.rs: make_funptr_tycon,
+       CODE src/fixstd/builtin.rs: make_funptr_name
+  <2>3. (b) の第 2 文が成り立つ。`<2>2` より `make_funptr_tycon(n)` を `E.tycons()` の鍵に置くのは
+     `Program::calculate_type_env` が渡す `bulitin_tycons()` だけであり、`<1>3b` の表よりその
+     `TyConInfo` の `variant` は `TyConVariant::Primitive` である。`<1>3b` の最後の節より、`E` に
+     入った後の書き替えは `variant` を動かさない。
+    BY <1>3b, <2>2, CODE src/fixstd/builtin.rs: bulitin_tycons
+  <2>4. (b) の第 3 文が成り立つ。`make_funptr_tycon(n)` の名前は `make_funptr_name(n)`、すなわち
+     `#FunPtr` に `n` の 10 進表記を継いだものなので、`FUNPTR_NAME` の分を落とした残りは `n` の
+     10 進表記であり、`parse::<u32>()` は成功する。
+    BY <2>1, <2>2, CODE src/fixstd/builtin.rs: make_funptr_name,
+       CODE src/fixstd/builtin.rs: make_funptr_tycon
+  <2>5. QED
+    BY <2>1, <2>2, <2>3, <2>4
 
 <1>3c. `<1>1` を満たす型 `t` について、次の 4 つが成り立つ。
    - (a) `t.is_closure()`、`t.is_array()`、`t.is_funptr()`、`t.is_punched_array()` は abort せず
@@ -317,61 +420,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
       BY CODE src/fixstd/builtin.rs: is_array_tycon,
          CODE src/fixstd/builtin.rs: is_punched_array_tycon,
          CODE src/ast/types.rs: TypeNode::is_closure
-    <3>3. `is_funptr_tycon(tc)` が abort しうるのは末尾の `number.parse::<u32>().unwrap()` だけで
-       ある。そこに達するのは、`tc.name.namespace` が `Std` の 1 段でありかつ `tc.name.name` が
-       `FUNPTR_NAME` (`"#FunPtr"`) で始まるときに限る。
-      BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME
-    <3>4. `E.tycons()` の鍵のうち `<3>3` の形の名前を持つのは、`bulitin_tycons` が
-       `make_funptr_tycon(n)` (`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下の `u32`) の下に入れる 100 個
-       だけである。`E` の鍵は次の 4 か所から来る。`TypeEnv` を作るのは `calculate_type_env` の
-       `TypeEnv::new` であり、鍵を足すのは `TypeEnv::add_tycons` だけである。`add_tycons` を呼ぶ
-       場所は `closure_specialization::lift_all`、`closure_specialization::realize_all`、
-       `defunctionalize_fix::run_one`、`desugar_opaque::register_opaque_tycon` の 4 つである。
-       - `Program::calculate_type_env` が置く `bulitin_tycons()` の鍵。`<1>3b` の表の 5 行が
-         挙げるもので、`#FunPtr` で始まるのは `make_funptr_tycon(n)` だけである。
-       - `Program::calculate_type_env` が置く `type_decl.tycon()` と、構造体についてその名前に
-         `PUNCHED_TYPE_SYMBOL` (`"#PunchedAt"`) と添字を継いだ穴つきの形。A13 より Fix の識別子は
-         `#` を含まないので、どちらも `#FunPtr` では始まらない。
-       - `lift_all` と `realize_all` が `add_tycons` に渡す capture 構造体の型構成子。この 2 つが
-         渡すのは `LiftedLambdas::take_new_tycons()` の返り値であり、その `new_tycons` へ入れるのは
-         `record_capture_list` だけで、入れる鍵は `CaptureStruct` の `tycon` である。`run_one` が
-         `add_tycons` に渡す鍵も、`FixDefunctionalizer::lift` が作った `CaptureStruct` の `tycon` で
-         ある。その名前は `CaptureStruct::new` が `format!("{}@{}", prefix, owner.name)` で作る。
-         **製品のコードで `CaptureStruct::new` を呼ぶのは 3 か所であり、`prefix` はそのどれかが
-         渡す値である。**`LiftedLambdas::capture_struct_of` と
-         `ClosureSpecializationVisitor::decapture_lambda` は `CAP_LIST_PREFIX` (`"#CapList"`) を、
-         `FixDefunctionalizer::lift` は `"#FixCap"` を渡す。`decapture_lambda` が作る
-         `CaptureStruct` が `new_tycons` に届くのは `LiftedLambdas::insert` を経由してであり、
-         それも `record_capture_list` を呼ぶ。よって `prefix` は `"#FixCap"` か `CAP_LIST_PREFIX` の
-         どちらかであり、どちらも `#FunPtr` では始まらない。
-       - `register_opaque_tycon` が `add_tycons` に渡す不透明型の型構成子。その鍵は
-         `OpaqueInfo` の `tycon` であり、その名前を作るのは `collect_opaque_infos` の
-         `FullName::new(&gv_name.to_namespace(), &opq_var.name)` である。`opq_var` は
-         `is_opaque_tyvar(&tv.name)` が真である型変数に限られ、`is_opaque_tyvar(name)` は
-         `name.starts_with('?')` である。よってこの鍵の `name.name` は `?` で始まり、`#FunPtr` では
-         始まらない。
-      BY A13, <1>3b, CODE src/ast/program.rs: Program::calculate_type_env,
-         CODE src/ast/program.rs: TypeEnv::add_tycons,
-         CODE src/ast/types.rs: TyCon::into_punched_type_name,
-         CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, CODE src/constants.rs: CAP_LIST_PREFIX,
-         CODE src/optimization/capture_struct.rs: CaptureStruct::new,
-         CODE src/optimization/defunctionalize_fix.rs: run_one, FixDefunctionalizer::lift,
-         CODE src/optimization/closure_specialization.rs: lift_all, realize_all,
-             record_capture_list, take_new_tycons, LiftedLambdas::insert,
-             LiftedLambdas::capture_struct_of,
-             ClosureSpecializationVisitor::decapture_lambda,
-         CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon, collect_opaque_infos,
-             OpaqueInfo,
-         CODE src/ast/types.rs: is_opaque_tyvar,
-         CODE src/fixstd/builtin.rs: make_funptr_tycon,
-         CODE src/fixstd/builtin.rs: make_funptr_name
     <3>5. QED
-      `<1>1` (i) より `t.toplevel_tycon()` が返す型構成子は `E.tycons()` の鍵である。`<3>4` より
-      それが `<3>3` の形であるのは `make_funptr_tycon(n)` のときだけで、そのとき
-      `make_funptr_name(n)` は `#FunPtr` に `n` の 10 進表記を継いだものなので `parse::<u32>()` は
-      成功する。`<3>1` と `<3>2` と合わせて 4 つとも abort しない。
-      BY <1>1, <3>1, <3>2, <3>3, <3>4,
-         CODE src/fixstd/builtin.rs: make_funptr_name
+      `<1>1` (i) より `t.toplevel_tycon()` が返す型構成子は `E.tycons()` の鍵である。`<1>3ba` (a) より
+      `is_funptr_tycon` が abort しうるのはその名前が `#FunPtr` で始まる `Std` の 1 段の名前のときだけで
+      あり、`<1>3ba` (b) より `E.tycons()` の鍵でその形を持つのは `make_funptr_tycon(n)` に限られて、
+      そこでは `parse::<u32>()` が成功する。`<3>1` と `<3>2` と合わせて 4 つとも abort しない。
+      BY <1>1, <1>3ba, <3>1, <3>2
   <2>2. (c) が成り立つ。`toplevel_tycon_info` は `assert!(!self.is_closure())` を置き、
      `self.toplevel_tycon().unwrap()` と `type_env.tycons().get(&tycon).unwrap()` を行う。この場合の
      仮定より `assert!` は通り、`<1>1` (i) より 2 つの `unwrap` は成功する。`is_union` は
@@ -460,6 +514,25 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     未満で `f` は `t.field_types(E)[i]` である。
     BY <2>1, <2>2, <2>3, <2>7, CODE src/ast/types.rs: TypeNode::unpunched_field_types,
        CODE src/ast/types.rs: TypeNode::field_types
+
+<1>3ca. `<1>1` を満たす型 `t` について `t.is_closure()` が偽であるとき、`t.is_funptr()` が真ならば
+   `t.toplevel_tycon_info(E).variant` は `TyConVariant::Primitive` である。対偶をとると、
+   `t.toplevel_tycon_info(E).variant` が `Primitive` でなければ `t.is_funptr()` は偽である。
+  <2>1. `t.is_funptr()` は `toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())` である。
+     それが真であるのは `t.toplevel_tycon()` が `Some(tc)` を返し、かつ `is_funptr_tycon(tc)` が
+     `Some` を返すときに限る。
+    BY CODE src/ast/types.rs: TypeNode::is_funptr,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies
+  <2>2. `is_funptr_tycon(tc)` が `Some` を返すとき、`tc` の名前は `<1>3ba` (a) の形である。
+     `is_funptr_tycon` は 2 つの検査のどちらかに落ちたら `None` を返すからである。
+    BY <1>3ba, <2>1, CODE src/fixstd/builtin.rs: is_funptr_tycon
+  <2>3. `<1>1` (i) より `tc` は `E.tycons()` の鍵であり、`<1>3ba` (b) よりその `TyConInfo` の
+     `variant` は `TyConVariant::Primitive` である。
+    BY <1>1, <1>3ba, <2>2
+  <2>4. QED
+    `t.is_closure()` が偽なので `<1>3c` (c) より `t.toplevel_tycon_info(E)` は abort せず値を返し、
+    その値は `E.tycons()[tc]` である。`<2>3` よりその `variant` は `Primitive` である。
+    BY <1>1, <1>3c, <2>1, <2>3, CODE src/ast/types.rs: TypeNode::toplevel_tycon_info
 
 <1>3d. `<1>1` を満たす型 `t_0` から始まる無限列 `t_0 REC t_1 REC t_2 ...` は存在しない。
   <2>1. `t REC f` であるとき、ある `i` について `(i, f)` は `F(t)` の要素である。すなわち `REC` の辺は
