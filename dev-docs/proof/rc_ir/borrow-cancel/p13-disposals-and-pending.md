@@ -560,10 +560,11 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
         BY CODE src/rc_ir/ownership.rs: resolve_callee_params
       <4>1a. `n` の段の**実行時の**呼び出し先 (D23) を `g` と書くと、`g` は `prog` の `funcs` の関数で
              あり、そのパラメータの列は `params` である。
-        BY P30, <2>4, <4>1, D23
-        第 1 節より `B` は `cancel` の入力、すなわち `borrow_ify` の出力の本体であり、`prog` はその
-        プログラムである。<2>4 と <4>1 より `params` は `resolve_callee_params(callee, vars, prog)` の
-        返り値である。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
+        BY P15, P30, <2>4, <4>1, D23
+        第 1 節より `B` は `cancel` の入力の本体であり、`prog` はそのプログラムである。P15 は
+        「**`cancel` の入力が `borrow_ify` の出力であることは、`optimize_rc_program` の 1 か所を
+        読めば決まる。**」と述べるので、`prog` は `borrow_ify` の出力である。<2>4 と <4>1 より
+        `params` は `resolve_callee_params(callee, vars, prog)` の返り値である。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
         `resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の呼び出し先
         (D23) と同じ `RcFunc` である。`cancel` の中で `CancelAnalysis::consume_rhs` が `rhs_consumes` を
         呼ぶ位置がこれを読む」と述べる。`n` はまさにその位置である。`g` が `prog` の
@@ -2531,11 +2532,12 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
     `d(C) = held_ρ(n, C) - 1 ≥ bumps_ρ(n, C)` である。
   <2>4. CASE `C` の ρ-終端が借用する (D14) パラメータ・capture の leaf であり、`bumps_ρ(n, C) = 0` で
         ある。
-    BY P14a, D34, DEF 節点の時点, <2>1, L17
+    BY P14a, P15, D34, DEF 節点の時点, <2>1, L17
     P14a は「`borrow_ify` の出力の各本体、各実行路、各活性化について、ρ-終端が借用する (D14)
     パラメータ・capture の leaf である**計数下**の別名類 (D26) は、活性化の間ずっと参照を少なくとも
-    1 つ持つ」と述べる。第 1 節より `B` は `cancel` の入力、すなわち `borrow_ify` の出力の本体であり、
-    L17 より `C` は計数下である。D34 がその「参照の個数」の帰属を定め、DEF 節点の時点より
+    1 つ持つ」と述べる。第 1 節より `B` は `cancel` の入力の本体であり、P15 の「**`cancel` の入力が
+    `borrow_ify` の出力であることは、`optimize_rc_program` の 1 か所を読めば決まる。**」より、`B` は
+    `borrow_ify` の出力の本体である。L17 より `C` は計数下である。D34 がその「参照の個数」の帰属を定め、DEF 節点の時点より
     `τ(n)` はこの活性化が生きている間の時点である。よって `held_ρ(n, C) ≥ 1` であり、
     `d(C) = held_ρ(n, C) - 1 ≥ 0 = bumps_ρ(n, C)` である。
   <2>5. QED
