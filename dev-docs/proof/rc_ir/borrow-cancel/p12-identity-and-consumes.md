@@ -284,10 +284,14 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
           `vars.bindings` の記録・`type_env`・`(x, π)` だけで決まり、`vars.origins` を読まない。
           `None | Param | Producer` の腕は呼び出しを行わず、`Move` の腕は 1 つの鍵を、`Join` の腕は
           `arm_results` の各元の鍵を、`Field` と `Payload` の腕は高々 1 つの鍵を、`Llvm` の腕は `decl` から
-          決まる鍵を渡す。`origin_from_leaves_under` も、`decl` から
+          決まる鍵を渡す。`Llvm` の腕の `decl` は
+          `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の値であり、A3 より `result_prov` は
+          決定的である -- 同じ引数に対して常に同じ値を返す -- ので、`decl` は
+          `vars.bindings` が持つ `llvm_gen`・`args`・`result_ty` と `type_env` だけで決まる。
+          `origin_from_leaves_under` も、`decl` から
           `operand_units` を先に集め終えてからその全部について `origin` を呼ぶ。どの腕も、行った
           `origin` の呼び出しの返り値で次の呼び出しの有無や鍵を変えない。
-      BY CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under
+      BY A3, CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under
     <3>2. 対 `(A, B)` を取る。`D_0 := A` とし、`D_i ≠ B` である間、`D_{i+1}` を「`D_i` の `origin_inner` の
           評価の中で始まる `origin` の呼び出しのうち、`B` を実行区間に含む (または `B` 自身である) もので
           最も外側のもの」と定めると、`A = D_0 ⊋ D_1 ⊋ … ⊋ D_k = B` (`k ≥ 1`) が得られる。`D_0` から
@@ -301,9 +305,11 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
       BY <1>1, <2>3, <3>1
     <3>3. `B` の `origin_inner` の評価は、`D_1` の鍵と同じ鍵の呼び出し `E` を直接行う。
       `B` は記録を見つけないので `origin_inner` を評価し、その鍵は `A` の鍵に等しい。`<3>1` より
-      `B` の `origin_inner` が直接行う呼び出しの鍵の集合は `A` の `origin_inner` のそれに等しく、
-      `D_1` は `A` の `origin_inner` が直接行った呼び出しなので、その鍵はその集合に入っている。
-      BY <3>1, <3>2
+      直接行う呼び出しの鍵の集合は鍵と `vars.bindings` と `type_env` だけで決まるので (`Llvm` の腕に
+      ついては A3 の決定性がそれを与える)、`B` の `origin_inner` が直接行う呼び出しの鍵の集合は
+      `A` の `origin_inner` のそれに等しい。`D_1` は `A` の `origin_inner` が直接行った呼び出しなので、
+      その鍵はその集合に入っている。
+      BY A3, <3>1, <3>2
     <3>4. `E` は `D_1` の `origin_inner` の評価の中で始まる。
       `k = 1` のとき `B = D_1` であり、`E` は `B` の `origin_inner` の中で始まる。`k ≥ 2` のとき
       `B` は `D_1` の `origin_inner` の評価の中で始まるので、その中で始まる `E` も同じである。
