@@ -83,7 +83,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 の値を返す (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。すなわち `ActRefs(t)` は D15 の
 `ActRefs(v, path)` である。`self.vars` と `self.type_env` は `CancelAnalysis` の構築のときに置かれ、走査は
 この 2 つの欄を差し替えない (`CODE src/rc_ir/borrow.rs: CancelAnalysis`,
-`CODE src/rc_ir/borrow.rs: cancel`)。**上の 3 つの量が、走査のどの時点で読んでも同じ値であることは
+`CODE src/rc_ir/borrow.rs: cancel`)。**上の 3 つの量が、走査のどの時点で読んでも同じであることは
 L0 が示す。**
 
 ### DEF 参照の多重集合
@@ -438,8 +438,8 @@ enum については元と同じ変位で、その変位が保持する各値を
     返った後に起きる。<2>2 よりその後 `vars.bindings` への書き込みは無い。
     BY <2>2, <2>3
 <1>3. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが直に行う、第 1 引数が `vars` である
-      `origin` の呼び出しの鍵の集合は、`vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの集合は `vars.origins` の状態にも、
-      その呼び出しが受け取る `origin` の返り値にも依らない。
+      `origin` の呼び出しの鍵の集合は、`vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの
+      集合は `vars.origins` の状態にも、その呼び出しが受け取る `origin` の返り値にも依らない。
   <2>0. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しの中で、第 1 引数が `vars` である `origin`
         の呼び出しが直に (別の `origin` の呼び出しの中でなく) 起きるのは、`origin_inner` の本体に書かれた
         6 か所と、それが呼ぶ `origin_from_leaves_under` の本体に書かれた 1 か所を通ってだけである。
