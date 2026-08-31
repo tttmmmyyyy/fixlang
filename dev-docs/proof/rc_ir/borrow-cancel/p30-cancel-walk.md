@@ -1457,11 +1457,13 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       `others` として `self.consume_objects(&mut pending, &others)` を 1 回呼び (「消費」)、
       `un_bump(&mut pending, &un_bumped)` を 1 回呼び (「引き」)、その返り値が `OutsideBracket` のとき
       さらに `self.consume_objects(&mut pending, &objects)` を 1 回呼ぶ (「消費」)。その後
-      `self.walk(k, pending, returns_from_func)` の値を返す。`InBracket` の枝が触れるのは
-      `self.un_bump_releases` だけである。よって `pending(k)` は `pending(n)` に有限個の基本操作を
-      行ったものであり、`pending_out(n) = pending_out(k)` である。この腕はほかに `PendingRetains` の値を
-      作らない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕, L6, <1>1, <1>1a
+      `self.walk(k, pending, returns_from_func)` の値を返す。`un_bump` の返り値についての場合分けは
+      `UnBump` の 3 変位を尽くしており、`InBracket` の枝が触れるのは `self.un_bump_releases` だけ、
+      `NoBracket` の枝 (`UnBump::NoBracket => {}`) は何もしない。よって `pending(k)` は `pending(n)` に
+      有限個の基本操作を行ったものであり、`pending_out(n) = pending_out(k)` である。この腕はほかに
+      `PendingRetains` の値を作らない。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
+     CODE src/rc_ir/borrow.rs: UnBump, L6, <1>1, <1>1a
 <1>4. CASE `n` の式が `RcExpr::Let(_, RcRhs::Match(_, arms), k)` である。この腕は各アームについて
       `pending.clone()` (「複製」) を渡して `walk` を呼び、`pending` 自身は変えない。その後
       `self.merge(&pending, &arm_exits)` (「併合」) で `merged` を作り、
