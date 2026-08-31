@@ -66,7 +66,7 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 `ActRefs(v, π)` は D15 の `acted_references(v, π)` である。`VarPath` は対 `(FullName, FieldPath)` である
 (`CODE src/rc_ir/ast.rs: VarPath`)。等号はこの対の等号である。
 
-この文書は補題を `L0`、`L0a`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L4`、`L5`、`L5a`、`L6` (この順に並べる)、
+この文書は補題を `L0`、`L0a`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L4`、`L5a`、`L5`、`L6` (この順に並べる)、
 反例を `R1` と呼ぶ。**`BY` の行で
 引用してよいのは、それぞれの言明だけである。** 言明が複数の主張からなる補題は主張に (a)、(b)、… の名札を
 付け、`L5 (c)` のように引用する。同じ規則を P6 (a)、P6 (b)、P7 (a)、P7 (b) にも使う -- これらは
@@ -1528,7 +1528,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 
 <1>1. `walk_inner` の `RcExpr::Release(v, path, _, k)` の腕は、`other_objects(v, path)` を
       `consume_objects` に渡し、`acted_references(v, path)` を `un_bump` に渡す。`un_bump` が読むのは
-      その `References` の鍵、すなわち `ActRefs(v, π).objects()` である。
+      その `References` の鍵ごとの個数であり、それが名指す鍵の全体は `ActRefs(v, π).objects()` である。
   <2>1. 腕は `let others = self.other_objects(v, path); self.consume_objects(&mut pending, &others);` の
         のち `let un_bumped = self.acted_references(v, path);` を `un_bump(&mut pending, &un_bumped)` に
         渡す。`UnBump::OutsideBracket` の枝はさらに `un_bumped.objects()` を `consume_objects` に渡す。
@@ -1772,6 +1772,50 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
 呼ばず `rhs_consumes` を直接呼ぶので (`L5 (n)`)、P7 はそちらについて何も述べない
 (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`)。
 
+### L5a (unbox 容器の boxed leaf はフィールドの添字で始まる)
+
+**言明**。本体の `Destructure(c, fs, s, k)` の節点であって `c.ty.is_box(type_env)` が偽であるものに
+ついて、次の 2 つが成り立つ。
+
+- **(a)** `boxed_leaf_paths(ty(c), type_env)` の各元は空でない path であり、その先頭の添字は、その leaf が
+  属するフィールドの添字である。
+- **(b)** D9 の `Destructure` (unbox) の行が消費とする**名前が付いていないフィールドの leaf**の全体は、
+  `boxed_leaf_paths(ty(c), type_env)` の元のうち**先頭の添字が `fs` の名前付きフィールドの添字でない**
+  ものの全体に等しい。
+
+(b) が成り立つのは D4 の規則 5 による -- unbox 集約の leaf は、フィールドの添字をそのフィールドの型の
+leaf に前置したものだからである。
+
+<1>1. `ty(c)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Struct` である。したがって
+      `is_array(ty(c))` は偽である。
+  A12 の「`Destructure` の容器が構造体であること」の行が `is_struct(ty(c))` を与え、`is_struct` は
+  `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、型の
+  `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が構造体で
+  あることをその節の 1 つに挙げる。
+  `is_array` は tycon が `Std::Array` であることであり、その `TyConInfo` の `variant` は `Array` なので、
+  `variant` が `Struct` である `ty(c)` には当たらない。
+  BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
+     TypeNode::is_array, TyConVariant
+
+<1>2. CASE `is_fully_unboxed(ty(c))` が真。
+  D4 の規則 1 より `boxed_leaf_paths(ty(c), type_env)` は空なので、(a) は空虚に成り立ち、(b) の 2 つの
+  集合はどちらも空である。
+  BY D4
+
+<1>3. CASE `is_fully_unboxed(ty(c))` が偽。
+  D4 の規則 1 は当たらず、`<1>1` より規則 2 (クロージャ) と規則 4 (`is_array`) も当たらず、前提より
+  規則 3 (`is_box`) も当たらない。よって規則 5 が当たり、`ty(c)` の各 leaf は `unpunched_field_types` が
+  返すフィールドの添字を、そのフィールドの型の leaf に前置したものである。すなわち各 leaf は空でない
+  path を持ち、その先頭の添字はその leaf が属するフィールドの添字であって、これが (a) である。よって
+  「名前が付いていないフィールドの leaf」と「先頭の添字が名前付きフィールドの添字でない leaf」は同じ
+  集合であり、これが (b) である。
+  BY D4, <1>1
+
+<1>4. QED
+  `<1>2` と `<1>3` は `is_fully_unboxed(ty(c))` の真偽の 2 つの場合で尽きており、どちらでも (a) と (b) が
+  成り立つ。
+  BY <1>2, <1>3
+
 ### L5 (`collect_consumes` が積むもの)
 
 **言明**。次が成り立つ。
@@ -1787,8 +1831,9 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
   積む。
 - **(d)** `RcExpr::Destructure(c, fs, _, k)` の腕は、`destructure_consumes(c, fs, type_env)` の各 `leaf` に
   ついて `(c.name, leaf)` を積む。
-- **(e)** `destructure_consumes` は、`c.ty.is_box(type_env)` が真のとき `boxed_leaf_paths(ty(c), type_env)`
-  の全部を返し、偽のときはそのうち先頭の添字が `fs` の名前付きフィールドの添字でないものだけを返す。
+- **(e)** 本体の `Destructure(c, fs, s, k)` の節点について、`destructure_consumes(c, fs, type_env)` は、
+  `c.ty.is_box(type_env)` が真のとき `boxed_leaf_paths(ty(c), type_env)` の全部を返し、偽のときはその
+  うち先頭の添字が `fs` の名前付きフィールドの添字でないものだけを返す。
 - **(f)** `RcExpr::Retain | RcExpr::Release | RcExpr::Eval` の腕は何も積まない。`RcExpr::Let(x, rhs, k)` の
   腕は、`rhs` が `RcRhs::Match` のとき自身は何も積まず (各アーム本体へ再帰する)、それ以外の 4 種のとき
   `rhs_consumes(rhs, &x.ty, ..)` を呼ぶ。
@@ -1865,9 +1910,11 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
   BY CODE src/rc_ir/ownership.rs: collect_consumes_go の `RcExpr::Destructure` の腕
 
 <1>10. (e) が成り立つ。`destructure_consumes` は、`container.ty.is_box(type_env)` が真のとき
-       `boxed_leaf_paths(container.ty, type_env)` の全部を返し、偽のときはそのうち先頭の添字が `fields` の
-       名前付きフィールドの添字でないものだけを返す。
-  BY CODE src/rc_ir/ownership.rs: destructure_consumes
+       `boxed_leaf_paths(container.ty, type_env)` の全部を返す。偽のときは、その各 `leaf` について
+       `leaf.first()` を取り、それが `fields` の名前付きフィールドの添字の集合に入らないものだけを残す。
+       **その `leaf.first()` の `expect` は発火しない** -- `L5a (a)` より、`is_box` が偽である本体の
+       `Destructure` の容器の boxed leaf は空でない path を持つ。
+  BY L5a, CODE src/rc_ir/ownership.rs: destructure_consumes
 
 <1>11. (f) の前半が成り立つ。`RcExpr::Retain | RcExpr::Release | RcExpr::Eval` の腕は何も積まない。
   BY CODE src/rc_ir/ownership.rs: collect_consumes_go の
@@ -1934,44 +1981,6 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
   BY <1>1, <1>3, <1>7, <1>7a, <1>8, <1>9, <1>10, <1>11, <1>12, <1>14, <1>15, <1>16, <1>17, <1>18,
      <1>19, <1>20, <1>20a
 
-### L5a (unbox 容器の 2 つの記述は同じ leaf を指す)
-
-**言明**。`Destructure(c, fs, s, k)` の節点で `c.ty.is_box(type_env)` が偽であるとする。このとき、
-D9 の `Destructure` (unbox) の行が消費とする**名前が付いていないフィールドの leaf**の全体は、
-`boxed_leaf_paths(ty(c), type_env)` の元のうち**先頭の添字が `fs` の名前付きフィールドの添字でない**
-ものの全体に等しい。すなわち `L5 (e)` の `is_box` が偽の場合が返す集合である。
-
-この 2 つが同じ集合であるのは D4 の規則 5 による -- unbox 集約の leaf は、フィールドの添字をその
-フィールドの型の leaf に前置したものだからである。
-
-<1>1. `ty(c)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Struct` である。したがって
-      `is_array(ty(c))` は偽である。
-  A12 の「`Destructure` の容器が構造体であること」の行が `is_struct(ty(c))` を与え、`is_struct` は
-  `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、型の
-  `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が構造体で
-  あることをその節の 1 つに挙げる。
-  `is_array` は tycon が `Std::Array` であることであり、その `TyConInfo` の `variant` は `Array` なので、
-  `variant` が `Struct` である `ty(c)` には当たらない。
-  BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
-     TypeNode::is_array, TyConVariant
-
-<1>2. CASE `is_fully_unboxed(ty(c))` が真。
-  D4 の規則 1 より `boxed_leaf_paths(ty(c), type_env)` は空なので、2 つの集合はどちらも空である。
-  BY D4
-
-<1>3. CASE `is_fully_unboxed(ty(c))` が偽。
-  D4 の規則 1 は当たらず、`<1>1` より規則 2 (クロージャ) と規則 4 (`is_array`) も当たらず、前提より
-  規則 3 (`is_box`) も当たらない。よって規則 5 が当たり、`ty(c)` の各 leaf は `unpunched_field_types` が
-  返すフィールドの添字を、そのフィールドの型の leaf に前置したものである。すなわち各 leaf は空でない
-  path を持ち、その先頭の添字はその leaf が属するフィールドの添字である。よって「名前が付いていない
-  フィールドの leaf」と「先頭の添字が名前付きフィールドの添字でない leaf」は同じ集合である。
-  BY D4, <1>1
-
-<1>4. QED
-  `<1>2` と `<1>3` は `is_fully_unboxed(ty(c))` の真偽の 2 つの場合で尽きており、どちらでも 2 つの集合が
-  等しい。`L5 (e)` の `is_box` が偽の場合が返すのが後者である。
-  BY L5 (e), <1>2, <1>3
-
 ### P7 (a) D9 の消費はすべて報告される
 
 この節は `own` が DEF leaf 粒度の所有 を満たすことを前提に置く。`own` を読む出どころは (i) だけで
@@ -2022,8 +2031,8 @@ D9 の `Destructure` (unbox) の行が消費とする**名前が付いていな�
       `L5 (e)` の `is_box` が真の場合が返し、`L5 (d)` が積む。
   BY D9, L5 (d), L5 (e)
 <1>5. CASE D9 の `Destructure(c, fs)` (`c` が unbox) の行。D9 のこの行「名前が付いていない
-      フィールドの leaf」の全体は、L5a より `L5 (e)` の `is_box` が偽の場合が返す集合に等しく、それを
-      `L5 (d)` が積む。
+      フィールドの leaf」の全体は、`L5a (b)` より `L5 (e)` の `is_box` が偽の場合が返す集合に等しく、
+      それを `L5 (d)` が積む。
   BY D9, L5 (d), L5 (e), L5a
 <1>6. CASE D9 の「本体 (D23) の終端の `Ret(x)`」の行。
   <2>1. `collect_consumes` に渡された式は関数の `body` であり、D23 よりそれは本体である。
@@ -2049,7 +2058,7 @@ D9 の `Destructure` (unbox) の行が消費とする**名前が付いていな�
 <1>1. `L5 (m)` の出どころ (d) が積むものは D9 の `Destructure` の 2 行のいずれかである。`L5 (e)` の
       2 つの場合は `container.ty.is_box(type_env)` の真偽で尽きている。真の場合が返すのは `ty(c)` の
       全 boxed leaf であって D9 の `Destructure` (boxed) の行に等しく、偽の場合が返す集合が D9 の
-      `Destructure` (unbox) の行が指す leaf に等しいことは L5a である。
+      `Destructure` (unbox) の行が指す leaf に等しいことは `L5a (b)` である。
   BY D9, L5 (d), L5 (e), L5 (m), L5a
 
 <1>2. 出どころ (h) が積むものは D9 の `Closure` の行である。`L5 (h)` が積むのは各 capture の全 boxed
@@ -2159,10 +2168,10 @@ D9 の `Destructure` (unbox) の行が消費とする**名前が付いていな�
       作らないと述べる。D9 の移動の表の最後の行がこれを移動とし、D10 の移動の行より `Obl` は変わらない。
   BY A3, D9, D10, L5 (k), L5 (l)
 
-<1>8. `destructure_consumes` が unbox 容器について落とす名前付きフィールドの leaf (`L5 (e)`)。L5a より
-      `L5 (e)` が返す集合は D9 の `Destructure` (unbox) の行が指す leaf に等しいので、落とされる leaf は
-      名前が付いたフィールドの leaf である。D9 のその行は消費を名前が付いていないフィールドの leaf に
-      限るので、これは消費ではない。D9 の移動の表の第 3 行がこれを移動とし、D10 の移動の行より `Obl` は
+<1>8. `destructure_consumes` が unbox 容器について落とす名前付きフィールドの leaf (`L5 (e)`)。
+      `L5a (b)` より `L5 (e)` が返す集合は D9 の `Destructure` (unbox) の行が指す leaf に等しいので、
+      落とされる leaf は名前が付いたフィールドの leaf である。D9 のその行は消費を名前が付いていない
+      フィールドの leaf に限るので、これは消費ではない。D9 の移動の表の第 3 行がこれを移動とし、D10 の移動の行より `Obl` は
       変わらない。
   BY D9, D10, L5 (e), L5a
 
