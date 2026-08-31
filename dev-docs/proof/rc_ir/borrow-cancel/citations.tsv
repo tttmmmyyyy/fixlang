@@ -349,8 +349,8 @@ src/rc_ir/borrow.rs	cancel	D/A,P1,P2,P2a,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,
 src/rc_ir/borrow.rs	check_clone_names_are_fresh	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,T	aa605276d3fa
 src/rc_ir/borrow.rs	clone_func	P2a,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,P27,P29,P30,T	c6a5f2c80a44
 src/rc_ir/borrow.rs	covered_leaves	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b	95bb7b49e4a1
-src/rc_ir/borrow.rs	drop_nodes	P18c,P19,P20,P21,P22,P23,P24	4a4d43cb3f4a
-src/rc_ir/borrow.rs	drop_nodes_inner	P18c,P19,P20,P21,P22,P23,P24	a208018d5cf5
+src/rc_ir/borrow.rs	drop_nodes	P18c,P19,P20,P21,P22,P23,P24,T	4a4d43cb3f4a
+src/rc_ir/borrow.rs	drop_nodes_inner	P18c,P19,P20,P21,P22,P23,P24,T	a208018d5cf5
 src/rc_ir/borrow.rs	expr_node	P2a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	bace42aa8264
 src/rc_ir/borrow.rs	func_has_borrowable_param	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b	e7c889e3f8d6
 src/rc_ir/borrow.rs	funcs_observing_uniqueness	D/A,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26	bc386fc09dae

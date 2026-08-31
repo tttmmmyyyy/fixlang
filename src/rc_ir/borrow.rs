@@ -1683,13 +1683,13 @@ impl<'a> CancelAnalysis<'a> {
 }
 
 /// Rebuild a body with the analysis's cancelled retain and release nodes spliced out.
-// PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 fn drop_nodes(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     grow_stack(|| drop_nodes_inner(node, to_delete))
 }
 
 /// One node of `drop_nodes`'s rebuild, over its rebuilt continuation.
-// PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     match node.expr.as_ref() {
         RcExpr::Retain(v, path, state, k) => {
