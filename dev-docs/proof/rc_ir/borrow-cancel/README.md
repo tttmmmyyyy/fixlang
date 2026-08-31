@@ -1200,6 +1200,17 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 形)。**これが無いと `p30-cancel-walk.md` の `L0`、したがって P2a が閉じない** -- `origin_inner` の
 `Binding::Llvm` の腕が `result_prov` を呼ぶので、その答えが呼ぶたびに変わると `origin` の答えも変わる。
 
+**この節を読む段は 5 つのファイルに在る。** `origin` の答えが鍵で決まることを、それぞれが自分の局所補題
+として示すからである -- `p10-leaves-and-units.md` の `<1>29a`、`p11-origin-soundness.md` の `L14`、
+`p12-identity-and-consumes.md` の `L0`、`p13-disposals-and-pending.md` の `L8a`、
+`p30-cancel-walk.md` の `L0`。**5 つとも、この節を `BY` に挙げないまま書かれた周がある。**
+`origin_inner` の腕の数え上げは `result_prov` の呼び出しを含むので、数え上げを書く者はここを通る。
+在りかをこの行に集めるのは、次の周が 5 つを 1 度に確かめられるようにするためである。
+
+**5 つが同じことを別々に示すのは、依存の順による。** P2a は層 1 に在り、層 0 の `p10` は引けない。
+`p11` と `p12` は `p30` より前に読まれる。1 つにまとめるには P2a を層 0 へ下ろす必要があり、その証明が
+`origin` の停止性 (P2) を読むので下ろせない。
+
 **`result_prov` と `borrows_operand` は自分の `FullName` の欄を読まない。** `LLVMGen::result_prov` は `&self` を取るので op が
 持つ変数名を読めるが、どの op もそうしない -- `result_prov` を override する 29 個のうち `self` の欄を読む
 のは 6 つで、読む欄はいずれも `usize` か `u32` の添字である。この性質が要るのは、`rename_rhs` の `Llvm` の
