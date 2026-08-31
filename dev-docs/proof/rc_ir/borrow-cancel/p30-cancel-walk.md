@@ -74,7 +74,10 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 `CancelAnalysis` の走査中に次の値を定める。
 
 - `ActRefs(t) :=` `self.acted_references(v, path)` の値、`ActRefs(r) :=` `self.acted_references(v, path)` の値。
-- `others(r) :=` `self.other_objects(v, path)` の値。
+- `others(r) :=` `self.other_objects(v, path)` が返す `Vec` の**元の集合**。並びを取らないのは、
+  `Origin::candidates` が `Join` の変位について `Set` の反復から `Vec` を作るからである
+  (DEF 引数で決まる関数)。走査がこの `Vec` を読むのは `consume_objects` の `objects.iter().any(..)` を
+  通してだけなので、元の集合が同じであれば作用は同じである (L6)。
 
 `CancelAnalysis::acted_references(v, path)` は `ownership::acted_references(self.vars, self.type_env, v, path)`
 の値を返す (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。すなわち `ActRefs(t)` は D15 の
@@ -330,8 +333,8 @@ enum については元と同じ変位で、その変位が保持する各値を
 
 **鍵 `(x, π)` が等しい 2 つの呼び出しがどちらも値を返すならば、その 2 つの返り値は等しい。**
 
-したがって `ownership::acted_references(vars, type_env, v, π)` と `CancelAnalysis::other_objects(v, π)` の
-返り値も、走査のどの時点で読んでも同じである。
+したがって `ownership::acted_references(vars, type_env, v, π)` の返り値と、
+`CancelAnalysis::other_objects(v, π)` が返す `Vec` の元の集合も、走査のどの時点で読んでも同じである。
 
 **証明**
 
@@ -550,9 +553,11 @@ enum については元と同じ変位で、その変位が保持する各値を
 
   `ownership::acted_references(vars, type_env, v, π)` は、`boxed_leaf_paths(&v.ty, type_env)` のうち
   `π` を接頭辞に持つ各 leaf について `origin(vars, type_env, &v.name, &leaf)` の `identity` を数えたもので
-  あり、`CancelAnalysis::other_objects(v, π)` は同じ leaf について同じ `origin` を呼び、その `identity` と
-  `candidates` から値を作る。DEF 引数で決まる関数 より `boxed_leaf_paths`、`Origin::identity`、
-  `Origin::candidates` は引数で決まるので、この 2 つの返り値も `vars`、`type_env`、`v`、`π` だけで決まる。
+  あり、`CancelAnalysis::other_objects(v, π)` は同じ leaf について同じ `origin` を呼び、その `candidates`
+  のうち `identity` と異なるものを並べる。DEF 引数で決まる関数 より `boxed_leaf_paths` と
+  `Origin::identity` は引数で決まるので、`acted_references` の返り値は `vars`、`type_env`、`v`、`π` だけ
+  で決まる。`Origin::candidates` については引数で決まるのは元の集合だけなので (DEF 引数で決まる関数)、
+  `other_objects` について決まるのも、返る `Vec` の元の集合だけである。
   BY <1>1, <1>2, <1>5, CODE src/rc_ir/ownership.rs: acted_references,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数, DEF Clone
 
