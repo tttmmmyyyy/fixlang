@@ -905,13 +905,51 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
             `x.clone()`、`args.clone()` は木の節点を持ち込まない。
         BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
            CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath
+      <4>2a. `route` と `call_rc` の 1 回の呼び出しは `expr_node` を実行しない。よって `RcExprNode` の
+             値を 1 つも作らない。
+        <5>1. `expr_node` は `borrow.rs` の非公開の自由関数であり、`borrow.rs` は `mod` 宣言を 1 つも
+              持たないので、その呼び出しは `borrow.rs` の中にしか書けない。`borrow.rs` の中で
+              `expr_node` を呼ぶのは、`RewriteCtx::rewrite_inner`、`rc_node`、`split_body_inner`、
+              `drop_nodes_inner` の 4 つの本体だけである。
+          BY CODE src/rc_ir/borrow.rs: expr_node, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+             CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: split_body_inner,
+             CODE src/rc_ir/borrow.rs: drop_nodes_inner, DEF 本体
+        <5>2. `route` または `call_rc` の 1 回の呼び出しの中で走る `borrow.rs` の関数は、この 2 つと
+              `RewriteCtx::routing_is_safe`、`RewriteCtx::routing_saves_retain`、
+              `RewriteCtx::any_owned_unit`、`RewriteCtx::owns_unit`、`RewriteCtx::owns_object`、
+              `RewriteCtx::comes_from_a_value_used_later`、`used_later`、`rhs_uses` で尽きる。
+              `borrow.rs` の関数としては、`route` は `routing_is_safe` と `routing_saves_retain` を、
+              `call_rc` は `owns_unit` を、`routing_is_safe` は `any_owned_unit` を、
+              `routing_saves_retain` は `used_later`、`owns_unit`、`comes_from_a_value_used_later` を、
+              `any_owned_unit` は `owns_unit` を、`owns_unit` は `owns_object` を、
+              `comes_from_a_value_used_later` は `used_later` を、`used_later` は `rhs_uses` と自身を、
+              `rhs_uses` は `used_later` を呼ぶ。`owns_object` が呼ぶ `borrow.rs` の関数は無い。
+              この 10 個の本体がほかに呼ぶのは `borrow.rs` の外の項目である --- `Map` と `Set` と `Vec` の
+              操作、`Clone::clone`、`Iterator` の組み合わせ子、`grow_stack`、`origin`、
+              `Origin::candidates`、`rc_units`、`units_under`、`truncate_to_unit`、`LLVMGen::free_vars`。
+              DEF 本体 より、この 10 個が標準ライブラリの関数へ渡す閉包の本体もこの数え上げに入っている。
+          BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::routing_is_safe,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::routing_saves_retain,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::any_owned_unit,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::comes_from_a_value_used_later,
+             CODE src/rc_ir/borrow.rs: used_later, CODE src/rc_ir/borrow.rs: rhs_uses, DEF 本体
+        <5>3. QED
+          <5>2 の 10 個はどれも <5>1 の 4 つではないので、その本体に `expr_node` の呼び出しは書かれて
+          いない。`borrow.rs` の外で定義された関数の本体は `borrow.rs` の中に無いので、<5>1 より
+          `expr_node` を呼べない。よって `route` と `call_rc` の呼び出しの中で `expr_node` は走らない。
+          `expr_node` は `Arc::new` を 1 つ作って `RcExprNode` を返す唯一の場所である (<2>1)。
+          BY <2>1, <5>1, <5>2, DEF 本体
       <4>3. QED
-        <4>1 の第 3 文から第 5 文が木を組み立て、その材料は `self.rewrite(k)` が返した木と、`prepend_rc`
-        と `expr_node` が作る節点だけである (<2>2、<4>2)。第 3 文の `prepend_rc(after, ...)` が作る節点は
-        `k` に、第 4 文の `expr_node` が作る節点は `app` に、第 5 文の `prepend_rc(before, ...)` が作る
-        節点は返り値に入り、`k` は `app` の中に、`app` は返り値の中にあるので、作った節点は 1 つ残らず
-        返り値の木に入る。
-        BY <2>2, <4>1, <4>2
+        <4>1 の第 1 文と第 2 文の `route` と `call_rc` は節点を作らない (<4>2a) ので、この腕がこの
+        呼び出しの中で作る節点は第 3 文から第 5 文のものだけである。第 3 文から第 5 文が木を組み立て、
+        その材料は `self.rewrite(k)` が返した木と、`prepend_rc` と `expr_node` が作る節点だけである
+        (<2>2、<4>2)。第 3 文の `prepend_rc(after, ...)` が作る節点は `k` に、第 4 文の `expr_node` が
+        作る節点は `app` に、第 5 文の `prepend_rc(before, ...)` が作る節点は返り値に入り、`k` は `app`
+        の中に、`app` は返り値の中にあるので、作った節点は 1 つ残らず返り値の木に入る。
+        BY <2>2, <4>1, <4>2, <4>2a
     <3>2. `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕は、`arms` の各 `arm` について
           `self.rewrite(&arm.body)` を 1 回ずつ呼び、`self.rewrite(k)` を 1 回呼び、`expr_node` で
           1 節点を積む。アームの列は `arms.iter().map(|arm| arm.with_body(self.rewrite(&arm.body))).collect()`
