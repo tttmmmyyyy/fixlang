@@ -1,9 +1,15 @@
 # P5, P6, P7 -- identity とオブジェクト、`acted_references`、消費の網羅性
 
-この文書は `README.md` の P5 (a)、P5 (b)、P5 (c)、P6、P7 を証明する。立つのは `README.md` の定義
-(D1、D2、D3、D4、D6、D7、D8、D9、D10、D11、D14、D15、D16、D17、D20、D21、D23、D26)、仮定 (A1、A3、
-A5、A6、A9、A10、A11、A12、A14、A15、A16)、および命題 P1、P2、P29 の**言明**である。P1 と P2 の証明は
-`p10-leaves-and-units.md`、P29 の証明は `p51-runs.md` にあり、この文書はその 3 つの言明だけを使う。
+この文書は `README.md` の P5 (a)、P5 (b)、P5 (c)、P6、P7 を証明する。主語となる語彙は D13 が定める --
+`origin` の返り値と、その 2 つの形 `Exactly(u, σ)` と `Join { identity, candidates }` である。段が `BY` で
+引くのは、`README.md` の定義 (D1、D2、D3、D4、D6、D7、D8、D9、D10、D11、D14、D15、D16、D20、D21、D23、
+D26)、仮定 (A1、A3、A6、A9、A10、A11、A12、A14、A15、A16)、および命題 P1、P2、P29 の**言明**である。
+P1 と P2 の証明は `p10-leaves-and-units.md`、P29 の証明は `p51-runs.md` にあり、この文書はその 3 つの
+言明だけを使う。
+
+本文はこのほかに D17 と A5 を引き合いに出す。D17 は DEF 辺の leaf 対応 が leaf の写り方を突き合わせる
+相手であり、A5 は P6 の補足 3 が「1 つの名前に 2 つの leaf が付くとき参照も 2 つある」と述べる根拠で
+ある。この 2 つを `BY` に挙げる段は無い。
 
 A16 が要るのは L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b)、R1 である。読むのは A16 の 2 つの節 --
 `Match` のアームが scrutinee のタグを尽くすことと、catch-all アームが `arms` の最後にあること --
@@ -66,11 +72,32 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 `ActRefs(v, π)` は D15 の `acted_references(v, π)` である。`VarPath` は対 `(FullName, FieldPath)` である
 (`CODE src/rc_ir/ast.rs: VarPath`)。等号はこの対の等号である。
 
-この文書は補題を `L0`、`L0a`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L4`、`L5`、`L5a`、`L6` (この順に並べる)、
+**DEF プログラムの束縛変数**
+P2 が第 1 の節で言う「プログラムの束縛変数」を、この文書は次の 2 種の名前と読む -- プログラムのいずれかの
+本体 (D23) について、**その本体の節点が束縛する変数** (D2)、および**その本体が関数の `body` であるときの
+その関数のパラメータ・capture**。D2 はパラメータと capture のスコープを本体の全体と定め、D23 は活性化の
+入力の束縛としてそれぞれに 1 つずつの値を挙げるので、この 2 種はどちらも本体の中で名前に値を束縛する。
+**この読みが要るのは、`VarTable::of` が `vars.bindings` にこの 2 種を入れるからである** -- P2 の第 2 の節
+(`vars.bindings` に束縛を持たない名前) はパラメータ・capture を覆わないので、覆う節は第 1 の節しか
+残らない。
+
+この文書は補題を `L0`、`L0a`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L4`、`L5a`、`L5`、`L6` (この順に並べる)、
 反例を `R1` と呼ぶ。**`BY` の行で
 引用してよいのは、それぞれの言明だけである。** 言明が複数の主張からなる補題は主張に (a)、(b)、… の名札を
 付け、`L5 (c)` のように引用する。同じ規則を P6 (a)、P6 (b)、P7 (a)、P7 (b) にも使う -- これらは
 この文書が P6 と P7 を分けた主張であり、引用してよいのはその言明である。
+
+### 外部の結果
+
+この文書が Rust の言語仕様と実行の意味論から引く結果に名札を付ける。`BY` の行では `EXT <名前>` として
+挙げる。
+
+- **EXT 呼び出しの入れ子**。1 つのスレッドの上では、呼び出された関数は呼び出し元へ返るまでの間だけ走り、
+  その間 呼び出し元は走らない。したがって 1 つのスレッドの上の 2 つの関数呼び出しの実行区間は、互いに
+  素であるか、一方が他方に含まれるかのどちらかである。
+- **EXT `Send` と `Sync`**。Rust では `&T` が `Send` であることと `T` が `Sync` であることは同値であり、
+  `RefCell<T>` は `Sync` を実装しない。`Send` でない値は、スレッドをまたいで渡せない。
+- **EXT 借用規則**。Rust の借用規則は、値を move する時点にその値への参照が生きていることを許さない。
 
 ### A16 の 2 つの節
 
@@ -166,12 +193,19 @@ E1 から E4 と E6 の 5 行では、対応する leaf は行の文言そのも
 leaf `σ` が inhabited であることを同値と述べ、`λ` と対にする leaf を `σ` と名指す。よって値の水準の
 第 6 行が言う「オペランド `i` のその leaf」は `σ` である。
 
-**辺が在るのは両端が `ρ` の位置であるときに限る。** D20 は別名の辺をスロットの間に引くと書くが、D6 は
-別名の道が記号の位置で終わること -- すなわち D9 の移動の表の辺が記号の位置へ着きうること -- を述べる。
-E1 から E6 の終点はいずれも本体が束縛する変数なので必ず `ρ` のスロットであり、始点は `ρ` のスロットか
-記号の位置である。とくに E2 の `[i] ++ λ` は、`i` が穴のとき `ty(c)` の boxed leaf ではない (D4 の規則 5)
-ので、その辺は無い。この制限のために、L2 は辺ではなく `vars.bindings` の記録について述べる -- 辺が在ることを
-先に言わなくても `origin` の等式が使えるようにするためである。
+**DEF 辺の存在**
+E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び方から、2 つの対 `(u, α)`、`(w, β)` を作る。
+**その 2 つがどちらも `ρ` の位置 (DEF 路の位置) であるとき、その節点と `λ` についてのその辺は `ρ` の上に
+在るといい、一方でも `ρ` の位置でないときは無いという。** D20 は別名の辺をスロットの間に引くと書くが、
+D6 は別名の道が記号の位置で終わること -- すなわち D9 の移動の表の辺が記号の位置へ着きうること -- を
+述べるので、この文書は辺の端をスロットから位置へ広げて読む。以下、単に「辺が在る」と書くのはこの意味で
+ある。
+
+端が `ρ` の位置でない形は両側にある。E2 の `[i] ++ λ` は、`i` が穴のとき `ty(c)` の boxed leaf ではない
+(D4 の規則 5)。E3 の payload 変数の型が boxed leaf を 1 つも持たなければ、その節点はどの `λ` についても
+E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たない名前であるとき、始点は記号の位置である
+(D6)。この扱いのために、L2 は辺ではなく `vars.bindings` の記録について述べる -- 辺が在ることを先に
+言わなくても `origin` の等式が使えるようにするためである。
 
 **DEF `ρ` の上で実行された辺**
 辺が **`ρ` の上で実行された**とは、次をいう。
@@ -194,8 +228,12 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
 - **(b)** 鍵 `(x, π)` について `origin` の呼び出しが 1 つでも在るならば、その鍵の cold な呼び出しは
   ちょうど 1 つ在る。
 
-**(a) は `README.md` の P2a と同じ言明である。** (b) は L0a と L4 の帰納が要るものであり、(a) と同じ
-分析から出る。
+**(a) は `README.md` の P2a より強い。** P2a は 1 つの `VarTable` の値と 1 つの `TypeEnv` の値を固定した
+うえで、鍵が等しい 2 つの `origin` の呼び出しがどちらも値を返すならばその 2 つの返り値が等しいと述べる。
+(a) は同じ固定の下で、`origin(vars, type_env, x, π)` が `(x, π)` の関数として定まることに加えて、その値が
+`origin_inner` の**1 回の呼び出しが返した値**であることを述べる。後半が要るのは L2 と L4 であり、そこは
+`origin` の値を `origin_inner` の腕が返す式として読む。(b) は L0a と L4 の帰納が要るものであり、(a) と
+同じ分析から出る。
 
 <1>1. `origin` は、`vars.origins` に鍵 `(x, π)` の記録があればその値を返し、無ければ
       `grow_stack(|| origin_inner(vars, type_env, x, π))` の値を鍵 `(x, π)` で記録して返す。
@@ -208,12 +246,13 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
   <2>1. `origins` は `VarTable` の非公開の欄である (`pub` が付かない)。Rust の可視性規則より、この欄を
         名指す式は `ownership.rs` の中にしかない。
     BY CODE src/rc_ir/ownership.rs: VarTable
-  <2>2. `ownership.rs` の中で識別子 `origins` を名指す式は 3 つである。`VarTable::empty` の
+  <2>2. `ownership.rs` の中でこの欄を名指す式は 3 つである。`VarTable::empty` の
         `origins: RefCell::default()`、`origin` の `vars.origins.borrow()`、`origin` の
         `vars.origins.borrow_mut()` である。(この列挙は `ownership.rs` の全体について識別子 `origins` を
-        検索して得られる。`leaf_origins_at` / `leaf_origins_under` は別の識別子であり、残りの出現は
-        doc コメントの中の散文である。)
-    BY CODE src/rc_ir/ownership.rs: VarTable::empty, origin
+        検索して得られる。得られるのは、`VarTable` の欄の宣言 `origins: RefCell<Map<VarPath, Origin>>`、
+        この 3 つの式、および doc コメントの中の散文 3 か所である。宣言は式ではない。
+        `leaf_origins_at` / `leaf_origins_under` は別の識別子である。)
+    BY CODE src/rc_ir/ownership.rs: VarTable, VarTable::empty, origin
   <2>3. QED
     `RefCell<Map<..>>` の中身を変更するには `borrow_mut` を通る必要があるので、`<2>1` と `<2>2` より
     変更は `VarTable::empty` の初期化 (空の写像) と `origin` の `insert` だけであり、後者が `<1>1` の
@@ -227,9 +266,10 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
     P2 は、`x` がプログラムの束縛変数であるか `vars.bindings` に束縛を持たない名前であるような
     すべての `(x, π)` について、`π` を問わず `origin(vars, type_env, x, π)` が停止すると述べる。
     `vars.bindings` に記録を持つ名前は `VarTable::of` と `collect_bindings` が記録する名前、すなわち
-    この本体のパラメータ・capture と束縛変数であって、どれもプログラムの束縛変数である。記録を持たない
-    名前は P2 の第 2 の節に当たる。
-    BY P2, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+    この本体のパラメータ・capture と束縛変数であって、DEF プログラムの束縛変数 よりどちらも
+    プログラムの束縛変数である。記録を持たない名前は P2 の第 2 の節に当たる。
+    BY P2, DEF プログラムの束縛変数,
+       CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
   <2>1b. 鍵 `(x, π)` の cold な呼び出しの全体は、その鍵の記録を書く呼び出しの全体に等しい。
     `<1>1` より、記録を書くのは自分の検査で記録を見つけなかった呼び出し、すなわち `origin_inner` を
     評価する呼び出しであり、書き込みは `origin_inner` が返った後、その呼び出しが返る直前にある。
@@ -238,17 +278,17 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
   <2>2. 1 つの `vars` を引数に取る 2 つの `origin` の呼び出しが別々のスレッドの上にあるならば、その
         2 つの実行区間は互いに素である。
     <3>1. 1 つの `VarTable` への参照を 2 つのスレッドが同時に持つことはない。`VarTable` は
-          `origins: RefCell<Map<VarPath, Origin>>` の欄を持つ。`RefCell<T>` は `Sync` を実装しないので
-          `VarTable` も `Sync` を実装せず、Rust の `Send`/`Sync` の規則より `&VarTable` は `Send` では
-          ない。
-      BY CODE src/rc_ir/ownership.rs: VarTable
+          `origins: RefCell<Map<VarPath, Origin>>` の欄を持つ。EXT `Send` と `Sync` より `RefCell<T>` は
+          `Sync` を実装しないので `VarTable` も `Sync` を実装せず、`&VarTable` は `Send` ではないので
+          スレッドをまたいで渡せない。
+      BY EXT `Send` と `Sync`, CODE src/rc_ir/ownership.rs: VarTable
     <3>2. `origin` は `vars: &VarTable` を引数に取り、その呼び出しの実行区間の間ずっとこの参照を保持
           する。
       BY CODE src/rc_ir/ownership.rs: origin
     <3>3. `VarTable` の値を別のスレッドへ move する時点では、`origin` の呼び出しは 1 つも走っていない。
-          Rust の借用規則は、値を move する時点にその値への参照が生きていることを許さず、`<3>2` より
+          EXT 借用規則 より、値を move する時点にその値への参照が生きていることはなく、`<3>2` より
           走っている `origin` の呼び出しはその参照を保持している。
-      BY <3>2
+      BY EXT 借用規則, <3>2
     <3>4. QED
       `<3>1` より 2 つのスレッドが同時に `&VarTable` を持つことはないので、この `vars` を引数に取る
       呼び出しがスレッドをまたぐには、その `VarTable` の値が move されている。`<3>3` よりその時点に
@@ -257,10 +297,9 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
       BY <3>1, <3>3
   <2>3. 1 つの `vars` を引数に取る 2 つの `origin` の呼び出しの実行区間は、互いに素であるか、一方が
         他方に含まれるかのどちらかである。
-        1 つのスレッドの上では、呼び出された関数は呼び出し元へ返るまでの間だけ走り、その間 呼び出し元は
-        走らないので、2 つの関数呼び出しの実行区間は互いに素であるか一方が他方に含まれるかである。
-        別々のスレッドの上にある 2 つについては `<2>2` が互いに素であることを与える。
-    BY <2>2
+        同じスレッドの上にある 2 つについては EXT 呼び出しの入れ子 がこれを与える。別々のスレッドの上に
+        ある 2 つについては `<2>2` が互いに素であることを与える。
+    BY EXT 呼び出しの入れ子, <2>2
   <2>4. 鍵 `(x, π)` の記録を書く呼び出しが 2 つあるとすると、一方 `C` は他方 `C'` の `origin_inner` の
         評価の中で始まり、どちらも自分の検査で記録を見つけていない。
     `<1>1` より、記録を書くのは自分の検査で記録を見つけなかった呼び出しであり、書き込みは `origin_inner`
@@ -277,10 +316,14 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
           `vars.bindings` の記録・`type_env`・`(x, π)` だけで決まり、`vars.origins` を読まない。
           `None | Param | Producer` の腕は呼び出しを行わず、`Move` の腕は 1 つの鍵を、`Join` の腕は
           `arm_results` の各元の鍵を、`Field` と `Payload` の腕は高々 1 つの鍵を、`Llvm` の腕は `decl` から
-          決まる鍵を渡す。`origin_from_leaves_under` も、`decl` から
+          決まる鍵を渡す。`Llvm` の腕の `decl` は
+          `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の値であり、A3 より `result_prov` は
+          決定的である -- 同じ引数に対して常に同じ値を返す -- ので、`decl` は
+          `vars.bindings` が持つ `llvm_gen`・`args`・`result_ty` と `type_env` だけで決まる。
+          `origin_from_leaves_under` も、`decl` から
           `operand_units` を先に集め終えてからその全部について `origin` を呼ぶ。どの腕も、行った
           `origin` の呼び出しの返り値で次の呼び出しの有無や鍵を変えない。
-      BY CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under
+      BY A3, CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under
     <3>2. 対 `(A, B)` を取る。`D_0 := A` とし、`D_i ≠ B` である間、`D_{i+1}` を「`D_i` の `origin_inner` の
           評価の中で始まる `origin` の呼び出しのうち、`B` を実行区間に含む (または `B` 自身である) もので
           最も外側のもの」と定めると、`A = D_0 ⊋ D_1 ⊋ … ⊋ D_k = B` (`k ≥ 1`) が得られる。`D_0` から
@@ -294,9 +337,11 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
       BY <1>1, <2>3, <3>1
     <3>3. `B` の `origin_inner` の評価は、`D_1` の鍵と同じ鍵の呼び出し `E` を直接行う。
       `B` は記録を見つけないので `origin_inner` を評価し、その鍵は `A` の鍵に等しい。`<3>1` より
-      `B` の `origin_inner` が直接行う呼び出しの鍵の集合は `A` の `origin_inner` のそれに等しく、
-      `D_1` は `A` の `origin_inner` が直接行った呼び出しなので、その鍵はその集合に入っている。
-      BY <3>1, <3>2
+      直接行う呼び出しの鍵の集合は鍵と `vars.bindings` と `type_env` だけで決まるので (`Llvm` の腕に
+      ついては A3 の決定性がそれを与える)、`B` の `origin_inner` が直接行う呼び出しの鍵の集合は
+      `A` の `origin_inner` のそれに等しい。`D_1` は `A` の `origin_inner` が直接行った呼び出しなので、
+      その鍵はその集合に入っている。
+      BY A3, <3>1, <3>2
     <3>4. `E` は `D_1` の `origin_inner` の評価の中で始まる。
       `k = 1` のとき `B = D_1` であり、`E` は `B` の `origin_inner` の中で始まる。`k ≥ 2` のとき
       `B` は `D_1` の `origin_inner` の評価の中で始まるので、その中で始まる `E` も同じである。
@@ -621,7 +666,7 @@ E1 から E6 の終点はいずれも本体が束縛する変数なので必ず 
 ## L2 (5 種の束縛は `origin` を保つ)
 
 **言明**。次の 6 つが成り立つ。(E1) から (E5) の主語は `vars.bindings` の記録であって辺ではない --
-辺が在ることを先に言わなくても `origin` の等式が使えるようにするためである (DEF 辺の leaf 対応)。
+辺が在ることを先に言わなくても `origin` の等式が使えるようにするためである (DEF 辺の存在)。
 `λ` と `σ` は任意の path を渡る。
 
 - **(E1)** `vars.bindings.get(u) = Some(Move(y))` のとき `origin(u, λ) = origin(y, λ)`。
@@ -915,9 +960,10 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     inhabited である。`y` が `ρ` の上で値を得ていることは `<1>3` である。
     BY A12, D9, D16, DEF 路の位置, <1>3
   <2>3. `obj(x, λ) = obj(y, λ)`。
-    `<2>2` と前提より E1 の辺 `(y, λ)`-`(x, λ)` の両端は `ρ` の位置なので、その辺は在る
-    (DEF 辺の leaf 対応)。L1a (b) の `Move(y)` の行より、それは `ρ` の上で実行された辺である。
-    BY L1, L1a, DEF 辺の leaf 対応, <2>2
+    L1a (b) の `Move(y)` の行より、`x` を束縛する節点 `Let(x, Var(y), k)` が `ρ` の上にあり、それが
+    定める E1 の辺は `(y, λ)`-`(x, λ)` である。`<2>2` と前提よりその両端は `ρ` の位置なので、その辺は
+    在る (DEF 辺の存在)。L1a (b) の同じ行より、それは `ρ` の上で実行された辺である。
+    BY L1, L1a, DEF 辺の存在, <2>2
   <2>4. QED
     `<2>1` より `(y, λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。IH を `(y, λ)` に適用
     すると、`id(y, λ) = (w, σ)` について (i) と `obj(y, λ) = obj(w, σ)` が出る。
@@ -946,11 +992,10 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     BY A12, L1a
   <2>3. `[i] ++ λ` は `ty(c)` の boxed leaf である。
     <3>1. `ty(c)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Struct` である。
-      A12 の「`Destructure` の容器が構造体であること」の行が `is_struct(ty(c))` を与える。**A12 は、
-      構造体であることが `is_closure()` が偽であることを含むと明記する** -- `toplevel_tycon_info` が
-      `assert!(!self.is_closure())` で始まるからである (A12 の `InlineLLVMStructPunchBody` の行の
-      括弧書き)。`is_struct` はその `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` で
-      あることである。
+      A12 の「`Destructure` の容器が構造体であること」の行が `is_struct(ty(c))` を与え、`is_struct` は
+      `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。**A12 は、
+      型の `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が
+      構造体であることをその節の 1 つに挙げる。**
       BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info
     <3>2. `is_array(ty(c))` と `is_funptr(ty(c))` は偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
@@ -979,16 +1024,19 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
       BY D4, <2>2, <3>1, <3>2, <3>3
   <2>4. `[i] ++ λ` は `c` の値で inhabited である。
     D9 の値の水準の第 3 行より `x` の値は `c` の値の第 `i` フィールドなので、`c` の値の位置
-    `[i] ++ λ` は `x` の値の位置 `λ` である。前提より `λ` は `x` の値で inhabited である。A12 の
+    `[i] ++ λ` は `x` の値の位置 `λ` である。前提より `(x, λ)` は `ρ` の位置であり、DEF 路の位置 より
+    その `λ` は `x` の値で inhabited である。A12 の
     `Destructure` の容器が構造体であることの行より `[i]` は unbox union の節を通らず、`[i] ++ λ` が通る
     unbox union の節は `λ` が通る節と同じである。
-    BY A12, D9, D16, <2>3
+    BY A12, D9, D16, DEF 路の位置, <2>3
   <2>5. `(c, [i] ++ λ)` は `ρ` の位置である。
     BY DEF 路の位置, <1>3, <2>3, <2>4
   <2>6. `obj(x, λ) = obj(c, [i] ++ λ)`。
-    `<2>5` と前提より E2 の辺 `(c, [i] ++ λ)`-`(x, λ)` の両端は `ρ` の位置なので、その辺は在る
-    (DEF 辺の leaf 対応)。L1a (b) の `Field(c, i)` の行より、それは `ρ` の上で実行された辺である。
-    BY L1, L1a, DEF 辺の leaf 対応, <2>5
+    L1a (b) の `Field(c, i)` の行より、`x` を束縛する節点 `Destructure(c, fs, s, k)` が `ρ` の上に
+    あり、`c` が unbox のときそれが定める E2 の辺は `(c, [i] ++ λ)`-`(x, λ)` である。`<2>5` と前提より
+    その両端は `ρ` の位置なので、その辺は在る (DEF 辺の存在)。L1a (b) の同じ行より、それは `ρ` の上で
+    実行された辺である。
+    BY L1, L1a, DEF 辺の存在, <2>5
   <2>7. QED
     `<2>1` より `(c, [i] ++ λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。IH を
     `(c, [i] ++ λ)` に適用する。
@@ -1010,10 +1058,11 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     `<1>3` である。
     BY A12, D9, D16, DEF 路の位置, <1>3
   <2>3. `obj(x, λ) = obj(s, λ)`。
-    `<2>2` と前提より E4 の辺 `(s, λ)`-`(x, λ)` の両端は `ρ` の位置なので、その辺は在る
-    (DEF 辺の leaf 対応)。L1a (b) の `Payload(s, None)` の行より、それは `ρ` の上で実行された辺で
-    ある。
-    BY L1, L1a, DEF 辺の leaf 対応, <2>2
+    L1a (b) の `Payload(s, None)` の行より、`x` を payload とする catch-all アームを `ρ` が選ぶ
+    `Let(m, Match(s, arms), k)` の節点が `ρ` の上にあり、それが定める E4 の辺は `(s, λ)`-`(x, λ)` で
+    ある。`<2>2` と前提よりその両端は `ρ` の位置なので、その辺は在る (DEF 辺の存在)。L1a (b) の同じ行
+    より、それは `ρ` の上で実行された辺である。
+    BY L1, L1a, DEF 辺の存在, <2>2
   <2>4. QED
     `<2>1` より `(s, λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。
     BY <2>1, <2>2, <2>3, IH
@@ -1037,11 +1086,9 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   <2>2. `[t] ++ λ` は `ty(s)` の boxed leaf である。
     <3>1. `ty(s)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Union` である。
       A12 の「`Match` の scrutinee が union であること」の行が `is_union(ty(s))` を与え、`is_union` は
-      `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Union` であることである。
-      `toplevel_tycon_info` は `is_closure()` が真の型について `assert!(!self.is_closure())` で止まるので、
-      その型について `is_union` は値を返さない。A12 が `is_union(ty(s))` を真と述べる以上その呼び出しは
-      値を返しているので、`is_closure(ty(s))` は偽である。**A12 が構造体について同じことを明記するのも
-      同じ理由による** (A12 の `InlineLLVMStructPunchBody` の行の括弧書き)。
+      `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Union` であることである。**A12 は、
+      型の `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Match` の scrutinee が
+      union であることをその節の 1 つに挙げる。**
       BY A12, CODE src/ast/types.rs: TypeNode::is_union, TypeNode::toplevel_tycon_info
     <3>2. `is_array(ty(s))` と `is_funptr(ty(s))` は偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
@@ -1075,16 +1122,17 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   <2>4. `[t] ++ λ` は `s` の値で inhabited である。
     D9 の値の水準の第 4 行より `x` の値は `s` の値の活性変位の payload であり、`<2>3` よりその活性変位は
     `t` なので、`s` の値の位置 `[t] ++ λ` は `x` の値の位置 `λ` である。`[t] ++ λ` が通る unbox union の
-    節は、`ty(s)` の根の節 (`<2>3` よりタグは `t`) と、`λ` が通る節 (前提より `λ` は `x` の値で
-    inhabited) である。
-    BY D9, D16, <2>2, <2>3
+    節は、`ty(s)` の根の節 (`<2>3` よりタグは `t`) と、`λ` が通る節である。後者について、前提より
+    `(x, λ)` は `ρ` の位置であり、DEF 路の位置 よりその `λ` は `x` の値で inhabited である。
+    BY D9, D16, DEF 路の位置, <2>2, <2>3
   <2>5. `(s, [t] ++ λ)` は `ρ` の位置である。
     BY DEF 路の位置, <1>3, <2>2, <2>4
   <2>6. `obj(x, λ) = obj(s, [t] ++ λ)`。
-    `<2>5` と前提より E3 の辺 `(s, [t] ++ λ)`-`(x, λ)` の両端は `ρ` の位置なので、その辺は在る
-    (DEF 辺の leaf 対応)。L1a (b) の `Payload(s, Some(t))` の行より、それは `ρ` の上で実行された辺で
-    ある。
-    BY L1, L1a, DEF 辺の leaf 対応, <2>5
+    L1a (b) の `Payload(s, Some(t))` の行より、`x` を payload とする `tag = Some(t)` のアームを `ρ` が
+    選ぶ `Let(m, Match(s, arms), k)` の節点が `ρ` の上にあり、`s` が unbox のときそれが定める E3 の辺は
+    `(s, [t] ++ λ)`-`(x, λ)` である。`<2>5` と前提よりその両端は `ρ` の位置なので、その辺は在る
+    (DEF 辺の存在)。L1a (b) の同じ行より、それは `ρ` の上で実行された辺である。
+    BY L1, L1a, DEF 辺の存在, <2>5
   <2>7. QED
     `<2>1` より `(s, [t] ++ λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。IH を
     `(s, [t] ++ λ)` に適用する。
@@ -1107,10 +1155,11 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   <2>3. `(args[j], σ')` は `ρ` の位置である。
     BY DEF 路の位置, <1>3, <2>2
   <2>4. `obj(x, λ) = obj(args[j], σ')`。
-    `<2>3` と前提より E5 の辺 `(args[j], σ')`-`(x, λ)` の両端は `ρ` の位置なので、その辺は在る
-    (DEF 辺の leaf 対応)。L1a (b) の `Llvm(gen, args, ty)` の行より、それは `ρ` の上で実行された辺で
-    ある。
-    BY L1, L1a, DEF 辺の leaf 対応, <2>3
+    L1a (b) の `Llvm(gen, args, ty)` の行より、`x` を束縛する節点 `Let(x, Llvm(gen, args), k)` が
+    `ρ` の上にあり、宣言が単一の `Arg(j, σ')` であるときそれが定める E5 の辺は
+    `(args[j], σ')`-`(x, λ)` である。`<2>3` と前提よりその両端は `ρ` の位置なので、その辺は在る
+    (DEF 辺の存在)。L1a (b) の同じ行より、それは `ρ` の上で実行された辺である。
+    BY L1, L1a, DEF 辺の存在, <2>3
   <2>5. QED
     `<2>1` より `(args[j], σ')` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。
     BY <2>1, <2>3, <2>4, IH
@@ -1158,10 +1207,11 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
         `obj(x, λ) = obj(r_0, λ)` である。
     A12 のアームの結果と `Match` の束縛変数の行より両者の型は一致するので `λ` は `ty(r_0)` の boxed leaf
     である。D9 の値の水準の第 2 行より `x` が得る値は `r_0` の値なので、`λ` は `r_0` の値でも inhabited
-    である (D16)。`r_0` が値を得ていることは `<1>3` である。よって E6 の辺 `(r_0, λ)`-`(x, λ)` の両端は
-    `ρ` の位置であり、その辺は在る (DEF 辺の leaf 対応)。L1a (b) の `Join(rs)` の行よりそれは `ρ` の
-    上で実行された辺なので、L1 よりオブジェクトが一致する。
-    BY A12, D9, D16, L1, L1a, DEF 辺の leaf 対応, DEF 路の位置, <1>3
+    である (D16)。`r_0` が値を得ていることは `<1>3` である。L1a (b) の `Join(rs)` の行より、`ρ` が選ぶ
+    アーム `a` について `r_0 ∈ rs` であり、`a` の本体の終端の `Ret(r_0)` が定める E6 の辺は
+    `(r_0, λ)`-`(x, λ)` である。その両端は `ρ` の位置なので、その辺は在る (DEF 辺の存在)。L1a (b) の
+    同じ行よりそれは `ρ` の上で実行された辺なので、L1 よりオブジェクトが一致する。
+    BY A12, D9, D16, L1, L1a, DEF 辺の存在, DEF 路の位置, <1>3
   <2>2a. 任意の変数 `u` と path `μ` について `act(u, μ)` は `id(u, μ)` を含み、したがって空でない。
     `Origin::acted_on()` は `identity()` を先頭に置く列である。
     BY D15, CODE src/rc_ir/ownership.rs: Origin::acted_on
@@ -1276,26 +1326,23 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 <1>1. 次の関数 `f` を考える。op と型は、このコンパイラが実在に持つものを取る。
 
       - `gen`: `InlineLLVMStringBuf`。**この op はこのコンパイラの `impl LLVMGen for` の 1 つである**
-        (A3 がその全体を 78 個と数え上げている)。`free_vars_mut` は空の列を返すのでオペランドを 1 つも
-        取らない。`result_prov` は `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返す
-        ので、結果の型の各 boxed leaf に**単一の `Fresh`** を宣言する。`generate` は
-        `make_byte_array_copy` を呼び、それは `alloc_array_storage` (`build_capacity_check` と
-        `create_obj`) で記憶域を、`create_obj` で `Array U8` のオブジェクトを新しく割り当て、
-        バイト列をその記憶域へ写す。
-      - `T`: `gen` の結果の型 `Array U8` (`make_byte_array_copy` が `type_tyapp(make_array_ty(),
-        make_u8_ty())` として組む型)。
+        (A3 がその全体を 78 個と数え上げている)。`free_vars_mut` は空の列を返す。`result_prov` は
+        `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返すので、結果の型の各 boxed leaf
+        に**単一の `Fresh`** を宣言する。
+      - `T`: `Array U8`。`make_string_lit` が、この op を持つ `Llvm` 節点に
+        `type_tyapp(make_array_ty(), make_u8_ty())` を結果の型として与える。
       - `Bool`: `Std::Bool`。`unbox union { _false : (), _true : () }` であり、2 つの変位の payload の
         型はどちらも `()` である。
 
       A3 の表の「単一の `Fresh`」の行より、`gen` が結果のその leaf に置くのは、新しく割り当てた
       オブジェクトへの新しい参照である。**A3 が同じ節に置く但し書き -- 実行時に参照カウントで分岐する
       op の `Fresh` の行は、オブジェクトの同一性については字義どおりではない -- は `gen` に当たらない。**
-      参照カウントを読んで分岐する経路は `Generator::build_branch_by_is_unique` を通り、その呼び出しは
-      `src/fixstd/builtin.rs` の中にしか無い (この列挙は、リポジトリの全体について識別子
-      `build_branch_by_is_unique` を検索して得られる)。`gen` の生成コードは `make_byte_array_copy` を
-      呼ぶだけであり、その本体も、そこから呼ばれる `alloc_array_storage`・`build_capacity_check`・
-      `create_obj` も `src/object.rs` に在ってその呼び出しを持たない。`create_obj` が参照カウントに
-      触れるのは、新しいオブジェクトの制御ブロックに 1 を書き込む 1 か所だけである。
+      A3 はその但し書きで、そうした op の一意の腕が**オペランドの**オブジェクトをそのまま返すと述べる。
+      `gen` の `free_vars_mut` は空の列を返し、`LLVMGen::free_vars` はその複製の `free_vars_mut` を
+      写した列なので `gen.free_vars()` も空である。A12 の `Llvm` 節点の型についての第 1 の節より
+      `Let(x, Llvm(gen, args), k)` の `args` の名前の列は `gen.free_vars()` に等しいので、`gen` を持つ
+      `Llvm` 節点はオペランドを 1 つも持たない。返せるオペランドのオブジェクトが無いので、`gen` は
+      A3 の但し書きが述べる op ではない。
 
       `f` のパラメータは `c : Bool` の 1 つ、capture は無く、`borrowed_units` は空 (A1) である。本体は
       次のとおりで、`m`・`x_0`・`x_1` は型 `T`、`p_0`・`p_1` は `()` である。
@@ -1305,15 +1352,23 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
                         arm(tag=1, payload=p_1, body=Let(x_1, Llvm(gen, []), Ret(x_1))) ]), Ret(m))
       ```
 
-      これは D2 の形の本体であり、A6 (`c`・`m`・`x_0`・`x_1`・`p_0`・`p_1` は相異なる名前)、
-      A9 (アームは 2 つ)、A12 (アームの結果と `Match` の束縛変数の型、payload と変位の型、`Llvm` 節点の
-      `args` の名前の列が `gen.free_vars()` -- 空の列 -- に等しいこと)、A16 の (網羅) (2 つのアームが
-      `Bool` の 2 変位を尽くす) と (位置) (catch-all アームが無いので空虚に真) を満たす。以下、`j` は
-      0 と 1 を渡り、`ρ_j` は変位 `j` のアームを選ぶ実行路を表す。
-  BY A1, A3, A6, A9, A12, A16, D2,
-     CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStringBuf, make_byte_array_copy,
-     CODE src/object.rs: alloc_array_storage, build_capacity_check, create_obj,
-     CODE src/generator.rs: Generator::build_branch_by_is_unique,
+      これは D2 の形の本体であり、次の仮定を満たす。A1 の後半 (`borrowed_units` が空であること)、
+      A6 (`c`・`m`・`x_0`・`x_1`・`p_0`・`p_1` は相異なる名前)、A9 (アームは 2 つ)、
+      A12 (アームの結果と `Match` の束縛変数の型、payload と変位の型、`Llvm` 節点の `args` の名前の列が
+      `gen.free_vars()` -- 空の列 -- に等しいこと)、A16 の (網羅) (2 つのアームが `Bool` の 2 変位を
+      尽くす) と (位置) (catch-all アームが無いので空虚に真)。**A10 と A11 も満たす。** `T`・`Bool`・`()`
+      はどれも実在の Fix プログラムに現れる型 -- 文字列リテラルの `Array U8`、`Std::Bool`、0 要素の
+      タプル -- なので、A10 がそれらについて ground・飽和・tycon が `type_env` にあること・
+      `unpunched_field_types` の歩みが有限であることを与える。各変数の使用はその位置でスコープに入って
+      いる束縛に解決するので A11 を満たす -- `c` はパラメータ、`m` は `Let(m, ..)` の継続 `Ret(m)` に、
+      `x_j` は同じアーム本体の `Ret(x_j)` に現れる。**この 2 つを R1 が読むのは次の 3 か所である。**
+      `<1>7` と `<1>8` はどちらも `<1>6a` (= L0 (a)) を通り、L0 の停止性は P2 に載り、A11 は
+      `origin` の停止性がその仮定に立つと述べる。A10 は、`<1>2` が D4 の規則を `T`・`Bool`・`()` に
+      当てて `boxed_leaf_paths` を数え上げるところが読む。以下、`j` は 0 と 1 を渡り、`ρ_j` は変位 `j`
+      のアームを選ぶ実行路を表す。
+  BY A1, A3, A6, A9, A10, A11, A12, A16, D2,
+     CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStringBuf, make_string_lit,
+     CODE src/ast/inline_llvm.rs: LLVMGen::free_vars,
      CODE src/fixstd/std.fix: Bool
 
 <1>2. `boxed_leaf_paths(T, type_env)` は `{[]}` であり、`[]` は `T` の値で inhabited である。`p_0` と
@@ -1364,15 +1419,16 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
         ある。
     BY DEF 路の位置, <1>1, <1>2, <1>3
   <2>3. E6 の辺 `(x_j, [])`-`(m, [])` は在り、`ρ_j` の上で実行された辺である。
-    `<2>1` と `<2>2` より両端は `ρ_j` の位置なので、辺は在る (DEF 辺の leaf 対応)。アーム本体の終端の
-    `Ret(x_j)` は `ρ_j` の上にあるので、DEF `ρ` の上で実行された辺 の第 3 の場合よりその辺は実行された。
-    BY DEF 辺の leaf 対応, DEF `ρ` の上で実行された辺, <1>1, <1>3, <2>1, <2>2
+    `<1>3` よりアーム `j` の本体の終端の `Ret(x_j)` は `ρ_j` の上にあり、`<1>1` よりその `Match` の
+    束縛変数は `m` なので、それが定める E6 の辺は `(x_j, [])`-`(m, [])` である。`<2>1` と `<2>2` より
+    両端は `ρ_j` の位置なので、辺は在る (DEF 辺の存在)。DEF `ρ` の上で実行された辺 の第 3 の場合より
+    その辺は実行された。
+    BY DEF 辺の存在, DEF `ρ` の上で実行された辺, <1>1, <1>3, <2>1, <2>2
   <2>4. QED
-    L1 より `<2>3` の辺の両端は同じオブジェクトを指す。`<1>1` より `gen` は実行時に参照カウントで
-    分岐しないので、A3 の但し書き -- そうした op の `Fresh` の行はオブジェクトの同一性については
-    字義どおりでない -- は当たらず、A3 の「単一の `Fresh`」の行を字義どおりに読める。すなわち
-    `obj(x_j, [])` はこの op が新しく割り当てたオブジェクトであり、D26 より割り当てられたオブジェクトは
-    計数下である。
+    L1 より `<2>3` の辺の両端は同じオブジェクトを指す。`<1>1` より A3 の但し書き -- 実行時に参照カウントで
+    分岐する op の `Fresh` の行はオブジェクトの同一性については字義どおりでない -- は `gen` に当たらない
+    ので、A3 の「単一の `Fresh`」の行を字義どおりに読める。すなわち `obj(x_j, [])` はこの op が新しく
+    割り当てたオブジェクトであり、D26 より割り当てられたオブジェクトは計数下である。
     BY A3, D26, L1, <1>1, <2>1, <2>2, <2>3
 
 <1>5. `ρ_j` を辿る活性化について次が成り立つ。`Obl` は `Let(x_j, Llvm(gen, []), Ret(x_j))` の実行までは
@@ -1460,8 +1516,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
     `<2>2` より `of_candidates` は元数 2 の集合を受け取るので `Join { identity: (m, []), .. }` を返す。
     BY <2>2, CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::identity
 
-<1>9. `f` の本体が持つ別名の辺は、E6 の辺 `(x_0, [])`-`(m, [])` と `(x_1, [])`-`(m, [])` の 2 本だけで
-      ある。
+<1>9. `ρ_j` の上に在る `f` の本体の別名の辺は、E6 の辺 `(x_j, [])`-`(m, [])` の 1 本だけである。
   <2>1. E1 の辺は `Let(_, Var(_), _)` の節点を要し、E2 の辺は `Destructure` の節点を要する。`<1>3` の
         本体はこの 2 種の節点を持たない。
     BY D20, <1>3
@@ -1470,11 +1525,14 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
     BY D20, <1>1, <1>2
   <2>3. E4 の辺は catch-all アームを要する。`<1>1` の 2 つのアームはどちらも `tag` を持つので、E4 の辺は
         無い。E3 の辺は payload 変数 `p_0` / `p_1` の位置を端に持つが、`<1>2` より `p_0` と `p_1` の
-        型は boxed leaf を持たないので、この 2 つを端とする位置は無く、辺も無い。
-    BY D20, DEF 辺の leaf 対応, <1>1, <1>2
-  <2>4. E6 の辺は 2 つのアーム本体の終端の `Ret` から来る。`<1>2` より `T` の boxed leaf は `[]` だけ
-        なので、その辺は `(x_0, [])`-`(m, [])` と `(x_1, [])`-`(m, [])` の 2 本である。
-    BY D20, <1>1, <1>2
+        型は boxed leaf を持たないので、この 2 つを端とする `ρ_j` の位置は無く、DEF 辺の存在 よりその辺も
+        無い。
+    BY D20, DEF 辺の存在, <1>1, <1>2
+  <2>4. E6 の辺は 2 つのアーム本体の終端の `Ret` から来る。`<1>3` より `ρ_j` の上にあるのはアーム `j` の
+        本体の終端の `Ret(x_j)` だけであり、`<1>2` より `T` の boxed leaf は `[]` だけなので `λ` の
+        選び方は 1 つである。よって `ρ_j` の上に在る E6 の辺は `(x_j, [])`-`(m, [])` の 1 本である
+        (`<2>3` と同じく DEF 辺の存在 による)。
+    BY D20, DEF 辺の存在, <1>1, <1>2, <1>3
   <2>5. QED
     BY D20, <2>1, <2>2, <2>3, <2>4
 
@@ -1482,8 +1540,9 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   `<1>6` より `f` の本体は RC 規律を満たす。`<1>4` より `ρ_0` の上で `(x_0, [])` と `(m, [])` はどちらも
   スロットであり、同じオブジェクトを指す。`<1>7` と `<1>8` より `id(x_0, []) = (x_0, [])`、
   `id(m, []) = (m, [])` であり、`<1>1` の A6 より `x_0` と `m` は相異なる名前なので、この 2 つの
-  `VarPath` は異なる。`<1>9` より本体の別名の辺は E6 の 2 本だけなので、`(x_0, [])` と `(m, [])` は
-  別名の道 (E6 の辺 1 本) で結ばれており、この 2 つを結ぶどの道も E6 の辺だけからなる。
+  `VarPath` は異なる。`<1>9` を `j = 0` に当てると、`ρ_0` の上に在る別名の辺は E6 の
+  `(x_0, [])`-`(m, [])` の 1 本だけなので、`(x_0, [])` と `(m, [])` はその 1 本からなる別名の道で結ばれ、
+  この 2 つを結ぶどの道も E6 の辺だけからなる。
   BY D20, <1>1, <1>4, <1>6, <1>7, <1>8, <1>9
 
 **補足 (両端は計数下である)**。`<1>4` の 2 つのスロットが指すオブジェクトは計数下 (D26) である。よって
@@ -1504,7 +1563,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 
 <1>1. `walk_inner` の `RcExpr::Release(v, path, _, k)` の腕は、`other_objects(v, path)` を
       `consume_objects` に渡し、`acted_references(v, path)` を `un_bump` に渡す。`un_bump` が読むのは
-      その `References` の鍵、すなわち `ActRefs(v, π).objects()` である。
+      その `References` の鍵ごとの個数であり、それが名指す鍵の全体は `ActRefs(v, π).objects()` である。
   <2>1. 腕は `let others = self.other_objects(v, path); self.consume_objects(&mut pending, &others);` の
         のち `let un_bumped = self.acted_references(v, path);` を `un_bump(&mut pending, &un_bumped)` に
         渡す。`UnBump::OutsideBracket` の枝はさらに `un_bumped.objects()` を `consume_objects` に渡す。
@@ -1748,6 +1807,50 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
 呼ばず `rhs_consumes` を直接呼ぶので (`L5 (n)`)、P7 はそちらについて何も述べない
 (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`)。
 
+### L5a (unbox 容器の boxed leaf はフィールドの添字で始まる)
+
+**言明**。本体の `Destructure(c, fs, s, k)` の節点であって `c.ty.is_box(type_env)` が偽であるものに
+ついて、次の 2 つが成り立つ。
+
+- **(a)** `boxed_leaf_paths(ty(c), type_env)` の各元は空でない path であり、その先頭の添字は、その leaf が
+  属するフィールドの添字である。
+- **(b)** D9 の `Destructure` (unbox) の行が消費とする**名前が付いていないフィールドの leaf**の全体は、
+  `boxed_leaf_paths(ty(c), type_env)` の元のうち**先頭の添字が `fs` の名前付きフィールドの添字でない**
+  ものの全体に等しい。
+
+(b) が成り立つのは D4 の規則 5 による -- unbox 集約の leaf は、フィールドの添字をそのフィールドの型の
+leaf に前置したものだからである。
+
+<1>1. `ty(c)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Struct` である。したがって
+      `is_array(ty(c))` は偽である。
+  A12 の「`Destructure` の容器が構造体であること」の行が `is_struct(ty(c))` を与え、`is_struct` は
+  `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、型の
+  `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が構造体で
+  あることをその節の 1 つに挙げる。
+  `is_array` は tycon が `Std::Array` であることであり、その `TyConInfo` の `variant` は `Array` なので、
+  `variant` が `Struct` である `ty(c)` には当たらない。
+  BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
+     TypeNode::is_array, TyConVariant
+
+<1>2. CASE `is_fully_unboxed(ty(c))` が真。
+  D4 の規則 1 より `boxed_leaf_paths(ty(c), type_env)` は空なので、(a) は空虚に成り立ち、(b) の 2 つの
+  集合はどちらも空である。
+  BY D4
+
+<1>3. CASE `is_fully_unboxed(ty(c))` が偽。
+  D4 の規則 1 は当たらず、`<1>1` より規則 2 (クロージャ) と規則 4 (`is_array`) も当たらず、前提より
+  規則 3 (`is_box`) も当たらない。よって規則 5 が当たり、`ty(c)` の各 leaf は `unpunched_field_types` が
+  返すフィールドの添字を、そのフィールドの型の leaf に前置したものである。すなわち各 leaf は空でない
+  path を持ち、その先頭の添字はその leaf が属するフィールドの添字であって、これが (a) である。よって
+  「名前が付いていないフィールドの leaf」と「先頭の添字が名前付きフィールドの添字でない leaf」は同じ
+  集合であり、これが (b) である。
+  BY D4, <1>1
+
+<1>4. QED
+  `<1>2` と `<1>3` は `is_fully_unboxed(ty(c))` の真偽の 2 つの場合で尽きており、どちらでも (a) と (b) が
+  成り立つ。
+  BY <1>2, <1>3
+
 ### L5 (`collect_consumes` が積むもの)
 
 **言明**。次が成り立つ。
@@ -1763,8 +1866,9 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
   積む。
 - **(d)** `RcExpr::Destructure(c, fs, _, k)` の腕は、`destructure_consumes(c, fs, type_env)` の各 `leaf` に
   ついて `(c.name, leaf)` を積む。
-- **(e)** `destructure_consumes` は、`c.ty.is_box(type_env)` が真のとき `boxed_leaf_paths(ty(c), type_env)`
-  の全部を返し、偽のときはそのうち先頭の添字が `fs` の名前付きフィールドの添字でないものだけを返す。
+- **(e)** 本体の `Destructure(c, fs, s, k)` の節点について、`destructure_consumes(c, fs, type_env)` は、
+  `c.ty.is_box(type_env)` が真のとき `boxed_leaf_paths(ty(c), type_env)` の全部を返し、偽のときはその
+  うち先頭の添字が `fs` の名前付きフィールドの添字でないものだけを返す。
 - **(f)** `RcExpr::Retain | RcExpr::Release | RcExpr::Eval` の腕は何も積まない。`RcExpr::Let(x, rhs, k)` の
   腕は、`rhs` が `RcRhs::Match` のとき自身は何も積まず (各アーム本体へ再帰する)、それ以外の 4 種のとき
   `rhs_consumes(rhs, &x.ty, ..)` を呼ぶ。
@@ -1841,9 +1945,11 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
   BY CODE src/rc_ir/ownership.rs: collect_consumes_go の `RcExpr::Destructure` の腕
 
 <1>10. (e) が成り立つ。`destructure_consumes` は、`container.ty.is_box(type_env)` が真のとき
-       `boxed_leaf_paths(container.ty, type_env)` の全部を返し、偽のときはそのうち先頭の添字が `fields` の
-       名前付きフィールドの添字でないものだけを返す。
-  BY CODE src/rc_ir/ownership.rs: destructure_consumes
+       `boxed_leaf_paths(container.ty, type_env)` の全部を返す。偽のときは、その各 `leaf` について
+       `leaf.first()` を取り、それが `fields` の名前付きフィールドの添字の集合に入らないものだけを残す。
+       **その `leaf.first()` の `expect` は発火しない** -- `L5a (a)` より、`is_box` が偽である本体の
+       `Destructure` の容器の boxed leaf は空でない path を持つ。
+  BY L5a, CODE src/rc_ir/ownership.rs: destructure_consumes
 
 <1>11. (f) の前半が成り立つ。`RcExpr::Retain | RcExpr::Release | RcExpr::Eval` の腕は何も積まない。
   BY CODE src/rc_ir/ownership.rs: collect_consumes_go の
@@ -1910,44 +2016,6 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
   BY <1>1, <1>3, <1>7, <1>7a, <1>8, <1>9, <1>10, <1>11, <1>12, <1>14, <1>15, <1>16, <1>17, <1>18,
      <1>19, <1>20, <1>20a
 
-### L5a (unbox 容器の 2 つの記述は同じ leaf を指す)
-
-**言明**。`Destructure(c, fs, s, k)` の節点で `c.ty.is_box(type_env)` が偽であるとする。このとき、
-D9 の `Destructure` (unbox) の行が消費とする**名前が付いていないフィールドの leaf**の全体は、
-`boxed_leaf_paths(ty(c), type_env)` の元のうち**先頭の添字が `fs` の名前付きフィールドの添字でない**
-ものの全体に等しい。すなわち `L5 (e)` の `is_box` が偽の場合が返す集合である。
-
-この 2 つが同じ集合であるのは D4 の規則 5 による -- unbox 集約の leaf は、フィールドの添字をその
-フィールドの型の leaf に前置したものだからである。
-
-<1>1. `ty(c)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Struct` である。したがって
-      `is_array(ty(c))` は偽である。
-  A12 の「`Destructure` の容器が構造体であること」の行が `is_struct(ty(c))` を与え、`is_struct` は
-  `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、構造体で
-  あることが `is_closure()` が偽であることを含むと明記する -- `toplevel_tycon_info` が
-  `assert!(!self.is_closure())` で始まるからである (A12 の `InlineLLVMStructPunchBody` の行の括弧書き)。
-  `is_array` は tycon が `Std::Array` であることであり、その `TyConInfo` の `variant` は `Array` なので、
-  `variant` が `Struct` である `ty(c)` には当たらない。
-  BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
-     TypeNode::is_array, TyConVariant
-
-<1>2. CASE `is_fully_unboxed(ty(c))` が真。
-  D4 の規則 1 より `boxed_leaf_paths(ty(c), type_env)` は空なので、2 つの集合はどちらも空である。
-  BY D4
-
-<1>3. CASE `is_fully_unboxed(ty(c))` が偽。
-  D4 の規則 1 は当たらず、`<1>1` より規則 2 (クロージャ) と規則 4 (`is_array`) も当たらず、前提より
-  規則 3 (`is_box`) も当たらない。よって規則 5 が当たり、`ty(c)` の各 leaf は `unpunched_field_types` が
-  返すフィールドの添字を、そのフィールドの型の leaf に前置したものである。すなわち各 leaf は空でない
-  path を持ち、その先頭の添字はその leaf が属するフィールドの添字である。よって「名前が付いていない
-  フィールドの leaf」と「先頭の添字が名前付きフィールドの添字でない leaf」は同じ集合である。
-  BY D4, <1>1
-
-<1>4. QED
-  `<1>2` と `<1>3` は `is_fully_unboxed(ty(c))` の真偽の 2 つの場合で尽きており、どちらでも 2 つの集合が
-  等しい。`L5 (e)` の `is_box` が偽の場合が返すのが後者である。
-  BY L5 (e), <1>2, <1>3
-
 ### P7 (a) D9 の消費はすべて報告される
 
 この節は `own` が DEF leaf 粒度の所有 を満たすことを前提に置く。`own` を読む出どころは (i) だけで
@@ -1998,8 +2066,8 @@ D9 の `Destructure` (unbox) の行が消費とする**名前が付いていな�
       `L5 (e)` の `is_box` が真の場合が返し、`L5 (d)` が積む。
   BY D9, L5 (d), L5 (e)
 <1>5. CASE D9 の `Destructure(c, fs)` (`c` が unbox) の行。D9 のこの行「名前が付いていない
-      フィールドの leaf」の全体は、L5a より `L5 (e)` の `is_box` が偽の場合が返す集合に等しく、それを
-      `L5 (d)` が積む。
+      フィールドの leaf」の全体は、`L5a (b)` より `L5 (e)` の `is_box` が偽の場合が返す集合に等しく、
+      それを `L5 (d)` が積む。
   BY D9, L5 (d), L5 (e), L5a
 <1>6. CASE D9 の「本体 (D23) の終端の `Ret(x)`」の行。
   <2>1. `collect_consumes` に渡された式は関数の `body` であり、D23 よりそれは本体である。
@@ -2025,7 +2093,7 @@ D9 の `Destructure` (unbox) の行が消費とする**名前が付いていな�
 <1>1. `L5 (m)` の出どころ (d) が積むものは D9 の `Destructure` の 2 行のいずれかである。`L5 (e)` の
       2 つの場合は `container.ty.is_box(type_env)` の真偽で尽きている。真の場合が返すのは `ty(c)` の
       全 boxed leaf であって D9 の `Destructure` (boxed) の行に等しく、偽の場合が返す集合が D9 の
-      `Destructure` (unbox) の行が指す leaf に等しいことは L5a である。
+      `Destructure` (unbox) の行が指す leaf に等しいことは `L5a (b)` である。
   BY D9, L5 (d), L5 (e), L5 (m), L5a
 
 <1>2. 出どころ (h) が積むものは D9 の `Closure` の行である。`L5 (h)` が積むのは各 capture の全 boxed
@@ -2135,11 +2203,11 @@ D9 の `Destructure` (unbox) の行が消費とする**名前が付いていな�
       作らないと述べる。D9 の移動の表の最後の行がこれを移動とし、D10 の移動の行より `Obl` は変わらない。
   BY A3, D9, D10, L5 (k), L5 (l)
 
-<1>8. `destructure_consumes` が unbox 容器について落とす名前付きフィールドの leaf (`L5 (e)`)。L5a より
-      `L5 (e)` が返す集合は D9 の `Destructure` (unbox) の行が指す leaf に等しいので、落とされる leaf は
-      名前が付いたフィールドの leaf である。D9 のその行は消費を名前が付いていないフィールドの leaf に
-      限るので、これは消費ではない。D9 の移動の表の第 3 行がこれを移動とし、D10 の移動の行より `Obl` は
-      変わらない。
+<1>8. `destructure_consumes` が unbox 容器について落とす名前付きフィールドの leaf (`L5 (e)`)。
+      `L5a (b)` より `L5 (e)` が返す集合は D9 の `Destructure` (unbox) の行が指す leaf に等しいので、
+      落とされる leaf は名前が付いたフィールドの leaf である。D9 のその行は消費を名前が付いていない
+      フィールドの leaf に限るので、これは消費ではない。D9 の移動の表の第 3 行がこれを移動とし、
+      D10 の移動の行より `Obl` は変わらない。
   BY D9, D10, L5 (e), L5a
 
 <1>8a. `rhs_consumes` の `RcRhs::App` の腕が、`resolve_callee_params` が `Some(params)` を返し
@@ -2222,6 +2290,14 @@ D20 は「別名の辺の両端のスロットは、同じオブジェクトを�
 `ρ` の上で実行された辺 (DEF `ρ` の上で実行された辺) についてであり、E3 の辺についてはその活性化が
 選んだアームの辺だけである。L4 が使うのはこの強めた形である。
 
+**辺が在ることを言うのは DEF 辺の存在 である。** D20 も D6 も、どの節点とどの leaf の組が辺を持つかを
+述べる節を持たない -- D6 が述べるのは、別名の道が記号の位置で終わりうること、すなわち辺の端がスロットに
+限らないことである。この文書は、E1 から E6 の各行が節点の形と leaf から作る 2 つの対がどちらも `ρ` の
+位置であることを、その辺が在ることの定義に取る。L4 の各段が辺の存在をこの形で言うのは、`ρ` の位置で
+あることを段ごとに別に示しているからである -- `λ` が終点の型の boxed leaf であって inhabited であること
+(A12 と D9 と D16)、始点の path が始点の型の boxed leaf であって inhabited であること、そして両端の
+変数が `ρ` の上で値を得ていること (`<1>3`) である。
+
 ### P3/P4 の「条件を外した形」と L4
 
 P3 と P4 は、条件を外した形で「2 つの位置 (D6) は同じオブジェクトを指す」を述べる。**P5 (a) が要るのは
@@ -2242,14 +2318,11 @@ develop mode の検査である。第 4 節の格付けでは、`develop_mode` �
 
 ### A12 の「構造体である」「union である」の読み
 
-L4 の `<1>9` と `<1>12` は、`ty(c)` と `ty(s)` がクロージャでないことを A12 から出す。構造体の側は
-A12 が明記する -- `InlineLLVMStructPunchBody` の行が、構造体であることが `is_closure()` が偽であることを
-含むと書き、その理由を `toplevel_tycon_info` が `assert!(!self.is_closure())` で始まることに置く。
-union の側は A12 が明記しないので、この文書は同じ理由を次の向きで使う。`is_union` はその
-`toplevel_tycon_info` を通るので、`is_closure()` が真の型について値を返さない。A12 が
-`is_union(ty(s))` を真と述べる以上その呼び出しは値を返しており、`is_closure(ty(s))` は偽である。
-**表明を「発火しないから性質が成り立つ」の向きに読んではいない** -- 読んでいるのは「値が返っている以上
-その型はここへ来られる型である」の向きである。
+L4 の `<1>9` と `<1>12` と L5a の `<1>1` は、`ty(c)` と `ty(s)` がクロージャでないことを A12 から出す。
+A12 は「この仮定が型の `variant` を述べる各節では、その型の `is_closure()` は偽である」を持ち、
+`Match` の scrutinee が union であることと `Destructure` の容器が構造体であることをその節に数える。
+この 3 つの段はその節をそのまま引く。A12 がその節の理由に置くのは、`is_union` も `is_struct` も
+`toplevel_tycon_info` を通り、それが `assert!(!self.is_closure())` で始まることである。
 
 ### D9 の `App` の行と `collect_consumes` の粒度が違う
 

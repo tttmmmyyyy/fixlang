@@ -1690,7 +1690,6 @@ pub enum CapacityCheck {
 
 /// Allocate a fresh `#ArrayStorage` object for element type `elem_ty` with room for `cap` elements,
 /// its control block initialized to a reference count of one and its buffer left uninitialized.
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn alloc_array_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: Arc<TypeNode>,
@@ -1833,7 +1832,6 @@ pub fn build_storage_is_aligned<'c, 'm>(
 /// invariant that an array's capacity field is within the bound. `capacity_check` says whether this
 /// allocation is one of those; `CapacityCheck::Skip` is for the capacities that invariant already
 /// covers.
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_capacity_check<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: &Arc<TypeNode>,
@@ -2084,7 +2082,7 @@ pub fn write_alloc_offset<'c, 'm>(
 /// A fresh object of type `ty`, with its control block initialized and its remaining fields left
 /// undefined for the caller to fill in. A boxed type is allocated on the heap and comes back as a
 /// pointer to it; an unboxed type comes back as an undefined aggregate value.
-// PROOF: P5, P6, P7, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
     // Captured values. Used only for creating dynamic object.

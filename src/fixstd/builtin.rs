@@ -878,7 +878,6 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
 }
 
 /// An `Array U8` of `len` bytes, holding a copy of the `len` bytes at `buf`.
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_byte_array_copy<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     buf: PointerValue<'c>,
@@ -971,6 +970,7 @@ impl LLVMGen for InlineLLVMStringBuf {
     }
 }
 
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
     let array_ty = make_array_ty().set_source(source.clone());
     let u8_ty = make_u8_ty().set_source(source.clone());
