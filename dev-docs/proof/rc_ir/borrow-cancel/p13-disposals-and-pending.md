@@ -1134,7 +1134,7 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
     BY A3, A12, D6, D9, <2>1, <2>2
     A3 は「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` はその型の
     boxed leaf である」と述べるので、`p ∈ boxed_leaf_paths(ty(args[j]), type_env)` である。A12 の
-    `Llvm` 節点の型についての 3 つは、`result_prov` の呼び出しが abort せず `Provenance` を返すことの
+    `Llvm` 節点の型についての 4 つは、`result_prov` の呼び出しが abort せず `Provenance` を返すことの
     前提を与える (A3)。A3 の表の
     「単一の `Arg(j, σ)`」の行が「結果のその leaf が inhabited であることと、第 `j` オペランドの leaf
     `σ` が inhabited であることは同値である」と述べる。`obj` の一致は D9 の値の水準の最後の行が与える --
