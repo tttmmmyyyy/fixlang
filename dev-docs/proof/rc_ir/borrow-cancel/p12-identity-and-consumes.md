@@ -960,11 +960,10 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     BY A12, L1a
   <2>3. `[i] ++ λ` は `ty(c)` の boxed leaf である。
     <3>1. `ty(c)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Struct` である。
-      A12 の「`Destructure` の容器が構造体であること」の行が `is_struct(ty(c))` を与える。**A12 は、
-      構造体であることが `is_closure()` が偽であることを含むと明記する** -- `toplevel_tycon_info` が
-      `assert!(!self.is_closure())` で始まるからである (A12 の `InlineLLVMStructPunchBody` の行の
-      括弧書き)。`is_struct` はその `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` で
-      あることである。
+      A12 の「`Destructure` の容器が構造体であること」の行が `is_struct(ty(c))` を与え、`is_struct` は
+      `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。**A12 は、
+      型の `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が
+      構造体であることをその節の 1 つに挙げる。**
       BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info
     <3>2. `is_array(ty(c))` と `is_funptr(ty(c))` は偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
@@ -1054,11 +1053,9 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   <2>2. `[t] ++ λ` は `ty(s)` の boxed leaf である。
     <3>1. `ty(s)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Union` である。
       A12 の「`Match` の scrutinee が union であること」の行が `is_union(ty(s))` を与え、`is_union` は
-      `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Union` であることである。
-      `toplevel_tycon_info` は `is_closure()` が真の型について `assert!(!self.is_closure())` で止まるので、
-      その型について `is_union` は値を返さない。A12 が `is_union(ty(s))` を真と述べる以上その呼び出しは
-      値を返しているので、`is_closure(ty(s))` は偽である。**A12 が構造体について同じことを明記するのも
-      同じ理由による** (A12 の `InlineLLVMStructPunchBody` の行の括弧書き)。
+      `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Union` であることである。**A12 は、
+      型の `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Match` の scrutinee が
+      union であることをその節の 1 つに挙げる。**
       BY A12, CODE src/ast/types.rs: TypeNode::is_union, TypeNode::toplevel_tycon_info
     <3>2. `is_array(ty(s))` と `is_funptr(ty(s))` は偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
@@ -1950,9 +1947,9 @@ D9 の `Destructure` (unbox) の行が消費とする**名前が付いていな�
 <1>1. `ty(c)` はクロージャではなく、その tycon の `variant` は `TyConVariant::Struct` である。したがって
       `is_array(ty(c))` は偽である。
   A12 の「`Destructure` の容器が構造体であること」の行が `is_struct(ty(c))` を与え、`is_struct` は
-  `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、構造体で
-  あることが `is_closure()` が偽であることを含むと明記する -- `toplevel_tycon_info` が
-  `assert!(!self.is_closure())` で始まるからである (A12 の `InlineLLVMStructPunchBody` の行の括弧書き)。
+  `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、型の
+  `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が構造体で
+  あることをその節の 1 つに挙げる。
   `is_array` は tycon が `Std::Array` であることであり、その `TyConInfo` の `variant` は `Array` なので、
   `variant` が `Struct` である `ty(c)` には当たらない。
   BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
@@ -2277,14 +2274,11 @@ develop mode の検査である。第 4 節の格付けでは、`develop_mode` �
 
 ### A12 の「構造体である」「union である」の読み
 
-L4 の `<1>9` と `<1>12` は、`ty(c)` と `ty(s)` がクロージャでないことを A12 から出す。構造体の側は
-A12 が明記する -- `InlineLLVMStructPunchBody` の行が、構造体であることが `is_closure()` が偽であることを
-含むと書き、その理由を `toplevel_tycon_info` が `assert!(!self.is_closure())` で始まることに置く。
-union の側は A12 が明記しないので、この文書は同じ理由を次の向きで使う。`is_union` はその
-`toplevel_tycon_info` を通るので、`is_closure()` が真の型について値を返さない。A12 が
-`is_union(ty(s))` を真と述べる以上その呼び出しは値を返しており、`is_closure(ty(s))` は偽である。
-**表明を「発火しないから性質が成り立つ」の向きに読んではいない** -- 読んでいるのは「値が返っている以上
-その型はここへ来られる型である」の向きである。
+L4 の `<1>9` と `<1>12` と L5a の `<1>1` は、`ty(c)` と `ty(s)` がクロージャでないことを A12 から出す。
+A12 は「この仮定が型の `variant` を述べる各節では、その型の `is_closure()` は偽である」を持ち、
+`Match` の scrutinee が union であることと `Destructure` の容器が構造体であることをその節に数える。
+この 3 つの段はその節をそのまま引く。A12 がその節の理由に置くのは、`is_union` も `is_struct` も
+`toplevel_tycon_info` を通り、それが `assert!(!self.is_closure())` で始まることである。
 
 ### D9 の `App` の行と `collect_consumes` の粒度が違う
 
