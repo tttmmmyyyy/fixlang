@@ -156,6 +156,15 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 2 つの呼び出しの実行区間は、交わらないか、一方が他方に含まれるかのどちらかである。また、返る呼び出しの
 中で始まる呼び出しは有限個である。
 
+**DEF 参照は引数を通ってだけ届く**
+safe Rust で書かれた関数の本体が名指せる値は、自分の引数 (`self` を含む) から到達できる値、自分が作った
+値、および `static` 項目の値だけである。よって、呼び出し先の本体が呼び出し元の局所変数に届くのは、その値
+かそれへの参照が引数として渡ったときに限る。
+
+**DEF static は Sync を要る**
+safe Rust の `static` 項目の型は `Sync` でなければならない。`Sync` は auto trait であり、`RefCell<T>` は
+`Sync` を実装しないので、`RefCell` の欄を持つ構造体も `Sync` でない。
+
 **DEF 型のサイズ**
 型の値が占める記憶域の大きさを、その型の**サイズ**という。構造体の各フィールドと、enum の 1 つの変位が
 保持する各値は、その値の記憶域の中に互いに重ならずに置かれる。よって、構造体のサイズはその各フィールドの
@@ -326,6 +335,48 @@ enum については元と同じ変位で、その変位が保持する各値を
 
 **証明**
 
+<1>0. `origin` の呼び出しがこのクレートの中に書かれているのは 17 か所であり、それを含む関数は 12 個で
+      ある。`origin` は `ownership.rs` の `pub(crate)` の自由関数なので、その呼び出しはこのクレートの中に
+      しか書けない。12 個は、`ownership.rs` の `origin_inner` (6 か所)、`origin_from_leaves_under`
+      (1 か所)、`acted_references` (1 か所)、その `#[cfg(test)] mod tests` の `origin_of` と
+      `a_unit_read_out_of_a_container_keeps_the_containers_origin` (各 1 か所)、`borrow.rs` の
+      `infer_ownership`、`level_ownership`、`RewriteCtx::comes_from_a_value_used_later`、
+      `RewriteCtx::owns_unit`、`RewriteCtx::check_ownership_is_levelled`、`CancelAnalysis::consume`、
+      `CancelAnalysis::other_objects` (各 1 か所) である。DEF 本体 より、標準ライブラリの関数へ渡す
+      閉包の中に書かれた呼び出しもこの数え上げに入っている。
+  BY CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: origin_inner,
+     CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+     CODE src/rc_ir/ownership.rs: acted_references, CODE src/rc_ir/borrow.rs: infer_ownership,
+     CODE src/rc_ir/borrow.rs: level_ownership,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::comes_from_a_value_used_later,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 本体
+<1>0a. `origin(vars, ・, ・, ・)` の 1 回の呼び出しの中で `vars` を引数として受け取る本体は、`origin`、
+       `origin_inner`、`origin_from_leaves_under` の 3 つだけである。
+  <2>1. `VarTable` は `origins: RefCell<Map<VarPath, Origin>>` の欄を持つので `Sync` ではなく、
+        DEF static は Sync を要る より `static` 項目に置けない。よって DEF 参照は引数を通ってだけ届く
+        より、関数の本体が `VarTable` のある値に届くのは、その値への参照が引数 (`self` を含む) として
+        渡ったときか、自分でその値を作ったときに限る。自分で作った値は `vars` ではない。
+    BY CODE src/rc_ir/ownership.rs: VarTable, DEF static は Sync を要る,
+       DEF 参照は引数を通ってだけ届く
+  <2>2. `origin` の本体が `vars` を渡すのは `origin_inner(vars, type_env, var, path)` の 1 か所だけで
+        ある。ほかに `vars` が現れるのは `vars.origins.borrow()` と `vars.origins.borrow_mut()` で、
+        どちらも `RefCell` の欄への参照を渡すだけである。`origin_inner` の呼び出しは `grow_stack` へ渡す
+        閉包の中に書かれているが、DEF 本体 よりその閉包の本体は `origin` の本体の一部であり、A15 より
+        `grow_stack` はその閉包をちょうど 1 回呼ぶ。
+    BY CODE src/rc_ir/ownership.rs: origin, DEF 本体, A15
+  <2>3. `origin_inner` の本体が `vars` を渡すのは、6 か所の `origin(vars, ...)` と 1 か所の
+        `origin_from_leaves_under(vars, ...)` だけである。`origin_from_leaves_under` の本体が `vars` を
+        渡すのは 1 か所の `origin(vars, ...)` だけである。
+    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+  <2>4. QED
+    呼び出しの入れ子の深さについての帰納法による (DEF 呼び出しの入れ子)。根の呼び出し
+    `origin(vars, ・, ・, ・)` はこの 3 つの 1 つであり、<2>2 と <2>3 より、この 3 つの本体が `vars` を
+    引数として渡す先はこの 3 つだけである。<2>1 より、`vars` を引数として受け取らない本体は `vars` に
+    届かないので、その中の呼び出しの引数に `vars` は現れない。
+    BY <2>1, <2>2, <2>3, DEF 呼び出しの入れ子
 <1>1. `origin(vars, type_env, x, π)` の本体は 3 つの文である。`key` を `(x.clone(), π.to_vec())` として、
       `if let Some(known) = vars.origins.borrow().get(&key) { return known.clone(); }`、
       `let answer = grow_stack(|| origin_inner(vars, type_env, x, π));`、
@@ -345,19 +396,31 @@ enum については元と同じ変位で、その変位が保持する各値を
       `insert` は鍵を失わせない。
   BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
      CODE src/rc_ir/ownership.rs: origin, <1>1, DEF Map と Set
-<1>3. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが直に行う `origin` の呼び出しの鍵の集合は、
-      `vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの集合は `vars.origins` の状態にも、
+<1>3. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが直に行う、第 1 引数が `vars` である
+      `origin` の呼び出しの鍵の集合は、`vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの集合は `vars.origins` の状態にも、
       その呼び出しが受け取る `origin` の返り値にも依らない。
-  <2>0. `origin_inner` の 1 回の呼び出しの中で `origin` の呼び出しが直に起きるのは、`origin_inner` の
-        本体に書かれた 6 か所の `origin(...)` と、それが呼ぶ `origin_from_leaves_under` の本体に書かれた
-        1 か所の `origin(...)` を通ってだけである。この 2 つの本体が呼ぶ関数は、`origin` と次のもので
-        尽きる --- `origin_from_leaves_under` (`origin_inner` の `Binding::Llvm` の腕が呼ぶ)、`Map::get`、
-        `TypeNode::is_box`、`LLVMGen::result_prov`、`Provenance::leaf_origins_at`、
-        `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`Origin::acted_on`、
-        `Origin::of_candidates`、`<Origin as PartialEq>::eq`、`<[T]>::first`、`Set`・`Vec`・`Map` の操作、
-        `Clone::clone` と `<[T]>::to_vec`、および `Option` と `Iterator` の組み合わせ子。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       DEF 本体
+  <2>0. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しの中で、第 1 引数が `vars` である `origin`
+        の呼び出しが直に (別の `origin` の呼び出しの中でなく) 起きるのは、`origin_inner` の本体に書かれた
+        6 か所と、それが呼ぶ `origin_from_leaves_under` の本体に書かれた 1 か所を通ってだけである。
+    <3>1. 第 1 引数が `vars` である `origin` の呼び出しは、`vars` を引数として受け取った本体の中に
+          書かれたものである。<1>0a より、その本体は `origin`、`origin_inner`、
+          `origin_from_leaves_under` の 3 つに限る。
+      BY <1>0a
+    <3>2. <1>0 の 17 か所のうち、この 3 つの本体に在るのは `origin_inner` の 6 か所と
+          `origin_from_leaves_under` の 1 か所である。`origin` の本体に `origin` の呼び出しは書かれて
+          いない。
+      BY <1>0
+    <3>3. `origin_from_leaves_under` は `ownership.rs` の非公開の自由関数であり、`ownership.rs` の中で
+          それを呼ぶのは `origin_inner` の 1 か所と `#[cfg(test)] mod tests` の 2 か所だけである。
+          `ownership.rs` は `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たないので、その呼び出しは
+          このファイルの中にしか書けない。
+      BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+         CODE src/rc_ir/ownership.rs: origin_inner, DEF 本体
+    <3>4. QED
+      <3>1 と <3>2 より、第 1 引数が `vars` である `origin` の呼び出しはこの 7 か所を通ってだけ起きる。
+      <3>3 より、この `origin_inner` の呼び出しの中で走る `origin_from_leaves_under` は、その本体が
+      呼んだものである。
+      BY <3>1, <3>2, <3>3
   <2>1. 本体は `vars.bindings.get(x)` による場合分けである。`None`、`Binding::Param`、
         `Binding::Producer` の腕、`Binding::Field(container, idx)` の `container` が boxed の枝、
         `Binding::Payload(scrut, Some(_))` の `scrut` が boxed の枝は、いずれも `here()` を返して
@@ -387,8 +450,8 @@ enum については元と同じ変位で、その変位が保持する各値を
   <2>4. QED
     DEF 引数で決まる関数 より `vars.bindings.get(x)` の値は `vars.bindings` と `x` で決まる。`Binding` の
     変位は `Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、`Join` の 7 つであり、<2>1 から
-    <2>3 がこの 7 つと、`get` が `None` を返す場合を尽くす。<2>0 より、直に起きる `origin` の呼び出しは
-    この 2 つの本体に書かれたものだけである。
+    <2>3 がこの 7 つと、`get` が `None` を返す場合を尽くす。<2>0 より、第 1 引数が `vars` であって直に
+    起きる `origin` の呼び出しは、この 2 つの本体に書かれたものだけである。
     BY <2>0, <2>1, <2>2, <2>3, CODE src/rc_ir/ownership.rs: Binding, DEF 引数で決まる関数
 <1>4. 値を返す `origin` の呼び出し `c` について、`c` の中には、鍵が等しく一方が他方に真に含まれる 2 つの
       外れの `origin` の呼び出しは無い。ここで外側の候補には `c` 自身も数える。この 2 つ組を**入れ子の対**
