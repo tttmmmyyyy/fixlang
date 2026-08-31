@@ -22,22 +22,59 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# `CODE src/rc_ir/ownership.rs: origin_inner` and `CODE ...: Origin::identity`. The symbol stops at
-# the first character a path cannot hold, so a citation that trails prose keeps only its symbol.
-CITATION = re.compile(
-    r"CODE\s+([A-Za-z0-9_/.]+\.(?:rs|fix))\s*:\s*`?"
-    r"(impl\s+[A-Za-z_][A-Za-z0-9_]*\s+for\s+[A-Za-z_][A-Za-z0-9_]*"
-    r"|[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)"
+# `CODE src/rc_ir/ownership.rs: origin, origin_inner`. One citation names a file and then a
+# comma-separated list of that file's symbols, so the head and the symbol are matched separately and
+# the list is walked by `citations_in`.
+CITATION_HEAD = re.compile(r"CODE\s+([A-Za-z0-9_/.]+\.(?:rs|fix))\s*:\s*")
+CITATION_SYMBOL = re.compile(
+    r"\s*`?(impl\s+[A-Za-z_][A-Za-z0-9_]*\s+for\s+[A-Za-z_][A-Za-z0-9_]*"
+    r"|[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)`?"
 )
 
-# `| P1, P2 | `p10-leaves-and-units.md` | ... |` in a proof README's status table.
-STATUS_ROW = re.compile(r"^\|\s*([^|]*P[0-9][^|]*?)\s*\|\s*`([^`]+\.md)`\s*\|", re.M)
+# What ends a citation's list of symbols: the next citation of any kind. A `BY` line runs the groups
+# together with the same comma the list uses, so a name shaped like a label closes the list rather
+# than being read as one more symbol of the file.
+CITATION_LABEL = re.compile(
+    r"(?:[A-Z]\d+[a-z]?|p\d+|CODE|DEF|BY|PROVE|ASSUME|QED|CASE|DEFINE)\Z"
+)
+
+
+def citations_in(text):
+    """Every `(source file, symbol)` a proof's text cites.
+
+    A citation names one file and as many of its symbols as the step relies on. Reading only the
+    first would leave the rest of them out of both directions of the link -- the cited item would
+    carry no `// PROOF:` comment, and `citations.tsv` would not notice it changing."""
+    for head in CITATION_HEAD.finditer(text):
+        source, at = head.group(1), head.end()
+        while True:
+            hit = CITATION_SYMBOL.match(text, at)
+            if hit is None:
+                break
+            symbol, at = hit.group(1), hit.end()
+            if CITATION_LABEL.match(symbol):
+                break
+            yield source, symbol
+            if not text.startswith(",", at):
+                break
+            at += 1
+
+# `| P1, P2 | `p10-leaves-and-units.md` | ... |` in a proof README's status table. The main theorem's
+# row names it `T`, so a cell holding that alone counts as well.
+STATUS_ROW = re.compile(
+    r"^\|\s*((?:[^|]*P[0-9A-Za-z-][^|]*?)|T)\s*\|\s*`([^`]+\.md)`\s*\|", re.M
+)
 
 PROOF_COMMENT = re.compile(r"^\s*// PROOF: ")
 
 
 def propositions_of(text):
-    """The propositions a status-table cell names, expanding `P8 - P14` into each of its members."""
+    """The propositions a status-table cell names, expanding `P8 - P14` into each of its members.
+
+    A cell may also carry a name that is not a numbered proposition -- the main theorem's `T`, or a
+    label like `(P-insert)` for a file whose obligation is an assumption rather than a proposition.
+    Such a name is kept as it stands, so that the items only that file cites still get a comment
+    saying which part of the proof rests on them."""
     out = []
     for part in re.split(r"[、,]", text):
         part = part.strip().strip("*")
@@ -45,9 +82,19 @@ def propositions_of(text):
         if span:
             out.extend(f"P{n}" for n in range(int(span.group(1)), int(span.group(2)) + 1))
             continue
-        one = re.match(r"(P\d+)", part)
+        # The letter is part of the name: `P7a` and `P7e` are different propositions in different
+        # files, and dropping it would give six of them one comment.
+        one = re.match(r"(P\d+[a-z]?)", part)
         if one:
             out.append(one.group(1))
+            continue
+        # A bare name (the main theorem's `T`) or a parenthesised label of more than one letter
+        # (`(P-insert)`). One letter in parentheses is a clause of the proposition beside it --
+        # the `(b)` of `P5 (a), (b)` -- and names no file of its own.
+        if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", part) or re.fullmatch(
+            r"\([A-Za-z][A-Za-z0-9_-]+\)", part
+        ):
+            out.append(part)
     return out
 
 
@@ -59,20 +106,39 @@ def proof_dirs():
             yield directory
 
 
+# What a `// PROOF:` comment names when the citation comes from the README rather than from a
+# proof of some proposition -- the definitions and the assumptions the whole proof is framed in.
+FRAME = "D/A"
+
+
 def citations_of(directory):
-    """Map each cited `(source file, symbol)` to the propositions that cite it, for one proof."""
+    """Map each cited `(source file, symbol)` to the propositions that cite it, for one proof.
+
+    The README cites code too, in its definitions and its assumptions, and those citations carry the
+    same weight: an item a definition rests on has moved out from under the whole proof when it
+    changes. They are collected under `FRAME`."""
     readme = open(os.path.join(directory, "README.md"), encoding="utf-8").read()
     by_file = {}
     for row in STATUS_ROW.finditer(readme):
-        by_file[row.group(2)] = propositions_of(row.group(1))
+        # A file may hold several rows -- one per group of propositions whose state differs -- and
+        # every one of them names propositions the file proves.
+        by_file.setdefault(row.group(2), []).extend(propositions_of(row.group(1)))
     cited = {}
-    for path in sorted(glob.glob(os.path.join(directory, "p*.md"))):
-        props = by_file.get(os.path.basename(path))
-        if props is None:
+    for path in sorted(glob.glob(os.path.join(directory, "*.md"))):
+        name = os.path.basename(path)
+        if name == "README.md":
+            continue
+        props = by_file.get(name)
+        if props is None and name.startswith("p"):
             print(f"{os.path.relpath(path, REPO)}: no row in the README's status table")
             continue
-        for hit in CITATION.finditer(open(path, encoding="utf-8").read()):
-            cited.setdefault((hit.group(1), hit.group(2)), set()).update(props)
+        # A document that proves no proposition discharges an assumption instead, so its citations
+        # carry the frame's weight: the enumeration behind an assumption has moved out from under
+        # the whole proof when the code it reads changes.
+        for citation in citations_in(open(path, encoding="utf-8").read()):
+            cited.setdefault(citation, set()).update(props or {FRAME})
+    for citation in citations_in(readme):
+        cited.setdefault(citation, set()).add(FRAME)
     return cited
 
 
@@ -126,13 +192,42 @@ def digest(lines, span):
     return hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
 
 
+def proposition_order(name):
+    """Sort key: the frame first, then `P<n>` and its lettered variants, then everything else.
+
+    The key orders the names totally. A set of them iterates in an order that varies from run to
+    run, so a key that leaves two names tied would write the comment one way and then the other,
+    and the comments would never settle."""
+    if name == FRAME:
+        return (-1, 0, "")
+    numbered = re.fullmatch(r"P(\d+)([a-z]?)", name)
+    if numbered:
+        return (0, int(numbered.group(1)), numbered.group(2))
+    return (1, 0, name)
+
+
 def comment_for(props, directory):
-    ordered = sorted(props, key=lambda p: int(p[1:]))
+    ordered = sorted(props, key=proposition_order)
     return f"// PROOF: {', '.join(ordered)} ({os.path.relpath(directory, REPO)})\n"
+
+
+def strip_comments():
+    """Take every `// PROOF:` line out of the sources, so the comments are rebuilt from nothing.
+
+    A citation the proof stops making leaves its comment behind, and rebuilding around the leftovers
+    would keep it. Stripping first also keeps the line positions the spans are computed at true."""
+    for source in rust_files_with_comments():
+        path = os.path.join(REPO, source)
+        lines = open(path, encoding="utf-8").readlines()
+        open(path, "w", encoding="utf-8").writelines(
+            line for line in lines if not PROOF_COMMENT.match(line)
+        )
 
 
 def main():
     write = "--write" in sys.argv[1:]
+    if write:
+        strip_comments()
     findings = []
     for directory in proof_dirs():
         cited = citations_of(directory)
@@ -223,7 +318,7 @@ def write_table(directory, rows):
         handle.write("# generated by dev-docs/proof/proof_links.py -- do not edit\n")
         handle.write("file\tsymbol\tpropositions\tdigest\n")
         for source, symbol, props, dig in rows:
-            ordered = ",".join(sorted(props, key=lambda p: int(p[1:])))
+            ordered = ",".join(sorted(props, key=proposition_order))
             handle.write(f"{source}\t{symbol}\t{ordered}\t{dig}\n")
 
 
@@ -241,7 +336,7 @@ def check_table(directory, rows):
         if was is None:
             yield f"{source}: `{symbol}` is cited and absent from citations.tsv"
         elif was != dig:
-            names = ",".join(sorted(props, key=lambda p: int(p[1:])))
+            names = ",".join(sorted(props, key=proposition_order))
             yield f"{source}: `{symbol}` changed since the proof was written; re-verify {names}"
 
 

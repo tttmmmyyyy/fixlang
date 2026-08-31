@@ -66,21 +66,24 @@ impl TypeDefn {
         self.value.find_node_at(pos)
     }
 
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.value.resolve_namespace(ctx)?;
         Ok(())
     }
 
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.value.resolve_type_aliases(type_env)?;
         Ok(())
     }
 
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycon(&self) -> TyCon {
         TyCon::new(self.name.clone())
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycon_info(&self, punched_struct_fields: &[usize]) -> TyConInfo {
         let kind = self.kind();
         let (variant, is_unbox, fields) = match &self.value {
@@ -181,6 +184,7 @@ impl TypeDefn {
         ret
     }
 
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate_tyvars(&self) -> Result<(), Errors> {
         // Check if type variables are not duplicated.
         let mut names = Set::<String>::default();
@@ -393,6 +397,7 @@ impl TypeAlias {
     }
 }
 
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct Field {
     pub name: Name,
@@ -425,12 +430,14 @@ impl Field {
         self.ty.find_node_at(pos)
     }
 
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.syn_ty = self.syn_ty.resolve_namespace(ctx)?;
         self.ty = self.ty.resolve_namespace(ctx)?;
         Ok(())
     }
 
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.ty = self.ty.resolve_type_aliases(type_env)?;
         Ok(())

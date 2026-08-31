@@ -58,6 +58,7 @@ use std::vec;
 
 /// What a program declares about its types: the type constructors and the type aliases it can name,
 /// and which of the newtypes among them a value has stopped being built at.
+// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TypeEnv {
     /// The declaration of every type constructor, built-in and user-defined, by its name.
@@ -80,6 +81,7 @@ pub struct TypeEnv {
 
 impl Default for TypeEnv {
     /// An environment in which no type constructor and no type alias is declared.
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn default() -> Self {
         Self {
             tycons: Arc::new(Default::default()),
@@ -92,6 +94,7 @@ impl Default for TypeEnv {
 impl TypeEnv {
     /// An environment holding `tycons` and `aliases` as declared, with every newtype among them
     /// still a type values are built at.
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(tycons: Map<TyCon, TyConInfo>, aliases: Map<TyCon, TyAliasInfo>) -> TypeEnv {
         TypeEnv {
             tycons: Arc::new(tycons),
@@ -109,6 +112,7 @@ impl TypeEnv {
     ///
     /// Every newtype recorded is one this environment declares, which is what lets
     /// `unwrapped_newtype_info` answer with a declaration rather than with the possibility of one.
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unwrap_newtypes(&mut self, newtypes: Set<TyCon>) {
         for tycon in &newtypes {
             assert!(
@@ -146,6 +150,7 @@ impl TypeEnv {
     /// Adds each declaration of `new_tycons` to this environment, replacing the one already held
     /// under the same name, each with its field types unwrapped, so that a declaration minted after
     /// the newtype-unwrapping pass answers as the ones that were there before it do.
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
         let declared_type_env = self.clone();
         let mut tycons = self.tycons.as_ref().clone();
@@ -208,6 +213,7 @@ impl TypeEnv {
 
     /// Replace every type alias written in the definition of a type constructor of this environment
     /// by the type it stands for, so that a stage reading a field or variant type meets no alias.
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases_in_tycons(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let type_env = self.clone();
@@ -734,6 +740,7 @@ impl Program {
 
     /// A program made of the one module `mod_info`, which declares nothing yet and imports itself
     /// and `Std`.
+    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn single_module(mod_info: ModuleInfo) -> Program {
         let mut fix_mod = Program {
             mod_to_import_stmts: Default::default(),
@@ -764,6 +771,7 @@ impl Program {
     }
 
     /// Declares the type `Std::Tuple{tuple_size}`.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn add_tuple_defn(&mut self, tuple_size: u32) {
         self.type_defns.push(tuple_defn(tuple_size));
     }
@@ -910,6 +918,7 @@ impl Program {
 
     /// Adds `type_defns` to the type definitions the program declares, keeping the ones it already
     /// holds.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_type_defns(&mut self, mut type_defns: Vec<TypeDefn>) {
         self.type_defns.append(&mut type_defns);
     }
@@ -918,6 +927,7 @@ impl Program {
     /// giving each type variable written on the right-hand side of a definition its kind. A name
     /// two definitions declare is reported as an error, and the second definition is left out of
     /// the environment.
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn calculate_type_env(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let mut tycons = bulitin_tycons();
@@ -976,6 +986,7 @@ impl Program {
     /// The type of every top-level symbol of the program, by name. Compiling one unit needs the
     /// types of the symbols the other units define as well, since this unit's code refers to them,
     /// so this covers the whole program rather than any one unit.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn global_types(&self) -> Map<FullName, Arc<TypeNode>> {
         self.symbols
             .iter()
@@ -2272,6 +2283,7 @@ impl Program {
     /// Only the calls a program reaches are reported, so the symbols have to be instantiated by the
     /// time this runs. Run it before the program is optimized, while each expression still carries
     /// the source it came from.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn check_multi_threading_requirement(&self, config: &Configuration) -> Result<(), Errors> {
         if config.threaded {
             return Ok(());
@@ -2633,6 +2645,7 @@ impl Program {
     ///
     /// The name on the left-hand side of a type, of a trait and of a global value is a full name by
     /// the time this runs, so what is resolved here is the names written to the right of them.
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace_not_in_expr(&mut self) -> Result<(), Errors> {
         let env = self.create_name_resolution_env();
         let mut ctx = NameResolutionContext::new("NA".to_string(), env.clone());
@@ -2708,6 +2721,7 @@ impl Program {
     /// Validates the definition of every type the program declares: the type variables it writes,
     /// the associated types written in the types it gives its fields, the field it declares twice,
     /// and the number of variants a union declares.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate_type_defns(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for type_defn in &self.type_defns {
@@ -2846,6 +2860,7 @@ impl Program {
     /// and the functorial actions for each field of a struct, and a constructor, an extractor, a
     /// test and a modifier for each variant of a union. Each is defined in the namespace of the
     /// type, under the name a source writes it by, with the documentation shown for it.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_methods(self: &mut Program) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for defn in &self.type_defns.clone() {
@@ -3023,6 +3038,7 @@ impl Program {
     }
 
     /// Implements `Std::Boxed` for every boxed struct and every boxed union the program declares.
+    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_boxed_impls(&mut self) -> Result<(), Errors> {
         for defn in &self.type_defns {
             match &defn.value {
@@ -3058,6 +3074,7 @@ impl Program {
     ///   module: its declarations join the module's, and the module goes on being the one it was
     ///   declared as. When false, a module of one name declared in two files is an error, and a
     ///   module already linked is left as it stands.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn link(&mut self, mut other: Program, extend: bool) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 

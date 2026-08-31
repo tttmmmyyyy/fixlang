@@ -90,6 +90,7 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 //
 // `stable` holds symbols already known to contain no further `fix` to defunctionalize; they are
 // carried over untouched.
+// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 fn run_one(
     prg: &mut Program,
     stable: &mut Set<FullName>,
@@ -229,6 +230,7 @@ impl FixDefunctionalizer {
     // Build the lifted global `G` for `fix(f)`, and return a reference to `G` (typed
     // `FixCap -> a -> b`) together with the capture-struct expression built from the current scope.
     // `G(cap)` then reconstructs the recursive value `fix(f) : a -> b`.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lift(&mut self, f: &Arc<ExprNode>, state: &VisitState) -> (Arc<ExprNode>, Arc<ExprNode>) {
         // `f = |self| f_body`, single-parameter before uncurrying.
         let (self_params, f_body) = f.destructure_lam();

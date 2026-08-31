@@ -22,6 +22,22 @@ accesses the cache condition reads.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 3debb13d30f78ca9b6f3b853da531b786716ffa7
+
+借用化が一意性の観測へ到達できる関数に借用版を作らなくなった行と、その直前の `main`
+(`a924f115ab551cb8ccb0b90d195889abfd3f8804`) の行を並べて置く。**この 2 行は同じ機械で続けて取ったもので、
+互いの比較のために在る。**
+
+**56 ケースのうち 55 が 1 命令も動かない。** 動いたのは `sum_by_fix` の 14 命令 (113,654 -> 113,640、
+-0.012%) だけである。**このコーパスは変更が効く場所を踏まない** -- 借用版を止めるゲートが発火するのは
+`unsafe_is_unique` / `Debug::assert_unique` / `Std::FFI::Destructor` へ到達できる関数だけで、56 ケースの
+どのソースもそれらを使わない。
+
+**サイクルは退行の証拠に使えない行である。** 枝の走りは 27 ケースがサイクル欄を空けて返り、他の仕事が
+1.14 コアを取っていた (`main` の行は 0.06 で 56 ケース全部が埋まった)。両方が埋まった 29 ケースの差は
+`cp_lib_lsegtree` の +6.19% から `sort_ordered` の -2.12% まで散るが、**命令数が 1 つも動いていない
+ケースがその幅で振れている**ので、読めるのはこの環境の雑音の大きさだけである。
+
 ## b1083ab414b351b75a7e164b4b3a7d51ca0e434d
 
 The first row measured over the dependencies the corpus's version requirements resolve to today —

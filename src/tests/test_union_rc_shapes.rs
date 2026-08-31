@@ -150,10 +150,9 @@ mod union_rc_shapes_tests {
     // call returns, so that the simplifier leaves it standing as a value reference counting acts
     // on. The payload it was built from stays live beside it and is read back at the end. For the
     // shapes whose payload holds two units, freeing that payload early changes the answer. For the
-    // shape whose unit sits one level down the answer stays right either way, and the assertion in
-    // `unit_of` catches a key made for it. That payload arrives as a parameter, so the union is
-    // resolved from a value whose own unit sits a level below it; it carries a second field so that
-    // the struct around the boxed value survives to the RC IR.
+    // shape whose unit sits one level down the answer stays right either way. That payload arrives
+    // as a parameter, so the union is resolved from a value whose own unit sits a level below it; it
+    // carries a second field so that the struct around the boxed value survives to the RC IR.
     const UNION_PAYLOAD_UNITS_SOURCE: &str = r#"
 module Main;
 
@@ -754,6 +753,225 @@ main = (
             return;
         }
         test_source(ONE_VARIANT_OWNED_SOURCE, Configuration::develop_mode());
+    }
+
+    // Borrowing must not change the answer a uniqueness observation gives.
+    //
+    // A parameter the body never consumes is inferred borrowed, so the borrowing version drops its
+    // release and the caller holds that reference until after the call. Where the observed value is
+    // the same object under another name, the count the observation reads is one higher than it was,
+    // and a value that was unique reads as shared. `Std::unsafe_is_unique` documents the opposite
+    // change -- shared to unique, as optimization drops a use -- and not this one.
+    //
+    // The third argument is what makes the call worth routing to the borrowing version, and it is
+    // neither the borrowed parameter nor the observed one: the routing test is an `any` over the
+    // arguments, so one argument alone can enable the routing that breaks another.
+    const OBSERVED_UNIQUENESS_SOURCE: &str = r#"
+module Main;
+
+type B = box struct { v : I64 };
+
+// `x` is never consumed, so it is inferred borrowed. `y` is observed. `w` is used after the call.
+observe : I64 -> B -> B -> B -> I64;
+observe = |n, x, y, w| (
+    if n > 0 { observe(n - 1, x, y, w) };
+    let y = y.Debug::assert_unique(|_| "the observed value is shared");
+    y.@v
+);
+
+main : IO ();
+main = (
+    let p = B { v : 1 };
+    let w = B { v : 2 };
+    // The same object reaches both `x` and `y`, under two names `origin` does not connect.
+    let r = observe(0, p, p, w);
+    eval w.@v;
+    assert_eq(|_|"observe returned the wrong value", r, 1);;
+    pure()
+);
+"#;
+
+    // The same, where the observation is reached by an indirect call.
+    //
+    // A call through a local holding a closure names no function, so a call graph built from named
+    // callees alone stops there. The observation sits in the closure's body, one edge past the stop,
+    // and the function making the indirect call is the one whose parameters get borrowed.
+    //
+    // Which closure the local holds is decided from the program's arguments, so no pass can resolve
+    // it and specialize the call away.
+    const OBSERVED_UNIQUENESS_THROUGH_A_CLOSURE_SOURCE: &str = r#"
+module Main;
+
+type B = box struct { v : I64 };
+
+// `x` is never consumed, so it is inferred borrowed. `w` is used after the call, which is what makes
+// the call worth routing. The observation is inside `cl`, which this function only calls indirectly.
+relay : I64 -> B -> B -> (() -> I64) -> I64;
+relay = |n, x, w, cl| (
+    if n > 0 { relay(n - 1, x, w, cl) };
+    cl()
+);
+
+main : IO ();
+main = (
+    let args = *IO::get_args;
+    let p = B { v : 1 };
+    let w = B { v : 2 };
+    let observing = |_| (
+        let p = p.Debug::assert_unique(|_| "the observed value is shared");
+        p.@v
+    );
+    let other : () -> I64 = |_| 0;
+    // The argument count decides which one, so the call stays indirect.
+    let cl = if args.@size > 100 { other } else { observing };
+    let r = relay(0, p, w, cl);
+    eval w.@v;
+    assert_eq(|_|"relay returned the wrong value", r, 1);;
+    pure()
+);
+"#;
+
+    // The same, where the closure the indirect call arrives at was built in a global's initializer.
+    //
+    // A global initializer is not a function of the program and gets no borrowing version, so nothing
+    // about the gate is recorded against it — but the closures it builds are ones an indirect call
+    // anywhere can arrive at, so its body has to be scanned all the same.
+    const OBSERVED_UNIQUENESS_THROUGH_A_GLOBAL_CLOSURE_SOURCE: &str = r#"
+module Main;
+
+type B = box struct { v : I64 };
+
+// The `Closure` node that names the observing function is in this initializer's body.
+checkers : Array (B -> Bool);
+checkers = [ |b| ( let (u, b) = b.unsafe_is_unique; eval b; u ) ];
+
+relay : I64 -> B -> B -> B -> (B -> Bool) -> Bool;
+relay = |n, x, y, w, cl| (
+    if n > 0 { relay(n - 1, x, y, w, cl) };
+    cl(y)
+);
+
+main : IO ();
+main = (
+    let o = B { v : 1 };
+    let w = B { v : 2 };
+    let cl = checkers.@(0);
+    // The same object reaches `x` and `y`, under two names `origin` does not connect.
+    let u = relay(0, o, o, w, cl);
+    eval w.@v;
+    assert_eq(|_|"the observed value read as shared", u, true);;
+    pure()
+);
+"#;
+
+    // The same, where the observation is reached by an inline-LLVM operation applying an operand.
+    //
+    // `Option::mod_some` names no function: the modifier arrives as an operand and the operation's
+    // generated code applies it. A call graph built from the callees of `App` alone stops there, and
+    // the observation sits in the modifier, one edge past the stop.
+    const OBSERVED_UNIQUENESS_THROUGH_AN_APPLIED_OPERAND_SOURCE: &str = r#"
+module Main;
+
+type B = box struct { v : I64 };
+
+// `x` is never consumed, so it is inferred borrowed. `w` is used after the call, which is what makes
+// the call worth routing. The observation is inside the modifier `mod_some` applies.
+relay : I64 -> B -> B -> B -> Bool;
+relay = |n, x, y, w| (
+    if n > 0 { relay(n - 1, x, y, w) };
+    let opt : Option B = Option::some(y);
+    let opt = opt.mod_some(|b| (
+        let b = b.Debug::assert_unique(|_| "the observed value is shared");
+        B { v : b.@v }
+    ));
+    opt.as_some.@v == 1
+);
+
+main : IO ();
+main = (
+    let o = B { v : 1 };
+    let w = B { v : 2 };
+    // The same object reaches `x` and `y`, under two names `origin` does not connect.
+    let u = relay(0, o, o, w);
+    eval w.@v;
+    assert_eq(|_|"relay returned the wrong value", u, true);;
+    pure()
+);
+"#;
+
+    // The same, where the observation is reached by releasing a `Destructor`.
+    //
+    // A release runs the destructor function of the object it takes to a count of zero, before that
+    // object's own references are released. The function names no call site: it comes out of the
+    // object's field, and the `IO` action it returns is run by the release as well. A call graph
+    // built from what a body calls stops at the release.
+    const OBSERVED_UNIQUENESS_THROUGH_A_DESTRUCTOR_SOURCE: &str = r#"
+module Main;
+
+type B = box struct { v : I64 };
+
+// `x` is never consumed, so it is inferred borrowed. `d` is consumed by the array literal, so the
+// release of that array runs the destructor inside this activation, on the same object `x` borrows.
+// `w` is used after the call, which is what makes the call worth routing.
+relay : I64 -> B -> Destructor B -> B -> I64;
+relay = |n, x, d, w| (
+    if n > 0 { relay(n - 1, x, d, w) };
+    let arr : Array (Destructor B) = [d];
+    eval arr.@size;
+    0
+);
+
+main : IO ();
+main = (
+    let args = *IO::get_args;
+    // The argument count decides the depth, so the call survives to run time.
+    let n = if args.@size > 100 { 1 } else { 0 };
+    let o = B { v : 1 };
+    let w = B { v : 2 };
+    // The destructor holds the same object `main` passes to the borrowed position `x`.
+    let d = *Destructor::make(o, |v| (
+        let v = v.Debug::assert_unique(|_| "the observed value is shared");
+        pure(v)
+    ));
+    let r = relay(n, o, d, w);
+    eval w.@v;
+    eval r;
+    pure()
+);
+"#;
+
+    /// `Debug::assert_unique` halts the program when the value it is given is shared, so a run that
+    /// completes is the whole check. Valgrind is off: nothing here is a memory error, and the
+    /// observation is what the test is about.
+    #[test]
+    pub fn test_observed_uniqueness_survives_borrowing() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_SOURCE);
+    }
+
+    /// As `test_observed_uniqueness_survives_borrowing`, reached through an indirect call.
+    #[test]
+    pub fn test_observed_uniqueness_survives_borrowing_through_a_closure() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_CLOSURE_SOURCE);
+    }
+
+    /// As `test_observed_uniqueness_survives_borrowing_through_a_closure`, where the closure the
+    /// indirect call arrives at was built in a global's initializer.
+    #[test]
+    pub fn test_observed_uniqueness_survives_borrowing_through_a_global_closure() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_GLOBAL_CLOSURE_SOURCE);
+    }
+
+    /// As `test_observed_uniqueness_survives_borrowing`, reached by an inline-LLVM operation that
+    /// applies one of its operands rather than by a call.
+    #[test]
+    pub fn test_observed_uniqueness_survives_borrowing_through_an_applied_operand() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_AN_APPLIED_OPERAND_SOURCE);
+    }
+
+    /// As `test_observed_uniqueness_survives_borrowing`, reached by the release of a `Destructor`.
+    #[test]
+    pub fn test_observed_uniqueness_survives_borrowing_through_a_destructor() {
+        test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_DESTRUCTOR_SOURCE);
     }
 
     // A union payload built from a value a match binding carries and a second value. The binding

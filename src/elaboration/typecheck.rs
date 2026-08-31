@@ -173,6 +173,7 @@ impl Substitution {
     }
 
     /// The substitution that replaces the type variable named `var` by `ty`, and nothing else.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn single(var: &str, ty: Arc<TypeNode>) -> Self {
         let mut data = Map::<String, Arc<TypeNode>>::default();
         data.insert(var.to_string(), ty);
@@ -201,6 +202,7 @@ impl Substitution {
     /// # Returns
     /// Whether the two agreed. Where they disagree, the replacements taken from `other` before the
     /// disagreement stay, so a caller that carries on has to drop this substitution.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn merge(&mut self, other: &Self) -> bool {
         for (var, ty) in &other.data {
             if self.data.contains_key(var) {
@@ -224,6 +226,7 @@ impl Substitution {
     /// A type none of whose variables this substitution replaces is returned as
     /// it came: the common case of a substitution that says nothing about a type
     /// walks the type and hands back the same node.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
@@ -1156,6 +1159,7 @@ impl TypeCheckContext {
     /// later stage — as the `Expr::MakeStruct` arm holds them in the
     /// struct's declaration order for code generation — reorders them
     /// after the walk rather than before it.
+    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unify_type_of_expr_inner(
         &mut self,
         ei: &Arc<ExprNode>,

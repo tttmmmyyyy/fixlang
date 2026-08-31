@@ -32,6 +32,7 @@ use std::sync::Arc;
 /// compilation unit may not define, since separated compilation splits the program across units — and
 /// code generation materializes it, so it is always in scope. Local names are globally-unique fresh
 /// names, so admitting the symbol names never masks a dangling local.
+// PROOF: P1, P2, P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeEnv, stage: &str) {
     // The globally-referenceable names: every program symbol, plus this program's own functions and
     // globals — which include the clones borrow-ification and specialization mint (not program
@@ -271,11 +272,11 @@ impl<'a> Validator<'a> {
     }
 
     /// One node of the walk: the uses it makes, the bindings it introduces, and its continuation.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_expr_inner(&mut self, node: &RcExprNode) {
         match node.expr.as_ref() {
             RcExpr::Let(x, rhs, k) => {
-                self.check_rhs(rhs);
+                self.check_rhs(x, rhs);
                 self.bind(&x.name);
                 self.check_expr(k);
                 self.scope.remove(&x.name);
@@ -307,8 +308,8 @@ impl<'a> Validator<'a> {
     /// Check a right-hand side: the variables it uses, and the invariants its own form carries — a
     /// closure's target function and stored capture layout, an `Llvm` operation's operand names, and
     /// a match's arms.
-    // PROOF: P1, P2, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn check_rhs(&mut self, rhs: &RcRhs) {
+    // PROOF: D/A, P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    fn check_rhs(&mut self, x: &RcVar, rhs: &RcRhs) {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),
             RcRhs::App(callee, args) => {
@@ -366,6 +367,23 @@ impl<'a> Validator<'a> {
                         arg_names.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
                         self.location,
                     );
+                }
+                // Each result leaf comes from at most one place. The reference-counting analyses
+                // read the declaration leaf by leaf and follow the single source back to the object
+                // the leaf belongs to; a leaf declaring two sources would let one name stand for two
+                // objects, and `cancel` pairs a release with a retain by name.
+                let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+                let prov = llvm_gen.result_prov(&x.ty, &arg_tys, self.type_env);
+                for origins in prov.leaves() {
+                    if origins.len() > 1 {
+                        panic!(
+                            "[RC IR validate] {}: `{}` declares {} sources for one result leaf in `{}`",
+                            self.stage,
+                            llvm_gen.name(),
+                            origins.len(),
+                            self.location,
+                        );
+                    }
                 }
                 for a in args {
                     self.use_var(&a.name);
