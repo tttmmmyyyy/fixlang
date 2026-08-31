@@ -82,7 +82,7 @@ pub(crate) struct VarTable {
 impl VarTable {
     /// The variable table of a function: its parameters and capture as `Param` bindings, plus the `Binding` and
     /// type of every variable bound in its body.
-    // PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn of(func: &RcFunc) -> VarTable {
         let mut vars = VarTable::empty();
         for p in func.params.iter().chain(func.capture.iter()) {
@@ -95,7 +95,7 @@ impl VarTable {
     }
 
     /// The vars of a param-less body (a global initializer).
-    // PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18c, P19, P20, P21, P22, P23, P24, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn body_only(body: &RcExprNode) -> VarTable {
         let mut vars = VarTable::empty();
         collect_bindings(body, &mut vars);
@@ -117,7 +117,7 @@ impl VarTable {
 
 /// Record every local variable's `Binding` and type (and any closure value's target function) in a
 /// function body.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
     match node.expr.as_ref() {
         RcExpr::Ret(_) => {}
@@ -181,7 +181,7 @@ fn returned_var(node: &RcExprNode) -> &RcVar {
 }
 
 /// Where the object at a leaf comes from.
-// PROOF: D/A, P1, P2, P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Origin {
     /// The leaf denotes exactly this object.
@@ -200,7 +200,7 @@ impl Origin {
     /// The one name for the value, for a reader that pairs two operations on it — a retain with the
     /// release that un-bumps it — which only a single name can decide. Two leaves with the same
     /// identity hold the same reference.
-    // PROOF: P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn identity(&self) -> &VarPath {
         match self {
             Origin::Exactly(p) => p,
@@ -216,7 +216,7 @@ impl Origin {
     /// release of that value disposes it — so a candidate set that left the name out would let the
     /// release pass over the retain and the two would pair with the wrong partners. Building one
     /// candidate set out of several origins therefore folds in `acted_on`, not `candidates`.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn candidates(&self) -> Vec<&VarPath> {
         match self {
             Origin::Exactly(p) => vec![p],
@@ -791,7 +791,7 @@ fn rc_units_go(
 /// Truncate a leaf path to its reference-counting unit: the path down to the first unit `unit_step`
 /// reaches, whose whole subtree is that one unit. A path that stays within unboxed structs is
 /// unchanged.
-// PROOF: D/A, P1, P2, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn truncate_to_unit(
     ty: &Arc<TypeNode>,
     path: &[usize],
