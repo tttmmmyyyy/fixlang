@@ -3030,7 +3030,7 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
         の段の実行時の呼び出し先 (D23) を `g`、`g` の第 `i` パラメータを `p_i` と書く。`g` は
         `borrow_ify` の出力の `funcs` の関数である。また `call_rc` が引く `params` が `Some` であるとき、
         `params[i]` は `p_i` の名前と型である。
-    BY D23, P30, A6, A13, P9, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+    BY D23, P30, A6, A13, A14, P9, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/ownership.rs: resolve_callee_params
     D23 は `App` の呼び出し先を実行時に `callee` の値が指す関数と定め、「**D9 の `App` の行と D10 の
     生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数である。**」と述べたうえで、「D9 の
@@ -3044,7 +3044,10 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
     `params` を返す。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
     `resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の呼び出し先
     (D23) と同じ `RcFunc` である」と述べる。`V` の本体は `borrow_ify` の出力の本体なので、その `params` は
-    実行時の呼び出し先 `g` のパラメータの列である。
+    実行時の呼び出し先 `g` のパラメータの列である。`params[i]` が範囲内であることは A14 が与える --
+    「`App(callee, args)` の `args` の個数は、呼び出し先のパラメータの個数に**等しい**」であり、
+    「**「呼び出し先」は D23 の実行時の関数と、`resolve_callee_params` が静的に引く関数の両方に
+    ついて読む。**」と続く。`p` は第 `i` 引数なので `i < args.len() = params.len()` である。
   <2>0a. `u ∈ rc_units(ty(p), type_env)` であり、`ty(p) = ty(p_i)` なので
          `u ∈ rc_units(ty(p_i), type_env)` でもある。**`call_rc` が `(p, u)` を見るのはこの所属に
          よる** -- その繰り返しは `for unit in rc_units(&arg.ty, self.type_env)` であり、`callee_owns`
