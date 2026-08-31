@@ -119,6 +119,34 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 プログラムを実行したときのヒープオブジェクトの参照カウントが 0 になることをいう。この文書に現れるのは
 前者だけである。
 
+### DEF 引数で決まる関数
+
+関数の返り値が**引数で決まる**とは、引数の値が等しい 2 回の呼び出しが同じ値を返すことをいう。この文書は
+この性質を 3 つの群について使い、群ごとに根拠が違う。
+
+- **標準ライブラリの操作** --- `Map::get`、`Set`・`Vec`・`Map` の操作、`<[T]>::starts_with`、
+  `<[T]>::first`、`Clone::clone`、`Option` と `Iterator` の組み合わせ子。根拠は外部の結果であり、その
+  言明は `DEF Map と Set`、`DEF スライスの接頭と先頭`、`DEF Clone`、`DEF Vec::iter と slice::iter`、
+  `DEF Iterator::all と any`、`DEF Iterator::map と collect`、`DEF Iterator::filter_map` が述べる。
+  `Set` の反復の順序は定めないので、`Set` から作られるのは要素の集合であって並びではない。
+- **`LLVMGen::result_prov`** --- 根拠は **A3** の「`result_prov` と `borrows_operand` は決定的である ---
+  同じ引数に対して常に同じ値を返す」である。これは外部の結果ではないので、この文書はこれを使う段の `BY`
+  に A3 を挙げる。
+- **型と `Provenance` の上の関数** --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
+  `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
+  `Origin::identity`、`Origin::candidates`。この 8 つは型・path・`Provenance`・`Origin` の値だけを引数に
+  取り、`VarTable` も走査の状態も引数に取らない。根拠はその定義である
+  (`CODE src/ast/types.rs: TypeNode::is_box`,
+  `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at`,
+  `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`,
+  `CODE src/rc_ir/ownership.rs: as_arg_projection`, `CODE src/rc_ir/ownership.rs: truncate_to_unit`,
+  `CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`, `CODE src/rc_ir/ownership.rs: Origin::identity`,
+  `CODE src/rc_ir/ownership.rs: Origin::candidates`)。
+
+**この 8 つのうち 2 つは、並びではなく集合が決まる。** `Provenance::leaf_origins_under` が渡す要素は
+「順序を定めない」と宣言されているので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は
+`Join` の変位について `Set` の反復から `Vec` を作るので、引数で決まるのはその元の集合である。
+
 ### 外部の結果
 
 この文書が使う Rust の言語と標準ライブラリの契約を、名前を付けて述べる。
@@ -127,24 +155,6 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 関数の呼び出しは入れ子である。呼び出し `c` の中で始まった呼び出しは、`c` が返るより前に返る。よって
 2 つの呼び出しの実行区間は、交わらないか、一方が他方に含まれるかのどちらかである。また、返る呼び出しの
 中で始まる呼び出しは有限個である。
-
-**DEF 引数で決まる関数**
-関数の返り値が**引数で決まる**とは、引数の値が等しい 2 回の呼び出しが同じ値を返すことをいう。
-
-`origin_inner` と `origin_from_leaves_under` の本体が呼ぶ関数は、`origin` と次のもので尽きる ---
-`Map::get`、`TypeNode::is_box`、`LLVMGen::result_prov`、`Provenance::leaf_origins_at`、
-`Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`Origin::acted_on`、
-`Origin::of_candidates`、`Set`・`Vec`・`Map` の操作、`Clone::clone`、および `Option` と `Iterator` の
-組み合わせ子 (`CODE src/rc_ir/ownership.rs: origin_inner`,
-`CODE src/rc_ir/ownership.rs: origin_from_leaves_under`)。**この一覧のどれも `origin` を呼ばない。**
-`acted_references` と `CancelAnalysis::other_objects` の本体が `origin` のほかに呼ぶのは、
-`boxed_leaf_paths`、`<[usize]>::starts_with`、`Origin::identity`、`Origin::candidates`、および `Map` と
-`Vec` の操作であり、これらも `origin` を呼ばない (`CODE src/rc_ir/ownership.rs: acted_references`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
-
-この文書は、**上に挙げたすべての関数の返り値が引数で決まること**を外部の結果として使う。どれも
-`VarTable` の `origins` の欄を引数に取らないので、この欄の状態はその返り値に届かない。`Set` の反復の
-順序は定めないので、`Set` から作られるのは要素の集合であって並びではない。
 
 **DEF 型のサイズ**
 型の値が占める記憶域の大きさを、その型の**サイズ**という。構造体の各フィールドと、enum の 1 つの変位が
@@ -186,6 +196,11 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 **DEF Vec::iter と slice::iter**
 `v.iter()` は、`Vec<T>` またはスライス `&[T]` の値 `v` の各要素への共有参照を、先頭から順にちょうど
 1 度ずつ渡す反復子である。
+
+**DEF スライスの接頭と先頭**
+`s.starts_with(p)` は、`s` の長さが `p` の長さ以上であり、`s` の先頭からの `p` の長さ個の要素が `p` の
+要素と順に等しいとき真、そうでないとき偽である。`s.first()` は、`s` が空でないときその第 0 要素への共有
+参照を `Some` で返し、空のとき `None` を返す。
 
 **DEF Iterator::all と any**
 `it.all(f)` は、`it` が渡すすべての要素について `f` が真を返すとき真であり、`f` が偽を返す要素が 1 つでも
@@ -334,11 +349,15 @@ enum については元と同じ変位で、その変位が保持する各値を
       `vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの集合は `vars.origins` の状態にも、
       その呼び出しが受け取る `origin` の返り値にも依らない。
   <2>0. `origin_inner` の 1 回の呼び出しの中で `origin` の呼び出しが直に起きるのは、`origin_inner` の
-        本体に書かれた `origin(...)` と、それが呼ぶ `origin_from_leaves_under` の本体に書かれた
-        `origin(...)` を通ってだけである。DEF 引数で決まる関数 より、この 2 つの本体が呼ぶほかの関数は
-        どれも `origin` を呼ばない。
+        本体に書かれた 6 か所の `origin(...)` と、それが呼ぶ `origin_from_leaves_under` の本体に書かれた
+        1 か所の `origin(...)` を通ってだけである。この 2 つの本体が呼ぶ関数は、`origin` と次のもので
+        尽きる --- `origin_from_leaves_under` (`origin_inner` の `Binding::Llvm` の腕が呼ぶ)、`Map::get`、
+        `TypeNode::is_box`、`LLVMGen::result_prov`、`Provenance::leaf_origins_at`、
+        `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`Origin::acted_on`、
+        `Origin::of_candidates`、`<Origin as PartialEq>::eq`、`<[T]>::first`、`Set`・`Vec`・`Map` の操作、
+        `Clone::clone` と `<[T]>::to_vec`、および `Option` と `Iterator` の組み合わせ子。
     BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       DEF 引数で決まる関数, DEF 本体
+       DEF 本体
   <2>1. 本体は `vars.bindings.get(x)` による場合分けである。`None`、`Binding::Param`、
         `Binding::Producer` の腕、`Binding::Field(container, idx)` の `container` が boxed の枝、
         `Binding::Payload(scrut, Some(_))` の `scrut` が boxed の枝は、いずれも `here()` を返して
@@ -359,10 +378,12 @@ enum については元と同じ変位で、その変位が保持する各値を
         を呼ぶ。後者は `decl.leaf_origins_under(π)` と `args` と `type_env` から `Set` の値
         `operand_units` を作り、その各元 `(j, unit)` について鍵 `(args[j].name, unit)` の `origin` を
         1 回呼ぶ。DEF 引数で決まる関数 より、`decl` も `operand_units` も `vars.bindings.get(x)` が返した
-        束縛と `type_env` と `π` で決まる。`operand_units` は `Set` なので反復の順序は定まらないが、
-        呼ぶ鍵の集合は定まる。どの鍵も `origin` の返り値を読まない。
+        束縛と `type_env` と `π` で決まる。`decl` については A3 が、`arg_tys`・`leaf_origins_at`・
+        `leaf_origins_under`・`as_arg_projection`・`truncate_to_unit` については DEF 引数で決まる関数 が
+        与える。`operand_units` は `Set` なので反復の順序は定まらないが、呼ぶ鍵の集合は定まる。どの鍵も
+        `origin` の返り値を読まない。
     BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       CODE src/rc_ir/ownership.rs: as_arg_projection, DEF 引数で決まる関数
+       CODE src/rc_ir/ownership.rs: as_arg_projection, DEF 引数で決まる関数, A3
   <2>4. QED
     DEF 引数で決まる関数 より `vars.bindings.get(x)` の値は `vars.bindings` と `x` で決まる。`Binding` の
     変位は `Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、`Join` の 7 つであり、<2>1 から
