@@ -41,7 +41,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     fn free_vars_mut(&mut self) -> Vec<&mut FullName>;
 
     /// The free variables by value.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn free_vars(&self) -> Vec<FullName> {
         dyn_clone::clone_box(self)
             .free_vars_mut()
