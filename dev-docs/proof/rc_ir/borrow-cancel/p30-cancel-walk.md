@@ -141,7 +141,8 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 - **型と `Provenance` の上の関数** --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
   `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
   `Origin::identity`、`Origin::candidates`。この 8 つは型・path・`Provenance`・`Origin` の値だけを引数に
-  取り、`VarTable` も走査の状態も引数に取らない。根拠はその定義である
+  取り、`VarTable` も走査の状態も引数に取らない。根拠は、その本体が引数から到達できる値だけを読み、
+  可変な静的変数にも内部可変性を持つ値にも触れないことである
   (`CODE src/ast/types.rs: TypeNode::is_box`,
   `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at`,
   `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`,
