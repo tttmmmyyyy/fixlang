@@ -1481,8 +1481,13 @@ Fix の関数型の leaf に新しい番地を書き込むのが `InlineLLVMFixB
 (`CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner`)。funptr 型の lambda を
 作るのは `uncurry::funptr_lambda` だけで、その式は新しい記号の `expr` 全体に据わるので
 `Lowerer::lower_symbol` の funptr の枝が直に受け取り、`lower_to_var` を通らない
-(`CODE src/optimization/uncurry.rs: run`, `funptr_lambda`)。**確かめていない点が 1 つ残る** -- その 2 人の
-間の変換が funptr 型の `Expr::Lam` を式の内側へ移さないこと。
+(`CODE src/optimization/uncurry.rs: run`, `funptr_lambda`)。
+
+**funptr 型の `Expr::Lam` が式の内側へ移らないことは、`p50-observation.md` の `L9b` `<2>2a` が示す** --
+`type_funptr` を呼ぶ生産コードは `uncurry` の 2 か所だけであり、型検査は `Expr::Lam` に
+`type_fun(arg_ty, body_ty)` を与え、Fix のソースに書かれた型は `#FunPtr` の tycon を持たないので、
+`uncurry` より前の式に funptr 型は現れない。`uncurry` の後に式を書き換えるパスも無い。その段は A23 を
+引かないので、この参照で循環は生じない。
 
 読む者は `p20-borrow-ify.md` の `L18` である。これが無いと、振り分けられた callee の型が funptr とは限らず、
 `route` が差し替えた callee の消費が両側でずれる。
@@ -2544,9 +2549,10 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | T | `p70-main-theorem.md` | -- | 証明済み。(T1) から (T4) まで、引用する命題の言明の上で閉じる | 未着手 |
 
 **T が閉じることは、T が引く命題が閉じることを意味しない。**各命題の状態はこの表が述べる。誰も果たさない
-仮定は A3、A4、A12、A18、A24 の 5 つである。A12 は `RcFunc` の欄の整合についてだけ果たす者を持つ。A23 は果たす者を 2 人持つが、その 2 人の間を funptr 型の
-`Expr::Lam` が式の内側へ移らずに通ることは、まだ誰も確かめていない。A10 は newtype を剥がす節を持ち、
-その節は誰も示していない。
+仮定は A3、A4、A12、A18、A24 の 5 つである。A12 は `RcFunc` の欄の整合についてだけ果たす者を持つ。
+A23 が果たす者を 2 人持つこと -- その 2 人の間を funptr 型の `Expr::Lam` が式の内側へ移らずに通ること --
+は `p50-observation.md` の `L9b` `<2>2a` が示す。A10 は newtype を剥がす節を持ち、その節は誰も示して
+いない。
 
 **A19 の果たす者。** (ii-a) は `insert_rc`・`split_rc_units`・`borrow_ify` の 3 人が果たす。(i) は仮定では
 なく D21 が活性化に課す制限であり (第 4 節)、実行が作る活性化がそれを満たすことを P28 (b) が示す。(ii-b) は無条件に閉じている --

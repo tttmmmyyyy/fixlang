@@ -1165,8 +1165,10 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
        replace_closure_call_to_funptr_call_subexprs
   <2>2a. 式が funptr 型を持つのは、`type_funptr` が作った型を `set_type` で与えられたときか、funptr 型を
         持つ式の型を `set_type` で写されたときである。型検査が `Expr::Lam` に与えるのは
-        `type_fun(arg_ty, body_ty)` であり (A23)、`<2>1` より Fix のソースに書かれた型はこの tycon を
-        持たないので、`uncurry` より前の式に funptr 型は現れない。`uncurry` の中で funptr 型が式に付く
+        `type_fun(arg_ty, body_ty)` であり (`CODE src/elaboration/typecheck.rs:
+        TypeCheckContext::unify_type_of_expr_inner`)、`<2>1` より Fix のソースに書かれた型はこの tycon を
+        持たないので、`uncurry` より前の式に funptr 型は現れない。**この段は A23 を引かない** -- A23 が
+        残していた点をこの段が閉じるからである。`uncurry` の中で funptr 型が式に付く
         位置は 3 つに尽きる -- `funptr_lambda` が `expr_abs(args, body, None).set_type(funptr_ty)` を
         作る位置、`replace_closure_call_to_funptr_call` が
         `expr_var(f_funptr.name, None).set_type(funptr_ty)` を作って `expr_app` の関数の位置に置く位置、
@@ -1175,7 +1177,7 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         `replace_closure_call_to_funptr_call_subexprs` は部分式を辿って
         `replace_closure_call_to_funptr_call` を当て、その答えの部分式を組み直すだけで、式の型を別の式へ
         写さない。
-    BY A23, <2>1, <2>2, CODE src/optimization/uncurry.rs: run, funptr_lambda,
+    BY <2>1, <2>2, CODE src/optimization/uncurry.rs: run, funptr_lambda,
        replace_closure_call_to_funptr_call, replace_closure_call_to_funptr_call_subexprs,
        CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner
   <2>3. `uncurry::run` は export statement の `value_expr` と `entry_io_value` も funptr 記号の `Var` に
