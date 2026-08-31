@@ -2270,17 +2270,13 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
 
 <1>2. `origin_inner` が `origin` を呼ばないのは、`vars.bindings.get(u)` が次の 6 つのいずれかである
       ときに限る。束縛を持たない名前 (`None`)、`Binding::Param`、`Binding::Producer`、`Binding::Llvm`
-      であって `decl.leaf_origins_at(σ).and_then(as_arg_projection)` が `None` を返す場合、boxed 容器の
-      `Binding::Field`、boxed scrutinee の `Binding::Payload`。
-  BY A9, CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding,
-     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var
-  `Binding` は 7 変位を持ち、`origin_inner` の `match` はそれに `None` を加えた腕を持つ。残る腕は
-  いずれも `origin` を少なくとも 1 回呼ぶ -- `Binding::Move(y)` の腕、`Binding::Llvm` の `Some((j, p))`
-  の枝、unbox 容器の `Binding::Field` の枝、`Binding::Payload` の catch-all の枝と unbox 変位の枝は
-  それぞれ 1 回呼び、`Binding::Join(arm_results)` の腕は `arm_results` の各元について 1 回ずつ呼ぶ。
-  `arm_results` が空でないことは `collect_bindings` と A9 が与える -- `collect_bindings` は
-  `RcRhs::Match(scrut, arms)` の各 `arm` について `returned_var(&arm.body)` を `arm_results` に push し、
-  A9 よりすべての `Match` は 1 つ以上のアームを持つ。
+      であって `decl.leaf_origins_at(σ).and_then(as_arg_projection)` が `None` を返す枝、boxed 容器の
+      `Binding::Field`、**変位アーム** (`variant` が `Some`) であって boxed scrutinee の
+      `Binding::Payload`。
+  BY L7a
+  L7a の (a) がこの 6 つであり、(b) の 5 つと (c) の `Binding::Join` の腕はいずれも `origin` を
+  少なくとも 1 回呼ぶ。**catch-all アーム (`variant` が `None`) の `Binding::Payload` は、
+  scrutinee が boxed であっても `origin(scrut, σ)` を呼ぶ** -- L7a はそれを (b) に置く。
 
 <1>3. `Binding::Param` の腕は (b) か (c) である。
   BY D14, P1, A10, D6, L12a, CODE src/rc_ir/ownership.rs: VarTable::of
@@ -2306,7 +2302,8 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
   (D26)」と述べるのがこの点である。
 
 <1>5. 残る 4 つの腕 -- `Binding::Producer`、`Binding::Llvm` の `as_arg_projection` が `None` を返す枝、
-      boxed 容器の `Binding::Field`、boxed scrutinee の `Binding::Payload` -- は (a) である。
+      boxed 容器の `Binding::Field`、**変位アーム**であって boxed scrutinee の `Binding::Payload` --
+      は (a) である。
   BY D10, D4, CODE src/rc_ir/ownership.rs: collect_bindings,
      CODE src/rc_ir/ownership.rs: as_arg_projection
   `collect_bindings` は `RcRhs::App(..)` と `RcRhs::Closure(..)` にだけ `Binding::Producer` を置くので、
@@ -2314,7 +2311,9 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
   「`App(callee, args)` の結果の各 boxed leaf」「`Closure(f, caps)` の結果 (capture object)」
   「`Llvm(gen, args)` の結果の leaf のうち、`result_prov` の宣言が単一の `Arg(j, σ)` **でない**もの」
   「boxed 容器の `Destructure` の各名前付きフィールドの各 leaf」「boxed union の変位アームの payload の
-  各 leaf」である。クロージャの boxed leaf が capture の位置 1 つであることは D4 の第 2 規則が与える。
+  各 leaf」である。**最後の行が変位アームだけを挙げることが、この段が `Binding::Payload` を変位アームに
+  限る理由である** -- catch-all アームの payload 束縛は D10 の生成の表に行を持たず、D9 の移動の表が
+  それを扱う。クロージャの boxed leaf が capture の位置 1 つであることは D4 の第 2 規則が与える。
   `Llvm` の行がこの腕に対応するのは、`as_arg_projection` が `Some((j, p))` を返すのが「`sources` が
   ちょうど 1 元であってその元が `LeafOrigin::Arg(j, p)` であるとき」に限るからである -- すなわち
   `None` を返すことと、宣言が単一の `Arg(j, σ)` でないことは同値である。
