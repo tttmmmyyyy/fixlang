@@ -2,11 +2,11 @@
 
 **対象コミット**: `409378f6a8132088c432e2d1b3b76476e2a8fe88`
 
-この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義 D1-D34 と仮定 A1-A25、および命題
-P1、P2、P2a、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P16、P17、P18、P30 の**言明**の
-上に立つ。それらの証明は `p10-leaves-and-units.md`、`p12-identity-and-consumes.md`、
-`p15-ownership-uniformity.md`、`p20-borrow-ify.md`、`p30-cancel-walk.md`、`p51-runs.md` にあり、
-この文書はその言明だけを使う。
+この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義 D1-D34 と仮定 A1 から A26、および
+命題 P1、P2、P2a、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P15、P16、P17、P18、P24、
+P30 の**言明**の上に立つ。それらの証明は `p10-leaves-and-units.md`、
+`p12-identity-and-consumes.md`、`p15-ownership-uniformity.md`、`p20-borrow-ify.md`、
+`p30-cancel-walk.md`、`p40-cancel-soundness.md`、`p51-runs.md` にあり、この文書はその言明だけを使う。
 
 **別名類は D33 が、`held` は D34 が定める。この 2 つがこの文書に残す 4 つを、第 7.5 節が果たす。**
 歩みの各段が D20 の別名の辺であること (`L11b`)、`obj(C)` が
@@ -739,7 +739,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 
 ## 7. P18b と P18a
 
-**結論を先に書く。P18b は A1・A2・D12 から証明できた。P18a は A19 と P14a の上で証明できた。**
+**結論を先に書く。P18b は A19 を読まずに証明できた。P18a は A19 と P14a の上で証明できた。**
 
 P18b は第 7.4 節が証明する。証明の要は補題 `L9` -- `origin` の `identity` が等しい 2 つの leaf は、
 実行時に同時に inhabited (D16) であるか同時にそうでないか、のどちらかである -- であり、これが
@@ -758,7 +758,7 @@ P18a は A1・A2・D12 だけからは出ない。第 7.5 節が README の A19 
 
 ### 7.1 局所の定義
 
-この節から先で使う補題を `L7` から `L17` と番号を付ける (`L14a` の番号は使わない)。後から挟んだものには
+この節から先で使う補題を `L7` から `L17` と番号を付ける (`L13` と `L14a` の番号は使わない)。後から挟んだものには
 `L8a` のように枝番を振る。`p60-insert-rc.md` の補題の名前は、README の A19 の文面を引用する箇所にだけ現れ、そこでは
 `p60` の `L9` のように書く。この文書の `BY` の行はそれらを引かない。
 
@@ -1536,9 +1536,6 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
 実行路は根から各節点を高々 1 度通るので、1 つの束縛は 1 つの実行路の上で高々 1 回実行される。計数下が
 時点によらないのは D26 の最後の段落による。
 
-値は束縛の後に変わらない -- D2 より本体は木であり、D3 の実行路は根から各節点を高々 1 度通るので、
-1 つの束縛は 1 つの実行路の上で高々 1 回実行される。よって活性かどうかは `ρ` の上の時点によらない。
-
 #### L10a (静的な数え上げと実行時の作用が活性な名前で一致する)
 
 **言明**。実行路 `ρ` と、`ρ` の上の節点 `n` を固定する。`n` の式が `RcExpr::Retain(v, π, s, k)` または
@@ -2092,42 +2089,6 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
   各対は位置であり、`obj(x, λ) = obj(T_ρ(x, λ))` である。とくに `T_ρ(x, λ)` は位置なので D6 の
   `obj(T_ρ(x, λ))` は定まる。D33 より 1 つの別名類の 2 つのスロットは同じ `T_ρ` を持つので、どちらも
   同じオブジェクトを指す。
-
-##### L13 (`acted_on` は ρ-歩みで縮まない)
-
-**言明**。`(x, λ)` の ρ-歩みが `(x', λ')` であるとき、`acted_on(x, λ) ⊇ acted_on(x', λ')` である。
-
-**この補題を読むのは README の A19 である** -- (O2) が立つ前提 (N)「名前は別名類を決める」の形を、
-`L9`・`L12`・`L13` と P5 (a) が与えると述べる。
-
-**証明** L8 の場合分けのうち `origin` を呼ぶ腕で分ける。
-
-<1>1. CASE `Binding::Move`、`Binding::Llvm` の単一 `Arg` の腕、unbox 容器の `Binding::Field`、
-      `Binding::Payload` の catch-all か unbox 変位の腕。これらの腕は `origin(x', λ')` の値をそのまま
-      返すので `origin(x, λ) = origin(x', λ')` であり、両辺の `acted_on` は等しい。
-  BY CODE src/rc_ir/ownership.rs: origin_inner
-
-<1>2. CASE `Binding::Join(arm_results)` の腕。この腕は
-      `C = ⋃_{arm_result} acted_on(arm_result, λ)` を作り、`Origin::of_candidates(C, &(x.name, λ))` を
-      返す。`x' = arm_results[j]`、`λ' = λ` である。
-  <2>1. `acted_on(x', λ') ⊆ C` である。
-    BY CODE src/rc_ir/ownership.rs: origin_inner
-    この腕は各 `arm_result` について `origin(vars, type_env, &arm_result.name, path).acted_on()` の各元を
-    `candidates` に入れる。`x'` はその `arm_result` の 1 つである。
-  <2>2. CASE `C` の元数が 1 である。返り値は `Origin::Exactly(c)` (`c` は `C` の唯一の元) なので
-        `acted_on(x, λ) = {c} = C` である。D15 より `acted_on(x', λ')` は空でないので、<2>1 と
-        合わせて `acted_on(x', λ') = {c}` であり、包含は等号として成り立つ。
-    BY CODE src/rc_ir/ownership.rs: Origin::of_candidates, D15, <2>1
-  <2>3. CASE `C` の元数が 2 以上である。返り値は `Origin::Join { identity: (x.name, λ), candidates: C }`
-        なので、D15 より `acted_on(x, λ) = {(x.name, λ)} ∪ C ⊇ C ⊇ acted_on(x', λ')` である。
-    BY CODE src/rc_ir/ownership.rs: Origin::of_candidates, D15, <2>1
-  <2>4. QED
-    BY <2>2, <2>3
-    `of_candidates` は `candidates.len()` が 1 かそれ以外かで分かれる。
-
-<1>3. QED
-  BY <1>1, <1>2, L8
-  L8 の (A) が挙げる `origin` を呼ぶ腕はこの 2 つの場合で尽きる。
 
 ##### L14 (`identity` は自分の別名類の位置である)
 
