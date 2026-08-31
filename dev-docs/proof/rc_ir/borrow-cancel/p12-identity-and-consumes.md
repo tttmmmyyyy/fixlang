@@ -236,12 +236,13 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
   <2>1. `origins` は `VarTable` の非公開の欄である (`pub` が付かない)。Rust の可視性規則より、この欄を
         名指す式は `ownership.rs` の中にしかない。
     BY CODE src/rc_ir/ownership.rs: VarTable
-  <2>2. `ownership.rs` の中で識別子 `origins` を名指す式は 3 つである。`VarTable::empty` の
+  <2>2. `ownership.rs` の中でこの欄を名指す式は 3 つである。`VarTable::empty` の
         `origins: RefCell::default()`、`origin` の `vars.origins.borrow()`、`origin` の
         `vars.origins.borrow_mut()` である。(この列挙は `ownership.rs` の全体について識別子 `origins` を
-        検索して得られる。`leaf_origins_at` / `leaf_origins_under` は別の識別子であり、残りの出現は
-        doc コメントの中の散文である。)
-    BY CODE src/rc_ir/ownership.rs: VarTable::empty, origin
+        検索して得られる。得られるのは、`VarTable` の欄の宣言 `origins: RefCell<Map<VarPath, Origin>>`、
+        この 3 つの式、および doc コメントの中の散文 3 か所である。宣言は式ではない。
+        `leaf_origins_at` / `leaf_origins_under` は別の識別子である。)
+    BY CODE src/rc_ir/ownership.rs: VarTable, VarTable::empty, origin
   <2>3. QED
     `RefCell<Map<..>>` の中身を変更するには `borrow_mut` を通る必要があるので、`<2>1` と `<2>2` より
     変更は `VarTable::empty` の初期化 (空の写像) と `origin` の `insert` だけであり、後者が `<1>1` の
