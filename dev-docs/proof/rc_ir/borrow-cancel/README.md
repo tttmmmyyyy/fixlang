@@ -1155,6 +1155,12 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 ない path を歩く。表のこの行が「第 `j` オペランドの leaf `σ`」と書くのは、そのオペランドとその leaf が
 実在することを含んでいる。
 
+**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す。
+`LLVMGen::result_prov` は `&self` を取るので、内部可変性を持つ op は同じ引数に違う答えを返せる。果たす者は
+`impl LLVMGen for` の 78 個の通読である (A21 が `llvmgen-function-values.md` について取っているのと同じ
+形)。**これが無いと `p30-cancel-walk.md` の `L0`、したがって P2a が閉じない** -- `origin_inner` の
+`Binding::Llvm` の腕が `result_prov` を呼ぶので、その答えが呼ぶたびに変わると `origin` の答えも変わる。
+
 **`result_prov` と `borrows_operand` は自分の `FullName` の欄を読まない。** `LLVMGen::result_prov` は `&self` を取るので op が
 持つ変数名を読めるが、どの op もそうしない -- `result_prov` を override する 29 個のうち `self` の欄を読む
 のは 6 つで、読む欄はいずれも `usize` か `u32` の添字である。この性質が要るのは、`rename_rhs` の `Llvm` の
@@ -1788,9 +1794,13 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   `π` に制限を置かないのは、置いた制限が再帰について閉じないからである。`Result e (Option a)` を match して
   payload に `Retain` を置くと、`origin` はその payload の `[]` から scrutinee の `[0]` を問い、`[0]` は
   scrutinee の型の leaf でも unit でもない。
-- **P2a** (`origin` の答えは memo に依らない)。鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも
-  値を返すならば、その 2 つの返り値は等しい。すなわち答えは `vars.bindings`・`type_env`・`(x, π)` だけで
-  決まり、`vars.origins` が保持する memo の状態に依らない。
+- **P2a** (`origin` の答えは memo に依らない)。**1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値を
+  固定する。** 鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならば、その 2 つの返り値は
+  等しい。すなわち答えは `vars.origins` が保持する memo の状態に依らない。
+
+  **表を跨ぐ形はこの命題の主張ではない。** `bindings` が等しい相異なる 2 つの `VarTable` について答えが
+  等しいことは別の主張であり、それを要る段は自分で示す (`borrow_ify` は原本と複製に別々の `VarTable` を
+  作るので、その 2 つの `origin` が一致することを言う議論がこれに当たる)。
 
   `origin` は答えを `vars.origins` に記録し、次の呼び出しはそれを**先に読んで返す**
   (`CODE src/rc_ir/ownership.rs: origin`)。`VarTable` はその表を `RefCell` で持つので、走査が `VarTable` を
