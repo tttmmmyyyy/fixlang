@@ -964,6 +964,7 @@ impl ObjectFieldType {
 
     /// The value a union carries, read as `variant_ty`, owned by the caller: the value is retained
     /// and the union released, which cancel each other out for an unboxed union.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_union_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,

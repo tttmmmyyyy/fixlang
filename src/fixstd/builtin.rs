@@ -6630,7 +6630,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
         true
     }
 
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, union_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments
         let obj = gc.get_scoped_obj(&self.union_name);
