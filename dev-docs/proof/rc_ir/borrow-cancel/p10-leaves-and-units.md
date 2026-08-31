@@ -1,6 +1,8 @@
 # P1 (leaf と unit の対応) と P2 (`origin` の全域性と停止性) の証明
 
-対象コミットは `33d0e5d72d8414e5748175fb35c5572fb1bcd432` である。
+この文書が読んだコードのコミットは `33d0e5d72d8414e5748175fb35c5572fb1bcd432` である。README が証明の
+対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が引くファイルに
+変わったのは `// PROOF:` コメントだけである。
 
 この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A3、A6、A9、A10、A11、A12、A15 の
 上である。証明は 1 本の構造化証明で、その QED が次の 3 つである。
@@ -19,7 +21,7 @@ P1 と P2 は共通の補題 (型の上の walk が停止すること、`unit_st
 `go` の分類) を使うので、その補題を先頭の `<1>` ステップに置き、P1 と P2 をその後ろに置く。
 
 `<1>29a` は README の P2a (`origin` の答えは memo に依らない) と同じ内容の局所補題であり、`<1>34` の
-`<3>5` が読む。その証明は命題を 1 つも引かない。
+`<3>5` が読む。その証明は命題を 1 つも引かず、仮定は A3 (`result_prov` の決定性) だけを引く。
 
 P1 は 2 つの静的な列挙 (`boxed_leaf_paths` と `rc_units`) の対応についての主張なので、D16 の
 inhabited は現れない。実行時にどの leaf が参照を持つかは P1 の主張に入らない。
@@ -297,10 +299,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
    **`Opaque` を除く 7 行の `tyvars` の名前は相異なる。**`bulitin_tycons` の 5 行と
    `CaptureStruct::new` は上の表が名前を挙げている。`TypeDefn::tycon_info` の行は `self.tyvars` を
-   そのまま置き、`TypeDefn::validate_tyvars` がその名前が重複しないことを検査する。`E` に入る
-   `Struct`/`Union` の `TyConInfo` を作るのは `Program::calculate_type_env` であり、それは
-   `self.type_defns` の各要素について `type_decl.tycon_info(&[])` と、構造体ならフィールドごとの
-   穴つきの形 `type_decl.tycon_info(&[i])` を入れる。`Program::validate_type_defns` は同じ
+   そのまま置き、`TypeDefn::validate_tyvars` がその名前が重複しないことを検査する。
+   `TypeDefn::tycon_info` が作る `TyConInfo` が `E` に入るのは `Program::calculate_type_env` を通って
+   であり、それは `self.type_defns` の各要素について `type_decl.tycon_info(&[])` と、構造体なら
+   フィールドごとの穴つきの形 `type_decl.tycon_info(&[i])` を入れる。**`E` に入る `Struct` の
+   `TyConInfo` がこの関数から出るとは限らない** -- `CaptureStruct::new` が作る行は
+   `closure_specialization` の `lift_all` と `realize_all`、および `defunctionalize_fix::run_one` が
+   `add_tycons` で入れる。その行は `tyvars: vec![]` なので、上の表が別に片付けている。`Program::validate_type_defns` は同じ
    `self.type_defns` を渡って `validate_tyvars` を呼び、`elaborate` はそれを `?` で呼ぶので、
    elaboration を通ったプログラムではどの行の名前も相異なる。
 
@@ -1928,11 +1933,18 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>2. `origin_inner(vars, E, u, sig)` の返り値は、`vars.bindings`、`E`、`u`、`sig`、および自分が
      行う `origin` の呼び出しの返り値だけで決まる。この関数が読むのは `vars.bindings.get(var)`、
      その `Binding` が持つ `RcVar` の名前と型と `llvm_gen` と `result_ty`、および `E` であり、
-     `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` と `truncate_to_unit` はその引数の関数で
-     ある。`vars.origins` も `vars.var_tys` も読まない。`Llvm` の腕が
+     `truncate_to_unit` はその引数の関数である。
+     **`llvm_gen.result_prov(result_ty, &arg_tys, type_env)` がその引数の関数であることは A3 が言う** --
+     `LLVMGen::result_prov` は `&self` を取るので、内部可変性を持つ op は同じ引数に違う答えを返せる。
+     A3 の「`result_prov` と `borrows_operand` は決定的である -- 同じ引数に対して常に同じ値を返す」が
+     それを排除する。`decl` が変われば `origin_inner` の `Llvm` の腕は
+     `decl.leaf_origins_at(path).and_then(as_arg_projection)` の結果で別の道を選びうるので、この節が
+     無いとこの段は立たない。`vars.origins` も `vars.var_tys` も読まない。`Llvm` の腕が
      `origin_from_leaves_under` を呼ぶ道については `<2>1a` がこれを与える。
-    BY <2>1, <2>1a, CODE src/rc_ir/ownership.rs: origin_inner,
-       CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+    BY A3 (`result_prov` は決定的である), <2>1, <2>1a,
+       CODE src/rc_ir/ownership.rs: origin_inner,
+       CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
   <2>3. `vars.origins` に記録される `(u, sig)` の値は、その位置で計算した
      `origin_inner(vars, E, u, sig)` の返り値である。`origin` が `insert` するのはその値だけで
      ある。
