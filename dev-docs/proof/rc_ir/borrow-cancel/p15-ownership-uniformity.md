@@ -424,12 +424,26 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   に `variant: TyConVariant::Primitive` を置く。続く繰り返しが入れる鍵は 2 種である。第 1 種は型宣言の
   `tycon()` であり、その鍵が既に在れば診断を出して `continue` するので、`bulitin_tycons()` が置いた鍵の
   値は動かない。第 2 種は `tycon().into_punched_type_name(i)` であり、`PUNCHED_TYPE_SYMBOL`
-  (`#PunchedAt`) と 10 進表記を末尾に足した名前である。文法の `type_defn` は型の名前を `type_name`、
-  すなわち `capital_name` (ASCII の大文字で始まり英数字だけが続く形) として読むので、第 1 種の鍵の名前は
-  `#` を含まず、第 2 種の鍵の名前は大文字で始まって `#PunchedAt` と 10 進表記で終わる。よってどちらも
-  `#FunPtr` に 10 進表記を続けた名前と異なり、第 2 種は `Array` とも異なる。
-  BY CODE src/ast/program.rs: Program::calculate_type_env,
-     CODE src/fixstd/builtin.rs: bulitin_tycons, make_array_tycon, make_funptr_tycon,
+  (`#PunchedAt`) と 10 進表記を末尾に足した名前である。
+  `Program` の `type_defns` の欄を変える式は、`Program::add_tuple_defn` の `push` と
+  `Program::add_type_defns` の `append` の 2 つだけであり、そこへ渡る宣言の出所は 3 つである --
+  文法の `type_defn` から `parse_type_defn` が作るもの、`make_std_mod` が `Std::FFI` に置く C 型の別名、
+  および `Program::link` が併合する別のモジュールの `type_defns` (出所は同じ 3 つに帰する)。
+  文法の `type_defn` は型の名前を `type_name`、すなわち `capital_name` (ASCII の大文字で始まり英数字
+  だけが続く形) として読む。C 型の別名は `TypeDeclValue::Alias` なので、`calculate_type_env` の
+  `is_alias()` の腕を通って `aliases` に入り、`tycons` の鍵にならない。`add_tuple_defn` が積む
+  `tuple_defn(n)` の名前は `make_tuple_name(n)`、すなわち `Std` を namespace とし `Tuple`
+  (`TUPLE_NAME`) に 10 進表記が続く形である。
+  よって第 1 種の鍵の名前は ASCII の大文字で始まって `#` を含まず、第 2 種の鍵の名前は大文字で始まって
+  `#PunchedAt` と 10 進表記で終わる。どちらも `#FunPtr` に 10 進表記を続けた名前と異なり、第 2 種は
+  `Array` とも異なる。
+  BY CODE src/ast/program.rs: Program::calculate_type_env, Program::add_type_defns,
+     Program::add_tuple_defn, Program::link,
+     CODE src/parse/parser.rs: parse_module,
+     CODE src/fixstd/stdlib.rs: make_std_mod,
+     CODE src/fixstd/builtin.rs: bulitin_tycons, make_array_tycon, make_funptr_tycon, tuple_defn,
+     make_tuple_name,
+     CODE src/constants.rs: TUPLE_NAME,
      CODE src/ast/types.rs: TyCon::into_punched_type_name,
      CODE src/parse/grammer.pest: type_defn, type_name, capital_name
 
@@ -1650,16 +1664,20 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 
 ## 5. P7d の証明
 
-**言明** (README の P7d)。`infer_ownership` の不動点において、`levelled_sites` が挙げる各 site `(v, u)` に
+**言明** (README の P7d)。`infer_ownership` の不動点において、**P7a の意味の各 site** `(v, u)` に
 ついて、`origin(v, u)` の候補は、すべて `owns_object` が真であるか、すべて偽であるかのどちらかである。
 
 **読み方**。`owns_object` は `RewriteCtx` の method なので、この言明はある出力版の `RewriteCtx` について
 読む。`borrow_ify` が作る `RewriteCtx` は 3 種である。入力の各関数の全所有版 `f_own`、借用版を持つ関数の
-借用版、および各グローバル初期化子のものである
-(`CODE src/rc_ir/borrow.rs: borrow_ify`)。`levelled_sites` は `prog.funcs` の各関数について計算される
-(`CODE src/rc_ir/borrow.rs: infer_ownership`)。以下では、`f_own` については `levelled_sites(func)` の
-site を、借用版については `levelled_sites(clone)` の site を主語とし、グローバル初期化子については
-「`origin(v, u)` の候補」を任意の `(v, u)` について読む。
+借用版、および各グローバル初期化子のものである (`CODE src/rc_ir/borrow.rs: borrow_ify`)。
+
+**主語は `levelled_sites` が挙げる集合ではない。** README の P7d が述べるとおり、`levelled_sites` は
+`&RcFunc` を取るので、グローバル初期化子の版については site を 1 つも挙げず、その版が `owns_unit` を
+呼ぶ位置を主語から落とす。第 6 節の DEF site が P7a の意味の site を本体一般について定め、関数の版では
+それが `levelled_sites` が挙げる集合と一致する (第 6 節)。以下では、`f_own` については
+`levelled_sites(func)` の site を、借用版については `levelled_sites(clone)` の site を主語とし、
+グローバル初期化子については「`origin(v, u)` の候補」を任意の `(v, u)` について読む。この 3 つで
+P7a の意味の site の全部が覆われる。
 
 <1>1. `levelled_sites(func)` の各 site `(v, u)` は `u ∈ units(ty(v))` を満たす。
   `levelled_sites` は 2 種の site を積む。`Retain(v, path)` / `Release(v, path)` の節点について
@@ -1816,10 +1834,15 @@ site `(v, u)` と `Λ(u) = Λ_{ty(v)}(u)` について、次の 3 つの節を�
 3. `Λ(u)` の**すべての inhabited な** leaf のすべての候補について `owns_object` が真である。
 
 **読み方**。節 1 は静的である。節 2 と節 3 は inhabited (D16) を含むので、1 回の活性化 (D21) と、その
-活性化が辿る実行路の上の位置に相対的である。**その位置は site の節点の位置に取る** -- 以下では 1 つの
-活性化と、それが訪れるその site の節点の位置を固定する。その位置で `v` が値を得ていることは L20a が
-与える (site の節点は `v` を使用する)。その位置で inhabited な `Λ(u)` の leaf の集合を `Inh(v, u)` と
-書く。
+活性化が辿る実行路の上の位置に相対的である。**位置は、その活性化の上で `v` が値を得ている (D6) 任意の
+位置に取る。** 以下では 1 つの活性化とその 1 つの位置を固定し、そこで inhabited な `Λ(u)` の leaf の
+集合を `Inh(v, u)` と書く。
+
+**site の節点を訪れる位置に限れない。** site は `V` が書き換える前の本体から作られ、借用版の
+`rewrite_rc` は `owns_unit` が偽の unit の `Retain`/`Release` 節点を落とす (P10) ので、活性化がその節点を
+訪れるとは限らない。**位置がどれでもよいのは、値が束縛の後に変わらないからである** (D6)。site の節点を
+訪れる位置はこの範囲に入る -- site の節点は `v` を使用するので、活性化がそこを訪れるならば L20a より
+その位置で `v` は値を得ている。
 
 **この節が証明するもの**。L17 (`owns_unit` を呼ぶ位置は site を出ない)、**節 1 から節 3**、および
 **節 2 から節 1** である。この 2 つが README の解説が挙げる 2 つの役割 -- 「節点を残すのが安全である」と
@@ -2628,8 +2651,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 ### P7a の 2 つの向き
 
 **証明するもの**。第 1 節が固定する出力版 `V`、`V` の site `(v, u)` (DEF site)、`infer_ownership` の
-不動点、1 つの活性化と、それが訪れるその site の節点の位置を固定する。このとき **節 1 から節 3** と
-**節 2 から節 1** が成り立つ。
+不動点、1 つの活性化と、その活性化の上で `v` が値を得ている (D6) 任意の位置を固定する。このとき
+**節 1 から節 3** と **節 2 から節 1** が成り立つ。
 
 <1>1. `(v, u)` は unit を覆う。
   DEF site より `(v, u)` は、`V` が書き換える本体の `Retain(v, path, ..)` / `Release(v, path, ..)` 節点の
@@ -2644,11 +2667,12 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   BY A2, P9, L18, DEF site, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
 
 <1>1a. 固定した位置で `v` は値を得ている。
-  DEF site より site の節点は `Retain(v, path, ..)` / `Release(v, path, ..)` か、`v` を引数に持つ
-  `Let(_, App(_, args), _)` である。L20a が使用する変数として挙げる列に、この 2 つ -- 「`Retain` /
-  `Release` が名指す変数」と「`App` の各引数」-- はどちらも入っている。読み方より固定した位置はその節点の
-  位置であり、活性化はその位置を訪れているので、L20a より `v` はそこまでに値を得ている。
-  BY L20a, DEF site
+  読み方より、固定した位置は `v` が値を得ている位置として取ったものである。**site の節点を訪れる位置は
+  その 1 つである** -- DEF site より site の節点は `Retain(v, path, ..)` / `Release(v, path, ..)` か、
+  `v` を引数に持つ `Let(_, App(_, args), _)` であり、L20a が使用する変数として挙げる列にこの 2 つ --
+  「`Retain` / `Release` が名指す変数」と「`App` の各引数」-- はどちらも入っているので、活性化がその
+  節点を訪れるならば `v` はそこまでに値を得ている。
+  BY D6, L20a, DEF site
 
 <1>2. 節 1 から節 3 へ渡る。
   節 1 は「`cand(v, u)` のすべての元について `owns` が真」である (`owns_unit` の定義)。`<1>1` と L21 より
@@ -2703,13 +2727,26 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 **言明**。1 つの本体の活性化 (D21) と、それが辿る実行路の上の位置 `n` を取る。`p` をその本体の**所有する**
 (D14) パラメータ・capture、`λ` を活性化の開始の時点で inhabited (D16) な `ty(p)` の boxed leaf とし、
-`O = obj(p, λ)` は計数下 (D26) であるとする。活性化の開始から `n` までのどの段も `O` への参照を処分しない
-ならば、`n` において `O` は解放されていない。
+`O = obj(p, λ)` は計数下 (D26) であるとする。次の 2 つを仮定する。
+
+- **(H-a)** 活性化の開始から `n` までに実行されるどの段も、`O` への参照を処分しない。
+- **(H-b)** 活性化は `n` まで解放について閉じている (D11a)。
+
+このとき、`n` において `O` は解放されていない。
 
 **この補題が要るのは、D11 が 1 つの活性化について課す条件だからである。** README の P28 の系は実行 (D24)
 についての言明であり、その前提はプログラムが D12 を満たすことである。D11 を検査している段はそれを与件に
-できないので、代わりに D21 が活性化の開始を A19 (i) で縛ることと、D7 と D24 の (F) が解放を `H` が 0 に
-なることで定めることを使う。
+できないので、代わりに D21 が活性化の開始を A19 (i) で縛ることから `H(O) ≥ 1` を出し、それを (H-b) と
+合わせる。
+
+**(H-b) は (S-c) の接頭条件そのものである。** (S-c) は各時点について「その時点まで閉じている」ことを
+条件に主張するので、`n` における (S-c) を示す議論はこの仮定を与件に持つ。**D11a が名指すとおり、
+`H(O) ≥ 1` から「解放されていない」は D24 の (F) だけからは出ない** -- (F) は、一度解放された
+オブジェクトのカウントが後から上がらないことを言わないからである。
+
+**(H-a) が数える段は、この活性化の段に限らない。** D21 より、活性化が持つ `H` は別の制御の流れの段に
+よる増減も受ける。`O` への参照を処分する段が区間の中に在れば、それがこの活性化の外の段であっても
+`H(O)` は下がる。
 
 <1>1. スロット `(p, λ)` が属する別名類 `C` の ρ-終端は `(p, λ)` であり、`obj(C) = O` である。
   D20 の別名の辺はどれも、節点が束縛する変数 -- move-bind の束縛変数、`Match` の束縛変数、`Destructure`
@@ -2728,18 +2765,16 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   ある。よって A19 (i) の右辺は `d(C) = 1` 以上である。
   BY <1>1, A19, D14, D21, D26, D34
 
-<1>3. 開始から `n` までのどの時点でも `H(O) ≥ 1` である。
-  D10 と D24 の `H` の表より、`H(O)` が下がるのは `O` への参照が処分されるときだけである。仮定より
-  その間の段は `O` への参照を処分しない。`<1>2` が開始の値を与える。
-  BY <1>2, D10, D24
+<1>3. `n` において `H(O) ≥ 1` である。
+  D10 と D24 の `H` の表より、`H(O)` が下がるのは `O` への参照が処分されるときだけである。(H-a) より
+  開始から `n` までに実行される段はどれも `O` への参照を処分せず、D21 より `H` を動かす段はこの区間の
+  中に在る段に限る。`<1>2` が開始の値を与える。
+  BY <1>2, D10, D21, D24
 
 <1>4. QED
-  D7 と D24 の (F) より、計数下オブジェクトが解放されるのは、ある段が参照を処分してその `H` が 0 に
-  なったときだけである。`<1>3` より開始から `n` まで `H(O)` は 0 にならないので、その間に `O` を解放する
-  段は無い。開始の時点についても `<1>2` が `H(O) ≥ 1` を与えるので、`O` はその時点で `H` が 0 になった
-  オブジェクトではない。D11 が課すのは 1 つの活性化の各位置についての条件であり (D21)、その時間軸は
-  活性化の開始から始まるので、`n` において `O` は解放されていない。
-  BY <1>2, <1>3, D7, D11, D21, D24, D26
+  `<1>3` より `n` において `H(O) ≥ 1` であり、`O` は計数下 (D26) である。(H-b) より活性化は `n` まで
+  解放について閉じているので、D11a の定めるところにより `n` において `O` は解放されていない。
+  BY <1>3, D11a, D26
 
 ### R1 (節 2 と節 3 の inhabited の限定が要ること)
 
@@ -2792,10 +2827,14 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   leaf は `[]` 1 つである。`Release(x, [])` が触れるのは `obj(x, [1])` であり、素通しの行より
   `obj(z, [])` と同じオブジェクトである。`obj(z, [])` がグローバル状態であれば A8 よりそれは解放されない。
   計数下であれば L23 による -- `z` は所有するパラメータ、`[]` は開始の時点で inhabited な `Array I64` の
-  唯一の boxed leaf であり、この 2 つの位置までにこの本体が実行する段は `Let(x, Llvm(union_make_1, [z]), ..)`
-  だけで、その段は D9 の `Llvm` の行の消費を持たない (`z` の唯一の leaf は単一の `Arg(0, [])` として
-  素通しと宣言されている) ので、`obj(z, [])` への参照を処分しない。
-  BY D7, D8, D9, D10, D11, D12, D14, D16, D26, A8, L23, <1>1,
+  唯一の boxed leaf である。L23 の (H-a): このプログラムは `f` 1 つだけを持ち、`f` の本体は他の本体を
+  呼び出さない -- `union_make_1` と `int_lit_0` はどちらもオペランドを適用しないので (A3) 活性化を
+  作らない -- ので、この 2 つの位置までに実行される段はこの活性化の段だけである。それは
+  `Let(x, Llvm(union_make_1, [z]), ..)` だけで、その段は D9 の `Llvm` の行の消費を持たない
+  (`z` の唯一の leaf は単一の `Arg(0, [])` として素通しと宣言されている) ので、`obj(z, [])` への参照を
+  処分しない。L23 の (H-b): (S-c) は各時点について「その時点まで閉じている」ことを条件に主張する節なので
+  (D11a)、その位置の (S-c) を示しているこの議論は接頭条件を与件に持つ。
+  BY D7, D8, D9, D10, D11, D11a, D12, D14, D16, D26, A3, A8, L23, <1>1,
      CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov, InlineLLVMIntLit
 
 <1>2a. `origin(x, [])` は `Exactly((z, []))` である。
@@ -2824,9 +2863,10 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
 
 <1>2c. `<1>2` の入力プログラムは、第 4 節の仮定のうち入力プログラムを縛る残りのものをすべて満たす。
   第 4 節の仮定のうち入力プログラムについての節を持つのは、A1・A2・A6・A9・A10・A11・A12・A13・A14・
-  A16・A19・A20・A22・A24 である。残る A3・A4・A5・A7・A8・A15・A17・A18・A21・A23・A25 は、`LLVMGen` の
-  宣言・コード生成・leaf の模型・`resolve_callee_params`・`mark_global`・`stacker`・環境・型検査と
-  lowering・`insert_rc` の入力についての節であって、`borrow_ify` の入力の形によらない。A1 と A2 は
+  A16・A19・A20・A22・A24 である。残る A3・A4・A5・A7・A8・A15・A17・A18・A21・A23・A25・A26 は、
+  `LLVMGen` の宣言・コード生成・leaf の模型・`resolve_callee_params`・`mark_global`・`stacker`・環境・
+  型検査と lowering・`insert_rc` の入力についての節であって、`borrow_ify` の入力の形によらない。
+  第 4 節の仮定は A1 から A26 の 26 個であり、この 2 つの並びはその全部である。A1 と A2 は
   `<1>2` が与えた。残りを順に見る。
   A6: 束縛名は `z`・`x`・`w` の 3 つで互いに異なり、関数の名前 `f` とも異なる。
   A9 と A16: この本体に `Match` は無い。
@@ -2988,17 +3028,20 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   オペランドを持たないので、読まれるオブジェクトは無い。`Release(x, [])` が触れるのは、タグが `n` の
   活性化では inhabited な leaf が無いので何も無く、タグが `a` の活性化では `obj(x, [1])` である。後者が
   グローバル状態であれば A8 よりそれは解放されない。計数下であれば L23 による -- `x` は所有する
-  パラメータ、`[1]` は開始の時点で inhabited な `Mix` の boxed leaf であり、`Release(x, [])` は本体の
-  最初の節点なのでその位置までにこの活性化は段を 1 つも実行しておらず、`obj(x, [1])` への参照を処分して
-  いない。
-  BY D7, D8, D10, D11, D12, D14, D16, D26, A8, L23, <1>1,
+  パラメータ、`[1]` は開始の時点で inhabited な `Mix` の boxed leaf である。L23 の (H-a):
+  `Release(x, [])` は本体の最初の節点であり、このプログラムは `f` 1 つだけを持ち `f` の本体は他の本体を
+  呼び出さないので、その位置までに実行される段は 1 つも無い。L23 の (H-b): (S-c) は各時点について
+  「その時点まで閉じている」ことを条件に主張する節なので (D11a)、その位置の (S-c) を示している
+  この議論は接頭条件を与件に持つ。
+  BY D7, D8, D10, D11, D11a, D12, D14, D16, D26, A8, L23, <1>1,
      CODE src/fixstd/builtin.rs: InlineLLVMIntLit
 
 <1>2a. `<1>2` の入力プログラムは、第 4 節の仮定のうち入力プログラムを縛る残りのものをすべて満たす。
   第 4 節の仮定のうち入力プログラムについての節を持つのは、A1・A2・A6・A9・A10・A11・A12・A13・A14・
-  A16・A19・A20・A22・A24 である。残る A3・A4・A5・A7・A8・A15・A17・A18・A21・A23・A25 は、`LLVMGen` の
-  宣言・コード生成・leaf の模型・`resolve_callee_params`・`mark_global`・`stacker`・環境・型検査と
-  lowering・`insert_rc` の入力についての節であって、`borrow_ify` の入力の形によらない。A1 と A2 は
+  A16・A19・A20・A22・A24 である。残る A3・A4・A5・A7・A8・A15・A17・A18・A21・A23・A25・A26 は、
+  `LLVMGen` の宣言・コード生成・leaf の模型・`resolve_callee_params`・`mark_global`・`stacker`・環境・
+  型検査と lowering・`insert_rc` の入力についての節であって、`borrow_ify` の入力の形によらない。
+  第 4 節の仮定は A1 から A26 の 26 個であり、この 2 つの並びはその全部である。A1 と A2 は
   `<1>2` が与えた。残りを順に見る。
   A6: 束縛名は `x` と `w` の 2 つで互いに異なり、関数の名前 `f` とも異なる。
   A9 と A16: この本体に `Match` は無い。

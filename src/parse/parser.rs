@@ -534,7 +534,7 @@ fn parse_str_as_rule<T>(
 
 /// The program of the one module `pair` declares: its declaration, its import statements, and
 /// everything defined in it. `src` is the source it was parsed from, which its spans point into.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 fn parse_module(
     pair: Pair<Rule>,
     src: SourceFile,
