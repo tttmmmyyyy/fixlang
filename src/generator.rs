@@ -1091,6 +1091,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The object `name` is bound to, handed over as it stands: the reference counts are left
     /// untouched, so the caller owns whatever reference the binding already carried.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
         self.get_scoped_value(name).accessor.get(self)
     }
@@ -1100,7 +1101,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
     /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
     /// copy. Every other read is plain.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var_name);
         let obj = val.accessor.get(self);
