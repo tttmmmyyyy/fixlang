@@ -6,12 +6,12 @@
 読まない)。第 2 節の `BY` の行が引くのは次のものである。
 
 - **命題**: P9・P12・P14・P14a・P14b・P22・P23・P24・P26・P27。
-- **定義**: D1・D11・D12・D14・D18・D19・D23・D24・D30。
-- **仮定**: A1・A2 (前提 H1・H2 として)、A13・A17・A18・A19・A20 (前提 H3 が束ねる第 4 節の仮定の
-  中から名指す)。
+- **定義**: D1・D2・D11・D12・D14・D18・D19・D23・D24・D30。
+- **仮定**: A1・A2 (前提 H1・H2 として)、A13・A15・A17・A18・A19・A20 (前提 H3 が束ねる第 4 節の
+  仮定の中から名指す)。
 - **コード**: `optimize_rc_program` が 2 つのパスを呼ぶ順序、`validate`、`borrow_ify` と `cancel` が
   `RcProgram` を組み立てる 3 つの欄、`cancel` の本体の書き換えが `drop_nodes` を呼ぶこと、
-  `clone_func`、`borrow_funcref`、`RcProgram` の型。
+  `drop_nodes` が `Let` の右辺を丸ごと写すこと、`clone_func`、`borrow_funcref`、`RcProgram` の型。
 
 T の言明はこのほかに、D7・D21・D25・D26・D31 を名前で引く。
 
@@ -548,10 +548,25 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   (`<2>3`)、`globals` に収める本体も (`<2>3a`)、どちらもこの閉包の返り値である。
 
   P22 は「`drop_nodes(B, S)` は、`B` の `NodeId` が `S` に入る `Retain`/`Release` 節点だけを
-  取り除いた木を返し、他の節点の種類・変数・path・並びを変えない」と述べる。`App` の callee は
-  その節点の変数である。
+  取り除いた木を返し、他の節点の種類・変数・path・並びを変えない」と述べる。
 
-    BY <2>3, <2>3a, P22, `CODE src/rc_ir/borrow.rs: cancel`
+  **`App` の callee がその「変数」に入ることは、`drop_nodes` を直に読んで取る。** D2 は
+  `Let(x, rhs, k)` の `x` を節点が束縛する変数と呼び、`App(callee, args)` は `rhs` の 5 種の 1 つ
+  として別に数えるので、P22 の言明の語だけからは callee について何も出ない。`drop_nodes` は
+  `grow_stack` で `drop_nodes_inner` を包み、A15 よりその閉包をちょうど 1 回呼ぶ。
+  `drop_nodes_inner` の腕は次のとおりである。`Match` を右辺に持たない `Let` については
+  `RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete))` を組み立て、**右辺を丸ごと写す**
+  ので `App` の callee も `args` もそのままである。`Match` を右辺に持つ `Let` については scrutinee を
+  写し、各アームを `arm.with_body(drop_nodes(&arm.body, to_delete))` で写す。残る 5 つの腕
+  (`Retain`・`Release`・`Destructure`・`Eval`・`Ret`) は `Let` を組み立てない。よって部分木の
+  大きさについての帰納で、出力の各 `App` 節点の callee は入力の対応する `App` 節点のものである。
+
+  **この段が要るのは、P24 の第 5 項が 2 つのパスをまとめて数え上げるからである。** その項は
+  `Retain`/`Release` の節点と `App` の callee の名前を「変えてよいもの」に並べるだけで、`cancel` の
+  側で callee が動かないことを言わない。(T4) の `App` の callee の節はそれを要る。
+
+    BY <2>3, <2>3a, H3, A15, D2, P22, P24, `CODE src/rc_ir/borrow.rs: cancel`,
+       `CODE src/rc_ir/borrow.rs: drop_nodes`, `CODE src/rc_ir/borrow.rs: drop_nodes_inner`
 
   **<2>4.** `owns_initializer` と `owns_storage` について。`<2>2` の 3 を 2 つのパスに続けて
   当てると、この 2 つの欄には 2 回とも `true` が書かれ、最後に書かれた値も `true` である。その
