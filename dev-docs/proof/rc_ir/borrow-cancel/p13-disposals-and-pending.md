@@ -2880,7 +2880,7 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
     <2>1a より `F` の本体で `(p0, μ)` は D9 の意味で消費される。P8 は、ある関数のある leaf の参照が
     その関数のある実行路で D9 の意味で消費されるならば、その leaf の `origin` の候補であるパラメータ
     leaf はすべて `owned_leaves` に入っていると述べる。
-  <2>3. `origin(p, μ)` の各候補 `(r, q)` について `owns_object(r, q)` は真である。
+  <2>3. `origin_V(p, μ)` の各候補 `(r, q)` について `owns_object(r, q)` は真である。
     <3>1. `owns_object(r, q)` は、`r` が `V` の `vars.param_tys` の鍵でないとき -- すなわち `V` の
           パラメータでも capture でもないとき -- 真である。
       BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
