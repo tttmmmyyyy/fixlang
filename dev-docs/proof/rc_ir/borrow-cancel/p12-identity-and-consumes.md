@@ -1296,26 +1296,23 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 <1>1. 次の関数 `f` を考える。op と型は、このコンパイラが実在に持つものを取る。
 
       - `gen`: `InlineLLVMStringBuf`。**この op はこのコンパイラの `impl LLVMGen for` の 1 つである**
-        (A3 がその全体を 78 個と数え上げている)。`free_vars_mut` は空の列を返すのでオペランドを 1 つも
-        取らない。`result_prov` は `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返す
-        ので、結果の型の各 boxed leaf に**単一の `Fresh`** を宣言する。`generate` は
-        `make_byte_array_copy` を呼び、それは `alloc_array_storage` (`build_capacity_check` と
-        `create_obj`) で記憶域を、`create_obj` で `Array U8` のオブジェクトを新しく割り当て、
-        バイト列をその記憶域へ写す。
-      - `T`: `gen` の結果の型 `Array U8` (`make_byte_array_copy` が `type_tyapp(make_array_ty(),
-        make_u8_ty())` として組む型)。
+        (A3 がその全体を 78 個と数え上げている)。`free_vars_mut` は空の列を返す。`result_prov` は
+        `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返すので、結果の型の各 boxed leaf
+        に**単一の `Fresh`** を宣言する。
+      - `T`: `Array U8`。`make_string_lit` が、この op を持つ `Llvm` 節点に
+        `type_tyapp(make_array_ty(), make_u8_ty())` を結果の型として与える。
       - `Bool`: `Std::Bool`。`unbox union { _false : (), _true : () }` であり、2 つの変位の payload の
         型はどちらも `()` である。
 
       A3 の表の「単一の `Fresh`」の行より、`gen` が結果のその leaf に置くのは、新しく割り当てた
       オブジェクトへの新しい参照である。**A3 が同じ節に置く但し書き -- 実行時に参照カウントで分岐する
       op の `Fresh` の行は、オブジェクトの同一性については字義どおりではない -- は `gen` に当たらない。**
-      参照カウントを読んで分岐する経路は `Generator::build_branch_by_is_unique` を通り、その呼び出しは
-      `src/fixstd/builtin.rs` の中にしか無い (この列挙は、リポジトリの全体について識別子
-      `build_branch_by_is_unique` を検索して得られる)。`gen` の生成コードは `make_byte_array_copy` を
-      呼ぶだけであり、その本体も、そこから呼ばれる `alloc_array_storage`・`build_capacity_check`・
-      `create_obj` も `src/object.rs` に在ってその呼び出しを持たない。`create_obj` が参照カウントに
-      触れるのは、新しいオブジェクトの制御ブロックに 1 を書き込む 1 か所だけである。
+      A3 はその但し書きで、そうした op の一意の腕が**オペランドの**オブジェクトをそのまま返すと述べる。
+      `gen` の `free_vars_mut` は空の列を返し、`LLVMGen::free_vars` はその複製の `free_vars_mut` を
+      写した列なので `gen.free_vars()` も空である。A12 の `Llvm` 節点の型についての第 1 の節より
+      `Let(x, Llvm(gen, args), k)` の `args` の名前の列は `gen.free_vars()` に等しいので、`gen` を持つ
+      `Llvm` 節点はオペランドを 1 つも持たない。返せるオペランドのオブジェクトが無いので、`gen` は
+      A3 の但し書きが述べる op ではない。
 
       `f` のパラメータは `c : Bool` の 1 つ、capture は無く、`borrowed_units` は空 (A1) である。本体は
       次のとおりで、`m`・`x_0`・`x_1` は型 `T`、`p_0`・`p_1` は `()` である。
@@ -1325,15 +1322,22 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
                         arm(tag=1, payload=p_1, body=Let(x_1, Llvm(gen, []), Ret(x_1))) ]), Ret(m))
       ```
 
-      これは D2 の形の本体であり、A6 (`c`・`m`・`x_0`・`x_1`・`p_0`・`p_1` は相異なる名前)、
-      A9 (アームは 2 つ)、A12 (アームの結果と `Match` の束縛変数の型、payload と変位の型、`Llvm` 節点の
-      `args` の名前の列が `gen.free_vars()` -- 空の列 -- に等しいこと)、A16 の (網羅) (2 つのアームが
-      `Bool` の 2 変位を尽くす) と (位置) (catch-all アームが無いので空虚に真) を満たす。以下、`j` は
-      0 と 1 を渡り、`ρ_j` は変位 `j` のアームを選ぶ実行路を表す。
-  BY A1, A3, A6, A9, A12, A16, D2,
-     CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStringBuf, make_byte_array_copy,
-     CODE src/object.rs: alloc_array_storage, build_capacity_check, create_obj,
-     CODE src/generator.rs: Generator::build_branch_by_is_unique,
+      これは D2 の形の本体であり、次の仮定を満たす。A1 (`borrowed_units` が空であり、`<1>6` が D11 を
+      示す)、A6 (`c`・`m`・`x_0`・`x_1`・`p_0`・`p_1` は相異なる名前)、A9 (アームは 2 つ)、
+      A12 (アームの結果と `Match` の束縛変数の型、payload と変位の型、`Llvm` 節点の `args` の名前の列が
+      `gen.free_vars()` -- 空の列 -- に等しいこと)、A16 の (網羅) (2 つのアームが `Bool` の 2 変位を
+      尽くす) と (位置) (catch-all アームが無いので空虚に真)。**A10 と A11 も満たす。** `T`・`Bool`・`()`
+      はこのコンパイラが持つ ground で飽和した型であり、その tycon は `type_env` にあり、
+      `unpunched_field_types` の降下は `Array U8` で止まり `Bool` では `()` で止まるので有限である
+      (A10)。各変数の使用はその位置でスコープに入っている束縛に解決する -- `c` はパラメータ、`m` は
+      `Let(m, ..)` の継続 `Ret(m)` に、`x_j` は同じアーム本体の `Ret(x_j)` に現れる -- ので A11 を満たす。
+      **この 2 つが要るのは `<1>7` と `<1>8` である** -- どちらも `<1>6a` (= L0 (a)) を通り、L0 の停止性は
+      P2 に載り、A11 は `origin` の停止性がその仮定に立つと述べる。A10 は、`<1>2` が D4 の規則を
+      `T`・`Bool`・`()` に当てて `boxed_leaf_paths` を数え上げるところが読む。以下、`j` は 0 と 1 を
+      渡り、`ρ_j` は変位 `j` のアームを選ぶ実行路を表す。
+  BY A1, A3, A6, A9, A10, A11, A12, A16, D2,
+     CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStringBuf, make_string_lit,
+     CODE src/ast/inline_llvm.rs: LLVMGen::free_vars,
      CODE src/fixstd/std.fix: Bool
 
 <1>2. `boxed_leaf_paths(T, type_env)` は `{[]}` であり、`[]` は `T` の値で inhabited である。`p_0` と
@@ -1390,11 +1394,10 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
     その辺は実行された。
     BY DEF 辺の存在, DEF `ρ` の上で実行された辺, <1>1, <1>3, <2>1, <2>2
   <2>4. QED
-    L1 より `<2>3` の辺の両端は同じオブジェクトを指す。`<1>1` より `gen` は実行時に参照カウントで
-    分岐しないので、A3 の但し書き -- そうした op の `Fresh` の行はオブジェクトの同一性については
-    字義どおりでない -- は当たらず、A3 の「単一の `Fresh`」の行を字義どおりに読める。すなわち
-    `obj(x_j, [])` はこの op が新しく割り当てたオブジェクトであり、D26 より割り当てられたオブジェクトは
-    計数下である。
+    L1 より `<2>3` の辺の両端は同じオブジェクトを指す。`<1>1` より A3 の但し書き -- 実行時に参照カウントで
+    分岐する op の `Fresh` の行はオブジェクトの同一性については字義どおりでない -- は `gen` に当たらない
+    ので、A3 の「単一の `Fresh`」の行を字義どおりに読める。すなわち `obj(x_j, [])` はこの op が新しく
+    割り当てたオブジェクトであり、D26 より割り当てられたオブジェクトは計数下である。
     BY A3, D26, L1, <1>1, <2>1, <2>2, <2>3
 
 <1>5. `ρ_j` を辿る活性化について次が成り立つ。`Obl` は `Let(x_j, Llvm(gen, []), Ret(x_j))` の実行までは
