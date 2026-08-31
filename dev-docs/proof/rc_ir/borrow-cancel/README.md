@@ -28,6 +28,11 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 ことが `optimize_rc_program` の 1 か所を読めば決まる。対象コミットが持つ他の `src/` の変更は、第 8 節が
 述べる欠陥の修正である。
 
+**対象コミットより後に `src/` へ入った変更は 2 種である。** 1 つは各証明が引く記号に付く `// PROOF:`
+コメントで、`dev-docs/proof/proof_links.py` が生成する。もう 1 つは `RcIrValidator::check_rhs` が
+`result_prov` の宣言する source の個数を数える検査であり、A3 の「1 つの結果 leaf に 2 つ以上の source を
+宣言しない」を果たす者を与える。どちらも `borrow_ify`・`cancel`・`ownership.rs` の振る舞いを変えない。
+
 この 2 つは、`src/build/build_object_files.rs` の `optimize_rc_program` の中で、`-O max` 以上のとき
 `split_rc_units` の直後にこの順で走る。
 
@@ -1718,6 +1723,15 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
   結果について何を言うのかが決まらない** (`CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody`,
   `InlineLLVMUnionAsBody`)。
 
+**この仮定が型の `variant` を述べる各節では、その型の `is_closure()` は偽である。** `Match` の scrutinee が
+union であること、`Destructure` の容器が構造体であること、`InlineLLVMStructPunchBody` の穴の開いた成分が
+構造体であることのいずれもがそれを含む -- `TypeNode::is_union` も `is_struct` も `toplevel_tycon_info` を
+通り、それは `assert!(!self.is_closure())` で始まるので、`variant` を読めたことが `is_closure()` の偽を
+含む (`CODE src/ast/types.rs: TypeNode::toplevel_tycon_info`, `TypeNode::is_union`, `TypeNode::is_struct`)。
+**union の側にもこの節が要る** -- `p12-identity-and-consumes.md` の `L4` は、unbox の scrutinee の
+`Payload(s, Some(t))` について `[t] ++ λ` が `ty(s)` の boxed leaf であることを出すのに、`ty(s)` が
+クロージャでないことを読む。
+
 **`App` については引数とパラメータのほかに、結果の型も一致する。** `Let(x, App(callee, args), k)` の `ty(x)`
 は呼び出し先の返り値の型である。呼び出しの結果の leaf が呼び出し先の終端の `Ret` が渡す参照を受け取ると
 言うには、両者の `boxed_leaf_paths` が同じ列であることが要る。さらに `ty(callee)` は実行時の呼び出し先の
@@ -2528,29 +2542,29 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み (A16 の下で) | 検証済み (指摘 26 件を反映) |
 | P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 検証済み |
 | P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み (P6 は A16 の下で) | 検証済み |
-| P7e, P7d | `p15-ownership-uniformity.md` | 有 | 証明済み (P7e の言明は (a)/(b) に書き直した) | 検証済み (指摘 30 件超を反映)。**2 周目が要る** |
-| P7a | `p15-ownership-uniformity.md` | 有 | 証明済み (1 ⟹ 3 と 2 ⟹ 1) | 検証済み (指摘 30 件超を反映)。**2 周目が要る** |
+| P7e, P7d | `p15-ownership-uniformity.md` | 有 | 証明済み (P7e の言明は (a)/(b) に書き直した) | 検証は 2 周 (直近の周の指摘 10 件、FALSE 1)。**3 周目が要る** |
+| P7a | `p15-ownership-uniformity.md` | 有 | 証明済み (1 ⟹ 3 と 2 ⟹ 1) | 検証は 2 周 (直近の周の指摘 10 件、FALSE 1)。**3 周目が要る** |
 | P7c, P7f | `p13-disposals-and-pending.md` | 有 | 証明済み (P7c の言明は 2 度書き直した) | 検証済み (指摘 17 件を反映)。**3 周目が要る** |
 
-| P8 | `p20-borrow-ify.md` | 有 | 証明済み (`App` の引数の位置を除く形に狭めた) | 検証済み (指摘 27 件を反映)。**3 周目が要る** |
-| P9 - P13 | `p20-borrow-ify.md` | 有 | 証明済み | 検証済み (指摘 27 件を反映)。**3 周目が要る** |
-| P14 | `p20-borrow-ify.md` | 有 | 証明済み (A19 (ii-a)、A20、A21、A23、A24 の下で) | 検証済み (指摘 27 件を反映)。**3 周目が要る** |
+| P8 | `p20-borrow-ify.md` | 有 | 証明済み (`App` の引数の位置を除く形に狭めた) | 検証は 3 周 (直近の周の指摘 18 件、FALSE 2)。**4 周目が要る** |
+| P9 - P13 | `p20-borrow-ify.md` | 有 | 証明済み | 検証は 3 周 (直近の周の指摘 18 件、FALSE 2)。**4 周目が要る** |
+| P14 | `p20-borrow-ify.md` | 有 | 証明済み (A19 (ii-a)、A20、A21、A23、A24 の下で) | 検証は 3 周 (直近の周の指摘 18 件、FALSE 2)。**4 周目が要る** |
 | P15 - P18 | `p30-cancel-walk.md` | 有 | 証明済み | 検証済み (指摘 9 件を反映) |
 | P18b | `p13-disposals-and-pending.md` | 有 | 証明済み | 検証済み (指摘 17 件を反映)。**3 周目が要る** |
-| P18c | `p40-cancel-soundness.md` | 有 | 証明済み (A19、P14a、`p13` の `L17` の下で) | 検証済み (指摘 10 件を反映)。**3 周目が要る** |
+| P18c | `p40-cancel-soundness.md` | 有 | 証明済み (A19、P14a、`p13` の `L17` の下で) | 検証は 3 周 (直近の周の指摘 18 件、FALSE 1)。**4 周目が要る** |
 | P18a | `p13-disposals-and-pending.md` | 有 | 証明済み (A19 の下で)。A19 (ii-b) は、この証明が要る条件付きの形に書き直した | 検証済み (指摘 17 件を反映)。**3 周目が要る** |
 
-| P19, P20, P22, P24 | `p40-cancel-soundness.md` | 有 | 証明済み | 検証済み (指摘 10 件を反映)。**3 周目が要る** |
-| P14a | `p20-borrow-ify.md` | 有 | 証明済み (A20、A21、A23、A24 の下で) | 検証済み (指摘 27 件を反映)。**3 周目が要る** |
-| P14b | `p20-borrow-ify.md` | 有 | 証明済み (第 12 節)。局所補題 `L18a` が同じ内容を持っていた | 未着手 |
-| P21, P23 | `p40-cancel-soundness.md` | 有 | 証明済み (D29 と D21 の上で。局所の仮説は無い) | 検証済み (指摘 10 件を反映)。**3 周目が要る** |
+| P19, P20, P22, P24 | `p40-cancel-soundness.md` | 有 | 証明済み | 検証は 3 周 (直近の周の指摘 18 件、FALSE 1)。**4 周目が要る** |
+| P14a | `p20-borrow-ify.md` | 有 | 証明済み (A20、A21、A23、A24 の下で) | 検証は 3 周 (直近の周の指摘 18 件、FALSE 2)。**4 周目が要る** |
+| P14b | `p20-borrow-ify.md` | 有 | 証明済み (第 12 節)。局所補題 `L18a` が同じ内容を持っていた | 検証は 3 周 (直近の周の指摘 18 件、FALSE 2)。**4 周目が要る** |
+| P21, P23 | `p40-cancel-soundness.md` | 有 | 証明済み (D29 と D21 の上で。局所の仮説は無い) | 検証は 3 周 (直近の周の指摘 18 件、FALSE 1)。**4 周目が要る** |
 | P26 (`cancel` の半分) | `p50-observation.md` | 有 | 証明済み (D29 の上で) | 未着手 |
 | P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | 証明済み。第 1 文は**等号**で立つので (X1) の出口が起きない。第 2 文は `cancel` の側だけの主張になった -- `borrow_ify` は (X3) を開くため | 検証済み (指摘 37 件を反映)。**2 周目が要る** |
-| P27 | `p51-runs.md` | 有 | 証明済み。(R1)(R2)(R3) が立ち、`L0` の数え上げは A21 が片付けた | 検証済み (指摘 30 件を反映) |
+| P27 | `p51-runs.md` | 有 | 証明済み。(R1)(R2)(R3) が立ち、`L0` の数え上げは A21 が片付けた | 検証は 2 周 (直近の周の指摘 16 件、FALSE 3)。**3 周目が要る** |
 | (P-insert) | `p60-insert-rc.md` | 有 (A19 の (ii-a) と (ii-b)) | 証明済み。(O1) と (O2) はどちらも無条件、`split_rc_units` の段は第 13 節 | 検証済み (指摘 7 件、FALSE は無し) |
-| P28 | `p05-holders.md` | 有 | 証明済み (D12、P14b の内容、A20 の下で)。(a) と (b) を点の上の 1 つの帰納で示す | 未着手 |
-| P29 | `p51-runs.md` | 有 | 証明済み。局所補題 `L0b` を仮説つきで立て、入力に当てる | 未着手 |
-| P30 | `p51-runs.md` | 有 | 証明済み。局所補題 `L0` がその内容を持つ | 未着手 |
+| P28 | `p05-holders.md` | 有 | 証明済み (D12、P14b の内容、A20 の下で)。(a) と (b) を点の上の 1 つの帰納で示す | 検証は 1 周 (直近の周の指摘 13 件、FALSE 2)。**2 周目が要る** |
+| P29 | `p51-runs.md` | 有 | 証明済み。局所補題 `L0b` を仮説つきで立て、入力に当てる | 検証は 2 周 (直近の周の指摘 16 件、FALSE 3)。**3 周目が要る** |
+| P30 | `p51-runs.md` | 有 | 証明済み。局所補題 `L0` がその内容を持つ | 検証は 2 周 (直近の周の指摘 16 件、FALSE 3)。**3 周目が要る** |
 | T | `p70-main-theorem.md` | -- | 証明済み。(T1) から (T4) まで、引用する命題の言明の上で閉じる | 未着手 |
 
 **T が閉じることは、T が引く命題が閉じることを意味しない。**各命題の状態はこの表が述べる。誰も果たさない

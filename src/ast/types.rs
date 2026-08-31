@@ -1439,7 +1439,7 @@ impl TypeNode {
 
     /// Whether the top-level type constructor of this type is a struct.
     /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
-    // PROOF: P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1451,7 +1451,7 @@ impl TypeNode {
     /// Whether the top-level type constructor of this type is a union, so that a value of it
     /// carries one of the declared fields and a tag saying which.
     /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
-    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_union(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1476,7 +1476,7 @@ impl TypeNode {
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
     /// parameters and fields. Panics for a closure type, a type variable, or a type constructor
     /// absent from `type_env`.
-    // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
         assert!(!self.is_closure());
         let tycon = self.toplevel_tycon().unwrap();

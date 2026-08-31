@@ -1,6 +1,10 @@
 # P3 / P4 -- `origin` の健全性
 
-対象は `f96d3dc239f1b176bbfc5009647debba3b8c6b1e` である。
+この文書が読んだコードのコミットは `f96d3dc239f1b176bbfc5009647debba3b8c6b1e` である。README が証明の
+対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が引く 8 ファイル
+(`src/rc_ir/ownership.rs`、`leaf_map.rs`、`provenance.rs`、`borrow.rs`、`src/generator.rs`、
+`src/ast/types.rs`、`src/ast/inline_llvm.rs`、`src/fixstd/builtin.rs`) に変わったのは `// PROOF:`
+コメントだけである。
 定義・仮定・命題の番号は同ディレクトリの `README.md` による。
 
 ## 0. 結論
@@ -315,8 +319,11 @@ A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返
     BY <2>1, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   <2>3. (d3)。ループは `Arg(j, leaf)` について
         `operand_units.insert((*j, truncate_to_unit(&args[*j].ty, leaf, type_env)))` を行い、`reached` は
-        `operand_units` の各要素 `(j, unit)` について鍵 `(args[j], unit)` の答えを並べたものである。
-    BY <2>1, P2a (第 1 節の「鍵の答え」),
+        `operand_units` の各要素 `(j, unit)` について鍵 `(args[j], unit)` の答えを並べた列で始まる。
+        **`produced_here` が真のときはその列の後ろに `Exactly(here)` が 1 つ積まれる** (`<2>2`) ので、
+        この記述が `reached` の全体を述べるのは `produced_here` が偽のときだけである。(d3) が言うのは
+        `origin(args[j], u_j)` が `reached` の要素であることなので、どちらの場合でも成り立つ。
+    BY <2>1, <2>2, P2a (第 1 節の「鍵の答え」),
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   <2>4. (d2)。宣言がすべて空集合ならループは 1 度も回らず、`operand_units` は空、`produced_here` は
         偽であり、`reached` は空である。`reached.first()?` が `None` を返すので、<1>5 より答えは
@@ -1605,11 +1612,21 @@ let seen : Std::I64 = Main::peek(m, two)
      memo を書く。`origins` は `RefCell` なので `&VarTable` からでも書ける,
      CODE src/rc_ir/ownership.rs: VarTable -- 5 つの欄のうち `RefCell` を持つのは `origins` だけである
 <1>3a. memo への書き込みは鍵の答えを変えない。
-  BY P2a (「答えは `vars.bindings`・`type_env`・`(x, π)` だけで決まり、`vars.origins` が保持する memo の
-     状態に依らない」), <1>3 (`level_ownership` が書くのは `owned_leaves` と memo の 2 つだけである)
+  P2a は 1 つの `VarTable` の値と 1 つの `TypeEnv` の値を固定したうえで、鍵 `(x, π)` が等しい 2 つの
+  `origin` の呼び出しの返り値が等しいこと、すなわち「答えは `vars.origins` が保持する memo の状態に
+  依らない」ことを述べる。`<1>3` より `level_ownership` が書くのは同じ 1 つの `VarTable` の `origins` と
+  局所変数 `owned_leaves` の 2 つだけなので、P2a の範囲がそのまま当たる。
+  **表を跨ぐ形は引かない** -- P2a は「`bindings` が等しい相異なる 2 つの `VarTable` について答えが
+  等しい」ことを主張しないので、この段はその形を使わない。
+  BY P2a, <1>3
 <1>4. QED
-  BY <1>1, <1>2, <1>3, <1>3a -- `owned_leaves` は <1>2 が挙げる入力に入らず、memo への書き込みは答えを
-     変えない (<1>3a) ので、P3 と P4 の真偽は `level_ownership` の有無で変わらない。
+  `<1>2` が挙げる入力 -- `VarTable` の `bindings`、`TypeEnv`、`bindings` が持つ `LLVMGen` の
+  `result_prov` の返り値、および `origins` の memo -- のうち、`level_ownership` が書くのは memo だけで
+  ある (`<1>3`)。`owned_leaves` はその並びに入らない。`<1>3a` より memo への書き込みは答えを変えない。
+  **比較は 1 つの `VarTable` の値の上で行う** -- `level_ownership` は `bindings` を書かないので
+  (`<1>3`)、その有無で変わるのは同じ表の `origins` だけであり、P2a の固定した範囲を出ない。
+  よって P3 と P4 の真偽は `level_ownership` の有無で変わらない。
+  BY P2a, <1>1, <1>2, <1>3, <1>3a
 
 **観察 (この文書の命題の外)。** `level_ownership` の発火判定は、site の `origin` の候補のうち 1 つでも
 `owns_object_yet` が真であれば真になる (`CODE src/rc_ir/borrow.rs: level_ownership`, `owns_object_yet`)。
