@@ -1010,7 +1010,9 @@ leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が
 
 #### L8 (`origin` の 1 段は inhabited を保つ)
 
-**言明**。`x` を `B` の変数、`λ ∈ boxed_leaf_paths(ty(x))` とする。次の 2 つが成り立つ。
+**言明**。`B'` をプログラムのいずれかの本体 (D23) とし、この補題の中では `vars` を `B'` の
+`VarTable` とする (第 1 節の `vars` は `B' = B` の場合である)。`x` を `B'` に現れる変数、
+`λ ∈ boxed_leaf_paths(ty(x))` とする。次の 2 つが成り立つ。
 
 - **(A)** `origin_inner(vars, type_env, x.name, λ)` の本体が `origin(vars, type_env, x'.name, λ')` を
   呼ぶとき、次の 4 つが成り立つ。
@@ -1021,9 +1023,10 @@ leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が
     inhabited な leaf であることは同値である。
   - **(iv)** その leaf が inhabited であるとき、`obj(x, λ) = obj(x', λ')` である。
 
-  **(ii)、(iii)、(iv) は、実行路 `ρ` の上で `x` が値を得ているときに主張する。`Binding::Join` の腕に
-  ついては、`ρ` が選んだアームの結果変数 `x' = arm_results[j]` についてだけ主張する。(i) と (B) は
-  `ρ` を読まない。**
+  **(ii)、(iii)、(iv) は、`B' = B` であり、第 7.1 節が固定した実行路 `ρ` の上で `x` が値を得ている
+  ときに主張する。`Binding::Join` の腕については、`ρ` が選んだアームの結果変数 `x' = arm_results[j]`
+  についてだけ主張する。(i) と (B) は `B'` を問わず成り立ち、`ρ` を読まない。** `L16` が
+  `borrow_ify` の出力の任意の版について (i) と (B) を読む。
 
   **(ii) の「値を得ている」は D6 の 3 つの形を渡る。** 節点が束縛する変数と、パラメータ・capture と、
   `vars.bindings` に束縛を持たない名前である。3 つ目の値はその記号の値なので、`ρ` の上のどの時点でも
@@ -1039,6 +1042,8 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
 保たれる。
 
 **証明** `vars.bindings.get(x.name)` の 7 つの場合で分ける (`CODE src/rc_ir/ownership.rs: Binding`)。
+(ii)・(iii)・(iv) を示す段は `B' = B` の場合、すなわち第 7.1 節が固定した本体と実行路 `ρ` に
+ついてのものである。(i) と (B) を示す段は `B'` を問わない。
 
 <1>0. `x'` を、いずれかの腕が `origin` を呼ぶ相手の変数とする。`x'` が `vars.bindings` に束縛を
       持たない名前であるとき、`ρ` の上で `x'` は値を得ている。
@@ -1351,8 +1356,8 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
 
 #### L8a (`origin` の memo を使わない展開は有限である)
 
-**言明**。`vars` をある本体の `VarTable`、`x` をその本体の変数、`λ` を `FieldPath` とする。次の 2 つが
-成り立つ。
+**言明**。`vars` をプログラムのいずれかの本体 (D23) の `VarTable`、`x` をその本体に現れる変数、
+`λ` を `FieldPath` とする。次の 2 つが成り立つ。
 
 - **(i)** `origin(vars, type_env, x.name, λ)` が返す値は、`origin_inner` の再帰呼び出しを memo を
   使わずにそのまま展開して得られる木 -- 下の**展開とその値**が `E(x.name, λ)` と書くもの -- の値に
@@ -2927,40 +2932,49 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
       書き込むのはこの繰り返しだけである。**鍵は複製後の名前で、`owned_leaves` は原本の名前で
       引かれる。**この改名が P8 と `V` を繋ぐ橋である。P9 より `ty(rename[&p0.name]) = ty(p0)` である。
     <3>3a. `origin_V(p, μ)` の各候補 `(r, q)` について `q ∈ boxed_leaf_paths(ty(r), type_env)` である。
-      <4>1. `λ ∈ boxed_leaf_paths(ty(x))` であるすべての対 `(x, λ)` について、`origin(x, λ).acted_on()`
-            の各元 `(w, ν)` は `ν ∈ boxed_leaf_paths(ty(w))` を満たす。
-        `origin(x, λ)` の計算の、memo を使わない展開 (L8a (ii)) についての帰納法で示す。L8a (ii) より
-        その展開は有限なので、この帰納法は整礎であり、L8a (i) より `origin(x, λ)` が返す値はその展開の
-        値に等しい。L8 (A) の (i) と (B) はどちらも `ρ` を読まないので、`ρ` の上で値を得ていない
-        変数 -- `ρ` が選ばなかったアームの結果変数と、その先 -- についても使える。
+      <4>0. L7a、L8 の (i) と (B)、および L8a は、`Pre(V)` の `VarTable` について読める。
+        BY L7a, L8, L8a
+        L7a は `vars'` を「プログラムのいずれかの本体の `VarTable`」と量化する。L8 は本体を `B'` と
+        量化し、「(i) と (B) は `B'` を問わず成り立ち、`ρ` を読まない」と述べる。L8a も `vars` を
+        同じ形で量化する。<1>1c と <1>1d より `Pre(V)` はプログラムの本体 -- `borrow_ify` の出力の
+        版 `V` が書き換える前の本体 -- であり、`ctx.vars` はその `VarTable` である。**L8 の (ii)・
+        (iii)・(iv) は `B` と `ρ` についての主張なのでここでは読まない。**
+      <4>1. `Pre(V)` に現れる変数 `x` と `λ ∈ boxed_leaf_paths(ty(x))` であるすべての対について、
+            `origin_V(x, λ).acted_on()` の各元 `(w, ν)` は `ν ∈ boxed_leaf_paths(ty(w))` を満たす。
+        `origin_V(x, λ)` の計算の、memo を使わない展開 (L8a (ii)) についての帰納法で示す。L8a (ii) より
+        その展開は有限なので、この帰納法は整礎であり、L8a (i) より `origin_V(x, λ)` が返す値はその展開の
+        値に等しい。L8 (A) の (i) と (B) はどちらも `ρ` を読まないので、`ρ_P` の上で値を得ていない
+        変数 -- `ρ_P` が選ばなかったアームの結果変数と、その先 -- についても使える。
         <5>1. CASE `origin_inner` が `origin` を呼ばない。このとき `acted_on()` の元は `(x.name, λ)`
               だけであり、仮定より `λ ∈ boxed_leaf_paths(ty(x))` である。
-          BY L8, D15
+          BY <4>0, L8, D15
           L8 (B) より値は `Origin::Exactly((x.name, λ))` であり、D15 より `Origin::Exactly` の
           `acted_on()` はその 1 元だけからなる列である。
-        <5>2. CASE `origin_inner` が `Binding::Join` 以外の腕で `origin(x', λ')` を呼ぶ。このとき
-              腕の値は `origin(x', λ')` そのものであり、L8 (A) の (i) より
+        <5>2. CASE `origin_inner` が `Binding::Join` 以外の腕で `origin_V(x', λ')` を呼ぶ。このとき
+              腕の値は `origin_V(x', λ')` そのものであり、L8 (A) の (i) より
               `λ' ∈ boxed_leaf_paths(ty(x'))` である。
-          BY L8, CODE src/rc_ir/ownership.rs: origin_inner
-          `Binding::Move`、`Binding::Llvm` の単一 `Arg` の枝、unbox 容器の `Binding::Field`、
-          `Binding::Payload` の 2 つの枝は、いずれも `origin` を 1 回呼んでその値を腕の値とする。
+          BY <4>0, L7a, L8
+          L7a (b) より、`Binding::Move`、`Binding::Llvm` の単一 `Arg` の枝、unbox 容器の
+          `Binding::Field`、`Binding::Payload` の 2 つの枝は、いずれも `origin` を 1 回呼んでその値を
+          腕の値とする。
         <5>3. CASE `origin_inner` が `Binding::Join(arm_results)` の腕を取る。このとき `acted_on()` は
-              `{(x.name, λ)} ∪ ⋃_{j'} origin(arm_results[j'], λ).acted_on()` に含まれ、各 `j'` に
+              `{(x.name, λ)} ∪ ⋃_{j'} origin_V(arm_results[j'], λ).acted_on()` に含まれ、各 `j'` に
               ついて `λ ∈ boxed_leaf_paths(ty(arm_results[j']))` である。
-          BY L8, D15, CODE src/rc_ir/ownership.rs: origin_inner,
+          BY <4>0, L7a, L8, D15, CODE src/rc_ir/ownership.rs: origin_inner,
              CODE src/rc_ir/ownership.rs: Origin::of_candidates
-          この腕は各 `arm_result` について `origin(vars, type_env, &arm_result.name, path).acted_on()`
-          の各元を `candidates` に入れ、`Origin::of_candidates(candidates, &(x.name, λ))` を返す。
+          L7a (c) より、この腕は各 `arm_result` について
+          `origin(vars, type_env, &arm_result.name, path).acted_on()` の各元を `candidates` に入れ、
+          `Origin::of_candidates(candidates, &(x.name, λ))` を返す。
           `of_candidates` は候補が 1 元のときその元の `Origin::Exactly`、そうでないとき
           `Origin::Join { identity: (x.name, λ), candidates }` を返し、D15 より
           `acted_on() = {identity()} ∪ candidates()` である。leaf の側は L8 (A) の (i) が、この腕に
           ついてどのアームの結果変数についても成り立つ形で与える。
         <5>4. QED
-          BY <5>1, <5>2, <5>3, L8
-          L8 (A) と (B) より `origin_inner` の腕はこの 3 つの場合に分かれる。<5>1 では `acted_on()` の
-          元は仮定を満たす対 1 つである。<5>2 と <5>3 では、`acted_on()` の元は `(x.name, λ)` か、
-          行き先の型の boxed leaf を第 2 成分に持つ再帰の相手の `acted_on()` の元であり、後者には
-          帰納法の仮定が適用できる。
+          BY <5>1, <5>2, <5>3, <4>0, L7a
+          L7a より `origin_inner` の枝は 3 群に分かれ、その 3 つが場合を尽くす。(a) は <5>1、(b) は
+          <5>2、(c) は <5>3 である。<5>1 では `acted_on()` の元は仮定を満たす対 1 つである。
+          <5>2 と <5>3 では、`acted_on()` の元は `(x.name, λ)` か、行き先の型の boxed leaf を
+          第 2 成分に持つ再帰の相手の `acted_on()` の元であり、後者には帰納法の仮定が適用できる。
       <4>2. QED
         BY <4>1, D15, D9
         L16 の仮定より `(p, μ)` は D9 の意味で消費される leaf であり、D9 の消費の表が挙げるのは
