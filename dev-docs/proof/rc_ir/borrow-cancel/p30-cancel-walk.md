@@ -1,9 +1,13 @@
 # P15 - P18: `cancel` の走査
 
 この文書は README の層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の定義 D1 - D34 と仮定
-A1 - A25 の上に立つ。層 1 と層 2 の命題は引用しない。
+A1 - A26 の上に立つ。層 1 と層 2 の命題は引用しない。
 
-対象コミットは `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` である。
+この文書が読んだコードのコミットは `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` である。README が証明の
+対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が引く 7 ファイル
+(`src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、`src/rc_ir/ast.rs`、`src/rc_ir/rename.rs`、
+`src/rc_ir/validate.rs`、`src/misc.rs`、`src/build/build_object_files.rs`) に変わったのは `// PROOF:`
+コメントだけである。
 
 P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P16 - P18 もその入力に対する走査についての
 言明なので、この文書は全体を通じて、`cancel` の引数 `prog` が `borrow_ify` の 1 回の呼び出しの返り値で
