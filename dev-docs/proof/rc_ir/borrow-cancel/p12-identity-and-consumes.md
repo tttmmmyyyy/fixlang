@@ -1,9 +1,15 @@
 # P5, P6, P7 -- identity とオブジェクト、`acted_references`、消費の網羅性
 
-この文書は `README.md` の P5 (a)、P5 (b)、P5 (c)、P6、P7 を証明する。立つのは `README.md` の定義
-(D1、D2、D3、D4、D6、D7、D8、D9、D10、D11、D14、D15、D16、D17、D20、D21、D23、D26)、仮定 (A1、A3、
-A5、A6、A9、A10、A11、A12、A14、A15、A16)、および命題 P1、P2、P29 の**言明**である。P1 と P2 の証明は
-`p10-leaves-and-units.md`、P29 の証明は `p51-runs.md` にあり、この文書はその 3 つの言明だけを使う。
+この文書は `README.md` の P5 (a)、P5 (b)、P5 (c)、P6、P7 を証明する。主語となる語彙は D13 が定める --
+`origin` の返り値と、その 2 つの形 `Exactly(u, σ)` と `Join { identity, candidates }` である。段が `BY` で
+引くのは、`README.md` の定義 (D1、D2、D3、D4、D6、D7、D8、D9、D10、D11、D14、D15、D16、D20、D21、D23、
+D26)、仮定 (A1、A3、A6、A9、A10、A11、A12、A14、A15、A16)、および命題 P1、P2、P29 の**言明**である。
+P1 と P2 の証明は `p10-leaves-and-units.md`、P29 の証明は `p51-runs.md` にあり、この文書はその 3 つの
+言明だけを使う。
+
+本文はこのほかに D17 と A5 を引き合いに出す。D17 は DEF 辺の leaf 対応 が leaf の写り方を突き合わせる
+相手であり、A5 は P6 の補足 3 が「1 つの名前に 2 つの leaf が付くとき参照も 2 つある」と述べる根拠で
+ある。この 2 つを `BY` に挙げる段は無い。
 
 A16 が要るのは L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b)、R1 である。読むのは A16 の 2 つの節 --
 `Match` のアームが scrutinee のタグを尽くすことと、catch-all アームが `arms` の最後にあること --
