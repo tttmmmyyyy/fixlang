@@ -89,17 +89,20 @@ L0 が示す。**
 ### DEF 参照の多重集合
 
 `References` は `Map<VarPath, usize>` を 1 つ持つ構造体である (`CODE src/rc_ir/ownership.rs: References`)。
-これを、鍵をオブジェクトの名前、値をその個数とする多重集合とみなす。次の記法を使う。
+これを、鍵を**位置** (`VarPath`)、値をその位置について数えた参照の個数とする多重集合とみなす。
+**鍵は D6 の位置であって D25 のオブジェクトではない。** コードの `References::shares_an_object`、
+`References::names`、`References::objects` は名前が「オブジェクト」と言うが、扱うのは `VarPath` の鍵で
+ある。次の記法を使う。
 
-- `R2 ⊆ R1` とは、各オブジェクトについて `R2` の個数が `R1` の個数以下であることをいう。
-- `R1 - R2` とは、各オブジェクトの個数の差である (`R2 ⊆ R1` のときだけ書く)。
+- `R2 ⊆ R1` とは、各位置について `R2` の個数が `R1` の個数以下であることをいう。
+- `R1 - R2` とは、各位置の個数の差である (`R2 ⊆ R1` のときだけ書く)。
 - **空**とは、参照を 1 つも持たないことをいう。
-- 2 つの `References` の値が**等しい**とは、`PartialEq` が真を返すこと、すなわち各オブジェクトの個数が
+- 2 つの `References` の値が**等しい**とは、`PartialEq` が真を返すこと、すなわち各位置の個数が
   一致することをいう。`References` は `PartialEq` を derive し、その中身は `Map` (`FxHashMap`) なので、
   等しさは鍵と値の対の集合の一致である (`CODE src/rc_ir/ownership.rs: References`,
   `CODE src/misc.rs: Map`)。
 
-`⊆` は推移的である (各オブジェクトの個数についての不等式の推移律)。
+`⊆` は推移的である (各位置の個数についての不等式の推移律)。
 
 ### DEF 割り当て
 
@@ -602,9 +605,9 @@ enum については元と同じ変位で、その変位が保持する各値を
 
 1. `R.is_empty()` が真であることと `R` が空 (DEF 参照の多重集合) であることは同値である。
 2. `R1.covers(&R2)` が真であることと `R2 ⊆ R1` であることは同値である。
-3. `R1.shares_an_object(&R2)` が真であることと、`R1` と `R2` の双方が参照を持つオブジェクトが在ることは
-   同値である。また `R1.names(o)` が真であることと、`R1` が `o` の参照を持つことは同値である。
-   `R1.objects()` は `R1` が参照を持つオブジェクトをちょうど 1 度ずつ並べた列である。
+3. `R1.shares_an_object(&R2)` が真であることと、`R1` と `R2` の双方が参照を持つ位置が在ることは
+   同値である。また `R1.names(o)` が真であることと、`R1` が位置 `o` の参照を持つことは同値である。
+   `R1.objects()` は `R1` が参照を持つ位置をちょうど 1 度ずつ並べた列である。
 4. `R2 ⊆ R1` のとき `R1.subtract(&R2)` は `R1` を `R1 - R2` に書き換え、panic しない。また
    `R1 - R2 ⊆ R1` である。
 5. `CancelAnalysis::acted_references(v, path)` が値を返すとき、その値は空でない。すなわち、DEF 節点の量 の
@@ -623,7 +626,7 @@ enum については元と同じ変位で、その変位が保持する各値を
 <1>3. **`R1.covers(&R2)` が真であるとき**、`R1.subtract(&R2)` は panic せず、`R2` の各鍵についての `R1` の
       値をその分だけ減らし、減らした結果が 0 になった鍵を取り除く。`R2` の鍵でない `R1` の鍵の値は変わら
       ない。よって、各鍵の値が 1 以上の `R1` を `covers` が真である `R2` で `subtract` した結果も各鍵の
-      値が 1 以上であり、その値は各オブジェクトの個数を `R2` の分だけ減らしたものである。
+      値が 1 以上であり、その値は各位置の個数を `R2` の分だけ減らしたものである。
 
       `subtract` の本体は `for (object, count) in &other.0 { let held_count = self.0.get_mut(object)
       .expect(...); *held_count -= count; if *held_count == 0 { self.0.remove(object); } }` である。
@@ -636,10 +639,10 @@ enum については元と同じ変位で、その変位が保持する各値を
   BY CODE src/rc_ir/ownership.rs: References::subtract, CODE src/rc_ir/ownership.rs: References::covers,
      DEF Map と Set, DEF Iterator::all と any
 <1>4. `References::covers(other)` は、`other` のどの鍵についても、自分がその鍵を持ちその値以上であることを
-      言う。各鍵の値が 1 以上のとき、これは各オブジェクトの個数の不等式、すなわち `other ⊆ self` と同値で
-      ある (`other` が持たないオブジェクトの個数は 0 で、不等式は自動的に成り立つ)。よって 2 が成り立つ。
+      言う。各鍵の値が 1 以上のとき、これは各位置の個数の不等式、すなわち `other ⊆ self` と同値で
+      ある (`other` が持たない位置の個数は 0 で、不等式は自動的に成り立つ)。よって 2 が成り立つ。
       また `covers` が真のとき、<1>3 より引き算は panic せず結果は `self - other` である。`R1 - R2` の各
-      オブジェクトの個数は `R1` のそれ以下なので `R1 - R2 ⊆ R1` である。よって 4 が成り立つ。
+      位置の個数は `R1` のそれ以下なので `R1 - R2 ⊆ R1` である。よって 4 が成り立つ。
   BY CODE src/rc_ir/ownership.rs: References::covers, <1>3, DEF Map と Set, DEF Iterator::all と any
 <1>5. `References::is_empty()` は内側の `Map` が空であることを言う。各鍵の値が 1 以上の `References` に
       ついて、これは参照を 1 つも持たないことと同値である。よって 1 が成り立つ。
@@ -649,7 +652,8 @@ enum については元と同じ変位で、その変位が保持する各値を
       `self.0.contains_key(object)` であり、`object` が自分の鍵であることを言う。`References::objects()` の
       本体は `self.0.keys().cloned().collect()` であり、DEF Map と Set より自分の各鍵の複製をちょうど
       1 度ずつ渡す反復子を `Vec` に並べたもの、すなわち自分の鍵を 1 度ずつ並べた列を返す。各鍵の値が 1 以上の
-      `References` について、鍵であることとその参照を 1 つ以上持つことは同値である。よって 3 が成り立つ。
+      `References` について、鍵であることとその位置の参照を 1 つ以上持つことは同値である。よって 3 が
+      成り立つ。
   BY CODE src/rc_ir/ownership.rs: References::shares_an_object,
      CODE src/rc_ir/ownership.rs: References::names, CODE src/rc_ir/ownership.rs: References::objects,
      <1>1, <1>3, DEF Map と Set, DEF Iterator::all と any, DEF Iterator::map と collect
@@ -1200,13 +1204,13 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 
 ### L5 (`un_bump` の作用)
 
-要素 `e` が `References` の値 `R` と**オブジェクトを共有する**とは、`e.outstanding.shares_an_object(R)`
-が真であること、すなわち L2 の 3 より `e.outstanding` と `R` の双方が参照を持つオブジェクトが在ることを
-いう。
+要素 `e` が `References` の値 `R` と**位置を共有する**とは、`e.outstanding.shares_an_object(R)`
+が真であること、すなわち L2 の 3 より `e.outstanding` と `R` の双方が参照を持つ位置 (`VarPath`) が在る
+ことをいう。
 
 `un_bump(pending, un_bumped)` の 1 回の呼び出しについて、次の 3 つが成り立ち、この 3 つは場合を尽くす。
 
-1. `un_bumped` とオブジェクトを共有する要素が `pending` に無いとき、返り値は `NoBracket` であり、
+1. `un_bumped` と位置を共有する要素が `pending` に無いとき、返り値は `NoBracket` であり、
    `pending` は変わらない。
 2. あるとき、そのような要素の添字のうち最大のものを `i` とする。`pending[i].outstanding.covers(un_bumped)`
    が偽のとき、返り値は `OutsideBracket` であり、`pending` は変わらない。
@@ -1778,15 +1782,16 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 
 ## 7. P17 (`un_bump` の正しさ)
 
-**言明** --- `un_bump(pending, R)` の返り値は次で決まる。`R` とオブジェクトを共有する要素が `pending` に
-無ければ `NoBracket` で、`pending` は変わらない。あって、そのうち最も後ろの要素 (最内) の `outstanding`
-が `R` を `covers` しなければ `OutsideBracket` で、`pending` は変わらない。covers すれば `InBracket(t)`
-で、`t` はその要素の `node` であり、その要素の `outstanding` から `R` が引かれ、空になればその要素が
-取り除かれる。他の要素は変わらない。
+**言明** --- `un_bump(pending, R)` の返り値は次で決まる。`R` と位置 (`VarPath`) を共有する要素が
+`pending` に無ければ `NoBracket` で、`pending` は変わらない。あって、そのうち最も後ろの要素 (最内) の
+`outstanding` が `R` を `covers` しなければ `OutsideBracket` で、`pending` は変わらない。covers すれば
+`InBracket(t)` で、`t` はその要素の `node` であり、その要素の `outstanding` から `R` が引かれ、空に
+なればその要素が取り除かれる。他の要素は変わらない。
 
-ここで「`R` とオブジェクトを共有する要素」とは、`e.outstanding.shares_an_object(R)` が真である要素で
-ある (L5 の冒頭)。判定に使われるのはその要素の現在の `outstanding` であって、由来の `Retain` が作った
-`ActRefs` ではない。
+ここで「`R` と位置を共有する要素」とは、`e.outstanding.shares_an_object(R)` が真である要素である
+(L5 の冒頭)。判定に使われるのはその要素の現在の `outstanding` であって、由来の `Retain` が作った
+`ActRefs` ではない。**`References` の鍵は D6 の位置であって D25 のオブジェクトではない**
+(DEF 参照の多重集合)。
 
 **証明**
 
@@ -1801,7 +1806,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 <1>2. L5 の 1 は、言明の第 1 の場合と条件も結論も一致する。
   BY L5
 <1>3. L5 の 2 と 3 の添字 `i` の要素は、言明の「最も後ろの要素 (最内)」である。L5 の `i` は、`R` と
-      オブジェクトを共有する要素の添字のうち最大のものだからである。
+      位置を共有する要素の添字のうち最大のものだからである。
   BY L5
 <1>4. L5 の 2 は言明の第 2 の場合と、L5 の 3 は言明の第 3 の場合と、条件も結論も一致する。L5 の 3 の
       「`pending[i].outstanding` は `pending[i].outstanding - un_bumped` になる」は言明の
@@ -1813,7 +1818,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
   BY L5, <1>1, <1>2, <1>3, <1>4
 
 「最内」の名は P16 の (d) が支える。走査の状態では、`pending` の並びは由来の訪問順なので、`R` と
-オブジェクトを共有する要素のうち添字が最大のものは、その中で由来が最も後に訪問された要素である。
+位置を共有する要素のうち添字が最大のものは、その中で由来が最も後に訪問された要素である。
 
 ## 8. P18 (`merge` の後に残るもの)
 
@@ -2010,7 +2015,7 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
 ### L12 (`OutsideBracket` の後始末)
 
 `un_bump` が `OutsideBracket` を返したとき、`walk_inner` の `RcExpr::Release(v, path, _, k)` の腕は、
-`un_bumped` とオブジェクトを共有する `pending` の要素をすべて取り除き、その `node` を
+`un_bumped` と位置を共有する `pending` の要素をすべて取り除き、その `node` を
 `self.needed_retains` に入れる。取り除かれるのは `un_bump` が調べた最内の要素だけではない。
 
 **証明**
@@ -2018,11 +2023,11 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
 <1>1. この腕の `match un_bump(...)` の `UnBump::OutsideBracket` の枝は、`let objects = un_bumped.objects();`
       の後に `self.consume_objects(&mut pending, &objects)` を実行する。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕
-<1>2. L2 の 3 より `un_bumped.objects()` は `un_bumped` が参照を持つオブジェクトを 1 度ずつ並べた列で
+<1>2. L2 の 3 より `un_bumped.objects()` は `un_bumped` が参照を持つ位置を 1 度ずつ並べた列で
       ある。L6 より `consume_objects` はそのいずれかについて `outstanding.names` が真である要素をすべて
       取り除き、その `node` を `needed_retains` に入れる。L2 の 3 より、その条件は
       `outstanding.shares_an_object(un_bumped)` が真であること、すなわち L5 の意味で `un_bumped` と
-      オブジェクトを共有することと同値である。
+      位置を共有することと同値である。
   BY L2, L5, L6, <1>1
 <1>3. L5 の 2 より、`un_bump` が `OutsideBracket` を返すとき `pending` は変わらないので、<1>2 が見る
       `pending` は `un_bump` が見たものと同じである。`un_bump` が `covers` を検査したのはそのうち最内の
@@ -2049,15 +2054,15 @@ L9 の (ii) より空でなく (減ったのは各アームに渡った複製の
 2 つは食い違いうる。ある `Release` が P17 の第 3 の場合で最内の要素の `outstanding` を減らした後、
 `ActRefs` は覆うが `outstanding` は覆わない `un_bumped` を持つ `Release` が来ると、`covers` は偽になる。
 最内の要素を選ぶ `shares_an_object` の判定も同じく現在の `outstanding` で行われるので、部分的に un-bump
-された要素は、残った `outstanding` が名指すオブジェクトについてしか後続の `Release` と共有しない。
+された要素は、残った `outstanding` が名指す位置についてしか後続の `Release` と共有しない。
 
-第 2 に、`un_bump` はオブジェクトを共有する要素のうち最内のものしか調べないので、より外側の要素の
+第 2 に、`un_bump` は位置を共有する要素のうち最内のものしか調べないので、より外側の要素の
 `outstanding` が `un_bumped` を覆っていても `OutsideBracket` を返す。この場合の後始末は L12 が述べる ---
-`un_bumped` とオブジェクトを共有する要素は 1 つ残らず `needed_retains` に入る。`InBracket` の場合は、
+`un_bumped` と位置を共有する要素は 1 つ残らず `needed_retains` に入る。`InBracket` の場合は、
 外側の共有する要素は触られずに `pending` に残る。
 
 **注記 3 (`consume_objects` は列の途中からも取り除く)**。`consume_objects` は `Vec::retain` で、消費された
-オブジェクトを名指す要素を列のどの位置からも取り除く (L6)。取り除かれた要素の `node` は
+位置を名指す要素を列のどこからも取り除く (L6)。取り除かれた要素の `node` は
 `needed_retains` に入るので、それらは打ち消しの対象から外れる
 (`CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled` は `needed_retains` の要素を飛ばす)。残る要素の相対順序は変わらないので、
 P16 の (d) は保たれ、P17 の「最内」はその後も由来の訪問順で決まる。
