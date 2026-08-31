@@ -2231,8 +2231,13 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   - `p` が `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)` は、`π` の下の inhabited (D16) かつ
     計数下 (D26) の各 leaf を `origin` の identity で名付けて数えたものである。P6 より、これはその
     `Retain` が `ρ` で実際に作る参照の多重集合である。
-  - `un_bump` が `InBracket` で `p` を選ぶ `Release` の訪問で、その `Release` が `ρ` で実際に処分する
-    参照の多重集合を引く。
+  - `un_bump` が `InBracket` で `p` を選ぶ `Release(v, π)` の訪問で、その `Release` が `ρ` で実際に
+    処分する参照を、それを持つ leaf の `origin` の identity で名付けて数えた多重集合を引く。
+    すなわち、`π` の下の inhabited かつ計数下の各 leaf を `origin` の identity で名付けて数えたもので
+    ある。**引くのも名前の多重集合である** -- 第 1 項が名前で数えているので、参照の多重集合を引くと
+    水準が合わない。P6 より、この名前の多重集合はその `Release` が実際に処分する参照の多重集合と
+    1 対 1 に対応する。**名前ごとの差が切り捨てを起こさないことは、`p13-disposals-and-pending.md` の
+    `L11a` が示す。**
   - アームへの複製と、`merge` が `p` を返り値に据えるときは、`B(p, ρ)` をそのまま運ぶ。`consume_objects` が
     `p` を取り除いたときと、`merge` が `p` を `uniform` に入れずに落としたときは、定めるものが無い。
     ほかのどの操作も `B(p, ρ)` を変えない。
@@ -2245,7 +2250,7 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
 - **P18b** (`outstanding` は実行時の bump の上界である)。走査中の各位置と、その位置に至る各実行路 `ρ` に
   ついて、`pending` の各要素 `p` を考える。`p.node` の `Retain` が `ρ` で実際に作った参照のうち、`ρ` 上で
   まだ処分されていないものを、それを作った leaf の `origin` の identity で名付けた多重集合を `B(p, ρ)` と
-  する (D27)。このとき `p.outstanding` は `B(p, ρ)` を `covers` する。とくに `p.outstanding` が空ならば
+  する (D27)。**この多重集合は名前 (`VarPath`) ごとである** -- D27 の 2 つの項がどちらも名前で数える。このとき `p.outstanding` は `B(p, ρ)` を `covers` する。とくに `p.outstanding` が空ならば
   `B(p, ρ)` も空である。
 
   **数えるのは名前であってオブジェクトではない。** `outstanding` と `covers` は `VarPath` を鍵とする多重
