@@ -2206,8 +2206,8 @@ leaf に前置したものだからである。
 <1>8. `destructure_consumes` が unbox 容器について落とす名前付きフィールドの leaf (`L5 (e)`)。
       `L5a (b)` より `L5 (e)` が返す集合は D9 の `Destructure` (unbox) の行が指す leaf に等しいので、
       落とされる leaf は名前が付いたフィールドの leaf である。D9 のその行は消費を名前が付いていない
-      フィールドの leaf に限るので、これは消費ではない。D9 の移動の表の第 3 行がこれを移動とし、D10 の移動の行より `Obl` は
-      変わらない。
+      フィールドの leaf に限るので、これは消費ではない。D9 の移動の表の第 3 行がこれを移動とし、
+      D10 の移動の行より `Obl` は変わらない。
   BY D9, D10, L5 (e), L5a
 
 <1>8a. `rhs_consumes` の `RcRhs::App` の腕が、`resolve_callee_params` が `Some(params)` を返し
