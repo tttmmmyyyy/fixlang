@@ -2811,28 +2811,89 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
     腕は各 capture の leaf を無条件に入れ、`RcRhs::Llvm` の腕は `borrows_operand` と
     `passthrough_arg_leaves` だけを見る。
 
-  <2>1a. 次の 2 つが成り立つ。
+  <2>1a. `ren` を、`F` の本体の束縛変数には `rename` を当て、それ以外の名前 -- 直接呼び出しが名指す
+         関数の名前とグローバル値を読む `RcVar` の名前 (A13) -- を動かさない、`FullName` の上の写像と
+         する。`VarPath` へは `ren[(w, ν)] = (ren[w], ν)` で、`Origin` へは `Exactly` と `Join` の
+         名前の成分に当てて広げる。次の 2 つが成り立つ。
          - `p` が `rename` の像に無いとき、`Pre(V)` で `p` は束縛を持たず、`origin_V(p, μ)` は
            `Origin::Exactly((p, μ))` であり、`p` は `ctx.vars.param_tys` の鍵ではない。
          - `p = rename[p0]` であるとき、`F` の本体でも `(p0, μ)` が D9 の意味で消費され、
-           `origin_V(p, μ)` の候補の全体は `origin_F(p0, μ)` の候補を `rename` で写したものである。
-           `V` のパラメータ `r = rename[r0]` を根に持つ候補 `(r, q)` には、`F` のパラメータ `r0` を
-           根に持つ候補 `(r0, q)` が対応し、`ty(r) = ty(r0)` である。
-    BY <1>1e, <2>0a, <2>0b, <2>1, P9, A3, A6, A13,
-       CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin_inner,
-       CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/rename.rs: rename_rhs
-    `collect_bindings` は `Retain`/`Release` の腕で束縛を作らず、`RcRhs::App(..)` にはその callee に
-    よらず `Binding::Producer` を置くので、<2>0b の 2 つの違いは束縛表を動かさない。よって `V` の束縛表は
-    `F` の束縛表を `rename` で写したものである (`VarTable::of` はこれにパラメータ・capture の
-    `Binding::Param` を足す)。`origin_inner` が変数を引くのは名前によってだけであり、`Binding::Llvm` の腕が
-    呼ぶ `result_prov` も答えを変えない -- `rename_rhs` の `Llvm` の腕は `llvm_gen` を clone して
-    `free_vars_mut()` が挙げる名前を書き替えるが、A3 が「**`result_prov` と `borrows_operand` は自分の
-    `FullName` の欄を読まない。**」と述べる。よって `origin` の答えも同じ写像で写る。A6 と A13 より
-    複製の名前は原本のどの名前とも衝突しないので、この写しは単射である。`rename` の像に無い名前は
-    `Pre(V)` で束縛を持たないので、`origin_inner` の `None` の腕が `here()` すなわち
-    `Exactly((p, μ))` を返す。`V` のパラメータ名と capture 名 -- `ctx.vars.param_tys` の鍵 -- はどれも
-    `rename` の像なので、像に無い名前はその鍵ではない。この CASE の 6 種の消費が `V` の本体と `F` の
-    本体で写して一致することは <1>1e であり、<2>1 よりその 6 種はどの所有の割り当てでも同じ答えを返す。
+           `origin_V(p, μ) = ren[origin_F(p0, μ)]` である。とくに `origin_V(p, μ)` の候補の全体は
+           `origin_F(p0, μ)` の候補を `ren` で写したものであり、`V` のパラメータ
+           `r = rename[r0]` を根に持つ候補 `(r, q)` には、`F` のパラメータ `r0` を根に持つ候補
+           `(r0, q)` が対応し、`ty(r) = ty(r0)` である。
+
+         **表を跨ぐ形は P2a の主張ではない。** README の P2a は「**表を跨ぐ形はこの命題の主張では
+         ない。** `bindings` が等しい相異なる 2 つの `VarTable` について答えが等しいことは別の主張で
+         あり、それを要る段は自分で示す (`borrow_ify` は原本と複製に別々の `VarTable` を作るので、
+         その 2 つの `origin` が一致することを言う議論がこれに当たる)」と述べる。`<3>3` がその議論で
+         ある。
+    <3>1. `ren` は単射であり、`F` の本体に現れる各名前 `y` について `ty(ren[y]) = ty(y)` である。
+      BY P9, A6, A13
+      P9 は「`clone_func` が作る借用版の本体は、元の本体の束縛変数を一斉に付け替えたものであり、
+      それ以外の違いを持たない」と述べるので、`rename` は型を動かさず、束縛変数でない名前を動かさ
+      ない。A6 より `F` の本体の束縛名は相異なるので `rename` は単射であり、P9 の後半より複製が
+      導入する名前は入力のどの束縛名とも異なり、A13 よりその形の名前は入力のどの名前にも無いので、
+      `rename` の像と、動かさない名前の全体は交わらない。よって `ren` は単射である。
+    <3>2. `Pre(V)` の `VarTable` は `F` の本体の `VarTable` を `ren` で写したものである。すなわち
+          `F` の本体に現れる名前 `y` について、`vars_P.bindings.get(ren[y])` は
+          `vars_F.bindings.get(y)` の各変数名を `ren` で写したものであり、`ren` が動かさない
+          名前 -- とくに `rename` の像に無い名前 -- は `vars_P.bindings` の鍵ではない。
+          `param_tys` の鍵についても同じことが成り立つ。
+      BY <1>1c, <3>1, P9, CODE src/rc_ir/ownership.rs: collect_bindings,
+         CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/rename.rs: rename_rhs
+      <1>1c より `Pre(V)` は `F` の本体を `rename` で写した本体である。`collect_bindings` は節点の種と
+      それが名指す変数だけを読んで束縛を作り、`VarTable::of` はそれにパラメータ・capture の
+      `Binding::Param` と `param_tys` を足す。P9 より 2 つの本体は節点の種・並び・名指す変数の対応を
+      共有し、名前だけが `rename` で写る。`rename_rhs` の `Llvm` の腕は `llvm_gen` を clone して
+      `free_vars_mut()` が挙げる名前を書き替えるので、`Binding::Llvm` の `args` も `ren` で写り、
+      第 3 成分の `result_ty` は型なので <3>1 より動かない。束縛を持つ名前は局所名であり (D6)、
+      `ren` が動かさない名前は局所名ではない (A13) ので、後者は鍵にならない。
+    <3>3. `F` の本体に現れる名前 `y` と `FieldPath` `ν` について
+          `origin_V(ren[y], ν) = ren[origin_F(y, ν)]` である。
+      `origin_F(y, ν)` の計算の、memo を使わない展開 (L8a (ii)) についての帰納法で示す。L8a (ii) より
+      その展開は有限なので、この帰納法は整礎であり、L8a (i) より `origin_F(y, ν)` が返す値はその展開の
+      値に等しい。L8a は `vars` を「ある本体の `VarTable`」と量化するので、`F` の本体についても
+      `Pre(V)` についても読める。
+      <4>1. `origin_inner` が `(ren[y], ν)` について `vars_P` の下で取る枝は、`(y, ν)` について
+            `vars_F` の下で取る枝と同じであり、`origin` を呼ぶ相手は `ren` で対応する。
+        BY <3>1, <3>2, L7a, A3, CODE src/rc_ir/ownership.rs: origin_inner,
+           CODE src/rc_ir/ownership.rs: as_arg_projection
+        <3>2 より 2 つの表は `ren` で対応する束縛を持つので、`match` が取る `Binding` の変位は等しい。
+        `Binding::Field` と `Binding::Payload` の枝分かれは `container.ty` / `scrut.ty` の `is_box` を
+        読み、<3>1 よりその型は等しい。`Binding::Llvm` の枝分かれは
+        `decl.leaf_origins_at(ν).and_then(as_arg_projection)` を読み、`decl` は
+        `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` である。2 つの `llvm_gen` は
+        `free_vars_mut()` が挙げる `FullName` の欄だけが違い、A3 は「**`result_prov` と
+        `borrows_operand` は自分の `FullName` の欄を読まない。**」「**`result_prov` と
+        `borrows_operand` は決定的である**」と述べ、<3>1 より `result_ty` と `arg_tys` は等しいので、
+        `decl` は 2 つの側で等しい。L7a の (b) と (c) が挙げる相手 -- `(y', ν)`、`(args[j], p)`、
+        `(container, [idx] ++ ν)`、`(scrut, ν)`、`(scrut, [tag] ++ ν)`、`(arm_results[j'], ν)` --
+        は、変数の側が <3>2 の対応で `ren` の像へ写り、`FieldPath` の側は `decl` と `idx` と `tag` から
+        決まるので等しい。
+      <4>2. QED
+        BY <4>1, <3>1, L7a, D15, CODE src/rc_ir/ownership.rs: origin_inner,
+           CODE src/rc_ir/ownership.rs: Origin::of_candidates
+        L7a は `origin_inner` の枝を 3 群に分け、その 3 つが場合を尽くすと述べる。(a) の枝では両側の
+        値は `Origin::Exactly((y, ν))` と `Origin::Exactly((ren[y], ν))` であり、後者は前者の `ren`
+        像である。(b) の枝では両側の値は呼んだ `origin` の値そのものであり、<4>1 の相手に帰納法の
+        仮定を当てると後者は前者の `ren` 像である。(c) の枝では、両側の `candidates` は各アームの
+        結果対の `acted_on()` の合併であり、D15 より `acted_on() = {identity()} ∪ candidates()` なので、
+        帰納法の仮定と <4>1 より後者は前者の `ren` 像である。<3>1 より `ren` は単射なので 2 つの集合の
+        元数は等しく、`of_candidates` はどちらの側でも同じ分岐を取る -- 元数 1 のとき
+        `Origin::Exactly` を、そうでないとき `identity` を `(y, ν)` / `(ren[y], ν)` に据えた
+        `Origin::Join` を返す。どちらも `ren` 像の関係を保つ。
+    <3>4. QED
+      BY <1>1e, <2>1, <3>1, <3>2, <3>3, D15, D6, A13,
+         CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: VarTable::of
+      `p` が `rename` の像に無いときは、<3>2 より `Pre(V)` で `p` は束縛を持たないので、
+      `origin_inner` の `None` の腕が `here()` すなわち `Exactly((p, μ))` を返す。`V` のパラメータ名と
+      capture 名 -- `ctx.vars.param_tys` の鍵 -- はどれも `rename` の像なので (<3>2)、像に無い名前は
+      その鍵ではない。`p = rename[p0]` のときは、<1>1e よりこの CASE の 6 種の消費は `V` の本体と
+      `F` の本体で `rename` で写して一致し、<2>1 よりその 6 種は所有の割り当てを読まないので、`F` の
+      本体でも `(p0, μ)` は D9 の意味で消費される。`origin_V(p, μ) = ren[origin_F(p0, μ)]` は
+      <3>3 である。D15 より候補は `Origin` の名前の成分なので、候補の全体も `ren` で写り、
+      <3>1 より `ty(r) = ty(r0)` である。
   <2>2. `p = rename[p0]` であるとき、`origin_F(p0, μ)` の候補であるパラメータ leaf はすべて
         `owned_leaves` に入っている。ここで `owned_leaves = infer_ownership(prog, type_env)` であり、
         その鍵は原本の名前である (`CODE src/rc_ir/borrow.rs: borrow_ify`)。
