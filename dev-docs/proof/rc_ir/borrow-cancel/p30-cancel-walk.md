@@ -353,12 +353,14 @@ enum については元と同じ変位で、その変位が保持する各値を
      CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 本体
-<1>0a. `origin(vars, ・, ・, ・)` の 1 回の呼び出しの中で `vars` を引数として受け取る本体は、`origin`、
-       `origin_inner`、`origin_from_leaves_under` の 3 つだけである。
-  <2>1. `VarTable` は `origins: RefCell<Map<VarPath, Origin>>` の欄を持つので `Sync` ではなく、
-        DEF static は Sync を要る より `static` 項目に置けない。よって DEF 参照は引数を通ってだけ届く
-        より、関数の本体が `VarTable` のある値に届くのは、その値への参照が引数 (`self` を含む) として
-        渡ったときか、自分でその値を作ったときに限る。自分で作った値は `vars` ではない。
+<1>0a. `VarTable` のどの値 `t` についても、`t` への参照を引数 (`self` を含む) として受け取らず `t` を
+       自分で作りもしない関数の本体は、`t` に届かない。したがって `origin(vars, ・, ・, ・)` の 1 回の
+       呼び出しの中で `vars` を引数として受け取る本体は、`origin`、`origin_inner`、
+       `origin_from_leaves_under` の 3 つだけである。
+  <2>1. 前半が成り立つ。`VarTable` は `origins: RefCell<Map<VarPath, Origin>>` の欄を持つので `Sync`
+        ではなく、DEF static は Sync を要る より `static` 項目に置けない。よって
+        DEF 参照は引数を通ってだけ届く より、関数の本体が `VarTable` のある値に届くのは、その値への参照が
+        引数 (`self` を含む) として渡ったときか、自分でその値を作ったときに限る。
     BY CODE src/rc_ir/ownership.rs: VarTable, DEF static は Sync を要る,
        DEF 参照は引数を通ってだけ届く
   <2>2. `origin` の本体が `vars` を渡すのは `origin_inner(vars, type_env, var, path)` の 1 か所だけで
@@ -372,10 +374,11 @@ enum については元と同じ変位で、その変位が保持する各値を
         渡すのは 1 か所の `origin(vars, ...)` だけである。
     BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   <2>4. QED
-    呼び出しの入れ子の深さについての帰納法による (DEF 呼び出しの入れ子)。根の呼び出し
+    後半を、呼び出しの入れ子の深さについての帰納法で示す (DEF 呼び出しの入れ子)。根の呼び出し
     `origin(vars, ・, ・, ・)` はこの 3 つの 1 つであり、<2>2 と <2>3 より、この 3 つの本体が `vars` を
     引数として渡す先はこの 3 つだけである。<2>1 より、`vars` を引数として受け取らない本体は `vars` に
-    届かないので、その中の呼び出しの引数に `vars` は現れない。
+    届かない --- 自分で作った `VarTable` の値は `vars` ではない --- ので、その中の呼び出しの引数に
+    `vars` は現れない。
     BY <2>1, <2>2, <2>3, DEF 呼び出しの入れ子
 <1>1. `origin(vars, type_env, x, π)` の本体は 3 つの文である。`key` を `(x.clone(), π.to_vec())` として、
       `if let Some(known) = vars.origins.borrow().get(&key) { return known.clone(); }`、
@@ -396,6 +399,38 @@ enum については元と同じ変位で、その変位が保持する各値を
       `insert` は鍵を失わせない。
   BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
      CODE src/rc_ir/ownership.rs: origin, <1>1, DEF Map と Set
+<1>2a. `vars` を第 1 引数とする `origin` の呼び出しが起きるどの時点でも、`vars.bindings` は同じ値で
+       ある。
+  <2>1. `bindings` は `VarTable` の非公開の欄であり、`ownership.rs` の中で --- その
+        `#[cfg(test)] mod tests` を含めて --- この欄に触れるのは 5 か所だけである。書き手は 4 つ ---
+        `VarTable::empty` の `Map::default()`、`VarTable::of` の `vars.bindings.insert`、
+        `collect_bindings` の 3 つの `vars.bindings.insert`、`#[cfg(test)] mod tests` の `table` の
+        `vars.bindings.insert` --- であり、読み手は `origin_inner` の `vars.bindings.get(var)` 1 つで
+        ある。`ownership.rs` の外で `VarTable` を名指すのは `borrow.rs` だけであり、欄が非公開なので
+        そこからは触れない。
+    BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
+       CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: collect_bindings,
+       CODE src/rc_ir/ownership.rs: origin_inner
+  <2>2. `bindings` への書き込みは、`VarTable::of`、`VarTable::body_only`、または
+        `#[cfg(test)] mod tests` の `table` の 1 回の呼び出しの実行区間の中でだけ起きる。<2>1 の 4 つの
+        書き手のうち `VarTable::empty` と `collect_bindings` は `ownership.rs` の非公開の項目であり、
+        `VarTable::empty` を呼ぶのはこの 3 つだけ、`collect_bindings` を呼ぶのはこの 3 つのうち
+        `VarTable::of` と `VarTable::body_only`、および `collect_bindings` 自身だけである。
+    BY <2>1, CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
+       CODE src/rc_ir/ownership.rs: VarTable::body_only,
+       CODE src/rc_ir/ownership.rs: collect_bindings, DEF 呼び出しの入れ子, DEF 本体
+  <2>3. `VarTable` の値が作られるのは `VarTable::empty` の 1 か所だけなので、どの `VarTable` の値も
+        <2>2 の 3 つのいずれかの 1 回の呼び出しの中で作られる。その呼び出しの中で、その表を第 1 引数と
+        する `origin` の呼び出しは起きない --- <1>0a の前半より、その表に届く本体はそれを作った
+        `VarTable::of` (または `VarTable::body_only`、`table`) と、その表を引数として渡された
+        `collect_bindings` だけであり、<1>0 よりそのどれにも `origin` の呼び出しは書かれていない。
+    BY <1>0, <1>0a, <2>1, <2>2, CODE src/rc_ir/ownership.rs: VarTable::empty,
+       CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
+       CODE src/rc_ir/ownership.rs: collect_bindings
+  <2>4. QED
+    <2>3 より、`vars` を第 1 引数とする `origin` の呼び出しはどれも、`vars` を作った <2>2 の呼び出しが
+    返った後に起きる。<2>2 よりその後 `vars.bindings` への書き込みは無い。
+    BY <2>2, <2>3
 <1>3. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが直に行う、第 1 引数が `vars` である
       `origin` の呼び出しの鍵の集合は、`vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの集合は `vars.origins` の状態にも、
       その呼び出しが受け取る `origin` の返り値にも依らない。
@@ -471,11 +506,12 @@ enum については元と同じ変位で、その変位が保持する各値を
         `1 ≤ m - 1`)、`a` の中で始まるので `a` より始まる時刻が遅い。
     BY <1>1, <2>2, DEF 呼び出しの入れ子
   <2>4. `b` の中で、鍵が `d_1` の鍵 `k_1` である `origin` の呼び出し `b_1` が直に始まる。`a` と `b` は
-        どちらも外れであり鍵が `k` なので、<1>3 より 2 つが直に呼ぶ `origin` の鍵の集合は等しい。`d_1` は
+        どちらも外れであり鍵が `k` で、<1>2a より `a` の時点と `b` の時点で `vars.bindings` は等しい
+        ので、<1>3 より 2 つが直に呼ぶ `origin` の鍵の集合は等しい。`d_1` は
         `a` が直に呼ぶものなので、`k_1` はその集合の元であり、したがって `b` も鍵 `k_1` の `origin` を
         直に呼ぶ。`b_1` は `b` に真に含まれ、`b` は `d_1` に含まれる (`m = 1` のとき `b = d_1`) ので、
         `b_1` は `d_1` に真に含まれる。
-    BY <1>3, <2>2, <2>3, DEF 呼び出しの入れ子
+    BY <1>2a, <1>3, <2>2, <2>3, DEF 呼び出しの入れ子
   <2>5. CASE `b_1` が外れである。`(d_1, b_1)` は `c` の中の入れ子の対であり、<2>3 よりその外側 `d_1` が
         始まる時刻は `a` より遅い。これは <2>2 の取り方に反する。
     BY <2>2, <2>3, <2>4
