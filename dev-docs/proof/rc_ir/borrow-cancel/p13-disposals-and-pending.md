@@ -1392,7 +1392,7 @@ memo が当たった位置で止まる。`origin_inner` が呼ぶ相手を辿る
 <1>3. `vars.origins` に記録が書かれる順に `r_1, r_2, …` と番号を付け、`r_k` を書いた `origin` の
       呼び出しの引数を `a_k` と書く。各 `k` について、`E(a_k)` は有限であり、その値は `r_k` に
       記録された値に等しい。
-  BY <1>1, <1>2, A15, CODE src/rc_ir/ownership.rs: origin,
+  BY <1>1, <1>2, A3, A15, CODE src/rc_ir/ownership.rs: origin,
      CODE src/rc_ir/ownership.rs: origin_inner
   `k` についての強い帰納法による。<1>2 より記録は `origin_inner` から戻った後に書かれるので、
   `origin_inner(a_k)` の本体が行う `origin(b)` の呼び出しは、`r_k` より前に書かれた記録に当たって
@@ -1402,7 +1402,11 @@ memo が当たった位置で止まる。`origin_inner` が呼ぶ相手を辿る
   それが呼ぶ `origin` の返り値の関数なので、`E(a_k)` の値は `origin_inner(a_k)` が実際に返した値、
   すなわち `r_k` の値に等しい。`E(a_k)` の部分木はこれらの `E(b)` であり、<1>1 よりその個数は有限で、
   帰納法の仮定よりどれも有限なので、`E(a_k)` は有限である。`grow_stack` が本体をちょうど 1 回呼ぶ
-  ことは A15 による。
+  ことは A15 による。`E(a_k)` の値が 1 つに定まることは A3 による -- `origin_inner` の
+  `Binding::Llvm` の腕は `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を呼び、A3 は
+  「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」と
+  述べる。これが無いと `origin_inner` を同じ対に当てた 2 つの評価が違う値を返しうるので、`E(a_k)` の
+  値も、それが `r_k` に等しいことも定まらない。
 
 <1>4. QED
   BY <1>1, <1>2, <1>3
