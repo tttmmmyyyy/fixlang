@@ -66,6 +66,15 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 `ActRefs(v, π)` は D15 の `acted_references(v, π)` である。`VarPath` は対 `(FullName, FieldPath)` である
 (`CODE src/rc_ir/ast.rs: VarPath`)。等号はこの対の等号である。
 
+**DEF プログラムの束縛変数**
+P2 が第 1 の節で言う「プログラムの束縛変数」を、この文書は次の 2 種の名前と読む -- プログラムのいずれかの
+本体 (D23) について、**その本体の節点が束縛する変数** (D2)、および**その本体が関数の `body` であるときの
+その関数のパラメータ・capture**。D2 はパラメータと capture のスコープを本体の全体と定め、D23 は活性化の
+入力の束縛としてそれぞれに 1 つずつの値を挙げるので、この 2 種はどちらも本体の中で名前に値を束縛する。
+**この読みが要るのは、`VarTable::of` が `vars.bindings` にこの 2 種を入れるからである** -- P2 の第 2 の節
+(`vars.bindings` に束縛を持たない名前) はパラメータ・capture を覆わないので、覆う節は第 1 の節しか
+残らない。
+
 この文書は補題を `L0`、`L0a`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L4`、`L5a`、`L5`、`L6` (この順に並べる)、
 反例を `R1` と呼ぶ。**`BY` の行で
 引用してよいのは、それぞれの言明だけである。** 言明が複数の主張からなる補題は主張に (a)、(b)、… の名札を
@@ -246,9 +255,10 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
     P2 は、`x` がプログラムの束縛変数であるか `vars.bindings` に束縛を持たない名前であるような
     すべての `(x, π)` について、`π` を問わず `origin(vars, type_env, x, π)` が停止すると述べる。
     `vars.bindings` に記録を持つ名前は `VarTable::of` と `collect_bindings` が記録する名前、すなわち
-    この本体のパラメータ・capture と束縛変数であって、どれもプログラムの束縛変数である。記録を持たない
-    名前は P2 の第 2 の節に当たる。
-    BY P2, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+    この本体のパラメータ・capture と束縛変数であって、DEF プログラムの束縛変数 よりどちらも
+    プログラムの束縛変数である。記録を持たない名前は P2 の第 2 の節に当たる。
+    BY P2, DEF プログラムの束縛変数,
+       CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
   <2>1b. 鍵 `(x, π)` の cold な呼び出しの全体は、その鍵の記録を書く呼び出しの全体に等しい。
     `<1>1` より、記録を書くのは自分の検査で記録を見つけなかった呼び出し、すなわち `origin_inner` を
     評価する呼び出しであり、書き込みは `origin_inner` が返った後、その呼び出しが返る直前にある。
