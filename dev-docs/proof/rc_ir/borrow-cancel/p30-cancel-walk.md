@@ -1,9 +1,13 @@
-# P15 - P18: `cancel` の走査
+# P2a, P15 - P18: `cancel` の走査
 
-この文書は README の層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の定義 D1 - D34 と仮定
-A1 - A25 の上に立つ。層 1 と層 2 の命題は引用しない。
+この文書は README の層 1 の命題 P2a と、層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の定義
+D1 - D34 と仮定 A1 - A26 の上に立つ。P2a を除く層 1 の命題と、層 2 の命題は引用しない。
 
-対象コミットは `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` である。
+この文書が読んだコードのコミットは `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` である。README が証明の
+対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が引く 7 ファイル
+(`src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、`src/rc_ir/ast.rs`、`src/rc_ir/rename.rs`、
+`src/rc_ir/validate.rs`、`src/misc.rs`、`src/build/build_object_files.rs`) に変わったのは `// PROOF:`
+コメントだけである。
 
 P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P16 - P18 もその入力に対する走査についての
 言明なので、この文書は全体を通じて、`cancel` の引数 `prog` が `borrow_ify` の 1 回の呼び出しの返り値で
@@ -70,29 +74,35 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 `CancelAnalysis` の走査中に次の値を定める。
 
 - `ActRefs(t) :=` `self.acted_references(v, path)` の値、`ActRefs(r) :=` `self.acted_references(v, path)` の値。
-- `others(r) :=` `self.other_objects(v, path)` の値。
+- `others(r) :=` `self.other_objects(v, path)` が返す `Vec` の**元の集合**。並びを取らないのは、
+  `Origin::candidates` が `Join` の変位について `Set` の反復から `Vec` を作るからである
+  (DEF 引数で決まる関数)。走査がこの `Vec` を読むのは `consume_objects` の `objects.iter().any(..)` を
+  通してだけなので、元の集合が同じであれば作用は同じである (L6)。
 
 `CancelAnalysis::acted_references(v, path)` は `ownership::acted_references(self.vars, self.type_env, v, path)`
 の値を返す (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。すなわち `ActRefs(t)` は D15 の
 `ActRefs(v, path)` である。`self.vars` と `self.type_env` は `CancelAnalysis` の構築のときに置かれ、走査は
 この 2 つの欄を差し替えない (`CODE src/rc_ir/borrow.rs: CancelAnalysis`,
-`CODE src/rc_ir/borrow.rs: cancel`)。**上の 3 つの量が、走査のどの時点で読んでも同じ値であることは
+`CODE src/rc_ir/borrow.rs: cancel`)。**上の 3 つの量が、走査のどの時点で読んでも同じであることは
 L0 が示す。**
 
 ### DEF 参照の多重集合
 
 `References` は `Map<VarPath, usize>` を 1 つ持つ構造体である (`CODE src/rc_ir/ownership.rs: References`)。
-これを、鍵をオブジェクトの名前、値をその個数とする多重集合とみなす。次の記法を使う。
+これを、鍵を**位置** (`VarPath`)、値をその位置について数えた参照の個数とする多重集合とみなす。
+**鍵は D6 の位置であって D25 のオブジェクトではない。** コードの `References::shares_an_object`、
+`References::names`、`References::objects` は名前が「オブジェクト」と言うが、扱うのは `VarPath` の鍵で
+ある。次の記法を使う。
 
-- `R2 ⊆ R1` とは、各オブジェクトについて `R2` の個数が `R1` の個数以下であることをいう。
-- `R1 - R2` とは、各オブジェクトの個数の差である (`R2 ⊆ R1` のときだけ書く)。
+- `R2 ⊆ R1` とは、各位置について `R2` の個数が `R1` の個数以下であることをいう。
+- `R1 - R2` とは、各位置の個数の差である (`R2 ⊆ R1` のときだけ書く)。
 - **空**とは、参照を 1 つも持たないことをいう。
-- 2 つの `References` の値が**等しい**とは、`PartialEq` が真を返すこと、すなわち各オブジェクトの個数が
+- 2 つの `References` の値が**等しい**とは、`PartialEq` が真を返すこと、すなわち各位置の個数が
   一致することをいう。`References` は `PartialEq` を derive し、その中身は `Map` (`FxHashMap`) なので、
   等しさは鍵と値の対の集合の一致である (`CODE src/rc_ir/ownership.rs: References`,
   `CODE src/misc.rs: Map`)。
 
-`⊆` は推移的である (各オブジェクトの個数についての不等式の推移律)。
+`⊆` は推移的である (各位置の個数についての不等式の推移律)。
 
 ### DEF 割り当て
 
@@ -108,13 +118,41 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 占める番地はどれも他方の占める番地と相異なる。
 
 **この文書が節点の同一性に使うのは、`Arc<RcExpr>` が保持する `RcExpr` の番地である。** DEF Arc の契約 の
-最後の行より、その番地は先頭アドレスから強・弱カウントの分だけずれた、その割り当ての占める番地の 1 つで
-ある。
+最後の行より、その番地はその割り当ての占める番地の 1 つである。
 
 **この 2 つの語は D7 の語とは別の概念を指す。**「割り当てが解放される」「生存している」は、コンパイラの
 プロセスの中の Rust の `Arc` についての語である。D7 の「オブジェクトが解放される」は、コンパイルされた
 プログラムを実行したときのヒープオブジェクトの参照カウントが 0 になることをいう。この文書に現れるのは
 前者だけである。
+
+### DEF 引数で決まる関数
+
+関数の返り値が**引数で決まる**とは、引数の値が等しい 2 回の呼び出しが同じ値を返すことをいう。この文書は
+この性質を 3 つの群について使い、群ごとに根拠が違う。
+
+- **標準ライブラリの操作** --- `Map::get`、`Set`・`Vec`・`Map` の操作、`<[T]>::starts_with`、
+  `<[T]>::first`、`Clone::clone`、`Option` と `Iterator` の組み合わせ子。根拠は外部の結果であり、その
+  言明は `DEF Map と Set`、`DEF スライスの接頭と先頭`、`DEF Clone`、`DEF Vec::iter と slice::iter`、
+  `DEF Iterator::all と any`、`DEF Iterator::map と collect`、`DEF Iterator::filter_map` が述べる。
+  `Set` の反復の順序は定めないので、`Set` から作られるのは要素の集合であって並びではない。
+- **`LLVMGen::result_prov`** --- 根拠は **A3** の「`result_prov` と `borrows_operand` は決定的である ---
+  同じ引数に対して常に同じ値を返す」である。これは外部の結果ではないので、この文書はこれを使う段の `BY`
+  に A3 を挙げる。
+- **型と `Provenance` の上の関数** --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
+  `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
+  `Origin::identity`、`Origin::candidates`。この 8 つは型・path・`Provenance`・`Origin` の値だけを引数に
+  取り、`VarTable` も走査の状態も引数に取らない。根拠は、その本体が引数から到達できる値だけを読み、
+  可変な静的変数にも内部可変性を持つ値にも触れないことである
+  (`CODE src/ast/types.rs: TypeNode::is_box`,
+  `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at`,
+  `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`,
+  `CODE src/rc_ir/ownership.rs: as_arg_projection`, `CODE src/rc_ir/ownership.rs: truncate_to_unit`,
+  `CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`, `CODE src/rc_ir/ownership.rs: Origin::identity`,
+  `CODE src/rc_ir/ownership.rs: Origin::candidates`)。
+
+**この 8 つのうち 2 つは、並びではなく集合が決まる。** `Provenance::leaf_origins_under` が渡す要素は
+「順序を定めない」と宣言されているので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は
+`Join` の変位について `Set` の反復から `Vec` を作るので、引数で決まるのはその元の集合である。
 
 ### 外部の結果
 
@@ -125,23 +163,14 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 2 つの呼び出しの実行区間は、交わらないか、一方が他方に含まれるかのどちらかである。また、返る呼び出しの
 中で始まる呼び出しは有限個である。
 
-**DEF 引数で決まる関数**
-関数の返り値が**引数で決まる**とは、引数の値が等しい 2 回の呼び出しが同じ値を返すことをいう。
+**DEF 参照は引数を通ってだけ届く**
+safe Rust で書かれた関数の本体が名指せる値は、自分の引数 (`self` を含む) から到達できる値、自分が作った
+値、および `static` 項目の値だけである。よって、呼び出し先の本体が呼び出し元の局所変数に届くのは、その値
+かそれへの参照が引数として渡ったときに限る。
 
-`origin_inner` と `origin_from_leaves_under` の本体が呼ぶ関数は、`origin` と次のもので尽きる ---
-`Map::get`、`TypeNode::is_box`、`LLVMGen::result_prov`、`Provenance::leaf_origins_at`、
-`Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`Origin::acted_on`、
-`Origin::of_candidates`、`Set`・`Vec`・`Map` の操作、`Clone::clone`、および `Option` と `Iterator` の
-組み合わせ子 (`CODE src/rc_ir/ownership.rs: origin_inner`,
-`CODE src/rc_ir/ownership.rs: origin_from_leaves_under`)。**この一覧のどれも `origin` を呼ばない。**
-`acted_references` と `CancelAnalysis::other_objects` の本体が `origin` のほかに呼ぶのは、
-`boxed_leaf_paths`、`<[usize]>::starts_with`、`Origin::identity`、`Origin::candidates`、および `Map` と
-`Vec` の操作であり、これらも `origin` を呼ばない (`CODE src/rc_ir/ownership.rs: acted_references`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
-
-この文書は、**上に挙げたすべての関数の返り値が引数で決まること**を外部の結果として使う。どれも
-`VarTable` の `origins` の欄を引数に取らないので、この欄の状態はその返り値に届かない。`Set` の反復の
-順序は定めないので、`Set` から作られるのは要素の集合であって並びではない。
+**DEF static は Sync を要る**
+safe Rust の `static` 項目の型は `Sync` でなければならない。`Sync` は auto trait であり、`RefCell<T>` は
+`Sync` を実装しないので、`RefCell` の欄を持つ構造体も `Sync` でない。
 
 **DEF 型のサイズ**
 型の値が占める記憶域の大きさを、その型の**サイズ**という。構造体の各フィールドと、enum の 1 つの変位が
@@ -158,9 +187,8 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 なった後なので、ハンドルが 1 つでも在る間、そのブロックはアロケータへ返らない。
 
 `<Arc<T> as AsRef<T>>::as_ref` は、そのハンドルが指すブロックの中に置かれた `T` の値への共有参照を返す。
-ブロックは 2 つの強・弱カウントと `T` の値をこの順に持つので、返る参照の番地は先頭アドレスをカウントの
-分だけずらしたものである。`T` のサイズが 0 でないとき、その `T` の値が占める番地はそのブロックが占める
-番地であり、とくに返る参照の番地はそのブロックの占める番地の 1 つである。
+`T` のサイズが 0 でないとき、その `T` の値が占める番地はそのブロックが占める番地であり、とくに返る参照の
+番地はそのブロックの占める番地の 1 つである。
 
 **DEF アロケータの契約**
 アロケータが返した 2 つのメモリブロックが同時に *currently allocated* である (どちらもまだアロケータへ
@@ -184,6 +212,11 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 **DEF Vec::iter と slice::iter**
 `v.iter()` は、`Vec<T>` またはスライス `&[T]` の値 `v` の各要素への共有参照を、先頭から順にちょうど
 1 度ずつ渡す反復子である。
+
+**DEF スライスの接頭と先頭**
+`s.starts_with(p)` は、`s` の長さが `p` の長さ以上であり、`s` の先頭からの `p` の長さ個の要素が `p` の
+要素と順に等しいとき真、そうでないとき偽である。`s.first()` は、`s` が空でないときその第 0 要素への共有
+参照を `Some` で返し、空のとき `None` を返す。
 
 **DEF Iterator::all と any**
 `it.all(f)` は、`it` が渡すすべての要素について `f` が真を返すとき真であり、`f` が偽を返す要素が 1 つでも
@@ -238,10 +271,25 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 ものであり、その要素の集合は `it` の要素の集合に等しい。
 
 **DEF Clone**
-`<Vec<T> as Clone>::clone` は、元と同じ長さの新しい `Vec` を作り、その第 `i` 要素を元の第 `i` 要素の
-`<T as Clone>::clone` とする。`#[derive(Clone)]` が作る実装は、各フィールドをその型の `clone` で写した
-値を返す。`<usize as Clone>::clone` は同じ値を返す。`<Map<K, V> as Clone>::clone` は、元と同じ鍵を持ち、
-各鍵の値が元の値の `clone` である `Map` を返す。
+`<Vec<T> as Clone>::clone` と `<[T]>::to_vec` は、元と同じ長さの新しい `Vec` を作り、その第 `i` 要素を
+元の第 `i` 要素の `<T as Clone>::clone` とする。`<Set<K> as Clone>::clone` は、元の各要素の `clone` を
+要素とする `Set` を返す。`<Map<K, V> as Clone>::clone` は、元の各鍵の `clone` を鍵に持ち、各鍵の値が元の
+値の `clone` である `Map` を返す。`<usize as Clone>::clone`、`<bool as Clone>::clone`、
+`<String as Clone>::clone` は同じ値を返す。組 `(A, B)` の `clone` は各成分の `clone` の組である。
+`#[derive(Clone)]` が作る実装は、構造体については各フィールドをその型の `clone` で写した値を返し、
+enum については元と同じ変位で、その変位が保持する各値をその型の `clone` で写した値を返す。
+
+**この規則は等しさで閉じる。** 上に挙げた基底の型では `clone` は同じ値を返し、`Vec`・`Set`・`Map`・組・
+`#[derive(PartialEq)]` を持つ構造体と enum の等しさは成分ごとの等しさで決まるので、成分の `clone` が元と
+等しければ全体も元と等しい。
+
+`Origin` は `Clone` と `PartialEq` を derive した enum であり、変位 `Exactly` は `VarPath` を 1 つ、変位
+`Join` は `VarPath` と `Set<VarPath>` を保持する。`VarPath` は組 `(FullName, FieldPath)`、`FieldPath` は
+`Vec<usize>`、`FullName` は `Clone` と `PartialEq` を derive した構造体でそのフィールドは `NameSpace` と
+`String`、`NameSpace` は `Clone` を derive した構造体でそのフィールドは `Vec<String>` と `bool` である。
+よって `Origin` の値の `clone` も `VarPath` の値の `clone` も元と等しい
+(`CODE src/rc_ir/ownership.rs: Origin`, `CODE src/rc_ir/ast.rs: VarPath`, `CODE src/ast/name.rs: FullName`,
+`CODE src/ast/name.rs: NameSpace`)。
 
 `PendingRetain` は `Clone` を derive し、そのフィールドは `node: NodeId` (`usize` の別名) と
 `outstanding: References` である。`References` も `Clone` を derive し、そのフィールドは `Map` 1 つで
@@ -280,20 +328,66 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 `pending_in` と各 `arm_exits[j]` の全部であり、ほかの操作の入力は 1 つである。「追加」「消費」「引き」は
 状態をその場で書き換えるので、入力は書き換えの前の値、`P'` は後の値である。
 
-## 2. 予備の補題
+## 2. 予備の補題と P2a
 
 ### L0 (`origin` の返り値は memo に依らない)
 
-1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値 `type_env` を固定する。`vars` が構築された後に
-この 2 つを第 1・第 2 引数として行われる `origin` の呼び出しについて、次が成り立つ。
+1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値 `type_env` を固定する。以下この補題の中では、
+**呼び出し**も「`origin` の呼び出し」も、この 2 つを第 1・第 2 引数として行われる `origin` の呼び出しを
+指す。次が成り立つ。
 
 **鍵 `(x, π)` が等しい 2 つの呼び出しがどちらも値を返すならば、その 2 つの返り値は等しい。**
 
-したがって `ownership::acted_references(vars, type_env, v, π)` と `CancelAnalysis::other_objects(v, π)` の
-返り値も、走査のどの時点で読んでも同じである。
+したがって `ownership::acted_references(vars, type_env, v, π)` の返り値と、
+`CancelAnalysis::other_objects(v, π)` が返す `Vec` の元の集合も、走査のどの時点で読んでも同じである。
 
 **証明**
 
+<1>0. `origin` の呼び出しがこのクレートの中に書かれているのは 17 か所であり、それを含む関数は 12 個で
+      ある。`origin` は `ownership.rs` の `pub(crate)` の自由関数なので、その呼び出しはこのクレートの中に
+      しか書けない。12 個は、`ownership.rs` の `origin_inner` (6 か所)、`origin_from_leaves_under`
+      (1 か所)、`acted_references` (1 か所)、その `#[cfg(test)] mod tests` の `origin_of` と
+      `a_unit_read_out_of_a_container_keeps_the_containers_origin` (各 1 か所)、`borrow.rs` の
+      `infer_ownership`、`level_ownership`、`RewriteCtx::comes_from_a_value_used_later`、
+      `RewriteCtx::owns_unit`、`RewriteCtx::check_ownership_is_levelled`、`CancelAnalysis::consume`、
+      `CancelAnalysis::other_objects` (各 1 か所) である。DEF 本体 より、標準ライブラリの関数へ渡す
+      閉包の中に書かれた呼び出しもこの数え上げに入っている。
+  BY CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: origin_inner,
+     CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+     CODE src/rc_ir/ownership.rs: acted_references, CODE src/rc_ir/borrow.rs: infer_ownership,
+     CODE src/rc_ir/borrow.rs: level_ownership,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::comes_from_a_value_used_later,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 本体
+<1>0a. `VarTable` のどの値 `t` についても、`t` への参照を引数 (`self` を含む) として受け取らず `t` を
+       自分で作りもしない関数の本体は、`t` に届かない。したがって `origin(vars, ・, ・, ・)` の 1 回の
+       呼び出しの中で `vars` を引数として受け取る本体は、`origin`、`origin_inner`、
+       `origin_from_leaves_under` の 3 つだけである。
+  <2>1. 前半が成り立つ。`VarTable` は `origins: RefCell<Map<VarPath, Origin>>` の欄を持つので `Sync`
+        ではなく、DEF static は Sync を要る より `static` 項目に置けない。よって
+        DEF 参照は引数を通ってだけ届く より、関数の本体が `VarTable` のある値に届くのは、その値への参照が
+        引数 (`self` を含む) として渡ったときか、自分でその値を作ったときに限る。
+    BY CODE src/rc_ir/ownership.rs: VarTable, DEF static は Sync を要る,
+       DEF 参照は引数を通ってだけ届く
+  <2>2. `origin` の本体が `vars` を渡すのは `origin_inner(vars, type_env, var, path)` の 1 か所だけで
+        ある。ほかに `vars` が現れるのは `vars.origins.borrow()` と `vars.origins.borrow_mut()` で、
+        どちらも `RefCell` の欄への参照を渡すだけである。`origin_inner` の呼び出しは `grow_stack` へ渡す
+        閉包の中に書かれているが、DEF 本体 よりその閉包の本体は `origin` の本体の一部であり、A15 より
+        `grow_stack` はその閉包をちょうど 1 回呼ぶ。
+    BY CODE src/rc_ir/ownership.rs: origin, DEF 本体, A15
+  <2>3. `origin_inner` の本体が `vars` を渡すのは、6 か所の `origin(vars, ...)` と 1 か所の
+        `origin_from_leaves_under(vars, ...)` だけである。`origin_from_leaves_under` の本体が `vars` を
+        渡すのは 1 か所の `origin(vars, ...)` だけである。
+    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+  <2>4. QED
+    後半を、呼び出しの入れ子の深さについての帰納法で示す (DEF 呼び出しの入れ子)。根の呼び出し
+    `origin(vars, ・, ・, ・)` はこの 3 つの 1 つであり、<2>2 と <2>3 より、この 3 つの本体が `vars` を
+    引数として渡す先はこの 3 つだけである。<2>1 より、`vars` を引数として受け取らない本体は `vars` に
+    届かない --- 自分で作った `VarTable` の値は `vars` ではない --- ので、その中の呼び出しの引数に
+    `vars` は現れない。
+    BY <2>1, <2>2, <2>3, DEF 呼び出しの入れ子
 <1>1. `origin(vars, type_env, x, π)` の本体は 3 つの文である。`key` を `(x.clone(), π.to_vec())` として、
       `if let Some(known) = vars.origins.borrow().get(&key) { return known.clone(); }`、
       `let answer = grow_stack(|| origin_inner(vars, type_env, x, π));`、
@@ -301,8 +395,11 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
       **当たり**、第 1 の文で返らずに第 2 の文へ進む呼び出しを**外れ**と呼ぶ。この 2 つは呼び出しを
       尽くす。当たりの呼び出しは `vars.origins` の鍵 `key` の値の
       複製を返し、`origin` も `origin_inner` も呼ばない。外れの呼び出しは A15 より `origin_inner` を
-      ちょうど 1 回呼び、その値を鍵 `key` に `insert` してから返す。
-  BY CODE src/rc_ir/ownership.rs: origin, A15, DEF Map と Set
+      ちょうど 1 回呼び、その値を鍵 `key` に `insert` してから返す。`key` は `(x.clone(), π.to_vec())`
+      であり、`insert` に渡るのは `answer.clone()` で、当たりが返すのは `known.clone()` である。
+      DEF Clone より、`key` は `(x, π)` と等しく、`insert` に渡る値は返る値と等しく、当たりが返す値は
+      表が持つ値と等しい。
+  BY CODE src/rc_ir/ownership.rs: origin, A15, DEF Map と Set, DEF Clone
 <1>2. `vars.origins` の鍵の集合は増えるだけであり、鍵 `k` が入るのは、鍵が `k` である外れの呼び出しが
       `origin_inner` から戻った後に限る。`origins` は `VarTable` の非公開の欄であり、`ownership.rs` の
       中で --- その `#[cfg(test)] mod tests` を含めて --- この欄に触れるのは `VarTable::empty` の
@@ -310,15 +407,63 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
       `insert` は鍵を失わせない。
   BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
      CODE src/rc_ir/ownership.rs: origin, <1>1, DEF Map と Set
-<1>3. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが直に行う `origin` の呼び出しの鍵の集合は、
-      `vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの集合は `vars.origins` の状態にも、
-      その呼び出しが受け取る `origin` の返り値にも依らない。
-  <2>0. `origin_inner` の 1 回の呼び出しの中で `origin` の呼び出しが直に起きるのは、`origin_inner` の
-        本体に書かれた `origin(...)` と、それが呼ぶ `origin_from_leaves_under` の本体に書かれた
-        `origin(...)` を通ってだけである。DEF 引数で決まる関数 より、この 2 つの本体が呼ぶほかの関数は
-        どれも `origin` を呼ばない。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       DEF 引数で決まる関数, DEF 本体
+<1>2a. `vars` を第 1 引数とする `origin` の呼び出しが起きるどの時点でも、`vars.bindings` は同じ値で
+       ある。
+  <2>1. `bindings` は `VarTable` の非公開の欄であり、`ownership.rs` の中で --- その
+        `#[cfg(test)] mod tests` を含めて --- この欄に触れるのは 5 か所だけである。書き手は 4 つ ---
+        `VarTable::empty` の `Map::default()`、`VarTable::of` の `vars.bindings.insert`、
+        `collect_bindings` の 3 つの `vars.bindings.insert`、`#[cfg(test)] mod tests` の `table` の
+        `vars.bindings.insert` --- であり、読み手は `origin_inner` の `vars.bindings.get(var)` 1 つで
+        ある。`ownership.rs` の外で `VarTable` を名指すのは `borrow.rs` だけであり、欄が非公開なので
+        そこからは触れない。
+    BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
+       CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: collect_bindings,
+       CODE src/rc_ir/ownership.rs: origin_inner
+  <2>2. `bindings` への書き込みは、`VarTable::of`、`VarTable::body_only`、または
+        `#[cfg(test)] mod tests` の `table` の 1 回の呼び出しの実行区間の中でだけ起きる。<2>1 の 4 つの
+        書き手のうち `VarTable::empty` と `collect_bindings` は `ownership.rs` の非公開の項目であり、
+        `VarTable::empty` を呼ぶのはこの 3 つだけ、`collect_bindings` を呼ぶのはこの 3 つのうち
+        `VarTable::of` と `VarTable::body_only`、および `collect_bindings` 自身だけである。
+    BY <2>1, CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
+       CODE src/rc_ir/ownership.rs: VarTable::body_only,
+       CODE src/rc_ir/ownership.rs: collect_bindings, DEF 呼び出しの入れ子, DEF 本体
+  <2>3. `VarTable` の値が作られるのは `VarTable::empty` の 1 か所だけなので、どの `VarTable` の値も
+        <2>2 の 3 つのいずれかの 1 回の呼び出しの中で作られる。その呼び出しの中で、その表を第 1 引数と
+        する `origin` の呼び出しは起きない --- <1>0a の前半より、その表に届く本体はそれを作った
+        `VarTable::of` (または `VarTable::body_only`、`table`) と、その表を引数として渡された
+        `collect_bindings` だけであり、<1>0 よりそのどれにも `origin` の呼び出しは書かれていない。
+    BY <1>0, <1>0a, <2>1, <2>2, CODE src/rc_ir/ownership.rs: VarTable::empty,
+       CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
+       CODE src/rc_ir/ownership.rs: collect_bindings
+  <2>4. QED
+    <2>3 より、`vars` を第 1 引数とする `origin` の呼び出しはどれも、`vars` を作った <2>2 の呼び出しが
+    返った後に起きる。<2>2 よりその後 `vars.bindings` への書き込みは無い。
+    BY <2>2, <2>3
+<1>3. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが直に行う、第 1 引数が `vars` である
+      `origin` の呼び出しの鍵の集合は、`vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの
+      集合は `vars.origins` の状態にも、その呼び出しが受け取る `origin` の返り値にも依らない。
+  <2>0. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しの中で、第 1 引数が `vars` である `origin`
+        の呼び出しが直に (別の `origin` の呼び出しの中でなく) 起きるのは、`origin_inner` の本体に書かれた
+        6 か所と、それが呼ぶ `origin_from_leaves_under` の本体に書かれた 1 か所を通ってだけである。
+    <3>1. 第 1 引数が `vars` である `origin` の呼び出しは、`vars` を引数として受け取った本体の中に
+          書かれたものである。<1>0a より、その本体は `origin`、`origin_inner`、
+          `origin_from_leaves_under` の 3 つに限る。
+      BY <1>0a
+    <3>2. <1>0 の 17 か所のうち、この 3 つの本体に在るのは `origin_inner` の 6 か所と
+          `origin_from_leaves_under` の 1 か所である。`origin` の本体に `origin` の呼び出しは書かれて
+          いない。
+      BY <1>0
+    <3>3. `origin_from_leaves_under` は `ownership.rs` の非公開の自由関数であり、`ownership.rs` の中で
+          それを呼ぶのは `origin_inner` の 1 か所と `#[cfg(test)] mod tests` の 2 か所だけである。
+          `ownership.rs` は `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たないので、その呼び出しは
+          このファイルの中にしか書けない。
+      BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+         CODE src/rc_ir/ownership.rs: origin_inner, DEF 本体
+    <3>4. QED
+      <3>1 と <3>2 より、第 1 引数が `vars` である `origin` の呼び出しはこの 7 か所を通ってだけ起きる。
+      <3>3 より、この `origin_inner` の呼び出しの中で走る `origin_from_leaves_under` は、その本体が
+      呼んだものである。
+      BY <3>1, <3>2, <3>3
   <2>1. 本体は `vars.bindings.get(x)` による場合分けである。`None`、`Binding::Param`、
         `Binding::Producer` の腕、`Binding::Field(container, idx)` の `container` が boxed の枝、
         `Binding::Payload(scrut, Some(_))` の `scrut` が boxed の枝は、いずれも `here()` を返して
@@ -339,15 +484,17 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
         を呼ぶ。後者は `decl.leaf_origins_under(π)` と `args` と `type_env` から `Set` の値
         `operand_units` を作り、その各元 `(j, unit)` について鍵 `(args[j].name, unit)` の `origin` を
         1 回呼ぶ。DEF 引数で決まる関数 より、`decl` も `operand_units` も `vars.bindings.get(x)` が返した
-        束縛と `type_env` と `π` で決まる。`operand_units` は `Set` なので反復の順序は定まらないが、
-        呼ぶ鍵の集合は定まる。どの鍵も `origin` の返り値を読まない。
+        束縛と `type_env` と `π` で決まる。`decl` については A3 が、`arg_tys`・`leaf_origins_at`・
+        `leaf_origins_under`・`as_arg_projection`・`truncate_to_unit` については DEF 引数で決まる関数 が
+        与える。`operand_units` は `Set` なので反復の順序は定まらないが、呼ぶ鍵の集合は定まる。どの鍵も
+        `origin` の返り値を読まない。
     BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       CODE src/rc_ir/ownership.rs: as_arg_projection, DEF 引数で決まる関数
+       CODE src/rc_ir/ownership.rs: as_arg_projection, DEF 引数で決まる関数, A3
   <2>4. QED
     DEF 引数で決まる関数 より `vars.bindings.get(x)` の値は `vars.bindings` と `x` で決まる。`Binding` の
     変位は `Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、`Join` の 7 つであり、<2>1 から
-    <2>3 がこの 7 つと、`get` が `None` を返す場合を尽くす。<2>0 より、直に起きる `origin` の呼び出しは
-    この 2 つの本体に書かれたものだけである。
+    <2>3 がこの 7 つと、`get` が `None` を返す場合を尽くす。<2>0 より、第 1 引数が `vars` であって直に
+    起きる `origin` の呼び出しは、この 2 つの本体に書かれたものだけである。
     BY <2>0, <2>1, <2>2, <2>3, CODE src/rc_ir/ownership.rs: Binding, DEF 引数で決まる関数
 <1>4. 値を返す `origin` の呼び出し `c` について、`c` の中には、鍵が等しく一方が他方に真に含まれる 2 つの
       外れの `origin` の呼び出しは無い。ここで外側の候補には `c` 自身も数える。この 2 つ組を**入れ子の対**
@@ -367,11 +514,12 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
         `1 ≤ m - 1`)、`a` の中で始まるので `a` より始まる時刻が遅い。
     BY <1>1, <2>2, DEF 呼び出しの入れ子
   <2>4. `b` の中で、鍵が `d_1` の鍵 `k_1` である `origin` の呼び出し `b_1` が直に始まる。`a` と `b` は
-        どちらも外れであり鍵が `k` なので、<1>3 より 2 つが直に呼ぶ `origin` の鍵の集合は等しい。`d_1` は
+        どちらも外れであり鍵が `k` で、<1>2a より `a` の時点と `b` の時点で `vars.bindings` は等しい
+        ので、<1>3 より 2 つが直に呼ぶ `origin` の鍵の集合は等しい。`d_1` は
         `a` が直に呼ぶものなので、`k_1` はその集合の元であり、したがって `b` も鍵 `k_1` の `origin` を
         直に呼ぶ。`b_1` は `b` に真に含まれ、`b` は `d_1` に含まれる (`m = 1` のとき `b = d_1`) ので、
         `b_1` は `d_1` に真に含まれる。
-    BY <1>3, <2>2, <2>3, DEF 呼び出しの入れ子
+    BY <1>2a, <1>3, <2>2, <2>3, DEF 呼び出しの入れ子
   <2>5. CASE `b_1` が外れである。`(d_1, b_1)` は `c` の中の入れ子の対であり、<2>3 よりその外側 `d_1` が
         始まる時刻は `a` より遅い。これは <2>2 の取り方に反する。
     BY <2>2, <2>3, <2>4
@@ -403,17 +551,36 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
     BY <1>1, <1>2, <2>1, <2>2
 <1>6. QED
   鍵 `k` について値を返す呼び出しを考える。<1>5 より外れのものは高々 1 つであり、在るならその返り値を
-  `A` とする。当たりのものは <1>1 より `vars.origins` の鍵 `k` の値の複製を返し、<1>2 よりその値は鍵 `k` の
-  外れの呼び出しが `insert` で入れたもの、すなわち `A` である。よって鍵 `k` について値を返す呼び出しの
-  返り値はどれも `A` である。当たりのものが在って外れのものが無いことは、<1>2 より無い。
+  `A` とする。当たりのものは <1>1 より `vars.origins` の鍵 `k` の値と等しい値を返し、<1>2 よりその値は
+  鍵 `k` の外れの呼び出しが `insert` で入れたもの、すなわち `A` と等しい (DEF Clone)。よって鍵 `k` に
+  ついて値を返す呼び出しの返り値はどれも `A` と等しい。当たりのものが在って外れのものが無いことは、
+  <1>2 より無い。
 
   `ownership::acted_references(vars, type_env, v, π)` は、`boxed_leaf_paths(&v.ty, type_env)` のうち
   `π` を接頭辞に持つ各 leaf について `origin(vars, type_env, &v.name, &leaf)` の `identity` を数えたもので
-  あり、`CancelAnalysis::other_objects(v, π)` は同じ leaf について同じ `origin` を呼び、その `identity` と
-  `candidates` から値を作る。DEF 引数で決まる関数 より `boxed_leaf_paths`、`Origin::identity`、
-  `Origin::candidates` は引数で決まるので、この 2 つの返り値も `vars`、`type_env`、`v`、`π` だけで決まる。
+  あり、`CancelAnalysis::other_objects(v, π)` は同じ leaf について同じ `origin` を呼び、その `candidates`
+  のうち `identity` と異なるものを並べる。DEF 引数で決まる関数 より `boxed_leaf_paths` と
+  `Origin::identity` は引数で決まるので、`acted_references` の返り値は `vars`、`type_env`、`v`、`π` だけ
+  で決まる。`Origin::candidates` については引数で決まるのは元の集合だけなので (DEF 引数で決まる関数)、
+  `other_objects` について決まるのも、返る `Vec` の元の集合だけである。
   BY <1>1, <1>2, <1>5, CODE src/rc_ir/ownership.rs: acted_references,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数, DEF Clone
+
+### P2a (`origin` の答えは memo に依らない)
+
+**言明** --- 1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値を固定する。鍵 `(x, π)` が等しい 2 つの
+`origin` の呼び出しがどちらも値を返すならば、その 2 つの返り値は等しい。すなわち答えは `vars.origins` が
+保持する memo の状態に依らない。
+
+**証明**
+
+<1>1. QED
+  L0 は 1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値 `type_env` を固定し、その 2 つを第 1・
+  第 2 引数として行われる `origin` の呼び出しについて、鍵 `(x, π)` が等しい 2 つがどちらも値を返すならば
+  その 2 つの返り値が等しいことを述べる。P2a が固定するのも `VarTable` の値 1 つと `TypeEnv` の値 1 つで
+  あり、P2a が量化するのもその 2 つを第 1・第 2 引数とする `origin` の呼び出しである。よって L0 の言明は
+  P2a の言明である。
+  BY L0
 
 ### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ)
 
@@ -440,9 +607,9 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 
 1. `R.is_empty()` が真であることと `R` が空 (DEF 参照の多重集合) であることは同値である。
 2. `R1.covers(&R2)` が真であることと `R2 ⊆ R1` であることは同値である。
-3. `R1.shares_an_object(&R2)` が真であることと、`R1` と `R2` の双方が参照を持つオブジェクトが在ることは
-   同値である。また `R1.names(o)` が真であることと、`R1` が `o` の参照を持つことは同値である。
-   `R1.objects()` は `R1` が参照を持つオブジェクトをちょうど 1 度ずつ並べた列である。
+3. `R1.shares_an_object(&R2)` が真であることと、`R1` と `R2` の双方が参照を持つ位置が在ることは
+   同値である。また `R1.names(o)` が真であることと、`R1` が位置 `o` の参照を持つことは同値である。
+   `R1.objects()` は `R1` が参照を持つ位置をちょうど 1 度ずつ並べた列である。
 4. `R2 ⊆ R1` のとき `R1.subtract(&R2)` は `R1` を `R1 - R2` に書き換え、panic しない。また
    `R1 - R2 ⊆ R1` である。
 5. `CancelAnalysis::acted_references(v, path)` が値を返すとき、その値は空でない。すなわち、DEF 節点の量 の
@@ -461,7 +628,7 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 <1>3. **`R1.covers(&R2)` が真であるとき**、`R1.subtract(&R2)` は panic せず、`R2` の各鍵についての `R1` の
       値をその分だけ減らし、減らした結果が 0 になった鍵を取り除く。`R2` の鍵でない `R1` の鍵の値は変わら
       ない。よって、各鍵の値が 1 以上の `R1` を `covers` が真である `R2` で `subtract` した結果も各鍵の
-      値が 1 以上であり、その値は各オブジェクトの個数を `R2` の分だけ減らしたものである。
+      値が 1 以上であり、その値は各位置の個数を `R2` の分だけ減らしたものである。
 
       `subtract` の本体は `for (object, count) in &other.0 { let held_count = self.0.get_mut(object)
       .expect(...); *held_count -= count; if *held_count == 0 { self.0.remove(object); } }` である。
@@ -474,10 +641,10 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
   BY CODE src/rc_ir/ownership.rs: References::subtract, CODE src/rc_ir/ownership.rs: References::covers,
      DEF Map と Set, DEF Iterator::all と any
 <1>4. `References::covers(other)` は、`other` のどの鍵についても、自分がその鍵を持ちその値以上であることを
-      言う。各鍵の値が 1 以上のとき、これは各オブジェクトの個数の不等式、すなわち `other ⊆ self` と同値で
-      ある (`other` が持たないオブジェクトの個数は 0 で、不等式は自動的に成り立つ)。よって 2 が成り立つ。
+      言う。各鍵の値が 1 以上のとき、これは各位置の個数の不等式、すなわち `other ⊆ self` と同値で
+      ある (`other` が持たない位置の個数は 0 で、不等式は自動的に成り立つ)。よって 2 が成り立つ。
       また `covers` が真のとき、<1>3 より引き算は panic せず結果は `self - other` である。`R1 - R2` の各
-      オブジェクトの個数は `R1` のそれ以下なので `R1 - R2 ⊆ R1` である。よって 4 が成り立つ。
+      位置の個数は `R1` のそれ以下なので `R1 - R2 ⊆ R1` である。よって 4 が成り立つ。
   BY CODE src/rc_ir/ownership.rs: References::covers, <1>3, DEF Map と Set, DEF Iterator::all と any
 <1>5. `References::is_empty()` は内側の `Map` が空であることを言う。各鍵の値が 1 以上の `References` に
       ついて、これは参照を 1 つも持たないことと同値である。よって 1 が成り立つ。
@@ -487,7 +654,8 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
       `self.0.contains_key(object)` であり、`object` が自分の鍵であることを言う。`References::objects()` の
       本体は `self.0.keys().cloned().collect()` であり、DEF Map と Set より自分の各鍵の複製をちょうど
       1 度ずつ渡す反復子を `Vec` に並べたもの、すなわち自分の鍵を 1 度ずつ並べた列を返す。各鍵の値が 1 以上の
-      `References` について、鍵であることとその参照を 1 つ以上持つことは同値である。よって 3 が成り立つ。
+      `References` について、鍵であることとその位置の参照を 1 つ以上持つことは同値である。よって 3 が
+      成り立つ。
   BY CODE src/rc_ir/ownership.rs: References::shares_an_object,
      CODE src/rc_ir/ownership.rs: References::names, CODE src/rc_ir/ownership.rs: References::objects,
      <1>1, <1>3, DEF Map と Set, DEF Iterator::all と any, DEF Iterator::map と collect
@@ -666,8 +834,8 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 
 <1>1. `node_id(node)` は、`node.expr` の割り当ての占める番地の 1 つである。`node_id` の本体は
       `node.expr.as_ref() as *const RcExpr as NodeId` であり、`node.expr` の型は `Arc<RcExpr>` である。
-      DEF Arc の契約 の最後の行より、`as_ref` が返す参照の番地は、先頭アドレスから強・弱カウントの分だけ
-      ずれた、そのブロックの占める番地の 1 つである。この行の仮説
+      DEF Arc の契約 の最後の行より、`as_ref` が返す参照の番地は、そのブロックの占める番地の 1 つで
+      ある。この行の仮説
       「`T` のサイズが 0 でない」は満たされる --- `RcExpr` の変位 `Ret(RcVar)` は `RcVar` の値を保持し、
       `RcVar` は `skip_null_check: bool` のフィールドを持つ。DEF bool のサイズ より `bool` のサイズは
       1 であり、DEF 型のサイズ より `RcVar` のサイズは 1 以上、`RcExpr` のサイズも 1 以上である。
@@ -739,13 +907,51 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
             `x.clone()`、`args.clone()` は木の節点を持ち込まない。
         BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
            CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath
+      <4>2a. `route` と `call_rc` の 1 回の呼び出しは `expr_node` を実行しない。よって `RcExprNode` の
+             値を 1 つも作らない。
+        <5>1. `expr_node` は `borrow.rs` の非公開の自由関数であり、`borrow.rs` は `mod` 宣言を 1 つも
+              持たないので、その呼び出しは `borrow.rs` の中にしか書けない。`borrow.rs` の中で
+              `expr_node` を呼ぶのは、`RewriteCtx::rewrite_inner`、`rc_node`、`split_body_inner`、
+              `drop_nodes_inner` の 4 つの本体だけである。
+          BY CODE src/rc_ir/borrow.rs: expr_node, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+             CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: split_body_inner,
+             CODE src/rc_ir/borrow.rs: drop_nodes_inner, DEF 本体
+        <5>2. `route` または `call_rc` の 1 回の呼び出しの中で走る `borrow.rs` の関数は、この 2 つと
+              `RewriteCtx::routing_is_safe`、`RewriteCtx::routing_saves_retain`、
+              `RewriteCtx::any_owned_unit`、`RewriteCtx::owns_unit`、`RewriteCtx::owns_object`、
+              `RewriteCtx::comes_from_a_value_used_later`、`used_later`、`rhs_uses` で尽きる。
+              `borrow.rs` の関数としては、`route` は `routing_is_safe` と `routing_saves_retain` を、
+              `call_rc` は `owns_unit` を、`routing_is_safe` は `any_owned_unit` を、
+              `routing_saves_retain` は `used_later`、`owns_unit`、`comes_from_a_value_used_later` を、
+              `any_owned_unit` は `owns_unit` を、`owns_unit` は `owns_object` を、
+              `comes_from_a_value_used_later` は `used_later` を、`used_later` は `rhs_uses` と自身を、
+              `rhs_uses` は `used_later` を呼ぶ。`owns_object` が呼ぶ `borrow.rs` の関数は無い。
+              この 10 個の本体がほかに呼ぶのは `borrow.rs` の外の項目である --- `Map` と `Set` と `Vec` の
+              操作、`Clone::clone`、`Iterator` の組み合わせ子、`grow_stack`、`origin`、
+              `Origin::candidates`、`rc_units`、`units_under`、`truncate_to_unit`、`LLVMGen::free_vars`。
+              DEF 本体 より、この 10 個が標準ライブラリの関数へ渡す閉包の本体もこの数え上げに入っている。
+          BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::routing_is_safe,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::routing_saves_retain,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::any_owned_unit,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::comes_from_a_value_used_later,
+             CODE src/rc_ir/borrow.rs: used_later, CODE src/rc_ir/borrow.rs: rhs_uses, DEF 本体
+        <5>3. QED
+          <5>2 の 10 個はどれも <5>1 の 4 つではないので、その本体に `expr_node` の呼び出しは書かれて
+          いない。`borrow.rs` の外で定義された関数の本体は `borrow.rs` の中に無いので、<5>1 より
+          `expr_node` を呼べない。よって `route` と `call_rc` の呼び出しの中で `expr_node` は走らない。
+          `expr_node` は `Arc::new` を 1 つ作って `RcExprNode` を返す唯一の場所である (<2>1)。
+          BY <2>1, <5>1, <5>2, DEF 本体
       <4>3. QED
-        <4>1 の第 3 文から第 5 文が木を組み立て、その材料は `self.rewrite(k)` が返した木と、`prepend_rc`
-        と `expr_node` が作る節点だけである (<2>2、<4>2)。第 3 文の `prepend_rc(after, ...)` が作る節点は
-        `k` に、第 4 文の `expr_node` が作る節点は `app` に、第 5 文の `prepend_rc(before, ...)` が作る
-        節点は返り値に入り、`k` は `app` の中に、`app` は返り値の中にあるので、作った節点は 1 つ残らず
-        返り値の木に入る。
-        BY <2>2, <4>1, <4>2
+        <4>1 の第 1 文と第 2 文の `route` と `call_rc` は節点を作らない (<4>2a) ので、この腕がこの
+        呼び出しの中で作る節点は第 3 文から第 5 文のものだけである。第 3 文から第 5 文が木を組み立て、
+        その材料は `self.rewrite(k)` が返した木と、`prepend_rc` と `expr_node` が作る節点だけである
+        (<2>2、<4>2)。第 3 文の `prepend_rc(after, ...)` が作る節点は `k` に、第 4 文の `expr_node` が
+        作る節点は `app` に、第 5 文の `prepend_rc(before, ...)` が作る節点は返り値に入り、`k` は `app`
+        の中に、`app` は返り値の中にあるので、作った節点は 1 つ残らず返り値の木に入る。
+        BY <2>2, <4>1, <4>2, <4>2a
     <3>2. `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕は、`arms` の各 `arm` について
           `self.rewrite(&arm.body)` を 1 回ずつ呼び、`self.rewrite(k)` を 1 回呼び、`expr_node` で
           1 節点を積む。アームの列は `arms.iter().map(|arm| arm.with_body(self.rewrite(&arm.body))).collect()`
@@ -1038,13 +1244,13 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 
 ### L5 (`un_bump` の作用)
 
-要素 `e` が `References` の値 `R` と**オブジェクトを共有する**とは、`e.outstanding.shares_an_object(R)`
-が真であること、すなわち L2 の 3 より `e.outstanding` と `R` の双方が参照を持つオブジェクトが在ることを
-いう。
+要素 `e` が `References` の値 `R` と**位置を共有する**とは、`e.outstanding.shares_an_object(R)`
+が真であること、すなわち L2 の 3 より `e.outstanding` と `R` の双方が参照を持つ位置 (`VarPath`) が在る
+ことをいう。
 
 `un_bump(pending, un_bumped)` の 1 回の呼び出しについて、次の 3 つが成り立ち、この 3 つは場合を尽くす。
 
-1. `un_bumped` とオブジェクトを共有する要素が `pending` に無いとき、返り値は `NoBracket` であり、
+1. `un_bumped` と位置を共有する要素が `pending` に無いとき、返り値は `NoBracket` であり、
    `pending` は変わらない。
 2. あるとき、そのような要素の添字のうち最大のものを `i` とする。`pending[i].outstanding.covers(un_bumped)`
    が偽のとき、返り値は `OutsideBracket` であり、`pending` は変わらない。
@@ -1253,11 +1459,13 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       `others` として `self.consume_objects(&mut pending, &others)` を 1 回呼び (「消費」)、
       `un_bump(&mut pending, &un_bumped)` を 1 回呼び (「引き」)、その返り値が `OutsideBracket` のとき
       さらに `self.consume_objects(&mut pending, &objects)` を 1 回呼ぶ (「消費」)。その後
-      `self.walk(k, pending, returns_from_func)` の値を返す。`InBracket` の枝が触れるのは
-      `self.un_bump_releases` だけである。よって `pending(k)` は `pending(n)` に有限個の基本操作を
-      行ったものであり、`pending_out(n) = pending_out(k)` である。この腕はほかに `PendingRetains` の値を
-      作らない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕, L6, <1>1, <1>1a
+      `self.walk(k, pending, returns_from_func)` の値を返す。`un_bump` の返り値についての場合分けは
+      `UnBump` の 3 変位を尽くしており、`InBracket` の枝が触れるのは `self.un_bump_releases` だけ、
+      `NoBracket` の枝 (`UnBump::NoBracket => {}`) は何もしない。よって `pending(k)` は `pending(n)` に
+      有限個の基本操作を行ったものであり、`pending_out(n) = pending_out(k)` である。この腕はほかに
+      `PendingRetains` の値を作らない。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
+     CODE src/rc_ir/borrow.rs: UnBump, L6, <1>1, <1>1a
 <1>4. CASE `n` の式が `RcExpr::Let(_, RcRhs::Match(_, arms), k)` である。この腕は各アームについて
       `pending.clone()` (「複製」) を渡して `walk` を呼び、`pending` 自身は変えない。その後
       `self.merge(&pending, &arm_exits)` (「併合」) で `merged` を作り、
@@ -1616,15 +1824,16 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 
 ## 7. P17 (`un_bump` の正しさ)
 
-**言明** --- `un_bump(pending, R)` の返り値は次で決まる。`R` とオブジェクトを共有する要素が `pending` に
-無ければ `NoBracket` で、`pending` は変わらない。あって、そのうち最も後ろの要素 (最内) の `outstanding`
-が `R` を `covers` しなければ `OutsideBracket` で、`pending` は変わらない。covers すれば `InBracket(t)`
-で、`t` はその要素の `node` であり、その要素の `outstanding` から `R` が引かれ、空になればその要素が
-取り除かれる。他の要素は変わらない。
+**言明** --- `un_bump(pending, R)` の返り値は次で決まる。`R` と位置 (`VarPath`) を共有する要素が
+`pending` に無ければ `NoBracket` で、`pending` は変わらない。あって、そのうち最も後ろの要素 (最内) の
+`outstanding` が `R` を `covers` しなければ `OutsideBracket` で、`pending` は変わらない。covers すれば
+`InBracket(t)` で、`t` はその要素の `node` であり、その要素の `outstanding` から `R` が引かれ、空に
+なればその要素が取り除かれる。他の要素は変わらない。
 
-ここで「`R` とオブジェクトを共有する要素」とは、`e.outstanding.shares_an_object(R)` が真である要素で
-ある (L5 の冒頭)。判定に使われるのはその要素の現在の `outstanding` であって、由来の `Retain` が作った
-`ActRefs` ではない。
+ここで「`R` と位置を共有する要素」とは、`e.outstanding.shares_an_object(R)` が真である要素である
+(L5 の冒頭)。判定に使われるのはその要素の現在の `outstanding` であって、由来の `Retain` が作った
+`ActRefs` ではない。**`References` の鍵は D6 の位置であって D25 のオブジェクトではない**
+(DEF 参照の多重集合)。
 
 **証明**
 
@@ -1639,7 +1848,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 <1>2. L5 の 1 は、言明の第 1 の場合と条件も結論も一致する。
   BY L5
 <1>3. L5 の 2 と 3 の添字 `i` の要素は、言明の「最も後ろの要素 (最内)」である。L5 の `i` は、`R` と
-      オブジェクトを共有する要素の添字のうち最大のものだからである。
+      位置を共有する要素の添字のうち最大のものだからである。
   BY L5
 <1>4. L5 の 2 は言明の第 2 の場合と、L5 の 3 は言明の第 3 の場合と、条件も結論も一致する。L5 の 3 の
       「`pending[i].outstanding` は `pending[i].outstanding - un_bumped` になる」は言明の
@@ -1651,7 +1860,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
   BY L5, <1>1, <1>2, <1>3, <1>4
 
 「最内」の名は P16 の (d) が支える。走査の状態では、`pending` の並びは由来の訪問順なので、`R` と
-オブジェクトを共有する要素のうち添字が最大のものは、その中で由来が最も後に訪問された要素である。
+位置を共有する要素のうち添字が最大のものは、その中で由来が最も後に訪問された要素である。
 
 ## 8. P18 (`merge` の後に残るもの)
 
@@ -1769,13 +1978,14 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
 
 **証明**
 
-<1>1. 「`p` の上で真に前」は「`p` の上で直後」の推移閉包である。よって、`p` の上で `m'` が `m` の直後に
-      あるすべての対について「走査は `m` を `m'` より前に訪問する」を示せば足りる。
-  BY D3 (実行路は節点の有限列である)
-<1>1a. 本補題の仮定は P15 の言明の仮説である。P15 より、走査はこの本体の各位置をちょうど 1 回訪問するので、
-       各節点の「訪問」(DEF 訪問) は 1 つに定まり、「`m` を `m'` より前に訪問する」はその 1 つの訪問の
-       開始時刻の比較として読める。
+<1>0. 本補題の仮定は P15 の言明の仮説である。P15 より、走査はこの本体の各位置をちょうど 1 回訪問するので、
+      各節点の「訪問」(DEF 訪問) は 1 つに定まり、「`m` を `n` より前に訪問する」はその 1 つの訪問の
+      開始時刻の比較として読める。時刻の前後関係は推移的なので、この関係も推移的である。
   BY P15, 本補題の仮定, DEF 訪問
+<1>1. 「`p` の上で真に前」は「`p` の上で直後」の推移閉包である。<1>0 より結論側の関係は推移的なので、
+      `p` の上で `m'` が `m` の直後にあるすべての対について「走査は `m` を `m'` より前に訪問する」を
+      示せば足りる。
+  BY D3 (実行路は節点の有限列である), <1>0
 <1>2. CASE `m` の式が `RcExpr::Let(_, RcRhs::Match(_, arms), k)` である。
   <2>1. D3 より、`p` の上の `m` の直後の節点 `m'` は、`p` が選んだアーム `arm_i` の本体 `arm_i.body` で
         ある。
@@ -1835,20 +2045,20 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
     <3>5. QED
       <2>2 より `self.walk(&arm_i.body, ・, ・)` の呼び出しは `self.walk(k_M, ・, ・)` の呼び出しより
       前に返る。<3>2 より `m` の訪問はその前者の呼び出しの中で始まり、<3>3 と <3>4 より `k_M` の訪問は
-      その後者の呼び出しの中で始まる。<1>1a よりどちらの節点の訪問も 1 つに定まるので、`m` の訪問は
+      その後者の呼び出しの中で始まる。<1>0 よりどちらの節点の訪問も 1 つに定まるので、`m` の訪問は
       `k_M` の訪問より前に始まる (DEF 訪問)。
-      BY <1>1a, <2>2, <3>2, <3>3, <3>4, DEF 訪問
+      BY <1>0, <2>2, <3>2, <3>3, <3>4, DEF 訪問
   <2>4. QED
     BY <2>1, <2>2, <2>3
 <1>5. QED
   <1>2、<1>3、<1>4 は、`p` の上に直後の節点がある場合を尽くす。`RcExpr` の 6 変位のうち `Ret` 以外の
   5 つを <1>2 と <1>3 が尽くし、`Ret` を <1>4 が扱う。
-  BY <1>1, <1>1a, <1>2, <1>3, <1>4, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs
+  BY <1>0, <1>1, <1>2, <1>3, <1>4, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs
 
 ### L12 (`OutsideBracket` の後始末)
 
 `un_bump` が `OutsideBracket` を返したとき、`walk_inner` の `RcExpr::Release(v, path, _, k)` の腕は、
-`un_bumped` とオブジェクトを共有する `pending` の要素をすべて取り除き、その `node` を
+`un_bumped` と位置を共有する `pending` の要素をすべて取り除き、その `node` を
 `self.needed_retains` に入れる。取り除かれるのは `un_bump` が調べた最内の要素だけではない。
 
 **証明**
@@ -1856,11 +2066,11 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
 <1>1. この腕の `match un_bump(...)` の `UnBump::OutsideBracket` の枝は、`let objects = un_bumped.objects();`
       の後に `self.consume_objects(&mut pending, &objects)` を実行する。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕
-<1>2. L2 の 3 より `un_bumped.objects()` は `un_bumped` が参照を持つオブジェクトを 1 度ずつ並べた列で
+<1>2. L2 の 3 より `un_bumped.objects()` は `un_bumped` が参照を持つ位置を 1 度ずつ並べた列で
       ある。L6 より `consume_objects` はそのいずれかについて `outstanding.names` が真である要素をすべて
       取り除き、その `node` を `needed_retains` に入れる。L2 の 3 より、その条件は
       `outstanding.shares_an_object(un_bumped)` が真であること、すなわち L5 の意味で `un_bumped` と
-      オブジェクトを共有することと同値である。
+      位置を共有することと同値である。
   BY L2, L5, L6, <1>1
 <1>3. L5 の 2 より、`un_bump` が `OutsideBracket` を返すとき `pending` は変わらないので、<1>2 が見る
       `pending` は `un_bump` が見たものと同じである。`un_bump` が `covers` を検査したのはそのうち最内の
@@ -1887,15 +2097,15 @@ L9 の (ii) より空でなく (減ったのは各アームに渡った複製の
 2 つは食い違いうる。ある `Release` が P17 の第 3 の場合で最内の要素の `outstanding` を減らした後、
 `ActRefs` は覆うが `outstanding` は覆わない `un_bumped` を持つ `Release` が来ると、`covers` は偽になる。
 最内の要素を選ぶ `shares_an_object` の判定も同じく現在の `outstanding` で行われるので、部分的に un-bump
-された要素は、残った `outstanding` が名指すオブジェクトについてしか後続の `Release` と共有しない。
+された要素は、残った `outstanding` が名指す位置についてしか後続の `Release` と共有しない。
 
-第 2 に、`un_bump` はオブジェクトを共有する要素のうち最内のものしか調べないので、より外側の要素の
+第 2 に、`un_bump` は位置を共有する要素のうち最内のものしか調べないので、より外側の要素の
 `outstanding` が `un_bumped` を覆っていても `OutsideBracket` を返す。この場合の後始末は L12 が述べる ---
-`un_bumped` とオブジェクトを共有する要素は 1 つ残らず `needed_retains` に入る。`InBracket` の場合は、
+`un_bumped` と位置を共有する要素は 1 つ残らず `needed_retains` に入る。`InBracket` の場合は、
 外側の共有する要素は触られずに `pending` に残る。
 
 **注記 3 (`consume_objects` は列の途中からも取り除く)**。`consume_objects` は `Vec::retain` で、消費された
-オブジェクトを名指す要素を列のどの位置からも取り除く (L6)。取り除かれた要素の `node` は
+位置を名指す要素を列のどこからも取り除く (L6)。取り除かれた要素の `node` は
 `needed_retains` に入るので、それらは打ち消しの対象から外れる
 (`CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled` は `needed_retains` の要素を飛ばす)。残る要素の相対順序は変わらないので、
 P16 の (d) は保たれ、P17 の「最内」はその後も由来の訪問順で決まる。
@@ -1917,11 +2127,13 @@ P16 の (d) は保たれ、P17 の「最内」はその後も由来の訪問順�
 空のときに偽になり、そのとき返り値は空である。走査する本体にアームが 0 個の `Match` が無いことは L4 が
 述べ、その根拠は A9 である。P16 の (e3) の展開が (e1) か (e2) で終わることも A9 に依る。
 
-**注記 7 (層 4 が必要とする形)**。P19 は実行路で量化した言明である。P16 は実行路を量化しないので、P19 を
-示すには次の 2 つを繋ぐ必要がある。第 1 に、L11 (訪問順序は実行路の順序を含む) が、走査が状態を作る順序と
-実行路の順序を繋ぐ。第 2 に、P16 の (e) の (e3) の展開が `Match` のアームごとに分かれるので、「すべての
-実行路について」の場合分けの構造をそのまま与える。1 つの実行路は各 `Match` でアームを 1 つ選ぶので、
-(e3) の展開のうちその選択に沿った枝が、その実行路の上でどこで解消されたかを名指す。
+**注記 7 (層 4 が P16 と L11 から読むもの)**。P19 は実行路で量化した言明であり、P16 は実行路を量化
+しない。この文書が層 4 へ渡すのは次の 3 つである。
 
-`merge` を越えて残る要素については、P18 の証明の <1>5 が、その `outstanding` が各アームの出口での共通の
-値と等しいことを述べる。P16 の (b) と合わせると、それは由来の `ActRefs` に含まれ、空でない。
+- **L11** --- 実行路の上で `m` が `n` より真に前にあるならば、走査は `m` を `n` より前に訪問する。走査が
+  状態を作る順序と実行路の順序を繋ぐのはこの補題である。
+- **P16 の (e3)** --- その除去は `merge` によるものであり、各アームへ渡った複製の側に同じ `Retain` の
+  除去事象がある。1 つの実行路は各 `Match` でアームを 1 つ選ぶので (D3)、その選択に沿った 1 つが、その
+  実行路の上での除去事象を名指す。展開が有限で終わり、その葉が (e1) か (e2) であることも P16 が述べる。
+- **`merge` を越えて残る要素の `outstanding`** --- それは各アームの出口での共通の値と等しい (P18 の証明の
+  <1>5)。P16 の (b) と合わせると、それは由来の `ActRefs` に含まれ、空でない。
