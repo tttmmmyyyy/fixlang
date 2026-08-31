@@ -240,10 +240,25 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
 ものであり、その要素の集合は `it` の要素の集合に等しい。
 
 **DEF Clone**
-`<Vec<T> as Clone>::clone` は、元と同じ長さの新しい `Vec` を作り、その第 `i` 要素を元の第 `i` 要素の
-`<T as Clone>::clone` とする。`#[derive(Clone)]` が作る実装は、各フィールドをその型の `clone` で写した
-値を返す。`<usize as Clone>::clone` は同じ値を返す。`<Map<K, V> as Clone>::clone` は、元と同じ鍵を持ち、
-各鍵の値が元の値の `clone` である `Map` を返す。
+`<Vec<T> as Clone>::clone` と `<[T]>::to_vec` は、元と同じ長さの新しい `Vec` を作り、その第 `i` 要素を
+元の第 `i` 要素の `<T as Clone>::clone` とする。`<Set<K> as Clone>::clone` は、元の各要素の `clone` を
+要素とする `Set` を返す。`<Map<K, V> as Clone>::clone` は、元の各鍵の `clone` を鍵に持ち、各鍵の値が元の
+値の `clone` である `Map` を返す。`<usize as Clone>::clone`、`<bool as Clone>::clone`、
+`<String as Clone>::clone` は同じ値を返す。組 `(A, B)` の `clone` は各成分の `clone` の組である。
+`#[derive(Clone)]` が作る実装は、構造体については各フィールドをその型の `clone` で写した値を返し、
+enum については元と同じ変位で、その変位が保持する各値をその型の `clone` で写した値を返す。
+
+**この規則は等しさで閉じる。** 上に挙げた基底の型では `clone` は同じ値を返し、`Vec`・`Set`・`Map`・組・
+`#[derive(PartialEq)]` を持つ構造体と enum の等しさは成分ごとの等しさで決まるので、成分の `clone` が元と
+等しければ全体も元と等しい。
+
+`Origin` は `Clone` と `PartialEq` を derive した enum であり、変位 `Exactly` は `VarPath` を 1 つ、変位
+`Join` は `VarPath` と `Set<VarPath>` を保持する。`VarPath` は組 `(FullName, FieldPath)`、`FieldPath` は
+`Vec<usize>`、`FullName` は `Clone` と `PartialEq` を derive した構造体でそのフィールドは `NameSpace` と
+`String`、`NameSpace` は `Clone` を derive した構造体でそのフィールドは `Vec<String>` と `bool` である。
+よって `Origin` の値の `clone` も `VarPath` の値の `clone` も元と等しい
+(`CODE src/rc_ir/ownership.rs: Origin`, `CODE src/rc_ir/ast.rs: VarPath`, `CODE src/ast/name.rs: FullName`,
+`CODE src/ast/name.rs: NameSpace`)。
 
 `PendingRetain` は `Clone` を derive し、そのフィールドは `node: NodeId` (`usize` の別名) と
 `outstanding: References` である。`References` も `Clone` を derive し、そのフィールドは `Map` 1 つで
@@ -303,8 +318,11 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
       **当たり**、第 1 の文で返らずに第 2 の文へ進む呼び出しを**外れ**と呼ぶ。この 2 つは呼び出しを
       尽くす。当たりの呼び出しは `vars.origins` の鍵 `key` の値の
       複製を返し、`origin` も `origin_inner` も呼ばない。外れの呼び出しは A15 より `origin_inner` を
-      ちょうど 1 回呼び、その値を鍵 `key` に `insert` してから返す。
-  BY CODE src/rc_ir/ownership.rs: origin, A15, DEF Map と Set
+      ちょうど 1 回呼び、その値を鍵 `key` に `insert` してから返す。`key` は `(x.clone(), π.to_vec())`
+      であり、`insert` に渡るのは `answer.clone()` で、当たりが返すのは `known.clone()` である。
+      DEF Clone より、`key` は `(x, π)` と等しく、`insert` に渡る値は返る値と等しく、当たりが返す値は
+      表が持つ値と等しい。
+  BY CODE src/rc_ir/ownership.rs: origin, A15, DEF Map と Set, DEF Clone
 <1>2. `vars.origins` の鍵の集合は増えるだけであり、鍵 `k` が入るのは、鍵が `k` である外れの呼び出しが
       `origin_inner` から戻った後に限る。`origins` は `VarTable` の非公開の欄であり、`ownership.rs` の
       中で --- その `#[cfg(test)] mod tests` を含めて --- この欄に触れるのは `VarTable::empty` の
@@ -405,9 +423,10 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
     BY <1>1, <1>2, <2>1, <2>2
 <1>6. QED
   鍵 `k` について値を返す呼び出しを考える。<1>5 より外れのものは高々 1 つであり、在るならその返り値を
-  `A` とする。当たりのものは <1>1 より `vars.origins` の鍵 `k` の値の複製を返し、<1>2 よりその値は鍵 `k` の
-  外れの呼び出しが `insert` で入れたもの、すなわち `A` である。よって鍵 `k` について値を返す呼び出しの
-  返り値はどれも `A` である。当たりのものが在って外れのものが無いことは、<1>2 より無い。
+  `A` とする。当たりのものは <1>1 より `vars.origins` の鍵 `k` の値と等しい値を返し、<1>2 よりその値は
+  鍵 `k` の外れの呼び出しが `insert` で入れたもの、すなわち `A` と等しい (DEF Clone)。よって鍵 `k` に
+  ついて値を返す呼び出しの返り値はどれも `A` と等しい。当たりのものが在って外れのものが無いことは、
+  <1>2 より無い。
 
   `ownership::acted_references(vars, type_env, v, π)` は、`boxed_leaf_paths(&v.ty, type_env)` のうち
   `π` を接頭辞に持つ各 leaf について `origin(vars, type_env, &v.name, &leaf)` の `identity` を数えたもので
@@ -415,7 +434,7 @@ DEF アロケータの契約 より、同時に生存している相異なる 2 
   `candidates` から値を作る。DEF 引数で決まる関数 より `boxed_leaf_paths`、`Origin::identity`、
   `Origin::candidates` は引数で決まるので、この 2 つの返り値も `vars`、`type_env`、`v`、`π` だけで決まる。
   BY <1>1, <1>2, <1>5, CODE src/rc_ir/ownership.rs: acted_references,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数, DEF Clone
 
 ### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ)
 
