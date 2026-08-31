@@ -890,6 +890,123 @@ leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が
   その呼び出しは `I` の親であり、<1>1 よりそれも push の直後に `return` するので `I` は存在しない。
   どちらも矛盾である。よって `λ1` は `λ2` の真の前置ではない。`λ1` と `λ2` を入れ替えても同じである。
 
+#### L7a (`origin_inner` の腕は `origin` を何回呼ぶか)
+
+**言明**。`vars'` をプログラムのいずれかの本体 (D23) の `VarTable`、`x` をその本体に現れる変数、
+`λ ∈ boxed_leaf_paths(ty(x))` とする。`origin_inner(vars', type_env, x.name, λ)` は、
+`vars'.bindings.get(x.name)` に応じて次の 3 群のちょうど 1 つに入る。
+
+- **(a) `origin` を 1 回も呼ばない腕。** `None`、`Binding::Param`、`Binding::Producer`、`container` が
+  boxed である `Binding::Field(container, idx)`、`variant` が `Some` であって `scrut` が boxed である
+  `Binding::Payload(scrut, variant)`、そして `Binding::Llvm(llvm_gen, args, result_ty)` であって
+  `decl.leaf_origins_at(λ).and_then(as_arg_projection)` が `None` を返す枝。このいずれでも
+  `origin_inner` の値は `Origin::Exactly((x.name, λ))` である。
+- **(b) `origin` をちょうど 1 回呼び、その値をそのまま返す腕。** `Binding::Move(y)` は `(y, λ)` を、
+  `Binding::Llvm` であって `as_arg_projection` が `Some((j, p))` を返す枝は `(args[j], p)` を、
+  `container` が unbox である `Binding::Field(container, idx)` は `(container, [idx] ++ λ)` を、
+  `Binding::Payload(scrut, None)` は `(scrut, λ)` を、`variant` が `Some(tag)` であって `scrut` が
+  unbox である `Binding::Payload` は `(scrut, [tag] ++ λ)` を相手に呼ぶ。
+- **(c) `Binding::Join(arm_results)` の腕。** `arm_results` の各元 `arm_result` について
+  `origin(arm_result, λ)` を 1 回ずつ呼ぶ。`arm_results` は空でない。
+
+**この補題は本体を問わず、`ρ` も活性化も読まない。** 第 7.1 節が固定した `B` と `ρ` の外でも読める。
+`L16` が `borrow_ify` の出力の任意の版についてこれを読む。
+
+**(a) の `Llvm` の枝が `origin` を呼ばないことは A3 に立つ。** その枝が呼ぶ `origin_from_leaves_under`
+は `operand_units` の各元について `origin` を呼ぶので、A3 の「複数の元を宣言する op は存在しない」が
+無ければ `operand_units` は空とは限らない。
+
+**証明**
+
+<1>1. (a) の 6 つのうち `Llvm` の枝を除く 5 つ -- `None`、`Binding::Param`、`Binding::Producer`、
+      boxed 容器の `Binding::Field`、`variant` が `Some` であって boxed scrutinee の
+      `Binding::Payload` -- は `here()` を返し、`origin` を呼ばない。`here()` は
+      `Origin::Exactly((x.name, λ))` である。
+  BY CODE src/rc_ir/ownership.rs: origin_inner
+  `here` は `|| Origin::Exactly((var.clone(), path.to_vec()))` である。
+
+<1>2. `Binding::Llvm(llvm_gen, args, result_ty)` の腕について、`decl` は
+      `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` であり、`result_ty` は `ty(x)` である。
+      `decl` は `boxed_leaf_paths(ty(x), type_env)` の各元を鍵に持つ `LeafMap` を包み、
+      `decl.leaf_origins_at(λ)` は `Some(sources)` である。`sources` は元数 0 か 1 の集合である。
+  <2>1. `decl` の鍵の集合は `boxed_leaf_paths(ty(x), type_env)` である。
+    BY A3, CODE src/rc_ir/ownership.rs: origin_inner,
+       CODE src/rc_ir/ownership.rs: collect_bindings,
+       CODE src/rc_ir/provenance.rs: Provenance::build_shape,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape
+    `collect_bindings` は `RcRhs::Llvm(llvm_gen, args)` について `Binding::Llvm(llvm_gen.clone(),
+    args.clone(), x.ty.clone())` を作るので、`origin_inner` が `result_prov` に渡す `result_ty` は
+    `ty(x)` である。A3 より `result_prov` は結果の leaf ごとに `LeafOrigins` を宣言する。
+    `LeafMap::build_shape` は `boxed_leaf_paths(ty, type_env)` の各元を鍵にして値を置く。
+  <2>2. `leaf_origins_at(λ)` は `self.0.get(λ)` であり、`λ ∈ boxed_leaf_paths(ty(x))` なので
+        `Some` を返す。
+    BY <2>1, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::get
+  <2>3. QED
+    BY <2>1, <2>2, A3
+    A3 は「その 29 個が leaf に置く集合はすべて要素数 0 か 1 である」と述べ、複数の元を宣言する op が
+    このコミットのプログラムに存在しないことを仮定する。
+
+<1>3. `decl.leaf_origins_under(λ)` が渡す集合は、`<1>2` の `sources` ただ 1 つである。
+  BY <1>2, L7, A10, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+     CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under
+  `leaves_under(λ)` は鍵が `λ` を前置に持つ元だけを渡す。<1>2 より鍵は `boxed_leaf_paths(ty(x))` で
+  ある。`ty(x)` は本体に現れる変数の型、すなわちプログラムに現れる型なので A10 を満たし、L7 はその型に
+  ついて「`boxed_leaf_paths(τ, type_env)` の相異なる 2 元は、一方が他方の前置になることが無い」と
+  述べる。よってその中で `λ` を前置に持つのは `λ` 自身だけである。
+
+<1>4. `as_arg_projection` が `None` を返す枝では、`origin_from_leaves_under` の中の `operand_units` は
+      空であり、この枝は `origin` を 1 回も呼ばず、`origin_inner` の値は
+      `Origin::Exactly((x.name, λ))` である。
+  <2>1. `operand_units` は空である。
+    BY <1>2, <1>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       CODE src/rc_ir/ownership.rs: as_arg_projection
+    `operand_units` に元が入るのは `LeafOrigin::Arg(j, leaf)` の場合だけである。<1>2 より `sources` は
+    元数 0 か 1 であり、元数 1 でその元が `Arg` ならば `as_arg_projection` は `Some` を返すので、この
+    枝には来ない。よって `sources` は空集合か、`Fresh` か `Unknown` ただ 1 つである。
+  <2>2. この枝は `origin` を呼ばない。
+    BY <2>1, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+    `origin_from_leaves_under` が `origin` を呼ぶのは `operand_units` の各元についてだけである。
+  <2>3. QED
+    BY <2>1, <2>2, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       CODE src/rc_ir/ownership.rs: origin_inner
+    <2>1 より `reached` は、`produced_here` が偽なら空、真なら `[Origin::Exactly(here_identity)]` で
+    ある。ここで `here_identity = (x.name, λ)` である。空のとき `let first = reached.first()?;` が
+    `None` を返し、`origin_inner` の `unwrap_or_else(here)` が `here()` すなわち
+    `Origin::Exactly((x.name, λ))` を返す。1 元のときは
+    `reached.iter().all(|reached_origin| reached_origin == first)` が真なので `Some(first.clone())` を
+    返し、その値は `Origin::Exactly(here_identity)` である。
+
+<1>5. (b) の 5 つの腕は、それぞれ言明が挙げる相手について `origin` をちょうど 1 回呼び、その値を
+      そのまま腕の値とする。
+  BY CODE src/rc_ir/ownership.rs: origin_inner
+  `Binding::Move(y)` の腕は `origin(vars, type_env, &y.name, path)`、`Binding::Llvm` の `Some((j, p))`
+  の枝は `origin(vars, type_env, &args[j].name, &p)`、`container.ty.is_box` が偽である
+  `Binding::Field` の枝は `origin(vars, type_env, &container.name, &container_path)`
+  (`container_path = [idx] ++ path`)、`Binding::Payload` の `None` の枝は
+  `origin(vars, type_env, &scrut.name, path)`、`Some(tag)` かつ `scrut.ty.is_box` が偽の枝は
+  `origin(vars, type_env, &scrut.name, &scrut_path)` (`scrut_path = [tag] ++ path`) を、それぞれ腕の
+  値として返す。どの腕も `origin` の呼び出しをこの 1 か所しか持たない。
+
+<1>6. `Binding::Join(arm_results)` の腕は `arm_results` の各元について `origin` を 1 回ずつ呼ぶ。
+      `arm_results` は空でない。
+  BY A9, CODE src/rc_ir/ownership.rs: origin_inner,
+     CODE src/rc_ir/ownership.rs: collect_bindings,
+     CODE src/rc_ir/ownership.rs: returned_var
+  この腕は `for arm_result in arm_results` の中で
+  `origin(vars, type_env, &arm_result.name, path).acted_on()` を呼ぶ。`collect_bindings` は
+  `RcRhs::Match(scrut, arms)` の各 `arm` について `returned_var(&arm.body)` を `arm_results` に
+  push し、A9 よりすべての `Match` は 1 つ以上のアームを持つので `arm_results` は空でない。
+
+<1>7. QED
+  BY <1>1, <1>4, <1>5, <1>6, CODE src/rc_ir/ownership.rs: Binding,
+     CODE src/rc_ir/ownership.rs: origin_inner
+  `Binding` は 7 変位を持ち (`Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、`Join`)、
+  `origin_inner` の `match` はそれに `None` を加えた 8 つの腕を持つ。`Llvm` の腕は
+  `as_arg_projection` の返り値で 2 つに、`Field` の腕は `container.ty.is_box` で 2 つに、`Payload` の
+  腕は `variant` が `None` か `Some` か、`Some` のときは `scrut.ty.is_box` かで 3 つに分かれる。
+  この 12 の枝を (a) が 6 つ、(b) が 5 つ、(c) が 1 つに分けるので、3 群は場合を尽くす。
+
 #### L8 (`origin` の 1 段は inhabited を保つ)
 
 **言明**。`x` を `B` の変数、`λ ∈ boxed_leaf_paths(ty(x))` とする。次の 2 つが成り立つ。
@@ -1030,55 +1147,10 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
     (i) と (iii) と (iv) は <2>3 である。この腕は `origin` を呼ぶので (B) は空虚に成り立つ。
 
 <1>5. CASE `Some(Binding::Llvm(llvm_gen, args, result_ty))` であって
-      `decl.leaf_origins_at(path).and_then(as_arg_projection)` が `None` を返す。この腕は
-      `origin_from_leaves_under(vars, type_env, &decl, args, path, &here_identity)
-      .unwrap_or_else(here)` を返す。ここで `here_identity = (x.name, λ)` である。
-  <2>1. `decl` は `boxed_leaf_paths(ty(x), type_env)` の各元を鍵に持つ `LeafMap` を包み、
-        `decl.leaf_origins_at(path)` は `Some(sources)` である。`sources` は元数 0 か 1 の集合である。
-    <3>1. `decl` の鍵の集合は `boxed_leaf_paths(ty(x), type_env)` である。
-      BY A3, CODE src/rc_ir/ownership.rs: collect_bindings,
-         CODE src/rc_ir/provenance.rs: Provenance::build_shape,
-         CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape
-      `collect_bindings` は `Binding::Llvm` の第 3 成分に `x.ty` を置くので、`origin_inner` が
-      `result_prov` に渡す `result_ty` は `ty(x)` である。A3 より `result_prov` は結果の leaf ごとに
-      `LeafOrigins` を宣言する。`LeafMap::build_shape` は `boxed_leaf_paths(ty, type_env)` の各元を鍵に
-      して値を置く。
-    <3>2. `leaf_origins_at(path)` は `self.0.get(path)` であり、`path ∈ boxed_leaf_paths(ty(x))` なので
-          `Some` を返す。
-      BY <3>1, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
-         CODE src/rc_ir/leaf_map.rs: LeafMap::get
-    <3>3. QED
-      BY <3>1, <3>2, A3
-      A3 は「その 29 個が leaf に置く集合はすべて要素数 0 か 1 である」と述べ、複数の元を宣言する op が
-      このコミットのプログラムに存在しないことを仮定する。
-  <2>2. `decl.leaf_origins_under(path)` が渡す集合は、<2>1 の `sources` ただ 1 つである。
-    BY <2>1, L7, A10, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
-       CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under
-    `leaves_under(path)` は鍵が `path` を前置に持つ元だけを渡す。<2>1 より鍵は
-    `boxed_leaf_paths(ty(x))` である。`ty(x)` は本体に現れる変数の型、すなわちプログラムに現れる型
-    なので A10 を満たし、L7 はその型について「`boxed_leaf_paths(τ, type_env)` の相異なる 2 元は、
-    一方が他方の前置になることが無い」と述べる。よってその中で `path` を前置に持つのは `path` 自身
-    だけである。
-  <2>3. `origin_from_leaves_under` の中の `operand_units` は空である。
-    BY <2>1, <2>2, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       CODE src/rc_ir/ownership.rs: as_arg_projection
-    `operand_units` に元が入るのは `LeafOrigin::Arg(j, leaf)` の場合だけである。<2>1 より `sources` は
-    元数 0 か 1 であり、元数 1 でその元が `Arg` ならば `as_arg_projection` は `Some` を返すので、この
-    場合には来ない。よって `sources` は空集合か、`Fresh` か `Unknown` ただ 1 つである。
-  <2>4. この腕は `origin` を呼ばない。
-    BY <2>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
-    `origin_from_leaves_under` が `origin` を呼ぶのは `operand_units` の各元についてだけである。
-  <2>5. この腕の値は `Origin::Exactly((x.name, λ))` である。
-    BY <2>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       CODE src/rc_ir/ownership.rs: origin_inner
-    <2>3 より `reached` は、`produced_here` が偽なら空、真なら `[Origin::Exactly(here_identity)]` で
-    ある。空のとき `let first = reached.first()?;` が `None` を返し、`origin_inner` の
-    `unwrap_or_else(here)` が `here()` すなわち `Origin::Exactly((x.name, λ))` を返す。1 元のときは
-    `reached.iter().all(|reached_origin| reached_origin == first)` が真なので `Some(first.clone())` を
-    返し、その値は `Origin::Exactly(here_identity) = Origin::Exactly((x.name, λ))` である。
-  <2>6. QED
-    BY <2>4, <2>5
-    (A) は空虚に成り立ち、(B) は <2>5 である。
+      `decl.leaf_origins_at(path).and_then(as_arg_projection)` が `None` を返す。
+  BY L7a
+  L7a (a) より、この枝は `origin` を 1 回も呼ばず、その値は `Origin::Exactly((x.name, λ))` である。
+  よって (A) は空虚に成り立ち、(B) が成り立つ。
 
 <1>6. CASE `Some(Binding::Field(container, idx))`。
   <2>1. CASE `container.ty.is_box(type_env)` が真。この腕は `here()` すなわち
@@ -1411,13 +1483,13 @@ inhabited な leaf であることは同値である。
     `(u, σ) = (x.name, λ)` なので、3 つの主張はいずれも仮定そのものである。
 
 <1>5. QED
-  BY <1>1, <1>2, <1>3, <1>4, CODE src/rc_ir/ownership.rs: origin_inner,
-     CODE src/rc_ir/ownership.rs: Binding, CODE src/rc_ir/ownership.rs: Origin
-  `origin_inner` の `match` の腕は `None`/`Param`/`Producer`、`Move`、`Join`、`Llvm`、`Field`、
-  `Payload` である。`origin` を呼ばない腕 -- `None`/`Param`/`Producer`、`Llvm` の
-  `origin_from_leaves_under` の枝、boxed 容器の `Field` の枝、boxed scrutinee の `Payload` の枝 -- は
-  <1>1 が扱う。`origin` を 1 回呼んでその値を返す腕は <1>2 が扱う。`Binding::Join` の腕は
-  `of_candidates` の返り値が `Origin` の 2 変位のどちらかなので <1>3 と <1>4 で尽きる。
+  BY <1>1, <1>2, <1>3, <1>4, L7a, CODE src/rc_ir/ownership.rs: Origin
+  L7a は `origin_inner` の枝を 3 群に分け、その 3 つが場合を尽くすと述べる。(a) の 6 つ --
+  `None`/`Param`/`Producer`、boxed 容器の `Field` の枝、`variant` が `Some` であって boxed scrutinee の
+  `Payload` の枝、`Llvm` であって `as_arg_projection` が `None` を返す枝 -- は `origin` を 1 回も
+  呼ばないので <1>1 が扱う。(b) の 5 つは `origin` をちょうど 1 回呼んでその値をそのまま返すので
+  <1>2 が扱う。(c) の `Binding::Join` の腕は `of_candidates` の返り値が `Origin` の 2 変位のどちらかな
+  ので <1>3 と <1>4 で尽きる。
 
 #### L10 (名前の活性)
 
