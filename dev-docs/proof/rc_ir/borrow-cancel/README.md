@@ -2560,12 +2560,12 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 
 | 命題 | ファイル | T への寄与 | 証明 | 検証 |
 |---|---|---|---|---|
-| P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み (P1 は A10 を満たす型について) | 検証済み (指摘 17 件を反映)。**2 周目が要る** |
+| P1, P2 | `p10-leaves-and-units.md` | 有 | 証明済み (P1 は A10 を満たす型について) | 検証は 3 周 (直近の周の指摘 2 件、FALSE 1)。**4 周目が要る** |
 | P2a | `p30-cancel-walk.md` | 有 | 証明済み。局所補題 `L0` がその内容を持ち、命題を 1 つも引かずに閉じる | 未着手 |
-| P3, P4 | `p11-origin-soundness.md` | 有 | 証明済み (スロットが D8 の意味の参照を持つときについて) | 検証済み (指摘を反映)。**2 周目が要る** |
-| P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み (A16 の下で) | 検証済み (指摘 26 件を反映) |
-| P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 検証済み |
-| P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み (P6 は A16 の下で) | 検証済み |
+| P3, P4 | `p11-origin-soundness.md` | 有 | 証明済み (スロットが D8 の意味の参照を持つときについて) | 検証は 3 周 (直近の周の指摘 8 件、FALSE 0)。**4 周目が要る** |
+| P5 (a), (b) | `p12-identity-and-consumes.md` | 有 | 証明済み (A16 の下で) | 検証は 3 周 (直近の周の指摘 14 件、FALSE 0)。**4 周目が要る** |
+| P5 (c) | `p12-identity-and-consumes.md` | 有 | 証明済み | 検証は 3 周 (直近の周の指摘 14 件、FALSE 0)。**4 周目が要る** |
+| P6, P7 | `p12-identity-and-consumes.md` | 有 | 証明済み (P6 は A16 の下で) | 検証は 3 周 (直近の周の指摘 14 件、FALSE 0)。**4 周目が要る** |
 | P7e, P7d | `p15-ownership-uniformity.md` | 有 | 証明済み (P7e の言明は (a)/(b) に書き直した) | 検証は 2 周 (直近の周の指摘 10 件、FALSE 1)。**3 周目が要る** |
 | P7a | `p15-ownership-uniformity.md` | 有 | 証明済み (1 ⟹ 3 と 2 ⟹ 1) | 検証は 2 周 (直近の周の指摘 10 件、FALSE 1)。**3 周目が要る** |
 | P7c, P7f | `p13-disposals-and-pending.md` | 有 | 証明済み (P7c の言明は 2 度書き直した) | 検証済み (指摘 17 件を反映)。**3 周目が要る** |
