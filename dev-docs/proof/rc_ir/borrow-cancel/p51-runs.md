@@ -917,13 +917,14 @@ D11 を満たすとする。このとき次の 2 つが成り立つ。
       argument is actually a pointer to the type of the return value, and undefined behavior will occur
       if it is not」と述べる。すなわち番地は `boxed_to_retained_ptr` が渡したものであり、**A17 (i-b) が
       「`boxed_to_retained_ptr` が渡した番地について、環境はその参照を持ち、`boxed_from_retained_ptr` で
-      Fix の側へ返すまで処分しない」と言う。**その番地が指すオブジェクトを `o` とすると、環境が `o` への
-      未処分の参照を 1 つ持つので (D25 の 3 つ目の持ち手)、D8 より `H(o) ≥ 1` であり、`p` は解放について
-      閉じているので `o` は `p` で解放されていない。その形でない番地を渡す実行は、doc が言うとおりこの文書の
+      Fix の側へ返すまで処分しない」と言う。**その番地が指すオブジェクトを `o` とする。`o` がグローバル状態
+      (D26) ならば A8 より解放されない。`o` が計数下ならば、環境が `o` への未処分の参照を 1 つ持つので
+      (D25 の 3 つ目の持ち手)、D8 より `H(o) ≥ 1` であり、`p` は解放について閉じているので `o` は `p` で
+      解放されていない。その形でない番地を渡す実行は、doc が言うとおりこの文書の
       モデルの外にある。**この行は D24 の `H` の表の `InlineLLVMBoxedFromRetainedPtrIOS` の行でもある** --
       そこでは `H` は変わらず、環境が持っていた参照が `E` から `Obl(a)` へ渡るので、この段は新しい参照を
       作らない。
-      BY A3, A17, D8, D11a, D22, D24 (E2 の `H` の表), D25,
+      BY A3, A8, A17, D8, D11a, D22, D24 (E2 の `H` の表), D25, D26,
          CODE src/fixstd/builtin.rs: InlineLLVMBoxedFromRetainedPtrIOS,
          CODE src/fixstd/std.fix: boxed_from_retained_ptr, boxed_to_retained_ptr
     <3>0a. CASE op が `applies_a_function_operand` を宣言する。
@@ -1010,12 +1011,13 @@ D11 を満たすとする。このとき次の 2 つが成り立つ。
   (`CODE src/generator.rs: Generator::build_traverser_work_nonnull_boxed_with` --
   `obj.is_destructor_object()` の枝が `build_run_destructor` を `traverse_refs` の前に置く。
   `CODE src/generator.rs: Generator::build_run_destructor` -- `build_retain(dtor, one, ..)` が
-  `apply_lambda` の前に立つ)。D24 の (F) より、この解放が `o` の持つ参照を処分するのは `_dtor` の適用と
+  `apply_lambda` の前に立つ)。対象のオブジェクトがグローバル状態 (D26) ならば A8 より解放されない。
+  計数下ならば次のとおりである。D24 の (F) より、この解放が `o` の持つ参照を処分するのは `_dtor` の適用と
   `IO` の動作の往復の**後**なので、この retain の点で `o` はまだその参照を持っている。`o` は割り当てられて
   いて記憶域を返す前であり、D24 が「解放の中では `o` はまだ解放されておらず、走査は `o` を読む」と述べる
   ので、`o` は D25 の 2 つ目の持ち手である。A5 よりその leaf は参照を 1 つ持ち、D8 より対象のオブジェクトの
   `H` は 1 以上である。`p` は解放について閉じているので、対象は `p` で解放されていない。
-  BY A5, D8, D11a, D24 (F), D25,
+  BY A5, A8, D8, D11a, D24 (F), D25, D26,
      CODE src/generator.rs: Generator::build_run_destructor,
      Generator::build_traverser_work_nonnull_boxed_with
 
