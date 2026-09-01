@@ -186,7 +186,8 @@ README の A19 は (ii-a) と (ii-b) の果たす者に `insert_rc` を挙げる
 宣言し、`zero : () -> I` は boxed leaf を持たない結果を返す。どちらもオペランドを持たない。
 
 **名前の取り方。** 以下の骨格のパラメータと束縛変数の名前は、いずれも名前空間を持たないものを取る。
-関数 `f` と `main` は `prog.funcs` の鍵であり、A13 の最後の段落よりその名前は局所名ではない。
+関数 `f` と `main` は `prog.funcs` の鍵であり、A13 の「最上位の記号の名前は局所名ではない」の節より
+その名前は局所名ではない。
 
 骨格 `S_f` (関数 `f`、パラメータ `b : Arr`、`borrowed_units` は空、返り値の型 `I`):
 
@@ -233,7 +234,7 @@ Ret(w)))))
 <1>2. `p`、`u`、`w`、`z`、`b` の名前は `is_local` が真であり、`f` の名前は偽である。
   BY A13, 4.1 節の名前の取り方, CODE src/ast/name.rs: FullName::is_local
   `is_local` は名前空間が空かを答える。4.1 節の名前の取り方より `p`、`u`、`w`、`z`、`b` の名前は
-  名前空間を持たない。`f` は `prog.funcs` の鍵であり、A13 の最後の段落が「最上位の記号の名前は局所名
+  名前空間を持たない。`f` は `prog.funcs` の鍵であり、A13 は「最上位の記号の名前は局所名
   ではない」-- `FullName::is_local` が偽であり、`prog.funcs` の鍵はそのような名前である -- と述べる。
 
 <1>3. `insert_rc` は `main` について `RcInserter::insert_into_func(main)` を呼び、それは
@@ -1146,8 +1147,8 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   P12 より `route` が返す呼び出し先は、元の呼び出し先と同じ関数の版 (元の版そのものか、その
   `borrow_versions` の像) であるか、局所変数を経由する間接呼び出しでは呼び出し先そのものである。
   後者では名前が変わらない。前者で名前が変わるとき、元の名前は `borrow_ify` の入力の `funcs` の鍵で
-  あり、A13 の最後の段落よりそれは局所名ではない。返る名前は `borrow_funcref` が元の名前の最後の
-  断片に `#borrow` を足したものであり、名前空間の欄を書き替えない。`FullName::is_local` は名前空間が
+  あり、A13 の「最上位の記号の名前は局所名ではない」の節よりそれは局所名ではない。返る名前は
+  `borrow_funcref` が元の名前の最後の断片に `#borrow` を足したものであり、名前空間の欄を書き替えない。`FullName::is_local` は名前空間が
   空かを答えるので、返る名前も局所名ではない。一方 `insert_rc` が `Retain` を置くのは
   `insert_into_operation_let` の `if v.name.is_local()` の門の中と、`retain_if_live` の
   `var.name.is_local()` を要求する枝だけなので、`Retain(v, π)` の `v` は局所名である。よって
