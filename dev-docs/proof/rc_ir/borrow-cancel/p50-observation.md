@@ -916,6 +916,42 @@ DEF 共通接頭の段の中の対応 の下で、D30 の共通接頭が終わ�
        InlineLLVMArraySetCapacityBoundsUnchecked::generate,
        InlineLLVMArrayAppendCapacityUnchecked, InlineLLVMArrayAppendCapacityUnchecked::generate,
        InlineLLVMIsUniqueFunctionBody::generate, InlineLLVMArrayIsStorageUniqueBody::generate
+  <2>0a. `<2>0` の 4 か所が参照カウントを読むオブジェクトは、その分岐を含む op のオペランドの inhabited な
+        boxed leaf が指すオブジェクトである。`make_array_unique_with_hole` は渡された配列の
+        `get_array_storage` を、`make_struct_union_unique` は渡された値そのものを
+        `build_branch_by_is_unique` へ渡す。この 2 つを呼ぶのは `force_unique_or_assert_with_hole` だけで
+        あり (`force_unique_or_assert` はそこへ委譲する)、その呼び出し元は op の生成コードの 14 か所と、
+        `InlineLLVMArrayAppendCapacityUnchecked` と `InlineLLVMArrayCopyCapacityBoundsUnchecked` が呼ぶ
+        `array_tail_destination` の 1 か所である。14 か所は
+        `InlineLLVMArrayTruncateBoundsUnchecked`、`InlineLLVMArrayAppendValueCapacityUnchecked`、
+        `InlineLLVMArrayGrowSizeBody`、`InlineLLVMArraySetBody`、`InlineLLVMArraySwapBody`、
+        `InlineLLVMArrayPunchBody`、`InlineLLVMPunchedArrayPlugBody`、`InlineLLVMStructPunchBody`、
+        `InlineLLVMStructPlugInBody`、`InlineLLVMStructSetBody`、
+        `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、`InlineLLVMUnsafeMutateBoxedIOSInternalBody`、
+        `InlineLLVMArrayMutateElementsInternalBody`、`InlineLLVMArrayMutateElementsIosInternalBody` の
+        生成コードにある。**`InlineLLVMPunchedArrayPlugBody` を除く 13 か所と `array_tail_destination` は、
+        渡す値を `gc.get_scoped_obj(&self.<欄>)` で取る。** A12 より `Llvm` 節点の `args` の名前の列は
+        `gen.free_vars()` に等しいので、それはこの op のオペランドである。`InlineLLVMPunchedArrayPlugBody`
+        が渡すのは、オペランド `punched` から `move_out_struct_field` で取り出した `_arr` の欄であり、
+        `PunchedArray a = unbox struct { _arr : Array a, _idx : I64 }` の boxed leaf はその `_arr` の位置
+        1 つなので (D4 の規則 5 と規則 4)、これもオペランドの leaf である。残る 2 か所 --
+        `InlineLLVMArraySetCapacityBoundsUnchecked` の `force_unique` の枝と
+        `InlineLLVMArrayAppendCapacityUnchecked` が `src` について立てる分岐 -- は、どちらも
+        `gc.get_scoped_obj` で取ったオペランドの `get_array_storage` を `build_branch_by_is_unique` へ
+        渡す。L0 の `<1>3a` より配列の値の leaf `[]` が指すオブジェクトはその記憶域である。
+    BY A12, D4, L0, <2>0, CODE src/object.rs: get_array_storage,
+       CODE src/object.rs: ObjectFieldType::move_out_struct_field,
+       CODE src/fixstd/builtin.rs: force_unique_or_assert, force_unique_or_assert_with_hole,
+       array_tail_destination, make_array_unique_with_hole, make_struct_union_unique,
+       InlineLLVMArrayTruncateBoundsUnchecked, InlineLLVMArrayAppendValueCapacityUnchecked,
+       InlineLLVMArrayGrowSizeBody, InlineLLVMArraySetBody, InlineLLVMArraySwapBody,
+       InlineLLVMArrayPunchBody, InlineLLVMPunchedArrayPlugBody, InlineLLVMStructPunchBody,
+       InlineLLVMStructPlugInBody, InlineLLVMStructSetBody,
+       InlineLLVMUnsafeMutateBoxedInternalFunctionBody, InlineLLVMUnsafeMutateBoxedIOSInternalBody,
+       InlineLLVMArrayMutateElementsInternalBody, InlineLLVMArrayMutateElementsIosInternalBody,
+       InlineLLVMArraySetCapacityBoundsUnchecked, InlineLLVMArrayAppendCapacityUnchecked,
+       InlineLLVMArrayCopyCapacityBoundsUnchecked
+
   <2>1. `O` は計数下 (D26) である。`<2>0` の 4 か所はいずれも `build_branch_by_is_unique` を通り、その
         `global_bb` の腕は無条件に `shared_bb` へ跳ぶ。よってグローバル状態のオブジェクトはどちらの実行
         でも共有の腕を取り、分岐は違わない。**片方の実行でだけグローバル状態である場合は無い** -- D29 の
@@ -933,11 +969,9 @@ DEF 共通接頭の段の中の対応 の下で、D30 の共通接頭が終わ�
        CODE src/fixstd/builtin.rs: make_array_unique_with_hole, make_struct_union_unique,
        InlineLLVMArraySetCapacityBoundsUnchecked::generate,
        InlineLLVMArrayAppendCapacityUnchecked::generate
-  <2>2a. `H'(p, O) ≥ 1` である。`<2>0` の 4 か所はいずれも `Llvm` の op の生成コードの中にあり、`O` は
-        その op のオペランドの inhabited な boxed leaf が指すオブジェクトである --
-        `make_struct_union_unique` はオペランドの boxed な構造体・union そのものを、残る 3 か所は配列の
-        記憶域を読み、L0 の `<1>3a` より配列の値の leaf `[]` が指すオブジェクトはその記憶域である。D7 の
-        読む構文の表の `Llvm` の行より、その op はそのオブジェクトを読みうる。この命題の前提より `cancel`
+  <2>2a. `H'(p, O) ≥ 1` である。`<2>0a` より `O` はその分岐を含む op のオペランドの inhabited な boxed
+        leaf が指すオブジェクトであり、D7 の読む構文の表の `Llvm` の行より、その op はそのオブジェクトを
+        読みうる。この命題の前提より `cancel`
         の入力は `borrow_ify` の出力なので、P23 より `P'` は D12 を満たす。(S-c) の接頭条件 (D11a) は、
         D11a が「実行 (D24) の各時点と各段内の点で閉じていることは `p51-runs.md` の `L3` が示す」と書くことによる
         (`L3` が要る「すべての本体が D11 を満たす」は P23 が与える)。`p51 の DEF 段の素動作と段内の点` が
@@ -947,7 +981,7 @@ DEF 共通接頭の段の中の対応 の下で、D30 の共通接頭が終わ�
         粒度で読めるのは、D24 の (F) が「**解放は、それを起こした処分に付随して起きる。** 処分とその処分が
         起こす解放のあいだに段内の点は挟まらない」と述べるからである -- `H` が 0 でありながらまだ解放されて
         いない段内の点は無い。
-    BY D7, D11, D11a, D12, D24, L0, P23, p51 の DEF 段の素動作と段内の点, <2>0, <2>1
+    BY D7, D11, D11a, D12, D24, L0, P23, p51 の DEF 段の素動作と段内の点, <2>0, <2>0a, <2>1
   <2>3. QED
     `<2>1` と `<1>0` より L6 が読めて `H'(p, O) ≤ H(p, O)` である。`<2>2` より分岐は読んだカウントが 1 で
     あるかで決まるので、分岐が違うのは一方だけがカウント 1 を読むときである。`<2>2a` の `H'(p, O) ≥ 1` と
