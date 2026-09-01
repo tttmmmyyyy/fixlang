@@ -2462,8 +2462,8 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
 `Bmp_τ(id) := Σ_{p ∈ pending} B(p, ρ)[id]` (D27)、
 `Bsub_τ(id) := Σ_{id' ∈ Sub(id)} Bmp_τ(id')` と置く。
 
-**`Anc`・`id`・`Ids`・`Sub` は時点に依らない。** `origin` は `vars` と `type_env` だけの関数であり
-(D13)、ρ-歩みは `ρ` が各 `Match` で選ぶアームだけで決まる (D17) ので、`id(s)` も `Anc(s)` も
+**`Anc`・`id`・`Ids`・`Sub` は時点に依らない。** `origin` の答えは鍵ごとに 1 つに決まって memo の
+状態に依らず (D13、P2a)、ρ-歩みは `ρ` が各 `Match` で選ぶアームだけで決まる (D17) ので、`id(s)` も `Anc(s)` も
 `ρ` を辿る 1 つの活性化について固定される。上の 4 つの集合は `ρ` の上に**いつか**存在するすべての
 スロットを走る。時点に依るのは `μ_τ`・`Down_τ`・`Bmp_τ`・`Bsub_τ` の 4 つだけである。
 **まだ値を得ていないスロットは `μ_τ = 0` を寄せ** (`DEF 割り当て` の 6 種はいずれもその位置の
@@ -3339,9 +3339,9 @@ A19 の範囲は `borrow_ify` の入力、すなわち `split_rc_units` の出�
 
 **言明**。`B` を `P` の 1 つの本体、`B' = split_body(B)` とする。
 
-- **(a)** `B` と `B'` について `VarTable` は等しい。すなわち `collect_bindings` が作る `bindings`・
-  `var_tys`・`param_tys`・`closure_targets` は一致し、したがって `origin` の答え、`Origin::acted_on`、
-  `acted_references` は等しい。
+- **(a)** `B` と `B'` の `VarTable` について、`bindings` の鍵の集合と各鍵の束縛の形、`var_tys`、
+  `param_tys`、`closure_targets` は一致する。したがって、鍵が等しい 2 つの `origin` の呼び出しの
+  答えは等しく、`Origin::acted_on` と `acted_references` も引数が等しければ等しい。
 - **(b)** `B'` の実行路 (D3) と `B` の実行路は 1 対 1 に対応する。対応する 2 本の路は、写し
   (`L26` (b)) の列が同じであり、各 `Match` で同じアームを選ぶ。
 - **(c)** 対応する路 `ρ` と `ρ'` について、`ρ'` を辿る `B'` の各活性化 `α'` に対し、次の 3 つを持つ
@@ -3372,19 +3372,102 @@ A19 の範囲は `borrow_ify` の入力、すなわち `split_rc_units` の出�
 **証明**
 
 <1>1. (a)。
-  BY L26, CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var,
-     CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
-     CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: acted_references
-  `collect_bindings` の `RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Eval(_, k)`
-  の腕は `collect_bindings(k, vars)` を呼ぶだけで、`bindings`・`var_tys`・`param_tys`・
-  `closure_targets` に何も入れない。表に何かを入れるのは `Let` と `Destructure` の腕であり、`Match` の
-  腕は各アームの `payload` と `tag` と `returned_var(&arm.body)` を読む。`returned_var` は
-  `Retain`/`Release`/`Eval`/`Let`/`Destructure` の継続を辿って `Ret` の変数を返す。`L26` (b) より
-  `B'` は `B` の `Let`・`Destructure`・`Match` の構造と、各アームの `tag`・`payload`・
-  `payload_state`と、各 `Ret` の変数をそのまま持つので、2 つの表は一致する。`VarTable::of` はこれに
-  パラメータと capture の `Param` 束縛を足すだけであり、`L26` (a) より `params` と `capture` は変わら
-  ない。`origin(vars, type_env, var, path)` は `vars` と `type_env` だけの関数なので答えも一致し、
-  `acted_references` は `boxed_leaf_paths` と `origin` から定まるので一致する。
+  <2>1. 2 つの表の `bindings` の鍵の集合、`var_tys`、`param_tys`、`closure_targets` は等しい。
+        対応する各鍵の `Binding` は同じ構成子であり、`Move`・`Field`・`Payload`・`Join` の欄は
+        等しく、`Llvm` の欄は `args` の列と結果の型が等しく、`llvm_gen` は `B` の側のものを
+        `rhs.clone()` が写したものである。
+    BY L26, CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var,
+       CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
+       CODE src/rc_ir/borrow.rs: split_body_inner
+    `collect_bindings` の `RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Eval(_, k)`
+    の腕は `collect_bindings(k, vars)` を呼ぶだけで、`bindings`・`var_tys`・`param_tys`・
+    `closure_targets` に何も入れない。表に何かを入れるのは `Let` と `Destructure` の腕であり、`Match` の
+    腕は各アームの `payload` と `tag` と `returned_var(&arm.body)` を読む。`returned_var` は
+    `Retain`/`Release`/`Eval`/`Let`/`Destructure` の継続を辿って `Ret` の変数を返す。`L26` (b) より
+    `B'` は `B` の `Let`・`Destructure`・`Match` の構造と、各アームの `tag`・`payload`・
+    `payload_state` と、各 `Ret` の変数をそのまま持つので、2 つの表は上の形で一致する。`Llvm` の欄に
+    ついては、`split_body_inner` の `Let(x, rhs, k)` の腕が右辺に `rhs.clone()` を据えるので、
+    `B'` の側の `llvm_gen` は `B` の側のものの写しであり、`args` と結果の型 (`x.ty`) は等しい。
+    `VarTable::of` はこれにパラメータと capture の `Param` 束縛を足すだけであり、`L26` (a) より
+    `params` と `capture` は変わらない。
+  <2>2. 対応する 2 つの `Binding::Llvm` の欄について、
+        `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の返り値は等しい。ここで `arg_tys` は
+        `args` の各元の型の列である。
+    BY <2>1, A3
+    <2>1 より `args`・結果の型・`type_env` は 2 つの側で等しい。`rhs.clone()` は右辺を欄ごとに写す
+    ので、複製の各欄は原本のものに等しく、A3 の「`result_prov` と `borrows_operand` は自分の
+    `FullName` の欄を読まない」の節より、答えは `self` が持つ名前にも依らない。A3 の決定性の節 --
+    「`result_prov` と `borrows_operand` は決定的である -- 同じ引数に対して常に同じ値を返す」-- より、
+    2 つの呼び出しは同じ `Provenance` を返す。
+  <2>3. `Org_B(x, π)` を、`vars_B` と `type_env` を第 1・第 2 引数として `origin` が鍵 `(x, π)` に
+        返す値とする。この値は 1 つに決まり、`origin_inner(vars_B, type_env, x, π)` の値に等しい --
+        ただしその中の各 `origin` の呼び出しは、その鍵の `Org_B` を返すものとして読む。`vars_{B'}` に
+        ついて同じものを `Org_{B'}` と書く。
+    BY P2, P2a, CODE src/rc_ir/ownership.rs: origin
+    P2 より `origin` はこの引数について答えを返して停止し、P2a より鍵が等しい 2 つの呼び出しの返り値は
+    等しいので、値は `vars.origins` が保持する memo の状態に依らず 1 つに決まる。`origin` は memo に
+    鍵が無いとき `origin_inner` を走らせてその値を返すので、その鍵についての最初の呼び出しが等式を
+    与える。その中の各 `origin` の呼び出しが返す値は、P2a よりその鍵の `Org_B` である。
+  <2>4. 鍵 `(y, σ)` が `origin_inner(vars_B, type_env, x, π)` の中の `origin` の呼び出しで問われる
+        ことを `(y, σ) ≺ (x, π)` と書くと、`≺` は整礎である。
+    BY P2, CODE src/rc_ir/ownership.rs: origin
+    `origin` が memo に答えを書くのは `origin_inner` から戻った後である。`≺` に無限下降列があれば、
+    その列の頭の鍵についての最初の呼び出しは memo に当たる前に無限に潜り、停止しない。P2 は停止すると
+    述べる。
+  <2>5. P2 が範囲に入れる各鍵 `(x, π)` について `Org_B(x, π) = Org_{B'}(x, π)` である。
+    BY <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/ownership.rs: origin_inner,
+       CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       CODE src/rc_ir/ownership.rs: as_arg_projection,
+       CODE src/rc_ir/ownership.rs: truncate_to_unit,
+       CODE src/rc_ir/ownership.rs: Origin::acted_on,
+       CODE src/rc_ir/ownership.rs: Origin::of_candidates
+    `≺` (<2>4) の上の帰納である。鍵 `(x, π)` を取り、`(y, σ) ≺ (x, π)` である各鍵について
+    `Org_B(y, σ) = Org_{B'}(y, σ)` を仮定する。<2>3 より示すのは、2 つの表について `origin_inner` が
+    同じ値を返すことである。`origin_inner` はまず `vars.bindings.get(var)` で腕を選び、<2>1 より鍵の
+    集合と構成子は等しいので、2 つの側は同じ腕に入る。
+    - `None`・`Binding::Param`・`Binding::Producer` の腕は `Exactly((var, path))` を返す。引数だけで
+      決まるので等しい。
+    - `Binding::Move(y)` の腕は `origin(vars, type_env, &y.name, path)` を返す。<2>1 より `y` は等しく、
+      帰納法の仮定よりこの値は等しい。
+    - `Binding::Join(arm_results)` の腕は、各 `arm_result` について
+      `origin(vars, type_env, &arm_result.name, path).acted_on()` の元を `candidates` に入れ、
+      `Origin::of_candidates(candidates, &(var, path))` を返す。<2>1 より `arm_results` は等しく、
+      帰納法の仮定より各 `origin` の値は等しい。`acted_on` は `Origin` の値から決まるので
+      `candidates` は集合として等しく、`of_candidates` はその集合と第 2 引数から値を決めるので、
+      返り値は等しい。
+    - `Binding::Llvm(llvm_gen, args, result_ty)` の腕は、<2>2 より同じ `decl` を得る。
+      `decl.leaf_origins_at(path).and_then(as_arg_projection)` は `decl` と `path` から決まる。
+      `Some((j, p))` のときは `origin(vars, type_env, &args[j].name, &p)` を返し、<2>1 より `args` は
+      等しいので帰納法の仮定より値は等しい。`None` のときは
+      `origin_from_leaves_under(vars, type_env, &decl, args, path, &(var, path))` を呼び、それが
+      `None` を返せば `Exactly((var, path))` を返す。`origin_from_leaves_under` は
+      `decl.leaf_origins_under(path)` と `truncate_to_unit(&args[j].ty, leaf, type_env)` から
+      `operand_units` と `produced_here` を作り、各 `(j, unit)` について
+      `origin(vars, type_env, &args[j].name, &unit)` を集めて `reached` とし、`produced_here` のとき
+      `Exactly(here)` を足す。`operand_units` と `produced_here` は `decl`・`args` の型・`type_env`
+      から決まり、`origin` の値は帰納法の仮定より等しいので、`reached` の元の集合は 2 つの側で等しい。
+      返り値はその集合から決まる -- `reached` の元がすべて等しいときはその共通の値であり、そうでない
+      ときは各元の `acted_on` を集めた**集合**を `of_candidates` に渡したものである。どちらも
+      `reached` の並べ方に依らない。
+    - `Binding::Field(container, idx)` の腕は `container.ty.is_box(type_env)` で枝が分かれ、<2>1 より
+      `container` と `idx` は等しいので 2 つの側は同じ枝に入る。boxed の枝は `Exactly((var, path))` を
+      返し、unbox の枝は `origin(vars, type_env, &container.name, &([idx] ++ path))` を返すので、
+      帰納法の仮定より等しい。
+    - `Binding::Payload(scrut, variant)` の腕も同じ形である。<2>1 より `scrut` と `variant` は等しい
+      ので同じ枝に入り、`None` と `Some(tag)` (unbox) の枝は `origin` の値を返すので帰納法の仮定より
+      等しく、`Some(_)` (boxed) の枝は `Exactly((var, path))` を返す。
+    どの腕でも 2 つの側は同じ鍵を問い、同じ値を返す。
+  <2>6. QED
+    BY <2>1, <2>3, <2>5, CODE src/rc_ir/ownership.rs: Origin::identity,
+       CODE src/rc_ir/ownership.rs: Origin::acted_on,
+       CODE src/rc_ir/ownership.rs: acted_references,
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+    <2>1 が `bindings`・`var_tys`・`param_tys`・`closure_targets` についての節を、<2>3 と <2>5 が
+    `origin` の答えについての節を与える。`Origin::acted_on` は `Origin` の値から決まるので、答えが
+    等しければ等しい。`acted_references(vars, type_env, v, path)` は
+    `boxed_leaf_paths(&v.ty, type_env)` のうち `path` で始まる各 leaf の
+    `origin(vars, type_env, &v.name, &leaf).identity()` を数えたものであり、`boxed_leaf_paths` は型と
+    `type_env` から決まるので、引数が等しい 2 つの呼び出しの値は等しい。
 
 <1>2. (b)。
   BY L26, D3
