@@ -918,10 +918,11 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
         返す。返す木の位置は、それらの `self.rewrite` の呼び出しが返した木の位置と、この呼び出しの中で
         `expr_node` (`rc_node` と `prepend_rc` が呼ぶものを含む) が作った節点の**全体**である。すなわち、
         受け取った木も作った節点も 1 つ残らず返す木に入り、返す木にはそれ以外の位置が無い。
-    <3>1. `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕は `self.rewrite(k)` を 1 回呼び、その上に
-          `prepend_rc(after, true, ...)`、`expr_node(RcExpr::Let(...))`、`prepend_rc(before, false, ...)`
-          で節点を積む。返す木の位置は、その `self.rewrite(k)` が返した木の位置と、これらが積んだ節点の
-          全体である。
+    <3>1. `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕が `self.rewrite` を呼ぶのは
+          `self.rewrite(k)` の 1 回だけであり、その上に `prepend_rc(after, true, ...)`、
+          `expr_node(RcExpr::Let(...))`、`prepend_rc(before, false, ...)` で節点を積む。この腕に落ちる
+          節点の子は継続 `k` だけである (DEF 部分木)。返す木の位置は、その `self.rewrite(k)` が返した
+          木の位置と、これらが積んだ節点の全体である。
       <4>1. この腕の本体は 5 つの文である。`let callee = self.route(x, callee, args, k);`、
             `let (before, after) = self.call_rc(&callee, args);`、
             `let k = prepend_rc(after, true, self.rewrite(k));`、
@@ -935,13 +936,16 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
             `x.clone()`、`args.clone()` は木の節点を持ち込まない。
         BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
            CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath
-      <4>2a. `route` と `call_rc` の 1 回の呼び出しは `expr_node` を実行しない。よって `RcExprNode` の
-             値を 1 つも作らない。
-        <5>1. `expr_node` は `borrow.rs` の非公開の自由関数であり、`borrow.rs` は `mod` 宣言を 1 つも
-              持たないので、その呼び出しは `borrow.rs` の中にしか書けない。`borrow.rs` の中で
-              `expr_node` を呼ぶのは、`RewriteCtx::rewrite_inner`、`rc_node`、`split_body_inner`、
-              `drop_nodes_inner` の 4 つの本体だけである。
-          BY CODE src/rc_ir/borrow.rs: expr_node, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+      <4>2a. `route` と `call_rc` の 1 回の呼び出しは `expr_node` も `RewriteCtx::rewrite` も実行
+             しない。よって `RcExprNode` の値を 1 つも作らず、`self.rewrite` の呼び出しも 1 つも
+             起こさない。
+        <5>1. `expr_node` は `borrow.rs` の非公開の自由関数であり、`RewriteCtx::rewrite` は
+              `RewriteCtx` の非公開のメソッドである。`borrow.rs` は `mod` 宣言を 1 つも持たないので、
+              この 2 つが見える子モジュールも無く、その呼び出しは `borrow.rs` の中にしか書けない。
+              `borrow.rs` の中で `expr_node` を呼ぶのは、`RewriteCtx::rewrite_inner`、`rc_node`、
+              `split_body_inner`、`drop_nodes_inner` の 4 つの本体だけである。
+          BY CODE src/rc_ir/borrow.rs: expr_node, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite,
+             CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
              CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: split_body_inner,
              CODE src/rc_ir/borrow.rs: drop_nodes_inner, DEF 本体
         <5>2. `route` または `call_rc` の 1 回の呼び出しの中で走る `borrow.rs` の関数は、この 2 つと
@@ -968,18 +972,23 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
              CODE src/rc_ir/borrow.rs: used_later, CODE src/rc_ir/borrow.rs: rhs_uses, DEF 本体
         <5>3. QED
           <5>2 の 10 個はどれも <5>1 の 4 つではないので、その本体に `expr_node` の呼び出しは書かれて
-          いない。`borrow.rs` の外で定義された関数の本体は `borrow.rs` の中に無いので、<5>1 より
-          `expr_node` を呼べない。よって `route` と `call_rc` の呼び出しの中で `expr_node` は走らない。
+          いない。この 10 個に `RewriteCtx::rewrite` は無く、<5>2 はこの 2 つの呼び出しの中で走る
+          `borrow.rs` の関数を尽くしているので、`RewriteCtx::rewrite` も走らない。`borrow.rs` の外で
+          定義された関数の本体は `borrow.rs` の中に無いので、<5>1 よりそのどちらも呼べない。よって
+          `route` と `call_rc` の呼び出しの中で `expr_node` も `RewriteCtx::rewrite` も走らない。
           `expr_node` は `Arc::new` を 1 つ作って `RcExprNode` を返す唯一の場所である (<2>1)。
           BY <2>1, <5>1, <5>2, DEF 本体
       <4>3. QED
-        <4>1 の第 1 文と第 2 文の `route` と `call_rc` は節点を作らない (<4>2a) ので、この腕がこの
-        呼び出しの中で作る節点は第 3 文から第 5 文のものだけである。第 3 文から第 5 文が木を組み立て、
-        その材料は `self.rewrite(k)` が返した木と、`prepend_rc` と `expr_node` が作る節点だけである
-        (<2>2、<4>2)。第 3 文の `prepend_rc(after, ...)` が作る節点は `k` に、第 4 文の `expr_node` が
-        作る節点は `app` に、第 5 文の `prepend_rc(before, ...)` が作る節点は返り値に入り、`k` は `app`
-        の中に、`app` は返り値の中にあるので、作った節点は 1 つ残らず返り値の木に入る。
-        BY <2>2, <4>1, <4>2, <4>2a
+        <4>1 の第 1 文と第 2 文の `route` と `call_rc` は節点を作らず `self.rewrite` も呼ばない
+        (<4>2a) ので、この腕が `self.rewrite` を呼ぶのは第 3 文の `self.rewrite(k)` の 1 回だけであり、
+        この腕がこの呼び出しの中で作る節点は第 3 文から第 5 文のものだけである。DEF 部分木 より
+        この腕に落ちる節点の子は継続 `k` だけなので、`self.rewrite` はこの節点の各子についてちょうど
+        1 回ずつ呼ばれている。第 3 文から第 5 文が木を組み立て、その材料は `self.rewrite(k)` が返した
+        木と、`prepend_rc` と `expr_node` が作る節点だけである (<2>2、<4>2)。第 3 文の
+        `prepend_rc(after, ...)` が作る節点は `k` に、第 4 文の `expr_node` が作る節点は `app` に、
+        第 5 文の `prepend_rc(before, ...)` が作る節点は返り値に入り、`k` は `app` の中に、`app` は
+        返り値の中にあるので、作った節点は 1 つ残らず返り値の木に入る。
+        BY <2>2, <4>1, <4>2, <4>2a, DEF 部分木
     <3>2. `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕は、`arms` の各 `arm` について
           `self.rewrite(&arm.body)` を 1 回ずつ呼び、`self.rewrite(k)` を 1 回呼び、`expr_node` で
           1 節点を積む。アームの列は `arms.iter().map(|arm| arm.with_body(self.rewrite(&arm.body))).collect()`
