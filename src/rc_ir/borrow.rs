@@ -910,7 +910,7 @@ impl<'a> RewriteCtx<'a> {
     /// routing to it is both safe and beneficial; otherwise keep the original (the all-`Own` version,
     /// or an indirect callee this leaves untouched). `k` is the call's continuation, which the
     /// benefit test reads to tell an argument's last use from a use that outlives the call.
-    // PROOF: D/A, P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn route(&self, x: &RcVar, callee: &RcVar, args: &[RcVar], k: &RcExprNode) -> RcVar {
         let orig = FuncRef {
             name: callee.name.clone(),
