@@ -3433,11 +3433,13 @@ A19 の範囲は `borrow_ify` の入力、すなわち `split_rc_units` の出�
     鍵が無いとき `origin_inner` を走らせてその値を返すので、その鍵についての最初の呼び出しが等式を
     与える。その中の各 `origin` の呼び出しが返す値は、P2a よりその鍵の `Org_B` である。
   <2>4. 鍵 `(y, σ)` が `origin_inner(vars_B, type_env, x, π)` の中の `origin` の呼び出しで問われる
-        ことを `(y, σ) ≺ (x, π)` と書くと、`≺` は整礎である。
+        ことを `(y, σ) ≺ (x, π)` と書くと、P2 が範囲に入れる鍵の上で `≺` は整礎である。
     BY P2, CODE src/rc_ir/ownership.rs: origin
-    `origin` が memo に答えを書くのは `origin_inner` から戻った後である。`≺` に無限下降列があれば、
-    その列の頭の鍵についての最初の呼び出しは memo に当たる前に無限に潜り、停止しない。P2 は停止すると
-    述べる。
+    無限下降列 `k_0 ≻ k_1 ≻ …` があるとする。memo が空の状態から `k_0` について `origin` を呼ぶ
+    計算では、`k_1`・`k_2`・… の呼び出しはどれも memo に当たらない -- `origin` が memo に答えを書くのは
+    `origin_inner` から戻った後であり、この列の鍵はどれもその時点で呼び出しの入れ子の中に在って
+    戻っていないからである。よってその計算は `origin_inner` へ潜り続けて停止しない。P2 は `k_0` に
+    ついて `origin` が停止すると述べるので、そのような列は無い。
   <2>5. P2 が範囲に入れる各鍵 `(x, π)` について `Org_B(x, π) = Org_{B'}(x, π)` である。
     BY <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
