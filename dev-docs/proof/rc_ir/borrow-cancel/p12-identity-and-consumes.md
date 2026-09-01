@@ -126,8 +126,8 @@ P2 が第 1 の節で言う「プログラムの束縛変数」を、この文�
 
 ### DEF 路の位置
 
-1 つの活性化と、その中の 1 回の実行 (D21) を固定し、その実行が辿る実行路を `ρ` とする。名前 `x` が
-`ρ` の上で**値を得る**とは、次のいずれかをいう。
+1 つの活性化 (D21) -- 固定した本体の 1 回の計算 -- を固定し、それが辿る実行路 (D21) を `ρ` とする。
+名前 `x` が `ρ` の上で**値を得る**とは、次のいずれかをいう。
 
 - **(S1)** `x` がこの本体のパラメータか capture である。この場合、`x` は活性化の**入力の束縛** (D23) から
   値を得ており、本体の最初の節点の時点で既に値を持つ。本体がグローバル初期化子の `init` であるときは、
@@ -269,7 +269,8 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
         `origins: RefCell::default()`、`origin` の `vars.origins.borrow()`、`origin` の
         `vars.origins.borrow_mut()` である。(この列挙は `ownership.rs` の全体について識別子 `origins` を
         検索して得られる。得られるのは、`VarTable` の欄の宣言 `origins: RefCell<Map<VarPath, Origin>>`、
-        この 3 つの式、および doc コメントの中の散文 3 か所である。宣言は式ではない。
+        この 3 つの式、doc コメントの中の散文 3 か所、および `origin_from_leaves_under` の中の
+        `//` コメント 1 行である。宣言もコメントも式ではない。
         `leaf_origins_at` / `leaf_origins_under` は別の識別子である。)
     BY CODE src/rc_ir/ownership.rs: VarTable, VarTable::empty, origin
   <2>3. QED
