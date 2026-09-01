@@ -96,8 +96,15 @@ P2 が第 1 の節で言う「プログラムの束縛変数」を、この文�
   その間 呼び出し元は走らない。したがって 1 つのスレッドの上の 2 つの関数呼び出しの実行区間は、互いに
   素であるか、一方が他方に含まれるかのどちらかである。
 - **EXT `Send` と `Sync`**。Rust では `&T` が `Send` であることと `T` が `Sync` であることは同値であり、
-  `RefCell<T>` は `Sync` を実装しない。`Send` でない値は、スレッドをまたいで渡せない。
+  `RefCell<T>` は `Sync` を実装しない。**`Sync` は auto trait であり、明示の `unsafe impl` を持たない
+  構造体は、その欄の型がすべて `Sync` であるときに限って `Sync` を実装する。** `Send` でない値は、
+  スレッドをまたいで渡せない。
 - **EXT 借用規則**。Rust の借用規則は、値を move する時点にその値への参照が生きていることを許さない。
+- **EXT 可視性**。Rust では、`pub` の付かない欄を名指す式は、その欄を宣言するモジュールとその子孫の
+  中にしか書けない。
+- **EXT `RefCell` の内部可変性**。`RefCell<T>` が包む値を変更するには、その `RefCell` を名指して
+  `borrow_mut` を呼ぶか、`get_mut`・`replace`・`take` のように可変参照を要求する操作を呼ぶ必要がある。
+  共有参照からの読み (`borrow`) はその値を変更しない。
 
 ### A16 の 2 つの節
 
@@ -247,9 +254,10 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
   BY A15
 
 <1>3. `origins` の欄を変更するのは `<1>1` の記録だけである。
-  <2>1. `origins` は `VarTable` の非公開の欄である (`pub` が付かない)。Rust の可視性規則より、この欄を
-        名指す式は `ownership.rs` の中にしかない。
-    BY CODE src/rc_ir/ownership.rs: VarTable
+  <2>1. `origins` は `VarTable` の非公開の欄である (`pub` が付かない)。EXT 可視性 より、この欄を
+        名指す式は `ownership.rs` の中にしかない -- `VarTable` を宣言するモジュールは `ownership.rs` の
+        モジュールであり、その子孫は `#[cfg(test)]` の `tests` だけで、それもこのファイルの中にある。
+    BY EXT 可視性, CODE src/rc_ir/ownership.rs: VarTable, tests
   <2>2. `ownership.rs` の中でこの欄を名指す式は 3 つである。`VarTable::empty` の
         `origins: RefCell::default()`、`origin` の `vars.origins.borrow()`、`origin` の
         `vars.origins.borrow_mut()` である。(この列挙は `ownership.rs` の全体について識別子 `origins` を
@@ -258,10 +266,11 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
         `leaf_origins_at` / `leaf_origins_under` は別の識別子である。)
     BY CODE src/rc_ir/ownership.rs: VarTable, VarTable::empty, origin
   <2>3. QED
-    `RefCell<Map<..>>` の中身を変更するには `borrow_mut` を通る必要があるので、`<2>1` と `<2>2` より
-    変更は `VarTable::empty` の初期化 (空の写像) と `origin` の `insert` だけであり、後者が `<1>1` の
-    記録である。
-    BY <2>1, <2>2
+    EXT `RefCell` の内部可変性 より、`RefCell<Map<..>>` が包む写像を変更するには、その `RefCell` を
+    名指す式を通る必要がある。`<2>1` と `<2>2` よりその式は 3 つであり、`origin` の `vars.origins.borrow()`
+    は読みなので変更しない。残るのは `VarTable::empty` の初期化 (空の写像) と `origin` の
+    `vars.origins.borrow_mut()` に続く `insert` だけであり、後者が `<1>1` の記録である。
+    BY EXT `RefCell` の内部可変性, <2>1, <2>2
 
 <1>3a. 鍵 `(x, π)` について、cold な呼び出しは高々 1 つであり、`<1>1` の記録も高々 1 度しか書かれない。
   <2>1. 記録は取り除かれない。`<1>3` より `origins` を変更するのは `<1>1` の `insert` だけである。
@@ -282,9 +291,10 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
   <2>2. 1 つの `vars` を引数に取る 2 つの `origin` の呼び出しが別々のスレッドの上にあるならば、その
         2 つの実行区間は互いに素である。
     <3>1. 1 つの `VarTable` への参照を 2 つのスレッドが同時に持つことはない。`VarTable` は
-          `origins: RefCell<Map<VarPath, Origin>>` の欄を持つ。EXT `Send` と `Sync` より `RefCell<T>` は
-          `Sync` を実装しないので `VarTable` も `Sync` を実装せず、`&VarTable` は `Send` ではないので
-          スレッドをまたいで渡せない。
+          `origins: RefCell<Map<VarPath, Origin>>` の欄を持ち、`Sync` の `unsafe impl` を持たない。
+          EXT `Send` と `Sync` より `RefCell<T>` は `Sync` を実装せず、`Sync` は auto trait なので
+          その欄を持つ `VarTable` も `Sync` を実装しない。同じ結果より `&VarTable` は `Send` では
+          ないので、スレッドをまたいで渡せない。
       BY EXT `Send` と `Sync`, CODE src/rc_ir/ownership.rs: VarTable
     <3>2. `origin` は `vars: &VarTable` を引数に取り、その呼び出しの実行区間の間ずっとこの参照を保持
           する。
