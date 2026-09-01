@@ -130,9 +130,13 @@ P2 が第 1 の節で言う「プログラムの束縛変数」を、この文�
 - **(S3)** `Let(m, Match(s, arms), k)` の形の節点が `ρ` の上にあり、`ρ` を辿る実行がその `Match` で選ぶ
   アーム `a` の `payload` が `x` である。
 - **(S4)** `x` が `vars.bindings` に無い名前であり、`ρ` の上のある節点に現れる (D6 が値を得る第 3 の形
-  として挙げるものである)。`VarTable::of` はパラメータ・capture と、`collect_bindings` が歩く本体の
-  すべての束縛を記録するので、この場合の `x` は本体が束縛しない名前である
-  (A11、`CODE src/rc_ir/ownership.rs: VarTable::of`, `collect_bindings`)。D6 より、束縛を持たない名前は
+  として挙げるものである)。表を作るのは、本体が関数の `body` なら `VarTable::of`、グローバル初期化子の
+  `init` なら `VarTable::body_only` である (§1)。前者はパラメータ・capture を記録したうえで
+  `collect_bindings` を呼び、後者は `collect_bindings` を呼ぶだけである -- D1 より `init` は
+  パラメータも capture も持たないので、記録しうるものがそれで尽きる。どちらでも `collect_bindings` が
+  歩く本体のすべての束縛が表に入るので、この場合の `x` は本体が束縛しない名前である
+  (A11、D1、`CODE src/rc_ir/ownership.rs: VarTable::of`, `VarTable::body_only`,
+  `collect_bindings`)。D6 より、束縛を持たない名前は
   必ず最上位の記号の名前 -- D1 の `globals` の記号か `funcs` の記号 -- であり、その値はその記号の値で
   ある。**節点に現れることを条件に置くのは、記号の位置が値を持つのがその記号のグローバル化の段より後の
   時点だからである** (D6)。D6 は同じ節で、`x` を読む節点は必ず値を読むこと -- まだ初期化されていなければ
@@ -752,9 +756,12 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
   `Destructure(c, fs, s, k)` で `(i, f) ∈ fs`、`Let(m, Match(s, arms), k)` の `tag = Some(t)` のアーム、
   同じ節点の catch-all アーム、`Let(x, Llvm(gen, args), k)` である。`<1>1` から `<1>4` より
   `collect_bindings` はそのそれぞれについて、辺の終点の変数に (B) の構成子を記録する。辺の終点の変数は
-  この本体が束縛する変数であり、A6 より束縛変数の名前は相異なるので、`collect_bindings` の他の記録も
-  `VarTable::of` が作る `Param` の記録も、同じ名前に別の値を入れない。
-  BY A6, <1>1, <1>2, <1>3, <1>4
+  この本体が束縛する変数であり、A6 より束縛変数の名前は相異なるので、`collect_bindings` の他の記録は
+  同じ名前に別の値を入れない。本体が関数の `body` であるとき `VarTable::of` が作る `Param` の記録は
+  パラメータ・capture の名前に付き、A6 より本体はその名前を束縛し直さないので、これも同じ名前に当たら
+  ない。本体がグローバル初期化子の `init` であるときは `VarTable::body_only` が `Param` を 1 つも
+  記録しない -- D1 より `init` はパラメータも capture も持たない。
+  BY A6, D1, <1>1, <1>2, <1>3, <1>4
 
 <1>10. QED
   BY <1>5, <1>6, <1>7, <1>8, <1>9, <1>9a
