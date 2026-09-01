@@ -713,7 +713,7 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 | A7 | 呼び出し先の解決 | `resolve_callee_params` の設計 | 第 8 節 (#551 の 1 件目の直しが健全な近似である根拠) |
 | A8 | グローバルは線形規律の外 | `mark_global` | D26、D24 の (E7)、P27 の系 |
 | A9 | `Match` はアームを持つ | lowering (検査は develop mode の `validate`) | P16 |
-| A10 | 型の well-formedness | `validate_layouts` (最適化が作る型の再検査は develop build だけ) | P1 の言明、A12。A10 自身の項が `boxed_leaf_paths` と `rc_units` の停止性を挙げる |
+| A10 | 型の well-formedness | 大きさの部分は `validate_layouts` (最適化が作る型の再検査は develop build だけ)。**飽和を果たすのは kind の体系である** -- 宣言された型の kind は `check_kinds` が検査して診断を出し、式の型は kind `*` を持つ。README 第 4 節の冒頭はこれを「構成上そうなる」の段に置く。**`validate_layouts` は飽和を検査しない** -- その走査自身が `no_size_reason` から `held_types` を経て `declared_field_types` に入るので、飽和していない型に出会えば診断を出さずに同じ `assert` で止まる | P1 の言明、A12。A10 自身の項が `boxed_leaf_paths` と `rc_units` の停止性を挙げる |
 | A11 | スコープの規律 | lowering (検査は develop mode の `validate`) | D2、P9。A11 自身の項が `origin` の停止性を挙げる |
 | **A12** | 束縛の形と型が合っている | **誰も** (項の見出し)。ただし `RcFunc` の欄の整合については `Lowerer::lower_lambda_as_function` が果たし、箇条ごとにも果たす者が居る -- `Llvm` 節点の `args` の名前の列は演算を作る側 (検査: develop mode の `validate` の `check_rhs`)、`Llvm` 節点の型についての残る 3 つは `struct_punch`・`struct_set` と `struct_plug_in`・`struct_get` と `union_as` が結果の型に取る形。punched でないことを検査するコードは無い | A3。A12 自身の項が P2 と `held_field_type`、`rhs_consumes` の停止性を挙げる |
 | A13 | 名前の形 | `Lowerer::fresh_var` と `clone_fresh` (検査は develop mode の `check_clone_names_are_fresh`) | P9 の後半、P14b。このファイルの `<1>10` の `<2>1a` |
