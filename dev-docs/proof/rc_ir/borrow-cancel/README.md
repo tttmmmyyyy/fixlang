@@ -1247,6 +1247,13 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 形)。**これが無いと `p30-cancel-walk.md` の `L0`、したがって P2a が閉じない** -- `origin_inner` の
 `Binding::Llvm` の腕が `result_prov` を呼ぶので、その答えが呼ぶたびに変わると `origin` の答えも変わる。
 
+**`RcProgram` から到達できる型は内部可変性を持たない。** すなわち `UnsafeCell` を欄に持つ型は、
+`RcProgram` の 3 つの欄 (D1) から辿って現れない -- `Box<dyn LLVMGen>` の op も含めてである。
+**決定性より強い節が要るのは、`RcProgram` を共有参照で受け取る関数がそれを変えないことを言う段が
+あるからである** -- `validate` がその 1 つであり、`RcIrValidator::check_rhs` は `result_prov` を呼ぶ。
+決定性は「同じ引数に同じ値を返す」までしか言わず、op が自分の中に持つ状態が動かないことを言わない。
+読む者は `p70-main-theorem.md` の `<1>1` である。
+
 **この 2 節を合わせると「op の複製は原本と同じ宣言を返す」が出る。** `rhs.clone()` や
 `fresh_rename_function` が作る複製の op は、原本と同じ引数を渡されれば同じ `Provenance` を返す --
 決定性がそれを引数の関数にし、`FullName` の欄を読まないことが名前替えを答えから外す。
