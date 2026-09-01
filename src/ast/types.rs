@@ -1394,13 +1394,13 @@ impl TypeNode {
 
     /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
     /// arguments that carries no captured value.
-    // PROOF: P1, P2, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_funptr(&self) -> bool {
         self.toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())
     }
 
     /// Whether this type is `Std::Array`.
-    // PROOF: P1, P2, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_array(&self) -> bool {
         self.toplevel_tycon_satisfies(is_array_tycon)
     }
@@ -1439,7 +1439,7 @@ impl TypeNode {
 
     /// Whether the top-level type constructor of this type is a struct.
     /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
-    // PROOF: D/A, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P5, P6, P7, P7a, P7d, P7e, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1451,7 +1451,7 @@ impl TypeNode {
     /// Whether the top-level type constructor of this type is a union, so that a value of it
     /// carries one of the declared fields and a tag saying which.
     /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
-    // PROOF: D/A, P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P5, P6, P7, P7a, P7d, P7e, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_union(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1503,7 +1503,7 @@ impl TypeNode {
     /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
     /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
     /// runs.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P28, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P28, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
         if self.is_box(type_env) {
             return false;

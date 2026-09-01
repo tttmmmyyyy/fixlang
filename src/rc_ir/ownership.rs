@@ -791,7 +791,7 @@ fn rc_units_go(
 /// Truncate a leaf path to its reference-counting unit: the path down to the first unit `unit_step`
 /// reaches, whose whole subtree is that one unit. A path that stays within unboxed structs is
 /// unchanged.
-// PROOF: D/A, P1, P2, P2a, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn truncate_to_unit(
     ty: &Arc<TypeNode>,
     path: &[usize],

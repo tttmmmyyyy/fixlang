@@ -1275,7 +1275,7 @@ fn split_rc(
 /// release of one of those objects, named after the object, would be filed elsewhere and never meet
 /// the retain. What decides whether a release closes a retain is the objects the two act on, which
 /// `References` already carries.
-// PROOF: P2a, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 type PendingRetains = Vec<PendingRetain>;
 
 /// A retain whose bump is still outstanding, and the references of it that no release has un-bumped
@@ -1399,7 +1399,7 @@ pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 }
 
 /// The forward must-analysis for one function: it decides which retain and release nodes to delete.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 struct CancelAnalysis<'a> {
     /// This function's variables: what binds each one and its type, which decide the objects a
     /// retain and a release act on, and so which of them pair.
