@@ -1917,7 +1917,7 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
   ある。`bumps` が正である類 `C0` が借用終端でなければ (ii-b) の `+1` が、借用終端であれば (i) の
   角括弧の `+1` が立つ。7.5.4 の `<1>6` と `<1>7` がその 2 つの場合である。
 - `A19` の (ii-a) と (ii-b) を果たす者は `insert_rc` と `borrow_ify` である。**この文書が示すのは
-  `borrow_ify` の側だけである。** 7.5.6 の `L16` がそれを示す -- `rewrite_rc` が借用版で落とす `Retain` は、
+  `borrow_ify` の側だけである。** 7.5.5 の `L16` がそれを示す -- `rewrite_rc` が借用版で落とす `Retain` は、
   その leaf を消費する構文が残っている限り落ちない (P8 と P7a)。落ちる場合には `call_rc` が消費の直前に
   同じ `Retain` を置く。`insert_rc` の側は `p60-insert-rc.md` が示す (README の A19)。
 
@@ -2682,7 +2682,7 @@ P17 が扱う (第 4 節の `L6` と、`L11` の `<2>2` の場合分け)。**消
 `rewrite_rc` である。借用版では、その版が所有しない unit の `Retain`/`Release` を丸ごと落とすからである
 (P10)。
 
-#### 7.5.6 L16 (消費が残る leaf の `Retain` は落ちないか、`call_rc` が補う)
+##### L16 (消費が残る leaf の `Retain` は落ちないか、`call_rc` が補う)
 
 **言明**。`V` を `borrow_ify` の出力の 1 つの版とし、`Pre(V)` を `RewriteCtx::rewrite` が `V` の本体を
 作るときに読む本体とする (`<1>1c` と `<1>1d` がこの 2 つを定める)。`V` の本体の 1 つの実行路 `ρ_V`
