@@ -1202,10 +1202,11 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 形)。**これが無いと `p30-cancel-walk.md` の `L0`、したがって P2a が閉じない** -- `origin_inner` の
 `Binding::Llvm` の腕が `result_prov` を呼ぶので、その答えが呼ぶたびに変わると `origin` の答えも変わる。
 
-**この節を読む段は 5 つのファイルに在る。** `origin` の答えが鍵で決まることを、それぞれが自分の局所補題
+**この節を読む段は 6 つのファイルに在る。** `origin` の答えが鍵で決まることを、それぞれが自分の局所補題
 として示すからである -- `p10-leaves-and-units.md` の `<1>29a`、`p11-origin-soundness.md` の `L14`、
 `p12-identity-and-consumes.md` の `L0`、`p13-disposals-and-pending.md` の `L8a`、
-`p30-cancel-walk.md` の `L0`。**5 つとも、この節を `BY` に挙げないまま書かれた周がある。**
+`p30-cancel-walk.md` の `L0`、`p60-insert-rc.md` の `L29`。**6 つとも、この節を `BY` に挙げないまま
+書かれた周がある。**
 `origin_inner` の腕の数え上げは `result_prov` の呼び出しを含むので、数え上げを書く者はここを通る。
 在りかをこの行に集めるのは、次の周が 5 つを 1 度に確かめられるようにするためである。
 
@@ -1905,8 +1906,14 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   依らない。
 
   **表を跨ぐ形はこの命題の主張ではない。** `bindings` が等しい相異なる 2 つの `VarTable` について答えが
-  等しいことは別の主張であり、それを要る段は自分で示す (`borrow_ify` は原本と複製に別々の `VarTable` を
-  作るので、その 2 つの `origin` が一致することを言う議論がこれに当たる)。
+  等しいことは別の主張であり、それを要る段は自分で示す。
+
+  **その形を要る段は 3 つある。** `p12-identity-and-consumes.md` の `L16` `<1>4` と
+  `p13-disposals-and-pending.md` の `L16` `<1>4` -- どちらも `borrow_ify` が原本と複製に別々の
+  `VarTable` を作るので、その 2 つの `origin` が一致することを言う -- および
+  `p60-insert-rc.md` の `L29` `<1>1` -- `split_rc_units` の入力と出力に別々の `VarTable` を作る。
+  **どれも `origin` の再帰の上の帰納が要る**。`origin` は答えを memo に記録して次の呼び出しに返すので、
+  「引数だけの関数である」という一言では出ない。**3 つとも、その帰納を書かないまま書かれた周がある。**
 
   `origin` は答えを `vars.origins` に記録し、次の呼び出しはそれを**先に読んで返す**
   (`CODE src/rc_ir/ownership.rs: origin`)。`VarTable` はその表を `RefCell` で持つので、走査が `VarTable` を
