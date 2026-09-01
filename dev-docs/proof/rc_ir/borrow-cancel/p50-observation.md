@@ -73,6 +73,11 @@ P26 の言明は 2 文からなる。第 1 文は共通接頭の上の各観測�
   `rc_units(B) = [[]]` である (D4 の規則 3、D5 の `unit_step` の `is_box` の行)。以下、`B` 型の値の path は
   すべて空列 `[]` である。
 
+**EXT LLVM の関数への制御の移り**。LLVM の関数の本体の命令が実行されるのは、その関数を呼ぶ命令 (`call` /
+`invoke`) が実行されたときに限る。すなわち、ある関数の本体へ制御が入る位置を数え上げるには、その関数を
+呼ぶ命令を組む位置を数え上げれば足りる。README の「証明の記法」の節が定める外部の結果の名札であり、
+`BY` からはこの名前で引く。
+
 ## 2. 何と何を比べるか
 
 P26 は**実行** (D24) の水準の言明である。観測値は参照カウントであり、参照カウントは 1 つの本体の量ではなく
@@ -1477,7 +1482,8 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       **この 2 つで尽きることは、LLVM の呼び出しを組む位置の数え上げによる。** D23 の本体は LLVM の関数と
       して実装される -- `prog.funcs` の各関数は `implement_rc_program` が `func_vals` に集めた関数値に、
       各グローバル初期化子の `init` は `InitValue#<symbol>` にである。そこへ制御が入るのは、その関数を
-      呼ぶ命令を実行するときである。`src/` の中で LLVM の呼び出し命令を組むのは 14 か所であり
+      呼ぶ命令を実行するときである (`EXT LLVM の関数への制御の移り`)。`src/` の中で LLVM の呼び出し命令を
+      組むのは 14 か所であり
       (`build_call` が 12、`build_indirect_call` が 2)、そのうち 12 か所は D23 の本体を呼ばない --
       runtime の関数 (`build_malloc`、`realloc_array`、`Generator::save_stack`、
       `Generator::restore_stack`、`Generator::call_runtime`)、LLVM の intrinsic
@@ -1509,7 +1515,8 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       `run_io_or_ios_runner` を呼ぶのは
       `CODE src/build/build_object_files.rs: build_main_function` と
       `CODE src/generator.rs: Generator::build_run_destructor` である。
-  BY CODE src/generator.rs: Generator::apply_lambda, Generator::build_run_destructor,
+  BY EXT LLVM の関数への制御の移り,
+     CODE src/generator.rs: Generator::apply_lambda, Generator::build_run_destructor,
      Generator::save_stack, Generator::restore_stack, Generator::call_runtime,
      Generator::build_lifetime_marker, Generator::emit_rc_helper_call,
      Generator::build_traverser_work, Generator::traverse_boxed_refs,
