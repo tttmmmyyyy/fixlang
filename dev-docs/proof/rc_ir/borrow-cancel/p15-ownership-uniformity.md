@@ -199,9 +199,12 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   両辺、アームの結果と `Match` の束縛変数、payload と変位、catch-all の payload と scrutinee、
   `Destructure` のフィールド変数とフィールド、`App` の各引数と呼び出し先のパラメータ、`App` の結果、
   同じ名前の `RcVar`、束縛を持たない `RcVar`、そして `Llvm` 節点の型についての 4 つ -- は、どちらの側も
-  型が変わらないまま対応するので、入力で成り立つ一致は借用版でも成り立つ。`App` の callee と束縛を
-  持たない `RcVar` の名前は最上位の記号の名前であり、A13 と D6 より局所名でないので `renaming` の鍵で
-  なく、名前も型も動かない。`RcFunc` の欄どうしの整合は、`clone_func` が `params` と `capture` に
+  型が変わらないまま対応するので、入力で成り立つ一致は借用版でも成り立つ。呼び出し先については
+  2 通りある。直接呼び出しの callee と、束縛を持たない `RcVar` の名前は最上位の記号の名前であり、
+  A13 と D6 より局所名でないので `renaming` の鍵ではなく、名前も型も動かない -- 名指す関数も
+  その `params` も入力のものである。局所変数を経由する間接呼び出しでは callee は鍵でありうるが、
+  `rename_var` が型を残すので `ty(callee)` は動かない。`RcRhs::Closure` の `FuncRef` も
+  `rename_rhs` がそのまま写す。`RcFunc` の欄どうしの整合は、`clone_func` が `params` と `capture` に
   `rename_var` を掛け `fn_ty` と `ret_ty` を写すことによる。
   BY A12, A13, D6, <1>2, CODE src/rc_ir/borrow.rs: clone_func,
      CODE src/rc_ir/rename.rs: rename_expr, rename_rhs, rename_var
