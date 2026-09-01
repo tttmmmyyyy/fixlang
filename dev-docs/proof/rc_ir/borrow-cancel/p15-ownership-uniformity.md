@@ -456,6 +456,11 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 `CODE src/fixstd/builtin.rs: is_funptr_tycon`)。どちらも `variant` を読まないので、`variant` が
 `Struct` である tycon がこの 2 つの名前を持たないことを別に述べる者が要る。
 
+**鍵の名前を残らず見るのは、`is_funptr` の側が中断しうるからでもある。** `is_funptr_tycon` は namespace が
+`Std` で名前が `#FunPtr` で始まるとき、残りを `parse::<u32>().unwrap()` に掛ける。その形の鍵が
+`make_funptr_tycon(arity)` のほかにも在れば、`is_funptr` はその型について偽を返すのではなく中断する
+(`CODE src/fixstd/builtin.rs: is_funptr_tycon`)。
+
 <1>1. `TypeEnv` の `tycons` の欄には `pub` が付かず、`src/ast/program.rs` は `mod` 宣言を持たないので、
       EXT Rust の可視性 よりこの欄への書き込みはそのファイルの中だけに在り、そこでは 6 か所である --
       `TypeEnv::default`、`TypeEnv::new`、
@@ -494,10 +499,15 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 
 <1>4. `calculate_type_env` が `TypeEnv::new` に渡す表では、`make_array_tycon()` の値は
       `variant: TyConVariant::Array` の `TyConInfo`、各 `make_funptr_tycon(n)` の値は
-      `variant: TyConVariant::Primitive` の `TyConInfo` である。
+      `variant: TyConVariant::Primitive` の `TyConInfo` である。さらに、その表の鍵のうち名前が `Array`
+      であるものは `make_array_tycon()` だけであり、名前が `#FunPtr` で始まるものは
+      `1..=FUNPTR_ARGS_MAX` の各 `arity` についての `make_funptr_tycon(arity)` だけである。
   `calculate_type_env` は `bulitin_tycons()` から始める。`bulitin_tycons()` は `make_array_tycon()` に
   `variant: TyConVariant::Array` を、`1..=FUNPTR_ARGS_MAX` の各 `arity` について `make_funptr_tycon(arity)`
-  に `variant: TyConVariant::Primitive` を置く。続く繰り返しが入れる鍵は 2 種である。第 1 種は型宣言の
+  に `variant: TyConVariant::Primitive` を置く。`bulitin_tycons()` が置く鍵はこのほかに 15 個あり、
+  その名前は `IOState`、`Ptr`、`U8`、`I8`、`U16`、`I16`、`I32`、`U32`、`I64`、`U64`、`F32`、`F64`、
+  `Arrow`、`#DynamicObject`、`#ArrayStorage` である。どれも `Array` と異なり、`#FunPtr` でも始まらない。
+  続く繰り返しが入れる鍵は 2 種である。第 1 種は型宣言の
   `tycon()` であり、その鍵が既に在れば診断を出して `continue` するので、`bulitin_tycons()` が置いた鍵の
   値は動かない。第 2 種は `tycon().into_punched_type_name(i)` であり、`PUNCHED_TYPE_SYMBOL`
   (`#PunchedAt`) と 10 進表記を末尾に足した名前である。
@@ -518,7 +528,8 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
      CODE src/parse/parser.rs: parse_module,
      CODE src/fixstd/stdlib.rs: make_std_mod,
      CODE src/fixstd/builtin.rs: bulitin_tycons, make_array_tycon, make_funptr_tycon, tuple_defn,
-     make_tuple_name,
+     make_tuple_name, make_iostate_name, make_arrow_tycon, make_dynamic_object_tycon,
+     make_array_storage_tycon,
      CODE src/constants.rs: TUPLE_NAME,
      CODE src/ast/types.rs: TyCon::into_punched_type_name,
      CODE src/parse/grammer.pest: type_defn, type_name, capital_name
@@ -540,7 +551,8 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 <1>6. QED
   `<1>3` から `<1>5` より、`type_env.tycons()` の鍵のうち名前が `Array` であるもの、および名前が
   `#FunPtr` で始まるものは、`bulitin_tycons()` が置いた `make_array_tycon()` と、
-  `1..=FUNPTR_ARGS_MAX` の各 `arity` についての `make_funptr_tycon(arity)` だけである -- `<1>4` の
+  `1..=FUNPTR_ARGS_MAX` の各 `arity` についての `make_funptr_tycon(arity)` だけである -- `<1>4` より
+  `bulitin_tycons()` の残る 15 個の鍵はどちらの形でもなく、
   第 1 種の鍵の名前は `#` を含まず、第 2 種のそれは大文字で始まり、`<1>5` の 4 つは `?` か `#FixCap` か
   `#CapList` で始まる。それらの値は `bulitin_tycons()` が作った `TyConInfo` であり、`<1>2` より
   `variant` は作られたときのままなので、`<1>4` よりそれぞれ `TyConVariant::Array` と
