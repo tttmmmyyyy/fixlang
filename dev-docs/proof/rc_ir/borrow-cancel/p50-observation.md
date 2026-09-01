@@ -1903,14 +1903,27 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
         (α) `InlineLLVMMakeStructBody`、`InlineLLVMMakeUnionBody`、`replaced_field_prov`
         (`InlineLLVMStructSetBody` と `InlineLLVMStructPlugInBody` の 2 つが使う) は、
         結果が boxed のときにだけ根の path に `Fresh` を置き、そうでないときは各 leaf に `Arg` を置く。
-        (β) `InlineLLVMStructPunchBody`、
-        `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、
+        (β) `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、
         `InlineLLVMUnsafeMutateBoxedIOSInternalBody`、`InlineLLVMArrayMutateElementsInternalBody`、
         `InlineLLVMArrayMutateElementsIosInternalBody`、`InlineLLVMArrayPunchBody` は
-        `Provenance::fresh_under(result_ty, .., path)` を返し、結果のタプルの 1 つの成分の下に `Fresh` を、
-        ほかの leaf に `Unknown` を置く。`InlineLLVMStructPunchBody` は自前の `result_prov` を持ち、結果
-        `(field, punched struct)` の `PUNCHED_STRUCT_FIELD` 成分が boxed のときにその成分の下に `Fresh` を
-        置く -- 条件が掛かるのは結果そのものではなくその成分である。
+        `Provenance::fresh_under(result_ty, .., path)` を返す。**`fresh_under` は `path` の下の
+        すべての boxed leaf に `Fresh` を置く**ので (`uniform(.., Unknown).set_leaves_under(path, Fresh)`)、
+        `path` が名指す成分が unbox の集約であれば `Fresh` の leaf は成分より深い位置に来る。**この 5 op の
+        成分は 2 つの形しか取らない。** `_mutate_boxed_internal` 系の 2 つでは、`path` が名指すのは
+        `_mutate_boxed_internal : [a : Boxed] (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)` の `a` で
+        あり (`_mutate_boxed_ios_internal` では結果が `(IOState, (a, b))` なのでその手前に `IOState` の
+        添字が付く)、`Std::Boxed` の制約が掛かるので `is_box` が真である (L0 の `<1>3a` の数え上げ)。
+        D4 の規則 3 よりその leaf は成分の位置 1 つであり、その型は `x.ty` の型式が成分として持つ型である。
+        残る 3 つでは、`path` が名指すのは `Array a` (`_mutate_elements_internal` 系) か
+        `PunchedArray a` (`InlineLLVMArrayPunchBody`) である。`Array a` の leaf は自分自身の位置 1 つ
+        (D4 の規則 4)、`PunchedArray a = unbox struct { _arr : Array a, _idx : I64 }` の leaf はその `_arr`
+        の位置 1 つであり、どちらの leaf の型も `Array a` である。L0 の `<1>3a` より配列の値の leaf が指す
+        のはその記憶域なので、**この 3 つが割り当てるのは `#ArrayStorage` のオブジェクトであって
+        `Std::FFI::Destructor` ではない。**
+        (β2) `InlineLLVMStructPunchBody` は自前の `result_prov` を持ち、結果
+        `(field, punched struct)` の `PUNCHED_STRUCT_FIELD` 成分が boxed のときにだけその成分の下に
+        `Fresh` を置く -- 条件が掛かるのは結果そのものではなくその成分である。その成分が boxed なので
+        D4 の規則 3 よりその leaf は成分の位置 1 つであり、その型は `x.ty` の型式が成分として持つ型である。
         (β') `InlineLLVMDestructorMake` は `Provenance::uniform(result_ty, .., Fresh)` を返し、結果の
         **全** boxed leaf を `Fresh` と宣言する。その結果の型は `(IOState, Destructor a)` であり、
         `Destructor a` を成分として含む。(γ) 残る `InlineLLVMStringBuf`、
@@ -1921,9 +1934,13 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
         `InlineLLVMArraySetBody`、`InlineLLVMArraySwapBody`、`InlineLLVMArrayLitBody`、
         `InlineLLVMPunchedArrayPlugBody` は、結果が `Std::String` か `Array a` か `PunchedArray a` で
         あり、その `Fresh` の leaf の型は配列かその記憶域であって `Destructor` ではない。
-        (α) では `x.ty` 自身が `Destructor a` であり、(β) と (β') ではタプルの型式が `Destructor a` を
-        成分として含む。`mentions_a_destructor` は型式を `TyApp` に沿って辿るので、どれでも真を返す。
-    BY A3, CODE src/rc_ir/borrow.rs: mentions_a_destructor,
+        (α) では `x.ty` 自身が `Destructor a` である。(β) の 5 つのうち 3 つと (γ) は `Destructor` の
+        オブジェクトを割り当てないので、この場合に入らない。残る (β) の 2 つと (β2) と (β') では、
+        `Fresh` の leaf の型は `x.ty` の型式が成分として持つ型なので、それが `Destructor a` であれば
+        `x.ty` の型式が `Destructor a` を成分として含む。`mentions_a_destructor` は型式を `TyApp` に
+        沿って辿るので、どの場合でも真を返す。
+    BY A3, D4, CODE src/rc_ir/provenance.rs: Provenance::fresh_under,
+       CODE src/rc_ir/borrow.rs: mentions_a_destructor,
        CODE src/ast/inline_llvm.rs: LLVMGen::result_prov,
        CODE src/fixstd/builtin.rs: InlineLLVMMakeStructBody::result_prov,
        InlineLLVMMakeUnionBody::result_prov, replaced_field_prov,
