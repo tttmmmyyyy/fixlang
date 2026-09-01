@@ -4,9 +4,11 @@
 D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて `p13-disposals-and-pending.md` から次の
 2 つを輸入する。
 
-- 補題 `L9`・`L12a`・`L14` の**言明**。`L9` は `origin` の `identity` が
-  inhabited (D16) を決めることを、`L12a` は 1 つの別名類に属する 2 つのスロットが同じオブジェクトを
-  指すこと -- すなわち D33 の `obj(C)` が定まること -- を与える。`L14` の言明は 2 つの節からなる。
+- 補題 `p13 の L9`・`p13 の L12a`・`p13 の L14` の**言明**。この文書自身も `L9`・`L12`・`L14` という
+  名札を別の補題に使うので、修飾を落とさない。`p13 の L9` は `origin` の
+  `identity` が inhabited (D16) を決めることを、`p13 の L12a` は 1 つの別名類に属する 2 つのスロットが
+  同じオブジェクトを指すこと -- すなわち D33 の `obj(C)` が定まること -- を与える。`p13 の L14` の
+  言明は 2 つの節からなる。
   - `ρ` の上のスロット `(x, λ)` について、`o = origin(x, λ).identity()` は `ρ` の上の位置 (D6) --
     スロットか記号の位置 -- であり、`obj(o) = obj(C_ρ(x, λ)) = obj(x, λ)` である。
   - **`obj(x, λ)` が D26 の意味で計数下であるとき、`o` は `ρ` の上のスロットであって
@@ -77,7 +79,7 @@ D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて 
 - **骨格**とは `insert_rc` の入力の本体である。A25 より骨格は `RcExpr::Retain` と `RcExpr::Release` を
   含まない。
 - `ty(x)`、`origin(x, π)`、`acted_on(x, π)`、`L(v, π)`、`ActRefs(v, π)` は
-  `p13-disposals-and-pending.md` の第 1 節と同じ意味で使う。
+  `p13-disposals-and-pending.md` が記法として定めるものと同じ意味で使う。
 - `needs_rc(v)` は `RcInserter::needs_rc(v)`、すなわち `!v.ty.is_fully_unboxed(type_env)`
   (`CODE src/rc_ir/rc_insert.rs: RcInserter::needs_rc`)。
 
