@@ -1168,9 +1168,9 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   `borrow_versions` の像) であるか、局所変数を経由する間接呼び出しでは呼び出し先そのものである。
   後者では名前が変わらない。前者で名前が変わるとき、元の名前は `borrow_ify` の入力の `funcs` の鍵で
   あり、A13 の「最上位の記号の名前は局所名ではない」の節よりそれは局所名ではない。返る名前は
-  `borrow_funcref` が元の名前の最後の断片に `#borrow` を足したものであり、名前空間の欄を書き替えない。`FullName::is_local` は名前空間が
-  空かを答えるので、返る名前も局所名ではない。一方 `insert_rc` が `Retain` を置くのは
-  `insert_into_operation_let` の `if v.name.is_local()` の門の中と、`retain_if_live` の
+  `borrow_funcref` が元の名前の最後の断片に `#borrow` を足したものであり、名前空間の欄を書き替えない。
+  `FullName::is_local` は名前空間が空かを答えるので、返る名前も局所名ではない。一方 `insert_rc` が
+  `Retain` を置くのは `insert_into_operation_let` の `if v.name.is_local()` の門の中と、`retain_if_live` の
   `var.name.is_local()` を要求する枝だけなので、`Retain(v, π)` の `v` は局所名である。よって
   差し替えが起きる callee の名前は `v` と異なり、`rhs_operands` はその `App` について `v` を
   `Ownership::Own` で挙げたままである。
