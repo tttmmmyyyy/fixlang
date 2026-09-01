@@ -47,7 +47,7 @@
 | P21 | 証明済み。(a) は `L43` と `L44` の (b) に、(b) は `L44` の (e) に載る。`α` が D21 の制限を満たすことは `L44` の (f) が示す |
 | P22 | 証明済み |
 | P23 | 証明済み。(S-a) は `L42` に、(S-b) と (S-c) は `L44` に載る |
-| P24 | 証明済み。第 4 の箇条は `rewrite_inner` の 8 腕についての構造帰納で出る |
+| P24 | 証明済み。第 5 の箇条は `rewrite_inner` の 8 腕についての構造帰納で出る |
 
 **この文書に開いている点は無い。**
 
@@ -2429,6 +2429,10 @@ P21 (b) ではなく、点の粒度の `L44` の (e) である。**
 - 出力のグローバル初期化子の列は入力と同じ長さで、第 `i` 要素の `symbol` と `ty` は入力の第 `i` 要素の
   ものに等しい。`owns_initializer` と `owns_storage` には `true` を書き、D1 が述べる呼び出し順により
   この書き込みは正しい値を書く。
+- **`cancel` は `RcFunc` の `body` 以外の欄を 1 つも変えない。** とくに `borrowed_units` と `capture` は
+  入力のものに等しい。`borrow_ify` は `borrowed_units` を書くので、この節は `cancel` についてだけで
+  ある。**この節は P14b の結論を運ばない** -- どの種の段がどの本体の活性化を作るかは実行の上の言明で
+  あり、欄と本体の一致からは出ない。それは P14b が自分の範囲に `cancel` の出力を入れて述べる。
 - **本体について書き換えが変えるのは、`Retain`/`Release` の節点と、`App` の callee の名前だけである。**
   節点の種類・その順序・`Let` の束縛変数・`Match` のアームの構成・`Llvm` の op とオペランド・
   `Destructure` のフィールドは、いずれも元の本体のものに等しい (複製の名前替えを P9 で戻したうえで)。
@@ -2441,6 +2445,17 @@ P21 (b) ではなく、点の粒度の `L44` の (e) である。**
 <1>2. `cancel` の出力の各関数は、入力の関数の `clone()` に `body` だけを書き込んだものである。よって
       `fn_ty`、`ret_ty`、`params`、`inline_into_callers` は変わらない。
   BY CODE src/rc_ir/borrow.rs: cancel
+<1>2a. `cancel` は `RcFunc` の `body` 以外の欄を 1 つも変えない。とくに `borrowed_units` と `capture` は
+       入力のものに等しい。
+  BY CODE src/rc_ir/borrow.rs: cancel, D1, P14b
+  D1 より `RcFunc` は `name`・`fn_ty`・`params`・`capture`・`ret_ty`・`body`・`source`・
+  `borrowed_units`・`inline_into_callers` の 9 個の欄を持つ。`cancel` は `prog.funcs.values()` の各 `f`
+  について `let mut clone = f.clone();` を作って `clone.body` にだけ書き込み、`(f.name.clone(), clone)` を
+  出力の `funcs` に入れるので、残る 8 個は入力のものに等しい。`borrow_ify` は `borrowed_units` を書く
+  (<1>3 の `<2>1` のループ) ので、この節は `cancel` についてだけである。
+  **この節は P14b の結論を運ばない。** P14b が述べる「借用する unit を持つ本体の活性化を作る段は (E3) に
+  限る」は実行 (D24) の上の言明であり、欄と本体の一致からは出ない。P14b は `cancel` の出力を自分の範囲に
+  入れて述べる。
 <1>3. `borrow_ify` の出力の各関数は入力のちょうど 1 つの関数から作られ、その `fn_ty`、`ret_ty`、
       `params` の型、`inline_into_callers` は元の関数のものと等しい。
   <2>1. 元の版 `f_own` は `func.clone()` に `body` を書き込んだものであり、その後
@@ -2522,9 +2537,9 @@ P21 (b) ではなく、点の粒度の `L44` の (e) である。**
   BY D1, CODE src/build/build_object_files.rs: build_object_files,
      CODE src/build/build_object_files.rs: optimize_rc_program
 <1>6. QED
-  BY <1>1, <1>2, <1>3, <1>3a, <1>3b, <1>4, <1>5
-  第 1 の箇条は <1>1、第 2 の箇条は <1>2 と <1>3、第 3 の箇条は <1>4 と <1>5、第 4 の箇条は <1>3a
-  (`borrow_ify`) と <1>3b (`cancel`) である。
+  BY <1>1, <1>2, <1>2a, <1>3, <1>3a, <1>3b, <1>4, <1>5
+  第 1 の箇条は <1>1、第 2 の箇条は <1>2 と <1>3、第 3 の箇条は <1>4 と <1>5、第 4 の箇条は <1>2a、
+  第 5 の箇条は <1>3a (`borrow_ify`) と <1>3b (`cancel`) である。
 
 ## 11. P21 (a) の `k(O)` を参照ごとに数える理由
 
