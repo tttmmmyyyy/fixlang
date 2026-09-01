@@ -41,12 +41,18 @@ A19 (i)・(ii-a)・(ii-b) と P14a の上である。A19 (i) は D21 が活性�
 - `Others(v, π)` は `CancelAnalysis::other_objects(v, π)` の返す列を集合とみなしたもの
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 
-**`origin(x, π)` は `(x, π)` で決まる 1 つの値である。** `origin` は答えを `vars.origins` に記録し、
-次の呼び出しはそれを先に読んで返すので (`CODE src/rc_ir/ownership.rs: origin`)、その返り値は走査が
-`vars` を共有したまま進む間に memo の状態が変わっても同じである -- P2a が「答えは
-`vars.bindings`・`type_env`・`(x, π)` だけで決まり、`vars.origins` が保持する memo の状態に依らない」と
-述べる。よってこの文書は `origin(x, π)`、したがって `acted_on(x, π)` と `ActRefs(v, π)` を、走査のどの
-位置でも、活性化のどの時点でも同じ値として書く。
+**`origin(x, π)` は `(x, π)` で決まる 1 つの値である。** この節は `B` について `vars` と `type_env` を
+1 つずつ固定するので、P2a がそのまま当たる -- P2a は「**1 つの `VarTable` の値 `vars` と 1 つの
+`TypeEnv` の値を固定する。** その 2 つを第 1・第 2 引数とし、鍵 `(x, π)` が等しい 2 つの `origin` の
+呼び出しがどちらも値を返すならば、その 2 つの返り値は等しい。すなわち答えは `vars.origins` が保持する
+memo の状態に依らない」と述べる。`origin` は答えを `vars.origins` に記録し、次の呼び出しはそれを先に
+読んで返すが (`CODE src/rc_ir/ownership.rs: origin`)、返り値はその memo の状態によらない。よってこの
+文書は `origin(x, π)`、したがって `acted_on(x, π)` と `ActRefs(v, π)` を、走査のどの位置でも、活性化の
+どの時点でも同じ値として書く。
+
+**表を跨ぐ形は P2a の主張ではない。** P2a は「`bindings` が等しい相異なる 2 つの `VarTable` について
+答えが等しいことは別の主張であり、それを要る段は自分で示す」と続ける。この文書でその形を要るのは
+`L16` の `<2>1a` であり、その `<3>3` が `origin` の展開の上の帰納で独自に示す。
 
 `VarPath` は対 `(FullName, FieldPath)` である (`CODE src/rc_ir/ast.rs: VarPath`)。変数 `v` (`RcVar`) と
 leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す。**`VarPath` はオブジェクトの名前で
