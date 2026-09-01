@@ -283,12 +283,16 @@ enum については元と同じ変位で、その変位が保持する各値を
 
 **この規則は等しさで閉じる。** 上に挙げた基底の型では `clone` は同じ値を返し、`Vec`・`Set`・`Map`・組・
 `#[derive(PartialEq)]` を持つ構造体と enum の等しさは成分ごとの等しさで決まるので、成分の `clone` が元と
-等しければ全体も元と等しい。
+等しければ全体も元と等しい。**`PartialEq` を手書きで実装する型については、その実装が読む成分について
+同じことを確かめる。** この文書に現れるその型は `NameSpace` の 1 つである。
 
 `Origin` は `Clone` と `PartialEq` を derive した enum であり、変位 `Exactly` は `VarPath` を 1 つ、変位
 `Join` は `VarPath` と `Set<VarPath>` を保持する。`VarPath` は組 `(FullName, FieldPath)`、`FieldPath` は
 `Vec<usize>`、`FullName` は `Clone` と `PartialEq` を derive した構造体でそのフィールドは `NameSpace` と
 `String`、`NameSpace` は `Clone` を derive した構造体でそのフィールドは `Vec<String>` と `bool` である。
+`NameSpace` の `PartialEq` は手書きであり、その本体は `self.names == other.names` なので、`NameSpace` の
+2 つの値が等しいことは `names` が等しいことである。`clone` は `names` を `<Vec<String> as Clone>::clone`
+で写すので複製の `names` は元と等しく、したがって `NameSpace` の値の `clone` は元と等しい。
 よって `Origin` の値の `clone` も `VarPath` の値の `clone` も元と等しい
 (`CODE src/rc_ir/ownership.rs: Origin`, `CODE src/rc_ir/ast.rs: VarPath`, `CODE src/ast/name.rs: FullName`,
 `CODE src/ast/name.rs: NameSpace`)。
