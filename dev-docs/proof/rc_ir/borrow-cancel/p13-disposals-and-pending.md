@@ -68,13 +68,13 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
 この文書は補題を `L1` から `L6` と呼ぶ。`BY` の行ではそれらを名前で引用する。補題の証明の内部の
 ステップは引用しない。
 
-外部の結果を 2 つ使う。
+外部の結果を 2 つ使う。名札は README の「証明の記法」が定める `EXT <名前>` である。
 
-- **stacker の `maybe_grow`**: `stacker::maybe_grow(red_zone, stack_size, callback)`
+- **`EXT stacker の maybe_grow`**: `stacker::maybe_grow(red_zone, stack_size, callback)`
   は `callback` をちょうど 1 回呼び、その値を返す (`CODE stacker-0.1.23/src/lib.rs: maybe_grow`)。
   `remaining_stack()` の値で分かれる 2 つの枝がどちらも `callback` を 1 回だけ評価し、`callback` の型が
   `FnOnce` なので 2 回は評価できない。
-- **Rust 標準ライブラリの `Vec::retain`**: `v.retain(f)` は、`v` の各要素に `f` を前から順に
+- **`EXT Vec::retain`** (Rust 標準ライブラリ): `v.retain(f)` は、`v` の各要素に `f` を前から順に
   ちょうど 1 回ずつ適用し、`f` が偽を返した要素を `v` から取り除く。残る要素は値も相対順序も変わらない。
   この文書は `PendingRetains` の `retain` としてこれを使う -- `PendingRetains` は
   `Vec<PendingRetain>` の別名である (`CODE src/rc_ir/borrow.rs: PendingRetains`)。
@@ -189,7 +189,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 <1>2. `grow_stack(f)` の本体は `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` である。
   BY CODE src/misc.rs: grow_stack
 <1>3. QED
-  BY <1>1, <1>2, 外部の結果 stacker の `maybe_grow`
+  BY <1>1, <1>2, EXT stacker の maybe_grow
 
 ### L2 (走査の再帰)
 
@@ -359,7 +359,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 <1>1. `consume_objects(pending, objects)` の呼び出しの後、`pending` のどの要素も `objects` のどの
       オブジェクトも名指さない。またこの呼び出しは `pending` の要素を落とすだけで、残る要素の
       `outstanding` を変えない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, 外部の結果 `Vec::retain`
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain
   本体は `pending.retain(...)` であり、述語は `objects` のいずれかを `outstanding.names` が真とする要素に
   ついて `false` を返す。`retain` は `false` を返した要素を落とし、他の要素はそのまま残す。
 
@@ -1642,7 +1642,7 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
 <1>1a. `consume_objects(pending, objects)` は、`objects` のいずれかについて `outstanding.names(object)`
        が真である要素を取り除いてその `node` を `self.needed_retains` に入れ、残る要素の `node`・
        `outstanding`・並びを変えない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, 外部の結果 `Vec::retain`
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain
   本体は `pending.retain(|retain| { if objects.iter().any(|object| retain.outstanding.names(object))
   { self.needed_retains.insert(retain.node); return false; } true })` である。
 
