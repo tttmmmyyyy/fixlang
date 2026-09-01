@@ -52,7 +52,7 @@ memo の状態に依らない」と述べる。`origin` は答えを `vars.origi
 
 **表を跨ぐ形は P2a の主張ではない。** P2a は「`bindings` が等しい相異なる 2 つの `VarTable` について
 答えが等しいことは別の主張であり、それを要る段は自分で示す」と続ける。この文書でその形を要るのは
-`L16` の `<2>1a` であり、その `<3>3` が `origin` の展開の上の帰納で独自に示す。
+`L16` の `<1>4` `<2>1a` であり、その `<3>3` が `origin` の展開の上の帰納で独自に示す。
 
 `VarPath` は対 `(FullName, FieldPath)` である (`CODE src/rc_ir/ast.rs: VarPath`)。変数 `v` (`RcVar`) と
 leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す。**`VarPath` はオブジェクトの名前で
