@@ -49,6 +49,7 @@ src/ast/types.rs	TyConInfo	P1,P2	e2f309478269
 src/ast/types.rs	TyConInfo::resolve_namespace	P1,P2,P7a,P7d,P7e	6a0535783f94
 src/ast/types.rs	TyConInfo::resolve_type_aliases	P1,P2,P7a,P7d,P7e	2d8bd2c4afd1
 src/ast/types.rs	TyConVariant	P1,P2,P5,P6,P7,P7c,P7f,P18a,P18b	18d30eb4b988
+src/ast/types.rs	TypeNode	D/A	4e726d9bb025
 src/ast/types.rs	TypeNode::check_kinds	D/A	8a88faed2aa7
 src/ast/types.rs	TypeNode::collect_type_arguments	P1,P2	6d18a772c333
 src/ast/types.rs	TypeNode::declared_field_types	D/A,P1,P2	eda5fdc86a3c

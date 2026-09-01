@@ -1262,11 +1262,23 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 形)。**これが無いと `p30-cancel-walk.md` の `L0`、したがって P2a が閉じない** -- `origin_inner` の
 `Binding::Llvm` の腕が `result_prov` を呼ぶので、その答えが呼ぶたびに変わると `origin` の答えも変わる。
 
-**`RcProgram` から到達できる型は内部可変性を持たない。** すなわち `UnsafeCell` を欄に持つ型は、
-`RcProgram` の 3 つの欄 (D1) から辿って現れない -- `Box<dyn LLVMGen>` の op も含めてである。
-**決定性より強い節が要るのは、`RcProgram` を共有参照で受け取る関数がそれを変えないことを言う段が
-あるからである** -- `validate` がその 1 つであり、`RcIrValidator::check_rhs` は `result_prov` を呼ぶ。
-決定性は「同じ引数に同じ値を返す」までしか言わず、op が自分の中に持つ状態が動かないことを言わない。
+**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。** 到達できる型が
+内部可変性を持つ欄を持つときは、その欄は**一度だけ書かれる memo**であって、その型の `PartialEq` と
+`Hash` が読まない。**決定性より強い節が要るのは、`RcProgram` を共有参照で受け取る関数がそれを
+変えないことを言う段があるからである** -- `validate` がその 1 つであり、`RcIrValidator::check_rhs` は
+`result_prov` を呼ぶ。決定性は「同じ引数に同じ値を返す」までしか言わず、op や型が自分の中に持つ状態が
+動かないことを言わない。
+
+**「内部可変性を持たない」と書くと偽になる。** `RcProgram` は `RcFunc` の `fn_ty` と `RcVar` の `ty` を
+通じて `TypeNode` に届き、`TypeNode` は `hash_cache`・`ground_cache`・`depth_cache` という `OnceLock` の
+欄を 3 つ持つ。`TypeNode::is_ground` は共有参照から `ground_cache.get_or_init` を実行する
+(`CODE src/ast/types.rs: TypeNode`, `TypeNode::is_ground`)。**その 3 つは一度だけ書かれる memo であり、
+`impl PartialEq for TypeNode` は `ty` だけを読む** (`CODE src/ast/types.rs: TypeNode` の `PartialEq` の
+実装) ので、この節は等しさの水準で立つ。`Box<dyn LLVMGen>` の op は内部可変性を持つ欄を持たない。
+
+**手書きの `PartialEq` が欄の真部分集合しか読まない型は、この族である。** `NameSpace` の実装は
+`names` だけを読み `is_absolute` を読まない。**等しさを主語にする節は、その実装が読む成分について
+確かめる。**
 
 **この節を読む段の見分け方はこうである** -- `RcProgram` かそこから到達する値を共有参照で受け取る計算が、
 その値を変えないと読む段が、それである。`Box<dyn LLVMGen>` の op はその値の中に在るので、欄への
