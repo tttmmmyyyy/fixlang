@@ -950,9 +950,11 @@ DEF 共通接頭の段の中の対応 の下で、D30 の共通接頭が終わ�
         `InlineLLVMStructPlugInBody`、`InlineLLVMStructSetBody`、
         `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、`InlineLLVMUnsafeMutateBoxedIOSInternalBody`、
         `InlineLLVMArrayMutateElementsInternalBody`、`InlineLLVMArrayMutateElementsIosInternalBody` の
-        生成コードにある。**`InlineLLVMPunchedArrayPlugBody` を除く 13 か所と `array_tail_destination` は、
-        渡す値を `gc.get_scoped_obj(&self.<欄>)` で取る。** A12 より `Llvm` 節点の `args` の名前の列は
-        `gen.free_vars()` に等しいので、それはこの op のオペランドである。`InlineLLVMPunchedArrayPlugBody`
+        生成コードにある。**`InlineLLVMPunchedArrayPlugBody` を除く 13 か所は、渡す値を
+        `gc.get_scoped_obj(&self.<欄>)` で取る。`array_tail_destination` に渡る `dst` も、それを呼ぶ 2 つの
+        op が `gc.get_scoped_obj(&self.dst_name)` で取ったものである。** A12 より `Llvm` 節点の `args` の
+        名前の列は `gen.free_vars()` に等しいので、それはこの op のオペランドである。
+        `InlineLLVMPunchedArrayPlugBody`
         が渡すのは、オペランド `punched` から `move_out_struct_field` で取り出した `_arr` の欄であり、
         `PunchedArray a = unbox struct { _arr : Array a, _idx : I64 }` の boxed leaf はその `_arr` の位置
         1 つなので (D4 の規則 5 と規則 4)、これもオペランドの leaf である。残る 2 か所 --
