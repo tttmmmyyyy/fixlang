@@ -35,7 +35,7 @@ CITATION_SYMBOL = re.compile(
 # together with the same comma the list uses, so a name shaped like a label closes the list rather
 # than being read as one more symbol of the file.
 CITATION_LABEL = re.compile(
-    r"(?:[A-Z]\d+[a-z]?|p\d+|CODE|DEF|BY|PROVE|ASSUME|QED|CASE|DEFINE)\Z"
+    r"(?:[A-Z]\d+[a-z]?|p\d+|CODE|DEF|EXT|BY|PROVE|ASSUME|QED|CASE|DEFINE)\Z"
 )
 
 
