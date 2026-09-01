@@ -2788,14 +2788,31 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
 <1>1e. D9 の消費の表が挙げる消費の位置は 7 種である -- `App` の callee、`App` の所有位置の引数、
        `Closure` の capture、`Llvm` のオペランド、boxed 容器の `Destructure`、unbox 容器の
        `Destructure`、本体 (D23) の終端の `Ret`。このうち `App` の所有位置の引数**以外**の 6 種に
-       ついて、消費される leaf の集合は、`V` の本体と `Pre(V)` の対応する節点では等しく、`Pre(V)` と
-       `F` の本体の対応する節点では `rename` で写して一致する。
-  BY <1>1c, <1>1d, P9, A3, A12, D9, CODE src/rc_ir/rename.rs: rename_rhs
+       ついて、消費される `VarPath` の集合 -- 対 `(名指す変数, leaf)` の集合 -- は、`V` の本体と
+       `Pre(V)` の対応する節点では等しく、`Pre(V)` と `F` の本体の対応する節点では `rename` で写して
+       一致する。
+  BY <1>1c, <1>1d, P9, A3, A12, A23, D4, D9,
+     CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/borrow.rs: route,
+     CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
   D9 の消費の表は 6 行を持ち、その `App` の行が callee の leaf と所有位置の引数の leaf の 2 つの位置を
-  挙げるので、消費の位置は 7 種である。`V` の本体と `Pre(V)` の間は <1>1d による -- 書き換えが変えるのは
-  `Retain`/`Release` 節点と `App` の callee の**名前**だけであり、`App` の callee の leaf の集合は
-  `ty(callee)` だけで決まる。この 6 種が読む残りのもの (`Closure` の capture、`Llvm` の op と
-  オペランド、`Destructure` の容器とフィールド、終端の `Ret` の変数) は書き換えが触れない。
+  挙げるので、消費の位置は 7 種である。
+
+  `V` の本体と `Pre(V)` の間は <1>1d による -- 書き換えが変えるのは `Retain`/`Release` 節点と
+  `App` の callee の**名前**だけである。この 6 種のうち 5 種が読むもの (`Closure` の capture、`Llvm` の
+  op とオペランド、`Destructure` の容器とフィールド、終端の `Ret` の変数) は書き換えが触れないので、
+  変数も leaf も両側で同じである。**残る `App` の callee の位置では名前が動くので、`VarPath` の集合が
+  等しいことは leaf の集合が等しいことから出ない。** そこは両側で空である。`route` が callee の名前を
+  差し替えるのは `borrow_versions` に鍵を持つ直接呼び出しに限られ、`borrow_ify` が `borrow_versions` に
+  入れるのは `func.capture.is_none()` の関数だけである。A12 の `RcFunc` の欄の整合より `capture` が
+  `Some` であることと `fn_ty.is_closure()` が真であることは同値なので、その関数の `fn_ty` は closure 型
+  ではない。A23 は、`Lowerer::lower_lam` が `prog.funcs` に入れる関数の `fn_ty` は closure 型であり
+  `lower_lambda_as_function` がその関数に `capture` を与えること、funptr 型の lambda を作るのは
+  `uncurry::funptr_lambda` だけであることを述べるので、`capture` を持たない関数の `fn_ty` は funptr 型で
+  ある。A12 の「さらに `ty(callee)` は実行時の呼び出し先の `fn_ty` である」より `ty(callee)` はその型で
+  あり、`is_funptr` の型は `is_fully_unboxed` が真で boxed leaf を持たない (D4 の第 1 規則)。よって
+  callee の位置で消費される leaf は両側で 1 つも無く、`VarPath` の集合は空どうしで等しい。`route` は
+  `callee.clone()` の `name` の欄だけを差し替えるので `ty(callee)` も動かない。
+
   `Pre(V)` と `F` の本体の間は `rename` である。6 種のうち 5 種 -- `App` の callee、`Closure` の
   capture、boxed 容器と unbox 容器の `Destructure`、終端の `Ret` -- は、名指す変数の boxed leaf を
   その変数の型だけで決める。P9 より `rename` は束縛変数の名前だけを替えるので変数の型を変えず、A12 より
@@ -2803,8 +2820,11 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
   残る `Llvm` の位置は `borrows_operand` と `result_prov` の宣言を読み、`rename_rhs` の `Llvm` の腕は
   `llvm_gen` を clone して `free_vars_mut()` が挙げる名前を書き替える。A3 は「**`result_prov` と
   `borrows_operand` は自分の `FullName` の欄を読まない。**」と述べ、`result_prov` を override する
-  29 個と `borrows_operand` を override する 13 個が読む欄を数え上げているので、この 2 つの宣言は
-  名前を書き替えても変わらない。
+  29 個と `borrows_operand` を override する 13 個が読む欄を数え上げている。さらに A3 は
+  「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」と
+  述べる。**この 2 節の両方が要る** -- `rename_rhs` も `rewrite_inner` も op を clone するので、
+  両側の op は別のオブジェクトであり、決定性が答えを引数の関数にし、`FullName` の欄を読まないことが
+  名前替えを答えから外す。よってこの 2 つの宣言は両側で等しい。
 
 <1>1f. `Pre(V)` の実行路と `V` の本体の実行路は、対応する `Match` 節点で同じアームを選ぶことによって
        1 対 1 に対応する。`ρ_V` に対応する `Pre(V)` の実行路を `ρ_P` と書く。`ρ_P` の各節点 `m` に
