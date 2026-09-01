@@ -4,10 +4,11 @@
 D1 - D34 と仮定 A1 - A26 の上に立つ。P2a を除く層 1 の命題と、層 2 の命題は引用しない。
 
 この文書が読んだコードのコミットは `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` である。README が証明の
-対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が引く 7 ファイル
-(`src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、`src/rc_ir/ast.rs`、`src/rc_ir/rename.rs`、
-`src/rc_ir/validate.rs`、`src/misc.rs`、`src/build/build_object_files.rs`) に変わったのは `// PROOF:`
-コメントだけである。
+対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書の `CODE` 引用が
+名指すファイル --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、`src/rc_ir/ast.rs`、
+`src/rc_ir/provenance.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/rename.rs`、`src/rc_ir/validate.rs`、
+`src/ast/types.rs`、`src/ast/name.rs`、`src/misc.rs`、`src/build/build_object_files.rs` の 11 個 ---
+に変わったのは `// PROOF:` コメントだけである。
 
 P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P16 - P18 もその入力に対する走査についての
 言明なので、この文書は全体を通じて、`cancel` の引数 `prog` が `borrow_ify` の 1 回の呼び出しの返り値で
