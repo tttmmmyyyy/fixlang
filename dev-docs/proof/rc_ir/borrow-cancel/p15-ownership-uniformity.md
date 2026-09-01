@@ -2144,6 +2144,26 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   DEF 再帰で訪れる対 の表の進む相手を尽くす (「呼ぶ相手」が無い 3 行は新しい対を作らない)。
   BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>6, <1>7, DEF 再帰で訪れる対
 
+### L18a (`Binding::Llvm` の第 3 成分は束縛変数の型である)
+
+**言明**。`vars.bindings.get(x)` が `Some(Binding::Llvm(gen, args, rty))` であるとき `rty = ty(x)` で
+ある。したがって `leaves(rty) = leaves(ty(x))` であり、任意の `π` について
+`Λ_{rty}(π) = Λ_{ty(x)}(π)` である。
+
+**この補題が要るのは、L19 と L20 が `rty` について語り、L21 と L22 がその答えを `Λ_{ty(x)}(π)` と
+`Inh_x(π)` に読み替えて使うからである。**
+
+<1>1. `collect_bindings` は `Let(x, Llvm(gen, args), k)` の腕で `bindings` に
+      `Binding::Llvm(gen.clone(), args.clone(), x.ty.clone())` を入れる。すなわち第 3 成分はその `Let` の
+      束縛変数 `x` の `RcVar` が持つ型である。`bindings` に `Binding::Llvm` を入れるのはこの腕だけで
+      ある。
+  BY CODE src/rc_ir/ownership.rs: collect_bindings
+
+<1>2. QED
+  A12 より同じ名前の `RcVar` が持つ型は一致するので、`<1>1` の `x.ty` は `x` が得る値の型 `ty(x)` で
+  ある (第 1 節の `ty`)。`leaves(・)` と `Λ_{・}(π)` は型だけの関数なので、後半が従う。
+  BY <1>1, A12, L0
+
 ### L19 (`Llvm` が束縛する値の leaf の `origin`)
 
 **言明**。`vars.bindings.get(x)` が `Some(Binding::Llvm(gen, args, rty))` であるとし、`decl` を
@@ -2429,27 +2449,31 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>4. CASE `Some(Binding::Llvm(gen, args, rty))` で `decl.leaf_origins_at(π).and_then(as_arg_projection)`
       が `Some((j, σ))`
   この腕は `π` が `rty` の leaf であることを要求する (`leaf_origins_at` は leaf の path にだけ `Some` を
-  返す)。`boxed_leaf_paths` の `go` は leaf を積んだ位置で戻るので、1 つの leaf が別の leaf の真の接頭辞に
+  返す)。L18a より `rty = ty(x)` なので `π ∈ leaves(ty(x))` である。`boxed_leaf_paths` の `go` は leaf を
+  積んだ位置で戻るので、1 つの leaf が別の leaf の真の接頭辞に
   なることはない。よって `π` を前置に持つ leaf は `π` だけなので `Λ_{ty(x)}(π) = {π}` である。すなわち
   `λ = π` しかなく、結論は仮定そのものである。
-  BY CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, Provenance::build_shape,
+  BY L18a, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, Provenance::build_shape,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, LeafMap::get, LeafMap::build_shape
 
 <1>5. CASE `Some(Binding::Llvm(gen, args, rty))` で `decl.leaf_origins_at(π).and_then(as_arg_projection)`
       が `None`
   <2>1. `reached` が空のとき、`Λ_{ty(x)}(π)` の各 `λ` について `S_λ = ∅` であり、
         `origin(x, λ) = Exactly((x, λ))` で `owns(x, λ)` は真である。
-    L20 (a) より、`reached` が空であることは `operand_units` が空かつ `produced_here` が偽であることで
+    L18a より `rty = ty(x)` なので、L19 と L20 が語る `Λ_{rty}(π)` と `leaves(rty)` はここでの
+    `Λ_{ty(x)}(π)` と `leaves(ty(x))` である。L20 (a) より、`reached` が空であることは `operand_units`
+    が空かつ `produced_here` が偽であることで
     あり、これは `Λ_{ty(x)}(π)` のどの `λ` の `S_λ` も `Arg` を含まず `Fresh` も `Unknown` も含まない
     こと、すなわち `S_λ = ∅` であることと同値である。L19 よりそのとき
     `origin(x, λ) = Exactly((x, λ))` である。`x` の binding は `Binding::Llvm` なので L13 より
     `owns(x, λ)` は真である。
-    BY L13, L19, L20
+    BY L13, L18a, L19, L20
   <2>2. `reached` が空でないとき、`reached` の各元 `o` について、`o` の候補はすべて `owns` で真である。
     L20 (d) より `cand(o) ⊆ cand(x, π)` であり、仮定より `cand(x, π)` の元はすべて真である。
     BY L20
   <2>3. `reached` が空でないとき、`Λ_{ty(x)}(π)` の各 `λ` について `(x, λ)` は所有される。
-    L19 より `S_λ` は 3 つの形のいずれかである。`S_λ = ∅` と `S_λ = {Fresh}` と `S_λ = {Unknown}` では
+    L18a より `rty = ty(x)` なので `Λ_{ty(x)}(π) = Λ_{rty}(π)` であり、その各 `λ` は `leaves(rty)` の
+    元である。L19 より `S_λ` は 3 つの形のいずれかである。`S_λ = ∅` と `S_λ = {Fresh}` と `S_λ = {Unknown}` では
     `origin(x, λ) = Exactly((x, λ))` であり、L13 より `owns(x, λ)` は真である。
     `S_λ = {Arg(j, σ)}` では `origin(x, λ) = origin(args[j], σ)` である。L20 (a) より
     `w := trunc(ty(args[j]), σ)` について `(j, w) ∈ operand_units` であり、L20 (b) より
@@ -2457,7 +2481,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     `(args[j], w)` は unit を覆う。`trunc` の答えは引数の接頭辞なので `w ⊑ σ` であり、
     `σ ∈ leaves(ty(args[j]))` (L19) なので `σ ∈ Λ_{ty(args[j])}(w)` である。帰納法の仮定より
     `(args[j], σ)` は所有される。
-    BY <2>2, L13, L18, L19, L20, CODE src/rc_ir/ownership.rs: truncate_to_unit
+    BY <2>2, L13, L18, L18a, L19, L20, CODE src/rc_ir/ownership.rs: truncate_to_unit
   <2>4. QED
     BY <2>1, <2>3
 
@@ -2705,14 +2729,15 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>7. CASE `Some(Binding::Llvm(gen, args, rty))` で `decl.leaf_origins_at(π).and_then(as_arg_projection)`
       が `Some((j, σ))`
   この腕は `π` が `rty` の leaf であることを要求する (`leaf_origins_at` は leaf の path にだけ `Some` を
-  返す)。`boxed_leaf_paths` の `go` は leaf を積んだ位置で戻るので、`π` を前置に持つ leaf は `π` だけで
+  返す)。L18a より `rty = ty(x)` なので `π ∈ leaves(ty(x))` である。
+  `boxed_leaf_paths` の `go` は leaf を積んだ位置で戻るので、`π` を前置に持つ leaf は `π` だけで
   あり、`Λ_{ty(x)}(π) = {π}` である。`Inh_x(π) ⊆ {π}` であり、`λ = π` のとき
   `cand(x, λ) = cand(x, π)` は仮定より全部偽である。`cand(x, π)` は空でない -- `x` は `vars.bindings` に
   `Binding::Llvm` を持つ束縛変数なので、P2 (固定した版が借用版のときは P9 と合わせて読む) より
   `origin(x, π)` は panic せずに答えを返し、その答えが `Exactly` ならば `candidates()` は 1 元の列、
   `Join` ならばそれを作った `of_candidates` の `assert!` が通っているので `candidates` は空でない。
   よって `cand(x, λ)` に `owns` が偽である元がある。
-  BY P2, P9, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, Provenance::build_shape,
+  BY L18a, P2, P9, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, Provenance::build_shape,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, LeafMap::get, LeafMap::build_shape,
      CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::candidates
 
@@ -2731,11 +2756,13 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     `cand(args[j], w) ⊆ cand(x, π)` である。
     BY <2>1, L20
   <2>4. `Inh_x(π)` の各 `λ` について `S_λ = {Arg(j, σ)}` の形である。
+    L18a より `rty = ty(x)` なので `Inh_x(π) ⊆ Λ_{ty(x)}(π) = Λ_{rty}(π)` であり、その各 `λ` は
+    `leaves(rty)` の元である。
     L19 より `S_λ` は `∅` か `{Fresh}` か `{Unknown}` か `{Arg(j, σ)}` である。`S_λ = ∅` は起きない --
     A3 の表の第 1 行が、空集合と宣言された leaf は inhabited にならないと述べるからである。
     `S_λ = {Fresh}` と `S_λ = {Unknown}` も起きない -- L20 (a) よりそのとき `produced_here` が真になり、
     `<2>2` に反するからである。
-    BY A3, L19, L20, <2>2
+    BY A3, L18a, L19, L20, <2>2
   <2>5. QED
     `λ ∈ Inh_x(π)` を取り、`S_λ = {Arg(j, σ)}` とする (`<2>4`)。L19 より
     `origin(x, λ) = origin(args[j], σ)` かつ `σ ∈ leaves(ty(args[j]))` である。L20 (a) より
@@ -2748,7 +2775,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     `collect_bindings` が `Binding::Llvm(gen, args, rty)` を記録した `Let(x, Llvm(gen, args), k)` ただ
     1 つであり、`x` がこの位置までに値を得ているので活性化はその節点を通っていて、その節点は `args` の
     各要素を `RcVar` として持つ。
-    BY <2>3, <2>4, A3, L18, L19, L20, L20a, L20b,
+    BY <2>3, <2>4, A3, L18, L18a, L19, L20, L20a, L20b,
        CODE src/rc_ir/ownership.rs: truncate_to_unit, collect_bindings
 
 <1>9. QED
