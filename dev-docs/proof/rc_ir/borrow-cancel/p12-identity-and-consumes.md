@@ -776,11 +776,11 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
   <2>2. `as_arg_projection(sources)` が `Some((j, p))` を返すのは、`sources` がちょうど 1 元からなり、
         その元が `LeafOrigin::Arg(j, p)` のときに限る。
     BY CODE src/rc_ir/ownership.rs: as_arg_projection
-  <2>2a. `<2>1` の呼び出しが作る `decl` は、言明の `decl` と同じ値である。どちらも
-         `llvm_gen.result_prov(ty, arg_tys, type_env)` の値であり、A3 の決定性の節 -- `result_prov` は
-         同じ引数に対して常に同じ値を返す -- がその 2 つを等しくする。`llvm_gen`・`args`・`ty` は
-         `vars.bindings.get(u)` の記録 `Llvm(gen, args, ty)` が持つ値であり、`arg_tys` は
-         `args` の各元の型の列である (`<2>1` の腕がそう作る)。
+  <2>2a. `<2>1` の呼び出しが作る `decl` は、言明の `decl` と同じ値である。どちらも、記録
+         `Llvm(gen, args, ty)` が持つ op に、記録が持つ結果の型 `ty`、`args` の各元の型の列、そして
+         `type_env` を渡した `result_prov` の値である (`<2>1` の腕が `arg_tys` をそう作る)。引数が
+         同じなので、A3 の決定性の節 -- `result_prov` は同じ引数に対して常に同じ値を返す -- が 2 つの
+         値を等しくする。
     BY A3, <2>1
   <2>3. 前提より `decl.leaf_origins_at(λ)` は 1 元集合 `{Arg(j, σ)}` なので、`as_arg_projection` はそれを
         `Some((j, σ))` に写す。`<2>2a` より、`<2>1` の呼び出しが `leaf_origins_at` を掛ける `decl` は
@@ -969,9 +969,10 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     BY A3
   <2>2a. `<1>1` の `origin_inner` の呼び出しが `Llvm` の腕で作る `decl` は、この言明の `decl` と同じ
          値である。その腕は `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を評価し、
-         `llvm_gen`・`args`・`result_ty` は `vars.bindings.get(x)` の記録が持つ値、`arg_tys` は `args` の
-         各元の型の列である。引数が同じなので、A3 の決定性の節 -- `result_prov` は同じ引数に対して常に
-         同じ値を返す -- が 2 つの値を等しくする。
+         `llvm_gen`・`args`・`result_ty` は `vars.bindings.get(x)` の記録 `Llvm(gen, args, result_ty)` が
+         持つ値 -- `llvm_gen` は `gen` である -- で、`arg_tys` は `args` の各元の型の列である。引数が
+         同じなので、A3 の決定性の節 -- `result_prov` は同じ引数に対して常に同じ値を返す -- が 2 つの
+         値を等しくする。
     BY A3, <1>1, CODE src/rc_ir/ownership.rs: origin_inner の
        `Some(Binding::Llvm(llvm_gen, args, result_ty))` の腕
   <2>3. `leaf_origins_at(π)` は、`π` に記録がある場合に `Some`、無い場合に `None` を返す。
