@@ -1,7 +1,7 @@
 # P18c, P19 - P24: `cancel` が RC 規律を保存すること
 
 この文書は README の 7 命題 P18c, P19, P20, P21, P22, P23, P24 を証明する。README の定義 D1 - D34
-(D11a と D11 の (S-c) の接頭条件を含む)、仮定 A1 - A26、層 0 の命題 P29、層 2 の命題 P30、および
+(D11a と D11 の (S-c) の接頭条件を含む)、仮定 A1 - A26、層 2 の命題 P30、および
 命題 P1 - P18b と P14a の**言明**の上に立つ。主定理 T は `p70-main-theorem.md` の担当であり、この文書は
 扱わない。
 
@@ -2138,10 +2138,13 @@ P14a、P18a を読む段はこれに立つ。**この 4 つはどれも「各実
           名指す leaf そのものである (解決しない場合は A7 が扱う。A14 より `params[i]` は範囲内である)。
           D9 の `App` の行が読む所有は実行時の呼び出し先 (D23) のものなので、静的に解決した関数が
           その呼び出し先であることが要る。`cancel` は `borrow_ify` の出力を入力に取るので (第 1 節)、
-          P29 の (b) がそれを与える -- README は「`cancel` の中で `CancelAnalysis::consume_rhs` が
-          `rhs_consumes` を呼ぶ位置がこれを読む」と、この位置を名指す。
+          それを与えるのは P30 -- 「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
+          `resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の
+          呼び出し先 (D23) と同じ `RcFunc` である」-- である。P30 は続けて「`cancel` の中で
+          `CancelAnalysis::consume_rhs` が `rhs_consumes` を呼ぶ位置がこれを読む」と、この位置を名指す。
+          **P29 は `borrow_ify` の入力についての命題なので、ここには当たらない。**
       BY CODE src/rc_ir/ownership.rs: rhs_consumes,
-         CODE src/rc_ir/ownership.rs: resolve_callee_params, D9, D23, A7, A14, P29, <3>1
+         CODE src/rc_ir/ownership.rs: resolve_callee_params, D9, D23, A7, A14, P30, <3>1
     <3>3. `rhs_consumes` は `RcRhs::Closure(_, caps)` について各 capture の全 boxed leaf を報告する。
           これは D9 の `Closure` の行である。
       BY CODE src/rc_ir/ownership.rs: rhs_consumes, CODE src/rc_ir/ownership.rs: push_boxed_leaves, D9
