@@ -3,7 +3,7 @@
 **対象コミット**: `b851338abfbb863d3b769d9232fd58d82e27b911`
 
 この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義 D1-D34 と仮定 A1 から A26、および
-命題 P1、P2、P2a、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P15、P16、P17、P18、P24、
+命題 P1、P2、P2a、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P16、P17、P18、P24、
 P30 の**言明**の上に立つ。それらの証明は `p10-leaves-and-units.md`、
 `p12-identity-and-consumes.md`、`p15-ownership-uniformity.md`、`p20-borrow-ify.md`、
 `p30-cancel-walk.md`、`p40-cancel-soundness.md`、`p51-runs.md` にあり、この文書はその言明だけを使う。
@@ -566,10 +566,12 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
         BY CODE src/rc_ir/ownership.rs: resolve_callee_params
       <4>1a. `n` の段の**実行時の**呼び出し先 (D23) を `g` と書くと、`g` は `prog` の `funcs` の関数で
              あり、そのパラメータの列は `params` である。
-        BY P15, P30, <2>4, <4>1, D23
-        第 1 節より `B` は `cancel` の入力の本体であり、`prog` はそのプログラムである。P15 は
-        「**`cancel` の入力が `borrow_ify` の出力であることは、`optimize_rc_program` の 1 か所を
-        読めば決まる。**」と述べるので、`prog` は `borrow_ify` の出力である。<2>4 と <4>1 より
+        BY P30, <2>4, <4>1, D23, CODE src/build/build_object_files.rs: optimize_rc_program,
+           CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel
+        第 1 節より `B` は `cancel` の入力の本体であり、`prog` はそのプログラムである。
+        `optimize_rc_program` は `borrow_ify` の返り値をそのまま `cancel` に渡し、`borrow_ify` と
+        `cancel` はどちらも `pub(crate)` なのでクレートの外から呼ぶ者は居ない。よって `prog` は
+        `borrow_ify` の出力である。<2>4 と <4>1 より
         `params` は `resolve_callee_params(callee, vars, prog)` の返り値である。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
         `resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の呼び出し先
         (D23) と同じ `RcFunc` である。`cancel` の中で `CancelAnalysis::consume_rhs` が `rhs_consumes` を
@@ -2515,12 +2517,14 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
     `d(C) = held_ρ(n, C) - 1 ≥ bumps_ρ(n, C)` である。
   <2>4. CASE `C` の ρ-終端が借用する (D14) パラメータ・capture の leaf であり、`bumps_ρ(n, C) = 0` で
         ある。
-    BY P14a, P15, D34, DEF 節点の時点, <2>1, L17
+    BY P14a, D34, DEF 節点の時点, <2>1, L17,
+       CODE src/build/build_object_files.rs: optimize_rc_program,
+       CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel
     P14a は「`borrow_ify` の出力の各本体、各実行路、各活性化について、ρ-終端が借用する (D14)
     パラメータ・capture の leaf である**計数下**の別名類 (D26) は、活性化の間ずっと参照を少なくとも
-    1 つ持つ」と述べる。第 1 節より `B` は `cancel` の入力の本体であり、P15 の「**`cancel` の入力が
-    `borrow_ify` の出力であることは、`optimize_rc_program` の 1 か所を読めば決まる。**」より、`B` は
-    `borrow_ify` の出力の本体である。L17 より `C` は計数下である。D34 がその「参照の個数」の帰属を定め、DEF 節点の時点より
+    1 つ持つ」と述べる。第 1 節より `B` は `cancel` の入力の本体であり、`optimize_rc_program` は
+    `borrow_ify` の返り値をそのまま `cancel` に渡し、`borrow_ify` と `cancel` はどちらも `pub(crate)`
+    なのでクレートの外から呼ぶ者は居ないので、`B` は `borrow_ify` の出力の本体である。L17 より `C` は計数下である。D34 がその「参照の個数」の帰属を定め、DEF 節点の時点より
     `τ(n)` はこの活性化が生きている間の時点である。よって `held_ρ(n, C) ≥ 1` であり、
     `d(C) = held_ρ(n, C) - 1 ≥ 0 = bumps_ρ(n, C)` である。
   <2>5. QED
