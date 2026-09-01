@@ -1613,10 +1613,11 @@ source、`Match` のアームの本数と並び、および継続の順序は変
       ものと同じだと読む段が、それである」と書いており、<3>1 よりこの段がそれである。
   <2>3b. 鍵 `(x, π)` が等しい 2 つの表の `origin` の答えは等しい。
     <3>0. P2a より、1 つの表を固定すれば `origin` の答えは `vars.origins` の memo の状態に依らないので、
-          各表の `origin` は鍵の関数である。P2 より `B` の表についての `origin(x, π)` は停止するので、
-          その評価が呼ぶ `origin` の呼び出しの木は有限である (`origin` は memo を引いてから
-          `grow_stack(|| origin_inner(...))` を 1 回呼ぶだけであり、A15 より `grow_stack` は閉包を
-          ちょうど 1 回呼ぶ)。その木の高さについての帰納法で示す。
+          各表の `origin` は鍵の関数である。よって 2 つの答えを比べるのに、memo が空の状態からの評価を
+          取ってよい。その評価では `origin` は memo に当たらず `grow_stack(|| origin_inner(...))` を
+          1 回呼ぶ (A15 より `grow_stack` は閉包をちょうど 1 回呼ぶ) ので、呼び出しの木は
+          `origin_inner` の再帰の木である。P2 よりその評価は停止するので木は有限であり、その高さに
+          ついての帰納法が整礎である。
       BY P2, P2a, A15, CODE src/rc_ir/ownership.rs: origin
     <3>1. `origin_inner` が `vars` から読むのは `bindings.get(var)` だけである。`var_tys`・`param_tys`・
           `closure_targets`・`origins` を読まない。
