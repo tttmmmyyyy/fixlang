@@ -1137,13 +1137,16 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
 <1>3a. `rewrite_inner` の `App` の腕は callee を `route` の結果で差し替える。差し替わりうる名前は
        局所名ではないので、`insert_rc` が `Retain` を置いた変数ではありえない。
   BY P12, A13, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+     CODE src/rc_ir/borrow.rs: borrow_funcref,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
      CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
      CODE src/ast/name.rs: FullName::is_local
   P12 より `route` が返す呼び出し先は、元の呼び出し先と同じ関数の版 (元の版そのものか、その
   `borrow_versions` の像) であるか、局所変数を経由する間接呼び出しでは呼び出し先そのものである。
-  後者では名前が変わらない。前者で名前が変わるとき、元の名前も返る名前も `funcs` の鍵であり、A13 の
-  最後の段落よりそれは局所名ではない。一方 `insert_rc` が `Retain` を置くのは
+  後者では名前が変わらない。前者で名前が変わるとき、元の名前は `borrow_ify` の入力の `funcs` の鍵で
+  あり、A13 の最後の段落よりそれは局所名ではない。返る名前は `borrow_funcref` が元の名前の最後の
+  断片に `#borrow` を足したものであり、名前空間の欄を書き替えない。`FullName::is_local` は名前空間が
+  空かを答えるので、返る名前も局所名ではない。一方 `insert_rc` が `Retain` を置くのは
   `insert_into_operation_let` の `if v.name.is_local()` の門の中と、`retain_if_live` の
   `var.name.is_local()` を要求する枝だけなので、`Retain(v, π)` の `v` は局所名である。よって
   差し替えが起きる callee の名前は `v` と異なり、`rhs_operands` はその `App` について `v` を
