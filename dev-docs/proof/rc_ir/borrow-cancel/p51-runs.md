@@ -89,18 +89,48 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   BY (N3), <1>2, CODE src/generator.rs: Generator::add_global_object, Generator::declare_program_global,
      Generator::declare_lambda_function
 
-<1>4. `<1>3` が登録する LLVM 関数は `func_vals[FuncRef{n}]` と同じものである。
-  `declare_lambda_function(fn_ty, name)` が作る関数の記号名は `object_file_symbol_name(name)` である。
-  `implement_rc_program` は `Q.funcs` の各項目 `(fref, func)` について `func.name.name` を取り、まず
-  `module.get_function(object_file_symbol_name(func.name.name))` を引き、在ればそれを使い、無ければ
-  `declare_program_global` を、それも `None` なら `declare_lambda_function` を呼ぶ。A22 より `func.name`
-  は鍵 `fref` に等しいので、鍵 `FuncRef{n}` の項目について取る名前は `n` である。`<1>3` より `n` に
-  ついて `declare_lambda_function` が呼ばれるのは funptr 型のときであり、`add_global_object` が同じ名前の
-  2 度目の登録で abort するので、この名前について `declare_lambda_function` が呼ばれるのは高々 1 度で
-  ある。よって `implement_rc_program` の 3 つの枝のどれを通っても、得られる LLVM 関数は
-  `object_file_symbol_name(n)` を記号名とするその 1 つである。
-  BY A22, <1>3, CODE src/generator.rs: Generator::declare_lambda_function, Generator::add_global_object,
-     CODE src/rc_ir/codegen.rs: Generator::implement_rc_program
+<1>4. コード生成が `n` の値を読むとき、`<1>3` が登録する LLVM 関数は `func_vals[FuncRef{n}]` と同じ
+      ものである。
+  <2>1. `n` について `declare_lambda_function` を呼ぶ道は 2 つであり、どちらも
+        `module.add_function(&object_file_symbol_name(n), ..)` で LLVM 関数を作る。
+    `declare_program_global(n)` は `global_types.get(n)` の型が funptr のとき
+    `declare_lambda_function(&ty, n)` を呼び、`implement_rc_program` は第 3 枝で
+    `declare_lambda_function(&func.fn_ty, &func.name.name)` を呼ぶ。`declare_lambda_function` は
+    `add_function(&object_file_symbol_name(name), ..)` で関数を作り、`fn_ty.is_funptr()` のときだけ
+    `add_global_object` でそれを登録する。
+    BY CODE src/generator.rs: Generator::declare_lambda_function, Generator::declare_program_global,
+       CODE src/rc_ir/codegen.rs: Generator::implement_rc_program
+  <2>2. `implement_rc_program` の第 3 枝は `n` について走らない。
+    第 3 枝に入るのは `declare_program_global(n)` が `None` を返したときであり、その関数が `None` を
+    返すのは `global_types` が `n` を持たないときだけである。`<1>2` と `<1>3` より、そのとき `n` の値を
+    読むコード生成は `get_or_declare_global` の `unwrap_or_else` で panic するので、そのプログラムは
+    走らず、この場合の段は存在しない。
+    BY <1>2, <1>3, CODE src/generator.rs: Generator::declare_program_global,
+       Generator::get_or_declare_global, CODE src/rc_ir/codegen.rs: Generator::implement_rc_program
+  <2>3. `n` について `declare_lambda_function` が走るのは高々 1 度である。
+    `<2>2` より残る道は `declare_program_global` の funptr の枝だけであり、その枝が走るたびに
+    `declare_lambda_function` は `add_global_object(n, ..)` を呼ぶ。`add_global_object` は `n` が
+    `declared_globals` に既に在るときコンパイルを止めるので、2 度目が走るプログラムは走らず、この場合の
+    段は存在しない。
+    BY <2>1, <2>2, CODE src/generator.rs: Generator::add_global_object,
+       Generator::declare_lambda_function
+  <2>4. 記号名 `object_file_symbol_name(n)` を要求してモジュールに関数を作る呼び出しは、`<2>3` のその
+        1 度だけである。
+    `object_file_symbol_name` の値をそのまま `module.add_function` に渡すのはコード生成のうち
+    `declare_lambda_function` の 1 か所である。ほかの `add_function` の呼び出しが渡すのは、
+    `Get#`・`InitValue#`・`GlobalVar#`・`InitFlag#`・`InitOnce#` を冠した名前 (`global_accessor_name` と
+    `implement_rc_global`) か、走時・走査・FFI の記号名であって、この綴りではない。
+    BY <2>1, <2>3, CODE src/generator.rs: object_file_symbol_name, Generator::declare_lambda_function,
+       CODE src/rc_ir/codegen.rs: Generator::implement_rc_global
+  <2>5. QED
+    `implement_rc_program` は `Q.funcs` の各項目 `(fref, func)` について `func.name.name` を取り、まず
+    `module.get_function(&object_file_symbol_name(func.name.name))` を引き、在ればそれを使い、無ければ
+    `declare_program_global` を、それも `None` なら `declare_lambda_function` を呼ぶ。A22 より `func.name`
+    は鍵 `fref` に等しいので、鍵 `FuncRef{n}` の項目について取る名前は `n` である。`<2>2` より第 3 枝は
+    走らない。第 2 枝が返すのは `<2>3` のその 1 度が作った関数であり、第 1 枝が返すのは記号名
+    `object_file_symbol_name(n)` の関数で、`<2>4` よりそれも同じ 1 つである。`<1>3` が
+    `declared_globals` に登録するのもその関数である。
+    BY A22, <1>3, <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/codegen.rs: Generator::implement_rc_program
 
 <1>5. (b) が成り立つ。
   `<1>3` の登録は `ValueAccessor::Global(fun, ty)` であり、`ty.is_funptr()` なので `ValueAccessor::get`
