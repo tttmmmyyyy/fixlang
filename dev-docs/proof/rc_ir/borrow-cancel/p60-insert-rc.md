@@ -3445,8 +3445,11 @@ A19 の範囲は `borrow_ify` の入力、すなわち `split_rc_units` の出�
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
        CODE src/rc_ir/ownership.rs: as_arg_projection,
        CODE src/rc_ir/ownership.rs: truncate_to_unit,
+       CODE src/rc_ir/ownership.rs: Origin,
        CODE src/rc_ir/ownership.rs: Origin::acted_on,
-       CODE src/rc_ir/ownership.rs: Origin::of_candidates
+       CODE src/rc_ir/ownership.rs: Origin::of_candidates,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under
     `≺` (<2>4) の上の帰納である。鍵 `(x, π)` を取り、`(y, σ) ≺ (x, π)` である各鍵について
     `Org_B(y, σ) = Org_{B'}(y, σ)` を仮定する。<2>3 より示すのは、2 つの表について `origin_inner` が
     同じ値を返すことである。`origin_inner` はまず `vars.bindings.get(var)` で腕を選び、<2>1 より鍵の
@@ -3474,7 +3477,8 @@ A19 の範囲は `borrow_ify` の入力、すなわち `split_rc_units` の出�
       から決まり、`origin` の値は帰納法の仮定より等しいので、`reached` の元の集合は 2 つの側で等しい。
       返り値はその集合から決まる -- `reached` の元がすべて等しいときはその共通の値であり、そうでない
       ときは各元の `acted_on` を集めた**集合**を `of_candidates` に渡したものである。どちらも
-      `reached` の並べ方に依らない。
+      `reached` の並べ方に依らない (`reached.iter().all(|o| o == first)` は「元がすべて互いに等しい」
+      と同値であり、`Origin` の等号は `Join` の `candidates` を集合として比べる)。
     - `Binding::Field(container, idx)` の腕は `container.ty.is_box(type_env)` で枝が分かれ、<2>1 より
       `container` と `idx` は等しいので 2 つの側は同じ枝に入る。boxed の枝は `Exactly((var, path))` を
       返し、unbox の枝は `origin(vars, type_env, &container.name, &([idx] ++ path))` を返すので、
