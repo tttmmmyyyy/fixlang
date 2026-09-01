@@ -429,12 +429,16 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
       `Llvm` の op は元の本体のものに等しい。P9 より複製は束縛変数の一斉の付け替えであり、`clone_func`
       は原本の `capture` を `fresh_rename_function` が付け替えた形で持つので、`Some` であることは
       保たれる。グローバル初期化子の `init` については、`fix_body` が op の `cap_name` を局所名
-      `#CAP` (`CAP_NAME`) に置き、`lower_llvm` がその名前をその位置の環境で解いてオペランドに直す。
-      `#CAP` を環境に束縛するのは `lower_lambda_as_function` の `lam_ty.is_closure()` の枝だけであり、
-      その枝が束縛するのはその関数の capture 変数である。よってこの op のオペランドは、その本体を持つ
-      関数の capture 変数であり、それがグローバル初期化子の `init` に在れば `init` の自由な局所名に
-      なる。A11 は「グローバル初期化子の `init` は自由な局所名を持たない」と述べる。
-      BY A11, A24, P9, P24, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
+      `#CAP` (`CAP_NAME`) に置き、`lower_llvm` が各自由変数の名前を `resolve` で引く。`resolve` が値を
+      返す枝ではその名前がその位置で束縛されている変数であり、`#CAP` を束縛するのは
+      `lower_lambda_as_function` の `lam_ty.is_closure()` の枝だけで、その枝が束縛するのはその関数の
+      capture 変数である。よってこの op のオペランドは、その本体を持つ関数の capture 変数であり、それが
+      グローバル初期化子の `init` に在れば `init` の自由な局所名になる。A11 は「グローバル初期化子の
+      `init` は自由な局所名を持たない」と述べる。`resolve` が `None` を返す枝では、`lower_llvm` は
+      `global_types` をその名前で引き、無ければ素の `panic!` で止まる -- `#CAP` は `FullName::local` が
+      作る局所名であり (`CAP_NAME`)、A13 より `global_types` の鍵は局所名ではないので、この枝を通る
+      プログラムはコンパイルされず、その本体の活性化は存在しない。
+      BY A11, A13, A24, P9, P24, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
          CODE src/rc_ir/rename.rs: fresh_rename_function, CODE src/fixstd/builtin.rs: fix_body,
          CODE src/constants.rs: CAP_NAME, CODE src/rc_ir/lower.rs: Lowerer::lower_llvm,
          Lowerer::lower_lambda_as_function
