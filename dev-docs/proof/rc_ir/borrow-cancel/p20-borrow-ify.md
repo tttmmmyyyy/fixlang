@@ -887,9 +887,11 @@ D9 の `App` の引数の行は「呼び出し先がその位置の **unit** を
     この腕は各 `a ∈ arm_results` について `act_f(a, ρ')` を集めた集合 `S` を作り、
     `Origin::of_candidates(S, (y, ρ'))` を返す。A12 よりアームの結果と `Match` の束縛変数の型は等しいので
     `ρ' ∈ leaves(ty(a))` であり、帰納法の仮定より `S` の各元の path はその変数の型の leaf である。
-    `of_candidates` は `|S| = 1` のとき `Exactly` を返してその元だけを持ち、`|S| ≥ 2` のとき
-    `Join { identity: (y, ρ'), candidates: S }` を返すので `act_f(y, ρ') = S ∪ {(y, ρ')}` である。`(y, ρ')` の
-    path も leaf である。
+    `of_candidates` は `|S| = 1` のとき `Exactly(p)` を返し (`p` は `S` の唯一の元)、`|S| ≥ 2` のとき
+    `Join { identity: (y, ρ'), candidates: S }` を返す。`Origin::acted_on` は `identity()` を先頭に
+    それと異なる `candidates()` の元を続けるので、前者では `act_f(y, ρ') = S`、後者では
+    `act_f(y, ρ') = {(y, ρ')} ∪ S` である。どちらの場合も `act_f(y, ρ') ⊆ S ∪ {(y, ρ')}` であり、
+    `ρ' ∈ leaves(ty(y))` なので `(y, ρ')` の path も leaf である。
     BY A12, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner, Origin::of_candidates,
        Origin::acted_on
   <2>7. QED
