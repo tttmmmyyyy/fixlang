@@ -466,7 +466,7 @@ enum については元と同じ変位で、その変位が保持する各値を
     返った後に起きる。<2>2 よりその後 `vars.bindings` への書き込みは無く、<2>3a より、この欄が保持する
     op がその中に持つ状態も動かない。
     BY <2>2, <2>3, <2>3a
-<1>2b. 呼び出し `c = origin(vars, τ, ・, ・)` の中で起きる呼び出しは、どれも第 2 引数が `τ` である。
+<1>2b. `origin(vars, τ, ・, ・)` の 1 回の呼び出しの中で起きる呼び出しは、どれも第 2 引数が `τ` である。
   <2>1. `origin` の本体は自分の第 2 引数を `origin_inner(vars, type_env, var, path)` の第 2 引数として
         渡す。`origin_inner` の本体に書かれた 6 か所の `origin(vars, type_env, ...)` と 1 か所の
         `origin_from_leaves_under(vars, type_env, ...)`、および `origin_from_leaves_under` の本体に
@@ -476,10 +476,10 @@ enum については元と同じ変位で、その変位が保持する各値を
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   <2>2. QED
     第 1 引数が `vars` である `origin` の呼び出しは、`vars` を引数として受け取った本体の中に書かれた
-    ものである。<1>0a より、`c` の中でそのような本体は `origin`、`origin_inner`、
+    ものである。<1>0a より、この呼び出しの中でそのような本体は `origin`、`origin_inner`、
     `origin_from_leaves_under` の 3 つに限り、<2>1 よりこの 3 つはどれも、自分が受け取った第 2 引数を
-    そのまま渡す。`c` 自身の第 2 引数は `τ` なので、呼び出しの入れ子の深さについての帰納法により、`c` の
-    中で起きる呼び出しはどれも第 2 引数が `τ` である。
+    そのまま渡す。この呼び出し自身の第 2 引数は `τ` なので、呼び出しの入れ子の深さについての帰納法に
+    より、その中で起きる呼び出しはどれも第 2 引数が `τ` である。
     BY <1>0a, <2>1, EXT 呼び出しの入れ子
 <1>3. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが直に行う、第 1 引数が `vars` である
       `origin` の呼び出しの鍵の集合は、`vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの
