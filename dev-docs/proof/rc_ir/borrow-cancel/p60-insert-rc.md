@@ -84,6 +84,12 @@ D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて 
 **時点。** この文書では**時点**とは節点の訪問の入口を指す。`held_ρ(n, C)`、`bumps_ρ(n, C)` は、
 `ρ` の上の節点 `n` の入口における値である。
 
+**EXT 呼び出しの入れ子** (README が `EXT` の名札を与える「外部の結果」の群の項目)。1 つのスレッドの
+計算において、関数の呼び出しは開始と終了について入れ子をなす。すなわち、呼び出し `c` の実行中に
+始まった呼び出しは `c` が戻る前に戻り、`c` の実行中のどの時点でも戻っていない呼び出しは、`c` と
+その祖先 -- `c` を実行している呼び出しの列 -- である。停止する計算が行う呼び出しは有限個であり、その
+どれもが戻る。
+
 **A19 (ii) の読み。** README の形で読む。**(ii-a)** は、各時点と各**計数下の**別名類 `C` に
 ついて `held_ρ(τ, C) ≥ 0` であり、読む構文と `Retain`/`Release` がその類を名指す時点では
 `held_ρ(τ, C) ≥ 1` であることである。**非負であることは、終端の `Ret` の消費を行った直後の時点に
@@ -3451,16 +3457,17 @@ A19 の範囲は `borrow_ify` の入力、すなわち `split_rc_units` の出�
     等しいので、値は `vars.origins` が保持する memo の状態に依らず 1 つに決まる。`origin` は memo に
     鍵が無いとき `origin_inner` を走らせてその値を返すので、その鍵についての最初の呼び出しが等式を
     与える。その中の各 `origin` の呼び出しが返す値は、P2a よりその鍵の `Org_B` である。
-  <2>4. 鍵 `(y, σ)` が `origin_inner(vars_B, type_env, x, π)` の中の `origin` の呼び出しで問われる
-        ことを `(y, σ) ≺ (x, π)` と書くと、P2 が範囲に入れる鍵の上で `≺` は整礎である。
-    BY P2, CODE src/rc_ir/ownership.rs: origin
-    無限下降列 `k_0 ≻ k_1 ≻ …` があるとする。memo が空の状態から `k_0` について `origin` を呼ぶ
-    計算では、`k_1`・`k_2`・… の呼び出しはどれも memo に当たらない -- `origin` が memo に答えを書くのは
-    `origin_inner` から戻った後であり、この列の鍵はどれもその時点で呼び出しの入れ子の中に在って
-    戻っていないからである。よってその計算は `origin_inner` へ潜り続けて停止しない。P2 は `k_0` に
-    ついて `origin` が停止すると述べるので、そのような列は無い。
+  <2>4. 1 つの計算の中で memo に当たった `origin` の呼び出しが読む項は、**同じ鍵についてそれより先に
+        戻った呼び出し**が入れたものである。
+    BY A15, CODE src/rc_ir/ownership.rs: origin
+    `origin` は `vars.origins` を鍵で引き、項が在ればその値を返し、無ければ `origin_inner` を走らせて
+    (A15 より `grow_stack` はその閉包をちょうど 1 回呼ぶ) その答えを同じ鍵で表に入れ、続けて返る。
+    表に項を入れる式はこの 1 つだけなので、読まれた項を入れたのは同じ鍵についての呼び出しである。
+    その呼び出しは `insert` の直後に返るので、項が読まれる時点で既に戻っている。
   <2>5. P2 が範囲に入れる各鍵 `(x, π)` について `Org_B(x, π) = Org_{B'}(x, π)` である。
-    BY <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/ownership.rs: origin_inner,
+    BY <2>1, <2>2, <2>3, <2>4, P2, P2a, A15, EXT 呼び出しの入れ子,
+       CODE src/rc_ir/ownership.rs: origin,
+       CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
        CODE src/rc_ir/ownership.rs: as_arg_projection,
        CODE src/rc_ir/ownership.rs: truncate_to_unit,
@@ -3469,10 +3476,21 @@ A19 の範囲は `borrow_ify` の入力、すなわち `split_rc_units` の出�
        CODE src/rc_ir/ownership.rs: Origin::of_candidates,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under
-    `≺` (<2>4) の上の帰納である。鍵 `(x, π)` を取り、`(y, σ) ≺ (x, π)` である各鍵について
-    `Org_B(y, σ) = Org_{B'}(y, σ)` を仮定する。<2>3 より示すのは、2 つの表について `origin_inner` が
-    同じ値を返すことである。`origin_inner` はまず `vars.bindings.get(var)` で腕を選び、<2>1 より鍵の
-    集合と構成子は等しいので、2 つの側は同じ腕に入る。
+    鍵 `(x, π)` を取る。P2 より、空の memo と `vars_B` から `(x, π)` について `origin` を呼ぶ計算は
+    停止し、`EXT 呼び出しの入れ子` よりその計算が行う呼び出しは有限個で、そのどれもが戻る。**この計算の
+    各呼び出しについて、その返り値がその鍵の `Org_{B'}` に等しいことを、戻る順の帰納で示す。** 根の
+    呼び出しにこれを読むと、P2a よりその返り値は `Org_B(x, π)` なので言明が出る。
+    呼び出しは 2 種である。memo に当たった呼び出しについては、<2>4 よりその項を入れたのは同じ鍵に
+    ついてそれより先に戻った呼び出しであり、帰納法の仮定よりその返り値はその鍵の `Org_{B'}` である。
+    残るのは `origin_inner(vars_B, type_env, y, σ)` を走らせる呼び出しであり (A15 より `grow_stack` は
+    その閉包をちょうど 1 回呼ぶ)、その中で行われる各 `origin` の呼び出しは
+    `EXT 呼び出しの入れ子` よりこの呼び出しより先に戻るので、帰納法の仮定よりその返り値はその鍵の
+    `Org_{B'}` である。<2>3 を `vars_{B'}` に読むと、示すべきことは、2 つの側の `origin_inner` が同じ腕を
+    通り、同じ鍵を問い、問うた鍵の答えが同じであれば同じ値を返すことである -- それが言えれば、`B` の側の
+    返り値は `origin_inner(vars_{B'}, type_env, y, σ)` を `Org_{B'}` で読んだ値、すなわち
+    `Org_{B'}(y, σ)` に等しい。以下、腕ごとにそれを見る。`origin_inner` はまず
+    `vars.bindings.get(var)` で腕を選び、<2>1 より鍵の集合と構成子は等しいので、2 つの側は同じ腕に
+    入る。
     - `None`・`Binding::Param`・`Binding::Producer` の腕は `Exactly((var, path))` を返す。引数だけで
       決まるので等しい。
     - `Binding::Move(y)` の腕は `origin(vars, type_env, &y.name, path)` を返す。<2>1 より `y` は等しく、
