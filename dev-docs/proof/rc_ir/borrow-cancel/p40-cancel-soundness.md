@@ -1533,9 +1533,11 @@ source、`Match` のアームの本数と並び、および継続の順序は変
 `Del` の節点を除いて同じ節点を実行し、その時点までに値を得ている各変数の値が D29 の全単射のもとで
 対応しているとする。このとき次の 3 つが成り立つ。
 
-1. `B` から作られる `VarTable` と `B'` から作られる `VarTable` は、`bindings`・`var_tys`・`param_tys`・
-   `closure_targets` が等しく、`origin` の答えも等しい。さらに `B` を本体に持つ関数と `B'` を本体に
-   持つ関数の `params`・`capture`・`borrowed_units` は等しい。
+1. `B` から作られる `VarTable` と `B'` から作られる `VarTable` は、`var_tys`・`param_tys`・
+   `closure_targets` が等しく、`bindings` は鍵の集合と各鍵の `Binding` の変位・`RcVar`・添字・変位番号・
+   型が等しい (`Binding::Llvm` が運ぶ op は同じ原本の複製であって同じオブジェクトではない)。鍵が等しい
+   2 つの `origin` の答えは等しい。さらに `B` を本体に持つ関数と `B'` を本体に持つ関数の `params`・
+   `capture`・`borrowed_units` は等しい。
 2. `ρ` の上の位置 (D6) と `ρ'` の上の位置は、変数と leaf を同じくする対応で 1 対 1 に対応し、その対応は
    別名類 (D33) の 1 対 1 の対応を導く。対応する 2 つの類は `β` (DEF 類ごとの義務) が等しく、`τ` までに
    開始しているか (D34) が一致し、計数下であるか (D26) が一致する。計数下の類については `obj` が D29 の
@@ -1553,8 +1555,11 @@ source、`Match` のアームの本数と並び、および継続の順序は変
     BY L30, L32
   <2>2. `collect_bindings` は `RcExpr::Retain` と `RcExpr::Release` の腕で継続へ降りるだけであり、
         `bindings`・`var_tys`・`closure_targets` に何も入れない。`returned_var` も同じ 2 つの腕で継続へ
-        降りる。よって <2>1 の木の変形はこの 3 つの表を変えない。
-    BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var, <2>1
+        降りる。よって <2>1 の木の変形は `var_tys` と `closure_targets` を変えず、`bindings` については
+        鍵の集合と、各鍵の `Binding` の変位・`RcVar`・添字・変位番号・型を変えない。**`Binding::Llvm` が
+        運ぶ op はこの水準では等しいと言えない** -- <2>3a がそれを扱う。
+    BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var,
+       CODE src/rc_ir/ownership.rs: Binding, <2>1
   <2>3. `cancel` は `prog.funcs.values()` の各 `f` について `f.clone()` を作って `clone.body` にだけ
         書き込み、鍵に `f.name.clone()` を据えるので、`params`・`capture`・`borrowed_units` は
         変わらない。グローバル初期化子はパラメータも capture も持たない (D1)。`VarTable::of` は
@@ -1562,12 +1567,69 @@ source、`Match` のアームの本数と並び、および継続の順序は変
         `collect_bindings` から取る。`VarTable::body_only` は `collect_bindings` だけを取る。
     BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/ownership.rs: VarTable::of,
        CODE src/rc_ir/ownership.rs: VarTable::body_only, D1
+  <2>3a. 2 つの表の対応する `Binding::Llvm` が運ぶ op は、同じ引数に対して同じ `Provenance` を返す。
+    <3>1. `B'` の `RcRhs::Llvm` が持つ op は `B` のものの複製であり、同じオブジェクトではない。
+          `drop_nodes_inner` の右辺が `Match` でない `Let` の腕は
+          `RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete))` を積むので、`RcRhs::Llvm` が
+          持つ `Box<dyn LLVMGen>` は `clone` された別のオブジェクトである。`collect_bindings` はさらに
+          `llvm_gen.clone()` を `Binding::Llvm` の第 1 欄に置くので、2 つの表の op は 2 段の複製で
+          隔たっている。
+      BY CODE src/rc_ir/borrow.rs: drop_nodes_inner, CODE src/rc_ir/ast.rs: RcRhs,
+         CODE src/rc_ir/ownership.rs: collect_bindings
+    <3>2. QED
+      BY <3>1, A3
+      A3 は「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を
+      返す」と述べ、続けて「**この 2 節を合わせると「op の複製は原本と同じ宣言を返す」が出る。**
+      `rhs.clone()` や `fresh_rename_function` が作る複製の op は、原本と同じ引数を渡されれば同じ
+      `Provenance` を返す」と述べる。A3 はこの 1 文を要る段の見分け方を「複製された op の宣言を原本の
+      ものと同じだと読む段が、それである」と書いており、<3>1 よりこの段がそれである。
+  <2>3b. 鍵 `(x, π)` が等しい 2 つの表の `origin` の答えは等しい。
+    <3>0. P2a より、1 つの表を固定すれば `origin` の答えは `vars.origins` の memo の状態に依らないので、
+          各表の `origin` は鍵の関数である。P2 より `B` の表についての `origin(x, π)` は停止するので、
+          その評価が呼ぶ `origin` の呼び出しの木は有限である (`origin` は memo を引いてから
+          `grow_stack(|| origin_inner(...))` を 1 回呼ぶだけであり、A15 より `grow_stack` は閉包を
+          ちょうど 1 回呼ぶ)。その木の高さについての帰納法で示す。
+      BY P2, P2a, A15, CODE src/rc_ir/ownership.rs: origin
+    <3>1. `origin_inner` が `vars` から読むのは `bindings.get(var)` だけである。`var_tys`・`param_tys`・
+          `closure_targets`・`origins` を読まない。
+      BY CODE src/rc_ir/ownership.rs: origin_inner
+    <3>2. CASE 腕が `None`/`Param`/`Producer`、`container.ty.is_box` が真の `Binding::Field`、または
+          `scrut.ty.is_box` が真の `Binding::Payload(_, Some(_))` である。これらは
+          `Exactly((var, path))` を返し、`origin` を呼ばない。<2>2 より 2 つの表は同じ鍵で同じ腕へ入り、
+          `is_box` が読む型も <2>2 より等しいので、返り値は等しい。
+      BY CODE src/rc_ir/ownership.rs: origin_inner, <2>2
+    <3>3. CASE 腕が `Binding::Move(y)`、`Binding::Join(arm_results)`、`Binding::Payload(scrut, None)`、
+          `container.ty.is_box` が偽の `Binding::Field(container, idx)`、または `scrut.ty.is_box` が
+          偽の `Binding::Payload(scrut, Some(tag))` である。これらが呼ぶ `origin` の引数 -- 変数と
+          path -- は、<2>2 より 2 つの表で等しい。帰納法の仮定よりその答えは等しく、`Join` の腕が
+          `Origin::of_candidates(candidates, (var, path))` に渡す `candidates` はそれらの答えの
+          `acted_on()` の合併なので、これも等しい。
+      BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Origin::of_candidates,
+         CODE src/rc_ir/ownership.rs: Origin::acted_on, <2>2, 帰納法の仮定
+    <3>4. CASE 腕が `Binding::Llvm(llvm_gen, args, result_ty)` である。この腕は `arg_tys` を `args` の
+          型から作り、`decl = llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を取る。<2>2 より
+          `args` と `result_ty` は 2 つの表で等しく、第 1 節の記法 より `type_env` は 1 つなので、
+          <2>3a より `decl` は 2 つで等しい。`as_arg_projection` は `decl` と `path` だけを読む。
+          `origin_from_leaves_under` は `decl`・`args`・`path`・`type_env` から `operand_units` と
+          `produced_here` を作り、`operand_units` の各元について `origin(vars, type_env, args[j].name,
+          unit)` を呼び、その答えから返り値を組む。呼び出しの引数は 2 つの表で等しいので、帰納法の仮定
+          よりその答えも等しく、返り値も等しい。
+      BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: as_arg_projection,
+         CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+         CODE src/rc_ir/ownership.rs: truncate_to_unit, <2>2, <2>3a, 第 1 節の記法, 帰納法の仮定
+    <3>5. QED
+      BY <3>0, <3>1, <3>2, <3>3, <3>4, CODE src/rc_ir/ownership.rs: origin_inner,
+         CODE src/rc_ir/ownership.rs: Binding
+      `origin_inner` の `match` は `bindings.get(var)` の値について `None | Param | Producer`、`Move`、
+      `Join`、`Llvm`、`Field`、`Payload` の 6 つの腕を持ち、`Field` と `Payload` は `is_box` で
+      さらに分かれる。<3>2、<3>3、<3>4 がこれを尽くす。
   <2>4. QED
-    BY <2>2, <2>3, P2a, 第 1 節の記法, CODE src/rc_ir/borrow.rs: cancel
+    BY <2>2, <2>3, <2>3a, <2>3b, 第 1 節の記法, CODE src/rc_ir/borrow.rs: cancel
     第 1 節の記法 より `type_env` はプログラムの `TypeEnv` であり、`cancel` は受け取った `type_env` を
     そのまま `CancelAnalysis` と `all_owned_units` に渡して型を作らないので、2 つの本体の `origin` は
-    同じ `type_env` の下で読む。P2a より `origin` の答えは `vars.bindings`・`type_env`・`(x, π)` だけで
-    決まるので、<2>2 と <2>3 より 2 つの表の `origin` は同じ答えを返す。
+    同じ `type_env` の下で読む。**P2a は 1 つの `VarTable` の値を固定した形の主張であり、相異なる
+    2 つの表について答えを比べる形はその主張ではない** -- その形を <2>3b が `origin` の再帰の上の帰納で
+    示す。
 <1>2. 2 が成り立つ。
   <2>1. 位置 (D6) が対応する。D6 より位置は対 `(x, λ)` であり、`x` は値を得た変数か束縛を持たない名前、
         `λ` は `ty(x)` の inhabited (D16) な boxed leaf である。<1>1 より 2 つの `VarTable` の
