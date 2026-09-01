@@ -313,7 +313,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret
 }
 
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_arrow_name_abs() -> FullName {
     let mut name = FullName::from_strs(&[STD_NAME], ARROW_NAME);
     name.set_absolute();

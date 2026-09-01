@@ -1108,6 +1108,7 @@ impl TypeCheckContext {
     /// Perform typechecking: update the type substitution so that `ei` has
     /// type `ty`, and return the given AST augmented with inferred
     /// information.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unify_type_of_expr(
         &mut self,
         ei: &Arc<ExprNode>,
