@@ -1224,6 +1224,13 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 形)。**これが無いと `p30-cancel-walk.md` の `L0`、したがって P2a が閉じない** -- `origin_inner` の
 `Binding::Llvm` の腕が `result_prov` を呼ぶので、その答えが呼ぶたびに変わると `origin` の答えも変わる。
 
+**この 2 節を合わせると「op の複製は原本と同じ宣言を返す」が出る。** `rhs.clone()` や
+`fresh_rename_function` が作る複製の op は、原本と同じ引数を渡されれば同じ `Provenance` を返す --
+決定性がそれを引数の関数にし、`FullName` の欄を読まないことが名前替えを答えから外す。
+**この 1 文を要る段が 3 つある** -- `p12-identity-and-consumes.md` の `L16`、
+`p13-disposals-and-pending.md` の `L16`、`p60-insert-rc.md` の `L29`。どれも 2 つの `VarTable` を跨いで
+`origin` の答えが一致することを言う段であり、3 つとも 2 節を自分で組み合わせている。
+
 **この節を読む段は 6 つのファイルに在る。** `origin` の答えが鍵で決まることを、それぞれが自分の局所補題
 として示すからである -- `p10-leaves-and-units.md` の `<1>29a`、`p11-origin-soundness.md` の `L14`、
 `p12-identity-and-consumes.md` の `L0`、`p13-disposals-and-pending.md` の `L8a`、
