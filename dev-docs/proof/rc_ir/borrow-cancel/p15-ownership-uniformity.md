@@ -1144,6 +1144,12 @@ A12 を満たす本体とその `VarTable::of` ならどれでもよく、この
 
 P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限である。
 
+**表の `Llvm` の 2 行の分かれ目は鍵から決まる。** どちらの行かを決めるのは
+`decl.leaf_origins_at(ρ)` であり、`decl` は `gen.result_prov(rty, arg_tys, type_env)` である。A3 より
+`result_prov` は決定的である -- 同じ引数に対して常に同じ値を返す -- ので、この分岐は対 `(y, ρ)` と
+固定した表から決まり、`Reach(x, π)` は 1 つの集合として定まる
+(`CODE src/rc_ir/ownership.rs: origin_inner`, `as_arg_projection`)。
+
 **`vars_f` について読む者。** 入力の関数 `func` は `borrow_ify` の入力の関数なので A6・A11・A12 を
 満たし、`ty(・)` も `func` に現れる名前について A12 が定める。よって L11a・L12・L14 を
 `vars_f = VarTable::of(func)` と `func.body` について読んでよく、そのとき `Reach` は
@@ -1199,8 +1205,11 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
       および部分結果をそのまま返す 6 か所 (`Binding::Move` の腕、unbox 容器の `Binding::Field` の腕、
       `Binding::Payload` の catch-all の腕、`Binding::Payload` の unbox 変位の腕、単一 `Arg` の
       `Binding::Llvm` の腕が返す `origin(...)`、および `origin_from_leaves_under` が返す
-      `first.clone()`) だけである。
-  BY CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under, Origin::of_candidates
+      `first.clone()`) だけである。どの作り方に入るかは鍵から決まる -- `Binding::Llvm` の腕の分かれ目
+      だけが `decl = gen.result_prov(rty, arg_tys, type_env)` を読み、A3 より `result_prov` は
+      決定的だからである。
+  BY A3, CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under, Origin::of_candidates,
+     as_arg_projection
 
 <1>2. `Origin::Exactly(p)` について `act = cand = {p}` であり、`Origin::Join { identity, candidates }`
       について `cand = candidates`、`act = candidates ∪ {identity}` である。
@@ -1583,11 +1592,17 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `Binding` は 7 つの構成子を持ち (`Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、
     `Join`)、`vars_f.bindings.get(x)` はそれらか `None` である。`Field` は容器の boxed / unbox で、
     `Payload` は `tag` の有無と scrutinee の boxed / unbox で分かれる。`<2>2` から `<2>5` はこの
-    分け方を尽くす。`origin` は memo `vars.origins` を先に見るが、`VarTable` は `origins` が空の
-    状態で作られ、`origin` はそこに自分が返す答えだけを記録するので、memo が返す値は
-    `origin_inner` の答えである。A15 と P2 より再帰は停止するので、この対応は全域である。
-    BY <2>1, <2>2, <2>3, <2>4, <2>5, A15, P2, L11a, DEF 再帰で訪れる対,
-       CODE src/rc_ir/ownership.rs: origin, origin_inner, Binding, VarTable::empty
+    分け方を尽くす。
+    `<2>2` から `<2>5` が結ぶのは `origin_inner` の腕についての等式であり、その腕は `origin` を
+    再帰的に呼び、帰納法の仮定も `origin` について立てている。等式の両辺を 1 つの値として読むには、
+    鍵 `(y, ρ)` が等しい 2 つの `origin` の呼び出しが等しい値を返すことが要る。それを与えるのが
+    P2a である -- `vars_f` と `type_env` を第 1・第 2 引数に固定した呼び出しについて、および
+    `vars_c` と `type_env` を固定した呼び出しについて、鍵の等しい 2 つの返り値は等しい。したがって
+    両辺の `origin` の答えは `vars.origins` が保持する memo の状態に依らない量であり、この帰納の
+    各段が結ぶ等式は 1 つの値どうしの等式である。A15 と P2 より再帰は停止するので、この対応は
+    全域である。
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, A15, P2, P2a, L11a, DEF 再帰で訪れる対,
+       CODE src/rc_ir/ownership.rs: origin, origin_inner, Binding
 
 <1>7. QED
   第 1 の項は `<1>2` と `<1>3` が、第 2 の項は `<1>6` が与える。
@@ -2050,11 +2065,14 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 - `S_λ = {Fresh}` または `S_λ = {Unknown}` のとき `origin(x, λ) = Exactly((x, λ))` である。
 - `S_λ = {Arg(j, σ)}` のとき `origin(x, λ) = origin(args[j], σ)` であり、`σ ∈ leaves(ty(args[j]))` である。
 
-<1>1. `|S_λ| ≤ 1` であり、`S_λ` の元は `Arg` か `Fresh` か `Unknown` である。
+<1>1. `|S_λ| ≤ 1` であり、`S_λ` の元は `Arg` か `Fresh` か `Unknown` である。また `decl` は
+      `(gen, rty, arg_tys, type_env)` から決まる 1 つの値であり、`S_λ` もそうである。
   A3 は、`result_prov` を override する 29 個の宣言が leaf に置く集合の要素数がすべて 0 か 1 であり、
   複数の元を宣言する op はこのコミットのプログラムに存在しないと述べる。`LeafOrigin` は `Arg`、`Fresh`、
-  `Unknown` の 3 つの構成子を持つ。
-  BY A3, CODE src/rc_ir/provenance.rs: LeafOrigin
+  `Unknown` の 3 つの構成子を持つ。A3 はさらに `result_prov` が決定的である -- 同じ引数に対して常に
+  同じ値を返す -- ことを述べるので、`decl` は呼び出しの時点によらない。よってこの補題が数え上げる
+  `origin_inner` の腕の分かれ目も、鍵から決まる。
+  BY A3, CODE src/rc_ir/provenance.rs: LeafOrigin, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
 
 <1>2. `S_λ = {Arg(j, σ)}` のとき `origin(x, λ) = origin(args[j], σ)` であり
       `σ ∈ leaves(ty(args[j]))` である。
@@ -2121,10 +2139,13 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   各元について `Arg(j, leaf)` なら `(j, truncate_to_unit(&args[j].ty, leaf, type_env))` を
   `operand_units` に入れ、`Fresh` か `Unknown` なら `produced_here` を真にする。
   `leaf_origins_under(π)` は `π` を前置に持つ `rty` の leaf の値を並べるので、渡るのは
-  `{ S_λ : λ ∈ Λ_{rty}(π) }` である。
-  BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+  `{ S_λ : λ ∈ Λ_{rty}(π) }` である。A3 より `result_prov` は決定的なので `decl` は
+  `(gen, rty, arg_tys, type_env)` から決まる 1 つの値であり、この補題が数え上げる `origin_inner` と
+  `origin_from_leaves_under` の腕の分かれ目も鍵から決まる。
+  BY A3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
      CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
-     CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under
+     CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under,
+     CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
 
 <1>2. (b) が成り立つ。
   関数は `operand_units` を `origin(vars, type_env, &args[j].name, &unit)` へ写して `reached` を作り、
@@ -2355,12 +2376,15 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `Binding` は 7 つの構成子を持ち (`Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、`Join`)、
   `vars.bindings.get(x)` はそれらか `None` である。`Field` は容器の boxed / unbox で、`Payload` は
   `tag` の有無と scrutinee の boxed / unbox で、`Llvm` は `as_arg_projection` の答えで分かれる。
+  A3 より `result_prov` は決定的なので、最後の分かれ目 -- `decl.leaf_origins_at(π)` を
+  `as_arg_projection` に掛けた答え -- は鍵 `(x, π)` から決まり、この数え上げは呼び出しの時点に
+  依らない。
   `<1>1` から `<1>5` はこの分け方を尽くす。帰納法の仮定を使ったのは `<1>2` (`Move` / `Payload(s, None)` の
   `(w, π)`・`(s, π)`、`Join` の `(a, π)`)、`<1>3` (`(c, [idx] ++ π)`・`(s, [t] ++ π)`)、`<1>5`
   (`(args[j], w)`) であり、どれも DEF 再帰で訪れる対 の表が `(x, π)` から進む相手なので、L11a より
   この帰納は整礎である。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, L11a, DEF 再帰で訪れる対,
-     CODE src/rc_ir/ownership.rs: Binding, origin_inner
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, A3, L11a, DEF 再帰で訪れる対,
+     CODE src/rc_ir/ownership.rs: Binding, origin_inner, as_arg_projection
 
 ### L21a (別名の辺は値を運ぶ)
 
@@ -2642,11 +2666,14 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `Binding` は 7 つの構成子を持ち (`Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、`Join`)、
   `vars.bindings.get(x)` はそれらか `None` である。`Field` は容器の boxed / unbox で、`Payload` は
   `tag` の有無と scrutinee の boxed / unbox で、`Llvm` は `as_arg_projection` の答えで分かれる。
+  A3 より `result_prov` は決定的なので、最後の分かれ目 -- `decl.leaf_origins_at(π)` を
+  `as_arg_projection` に掛けた答え -- は鍵 `(x, π)` から決まり、この数え上げは呼び出しの時点に
+  依らない。
   `<1>1` から `<1>8` はこの分け方を尽くす。帰納法の仮定を使ったのは `<1>3` (`(w, π)`・`(s, π)`)、
   `<1>4` (`(a*, π)`)、`<1>5` (`(c, [idx] ++ π)`)、`<1>6` (`(s, [t] ++ π)`)、`<1>8` (`(args[j], w)`)
   であり、どれも DEF 再帰で訪れる対 の表が `(x, π)` から進む相手なので、L11a よりこの帰納は整礎である。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, L11a, DEF 再帰で訪れる対,
-     CODE src/rc_ir/ownership.rs: Binding, origin_inner
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, A3, L11a, DEF 再帰で訪れる対,
+     CODE src/rc_ir/ownership.rs: Binding, origin_inner, as_arg_projection
 
 ### P7a の 2 つの向き
 
