@@ -3587,7 +3587,10 @@ A19 の範囲は `borrow_ify` の入力、すなわち `split_rc_units` の出�
     `src/rc_ir/rc_insert.rs` で `RcExpr::Retain` と `RcExpr::Release` を構成する式は `build_retains` と
     `build_releases` の中の 1 つずつであり、A25 より骨格はこの 2 種を含まないので、`insert_rc` の出力の
     `Retain`/`Release` 節点はこの 2 つが作ったものに限る。`L8` より `build_retains` の呼び出し元は
-    4 か所であり、`build_releases` の呼び出し元は 6 か所である。
+    4 か所である。`build_releases` の呼び出し元は 6 か所である -- `insert_into_func` の `unused`、
+    `insert_into_operation_let` の `after`、`insert_into_eval` の `Release`、
+    `insert_into_destructure` の `dead`、`insert_into_match` のアームの頭 (`head`) と `Let` の
+    束縛変数の 2 か所である。
     そのうち `is_local()` の門を持つのは 4 つである -- `insert_into_operation_let` の
     `retains_before` と `releases_after` は `if v.name.is_local()` の門の中に在り、`retain_if_live` は
     `var.name.is_local()` を要求し、`insert_into_eval` の `Release` も `x.name.is_local()` を要求し、
