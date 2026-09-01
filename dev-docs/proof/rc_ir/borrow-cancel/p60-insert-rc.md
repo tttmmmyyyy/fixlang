@@ -2724,10 +2724,17 @@ D6 のスロット -- が要る)。よって時点ごとの量は、その時点
   `false` を返す。
 
 <1>3. CASE 事象が `consume(var, path)` の呼び出しである。
-  BY <1>0, <1>1, <1>2, L21, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume, D15
+  BY <1>0, <1>1, <1>2, L21, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
+     CODE src/rc_ir/ownership.rs: rhs_consumes, D6, D9, D15, DEF `Down`、`Bmp`、`Bsub`
   `consume` は `origin(vars, type_env, var, path).acted_on()` を `consume_objects` に渡す。`path` は
   boxed leaf の path であり、それが inhabited でなければ D9 の消費は参照を処分せず `d = 0` で (i) が
-  成り立つ (`consume_objects` は要素を減らすだけなので `Bsub` は増えない)。inhabited なとき処分される
+  成り立つ (`consume_objects` は要素を減らすだけなので `Bsub` は増えない)。
+  `(var, path)` が `C` のスロットでないとき -- D6 のスロットでない記号の位置であるときと、別の類の
+  スロットであるときがある -- も `d = 0` で (i) が成り立つ。`DEF Down、Bmp、Bsub` の総和は `C` の
+  スロットだけを走るので、その `μ` はどの `Down(id)` の項でもないからである。**`consume` はこの形でも
+  呼ばれる** -- `rhs_consumes` の `App` の腕は callee の全 boxed leaf を挙げるので、callee が
+  `vars.bindings` に束縛を持たない名前であるとき、その対は記号の位置である (D6)。
+  残るのは `(var, path)` が `C` のスロットである場合であり、そのとき処分される
   スロットは `s = (var, path)` の 1 つであり、`d = [id ∈ Anc(s)]` である。`id ∉ Anc(s)` なら `d = 0`
   で同じく (i) が成り立つ。`id ∈ Anc(s)` なら、
   `L21` (a) より `Anc(s) ⊆ acted_on(s)` であり、<1>1 と <1>2 より `Anc(s)` のうち `Bmp ≥ 1` である
