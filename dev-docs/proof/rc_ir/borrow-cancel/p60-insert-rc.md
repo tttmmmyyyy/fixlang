@@ -312,10 +312,18 @@ Ret(w)))))
 
 <1>9. `f` について `insert_rc` は `Release(b, [], RcState::Unknown, Let(z, Llvm(zero, []), Ret(z)))` を
       作る。
-  BY <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+  BY <1>1, <1>2, A15, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
+     CODE src/rc_ir/rc_insert.rs: insert_if_local,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+     CODE src/rc_ir/rc_insert.rs: rhs_operands,
      CODE src/rc_ir/rc_insert.rs: build_releases
-  `Ret(z)` の腕は `live = {z}` を返し、`retain_if_live` は `live_after = ∅` の下で発火しない。
+  A15 より `insert_into_expr` は `insert_into_expr_inner` をちょうど 1 回呼ぶ。
+  `insert_into_expr_inner` の `RcExpr::Ret(x)` の腕は `live = live_after ∪ {z}` を作り
+  (`insert_if_local`、<1>2 より `z` は入る)、`retain_if_live(&z, live_after, ret)` を呼ぶ。
+  `live_after = ∅` は `z` を含まないので `live.contains(&var.name)` が偽であり、節点はそのまま返る。
   `Let(z, Llvm(zero, []), Ret(z))` はオペランドを持たず、`live_cont = {z}` が `x = z` を含むので
   `after` は空であり、`live_before = {z} \ {z} = ∅` である。`insert_into_func` はこの `live` が `b` を
   含まないことと `needs_rc(b)` が真であること (<1>1) から `unused = [b]` を作り、
