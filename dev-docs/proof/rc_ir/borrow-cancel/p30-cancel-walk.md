@@ -438,10 +438,19 @@ enum については元と同じ変位で、その変位が保持する各値を
     BY <1>0, <1>0a, <2>1, <2>2, CODE src/rc_ir/ownership.rs: VarTable::empty,
        CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
        CODE src/rc_ir/ownership.rs: collect_bindings
+  <2>3a. `bindings` の値が保持する op は、共有参照の下で自分の状態を動かさない。`Binding::Llvm` の
+         第 1 成分の型は `Box<dyn LLVMGen>` であり、これは `RcRhs::Llvm` の第 1 成分の型、すなわち D1 の
+         `RcProgram` の 3 つの欄から辿って現れる型である。A3 の内部可変性の節は `Box<dyn LLVMGen>` の
+         op を名指して、その op が `UnsafeCell` の欄を持たないことを述べる。`Binding` の残る 6 変位が
+         保持するのは `RcVar`、`Vec<RcVar>`、`Arc<TypeNode>`、`usize`、`Option<usize>` であって、op は
+         `Binding::Llvm` にしか現れない。
+    BY CODE src/rc_ir/ownership.rs: Binding, CODE src/rc_ir/ast.rs: RcRhs,
+       CODE src/rc_ir/ast.rs: RcVar, A3, D1
   <2>4. QED
     <2>3 より、`vars` を第 1 引数とする `origin` の呼び出しはどれも、`vars` を作った <2>2 の呼び出しが
-    返った後に起きる。<2>2 よりその後 `vars.bindings` への書き込みは無い。
-    BY <2>2, <2>3
+    返った後に起きる。<2>2 よりその後 `vars.bindings` への書き込みは無く、<2>3a より、この欄が保持する
+    op がその中に持つ状態も動かない。
+    BY <2>2, <2>3, <2>3a
 <1>2b. 呼び出し `c = origin(vars, τ, ・, ・)` の中で起きる呼び出しは、どれも第 2 引数が `τ` である。
   <2>1. `origin` の本体は自分の第 2 引数を `origin_inner(vars, type_env, var, path)` の第 2 引数として
         渡す。`origin_inner` の本体に書かれた 6 か所の `origin(vars, type_env, ...)` と 1 か所の
