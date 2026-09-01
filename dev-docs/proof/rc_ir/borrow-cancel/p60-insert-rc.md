@@ -947,7 +947,9 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+     CODE src/rc_ir/rc_insert.rs: build_retains,
+     CODE src/rc_ir/rc_insert.rs: build_releases
   これらの関数は `RcExprNode` を作って返すだけで、返した節点の継続を差し替える式を持たない。呼び出し元が
   するのは、返された節点を別の構成子の継続 (`cont` または `node`) として渡すことだけであり、
   `build_releases` と `build_retains` も渡された節点を継続として**包む**。よって出力の `Retain` 節点の
