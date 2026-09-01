@@ -12,7 +12,7 @@
 引用する外部の補題は 2 つのファイルにある。`p30-cancel-walk.md` の `L1` (`walk` と `rewrite` は内側を
 1 回呼ぶ)、`L5` (`un_bump` の作用)、`L6` (消費の作用)、`L10` (記録は増えるだけ)。
 `p13-disposals-and-pending.md` の第 7 節の局所の定義 -- `DEF 実行時の作用` (`Inh_ρ`、`ActRefs^inh_ρ`)、
-`DEF 名前の活性` (`obj_ρ`)、`DEF bump の帰属` (`B_ρ`)、`DEF ρ-歩みと ρ-終端` -- と、補題 `L7`
+`DEF 名前の活性` (`obj_ρ`)、`DEF bump の帰属` (`B_ρ`)、`DEF ρ-歩みと ρ-終端`、`DEF N` (`N_ρ`) -- と、補題 `L7`
 (boxed leaf の路は反鎖をなす)、`L9` (`identity` は inhabited を決める)、`L10a` (静的な数え上げと実行時の
 作用が活性な名前で一致する)、`L11` (非活性な名前では `B` は空)、`L17`
 (`N` は別名類ごとの `bumps` の和である)。
@@ -130,7 +130,12 @@
 - `others(r) :=` `self.other_objects(v, path)` の値の元の集合
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 
-`p30` の `DEF 節点の量` が、この 3 つの値が走査のどの時点で読んでも同じであることを示している。
+**この 3 つの値は、走査のどの時点で読んでも同じである。** `CancelAnalysis::acted_references` は
+`acted_references(self.vars, self.type_env, v, path)` を、`CancelAnalysis::other_objects` は
+`boxed_leaf_paths(&v.ty, self.type_env)` の各 leaf についての `origin(self.vars, self.type_env, v.name, leaf)`
+を呼ぶだけであり、`CancelAnalysis` の `vars` と `type_env` は共有参照であって走査の間 変わらない
+(`CODE src/rc_ir/borrow.rs: CancelAnalysis`)。D15 より `acted_references` の値はその引数と `origin` の答えで
+決まり、P2a より `origin` の答えは `vars.origins` が保持する memo の状態に依らない。
 
 ### DEF 削除集合
 
@@ -1245,7 +1250,7 @@ source、`Match` のアームの本数と並び、および継続の順序は変
       である。L40 の 1 がこの呼び出しについて言明のとおりを述べる。
     <3>4. QED
       BY <3>1, <3>2, <3>3, p13 の DEF ρ-歩みと ρ-終端
-      `p13` の `DEF ρ-終端` は「`origin_inner` が `origin` を呼ばないとき」を ρ-終端という。
+      `p13` の `DEF ρ-歩みと ρ-終端` は「`origin_inner` が `origin` を呼ばないとき」を ρ-終端という。
   <2>5. 計数下の `O` について `obj(C) = O` である類 `C` の ρ-終端は、D10 の生成が作る leaf か、パラメータ・
         capture の leaf である。
     <3>1. ρ-終端に当たる `origin_inner` の腕は、`None`/`Param`/`Producer` の腕、`Binding::Llvm` の
