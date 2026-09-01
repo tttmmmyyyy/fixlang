@@ -20,7 +20,7 @@ use std::{
 /// The map the compiler holds its data in. `fxhash` is fast on the short string keys the compiler
 /// looks values up by, and hashes from a fixed seed, at the cost of the resistance to chosen-key
 /// collisions a random seed gives.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub type Map<K, V> = FxHashMap<K, V>;
 
 /// A map holding the given key-value pairs. When a key is given more than once, the value that
