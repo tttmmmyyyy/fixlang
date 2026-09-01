@@ -11,8 +11,8 @@ D1 - D34 と仮定 A1 - A26 の上に立つ。P2a を除く層 1 の命題と、
 
 P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P16 - P18 もその入力に対する走査についての
 言明なので、この文書は全体を通じて、`cancel` の引数 `prog` が `borrow_ify` の 1 回の呼び出しの返り値で
-ある場合を扱う。この仮説を `ASSUME` の形で明示するのは L3、L4、L8a、L9、L11 であり、P16 と P18 の証明は
-その仮説の下で読む。
+ある場合を扱う。この仮説を `ASSUME` の形で明示するのは L3、L4、L8、L8a、L9、L11 であり、P16 と P18 の
+証明はその仮説の下で読む。
 
 ## 0. この文書が使う記法
 
@@ -1463,21 +1463,28 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 
 ### L8 (出口状態は入口状態から基本操作で得られる)
 
-各節点 `n` について、`pending_out(n)` は `pending(n)` から有限個の基本操作 (追加・消費・引き・併合) の
-列で得られる。この列を `n` の**状態の鎖**と呼ぶ。「複製」はこの列に現れない。また、走査が
-`PendingRetains` の値を作るのは DEF 基本操作 の 6 種だけである。
+ASSUME  NEW `prog`: `RcProgram`,
+        `prog` は `borrow_ify` の 1 回の呼び出しが返した値である
+PROVE   `cancel(prog, type_env)` が走査する本体の各節点 `n` について、`pending_out(n)` は `pending(n)`
+        から有限個の基本操作 (追加・消費・引き・併合) の列で得られる。この列を `n` の**状態の鎖**と
+        呼ぶ。「複製」はこの列に現れない。また、走査が `PendingRetains` の値を作るのは DEF 基本操作 の
+        6 種だけである。
 
 **証明** 木 `N(n)` の構造についての帰納法で示す。DEF 部分木より子は真の部分木なので整礎である。
 
+<1>0. 本補題の仮定は P15 の言明の仮説である。P15 より、走査はこの本体の各位置をちょうど 1 回訪問するので、
+      各節点の「訪問」(DEF 訪問) は 1 つに定まり、`pending(n)` と `pending_out(n)` はその 1 つの訪問に
+      ついての値として定まる。
+  BY P15, 本補題の仮定, DEF 訪問
 <1>1. 帰納法の仮定: `n` の各子 `c` について、`pending_out(c)` は `pending(c)` から有限個の基本操作の列で
       得られ、その走査が `PendingRetains` の値を作るのは DEF 基本操作 の 6 種だけである。
   BY 帰納法の仮定
 <1>1a. 任意の節点 `m` について、`self.walk(m, q, ・)` の 1 回の呼び出しに渡る `q` は `pending(m)` であり、
        その呼び出しの戻り値は `pending_out(m)` である。L1 よりこの呼び出しは
        `walk_inner(m, q, ・)` をちょうど 1 回呼んでその値を返し、DEF 訪問 より `walk_inner` のその
-       呼び出しが `m` の訪問であって、その `pending` 引数が `pending(m)`、その戻り値が `pending_out(m)`
-       である。
-  BY L1, DEF 訪問
+       呼び出しが `m` の訪問である。<1>0 より `m` の訪問は 1 つしかないので、その `pending` 引数が
+       `pending(m)`、その戻り値が `pending_out(m)` である。
+  BY L1, <1>0, DEF 訪問
 <1>2. CASE `n` の式が `RcExpr::Retain(v, path, _, k)` である。この腕は `pending` に「追加」を 1 回行い、
       `self.walk(k, pending, returns_from_func)` の値を返す。よって `pending(k)` は `pending(n)` に
       「追加」を 1 回行ったものであり、`pending_out(n) = pending_out(k)` である。この腕はほかに
@@ -1744,7 +1751,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 (e3) の展開は有限で終わり、その葉は (e1) か (e2) である。**
 
 **証明** 以下、`cancel` の入力 `prog` は `borrow_ify` の 1 回の呼び出しが返した値である (この文書の
-冒頭)。これは L4、L8a、L9 の仮定である。
+冒頭)。これは L4、L8、L8a、L9 の仮定である。
 
 <1>1. (a) が成り立つ。
   BY L9 の (i), DEF INV
@@ -1904,7 +1911,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 「`Retain` が `pending` に在る/現れる」は「その `NodeId` を `node` とする要素がある」と読む。
 
 **証明** 以下、`cancel` の入力 `prog` は `borrow_ify` の 1 回の呼び出しが返した値である (この文書の
-冒頭)。これは L8a と L9 の仮定である。
+冒頭)。これは L8、L8a、L9 の仮定である。
 
 <1>0. 言明の `merge` は、`walk_inner` の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕の
       `self.merge(&pending, &arm_exits)` の呼び出しである。`merge` は非公開の型 `CancelAnalysis` の
