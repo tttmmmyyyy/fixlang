@@ -264,9 +264,9 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
 
 <1>3. `origins` の欄を変更するのは `<1>1` の記録だけである。
   <2>1. `origins` は `VarTable` の非公開の欄である (`pub` が付かない)。EXT 可視性 より、この欄を
-        名指す式は `ownership.rs` の中にしかない -- `VarTable` を宣言するモジュールは `ownership.rs` の
-        モジュールであり、その子孫は `#[cfg(test)]` の `tests` だけで、それもこのファイルの中にある。
-    BY EXT 可視性, CODE src/rc_ir/ownership.rs: VarTable, tests
+        名指す式は `ownership.rs` の中にしかない -- この欄を宣言するモジュールは `ownership.rs` の
+        モジュールであり、その子孫のモジュールもこのファイルの中に書かれている。
+    BY EXT 可視性, CODE src/rc_ir/ownership.rs: VarTable
   <2>2. `ownership.rs` の中でこの欄を名指す式は 3 つである。`VarTable::empty` の
         `origins: RefCell::default()`、`origin` の `vars.origins.borrow()`、`origin` の
         `vars.origins.borrow_mut()` である。(この列挙は `ownership.rs` の全体について識別子 `origins` を
