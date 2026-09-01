@@ -77,6 +77,13 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
 主張がそのファイルの中のある集合の全体についてのものであることを、この形が示す。L15 の `<1>5` と L17 の
 `<1>1` がこの形を使う。
 
+**EXT Rust の可視性**
+Rust では、可視性の修飾子 (`pub`、`pub(crate)`、`pub(in ...)`) を持たない項目 -- struct のフィールド、
+`impl` ブロックの中の関連関数 -- は private であり、それを宣言したモジュールとその下位モジュールの
+中からだけ名指せる。1 つのファイルが 1 つのモジュールを成し、そのファイルが `mod` 宣言を持たなければ
+そのモジュールは下位モジュールを持たない。したがって、そのような項目に触れるコードは、それを宣言する
+ファイルの中だけに在る。読む者は L1d の `<1>1` と L17 の `<1>1` である。
+
 関数呼び出しについて、**値を返す**とその **中断する** (`panic!` / `assert!` / `unreachable!` に到達する) を
 区別する。等式「`f = g`」は、両辺が値を返してその値が等しいか、両辺が中断するかのどちらかであることを
 いう。
@@ -449,11 +456,13 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 `CODE src/fixstd/builtin.rs: is_funptr_tycon`)。どちらも `variant` を読まないので、`variant` が
 `Struct` である tycon がこの 2 つの名前を持たないことを別に述べる者が要る。
 
-<1>1. `TypeEnv` の `tycons` の欄には `pub` が付かず、`src/ast/program.rs` は下位モジュールを宣言しない
-      ので、この欄への書き込みはそのファイルの中の 6 か所に限る -- `TypeEnv::default`、`TypeEnv::new`、
+<1>1. `TypeEnv` の `tycons` の欄には `pub` が付かず、`src/ast/program.rs` は `mod` 宣言を持たないので、
+      EXT Rust の可視性 よりこの欄への書き込みはそのファイルの中だけに在り、そこでは 6 か所である --
+      `TypeEnv::default`、`TypeEnv::new`、
       `TypeEnv::unwrap_newtypes`、`TypeEnv::add_tycons`、`TypeEnv::resolve_type_aliases_in_tycons`、
       `Program::resolve_namespace_not_in_expr` である。
-  BY CODE src/ast/program.rs: TypeEnv, TypeEnv::default, TypeEnv::new, TypeEnv::unwrap_newtypes,
+  BY EXT Rust の可視性,
+     CODE src/ast/program.rs: TypeEnv, TypeEnv::default, TypeEnv::new, TypeEnv::unwrap_newtypes,
      TypeEnv::add_tycons, TypeEnv::resolve_type_aliases_in_tycons,
      Program::resolve_namespace_not_in_expr
 
@@ -1954,12 +1963,14 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>1. `owns_unit` を呼ぶのは `any_owned_unit`、`routing_saves_retain`、`call_rc`、`rewrite_rc` の 4 か所で
       ある。
   `owns_unit` は `src/rc_ir/borrow.rs` の `impl RewriteCtx` の中で `fn` として宣言されている --
-  `pub` も `pub(crate)` も付かない -- ので、Rust の可視性の規則により、その呼び出しはこのモジュールの中に
-  しかない。このモジュールの中で識別子 `owns_unit` が現れるのは、この宣言と、`any_owned_unit` の
+  `pub` も `pub(crate)` も付かない -- ので、そのファイルは `mod` 宣言を持たず、
+  EXT Rust の可視性 よりその呼び出しはこのファイルの中に
+  しかない。このファイルの中で識別子 `owns_unit` が現れるのは、この宣言と、`any_owned_unit` の
   `rc_units(&arg.ty, ..).iter().any(|unit| self.owns_unit(arg, unit))`、`routing_saves_retain` の
   `!(self.owns_unit(arg, unit) && ..)`、`call_rc` の `let arg_owned = self.owns_unit(arg, &unit);`、
   `rewrite_rc` の `.filter(|unit| self.owns_unit(v, unit))`、および 2 つの doc コメントである。
-  BY CODE src/rc_ir/borrow.rs: 識別子 owns_unit の全出現, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+  BY EXT Rust の可視性,
+     CODE src/rc_ir/borrow.rs: 識別子 owns_unit の全出現, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
      RewriteCtx::any_owned_unit, RewriteCtx::routing_saves_retain,
      RewriteCtx::call_rc, RewriteCtx::rewrite_rc
 
