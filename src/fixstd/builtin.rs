@@ -321,7 +321,7 @@ pub fn make_arrow_name_abs() -> FullName {
 }
 
 // The type constructor of function types: `a -> b` is this constructor applied to `a` and `b`.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_arrow_tycon() -> TyCon {
     TyCon::new(make_arrow_name_abs())
 }
@@ -330,6 +330,7 @@ pub fn make_dynamic_object_name() -> FullName {
     FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)
 }
 
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_dynamic_object_tycon() -> TyCon {
     TyCon::new(make_dynamic_object_name())
 }
@@ -338,6 +339,7 @@ pub fn make_array_storage_name() -> FullName {
     FullName::from_strs(&[STD_NAME], ARRAY_STORAGE_NAME)
 }
 
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_array_storage_tycon() -> TyCon {
     TyCon::new(make_array_storage_name())
 }
@@ -441,6 +443,7 @@ pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
     res
 }
 
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_iostate_name() -> FullName {
     FullName::from_strs(&[STD_NAME, IO_NAME], IOSTATE_NAME)
 }

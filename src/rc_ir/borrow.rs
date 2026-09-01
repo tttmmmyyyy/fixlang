@@ -429,7 +429,7 @@ pub fn param_ownership_shapes(
 
 /// The name of a function's borrow version: its name with a `#borrow` suffix. No lowered name ends in
 /// `#borrow`, so this stays globally unique.
-// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30, (P-insert), T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30, (P-insert), T (dev-docs/proof/rc_ir/borrow-cancel)
 fn borrow_funcref(name: &FuncRef) -> FuncRef {
     let mut borrow_name = name.name.clone();
     borrow_name.name.push_str("#borrow");
