@@ -1000,11 +1000,36 @@ source、`Match` のアームの本数と並び、および継続の順序は変
     BY CODE src/rc_ir/ownership.rs: origin_inner, D17, A12
   <2>3. CASE `u` の束縛が `Binding::Field(container, idx)` で `container.ty.is_box` が偽、または
         `Binding::Payload(scrut, Some(tag))` で `scrut.ty.is_box` が偽である。これらの腕が呼ぶのは
-        `origin(container, [idx] ++ σ)`、`origin(scrut, [tag] ++ σ)` である。D17 の第 2 行は「unbox 容器の
-        `Destructure` のフィールド、unbox union の変位アームの payload: `λ` の先頭に添字を足す」と述べ、
-        D17 はその像を「着く leaf」と呼ぶので、`[idx] ++ σ` と `[tag] ++ σ` は行き先の変数の型の boxed
-        leaf である。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, D17, A12
+        `origin(container, [idx] ++ σ)`、`origin(scrut, [tag] ++ σ)` である。
+    <3>1. 行き先の変数の型 -- `Destructure` の容器の型と `Match` の scrutinee の型 -- について、D4 の
+          第 5 規則が当たる。すなわちその型は `is_fully_unboxed` でも `is_closure` でも `is_box` でも
+          `is_array` でもない。
+      BY A12, A10, D4, 本場合の仮定, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+         CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_struct,
+         CODE src/ast/types.rs: TypeNode::is_union, CODE src/ast/types.rs: TypeNode::is_array,
+         CODE src/ast/types.rs: TypeNode::is_funptr, CODE src/fixstd/builtin.rs: bulitin_tycons
+      `is_box` が偽であることは本場合の仮定である。A12 は「`Match` の scrutinee が union であること、
+      `Destructure` の容器が構造体であること」を述べ、README の A12 は「**この仮定が型の `variant` を
+      述べる各節では、その型の `is_closure()` は偽である**」と続けるので `is_closure` は偽である。
+      `is_struct` と `is_union` はその型の `TyConInfo` の `variant` が `Struct` か `Union` であることで
+      あり、`Std::Array` の `variant` は `Array`、`Std::#FunPtr{n}` の `variant` は `Primitive` なので、
+      `is_array` も `is_funptr` も偽である
+      (`CODE src/fixstd/builtin.rs: bulitin_tycons` -- `make_array_tycon` と `make_funptr_tycon` に
+      与える `TyConInfo`)。`is_fully_unboxed` は、`is_box`・`is_closure`・`is_array` のいずれでもなく
+      `is_funptr` でもない型について、`unpunched_field_types` の各フィールドの型が `is_fully_unboxed` で
+      あることと同値である。A10 より、この型の `unpunched_field_types` の歩みは abort せず有限である。A12 より
+      `Destructure` が名指すフィールドと `Match` が名指す変位は punched でなく、その型は行き先の変数の
+      型 `ty(u)` に等しいので、`unpunched_field_types` はその型を含む。本補題の仮定より
+      `σ ∈ boxed_leaf_paths(ty(u))` であり、`boxed_leaf_paths` は `is_fully_unboxed` の型について空の列を
+      返すので、`ty(u)` は `is_fully_unboxed` ではない。よって行き先の型も `is_fully_unboxed` ではない。
+    <3>2. QED
+      BY <3>1, D4, D17, A12, CODE src/rc_ir/ownership.rs: origin_inner
+      D4 の第 5 規則は「それ以外 (unbox の構造体・タプル・union) は、`unpunched_field_types` が返す
+      フィールドの下へ降りる。union のときは各変位の payload へ降りる」と述べるので、
+      `boxed_leaf_paths(行き先の型)` は `[idx] ++ boxed_leaf_paths(ty(u))` と
+      `[tag] ++ boxed_leaf_paths(ty(u))` を含む。よって `[idx] ++ σ` と `[tag] ++ σ` は行き先の変数の型の
+      boxed leaf である。D17 の第 2 行が同じことを「unbox 容器の `Destructure` のフィールド、unbox union の
+      変位アームの payload: `λ` の先頭に添字を足す」と述べる。
   <2>4. CASE `u` の束縛が `Binding::Field(container, idx)` で `container.ty.is_box` が真、または
         `Binding::Payload(scrut, Some(tag))` で `scrut.ty.is_box` が真である。この 2 つの腕は `here()` を
         返し、`origin` を呼ばない。
