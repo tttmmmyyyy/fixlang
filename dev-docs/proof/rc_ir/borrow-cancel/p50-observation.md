@@ -1489,11 +1489,12 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
       鍵である。
   <2>1. 型が funptr であるとは `TypeNode::is_funptr` が真であること、すなわちその型の toplevel tycon が
         `make_funptr_tycon` の作る `Std::#FunPtr{n}` であることである。その tycon を型に組むのは
-        `type_funptr` だけであり、Fix のソースに書かれた型がこの tycon を持つことはない -- 識別子は `#` を
-        含めないからである。
+        `type_funptr` だけであり、Fix のソースに書かれた型がこの tycon を持つことはない -- ソースに
+        書かれた型構成子を作るのは `capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }`
+        であり (`type_name = { capital_name }`)、その文字集合は `#` を含めないからである。
     BY CODE src/ast/types.rs: TypeNode::is_funptr, type_funptr,
        CODE src/fixstd/builtin.rs: make_funptr_tycon, is_funptr_tycon,
-       CODE src/parse/grammer.pest: name_char
+       CODE src/parse/grammer.pest: capital_name, type_name
   <2>2. 生産コードで `type_funptr` を呼ぶのは 2 か所である。`funptr_lambda` は
         `expr_abs(args, body, None).set_type(funptr_ty)` を作り、これは記号そのものの式 (`Lam`) である。
         `replace_closure_call_to_funptr_call` は `expr_var(f_funptr.name, None).set_type(funptr_ty)` を
@@ -1503,10 +1504,14 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
     BY CODE src/optimization/uncurry.rs: funptr_lambda, replace_closure_call_to_funptr_call,
        replace_closure_call_to_funptr_call_subexprs
   <2>2a. 式が funptr 型を持つのは、`type_funptr` が作った型を `set_type` で与えられたときか、funptr 型を
-        持つ式の型を `set_type` で写されたときである。型検査が `Expr::Lam` に与えるのは
-        `type_fun(arg_ty, body_ty)` であり (`CODE src/elaboration/typecheck.rs:
-        TypeCheckContext::unify_type_of_expr_inner`)、`<2>1` より Fix のソースに書かれた型はこの tycon を
-        持たないので、`uncurry` より前の式に funptr 型は現れない。**この段は A23 を引かない** -- A23 が
+        持つ式の型を `set_type` で写されたときである。**型検査が推論した型を式に記録する経路もこの 2 つで
+        尽きる** -- `TypeCheckContext::unify_type_of_expr` は各式に推論した型を付けて返すが、その型は
+        制約系へ入った型の代入像であり、単一化は与えられた型から新しい tycon を作らない。`uncurry` より前に
+        funptr 型が制約系へ入る経路は無い。`type_funptr` を呼ぶ生産コードは `uncurry` の 2 か所だけであり
+        (`<2>2`)、Fix のソースに書かれた型はこの tycon を持たず (`<2>1`)、型検査が `Expr::Lam` に与えるのは
+        `type_fun(arg_ty, body_ty)` である (`CODE src/elaboration/typecheck.rs:
+        TypeCheckContext::unify_type_of_expr_inner`)。よって単一化が式に funptr 型を与えることもなく、
+        `uncurry` より前の式に funptr 型は現れない。**この段は A23 を引かない** -- A23 が
         残していた点をこの段が閉じるからである。`uncurry` の中で funptr 型が式に付く
         位置は 3 つに尽きる -- `funptr_lambda` が `expr_abs(args, body, None).set_type(funptr_ty)` を
         作る位置、`replace_closure_call_to_funptr_call` が
@@ -1518,15 +1523,23 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         写さない。
     BY <2>1, <2>2, CODE src/optimization/uncurry.rs: run, funptr_lambda,
        replace_closure_call_to_funptr_call, replace_closure_call_to_funptr_call_subexprs,
-       CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner
+       CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr,
+       TypeCheckContext::unify_type_of_expr_inner
   <2>3. `uncurry::run` は export statement の `value_expr` と `entry_io_value` も funptr 記号の `Var` に
         差し替える。この 2 つは関数の本体ではなく、環境が読むものである (D22)。
     BY D22, CODE src/optimization/uncurry.rs: run
-  <2>4. `uncurry` の後に式を書き換えるパスは無い。`optimization::run` が `uncurry` の後に走らせるのは
-        `dead_symbol_elimination` (到達しない記号を落とすだけで、残す記号の式を書き換えない) と、
-        `emit_symbols` のときの `simplify_symbol_names` (名前を替える) である。
+  <2>4. `uncurry` の後に、funptr 型が式に付く位置を動かすパスは無い。`optimization::run` が `uncurry` の
+        後に走らせるのは `dead_symbol_elimination` (到達しない記号を落とすだけで、残す記号の式を書き換え
+        ない) と、`emit_symbols` のときの `simplify_symbol_names` である。**後者は式を traverse して
+        書き換える** -- `SimplifyName::end_visit_var` が `Var` の名前を替え、`SimplifyName::end_visit_llvm`
+        が `Llvm` の op の `free_vars_mut()` が挙げる名前を替え、`simplify_symbol_names::run` がその結果を
+        `sym.expr` に戻す。**替えるのは名前だけである** -- その 2 つの腕は名前を差し替えた式を返すだけで
+        式の型に触れず、残る `end_visit_*` の腕はすべて `EndVisitResult::unchanged` を返すので、部分式が
+        別の位置へ移ることもない。
     BY CODE src/optimization/optimization.rs: run,
-       CODE src/optimization/dead_symbol_elimination.rs: run
+       CODE src/optimization/dead_symbol_elimination.rs: run,
+       CODE src/optimization/simplify_symbol_names.rs: run, SimplifyName::end_visit_var,
+       SimplifyName::end_visit_llvm
   <2>5. `Lowerer::lower_symbol` は `sym.ty.is_funptr()` の記号を `LoweredSymbol::Func` に、すなわち
         `prog.funcs` のエントリにする。`Lowerer::lower_app` は callee を `lower_to_var` に掛け、
         `lower_var` はグローバルの名前をそのまま `RcVar` にする。よって `App(callee, args)` の
@@ -1537,7 +1550,7 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
        Lowerer::lower_to_var
   <2>6. QED
     `<2>2a` より funptr 型が式に付く位置は 3 つであり、`<2>3` よりそのうち 1 つは関数の本体ではなく
-    環境が読むものである。`<2>4` より `uncurry` の後に式を書き換えるパスは無い。残る 2 つのうち、
+    環境が読むものである。`<2>4` より `uncurry` の後にその位置を動かすパスは無い。残る 2 つのうち、
     `funptr_lambda` の `Lam` は `<2>5` より `lower_symbol` の funptr の枝が受け取って `prog.funcs` の
     エントリにし、`replace_closure_call_to_funptr_call` の `Var` は `<2>5` より `App` の callee の位置に
     降りてその名前は `prog.funcs` の鍵である。
