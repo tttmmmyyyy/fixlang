@@ -918,9 +918,10 @@ DEF 共通接頭の段の中の対応 の下で、D30 の共通接頭が終わ�
        InlineLLVMIsUniqueFunctionBody::generate, InlineLLVMArrayIsStorageUniqueBody::generate
   <2>1. `O` は計数下 (D26) である。`<2>0` の 4 か所はいずれも `build_branch_by_is_unique` を通り、その
         `global_bb` の腕は無条件に `shared_bb` へ跳ぶ。よってグローバル状態のオブジェクトはどちらの実行
-        でも共有の腕を取り、分岐は違わない。D26 よりオブジェクトは計数下かグローバル状態かのどちらかで
-        ある。
-    BY D26, <2>0, CODE src/generator.rs: Generator::build_branch_by_is_unique
+        でも共有の腕を取り、分岐は違わない。**片方の実行でだけグローバル状態である場合は無い** -- D29 の
+        最後の行より、対応する 2 つのオブジェクトは計数下かグローバル状態か (D26) の区別も一致する。
+        D26 よりオブジェクトは計数下かグローバル状態かのどちらかである。
+    BY D26, D29, <2>0, CODE src/generator.rs: Generator::build_branch_by_is_unique
   <2>2. `<2>0` の 4 か所はいずれも、分岐が `build_branch_by_is_unique` の読んだカウントが 1 であるかで
         決まり、1 の腕では複製を作らない。`make_array_unique_with_hole` と `make_struct_union_unique` は
         オペランドの値をそのまま通し、共有の腕では新しい記憶域・新しいオブジェクトを割り当てて要素・
