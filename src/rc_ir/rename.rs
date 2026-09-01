@@ -166,7 +166,7 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
 
 /// A right-hand side with every variable occurrence (including `Llvm` operand names) rewritten
 /// through `renaming`.
-// PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
     match rhs {
         RcRhs::Var(v) => RcRhs::Var(rename_var(v, renaming)),
