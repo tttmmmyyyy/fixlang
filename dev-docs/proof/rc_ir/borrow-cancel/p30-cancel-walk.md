@@ -1297,8 +1297,8 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 ### L5 (`un_bump` の作用)
 
 要素 `e` が `References` の値 `R` と**位置を共有する**とは、`e.outstanding.shares_an_object(R)`
-が真であること、すなわち L2 の 3 より `e.outstanding` と `R` の双方が参照を持つ位置 (`VarPath`) が在る
-ことをいう。
+が真であることをいう。走査が扱う `References` の値については、これは `e.outstanding` と `R` の双方が
+参照を持つ位置 (`VarPath`) が在ることと同値である (L2 の 3)。
 
 `un_bump(pending, un_bumped)` の 1 回の呼び出しについて、次の 3 つが成り立ち、この 3 つは場合を尽くす。
 
@@ -1312,6 +1312,16 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 
 **証明**
 
+<1>0. `un_bump` の呼び出しはどれも走査の中のものであり、`pending` の各要素の `outstanding` と
+      `un_bumped` はどれも走査が扱う `References` の値である。よって L2 の 1 から 4 がこの 2 つに
+      当たり、上の「位置を共有する」は L2 の 3 により、双方が参照を持つ位置が在ることと同値である。
+      `un_bump` は `borrow.rs` の非公開の自由関数であり、`borrow.rs` は `mod` 宣言を 1 つも持たないので、
+      その呼び出しは `borrow.rs` の中にしか書けない。`borrow.rs` の中で `un_bump` を呼ぶのは
+      `walk_inner` の `RcExpr::Release(v, path, _, k)` の腕 1 か所だけであり、その第 1 引数はその時点の
+      走査の状態、第 2 引数は `self.acted_references(v, path)` の値である。
+  BY CODE src/rc_ir/borrow.rs: un_bump,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
+     L2, DEF 本体
 <1>1. `pending.iter().rposition(|retain| retain.outstanding.shares_an_object(un_bumped))` は、述語を
       満たす要素の添字のうち最大のものを `Some` で返し、そのような要素が無ければ `None` を返す。
       `let Some(index) = ... else { return UnBump::NoBracket; };` により、`None` のとき `NoBracket` を
@@ -1323,7 +1333,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
   BY CODE src/rc_ir/borrow.rs: un_bump, <1>1
 <1>3. `covers` が真のとき、`innermost.outstanding.subtract(un_bumped)` は panic せず、
       `innermost.outstanding` を `pending[index].outstanding - un_bumped` に書き換える。
-  BY CODE src/rc_ir/borrow.rs: un_bump, L2
+  BY CODE src/rc_ir/borrow.rs: un_bump, L2, <1>0
 <1>4. `let retain = innermost.node;` は <1>3 の後に実行されるが、`subtract` は `outstanding` しか変え
       ないので、`retain` は書き換え前後で同じ `pending[index].node` である。
   BY CODE src/rc_ir/borrow.rs: un_bump, CODE src/rc_ir/ownership.rs: References::subtract,
@@ -1331,7 +1341,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 <1>5. `if innermost.outstanding.is_empty() { pending.remove(index); }` は、L2 の 1 より <1>3 の差が空の
       ときちょうど添字 `index` の要素を取り除き、空でないとき何もしない。`Vec::remove` は後続の要素を
       1 つずつ前へ詰めるだけなので、残る要素の値と相対順序は変わらない。
-  BY CODE src/rc_ir/borrow.rs: un_bump, L2, EXT Vec::remove
+  BY CODE src/rc_ir/borrow.rs: un_bump, L2, <1>0, EXT Vec::remove
 <1>6. `UnBump::InBracket(retain)` を返す。
   BY CODE src/rc_ir/borrow.rs: un_bump, <1>4
 <1>7. <1>1 から <1>6 の間に `pending` に触れるのは <1>3 と <1>5 だけであり、どちらも添字 `index` の
@@ -1339,7 +1349,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
   BY CODE src/rc_ir/borrow.rs: un_bump, <1>3, <1>5
 <1>8. QED
   場合分けは「共有する要素が無い」「あって `covers` が偽」「あって `covers` が真」であり、尽くしている。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7
+  BY <1>0, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7
 
 ### L6 (消費の作用)
 
