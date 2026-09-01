@@ -1329,7 +1329,9 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 <1>2. (E3) は (i) と (ii) に割れる。`RcRhs::App` の callee は `RcVar` 1 つなので、その名前が
       `prog.funcs` の鍵であるか否かで 2 つに分かれる。呼び出し先は、callee の値がクロージャならその funptr が
       指す関数、funptr ならそれ自身である (D23)。`apply_lambda` はこの 2 つ以外の callee を受け取らない --
-      `assert!(fun.ty.is_closure() || fun.ty.is_funptr())` が冒頭にある。
+      冒頭の `assert!(fun.ty.is_closure() || fun.ty.is_funptr())` は `develop_mode` の門を持たないので、
+      その 2 つ以外の型の値を適用するプログラムはコード生成で止まり、その本体の活性化は存在しない
+      (README 第 4 節の 2 段目)。
   BY D23, CODE src/rc_ir/ast.rs: RcRhs, CODE src/generator.rs: Generator::apply_lambda
 
 <1>3. (E1) が (iv)、(E7) が (v) である。D22 は環境を 4 つに分け、そのうちグローバルのアクセサについて
@@ -1542,7 +1544,9 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
     BY <2>1, <2>2, <2>2a, <2>3, <2>4, <2>5
 
 <1>3. (ii)、(iii)、(vi) の段が適用する値はクロージャ型である。`apply_lambda` が受け取るのはクロージャ型か
-      funptr 型だけである (`assert!(fun.ty.is_closure() || fun.ty.is_funptr())`)。(ii) の段は callee の名前が
+      funptr 型だけである -- 冒頭の `assert!(fun.ty.is_closure() || fun.ty.is_funptr())` は `develop_mode`
+      の門を持たないので、その 2 つ以外の型の値を適用するプログラムはコード生成で止まり、その本体の活性化は
+      存在しない (README 第 4 節の 2 段目)。(ii) の段は callee の名前が
       `prog.funcs` の鍵でない `App` なので、`<1>2` よりその値は funptr 型ではない。(iii) の段が適用するのは
       その op のオペランドであって `App` の callee ではないので、`<1>2` よりその値も funptr 型ではない。
       (vi) の段が適用するのは `Destructor` のオブジェクトの `_dtor` 欄の値と、それが返す `IO` の動作の
@@ -1655,7 +1659,10 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         名前は `route` の返り値であり (P12)、`rewrite_inner` の他の腕は rhs をそのまま複製して
         `RcRhs::Closure(target, caps)` の `target` も書き換えない。
     BY P12, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, route
-  <2>2. `apply_lambda` が受け取るのはクロージャ型か funptr 型の値だけである。`<2>1` よりクロージャの値が
+  <2>2. `apply_lambda` が受け取るのはクロージャ型か funptr 型の値だけである -- 冒頭の
+        `assert!(fun.ty.is_closure() || fun.ty.is_funptr())` は `develop_mode` の門を持たないので、
+        その 2 つ以外の型の値を適用するプログラムはコード生成で止まり、その本体の活性化は存在しない
+        (README 第 4 節の 2 段目)。`<2>1` よりクロージャの値が
         指す関数が借用版であることは無い。funptr の値が名指す関数の名前は入力のプログラムに在る名前で
         あり、借用版の名前は `borrow_funcref` が付ける `<元の名前>#borrow` であって、A13 より入力のどの
         名前も `#` で区切った最後の断片が `borrow` になることはない。よって D23 の意味の呼び出し先が
