@@ -1529,7 +1529,11 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `Binding::Llvm` の腕であることは両側で同じである。`<2>1` より `gen'` が `gen` と違うのは
     `FullName` の欄だけであり、`<2>2` よりその欄は `result_prov` の答えに現れない。`<2>1` より残る
     引数 -- 結果の型と各オペランドの型と `type_env` -- も同じものである。
-    BY <1>4, <2>1, <2>2
+    `gen` と `gen'` は別のオブジェクトなので、ここまでで揃うのは引数と、`result_prov` が読む `self` の
+    欄だけである。同じものから同じ答えが出ることを与えるのは A3 の決定性の節である --
+    `result_prov` は同じ引数に対して常に同じ値を返す。よって
+    `gen'.result_prov(rty, arg_tys, type_env) = gen.result_prov(rty, arg_tys, type_env)` である。
+    BY <1>4, <2>1, <2>2, A3, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
 
 <1>6. `func` に現れる名前 `x` と任意の path `π` について
       `origin(vars_c, type_env, ρ(x), π) = ρ(origin(vars_f, type_env, x, π))` である。
