@@ -3183,6 +3183,7 @@ pub(crate) fn is_const_one(v: IntValue) -> bool {
 ///
 /// The getter of the field `x` of `Main::Point` is the Fix name `Main::Point::@x`, and enters a
 /// symbol table as `Main::Point::$x`.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
     let name = name.to_string();
     assert!(
