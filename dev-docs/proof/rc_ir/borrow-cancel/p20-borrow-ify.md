@@ -721,8 +721,9 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
   であるとき L6c が与える。`owns_object_yet` は `under` と
   `boxed_leaf_paths` を呼び、A10 よりどちらも有限で停止する。`collect_consumes` が積む対の全体が有限で
   あることは `<1>3` が与える。
-  BY A10, D2, D6, L6c, P2, <1>3, <1>4a, CODE src/rc_ir/borrow.rs: infer_ownership, levelled_sites,
-     level_ownership, owns_object_yet, covered_leaves, CODE src/rc_ir/ast.rs: for_each_node
+  BY A10, A15, D2, D6, L6c, P2, <1>3, <1>4a, CODE src/rc_ir/borrow.rs: infer_ownership, levelled_sites,
+     level_ownership, owns_object_yet, covered_leaves, CODE src/rc_ir/ast.rs: for_each_node,
+     CODE src/misc.rs: grow_stack
 
 <1>6. QED
   `<1>1` と `<1>2` より、`changed` が真になる周回では `owned_leaves` は真に大きくなる。`<1>3` と `<1>4`
@@ -1803,7 +1804,7 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
   帰納法の仮定がそのまま渡る。`<1>3` の場合、帰納法の仮定より `T_ρ(x, λ) = T_ρ(a_ρ, λ) ∈ cand(a_ρ, λ)` で
   あり、`cand(a_ρ, λ) ⊆ act(a_ρ, λ) ⊆ S = cand(x, λ)` である。`Exactly` になるのは `|S| = 1` のときで、
   そのとき `cand(x, λ) = S` の唯一の元は `T_ρ(x, λ)` である。
-  BY <1>1, <1>2, <1>3, CODE src/rc_ir/ownership.rs: Origin::acted_on
+  BY 帰納法の仮定, <1>1, <1>2, <1>3, CODE src/rc_ir/ownership.rs: Origin::acted_on
 
 <1>5. QED
   (c) を示す。`origin(x, λ)` が `Origin::Join` であるとする。`<1>1` より `ρ`-由来では `Exactly` であり、
@@ -2451,9 +2452,10 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
   「上のどれでもない」に当たる)。`ι = ι_全` のときは全 unit が所有されるので、両辺はどの inhabited な
   パラメータ leaf も 1 と数える。`ι = ι_V` のときは、第 8 節の系 3 と P7e より
   `ctx.owns_object(p, σ) = ctx.owns_object(p, trunc(ty(p), σ))` であり、これは `V` が unit
-  `trunc(ty(p), σ)` を D14 の意味で所有することと同値なので、両辺は同じ leaf を数える。P1 より
+  `trunc(ty(p), σ)` を D14 の意味で所有することと同値なので、両辺は同じ leaf を数える。P1 は **A10 を満たす**型についての言明であり、A10 は
+  プログラムに現れる型の全体についてそれを与えるので `ty(p)` に当たる。P1 より
   `trunc(ty(p), σ)` は `units(ty(p))` の元であり、D10 の初期値が渡る unit の 1 つである。
-  BY D10, D14, P1, P7e, 第 8 節の系 3, CODE src/rc_ir/ownership.rs: origin_inner
+  BY A10, D10, D14, P1, P7e, 第 8 節の系 3, CODE src/rc_ir/ownership.rs: origin_inner
 
 <1>2. 生成が合う。
   D10 の生成の表の 5 行 -- `Llvm` の結果の leaf で宣言が単一の `Arg` でないもの、`App` の結果の各 boxed
@@ -2738,8 +2740,8 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
     複製は `FieldPath` を変えず、`rename_var` は `ty` を残すので、複製の `Retain`/`Release` の path も
     その変数の型の `rc_units` の元である。`levelled_sites` は `for_each_node` で本体の全節点を歩き、
     `Retain`/`Release` の節点について `(v, path)` を積む。
-    BY A2, P9, CODE src/rc_ir/borrow.rs: levelled_sites, CODE src/rc_ir/ast.rs: for_each_node,
-       CODE src/rc_ir/rename.rs: rename_var
+    BY A2, A15, P9, CODE src/rc_ir/borrow.rs: levelled_sites, CODE src/rc_ir/ast.rs: for_each_node,
+       CODE src/rc_ir/rename.rs: rename_var, CODE src/misc.rs: grow_stack
   <2>2. `π` の下の inhabited な各 leaf `λ` について、`T_ρ(v, λ)` が所有されることと
         `ctx.owns_unit(v, π)` が真であることとは同値である。
     BY L13, <2>1
@@ -2815,8 +2817,9 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
     についての塊全体の変化は、これらの事象がその由来に与える増減の**和**である (DEF 由来ごとの義務 は
     各事象について 1 ずつ足し引きする)。その和を、`<2>1` が callee と結果について、`<2>6` と `<2>7` が
     各 `(i, u)` について与える。`u` は `units(ty(args[i]))` を渡り、P1 より `ty(args[i])` の各 leaf は
-    ちょうど 1 つの unit へ切り詰まるので、引数の leaf は重複なく尽くされる。
-    BY D9, D10, L16, P1, DEF 由来ごとの義務, <2>1, <2>6, <2>7
+    ちょうど 1 つの unit へ切り詰まるので、引数の leaf は重複なく尽くされる。P1 は **A10 を満たす**型に
+    ついての言明であり、A10 はプログラムに現れる型の全体についてそれを与えるので `ty(args[i])` に当たる。
+    BY A10, D9, D10, L16, P1, DEF 由来ごとの義務, <2>1, <2>6, <2>7
 
 <1>6. QED
   D2 より `RcExpr` は 6 種であり、`Let` を `App`・それ以外に分けると `<1>3`・`<1>4`・`<1>5` が尽くす
@@ -2848,8 +2851,8 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
   site である」は、A2 と P9 より `π ∈ units(ty(v))` であり、`levelled_sites` が `for_each_node` で本体の
   全節点を歩いて `Retain`/`Release` の `(v, path)` を積むことによる。D10 の `Retain`/`Release` の行が
   動かすのは `π` の下の inhabited な各 leaf の由来だけである。
-  BY A2, D10, L8, L13, L16, P9, CODE src/rc_ir/borrow.rs: levelled_sites,
-     CODE src/rc_ir/ast.rs: for_each_node
+  BY A2, A15, D10, L8, L13, L16, P9, CODE src/rc_ir/borrow.rs: levelled_sites,
+     CODE src/rc_ir/ast.rs: for_each_node, CODE src/misc.rs: grow_stack
 
 <1>1. 1 つの塊の中で `n_out` を増やす事象は `B'_V` の `Retain` 節点と D10 の生成の 2 種、減らす事象は
       `B'_V` の `Release` 節点と D9 の消費の 2 種である。さらに、生成が増やす由来を同じ塊の中で減らす
@@ -3187,9 +3190,10 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
   <2>4. `obj(x, λ)` が計数下で `T_ρ(x, λ)` が所有されないとき。L19 より、パラメータでも capture でもない
         変数を持つ由来は所有されるので、所有されない由来 `T_ρ(x, λ) = (u, σ)` の `u` は `V` の
         パラメータか capture である。第 8 節の系 3 と P7e より `owns_object(u, σ)` が偽であることは
-        `V` が unit `trunc(ty(u), σ)` を D14 の意味で借用することである。`<1>4` より `p` において
-        解放されていない。
-    BY D14, L19, P7e, 第 8 節の系 3, <1>4
+        `V` が unit `trunc(ty(u), σ)` を D14 の意味で借用することである。`σ` はその unit の下の
+        inhabited な leaf であり、L9 より `obj(x, λ) = obj(T_ρ(x, λ)) = obj(u, σ)` なので、`<1>4` より
+        `p` において解放されていない。
+    BY D14, L9, L19, P7e, 第 8 節の系 3, <1>4
   <2>5. QED
     BY <2>2, <2>3, <2>4
 
@@ -3323,9 +3327,10 @@ capture であり `ctx.owns_object(p, σ)` が偽であるとき 1、そうで�
   `None` は `None` のままである。
 
 <1>4. `σ ∈ leaves(ty(p))` であり `trunc(ty(p), σ) ∈ units(ty(p))` である。
-  BY D6, P1, DEF 由来の 1 歩
+  BY A10, D6, P1, DEF 由来の 1 歩
   DEF 由来の 1 歩 より `ρ`-由来は `ρ` の上のスロットであり、D6 より `σ` は `ty(p)` の inhabited な
-  boxed leaf である。P1 より各 leaf の `trunc` は `units(ty(p))` の元である。
+  boxed leaf である。P1 は **A10 を満たす**型についての言明であり、A10 はプログラムに現れる型の全体に
+  ついてそれを与えるので、`ty(p)` に当たる。P1 より各 leaf の `trunc` は `units(ty(p))` の元である。
 
 <1>5. `ctx.owns_object(p, σ)` が偽であることと、`V` が `(p, trunc(ty(p), σ))` を D14 の意味で借用する
       こととは同値である。
@@ -3494,8 +3499,10 @@ inhabited な leaf はどれも L20 の 2 を満たし、P14a の主語である
   変えず、`rename_var` は `ty` を残すので、複製の節点の path もその変数の型の unit である。
 
 <1>2. QED
-  BY <1>1, CODE src/rc_ir/borrow.rs: levelled_sites, CODE src/rc_ir/ast.rs: for_each_node
-  `levelled_sites` は `for_each_node` で本体の全節点を歩き、`RcExpr::Retain(v, path, _, _)` と
+  BY A15, <1>1, CODE src/rc_ir/borrow.rs: levelled_sites, CODE src/rc_ir/ast.rs: for_each_node,
+     CODE src/misc.rs: grow_stack
+  `for_each_node` は本体を `grow_stack` で包んで歩くので、A15 より包まない場合と同じ回数だけ各節点を
+  訪れる。`levelled_sites` は `for_each_node` で本体の全節点を 1 度ずつ歩き、`RcExpr::Retain(v, path, _, _)` と
   `RcExpr::Release(v, path, _, _)` の腕で `(v.clone(), path.clone())` を積み ((a))、
   `RcExpr::Let(_, RcRhs::App(_, args), _)` の腕で各 `arg` と各 `unit ∈ rc_units(&arg.ty, type_env)` に
   ついて `(arg.clone(), unit)` を積む ((b))。
@@ -3726,12 +3733,14 @@ DEF 対応する位置 が挙げる `ρ` の上の各位置と `B'_V` の対応�
   <2>2. 活性化が生きている間の各時点について、その時点までにこの活性化が行った D10 の事象のうち最後の
         ものの直後の時点は DEF 時点 が挙げる時点であり、その 2 つの時点の間にこの活性化は D10 の事象を
         1 つも行わない。事象をまだ 1 つも行っていない時点については、活性化の開始をその時点に取る。
-    DEF 時点 は、活性化の開始と、この活性化が行う D10 の各事象の直後の点を時点とする。D24 より段は
+    DEF 時点 は、活性化の開始と、この活性化が行う D10 の各事象の直後の点と、D7 の読む構文が行う各読みの
+    直前の点を時点とする。読みは事象ではないので、読みの直前の点における `held` は、その点より前の
+    最後の事象の直後の値に等しい (DEF 時点)。D24 より段は
     不可分なので、事象は段の中で起き、時点の列の上に順に並ぶ。この活性化が段を実行していない間 --
     子の活性化が動いている間 ((E3)、(E7)、オペランドを適用する `Llvm` の段) と、ほかの制御の流れの段が
     走っている間 -- は、この活性化は事象を 1 つも行わない。(F) の解放が作る活性化はその段の中で終わる
     ので、その内側に D24 の時点は無い。
-    BY D24, DEF 時点
+    BY D7, D24, DEF 時点
   <2>3. QED
     `<2>1` と `<2>2` より、生きている間の各時点の `held` は DEF 時点 が挙げるある時点の値に等しく、
     `<1>2` よりそれは 1 以上である。
