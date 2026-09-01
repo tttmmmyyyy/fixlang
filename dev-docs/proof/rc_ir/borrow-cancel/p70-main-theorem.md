@@ -11,7 +11,10 @@
   仮定の中から名指す)。
 - **コード**: `optimize_rc_program` が 2 つのパスを呼ぶ順序、`validate`、`borrow_ify` と `cancel` が
   `RcProgram` を組み立てる 3 つの欄、`cancel` の本体の書き換えが `drop_nodes` を呼ぶこと、
-  `drop_nodes` が `Let` の右辺を丸ごと写すこと、`clone_func`、`borrow_funcref`、`RcProgram` の型。
+  `drop_nodes` が `Let` の右辺を丸ごと写すこと、`clone_func`、`borrow_funcref`、`RcProgram` の型、
+  `Map` の別名。
+- **外部の結果**: EXT 共有参照は値を変えない、EXT 写像の `insert` と `values_mut`。第 1 節の
+  「外部の結果」がその完全な言明を据える。
 
 T の言明はこのほかに、D7・D21・D25・D26・D31 を名前で引く。
 
@@ -131,6 +134,25 @@ P27 は、本体が D11 を満たすことのほかに「借用する unit を�
 (T3) の結論も成り立つ。(T4) の残る 4 つの節は「変えてよいもの」を数え上げるだけなので破れない。
 **足し算の代わりに引き算をするパスが、それ以外の全項を満たす。**この節がそれを閉じる。
 
+### 外部の結果
+
+この文書が文書の外から引く結果に名札を付ける。`BY` の行では `EXT <名前>` として引く。
+
+**EXT 共有参照は値を変えない**
+safe Rust の関数が引数を共有参照 `&T` で取るとき、その呼び出しが `&T` を通じて書き込めるのは
+`UnsafeCell` の中に在る記憶域だけである。`UnsafeCell` を持たない型の値は、共有参照しか渡さない
+呼び出しを跨いで等しい。呼び出しはまた、呼び出し元の束縛そのものにも書かない -- 束縛に書くのは、
+その束縛が見えているスコープに置かれた代入文だけである。
+
+**EXT 写像の `insert` と `values_mut`**
+コンパイラの写像型 `Map<K, V>` は `FxHashMap<K, V>` の別名であり、`insert` と `values_mut` は Rust
+標準ライブラリの `HashMap` のものである (`CODE src/misc.rs: Map`)。次の 2 つの契約を使う。
+
+- `m.insert(k, v)` は、`m` が鍵 `k` を持たないとき対 `(k, v)` を加え、持つときその鍵の値を `v` で
+  置き換える。どちらの場合も `k` 以外の鍵とその値は変わらず、鍵が失われることはない。
+- `m.values_mut()` は、`m` の各値への可変参照をちょうど 1 つずつ渡す反復子を返す。鍵の集合も、鍵から
+  値への対応も変えない。
+
 ## 2. 証明
 
 ### <1>1. `optimize_rc_program` が `borrow_ify` に渡すプログラムは `p0`、`cancel` に渡すプログラムは `p1` であり、`cancel` の返り値は `p2` である
@@ -165,12 +187,16 @@ P27 は、本体が D11 を満たすことのほかに「借用する unit を�
 
   この閉包は `RcProgram` を共有参照で受け取り、値を返さない。呼ぶ先の
   `pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeEnv, stage: &str)`
-  も同じである。よって `validate` の呼び出しは、それがどこに置かれていても、束縛 `prog` の値を
-  変えない。とくに `<2>1` が引用した 2 つの呼び出し -- `"after split_rc_units"` と
-  `"after borrow_ify"` -- がこれに当たる。
+  も同じである。**共有参照しか渡さない呼び出しが呼び出し元の値を変えないことは、Rust の言語規則で
+  ある** (EXT 共有参照は値を変えない)。その規則が例外に置く内部可変性は `RcProgram` の欄に無い --
+  D1 が `RcProgram` の値と定めるのは `funcs`・`globals`・`roots` の 3 つ組であり、その 3 つの欄の型は
+  `Map`・`Vec`・`Set` であって `UnsafeCell` を持たない (`CODE src/rc_ir/ast.rs: RcProgram`)。よって
+  `validate` の呼び出しは、それがどこに置かれていても、束縛 `prog` の値を変えない。とくに `<2>1` が
+  引用した 2 つの呼び出し -- `"after split_rc_units"` と `"after borrow_ify"` -- がこれに当たる。
 
-    BY `CODE src/build/build_object_files.rs: optimize_rc_program`,
-       `CODE src/rc_ir/validate.rs: validate`
+    BY EXT 共有参照は値を変えない, D1,
+       `CODE src/build/build_object_files.rs: optimize_rc_program`,
+       `CODE src/rc_ir/validate.rs: validate`, `CODE src/rc_ir/ast.rs: RcProgram`
 
   **<2>3. QED**
 
@@ -474,9 +500,10 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     }
     ```
 
-    この 3 つのループが `funcs` に対して呼ぶのは `insert` と `values_mut` の 2 つだけである。写像の
-    `insert` は鍵を足すか既にある鍵の値を差し替えるかのどちらかであり、`values_mut` は値だけを可変に
-    走査する。どちらも鍵を取り除かない。ここから 3 つが出る。
+    この 3 つのループが `funcs` に対して呼ぶのは `insert` と `values_mut` の 2 つだけである。EXT 写像の
+    `insert` と `values_mut` より、`insert` は鍵を足すか既にある鍵の値を差し替えるかのどちらかであり、
+    `values_mut` は鍵の集合を変えずに値への可変参照を渡す。どちらも鍵を取り除かない。ここから 3 つが
+    出る。
 
     1. `p1.funcs` の各エントリは、2 つの挿入のループのどちらかが入れた値の `borrowed_units` を
        第 3 のループが書き替えたものである。**(T4) が名指す 4 つの欄 -- `fn_ty` / `ret_ty` /
@@ -493,8 +520,8 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     要素の `symbol` と `ty` は `p0.globals` の第 `i` 要素のものに等しい。
   - **`roots`**: `roots: prog.roots.clone()`。よって `p1.roots` は `p0.roots` に等しい。
 
-    BY `CODE src/rc_ir/borrow.rs: borrow_ify`, `CODE src/rc_ir/borrow.rs: clone_func`,
-       `CODE src/rc_ir/ast.rs: RcProgram`
+    BY EXT 写像の `insert` と `values_mut`, `CODE src/rc_ir/borrow.rs: borrow_ify`,
+       `CODE src/rc_ir/borrow.rs: clone_func`, `CODE src/rc_ir/ast.rs: RcProgram`
 
   **<2>1a.** 第 2 のループが入れる各借用版の名前は、`p0.funcs` のどの鍵とも、`p0.funcs` のどの
   関数の `name` とも異なる。
