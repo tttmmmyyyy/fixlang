@@ -737,7 +737,7 @@ optimize_rc_program`)。
         のアーム本体への降下からなる -- の上の `Retain` 節点だけである。`Match` のアーム本体の中で
         `pending` に入った `Retain` は、そのアームの外へ出ない。P18 より `merge` の返す `pending` に残る
         `Retain` は `pending_in` に在るものだけであり、`pending_in` は `Match` の入口の `pending` である。
-    BY P18, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, merge
+    BY P18, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, CancelAnalysis::merge
   <2>4. `r` を含む D3 の実行路は、本体の根から `r` へ至るその道をそのまま含む。`Match` を含む位置では、
         `r` を含む実行路は `r` を含むアームを選ぶからである。
     BY D3, <2>3
@@ -1671,7 +1671,7 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
   <2>1. 借用版の名前を `App` の callee に置くのは `route` だけである。書き換えが `App` の callee に入れる
         名前は `route` の返り値であり (P12)、`rewrite_inner` の他の腕は rhs をそのまま複製して
         `RcRhs::Closure(target, caps)` の `target` も書き換えない。
-    BY P12, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, route
+    BY P12, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::route
   <2>2. `apply_lambda` が受け取るのはクロージャ型か funptr 型の値だけである -- 冒頭の
         `assert!(fun.ty.is_closure() || fun.ty.is_funptr())` は `develop_mode` の門を持たないので、
         その 2 つ以外の型の値を適用するプログラムはコード生成で止まり、その本体の活性化は存在しない
