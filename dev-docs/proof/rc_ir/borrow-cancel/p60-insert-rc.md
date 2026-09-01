@@ -2147,8 +2147,8 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
     スロットを 1 回ずつ下げ、鎖の名前は相異なるフィールド変数 (A6) なので、<2>4 よりその入口の値は
     1 である。
   <2>5. QED
-    BY <2>2, <2>3, <2>4, <2>4a, D5
-    容器は boxed か unbox かのいずれかである。
+    BY <2>2, <2>3, <2>4, <2>4a, CODE src/ast/types.rs: TypeNode::is_box
+    `is_box` は `!is_unbox` を返すので、容器は boxed か unbox かのいずれかである。
 
 <1>4. **CASE (T1)** で `m = Eval(x, cont)`。
   BY <1>0, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval, D9, D7, L15
