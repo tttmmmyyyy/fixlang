@@ -142,6 +142,7 @@ impl TypeDefn {
 
     // Return TypeNode defined by this type definition.
     // If the definition is higher kinded, it returns a fully applied type (i.e., returns a type of kind `*`).
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn applied_type(&self) -> Arc<TypeNode> {
         let args: Vec<Arc<TypeNode>> = self
             .tyvars

@@ -105,7 +105,7 @@ impl Provenance {
 
     /// The provenance of the result of an operation that produces one uniquely owned value among
     /// values of unknown sharing: every boxed leaf under `path` is `Fresh`, every other leaf `Unknown`.
-    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn fresh_under(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &[usize]) -> Provenance {
         Provenance::uniform(ty, type_env, LeafOrigin::Unknown)
             .set_leaves_under(path, LeafOrigin::Fresh)
