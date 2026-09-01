@@ -47,11 +47,13 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 
 ## 1. 記法と前提
 
-1 つの本体を固定し、その本体から作られる `VarTable` を `vars`、プログラムの `TypeEnv` を `type_env` と
-書く。**固定する本体は、ある関数の `body` か、あるグローバル初期化子の `init` かのどちらかである** (D23)。
-前者の `vars` を作るのは `VarTable::of`、後者の `vars` を作るのは `VarTable::body_only` である
-(`CODE src/rc_ir/ownership.rs: VarTable::of`, `VarTable::body_only`)。この 2 つは本体ごとに 1 つなので、
-以下では `origin` と `acted_references` の第 1・第 2 引数を落として書く。
+1 つの本体を固定し、その本体から作られた `VarTable` の値を 1 つ、プログラムの `TypeEnv` の値を 1 つ
+固定して、それぞれ `vars`、`type_env` と書く。**固定する本体は、ある関数の `body` か、あるグローバル
+初期化子の `init` かのどちらかである** (D23)。前者の `vars` を作るのは `VarTable::of`、後者の `vars` を
+作るのは `VarTable::body_only` である
+(`CODE src/rc_ir/ownership.rs: VarTable::of`, `VarTable::body_only`)。以下では、この 2 つを固定した
+うえで `origin` と `acted_references` の第 1・第 2 引数を落として書く。**`bindings` が等しい相異なる
+2 つの `VarTable` の値について答えが等しいことは、この記法の主張ではない** (P2a)。
 
 - `origin(x, π)` は `origin(vars, type_env, x, π)`。この記法が定まること (同じ `(x, π)` について値が 1 つで
   あること) は L0 が示す。
