@@ -895,11 +895,15 @@ D24 の活性化の林が挙げる 5 種のうち、(E3) 以外の 4 種には�
         組み立てて `f` に渡し、**返った関数に改めてオペランド `x` を渡す**ので、`apply_lambda` を
         2 回呼び」、「1 つの節点が活性化を 2 つ作るときは、この種の段がその節点について 2 つ在る」、
         「**8 種の宣言する op のうち 5 種が 2 つ作る**」)
-      `<4>3.` 渡された関数の値の boxed leaf は capture の位置 1 つであり、その参照は 2 回目の適用が
-        作る活性化 `b` の初期 `Obl` に入る。capture の unit は必ず所有されるので (D14)、D10 の初期値は
-        その leaf の参照を含む。
-        BY D4 (規則 2 -- クロージャは capture の位置 1 つを leaf とする), D14 (「capture の unit は
-        必ず所有される」), D10 (初期値の行)
+      `<4>3.` 渡された関数の値が closure 型であれば、その boxed leaf は capture の位置 1 つであり
+        (D4 の規則 2)、その参照は 2 回目の適用が作る活性化 `b` の初期 `Obl` に入る -- capture の
+        unit は必ず所有されるので (D14)、D10 の初期値はその leaf の参照を含む。funptr 型であれば、
+        `is_funptr` が真の型は `is_fully_unboxed` なので D4 の規則 1 が当たり、boxed leaf は無い。
+        そのときこの適用が渡す参照は無く、(α) も無い。
+        BY D4 (規則 1 -- `is_fully_unboxed` が真の型は leaf を持たない、規則 2 -- クロージャは
+        capture の位置 1 つを leaf とする), D14 (「**capture の unit は必ず所有される。**」),
+        D10 (初期値の行), A5
+        `CODE src/ast/types.rs: TypeNode::is_fully_unboxed` (`self.is_funptr()` の枝が `true` を返す)
       `<4>4.` QED
         `<4>1` より参照は `Obl(a)` を離れ、`<4>2` と `<4>3` よりその行き先は `Obl(b)` である。
         BY `<4>1`, `<4>2`, `<4>3`, `<3>4` DEF (α)
