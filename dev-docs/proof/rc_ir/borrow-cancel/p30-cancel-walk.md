@@ -83,10 +83,20 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 `CancelAnalysis::acted_references(v, path)` は `ownership::acted_references(self.vars, self.type_env, v, path)`
 の値を返す (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。すなわち `ActRefs(t)` は D15 の
-`ActRefs(v, path)` である。`self.vars` と `self.type_env` は `CancelAnalysis` の構築のときに置かれ、走査は
-この 2 つの欄を差し替えない (`CODE src/rc_ir/borrow.rs: CancelAnalysis`,
-`CODE src/rc_ir/borrow.rs: cancel`)。**上の 3 つの量が、走査のどの時点で読んでも同じであることは
-L0 が示す。**
+`ActRefs(v, path)` である。`self.vars` と `self.type_env` は `cancel` の `cancel_body` が
+`CancelAnalysis` の値を構築するときに置かれ、走査はこの 2 つの欄を差し替えない。`CancelAnalysis` は
+`borrow.rs` の非公開の型でその欄も非公開であり、`borrow.rs` は `mod` 宣言を 1 つも持たないので、欄への
+書き込みは `borrow.rs` の中にしか書けない。構築の後にこの値へ可変参照を得るのは `&mut self` を取る
+6 つのメソッド --- `walk`、`walk_inner`、`consume_rhs`、`consume`、`consume_objects`、`merge` ---
+だけであり、この 6 つの本体で `self.vars` と `self.type_env` が現れるのは、どれも値を読んで別の関数へ
+渡す位置である (`CODE src/rc_ir/borrow.rs: CancelAnalysis`, `CODE src/rc_ir/borrow.rs: cancel`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::merge`)。**上の 3 つの量が、走査のどの時点で読んでも同じで
+あることは L0 が示す。**
 
 ### DEF 参照の多重集合
 
