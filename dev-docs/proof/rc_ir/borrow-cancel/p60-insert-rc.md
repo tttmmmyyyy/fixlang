@@ -1559,25 +1559,33 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
 
 <1>4b. (e)。
   BY D10, D17, A3, D33,
-     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin_inner
+     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin_inner,
+     CODE src/rc_ir/ownership.rs: as_arg_projection,
+     CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   D10 の生成の表は 5 行を持つ。`App(callee, args)` と `Closure(f, caps)` の結果は `collect_bindings` が
   `Binding::Producer` を入れ、`origin_inner` の `Producer` の腕は `here()` を返す。boxed 容器の
   `Destructure` の名前付きフィールドは `Binding::Field` の容器が boxed の枝、boxed union の変位アームの
   payload は `Binding::Payload` の `Some(_)` かつ scrutinee が boxed の枝で、どちらも `here()` を返す。
   `Llvm` の結果のうち `result_prov` の宣言が単一の `Arg` でない leaf は `Binding::Llvm` の腕の
-  `as_arg_projection` が `None` を返す枝に入り、A3 よりこのコミットの宣言は単一の `Fresh`・単一の
-  `Unknown`・空集合のいずれかなので、D17 の第 2 項より鎖はそこで止まる。いずれの行でも `origin` を
+  `as_arg_projection` が `None` を返す枝に入る。A3 よりこのコミットの宣言は単一の `Fresh`・単一の
+  `Unknown`・空集合のいずれかである。前 2 者では D17 の第 2 項より鎖がそこで止まる。空集合のときは
+  `origin_from_leaves_under` が `reached` に元を 1 つも積まず -- その leaf の宣言が空集合なので
+  `operand_units` は空、`produced_here` は偽である -- `reached.first()?` で `None` を返すので、
+  `origin_inner` は `unwrap_or_else(here)` で自分自身を答える。いずれの行でも `origin` を
   呼ばずに自分自身を答えるので、ρ-歩みはその位置で終わり、そのスロットは自分が属する類の ρ-終端で
   ある。
 
 <1>4c. (f)。
   BY D6, D10, D17, A3, D33, CODE src/rc_ir/ownership.rs: origin_inner,
-     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: as_arg_projection
+     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: as_arg_projection,
+     CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   ρ-歩みが止まるのは `origin_inner` が `origin` を呼ばずに `here()` を答える腕であり、それは
   束縛の無い腕、`Binding::Param`、`Binding::Producer`、`Binding::Field` の容器が boxed の枝、
   `Binding::Payload` の `Some(_)` かつ scrutinee が boxed の枝、`Binding::Llvm` の
   `as_arg_projection` が `None` を返す枝 (A3 よりこのコミットの宣言は単一の `Fresh`・単一の
-  `Unknown`・空集合のいずれかなので、D17 の第 2 項よりそこで止まる) の 6 つである。束縛の無い腕が
+  `Unknown`・空集合のいずれかである。前 2 者では D17 の第 2 項よりそこで止まり、空集合のときは
+  `origin_from_leaves_under` が `reached` に元を 1 つも積まずに `None` を返すので、`origin_inner` が
+  `unwrap_or_else(here)` で自分自身を答える) の 6 つである。束縛の無い腕が
   答える位置は D6 の記号の位置であってスロットではなく、D6 よりそれを終端とする類は計数下の類の
   範囲の外である。残る 5 つのうち `Binding::Param` はパラメータ・capture の leaf であり、
   `Producer` は `App` と `Closure` の結果、`Field` の boxed の枝は boxed 容器の `Destructure` の
@@ -2583,12 +2591,15 @@ D6 のスロット -- が要る)。よって時点ごとの量は、その時点
       **`Join` の腕**だけが第 3 の形であり、候補が 2 つ以上のとき `identity` を `here()` に取り替えた
       うえで、その活性化が選んだアームの結果へ辿る。
   BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Origin::of_candidates,
-     CODE src/rc_ir/ownership.rs: as_arg_projection, D17, A3
+     CODE src/rc_ir/ownership.rs: as_arg_projection,
+     CODE src/rc_ir/ownership.rs: origin_from_leaves_under, D17, A3
   止まる腕: `None`、`Binding::Param`、`Binding::Producer`、`Binding::Field` の容器が boxed の枝、
   `Binding::Payload` の `Some(_)` かつ scrutinee が boxed の枝、`Binding::Llvm` の
   `as_arg_projection` が `None` を返す枝 (スロットの path は boxed leaf なので `leaf_origins_at` は
   その leaf 自身の宣言を返し、A3 よりこのコミットの宣言は単一の `Fresh`・単一の `Unknown`・空集合の
-  いずれかである)。
+  いずれかである。前 2 者では D17 の第 2 項より鎖がそこで止まり、空集合のときは
+  `origin_from_leaves_under` が `reached` に元を 1 つも積まずに `None` を返すので、`origin_inner` が
+  `unwrap_or_else(here)` で自分自身を答える。いずれでも `origin` を呼ばない)。
   辿る腕: `Binding::Move`、`Binding::Field` の容器が unbox の枝、`Binding::Payload` の `None` の枝と
   `Some(tag)` かつ scrutinee が unbox の枝、`Binding::Llvm` の単一 `Arg` の枝。いずれも
   `origin(次のスロット)` をそのまま返す。
