@@ -480,7 +480,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
      CODE src/ast/typedecl.rs: Field::resolve_type_aliases, Field::resolve_namespace
 
 <1>3. `Program` の `type_env` の表に鍵と値の対を入れるのは、`Program::calculate_type_env` の
-      `TypeEnv::new` の呼び出しと、`TypeEnv::add_tycons` の 3 つの呼び出し元 --
+      `TypeEnv::new` の呼び出しと、`TypeEnv::add_tycons` の 4 つの呼び出し元 --
       `Program::register_opaque_tycon`、`defunctionalize_fix::run_one`、
       `closure_specialization` の `lift_all` と `realize_all` -- だけである。
   `<1>1` の 6 か所のうち、鍵の集合を変えるのは `TypeEnv::default`、`TypeEnv::new`、`TypeEnv::add_tycons`
@@ -523,9 +523,9 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
      CODE src/ast/types.rs: TyCon::into_punched_type_name,
      CODE src/parse/grammer.pest: type_defn, type_name, capital_name
 
-<1>5. `add_tycons` の 3 つの呼び出し元が渡す鍵の名前は、`Array` ではなく、`#FunPtr` でも始まらない。
+<1>5. `add_tycons` の 4 つの呼び出し元が渡す鍵の名前は、`Array` ではなく、`#FunPtr` でも始まらない。
   `register_opaque_tycon` が渡す鍵は `FullName::new(&gv_name.to_namespace(), &opq_var.name)` であり、
-  `opq_var` は `is_opaque_tyvar` が真の型変数なので、その名前は `?` で始まる。残る 2 つが渡すのは
+  `opq_var` は `is_opaque_tyvar` が真の型変数なので、その名前は `?` で始まる。残る 3 つが渡すのは
   `CaptureStruct::new` が作る tycon であり、その名前は `format!("{}@{}", prefix, owner.name)` である。
   `prefix` に渡るのは `defunctionalize_fix` の `"#FixCap"` と `closure_specialization` の
   `CAP_LIST_PREFIX` (`"#CapList"`) の 2 つなので、その名前は `#FixCap` か `#CapList` で始まる。
@@ -541,7 +541,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `<1>3` から `<1>5` より、`type_env.tycons()` の鍵のうち名前が `Array` であるもの、および名前が
   `#FunPtr` で始まるものは、`bulitin_tycons()` が置いた `make_array_tycon()` と、
   `1..=FUNPTR_ARGS_MAX` の各 `arity` についての `make_funptr_tycon(arity)` だけである -- `<1>4` の
-  第 1 種の鍵の名前は `#` を含まず、第 2 種のそれは大文字で始まり、`<1>5` の 3 つは `?` か `#FixCap` か
+  第 1 種の鍵の名前は `#` を含まず、第 2 種のそれは大文字で始まり、`<1>5` の 4 つは `?` か `#FixCap` か
   `#CapList` で始まる。それらの値は `bulitin_tycons()` が作った `TyConInfo` であり、`<1>2` より
   `variant` は作られたときのままなので、`<1>4` よりそれぞれ `TyConVariant::Array` と
   `TyConVariant::Primitive` である。これが言明の前半である。
