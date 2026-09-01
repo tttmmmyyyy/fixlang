@@ -96,7 +96,7 @@ fn lower_and_insert_rc(
 /// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
 /// borrowed parameters on the functions (`RcFunc::borrowed_units`), which `param_ownership_shapes`
 /// reads back as the owned complement.
-// PROOF: D/A, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, P30, (P-insert), T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, P30, (P-insert), T (dev-docs/proof/rc_ir/borrow-cancel)
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,

@@ -2802,7 +2802,7 @@ P17 が扱う (第 4 節の `L6` と、`L11` の `<2>2` の場合分け)。**消
        `Pre(V)` の対応する節点では等しく、`Pre(V)` と `F` の本体の対応する節点では `rename` で写して
        一致する。
   BY <1>1c, <1>1d, P9, A3, A12, A23, D4, D9,
-     CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/borrow.rs: route,
+     CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/borrow.rs: RewriteCtx::route,
      CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
   D9 の消費の表は 6 行を持ち、その `App` の行が callee の leaf と所有位置の引数の leaf の 2 つの位置を
   挙げるので、消費の位置は 7 種である。
