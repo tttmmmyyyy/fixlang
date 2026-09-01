@@ -2119,36 +2119,6 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   ある。`level_ownership` はこの一様性を、候補が 1 つでも所有されていれば候補すべての leaf を所有へ倒す
   ことで作る (`CODE src/rc_ir/borrow.rs: level_ownership`, `owns_object_yet`)。
 
-- **P7c** (処分はすべて走査に届く)。実行時に参照を処分するか、処分の義務を活性化の外へ渡す構文 --
-  D9 の消費、`Release`、終端の `Ret` -- はすべて、`cancel` の走査で次のどちらかを行う。
-
-  - **(a)** 終端の `Ret` 以外では、その節点の訪問が行う `consume_objects` と `un_bump` の呼び出しが名指す
-    オブジェクトの**和**が、その構文が触れうるオブジェクト (D15 の `acted_on`) をすべて含む。とくに触れうる
-    オブジェクトが在れば、訪問はこの 2 つのどちらかを少なくとも 1 回呼ぶ。
-
-    **和で述べるのは、1 回の呼び出しでは足りないからである。** `App` と `Closure` と `Destructure` の訪問は
-    leaf ごとに `consume` を呼び、`Release` の訪問は `identity` を `un_bump` へ、残る候補を
-    `consume_objects` へ分ける (`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`)。走査が要るのは
-    「どの処分もどれかの呼び出しに届く」ことであり、和の形がそれである。
-  - **(b)** 終端の `Ret` では、その時点の `pending` のすべての要素を `needed_retains` に入れる。
-
-  (b) を別に書くのは、`walk_inner` の `RcExpr::Ret` の腕がそのどちらの関数も呼ばず、`needed_retains` へ
-  直接入れるからである (`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`)。印を付ける範囲は
-  `consume_objects` より広く、要素を `pending` から取り除かない点だけが狭い。取り除かないことが後段に
-  響かないのは、終端の `Ret` の訪問が返す `pending` が走査全体の返り値であり、`cancel` がそれを捨てるから
-  である (`CODE src/rc_ir/borrow.rs: cancel`)。
-
-  P5 (a) では足りない。P5 (a) は同じ identity を持つ 2 つのスロットについての主張だが、`cancel` が要るのは
-  **1 つのオブジェクトを指す相異なる 2 つの参照**についてであり、こちらの方が広い。
-
-- **P7f** (処分の後、pending はそのオブジェクトを名指さない)。`Release` の訪問について、`un_bump` が
-  `NoBracket` か `OutsideBracket` を返したとき、その訪問の後の `pending` のどの要素の `outstanding` も、
-  その `Release` が触れうるオブジェクトのどれも名指さない。
-
-  P7c は「走査が呼んだ」までしか言わない。P18a が要るのは「pending から消えた」であり、その 1 段が
-  ここにある。`Release` の腕は `other_objects` を先に `consume_objects` へ渡してから `un_bump` を呼ぶので、
-  この 2 つの順序が load-bearing である。
-
 - **P7a** (site の所有は、その leaf の所有と一致する)。**出力の版 `V` を 1 つ固定し、`owns_unit` と
   `owns_object` は `V` の `RewriteCtx` のものとする。**`infer_ownership` は入力の関数の本体から site を
   作り、`RewriteCtx` は出力の各版につき作られるので、この 2 つは別でありうる。
@@ -2243,6 +2213,40 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
   **P29 と別に置くのは、証明が P1・P9・P12・P24 を読むからである。** P29 は `borrow_ify` の入力についての
   命題なのでそれらを読まず、層 0 に置ける。**並びが P12 の後ろなのは、`route` が返す名前についての節を
   P12 から取るからである。**
+
+- **P7c** (処分はすべて走査に届く)。**P30 の後ろに置くのは、この命題の証明が P30 を引くからである** --
+  D9 の消費の表の `App` の行と D23 が言う「呼び出し先」は実行時の関数であり、`rhs_consumes` が
+  `resolve_callee_params` で静的に引く関数と同じであることを言うのは P30 だけである。P29 は
+  `borrow_ify` の**入力**についての命題なので、`cancel` の入力には当たらない。
+  実行時に参照を処分するか、処分の義務を活性化の外へ渡す構文 --
+  D9 の消費、`Release`、終端の `Ret` -- はすべて、`cancel` の走査で次のどちらかを行う。
+
+  - **(a)** 終端の `Ret` 以外では、その節点の訪問が行う `consume_objects` と `un_bump` の呼び出しが名指す
+    オブジェクトの**和**が、その構文が触れうるオブジェクト (D15 の `acted_on`) をすべて含む。とくに触れうる
+    オブジェクトが在れば、訪問はこの 2 つのどちらかを少なくとも 1 回呼ぶ。
+
+    **和で述べるのは、1 回の呼び出しでは足りないからである。** `App` と `Closure` と `Destructure` の訪問は
+    leaf ごとに `consume` を呼び、`Release` の訪問は `identity` を `un_bump` へ、残る候補を
+    `consume_objects` へ分ける (`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`)。走査が要るのは
+    「どの処分もどれかの呼び出しに届く」ことであり、和の形がそれである。
+  - **(b)** 終端の `Ret` では、その時点の `pending` のすべての要素を `needed_retains` に入れる。
+
+  (b) を別に書くのは、`walk_inner` の `RcExpr::Ret` の腕がそのどちらの関数も呼ばず、`needed_retains` へ
+  直接入れるからである (`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`)。印を付ける範囲は
+  `consume_objects` より広く、要素を `pending` から取り除かない点だけが狭い。取り除かないことが後段に
+  響かないのは、終端の `Ret` の訪問が返す `pending` が走査全体の返り値であり、`cancel` がそれを捨てるから
+  である (`CODE src/rc_ir/borrow.rs: cancel`)。
+
+  P5 (a) では足りない。P5 (a) は同じ identity を持つ 2 つのスロットについての主張だが、`cancel` が要るのは
+  **1 つのオブジェクトを指す相異なる 2 つの参照**についてであり、こちらの方が広い。
+
+- **P7f** (処分の後、pending はそのオブジェクトを名指さない)。`Release` の訪問について、`un_bump` が
+  `NoBracket` か `OutsideBracket` を返したとき、その訪問の後の `pending` のどの要素の `outstanding` も、
+  その `Release` が触れうるオブジェクトのどれも名指さない。
+
+  P7c は「走査が呼んだ」までしか言わない。P18a が要るのは「pending から消えた」であり、その 1 段が
+  ここにある。`Release` の腕は `other_objects` を先に `consume_objects` へ渡してから `un_bump` を呼ぶので、
+  この 2 つの順序が load-bearing である。
 
 - **P13** (注釈の一致)。出力の各版の `borrowed_units` は、その版のパラメータ・capture の unit のうち
   `owned_units` に入らないものの集合に一致する。
