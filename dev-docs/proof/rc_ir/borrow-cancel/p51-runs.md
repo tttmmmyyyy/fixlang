@@ -1373,11 +1373,3 @@ L0a は P27 の証明から L2b と L5 を通じて引かれる。支えてい�
 unit を持つ本体の活性化を作る段が (E3) に限られること、A20 -- は仮定として置く。`borrow_ify` の出力に
 ついて前者を果たすのは P14b であり、その範囲は `cancel` の出力を含む。P27 の言明を D12 だけの形にするに
 は、P28 (a) を残る 2 つに依らない形で示す道が要る。
-
-## 6. 残っているもの
-
-**(2) `proof_links.py` の走査が `llvmgen-function-values.md` を読まない。**`citations_of` は README の
-`CODE` を `FRAME` として集めるが、`p*.md` の走査は `glob("p*.md")` なので
-`llvmgen-function-values.md` に当たらない (`dev-docs/proof/proof_links.py` の `citations_of`)。A21 の
-果たす者の数え上げがそこに在り、この文書の L0 の `<1>5` の `<2>4b` がそれを引くので、そのファイルが引く
-コードにもリンクを張るなら、走査の対象にそのファイルを足すことになる。
