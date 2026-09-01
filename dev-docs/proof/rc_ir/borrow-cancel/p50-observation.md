@@ -3186,10 +3186,11 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
    **要る形は A4 の決定性の節を「書き込む内容と、その段が作る活性化の個数・順序・渡す値」に広げること**
    である。第 2 節の 前提 (段が作る活性化の決定性) がこれである。果たす者: 誰も。
 
-5. **A23 の「確かめていない点」は、この文書が数え上げで閉じている。** A23 は「その 2 人の間の変換が
-   funptr 型の `Expr::Lam` を式の内側へ移さないこと」を確かめていないと書くが、L9b の `<2>2a` が
-   `uncurry` の中で funptr 型が式に付く位置を 3 つに数え上げ、`replace_closure_call_to_funptr_call_subexprs`
-   が式の型を別の式へ写さないことを読んでいる。**`README.md` はその一文を落とせる。**
+5. **A23 が名指す数え上げはこの文書に在る (穴ではない)。** README の A23 と第 7 節はどちらも、funptr 型の
+   `Expr::Lam` が式の内側へ移らないことを `L9b` の `<2>2a` が示すと書く。その段は `uncurry` の中で
+   funptr 型が式に付く位置を 3 つに数え上げ、`uncurry` より前に funptr 型が制約系へ入る経路が無いこと、
+   `replace_closure_call_to_funptr_call_subexprs` が式の型を別の式へ写さないこと、`uncurry` の後の
+   `simplify_symbol_names` が名前しか替えないことを読む。報告する穴は無い。
 
 6. **引用と `// PROOF:` の対応。** この文書が引く記号はすべて実在し、
    `python3 dev-docs/proof/proof_links.py --write` が `citations.tsv` と各記号の `// PROOF:` の欄を
