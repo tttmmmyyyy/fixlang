@@ -1885,9 +1885,15 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
   <2>1. `func.body` の対応する節点が、対応する leaf `(w_0, μ)` を同じ行で消費する。ここで
         `w = ρ_f(w_0)` である。
     P9 の前半より `B_V` は `func.body` の束縛変数を `ρ_f` で一斉に付け替えたものであり、節点の種類・
-    並び・`FieldPath`・変数の型を変えない。D9 の所有を読まない消費の 6 行はどれも節点の形と型だけで
-    決まる。
-    BY D9, P9
+    並び・`FieldPath`・変数の型を変えない。D9 の所有を読まない消費の 6 行のうち 5 行は節点の形と型だけで
+    決まる。残る `Llvm` の行は `borrows_operand(i, arg_tys, type_env)` と
+    `result_prov(result_ty, arg_tys, type_env)` を読み、この 2 つは `&self` を取るので、`rename_rhs` の
+    `Llvm` の腕が作る `llvm_gen.clone()` は原本とは別のオブジェクトである。A3 は「`rhs.clone()` や
+    `fresh_rename_function` が作る複製の op は、原本と同じ引数を渡されれば同じ `Provenance` を返す」と
+    述べ、`borrows_operand` にも同じことを述べる。`rename_var` が型を残すので `arg_tys` と `result_ty` も
+    両側で等しく、よって宣言は等しい。
+    BY A3, D9, P9, CODE src/rc_ir/rename.rs: rename_rhs, rename_var,
+       CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, LLVMGen::borrows_operand
   <2>2. `cand(w, μ) = ρ_f(cand_f(w_0, μ))` である。ここで `ρ_f` は `VarPath` に対しその変数だけを写す。
     第 1 節に写した `p15` の `L15` の (ii) は、`func` に現れる各名前 `x` と任意の path `π` について
     `origin(vars_c, type_env, ρ_f(x), π) = ρ_f(origin(vars_f, type_env, x, π))` であると述べる。
@@ -2154,6 +2160,8 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
 節点の列は、**`Let(x, App(callee, args), k)` 節点の `callee` の名前を除いて**等しい。すなわち対応する
 `App` 節点は、`x`・`args`・継続を共有し、`callee` は `B'_V` では `ctx.route(x, callee, args, k)` の値で
 ある。`route` は `callee` を複製して `name` だけを差し替えるので、両者の `ty` は等しい (P12 (a))。
+**`Llvm` を右辺に持つ `Let` については、両側の op は別のオブジェクトでありながら、同じオペランドの列と
+同じ型を持ち、`borrows_operand` と `result_prov` に同じ値を返す。**
 `B'_V` の `Retain`/`Release` 節点は次の 3 種で尽きる。
 
 - **(K)** `B_V` の `Retain(v, π)`/`Release(v, π)` 節点のうち、`V` が借用版でないか `owns_unit(v, π)` が
@@ -2166,8 +2174,15 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
 <1>1. `rewrite_inner` は `RcExpr` の 6 種のそれぞれについて、同じ種類の節点を作るか (`Let` の 3 つの腕、
       `Destructure`、`Eval`、`Ret`)、`rewrite_rc` を呼ぶ (`Retain`、`Release`)。`Let(x, App(..), k)` の
       腕は `prepend_rc` で `Retain`/`Release` の鎖を前後に足す。`Let(x, Match(scrut, arms), k)` の腕は
-      アームの数・`tag`・`payload` を変えずに各アーム本体を書き換える。
-  BY P10, P11, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
+      アームの数・`tag`・`payload` を変えずに各アーム本体を書き換える。**`Llvm` を右辺に持つ `Let` は
+      3 番目の腕が `rhs.clone()` で写すので、出力の op は入力とは別のオブジェクトである。** それでも
+      節点が「等しい」と言えるのは A3 による -- A3 は「`rhs.clone()` や `fresh_rename_function` が作る
+      複製の op は、原本と同じ引数を渡されれば同じ `Provenance` を返す」と述べ、`borrows_operand` にも
+      同じことを述べる。`rhs.clone()` はオペランドの列も型も変えないので、D9 の消費の表の `Llvm` の行が
+      読む `borrows_operand(i, arg_tys, type_env)` と、D10 の生成の表の `Llvm` の行が読む
+      `result_prov(result_ty, arg_tys, type_env)` は両側で同じ値を返す。
+  BY A3, D9, D10, P10, P11, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+     CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, LLVMGen::borrows_operand
 
 <1>2. `rewrite_rc` が作る節点は、`V` が借用版でないとき元の節点そのもの、借用版のとき
       `owns_unit(v, π)` が真ならば元の節点そのもの、偽ならば節点無しである。
@@ -2184,6 +2199,7 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
   `Retain`/`Release` を足し、`App` の `callee` を `route` の値に差し替えたものである。`Match` のアームの
   構造 (D3 が実行路を作るのに使う唯一の分岐) は変わらないので、実行路は 1 対 1 に対応する。`route` が
   返す `RcVar` は `callee.clone()` か、その複製の `name` を差し替えたものなので `ty` は等しい (P12 (a))。
+  `Llvm` を右辺に持つ `Let` についての節は `<1>1` が与える。
   BY D3, P10, P11, P12, <1>1, <1>2
 
 #### L16a (出力の活性化に対応する入力の活性化)
@@ -2218,12 +2234,13 @@ D21 が挙げる「オペランドから結果が決まらない 4 種」の各�
   `Llvm` の演算、子の活性化を作る段である。4 種目は D24 の「活性化の林」より `App` の段 (E3)、
   オペランドを適用する `Llvm` の段 (E2)、グローバルの初期化の段 (E7)、そして `Destructor` の
   オブジェクトを解放する段 (F) の 4 つである。前の 3 種と、4 種目のうち `Llvm` の段は `RcRhs::Llvm` の
-  節点であり、`<1>2` より両側で同じ `llvm_gen` と同じオペランドを持つ。`App` の段は `<1>2` より
+  節点であり、L16 の言明より両側の op は同じオペランドの列と同じ型を持ち、`borrows_operand` と
+  `result_prov` に同じ値を返す。`App` の段は `<1>2` より
   対応する。グローバルの初期化の段は、グローバルを読む節点に対応し、その節点も `<1>2` の対応に入る。
   **(F) の解放は参照を処分するどの段でも起こりうる** (D21) ので、その位置は `Retain`/`Release` 節点の
   上にも在る。`<1>2` が対応させない節点はその 2 種だけなので、それ以外の節点の上の (F) の位置は
   1 対 1 に対応する。
-  BY D18, D21, D24, <1>2
+  BY D18, D21, D24, L16, <1>2
 
 <1>4. `callee` の名前が違うことは、この対応を妨げない。
   D21 は `App` の段の結果 -- 返る値と参照カウントに与える変化 -- を活性化の側のデータとして与えるので、
@@ -2548,7 +2565,15 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
 
 <1>3. 一斉の名前替えは D11 を保つ。
   D3 の実行路、D6 のスロット、D9 の消費と移動、D10 の義務集合、D11 の 3 つの節は、いずれも本体の節点の
-  種類・並び・`FieldPath`・変数の型・呼び出し先の所有だけから定まり、束縛名がどの文字列であるかを読まない。
+  種類・並び・`FieldPath`・変数の型・呼び出し先の所有と、`Llvm` 節点の op が返す宣言だけから定まり、
+  束縛名がどの文字列であるかを読まない。**op の宣言をここに挙げるのは、D9 の消費の表の `Llvm` の行が
+  `borrows_operand(i, arg_tys, type_env)` を、D10 の生成の表の `Llvm` の行が
+  `result_prov(result_ty, arg_tys, type_env)` を読み、どちらも `&self` を取るからである** --
+  `rename_rhs` の `Llvm` の腕は `llvm_gen.clone()` を作って `free_vars_mut()` の名前を書き替えるので、
+  複製の op は原本とは別のオブジェクトである。A3 は「`rhs.clone()` や `fresh_rename_function` が作る
+  複製の op は、原本と同じ引数を渡されれば同じ `Provenance` を返す」と述べ、`borrows_operand` にも
+  同じことを述べる。`rename_var` は型を残すので `arg_tys` と `result_ty` も両側で等しく、よって宣言は
+  等しい。
   P9 の前半よりこの 5 つは `ρ_f` の下で保たれる -- 節点の種類・並び・`FieldPath`・`MatchArm` の `tag` は
   変わらず、`rename_var` は型を残し、`RcRhs::Closure` の `FuncRef` も変わらない。**呼び出し先 (D23) は
   `App` の callee の値が決める。** 直接呼び出しの callee は関数の名前を持つ `RcVar` であり、A6 より
@@ -2557,7 +2582,8 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
   本体の束縛と使用を一斉に写すので、対応する活性化が対応する位置でその変数に持つ値は等しく、呼び出し先も
   等しい。`ρ_f` は単射なので、A6 と A11 が要求する束縛と使用の対応も保たれる。`func` のパラメータ・
   capture と `f_borrow` のそれは `ρ_f` で対応し、型は等しい。
-  BY A6, A11, D3, D6, D9, D10, D11, D23, P9, CODE src/rc_ir/rename.rs: rename_var, rename_rhs
+  BY A3, A6, A11, D3, D6, D9, D10, D11, D23, P9, CODE src/rc_ir/rename.rs: rename_var, rename_rhs,
+     CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, LLVMGen::borrows_operand
 
 <1>4. QED
   第 1 文は `<1>1`・`<1>2`・`<1>3` による。第 2 文は `<1>3` が呼び出し先について述べたことそのもので
@@ -3423,11 +3449,13 @@ inhabited な leaf はどれも L20 の 2 を満たし、P14a の主語である
 消費 (DEF 所有を読まない消費) が消費するスロット `(w, μ)` は `C_T` に属さない。
 
 <1>1. `B'_V` のこれらの節点が消費するスロットは、`B_V` の対応する節点が消費するスロットと同じである。
-  BY D9, L16, L18
+  BY A3, D9, L16, L18, CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand, LLVMGen::result_prov
   L16 より `Retain`/`Release` 以外の節点の列は、`App` 節点の callee の名前を除いて両側で等しい。
   callee については L18 が場合を分ける -- `route` が名前を差し替えたときは `leaves(ty(c)) = ∅` なので
   D9 の `App` の行の callee の部分はどちらの側でも何も消費せず、差し替えないときは両側の callee が同じ
-  `RcVar` なので同じ leaf を消費する。
+  `RcVar` なので同じ leaf を消費する。`Llvm` の節点については、L16 の言明が「両側の op は別のオブジェクト
+  でありながら、同じオペランドの列と同じ型を持ち、`borrows_operand` と `result_prov` に同じ値を返す」と
+  述べ、D9 の消費の表の `Llvm` の行はその 2 つの宣言だけを読むので、消費される leaf も両側で同じである。
 
 <1>2. `B_V` の節点で所有を読まない消費によって消費されるスロット `(w, μ)` について
       `ctx.owns_object(T_ρ(w, μ))` は真である。
