@@ -745,11 +745,18 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
   <2>2. `as_arg_projection(sources)` が `Some((j, p))` を返すのは、`sources` がちょうど 1 元からなり、
         その元が `LeafOrigin::Arg(j, p)` のときに限る。
     BY CODE src/rc_ir/ownership.rs: as_arg_projection
+  <2>2a. `<2>1` の呼び出しが作る `decl` は、言明の `decl` と同じ値である。どちらも
+         `llvm_gen.result_prov(ty, arg_tys, type_env)` の値であり、A3 の決定性の節 -- `result_prov` は
+         同じ引数に対して常に同じ値を返す -- がその 2 つを等しくする。`llvm_gen`・`args`・`ty` は
+         `vars.bindings.get(u)` の記録 `Llvm(gen, args, ty)` が持つ値であり、`arg_tys` は
+         `args` の各元の型の列である (`<2>1` の腕がそう作る)。
+    BY A3, <2>1
   <2>3. 前提より `decl.leaf_origins_at(λ)` は 1 元集合 `{Arg(j, σ)}` なので、`as_arg_projection` はそれを
-        `Some((j, σ))` に写す。
-    BY <2>2
+        `Some((j, σ))` に写す。`<2>2a` より、`<2>1` の呼び出しが `leaf_origins_at` を掛ける `decl` は
+        言明の `decl` である。
+    BY <2>2, <2>2a
   <2>4. QED
-    BY <1>4a, <2>1, <2>3
+    BY <1>4a, <2>1, <2>2a, <2>3
 
 <1>9a. (B) が成り立つ。
   E1 から E5 の辺を定める節点は、第 2 節の一覧より、それぞれ `Let(x, Var(y), k)`、
@@ -921,19 +928,28 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 <1>4. `x` の `Binding` が `Llvm(gen, args, result_ty)` であるとき、`result_ty` は `ty(x)` であり、
       `decl := gen.result_prov(result_ty, &arg_tys, type_env)` について `decl.leaf_origins_at(λ)` は
-      `Some(S)` である。
+      `Some(S)` である。さらにこの `decl` は、`<1>1` の `origin_inner` の呼び出しが `Llvm` の腕で作る
+      `decl` と同じ値である。
   <2>1. `collect_bindings` は `Let(x, Llvm(llvm_gen, args), k)` に `Binding::Llvm(llvm_gen, args, x.ty)` を
         作る。
     BY CODE src/rc_ir/ownership.rs: collect_bindings の `RcExpr::Let` の腕の `RcRhs::Llvm` の場合
   <2>2. `result_prov` は結果の型の boxed leaf ごとに `LeafOrigins` を 1 つ宣言する。すなわち `decl` の
         鍵の全体は `boxed_leaf_paths(result_ty, type_env)` である。
     BY A3
+  <2>2a. `<1>1` の `origin_inner` の呼び出しが `Llvm` の腕で作る `decl` は、この言明の `decl` と同じ
+         値である。その腕は `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を評価し、
+         `llvm_gen`・`args`・`result_ty` は `vars.bindings.get(x)` の記録が持つ値、`arg_tys` は `args` の
+         各元の型の列である。引数が同じなので、A3 の決定性の節 -- `result_prov` は同じ引数に対して常に
+         同じ値を返す -- が 2 つの値を等しくする。
+    BY A3, <1>1, CODE src/rc_ir/ownership.rs: origin_inner の
+       `Some(Binding::Llvm(llvm_gen, args, result_ty))` の腕
   <2>3. `leaf_origins_at(π)` は、`π` に記録がある場合に `Some`、無い場合に `None` を返す。
     BY CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, CODE src/rc_ir/leaf_map.rs: LeafMap::get
   <2>4. QED
     `λ` は `ty(x)` の boxed leaf である (DEF 路の位置)。`<2>1` より `result_ty = ty(x)` なので、
-    `<2>2` より `λ` は `decl` の鍵であり、`<2>3` より `leaf_origins_at(λ)` は `Some` を返す。
-    BY DEF 路の位置, <2>1, <2>2, <2>3
+    `<2>2` より `λ` は `decl` の鍵であり、`<2>3` より `leaf_origins_at(λ)` は `Some` を返す。後半は
+    `<2>2a` である。
+    BY DEF 路の位置, <2>1, <2>2, <2>2a, <2>3
 
 <1>5. `<1>4` の `S` の元数は 0 か 1 である。
   A3 は「複数の元を宣言する op は存在しない」と述べ、`result_prov` を override する 29 個が leaf に置く
@@ -1149,7 +1165,9 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   <2>1. `origin(x, λ) = origin(args[j], σ')` であり、よって `id(x, λ) = id(args[j], σ')` である。また
         `(x, λ) ⇝ (args[j], σ')` である。
     この CASE の前提は `vars.bindings.get(x) = Some(Llvm(gen, args, result_ty))` かつ
-    `decl.leaf_origins_at(λ) = Some({Arg(j, σ')})` である (`<1>4`)。`origin_inner` の
+    `decl.leaf_origins_at(λ) = Some({Arg(j, σ')})` である (`<1>4`)。`<1>4` より、`<1>1` の呼び出しの腕が
+    作る `decl` はこの `decl` と同じ値なので、その腕の `leaf_origins_at(λ)` も同じ答えを返す。
+    `origin_inner` の
     `Some(Binding::Llvm(llvm_gen, args, result_ty))` の腕は `origin(vars, type_env, &args[j].name, &p)` を
     直接呼ぶので、DEF 鍵の関係 よりこの鍵は `(x, λ)` の `⇝` の像に入る。
     BY DEF 鍵の関係, L2 (E5), <1>4,
@@ -1179,8 +1197,9 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 <1>15. CASE `Some(Llvm(gen, args, result_ty))` で `<1>4` の `S` が単一の `Fresh` または単一の `Unknown`。
   <2>1. `as_arg_projection(S)` は `None` を返すので、腕は
         `origin_from_leaves_under(vars, type_env, &decl, args, λ, &here_identity)` に進む。
-        `here_identity` は `(x, λ)` である。
-    BY <1>1, CODE src/rc_ir/ownership.rs: as_arg_projection, origin_inner の
+        `here_identity` は `(x, λ)` である。`<1>4` より、その腕が作る `decl` はこの CASE が主語にする
+        `decl` と同じ値である。
+    BY <1>1, <1>4, CODE src/rc_ir/ownership.rs: as_arg_projection, origin_inner の
        `Some(Binding::Llvm(..))` の腕の `None =>` の枝
   <2>2. `decl.leaf_origins_under(λ)` が返すのは `S` 1 つだけである。
     `leaves_under(path)` は写像の鍵のうち `path` を前置に持つものの値を返す。`<1>4` より `decl` の鍵の
@@ -2071,9 +2090,11 @@ leaf に前置したものだからである。
   BY D2, D9, L5 (f), L5 (h)
 <1>3. CASE D9 の `Llvm(gen, args)` の行。D9 のこの行「`borrows_operand(i)` が偽のオペランドのうち、
       `result_prov` が単一の `Arg(i, σ)` として素通しを宣言していない leaf」は `L5 (k)` の条件そのもので
-      あり、その「単一の `Arg(i, σ)`」は `L5 (l)` の条件そのものである。`Llvm` は `RcRhs` の 1 種なので
-      `L5 (f)` より `rhs_consumes` が呼ばれる。
-  BY D2, D9, L5 (f), L5 (k), L5 (l)
+      あり、その「単一の `Arg(i, σ)`」は `L5 (l)` の条件そのものである。`L5 (l)` の
+      `passthrough_arg_leaves` が読む `result_prov` の値と、D9 の行が言う宣言が同じものであることは、
+      A3 の決定性の節 -- `result_prov` は同じ引数に対して常に同じ値を返す -- による。`Llvm` は `RcRhs` の
+      1 種なので `L5 (f)` より `rhs_consumes` が呼ばれる。
+  BY A3, D2, D9, L5 (f), L5 (k), L5 (l)
 <1>4. CASE D9 の `Destructure(c, fs)` (`c` が boxed) の行。D9 のこの行「`c` の全 boxed leaf」は
       `L5 (e)` の `is_box` が真の場合が返し、`L5 (d)` が積む。
   BY D9, L5 (d), L5 (e)
@@ -2144,8 +2165,9 @@ leaf に前置したものだからである。
 <1>4. 出どころ (k) が積むものは D9 の `Llvm` の行である。`L5 (k)` が積むのは `borrows_operand(i)` が偽の
       オペランドの leaf のうち `passthrough_arg_leaves` に入らないものであり、`L5 (l)` よりその条件は
       「結果のどの leaf の宣言も単一の `Arg(i, leaf)` でない」ことである。これは D9 の `Llvm` の行と
-      同じである。
-  BY D9, L5 (k), L5 (l), L5 (m)
+      同じである -- `L5 (l)` の `passthrough_arg_leaves` が読む `result_prov` の値と D9 の行が言う宣言が
+      同じものであることは、A3 の決定性の節による。
+  BY A3, D9, L5 (k), L5 (l), L5 (m)
 
 <1>5. 出どころ (c) が積むものは、その `Ret` 節点が `collect_consumes` に渡された式の終端のものなら D9 の
       `Ret` の行であり、そうでないなら `Match` のアーム本体の終端の `Ret` である。
@@ -2210,7 +2232,9 @@ leaf に前置したものだからである。
   BY A3, D9, L5 (k)
 
 <1>7. `rhs_consumes` の `RcRhs::Llvm` の腕が `passthrough` に入るとして飛ばす leaf (`L5 (k)`, `L5 (l)`)。
-      D9 の `Llvm` の行は消費から素通し leaf を外しているので、これは消費ではない。A3 の表の「単一の
+      D9 の `Llvm` の行は消費から素通し leaf を外しているので、これは消費ではない -- `L5 (l)` の
+      `passthrough_arg_leaves` が読む `result_prov` の値と D9 の行が言う宣言が同じものであることは、
+      A3 の決定性の節による。A3 の表の「単一の
       `Arg(j, σ)`」の行が、生成コードはそこに第 `j` オペランドの leaf `σ` と同じ参照を置き、新しい参照を
       作らないと述べる。D9 の移動の表の最後の行がこれを移動とし、D10 の移動の行より `Obl` は変わらない。
   BY A3, D9, D10, L5 (k), L5 (l)
