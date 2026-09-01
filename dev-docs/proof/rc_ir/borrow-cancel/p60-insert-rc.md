@@ -1194,7 +1194,7 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
 
 `L7` より、A19 (ii-b) は各別名類 `C` と `bumps ≥ 1` である各時点について `U + X ≥ D` である。`L9` と
 `L11` は、`R` を増やす節点 -- `Retain` -- が、その変数を名指す構文の直前にしか立たないことを示す。
-README の第 4 節が (O1) と (O2) と呼ぶ 2 つを、この節が言明として書く。
+README の A19 が (O1) と (O2) と呼ぶ 2 つを、この節が言明として書く。
 
 **(O1) 由来の形。** `insert_rc` の出力の各本体、各実行路 `ρ`、`ρ` を辿る各活性化について、(a) 各時点の
 各計数下の別名類 `C` について `held_ρ(・, C) ≥ 0` であり、(b) D7 の読む構文が読む値の各スロット、および
@@ -3341,8 +3341,9 @@ A19 の範囲は `borrow_ify` の入力、すなわち `split_rc_units` の出�
     `units_under` の `Some` の腕は `rc_units(σ)` の各 `u` について
     `let mut unit_path = path.clone(); unit_path.extend(u);` を返すので、各元は `π ++ u` の形であり
     `π` で始まる。<1>5 より `Leaves(τ, π) = {π ++ ν : ν ∈ boxed_leaf_paths(σ)}` であり、`π ++ ν` が
-    `π ++ u` で始まるのは `ν` が `u` で始まるときに限る。A10 の最後の段落より `σ` -- `τ` から
-    `unpunched_field_types` を繰り返し取って到達する型 -- も A10 を満たすので、<1>2a を `σ` に当てると、
+    `π ++ u` で始まるのは `ν` が `u` で始まるときに限る。A10 の「`unpunched_field_types` を
+    繰り返し取って到達する型」の節より `σ` -- `τ` から `unpunched_field_types` を繰り返し取って到達する
+    型 -- も A10 を満たすので、<1>2a を `σ` に当てると、
     各 `ν` はちょうど 1 つの `u ∈ rc_units(σ)` で始まる。
   <2>3. QED
     BY <2>1, <2>2, CODE src/rc_ir/ownership.rs: subtree_type
@@ -3351,8 +3352,9 @@ A19 の範囲は `borrow_ify` の入力、すなわち `split_rc_units` の出�
 <1>7. (b)。
   BY <1>4, <1>5, A10, CODE src/rc_ir/ownership.rs: units_under
   `subtree_type(τ, π) = Some(σ)` のとき `units_under(τ, π)` の各元は `π ++ u_0` (`u_0 ∈ rc_units(σ)`)
-  である。A10 の最後の段落より `σ` -- `τ` から `unpunched_field_types` を繰り返し取って到達する型 --
-  も A10 を満たすので <1>4 が当たり、`u_0` で始まる `ν ∈ boxed_leaf_paths(σ)` が在る。<1>5 より
+  である。A10 の「`unpunched_field_types` を繰り返し取って到達する型」の節より `σ` -- `τ` から
+  `unpunched_field_types` を繰り返し取って到達する型 -- も A10 を満たすので <1>4 が当たり、`u_0` で
+  始まる `ν ∈ boxed_leaf_paths(σ)` が在る。<1>5 より
   `π ++ ν ∈ Leaves(τ, π)` であり、`π ++ ν` は `π ++ u_0` で始まる。
 
 <1>8. (c)。
