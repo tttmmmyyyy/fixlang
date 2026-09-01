@@ -1,7 +1,7 @@
 # (P-insert): `insert_rc` と `split_rc_units` の出力と A19
 
 この文書は、`p13-disposals-and-pending.md` が `(P-insert)` として書き出した言明を扱う。README の定義
-D1-D34、仮定 A1-A25、命題 P1-P30 の**言明**の上に立つ。加えて `p13-disposals-and-pending.md` から次の
+D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて `p13-disposals-and-pending.md` から次の
 2 つを輸入する。
 
 - 補題 `L9`・`L12a`・`L14` の**言明**。`L9` は `origin` の `identity` が
