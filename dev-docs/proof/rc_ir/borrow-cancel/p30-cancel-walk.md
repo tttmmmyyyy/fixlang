@@ -333,13 +333,15 @@ enum については元と同じ変位で、その変位が保持する各値を
 
 ### L0 (`origin` の返り値は memo に依らない)
 
-1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値 `type_env` を固定する。以下この補題の中では、
-**呼び出し**も「`origin` の呼び出し」も、この 2 つを第 1・第 2 引数として行われる `origin` の呼び出しを
-指す。次が成り立つ。
+1 つの `VarTable` の値 `vars` を固定する。以下この補題の中では、**呼び出し**も「`origin` の呼び出し」も、
+`vars` を第 1 引数として行われる `origin` の呼び出しを指す。**第 2 引数は問わない。** memo の鍵は
+`(var.clone(), path.to_vec())` であって `TypeEnv` を含まないので、1 つの `vars` の表は、第 2 引数が
+相異なる呼び出しのあいだでも共有される。次が成り立つ。
 
 **鍵 `(x, π)` が等しい 2 つの呼び出しがどちらも値を返すならば、その 2 つの返り値は等しい。**
 
-したがって `ownership::acted_references(vars, type_env, v, π)` の返り値と、
+したがって、1 つの `TypeEnv` の値 `type_env` を固定すると、
+`ownership::acted_references(vars, type_env, v, π)` の返り値と、
 `CancelAnalysis::other_objects(v, π)` が返す `Vec` の元の集合も、走査のどの時点で読んでも同じである。
 
 **証明**
@@ -440,6 +442,21 @@ enum については元と同じ変位で、その変位が保持する各値を
     <2>3 より、`vars` を第 1 引数とする `origin` の呼び出しはどれも、`vars` を作った <2>2 の呼び出しが
     返った後に起きる。<2>2 よりその後 `vars.bindings` への書き込みは無い。
     BY <2>2, <2>3
+<1>2b. 呼び出し `c = origin(vars, τ, ・, ・)` の中で起きる呼び出しは、どれも第 2 引数が `τ` である。
+  <2>1. `origin` の本体は自分の第 2 引数を `origin_inner(vars, type_env, var, path)` の第 2 引数として
+        渡す。`origin_inner` の本体に書かれた 6 か所の `origin(vars, type_env, ...)` と 1 か所の
+        `origin_from_leaves_under(vars, type_env, ...)`、および `origin_from_leaves_under` の本体に
+        書かれた 1 か所の `origin(vars, type_env, ...)` も、どれも自分の第 2 引数をそのまま第 2 引数と
+        して渡す。
+    BY CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: origin_inner,
+       CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+  <2>2. QED
+    第 1 引数が `vars` である `origin` の呼び出しは、`vars` を引数として受け取った本体の中に書かれた
+    ものである。<1>0a より、`c` の中でそのような本体は `origin`、`origin_inner`、
+    `origin_from_leaves_under` の 3 つに限り、<2>1 よりこの 3 つはどれも、自分が受け取った第 2 引数を
+    そのまま渡す。`c` 自身の第 2 引数は `τ` なので、呼び出しの入れ子の深さについての帰納法により、`c` の
+    中で起きる呼び出しはどれも第 2 引数が `τ` である。
+    BY <1>0a, <2>1, EXT 呼び出しの入れ子
 <1>3. `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが直に行う、第 1 引数が `vars` である
       `origin` の呼び出しの鍵の集合は、`vars.bindings`、`type_env`、`(x, π)` だけで決まる。とくにこの
       集合は `vars.origins` の状態にも、その呼び出しが受け取る `origin` の返り値にも依らない。
@@ -515,12 +532,13 @@ enum については元と同じ変位で、その変位が保持する各値を
         `1 ≤ m - 1`)、`a` の中で始まるので `a` より始まる時刻が遅い。
     BY <1>1, <2>2, EXT 呼び出しの入れ子
   <2>4. `b` の中で、鍵が `d_1` の鍵 `k_1` である `origin` の呼び出し `b_1` が直に始まる。`a` と `b` は
-        どちらも外れであり鍵が `k` で、<1>2a より `a` の時点と `b` の時点で `vars.bindings` は等しい
-        ので、<1>3 より 2 つが直に呼ぶ `origin` の鍵の集合は等しい。`d_1` は
+        どちらも外れであり鍵が `k` で、<1>2a より `a` の時点と `b` の時点で `vars.bindings` は等しく、
+        `b` は `a` に真に含まれるので <1>2b より `b` の第 2 引数は `a` の第 2 引数と等しい。よって
+        <1>3 より 2 つが直に呼ぶ `origin` の鍵の集合は等しい。`d_1` は
         `a` が直に呼ぶものなので、`k_1` はその集合の元であり、したがって `b` も鍵 `k_1` の `origin` を
         直に呼ぶ。`b_1` は `b` に真に含まれ、`b` は `d_1` に含まれる (`m = 1` のとき `b = d_1`) ので、
         `b_1` は `d_1` に真に含まれる。
-    BY <1>2a, <1>3, <2>2, <2>3, EXT 呼び出しの入れ子
+    BY <1>2a, <1>2b, <1>3, <2>2, <2>3, EXT 呼び出しの入れ子
   <2>5. CASE `b_1` が外れである。`(d_1, b_1)` は `c` の中の入れ子の対であり、<2>3 よりその外側 `d_1` が
         始まる時刻は `a` より遅い。これは <2>2 の取り方に反する。
     BY <2>2, <2>3, <2>4
@@ -557,6 +575,7 @@ enum については元と同じ変位で、その変位が保持する各値を
   ついて値を返す呼び出しの返り値はどれも `A` と等しい。当たりのものが在って外れのものが無いことは、
   <1>2 より無い。
 
+  1 つの `TypeEnv` の値 `type_env` を固定する。
   `ownership::acted_references(vars, type_env, v, π)` は、`boxed_leaf_paths(&v.ty, type_env)` のうち
   `π` を接頭辞に持つ各 leaf について `origin(vars, type_env, &v.name, &leaf)` の `identity` を数えたもので
   あり、`CancelAnalysis::other_objects(v, π)` は同じ leaf について同じ `origin` を呼び、その `candidates`
@@ -576,11 +595,10 @@ enum については元と同じ変位で、その変位が保持する各値を
 **証明**
 
 <1>1. QED
-  L0 は 1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値 `type_env` を固定し、その 2 つを第 1・
-  第 2 引数として行われる `origin` の呼び出しについて、鍵 `(x, π)` が等しい 2 つがどちらも値を返すならば
-  その 2 つの返り値が等しいことを述べる。P2a が固定するのも `VarTable` の値 1 つと `TypeEnv` の値 1 つで
-  あり、P2a が量化するのもその 2 つを第 1・第 2 引数とする `origin` の呼び出しである。よって L0 の言明は
-  P2a の言明である。
+  L0 は 1 つの `VarTable` の値 `vars` を固定し、`vars` を第 1 引数として行われる `origin` の呼び出しに
+  ついて、鍵 `(x, π)` が等しい 2 つがどちらも値を返すならばその 2 つの返り値が等しいことを述べる。
+  P2a が量化するのは、`vars` を第 1 引数とし、固定した 1 つの `TypeEnv` の値を第 2 引数とする `origin` の
+  呼び出しであり、これは L0 が量化する呼び出しの一部である。よって L0 の言明は P2a の言明を含む。
   BY L0
 
 ### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ)
