@@ -460,9 +460,14 @@ L8c はこの補題を引かないので、`<1>2` が L8c を引くことで循�
       その引数の型には `[a : Boxed]` の制約が掛かる。`Std::Boxed` の実装は、`is_boxed()` が真の struct と
       union について `Program::add_boxed_impls` が、`Std::#DynamicObject` について `make_std_mod` が
       入れるものに限り、利用者が書いた実装は `TraitEnv::validate_trait_impl` が拒否する。
-      `TypeDefn::tycon_info` は宣言の `is_unbox` の欄をそのまま `TyConInfo` へ写し、`TypeNode::is_unbox`
-      はその欄を読むので、この 3 種はいずれも `TypeNode::is_box` が真である。よって D4 の規則 3 より
-      その引数の leaf は `[]` だけであり、渡るのはその値そのものである。
+      `TypeDefn::tycon_info` は宣言の `is_unbox` の欄をそのまま `TyConInfo` へ写す。`TypeNode::is_unbox`
+      は `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` であり、欄だけを読むのでは
+      ない。**`Boxed` の実装の頭はどれもクロージャ型ではない** -- `add_boxed_impls` が置く頭は宣言された
+      struct・union の `defn.applied_type()`、すなわちその宣言の tycon に型変数を適用した型であり、
+      `make_std_mod` が置く頭は `Std::#DynamicObject` である。`TypeNode::is_closure` が真になるのは
+      toplevel の tycon の名前が `make_arrow_name_abs()` のものであるときだけで、どちらもそうではない。
+      よって `is_unbox` はその欄の値であり、この 3 種はいずれも `TypeNode::is_box` が真である。よって
+      D4 の規則 3 よりその引数の leaf は `[]` だけであり、渡るのはその値そのものである。
       `array_is_storage_unique_function` が `Std::Array::_unsafe_is_storage_unique` に与える scheme の
       引数の型は `type_tyapp(make_array_ty(), a)` すなわち `Array a` であり (D4 の規則 4 よりその leaf も
       `[]` だけ)、渡るのは `get_array_storage` が `ARRAY_STORAGE_IDX` の欄から取り出す記憶域
@@ -476,11 +481,12 @@ L8c はこの補題を引かないので、`<1>2` が L8c を引くことで循�
       述べる。
   BY A4, A5, D4, D7, <1>3, CODE src/object.rs: get_array_storage, build_traverse,
      CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate, is_unique_function,
-     array_is_storage_unique_function, make_boxed_trait,
+     array_is_storage_unique_function, make_boxed_trait, make_arrow_name_abs,
      CODE src/fixstd/stdlib.rs: make_std_mod, CODE src/ast/types.rs: Scheme::generalize,
-     TypeNode::is_box, TypeNode::is_unbox, CODE src/ast/program.rs: Program::add_boxed_impls,
+     TypeNode::is_box, TypeNode::is_unbox, TypeNode::is_closure,
+     CODE src/ast/program.rs: Program::add_boxed_impls,
      CODE src/ast/traits.rs: TraitEnv::validate_trait_impl,
-     CODE src/ast/typedecl.rs: TypeDefn::tycon_info
+     CODE src/ast/typedecl.rs: TypeDefn::tycon_info, TypeDefn::applied_type
 
 <1>4. `assumed_state(false)` は `RcState::Unknown` であり、`RcState::Unknown.dispatches()` は真である。
   BY <1>2, CODE src/fixstd/builtin.rs: assumed_state, CODE src/rc_ir/ast.rs: RcState::dispatches
