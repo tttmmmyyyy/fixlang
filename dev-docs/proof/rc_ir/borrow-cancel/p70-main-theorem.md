@@ -732,7 +732,7 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 | A23 | 持ち上げた lambda は closure 型である | 型検査と `uncurry` (**検査: 無し**) | `p20-borrow-ify.md` の `L18` |
 | **A24** | `fix` の op は capture を持つ本体にだけ在る | **誰も** (検査は `Lowerer::lower_llvm` の panic) | P14b、`p20-borrow-ify.md` の `L18a` |
 | A25 | 骨格は `Retain`/`Release` を持たない | lowering と `simplify` (検査は `RcInserter::insert_into_expr_inner` の `panic!`) | `p60-insert-rc.md` の `L8`・`L14`・`L28` |
-| A26 | 節点は、読んでから手放す | コード生成 (**検査: 無し**) | `p20-borrow-ify.md` の第 10.7 節 (P14 の (S-c))。「読んだオブジェクトはその参照が作られるまで生き延びる」は `p51-runs.md` の `L2b` -- その節が要るのは参照を作る動作の直前の点である |
+| A26 | 節点は、読んでから手放す | コード生成 (**検査: 無し**) | `p20-borrow-ify.md` の第 10.7 節 (P14 の (S-c))。「読んだオブジェクトはその参照が作られるまで生き延びる」は `p51-runs.md` の `L2b` -- (S-c) が与えるのは読みの直前の点であり、`L2b` が要るのは参照を作る動作の直前の点である |
 
 **README 第 7 節が「誰も果たさない仮定」に挙げるのは A3・A4・A12・A18・A24 の 5 つである。**この
 うち A3 は 2 つの節についてだけ果たす者を持つ -- `applies_a_function_operand` の宣言については
