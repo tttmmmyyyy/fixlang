@@ -1081,6 +1081,51 @@ clones.iter().map(|(_, _, rename)| rename))` を呼ぶ。これは入力プロ�
   `<1>2`・`<1>4` の側と `<1>3` の側は 4.2 の言明より相異なる。
   BY A6, 4.2 の言明, <1>1, <1>2, <1>3, <1>4
 
+### 4.4 系 -- 出力の束縛名は `funcs` の鍵ではない
+
+**言明**。A13 の下で、`borrow_ify` の出力の束縛名 (DEF 出力の束縛名) は、入力の束縛名か `clone_func` が
+導入した名前のどちらかであり、入力の `funcs` の鍵でも出力の `funcs` の鍵でもない。
+
+<1>1. 出力の束縛名は、入力の束縛名か、`clone_func` が導入した名前のどちらかである。
+  `f_own` は `func.clone()` の `body` を `ctx.rewrite` の値に差し替えたものであり、`params` と `capture` は
+  `func` のままである。グローバル初期化子も `init` を差し替えるだけである。L5 より `rewrite` は本体の
+  束縛名を変えないので、この 2 種の束縛名は入力の束縛名である。`f_borrow` の束縛名は、4.1 の言明より
+  `rename_f` の像 -- すなわち `clone_func` が導入した名前 -- であり、その後の `ctx.rewrite` も L5 より
+  束縛名を変えない。
+  BY L5, 4.1 の言明, CODE src/rc_ir/borrow.rs: borrow_ify
+
+<1>2. 入力の束縛名は入力の `funcs` の鍵ではない。
+  DEF 入力の束縛名 の名前は、入力の関数のパラメータ・capture の名前か、入力のいずれかの本体が束縛する
+  変数の名前である。D6 は「`VarTable::of` と `VarTable::body_only` がその表に入れる鍵は、パラメータ・
+  capture の名前と節点が束縛する変数の名前だけで、どれも `Lowerer::fresh_var` が `FullName::local` で
+  作ったものである」と述べるので、どちらも局所名である。A13 は「最上位の記号の名前は局所名ではない。
+  `FullName::is_local` が偽であり、`prog.funcs` の鍵と `global_types` の鍵はどちらもそのような名前で
+  ある」と述べる。A6 も同じ結論を別に与える -- 入力のすべての束縛変数の名前はどの関数の名前とも異なる。
+  BY A6, A13, D6
+
+<1>3. 入力の束縛名は `borrow_versions` の値ではない。
+  `borrow_funcref` は借用版の名前を `<元の名前>#borrow` として作るので、その `name` フィールドを `#` で
+  区切った最後の断片は `borrow` である。A13 は入力に現れるすべての名前について、その断片が `borrow` で
+  ないと述べる。入力の束縛名は入力に現れる名前である。
+  BY A13, CODE src/rc_ir/borrow.rs: borrow_funcref
+
+<1>4. `clone_func` が導入した名前は入力の `funcs` の鍵ではない。
+  4.2 の言明よりその名前の最後の断片は `b` の後に 10 進数字が 1 個以上続く形であり、A13 は入力に現れる
+  すべての名前 -- `prog.funcs` の鍵を含む -- についてその断片がその形でないと述べる。
+  BY A13, 4.2 の言明
+
+<1>5. `clone_func` が導入した名前は `borrow_versions` の値ではない。
+  `<1>3` より借用版の名前の最後の断片は `borrow` であり、4.2 の言明より複製の名前の最後の断片は `b` の
+  後に 10 進数字が 1 個以上続く形である。`borrow` の 2 文字目は 10 進数字ではないので、2 つは異なる。
+  `FullName` の相等は `namespace` と `name` で決まるので、`name` フィールドが異なれば名前は異なる。
+  BY 4.2 の言明, <1>3, CODE src/ast/name.rs: FullName
+
+<1>6. QED
+  L6 より出力の `funcs` の鍵の集合は「入力の各関数の名前」と「`borrow_versions` の各値」の合併であり、
+  A22 より前者は入力の `funcs` の鍵の集合である。`<1>1` の 2 種のそれぞれについて、入力の `funcs` の鍵で
+  ないことを `<1>2` と `<1>4` が、`borrow_versions` の値でないことを `<1>3` と `<1>5` が与える。
+  BY A22, L6, <1>1, <1>2, <1>3, <1>4, <1>5
+
 ## 5. P10 -- 借用版が落とす RC 節点
 
 **言明**。`is_borrow_version` が真の `RewriteCtx` を `ctx` とする。`ctx.rewrite` は、`Retain(v, π, s, k)` を
@@ -1347,13 +1392,33 @@ Let(x, App(callee', args),
 <1>4. QED
   BY <1>1, <1>2, <1>3
 
+**P12 (e) (間接呼び出しの callee の名前)**。`V` の本体の `Let(x, App(callee, args), k)` の `callee` が
+局所変数であるとき、`route` は `callee` をそのまま返し、その名前は入力の `funcs` の鍵でも出力の `funcs` の
+鍵でもない。
+
+<1>1. `callee` が局所変数であるとは、その名前が `V` の本体の束縛名 -- パラメータ・capture の名前か、
+      節点が束縛する変数の名前 -- であることである。`V` は出力の版なので、それは出力の束縛名
+      (DEF 出力の束縛名) である。
+  BY D6, DEF 出力の束縛名
+
+<1>2. その名前は入力の `funcs` の鍵でも出力の `funcs` の鍵でもない。
+  BY 4.4 の系, <1>1
+
+<1>3. `route` は `callee.clone()` を返す。
+  P12 (a) より `route` が異なる名前を返すのは `borrow_versions` が `FuncRef { name: callee.name }` を鍵に
+  持つときだけであり、L6 よりその鍵はどれも入力の関数の名前、すなわち入力の `funcs` の鍵である
+  (A22)。`<1>2` よりこの名前はその鍵ではない。
+  BY A22, L6, P12 (a), <1>2
+
+<1>4. QED
+  BY <1>2, <1>3
+
 **「同じ関数の版である」について**。`borrow_versions` の鍵 `orig` に対する値は
 `borrow_funcref(&func.name)` であり、`func.name` の `name` フィールドに `#borrow` を継ぎ足したものである
 (`CODE src/rc_ir/borrow.rs: borrow_funcref`)。よって振り分け先は、`orig` の借用版として作られた版である。
-呼び出し先が入力の関数を名指していないとき (局所変数を経由する間接呼び出しのとき) は、`borrow_versions` が
-その名前を鍵に持たないので `route` は `callee` をそのまま返す。`README.md` の P12 の「呼び出し先が入力の
-関数を名指すとき、返る名前は出力の `funcs` の鍵である」はそのとおりであり、名指さないときの行も
-`<1>2` が与える。
+`README.md` の P12 の「呼び出し先が入力の関数を名指すとき、返る名前は出力の `funcs` の鍵である」は
+P12 (c) が、「局所変数を経由する間接呼び出しでは `route` は呼び出し先をそのまま返し、その名前はどちらの
+`funcs` の鍵でもない」は P12 (e) が与える。
 
 ## 8. P13 -- 注釈の一致
 
@@ -2024,15 +2089,12 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
           `Some(出力の funcs[callee'.name].params)` を返す。
       `resolve_callee_params` は `vars.closure_targets` を `callee'.name` で引き、外れたときは
       `FuncRef { name: callee'.name }` が `prog.funcs` の鍵かを見る。`closure_targets` に元を入れるのは
-      `collect_bindings` の `RcRhs::Closure` の腕だけで、鍵はその本体の `Let` の束縛変数の名前である。
-      L6 より `callee_params` の鍵は出力の `funcs` の鍵ちょうどであり、それは入力の関数の名前か借用版の
-      名前である。前者は A6 よりどの入力の束縛名とも異なり、4.2 の言明より複製が導入する名前とも異なる。
-      後者は A13 より、入力のどの名前も `name` フィールドの最後の断片が `borrow` でないので入力の
-      束縛名と異なり、4.2 の言明より複製が導入する名前 (最後の断片が `b<10 進数字>`) とも異なる。
-      4.3 の系 より出力の束縛名はこの 2 種で尽きるので、`callee'.name` は `V` の本体が束縛するどの
-      変数の名前とも異なり、`closure_targets` の鍵ではない。よって第 2 の枝が当たり、`callee'.name` は
-      出力の `funcs` の鍵なので `Some` が返る。
-      BY A6, A13, L6, 4.2 の言明, 4.3 の系, CODE src/rc_ir/ownership.rs: resolve_callee_params,
+      `collect_bindings` の `RcRhs::Closure` の腕だけで、鍵はその本体の `Let` の束縛変数の名前 --
+      すなわち出力の束縛名 (DEF 出力の束縛名) -- である。L6 より `callee_params` の鍵は出力の `funcs` の
+      鍵ちょうどであり、4.4 の系 より出力の束縛名は出力の `funcs` の鍵ではないので、`callee'.name` は
+      `closure_targets` の鍵ではない。よって第 2 の枝が当たり、`callee'.name` は出力の `funcs` の鍵なので
+      `Some` が返る。
+      BY L6, 4.4 の系, DEF 出力の束縛名, CODE src/rc_ir/ownership.rs: resolve_callee_params,
          VarTable::of, collect_bindings
     <3>2. QED
       P30 より、`borrow_ify` の出力の `App` について `resolve_callee_params` が解決する関数が
