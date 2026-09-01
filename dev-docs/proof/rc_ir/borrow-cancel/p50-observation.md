@@ -522,7 +522,9 @@ L8c はこの補題を引かないので、`<1>2` が L8c を引くことで循�
       オブジェクトの制御ブロックに `LOCAL` を書き、`build_mark_boxed_with` が `mark_global` のとき
       `GLOBAL` を・`Std::mark_threaded` のとき `THREADED` を書き、`build_branch_by_is_unique` の
       threaded の腕がカウントが 1 のとき `LOCAL` を書く。書かれる値はこの 3 つである。
-  BY CODE src/constants.rs: RefcntState, CODE src/generator.rs: Generator::set_refcnt_state,
+      **環境もこの欄を書かない** -- A17 (ii-b) は「**環境は制御ブロック -- 参照カウントの欄と状態バイト --
+      も書かない**」と述べる。よって欄に値を置くのは生成コードのこの 3 か所で尽きる。
+  BY A17, CODE src/constants.rs: RefcntState, CODE src/generator.rs: Generator::set_refcnt_state,
      Generator::build_mark_boxed_with, Generator::build_branch_by_is_unique,
      CODE src/object.rs: create_obj
 
