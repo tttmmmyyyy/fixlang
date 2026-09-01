@@ -657,14 +657,19 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
   <2>2. 消費の段が挿入するのは、`consumed` の各元 `(var, path)` について `origin(var, path).candidates()` の
         元のうち `vars.param_tys` に鍵 `root_var` を持つものである。
     BY CODE src/rc_ir/borrow.rs: infer_ownership
-  <2>3. `var_tables` はループの外で 1 度だけ作られ、`origin` は `vars` と `type_env` だけに依る。よって
-        1 つの `(var, path)` に対する `candidates()` は周回によらず同じ有限集合である。`Origin::Exactly` は
-        1 元、`Origin::Join` は有限集合の `candidates` を持つ。`origin(var, path)` が答えを返すのは、
-        `var` がプログラムの束縛変数であるとき P2 が、`vars.bindings` が `var` を鍵に持たないとき L6c が
-        与える。`consumed` の対の第 1 成分にはその 2 つ目が現れる -- D6 の第 3 の形、すなわち
-        `App` の callee や `Llvm` のオペランドとして現れるグローバル値の名前である。
-    BY D6, L6c, P2, CODE src/rc_ir/borrow.rs: infer_ownership,
-       CODE src/rc_ir/ownership.rs: origin, Origin, Origin::candidates
+  <2>3. 1 つの `(var, path)` に対する `candidates()` は周回によらず同じ有限集合である。
+        `Origin::Exactly` は 1 元、`Origin::Join` は有限集合の `candidates` を持つ。
+    `var_tables` はループの外で 1 度だけ作られるので、1 つの関数について `origin` に渡る第 1 引数
+    (`VarTable` の値) と第 2 引数 (`type_env`) は全周回で同じである。**それだけでは答えが同じことは
+    出ない** -- `origin` は答えを `vars.origins` の `RefCell<Map<VarPath, Origin>>` に記録し、次の
+    呼び出しはそれを先に読んで返すので、答えは memo の状態に依りうる。P2a が「1 つの `VarTable` の値と
+    1 つの `TypeEnv` の値を固定し、鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返す
+    ならば、その 2 つの返り値は等しい」と述べ、これを閉じる。`origin(var, path)` が答えを返すのは、
+    `var` がプログラムの束縛変数であるとき P2 が、`vars.bindings` が `var` を鍵に持たないとき L6c が
+    与える。`consumed` の対の第 1 成分にはその 2 つ目が現れる -- D6 の第 3 の形、すなわち
+    `App` の callee や `Llvm` のオペランドとして現れるグローバル値の名前である。
+    BY D6, L6c, P2, P2a, CODE src/rc_ir/borrow.rs: infer_ownership,
+       CODE src/rc_ir/ownership.rs: origin, Origin, Origin::candidates, VarTable
   <2>4. QED
     D1 より関数は有限個であり、`<2>1` より各関数の `consumed` に現れうる対は有限、`<2>3` より各対の
     候補は有限である。
