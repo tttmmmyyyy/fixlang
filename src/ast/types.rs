@@ -1492,7 +1492,7 @@ impl TypeNode {
 
     /// Whether a value of this type is a pointer to a heap block that holds its fields, so that the
     /// value costs one pointer wherever it is stored and its lifetime is reference-counted.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {
         !self.is_unbox(type_env)
     }

@@ -200,7 +200,7 @@ impl Origin {
     /// The one name for the value, for a reader that pairs two operations on it — a retain with the
     /// release that un-bumps it — which only a single name can decide. Two leaves with the same
     /// identity hold the same reference.
-    // PROOF: P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn identity(&self) -> &VarPath {
         match self {
             Origin::Exactly(p) => p,
@@ -250,7 +250,7 @@ impl Origin {
 
     /// Every object an operation on the leaf acts on: the reference the leaf holds, which `identity`
     /// names, and the object that reference belongs to, which is any of `candidates`.
-    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn acted_on(&self) -> Vec<&VarPath> {
         let mut out = vec![self.identity()];
         out.extend(

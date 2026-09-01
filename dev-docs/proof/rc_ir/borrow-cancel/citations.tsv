@@ -54,7 +54,7 @@ src/ast/types.rs	TypeNode::declared_field_types	D/A,P1,P2	eda5fdc86a3c
 src/ast/types.rs	TypeNode::field_types	P1,P2	f3b4b3ad1075
 src/ast/types.rs	TypeNode::instance_field_types	D/A,P1,P2	27064fdf0a46
 src/ast/types.rs	TypeNode::is_array	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b	d430c390ceb3
-src/ast/types.rs	TypeNode::is_box	P1,P2,P2a,P15,P16,P17,P18,P26	f364e8b05513
+src/ast/types.rs	TypeNode::is_box	P1,P2,P2a,P15,P16,P17,P18,P26,(P-insert)	f364e8b05513
 src/ast/types.rs	TypeNode::is_closure	P1,P2,P5,P6,P7,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b	938ff5f09f64
 src/ast/types.rs	TypeNode::is_fully_unboxed	P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P27,P29,P30,(P-insert)	8b7f69faf6d2
 src/ast/types.rs	TypeNode::is_funptr	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P26	2c9fa9ac23a2
@@ -343,7 +343,7 @@ src/rc_ir/borrow.rs	RewriteCtx::routing_saves_retain	P2a,P7a,P7d,P7e,P15,P16,P17
 src/rc_ir/borrow.rs	UnBump	P2a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24	9ee9a87502a0
 src/rc_ir/borrow.rs	any_owned_unit	D/A	c49b82677dd3
 src/rc_ir/borrow.rs	binds_a_destructor	P26	dc1545cfa9ab
-src/rc_ir/borrow.rs	borrow_funcref	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P29,P30,T	db31fb39070c
+src/rc_ir/borrow.rs	borrow_funcref	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P29,P30,(P-insert),T	db31fb39070c
 src/rc_ir/borrow.rs	borrow_ify	D/A,P1,P2,P2a,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P26,P27,P29,P30,T	732063470e9d
 src/rc_ir/borrow.rs	builds_a_destructor	P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26	8492b1a24ed5
 src/rc_ir/borrow.rs	call_rc	D/A	b05f4a24511a
@@ -413,9 +413,9 @@ src/rc_ir/lower.rs	lower_program	P8,P9,P10,P11,P12,P13,P14,P14a,P14b	f83dc3d6d8d
 src/rc_ir/lower.rs	lower_var	P26	36b5f9576f3c
 src/rc_ir/ownership.rs	Binding	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	3405ca6e1797
 src/rc_ir/ownership.rs	Origin	D/A,P1,P2,P2a,P3,P4,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,(P-insert)	787c5a1a8407
-src/rc_ir/ownership.rs	Origin::acted_on	D/A,P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	8aa26a04d152
+src/rc_ir/ownership.rs	Origin::acted_on	D/A,P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	8aa26a04d152
 src/rc_ir/ownership.rs	Origin::candidates	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18	d7c5753b621d
-src/rc_ir/ownership.rs	Origin::identity	P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24	a3086fd270ed
+src/rc_ir/ownership.rs	Origin::identity	P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	a3086fd270ed
 src/rc_ir/ownership.rs	Origin::of_candidates	D/A,P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	74615a999595
 src/rc_ir/ownership.rs	References	D/A,P2a,P5,P6,P7,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	38b3c3ed8fcb
 src/rc_ir/ownership.rs	References::covers	P2a,P7c,P7f,P15,P16,P17,P18,P18a,P18b	828ed77c7cf4
@@ -456,8 +456,8 @@ src/rc_ir/provenance.rs	LeafOrigins	P1,P2,P3,P4	f71a19652752
 src/rc_ir/provenance.rs	Provenance	P1,P2,P3,P4,(P-insert)	222264990c44
 src/rc_ir/provenance.rs	Provenance::build_shape	P1,P2,P3,P4,P7a,P7c,P7d,P7e,P7f,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	b35342f7ac15
 src/rc_ir/provenance.rs	Provenance::fresh_under	P1,P2	2efd8093d082
-src/rc_ir/provenance.rs	Provenance::leaf_origins_at	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	0f5932407146
-src/rc_ir/provenance.rs	Provenance::leaf_origins_under	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	06bbc45ec504
+src/rc_ir/provenance.rs	Provenance::leaf_origins_at	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	0f5932407146
+src/rc_ir/provenance.rs	Provenance::leaf_origins_under	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	06bbc45ec504
 src/rc_ir/provenance.rs	Provenance::leaves	P5,P6,P7,P7c,P7f,P18a,P18b	2b9d265dedae
 src/rc_ir/provenance.rs	Provenance::set_leaves_under	P1,P2	6d2380350498
 src/rc_ir/provenance.rs	Provenance::uniform	P1,P2,(P-insert)	b868bec59aed
