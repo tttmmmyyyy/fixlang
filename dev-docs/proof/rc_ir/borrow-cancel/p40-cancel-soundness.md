@@ -18,6 +18,16 @@
 (`N` は別名類ごとの `bumps` の和である)。
 これらは `p30 の L10`、`p13 の L17` のようにファイル名を添えて引用する。
 
+**外部の結果**は `EXT <名前>` の名札で引く。この文書が引くのは Rust 標準ライブラリの 2 つで、その完全な
+言明は次のとおりである。
+
+- **EXT Arc の割り当ての安定性** --- `std::sync::Arc<T>` の値は、制御ブロックと `T` を 1 つのヒープ
+  割り当ての中に置く。`Arc::as_ref`(`Deref`) が返す `&T` の番地はその割り当ての中の `T` の番地であり、
+  同じ割り当てを指す `Arc` から何度取っても等しい。`Arc` の値を move してもその番地は動かない。割り当てが
+  解放されるのは最後の強参照が落ちたときであり、共有参照が生きている間は落ちない。
+- **EXT Vec::clone** --- `Vec<T>` (`T: Clone`) の `clone` は、長さが原本と等しく、第 `i` 要素が原本の
+  第 `i` 要素の `clone` である新しい `Vec` を返す。要素の並びは原本のものである。
+
 `B_ρ` の個数が 0 以上であることは README の P18b が言う -- P18b は `B(p, ρ)` を「その `Retain` が `ρ` で
 実際に作った参照のうち、`ρ` 上でまだ処分されていないもの」を数えた多重集合と読む。**`outstanding` に
 ついて使うのは `covers`、すなわち `outstanding[o] ≥ B_ρ(・, ・)[o]` の向きだけである。**
@@ -338,13 +348,11 @@ source、`Match` のアームの本数と並び、および継続の順序は変
         `cancel` が持つのは共有参照だけで、`funcs` と `globals` を作る写像はそれぞれの `f.body` /
         `g.init` を読むだけである。
     BY CODE src/rc_ir/borrow.rs: cancel
-  <2>2. `node_id(n)` は `n.expr` が指す `RcExpr` の番地である。`Arc<T>` は `T` をヒープの 1 つの割り当ての
-        中に置き、`Arc::as_ref` はその割り当ての中の `T` の番地を返す。その番地は割り当てが生きている間
-        変わらない -- `Arc` の値を動かして動くのはポインタだけであり、割り当てが返るのは最後の強参照が
-        落ちたときである (Rust 標準ライブラリの `std::sync::Arc` の契約)。`NodeId` の doc がこの性質を
-        「the address of its expression, stable while the tree is borrowed」と述べる。
+  <2>2. `node_id(n)` は `n.expr` が指す `RcExpr` の番地である。`RcExprNode` の `expr` は
+        `Arc<RcExpr>` であり、EXT Arc の割り当ての安定性 より、その番地は同じ割り当てについて何度取っても
+        等しく、`Arc` の値を move しても動かず、共有参照が生きている間は割り当ても落ちない。
     BY CODE src/rc_ir/borrow.rs: node_id, CODE src/rc_ir/borrow.rs: NodeId,
-       CODE src/rc_ir/ast.rs: RcExprNode
+       CODE src/rc_ir/ast.rs: RcExprNode, EXT Arc の割り当ての安定性
   <2>3. QED
     BY <2>1, <2>2
     <2>1 より 2 つの走査は同じ木の同じ `Arc` を読み、その間 `body` の借用が生きているので、<2>2 より
@@ -532,11 +540,12 @@ source、`Match` のアームの本数と並び、および継続の順序は変
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume, p30 の L1, p30 の L6
 <1>2. CASE `n` の式が `Let(_, Match(_, arms), k)` である。D3 より `ρ` の上の `n` の直後の節点は、`ρ` が
       選んだアームの本体である。`walk_inner` のこの腕は各アームについて
-      `self.walk(&arm.body, pending.clone(), false)` を呼ぶ。`PendingRetain` は `Clone` を derive し、
-      `Vec::clone` は要素をその並びのまま複製するので、アーム本体の入口状態は `pending(n)` と等しい値で
-      ある。
+      `self.walk(&arm.body, pending.clone(), false)` を呼ぶ。`PendingRetains` は `Vec<PendingRetain>` で
+      あり、`PendingRetain` は `Clone` を derive してその 2 つの欄を複製する。EXT Vec::clone より、複製の
+      長さと各位置の要素は原本のものに等しいので、アーム本体の入口状態は `pending(n)` と等しい値である。
   BY D3, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
-     CODE src/rc_ir/borrow.rs: PendingRetain, p30 の L1
+     CODE src/rc_ir/borrow.rs: PendingRetain, CODE src/rc_ir/borrow.rs: PendingRetains,
+     EXT Vec::clone, p30 の L1
 <1>3. CASE `n` がアーム本体の終端の `Ret` である。D3 より、`Ret` の後に実行路が続くのは、`n` が、その
       実行路が入ったアームの本体の実行路を終える `Ret` であるときに限り、そのとき直後の節点はその `Match`
       節点 `M` の継続 `k_M` である。L33a より `n = ret(arm_i.body)` である。`walk_inner` の `M` の腕は
