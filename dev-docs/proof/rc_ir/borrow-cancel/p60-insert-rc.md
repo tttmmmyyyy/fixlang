@@ -400,10 +400,14 @@ Ret(w)))))
 **証明**
 
 <1>1. `f` のパラメータ `b` の unit は `f` が所有する。
-  BY A1, CODE src/rc_ir/borrow.rs: split_rc_units, D14
-  A1 より `borrow_ify` の入力のすべての関数の `borrowed_units` は空である。`borrow_ify` の入力は
-  `split_rc_units` の出力であり、`split_rc_units` は各関数の `body` と各グローバル初期化子の `init` しか
-  書き換えない (`CODE src/rc_ir/borrow.rs: split_rc_units`)。よって `insert_rc` の出力でも
+  BY A1, D14, CODE src/rc_ir/borrow.rs: split_rc_units,
+     CODE src/build/build_object_files.rs: lower_and_insert_rc,
+     CODE src/build/build_object_files.rs: optimize_rc_program
+  `optimize_rc_program` は `lower_and_insert_rc` が返したプログラム -- その最後の段が `insert_rc` で
+  ある -- に `split_rc_units` を掛け、その出力を `borrow_ify` に渡す。よって `borrow_ify` の入力は
+  `insert_rc` の出力に `split_rc_units` を掛けたものである。`split_rc_units` は各関数の `body` と
+  各グローバル初期化子の `init` しか書き換えないので、`borrowed_units` は 2 つの間で変わらない。
+  A1 より `borrow_ify` の入力のすべての関数の `borrowed_units` は空なので、`insert_rc` の出力でも
   `f.borrowed_units` は空であり、D14 より `b` のすべての unit を `f` が所有する。
 
 <1>2. `ρ_0` の上で `C_p` のスロットを名指す D9 の消費は、2 つの `App(f, [p])` の引数の位置の 2 つである。
@@ -1041,12 +1045,17 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
     BY D9
     消費の表の `App` の行の前半。
   <2>3. `App` の引数の各 leaf は D9 の消費である。
-    BY D9, A1, D14, CODE src/rc_ir/borrow.rs: split_rc_units, CODE src/rc_ir/rc_insert.rs: insert_rc
+    BY D9, A1, D14, CODE src/rc_ir/borrow.rs: split_rc_units,
+       CODE src/rc_ir/rc_insert.rs: insert_rc,
+       CODE src/build/build_object_files.rs: lower_and_insert_rc,
+       CODE src/build/build_object_files.rs: optimize_rc_program
     消費の表の `App` の行の後半は「呼び出し先がその位置の unit を所有する」引数の leaf を挙げる。
-    A1 の後半より `borrow_ify` の入力のすべての関数の `borrowed_units` は空であり、`borrow_ify` の入力は
-    `split_rc_units` の出力である。`split_rc_units` も `insert_rc` も各関数の `body` と各グローバル
-    初期化子の `init` しか書き換えないので、`insert_rc` の出力でも `borrowed_units` は空であり、D14 より
-    すべての位置が所有される。
+    `optimize_rc_program` は `lower_and_insert_rc` が返したプログラム -- その最後の段が `insert_rc` で
+    ある -- に `split_rc_units` を掛け、その出力を `borrow_ify` に渡すので、`borrow_ify` の入力は
+    `insert_rc` の出力に `split_rc_units` を掛けたものである。`split_rc_units` も `insert_rc` も
+    各関数の `body` と各グローバル初期化子の `init` しか書き換えないので、`borrowed_units` は 3 つの
+    プログラムで同じである。A1 の後半より `borrow_ify` の入力のすべての関数の `borrowed_units` は
+    空なので、`insert_rc` の出力でも空であり、D14 よりすべての位置が所有される。
   <2>4. `Closure` の capture の各 leaf は D9 の消費である。
     BY D9
     消費の表の `Closure` の行。
@@ -1337,11 +1346,15 @@ Ret(u)))))
 <1>2. `Obl` と `H(O)` は、割り当ての後 `{O}, 1`、`App(id, [o])` が返った後 `{O}, 1`、
       `App(f, [y])` が返った後 `{}, 0` である。
   BY <1>1, A1, D6, D8, D9, D10, D14, D26,
-     CODE src/rc_ir/borrow.rs: split_rc_units, CODE src/rc_ir/rc_insert.rs: insert_rc
-  A1 の後半より `borrow_ify` の入力のすべての関数の `borrowed_units` は空である。`borrow_ify` の入力は
-  `split_rc_units` の出力であり、`split_rc_units` も `insert_rc` も各関数の `body` と各グローバル
-  初期化子の `init` しか書き換えないので、`insert_rc` の出力でも `borrowed_units` は空であり、D14 より
-  `id` の `a` も `f` の `b` も所有される。
+     CODE src/rc_ir/borrow.rs: split_rc_units, CODE src/rc_ir/rc_insert.rs: insert_rc,
+     CODE src/build/build_object_files.rs: lower_and_insert_rc,
+     CODE src/build/build_object_files.rs: optimize_rc_program
+  `optimize_rc_program` は `lower_and_insert_rc` が返したプログラム -- その最後の段が `insert_rc` で
+  ある -- に `split_rc_units` を掛け、その出力を `borrow_ify` に渡すので、`borrow_ify` の入力は
+  `insert_rc` の出力に `split_rc_units` を掛けたものである。`split_rc_units` も `insert_rc` も各関数の
+  `body` と各グローバル初期化子の `init` しか書き換えないので、`borrowed_units` は 3 つのプログラムで
+  同じである。A1 の後半より `borrow_ify` の入力のすべての関数の `borrowed_units` は空なので、
+  `insert_rc` の出力でも空であり、D14 より `id` の `a` も `f` の `b` も所有される。
   `App(id, [o])` は `(o, [])` を消費し、`H` を動かさない。同じ節点について D9 の `App` の行は callee の
   全 boxed leaf も消費として挙げるが、<1>1 より `(id, ・)` と `(f, ・)` は記号の位置であってスロットでは
   なく、D6 よりそこが指すのは funptr かグローバル状態のオブジェクトである。D26 よりそれらは D8 の意味の
@@ -1821,12 +1834,15 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
   この名前であり、D6 よりその対は記号の位置であってスロットではない。
 
 <1>5. (e)。
-  BY A1, D14, CODE src/rc_ir/borrow.rs: split_rc_units, CODE src/rc_ir/rc_insert.rs: insert_rc
-  A1 の後半より `borrow_ify` の入力のすべての関数の `borrowed_units` は空である。`borrow_ify` の入力は
-  `split_rc_units` の出力であり、`split_rc_units` は各関数の `body` と各グローバル初期化子の `init` しか
-  書き換えない。`insert_rc` も `body` と `init` しか書き換えず、`borrowed_units` を読み書きしない。
-  よって `insert_rc` の出力でもすべての関数の `borrowed_units` は空であり、D14 よりすべての unit が
-  所有される。
+  BY A1, D14, CODE src/rc_ir/borrow.rs: split_rc_units, CODE src/rc_ir/rc_insert.rs: insert_rc,
+     CODE src/build/build_object_files.rs: lower_and_insert_rc,
+     CODE src/build/build_object_files.rs: optimize_rc_program
+  `optimize_rc_program` は `lower_and_insert_rc` が返したプログラム -- その最後の段が `insert_rc` で
+  ある -- に `split_rc_units` を掛け、その出力を `borrow_ify` に渡す。よって `borrow_ify` の入力は
+  `insert_rc` の出力に `split_rc_units` を掛けたものである。`split_rc_units` は各関数の `body` と
+  各グローバル初期化子の `init` しか書き換えず、`insert_rc` も `body` と `init` しか書き換えないので、
+  `borrowed_units` は 3 つのプログラムで同じである。A1 の後半より `borrow_ify` の入力のすべての関数の
+  `borrowed_units` は空なので、`insert_rc` の出力でも空であり、D14 よりすべての unit が所有される。
 
 <1>6. QED
   BY <1>1, <1>2, <1>3, <1>4, <1>5
