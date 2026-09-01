@@ -1061,7 +1061,7 @@ impl ObjectFieldType {
     /// The field of a struct at `field_idx`, taken at the struct's own reference to it: nothing is
     /// retained, so the caller either reads it while the struct is alive or takes the reference over
     /// by dropping the struct without releasing that field.
-    // PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn move_out_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,

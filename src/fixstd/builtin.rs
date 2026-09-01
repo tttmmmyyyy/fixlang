@@ -2013,6 +2013,7 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayTruncateBoundsUnchecked {
     arr_name: FullName,
@@ -2170,6 +2171,7 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// The code generator for `Array::_unsafe_append_value_capacity_unchecked`, which fills the slots
 /// past the array's length with copies of one value.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayAppendValueCapacityUnchecked {
     arr_name: FullName,
@@ -2484,6 +2486,7 @@ fn realloc_array<'c, 'm>(
 /// Gives an array a storage of `cap_name` elements, keeping the elements it already holds, and
 /// returns the array with its capacity field updated. The caller must ensure the new capacity holds
 /// the array's current size; a smaller one leaves elements outside the storage.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
     /// The local binding holding the array to resize.
@@ -2860,6 +2863,7 @@ pub fn array_append_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// The code generator for `Array::_unsafe_copy_capacity_bounds_unchecked`, which fills the slots
 /// past `dst`'s length from a borrowed `src`.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayCopyCapacityBoundsUnchecked {
     dst_name: FullName,
@@ -3046,6 +3050,7 @@ pub fn array_copy_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// The code generator for `Array::_unsafe_grow_size`, which moves the array's length out over
 /// uninitialized slots the caller then fills.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayGrowSizeBody {
     arr_name: FullName,
@@ -3318,6 +3323,7 @@ fn make_array_unique_with_hole<'c, 'm>(
     )
 }
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArraySetBody {
     array_name: FullName,
@@ -3500,6 +3506,7 @@ pub fn unsafe_set_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     set_array_common(false)
 }
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArraySwapBody {
     array_name: FullName,
@@ -3670,6 +3677,7 @@ pub fn swap_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// The body of the array punch: the element at the index bound to `idx_name` is moved out of the
 /// array bound to `arr_name`, leaving that slot as the hole, and is returned together with the
 /// punched array.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayPunchBody {
     pub(crate) force_unique: bool,
@@ -3860,6 +3868,7 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMPunchedArrayPlugBody {
     pub(crate) force_unique: bool,
@@ -4775,7 +4784,7 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
 
 /// The body of a struct's `punch_x`: field `field_idx` is moved out of the struct bound to
 /// `var_name`, and is returned together with the punched struct, whose type records the hole.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPunchBody {
     /// The operand: the struct the field is moved out of.
@@ -4985,6 +4994,7 @@ pub fn struct_punch(
 /// The body of a struct's `plug_in_x`: the value bound to `field_name` is moved into the hole of the
 /// punched struct bound to `punched_struct_name`, giving back the struct type the hole was punched
 /// out of.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPlugInBody {
     punched_struct_name: FullName,
@@ -5988,7 +5998,7 @@ fn make_struct_union_unique<'c, 'm>(
 
 /// The body of a struct's `set_x`: the value bound to `value_name` takes the place of field
 /// `field_idx` of the struct bound to `struct_name`, and the value it displaces is released.
-// PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructSetBody {
     pub value_name: FullName,
@@ -7967,7 +7977,7 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// Evaluates `Std::FFI::_mutate_boxed_internal`: makes the boxed value unique, runs the action on a
 /// pointer to the value's payload, and evaluates to the value paired with the action's result.
-// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     val_name: FullName,
@@ -8160,6 +8170,7 @@ fn assumed_state(assume_local: bool) -> RcState {
 ///   registers the punch and the plug it carries its update out with. The value is then returned as
 ///   it stands, and compiler development mode checks that against its reference count.
 /// * `state` — the reference-counting state the clone's uniqueness check reads the count under.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn force_unique_or_assert<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,
@@ -8171,7 +8182,7 @@ fn force_unique_or_assert<'c, 'm>(
 
 /// `force_unique_or_assert`, where `Some(hole)` makes a clone of the array `val` leave the element
 /// at that index uninitialized for the caller to fill.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn force_unique_or_assert_with_hole<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,
@@ -8213,6 +8224,7 @@ fn force_unique_or_assert_with_hole<'c, 'm>(
 /// elsewhere, the length it had, and a pointer to the first slot past that length. The caller
 /// guarantees the slots it fills are within `dst`'s capacity, and grows the length itself once they
 /// hold elements.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn array_tail_destination<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     dst: Object<'c>,
@@ -8288,7 +8300,7 @@ pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// Evaluates `Std::FFI::_mutate_boxed_ios_internal`: makes the boxed value unique, runs the action on
 /// a pointer to the value's payload while threading the caller's `IOState`, and evaluates to that
 /// state paired with the value and the action's result.
-// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     val_name: FullName,
@@ -8574,7 +8586,7 @@ pub fn array_borrow_elements() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayMutateElementsInternalBody {
     arr_name: FullName,
@@ -8723,7 +8735,7 @@ pub fn array_mutate_elements_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayMutateElementsIosInternalBody {
     arr_name: FullName,
