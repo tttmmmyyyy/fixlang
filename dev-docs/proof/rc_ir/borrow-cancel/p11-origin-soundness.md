@@ -849,8 +849,9 @@ README の定義・仮定とコードだけである。よって第 2 節と第 
       出す生成コードと、番地を渡された環境の 2 つだけである。
       <4>1. `v` が名指す記号の記憶域は、LLVM のグローバル変数 `GlobalVar#<symbol>` である。生成コードが
             そこへ store を出すのは `store_init_value` の `build_store` ただ 1 か所であり、その番地
-            (`global_var_ptr`) を読む式は `implement_rc_global` の中の 2 つ -- `store_init_value` へ
-            渡す引数と、アクセサの末尾の `build_load` -- だけである。どちらもその番地を値として外へ
+            (`global_var_ptr`) が現れるのは `implement_rc_global` の中の 3 つ -- `store_init_value` へ
+            渡す 2 つの引数 (非 threaded の枝と threaded の枝であり、1 つのビルドではその一方だけが
+            生成される) と、アクセサの末尾の `build_load` -- だけである。どれもその番地を値として外へ
             渡さない。
         BY CODE src/rc_ir/codegen.rs: Generator::implement_rc_global (`global_var` を作り、その
            `global_var_ptr` を `store_init_value` と末尾の `build_load` にだけ渡す),
