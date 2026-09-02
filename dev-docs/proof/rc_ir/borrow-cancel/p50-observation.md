@@ -1535,10 +1535,13 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 <1>2. (E3) は (i) と (ii) に割れる。`RcRhs::App` の callee は `RcVar` 1 つなので、その名前が
       `prog.funcs` の鍵であるか否かで 2 つに分かれる。呼び出し先は、callee の値がクロージャならその funptr が
       指す関数、funptr ならそれ自身である (D23)。`apply_lambda` はこの 2 つ以外の callee を受け取らない --
-      冒頭の `assert!(fun.ty.is_closure() || fun.ty.is_funptr())` は `develop_mode` の門を持たないので、
-      その 2 つ以外の型の値を適用するプログラムはコード生成で止まり、その本体の活性化は存在しない
-      (README の「仮定」の節の「「果たす者」と「検査」の読み方」が挙げる 3 段の 2 段目)。
-  BY D23, CODE src/rc_ir/ast.rs: RcRhs, CODE src/generator.rs: Generator::apply_lambda
+      引数を検査する `assert!(fun.ty.is_closure() || fun.ty.is_funptr())` は `develop_mode` の門を持たない
+      ので、その 2 つ以外の型の値を適用するプログラムはコード生成で止まり、その本体の活性化は存在しない。
+      README の「「果たす者」と「検査」の読み方」は「**コード生成が `expect` や `unreachable!` で止まる形も、
+      `develop_mode` の門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の活性化は
+      存在しない」と述べ、その 3 段の 2 段目がこれである。
+  BY D23, README の「「果たす者」と「検査」の読み方」,
+     CODE src/rc_ir/ast.rs: RcRhs, CODE src/generator.rs: Generator::apply_lambda
 
 <1>3. (E1) が (iv)、(E7) が (v) である。D22 は環境を 4 つに分け、そのうちグローバルのアクセサについて
       「**アクセサは、グローバルを読む活性化から、または環境から呼ばれる。** 前者の活性化は初期化子の
@@ -1783,15 +1786,18 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
     BY <2>1, <2>2, <2>2a, <2>3, <2>4, <2>5
 
 <1>3. (ii)、(iii)、(vi) の段が適用する値はクロージャ型である。`apply_lambda` が受け取るのはクロージャ型か
-      funptr 型だけである -- 冒頭の `assert!(fun.ty.is_closure() || fun.ty.is_funptr())` は `develop_mode`
-      の門を持たないので、その 2 つ以外の型の値を適用するプログラムはコード生成で止まり、その本体の活性化は
-      存在しない (README の「仮定」の節の「「果たす者」と「検査」の読み方」が挙げる 3 段の 2 段目)。
+      funptr 型だけである -- 引数を検査する `assert!(fun.ty.is_closure() || fun.ty.is_funptr())` は
+      `develop_mode` の門を持たないので、その 2 つ以外の型の値を適用するプログラムはコード生成で止まり、
+      その本体の活性化は存在しない。README の「「果たす者」と「検査」の読み方」は「**コード生成が `expect`
+      や `unreachable!` で止まる形も、`develop_mode` の門を持たない限りこの段に入る** -- そのプログラムは
+      走らないので、その本体の活性化は存在しない」と述べ、その 3 段の 2 段目がこれである。
       (ii) の段は callee の名前が `prog.funcs` の鍵でない `App` なので、`<1>2` よりその値は funptr 型では
       ない。(iii) の段が適用するのは
       その op のオペランドであって `App` の callee ではないので、`<1>2` よりその値も funptr 型ではない。
       (vi) の段が適用するのは `Destructor` のオブジェクトの `_dtor` 欄の値と、それが返す `IO` の動作の
       runner であって、どちらも `App` の callee ではないので、`<1>2` よりその値も funptr 型ではない。
-  BY <1>2, CODE src/generator.rs: Generator::apply_lambda, Generator::build_run_destructor
+  BY <1>2, README の「「果たす者」と「検査」の読み方」,
+     CODE src/generator.rs: Generator::apply_lambda, Generator::build_run_destructor
 
 <1>4. クロージャの値の funptr 欄 (`CLOSURE_FUNPTR_IDX`) に書き込む生成コードは 2 か所だけであり、環境の
       段 ((E8)) もこの欄を書かない。
@@ -1914,10 +1920,12 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         名前は `route` の返り値であり (P12)、`rewrite_inner` の他の腕は rhs をそのまま複製して
         `RcRhs::Closure(target, caps)` の `target` も書き換えない。
     BY P12, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::route
-  <2>2. `apply_lambda` が受け取るのはクロージャ型か funptr 型の値だけである -- 冒頭の
+  <2>2. `apply_lambda` が受け取るのはクロージャ型か funptr 型の値だけである -- 引数を検査する
         `assert!(fun.ty.is_closure() || fun.ty.is_funptr())` は `develop_mode` の門を持たないので、
-        その 2 つ以外の型の値を適用するプログラムはコード生成で止まり、その本体の活性化は存在しない
-        (README の「仮定」の節の「「果たす者」と「検査」の読み方」が挙げる 3 段の 2 段目)。
+        その 2 つ以外の型の値を適用するプログラムはコード生成で止まり、その本体の活性化は存在しない。
+        README の「「果たす者」と「検査」の読み方」は「**コード生成が `expect` や `unreachable!` で止まる
+        形も、`develop_mode` の門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の
+        活性化は存在しない」と述べ、その 3 段の 2 段目がこれである。
         `<2>1` よりクロージャの値が
         指す関数が借用版であることは無い。funptr の値が名指す関数の名前は入力のプログラムに在る名前で
         あり、借用版の名前は `borrow_funcref` が付ける `<元の名前>#borrow` であって、A13 より入力のどの
@@ -1925,7 +1933,8 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         借用版になるのは、`route` が置いた名前を callee に持つ呼び出しのときだけである。環境が
         `apply_lambda` に渡す値 (L9a の (iv)) も `App` の callee ではないので、それが名指す関数は借用版
         ではない。
-    BY <2>1, A13, D23, L9a, P12, CODE src/generator.rs: Generator::apply_lambda,
+    BY <2>1, A13, D23, L9a, P12, README の「「果たす者」と「検査」の読み方」,
+       CODE src/generator.rs: Generator::apply_lambda,
        CODE src/rc_ir/borrow.rs: borrow_funcref
   <2>3. QED
     BY <2>1, <2>2
