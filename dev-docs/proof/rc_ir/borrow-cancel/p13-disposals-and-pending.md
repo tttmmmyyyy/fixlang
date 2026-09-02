@@ -119,8 +119,13 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
 持たないので、`Disp` は実行時に処分される参照が属する leaf の上位集合である。上位集合を取るのは、以下の
 主張を強くする向きである。
 
-**D9 の `App` の行が unit を取る型。** D9 の消費の表の `App` の行は「unit は**呼び出し先のパラメータの
-型**で取る」と明記しており (`CODE src/rc_ir/ownership.rs: rhs_consumes`)、`ty(a_i) = ty(p_i)` は A12 の
+**D9 の `App` の行が unit を取る型。** D9 の消費の表の `App` の行は「所有の問いは**呼び出し先のパラメータ**
+について立て (`CODE src/rc_ir/ownership.rs: rhs_consumes`)、unit への丸めは `CancelAnalysis::consume_rhs`
+が渡す `owns` が行う (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`)」と述べる。その `owns` は
+`|p, leaf| self.owned_units.contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))`
+であり、`p` は `rhs_consumes` が渡す呼び出し先のパラメータなので、丸めは呼び出し先のパラメータの型で
+起きる (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`,
+`CODE src/rc_ir/ownership.rs: rhs_consumes`)。`ty(a_i) = ty(p_i)` は A12 の
 「`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型」が与える。上の表の `App` の行は
 その 2 つをそのまま読んだものである。
 
