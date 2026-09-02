@@ -3,12 +3,19 @@
 この文書は README の層 1 の命題 P2a と、層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の定義
 D1 - D34 と仮定 A1 - A26 の上に立つ。P2a を除く層 1 の命題と、層 2 の命題は引用しない。
 
-この文書が読んだコードのコミットは `e8eda4718cdae4d0927dbbb60c15299dbcc23ad5` である。README が証明の
+この文書が読んだコードのコミットは `31506c4aa941f4a13453dcff2f065128725a4f8c` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書の `CODE` 引用が
-名指すファイル --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、`src/rc_ir/ast.rs`、
-`src/rc_ir/provenance.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/rename.rs`、`src/rc_ir/validate.rs`、
-`src/ast/types.rs`、`src/ast/name.rs`、`src/misc.rs`、`src/build/build_object_files.rs` の 11 個 ---
-に変わったのは `// PROOF:` コメントだけである。
+名指すファイルは 11 個ある。そのうち 10 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
+`src/rc_ir/ast.rs`、`src/rc_ir/provenance.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/rename.rs`、
+`src/ast/types.rs`、`src/ast/name.rs`、`src/misc.rs`、`src/build/build_object_files.rs` --- に
+変わったのは `// PROOF:` コメントだけである。
+
+残る 1 個 `src/rc_ir/validate.rs` には、コメント以外の変更がある。`Validator::check_rhs` の署名が
+`(&mut self, x: &RcVar, rhs: &RcRhs)` になり、その `Llvm` の腕が `llvm_gen.result_prov(&x.ty, &arg_tys,
+self.type_env)` を呼んで、1 つの結果 leaf に宣言された source の個数が 2 以上のとき `panic!` する検査が
+入った。README の第 1 節がこの変更を挙げ、A3 の「**複数の元を宣言する op は存在しない。**」を果たす者と
+して数える。この文書が `validate` を引くのは L2b の `<1>2` の 1 か所であり、そこはこの検査を含む
+`validate` について読む。
 
 P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P16 - P18 もその入力に対する走査についての
 言明なので、この文書は全体を通じて、`cancel` の引数 `prog` が `borrow_ify` の 1 回の呼び出しの返り値で
