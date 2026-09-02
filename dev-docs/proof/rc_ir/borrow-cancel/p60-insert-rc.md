@@ -1,6 +1,6 @@
 # (P-insert): `insert_rc` と `split_rc_units` の出力と A19
 
-この文書は、README の A19 が `insert_rc` に帰した義務 -- (ii-a) と (ii-b) -- を扱う。README の定義
+この文書は、README の A19 が `insert_rc` に帰した義務 -- (ii-a)・(ii-b)・(ii-c) -- を扱う。README の定義
 D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて `p13-disposals-and-pending.md` から次の
 2 つを輸入する。
 
@@ -2207,7 +2207,8 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
      CODE src/ast/name.rs: FullName::local,
      CODE src/build/build_object_files.rs: lower_and_insert_rc,
      CODE src/rc_ir/simplify.rs: simplify, CODE src/rc_ir/rename.rs: clone_fresh,
-     CODE src/rc_ir/rename.rs: assign_fresh_name, CODE src/rc_ir/rename.rs: substitute_expr
+     CODE src/rc_ir/rename.rs: assign_fresh_name, CODE src/rc_ir/rename.rs: substitute_expr,
+     CODE src/rc_ir/rename.rs: rename_expr, CODE src/rc_ir/rename.rs: rename_var
   `vars.bindings` に鍵が入るのは 2 か所である -- `VarTable::of` が入れる関数のパラメータと capture の
   名前と、`collect_bindings` が入れる `Let`・`Destructure`・`Match` の束縛変数の名前である
   (グローバル初期化子については `VarTable::body_only` が後者だけを入れる)。D6 は
@@ -2217,14 +2218,22 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
   書く。`FullName::local` が作る名前の名前空間は空であり、`is_local` は名前空間が空かを答えるので、
   束縛を持つ名前は局所名である。対偶より局所でない名前は `vars.bindings` に束縛を持たない。
   **この本体は lowering の出力そのものではない。** `lower_and_insert_rc` は `lower_program` の後に
-  `simplify` を掛けてから `insert_rc` を呼ぶので、束縛名を作る位置は 2 つある。lowering の
+  `simplify` を掛けてから `insert_rc` を呼ぶので、束縛の位置に名前を書く式は 2 種ある。lowering の
   `Lowerer::fresh_var` (パラメータと capture は `lower_lambda_as_function` が、残りは各 `lower_*` が
-  呼ぶ) と、`simplify` の `clone_fresh` である。`EXT クレートの項目` より
-  `src/rc_ir/simplify.rs` の項目はそのファイルに書かれたものだけであり、そこで束縛変数の名前を
-  作る式は `clone_fresh` の呼び出し 1 つである (残る `substitute_expr` の呼び出しは、その本体に
-  既に在る名前へ写す)。`clone_fresh` は `assign_fresh_names_to_binders` を通じて各束縛変数に
+  呼ぶ) と、`simplify` が呼ぶ `clone_fresh` と `substitute_expr` である。`EXT クレートの項目` より
+  `src/rc_ir/simplify.rs` の項目はそのファイルに書かれたものだけなので、この 2 つの呼び出しの
+  一覧は完全である。
+  `clone_fresh` は `assign_fresh_names_to_binders` を通じて各束縛変数に
   `assign_fresh_name` を当て、`assign_fresh_name` は `name.clone()` の `name` 欄だけを
-  `format!("{}#{}{}", ...)` で書き替えるので、名前空間の欄は変わらない。よって `is_local` は
+  `format!("{}#{}{}", ...)` で書き替えるので、名前空間の欄は変わらない。
+  `substitute_expr` は `rename_expr` を通じて各変数 -- 束縛の位置のものを含む -- の名前を写像の像へ
+  置き替えるが、`simplify` の 4 つの呼び出しが渡す写像の定義域はどれも 1 つの名前であり、それは
+  その書き換えが**取り除く**節点が束縛する変数の名前である (`case_of_known_union` のアームの
+  payload と `Match` の束縛変数、`destructure_of_struct` の各フィールド変数、case-of-case の外側の
+  アームの payload)。写す先の部分式がその名前を改めて束縛することはない -- `Lowerer::fresh_var` は
+  `self.fresh_counter` を 1 つ進めてから `FullName::local(&format!("{}#{}{}", hint, self.symbol_tag,
+  self.fresh_counter))` を作るので、2 つの束縛変数が同じ名前を持つことがないからである。よって
+  `substitute_expr` は束縛の位置の名前を書き替えない。以上より `is_local` は
   この段を渡って保たれる。`insert_rc` 自身が束縛を作らないことは A2 が述べる。
   D6 の「**値を得る形は 3 つあり、スロットが在るのはそのうち 2 つである。**」の 3 つ目が
   この名前であり、D6 よりその対は記号の位置であってスロットではない。
