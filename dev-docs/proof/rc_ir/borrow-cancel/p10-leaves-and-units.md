@@ -87,6 +87,24 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 `borrow` はその値が可変に借用されている間 panic し、`borrow_mut` はその値が共有または可変に借用されて
 いる間 panic する。それ以外の場合はどちらも panic しない。`<1>30` の `<2>1` がこれを引く。
 
+**EXT derive した PartialEq と Eq** -- `#[derive(PartialEq)]` が enum に作る `eq` は、2 つの値の
+変位が等しく、かつ対応する各成分が `==` で等しいときにだけ真を返す。`Eq` を実装する型の `==` は
+同値関係であり、反射的・対称的・推移的である (`Eq` の doc がその契約を述べる)。`<1>29a` の `<2>1a` の
+`<3>3` がこれを引き、その `<3>6` が推移律を使う。
+
+**EXT 1 要素の集合の反復** -- 要素をちょうど 1 つ持つ `HashSet<T, S>` について、
+`into_iter().next()` は `Some` を返し、その中身はその 1 つの要素である。`<1>29a` の `<2>1a` の
+`<3>6` と `<1>34` の `<2>1` の `<3>3` がこれを引く。
+
+**EXT Iterator の enumerate と filter** -- 標準ライブラリの `Iterator` について、`enumerate` は
+もとの列の第 `i` 要素を対 `(i, 要素)` に写した列を返す。すなわち第 1 成分は 0 から始まる連続した
+整数であり、相異なる。`filter(pred)` は `pred` が真を返す要素だけを、もとの順序のまま残した列を
+返す。`<1>3c` の `<2>8` と `<1>12` の `<2>1` がこれを引く。
+
+**EXT スライスの split_first** -- 標準ライブラリの `<[T]>::split_first` は、空でないスライスに
+対して `Some((先頭の要素, 残り))` を返し、空のスライスに対して `None` を返す。`<1>28` の `<2>2f` の
+`<3>3` と `<2>2g` の `<3>2` がこれを引く。
+
 **DEF 呼び出しの辺** -- 表 `vars` と型環境 `E` を固定する。対 `(u, sig)` から対 `(u', sig')` への
 **呼び出しの辺**とは、`origin_inner(vars, E, u, sig)` の実行が `origin(vars, E, u', sig')` を呼ぶことを
 いう。
@@ -675,12 +693,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     `filter(|(i, _)| !ti.fields[*i].is_punched)` で絞る。`field_types` は
     `self.instance_field_types(self.toplevel_tycon_info(type_env), type_env)` の 1 文なので、
     `unpunched_field_types` が絞る列は `t.field_types(E)` そのものである。その長さは `ti.fields` の
-    長さに等しいので `enumerate` が渡す `i` はどれも `ti.fields` の添字として範囲内であり、
-    `ti.fields[*i]` は abort しない。`filter` は要素を落とすだけなので、`F(t)` は
+    長さに等しいので、`EXT Iterator の enumerate と filter` より `enumerate` が渡す `i` はどれも
+    `ti.fields` の添字として範囲内であり、`ti.fields[*i]` は abort しない。同じ `EXT` より `filter`
+    は要素を落とすだけなので、`F(t)` は
     `t.field_types(E)` の要素のうち `ti.fields` の同じ添字の成分の `is_punched` が偽であるものを、
     その添字とともに並べた列であり、その各要素 `(i, f)` について `i` は `t.field_types(E)` の長さ
     未満で `f` は `t.field_types(E)[i]` である。
-    BY <2>1, <2>2, <2>3, <2>7, CODE src/ast/types.rs: TypeNode::unpunched_field_types,
+    BY <2>1, <2>2, <2>3, <2>7, EXT Iterator の enumerate と filter,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types,
        CODE src/ast/types.rs: TypeNode::field_types
 
 <1>3ca. `<1>1` を満たす型 `t` について `t.is_closure()` が偽であるとき、`t.is_funptr()` が真ならば
@@ -926,9 +946,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    `fld(t, i)` は一価であり、`(i, f)` が `F(t)` の要素であるとき `held_field_type(F(t), i, w)` は
    abort せず `f` を返す。
   <2>1. `unpunched_field_types` は `instance_field_types(...)` の結果に `into_iter().enumerate()` を
-     適用してから `filter` する。`enumerate` の添字は 0 から始まる相異なる整数の列であり、`filter` は
-     その一部を残すだけである。
-    BY CODE src/ast/types.rs: TypeNode::unpunched_field_types
+     適用してから `filter` する。`EXT Iterator の enumerate と filter` より、`enumerate` の添字は
+     0 から始まる相異なる整数の列であり、`filter` はその一部を残すだけである。
+    BY EXT Iterator の enumerate と filter,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types
   <2>2. `<2>1` より `F(t)` の第 1 成分は相異なる。よって「第 1 成分が `i` である要素」は高々 1 つで
      あり、`fld(t, i)` は一価である。
     BY <2>1, DEF fld
@@ -1804,9 +1825,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>3. `build_shape` の閉包が受け取る `path` は `L(result_ty)` の要素である (`<1>27b`)。
        `<1>14` より空 path が `L(t)` に入るのは `cls(t)` が `BX` か `AR` のときだけであり、
        `DEF cls` よりその 2 つはそれぞれ `is_box` と `is_array` が真であることを要求する。
-       `<1>3a` (vii) はどちらも偽だと述べる。よって `path` は空でなく、`arg_leaf_path` の
-       `split_first` の `expect` は発火しない。
-      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls,
+       `<1>3a` (vii) はどちらも偽だと述べる。よって `path` は空でなく、
+       `EXT スライスの split_first` より `arg_leaf_path` の `split_first` は `Some` を返すので、
+       その `expect` は発火しない。
+      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, EXT スライスの split_first,
          CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
     <3>3a. `cls(result_ty)` は `UN` か `ST` である。`<1>3a` (vii) より `result_ty.is_box(E)` と
        `result_ty.is_array()` は偽である。`result_ty.is_closure()` も偽である -- `<3>1` より
@@ -1890,8 +1912,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `path` は `L(result_ty)` の要素であり (`<1>27b`)、`<1>14` より空 path が `L(t)` に
        入るのは `cls(t)` が `BX` か `AR` のときだけである。`BX` は場合の仮定が退け、`AR` は
        `<1>3a` (vii) の `ty(x).is_array()` が偽であることが退ける。よって `path` は空でなく、
-       `split_first` の `expect` は発火しない。
-      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls
+       `EXT スライスの split_first` より `split_first` は `Some` を返すので、その `expect` は
+       発火しない。
+      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, EXT スライスの split_first
     <3>3. QED
       閉包が行うのは `split_first` の `expect` と `Vec` の複製と `sole_origin` だけである。
       BY <1>1, <1>27b, <3>1, <3>2, CODE src/fixstd/builtin.rs: replaced_field_prov,
@@ -2077,11 +2100,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        この `Vec` の要素の並び順だけである。
       BY <3>1, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     <3>3. `Origin` の `==` は値としての等価性であり、同値関係である。`Origin` の宣言は
-       `#[derive(Clone, Debug, PartialEq, Eq)]` を持つので、`==` は変位が一致することと、
-       `Exactly` なら `VarPath` (= `(FullName, FieldPath)`) が等しいこと、`Join` なら `identity` が
-       等しくかつ `candidates` (`Set<VarPath>`) が等しいことである。`Set<T>` は `FxHashSet<T>` で
-       あり、その等価性は `EXT HashSet の等価性` より集合としての等価性である。
-      BY EXT HashSet の等価性, CODE src/rc_ir/ownership.rs: Origin,
+       `#[derive(Clone, Debug, PartialEq, Eq)]` を持つので、`EXT derive した PartialEq と Eq` より
+       `==` は変位が一致することと、`Exactly` なら `VarPath` (= `(FullName, FieldPath)`) が等しい
+       こと、`Join` なら `identity` が等しくかつ `candidates` (`Set<VarPath>`) が等しいことである。
+       `Set<T>` は `FxHashSet<T>` であり、その等価性は `EXT HashSet の等価性` より集合としての
+       等価性である。`Origin` は `Eq` を導出するので、同じ `EXT` より `==` は同値関係である。
+      BY EXT HashSet の等価性, EXT derive した PartialEq と Eq,
+         CODE src/rc_ir/ownership.rs: Origin,
          CODE src/rc_ir/ast.rs: VarPath, CODE src/misc.rs: Set
     <3>4. CASE `reached` が空。`reached.first()?` が `None` を返すので、
        `origin_from_leaves_under` は `None` を返す。空であるかどうかは並び順に依らない。
@@ -2100,7 +2125,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        そのものを `Origin::Join` の同名の欄に、`here` の複製を `identity` の欄に置く。要素数が 1 の
        集合の `into_iter().next()` はその元であり、要素数 2 以上のときに置かれる `Set` は並び順に
        依らず等しいので、`<3>3` の `Origin` の等価性のもとで返り値はどちらの場合も並び順に依らない。
-      BY <3>2, <3>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       要素数 1 の場合に `into_iter().next()` がその 1 つの要素を返すことは
+       `EXT 1 要素の集合の反復` が言う。
+      BY <3>2, <3>3, EXT 1 要素の集合の反復,
+         CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
          CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::acted_on
     <3>7. QED
       `<3>4` から `<3>6` は `reached` についての 3 つの場合を尽くしている。
@@ -2615,10 +2643,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        を返す。`candidates` は各子の返り値の `acted_on()` の合併である。`acted_on()` が返すのは
        `identity()` と `candidates()` の元、すなわちその辺の先の返り値に現れる `VarPath` だけな
        ので、帰納法の仮定よりその各要素は辺の先の下流にある。`of_candidates` は要素数 1 のとき
-       `Origin::Exactly(その要素)` を、それ以外のとき
+       `into_iter().next()` が返す元を `Origin::Exactly` に置き -- `EXT 1 要素の集合の反復` より
+       それは `candidates` のその 1 つの元である -- 、それ以外のとき
        `Origin::Join { identity: (var, path), candidates }` を返す。前者に現れるのは辺の先の下流の
        対、後者に現れるのはそれと `(u, sig)` 自身である。どちらも `(u, sig)` の下流にある。
-      BY CODE src/rc_ir/ownership.rs: origin_inner,
+      BY EXT 1 要素の集合の反復, CODE src/rc_ir/ownership.rs: origin_inner,
          CODE src/rc_ir/ownership.rs: Origin::of_candidates,
          CODE src/rc_ir/ownership.rs: Origin::acted_on,
          CODE src/rc_ir/ownership.rs: Origin::candidates
