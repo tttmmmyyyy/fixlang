@@ -42,6 +42,7 @@ const MOVED_INITIALIZER_NODE_LIMIT: u64 = 200;
 
 /// The program's RC IR divided among the compilation units, and what a unit needs to know about the
 /// others to generate code from its own slice.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub struct DividedProgram {
     /// One unit's slice of the program, in the order of the units it was divided among.
     pub unit_programs: Vec<RcProgram>,
@@ -73,6 +74,7 @@ pub struct DividedProgram {
 /// * `global_types` — the type of every symbol of the program, which the types of the versions the
 ///   optimizer synthesized are added to.
 /// * `root_value_names` — the values the C world enters the program through.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn divide_among_units(
     program: RcProgram,
     units: &[CompileUnit],

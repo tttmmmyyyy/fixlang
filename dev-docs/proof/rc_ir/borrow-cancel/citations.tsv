@@ -14,9 +14,12 @@ src/ast/inline_llvm.rs	LLVMGen::observes_uniqueness	P7a,P7d,P7e,P8,P9,P10,P11,P1
 src/ast/inline_llvm.rs	LLVMGen::result_prov	D/A,P1,P2,P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18c,P19,P20,P21,P22,P23,P24,P26,P28,(P-insert)	84846b9c9d85
 src/ast/inline_llvm.rs	LLVMGen::unique_check_operand	D/A	8b4dc048a673
 src/ast/name.rs	FullName	P2a,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18	e2c09889359d
-src/ast/name.rs	FullName::is_local	(P-insert)	42fc496e725b
+src/ast/name.rs	FullName::is_local	P27,P29,P30,(P-insert)	42fc496e725b
 src/ast/name.rs	FullName::local	(P-insert)	47c06982e039
+src/ast/name.rs	FullName::to_namespace	P27,P29,P30	bb19891f8d40
+src/ast/name.rs	FullName::to_string	P27,P29,P30	cf55213855f5
 src/ast/name.rs	NameSpace	P2a,P15,P16,P17,P18	efdb8b63a511
+src/ast/name.rs	NameSpace::to_string	P27,P29,P30	4ec970617b24
 src/ast/pattern.rs	Pattern::validate_match_cases_exhaustiveness	D/A	60f1ed66b7fc
 src/ast/program.rs	Program::add_boxed_impls	D/A,P26	3328bbee359d
 src/ast/program.rs	Program::add_methods	P26	f83b77a0035b
@@ -101,9 +104,11 @@ src/ast/types.rs	type_funptr	P26	3c1291d61de1
 src/ast/types.rs	type_tyapp	P1,P2	cb99462cb86f
 src/build/build.rs	build	P26	a09e5051ebcc
 src/build/build_object_files.rs	build_main_function	D/A,P26,P28	ac9bcf7f4d89
-src/build/build_object_files.rs	build_object_files	D/A,P18c,P19,P20,P21,P22,P23,P24	db59d512862f
+src/build/build_object_files.rs	build_object_files	D/A,P18c,P19,P20,P21,P22,P23,P24,P27,P29,P30	db59d512862f
 src/build/build_object_files.rs	lower_and_insert_rc	P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P30,(P-insert)	c4246127c77f
 src/build/build_object_files.rs	optimize_rc_program	D/A,P2a,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P26,P27,P29,P30,(P-insert),T	ef3141f56ac1
+src/build/divide_program.rs	DividedProgram	P27,P29,P30	2598f1705d68
+src/build/divide_program.rs	divide_among_units	P27,P29,P30	e44292292560
 src/build/divide_program.rs	global_types_including_synthesized	P27,P29,P30	0a2100db70d3
 src/commands/check.rs	check	P26	bebc25a47ac6
 src/configuration.rs	Configuration::enable_borrow_optimization	T	23c6af072902
@@ -129,6 +134,7 @@ src/elaboration/typecheck.rs	Substitution::substitute_type	P1,P2	a0820f8e8059
 src/elaboration/typecheck.rs	TypeCheckContext::unify_or_tolerated_mismatch	P26	20cd23171b40
 src/elaboration/typecheck.rs	TypeCheckContext::unify_type_of_expr	P26	9f6fcd7b0499
 src/elaboration/typecheck.rs	TypeCheckContext::unify_type_of_expr_inner	D/A,P26	c3b65b0be2be
+src/ffi.rs	CSignature::get_or_declare_in_module	P27,P29,P30	65818f246a29
 src/ffi.rs	c_boundary_tycon	D/A,P26,P28	2c5a42247af5
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked	D/A,P26	6b9afb59394d
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::generate	P26	4058fb759569
@@ -170,6 +176,8 @@ src/fixstd/builtin.rs	InlineLLVMDestructorMake::result_prov	P1,P2,P26	1937952562
 src/fixstd/builtin.rs	InlineLLVMFixBody	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P28,P29,P30	60fdab56c3bc
 src/fixstd/builtin.rs	InlineLLVMFixBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
 src/fixstd/builtin.rs	InlineLLVMFixBody::generate_tail	D/A,P26	b42d29e5682c
+src/fixstd/builtin.rs	InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody	P27,P29,P30	80a6ab3e25f3
+src/fixstd/builtin.rs	InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody	P27,P29,P30	45558c1323f9
 src/fixstd/builtin.rs	InlineLLVMIntLit	P7a,P7d,P7e	b8126e10483f
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody	D/A	1da0d65c3df8
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::generate	P26	cf1c72be74b6
@@ -226,7 +234,7 @@ src/fixstd/builtin.rs	bulitin_tycons	P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P1
 src/fixstd/builtin.rs	fix	P28	c182312f94a6
 src/fixstd/builtin.rs	fix_body	D/A,P27,P28,P29,P30	a45709f796ae
 src/fixstd/builtin.rs	force_unique_or_assert	P26	57ffe5ab0aa5
-src/fixstd/builtin.rs	force_unique_or_assert_with_hole	D/A,P26	d343a7084e1d
+src/fixstd/builtin.rs	force_unique_or_assert_with_hole	D/A,P26,P27,P29,P30	d343a7084e1d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeStructBody	P3,P4,(P-insert)	c4dab170b90d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeUnionBody	P3,P4	5ba9e8112ba7
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMStringBuf	P5,P6,P7	f40ea3f1cbb7
@@ -247,7 +255,7 @@ src/fixstd/builtin.rs	make_funptr_name	P1,P2,P7a,P7d,P7e	34284cce7fb0
 src/fixstd/builtin.rs	make_funptr_tycon	P1,P2,P7a,P7d,P7e,P26	c0fafed01fb9
 src/fixstd/builtin.rs	make_iostate_name	P7a,P7d,P7e	9955961601a5
 src/fixstd/builtin.rs	make_string_lit	P5,P6,P7	09f6b13cd2cf
-src/fixstd/builtin.rs	make_struct_union_unique	D/A,P26	d88c213c8b1a
+src/fixstd/builtin.rs	make_struct_union_unique	D/A,P26,P27,P29,P30	d88c213c8b1a
 src/fixstd/builtin.rs	make_tuple_name	P7a,P7d,P7e	bb738d48dcf0
 src/fixstd/builtin.rs	mark_threaded_function	P26	bbadc0f9cc77
 src/fixstd/builtin.rs	realloc_array	P26	cce0d609efe9
@@ -258,6 +266,7 @@ src/fixstd/builtin.rs	run_ios_runner	D/A,P26,P28	6dbd7e735631
 src/fixstd/builtin.rs	tuple_defn	P1,P2,P5,P6,P7,P7a,P7d,P7e	87c0549cd2d4
 src/fixstd/builtin.rs	union_mod_function	P26	c707b908e27e
 src/fixstd/runtime.rs	build_pthread_once_function	P3,P4	30df3f16b29f
+src/fixstd/runtime.rs	build_runtime	P27,P29,P30	12274ea66952
 src/fixstd/std.fix	Bool	P5,P6,P7	-
 src/fixstd/std.fix	PunchedArray	P7a,P7d,P7e	-
 src/fixstd/std.fix	assert_unique	D/A,P26	-
@@ -285,7 +294,7 @@ src/generator.rs	Generator::call_runtime	P26	15a58f726eae
 src/generator.rs	Generator::current_function	P27,P29,P30	5da58f805c4b
 src/generator.rs	Generator::declare_lambda_function	P27,P29,P30	e091531ab3d5
 src/generator.rs	Generator::declare_program_global	P3,P4,P27,P29,P30	ba2a67ad0c2e
-src/generator.rs	Generator::emit_rc_helper_call	P26	44aac53fb64a
+src/generator.rs	Generator::emit_rc_helper_call	P26,P27,P29,P30	44aac53fb64a
 src/generator.rs	Generator::get_lambda_func_ptr	P27,P29,P30	7fb0c56a5446
 src/generator.rs	Generator::get_or_declare_global	P3,P4,P27,P29,P30	528a6fcc3916
 src/generator.rs	Generator::get_scoped_obj	P3,P4,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P28,P29,P30	8931a2ab6068
@@ -294,6 +303,7 @@ src/generator.rs	Generator::get_scoped_obj_noretain	P3,P4,P8,P9,P10,P11,P12,P13,
 src/generator.rs	Generator::get_scoped_value	D/A,P3,P4,P27,P29,P30	c6a7bbca6b83
 src/generator.rs	Generator::mark_global	D/A,P26,P28	a286105176a5
 src/generator.rs	Generator::mark_threaded	D/A,P26,P27,P29,P30	0a998e05aae3
+src/generator.rs	Generator::new	P27,P29,P30	af5d82b5074f
 src/generator.rs	Generator::restore_stack	P26	be5150f899f2
 src/generator.rs	Generator::returns_through_out_pointer	P27,P29,P30	a80f7498eeb6
 src/generator.rs	Generator::save_stack	P26	c69d52342edf
@@ -301,9 +311,10 @@ src/generator.rs	Generator::scope_push	P27,P29,P30	4441bcaf1b56
 src/generator.rs	Generator::set_refcnt_state	P26	940b5ba1b600
 src/generator.rs	Generator::traverse_boxed_refs	P26	3272a267c4e1
 src/generator.rs	Object::extract_field_object	D/A	715dee0ef5a4
-src/generator.rs	Scope::push_local	D/A,P28	fd57787daef2
+src/generator.rs	Scope::push_local	D/A,P27,P28,P29,P30	fd57787daef2
 src/generator.rs	ValueAccessor::get	D/A,P3,P4,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P29,P30	52839bab1d27
 src/generator.rs	get_scoped_value	P8,P9,P10,P11,P12,P13,P14,P14a,P14b	c6a7bbca6b83
+src/generator.rs	global_accessor_name	P27,P29,P30	5fa06dc51788
 src/generator.rs	object_file_symbol_name	P27,P29,P30	227cdfd72912
 src/main.rs	GLOBAL	P2a,P15,P16,P17,P18	4382bb5a6e12
 src/misc.rs	Map	P1,P2,P2a,P3,P4,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,T	acc6b79589ac
@@ -322,11 +333,13 @@ src/object.rs	ObjectFieldType::traverse_array_buf	D/A	73e1ad4e79ca
 src/object.rs	build_free_boxed	D/A,P28	d79415db8029
 src/object.rs	build_malloc	P26	57f5c494571d
 src/object.rs	build_traverse	P26	90e003680ea6
-src/object.rs	create_obj	D/A,P26,P28	55a56677f8db
+src/object.rs	create_obj	D/A,P26,P27,P28,P29,P30	55a56677f8db
+src/object.rs	create_traverser	P27,P29,P30	29c19472acf8
 src/object.rs	get_array_storage	P26	a417e5ff90d9
+src/object.rs	get_traverser_ptr	P27,P29,P30	2815e61b62e9
 src/object.rs	lambda_function_type	P27,P29,P30	12512f00c4bd
 src/object.rs	lambda_return_part_types	P27,P29,P30	e5804412a933
-src/object.rs	ty_to_object_ty	P28	bd40ee79d08f
+src/object.rs	ty_to_object_ty	P27,P28,P29,P30	bd40ee79d08f
 src/optimization/capture_struct.rs	CaptureStruct::new	P1,P2,P7a,P7d,P7e	79b12cf140d7
 src/optimization/closure_specialization.rs	ClosureSpecializationVisitor::decapture_lambda	P1,P2	36c2dc7a5422
 src/optimization/closure_specialization.rs	LiftedLambdas::capture_struct_of	P1,P2	b1b391b33646

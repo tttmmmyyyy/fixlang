@@ -253,6 +253,7 @@ impl CSignature {
     /// The function `name` of this signature in the module, declaring it where nothing declares it
     /// yet. Every description of one C name goes through here, which is what puts the calls a
     /// program makes and the definition it exports on one function.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_or_declare_in_module<'c, 'm>(
         &self,
         name: &Name,
