@@ -939,7 +939,7 @@ impl<'a> RewriteCtx<'a> {
     /// call, where the borrow cancels the retain made ahead of it. An owned value whose object ends
     /// at the call is moved either way, so borrowing it removes no retain and only delays its
     /// release.
-    // PROOF: P2a, P3, P4, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P2a, P3, P4, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn routing_saves_retain(
         &self,
         borrow_version: &FuncRef,

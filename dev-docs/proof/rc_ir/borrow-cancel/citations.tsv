@@ -442,7 +442,7 @@ src/rc_ir/borrow.rs	prepend_rc	P2a,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P
 src/rc_ir/borrow.rs	rc_node	P2a,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	5d543479e186
 src/rc_ir/borrow.rs	rhs_uses	P2a,P15,P16,P17,P18	c57d3ebc9ee5
 src/rc_ir/borrow.rs	route	D/A	a2c829b25466
-src/rc_ir/borrow.rs	routing_saves_retain	P3,P4	d0cd17bb5277
+src/rc_ir/borrow.rs	routing_saves_retain	D/A,P3,P4	d0cd17bb5277
 src/rc_ir/borrow.rs	split_body	(P-insert)	3ab6d7ce07a2
 src/rc_ir/borrow.rs	split_body_inner	P2a,P15,P16,P17,P18,(P-insert)	92207d0e6252
 src/rc_ir/borrow.rs	split_rc	D/A,(P-insert)	e9aa346a4628
