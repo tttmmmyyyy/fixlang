@@ -74,7 +74,7 @@ pub struct DividedProgram {
 /// * `global_types` — the type of every symbol of the program, which the types of the versions the
 ///   optimizer synthesized are added to.
 /// * `root_value_names` — the values the C world enters the program through.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn divide_among_units(
     program: RcProgram,
     units: &[CompileUnit],
