@@ -1092,7 +1092,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The object `name` is bound to, handed over as it stands: the reference counts are left
     /// untouched, so the caller owns whatever reference the binding already carried.
-    // PROOF: P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
         self.get_scoped_value(name).accessor.get(self)
     }

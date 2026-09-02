@@ -260,6 +260,7 @@ fn global_types_including_synthesized(
 }
 
 /// The functions a unit calling one may take a copy of, by name.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn copyable_funcs(program: &RcProgram) -> Map<FullName, RcFunc> {
     program
         .funcs
@@ -318,6 +319,7 @@ fn names_reached_elsewhere(unit_program: &RcProgram, mut visit: impl FnMut(&Full
 /// computes it once.
 ///
 /// Copying is a fixed point, since a copied body reaches names of its own.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn import_what_each_unit_reaches(
     unit_programs: &mut [RcProgram],
     imported: &mut [Set<FullName>],
@@ -563,6 +565,7 @@ fn give_the_main_unit_the_root_values(
 /// Publish to the linker the names one unit's code reaches in another, drop from each unit what its
 /// own code cannot reach, and return both sets of published names: the program's, and one per unit
 /// of the names that unit defines under external linkage.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn publish_and_prune(
     unit_programs: &mut [RcProgram],
     defined_in_program: &Map<FullName, usize>,
