@@ -1456,7 +1456,8 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       ある (DEF 訪問) ので、閉じるべきなのは `walk` の呼び出し元だけではなく `walk_inner` の呼び出し元でも
       ある。**
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, DEF 訪問, DEF 本文
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, DEF 訪問, DEF 本文,
+     EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>1a. `borrow.rs` の中で `CancelAnalysis::walk` を呼ぶのは、`cancel` の中の
        `analysis.walk(body, PendingRetains::default(), true)` と、`walk_inner` の中の 7 か所だけである。
        その 7 か所は、`Retain` の腕、`Release` の腕、`Match` の腕の 2 か所 (アームと継続)、
@@ -1546,7 +1547,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 <1>3. 任意の節点 `n`、任意の `pending`、任意の `returns_from_func` について、
       `walk(n, pending, returns_from_func)` の 1 回の呼び出しの実行中、`N(n)` の各節点はちょうど 1 回
       訪問され、`N(n)` の外の節点は訪問されない。
-  木 `N(n)` の構造についての帰納法で示す。DEF 部分木より子は真の部分木なので、この帰納法は整礎である。
+  木 `N(n)` の構造についての帰納法で示す。L0a の 4 よりこの帰納法は整礎である。
   <2>1. 帰納法の仮定: `n` の各子 `c` と任意の引数について、`walk(c, ・, ・)` の 1 回の呼び出しの実行中、
         `N(c)` の各節点はちょうど 1 回訪問され、`N(c)` の外の節点は訪問されない。
     BY 帰納法の仮定
@@ -1563,15 +1564,17 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
   <2>3. CASE `n` の式が `RcExpr::Retain(v, path, _, k)` である。
     <3>1. この腕は `self.walk(k, pending, returns_from_func)` を 1 回呼び、ほかに `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕, <1>2
-    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。
-      BY DEF 部分木
+    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。L0a の 4 より `n` は
+          `N(k)` に入らない。
+      BY L0a, DEF 部分木
     <3>3. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2
   <2>4. CASE `n` の式が `RcExpr::Release(v, path, _, k)` である。
     <3>1. この腕は `self.walk(k, pending, returns_from_func)` を 1 回呼び、ほかに `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕, <1>2
-    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。
-      BY DEF 部分木
+    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。L0a の 4 より `n` は
+          `N(k)` に入らない。
+      BY L0a, DEF 部分木
     <3>3. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2
   <2>5. CASE `n` の式が `RcExpr::Let(_, RcRhs::Match(_, arms), k)` である。
@@ -1584,16 +1587,18 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
           よって <3>1 の `self.walk(&arm.body, ・, ・)` は `arms` の各要素についてちょうど 1 回である。
       BY EXT Vec::iter と slice::iter, EXT Iterator::map と collect
     <3>3. `n` の子は `arms` の各 `arm.body` と `k` であり、`N(n)` は `{n}` とそれらの部分木の非交和で
-          ある。
-      BY DEF 部分木
+          ある。L0a の 3 より相異なる子の部分木は交わらず、L0a の 4 より `n` はどの子の部分木にも
+          入らない。
+      BY L0a, DEF 部分木
     <3>4. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2, <3>3
   <2>6. CASE `n` の式が `RcExpr::Let(x, rhs, k)` で `rhs` が `RcRhs::Match(..)` でない。
     <3>1. この腕は `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼び、その後
           `self.walk(k, pending, returns_from_func)` を 1 回呼ぶ。ほかに `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(x, rhs, k)` の腕, <1>2
-    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。
-      BY DEF 部分木
+    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。L0a の 4 より `n` は
+          `N(k)` に入らない。
+      BY L0a, DEF 部分木
     <3>3. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2
   <2>7. CASE `n` の式が `RcExpr::Destructure(container, fields, _state, k)` である。
@@ -1602,15 +1607,17 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
           `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Destructure(container, fields, _state, k)` の腕,
          <1>2
-    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。
-      BY DEF 部分木
+    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。L0a の 4 より `n` は
+          `N(k)` に入らない。
+      BY L0a, DEF 部分木
     <3>3. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2
   <2>8. CASE `n` の式が `RcExpr::Eval(_, k)` である。
     <3>1. この腕は `self.walk(k, pending, returns_from_func)` を 1 回呼び、ほかに `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Eval(_, k)` の腕, <1>2
-    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。
-      BY DEF 部分木
+    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。L0a の 4 より `n` は
+          `N(k)` に入らない。
+      BY L0a, DEF 部分木
     <3>3. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2
   <2>9. CASE `n` の式が `RcExpr::Ret(_)` である。
@@ -1659,7 +1666,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       走査の状態、第 2 引数は `self.acted_references(v, path)` の値である。
   BY CODE src/rc_ir/borrow.rs: un_bump,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
-     L2, DEF 本文
+     L2, DEF 本文, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>1. `pending.iter().rposition(|retain| retain.outstanding.shares_an_object(un_bumped))` は、述語を
       満たす要素の添字のうち最大のものを `Some` で返し、そのような要素が無ければ `None` を返す。
       `let Some(index) = ... else { return UnBump::NoBracket; };` により、`None` のとき `NoBracket` を
@@ -1842,7 +1849,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体の各節点 `n` につい
         呼ぶ。「複製」はこの列に現れない。また、走査が `PendingRetains` の値を作るのは DEF 基本操作 の
         6 種だけである。
 
-**証明** 木 `N(n)` の構造についての帰納法で示す。DEF 部分木より子は真の部分木なので整礎である。
+**証明** 木 `N(n)` の構造についての帰納法で示す。L0a の 4 よりこの帰納法は整礎である。
 
 <1>0. 本補題の仮定は P15 の言明の仮説である。P15 より、走査はこの本体の各位置をちょうど 1 回訪問するので、
       各節点の「訪問」(DEF 訪問) は 1 つに定まり、`pending(n)` と `pending_out(n)` はその 1 つの訪問に
@@ -2265,7 +2272,7 @@ L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべて
 
 <1>0a. `un_bump` は `borrow.rs` の非公開の自由関数であり、`borrow.rs` は `mod` 宣言を 1 つも持たないので、
        その呼び出しは `borrow.rs` の中にしか書けない。
-  BY CODE src/rc_ir/borrow.rs: un_bump
+  BY CODE src/rc_ir/borrow.rs: un_bump, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>1. `borrow.rs` の中で `un_bump` を呼ぶのは `walk_inner` の `RcExpr::Release(v, path, _, k)` の腕
       1 か所だけであり、その第 1 引数はその時点の走査の状態、第 2 引数は
       `un_bumped = self.acted_references(v, path)` である。
@@ -2316,7 +2323,8 @@ L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての�
       `cancel_body` の 1 回の実行の中で走査が作った状態である (DEF 基本操作)。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
-     L1, DEF 訪問, DEF 基本操作, EXT Vec::iter と slice::iter, EXT Iterator::map と collect
+     L1, DEF 訪問, DEF 基本操作, EXT Vec::iter と slice::iter, EXT Iterator::map と collect,
+     EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>1. L9 の (iii) を各 `arm_exits[j]` に適用すると、L7 の仮定が満たされる。<1>0 より各 `arm_exits[j]` は
       走査が作った状態なので、L9 が当たる。以下 L7 の 1 から 6 を使う。
   BY <1>0, L9, L7
@@ -2464,11 +2472,11 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
     <3>3. `k_M ∈ N(k_M)` なので、<3>1 より `k_M` は <2>2 の `self.walk(k_M, ・, ・)` の呼び出しの中で
           訪問される。
       BY <2>2, <3>1, DEF 部分木
-    <3>4. `k_M` は `N(arm_i.body)` の要素ではない。DEF 部分木 より `M` の相異なる子の部分木は交わらず、
+    <3>4. `k_M` は `N(arm_i.body)` の要素ではない。L0a の 3 より `M` の相異なる子の部分木は交わらず、
           `arm_i.body` と `k_M` は `M` の相異なる子である。`k_M ∈ N(k_M)` なので `k_M ∉ N(arm_i.body)`
           である。よって <3>1 より、<2>2 の `self.walk(&arm_i.body, ・, ・)` の呼び出しの中で `k_M` は
           訪問されない。
-      BY <2>2, <3>1, DEF 部分木
+      BY <2>2, <3>1, L0a, DEF 部分木
     <3>5. QED
       <2>2 より `self.walk(&arm_i.body, ・, ・)` の呼び出しは `self.walk(k_M, ・, ・)` の呼び出しより
       前に返る。<3>2 より `m` の訪問はその前者の呼び出しの中で始まり、<3>3 と <3>4 より `k_M` の訪問は
