@@ -106,7 +106,7 @@ impl<T: Clone> LeafMap<T> {
     }
 
     /// The map whose every boxed leaf carries `fact`.
-    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, fact: T) -> LeafMap<T> {
         LeafMap::build_shape(ty, type_env, &|_| fact.clone())
     }
@@ -195,7 +195,7 @@ impl<T: Clone> LeafMap<T> {
 
     /// The map carrying `f` of each leaf under `path`, and the rest unchanged. The empty path covers
     /// the whole value.
-    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn map_leaves_under(&self, path: &[usize], f: impl Fn(&T) -> T) -> LeafMap<T> {
         LeafMap(
             self.0

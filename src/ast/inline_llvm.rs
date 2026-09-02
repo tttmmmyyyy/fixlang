@@ -14,6 +14,7 @@ use std::sync::Arc;
 /// One inline-LLVM builtin operation. Each builtin is a struct that implements this trait; an
 /// `InlineLLVM` holds a `Box<dyn LLVMGen>`. `typetag` serializes the trait object (tagged by op) so
 /// the typecheck cache round-trips it.
+// PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde(tag = "op")]
 pub trait LLVMGen: DynClone + Send + Sync {
     /// Emit the op's code and return its value.
@@ -155,7 +156,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// must not (see `InlineLLVMIsUniqueFunctionBody` and `InlineLLVMMarkThreadedFunctionBody`, which
     /// say why). A leaf that joins an argument with another source says only where the result's
     /// sharing comes from: the op consumes that argument like any other.
-    // PROOF: D/A, P1, P2, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P28, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18c, P19, P20, P21, P22, P23, P24, P26, P28, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
