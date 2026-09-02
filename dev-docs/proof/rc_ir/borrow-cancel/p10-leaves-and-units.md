@@ -89,7 +89,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 **DEF 呼び出しの辺** -- 表 `vars` と型環境 `E` を固定する。対 `(u, sig)` から対 `(u', sig')` への
 **呼び出しの辺**とは、`origin_inner(vars, E, u, sig)` の実行が `origin(vars, E, u', sig')` を呼ぶことを
-いう。`(x, pi)` から呼び出しの辺を 0 回以上辿って着ける対の全体を、`(x, pi)` の**呼び出しの下流**と呼ぶ。
+いう。
 
 この関係は memo の状態に依らない。`origin_inner` が行う `origin` の呼び出しとその引数は、`vars`、`E`、
 `u`、`sig` だけで決まる -- `Join` の腕は `arm_results` の各要素について、`Llvm` の腕は `decl` と `args`
@@ -111,6 +111,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 `CODE src/ast/inline_llvm.rs: LLVMGen::result_prov`、
 `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at`、
 `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`。
+
+**DEF 呼び出しの下流** -- 対 `(x, pi)` から `DEF 呼び出しの辺` の辺を 0 回以上辿って着ける対の全体を、
+`(x, pi)` の**呼び出しの下流**と呼ぶ。0 回の場合を含むので `(x, pi)` 自身もそこに入る。
 
 **DEF cls** -- 型 `t` の**クラス** `cls(t)` を、次の順に最初に当たるもので定める。6 つの条件がすべて
 真偽値を持つとき `cls(t)` は定まる。`<1>1` を満たす型についてそれが成り立つことは `<1>3c` と `<1>3e` が
