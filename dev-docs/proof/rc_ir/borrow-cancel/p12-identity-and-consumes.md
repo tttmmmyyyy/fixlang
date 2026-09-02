@@ -1912,6 +1912,14 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
        `L(v, π)` である。
   BY D4, DEF `L`
 
+<1>1b. `Release(v, π)` の訪問が呼ぶ `acted_references(v, π)` と `other_objects(v, π)` は、どちらも
+       `L(v, π)` の各 `λ` について `origin(vars, type_env, &v.name, &λ)` を呼ぶ。よってこの節が書く
+       `id(v, λ)`・`cand(v, λ)`・`act(v, λ)` は、いずれも解析が呼ぶ鍵についての値である (§1)。
+  どちらの関数も `boxed_leaf_paths(&v.ty, type_env)` の要素のうち `leaf.starts_with(path)` を満たす各
+  `leaf` について `origin` を呼び、`<1>1a` よりその `leaf` の全体は `L(v, π)` である。
+  BY <1>1, <1>1a, CODE src/rc_ir/ownership.rs: acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects
+
 <1>2. `ActRefs(v, π).objects()` は `{ id(v, λ) : λ ∈ L(v, π) }` である。
   <2>1. `acted_references(v, π)` は、`boxed_leaf_paths(ty(v), type_env)` の要素 `leaf` のうち
         `leaf.starts_with(π)` を満たすものについて、`origin(v, leaf).identity()` をキーとする計数を
@@ -1920,13 +1928,13 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   <2>2. `References::objects()` はその `Map` のキーの列を返す。
     BY D15, CODE src/rc_ir/ownership.rs: References::objects
   <2>3. QED
-    BY <1>1a, <2>1, <2>2
+    BY <1>1a, <1>1b, <2>1, <2>2
 
 <1>3. `other_objects(v, π)` は `∪_{λ ∈ L(v, π)} (cand(v, λ) \ {id(v, λ)})` を含む。
   `other_objects` は `boxed_leaf_paths(ty(v), type_env)` のうち `leaf.starts_with(path)` を満たす各 `leaf`
   について `where_from = origin(v, leaf)` を取り、その `candidates()` のうち `identity()` と異なるものを
   すべて `out` に積む。回る `leaf` の全体は `<1>1a` より `L(v, π)` である。
-  BY <1>1a, CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects
+  BY <1>1a, <1>1b, CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects
 
 <1>4. 各 `λ` について `act(v, λ) = {id(v, λ)} ∪ (cand(v, λ) \ {id(v, λ)})` である。
   `Origin::acted_on()` は `identity()` を先頭に、`candidates()` のうち `identity()` と異なるものを続けた
@@ -1949,8 +1957,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 
 P6 の 2 つの主張を次のように書く。
 
-- **(a)** `acted_references(v, π)` が返す `Map` は、`L(v, π)` のすべての元 `λ` を `id(v, λ)` で名付けて
-  数えた多重集合である。
+- **(a)** `acted_references(v, π)` は `L(v, π)` の各元 `λ` について鍵 `(v, λ)` で `origin` を呼び、
+  返す `References` は、`L(v, π)` のすべての元 `λ` を `id(v, λ)` で名付けて数えた多重集合である。
 - **(b)** 位置 `p` において `Retain(v, π)` が実行時に作る参照の多重集合は、(a) の数え上げを
   `Linhc(v, π, p)` に制限し、各名前をそれが指すオブジェクトへ写して得られる多重集合に等しい。
   `Release(v, π)` が実行時に処分する参照の多重集合も同じものに等しい。
@@ -1958,7 +1966,8 @@ P6 の 2 つの主張を次のように書く。
 **DEF `Linhc`**
 `Linh(v, π, p)` の元のうち、`obj(v, λ)` が計数下 (D26) であるものの集合を `Linhc(v, π, p)` と書く。
 
-(a) は README の P6 の第 1 文、(b) は第 2 文である。第 2 文が「**inhabited (D16) かつ計数下 (D26)**」の
+(a) は README の P6 の第 1 文と第 2 文、(b) は第 3 文である。第 3 文が「**inhabited (D16)
+かつ計数下 (D26)**」の
 leaf への制限と「**各名前をそれが指すオブジェクトへ写して**」の段を持つのは、D8 と D26 による。D26 より、
 グローバル状態のオブジェクトを指す leaf は D8 の意味の参照を持たないので、`Retain` はその leaf について
 参照を作らない。また D8 より参照の多重集合は**オブジェクトごと**の個数であり、(a) の数え上げは `VarPath`
@@ -1977,15 +1986,18 @@ leaf への制限と「**各名前をそれが指すオブジェクトへ写し�
 ### P6 (a)
 
 <1>1. `acted_references(v, path)` は、`boxed_leaf_paths(&v.ty, type_env)` の要素 `leaf` のうち
-      `leaf.starts_with(path)` を満たすものについて、`origin(vars, type_env, &v.name, &leaf).identity()` を
-      キーとする計数を 1 ずつ増やした `Map<VarPath, usize>` を返す。
-  BY CODE src/rc_ir/ownership.rs: acted_references
+      `leaf.starts_with(path)` を満たすものについて `origin(vars, type_env, &v.name, &leaf)` を呼び、
+      その `identity()` をキーとする計数を 1 ずつ増やした `Map<VarPath, usize>` を組み立て、それを
+      `References` に包んで返す。
+  BY CODE src/rc_ir/ownership.rs: acted_references, References
 
 <1>2. `<1>1` の走査が回る `leaf` の全体は `L(v, π)` である。inhabited かどうかは判定していない。
   BY D4, D15, DEF `L`, <1>1
 
 <1>3. QED
-  `<1>1` と `<1>2` より、返り値は `L(v, π)` の各元 `λ` を `id(v, λ)` で名付けて数えた多重集合である。
+  `<1>1` と `<1>2` より、`acted_references(v, π)` は `L(v, π)` の各元 `λ` について鍵 `(v, λ)` で
+  `origin` を呼び、返り値の `References` は `L(v, π)` の各元 `λ` を `id(v, λ)` で名付けて数えた
+  多重集合である。
   BY <1>1, <1>2
 
 ### P6 (b)
@@ -1995,7 +2007,7 @@ leaf への制限と「**各名前をそれが指すオブジェクトへ写し�
   <2>1. D10 の `Retain` の行は「`π` の下の inhabited な各 leaf `λ` につき `obj(v, λ)` への参照を 1 つ
         加える」である。
     BY D10
-  <2>2. 「`π` の下の inhabited な leaf」の全体は `Linh(v, π, p)` である。
+  <2>2. `<2>1` の行が渡る leaf -- `π` の下の inhabited な各 leaf -- の全体は `Linh(v, π, p)` である。
     BY D4, D16, DEF `L`, DEF `Linh`
   <2>3. `Linh(v, π, p)` の元のうち `obj(v, λ)` がグローバル状態であるものについては、参照は加わらない。
     D26 より、D8 の参照と D10 の義務集合は計数下のオブジェクトへの参照だけを対象とし、グローバル状態の
@@ -2010,7 +2022,7 @@ leaf への制限と「**各名前をそれが指すオブジェクトへ写し�
   <2>1. D10 の `Release` の行は「`π` の下の inhabited な各 leaf `λ` につき `obj(v, λ)` への参照を 1 つ
         取り除く」である。
     BY D10
-  <2>2. 「`π` の下の inhabited な leaf」の全体は `Linh(v, π, p)` である。
+  <2>2. `<2>1` の行が渡る leaf -- `π` の下の inhabited な各 leaf -- の全体は `Linh(v, π, p)` である。
     BY D4, D16, DEF `L`, DEF `Linh`
   <2>3. `Linh(v, π, p)` の元のうち `obj(v, λ)` がグローバル状態であるものについては、取り除く参照が
         無い。
@@ -2042,10 +2054,13 @@ leaf への制限と「**各名前をそれが指すオブジェクトへ写し�
 
 <1>4. 各 `λ ∈ Linhc(v, π, p)` について、`id(v, λ)` は `ρ` の位置であり、`ν(id(v, λ)) = obj(v, λ)` で
       ある。
-  `<1>2a` より `(v, λ)` は `ρ` の位置なので L4 が使える。L4 の (i) が `id(v, λ)` が `ρ` の位置で
-  あることを、(ii) が `obj(v, λ) = obj(id(v, λ))` を与え、DEF 名前の指すオブジェクト より
-  `obj(id(v, λ)) = ν(id(v, λ))` である。
-  BY L4, DEF 名前の指すオブジェクト, <1>2a
+  `<1>2a` より `(v, λ)` は `ρ` の位置である。(b) の言明が数えるのは `acted_references(v, π)` が返した
+  多重集合を制限したものなので、その呼び出しは行われており、P6 (a) よりその呼び出しは `L(v, π)` の各元に
+  ついて鍵 `(v, ・)` で `origin` を呼ぶ。DEF `Linhc` と DEF `Linh` と DEF `L` より
+  `Linhc(v, π, p) ⊆ L(v, π)` なので、解析は鍵 `(v, λ)` で `origin` を呼ぶ。よって L4 の 2 つの前件が
+  揃い、L4 の (i) が `id(v, λ)` が `ρ` の位置であることを、(ii) が `obj(v, λ) = obj(id(v, λ))` を与え、
+  DEF 名前の指すオブジェクト より `obj(id(v, λ)) = ν(id(v, λ))` である。
+  BY L4, P6 (a), DEF `L`, DEF `Linh`, DEF `Linhc`, DEF 名前の指すオブジェクト, <1>2a
 
 <1>5. P6 (a) の数え上げを `Linhc(v, π, p)` に制限した多重集合を `M := Σ_{λ ∈ Linhc(v, π, p)} [id(v, λ)]` と
       おくと、その押し出しは各オブジェクト `o` について
@@ -2064,14 +2079,18 @@ leaf への制限と「**各名前をそれが指すオブジェクトへ写し�
 
 ### P6 の結論
 
-<1>1. README の P6 の第 1 文 --「**1 つの本体 (D23)** の 1 回の活性化について、`acted_references(v, π)` が返す
-      `Map` は、`π` の下のすべての boxed leaf を `origin` の identity で名付けて数えたものである」--
-      が成り立つ。
+<1>1. README の P6 の第 1 文 --「**1 つの本体 (D23)** の 1 回の活性化について、`acted_references(v, π)` が返す `References` は、`π` の下の
+      すべての boxed leaf を `origin` の identity で名付けて数えたものである」-- が成り立つ。
   DEF `L` より `L(v, π)` が「`π` の下のすべての boxed leaf」である。この文書が固定するのは、ある関数の
   `body` かあるグローバル初期化子の `init` かのどちらかであり (§1)、D23 の「本体」はその 2 つで尽きる
   ので、固定した本体を渡ると第 1 文の主語である本体を尽くす。
   BY D23, P6 (a), DEF `L`
-<1>2. README の P6 の第 2 文 --「この数え上げを **inhabited (D16)
+<1>1a. README の P6 の第 2 文 --「**その各 leaf について解析が
+      `origin` を呼ぶ** -- `acted_references` 自身がその呼び出しである」-- が成り立つ。
+  P6 (a) の前半がこれを与える -- `acted_references(v, π)` は `L(v, π)` の各元について鍵 `(v, ・)` で
+  `origin` を呼ぶ。`<1>1` より `L(v, π)` が第 1 文の言う leaf の全体である。
+  BY P6 (a), DEF `L`, <1>1
+<1>2. README の P6 の第 3 文 --「この数え上げを **inhabited (D16)
       かつ計数下 (D26)** の leaf に制限し、**各名前をそれが指すオブジェクトへ写して**得られる多重集合は、実行時に
       `Retain(v, π)` が作る参照の多重集合に等しく、`Release(v, π)` が処分する参照の多重集合にも等しい」--
       が成り立つ。
@@ -2080,10 +2099,11 @@ leaf への制限と「**各名前をそれが指すオブジェクトへ写し�
   「**各名前をそれが指すオブジェクトへ写して**得られる多重集合」である。
   BY P6 (b), DEF `Linhc`, DEF 名前の指すオブジェクト
 <1>3. QED
-  README の P6 は 2 つの文からなり、第 1 文が `<1>1`、第 2 文が `<1>2` である。2 つの文の主語は
-  「**1 つの本体 (D23)** の 1 回の活性化」であり、`<1>1` がその範囲を尽くすことを述べる -- 第 2 文は
-  第 1 文の主語を引き継ぐ。
-  BY D23, <1>1, <1>2
+  README の P6 は 3 つの文からなり、第 1 文が `<1>1`、第 2 文が `<1>1a`、第 3 文が `<1>2` である。
+  3 つの文の主語は
+  「**1 つの本体 (D23)** の 1 回の活性化」であり、`<1>1` がその範囲を尽くすことを述べる -- 第 2 文と
+  第 3 文は第 1 文の主語を引き継ぐ。
+  BY D23, <1>1, <1>1a, <1>2
 
 **補足 1 (名前づけが 2 つのオブジェクトを 1 つに潰さないこと)**。`References` の鍵は `VarPath` であり、
 `covers` などの演算は鍵ごとに数える (D15)。鍵をオブジェクトの名前として読めるためには、1 つの鍵が 2 つの
@@ -2100,7 +2120,7 @@ obj(v, μ)` である。これは P5 (a) を 1 つの `v` の 2 つの leaf に�
 比べる読み手 -- `un_bump` の `covers` -- が R1 の形をどう扱うかは P17 と P18b が扱う。
 
 **補足 3 (2 つの leaf が 1 つの名前を持つとき)**。`L(v, π)` の相異なる 2 つの leaf が同じ `id` を持つことが
-ある。`Map` はそのとき計数を 2 にする (P6 (a))。その 2 つがどちらも `Linhc(v, π, p)` に入るときは、
+ある。返る `References` はそのとき計数を 2 にする (P6 (a))。その 2 つがどちらも `Linhc(v, π, p)` に入るときは、
 A5 の下で参照は inhabited かつ計数下の leaf ごとに 1 つなので、参照としても 2 つある。
 
 **補足 4 (上位近似のずれは片側だけである)**。`acted_references` は `L(v, π)` を数え、実行時に触れるのは
