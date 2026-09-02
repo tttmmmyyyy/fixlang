@@ -1063,10 +1063,11 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
               `any_owned_unit` は `owns_unit` を、`owns_unit` は `owns_object` を、
               `comes_from_a_value_used_later` は `used_later` を、`used_later` は `rhs_uses` と自身を、
               `rhs_uses` は `used_later` を呼ぶ。`owns_object` が呼ぶ `borrow.rs` の関数は無い。
-              この 10 個の本文がほかに呼ぶのは `borrow.rs` の外の項目である --- `Map` と `Set` と `Vec` の
-              操作、`Clone::clone`、`Iterator` の組み合わせ子、`grow_stack`、`origin`、
-              `Origin::candidates`、`rc_units`、`units_under`、`truncate_to_unit`、`LLVMGen::free_vars`。
-              DEF 本文 より、この 10 個が標準ライブラリの関数へ渡す閉包の本文もこの数え上げに入っている。
+              **この 10 個の本文に書かれた呼び出しのうち、`borrow.rs` の項目に解決するのは上に挙げた
+              ものだけであり、残りはすべて `borrow.rs` の外で定義された項目に解決する。** DEF 本文 より、
+              この 10 個が引数として渡すクロージャの本文はそれを書いた関数の本文の一部なので、その中に
+              書かれた呼び出しもこの数え上げに入っている --- 渡す先が標準ライブラリであっても
+              `borrow.rs` の外の項目であっても同じである。
           BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
              CODE src/rc_ir/borrow.rs: RewriteCtx::routing_is_safe,
              CODE src/rc_ir/borrow.rs: RewriteCtx::routing_saves_retain,
@@ -1265,12 +1266,12 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
        CODE src/rc_ir/ownership.rs: References::objects,
        CODE src/rc_ir/ownership.rs: destructure_consumes, CODE src/misc.rs: Map, CODE src/misc.rs: Set,
        EXT IntoIterator と for, EXT Vec::iter と slice::iter, DEF 本文
-  <2>2. <2>1 の 9 つの本文は、`self.walk(...)` も `self.walk_inner(...)` も持たない。さらに、`borrow.rs`
-        で定義された関数としてはこの 9 つしか呼ばない --- `consume` が `consume_objects` を、`consume_rhs`
-        が `consume` を呼ぶほかは、9 つの本文が呼ぶのはすべて `borrow.rs` の外の項目である。DEF 本文 より、
-        この 9 つが標準ライブラリの関数へ渡すクロージャ --- `consume_objects` が `Vec::retain` へ、
-        `un_bump` が `Iterator::rposition` へ、`merge` が `Iterator::all` と `Iterator::filter_map` へ
-        渡すもの --- の本文もこの数え上げに入っている。
+  <2>2. <2>1 の 9 つの本文は、`self.walk(...)` も `self.walk_inner(...)` も持たない。さらに、**この 9 つの
+        本文に書かれた呼び出しのうち `borrow.rs` の項目に解決するのは、`consume` が呼ぶ
+        `consume_objects` と `consume_rhs` が呼ぶ `consume` の 2 つだけであり、残りはすべて `borrow.rs` の
+        外で定義された項目に解決する。** DEF 本文 より、この 9 つが引数として渡すクロージャの本文は
+        それを書いた関数の本文の一部なので、その中に書かれた呼び出しもこの数え上げに入っている ---
+        渡す先が標準ライブラリであっても `borrow.rs` の外の項目であっても同じである。
         `PendingRetain` が derive する `Clone::clone` の本文はフィールドごとの `clone` であり、その
         フィールドの型は `usize` と `References` で、どちらの `Clone` の実装も `borrow.rs` の外にある。
     BY <1>1a, DEF 本文, CODE src/rc_ir/borrow.rs: node_id,
