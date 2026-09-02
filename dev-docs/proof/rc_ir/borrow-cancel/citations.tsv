@@ -56,6 +56,7 @@ src/ast/types.rs	TyConInfo	P1,P2	e2f309478269
 src/ast/types.rs	TyConInfo::resolve_namespace	P1,P2,P7a,P7d,P7e	6a0535783f94
 src/ast/types.rs	TyConInfo::resolve_type_aliases	P1,P2,P7a,P7d,P7e	2d8bd2c4afd1
 src/ast/types.rs	TyConVariant	P1,P2,P5,P6,P7,P7c,P7f,P18a,P18b	18d30eb4b988
+src/ast/types.rs	Type	P1,P2	e0140595eff2
 src/ast/types.rs	TypeNode	D/A,P1,P2,P2a,P3,P4,P15,P16,P17,P18,T	4e726d9bb025
 src/ast/types.rs	TypeNode::collect_type_arguments	P1,P2	6d18a772c333
 src/ast/types.rs	TypeNode::declared_field_types	D/A,P1,P2	eda5fdc86a3c
@@ -73,22 +74,31 @@ src/ast/types.rs	TypeNode::is_struct	D/A,P3,P4,P5,P6,P7,P7a,P7d,P7e,P18c,P19,P20
 src/ast/types.rs	TypeNode::is_unbox	P1,P2,P2a,P15,P16,P17,P18,P26,(P-insert)	9260dc476785
 src/ast/types.rs	TypeNode::is_union	D/A,P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e,P18c,P19,P20,P21,P22,P23,P24	eaa9230b88af
 src/ast/types.rs	TypeNode::kind	D/A	a08211f10d71
+src/ast/types.rs	TypeNode::new	P1,P2	407c8d3d0a39
 src/ast/types.rs	TypeNode::set_assocty_args	P1,P2	24abf982807a
+src/ast/types.rs	TypeNode::set_assocty_name	P1,P2	4cf5badd7071
 src/ast/types.rs	TypeNode::set_source	P1,P2	0ef112a184f4
 src/ast/types.rs	TypeNode::set_source_if_none	P1,P2	d994e62b7a25
+src/ast/types.rs	TypeNode::set_ty	P1,P2	6fe64b2fc801
 src/ast/types.rs	TypeNode::set_tyapp_arg	P1,P2	a6f31c6f50bd
 src/ast/types.rs	TypeNode::set_tyapp_fun	P1,P2	ac5f81cec7a7
+src/ast/types.rs	TypeNode::set_tycon_tc	P1,P2	902476fa599e
+src/ast/types.rs	TypeNode::set_tyvar	P1,P2	fffec7e26a23
+src/ast/types.rs	TypeNode::set_tyvar_kind	P1,P2	f433b04ead6f
 src/ast/types.rs	TypeNode::toplevel_tycon	P1,P2	9c1d47a34349
 src/ast/types.rs	TypeNode::toplevel_tycon_info	D/A,P1,P2,P2a,P5,P6,P7,P15,P16,P17,P18	ae62bc398a0a
 src/ast/types.rs	TypeNode::toplevel_tycon_satisfies	P1,P2	704a2f7f7d60
 src/ast/types.rs	TypeNode::type_hash	P1,P2,P2a,P3,P4,P15,P16,P17,P18,T	19915b74d10a
 src/ast/types.rs	TypeNode::unpunched_field_types	P1,P2,P2a,P3,P4,P5,P6,P7,P7c,P7f,P15,P16,P17,P18,P18a,P18b	ecae1220e285
 src/ast/types.rs	TypeNode::unwrap_newtypes_memoized	P1,P2,P2a,P3,P4,P15,P16,P17,P18	b775960e33b3
+src/ast/types.rs	impl Clone for TypeNode	P1,P2	102b1463683d
 src/ast/types.rs	impl Hash for TypeNode	P1,P2,P3,P4	be2e413d0b6d
 src/ast/types.rs	impl PartialEq for TypeNode	P1,P2	bdc0f3dd3070
 src/ast/types.rs	is_opaque_tyvar	P1,P2,P7a,P7d,P7e	6a391148be06
+src/ast/types.rs	type_assocty	P1,P2	e870cc8cf32d
 src/ast/types.rs	type_fun	P26	e57e667fefea
 src/ast/types.rs	type_funptr	P26	3c1291d61de1
+src/ast/types.rs	type_tyapp	P1,P2	cb99462cb86f
 src/build/build.rs	build	P26	a09e5051ebcc
 src/build/build_object_files.rs	build_main_function	D/A,P26,P28	ac9bcf7f4d89
 src/build/build_object_files.rs	build_object_files	D/A,P18c,P19,P20,P21,P22,P23,P24	db59d512862f

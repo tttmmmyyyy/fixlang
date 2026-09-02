@@ -1,6 +1,6 @@
 # P1 (leaf と unit の対応) と P2 (`origin` の全域性と停止性) の証明
 
-この文書が読んだコードのコミットは `b41ccba848af6f1f4795548cc858004ffdff5c11` である。README が証明の
+この文書が読んだコードのコミットは `20aaa746566f85650d33259fb05a505b4e8ba26c` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が引くファイルに
 変わったのは `// PROOF:` コメントと、`Validator::check_rhs` に足された検査 -- 各 `Llvm` 節点の
 `result_prov` が 1 つの結果 leaf に 2 つ以上の source を宣言しないことを develop mode で確かめるもの --
@@ -25,7 +25,8 @@ P1 と P2 は共通の補題 (型の上の walk が停止すること、`unit_st
 `<1>29a` は README の P2a (`origin` の答えは memo に依らない) と同じ内容の局所補題であり、`<1>34` の
 `<3>5` が読む。その証明は命題を 1 つも引かない。仮定は A3 -- `result_prov` の決定性と、共有参照で
 受け取る計算が値の等しさを変えないことの 2 節 -- のほか、`<1>25` と `<1>21` を経て A6 と A11 を引き、
-定義 D1、D2、D6 を引く。
+定義 D1、D2、D6 を引く。外部の結果は `EXT derive した PartialEq と Eq`、`EXT HashSet の等価性`、
+`EXT 1 要素の集合の反復` の 3 つである。
 
 P1 は 2 つの静的な列挙 (`boxed_leaf_paths` と `rc_units`) の対応についての主張なので、D16 の
 inhabited は現れない。実行時にどの leaf が参照を持つかは P1 の主張に入らない。
@@ -40,13 +41,14 @@ inhabited は現れない。実行時にどの leaf が参照を持つかは P1 
 - `L(t)` := `boxed_leaf_paths(t, E)` (`CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`)
 - `U(t)` := `rc_units(t, E)` (`CODE src/rc_ir/ownership.rs: rc_units`)
 - `T(t, p)` := `truncate_to_unit(t, p, E)` (`CODE src/rc_ir/ownership.rs: truncate_to_unit`)
-- `F(t)` := `t.unpunched_field_types(E)` (`CODE src/ast/types.rs: TypeNode::unpunched_field_types`)。
-  これは対 `(添字, 型)` の列である。
 - `c` := `CLOSURE_CAPTURE_IDX as usize` (`CODE src/constants.rs: CLOSURE_CAPTURE_IDX`)
 
 型は `t`、`s`、`f` などのラテン文字で表す。path は `usize` の有限列 (`CODE src/rc_ir/ast.rs:
 FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 `i` 要素 (0 始まり)、`p[0..k]` は
 先頭 `k` 要素からなる前置、`|p|` は長さ、`p ++ q` は連結、`[]` は空列とする。
+
+**DEF F** -- 型 `t` について `F(t) := t.unpunched_field_types(E)` と書く
+(`CODE src/ast/types.rs: TypeNode::unpunched_field_types`)。これは対 `(添字, 型)` の列である。
 
 **EXT Rust の一時値のスコープ** -- Rust Reference の "Destructors" の節の "Temporary scopes" が
 次を述べる。`<1>30` の `<2>1` がこれを引く。
@@ -86,9 +88,27 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 `borrow` はその値が可変に借用されている間 panic し、`borrow_mut` はその値が共有または可変に借用されて
 いる間 panic する。それ以外の場合はどちらも panic しない。`<1>30` の `<2>1` がこれを引く。
 
+**EXT derive した PartialEq と Eq** -- `#[derive(PartialEq)]` が enum に作る `eq` は、2 つの値の
+変位が等しく、かつ対応する各成分が `==` で等しいときにだけ真を返す。`Eq` を実装する型の `==` は
+同値関係であり、反射的・対称的・推移的である (`Eq` の doc がその契約を述べる)。`<1>29a` の `<2>1a` の
+`<3>3` がこれを引き、その `<3>6` が推移律を使う。
+
+**EXT 1 要素の集合の反復** -- 要素をちょうど 1 つ持つ `HashSet<T, S>` について、
+`into_iter().next()` は `Some` を返し、その中身はその 1 つの要素である。`<1>29a` の `<2>1a` の
+`<3>6` と `<1>34` の `<2>1` の `<3>3` がこれを引く。
+
+**EXT Iterator の enumerate と filter** -- 標準ライブラリの `Iterator` について、`enumerate` は
+もとの列の第 `i` 要素を対 `(i, 要素)` に写した列を返す。すなわち第 1 成分は 0 から始まる連続した
+整数であり、相異なる。`filter(pred)` は `pred` が真を返す要素だけを、もとの順序のまま残した列を
+返す。`<1>3c` の `<2>8` と `<1>12` の `<2>1` がこれを引く。
+
+**EXT スライスの split_first** -- 標準ライブラリの `<[T]>::split_first` は、空でないスライスに
+対して `Some((先頭の要素, 残り))` を返し、空のスライスに対して `None` を返す。`<1>28` の `<2>2f` の
+`<3>3` と `<2>2g` の `<3>2` がこれを引く。
+
 **DEF 呼び出しの辺** -- 表 `vars` と型環境 `E` を固定する。対 `(u, sig)` から対 `(u', sig')` への
 **呼び出しの辺**とは、`origin_inner(vars, E, u, sig)` の実行が `origin(vars, E, u', sig')` を呼ぶことを
-いう。`(x, pi)` から呼び出しの辺を 0 回以上辿って着ける対の全体を、`(x, pi)` の**呼び出しの下流**と呼ぶ。
+いう。
 
 この関係は memo の状態に依らない。`origin_inner` が行う `origin` の呼び出しとその引数は、`vars`、`E`、
 `u`、`sig` だけで決まる -- `Join` の腕は `arm_results` の各要素について、`Llvm` の腕は `decl` と `args`
@@ -101,8 +121,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 内部可変性を持つ op は呼ぶたびに違う `Provenance` を返せる。そのとき
 `decl.leaf_origins_at(path).and_then(as_arg_projection)` の場合分けが変わり、`Some((j, p))` の腕が
 呼ぶ対も、`None` の腕で `origin_from_leaves_under` が `decl.leaf_origins_under(path)` から組む
-`operand_units` の各対も変わる。すなわち呼び先の対そのものが変わる。A3 の「`result_prov` と
-`borrows_operand` は決定的である -- 同じ引数に対して常に同じ値を返す」がそれを排除する。
+`operand_units` の各対も変わる。すなわち呼び先の対そのものが変わる。A3 の「**`result_prov` と
+`borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」がそれを排除する。
 
 依拠するもの: A3 (`result_prov` は決定的である)、
 `CODE src/rc_ir/ownership.rs: origin_inner`、`CODE src/rc_ir/ownership.rs: origin_from_leaves_under`、
@@ -110,6 +130,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 `CODE src/ast/inline_llvm.rs: LLVMGen::result_prov`、
 `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at`、
 `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`。
+
+**DEF 呼び出しの下流** -- 対 `(x, pi)` から `DEF 呼び出しの辺` の辺を 0 回以上辿って着ける対の全体を、
+`(x, pi)` の**呼び出しの下流**と呼ぶ。0 回の場合を含むので `(x, pi)` 自身もそこに入る。
 
 **DEF cls** -- 型 `t` の**クラス** `cls(t)` を、次の順に最初に当たるもので定める。6 つの条件がすべて
 真偽値を持つとき `cls(t)` は定まる。`<1>1` を満たす型についてそれが成り立つことは `<1>3c` と `<1>3e` が
@@ -181,8 +204,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    読む」と述べるのがそれである。すなわち A10 の言う飽和は、`collect_type_arguments()` の長さが
    その `TyConInfo` の `tyvars` の長さに等しいことである。
 
-   **3 つはどれも A10 である。** A10 の第 1 文「プログラムに現れる型は ground であり、その tycon に
-   kind の要求するだけの引数が与えられており、その tycon は `type_env` にある」が (i) を、
+   **3 つはどれも A10 である。** A10 の第 1 文のうち「プログラムに現れる型は ground であり、
+   **その tycon に kind の要求するだけの引数が与えられており**、その tycon は `type_env` にあり、…」が
+   (i) を、
    「`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が
    `type_env` にある -- がすべて成り立ち、その歩みは有限である」が (ii) を、それに続く「さらに、到達
    する各型について `instance_field_types` が行う newtype の展開 (`unwrap_newtypes_memoized`) は
@@ -198,6 +222,49 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      CODE src/ast/types.rs: TypeNode::instance_field_types,
      CODE src/rc_ir/ast.rs: RcVar (`ty` の doc「always concrete (monomorphic)」),
      CODE src/ast/program.rs: Program::validate_layouts
+
+<1>1a. **(型の項は有限である)** `TypeNode` の値 `n` の**直接の部分**を、`n.ty` が
+   `Type::TyApp(fun, arg)` のとき `fun` と `arg`、`Type::AssocTy(_, args)` のとき `args` の各要素、
+   `Type::TyVar(_)` と `Type::TyCon(_)` のとき無しと定める。このとき、`n` から直接の部分の辺を
+   0 回以上辿って着ける `TypeNode` の値は有限個である。したがって、辿る辺が直接の部分だけである
+   再帰は停止する。この段は `<1>1` を読まない -- 型が RC IR に現れるかどうかに依らず、`TypeNode` の
+   任意の値について成り立つ。
+  <2>1. 1 つの値の直接の部分は有限個である。`Type` の変位は `TyVar`、`TyCon`、`TyApp`、`AssocTy` の
+     4 つであり、はじめの 2 つは 0 個、`TyApp` は 2 個、`AssocTy` は `args` の長さだけを持つ。
+    BY CODE src/ast/types.rs: Type
+  <2>2. `TypeNode` の値の `ty` の欄が書かれるのは、その値が作られるときだけである。`src/` で
+     `TypeNode` の `ty` に代入するのは `src/ast/types.rs` の 8 か所 -- `set_ty`、`set_tyvar_kind`、
+     `set_tyvar`、`set_tycon_tc`、`set_tyapp_fun`、`set_tyapp_arg`、`set_assocty_name`、
+     `set_assocty_args` -- であり、どれも `self.clone()` が作った局所の値に代入してから `Arc::new`
+     で包んで返す。`ty` の欄に値を置く残りは `TypeNode::new` と `impl Clone for TypeNode` の
+     構造体リテラル、および `TypeNode` が導出する `Deserialize` であり、どれも新しい値を作る。
+     既に在る値の `ty` を書き替える道は無い --
+     `TypeNode` は `Arc<TypeNode>` を通じてしか渡されず、`Arc` が渡すのは `&TypeNode` であって、
+     `src/` は `TypeNode` について `Arc::get_mut` も `Arc::make_mut` も呼ばず、`&mut TypeNode` を
+     受け取る関数も持たない。ほかのファイルに在る `.ty` への代入は `Scheme`、`Field`、`QualType`、
+     `Predicate` といった別の型の欄への代入であり、そこが替わるのは `Arc<TypeNode>` そのもので
+     あって節点の中身ではない。
+    BY CODE src/ast/types.rs: TypeNode (`ty` の宣言), CODE src/ast/types.rs: TypeNode::new,
+       CODE src/ast/types.rs: TypeNode::set_ty, CODE src/ast/types.rs: TypeNode::set_tyvar_kind,
+       CODE src/ast/types.rs: TypeNode::set_tyvar, CODE src/ast/types.rs: TypeNode::set_tycon_tc,
+       CODE src/ast/types.rs: TypeNode::set_tyapp_fun, CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
+       CODE src/ast/types.rs: TypeNode::set_assocty_name,
+       CODE src/ast/types.rs: TypeNode::set_assocty_args,
+       CODE src/ast/types.rs: impl Clone for TypeNode
+  <2>3. 値が作られる時点で、その直接の部分はどれも既に在る値である。`Type::TyApp` と
+     `Type::AssocTy` を組み立てるのは `type_tyapp`、`type_assocty`、および `<2>2` の
+     `set_tyapp_fun`・`set_tyapp_arg`・`set_assocty_name`・`set_assocty_args` であり、どれも
+     引数として渡された `Arc<TypeNode>` か、複製元の `ty` が既に持っていた `Arc<TypeNode>` を置く。
+     `TypeNode` が導出する `Deserialize` も、`ty` の欄を読み終えてから節点を組み立てるので、
+     部分は節点より先に作られる。
+    BY <2>2, CODE src/ast/types.rs: type_tyapp, CODE src/ast/types.rs: type_assocty,
+       CODE src/ast/types.rs: TypeNode (`Serialize` と `Deserialize` の導出)
+  <2>4. QED
+    1 回の実行で作られる `TypeNode` の値に、作られた順の番号を与える。`<2>2` と `<2>3` より、直接の
+    部分の辺はこの番号を狭義に減らすので、`n` から降りる辺の道はどれも有限であり、その長さは `n` の
+    番号で上から抑えられる。`<2>1` より各段の分岐は有限である。有限分岐で深さが有限の木は有限なので、
+    `n` から着ける値は有限個であり、辺が直接の部分だけである再帰はそのすべてを訪れて終わる。
+    BY <2>1, <2>2, <2>3
 
 <1>2. **(H2: 変数のスコープ規律)** 本体 -- 関数の `body` またはグローバル初期化子の `init` -- を 1 つ
    取り、`vars` をそれについて `VarTable::of` または `VarTable::body_only` が作る表とする。その本体の
@@ -242,7 +309,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      CODE src/rc_ir/validate.rs: Validator::use_var,
      CODE src/rc_ir/validate.rs: Validator::bind
 
-<1>3. `RcRhs::Match(scrut, arms)` の `arms` は空でない。
+<1>3. A9 を満たすプログラムのどの本体についても、`RcRhs::Match(scrut, arms)` の `arms` は
+   空でない。A9 の第 1 文が `borrow_ify` の入力プログラムについてこれを述べ、第 2 文が範囲を
+   `cancel` の入力と出力へ伸ばす。**プログラムを名指すのが要るのは、A9 が全プログラムについての
+   言明ではないからである。**
   BY A9, CODE src/rc_ir/validate.rs: Validator::check_rhs (`RcRhs::Match` の腕の `arms.is_empty()`
      検査)
 
@@ -365,14 +435,16 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `TyConInfo::resolve_namespace` を当てる。それは各 `Field` に `Field::resolve_namespace` を
      当て、その本体は `self.syn_ty` と `self.ty` への 2 つの代入である。
 
-   **`tycons` に `TyConInfo` の値を置くのは、この 6 つのうち最初の 3 つである。**`TypeEnv::default`
-   は空の `Map` を置くので値を 1 つも置かない。`TypeEnv::new` が置くのは
+   **`tycons` に `TyConInfo` の値を置くのは、この 6 つのうち `TypeEnv::new` と
+   `TypeEnv::add_tycons` の 2 つである。**`TypeEnv::default` が置く `Map` は空なので `TyConInfo` を
+   1 つも含まず、残る 3 つは既に在る `TyConInfo` の欄を書き替えるだけである (次の段落)。
+   `TypeEnv::new` が置くのは
    `Program::calculate_type_env` が渡す `Map`、すなわち `bulitin_tycons()` の各行と、各型宣言に
    ついての `TypeDefn::tycon_info` の返り値である。`TypeEnv::add_tycons` が置くのは、`add_tycons` を
    呼ぶ 4 か所が渡す `TyConInfo`、すなわち `CaptureStruct::new` が作った `tycon_info`
    (`closure_specialization` の `lift_all` と `realize_all` が `record_capture_list` と
    `take_new_tycons` を経て渡すもの、および `defunctionalize_fix::run_one` が渡すもの) と、
-   `register_opaque_tycon` がその場で作る `TyConInfo` である。**すなわちこの 3 つが置く値はどれも、
+   `register_opaque_tycon` がその場で作る `TyConInfo` である。**すなわちこの 2 つが置く値はどれも、
    上の表の 4 つの関数のいずれかが作ったものである。**`add_tycons` は入れる前に各 `Field` の `ty` を
    `unwrap_newtypes` の像に置き替えるが、`fields` の長さを変えず、`variant`、`tyvars`、`is_unbox`、
    `fields[i].is_punched` にも触れない。
@@ -598,8 +670,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        **`set_source_if_none` も abort しない** -- `info.source` を見て、`None` なら `set_source` が
        節点を複製して `info.source` を置き替えた新しい `Arc` を返し、`Some` なら自分の `Arc` を複製
        する。どちらの枝も場合分けと複製だけである。
-       型は有限の項なので再帰は停止する。返る列の長さは `ti.fields` の長さである。
-      BY CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
+       `substitute_type` が再帰する先は `TyApp` の `fun` と `arg`、および `AssocTy` の `args` の
+       各要素であり、これは `<1>1a` の直接の部分の辺そのものなので、`<1>1a` より再帰は停止する。
+       返る列の長さは `ti.fields` の長さである。
+      BY <1>1a, CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
          CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
          CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
          CODE src/ast/types.rs: TypeNode::set_assocty_args,
@@ -626,12 +700,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     `filter(|(i, _)| !ti.fields[*i].is_punched)` で絞る。`field_types` は
     `self.instance_field_types(self.toplevel_tycon_info(type_env), type_env)` の 1 文なので、
     `unpunched_field_types` が絞る列は `t.field_types(E)` そのものである。その長さは `ti.fields` の
-    長さに等しいので `enumerate` が渡す `i` はどれも `ti.fields` の添字として範囲内であり、
-    `ti.fields[*i]` は abort しない。`filter` は要素を落とすだけなので、`F(t)` は
+    長さに等しいので、`EXT Iterator の enumerate と filter` より `enumerate` が渡す `i` はどれも
+    `ti.fields` の添字として範囲内であり、`ti.fields[*i]` は abort しない。同じ `EXT` より `filter`
+    は要素を落とすだけなので、`F(t)` は
     `t.field_types(E)` の要素のうち `ti.fields` の同じ添字の成分の `is_punched` が偽であるものを、
     その添字とともに並べた列であり、その各要素 `(i, f)` について `i` は `t.field_types(E)` の長さ
     未満で `f` は `t.field_types(E)[i]` である。
-    BY <2>1, <2>2, <2>3, <2>7, CODE src/ast/types.rs: TypeNode::unpunched_field_types,
+    BY <2>1, <2>2, <2>3, <2>7, EXT Iterator の enumerate と filter,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types,
        CODE src/ast/types.rs: TypeNode::field_types
 
 <1>3ca. `<1>1` を満たす型 `t` について `t.is_closure()` が偽であるとき、`t.is_funptr()` が真ならば
@@ -877,9 +953,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    `fld(t, i)` は一価であり、`(i, f)` が `F(t)` の要素であるとき `held_field_type(F(t), i, w)` は
    abort せず `f` を返す。
   <2>1. `unpunched_field_types` は `instance_field_types(...)` の結果に `into_iter().enumerate()` を
-     適用してから `filter` する。`enumerate` の添字は 0 から始まる相異なる整数の列であり、`filter` は
-     その一部を残すだけである。
-    BY CODE src/ast/types.rs: TypeNode::unpunched_field_types
+     適用してから `filter` する。`EXT Iterator の enumerate と filter` より、`enumerate` の添字は
+     0 から始まる相異なる整数の列であり、`filter` はその一部を残すだけである。
+    BY EXT Iterator の enumerate と filter,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types
   <2>2. `<2>1` より `F(t)` の第 1 成分は相異なる。よって「第 1 成分が `i` である要素」は高々 1 つで
      あり、`fld(t, i)` は一価である。
     BY <2>1, DEF fld
@@ -912,14 +989,64 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      - `cls(s)` が `BX`、`AR`、`UN` のとき `R(s, q)` は `{q}`
      - `cls(s) = ST` のとき `R(s, q)` は `F(s)` の各 `(i, f)` についての `R(f, q ++ [i])` の合併
     BY <1>1, <1>10, <2>2, CODE src/rc_ir/ownership.rs: rc_units_go
-  <2>4. `<2>3` の再帰式を `DESC` に関する整礎帰納法 (`<1>8`) で展開する。`R(t, [])` の要素は、
-     `cls(s_j) = ST` (`j` は `|p|` 未満) を満たす道 `p` をたどって到達した型 `end(t, p)` のクラスが
-     `NB` でも `ST` でもないところで積まれた path である。すなわち `R(t, [])` は
+  <2>3a. `s` が `<1>1` を満たし、`p` が `s` の長さ 1 以上の ST-道であるとき `cls(s) = ST` である。
+     `DEF ST-道` の条件を `j = 0` に読むとそれである。したがって `cls(s)` が `ST` でないとき、
+     `s` の ST-道は `[]` だけである。
+    BY DEF ST-道
+  <2>3b. `s` が `<1>1` を満たし `cls(s) = ST` であるとき、`s` の ST-道は、`[]` と、`F(s)` の各
+     `(i, f)` と `f` の各 ST-道 `p'` についての `[i] ++ p'` で尽きる。
+     `end(s, [i] ++ p') = end(f, p')` である。
+    <3>1. `[i] ++ p'` は `s` の ST-道である。`DEF ST-道` の `s_0 = s` のクラスは場合の仮定より `ST`
+       であり、`fld(s, i) = f` なので `s_1 = f` であり、以後の各段は `p'` が `f` の ST-道である
+       ことから `ST` である。
+      BY DEF ST-道, DEF fld
+    <3>2. 逆に `p` が `s` の長さ 1 以上の ST-道であるとき、`p = [p[0]] ++ p[1..]` と書くと
+       `(p[0], fld(s, p[0]))` は `F(s)` の要素であり、`p[1..]` は `fld(s, p[0])` の ST-道である。
+       `DEF ST-道` の `s_j` の定義を位置 1 で切ったものがそれである。
+      BY DEF ST-道, DEF fld
+    <3>3. QED
+      `end` は `fld` の連鎖の終点なので、位置 1 で切ると `end(s, [i] ++ p') = end(f, p')` である。
+      BY <3>1, <3>2, DEF ST-道, DEF fld
+  <2>4. `<1>1` を満たす任意の型 `s` と任意の path `q` について、`R(s, q)` は次の 2 つの集合の合併で
+     ある。
+     - `{ q ++ p : p は s の ST-道で、cls(end(s, p)) が BX、AR、UN のどれか }`
+     - `{ q ++ p ++ [c] : p は s の ST-道で、cls(end(s, p)) = CL }`
+
+     `q` を渡って一般化するのは、`<2>3` の再帰式が `q ++ [i]` を渡して降りるからである。以下は
+     `DESC` に関する整礎帰納法 (`<1>8`) であり、帰納法の仮定は `s DESC f` を満たす各 `f` と
+     **任意の** `q` についてこの主張が成り立つことである。
+    <3>1. CASE `cls(s) = NB`。`<2>3` より `R(s, q)` は空集合である。`<2>3a` より `s` の ST-道は
+       `[]` だけで、`cls(end(s, [])) = cls(s) = NB` はどちらの集合の条件にも当たらないので、
+       2 つの集合はどちらも空である。
+      BY <2>3, <2>3a, DEF ST-道
+    <3>2. CASE `cls(s) = CL`。`<2>3` より `R(s, q)` は `{q ++ [c]}` である。`<2>3a` より `s` の
+       ST-道は `[]` だけで、`cls(end(s, [])) = CL` は第 2 の集合の条件に当たるので、第 1 の集合は
+       空、第 2 の集合は `{q ++ [] ++ [c]} = {q ++ [c]}` である。
+      BY <2>3, <2>3a, DEF ST-道
+    <3>3. CASE `cls(s)` が `BX`、`AR`、`UN` のどれか。`<2>3` より `R(s, q)` は `{q}` である。
+       `<2>3a` より `s` の ST-道は `[]` だけで、`cls(end(s, []))` はその 3 つのどれかなので、第 1 の
+       集合は `{q ++ []} = {q}`、第 2 の集合は空である。
+      BY <2>3, <2>3a, DEF ST-道
+    <3>4. CASE `cls(s) = ST`。`<2>3` より `R(s, q)` は `F(s)` の各 `(i, f)` についての
+       `R(f, q ++ [i])` の合併である。`<1>1` (ii) より各 `f` は `<1>1` を満たし、`DEF DESC` より
+       `s DESC f` なので、帰納法の仮定を `f` と path `q ++ [i]` に適用できる。それより
+       `R(f, q ++ [i])` は `{ q ++ [i] ++ p' : p' は f の ST-道で cls(end(f, p')) が BX、AR、UN の
+       どれか }` と `{ q ++ [i] ++ p' ++ [c] : p' は f の ST-道で cls(end(f, p')) = CL }` の合併で
+       ある。`<2>3b` より、`i` と `p'` を渡ったときの `[i] ++ p'` は `s` の長さ 1 以上の ST-道を
+       ちょうど尽くし、`cls(end(s, [i] ++ p')) = cls(end(f, p'))` である。残る ST-道は `[]` だけで
+       あり、`cls(end(s, [])) = cls(s) = ST` はどちらの集合の条件にも当たらないので、主張の 2 つの
+       集合はこの合併に一致する。
+      BY <1>1, <2>3, <2>3b, DEF DESC, DEF ST-道
+    <3>5. QED
+      `<1>4` より `cls(s)` は 6 つのどれかであり、`<3>1` から `<3>4` がそれを尽くしている。整礎性は
+      `<1>8` が与える。
+      BY <1>4, <1>8, <3>1, <3>2, <3>3, <3>4
+  <2>4a. `<2>4` を `s := t`、`q := []` に適用すると、`R(t, [])` は
      `{ p : p は t の ST-道で cls(end(t, p)) が BX、AR、UN のどれか }` と
      `{ p ++ [c] : p は t の ST-道で cls(end(t, p)) = CL }` の合併である。
-    BY <1>8, <2>3, DEF ST-道, DEF fld
+    BY <2>4
   <2>5. QED
-    BY <2>1, <2>4
+    BY <2>1, <2>4a
 
 <1>14. `<1>1` を満たす任意の型 `t` について、`L(t)` は次の 2 つの集合の合併に等しい。
    - `{ p : p は t の UNST-道で、cls(end(t, p)) が BX か AR }`
@@ -944,21 +1071,71 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      - `cls(s)` が `UN` か `ST` のとき `G(s, q)` は `F(s)` の各 `(i, f)` についての `G(f, q ++ [i])`
        の合併
     BY <1>1, <1>11, <2>2, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
-  <2>4. `<2>3` の再帰式を `DESC` に関する整礎帰納法 (`<1>8`) で展開する。`G(t, [])` の要素は、
-     `cls(s_j)` が `UN` か `ST` (`j` は `|p|` 未満) を満たす道 `p` をたどって到達した型 `end(t, p)`
-     のクラスが `NB` でも `UN` でも `ST` でもないところで積まれた path である。すなわち `G(t, [])` は
+  <2>3a. `s` が `<1>1` を満たし、`p` が `s` の長さ 1 以上の UNST-道であるとき `cls(s)` は `UN` か
+     `ST` である。`DEF UNST-道` の条件を `j = 0` に読むとそれである。したがって `cls(s)` が `UN`
+     でも `ST` でもないとき、`s` の UNST-道は `[]` だけである。
+    BY DEF UNST-道
+  <2>3b. `s` が `<1>1` を満たし `cls(s)` が `UN` か `ST` であるとき、`s` の UNST-道は、`[]` と、
+     `F(s)` の各 `(i, f)` と `f` の各 UNST-道 `p'` についての `[i] ++ p'` で尽きる。
+     `end(s, [i] ++ p') = end(f, p')` である。
+    <3>1. `[i] ++ p'` は `s` の UNST-道である。`DEF UNST-道` の `s_0 = s` のクラスは場合の仮定より
+       `UN` か `ST` であり、`fld(s, i) = f` なので `s_1 = f` であり、以後の各段は `p'` が `f` の
+       UNST-道であることから `UN` か `ST` である。
+      BY DEF UNST-道, DEF fld
+    <3>2. 逆に `p` が `s` の長さ 1 以上の UNST-道であるとき、`p = [p[0]] ++ p[1..]` と書くと
+       `(p[0], fld(s, p[0]))` は `F(s)` の要素であり、`p[1..]` は `fld(s, p[0])` の UNST-道である。
+       `DEF UNST-道` の `s_j` の定義を位置 1 で切ったものがそれである。
+      BY DEF UNST-道, DEF fld
+    <3>3. QED
+      `end` は `fld` の連鎖の終点なので、位置 1 で切ると `end(s, [i] ++ p') = end(f, p')` である。
+      BY <3>1, <3>2, DEF UNST-道, DEF fld
+  <2>4. `<1>1` を満たす任意の型 `s` と任意の path `q` について、`G(s, q)` は次の 2 つの集合の合併で
+     ある。
+     - `{ q ++ p : p は s の UNST-道で、cls(end(s, p)) が BX か AR }`
+     - `{ q ++ p ++ [c] : p は s の UNST-道で、cls(end(s, p)) = CL }`
+
+     `q` を渡って一般化するのは、`<2>3` の再帰式が `q ++ [i]` を渡して降りるからである。以下は
+     `DESC` に関する整礎帰納法 (`<1>8`) であり、帰納法の仮定は `s DESC f` を満たす各 `f` と
+     **任意の** `q` についてこの主張が成り立つことである。
+    <3>1. CASE `cls(s) = NB`。`<2>3` より `G(s, q)` は空集合である。`<2>3a` より `s` の UNST-道は
+       `[]` だけで、`cls(end(s, [])) = cls(s) = NB` はどちらの集合の条件にも当たらないので、
+       2 つの集合はどちらも空である。
+      BY <2>3, <2>3a, DEF UNST-道
+    <3>2. CASE `cls(s) = CL`。`<2>3` より `G(s, q)` は `{q ++ [c]}` である。`<2>3a` より `s` の
+       UNST-道は `[]` だけで、`cls(end(s, [])) = CL` は第 2 の集合の条件に当たるので、第 1 の集合は
+       空、第 2 の集合は `{q ++ [] ++ [c]} = {q ++ [c]}` である。
+      BY <2>3, <2>3a, DEF UNST-道
+    <3>3. CASE `cls(s)` が `BX` か `AR`。`<2>3` より `G(s, q)` は `{q}` である。`<2>3a` より `s` の
+       UNST-道は `[]` だけで、`cls(end(s, []))` はその 2 つのどちらかなので、第 1 の集合は
+       `{q ++ []} = {q}`、第 2 の集合は空である。
+      BY <2>3, <2>3a, DEF UNST-道
+    <3>4. CASE `cls(s)` が `UN` か `ST`。`<2>3` より `G(s, q)` は `F(s)` の各 `(i, f)` についての
+       `G(f, q ++ [i])` の合併である。`<1>1` (ii) より各 `f` は `<1>1` を満たし、`DEF DESC` より
+       `s DESC f` なので、帰納法の仮定を `f` と path `q ++ [i]` に適用できる。それより
+       `G(f, q ++ [i])` は `{ q ++ [i] ++ p' : p' は f の UNST-道で cls(end(f, p')) が BX か AR }` と
+       `{ q ++ [i] ++ p' ++ [c] : p' は f の UNST-道で cls(end(f, p')) = CL }` の合併である。
+       `<2>3b` より、`i` と `p'` を渡ったときの `[i] ++ p'` は `s` の長さ 1 以上の UNST-道を
+       ちょうど尽くし、`cls(end(s, [i] ++ p')) = cls(end(f, p'))` である。残る UNST-道は `[]` だけで
+       あり、`cls(end(s, [])) = cls(s)` は `UN` か `ST` なのでどちらの集合の条件にも当たらないので、
+       主張の 2 つの集合はこの合併に一致する。
+      BY <1>1, <2>3, <2>3b, DEF DESC, DEF UNST-道
+    <3>5. QED
+      `<1>4` より `cls(s)` は 6 つのどれかであり、`<3>1` から `<3>4` がそれを尽くしている。整礎性は
+      `<1>8` が与える。
+      BY <1>4, <1>8, <3>1, <3>2, <3>3, <3>4
+  <2>4a. `<2>4` を `s := t`、`q := []` に適用すると、`G(t, [])` は
      `{ p : p は t の UNST-道で cls(end(t, p)) が BX か AR }` と
      `{ p ++ [c] : p は t の UNST-道で cls(end(t, p)) = CL }` の合併である。
-    BY <1>8, <2>3, DEF UNST-道, DEF fld
-  <2>5. 分解の一意性。`lam` が `L(t)` の要素で `lam = p ++ e` が `<2>4` の分解であるとする。`q` が
+    BY <2>4
+  <2>5. 分解の一意性。`lam` が `L(t)` の要素で `lam = p ++ e` が `<2>4a` の分解であるとする。`q` が
      `lam` の別の前置で `t` の UNST-道であり `cls(end(t, q))` が `UN` でも `ST` でもないとする。
      `|q|` が `|p|` 未満なら、`p` が UNST-道であることから `cls(end(t, q)) = cls(s_{|q|})` は `UN` か
      `ST` であり、仮定に反する。`|q|` が `|p|` より大きいなら、`q` が UNST-道であることから
-     `cls(s_{|p|}) = cls(end(t, p))` は `UN` か `ST` であり、`<2>4` の `cls(end(t, p))` が `BX`、
+     `cls(s_{|p|}) = cls(end(t, p))` は `UN` か `ST` であり、`<2>4a` の `cls(end(t, p))` が `BX`、
      `AR`、`CL` のどれかであることに反する。よって `|q| = |p|`、すなわち `q = p` である。
-    BY <2>4, DEF UNST-道
+    BY <2>4a, DEF UNST-道
   <2>6. QED
-    BY <2>1, <2>4, <2>5
+    BY <2>1, <2>4a, <2>5
 
 <1>14a. `<1>1` を満たす型 `s` と任意の path `q` について、`go(s, E, q, out)` が `out` に積む path の
    集合は `{ q ++ r : r は L(s) の要素 }` である。
@@ -1664,6 +1841,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>1. `impl LLVMGen for` は 78 個あり、`result_prov` を override するのは 29 個である。残る 49 個は
      既定の実装を取る。
     BY A3, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
+  <2>1a. `origin_inner` の `Llvm` の腕が `result_prov` に渡す `result_ty` と `arg_tys` は、
+     `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の `ty(x)` と `args` の各要素の型である。
+     `Binding::Llvm(llvm_gen, args, result_ty)` を作るのは `collect_bindings` のこの腕だけであり、
+     そこが `result_ty` に置くのは `x.ty` である。腕の中で `arg_tys` を作るのは
+     `args.iter().map(|a| a.ty.clone())` の 1 行である。
+    BY CODE src/rc_ir/ownership.rs: collect_bindings,
+       CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding
   <2>2. 既定の実装は `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` の 1 文であり、
      `<1>27b` より abort しない。
     BY <1>1, <1>27b, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
@@ -1748,9 +1932,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>3. `build_shape` の閉包が受け取る `path` は `L(result_ty)` の要素である (`<1>27b`)。
        `<1>14` より空 path が `L(t)` に入るのは `cls(t)` が `BX` か `AR` のときだけであり、
        `DEF cls` よりその 2 つはそれぞれ `is_box` と `is_array` が真であることを要求する。
-       `<1>3a` (vii) はどちらも偽だと述べる。よって `path` は空でなく、`arg_leaf_path` の
-       `split_first` の `expect` は発火しない。
-      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls,
+       `<1>3a` (vii) はどちらも偽だと述べる。よって `path` は空でなく、
+       `EXT スライスの split_first` より `arg_leaf_path` の `split_first` は `Some` を返すので、
+       その `expect` は発火しない。
+      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, EXT スライスの split_first,
          CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
     <3>3a. `cls(result_ty)` は `UN` か `ST` である。`<1>3a` (vii) より `result_ty.is_box(E)` と
        `result_ty.is_array()` は偽である。`result_ty.is_closure()` も偽である -- `<3>1` より
@@ -1834,8 +2019,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `path` は `L(result_ty)` の要素であり (`<1>27b`)、`<1>14` より空 path が `L(t)` に
        入るのは `cls(t)` が `BX` か `AR` のときだけである。`BX` は場合の仮定が退け、`AR` は
        `<1>3a` (vii) の `ty(x).is_array()` が偽であることが退ける。よって `path` は空でなく、
-       `split_first` の `expect` は発火しない。
-      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls
+       `EXT スライスの split_first` より `split_first` は `Some` を返すので、その `expect` は
+       発火しない。
+      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, EXT スライスの split_first
     <3>3. QED
       閉包が行うのは `split_first` の `expect` と `Vec` の複製と `sole_origin` だけである。
       BY <1>1, <1>27b, <3>1, <3>2, CODE src/fixstd/builtin.rs: replaced_field_prov,
@@ -1847,7 +2033,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     ついてだけ述べて足りるのは、この数え上げによる** -- `<2>2` から `<2>2g` はどれも本体を 1 つずつ
     読んでおり、そこで `Provenance` を作るのに使われるのは `build_shape`、`uniform`、
     `uniform_bottom`、`fresh_under` の 4 つだけである。
-    BY <1>27b, <2>1, <2>2, <2>2a, <2>2b, <2>2c, <2>2d, <2>2e, <2>2f, <2>2g
+    BY <1>27b, <2>1, <2>1a, <2>2, <2>2a, <2>2b, <2>2c, <2>2d, <2>2e, <2>2f, <2>2g
 
 <1>28a. `origin_inner` の `Llvm` の腕が得る `decl` は、各 leaf に要素数 0 か 1 の `LeafOrigins` を
    置く。したがって `decl.leaf_origins_at(path)` が返す集合と `decl.leaf_origins_under(path)` が
@@ -1904,7 +2090,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `is_closure() || toplevel_tycon_info(E).is_unbox` であり、`is_closure` は
        `toplevel_tycon_satisfies` を経て `toplevel_tycon()` を 1 回呼んで名前を 1 回比べるだけ、
        `toplevel_tycon_info` は `toplevel_tycon()` を 1 回呼んで `E.tycons()` を 1 回引くだけで
-       ある。`toplevel_tycon()` は `Type::TyApp` の関数側への再帰であり、型は有限の項なので停止する。
+       ある。`toplevel_tycon()` が再帰する先は `Type::TyApp` の関数側だけであり、それは `<1>1a` の
+       直接の部分の辺なので、`<1>1a` より停止する。
      - `Binding::Join` の腕の `origin(...).acted_on()` と `candidates` (`Set`) への挿入。
        `acted_on` は `identity()` と `candidates()` を呼んで有限の `Vec` を作り、`candidates()` は
        `Origin::Join` が持つ有限の `Set` を 1 回走査する。`arm_results` は有限である (`<1>26`)。
@@ -1918,7 +2105,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        走査、`truncate_to_unit` の呼び出し (`<1>1` と `<1>9` より停止する)、`operand_units` (`Set`)
        への挿入、`reached` (有限の `Vec`) の走査と `Origin` どうしの等価比較、各 `Origin` の
        `acted_on()` の呼び出し、`candidates` (`Set`) の構成、`Origin::of_candidates`。
-    BY A15, <1>1, <1>9, <1>26, <1>28,
+    BY A15, <1>1, <1>1a, <1>9, <1>26, <1>28,
        CODE src/rc_ir/ownership.rs: origin, origin_inner, origin_from_leaves_under,
           as_arg_projection, Origin::acted_on, Origin::candidates, Origin::of_candidates,
        CODE src/ast/types.rs: TypeNode::is_box, TypeNode::is_unbox, TypeNode::is_closure,
@@ -1933,10 +2120,19 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 <1>29a. 1 つの表 `vars` と型環境 `E` を固定する。`origin(vars, E, u, sig)` が値を返すとき、その値は
    `(u, sig)` で決まる。すなわち、`vars.origins` の状態がどうであれ、同じ `(u, sig)` についての
    2 回の呼び出しは等しい値を返す。
-  <2>1. `vars.bindings` と `vars.var_tys` は、表を作り終えたのちは**値として**変わらない。
-     以下の段が数え上げるのは、この 2 つの `Map` に対する書き込みと、そこから届く内部可変性の欄で
-     ある。値としての等しさで述べるのは、`<2>2` がこの 2 つから `origin_inner` の返り値が決まると
-     読むところが、値の水準の読みだからである。
+  <2>1. `origin` の実行は、`vars.bindings` と `vars.var_tys` について次の 3 つを満たす。
+     - (a) 2 つの `Map` の鍵の集合は変わらず、各鍵が対応づける `Binding` と `Arc<TypeNode>` も
+       別の値に置き替えられない。
+     - (b) `origin_inner` がこの 2 つから**値として**読むもの -- `Binding` の変位、`Binding` が
+       持つ各 `RcVar` の `name` と `ty`、`Binding::Llvm` の `result_ty`、`var_tys` が持つ
+       `Arc<TypeNode>` -- は、表を作り終えたのちは変わらない。
+     - (c) `Binding::Llvm` が持つ `Box<dyn LLVMGen>` の op について、`origin_inner` がそこから読む
+       のは `result_prov(result_ty, &arg_tys, E)` の返り値だけであり、その返り値は引数だけで決まる。
+
+     **(c) を (b) と分けるのは、op が値として読まれないからである。**README の A3 は
+     「`Box<dyn LLVMGen>` の op はその値の中に在るので、欄への書き込みを数え上げるだけでは
+     足りない」と述べる。op が持ちうる内部可変性の欄を数え上げる代わりに、(c) は op が答えるものの
+     側を A3 の決定性の節で閉じる。
     <3>1. `bindings` は `VarTable` の非公開フィールドなので、それに書けるのは
        `src/rc_ir/ownership.rs` の中だけである。同ファイルで `bindings` に書くのは、
        `VarTable::empty` の初期化と、`VarTable::of` の 1 か所と、`collect_bindings` の 3 か所で
@@ -1969,12 +2165,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `Map<Arc<TypeNode>, Arc<TypeNode>>` を `Arc<TypeNode>` の鍵で引き、`Map` は `FxHashMap` なので
        その鍵をハッシュする。すなわち共有参照から `hash_cache` が書かれる。
 
-       **A3 の値の等しさの節がこれを片付ける** -- 「`RcProgram` から到達できる値の等しさは、それを
-       共有参照で受け取る計算が変えない。到達できる型が内部可変性を持つ欄を持つときは、その欄は
-       一度だけ書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である」。
+       **A3 の値の等しさの節がこれを片付ける** -- 「**`RcProgram` から到達できる値の等しさは、それを
+       共有参照で受け取る計算が変えない。** 到達できる型が内部可変性を持つ欄を持つときは、その欄は
+       **一度だけ書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である**。」
        `impl PartialEq for TypeNode` が読むのは `ty` だけであり、3 つの memo の値はどれも `ty` の
-       関数である。よってその欄が埋まっても、`bindings` と `var_tys` は値として変わらない。
+       関数である。よってその欄が埋まっても、(b) が挙げるものは値として変わらない。
       BY A3 (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない),
+         <3>1, <3>2,
          CODE src/rc_ir/ownership.rs: origin, VarTable, origin_inner, origin_from_leaves_under,
             truncate_to_unit, unit_step,
          CODE src/ast/types.rs: TypeNode (`hash_cache` / `ground_cache` / `depth_cache` の宣言と
@@ -1983,8 +2180,22 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          CODE src/ast/types.rs: impl Hash for TypeNode,
          CODE src/ast/types.rs: impl PartialEq for TypeNode,
          CODE src/misc.rs: Map
+    <3>3a. (c) が成り立つ。`origin_inner` の `Binding::Llvm` の腕は、`args` の各要素の `ty` を
+       集めて `arg_tys` を作り、`llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を 1 度呼んで
+       `decl` を得たのち、`decl`、`args`、`path`、`var` を読む。この腕にも `origin_inner` の
+       ほかの腕にも、`llvm_gen` を読む式はこの呼び出し以外に無い。A3 の
+       「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を
+       返す」より、その返り値は `result_ty`、`arg_tys`、`E` だけで決まる。**op が自分の中に持つ
+       内部可変性は、この段に入らない** -- `LLVMGen::result_prov` は `&self` を取るので op はそれを
+       持ちうるが、決定性の節はその有無に依らず答えを引数の関数にする。
+      BY A3 (`result_prov` と `borrows_operand` は決定的である),
+         CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding,
+         CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
     <3>4. QED
-      BY <3>1, <3>2, <3>3
+      (a) は `<3>1` と `<3>2`、および `<3>3` の第 1 段落 --「`origin` は `&VarTable` を取るので、
+      `bindings` と `var_tys` の `Map` そのものを置き替えることも、その要素を可変に借りることも
+      できない」-- である。(b) は `<3>3`、(c) は `<3>3a` である。
+      BY <3>1, <3>2, <3>3, <3>3a
   <2>1a. `origin_from_leaves_under(vars, E, decl, args, path, here)` の返り値は、`decl`、`args`、
      `path`、`here`、`E`、および自分が行う `origin` の呼び出しの返り値だけで決まる。とくに
      `operand_units` の反復の順序には依らない。
@@ -1999,11 +2210,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        この `Vec` の要素の並び順だけである。
       BY <3>1, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     <3>3. `Origin` の `==` は値としての等価性であり、同値関係である。`Origin` の宣言は
-       `#[derive(Clone, Debug, PartialEq, Eq)]` を持つので、`==` は変位が一致することと、
-       `Exactly` なら `VarPath` (= `(FullName, FieldPath)`) が等しいこと、`Join` なら `identity` が
-       等しくかつ `candidates` (`Set<VarPath>`) が等しいことである。`Set<T>` は `FxHashSet<T>` で
-       あり、その等価性は `EXT HashSet の等価性` より集合としての等価性である。
-      BY EXT HashSet の等価性, CODE src/rc_ir/ownership.rs: Origin,
+       `#[derive(Clone, Debug, PartialEq, Eq)]` を持つので、`EXT derive した PartialEq と Eq` より
+       `==` は変位が一致することと、`Exactly` なら `VarPath` (= `(FullName, FieldPath)`) が等しい
+       こと、`Join` なら `identity` が等しくかつ `candidates` (`Set<VarPath>`) が等しいことである。
+       `Set<T>` は `FxHashSet<T>` であり、その等価性は `EXT HashSet の等価性` より集合としての
+       等価性である。`Origin` は `Eq` を導出するので、同じ `EXT` より `==` は同値関係である。
+      BY EXT HashSet の等価性, EXT derive した PartialEq と Eq,
+         CODE src/rc_ir/ownership.rs: Origin,
          CODE src/rc_ir/ast.rs: VarPath, CODE src/misc.rs: Set
     <3>4. CASE `reached` が空。`reached.first()?` が `None` を返すので、
        `origin_from_leaves_under` は `None` を返す。空であるかどうかは並び順に依らない。
@@ -2022,7 +2235,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        そのものを `Origin::Join` の同名の欄に、`here` の複製を `identity` の欄に置く。要素数が 1 の
        集合の `into_iter().next()` はその元であり、要素数 2 以上のときに置かれる `Set` は並び順に
        依らず等しいので、`<3>3` の `Origin` の等価性のもとで返り値はどちらの場合も並び順に依らない。
-      BY <3>2, <3>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       要素数 1 の場合に `into_iter().next()` がその 1 つの要素を返すことは
+       `EXT 1 要素の集合の反復` が言う。
+      BY <3>2, <3>3, EXT 1 要素の集合の反復,
+         CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
          CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::acted_on
     <3>7. QED
       `<3>4` から `<3>6` は `reached` についての 3 つの場合を尽くしている。
@@ -2030,15 +2246,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>2. `origin_inner(vars, E, u, sig)` の返り値は、`vars.bindings`、`E`、`u`、`sig`、および自分が
      行う `origin` の呼び出しの返り値だけで決まる。この関数が読むのは `vars.bindings.get(var)`、
      その `Binding` が持つ `RcVar` の名前と型と `llvm_gen` と `result_ty`、および `E` であり、
-     `truncate_to_unit` はその引数の関数である。
-     **`llvm_gen.result_prov(result_ty, &arg_tys, type_env)` がその引数の関数であることは A3 が言う** --
-     `LLVMGen::result_prov` は `&self` を取るので、内部可変性を持つ op は同じ引数に違う答えを返せる。
-     A3 の「`result_prov` と `borrows_operand` は決定的である -- 同じ引数に対して常に同じ値を返す」が
-     それを排除する。`decl` が変われば `origin_inner` の `Llvm` の腕は
-     `decl.leaf_origins_at(path).and_then(as_arg_projection)` の結果で別の道を選びうるので、この節が
-     無いとこの段は立たない。`vars.origins` も `vars.var_tys` も読まない。`Llvm` の腕が
-     `origin_from_leaves_under` を呼ぶ道については `<2>1a` がこれを与える。
-    BY A3 (`result_prov` は決定的である), <2>1, <2>1a,
+     `truncate_to_unit` はその引数の関数である。`vars.origins` も `vars.var_tys` も読まない。
+     このうち `llvm_gen` から読まれるのは `result_prov(result_ty, &arg_tys, E)` の返り値だけで
+     あり、それが引数だけで決まることは `<2>1` (c) が与える。**その節が要るのは、`decl` が変われば
+     `origin_inner` の `Llvm` の腕が `decl.leaf_origins_at(path).and_then(as_arg_projection)` の
+     結果で別の道を選びうるからである。**残るものが表を作り終えたのちは変わらないことは `<2>1` (b)
+     が与える。`Llvm` の腕が `origin_from_leaves_under` を呼ぶ道については `<2>1a` がこれを与える。
+    BY <2>1, <2>1a,
        CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
        CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
@@ -2197,8 +2411,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
    P2 が量化するのは、`x` がプログラムの束縛変数である場合と、`x` が `vars.bindings` に束縛を
    持たない名前 (D6 の第 3 の形) である場合であり、どちらもこの主張の特別な場合である。
-  <2>1. `<1>29` (停止性) と `<1>30` (abort しないこと) の主張も証明も、`pi` に条件を置いていない。
-     P2 の「`π` を問わず」が要求するのはこれである。
+  <2>1. `<1>29` (停止性) と `<1>30` (abort しないこと) の言明はどちらも、`pi` に条件を置いて
+     いない。P2 の「`π` を問わず」が要求するのはこれである。
     BY <1>29, <1>30
   <2>2. `pi` が型の上の walk に渡らないことは `<1>30` が場合ごとに述べている。`origin` と
      `origin_inner` は `pi` を、`Origin::Exactly` と `Origin::of_candidates` の成分として複製するか、
@@ -2207,33 +2421,18 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      ある。
     BY <1>30, CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under
-  <2>2a. `<1>29` と `<1>30` の主張も証明も、`x` に条件を置いていない。とくに `x` が
-     `vars.bindings` に束縛を持たない名前 (D6 の第 3 の形) である場合も範囲に入る。`<1>29` の
-     `<2>3` はその節点を葉として扱い、`<1>30` の `<2>2` は `origin_inner` の `None` の腕が
-     `Origin::Exactly` を作るだけであることを述べる。すなわち `origin_inner` はその腕で即座に
-     `here()` を返し、`origin` はその値を返す。
-    BY D6, <1>29, <1>30, CODE src/rc_ir/ownership.rs: origin_inner
-  <2>2b. `<1>29` と `<1>30` の主張も証明も、`vars` が `VarTable::of(func)` の作る表か
-     `VarTable::body_only(body)` の作る表かを問わない。**判定の述語は「その段が、表を作ったのが
-     2 つの構成子のどちらであるかを読むか」である。**`<1>29` と `<1>30` が引く段は `<1>1`、`<1>3`、
-     `<1>9`、`<1>17`、`<1>21`、`<1>25`、`<1>26`、`<1>27a`、`<1>28`、`<1>28a` である (`<1>29` は
-     A15、`<1>1`、`<1>9`、`<1>21`、`<1>25`、`<1>26`、`<1>28` を、`<1>30` は `<1>1`、`<1>3`、
-     `<1>9`、`<1>17`、`<1>27a`、`<1>28`、`<1>28a` と 2 つの `EXT` を引く)。
-
-     読む段は `<1>21` と `<1>25` の 2 つであり、どちらも 2 つの構成子を並べて述べられている --
-     `<1>21` は言明そのものが 2 つを並べ、`<1>25` は `<1>2`、`<1>22`、`<1>23`、`<1>24` を経てそれを
-     引く。`<1>2` は本体を「関数の `body` またはグローバル初期化子の `init`」と取って表をその
-     どちらの構成子とも置き、`<1>23` の `<2>1` は根の場合をその 2 つに分け、`<1>22` と `<1>24` は
-     `collect_bindings` と `DEF Scope` だけを読む。
-
-     残る `<1>1`、`<1>3`、`<1>9`、`<1>17`、`<1>26`、`<1>27a`、`<1>28`、`<1>28a` は読まない。
-     `<1>1`、`<1>9`、`<1>17` は型についての、`<1>3` は `RcRhs::Match` についての、`<1>27a` は
-     `Origin` についての、`<1>28` と `<1>28a` は `result_prov` の宣言についての言明であって、表に
-     触れない。`<1>26` は `origin_inner` を主語に取るが、読むのは `collect_bindings` が積む
-     `arm_results` と `Provenance` の有限性だけであり、`collect_bindings` はどちらの構成子も呼ぶ。
-    BY <1>1, <1>2, <1>3, <1>9, <1>17, <1>21, <1>22, <1>23, <1>24, <1>25, <1>26, <1>27a, <1>28,
-       <1>28a, <1>29, <1>30, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only,
-       collect_bindings
+  <2>2a. `<1>29` と `<1>30` の言明はどちらも、`x` に条件を置いていない。とくに `x` が
+     `vars.bindings` に束縛を持たない名前 (D6 の第 3 の形) である場合も、その 2 つの言明の範囲に
+     入る。その場合に `origin` が返す値は `Origin::Exactly((x, pi))` である -- `origin_inner` は
+     `vars.bindings.get(var)` が `None` の腕で `here()` を返し、`origin` はその値を記録して返す。
+    BY D6, <1>29, <1>30, CODE src/rc_ir/ownership.rs: origin_inner,
+       CODE src/rc_ir/ownership.rs: origin
+  <2>2b. `<1>29` と `<1>30` の言明はどちらも、`vars` が `VarTable::of(func)` の作る表か
+     `VarTable::body_only(body)` の作る表かを問わない。その 2 つの言明が `vars` に置く条件は、
+     `<1>2` と `<1>21` が `vars` に置くもの -- 本体を 1 つ取り、その本体について 2 つの構成子の
+     どちらかが作る表であること -- だけであり、どちらの構成子であるかで場合を分ける条件を
+     持たないからである。`<1>2` と `<1>21` は言明そのものが 2 つの構成子を並べる。
+    BY <1>2, <1>21, <1>29, <1>30
   <2>3. QED
     P2 が量化する 2 つの場合はどちらも `<2>2a` の範囲に入り、`pi` についての一般性は `<2>1` と
     `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 7 つの仮定は `<1>29` と
@@ -2363,28 +2562,43 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      型を持つならば `sig'` は `ty(u')` の unit に届く
     <3>1. CASE `vars.bindings[u]` が `Binding::Move(y)` である。辺の先は `(y, sig)` である。この
        場合の仮定より `u` は `vars.bindings` の定義域にあるので、`<2>5a` より帰納法の仮定の前件が
-       満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (i) と (vi) より `ty(y) = ty(u)` なので、
-       `y` が `vars.var_tys` に型を持つならばその型は `ty(u)` であり、`sig` はその unit に届く。
-      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
+       満たされ、`sig` は `ty(u)` の unit に届く。`Binding::Move(y)` を作るのは `collect_bindings` の
+       `Let(u, RcRhs::Var(y), k)` の腕だけなので、`<1>3a` (i) が当たり、(vi) と合わせて
+       `ty(y) = ty(u)` である。よって `y` が `vars.var_tys` に型を持つならばその型は `ty(u)` であり、
+       `sig` はその unit に届く。
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner,
+         CODE src/rc_ir/ownership.rs: collect_bindings
     <3>2. CASE `vars.bindings[u]` が `Binding::Join(arm_results)` である。辺の先は
        `(arm_result, sig)` である。この場合の仮定より `u` は `vars.bindings` の定義域にあるので、
-       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (ii) と
-       (vi) より `ty(arm_result) = ty(u)` なので、`arm_result` が `vars.var_tys` に型を持つならば
+       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。
+       `Binding::Join(arm_results)` を作るのは `collect_bindings` の
+       `Let(u, RcRhs::Match(scrut, arms), k)` の腕だけであり、`arm_results` の各要素は
+       `returned_var(&arm.body)` なので、`<1>3a` (ii) が当たり、(vi) と合わせて
+       `ty(arm_result) = ty(u)` である。よって `arm_result` が `vars.var_tys` に型を持つならば
        その型は `ty(u)` であり、`sig` はその unit に届く。
-      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner,
+         CODE src/rc_ir/ownership.rs: collect_bindings,
+         CODE src/rc_ir/ownership.rs: returned_var
     <3>3. CASE `vars.bindings[u]` が `Binding::Payload(scrut, None)` である。辺の先は
        `(scrut, sig)` である。この場合の仮定より `u` は `vars.bindings` の定義域にあるので、
-       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (iii) と
-       (vi) より `ty(u) = ty(scrut)` なので、`scrut` が `vars.var_tys` に型を持つならばその型は
+       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。
+       `Binding::Payload(scrut, arm.tag)` を作るのは `collect_bindings` の
+       `Let(z, RcRhs::Match(scrut, arms), k)` の腕だけであり、`u` はその `arm.payload.name` で
+       `arm.tag` は `None` なので、`<1>3a` (iii) の catch-all の場合が当たり、(vi) と合わせて
+       `ty(u) = ty(scrut)` である。よって `scrut` が `vars.var_tys` に型を持つならばその型は
        `ty(u)` であり、`sig` はその unit に届く。
-      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner,
+         CODE src/rc_ir/ownership.rs: collect_bindings
     <3>4. CASE `vars.bindings[u]` が `Binding::Payload(scrut, Some(tag))` で `scrut.ty.is_box(E)` が
        偽である。
       <4>1. 辺の先は `(scrut, [tag] ++ sig)` である。
         BY CODE src/rc_ir/ownership.rs: origin_inner
-      <4>2. `<1>3a` (iii) と (vi) より `(tag, ty(u))` は `F(ty(scrut))` の要素であり、`<1>3a` (iv)
-         より `ty(scrut).toplevel_tycon_info(E).variant` は `TyConVariant::Union` である。
-        BY <1>3a
+      <4>2. `Binding::Payload(scrut, arm.tag)` を作るのは `collect_bindings` の
+         `Let(z, RcRhs::Match(scrut, arms), k)` の腕だけであり、`u` はその `arm.payload.name` で
+         `arm.tag` は `Some(tag)` である。よって `<1>3a` (iii) の変位アームの場合と (vi) より
+         `(tag, ty(u))` は `F(ty(scrut))` の要素であり、`<1>3a` (iv) より
+         `ty(scrut).toplevel_tycon_info(E).variant` は `TyConVariant::Union` である。
+        BY <1>3a, CODE src/rc_ir/ownership.rs: collect_bindings
       <4>2a. `ty(scrut).is_closure()` は偽であり、`ty(scrut).is_funptr()` も偽である。`<4>2` は
          `ty(scrut).toplevel_tycon_info(E)` が値を返し、その `variant` が `TyConVariant::Union` で
          あると述べる。`toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、値を
@@ -2421,9 +2635,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        ある。
       <4>1. 辺の先は `(cont, [idx] ++ sig)` である。
         BY CODE src/rc_ir/ownership.rs: origin_inner
-      <4>2. `<1>3a` (v) と (vi) より `(idx, ty(u))` は `F(ty(cont))` の要素であり、
+      <4>2. `Binding::Field(cont, idx)` を作るのは `collect_bindings` の
+         `Destructure(cont, fields, _state, k)` の腕だけであり、`u` はその `fields` のある要素の
+         変数である。よって `<1>3a` (v) と (vi) より `(idx, ty(u))` は `F(ty(cont))` の要素であり、
          `ty(cont).toplevel_tycon_info(E).variant` は `TyConVariant::Struct` である。
-        BY <1>3a
+        BY <1>3a, CODE src/rc_ir/ownership.rs: collect_bindings
       <4>2a. `ty(cont).is_closure()` は偽であり、`ty(cont).is_funptr()` も偽である。`<4>2` は
          `ty(cont).toplevel_tycon_info(E)` が値を返し、その `variant` が `TyConVariant::Struct` で
          あると述べる。`toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、値を
@@ -2522,10 +2738,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        を返す。`candidates` は各子の返り値の `acted_on()` の合併である。`acted_on()` が返すのは
        `identity()` と `candidates()` の元、すなわちその辺の先の返り値に現れる `VarPath` だけな
        ので、帰納法の仮定よりその各要素は辺の先の下流にある。`of_candidates` は要素数 1 のとき
-       `Origin::Exactly(その要素)` を、それ以外のとき
+       `into_iter().next()` が返す元を `Origin::Exactly` に置き -- `EXT 1 要素の集合の反復` より
+       それは `candidates` のその 1 つの元である -- 、それ以外のとき
        `Origin::Join { identity: (var, path), candidates }` を返す。前者に現れるのは辺の先の下流の
        対、後者に現れるのはそれと `(u, sig)` 自身である。どちらも `(u, sig)` の下流にある。
-      BY CODE src/rc_ir/ownership.rs: origin_inner,
+      BY EXT 1 要素の集合の反復, CODE src/rc_ir/ownership.rs: origin_inner,
          CODE src/rc_ir/ownership.rs: Origin::of_candidates,
          CODE src/rc_ir/ownership.rs: Origin::acted_on,
          CODE src/rc_ir/ownership.rs: Origin::candidates
@@ -2580,9 +2797,11 @@ D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が�
 忠実さ) の 1 段である。README の文面とこの文書の記法との対応は、3 つの前提のそれぞれについて次の
 とおりである。
 
-- **`<1>1` の 3 つはどれも A10 である。**(i) は A10 の第 1 文 --「プログラムに現れる型は ground で
-  あり、その tycon に kind の要求するだけの引数が与えられており、その tycon は `type_env` にある」--
-  そのものである。**引数の個数を `tyvars` の長さと書き直すのは A10 の「飽和は ground から出ない」の
+- **`<1>1` の 3 つはどれも A10 である。**(i) は A10 の第 1 文のうち「プログラムに現れる型は ground で
+  あり、**その tycon に kind の要求するだけの引数が与えられており**、その tycon は `type_env` にあり、
+  …」の部分そのものである。省略記号が置き替えるのは `no_size_in_place` の降下についての節で、この
+  文書はそれを読まない (この項の末尾)。
+  **引数の個数を `tyvars` の長さと書き直すのは A10 の「飽和は ground から出ない」の
   段落による** --「`declared_field_types` はそこで
   `assert_eq!(args.len(), tycon_info.tyvars.len())` に当たって止まる」。(ii) と (iii) は A10 の
   「`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が
