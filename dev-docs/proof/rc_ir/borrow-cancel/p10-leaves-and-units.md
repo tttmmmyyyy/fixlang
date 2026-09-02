@@ -1959,8 +1959,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        **`bindings` と `var_tys` が持つ `Arc<TypeNode>` も内部可変性に届く。**`TypeNode` は
        `hash_cache`・`ground_cache`・`depth_cache` という `OnceLock` の欄を 3 つ持ち、
        `impl Hash for TypeNode` は `type_hash` を呼んで `hash_cache.get_or_init` を実行する。
-       **`origin` の歩みはその道を実際に通る** -- `origin_inner` の `Llvm` の腕が呼ぶ
-       `truncate_to_unit` は `unit_step` を経て `unpunched_field_types` を呼び、それが呼ぶ
+       **`origin` の歩みはその道を実際に通る** -- `origin_inner` の `Llvm` の腕は
+       `origin_from_leaves_under` を呼び、そこが `truncate_to_unit` を呼び、`truncate_to_unit` は
+       `unit_step` を経て `unpunched_field_types` を呼ぶ。それが呼ぶ
        `instance_field_types` は、その宣言が kind `*` でない型変数を持つとき各フィールドの型に
        `unwrap_newtypes_memoized` を当てる。`unwrap_newtypes_memoized` は
        `Map<Arc<TypeNode>, Arc<TypeNode>>` を `Arc<TypeNode>` の鍵で引き、`Map` は `FxHashMap` なので
@@ -1972,7 +1973,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `impl PartialEq for TypeNode` が読むのは `ty` だけであり、3 つの memo の値はどれも `ty` の
        関数である。よってその欄が埋まっても、`bindings` と `var_tys` は値として変わらない。
       BY A3 (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない),
-         CODE src/rc_ir/ownership.rs: origin, VarTable, origin_inner, truncate_to_unit, unit_step,
+         CODE src/rc_ir/ownership.rs: origin, VarTable, origin_inner, origin_from_leaves_under,
+            truncate_to_unit, unit_step,
          CODE src/ast/types.rs: TypeNode (`hash_cache` / `ground_cache` / `depth_cache` の宣言と
             `PartialEq` の実装), TypeNode::type_hash, TypeNode::unpunched_field_types,
             TypeNode::instance_field_types, TypeNode::unwrap_newtypes_memoized,
