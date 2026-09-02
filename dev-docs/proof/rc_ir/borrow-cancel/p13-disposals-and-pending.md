@@ -1167,10 +1167,10 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
   `collect_bindings` より、`origin` を呼ぶ 6 つの腕が渡す `x'` を名指す節点は次のとおりである。
   `Binding::Move(y)` では `x` を束縛する `Let(x, RcRhs::Var(y), k)`、`Binding::Llvm` では `x` を
   束縛する `Let(x, RcRhs::Llvm(gen, args), k)` (`x'` はそのオペランド `args[j]`)、`Binding::Field` では
-  `x` を束縛する `Destructure(x', fs, s, k)`、`Binding::Payload` では `x` を束縛する
-  `Let(x, RcRhs::Match(x', arms), k)` である。**`Binding::Join(arm_results)` の腕だけは `x` を束縛
-  する節点ではない** -- `Let(x, RcRhs::Match(scrut, arms), k)` が名指すのは `scrut` であり、
-  `x' = arm_results[j]` を名指すのは `ρ` が選んだアーム `arm_j` の本体の終端の `Ret` である
+  `x` を束縛する `Destructure(x', fs, s, k)`、`Binding::Payload` では `x` を payload として束縛する
+  アームを持つ `Let(m, RcRhs::Match(x', arms), k)` である。**`Binding::Join(arm_results)` の腕だけは
+  `x` を束縛する節点ではない** -- `x` を束縛する `Let(x, RcRhs::Match(scrut, arms), k)` が名指すのは
+  `scrut` であり、`x' = arm_results[j]` を名指すのは `ρ` が選んだアーム `arm_j` の本体の終端の `Ret` である
   (`collect_bindings` はそれを `returned_var(&arm.body)` として `arm_results` に積む)。
   L8 の仮定より `ρ` の上で `x` は値を得ているので、前の 4 つの形ではその束縛の節点が `ρ` の上に在り、
   `Binding::Join` では D3 より `ρ` はそのアーム本体の実行路を辿ってから `Match` の継続へ進むので、
