@@ -2112,10 +2112,11 @@ DEF 名前の活性による。よって 7.5.4 が `INV(n)` を示せば P18a �
 第 2 の条件を与える。
 
 <1>1. `ρ` 歩みの 1 歩 `(x, λ) → (x', λ')` は、D20 が挙げる 6 行のちょうど 1 つが結ぶ 2 つの対である。
-      その行を定める節点は、`x` を束縛する節点 -- `Binding::Move` では `Let(x, RcRhs::Var(y), k)`、
-      `Binding::Join` では `Let(x, RcRhs::Match(scrut, arms), k)` が選んだアーム本体の終端の `Ret`、
-      `Binding::Field` では `Destructure`、`Binding::Payload` では `Match` のそのアームの payload
-      束縛、`Binding::Llvm` では `Let(x, RcRhs::Llvm(gen, args), k)` -- である。
+      その行を定める節点は次のとおりである -- `Binding::Move` では `x` を束縛する
+      `Let(x, RcRhs::Var(y), k)`、`Binding::Join` では `Let(x, RcRhs::Match(scrut, arms), k)` が
+      選んだアーム本体の終端の `Ret`、`Binding::Field` では `x` を束縛する `Destructure`、
+      `Binding::Payload` では `x` を payload として束縛する `Match` のアーム、`Binding::Llvm` では
+      `x` を束縛する `Let(x, RcRhs::Llvm(gen, args), k)`。
   BY L8, D20, D9, CODE src/rc_ir/ownership.rs: origin_inner,
      CODE src/rc_ir/ownership.rs: collect_bindings
   D20 は D9 の移動の表の 6 行を別名の辺と呼び、その 6 つを挙げる -- `Let(x, Var(y), k)` の `y` から
