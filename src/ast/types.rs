@@ -491,7 +491,7 @@ impl TyAliasInfo {
 pub const MAX_TYPE_DEPTH: usize = 500;
 
 /// A node of a type expression, together with the information the compiler carries alongside it.
-// PROOF: D/A, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Serialize, Deserialize)]
 pub struct TypeNode {
     /// The type expression, which is what equality and hashing of a node read.
@@ -540,7 +540,7 @@ impl TypeNode {
     /// the node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing
     /// a type that shares a subterm many times costs one visit per node rather than one per
     /// occurrence.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn type_hash(&self) -> u64 {
         *self.hash_cache.get_or_init(|| {
             let mut hasher = DefaultHasher::new();
@@ -2223,7 +2223,7 @@ impl TypeNode {
     /// `free_vars` answers the same question by collecting the variables, which walks a type that
     /// shares a subterm once per occurrence rather than once per node. Every type reaching code
     /// generation is asked this, so it is answered here and kept on the node.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_ground(&self) -> bool {
         *self.ground_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) => false,
