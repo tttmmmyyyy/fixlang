@@ -1177,18 +1177,20 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
        自然数で番号づけられる。
   `insert` は `origin(vars: &VarTable, ..)` の中の 1 行であり、共有参照 `&VarTable` を通じた動作で
   ある。`VarTable` は `origins: RefCell<Map<VarPath, Origin>>` を欄に持つので `Sync` ではなく
-  (EXT 1, 2)、したがって `&VarTable` は `Send` ではない (EXT 3)。よってその表への動作が 2 つの
-  スレッドで重なることはなく、時間で全順序に並ぶ (EXT 5)。
+  (EXT auto trait と共有 の 1 と 2)、したがって `&VarTable` は `Send` ではない
+  (EXT auto trait と共有 の 3)。よってその表への動作が 2 つのスレッドで重なることはなく、時間で
+  全順序に並ぶ (EXT auto trait と共有 の 5)。
   **結論に要るのは全順序であって「1 つの制御の流れ」ではない。** `&VarTable` が `Send` でないことは、
   `VarTable` の**値そのもの**が別のスレッドへ move されることを排除しない。それでも順序は付く --
-  値の所有者は各時点で 1 つであり、渡す動作が前後のアクセスを順序づけるからである (EXT 4)。
+  値の所有者は各時点で 1 つであり、渡す動作が前後のアクセスを順序づけるからである
+  (EXT auto trait と共有 の 4)。
   **番号づけには全順序だけでは足りない。** 全順序の元に自然数の番号を振るには、各元の前に在る元が
   有限個であることが要る。`insert` はコンパイラのプロセスの実行の動作なので、EXT 動作の番号づけが
   それを与える。
   BY <1>1, EXT auto trait と共有 (1 から 5), EXT 動作の番号づけ,
      CODE src/rc_ir/ownership.rs: VarTable (`origins` は `RefCell<Map<VarPath, Origin>>` の欄である。
-     `src/` 全体を `unsafe impl` で検索して当たる行は無いので、EXT 2 の但し書きに当たる型はこの
-     クレートに無い),
+     `src/` 全体を `unsafe impl` で検索して当たる行は無いので、EXT auto trait と共有 の 2 の
+     但し書きに当たる型はこのクレートに無い),
      CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow_mut().insert(..)` はこの関数の中の
      1 行であり、`vars` は共有参照である)
 <1>2. どの鍵についても `origin` の呼び出しは停止する。
