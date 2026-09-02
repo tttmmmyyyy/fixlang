@@ -451,7 +451,8 @@ enum については元と同じ変位で、その変位が保持する各値を
   BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
      CODE src/rc_ir/ownership.rs: origin, <1>1, EXT Map と Set
 <1>2a. `vars` を第 1 引数とする `origin` の呼び出しが起きるどの時点でも、`vars.bindings` は同じ値で
-       ある。
+       ある。すなわち鍵の集合が同じであり、各鍵の `Binding` の変位が同じで、その変位が保持する値が
+       等しく、`Binding::Llvm` の `Box<dyn LLVMGen>` は同じ引数に同じ宣言を返す。
   <2>1. `bindings` は `VarTable` の非公開の欄であり、`ownership.rs` の中で --- その
         `#[cfg(test)] mod tests` を含めて --- この欄に触れるのは 5 か所だけである。書き手は 4 つ ---
         `VarTable::empty` の `Map::default()`、`VarTable::of` の `vars.bindings.insert`、
@@ -478,18 +479,35 @@ enum については元と同じ変位で、その変位が保持する各値を
     BY <1>0, <1>0a, <2>1, <2>2, CODE src/rc_ir/ownership.rs: VarTable::empty,
        CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
        CODE src/rc_ir/ownership.rs: collect_bindings
-  <2>3a. `bindings` の値が保持する op は、共有参照の下で自分の状態を動かさない。`Binding::Llvm` の
-         第 1 成分の型は `Box<dyn LLVMGen>` であり、これは `RcRhs::Llvm` の第 1 成分の型、すなわち D1 の
-         `RcProgram` の 3 つの欄から辿って現れる型である。A3 の内部可変性の節は `Box<dyn LLVMGen>` の
-         op を名指して、その op が `UnsafeCell` の欄を持たないことを述べる。`Binding` の残る 6 変位が
-         保持するのは `RcVar`、`Vec<RcVar>`、`Arc<TypeNode>`、`usize`、`Option<usize>` であって、op は
-         `Binding::Llvm` にしか現れない。
-    BY CODE src/rc_ir/ownership.rs: Binding, CODE src/rc_ir/ast.rs: RcRhs,
-       CODE src/rc_ir/ast.rs: RcVar, A3, D1
+  <2>3a. `bindings` が保持する値の等しさは、それを共有参照で受け取る計算が変えない。また
+         `Binding::Llvm` の `Box<dyn LLVMGen>` は、同じ引数に同じ宣言を返す。
+    <3>1. `bindings` が保持するのは、`Box<dyn LLVMGen>`、`RcVar`、`Vec<RcVar>`、`Arc<TypeNode>`、
+          `usize`、`Option<usize>` の値である。`Binding` の 7 変位のうち `Param` と `Producer` は何も
+          保持せず、`Move` は `RcVar`、`Llvm` は `Box<dyn LLVMGen>` と `Vec<RcVar>` と `Arc<TypeNode>`、
+          `Field` は `RcVar` と `usize`、`Payload` は `RcVar` と `Option<usize>`、`Join` は
+          `Vec<RcVar>` を保持する。この 6 つの型はどれも、D1 の `RcProgram` の 3 つの欄から辿って現れる ---
+          `Box<dyn LLVMGen>` と `Vec<RcVar>` は `RcRhs::Llvm` の 2 つの成分の型、`RcVar` は `RcRhs::Var`
+          の成分と `Let` の束縛変数の型、`Arc<TypeNode>` は `RcVar` の `ty` の型、`usize` と
+          `Option<usize>` は `Destructure` のフィールド添字と `MatchArm` の `tag` の型である。
+          `VarTable::of` と `collect_bindings` が `bindings` に入れるのは、その位置から複製した値である。
+      BY CODE src/rc_ir/ownership.rs: Binding, CODE src/rc_ir/ownership.rs: VarTable::of,
+         CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ast.rs: RcRhs,
+         CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: MatchArm, CODE src/rc_ir/ast.rs: RcExpr, D1
+    <3>2. A3 の「**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。**」の
+          節が、この 6 つの型の値に当たる。その節は「到達できる型が内部可変性を持つ欄を持つときは、その欄は
+          **一度だけ書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である**」と、
+          型についての言明として述べるので、その型の値である複製にも当たる。よって、その欄が埋まっても
+          `bindings` が保持する値の等しさは動かない。
+      BY <3>1, A3
+    <3>3. QED
+      A3 の「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す。」
+      より、`Binding::Llvm` の `Box<dyn LLVMGen>` は同じ引数に同じ宣言を返す。
+      BY <3>1, <3>2, A3
   <2>4. QED
     <2>3 より、`vars` を第 1 引数とする `origin` の呼び出しはどれも、`vars` を作った <2>2 の呼び出しが
-    返った後に起きる。<2>2 よりその後 `vars.bindings` への書き込みは無く、<2>3a より、この欄が保持する
-    op がその中に持つ状態も動かない。
+    返った後に起きる。<2>2 よりその後 `vars.bindings` への書き込みは無いので、鍵の集合と、各鍵の
+    `Binding` の変位と、その変位が保持する値は動かない。<2>3a より、保持する値の等しさも、
+    `Box<dyn LLVMGen>` が同じ引数に返す宣言も動かない。
     BY <2>2, <2>3, <2>3a
 <1>2b. `origin(vars, τ, ・, ・)` の 1 回の呼び出しの中で起きる呼び出しは、どれも第 2 引数が `τ` である。
   <2>1. `origin` の本文は自分の第 2 引数を `origin_inner(vars, type_env, var, path)` の第 2 引数として
