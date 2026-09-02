@@ -146,9 +146,27 @@
 **この 3 つの値は、走査のどの時点で読んでも同じである。** `CancelAnalysis::acted_references` は
 `acted_references(self.vars, self.type_env, v, path)` を、`CancelAnalysis::other_objects` は
 `boxed_leaf_paths(&v.ty, self.type_env)` の各 leaf についての `origin(self.vars, self.type_env, v.name, leaf)`
-を呼ぶだけであり、`CancelAnalysis` の `vars` と `type_env` は共有参照であって走査の間 変わらない
-(`CODE src/rc_ir/borrow.rs: CancelAnalysis`)。D15 より `acted_references` の値はその引数と `origin` の答えで
-決まり、P2a より `origin` の答えは `vars.origins` が保持する memo の状態に依らない。
+を呼ぶだけである (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。D15 より `acted_references` の値はその引数と
+`origin` の答えで決まる。`CancelAnalysis` の `vars` と `type_env` の欄は、`cancel` が据えた 1 つの
+`VarTable` の値と 1 つの `TypeEnv` の値への共有参照であり、走査はその欄を差し替えない
+(`CODE src/rc_ir/borrow.rs: CancelAnalysis`, `CODE src/rc_ir/borrow.rs: cancel`)。よって走査の全体が、
+**1 つの `VarTable` の値と 1 つの `TypeEnv` の値**を第 1・第 2 引数として `origin` を呼ぶ。P2a はその形の
+主張であり、鍵 `(x, π)` が等しい 2 つの呼び出しの答えが等しいこと -- すなわち答えが `vars.origins` が
+保持する memo の状態に依らないこと -- を与える。
+
+**根拠を「共有参照だから値が動かない」に置くことはできない。** `VarTable` は `origins` を
+`RefCell<Map<VarPath, Origin>>` で持ち、`origin` は共有参照から
+`vars.origins.borrow_mut().insert(key, answer.clone())` を実行する
+(`CODE src/rc_ir/ownership.rs: VarTable`, `CODE src/rc_ir/ownership.rs: origin`)。README の A3 は
+「**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。** 到達できる型が
+内部可変性を持つ欄を持つときは、その欄は**一度だけ書かれる memo であって、その値はその型の
+`PartialEq` が読む成分の関数である**」と述べ、続けて「**「内部可変性を持たない」と書くと偽になる。**」と
+書く。`type_env` から到達する `TypeNode` の `OnceLock` の欄についてはその節が、`vars.origins` については
+P2a が答える。`origin` が `vars` から読む残りの欄 `bindings` は、`VarTable::of` と `VarTable::body_only` が
+`collect_bindings` で作った後 書き込まれない -- `VarTable` を `&mut` で受け取るのはこの 3 つと
+`collect_bindings` だけである (`CODE src/rc_ir/ownership.rs: VarTable::of`,
+`CODE src/rc_ir/ownership.rs: VarTable::body_only`, `CODE src/rc_ir/ownership.rs: collect_bindings`)。
 
 ### DEF 削除集合
 
