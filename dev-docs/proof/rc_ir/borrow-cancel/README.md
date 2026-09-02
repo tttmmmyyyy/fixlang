@@ -21,7 +21,7 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 - `src/rc_ir/ownership.rs` の全体 (この 2 つが参照の同一性と消費を決めるのに使うモデル)
 
 である。`split_rc_units` は同じファイルに住むが、`borrow_ify` の前段であって対象ではない。その出力の性質は
-仮定 A3 として置く。
+仮定 A2 として置く。
 
 **証明のために動いたコードが 1 か所ある。** `borrow_ify` と `cancel` が `pub` から `pub(crate)` に
 なった。P15 がその可視性を引く -- クレートの外から呼べないので、`cancel` の入力が `borrow_ify` の出力である
@@ -89,6 +89,17 @@ unit の集合)、`inline_into_callers`。グローバル初期化子 `RcGlobalI
 与える `divide_among_units` は、この 2 つのパスの**後**に走る (`CODE src/build/build_object_files.rs:
 build_object_files` -- `optimize_rc_program` の呼び出しが `divide_among_units` の呼び出しより前にある)。
 分割前のプログラムは 1 つであり、その 1 つがすべての初期化子と記憶域を持つので、`true` が正しい値である。
+
+**D1a (プログラムの等しさ)**
+2 つの `RcProgram` が**等しい**とは、D1 の 3 つの成分がそれぞれ等しいことである。`funcs` は鍵の集合が
+等しく、各鍵の `RcFunc` の 9 欄がそれぞれ等しいこと。`globals` は列の長さが等しく、各位置の
+`RcGlobalInit` の 5 欄がそれぞれ等しいこと。`roots` は集合として等しいこと。
+**本体の等しさは、D2 が節点と呼ぶ位置の集合と、対応する位置の内容だけで決まる。**
+
+**`Arc` の参照カウントも、木が式を共有する度合いも、成分ではない。** D2 は木の**位置**を節点と呼び、
+位置が相異なれば節点も相異なるものとするので、共有の度合いは D1 の 3 つ組の値に現れない。
+**内部可変性の memo も成分ではない** (A3)。**この定義をここに置くのは、それを要るファイルが
+自分で置くと、2 つのファイルが別の等号の上で同じことを述べうるからである。**
 
 **D2 (本体の木)**
 本体は式の節点 `RcExprNode` の木である。節点は式 `RcExpr` と source span からなり、式は次の 6 種である
@@ -1439,8 +1450,10 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 
 **「内部可変性を持たない」と書くと偽になる。** `RcProgram` は `RcFunc` の `fn_ty` と `RcVar` の `ty` を
 通じて `TypeNode` に届き、`TypeNode` は `hash_cache`・`ground_cache`・`depth_cache` という `OnceLock` の
-欄を 3 つ持つ。`TypeNode::is_ground` は共有参照から `ground_cache.get_or_init` を実行する
-(`CODE src/ast/types.rs: TypeNode`, `TypeNode::is_ground`)。**その 3 つは一度だけ書かれる memo であり、
+欄を 3 つ持つ。**その 3 つを共有参照から埋めるのは、`<欄>.get_or_init` を呼ぶメソッドである** --
+`TypeNode::type_hash`・`TypeNode::is_ground`・`TypeNode::depth` の 3 つで、
+**在りかは `_cache.get_or_init` の全出現で決める** (`CODE src/ast/types.rs: TypeNode`,
+`TypeNode::is_ground`, `TypeNode::type_hash`, `TypeNode::depth`)。**その 3 つは一度だけ書かれる memo であり、
 `impl PartialEq for TypeNode` は `ty` だけを読み、3 つの memo の値はどれも `ty` の関数である**
 (`CODE src/ast/types.rs: TypeNode` の `PartialEq` の実装, `TypeNode::type_hash`, `TypeNode::is_ground`)
 ので、この節は等しさの水準で立つ。**`impl Hash for TypeNode` は `type_hash` を呼ぶので `hash_cache` を

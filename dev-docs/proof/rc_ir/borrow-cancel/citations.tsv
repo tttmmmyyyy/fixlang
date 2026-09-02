@@ -66,6 +66,7 @@ src/ast/types.rs	Type	P1,P2,P2a,P15,P16,P17,P18	e0140595eff2
 src/ast/types.rs	TypeNode	D/A,P1,P2,P2a,P3,P4,P15,P16,P17,P18,T	4e726d9bb025
 src/ast/types.rs	TypeNode::collect_type_arguments	P1,P2,P2a,P15,P16,P17,P18	6d18a772c333
 src/ast/types.rs	TypeNode::declared_field_types	D/A,P1,P2,P2a,P15,P16,P17,P18	eda5fdc86a3c
+src/ast/types.rs	TypeNode::depth	D/A	32615cca8dc3
 src/ast/types.rs	TypeNode::field_types	P1,P2	f3b4b3ad1075
 src/ast/types.rs	TypeNode::get_source	P1,P2	c02893955b55
 src/ast/types.rs	TypeNode::instance_field_types	D/A,P1,P2,P2a,P3,P4,P15,P16,P17,P18	27064fdf0a46
@@ -94,7 +95,7 @@ src/ast/types.rs	TypeNode::set_tyvar_kind	P1,P2	f433b04ead6f
 src/ast/types.rs	TypeNode::toplevel_tycon	P1,P2,P2a,P15,P16,P17,P18	9c1d47a34349
 src/ast/types.rs	TypeNode::toplevel_tycon_info	D/A,P1,P2,P2a,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18	ae62bc398a0a
 src/ast/types.rs	TypeNode::toplevel_tycon_satisfies	P1,P2	704a2f7f7d60
-src/ast/types.rs	TypeNode::type_hash	P1,P2,P2a,P3,P4,P15,P16,P17,P18,T	19915b74d10a
+src/ast/types.rs	TypeNode::type_hash	D/A,P1,P2,P2a,P3,P4,P15,P16,P17,P18,T	19915b74d10a
 src/ast/types.rs	TypeNode::unpunched_field_types	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b	ecae1220e285
 src/ast/types.rs	TypeNode::unwrap_newtypes_memoized	P1,P2,P2a,P3,P4,P15,P16,P17,P18	b775960e33b3
 src/ast/types.rs	TypeNode::unwrap_newtypes_node	P1,P2,P2a,P15,P16,P17,P18	58f7c241baaf

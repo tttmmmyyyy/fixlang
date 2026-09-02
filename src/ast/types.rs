@@ -542,7 +542,7 @@ impl TypeNode {
     /// the node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing
     /// a type that shares a subterm many times costs one visit per node rather than one per
     /// occurrence.
-    // PROOF: P1, P2, P2a, P3, P4, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn type_hash(&self) -> u64 {
         *self.hash_cache.get_or_init(|| {
             let mut hasher = DefaultHasher::new();
@@ -2258,6 +2258,7 @@ impl TypeNode {
     /// This measures the type expression the program wrote or the compiler built: a chain of a
     /// thousand types that each hold the next is a thousand types of depth one. What grows this is
     /// a type reached from itself at a larger type argument.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn depth(&self) -> usize {
         *self.depth_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) | Type::TyCon(_) => 1,
