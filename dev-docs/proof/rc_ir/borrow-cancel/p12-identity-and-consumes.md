@@ -719,7 +719,8 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
 - **(E4)** `vars.bindings.get(u) = Some(Payload(s, None))` のとき `origin(u, λ) = origin(s, λ)`。
 - **(E5)** `vars.bindings.get(u) = Some(Llvm(gen, args, ty))` であって、
   `decl := gen.result_prov(ty, arg_tys, type_env)` の `decl.leaf_origins_at(λ)` が単一の `Arg(j, σ)` から
-  なる集合であるとき `origin(u, λ) = origin(args[j], σ)`。
+  なる集合であるとき `origin(u, λ) = origin(args[j], σ)`。ここで **`arg_tys` は `args` の各元の型の列**
+  `args.iter().map(|a| a.ty.clone()).collect()` である。
 - **(B)** 本体の節点が E1 から E5 のいずれかの辺を定めるとき、その辺の終点の変数の `vars.bindings` の
   記録は、その辺の種に応じてそれぞれ `Some(Move(y))`、`Some(Field(c, i))`、`Some(Payload(s, Some(t)))`、
   `Some(Payload(s, None))`、`Some(Llvm(gen, args, ty(x)))` である。
