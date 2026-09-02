@@ -2180,8 +2180,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          CODE src/misc.rs: Map
     <3>3a. (c) が成り立つ。`origin_inner` の `Binding::Llvm` の腕は、`args` の各要素の `ty` を
        集めて `arg_tys` を作り、`llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を 1 度呼んで
-       `decl` を得たのち、`decl` と `args` と `path` だけを読む。この腕にも `origin_inner` の
-       ほかの腕にも、op の欄を読む式はこの呼び出し以外に無い。A3 の
+       `decl` を得たのち、`decl`、`args`、`path`、`var` を読む。この腕にも `origin_inner` の
+       ほかの腕にも、`llvm_gen` を読む式はこの呼び出し以外に無い。A3 の
        「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を
        返す」より、その返り値は `result_ty`、`arg_tys`、`E` だけで決まる。**op が自分の中に持つ
        内部可変性は、この段に入らない** -- `LLVMGen::result_prov` は `&self` を取るので op はそれを
