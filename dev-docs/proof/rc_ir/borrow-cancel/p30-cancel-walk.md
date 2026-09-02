@@ -26,7 +26,9 @@ P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P1
 
 README の第 2 節の記法に、次の 3 つを加える。
 
-- **局所の定義**。この文書の中だけで使う語を第 1 節と第 5 節で定める。`BY` の行では `DEF <名前>` で引用する。
+- **局所の定義**。この文書の中だけで使う語を定め、`BY` の行では `DEF <名前>` で引用する。定義は第 1 節に
+  置く。定めるものが 1 つに決まることを補題が与えるときは、その補題の後に置く --- `DEF 節点の量` は L0 の
+  後、`DEF INV` は P15 の後である。
 - **局所の補題**。この文書の中だけで使う補題を `L0` - `L12` と番号を付けて述べ、`BY` の行では
   `L<n>` で引用する。あいだに挟む補題には `L8a` のように枝番を振り、既存の番号は振り直さない。各補題は、
   それより前に置かれた補題と命題と、README の D/A だけを引用する。
@@ -92,34 +94,6 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 節点 `n` が時点 `τ` までに**訪問された**とは、`n` の訪問がその時点までに始まっていることをいう。節点 `m`
 が節点 `n` より**前に訪問された**とは、`m` の訪問が `n` の訪問より前に始まっていることをいう。
-
-### DEF 節点の量
-
-`Retain` 節点 `t = Retain(v, path, _, _)` と `Release` 節点 `r = Release(v, path, _, _)` について、
-`CancelAnalysis` の走査中に次の値を定める。
-
-- `ActRefs(t) :=` `self.acted_references(v, path)` の値、`ActRefs(r) :=` `self.acted_references(v, path)` の値。
-- `others(r) :=` `self.other_objects(v, path)` が返す `Vec` の**元の集合**。並びを取らないのは、
-  `Origin::candidates` が `Join` の変位について `Set` の反復から `Vec` を作るからである
-  (DEF 引数で決まる関数)。走査がこの `Vec` を読むのは `consume_objects` の `objects.iter().any(..)` を
-  通してだけなので、元の集合が同じであれば作用は同じである (L6)。
-
-`CancelAnalysis::acted_references(v, path)` は `ownership::acted_references(self.vars, self.type_env, v, path)`
-の値を返す (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。すなわち `ActRefs(t)` は D15 の
-`ActRefs(v, path)` である。`self.vars` と `self.type_env` は `cancel` の `cancel_body` が
-`CancelAnalysis` の値を構築するときに置かれ、走査はこの 2 つの欄を差し替えない。`CancelAnalysis` は
-`borrow.rs` の非公開の型でその欄も非公開であり、`borrow.rs` は `mod` 宣言を 1 つも持たないので、欄への
-書き込みは `borrow.rs` の中にしか書けない。構築の後にこの値へ可変参照を得るのは `&mut self` を取る
-6 つのメソッド --- `walk`、`walk_inner`、`consume_rhs`、`consume`、`consume_objects`、`merge` ---
-だけであり、この 6 つの本文で `self.vars` と `self.type_env` が現れるのは、どれも値を読んで別の関数へ
-渡す位置である (`CODE src/rc_ir/borrow.rs: CancelAnalysis`, `CODE src/rc_ir/borrow.rs: cancel`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::merge`)。**上の 3 つの量が、走査のどの時点で読んでも同じで
-あることは L0 が示す。**
 
 ### DEF 参照の多重集合
 
@@ -647,6 +621,38 @@ enum については元と同じ変位で、その変位が保持する各値を
   P2a が量化するのは、`vars` を第 1 引数とし、固定した 1 つの `TypeEnv` の値を第 2 引数とする `origin` の
   呼び出しであり、これは L0 が量化する呼び出しの一部である。よって L0 の言明は P2a の言明を含む。
   BY L0
+
+### DEF 節点の量
+
+1 回の `cancel_body` の実行を固定し、その `CancelAnalysis` の値の `vars` の欄を `vars`、`type_env` の欄を
+`type_env` と書く。**この 2 つの欄はその実行のあいだずっと同じ値である。** 2 つは `cancel` の
+`cancel_body` が `CancelAnalysis` の値を構築するときに置かれ、走査はこの 2 つの欄を差し替えない。
+`CancelAnalysis` は `borrow.rs` の非公開の型でその欄も非公開であり、`borrow.rs` は `mod` 宣言を 1 つも
+持たないので、欄への書き込みは `borrow.rs` の中にしか書けない。構築の後にこの値へ可変参照を得るのは
+`&mut self` を取る 6 つのメソッド --- `walk`、`walk_inner`、`consume_rhs`、`consume`、
+`consume_objects`、`merge` --- だけであり、この 6 つの本文で `self.vars` と `self.type_env` が現れるのは、
+どれも値を読んで別の関数へ渡す位置である (`CODE src/rc_ir/borrow.rs: CancelAnalysis`,
+`CODE src/rc_ir/borrow.rs: cancel`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`,
+`CODE src/rc_ir/borrow.rs: CancelAnalysis::merge`)。
+
+その上で、`Retain` 節点 `t = Retain(v, path, _, _)` と `Release` 節点 `r = Release(v, path, _, _)` に
+ついて次の値を定める。
+
+- `ActRefs(t) :=` `ownership::acted_references(vars, type_env, v, path)` の値、
+  `ActRefs(r) :=` `ownership::acted_references(vars, type_env, v, path)` の値。これは `vars`、`type_env`、
+  `v`、`path` で決まる量であって、走査のどの時点についてのものかを問わない。
+
+**この量が 1 つに定まるのは L0 による。** L0 は、`vars` を第 1 引数とする `origin` の呼び出しが memo の
+状態に依らず鍵で決まる値を返すことと、そこから `ownership::acted_references(vars, type_env, v, π)` の
+返り値も走査のどの時点で読んでも同じであることを述べる。この定義をここに置くのはそのためである。
+`CancelAnalysis::acted_references(v, path)` はその値を返す
+(`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。`ActRefs(t)` は D15 の
+`ActRefs(v, path)` である。
 
 ### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ)
 
