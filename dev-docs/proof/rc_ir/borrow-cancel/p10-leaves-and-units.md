@@ -431,14 +431,16 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `TyConInfo::resolve_namespace` を当てる。それは各 `Field` に `Field::resolve_namespace` を
      当て、その本体は `self.syn_ty` と `self.ty` への 2 つの代入である。
 
-   **`tycons` に `TyConInfo` の値を置くのは、この 6 つのうち最初の 3 つである。**`TypeEnv::default`
-   は空の `Map` を置くので値を 1 つも置かない。`TypeEnv::new` が置くのは
+   **`tycons` に `TyConInfo` の値を置くのは、この 6 つのうち `TypeEnv::new` と
+   `TypeEnv::add_tycons` の 2 つである。**`TypeEnv::default` が置く `Map` は空なので `TyConInfo` を
+   1 つも含まず、残る 3 つは既に在る `TyConInfo` の欄を書き替えるだけである (次の段落)。
+   `TypeEnv::new` が置くのは
    `Program::calculate_type_env` が渡す `Map`、すなわち `bulitin_tycons()` の各行と、各型宣言に
    ついての `TypeDefn::tycon_info` の返り値である。`TypeEnv::add_tycons` が置くのは、`add_tycons` を
    呼ぶ 4 か所が渡す `TyConInfo`、すなわち `CaptureStruct::new` が作った `tycon_info`
    (`closure_specialization` の `lift_all` と `realize_all` が `record_capture_list` と
    `take_new_tycons` を経て渡すもの、および `defunctionalize_fix::run_one` が渡すもの) と、
-   `register_opaque_tycon` がその場で作る `TyConInfo` である。**すなわちこの 3 つが置く値はどれも、
+   `register_opaque_tycon` がその場で作る `TyConInfo` である。**すなわちこの 2 つが置く値はどれも、
    上の表の 4 つの関数のいずれかが作ったものである。**`add_tycons` は入れる前に各 `Field` の `ty` を
    `unwrap_newtypes` の像に置き替えるが、`fields` の長さを変えず、`variant`、`tyvars`、`is_unbox`、
    `fields[i].is_punched` にも触れない。
