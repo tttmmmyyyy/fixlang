@@ -572,8 +572,10 @@ D9 の消費の表の行が指す節点を**消費点**と呼び、その行が�
 ### L30 (`drop_nodes` の作用)
 
 **言明** --- `S` を `NodeId` の集合とする。`drop_nodes(B, S)` は、`B` の木から、`NodeId` が `S` に入る
-`Retain` 節点と `Release` 節点だけを取り除いた木を返す。残る各位置の式の変位、変数、path、`RcState`、
-source、`Match` のアームの本数と並び、および継続の順序は変わらない。
+`Retain` 節点と `Release` 節点だけを取り除いた木を返す。残る各位置について、式の変位、変数、path、
+`RcState`、source、**`Let` の右辺**(`App` の callee と引数、`Closure` の `FuncRef` と capture、`Llvm` の
+op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructure` のフィールドの列**、`Match` の
+アームの本数と並びとその `tag`・`payload`・`payload_state`、および継続の順序は変わらない。
 
 **証明**
 
@@ -585,9 +587,10 @@ source、`Match` のアームの本数と並び、および継続の順序は変
   <2>1. `cancel_body` は 1 つの共有参照 `body: &RcExprNode` について `analysis.walk(body, ・, ・)` を
         呼び、その値から作った集合を持って `drop_nodes(body, &analysis.cancelled())` を呼ぶ。`body` は
         `prog: &RcProgram` から借用したものであり、この 2 つの呼び出しの間に木を変える操作は無い --
-        `cancel` が持つのは共有参照だけで、`funcs` と `globals` を作る写像はそれぞれの `f.body` /
+        `cancel` が持つのは共有参照 `prog: &RcProgram` だけで、EXT 共有参照は代入を許さない より
+        その先の値へ代入することはできず、`funcs` と `globals` を作る写像はそれぞれの `f.body` /
         `g.init` を読むだけである。
-    BY CODE src/rc_ir/borrow.rs: cancel
+    BY CODE src/rc_ir/borrow.rs: cancel, EXT 共有参照は代入を許さない
   <2>2. `node_id(n)` は `n.expr` が指す `RcExpr` の番地である。`RcExprNode` の `expr` は
         `Arc<RcExpr>` であり、EXT Arc の割り当ての安定性 より、その番地は同じ割り当てについて何度取っても
         等しく、`Arc` の値を move しても動かず、共有参照が生きている間は割り当ても落ちない。
@@ -613,16 +616,19 @@ source、`Match` のアームの本数と並び、および継続の順序は変
     BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
        CODE src/rc_ir/ast.rs: MatchArm::with_body
   <2>4. CASE `node` の式が `RcExpr::Let(x, rhs, k)` で `rhs` が `RcRhs::Match(..)` でない。この腕は
-        `drop_nodes(k, to_delete)` を 1 回呼び、`x` と `rhs` を変えずに `&node.source` を付けて節点を
-        積む。`to_delete` の検査はしない。`match` の腕はこの順に並んでいるので、この腕に落ちる `rhs` は
-        `RcRhs::Match` ではない。
+        `drop_nodes(k, to_delete)` を 1 回呼び、`x` と `rhs` を `clone()` で運んで `&node.source` を
+        付けて節点を積む。すなわち `App` の callee と引数、`Closure` の `FuncRef` と capture、`Llvm` の
+        op とオペランド、`Var` の変数は元のものである。`to_delete` の検査はしない。`match` の腕はこの順に
+        並んでいるので、この腕に落ちる `rhs` は `RcRhs::Match` ではない。
     BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Let(x, rhs, k)` の腕,
-       CODE src/rc_ir/borrow.rs: drop_nodes_inner
+       CODE src/rc_ir/borrow.rs: drop_nodes_inner, CODE src/rc_ir/ast.rs: RcRhs, EXT derive(Clone)
   <2>5. CASE `node` の式が `RcExpr::Destructure(container, fields, state, k)` または `RcExpr::Eval(v, k)`
-        である。この 2 つの腕は `drop_nodes(k, to_delete)` を 1 回呼び、他のフィールドを変えずに
-        `&node.source` を付けて節点を積む。`to_delete` の検査はしない。
+        である。この 2 つの腕は `drop_nodes(k, to_delete)` を 1 回呼び、`container`・`fields`・`state`・
+        `v` を `clone()` で運んで `&node.source` を付けて節点を積む。すなわち `Destructure` の
+        フィールドの列は元のものである。`to_delete` の検査はしない。
     BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Destructure(container, fields, state, k)` の腕,
-       CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Eval(v, k)` の腕
+       CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Eval(v, k)` の腕,
+       EXT Vec::clone, EXT derive(Clone)
   <2>6. CASE `node` の式が `RcExpr::Ret(v)` である。この腕は `v` を変えずに `&node.source` を付けて
         1 節点を作って返す。
     BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Ret(v)` の腕
@@ -678,17 +684,27 @@ source、`Match` のアームの本数と並び、および継続の順序は変
        CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled, p30 の L10
   <2>2. QED
     BY <2>1, CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled, DEF 削除集合
+<1>1a. `CancelAnalysis` の欄に書き込むコードは `borrow.rs` の中にしか無い。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
+  `CancelAnalysis` とその欄はどれも `pub` を持たないので、EXT 可視性と私有性 よりそれを名指せるのは
+  `borrow.rs` のモジュールとその子孫だけである。`borrow.rs` は `mod` の項目を 1 つも持たないので、
+  EXT モジュールは `mod` が導入する よりそのモジュールは子孫を持たない。
 <1>2. `self.all_retains` に値が入るのは、`walk_inner` の `RcExpr::Retain(v, path, _, k)` の腕の
       `self.all_retains.push(retain)` だけであり、そこで `retain = node_id(node)` の `node` はいま訪問して
       いる `Retain` 節点である。よって 1 が成り立つ。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-     CODE src/rc_ir/borrow.rs: node_id, <1>1
+     CODE src/rc_ir/borrow.rs: node_id, <1>1, <1>1a
+  <1>1a より、`self.all_retains` へ書き込む式は `borrow.rs` の中に在るものだけであり、`borrow.rs` の
+  中で `all_retains` を書き込む式はこの `push` だけである。
 <1>3. `self.un_bump_releases` の値の `Vec` に要素が入るのは、`walk_inner` の
       `RcExpr::Release(v, path, _, k)` の腕の `UnBump::InBracket(retain)` の枝の
       `self.un_bump_releases.entry(retain).or_default().push(node_id(node))` だけであり、そこで `node` は
       いま訪問している `Release` 節点である。よって 2 と 4 が成り立つ。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
-     CODE src/rc_ir/borrow.rs: node_id
+     CODE src/rc_ir/borrow.rs: node_id, <1>1a
+  <1>1a より、`self.un_bump_releases` へ書き込む式は `borrow.rs` の中に在るものだけである。`cancelled`
+  の中の `get` は読むだけであり、`borrow.rs` の中でその値の `Vec` に要素を入れるのはこの `push` だけで
+  ある。
 <1>4. 1 つの `Release` 節点は、高々 1 つの `t` の `un_bump_releases[t]` に、高々 1 回入る。
   <2>1. P15 の後半より、走査は `Release` 節点 `r` をちょうど 1 回訪問する。
     BY P15
@@ -874,33 +890,44 @@ source、`Match` のアームの本数と並び、および継続の順序は変
 
 <1>1. `consume_objects` の作用は言明のとおりである。
   BY p30 の L6
+<1>1a. `consume_objects` を呼ぶ式は `borrow.rs` の中にしか無い。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
+     EXT 可視性と私有性, EXT モジュールは `mod` が導入する
+  `CancelAnalysis::consume_objects` は `pub` を持たない inherent なメソッドなので、EXT 可視性と私有性 より
+  それを名指せるのは `borrow.rs` のモジュールとその子孫だけである。`borrow.rs` は `mod` の項目を 1 つも
+  持たないので、EXT モジュールは `mod` が導入する よりそのモジュールは子孫を持たない。
 <1>2. 走査のコードで `self.consume_objects(...)` と書かれているのは 3 か所である。`CancelAnalysis::consume`
       の末尾の `self.consume_objects(pending, &objects)`、`walk_inner` の
       `RcExpr::Release(v, path, _, k)` の腕の `let others = self.other_objects(v, path);` の直後の
       `self.consume_objects(&mut pending, &others)`、および同じ腕の `UnBump::OutsideBracket` の枝の
       `self.consume_objects(&mut pending, &objects)` である。`merge`、`cancelled`、`un_bump` はこの
       呼び出しを持たない。`consume_rhs` がこの呼び出しに届くのは `consume` を通してであり、<1>3 が
-      その 1 か所を展開する。
+      その 1 か所を展開する。<1>1a より、この数え上げは `borrow.rs` の中の出現を尽くせば足りる。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled,
-     CODE src/rc_ir/borrow.rs: un_bump
+     CODE src/rc_ir/borrow.rs: un_bump, <1>1a
 <1>3. `consume(pending, var, path)` は `origin(self.vars, self.type_env, var, path).acted_on()` の元を
       `objects` に集め、`self.consume_objects(pending, &objects)` を 1 回呼ぶ。すなわち
       `objects = acted_on(var, path)` である。`consume` を呼ぶのは、`consume_rhs` と、`walk_inner` の
-      `RcExpr::Destructure(container, fields, _state, k)` の腕の 2 か所である。
+      `RcExpr::Destructure(container, fields, _state, k)` の腕の 2 か所である。`consume` も `pub` を
+      持たない inherent なメソッドなので、<1>1a と同じ根拠でその呼び出しは `borrow.rs` の中にしか無い。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume, 第 1 節の記法,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Destructure(container, fields, _state, k)` の腕
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Destructure(container, fields, _state, k)` の腕,
+     EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>4. `consume_rhs(pending, rhs, result_ty)` は `rhs_consumes` が `consumed` に積んだ各 `(var, leaf)` に
       ついて `self.consume(pending, &var, &leaf)` を呼ぶ。`consume_rhs` を呼ぶのは `walk_inner` の
       `RcExpr::Let(x, rhs, k)` の腕 1 か所だけであり、その腕には右辺が `Match` の `Let` は入らない
-      (`match` の腕がその先に置かれているため)。よって <1>3 と合わせて 1 が成り立つ。
+      (`match` の腕がその先に置かれているため)。よって <1>3 と合わせて 1 が成り立つ。`consume_rhs` も
+      `pub` を持たない inherent なメソッドなので、<1>1a と同じ根拠でその呼び出しは `borrow.rs` の中にしか
+      無い。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(x, rhs, k)` の腕,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, <1>3
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, <1>3,
+     EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>5. `walk_inner` の `RcExpr::Destructure(container, fields, _state, k)` の腕は、
       `destructure_consumes(container, fields, self.type_env)` の各 `leaf` について
       `self.consume(&mut pending, &container.name, &leaf)` を呼ぶ。よって <1>3 と合わせて 2 が成り立つ。
@@ -927,9 +954,11 @@ source、`Match` のアームの本数と並び、および継続の順序は変
       返した。
   BY L32
 <1>2. `p30` の `L5` の 3 より、`un_bump` が `InBracket(t)` を返すのは、その第 1 引数の `pending` に、
-      `un_bumped` とオブジェクトを共有する要素があり、そのうち最も後ろの要素の `node` が `t` の `NodeId`
-      であるときである。すなわちその要素は由来が `t` の要素である。
-  BY p30 の L5, <1>1
+      `un_bumped` と**位置を共有する**要素があり、そのうち最も後ろの要素の `node` が `t` の `NodeId`
+      であるときである。すなわちその要素は由来が `t` の要素である。`p30` の `L5` は「要素 `e` が
+      `References` の値 `R` と**位置を共有する**とは、`e.outstanding.shares_an_object(R)` が真である
+      ことをいう」と定め、その鍵が `VarPath` -- この文書の名前 (第 1 節の記法) -- であることを述べる。
+  BY p30 の L5, <1>1, 第 1 節の記法
 <1>3. <1>2 の第 1 引数は、`r` の訪問が `un_bump` を呼ぶところの `pending` であり、それは `pending(r)` に、
       この腕がそれより前に行う `others(r)` についての `consume_objects` を施したものである。L36 より
       `consume_objects` は要素を取り除くだけで加えないので、由来が `t` の要素は `pending(r)` にも在る。
