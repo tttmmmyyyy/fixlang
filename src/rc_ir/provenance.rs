@@ -70,12 +70,13 @@ pub fn sole_origin(src: LeafOrigin) -> LeafOrigins {
 }
 
 /// The provenance of a whole value: the source of each of its boxed leaves.
-// PROOF: P1, P2, P3, P4, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Provenance(LeafMap<LeafOrigins>);
 
 impl Provenance {
     /// A value with no boxed leaf (a scalar or a fieldless aggregate).
+    // PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn empty() -> Provenance {
         Provenance(LeafMap::empty())
     }
@@ -92,20 +93,20 @@ impl Provenance {
     }
 
     /// The provenance whose every boxed leaf is `src`.
-    // PROOF: P1, P2, P3, P4, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: LeafOrigin) -> Provenance {
         Provenance(LeafMap::uniform(ty, type_env, sole_origin(src)))
     }
 
     /// The provenance whose every boxed leaf is bottom (the empty set) — an absent union variant.
-    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn uniform_bottom(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Provenance {
         Provenance::build_shape(ty, type_env, &|_| Set::default())
     }
 
     /// The provenance of the result of an operation that produces one uniquely owned value among
     /// values of unknown sharing: every boxed leaf under `path` is `Fresh`, every other leaf `Unknown`.
-    // PROOF: P1, P2, P3, P4, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn fresh_under(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &[usize]) -> Provenance {
         Provenance::uniform(ty, type_env, LeafOrigin::Unknown)
             .set_leaves_under(path, LeafOrigin::Fresh)
@@ -203,7 +204,7 @@ impl Provenance {
     }
 
     /// Give every boxed leaf under `path` the source `src`. An empty path covers the whole value.
-    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     fn set_leaves_under(&self, path: &[usize], src: LeafOrigin) -> Provenance {
         Provenance(self.0.map_leaves_under(path, |_| sole_origin(src.clone())))
     }
