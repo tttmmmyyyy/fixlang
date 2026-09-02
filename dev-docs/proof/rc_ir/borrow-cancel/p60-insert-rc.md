@@ -1164,11 +1164,14 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   `split_rc` は `fold` で `k` の外へ節点を積む。他の腕は同じ種類の節点を `split_body` した継続の上に
   作り直す。よって `Retain` の鎖の後に来る節点の種類・変数・並びは変わらない。
 
-<1>2. `borrow_ify` の `rewrite_rc` は `Retain(v, π, s, k)` を `units_under(ty(v), π)` の部分列の
-      `Retain` 節点の鎖に置き換える。
-  BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
-  借用版でないときは同じ節点を作り直し、借用版のときは `owns_unit` が真の unit だけを残して鎖にする。
-  鎖が空になることはあるが、後に来る節点は変わらない。
+<1>2. `borrow_ify` の `rewrite_rc` は `Retain(v, π, s, k)` を、`v` を名指す `Retain` 節点の鎖
+      (長さ 0 のこともある) に置き換え、その後に `k` の写しを置く。
+  BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, CODE src/rc_ir/borrow.rs: rc_node
+  この関数はまず `k` を `rewrite` で写す。`is_borrow_version` が偽のときは `rc_node` で同じ `v`・
+  同じ `path`・同じ `state` の節点を 1 つ作り直してそこで返る -- この枝は `units_under` を呼ばない。
+  真のときは `units_under(&v.ty, path, ・)` のうち `owns_unit(v, ・)` が真の unit だけを残し、
+  `rev().fold` でその各 unit の `Retain` 節点を `k` の外へ積む。どちらの枝でも作られる節点は
+  `v` を名指す `Retain` であり、鎖の後に来る節点は `k` の写しである。
 
 <1>3. `borrow_ify` の `rewrite_inner` は、`Let(x, App(callee, args), k)` について `call_rc` の `before` の
       `Retain` 節点をその `Let` 節点の直前に積み、`after` の `Release` 節点をその `Let` 節点と継続の間に
