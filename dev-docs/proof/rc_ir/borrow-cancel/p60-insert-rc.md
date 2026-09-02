@@ -665,12 +665,20 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
 - `U_ρ(n, C)` を、`n` より前の `Release` の訪問で `un_bump` が `InBracket` を返し、選ばれた要素の
   `B_ρ` から引かれた量のうち、`C` のスロットの `identity` に付いていた分の総和とする
   (`CODE src/rc_ir/borrow.rs: un_bump`, D27)。
-- `X_ρ(n, C)` を、`n` より前に `pending` から取り除かれた要素の、取り除かれた時点の `B_ρ` のうち
-  `C` のスロットの `identity` に付いていた分の総和とする。要素を `pending` から取り除く操作は 3 つで
-  ある -- `consume_objects`、`merge`、そして `un_bump` が `InBracket` の subtract の後に置く
+- `X_ρ(n, C)` を、`n` より前に `ρ` の上の `pending` から取り除かれた要素の、取り除かれた時点の `B_ρ` の
+  うち `C` のスロットの `identity` に付いていた分の総和とする。要素を `pending` から取り除く操作は
+  3 つである -- `consume_objects`、`merge`、そして `un_bump` が `InBracket` の subtract の後に置く
   `if innermost.outstanding.is_empty() { pending.remove(index); }` である
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`, `CODE src/rc_ir/borrow.rs:
   CancelAnalysis::merge`, `CODE src/rc_ir/borrow.rs: un_bump`)。
+
+  **`merge` の分は `ρ` が選んだアームの出口の側で読む。** `merge` は返り値の要素を `pending_in` から
+  組み立てるが、その `outstanding` は `uniform` の値、すなわちアームの出口の側の値である
+  (`CODE src/rc_ir/borrow.rs: CancelAnalysis::merge`)。D27 の第 3 箇条はアームへの複製が
+  `B(p, ρ)` をそのまま運ぶと定めるので、`ρ` の上で `bumps_ρ` の和に入っているのは `ρ` が選んだアームへ
+  渡った複製であり、`merge` が落とす分もその側の `B_ρ` である。`pending_in` の側の値で読むと、
+  アームの中で `consume_objects` が外した要素の分が 2 度数えられ、`L7` の恒等式が偽になる。
+  `ρ` が選んだアームの出口に現れない要素は、その落ちる分をアームの中の除去としてすでに数えている。
 
 ### 6.1a `L5a` (`B` は `outstanding` の一部と一致する)
 
@@ -838,11 +846,16 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
 
 <1>4. 要素が `pending` を離れるとその `B_ρ` は `bumps` の和から落ち、`n` までに落ちた量のうち `C` の
       名前に付く分の総和は `X_ρ(n, C)` である。
-  BY <1>1, L5a, 6.1 節の `X_ρ(n, C)` の定義
+  BY <1>1, L5a, D27, 6.1 節の `X_ρ(n, C)` の定義,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::merge
   `bumps_ρ(n, C)` は `pending` に在る要素についての総和なので、`pending` を離れた要素は数えられない。
   6.1 節の `X_ρ(n, C)` は 3 つの取り除く操作すべてについての総和であり、そのうち `un_bump` が
   `outstanding` の空になった要素を外す分は `L5a` (c) より 0 を寄せる。`un_bump` が同じ訪問で引いた分は
   `U_ρ(n, C)` が数えている (<1>3) ので、二重には数えられない。
+  `merge` の分については、6.1 節の定義が `ρ` が選んだアームの出口の側の `B_ρ` を数えると定める。`ρ` の上で
+  `bumps_ρ` の和に在るのはそのアームへ渡った複製であり (D27 の第 3 箇条)、`merge` はそのうち
+  `uniform` に入らないものを落とす。`ρ` が選んだアームの出口に現れない要素は、その落ちる分をアームの
+  中の `consume_objects` か `un_bump` の除去としてすでに数えているので、ここでは数えない。
 
 <1>5. 残るもの -- アームへの複製と、`merge` が要素を返り値に据える段 -- は `B_ρ` を変えない。
   BY <1>1, D27
