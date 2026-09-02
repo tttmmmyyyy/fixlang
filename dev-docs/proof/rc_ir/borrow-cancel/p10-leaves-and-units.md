@@ -321,7 +321,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `type_decl.tycon_info(&[])` と、構造体についてはフィールドごとの穴つきの形
      `type_decl.tycon_info(&[i])` を足した `Map` を渡す。
    - `TypeEnv::add_tycons`。渡された各 `TyConInfo` の `fields` を走って `field.ty` を
-     `unwrap_newtypes` の像に置き替えてから、`tycons` に入れる。
+     `unwrap_newtypes` の像に置き替えてから、`tycons.insert(tycon, tycon_info)` で丸ごと入れる。
+     鍵が新しければ項目が増え、同名の項目が既に在ればそれが置き替わる。
    - `TypeEnv::unwrap_newtypes`。既に在る各 `TyConInfo` の `fields` を走って `field.ty` を
      同じように置き替える。
    - `TypeEnv::resolve_type_aliases_in_tycons`。既に在る各 `TyConInfo` に
@@ -331,10 +332,23 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `TyConInfo::resolve_namespace` を当てる。それは各 `Field` に `Field::resolve_namespace` を
      当て、その本体は `self.syn_ty` と `self.ty` への 2 つの代入である。
 
-   最初の 2 つが `Map` を丸ごと置き、残る 4 つが書き替えるのは `fields[..].ty` と `fields[..].syn_ty`
-   だけである。どれも `fields` の長さを変えず、`variant`、`tyvars`、`is_unbox`、`fields[i].is_punched`
-   にも触れない。`TyConInfo` は `Serialize` も `Deserialize` も導出しないので、キャッシュから読まれる
-   `TyConInfo` も無い。
+   **`tycons` に `TyConInfo` の値を置くのは、この 6 つのうち最初の 3 つである。**`TypeEnv::default`
+   は空の `Map` を置くので値を 1 つも置かない。`TypeEnv::new` が置くのは
+   `Program::calculate_type_env` が渡す `Map`、すなわち `bulitin_tycons()` の各行と、各型宣言に
+   ついての `TypeDefn::tycon_info` の返り値である。`TypeEnv::add_tycons` が置くのは、`add_tycons` を
+   呼ぶ 4 か所が渡す `TyConInfo`、すなわち `CaptureStruct::new` が作った `tycon_info`
+   (`closure_specialization` の `lift_all` と `realize_all` が `record_capture_list` と
+   `take_new_tycons` を経て渡すもの、および `defunctionalize_fix::run_one` が渡すもの) と、
+   `register_opaque_tycon` がその場で作る `TyConInfo` である。**すなわちこの 3 つが置く値はどれも、
+   上の表の 4 つの関数のいずれかが作ったものである。**`add_tycons` は入れる前に各 `Field` の `ty` を
+   `unwrap_newtypes` の像に置き替えるが、`fields` の長さを変えず、`variant`、`tyvars`、`is_unbox`、
+   `fields[i].is_punched` にも触れない。
+
+   **残る 3 つ -- `TypeEnv::unwrap_newtypes`、`TypeEnv::resolve_type_aliases_in_tycons`、
+   `Program::resolve_namespace_not_in_expr` -- が書き替えるのは、既に在る `TyConInfo` の
+   `fields[..].ty` と `fields[..].syn_ty` だけである。**どれも `fields` の長さを変えず、`variant`、
+   `tyvars`、`is_unbox`、`fields[i].is_punched` にも触れない。`TyConInfo` は `Serialize` も
+   `Deserialize` も導出しないので、キャッシュから読まれる `TyConInfo` も無い。
   BY CODE src/ast/types.rs: TyConInfo, CODE src/fixstd/builtin.rs: bulitin_tycons,
      CODE src/constants.rs: FUNPTR_ARGS_MAX, CODE src/ast/typedecl.rs: TypeDefn::tycon_info,
      CODE src/ast/typedecl.rs: TypeDefn::validate_tyvars,
@@ -353,6 +367,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      CODE src/ast/types.rs: TyConInfo::resolve_type_aliases,
      CODE src/elaboration/mod.rs: elaborate,
      CODE src/optimization/capture_struct.rs: CaptureStruct::new,
+     CODE src/optimization/closure_specialization.rs: lift_all, realize_all,
+         record_capture_list, take_new_tycons,
+     CODE src/optimization/defunctionalize_fix.rs: run_one,
      CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon
 
 <1>3ba. `is_funptr_tycon` について次の 2 つが成り立つ。
