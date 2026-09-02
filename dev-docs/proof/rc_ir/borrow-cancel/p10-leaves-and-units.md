@@ -1713,6 +1713,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>1. `impl LLVMGen for` は 78 個あり、`result_prov` を override するのは 29 個である。残る 49 個は
      既定の実装を取る。
     BY A3, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
+  <2>1a. `origin_inner` の `Llvm` の腕が `result_prov` に渡す `result_ty` と `arg_tys` は、
+     `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の `ty(x)` と `args` の各要素の型である。
+     `Binding::Llvm(llvm_gen, args, result_ty)` を作るのは `collect_bindings` のこの腕だけであり、
+     そこが `result_ty` に置くのは `x.ty` である。腕の中で `arg_tys` を作るのは
+     `args.iter().map(|a| a.ty.clone())` の 1 行である。
+    BY CODE src/rc_ir/ownership.rs: collect_bindings,
+       CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding
   <2>2. 既定の実装は `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` の 1 文であり、
      `<1>27b` より abort しない。
     BY <1>1, <1>27b, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
@@ -1896,7 +1903,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     ついてだけ述べて足りるのは、この数え上げによる** -- `<2>2` から `<2>2g` はどれも本体を 1 つずつ
     読んでおり、そこで `Provenance` を作るのに使われるのは `build_shape`、`uniform`、
     `uniform_bottom`、`fresh_under` の 4 つだけである。
-    BY <1>27b, <2>1, <2>2, <2>2a, <2>2b, <2>2c, <2>2d, <2>2e, <2>2f, <2>2g
+    BY <1>27b, <2>1, <2>1a, <2>2, <2>2a, <2>2b, <2>2c, <2>2d, <2>2e, <2>2f, <2>2g
 
 <1>28a. `origin_inner` の `Llvm` の腕が得る `decl` は、各 leaf に要素数 0 か 1 の `LeafOrigins` を
    置く。したがって `decl.leaf_origins_at(path)` が返す集合と `decl.leaf_origins_under(path)` が
@@ -2432,28 +2439,43 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      型を持つならば `sig'` は `ty(u')` の unit に届く
     <3>1. CASE `vars.bindings[u]` が `Binding::Move(y)` である。辺の先は `(y, sig)` である。この
        場合の仮定より `u` は `vars.bindings` の定義域にあるので、`<2>5a` より帰納法の仮定の前件が
-       満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (i) と (vi) より `ty(y) = ty(u)` なので、
-       `y` が `vars.var_tys` に型を持つならばその型は `ty(u)` であり、`sig` はその unit に届く。
-      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
+       満たされ、`sig` は `ty(u)` の unit に届く。`Binding::Move(y)` を作るのは `collect_bindings` の
+       `Let(u, RcRhs::Var(y), k)` の腕だけなので、`<1>3a` (i) が当たり、(vi) と合わせて
+       `ty(y) = ty(u)` である。よって `y` が `vars.var_tys` に型を持つならばその型は `ty(u)` であり、
+       `sig` はその unit に届く。
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner,
+         CODE src/rc_ir/ownership.rs: collect_bindings
     <3>2. CASE `vars.bindings[u]` が `Binding::Join(arm_results)` である。辺の先は
        `(arm_result, sig)` である。この場合の仮定より `u` は `vars.bindings` の定義域にあるので、
-       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (ii) と
-       (vi) より `ty(arm_result) = ty(u)` なので、`arm_result` が `vars.var_tys` に型を持つならば
+       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。
+       `Binding::Join(arm_results)` を作るのは `collect_bindings` の
+       `Let(u, RcRhs::Match(scrut, arms), k)` の腕だけであり、`arm_results` の各要素は
+       `returned_var(&arm.body)` なので、`<1>3a` (ii) が当たり、(vi) と合わせて
+       `ty(arm_result) = ty(u)` である。よって `arm_result` が `vars.var_tys` に型を持つならば
        その型は `ty(u)` であり、`sig` はその unit に届く。
-      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner,
+         CODE src/rc_ir/ownership.rs: collect_bindings,
+         CODE src/rc_ir/ownership.rs: returned_var
     <3>3. CASE `vars.bindings[u]` が `Binding::Payload(scrut, None)` である。辺の先は
        `(scrut, sig)` である。この場合の仮定より `u` は `vars.bindings` の定義域にあるので、
-       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。`<1>3a` (iii) と
-       (vi) より `ty(u) = ty(scrut)` なので、`scrut` が `vars.var_tys` に型を持つならばその型は
+       `<2>5a` より帰納法の仮定の前件が満たされ、`sig` は `ty(u)` の unit に届く。
+       `Binding::Payload(scrut, arm.tag)` を作るのは `collect_bindings` の
+       `Let(z, RcRhs::Match(scrut, arms), k)` の腕だけであり、`u` はその `arm.payload.name` で
+       `arm.tag` は `None` なので、`<1>3a` (iii) の catch-all の場合が当たり、(vi) と合わせて
+       `ty(u) = ty(scrut)` である。よって `scrut` が `vars.var_tys` に型を持つならばその型は
        `ty(u)` であり、`sig` はその unit に届く。
-      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner
+      BY <1>3a, <2>5a, CODE src/rc_ir/ownership.rs: origin_inner,
+         CODE src/rc_ir/ownership.rs: collect_bindings
     <3>4. CASE `vars.bindings[u]` が `Binding::Payload(scrut, Some(tag))` で `scrut.ty.is_box(E)` が
        偽である。
       <4>1. 辺の先は `(scrut, [tag] ++ sig)` である。
         BY CODE src/rc_ir/ownership.rs: origin_inner
-      <4>2. `<1>3a` (iii) と (vi) より `(tag, ty(u))` は `F(ty(scrut))` の要素であり、`<1>3a` (iv)
-         より `ty(scrut).toplevel_tycon_info(E).variant` は `TyConVariant::Union` である。
-        BY <1>3a
+      <4>2. `Binding::Payload(scrut, arm.tag)` を作るのは `collect_bindings` の
+         `Let(z, RcRhs::Match(scrut, arms), k)` の腕だけであり、`u` はその `arm.payload.name` で
+         `arm.tag` は `Some(tag)` である。よって `<1>3a` (iii) の変位アームの場合と (vi) より
+         `(tag, ty(u))` は `F(ty(scrut))` の要素であり、`<1>3a` (iv) より
+         `ty(scrut).toplevel_tycon_info(E).variant` は `TyConVariant::Union` である。
+        BY <1>3a, CODE src/rc_ir/ownership.rs: collect_bindings
       <4>2a. `ty(scrut).is_closure()` は偽であり、`ty(scrut).is_funptr()` も偽である。`<4>2` は
          `ty(scrut).toplevel_tycon_info(E)` が値を返し、その `variant` が `TyConVariant::Union` で
          あると述べる。`toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、値を
@@ -2490,9 +2512,11 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        ある。
       <4>1. 辺の先は `(cont, [idx] ++ sig)` である。
         BY CODE src/rc_ir/ownership.rs: origin_inner
-      <4>2. `<1>3a` (v) と (vi) より `(idx, ty(u))` は `F(ty(cont))` の要素であり、
+      <4>2. `Binding::Field(cont, idx)` を作るのは `collect_bindings` の
+         `Destructure(cont, fields, _state, k)` の腕だけであり、`u` はその `fields` のある要素の
+         変数である。よって `<1>3a` (v) と (vi) より `(idx, ty(u))` は `F(ty(cont))` の要素であり、
          `ty(cont).toplevel_tycon_info(E).variant` は `TyConVariant::Struct` である。
-        BY <1>3a
+        BY <1>3a, CODE src/rc_ir/ownership.rs: collect_bindings
       <4>2a. `ty(cont).is_closure()` は偽であり、`ty(cont).is_funptr()` も偽である。`<4>2` は
          `ty(cont).toplevel_tycon_info(E)` が値を返し、その `variant` が `TyConVariant::Struct` で
          あると述べる。`toplevel_tycon_info` は `assert!(!self.is_closure())` から始まるので、値を
