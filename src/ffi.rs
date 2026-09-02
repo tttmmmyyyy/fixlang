@@ -222,6 +222,7 @@ impl CSignature {
 
     /// The signature of the C function generated for a value exported at `exported_ty`, whose every
     /// position `ExportedFunctionType::validate` has admitted as one the C ABI can carry.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn of_ffi_export(exported_ty: &ExportedFunctionType, type_env: &TypeEnv) -> CSignature {
         let boundary_tycon = |ty: &Arc<TypeNode>| {
             c_boundary_tycon(ty, type_env)
