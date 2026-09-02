@@ -7455,6 +7455,7 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBoxedToRetainedPtrIOS {
     val_name: FullName,
@@ -7523,7 +7524,7 @@ impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
     }
 }
 
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAL_NAME: &str = "val";

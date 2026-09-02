@@ -1167,7 +1167,7 @@ impl TypeNode {
     ///
     /// This is what a walk over the values a type holds descends: reference counting reaches a hole's
     /// slot through no path, and reading one would read a value that has moved on.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unpunched_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
         let tycon_info = self.toplevel_tycon_info(type_env);
         self.instance_field_types(tycon_info, type_env)
@@ -1400,7 +1400,7 @@ impl TypeNode {
 
     /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
     /// the values it captured.
-    // PROOF: P1, P2, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_closure(&self) -> bool {
         self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())
     }
@@ -1489,7 +1489,7 @@ impl TypeNode {
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
     /// parameters and fields. Panics for a closure type, a type variable, or a type constructor
     /// absent from `type_env`.
-    // PROOF: D/A, P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
         assert!(!self.is_closure());
         let tycon = self.toplevel_tycon().unwrap();
@@ -1498,14 +1498,14 @@ impl TypeNode {
 
     /// Whether a value of this type is held in place, with its fields laid out where the value
     /// sits. A closure is unboxed: it is a function pointer beside the object its captures live in.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P7a, P7d, P7e, P15, P16, P17, P18, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox
     }
 
     /// Whether a value of this type is a pointer to a heap block that holds its fields, so that the
     /// value costs one pointer wherever it is stored and its lifetime is reference-counted.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P7a, P7d, P7e, P15, P16, P17, P18, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {
         !self.is_unbox(type_env)
     }
