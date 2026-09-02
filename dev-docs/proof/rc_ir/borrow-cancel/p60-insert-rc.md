@@ -3561,7 +3561,9 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
        CODE src/rc_ir/ownership.rs: Origin::of_candidates,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under
-    鍵 `(x, π)` を取る。P2 より、空の memo と `vars_B` から `(x, π)` について `origin` を呼ぶ計算は
+    鍵 `(x, π)` を取る。P2 の言明は `vars.origins` の状態に条件を置かず、範囲に入る `(x, π)` について
+    `origin(x, π)` が panic せずに答えを返して停止すると述べるので、どの memo の状態から呼んでも
+    それが成り立つ。とくに空の memo と `vars_B` から `(x, π)` について `origin` を呼ぶ計算は
     停止し、`EXT 呼び出しの入れ子` よりその計算が行う呼び出しは有限個で、そのどれもが戻る。**この計算の
     各呼び出しについて、その返り値がその鍵の `Org_{B'}` に等しいことを、戻る順の帰納で示す。** 根の
     呼び出しにこれを読むと、P2a よりその返り値は `Org_B(x, π)` なので言明が出る。
