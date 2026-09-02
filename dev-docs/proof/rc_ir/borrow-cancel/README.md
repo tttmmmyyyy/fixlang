@@ -3086,7 +3086,20 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P26 (`cancel` の半分) | `p50-observation.md` | 有 | 証明済み (D29 の上で) |
 | P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | 証明済み。第 1 文は**等号**で立つので (X1) の出口が起きない。第 2 文は `cancel` の側だけの主張になった -- `borrow_ify` は (X3) を開くため。**量化は観測の事象へ広げた** (段の中の観測を含む) |
 | P27 | `p51-runs.md` | 有 | 証明済み。(R1)(R2)(R3) が立ち、`L0` の数え上げは A21 が片付けた |
-| P28 | `p05-holders.md` | 第 6 周 (224 段) | **0** | 5 | BAD-CITATION 5、NOT-OBVIOUS 8 | 修理済み。**第 7 周の検証** |
+| P28 | `p05-holders.md` | 有 | 証明済み (D12、P14b の内容、A20 の下で)。(a) と (b) を点の上の 1 つの帰納で示す |
+| P29 | `p51-runs.md` | 有 | 証明済み。局所補題 `L0b` を仮説つきで立て、入力に当てる |
+| P30 | `p51-runs.md` | 有 | 証明済み。局所補題 `L0` がその内容を持つ |
+| (P-insert) | `p60-insert-rc.md` | 有 (A19 の (ii-a) と (ii-b)) | 証明済み。(O1) と (O2) はどちらも無条件、`split_rc_units` の段は同名の節 |
+| T | `p70-main-theorem.md` | -- | 証明済み。(T1) から (T4) まで、引用する命題の言明の上で閉じる |
+
+### 7.2 ファイルごとの直近の検証
+
+**1 つのファイルが複数の命題を持つので、検証の状態はファイルごとに 1 行だけ書く。**
+命題の側に書くと、同じ 1 つの事実が最大 5 か所に複写され、そのうち 1 か所だけ直った版が残る。
+
+| ファイル | 直近の検証 | FALSE | INCOMPLETE | NOT-OBVIOUS ほか | 次にすること |
+|---|---|---|---|---|---|
+| `p05-holders.md` | 第 6 周 (224 段) | **0** | 5 | BAD-CITATION 5、NOT-OBVIOUS 8 | 修理済み。**第 7 周の検証** |
 | `p10-leaves-and-units.md` | 第 6 周 (509 段) | **0** | **0** | NOT-OBVIOUS 8 | **2 周続けてゼロ**。修理済み。**第 7 周の検証** |
 | `p11-origin-soundness.md` | 第 6 周 (298 段) | 2 | 5 | UNDEFINED 1、NOT-OBVIOUS 6 | 修理済み。**第 7 周の検証** |
 | `p12-identity-and-consumes.md` | 第 6 周 (373 段) | **0** (散文 2) | 2 | BAD-CITATION 1、NOT-OBVIOUS 10 | 修理済み。**第 7 周の検証** |
