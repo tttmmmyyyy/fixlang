@@ -464,7 +464,7 @@ enum については元と同じ変位で、その変位が保持する各値を
        ある。すなわち鍵の集合が同じであり、各鍵の `Binding` の変位が同じで、その変位が保持する値が
        等しく、`Binding::Llvm` の `Box<dyn LLVMGen>` は同じ引数に同じ宣言を返す。
   <2>1. `bindings` は `VarTable` の非公開の欄であり、`ownership.rs` の中で --- その
-        `#[cfg(test)] mod tests` を含めて --- この欄に触れるのは 5 か所だけである。書き手は 4 つ ---
+        `#[cfg(test)] mod tests` を含めて --- この欄に触れる関数は 5 つだけである。書き手は 4 つ ---
         `VarTable::empty` の `Map::default()`、`VarTable::of` の `vars.bindings.insert`、
         `collect_bindings` の 3 つの `vars.bindings.insert`、`#[cfg(test)] mod tests` の `table` の
         `vars.bindings.insert` --- であり、読み手は `origin_inner` の `vars.bindings.get(var)` 1 つで
