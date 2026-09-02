@@ -3086,34 +3086,27 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | P26 (`cancel` の半分) | `p50-observation.md` | 有 | 証明済み (D29 の上で) |
 | P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | 証明済み。第 1 文は**等号**で立つので (X1) の出口が起きない。第 2 文は `cancel` の側だけの主張になった -- `borrow_ify` は (X3) を開くため。**量化は観測の事象へ広げた** (段の中の観測を含む) |
 | P27 | `p51-runs.md` | 有 | 証明済み。(R1)(R2)(R3) が立ち、`L0` の数え上げは A21 が片付けた |
-| P28 | `p05-holders.md` | 有 | 証明済み (D12、P14b の内容、A20 の下で)。(a) と (b) を点の上の 1 つの帰納で示す |
-| P29 | `p51-runs.md` | 有 | 証明済み。局所補題 `L0b` を仮説つきで立て、入力に当てる |
-| P30 | `p51-runs.md` | 有 | 証明済み。局所補題 `L0` がその内容を持つ |
-| (P-insert) | `p60-insert-rc.md` | 有 (A19 の (ii-a) と (ii-b)) | 証明済み。(O1) と (O2) はどちらも無条件、`split_rc_units` の段は同名の節 |
-| T | `p70-main-theorem.md` | -- | 証明済み。(T1) から (T4) まで、引用する命題の言明の上で閉じる |
-
-### 7.2 ファイルごとの直近の検証
-
-**1 つのファイルが複数の命題を持つので、検証の状態はファイルごとに 1 行だけ書く。**
-命題の側に書くと、同じ 1 つの事実が最大 5 か所に複写され、そのうち 1 か所だけ直った版が残る。
-
-| ファイル | 直近の検証 | FALSE | INCOMPLETE | NOT-OBVIOUS ほか | 次にすること |
-|---|---|---|---|---|---|
-| `p05-holders.md` | 第 5 周 | 1 | -- | README 差し戻し 4 | 修理済み。**第 6 周の検証** |
-| `p10-leaves-and-units.md` | 第 6 周 (509 段) | **0** | **0** | NOT-OBVIOUS 8、README 差し戻し 5 | **2 周続けてゼロ**。修理済み。**第 7 周の検証** |
+| P28 | `p05-holders.md` | 第 6 周 (224 段) | **0** | 5 | BAD-CITATION 5、NOT-OBVIOUS 8 | 修理済み。**第 7 周の検証** |
+| `p10-leaves-and-units.md` | 第 6 周 (509 段) | **0** | **0** | NOT-OBVIOUS 8 | **2 周続けてゼロ**。修理済み。**第 7 周の検証** |
 | `p11-origin-soundness.md` | 第 6 周 (298 段) | 2 | 5 | UNDEFINED 1、NOT-OBVIOUS 6 | 修理済み。**第 7 周の検証** |
-| `p12-identity-and-consumes.md` | 第 5 周 | 0 | 2 | BAD-CITATION 8、NOT-OBVIOUS 6 | 修理済み。**第 6 周の検証** |
-| `p13-disposals-and-pending.md` | 第 6 周 | 1 | 0 | BAD-CITATION 4、UNDEFINED 2、NOT-OBVIOUS 6、HEDGE 1 | 修理済み。**第 7 周の検証** |
-| `p15-ownership-uniformity.md` | 第 6 周 (382 段) | 0 | 2 | NOT-OBVIOUS 5 | 修理済み。**第 7 周の検証** |
-| `p20-borrow-ify.md` | 第 6 周 (551 段) | **3** | 0 | BAD-CITATION 3、UNDEFINED 2、NOT-OBVIOUS 11 | 修理済み (A19 (ii-c) を果たした)。**第 7 周の検証** |
-| `p30-cancel-walk.md` | 第 6 周 (366 段) | **0** | **0** | BAD-CITATION 1、NOT-OBVIOUS 20 | 修理済み。**第 7 周の検証** |
+| `p12-identity-and-consumes.md` | 第 6 周 (373 段) | **0** (散文 2) | 2 | BAD-CITATION 1、NOT-OBVIOUS 10 | 修理済み。**第 7 周の検証** |
+| `p13-disposals-and-pending.md` | 第 6 周 | 1 | 0 | BAD-CITATION 4、UNDEFINED 2、NOT-OBVIOUS 6 | 修理済み。**第 7 周の検証** |
+| `p15-ownership-uniformity.md` | 第 6 周 (382 段) | **0** | 2 | NOT-OBVIOUS 5 | 修理済み。**第 7 周の検証** |
+| `p20-borrow-ify.md` | 第 6 周 (551 段) | 3 | **0** | BAD-CITATION 3、UNDEFINED 2、NOT-OBVIOUS 11 | 修理済み (A19 (ii-c) を果たした)。**第 7 周の検証** |
+| `p30-cancel-walk.md` | 第 6 周 (366 段) | **0** | **0** | BAD-CITATION 1、NOT-OBVIOUS 20 | **2 周続けてゼロ**。修理済み。**第 7 周の検証** |
 | `p40-cancel-soundness.md` | 第 6 周 (400 段) | 5 | 4 | BAD-CITATION 13、NOT-OBVIOUS 14、UNDEFINED 1 | 修理済み。**第 7 周の検証** |
-| `p50-observation.md` | 第 6 周 | 0 | 1 | BAD-CITATION 8、NOT-OBVIOUS 12 | 修理済み。**第 7 周の検証** |
-| `p51-runs.md` | 第 5 周 | 1 | 3 | NOT-OBVIOUS 8、BAD-CITATION 4 | 修理済み。**第 6 周の検証** |
-| `p60-insert-rc.md` | 第 6 周 (360 段) | **4** | **9** | UNDEFINED 1、BAD-CITATION 4、HEDGE 1、NOT-OBVIOUS 45 段 | **修理** |
-| `p70-main-theorem.md` | 第 5 周 | 2 | -- | NOT-OBVIOUS 3、散文 7 | 修理済み。**第 6 周の検証** |
+| `p50-observation.md` | 第 6 周 | **0** | 1 | BAD-CITATION 8、NOT-OBVIOUS 12 | 修理済み。**第 7 周の検証** |
+| `p51-runs.md` | 第 6 周 (172 段) | 9 | 1 | BAD-CITATION 2、UNDEFINED 1、NOT-OBVIOUS 11 | 修理済み。**第 7 周の検証** |
+| `p60-insert-rc.md` | 第 6 周 (360 段) | 4 | 9 | UNDEFINED 1、BAD-CITATION 4、HEDGE 1、NOT-OBVIOUS 45 段 | 修理済み。**第 7 周の検証** |
+| `p70-main-theorem.md` | 第 6 周 (31 段) | **0** (散文 6) | 1 | NOT-OBVIOUS 1、表の落ち 12、引用 13 | 修理済み。**第 7 周の検証** |
 
 `--` は、その周の検証がその欄を挙げなかったことを表す。
+
+**第 6 周は枠を固める周だった。** この周に README は 30 回以上動き、**A19 が読める点の粒度、実行と
+コンパイル単位の関係、プログラムの等号、素動作の粒度での網羅**という 4 つの穴が埋まった。
+**FALSE の数が第 5 周より増えているのは、検証が強くなった分と、枠が動いた分である** --
+この周のあいだに走査を 3 本足した (A19 を引く段の一覧、引用の帰属による分別、README について
+述べる文)。**周どうしの数はそのままでは比べられない。**
 
 ### 7.3 果たされていない義務
 
