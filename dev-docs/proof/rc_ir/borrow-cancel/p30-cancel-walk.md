@@ -1977,7 +1977,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 
 ## 7. P17 (`un_bump` の正しさ)
 
-**言明** --- `un_bump(pending, R)` の返り値は次で決まる。`R` と位置 (`VarPath`) を共有する要素が
+**言明** --- `un_bump(pending, R)` の返り値は次で決まる。`R` と**位置 (`VarPath`) を共有する**要素が
 `pending` に無ければ `NoBracket` で、`pending` は変わらない。あって、そのうち最も後ろの要素 (最内) の
 `outstanding` が `R` を `covers` しなければ `OutsideBracket` で、`pending` は変わらない。covers すれば
 `InBracket(t)` で、`t` はその要素の `node` であり、その要素の `outstanding` から `R` が引かれ、空に
