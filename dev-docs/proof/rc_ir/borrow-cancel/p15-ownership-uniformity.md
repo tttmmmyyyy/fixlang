@@ -101,15 +101,12 @@ Rust では、可視性の修飾子 (`pub`、`pub(crate)`、`pub(in ...)`) を�
 `RcVar` の名前 (`Let` の束縛変数、`Destructure` の容器とフィールド変数、`Match` の scrutinee とアームの
 payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llvm` の各オペランド、`Retain` /
 `Release` / `Eval` / `Ret` が名指す変数) の全体である
-(`CODE src/rc_ir/ast.rs: for_each_var`, `for_each_var_of_node`, `for_each_var_of_rhs`)。この集合は
-A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- に含まれる。
+(`CODE src/rc_ir/ast.rs: for_each_var`, `for_each_var_of_node`, `for_each_var_of_rhs`)。
 
 **DEF 扱う型**
 次の 3 種を**根の型**と呼ぶ。**関数のパラメータ・capture が宣言する型** (`RcFunc::params` と
 `RcFunc::capture` の `RcVar` の型)、本体に現れる `RcVar` の型、`Llvm` 節点の結果の型 `rty` である。
 パラメータ・capture の型を数えるのは、本体が一度も読まないパラメータの型が本体に現れないからである。
-固定した出力版のこれら 3 種は、入力の関数のものと同じ型である -- `f_own` の版とグローバル初期化子の
-版は入力の本体をそのまま写したものであり、借用版は束縛名を付け替えただけで型を変えない (P9)。
 根の型と、根の型から `unpunched_field_types(・)` が返す対の第 2 成分を有限回取って到達する型とを
 合わせて**扱う型**と呼ぶ。
 **以下の補題が量化する型 -- `τ`、`σ`、および `ty(・)` の形で現れる型 -- は、すべて扱う型を渡る。**
@@ -381,11 +378,15 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 
 <1>1. 根の型は A10 を満たす。
   DEF 扱う型 より根の型はパラメータ・capture の `RcVar` の型か、本体に現れる `RcVar` の型か、
-  `Llvm` 節点の結果の型であり、どれもプログラムに現れる型である (D1 より `RcFunc` はパラメータの列と
-  capture を持ち、その各 `RcVar` は型を持つ)。A10 は、プログラムに現れる型が ground であり、その
-  tycon に kind の要求するだけの引数が与えられており、その tycon が `type_env` にあり、
-  `no_size_in_place` の in-place の降下が有限であると述べる。
-  BY A10, D1, DEF 扱う型
+  `Llvm` 節点の結果の型である (D1 より `RcFunc` はパラメータの列と capture を持ち、その各 `RcVar` は
+  型を持つ)。固定した出力版のこの 3 種は、入力のプログラムに現れる型である -- `f_own` の版と
+  グローバル初期化子の版の本体・パラメータ・capture は入力のものそのものであり (`borrow_ify` は
+  `func.clone()` を写し、グローバルは `g.init` を写す)、借用版のそれらは入力の関数のものの束縛変数を
+  一斉に付け替えたものであって (P9)、`rename_var` は名前だけを差し替えて型を残す。A10 は、プログラムに
+  現れる型が ground であり、その tycon に kind の要求するだけの引数が与えられており、その tycon が
+  `type_env` にあり、`no_size_in_place` の in-place の降下が有限であると述べる。
+  BY A10, D1, P9, DEF 扱う型, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
+     CODE src/rc_ir/rename.rs: rename_var
 
 <1>2. 扱う型はすべて A10 を満たす。
   <2>1. DEF 扱う型 の第 2 の種 -- 根の型から `unpunched_field_types` の対の第 2 成分を有限回取って
@@ -1084,15 +1085,19 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `is_fully_unboxed`・`is_closure`・`is_box`・`is_array` と `unpunched_field_types` であり、
   `unpunched_field_types` と `is_fully_unboxed` は最上位 tycon の宣言を `type_env` から引く。A10 より、
   `τ` から `unpunched_field_types` を繰り返し取る歩みは有限であり、その各段の型は ground で飽和していて
-  tycon が `type_env` にあるので、この降下は中断せずに終わる (`is_unbox` は `is_closure()` を先に見て
-  短絡し、`go` は `unpunched_field_types` を呼ぶ前に `is_closure` を見るので、`toplevel_tycon_info` の
-  `assert!(!self.is_closure())` も通る)。`leaf ∈ leaves(τ)` については、L9a より `τ` の `leaf` に沿う
+  tycon が `type_env` にあるので、この降下は中断せずに終わる。この降下が通る `toplevel_tycon_info` の
+  `assert!(!self.is_closure())` も通る -- `unpunched_field_types` はその関数を呼び、`is_fully_unboxed` は
+  `is_box` を経て `is_unbox` を呼び、`is_unbox` は `is_closure()` を先に見て短絡するので、closure 型では
+  `toplevel_tycon_info` に届かない。closure でない型では表明の条件がそのまま成り立つ。`go` は
+  `unpunched_field_types` を呼ぶ前に `is_closure` を見るので、`go` がその関数を呼ぶ型も closure ではない。
+  `leaf ∈ leaves(τ)` については、L9a より `τ` の `leaf` に沿う
   歩みは (A) `Unit` で終わるか、(B) `Capture` で終わり、そこで `leaf` が選ぶ添字が `capture_idx` に
   等しいかのどちらかである。(A) で歩みの長さが `|leaf|` ならば L1 の場合 (a)、それより短ければ場合 (b) の
   `Unit` の行、(B) ならば場合 (b) の `Capture` (`π[m] = capture_idx`) の行が当てはまり、どれも `trunc` は
   値を返す。
   BY A10, L1, L1b, L9a, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
-     CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
+     TypeNode::is_closure, TypeNode::toplevel_tycon_info, TypeNode::unpunched_field_types
 
 <1>1. `owns_object_yet(V, type_env, r, p, OL)` は、まず `leaves(τ)` を計算し、続けて `under(τ, p)` の
       各要素 `unit` について「`trunc(τ, unit)` を鍵 `key` とし、`leaves(τ)` のうち `trunc(τ, ・) = key` を
@@ -1493,6 +1498,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     よって `boxed_leaf_paths` の `go` は `ty(c)` について `unpunched_field_types` の下へ降り、第 `idx`
     フィールドについて `ty(y)` から始めた `go` の結果の前に `idx` を置いたものを積む。
     BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
+       TypeNode::toplevel_tycon_info,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>3. QED
     この step の ASSUME より `covered(ty(y), ρ)` の元 `λ` が取れる。`covered(ty(y), ρ) ⊆ leaves(ty(y))`
@@ -1522,6 +1528,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `go` は `ty(s)` について `unpunched_field_types` の下へ降り、第 `t` 変位について `ty(y)` から始めた
     `go` の結果の前に `t` を置いたものを積む。
     BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union,
+       TypeNode::toplevel_tycon_info,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>3. QED
     この step の ASSUME より `covered(ty(y), ρ)` の元 `λ` が取れる。`covered(ty(y), ρ) ⊆ leaves(ty(y))`
@@ -1813,14 +1820,18 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   `is_box`・`is_array` と `unpunched_field_types` であり、`unpunched_field_types` と `is_fully_unboxed` は
   最上位 tycon の宣言を `type_env` から引く。A10 より、`τ` から `unpunched_field_types` を繰り返し取る
   歩みは有限であり、その各段の型は ground で飽和していて tycon が `type_env` にあるので、この降下は
-  中断せずに終わる (`is_unbox` は `is_closure()` を先に見て短絡し、`go` は `unpunched_field_types` を
-  呼ぶ前に `is_closure` を見るので、`toplevel_tycon_info` の `assert!(!self.is_closure())` も通る)。
+  中断せずに終わる。この降下が通る `toplevel_tycon_info` の `assert!(!self.is_closure())` も通る --
+  `unpunched_field_types` はその関数を呼び、`is_fully_unboxed` は `is_box` を経て `is_unbox` を呼び、
+  `is_unbox` は `is_closure()` を先に見て短絡するので、closure 型では `toplevel_tycon_info` に届かない。
+  closure でない型では表明の条件がそのまま成り立つ。`go` は `unpunched_field_types` を呼ぶ前に
+  `is_closure` を見るので、`go` がその関数を呼ぶ型も closure ではない。
   `leaf ∈ leaves(τ)` については、L9a より `τ` の `leaf` に沿う歩みは (A) `Unit` で終わるか、(B) `Capture`
   で終わって `leaf[m] = capture_idx` であるかのどちらかである。(A) で歩みの長さが `|leaf|` ならば L1 の
   場合 (a)、それより短ければ場合 (b) の `Unit` の行、(B) ならば場合 (b) の `Capture`
   (`π[m] = capture_idx`) の行が当てはまり、どれも `trunc` は値を返す。
   BY <1>2, A10, L1, L1b, L9a, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
-     CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
+     TypeNode::is_closure, TypeNode::toplevel_tycon_info, TypeNode::unpunched_field_types
 
 <1>4. QED
   `pty_f(r)` は `Option` なので `None` か `Some(τ)` のどちらかである。`None` の場合は `<1>1` が両辺とも
@@ -2146,7 +2157,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `unbox struct { _arr : Array a, _idx : I64 }` なので、この場合は実際に起こりうる**
   (`CODE src/fixstd/std.fix: PunchedArray`)。
   BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
-     TypeNode::is_union, TypeNode::is_punched_array, CODE src/rc_ir/ownership.rs: unit_step
+     TypeNode::is_union, TypeNode::is_punched_array, TypeNode::toplevel_tycon_info,
+     CODE src/rc_ir/ownership.rs: unit_step
 
 <1>3a. unbox 容器の `Field(c, idx)` について、`leaves(ty(c))` のうち `[idx]` を前置に持つものは
        `{ [idx] ++ μ : μ ∈ leaves(ty(x)) }` であり、したがって
@@ -2198,7 +2210,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   空でない。
   BY A12, L1a, L1d, L8, CODE src/rc_ir/ownership.rs: unit_step, truncate_to_unit,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
-     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union,
+     TypeNode::toplevel_tycon_info
 
 <1>6. 単一 `Arg(j, σ)` の `(args[j], σ)` は unit を覆い、`Λ_{ty(args[j])}(σ) = { σ }` である。
   A3 より `σ ∈ leaves(ty(args[j]))` である。`boxed_leaf_paths` の `go` は leaf を積んだ位置で戻るので、
@@ -2610,20 +2623,30 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   L20b である。この step が扱う 5 種の `Binding` は L20b が挙げるものに含まれる。
   BY <1>1, L20b
 
+<1>1b. `x` が値を得るのは、`<1>1a` の構文がそれを束縛する位置においてだけである。したがって、`x` が
+       ある位置までに値を得ているならば、活性化の辿る実行路はその節点を通っている。
+  D6 は値を得る形を 3 つ挙げる -- 節点が束縛する変数、パラメータ・capture、`vars.bindings` に束縛を
+  持たない名前である。この step が扱う 5 種の `Binding` はどれも `collect_bindings` が記録するもので
+  あり、`vars.bindings.get(x)` はそれを値に持つので、`x` は第 3 の形ではない。L1e の (i) と (ii) の
+  同値より、この版のパラメータ・capture であるのは `vars.bindings.get(x)` が `Some(Binding::Param)` で
+  ある名前ちょうどなので、`x` は第 2 の形でもない。残るのは第 1 の形であり、`<1>1a` より `x` を束縛
+  する構文は 1 つである。
+  BY <1>1, <1>1a, D6, L1e, CODE src/rc_ir/ownership.rs: collect_bindings
+
 <1>2. `Binding::Move(w)` の `w`、`Binding::Payload(s, tag)` の `s`、`Binding::Field(c, idx)` の `c` は、
       `x` がその位置までに値を得ているならば、その位置までに値を得ている。
   `<1>1` より、この 3 種の `Binding` を記録する構文は `Let(x, Var(w), k)`、`Let(_, Match(s, arms), _)`、
   `Destructure(c, fs, _, k)` であり、どれも `w` / `s` / `c` を節点そのものに `RcVar` として持つ。
-  `<1>1a` よりこれが `x` を束縛する唯一の構文なので、`x` がその位置までに値を得ているならば活性化の
-  辿る実行路はこの節点を通っている (D2 と D3 -- `Let` の束縛変数と `Destructure` のフィールド変数は
+  `<1>1b` より、`x` がその位置までに値を得ているならば活性化の辿る実行路はこの節点を通っている
+  (D2 と D3 -- `Let` の束縛変数と `Destructure` のフィールド変数は
   `k` へ進むところで、`Match` のアームの payload はそのアーム本体へ入るところで値を得る)。L20a を
   その節点の位置に当てると `w` / `s` / `c` はそこまでに値を得ており、D6 より以後の位置でも値を得た
   変数である。
-  BY <1>1, <1>1a, D2, D3, D6, L20a
+  BY <1>1, <1>1b, D2, D3, D6, L20a
 
 **アーム結果はこの step に入らない。** `Binding::Join(arm_results)` の `arm_results` は各アームの
 結果の変数を並べたものであり、活性化が選ばなかったアームの本体は走らないので、その結果の変数は値を
-得ていない。(m3) が要るのは選ばれたアームの結果の変数だけであり、それは `<1>5` が別に与える。
+得ていない。(m3) が要るのは選ばれたアームの結果の変数だけであり、それは (m3) の証明が別に与える。
 
 <1>3. (m1) が成り立つ。
   D2 より `Let(x, rhs, k)` は `rhs` の値を `x` に束縛し、D7 より `Var` は値を渡すだけである。コード生成も
@@ -2641,10 +2664,10 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   <2>1. この活性化はこの `Match` でちょうど 1 つのアームを選び、そのアーム本体の実行路を辿ってから
         `x` を束縛する。
     `<1>1` と `<1>1a` より `Binding::Join(arm_results)` を記録する構文は `Let(x, Match(scrut, arms), k)`
-    ただ 1 つであり、`x` が値を得るのはこの節点で `k` へ進むところなので (D2、D3)、`x` がその位置までに
-    値を得ているならば活性化はこの節点を通っている。D21 より活性化はその `Match` でちょうど 1 つの
-    アームを選び、D3 より辿る実行路はそのアーム本体の実行路を辿ってから `k` へ進む。
-    BY <1>1, <1>1a, D2, D3, D21
+    ただ 1 つであり、`x` が値を得るのはこの節点で `k` へ進むところなので (D2、D3、`<1>1b`)、`x` が
+    その位置までに値を得ているならば活性化はこの節点を通っている。D21 より活性化はその `Match` で
+    ちょうど 1 つのアームを選び、D3 より辿る実行路はそのアーム本体の実行路を辿ってから `k` へ進む。
+    BY <1>1, <1>1a, <1>1b, D2, D3, D21
   <2>2. そのアーム本体の実行路の最後の節点は `Ret(a*)` であり、`a*` は `arm_results` の元である。
     D2 より `Ret` は唯一の終端子であり、残る 5 種はちょうど 1 つの継続を持つ。D3 より、アーム本体の
     実行路はアーム本体の根から継続を辿って `Ret` に着いて終わる (途中の `Match` はアーム本体の実行路を
@@ -2676,10 +2699,10 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>7. (m5) が成り立つ。
   <2>1. 活性化はこの `Match` で、`x` を payload に持つアーム (`tag` が `Some(t)`) を選んでいる。
     `<1>1` より `x` は `tag = Some(t)` のアームの payload 変数であり、`<1>1a` よりそれが `x` を束縛する
-    唯一の構文である。payload 変数が値を得るのはそのアームへ入るところなので (D2 と D3、および
+    唯一の構文である。payload 変数が値を得るのはそのアームへ入るところなので (D2 と D3、`<1>1b`、および
     `eval_rc_match` がアーム本体を評価する前に payload を `scope_push` すること)、`x` がこの位置までに
     値を得ているならば活性化はそのアームを選んでいる。
-    BY <1>1, <1>1a, D2, D3, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
+    BY <1>1, <1>1a, <1>1b, D2, D3, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
   <2>2. `s` はこの位置までに値を得ている。
     `<1>2` を `Binding::Payload(s, Some(t))` に当てる。
     BY <1>2
@@ -2951,60 +2974,52 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 節点が触れる参照はすべてこの版のものである」を、節 2 の否定は「落とした節点が触れたはずの参照は
 どれもこの版のものでない」を与える。
 
-### L23 (参照が残る間、オブジェクトは解放されていない)
+### L23 (類が参照を持つ点で、そのオブジェクトは解放されていない)
 
-**言明**。1 つの本体の活性化 (D21) と、それが辿る実行路の上の位置 `n` を取る。`p` をその本体の**所有する**
-(D14) パラメータ・capture、`λ` を活性化の開始の時点で inhabited (D16) な `ty(p)` の boxed leaf とし、
-`O = obj(p, λ)` は計数下 (D26) であるとする。次の 2 つを仮定する。
+**言明**。1 つの本体の活性化 (D21) と、それが辿る実行路 `ρ` を取る。`n` をその活性化の時点、段内の点
+(D24)、または読み・触れる動作の直前の点 (D11 の (S-c) が条件を課す点) とする。`C` をこの活性化の
+計数下 (D26) の別名類 (D33)、`O = obj(C)` とし、次の 3 つを仮定する。
 
-- **(H-a)** 活性化の開始から `n` までに実行されるどの段も、`O` への参照を処分しない。
-- **(H-b)** 活性化は `n` まで解放について閉じている (D11a)。
+- **(H-a)** `n` は `C` の開始の時点 (D34) 以後であり、`n` において `held_ρ(n, C) ≥ 1` であって、
+  `C` の `ρ` 終端は借用する (D14) leaf ではない。
+- **(H-b)** `obj(C') = O` であり開始の時点が `n` 以前である `C` 以外の計数下の別名類 `C'` は、どれも
+  A19 (i) の `d(C') ≥ 0` を満たす。
+- **(H-c)** 活性化は `n` まで解放について閉じている (D11a)。
 
 このとき、`n` において `O` は解放されていない。
 
 **この補題が要るのは、D11 が 1 つの活性化について課す条件だからである。** README の P28 の系は実行 (D24)
 についての言明であり、その前提はプログラムが D12 を満たすことである。D11 を検査している段はそれを与件に
-できないので、代わりに D21 が活性化の開始を A19 (i) で縛ることから `H(O) ≥ 1` を出し、それを (H-b) と
+できないので、代わりに D21 が活性化に課す制限 (A19 (i) の不等式) から `H(O) ≥ 1` を出し、それを (H-c) と
 合わせる。
 
-**(H-b) は (S-c) の接頭条件そのものである。** (S-c) は各時点について、「その活性化がその時点まで
+**(H-c) は (S-c) の接頭条件そのものである。** (S-c) は各時点について、「その活性化がその時点まで
 解放について閉じている」(D11a) ことを条件に主張するので、`n` における (S-c) を示す議論はこの仮定を
 与件に持つ。**D11a が名指すとおり、`H(O) ≥ 1` から「解放されていない」は D24 の (F) だけからは
 出ない** -- (F) は、一度解放された
 オブジェクトのカウントが後から上がらないことを言わないからである。
 
-**(H-a) が数える段は、この活性化の段に限らない。** D21 より、活性化が持つ `H` は別の制御の流れの段に
-よる増減も受ける。`O` への参照を処分する段が区間の中に在れば、それがこの活性化の外の段であっても
-`H(O)` は下がる。
+**仮定が段でなく点の `held` を主語にするのは、D21 の `H` が別の制御の流れの段による増減も受けるから
+である。** 「開始から `n` までにこの活性化の段が `O` への参照を処分しない」は `H(O)` の下限を与えない
+-- 処分する段が別の制御の流れに在れば `H(O)` は下がる (D21、D24 が「複数の制御の流れ
+(`FFI_EXPORT` を通じて外から入るスレッド) がある実行では、それらの段が 1 つの列に並ぶ」と述べる)。
+D21 の制限は各時点と各段内の点で当たるので、その点の `held` だけから下限が出る。
 
-<1>1. スロット `(p, λ)` が属する別名類 `C` の ρ-終端は `(p, λ)` であり、`obj(C) = O` である。
-  D33 は歩みが止まる位置を数え上げる。その第 1 の行は「辺を持たない束縛、すなわち `Binding::Param`、
-  `Binding::Producer`、および束縛を持たない名前 (記号の位置)」である。`p` はこの本体のパラメータ・
-  capture なので、`VarTable::of` は `vars.bindings` に `p` の `Binding::Param` を入れる。よって
-  `(p, λ)` の `ρ` 歩みはその位置で止まり、`ρ` 終端は `(p, λ)` 自身である。1 つの別名類の
-  すべてのスロットは同じオブジェクトを指すので (D33)、`obj(C) = obj(p, λ) = O` である。
-  BY D6, D33, CODE src/rc_ir/ownership.rs: VarTable::of
+<1>1. `n` において `H(O) ≥ 1` である。
+  D21 より、活性化はその各時点と各段内の点 (D24) で A19 (i) の不等式を満たすものに限る。`n` が読み・
+  触れる動作の直前の点であるときは、その点と直前の段内の点のあいだに素動作が 1 つも無いので `H` も
+  `held` も動かない (D24)。よってどの場合も `n` でこの不等式を読んでよい。
+  `n` において `obj(C') = O` であり開始の時点が `n` 以前である計数下の別名類の全体を `S` とする。
+  (H-a) より `C ∈ S` であり、`C` の `ρ` 終端は借用する leaf でないので、A19 (i) の
+  `d(C) = held_ρ(n, C) - 0 ≥ 1` である。(H-b) より `S` の残りの元はどれも `d(C') ≥ 0` を満たし、
+  A19 (i) の角括弧の項は 0 か 1 である。よって A19 (i) の右辺は `d(C)` 以上、すなわち 1 以上であり、
+  `H(O) ≥ 1` である。
+  BY A19, D14, D21, D24, D26, D33, D34
 
-<1>2. 活性化の開始の時点で `H(O) ≥ 1` である。
-  D21 より活性化は開始の時点で A19 (i) の不等式を満たす。`<1>1` より `C` の ρ-終端は所有する
-  パラメータ・capture の leaf なので、D34 の第 2 行より `C` の開始値は `held = 1` であり、その終端は
-  借用する leaf ではないので A19 (i) の `d(C) = held(C) - 0 = 1` である。`C` の開始の時点は活性化が
-  始まる時点であり (D34)、`<1>1` より `obj(C) = O` なので、`C` は A19 (i) の総和が渡る `S` の元である。
-  開始の時点で `S` に入る類は、D34 の 3 つの開始行のうちパラメータ・capture の leaf を終端とする 2 行の
-  ものだけであり、その `held` はどれも 1、`d` は所有なら 1・借用なら 0 なので、総和の各項は 0 以上で
-  ある。よって A19 (i) の右辺は `d(C) = 1` 以上である。
-  BY <1>1, A19, D14, D21, D26, D34
-
-<1>3. `n` において `H(O) ≥ 1` である。
-  D10 と D24 の `H` の表より、`H(O)` が下がるのは `O` への参照が処分されるときだけである。(H-a) より
-  開始から `n` までに実行される段はどれも `O` への参照を処分せず、D21 より `H` を動かす段はこの区間の
-  中に在る段に限る。`<1>2` が開始の値を与える。
-  BY <1>2, D10, D21, D24
-
-<1>4. QED
-  `<1>3` より `n` において `H(O) ≥ 1` であり、`O` は計数下 (D26) である。(H-b) より活性化は `n` まで
+<1>2. QED
+  `<1>1` より `n` において `H(O) ≥ 1` であり、`O` は計数下 (D26) である。(H-c) より活性化は `n` まで
   解放について閉じているので、D11a の定めるところにより `n` において `O` は解放されていない。
-  BY <1>3, D11a, D26
+  BY <1>1, D11a, D26
 
 ### R1 (節 2 と節 3 の inhabited の限定が要ること)
 
@@ -3056,15 +3071,27 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   オペランドを持たないので読むオブジェクトが無い。`union_make_1` はオペランド `z` を読み、その inhabited な
   leaf は `[]` 1 つである。`Release(x, [])` が触れるのは `obj(x, [1])` であり、素通しの行より
   `obj(z, [])` と同じオブジェクトである。`obj(z, [])` がグローバル状態であれば A8 よりそれは解放されない。
-  計数下であれば L23 による -- `z` は所有するパラメータ、`[]` は開始の時点で inhabited な `Array I64` の
-  唯一の boxed leaf である。L23 の (H-a): このプログラムは `f` 1 つだけを持ち、`f` の本体は他の本体を
-  呼び出さない -- `union_make_1` と `int_lit_0` はどちらもオペランドを適用しないので (A3) 活性化を
-  作らない -- ので、この 2 つの位置までに実行される段はこの活性化の段だけである。それは
-  `Let(x, Llvm(union_make_1, [z]), ..)` だけで、その段は D9 の `Llvm` の行の消費を持たない
-  (`z` の唯一の leaf は単一の `Arg(0, [])` として素通しと宣言されている) ので、`obj(z, [])` への参照を
-  処分しない。L23 の (H-b): (S-c) は各時点について、「その活性化がその時点まで解放について閉じている」
+  計数下であれば L23 による。`O = obj(z, [])` と置き、その別名類を取る -- D20 の別名の辺のうち
+  この本体に在るのは `Llvm` の素通し leaf の辺 (`z` の leaf `[]` から `x` の leaf `[1]` へ) だけであり、
+  `z` はパラメータなので `VarTable::of` は `vars.bindings` に `z` の `Binding::Param` を入れ、D33 が
+  歩みを止める位置の第 1 の行がそれである。よってスロット `(z, [])` と `(x, [1])` が 1 つの別名類 `C` を
+  なし、その `ρ` 終端は `(z, [])`、`obj(C) = obj(z, []) = O` である。この活性化のスロットはこの 2 つで
+  尽きる -- 値を得る変数は `z`・`x`・`w` の 3 つで、`x` の値の変位は 1 なので leaf `[0, 0]` は
+  inhabited でなく (D16)、`w` の型 `I64` は boxed leaf を持たない -- ので、`obj(C') = O` である計数下の
+  別名類は `C` のほかに無く、L23 の (H-b) は空に成り立つ。
+  L23 の (H-a): `z` は所有するパラメータなので、D34 の第 2 行より `C` の `held` は 1 から始まり、その
+  `ρ` 終端は借用する leaf ではない。D34 よりその開始値が置かれるのは `C` の終端の参照が `Obl` に入る
+  素動作の直後の段内の点、すなわち活性化を作る段の中の点なので、以下の 2 つの点はどちらもそれより後で
+  ある。この本体で `held` を動かす事象は `Release(x, [])`
+  だけである -- `Retain` 節点は無く、D9 の消費のうちこの本体に在るのは `Llvm` のオペランドの行と終端の
+  `Ret` の行だけで、`z` の唯一の leaf は単一の `Arg(0, [])` として素通しと宣言されているので消費されず、
+  `Ret(w)` の `w` は boxed leaf を持たない。D34 より第 5 行の事象が `held` を動かすのはそれを運ぶ素動作の
+  直後の段内の点なので、`union_make_1` が `z` を読む直前の点でも `Release(x, [])` が触れる直前の点でも
+  `held_ρ(・, C) = 1` である。
+  L23 の (H-c): (S-c) は各時点について、「その活性化がその時点まで解放について閉じている」
   (D11a) ことを条件に主張する節なので、その位置の (S-c) を示しているこの議論は接頭条件を与件に持つ。
-  BY D7, D8, D9, D10, D11, D11a, D12, D14, D16, D26, A3, A8, L23, <1>1,
+  BY D6, D7, D8, D9, D10, D11, D11a, D12, D14, D16, D20, D26, D33, D34, A3, A8, L23, <1>1,
+     CODE src/rc_ir/ownership.rs: VarTable::of,
      CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov, InlineLLVMIntLit
 
 <1>2a. `origin(x, [])` は `Exactly((z, []))` である。
@@ -3092,12 +3119,14 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
 <1>2c. `<1>2` の入力プログラムは、第 4 節の仮定のうち入力プログラムを縛る残りのものをすべて満たす。
-  **どの仮定が入力プログラムを縛るかは、次の述語で決まる** -- その仮定の言明が、`borrow_ify` の入力
-  プログラムそのもの (その `funcs` と `globals`、それらの本体の節点、本体に現れる名前と型) を主語に
-  する節を持つか。持たない仮定の節が主語にするのは、`LLVMGen` の宣言、コード生成、値と leaf の模型、
-  `resolve_callee_params`、`mark_global`、`stacker`、環境、型検査と lowering、`insert_rc` の入力の
-  いずれかであり、どれもこの入力プログラムの取り方によらないので、どう取っても真偽が動かない。
-  以下、述語に当たる仮定を順に見る。A1 と A2 は `<1>2` が与えた。
+  **どの仮定が入力プログラムを縛るかは、次の述語で決まる** -- **その仮定の言明の真偽が、`borrow_ify` の
+  入力プログラムをどう取るかで動きうるか。** 動きうるものはこの構成について確かめる。動かないものは
+  どう取っても真偽が同じなので、この構成が果たすべきものを持たない。
+  第 4 節の仮定は A1 から A26 の 26 件である。真偽が動かないのは次の 10 件で、その言明の各節が主語に
+  するのはこの構成が選ばないもの -- `LLVMGen` の宣言 (A3)、コード生成 (A4、A26)、値と leaf の模型
+  (A5)、`resolve_callee_params` (A7)、`mark_global` (A8)、`stacker` (A15)、環境 (A17)、`builtin.rs` の
+  op の集合 (A21)、`insert_rc` の入力プログラム (A25) -- である。
+  残る 16 件を順に見る。A1 と A2 は `<1>2` が与えた。
   A6: 束縛名は `z`・`x`・`w` の 3 つで互いに異なり、関数の名前 `f` とも異なる。
   A9 と A16: この本体に `Match` は無い。
   A10: 現れる型は `Array I64`・`I64`・`Inner`・`Outer` の 4 つである。どれも型変数を持たない ground な型で、
@@ -3116,6 +3145,29 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   A13: `f`・`z`・`x`・`w` はどれも `#` を含まないので、`#` で区切った最後の断片は名前自身であり、`b` の
   後に 10 進数字が続く形でも `borrow` でもない。
   A14: この本体に `App` は無い。
+  A18: (b) は空に成り立つ -- オブジェクトがグローバル状態になるのは `mark_global` が印を付ける (E5) の
+  段だけであり (D26)、(E5) が走るのはグローバル初期化子の活性化が終端の `Ret` に着くときなので (D24)、
+  初期化子を 1 つも持たないこのプログラムの実行に (E5) の段は無い。よってグローバル状態のオブジェクトは
+  1 つも無い。
+  (a) について。このプログラムのどの実行でも、生きている (D25) オブジェクトはどの点でも 1 つも無い。
+  素動作の列についての帰納で見る。最初の時点について -- 環境が持ち込む boxed な値は A17 の (i-d) より
+  「このプログラムが作って環境へ番地を渡したもの」に限るが、番地を渡す op
+  (`boxed_to_retained_ptr` の `InlineLLVMBoxedToRetainedPtrIOS`) はこの本体に無いので 1 つも無く、
+  D25 よりその時点に生きているオブジェクトは無い。ある点まで生きているオブジェクトが 1 つも無いとする。
+  オブジェクトを割り当てる素動作は、割り当てられたオブジェクトの `H` が 1 から始まるので D24 の `H` の
+  表に行を持ち (段の記述は網羅である)、その表で新しいオブジェクトを作るのは単一の `Fresh` を宣言する
+  `Llvm` の結果 leaf の行と `Closure` の結果の行の 2 つである。この本体に `Closure` 節点は無く、
+  `Llvm` の結果 leaf の宣言は `union_make_1` の `[1]` が単一の `Arg(0, [])`、`[0, 0]` が空集合であり
+  (`<1>2a`)、`int_lit_0` の結果の型 `I64` は boxed leaf を持たないので、`Fresh` を宣言する leaf は無い。
+  子の活性化を作る段も無い -- `globals` が空なので (E5) と (E7) の段は無く、この本体に `App` が無いので
+  (E3) の段も無く、`union_make_1` と `int_lit_0` は `applies_a_function_operand` を宣言しないので (A3)
+  オペランドを適用する `Llvm` の段も無く、(F) の解放が活性化を作るのは `Destructor` のオブジェクトに
+  ついてだが、その点まで生きているオブジェクトが無い。環境の書き込みの段 (E8) はどの leaf がどの
+  オブジェクトを指すかを変えない (A17 の (ii-b))。よって次の素動作もオブジェクトを作らない。
+  したがって生きているオブジェクトのグラフはどの点でも空であり、非巡回である。
+  この 2 つは `<1>2` と食い違わない。A18 が主語にするのは実行 (D24) のヒープであるのに対し、`<1>2` は
+  D11 の 3 つの節を D21 の意味のすべての活性化について確かめており、その活性化は実行に実現するとは
+  限らない (D21)。
   A19: `obj(z, [])` が計数下である活性化の計数下の別名類は 1 つである -- D20 の別名の辺のうちこの本体に
   在るのは `Llvm` の素通し leaf の辺 (`z` の leaf `[]` から `x` の leaf `[1]` へ) だけなので、スロット
   `(z, [])` と `(x, [1])` が 1 つの類 `C` をなす。`z` は所有するパラメータなので D34 より `C` の `held` は
@@ -3137,9 +3189,11 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   節点も、`Lowerer::lower_lam` が `funcs` に入れる関数も無い。A23 の 2 つの節はその 2 つを主語にするので、
   空に成り立つ。
   A24: この本体に `InlineLLVMFixBody` の `Llvm` 節点は無い。
-  BY <1>1, <1>2, A2, A19, A23, D14, D20, D21, D26, D33, D34, L6, P9,
+  BY <1>1, <1>2, <1>2a, A2, A3, A17, A18, A19, A23, D1, D4, D10, D14, D20, D21, D24, D25, D26, D33,
+     D34, L6, P9,
      CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
-     CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody, InlineLLVMIntLit
+     CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody, InlineLLVMIntLit,
+     InlineLLVMBoxedToRetainedPtrIOS, boxed_to_retained_ptr_ios
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空である。
   <2>1. `collect_consumes` はこの本体について何も報告しない。
@@ -3268,22 +3322,36 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   (`Release` と `Ret` は読む構文ではない)、D7 の `Llvm` の行が読むのは各オペランドだが `int_lit_0` は
   オペランドを持たないので、読まれるオブジェクトは無い。`Release(x, [])` が触れるのは、タグが `n` の
   活性化では inhabited な leaf が無いので何も無く、タグが `a` の活性化では `obj(x, [1])` である。後者が
-  グローバル状態であれば A8 よりそれは解放されない。計数下であれば L23 による -- `x` は所有する
-  パラメータ、`[1]` は開始の時点で inhabited な `Mix` の boxed leaf である。L23 の (H-a):
-  `Release(x, [])` は本体の最初の節点であり、このプログラムは `f` 1 つだけを持ち `f` の本体は他の本体を
-  呼び出さないので、その位置までに実行される段は 1 つも無い。L23 の (H-b): (S-c) は各時点について、
+  グローバル状態であれば A8 よりそれは解放されない。計数下であれば L23 による。`O = obj(x, [1])` と
+  置き、その別名類を取る -- D20 の別名の辺はこの本体に 1 つも無く、`x` はパラメータなので
+  `VarTable::of` は `vars.bindings` に `x` の `Binding::Param` を入れ、D33 が歩みを止める位置の第 1 の
+  行がそれである。よってスロット `(x, [1])` は 1 つだけからなる別名類 `C` をなし、その `ρ` 終端は
+  `(x, [1])` 自身であって `obj(C) = O` である。この活性化のスロットはこの 1 つで尽きる -- 値を得る変数は
+  `x` と `w` の 2 つで、`<1>1` より `Λ_{Mix}([]) = {[1]}`、`w` の型 `I64` は boxed leaf を持たない --
+  ので、`obj(C') = O` である計数下の別名類は `C` のほかに無く、L23 の (H-b) は空に成り立つ。
+  L23 の (H-a): `x` は所有するパラメータなので、D34 の第 2 行より `C` の `held` は 1 から始まり、その
+  `ρ` 終端は借用する leaf ではない。D34 よりその開始値が置かれるのは `C` の終端の参照が `Obl` に入る
+  素動作の直後の段内の点、すなわち活性化を作る段の中の点なので、以下の点はそれより後である。
+  この本体で `held` を動かす事象は `Release(x, [])`
+  だけである -- `Retain` 節点は無く、D9 の消費のうちこの本体に在るのは終端の `Ret` の行だけで、`Ret(w)`
+  の `w` は boxed leaf を持たない。D34 より第 5 行の事象が `held` を動かすのはそれを運ぶ素動作の直後の
+  段内の点なので、`Release(x, [])` が触れる直前の点で `held_ρ(・, C) = 1` である。
+  L23 の (H-c): (S-c) は各時点について、
   「その活性化がその時点まで解放について閉じている」(D11a) ことを条件に主張する節なので、その位置の
   (S-c) を示しているこの議論は接頭条件を与件に持つ。
-  BY D7, D8, D10, D11, D11a, D12, D14, D16, D26, A8, L23, <1>1,
+  BY D6, D7, D8, D9, D10, D11, D11a, D12, D14, D16, D20, D26, D33, D34, A8, L23, <1>1,
+     CODE src/rc_ir/ownership.rs: VarTable::of,
      CODE src/fixstd/builtin.rs: InlineLLVMIntLit
 
 <1>2a. `<1>2` の入力プログラムは、第 4 節の仮定のうち入力プログラムを縛る残りのものをすべて満たす。
-  **どの仮定が入力プログラムを縛るかは、次の述語で決まる** -- その仮定の言明が、`borrow_ify` の入力
-  プログラムそのもの (その `funcs` と `globals`、それらの本体の節点、本体に現れる名前と型) を主語に
-  する節を持つか。持たない仮定の節が主語にするのは、`LLVMGen` の宣言、コード生成、値と leaf の模型、
-  `resolve_callee_params`、`mark_global`、`stacker`、環境、型検査と lowering、`insert_rc` の入力の
-  いずれかであり、どれもこの入力プログラムの取り方によらないので、どう取っても真偽が動かない。
-  以下、述語に当たる仮定を順に見る。A1 と A2 は `<1>2` が与えた。
+  **どの仮定が入力プログラムを縛るかは、次の述語で決まる** -- **その仮定の言明の真偽が、`borrow_ify` の
+  入力プログラムをどう取るかで動きうるか。** 動きうるものはこの構成について確かめる。動かないものは
+  どう取っても真偽が同じなので、この構成が果たすべきものを持たない。
+  第 4 節の仮定は A1 から A26 の 26 件である。真偽が動かないのは次の 10 件で、その言明の各節が主語に
+  するのはこの構成が選ばないもの -- `LLVMGen` の宣言 (A3)、コード生成 (A4、A26)、値と leaf の模型
+  (A5)、`resolve_callee_params` (A7)、`mark_global` (A8)、`stacker` (A15)、環境 (A17)、`builtin.rs` の
+  op の集合 (A21)、`insert_rc` の入力プログラム (A25) -- である。
+  残る 16 件を順に見る。A1 と A2 は `<1>2` が与えた。
   A6: 束縛名は `x` と `w` の 2 つで互いに異なり、関数の名前 `f` とも異なる。
   A9 と A16: この本体に `Match` は無い。
   A10: 現れる型は `Mix`・`I64`・`Array I64` の 3 つである。どれも型変数を持たない ground な型で、その
@@ -3301,6 +3369,28 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   A13: `f`・`x`・`w` はどれも `#` を含まないので、`#` で区切った最後の断片は名前自身であり、`b` の後に
   10 進数字が続く形でも `borrow` でもない。
   A14: この本体に `App` は無い。
+  A18: (b) は空に成り立つ -- オブジェクトがグローバル状態になるのは `mark_global` が印を付ける (E5) の
+  段だけであり (D26)、(E5) が走るのはグローバル初期化子の活性化が終端の `Ret` に着くときなので (D24)、
+  初期化子を 1 つも持たないこのプログラムの実行に (E5) の段は無い。よってグローバル状態のオブジェクトは
+  1 つも無い。
+  (a) について。このプログラムのどの実行でも、生きている (D25) オブジェクトはどの点でも 1 つも無い。
+  素動作の列についての帰納で見る。最初の時点について -- 環境が持ち込む boxed な値は A17 の (i-d) より
+  「このプログラムが作って環境へ番地を渡したもの」に限るが、番地を渡す op
+  (`boxed_to_retained_ptr` の `InlineLLVMBoxedToRetainedPtrIOS`) はこの本体に無いので 1 つも無く、
+  D25 よりその時点に生きているオブジェクトは無い。ある点まで生きているオブジェクトが 1 つも無いとする。
+  オブジェクトを割り当てる素動作は、割り当てられたオブジェクトの `H` が 1 から始まるので D24 の `H` の
+  表に行を持ち (段の記述は網羅である)、その表で新しいオブジェクトを作るのは単一の `Fresh` を宣言する
+  `Llvm` の結果 leaf の行と `Closure` の結果の行の 2 つである。この本体に `Closure` 節点は無く、
+  `int_lit_0` の結果の型 `I64` は boxed leaf を持たないので、`Fresh` を宣言する leaf は無い。
+  子の活性化を作る段も無い -- `globals` が空なので (E5) と (E7) の段は無く、この本体に `App` が無いので
+  (E3) の段も無く、`int_lit_0` は `applies_a_function_operand` を宣言しないので (A3) オペランドを
+  適用する `Llvm` の段も無く、(F) の解放が活性化を作るのは `Destructor` のオブジェクトについてだが、
+  その点まで生きているオブジェクトが無い。環境の書き込みの段 (E8) はどの leaf がどのオブジェクトを
+  指すかを変えない (A17 の (ii-b))。よって次の素動作もオブジェクトを作らない。
+  したがって生きているオブジェクトのグラフはどの点でも空であり、非巡回である。
+  この 2 つは `<1>2` と食い違わない。A18 が主語にするのは実行 (D24) のヒープであるのに対し、`<1>2` は
+  D11 の 3 つの節を D21 の意味のすべての活性化について確かめており、その活性化は実行に実現するとは
+  限らない (D21)。
   A19: D20 の別名の辺はこの本体に 1 つも無いので、計数下の別名類はスロット 1 つずつからなる。タグが `n` の
   活性化では inhabited な leaf が無いので類も無く、タグが `a` で `obj(x, [1])` がグローバル状態の活性化
   でも計数下の類が無いので、どちらでも (ii-a) と (ii-b) は空に成り立つ。タグが `a` で `obj(x, [1])` が
@@ -3322,9 +3412,11 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   節点も、`Lowerer::lower_lam` が `funcs` に入れる関数も無い。A23 の 2 つの節はその 2 つを主語にするので、
   空に成り立つ。
   A24: この本体に `InlineLLVMFixBody` の `Llvm` 節点は無い。
-  BY <1>1, <1>2, A2, A19, A23, D14, D16, D20, D21, D26, D33, D34, L6, P9,
+  BY <1>1, <1>2, A2, A3, A17, A18, A19, A23, D1, D4, D10, D14, D16, D20, D21, D24, D25, D26, D33,
+     D34, L6, P9,
      CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
-     CODE src/fixstd/builtin.rs: InlineLLVMIntLit
+     CODE src/fixstd/builtin.rs: InlineLLVMIntLit, InlineLLVMBoxedToRetainedPtrIOS,
+     boxed_to_retained_ptr_ios
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空であり、`f` は借用版を持ち、そこで
       `owns_object(ρ(x), [])` は偽である。
