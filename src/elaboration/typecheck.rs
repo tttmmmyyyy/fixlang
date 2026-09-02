@@ -649,6 +649,7 @@ impl TypeCheckContext {
     /// unification mismatch is swallowed (`Ok(())`) so the caller can
     /// keep elaborating siblings; non-unification errors (e.g. an
     /// associated-type reduction failure) always propagate.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unify_or_tolerated_mismatch(
         &mut self,
         expected: &Arc<TypeNode>,

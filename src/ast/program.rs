@@ -3407,6 +3407,7 @@ impl Program {
     /// The checker tolerates a type error where the `diagnostics` subcommand asks it to, so that an
     /// editor is given a typed expression for a file that does not check; every other subcommand
     /// checks strictly.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn create_typechecker(&self, config: &Configuration) -> TypeCheckContext {
         let error_tolerant = matches!(
             &config.subcommand,
