@@ -481,7 +481,7 @@ fn rhs_operands(rhs: &RcRhs, type_env: &TypeEnv) -> Vec<(RcVar, Ownership)> {
 }
 
 /// Wrap `cont` in a chain of `Retain` nodes (the first element outermost).
-// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_retains(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     vars.into_iter().rev().fold(cont, |c, v| {
         let source = v.source.clone();
@@ -493,7 +493,7 @@ fn build_retains(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
 }
 
 /// Wrap `cont` in a chain of `Release` nodes (the first element outermost).
-// PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_releases(vars: Vec<RcVar>, cont: RcExprNode) -> RcExprNode {
     vars.into_iter().rev().fold(cont, |c, v| {
         let source = v.source.clone();

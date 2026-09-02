@@ -1307,6 +1307,16 @@ payload は、どれも D10 の生成の表が行を持つ位置なので第 1 �
 `Some(τ)` を返すので、この分解が返すのは `rc_units(τ)` そのものである。**この 2 つは
 `p60-insert-rc.md` の `L27` (c) と `L28` が示す。**
 
+**`insert_rc` と `split_rc_units` は束縛を作らず、名前を替えず、`Match` のアームを消さない。**
+`insert_rc` が入れるのは `Retain`/`Release` の節点だけであり (`CODE src/rc_ir/rc_insert.rs: build_retains`,
+`build_releases`)、`split_rc_units` が作るのはその節点を unit の鎖へ割ったものだけである
+(`CODE src/rc_ir/borrow.rs: split_rc`)。どちらの構文も変数を束縛しない (D2)。
+
+**したがって、`borrow_ify` の入力について語る仮定は、`insert_rc` の入力と出力についても読める。**
+束縛名の集合も、`Match` のアームの本数も、名前の形も、この 2 つの段を渡って変わらないからである。
+**A6・A9・A13 を上流について読む段は、この節を引く。** 下流 (`borrow_ify` の出力) へ延ばす道は
+それぞれの仮定が別に持つ (A6 は P9、A9 は P22 と P24)。
+
 **A3 (宣言されたモデルの忠実さ)** -- 果たす者: 誰も。ただし `applies_a_function_operand` については
 `Generator::apply_lambda` の develop mode の検査が、`result_prov` の元数については `validate` の
 `check_rhs` の develop mode の検査が果たす。
@@ -1486,7 +1496,7 @@ inhabited でない leaf と同じに扱う。
 `borrow_ify` の入力のすべての束縛変数の名前は相異なり、**どの関数の名前とも異なる**。後半が要るのは、
 `call_rc` が呼び出し先を `callee_params` から名前で引くからである。よって変数名は束縛を一意に決める。出力についての同じ
 性質は仮定ではなく P9 が示す -- `fresh_rename_function` を呼ぶのは証明対象の `borrow_ify` 自身なので、
-それを仮定に置くと証明対象が自分を支えることになる。
+それを仮定に置くと証明対象が自分を支えることになる。**`insert_rc` の入力と出力について読む段は A2 を引く。**
 
 **層 1 の命題 (P1-P7) を `borrow_ify` の出力について読む者が居る。** `cancel` の側の命題がそれである。
 層 1 の証明は依存の順で P9 を引けないので、A6 を読む段は入力について読み、出力について読む者は P9 と
@@ -1497,6 +1507,8 @@ inhabited でない leaf と同じに扱う。
 `check_clone_names_are_fresh` (`CODE src/rc_ir/borrow.rs: check_clone_names_are_fresh`) が develop mode で
 まさにこの集合について表明する -- 全関数・全グローバル初期化子のパラメータと capture、および `for_each_var`
 が挙げる全変数を集め、複製の各名前がそこに入らないことを検査する。
+
+**`insert_rc` の入力と出力について読む段は A2 を引く。**
 
 `borrow_ify` の入力に現れる**すべての名前**について -- 束縛名、直接呼び出しが名指す関数の名前、グローバル
 値を読む `RcVar` の名前、**`prog.funcs` の鍵**、**各 `RcFunc` の `name`**、**`prog.globals` の各エントリの
@@ -1890,6 +1902,7 @@ resolve_callee_params`)。
 (`CODE src/rc_ir/validate.rs: Validator::check_rhs`)、ただし `develop_mode` のときだけ走る。
 `borrow_ify` の入力プログラムのすべての `Match` は 1 つ以上のアームを持つ。`borrow_ify` と `cancel` は
 アームを持たない `Match` を作らないので (P22、P24)、`cancel` の入力と出力についても同じことが言える。
+**`insert_rc` の入力と出力について読む段は A2 を引く。**
 
 **A10 (型の well-formedness)** -- 果たす者: `validate_layouts` (elaboration で必ず走る)。ただし最適化が
 作る型を再検査するのは develop build だけである。
