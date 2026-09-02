@@ -144,9 +144,9 @@ EXT アロケータの契約 より、同時に生存している相異なる 2 
   言明は `EXT Map と Set`、`EXT スライスの接頭と先頭`、`EXT Clone`、`EXT Vec::iter と slice::iter`、
   `EXT Iterator::all と any`、`EXT Iterator::map と collect`、`EXT Iterator::filter_map` が述べる。
   `Set` の反復の順序は定めないので、`Set` から作られるのは要素の集合であって並びではない。
-- **`LLVMGen::result_prov`** --- 根拠は **A3** の「`result_prov` と `borrows_operand` は決定的である ---
-  同じ引数に対して常に同じ値を返す」である。これは外部の結果ではないので、この文書はこれを使う段の `BY`
-  に A3 を挙げる。
+- **`LLVMGen::result_prov`** --- 根拠は **A3** の「**`result_prov` と `borrows_operand` は決定的である**
+  -- 同じ引数に対して常に同じ値を返す。」である。これは外部の結果ではないので、この文書はこれを使う段の
+  `BY` に A3 を挙げる。
 - **型と `Provenance` の上の関数** --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
   `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
   `Origin::identity`、`Origin::candidates`。この 8 つは型・path・`Provenance`・`Origin` の値だけを引数に
