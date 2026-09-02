@@ -965,6 +965,88 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   `L(v, π) = {π}` である。
   BY DEF `L`, <1>3, <1>3a
 
+## L3a (`Std::Array` と `Std::#FunPtr{n}` の `TyConInfo`)
+
+**言明**。プログラムの `TypeEnv` の `tycons` について、鍵 `Std::Array` の項が在るならばその `variant` は
+`TyConVariant::Array` であり、鍵 `Std::#FunPtr{n}` (`n` は `1` から `FUNPTR_ARGS_MAX`) の項が在るならば
+その `variant` は `TyConVariant::Primitive` である。
+
+**この補題が要るのは、`is_array` と `is_funptr` が tycon の名前で決まるのに対し、`is_struct` と
+`is_union` が `type_env` の項の `variant` で決まるからである。** 2 つを突き合わせる段は L4 の
+`<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` である。
+
+<1>1. `TypeNode::is_array` は最上位の tycon が `make_array_tycon()` すなわち `Std::Array` であることで
+      あり、`TypeNode::is_funptr` は最上位の tycon が `make_funptr_tycon(n)` すなわち
+      `Std::#FunPtr{n}` のいずれかであることである。`TypeNode::toplevel_tycon_info(type_env)` が返すのは
+      `type_env.tycons()` のその tycon の項である。
+  BY CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr, TypeNode::toplevel_tycon_info,
+     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon, is_array_tycon, is_funptr_tycon
+
+<1>2. `bulitin_tycons()` が返す写像は、鍵 `make_array_tycon()` に `variant` が `TyConVariant::Array` の
+      `TyConInfo` を、各 `n` について鍵 `make_funptr_tycon(n)` に `variant` が `TyConVariant::Primitive`
+      の `TyConInfo` を持つ。
+  BY CODE src/fixstd/builtin.rs: bulitin_tycons
+
+<1>3. `TypeEnv` の `tycons` の欄に書く式は 6 つである。`TypeEnv::default`、`TypeEnv::new`、
+      `TypeEnv::unwrap_newtypes`、`TypeEnv::add_tycons`、`TypeEnv::resolve_type_aliases_in_tycons`、
+      および `Program::resolve_namespace_not_in_expr` である。
+  `tycons` は `TypeEnv` の非公開の欄である (`pub` が付かない) ので、EXT 可視性 より、この欄を名指す式は
+  `program.rs` の中にしかない -- この欄を宣言するモジュールは `program.rs` のモジュールであり、その子孫の
+  モジュールもこのファイルの中に書かれている。EXT 名前による数え上げ より、この列挙は `program.rs` の
+  全体について識別子 `tycons` を検索して得られる (このファイルはこの欄に `use` の別名を導入しない)。
+  BY EXT 可視性, EXT 名前による数え上げ, CODE src/ast/program.rs: TypeEnv, TypeEnv::new,
+     TypeEnv::add_tycons, TypeEnv::unwrap_newtypes, TypeEnv::resolve_type_aliases_in_tycons,
+     Program::resolve_namespace_not_in_expr
+
+<1>4. `<1>3` の 6 つのうち 4 つは、どの鍵の項の `variant` も変えない。`TypeEnv::default` は空の写像を
+      置き、`TypeEnv::unwrap_newtypes`、`TypeEnv::resolve_type_aliases_in_tycons`、
+      `Program::resolve_namespace_not_in_expr` は写像の鍵を変えずに各項へ `TyConInfo` の書き替えを掛け、
+      その 3 つの書き替え -- `Field::ty` の newtype の展開、`TyConInfo::resolve_type_aliases`、
+      `TyConInfo::resolve_namespace` -- はいずれも `fields` だけに触れる。
+  BY CODE src/ast/program.rs: TypeEnv, TypeEnv::unwrap_newtypes,
+     TypeEnv::resolve_type_aliases_in_tycons, Program::resolve_namespace_not_in_expr,
+     CODE src/ast/types.rs: TyConInfo, TyConInfo::resolve_namespace, TyConInfo::resolve_type_aliases
+
+<1>5. `TypeEnv::new` が置く写像の `Std::Array` と `Std::#FunPtr{n}` の項は、`bulitin_tycons()` が入れた
+      ものである。
+  製品のコードで `TypeEnv::new` を呼ぶ式は `Program::calculate_type_env` の中の 1 つである -- EXT 名前に
+  よる数え上げ より、`src/` の全体について識別子 `TypeEnv::new` を検索すると 3 件が得られ、残る 2 件は
+  `#[cfg(test)]` の下の作り手である。`Program::calculate_type_env` は写像を `bulitin_tycons()` から
+  始め、各型宣言について、その tycon がすでに写像にあるか型別名にあるときは診断を出して次の宣言へ進み、
+  無いときだけ `insert` する。構造体の宣言についてはさらに、`TyCon::into_punched_type_name` が名前の
+  末尾に `PUNCHED_TYPE_SYMBOL` と穴の添字を足した鍵で `insert` する。`Std::Array` の名前は `ARRAY_NAME`
+  すなわち `Array`、`Std::#FunPtr{n}` の名前は `FUNPTR_NAME` すなわち `#FunPtr` に `n` を続けたもので
+  あり、どちらも `PUNCHED_TYPE_SYMBOL` すなわち `#PunchedAt` を含まない。
+  BY EXT 名前による数え上げ, <1>2, CODE src/ast/program.rs: Program::calculate_type_env,
+     CODE src/ast/types.rs: TyCon::into_punched_type_name,
+     CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, ARRAY_NAME, FUNPTR_NAME,
+     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon
+
+<1>6. `TypeEnv::add_tycons` に渡る写像の鍵は、`Std::Array` でも `Std::#FunPtr{n}` でもない。
+  `add_tycons` は `program.rs` の `pub` のメソッドなので、EXT 名前による数え上げ より、それを呼ぶ式は
+  `src/` の全体について識別子 `add_tycons` を検索して得られる -- `desugar_opaque.rs` の
+  `register_opaque_tycon` に 1 つ、`defunctionalize_fix.rs` の `run_one` に 1 つ、
+  `closure_specialization.rs` の `lift_all` と `realize_all` に 1 つずつである。
+  `register_opaque_tycon` が入れる鍵の名前は不透明型変数の名前であり、`is_opaque_tyvar` が真を返す名前、
+  すなわち `?` で始まる名前である。残る 3 か所が入れる鍵は `CaptureStruct` の `tycon` であり、
+  `CaptureStruct` は非公開の欄 `fields` を持つので EXT 可視性 より `capture_struct.rs` の外では構造体
+  リテラルで作れず、その中の唯一の作り手 `CaptureStruct::new` は tycon の名前を
+  `format!("{}@{}", prefix, owner.name)` と作るので `@` を含む。`Array` も `#FunPtr` に `n` を続けたものも、
+  `?` で始まらず `@` を含まない。
+  BY EXT 可視性, EXT 名前による数え上げ, CODE src/ast/program.rs: TypeEnv::add_tycons,
+     CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon,
+     CODE src/optimization/defunctionalize_fix.rs: run_one,
+     CODE src/optimization/closure_specialization.rs: lift_all, realize_all, record_capture_list,
+     CODE src/optimization/capture_struct.rs: CaptureStruct, CaptureStruct::new,
+     CODE src/ast/types.rs: is_opaque_tyvar,
+     CODE src/constants.rs: ARRAY_NAME, FUNPTR_NAME
+
+<1>7. QED
+  `<1>3` の 6 つの書き込みのうち、`<1>4` の 4 つはどの項の `variant` も変えず、`<1>5` の `TypeEnv::new` は
+  この 2 種の鍵に `<1>2` の項を置き、`<1>6` の `add_tycons` はこの 2 種の鍵に触れない。よって
+  `type_env.tycons()` にこの 2 種の鍵の項が在るならば、それは `<1>2` が述べる `TyConInfo` である。
+  BY <1>2, <1>3, <1>4, <1>5, <1>6
+
 ## L4 (identity の位置)
 
 **言明**。`ρ` を実行路、`(x, λ)` を `ρ` の位置 (DEF 路の位置) とする。`id(x, λ) = (w, σ)` と
