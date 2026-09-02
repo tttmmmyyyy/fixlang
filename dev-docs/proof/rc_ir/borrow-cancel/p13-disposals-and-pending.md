@@ -1524,10 +1524,12 @@ inhabited な leaf であることは同値である。
       `Origin::Join` を返す。
   <2>1. このとき返り値は `Origin::Join { identity: (x.name, λ), candidates }` であり、
         `(u, σ) = (x.name, λ)` である。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Origin::of_candidates, D15
+    BY CODE src/rc_ir/ownership.rs: origin_inner, Origin::of_candidates, Origin::identity
     この腕は `Origin::of_candidates(candidates, &(var.clone(), path.to_vec()))` を返し、
-    `of_candidates` は元数が 1 でないとき `Origin::Join { identity, candidates }` を返す。D15 より
-    `Origin::Join` の `identity()` はその `identity` フィールドである。
+    `of_candidates` は元数が 1 でないとき `Origin::Join { identity, candidates }` を返す。
+    `Origin::identity` の本体は
+    `match self { Origin::Exactly(p) => p, Origin::Join { identity, .. } => identity }` なので、
+    `Origin::Join` の `identity()` はその `identity` の欄である。
   <2>2. QED
     BY <2>1
     `(u, σ) = (x.name, λ)` なので、3 つの主張はいずれも仮定そのものである。
@@ -2240,10 +2242,14 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
     BY CODE src/rc_ir/ownership.rs: origin_inner
   <2>3. `Binding::Join` の腕では、`of_candidates` が返す値の `identity()` は、候補が 2 元以上のときは
         `(x.name, λ)` 自身であり、1 元のときは `ρ` が選んだアームの結果対の `identity()` と等しい。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Origin::of_candidates, D15
+    BY CODE src/rc_ir/ownership.rs: origin_inner, Origin::of_candidates, Origin::identity, D15
     候補が 1 元 `{c}` のとき返り値は `Origin::Exactly(c)` である。この腕は各 `arm_result` の
     `acted_on()` の元を候補に入れるので、`ρ` が選んだアームの結果対の `acted_on()` は `{c}` に含まれ、
     D15 より `acted_on()` は `identity()` を先頭に持つ空でない列なので、その `identity()` は `c` である。
+    候補が 2 元以上のとき返り値は `Origin::Join { identity: (x.name, λ), candidates }` であり、
+    `Origin::identity` の本体は
+    `match self { Origin::Exactly(p) => p, Origin::Join { identity, .. } => identity }` なので、
+    その `identity()` は `(x.name, λ)` である。
   <2>4. QED
     BY <2>1, <2>2, <2>3, L12
     `(x, λ)` から ρ-歩みを辿ると、<2>2 と <2>3 の 1 元の場合では `identity()` が次の対のそれに等しく、
