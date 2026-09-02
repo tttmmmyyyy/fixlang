@@ -101,7 +101,8 @@ identity で名付けた多重集合」と定める。**`outstanding` に
 別名類 (`obj(C)`、`T_ρ(C)`) は **D33**、類ごとの参照 `held_ρ` は **D34** であり、どちらも `README.md` に在る。
 
 この文書が導入する補題は `L30` から番号を付ける。`p30` と `p13` の補題の番号と衝突させないためである。
-補題は依存の順に並ぶので、`L43a` を読む `L41c` はその後に在る。
+**番号は固定された名札であって、ファイルの中の並びではない。** 補題は依存の順に並ぶので、`L43a` を読む
+`L41c` はその後に在り、`L45` から `L49` は自分の依存が済んだ場所に在る。
 
 ## 0. 到達した所
 
@@ -112,7 +113,7 @@ identity で名付けた多重集合」と定める。**`outstanding` に
 | P20 | 証明済み |
 | P21 | 証明済み。(a) は `L43` と `L44` の (b) に、(b) は `L44` の (e) に載る。`α` が D21 の制限を満たすことは `L44` の (f) が示す |
 | P22 | 証明済み |
-| P23 | 証明済み。(S-a) は `L42` に、(S-b) は `L44` の (c) に、(S-c) は `L44` の (e) に載る。(S-c) は D11a の接頭条件つきで示す |
+| P23 | 証明済み。(S-a) は `L41c` の 1 に、(S-b) は `L44` の (c) に、(S-c) は `L44` の (e) に載る。(S-c) は D11a の接頭条件つきで示す |
 | P24 | 証明済み。第 5 の箇条は `rewrite_inner` の 8 腕についての構造帰納で出る |
 
 **各段が依拠するのは、冒頭が挙げる README の定義・仮定・命題と、そこに据えた 8 つの外部の結果 (`EXT`)
@@ -3277,10 +3278,15 @@ README はこの限定の理由を続けて述べる。「入力を `borrow_ify`
           `args.clone()` を据えた `Let` の節点を `&node.source` を付けて作り、その継続を
           `prepend_rc(after, true, self.rewrite(k))` に、callee を `self.route(x, callee, args, k)` の
           値にする。さらに `prepend_rc(before, false, ・)` でその節点を包む。P12 より `route` が返すのは
-          元の呼び出し先と同じ関数の版であり、変わりうるのはその名前だけである。P11 より `call_rc` が
+          元の呼び出し先と同じ関数の版である。**変わりうるのがその名前だけであることは `route` の
+          コードが与える** -- `route` は振り替えるとき `callee.clone()` を作ってその `name` の欄だけを
+          借用版の `name` で置き替え、振り替えないときは `callee.clone()` をそのまま返す
+          (`CODE src/rc_ir/borrow.rs: route`)。`RcVar` は `#[derive(Clone)]` を持つので、
+          EXT derive(Clone) より複製の各欄は原本の対応する欄の `clone` である。P11 より `call_rc` が
           置くのは `Retain` と `Release` だけであり、`prepend_rc` はその各要素を `rc_node` で節点にする。
       BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, CODE src/rc_ir/borrow.rs: prepend_rc,
-         CODE src/rc_ir/borrow.rs: rc_node, P11, P12
+         CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: route,
+         CODE src/rc_ir/ast.rs: RcVar, P11, P12, EXT derive(Clone)
     <3>2. CASE `node` の式が `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` である。この腕は `x`、
           `scrut`、各アームの `tag`/`payload`/`payload_state`、アームの本数と並びを変えず、各アーム本体を
           `self.rewrite(&arm.body)` に、継続を `self.rewrite(k)` に置き換えて `&node.source` を付ける。
@@ -3390,12 +3396,12 @@ Retain(v, [], s,
 
 **README の P21 (a) は参照ごとに数える形である。**
 
-> `k(O)` は、その位置までに `α` が実行した削除済みの `Retain` が `O` に作った参照のうち、その `Retain`
-> と対になる削除済みの `Release` がまだ処分していないものの個数である。
+> `k(O)` は、その位置までに `α` が実行した削除済みの `Retain` が `O` に作った参照のうち、**その `Retain`
+> と対になる削除済みの `Release` がまだ処分していないもの**の個数である。
 
 この形では、上の本体の点 `q` で `k(O0) = 0`、`k(O1) = 1` であり、どちらも差に一致する。
 
-**この形は証明が出す量である。** `L43` の <1>8 が、`DEF 欠損` の `d(q, O)` -- 削除される `Retain` が
+**この形は証明が出す量である。** `L43` が、`DEF 欠損` の `d(q, O)` -- 削除される `Retain` が
 作った個数から削除される `Release` が処分した個数を引いたもの -- がこの形の量に等しいことを示す。
 `L44` の (b) が `H'(q, O) = H(q, O) - d(q, O)` を与えるので、P21 (a) はそのまま出る。
 
