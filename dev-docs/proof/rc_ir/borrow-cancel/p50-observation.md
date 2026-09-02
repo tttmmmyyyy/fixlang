@@ -56,7 +56,7 @@ P26 の言明は 2 文からなる。第 1 文は共通接頭の上の各観測�
   (L13)。
 
 **前提として残るもの。** 1 つの制御の流れからなる実行であること (第 12 節の項目 1)、グローバル初期化子の
-広がりの中に `InlineLLVMBoxedFromRetainedPtrIOS` の節点の実行が無いこと (同 項目 2)、環境について残る 3 つ
+広がりの中に `InlineLLVMBoxedFromRetainedPtrIOS` の節点の実行が無いこと (同 項目 2)、環境について残る 2 つ
 (同 項目 3) である。
 
 第 6 節から第 10 節は、直った 5 つの反例を 1 つの列として記録する -- 門が無かったとき、門が直接呼び出し
@@ -1590,8 +1590,8 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 `move_out_struct_field` で取り出す (`CODE src/generator.rs: Generator::build_run_destructor`)。D24 が
 「新しい参照を作るのは (E2) だけではない」と書き、活性化を作る段を 5 種と数えるのはこの動作を含めてである。
 
-**前提 (環境について残る 3 つ)。** 以下 L9b から L13 は、次の 3 つを満たす実行についての主張である。
-(P-1) と (P-2) が内容を持つのは、実行の最初の時点に環境がオブジェクトを持ち込む実行についてである --
+**前提 (環境について残る 2 つ)。** 以下 L9b から L13 は、次の 2 つを満たす実行についての主張である。
+(P-1) が内容を持つのは、実行の最初の時点に環境がオブジェクトを持ち込む実行についてである --
 D24 は「C のエントリ点から始まる実行では、その時点に参照は 1 つも無い」と書き、**`FFI_EXPORT` のエントリ点
 が boxed な引数を取る実行では在る**と書く。
 
@@ -1600,9 +1600,6 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
   の元である。**A17 (i-d) が与えるのは「このプログラムの関数である」までである** -- `closure_targets` は
   `Closure` 節点が名指す関数の集合であって `prog.funcs` の鍵の集合ではないので、そこまででは届かない。
   読むのは L9b の `<1>5` である。
-- **(P-2)** 実行の最初の時点に環境が持ち込むオブジェクトから到達できるオブジェクトの型が
-  `Std::FFI::Destructor` を含むならば、`builds_a_destructor(prog)` は真である。読むのは L10 の
-  `<1>6a` である。
 - **(P-3)** 環境の書き込みの段 (E8) は、Fix の関数型の値の funptr 欄を書かない。A17 (ii-b) が縛るのは
   計数下オブジェクトの inhabited な boxed leaf だけであり、funptr 欄はその leaf ではない。読むのは
   L9b の `<1>4` である。
@@ -1611,7 +1608,7 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
 
 ## L9b (適用される関数の値が名指す関数は `closure_targets` の元である)
 
-**言明**。前提 (環境について残る 3 つ) の下で、L9a の (ii)、(iii)、(vi) のいずれかの段が作る活性化の本体の関数を
+**言明**。前提 (環境について残る 2 つ) の下で、L9a の (ii)、(iii)、(vi) のいずれかの段が作る活性化の本体の関数を
 `G` とし、その `FuncRef` を `g` とすると、`g` は `funcs_observing_uniqueness` が `borrow_ify` の入力に
 ついて集める `closure_targets` の元である。
 
@@ -1984,7 +1981,7 @@ D30 はそれを (X3) の出口に数え、「(X3) は `π` が `borrow_ify` の
 
 ## L10 (門が閉じた関数の到達の列に観測点は現れない)
 
-**言明**。前提 (環境について残る 3 つ) の下で、`f` が `borrow_versions` の鍵であるとき、`f#borrow` の活性化から
+**言明**。前提 (環境について残る 2 つ) の下で、`f` が `borrow_versions` の鍵であるとき、`f#borrow` の活性化から
 L9a の (v) の段を含まない列で到達される活性化の本体に、一意性の観測点 (D18) は無い。以下この列を
 **到達の列**と呼ぶ。(iv) の段は親を持つ活性化を作らないので、到達の列の段は (i)(ii)(iii)(vi) のいずれかで
 ある。
@@ -2064,15 +2061,16 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
         生きているオブジェクトは環境が持ち込んだもので尽きるから有限個である。最初の時点に無かった
         計数下のオブジェクトは、この実行のある段が割り当てたものである。
     BY A17, A18, D25
-  <2>2a. この実行のある段が割り当てた場合、出力の本体のある `Let(x, Llvm(gen, args), k)` があって、
-        `Destructor a` は `x.ty` のある boxed leaf の型である。D24 の (E2) の `H` の表より、オブジェクトを
+  <2>2a. このプログラムのコードが `Std::FFI::Destructor` のオブジェクトを割り当てるのは、出力の本体の
+        ある `Let(x, Llvm(gen, args), k)` の実行においてであり、そのとき `Destructor a` は `x.ty` の
+        ある boxed leaf の型である。D24 の (E2) の `H` の表より、オブジェクトを
         新しく割り当てる段は `Closure(f, caps)` 節点の capture object と、`result_prov` が単一の `Fresh` を
         宣言する `Llvm` の結果の leaf である。capture object の型は `Std::#DynamicObject` であって
         `Destructor` ではない。**その `Let` は入力の本体にも在って `x.ty` は同じである** -- L8 の (2) より、
         出力の本体と入力の本体の節点は `Retain`/`Release` の 3 種を除いて 1 対 1 に対応し、対応する節点は
         同じ種類・同じ path・同じ並びを持ち、名指す変数は名前替えの下で対応する。名前替えは型を替えない
         (P9)。
-    BY D24, L8, P9, <2>2, CODE src/rc_ir/codegen.rs: Generator::build_rc_closure
+    BY D24, L8, P9, CODE src/rc_ir/codegen.rs: Generator::build_rc_closure
   <2>3. `mentions_a_destructor(&x.ty)` は真である。この段が読むのは宣言される leaf の**型**だけであり、
         A3 が実行時に参照カウントで分岐する op の `Fresh` の行に置く但し書き -- その行はオブジェクトの
         同一性については字義どおりでない -- はここに当たらない。`result_prov` の既定は `Unknown` であり、A3 より
@@ -2136,19 +2134,30 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
        InlineLLVMArrayGrowSizeBody::result_prov, InlineLLVMArraySetBody::result_prov,
        InlineLLVMArraySwapBody::result_prov, InlineLLVMArrayLitBody::result_prov,
        InlineLLVMPunchedArrayPlugBody::result_prov
-  <2>4. `<2>2a` の場合、`builds_a_destructor(prog)` は真である。`builds_a_destructor` は `prog.funcs` の
-        各本体と `prog.globals` の各初期化子の全節点に `binds_a_destructor` を当て (`for_each_node`)、
+  <2>3a. 入力の本体のある `Let(x, _, _)` について `mentions_a_destructor(&x.ty)` が真であるならば、
+        `builds_a_destructor(prog)` は真である。`builds_a_destructor` は `prog.funcs` の各本体と
+        `prog.globals` の各初期化子の全節点に `binds_a_destructor` を当て (`for_each_node`)、
         `binds_a_destructor` は `Let(x, _, _)` について `mentions_a_destructor(&x.ty)` を問う。
-        `funcs_observing_uniqueness` が読む `prog` は `borrow_ify` の入力であり、`<2>2a` よりその `Let` は
-        入力の本体にも在って `x.ty` は同じなので、`<2>3` より真である。
-    BY <2>2a, <2>3, CODE src/rc_ir/borrow.rs: builds_a_destructor, binds_a_destructor,
-       CODE src/rc_ir/ast.rs: for_each_node
-  <2>4a. 環境が持ち込んだオブジェクトから到達できる場合も、`builds_a_destructor(prog)` は真である。
-        そのオブジェクトの型は `Std::FFI::Destructor` を含む。
-    BY 前提 (P-2), <2>1, <2>2
+        `funcs_observing_uniqueness` が読む `prog` は `borrow_ify` の入力である。
+    BY CODE src/rc_ir/borrow.rs: builds_a_destructor, binds_a_destructor,
+       funcs_observing_uniqueness, CODE src/rc_ir/ast.rs: for_each_node
+  <2>4. `<2>2` の第 1 の場合 -- この実行のある段が割り当てた場合 -- は、`builds_a_destructor(prog)` は
+        真である。その段はこのプログラムのコードの実行なので `<2>2a` の `Let` が在り、それは入力の本体にも
+        同じ `x.ty` で在る。`<2>3` よりその `x.ty` について `mentions_a_destructor` は真であり、`<2>3a` が
+        結論を与える。
+    BY <2>2, <2>2a, <2>3, <2>3a
+  <2>4a. `<2>2` の第 2 の場合 -- 環境が持ち込んだオブジェクトから到達できる場合 -- も、
+        `builds_a_destructor(prog)` は真である。A17 (i-d) の第 1 文は「環境が実行の最初の時点に持ち込む
+        boxed な値は、このプログラムが作って環境へ番地を渡したものである (`boxed_to_retained_ptr` と
+        `boxed_from_retained_ptr` の対)」と述べ、第 2 文がその読みを「このプログラムが作ったオブジェクトの
+        クロージャの欄は、このプログラムのコード生成が書いたものだからである」と広げる。よってその値から
+        到達できる `Std::FFI::Destructor` のオブジェクトを割り当てたのもこのプログラムのコードであり、
+        `<2>2a` よりその `Let` は入力の本体に在って `Destructor a` は `x.ty` のある boxed leaf の型で
+        ある。`<2>3` よりその `x.ty` について `mentions_a_destructor` は真であり、`<2>3a` が結論を与える。
+    BY A17, <2>1, <2>2, <2>2a, <2>3, <2>3a
   <2>5. QED
     `<2>2` の 2 つの場合を `<2>4` と `<2>4a` が尽くす。
-    BY <2>1, <2>2, <2>2a, <2>3, <2>4, <2>4a
+    BY <2>1, <2>2, <2>2a, <2>3, <2>3a, <2>4, <2>4a
 
 <1>6b. (vi) の段は `<1>1` の (f) の辺を与える。`<1>6a` より `builds_a_destructor(prog)` は真なので、
       (vi) の段を持つ活性化の本体の入力関数 `g` から `closure_targets` の各元へ辺が張られる。L9b より
@@ -2318,7 +2327,7 @@ main = (
 ## L12 (窓の下の観測は差を見ない)
 
 **言明**。1 つの制御の流れからなる実行について、また L11 の仮定 (グローバル初期化子の広がりの中に
-`InlineLLVMBoxedFromRetainedPtrIOS` の節点の実行が無いこと)、前提 (環境について残る 3 つ)、
+`InlineLLVMBoxedFromRetainedPtrIOS` の節点の実行が無いこと)、前提 (環境について残る 2 つ)、
 DEF 共通接頭の段の中の対応 の下で、
 2 つの実行の対になった観測の事象 `q` (`DEF 観測の事象と観測の点`) であって、その観測の点まで D30 の対応が
 伸びているものについて、その観測が読むオブジェクト `O` が計数下 (D26) であるとき、`q` の観測の点で
@@ -2428,7 +2437,7 @@ DEF 共通接頭の段の中の対応 の下で、
 ## L13 (P26 の第 1 文は `borrow_ify` について成り立つ。しかも等号で)
 
 **言明**。`borrow_ify` の入力 `P` が D12 と A1 と A2 を満たすとする。1 つの制御の流れからなる実行について、
-また L11 の仮定、前提 (環境について残る 3 つ)、DEF 共通接頭の段の中の対応 の下で、
+また L11 の仮定、前提 (環境について残る 2 つ)、DEF 共通接頭の段の中の対応 の下で、
 2 つの実行の対になった観測の事象 `q`
 (`DEF 観測の事象と観測の点`) であって、その観測の点まで D30 の対応が伸びているものにおいて、`X` の観測値と
 `X'` の観測値は**等しい**。
@@ -3342,25 +3351,16 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
    足りないのは**その番地が指すオブジェクトが `t0` より後に割り当てられたこと**であり、この 2 つは
    割り当ての時点を言わない。果たす者: 誰も。
 
-3. **環境について残る 3 つ (L9b、L10)。** D24 は「**`FFI_EXPORT` のエントリ点が boxed な
+3. **環境について残る 2 つ (L9b、L10)。** D24 は「**`FFI_EXPORT` のエントリ点が boxed な
    引数を取る実行では在る**」と書き、A17 (i-c) がその参照を勘定に入れる。A17 (i-d) は、そのオブジェクトから
    到達できるオブジェクトのクロージャの欄が名指す関数がこのプログラムの関数であることを与える。この文書が
-   要るのは次の 3 つで、第 5 節の 前提 (環境について残る 3 つ) の (P-1)(P-2)(P-3) がそれである。
+   要るのは次の 2 つで、第 5 節の 前提 (環境について残る 2 つ) の (P-1)(P-3) がそれである。
 
    - **(P-1)** L9b が結論するのは `g ∈ closure_targets` であり、`closure_targets` は `Closure` 節点が
      名指す関数の集合である (`CODE src/rc_ir/borrow.rs: funcs_observing_uniqueness`)。「このプログラムの
      関数である」は `prog.funcs` の鍵までしか与えない。L10 の規則 (e) と (f) の辺の行き先は
      `closure_targets` なので、そこが届かないと L10 の `<1>6` と `<1>6b` が閉じない。**要る形は A17 (i-d)
      を「…名指す関数は、このプログラムのある本体の `Closure` 節点が名指す関数である」にすること**である。
-   - **(P-2)** L10 の `<1>6a` は `builds_a_destructor(prog)` を要る。環境が持ち込んだ `Destructor` の
-     オブジェクトについては、それを割り当てた段がこの実行に無いので、`<2>2a` の道が通らない。
-     `builds_a_destructor` は各関数のパラメータ・capture の型と返り値の型、各グローバルの型も見るので、
-     `Destructor` を `FFI_EXPORT` の引数として直に受け取るプログラムでは真になるが、`Destructor` を
-     フィールドに持つ型を受け取るプログラムでは真とは限らない -- `mentions_a_destructor` は型式を辿る
-     だけで型定義のフィールドへ降りない (`CODE src/rc_ir/borrow.rs: builds_a_destructor`,
-     `mentions_a_destructor`)。**要る形は、A17 (i-d) の第 2 文 (「環境が持ち込む boxed な値は、この
-     プログラムが作ってその番地を環境へ渡したものである」) を、(i-d) の第 1 文の理由ではなく独立の節に
-     すること**である。そこから `Destructor::_make` の `Let` がこのプログラムに在ることが出る。
    - **(P-3)** A17 (ii-b) が縛るのは計数下オブジェクトの inhabited な boxed leaf だけなので、環境の
      書き込みの段 (E8) が Fix の関数型の値の funptr 欄を書く形が排除されていない。L9b の `<1>4` は
      生成コードの数え上げなので、環境の書き込みには当たらない。**要る形は A17 (ii-b) に「環境は Fix の
