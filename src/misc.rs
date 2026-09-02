@@ -34,7 +34,7 @@ pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K
 }
 
 /// The set the compiler holds its data in, hashed by `fxhash` as `Map` is.
-// PROOF: P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub type Set<T> = FxHashSet<T>;
 
 /// A set holding the given elements, with an element that appears several times held once.
