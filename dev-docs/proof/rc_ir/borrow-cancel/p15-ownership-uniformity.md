@@ -1545,11 +1545,12 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
       であり、それ以外の違いを持たない。
   BY P9, CODE src/rc_ir/borrow.rs: clone_func
 
-<1>2. `ρ` は `func` に現れる名前の上で単射であり、`func` に現れる名前のうち `rename` の鍵でないものは
+<1>2. `rename` の鍵は `func` のパラメータ・capture の名前と、`func.body` の `Let` の束縛変数・
+      `Destructure` のフィールド変数・`Match` のアームの payload 変数の名前ちょうどである。`ρ` は
+      `func` に現れる名前の上で単射であり、`func` に現れる名前のうち `rename` の鍵でないものは
       `rename` の像に入らない。
-  <2>1. `rename` の鍵は `func` のパラメータ・capture の名前と、`func.body` の `Let` の束縛変数・
-        `Destructure` のフィールド変数・`Match` のアームの payload 変数の名前ちょうどであり、いずれも
-        `func` に現れる名前である。
+  <2>1. `rename` の鍵は言明の第 1 の節が挙げる名前ちょうどであり、いずれも `func` に現れる名前で
+        ある。
     `fresh_rename_function` は `params` と `cap` の各名前について `assign_fresh_name` を呼び、続けて
     `assign_fresh_names_to_binders` が本体を歩いて `Let` の束縛変数、`Match` のアームの payload 変数、
     `Destructure` のフィールド変数について同じことをする。`renaming` に鍵が入るのはこの 2 か所だけで
@@ -1572,11 +1573,12 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     BY A13, DEF 現れる名前, CODE src/rc_ir/rename.rs: assign_fresh_name,
        CODE src/rc_ir/borrow.rs: clone_func
   <2>4. QED
-    `func` に現れる 2 つの相異なる名前 `n1`、`n2` を取る。どちらも `rename` の鍵ならば `<2>2` より
+    鍵についての第 1 の節は `<2>1` である。単射性は次のとおりである。`func` に現れる 2 つの相異なる
+    名前 `n1`、`n2` を取る。どちらも `rename` の鍵ならば `<2>2` より
     `ρ(n1) ≠ ρ(n2)` である。どちらも鍵でないならば `ρ(n1) = n1 ≠ n2 = ρ(n2)` である。`n1` だけが鍵
     ならば、`ρ(n1)` は `rename` の像の元であり、`ρ(n2) = n2` は `<2>3` より像に入らないので異なる。
-    言明の後半 (`func` に現れる名前のうち鍵でないものは像に入らない) は `<2>3` の特別な場合である。
-    BY <2>2, <2>3
+    言明の最後の節 (`func` に現れる名前のうち鍵でないものは像に入らない) は `<2>3` の特別な場合である。
+    BY <2>1, <2>2, <2>3
 
 <1>3. `vars_c.param_tys` は `vars_f.param_tys` の `ρ` による像であり、型は変わらない。
   `VarTable::of` は `func.params` と `func.capture` から `param_tys` を作る。`fresh_rename_function` は
@@ -1589,8 +1591,8 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
       あり、`vars_c.var_tys[ρ(x)] = vars_f.var_tys[x]` である。
   `VarTable::of` は各パラメータ・capture について `bindings` に `Binding::Param` を入れ、続けて
   `collect_bindings` が本体の `Let` の束縛変数、`Destructure` のフィールド変数、`Match` のアームの
-  payload 変数について `bindings` を入れる。これは `<1>2` の `<2>1` が挙げる `rename` の鍵ちょうどで
-  ある。`collect_bindings` が `Binding` に記録するのは、右辺に現れる変数 (`Move` の `y`、`Field` の
+  payload 変数について `bindings` を入れる。これは `<1>2` が挙げる `rename` の鍵ちょうどである。
+  `collect_bindings` が `Binding` に記録するのは、右辺に現れる変数 (`Move` の `y`、`Field` の
   容器、`Payload` の scrutinee、`Join` のアーム結果、`Llvm` のオペランド) である。`<1>1` より `clone` の
   パラメータ・capture と本体はこれらをすべて `ρ` で写したものであり、型は変わらない。
   BY <1>1, <1>2, CODE src/rc_ir/ownership.rs: VarTable::of, collect_bindings,
