@@ -2149,7 +2149,7 @@ leaf に前置したものだからである。
     `ty(params[i])` はプログラムに現れる型なので A10 を満たし、P1 より
     `truncate_to_unit(ty(params[i]), leaf, type_env)` は `rc_units(ty(params[i]))` の要素である。
     BY A10, A12, L5 (i), P1, DEF leaf 粒度の所有, <2>2a
-  <2>3. D9 の行の後半「呼び出し先がその位置の unit を所有する引数の leaf」は、`resolve_callee_params` が
+  <2>3. D9 の行の後半「呼び出し先がその位置の unit を所有する (D14) 引数の leaf」は、`resolve_callee_params` が
         `Some(params)` のとき `owns(&params[i], &leaf)` が積む。`<2>2a` より `params` は D9 の行が言う
         呼び出し先のパラメータであり、`<2>2b` より DEF leaf 粒度の所有 の対応が定まる。その対応より、
         この述語は「`params[i]` の leaf `leaf` の unit が D14 の意味で所有される」ことと同値である。
