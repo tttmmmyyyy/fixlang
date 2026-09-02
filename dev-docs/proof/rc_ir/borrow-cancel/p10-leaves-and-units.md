@@ -897,19 +897,27 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        CODE src/ast/types.rs: TypeNode::collect_type_arguments,
        CODE src/ast/program.rs: TypeEnv::unwrapped_newtype_info,
        CODE src/fixstd/builtin.rs: make_unit_ty
-  <2>1a. `<2>1` の最後の 2 つの返り値は、値としては同じものである。`Type::TyApp(fun_ty, arg_ty)` の
-     腕で `self.clone()` を返すのは `Arc::ptr_eq(&new_fun_ty, fun_ty)` と
-     `Arc::ptr_eq(&new_arg_ty, arg_ty)` がどちらも真のときであり、そのとき `new_fun_ty` は `fun_ty`
-     と、`new_arg_ty` は `arg_ty` と同じ `Arc` なので値としても等しい。`self.ty` は
-     `Type::TyApp(fun_ty, arg_ty)` であり、`set_tyapp_fun` と `set_tyapp_arg` を継いで作る値の `ty`
-     は `Type::TyApp(new_fun_ty, new_arg_ty)` である。`impl PartialEq for TypeNode` は `ty` だけを
-     読み、`impl PartialEq for Type` は変位と成分を読むので、どちらの腕が返す値も
-     `Type::TyApp(new_fun_ty, new_arg_ty)` を `ty` に持つ節点と等しい。すなわち `Arc::ptr_eq` の
-     分岐は返り値の**値**を変えない。
+  <2>1a. 型を写す 2 つの関数 -- `unwrap_newtypes_node` と `Substitution::substitute_type` -- が置く
+     `Arc::ptr_eq` の分岐は、返り値の**値**を変えない。どちらも `Type::TyApp(fun, arg)` の腕で、
+     `Arc::ptr_eq(&new_fun, fun)` と `Arc::ptr_eq(&new_arg, arg)` がどちらも真のときは節点をそのまま
+     複製して返し、そうでないときは `set_tyapp_fun(new_fun).set_tyapp_arg(new_arg)` を返す。真の腕に
+     入るとき `new_fun` は `fun` と、`new_arg` は `arg` と同じ `Arc` なので値としても等しく、
+     複製されるもとの節点の `ty` は `Type::TyApp(fun, arg)` である。偽の腕が作る節点の `ty` は
+     `Type::TyApp(new_fun, new_arg)` である。`impl PartialEq for TypeNode` は `ty` だけを読み、
+     `impl PartialEq for Type` は変位と成分を読むので、どちらの腕が返す値も
+     `Type::TyApp(new_fun, new_arg)` を `ty` に持つ節点と等しい。`substitute_type` の
+     `Type::AssocTy` の腕も同じ形である。**同じ関数の `Type::TyVar` の腕が呼ぶ
+     `set_source_if_none` も値を変えない** -- 書き替えるのは `info.source` であり、
+     `impl PartialEq for TypeNode` はそれを読まない。
     BY <2>1, CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
        CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
+       CODE src/ast/types.rs: TypeNode::set_assocty_args,
+       CODE src/ast/types.rs: TypeNode::set_source_if_none,
+       CODE src/ast/types.rs: TypeNode::set_source,
        CODE src/ast/types.rs: impl PartialEq for TypeNode,
-       CODE src/ast/types.rs: impl PartialEq for Type
+       CODE src/ast/types.rs: impl PartialEq for Type,
+       CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
+       CODE src/elaboration/typecheck.rs: Substitution::substitute_type
   <2>2. `unwrap_newtypes_memoized(self, E, unwrapped)` が読むのは、`unwrapped` を `self` を鍵に引いた
      結果と、`unwrap_newtypes_node` の返り値だけである。`Map` は `FxHashMap` なので、鍵の一致は
      `Arc<TypeNode>` の `Hash` と `Eq`、すなわち `TypeNode` の `Hash` と `PartialEq` で決まり、
@@ -925,6 +933,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      あり、そこへ渡す `unwrapped` はこの呼び出しがその場で作る空の `Map` である。
      `declared_field_types` が読むのは `self.collect_type_arguments()`、`ti.tyvars`、`ti.fields` の
      各 `ty` と、`Substitution::single` / `merge` / `substitute_type` の返り値だけである。
+     `Substitution` は `Map<String, Arc<TypeNode>>` を 1 つ包む値であり、`single` はその 1 要素の
+     写像を作り、`merge` は鍵ごとに値を `==` で突き合わせ、`substitute_type` は型の節点を降りて
+     `data` を型変数の名前で引く。
      `toplevel_tycon_info` が読むのは `self.is_closure()`、`self.toplevel_tycon()`、`E.tycons()` の
      1 回の探索だけである。
     BY CODE src/ast/types.rs: TypeNode::unpunched_field_types,
