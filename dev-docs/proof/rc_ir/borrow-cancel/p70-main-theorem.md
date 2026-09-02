@@ -1,20 +1,24 @@
 # T -- パイプラインが保存するもの
 
-対象コミット: `683eb96719a36da513391755d834ab0c8d54b679`
+対象コミット: `b6c51fb892746e493e155d9d59ea05d02d7357db` (README 第 1 節が証明の対象として
+名指すコミット)
 
 このファイルは主定理 T を証明する。T は合成であり、引用する命題の**言明**だけを使う (証明は
-読まない)。第 2 節の `BY` の行が引くのは次のものである。
+読まない)。このファイルが引くのは次のものである。**P2a を除き、どれも第 2 節の `BY` の行が引く。**
 
-- **命題**: P9・P12・P14・P14a・P14b・P22・P23・P24・P26・P27。
+- **命題**: P2a・P9・P12・P14・P14a・P14b・P22・P23・P24・P26・P27。**P2a を引くのは第 4 節の
+  「開発ビルドでだけ走る検査」の項であり、そこだけである。**
 - **定義**: D1・D2・D11・D12・D14・D18・D19・D23・D24・D30。
-- **仮定**: A1・A2 (前提 H1・H2 として)、A13・A15・A17・A18・A19・A20 (前提 H3 が束ねる第 4 節の
-  仮定の中から名指す)。
-- **コード**: `optimize_rc_program` が 2 つのパスを呼ぶ順序、`validate`、`borrow_ify` と `cancel` が
-  `RcProgram` を組み立てる 3 つの欄、`cancel` の本体の書き換えが `drop_nodes` を呼ぶこと、
-  `drop_nodes` が `Let` の右辺を丸ごと写すこと、`clone_func`、`borrow_funcref`、`RcProgram` の型、
-  `Map` の別名。
-- **外部の結果**: EXT 共有参照は値を変えない、EXT 写像の `insert` と `values_mut`。第 1 節の
-  「外部の結果」がその完全な言明を据える。
+- **仮定**: A1・A2 (前提 H1・H2 として)、A3・A13・A15・A17・A18・A19・A20 (前提 H3 が束ねる
+  第 4 節の仮定の中から名指す)。
+- **コード**: `optimize_rc_program` が 2 つのパスを呼ぶ順序、`validate`、`RcProgram` の型と、
+  そこから到達する `RcFunc`・`RcVar`・`TypeNode` の欄、`TypeNode::is_ground` と
+  `TypeNode::type_hash` がその memo へ書くこと、`InlineLLVMCaptureProjectBody` の欄、`borrow_ify` と
+  `cancel` が `RcProgram` を組み立てる 3 つの欄、`cancel` の本体の書き換えが `drop_nodes` を呼ぶ
+  こと、`drop_nodes` と `drop_nodes_inner` が `Let` の右辺を丸ごと写すこと、`clone_func`、
+  `borrow_funcref`。`Map` の別名は第 1 節の EXT の言明が引く。
+- **外部の結果**: EXT 共有参照が書き込める先、EXT 反復子の `iter`・`map`・`collect`、
+  EXT 写像の `insert` と `values_mut`。第 1 節の「外部の結果」がその完全な言明を据える。
 
 T の言明はこのほかに、D7・D21・D25・D26・D31 を名前で引く。
 
@@ -91,8 +95,10 @@ T の言明はこのほかに、D7・D21・D25・D26・D31 を名前で引く。
 
            **観測が起きる段が `C` に入らないことは在る。** (F) の解放が作る活性化の中で起きる観測に
            ついては、それを含む段は参照を処分する段であり、`Retain`/`Release` の節点の段でありうる。
-           その節点を 2 つのパスの一方が消したか入れたならば、その段は D30 の並びから除かれて対を
-           持たず、`C` に入らない。(T3) はその段の上の観測について何も言わない。
+           その節点を `borrow_ify` が**入れた**か、`cancel` が**消した**ならば、その段は D30 の
+           並びから除かれて対を持たず、`C` に入らない。**`X1` の段について除かれる形はこの 2 つで
+           ある** -- `borrow_ify` が消した節点の段は `X0` の側に、`cancel` が入れた節点の段は `X2` の
+           側に在り、どちらも `X1` には無い。(T3) はその段の上の観測について何も言わない。
 
            **`C` が終わった後については何も主張しない。**とくに `C` が終わる出口が (X1) か (X2) か
            (X3) かを述べない。理由は第 4 節が述べる。
@@ -138,11 +144,25 @@ P27 は、本体が D11 を満たすことのほかに「借用する unit を�
 
 この文書が文書の外から引く結果に名札を付ける。`BY` の行では `EXT <名前>` として引く。
 
-**EXT 共有参照は値を変えない**
+**EXT 共有参照が書き込める先**
 safe Rust の関数が引数を共有参照 `&T` で取るとき、その呼び出しが `&T` を通じて書き込めるのは
-`UnsafeCell` の中に在る記憶域だけである。`UnsafeCell` を持たない型の値は、共有参照しか渡さない
-呼び出しを跨いで等しい。呼び出しはまた、呼び出し元の束縛そのものにも書かない -- 束縛に書くのは、
-その束縛が見えているスコープに置かれた代入文だけである。
+`UnsafeCell` の中に在る記憶域だけである。呼び出しはまた、呼び出し元の束縛そのものにも書かない --
+束縛に書くのは、その束縛が見えているスコープに置かれた代入文だけである。
+
+**EXT 反復子の `iter`・`map`・`collect`**
+Rust 標準ライブラリの反復子について、次の 5 つの契約を使う。コンパイラの写像型 `Map<K, V>` は
+`FxHashMap<K, V>` の別名なので、その `values` と `collect` は `HashMap` のものである
+(`CODE src/misc.rs: Map`)。
+
+- `v.iter()` は、`Vec<T>` の各要素への共有参照を添字の順にちょうど 1 つずつ渡す。
+- `m.values()` は、`HashMap<K, V>` の各値への共有参照をちょうど 1 つずつ渡す。渡す順序は定めない。
+- `it.map(f)` は、`it` と同じ個数の要素を同じ順に渡し、その第 `i` 要素は `it` の第 `i` 要素に `f` を
+  当てたものである。
+- `Vec<T>` への `collect` は、反復の順序をそのまま添字に写す -- 得られる列の長さは渡された要素の
+  個数に等しく、その第 `i` 要素は第 `i` 番目に渡された要素である。
+- 対 `(K, V)` の反復子の `HashMap<K, V>` への `collect` は、鍵の集合を渡された各対の第 1 成分の
+  集合に等しくする。鍵 `k` の値は、第 1 成分が `k` である対のうち最後に渡されたものの第 2 成分で
+  ある。
 
 **EXT 写像の `insert` と `values_mut`**
 コンパイラの写像型 `Map<K, V>` は `FxHashMap<K, V>` の別名であり、`insert` と `values_mut` は Rust
@@ -187,18 +207,39 @@ safe Rust の関数が引数を共有参照 `&T` で取るとき、その呼び�
 
   この閉包は `RcProgram` を共有参照で受け取り、値を返さない。呼ぶ先の
   `pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeEnv, stage: &str)`
-  も同じである。**共有参照しか渡さない呼び出しが呼び出し元の値を変えないことは、Rust の言語規則で
-  ある** (EXT 共有参照は値を変えない)。その規則が例外に置く内部可変性は `RcProgram` の欄に無い --
-  D1 が `RcProgram` の値と定めるのは `funcs`・`globals`・`roots` の 3 つ組であり、その 3 つの欄の型は
-  `Map`・`Vec`・`Set` であって `UnsafeCell` を持たない (`CODE src/rc_ir/ast.rs: RcProgram`)。本体の木が
-  式を共有する `Arc` の参照カウントは `UnsafeCell` の中に在るが、D2 は木の**位置**を節点と呼び、
-  位置が相異なれば節点も相異なるものとするので、その共有の度合いは D1 の 3 つ組の値ではない。よって
-  `validate` の呼び出しは、それがどこに置かれていても、束縛 `prog` の値を変えない。とくに `<2>1` が
-  引用した 2 つの呼び出し -- `"after split_rc_units"` と `"after borrow_ify"` -- がこれに当たる。
+  も同じである。EXT 共有参照が書き込める先より、この呼び出しは束縛 `prog` そのものに書かず、
+  `&RcProgram` を通じて書き込めるのは `UnsafeCell` の中に在る記憶域だけである。
 
-    BY EXT 共有参照は値を変えない, D1, D2,
+  **`RcProgram` から到達できる値は `UnsafeCell` を持つ。**`funcs` の型は `Map<FuncRef, RcFunc>` で
+  あり、`RcFunc` は `fn_ty: Arc<TypeNode>` と `params: Vec<RcVar>` を持ち、`RcVar` は
+  `ty: Arc<TypeNode>` を持つ。`TypeNode` は `hash_cache`・`ground_cache`・`depth_cache` という
+  `OnceLock` の欄を 3 つ持ち、`TypeNode::is_ground` と `TypeNode::type_hash` は共有参照からそこへ
+  書く (`CODE src/ast/types.rs: TypeNode`, `TypeNode::is_ground`, `TypeNode::type_hash`)。
+  `RcRhs::Llvm` が持つ `Box<dyn LLVMGen>` の op も同じ道で届く -- `InlineLLVMCaptureProjectBody` は
+  `cap_tys: Vec<Arc<TypeNode>>` を欄に持つ (`CODE src/fixstd/builtin.rs:
+  InlineLLVMCaptureProjectBody`)。`globals` の各 `RcGlobalInit` も `ty: Arc<TypeNode>` と本体を持つ
+  ので同じである。よって「`UnsafeCell` を持たない型だから値が動かない」の形では結論が出ない。
+
+  **その書き込みが値の等しさを動かさないことを言うのは A3 の「値の等しさ」の節である。**その節は
+  「`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。到達できる型が
+  内部可変性を持つ欄を持つときは、その欄は**一度だけ書かれる memo であって、その値はその型の
+  `PartialEq` が読む成分の関数である**」と述べ、`TypeNode` の 3 つの `OnceLock` と
+  `Box<dyn LLVMGen>` の op が届く道の両方を名指す。README はその節の読み手として `validate` を
+  名指している -- 「`validate` がその 1 つであり、`Validator::check_rhs` は `result_prov` を呼ぶ」。
+  H3 が A3 を与える。
+
+  本体の木が式を共有する `Arc` の参照カウントも `UnsafeCell` の中に在るが、D2 は木の**位置**を節点と
+  呼び、位置が相異なれば節点も相異なるものとするので、その共有の度合いは D1 の 3 つ組の値ではない。
+
+  よって `validate` の呼び出しを跨いで、束縛 `prog` の値は -- D1 の 3 つ組と D2 の木として -- 等しい。
+  とくに `<2>1` が引用した 2 つの呼び出し -- `"after split_rc_units"` と `"after borrow_ify"` --
+  がこれに当たる。
+
+    BY EXT 共有参照が書き込める先, H3, A3, D1, D2,
        `CODE src/build/build_object_files.rs: optimize_rc_program`,
-       `CODE src/rc_ir/validate.rs: validate`, `CODE src/rc_ir/ast.rs: RcProgram`
+       `CODE src/rc_ir/validate.rs: validate`, `CODE src/rc_ir/ast.rs: RcProgram`, `RcFunc`, `RcVar`,
+       `CODE src/ast/types.rs: TypeNode`, `TypeNode::is_ground`, `TypeNode::type_hash`,
+       `CODE src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody`
 
   **<2>3. QED**
 
@@ -310,10 +351,11 @@ D12 は、プログラム `P` が RC 規律を満たすことを、`P` のすべ
   割り当て (D14) の下で」-- でそれを与える。第 2 の前提を `p2` について与えるのが `<2>1b` である。
   H3 が A17・A18・A20 を与える。
 
-  (T2) は 3 つを主張し、その 3 つは P27 の結論の 3 つである。第 1 は (R1) (解放されたオブジェクトの
-  読みは起きない)、第 2 は (R2) (どのオブジェクトも高々 1 回しか解放されない)、第 3 は P27 の系
-  「正常終了する実行では、計数下のオブジェクトはちょうど 1 回解放される -- ただし環境が持つ参照から
-  到達できるものを除く」である。
+  (T2) は 3 つを主張する。第 1 と第 2 は P27 の**結論**であり、第 1 が (R1) (解放されたオブジェクトの
+  読みは起きない)、第 2 が (R2) (どのオブジェクトも高々 1 回しか解放されない) である。第 3 は P27 の
+  **系**「正常終了する実行では、計数下のオブジェクトはちょうど 1 回解放される -- ただし環境が持つ
+  参照から到達できるものを除く」である。P27 はその系を (R2) と (R3) から出す -- (R2) が「高々 1 回」を、
+  (R3) が「解放されずに残るのは環境から到達できるものだけ」を与える。
 
     BY <1>6, <2>1, <2>1b, H3, A17, A18, A20, P27
 
@@ -430,8 +472,10 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
 
   **段の中で起きる観測については、それを含む段が除かれる段でありうる。** D30 が並びから除くのは
   「`π` が消した節点と入れた節点の段」であり、(F) の解放が作る活性化の中の観測を含む段は参照を
-  処分する段なので、`Retain`/`Release` の節点の段でありうる。そのような段は対を持たず `C` に
-  入らない。`<2>4` が言うのは `C` の段の上の観測についてだけである。
+  処分する段なので、`Retain`/`Release` の節点の段でありうる。**`X1` の段がそれに当たるのは、その
+  節点を `borrow_ify` が入れたか、`cancel` が消したときである** -- `borrow_ify` が消した節点の段は
+  `X0` の側に、`cancel` が入れた節点の段は `X2` の側に在り、どちらも `X1` には無い。そのような段は
+  対を持たず `C` に入らない。`<2>4` が言うのは `C` の段の上の観測についてだけである。
 
   **段の節点そのものが観測点であるものは、D30 の並びに残る。** 一意性の観測点は `Llvm` の演算 1 つが
   現れる位置であり (D18)、D19 は `borrow_ify` と `cancel` について「値を計算する構文を作らず、消さず、
@@ -439,12 +483,13 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   `App` の callee の名前だけである」と述べる。よってどちらのパスも観測点の節点を残すので、その段は
   D30 が除く 2 種のどちらでもない。
 
-  **除かれる段は 2 つの実例で別である。** `C01` の側で除かれるのは `borrow_ify` が消した節点と
-  入れた節点 (`call_rc` が置く `Retain`/`Release`) の段であり、`C12` の側で除かれるのは `cancel` が
-  消した節点 -- そのうちには `p0` から来て `borrow_ify` が残した節点もある -- の段である。2 つの対の
-  定義域は、どちらも `X1` の段の列を先頭から取ったものから除かれる段を落としたものであり、落とす先が
-  この 2 つで別である。よって一方が他方を含むとは限らず、`C01` と `C12` を `X1` の段の列の接頭として
-  比べることはできない。
+  **除かれる段は 2 つの実例で別である。** `C01` の実例では `π` が `borrow_ify` であり `X1` はその
+  出力なので、`X1` の側で落ちるのは `borrow_ify` が**入れた**節点 (`call_rc` が置く
+  `Retain`/`Release`) の段である。`C12` の実例では `π` が `cancel` であり `X1` はその入力なので、
+  `X1` の側で落ちるのは `cancel` が**消した**節点 -- そのうちには `p0` から来て `borrow_ify` が
+  残した節点もある -- の段である。2 つの対の定義域は、どちらも `X1` の段の列を先頭から取ったものから
+  落ちる段を除いたものであり、除く先がこの 2 つで別である。よって一方が他方を含むとは限らず、
+  `C01` と `C12` を `X1` の段の列の接頭として比べることはできない。
 
     BY D18, D19, D24, D30, P24, P26
 
@@ -515,15 +560,21 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
        `f_own.name` を鍵に取り、第 2 のループは `clone.name` に等しい `borrow_version` を鍵に
        取る。第 3 のループは `name` も鍵も変えない。
     3. **`p0.funcs` の各関数の `name` は `p1.funcs` の鍵である。**第 1 のループは
-       `prog.funcs.values()` を走り、各 `func` について `func.name` を鍵に挿入する。その後の挿入も
-       `values_mut` も鍵を取り除かない。
+       `prog.funcs.values()` を走る。EXT 反復子の `iter`・`map`・`collect` より `values` は写像の
+       各値をちょうど 1 つずつ渡すので、`p0.funcs` のどの関数についても `func.name` を鍵とする挿入が
+       1 回行われる。その後の挿入も `values_mut` も鍵を取り除かない。
   - **`globals`**: `prog.globals.iter().map(|g| RcGlobalInit { symbol: g.symbol.clone(),
     ty: g.ty.clone(), init: ctx.rewrite(&g.init), owns_initializer: true, owns_storage: true })`
-    を `collect` した列である。よって `p1.globals` は `p0.globals` と同じ長さであり、第 `i`
-    要素の `symbol` と `ty` は `p0.globals` の第 `i` 要素のものに等しい。
+    を `collect` した列である。EXT 反復子の `iter`・`map`・`collect` より、`iter` は
+    `p0.globals` の各要素を添字の順に渡し、`map` は個数と順序を保ち、`Vec` への `collect` は
+    反復の順序をそのまま添字に写す。よって `p1.globals` は `p0.globals` と同じ長さであり、その第 `i`
+    要素は `p0.globals` の第 `i` 要素から作られたものである。閉包が組み立てる `RcGlobalInit` は
+    `symbol` と `ty` にその要素のものの複製を置くので、第 `i` 要素の `symbol` と `ty` は
+    `p0.globals` の第 `i` 要素のものに等しい。
   - **`roots`**: `roots: prog.roots.clone()`。よって `p1.roots` は `p0.roots` に等しい。
 
-    BY EXT 写像の `insert` と `values_mut`, `CODE src/rc_ir/borrow.rs: borrow_ify`,
+    BY EXT 反復子の `iter`・`map`・`collect`, EXT 写像の `insert` と `values_mut`,
+       `CODE src/rc_ir/borrow.rs: borrow_ify`,
        `CODE src/rc_ir/borrow.rs: clone_func`, `CODE src/rc_ir/ast.rs: RcProgram`
 
   **<2>1a.** 第 2 のループが入れる各借用版の名前は、`p0.funcs` のどの鍵とも、`p0.funcs` のどの
@@ -585,20 +636,27 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   差し替えて `(f.name.clone(), clone)` を収める。`funcs` を作るのはこの 1 つの `map` であり、
   ほかに `funcs` へ書くところは無い。
 
-  よって `p2.funcs` の鍵の集合は `{ f.name : f ∈ p1.funcs.values() }` である。`<2>1` の 2 より
+  EXT 反復子の `iter`・`map`・`collect` より、`values` は `p1.funcs` の各関数をちょうど 1 回ずつ
+  渡し、`map` はその 1 つ 1 つを対 `(f.name.clone(), clone)` に写し、対の反復子の `Map` への
+  `collect` は鍵の集合を渡された各対の第 1 成分の集合に等しくする。よって `p2.funcs` の鍵の集合は
+  `{ f.name : f ∈ p1.funcs.values() }` である。`<2>1` の 2 より
   `p1.funcs` のどのエントリも鍵はその `name` に等しいので、この集合は `p1.funcs` の鍵の集合に
   等しい。`<2>1` の 3 と合わせて、**`p0.funcs` の各関数の `name` は `p2.funcs` の鍵である。**
 
-    BY <2>1, `CODE src/rc_ir/borrow.rs: cancel`, `CODE src/rc_ir/ast.rs: RcProgram`
+    BY <2>1, EXT 反復子の `iter`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`,
+       `CODE src/rc_ir/ast.rs: RcProgram`
 
   **<2>3a.** `cancel` が返す `globals` と `roots` を、コードの上で読む。`cancel` は
   `prog.globals.iter().map(|g| RcGlobalInit { symbol: g.symbol.clone(), ty: g.ty.clone(),
   init: cancel_body(&vars, &g.init), owns_initializer: true, owns_storage: true })` を `collect`
-  した列を返す。よって `p2.globals` は `p1.globals` と同じ長さであり、第 `i` 要素の `symbol` と
-  `ty` は `p1.globals` の第 `i` 要素のものに等しい。`roots` は `roots: prog.roots.clone()` なので
-  `p2.roots` は `p1.roots` に等しい。
+  した列を返す。EXT 反復子の `iter`・`map`・`collect` より、`iter` は `p1.globals` の各要素を
+  添字の順に渡し、`map` は個数と順序を保ち、`Vec` への `collect` は反復の順序をそのまま添字に写す。
+  よって `p2.globals` は `p1.globals` と同じ長さであり、その第 `i` 要素は `p1.globals` の第 `i`
+  要素から作られたものである。閉包が組み立てる `RcGlobalInit` は `symbol` と `ty` にその要素のものの
+  複製を置くので、第 `i` 要素の `symbol` と `ty` は `p1.globals` の第 `i` 要素のものに等しい。
+  `roots` は `roots: prog.roots.clone()` なので `p2.roots` は `p1.roots` に等しい。
 
-    BY `CODE src/rc_ir/borrow.rs: cancel`
+    BY EXT 反復子の `iter`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`
 
   **<2>3b.** `cancel` は `App` の callee の名前を変えない。
 
@@ -705,34 +763,39 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 ほかの仮定も名指されていない仮定については、README がその仮定を名指す節、またはその仮定自身の項が
 挙げる読み手を書く。
 
+**2 つの欄は README を機械的に走査して埋める。** 果たす者の欄はその仮定の項の「果たす者」と「検査」を
+写し、読み手の欄は README の全行のうちその仮定の番号が現れるものを、その仮定自身の項の内と外の
+両方について数え上げる。**番号の一致で拾う形にするのは、目で選んだ一覧が落ちるからである** --
+落ちても表は表として読めてしまうので、落ちたことは表からは分からない。
+
 | 仮定 | 内容 | 果たす者 (README 第 4 節) | README が挙げる読み手 |
 |---|---|---|---|
-| A1 | 入力が RC 規律を満たす | 前段のパス (`insert_rc`) | P14 と T の言明の前提。A19 (i) の量化範囲に D12 を与える (P28 の項) |
+| A1 | 入力が RC 規律を満たす | 前段のパス (`insert_rc`) | P14 と T の言明の前提。A19 (i) の量化範囲に D12 を与える (P28 の項と、A19 の「(i) も閉じた」の節) |
 | A2 | 単位への正規化 | `insert_rc` と `split_rc_units` | P14 と T の言明の前提。P9 の項 |
-| **A3** | 宣言されたモデルの忠実さ | **誰も**。ただし `applies_a_function_operand` については `Generator::apply_lambda` の develop mode の検査が、`result_prov` の元数については `validate` の `check_rhs` の develop mode の検査が果たす | D10、D21、D24、D29、D30、P5 (a)。元数の節を読むのは「名前は別名類を決める」-- A19 (ii-b) の (O2) が使う性質 -- である (第 7 節) |
-| **A4** | コード生成の忠実さ | **誰も** | D29、D30 |
-| A5 | 型が leaf の上位近似 | `leaf_map.rs` の設計 | D25、P7a、A19 (i) |
-| A6 | 名前の一意性 | lowering | D6、P9、A11 |
+| **A3** | 宣言されたモデルの忠実さ | **誰も**。ただし `applies_a_function_operand` については `Generator::apply_lambda` の develop mode の検査が、`result_prov` の元数については `validate` の `check_rhs` の develop mode の検査が果たす | D10、D17、D20、D21、D24、D29、D30、A26 (`Unknown` の行が参照を作る先)、P2a (決定性の節)、P5 (a)。「値の等しさ」の節の読み手として `validate` を名指す -- このファイルでは `<1>1` の `<2>2` と第 4 節の「開発ビルドでだけ走る検査」がそこに立つ。元数の節を読むのは「名前は別名類を決める」-- A19 (ii-b) の (O2) が使う性質 -- である (第 7 節) |
+| **A4** | コード生成の忠実さ | **誰も** | D29、D30。「活性化の側も要る」の節は `p50-observation.md` の `L5` と `L6` が読む |
+| A5 | 型が leaf の上位近似。`#ArrayStorage` のオブジェクトについては、持ち手の単位は leaf ではなく要素の位置である | `leaf_map.rs` の設計 | D16 (null ポインタの leaf を数えない節)、D21 (開始の時点で A19 (i) の不等式が出ること)、D25、D29 (対応するオブジェクトが保持する値の節)、P7a、A19 (i) |
+| A6 | 名前の一意性 | lowering | D6、P9、A11、層 1 の命題 P1-P7 (`borrow_ify` の出力については P9 と合わせて読む) |
 | A7 | 呼び出し先の解決 | `resolve_callee_params` の設計 | 第 8 節 (#551 の 1 件目の直しが健全な近似である根拠) |
-| A8 | グローバルは線形規律の外 | `mark_global` | D26、D24 の (E7)、P27 の系 |
-| A9 | `Match` はアームを持つ | lowering (検査は develop mode の `validate`) | P16 |
-| A10 | 型の well-formedness | 大きさの部分は `validate_layouts` (最適化が作る型の再検査は develop build だけ)。**飽和を果たすのは kind の体系である** -- 宣言された型の kind は `check_kinds` が検査して診断を出し、式の型は kind `*` を持つ。README 第 4 節の冒頭はこれを「構成上そうなる」の段に置く。**`validate_layouts` は飽和を検査しない** -- その走査自身が `no_size_reason` から `held_types` を経て `declared_field_types` に入るので、飽和していない型に出会えば診断を出さずに同じ `assert` で止まる | P1 の言明、A12。A10 自身の項が `boxed_leaf_paths` と `rc_units` の停止性を挙げる |
-| A11 | スコープの規律 | lowering (検査は develop mode の `validate`) | D2、P9。A11 自身の項が `origin` の停止性を挙げる |
-| **A12** | 束縛の形と型が合っている | **誰も** (項の見出し)。ただし `RcFunc` の欄の整合については `Lowerer::lower_lambda_as_function` が果たし、箇条ごとにも果たす者が居る -- `Llvm` 節点の `args` の名前の列は演算を作る側 (検査: develop mode の `validate` の `check_rhs`)、`Llvm` 節点の型についての残る 3 つは `struct_punch`・`struct_set` と `struct_plug_in`・`struct_get` と `union_as` が結果の型に取る形。punched でないことを検査するコードは無い | A3。A12 自身の項が P2 と `held_field_type`、`rhs_consumes` の停止性を挙げる |
-| A13 | 名前の形 | `Lowerer::fresh_var` と `clone_fresh` (検査は develop mode の `check_clone_names_are_fresh`) | P9 の後半、P14b。このファイルの `<1>10` の `<2>1a` |
+| A8 | グローバルは線形規律の外 | `mark_global` | D6 (記号の位置が指す先)、D26、D24 の (E7)、P27 の系 |
+| A9 | `Match` はアームを持つ | lowering (検査は develop mode の `validate` の `check_rhs`) | P16 |
+| A10 | 型の well-formedness | 大きさの部分は `validate_layouts` (最適化が作る型の再検査は develop build だけ)。**飽和を果たすのは kind の体系である** -- 宣言された型の kind は `Scheme::check_kinds` が検査して診断を出し、式の型は kind `*` を持つ。README 第 4 節の冒頭はこれを「構成上そうなる」の段に置く。**`validate_layouts` は飽和を検査しない** -- その走査自身が `no_size_reason` から `held_types` を経て `declared_field_types` に入るので、飽和していない型に出会えば診断を出さずに同じ `assert` で止まる。`declared_field_types` の `assert!(merge_ok)` を通すのは `TypeDefn::validate_tyvars` であり、`Program::validate_type_defns` がすべての型宣言に掛ける | P1 の言明、A12。A10 自身の項が `boxed_leaf_paths` と `rc_units` の停止性を挙げる |
+| A11 | スコープの規律 | lowering (検査は develop mode の `validate` の `check_expr_inner` と `check_rhs`) | D2、P9。A11 自身の項が `origin` の停止性を挙げる |
+| **A12** | 束縛の形と型が合っている | **誰も** (項の見出し)。ただし `RcFunc` の欄の整合については `Lowerer::lower_lambda_as_function` が果たし、箇条ごとにも果たす者が居る -- `Llvm` 節点の `args` の名前の列は演算を作る側 (検査: develop mode の `validate` の `check_rhs`)、`Llvm` 節点の型についての残る 3 つは `struct_punch`・`struct_set` と `struct_plug_in`・`struct_get` と `union_as` が結果の型に取る形。punched でないことを検査するコードは無い | D6 (束縛を持たない `RcVar` の型)、A3。union の側の節の読み手として `p12-identity-and-consumes.md` の `L4` を挙げる。A12 自身の項が P2 と `held_field_type`、`rhs_consumes` の停止性を挙げる |
+| A13 | 名前の形 | `Lowerer::fresh_var` と `clone_fresh` (検査は develop mode の `check_clone_names_are_fresh`) | D6 (束縛を持たない名前の 2 種)、P9 の後半、P14b。このファイルの `<1>10` の `<2>1a` |
 | A14 | 適用は飽和している (`App` の `args` の個数は呼び出し先のパラメータの個数に**等しい**) | 型検査と lowering (検査は `Generator::apply_lambda` の `assert_eq!`) | A14 自身の項が両向きの読み手を挙げる -- 以下は `call_rc` と `rhs_consumes` の `params[arg_idx]`、以上は D10 の初期値 |
 | A15 | `grow_stack` は閉包をちょうど 1 回呼ぶ | `stacker` crate | A15 自身の項が「`src/` の `grow_stack(` の呼び出し元を数え上げて決める」と述べる |
-| A16 | `Match` のアームは scrutinee のタグを尽くす | lowering と、アームの列を保つ後段のパス。catch-all の位置についてはコード生成 (**検査: 無し**) | P3、P4、P5 (a)、P6 |
-| A17 | 環境の契約 | 環境のコード (**検査: 無し**) | D21 (`H` の外から来る増減)、D24 の「実行の最初の時点」と (E8)、P27 の言明。(i-c) の「環境が持ち込むオブジェクトは有限個である」は `p51-runs.md` の `L5` (d)。(i-d) は `p50-observation.md` の `L9b`・`L10` |
+| A16 | `Match` のアームは scrutinee のタグを尽くす | 型検査の網羅性検査 (`Pattern::validate_match_cases_exhaustiveness`)、Bool の 2 つのタグを直に出す lowering (`Lowerer::lower_if`)、およびアームの列を保つ後段のパス。catch-all の位置についてはコード生成 (**検査: 無し**) | P3、P4、P5 (a)、P6 |
+| A17 | 環境の契約 | 環境のコード -- `build_main_function`、`ExportStatement::implement`、`implement_rc_global` (**検査: 無し**) | D21 (`H` の外から来る増減)、D24 の「実行の最初の時点」・(E2) の段の不可分性・(E8)、D25 (環境が持ち込むオブジェクトを割り当てた素動作がこの実行に無いこと)、D30 (環境が持ち込む値の関数の欄)、P27 の言明。(i-c) の「環境が持ち込むオブジェクトは有限個である」は `p51-runs.md` の `L5` (d)。(i-d) は `p50-observation.md` の `L9b`・`L10`。(ii-b) は `p50-observation.md` の `L0` |
 | **A18** | 生きているオブジェクトのグラフの非巡回性と、グローバル状態のオブジェクトが計数下の参照を持たないこと | **誰も** | P27 の言明の前提。使うのは (R3) だけ (A18 自身の項) |
-| A19 | bump の下に余りが在る | (ii-a) は `insert_rc`・`split_rc_units`・`borrow_ify` の 3 人 (**検査: 無し**)。(ii-b) は無条件に閉じている (第 7 節)。(i) は仮定ではなく D21 が活性化に課す制限であり、実行が作る活性化がそれを満たすことを P28 (b) が示す | (ii-a) は P14・P18a・P18c (P18a と P18c は `cancel` の入力について (ii-a) も読む)、(ii-b) は P18a・P18c・P19・P21。(i) の不等式は D21 が活性化への制限として読み、P28 (b) がそれを実行の作る活性化について示す |
+| A19 | bump の下に余りが在る | (ii-a) は `insert_rc`・`split_rc_units`・`borrow_ify` の 3 人 (**検査: 無し**)。(ii-b) は無条件に閉じている (第 7 節)。(i) は仮定ではなく D21 が活性化に課す制限であり、実行が作る活性化がそれを満たすことを P28 (b) が示す | (ii-a) は P14・P18a・P18c (P18a と P18c は `cancel` の入力について (ii-a) も読む)、(ii-b) は P18a・P18c・P19・P21。(i) の不等式は D21 が活性化への制限として読み、D34 がその `held` と `d` と角括弧を定め、D6 がそれを計数下の類に限り、P28 (b) がそれを実行の作る活性化について示す |
 | A20 | 借りた参照は活性化の間 生きている | 呼び出し元 (**検査: 無し**) | A19 (i)、P14 の (S-c)、P14a、P14b の項、P27 と P28 の言明の前提。「借用位置へ渡された参照は、呼び出しの間 呼び出し先の `Obl` に入らない」は `p05-holders.md` の `<1>4b` |
 | A21 | 関数の値を作る演算 | `builtin.rs` の op の集合 (**検査: 無し**) | P14b、P27 (第 7 節: 「`L0` の数え上げは A21 が片付けた」)。A21 自身の項が「実行時の呼び出し先を静的な名前から決める議論」を挙げる |
 | A22 | `funcs` の鍵は関数の名前 | lowering (**検査: 無し**) | A22 自身の項が `resolve_callee_params` と `call_rc` を挙げ、`RcRhs::Closure` の `FuncRef` の節が `infer_ownership` の停止性 (P8 (a)) を挙げる |
 | A23 | 持ち上げた lambda は closure 型である | 型検査と `uncurry` (**検査: 無し**) | `p20-borrow-ify.md` の `L18` |
 | **A24** | `fix` の op は capture を持つ本体にだけ在る | **誰も** (検査は `Lowerer::lower_llvm` の panic) | P14b、`p20-borrow-ify.md` の `L18a` |
 | A25 | 骨格は `Retain`/`Release` を持たない | lowering と `simplify` (検査は `RcInserter::insert_into_expr_inner` の `panic!`) | `p60-insert-rc.md` の `L8`・`L14`・`L28` |
-| A26 | 節点は、読んでから手放す | コード生成 (**検査: 無し**) | `p20-borrow-ify.md` の第 10.7 節 (P14 の (S-c))。「読んだオブジェクトはその参照が作られるまで生き延びる」は `p51-runs.md` の `L2b` -- (S-c) が与えるのは読みの直前の点であり、`L2b` が要るのは参照を作る動作の直前の点である |
+| A26 | 節点は、読んでから手放す | コード生成 (**検査: 無し**) | `p20-borrow-ify.md` の P14 の (S-c) の節。「読んだオブジェクトはその参照が作られるまで生き延びる」は `p51-runs.md` の `L2b` -- (S-c) が与えるのは読みの直前の点であり、`L2b` が要るのは参照を作る動作の直前の点である |
 
 **README 第 7 節が「誰も果たさない仮定」に挙げるのは A3・A4・A12・A18・A24 の 5 つである。**この
 うち A3 は 2 つの節についてだけ果たす者を持つ -- `applies_a_function_operand` の宣言については
@@ -789,8 +852,9 @@ README 第 1 節が名前で挙げるとおり、**評価順の保存**、**FFI 
 証明しない。返り値の一致は `cancel` についても主張しない -- カウントが下がると**参照カウントで分岐
 する op** が別の腕を取り、割り当てるオブジェクトの個数が変わる。この向きの変化は言語が認めている
 (P26)。**数え上げるのは生成コードの分岐であって、`LLVMGen::unique_check_operand` の宣言ではない**
-(D30 の (X2)、D21) -- 宣言は `Option<usize>` を返すのでオペランドを 1 つしか名指せず、
-`InlineLLVMArrayAppendCapacityUnchecked` は `dst` を宣言しながら `src` についても分岐する。
+(D30 の (X2)、D21) -- 宣言は `Option<UniqueCheckOperand>` を返し、`UniqueCheckOperand` の
+`container_index` はオペランドを 1 つしか名指せないので、`InlineLLVMArrayAppendCapacityUnchecked` は
+`dst` を宣言しながら `src` についても分岐する。
 
 ### T が言うのは `optimize_rc_program` の返り値についてではない
 
@@ -868,8 +932,9 @@ P26 の量化範囲がそうだからであり (`<1>9` の `<2>4`)、外すと `
 持つプログラムについて T が何も言わなくなる。
 
 **段の中で起きる観測については、それを含む段が `C` に入らないことがある。** その段は参照を処分する
-段なので `Retain`/`Release` の節点の段でありうる。その節点を 2 つのパスの一方が消したか入れたならば、
-その段は D30 の並びから除かれて対を持たない。(T3) はその段の上の観測について何も言わない。**段の
+段なので `Retain`/`Release` の節点の段でありうる。その節点を `borrow_ify` が入れたか、`cancel` が
+消したならば、その段は D30 の並びから除かれて対を持たない。`X1` の段について除かれる形はこの 2 つで
+ある (`<1>9` の `<2>4`)。(T3) はその段の上の観測について何も言わない。**段の
 節点そのものが観測点である場合は、その段は D30 の並びに残る** -- どちらのパスも観測点の節点を残す
 からである (`<1>9` の `<2>4`)。
 
@@ -891,16 +956,15 @@ D30 が言い ((X3) は `π` が `borrow_ify` のときに開く)、その 2 つ
 **接頭の中では「一意だったものが共有になる」ことは起きない。** これは `<1>9` の `<2>2` と `<2>3` の
 第 1 項が与えるもので、出口の向きとは別の主張である。
 
-**残っているのは検証である。** README 第 7 節の表は P26 を 2 行に分けて記録する。
+**残っているのは検証である。** README 第 7 節の表は P26 を 2 行に分けて記録する -- `cancel` の
+半分と `borrow_ify` の半分であり、どちらも `p50-observation.md` が担う。2 行が記録するのは、
+どちらの半分も証明済みであること、`cancel` の半分が D29 の上に立つこと、そして `borrow_ify` の
+半分については第 1 文が等号で立つこと・第 2 文が `cancel` の側だけの主張であること・量化を観測の
+事象へ (段の中の観測を含む形へ) 広げたことである。
 
-```
-| P26 (`cancel` の半分) | `p50-observation.md` | 有 | 証明済み (D29 の上で) | 検証は 2 周 (直近の周の指摘 21 件、FALSE 0)。**3 周目が要る** |
-| P26 (`borrow_ify` の半分) | `p50-observation.md` | 有 | 証明済み。第 1 文は**等号**で立つので (X1) の出口が起きない。第 2 文は `cancel` の側だけの主張になった -- `borrow_ify` は (X3) を開くため。**量化は観測の事象へ広げた** (段の中の観測を含む) | 検証は 2 周 (直近の周の指摘 21 件、FALSE 0)。**3 周目が要る** |
-```
-
-どちらの `証明` の欄も `証明済み` であり、`borrow_ify` の半分の欄は、量化を観測の事象へ -- 段の中の
-観測を含む形へ -- 広げたことも記録する。`検証` の欄はどちらも 2 周であり、3 周目を待っている。
-**この数え上げは検証が 1 周進むたびに動く。読むときは README 第 7 節の表を読み直すこと。**
+**その 2 行に検証が要るかどうかを決めるのは、README 第 7 節が据える述語である** --
+「そのファイルの最後の変更より後に、そのファイルの検証が走っているか」。走っていなければ検証が要る。
+**その 2 行がいまその述語のどちら側に在るかは、表を開いて読むこと。**
 
 ### 借用版の名前が新しいことを、T は A13 から取る
 
@@ -944,10 +1008,35 @@ A3 (元数) と A9 と A12 は `check_rhs`、A11 は `check_expr_inner` と `che
 `check_ownership_is_levelled` は `expect` 1 つと `assert!` 1 つからなり、`validate` の中の検査は
 `panic!` を呼ぶ (`CODE src/rc_ir/borrow.rs: check_clone_names_are_fresh`,
 `CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled`,
-`CODE src/rc_ir/validate.rs: validate`)。**どれも自分が調べる対象を共有参照で受け取り、値を
-返さない** -- `check_clone_names_are_fresh` と `validate` は `&RcProgram` を、
-`check_ownership_is_levelled` は `&self` と `&RcFunc` を取る。よってプログラムを書き換えることは
-しない。
+`CODE src/rc_ir/validate.rs: validate`)。どれも調べる対象を共有参照で受け取り、値を返さない --
+`check_clone_names_are_fresh` と `validate` は `&RcProgram` を、`check_ownership_is_levelled` は
+`&self` と `&RcFunc` を取る。
+
+**`&RcProgram` を取る 2 つには、`<1>1` の `<2>2` と同じ議論が当たる。** EXT 共有参照が書き込める先
+より、その呼び出しが書けるのは `UnsafeCell` の中に在る記憶域だけであり、`RcProgram` から到達できる
+内部可変性 -- `TypeNode` の 3 つの `OnceLock` と、`Box<dyn LLVMGen>` の op がその道で持つ型 -- が
+値の等しさを動かさないことを、A3 の「値の等しさ」の節が言う。
+
+**`check_ownership_is_levelled` の `&self` は書き込みの道を持つ。**その `&self` は `&RewriteCtx`
+であり、`RewriteCtx` は `vars: VarTable` を欄に持ち、`VarTable` は
+`origins: RefCell<Map<VarPath, Origin>>` を持つ (`CODE src/rc_ir/borrow.rs: RewriteCtx`,
+`CODE src/rc_ir/ownership.rs: VarTable`)。本体は `levelled_sites` が挙げる各 site について
+`origin(&self.vars, self.type_env, ..)` を呼び、`origin` は答えを
+`vars.origins.borrow_mut().insert(..)` で記録する (`CODE src/rc_ir/borrow.rs:
+RewriteCtx::check_ownership_is_levelled`, `CODE src/rc_ir/ownership.rs: origin`)。すなわちこの検査は
+共有参照から memo を書く。
+
+**その書き込みが書き換えの答えを動かさないことを言うのは P2a である。**`borrow_ify` は借用版に
+ついて `if develop_mode { ctx.check_ownership_is_levelled(&clone); }` を
+`clone.body = ctx.rewrite(&clone.body);` の**直前**に置き、この 2 つは同じ `ctx` の同じ `vars` を
+読む (`CODE src/rc_ir/borrow.rs: borrow_ify`)。P2a は、1 つの `VarTable` の値と 1 つの `TypeEnv` の
+値を固定したとき、鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならばその 2 つは
+等しく、答えは `vars.origins` が保持する memo の状態に依らないと述べる。この検査が 2 つの共有参照を
+通じて書けるのは、`origins` の memo と、`&RcFunc` および `RewriteCtx` の型の欄から到達する
+`TypeNode` の memo -- 上の段が A3 の「値の等しさ」の節で扱ったもの -- の 2 つだけである。よって
+`ctx.rewrite` が引く `origin` の答えは検査の有無で変わらない。コードは
+`RewriteCtx::rewrite` に `// PROOF: P2a` を付けてこの読みを指す
+(`CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite`)。
 
 よって次の 2 つが言える。表明がすべて成り立つ入力については、`borrow_ify` が組み立てる `RcProgram` は
 `develop_mode` によらず同じであり、T の主語は 2 つのビルドで同じプログラムである --
@@ -960,10 +1049,10 @@ A3 (元数) と A9 と A12 は `check_rhs`、A11 は `check_expr_inner` と `che
 
 T は P9・P12・P14・P14a・P14b・P22・P23・P24・P26・P27 の言明を引用する。それらが対象コミットに対して
 どこまで証明され、どこまで検証されているかは README 第 7 節の表が述べる。**T が閉じることは、それらが
-閉じることを意味しない。**その表の `検証` の欄は、T が引く 10 個の命題のどの行についても次の周を
-待っている。**周が最も少ないのは P26 の 2 行 (2 周) であり、最も多いのは P9 と P12 を載せる行、
-P14 の行、P14a の行、P14b の行 (どれも 4 周) である。**この数え上げは検証が 1 周進むたびに動く。
-読むときは README 第 7 節の表を読み直すこと。**
+閉じることを意味しない。**表の `証明` の欄が、その命題をどのファイルが担い、どの仮定の下で、どう
+書き直した言明について示されているかを記録する。**どの行に検証が要るかを決めるのは、README 第 7 節が
+据える述語である** -- 「そのファイルの最後の変更より後に、そのファイルの検証が走っているか」。
+T が引く 10 個がいまどの状態に在るかは、表を開いて読むこと。
 
 P23 の言明は、入力を `borrow_ify` の出力に限る。T が P23 に渡すのはまさに `borrow_ify` の出力なので
 (`<1>1`)、この限定は主定理の鎖を切らない。限定の理由は P23 自身が述べており、A19 (ii-b) の量化範囲と

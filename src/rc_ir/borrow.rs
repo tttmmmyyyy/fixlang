@@ -804,7 +804,7 @@ fn clone_func(
 
 /// The per-version state the body rewrite reads: this version's aliasing vars and tail calls,
 /// whether it is the borrow clone, and the whole-program ownership and version tables.
-// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7d, P7e, T (dev-docs/proof/rc_ir/borrow-cancel)
 struct RewriteCtx<'a> {
     /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
@@ -854,7 +854,7 @@ impl<'a> RewriteCtx<'a> {
     /// Rewrite a body for this version: route each direct call to a callee version, bracket a call
     /// with the reference counting the routed callee no longer does, and drop the counting this
     /// version's borrowed parameters no longer need.
-    // PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
     fn rewrite(&self, node: &RcExprNode) -> RcExprNode {
         grow_stack(|| self.rewrite_inner(node))
     }
