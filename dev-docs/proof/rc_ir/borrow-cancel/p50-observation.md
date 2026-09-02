@@ -2146,7 +2146,7 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
       呼び出し先 (D23) である。`route` が返す呼び出し先は元の呼び出し先と同じ入力関数の版であり、呼び出し先が
       入力の関数を名指すとき返る名前は出力の `funcs` の鍵である (P12)。よって `g` の本体の位置にある (i) の
       段は、入力の関数の対 `g -> h` の辺を与える。ここで `h` は到達される活性化の本体の入力関数である。
-  BY D23, P12, P30, <1>3, CODE src/rc_ir/ownership.rs: resolve_callee_params
+  BY D23, P12, P30, <1>1, <1>3, CODE src/rc_ir/ownership.rs: resolve_callee_params
 
 <1>6. (ii) の段と (iii) の段は `<1>1` の (e) の辺を与える。(ii) の段を持つ本体の `owner` は `<1>1` の (c)
       により、(iii) の段を持つ本体の `owner` は `<1>1` の (d) により `calls_indirectly` に入る。(iii) の
