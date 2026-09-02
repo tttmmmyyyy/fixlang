@@ -408,11 +408,19 @@ enum については元と同じ変位で、その変位が保持する各値を
        自分で作りもしない関数の本文は、`t` に届かない。したがって `origin(vars, ・, ・, ・)` の 1 回の
        呼び出しの中で `vars` を引数として受け取る本文は、`origin`、`origin_inner`、
        `origin_from_leaves_under` の 3 つだけである。
-  <2>1. 前半が成り立つ。`VarTable` は `origins: RefCell<Map<VarPath, Origin>>` の欄を持つので `Sync`
-        ではなく、EXT static は Sync を要る より `static` 項目に置けない。よって
-        EXT 参照は引数を通ってだけ届く より、関数の本文が `VarTable` のある値に届くのは、その値への参照が
-        引数 (`self` を含む) として渡ったときか、自分でその値を作ったときに限る。
-    BY CODE src/rc_ir/ownership.rs: VarTable, EXT static は Sync を要る,
+  <2>1. 前半が成り立つ。EXT 参照は引数を通ってだけ届く より、関数の本文が名指せる値は、自分の引数
+        (`self` を含む) から到達できる値、自分が作った値、および `static` 項目の値だけである。この 3 つ目
+        から `VarTable` の値には届かない --- このクレートの `static` 項目は 4 つ (`src/main.rs` の
+        `GLOBAL: MiMalloc`、`src/object.rs` の `FIELDS_BY_NAME: OnceLock<Map<FullName,
+        Vec<ObjectFieldType>>>`、`src/tests/test_util.rs` の `BUILD_FIX: Once`、`src/tool/log_file.rs` の
+        `LOG_FILE: Lazy<Mutex<File>>`) であり、どの型からも `VarTable` に到達できない。`VarTable` 自身を
+        `static` に置けないことも別に出る --- `VarTable` は `origins: RefCell<Map<VarPath, Origin>>` の
+        欄を持つので `Sync` ではなく、EXT static は Sync を要る がそれを禁じる。よって関数の本文が
+        `VarTable` のある値に届くのは、その値への参照が引数 (`self` を含む) として渡ったときか、自分で
+        その値を作ったときに限る。
+    BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/main.rs: GLOBAL,
+       CODE src/object.rs: FIELDS_BY_NAME, CODE src/tests/test_util.rs: BUILD_FIX,
+       CODE src/tool/log_file.rs: LOG_FILE, EXT static は Sync を要る,
        EXT 参照は引数を通ってだけ届く
   <2>2. `origin` の本文が `vars` を渡すのは `origin_inner(vars, type_env, var, path)` の 1 か所だけで
         ある。ほかに `vars` が現れるのは `vars.origins.borrow()` と `vars.origins.borrow_mut()` で、
