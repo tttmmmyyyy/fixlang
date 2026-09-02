@@ -1983,10 +1983,18 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 <1>29a. 1 つの表 `vars` と型環境 `E` を固定する。`origin(vars, E, u, sig)` が値を返すとき、その値は
    `(u, sig)` で決まる。すなわち、`vars.origins` の状態がどうであれ、同じ `(u, sig)` についての
    2 回の呼び出しは等しい値を返す。
-  <2>1. `vars.bindings` と `vars.var_tys` は、表を作り終えたのちは**値として**変わらない。
-     以下の段が数え上げるのは、この 2 つの `Map` に対する書き込みと、そこから届く内部可変性の欄で
-     ある。値としての等しさで述べるのは、`<2>2` がこの 2 つから `origin_inner` の返り値が決まると
-     読むところが、値の水準の読みだからである。
+  <2>1. `origin` の実行は、`vars.bindings` と `vars.var_tys` について次の 3 つを満たす。
+     - (a) 2 つの `Map` の鍵の集合も、各鍵が持つ `Binding` と `Arc<TypeNode>` の在りかも、動かない。
+     - (b) `origin_inner` がこの 2 つから**値として**読むもの -- `Binding` の変位、`Binding` が
+       持つ各 `RcVar` の `name` と `ty`、`Binding::Llvm` の `result_ty`、`var_tys` が持つ
+       `Arc<TypeNode>` -- は、表を作り終えたのちは変わらない。
+     - (c) `Binding::Llvm` が持つ `Box<dyn LLVMGen>` の op について、`origin_inner` がそこから読む
+       のは `result_prov(result_ty, &arg_tys, E)` の返り値だけであり、その返り値は引数だけで決まる。
+
+     **(c) を (b) と分けるのは、op が値として読まれないからである。**README の A3 は
+     「`Box<dyn LLVMGen>` の op はその値の中に在るので、欄への書き込みを数え上げるだけでは
+     足りない」と述べる。op が持ちうる内部可変性の欄を数え上げる代わりに、(c) は op が答えるものの
+     側を A3 の決定性の節で閉じる。
     <3>1. `bindings` は `VarTable` の非公開フィールドなので、それに書けるのは
        `src/rc_ir/ownership.rs` の中だけである。同ファイルで `bindings` に書くのは、
        `VarTable::empty` の初期化と、`VarTable::of` の 1 か所と、`collect_bindings` の 3 か所で
@@ -2023,8 +2031,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        共有参照で受け取る計算が変えない。** 到達できる型が内部可変性を持つ欄を持つときは、その欄は
        **一度だけ書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である**。」
        `impl PartialEq for TypeNode` が読むのは `ty` だけであり、3 つの memo の値はどれも `ty` の
-       関数である。よってその欄が埋まっても、`bindings` と `var_tys` は値として変わらない。
+       関数である。よってその欄が埋まっても、(b) が挙げるものは値として変わらない。
       BY A3 (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない),
+         <3>1, <3>2,
          CODE src/rc_ir/ownership.rs: origin, VarTable, origin_inner, origin_from_leaves_under,
             truncate_to_unit, unit_step,
          CODE src/ast/types.rs: TypeNode (`hash_cache` / `ground_cache` / `depth_cache` の宣言と
@@ -2033,8 +2042,20 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          CODE src/ast/types.rs: impl Hash for TypeNode,
          CODE src/ast/types.rs: impl PartialEq for TypeNode,
          CODE src/misc.rs: Map
+    <3>3a. (c) が成り立つ。`origin_inner` の `Binding::Llvm` の腕は、`args` の各要素の `ty` を
+       集めて `arg_tys` を作り、`llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を 1 度呼んで
+       `decl` を得たのち、`decl` と `args` と `path` だけを読む。この腕にも `origin_inner` の
+       ほかの腕にも、op の欄を読む式はこの呼び出し以外に無い。A3 の
+       「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を
+       返す」より、その返り値は `result_ty`、`arg_tys`、`E` だけで決まる。**op が自分の中に持つ
+       内部可変性は、この段に入らない** -- `LLVMGen::result_prov` は `&self` を取るので op はそれを
+       持ちうるが、決定性の節はその有無に依らず答えを引数の関数にする。
+      BY A3 (`result_prov` と `borrows_operand` は決定的である),
+         CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding,
+         CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
     <3>4. QED
-      BY <3>1, <3>2, <3>3
+      (a) は `<3>1`、`<3>2`、`<3>3` の第 1 段落、(b) は `<3>3`、(c) は `<3>3a` である。
+      BY <3>1, <3>2, <3>3, <3>3a
   <2>1a. `origin_from_leaves_under(vars, E, decl, args, path, here)` の返り値は、`decl`、`args`、
      `path`、`here`、`E`、および自分が行う `origin` の呼び出しの返り値だけで決まる。とくに
      `operand_units` の反復の順序には依らない。
@@ -2080,15 +2101,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>2. `origin_inner(vars, E, u, sig)` の返り値は、`vars.bindings`、`E`、`u`、`sig`、および自分が
      行う `origin` の呼び出しの返り値だけで決まる。この関数が読むのは `vars.bindings.get(var)`、
      その `Binding` が持つ `RcVar` の名前と型と `llvm_gen` と `result_ty`、および `E` であり、
-     `truncate_to_unit` はその引数の関数である。
-     **`llvm_gen.result_prov(result_ty, &arg_tys, type_env)` がその引数の関数であることは A3 が言う** --
-     `LLVMGen::result_prov` は `&self` を取るので、内部可変性を持つ op は同じ引数に違う答えを返せる。
-     A3 の「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を
-     返す」がそれを排除する。`decl` が変われば `origin_inner` の `Llvm` の腕は
-     `decl.leaf_origins_at(path).and_then(as_arg_projection)` の結果で別の道を選びうるので、この節が
-     無いとこの段は立たない。`vars.origins` も `vars.var_tys` も読まない。`Llvm` の腕が
-     `origin_from_leaves_under` を呼ぶ道については `<2>1a` がこれを与える。
-    BY A3 (`result_prov` は決定的である), <2>1, <2>1a,
+     `truncate_to_unit` はその引数の関数である。`vars.origins` も `vars.var_tys` も読まない。
+     このうち `llvm_gen` から読まれるのは `result_prov(result_ty, &arg_tys, E)` の返り値だけで
+     あり、それが引数だけで決まることは `<2>1` (c) が与える。**その節が要るのは、`decl` が変われば
+     `origin_inner` の `Llvm` の腕が `decl.leaf_origins_at(path).and_then(as_arg_projection)` の
+     結果で別の道を選びうるからである。**残るものが表を作り終えたのちは変わらないことは `<2>1` (b)
+     が与える。`Llvm` の腕が `origin_from_leaves_under` を呼ぶ道については `<2>1a` がこれを与える。
+    BY <2>1, <2>1a,
        CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
        CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
