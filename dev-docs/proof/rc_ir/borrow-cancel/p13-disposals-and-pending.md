@@ -68,7 +68,7 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
 この文書は補題を `L1` から `L6` と呼ぶ。`BY` の行ではそれらを名前で引用する。補題の証明の内部の
 ステップは引用しない。
 
-外部の結果を 3 つ使う。名札は README の「証明の記法」が定める `EXT <名前>` である。
+外部の結果を 6 つ使う。名札は README の「証明の記法」が定める `EXT <名前>` である。
 
 - **`EXT stacker の maybe_grow`**: `stacker::maybe_grow(red_zone, stack_size, callback)`
   は `callback` をちょうど 1 回呼び、その値を返す (`CODE stacker-0.1.23/src/lib.rs: maybe_grow`)。
@@ -82,6 +82,13 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
   同じ長さの `Vec` を返し、その第 `i` 要素は `v` の第 `i` 要素の `clone()` である。すなわち複製は
   要素をその並びのまま持つ。`#[derive(Clone)]` が作る `clone()` は、各フィールドの `clone()` を
   呼んで同じ変位の値を組み立てる。この文書は `PendingRetains` の `clone` としてこれを使う。
+- **`EXT Iterator::rposition`** (Rust 標準ライブラリ): `it.rposition(f)` は、`f` が真を返す最後の
+  要素の添字を `Some` で返し、`f` がどの要素についても偽であるときにかぎり `None` を返す。すなわち
+  `None` は「述語がどの要素についても偽である」と同値である。
+- **`EXT Iterator::any`** (Rust 標準ライブラリ): `it.any(f)` は、`f` が真を返す要素が在れば真を、
+  1 つも無ければ偽を返す。すなわち真は「述語が真である要素が在る」と同値である。
+- **`EXT Iterator::all`** (Rust 標準ライブラリ): `it.all(f)` は、`f` がすべての要素について真を返す
+  ときに真を、偽を返す要素が在るときに偽を返す。要素が 1 つも無いときは真である。
 
 ## 2. 局所の定義
 
@@ -376,9 +383,9 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
       オブジェクトも名指さない。またこの呼び出しは `pending` の要素を落とすだけで、残る要素の
       `outstanding` を変えない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain,
-     DEF 要素が名指すオブジェクト
-  本体は `pending.retain(...)` であり、述語は `objects` のいずれかを `outstanding.names` が真とする要素に
-  ついて `false` を返す。`retain` は `false` を返した要素を落とし、他の要素はそのまま残す。
+     EXT Iterator::any, DEF 要素が名指すオブジェクト
+  本体は `pending.retain(...)` であり、その述語は `objects.iter().any(|object|
+  retain.outstanding.names(object))` が真の要素について `false` を返す。`retain` は `false` を返した要素を落とし、他の要素はそのまま残す。
   DEF 要素が名指すオブジェクト より、その述語が真であることは要素がそのオブジェクトを名指すことである。
 
 <1>2. `Obj(n) ⊆ ActRefs(v, π).objects() ∪ Others(v, π)` である。
@@ -397,11 +404,13 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
     `NoBracket` を返すのは `pending.iter().rposition(...)` が `None` を返した枝であり、そこまでに
     `pending` への書き込みは無い。
   <2>2. `pending` のどの要素 `r` についても `r.outstanding.shares_an_object(un_bumped)` は偽である。
-    BY CODE src/rc_ir/borrow.rs: un_bump
-    `Iterator::rposition` が `None` を返すのは、述語がどの要素についても偽のときである。
+    BY CODE src/rc_ir/borrow.rs: un_bump, EXT Iterator::rposition
+    この場合の仮定より `pending.iter().rposition(|retain| retain.outstanding
+    .shares_an_object(un_bumped))` は `None` を返す。
   <2>3. `r.outstanding.shares_an_object(un_bumped)` が偽であることは、`un_bumped.objects()` のどの
         オブジェクト `o` についても `r.outstanding.names(o)` が偽であることと同値である。
-    BY CODE src/rc_ir/ownership.rs: References::shares_an_object, References::objects, References::names
+    BY CODE src/rc_ir/ownership.rs: References::shares_an_object, References::objects, References::names,
+       EXT Iterator::any
     `shares_an_object` は `other.0.keys().any(|object| self.0.contains_key(object))`、`objects` は
     `self.0.keys()` の複製、`names` は `self.0.contains_key` である。
   <2>4. 訪問が `walk(k, pending, ·)` に渡す `pending` は、L5 の 1 の呼び出しの後で、かつ <2>1 により
@@ -1013,7 +1022,7 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
     BY <2>1, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     `origin_from_leaves_under` が `origin` を呼ぶのは `operand_units` の各元についてだけである。
   <2>3. QED
-    BY <2>1, <2>2, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+    BY <2>1, <2>2, EXT Iterator::all, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
        CODE src/rc_ir/ownership.rs: origin_inner
     <2>1 より `reached` は、`produced_here` が偽なら空、真なら `[Origin::Exactly(here_identity)]` で
     ある。ここで `here_identity = (x.name, λ)` である。空のとき `let first = reached.first()?;` が
@@ -1748,7 +1757,7 @@ P6 より、`n` が `Retain` のとき `(ActRefs^inh_ρ(n))^obj` は `n` が `ρ
 <1>1a. `consume_objects(pending, objects)` は、`objects` のいずれかについて `outstanding.names(object)`
        が真である要素を取り除いてその `node` を `self.needed_retains` に入れ、残る要素の `node`・
        `outstanding`・並びを変えない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain, EXT Iterator::any
   本体は `pending.retain(|retain| { if objects.iter().any(|object| retain.outstanding.names(object))
   { self.needed_retains.insert(retain.node); return false; } true })` である。
 
@@ -1868,7 +1877,7 @@ P6 より、`n` が `Retain` のとき `(ActRefs^inh_ρ(n))^obj` は `n` が `ρ
     <3>4. `merged` の各要素 `p` について、`p.node` は `pending(M)` のある要素の `node` であり、
           `p.outstanding` は各 `arm_exits[j']` の中の `node` が `p.node` に等しい要素の `outstanding`
           と等しい。とくに `arm_exits[j]` にそのような要素 `p^{(j)}` が在る。
-      BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, P18
+      BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, P18, EXT Iterator::all
       `merge` の返り値は `pending_in.iter().filter_map(|retain| uniform.get(&retain.node).map(
       |outstanding| PendingRetain { node: retain.node, outstanding: outstanding.clone() }))` であり、
       `uniform` に `retain` が入るのは `is_uniform` すなわち
@@ -1970,7 +1979,7 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
   活性なら等しく、活性でなければ右辺が 0 で左辺は 0 以上である。
 
 <1>4. `p.outstanding` は `B_ρ(n, p)` を `covers` する。
-  BY <1>3, D15, CODE src/rc_ir/ownership.rs: References::covers
+  BY <1>3, D15, EXT Iterator::all, CODE src/rc_ir/ownership.rs: References::covers
   D15 より `covers(R)` は各オブジェクトについて自分の個数が `R` 以上かを答える。`covers` の本体は
   `other.0.iter().all(|(object, count)| self.0.get(object).is_some_and(|held_count| held_count >=
   count))` であり、`References` の `Map` に鍵が無いことは個数 0 と同じ意味なので、これは <1>3 の
