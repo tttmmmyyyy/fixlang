@@ -1577,18 +1577,21 @@ leaf のスロットで、一方から他方への別名の道が `Match` のア
         `Let(x, Llvm(llvm_gen, args), k)` に対し `x` の `Binding` を `Llvm(llvm_gen, args, x.ty)` と
         する。
     BY <1>1, CODE src/rc_ir/ownership.rs: collect_bindings
-  <2>2. `origin_inner` の `Llvm` の腕は `origin_from_leaves_under` へ進む。`<1>1` より
-        `decl.leaf_origins_at([])` は単一の `Fresh` からなる集合であり、`as_arg_projection` はそれに
-        `None` を返す。
+  <2>2. `origin_inner` の `Llvm` の腕は `origin_from_leaves_under` の値を `unwrap_or_else(here)` に
+        渡し、その結果を返す。`<1>1` より `decl.leaf_origins_at([])` は単一の `Fresh` からなる集合で
+        あり、`as_arg_projection` はそれに `None` を返すので、腕はこの枝に入る。
     BY <1>1, <2>1, CODE src/rc_ir/ownership.rs: origin_inner, as_arg_projection
-  <2>3. `origin_from_leaves_under` は `Exactly((x_j, []))` を返す。`<1>2` より `T` の boxed leaf は `[]`
-        だけなので `decl.leaf_origins_under([])` が返すのはその 1 つの宣言だけであり、その元は `Fresh`
-        なので、ループは `operand_units` に何も入れず `produced_here` を立てる。よって `reached` は
-        `Exactly((x_j, []))` 1 つだけからなり、`reached.iter().all(..)` の枝がその値を返す。
+  <2>3. `origin_from_leaves_under` は `Some(Origin::Exactly((x_j, [])))` を返す。`<1>2` より `T` の
+        boxed leaf は `[]` だけなので `decl.leaf_origins_under([])` が返すのはその 1 つの宣言だけであり、
+        その元は `Fresh` なので、ループは `operand_units` に何も入れず `produced_here` を立てる。よって
+        `reached` は `Exactly((x_j, []))` 1 つだけからなり、`reached.iter().all(..)` の枝がその値を返す。
     BY <1>2, <2>2, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   <2>4. QED
-    `Exactly(p)` の `identity()` は `p`、`acted_on()` は `[p]` である。
-    BY <1>6a, <2>3, CODE src/rc_ir/ownership.rs: Origin::identity, Origin::acted_on
+    `<2>3` より `origin_from_leaves_under` の値は `Some(Origin::Exactly((x_j, [])))` なので、`<2>2` の
+    `unwrap_or_else(here)` はその中身をそのまま返し、腕の値は `Exactly((x_j, []))` である。`<1>6a` より
+    `origin(x_j, [])` の値はその `origin_inner` の呼び出しが返した値であり、`Exactly(p)` の
+    `identity()` は `p`、`acted_on()` は `[p]` である。
+    BY <1>6a, <2>2, <2>3, CODE src/rc_ir/ownership.rs: Origin::identity, Origin::acted_on
 
 <1>8. `id(m, []) = (m, [])` である。
   <2>1. `m` の `Binding` は `Join([x_0, x_1])` である。`collect_bindings` は `Let(m, Match(s, arms), k)` に
