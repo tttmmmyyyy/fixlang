@@ -1049,8 +1049,8 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 ## L4 (identity の位置)
 
-**言明**。`ρ` を実行路、`(x, λ)` を `ρ` の位置 (DEF 路の位置) とする。`id(x, λ) = (w, σ)` と
-おくと、次が成り立つ。
+**言明**。`ρ` を実行路、`(x, λ)` を `ρ` の位置 (DEF 路の位置) であって、**解析が鍵 `(x, λ)` で `origin` を
+呼ぶ**ものとする。`id(x, λ) = (w, σ)` とおくと、次が成り立つ。
 
 - (i) `σ` は `ty(w)` の boxed leaf であり、`(w, σ)` は `ρ` の位置である。
 - (ii) `obj(x, λ) = obj(w, σ)`。
@@ -1059,14 +1059,20 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 `Let(x, Var(g), k)` (`g` はグローバル値) の `(g, λ)` がそれであり、そこがこの再帰の終端の 1 つである
 (D6)。
 
-証明は、DEF 鍵の関係 の `⇝` の上の帰納法による。`id(x, λ)` は `origin(x, λ)` の値であり、L0 (a) より
-その値はこの鍵についての `origin` の 1 回の呼び出しが返したものなので、この鍵について `origin` の
-呼び出しが在る。L0a より、この鍵から始まる `⇝` の無限列は無い。
-以下、帰納法の仮定を「IH」と書く。**IH を当てる各段は、当てる先の鍵が `(x, λ)` の `⇝` の像に入ることを
-併せて述べる。** `origin` は memo を持つので、`origin_inner` の腕が行う `origin` の呼び出しが下位の
-計算を始めるとは限らず、動的な呼び出しの入れ子ではこの帰納法は立たない。
+**前件「解析が鍵 `(x, λ)` で `origin` を呼ぶ」を置くのは、この証明の帰納が立つ整礎性がその範囲でしか
+言えないからである** -- L0a (b) が `⇝` の整礎性を与えるのは呼び出しの在る鍵についてであり、`id(x, λ)` の
+値そのものも呼び出しの在る鍵についてしか定まらない (L0 (a)、§1)。**前件を落として `ρ` のすべての位置を
+渡る形にすると、解析が呼ばない鍵について `id` の値を引くことになる。** `README.md` の P3・P4・P5 (a)・
+P6 が同じ前件を持ち、この補題を読む P5 (a) と P6 (b) はそこからそれを取る。
+
+証明は、DEF 鍵の関係 の `⇝` の上の帰納法による。前提より鍵 `(x, λ)` について `origin` の呼び出しが在るので、
+L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
+以下、帰納法の仮定を「IH」と書く。**IH を当てる各段は、当てる先の鍵が `(x, λ)` の `⇝` の像に入ることと、
+解析がその鍵でも `origin` を呼ぶこととを併せて述べる。** `origin` は memo を持つので、`origin_inner` の腕が
+行う `origin` の呼び出しが下位の計算を始めるとは限らず、動的な呼び出しの入れ子ではこの帰納法は立たない。
 
 <1>1. `origin(x, λ)` の値は `origin_inner(vars, type_env, x, λ)` の 1 回の呼び出しが返した値である。
+  前提より鍵 `(x, λ)` について `origin` の呼び出しが在るので、L0 (a) が当たる。
   BY L0 (a)
 
 <1>2. `origin_inner` の腕は、`vars.bindings.get(x)` の値について次の 6 本で尽きている。
@@ -1168,9 +1174,10 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     BY <1>5a, <2>1
 
 <1>7. CASE `Some(Move(y))`。
-  <2>1. `origin(x, λ) = origin(y, λ)` であり、よって `id(x, λ) = id(y, λ)` である。また
-        `(x, λ) ⇝ (y, λ)` である。
-    この CASE の前提は `vars.bindings.get(x) = Some(Move(y))` である。`origin_inner` の
+  <2>1. 解析は鍵 `(y, λ)` でも `origin` を呼び、`origin(x, λ) = origin(y, λ)` であり、よって
+        `id(x, λ) = id(y, λ)` である。また `(x, λ) ⇝ (y, λ)` である。
+    この CASE の前提は `vars.bindings.get(x) = Some(Move(y))` であり、L4 の前提より解析は鍵 `(x, λ)` で
+    `origin` を呼ぶので、L2 (E1) が呼び出しと等式の両方を与える。`origin_inner` の
     `Some(Binding::Move(y))` の腕は `origin(vars, type_env, &y.name, path)` を直接呼ぶので、
     DEF 鍵の関係 よりこの鍵は `(x, λ)` の `⇝` の像に入る。
     BY DEF 鍵の関係, L2 (E1),
@@ -1186,9 +1193,11 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     在る (DEF 辺の存在)。L1a (b) の同じ行より、それは `ρ` の上で実行された辺である。
     BY L1, L1a, DEF 辺の存在, <2>2
   <2>4. QED
-    `<2>1` より `(y, λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。IH を `(y, λ)` に適用
-    すると、`id(y, λ) = (w, σ)` について (i) と `obj(y, λ) = obj(w, σ)` が出る。
-    BY <2>1, <2>2, <2>3, IH
+    `<2>1` より `(y, λ)` は `(x, λ)` の `⇝` の像に入り、解析はその鍵でも `origin` を呼び、`<2>2` より
+    それは `ρ` の位置なので、IH を当てられる。IH を `(y, λ)` に適用
+    すると、`id(y, λ) = (w, σ)` について (i) と `obj(y, λ) = obj(w, σ)` が出る。`<2>1` より
+    `id(x, λ) = id(y, λ)` であり、`<2>3` と EXT 等号の性質 の推移性より `obj(x, λ) = obj(w, σ)` である。
+    BY EXT 等号の性質, <2>1, <2>2, <2>3, IH
 
 <1>8. CASE `Some(Field(c, i))` で `c` が boxed。
   <2>1. 答えは `here()` であり `id(x, λ) = (x, λ)` である。
@@ -1198,10 +1207,11 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     BY <1>5a, <2>1
 
 <1>9. CASE `Some(Field(c, i))` で `c` が unbox。
-  <2>1. `origin(x, λ) = origin(c, [i] ++ λ)` であり、よって `id(x, λ) = id(c, [i] ++ λ)` である。また
-        `(x, λ) ⇝ (c, [i] ++ λ)` である。
+  <2>1. 解析は鍵 `(c, [i] ++ λ)` でも `origin` を呼び、`origin(x, λ) = origin(c, [i] ++ λ)` であり、
+        よって `id(x, λ) = id(c, [i] ++ λ)` である。また `(x, λ) ⇝ (c, [i] ++ λ)` である。
     この CASE の前提は `vars.bindings.get(x) = Some(Field(c, i))` かつ `c.ty.is_box(type_env)` が偽で
-    ある。`origin_inner` の `Some(Binding::Field(container, idx))` の腕は
+    あり、L4 の前提より解析は鍵 `(x, λ)` で `origin` を呼ぶので、L2 (E2) が呼び出しと等式の両方を
+    与える。`origin_inner` の `Some(Binding::Field(container, idx))` の腕は
     `origin(vars, type_env, &container.name, &container_path)` を直接呼ぶので、DEF 鍵の関係 より
     この鍵は `(x, λ)` の `⇝` の像に入る。
     BY DEF 鍵の関係, L2 (E2),
@@ -1220,12 +1230,12 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
       BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info
     <3>2. `is_array(ty(c))` と `is_funptr(ty(c))` は偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
-      `ArrayStorage`・`Opaque` のいずれか 1 つである。`is_array` は tycon が `Std::Array` であること、
-      `is_funptr` は tycon が `Std::#FunPtr{n}` のいずれかであることであり、前者の `TyConInfo` の
-      `variant` は `Array`、後者は `Primitive` である。`<3>1` より `ty(c)` の `variant` は `Struct` なので
-      どちらでもない。
-      BY <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
-         CODE src/fixstd/builtin.rs: bulitin_tycons
+      `ArrayStorage`・`Opaque` のいずれか 1 つである。`is_array(ty(c))` が真ならば `ty(c)` の最上位の
+      tycon は `Std::Array` であり、L3a より `toplevel_tycon_info(ty(c), type_env)` の `variant` は
+      `Array` である。`is_funptr(ty(c))` が真ならば同じくその `variant` は `Primitive` である。
+      `<3>1` より `ty(c)` の `variant` は `Struct` なので、どちらでもない。
+      BY L3a, <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
+         TypeNode::toplevel_tycon_info
     <3>3. `is_fully_unboxed(ty(c))` は偽である。
       この CASE の前提より `is_box(ty(c))` は偽であり、`<3>1` と `<3>2` より `is_closure`・`is_array`・
       `is_funptr` も偽なので、`is_fully_unboxed(ty(c))` は `unpunched_field_types(ty(c))` の各
@@ -1259,14 +1269,18 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     実行された辺である。
     BY L1, L1a, DEF 辺の存在, <2>5
   <2>7. QED
-    `<2>1` より `(c, [i] ++ λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。IH を
-    `(c, [i] ++ λ)` に適用する。
-    BY <2>1, <2>5, <2>6, IH
+    `<2>1` より `(c, [i] ++ λ)` は `(x, λ)` の `⇝` の像に入り、解析はその鍵でも `origin` を呼び、
+    `<2>5` よりそれは `ρ` の位置なので、IH を当てられる。IH を `(c, [i] ++ λ)` に適用すると、
+    `id(c, [i] ++ λ) = (w, σ)` について (i) と `obj(c, [i] ++ λ) = obj(w, σ)` が出る。`<2>1` より
+    `id(x, λ) = id(c, [i] ++ λ)` であり、`<2>6` と EXT 等号の性質 の推移性より
+    `obj(x, λ) = obj(w, σ)` である。
+    BY EXT 等号の性質, <2>1, <2>5, <2>6, IH
 
 <1>10. CASE `Some(Payload(s, None))` (catch-all)。
-  <2>1. `origin(x, λ) = origin(s, λ)` であり、よって `id(x, λ) = id(s, λ)` である。また
-        `(x, λ) ⇝ (s, λ)` である。
-    この CASE の前提は `vars.bindings.get(x) = Some(Payload(s, None))` である。`origin_inner` の
+  <2>1. 解析は鍵 `(s, λ)` でも `origin` を呼び、`origin(x, λ) = origin(s, λ)` であり、よって
+        `id(x, λ) = id(s, λ)` である。また `(x, λ) ⇝ (s, λ)` である。
+    この CASE の前提は `vars.bindings.get(x) = Some(Payload(s, None))` であり、L4 の前提より解析は
+    鍵 `(x, λ)` で `origin` を呼ぶので、L2 (E4) が呼び出しと等式の両方を与える。`origin_inner` の
     `Some(Binding::Payload(scrut, variant))` の腕の `None` の場合は
     `origin(vars, type_env, &scrut.name, path)` を直接呼ぶので、DEF 鍵の関係 よりこの鍵は `(x, λ)` の
     `⇝` の像に入る。
@@ -1285,8 +1299,11 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     より、それは `ρ` の上で実行された辺である。
     BY L1, L1a, DEF 辺の存在, <2>2
   <2>4. QED
-    `<2>1` より `(s, λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。
-    BY <2>1, <2>2, <2>3, IH
+    `<2>1` より `(s, λ)` は `(x, λ)` の `⇝` の像に入り、解析はその鍵でも `origin` を呼び、`<2>2` より
+    それは `ρ` の位置なので、IH を当てられる。IH を `(s, λ)` に適用すると、`id(s, λ) = (w, σ)` に
+    ついて (i) と `obj(s, λ) = obj(w, σ)` が出る。`<2>1` より `id(x, λ) = id(s, λ)` であり、`<2>3` と
+    EXT 等号の性質 の推移性より `obj(x, λ) = obj(w, σ)` である。
+    BY EXT 等号の性質, <2>1, <2>2, <2>3, IH
 
 <1>11. CASE `Some(Payload(s, Some(t)))` で `s` が boxed。
   <2>1. 答えは `here()` であり `id(x, λ) = (x, λ)` である。
@@ -1296,10 +1313,11 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     BY <1>5a, <2>1
 
 <1>12. CASE `Some(Payload(s, Some(t)))` で `s` が unbox。
-  <2>1. `origin(x, λ) = origin(s, [t] ++ λ)` であり、よって `id(x, λ) = id(s, [t] ++ λ)` である。また
-        `(x, λ) ⇝ (s, [t] ++ λ)` である。
+  <2>1. 解析は鍵 `(s, [t] ++ λ)` でも `origin` を呼び、`origin(x, λ) = origin(s, [t] ++ λ)` であり、
+        よって `id(x, λ) = id(s, [t] ++ λ)` である。また `(x, λ) ⇝ (s, [t] ++ λ)` である。
     この CASE の前提は `vars.bindings.get(x) = Some(Payload(s, Some(t)))` かつ `s.ty.is_box(type_env)` が
-    偽である。`origin_inner` の `Some(Binding::Payload(scrut, variant))` の腕の
+    偽であり、L4 の前提より解析は鍵 `(x, λ)` で `origin` を呼ぶので、L2 (E3) が呼び出しと等式の両方を
+    与える。`origin_inner` の `Some(Binding::Payload(scrut, variant))` の腕の
     `Some(tag) if !scrut.ty.is_box(type_env)` の場合は `origin(vars, type_env, &scrut.name, &scrut_path)`
     を直接呼ぶので、DEF 鍵の関係 よりこの鍵は `(x, λ)` の `⇝` の像に入る。
     BY DEF 鍵の関係, L2 (E3),
@@ -1313,12 +1331,12 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
       BY A12, CODE src/ast/types.rs: TypeNode::is_union, TypeNode::toplevel_tycon_info
     <3>2. `is_array(ty(s))` と `is_funptr(ty(s))` は偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
-      `ArrayStorage`・`Opaque` のいずれか 1 つである。`is_array` は tycon が `Std::Array` であること、
-      `is_funptr` は tycon が `Std::#FunPtr{n}` のいずれかであることであり、前者の `TyConInfo` の
-      `variant` は `Array`、後者は `Primitive` である。`<3>1` より `ty(s)` の `variant` は `Union` なので
-      どちらでもない。
-      BY <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
-         CODE src/fixstd/builtin.rs: bulitin_tycons
+      `ArrayStorage`・`Opaque` のいずれか 1 つである。`is_array(ty(s))` が真ならば `ty(s)` の最上位の
+      tycon は `Std::Array` であり、L3a より `toplevel_tycon_info(ty(s), type_env)` の `variant` は
+      `Array` である。`is_funptr(ty(s))` が真ならば同じくその `variant` は `Primitive` である。
+      `<3>1` より `ty(s)` の `variant` は `Union` なので、どちらでもない。
+      BY L3a, <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
+         TypeNode::toplevel_tycon_info
     <3>3. `is_fully_unboxed(ty(s))` は偽である。
       この CASE の前提より `is_box(ty(s))` は偽であり、`<3>1` と `<3>2` より `is_closure`・`is_array`・
       `is_funptr` も偽なので、`is_fully_unboxed(ty(s))` は `unpunched_field_types(ty(s))` の各
@@ -1355,15 +1373,19 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     (DEF 辺の存在)。L1a (b) の同じ行より、それは `ρ` の上で実行された辺である。
     BY L1, L1a, DEF 辺の存在, <2>5
   <2>7. QED
-    `<2>1` より `(s, [t] ++ λ)` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。IH を
-    `(s, [t] ++ λ)` に適用する。
-    BY <2>1, <2>5, <2>6, IH
+    `<2>1` より `(s, [t] ++ λ)` は `(x, λ)` の `⇝` の像に入り、解析はその鍵でも `origin` を呼び、
+    `<2>5` よりそれは `ρ` の位置なので、IH を当てられる。IH を `(s, [t] ++ λ)` に適用すると、
+    `id(s, [t] ++ λ) = (w, σ)` について (i) と `obj(s, [t] ++ λ) = obj(w, σ)` が出る。`<2>1` より
+    `id(x, λ) = id(s, [t] ++ λ)` であり、`<2>6` と EXT 等号の性質 の推移性より
+    `obj(x, λ) = obj(w, σ)` である。
+    BY EXT 等号の性質, <2>1, <2>5, <2>6, IH
 
 <1>13. CASE `Some(Llvm(gen, args, result_ty))` で `<1>4` の `S` が単一の `Arg(j, σ')`。
-  <2>1. `origin(x, λ) = origin(args[j], σ')` であり、よって `id(x, λ) = id(args[j], σ')` である。また
-        `(x, λ) ⇝ (args[j], σ')` である。
+  <2>1. 解析は鍵 `(args[j], σ')` でも `origin` を呼び、`origin(x, λ) = origin(args[j], σ')` であり、
+        よって `id(x, λ) = id(args[j], σ')` である。また `(x, λ) ⇝ (args[j], σ')` である。
     この CASE の前提は `vars.bindings.get(x) = Some(Llvm(gen, args, result_ty))` かつ
-    `decl.leaf_origins_at(λ) = Some({Arg(j, σ')})` である (`<1>4`)。`<1>4` より、`<1>1` の呼び出しの腕が
+    `decl.leaf_origins_at(λ) = Some({Arg(j, σ')})` である (`<1>4`)。L4 の前提より解析は鍵 `(x, λ)` で
+    `origin` を呼ぶので、L2 (E5) が呼び出しと等式の両方を与える。`<1>4` より、`<1>1` の呼び出しの腕が
     作る `decl` はこの `decl` と同じ値なので、その腕の `leaf_origins_at(λ)` も同じ答えを返す。
     `origin_inner` の
     `Some(Binding::Llvm(llvm_gen, args, result_ty))` の腕は `origin(vars, type_env, &args[j].name, &p)` を
@@ -1384,8 +1406,12 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     (DEF 辺の存在)。L1a (b) の同じ行より、それは `ρ` の上で実行された辺である。
     BY L1, L1a, DEF 辺の存在, <2>3
   <2>5. QED
-    `<2>1` より `(args[j], σ')` は `(x, λ)` の `⇝` の像に入るので IH を当てられる。
-    BY <2>1, <2>3, <2>4, IH
+    `<2>1` より `(args[j], σ')` は `(x, λ)` の `⇝` の像に入り、解析はその鍵でも `origin` を呼び、
+    `<2>3` よりそれは `ρ` の位置なので、IH を当てられる。IH を `(args[j], σ')` に適用すると、
+    `id(args[j], σ') = (w, σ)` について (i) と `obj(args[j], σ') = obj(w, σ)` が出る。`<2>1` より
+    `id(x, λ) = id(args[j], σ')` であり、`<2>4` と EXT 等号の性質 の推移性より
+    `obj(x, λ) = obj(w, σ)` である。
+    BY EXT 等号の性質, <2>1, <2>3, <2>4, IH
 
 <1>14. CASE `Some(Llvm(gen, args, result_ty))` で `<1>4` の `S` が空集合。
   A3 の空集合の行より、結果のその leaf は inhabited にならない。前提より `λ` は inhabited なので、この
@@ -1425,11 +1451,13 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 <1>17. CASE `Some(Join(arm_results))`。
   <2>1. 答えは `Origin::of_candidates(C, (x, λ))` である。ここで `C` は各 `r ∈ arm_results` についての
-        `act(r, λ)` の合併である。また各 `r ∈ arm_results` について `(x, λ) ⇝ (r, λ)` である。
+        `act(r, λ)` の合併である。また各 `r ∈ arm_results` について `(x, λ) ⇝ (r, λ)` であり、解析は
+        その各鍵でも `origin` を呼ぶ。
     `origin_inner` の `Some(Binding::Join(arm_results))` の腕は、各 `r` について
     `origin(vars, type_env, &r.name, path)` を直接呼び、その `acted_on()` を集める。DEF 鍵の関係 より
-    その鍵は `(x, λ)` の `⇝` の像に入る。
-    BY DEF 鍵の関係, <1>1,
+    その鍵は `(x, λ)` の `⇝` の像に入る。L4 の前提より解析は鍵 `(x, λ)` で `origin` を呼ぶので、
+    L0a (a) より各 `(r, λ)` でも呼ぶ。
+    BY DEF 鍵の関係, L0a (a), <1>1,
        CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Join(arm_results))` の腕
   <2>2. `r_0` を `ρ` が通ったアームの結果とすると、`(r_0, λ)` は `ρ` の位置であり
         `obj(x, λ) = obj(r_0, λ)` である。
@@ -1463,9 +1491,11 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
       BY L1a, <2>1, <2>2a
     <3>3. QED
       L1a (b) の `Join(rs)` の行より `r_0 ∈ arm_results` なので、`<2>1` より `(r_0, λ)` は `(x, λ)` の
-      `⇝` の像に入り、IH を当てられる。IH を `(r_0, λ)` に適用すると、(i) は `c` について成り立ち、
-      `obj(r_0, λ) = obj(c)` が出る。`<2>2` と合わせて `obj(x, λ) = obj(c)` である。
-      BY L1a, <2>1, <2>2, <3>1, <3>2, IH
+      `⇝` の像に入り、解析はその鍵でも `origin` を呼び、`<2>2` よりそれは `ρ` の位置なので、IH を
+      当てられる。IH を `(r_0, λ)` に適用すると、`<3>2` より `id(r_0, λ) = c` なので (i) は `c` に
+      ついて成り立ち、`obj(r_0, λ) = obj(c)` が出る。`<2>2` と EXT 等号の性質 の推移性より
+      `obj(x, λ) = obj(c)` であり、`<3>1` より `id(x, λ) = c` である。
+      BY EXT 等号の性質, L1a, <2>1, <2>2, <3>1, <3>2, IH
   <2>6. QED
     `<2>3` より `|C| ≥ 1` であり、`<2>4` と `<2>5` がその 2 つの場合を尽くす。
     BY <2>3, <2>4, <2>5
@@ -2090,10 +2120,11 @@ leaf に前置したものだからである。
   `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、型の
   `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が構造体で
   あることをその節の 1 つに挙げる。
-  `is_array` は tycon が `Std::Array` であることであり、`bulitin_tycons` がその tycon に入れる
-  `TyConInfo` の `variant` は `Array` なので、`variant` が `Struct` である `ty(c)` には当たらない。
-  BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
-     TypeNode::is_array, TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
+  `is_array(ty(c))` が真ならば `ty(c)` の最上位の tycon は `Std::Array` であり、L3a より
+  `toplevel_tycon_info(ty(c), type_env)` の `variant` は `Array` である。`variant` が `Struct` である
+  `ty(c)` には当たらない。
+  BY A12, L3a, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
+     TypeNode::is_array, TyConVariant
 
 <1>2. CASE `is_fully_unboxed(ty(c))` が真。
   D4 の規則 1 より `boxed_leaf_paths(ty(c), type_env)` は空なので、(a) は空虚に成り立ち、(b) の 2 つの
