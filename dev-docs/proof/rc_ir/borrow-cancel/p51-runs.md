@@ -706,14 +706,19 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 `Llvm` の段の段落は「(E3) と違うのは 2 点である。呼び出し先を決めるのが `callee` の値ではなく op の
 生成コードであること、**呼び出し先に渡る値がオペランドとは限らない**ことである」と述べ、続けて
 「`Obl(a)` からオペランドの参照が離れる動きは D9 の `Llvm` の行が、結果の leaf に参照が生じる動きは
-A3 の宣言が決めるので、上の表の行はそのままである」と述べる。`InlineLLVMFixBody` がその形を示す -- `fix(f)` のクロージャをその場で
-組み立てて `f` に渡し、返った関数に改めてオペランド `x` を渡すので、1 回目の活性化の第 1 引数は
-どのオペランドでもなく、この段が割り当てたオブジェクトへの参照である
-(`CODE src/fixstd/builtin.rs: InlineLLVMFixBody` -- `create_obj` で `fix(f)` を作り、`insert_field` で
-funptr と capture の欄を埋めてから `apply_lambda` を 2 回呼ぶ)。**割り当てと、割り当てたオブジェクトの
-欄を埋める受け渡しは別の素動作であり、そのあいだには段内の点が在る** (D24)。capture の欄に入るのは
-オペランド `cap` の参照であり、D24 は「読みが retain を伴わないので、この組み立てで参照は作られない」と
-述べる。よって `Obl(a)` を離れる参照の多重集合と作られた活性化の初期 `Obl` は一致しない。
+A3 の宣言が決めるので、上の表の行はそのままである」と述べる。`InlineLLVMFixBody` がその形を示す --
+`fix(f)` のクロージャをその場で組み立てて `f` に渡し、返った関数に改めてオペランド `x` を渡すので、
+1 回目の活性化の第 1 引数はどのオペランドでもなく、この段が組み立てた値である。D24 が「`InlineLLVMFixBody`
+の 1 回目の適用に渡る `fix(f)` はこの段が組み立てた値であってオペランドではない」と書くのがこれである。
+**この段はオブジェクトを 1 つも割り当てない。** `create_obj` に渡す `fixf_ty` は `f.ty.get_lambda_dst()`
+すなわちクロージャ型であり、クロージャの値は unbox なので (`CODE src/object.rs: ty_to_object_ty` --
+`is_closure()` の枝が `is_unbox` に `true` を置く)、`create_obj` は unbox の枝で `struct_type.get_undef()`
+を返すだけで `build_malloc` を呼ばない (`CODE src/object.rs: create_obj`)。組み立ては `insert_field` で
+funptr と capture の欄を埋め、`apply_lambda` を 2 回呼ぶ
+(`CODE src/fixstd/builtin.rs: InlineLLVMFixBody`)。capture の欄に入るのはオペランド `cap` の参照であり、
+D24 は「その capture の欄が持つのはオペランド `cap` の参照であり、読みが retain を伴わない
+(`CODE src/generator.rs: Scope::push_local` -- `retain_on_read` が偽) ので、この組み立てで参照は
+作られない」と述べる。よって `Obl(a)` を離れる参照の多重集合と作られた活性化の初期 `Obl` は一致しない。
 
 ### L1 (呼び出しと返りの受け渡しが釣り合う)
 
