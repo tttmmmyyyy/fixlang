@@ -390,7 +390,7 @@ src/rc_ir/borrow.rs	builds_a_destructor	P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26	
 src/rc_ir/borrow.rs	call_rc	D/A	b05f4a24511a
 src/rc_ir/borrow.rs	cancel	D/A,P1,P2,P2a,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P26,P27,P29,P30,(P-insert),T	012b0d6cdb65
 src/rc_ir/borrow.rs	check_clone_names_are_fresh	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,T	aa605276d3fa
-src/rc_ir/borrow.rs	clone_func	D/A,P2a,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,P27,P29,P30,T	c6a5f2c80a44
+src/rc_ir/borrow.rs	clone_func	D/A,P2a,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P27,P29,P30,T	c6a5f2c80a44
 src/rc_ir/borrow.rs	covered_leaves	P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b	95bb7b49e4a1
 src/rc_ir/borrow.rs	drop_nodes	P18c,P19,P20,P21,P22,P23,P24,T	4a4d43cb3f4a
 src/rc_ir/borrow.rs	drop_nodes_inner	P2a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,T	a208018d5cf5
@@ -455,7 +455,7 @@ src/rc_ir/ownership.rs	Binding	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P
 src/rc_ir/ownership.rs	Origin	D/A,P1,P2,P2a,P3,P4,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,(P-insert)	787c5a1a8407
 src/rc_ir/ownership.rs	Origin::acted_on	D/A,P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	8aa26a04d152
 src/rc_ir/ownership.rs	Origin::candidates	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18	d7c5753b621d
-src/rc_ir/ownership.rs	Origin::identity	P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	a3086fd270ed
+src/rc_ir/ownership.rs	Origin::identity	P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	a3086fd270ed
 src/rc_ir/ownership.rs	Origin::of_candidates	D/A,P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	74615a999595
 src/rc_ir/ownership.rs	References	D/A,P2a,P5,P6,P7,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	38b3c3ed8fcb
 src/rc_ir/ownership.rs	References::covers	P2a,P7c,P7f,P15,P16,P17,P18,P18a,P18b	828ed77c7cf4
@@ -526,10 +526,10 @@ src/rc_ir/rc_insert.rs	insert_into_operation_let	P8,P9,P10,P11,P12,P13,P14,P14a,
 src/rc_ir/rc_insert.rs	insert_rc	P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P30,(P-insert)	ddc722babbda
 src/rc_ir/rc_insert.rs	retain_if_live	P8,P9,P10,P11,P12,P13,P14,P14a,P14b	a4dad5564dd6
 src/rc_ir/rc_insert.rs	rhs_operands	(P-insert)	1d8e7e575c71
-src/rc_ir/rename.rs	assign_fresh_name	D/A,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P30	e52d71f7810c
-src/rc_ir/rename.rs	assign_fresh_names_to_binders	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b	2696c8cd590a
+src/rc_ir/rename.rs	assign_fresh_name	D/A,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P27,P29,P30	e52d71f7810c
+src/rc_ir/rename.rs	assign_fresh_names_to_binders	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b	2696c8cd590a
 src/rc_ir/rename.rs	assign_fresh_names_to_binders_inner	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b	c2f0b830f73f
-src/rc_ir/rename.rs	fresh_rename_function	D/A,P2a,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,P27,P29,P30	592cc4b5a304
+src/rc_ir/rename.rs	fresh_rename_function	D/A,P2a,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P27,P29,P30	592cc4b5a304
 src/rc_ir/rename.rs	rename_expr	P2a,P7a,P7d,P7e,P15,P16,P17,P18	5c684036c35a
 src/rc_ir/rename.rs	rename_expr_inner	P2a,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18	5bebcb3ee0f7
 src/rc_ir/rename.rs	rename_rhs	D/A,P2a,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P26	0f15930e08dc
