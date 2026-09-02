@@ -588,15 +588,22 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          CODE src/elaboration/typecheck.rs: Substitution::merge,
          CODE src/elaboration/typecheck.rs: Substitution::single
     <3>3. 最後の式は `ti.fields.iter().map(|field| subst.substitute_type(&field.ty)).collect()` で
-       ある。`substitute_type` は型の節点についての再帰であり、`TyVar` の腕は写像を引くだけ、
-       `TyCon` の腕は複製、`TyApp` の腕は 2 つの部分に再帰してから `set_tyapp_fun`/`set_tyapp_arg`
-       を、`AssocTy` の腕は各引数に再帰してから `set_assocty_args` を呼ぶ。この 3 つの setter が
+       ある。`substitute_type` は型の節点についての再帰であり、`TyVar` の腕は写像を引き、当たった
+       ときはその値に `set_source_if_none(ty.get_source().clone())` を当てる。`TyCon` の腕は複製、
+       `TyApp` の腕は 2 つの部分に再帰してから `set_tyapp_fun`/`set_tyapp_arg` を、`AssocTy` の腕は
+       各引数に再帰してから `set_assocty_args` を呼ぶ。この 3 つの setter が
        `panic!` するのは節点が対応する `Type` の腕でないときだけで、どれもその腕の中から呼ばれる。
+       **`set_source_if_none` も abort しない** -- `info.source` を見て、`None` なら `set_source` が
+       節点を複製して `info.source` を置き替えた新しい `Arc` を返し、`Some` なら自分の `Arc` を複製
+       する。どちらの枝も場合分けと複製だけである。
        型は有限の項なので再帰は停止する。返る列の長さは `ti.fields` の長さである。
       BY CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
          CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
          CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
          CODE src/ast/types.rs: TypeNode::set_assocty_args,
+         CODE src/ast/types.rs: TypeNode::set_source_if_none,
+         CODE src/ast/types.rs: TypeNode::set_source,
+         CODE src/ast/types.rs: TypeNode::get_source,
          CODE src/ast/types.rs: TypeNode::declared_field_types
     <3>4. QED
       BY <3>1, <3>2, <3>3

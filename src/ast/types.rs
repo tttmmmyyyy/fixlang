@@ -669,11 +669,13 @@ impl TypeNode {
     }
 
     /// Where this type was written; a type the compiler builds itself carries none.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_source(&self) -> &Option<Span> {
         &self.info.source
     }
 
     /// A copy of this type written at `src`, leaving this node as it is.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_source(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone();
         ret.info.source = src;
@@ -682,6 +684,7 @@ impl TypeNode {
 
     /// A copy of this type written at `src` where it carries no source of its own, and this type
     /// itself where it does.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_source_if_none(self: &Arc<TypeNode>, src: Option<Span>) -> Arc<TypeNode> {
         if self.info.source.is_none() {
             self.set_source(src)
