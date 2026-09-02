@@ -422,7 +422,7 @@ Ret(w)))))
   BY D6, CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/lower.rs: Lowerer::lower_var
   `collect_bindings` は `f` に束縛を入れない (`f` は `B_0` のどの `Let`、`Destructure`、`Match` の
   束縛変数でもない)。`f` はパラメータでも capture でもないので `vars.bindings` に束縛を持たず、
-  D6 の「値を得る 3 つの形」の 3 つ目 -- `Lowerer::lower_var` の `resolve` が `None` を返す腕が作る名前 --
+  D6 の「**値を得る形は 3 つあり、スロットが在るのはそのうち 2 つである。**」の 3 つ目 -- `Lowerer::lower_var` の `resolve` が `None` を返す腕が作る名前 --
   である。D6 よりその対は記号の位置であってスロットではない。
 
 <1>3. `origin(p, []) = Origin::Exactly((p, []))` である。
@@ -573,7 +573,8 @@ D9 の消費は 2 つの `App(f, [p])` の引数の位置の 2 つであり、`�
       `held(・, C) ≥ 1` を満たすならば `H(obj(C)) ≥ 1` であり、その活性化がその時点まで解放に
       ついて閉じている (D11a) ならば `obj(C)` はその時点で解放されていない。
   BY <1>1, <1>2, <1>3, D11a, D21, D33, L13a
-  D21 は活性化を「その各時点と各段内の点で A19 (i) の不等式を満たすもの」に限る。<1>1 と
+  D21 は「**活性化は、その各時点と各段内の点 (D24) で A19 (i) の不等式を満たすものに限る。**」と
+  定める。<1>1 と
   `L13a` (c) より `β ≡ 0` なので、A19 (i) の角括弧は 0 であり `d(C') = held(・, C')` である。
   <1>2 と <1>3 より、どちらの本体でもスロットを持つ別名類は 1 つだけなので、A19 (i) の総和 `S` は
   `C` を含むならその 1 項だけからなる。よって `H(obj(C)) ≥ held(・, C) ≥ 1` である。D11a は、
@@ -1258,7 +1259,7 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
 
 <1>3. CASE (c)。`Destructure(v, fs, s, k')` は `v` の各 leaf を消費するか移動させる。
   BY D9
-  `v` が boxed なら消費の表の「`Destructure`、`c` が boxed」の行が全 leaf を挙げる。`v` が unbox なら、
+  `v` が boxed なら消費の表の「`Destructure(c, fs)` (`c` が boxed)」の行が全 leaf を挙げる。`v` が unbox なら、
   名前の付いていないフィールドの leaf は消費の表の行に、名前の付いたフィールドの leaf は移動の表の
   「unbox 容器の `Destructure` の名前付きフィールド」の行にある。
 
@@ -2061,7 +2062,7 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
   この両方を `Lowerer::fresh_var` で作り (パラメータと capture は `lower_lambda_as_function` が、
   残りは各 `lower_*` が)、`fresh_var` は名前を `FullName::local(...)` で組む。`FullName::local` が作る
   名前の名前空間は空であり、`is_local` は名前空間が空かを答えるので、束縛を持つ名前は局所名である。
-  対偶より局所でない名前は `vars.bindings` に束縛を持たない。D6 の「値を得る 3 つの形」の 3 つ目が
+  対偶より局所でない名前は `vars.bindings` に束縛を持たない。D6 の「**値を得る形は 3 つあり、スロットが在るのはそのうち 2 つである。**」の 3 つ目が
   この名前であり、D6 よりその対は記号の位置であってスロットではない。
 
 <1>5. (e)。
@@ -2394,14 +2395,14 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `!live_cont.contains(&fv.name) && self.needs_rc(fv)` を満たすフィールド変数である。
   <2>2. CASE `container` が boxed。
     BY <2>1, D9, D10
-    D9 の消費の表の「`Destructure`、`c` が boxed」の行より容器の全 boxed leaf が消費され (`μ` が各
+    D9 の消費の表の「`Destructure(c, fs)` (`c` が boxed)」の行より容器の全 boxed leaf が消費され (`μ` が各
     leaf で 1 下がる)、D10 の生成の表の「boxed 容器の `Destructure` の各名前付きフィールドの各 leaf」の
     行より各フィールドの leaf の `μ` が 1 上がる。よって遷移の後
     `μ(container, λ) = 1 + [container ∈ Λ(m')] - 1 = [container ∈ Λ(m')]`、
     `μ(fv, λ') = 1 - [fv ∉ Λ(m')] = [fv ∈ Λ(m')]`。
   <2>3. CASE `container` が unbox。
     BY <2>1, D9, CODE src/rc_ir/ownership.rs: destructure_consumes
-    D9 の消費の表の「`Destructure`、`c` が unbox」の行より名前の付いていないフィールドの leaf が
+    D9 の消費の表の「`Destructure(c, fs)` (`c` が unbox)」の行より名前の付いていないフィールドの leaf が
     消費され、移動の表の「unbox 容器の `Destructure` の名前付きフィールド」の行より名前の付いた
     フィールドの leaf は容器からフィールド変数へ移る。どちらでも容器の各 leaf の `μ` は 1 下がり、
     名前の付いたフィールドの leaf では対応するフィールド変数の `μ` が 1 上がる。よって <2>2 と同じ
@@ -3415,8 +3416,9 @@ Ret(x)))
   後も `{O_m, O_m}, 2` (A3 の単一 `Arg` の行より素通しは新しい参照を作らず、D9 の移動の行より `Obl` を
   変えない)、終端の `Ret` の消費で `{}, 2` -- 2 つの参照は呼び出し元へ渡る。(S-a) は各除去がその時点の
   `Obl` に入っており、(S-b) は終端の消費の後 `Obl` が空であり、(S-c) は `H(O_m) ≥ 1` の下で読み・
-  触れるので、それぞれ成り立つ。D12 は「すべての関数の本体とすべてのグローバル初期化子の `init` が
-  D11 を満たす」ことなので、`g` だけからなるプログラムは D12 を満たす。
+  触れるので、それぞれ成り立つ。D12 は「`P` のすべての関数の本体と、すべての
+  グローバル初期化子の `init` が、`P` の `borrowed_units` が定める所有と借用の割り当て (D14) の下で
+  RC 規律を満たす (D11) こと」なので、`g` だけからなるプログラムは D12 を満たす。
 
 <1>5. QED
   BY <1>1, <1>3, <1>4
