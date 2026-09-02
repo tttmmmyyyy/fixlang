@@ -628,11 +628,15 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   差し替えて `(f.name.clone(), clone)` を収める。`funcs` を作るのはこの 1 つの `map` であり、
   ほかに `funcs` へ書くところは無い。
 
-  よって `p2.funcs` の鍵の集合は `{ f.name : f ∈ p1.funcs.values() }` である。`<2>1` の 2 より
+  EXT 反復子の `iter`・`map`・`collect` より、`values` は `p1.funcs` の各関数をちょうど 1 回ずつ
+  渡し、`map` はその 1 つ 1 つを対 `(f.name.clone(), clone)` に写し、対の反復子の `Map` への
+  `collect` は鍵の集合を渡された各対の第 1 成分の集合に等しくする。よって `p2.funcs` の鍵の集合は
+  `{ f.name : f ∈ p1.funcs.values() }` である。`<2>1` の 2 より
   `p1.funcs` のどのエントリも鍵はその `name` に等しいので、この集合は `p1.funcs` の鍵の集合に
   等しい。`<2>1` の 3 と合わせて、**`p0.funcs` の各関数の `name` は `p2.funcs` の鍵である。**
 
-    BY <2>1, `CODE src/rc_ir/borrow.rs: cancel`, `CODE src/rc_ir/ast.rs: RcProgram`
+    BY <2>1, EXT 反復子の `iter`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`,
+       `CODE src/rc_ir/ast.rs: RcProgram`
 
   **<2>3a.** `cancel` が返す `globals` と `roots` を、コードの上で読む。`cancel` は
   `prog.globals.iter().map(|g| RcGlobalInit { symbol: g.symbol.clone(), ty: g.ty.clone(),
