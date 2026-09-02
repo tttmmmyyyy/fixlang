@@ -73,18 +73,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 節点 `n` の**部分木** `N(n)` を、`n` と、`n` の各子 `c` についての `N(c)` との合併とする。
 
-**節点の道**を、本体の根からその節点まで、上の表が挙げる子のどれを選んだかを順に並べた列とする。D2 は
-本体を式の節点の有限の**木**と定め、木の位置が相異なれば節点も相異なるものと定めるので、各節点はその道で
-ちょうど 1 つに定まり、相異なる節点の道は相異なる。
-
-**`N(n)` は、`n` の道を接頭として持つ道の節点の全体である。** `n` の部分木の大きさについての帰納による ---
-`n` 自身の道は `n` の道を接頭として持ち、`n` の各子 `c` の道は `n` の道に選択を 1 つ継ぎ足したものなので、
-帰納法の仮定より `N(c)` は `c` の道を、したがって `n` の道を接頭として持つ道の節点からなる。逆に `n` の道を
-真の接頭として持つ道は、`n` のどれか 1 つの子の道を接頭として持つ。
-
-この形から 2 つが出る。**相異なる子の部分木は交わらない。** `n` の相異なる 2 つの子の道は、`n` の道に
-相異なる選択を 1 つずつ継ぎ足したものなので、その両方を接頭として持つ道は無い。**`n` はどの子の部分木にも
-入らない。** `n` の道は各子の道より 1 つ短いので、子の道を接頭として持たない。
+**節点の道**を、本体の根からその節点まで、上の表が挙げる子のどれを選んだかを順に並べた列とする。
 
 ### DEF 訪問
 
@@ -108,28 +97,17 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 - `R2 ⊆ R1` とは、各位置について `R2` の個数が `R1` の個数以下であることをいう。
 - `R1 - R2` とは、各位置の個数の差である (`R2 ⊆ R1` のときだけ書く)。
 - **空**とは、参照を 1 つも持たないことをいう。
-- 2 つの `References` の値が**等しい**とは、`PartialEq` が真を返すこと、すなわち各位置の個数が
-  一致することをいう。`References` は `PartialEq` を derive し、その中身は `Map` (`FxHashMap`) なので、
-  等しさは鍵と値の対の集合の一致である (`CODE src/rc_ir/ownership.rs: References`,
-  `CODE src/misc.rs: Map`)。
-
-`⊆` は推移的である (各位置の個数についての不等式の推移律)。
+- 2 つの `References` の値が**等しい**とは、`PartialEq` が真を返すことをいう。
 
 ### DEF 割り当て
 
 `Arc::new(v)` の 1 回の呼び出しは、アロケータから 1 つのメモリブロックを取る。このブロックを**割り当て**と
 呼ぶ。相異なる 2 つの `Arc::new` の呼び出しが取るブロックを、相異なる割り当てという。割り当ての**占める
 番地**とは、そのブロックが占める番地の集合の元である。`Arc::new` が返した値と、`Arc::clone` がそれから
-作った値を、その割り当ての**ハンドル**と呼ぶ。ハンドルの個数は `Arc::clone` で 1 増え、ハンドルが drop
-されるたびに 1 減る (EXT Arc の契約)。
+作った値を、その割り当ての**ハンドル**と呼ぶ。
 
-ハンドルの個数が 1 以上である間、その割り当ては**生存している**という。ブロックがアロケータへ返ることを、
-その**割り当てが解放される**という。EXT Arc の契約 より、生存している割り当ては解放されていない。よって
-EXT アロケータの契約 より、同時に生存している相異なる 2 つの割り当ては記憶域を共有せず、したがって一方の
-占める番地はどれも他方の占める番地と相異なる。
-
-**この文書が節点の同一性に使うのは、`Arc<RcExpr>` が保持する `RcExpr` の番地である。** EXT Arc の契約 の
-最後の行より、その番地はその割り当ての占める番地の 1 つである。
+ハンドルが 1 つ以上存在する間、その割り当ては**生存している**という。ブロックがアロケータへ返ることを、
+その**割り当てが解放される**という。
 
 **この 2 つの語は D7 の語とは別の概念を指す。**「割り当てが解放される」「生存している」は、コンパイラの
 プロセスの中の Rust の `Arc` についての語である。D7 の「オブジェクトが解放される」は、コンパイルされた
@@ -138,62 +116,9 @@ EXT アロケータの契約 より、同時に生存している相異なる 2 
 
 ### DEF 引数で決まる関数
 
-関数の返り値が**引数で決まる**とは、引数の値が等しい 2 回の呼び出しが同じ値を返すことをいう。この文書は
-この性質を 3 つの群について使い、群ごとに根拠が違う。
-
-- **標準ライブラリの操作** --- `Map::get`、`Set`・`Vec`・`Map` の操作、`<[T]>::starts_with`、
-  `<[T]>::first`、`Clone::clone`、`Option` と `Iterator` の組み合わせ子。根拠は外部の結果であり、その
-  言明は `EXT Map と Set`、`EXT スライスの接頭と先頭`、`EXT Clone`、`EXT Vec::iter と slice::iter`、
-  `EXT Iterator::all と any`、`EXT Iterator::map と collect`、`EXT Iterator::filter_map` が述べる。
-  `Set` の反復の順序は定めないので、`Set` から作られるのは要素の集合であって並びではない。
-- **`LLVMGen::result_prov`** --- 根拠は **A3** の「**`result_prov` と `borrows_operand` は決定的である**
-  -- 同じ引数に対して常に同じ値を返す。」である。これは外部の結果ではないので、この文書はこれを使う段の
-  `BY` に A3 を挙げる。
-- **型と `Provenance` の上の関数** --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
-  `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
-  `Origin::identity`、`Origin::candidates`。この 8 つは型・path・`TypeEnv`・`Provenance`・`Origin` の
-  値だけを引数に取り、`VarTable` も走査の状態も引数に取らない。根拠は 2 つに分かれる。
-
-  **6 つは内部可変性を持つ値に触れない。** `TypeNode::is_box`、`Provenance::leaf_origins_at`、
-  `Provenance::leaf_origins_under`、`as_arg_projection`、`Origin::identity`、`Origin::candidates` が
-  それであり、その本文は引数から到達できる値だけを読み、可変な静的変数にも触れない。`is_box` は
-  `is_unbox` を経て `toplevel_tycon_info` の `type_env.tycons().get(&tycon)` に落ちるが、その鍵の型
-  `TyCon` は `FullName` の欄を 1 つ持つだけであり、`FullName` と `NameSpace` の手書きの `Hash` が読むのは
-  `Vec<String>` と `String` だけなので、内部可変性を持たない。残る 5 つは引数の
-  `Provenance`・`Set<LeafOrigin>`・`Origin` を読むだけである
-  (`CODE src/ast/types.rs: TypeNode::is_box`, `CODE src/ast/types.rs: TypeNode::is_unbox`,
-  `CODE src/ast/types.rs: TypeNode::toplevel_tycon_info`, `CODE src/ast/types.rs: TyCon`,
-  `CODE src/ast/name.rs: FullName`, `CODE src/ast/name.rs: NameSpace`,
-  `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at`,
-  `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`,
-  `CODE src/rc_ir/ownership.rs: as_arg_projection`, `CODE src/rc_ir/ownership.rs: Origin::identity`,
-  `CODE src/rc_ir/ownership.rs: Origin::candidates`)。
-
-  **残る 2 つは触れる。** `boxed_leaf_paths` は `is_fully_unboxed` から `unpunched_field_types`、
-  `instance_field_types` を経て `unwrap_newtypes_memoized` に入り、`truncate_to_unit` は `unit_step` から
-  同じ道に入る。その memo の型は `Map<Arc<TypeNode>, Arc<TypeNode>>` であり、鍵を引くたびに
-  `impl Hash for TypeNode` が `TypeNode::type_hash` を呼んで `hash_cache` の `OnceLock` を共有参照から
-  書く。memo 自身は `instance_field_types` の 1 回の呼び出しごとに空から作られるので、呼び出しを跨いで
-  持ち越す状態はこの `OnceLock` の欄だけである
-  (`CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`, `CODE src/ast/types.rs: TypeNode::is_fully_unboxed`,
-  `CODE src/ast/types.rs: TypeNode::unpunched_field_types`,
-  `CODE src/ast/types.rs: TypeNode::instance_field_types`,
-  `CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized`,
-  `CODE src/ast/types.rs: TypeNode::type_hash`, `CODE src/ast/types.rs: TypeNode`,
-  `CODE src/rc_ir/ownership.rs: truncate_to_unit`, `CODE src/rc_ir/ownership.rs: unit_step`)。
-
-  **この 2 つの根拠は A3 である。** A3 は「**`RcProgram` から到達できる値の等しさは、それを共有参照で
-  受け取る計算が変えない。**」と述べ、その欄を「**一度だけ書かれる memo であって、その値はその型の
-  `PartialEq` が読む成分の関数である**」とし、「よってその欄が埋まっても値の等しさは動かず、`Hash` が
-  その memo を通して反映するのもその成分だけである。」と続ける。`Arc<TypeNode>` は `RcProgram` の欄から
-  辿って現れる型なので、この節がその `OnceLock` の 3 つの欄に当たる。よって memo が埋まっても、引数の値の
-  等しさも、memo の鍵の一致も、その鍵のハッシュも動かず、この 2 つの返り値は引数の値で決まる。この文書は
-  この 2 つを使う段の `BY` に A3 を挙げる。
-
-**この 8 つのうち 2 つは、並びではなく集合が決まる。** `Provenance::leaf_origins_under` の doc は、渡す
-要素を `in no particular order` と述べる (`CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`)
-ので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は
-`Join` の変位について `Set` の反復から `Vec` を作るので、引数で決まるのはその元の集合である。
+関数の返り値が**引数で決まる**とは、引数の値が等しい 2 回の呼び出しが同じ値を返すことをいう。返り値が
+`Set` の反復から作られる列であるように、決まるのが並びではなく元の集合であるときは、**元の集合が引数で
+決まる**という。
 
 ### 外部の結果
 
@@ -212,6 +137,53 @@ safe Rust で書かれた関数の本文が名指せる値は、自分の引数 
 **EXT static は Sync を要る**
 safe Rust の `static` 項目の型は `Sync` でなければならない。`Sync` は auto trait であり、`RefCell<T>` は
 `Sync` を実装しないので、`RefCell` の欄を持つ構造体も `Sync` でない。
+
+**EXT 可視性と私有性**
+Rust Reference の "Visibility and Privacy" が次を述べる。
+
+> By default, everything is *private*, with two exceptions: Associated items in a `pub` Trait are
+> public by default; Enum variants in a `pub` enum are also public by default.
+
+> With the notion of an item being either public or private, Rust allows item accesses in two cases:
+>
+> 1. If an item is public, then it can be accessed externally from some module `m` if you can access
+>    all the item's ancestor modules from `m`. You can also potentially be able to name the item
+>    through re-exports. See below.
+> 2. If an item is private, it may be accessed by the current module and its descendants.
+
+同じ節が `pub(crate)` について次を述べる。
+
+> `pub(crate)` makes an item visible within the current crate.
+
+すなわち、`pub` の付かない項目 --- 自由関数、型、inherent な `impl` の中のメソッド、構造体のフィールド
+--- を名指せるのは、それを宣言したモジュールとその子孫のモジュールの中だけである。`pub(crate)` の付いた
+項目を名指せるのは、そのクレートの中だけである。
+
+**EXT モジュールは `mod` が導入する**
+Rust Reference の "Modules" が次を述べる。
+
+> A module is a container for zero or more items.
+
+> A *module item* is a module, surrounded in braces, named, and prefixed with the keyword `mod`. A
+> module item introduces a new, named module into the tree of modules making up a crate.
+
+> Modules can nest arbitrarily.
+
+すなわち、1 つのファイルの本体が `mod` の項目を 1 つも書かなければ、そのファイルのモジュールは子孫の
+モジュールを持たない。EXT 可視性と私有性 と合わせると、そのファイルが宣言する非公開の項目を名指せるのは
+そのファイルの中だけである。書かれた `mod` の項目が `#[cfg(test)] mod tests` の 1 つだけであれば、
+子孫はそのモジュールだけである。
+
+**EXT 共有参照は代入を許さない**
+Rust Reference の "Pointer types" が共有参照について次を述べる。
+
+> When a shared reference to a value is created, it prevents direct mutation of the value. Interior
+> mutability provides an exception for this in certain circumstances. As the name suggests, any
+> number of shared references to a value may exist. A shared reference type is written `&type`, or
+> `&'a type` when you need to specify an explicit lifetime.
+
+すなわち `&T` を通じて `T` の欄へ代入することはできない。`&T` から値を動かす道として残るのは、その型が
+`UnsafeCell` を通じて持つ内部可変性だけである。
 
 **EXT 型のサイズ**
 型の値が占める記憶域の大きさを、その型の**サイズ**という。構造体の各フィールドと、enum の 1 つの変位が
@@ -323,7 +295,7 @@ enum については元と同じ変位で、その変位が保持する各値を
 **この規則は等しさで閉じる。** 上に挙げた基底の型では `clone` は同じ値を返し、`Vec`・`Set`・`Map`・組・
 `#[derive(PartialEq)]` を持つ構造体と enum の等しさは成分ごとの等しさで決まるので、成分の `clone` が元と
 等しければ全体も元と等しい。**`PartialEq` を手書きで実装する型については、その実装が読む成分について
-同じことを確かめる。** この文書に現れるその型は `NameSpace` の 1 つである。
+同じことを確かめる。** 次の段落が `NameSpace` についてそれを行う。
 
 `Origin` は `Clone` と `PartialEq` を derive した enum であり、変位 `Exactly` は `VarPath` を 1 つ、変位
 `Join` は `VarPath` と `Set<VarPath>` を保持する。`VarPath` は組 `(FullName, FieldPath)`、`FieldPath` は
@@ -408,7 +380,7 @@ enum については元と同じ変位で、その変位が保持する各値を
      CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
      CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 本文
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 本文, EXT 可視性と私有性
 <1>0a. `VarTable` のどの値 `t` についても、`t` への参照を引数 (`self` を含む) として受け取らず `t` を
        自分で作りもしない関数の本文は、`t` に届かない。したがって `origin(vars, ・, ・, ・)` の 1 回の
        呼び出しの中で `vars` を引数として受け取る本文は、`origin`、`origin_inner`、
@@ -444,6 +416,127 @@ enum については元と同じ変位で、その変位が保持する各値を
     届かない --- 自分で作った `VarTable` の値は `vars` ではない --- ので、その中の呼び出しの引数に
     `vars` は現れない。
     BY <2>1, <2>2, <2>3, EXT 呼び出しの入れ子
+<1>0b. 次の関数の返り値は引数で決まる (DEF 引数で決まる関数)。`Map::get`、`Set`・`Vec`・`Map` の操作、
+       `<[T]>::starts_with`、`<[T]>::first`、`Clone::clone`、`Option` と `Iterator` の組み合わせ子、
+       `LLVMGen::result_prov`、`TypeNode::is_box`、`Provenance::leaf_origins_at`、
+       `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
+       `Origin::identity`、`Origin::candidates`。ただし `Provenance::leaf_origins_under` と
+       `Origin::candidates` については、引数で決まるのは並びではなく元の集合である。
+  <2>1. 標準ライブラリの操作 --- `Map::get`、`Set`・`Vec`・`Map` の操作、`<[T]>::starts_with`、
+        `<[T]>::first`、`Clone::clone`、`Option` と `Iterator` の組み合わせ子 --- については、外部の結果が
+        それを述べる。`Set` の反復の順序は定めないので、`Set` から作られるのは要素の集合であって並びでは
+        ない。
+    BY DEF 引数で決まる関数, EXT Map と Set, EXT collect into Map と Set, EXT スライスの接頭と先頭,
+       EXT Clone, EXT Vec::iter と slice::iter, EXT Iterator::all と any,
+       EXT Iterator::map と collect, EXT Iterator::filter_map, EXT Iterator::rposition
+  <2>2. `LLVMGen::result_prov` については A3 が述べる。A3 は「**`result_prov` と `borrows_operand` は
+        決定的である** -- 同じ引数に対して常に同じ値を返す。」と書き、その果たす者を
+        `impl LLVMGen for` の 78 個の通読としている。
+    BY A3, DEF 引数で決まる関数
+  <2>3. 残る 8 つ --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
+        `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
+        `Origin::identity`、`Origin::candidates` --- が引数に取るのは、型・path・`TypeEnv`・
+        `Provenance`・`Set<LeafOrigin>`・`Origin` の値だけであり、`VarTable` も走査の状態も引数に
+        取らない。
+    BY CODE src/ast/types.rs: TypeNode::is_box,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+       CODE src/rc_ir/ownership.rs: as_arg_projection,
+       CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+       CODE src/rc_ir/ownership.rs: Origin::identity, CODE src/rc_ir/ownership.rs: Origin::candidates
+  <2>4. <2>3 の 8 つのうち 6 つ --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
+        `Provenance::leaf_origins_under`、`as_arg_projection`、`Origin::identity`、
+        `Origin::candidates` --- は内部可変性を持つ値に触れない。その本文は引数から到達できる値だけを
+        読み、可変な静的変数にも触れない。`is_box` は `is_unbox` を経て `toplevel_tycon_info` の
+        `type_env.tycons().get(&tycon)` に落ちるが、その鍵の型 `TyCon` は `FullName` の欄を 1 つ持つだけ
+        であり、`FullName` と `NameSpace` の手書きの `Hash` が読むのは `Vec<String>` と `String` だけ
+        なので、内部可変性を持たない。残る 5 つは引数の `Provenance`・`Set<LeafOrigin>`・`Origin` を
+        読むだけである。よってこの 6 つの返り値は引数の値で決まる。
+    BY <2>3, CODE src/ast/types.rs: TypeNode::is_box, CODE src/ast/types.rs: TypeNode::is_unbox,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info, CODE src/ast/types.rs: TyCon,
+       CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: NameSpace,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+       CODE src/rc_ir/ownership.rs: as_arg_projection, CODE src/rc_ir/ownership.rs: Origin::identity,
+       CODE src/rc_ir/ownership.rs: Origin::candidates, DEF 引数で決まる関数
+  <2>5. 残る 2 つ --- `boxed_leaf_paths` と `truncate_to_unit` --- は触れる。`boxed_leaf_paths` は
+        `is_fully_unboxed` から `unpunched_field_types`、`instance_field_types` を経て
+        `unwrap_newtypes_memoized` に入り、`truncate_to_unit` は `unit_step` から同じ道に入る。その memo
+        `unwrapped` の型は `Map<Arc<TypeNode>, Arc<TypeNode>>` であり、鍵を引くたびに
+        `impl Hash for TypeNode` が `TypeNode::type_hash` を呼んで `hash_cache` の `OnceLock` を共有参照
+        から書く。**`unwrapped` 自身は `instance_field_types` の 1 回の呼び出しごとに空から作られるので、
+        呼び出しを跨いで持ち越す状態は `TypeNode` の 3 つの `OnceLock` の欄だけである。**
+    BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types,
+       CODE src/ast/types.rs: TypeNode::instance_field_types,
+       CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
+       CODE src/ast/types.rs: TypeNode::type_hash, CODE src/ast/types.rs: TypeNode,
+       CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/ownership.rs: unit_step
+  <2>6. `TypeNode` の 3 つの `OnceLock` の欄が埋まっても、`Arc<TypeNode>` の値の等しさも、そのハッシュも
+        動かない。**この節は `type_env` を通じてだけ現れる `TypeNode` にも当たる。**
+    <3>1. A3 は「**その 3 つは一度だけ書かれる memo であり、`impl PartialEq for TypeNode` は `ty` だけを
+          読み、3 つの memo の値はどれも `ty` の関数である**」と述べ、「**`impl Hash for TypeNode` は
+          `type_hash` を呼ぶので `hash_cache` を読み、かつ書く。**」「反映されるのは `ty` だけなので、
+          等しい 2 つの値は等しくハッシュされる。」と続ける。
+      BY A3
+    <3>2. <3>1 の 3 文は、`TypeNode` という**型**と、その型が持つ 3 つの欄と 2 つの実装についての言明で
+          ある。主語は `TypeNode` の値がどこから到達できるかを条件にしていないので、`RcProgram` から
+          到達できない `TypeNode` の値 --- `type_env` の `TyConInfo` が持つ欄の型と、そこから
+          `declared_field_types` の代入が作る型 --- にも当たる。
+      BY <3>1, A3, CODE src/ast/types.rs: TypeNode, CODE src/ast/types.rs: TypeNode::instance_field_types
+    <3>3. QED
+      <3>1 の 3 文より、3 つの欄の値は `ty` の関数であり、`PartialEq` は `ty` だけを読み、`Hash` が
+      反映するのも `ty` だけである。よって欄が埋まっても値の等しさもハッシュも動かない。<3>2 より
+      これは `type_env` を通じてだけ現れる値にも当たる。
+      BY <3>1, <3>2
+  <2>7. `unwrap_newtypes_node` の `Type::TyApp` の腕は `Arc::ptr_eq` を読むが、その真偽は返る `Arc` の
+        同一性を変えるだけで、返る値を変えない。
+    <3>1. その腕は、`Arc::ptr_eq(&new_fun_ty, fun_ty) && Arc::ptr_eq(&new_arg_ty, arg_ty)` が真のとき
+          `self.clone()` を返し、偽のとき `self.set_tyapp_fun(new_fun_ty).set_tyapp_arg(new_arg_ty)` を
+          返す。`self.clone()` は `self` と同じ割り当てのハンドルであり、その `ty` は
+          `Type::TyApp(fun_ty, arg_ty)` である。`set_tyapp_fun` と `set_tyapp_arg` は `self` の複製の
+          `ty` の成分を差し替えるので、後者の `ty` は `Type::TyApp(new_fun_ty, new_arg_ty)` である。
+      BY CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node, CODE src/ast/types.rs: Type,
+         CODE src/ast/types.rs: TypeNode::set_tyapp_fun, CODE src/ast/types.rs: TypeNode::set_tyapp_arg
+    <3>2. `impl PartialEq for Type` の `TyApp` の腕は、2 つの成分に `type_node_eq` を掛ける。
+          `type_node_eq(lhs, rhs)` の本文は `Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty` であり、
+          `Arc::ptr_eq` が真ならば 2 つは同じ値なので `lhs.ty == rhs.ty` も真である。よって
+          `type_node_eq(lhs, rhs)` が真であることと `lhs.ty == rhs.ty` は同値であり、`Type` の等しさは
+          値で決まる。
+      BY CODE src/ast/types.rs: Type, CODE src/ast/types.rs: type_node_eq
+    <3>3. QED
+      `Arc::ptr_eq(&new_fun_ty, fun_ty)` が真のとき `new_fun_ty` と `fun_ty` は同じ割り当てのハンドル
+      なので値が等しく、`new_arg_ty` と `arg_ty` についても同じである。よって <3>1 の 2 つの枝が返す値の
+      `ty` は、<3>2 の意味でどちらも `Type::TyApp(new_fun_ty, new_arg_ty)` と等しい。`TypeNode` の
+      `PartialEq` は `ty` だけを読むので (<2>6)、2 つの枝は等しい値を返す。
+      BY <3>1, <3>2, <2>6, CODE src/ast/types.rs: TypeNode
+  <2>8. QED
+    <2>5 の 2 つの返り値は引数の値で決まる。`unwrap_newtypes_memoized` の再帰について、その返り値の値と
+    それが `unwrapped` に加える対の値が、引数の値と `unwrapped` の値で決まることを、その再帰の上の
+    帰納で示す --- 再帰が停止することは A10 の最後の節が与える。memo の引きは `Hash` と `PartialEq` で
+    行われ、<2>6 よりその 2 つは値で決まる。`unwrap_newtypes_node` の腕のうち `Arc::ptr_eq` を読むのは
+    `Type::TyApp` の腕だけであり、<2>7 よりその読みは返る値を変えない。残る腕が読むのは
+    `toplevel_tycon`・`type_env.unwrapped_newtype_info`・`collect_type_arguments`・
+    `declared_field_types` であって、どれも引数の値から決まる。よって
+    `instance_field_types` の返り値の値は、`unwrapped` を空から作るので引数の値で決まり、
+    `unpunched_field_types`・`is_fully_unboxed`・`unit_step`・`truncate_to_unit`・`boxed_leaf_paths` の
+    返り値もそれぞれの再帰の上の帰納で引数の値から決まる。**`Arc` の同一性を読む場所はこの道に 2 つしか
+    無い** --- `unwrap_newtypes_node` の `Arc::ptr_eq` (<2>7) と `type_node_eq` の `Arc::ptr_eq`
+    (<3>2 の意味で値と同値) であり、`leaf_map.rs`・`ownership.rs`・`provenance.rs` には 1 つも無い。
+    <2>1、<2>2、<2>4 と合わせて、挙げた関数はすべて引数で決まる。
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, A10, DEF 引数で決まる関数,
+       CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
+       CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
+       CODE src/ast/types.rs: TypeNode::instance_field_types,
+       CODE src/ast/types.rs: TypeNode::declared_field_types,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types,
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon,
+       CODE src/ast/types.rs: TypeNode::collect_type_arguments,
+       CODE src/ast/program.rs: TypeEnv::unwrapped_newtype_info,
+       CODE src/rc_ir/ownership.rs: unit_step,
+       CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+       CODE src/ast/types.rs: type_node_eq
 <1>1. `origin(vars, type_env, x, π)` の本文は 4 つの文と末尾式である。
       `let key = (x.clone(), π.to_vec());`、
       `if let Some(known) = vars.origins.borrow().get(&key) { return known.clone(); }`、
@@ -458,17 +551,20 @@ enum については元と同じ変位で、その変位が保持する各値を
       表が持つ値と等しい。
   BY CODE src/rc_ir/ownership.rs: origin, A15, EXT Map と Set, EXT Clone
 <1>2. `vars.origins` の鍵の集合は増えるだけであり、鍵 `k` が入るのは、鍵が `k` である外れの呼び出しが
-      `origin_inner` から戻った後に限る。`origins` は `VarTable` の非公開の欄であり、`ownership.rs` の
-      中で --- その `#[cfg(test)] mod tests` を含めて --- この欄に触れるのは `VarTable::empty` の
-      `RefCell::default()` と <1>1 の `get` と `insert` の 3 か所だけである。EXT Map と Set より
-      `insert` は鍵を失わせない。
+      `origin_inner` から戻った後に限る。`origins` は `VarTable` の非公開の欄であり、`ownership.rs` は
+      `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たないので、この欄を名指す式が書けるのは
+      `ownership.rs` の中だけである。そこで --- その `#[cfg(test)] mod tests` を含めて --- この欄に
+      触れるのは `VarTable::empty` の `RefCell::default()` と <1>1 の `get` と `insert` の 3 か所だけで
+      ある。EXT Map と Set より `insert` は鍵を失わせない。
   BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
-     CODE src/rc_ir/ownership.rs: origin, <1>1, EXT Map と Set
+     CODE src/rc_ir/ownership.rs: origin, <1>1, EXT Map と Set, EXT 可視性と私有性,
+     EXT モジュールは `mod` が導入する
 <1>2a. `vars` を第 1 引数とする `origin` の呼び出しが起きるどの時点でも、`vars.bindings` は同じ値で
        ある。すなわち鍵の集合が同じであり、各鍵の `Binding` の変位が同じで、その変位が保持する値が
        等しく、`Binding::Llvm` の `Box<dyn LLVMGen>` は同じ引数に同じ宣言を返す。
-  <2>1. `bindings` は `VarTable` の非公開の欄であり、`ownership.rs` の中で --- その
-        `#[cfg(test)] mod tests` を含めて --- この欄に触れる関数は 5 つだけである。書き手は 4 つ ---
+  <2>1. `bindings` は `VarTable` の非公開の欄であり、`ownership.rs` は `mod` 宣言を
+        `#[cfg(test)] mod tests` の 1 つしか持たないので、この欄を名指す式が書けるのは `ownership.rs`
+        とそのモジュールの中だけである。そこでこの欄に触れる関数は 5 つだけである。書き手は 4 つ ---
         `VarTable::empty` の `Map::default()`、`VarTable::of` の `vars.bindings.insert`、
         `collect_bindings` の 3 つの `vars.bindings.insert`、`#[cfg(test)] mod tests` の `table` の
         `vars.bindings.insert` --- であり、読み手は `origin_inner` の `vars.bindings.get(var)` 1 つで
@@ -476,15 +572,19 @@ enum については元と同じ変位で、その変位が保持する各値を
         そこからは触れない。
     BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
        CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: collect_bindings,
-       CODE src/rc_ir/ownership.rs: origin_inner
+       CODE src/rc_ir/ownership.rs: origin_inner, EXT 可視性と私有性,
+       EXT モジュールは `mod` が導入する
   <2>2. `bindings` への書き込みは、`VarTable::of`、`VarTable::body_only`、または
         `#[cfg(test)] mod tests` の `table` の 1 回の呼び出しの実行区間の中でだけ起きる。<2>1 の 4 つの
         書き手のうち `VarTable::empty` と `collect_bindings` は `ownership.rs` の非公開の項目であり、
-        `VarTable::empty` を呼ぶのはこの 3 つだけ、`collect_bindings` を呼ぶのはこの 3 つのうち
-        `VarTable::of` と `VarTable::body_only`、および `collect_bindings` 自身だけである。
+        `ownership.rs` の `mod` 宣言は `#[cfg(test)] mod tests` の 1 つだけなので、その呼び出しは
+        `ownership.rs` とそのモジュールの中にしか書けない。そこで `VarTable::empty` を呼ぶのはこの
+        3 つだけ、`collect_bindings` を呼ぶのはこの 3 つのうち `VarTable::of` と `VarTable::body_only`、
+        および `collect_bindings` 自身だけである。
     BY <2>1, CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
        CODE src/rc_ir/ownership.rs: VarTable::body_only,
-       CODE src/rc_ir/ownership.rs: collect_bindings, EXT 呼び出しの入れ子, DEF 本文
+       CODE src/rc_ir/ownership.rs: collect_bindings, EXT 呼び出しの入れ子, DEF 本文,
+       EXT 可視性と私有性, EXT モジュールは `mod` が導入する
   <2>3. `VarTable` の値が作られるのは `VarTable::empty` の 1 か所だけなので、どの `VarTable` の値も
         <2>2 の 3 つのいずれかの 1 回の呼び出しの中で作られる。その呼び出しの中で、その表を第 1 引数と
         する `origin` の呼び出しは起きない --- <1>0a の前半より、その表に届く本文はそれを作った
@@ -552,12 +652,13 @@ enum については元と同じ変位で、その変位が保持する各値を
           `origin_from_leaves_under` の 1 か所である。`origin` の本文に `origin` の呼び出しは書かれて
           いない。
       BY <1>0
-    <3>3. `origin_from_leaves_under` は `ownership.rs` の非公開の自由関数であり、`ownership.rs` の中で
-          それを呼ぶのは `origin_inner` の 1 か所と `#[cfg(test)] mod tests` の 2 か所だけである。
-          `ownership.rs` は `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たないので、その呼び出しは
-          このファイルの中にしか書けない。
+    <3>3. `origin_from_leaves_under` は `ownership.rs` の非公開の自由関数であり、`ownership.rs` は
+          `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たないので、その呼び出しはこのファイルと
+          そのモジュールの中にしか書けない。そこでそれを呼ぶのは `origin_inner` の 1 か所と
+          `#[cfg(test)] mod tests` の 2 か所だけである。
       BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-         CODE src/rc_ir/ownership.rs: origin_inner, DEF 本文
+         CODE src/rc_ir/ownership.rs: origin_inner, DEF 本文, EXT 可視性と私有性,
+         EXT モジュールは `mod` が導入する
     <3>4. QED
       <3>1 と <3>2 より、第 1 引数が `vars` である `origin` の呼び出しはこの 7 か所を通ってだけ起きる。
       <3>3 より、この `origin_inner` の呼び出しの中で走る `origin_from_leaves_under` は、その本文が
@@ -582,19 +683,20 @@ enum については元と同じ変位で、その変位が保持する各値を
         `origin` を 1 回呼び、`None` のときは `origin_from_leaves_under(vars, type_env, &decl, args, π, ・)`
         を呼ぶ。後者は `decl.leaf_origins_under(π)` と `args` と `type_env` から `Set` の値
         `operand_units` を作り、その各元 `(j, unit)` について鍵 `(args[j].name, unit)` の `origin` を
-        1 回呼ぶ。DEF 引数で決まる関数 より、`decl` も `operand_units` も `vars.bindings.get(x)` が返した
-        束縛と `type_env` と `π` で決まる。`decl` については A3 が、`arg_tys`・`leaf_origins_at`・
-        `leaf_origins_under`・`as_arg_projection`・`truncate_to_unit` については DEF 引数で決まる関数 が
-        与える。`operand_units` は `Set` なので反復の順序は定まらないが、呼ぶ鍵の集合は定まる。どの鍵も
-        `origin` の返り値を読まない。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       CODE src/rc_ir/ownership.rs: as_arg_projection, DEF 引数で決まる関数, A3
+        1 回呼ぶ。<1>0b より、`decl` も `operand_units` も `vars.bindings.get(x)` が返した束縛と
+        `type_env` と `π` で決まる --- `decl` については `LLVMGen::result_prov` の行が、`operand_units`
+        については `arg_tys`・`leaf_origins_at`・`leaf_origins_under`・`as_arg_projection`・
+        `truncate_to_unit` の行が与える。`operand_units` は `Set` なので反復の順序は定まらないが、呼ぶ
+        鍵の集合は定まる。どの鍵も `origin` の返り値を読まない。
+    BY <1>0b, CODE src/rc_ir/ownership.rs: origin_inner,
+       CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       CODE src/rc_ir/ownership.rs: as_arg_projection, DEF 引数で決まる関数
   <2>4. QED
-    DEF 引数で決まる関数 より `vars.bindings.get(x)` の値は `vars.bindings` と `x` で決まる。`Binding` の
+    <1>0b より `vars.bindings.get(x)` の値は `vars.bindings` と `x` で決まる。`Binding` の
     変位は `Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、`Join` の 7 つであり、<2>1 から
     <2>3 がこの 7 つと、`get` が `None` を返す場合を尽くす。<2>0 より、第 1 引数が `vars` であって直に
     起きる `origin` の呼び出しは、この 2 つの本文に書かれたものだけである。
-    BY <2>0, <2>1, <2>2, <2>3, CODE src/rc_ir/ownership.rs: Binding, DEF 引数で決まる関数
+    BY <1>0b, <2>0, <2>1, <2>2, <2>3, CODE src/rc_ir/ownership.rs: Binding, DEF 引数で決まる関数
 <1>4. 値を返す `origin` の呼び出し `c` について、`c` の中には、鍵が等しく一方が他方に真に含まれる 2 つの
       外れの `origin` の呼び出しは無い。ここで外側の候補には `c` 自身も数える。この 2 つ組を**入れ子の対**
       と呼ぶ。
@@ -660,12 +762,12 @@ enum については元と同じ変位で、その変位が保持する各値を
   `ownership::acted_references(vars, type_env, v, π)` は、`boxed_leaf_paths(&v.ty, type_env)` のうち
   `π` を接頭辞に持つ各 leaf について `origin(vars, type_env, &v.name, &leaf)` の `identity` を数えたもので
   あり、`CancelAnalysis::other_objects(v, π)` は同じ leaf について同じ `origin` を呼び、その `candidates`
-  のうち `identity` と異なるものを並べる。DEF 引数で決まる関数 より `boxed_leaf_paths` と
-  `Origin::identity` は引数で決まるので、`acted_references` の返り値は `vars`、`type_env`、`v`、`π` だけ
-  で決まる。`Origin::candidates` については引数で決まるのは元の集合だけなので (DEF 引数で決まる関数)、
-  `other_objects` について決まるのも、返る `Vec` の元の集合だけである。
-  BY <1>1, <1>2, <1>5, CODE src/rc_ir/ownership.rs: acted_references,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数, A3, EXT Clone
+  のうち `identity` と異なるものを並べる。<1>0b より `boxed_leaf_paths` と `Origin::identity` は引数で
+  決まるので、`acted_references` の返り値は `vars`、`type_env`、`v`、`π` だけで決まる。
+  `Origin::candidates` については引数で決まるのは元の集合だけなので (<1>0b)、`other_objects` について
+  決まるのも、返る `Vec` の元の集合だけである。
+  BY <1>0b, <1>1, <1>2, <1>5, CODE src/rc_ir/ownership.rs: acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数, EXT Clone
 
 ### P2a (`origin` の答えは memo に依らない)
 
@@ -673,45 +775,112 @@ enum については元と同じ変位で、その変位が保持する各値を
 第 2 引数とし、鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならば、その 2 つの
 返り値は等しい。すなわち答えは `vars.origins` が保持する memo の状態に依らない。
 
+**`vars` は、A6 と A11 を満たすプログラムの本体について `VarTable::of` か `VarTable::body_only` が
+作った表である。** 製品のコードが作る表はこの 2 つの構成子を通るものだけであり (`VarTable::empty` を直に
+呼ぶ残る 1 か所は `#[cfg(test)]` の下の作り手である)、この命題を引く段が扱うのもそれである。**この制限は
+言明の一部であって、読む段が自分で補うものではない。**
+
+**L0 はこの制限を持たない。** L0 が量化するのは `VarTable` のどの値でもある `vars` であり、言明の
+`vars` はその特別な場合である。
+
 **証明**
 
 <1>1. QED
   L0 は 1 つの `VarTable` の値 `vars` を固定し、`vars` を第 1 引数として行われる `origin` の呼び出しに
   ついて、鍵 `(x, π)` が等しい 2 つがどちらも値を返すならばその 2 つの返り値が等しいことを述べる。
-  P2a が量化するのは、`vars` を第 1 引数とし、固定した 1 つの `TypeEnv` の値を第 2 引数とする `origin` の
-  呼び出しであり、これは L0 が量化する呼び出しの一部である。よって L0 の言明は P2a の言明を含む。
+  L0 は `vars` の作られ方を問わないので、言明が制限する `vars` --- A6 と A11 を満たすプログラムの本体に
+  ついて `VarTable::of` か `VarTable::body_only` が作った表 --- もその範囲にある。P2a が量化するのは、
+  その `vars` を第 1 引数とし、固定した 1 つの `TypeEnv` の値を第 2 引数とする `origin` の呼び出しで
+  あり、これは L0 が量化する呼び出しの一部である。よって L0 の言明は P2a の言明を含む。
   BY L0
+
+### L0a (部分木の形)
+
+DEF 部分木 の節点・子・部分木・節点の道について、次の 4 つが成り立つ。
+
+1. 各節点はその道でちょうど 1 つに定まり、相異なる節点の道は相異なる。
+2. `N(n)` は、`n` の道を接頭として持つ道の節点の全体である。
+3. `n` の相異なる 2 つの子 `c`、`c'` について、`N(c)` と `N(c')` は交わらない。
+4. `n` はどの子の部分木にも入らない。したがって `N(n)` の上の構造帰納法 --- `n` の各子について成り
+   立つことから `n` について結論する形 --- は整礎である。
+
+**証明**
+
+<1>1. 1 が成り立つ。D2 は本体を式の節点の有限の**木**と定め、木の位置が相異なれば節点も相異なるものと
+      定める。木の位置は根からの選択の列で一意に定まるので、各節点はその道でちょうど 1 つに定まり、
+      相異なる節点の道は相異なる。
+  BY D2, DEF 部分木
+<1>2. 2 が成り立つ。`n` の部分木の大きさについての帰納による --- `n` 自身の道は `n` の道を接頭として
+      持ち、`n` の各子 `c` の道は `n` の道に選択を 1 つ継ぎ足したものなので、帰納法の仮定より `N(c)` は
+      `c` の道を、したがって `n` の道を接頭として持つ道の節点からなる。逆に `n` の道を真の接頭として
+      持つ道は、`n` のどれか 1 つの子の道を接頭として持つ。
+  BY <1>1, DEF 部分木
+<1>3. 3 が成り立つ。`n` の相異なる 2 つの子の道は、`n` の道に相異なる選択を 1 つずつ継ぎ足したもので
+      あるから、その両方を接頭として持つ道は無い。<1>2 より `N(c)` と `N(c')` の元はそれぞれ `c` の道と
+      `c'` の道を接頭として持つので、2 つは交わらない。
+  BY <1>1, <1>2, DEF 部分木
+<1>4. QED
+  4 が成り立つ。`n` の道は各子の道より 1 つ短いので、子の道を接頭として持たない。<1>2 より `n` は
+  どの `N(c)` にも入らない。よって `N(c) ⊊ N(n)` であり、`N(・)` の大きさが子で真に減るので、構造
+  帰納法は整礎である。DEF 部分木 より本体は有限の木なので、`N(n)` は有限集合である。
+  BY <1>1, <1>2, <1>3, D2, DEF 部分木
+
+### L0b (走査は `vars` と `type_env` の欄を動かさない)
+
+1 回の `cancel_body` の実行を通じて、その `CancelAnalysis` の値の `vars` の欄と `type_env` の欄は
+同じ値である。すなわち、その 2 つの欄が指す `VarTable` と `TypeEnv` は最初から最後まで同じ値である。
+
+**証明**
+
+<1>1. この 2 つの欄は、`cancel` の `cancel_body` の閉包が `CancelAnalysis` の値を構築するときに
+      置かれ、その値は閉包の局所変数 `analysis` である。閉包の本文がその値を名指すのは
+      `analysis.walk(body, PendingRetains::default(), true)` と `analysis.cancelled()` の 2 か所だけで
+      ある。
+  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: CancelAnalysis
+<1>2. `CancelAnalysis` は `borrow.rs` の非公開の型であり、その 7 つの欄はいずれも非公開である。
+      `borrow.rs` は `mod` 宣言を 1 つも持たないので子孫のモジュールも無く、その欄を名指す式は
+      `borrow.rs` の中にしか書けない。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
+<1>3. <1>1 の値に届く本文は、`CancelAnalysis` のメソッドの本文と `cancel_body` の閉包の本文だけで
+      ある。EXT 参照は引数を通ってだけ届く より、ある本文がこの値に届くのは、その値かそれへの参照が
+      引数 (`self` を含む) として渡ったときか、自分でその値を作ったときに限る。この値を作るのは
+      <1>1 の 1 か所であり、それを引数として渡すのは <1>1 の 2 つのメソッド呼び出しの `self` である。
+  BY <1>1, EXT 参照は引数を通ってだけ届く
+<1>4. `CancelAnalysis` のメソッドは 9 つあり、`&mut self` を取るのは `walk`、`walk_inner`、
+      `consume_rhs`、`consume`、`consume_objects`、`merge` の 6 つ、`&self` を取るのは
+      `acted_references`、`other_objects`、`cancelled` の 3 つである。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled
+<1>5. QED
+  <1>4 の 6 つの本文と `cancel_body` の閉包の本文で `vars` と `type_env` の欄が現れるのは、どれも値を
+  読んで別の関数へ渡す位置であり、どちらの欄への代入も書かれていない。残る 3 つは `self` を共有参照で
+  受け取るので、EXT 共有参照は代入を許さない よりこの値のどの欄へも代入できない。その例外の内部可変性が
+  与えるのは、欄が指す先を書き換える道だけであり、欄そのもの --- どの `VarTable` と `TypeEnv` を指すか
+  --- を差し替える道ではない。<1>2 と <1>3 より、これ以外に欄を動かしうる本文は無い。
+  BY <1>1, <1>2, <1>3, <1>4, CODE src/rc_ir/borrow.rs: cancel,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis, EXT 共有参照は代入を許さない
 
 ### DEF 節点の量
 
 1 回の `cancel_body` の実行を固定し、その `CancelAnalysis` の値の `vars` の欄を `vars`、`type_env` の欄を
-`type_env` と書く。**この 2 つの欄はその実行のあいだずっと同じ値である。** 2 つは `cancel` の
-`cancel_body` が `CancelAnalysis` の値を構築するときに置かれ、走査はこの 2 つの欄を差し替えない。
-`CancelAnalysis` は `borrow.rs` の非公開の型でその欄も非公開であり、`borrow.rs` は `mod` 宣言を 1 つも
-持たないので、欄への書き込みは `borrow.rs` の中にしか書けない。構築の後にこの値へ可変参照を得るのは
-`&mut self` を取る 6 つのメソッド --- `walk`、`walk_inner`、`consume_rhs`、`consume`、
-`consume_objects`、`merge` --- だけであり、この 6 つの本文で `self.vars` と `self.type_env` が現れるのは、
-どれも値を読んで別の関数へ渡す位置である (`CODE src/rc_ir/borrow.rs: CancelAnalysis`,
-`CODE src/rc_ir/borrow.rs: cancel`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::merge`)。
+`type_env` と書く。L0b より、この 2 つはその実行のあいだ同じ値である。
 
 その上で、`Retain` 節点 `t = Retain(v, path, _, _)` と `Release` 節点 `r = Release(v, path, _, _)` に
 ついて次の値を定める。
 
 - `ActRefs(t) :=` `ownership::acted_references(vars, type_env, v, path)` の値、
-  `ActRefs(r) :=` `ownership::acted_references(vars, type_env, v, path)` の値。これは `vars`、`type_env`、
-  `v`、`path` で決まる量であって、走査のどの時点についてのものかを問わない。
+  `ActRefs(r) :=` `ownership::acted_references(vars, type_env, v, path)` の値。
 
-**この量が 1 つに定まるのは L0 による。** L0 は、`vars` を第 1 引数とする `origin` の呼び出しが memo の
-状態に依らず鍵で決まる値を返すことと、そこから `ownership::acted_references(vars, type_env, v, π)` の
-返り値も走査のどの時点で読んでも同じであることを述べる。この定義をここに置くのはそのためである。
-`CancelAnalysis::acted_references(v, path)` はその値を返す
-(`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。`ActRefs(t)` は D15 の
+L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走査のどの時点で読んでも同じである。
+定義をここに置くのはそのためである。`CancelAnalysis::acted_references(v, path)` は、値を返すときこの値を
+返す (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。`ActRefs(t)` は D15 の
 `ActRefs(v, path)` である。
 
 ### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ)
