@@ -11,10 +11,12 @@
 - **定義**: D1・D2・D11・D12・D14・D18・D19・D23・D24・D30。
 - **仮定**: A1・A2 (前提 H1・H2 として)、A3・A13・A15・A17・A18・A19・A20 (前提 H3 が束ねる
   第 4 節の仮定の中から名指す)。
-- **コード**: `optimize_rc_program` が 2 つのパスを呼ぶ順序、`validate`、`borrow_ify` と `cancel` が
-  `RcProgram` を組み立てる 3 つの欄、`cancel` の本体の書き換えが `drop_nodes` を呼ぶこと、
-  `drop_nodes` が `Let` の右辺を丸ごと写すこと、`clone_func`、`borrow_funcref`、`RcProgram` の型、
-  `Map` の別名。
+- **コード**: `optimize_rc_program` が 2 つのパスを呼ぶ順序、`validate`、`RcProgram` の型と、
+  そこから到達する `RcFunc`・`RcVar`・`TypeNode` の欄、`TypeNode::is_ground` と
+  `TypeNode::type_hash` がその memo へ書くこと、`InlineLLVMCaptureProjectBody` の欄、`borrow_ify` と
+  `cancel` が `RcProgram` を組み立てる 3 つの欄、`cancel` の本体の書き換えが `drop_nodes` を呼ぶ
+  こと、`drop_nodes` と `drop_nodes_inner` が `Let` の右辺を丸ごと写すこと、`clone_func`、
+  `borrow_funcref`。`Map` の別名は第 1 節の EXT の言明が引く。
 - **外部の結果**: EXT 共有参照が書き込める先、EXT 反復子の `iter`・`map`・`collect`、
   EXT 写像の `insert` と `values_mut`。第 1 節の「外部の結果」がその完全な言明を据える。
 
