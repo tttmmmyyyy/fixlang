@@ -728,7 +728,7 @@ pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
 /// Unit and leaf enumerations both leave a punched field out, so every path that reference counting
 /// works with names a held field. An index naming a punched field, or one out of range, aborts the
 /// walk `walk_name` names.
-// PROOF: D/A, P1, P2, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn held_field_type(
     held_fields: &[(usize, Arc<TypeNode>)],
     idx: usize,
@@ -754,7 +754,7 @@ pub(crate) fn held_field_type(
 /// expanding it into the boxed leaves inside (an unboxed union is one unit, since only its active
 /// variant is live and a refcount operation must dispatch on the tag rather than name a variant's
 /// leaf).
-// PROOF: D/A, P1, P2, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     let mut out = vec![];
     rc_units_go(ty, type_env, &mut vec![], &mut out);
@@ -763,7 +763,7 @@ pub(crate) fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath>
 
 /// Descend a type, pushing onto `out` the path of each unit reached. `path` is the field path from
 /// the whole value down to `ty`, which each pushed unit is named relative to.
-// PROOF: P1, P2, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn rc_units_go(
     ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -959,7 +959,7 @@ pub(crate) fn units_under(
 
 /// The type of the subtree a path names, descending only unboxed structs; `None` once the path
 /// reaches a value the walk stops at — a closure, a unit, or a value holding no reference.
-// PROOF: D/A, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Option<Arc<TypeNode>> {
     let mut cur = ty.clone();
     for &idx in path {

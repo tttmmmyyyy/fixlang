@@ -29,9 +29,9 @@ P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P1
 README の第 2 節の記法に、次の 3 つを加える。
 
 - **局所の定義**。この文書の中だけで使う語を定め、`BY` の行では `DEF <名前>` で引用する。定義は第 1 節に
-  置く。定めるものが 1 つに決まることを補題が与えるときは、その補題の後に置く --- `DEF 節点の量` は L0 の
-  後、`DEF INV` は P15 の後である。
-- **局所の補題**。この文書の中だけで使う補題を `L0` - `L12` と番号を付けて述べ、`BY` の行では
+  置く。定めるものが 1 つに決まることを補題が与えるときは、その補題の後に置く --- `DEF 節点の量` は
+  L0b の後である。
+- **局所の補題**。この文書の中だけで使う補題を `L0` - `L13` と番号を付けて述べ、`BY` の行では
   `L<n>` で引用する。あいだに挟む補題には `L8a` のように枝番を振り、既存の番号は振り直さない。各補題は、
   それより前に置かれた補題と命題と、README の D/A だけを引用する。
 - **外部の結果**。`BY` の行では `EXT <名前>` として引く。Rust の言語と標準ライブラリの契約のうち
@@ -1933,9 +1933,9 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行に�
   <2>2. 1 回の訪問が実行する基本操作は有限個である。「初期」は訪問の中では実行されない。「追加」は
         `Retain` の腕で 1 回、「引き」は `Release` の腕で 1 回、「複製」は `Match` の腕でアームごとに
         1 回、「併合」は `Match` の腕で 1 回である。「消費」は `consume_objects` の呼び出しごとに 1 回で、
-        その呼び出しは `Release` の腕で高々 2 回、`Let` (右辺が `Match` でない) の腕で `rhs_consumes` が
-        返す `Vec` の要素ごとに 1 回、`Destructure` の腕で `destructure_consumes` が返す `Vec` の要素
-        ごとに 1 回である (L6)。`Vec` の長さは有限であり、`arms` も `Vec` である。
+        その呼び出しは `Release` の腕で高々 2 回、`Let` (右辺が `Match` でない) の腕で `consume_rhs` が
+        `rhs_consumes` に積ませた `Vec` の要素ごとに 1 回、`Destructure` の腕で `destructure_consumes` が
+        返す `Vec` の要素ごとに 1 回である (L6)。`Vec` の長さは有限であり、`arms` も `Vec` である。
     BY L6, DEF 基本操作, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume
   <2>3. QED
@@ -2147,12 +2147,16 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての呼び出しについて無条件に果たす**ので、
 この命題は README の P16 --- 仮説を持たない言明 --- として立つ。
 
-<1>0. 言明の (e) が主語にする「`pending` から取り除かれた `Retain`」と、DEF 除去事象 の除去事象は
-      1 対 1 である。よって各除去事象について上の 3 つを示せば、言明の (e) が出る。
+<1>0. 言明の (e) が主語にする「`pending` から取り除かれた `Retain`」は、`NodeId` の値ごとに読む。
+      すなわち、`node` が `x` である要素が `pending` から取り除かれることと、`x` の除去事象
+      (DEF 除去事象) が在ることは同値である。よって各除去事象について上の 3 つを示せば、言明の (e) が
+      出る。
   <2>1. `NodeId` の値 `x` を 1 つ取る。走査が `PendingRetains` の値を作るのは DEF 基本操作 の 6 種だけで
         あり (L8)、各状態はそれを作る基本操作が実行される時点で生じる (DEF 基本操作)。よって `node` が
         `x` である要素が `pending` から取り除かれるとは、その要素を持つ状態を入力に取り、それを持たない
         状態を作る基本操作が在ることであり、これは DEF 除去事象 の言う `x` の除去事象そのものである。
+        **1 つの除去事象が `node` の相異なる 2 つの値の要素を同時に取り除くことも、1 つの `x` について
+        除去事象が複数在ることもありうる。** この段が言うのは、`x` を固定したときの同値だけである。
     BY L8, DEF 基本操作, DEF 除去事象
   <2>2. QED
     上の 3 つの場合は、言明の (e1)(e2)(e3) をそれぞれ含む。(e1) は「取り除かれた要素の `outstanding` は
@@ -2374,7 +2378,7 @@ L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての�
 
 ## 9. 層 4 へ渡す補題
 
-次の 3 つは P15 - P18 の証明には使わないが、`cancel` の走査の性質なのでここで示す。
+次の 4 つは P15 - P18 の証明には使わないが、`cancel` の走査の性質なのでここで示す。
 
 ### L10 (記録は増えるだけ)
 
@@ -2524,6 +2528,33 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
 <1>4. QED
   BY <1>1, <1>2, <1>3
 
+### L13 (`merge` を越えて残る要素の `outstanding`)
+
+ASSUME  NEW `prog`: `RcProgram`,
+        `prog` は `borrow_ify` の 1 回の呼び出しが返した値である
+PROVE   `cancel(prog, type_env)` の走査が行う `merge` の呼び出しについて、その返り値の各要素 `e` の
+        `outstanding` は、各アームの出口 `arm_exits[j]` にある `node` が `e.node` である要素の
+        `outstanding` と等しく、その値はどの `j` についても等しい。
+
+**証明**
+
+<1>1. この `merge` の呼び出しは `walk_inner` の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕の
+      `self.merge(&pending, &arm_exits)` であり、各 `arm_exits[j]` は
+      `self.walk(&arms[j].body, ・, false)` の返り値 `pending_out(arms[j].body)`、すなわちこの走査が
+      作った状態である。よって L9 が当たり、その (iii) より `arm_exits[j]` の相異なる要素は相異なる
+      `node` を持つので、L7 の仮定が満たされる。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
+     L1, L9, DEF 訪問, DEF 基本操作, 本補題の仮定
+<1>2. 返り値の要素 `e` について、`uniform` は `e.node` を鍵に持ち、`e.outstanding` は `uniform[e.node]` と
+      等しい。L7 の 6 より、返り値の要素は `pending_in` の要素のうち `node` を `uniform` が鍵に持つもの
+      から作られ、その `outstanding` は `uniform[node]` と等しい `References` である。
+  BY L7, <1>1
+<1>3. QED
+  <1>2 より `uniform` は `e.node` を鍵に持つので、L7 の 4 より `U(e.node)` が成り立ち、`uniform[e.node]`
+  は各 `arm_states[j]` が `e.node` に与える共通の値と等しい。L7 の 1 より `arm_states[j]` が `e.node` に
+  与える値は、`arm_exits[j]` の `node` が `e.node` である唯一の要素の `outstanding` である。
+  BY L7, <1>1, <1>2
+
 ## 10. 言明についての注記
 
 **注記 1 (P16 の (e) に第 3 の場合が要ること)**。(e) を「取り除かれた要素の `outstanding` がその時点で
@@ -2580,5 +2611,5 @@ P16 の (d) は保たれ、P17 の「最内」はその後も由来の訪問順�
 - **P16 の (e3)** --- その除去は `merge` によるものであり、各アームへ渡った複製の側に同じ `Retain` の
   除去事象がある。1 つの実行路は各 `Match` でアームを 1 つ選ぶので (D3)、その選択に沿った 1 つが、その
   実行路の上での除去事象を名指す。展開が有限で終わり、その葉が (e1) か (e2) であることも P16 が述べる。
-- **`merge` を越えて残る要素の `outstanding`** --- それは各アームの出口での共通の値と等しい (P18 の証明の
-  <1>5)。P16 の (b) と合わせると、それは由来の `ActRefs` に含まれ、空でない。
+- **L13** --- `merge` を越えて残る要素の `outstanding` は、各アームの出口での共通の値と等しい。P16 の
+  (b) と合わせると、それは由来の `ActRefs` に含まれ、空でない。
