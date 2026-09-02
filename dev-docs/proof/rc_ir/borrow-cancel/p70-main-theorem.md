@@ -1141,11 +1141,13 @@ P9 が示す」と書き、A11 は「**この仮定が語るのは `borrow_ify` 
 - `RewriteCtx` の `vars: VarTable` が持つ `origins: RefCell<Map<VarPath, Origin>>`
   (`CODE src/rc_ir/borrow.rs: RewriteCtx`, `CODE src/rc_ir/ownership.rs: VarTable`)。
 - `TypeNode` の `hash_cache`・`ground_cache`・`depth_cache` という 3 つの `OnceLock`
-  (`CODE src/ast/types.rs: TypeNode`)。`&RcFunc` の `fn_ty` と `params` の各 `RcVar` の `ty`、
-  `RewriteCtx` の `callee_params` が持つ型、そして `type_env: &'a TypeEnv` が型宣言の欄を経て持つ型が、
-  いずれもこの道である。**`type_env` もこの道に数える** -- `RewriteCtx` はそれを欄に持ち、
-  `TypeEnv` は型宣言を通じて `TypeNode` に届く。`is_borrow_version`・`owned_units`・
-  `borrow_versions`・`tail` は `bool` と名前の集合・写像であって、`UnsafeCell` を持たない。
+  (`CODE src/ast/types.rs: TypeNode`)。`&RcFunc` の `fn_ty`・`ret_ty` と `params` の各 `RcVar` の
+  `ty`、`RewriteCtx` の `callee_params` が持つ型、`vars: VarTable` の `param_tys`・`var_tys` と
+  `bindings` の `Binding::Llvm` が運ぶ型、そして `type_env: &'a TypeEnv` が型宣言の欄を経て持つ型が、
+  いずれもこの道である (`CODE src/rc_ir/ownership.rs: VarTable`)。**`type_env` もこの道に数える** --
+  `RewriteCtx` はそれを欄に持ち、`TypeEnv` は型宣言を通じて `TypeNode` に届く。
+  `is_borrow_version`・`owned_units`・`borrow_versions`・`tail` は `bool` と名前の集合・写像で
+  あって、`UnsafeCell` を持たない。
 
 **その 2 種はどちらも、書き込まれても答えを動かさない。**`origins` については、それに触れられるのは
 `VarTable` を宣言するファイルの中だけであり (EXT 非公開の欄に触れられる範囲、
