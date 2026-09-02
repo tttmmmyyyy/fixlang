@@ -2268,8 +2268,12 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 **証明**
 
 <1>1. `borrows_operand` を override する `impl LLVMGen for` は 13 個であり、既定は偽を返す。
-  BY CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand
-  既定の実装は `false` を返す。override するのは `src/fixstd/builtin.rs` の
+  BY A3, EXT クレートの項目, CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand
+  **`impl LLVMGen for` の集合が閉じていることが要る。** A3 は「`impl LLVMGen for` は 78 個あり」と
+  数え上げ、`EXT クレートの項目` よりクレートの項目 -- トレイト実装を含む -- はクレート根から
+  `mod` 宣言をたどって得られる各モジュールのソースに書かれたものだけなので、クレートの全ファイルを
+  読んで得たこの 78 個の一覧は完全である。その 78 個のうち `borrows_operand` を override するものを
+  数えると 13 個である。既定の実装は `false` を返す。override するのは `src/fixstd/builtin.rs` の
   `InlineLLVMArrayUnsafeGetBoundsUnchecked`、`InlineLLVMArrayCopyCapacityBoundsUnchecked`、
   `InlineLLVMArrayGetPtrBody`、`InlineLLVMArrayGetSizeBody`、`InlineLLVMArrayGetCapacityBody`、
   `InlineLLVMStructGetBody`、`InlineLLVMCaptureProjectBody`、`InlineLLVMUnionAsBody`、
@@ -2279,26 +2283,36 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 <1>2. `result_prov` の既定の実装は、結果のどの leaf にも `Unknown` だけを置く。
   BY CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, CODE src/rc_ir/provenance.rs: Provenance,
+     CODE src/rc_ir/provenance.rs: Provenance::uniform, CODE src/rc_ir/provenance.rs: sole_origin,
+     CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape, CODE src/rc_ir/leaf_map.rs: LeafMap::uniform,
      CODE src/rc_ir/ownership.rs: as_arg_projection
-  既定は `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` であり、`uniform` は各 boxed
-  leaf に `sole_origin(Unknown)` を置く。`as_arg_projection` は `LeafOrigin::Unknown` に `None` を
-  返す。
+  既定は `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` であり、それは
+  `LeafMap::uniform(ty, type_env, sole_origin(src))`、さらに
+  `LeafMap::build_shape(ty, type_env, &|_| fact.clone())` である。`build_shape` は
+  `boxed_leaf_paths(ty, type_env)` の各元に項を置くので、各 boxed leaf に `sole_origin(Unknown)` が
+  入る。`as_arg_projection` は `LeafOrigin::Unknown` に `None` を返す。
 
 <1>3. <1>1 の 13 個のうち `result_prov` を override するのは
       `InlineLLVMArrayCopyCapacityBoundsUnchecked`、`InlineLLVMStructGetBody`、
       `InlineLLVMUnionAsBody` の 3 個である。
-  BY CODE src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov,
+  BY <1>1, EXT クレートの項目,
+     CODE src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov,
      CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov,
      CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov
   残る 10 個は `result_locality` を override するが `result_prov` は override しない。
+  `EXT クレートの項目` より、<1>1 の 13 個の `impl` ブロックはそれぞれ 1 か所にしかなく、その本体を
+  読んで得たメソッドの一覧は完全である。
 
 <1>3a. `InlineLLVMArrayCopyCapacityBoundsUnchecked` の `result_prov` は、結果の各 boxed leaf に
        単一の `Fresh` を置く。単一の `Fresh` は単一の `Arg(i, σ)` ではない。
   BY CODE src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov,
      CODE src/rc_ir/provenance.rs: Provenance::uniform, CODE src/rc_ir/provenance.rs: sole_origin,
+     CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape, CODE src/rc_ir/leaf_map.rs: LeafMap::uniform,
      CODE src/rc_ir/provenance.rs: LeafOrigin
   その `result_prov` は `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返す。
-  `uniform` は `LeafMap::uniform(ty, type_env, sole_origin(src))` であり、`sole_origin` は 1 元の
+  `uniform` は `LeafMap::uniform(ty, type_env, sole_origin(src))`、さらに
+  `LeafMap::build_shape(ty, type_env, &|_| fact.clone())` であり、`build_shape` は
+  `boxed_leaf_paths(ty, type_env)` の各元に項を置く。`sole_origin` は 1 元の
   集合を作る。`LeafOrigin` の構成子は `Arg`・`Fresh`・`Unknown` であり、`Fresh` は `Arg` ではない。
 
 <1>4. 残る 2 個 -- `InlineLLVMStructGetBody` と `InlineLLVMUnionAsBody` -- は、`borrows_operand(i)` が
@@ -2315,9 +2329,11 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `is_fully_unboxed` を問う。どちらも `i == 0` 以外の `i` には偽を返す。
 
 <1>5. 結果の型が `is_fully_unboxed` であるとき、宣言はどの leaf にも何も置かない。
-  BY D4, CODE src/rc_ir/provenance.rs: Provenance
+  BY D4, CODE src/rc_ir/provenance.rs: Provenance,
+     CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape, CODE src/rc_ir/leaf_map.rs: LeafMap::uniform
   D4 の第 1 規則より `is_fully_unboxed` が真の型は boxed leaf を持たない。`Provenance::build_shape` と
-  `Provenance::uniform` はどちらも型の boxed leaf の上に `LeafMap` を作るので、leaf を持たない型では
+  `Provenance::uniform` はどちらも `LeafMap::build_shape` を通り、それは
+  `boxed_leaf_paths(ty, type_env)` の各元に項を置くので、leaf を持たない型では
   空である。
 
 <1>6. QED
@@ -2547,9 +2563,11 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   <2>1. `container` が局所名であるとき `Λ(m) = (Λ(m') \ {フィールド変数}) ∪ {container}`、そうでない
         とき `Λ(m) = Λ(m') \ {フィールド変数}` である。前置 `Retain` 鎖は `container` が局所名で
         `container ∈ Λ(m')` のとき `Retain(container, [])` を 1 つ置き、後置 `Release` 鎖は `Λ(m')` に
-        入らない各フィールド変数の `Release` を 1 つずつ置く。以下 `container` は局所名とする --
-        そうでないとき <1>0 よりこの変数はスロットを持たず、下の勘定はフィールド変数だけについて
-        同じ形で走る。
+        入らない各フィールド変数の `Release` を 1 つずつ置く。**以下 `container` は局所名とする。**
+        局所名でないときは、<1>0 よりこの変数はスロットを持たないので、<2>2・<2>3・<2>4・<2>4a の
+        `μ(container, λ)` についての等式は量化する対象を 1 つも持たず、フィールド変数についての
+        等式だけが残る。前置 `Retain` 鎖もそのとき空である -- `retain_if_live` は
+        `var.name.is_local()` を要求する。
     BY <1>0, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
        CODE src/rc_ir/rc_insert.rs: insert_if_local,
        CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live, L15
@@ -2609,9 +2627,17 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   <2>1. `H := live_at_arm_head`、`M := live_after_match`、`U_j := arm_free_locals(arm_j)`、
         `P_j := {payload_j} ∩ free_locals(arm_j.body)` と置くと、`Λ(m) = H ∪ {scrut}`、
         `Λ(m') = U_j ∪ P_j ∪ M` であり、`H = M ∪ (∪_i U_i)` である。
-    BY <2>0, L14, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
+    BY <2>0, L14, A2, A9, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
        CODE src/rc_ir/rc_insert.rs: RcInserter::arm_free_locals
-    `live_at_arm_head` は `live_after_match` に各アームの `arm_free_locals` を足したものである。
+    `live_at_arm_head` は `live_after_match.clone()` から始めて各アームの `arm_free_locals` の名前を
+    足したものなので、`H = M ∪ (∪_i U_i)` である。
+    **アームが 1 つ以上あることが要る。** `insert_into_match` が返す `live_before` は
+    `Set::default()` から始まる `live_before_arms` を土台にするので、アームが 0 個ならそれは空になり、
+    `Λ(m) = {scrut}` となって下の等式が破れる。A9 は「`borrow_ify` の入力プログラムのすべての `Match`
+    は 1 つ以上のアームを持つ」と述べ、A9 自身が「**`insert_rc` の入力と出力について読む段は A2 を
+    引く。**」と書き、A2 が「**したがって、`borrow_ify` の入力について語る仮定は、`insert_rc` の
+    入力と出力についても読める。**」を与えるので、`insert_rc` の入力の骨格の各 `Match` は
+    アームを 1 つ以上持つ。
     `L14` (a) より `Λ(m) = free_locals(m) ∪ A(m)` であり、`free_locals(m)` は
     `{scrut} ∪ (∪_i U_i) ∪ (free_locals(cont) \ {x})`、`M = live_cont \ {x}` は
     `(free_locals(cont) ∪ A(m)) \ {x}` なので `Λ(m) = {scrut} ∪ (∪_i U_i) ∪ M = {scrut} ∪ H`。
@@ -2804,7 +2830,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   スロットの `μ` は非負であり、各計数下の別名類 `C` について `held_ρ(・, C) ≥ 0` である。
 
 **(d) は (a) の粒度の外に在る。** (a) が言うのは節点の入口についてだけであり、A19 (ii-a) が量化する
-のもその点集合である (第 1 節)。節点の実行の途中で非負性を要る読み手のために置くのが (d) であり、
+のもその点集合である (第 1 節)。A19 の (ii-c) -- 節点の実行の途中の各点 (D24 の段内の点) での
+非負性 -- を果たすために置くのが (d) であり、
 その中身は遷移については `L17` (c) そのもの、残る 2 か所については `L18` から出る。
 
 **証明**
