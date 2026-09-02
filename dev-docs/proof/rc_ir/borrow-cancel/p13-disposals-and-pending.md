@@ -3015,12 +3015,13 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
   グローバル初期化子について `VarTable::body_only(&g.init)` を `vars` に置いた `RewriteCtx` で
   `ctx.rewrite(&g.init)` とする。どの場合も `ctx` が読む本体は書き換え前の本体、すなわち `Pre(V)` で
   あり、`RewriteCtx::new` は `vars` に `VarTable::of(func)` を置く。A15 より `rewrite` は
-  `rewrite_inner` を本体としてちょうど 1 回呼ぶ。`rewrite_inner` の 7 つの腕を読む。`RcExpr::Retain` と
+  `rewrite_inner` を本体としてちょうど 1 回呼ぶ。`rewrite_inner` の 8 つの腕 -- `RcExpr` の 6 種のうち
+  `Let` が右辺の `App`、`Match`、それ以外の 3 つに分かれる -- を読む。`RcExpr::Retain` と
   `RcExpr::Release` の腕は `rewrite_rc` へ行く。`RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕は
   `callee` を `route` の結果に差し替え、`call_rc` が返す `before` と `after` の節点を前後に置き、
-  `x` と `args` はそのまま複製する。残る腕 -- `Let` の `Match` とそれ以外、`Destructure`、`Eval`、
-  `Ret` -- は、束縛変数・右辺・容器・フィールド・scrutinee・返す変数をそのまま複製し、継続とアーム本体を
-  書き換えた木で組み直す。`levelled_sites` の呼び出しは 2 か所である -- `infer_ownership` が
+  `x` と `args` はそのまま複製する。残る 5 つの腕 -- `Let` の `Match` とそれ以外、`Destructure`、
+  `Eval`、`Ret` -- は、束縛変数・右辺・容器・フィールド・scrutinee・返す変数をそのまま複製し、継続と
+  アーム本体を書き換えた木で組み直す。`levelled_sites` の呼び出しは 2 か所である -- `infer_ownership` が
   `prog.funcs` の各関数について呼ぶもの (入力の本体) と、`check_ownership_is_levelled` が `clone` に
   ついて呼ぶもの (借用版の書き換え前の本体) である。
 
