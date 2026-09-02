@@ -2121,7 +2121,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    `(u, sig)` で決まる。すなわち、`vars.origins` の状態がどうであれ、同じ `(u, sig)` についての
    2 回の呼び出しは等しい値を返す。
   <2>1. `origin` の実行は、`vars.bindings` と `vars.var_tys` について次の 3 つを満たす。
-     - (a) 2 つの `Map` の鍵の集合も、各鍵が持つ `Binding` と `Arc<TypeNode>` の在りかも、動かない。
+     - (a) 2 つの `Map` の鍵の集合は変わらず、各鍵が対応づける `Binding` と `Arc<TypeNode>` も
+       別の値に置き替えられない。
      - (b) `origin_inner` がこの 2 つから**値として**読むもの -- `Binding` の変位、`Binding` が
        持つ各 `RcVar` の `name` と `ty`、`Binding::Llvm` の `result_ty`、`var_tys` が持つ
        `Arc<TypeNode>` -- は、表を作り終えたのちは変わらない。
@@ -2191,7 +2192,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding,
          CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
     <3>4. QED
-      (a) は `<3>1`、`<3>2`、`<3>3` の第 1 段落、(b) は `<3>3`、(c) は `<3>3a` である。
+      (a) は `<3>1` と `<3>2`、および `<3>3` の第 1 段落 --「`origin` は `&VarTable` を取るので、
+      `bindings` と `var_tys` の `Map` そのものを置き替えることも、その要素を可変に借りることも
+      できない」-- である。(b) は `<3>3`、(c) は `<3>3a` である。
       BY <3>1, <3>2, <3>3, <3>3a
   <2>1a. `origin_from_leaves_under(vars, E, decl, args, path, here)` の返り値は、`decl`、`args`、
      `path`、`here`、`E`、および自分が行う `origin` の呼び出しの返り値だけで決まる。とくに
