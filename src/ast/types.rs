@@ -491,7 +491,7 @@ impl TyAliasInfo {
 pub const MAX_TYPE_DEPTH: usize = 500;
 
 /// A node of a type expression, together with the information the compiler carries alongside it.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Serialize, Deserialize)]
 pub struct TypeNode {
     /// The type expression, which is what equality and hashing of a node read.
@@ -540,6 +540,7 @@ impl TypeNode {
     /// the node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing
     /// a type that shares a subterm many times costs one visit per node rather than one per
     /// occurrence.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn type_hash(&self) -> u64 {
         *self.hash_cache.get_or_init(|| {
             let mut hasher = DefaultHasher::new();
@@ -549,6 +550,7 @@ impl TypeNode {
     }
 }
 
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for TypeNode {
     /// Writes `type_hash`, so that two nodes `PartialEq` calls equal hash alike.
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -1055,6 +1057,7 @@ impl TypeNode {
     /// the tree it unfolds to, which doubles at every level of a type like `P (a, a)`. A node the
     /// walk leaves alone is answered with itself, so the graph the answer is stands as shared as the
     /// one that was walked.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unwrap_newtypes_memoized(
         self: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -1112,7 +1115,7 @@ impl TypeNode {
     /// applied to arguments and substituting for one leaves every application spine as it stands;
     /// the field types a declaration is stored with are unwrapped once, by the pass that unwraps
     /// newtypes.
-    // PROOF: D/A, P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn instance_field_types(
         &self,
         tycon_info: &TyConInfo,
@@ -1440,7 +1443,7 @@ impl TypeNode {
 
     /// Whether the top-level type constructor of this type is a struct.
     /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
-    // PROOF: D/A, P5, P6, P7, P7a, P7d, P7e, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7d, P7e, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1452,7 +1455,7 @@ impl TypeNode {
     /// Whether the top-level type constructor of this type is a union, so that a value of it
     /// carries one of the declared fields and a tag saying which.
     /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
-    // PROOF: D/A, P1, P2, P5, P6, P7, P7a, P7d, P7e, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_union(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {

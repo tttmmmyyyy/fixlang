@@ -227,7 +227,7 @@ fn owns_object_yet(
 ///
 /// A path reaches a leaf from either side. A unit path stops above the leaves of an unboxed union's
 /// variants, and a path into a variant runs below the leaf a punched array holds.
-// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
 fn covered_leaves(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Vec<FieldPath> {
     boxed_leaf_paths(ty, type_env)
         .into_iter()
