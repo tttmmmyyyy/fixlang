@@ -431,12 +431,13 @@ enum については元と同じ変位で、その変位が保持する各値を
     届かない --- 自分で作った `VarTable` の値は `vars` ではない --- ので、その中の呼び出しの引数に
     `vars` は現れない。
     BY <2>1, <2>2, <2>3, EXT 呼び出しの入れ子
-<1>1. `origin(vars, type_env, x, π)` の本文は 3 つの文である。`key` を `(x.clone(), π.to_vec())` として、
+<1>1. `origin(vars, type_env, x, π)` の本文は 4 つの文と末尾式である。
+      `let key = (x.clone(), π.to_vec());`、
       `if let Some(known) = vars.origins.borrow().get(&key) { return known.clone(); }`、
       `let answer = grow_stack(|| origin_inner(vars, type_env, x, π));`、
-      `vars.origins.borrow_mut().insert(key, answer.clone()); answer` である。第 1 の文で返る呼び出しを
-      **当たり**、第 1 の文で返らずに第 2 の文へ進む呼び出しを**外れ**と呼ぶ。この 2 つは呼び出しを
-      尽くす。当たりの呼び出しは `vars.origins` の鍵 `key` の値の
+      `vars.origins.borrow_mut().insert(key, answer.clone());`、そして末尾式 `answer` である。
+      第 2 の文で返る呼び出しを**当たり**、第 2 の文で返らずに第 3 の文へ進む呼び出しを**外れ**と呼ぶ。
+      この 2 つは呼び出しを尽くす。当たりの呼び出しは `vars.origins` の鍵 `key` の値の
       複製を返し、`origin` も `origin_inner` も呼ばない。外れの呼び出しは A15 より `origin_inner` を
       ちょうど 1 回呼び、その値を鍵 `key` に `insert` してから返す。`key` は `(x.clone(), π.to_vec())`
       であり、`insert` に渡るのは `answer.clone()` で、当たりが返すのは `known.clone()` である。
@@ -613,7 +614,7 @@ enum については元と同じ変位で、その変位が保持する各値を
         <2>3 より `d_1` は外れなので、`d_1` が始まる時点で `vars.origins` は `k_1` を持たない。<1>2 より
         鍵 `k_1` が入るのは鍵 `k_1` の外れの呼び出しが `insert` を実行するときだけなので、そのような
         呼び出し `f` の `insert` が `d_1` の始まりと `b_1` の始まりの間にある。<1>1 より `insert` は `f` が
-        返る直前の文なので、`f` は `d_1` の実行区間の中で返る。EXT 呼び出しの入れ子 より `f` と `d_1` の
+        末尾式の直前の文なので、`f` は `d_1` の実行区間の中で返る。EXT 呼び出しの入れ子 より `f` と `d_1` の
         実行区間は交わらないか一方が他方に含まれるかであり、交わるので後者である。`d_1` が `f` に含まれる
         なら `f` は `d_1` より後に返るが、`f` は `d_1` の実行区間の中で返るのでそれは無い。よって `f` は
         `d_1` に含まれ、`b_1` が始まる時点で `d_1` はまだ返っていないので `f ≠ d_1`、すなわち `f` は
