@@ -2040,8 +2040,9 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
 - **`+1` は 1 回だけ立つ。** A19 (i) の右辺は、各類の `d(C)` の総和と、借用終端の類が在るときの `+1` で
   ある。`bumps` が正である類 `C0` が借用終端でなければ (ii-b) の `+1` が、借用終端であれば (i) の
   角括弧の `+1` が立つ。7.5.4 の `<1>6` と `<1>7` がその 2 つの場合である。
-- `A19` の (ii-a) と (ii-b) を果たす者は `insert_rc` と `borrow_ify` である。**この文書が示すのは
-  `borrow_ify` の側だけである。** 7.5.5 の `L16` がそれを示す -- `rewrite_rc` が借用版で落とす `Retain` は、
+- `A19` の (ii-a) と (ii-b) は、`insert_rc` の出力で成り立ち、`split_rc_units` と `borrow_ify` が
+  それを保つ形で果たされる (README の A19)。**この文書が示すのは `borrow_ify` の側だけである。**
+  7.5.5 の `L16` がそれを示す -- `rewrite_rc` が借用版で落とす `Retain` は、
   その leaf を消費する構文が残っている限り落ちない (P8 と P7a)。落ちる場合には `call_rc` が消費の直前に
   同じ `Retain` を置く。`insert_rc` の側は `p60-insert-rc.md` が示す (README の A19)。
 
@@ -3472,11 +3473,14 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
 他の 6 種の位置を `owns_unit` 真にするので)。そこでは `call_rc` が消費の直前に同じ `Retain(p, u)` を
 置くので (L16 の (B))、`Retain` の直後に消費が来て `held_ρ(·, C)` はこの節点をまたいで変わらない。
 
-**この補題は A19 (ii-b) を果たさない。** 果たすのは「`borrow_ify` が `insert_rc` の出した `Retain` を
+**この補題は A19 (ii-b) を果たさない。** 果たすのは「`borrow_ify` は `insert_rc` の出した `Retain` を
 消費から引き離さない」ことだけである。(C) の場合 -- 消費の実行路の上に `Retain` 節点が無い場合 -- は
-`insert_rc` の側の義務であり、README の A19 がそれを `p60-insert-rc.md` に帰す。A19 は果たす者を 2 人
-挙げ、「**果たす者の 2 人のうち、`borrow_ify` の側は示されている** (`p13-disposals-and-pending.md` の
-`L16`)」「**`insert_rc` の側も示されている** (`p60-insert-rc.md`)」と、2 人を別に数えている。
+`insert_rc` の側の義務であり、README の A19 がそれを `p60-insert-rc.md` に帰す。A19 は
+「**`borrow_ify` の側について示されているのは、「`borrow_ify` は `insert_rc` の出した `Retain` を消費から
+引き離さない」ことである** (`p13-disposals-and-pending.md` の `L16`)」と、この補題が示す形へ狭めたうえ
+で、「**消費の実行路の上に `Retain` 節点が無い場合は `borrow_ify` の側の問題ではなく、`insert_rc` の側の
+義務である** -- `L16` は自分がその場合を扱わないことを自分の末尾に書いている」と続け、
+「**`insert_rc` の側も示されている** (`p60-insert-rc.md`)」と 2 人を別に数えている。
 
 #### 7.5.7 反例 `C1` (A19 (ii-b) が A1・A2・D12 から出ないことを示す)
 
