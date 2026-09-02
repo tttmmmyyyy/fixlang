@@ -519,7 +519,7 @@ pub struct Scope<'c> {
 
 impl<'c> Scope<'c> {
     /// Bind `var` to `obj`, shadowing whatever the name is bound to until the binding is popped.
-    // PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn push_local(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         // TODO: add assertion that var is local (or change var to Name).
         self.data.entry(var.clone()).or_default().push(ScopedValue {
@@ -920,6 +920,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// * `imported` — the names whose home is another unit and which this module holds a copy of
     ///   for its own calls.
     /// * `shared_globals` — the globals a unit other than the one owning them reads.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(
         ctx: &'c Context,
         module: &'m Module<'c>,
@@ -1923,7 +1924,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// object is passed as its parts rather than as one aggregate (see `lambda_function_type`), so
     /// no aggregate is materialized across the call; `build_body` emits the retain / release / mark
     /// work on the object reassembled from those parts inside the helper.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn emit_rc_helper_call(
         &mut self,
         obj: Object<'c>,
@@ -3204,6 +3205,7 @@ pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
 /// The name of the LLVM function through which the global `name`, of a type other than funptr, is
 /// obtained. It is the name every module — the one defining the global and the ones calling into
 /// it — declares and looks the accessor up under.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn global_accessor_name(name: &FullName) -> String {
     format!("Get#{}", object_file_symbol_name(name))
 }

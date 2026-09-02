@@ -5936,7 +5936,7 @@ pub fn struct_act_const(
 
 /// Force a struct or union object to be unique: an unboxed or unique object is returned as it is,
 /// and a shared boxed one is cloned.
-// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn make_struct_union_unique<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     mut obj: Object<'c>,
@@ -7645,6 +7645,7 @@ pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
@@ -7756,6 +7757,7 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
@@ -8183,7 +8185,7 @@ fn force_unique_or_assert<'c, 'm>(
 
 /// `force_unique_or_assert`, where `Some(hole)` makes a clone of the array `val` leave the element
 /// at that index uninitialized for the caller to fill.
-// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn force_unique_or_assert_with_hole<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,

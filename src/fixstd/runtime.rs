@@ -84,6 +84,7 @@ pub fn compiler_defined_c_function_reason(name: &str, output: OutputFileType) ->
 
 /// Emits the runtime support functions into the module: their declarations when
 /// `mode` is `Declare`, the bodies of the ones implemented here when it is `Implement`.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
     declare_noreturn_runtime_function(gc, mode, RUNTIME_ABORT, &[]);

@@ -100,6 +100,7 @@ impl NameSpace {
     ///
     /// # Examples
     /// `NameSpace::from_strs(&["Std", "Iterator"]).to_string()` is `"Std::Iterator"`.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn to_string(&self) -> String {
         self.names.join(NAMESPACE_SEPARATOR)
     }
@@ -169,6 +170,7 @@ impl NameSpace {
 
     /// The module the path lies in, which is the first of its names. The path must hold at least
     /// one name.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn module(&self) -> Name {
         self.names[0].clone()
     }
@@ -299,7 +301,7 @@ impl FullName {
     }
 
     /// Whether the name is written with no namespace, as a local variable's is.
-    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         return self.namespace.is_local();
     }
@@ -348,6 +350,7 @@ impl FullName {
     /// # Examples
     /// `FullName::from_strs(&["Std", "Iterator"], "empty").to_string()` is
     /// `"Std::Iterator::empty"`.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn to_string(&self) -> String {
         let ns = self.namespace.to_string();
         if ns.is_empty() {
@@ -364,6 +367,7 @@ impl FullName {
     }
 
     /// The whole name read as a path, with the entity's name as its last name.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn to_namespace(&self) -> NameSpace {
         let mut names = self.namespace.names.clone();
         names.push(self.name.clone());
