@@ -1736,16 +1736,17 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         `type_fun(arg_ty, body_ty)` と `unify_or_tolerated_mismatch` で単一化する
         (`CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner`,
         `TypeCheckContext::unify_or_tolerated_mismatch`)。`type_fun` が組む型の toplevel の tycon は
-        `make_arrow_tycon` の
-        もの、`type_funptr` が組む型の toplevel の tycon は `make_funptr_tycon` のものであって相異なるので
-        (`CODE src/ast/types.rs: type_fun, type_funptr`, `CODE src/fixstd/builtin.rs: make_arrow_tycon,
-        make_funptr_tycon`)、期待型が funptr 型であればこの単一化は失敗する。`error_tolerant` が真のとき
-        `unify_or_tolerated_mismatch` はその失敗を飲むが、`error_tolerant` を真にするのは
-        `diagnostics` サブコマンドだけであり (`CODE src/ast/program.rs: Program::create_typechecker`)、
-        そのサブコマンドは `build_object_files` を呼ばない (`CODE src/commands/check.rs: check`,
+        `make_arrow_tycon` のもの、`type_funptr` が組む型の toplevel の tycon は `make_funptr_tycon` の
+        ものであって相異なるので (`CODE src/ast/types.rs: type_fun, type_funptr`,
+        `CODE src/fixstd/builtin.rs: make_arrow_tycon, make_funptr_tycon`)、期待型が funptr 型であれば
+        この単一化は失敗する。`error_tolerant` が真のとき `unify_or_tolerated_mismatch` はその失敗を飲むが、
+        `error_tolerant` が真になるのは `diagnostics` サブコマンドがそれを求めるときだけであり
+        (`CODE src/ast/program.rs: Program::create_typechecker`)、そのサブコマンドは
+        `build_object_files` を呼ばない (`CODE src/commands/check.rs: check`,
         `CODE src/build/build.rs: build`)。よって RC IR のパスが走る経路では、期待型が funptr 型の
-        `Expr::Lam` を持つプログラムは型検査が `Err` で止め、その本体の活性化は存在しない
-        (README の「仮定」の節の「「果たす者」と「検査」の読み方」が挙げる 3 段の 2 段目)。
+        `Expr::Lam` を持つプログラムは型検査が `Err` を返して二値にならず、その本体の活性化は存在しない
+        (README の「「果たす者」と「検査」の読み方」が挙げる 3 段の 2 段目 -- 「**検査して診断を出す。**
+        破れた入力は利用者へのエラーになる」)。
         **この段は A23 を引かない** -- A23 が残していた点をこの段が閉じるからである。`uncurry` の中で
         funptr 型が式に付く
         位置は 3 つに尽きる -- `funptr_lambda` が `expr_abs(args, body, None).set_type(funptr_ty)` を
