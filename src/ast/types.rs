@@ -491,7 +491,7 @@ impl TyAliasInfo {
 pub const MAX_TYPE_DEPTH: usize = 500;
 
 /// A node of a type expression, together with the information the compiler carries alongside it.
-// PROOF: D/A, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Serialize, Deserialize)]
 pub struct TypeNode {
     /// The type expression, which is what equality and hashing of a node read.
@@ -525,6 +525,7 @@ pub struct TypeNode {
     depth_cache: OnceLock<usize>,
 }
 
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for TypeNode {
     /// Compares the type expressions; the source information a node carries stays out of the
     /// comparison.
@@ -540,7 +541,7 @@ impl TypeNode {
     /// the node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing
     /// a type that shares a subterm many times costs one visit per node rather than one per
     /// occurrence.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn type_hash(&self) -> u64 {
         *self.hash_cache.get_or_init(|| {
             let mut hasher = DefaultHasher::new();
@@ -550,7 +551,7 @@ impl TypeNode {
     }
 }
 
-// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for TypeNode {
     /// Writes `type_hash`, so that two nodes `PartialEq` calls equal hash alike.
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -1057,7 +1058,7 @@ impl TypeNode {
     /// the tree it unfolds to, which doubles at every level of a type like `P (a, a)`. A node the
     /// walk leaves alone is answered with itself, so the graph the answer is stands as shared as the
     /// one that was walked.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unwrap_newtypes_memoized(
         self: &Arc<TypeNode>,
         type_env: &TypeEnv,

@@ -1899,7 +1899,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 <1>29a. 1 つの表 `vars` と型環境 `E` を固定する。`origin(vars, E, u, sig)` が値を返すとき、その値は
    `(u, sig)` で決まる。すなわち、`vars.origins` の状態がどうであれ、同じ `(u, sig)` についての
    2 回の呼び出しは等しい値を返す。
-  <2>1. `vars.bindings` と `vars.var_tys` は、表を作り終えたのちは変わらない。
+  <2>1. `vars.bindings` と `vars.var_tys` は、表を作り終えたのちは**値として**変わらない。
+     以下の段が数え上げるのは、この 2 つの `Map` に対する書き込みと、そこから届く内部可変性の欄で
+     ある。値としての等しさで述べるのは、`<2>2` がこの 2 つから `origin_inner` の返り値が決まると
+     読むところが、値の水準の読みだからである。
     <3>1. `bindings` は `VarTable` の非公開フィールドなので、それに書けるのは
        `src/rc_ir/ownership.rs` の中だけである。同ファイルで `bindings` に書くのは、
        `VarTable::empty` の初期化と、`VarTable::of` の 1 か所と、`collect_bindings` の 3 か所で
@@ -1917,8 +1920,33 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
       BY CODE src/rc_ir/ownership.rs: VarTable (`var_tys` の宣言),
          CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
          CODE src/rc_ir/ownership.rs: collect_bindings
-    <3>3. `origin` は `&VarTable` を取るので、内部可変性を持つ `origins` 以外を書き換えられない。
-      BY CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: VarTable
+    <3>3. `origin` は `&VarTable` を取るので、`bindings` と `var_tys` の `Map` そのものを置き替える
+       ことも、その要素を可変に借りることもできない。共有参照から届くのは内部可変性を持つ欄だけで
+       あり、`origins` の `RefCell` がその 1 つである。
+
+       **`bindings` と `var_tys` が持つ `Arc<TypeNode>` も内部可変性に届く。**`TypeNode` は
+       `hash_cache`・`ground_cache`・`depth_cache` という `OnceLock` の欄を 3 つ持ち、
+       `impl Hash for TypeNode` は `type_hash` を呼んで `hash_cache.get_or_init` を実行する。
+       **`origin` の歩みはその道を実際に通る** -- `origin_inner` の `Llvm` の腕が呼ぶ
+       `truncate_to_unit` は `unit_step` を経て `unpunched_field_types` を呼び、それが呼ぶ
+       `instance_field_types` は、その宣言が kind `*` でない型変数を持つとき各フィールドの型に
+       `unwrap_newtypes_memoized` を当てる。`unwrap_newtypes_memoized` は
+       `Map<Arc<TypeNode>, Arc<TypeNode>>` を `Arc<TypeNode>` の鍵で引き、`Map` は `FxHashMap` なので
+       その鍵をハッシュする。すなわち共有参照から `hash_cache` が書かれる。
+
+       **A3 の値の等しさの節がこれを片付ける** -- 「`RcProgram` から到達できる値の等しさは、それを
+       共有参照で受け取る計算が変えない。到達できる型が内部可変性を持つ欄を持つときは、その欄は
+       一度だけ書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である」。
+       `impl PartialEq for TypeNode` が読むのは `ty` だけであり、3 つの memo の値はどれも `ty` の
+       関数である。よってその欄が埋まっても、`bindings` と `var_tys` は値として変わらない。
+      BY A3 (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない),
+         CODE src/rc_ir/ownership.rs: origin, VarTable, origin_inner, truncate_to_unit, unit_step,
+         CODE src/ast/types.rs: TypeNode (`hash_cache` / `ground_cache` / `depth_cache` の宣言と
+            `PartialEq` の実装), TypeNode::type_hash, TypeNode::unpunched_field_types,
+            TypeNode::instance_field_types, TypeNode::unwrap_newtypes_memoized,
+         CODE src/ast/types.rs: impl Hash for TypeNode,
+         CODE src/ast/types.rs: impl PartialEq for TypeNode,
+         CODE src/misc.rs: Map
     <3>4. QED
       BY <3>1, <3>2, <3>3
   <2>1a. `origin_from_leaves_under(vars, E, decl, args, path, here)` の返り値は、`decl`、`args`、
