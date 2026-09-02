@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 /// A variable of the RC IR. Because a fresh name is minted at every binding, a name resolves its
 /// binding uniquely, without scope tracking.
-// PROOF: P1, P2, P2a, P7c, P7f, P15, P16, P17, P18, P18a, P18b, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcVar {
     /// The name this variable is bound under, unique across the program.

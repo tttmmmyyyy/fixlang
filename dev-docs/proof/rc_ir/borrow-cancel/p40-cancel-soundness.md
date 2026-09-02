@@ -500,14 +500,25 @@ D9 の消費の表の行が指す節点を**消費点**と呼び、その行が�
       1 つの `TypeEnv` の値への共有参照であり、走査はその欄を差し替えない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: cancel,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+     CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: origin,
+     CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
+     CODE src/rc_ir/ownership.rs: collect_bindings, A3, P2a,
      EXT 可視性と私有性, EXT モジュールは `mod` が導入する, EXT 共有参照は代入を許さない
   `CancelAnalysis` とその欄はどれも `pub` を持たないので、EXT 可視性と私有性 よりそれを名指せるのは
   `borrow.rs` のモジュールとその子孫だけであり、`borrow.rs` は `mod` の項目を 1 つも持たないので
   EXT モジュールは `mod` が導入する より子孫のモジュールを持たない。すなわち欄への書き込みは
   `borrow.rs` の中にしか書けない。`borrow.rs` で `CancelAnalysis` の値を作るのは `cancel` の中の
   `cancel_body` の 1 か所だけであり、`impl CancelAnalysis` の関数のどれも `self.vars` と
-  `self.type_env` へ代入しない。欄の型は共有参照なので、その先の `VarTable` と `TypeEnv` の値へ代入
-  することもできない (EXT 共有参照は代入を許さない)。
+  `self.type_env` へ代入しない。**欄の型は共有参照なので、その先の値の欄へ代入することもできない**
+  (EXT 共有参照は代入を許さない)。**その例外は内部可変性であり、`VarTable` はそれを 1 つ持つ** --
+  `origins` の `RefCell` である (`CODE src/rc_ir/ownership.rs: VarTable`)。`origin` は共有参照から
+  `vars.origins.borrow_mut().insert(key, answer.clone())` を実行する
+  (`CODE src/rc_ir/ownership.rs: origin`)。この欄が動いても `origin` の答えが動かないことは P2a が言う。
+  `origin` が `vars` から読む残りの欄 `bindings` は、`VarTable::of` と
+  `VarTable::body_only` が `collect_bindings` で作った後 書き込まれない -- `VarTable` を `&mut` で
+  受け取るのはこの 3 つと `collect_bindings` だけである。`type_env` から到達する `TypeNode` の
+  `OnceLock` の欄については A3 が「到達できる型が内部可変性を持つ欄を持つときは、その欄は**一度だけ
+  書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である**」と述べる。
 <1>3. `self.vars` は、A6 と A11 を満たす本体について `VarTable::of` か `VarTable::body_only` が作った
       表である。
   BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/ownership.rs: VarTable::of,

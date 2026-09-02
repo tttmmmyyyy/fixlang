@@ -900,7 +900,7 @@ impl References {
 
 /// The references an operation on the subtree of `v` that `path` names acts on: the reference each
 /// boxed leaf under `path` holds, named by the object its `origin` identifies.
-// PROOF: D/A, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn acted_references(
     vars: &VarTable,
     type_env: &TypeEnv,
