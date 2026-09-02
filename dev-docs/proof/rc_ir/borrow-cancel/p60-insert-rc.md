@@ -377,11 +377,12 @@ Ret(w)))))
 
 <1>3. `origin(p, []) = Origin::Exactly((p, []))` である。
   BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin_inner,
-     CODE src/rc_ir/ownership.rs: origin_from_leaves_under, A3
+     CODE src/rc_ir/ownership.rs: as_arg_projection,
+     CODE src/rc_ir/ownership.rs: origin_from_leaves_under, A3, 4.1 節の道具立て
   `collect_bindings` は `Let(p, Llvm(alloc, []), ·)` に `Binding::Llvm(alloc, [], Arr)` を入れる。
   `origin_inner` の `Binding::Llvm` の腕は、まず `decl.leaf_origins_at([])` を `as_arg_projection` に
-  掛ける。A3 と 4.1 より宣言は単一の `Fresh` なので `as_arg_projection` は `None` を返す
-  (`CODE src/rc_ir/ownership.rs: as_arg_projection` は `LeafOrigin::Fresh` に `None` を返す)。次に
+  掛ける。A3 と 4.1 節の道具立てより宣言は単一の `Fresh` であり、`as_arg_projection` は
+  `LeafOrigin::Fresh` に `None` を返す。次に
   `origin_from_leaves_under` を呼ぶ。オペランドが無いので `operand_units` は空、`Fresh` により
   `produced_here` が真になり、`reached = [Origin::Exactly((p, []))]` の 1 元である。`reached` の元が
   すべて等しいので、その値がそのまま返る。
@@ -1387,10 +1388,10 @@ Ret(u)))))
   `o` を、`Eval(o)` は `H(O) = 1` の下で `o` を、`App(f, [y])` は `H(O) = 1` の下で `y` を読む。
 
 <1>4. `B_1` は A19 (ii) を満たす。
-  BY <1>1, L4, 第 1 節の読み
-  `B_1` に `Retain` 節点は無いので、走査の `pending` は空のままであり `bumps ≡ 0` である
-  (`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner` -- `pending` に要素を足すのは
-  `RcExpr::Retain` の腕だけである)。`held(C_o)` は 1 の後 `App(id, [o])` の消費で 0、`held(C_y)` は
+  BY <1>1, L4, 第 1 節の読み, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
+  `B_1` に `Retain` 節点は無く、`walk_inner` が `pending` に要素を足すのは `RcExpr::Retain` の腕
+  だけなので、走査の `pending` は空のままであり `bumps ≡ 0` である。
+  `held(C_o)` は 1 の後 `App(id, [o])` の消費で 0、`held(C_y)` は
   生成で 1 の後 `App(f, [y])` の消費で 0 であり、どちらも 0 以上である。`bumps ≥ 1` の時点は無い。
 
 <1>5. `B_1` は由来の形の (b) を破る。
@@ -1403,13 +1404,13 @@ Ret(u)))))
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
      CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
      CODE src/rc_ir/rc_insert.rs: RcInserter::needs_rc, CODE src/ast/name.rs: FullName::is_local,
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
      CODE src/rc_ir/rc_insert.rs: build_retains
   `Let(y, App(id, [o]), cont)` を書き換える呼び出しの `live_cont` は `o` を含む -- `insert_into_eval` は
   返す `live_before` に `o` を入れる。`o` は局所名であり (`is_local` は名前空間が空かを答え、4.1 節の
   名前の取り方より `o` の名前は名前空間を持たない)、`rhs_operands(App(id, [o]))` は `o` に
-  `Ownership::Own` を与え、
-  `needs_rc(o)` は真である (`is_fully_unboxed` は `if self.is_box(type_env) { return false; }` で
-  始まるので boxed な `ty(o) = Arr` では偽である、`CODE src/ast/types.rs: TypeNode::is_fully_unboxed`)。
+  `Ownership::Own` を与え、`needs_rc(o)` は真である -- `is_fully_unboxed` は
+  `if self.is_box(type_env) { return false; }` で始まるので boxed な `ty(o) = Arr` では偽である。
   よって
   `retains_before` に `o` が入り、`build_retains` が `Retain(o, [])` をこの `Let` の直前に置く。
   `B_1` はその節点を持たない。
@@ -2821,10 +2822,10 @@ D6 のスロット -- が要る)。よって時点ごとの量は、その時点
 
 <1>1. スロット `s` について、`Bmp(id') ≥ 1` である名前 `id'` は、ある pending の要素の `outstanding`
       が名指す。
-  BY P18b
+  BY P18b, D15, CODE src/rc_ir/ownership.rs: References
   P18b より各要素の `outstanding` は `B(p, ρ)` を `covers` するので、`B(p, ρ)[id'] ≥ 1` ならば
-  `outstanding[id'] ≥ 1`、すなわち `outstanding.names(id')` が真である
-  (`CODE src/rc_ir/ownership.rs: References`)。
+  `outstanding[id'] ≥ 1` である。D15 より `References` は `VarPath` から個数への写像であり、
+  `names(o)` は `o` を含むかを答えるので、`outstanding.names(id')` が真である。
 
 <1>2. `consume_objects(pending, objects)` は、`outstanding` が `objects` のいずれかを名指す要素を
       すべて `pending` から取り除く。
