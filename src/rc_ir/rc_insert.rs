@@ -176,7 +176,7 @@ impl<'a> RcInserter<'a> {
     /// An `eval x; cont`. `Eval` observes `x` without consuming it (a borrow), so — like a borrowed
     /// operand at its last use — `x` is released after the eval iff it is a local that needs reference
     /// counting and is dead in the continuation.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_eval(
         &self,
         x: RcVar,
@@ -200,7 +200,7 @@ impl<'a> RcInserter<'a> {
     }
 
     /// A `let x = rhs; cont` whose `rhs` is not a `Match` (the `Match` case is `insert_into_match`).
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_operation_let(
         &self,
         x: RcVar,
@@ -306,7 +306,7 @@ impl<'a> RcInserter<'a> {
     }
 
     /// A `let x = match scrut { arms }; cont`.
-    // PROOF: D/A, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_match(
         &self,
         x: RcVar,
@@ -435,7 +435,7 @@ impl<'a> RcInserter<'a> {
     /// Wrap `node` in a `Retain` of `var` iff `var` is a local that needs reference counting and is
     /// live in `live` — the owned-operand rule for a variable a consuming construct (a `Ret`, a
     /// `Destructure`, or a `Match` scrutinee) uses, when it is still live afterward.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn retain_if_live(&self, var: &RcVar, live: &Set<FullName>, node: RcExprNode) -> RcExprNode {
         if var.name.is_local() && live.contains(&var.name) && self.needs_rc(var) {
             build_retains(vec![var.clone()], node)
