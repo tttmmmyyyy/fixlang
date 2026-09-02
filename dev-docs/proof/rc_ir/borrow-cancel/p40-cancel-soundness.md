@@ -2675,11 +2675,18 @@ P21 (b) ではなく、点の粒度の `L44` の (e) である。**
       BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
     <3>6. QED
       BY <3>1, <3>2, <3>3, <3>4, <3>5, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
-         CODE src/rc_ir/borrow.rs: expr_node, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
+         CODE src/rc_ir/borrow.rs: expr_node, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+         CODE src/rc_ir/borrow.rs: prepend_rc, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, D11, D12
       `RcExpr` の 6 変位のうち `Let` を右辺で 3 つに分けた 8 つの場合を <3>1 から <3>5 が尽くす。これは
-      `rewrite_inner` の `match` の 8 つの腕である。どの腕も `expr_node` で節点を作って `&node.source` を
-      据え、継続には `self.rewrite` の値を置くので、節点の並びは元の並びである。節点を足すのは <3>1 と
-      <3>4 だけであり、足す節点はいずれも `Retain` か `Release` である。節点を落とすのは <3>4 の借用版
+      `rewrite_inner` の `match` の 8 つの腕である。どの腕も、入力の節点に対応する節点を `expr_node` で
+      作って `&node.source` を据え、継続には `self.rewrite` の値を置くので、節点の並びは元の並びである
+      (`<3>4` の借用版が `rewrite_rc` で作る unit ごとの節点も、その節点の `source` を据える)。節点を
+      足すのは <3>1 と <3>4 だけであり、足す節点はいずれも `Retain` か `Release` である。**`<3>1` の
+      `prepend_rc` が足す節点の `source` は `None` である** (`CODE src/rc_ir/borrow.rs: prepend_rc` --
+      `rc_node(is_release, var, path, RcState::Unknown, cont, &None)`)。P24 の第 5 の箇条が数えるのは
+      節点の種類・その順序・`Let` の束縛変数・`Match` のアームの構成・`Llvm` の op とオペランド・
+      `Destructure` のフィールドであって `source` ではなく、D11 と D12 も `RcExprNode` の `source` を
+      読まないので、この違いは言明に触れない。節点を落とすのは <3>4 の借用版
       だけであり、落とす節点は `Retain` か `Release` である。ほかのどの腕も、式の変位と、`Let` の束縛
       変数、`Match` のアームの構成、`Llvm` の op とオペランド、`Destructure` のフィールドを `clone()` で
       運ぶ。
