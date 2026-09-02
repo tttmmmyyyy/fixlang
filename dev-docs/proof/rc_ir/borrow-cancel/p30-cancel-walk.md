@@ -150,14 +150,41 @@ EXT アロケータの契約 より、同時に生存している相異なる 2 
 - **型と `Provenance` の上の関数** --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
   `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
   `Origin::identity`、`Origin::candidates`。この 8 つは型・path・`Provenance`・`Origin` の値だけを引数に
-  取り、`VarTable` も走査の状態も引数に取らない。根拠は、その本文が引数から到達できる値だけを読み、
-  可変な静的変数にも内部可変性を持つ値にも触れないことである
-  (`CODE src/ast/types.rs: TypeNode::is_box`,
+  取り、`VarTable` も走査の状態も引数に取らない。根拠は 2 つに分かれる。
+
+  **6 つは内部可変性を持つ値に触れない。** `TypeNode::is_box`、`Provenance::leaf_origins_at`、
+  `Provenance::leaf_origins_under`、`as_arg_projection`、`Origin::identity`、`Origin::candidates` が
+  それであり、その本文は引数から到達できる値だけを読み、可変な静的変数にも触れない。`is_box` は
+  `is_unbox` を経て `toplevel_tycon_info` の `type_env.tycons().get(&tycon)` に落ちるが、その鍵の型
+  `TyCon` は `FullName` の欄を 1 つ持つだけで `Hash` を derive しており、内部可変性を持たない。残る 4 つは
+  引数の `Provenance`・`Set<LeafOrigin>`・`Origin` を読むだけである
+  (`CODE src/ast/types.rs: TypeNode::is_box`, `CODE src/ast/types.rs: TypeNode::is_unbox`,
+  `CODE src/ast/types.rs: TypeNode::toplevel_tycon_info`, `CODE src/ast/types.rs: TyCon`,
   `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at`,
   `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`,
-  `CODE src/rc_ir/ownership.rs: as_arg_projection`, `CODE src/rc_ir/ownership.rs: truncate_to_unit`,
-  `CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`, `CODE src/rc_ir/ownership.rs: Origin::identity`,
+  `CODE src/rc_ir/ownership.rs: as_arg_projection`, `CODE src/rc_ir/ownership.rs: Origin::identity`,
   `CODE src/rc_ir/ownership.rs: Origin::candidates`)。
+
+  **残る 2 つは触れる。** `boxed_leaf_paths` は `is_fully_unboxed` から `unpunched_field_types`、
+  `instance_field_types` を経て `unwrap_newtypes_memoized` に入り、`truncate_to_unit` は `unit_step` から
+  同じ道に入る。その memo の型は `Map<Arc<TypeNode>, Arc<TypeNode>>` であり、鍵を引くたびに
+  `impl Hash for TypeNode` が `TypeNode::type_hash` を呼んで `hash_cache` の `OnceLock` を共有参照から
+  書く。memo 自身は `instance_field_types` の 1 回の呼び出しごとに空から作られるので、呼び出しを跨いで
+  持ち越す状態はこの `OnceLock` の欄だけである
+  (`CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`, `CODE src/ast/types.rs: TypeNode::is_fully_unboxed`,
+  `CODE src/ast/types.rs: TypeNode::unpunched_field_types`,
+  `CODE src/ast/types.rs: TypeNode::instance_field_types`,
+  `CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized`,
+  `CODE src/ast/types.rs: TypeNode::type_hash`, `CODE src/ast/types.rs: TypeNode`,
+  `CODE src/rc_ir/ownership.rs: truncate_to_unit`, `CODE src/rc_ir/ownership.rs: unit_step`)。
+
+  **この 2 つの根拠は A3 である。** A3 は「**`RcProgram` から到達できる値の等しさは、それを共有参照で
+  受け取る計算が変えない。**」と述べ、その欄を「**一度だけ書かれる memo であって、その値はその型の
+  `PartialEq` が読む成分の関数である**」とし、「よってその欄が埋まっても値の等しさは動かず、`Hash` が
+  その memo を通して反映するのもその成分だけである。」と続ける。`Arc<TypeNode>` は `RcProgram` の欄から
+  辿って現れる型なので、この節がその `OnceLock` の 3 つの欄に当たる。よって memo が埋まっても、引数の値の
+  等しさも、memo の鍵の一致も、その鍵のハッシュも動かず、この 2 つの返り値は引数の値で決まる。この文書は
+  この 2 つを使う段の `BY` に A3 を挙げる。
 
 **この 8 つのうち 2 つは、並びではなく集合が決まる。** `Provenance::leaf_origins_under` が渡す要素は
 「順序を定めない」と宣言されているので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は
@@ -605,7 +632,7 @@ enum については元と同じ変位で、その変位が保持する各値を
   で決まる。`Origin::candidates` については引数で決まるのは元の集合だけなので (DEF 引数で決まる関数)、
   `other_objects` について決まるのも、返る `Vec` の元の集合だけである。
   BY <1>1, <1>2, <1>5, CODE src/rc_ir/ownership.rs: acted_references,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数, EXT Clone
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数, A3, EXT Clone
 
 ### P2a (`origin` の答えは memo に依らない)
 
