@@ -1019,20 +1019,45 @@ D24 が `Obl` に触れると述べるのは、(F) の retain と (E4) の 2 つ
         `Binding::Llvm` の第 3 欄に置くのは `Let(x, RcRhs::Llvm(..), k)` の `x.ty` なので
         `result_ty = ty(u)` である。
     BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: collect_bindings, D6
-  <2>2. `leaf_origins_at(σ)` は `Some` を返す。A3 は「`result_prov` は結果の
-        leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する」と述べるので、`decl` が持つ鍵は
-        `boxed_leaf_paths(result_ty)` の各元である。`Provenance::build_shape` はその形の値を作る --
-        `LeafMap::build_shape` が `boxed_leaf_paths(ty, type_env)` の各元を鍵に据える。
-        `leaf_origins_at` はその写像を鍵 `σ` で引くだけであり (`LeafMap::get`)、`σ` は
-        `boxed_leaf_paths(ty(u)) = boxed_leaf_paths(result_ty)` の元である。
-    BY <2>1, A3, CODE src/rc_ir/provenance.rs: Provenance::build_shape,
-       CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape,
-       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+  <2>2. `decl` が持つ鍵は `boxed_leaf_paths(result_ty, type_env)` の各元である。
+    <3>1. `Provenance` の値の鍵の集合は、それを作った `LeafMap::build_shape` に渡した型の
+          `boxed_leaf_paths` である。`LeafMap::build_shape(ty, type_env, leaf)` は
+          `boxed_leaf_paths(ty, type_env)` の各元を鍵に据えた写像を作る。`Provenance::build_shape` は
+          それをそのまま包み、`Provenance::uniform` は `LeafMap::uniform` を経てそれを呼び、
+          `Provenance::uniform_bottom` は `Provenance::build_shape` を呼ぶ。`Provenance::fresh_under` は
+          `uniform` の値に `set_leaves_under` を掛けるが、それは `LeafMap::map_leaves_under` で各鍵の値を
+          写すだけで鍵を増減しない。
+      BY CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape, CODE src/rc_ir/leaf_map.rs: LeafMap::uniform,
+         CODE src/rc_ir/provenance.rs: Provenance::build_shape,
+         CODE src/rc_ir/provenance.rs: Provenance::uniform,
+         CODE src/rc_ir/provenance.rs: Provenance::uniform_bottom,
+         CODE src/rc_ir/provenance.rs: Provenance::fresh_under,
+         CODE src/rc_ir/provenance.rs: Provenance::set_leaves_under,
+         CODE src/rc_ir/leaf_map.rs: LeafMap::map_leaves_under
+    <3>2. `result_prov` の値は、`result_ty` を渡した `<3>1` の 4 つの構成子のいずれかが作る。
+          `LLVMGen::result_prov` の既定の実装は `Provenance::uniform(result_ty, type_env,
+          LeafOrigin::Unknown)` を返す。これを override するのは `src/fixstd/builtin.rs` の 29 個であり
+          (A3 がその個数を述べる)、そのどれもが `Provenance::uniform(result_ty, ・, ・)`、
+          `Provenance::uniform_bottom(result_ty, ・)`、`Provenance::fresh_under(result_ty, ・, ・)`、
+          `Provenance::build_shape(result_ty, ・, ・)`、または同じ 2 つを `result_ty` に掛ける
+          `replaced_field_prov` を返す。**`Provenance::empty()` と `Provenance` の `Default` は
+          `result_prov` の実装に現れない** -- `Provenance::empty()` を呼ぶのは
+          `src/rc_ir/provenance.rs` の単体テストだけであり、`Default` を呼ぶ生産コードは無い。この
+          2 つは鍵を 1 つも持たない値を作るので、この数え上げが要る。
+      BY CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, CODE src/fixstd/builtin.rs: replaced_field_prov,
+         CODE src/rc_ir/provenance.rs: Provenance::empty, CODE src/rc_ir/provenance.rs: Provenance, A3
+    <3>3. QED
+      BY <3>1, <3>2, <2>1
+      `<2>1` より `result_ty = ty(u)` である。
+  <2>2a. `leaf_origins_at(σ)` は `Some` を返す。`leaf_origins_at` は `decl` の写像を鍵 `σ` で引くだけで
+         あり (`LeafMap::get`)、本補題の仮定より `σ` は `boxed_leaf_paths(ty(u))` の元なので、`<2>2` より
+         それは `decl` の鍵である。
+    BY <2>1, <2>2, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
        CODE src/rc_ir/leaf_map.rs: LeafMap::get
   <2>3. `σ` の宣言は、空集合か、`Fresh` ただ 1 つか、`Unknown` ただ 1 つである。A3 より、このコミットの
         すべての op の宣言は結果の各 leaf に元数 0 か 1 の `LeafOrigins` を与える。元数 1 でその元が
         `LeafOrigin::Arg` ならば `as_arg_projection` は `Some` を返し、<2>1 の場合に入らない。
-    BY <2>1, <2>2, A3, CODE src/rc_ir/ownership.rs: as_arg_projection
+    BY <2>1, <2>2a, A3, CODE src/rc_ir/ownership.rs: as_arg_projection
   <2>4. `decl.leaf_origins_under(σ)` が渡す集合は、`σ` 自身の宣言 1 つだけである。`leaves_under(path)` は
         鍵が `path` を前置に持つ元を渡し、`p13` の `L7` より boxed leaf の路は反鎖をなすので、`σ` を
         前置に持つ boxed leaf は `σ` 自身だけである。
