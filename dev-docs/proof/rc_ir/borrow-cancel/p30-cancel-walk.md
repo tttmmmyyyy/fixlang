@@ -455,8 +455,13 @@ enum については元と同じ変位で、その変位が保持する各値を
         `type_env.tycons().get(&tycon)` に落ちるが、その鍵の型 `TyCon` は `FullName` の欄を 1 つ持つだけ
         であり、`FullName` と `NameSpace` の手書きの `Hash` が読むのは `Vec<String>` と `String` だけ
         なので、内部可変性を持たない。残る 5 つは引数の `Provenance`・`Set<LeafOrigin>`・`Origin` を
-        読むだけである。よってこの 6 つの返り値は引数の値で決まる。
-    BY <2>3, CODE src/ast/types.rs: TypeNode::is_box, CODE src/ast/types.rs: TypeNode::is_unbox,
+        読むだけである。よってこの 6 つの返り値は引数の値で決まる。**そのうち 2 つは、並びではなく元の
+        集合が決まる。** `Provenance::leaf_origins_under` の doc は、渡す要素を `in no particular order`
+        と述べるので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は `Join` の変位に
+        ついて `Set` の反復から `Vec` を作り、EXT Map と Set は `Set` の反復の順序を定めないので、
+        引数で決まるのはその元の集合である。
+    BY <2>3, EXT Map と Set, CODE src/ast/types.rs: TypeNode::is_box,
+       CODE src/ast/types.rs: TypeNode::is_unbox,
        CODE src/ast/types.rs: TypeNode::toplevel_tycon_info, CODE src/ast/types.rs: TyCon,
        CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: NameSpace,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
@@ -522,7 +527,8 @@ enum については元と同じ変位で、その変位が保持する各値を
     `Hash` と `PartialEq` で行われ、<2>6 よりその 2 つは値で決まる。`unwrap_newtypes_node` の腕のうち
     `Arc::ptr_eq` を読むのは `Type::TyApp` の腕だけであり、<2>7 よりその読みは返る値を変えない。残る腕が
     読むのは `toplevel_tycon`・`TypeEnv::unwrapped_newtype_info`・`collect_type_arguments`・
-    `declared_field_types` であって、どれも引数の値から決まる。よって
+    `declared_field_types` と、そこから得た `TyConInfo` の欄、および引数を取らない `make_unit_ty` で
+    あって、どれも引数の値から決まる。よって
     `instance_field_types` の返り値の値は、`unwrapped` を空から作るので引数の値で決まり、
     `unpunched_field_types`・`is_fully_unboxed`・`unit_step`・`truncate_to_unit`・`boxed_leaf_paths` の
     返り値もそれぞれの再帰の上の帰納で引数の値から決まる。**`Arc` の同一性を読む場所はこの道に 2 つしか
@@ -1137,7 +1143,8 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
        CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
        CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: held_field_type, DEF 本文
   <2>4. QED
-    <1>0 が挙げる 7 つの本文 --- `expr_node` を呼ぶ 4 つと `RewriteCtx::rewrite` を呼ぶ 3 つ --- は、
+    <1>0 が挙げる本文 --- `expr_node` を呼ぶ 4 つと `RewriteCtx::rewrite` を呼ぶ 3 つ、重複する
+    `rewrite_inner` を 1 つと数えて 6 つ --- は、
     <2>1 の 10 個にも <2>2 の 2 つにも入らず、<2>3 より `units_under` の中では `borrow.rs` の関数が
     1 つも走らない。`borrow.rs` の外で定義された関数の本文は `borrow.rs` の中に無いので、<1>0 より
     `expr_node` も `RewriteCtx::rewrite` も呼べない。よってこの 4 つの呼び出しの中で `expr_node` も
