@@ -1028,12 +1028,13 @@ D24 の活性化の林が挙げる 5 種のうち、(E3) 以外の 4 種には�
         改めてオペランド `x` を渡すので、`apply_lambda` を 2 回呼び、1 回目に渡す値はどのオペランドでも
         ない」), `<3>4a`
       `<4>3.` `fix(f)` の組み立ては (γ) ではない。
-        `<5>1.` `Std::fix` の値は `\f -> \x -> fix_body(b, f, x)` であり、その型は
-          `((a -> b) -> (a -> b)) -> (a -> b)` である。型変数の代入はこの形を保つので、どの実体に
-          おいても `f` の型は `τ -> τ` であり、`τ` は内側の lambda `\x -> fix_body(b, f, x)` の型で
-          ある。この op はその内側の lambda の本体である。よって `f.ty.get_lambda_dst()` すなわち
-          `fixf_ty` は、この op を本体に持つ、持ち上げられた lambda の型である。
-          BY A12 (同じ名前の `RcVar` が持つ型が、その束縛の型と一致すること)
+        `<5>1.` `Std::fix` の値は `\f -> \x -> fix_body(b, f, x)` であり、その scheme の型は
+          `type_fun(type_fun(fixed_ty, fixed_ty), fixed_ty)`、すなわち
+          `((a -> b) -> (a -> b)) -> (a -> b)` である。この op はその内側の lambda の本体なので、
+          `f` はその scheme の `f` であり、その型は `fixed_ty -> fixed_ty` に型変数の代入を施した
+          ものである。よって `fixf_ty = f.ty.get_lambda_dst()` は、`fixed_ty` に同じ代入を施した
+          ものである。
+          BY A12 (「同じ名前の `RcVar` が持つ型が一致すること」)
           `CODE src/fixstd/builtin.rs: fix` (`expr_abs(vec![var_local("f")],
           expr_abs(vec![var_local("x")], fix_body("b", "f", "x"), None), None)` を値とし、
           `fixed_ty = type_fun(a, b)` として
@@ -1042,8 +1043,15 @@ D24 の活性化の林が挙げる 5 種のうち、(E3) 以外の 4 種には�
           `expr_llvm` である)
           `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
           `let fixf_ty = f.ty.get_lambda_dst();` を取る)
-        `<5>2.` `fixf_ty` は closure 型である。
-          BY `<5>1`, A23 (持ち上げた lambda は closure 型である)
+        `<5>2.` `fixf_ty` は closure 型である。`fixed_ty = type_fun(a, b)` の頂の tycon は矢印で
+          あり、型変数の代入は型変数を置き換えるだけで頂の tycon を変えない。`is_closure()` が見るのは
+          頂の tycon が矢印であることだけなので、代入後の `fixed_ty` すなわち `fixf_ty` について
+          `is_closure()` は真である。
+          BY `<5>1`
+          `CODE src/fixstd/builtin.rs: fix` (`let fixed_ty = type_fun(type_tyvar_star("a"),
+          type_tyvar_star("b"));`)
+          `CODE src/ast/types.rs: TypeNode::is_closure`
+          (`self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())`)
         `<5>3.` closure 型の object type は `is_unbox` が真なので、`create_obj` は割り当てを行わず
           undef の集約を返す。
           BY `<5>2`
