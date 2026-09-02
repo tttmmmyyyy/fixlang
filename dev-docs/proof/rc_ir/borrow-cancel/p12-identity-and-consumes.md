@@ -2434,7 +2434,8 @@ L4 は (i) -- `identity` の path が `ty(w)` の boxed leaf であり、`(w, σ
 
 P5 (a) の証明は L4 を通り、L4 は `result_prov` が leaf に置く集合の元数が 0 か 1 であること (A3) に
 載っている。`README.md` の A3 はこの経路を本文に持ち、その節を果たすのは `validate` の `check_rhs` の
-develop mode の検査である。第 4 節の格付けでは、`develop_mode` でだけ走る表明は 3 段のどれよりも弱い。
+develop mode の検査である。`README.md` の「仮定」の節は、その強さについて「`develop_mode` でだけ走る
+表明は 3 段目より弱い」と述べる。
 
 ### A12 の「構造体である」「union である」の読み
 
