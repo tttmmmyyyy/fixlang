@@ -848,13 +848,14 @@ src/rc_ir/borrow.rs: cancel`)、定めるものが無い。`ρ` の上で `n` �
 `p^{(j)}` が存在することは、`L11` の証明の中で示す。
 
 `B_ρ(n, p)` を、P18b と P18a の言明の `B(p, ρ)` として読む。この帰属は README の D27 と同じものである --
-D27 は「`Retain(v, π)` の訪問で `pending` に入るとき … `π` の下の inhabited (D16) かつ計数下 (D26) の各
-leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が `InBracket` で `p` を選ぶ
-`Release(v, π)` の訪問で、その `Release` が `ρ` で実際に処分する参照を、それを持つ leaf の `origin` の
-identity で名付けて数えた多重集合を引く。すなわち、`π` の下の inhabited かつ計数下の各 leaf を
-`origin` の identity で名付けて数えたもの」「アームへの複製と `merge` は `B(p, ρ)` をそのまま運ぶ」
-「`consume_objects` が `p` を取り除いたときは定めるものが無い」と述べており、上の表の 6 行はその 4 つを
-`ρ` の上の節点ごとに並べたものである。
+D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)` は、`π` の下の inhabited (D16) かつ
+計数下 (D26) の各 leaf を `origin` の identity で名付けて数えたものである」「`un_bump` が `InBracket` で
+`p` を選ぶ `Release(v, π)` の訪問で、その `Release` が `ρ` で実際に処分する参照を、それを持つ leaf の
+`origin` の identity で名付けて数えた多重集合を引く。すなわち、`π` の下の inhabited かつ計数下の各 leaf を
+`origin` の identity で名付けて数えたものである」「アームへの複製と、`merge` が `p` を返り値に据えるときは、
+`B(p, ρ)` をそのまま運ぶ」「`consume_objects` が `p` を取り除いたときと、`merge` が `p` を `uniform` に
+入れずに落としたときは、定めるものが無い」と述べており、上の表の 6 行はその 4 つを `ρ` の上の節点ごとに
+並べたものである。
 
 **D27 の 2 つの項はどちらも名前 (`VarPath`) の多重集合である。** 上の表の第 1 行が `ActRefs^inh_ρ(n)` を
 置き、第 2 行がそれを引くのはこの水準であり、D27 も「**引くのも名前の多重集合である** -- 第 1 項が
