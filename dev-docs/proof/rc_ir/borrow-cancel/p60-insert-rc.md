@@ -1767,10 +1767,9 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
 - **D9 の消費**: 消費される inhabited な各 leaf `(v, λ)` について `-1`。
 - **D9 の移動**: 移動元の leaf `(v, λ)` について `-1`、移動先の leaf `(x, λ')` について `+1`。
 
-D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照を作る・移す・手放す構文はすべてである」と
-述べるとおり、活性化が保持する参照を動かす事象はこの 6 種で尽きる。**`μ` の類ごとの総和が
-`held_ρ(・, C)` とどれだけ違うかは、`L13a` が示す** -- 違いは、借用する (D14) unit の下の
-パラメータ・capture の leaf を ρ-終端とする類の開始の 1 だけである。
+**この 6 種が、活性化が保持する参照を動かす事象を尽くすことは、`L13a` (g) が示す。**
+**`μ` の類ごとの総和が `held_ρ(・, C)` とどれだけ違うかは、`L13a` (b) が示す** -- 違いは、
+借用する (D14) unit の下のパラメータ・capture の leaf を ρ-終端とする類の開始の 1 だけである。
 
 **DEF `N_ρ(m, C)`**。`κ_C(v) := #{λ : λ は ty(v) の inhabited (D16) な boxed leaf で (v, λ) ∈ C}` と
 置き、骨格節点 `m` について `N_ρ(m, C) := Σ_{v ∈ Λ(m)} κ_C(v)` と置く。
@@ -1798,6 +1797,10 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
 - **(e)** D10 の生成の表の各行が参照を作る位置のスロットは、それが属する別名類の ρ-終端である。
 - **(f)** 計数下の別名類の ρ-終端は、パラメータ・capture の leaf か、D10 の生成の表の各行が参照を作る
   位置のスロットかのいずれかである。
+- **(g)** 活性化が保持する参照を動かす `ρ` の上の事象は、`DEF 割り当て` が挙げる 6 種で尽きる。
+
+**(g) を段として立てるのは、定義の中に置くと誰の検査も受けないからである** (README 第 3 節)。
+`L17` (b)(c)、`L19` (a)(d)、`L24` `<1>2` がこの網羅の上に立つ。
 
 **(c) の前提が成り立つ範囲。** この文書が扱うのは `insert_rc` の出力と
 `split_rc_units` の出力であり、前者については `L15` (e) が、後者については `L15` (e) と `L26` (a) が
@@ -1809,6 +1812,16 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
 (D14) leaf ならば 1]` と置く。`β` はこの角括弧である。
 
 **証明**
+
+<1>0. (g)。
+  BY D8, D9, D10, DEF 割り当て
+  D9 は 2 つの表の後に「上の 2 つの表と D10 の生成の表で、参照を作る・移す・手放す構文はすべてで
+  ある」と述べ、続けて「`Eval(v, k)` と `Let(x, Match(v, arms), k)` の `Match` 節点自身は、参照を
+  作らず、移さず、手放さない」「`Retain` と `Release` は D10 が直接扱う」と述べる。D10 は活性化が
+  始まる時点の参照を初期値の行で与え、`Retain(v, π)` と `Release(v, π)` の行がその 2 種を扱う。
+  D8 より参照は D10 の生成で作られ D10 の消費か `Release` で処分されるので、活性化が保持する参照を
+  動かす事象は、D10 の初期値・D10 の生成・`Retain`・`Release`・D9 の消費・D9 の移動の 6 つで尽きる。
+  `DEF 割り当て` の 6 行がこの 6 つである。
 
 <1>1. D9 の移動の表の 6 行の移動先のスロットの変数は、`collect_bindings` が次の 6 通りの束縛を
       入れる変数である。
@@ -1914,8 +1927,8 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
   `(p, λ)` について `+1`」であり、D10 の初期値も「所有する (D14) パラメータ・capture の unit の下の
   inhabited な各 leaf につき 1 つ。借用する unit の下の leaf は入れない」と述べる。よって所有する
   leaf については両辺が 1 ずつ増え、借用する leaf については左辺だけが 1 増える。D10 の生成の事象に
-  ついては `DEF 割り当て` の第 2 行が同じ leaf について `+1` する。参照を作る事象が D10 の初期値と
-  D10 の生成の表で尽きることは D9 の末尾の段落が述べる。
+  ついては `DEF 割り当て` の第 2 行が同じ leaf について `+1` する。活性化が始まる時点の参照を D10 の
+  初期値が、それ以後に作られる参照を D10 の生成の表が尽くすことは、<1>0 が示す。
 
 <1>5a. `Retain`・`Release`・D9 の消費の 3 種は、`DEF 割り当て` の第 3・第 4・第 5 行が <1>4 の残る
        3 行と同じ leaf について同じ向きに 1 だけ動かす。
@@ -1952,19 +1965,19 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
   あり、和は 1 である。
 
 <1>7. QED
-  BY <1>3, <1>4, <1>4a, <1>4b, <1>4c, <1>5, <1>5a, <1>6, <1>6a, D1, D9, D14, DEF 割り当て
+  BY <1>0, <1>3, <1>4, <1>4a, <1>4b, <1>4c, <1>5, <1>5a, <1>6, <1>6a, D1, D14, D34, DEF 割り当て
   (a) は <1>3 である。(b) について、`C` を計数下の別名類とする。<1>6a が、D34 が
   `held_ρ(・, C)` を定め始める時点で等式が成り立つことを与える。その時点より後について、
-  D9 の末尾の段落より両辺を動かす事象は
-  `DEF 割り当て` の 6 種と、<1>5 が挙げる「借用する unit の下のパラメータ・capture の leaf の
-  開始値」で尽きる。<1>5・<1>5a・<1>6 が各事象について 2 つの増減の一致を与え、ずれるのは最後の
-  1 種だけである。<1>4a よりその事象は `β(C) = 1` である類についてちょうど 1 回、`β(C) = 0` である
+  右辺を動かす事象は <1>0 より `DEF 割り当て` の 6 種で尽き、左辺を動かす事象は D34 の表の 6 行で
+  尽きる。<1>5 より両者の差は「借用する unit の下のパラメータ・capture の leaf の
+  開始値」の 1 種だけであり、<1>5・<1>5a・<1>6 が残る各事象について 2 つの増減の一致を与える。
+  <1>4a よりその 1 種は `β(C) = 1` である類についてちょうど 1 回、`β(C) = 0` である
   類については 1 回も起きず、しかも <1>6a が基底に取った時点で既に起きている。よってその時点より後の
   事象の個数についての帰納で (b) の等式が成り立つ。
   (c) は `β` の定義である -- すべての unit が所有されるとき、どの類の ρ-終端も借用する unit の下の
   leaf ではないので `β(C) = 0` である。グローバル初期化子の `init` は D1 よりパラメータも capture も
   持たないので、その本体の類の ρ-終端はパラメータ・capture の leaf ではない。(d) は <1>4a、(e) は
-  <1>4b、(f) は <1>4c である。
+  <1>4b、(f) は <1>4c、(g) は <1>0 である。
 
 ### 10.2 `L14` (`live_before` は自由変数と `live_after` の和である)
 
@@ -2096,14 +2109,21 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
   <2>5. CASE `m = Let(x, Match(scrut, arms), cont)`。
     BY 帰納法の仮定, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
        CODE src/rc_ir/rc_insert.rs: RcInserter::arm_free_locals,
-       CODE src/rc_ir/rc_insert.rs: insert_if_local, <1>1, <1>3, A6, A11, D2
+       CODE src/rc_ir/rc_insert.rs: insert_if_local, <1>1, <1>3, A2, A6, A9, A11, D2
     この関数は `live_cont = insert_into_expr(cont, live_after)` を取り、
     `live_after_match = live_cont \ {x}` の下で各アーム本体を書き換え、返った `body_live` をすべて
     `live_before_arms` に集めて各アームの payload を除き、最後に `x` を除いて `scrut` を足す。
     帰納法の仮定より `live_cont = free_locals(cont) ∪ A(m)` であり、
     `body_live_j = free_locals(arm_j.body) ∪ live_after_match` である。payload は <1>3 より
     `live_after_match` に入らないので、`live_before_arms` は
-    `(∪_j (free_locals(arm_j.body) \ {payload_j})) ∪ live_after_match` である。A6 と A11 より、ある
+    `(∪_j (free_locals(arm_j.body) \ {payload_j})) ∪ live_after_match` である。
+    **`live_after_match` の分が入るのは、アームが 1 つ以上あるからである** -- `live_before_arms` は
+    `Set::default()` から始まり、各アームが返した `body_live` からしか名前を受け取らないので、アームが
+    0 個ならこの和は空になる。A9 は「`borrow_ify` の入力プログラムのすべての `Match` は 1 つ以上の
+    アームを持つ」と述べ、A9 自身が「**`insert_rc` の入力と出力について読む段は A2 を引く。**」と
+    書き、A2 が「**したがって、`borrow_ify` の入力について語る仮定は、`insert_rc` の入力と出力に
+    ついても読める。**」を与えるので、`insert_rc` の入力の骨格の各 `Match` はアームを 1 つ以上持つ。
+    A6 と A11 より、ある
     アームが束縛する名前を別のアームや `cont` が参照することはないので、この和は
     `collect_referenced_and_bound` がアームについて集める `refs \ bound` と一致する。
     最後の `x` の除去はこの和のうち `live_after_match` の分にしか掛からない --
@@ -2168,37 +2188,63 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
   真の型は boxed leaf を持たない。D6 よりスロットは boxed leaf についてのみ在る。
 
 <1>4. (d)。
-  BY D6, CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: VarTable::of,
+  BY A2, D6, EXT クレートの項目,
+     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: VarTable::of,
      CODE src/rc_ir/ownership.rs: VarTable::body_only,
      CODE src/rc_ir/lower.rs: Lowerer::fresh_var, CODE src/rc_ir/lower.rs:
      Lowerer::lower_lambda_as_function, CODE src/ast/name.rs: FullName::is_local,
-     CODE src/ast/name.rs: FullName::local
+     CODE src/ast/name.rs: FullName::local,
+     CODE src/build/build_object_files.rs: lower_and_insert_rc,
+     CODE src/rc_ir/simplify.rs: simplify, CODE src/rc_ir/rename.rs: clone_fresh,
+     CODE src/rc_ir/rename.rs: assign_fresh_name, CODE src/rc_ir/rename.rs: substitute_expr
   `vars.bindings` に鍵が入るのは 2 か所である -- `VarTable::of` が入れる関数のパラメータと capture の
   名前と、`collect_bindings` が入れる `Let`・`Destructure`・`Match` の束縛変数の名前である
-  (グローバル初期化子については `VarTable::body_only` が後者だけを入れる)。lowering は
-  この両方を `Lowerer::fresh_var` で作り (パラメータと capture は `lower_lambda_as_function` が、
-  残りは各 `lower_*` が)、`fresh_var` は名前を `FullName::local(...)` で組む。`FullName::local` が作る
-  名前の名前空間は空であり、`is_local` は名前空間が空かを答えるので、束縛を持つ名前は局所名である。
-  対偶より局所でない名前は `vars.bindings` に束縛を持たない。D6 の「**値を得る形は 3 つあり、スロットが在るのはそのうち 2 つである。**」の 3 つ目が
+  (グローバル初期化子については `VarTable::body_only` が後者だけを入れる)。D6 は
+  「**逆に、`vars.bindings` に束縛を持つ名前は局所名である。**」と述べ、その道を
+  「`VarTable::of` と `VarTable::body_only` がその表に入れる鍵は、パラメータ・capture の名前と節点が
+  束縛する変数の名前だけで、どれも `Lowerer::fresh_var` が `FullName::local` で作ったものである」と
+  書く。`FullName::local` が作る名前の名前空間は空であり、`is_local` は名前空間が空かを答えるので、
+  束縛を持つ名前は局所名である。対偶より局所でない名前は `vars.bindings` に束縛を持たない。
+  **この本体は lowering の出力そのものではない。** `lower_and_insert_rc` は `lower_program` の後に
+  `simplify` を掛けてから `insert_rc` を呼ぶので、束縛名を作る位置は 2 つある。lowering の
+  `Lowerer::fresh_var` (パラメータと capture は `lower_lambda_as_function` が、残りは各 `lower_*` が
+  呼ぶ) と、`simplify` の `clone_fresh` である。`EXT クレートの項目` より
+  `src/rc_ir/simplify.rs` の項目はそのファイルに書かれたものだけであり、そこで束縛変数の名前を
+  作る式は `clone_fresh` の呼び出し 1 つである (残る `substitute_expr` の呼び出しは、その本体に
+  既に在る名前へ写す)。`clone_fresh` は `assign_fresh_names_to_binders` を通じて各束縛変数に
+  `assign_fresh_name` を当て、`assign_fresh_name` は `name.clone()` の `name` 欄だけを
+  `format!("{}#{}{}", ...)` で書き替えるので、名前空間の欄は変わらない。よって `is_local` は
+  この段を渡って保たれる。`insert_rc` 自身が束縛を作らないことは A2 が述べる。
+  D6 の「**値を得る形は 3 つあり、スロットが在るのはそのうち 2 つである。**」の 3 つ目が
   この名前であり、D6 よりその対は記号の位置であってスロットではない。
 
 <1>5. (e)。
-  BY D14, CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function,
+  BY D14, EXT クレートの項目, EXT 条件つきコンパイル,
+     CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function,
      CODE src/rc_ir/simplify.rs: simplify, CODE src/rc_ir/rc_insert.rs: insert_rc,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
      CODE src/build/build_object_files.rs: lower_and_insert_rc,
      CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: clone_func,
      CODE src/rc_ir/specialization.rs: CloneRegistry::finish_clone,
      CODE src/build/build_object_files.rs: optimize_rc_program
-  `RcFunc` の `borrowed_units` の欄に値を書く生産コードは 4 か所である --
-  `Lowerer::lower_lambda_as_function` が `RcFunc` を組むときに置く `Set::default()`、`borrow_ify` の
-  末尾の `func.borrowed_units = param_capture_units(func, type_env)…`、`clone_func` が複製に置く
-  `Set::default()`、そして `finish_clone` が複製の鍵を改名する式である。後ろの 3 つはいずれも
-  `borrow_ify` の中か、`optimize_rc_program` が `borrow_ify` より後に呼ぶパス (`unique_check_elim` と
-  `locality`) の中に在るので、`insert_rc` の出力には掛からない。
+  `RcFunc` の `borrowed_units` の欄に値を書く式は 6 つである。**`EXT クレートの項目` より、クレートの
+  全ファイルを読んで得たこの一覧は完全である。**
+
+  1. `Lowerer::lower_lambda_as_function` が `RcFunc` を組むときに置く `Set::default()`。
+  2. `borrow_ify` の末尾の `func.borrowed_units = param_capture_units(func, type_env)…`。
+  3. `clone_func` が複製に置く `Set::default()`。
+  4. `CloneRegistry::finish_clone` の `name == func.name` の枝が返す `RcFunc { body, ..func.clone() }`
+     -- この欄には `func` の値がそのまま入る。
+  5. 同じ関数の残る枝が、複製の鍵を改名して組む式。
+  6. `#[cfg(test)]` の下の 2 つの構成 (`src/rc_ir/validate.rs` のテスト用の `RcFunc` と、
+     `src/rc_ir/dead_code_elim.rs` のテスト用の `RcFunc`)。どちらも `Set::default()` を置く。
+
+  6 は `EXT 条件つきコンパイル` より `fix` の実行可能ファイルを作るビルドに入らない。2・3・4・5 は
+  いずれも `borrow_ify` の中か、`optimize_rc_program` が `borrow_ify` より後に呼ぶパス
+  (`unique_check_elim` と `locality`) の中に在るので、`insert_rc` の出力には掛からない。
   `lower_and_insert_rc` は `lower_program` の後に `simplify` と `insert_rc` を掛けるだけであり、
   そのどちらもこの欄を書かない (`insert_into_func` が代入するのは `func.body` である)。よって
-  `insert_rc` の出力の各関数の `borrowed_units` は `lower_lambda_as_function` が置いた空集合のままで
+  `insert_rc` の出力の各関数の `borrowed_units` は 1 が置いた空集合のままで
   ある。D14 は借用する unit の集合を `RcFunc::borrowed_units` と定め、残りを所有すると定めるので、
   すべてのパラメータ・capture の unit が所有される。
 
@@ -2208,9 +2254,10 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
 **(e) は最適化の水準に依らない。** `borrow_ify` を呼ぶのは `optimize_rc_program` の
 `if config.enable_borrow_optimization()` の中だけなので (`CODE src/build/build_object_files.rs:
 optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify` の入力にならず、A1 はそれに
-当たらない。(e) の証明はコードの数え上げと D14 だけに立つので、門の真偽を問わない。**`L3` と
-`L9` の系が (e) を引くのはこの形である** -- どちらも `insert_rc` の出力を主語にし、(e) の証明は
-その 2 つを引かないので循環しない。手で据えた本体 (`L12` の `C1`、`L13` の `B_1`) は
+当たらない。(e) の証明はコードの数え上げと D14 だけに立つので、門の真偽を問わない。
+**(e) を引く段はこの文書のどこにも在りうる。循環しないことを述語で述べる** -- (e) の証明はこの文書の
+補題を 1 つも引かないので、(e) を引く段がどれであっても循環は生じない。一覧でなく述語で書くのは、
+段が増えるたびに一覧が古くなるからである。手で据えた本体 (`L12` の `C1`、`L13` の `B_1`) は
 `insert_rc` の出力ではないので (e) の範囲の外であり、その `borrowed_units` は道具立てが取り決める。
 
 ### 10.4 `L16` (借用するオペランドの leaf は素通しを宣言されない)
