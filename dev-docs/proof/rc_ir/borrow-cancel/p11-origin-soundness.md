@@ -2,10 +2,10 @@
 
 この文書が読んだコードのコミットは `beed6a0bb4bfeb907d8f30561099306d8d013a67` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が `CODE` で引く
-10 ファイル (`src/rc_ir/ownership.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/provenance.rs`、
+11 ファイル (`src/rc_ir/ownership.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/provenance.rs`、
 `src/rc_ir/borrow.rs`、`src/rc_ir/codegen.rs`、`src/generator.rs`、`src/ast/types.rs`、
-`src/ast/inline_llvm.rs`、`src/fixstd/builtin.rs`、`src/misc.rs`) に変わったのは `// PROOF:` コメント
-だけである。
+`src/ast/inline_llvm.rs`、`src/fixstd/builtin.rs`、`src/fixstd/runtime.rs`、`src/misc.rs`) に
+変わったのは `// PROOF:` コメントだけである。
 **この一覧は本文の `CODE` の行を数え上げて作る** -- 手で並べた一覧は、証明が新しいファイルを引くたびに
 落ちる。
 定義・仮定・命題の番号は同ディレクトリの `README.md` による。

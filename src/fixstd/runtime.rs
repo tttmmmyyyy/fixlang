@@ -291,6 +291,7 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: B
 
 /// Declare `pthread_once`, which takes the flag recording whether the initializer has run and the
 /// initializer itself. A multi-threaded program initializes each global through it.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_pthread_once_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
