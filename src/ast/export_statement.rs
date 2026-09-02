@@ -235,6 +235,7 @@ pub enum IOType {
 impl ExportedFunctionType {
     // Check if a type is valid for a value which is exported.
     // - src: Used for error messages.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate(
         scm: Arc<Scheme>,
         type_env: &TypeEnv,
