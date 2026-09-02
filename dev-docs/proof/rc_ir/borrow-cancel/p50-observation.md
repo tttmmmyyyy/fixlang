@@ -1724,7 +1724,8 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         `let ei = ei.set_type(ty.clone());` で節点に**期待型** `ty` を置き、`Expr::Lam` の腕はその `ty` を
         `type_fun(arg_ty, body_ty)` と `unify_or_tolerated_mismatch` で単一化する
         (`CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner`,
-        `unify_or_tolerated_mismatch`)。`type_fun` が組む型の toplevel の tycon は `make_arrow_tycon` の
+        `TypeCheckContext::unify_or_tolerated_mismatch`)。`type_fun` が組む型の toplevel の tycon は
+        `make_arrow_tycon` の
         もの、`type_funptr` が組む型の toplevel の tycon は `make_funptr_tycon` のものであって相異なるので
         (`CODE src/ast/types.rs: type_fun, type_funptr`, `CODE src/fixstd/builtin.rs: make_arrow_tycon,
         make_funptr_tycon`)、期待型が funptr 型であればこの単一化は失敗する。`error_tolerant` が真のとき
