@@ -1067,7 +1067,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The value `var` names: its innermost local binding, or the global of that name, which the
     /// module declares here if it has not reached it yet.
-    // PROOF: D/A, P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P3, P4, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_value(&mut self, var: &FullName) -> ScopedValue<'c> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
@@ -1091,7 +1091,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The object `name` is bound to, handed over as it stands: the reference counts are left
     /// untouched, so the caller owns whatever reference the binding already carried.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
         self.get_scoped_value(name).accessor.get(self)
     }
