@@ -114,6 +114,16 @@ D11 の (S-c) の接頭条件 -- その活性化がその点まで解放につ�
 **DEF 出力の版** -- 出力プログラムの `funcs` の各元と、出力の各グローバル初期化子をいう。第 8 節の
 `L6` より、`funcs` の元は各 `f_own` と各 `f_borrow` である。
 
+**DEF site** -- 出力の版が書き換える本体 -- 関数の `body` かグローバル初期化子の `init` -- を
+`for_each_node` で歩いて挙げた、`Retain`/`Release` 節点の `(v, path)` と、`App` の各引数 `arg` と各
+`unit ∈ rc_units(ty(arg))` の対を、その本体の **site** と呼ぶ
+(`CODE src/rc_ir/ast.rs: for_each_node`, `CODE src/rc_ir/ownership.rs: rc_units`)。
+
+**この語を置く理由**。`levelled_sites` は `&RcFunc` を取るので、グローバル初期化子の版については
+site を 1 つも挙げない。P7a と P7d はその点を避けて site を本体の側で定めており、`L13` と `L23` の
+言明も同じ形を取る。2 つが同じ集合であることは `L13` の `<1>0` が述べ、関数の版でそれが
+`levelled_sites` の挙げる集合と一致することは P7a が述べる。
+
 **引用する他ファイルの補題**。この文書が引く外部の補題の言明を、引く形で写す。以下、`vars_f` は
 `VarTable::of(func)`、`vars_c` は `VarTable::of(clone)` である (`func` は入力の関数、`clone` はその借用版)。
 
@@ -526,7 +536,8 @@ P8 の後半は「D9 の意味で消費される」と言う。D9 の `App` の�
     `Release(y, [])` が触れる `obj(y, [])` を見る。`<2>1` よりこの節点は実行路の最初の節点であり、
     `<1>0` より `[]` の下の inhabited な leaf は `[]` の 1 つだけなので、その触れる動作の直前の点は
     この活性化の開始の時点である。計数下のときは `<2>2` よりその時点で `Obl` がその参照を持つ。
-    D21 は「活性化は、その各時点で A19 (i) の不等式を満たすものに限る」と述べ、A19 (i) の本文は
+    D21 は「活性化は、その各時点と各段内の点 (D24) で A19 (i) の不等式を満たすものに限る」と述べ、
+    A19 (i) の本文は
     その不等式 `H(O) ≥ Σ_{C ∈ S} d(C) + [S に借用終端の類が在るならば 1]` の `Σ d(C)` を「その活性化の
     義務集合が持つ `O` への参照の個数である」と述べる。角括弧は 0 以上なので
     `H(obj(y, [])) ≥ Obl(obj(y, [])) ≥ 1` である。(S-c) の接頭条件よりこの活性化はその点まで解放に
@@ -581,9 +592,10 @@ P8 の後半は「D9 の意味で消費される」と言う。D9 の `App` の�
     `<2>3` と `<2>4` が与える。(S-c) は、この実行路の読む構文が `App` の 1 つだけで、それが読みうる
     オブジェクトが `obj(x, [])` であることによる -- 計数下のときは、その読みの直前の点である `App` の
     節点の入口 (`<2>1` よりこの節点は実行路の最初の節点なので、この活性化の開始の時点でもある) で
-    `<2>2` より `Obl` がその参照を持つ。D21 は「活性化は、その各時点で A19 (i) の不等式を満たすものに
-    限る」と述べ、A19 (i) の本文はその不等式の `Σ d(C)` を「その活性化の義務集合が持つ `O` への参照の
-    個数である」と述べる。角括弧は 0 以上なので `H(obj(x, [])) ≥ Obl(obj(x, [])) ≥ 1` である。(S-c) の
+    `<2>2` より `Obl` がその参照を持つ。D21 は「活性化は、その各時点と各段内の点 (D24) で A19 (i) の
+    不等式を満たすものに限る」と述べ、A19 (i) の本文はその不等式の `Σ d(C)` を「その活性化の義務集合が
+    持つ `O` への参照の個数である」と述べる。角括弧は 0 以上なので
+    `H(obj(x, [])) ≥ Obl(obj(x, [])) ≥ 1` である。(S-c) の
     接頭条件よりこの活性化はその点まで解放について閉じているので、D11a よりその点で解放されていない。
     グローバル状態のときは解放されることが無い (A8、D26)。
     BY A8, A19, D7, D11, D11a, D21, D26, <2>1, <2>1a, <2>2, <2>3, <2>4
@@ -861,7 +873,7 @@ D9 はアーム本体の `Ret` を消費とせず移動とするので、これ�
 
 ### 3.6 `App` の引数の行について
 
-D9 の `App` の引数の行は「呼び出し先がその位置の **unit** を所有する (D14) 引数の leaf」であり、
+D9 の `App` の引数の行は「呼び出し先がその位置の unit を所有する (D14) 引数の leaf」であり、
 `rhs_consumes` の `is_owning_position` は **leaf** ごとに `owned_leaves` を引く。1 つの unit の下に
 2 つ以上の leaf を持つ型 -- unbox union と punched array (D5) -- では、この 2 つは食い違いうる。
 `owned_leaves` が unit `u` の下の leaf を 1 つだけ持つとき、DEF 推論の割り当て を unit 粒度へ持ち上げた
@@ -1400,7 +1412,10 @@ Let(x, App(callee', args),
   BY L6
 
 <1>3. 入力の `funcs` の各鍵は出力の `funcs` の鍵である。
-  BY L6
+  L6 より出力の `funcs` の鍵の集合は「入力の各関数の名前」と「`borrow_versions` の各値」の合併であり、
+  A22 より入力の `funcs` の各エントリの鍵はその `RcFunc` の `name` に等しいので、入力の `funcs` の鍵は
+  「入力の各関数の名前」である。
+  BY A22, L6
 
 <1>4. QED
   BY <1>1, <1>2, <1>3
@@ -1972,20 +1987,24 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
 
 #### L13 (site の下の inhabited な leaf の由来は `owns_unit` と一致する)
 
-**言明**。`(v, u)` を `B_V` について `levelled_sites` が挙げる site とし、`λ` を `u` の下の boxed leaf で
+**言明**。`(v, u)` を `B_V` の site (DEF site) とし、`λ` を `u` の下の boxed leaf で
 `ρ` のこの位置で inhabited なものとする。このとき `ctx.owns_unit(v, u)` が真であることと
 `ctx.owns_object(T_ρ(v, λ))` が真であることとは同値である。
 
-<1>0. この命題が P7a を読むのは、`V` の `RewriteCtx` (`ctx`) と `B_V` についてである。
+<1>0. DEF site が定める `B_V` の site は P7a が site と呼ぶ集合であり、この命題が P7a を読むのは、
+      `V` の `RewriteCtx` (`ctx`) と `B_V` についてである。
   P7a は「**出力の版 `V` を 1 つ固定し、`owns_unit` と `owns_object` は `V` の `RewriteCtx` のものと
-  する。**」と書き、site を「**その版が書き換える本体 -- 関数の `body` かグローバル初期化子の `init` --
-  を `for_each_node` で歩いて挙げた、`Retain`/`Release` 節点の `(v, path)` と、`App` の各引数 `arg` と各
-  `unit ∈ rc_units(ty(arg))` の対である。**」と定め、「関数の版ではこれは `levelled_sites` が挙げる集合と
-  一致する」と述べる。この文書が固定しているのは第 9.1 節の `V` であり、その `RewriteCtx` が `ctx`、
+  する。**」と書き、site を「**site とは、その版が書き換える本体 -- 関数の `body` かグローバル初期化子の
+  `init` -- を `for_each_node` で歩いて挙げた、`Retain`/`Release` 節点の `(v, path)` と、`App` の各引数
+  `arg` と各 `unit ∈ rc_units(ty(arg))` の対である。**」と定める。DEF site はこの文をその主語のまま
+  写したものである。この文書が固定しているのは第 9.1 節の `V` であり、その `RewriteCtx` が `ctx`、
   その本体が `B_V` である。`V = f_borrow` の ときその本体は `clone_func` が返した `B_V` であり、`ctx` は `RewriteCtx::new(&clone, true, ..)` が
-  作ったものである。`owns_unit` を呼ぶ位置がその版の `levelled_sites` の挙げる site を出ないことは
-  `p15` の `L17` が述べる。
-  BY P7a, p15 の L17, CODE src/rc_ir/borrow.rs: borrow_ify, RewriteCtx::new
+  作ったものである。`owns_unit` を呼ぶ位置がその版の site を出ないことは 第 1 節に写した `p15` の
+  `L17` が述べる -- 関数の版については「`(v, u)` は**その版の本体**について `levelled_sites` が挙げる
+  site である」として、グローバル初期化子の版については「`owns_unit(v, u)` は真を返す」として述べる。
+  P7a はその 2 つの版を 1 つの site の定義で覆い、「関数の版ではこれは `levelled_sites` が挙げる集合と
+  一致する」と述べる。
+  BY DEF site, P7a, p15 の L17, CODE src/rc_ir/borrow.rs: borrow_ify, RewriteCtx::new
 
 <1>1. `ctx.owns_unit(v, u)` が真ならば、`cand(v, λ)` のすべての元について `owns_object` は真である。
   P7a の節 1 から節 3 への含意である。`λ` は `Λ(u)` の inhabited な leaf である。`<1>0` より、読む
@@ -2817,12 +2836,12 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
     BY <1>1, <2>1, <2>3
 
 <1>4. CASE `τ` の節点が `Retain(v, π)` または `Release(v, π)` である。
-  <2>1. `π ∈ units(ty(v))` であり、`(v, π)` は `B_V` について `levelled_sites` が挙げる site である。
+  <2>1. `π ∈ units(ty(v))` であり、`(v, π)` は `B_V` の site (DEF site) である。
     `B_V` が入力の本体のときは A2 がそのまま与える。`B_V` が `f_borrow` の複製本体のときは、P9 の前半より
     複製は `FieldPath` を変えず、`rename_var` は `ty` を残すので、複製の `Retain`/`Release` の path も
-    その変数の型の `rc_units` の元である。`levelled_sites` は `for_each_node` で本体の全節点を歩き、
-    `Retain`/`Release` の節点について `(v, path)` を積む。
-    BY A2, A15, P9, CODE src/rc_ir/borrow.rs: levelled_sites, CODE src/rc_ir/ast.rs: for_each_node,
+    その変数の型の `rc_units` の元である。DEF site は `B_V` を `for_each_node` で歩いた
+    `Retain`/`Release` の節点の `(v, path)` を site とし、A15 より `grow_stack` はその歩みを変えない。
+    BY A2, A15, DEF site, P9, CODE src/rc_ir/ast.rs: for_each_node,
        CODE src/rc_ir/rename.rs: rename_var, CODE src/misc.rs: grow_stack
   <2>2. `π` の下の inhabited な各 leaf `λ` について、`T_ρ(v, λ)` が所有されることと
         `ctx.owns_unit(v, π)` が真であることとは同値である。
@@ -2848,11 +2867,10 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
     D9 の `App` の行の callee の部分はどちらの側でも何も消費せず、差し替えないときは両側の callee が
     同じ `RcVar` なので同じ leaf を消費し、その由来は L14 より所有される。
     BY D9, D10, L14, L16, L18, <1>1
-  <2>2. 各引数の添字 `i` と各 `u ∈ units(ty(args[i]))` をとる。`(args[i], u)` は `B_V` について
-        `levelled_sites` が挙げる site である。
-    `levelled_sites` は `Let(_, App(_, args), _)` の各 `arg` と各 `unit ∈ rc_units(arg.ty)` について
-    `(arg, unit)` を積む。
-    BY CODE src/rc_ir/borrow.rs: levelled_sites
+  <2>2. 各引数の添字 `i` と各 `u ∈ units(ty(args[i]))` をとる。`(args[i], u)` は `B_V` の site
+        (DEF site) である。
+    DEF site は `Let(_, App(_, args), _)` の各 `arg` と各 `unit ∈ rc_units(ty(arg))` の対を site とする。
+    BY DEF site
   <2>3. `u` の下の inhabited な各 leaf `λ` について、`T_ρ(args[i], λ)` が所有されることと
         P11 の `arg_owned(i, u)` が真であることとは同値である。
     BY L13, <2>2
@@ -2929,11 +2947,11 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
 <1>0a. L16 の (K) の `Retain(v, π)`/`Release(v, π)` 節点が動かす由来は、すべて所有される。
   L16 の (K) は「`B_V` の `Retain`/`Release` 節点のうち、`V` が借用版でないか `owns_unit(v, π)` が真で
   あるもの」である。前者では L8 よりすべての由来が所有される。後者では L13 より `π` の下の inhabited な
-  各 leaf の由来が所有される -- L13 が要求する「`(v, π)` は `B_V` について `levelled_sites` が挙げる
-  site である」は、A2 と P9 より `π ∈ units(ty(v))` であり、`levelled_sites` が `for_each_node` で本体の
-  全節点を歩いて `Retain`/`Release` の `(v, path)` を積むことによる。D10 の `Retain`/`Release` の行が
-  動かすのは `π` の下の inhabited な各 leaf の由来だけである。
-  BY A2, A15, D10, L8, L13, L16, P9, CODE src/rc_ir/borrow.rs: levelled_sites,
+  各 leaf の由来が所有される -- L13 が要求する「`(v, u)` を `B_V` の site (DEF site) とし」は、A2 と
+  P9 より `π ∈ units(ty(v))` であり、DEF site が `B_V` を `for_each_node` で歩いた `Retain`/`Release` の
+  `(v, path)` を site とすることによる (A15 より `grow_stack` はその歩みを変えない)。D10 の
+  `Retain`/`Release` の行が動かすのは `π` の下の inhabited な各 leaf の由来だけである。
+  BY A2, A15, D10, DEF site, L8, L13, L16, P9,
      CODE src/rc_ir/ast.rs: for_each_node, CODE src/misc.rs: grow_stack
 
 <1>1. 1 つの塊の中で `n_out` を増やす事象は `B'_V` の `Retain` 節点と D10 の生成の 2 種、減らす事象は
@@ -3300,13 +3318,12 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
 
 <1>6. 固定した動作が (iii) の触れる動作、すなわち (A-前) か (A-後) の節点のそれであるとき、それが名指す
       オブジェクトは `p` において解放されていない。
-  <2>0. (A-前) と (A-後) が名指す `(a, u)` について、`a` は `App` の引数であり、`(a, u)` は `B_V` に
-        ついて `levelled_sites` が挙げる site である。`u` の下の inhabited な各 leaf `λ` について、L13 より
+  <2>0. (A-前) と (A-後) が名指す `(a, u)` について、`a` は `App` の引数であり、`(a, u)` は `B_V` の
+        site (DEF site) である。`u` の下の inhabited な各 leaf `λ` について、L13 より
         `T_ρ(a, λ)` が所有されることと `arg_owned(i, u)` が真であることとは同値である。
-    `levelled_sites` は `Let(_, App(_, args), _)` の各 `arg` と各 `unit ∈ rc_units(arg.ty)` について
-    `(arg, unit)` を積む。(A-前) と (A-後) の対は P11 より `args` の元と `units(ty(args[i]))` の元の対で
-    ある。
-    BY L13, P11, CODE src/rc_ir/borrow.rs: levelled_sites
+    DEF site は `Let(_, App(_, args), _)` の各 `arg` と各 `unit ∈ rc_units(ty(arg))` の対を site とする。
+    (A-前) と (A-後) の対は P11 より `args` の元と `units(ty(args[i]))` の元の対である。
+    BY DEF site, L13, P11
   <2>1. (A-前) の `Retain(a, u)` が触れるオブジェクトは `p` において解放されていない。
         P11 より `arg_owned(i, u)` は偽なので、`<2>0` より `u` の下の inhabited な各 leaf `λ` の
         `T_ρ(a, λ)` は所有されない。`obj(a, λ)` がグローバル状態なら `<1>2` による。計数下ならば、
@@ -3608,14 +3625,14 @@ INV-a はその `T` について立て、第 11.7 節の `<1>2` は L20 から `
 
 ### 11.4 (α) `Release` は借用する由来を減らさない
 
-#### L23 (`Retain`/`Release` の対象と `App` の引数 unit は levelled site である)
+#### L23 (`Retain`/`Release` の対象と `App` の引数 unit は site である)
 
 **言明**。次の 2 つが成り立つ。
 
 - **(a)** `B_V` の `Retain(v, π, s, k)` 節点と `Release(v, π, s, k)` 節点について、`π ∈ units(ty(v))` で
-  あり、`(v, π)` は `B_V` について `levelled_sites` が挙げる site である。
+  あり、`(v, π)` は `B_V` の site (DEF site) である。
 - **(b)** `B_V` の `Let(x, App(callee, args), k)` 節点の各引数 `args[i]` と各 `u ∈ units(ty(args[i]))` に
-  ついて、`(args[i], u)` は `B_V` について `levelled_sites` が挙げる site である。
+  ついて、`(args[i], u)` は `B_V` の site である。
 
 <1>1. (a) の `π ∈ units(ty(v))` である。
   BY A2, P9, CODE src/rc_ir/rename.rs: rename_var
@@ -3624,13 +3641,18 @@ INV-a はその `T` について立て、第 11.7 節の `<1>2` は L20 から `
   変えず、`rename_var` は `ty` を残すので、複製の節点の path もその変数の型の unit である。
 
 <1>2. QED
-  BY A15, <1>1, CODE src/rc_ir/borrow.rs: levelled_sites, CODE src/rc_ir/ast.rs: for_each_node,
-     CODE src/misc.rs: grow_stack
-  `for_each_node` は本体を `grow_stack` で包んで歩くので、A15 より包まない場合と同じ回数だけ各節点を
-  訪れる。`levelled_sites` は `for_each_node` で本体の全節点を 1 度ずつ歩き、`RcExpr::Retain(v, path, _, _)` と
-  `RcExpr::Release(v, path, _, _)` の腕で `(v.clone(), path.clone())` を積み ((a))、
-  `RcExpr::Let(_, RcRhs::App(_, args), _)` の腕で各 `arg` と各 `unit ∈ rc_units(&arg.ty, type_env)` に
-  ついて `(arg.clone(), unit)` を積む ((b))。
+  BY A15, DEF site, <1>1, CODE src/rc_ir/ast.rs: for_each_node, CODE src/misc.rs: grow_stack
+  `for_each_node` は本体の全節点を 1 度ずつ歩く。本体を `grow_stack` で包んで歩くので、A15 より包まない
+  場合と同じ回数だけ各節点を訪れる。DEF site が site とするのは、その歩みが訪れる
+  `RcExpr::Retain(v, path, _, _)` と `RcExpr::Release(v, path, _, _)` の節点の `(v, path)` ((a)) と、
+  `RcExpr::Let(_, RcRhs::App(_, args), _)` の節点の各 `arg` と各 `unit ∈ rc_units(ty(arg))` の対 ((b))
+  である。`B_V` は `V` が書き換える本体なので、その 2 種の節点はこの歩みが訪れる。
+
+**関数の版では `levelled_sites` がこの集合を計算する**。`levelled_sites` は `for_each_node` で
+`func.body` の全節点を歩き、`RcExpr::Retain` と `RcExpr::Release` の腕で `(v.clone(), path.clone())` を、
+`RcExpr::Let(_, RcRhs::App(_, args), _)` の腕で各 `arg` と各 `unit ∈ rc_units(&arg.ty, type_env)` に
+ついて `(arg.clone(), unit)` を積む (`CODE src/rc_ir/borrow.rs: levelled_sites`)。それが `&RcFunc` を
+取ることと、グローバル初期化子の版について site を 1 つも挙げないことは P7d が述べる。
 
 #### L24 (`B'_V` の `Retain`/`Release` 節点は借用する由来を減らさない)
 
@@ -3651,7 +3673,7 @@ INV-a はその `T` について立て、第 11.7 節の `<1>2` は L20 から `
     真であるもの」であり、`<1>1` より第 1 の場合には当たらない。
   <2>2. `π` の下の inhabited な各 leaf `λ` について `ctx.owns_object(T_ρ(v, λ))` は真である。
     BY L13, L23, <2>1
-    L23 (a) より `(v, π)` は `B_V` について `levelled_sites` が挙げる site であり、
+    L23 (a) より `(v, π)` は `B_V` の site (DEF site) であり、
     `π ∈ units(ty(v))` である。
   <2>3. QED
     BY D10, <2>2
@@ -3747,7 +3769,7 @@ INV-a はその `T` について立て、第 11.7 節の `<1>2` は L20 から `
 
 <1>5. `u` の下の inhabited な leaf に `C_T` の元があるならば、`arg_owned(i, u)` は偽である。
   BY L13, L23, P11
-  L23 (b) より `(args[i], u)` は `B_V` について `levelled_sites` が挙げる site である。P11 の
+  L23 (b) より `(args[i], u)` は `B_V` の site (DEF site) である。P11 の
   `arg_owned(i, u)` は `ctx.owns_unit(args[i], u)` であり、これが真ならば L13 より `u` の下の inhabited な
   各 leaf の由来は所有される。`T` は所有されないのでそのどれも `T` ではなく、`C_T` の元は無い。対偶が
   言明である。
