@@ -152,10 +152,12 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
       `implement_rc_program` の前にモジュールへ関数を入れるのは `build_runtime` の `Declare` の呼び出し
       だけである -- `build_object_files` はその呼び出しを `implement_rc_program` の直前に置き、
       `build_exported_c_functions` と `build_main_function` を後に置く。その名前は `<3>1` が挙げる走時の
-      記号名なので、`<3>1` より `object_file_symbol_name(n)` ではない。第 1 ループのより前の項目が入れる
-      関数は、その鍵の名前 `n'` について `declare_lambda_function` が作る記号名
-      `object_file_symbol_name(n')` の関数だけである -- `<1>3` より (N3) の下で `declare_program_global`
-      はアクセサを作る行に着かず、`<3>1` よりほかに関数を作る呼び出しはこの 3 枝の下に無い。鍵は相異なる
+      記号名なので、`<3>1` より `object_file_symbol_name(n)` ではない。第 1 ループの 3 枝が呼ぶのは
+      `module.get_function`、`declare_program_global`、`declare_lambda_function` だけであり、そのうち
+      モジュールに関数を作るのは `declare_lambda_function` の `add_function` と `declare_program_global`
+      のアクセサの行の 2 つである。`<1>3` より (N3) の下で後者は鍵の名前について走らないので、より前の
+      項目が入れる関数は、その鍵の名前 `n'` について `declare_lambda_function` が作る記号名
+      `object_file_symbol_name(n')` の関数だけである。鍵は相異なる
       ので `n' ≠ n` であり、`<2>1a` よりその記号名は `object_file_symbol_name(n)` と異なる。
       `EXT LLVM モジュールの記号名` より、記号名は関数を高々 1 つ決める。
       BY (N3), EXT LLVM モジュールの記号名, <1>3, <2>1, <2>1a, <3>1,
