@@ -42,6 +42,7 @@ src/ast/typedecl.rs	Field::resolve_type_aliases	P1,P2,P7a,P7d,P7e	f4ee12ffb5a7
 src/ast/typedecl.rs	TypeDefn::applied_type	P26	5f801d4d3b7c
 src/ast/typedecl.rs	TypeDefn::resolve_namespace	P1,P2	596c34ae3564
 src/ast/typedecl.rs	TypeDefn::resolve_type_aliases	P1,P2	bb5a7b2ef3d9
+src/ast/typedecl.rs	TypeDefn::set_kinds_in_value	P1,P2	d10301993e0e
 src/ast/typedecl.rs	TypeDefn::tycon	P1,P2	fe839bfbc2f6
 src/ast/typedecl.rs	TypeDefn::tycon_info	P1,P2,P26	f04fd919ce0d
 src/ast/typedecl.rs	TypeDefn::validate_tyvars	P1,P2	7216a81f3d2f

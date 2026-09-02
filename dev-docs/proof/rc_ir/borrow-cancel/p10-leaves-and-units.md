@@ -438,10 +438,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        ある。`parse_type_defn` が作る宣言の名前は文法の `type_name`、すなわち `capital_name` に
        当たる文字列なので、ASCII の大文字で始まる。`add_tuple_defn` が積む `tuple_defn(n)` の名前は
        `Std::Tuple{n}` である。`make_std_mod` が `Std::FFI` の下に積むのは `TypeDeclValue::Alias` で
-       あり、`calculate_type_env` はそれを `aliases` に入れる。積んだ後に `TypeDefn` を書き替える
-       `TypeDefn::resolve_namespace` と `TypeDefn::resolve_type_aliases` はどちらも `self.value` に
-       しか触れないので、名前はこの 3 つのままである。穴つきの形はもとの名前を接頭辞に持つ。よって
-       どれも `#FunPtr` では始まらない。
+       あり、`calculate_type_env` はそれを `aliases` に入れる。**積んだ後に `TypeDefn` を書き替える
+       のは、`impl TypeDefn` が `&mut self` で受け取る 3 つのメソッド --
+       `TypeDefn::resolve_namespace`、`TypeDefn::resolve_type_aliases`、
+       `TypeDefn::set_kinds_in_value` -- だけであり、どれも `self.value` にしか触れない。**
+       `set_kinds_in_value` を呼ぶのは `Program::calculate_type_env` で、`self.type_defns` を渡り
+       ながら各要素に当てる。よって名前はこの 3 つのままである。穴つきの形はもとの名前を接頭辞に
+       持つ。よってどれも `#FunPtr` では始まらない。
      - `lift_all` と `realize_all` が `add_tycons` に渡す capture 構造体の型構成子。この 2 つが
        渡すのは `LiftedLambdas::take_new_tycons()` の返り値であり、その `new_tycons` へ入れるのは
        `record_capture_list` だけで、入れる鍵は `CaptureStruct` の `tycon` である。`run_one` が
@@ -468,6 +471,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        CODE src/fixstd/builtin.rs: tuple_defn, CODE src/fixstd/stdlib.rs: make_std_mod,
        CODE src/ast/typedecl.rs: TypeDefn::resolve_namespace,
        CODE src/ast/typedecl.rs: TypeDefn::resolve_type_aliases,
+       CODE src/ast/typedecl.rs: TypeDefn::set_kinds_in_value,
        CODE src/ast/typedecl.rs: TypeDefn::tycon,
        CODE src/ast/program.rs: TypeEnv::add_tycons,
        CODE src/ast/types.rs: TyCon::into_punched_type_name,
