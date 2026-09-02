@@ -6957,7 +6957,7 @@ pub fn hole_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMWithRetainedFunctionBody {
     f_name: FullName,

@@ -769,7 +769,7 @@ impl ObjectFieldType {
     /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
     ///   (`Std::PunchedArray`), which the source therefore does not own; the copy skips it and
     ///   leaves `dst_buffer[idx]` uninitialized.
-    // PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn clone_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,

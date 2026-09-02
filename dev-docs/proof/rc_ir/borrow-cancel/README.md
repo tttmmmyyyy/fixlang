@@ -938,13 +938,18 @@ inhabited な全 boxed leaf の参照 -- が `Obl(b)` を離れ、`b` を作っ�
 
 **段の記述は `Obl` について網羅である。** (E1)-(E8) と (F) は、各段について `Obl` を離れる参照の行き先と、
 作られる参照の持ち手と、`H` の動きを全部書いている。**すなわち、ここに挙がっていない動きは起きない。**
-**網羅は段の境界についてである。** 1 つの段の生成コードは、その段の中で相殺する素動作を出しうる --
-`InlineLLVMWithRetainedFunctionBody` はオペランドを retain し、適用の後に release する
-(`CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody`)。`InlineLLVMArrayAppendCapacityUnchecked`
-の共有の腕は要素ごとに retain する (`CODE src/object.rs: ObjectFieldType::clone_array_buf`)。
-**段の出口では相殺するので上の表には現れないが、段内の点 (D24) では見える。**
-**素動作の粒度で勘定する段は、この 2 つを場合に数える。** 前者はオペランドの各 leaf について
-生成を 1 つと処分を 1 つ、後者は書き込む各要素について生成を 1 つ出す。
+**この網羅は段の境界についてである。** 1 つの段の生成コードは、この表に行を持たない素動作を段の中で
+出しうる。**素動作の粒度で勘定する段は、その op の `generate` が出す retain と release を読む。**
+**在りかは述語で決める** -- `gc.retain(`・`gc.build_retain(`・`gc.release(` を出す生成コードの全体で
+あり、一覧で書くと op が 1 つ増えるたびに古くなる。形は 2 つに分かれる。
+
+- **段の中で相殺するもの。** `InlineLLVMWithRetainedFunctionBody` はオペランドを retain し、適用の
+  後に release する。段の出口では相殺するので表には現れないが、段内の点では見える。
+- **相殺しないもの。** 複製を作る腕が複製の欄へ retain する形である
+  (`make_struct_union_unique` の共有の腕、`clone_array_buf`)。**原本が共有で生き残れば相殺しない**ので、
+  段の境界でも `H` を上げる。**その参照の持ち手は、割り当てたオブジェクトの欄である** (D25 の 2 番目)。
+  **上の表がこの行を持たないのは、割り当てと欄を埋める受け渡しを 1 つの段が続けて行うからである** --
+  段の記述はその段が `Obl` について何をするかを書き、割り当てたオブジェクトの中は D25 が数える。
 
 `p40-cancel-soundness.md` の `L39a` のように、D21 の意味の活性化 -- 実行に実現するとは限らないもの -- の
 `Obl` を論じる段は、P28 を引けないのでこの網羅で迂回する。**この節を D24 に置くのは、それを要る段が
@@ -1513,7 +1518,14 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 状態のときに 2 つの leaf が同じオブジェクトを指すことは、参照ではなく**値**の運び (D9 の値の水準の行) が
 与える。
 
-**配列の記憶域は例外である。** `#ArrayStorage a` のオブジェクトは、その時点の `size` 個の要素の参照を
+**配列の記憶域は例外である。** `#ArrayStorage a` のオブジェクトの持ち手の単位は、その記憶域の各スロット
+である。**スロットが参照を持つのは、生成の素動作がそこへ書いた時点からである** -- 割り当て直後の
+オブジェクトの欄について D24 が置くのと同じ読みであり、**`size` はこの数え上げを切らない。**
+`InlineLLVMArrayAppendCapacityUnchecked` の共有の腕は `dst_len` 以降のスロットへ全部書いてから
+最後に `size` を伸ばすので、`size` で切ると、書いたスロットの参照が段の途中の点でどの持ち手にも
+属さなくなる (`CODE src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked`)。
+
+`#ArrayStorage a` のオブジェクトは、その時点の `size` 個の要素の参照を
 持ち、`Array` 値のトラバーサが、その `size` 個の要素を、`#ArrayStorage` のカウントが 0 になった段で
 1 つずつ処分する (`CODE src/object.rs: ObjectFieldType::traverse_array_buf`)。
 `boxed_leaf_paths` は `Array` にも `#ArrayStorage` にも leaf を 1 つしか返さない
