@@ -1880,8 +1880,9 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 (e3) その事象は「併合」であり、各アームの状態の鎖 (L8) の中に、同じ `node` の除去事象がある。そして
 (e3) の展開は有限で終わり、その葉は (e1) か (e2) である。**
 
-**証明** 以下、`cancel` の入力 `prog` は `borrow_ify` の 1 回の呼び出しが返した値である (この文書の
-冒頭)。これは L4、L8、L8a、L9 の仮定である。
+**証明** 以下、`cancel` の入力 `prog` は `borrow_ify` の 1 回の呼び出しが返した値である。これは
+L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての呼び出しについて無条件に果たす**ので、
+この命題は README の P16 --- 仮説を持たない言明 --- として立つ。
 
 <1>1. (a) が成り立つ。
   BY L9 の (i), DEF INV
@@ -2040,8 +2041,9 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 ついて `arm_exits[j']` に `node` が `x` の要素があってそれらの `outstanding` が互いに等しいことである。
 「`Retain` が `pending` に在る/現れる」は「その `NodeId` を `node` とする要素がある」と読む。
 
-**証明** 以下、`cancel` の入力 `prog` は `borrow_ify` の 1 回の呼び出しが返した値である (この文書の
-冒頭)。これは L8、L8a、L9 の仮定である。
+**証明** 以下、`cancel` の入力 `prog` は `borrow_ify` の 1 回の呼び出しが返した値である。これは
+L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての呼び出しについて無条件に果たす**ので、
+この命題は README の P18 --- 仮説を持たない言明 --- として立つ。
 
 <1>0. 言明の `merge` は、`walk_inner` の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕の
       `self.merge(&pending, &arm_exits)` の呼び出しである。`merge` は非公開の型 `CancelAnalysis` の
