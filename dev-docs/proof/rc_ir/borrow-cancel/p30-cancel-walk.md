@@ -186,8 +186,9 @@ EXT アロケータの契約 より、同時に生存している相異なる 2 
   等しさも、memo の鍵の一致も、その鍵のハッシュも動かず、この 2 つの返り値は引数の値で決まる。この文書は
   この 2 つを使う段の `BY` に A3 を挙げる。
 
-**この 8 つのうち 2 つは、並びではなく集合が決まる。** `Provenance::leaf_origins_under` が渡す要素は
-「順序を定めない」と宣言されているので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は
+**この 8 つのうち 2 つは、並びではなく集合が決まる。** `Provenance::leaf_origins_under` の doc は、渡す
+要素を `in no particular order` と述べる (`CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`)
+ので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は
 `Join` の変位について `Set` の反復から `Vec` を作るので、引数で決まるのはその元の集合である。
 
 ### 外部の結果
