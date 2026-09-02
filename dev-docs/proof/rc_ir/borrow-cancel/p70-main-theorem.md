@@ -845,8 +845,9 @@ README 第 1 節が名前で挙げるとおり、**評価順の保存**、**FFI 
 証明しない。返り値の一致は `cancel` についても主張しない -- カウントが下がると**参照カウントで分岐
 する op** が別の腕を取り、割り当てるオブジェクトの個数が変わる。この向きの変化は言語が認めている
 (P26)。**数え上げるのは生成コードの分岐であって、`LLVMGen::unique_check_operand` の宣言ではない**
-(D30 の (X2)、D21) -- 宣言は `Option<usize>` を返すのでオペランドを 1 つしか名指せず、
-`InlineLLVMArrayAppendCapacityUnchecked` は `dst` を宣言しながら `src` についても分岐する。
+(D30 の (X2)、D21) -- 宣言は `Option<UniqueCheckOperand>` を返し、`UniqueCheckOperand` の
+`container_index` はオペランドを 1 つしか名指せないので、`InlineLLVMArrayAppendCapacityUnchecked` は
+`dst` を宣言しながら `src` についても分岐する。
 
 ### T が言うのは `optimize_rc_program` の返り値についてではない
 
