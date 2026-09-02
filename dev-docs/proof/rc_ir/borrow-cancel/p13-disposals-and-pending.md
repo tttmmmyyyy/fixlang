@@ -1051,6 +1051,65 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
   腕は `variant` が `None` か `Some` か、`Some` のときは `scrut.ty.is_box` かで 3 つに分かれる。
   この 12 の枝を (a) が 6 つ、(b) が 5 つ、(c) が 1 つに分けるので、3 群は場合を尽くす。
 
+#### L7b (束縛を持たない名前は、それを名指す節点の段で値を持つ)
+
+**言明**。`w` を `vars.bindings` に束縛を持たない名前とし、`n` を `w` を名指す節点とする。`n` を実行
+する段において `w` は値を持つ。
+
+**この補題は `ρ` も活性化も読まない。** 主語は 1 つの節点とその段である。**`Ret(w)` もこの補題の
+主語である** -- `Ret` は D7 の読む構文ではないが、その節点も `w` の記憶域を読む。
+
+**証明**
+
+<1>1. `w` は最上位の記号の名前であり、`(w, ・)` は D6 の記号の位置である。
+  BY D6
+  D6 は「**束縛を持たない名前は、必ず最上位の記号の名前である。**」と述べ、その名前と `ty(w)` の
+  inhabited な boxed leaf の対を記号の位置と呼ぶ。
+
+<1>2. CASE `n` が D7 の読む構文である。このとき `n` は `w` の値の各 boxed leaf が指すオブジェクトを
+      読みうるので、`w` を読む。
+  BY D7
+  D7 は読む構文を 6 つ挙げ、「読む構文は、名指した値の inhabited な各 boxed leaf が指すオブジェクトを
+  読みうる」と述べる。名指した値を読まずにその leaf が指すオブジェクトへは届かない。
+
+<1>2a. CASE `n` が D7 の読む構文でない 4 種 -- `Let(x, RcRhs::Var(w), k)`、`Retain(w, π, s, k)`、
+       `Release(w, π, s, k)`、`Ret(w)` -- のいずれかである。このときも `n` の段は
+       `Generator::get_scoped_value` を `w` について呼ぶ。
+  BY D7, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
+     CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs,
+     CODE src/generator.rs: Generator::get_scoped_obj,
+     CODE src/generator.rs: Generator::get_scoped_obj_noretain,
+     CODE src/generator.rs: Generator::get_scoped_value
+  D7 は「残る 4 種 (`Let(x, Var(y), k)`、`Retain`、`Release`、`Ret`) は読む構文ではない」と述べ、
+  この 4 種を挙げる。`eval_rc_expr_inner` の `RcExpr::Ret(x)` の腕は `self.get_scoped_obj(&x.name)`、
+  `RcExpr::Retain` と `RcExpr::Release` の腕は `self.get_scoped_obj_noretain(&x.name)` を呼ぶ。
+  `Let(x, RcRhs::Var(w), k)` は `RcExpr::Let(x, rhs, k)` の腕から `eval_rc_rhs` へ入り、その
+  `RcRhs::Var(v)` の腕が `self.get_scoped_obj(&v.name)` を呼ぶ。`get_scoped_obj` と
+  `get_scoped_obj_noretain` はどちらも `get_scoped_value` を呼ぶ。
+
+<1>3. `n` の段はその記号のアクセサを通って `w` の値を得る。
+  BY <1>1, <1>2, <1>2a, D6, CODE src/generator.rs: Generator::get_scoped_value,
+     CODE src/generator.rs: Generator::get_or_declare_global,
+     CODE src/generator.rs: ValueAccessor::get
+  <1>1 と D6 より `w` は最上位の記号の名前であり、D6 の「**最上位の記号の名前は局所名ではない。**」より
+  局所名ではない。`get_scoped_value` は `var.is_local()` が偽の名前を `get_or_declare_global` へ回して
+  `ValueAccessor::Global` を返し、`ValueAccessor::get` は、funptr の型ならその関数の番地を取り、
+  そうでなければその記号のアクセサ関数を呼ぶ。<1>2 の場合は `n` が `w` を読むこと自体がこの読みで
+  あり、<1>2a の場合は `get_scoped_value` の呼び出しがそれである。
+
+<1>4. QED
+  BY <1>1, <1>2, <1>2a, <1>3, D6, D7, D22, D24
+  D22 のアクセサの行は「**グローバルのアクセサ**。初期化済みの旗を見て、まだならグローバル初期化子の
+  本体を持つ関数 `InitValue#<symbol>` を呼び、返った値を記憶域へ格納する。」と述べ、D24 の (E7) が
+  その呼び出しを段として置く -- 「まだ初期化されていないグローバル `g` を読む者が居るとき、`g` の
+  アクセサが `g` の初期化子の `init` の活性化 `b` を作る」であり、`b` が終わって (E5) が走った後に
+  読む者が再開する。D6 はこれを「**記号の位置が値を持つのは、その記号のグローバル化の段 (E5) より後の
+  時点である。**」「**それでも `g` を読む節点は必ず値を読む** -- まだ初期化されていなければ、その節点の
+  段が先に (E7) と (E5) を走らせるからである」と述べる。<1>3 より `n` の段はその読む者である。
+  関数の名前については記号の位置は funptr を指し、初期化の段を持たない (D6) ので、その値は初めから
+  在る。<1>2 と <1>2a は場合を尽くす -- D7 は読む構文を 6 つ挙げ、「残る 4 種 (`Let(x, Var(y), k)`、
+  `Retain`、`Release`、`Ret`) は読む構文ではない」と述べるので、この 2 つで節点の形は尽きる。
+
 #### L8 (`origin` の 1 段は inhabited を保つ)
 
 **言明**。`B'` をプログラムのいずれかの本体 (D23) とし、この補題の中では `vars` を `B'` の
@@ -1072,10 +1131,9 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
   `borrow_ify` の出力の任意の版について (i) と (B) を読む。
 
   **(ii) の「値を得ている」は D6 の 3 つの形を渡る。** 節点が束縛する変数と、パラメータ・capture と、
-  `vars.bindings` に束縛を持たない名前である。3 つ目についてその値が在るのは、その名前を読む節点の段で
-  ある -- D6 は「**それでも `g` を読む節点は必ず値を読む** -- まだ初期化されていなければ、その節点の段が
-  先に (E7) と (E5) を走らせるからである」と述べる。`x'` を名指すのは `x` を束縛する節点なので、
-  その段で `x'` は値を持つ。
+  `vars.bindings` に束縛を持たない名前である。3 つ目についてその値が在るのは、その名前を名指す節点の
+  段である (`L7b`)。**その節点は `x` を束縛する節点とは限らない** -- `Binding::Join` の腕では
+  `arm_results[j]` を名指すのはアーム本体の終端の `Ret` である。
 - **(B)** `origin_inner(vars, type_env, x.name, λ)` の本体が `origin` を 1 回も呼ばないとき、その値は
   `Origin::Exactly((x.name, λ))` である。
 
@@ -1090,17 +1148,22 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
 (ii)・(iii)・(iv) を示す段は `B' = B` の場合、すなわち第 7.1 節が固定した本体と実行路 `ρ` に
 ついてのものである。(i) と (B) を示す段は `B'` を問わない。
 
-<1>0. `x'` を、いずれかの腕が `origin` を呼ぶ相手の変数とする。`x'` が `vars.bindings` に束縛を
-      持たない名前であるとき、`x` を束縛する節点は `x'` を名指し、その節点の段で `x'` は値を持つ。
+<1>0. `x'` を、いずれかの腕が `origin` を呼ぶ相手の変数とし、`x'` が `vars.bindings` に束縛を持たない
+      名前であるとする。このとき `x'` を名指す節点が `ρ` の上に在り、その節点の段で `x'` は値を持つ。
       よって `ρ` の上で `x'` は値を得ている。
-  BY D6, D24, CODE src/rc_ir/ownership.rs: collect_bindings
-  D6 は値を得る形を 3 つ挙げ、3 つ目を「**`vars.bindings` に束縛を持たない名前**」として、その値は
-  その記号の値であると述べ、「**それでも `g` を読む節点は必ず値を読む** -- まだ初期化されていなければ、
-  その節点の段が先に (E7) と (E5) を走らせるからである」と続ける。D24 の (E7) が、まだ初期化されて
-  いないグローバルを読む節点の段がその初期化子の活性化を作り、それが終わってからその節点が再開すると
-  定める。`collect_bindings` より、`origin` を呼ぶ 6 つの腕が渡す `x'` は、いずれも `x` を束縛する
-  節点が名指す変数 -- move-bind の右辺、`Llvm` のオペランド、`Destructure` の容器、`Match` の
-  scrutinee、`ρ` が選んだアーム本体の終端の `Ret` が名指す変数 -- である。
+  BY L7b, D3, D6, CODE src/rc_ir/ownership.rs: collect_bindings
+  `collect_bindings` より、`origin` を呼ぶ 6 つの腕が渡す `x'` を名指す節点は次のとおりである。
+  `Binding::Move(y)` では `x` を束縛する `Let(x, RcRhs::Var(y), k)`、`Binding::Llvm` では `x` を
+  束縛する `Let(x, RcRhs::Llvm(gen, args), k)` (`x'` はそのオペランド `args[j]`)、`Binding::Field` では
+  `x` を束縛する `Destructure(x', fs, s, k)`、`Binding::Payload` では `x` を束縛する
+  `Let(x, RcRhs::Match(x', arms), k)` である。**`Binding::Join(arm_results)` の腕だけは `x` を束縛
+  する節点ではない** -- `Let(x, RcRhs::Match(scrut, arms), k)` が名指すのは `scrut` であり、
+  `x' = arm_results[j]` を名指すのは `ρ` が選んだアーム `arm_j` の本体の終端の `Ret` である
+  (`collect_bindings` はそれを `returned_var(&arm.body)` として `arm_results` に積む)。
+  L8 の仮定より `ρ` の上で `x` は値を得ているので、前の 4 つの形ではその束縛の節点が `ρ` の上に在り、
+  `Binding::Join` では D3 より `ρ` はそのアーム本体の実行路を辿ってから `Match` の継続へ進むので、
+  その `Ret` も `ρ` の上に在る。D6 より、束縛を持たない名前は最上位の記号の名前であり、`L7b` が
+  その節点の段で `x'` が値を持つことを与える。
 
 <1>1. CASE `None`、`Some(Binding::Param)`、`Some(Binding::Producer)`。
   <2>1. この 3 つの腕は `here()` すなわち `Origin::Exactly((var.clone(), path.to_vec()))` を返し、
@@ -1621,12 +1684,11 @@ P6 より、`n` が `Retain` のとき `(ActRefs^inh_ρ(n))^obj` は `n` が `ρ
 
 <1>2. `L(v, π)` の各元 `λ` は `boxed_leaf_paths(ty(v), type_env)` の元であり、`ρ` の上で `v` は値を
       得ている。
-  BY 第 1 節の記法, D3, A11, D6, D24
+  BY 第 1 節の記法, D3, A11, L7b
   第 1 節の記法より `L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の部分集合である。`n` は `ρ` の上の
   節点であり、`v` を名指す。`v` が `vars.bindings` に束縛を持つときは、A11 より `v` はその位置で
-  スコープに入っている束縛に解決するので、`ρ` の上で `v` は先に値を得ている。持たないときは、D6 の
-  「**それでも `g` を読む節点は必ず値を読む** -- まだ初期化されていなければ、その節点の段が先に (E7) と
-  (E5) を走らせるからである」と D24 の (E7) より、`v` を名指す `n` の段で `v` は値を持つ。
+  スコープに入っている束縛に解決するので、`ρ` の上で `v` は先に値を得ている。持たないときは、`L7b` より
+  `v` を名指す `n` の段で `v` は値を持つ。
 
 <1>3. CASE `o` が `ρ` で活性である。
   <2>1. `L(v, π)` の元 `λ` で `origin(v, λ).identity() = o` となるものは、すべて `v` の値の inhabited な
@@ -2076,20 +2138,21 @@ DEF 名前の活性による。よって 7.5.4 が `INV(n)` を示せば P18a �
 
 <1>0. `ρ` 歩みの 1 歩 `(x, λ) → (x', λ')` について、`ρ` の上で `x'` は `x` が値を得る段以前に値を
       得ている。
-  BY L8, A11, D3, D6, D24, CODE src/rc_ir/ownership.rs: origin_inner,
-     CODE src/rc_ir/ownership.rs: collect_bindings
-  L8 (A) が挙げる `origin` を呼ぶ 6 つの腕が渡す `x'` は、`Binding::Move(y)` の `y`、`Binding::Llvm` の
-  `args[j]`、`Binding::Field(container, _)` の `container`、`Binding::Payload(scrut, _)` の `scrut`、
-  そして `Binding::Join(arm_results)` の `ρ` が選んだアームの結果変数である。`x'` が `vars.bindings` に
-  束縛を持たない名前であるときは、`x` を束縛する節点がその名前を名指すので、D6 の「**それでも `g` を
-  読む節点は必ず値を読む** -- まだ初期化されていなければ、その節点の段が先に (E7) と (E5) を走らせる
-  からである」と D24 の (E7) より、その節点の段で `x'` は値を持つ。これは `x` が値を得る段そのもので
-  ある。以下は `x'` が束縛を持つ場合である。
-  `collect_bindings` より、
-  前の 4 つでは `x'` は `x` を束縛する節点 (`Let`、`Destructure`、`Match`) がその右辺・容器・scrutinee
-  として名指す変数であり、A11 よりその使用はその位置でスコープに入っている束縛に解決するので、`ρ` の
-  上でその節点より前に値を得ている。`Binding::Join` では、`collect_bindings` が `arm_results` に置くのは
-  各アーム本体の `returned_var`、すなわちそのアーム本体の終端の `Ret` が名指す変数であり、D3 より `ρ` は
+  BY L7b, A11, D3, D6, CODE src/rc_ir/ownership.rs: origin_inner,
+     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var
+  `collect_bindings` より、`origin` を呼ぶ 6 つの腕が渡す `x'` は、`Binding::Move(y)` の `y`、
+  `Binding::Llvm` の `args[j]`、`Binding::Field(container, _)` の `container`、
+  `Binding::Payload(scrut, _)` の `scrut`、そして `Binding::Join(arm_results)` の `ρ` が選んだアームの
+  結果変数である。前の 4 つを名指すのは `x` を束縛する節点 (`Let`、`Destructure`、`Match`) であり、
+  **`Binding::Join` の結果変数を名指すのはその節点ではない** -- `Let(x, Match(scrut, arms), k)` が
+  名指すのは `scrut` であり、`arm_results[j]` を名指すのは `ρ` が選んだアーム本体の終端の `Ret` である
+  (`collect_bindings` はそれを `returned_var(&arm.body)` として積む)。
+  `x'` が `vars.bindings` に束縛を持たない名前であるときは、`L7b` より `x'` を名指す節点の段で `x'` は
+  値を持つ。前の 4 つではその節点は `x` を束縛する節点なので、その段は `x` が値を得る段そのもので
+  ある。`Binding::Join` では、D3 より `ρ` はそのアーム本体を辿ってから `Match` の継続へ進むので、
+  その `Ret` の段は `x` が値を得る段より前である。以下は `x'` が束縛を持つ場合である。
+  前の 4 つでは A11 よりその使用はその位置でスコープに入っている束縛に解決するので、`ρ` の
+  上でその節点より前に値を得ている。`Binding::Join` では、D3 より `ρ` は
   そのアーム本体を辿ってから `Match` の継続へ進むので、その変数が値を得るのは `x` が値を得る前である
   (アーム本体の中で束縛されるか、A11 よりアームの外の、スコープに入っている束縛である)。
 
@@ -2519,12 +2582,11 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
     訪れた `Retain` 節点」である。L11 より帰属の表は `ρ` の上の場合を尽くすので、その訪問は `ρ` の上で
     `n` より前にある。
   <2>2. `(v, λ)` は `ρ` の上のスロットである。
-    BY <2>1, D6, D4, A8, A11, D24, D26,
+    BY <2>1, D6, D4, A8, A11, L7b, D26,
        CODE src/ast/types.rs: TypeNode::is_fully_unboxed
     `Retain(v, π)` 節点は `ρ` の上に在り `v` を名指す。`v` が `vars.bindings` に束縛を持つときは、
     A11 より `v` はその位置でスコープに入っている束縛に解決するので、`ρ` の上で先に値を得ている。
-    持たないときは、D6 の「**それでも `g` を読む節点は必ず値を読む** -- まだ初期化されていなければ、
-    その節点の段が先に (E7) と (E5) を走らせるからである」と D24 の (E7) より、`v` を名指す節点の段で
+    持たないときは、`L7b` より `v` を名指す節点の段で
     `v` は値を持つ。後者の場合 D6 より `(v, λ)` は記号の位置であり、指すのは funptr かグローバル状態の
     オブジェクトである。`is_funptr` の型は `is_fully_unboxed` が真で boxed leaf を持たない
     (D4 の第 1 規則) ので `obj(v, λ)` はグローバル状態であり、A8 と D26 よりそれは計数下ではない。
