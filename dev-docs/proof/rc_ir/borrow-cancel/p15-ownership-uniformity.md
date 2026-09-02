@@ -3164,6 +3164,9 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   ついてだが、その点まで生きているオブジェクトが無い。環境の書き込みの段 (E8) はどの leaf がどの
   オブジェクトを指すかを変えない (A17 の (ii-b))。よって次の素動作もオブジェクトを作らない。
   したがって生きているオブジェクトのグラフはどの点でも空であり、非巡回である。
+  この 2 つは `<1>2` と食い違わない。A18 が主語にするのは実行 (D24) のヒープであるのに対し、`<1>2` は
+  D11 の 3 つの節を D21 の意味のすべての活性化について確かめており、その活性化は実行に実現するとは
+  限らない (D21)。
   A19: `obj(z, [])` が計数下である活性化の計数下の別名類は 1 つである -- D20 の別名の辺のうちこの本体に
   在るのは `Llvm` の素通し leaf の辺 (`z` の leaf `[]` から `x` の leaf `[1]` へ) だけなので、スロット
   `(z, [])` と `(x, [1])` が 1 つの類 `C` をなす。`z` は所有するパラメータなので D34 より `C` の `held` は
@@ -3185,8 +3188,8 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   節点も、`Lowerer::lower_lam` が `funcs` に入れる関数も無い。A23 の 2 つの節はその 2 つを主語にするので、
   空に成り立つ。
   A24: この本体に `InlineLLVMFixBody` の `Llvm` 節点は無い。
-  BY <1>1, <1>2, <1>2a, A2, A3, A17, A18, A19, A23, D1, D4, D14, D20, D21, D24, D25, D26, D33, D34,
-     L6, P9,
+  BY <1>1, <1>2, <1>2a, A2, A3, A17, A18, A19, A23, D1, D4, D10, D14, D20, D21, D24, D25, D26, D33,
+     D34, L6, P9,
      CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
      CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody, InlineLLVMIntLit,
      InlineLLVMBoxedToRetainedPtrIOS, boxed_to_retained_ptr_ios
@@ -3384,6 +3387,9 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   その点まで生きているオブジェクトが無い。環境の書き込みの段 (E8) はどの leaf がどのオブジェクトを
   指すかを変えない (A17 の (ii-b))。よって次の素動作もオブジェクトを作らない。
   したがって生きているオブジェクトのグラフはどの点でも空であり、非巡回である。
+  この 2 つは `<1>2` と食い違わない。A18 が主語にするのは実行 (D24) のヒープであるのに対し、`<1>2` は
+  D11 の 3 つの節を D21 の意味のすべての活性化について確かめており、その活性化は実行に実現するとは
+  限らない (D21)。
   A19: D20 の別名の辺はこの本体に 1 つも無いので、計数下の別名類はスロット 1 つずつからなる。タグが `n` の
   活性化では inhabited な leaf が無いので類も無く、タグが `a` で `obj(x, [1])` がグローバル状態の活性化
   でも計数下の類が無いので、どちらでも (ii-a) と (ii-b) は空に成り立つ。タグが `a` で `obj(x, [1])` が
@@ -3405,8 +3411,8 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   節点も、`Lowerer::lower_lam` が `funcs` に入れる関数も無い。A23 の 2 つの節はその 2 つを主語にするので、
   空に成り立つ。
   A24: この本体に `InlineLLVMFixBody` の `Llvm` 節点は無い。
-  BY <1>1, <1>2, A2, A3, A17, A18, A19, A23, D1, D4, D14, D16, D20, D21, D24, D25, D26, D33, D34,
-     L6, P9,
+  BY <1>1, <1>2, A2, A3, A17, A18, A19, A23, D1, D4, D10, D14, D16, D20, D21, D24, D25, D26, D33,
+     D34, L6, P9,
      CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
      CODE src/fixstd/builtin.rs: InlineLLVMIntLit, InlineLLVMBoxedToRetainedPtrIOS,
      boxed_to_retained_ptr_ios
