@@ -2049,27 +2049,35 @@ let seen : Std::I64 = Main::peek(m, two)
       到達する `TypeNode` の `OnceLock` の memo (`hash_cache`・`ground_cache`・`depth_cache`) で
       ある。**`VarTable` の残りの欄
       (`bindings`、`closure_targets`、`param_tys`、`var_tys`) と `TypeEnv` の値は変わらない。**
-  <2>1. `level_ownership` 自身が行う書き込みは `owned_leaves.insert` だけであり、呼ぶのは `origin`、
-        `owns_object_yet`、`covered_leaves` の 3 つである。`owns_object_yet` は `&Set<VarPath>` を
-        読むだけで、どこにも書かない。`origin` は `origins` の memo を書く。
-    BY CODE src/rc_ir/borrow.rs: level_ownership, owns_object_yet (`level_ownership` の引数は
-       `&VarTable`、`&TypeEnv`、site、`&mut Set<VarPath>` である),
+  <2>1. `level_ownership` の実行が `infer_ownership` の局所変数へ行う書き込みは `owned_leaves.insert`
+        だけである。`level_ownership` が呼ぶのは `origin`、`owns_object_yet`、`covered_leaves` の
+        3 つであり、`owns_object_yet` は `owned_leaves` を共有参照で受け取るのでそれを値として
+        変えない。`origin` は `VarTable` の `origins` の memo を書く。
+    BY CODE src/rc_ir/borrow.rs: level_ownership (引数は `&VarTable`、`&TypeEnv`、site、
+       `&mut Set<VarPath>` であり、`owned_leaves.insert` のほかに書き込みを行わず、呼ぶのはこの
+       3 つである),
+       CODE src/rc_ir/borrow.rs: owns_object_yet (`owned_leaves` を `&Set<VarPath>` で受け取る),
        CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow_mut().insert(key, answer.clone())` が
        memo を書く。`origins` は `RefCell` なので `&VarTable` からでも書ける)
-  <2>2. `covered_leaves` は `TypeNode` の `OnceLock` の memo を書きうる。
+  <2>2. `covered_leaves` と `owns_object_yet` はどちらも `TypeNode` の `OnceLock` の memo を書きうる。
         **「`VarTable` の 5 つの欄のうち `RefCell` を持つのは `origins` だけである」では、内部可変性の
         数え上げは尽きない** -- `param_tys`・`var_tys`・`bindings` は `Arc<TypeNode>` を持ち、
-        `TypeNode` は `OnceLock` の欄を 3 つ持つからである。道は実在する。`level_ownership` は
-        `vars.param_tys.get(root)` が返す型を `covered_leaves` へ渡し、`covered_leaves` は
-        `boxed_leaf_paths` を呼び、その走査は `unpunched_field_types` を呼ぶ。
+        `TypeNode` は `OnceLock` の欄を 3 つ持つからである。**道は 2 本ある** -- `level_ownership` は
+        `vars.param_tys.get(root)` が返す型を `covered_leaves` へ渡し、`owns_object_yet` も
+        `vars.param_tys.get(root)` が返す型を取って同じ `boxed_leaf_paths` を呼ぶ。`covered_leaves`
+        1 本を数えると `owns_object_yet` の側が落ちる。以下はその共通の道である。
+        `boxed_leaf_paths` の走査は `unpunched_field_types` を呼ぶ。
         `unpunched_field_types` は `instance_field_types` を経て、tycon が kind `*` でない型変数を
         持つとき `unwrap_newtypes_memoized` を呼び、そこで `Map<Arc<TypeNode>, Arc<TypeNode>>` を
         `Arc<TypeNode>` の鍵で引く。`Map` は `FxHashMap` なので鍵は hash される。
         `impl Hash for TypeNode` は `type_hash` を呼び、`type_hash` は `hash_cache.get_or_init` を
         走らせる -- 共有参照から `hash_cache` を書く。この道で書かれるのは `hash_cache` であり、
-        `TypeNode` が持つ `OnceLock` の欄は 3 つで尽きるので、`origin` と `owns_object_yet` が残る
-        2 つを書いたとしても `<1>3` の言明の外へは出ない。
+        `TypeNode` が持つ `OnceLock` の欄は `hash_cache`・`ground_cache`・`depth_cache` の 3 つで
+        尽きるので、この 2 つと `origin` が書く `TypeNode` の memo は、どれも `<1>3` の言明の中に
+        ある。
     BY CODE src/rc_ir/borrow.rs: level_ownership, covered_leaves,
+       CODE src/rc_ir/borrow.rs: owns_object_yet (`vars.param_tys.get(root)` が返す型に
+       `boxed_leaf_paths` を掛ける),
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
        CODE src/ast/types.rs: TypeNode::unpunched_field_types, TypeNode::instance_field_types,
        TypeNode::unwrap_newtypes_memoized, TypeNode::type_hash, TypeNode,
