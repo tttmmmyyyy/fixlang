@@ -117,6 +117,7 @@ impl TypeDefn {
     }
 
     // Calculate kind of tycon defined by this type definition.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn kind(&self) -> Arc<Kind> {
         let mut kind = kind_star();
         for tv in self.tyvars.iter().rev() {

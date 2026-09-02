@@ -1985,6 +1985,11 @@ TypeNode::is_ground`)、部分適用された tycon は ground である。`decl
 (`CODE src/ast/types.rs: TypeNode::declared_field_types`)。`unpunched_field_types` を呼ぶ歩みが abort
 しないことを言う議論はこの節を読む。
 
+**飽和とは、`collect_type_arguments().len()` が `tycon_info.tyvars.len()` に等しいことである。**
+宣言の kind はその `tyvars` の個数だけ引数を要求するので (`CODE src/ast/typedecl.rs: TypeDefn::kind`)、
+組み込みの各行も `kind` と `tyvars` の長さが揃う (`CODE src/fixstd/builtin.rs: bulitin_tycons`)。
+**この等式を書いておくのは、「kind の要求するだけ」から個数の等式へ渡る段が要るからである。**
+
 **飽和を果たすのは kind の体系であって `validate_layouts` ではない。** 宣言された型の kind は
 `check_kinds` が検査して診断を出し (`CODE src/ast/types.rs: Scheme::check_kinds`,
 `TypeNode::kind` -- `TyApp` の腕が関数側の kind と引数の kind を突き合わせる)、式の型は kind `*` を持つ。
@@ -2103,7 +2108,8 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 
 - `Let(x, Llvm(gen, args), k)` の `args` の名前の列は `gen.free_vars()` に等しい。果たす者: 演算を作る側。
   検査: `validate` の `check_rhs` が develop mode で行う。
-- `InlineLLVMStructPunchBody` の `ty(x)` は `is_box` も `is_array` も偽で、`field_types` が長さ 2 であり、
+- `InlineLLVMStructPunchBody` の `ty(x)` は `is_box` も `is_array` も偽で、**`is_closure()` も偽であり**
+  (`struct_punch` が結果の型を `make_tuple_ty` で作り、tuple は構造体である)、`field_types` が長さ 2 であり、
   その第 `PUNCHED_STRUCT_FIELD` 成分は A10 を満たす構造体であって第 `field_idx` フィールドが穴である -- すなわちその成分の `TyConInfo` の `fields[field_idx].is_punched` が真であり、`is_closure()` は
   偽である (`toplevel_tycon_info` が `assert!(!self.is_closure())` で始まるので、構造体であることが
   それを含む)。
