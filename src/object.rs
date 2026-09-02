@@ -1490,6 +1490,7 @@ pub fn struct_field_idx(is_unbox: bool) -> u32 {
 /// The fields a primitive type is laid out as, by the primitive's name: one scalar, except for
 /// `IOState`, which carries nothing.
 fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
+    // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     static FIELDS_BY_NAME: OnceLock<Map<FullName, Vec<ObjectFieldType>>> = OnceLock::new();
     let fields_by_name = FIELDS_BY_NAME.get_or_init(|| {
         [

@@ -217,6 +217,7 @@ const C_SCALAR_NAMES: &[&str] = &[
 
 /// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
 /// it. A type constructor is determined by its name.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
     /// The name the type is declared under.
@@ -491,7 +492,7 @@ impl TyAliasInfo {
 pub const MAX_TYPE_DEPTH: usize = 500;
 
 /// A node of a type expression, together with the information the compiler carries alongside it.
-// PROOF: D/A, P1, P2, P3, P4, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Serialize, Deserialize)]
 pub struct TypeNode {
     /// The type expression, which is what equality and hashing of a node read.
@@ -541,7 +542,7 @@ impl TypeNode {
     /// the node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing
     /// a type that shares a subterm many times costs one visit per node rather than one per
     /// occurrence.
-    // PROOF: P1, P2, P3, P4, T (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn type_hash(&self) -> u64 {
         *self.hash_cache.get_or_init(|| {
             let mut hasher = DefaultHasher::new();
@@ -1061,7 +1062,7 @@ impl TypeNode {
     /// the tree it unfolds to, which doubles at every level of a type like `P (a, a)`. A node the
     /// walk leaves alone is answered with itself, so the graph the answer is stands as shared as the
     /// one that was walked.
-    // PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unwrap_newtypes_memoized(
         self: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -1119,7 +1120,7 @@ impl TypeNode {
     /// applied to arguments and substituting for one leaves every application spine as it stands;
     /// the field types a declaration is stored with are unwrapped once, by the pass that unwraps
     /// newtypes.
-    // PROOF: D/A, P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn instance_field_types(
         &self,
         tycon_info: &TyConInfo,
@@ -1162,7 +1163,7 @@ impl TypeNode {
     ///
     /// This is what a walk over the values a type holds descends: reference counting reaches a hole's
     /// slot through no path, and reading one would read a value that has moved on.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unpunched_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
         let tycon_info = self.toplevel_tycon_info(type_env);
         self.instance_field_types(tycon_info, type_env)
@@ -1484,7 +1485,7 @@ impl TypeNode {
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
     /// parameters and fields. Panics for a closure type, a type variable, or a type constructor
     /// absent from `type_env`.
-    // PROOF: D/A, P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
         assert!(!self.is_closure());
         let tycon = self.toplevel_tycon().unwrap();
@@ -1493,7 +1494,7 @@ impl TypeNode {
 
     /// Whether a value of this type is held in place, with its fields laid out where the value
     /// sits. A closure is unboxed: it is a function pointer beside the object its captures live in.
-    // PROOF: P1, P2, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox
     }
@@ -1511,7 +1512,7 @@ impl TypeNode {
     /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
     /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
     /// runs.
-    // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P28, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P28, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
         if self.is_box(type_env) {
             return false;
