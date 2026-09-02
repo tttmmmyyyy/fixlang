@@ -145,7 +145,7 @@ src/elaboration/typecheck.rs	Substitution::substitute_type	P1,P2	a0820f8e8059
 src/elaboration/typecheck.rs	TypeCheckContext::unify_or_tolerated_mismatch	P26	20cd23171b40
 src/elaboration/typecheck.rs	TypeCheckContext::unify_type_of_expr	P26	9f6fcd7b0499
 src/elaboration/typecheck.rs	TypeCheckContext::unify_type_of_expr_inner	D/A,P26	c3b65b0be2be
-src/ffi.rs	CSignature::get_or_declare_in_module	P27,P29,P30	65818f246a29
+src/ffi.rs	CSignature::get_or_declare_in_module	D/A,P27,P29,P30	65818f246a29
 src/ffi.rs	CSignature::of_ffi_export	P26	ed5fe25c470a
 src/ffi.rs	c_boundary_tycon	D/A,P26,P28	2c5a42247af5
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked	D/A,P26	6b9afb59394d

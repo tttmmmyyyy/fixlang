@@ -1335,6 +1335,15 @@ payload は、どれも D10 の生成の表が行を持つ位置なので第 1 �
 **A6・A9・A13 を上流について読む段は、この節を引く。** 下流 (`borrow_ify` の出力) へ延ばす道は
 それぞれの仮定が別に持つ (A6 は P9、A9 は P22 と P24)。
 
+**A26a (`FFI_CALL` の C 関数名は記号名と衝突しない)** -- 果たす者: 誰も。検査: 無し。
+`FFI_CALL` が名指す C 関数の名前は、このプログラムのどのグローバルの `object_file_symbol_name` とも
+異なる。**文法はこれを禁じない** -- `ffi_c_fun_char` は `(` 以外のすべての文字を受けるので、
+`Main::foo` という綴りの C 関数名を書ける (`CODE src/parse/grammer.pest: ffi_c_fun_char`)。
+衝突すると `CSignature::get_or_declare_in_module` が `module.get_function(name)` で見つけた既存の宣言を
+返すので (`CODE src/ffi.rs: CSignature::get_or_declare_in_module`)、その名前は記号でなく C 関数へ
+解決される。**読む者は `p51-runs.md` の `L0d` である** -- 単位が定義しない記号の宣言が、その単位で
+別のものへ解決されないことをこの仮定が与える。
+
 **A3 (宣言されたモデルの忠実さ)** -- 果たす者: 誰も。ただし `applies_a_function_operand` については
 `Generator::apply_lambda` の develop mode の検査が、`result_prov` の元数については `validate` の
 `check_rhs` の develop mode の検査が果たす。
@@ -3071,7 +3080,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 
 
 **T が閉じることは、T が引く命題が閉じることを意味しない。**各命題の状態はこの表が述べる。誰も果たさない
-仮定は A3、A4、A12、A18、A24 の 5 つである。A12 は `RcFunc` の欄の整合についてだけ果たす者を持つ。
+仮定は A3、A4、A12、A18、A24、A26a の 6 つである。A12 は `RcFunc` の欄の整合についてだけ果たす者を持つ。
 A23 が果たす者を 2 人持つこと -- その 2 人の間を funptr 型の `Expr::Lam` が式の内側へ移らずに通ること --
 は `p50-observation.md` の `L9b` `<2>2a` が示す。A10 は newtype を剥がす節を持ち、その節は誰も示して
 いない。
