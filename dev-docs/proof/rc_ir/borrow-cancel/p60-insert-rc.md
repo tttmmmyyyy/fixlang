@@ -3234,33 +3234,57 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 ### 11.4 `L23` (処分の事象に対する走査の応答)
 
-**DEF 処分の事象**。次の 2 種を**処分の事象**と呼ぶ。
+**DEF 処分の事象**。走査の次の 2 種の事象と、それが `ρ` の上で対にする実行時の事象との組を、
+**処分の事象**と呼ぶ。
 
 - `CancelAnalysis` の `consume` の 1 回の呼び出し (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume`)
-  と、それに対応する D9 の消費 1 つ。
+  と、それに対になる D9 の消費 1 つ。
 - `RcExpr::Release` の腕の 1 回の訪問 (`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`) と、
-  それに対応する `Release(v, π)` の実行時の処分。
+  それに対になる `Release(v, π)` の実行時の処分。
 
-**D9 の消費と `consume` の呼び出しの対応。** `walk_inner` の `Let(x, rhs, k)` の腕は `consume_rhs` を
-通じて `rhs_consumes` が挙げる各 leaf について `consume` を呼び、`Destructure` の腕は
-`destructure_consumes` が挙げる各 leaf について呼ぶ
-(`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`,
-`CODE src/rc_ir/ownership.rs: rhs_consumes`, `CODE src/rc_ir/ownership.rs: destructure_consumes`)。
-前提 (S1) よりすべての unit が所有されるので `owns` は常に真であり、`L16` より借用オペランドの素通しは
-無いので、この 2 つが挙げる leaf は D9 の消費の表の対応する行が挙げる leaf に一致する。
-**関数本体・初期化子の終端の `Ret` の消費には、対応する呼び出しが無い。** `walk_inner` の
+**その対が付くことは言明の (0) が述べ、`<1>0a` が示す。**
+
+**関数本体・初期化子の終端の `Ret` の消費は、この定義の外に落ちる。** `walk_inner` の
 `RcExpr::Ret` の腕は `returns_from_func` が真のとき `needed_retains` に入れるだけで `pending` を
 変えない。この消費の後には `ρ` の上に時点が無いので、`L24` と `L25` の言明はそこを扱わない
 (`L19` (c) と `L38`)。
 
-**言明**。(S1) の下で、1 つの処分の事象と各 `id ∈ Ids(C)` について、その事象が `Down(id)` を減らす量を
-`d` とすると、次のどちらかが成り立つ。
+**言明**。(S1) の下で次が成り立つ。
 
-- **(i)** その事象で `Bsub(id)` は `d` 以上減る。
-- **(ii)** 事象の後、その事象が処分したスロットのうち `id ∈ Anc(s)` であるもの `s` について、
-  `Anc(s) ∩ Sub(id)` の各名前 `id'` は `Bmp(id') = 0` である。
+- **(0)** `ρ` の上の D9 の消費のうち、関数本体・初期化子の終端の `Ret` の消費でないものは、走査の
+  `consume` の呼び出しと 1 対 1 に対応し、対応する 2 つは同じ leaf を名指す。`ρ` の上の各
+  `Release(v, π)` 節点の実行時の処分は、走査の `RcExpr::Release` の腕の訪問と 1 対 1 に対応する。
+- 1 つの処分の事象と各 `id ∈ Ids(C)` について、その事象が `Down(id)` を減らす量を
+  `d` とすると、次のどちらかが成り立つ。
+  - **(i)** その事象で `Bsub(id)` は `d` 以上減る。
+  - **(ii)** 事象の後、その事象が処分したスロットのうち `id ∈ Anc(s)` であるもの `s` について、
+    `Anc(s) ∩ Sub(id)` の各名前 `id'` は `Bmp(id') = 0` である。
 
 **証明**
+
+<1>0a. (0)。
+  BY 前提 (S1), D9, D14, D23, L16,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
+     CODE src/rc_ir/ownership.rs: rhs_consumes,
+     CODE src/rc_ir/ownership.rs: destructure_consumes
+  `walk_inner` が `consume` を呼ぶのは 2 か所である -- `Let(x, rhs, k)` の腕が `consume_rhs` を通じて
+  `rhs_consumes` が `consumed` に積む各 `(var, leaf)` について呼ぶ場所と、`Destructure` の腕が
+  `destructure_consumes` が挙げる各 leaf について呼ぶ場所であり、どちらも 1 つの leaf につき
+  1 回である。`RcExpr::Ret` の腕も `Retain`/`Release`/`Eval` の腕も `consume` を呼ばない。
+  D9 の消費の表の 6 行のうち、`App`・`Closure`・`Llvm` の 3 行は `Let` の右辺に、`Destructure` の
+  2 行は `Destructure` の節点に、残る 1 行は本体の終端の `Ret` に付く。
+  前提 (S1) よりすべてのパラメータ・capture の unit が所有される (D14) ので、`consume_rhs` が
+  `rhs_consumes` に渡す `owns` は常に真であり、D9 の `App` の行が言う所有 -- D23 よりその呼び出し先は
+  プログラムの `funcs` の関数である -- も常に真である。`L16` より借用オペランドの leaf は素通しを
+  宣言されないので、D9 の消費の表の `Llvm` の行が挙げる leaf -- `borrows_operand(i)` が偽の
+  オペランドのうち素通しを宣言されていない leaf -- は `rhs_consumes` の `Llvm` の腕が積む leaf に
+  一致する。よって前 5 行については、走査の呼び出しと D9 の消費が同じ leaf の上で 1 対 1 に対応する。
+  第 6 行 -- 本体の終端の `Ret` -- については走査が `consume` を呼ばないので、言明はそれを除いて
+  いる。
+  `RcExpr::Release` の腕は 1 つの `Release` 節点の訪問につき 1 回走り、`ρ` の上の `Release(v, π)`
+  節点の実行と 1 対 1 に対応する。
 
 <1>0. どの pending の要素 `p` と名前 `id'` についても `B(p, ρ)[id'] ≥ 0` であり、したがって
       `Bmp(id')` と `Bsub(id')` も 0 以上である。要素を `pending` から取り除くこと、および `un_bump` が
@@ -3288,11 +3312,17 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   すべて残す。
 
 <1>3. CASE 事象が `consume(var, path)` の呼び出しである。
-  BY <1>0, <1>1, <1>2, L21, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
-     CODE src/rc_ir/ownership.rs: rhs_consumes, D6, D9, D15, DEF `Down`、`Bmp`、`Bsub`
-  `consume` は `origin(vars, type_env, var, path).acted_on()` を `consume_objects` に渡す。`path` は
-  boxed leaf の path であり、それが inhabited でなければ D9 の消費は参照を処分せず `d = 0` で (i) が
-  成り立つ (`consume_objects` は要素を減らすだけなので `Bsub` は増えない)。
+  BY <1>0, <1>0a, <1>1, <1>2, L21, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
+     CODE src/rc_ir/ownership.rs: rhs_consumes, D6, D9, D15, D16, DEF 割り当て,
+     DEF `Down`、`Bmp`、`Bsub`
+  `consume` は `origin(vars, type_env, var, path).acted_on()` を `consume_objects` に渡す。
+  <1>0a よりこの呼び出しに対になる D9 の消費は `(var, path)` の 1 つであり、`DEF 割り当て` の第 5 行
+  より、その消費が `μ` を下げるのはその leaf が inhabited (D16) であるときの `(var, path)` 1 つに
+  ついてだけである。`DEF Down、Bmp、Bsub` より `Down(id) = Σ_{s : id ∈ Anc(s)} μ(s)` なので、
+  この事象が `Down(id)` を減らす量 `d` は、`(var, path)` が `C` のスロットであって
+  `id ∈ Anc(var, path)` であるとき 1、そうでないとき 0 である。以下、場合で分ける。
+  `path` は boxed leaf の path であり、それが inhabited でなければ D9 の消費は参照を処分せず `d = 0`
+  で (i) が成り立つ (`consume_objects` は要素を減らすだけなので `Bsub` は増えない)。
   `(var, path)` が `C` のスロットでないとき -- D6 のスロットでない記号の位置であるときと、別の類の
   スロットであるときがある -- も `d = 0` で (i) が成り立つ。`DEF Down、Bmp、Bsub` の総和は `C` の
   スロットだけを走るので、その `μ` はどの `Down(id)` の項でもないからである。**`consume` はこの形でも
@@ -3321,15 +3351,18 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release` の腕,
        CODE src/rc_ir/borrow.rs: un_bump, D27
   <2>4. CASE `un_bump` が `InBracket` を返す。(i) が成り立つ。
-    BY <2>3, L5a, D27, L5b, L21
+    BY <2>1, <2>3, <1>0, L5a, D27, L5b, L21
     この `Release` が処分するのは `π` の下の inhabited な各 leaf の参照であり (D10)、`Down(id)` が
     減る量 `d` はそのうち `id ∈ Anc(s)` であるスロットの個数である。`B(p, ρ)` は `origin` の
     `identity` を鍵とする多重集合であり (D27)、<2>3 よりそこから引かれる名前の多重集合も
     同じ鍵で数えたものなので、`Sub(id)` に落ちる分はちょうど
     `id(s) ∈ Sub(id)` すなわち `id ∈ Anc(s)` であるスロットの分、すなわち `d` である。`L5a` (d) より
     引き算は打ち切られない -- 選ばれた要素の `B(p, ρ)` は各名前でその量を下回らない -- ので、引かれる
-    量はそのまま `B(p, ρ)` から落ちる。`L5b` より `Sub(id) ⊆ Ids(C)` の名前が付く分はほかに無い。よって
-    `Bsub(id)` はちょうど `d` 減る。
+    量はそのまま `B(p, ρ)` から落ちる。`L5b` より `Sub(id) ⊆ Ids(C)` の名前が付く分はほかに無い。
+    **この訪問は `un_bump` の前に <2>1 の `consume_objects` も走らせるので、`Bsub(id)` の減り方は
+    `d` を下回らない、という向きで読む。** <1>0 より要素が `pending` から取り除かれることは
+    `Bmp` を増やさないので、その分は `Bsub(id)` をさらに下げるだけである。よって
+    `Bsub(id)` は `d` 以上減り、(i) が成り立つ。
   <2>5. CASE `un_bump` が `OutsideBracket` を返す。(ii) が成り立つ。
     BY <2>1, <2>2, <1>0, <1>1, <1>2, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の
        `RcExpr::Release` の腕, CODE src/rc_ir/ownership.rs: acted_references
@@ -3351,8 +3384,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     返す。
 
 <1>5. QED
-  BY <1>3, <1>4
-  処分の事象は `DEF 処分の事象` の 2 種で尽きる。
+  BY <1>0a, <1>3, <1>4
+  (0) は <1>0a である。処分の事象は `DEF 処分の事象` の 2 種で尽きる。
 
 ### 11.5 `L24` (名前の木の不等式)
 
