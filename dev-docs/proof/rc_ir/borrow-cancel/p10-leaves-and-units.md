@@ -2455,9 +2455,13 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    `is_box`、`is_closure`、`is_array`、`is_funptr` はすべて偽で `F(I64)` は空であり、
    `is_fully_unboxed(I64)` は空の連言として真になる。すなわち `cls(I64) = NB` であり、`<1>10` より
    `unit_step(I64, E)` は `UnitStep::NoUnit` で、`T(I64, [0])` はループの第 0 周で `panic!` に達する。
-   `origin` の答えに `T` を当てる読み手は `owns_object` であり、そこへ対を渡す `owns_unit` と
-   `check_ownership_is_levelled` が問うのは site の unit についての `origin(v, u)` なので、この条件を
-   満たす。
+   **`origin` の答えの `VarPath` の第 2 成分を `units_under` と `T` に掛ける読み手は、`owns_object` と
+   `owns_object_yet` の 2 つである。**`src/` で `truncate_to_unit` を呼ぶ製品のコードは 6 か所であり、
+   path を `origin` の答えから得るのはこの 2 つだけで、残る 4 か所が渡すのは `boxed_leaf_paths` が
+   挙げる leaf か、`rhs_consumes` が報告する leaf か、`result_prov` の宣言が名指す leaf である。
+   `owns_object` へ対を渡すのは `owns_unit` と `check_ownership_is_levelled`、`owns_object_yet` へ
+   対を渡すのは `level_ownership` であり、3 つとも問うのは site の unit についての `origin(v, u)` な
+   ので、この条件を満たす。第 5 節がその site を数え上げる。
   <2>1. `origin(vars, E, u, sig)` が返す値に現れる各 `VarPath` は、`(u, sig)` の呼び出しの下流
      (`DEF 呼び出しの下流`) にある対である。
     <3>1. `origin_inner` の `None`、`Binding::Param`、`Binding::Producer` の腕、`Binding::Field` で
@@ -2652,10 +2656,26 @@ leaf を持つ、という 2 つの事実の上に立っている。どちらか
 再帰の各辺 (move-bind、`Match` のアームの結果、変位アームの payload、catch-all の payload、
 unbox 容器のフィールド、`Llvm` の 2 つの道) が保つ。
 
-`origin` の答えに `truncate_to_unit` を当てるコードは `borrow.rs` の `owns_object` である。
+**`origin` の答えに `units_under` と `truncate_to_unit` を当てるコードは 2 つある。**`src/` で
+`truncate_to_unit` を呼ぶ製品のコードは 6 か所であり、そのうち path を `origin` の答えから得るのは
+`borrow.rs` の `owns_object` と `owns_object_yet` だけである。残る 4 か所が渡すのは、
+`boxed_leaf_paths` が挙げる leaf 2 か所 (`owns_object_yet` の中でキーと突き合わせる側と、
+`borrow_ify` が借用版の `owned_units` を組む箇所)、`rhs_consumes` が報告する leaf
+(`CancelAnalysis::consume_rhs` の `owns`)、`result_prov` の宣言が名指す leaf
+(`origin_from_leaves_under`) である。
+
 `owns_unit` と `check_ownership_is_levelled` が `origin(v, unit).candidates()` の各 `(root, path)` を
-`owns_object` に渡し、`owns_object` は `root` が `vars.param_tys` にあるとき `path` を `units_under`
-と `truncate_to_unit` に掛ける。その `unit` が `U(ty(v))` の要素であることは、`App` の引数の site に
-ついては P7a の site の定義が、`Retain`/`Release` 節点の site については A2 (単位への正規化) と P9
-(複製は名前替えである) が与える。`param_tys` に入る名前は `var_tys` にも同じ型で入るので、`<1>34` が
-その `path` について「`ty(root)` の unit に届く」を与える。`owns_object` を主語とする命題は P7e である。
+`owns_object` に渡し、`level_ownership` が同じ形で `origin(v, unit).candidates()` の各 `(root, path)`
+を `owns_object_yet` に渡す。どちらの関数も `root` が `vars.param_tys` にあるとき `path` を
+`units_under` と `truncate_to_unit` に掛ける。その `unit` が `U(ty(v))` の要素であることは、`App` の
+引数の site については P7a の site の定義が、`Retain`/`Release` 節点の site については A2
+(単位への正規化) と、借用版については P9 (複製は名前替えである) が与える。`level_ownership` が受け取る
+site は `infer_ownership` が入力の各関数について `levelled_sites` から作るものなので、`Retain`/`Release`
+節点については A2 だけで足りる。`param_tys` に入る名前は `var_tys` にも同じ型で入るので、`<1>34` が
+その `path` について「`ty(root)` の unit に届く」を与える。`owns_object` を主語とする命題は P7e、
+`level_ownership` と `owns_object_yet` を組で主語とする命題は P7d である
+(`CODE src/rc_ir/borrow.rs: owns_object, owns_object_yet, level_ownership, levelled_sites,
+infer_ownership, RewriteCtx::owns_unit, RewriteCtx::check_ownership_is_levelled,
+CancelAnalysis::consume_rhs, borrow_ify`,
+`CODE src/rc_ir/ownership.rs: units_under, truncate_to_unit, rhs_consumes, origin_from_leaves_under`,
+`CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`)。
