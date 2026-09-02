@@ -1027,8 +1027,10 @@ RewriteCtx::check_ownership_is_levelled`, `CODE src/rc_ir/ownership.rs: origin`)
 `clone.body = ctx.rewrite(&clone.body);` の**直前**に置き、この 2 つは同じ `ctx` の同じ `vars` を
 読む (`CODE src/rc_ir/borrow.rs: borrow_ify`)。P2a は、1 つの `VarTable` の値と 1 つの `TypeEnv` の
 値を固定したとき、鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならばその 2 つは
-等しく、答えは `vars.origins` が保持する memo の状態に依らないと述べる。この検査が書くのはその memo
-だけなので、`ctx.rewrite` が引く `origin` の答えは検査の有無で変わらない。コードは
+等しく、答えは `vars.origins` が保持する memo の状態に依らないと述べる。この検査が 2 つの共有参照を
+通じて書けるのは、`origins` の memo と、`&RcFunc` および `RewriteCtx` の型の欄から到達する
+`TypeNode` の memo -- 上の段が A3 の「値の等しさ」の節で扱ったもの -- の 2 つだけである。よって
+`ctx.rewrite` が引く `origin` の答えは検査の有無で変わらない。コードは
 `RewriteCtx::rewrite` に `// PROOF: P2a` を付けてこの読みを指す
 (`CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite`)。
 
