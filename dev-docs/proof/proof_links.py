@@ -55,9 +55,32 @@ def citations_in(text):
             if CITATION_LABEL.match(symbol):
                 break
             yield source, symbol
+            at = skip_note(text, at)
             if not text.startswith(",", at):
                 break
             at += 1
+
+
+def skip_note(text, at):
+    """The position past a parenthesised note following a cited symbol, or `at` where none stands.
+
+    A citation may say which part of an item it relies on -- `RcVar (`ty` の doc)`. The note sits
+    between the symbol and the comma that introduces the next symbol, so a reader that looks for the
+    comma where the symbol ends stops at the first annotated symbol and drops every symbol after it,
+    silently: a dropped symbol carries no `// PROOF:` comment and is never checked to exist."""
+    start = at
+    while start < len(text) and text[start] in " \t":
+        start += 1
+    if start >= len(text) or text[start] != "(":
+        return at
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "\n" and text[index - 1] == "\n":
+            return at
+        depth += (text[index] == "(") - (text[index] == ")")
+        if depth == 0:
+            return index + 1
+    return at
 
 # `| P1, P2 | `p10-leaves-and-units.md` | ... |` in a proof README's status table. The main theorem's
 # row names it `T`, so a cell holding that alone counts as well.
