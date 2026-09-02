@@ -111,9 +111,11 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
        CODE src/rc_ir/codegen.rs: Generator::implement_rc_program
   <2>1a. 相異なる 2 つの鍵の名前は相異なる記号名を持ち、鍵の名前の記号名は `::` を含む。
     `FullName::to_string` は名前空間の各成分を `::` で継いだ列に `::` と `name` を継いだ文字列である。
-    名前空間の成分も `name` も `::` を含まない -- Fix の識別子を作る文字は英数字と `_` だけであり、
-    名前空間の成分はその識別子を `.` で継いだものであって、コンパイラが作る名前が足す接尾辞は
-    `#<タグ><10 進数字>` の形である (A13)。よって `to_string` は相異なる名前に相異なる文字列を与える。
+    名前空間の成分も `name` も `::` を含まない -- 名前空間の成分は、module 宣言と namespace 宣言が与える
+    `namespace_item` (大文字で始まる語を `.` で継いだもの) か、最上位の記号の名前を名前空間へ移したもので
+    あり、記号の名前は Fix の識別子にコンパイラが `#<タグ><10 進数字>` の形の接尾辞を足したものである
+    (A13)。Fix の識別子を作る文字は英数字と `_` (と値の名前の頭の `@`) だけなので、どれも `:` を持たない。
+    よって `to_string` は相異なる名前に相異なる文字列を与える。
     `object_file_symbol_name` はその文字列の `SYMBOL_VERSION_SEPARATOR` を
     `SYMBOL_VERSION_SEPARATOR_SUBSTITUTE` に置き替えるだけであり、置き替える前の文字列が substitute を
     含まないことをその関数の表明が検査する -- 含むプログラムはコンパイルされず、この場合の段は存在しない --
@@ -132,7 +134,9 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
       `Get#` を冠する `global_accessor_name` の値 (`declare_program_global`)、`InitValue#` と `InitOnce#`
       を冠する名前 (`implement_rc_global` の 2 か所)、`release#` と `retain#` を冠する名前 (`builtin.rs`
       の 2 か所) は、いずれも最初の `::` より前に `#` を持つ。鍵の名前の記号名は最も外側の名前空間の成分
-      から始まり、その成分は Fix の識別子を `.` で継いだものなので `#` を持たない (A13、`namespace_item`)。
+      から始まり、その成分は module 宣言が与える `namespace_item` なので `#` を持たない -- 最上位の記号の
+      名前は module の名前空間の下に在り (A13)、持ち上げた lambda の名前の名前空間はその記号の名前を
+      末尾に足したものである (`fresh_closure_ref`)。
       `<接頭辞>_<型のハッシュ>` (`emit_rc_helper_call` の 1 か所)、走査関数の名前 `trav_...` と
       `fixruntime_empty_traverser`・`fixruntime_empty_traverser_dynamic` (`object.rs` の
       `create_traverser` と `get_traverser_ptr`)、走時の記号名 `fixruntime_...`・`sprintf`・
@@ -147,6 +151,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
          CODE src/fixstd/builtin.rs: InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
          InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody,
          CODE src/fixstd/runtime.rs: build_runtime, CODE src/ffi.rs: CSignature::get_or_declare_in_module,
+         CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
          CODE src/parse/grammer.pest: name, namespace_item
     <3>2. QED
       `implement_rc_program` の前にモジュールへ関数を入れるのは `build_runtime` の `Declare` の呼び出し
