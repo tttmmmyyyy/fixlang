@@ -426,12 +426,17 @@ Ret(w)))))
   すべて等しいので、その値がそのまま返る。
 
 <1>4. `(p, [])` は ρ-終端であり、`C_p = {(p, [])}` である。
-  BY <1>3, <1>2, <1>2a, D6, D33
-  <1>3 の計算で `origin_inner` は `origin` を 1 度も呼ばない (`operand_units` が空なので
-  `origin_from_leaves_under` の中の `origin` の呼び出しも起きない)。よって `(p, [])` は ρ-終端である。
-  別名類は ρ-終端が等しいスロットの集まりなので、`(p, [])` を ρ-終端とするスロットを数えればよい。
-  `B_0` に現れる `RcVar` は `p`、`u`、`w`、`f` であり、<1>2 より前 3 者のスロットは `(p, [])` だけ、
-  <1>2a より `f` はスロットを持たない。
+  BY <1>2, <1>2a, <1>3, D6, D17, D33, A3, 4.1 節の道具立て,
+     CODE src/rc_ir/ownership.rs: collect_bindings
+  D33 は ρ-歩みが止まる位置を 3 種で挙げ、その第 2 種は「`Binding::Llvm` であって、`λ` の宣言が
+  単一の `Fresh` または単一の `Unknown` である位置」である。<1>3 より `p` の束縛は
+  `collect_bindings` が入れた `Binding::Llvm(alloc, [], Arr)` であり、A3 と 4.1 節の道具立てより
+  `alloc` の結果の leaf `[]` の宣言は単一の `Fresh` なので、`(p, [])` はこの第 2 種に当たる。
+  D17 の第 2 項も、宣言が単一の `Fresh` のとき鎖はそこで止まり対応するスロットはその位置自身であると
+  述べる。よって `(p, [])` は ρ-終端である。
+  別名類は ρ-終端が等しいスロットの集まりなので (D33)、`(p, [])` を ρ-終端とするスロットを数えれば
+  よい。`B_0` に現れる `RcVar` は `p`、`u`、`w`、`f` であり、<1>2 より前 3 者のスロットは `(p, [])`
+  だけ、<1>2a より `f` はスロットを持たない。
 
 <1>5. `obj(C_p)` は計数下である。
   BY A3, D26, 4.1 節の道具立て
@@ -1387,7 +1392,7 @@ Ret(u)))))
 
 <1>1. `B_1` の実行路は 1 本であり、その上の計数下の別名類は `C_o = {(o, [])}` と `C_y = {(y, [])}` で
       ある。
-  BY D3, D4, D6, D26, A3, CODE src/rc_ir/ownership.rs: collect_bindings,
+  BY D3, D4, D6, D26, D33, A3, CODE src/rc_ir/ownership.rs: collect_bindings,
      CODE src/rc_ir/ownership.rs: origin_inner,
      CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
      CODE src/rc_ir/ownership.rs: as_arg_projection,
@@ -1395,9 +1400,12 @@ Ret(u)))))
   `Match` が無いので実行路は 1 本である。`collect_bindings` は `Let(o, Llvm(alloc, []), ・)` に
   `Binding::Llvm(alloc, [], Arr)` を入れる。A3 と 4.1 より `alloc` の宣言は単一の `Fresh` なので
   `as_arg_projection` は `None` を返し、`origin_from_leaves_under` はオペランドを持たないこの op に
-  ついて `Exactly((o, []))` を返す。よって `origin(o, []) = Exactly((o, []))` である。`y` は `RcRhs::App` に束縛されるので `collect_bindings` は `Binding::Producer` を入れ、
-  `origin_inner` の `Producer` の腕は `here()` を返して `origin` を呼ばない。よって `(o, [])` と
-  `(y, [])` はどちらも ρ-終端であり、別々の類である。
+  ついて `Exactly((o, []))` を返す。よって `origin(o, []) = Exactly((o, []))` である。`y` は
+  `RcRhs::App` に束縛されるので `collect_bindings` は `Binding::Producer` を入れる。
+  D33 が ρ-歩みを止める 3 種のうち、第 1 種「辺を持たない束縛、すなわち `Binding::Param`、
+  `Binding::Producer`、および束縛を持たない名前 (記号の位置)」が `(y, [])` に、第 2 種
+  「`Binding::Llvm` であって、`λ` の宣言が単一の `Fresh` または単一の `Unknown` である位置」が
+  `(o, [])` に当たるので、どちらも ρ-終端であり、別々の類である。
   `ty(o) = ty(y) = Arr` の leaf が `[]` の 1 つであることは D4 の判定から出る -- `is_fully_unboxed` は
   `if self.is_box(type_env) { return false; }` で始まるので boxed な `Arr` では偽であり、`is_unbox` は
   `self.is_closure() || toplevel_tycon_info(type_env).is_unbox` で `is_box` はその否定なので `Arr` では
@@ -3204,6 +3212,7 @@ Ret(x)))
 <1>2. `B_2` の実行路は 1 本であり、`C := {(m, []), (x, [0]), (x, [1])}` はその上の 1 つの別名類で、
       `obj(C)` は計数下であり、`id` はどのスロットについても `(m, [])` である。
   BY D3, D4, D26, A3, CODE src/rc_ir/ownership.rs: collect_bindings,
+     CODE src/rc_ir/ownership.rs: VarTable::of,
      CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: as_arg_projection,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_unbox,
      D33
@@ -3217,8 +3226,10 @@ Ret(x)))
   ある。`collect_bindings` は `x` に
   `Binding::Llvm(make_pair, [m, m], Pair)` を入れ、12.1 節の宣言と `as_arg_projection` より
   `origin(x, [0])` は `origin(m, [])`、`origin(x, [1])` も `origin(m, [])` である。`m` はパラメータ
-  なので `origin_inner` の `Binding::Param` の腕が `Exactly((m, []))` を返し、`(m, [])` が 3 つの
-  スロットの ρ-終端である。3 つのスロットは ρ-終端が等しいので 1 つの別名類をなす。`obj(C)` は
+  なので `VarTable::of` が `Binding::Param` を入れ、D33 が ρ-歩みを止める第 1 種
+  「辺を持たない束縛、すなわち `Binding::Param`、`Binding::Producer`、および束縛を持たない名前
+  (記号の位置)」に当たるので、`(m, [])` が 3 つのスロットの ρ-終端である。
+  3 つのスロットは ρ-終端が等しいので 1 つの別名類をなす。`obj(C)` は
   `m` が受け取ったオブジェクトであり、言明はそれが計数下である活性化について述べる。
 
 <1>3. `μ`、`held`、`bumps` は次のように動く。
