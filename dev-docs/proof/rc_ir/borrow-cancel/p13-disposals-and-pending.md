@@ -3011,10 +3011,11 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
     BY <1>1d
   <2>1. この CASE の 6 種の位置で消費が起きるかどうかは、所有の割り当てによらない。また
         `collect_consumes` はそれらを、渡された `own` によらず報告する。
-    BY <1>1e, D9, CODE src/rc_ir/ownership.rs: collect_consumes_go,
-       CODE src/rc_ir/ownership.rs: rhs_consumes, destructure_consumes, push_boxed_leaves
+    BY <1>1e, D9, CODE src/rc_ir/ownership.rs: collect_consumes, collect_consumes_go,
+       rhs_consumes, destructure_consumes, push_boxed_leaves
     <1>1e より消費の位置は 7 種であり、D9 の消費の表で所有を読むのは `App` の行の引数の側だけなので、
-    残る 6 種は所有の割り当てを読まない。この 6 種について `collect_consumes_go` と `rhs_consumes` の
+    残る 6 種は所有の割り当てを読まない。`collect_consumes` は `own` を `owns` の閉包に包んで
+    `collect_consumes_go` に渡すだけであり、この 6 種について `collect_consumes_go` と `rhs_consumes` の
     判定は `own` を読まない --
     `rhs_consumes` の `RcRhs::App` の腕は `callee` の leaf を無条件に `out` に入れ、`RcRhs::Closure` の
     腕は各 capture の leaf を無条件に入れ、`RcRhs::Llvm` の腕は `borrows_operand` と
