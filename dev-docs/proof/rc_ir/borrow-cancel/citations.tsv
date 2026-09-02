@@ -19,6 +19,7 @@ src/ast/name.rs	FullName::local	(P-insert)	47c06982e039
 src/ast/name.rs	FullName::to_namespace	P27,P29,P30	bb19891f8d40
 src/ast/name.rs	FullName::to_string	P27,P29,P30	cf55213855f5
 src/ast/name.rs	NameSpace	P2a,P15,P16,P17,P18	efdb8b63a511
+src/ast/name.rs	NameSpace::module	P27,P29,P30	424f66bfee2f
 src/ast/name.rs	NameSpace::to_string	P27,P29,P30	4ec970617b24
 src/ast/pattern.rs	Pattern::validate_match_cases_exhaustiveness	D/A	60f1ed66b7fc
 src/ast/program.rs	Program::add_boxed_impls	D/A,P26	3328bbee359d

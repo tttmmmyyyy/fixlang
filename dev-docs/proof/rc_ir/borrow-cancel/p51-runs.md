@@ -126,33 +126,41 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
        CODE src/parse/grammer.pest: name_char, namespace_item
   <2>2. 第 1 ループが鍵 `FuncRef{n}` の項目に着く時点で、モジュールは記号名 `object_file_symbol_name(n)`
         の関数を持たない。
-    <3>1. `object_file_symbol_name(n)` を名前として `module.add_function` に渡すのは
-          `declare_lambda_function` の呼び出しだけである。
+    <3>1. 第 1 ループが鍵 `FuncRef{n}` の項目に着くまでに走りうる `module.add_function` の呼び出しの
+          うち、`object_file_symbol_name(n)` を名前とするのは `declare_lambda_function` の 1 か所だけで
+          ある。
       `src/` の `module.add_function(` は 17 か所であり、`object_file_symbol_name` の値をそのまま名前に
-      するのは `declare_lambda_function` の 1 か所である。残る 16 か所が渡す名前は次のとおりで、どれも
-      鍵の名前の記号名ではない。
-      `Get#` を冠する `global_accessor_name` の値 (`declare_program_global`)、`InitValue#` と `InitOnce#`
+      するのは `declare_lambda_function` の 1 か所である。残る 16 か所を挙げる。
+      **第 1 ループより前に走るもの**は、走時の記号名 `fixruntime_...`・`sprintf`・`pthread_once`・
+      `malloc`・`realloc` を渡す `runtime.rs` の 7 か所である。どれも `::` を含まず、`<2>1a` より鍵の
+      名前の記号名は `::` を含むので、これらは `object_file_symbol_name(n)` ではない。
+      **第 1 ループの中で走りうるもの**は、`global_accessor_name` の値 -- `Get#` を冠する名前 -- を渡す
+      `declare_program_global` の 1 か所である。その名前は最初の `::` より前に `#` を持つ。鍵の名前の
+      記号名は最も外側の名前空間の成分から始まり、その成分は module 宣言が与える `namespace_item` なので
+      `#` を持たない -- 最上位の記号の名前の名前空間の最も外側の成分はその記号が住む module の名前であり
+      (`CODE src/ast/name.rs: NameSpace::module` の doc -- 「The module the path lies in, which is the
+      first name of its namespace.」)、持ち上げた lambda の名前の名前空間はその記号の名前を末尾に足した
+      ものである (`fresh_closure_ref`)。
+      **残る 8 か所は本体を出す段で走る**ので、第 1 ループの後である (`build_object_files` が
+      `implement_rc_program` を 1 度呼び、その第 2・第 3 ループが本体を出す)。`InitValue#` と `InitOnce#`
       を冠する名前 (`implement_rc_global` の 2 か所)、`release#` と `retain#` を冠する名前 (`builtin.rs`
-      の 2 か所) は、いずれも最初の `::` より前に `#` を持つ。鍵の名前の記号名は最も外側の名前空間の成分
-      から始まり、その成分は module 宣言が与える `namespace_item` なので `#` を持たない -- 最上位の記号の
-      名前は module の名前空間の下に在り (A13)、持ち上げた lambda の名前の名前空間はその記号の名前を
-      末尾に足したものである (`fresh_closure_ref`)。
-      `<接頭辞>_<型のハッシュ>` (`emit_rc_helper_call` の 1 か所)、走査関数の名前 `trav_...` と
+      の 2 か所)、`<接頭辞>_<型のハッシュ>` (`emit_rc_helper_call` の 1 か所)、走査関数の名前 `trav_...` と
       `fixruntime_empty_traverser`・`fixruntime_empty_traverser_dynamic` (`object.rs` の
-      `create_traverser` と `get_traverser_ptr`)、走時の記号名 `fixruntime_...`・`sprintf`・
-      `pthread_once`・`malloc`・`realloc` (`runtime.rs` の 7 か所)、そして `FFI_CALL` が呼ぶ C の関数の
-      名前 (`ffi.rs` の 1 か所、文法の `name` が作る識別子) は、いずれも `::` を含まない。`<2>1a` より
-      鍵の名前の記号名は `::` を含む。
+      `create_traverser` と `get_traverser_ptr`)、そして `FFI_CALL` が呼ぶ C の関数の名前 (`ffi.rs` の
+      1 か所) である。**最後のものは形では分けられない** -- 文法の `ffi_c_fun_char` は `(` 以外の任意の
+      文字を許すので、その名前は鍵の記号名と同じ綴りでありうる。分けるのは走る時期である。
       BY A13, <2>1a, CODE src/generator.rs: object_file_symbol_name, global_accessor_name,
          Generator::declare_lambda_function, Generator::declare_program_global,
          Generator::emit_rc_helper_call,
-         CODE src/rc_ir/codegen.rs: Generator::implement_rc_global,
+         CODE src/ast/name.rs: NameSpace::module,
+         CODE src/build/build_object_files.rs: build_object_files,
+         CODE src/rc_ir/codegen.rs: Generator::implement_rc_program, Generator::implement_rc_global,
          CODE src/object.rs: create_traverser, get_traverser_ptr,
          CODE src/fixstd/builtin.rs: InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
          InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody,
          CODE src/fixstd/runtime.rs: build_runtime, CODE src/ffi.rs: CSignature::get_or_declare_in_module,
          CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
-         CODE src/parse/grammer.pest: name, namespace_item
+         CODE src/parse/grammer.pest: ffi_c_fun_char, namespace_item
     <3>2. QED
       `implement_rc_program` の前にモジュールへ関数を入れるのは `build_runtime` の `Declare` の呼び出し
       だけである -- `build_object_files` はその呼び出しを `implement_rc_program` の直前に置き、

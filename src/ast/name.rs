@@ -170,6 +170,7 @@ impl NameSpace {
 
     /// The module the path lies in, which is the first of its names. The path must hold at least
     /// one name.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn module(&self) -> Name {
         self.names[0].clone()
     }
