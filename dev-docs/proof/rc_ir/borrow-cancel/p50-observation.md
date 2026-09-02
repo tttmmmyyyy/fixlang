@@ -1645,11 +1645,24 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         尽きる** -- `TypeCheckContext::unify_type_of_expr` は各式に推論した型を付けて返すが、その型は
         制約系へ入った型の代入像であり、単一化は与えられた型から新しい tycon を作らない。`uncurry` より前に
         funptr 型が制約系へ入る経路は無い。`type_funptr` を呼ぶ生産コードは `uncurry` の 2 か所だけであり
-        (`<2>2`)、Fix のソースに書かれた型はこの tycon を持たず (`<2>1`)、型検査が `Expr::Lam` に与えるのは
-        `type_fun(arg_ty, body_ty)` である (`CODE src/elaboration/typecheck.rs:
-        TypeCheckContext::unify_type_of_expr_inner`)。よって単一化が式に funptr 型を与えることもなく、
-        `uncurry` より前の式に funptr 型は現れない。**この段は A23 を引かない** -- A23 が
-        残していた点をこの段が閉じるからである。`uncurry` の中で funptr 型が式に付く
+        (`<2>2`)、Fix のソースに書かれた型はこの tycon を持たない (`<2>1`)。よって単一化が式に funptr 型を
+        与えることもなく、`uncurry` より前の式に funptr 型は現れない。
+        **`Expr::Lam` の節点についてはこれが独立に出る。** `unify_type_of_expr_inner` は冒頭の
+        `let ei = ei.set_type(ty.clone());` で節点に**期待型** `ty` を置き、`Expr::Lam` の腕はその `ty` を
+        `type_fun(arg_ty, body_ty)` と `unify_or_tolerated_mismatch` で単一化する
+        (`CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner`,
+        `unify_or_tolerated_mismatch`)。`type_fun` が組む型の toplevel の tycon は `make_arrow_tycon` の
+        もの、`type_funptr` が組む型の toplevel の tycon は `make_funptr_tycon` のものであって相異なるので
+        (`CODE src/ast/types.rs: type_fun, type_funptr`, `CODE src/fixstd/builtin.rs: make_arrow_tycon,
+        make_funptr_tycon`)、期待型が funptr 型であればこの単一化は失敗する。`error_tolerant` が真のとき
+        `unify_or_tolerated_mismatch` はその失敗を飲むが、`error_tolerant` を真にするのは
+        `diagnostics` サブコマンドだけであり (`CODE src/ast/program.rs: Program::create_typechecker`)、
+        そのサブコマンドは `build_object_files` を呼ばない (`CODE src/commands/check.rs: check`,
+        `CODE src/build/build.rs: build`)。よって RC IR のパスが走る経路では、期待型が funptr 型の
+        `Expr::Lam` を持つプログラムは型検査が `Err` で止め、その本体の活性化は存在しない
+        (README の「仮定」の節の「「果たす者」と「検査」の読み方」が挙げる 3 段の 2 段目)。
+        **この段は A23 を引かない** -- A23 が残していた点をこの段が閉じるからである。`uncurry` の中で
+        funptr 型が式に付く
         位置は 3 つに尽きる -- `funptr_lambda` が `expr_abs(args, body, None).set_type(funptr_ty)` を
         作る位置、`replace_closure_call_to_funptr_call` が
         `expr_var(f_funptr.name, None).set_type(funptr_ty)` を作って `expr_app` の関数の位置に置く位置、
@@ -1658,10 +1671,15 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         `replace_closure_call_to_funptr_call_subexprs` は部分式を辿って
         `replace_closure_call_to_funptr_call` を当て、その答えの部分式を組み直すだけで、式の型を別の式へ
         写さない。
-    BY <2>1, <2>2, CODE src/optimization/uncurry.rs: run, funptr_lambda,
+    BY <2>1, <2>2, README の「「果たす者」と「検査」の読み方」,
+       CODE src/optimization/uncurry.rs: run, funptr_lambda,
        replace_closure_call_to_funptr_call, replace_closure_call_to_funptr_call_subexprs,
        CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr,
-       TypeCheckContext::unify_type_of_expr_inner
+       TypeCheckContext::unify_type_of_expr_inner, TypeCheckContext::unify_or_tolerated_mismatch,
+       CODE src/ast/program.rs: Program::create_typechecker,
+       CODE src/ast/types.rs: type_fun, type_funptr,
+       CODE src/fixstd/builtin.rs: make_arrow_tycon, make_funptr_tycon,
+       CODE src/commands/check.rs: check, CODE src/build/build.rs: build
   <2>3. `uncurry::run` は export statement の `value_expr` と `entry_io_value` も funptr 記号の `Var` に
         差し替える。この 2 つは関数の本体ではなく、環境が読むものである (D22)。
     BY D22, CODE src/optimization/uncurry.rs: run
