@@ -2475,8 +2475,9 @@ leaf に前置したものだからである。
         `collect_consumes` と `rhs_consumes` は `pub(crate)`、`infer_ownership` は `borrow.rs` の
         非公開の関数なので、EXT 可視性 より、それらを呼ぶ式はこのクレートのソース `src/` の中にしか
         ない。EXT 名前による数え上げ より、この列挙は `src/` の全体について識別子 `collect_consumes`、
-        `infer_ownership`、`rhs_consumes` を検索して得られる (どのファイルもこの 3 つに `use` の別名を
-        導入しない)。
+        `infer_ownership`、`rhs_consumes` を検索して得られる。`borrow.rs` の `use` はこの 3 つのうち
+        2 つを別名なしで導入し、ほかに別名を導入するファイルは無い。検索が返す残りは各関数の宣言と、
+        `collect_consumes_go` -- `collect_consumes` とは別の識別子 -- の宣言と呼び出しである。
     BY EXT 可視性, EXT 名前による数え上げ, CODE src/rc_ir/ownership.rs: collect_consumes,
        collect_consumes_go, rhs_consumes,
        CODE src/rc_ir/borrow.rs: infer_ownership, borrow_ify, CancelAnalysis::consume_rhs
