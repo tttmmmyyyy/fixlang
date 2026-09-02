@@ -40,13 +40,14 @@ inhabited は現れない。実行時にどの leaf が参照を持つかは P1 
 - `L(t)` := `boxed_leaf_paths(t, E)` (`CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`)
 - `U(t)` := `rc_units(t, E)` (`CODE src/rc_ir/ownership.rs: rc_units`)
 - `T(t, p)` := `truncate_to_unit(t, p, E)` (`CODE src/rc_ir/ownership.rs: truncate_to_unit`)
-- `F(t)` := `t.unpunched_field_types(E)` (`CODE src/ast/types.rs: TypeNode::unpunched_field_types`)。
-  これは対 `(添字, 型)` の列である。
 - `c` := `CLOSURE_CAPTURE_IDX as usize` (`CODE src/constants.rs: CLOSURE_CAPTURE_IDX`)
 
 型は `t`、`s`、`f` などのラテン文字で表す。path は `usize` の有限列 (`CODE src/rc_ir/ast.rs:
 FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 `i` 要素 (0 始まり)、`p[0..k]` は
 先頭 `k` 要素からなる前置、`|p|` は長さ、`p ++ q` は連結、`[]` は空列とする。
+
+**DEF F** -- 型 `t` について `F(t) := t.unpunched_field_types(E)` と書く
+(`CODE src/ast/types.rs: TypeNode::unpunched_field_types`)。これは対 `(添字, 型)` の列である。
 
 **EXT Rust の一時値のスコープ** -- Rust Reference の "Destructors" の節の "Temporary scopes" が
 次を述べる。`<1>30` の `<2>1` がこれを引く。
