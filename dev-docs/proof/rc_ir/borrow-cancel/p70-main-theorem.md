@@ -766,20 +766,20 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 |---|---|---|---|
 | A1 | 入力が RC 規律を満たす | 前段のパス (`insert_rc`) | P14 と T の言明の前提。A19 (i) の量化範囲に D12 を与える (P28 の項) |
 | A2 | 単位への正規化 | `insert_rc` と `split_rc_units` | P14 と T の言明の前提。P9 の項 |
-| **A3** | 宣言されたモデルの忠実さ | **誰も**。ただし `applies_a_function_operand` については `Generator::apply_lambda` の develop mode の検査が、`result_prov` の元数については `validate` の `check_rhs` の develop mode の検査が果たす | D10、D21、D24、D29、D30、P5 (a)。元数の節を読むのは「名前は別名類を決める」-- A19 (ii-b) の (O2) が使う性質 -- である (第 7 節) |
+| **A3** | 宣言されたモデルの忠実さ | **誰も**。ただし `applies_a_function_operand` については `Generator::apply_lambda` の develop mode の検査が、`result_prov` の元数については `validate` の `check_rhs` の develop mode の検査が果たす | D10、D21、D24、D29、D30、P5 (a)。「値の等しさ」の節の読み手として `validate` を名指す -- このファイルでは `<1>1` の `<2>2` と第 4 節の「開発ビルドでだけ走る検査」がそこに立つ。元数の節を読むのは「名前は別名類を決める」-- A19 (ii-b) の (O2) が使う性質 -- である (第 7 節) |
 | **A4** | コード生成の忠実さ | **誰も** | D29、D30 |
-| A5 | 型が leaf の上位近似 | `leaf_map.rs` の設計 | D25、P7a、A19 (i) |
+| A5 | 型が leaf の上位近似。`#ArrayStorage` のオブジェクトについては、持ち手の単位は leaf ではなく要素の位置である | `leaf_map.rs` の設計 | D16 (null ポインタの leaf を数えない節)、D25、D29 (対応するオブジェクトが保持する値の節)、P7a、A19 (i) |
 | A6 | 名前の一意性 | lowering | D6、P9、A11 |
 | A7 | 呼び出し先の解決 | `resolve_callee_params` の設計 | 第 8 節 (#551 の 1 件目の直しが健全な近似である根拠) |
 | A8 | グローバルは線形規律の外 | `mark_global` | D26、D24 の (E7)、P27 の系 |
 | A9 | `Match` はアームを持つ | lowering (検査は develop mode の `validate`) | P16 |
-| A10 | 型の well-formedness | 大きさの部分は `validate_layouts` (最適化が作る型の再検査は develop build だけ)。**飽和を果たすのは kind の体系である** -- 宣言された型の kind は `check_kinds` が検査して診断を出し、式の型は kind `*` を持つ。README 第 4 節の冒頭はこれを「構成上そうなる」の段に置く。**`validate_layouts` は飽和を検査しない** -- その走査自身が `no_size_reason` から `held_types` を経て `declared_field_types` に入るので、飽和していない型に出会えば診断を出さずに同じ `assert` で止まる | P1 の言明、A12。A10 自身の項が `boxed_leaf_paths` と `rc_units` の停止性を挙げる |
+| A10 | 型の well-formedness | 大きさの部分は `validate_layouts` (最適化が作る型の再検査は develop build だけ)。**飽和を果たすのは kind の体系である** -- 宣言された型の kind は `Scheme::check_kinds` が検査して診断を出し、式の型は kind `*` を持つ。README 第 4 節の冒頭はこれを「構成上そうなる」の段に置く。**`validate_layouts` は飽和を検査しない** -- その走査自身が `no_size_reason` から `held_types` を経て `declared_field_types` に入るので、飽和していない型に出会えば診断を出さずに同じ `assert` で止まる。`declared_field_types` の `assert!(merge_ok)` を通すのは `TypeDefn::validate_tyvars` であり、`Program::validate_type_defns` がすべての型宣言に掛ける | P1 の言明、A12。A10 自身の項が `boxed_leaf_paths` と `rc_units` の停止性を挙げる |
 | A11 | スコープの規律 | lowering (検査は develop mode の `validate`) | D2、P9。A11 自身の項が `origin` の停止性を挙げる |
-| **A12** | 束縛の形と型が合っている | **誰も** (項の見出し)。ただし `RcFunc` の欄の整合については `Lowerer::lower_lambda_as_function` が果たし、箇条ごとにも果たす者が居る -- `Llvm` 節点の `args` の名前の列は演算を作る側 (検査: develop mode の `validate` の `check_rhs`)、`Llvm` 節点の型についての残る 3 つは `struct_punch`・`struct_set` と `struct_plug_in`・`struct_get` と `union_as` が結果の型に取る形。punched でないことを検査するコードは無い | A3。A12 自身の項が P2 と `held_field_type`、`rhs_consumes` の停止性を挙げる |
+| **A12** | 束縛の形と型が合っている | **誰も** (項の見出し)。ただし `RcFunc` の欄の整合については `Lowerer::lower_lambda_as_function` が果たし、箇条ごとにも果たす者が居る -- `Llvm` 節点の `args` の名前の列は演算を作る側 (検査: develop mode の `validate` の `check_rhs`)、`Llvm` 節点の型についての残る 3 つは `struct_punch`・`struct_set` と `struct_plug_in`・`struct_get` と `union_as` が結果の型に取る形。punched でないことを検査するコードは無い | A3。union の側の節の読み手として `p12-identity-and-consumes.md` の `L4` を挙げる。A12 自身の項が P2 と `held_field_type`、`rhs_consumes` の停止性を挙げる |
 | A13 | 名前の形 | `Lowerer::fresh_var` と `clone_fresh` (検査は develop mode の `check_clone_names_are_fresh`) | P9 の後半、P14b。このファイルの `<1>10` の `<2>1a` |
 | A14 | 適用は飽和している (`App` の `args` の個数は呼び出し先のパラメータの個数に**等しい**) | 型検査と lowering (検査は `Generator::apply_lambda` の `assert_eq!`) | A14 自身の項が両向きの読み手を挙げる -- 以下は `call_rc` と `rhs_consumes` の `params[arg_idx]`、以上は D10 の初期値 |
 | A15 | `grow_stack` は閉包をちょうど 1 回呼ぶ | `stacker` crate | A15 自身の項が「`src/` の `grow_stack(` の呼び出し元を数え上げて決める」と述べる |
-| A16 | `Match` のアームは scrutinee のタグを尽くす | lowering と、アームの列を保つ後段のパス。catch-all の位置についてはコード生成 (**検査: 無し**) | P3、P4、P5 (a)、P6 |
+| A16 | `Match` のアームは scrutinee のタグを尽くす | 型検査の網羅性検査 (`Pattern::validate_match_cases_exhaustiveness`)、Bool の 2 つのタグを直に出す lowering (`Lowerer::lower_if`)、およびアームの列を保つ後段のパス。catch-all の位置についてはコード生成 (**検査: 無し**) | P3、P4、P5 (a)、P6 |
 | A17 | 環境の契約 | 環境のコード (**検査: 無し**) | D21 (`H` の外から来る増減)、D24 の「実行の最初の時点」と (E8)、P27 の言明。(i-c) の「環境が持ち込むオブジェクトは有限個である」は `p51-runs.md` の `L5` (d)。(i-d) は `p50-observation.md` の `L9b`・`L10` |
 | **A18** | 生きているオブジェクトのグラフの非巡回性と、グローバル状態のオブジェクトが計数下の参照を持たないこと | **誰も** | P27 の言明の前提。使うのは (R3) だけ (A18 自身の項) |
 | A19 | bump の下に余りが在る | (ii-a) は `insert_rc`・`split_rc_units`・`borrow_ify` の 3 人 (**検査: 無し**)。(ii-b) は無条件に閉じている (第 7 節)。(i) は仮定ではなく D21 が活性化に課す制限であり、実行が作る活性化がそれを満たすことを P28 (b) が示す | (ii-a) は P14・P18a・P18c (P18a と P18c は `cancel` の入力について (ii-a) も読む)、(ii-b) は P18a・P18c・P19・P21。(i) の不等式は D21 が活性化への制限として読み、P28 (b) がそれを実行の作る活性化について示す |
