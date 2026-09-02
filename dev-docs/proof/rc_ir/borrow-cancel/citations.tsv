@@ -38,7 +38,7 @@ src/ast/program.rs	Program::validate_layouts	P1,P2	afd5670a4fe7
 src/ast/program.rs	Program::validate_type_defns	P1,P2	57ee1409b0be
 src/ast/program.rs	TypeEnv	P1,P2,P5,P6,P7,P7a,P7d,P7e	198141b731bf
 src/ast/program.rs	TypeEnv::add_tycons	P1,P2,P5,P6,P7,P7a,P7d,P7e	3800a2adf344
-src/ast/program.rs	TypeEnv::default	P1,P2,P7a,P7d,P7e	d2f0e508e184
+src/ast/program.rs	TypeEnv::default	P1,P2,P5,P6,P7,P7a,P7d,P7e	d2f0e508e184
 src/ast/program.rs	TypeEnv::new	P1,P2,P5,P6,P7,P7a,P7d,P7e	f7740b2940ef
 src/ast/program.rs	TypeEnv::resolve_type_aliases_in_tycons	P1,P2,P5,P6,P7,P7a,P7d,P7e	aab046069e97
 src/ast/program.rs	TypeEnv::unwrap_newtypes	P1,P2,P5,P6,P7,P7a,P7d,P7e	690307333938
