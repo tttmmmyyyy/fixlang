@@ -158,6 +158,17 @@ harness」と述べる (Rust Reference の "Conditional compilation")。すな�
 A19 (ii-b) の本文である** -- 「`bumps_ρ(τ, C)` とは、時点 `τ` の `pending` の各要素 `p` について
 D27 が定める `B(p, ρ)` のうち、`C` のスロットの `origin` の identity に付く分の総和である」。
 
+**上流の仮定は A2 を通して読む。** A6 (名前の一意性)、A9 (`Match` はアームを持つ)、A11 (スコープの
+規律)、A13 (名前の形) はいずれも `borrow_ify` の入力にかかる仮定であり、この文書が主語にする本体 --
+`insert_rc` の入力・出力と `split_rc_units` の入力 -- はその上流にある。A2 は
+「**`insert_rc` と `split_rc_units` は束縛を作らず、名前を替えず、`Match` のアームを消さない。**」と
+「**したがって、`borrow_ify` の入力について語る仮定は、`insert_rc` の入力と出力についても読める。**」を
+述べ、A6・A9・A13 のそれぞれが「**`insert_rc` の入力と出力について読む段は A2 を引く。**」と書く。
+A11 は「**この仮定が語るのは `borrow_ify` の入力である。**」と範囲を述べるので同じ形で読む。
+**この文書でこの 4 つを引く段は、どれも A2 を併せて引く。** 上流について読む段だけを一覧にすると、
+段が増えるたびに一覧が古くなるので、規則として書く。**`L11` はこの規則の外にある** -- その主語は
+`borrow_ify` の入力と出力であり、A13 の範囲にそのまま入る。
+
 **この文書の補題は `L1` から `L38` と番号を付ける。** 番号は固定された名札であり、間に挟むときは
 `L13a` のように枝番を振る。`L33` から `L37` までの番号は使わない。他のファイルの補題を引く
 ときは `p13 の L14` のように書く。
@@ -1949,7 +1960,7 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
 <1>6a. 計数下の別名類 `C` について、D34 が `held_ρ(・, C)` を定め始める時点 -- `C` の ρ-終端の変数が
        値を得る時点 -- において、値を得ている `C` のスロットは ρ-終端 1 つだけであり、そこで
        `held_ρ(・, C) = 1 = Σ_{s ∈ C} μ(s) + β(C)` である。
-  BY <1>4, <1>4a, <1>4c, D2, D6, D14, D33, D34, A11, DEF 割り当て, 言明の `β` の定義
+  BY A2, <1>4, <1>4a, <1>4c, D2, D6, D14, D33, D34, A11, DEF 割り当て, 言明の `β` の定義
   D33 の ρ-歩みの各段は、いま居る位置の変数の束縛が名指す変数へ進む。A11 よりその名指しはその束縛の
   位置でスコープに入っている束縛に解決し、D2 のスコープの規則よりその変数はいま居る位置の変数より前に
   値を得る。よって `C` のスロットのうち ρ-終端でないものの変数は、ρ-終端の変数より後に値を得る。
@@ -2058,7 +2069,7 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
     部分木はアーム本体の部分木と交わらないので前者は `m` の部分木の外にあり、後者は仮定より
     `m_0` の部分木の外、したがって `m` の部分木の外にある位置で使われる。
   <2>6. QED
-    BY <2>1, <2>3, <2>4, <2>5, A6, A11, D2, EXT 呼び出しの入れ子
+    BY A2, <2>1, <2>3, <2>4, <2>5, A6, A11, D2, EXT 呼び出しの入れ子
     <2>1 の 3 通りについて、`insert_into_expr` の呼び出しの入れ子の深さについての帰納で前半が
     成り立つ -- 基底は <2>3、段は <2>4 と <2>5 である。`EXT 呼び出しの入れ子` より入れ子は木をなし、
     <2>1 の後ろ 2 通りはどちらも `m_0` の真の部分木についての呼び出しなので、D2 (骨格は有限の木) より
@@ -2077,7 +2088,7 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
     この腕は `live = live_after.clone()` に `insert_if_local(&mut live, &x.name)` で `x` を足したものを
     返す。<1>1 より `free_locals(Ret(x))` は `x` が局所名なら `{x}`、そうでなければ空である。
   <2>2. CASE `m = Let(x, rhs, cont)` で `rhs` が `Match` でない。
-    BY 帰納法の仮定, A6, A11, D2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+    BY A2, 帰納法の仮定, A6, A11, D2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
        CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs: insert_if_local,
        <1>1, <1>3
     この関数は `insert_into_expr(cont, live_after)` を呼び、返った `live_cont` から `x` を除き、
@@ -2093,14 +2104,14 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
     交わらない。よって `free_locals(m) = ops ∪ (free_locals(cont) \ {x})` であり、上の式の前 2 項が
     それである。
   <2>3. CASE `m = Destructure(container, fields, _, cont)`。
-    BY 帰納法の仮定, A6, A11, D2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
+    BY A2, 帰納法の仮定, A6, A11, D2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
        CODE src/rc_ir/rc_insert.rs: insert_if_local, <1>1, <1>3
     この関数は `live_cont` から各フィールド変数を除き、`container` の局所名を足したものを返す。
     フィールド変数は <1>3 より `A(m)` に入らない。<2>2 と同じく A6・A11・D2 のスコープの規則より
     `container` は `m` の部分木が束縛する名前ではないので、<1>1 の `free_locals(m)` は
     `free_locals(cont)` からフィールド変数を落として `container` を足したものである。
   <2>4. CASE `m = Eval(x, cont)`。
-    BY 帰納法の仮定, A6, A11, D2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
+    BY A2, 帰納法の仮定, A6, A11, D2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
        CODE src/rc_ir/rc_insert.rs: insert_if_local, <1>1
     この関数は `live_cont` に `x` の局所名を足したものを返す。`Eval` は名前を束縛しないので `m` の
     部分木が束縛する名前は `cont` の部分木が束縛するものであり、<2>2 と同じく A6・A11・D2 のスコープの
@@ -2164,14 +2175,14 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
 **証明**
 
 <1>1. (a)。
-  BY L14, A11
+  BY A2, L14, A11
   `L14` (a) より `Λ(m) = free_locals(m) ∪ A(m)`。`free_locals(m)` の各名前は `m` の部分木が参照して束縛
   しない名前なので、A11 よりその束縛は `m` を囲むスコープに在り、`m` の検査点までに値を得ている。
   `L14` (b) より `A(m)` の各名前は `m` の部分木の外にある位置で使われる名前であり、同じ理由でその束縛は
   `m` を囲むスコープに在る。
 
 <1>2. (b)。
-  BY L14, A6, A11, D2, CODE src/rc_ir/rc_insert.rs: free_locals,
+  BY A2, L14, A6, A11, D2, CODE src/rc_ir/rc_insert.rs: free_locals,
      CODE src/rc_ir/rc_insert.rs: collect_referenced_and_bound
   核節点が名指す変数は、`collect_referenced_and_bound` が `refs` に入れる名前のうち、`m` 自身の
   節点が挙げるものである。`free_locals(m)` は `refs` から `m` の**部分木**が束縛する名前 `bound` を
@@ -2475,7 +2486,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 <1>2. **CASE (T1)** で `m = Let(x, rhs, cont)`、`rhs` は `Match` でない。
   <2>1. `Λ(m) = (Λ(m') \ {x}) ∪ ops` である。ここで `ops` は `rhs_operands(rhs)` が挙げるオペランドの
         局所名の集合であり、`x ∉ ops` である。
-    BY A6, A11, D2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+    BY A2, A6, A11, D2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
        CODE src/rc_ir/rc_insert.rs: insert_if_local
     `insert_into_operation_let` は `live_cont` (= `Λ(m')`) から `x` を除き、各オペランドの局所名を
     `insert_if_local` で足したものを返す。`x ∉ ops` は A11 と D2 から出る -- `ops` の各名前は `rhs` の
@@ -2536,7 +2547,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     <2>1 より `Λ(m)` と `Λ(m')` の差は `ops` と `{x}` の上にしか無いので、他の名前は両方に入るか
     両方に入らないかであり、`μ` も変わらない。
   <2>7. 遷移の中の各節点の入口で `μ ≥ 0` であり、読む値と触れる先のスロットについて `μ ≥ 1` である。
-    BY <1>0, <2>2, <2>3, <2>4, <2>5, <2>6, A6
+    BY A2, <1>0, <2>2, <2>3, <2>4, <2>5, <2>6, A6
     前置 `Retain` 鎖の中では `μ` は上がるだけなので、`μ(v, λ) ≥ 1` (`v ∈ ops`) が保たれ、鎖の各
     `Retain` が触れるスロットは `μ ≥ 1` である。核節点の入口では `μ(v, λ) = 1 + (前置の回数) ≥ n_v`
     であり、核節点が読む値 (D7 の表: `Llvm` の各オペランド、`App` の callee と各引数、`Closure` の
@@ -2548,7 +2559,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     <2>6 の最終値 `[・ ∈ Λ(m')]` に、まだ実行していない自分自身の分 1 を足したもの以上であり、1 以上で
     ある。それらの `Release` の後の値は <2>6 の最終値であり非負である。
   <2>7a. (c)。
-    BY <2>2, <2>3, <2>4, <2>5, <2>6, A6
+    BY A2, <2>2, <2>3, <2>4, <2>5, <2>6, A6
     核節点は、<2>4 より
     `ops` の各名前 `v` の各スロット `(v, λ)` を `n_v` 回下げ、<2>5 より `x` のスロットは上げるだけ
     なので、`k_核(v, λ) = n_v`、`k_核(x, ・) = 0`、他のスロットについては 0 である。核節点の入口での
@@ -2590,12 +2601,12 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     名前の付いたフィールドの leaf では対応するフィールド変数の `μ` が 1 上がる。よって <2>2 と同じ
     最終値になる。
   <2>4. 遷移の中の各節点の入口で `μ ≥ 0` であり、読む値と触れる先のスロットについて `μ ≥ 1` である。
-    BY <2>1, <2>2, <2>3, A6
+    BY A2, <2>1, <2>2, <2>3, A6
     前置 `Retain` は `μ(container, ・)` を上げるだけである。核節点が読む値は容器であり、その入口で
     `μ(container, λ) = 1 + [container ∈ Λ(m')] ≥ 1`。後置 `Release` 鎖の名前は相異なるフィールド変数
     (A6) であり、各 `Release` の入口でその変数の `μ` は 1 である。
   <2>4a. (c)。
-    BY <2>1, <2>2, <2>3, <2>4, A6
+    BY A2, <2>1, <2>2, <2>3, <2>4, A6
     前置 `Retain` は `μ` を上げるだけなので `k = 0` である。核節点は、<2>2 と <2>3 より容器の各
     スロットを 1 回だけ下げ、フィールド変数のスロットは上げるだけなので、`k_核 ≤ 1` であり、
     <2>4 より容器のスロットの入口の値は 1 以上である。後置 `Release` 鎖の各節点はその名前の各
@@ -2658,7 +2669,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `Λ(m')` であり、`release_container` は `scrut.ty.is_box(self.type_env)` である。
   <2>3. `DB_j` の各名前 `n` (`scrut` を含みうる) について `n ∉ Λ(m')` であり、`Λ(m) \ Λ(m')` は
         `DB_j ∪ ({scrut} \ H)`、`Λ(m') \ Λ(m)` は `P_j` である。
-    BY <2>1, A6
+    BY A2, <2>1, A6
     `DB_j = H \ (U_j ∪ M)` であり `Λ(m') = U_j ∪ P_j ∪ M`。`payload_j` は A6 より `H` に入らないので
     `DB_j ∩ Λ(m') = ∅`。`Λ(m) \ Λ(m') = (H ∪ {scrut}) \ (U_j ∪ P_j ∪ M)` であり、`payload_j` は
     `H ∪ {scrut}` に入らないので `= (H \ (U_j ∪ M)) ∪ ({scrut} \ (U_j ∪ M))`。`scrut ∈ H` のとき
@@ -2688,7 +2699,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `[scrut ∈ Λ(m')]` に等しい。`μ(payload_j, λ'') = 1 - [payload_j ∉ Λ(m')] = [payload_j ∈ Λ(m')]`。
     `DB_j` の他の名前は <2>4 と同じである。
   <2>6. 遷移の中の各節点の入口で `μ ≥ 0` であり、読む値と触れる先のスロットについて `μ ≥ 1` である。
-    BY <2>0, <2>2, <2>4, <2>5, A6, D7
+    BY A2, <2>0, <2>2, <2>4, <2>5, A6, D7
     前置 `Retain` が置かれるのは `scrut ∈ H ⊆ Λ(m)` のときであり、そのときその入口で
     `μ(scrut, λ) = 1` である。核節点は scrutinee を読み (D7)、その入口で
     `μ(scrut, λ) = 1 + [scrut ∈ H] ≥ 1`。頭の `Release` 鎖の名前のうち `scrut` は最大 2 回
@@ -2698,7 +2709,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     よって 2 つの `Release` の入口の値は 2 と 1 である。片方だけのときは入口の値は 1 以上である。`payload_j` と `DB_j` の他の名前は互いに、また `scrut` とも異なり (A6)、
     それぞれ 1 度しか現れないので、その入口の値は 1 である。<2>4 と <2>5 の最終値はすべて非負である。
   <2>6a. (c)。
-    BY <2>2, <2>4, <2>5, <2>6, A6
+    BY A2, <2>2, <2>4, <2>5, <2>6, A6
     前置 `Retain` は `μ` を上げるだけなので `k = 0` である。核節点は、<2>4 では scrutinee の `μ` を
     下げず (下げるのは頭の `Release` 鎖である)、<2>5 では移動によって scrutinee の各スロットを 1 回
     だけ下げるので、どちらでも `k_核 ≤ 1` であり、<2>6 よりその入口の値は `1 + [scrut ∈ H] ≥ 1` で
@@ -2729,7 +2740,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     型は等しいので leaf は対応する。`r` が局所名でないときは <1>0 より `(r, λ)` はスロットではないので
     `μ` を下げる項が無い。
   <2>4. QED
-    BY <1>0, <2>1, <2>2, <2>3, A6
+    BY A2, <1>0, <2>1, <2>2, <2>3, A6
     A6 より `x ≠ r` であり、`r ∈ M ⟺ r ∈ live_cont` である。`r` が局所名であるとき、遷移の後
     `μ(r, λ) = 1 + [r ∈ M] - 1 = [r ∈ Λ(m')]` である。`r` が局所名でないときは <1>0 より `r` は
     スロットを持たず、<2>1 より `Λ(m) = M` であり、`r` についての勘定は空である。どちらでも
@@ -2757,14 +2768,14 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 <1>1. 最初の検査点 -- 本体の根の骨格節点の検査点 -- で言明が成り立つ。
   <2>1. CASE 本体がグローバル初期化子の `init` である。
-    BY A11, L14, D10, D1, CODE src/rc_ir/rc_insert.rs: insert_rc
+    BY A2, A11, L14, D10, D1, CODE src/rc_ir/rc_insert.rs: insert_rc
     D1 より `init` はパラメータも capture も持たないので D10 の初期値は空であり、活性化の開始時の
     `μ` はすべて 0 である。`insert_rc` は `inserter.insert_into_expr(glob.init, &Set::default())` を
     呼ぶので `A(根) = ∅` であり、`L14` (a) より `Λ(根) = free_locals(init)` である。A11 は
     「グローバル初期化子の `init` は自由な局所名を持たない」と述べるので `Λ(根) = ∅` である。
     `insert_rc` はこの本体に `build_releases` を掛けないので、根の前に節点は無い。
   <2>2. CASE 本体が関数の `body` である。
-    BY A11, L14, D10, L15, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+    BY A2, A11, L14, D10, L15, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
        CODE src/rc_ir/rc_insert.rs: build_releases
     `L15` (e) より、すべてのパラメータ・capture の unit は所有される。D10 の初期値は、所有する
     各パラメータ・capture の inhabited な各 leaf の `μ` を 1 にする。`insert_into_func` は
@@ -2777,7 +2788,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `[p ∈ Λ(根)]` である。`unused` の名前は相異なるので各 `Release` の入口で `μ = 1` であり、
     パラメータ・capture 以外の名前のスロットは値を得ておらず `μ = 0 = [・ ∈ Λ(根)]` である。
   <2>3. QED
-    BY <2>1, <2>2, D23, A6
+    BY A2, <2>1, <2>2, D23, A6
     D23 より本体は関数の `body` かグローバル初期化子の `init` かのいずれかである。A6 より
     `unused` の名前は相異なる。
 
@@ -2873,7 +2884,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `held_ρ(・, C) = Σ_{(v, λ) ∈ C} μ(v, λ) = 0` である。
 
 <1>3a. (d)。
-  BY L13a, L15, L16a, L17, L18, L18a, L14, D2, D9, D16, D23, A6, DEF 割り当て
+  BY A2, L13a, L15, L16a, L17, L18, L18a, L14, D2, D9, D16, D23, A6, DEF 割り当て
   `L17` (a) より `ρ` の上の各節点の入口は 3 通りである。
   遷移の中の節点については `L17` (c) がそのまま (d) の不等式を与える。
   本体の根の検査点より前の `Release` 鎖 (`insert_into_func` の `unused` の鎖) の中では、各節点は
@@ -2923,7 +2934,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   そのスロットが自分の属する類の ρ-終端であることを与える。
 
 <1>3. QED
-  BY <1>1, <1>2, D6, A6, A11
+  BY A2, <1>1, <1>2, D6, A6, A11
   <1>2 より、相異なる開始事象は相異なるスロットを ρ-終端とする -- 事象の位置が相異なれば、そこで値を
   得る変数が相異なる (A6) か、同じ変数の相異なる leaf である。よって相異なる開始事象は相異なる類に
   開始値を与える。A11 と D6 より 1 つのスロットが 2 度値を得ることはない。
@@ -3154,7 +3165,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 <1>5a. ρ-歩みの上で、候補が 2 つ以上の `Join` の腕を取るスロット `s_k` について、`id(s_k)` は
        `Anc(s_{k+1})` に入らない。したがって `Anc(s_k) = {id(s_k)} ∪ Anc(s_{k+1})` は
        `Anc(s_{k+1})` を真に含む。
-  BY <1>2, <1>5, D2, D6, D33, A6, A11, CODE src/rc_ir/ownership.rs: origin_inner
+  BY A2, <1>2, <1>5, D2, D6, D33, A6, A11, CODE src/rc_ir/ownership.rs: origin_inner
   <1>2 より、候補が 2 つ以上の `Join` では `identity` は `s_k` 自身の位置に取り替わるので
   `id(s_k) = s_k` であり、`s_k` はその `Match` の束縛変数 `x` の leaf である。
   `Anc(s_{k+1})` の元は `s_{k+1}` の歩みの上の位置である (<1>5、D33)。歩みの各段は、いま居る位置の
@@ -3186,7 +3197,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `id_0` への道がちょうど 1 本あり、`Ids(C)` は `id_0` を根とする木をなす。
 
 <1>7. (e)。
-  BY <1>2, <1>5, <1>5a, D9, D20, A6, CODE src/rc_ir/ownership.rs: collect_bindings
+  BY A2, <1>2, <1>5, <1>5a, D9, D20, A6, CODE src/rc_ir/ownership.rs: collect_bindings
   D9 の移動の表は 6 行を持つ。`Let(x, Var(y), k)` の移動先は `Binding::Move`、unbox 容器の
   `Destructure` の名前付きフィールドは `Binding::Field` の unbox の枝、unbox union の変位アームの
   payload 束縛は `Binding::Payload` の `Some(tag)` かつ scrutinee が unbox の枝、catch-all アームの
@@ -3429,7 +3440,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 <1>3. 事象の前の時点で言明が成り立つならば、その事象の後の時点でも成り立つ。
   <2>1. CASE (E-生成)。
-    BY L20b, 前提 (S3), D2, D6, D33, D34, A11, L13a, L21
+    BY A2, L20b, 前提 (S3), D2, D6, D33, D34, A11, L13a, L21
     まず、この事象より前に `C` はスロットを持たない。D33 の ρ-歩みの各段は、いま居る位置の変数の
     束縛が名指す変数へ進み、A11 と D2 よりその変数はいま居る位置の変数より前に値を得ている。よって
     `C` のスロットが在る時点では `C` の ρ-終端の位置も値を得ており、`L13a` (f) よりその位置は
@@ -3466,7 +3477,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `L21` (e) の前者の場合であり、`Anc(s') = Anc(s)` である。`μ(s)` が 1 減り `μ(s')` が 1 増えるので、どの `id` についても `Down(id)` は変わらない。
     `B(p, ρ)` は動かない (D27) ので `Bsub` も変わらない。
   <2>4. CASE (E-移動-新名)。
-    BY L20b, D2, D6, D33, A6, A11, L21
+    BY A2, L20b, D2, D6, D33, A6, A11, L21
     `L21` (e) の後者の場合であり、`Anc(s') = {id(s')} ∪ Anc(s)` かつ `id(s') ∉ Anc(s)` である。
     `id ∈ Anc(s)` については `Down(id)` は `-1` (移動元) `+1` (移動先) で変わらず、`Bsub(id)` も
     変わらない。`Anc(s) ∪ {id(s')}` に入らない `id` については、移動元も移動先もその `Sub(id)` に
