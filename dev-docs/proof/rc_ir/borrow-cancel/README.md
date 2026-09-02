@@ -1668,9 +1668,12 @@ P14 は `borrow_ify` の**入力**について (ii-a) を読み、P18a・P18c・
 `held` の推移ではなく、`origin` の `identity` と `acted_on` が名前を共有するかどうかである。`C1` は名前が
 届かない例、`C2` は `Retain` が処分より後に来る例と、統一的に読める。
 
-**果たす者の 2 人のうち、`borrow_ify` の側は示されている** (`p13-disposals-and-pending.md` の `L16`)。借用版が `Retain` を落と
+**`borrow_ify` の側について示されているのは、「`borrow_ify` は `insert_rc` の出した `Retain` を消費から
+引き離さない」ことである** (`p13-disposals-and-pending.md` の `L16`)。借用版が `Retain` を落と
 すのは `owns_unit` が偽のときだけで、`App` の引数以外の消費では P8 と P7a がそれを真にし、`App` の引数では
-`call_rc` が同じ `Retain` を呼び出しの直前に置き直す。**`insert_rc` の側も示されている** (`p60-insert-rc.md`)。その途中で立つ次の 2 つが、`C1` と `C2` の形を
+`call_rc` が同じ `Retain` を呼び出しの直前に置き直す。**消費の実行路の上に `Retain` 節点が無い場合は
+`borrow_ify` の側の問題ではなく、`insert_rc` の側の義務である** -- `L16` は自分がその場合を扱わないことを
+自分の末尾に書いている。**`insert_rc` の側も示されている** (`p60-insert-rc.md`)。その途中で立つ次の 2 つが、`C1` と `C2` の形を
 弾く。
 
 - **`insert_rc` が出す `Retain` は、間に `Retain` 以外の節点を挟まず、同じ変数を名指す構文の直前に立つ**
