@@ -1368,11 +1368,28 @@ L14 が与える。**`π` に「`origin(x, π)` が呼ばれる」を課すの�
   <2>1a. `c` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E5 (`x` の束縛は `Field(c, i)` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>2. `[i] ++ λ` は `ty(c)` の boxed leaf であり、`[i] ++ λ ⊒ [i] ++ π` である。
+    **`boxed_leaf_paths` の走査が `unpunched_field_types` のループへ降りるのは、`is_fully_unboxed`、
+    `is_closure`、`is_box`、`is_array` の 4 つがいずれも偽のときである。** `is_box` は DEF-1 の段 E5 の
+    条件 (`c` が unbox) が偽にする。`is_closure` を偽にするのは A12 の「**この仮定が型の `variant` を
+    述べる各節では、その型の `is_closure()` は偽である。**」の節であり、「`Destructure` の容器が構造体
+    である」がその節の 1 つである。同じ節が `is_array` と `is_funptr` も偽にする -- `Std::Array` の
+    `TyConInfo` の `variant` は `Array`、`Std::#FunPtr{n}` のそれは `Primitive` であって、どちらも
+    `Struct` ではない。残る `is_fully_unboxed` は、この 4 つが偽なので unpunched な各フィールドの型が
+    すべて fully unboxed であることに帰着するが、フィールド `i` の型 `ty(x)` は boxed leaf `λ` を
+    持つので fully unboxed ではない -- fully unboxed な型に `boxed_leaf_paths` は leaf を返さない。
     BY A12 (`Destructure` のフィールド変数とフィールドの型が合っていること、容器が構造体であること、
-       **`Destructure` が名指すフィールドがその型が実際に持つ (punched でない) ものであること**),
-       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths -- unbox 集約の枝は `unpunched_field_types` の
-       各フィールドへ添字を積んで降りるので、punched でないフィールド `i` の leaf は
-       `[i] ++ (そのフィールドの型の leaf)` である,
+       **`Destructure` が名指すフィールドがその型が実際に持つ (punched でない) ものであること**、
+       および「**この仮定が型の `variant` を述べる各節では、その型の `is_closure()` は偽である。**」),
+       補題 Q の ASSUME (`λ` は `ty(x)` の boxed leaf である), DEF-1 の段 E5 (`c` は unbox である),
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths -- 走査は `is_fully_unboxed`、`is_closure`、
+       `is_box`、`is_array` の 4 つを順に見て `return` し、どれも偽のときだけ
+       `unpunched_field_types` のループへ降りる。降りた枝は各フィールドへ添字を積むので、punched で
+       ないフィールド `i` の leaf は `[i] ++ (そのフィールドの型の leaf)` である,
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed (`is_box`・`is_closure`・`is_array` に偽を
+       返した後、`is_funptr` なら真、そうでなければ unpunched な各フィールドの型についての `all`),
+       CODE src/ast/types.rs: TypeNode::is_struct (`toplevel_tycon_info` の `variant` が `Struct` か),
+       CODE src/fixstd/builtin.rs: bulitin_tycons (`Std::Array` の `variant` は
+       `TyConVariant::Array`、`Std::#FunPtr{n}` のそれは `TyConVariant::Primitive` である),
        CODE src/ast/types.rs: TypeNode::unpunched_field_types (punched なフィールドを落とす)
   <2>3. `P` における `x` の値は `c` の値の第 `i` フィールドであり、`[i] ++ λ` は `P` で inhabited で
         ある。
@@ -1416,9 +1433,26 @@ L14 が与える。**`π` に「`origin(x, π)` が呼ばれる」を課すの�
   <2>1a. `s` は `P` で値を持つ (DEF-0)。
     BY L11, DEF-1 の段 E7 (`x` の束縛は `Payload(s, Some(t))` である), 補題 Q の前提 (`x` は `P` で値を持つ)
   <2>2. `[t] ++ λ` は `ty(s)` の boxed leaf であり、`[t] ++ λ ⊒ [t] ++ π` である。
+    **`boxed_leaf_paths` の走査が `unpunched_field_types` のループへ降りるのは、`is_fully_unboxed`、
+    `is_closure`、`is_box`、`is_array` の 4 つがいずれも偽のときである。** `is_box` は DEF-1 の段 E7 の
+    条件 (`s` が unbox) が偽にする。`is_closure` を偽にするのは A12 の「**この仮定が型の `variant` を
+    述べる各節では、その型の `is_closure()` は偽である。**」の節であり、「`Match` の scrutinee が
+    union である」がその節の 1 つである。同じ節が `is_array` と `is_funptr` も偽にする --
+    `Std::Array` の `TyConInfo` の `variant` は `Array`、`Std::#FunPtr{n}` のそれは `Primitive` で
+    あって、どちらも `Union` ではない。残る `is_fully_unboxed` は、この 4 つが偽なので unpunched な
+    各変位の payload の型がすべて fully unboxed であることに帰着するが、変位 `t` の payload の型
+    `ty(x)` は boxed leaf `λ` を持つので fully unboxed ではない。
     BY A12 (payload と変位の型が合っていること、scrutinee が union であること、**`Match` が名指す変位が
-       その型が実際に持つ (punched でない) ものであること**),
-       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+       その型が実際に持つ (punched でない) ものであること**、および「**この仮定が型の `variant` を
+       述べる各節では、その型の `is_closure()` は偽である。**」),
+       補題 Q の ASSUME (`λ` は `ty(x)` の boxed leaf である), DEF-1 の段 E7 (`s` は unbox である),
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths -- 走査は `is_fully_unboxed`、`is_closure`、
+       `is_box`、`is_array` の 4 つを順に見て `return` し、どれも偽のときだけ
+       `unpunched_field_types` のループへ降りる,
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/ast/types.rs: TypeNode::is_union (`toplevel_tycon_info` の `variant` が `Union` か),
+       CODE src/fixstd/builtin.rs: bulitin_tycons (`Std::Array` の `variant` は
+       `TyConVariant::Array`、`Std::#FunPtr{n}` のそれは `TyConVariant::Primitive` である),
        CODE src/ast/types.rs: TypeNode::unpunched_field_types -- union の `unpunched_field_types` は
        punched でない各変位の payload の型を返すので、変位 `t` の leaf は
        `[t] ++ (その payload の型の leaf)` である
