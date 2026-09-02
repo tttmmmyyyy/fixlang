@@ -112,6 +112,7 @@ impl<K: Clone + Eq + Hash> CloneRegistry<K> {
     /// Assemble the clone of `func` named `name` from its rewritten `body`. The canonical clone is
     /// the original function carrying the new body; a fresh clone additionally gets fresh local
     /// names, so that its names do not collide with the original's.
+    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn finish_clone(&mut self, func: &RcFunc, name: FuncRef, body: RcExprNode) -> RcFunc {
         if name == func.name {
             return RcFunc {
