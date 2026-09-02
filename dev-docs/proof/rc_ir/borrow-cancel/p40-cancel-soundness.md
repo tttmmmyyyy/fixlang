@@ -154,7 +154,7 @@ identity で名付けた多重集合」と定める。**`outstanding` に
 - `others(r) :=` `self.other_objects(v, path)` の値の元の集合
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 
-**この 3 つの値は、走査のどの時点で読んでも同じである。** `CancelAnalysis::acted_references` は
+**この 3 つの値は、走査のどの段階で読んでも同じである。** `CancelAnalysis::acted_references` は
 `acted_references(self.vars, self.type_env, v, path)` を、`CancelAnalysis::other_objects` は
 `boxed_leaf_paths(&v.ty, self.type_env)` の各 leaf についての `origin(self.vars, self.type_env, v.name, leaf)`
 を呼ぶだけである (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`,
@@ -778,7 +778,7 @@ source、`Match` のアームの本数と並び、および継続の順序は変
       `un_bumped` とオブジェクトを共有する要素があり、そのうち最も後ろの要素の `node` が `t` の `NodeId`
       であるときである。すなわちその要素は由来が `t` の要素である。
   BY p30 の L5, <1>1
-<1>3. <1>2 の第 1 引数は、`r` の訪問が `un_bump` を呼ぶ時点の `pending` であり、それは `pending(r)` に、
+<1>3. <1>2 の第 1 引数は、`r` の訪問が `un_bump` を呼ぶところの `pending` であり、それは `pending(r)` に、
       この腕がそれより前に行う `others(r)` についての `consume_objects` を施したものである。L36 より
       `consume_objects` は要素を取り除くだけで加えないので、由来が `t` の要素は `pending(r)` にも在る。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
@@ -799,8 +799,8 @@ source、`Match` のアームの本数と並び、および継続の順序は変
 3. `I_ρ(t)` に入る `Release` 節点のうち、その訪問の `un_bump` が `InBracket(t)` を返すもの全体を
    `R_ρ(t)` と書くと、`n*(ρ) ∈ R_ρ(t) ⊆ un_bump_releases[t] ⊆ Del` であり、
    `Σ_{r ∈ R_ρ(t)} ActRefs(r) = ActRefs(t)` である。
-4. `I_ρ(t)` に入る節点の訪問の中で、由来が `t` の要素が走査の `pending` に在る時点に走る
-   `consume_objects(pending, objects)` の呼び出しはどれも、その時点のその要素の `outstanding` が名指す
+4. `I_ρ(t)` に入る節点の訪問の中で、由来が `t` の要素が走査の `pending` に在るところで走る
+   `consume_objects(pending, objects)` の呼び出しはどれも、その要素のそのときの `outstanding` が名指す
    名前を `objects` に含まない。よってその要素は `consume_objects` に取り除かれない。
 
 **証明**
@@ -846,7 +846,7 @@ source、`Match` のアームの本数と並び、および継続の順序は変
     残る。これは `t ∈ CT` (DEF 削除集合) に反する。
     BY <2>1, <2>2, <2>3, p30 の L10, DEF 削除集合
 <1>5. 4 が成り立つ。
-  <2>1. `I_ρ(t)` に入る節点 `n` の訪問の中で `consume_objects(pending, objects)` が走る時点に、由来が
+  <2>1. `I_ρ(t)` に入る節点 `n` の訪問の中で `consume_objects(pending, objects)` が走るところで、由来が
         `t` の要素 `e` が走査の `pending` に在り、`objects` のいずれかの名前を `e.outstanding` が名指す
         と仮定する。
     BY 仮定
@@ -2511,7 +2511,7 @@ A19 の (ii-a)・(ii-b) と P14a を活性化に当てるので、その範囲�
     BY L38
   <2>5. QED
     <2>2 と <2>3 の呼び出しは、`I_ρ(t)` に入る節点の訪問の中で、由来が `t` の要素が走査の `pending` に
-    在る時点に走る。仮定よりその `objects` は `out(t, c)` が名指す名前を含むので、L38 の 4 に反する。
+    在るところで走る。仮定よりその `objects` は `out(t, c)` が名指す名前を含むので、L38 の 4 に反する。
     D9 の消費の表の 6 行を <2>2、<2>3、<2>4 が尽くす。よって <2>1 の仮定は成り立たない。L38 より `t` が
     pending である区間は `n*(ρ)` で終わるので、`t` より後にあってそのような名前を名指す消費点は
     `n*(ρ)` より後にある。
