@@ -2915,6 +2915,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// * `cap_tys` — the types of all the captured values, which give the capture object its struct
     ///   layout.
     /// * `result_ty` — the type of the projected value.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_capture_project(
         &mut self,
         cap_name: &FullName,

@@ -456,7 +456,7 @@ fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
 /// decide which argument positions consume: an owning argument position, a captured value, or a
 /// returned value. Alias edges are not consumes here — the consume of an alias is attributed to its
 /// `origin`. Explicit `Release` nodes are own-then-release drops, not consumes.
-// PROOF: P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn collect_consumes(
     node: &RcExprNode,
     vars: &VarTable,
@@ -471,7 +471,7 @@ pub(crate) fn collect_consumes(
 
 /// Collect the leaves an expression and its continuation consume. `owns` answers whether a callee's
 /// parameter leaf is owned, which decides whether the argument at that position is consumed.
-// PROOF: D/A, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
     node: &RcExprNode,
     vars: &VarTable,
@@ -645,7 +645,7 @@ fn passthrough_arg_leaves(
 }
 
 /// Push every boxed leaf of a value onto `out`.
-// PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn push_boxed_leaves(
     var: &FullName,
     ty: &Arc<TypeNode>,
