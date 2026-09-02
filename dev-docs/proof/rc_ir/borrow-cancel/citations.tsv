@@ -125,7 +125,7 @@ src/constants.rs	CAP_LIST_PREFIX	P1,P2,P7a,P7d,P7e	17701702d896
 src/constants.rs	CAP_NAME	P27,P29,P30	ab454a035e77
 src/constants.rs	CLOSURE_CAPTURE_IDX	P1,P2	8ac4c663fef1
 src/constants.rs	CLOSURE_FIELD_COUNT	P1,P2	3e3f60cca61a
-src/constants.rs	FUNPTR_ARGS_MAX	P1,P2	5054470d6f01
+src/constants.rs	FUNPTR_ARGS_MAX	P1,P2,P5,P6,P7	5054470d6f01
 src/constants.rs	FUNPTR_NAME	P1,P2,P5,P6,P7	5f81220a51a7
 src/constants.rs	PUNCHED_TYPE_SYMBOL	P1,P2,P5,P6,P7	866c661bcaee
 src/constants.rs	RefcntState	P26	192fb7a3bcd5

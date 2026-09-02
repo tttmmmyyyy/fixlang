@@ -230,10 +230,12 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 
 **補足 (端が `ρ` の位置にならない形)**。端が `ρ` の位置でない形は辺の両側にある。E2 の `[i] ++ λ` は、
 `i` が穴のとき `ty(c)` の boxed leaf ではない (D4 の規則 5)。E3 の payload 変数の型が boxed leaf を
-1 つも持たなければ、その節点はどの `λ` についても E3 の辺を持たない。E1 の `y` が `vars.bindings` に
-束縛を持たない名前であるとき、始点は記号の位置である (D6)。この扱いのために、L2 は辺ではなく
-`vars.bindings` の記録について述べる -- 辺が在ることを先に言わなくても `origin` の等式が使えるように
-するためである。
+1 つも持たなければ、その節点はどの `λ` についても E3 の辺を持たない。
+
+**補足 (始点が記号の位置である形)**。E1 の `y` が `vars.bindings` に束縛を持たない名前であるとき、
+始点は記号の位置であり、これは `ρ` の位置である (D6 はスロットと記号の位置を合わせて位置と呼ぶ) --
+すなわちこの形では辺は在る。この形のために、L2 は辺ではなく `vars.bindings` の記録について述べる --
+辺が在ることを先に言わなくても `origin` の等式が使えるようにするためである。
 
 ## L0 (`origin` は `origin_inner` の値を返す)
 
@@ -531,8 +533,11 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
   が節点が束縛する変数、(S4) が `vars.bindings` に束縛を持たない名前である。
 - **(b)** 名前 `x` が `ρ` の上で値を得ることと、`ρ` を辿るある時点までに `x` が値を得ていることは同値で
   ある。そのとき、`x` の値の inhabited (D16) な boxed leaf `λ` との対 `(x, λ)` は D6 の意味の `ρ` の
-  位置であり、逆に `ρ` の位置はどれもこの形である。(S1) から (S3) の `(x, λ)` は `ρ` のスロット、
-  (S4) の `(x, λ)` は `ρ` の記号の位置である。
+  位置である -- (S1) から (S3) の `(x, λ)` は `ρ` のスロット、(S4) の `(x, λ)` は `ρ` の記号の位置で
+  ある。**逆向きは 2 つに分かれる。** `ρ` の位置 `(x, λ)` について `λ` は `ty(x)` の inhabited な
+  boxed leaf である。`(x, λ)` が `ρ` の**スロット**であるならば、`x` は (S1) から (S3) のいずれかの形で
+  `ρ` の上で値を得る。**記号の位置については逆向きを主張しない** -- D6 の記号の位置は `g` が `ρ` の上に
+  現れることを条件に持たないので、`ρ` のどの節点も名指さない記号の位置が在りうる。
 - **(c)** `obj(x, λ)` は `x` が得る値と `λ` だけで決まり、`ρ` の上の位置に依らない。参照を経由しない。
 
 <1>1. (S1) の `x` は活性化の**入力の束縛** (D23) から値を得ており、本体の最初の節点の時点で既に値を持つ。
@@ -576,7 +581,12 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
   時点で、値を持つ。D6 より、値を得た変数とその値の inhabited (D16) な boxed leaf との対が `ρ` の位置で
   あり、束縛を持つ名前の対はスロット、束縛を持たない名前の対は記号の位置である。`<1>3` より (S4) の
   名前は束縛を持たず、(S1) から (S3) の名前は束縛を持つ。
-  BY D6, D16, <1>1, <1>2, <1>3, <1>3a, <1>4
+  逆向きについて。D6 より `ρ` の位置の第 2 成分はその変数の値の inhabited な boxed leaf である。
+  `ρ` のスロットの第 1 成分は、D6 より束縛を持つ名前 -- 節点が束縛する変数か、パラメータ・capture --
+  であって、`ρ` を辿るある時点までに値を得たものである。前者は D2 の 3 種の束縛節点のいずれかが束縛し、
+  その節点は `ρ` の上にあり (値を得た時点までに実行されている)、`Match` のアームの payload の場合は
+  `ρ` がそのアームを選んでいる -- すなわち (S2) か (S3) である。後者は (S1) である。
+  BY D2, D6, D16, <1>1, <1>2, <1>3, <1>3a, <1>4
 
 <1>6. (c) が成り立つ。
   A6 より束縛名は相異なるので、`x` を束縛する節点は高々 1 つである。D2 は「節点が自分自身を含むことは
@@ -634,8 +644,8 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 
 **言明**。次の 2 つが成り立つ。
 
-- **(a)** `ρ` の上で実行された (DEF `ρ` の上で実行された辺) E1 から E6 の辺の両端の位置は、同じ値の
-  同じ位置を名指し、したがって同じオブジェクトを指す。
+- **(a)** この文書の意味で在り (DEF 辺の存在)、かつ `ρ` の上で実行された (DEF `ρ` の上で実行された辺)
+  E1 から E6 の辺の両端の位置は、同じ値の同じ位置を名指し、したがって同じオブジェクトを指す。
 - **(b)** 「この文書の意味で在り (DEF 辺の存在)、かつ `ρ` の上で実行された辺」と「D20 の意味で在る辺」は
   同じものである。
 
@@ -742,8 +752,10 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 
 <1>8. QED
   (a) について。E1 から E6 は D20 (すなわち D9 の移動の表) の 6 行に 1 対 1 で対応し、値の水準の 6 行も
-  その 6 行に 1 対 1 で対応する (D9)。`<1>2` から `<1>7` がその 6 つである。(b) は `<1>7a` である。
-  BY D9, D20, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>7a
+  その 6 行に 1 対 1 で対応する (D9)。`<1>2` から `<1>7` がその 6 つであり、どれも両端が同じ値の同じ
+  位置を名指すことを与える。辺が在る (DEF 辺の存在) ことは両端が `ρ` の位置であることなので、`<1>1` の
+  前提が揃い、両端は同じオブジェクトを指す。(b) は `<1>7a` である。
+  BY D9, D20, DEF 辺の存在, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>7a
 
 ## L1a (`Binding` の形は `ρ` の上の束縛節点の形である)
 
@@ -802,10 +814,11 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
     BY D23, <2>1, <2>2
 
 <1>4. `b ≠ Param` のとき、`x` を束縛する節点が `ρ` の上にある。
-  L0b (b) より `x` は `ρ` の上で値を得る。(S4) は `x` が `vars.bindings` に無いことを言うので
-  前提に反する。(S1) は `<1>3` より `b = Param` を与えるので前提に反する。残るのは (S2) と (S3) であり、
-  どちらも `x` を束縛する節点が `ρ` の上にあることを言う。
-  BY L0b, DEF 路の位置, <1>3
+前提より `vars.bindings.get(x)` は `Some(b)` なので `x` は束縛を持つ名前であり、D6 より束縛を持つ名前の
+  対はスロットである。よって `(x, λ)` は `ρ` のスロットであり、L0b (b) の逆向きより `x` は (S1) から
+  (S3) のいずれかの形で `ρ` の上で値を得る。(S1) は `<1>3` より `b = Param` を与えるので前提に反する。
+  残るのは (S2) と (S3) であり、どちらも `x` を束縛する節点が `ρ` の上にあることを言う。
+  BY D6, L0b, DEF 路の位置, <1>3
 
 <1>5. `x` を束縛する節点は高々 1 つであり、`b` はその節点が `<1>2` の規則で作る構成子である。
   BY A6, <1>2
@@ -1056,25 +1069,38 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 ## L3a (`Std::Array` と `Std::#FunPtr{n}` の `TyConInfo`)
 
-**言明**。プログラムの `TypeEnv` の `tycons` について、鍵 `Std::Array` の項が在るならばその `variant` は
-`TyConVariant::Array` であり、鍵 `Std::#FunPtr{n}` (`n` は `1` から `FUNPTR_ARGS_MAX`) の項が在るならば
-その `variant` は `TyConVariant::Primitive` である。
+**言明**。プログラムの `TypeEnv` の `tycons` について、次の 2 つが成り立つ。
+
+- 鍵 `Std::Array` の項が在るならば、その `variant` は `TyConVariant::Array` である。
+- 鍵が `is_funptr_tycon` を満たす -- 名前空間が `Std` ただ 1 つで、名前が `FUNPTR_NAME` すなわち
+  `#FunPtr` で始まり、残りが `u32` として読める -- 項が在るならば、その `variant` は
+  `TyConVariant::Primitive` である。
+
+**funptr の側を範囲でなく述語で書くのは、`TypeNode::is_funptr` がその述語で決まるからである** --
+`bulitin_tycons` が入れるのは `1` から `FUNPTR_ARGS_MAX` までだが、`is_funptr` はその範囲の外の
+`#FunPtr{n}` にも真を返す。範囲で書くと、読む 3 段が要る「`is_funptr(τ)` が真ならば `variant` は
+`Primitive`」が範囲の外で覆われない。
 
 **この補題が要るのは、`is_array` と `is_funptr` が tycon の名前で決まるのに対し、`is_struct` と
 `is_union` が `type_env` の項の `variant` で決まるからである。** 2 つを突き合わせる段は L4 の
 `<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` である。
 
-<1>1. `TypeNode::is_array` は最上位の tycon が `make_array_tycon()` すなわち `Std::Array` であることで
-      あり、`TypeNode::is_funptr` は最上位の tycon が `make_funptr_tycon(n)` すなわち
-      `Std::#FunPtr{n}` のいずれかであることである。`TypeNode::toplevel_tycon_info(type_env)` が返すのは
+<1>1. `TypeNode::is_array` は最上位の tycon が `is_array_tycon` を満たす -- `make_array_tycon()`
+      すなわち `Std::Array` である -- ことであり、`TypeNode::is_funptr` は最上位の tycon が
+      `is_funptr_tycon` を満たす -- 名前空間が `Std` ただ 1 つで、名前が `FUNPTR_NAME` で始まり、残りが
+      `u32` として読める -- ことである。`TypeNode::toplevel_tycon_info(type_env)` が返すのは
       `type_env.tycons()` のその tycon の項である。
   BY CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr, TypeNode::toplevel_tycon_info,
-     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon, is_array_tycon, is_funptr_tycon
+     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon, is_array_tycon, is_funptr_tycon,
+     CODE src/constants.rs: FUNPTR_NAME
 
 <1>2. `bulitin_tycons()` が返す写像は、鍵 `make_array_tycon()` に `variant` が `TyConVariant::Array` の
-      `TyConInfo` を、各 `n` について鍵 `make_funptr_tycon(n)` に `variant` が `TyConVariant::Primitive`
-      の `TyConInfo` を持つ。
-  BY CODE src/fixstd/builtin.rs: bulitin_tycons
+      `TyConInfo` を、`1` から `FUNPTR_ARGS_MAX` までの各 `n` について鍵 `make_funptr_tycon(n)` に
+      `variant` が `TyConVariant::Primitive` の `TyConInfo` を持つ。この写像の鍵のうち
+      `is_funptr_tycon` を満たすものはその `FUNPTR_ARGS_MAX` 個で尽きる -- 残りの鍵は名前が
+      `#FunPtr` で始まらないか、名前空間が `Std` でない。
+  BY CODE src/fixstd/builtin.rs: bulitin_tycons, make_funptr_tycon, is_funptr_tycon,
+     CODE src/constants.rs: FUNPTR_ARGS_MAX, FUNPTR_NAME
 
 <1>3. `TypeEnv` の `tycons` の欄に書く式は 6 つである。`TypeEnv::default`、`TypeEnv::new`、
       `TypeEnv::unwrap_newtypes`、`TypeEnv::add_tycons`、`TypeEnv::resolve_type_aliases_in_tycons`、
@@ -1099,23 +1125,32 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
      TypeEnv::resolve_type_aliases_in_tycons, Program::resolve_namespace_not_in_expr,
      CODE src/ast/types.rs: TyConInfo, TyConInfo::resolve_namespace, TyConInfo::resolve_type_aliases
 
-<1>5. `TypeEnv::new` が置く写像の `Std::Array` と `Std::#FunPtr{n}` の項は、`bulitin_tycons()` が入れた
-      ものである。
+<1>5. `TypeEnv::new` が置く写像のうち、鍵 `Std::Array` の項と、`is_funptr_tycon` を満たす鍵の項は、
+      `bulitin_tycons()` が入れたものである。
   製品のコードで `TypeEnv::new` を呼ぶ式は `Program::calculate_type_env` の中の 1 つである -- EXT 名前に
   よる数え上げ より、`src/` の全体について識別子 `TypeEnv::new` を検索すると 3 件が得られ、残る 2 件は
   `src/rc_ir/validate.rs` と `src/rc_ir/ownership.rs` の `#[cfg(test)]` のモジュールの中の作り手で
   ある。`Program::calculate_type_env` は写像を `bulitin_tycons()` から
   始め、各型宣言について、その tycon がすでに写像にあるか型別名にあるときは診断を出して次の宣言へ進み、
   無いときだけ `insert` する。構造体の宣言についてはさらに、`TyCon::into_punched_type_name` が名前の
-  末尾に `PUNCHED_TYPE_SYMBOL` と穴の添字を足した鍵で `insert` する。`Std::Array` の名前は `ARRAY_NAME`
-  すなわち `Array`、`Std::#FunPtr{n}` の名前は `FUNPTR_NAME` すなわち `#FunPtr` に `n` を続けたもので
-  あり、どちらも `PUNCHED_TYPE_SYMBOL` すなわち `#PunchedAt` を含まない。
+  末尾に `PUNCHED_TYPE_SYMBOL` と穴の添字を足した鍵で `insert` する。
+
+  `Std::Array` の鍵は `bulitin_tycons()` に在るので、それを名指す宣言は `contains_key` の枝で弾かれ、
+  `insert` へ進まない。`is_funptr_tycon` を満たす鍵については、`bulitin_tycons()` に無い `n` の分が
+  `contains_key` を外れうるが、その鍵の名前は `#FunPtr` で始まるので Fix のソースに書けない -- Fix の
+  識別子は `#` を含まない (`CODE src/parse/grammer.pest: name_char`)。宣言の tycon の名前は Fix の
+  ソースに書かれた識別子である。
+
+  穴を開けた鍵は元の名前の末尾に `PUNCHED_TYPE_SYMBOL` すなわち `#PunchedAt` と添字を足したものなので、
+  `ARRAY_NAME` すなわち `Array` とは異なり、`FUNPTR_NAME` の後ろが `u32` として読めないので
+  `is_funptr_tycon` も満たさない。
   BY EXT 名前による数え上げ, <1>2, CODE src/ast/program.rs: Program::calculate_type_env,
      CODE src/ast/types.rs: TyCon::into_punched_type_name,
      CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, ARRAY_NAME, FUNPTR_NAME,
-     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon
+     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon, is_funptr_tycon,
+     CODE src/parse/grammer.pest: name_char
 
-<1>6. `TypeEnv::add_tycons` に渡る写像の鍵は、`Std::Array` でも `Std::#FunPtr{n}` でもない。
+<1>6. `TypeEnv::add_tycons` に渡る写像の鍵は、`Std::Array` でも `is_funptr_tycon` を満たす鍵でもない。
   `add_tycons` は `program.rs` の `pub` のメソッドなので、EXT 名前による数え上げ より、それを呼ぶ式は
   `src/` の全体について識別子 `add_tycons` を検索して得られる -- `desugar_opaque.rs` の
   `register_opaque_tycon` に 1 つ、`defunctionalize_fix.rs` の `run_one` に 1 つ、
@@ -1124,20 +1159,23 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   すなわち `?` で始まる名前である。残る 3 か所が入れる鍵は `CaptureStruct` の `tycon` であり、
   `CaptureStruct` は非公開の欄 `fields` を持つので EXT 可視性 より `capture_struct.rs` の外では構造体
   リテラルで作れず、その中の唯一の作り手 `CaptureStruct::new` は tycon の名前を
-  `format!("{}@{}", prefix, owner.name)` と作るので `@` を含む。`Array` も `#FunPtr` に `n` を続けたものも、
-  `?` で始まらず `@` を含まない。
+  `format!("{}@{}", prefix, owner.name)` と作るので `@` を含む。`Array` は `?` で始まらず `@` を含まない。
+  `is_funptr_tycon` を満たす名前は `#FunPtr` で始まって残りが `u32` として読めるので、`?` で始まらず、
+  `@` を含めば残りが `u32` として読めない。
   BY EXT 可視性, EXT 名前による数え上げ, CODE src/ast/program.rs: TypeEnv::add_tycons,
      CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon,
      CODE src/optimization/defunctionalize_fix.rs: run_one,
      CODE src/optimization/closure_specialization.rs: lift_all, realize_all, record_capture_list,
      CODE src/optimization/capture_struct.rs: CaptureStruct, CaptureStruct::new,
      CODE src/ast/types.rs: is_opaque_tyvar,
+     CODE src/fixstd/builtin.rs: is_funptr_tycon,
      CODE src/constants.rs: ARRAY_NAME, FUNPTR_NAME
 
 <1>7. QED
   `<1>3` の 6 つの書き込みのうち、`<1>4` の 4 つはどの項の `variant` も変えず、`<1>5` の `TypeEnv::new` は
   この 2 種の鍵に `<1>2` の項を置き、`<1>6` の `add_tycons` はこの 2 種の鍵に触れない。よって
-  `type_env.tycons()` にこの 2 種の鍵の項が在るならば、それは `<1>2` が述べる `TyConInfo` である。
+  `type_env.tycons()` に、鍵 `Std::Array` の項か `is_funptr_tycon` を満たす鍵の項が在るならば、それは
+  `<1>2` が述べる `TyConInfo` である。
   BY <1>2, <1>3, <1>4, <1>5, <1>6
 
 ## L4 (identity の位置)
@@ -1155,8 +1193,8 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 **前件「解析が鍵 `(x, λ)` で `origin` を呼ぶ」を置くのは、この証明の帰納が立つ整礎性がその範囲でしか
 言えないからである** -- L0a (b) が `⇝` の整礎性を与えるのは呼び出しの在る鍵についてであり、`id(x, λ)` の
 値そのものも呼び出しの在る鍵についてしか定まらない (L0 (a)、§1)。**前件を落として `ρ` のすべての位置を
-渡る形にすると、解析が呼ばない鍵について `id` の値を引くことになる。** `README.md` の P3・P4・P5 (a)・
-P5 (a) が同じ前件を持ち、P6 は「**その各 leaf について解析が `origin` を呼ぶ**」を本文で述べる。この
+渡る形にすると、解析が呼ばない鍵について `id` の値を引くことになる。** `README.md` の P3・P4・P5 (a)
+が同じ前件を持ち、P6 は「**その各 leaf について解析が `origin` を呼ぶ**」を本文で述べる。この
 補題を読む 2 人はそこから前件を得る -- P5 (a) は自分の前件から、P6 (b) は P6 (a) の前半から取る。
 
 証明は、DEF 鍵の関係 の `⇝` の上の帰納法による。前提より鍵 `(x, λ)` について `origin` の呼び出しが在るので、
@@ -1326,7 +1364,8 @@ L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
       `ArrayStorage`・`Opaque` のいずれか 1 つである。`is_array(ty(c))` が真ならば `ty(c)` の最上位の
       tycon は `Std::Array` であり、L3a より `toplevel_tycon_info(ty(c), type_env)` の `variant` は
-      `Array` である。`is_funptr(ty(c))` が真ならば同じくその `variant` は `Primitive` である。
+      `Array` である。`is_funptr(ty(c))` が真ならば `ty(c)` の最上位の tycon は `is_funptr_tycon` を
+      満たし、L3a より同じくその `variant` は `Primitive` である。
       `<3>1` より `ty(c)` の `variant` は `Struct` なので、どちらでもない。
       BY L3a, <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
          TypeNode::toplevel_tycon_info
@@ -1427,7 +1466,8 @@ L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
       `ArrayStorage`・`Opaque` のいずれか 1 つである。`is_array(ty(s))` が真ならば `ty(s)` の最上位の
       tycon は `Std::Array` であり、L3a より `toplevel_tycon_info(ty(s), type_env)` の `variant` は
-      `Array` である。`is_funptr(ty(s))` が真ならば同じくその `variant` は `Primitive` である。
+      `Array` である。`is_funptr(ty(s))` が真ならば `ty(s)` の最上位の tycon は `is_funptr_tycon` を
+      満たし、L3a より同じくその `variant` は `Primitive` である。
       `<3>1` より `ty(s)` の `variant` は `Union` なので、どちらでもない。
       BY L3a, <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
          TypeNode::toplevel_tycon_info
@@ -1683,8 +1723,9 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   `Field(c, i)` は `(c, [i] ++ λ)`、`Payload(s, Some(t))` は `(s, [t] ++ λ)`、`Payload(s, None)` は
   `(s, λ)`、`Llvm(gen, args, ty)` は `decl.leaf_origins_at(λ)` が単一の `Arg(j, σ)` であるときの
   `(args[j], σ)` であり、その `decl` は記録が持つ op・引数・結果の型と `type_env` だけから決まる
-  (A3 の決定性の節)。
-  BY A3, L2 (B), CODE src/rc_ir/ownership.rs: VarTable
+  (A3 の決定性の節)。始点の path を記録と `λ` から読む一覧は、第 2 節の E1 から E5 の定義そのもので
+  ある (DEF 辺の leaf 対応 がその対応を書き下す)。
+  BY A3, D20, L2 (B), DEF 辺の leaf 対応, CODE src/rc_ir/ownership.rs: VarTable
 
 <1>1c. 道の上のどの位置についても、解析はその鍵で `origin` を呼ぶ。
   道を `v_0, …, v_n` とし、`v_0` と `v_n` を言明の 2 つのスロットとする。`v_i` と `v_{i+1}` を結ぶ辺を、
@@ -1693,8 +1734,9 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   なる。その 2 歩を除いた列は前提を満たすより短い道であり、`<1>1` の最小性に反する。よって道は上りの
   区間と下りの区間がこの順に並ぶ。L2 の (E1) から (E5) は、解析が辺の終点の鍵で `origin` を呼ぶならば
   始点の鍵でも呼ぶことを与えるので、前提の `v_0` の呼び出しから上りの区間の各位置へ、`v_n` の呼び出しから
-  下りの区間を逆に辿って各位置へ、呼び出しが伝わる。
-  BY L2 (E1), L2 (E2), L2 (E3), L2 (E4), L2 (E5), <1>1, <1>1a, <1>1b
+  下りの区間を逆に辿って各位置へ、呼び出しが伝わる。L2 の (E2)・(E3)・(E5) が置く「容器が unbox」
+  「scrutinee が unbox」「宣言が単一の `Arg(j, σ)`」は、第 2 節の E2・E3・E5 の定義に含まれている。
+  BY D20, L2 (E1), L2 (E2), L2 (E3), L2 (E4), L2 (E5), <1>1, <1>1a, <1>1b
 
 <1>2. 道の各辺の両端の位置は同じ `origin` を持つ。
   `<1>1c` より辺の終点の鍵で解析は `origin` を呼ぶので、`<1>1a` の記録に L2 の (E1) から (E5) を
@@ -2779,7 +2821,8 @@ leaf を行の文言そのものから読める。
 D26 が A5 を計数下のオブジェクトへ制限した結果、「同じ参照を持つ 2 つの leaf は同じオブジェクトを指す」の
 形の議論は両端が計数下であるときにしか通らない。**この文書の L1 は A5 を使わない。** 使うのは D9 の値の
 水準の 6 行と、`obj(x, λ)` が `x` が得る値と `λ` だけで決まる量であること (L0b (c)、D6) である。
-したがって L1 (a) に載る P5 (a)・P5 (b)・P6 (b) は、両端が計数下であるかどうかに依らずに成り立つ。
+したがって L1 (a) に載る P5 (a) と P6 (b) は、両端が計数下であるかどうかに依らずに成り立つ。
+P5 (b) は L1 を読まない -- その証明が引くのは L2 と `Origin::identity` だけである。
 
 `Let(x, Var(g), k)` (`g` はグローバル値) がその境目である。`(g, [])` は記号の位置 (D6) であって D8 の
 意味の参照を持たず、`(x, [])` の指すオブジェクトもグローバル状態なので参照を持たない (D26)。よって参照を
@@ -2806,13 +2849,17 @@ L0 (a) であり、それは呼び出しの在る鍵についての言明であ�
 
 ### D20 の「別名の辺の両端」と L1
 
-D20 は「別名の辺の両端のスロットは、同じオブジェクトを指す」を述べる。L1 (a) はその文を 2 点で強めた形を
-示す。一方は主語で、L1 (a) が渡るのは `ρ` のスロットではなく `ρ` の位置 (D6) である -- 別名の辺は記号の
-位置へ着きうるので、スロットだけを渡る言明では L4 の帰納が閉じない。**辺の端を位置に取ること自体は D20 が
+D20 は「別名の辺の両端のスロットは、同じオブジェクトを指す」を述べる。L1 (a) はその文を 1 点で強めた形を
+示す。主語が `ρ` のスロットではなく `ρ` の位置 (D6) であることがそれで、別名の辺は記号の位置へ着きうる
+ので、スロットだけを渡る言明では L4 の帰納が閉じない。**辺の端を位置に取ること自体は D20 が
 本文で述べる** -- 「**辺の端はスロットに限らず、位置 (D6) である。**」-- が、上に引いた文の主語は
-「両端のスロット」である。もう一方は辺の選び方で、L1 (a) が主張するのは
-`ρ` の上で実行された辺 (DEF `ρ` の上で実行された辺) についてであり、E3 の辺についてはその活性化が
-選んだアームの辺だけである。L4 が使うのはこの強めた形である。
+「両端のスロット」である。L4 が使うのはこの強めた形である。
+
+**辺の選び方は D20 と同じである。** L1 (a) が主語に置くのは、この文書の意味で在り、かつ `ρ` の上で
+実行された辺であり、L1 (b) よりこれは D20 の意味で在る辺の全体である -- D20 の存在の条件が
+「アームの中の行 (変位アームの payload 束縛、catch-all アームの payload 束縛、アーム本体の `Ret`) に
+ついては、路がそのアームを選ぶことも要る」を既に持つ。すなわちこの軸では L1 (a) は D20 より広くも
+狭くもない。
 
 **辺が在る条件は D20 が持ち、この文書はそれを 2 つの語に割る。** D20 は、辺が在るのは、その辺を定める
 節点が実行路の上に在り、かつその節点と leaf `λ` が作る 2 つの対がどちらもその路の位置であるときで
@@ -2852,9 +2899,11 @@ develop mode の検査である。`README.md` の「仮定」の節は、その�
 
 `TypeNode::is_array` と `TypeNode::is_funptr` は最上位の tycon の**名前**で決まるのに対し、`is_struct` と
 `is_union` は `toplevel_tycon_info(type_env)` が返す項の `variant` で決まる。2 つを突き合わせる段 --
-L4 の `<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` -- は、その実行の `TypeEnv` の `Std::Array` と
-`Std::#FunPtr{n}` の項が `bulitin_tycons` が入れたものであることを要る。L3a がそれを、
+L4 の `<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` -- は、その実行の `TypeEnv` の `Std::Array` の
+項と `is_funptr_tycon` を満たす鍵の項が `bulitin_tycons` が入れたものであることを要る。L3a がそれを、
 `Program::calculate_type_env` の種と、`TypeEnv` の `tycons` の欄に書く 6 つの式の数え上げから示す。
+**funptr の側を範囲 (`1` から `FUNPTR_ARGS_MAX`) でなく述語で書くのは、`is_funptr` がその述語で決まり、
+範囲の外の `#FunPtr{n}` にも真を返すからである。**
 
 ### L4 の前件 -- 解析が呼ぶ鍵に限ること
 

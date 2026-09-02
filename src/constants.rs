@@ -377,7 +377,7 @@ pub const DW_ATE_UNSIGNED: u32 = 7;
 pub const DW_ATE_UNSINGED_CHAR: u32 = 8;
 
 // Max number of arguments of function pointer lambda.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const FUNPTR_ARGS_MAX: u32 = 100;
 // The max size of tuples which are defined in any program.
 // Any bigger tuples are defined on demand.
