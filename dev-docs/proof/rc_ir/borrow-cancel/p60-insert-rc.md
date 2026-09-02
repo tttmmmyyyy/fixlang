@@ -3842,33 +3842,37 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
     グローバルの記憶域を読まないので、(E7) を起こしうるのは局所名でない変数を名指す節点だけである。
     `src/rc_ir/rc_insert.rs` で `RcExpr::Retain` と `RcExpr::Release` を構成する式は `build_retains` と
     `build_releases` の中の 1 つずつであり、A25 より骨格はこの 2 種を含まないので、`insert_rc` の出力の
-    `Retain`/`Release` 節点はこの 2 つが作ったものに限る。`L8` より `build_retains` の呼び出し元は
-    4 か所である。`build_releases` の呼び出し元は 6 か所である -- `insert_into_func` の `unused`、
-    `insert_into_operation_let` の `after`、`insert_into_eval` の `Release`、
-    `insert_into_destructure` の `dead`、`insert_into_match` のアームの頭 (`head`) と `Let` の
-    束縛変数の 2 か所である。
-    そのうち `is_local()` の門を持つのは 4 つである -- `insert_into_operation_let` の
-    `retains_before` と `releases_after` は `if v.name.is_local()` の門の中に在り、`retain_if_live` は
-    `var.name.is_local()` を要求し、`insert_into_eval` の `Release` も `x.name.is_local()` を要求し、
-    `insert_into_match` の dead-branch の `Release` が名指すのは `live_at_arm_head` の名前で、その
-    集合は `insert_if_local` と `free_locals` が作るので局所名だけからなる。
-    門を持たない位置のうち 5 つは、名指す名前が `vars.bindings` に束縛を持つ。
-    `insert_into_operation_let` の
-    `if !live_cont.contains(&x.name) && self.needs_rc(&x) { after.push(x.clone()); }` と、
-    `insert_into_match` の
-    `if !live_cont.contains(&x.name) && self.needs_rc(&x) { build_releases(vec![x.clone()], cont) }` は
-    どちらも `Let` の束縛変数 `x` を、`insert_into_destructure` の `dead` は `Destructure` の
-    フィールド変数を、`insert_into_match` の payload の `Release` はアームの payload 変数を名指す。
-    `collect_bindings` は `Let`・`Destructure`・`Match` の束縛変数を `vars.bindings` に入れる。
-    `insert_into_func` の `unused` はパラメータと capture を名指し、`VarTable::of` がその名前を
-    `vars.bindings` に入れる (グローバル初期化子の `init` はパラメータも capture も持たないので、
-    この位置は関数についてだけ在る)。よって `L15` (d) の対偶より、この 5 つが名指す名前はどれも
-    局所名である。
-    残る 1 つは、`insert_into_match` が boxed union の変位アームの頭に置く `Release(scrut, [])` --
-    `release_container && arm.tag.is_some() && needs_rc(&scrut)` の枝 -- である。その `scrut` が
-    局所名でないグローバルであるとき、D7 の読む構文の表の `Let(x, Match(v, arms), k)` の行より
+    `Retain`/`Release` 節点はこの 2 つが作ったものに限る。
+    **数えるのは、その 2 つの関数へ変数を渡す式である。** `L8` より `build_retains` の呼び出し元は
+    4 か所であり、そのうち `insert_into_operation_let` の呼び出しは `retains_before` を、残る
+    3 か所 (`Ret` の腕・`insert_into_destructure`・`insert_into_match`) は `retain_if_live` の
+    唯一の引数を渡すので、渡す式は 4 つである。`build_releases` の呼び出し元は 6 か所であり、
+    渡す式は 9 つである -- `insert_into_func` の `unused` (1)、`insert_into_operation_let` の
+    `after` に入る `releases_after` と `x` (2)、`insert_into_eval` の `vec![x]` (1)、
+    `insert_into_destructure` の `dead` (1)、`insert_into_match` の `head` に入る dead-branch・
+    容器解放・payload (3)、`insert_into_match` の `Let` の束縛変数 `vec![x]` (1)。合わせて 13 の式が
+    あり、これが `Retain`/`Release` 節点の名指す変数の出どころを尽くす。13 は次の 3 群に分かれる。
+    **第 1 群 (7 つ): `is_local()` の門の中に在るもの。** `insert_into_operation_let` の
+    `retains_before` と `releases_after` は `if v.name.is_local()` の門の中に在り (2)、
+    `retain_if_live` の 3 か所は `var.name.is_local()` を要求し (3)、`insert_into_eval` の
+    `vec![x]` も `x.name.is_local()` を要求し (1)、`insert_into_match` の dead-branch が名指すのは
+    `live_at_arm_head` の名前で、その集合は `insert_if_local` と `free_locals` が作るので局所名だけ
+    からなる (1)。
+    **第 2 群 (5 つ): 名指す名前が `vars.bindings` に束縛を持つもの。**
+    `insert_into_operation_let` の `after` に入る `x` と `insert_into_match` の `Let` の束縛変数は
+    どちらも `Let` の束縛変数 (2)、`insert_into_destructure` の `dead` は `Destructure` のフィールド
+    変数 (1)、`insert_into_match` の payload はアームの payload 変数 (1) であり、`collect_bindings` は
+    この 3 種を `vars.bindings` に入れる。`insert_into_func` の `unused` はパラメータと capture を
+    名指し (1)、`VarTable::of` がその名前を `vars.bindings` に入れる (グローバル初期化子の `init` は
+    パラメータも capture も持たないので、この位置は関数についてだけ在る)。よって `L15` (d) の対偶より、
+    この 5 つが名指す名前はどれも局所名である。
+    **第 3 群 (1 つ): 残る `insert_into_match` の容器解放。** boxed union の変位アームの頭に置く
+    `Release(scrut, [])` (`release_container && arm.tag.is_some() && needs_rc(&scrut)` の枝) である。
+    その `scrut` が局所名でないグローバルであるとき、D7 の読む構文の表の
+    `Let(x, Match(v, arms), k)` の行より
     その `Match` の写し節点が `scrut` を読み、D3 よりその節点は `ρ` の上でこの `Release` より前に
     あるので、そのグローバルの初期化はその写しの段で済んでいる。
+    第 1 群と第 2 群が名指すのは局所名であり、第 3 群の 1 つは (E7) を起こさない。
   <2>1. `B` の活性化は、言明の 3 項が与えるデータで 1 つに決まる。
     BY <2>0, D21, D24, D2, L26
     D21 は「1 つの本体の活性化は、パラメータ・capture の値と、この 4 種の各位置での結果を与えると
