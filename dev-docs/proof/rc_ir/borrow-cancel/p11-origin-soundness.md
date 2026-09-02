@@ -774,13 +774,16 @@ README の定義・仮定とコードだけである。よって第 2 節と第 
     D6 より (v-3) の名前は `Llvm` のオペランドとしても現れうるので、この道も数える。どちらの側でも
     値は `get_scoped_value` を通り、局所でない名前は `get_or_declare_global` へ行く。
     BY <2>1, CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
-       Generator::get_scoped_obj_field (`get_scoped_obj` を呼ぶ),
-       CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner (`RcExpr::Let` の `RcRhs::Llvm` の腕は
-       `llvm_gen.generate_tail` を呼び、オペランドを自分では読まない), Generator::eval_rc_rhs,
-       Generator::eval_rc_match,
-       CODE src/ast/inline_llvm.rs: LLVMGen::generate_tail (`self.generate(gc, ty)` を呼ぶ),
-       CODE src/fixstd/builtin.rs (op の生成コードが `Llvm` 節点のオペランドを読む式は、上の 3 つの
-       method の呼び出し 127 か所である),
+       Generator::get_scoped_obj_field (`get_scoped_obj_field` は `get_scoped_obj` を呼ぶ。この 3 つに
+       名前を渡す呼び出しを `src/` 全体で数えると、`src/rc_ir/codegen.rs` に 12 か所、`Llvm` 節点の
+       オペランドを読む `src/fixstd/builtin.rs` の op の生成コードに 127 か所ある。残る 2 か所 --
+       `src/ast/export_statement.rs` と `src/build/build_object_files.rs` -- は環境 (D22) の側で
+       あって、本体の節点ではない),
+       CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_rhs,
+       Generator::eval_rc_match (`RcExpr::Let` の `RcRhs::Llvm` の腕は `llvm_gen.generate_tail` を
+       呼び、オペランドを自分では読まない),
+       CODE src/ast/inline_llvm.rs: LLVMGen::generate_tail (`self.generate(gc, ty)` を呼ぶので、
+       オペランドを読むのは各 op の `generate` である),
        CODE src/generator.rs: Generator::get_scoped_value (`var.is_local()` が偽なら
        `get_or_declare_global` へ行く。名前から `ScopedValue` を引く式はこの 1 つであり、これを呼ぶのは
        `get_scoped_obj` と `get_scoped_obj_noretain` の 2 つだけである),
@@ -1973,8 +1976,8 @@ let seen : Std::I64 = Main::peek(m, two)
   <2>1. `level_ownership` 自身が行う書き込みは `owned_leaves.insert` だけであり、呼ぶのは `origin`、
         `owns_object_yet`、`covered_leaves` の 3 つである。`owns_object_yet` は `&Set<VarPath>` を
         読むだけで、どこにも書かない。`origin` は `origins` の memo を書く。
-    BY CODE src/rc_ir/borrow.rs: level_ownership (引数は `&VarTable`、`&TypeEnv`、site、
-       `&mut Set<VarPath>` である), owns_object_yet,
+    BY CODE src/rc_ir/borrow.rs: level_ownership, owns_object_yet (`level_ownership` の引数は
+       `&VarTable`、`&TypeEnv`、site、`&mut Set<VarPath>` である),
        CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow_mut().insert(key, answer.clone())` が
        memo を書く。`origins` は `RefCell` なので `&VarTable` からでも書ける)
   <2>2. `covered_leaves` は `TypeNode` の `OnceLock` の memo を書きうる。

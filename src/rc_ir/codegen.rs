@@ -88,7 +88,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     const ACCESSES_PER_INITIALIZATION: u64 = 1 << 20;
 
     /// Call `init_value_fn` and store what it returns into `global_var_ptr`.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn store_init_value(
         &mut self,
         init_value_fn: FunctionValue<'c>,
@@ -622,7 +622,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// it keeps it, and the accessor where it reads it — which is where it keeps the value, and
     /// where it reads the value another unit keeps and publishes. Whatever it does not generate it
     /// declares.
-    // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P3, P4, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,

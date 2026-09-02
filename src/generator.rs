@@ -1116,6 +1116,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The value of field `field_idx` of the object `var` is bound to, read the way
     /// `get_scoped_obj` reads it.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj_field(
         self: &mut Self,
         var: &FullName,
