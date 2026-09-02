@@ -46,7 +46,7 @@ inhabited は現れない。実行時にどの leaf が参照を持つかは P1 
 FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 `i` 要素 (0 始まり)、`p[0..k]` は
 先頭 `k` 要素からなる前置、`|p|` は長さ、`p ++ q` は連結、`[]` は空列とする。
 
-**外部の結果 (Rust の一時値のスコープ)** -- Rust Reference の "Destructors" の節の "Temporary scopes" が
+**EXT Rust の一時値のスコープ** -- Rust Reference の "Destructors" の節の "Temporary scopes" が
 次を述べる。`<1>30` の `<2>1` がこれを引く。
 
 > The _temporary scope_ of an expression is the scope that is used for the temporary variable that
@@ -73,11 +73,16 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 一時値はその temporary scope の終わりで drop される。
 
-**外部の結果 (`HashSet` の等価性)** -- 標準ライブラリの `HashSet<T, S>` の `PartialEq` は、両者の
+**EXT HashSet の等価性** -- 標準ライブラリの `HashSet<T, S>` の `PartialEq` は、両者の
 要素数が等しく、かつ一方のすべての要素が他方に含まれるときにだけ真を返す。すなわち `==` は集合と
 しての等価性であり、反復の順序に依らない。`<1>29a` の `<2>1a` の `<3>3` がこれを引く。`crate::misc` の
 `Set<T>` は `FxHashSet<T>`、すなわちハッシャだけを差し替えた `HashSet<T, S>` である
 (`CODE src/misc.rs: Set`)。
+
+**EXT RefCell の借用** -- 標準ライブラリの `RefCell<T>` について、`borrow` は返した `Ref` が drop
+されるまで共有の借用を保ち、`borrow_mut` は返した `RefMut` が drop されるまで可変の借用を保つ。
+`borrow` はその値が可変に借用されている間 panic し、`borrow_mut` はその値が共有または可変に借用されて
+いる間 panic する。それ以外の場合はどちらも panic しない。`<1>30` の `<2>1` がこれを引く。
 
 **DEF 呼び出しの辺** -- 表 `vars` と型環境 `E` を固定する。対 `(u, sig)` から対 `(u', sig')` への
 **呼び出しの辺**とは、`origin_inner(vars, E, u, sig)` の実行が `origin(vars, E, u', sig')` を呼ぶことを
@@ -1968,8 +1973,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `#[derive(Clone, Debug, PartialEq, Eq)]` を持つので、`==` は変位が一致することと、
        `Exactly` なら `VarPath` (= `(FullName, FieldPath)`) が等しいこと、`Join` なら `identity` が
        等しくかつ `candidates` (`Set<VarPath>`) が等しいことである。`Set<T>` は `FxHashSet<T>` で
-       あり、その等価性は外部の結果 (`HashSet` の等価性) より集合としての等価性である。
-      BY 外部の結果 (`HashSet` の等価性), CODE src/rc_ir/ownership.rs: Origin,
+       あり、その等価性は `EXT HashSet の等価性` より集合としての等価性である。
+      BY EXT HashSet の等価性, CODE src/rc_ir/ownership.rs: Origin,
          CODE src/rc_ir/ast.rs: VarPath, CODE src/misc.rs: Set
     <3>4. CASE `reached` が空。`reached.first()?` が `None` を返すので、
        `origin_from_leaves_under` は `None` を返す。空であるかどうかは並び順に依らない。
@@ -2037,25 +2042,32 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>1. `origin` 自身の abort の可能性は `vars.origins` の `RefCell` の借用の衝突だけである。
     <3>1. `origin` は `vars.origins.borrow()` を
        `if let Some(known) = ... { return known.clone(); }` の走査対象で 1 回、
-       `vars.origins.borrow_mut()` を最後の文で 1 回使う。
-      BY CODE src/rc_ir/ownership.rs: origin
+       `vars.origins.borrow_mut()` を最後の文で 1 回使う。`origin` の本体が行う残りは、鍵
+       `(var.clone(), path.to_vec())` の構成、`Map` の 1 回の探索と 1 回の挿入、`Origin` の複製、
+       および `grow_stack` の 1 段であり、そのどれも panic しない。`grow_stack` が呼ぶ
+       `origin_inner` は `<2>2` 以降が扱う。
+      BY A15, CODE src/rc_ir/ownership.rs: origin, CODE src/misc.rs: grow_stack,
+         CODE src/misc.rs: Map
     <3>2. `if let` の走査対象が作る一時値は、その `if let` 文の終わりで落ちる。`origin_inner` を
        呼ぶのはその次の文なので、その `Ref` は既に落ちている。
 
-       依拠するのは第 1 節の外部の結果 (Rust の一時値のスコープ) である。その一覧のうち、
+       依拠するのは第 1 節の `EXT Rust の一時値のスコープ` である。その一覧のうち、
        edition 2021 で `if let` の走査対象を含む最小の場は「A statement」であり、ここではその
        `if let` 文自身である。edition 2024 は「The pattern-matching condition(s) and consequent
        body of `if` (2024 Edition)」をこの一覧に足すので、走査対象の一時値は `else` ブロックより
        前で落ちる。`Cargo.toml` の `[package]` は `edition = "2021"` を書いており、この `if let` は
        `else` を持たないので、どちらの規則でも落ちる点は同じ `if let` 文の終わりである。
-      BY <3>1, 外部の結果 (Rust の一時値のスコープ), CODE Cargo.toml: [package] の edition
+      BY <3>1, EXT Rust の一時値のスコープ, CODE Cargo.toml: [package] の edition
     <3>3. `borrow_mut()` が作る一時値はその文の終わりで落ちる。その文の中で `origin` は呼ばれない
-       (`answer.clone()` は既に得た `Origin` の複製である)。
-      BY <3>1
+       (`answer.clone()` は既に得た `Origin` の複製である)。落ちる点を与えるのは `<3>2` と同じ
+       `EXT Rust の一時値のスコープ` であり、その一覧のうちこの式を含む最小の場は「A statement」、
+       すなわちその文自身である。
+      BY <3>1, EXT Rust の一時値のスコープ
     <3>4. QED
       `<3>2` と `<3>3` より、`Ref` が生きている間に `borrow_mut()` は起きず、`RefMut` が生きている
-      間に `borrow()` も `borrow_mut()` も起きない。
-      BY <3>2, <3>3
+      間に `borrow()` も `borrow_mut()` も起きない。`EXT RefCell の借用` より、借用が重ならなければ
+      `borrow` も `borrow_mut` も panic しない。
+      BY <3>2, <3>3, EXT RefCell の借用
   <2>2. `origin_inner` の `None`、`Param`、`Producer` の腕は `Origin::Exactly` を作るだけで abort
      しない。
     BY CODE src/rc_ir/ownership.rs: origin_inner
