@@ -51,7 +51,7 @@ README の第 2 節の記法に、次の 3 つを加える。
 クロージャの本文は `borrow.rs` の関数の本文の一部のままであって、受け取った標準ライブラリの関数の本文の
 一部にはならない。「呼び出しが `borrow.rs` の中にしか書けない」も、この意味の本文について読む。
 
-**Rust の側を `本文`、RC IR の側を `本体` と呼んで分ける。** D2 の**本体**は式の節点の木であり、D23 の
+**Rust の側を「本文」、RC IR の側を「本体」と呼んで分ける。** D2 の**本体**は式の節点の木であり、D23 の
 **本体**は活性化の主語 --- ある関数の `body` か、あるグローバル初期化子の `init` --- である。この文書は
 その 2 つの意味でも「本体」を使うので、Rust の関数の側にはこの語を当てない。`match` の腕のように関数より
 小さい単位について「本文」と書くときも、指すのはその腕に書かれた式と文の全体である。
@@ -150,17 +150,19 @@ EXT アロケータの契約 より、同時に生存している相異なる 2 
   `BY` に A3 を挙げる。
 - **型と `Provenance` の上の関数** --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
   `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
-  `Origin::identity`、`Origin::candidates`。この 8 つは型・path・`Provenance`・`Origin` の値だけを引数に
-  取り、`VarTable` も走査の状態も引数に取らない。根拠は 2 つに分かれる。
+  `Origin::identity`、`Origin::candidates`。この 8 つは型・path・`TypeEnv`・`Provenance`・`Origin` の
+  値だけを引数に取り、`VarTable` も走査の状態も引数に取らない。根拠は 2 つに分かれる。
 
   **6 つは内部可変性を持つ値に触れない。** `TypeNode::is_box`、`Provenance::leaf_origins_at`、
   `Provenance::leaf_origins_under`、`as_arg_projection`、`Origin::identity`、`Origin::candidates` が
   それであり、その本文は引数から到達できる値だけを読み、可変な静的変数にも触れない。`is_box` は
   `is_unbox` を経て `toplevel_tycon_info` の `type_env.tycons().get(&tycon)` に落ちるが、その鍵の型
-  `TyCon` は `FullName` の欄を 1 つ持つだけで `Hash` を derive しており、内部可変性を持たない。残る 4 つは
-  引数の `Provenance`・`Set<LeafOrigin>`・`Origin` を読むだけである
+  `TyCon` は `FullName` の欄を 1 つ持つだけであり、`FullName` と `NameSpace` の手書きの `Hash` が読むのは
+  `Vec<String>` と `String` だけなので、内部可変性を持たない。残る 5 つは引数の
+  `Provenance`・`Set<LeafOrigin>`・`Origin` を読むだけである
   (`CODE src/ast/types.rs: TypeNode::is_box`, `CODE src/ast/types.rs: TypeNode::is_unbox`,
   `CODE src/ast/types.rs: TypeNode::toplevel_tycon_info`, `CODE src/ast/types.rs: TyCon`,
+  `CODE src/ast/name.rs: FullName`, `CODE src/ast/name.rs: NameSpace`,
   `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at`,
   `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`,
   `CODE src/rc_ir/ownership.rs: as_arg_projection`, `CODE src/rc_ir/ownership.rs: Origin::identity`,
