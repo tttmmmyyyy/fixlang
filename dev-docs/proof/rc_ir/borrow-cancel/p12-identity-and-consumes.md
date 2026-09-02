@@ -630,11 +630,11 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
 
 <1>6. E5 の辺 `(args[j], σ)`-`(x, λ)`。
   <2>1. `x` の値の位置 `λ` の値は、`args[j]` の値の位置 `σ` の値である。
-    D9 の値の水準の第 6 行 (`Llvm` の素通し leaf) が「結果のその leaf の値はオペランド `i` のその leaf の
-    値である」と述べる。第 2 節より、この行がオペランドの側で名指す leaf は、結果の leaf `λ` の宣言
-    `Arg(j, σ)` の `σ` である -- D9 の移動の表の同じ行が `Arg(i, σ)` を条件に置いて `σ` を名指し、A3 の
-    同じ行が `λ` の inhabited と第 `j` オペランドの leaf `σ` の inhabited を同値と述べる。
-    BY A3, D9, DEF 辺の leaf 対応
+    D9 の値の水準の第 6 行 (`Llvm` の素通し leaf) が「結果の leaf `λ` の宣言が単一の `Arg(i, σ)` である
+    とき、その leaf の値は**オペランド `i` の leaf `σ` の値**である」と述べる。第 2 節の E5 は、結果の
+    leaf `λ` の宣言が単一の `Arg(j, σ)` であるときの辺を `(args[j], σ)`-`(x, λ)` と定めるので、この行が
+    オペランドの側で名指す leaf は E5 の辺の始点そのものである。
+    BY D9, DEF 辺の leaf 対応
   <2>2. QED
     BY DEF 辺の leaf 対応, <1>1, <2>1
 
@@ -702,8 +702,8 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
     作ったものであり、`x` はパラメータか capture である。
     BY A6, <1>1, <1>2
   <2>2. CASE `vars` が `VarTable::body_only` で作られた (本体がグローバル初期化子の `init` である)。
-    D1 より `init` はパラメータも capture も持たないので、「`x` がこの本体のパラメータか capture で
-    ある」は偽である。`<1>1` より `body_only` は `Param` を 1 つも記録せず、`<1>2` より
+    D1 より `init` はパラメータも capture も持たないので、(a) の第 2 の側 -- `x` がこの本体のパラメータか
+    capture であること -- は偽である。`<1>1` より `body_only` は `Param` を 1 つも記録せず、`<1>2` より
     `collect_bindings` の作る構成子も `Param` を含まないので、`b = Param` も偽である。よって 2 つは
     同値である。
     BY D1, <1>1, <1>2
@@ -760,17 +760,23 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
 
 **言明**。次の 6 つが成り立つ。(E1) から (E5) の主語は `vars.bindings` の記録であって辺ではない --
 辺が在ることを先に言わなくても `origin` の等式が使えるようにするためである (DEF 辺の存在)。
-`λ` と `σ` は任意の path を渡る。
+`λ` と `σ` は任意の path を渡る。**(E1) から (E5) はいずれも、解析が鍵 `(u, λ)` で `origin` を呼ぶ場合に
+ついて述べ、右辺の鍵でも呼ぶことを併せて言う** -- 呼ばれない鍵について `origin` は答えを持たない (§1)。
 
-- **(E1)** `vars.bindings.get(u) = Some(Move(y))` のとき `origin(u, λ) = origin(y, λ)`。
-- **(E2)** `vars.bindings.get(u) = Some(Field(c, i))` かつ `c.ty.is_box(type_env)` が偽のとき
-  `origin(u, λ) = origin(c, [i] ++ λ)`。
-- **(E3)** `vars.bindings.get(u) = Some(Payload(s, Some(t)))` かつ `s.ty.is_box(type_env)` が偽のとき
-  `origin(u, λ) = origin(s, [t] ++ λ)`。
-- **(E4)** `vars.bindings.get(u) = Some(Payload(s, None))` のとき `origin(u, λ) = origin(s, λ)`。
-- **(E5)** `vars.bindings.get(u) = Some(Llvm(gen, args, ty))` であって、
-  `decl := gen.result_prov(ty, arg_tys, type_env)` の `decl.leaf_origins_at(λ)` が単一の `Arg(j, σ)` から
-  なる集合であるとき `origin(u, λ) = origin(args[j], σ)`。ここで **`arg_tys` は `args` の各元の型の列**
+- **(E1)** 解析が鍵 `(u, λ)` で `origin` を呼び、`vars.bindings.get(u) = Some(Move(y))` であるとき、
+  解析は鍵 `(y, λ)` でも `origin` を呼び、`origin(u, λ) = origin(y, λ)` である。
+- **(E2)** 解析が鍵 `(u, λ)` で `origin` を呼び、`vars.bindings.get(u) = Some(Field(c, i))` かつ
+  `c.ty.is_box(type_env)` が偽であるとき、解析は鍵 `(c, [i] ++ λ)` でも `origin` を呼び、
+  `origin(u, λ) = origin(c, [i] ++ λ)` である。
+- **(E3)** 解析が鍵 `(u, λ)` で `origin` を呼び、`vars.bindings.get(u) = Some(Payload(s, Some(t)))` かつ
+  `s.ty.is_box(type_env)` が偽であるとき、解析は鍵 `(s, [t] ++ λ)` でも `origin` を呼び、
+  `origin(u, λ) = origin(s, [t] ++ λ)` である。
+- **(E4)** 解析が鍵 `(u, λ)` で `origin` を呼び、`vars.bindings.get(u) = Some(Payload(s, None))` である
+  とき、解析は鍵 `(s, λ)` でも `origin` を呼び、`origin(u, λ) = origin(s, λ)` である。
+- **(E5)** 解析が鍵 `(u, λ)` で `origin` を呼び、`vars.bindings.get(u) = Some(Llvm(gen, args, ty))` で
+  あって、`decl := gen.result_prov(ty, arg_tys, type_env)` の `decl.leaf_origins_at(λ)` が単一の
+  `Arg(j, σ)` からなる集合であるとき、解析は鍵 `(args[j], σ)` でも `origin` を呼び、
+  `origin(u, λ) = origin(args[j], σ)` である。ここで **`arg_tys` は `args` の各元の型の列**
   `args.iter().map(|a| a.ty.clone()).collect()` である。
 - **(B)** 本体の節点が E1 から E5 のいずれかの辺を定めるとき、その辺の終点の変数の `vars.bindings` の
   記録は、その辺の種に応じてそれぞれ `Some(Move(y))`、`Some(Field(c, i))`、`Some(Payload(s, Some(t)))`、
@@ -792,15 +798,20 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
       `Llvm(llvm_gen, args, x.ty)` とする。
   BY CODE src/rc_ir/ownership.rs: collect_bindings の `RcExpr::Let` の腕の `RcRhs::Llvm` の場合
 
-<1>4a. `origin(x, π)` の値は `origin_inner(vars, type_env, x, π)` の 1 回の呼び出しが返した値である。
-      よって `origin_inner` の腕が返す式を読めば `origin` の値が決まる。
-  BY L0 (a)
+<1>4a. 解析が鍵 `(u, λ)` で `origin` を呼ぶとき、その鍵の cold な呼び出しがちょうど 1 つ在り、
+      `origin(u, λ)` の値はその呼び出しの `origin_inner(vars, type_env, u, λ)` が返した値である。
+      よって `origin_inner` の腕が返す式を読めば `origin(u, λ)` の値が決まり、その腕が直接行う `origin` の
+      呼び出しは解析が行う呼び出しである。
+  BY L0 (a), L0 (b)
 
 <1>5. (E1) が成り立つ。
   <2>1. `origin_inner` の `Some(Binding::Move(y))` の腕は `origin(vars, type_env, &y.name, path)` を
         そのまま返す。
     BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Move(y))` の腕
   <2>2. QED
+    `<1>4a` より鍵 `(u, λ)` の cold な呼び出しが `origin_inner` を評価し、`<2>1` よりその腕は鍵 `(y, λ)` の
+    `origin` を直接呼んでその値を返す。よって解析は鍵 `(y, λ)` でも `origin` を呼び、
+    `origin(u, λ) = origin(y, λ)` である。
     BY <1>4a, <2>1
 
 <1>6. (E2) が成り立つ。
@@ -809,6 +820,9 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
         `origin(vars, type_env, &container.name, &container_path)` をそのまま返す。
     BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Field(container, idx))` の腕
   <2>2. QED
+    `<1>4a` より鍵 `(u, λ)` の cold な呼び出しが `origin_inner` を評価し、`<2>1` よりその腕は
+    鍵 `(c, [i] ++ λ)` の `origin` を直接呼んでその値を返す。よって解析はその鍵でも `origin` を呼び、
+    `origin(u, λ) = origin(c, [i] ++ λ)` である。
     BY <1>4a, <2>1
 
 <1>7. (E3) が成り立つ。
@@ -817,6 +831,9 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
         `origin(vars, type_env, &scrut.name, &scrut_path)` をそのまま返す。
     BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Payload(scrut, variant))` の腕
   <2>2. QED
+    `<1>4a` より鍵 `(u, λ)` の cold な呼び出しが `origin_inner` を評価し、`<2>1` よりその腕は
+    鍵 `(s, [t] ++ λ)` の `origin` を直接呼んでその値を返す。よって解析はその鍵でも `origin` を呼び、
+    `origin(u, λ) = origin(s, [t] ++ λ)` である。
     BY <1>4a, <2>1
 
 <1>8. (E4) が成り立つ。
@@ -824,6 +841,9 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
         `origin(vars, type_env, &scrut.name, path)` をそのまま返す。
     BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Payload(scrut, variant))` の腕
   <2>2. QED
+    `<1>4a` より鍵 `(u, λ)` の cold な呼び出しが `origin_inner` を評価し、`<2>1` よりその腕は鍵 `(s, λ)` の
+    `origin` を直接呼んでその値を返す。よって解析は鍵 `(s, λ)` でも `origin` を呼び、
+    `origin(u, λ) = origin(s, λ)` である。
     BY <1>4a, <2>1
 
 <1>9. (E5) が成り立つ。
@@ -846,6 +866,9 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
         言明の `decl` である。
     BY <2>2, <2>2a
   <2>4. QED
+    `<2>3` よりこの腕は `Some((j, σ))` の枝を取る。`<1>4a` より鍵 `(u, λ)` の cold な呼び出しが
+    `origin_inner` を評価し、`<2>1` よりその枝は鍵 `(args[j], σ)` の `origin` を直接呼んでその値を返す。
+    よって解析はその鍵でも `origin` を呼び、`origin(u, λ) = origin(args[j], σ)` である。
     BY <1>4a, <2>1, <2>2a, <2>3
 
 <1>9a. (B) が成り立つ。
