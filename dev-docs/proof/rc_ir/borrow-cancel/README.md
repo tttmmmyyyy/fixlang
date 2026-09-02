@@ -2387,7 +2387,9 @@ README から消えた後もその形で残っていた。**検証が要るか�
   名指さない (`CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov`)。
 
   `owns_unit` を呼ぶ位置がこの site の集合を出ないことは、この命題の証明の中で示す
-  (`CODE src/rc_ir/borrow.rs: levelled_sites`, `RewriteCtx::rewrite_rc`, `call_rc`, `any_owned_unit`)。
+  (`CODE src/rc_ir/borrow.rs: levelled_sites`, `RewriteCtx::rewrite_rc`, `call_rc`, `any_owned_unit`,
+  `routing_saves_retain`)。**呼ぶ位置は数え上げでなく `self.owns_unit(` の全出現で決める** --
+  一覧は関数が 1 つ増えるたびに古くなる。
 
 - **P8** (推論の停止性と安全性)。`infer_ownership` は停止する。その不動点が返す集合 `owned_leaves` は、
   次を満たす。ある関数のある leaf の参照が、その関数のある実行路で D9 の意味で消費されるならば、その leaf の
