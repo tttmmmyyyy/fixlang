@@ -1096,11 +1096,11 @@ D30 の共通接頭が終わるとき、その出口は (X1) か (X2)
         `build_branch_by_refcnt_state` が `global_bb` を `Some` で返すのは `state.dispatches()` が真の
         ときだけである (L0 の `<1>5`)。4 か所のうち `make_array_unique_with_hole`・
         `make_struct_union_unique`・`InlineLLVMArraySetCapacityBoundsUnchecked` の `force_unique` の枝は、
-        `force_unique_or_assert` と `force_unique_or_assert_with_hole` を通って
-        `assumed_state(self.assume_local)` を渡す。L0 より、`borrow_ify` の入力・出力と `cancel` の
-        出力のいずれかの本体にある `Llvm` の演算の `assume_local` は偽であり -- この命題が範囲に取る
-        2 つはその中に在る -- 、`assumed_state(false)` は `RcState::Unknown` で
-        `dispatches()` は真である (L0 の `<1>4`)。残る 1 か所 --
+        `force_unique_or_assert` と `force_unique_or_assert_with_hole` (`array_tail_destination` を
+        経る 2 つの op も同じ) を通って `assumed_state(self.assume_local)` を渡す。L0 より、`borrow_ify`
+        の入力・出力と `cancel` の出力のいずれかの本体にある `Llvm` の演算の `assume_local` は偽で
+        あり、この命題が範囲に取る 2 つの本体はその中に在る。よって `assumed_state(false)` すなわち
+        `RcState::Unknown` が渡り、その `dispatches()` は真である (L0 の `<1>4`)。残る 1 か所 --
         `InlineLLVMArrayAppendCapacityUnchecked` が `src` について立てる分岐 -- は `RcState::Unknown` を
         直に渡す。よってどの場合も `global_bb` は在る。
         よってグローバル状態のオブジェクトはどちらの実行
