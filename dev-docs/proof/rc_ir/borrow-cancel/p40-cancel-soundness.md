@@ -2281,17 +2281,29 @@ A19 の (ii-a)・(ii-b) と P14a を活性化に当てるので、その範囲�
           `p.ty` で取る。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs, CODE src/rc_ir/borrow.rs: cancel,
          CODE src/rc_ir/ownership.rs: all_owned_units, D14
-    <3>2. `rhs_consumes` は `RcRhs::App(callee, args)` について、callee の全 boxed leaf と、
-          `resolve_callee_params` が返すパラメータについて `owns` が真である引数 leaf を報告する。
-          呼び出し先が解決しないときは全位置を所有とみなす。<3>1 と合わせて、これは D9 の `App` の行が
-          名指す leaf そのものである (解決しない場合は A7 が扱う。A14 より `params[i]` は範囲内である)。
-          D9 の `App` の行が読む所有は実行時の呼び出し先 (D23) のものなので、静的に解決した関数が
-          その呼び出し先であることが要る。`cancel` は `borrow_ify` の出力を入力に取るので (第 1 節)、
-          それを与えるのは P30 -- 「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
-          `resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の
-          呼び出し先 (D23) と同じ `RcFunc` である」-- である。P30 は続けて「`cancel` の中で
-          `CancelAnalysis::consume_rhs` が `rhs_consumes` を呼ぶ位置がこれを読む」と、この位置を名指す。
-          **P29 は `borrow_ify` の入力についての命題なので、ここには当たらない。**
+    <3>2. `rhs_consumes` が `RcRhs::App(callee, args)` について報告する leaf の集合は、D9 の `App` の行が
+          名指す leaf をすべて含む。`rhs_consumes` は callee の全 boxed leaf と、
+          `resolve_callee_params` が返すパラメータについて `owns` が真である引数 leaf を報告し、
+          `resolve_callee_params` が `None` を返すときは `is_owning_position` を無条件に真とする。
+          A14 より `params[i]` は範囲内である。callee の全 boxed leaf は D9 の `App` の行の第 1 項その
+          ものなので、残るのは引数の leaf である。
+          - `resolve_callee_params` が `Some` を返す場合。<3>1 より `owns` は「呼び出し先がその leaf の
+            unit を所有する (D14)」に等しい。D9 の `App` の行が読む所有は実行時の呼び出し先 (D23) の
+            ものなので、静的に解決した関数がその呼び出し先であることが要る。`cancel` は `borrow_ify` の
+            出力を入力に取るので (第 1 節)、それを与えるのは P30 -- 「`borrow_ify` の出力の
+            `Let(x, App(callee, args), k)` について、`resolve_callee_params` が解決する関数が `Some` で
+            あるならば、それはその段の実行時の呼び出し先 (D23) と同じ `RcFunc` である」-- である。P30 は
+            続けて「`cancel` の中で `CancelAnalysis::consume_rhs` が `rhs_consumes` を呼ぶ位置がこれを
+            読む」と、この位置を名指す。**P29 は `borrow_ify` の入力についての命題なので、ここには
+            当たらない。** よってこの場合、報告する集合は D9 の行が名指す集合に等しい。
+          - `resolve_callee_params` が `None` を返す場合。報告するのは全引数の全 boxed leaf であり、
+            D9 の行が名指す集合はその部分集合である。**2 つは等しいとは限らない** -- A7 は
+            「`prog.funcs` に無い呼び出し先は、全パラメータの全 unit を所有するものとして扱われる。これは
+            所有を増やす向きの近似である」と述べ、その近似の差がここに出る。D9 の行が読むのは実行時の
+            呼び出し先が所有する位置だけなので、実行時の呼び出し先が借用する unit の引数 leaf は D9 の
+            行に無く、`rhs_consumes` の報告には在る。
+          **この段が与えるのは包含だけである。** `<3>5` が使うのは「`c` で消費される leaf は
+          `rhs_consumes` がこの位置で報告する」という向きだけであり、逆向きは要らない。
       BY CODE src/rc_ir/ownership.rs: rhs_consumes,
          CODE src/rc_ir/ownership.rs: resolve_callee_params, D9, D23, A7, A14, P30, <3>1
     <3>3. `rhs_consumes` は `RcRhs::Closure(_, caps)` について各 capture の全 boxed leaf を報告する。
