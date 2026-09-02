@@ -867,81 +867,104 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    渡した 2 回の呼び出しは同じ振る舞いをとる -- ともに停止して等しい `FieldPath` を返すか、ともに
    abort するか、ともに停止しないかのいずれかである。`unit_step(ty, E)`、`ty.is_box(E)`、
    `ty.unpunched_field_types(E)` についても同じことが成り立つ。この段は `<1>1` を読まない。
-  <2>1. `truncate_to_unit` の本体は、`out` と `cur` の 2 つの局所変数を持つ `for` ループ 1 つで
-     あり、各周で `unit_step(&cur, E)` と `held_field_type(&held_fields, idx, ..)` を呼ぶ。この 2 つの
-     ほかに呼ぶものは無く、`out` と `cur` の推移はその 2 つの返り値と `path` の要素だけで決まる。
-     `held_field_type` は有限列の線形探索であり、その振る舞いは `held_fields` と `idx` の値だけで
-     決まる。
-    BY CODE src/rc_ir/ownership.rs: truncate_to_unit,
-       CODE src/rc_ir/ownership.rs: held_field_type
-  <2>2. `unit_step(ty, E)` が呼ぶのは `is_fully_unboxed`、`is_closure`、`is_box`、`is_union`、
-     `is_array`、`is_punched_array`、`toplevel_tycon_info`、`unpunched_field_types` だけであり、返す
-     `UnitStep` はその返り値と `CLOSURE_CAPTURE_IDX` / `CLOSURE_FIELD_COUNT` の定数から組まれる。
-     このうち `toplevel_tycon_info` は `ty` の `toplevel_tycon()` を引いて `E.tycons()` を引くだけ、
-     残る 6 つはその上に立つ述語であり、どれも `ty` の値と `E` のほかに何も読まない。
-    BY CODE src/rc_ir/ownership.rs: unit_step, CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+
+   以下は、この道の各関数が**何を読むか**を先に数え上げ、その数え上げから 2 つの呼び出しの振る舞いが
+   一致することを QED で出す形をとる。
+  <2>1. `unwrap_newtypes_node(self, E, unwrapped)` が読むのは、`self.toplevel_tycon()`、
+     `E.unwrapped_newtype_info(&tycon)` が返す `TyConInfo` の `tyvars` の長さと
+     `fields[0].is_punched`、`self.collect_type_arguments()` の長さ、
+     `self.declared_field_types(tycon_info)` の第 0 成分、`self.ty` の変位とその成分、そして
+     `unwrap_newtypes_memoized` の再帰の返り値だけである。返すのは `make_unit_ty()`、その再帰の
+     返り値、`self.clone()`、`self.set_tyapp_fun(new_fun_ty).set_tyapp_arg(new_arg_ty)` の
+     いずれかである。
+    BY CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
        CODE src/ast/types.rs: TypeNode::toplevel_tycon,
-       CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
-       CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_closure,
-       CODE src/ast/types.rs: TypeNode::is_box, CODE src/ast/types.rs: TypeNode::is_unbox,
-       CODE src/ast/types.rs: TypeNode::is_union, CODE src/ast/types.rs: TypeNode::is_array,
-       CODE src/ast/types.rs: TypeNode::is_punched_array,
-       CODE src/constants.rs: CLOSURE_CAPTURE_IDX, CODE src/constants.rs: CLOSURE_FIELD_COUNT
-  <2>3. `unpunched_field_types` が呼ぶのは `toplevel_tycon_info` と `instance_field_types` であり、
-     `instance_field_types` が呼ぶのは `declared_field_types` と、宣言が kind `*` でない型変数を
-     持つときの `unwrap_newtypes_memoized` である。`declared_field_types` が呼ぶのは
-     `collect_type_arguments`、`Substitution::single`、`Substitution::merge`、`substitute_type` で
-     あり、どれも型の値だけを読む。`instance_field_types` が `unwrap_newtypes_memoized` に渡す
-     `unwrapped` は、その呼び出しがその場で作る空の `Map` である。よって `unpunched_field_types` の
-     振る舞いは `self` の値と `E` の値だけで決まる。
+       CODE src/ast/types.rs: TypeNode::collect_type_arguments,
+       CODE src/ast/program.rs: TypeEnv::unwrapped_newtype_info,
+       CODE src/fixstd/builtin.rs: make_unit_ty
+  <2>1a. `<2>1` の最後の 2 つの返り値は、値としては同じものである。`Type::TyApp(fun_ty, arg_ty)` の
+     腕で `self.clone()` を返すのは `Arc::ptr_eq(&new_fun_ty, fun_ty)` と
+     `Arc::ptr_eq(&new_arg_ty, arg_ty)` がどちらも真のときであり、そのとき `new_fun_ty` は `fun_ty`
+     と、`new_arg_ty` は `arg_ty` と同じ `Arc` なので値としても等しい。`self.ty` は
+     `Type::TyApp(fun_ty, arg_ty)` であり、`set_tyapp_fun` と `set_tyapp_arg` を継いで作る値の `ty`
+     は `Type::TyApp(new_fun_ty, new_arg_ty)` である。`impl PartialEq for TypeNode` は `ty` だけを
+     読み、`impl PartialEq for Type` は変位と成分を読むので、どちらの腕が返す値も
+     `Type::TyApp(new_fun_ty, new_arg_ty)` を `ty` に持つ節点と等しい。すなわち `Arc::ptr_eq` の
+     分岐は返り値の**値**を変えない。
+    BY <2>1, CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
+       CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
+       CODE src/ast/types.rs: impl PartialEq for TypeNode,
+       CODE src/ast/types.rs: impl PartialEq for Type
+  <2>2. `unwrap_newtypes_memoized(self, E, unwrapped)` が読むのは、`unwrapped` を `self` を鍵に引いた
+     結果と、`unwrap_newtypes_node` の返り値だけである。`Map` は `FxHashMap` なので、鍵の一致は
+     `Arc<TypeNode>` の `Hash` と `Eq`、すなわち `TypeNode` の `Hash` と `PartialEq` で決まり、
+     どちらも `ty` だけを読む。
+    BY CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
+       CODE src/ast/types.rs: impl Hash for TypeNode,
+       CODE src/ast/types.rs: impl PartialEq for TypeNode,
+       CODE src/ast/types.rs: TypeNode::type_hash, CODE src/misc.rs: Map
+  <2>3. `unpunched_field_types(self, E)` が読むのは、`self.toplevel_tycon_info(E)` が返す
+     `TyConInfo` の `fields[i].is_punched` と、`self.instance_field_types(ti, E)` の返り値だけで
+     ある。`instance_field_types` が読むのは `self.declared_field_types(ti)` の返り値、`ti.tyvars` の
+     各 kind、そして宣言が kind `*` でない型変数を持つときの `unwrap_newtypes_memoized` の返り値で
+     あり、そこへ渡す `unwrapped` はこの呼び出しがその場で作る空の `Map` である。
+     `declared_field_types` が読むのは `self.collect_type_arguments()`、`ti.tyvars`、`ti.fields` の
+     各 `ty` と、`Substitution::single` / `merge` / `substitute_type` の返り値だけである。
+     `toplevel_tycon_info` が読むのは `self.is_closure()`、`self.toplevel_tycon()`、`E.tycons()` の
+     1 回の探索だけである。
     BY CODE src/ast/types.rs: TypeNode::unpunched_field_types,
        CODE src/ast/types.rs: TypeNode::instance_field_types,
        CODE src/ast/types.rs: TypeNode::declared_field_types,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
        CODE src/ast/types.rs: TypeNode::collect_type_arguments,
        CODE src/elaboration/typecheck.rs: Substitution::single,
        CODE src/elaboration/typecheck.rs: Substitution::merge,
        CODE src/elaboration/typecheck.rs: Substitution::substitute_type
-  <2>4. `unwrap_newtypes_memoized` の振る舞いは `self` の値、`E` の値、`unwrapped` の値だけで決まる。
-     この関数は `unwrapped` を `self` を鍵に引き、当たらなければ `unwrap_newtypes_node` を呼んで
-     その結果を `unwrapped` に入れる。`Map` は `FxHashMap` であり、その鍵の一致は
-     `Arc<TypeNode>` の `Hash` と `Eq`、すなわち `TypeNode` の `Hash` と `PartialEq` で決まる。
-     `unwrap_newtypes_node` が読むのは `self.toplevel_tycon()`、`E.unwrapped_newtype_info(&tycon)`、
-     `self.collect_type_arguments()`、`tycon_info.tyvars` と `tycon_info.fields[0].is_punched`、
-     `declared_field_types` の第 0 成分、そして `self.ty` の変位だけである。
-    BY CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
-       CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
-       CODE src/ast/program.rs: TypeEnv::unwrapped_newtype_info,
-       CODE src/ast/types.rs: impl Hash for TypeNode,
-       CODE src/ast/types.rs: impl PartialEq for TypeNode, CODE src/misc.rs: Map
-  <2>4a. `unwrap_newtypes_node` の `Type::TyApp` の腕が置く `Arc::ptr_eq` の分岐は、返る値を変えない。
-     真の腕は `self.clone()` を返し、偽の腕は `self.set_tyapp_fun(new_fun_ty).set_tyapp_arg(new_arg_ty)`
-     を返す。真の腕に入るのは `new_fun_ty` と `new_arg_ty` がそれぞれ `fun_ty` と `arg_ty` と同じ
-     `Arc` であるときなので、そのとき偽の腕が作る値の `ty` は `Type::TyApp(fun_ty, arg_ty)`、すなわち
-     `self.ty` に等しい。`impl PartialEq for TypeNode` は `ty` だけを読むので、どちらの腕が返す値も、
-     `new_fun_ty` と `new_arg_ty` の**値**だけで決まる。
-    BY CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
-       CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
-       CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
-       CODE src/ast/types.rs: impl PartialEq for TypeNode, CODE src/ast/types.rs: impl PartialEq for Type
-  <2>5. この道で `TypeNode` の内部可変性の欄が書かれるのは 1 か所である --
-     `unwrap_newtypes_memoized` の `Map` の探索と挿入が `Arc<TypeNode>` の鍵をハッシュし、
-     `impl Hash for TypeNode` が `type_hash` を経て `hash_cache.get_or_init` を実行する。
-     A3 の「**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。**
-     到達できる型が内部可変性を持つ欄を持つときは、その欄は**一度だけ書かれる memo であって、その値は
-     その型の `PartialEq` が読む成分の関数である**」より、その書き込みは型の値を変えない。よって
-     `<2>1` から `<2>4a` が「値だけで決まる」と述べたものは、この書き込みで動かない。
-    BY A3 (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない),
+  <2>4. `unit_step(ty, E)` が読むのは、`is_fully_unboxed`、`is_closure`、`is_box`、`is_union`、
+     `is_array`、`is_punched_array` の返り値、`toplevel_tycon_info(E).fields` の長さ、そして
+     `unpunched_field_types(E)` の返り値だけであり、返す `UnitStep` はそれと定数
+     `CLOSURE_CAPTURE_IDX` / `CLOSURE_FIELD_COUNT` から組まれる。この 6 つの述語のうち
+     `is_closure`、`is_array`、`is_funptr`、`is_punched_array` は `toplevel_tycon_satisfies` を経て
+     `toplevel_tycon()` が返す `TyCon` の名前だけを見る。`is_unbox` は
+     `is_closure() || toplevel_tycon_info(E).is_unbox` であり、`is_box` はその否定である。
+     `is_fully_unboxed` はこの 4 つの述語と `unpunched_field_types(E)` の第 2 成分についての再帰から
+     なる。`toplevel_tycon()` が読むのは `self.ty` の変位と、`Type::TyApp` の関数側への再帰だけで
+     ある。
+    BY CODE src/rc_ir/ownership.rs: unit_step, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/ast/types.rs: TypeNode::is_closure, CODE src/ast/types.rs: TypeNode::is_box,
+       CODE src/ast/types.rs: TypeNode::is_unbox, CODE src/ast/types.rs: TypeNode::is_union,
+       CODE src/ast/types.rs: TypeNode::is_array, CODE src/ast/types.rs: TypeNode::is_funptr,
+       CODE src/ast/types.rs: TypeNode::is_punched_array,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+       CODE src/constants.rs: CLOSURE_CAPTURE_IDX, CODE src/constants.rs: CLOSURE_FIELD_COUNT
+  <2>5. `truncate_to_unit(ty, path, E)` が読むのは、`path` の各要素と、`unit_step(&cur, E)` と
+     `held_field_type(&held_fields, idx, "truncate_to_unit")` の返り値だけである。局所変数は `out`
+     と `cur` の 2 つで、その推移はその返り値と `path` の要素で決まる。`held_field_type` は
+     `held_fields` を `idx` で線形に探すだけである。
+    BY CODE src/rc_ir/ownership.rs: truncate_to_unit,
+       CODE src/rc_ir/ownership.rs: held_field_type
+  <2>6. この道で `TypeNode` の内部可変性の欄が書かれるのは 1 か所である -- `<2>2` の `Map` の探索と
+     挿入が `Arc<TypeNode>` の鍵をハッシュし、`impl Hash for TypeNode` が `type_hash` を経て
+     `hash_cache.get_or_init` を実行する。A3 の「**`RcProgram` から到達できる値の等しさは、それを
+     共有参照で受け取る計算が変えない。** 到達できる型が内部可変性を持つ欄を持つときは、その欄は
+     **一度だけ書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である**」より、
+     その書き込みは型の値を変えない。
+    BY A3 (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない), <2>2,
        CODE src/ast/types.rs: TypeNode (`hash_cache` の宣言),
        CODE src/ast/types.rs: TypeNode::type_hash,
        CODE src/ast/types.rs: impl Hash for TypeNode
-  <2>6. QED
-    値として等しい引数を渡した 2 つの呼び出しを並べる。`<2>1` から `<2>4a` は、この道の各関数が
-    分岐と呼び先を決めるのに読むものを尽くしており、そのどれもが引数の値と `E` の値、および同じ
-    呼び出しがその場で作る局所の値である。`<2>5` より、走らせることで書かれる memo はその値を
-    動かさない。よって 2 つの呼び出しが行う計算の列は 1 対 1 に対応し、対応する各段で同じ分岐を
-    選び、同じ引数の値で同じ関数を呼ぶ。したがって、ともに停止して等しい値を返すか、ともに同じ
-    `panic!` / `assert` に達するか、ともに停止しない。
-    BY <2>1, <2>2, <2>3, <2>4, <2>4a, <2>5
+  <2>7. QED
+    値として等しい引数を渡した 2 つの呼び出しを並べ、素の動作の列を先頭から突き合わせる。`<2>1` から
+    `<2>5` はこの道の各関数が読むものを尽くしており、そのどれもが引数の値、`E` の値、`TyConInfo` の
+    欄の値、その呼び出しがその場で作る局所の値、そして下位の呼び出しの返り値である。`<2>6` より、
+    走らせることで書かれる memo はその値を動かさない。`<2>1a` より `Arc::ptr_eq` の分岐も返り値の値を
+    変えない。よって 2 つの呼び出しは、対応する各点で同じ値を読み、同じ分岐を選び、同じ引数の値で
+    同じ関数を呼ぶ。したがって、ともに停止して等しい値を返すか、ともに同じ `panic!` / `assert` /
+    添字付けに達するか、ともに停止しない。`<2>4` と `<2>5` はこの結論を `unit_step`・`is_box`・
+    `unpunched_field_types`・`truncate_to_unit` のどれについても同じ形で与える。
+    BY <2>1, <2>1a, <2>2, <2>3, <2>4, <2>5, <2>6
 
 <1>10. `<1>1` を満たす型 `t` について、`unit_step(t, E)` の返す `UnitStep` は `cls(t)` で決まり、
    次の表の通りである。

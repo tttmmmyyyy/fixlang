@@ -264,6 +264,7 @@ src/fixstd/builtin.rs	make_iostate_name	P7a,P7d,P7e	9955961601a5
 src/fixstd/builtin.rs	make_string_lit	P5,P6,P7	09f6b13cd2cf
 src/fixstd/builtin.rs	make_struct_union_unique	D/A,P26,P27,P29,P30	d88c213c8b1a
 src/fixstd/builtin.rs	make_tuple_name	P7a,P7d,P7e	bb738d48dcf0
+src/fixstd/builtin.rs	make_unit_ty	P1,P2	272a1957ae37
 src/fixstd/builtin.rs	mark_threaded_function	P26	bbadc0f9cc77
 src/fixstd/builtin.rs	realloc_array	P26	cce0d609efe9
 src/fixstd/builtin.rs	replaced_field_prov	D/A,P1,P2,P3,P4,P18c,P19,P20,P21,P22,P23,P24,P26	9cbd41e96b65
