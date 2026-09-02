@@ -413,15 +413,10 @@ Ret(w)))))
 **証明**
 
 <1>1. `f` のパラメータ `b` の unit は `f` が所有する。
-  BY A1, D14, CODE src/rc_ir/borrow.rs: split_rc_units,
-     CODE src/build/build_object_files.rs: lower_and_insert_rc,
-     CODE src/build/build_object_files.rs: optimize_rc_program
-  `optimize_rc_program` は `lower_and_insert_rc` が返したプログラム -- その最後の段が `insert_rc` で
-  ある -- に `split_rc_units` を掛け、その出力を `borrow_ify` に渡す。よって `borrow_ify` の入力は
-  `insert_rc` の出力に `split_rc_units` を掛けたものである。`split_rc_units` は各関数の `body` と
-  各グローバル初期化子の `init` しか書き換えないので、`borrowed_units` は 2 つの間で変わらない。
-  A1 より `borrow_ify` の入力のすべての関数の `borrowed_units` は空なので、`insert_rc` の出力でも
-  `f.borrowed_units` は空であり、D14 より `b` のすべての unit を `f` が所有する。
+  BY L1, L15
+  `L15` (e) より `insert_rc` の出力のすべての関数の `borrowed_units` は空であり、そのすべての
+  パラメータ・capture の unit をその関数が所有する。`B_0` は `insert_rc` の出力の本体なので (`L1`)、
+  同じプログラムの `f` にこれが当たる。
 
 <1>2. `ρ_0` の上で `C_p` のスロットを名指す D9 の消費は、2 つの `App(f, [p])` の引数の位置の 2 つである。
   BY D9, <1>1, L2, CODE src/rc_ir/ownership.rs: rhs_consumes
@@ -1076,17 +1071,10 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
     BY D9
     消費の表の `App` の行の前半。
   <2>3. `App` の引数の各 leaf は D9 の消費である。
-    BY D9, A1, D14, CODE src/rc_ir/borrow.rs: split_rc_units,
-       CODE src/rc_ir/rc_insert.rs: insert_rc,
-       CODE src/build/build_object_files.rs: lower_and_insert_rc,
-       CODE src/build/build_object_files.rs: optimize_rc_program
-    消費の表の `App` の行の後半は「呼び出し先がその位置の unit を所有する」引数の leaf を挙げる。
-    `optimize_rc_program` は `lower_and_insert_rc` が返したプログラム -- その最後の段が `insert_rc` で
-    ある -- に `split_rc_units` を掛け、その出力を `borrow_ify` に渡すので、`borrow_ify` の入力は
-    `insert_rc` の出力に `split_rc_units` を掛けたものである。`split_rc_units` も `insert_rc` も
-    各関数の `body` と各グローバル初期化子の `init` しか書き換えないので、`borrowed_units` は 3 つの
-    プログラムで同じである。A1 の後半より `borrow_ify` の入力のすべての関数の `borrowed_units` は
-    空なので、`insert_rc` の出力でも空であり、D14 よりすべての位置が所有される。
+    BY D9, L15
+    消費の表の `App` の行の後半は「呼び出し先がその位置の unit を所有する (D14) 引数の leaf」を
+    挙げる。`L15` (e) より `insert_rc` の出力のすべての関数のすべてのパラメータ・capture の unit は
+    その関数が所有するので、すべての位置が所有される。
   <2>4. `Closure` の capture の各 leaf は D9 の消費である。
     BY D9
     消費の表の `Closure` の行。
@@ -1380,16 +1368,11 @@ Ret(u)))))
 
 <1>2. `Obl` と `H(O)` は、割り当ての後 `{O}, 1`、`App(id, [o])` が返った後 `{O}, 1`、
       `App(f, [y])` が返った後 `{}, 0` である。
-  BY <1>1, A1, D6, D8, D9, D10, D14, D26,
-     CODE src/rc_ir/borrow.rs: split_rc_units, CODE src/rc_ir/rc_insert.rs: insert_rc,
-     CODE src/build/build_object_files.rs: lower_and_insert_rc,
-     CODE src/build/build_object_files.rs: optimize_rc_program
-  `optimize_rc_program` は `lower_and_insert_rc` が返したプログラム -- その最後の段が `insert_rc` で
-  ある -- に `split_rc_units` を掛け、その出力を `borrow_ify` に渡すので、`borrow_ify` の入力は
-  `insert_rc` の出力に `split_rc_units` を掛けたものである。`split_rc_units` も `insert_rc` も各関数の
-  `body` と各グローバル初期化子の `init` しか書き換えないので、`borrowed_units` は 3 つのプログラムで
-  同じである。A1 の後半より `borrow_ify` の入力のすべての関数の `borrowed_units` は空なので、
-  `insert_rc` の出力でも空であり、D14 より `id` の `a` も `f` の `b` も所有される。
+  BY <1>1, D6, D8, D9, D10, D14, D26, 第 1 節の `C1` の道具立て (関数 `f` の `borrowed_units` は空),
+     第 5 節の `C2` の道具立て (関数 `id` の `borrowed_units` は空)
+  `f` と `id` の `borrowed_units` が空であることは、この 2 つの関数を据えた道具立ての取り決めである。
+  D14 は借用する unit の集合を `RcFunc::borrowed_units` と定め、残りを所有すると定めるので、
+  `id` の `a` も `f` の `b` も所有される。
   `App(id, [o])` は `(o, [])` を消費し、`H` を動かさない。同じ節点について D9 の `App` の行は callee の
   全 boxed leaf も消費として挙げるが、<1>1 より `(id, ・)` と `(f, ・)` は記号の位置であってスロットでは
   なく、D6 よりそこが指すのは funptr かグローバル状態のオブジェクトである。D26 よりそれらは D8 の意味の
@@ -1905,18 +1888,35 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
   この名前であり、D6 よりその対は記号の位置であってスロットではない。
 
 <1>5. (e)。
-  BY A1, D14, CODE src/rc_ir/borrow.rs: split_rc_units, CODE src/rc_ir/rc_insert.rs: insert_rc,
+  BY D14, CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function,
+     CODE src/rc_ir/simplify.rs: simplify, CODE src/rc_ir/rc_insert.rs: insert_rc,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
      CODE src/build/build_object_files.rs: lower_and_insert_rc,
+     CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: clone_func,
+     CODE src/rc_ir/specialization.rs: CloneRegistry::finish_clone,
      CODE src/build/build_object_files.rs: optimize_rc_program
-  `optimize_rc_program` は `lower_and_insert_rc` が返したプログラム -- その最後の段が `insert_rc` で
-  ある -- に `split_rc_units` を掛け、その出力を `borrow_ify` に渡す。よって `borrow_ify` の入力は
-  `insert_rc` の出力に `split_rc_units` を掛けたものである。`split_rc_units` は各関数の `body` と
-  各グローバル初期化子の `init` しか書き換えず、`insert_rc` も `body` と `init` しか書き換えないので、
-  `borrowed_units` は 3 つのプログラムで同じである。A1 の後半より `borrow_ify` の入力のすべての関数の
-  `borrowed_units` は空なので、`insert_rc` の出力でも空であり、D14 よりすべての unit が所有される。
+  `RcFunc` の `borrowed_units` の欄に値を書く生産コードは 4 か所である --
+  `Lowerer::lower_lambda_as_function` が `RcFunc` を組むときに置く `Set::default()`、`borrow_ify` の
+  末尾の `func.borrowed_units = param_capture_units(func, type_env)…`、`clone_func` が複製に置く
+  `Set::default()`、そして `finish_clone` が複製の鍵を改名する式である。後ろの 3 つはいずれも
+  `borrow_ify` の中か、`optimize_rc_program` が `borrow_ify` より後に呼ぶパス (`unique_check_elim` と
+  `locality`) の中に在るので、`insert_rc` の出力には掛からない。
+  `lower_and_insert_rc` は `lower_program` の後に `simplify` と `insert_rc` を掛けるだけであり、
+  そのどちらもこの欄を書かない (`insert_into_func` が代入するのは `func.body` である)。よって
+  `insert_rc` の出力の各関数の `borrowed_units` は `lower_lambda_as_function` が置いた空集合のままで
+  ある。D14 は借用する unit の集合を `RcFunc::borrowed_units` と定め、残りを所有すると定めるので、
+  すべてのパラメータ・capture の unit が所有される。
 
 <1>6. QED
   BY <1>1, <1>2, <1>3, <1>4, <1>5
+
+**(e) は最適化の水準に依らない。** `borrow_ify` を呼ぶのは `optimize_rc_program` の
+`if config.enable_borrow_optimization()` の中だけなので (`CODE src/build/build_object_files.rs:
+optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify` の入力にならず、A1 はそれに
+当たらない。(e) の証明はコードの数え上げと D14 だけに立つので、門の真偽を問わない。**`L3` と
+`L9` の系が (e) を引くのはこの形である** -- どちらも `insert_rc` の出力を主語にし、(e) の証明は
+その 2 つを引かないので循環しない。手で据えた本体 (`L12` の `C1`、`L13` の `B_1`) は
+`insert_rc` の出力ではないので (e) の範囲の外であり、その `borrowed_units` は道具立てが取り決める。
 
 ### 10.4 `L16` (借用するオペランドの leaf は素通しを宣言されない)
 
