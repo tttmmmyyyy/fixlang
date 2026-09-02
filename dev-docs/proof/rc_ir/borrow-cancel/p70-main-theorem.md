@@ -8,13 +8,13 @@
 
 - **命題**: P9・P12・P14・P14a・P14b・P22・P23・P24・P26・P27。
 - **定義**: D1・D2・D11・D12・D14・D18・D19・D23・D24・D30。
-- **仮定**: A1・A2 (前提 H1・H2 として)、A13・A15・A17・A18・A19・A20 (前提 H3 が束ねる第 4 節の
-  仮定の中から名指す)。
+- **仮定**: A1・A2 (前提 H1・H2 として)、A3・A13・A15・A17・A18・A19・A20 (前提 H3 が束ねる
+  第 4 節の仮定の中から名指す)。
 - **コード**: `optimize_rc_program` が 2 つのパスを呼ぶ順序、`validate`、`borrow_ify` と `cancel` が
   `RcProgram` を組み立てる 3 つの欄、`cancel` の本体の書き換えが `drop_nodes` を呼ぶこと、
   `drop_nodes` が `Let` の右辺を丸ごと写すこと、`clone_func`、`borrow_funcref`、`RcProgram` の型、
   `Map` の別名。
-- **外部の結果**: EXT 共有参照は値を変えない、EXT 写像の `insert` と `values_mut`。第 1 節の
+- **外部の結果**: EXT 共有参照が書き込める先、EXT 写像の `insert` と `values_mut`。第 1 節の
   「外部の結果」がその完全な言明を据える。
 
 T の言明はこのほかに、D7・D21・D25・D26・D31 を名前で引く。
@@ -139,11 +139,10 @@ P27 は、本体が D11 を満たすことのほかに「借用する unit を�
 
 この文書が文書の外から引く結果に名札を付ける。`BY` の行では `EXT <名前>` として引く。
 
-**EXT 共有参照は値を変えない**
+**EXT 共有参照が書き込める先**
 safe Rust の関数が引数を共有参照 `&T` で取るとき、その呼び出しが `&T` を通じて書き込めるのは
-`UnsafeCell` の中に在る記憶域だけである。`UnsafeCell` を持たない型の値は、共有参照しか渡さない
-呼び出しを跨いで等しい。呼び出しはまた、呼び出し元の束縛そのものにも書かない -- 束縛に書くのは、
-その束縛が見えているスコープに置かれた代入文だけである。
+`UnsafeCell` の中に在る記憶域だけである。呼び出しはまた、呼び出し元の束縛そのものにも書かない --
+束縛に書くのは、その束縛が見えているスコープに置かれた代入文だけである。
 
 **EXT 写像の `insert` と `values_mut`**
 コンパイラの写像型 `Map<K, V>` は `FxHashMap<K, V>` の別名であり、`insert` と `values_mut` は Rust
@@ -188,18 +187,39 @@ safe Rust の関数が引数を共有参照 `&T` で取るとき、その呼び�
 
   この閉包は `RcProgram` を共有参照で受け取り、値を返さない。呼ぶ先の
   `pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeEnv, stage: &str)`
-  も同じである。**共有参照しか渡さない呼び出しが呼び出し元の値を変えないことは、Rust の言語規則で
-  ある** (EXT 共有参照は値を変えない)。その規則が例外に置く内部可変性は `RcProgram` の欄に無い --
-  D1 が `RcProgram` の値と定めるのは `funcs`・`globals`・`roots` の 3 つ組であり、その 3 つの欄の型は
-  `Map`・`Vec`・`Set` であって `UnsafeCell` を持たない (`CODE src/rc_ir/ast.rs: RcProgram`)。本体の木が
-  式を共有する `Arc` の参照カウントは `UnsafeCell` の中に在るが、D2 は木の**位置**を節点と呼び、
-  位置が相異なれば節点も相異なるものとするので、その共有の度合いは D1 の 3 つ組の値ではない。よって
-  `validate` の呼び出しは、それがどこに置かれていても、束縛 `prog` の値を変えない。とくに `<2>1` が
-  引用した 2 つの呼び出し -- `"after split_rc_units"` と `"after borrow_ify"` -- がこれに当たる。
+  も同じである。EXT 共有参照が書き込める先より、この呼び出しは束縛 `prog` そのものに書かず、
+  `&RcProgram` を通じて書き込めるのは `UnsafeCell` の中に在る記憶域だけである。
 
-    BY EXT 共有参照は値を変えない, D1, D2,
+  **`RcProgram` から到達できる値は `UnsafeCell` を持つ。**`funcs` の型は `Map<FuncRef, RcFunc>` で
+  あり、`RcFunc` は `fn_ty: Arc<TypeNode>` と `params: Vec<RcVar>` を持ち、`RcVar` は
+  `ty: Arc<TypeNode>` を持つ。`TypeNode` は `hash_cache`・`ground_cache`・`depth_cache` という
+  `OnceLock` の欄を 3 つ持ち、`TypeNode::is_ground` と `TypeNode::type_hash` は共有参照からそこへ
+  書く (`CODE src/ast/types.rs: TypeNode`, `TypeNode::is_ground`, `TypeNode::type_hash`)。
+  `RcRhs::Llvm` が持つ `Box<dyn LLVMGen>` の op も同じ道で届く -- `InlineLLVMCaptureProjectBody` は
+  `cap_tys: Vec<Arc<TypeNode>>` を欄に持つ (`CODE src/fixstd/builtin.rs:
+  InlineLLVMCaptureProjectBody`)。`globals` の各 `RcGlobalInit` も `ty: Arc<TypeNode>` と本体を持つ
+  ので同じである。よって「`UnsafeCell` を持たない型だから値が動かない」の形では結論が出ない。
+
+  **その書き込みが値の等しさを動かさないことを言うのは A3 の「値の等しさ」の節である。**その節は
+  「`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。到達できる型が
+  内部可変性を持つ欄を持つときは、その欄は**一度だけ書かれる memo であって、その値はその型の
+  `PartialEq` が読む成分の関数である**」と述べ、`TypeNode` の 3 つの `OnceLock` と
+  `Box<dyn LLVMGen>` の op が届く道の両方を名指す。README はその節の読み手として `validate` を
+  名指している -- 「`validate` がその 1 つであり、`Validator::check_rhs` は `result_prov` を呼ぶ」。
+  H3 が A3 を与える。
+
+  本体の木が式を共有する `Arc` の参照カウントも `UnsafeCell` の中に在るが、D2 は木の**位置**を節点と
+  呼び、位置が相異なれば節点も相異なるものとするので、その共有の度合いは D1 の 3 つ組の値ではない。
+
+  よって `validate` の呼び出しを跨いで、束縛 `prog` の値は -- D1 の 3 つ組と D2 の木として -- 等しい。
+  とくに `<2>1` が引用した 2 つの呼び出し -- `"after split_rc_units"` と `"after borrow_ify"` --
+  がこれに当たる。
+
+    BY EXT 共有参照が書き込める先, H3, A3, D1, D2,
        `CODE src/build/build_object_files.rs: optimize_rc_program`,
-       `CODE src/rc_ir/validate.rs: validate`, `CODE src/rc_ir/ast.rs: RcProgram`
+       `CODE src/rc_ir/validate.rs: validate`, `CODE src/rc_ir/ast.rs: RcProgram`, `RcFunc`, `RcVar`,
+       `CODE src/ast/types.rs: TypeNode`, `TypeNode::is_ground`, `TypeNode::type_hash`,
+       `CODE src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody`
 
   **<2>3. QED**
 
