@@ -2849,15 +2849,19 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     `λ ∈ Inh_x(π)` を取り、`S_λ = {Arg(j, σ)}` とする (`<2>4`)。L19 より
     `origin(x, λ) = origin(args[j], σ)` かつ `σ ∈ leaves(ty(args[j]))` である。L20 (a) より
     `w := trunc(ty(args[j]), σ)` について `(j, w) ∈ operand_units` である。`trunc` の答えは引数の接頭辞
-    なので `w ⊑ σ`、よって `σ ∈ Λ_{ty(args[j])}(w)` である。A3 の表の「単一の `Arg(j, σ)`」の行は、
-    結果のその leaf が inhabited であることと第 `j` オペランドの leaf `σ` が inhabited であることが同値だ
-    と述べるので、`σ ∈ Inh_{args[j]}(w)` である。L18 より `(args[j], w)` は unit を覆い、`<2>3` より
-    全部偽なので、帰納法の仮定より `cand(args[j], σ) = cand(x, λ)` に `owns` が偽の元がある。
-    `args[j]` がこの位置までに値を得ていることは L20a による -- L20b より `x` を束縛する構文は
-    `collect_bindings` が `Binding::Llvm(gen, args, rty)` を記録した `Let(x, Llvm(gen, args), k)` ただ
-    1 つであり、`x` がこの位置までに値を得ているので活性化はその節点を通っていて、その節点は `args` の
-    各要素を `RcVar` として持つ。
-    BY <2>3, <2>4, A3, L18, L18a, L19, L20, L20a, L20b,
+    なので `w ⊑ σ`、よって `σ ∈ Λ_{ty(args[j])}(w)` である。
+    L20b より `x` を束縛する構文は `collect_bindings` が `Binding::Llvm(gen, args, rty)` を記録した
+    `Let(x, Llvm(gen, args), k)` ただ 1 つであり、`x` がこの位置までに値を得ているので活性化はその節点を
+    通っている。その節点は `args` の各要素を `RcVar` として持つので、L20a より `args[j]` もその節点まで
+    に値を得ている。
+    A3 の表の「単一の `Arg(j, σ)`」の行は、結果のその leaf が inhabited であることと第 `j` オペランドの
+    leaf `σ` が inhabited であることが同値だと述べる。その行が語るのはこの節点が走る瞬間の結果と
+    オペランドであり、`Inh_x(π)` と `Inh_{args[j]}(w)` は固定した 1 つの位置の量である。D6 より変数の値は
+    それを束縛する節点の後は変わらず、D16 の inhabited は値だけを見るので、`x` と `args[j]` のどちらの値も
+    その瞬間と固定した位置とで同じであり、同じ leaf が inhabited である。よって `σ ∈ Inh_{args[j]}(w)` で
+    ある。L18 より `(args[j], w)` は unit を覆い、`<2>3` より全部偽なので、帰納法の仮定より
+    `cand(args[j], σ) = cand(x, λ)` に `owns` が偽の元がある。
+    BY <2>3, <2>4, A3, D6, D16, L18, L18a, L19, L20, L20a, L20b,
        CODE src/rc_ir/ownership.rs: truncate_to_unit, collect_bindings
 
 <1>9. QED
