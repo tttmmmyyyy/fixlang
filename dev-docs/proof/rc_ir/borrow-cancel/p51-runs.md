@@ -494,13 +494,11 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 ### L0 (`cancel` が読む所有と実行時の呼び出し先)
 
 **DEF `cancel` の所有述語**
-`cancel(prog, type_env)` は `owned_units = all_owned_units(prog, type_env)` を作り、走査の `consume_rhs`
-が `rhs_consumes` に渡す述語 `owns` を
-`owns(p, λ) = owned_units.contains((p.name, truncate_to_unit(ty(p), λ)))` と定める
-(`CODE src/rc_ir/borrow.rs: cancel`, `CancelAnalysis::consume_rhs`)。この述語を **`owns_cancel`** と書く。
-`rhs_consumes` は `App(callee, args)` の第 `i` 引数の leaf `λ` を、`resolve_callee_params` が返した
-`params` について `owns_cancel(params[i], λ)` が真であるときに消費として報告する
-(`CODE src/rc_ir/ownership.rs: rhs_consumes`)。
+**`owns_cancel`** とは、`cancel(prog, type_env)` の走査の `consume_rhs` が `rhs_consumes` へ渡す述語
+`owns` に付けた名前である。`owns_cancel(p, λ)` は
+`owned_units.contains((p.name, truncate_to_unit(ty(p), λ)))` であり、`owned_units` は
+`all_owned_units(prog, type_env)` である
+(`CODE src/rc_ir/borrow.rs: cancel`, `CancelAnalysis::consume_rhs`)。
 
 **言明**。A6、A10、A11、A13、A21、A22、A24 の下で、`borrow_ify` の入力プログラム `P` と、`borrow_ify` の
 出力プログラム `P'` を取る。`P'` のどの
@@ -519,6 +517,11 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 何も言わない部分であり、この文書が局所補題として足す強化である。`cancel` の走査は `None` のとき全位置を
 所有として扱うので、その扱いが実行時の呼び出し先の所有と食い違わないことを言うのがこの後半である。
 
+**(b) が読まれる場所。** `rhs_consumes` は `App(callee, args)` の第 `i` 引数の leaf `λ` を、
+`resolve_callee_params` が返した `params` について `owns_cancel(params[i], λ)` が真であるときに消費と
+して報告する (`CODE src/rc_ir/ownership.rs: rhs_consumes`)。(b) は、その報告が D9 の `App` の行 --
+実行時の呼び出し先の所有 -- と一致することである。
+
 <1>1. `P'` は L0b の (N1) を満たす。
   <2>1. `P'` の束縛変数の名前は、`P` の束縛変数の名前か、`clone_func` が作る複製の名前である。
     `borrow_ify` は出力の各版を、原本 `func.clone()` の本体を `RewriteCtx::rewrite` で書き換えたものか、
@@ -533,9 +536,13 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     BY P9
   <2>4. 相異なる 2 つの複製が導入する名前は互いに異なる。
     `borrow_ify` は 1 つの `rename_counter` をすべての `clone_func` の呼び出しに渡し、
-    `assign_fresh_name` は呼ばれるたびにそれを 1 増やしてから `<元の名前>#b<counter>` を作る。よって
-    2 つの複製名が等しければ `counter` が等しく、同じ呼び出しである。
-    BY CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/rename.rs: fresh_rename_function,
+    `assign_fresh_name` は呼ばれるたびにそれを 1 増やしてから `<元の名前>#b<counter>` を作る。
+    **この形の分解は一意である** -- 複製名の `#` で区切った最後の断片は `b` の後に 10 進数字だけが
+    続く形であり、A13 より入力のどの名前もその形の断片を最後に持たないので、複製名の最後の `#` は
+    `assign_fresh_name` が入れたものであって元の名前の中の `#` ではない。よって
+    `<元の名前>` と `<counter>` は複製名から一意に読み取れ、2 つの複製名が等しければ `counter` が
+    等しく、同じ呼び出しである。
+    BY A13, CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/rename.rs: fresh_rename_function,
        assign_fresh_name
   <2>5. 複製が導入する名前は、`P'` のどの関数の名前とも異なる。
     `borrow_ify` が出力の `funcs` に入れるのは、原本を `f_own.name` で入れる項目と、複製を
@@ -697,14 +704,16 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     どちらも当たらないときだけ `?` が `None` を返す)。実行時の呼び出し先は、`callee` の値がクロージャ
     ならその funptr が指す関数、funptr ならそれ自身であり、D23 はその関数がプログラムの `funcs` の
     関数であると述べる。その番地は `<2>4b` の 3 つのいずれかが置いたものである。
-    (M1) が置くのは `func_vals[fref]` であり、L0d (a) よりそれは `P'.funcs[fref]` の本体を実装した
-    LLVM 関数である。`<2>3` よりクロージャの目標 `fref` は入力から運ばれた名前、すなわち原本の名前で
-    ある。
+    (M1) が置くのは `func_vals[fref]` である。`build_rc_closure` は `func_vals` をその単位の切片 `U` の
+    `funcs` の鍵で索くので、`fref` はその鍵であり、L0d (a) よりその関数は `P'.funcs[fref]` の本体を
+    実装した LLVM 関数である。`<2>3` よりクロージャの目標 `fref` は入力から運ばれた名前、すなわち原本の
+    名前である。
     (M2) が置くのは、funptr のグローバル `m` について `ValueAccessor::get` が返す LLVM 関数である。
     D23 より実行時の呼び出し先はプログラムの `funcs` の関数なので、`m` は `P'.funcs` の鍵である -- 鍵で
-    なければ、L0d (a) が本体を実装するのは `funcs` の項目についてだけなので、その LLVM 関数はどの
-    `RcFunc` の本体も実装していない。`<1>3` より `P'` は L0b の (N3) を満たすので、L0d (b) よりその
-    LLVM 関数は `P'.funcs[FuncRef{m}]` の本体を実装したものである。`m` は借用版の名前ではない --
+    なければ、L0d (a) と (b) が本体を実装したものと言うのは `funcs` の項目についてだけなので、その
+    LLVM 関数はどの `RcFunc` の本体も実装していない。`<1>3` より `P'` は L0b の (N3) を満たすので、
+    L0d (b) より実行時にその LLVM 関数が指すのは `P'.funcs[FuncRef{m}]` の本体を実装したもので
+    ある。`m` は借用版の名前ではない --
     `<2>4a` より借用版の名前が `RcVar` として現れるのは `App` の `callee` の位置だけであり、`<2>4d` より
     そこで読まれた値はその節点の呼び出し先としてだけ使われるので、`m` が借用版の名前ならばこの節点の
     `callee.name` が `m` である。ところが `<2>4` より、`route` が借用版を置いた節点では
@@ -714,7 +723,8 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     持つ関数には借用版が作られないので原本である。
     `<2>2` より原本の `borrowed_units` は空である。
     BY D23, L0d, <1>3, <2>1, <2>2, <2>3, <2>4, <2>4a, <2>4b, <2>4c, <2>4d,
-       CODE src/rc_ir/ownership.rs: resolve_callee_params
+       CODE src/rc_ir/ownership.rs: resolve_callee_params,
+       CODE src/rc_ir/codegen.rs: Generator::build_rc_closure
 
 <1>6. (b) が成り立つ。
   <2>1. `params` は `g` のパラメータの列である。
