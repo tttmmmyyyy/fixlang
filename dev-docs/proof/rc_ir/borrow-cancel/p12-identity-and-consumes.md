@@ -1934,10 +1934,10 @@ leaf に前置したものだからである。
   `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、型の
   `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が構造体で
   あることをその節の 1 つに挙げる。
-  `is_array` は tycon が `Std::Array` であることであり、その `TyConInfo` の `variant` は `Array` なので、
-  `variant` が `Struct` である `ty(c)` には当たらない。
+  `is_array` は tycon が `Std::Array` であることであり、`bulitin_tycons` がその tycon に入れる
+  `TyConInfo` の `variant` は `Array` なので、`variant` が `Struct` である `ty(c)` には当たらない。
   BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
-     TypeNode::is_array, TyConVariant
+     TypeNode::is_array, TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
 
 <1>2. CASE `is_fully_unboxed(ty(c))` が真。
   D4 の規則 1 より `boxed_leaf_paths(ty(c), type_env)` は空なので、(a) は空虚に成り立ち、(b) の 2 つの
