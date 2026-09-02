@@ -2651,8 +2651,9 @@ D6 のスロット -- が要る)。よって時点ごとの量は、その時点
       **`Join` の腕**だけが第 3 の形であり、候補が 2 つ以上のとき `identity` を `here()` に取り替えた
       うえで、その活性化が選んだアームの結果へ辿る。
   BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Origin::of_candidates,
+     CODE src/rc_ir/ownership.rs: Origin, CODE src/rc_ir/ownership.rs: Origin::acted_on,
      CODE src/rc_ir/ownership.rs: as_arg_projection,
-     CODE src/rc_ir/ownership.rs: origin_from_leaves_under, D17, A3
+     CODE src/rc_ir/ownership.rs: origin_from_leaves_under, D13, D15, D17, A3
   止まる腕: `None`、`Binding::Param`、`Binding::Producer`、`Binding::Field` の容器が boxed の枝、
   `Binding::Payload` の `Some(_)` かつ scrutinee が boxed の枝、`Binding::Llvm` の
   `as_arg_projection` が `None` を返す枝 (スロットの path は boxed leaf なので `leaf_origins_at` は
@@ -2663,10 +2664,18 @@ D6 のスロット -- が要る)。よって時点ごとの量は、その時点
   辿る腕: `Binding::Move`、`Binding::Field` の容器が unbox の枝、`Binding::Payload` の `None` の枝と
   `Some(tag)` かつ scrutinee が unbox の枝、`Binding::Llvm` の単一 `Arg` の枝。いずれも
   `origin(次のスロット)` をそのまま返す。
-  `Binding::Join` の腕は `of_candidates(candidates, here)` を返す。候補が 1 つのときそれは
-  `Exactly(その候補)` であり、その候補は選ばれたアームの結果の `origin` の値そのものなので辿る腕と同じ
-  形になる。候補が 2 つ以上のとき `Join { identity: here, candidates }` であり、`identity` は
-  そのスロット自身である。D17 より ρ-歩みは選ばれたアームの結果へ進む。
+  `Binding::Join` の腕は、各アームの結果の `origin` の `acted_on()` の元をすべて集めた集合
+  `candidates` について `of_candidates(candidates, here)` を返す。候補が 2 つ以上のとき返り値は
+  `Join { identity: here, candidates }` であり、`identity` はそのスロット自身である。
+  候補が 1 つのとき返り値は `Exactly(その候補)` であり、それは**選ばれたアームの結果の `origin` の値
+  そのもの**である -- `origin` が返す `Origin::Join` の値は `of_candidates` が `candidates.len()` が
+  2 以上のときにだけ作るものであり (`Origin::Join` を構成する式はその 1 つだけである)、
+  `Origin::acted_on` は `identity()` を先頭に、それと異なる `candidates()` の元を続けた列なので、
+  そのとき `acted_on()` は 2 元以上を持つ。ところが `candidates` は全アームの `acted_on()` の和であって
+  1 元なので、選ばれたアームの結果の `origin` の `acted_on()` も 1 元であり、その値は `Join` では
+  ありえず `Exactly` である。`Exactly(p)` の `acted_on()` は `[p]` なのでその `p` が唯一の候補であり、
+  返り値と一致する。よってこの場合は辿る腕と同じ形になる。
+  D17 より ρ-歩みは選ばれたアームの結果へ進む。
 
 <1>3. (c)。
   BY <1>2
