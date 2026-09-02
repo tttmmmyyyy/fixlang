@@ -308,7 +308,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      CODE src/rc_ir/validate.rs: Validator::use_var,
      CODE src/rc_ir/validate.rs: Validator::bind
 
-<1>3. `RcRhs::Match(scrut, arms)` の `arms` は空でない。
+<1>3. A9 を満たすプログラムのどの本体についても、`RcRhs::Match(scrut, arms)` の `arms` は
+   空でない。A9 の第 1 文が `borrow_ify` の入力プログラムについてこれを述べ、第 2 文が範囲を
+   `cancel` の入力と出力へ伸ばす。**プログラムを名指すのが要るのは、A9 が全プログラムについての
+   言明ではないからである。**
   BY A9, CODE src/rc_ir/validate.rs: Validator::check_rhs (`RcRhs::Match` の腕の `arms.is_empty()`
      検査)
 
