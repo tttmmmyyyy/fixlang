@@ -4708,6 +4708,7 @@ impl LLVMGen for InlineLLVMFFICallBody {
 // Project a captured value out of a lifted closure's capture object, retaining it (a retain-getter).
 // Lowering emits this at the entry of a lifted closure function to bind each captured variable.
 // `cap_tys` are the types of all captured values, needed to reconstruct the capture object's layout.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCaptureProjectBody {
     pub cap_name: FullName,

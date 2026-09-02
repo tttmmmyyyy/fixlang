@@ -171,6 +171,7 @@ pub type FieldPath = Vec<usize>;
 
 /// The boxed leaf whose runtime uniqueness an inline-LLVM op branches on: which operand carries the
 /// container, and the path to the leaf within that operand's value.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 pub struct UniqueCheckOperand {
     /// The position, among the operation's arguments, of the operand holding the container.
     pub container_index: usize,

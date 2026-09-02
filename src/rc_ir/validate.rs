@@ -120,6 +120,7 @@ fn capture_layouts(prog: &RcProgram, stage: &str) -> Map<FuncRef, Vec<Arc<TypeNo
 /// has, and agree on the layout with the function's other projections — they are copies of one list,
 /// so a rewrite that retyped or reordered the captures of one projection alone would leave the rest
 /// reading the old layout.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 fn check_capture_projection(
     func: &RcFunc,
     proj: &InlineLLVMCaptureProjectBody,

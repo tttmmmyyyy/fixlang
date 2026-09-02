@@ -292,7 +292,7 @@ impl ObjectFieldType {
     /// * `loop_body` — receives the current index, `size` and `buffer`.
     /// * `after_loop` — receives `size` and `buffer`, and runs once, including when `size` is
     ///   zero.
-    // PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     fn loop_over_array_buf<'c, 'm, F, G>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -488,6 +488,7 @@ impl ObjectFieldType {
     /// * `size` — the array's element count; the elements walked are `[0, size)`.
     /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
     ///   (`Std::PunchedArray`), which the storage therefore does not own, so it is skipped.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn traverse_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,

@@ -643,7 +643,6 @@ impl<'a> Lowerer<'a> {
     /// Lower a `match`: the matched value becomes a variable, each arm is lowered against it, and
     /// the appended binding selects one arm on that value. The result variable holds the value of
     /// whichever arm is taken.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_match(
         &mut self,
         cond: &ExprNode,

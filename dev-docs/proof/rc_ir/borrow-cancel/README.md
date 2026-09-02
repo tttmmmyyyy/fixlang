@@ -29,7 +29,7 @@ compiler verification の慣行では、パスが意味を保つことを *corre
 述べる欠陥の修正である。
 
 **対象コミットより後に `src/` へ入った変更は 2 種である。** 1 つは各証明が引く記号に付く `// PROOF:`
-コメントで、`dev-docs/proof/proof_links.py` が生成する。もう 1 つは `RcIrValidator::check_rhs` が
+コメントで、`dev-docs/proof/proof_links.py` が生成する。もう 1 つは `Validator::check_rhs` が
 `result_prov` の宣言する source の個数を数える検査であり、A3 の「1 つの結果 leaf に 2 つ以上の source を
 宣言しない」を果たす者を与える。どちらも `borrow_ify`・`cancel`・`ownership.rs` の振る舞いを変えない。
 
@@ -409,8 +409,9 @@ path の連結ではなく宣言の辿り着く先で定義するのは、構築
 (`CODE src/rc_ir/ownership.rs: all_owned_units`)。所有する unit の参照はその関数が処分し、借用する unit の
 参照は呼び出し元が処分する。
 
-**capture の unit は必ず所有される。** `borrowed_units` に書き込むのは `borrow_ify` の末尾ただ 1 か所で
-あり (`CODE src/rc_ir/borrow.rs: borrow_ify`)、そこが借用に落とすのは `owned_units` に無い unit だけで
+**capture の unit は必ず所有される。** `borrowed_units` に unit を**入れる**のは `borrow_ify` の末尾ただ 1 か所で
+あり (`CODE src/rc_ir/borrow.rs: borrow_ify`)、他の書き込みは空集合を置くか既存の鍵を改名するだけで
+ある (`CODE src/rc_ir/borrow.rs: clone_func`)、そこが借用に落とすのは `owned_units` に無い unit だけで
 ある。入力の各関数については `owned_units.extend(param_capture_units(func, type_env))` がパラメータと
 capture の全 unit を入れ、借用版は `func.capture.is_none()` の関数からしか作られないので capture を
 持たない。**この節が無いと、D9 の `App` の行が callee の全 boxed leaf を無条件に消費するのに、D10 の
@@ -489,7 +490,7 @@ A8 が言っているのはこのことであり、D26 はそれを D10 と D11 
 
 | 構文 | 消費される leaf |
 |---|---|
-| `App(callee, args)` | callee の全 boxed leaf、および呼び出し先がその位置の unit を所有する (D14) 引数の leaf。unit は**呼び出し先のパラメータの型**で取る (`CODE src/rc_ir/ownership.rs: rhs_consumes`) |
+| `App(callee, args)` | callee の全 boxed leaf、および呼び出し先がその位置の unit を所有する (D14) 引数の leaf。所有の問いは**呼び出し先のパラメータ**について立て (`CODE src/rc_ir/ownership.rs: rhs_consumes`)、unit への丸めは `CancelAnalysis::consume_rhs` が渡す `owns` が行う (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`) |
 | `Closure(f, caps)` | 各 capture の全 boxed leaf |
 | `Llvm(gen, args)` | `borrows_operand(i)` が偽のオペランドのうち、`result_prov` が**単一の** `Arg(i, σ)` として素通しを宣言していない leaf |
 | `Destructure(c, fs)` (`c` が boxed) | `c` の全 boxed leaf |
@@ -624,7 +625,8 @@ D11 と D12 は `RcProgram` の残りの部分について何も言わない。`
 
 **2 つを同じ集合に入れるのは、どちらも同じ量に反応するからである。** `p50-observation.md` の「門が無かったときの反例」の
 反例は `Array I64` を使って `_unsafe_is_storage_unique` でも書ける。コードが観測として扱う集合は
-`LLVMGen::observes_uniqueness` が真を返す op であり、それはちょうどこの 2 つの本体である
+`LLVMGen::observes_uniqueness` が真を返す op であり、それはこの 2 つの型の実体のうち
+`assume_unique` が偽であるものである -- 真である実体は参照カウントを読まず定数を返す
 (`CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody`,
 `InlineLLVMArrayIsStorageUniqueBody`)。
 
@@ -689,8 +691,10 @@ RC IR プログラムの外側にあって、その本体を起動するコー�
 - **グローバルのアクセサ**。初期化済みの旗を見て、まだならグローバル初期化子の本体を持つ関数
   `InitValue#<symbol>` を呼び、返った値を記憶域へ格納する。`mark_global` で印を付けるのは
   `InitValue#<symbol>` の側であり、本体を評価した直後、値を返す前に行う。以後の読みは記憶域を読むだけで
-  ある (`CODE src/rc_ir/codegen.rs: Generator::implement_rc_global`)。**アクセサは
-  グローバルを読む活性化から呼ばれる。**その活性化は初期化子の活性化が終わるまで中断中であり ((E7))、
+  ある (`CODE src/rc_ir/codegen.rs: Generator::implement_rc_global`)。**アクセサは、グローバルを読む活性化から、または環境から
+  呼ばれる。** 前者の活性化は初期化子の活性化が終わるまで中断中であり ((E7))、後者は C のエントリ点が
+  活性化を 1 つも持たない時点で `main` を読む場合である (`CODE src/build/build_object_files.rs:
+  build_main_function`、D24 の (E7) が同じことを述べる)。どちらも
   C のエントリ点や `FFI_EXPORT` のエントリ点のように活性化の根を作るのではない。
 
 環境は参照を持つ (D25)。環境が持つ参照の多重集合を `E` と書く。
@@ -1062,8 +1066,8 @@ P22) で 1 対 1 に並べる。並んだ 2 つの段が同じ位置の節点を
 
   **数え上げるのは生成コードの分岐であって、`LLVMGen::unique_check_operand` の宣言ではない。** その宣言の
   doc は「宣言された検査は op が実際に出すものと読んでよい」と一方向だけを言い、逆は言わない
-  (`CODE src/ast/inline_llvm.rs: LLVMGen::unique_check_operand`)。宣言は `Option<usize>` を返すので
-  オペランド 1 つしか名指せず、`InlineLLVMArrayAppendCapacityUnchecked` は `dst` を宣言しながら `src`
+  (`CODE src/ast/inline_llvm.rs: LLVMGen::unique_check_operand`)。宣言は `Option<UniqueCheckOperand>` を返し、`UniqueCheckOperand` の
+  `container_index` はオペランドを 1 つしか名指せないので (`CODE src/rc_ir/ast.rs: UniqueCheckOperand`)、`InlineLLVMArrayAppendCapacityUnchecked` は `dst` を宣言しながら `src`
   についても `build_branch_by_is_unique` で分岐する
   (`CODE src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked`)。
 - **(X3)** 対応する 2 つの段の素動作の列が対応しない。とくに、対応する 2 つの動作の一方だけが解放する
@@ -1266,7 +1270,7 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 内部可変性を持つ欄を持つときは、その欄は**一度だけ書かれる memo であって、その値はその型の
 `PartialEq` が読む成分の関数である**。よってその欄が埋まっても値の等しさは動かず、`Hash` がその memo を
 通して反映するのもその成分だけである。**決定性より強い節が要るのは、`RcProgram` を共有参照で受け取る関数がそれを
-変えないことを言う段があるからである** -- `validate` がその 1 つであり、`RcIrValidator::check_rhs` は
+変えないことを言う段があるからである** -- `validate` がその 1 つであり、`Validator::check_rhs` は
 `result_prov` を呼ぶ。決定性は「同じ引数に同じ値を返す」までしか言わず、op や型が自分の中に持つ状態が
 動かないことを言わない。
 
@@ -1277,7 +1281,11 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 `impl PartialEq for TypeNode` は `ty` だけを読み、3 つの memo の値はどれも `ty` の関数である**
 (`CODE src/ast/types.rs: TypeNode` の `PartialEq` の実装, `TypeNode::type_hash`, `TypeNode::is_ground`)
 ので、この節は等しさの水準で立つ。**`impl Hash for TypeNode` は `type_hash` を呼ぶので `hash_cache` を
-読み、かつ書く。** 反映されるのは `ty` だけなので、等しい 2 つの値は等しくハッシュされる。`Box<dyn LLVMGen>` の op は内部可変性を持つ欄を持たない。
+読み、かつ書く。** 反映されるのは `ty` だけなので、等しい 2 つの値は等しくハッシュされる。**`Box<dyn LLVMGen>` の op が内部可変性に届くのもこの道である** --
+`InlineLLVMCaptureProjectBody` は `cap_tys: Vec<Arc<TypeNode>>` を欄に持ち、capture を持つ関数の本体は
+すべてこの op を持つ (`CODE src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody`,
+`CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function`)。その欄を開く読み手も在る
+(`CODE src/rc_ir/validate.rs: check_capture_projection`)。
 
 **手書きの `PartialEq` が欄の真部分集合しか読まない型は、この族である。** `NameSpace` の実装は
 `names` だけを読み `is_absolute` を読まない。**等しさを主語にする節は、その実装が読む成分について
@@ -1348,7 +1356,8 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 与える。
 
 **配列の記憶域は例外である。** `#ArrayStorage a` のオブジェクトは、その時点の `size` 個の要素の参照を
-持ち、解放の走査はそれを 1 つずつ処分する (`CODE src/object.rs: ObjectFieldType::loop_over_array_buf`)。
+持ち、`Array` 値のトラバーサが、その `size` 個の要素を、`#ArrayStorage` のカウントが 0 になった段で
+1 つずつ処分する (`CODE src/object.rs: ObjectFieldType::traverse_array_buf`)。
 `boxed_leaf_paths` は `Array` にも `#ArrayStorage` にも leaf を 1 つしか返さない
 (`CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`) ので、**この 1 つのオブジェクトについては、持ち手の
 単位は leaf ではなく要素の位置である。** `0` から `size - 1` までの各位置が、その要素の型の
@@ -1426,8 +1435,9 @@ P29 が 2 つを一致させ、間接呼び出しでは静的な相手が居な�
 ちょうど 1 回訪れる」がどれも言えない。**どの関数がこれに当たるかは、`src/` の `grow_stack(` の呼び出し元を
 数え上げて決める** -- 名前を書き写した列挙は、この証明が新しい関数を読むたびに落ちる。
 
-**A16 (`Match` のアームは scrutinee のタグを尽くす)** -- 果たす者: lowering
-(`CODE src/rc_ir/lower.rs: Lowerer::lower_match`, `Lowerer::lower_if`) と、アームの列を保つ後段のパス。
+**A16 (`Match` のアームは scrutinee のタグを尽くす)** -- 果たす者: 型検査の網羅性検査
+(`CODE src/ast/pattern.rs: Pattern::validate_match_cases_exhaustiveness`)、Bool の 2 つのタグを直に出す
+lowering (`CODE src/rc_ir/lower.rs: Lowerer::lower_if`)、およびアームの列を保つ後段のパス。
 catch-all の位置についてはコード生成が果たす (下記)。検査: 無し。
 すべての `Match(s, arms)` について、`arms` が catch-all アーム (`tag` が `None`) を持つか、`s` の値が
 取りうる実行時のタグがいずれかのアームの `tag` である。
@@ -1619,19 +1629,20 @@ Fix の関数型の leaf に新しい番地を書き込むのが `InlineLLVMFixB
 唯一の道である。
 
 **A23 (持ち上げた lambda は closure 型である)** -- 果たす者: 型検査と `uncurry`。検査: 無し。
-`Lowerer::lower_to_var` が `Expr::Lam` の節点に与える型は closure 型である
+`Lowerer::lower_to_var` に着く `Expr::Lam` の節点が持つ型は closure 型である
 (`CODE src/rc_ir/lower.rs: Lowerer::lower_to_var`)。したがって `Lowerer::lower_lam` が `prog.funcs` に
 入れる関数の `fn_ty` は closure 型であり、`lower_lambda_as_function` はその関数に `capture` を与える。
 
-型検査は `Expr::Lam` に `type_fun(arg_ty, body_ty)` を与える
-(`CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner`)。funptr 型の lambda を
+型検査は `Expr::Lam` の節点に期待型を置き、それを `type_fun(arg_ty, body_ty)` と unify する
+(`CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner`)。unify が成功した
+経路では、代入を適用した後の節点の型は矢印型である。funptr 型の lambda を
 作るのは `uncurry::funptr_lambda` だけで、その式は新しい記号の `expr` 全体に据わるので
 `Lowerer::lower_symbol` の funptr の枝が直に受け取り、`lower_to_var` を通らない
 (`CODE src/optimization/uncurry.rs: run`, `funptr_lambda`)。
 
 **funptr 型の `Expr::Lam` が式の内側へ移らないことは、`p50-observation.md` の `L9b` `<2>2a` が示す** --
-`type_funptr` を呼ぶ生産コードは `uncurry` の 2 か所だけであり、型検査は `Expr::Lam` に
-`type_fun(arg_ty, body_ty)` を与え、Fix のソースに書かれた型は `#FunPtr` の tycon を持たないので、
+`type_funptr` を呼ぶ生産コードは `uncurry` の 2 か所だけであり、型検査は `Expr::Lam` の節点の型を
+`type_fun(arg_ty, body_ty)` と unify し、Fix のソースに書かれた型は `#FunPtr` の tycon を持たないので、
 `uncurry` より前の式に funptr 型は現れない。`uncurry` の後に式を書き換えるパスも無い。その段は A23 を
 引かないので、この参照で循環は生じない。
 
@@ -1750,7 +1761,7 @@ TypeNode::is_ground`)、部分適用された tycon は ground である。`decl
 しないことを言う議論はこの節を読む。
 
 **飽和を果たすのは kind の体系であって `validate_layouts` ではない。** 宣言された型の kind は
-`check_kinds` が検査して診断を出し (`CODE src/ast/types.rs: TypeNode::check_kinds`,
+`check_kinds` が検査して診断を出し (`CODE src/ast/types.rs: Scheme::check_kinds`,
 `TypeNode::kind` -- `TyApp` の腕が関数側の kind と引数の kind を突き合わせる)、式の型は kind `*` を持つ。
 `validate_layouts` はこの節を**検査しない** -- その走査自身が `no_size_reason` から `held_types` を経て
 `declared_field_types` に入るので、飽和していない型に出会えば診断を出さずに同じ `assert` で止まる。**その降下で到達する型も ground であり、tycon が `type_env` にある。**
@@ -1911,9 +1922,11 @@ punched でないことが要るのは、`held_field_type` が持たないフィ
 (`CODE src/rc_ir/ownership.rs: held_field_type`)。**このコミットにこれを検査するコードは無い**
 (`validate` は構造だけを見る)。
 
-引数とパラメータの型の一致は、`rhs_consumes` が引数の leaf を呼び出し先のパラメータの型で
-`truncate_to_unit` に掛けるので、停止性にも要る -- 型に合わない path は panic する
-(`CODE src/rc_ir/ownership.rs: rhs_consumes`, `truncate_to_unit`)。
+引数とパラメータの型の一致は停止性にも要る。`rhs_consumes` は所有の問いを呼び出し先のパラメータに
+ついて立て (`CODE src/rc_ir/ownership.rs: rhs_consumes`)、その問いに答える `owns` を渡すのは
+`CancelAnalysis::consume_rhs` であって、そこが引数の leaf をパラメータの型で `truncate_to_unit` に
+掛ける (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`,
+`CODE src/rc_ir/ownership.rs: truncate_to_unit`)。型に合わない path は panic する。
 
 ## 5. 命題
 

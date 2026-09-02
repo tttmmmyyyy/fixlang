@@ -146,8 +146,10 @@ def item_span(lines, symbol):
     """The half-open line range of a Rust item's definition, or `None` where it is not found.
 
     A one-part symbol names an item at any depth; a two-part `Owner::name` names one whose enclosing
-    `impl`, `trait` or `mod` line carries the owner. The end is found by counting braces from the
-    first one on or after the definition line, so an item without a body ends at its own line.
+    `impl`, `trait` or `mod` line carries the owner. An owner's block ends where its braces close,
+    so a symbol names an item only while the scan is inside that block. The end is found by counting
+    braces from the first one on or after the definition line, so an item without a body ends at its
+    own line.
     """
     block = re.fullmatch(r"impl\s+(\w+)\s+for\s+(\w+)", symbol)
     if block:
@@ -163,23 +165,31 @@ def item_span(lines, symbol):
             r"^\s*(?:pub(?:\([a-z()]+\))?\s+)?(?:impl|trait|mod)\b.*\b" + re.escape(owner) + r"\b"
         )
     enclosing = not owner
+    depth, owner_exit, owner_open = 0, 0, False
     for index, line in enumerate(lines):
         if owner and scope.search(line):
-            enclosing = True
-        if not starts.match(line):
-            continue
-        if not enclosing:
-            continue
-        depth, seen = 0, False
-        for end in range(index, len(lines)):
-            depth += lines[end].count("{") - lines[end].count("}")
-            seen = seen or "{" in lines[end]
-            if seen and depth <= 0:
-                return index, end + 1
-            if not seen and lines[end].rstrip().endswith(";"):
-                return index, end + 1
-        return index, len(lines)
+            enclosing, owner_exit, owner_open = True, depth, False
+        if starts.match(line) and enclosing:
+            return item_body(lines, index)
+        depth += line.count("{") - line.count("}")
+        if owner and enclosing:
+            owner_open = owner_open or depth > owner_exit
+            if owner_open and depth <= owner_exit:
+                enclosing = False
     return None
+
+
+def item_body(lines, index):
+    """The half-open line range of the item whose definition starts at `index`."""
+    depth, seen = 0, False
+    for end in range(index, len(lines)):
+        depth += lines[end].count("{") - lines[end].count("}")
+        seen = seen or "{" in lines[end]
+        if seen and depth <= 0:
+            return index, end + 1
+        if not seen and lines[end].rstrip().endswith(";"):
+            return index, end + 1
+    return index, len(lines)
 
 
 def digest(lines, span):
