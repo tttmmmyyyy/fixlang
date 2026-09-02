@@ -101,15 +101,12 @@ Rust では、可視性の修飾子 (`pub`、`pub(crate)`、`pub(in ...)`) を�
 `RcVar` の名前 (`Let` の束縛変数、`Destructure` の容器とフィールド変数、`Match` の scrutinee とアームの
 payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llvm` の各オペランド、`Retain` /
 `Release` / `Eval` / `Ret` が名指す変数) の全体である
-(`CODE src/rc_ir/ast.rs: for_each_var`, `for_each_var_of_node`, `for_each_var_of_rhs`)。この集合は
-A13 が語る集合 -- `borrow_ify` の入力に現れるすべての名前 -- に含まれる。
+(`CODE src/rc_ir/ast.rs: for_each_var`, `for_each_var_of_node`, `for_each_var_of_rhs`)。
 
 **DEF 扱う型**
 次の 3 種を**根の型**と呼ぶ。**関数のパラメータ・capture が宣言する型** (`RcFunc::params` と
 `RcFunc::capture` の `RcVar` の型)、本体に現れる `RcVar` の型、`Llvm` 節点の結果の型 `rty` である。
 パラメータ・capture の型を数えるのは、本体が一度も読まないパラメータの型が本体に現れないからである。
-固定した出力版のこれら 3 種は、入力の関数のものと同じ型である -- `f_own` の版とグローバル初期化子の
-版は入力の本体をそのまま写したものであり、借用版は束縛名を付け替えただけで型を変えない (P9)。
 根の型と、根の型から `unpunched_field_types(・)` が返す対の第 2 成分を有限回取って到達する型とを
 合わせて**扱う型**と呼ぶ。
 **以下の補題が量化する型 -- `τ`、`σ`、および `ty(・)` の形で現れる型 -- は、すべて扱う型を渡る。**
@@ -381,11 +378,15 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 
 <1>1. 根の型は A10 を満たす。
   DEF 扱う型 より根の型はパラメータ・capture の `RcVar` の型か、本体に現れる `RcVar` の型か、
-  `Llvm` 節点の結果の型であり、どれもプログラムに現れる型である (D1 より `RcFunc` はパラメータの列と
-  capture を持ち、その各 `RcVar` は型を持つ)。A10 は、プログラムに現れる型が ground であり、その
-  tycon に kind の要求するだけの引数が与えられており、その tycon が `type_env` にあり、
-  `no_size_in_place` の in-place の降下が有限であると述べる。
-  BY A10, D1, DEF 扱う型
+  `Llvm` 節点の結果の型である (D1 より `RcFunc` はパラメータの列と capture を持ち、その各 `RcVar` は
+  型を持つ)。固定した出力版のこの 3 種は、入力のプログラムに現れる型である -- `f_own` の版と
+  グローバル初期化子の版の本体・パラメータ・capture は入力のものそのものであり (`borrow_ify` は
+  `func.clone()` を写し、グローバルは `g.init` を写す)、借用版のそれらは入力の関数のものの束縛変数を
+  一斉に付け替えたものであって (P9)、`rename_var` は名前だけを差し替えて型を残す。A10 は、プログラムに
+  現れる型が ground であり、その tycon に kind の要求するだけの引数が与えられており、その tycon が
+  `type_env` にあり、`no_size_in_place` の in-place の降下が有限であると述べる。
+  BY A10, D1, P9, DEF 扱う型, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
+     CODE src/rc_ir/rename.rs: rename_var
 
 <1>2. 扱う型はすべて A10 を満たす。
   <2>1. DEF 扱う型 の第 2 の種 -- 根の型から `unpunched_field_types` の対の第 2 成分を有限回取って
