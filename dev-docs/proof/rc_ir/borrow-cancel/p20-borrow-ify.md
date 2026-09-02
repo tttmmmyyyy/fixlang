@@ -1432,10 +1432,13 @@ P12 (c) が、「局所変数を経由する間接呼び出しでは `route` は
       .filter(|unit_path| !owned_units.contains(unit_path)).collect();` を実行する。
   BY CODE src/rc_ir/borrow.rs: borrow_ify
 
-<1>2. このループは出力の `funcs` の全元を回り、`borrowed_units` に書き込むのはここだけである。
-      `f_own` は `func.clone()` の `body` を差し替えたもの、`f_borrow` は `clone_func` が
-      `borrowed_units` を空にして作ったものであり、どちらもこのループで上書きされる。
-  BY CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
+<1>2. このループは出力の `funcs` の全元を回り、その代入が各元の `borrowed_units` を決める。
+      `f_own` は `func.clone()` の `body` を差し替えたものなので入力の関数の集合を写しており、
+      `f_borrow` は `clone_func` が `Set::default()` を置いたものである。どちらもこのループの代入で
+      上書きされる。ループは `funcs` を組み立てた後に走り、`borrow_ify` はその後 `funcs` を返すだけで
+      ある。D14 も「`borrowed_units` に unit を**入れる**のは `borrow_ify` の末尾ただ 1 か所であり」
+      「他の書き込みは空集合を置くか既存の鍵を改名するだけである」と述べる。
+  BY D14, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
 
 <1>2a. 出力のグローバル初期化子について、この命題は集合を述べない。
   `RcGlobalInit` は `symbol`、`ty`、`init`、`owns_initializer`、`owns_storage` の 5 つのフィールドを
