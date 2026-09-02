@@ -2927,12 +2927,35 @@ P17 が扱う (第 4 節の `L6` と、`L11` の `<2>2` の場合分け)。**消
          `Pre(V)` の表と `F` の本体の表という相異なる 2 つの表について `origin` の答えを比べるので、
          その形である。`<3>3` がその議論を持つ。
     <3>1. `ren` は単射であり、`F` の本体に現れる各名前 `y` について `ty(ren[y]) = ty(y)` である。
-      BY P9, A6, A13
-      P9 は「`clone_func` が作る借用版の本体は、元の本体の束縛変数を一斉に付け替えたものであり、
-      それ以外の違いを持たない」と述べるので、`rename` は型を動かさず、束縛変数でない名前を動かさ
-      ない。A6 より `F` の本体の束縛名は相異なるので `rename` は単射であり、P9 の後半より複製が
-      導入する名前は入力のどの束縛名とも異なり、A13 よりその形の名前は入力のどの名前にも無いので、
-      `rename` の像と、動かさない名前の全体は交わらない。よって `ren` は単射である。
+      <4>1. `rename` の各項は `assign_fresh_name` の 1 回の呼び出しが書き込むものであり、`F` の各束縛名に
+            ついてその呼び出しはちょうど 1 回である。`pass_tag` は `"b"` である。
+        BY P9, CODE src/rc_ir/borrow.rs: clone_func,
+           CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_names_to_binders,
+           assign_fresh_name
+        `clone_func` は `fresh_rename_function(&func.params, &func.capture, &func.body, "b",
+        rename_counter)` を呼び、`fresh_rename_function` は各パラメータ・capture について
+        `assign_fresh_name` を呼んでから `assign_fresh_names_to_binders` に本体を渡す。
+        `assign_fresh_names_to_binders` は各束縛について `assign_fresh_name` を 1 回呼ぶ。
+        `renaming` へ書き込むのは `assign_fresh_name` のこの 1 か所だけである。
+      <4>2. `assign_fresh_name` の相異なる 2 つの呼び出しが作る名前は相異なる。
+        BY <4>1, CODE src/rc_ir/rename.rs: assign_fresh_name
+        `assign_fresh_name` の本体は `*counter += 1;` で始まり、続いて
+        `fresh.name = format!("{}#{}{}", fresh.name, pass_tag, counter);` を置く。`counter` は
+        呼び出しをまたいで運ばれ、各呼び出しの先頭で 1 増えるので、2 つの呼び出しが読む値は相異なる。
+        <4>1 より `pass_tag` は `"b"` であり、`counter` の 10 進表記は数字だけからなるので、作られた
+        名前の最後の `#` より後ろの断片は `b` に続く `counter` の 10 進表記であり、その断片が `counter`
+        の値を決める。値が相異なれば断片が相異なり、名前も相異なる。
+      <4>3. `rename` は `F` の本体の束縛名の上で単射である。
+        BY <4>1, <4>2
+        相異なる 2 つの束縛名は `assign_fresh_name` の相異なる 2 つの呼び出しで写される。
+      <4>4. QED
+        BY <4>2, <4>3, P9, A13
+        P9 は「`clone_func` が作る借用版の本体は、元の本体の束縛変数を一斉に付け替えたものであり、
+        それ以外の違いを持たない」と述べるので、`rename` は型を動かさず、`ren` は束縛変数でない名前を
+        動かさない。<4>3 より `rename` は束縛名の上で単射である。<4>2 より `rename` の像の名前は
+        `#b` に 10 進数字が続く形で終わり、A13 より入力に現れるすべての名前 -- 束縛名、直接呼び出しが
+        名指す関数の名前、グローバル値を読む `RcVar` の名前を含む -- はその形ではないので、`rename` の
+        像と、`ren` が動かさない名前の全体は交わらない。よって `ren` は単射である。
     <3>2. `Pre(V)` の `VarTable` は `F` の本体の `VarTable` を `ren` で写したものである。すなわち
           `F` の本体に現れる名前 `y` について、`vars_P.bindings.get(ren[y])` は
           `vars_F.bindings.get(y)` の各変数名を `ren` で写したものであり、`ren` が動かさない
