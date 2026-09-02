@@ -589,6 +589,12 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
       その本体は `capture` が `Some` である `P'` の関数のものであり、`<3>2` より `gc.current_function()`
       はその関数の LLVM 関数である。
       BY <3>1, <3>2, CODE src/fixstd/builtin.rs: InlineLLVMFixBody
+  <2>4d. `App` の `callee` の位置で読まれた値は、その節点の呼び出し先としてだけ使われる。
+    `eval_rc_expr_inner` の `App` の腕は `get_scoped_obj(&callee.name)` の返り値を `callee_obj` に取り、
+    それを `apply_lambda` の第 1 引数に渡す。ほかのどこにも渡さず、`scope_push` もしない。よってその値が
+    別の節点の呼び出し先になることは無い。
+    BY CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
+       CODE src/generator.rs: Generator::apply_lambda, Generator::get_scoped_obj
   <2>5. QED
     `resolve_callee_params` が `None` を返すなら、`callee.name` は `P'.funcs` の鍵でも
     `closure_targets` の鍵でもない (`CODE src/rc_ir/ownership.rs: resolve_callee_params` -- 2 つの枝が
@@ -602,13 +608,16 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     D23 より実行時の呼び出し先はプログラムの `funcs` の関数なので、`m` は `P'.funcs` の鍵である -- 鍵で
     なければ、L0d (a) が本体を実装するのは `funcs` の項目についてだけなので、その LLVM 関数はどの
     `RcFunc` の本体も実装していない。`<1>3` より `P'` は L0b の (N3) を満たすので、L0d (b) よりその
-    LLVM 関数は `P'.funcs[FuncRef{m}]` の本体を実装したものである。`m` は `<2>4a` より借用版の名前では
-    ない -- 借用版の名前は `App` の `callee` の位置にしか現れず、そこでは `<2>4` より
-    `resolve_callee_params` が `Some` を返す -- のでやはり原本の名前である。
+    LLVM 関数は `P'.funcs[FuncRef{m}]` の本体を実装したものである。`m` は借用版の名前ではない --
+    `<2>4a` より借用版の名前が `RcVar` として現れるのは `App` の `callee` の位置だけであり、`<2>4d` より
+    そこで読まれた値はその節点の呼び出し先としてだけ使われるので、`m` が借用版の名前ならばこの節点の
+    `callee.name` が `m` である。ところが `<2>4` より、`route` が借用版を置いた節点では
+    `resolve_callee_params` が `Some` を返すので、`None` を返すこの節点はそれではない。よって `m` は
+    原本の名前である。
     (M3) の関数は `<2>4c` より `capture` を持つ `P'` の関数の LLVM 関数であり、`<2>1` より capture を
     持つ関数には借用版が作られないので原本である。
     `<2>2` より原本の `borrowed_units` は空である。
-    BY D23, L0d, <1>3, <2>1, <2>2, <2>3, <2>4, <2>4a, <2>4b, <2>4c,
+    BY D23, L0d, <1>3, <2>1, <2>2, <2>3, <2>4, <2>4a, <2>4b, <2>4c, <2>4d,
        CODE src/rc_ir/ownership.rs: resolve_callee_params
 
 <1>6. (b) が成り立つ。
