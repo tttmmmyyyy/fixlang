@@ -63,7 +63,10 @@ P9 と合わせて読む」。A9 についてはその項が「`borrow_ify` と 
 アームを持たない `Match` を作らないので (P22、P24)、`cancel` の入力と出力についても同じことが言える」と
 述べる。
 
-- `origin(x, π)` は `origin(vars, type_env, x, π)`。**この記法が指すのは、解析が鍵 `(x, π)` で `origin` を
+- `origin(x, π)` は `origin(vars, type_env, x, π)`。**解析**とは、この文書が固定した `vars` と
+  `type_env` を引数として `origin` を呼ぶ計算の全体である -- `borrow_ify` の `infer_ownership` と
+  `RewriteCtx`、`cancel` の `CancelAnalysis` がそれであり、`README.md` の P3・P4 が「解析」と呼ぶのも
+  これである。**この記法が指すのは、解析が鍵 `(x, π)` で `origin` を
   呼ぶときの、その呼び出しが返す値である。** 値が呼び出しに依らず 1 つであることは L0 (a) が示す。
   **解析が呼ばない鍵についてこの記法は何も指さないので、この文書の言明は、その鍵で `origin` が呼ばれる
   ことを前提に置く。** README の P3・P4・P5 (a)・P6 が同じ前件を持つ。
@@ -1470,11 +1473,12 @@ L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
     `(r_0, λ)`-`(x, λ)` である。その両端は `ρ` の位置なので、その辺は在る (DEF 辺の存在)。L1a (b) の
     同じ行よりそれは `ρ` の上で実行された辺なので、L1 よりオブジェクトが一致する。
     BY A12, D9, D16, L1, L1a, DEF 辺の存在, DEF 路の位置, <1>3
-  <2>2a. 任意の変数 `u` と path `μ` について `act(u, μ)` は `id(u, μ)` を含み、したがって空でない。
+  <2>2a. 解析が鍵 `(u, μ)` で `origin` を呼ぶとき、`act(u, μ)` は `id(u, μ)` を含み、したがって空でない。
     `Origin::acted_on()` は `identity()` を先頭に置く列である。
     BY D15, CODE src/rc_ir/ownership.rs: Origin::acted_on
   <2>3. `C` は空でない。
-    A9 よりアームは 1 つ以上あり、`<2>2a` より各 `act(r, λ)` は空でない。
+    A9 よりアームは 1 つ以上あり、`<2>1` より解析は各 `r ∈ arm_results` について鍵 `(r, λ)` で `origin` を
+    呼ぶので、`<2>2a` より各 `act(r, λ)` は空でない。
     BY A9, <2>1, <2>2a
   <2>4. CASE `|C| ≥ 2`。
     <3>1. `of_candidates(C, (x, λ))` は `Join { identity: (x, λ), candidates: C }` を返すので
@@ -1938,10 +1942,11 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   すべて `out` に積む。回る `leaf` の全体は `<1>1a` より `L(v, π)` である。
   BY <1>1a, <1>1b, CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects
 
-<1>4. 各 `λ` について `act(v, λ) = {id(v, λ)} ∪ (cand(v, λ) \ {id(v, λ)})` である。
-  `Origin::acted_on()` は `identity()` を先頭に、`candidates()` のうち `identity()` と異なるものを続けた
+<1>4. `L(v, π)` の各 `λ` について `act(v, λ) = {id(v, λ)} ∪ (cand(v, λ) \ {id(v, λ)})` である。
+  `<1>1b` より解析は鍵 `(v, λ)` で `origin` を呼ぶので、この 3 つの値が定まる。`Origin::acted_on()` は
+  `identity()` を先頭に、`candidates()` のうち `identity()` と異なるものを続けた
   列である。
-  BY D15, CODE src/rc_ir/ownership.rs: Origin::acted_on
+  BY D15, <1>1b, CODE src/rc_ir/ownership.rs: Origin::acted_on
 
 <1>5. QED
   `<1>4` より `∪_{λ ∈ L(v, π)} act(v, λ) = { id(v, λ) : λ ∈ L(v, π) } ∪
