@@ -3326,7 +3326,8 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
   問うので、4 つとも偽であり、`go` は同じ `ty.unpunched_field_types(type_env)` のループに入る。
 
 <1>2. ASSUME NEW 型 `σ` (A10 を満たす)、および (帰納法の仮定) `unit_step(σ)` の `Fields` の腕が
-              降りる各フィールドの型について言明の結論が成り立つこと
+              降りる各フィールドの型 `fty` について「`boxed_leaf_paths(fty)` の各元はちょうど 1 つの
+              `rc_units(fty)` の元で始まる」が成り立つこと
       PROVE  `boxed_leaf_paths(σ)` の各元はちょうど 1 つの `rc_units(σ)` の元で始まる
   <2>1. CASE `unit_step(σ) = NoUnit`。
     BY CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: rc_units_go,
@@ -3366,8 +3367,8 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
        `rc_units(σ)` の元で始まる。
   BY <1>2, A10
   A10 より `boxed_leaf_paths` も `rc_units` も停止するので、`unit_step` の `Fields` の腕が降りる
-  フィールドの型の降下は有限である。<1>2 を段とする整礎帰納で、その降下で到達する各型について結論が
-  成り立つ。
+  フィールドの型の降下は有限である。<1>2 を段とする整礎帰納で、その降下で到達する各型 `σ` について
+  「`boxed_leaf_paths(σ)` の各元はちょうど 1 つの `rc_units(σ)` の元で始まる」が成り立つ。
 
 <1>3. `truncate_to_unit(σ, λ)` が値を返すとき、その値は `λ` の接頭である。
   BY CODE src/rc_ir/ownership.rs: truncate_to_unit
