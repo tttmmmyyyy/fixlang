@@ -641,11 +641,14 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   **<2>3a.** `cancel` が返す `globals` と `roots` を、コードの上で読む。`cancel` は
   `prog.globals.iter().map(|g| RcGlobalInit { symbol: g.symbol.clone(), ty: g.ty.clone(),
   init: cancel_body(&vars, &g.init), owns_initializer: true, owns_storage: true })` を `collect`
-  した列を返す。よって `p2.globals` は `p1.globals` と同じ長さであり、第 `i` 要素の `symbol` と
-  `ty` は `p1.globals` の第 `i` 要素のものに等しい。`roots` は `roots: prog.roots.clone()` なので
-  `p2.roots` は `p1.roots` に等しい。
+  した列を返す。EXT 反復子の `iter`・`map`・`collect` より、`iter` は `p1.globals` の各要素を
+  添字の順に渡し、`map` は個数と順序を保ち、`Vec` への `collect` は反復の順序をそのまま添字に写す。
+  よって `p2.globals` は `p1.globals` と同じ長さであり、その第 `i` 要素は `p1.globals` の第 `i`
+  要素から作られたものである。閉包が組み立てる `RcGlobalInit` は `symbol` と `ty` にその要素のものの
+  複製を置くので、第 `i` 要素の `symbol` と `ty` は `p1.globals` の第 `i` 要素のものに等しい。
+  `roots` は `roots: prog.roots.clone()` なので `p2.roots` は `p1.roots` に等しい。
 
-    BY `CODE src/rc_ir/borrow.rs: cancel`
+    BY EXT 反復子の `iter`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`
 
   **<2>3b.** `cancel` は `App` の callee の名前を変えない。
 
