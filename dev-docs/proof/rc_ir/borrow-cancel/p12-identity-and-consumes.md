@@ -1083,6 +1083,8 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   `program.rs` の中にしかない -- この欄を宣言するモジュールは `program.rs` のモジュールであり、その子孫の
   モジュールもこのファイルの中に書かれている。EXT 名前による数え上げ より、この列挙は `program.rs` の
   全体について識別子 `tycons` を検索して得られる (このファイルはこの欄に `use` の別名を導入しない)。
+  検索が返す残りは、この欄を読む式、`Program::calculate_type_env` の同名の局所変数、および
+  `bulitin_tycons` や `add_tycons` のように `tycons` を部分文字列に持つ別の識別子である。
   BY EXT 可視性, EXT 名前による数え上げ, CODE src/ast/program.rs: TypeEnv, TypeEnv::default,
      TypeEnv::new,
      TypeEnv::add_tycons, TypeEnv::unwrap_newtypes, TypeEnv::resolve_type_aliases_in_tycons,
