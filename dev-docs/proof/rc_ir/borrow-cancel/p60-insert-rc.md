@@ -1730,8 +1730,8 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
 - **A19 (ii-a)** は `DEF 由来の形` の 3 つの節であり、それが `insert_rc` の出力について成り立つという
   言明が第 8 節の **(O1)** である。走査を読まないので、`insert_rc` の liveness の規律だけで
   書ける。`C2` はこれを破り (`Retain(o, [])` の時点で `held(C_o) = 0`)、`L10` がその形を弾く。
-- **A19 (ii-b)** は「`bumps ≥ 1` である時点で `held ≥ 1 + bumps`」であり、それが `insert_rc` の出力に
-  ついて成り立つという言明が第 8 節の **(O2)** である。`L7` の恒等式より、`L4` と `L6` の前提の下で
+- **A19 (ii-b)** は「**`bumps ≥ 1` である時点では `held ≥ 1 + bumps` である。**」であり、それが
+  `insert_rc` の出力について成り立つという言明が第 8 節の **(O2)** である。`L7` の恒等式より、`L4` と `L6` の前提の下で
   この形は `U + X ≥ D` と同値である。`C1` は (ii-b) だけを破る (`L12`)。
 
 **第 10 節が (O1) を、第 11 節が (O2) を示す。** よって `insert_rc` の出力について A19 の (ii-a) と
@@ -2575,8 +2575,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
         とき `Λ(m) = Λ(m') \ {フィールド変数}` である。前置 `Retain` 鎖は `container` が局所名で
         `container ∈ Λ(m')` のとき `Retain(container, [])` を 1 つ置き、後置 `Release` 鎖は `Λ(m')` に
         入らない各フィールド変数の `Release` を 1 つずつ置く。**以下 `container` は局所名とする。**
-        局所名でないときは、<1>0 よりこの変数はスロットを持たないので、<2>2・<2>3・<2>4・<2>4a の
-        `μ(container, λ)` についての等式は量化する対象を 1 つも持たず、フィールド変数についての
+        局所名でないときは、<1>0 よりこの変数はスロットを持たないので、`container` のスロットを
+        主語にする以下の各等式は量化する対象を 1 つも持たず、フィールド変数のスロットについての
         等式だけが残る。前置 `Retain` 鎖もそのとき空である -- `retain_if_live` は
         `var.name.is_local()` を要求する。
     BY <1>0, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
@@ -3042,9 +3042,9 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
      CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
   `id(s) = origin(v, λ).identity()` であり、`origin` の答えは鍵ごとに 1 つに決まって
   `vars.origins` が保持する memo の状態に依らない (P2a)。**P2a の制限がここで満たされる。**
-  P2a は「**1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値を固定する。**」と述べ、その `vars` を
-  「**A6 と A11 を満たすプログラムの本体について `VarTable::of` か `VarTable::body_only` が作った表で
-  ある。**」と限る。11.1 節が固定するのは 1 つの本体とその表であり、その表は走査がその本体について
+  P2a は「**1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値を固定する。**」と述べ、
+  「**`vars` は、A6 と A11 を満たすプログラムの本体について `VarTable::of` か `VarTable::body_only` が
+  作った表である。**」と限る。11.1 節が固定するのは 1 つの本体とその表であり、その表は走査がその本体について
   `VarTable::of` か `VarTable::body_only` で作るものである。A6 と A11 は `borrow_ify` の入力に
   かかる仮定だが、A6 と A11 の脇と A2 の「**したがって、`borrow_ify` の入力について語る仮定は、
   `insert_rc` の入力と出力についても読める。**」により、この文書が扱う本体についてもそれを読める。
@@ -3253,7 +3253,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 - `RcExpr::Release` の腕の 1 回の訪問 (`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`) と、
   それに対になる `Release(v, π)` の実行時の処分。
 
-**その対が付くことは言明の (0) が述べ、`<1>0a` が示す。**
+**その対が付くことは、この補題の言明の (0) が述べる。**
 
 **関数本体・初期化子の終端の `Ret` の消費は、この定義の外に落ちる。** `walk_inner` の
 `RcExpr::Ret` の腕は `returns_from_func` が真のとき `needed_retains` に入れるだけで `pending` を
@@ -3272,6 +3272,15 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `Anc(s) ∩ Sub(id)` の各名前 `id'` は `Bmp(id') = 0` である。
 
 **証明**
+
+<1>0. どの pending の要素 `p` と名前 `id'` についても `B(p, ρ)[id'] ≥ 0` であり、したがって
+      `Bmp(id')` と `Bsub(id')` も 0 以上である。要素を `pending` から取り除くこと、および `un_bump` が
+      `InBracket` で 1 つの要素の `B` から引くことは、どの `id'` についても `Bmp(id')` を増やさない。
+  BY L5a, D27, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
+     CODE src/rc_ir/borrow.rs: un_bump
+  `L5a` (b) が第 1 文を与え、`Bmp` と `Bsub` はその非負の項の和である。`consume_objects` は要素を
+  取り除くだけであり、取り除かれた要素の `B` は和から落ちるので、非負の項が 1 つ減る。`un_bump` の
+  `InBracket` は 1 つの要素の `B` から引くだけである。
 
 <1>0a. (0)。
   BY 前提 (S1), D9, D14, D23, L16,
@@ -3296,15 +3305,6 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   いる。
   `RcExpr::Release` の腕は 1 つの `Release` 節点の訪問につき 1 回走り、`ρ` の上の `Release(v, π)`
   節点の実行と 1 対 1 に対応する。
-
-<1>0. どの pending の要素 `p` と名前 `id'` についても `B(p, ρ)[id'] ≥ 0` であり、したがって
-      `Bmp(id')` と `Bsub(id')` も 0 以上である。要素を `pending` から取り除くこと、および `un_bump` が
-      `InBracket` で 1 つの要素の `B` から引くことは、どの `id'` についても `Bmp(id')` を増やさない。
-  BY L5a, D27, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
-     CODE src/rc_ir/borrow.rs: un_bump
-  `L5a` (b) が第 1 文を与え、`Bmp` と `Bsub` はその非負の項の和である。`consume_objects` は要素を
-  取り除くだけであり、取り除かれた要素の `B` は和から落ちるので、非負の項が 1 つ減る。`un_bump` の
-  `InBracket` は 1 つの要素の `B` から引くだけである。
 
 <1>1. スロット `s` について、`Bmp(id') ≥ 1` である名前 `id'` は、ある pending の要素の `outstanding`
       が名指す。
@@ -4114,11 +4114,13 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
     BY P2, P2a, A2, A6, A11, L26, CODE src/rc_ir/ownership.rs: origin,
        CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
     **P2a の制限がここで満たされる。** P2a は「**1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の
-    値を固定する。**」と述べ、その `vars` を「**A6 と A11 を満たすプログラムの本体について
+    値を固定する。**」と述べ、「**`vars` は、A6 と A11 を満たすプログラムの本体について
     `VarTable::of` か `VarTable::body_only` が作った表である。**」と限る。`vars_B` と `vars_{B'}` は
     それぞれ `B` と `B'` についてその 2 つの構成子が作る表であり、この段はどちらか一方を固定した中で
-    P2a を読む -- 「**表を跨ぐ形はこの命題の主張ではない。**」ので、2 つの表を跨ぐ等式は <2>5 が
-    自分で示す。A6 と A11 は `borrow_ify` の入力にかかる仮定だが、A6 と A11 の脇と A2 の
+    P2a を読む -- P2a は「**表を跨ぐ形はこの命題の主張ではない。**」と述べ、
+    「**`bindings` が等しい相異なる 2 つの `VarTable` について答えが等しいことは別の主張であり、
+    それを要る段は自分で示す。**」と続けるので、2 つの表を跨ぐ等式はこの段の主張ではない。
+    A6 と A11 は `borrow_ify` の入力にかかる仮定だが、A6 と A11 の脇と A2 の
     「**したがって、`borrow_ify` の入力について語る仮定は、`insert_rc` の入力と出力についても
     読める。**」より `B` -- `insert_rc` の出力 -- についてそれを読め、`L26` (b) より `B'` は `B` の
     束縛変数と `Match` のアームをそのまま持つので `B'` についても読める。
