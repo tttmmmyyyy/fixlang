@@ -804,6 +804,7 @@ impl TypeNode {
 
     /// A copy of this type variable carrying `kind`, leaving this node as it is. Panics for a type
     /// that is not a type variable.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     #[allow(dead_code)]
     pub fn set_tyvar_kind(&self, kind: Arc<Kind>) -> Arc<TypeNode> {
         let mut ret = self.clone();
@@ -821,6 +822,7 @@ impl TypeNode {
 
     /// A copy of this type with `tv` as its type variable, leaving this node as it is. Panics for
     /// a type that is not a type variable.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_tyvar(&self, tv: Arc<TyVar>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -865,6 +867,7 @@ impl TypeNode {
 
     /// A copy of this associated type application named `name`, keeping the arguments. Panics for
     /// a type that is not an associated type application.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_assocty_name(&self, name: AssocType) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -923,6 +926,7 @@ impl TypeNode {
 
     /// A copy of this type with `tc` as its type constructor, leaving this node as it is. Panics
     /// for a type that is not a type constructor standing on its own.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_tycon_tc(&self, tc: Arc<TyCon>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -1535,6 +1539,7 @@ impl TypeNode {
     }
 
     /// A node holding `ty`, written nowhere.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn new(ty: Type) -> Self {
         Self {
             ty,
@@ -1559,6 +1564,7 @@ impl TypeNode {
     }
 
     /// A copy of this node holding the type expression `ty`, keeping the source it was written at.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     #[allow(dead_code)]
     pub fn set_ty(self: &Arc<Self>, ty: Type) -> Arc<Self> {
         let mut ret = (**self).clone();
@@ -1821,6 +1827,7 @@ pub struct AssocTypeDefnHead {
     pub impl_type_as_written: Arc<TypeNode>,
 }
 
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Clone for TypeNode {
     /// Copies the type expression and where it was written, leaving the values kept on the node —
     /// its hash, whether it is ground, how deeply it nests — to be computed again.
@@ -1837,6 +1844,7 @@ impl Clone for TypeNode {
 
 /// A type expression, which is a type variable, a type constructor, or one of these applied to
 /// arguments.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, Hash, Serialize, Deserialize, Clone)]
 pub enum Type {
     /// A type variable, e.g. `a`.
@@ -2183,12 +2191,14 @@ pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode
 }
 
 /// The type `tyfun` applied to `param`.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_tyapp(tyfun: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyApp(tyfun, param))
 }
 
 /// The associated type `assoc_ty` applied to `args`, the first of which is the type the trait is
 /// implemented for.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_assocty(assoc_ty: AssocType, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::AssocTy(assoc_ty, args))
 }
