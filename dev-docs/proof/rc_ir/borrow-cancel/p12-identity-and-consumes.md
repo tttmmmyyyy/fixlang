@@ -2165,7 +2165,7 @@ leaf に前置したものだからである。
       `Closure` は `RcRhs` の 1 種なので `L5 (f)` より `rhs_consumes` が呼ばれる。
   BY D2, D9, L5 (f), L5 (h)
 <1>3. CASE D9 の `Llvm(gen, args)` の行。D9 のこの行「`borrows_operand(i)` が偽のオペランドのうち、
-      `result_prov` が単一の `Arg(i, σ)` として素通しを宣言していない leaf」は `L5 (k)` の条件そのもので
+      `result_prov` が**単一の** `Arg(i, σ)` として素通しを宣言していない leaf」は `L5 (k)` の条件そのもので
       あり、その「単一の `Arg(i, σ)`」は `L5 (l)` の条件そのものである。`L5 (l)` の
       `passthrough_arg_leaves` が読む `result_prov` の値と、D9 の行が言う宣言が同じものであることは、
       A3 の決定性の節 -- `result_prov` は同じ引数に対して常に同じ値を返す -- による。`Llvm` は `RcRhs` の
