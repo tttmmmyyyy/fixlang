@@ -1597,15 +1597,17 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   `<1>1` より各辺は E1 から E5 のいずれかであり、L2 (B) がその 5 種について記録を与える。
   BY L2 (B), <1>1
 
-<1>1b. 1 つの位置を終点とする E1 から E5 の辺は高々 1 つである。
-  第 2 節の一覧より、E1 から E5 の各辺の終点の変数は、その辺を定める節点が束縛する変数である。A6 より
-  束縛名は相異なるので、1 つの変数を束縛する節点は高々 1 つであり、`<1>1a` よりその変数の
-  `vars.bindings` の記録も 1 つである。その記録と leaf `λ` から始点は決まる -- `Move(y)` は `(y, λ)`、
+<1>1b. 1 つの位置 `(x, λ)` を終点とする E1 から E5 の辺は高々 1 つである。
+  L2 (B) より、E1 から E5 の辺の終点の変数の `vars.bindings` の記録は、辺の種に応じて `Move(y)`、
+  `Field(c, i)`、`Payload(s, Some(t))`、`Payload(s, None)`、`Llvm(gen, args, ty(x))` のいずれかで
+  ある。`vars.bindings` は名前から `Binding` への写像なので `x` の記録は高々 1 つであり、辺の種は
+  それで決まる -- `Payload` の 2 種は記録の `variant` が `Some` か `None` かで分かれる。始点はその記録と
+  leaf `λ` で決まる -- `Move(y)` は `(y, λ)`、
   `Field(c, i)` は `(c, [i] ++ λ)`、`Payload(s, Some(t))` は `(s, [t] ++ λ)`、`Payload(s, None)` は
   `(s, λ)`、`Llvm(gen, args, ty)` は `decl.leaf_origins_at(λ)` が単一の `Arg(j, σ)` であるときの
   `(args[j], σ)` であり、その `decl` は記録が持つ op・引数・結果の型と `type_env` だけから決まる
   (A3 の決定性の節)。
-  BY A3, A6, L2 (B), <1>1, <1>1a
+  BY A3, L2 (B), CODE src/rc_ir/ownership.rs: VarTable
 
 <1>1c. 道の上のどの位置についても、解析はその鍵で `origin` を呼ぶ。
   道を `v_0, …, v_n` とし、`v_0` と `v_n` を言明の 2 つのスロットとする。`v_i` と `v_{i+1}` を結ぶ辺を、
@@ -1811,14 +1813,16 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 
 <1>6a. 解析は鍵 `(x_j, [])` と `(m, [])` で `origin` を呼ぶ。したがってその 2 つについて
        `origin(x_j, [])` と `origin(m, [])` の値は `origin_inner` の 1 回の呼び出しが返した値である。
-  `borrow_ify` は自分の入力プログラムについて `infer_ownership` を呼び、`infer_ownership` は
-  `prog.funcs` の各関数について `collect_consumes(&func.body, ..)` を呼び、報告された各 `(var, path)` に
-  ついて `origin(vars, type_env, &var, &path)` を呼ぶ。`collect_consumes` は `collect_consumes_go` を
+  `borrow_ify` は自分の入力プログラムについて `infer_ownership` を呼ぶ。`infer_ownership` は
+  `prog.funcs` の各関数 `func` について `VarTable::of(func)` を作り、`collect_consumes(&func.body, ..)` を
+  呼び、報告された各 `(var, path)` に
+  ついて `origin(vars, type_env, &var, &path)` を呼ぶ。その `vars` は `f` については `VarTable::of(f)`
+  であり、§1 が固定する表である。`collect_consumes` は `collect_consumes_go` を
   呼び、その `RcExpr::Ret(x)` の腕は `push_boxed_leaves` で `boxed_leaf_paths(ty(x), type_env)` の各 `p`
   について `(x.name, p)` を積み、`RcExpr::Let` の腕は `rhs` が `RcRhs::Match` のとき各アーム本体へも
   降りる。`<1>3` より `f` の本体は終端の `Ret(m)` を持ち、アーム `j` の本体は終端の `Ret(x_j)` を持つ
   ので、走査はその 2 つを訪れる。`<1>1` より `ty(m)` も `ty(x_j)` も `T` であり、`<1>2` より `T` の
-  boxed leaf は `[]` 1 つなので、積まれるのは `(m, [])` と `(x_j, [])` である。呼び出しが在るので
+  boxed leaf は `[]` 1 つなので、積まれるものの中に `(m, [])` と `(x_j, [])` がある。呼び出しが在るので
   L0 (a) が当たる。
   BY L0 (a), <1>1, <1>2, <1>3, CODE src/rc_ir/borrow.rs: borrow_ify, infer_ownership,
      CODE src/rc_ir/ownership.rs: collect_consumes, collect_consumes_go, push_boxed_leaves
