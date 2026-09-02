@@ -71,7 +71,7 @@ src/ast/types.rs	TypeNode::get_source	P1,P2	c02893955b55
 src/ast/types.rs	TypeNode::instance_field_types	D/A,P1,P2,P2a,P3,P4,P15,P16,P17,P18	27064fdf0a46
 src/ast/types.rs	TypeNode::is_array	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	d430c390ceb3
 src/ast/types.rs	TypeNode::is_box	P1,P2,P2a,P7a,P7d,P7e,P15,P16,P17,P18,P26,(P-insert)	f364e8b05513
-src/ast/types.rs	TypeNode::is_closure	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P26,P28	938ff5f09f64
+src/ast/types.rs	TypeNode::is_closure	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P26	938ff5f09f64
 src/ast/types.rs	TypeNode::is_fully_unboxed	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P27,P28,P29,P30,(P-insert)	8b7f69faf6d2
 src/ast/types.rs	TypeNode::is_funptr	P1,P2,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P26	2c9fa9ac23a2
 src/ast/types.rs	TypeNode::is_ground	D/A,T	b2b0748bba35
@@ -148,7 +148,7 @@ src/elaboration/typecheck.rs	TypeCheckContext::unify_type_of_expr_inner	D/A,P26	
 src/ffi.rs	CSignature::get_or_declare_in_module	D/A,P27,P29,P30	65818f246a29
 src/ffi.rs	CSignature::of_ffi_export	P26	ed5fe25c470a
 src/ffi.rs	c_boundary_tycon	D/A,P26,P28	2c5a42247af5
-src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked	D/A,P26	6b9afb59394d
+src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked	D/A,P26,P28	6b9afb59394d
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::generate	P26	4058fb759569
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMArrayAppendValueCapacityUnchecked	P26	63ea2bf9f417
@@ -234,7 +234,7 @@ src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedIOSInternalBody::result_prov	P1
 src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedInternalFunctionBody	P26,P28	9306893962d4
 src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
 src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedInternalFunctionBody::result_prov	P1,P2,P26	2986ab52e872
-src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody	D/A	5162abbf81d0
+src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody	D/A,P28	5162abbf81d0
 src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
 src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody::generate	P26	50b1a36d06f9
 src/fixstd/builtin.rs	PUNCHED_STRUCT_FIELD	P1,P2	aba96959fc58
@@ -245,8 +245,7 @@ src/fixstd/builtin.rs	assumed_state	P26	94231012a564
 src/fixstd/builtin.rs	boxed_from_retained_ptr_ios	D/A	767a95dce0ce
 src/fixstd/builtin.rs	boxed_to_retained_ptr_ios	D/A,P7a,P7d,P7e	65a4511404e3
 src/fixstd/builtin.rs	bulitin_tycons	P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P27,P28,P29,P30	4dc11f509041
-src/fixstd/builtin.rs	fix	P28	c182312f94a6
-src/fixstd/builtin.rs	fix_body	D/A,P27,P28,P29,P30	a45709f796ae
+src/fixstd/builtin.rs	fix_body	D/A,P27,P29,P30	a45709f796ae
 src/fixstd/builtin.rs	force_unique_or_assert	P26	57ffe5ab0aa5
 src/fixstd/builtin.rs	force_unique_or_assert_with_hole	D/A,P26,P27,P29,P30	d343a7084e1d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeStructBody	P3,P4,(P-insert)	c4dab170b90d
@@ -269,7 +268,7 @@ src/fixstd/builtin.rs	make_funptr_name	P1,P2,P7a,P7d,P7e	34284cce7fb0
 src/fixstd/builtin.rs	make_funptr_tycon	P1,P2,P5,P6,P7,P7a,P7d,P7e,P26	c0fafed01fb9
 src/fixstd/builtin.rs	make_iostate_name	P7a,P7d,P7e	9955961601a5
 src/fixstd/builtin.rs	make_string_lit	P5,P6,P7	09f6b13cd2cf
-src/fixstd/builtin.rs	make_struct_union_unique	D/A,P26,P27,P29,P30	d88c213c8b1a
+src/fixstd/builtin.rs	make_struct_union_unique	D/A,P26,P27,P28,P29,P30	d88c213c8b1a
 src/fixstd/builtin.rs	make_tuple_name	P7a,P7d,P7e	bb738d48dcf0
 src/fixstd/builtin.rs	make_unit_ty	P1,P2	272a1957ae37
 src/fixstd/builtin.rs	mark_threaded_function	P26	bbadc0f9cc77
@@ -336,7 +335,9 @@ src/misc.rs	Map	P1,P2,P2a,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15
 src/misc.rs	Set	P1,P2,P2a,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,(P-insert)	9c1db0b33e81
 src/misc.rs	grow_stack	D/A,P1,P2,P5,P6,P7,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b	9e286a06aa6b
 src/object.rs	FIELDS_BY_NAME	P2a,P15,P16,P17,P18	cbd73d77d530
-src/object.rs	ObjectFieldType::clone_array_buf	D/A	996b221b4e44
+src/object.rs	ObjectFieldType::clone_array_buf	D/A,P28	996b221b4e44
+src/object.rs	ObjectFieldType::clone_struct	P28	7c326d6d8e14
+src/object.rs	ObjectFieldType::clone_union	P28	536e66a020b5
 src/object.rs	ObjectFieldType::get_struct_fields	D/A,P7a,P7d,P7e,P27,P29,P30	adccf6cb3234
 src/object.rs	ObjectFieldType::get_union_value	D/A	93365089776d
 src/object.rs	ObjectFieldType::get_union_value_noretain_norelease	P7a,P7d,P7e	03f0071fff84
