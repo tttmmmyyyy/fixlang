@@ -2000,16 +2000,32 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         README の「「果たす者」と「検査」の読み方」は「**コード生成が `expect` や `unreachable!` で止まる
         形も、`develop_mode` の門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の
         活性化は存在しない」と述べ、その 3 段の 2 段目がこれである。
-        `<2>1` よりクロージャの値が
-        指す関数が借用版であることは無い。funptr の値が名指す関数の名前は入力のプログラムに在る名前で
-        あり、借用版の名前は `borrow_funcref` が付ける `<元の名前>#borrow` であって、A13 より入力のどの
-        名前も `#` で区切った最後の断片が `borrow` になることはない。よって D23 の意味の呼び出し先が
-        借用版になるのは、`route` が置いた名前を callee に持つ呼び出しのときだけである。環境が
-        `apply_lambda` に渡す値 (L9a の (iv)) も `App` の callee ではないので、それが名指す関数は借用版
-        ではない。
-    BY <2>1, A13, D23, L9a, P12, README の「「果たす者」と「検査」の読み方」,
-       CODE src/generator.rs: Generator::apply_lambda,
-       CODE src/rc_ir/borrow.rs: borrow_funcref
+        **funptr 型の値は、関数の本体の中では `App` の callee の位置にしか現れず、その名前は
+        `prog.funcs` の鍵である** (L9b の `<1>2`。その段は 前提 (環境について残る 2 つ) を読まない)。
+        よって、`App` の callee でない位置で `apply_lambda` に渡る値 -- (iii) の op のオペランド、
+        (vi) の `_dtor` 欄の値とそれが返す `IO` の動作、環境が渡す値 (L9a の (iv)) -- はクロージャ型で
+        あり、(ii) の段の値も、その callee の名前が `prog.funcs` の鍵でないのでクロージャ型である。
+        **クロージャの値の funptr 欄が名指す関数は借用版ではない。** A21 より Fix の関数型の値に LLVM
+        関数の番地を書き込むのは 3 か所である -- クロージャを作る段 (`build_rc_closure`)、funptr の
+        グローバルを読む段 (`ValueAccessor::get` の `is_funptr` の枝)、そして `InlineLLVMFixBody` で
+        ある。第 1 のものが入れるのは `Closure` 節点が名指す関数の番地であり、書き換えはその `FuncRef`
+        を変えない (`<2>1`、P24) ので入力の名前である。借用版の名前は `borrow_funcref` が付ける
+        `<元の名前>#borrow` であって、A13 より入力のどの名前も `#` で区切った最後の断片が `borrow` に
+        なることはない。第 2 のものが返すのは funptr の記号そのものの番地であって、クロージャの値では
+        ない。第 3 のものが入れるのは `gc.current_function()` の番地、すなわちその節点を持つ本体の
+        番地であり、その本体は借用版ではない -- A24 より `InlineLLVMFixBody` の節点を持つ入力の関数は
+        `capture` が `Some` であるのに対し、`borrow_ify` が複製を作るのは `func.capture.is_none()` の
+        関数についてだけであり (D14)、複製は束縛変数の付け替えであって節点の種類も `capture` の有無も
+        変えない (P9、L8 の (1))。
+        残る (i) の段では、callee の名前は `prog.funcs` の鍵であり、`resolve_callee_params` がその名前で
+        引く関数がその段の実行時の呼び出し先 (D23) である (P30)。その名前が借用版のものであれば
+        `<2>1` よりそれを置いたのは `route` である。よって D23 の意味の呼び出し先が
+        借用版になるのは、`route` が借用版へ回した呼び出しのときだけである。
+    BY <2>1, A13, A21, A24, D14, D23, L8, L9a, L9b, P9, P12, P24, P30,
+       README の「「果たす者」と「検査」の読み方」,
+       CODE src/generator.rs: Generator::apply_lambda, ValueAccessor::get,
+       CODE src/rc_ir/borrow.rs: borrow_funcref, borrow_ify,
+       CODE src/rc_ir/ownership.rs: resolve_callee_params
   <2>3. QED
     BY <2>1, <2>2
 
