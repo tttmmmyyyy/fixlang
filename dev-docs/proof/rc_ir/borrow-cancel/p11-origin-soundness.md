@@ -39,8 +39,21 @@ path に別の答えを与え、leaf の側の `identity` が unit の側の答�
 
 ## 1. 記法
 
+**この文書は 1 つの本体とその `VarTable` を固定する。** `B` を、`borrow_ify` か `cancel` が扱う 1 つの
+RC IR プログラムの 1 つの本体 (D23) -- ある関数 `f` の `body` か、あるグローバル初期化子 `g` の `init`
+-- とする。`type_env` をそのプログラムの `TypeEnv`、`vars` を `B` について作られた `VarTable` -- `B` が
+`f.body` なら `VarTable::of(f)`、`B` が `g.init` なら `VarTable::body_only(&g.init)` -- とする。
+**この 2 つが `VarTable` を作る形の全体である** (`CODE src/rc_ir/ownership.rs: VarTable::of`,
+`VarTable::body_only`, `VarTable::empty` -- `empty` を呼ぶのは `of` と `body_only` の 2 つだけであり、
+残る 1 か所は `#[cfg(test)]` のモジュールの中にある)。
+
+**以下、「本体」と書けば `B` を指す。**活性化 `α` (D21)、それが辿る実行路 `ρ` (D3)、その上の位置 `P` は
+いずれも `B` のものであり、DEF-0 の 3 つの場合も、L10 から L14 も、補題 Q も、この 1 つの `B` と
+`vars` の上で読む。**この固定が無いと `vars.bindings` と `vars.var_tys` の主語が定まらず、L10 (a')、
+L11、L13 が当たらない。**
+
 `origin(x, π)` は `origin(vars, type_env, &x, &π)` の略記とする。`VarPath` を `(x, π)` と書く。
-`ty(x)` は `x` に束縛された値の型 (D6) である。`x` がこの関数の束縛変数であるとき、`vars.var_tys` が
+`ty(x)` は `x` に束縛された値の型 (D6) である。`x` が `B` の束縛変数であるとき、`vars.var_tys` が
 それを記録する -- パラメータと capture、および `Let`、`Destructure`、`Match` のアーム payload が束縛する
 変数のすべてについて `var_tys` に型が入る (`CODE src/rc_ir/ownership.rs: VarTable::of`, `collect_bindings`,
 `CODE src/rc_ir/ownership.rs: VarTable` の `var_tys` フィールド)。`x` が束縛を持たない名前のとき、
@@ -638,8 +651,8 @@ README の定義・仮定とコードだけである。よって第 2 節と第 
   `Destructure(c, fs, s, k)` は各 `(i, x)` の `x` に、`Match` の各アームはその `payload` に値を与える。
   残る 4 種 (`Retain`、`Release`、`Eval`、`Ret`) はどの変数にも値を与えない。**パラメータと capture に
   値を与えるのは節点ではなく、活性化の入力の束縛 (D23) である。**
-- **(a')** `vars.bindings` に入る名前は、その関数のパラメータと capture (いずれも `Binding::Param`)、
-  および (a) の 3 構文が束縛する変数だけである。すなわち DEF-0 の (v-1) と (v-2) は `vars.bindings` が
+- **(a')** `vars.bindings` に入る名前は、`B` が関数 `f` の `body` であるときの `f` のパラメータと
+  capture (いずれも `Binding::Param`)、および (a) の 3 構文が束縛する変数だけである。すなわち DEF-0 の (v-1) と (v-2) は `vars.bindings` が
   束縛を持つ名前、(v-3) はそれ以外の名前である。
 - **(b)** 活性化 `α` とそれが辿る実行路 `ρ` について、`RcVar` `v` が `ρ` 上の位置 `N` で値を持つ
   (DEF-0) ならば、`ρ` 上の `N` 以後のすべての位置で `v` の値は同じである。
