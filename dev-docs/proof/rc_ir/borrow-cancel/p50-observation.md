@@ -1901,11 +1901,15 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
   鎖で遡る。その欄の内容を**作る**のは、番地をその欄へ書く動作だけである -- 値を運ぶほかの動作 (D9 の
   移動の表、D10 の生成の表の読み出しの行、活性化の入力の束縛と返り値、D24 の (E2) がこの段で組み立てる値)
   はどれも既にある内容を写す。**環境がクロージャの値を渡すことはない** -- 環境が Fix の側へ値を渡すのは
-  `FFI_EXPORT` のエントリ点の引数と `FFI_CALL` の返り値であり (D22)、そこを渡れる型は `c_boundary_tycon`
-  が答えるものに限る。その関数は boxed な型に `Std::Ptr` を返し、そうでない型のうち toplevel の tycon が
+  `FFI_EXPORT` のエントリ点の引数と `FFI_CALL` の返り値である (D22)。**`FFI_EXPORT` のエントリ点を渡れる
+  型は `c_boundary_tycon` が答えるものに限る** -- `ExportedFunctionType::validate` は各引数と返り値に
+  ついて `c_boundary_tycon` が `None` を返す型を診断つきの `Err` で弾き、コード生成の側では
+  `CSignature::of_ffi_export` が `None` に panic する。その関数は boxed な型に `Std::Ptr` を返し、
+  そうでない型のうち toplevel の tycon が
   C のスカラであるものだけを通す。クロージャ型は `is_box` が偽であり (`TypeNode::is_unbox` は
   `self.is_closure()` に真を返す)、その toplevel の tycon は `make_arrow_name_abs()` のものであって C の
-  スカラではないので、`None` が返る。
+  スカラではないので、`None` が返る。**`FFI_CALL` の返り値の型はソースに書かれた `ffi_c_fun_ty` で
+  ある** -- 文法が許すのは C の型名・`Ptr`・`()`・数値リテラル型だけであり、クロージャ型はその中に無い。
   `<1>4` よりその欄に書き込む生成コードは 2 か所だけであり、環境の段もこの欄を書かないので、その内容は
   この実行が始まる前から在った記憶域から読み出されたものである。その記憶域を持つオブジェクトは実行の
   最初の時点に生きており、その時点のオブジェクトは計数下である -- グローバル状態になるのは (E5) の段から
@@ -1916,8 +1920,11 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
   オブジェクトは有限個である」による。** よって前提 (P-1) より、その欄が名指す関数は `closure_targets` の
   元である。
   BY A17, A18, D4, D9, D10, D22, D24, D25, D26, 前提 (P-1), <1>4,
-     CODE src/ffi.rs: c_boundary_tycon, CODE src/ast/types.rs: TypeNode::is_unbox,
-     CODE src/fixstd/builtin.rs: make_arrow_name_abs
+     CODE src/ffi.rs: c_boundary_tycon, CSignature::of_ffi_export,
+     CODE src/ast/export_statement.rs: ExportedFunctionType::validate,
+     CODE src/ast/types.rs: TypeNode::is_unbox,
+     CODE src/fixstd/builtin.rs: make_arrow_name_abs,
+     CODE src/parse/grammer.pest: ffi_c_fun_ty
 
 <1>5a. 以下、`G` の番地をクロージャの値の funptr 欄へ書く段がこの実行に在るとし、そのうち実行の中で最も
       早いものを `s` とする。そのような段が 1 つも無いときは、`<1>3` より (ii)(iii)(vi) の段が適用する値は
