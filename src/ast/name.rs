@@ -235,7 +235,7 @@ impl NameSpace {
 
 /// An entity's name together with the path it is written under: `Std::Iterator::empty` is the name
 /// `empty` under the namespace `Std::Iterator`.
-// PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FullName {
     /// The path the entity is written under.

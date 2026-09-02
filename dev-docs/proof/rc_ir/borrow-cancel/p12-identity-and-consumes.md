@@ -113,7 +113,10 @@ P9 と合わせて読む」。A9 についてはその項が「`borrow_ify` と 
   また、共有参照 `&T` を通じて `T` の値やその欄に代入することはできない -- 共有参照から書き換えられるのは
   内部可変性を持つ欄だけである。
 - **EXT 可視性**。Rust では、`pub` の付かない欄を名指す式は、その欄を宣言するモジュールとその子孫の
-  中にしか書けない。
+  中にしか書けない。同じく、`pub(crate)` の項目を名指す式はそれを宣言するクレートの中にしか、可視性の
+  指定を持たない項目を名指す式はそれを宣言するモジュールとその子孫の中にしか書けない。
+- **EXT `derive` した `Clone`**。`#[derive(Clone)]` が生成する実装は、その型の各欄について
+  `Clone::clone` を呼び、その結果から同じ形の値を組み立てるだけであり、ほかの関数を呼ばない。
 - **EXT `RefCell` の内部可変性**。`RefCell<T>` が包む値を変更するには、その `RefCell` を名指して
   `borrow_mut` を呼ぶか、`get_mut`・`replace`・`take` のように可変参照を要求する操作を呼ぶ必要がある。
   共有参照からの読み (`borrow`) はその値を変更しない。
@@ -290,14 +293,23 @@ E3 の辺を持たない。E1 の `y` が `vars.bindings` に束縛を持たな�
 
 <1>2a. `origin(vars, type_env, x, π)` の 1 回の呼び出しの中で `origin` の呼び出しが始まるのは、その
       呼び出しが `origin_inner` を評価する場合の、その評価の中だけである。
-  `<1>1` より `origin` の本体が行う呼び出しは、`vars.origins.borrow()` と `Map::get` (記録の検査)、
-  `Origin::clone` (記録の値と答えの複製)、`grow_stack(|| origin_inner(..))`、`vars.origins.borrow_mut()` と
+  `origin` は `ownership.rs` の `pub(crate)` の関数なので、EXT 可視性 より、それを呼ぶ式はこのクレートの
+  ソース `src/` の中にしかない。`<1>1` より `origin` の本体が行う呼び出しは、`vars.origins.borrow()` と
+  `Map::get` (記録の検査)、`Origin::clone` (記録の値と答えの複製)、
+  `grow_stack(|| origin_inner(..))`、`vars.origins.borrow_mut()` と
   `Map::insert` (記録の書き込み) である。`grow_stack(f)` は `f` をちょうど 1 回呼びその返り値を返す (A15)
-  ので、その中で始まる `origin` の呼び出しは `origin_inner` の評価の中で始まる。残りの受け手は
-  `RefCell` (標準ライブラリ)、`Map` すなわち `FxHashMap` (外部クレート)、および `Origin` の derive した
-  `Clone` である。`origin` は `ownership.rs` の `pub(crate)` の関数なので、EXT 可視性 より外部クレートの
-  コードはそれを名指せず、`Origin` の derive した `Clone` は欄を複製するだけである。
-  BY A15, EXT 可視性, CODE src/rc_ir/ownership.rs: origin, Origin, CODE src/misc.rs: grow_stack, Map
+  ので、その中で始まる `origin` の呼び出しは `origin_inner` の評価の中で始まる。残る 5 つの受け手のうち
+  `RefCell` の操作は標準ライブラリ、`Map` すなわち `FxHashMap` の操作は外部クレートのコードなので、
+  どれも `src/` の外に在り、EXT 可視性 より `origin` を名指す式を持たない。`Origin` は
+  `#[derive(Clone)]` を持ち、その欄の型は `VarPath` -- `FullName` と `Vec<usize>` の対、`FullName` も
+  `Clone` を derive する -- と `Set<VarPath>` すなわち外部クレートの `FxHashSet` である。EXT `derive` した
+  `Clone` より derive した実装が呼ぶのは
+  欄の `Clone::clone` だけなので、`Origin::clone` の実行の中で始まる呼び出しは `Clone::clone` の実装に
+  限り、その実装はどれも derive したものか標準ライブラリ・外部クレートのものであって、`origin` を名指す
+  式を持たない。
+  BY A15, EXT 可視性, EXT `derive` した `Clone`, CODE src/rc_ir/ownership.rs: origin, Origin,
+     CODE src/rc_ir/ast.rs: VarPath, FieldPath, CODE src/ast/name.rs: FullName,
+     CODE src/misc.rs: grow_stack, Map, Set
 
 <1>3. `origins` の欄を変更するのは `<1>1` の記録だけである。
   <2>1. `origins` は `VarTable` の非公開の欄である (`pub` が付かない)。EXT 可視性 より、この欄を
