@@ -237,7 +237,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `set_tyvar`、`set_tycon_tc`、`set_tyapp_fun`、`set_tyapp_arg`、`set_assocty_name`、
      `set_assocty_args` -- であり、どれも `self.clone()` が作った局所の値に代入してから `Arc::new`
      で包んで返す。`ty` の欄に値を置く残りは `TypeNode::new` と `impl Clone for TypeNode` の
-     構造体リテラルであり、どちらも新しい値を作る。既に在る値の `ty` を書き替える道は無い --
+     構造体リテラル、および `TypeNode` が導出する `Deserialize` であり、どれも新しい値を作る。
+     既に在る値の `ty` を書き替える道は無い --
      `TypeNode` は `Arc<TypeNode>` を通じてしか渡されず、`Arc` が渡すのは `&TypeNode` であって、
      `src/` は `TypeNode` について `Arc::get_mut` も `Arc::make_mut` も呼ばず、`&mut TypeNode` を
      受け取る関数も持たない。ほかのファイルに在る `.ty` への代入は `Scheme`、`Field`、`QualType`、
