@@ -101,8 +101,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 内部可変性を持つ op は呼ぶたびに違う `Provenance` を返せる。そのとき
 `decl.leaf_origins_at(path).and_then(as_arg_projection)` の場合分けが変わり、`Some((j, p))` の腕が
 呼ぶ対も、`None` の腕で `origin_from_leaves_under` が `decl.leaf_origins_under(path)` から組む
-`operand_units` の各対も変わる。すなわち呼び先の対そのものが変わる。A3 の「`result_prov` と
-`borrows_operand` は決定的である -- 同じ引数に対して常に同じ値を返す」がそれを排除する。
+`operand_units` の各対も変わる。すなわち呼び先の対そのものが変わる。A3 の「**`result_prov` と
+`borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」がそれを排除する。
 
 依拠するもの: A3 (`result_prov` は決定的である)、
 `CODE src/rc_ir/ownership.rs: origin_inner`、`CODE src/rc_ir/ownership.rs: origin_from_leaves_under`、
@@ -2034,8 +2034,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `truncate_to_unit` はその引数の関数である。
      **`llvm_gen.result_prov(result_ty, &arg_tys, type_env)` がその引数の関数であることは A3 が言う** --
      `LLVMGen::result_prov` は `&self` を取るので、内部可変性を持つ op は同じ引数に違う答えを返せる。
-     A3 の「`result_prov` と `borrows_operand` は決定的である -- 同じ引数に対して常に同じ値を返す」が
-     それを排除する。`decl` が変われば `origin_inner` の `Llvm` の腕は
+     A3 の「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を
+     返す」がそれを排除する。`decl` が変われば `origin_inner` の `Llvm` の腕は
      `decl.leaf_origins_at(path).and_then(as_arg_projection)` の結果で別の道を選びうるので、この節が
      無いとこの段は立たない。`vars.origins` も `vars.var_tys` も読まない。`Llvm` の腕が
      `origin_from_leaves_under` を呼ぶ道については `<2>1a` がこれを与える。
