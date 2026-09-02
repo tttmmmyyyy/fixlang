@@ -14,8 +14,8 @@
   `RcProgram` を組み立てる 3 つの欄、`cancel` の本体の書き換えが `drop_nodes` を呼ぶこと、
   `drop_nodes` が `Let` の右辺を丸ごと写すこと、`clone_func`、`borrow_funcref`、`RcProgram` の型、
   `Map` の別名。
-- **外部の結果**: EXT 共有参照が書き込める先、EXT 写像の `insert` と `values_mut`。第 1 節の
-  「外部の結果」がその完全な言明を据える。
+- **外部の結果**: EXT 共有参照が書き込める先、EXT 反復子の `iter`・`map`・`collect`、
+  EXT 写像の `insert` と `values_mut`。第 1 節の「外部の結果」がその完全な言明を据える。
 
 T の言明はこのほかに、D7・D21・D25・D26・D31 を名前で引く。
 
@@ -143,6 +143,19 @@ P27 は、本体が D11 を満たすことのほかに「借用する unit を�
 safe Rust の関数が引数を共有参照 `&T` で取るとき、その呼び出しが `&T` を通じて書き込めるのは
 `UnsafeCell` の中に在る記憶域だけである。呼び出しはまた、呼び出し元の束縛そのものにも書かない --
 束縛に書くのは、その束縛が見えているスコープに置かれた代入文だけである。
+
+**EXT 反復子の `iter`・`map`・`collect`**
+Rust 標準ライブラリの反復子について、次の 5 つの契約を使う。
+
+- `v.iter()` は、`Vec<T>` の各要素への共有参照を添字の順にちょうど 1 つずつ渡す。
+- `m.values()` は、`HashMap<K, V>` の各値への共有参照をちょうど 1 つずつ渡す。渡す順序は定めない。
+- `it.map(f)` は、`it` と同じ個数の要素を同じ順に渡し、その第 `i` 要素は `it` の第 `i` 要素に `f` を
+  当てたものである。
+- `Vec<T>` への `collect` は、反復の順序をそのまま添字に写す -- 得られる列の長さは渡された要素の
+  個数に等しく、その第 `i` 要素は第 `i` 番目に渡された要素である。
+- 対 `(K, V)` の反復子の `HashMap<K, V>` への `collect` は、鍵の集合を渡された各対の第 1 成分の
+  集合に等しくする。鍵 `k` の値は、第 1 成分が `k` である対のうち最後に渡されたものの第 2 成分で
+  ある。
 
 **EXT 写像の `insert` と `values_mut`**
 コンパイラの写像型 `Map<K, V>` は `FxHashMap<K, V>` の別名であり、`insert` と `values_mut` は Rust
@@ -540,11 +553,20 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
        `values_mut` も鍵を取り除かない。
   - **`globals`**: `prog.globals.iter().map(|g| RcGlobalInit { symbol: g.symbol.clone(),
     ty: g.ty.clone(), init: ctx.rewrite(&g.init), owns_initializer: true, owns_storage: true })`
-    を `collect` した列である。よって `p1.globals` は `p0.globals` と同じ長さであり、第 `i`
-    要素の `symbol` と `ty` は `p0.globals` の第 `i` 要素のものに等しい。
+    を `collect` した列である。EXT 反復子の `iter`・`map`・`collect` より、`iter` は
+    `p0.globals` の各要素を添字の順に渡し、`map` は個数と順序を保ち、`Vec` への `collect` は
+    反復の順序をそのまま添字に写す。よって `p1.globals` は `p0.globals` と同じ長さであり、その第 `i`
+    要素は `p0.globals` の第 `i` 要素から作られたものである。閉包が組み立てる `RcGlobalInit` は
+    `symbol` と `ty` にその要素のものの複製を置くので、第 `i` 要素の `symbol` と `ty` は
+    `p0.globals` の第 `i` 要素のものに等しい。
   - **`roots`**: `roots: prog.roots.clone()`。よって `p1.roots` は `p0.roots` に等しい。
 
-    BY EXT 写像の `insert` と `values_mut`, `CODE src/rc_ir/borrow.rs: borrow_ify`,
+  上の 3 つのループのうち 2 つは `prog.funcs.values()` と `clones` を走る。EXT 反復子の
+  `iter`・`map`・`collect` より、`values` は `p0.funcs` の各関数をちょうど 1 回ずつ渡すので、
+  第 1 のループはそのすべてについて挿入を行う。
+
+    BY EXT 反復子の `iter`・`map`・`collect`, EXT 写像の `insert` と `values_mut`,
+       `CODE src/rc_ir/borrow.rs: borrow_ify`,
        `CODE src/rc_ir/borrow.rs: clone_func`, `CODE src/rc_ir/ast.rs: RcProgram`
 
   **<2>1a.** 第 2 のループが入れる各借用版の名前は、`p0.funcs` のどの鍵とも、`p0.funcs` のどの
