@@ -247,6 +247,12 @@ Rust Reference の "Pointer types" が共有参照について次を述べる。
 生じない反復子である。`f` は各要素についてちょうど 1 回、先頭から順に呼ばれ、生じる要素の順序は `it` の
 順序である。
 
+**EXT Iterator::fold と rev**
+`it.fold(init, f)` は、累積値を `init` から始め、`it` が渡す各要素 `x` について累積値を
+`f(累積値, x)` で置き換え、最後の累積値を返す。`f` は各要素についてちょうど 1 回、`it` の順序で呼ばれる。
+`it.rev()` は、両端から取り出せる反復子 `it` の要素を末尾から先頭へ 1 度ずつ渡す反復子である。
+`Vec<T>` の `into_iter()` はその要素を先頭から順に 1 度ずつ渡し、両端から取り出せる。
+
 **EXT Iterator::rposition**
 `it.rposition(f)` は、`f` を満たす要素が在るとき、そのうち先頭から数えた添字が最大のものの添字を `Some` で
 返し、無いとき `None` を返す。判定は後ろから行われ、最初に真を返した時点で止まる。
@@ -940,7 +946,7 @@ L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走�
       要求する理由である。** `covers` を落とすと、`R1` が持たない鍵を `R2` が持つとき `expect` が発火し、
       `R2` の値が `R1` の値を超えるとき減算が underflow する。
   BY CODE src/rc_ir/ownership.rs: References::subtract, CODE src/rc_ir/ownership.rs: References::covers,
-     EXT Map と Set, EXT Iterator::all と any
+     EXT Map と Set, EXT Iterator::all と any, EXT IntoIterator と for
 <1>4. `References::covers(other)` は、`other` のどの鍵についても、自分がその鍵を持ちその値以上であることを
       言う。各鍵の値が 1 以上のとき、これは各位置の個数の不等式、すなわち `other ⊆ self` と同値で
       ある (`other` が持たない位置の個数は 0 で、不等式は自動的に成り立つ)。よって 2 が成り立つ。
@@ -980,7 +986,8 @@ L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走�
        1 つなので、2 つの値が等しいことは 2 つの `Map` が等しいこと、すなわち鍵と値の対の集合が一致する
        ことである。各鍵の値が 1 以上のとき、鍵と値の対の集合の一致は各位置についての個数の一致と同値で
        ある --- 一方が持たない位置の個数は 0 だからである。
-  BY CODE src/rc_ir/ownership.rs: References, CODE src/misc.rs: Map, DEF 参照の多重集合, EXT Map と Set
+  BY CODE src/rc_ir/ownership.rs: References, CODE src/misc.rs: Map, DEF 参照の多重集合, EXT Map と Set,
+     EXT Clone
 <1>8. QED
   <1>7 が走査の扱う値の出どころを尽くし、<1>1、<1>2 が `acted_references` の値について、<1>3 と <1>7a が
   `subtract` で減らした値について、各鍵の値が 1 以上であることを与える。複製は EXT Clone より元と同じ鍵と
@@ -1140,7 +1147,8 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
 <1>2. `rc_node(is_release, var, path, state, k, source)` は `expr_node` を 1 回呼んでその値を返す。
       `prepend_rc(units, is_release, k)` は `units` を逆順にたたみ込み、`units` の要素ごとに `rc_node`
       を 1 回呼ぶ。`units` が空なら `k` をそのまま返す。どちらも `self.rewrite` を呼ばない。
-  BY CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: prepend_rc, <1>0, <1>1
+  BY CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: prepend_rc, <1>0, <1>1,
+     EXT Iterator::fold と rev
 <1>3. `RewriteCtx::rewrite_rc(v, path, state, is_release, k, source)` は `self.rewrite(k)` をちょうど
       1 回呼び、ほかに `self.rewrite` を呼ばず、その値の上に `rc_node` で 0 個以上の節点を積んだものを
       返す。返す木の位置は、その `self.rewrite(k)` が返した木の位置と、`rc_node` が積んだ節点の
@@ -1151,7 +1159,7 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
         `kept.into_iter().rev().fold(k, |cont, unit| rc_node(is_release, v.clone(), unit, state, cont, source))`
         を返す。この `fold` の値は、`k` の上に `kept` の要素ごとに `rc_node` の節点を 1 つ積んだ木で
         ある。どちらの枝の `rc_node` も、最初の文が返った後に実行される。
-    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, EXT Iterator::fold と rev
   <2>2. `kept` は `units_under(&v.ty, path, self.type_env)` を `self.owns_unit(v, unit)` で絞った
         `Vec<FieldPath>` である。`units_under` の返り値の型は `Vec<FieldPath>`、`owns_unit` の返り値の
         型は `bool`、`FieldPath` は `Vec<usize>` であり、どれも `RcExprNode` を含まない。よって `kept`
@@ -1166,7 +1174,7 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
     `expr_node` で 1 節点を作り、`self.rewrite` を呼ばない。<2>2 よりほかの値は木の節点にならず、
     `kept` を作る 2 つの呼び出しも `self.rewrite` を呼ばない。よって `self.rewrite` の呼び出しは
     最初の文の 1 回だけであり、`rc_node` の実行はその後である。
-    BY <1>1a, <1>2, <2>1, <2>2
+    BY <1>1a, <1>2, <2>1, <2>2, EXT Iterator::fold と rev
 <1>4. `rewrite_inner(node)` の 8 つの腕はいずれも、`self.rewrite` を `node` の各子についてちょうど
       1 回ずつ呼び、ほかに `self.rewrite` を呼ばず、その戻り値の上に `expr_node` / `rc_node` /
       `prepend_rc` で有限個の節点を積んだ木を返す。返す木の位置は、それらの `self.rewrite` の呼び出しが
@@ -1528,7 +1536,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, CODE src/rc_ir/borrow.rs: un_bump,
-       CODE src/rc_ir/borrow.rs: PendingRetain, CODE src/rc_ir/ownership.rs: References
+       CODE src/rc_ir/borrow.rs: PendingRetain, CODE src/rc_ir/ownership.rs: References, EXT Clone
   <2>2a. `borrow.rs` の外で定義された関数の本文は `borrow.rs` の中に無いので、<1>1 より `walk` も
          `walk_inner` も呼べない。DEF 本文 より、`borrow.rs` の中に書かれたクロージャを引数に取る
          標準ライブラリの関数についても同じである --- そのクロージャの本文は、それを書いた `borrow.rs` の
@@ -1780,7 +1788,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
         は、`other` がその鍵を持つときその値への共有参照を `Some` で、持たないとき `None` を返す
         (EXT Map と Set)。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF 参照の多重集合, EXT Map と Set,
-       EXT Vec::iter と slice::iter, EXT Iterator::all と any
+       EXT Vec::iter と slice::iter, EXT Iterator::all と any, EXT IntoIterator と for
   <2>2. 第 1 の連言肢 `entered_with.contains(&retain)` は `retain` だけで決まる。
     BY <2>1
   <2>3. CASE すべての `j'` について `arm_states[j']` が `retain` を鍵に持ち、その値が互いに等しい。
@@ -1830,7 +1838,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       `outstanding` が `uniform[node]` と等しい `References` である (EXT Clone)。`merge` はほかに返り値を
       作らない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, EXT Vec::iter と slice::iter,
-     EXT Iterator::filter_map, EXT Map と Set, EXT Clone
+     EXT Iterator::filter_map, EXT Iterator::map と collect, EXT Map と Set, EXT Clone
 <1>8. `arm_states` の各表と `pending_in` の反復について、`arm_states` の表は `Map` (ハッシュ表) なので
       反復の順序は定まらないが、<1>3 により `is_uniform` は反復の順序によらず、<1>4 により `uniform` は
       要素を失わないので、`uniform` の最終的な内容は反復の順序によらない。返り値は `pending_in` の順序で
@@ -2406,7 +2414,8 @@ L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての�
       `self.un_bump_releases.entry(retain).or_default().push(node_id(node))` の 2 か所だけである。
       どちらも鍵を取り除かず、値の `Vec` から要素を取り除かない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
+     EXT Map と Set, EXT Vec::push
 <1>4. `Retain` 節点 `t` の訪問は `self.all_retains.push(node_id(t))` と
       `self.un_bump_releases.entry(node_id(t)).or_default()` を実行する。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
