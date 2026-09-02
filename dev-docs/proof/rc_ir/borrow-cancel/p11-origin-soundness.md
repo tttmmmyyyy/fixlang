@@ -643,25 +643,36 @@ README の定義・仮定とコードだけである。よって第 2 節と第 
   BY <1>1, <1>2
 
 **L4 (畳み込みの答えの形)**: `origin_inner` の `Binding::Join` の腕と `origin_from_leaves_under` が
-畳み込む先の `Origin` を `o_1, ..., o_k` (`k ≥ 1`) とし、答えを `o` とする。
+畳み込む先の `Origin` を `o_1, ..., o_k` とし、答えを `o` とする。**`k ≥ 1` である** -- `Binding::Join`
+の腕では `k` はアームの個数であって A9 がそれを 1 以上にし、`origin_from_leaves_under` では答えを作る
+道で `reached` が空でない。
 
 - **(a)** `Binding::Join` の腕では `o = of_candidates(∪_i act(o_i), (var, path))` である。
 - **(b)** `origin_from_leaves_under` では、`reached` の全要素が等しいときは `o` はその要素そのもので
   あり、そうでないときは `o = of_candidates(∪_i act(o_i), here)` である。
 - **(c)** どちらの場合も `act(o) ⊇ act(o_1) ∪ ... ∪ act(o_k)` である。
 
+<1>0. `k ≥ 1` である。
+  BY A9 (`Match` は 1 つ以上のアームを持つ),
+     CODE src/rc_ir/ownership.rs: origin_inner (`Some(Binding::Join(arm_results))` の腕が畳み込む先は
+     `arm_results` の各要素である),
+     CODE src/rc_ir/ownership.rs: collect_bindings (`RcRhs::Match` の腕は各アームの `returned_var` を
+     `arm_results` に 1 つずつ入れるので、`arm_results` の長さはアームの個数である),
+     CODE src/rc_ir/ownership.rs: origin_from_leaves_under (`reached.first()?` は `reached` が空の
+     とき `None` を返してそこで抜けるので、畳み込みの答えを作る道では `reached` は空でない)
 <1>1. (a)。
-  BY CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Join(..))` の腕 -- ループは
+  BY <1>0, CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Join(..))` の腕 -- ループは
      `origin(..).acted_on()` の各要素を `candidates` に入れる。
 <1>2. (b)。
-  BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under の `if reached.iter().all(..)` の枝と
+  BY <1>0, CODE src/rc_ir/ownership.rs: origin_from_leaves_under の `if reached.iter().all(..)` の枝と
      その後の `flat_map(|reached_origin| reached_origin.acted_on())`
 <1>3. (a) と (b) の後者の場合、`act(o) ⊇ ∪_i act(o_i)`。
-  BY <1>1, <1>2, L3
+  BY <1>0, <1>1, <1>2, L2 (a) (`act(o_i)` は `id(o_i)` を含むので空でない -- よって `k ≥ 1` と
+     合わせて `∪_i act(o_i)` は空でなく、L3 の前提が満たされる), L3
 <1>4. (b) の前者の場合、`o = o_1 = ... = o_k` なので `act(o) = ∪_i act(o_i)`。
-  BY <1>2
+  BY <1>0, <1>2
 <1>5. QED
-  BY <1>1, <1>2, <1>3, <1>4 -- (c) はどちらの場合も成り立つ。
+  BY <1>0, <1>1, <1>2, <1>3, <1>4 -- (c) はどちらの場合も成り立つ。
 
 **L5 (leaf は互いに比較不能である)**: 型 `τ` の相異なる 2 つの boxed leaf の一方が他方の接頭辞になることは
 無い。
