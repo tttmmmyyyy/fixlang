@@ -52,7 +52,7 @@ memo の状態に依らない」と述べる。`origin` は答えを `vars.origi
 
 **表を跨ぐ形は P2a の主張ではない。** P2a は「`bindings` が等しい相異なる 2 つの `VarTable` について
 答えが等しいことは別の主張であり、それを要る段は自分で示す」と続ける。この文書でその形を要るのは
-`L16` の `<1>4` `<2>1a` であり、その `<3>3` が `origin` の展開の上の帰納で独自に示す。
+`L16` であり、その証明が `origin` の展開の上の帰納で独自に示す。
 
 `VarPath` は対 `(FullName, FieldPath)` である (`CODE src/rc_ir/ast.rs: VarPath`)。変数 `v` (`RcVar`) と
 leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す。**`VarPath` はオブジェクトの名前で
@@ -101,6 +101,13 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
 - `un_bump(pending, un_bumped)` が**名指すオブジェクト**とは、`un_bumped.objects()` の元の全体、すなわち
   `un_bumped` が個数を持つオブジェクトの全体である (`CODE src/rc_ir/borrow.rs: un_bump`,
   `CODE src/rc_ir/ownership.rs: References::objects`)。
+
+### DEF 要素が名指すオブジェクト
+
+`pending` の要素 `r` がオブジェクト `o` を**名指す**とは、`r.outstanding.names(o)` が真であることを
+いう。`PendingRetain` は `node` と `outstanding` の 2 つの欄を持ち、`References::names` の本体は
+`self.0.contains_key` である (`CODE src/rc_ir/borrow.rs: PendingRetain`,
+`CODE src/rc_ir/ownership.rs: References::names`)。
 
 ### DEF 処分 leaf
 
@@ -368,9 +375,11 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 <1>1. `consume_objects(pending, objects)` の呼び出しの後、`pending` のどの要素も `objects` のどの
       オブジェクトも名指さない。またこの呼び出しは `pending` の要素を落とすだけで、残る要素の
       `outstanding` を変えない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain,
+     DEF 要素が名指すオブジェクト
   本体は `pending.retain(...)` であり、述語は `objects` のいずれかを `outstanding.names` が真とする要素に
   ついて `false` を返す。`retain` は `false` を返した要素を落とし、他の要素はそのまま残す。
+  DEF 要素が名指すオブジェクト より、その述語が真であることは要素がそのオブジェクトを名指すことである。
 
 <1>2. `Obj(n) ⊆ ActRefs(v, π).objects() ∪ Others(v, π)` である。
   BY P5, DEF 処分 leaf, DEF 触れうるオブジェクト
@@ -752,14 +761,15 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 **証明**
 
 <1>1. QED
-  BY L6, L5, DEF 触れうるオブジェクト, DEF 処分 leaf, P7c
+  BY L6, L5, DEF 触れうるオブジェクト, DEF 処分 leaf, DEF 要素が名指すオブジェクト, P7c
   L6 の言明は「`n = Release(v, π, s, k)` の訪問において、`un_bump` の呼び出しが `UnBump::NoBracket` または
   `UnBump::OutsideBracket` を返すならば、訪問がその後 `self.walk(k, pending, ·)` に渡す `pending` の
   どの要素も、`Obj(n)` のどのオブジェクトも名指さない」である。「訪問の後の `pending`」とは `walk(k, ·, ·)`
   に渡すものである (L5 の 4)。「その `Release` が触れうるオブジェクト」とは、DEF 触れうるオブジェクトと
   DEF 処分 leaf の `Release` の行より `Obj(n) = ⋃_{λ ∈ L(v, π)} acted_on(v, λ)` である。これは P7c の
-  言明が「その構文が触れうるオブジェクト」と呼ぶものと同じ量である。「要素が名指す」とは
-  `outstanding.names` が真であることである (L6 の <1>1)。よって 2 つの言明は同じことを述べている。
+  言明が「その構文が触れうるオブジェクト (D15 の `acted_on`)」と呼ぶものと同じ量である。要素が
+  オブジェクトを名指すことが `outstanding.names` が真であることであるのは
+  DEF 要素が名指すオブジェクト による。よって 2 つの言明は同じことを述べている。
 
 ## 7. P18b と P18a
 
@@ -2778,8 +2788,9 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
 #### 7.5.5 A19 (ii-b) の `borrow_ify` の側
 
 A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減らないときである。`held_ρ(·, C)` を減らす
-事象は 2 つ -- `C` のスロットを名指す `Release` と、`C` のスロットの消費である。`Release` の側は L6 と
-P17 が扱う (第 4 節の `L6` と、`L11` の `<2>2` の場合分け)。**消費の側が、依頼された問いの場所である。**
+事象は 2 つ -- `C` のスロットを名指す `Release` と、`C` のスロットの消費である。`Release` の側は
+第 4 節の `L6` と、`Release` 節点について `un_bump` の 3 つの返り値を場合に持つ `L11` が扱う。
+**消費の側が、依頼された問いの場所である。**
 
 問いは次の形になる。`cancel` の入力 -- `borrow_ify(split_rc_units(insert_rc の出力))` -- において、
 `(w, μ) ∈ C` の消費が起きるとき、その消費で減る分を埋める参照が `C` に在るか。`insert_rc` はそれを
