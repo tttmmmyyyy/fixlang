@@ -105,13 +105,17 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 
 <1>2. コード生成が `n` の値として返すのは、`declared_globals` に `n` で登録された `ValueAccessor` が
       答える値である。
-  変数を読む腕 -- `eval_rc_rhs` の `RcRhs::Var` の腕と、`eval_rc_expr_inner` が `App` の callee・引数・
-  capture・scrutinee・容器を読む腕 -- は `get_scoped_obj` か `get_scoped_obj_noretain` を呼び、
-  どちらも `get_scoped_value` の答えの `accessor` に `get` を掛ける。`get_scoped_value` は
-  `var.is_local()` のときだけスコープを引き、そうでなければ `get_or_declare_global` を通る。(N3) より
-  `n` は局所名ではないので後者である。`get_or_declare_global` は `declared_globals` に在ればそれを返し、
-  無ければ `declare_program_global` を呼んで登録させ、それが `None` を返せば panic する。
+  **コード生成が変数の名前から値を得る道は `get_scoped_value` の 1 か所である** -- `src/` でその関数を
+  呼ぶのは `get_scoped_obj` と `get_scoped_obj_noretain` の 2 つだけであり、どちらもその答えの
+  `accessor` に `get` を掛ける。`RcExpr` を出す腕はそのどちらかを呼ぶ -- `eval_rc_rhs` の
+  `RcRhs::Var` の腕、`eval_rc_expr_inner` の `Retain`/`Release`/`Eval`/`Destructure`/`App` の腕、
+  `build_rc_closure` の capture の読み、`eval_rc_match` の scrutinee の読みである。
+  `get_scoped_value` は `var.is_local()` のときだけスコープを引き、そうでなければ
+  `get_or_declare_global` を通る。(N3) より `n` は局所名ではないので後者である。
+  `get_or_declare_global` は `declared_globals` に在ればそれを返し、無ければ
+  `declare_program_global` を呼んで登録させ、それが `None` を返せば panic する。
   BY (N3), CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs, Generator::eval_rc_expr_inner,
+     Generator::build_rc_closure, Generator::eval_rc_match,
      CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
      Generator::get_scoped_value, Generator::get_or_declare_global
 
