@@ -107,6 +107,8 @@ P9 と合わせて読む」。A9 についてはその項が「`borrow_ify` と 
   含む。`use` が別名を導入する場合はその別名を含む。したがって、その項目が可視である範囲のソースについて
   その名前と、`use` が導入した別名とを検索すれば、その項目を名指す式の全体が得られる。
 - **EXT 借用規則**。Rust の借用規則は、値を move する時点にその値への参照が生きていることを許さない。
+  また、共有参照 `&T` を通じて `T` の値やその欄に代入することはできない -- 共有参照から書き換えられるのは
+  内部可変性を持つ欄だけである。
 - **EXT 可視性**。Rust では、`pub` の付かない欄を名指す式は、その欄を宣言するモジュールとその子孫の
   中にしか書けない。
 - **EXT `RefCell` の内部可変性**。`RefCell<T>` が包む値を変更するには、その `RefCell` を名指して
@@ -2254,8 +2256,8 @@ leaf に前置したものだからである。
 - **(m)** 積まれるものの出どころは (c)、(d)、(h)、(i)、(k) の 5 か所で全部である。
 - **(n)** `collect_consumes` を呼ぶ式はリポジトリに 1 つで、`infer_ownership` の中にある。
   `infer_ownership` を呼ぶ式も 1 つで、`borrow_ify` の中にあり、渡される `prog` は `borrow_ify` の
-  第 1 引数、すなわち `borrow_ify` の入力プログラムである。`infer_ownership` はその `prog` を
-  `&RcProgram` として受け取るので書き換えない。`rhs_consumes` にはもう 1 人の呼び出し元
+  第 1 引数である。よって `collect_consumes` とその走査が読む `prog` は、`borrow_ify` の入力プログラムに
+  **等しい**。`rhs_consumes` にはもう 1 人の呼び出し元
   `CancelAnalysis::consume_rhs` があるが、そちらは `collect_consumes` を通らない。
 
 <1>1. (a) が成り立つ。`collect_consumes` は `owns` を作って `collect_consumes_go` を呼ぶだけである。
@@ -2359,14 +2361,29 @@ leaf に前置したものだからである。
   BY CODE src/rc_ir/ownership.rs: passthrough_arg_leaves, as_arg_projection,
      CODE src/rc_ir/provenance.rs: Provenance::leaves
 
-<1>20a. (n) が成り立つ。`collect_consumes` を呼ぶ式は `infer_ownership` の中の 1 つ、`infer_ownership` を
-       呼ぶ式は `borrow_ify` の中の 1 つであり、`borrow_ify` はそれに自分の第 1 引数 `prog` を渡す。
-       `infer_ownership` の `prog` の型は `&RcProgram` である。`rhs_consumes` を呼ぶ式は
-       `collect_consumes_go` の中の 1 つと `CancelAnalysis::consume_rhs` の中の 1 つである。
-       (この列挙は、リポジトリの全体について識別子 `collect_consumes`、`infer_ownership`、
-       `rhs_consumes` を検索して得られる。)
-  BY CODE src/rc_ir/ownership.rs: collect_consumes, collect_consumes_go, rhs_consumes,
-     CODE src/rc_ir/borrow.rs: infer_ownership, borrow_ify, CancelAnalysis::consume_rhs
+<1>20a. (n) が成り立つ。
+  <2>1. `collect_consumes` を呼ぶ式は `infer_ownership` の中の 1 つ、`infer_ownership` を
+        呼ぶ式は `borrow_ify` の中の 1 つであり、`borrow_ify` はそれに自分の第 1 引数 `prog` を渡す。
+        `infer_ownership` の `prog` の型は `&RcProgram` である。`rhs_consumes` を呼ぶ式は
+        `collect_consumes_go` の中の 1 つと `CancelAnalysis::consume_rhs` の中の 1 つである。
+        `collect_consumes` と `rhs_consumes` は `pub(crate)`、`infer_ownership` は `borrow.rs` の
+        非公開の関数なので、EXT 可視性 より、それらを呼ぶ式はこのクレートのソース `src/` の中にしか
+        ない。EXT 名前による数え上げ より、この列挙は `src/` の全体について識別子 `collect_consumes`、
+        `infer_ownership`、`rhs_consumes` を検索して得られる (どのファイルもこの 3 つに `use` の別名を
+        導入しない)。
+    BY EXT 可視性, EXT 名前による数え上げ, CODE src/rc_ir/ownership.rs: collect_consumes,
+       collect_consumes_go, rhs_consumes,
+       CODE src/rc_ir/borrow.rs: infer_ownership, borrow_ify, CancelAnalysis::consume_rhs
+  <2>2. `collect_consumes` とその走査が読む `prog` は、`borrow_ify` の入力プログラムに等しい。
+    `<2>1` より、`borrow_ify` は自分の第 1 引数を `infer_ownership` へ渡し、`infer_ownership` はそれを
+    `&RcProgram` として受け取って `collect_consumes` へ渡す。EXT 借用規則 より、共有参照を通じて
+    `RcProgram` の値やその欄に代入することはできず、書き換えられるのは内部可変性を持つ欄だけである。
+    A3 の memo の節 --「`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が
+    変えない」、到達できる型が内部可変性を持つ欄を持つときその欄は「一度だけ書かれる memo であって、
+    その値はその型の `PartialEq` が読む成分の関数である」-- より、その書き換えは値の等しさを動かさない。
+    BY A3, EXT 借用規則, <2>1
+  <2>3. QED
+    BY <2>1, <2>2
 
 <1>21. QED
   (a) は `<1>1`、(b) は `<1>7`、(b') は `<1>7a`、(c) は `<1>8`、(d) は `<1>9`、(e) は `<1>10`、(f) は
@@ -2475,14 +2492,15 @@ leaf に前置したものだからである。
   <2>2. callee の全 boxed leaf は D9 の `App` の行の前半である。
     BY D9, <2>1
   <2>3. この `collect_consumes` の呼び出しは `borrow_ify` の入力プログラムの関数の本体についてのもので
-        あり、`prog` はその入力である。
+        あり、それが読む `prog` は `borrow_ify` の入力プログラムに等しい。
     BY L5 (b'), L5 (n)
   <2>4. D9 の `App` の行の後半が指すのは、各引数の**全** boxed leaf である。
     <3>1. D9 の `App` の行が言う呼び出し先 -- D23 より、その段の実行時の関数 -- は、プログラムの
           `funcs` の関数である。D23 は、D9 の `App` の行が読む所有を D14 が `RcFunc::borrowed_units` から
           定めることを理由に、これを本文で述べる。
       BY D9, D14, D23
-    <3>2. `<2>3` と A1 より、そのプログラムのすべての関数の `borrowed_units` は空である。D14 より
+    <3>2. `<2>3` と A1 より、`prog` のすべての関数の `borrowed_units` は空である -- A1 は
+          `borrow_ify` に渡されるプログラムについての仮定であり、`prog` はその値に等しい。D14 より
           借用する unit の集合が `borrowed_units` で残りが所有する unit なので、どの関数もその全
           パラメータの全 unit を所有する。
       BY A1, D14, <2>3, <3>1
