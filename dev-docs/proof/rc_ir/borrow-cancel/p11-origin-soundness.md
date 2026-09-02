@@ -454,10 +454,13 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
     <3>4. QED
       BY <3>3, CODE src/rc_ir/ownership.rs: Origin::of_candidates -- 要素数が 1 でない集合には
          `Join` を返す。
-  <2>3a. `origin(v, q)` が返す `Origin` に現れる `VarPath` は、鍵 `(v, q)` から**再帰の辺**を 0 回以上
-         辿って着く鍵である。ここで再帰の辺とは、L6 の E1 から E7 が名指す `origin` の再帰呼び出しの
-         鍵への辺をいう。鍵についての言明にできるのは、`origin` の答えが鍵ごとに 1 つに決まり、それが
+  <2>3a. `origin(v, q)` が呼ばれるとき、それが返す `Origin` に現れる `VarPath` は、鍵 `(v, q)` から
+         **再帰の辺** (L14) を 0 回以上辿って着く鍵である。**再帰の辺は L14 が定めるものであり、
+         L6 よりそれは E1 から E7 が名指す再帰呼び出しの辺で尽きる。** 鍵についての言明にできるのは、
+         `origin` の答えが鍵ごとに 1 つに決まり、それが
          その鍵について `origin_inner` が答えた値だからである (P2a、第 1 節の「鍵の答え」)。
+         **前提を置くのは L14 (a) のためである** -- L14 (a) の整礎性は、`origin` が呼ばれる鍵から
+         到達する鍵の上でしか言えない。
     <3>1. `Origin` の値を作る式は 3 つある -- `origin_inner` の `here()`、`origin_from_leaves_under` の
           `Origin::Exactly(here.clone())`、そして `Origin::of_candidates` である。
       BY L1 (`Origin::Join { .. }` を作る式は `of_candidates` の中の 1 か所だけであり、どの `Origin` の
@@ -502,8 +505,12 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
       BY <1>1, <2>1, L6, P2a (第 1 節の「鍵の答え」),
          CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under
     <3>3. QED
-      BY <3>1, <3>1a, <3>1b, <3>1c, <3>2, L14 (a), EXT 整礎性 ((b) 整礎な関係の上では整礎帰納が
-         使える), P2a -- 鍵の再帰の辺の関係は整礎である (L14 (a))。その関係の
+      BY <3>1, <3>1a, <3>1b, <3>1c, <3>2, L6 (L14 が定める再帰の辺は E1 から E7 で尽きる),
+         L14 (a), L14 (b) (`origin(K)` が呼ばれ再帰の辺 `K -> K'` が在れば `origin(K')` も呼ばれる
+         ので、帰納法の仮定の前提が各段で満たされる),
+         EXT 整礎性 ((b) 整礎な関係の上では整礎帰納が
+         使える), P2a -- 鍵の再帰の辺の関係は、`origin(v, q)` が呼ばれる鍵から到達する鍵の上で
+         整礎である (L14 (a))。その関係の
          上の整礎帰納で示す。子の呼び出しが返した値はその子の鍵の答えである (P2a)。
          (r1) が返す値の `VarPath` はその呼び出しの鍵そのもの (<3>1a)。
          (r2) が返す値には帰納法の仮定が当たり、その子の鍵はこの鍵から辺 1 本で着く (L6)。(r3) が
@@ -517,7 +524,10 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
         `origin(args[j], unit)` -- は、どれも `Exactly((var, path))` を返さない。
     <3>1. そのような呼び出しが `Exactly((var, path))` を返すならば、その呼び出しの鍵から再帰の辺を
           0 回以上辿って鍵 `(var, path)` に着く。
-      BY <2>3a
+      BY <2>3a -- その呼び出しは `origin_inner(var, path)` の実行が行う `origin` の呼び出しなので、
+         `<2>3a` の前提 (その鍵で `origin` が呼ばれる) を満たす,
+         CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Llvm(..))` の腕,
+         CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     <3>2. 鍵 `(var, path)` からその呼び出しの鍵へは、再帰の辺が 1 本ある。
       BY L6 (E3 と E4 は `Binding::Llvm` の腕の再帰呼び出しである),
          CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Llvm(..))` の腕,
@@ -546,10 +556,12 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
          E2 が `Join` の腕の再帰呼び出しである),
          CODE src/rc_ir/ownership.rs: origin_inner
     <3>3. どの子の呼び出しも `Exactly((var, path))` を返さない。
-      返すとすると、`<2>3a` よりその子の鍵から再帰の辺を 0 回以上辿って `(var, path)` に着く。`<3>2` と
+      返すとすると、`<2>3a` よりその子の鍵から再帰の辺を 0 回以上辿って `(var, path)` に着く -- 子の
+      呼び出しは `origin_inner(var, path)` の実行が行う `origin` の呼び出しなので、`<2>3a` の前提を
+      満たす。`<3>2` と
       繋ぐと、鍵 `(var, path)` から再帰の辺を 1 回以上辿って `(var, path)` 自身に着く。その閉路を
       繰り返せば無限に降りる鍵の列ができるので、L14 (a) に反する。
-      BY <2>3a, <3>2, L14 (a)
+      BY <2>3a, <3>2, L14 (a), CODE src/rc_ir/ownership.rs: origin_inner
     <3>4. QED
       前の 4 つの道については `<3>1` と `<3>3` から出る。`Join` の腕については、`of_candidates(C, h)` が
       `Exactly` を返すのは `|C| = 1` のときであり、そのとき返るのは `C` の唯一の元を持つ
