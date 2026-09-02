@@ -1,10 +1,12 @@
 # P3 / P4 -- `origin` の健全性
 
-この文書が読んだコードのコミットは `f96d3dc239f1b176bbfc5009647debba3b8c6b1e` である。README が証明の
-対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が引く 8 ファイル
-(`src/rc_ir/ownership.rs`、`leaf_map.rs`、`provenance.rs`、`borrow.rs`、`src/generator.rs`、
-`src/ast/types.rs`、`src/ast/inline_llvm.rs`、`src/fixstd/builtin.rs`) に変わったのは `// PROOF:`
-コメントだけである。
+この文書が読んだコードのコミットは `9f82c772cabd73dfe398651f21f5e1a6db8eb4f5` である。README が証明の
+対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が `CODE` で引く
+9 ファイル (`src/rc_ir/ownership.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/provenance.rs`、
+`src/rc_ir/borrow.rs`、`src/rc_ir/codegen.rs`、`src/generator.rs`、`src/ast/types.rs`、
+`src/ast/inline_llvm.rs`、`src/fixstd/builtin.rs`) に変わったのは `// PROOF:` コメントだけである。
+**この一覧は本文の `CODE` の行を数え上げて作る** -- 手で並べた一覧は、証明が新しいファイルを引くたびに
+落ちる。
 定義・仮定・命題の番号は同ディレクトリの `README.md` による。
 
 ## 0. 結論
