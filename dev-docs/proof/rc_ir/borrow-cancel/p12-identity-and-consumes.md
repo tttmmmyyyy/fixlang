@@ -1624,7 +1624,8 @@ leaf のスロットで、一方から他方への別名の道が `Match` のア
 
 ## P5 (c) -- 被覆
 
-**言明** (README の P5 (c))。`Release(v, π)` の走査が `un_bump` と `consume_objects` に渡すオブジェクトの
+**言明** (README の P5 (c))。**1 つの本体 (D23)** の 1 回の活性化について、`Release(v, π)` の走査が
+`un_bump` と `consume_objects` に渡すオブジェクトの
 和 -- すなわち `ActRefs(v, π).objects()` と `other_objects(v, π)` の和 -- は、`π` の下の各 boxed leaf `λ` に
 ついて `origin(v, λ).acted_on()` をすべて含む。
 
@@ -1634,6 +1635,11 @@ leaf のスロットで、一方から他方への別名の道が `Match` のア
 (`CODE src/rc_ir/ownership.rs: References`, `CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`,
 `CancelAnalysis::consume_objects`)。`VarPath` は D6 の位置であって D7 の実行時のオブジェクトではなく、
 2 つが `obj(・)` で写り合うことは P5 (a) が述べる。以下、この節の各集合は `VarPath` の集合である。
+
+<1>0. この文書が固定する本体は、ある関数の `body` かあるグローバル初期化子の `init` かのどちらかであり
+      (§1)、D23 の「本体」はその 2 つで尽きる。以下の各段はその固定の下で述べられているので、言明の
+      主語である本体を尽くす。
+  BY D23
 
 <1>1. `walk_inner` の `RcExpr::Release(v, path, _, k)` の腕は、`other_objects(v, path)` を
       `consume_objects` に渡し、`acted_references(v, path)` を `un_bump` に渡す。`un_bump` が読むのは
@@ -1680,8 +1686,9 @@ leaf のスロットで、一方から他方への別名の道が `Match` のア
   `<1>4` より `∪_{λ ∈ L(v, π)} act(v, λ) = { id(v, λ) : λ ∈ L(v, π) } ∪
   ∪_{λ ∈ L(v, π)} (cand(v, λ) \ {id(v, λ)})` であり、第 1 項は `<1>2` より `ActRefs(v, π).objects()` に
   等しく、第 2 項は `<1>3` より `other_objects(v, π)` に含まれる。`<1>1` より、この 2 つが走査の
-  `un_bump` と `consume_objects` に渡るオブジェクトである。
-  BY <1>1, <1>2, <1>3, <1>4
+  `un_bump` と `consume_objects` に渡るオブジェクトである。`<1>0` よりこの結論は言明の主語である
+  本体を尽くす。
+  BY <1>0, <1>1, <1>2, <1>3, <1>4
 
 **補足 (逆向きも成り立つ)**。`<1>2` と `<1>3` はどちらも等号で成り立つので、和はちょうど
 `∪_{λ ∈ L(v, π)} act(v, λ)` である。P5 (c) の言明が包含の向きだけを述べるのは `README.md` の書き方で
