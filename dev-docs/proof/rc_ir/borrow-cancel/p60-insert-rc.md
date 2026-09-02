@@ -873,7 +873,15 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
 
 ### 6.1 局所の定義
 
-`ρ` と活性化を固定し、`obj(C)` が計数下である別名類 `C` を固定する。`ρ` の上の節点 `n` について:
+`ρ` と活性化を固定し、`obj(C)` が計数下である別名類 `C` を固定する。
+
+**「`C` の名前」とは、`C` のスロットの `origin` の `identity` の全体をいう。** 1 つの別名類のスロットが
+持つ `identity` は 1 つとは限らない -- 第 11 節の `L21` はその全体 `Ids(C)` が木をなすことを示す。
+以下「`C` の名前に付く分」と書くときは、その全体にわたる総和を指す。A19 (ii-b) が `bumps` の帰属を
+「時点 `τ` の `pending` の各要素 `p` について D27 が定める `B(p, ρ)` のうち、`C` のスロットの
+`origin` の identity に付く分の総和である」と定めるのと同じ読みである。
+
+`ρ` の上の節点 `n` について:
 
 - `R_ρ(n, C)`、`D_ρ(n, C)` は `L4` のもの。
 - `U_ρ(n, C)` を、`n` より前の `Release` の訪問で `un_bump` が `InBracket` を返し、選ばれた要素の
@@ -1036,13 +1044,13 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
   D27 は `B(p, ρ)` を 3 つの箇条で定め、最後の箇条が「ほかのどの操作も `B(p, ρ)` を変えない」と
   述べる。
 
-<1>1a. `Retain(v, π)` の訪問が `B_ρ` に足す量のうち `C` の名前 -- `C` のスロットの `identity` -- に
-       付く分は、`π` の下の `(v, λ) ∈ C` である `λ` の個数に等しい。
-  BY L5b, D27, D6, D16, D26, D33, 前提 (I)
+<1>1a. `Retain(v, π)` の訪問が `B_ρ` に足す量のうち `C` の名前 (6.1 節 -- `C` のスロットの
+       `identity` の全体) に付く分の総和は、`π` の下の `(v, λ) ∈ C` である `λ` の個数に等しい。
+  BY L5b, D27, D6, D16, D26, D33, 前提 (I), 6.1 節の「`C` の名前」の読み
   D27 の第 1 箇条より、`Retain(v, π)` の訪問が押し込む要素の `B(p, ρ)` は、`π` の下の inhabited (D16)
   かつ計数下 (D26) の各 leaf を `origin` の `identity` で名付けて数えたものである。よって `C` の名前に
-  付く分は、`π` の下の inhabited かつ計数下であって `identity` が `C` のスロットの `identity` に等しい
-  leaf の個数である。D6 より inhabited な leaf は `ρ` の上のスロットなので、`L5b` よりそのような leaf は
+  付く分の総和は、`π` の下の inhabited かつ計数下であって `identity` が `C` のいずれかのスロットの
+  `identity` に等しい leaf の個数である。D6 より inhabited な leaf は `ρ` の上のスロットなので、`L5b` よりそのような leaf は
   `C` のスロットである。逆に `(v, λ) ∈ C` で `λ` が `π` の下に在るならば、D6 より `λ` は inhabited で
   あり、D33 と前提 (I) より `obj(v, λ) = obj(C)` は計数下であり、その `identity` は `C` のスロットの
   `identity` である。よって 2 つの個数は等しい。
@@ -1077,9 +1085,12 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
   運ぶ」と述べる。
 
 <1>6. QED
-  BY <1>1, <1>1a, <1>2, <1>3, <1>4, <1>5, L5b, D27
-  `bumps_ρ(n, C)` は `pending` の要素の `B_ρ` のうち `C` の名前に付く分の総和である (A19 (ii-b) が
-  `bumps` の帰属をそう定める)。<1>2 から <1>5 より、その値は足した分 `R` から引いた分 `U` と落ちた分
+  BY <1>1, <1>1a, <1>2, <1>3, <1>4, <1>5, L5b, D27, A19, 6.1 節の「`C` の名前」の読み
+  `bumps_ρ(n, C)` は `pending` の要素の `B_ρ` のうち `C` の名前に付く分の総和である -- A19 (ii-b) が
+  `bumps` の帰属を「`bumps_ρ(τ, C)` とは、時点 `τ` の `pending` の各要素 `p` について D27 が定める
+  `B(p, ρ)` のうち、`C` のスロットの `origin` の identity に付く分の総和である」と定め、6.1 節の
+  読みよりその identity は 1 つとは限らずその全体にわたる総和である。<1>2 から <1>5 より、その値は
+  足した分 `R` から引いた分 `U` と落ちた分
   `X` を除いたものである。D27 が `B_ρ` に量を足すのは inhabited かつ計数下の leaf についてであり、
   `L5b` よりそのうち `C` の名前を持つものは `C` のスロットに限るので、`C` の外のスロットが `C` の
   名前へ量を足すことはない。
@@ -1116,8 +1127,9 @@ held_ρ(n, C) - (1 + bumps_ρ(n, C)) = U_ρ(n, C) + X_ρ(n, C) - D_ρ(n, C)
 
 ### 6.4 台帳形が言うもの
 
-`D` は別名類の処分の個数であり、`U + X` は走査がその類の名前について落とす bump の量である。すなわち
-A19 (ii) は「**走査の帳簿は、その類の処分に遅れない**」という主張である。
+`D` は別名類の処分の個数であり、`U + X` は走査がその類の名前について落とす bump の量である。README の
+A19 が「すなわち **(ii-b) は「走査の帳簿がその類の処分に遅れない」ことである。**」と書くのがこの形で
+ある。
 
 `p13-disposals-and-pending.md` の 2 つの反例は、この形で次のように読める。
 
@@ -1155,20 +1167,27 @@ A19 (ii) は「**走査の帳簿は、その類の処分に遅れない**」と�
 
 <1>1. `insert_rc` の出力の `RcExpr::Retain` 節点は、すべて `build_retains` の中の 1 つの式が作った
       ものである。
-  BY A25, CODE src/rc_ir/rc_insert.rs: build_retains
-  `src/rc_ir/rc_insert.rs` で `RcExpr::Retain` を構成する式はこの 1 つである。A25 より骨格 (第 1 節) は
+  BY A25, EXT クレートの項目, CODE src/rc_ir/rc_insert.rs: build_retains
+  `src/rc_ir/rc_insert.rs` で `RcExpr::Retain` を構成する式はこの 1 つである -- `EXT クレートの項目`
+  より、このモジュールの項目はこのファイルに書かれたものだけなので、ファイルの全文を読んで得た
+  この一覧は完全である。A25 より骨格 (第 1 節) は
   `Retain` 節点を含まないので、出力の `Retain` 節点はこのパスが作ったものに限る。
 
 <1>2. `build_retains` を呼ぶのは `insert_into_operation_let` と `retain_if_live` の 2 か所である。
-  BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+  BY EXT クレートの項目, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
      CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live
+  `build_retains` はこのモジュールの非公開の項目なので、それを呼ぶ式はこのモジュールの中にしかなく、
+  `EXT クレートの項目` よりこのモジュールの項目はこのファイルに書かれたものだけである。よって
+  ファイルの全文を読んで得たこの一覧は完全である。
 
 <1>3. `retain_if_live` を呼ぶのは、言明の 2・3・4 に挙げた 3 か所である。
-  BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
+  BY EXT クレートの項目, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
   `insert_into_expr_inner` の `RcExpr::Ret(x)` の腕、`insert_into_destructure`、`insert_into_match` の
-  3 か所である。
+  3 か所である。`retain_if_live` は `RcInserter` の非公開のメソッドなので、それを呼ぶ式はこの
+  モジュールの中にしかなく、`EXT クレートの項目` よりこのモジュールの項目はこのファイルに書かれた
+  ものだけである。
 
 <1>4. QED
   BY <1>1, <1>2, <1>3
@@ -1198,7 +1217,7 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   `vec![]`、`RcState` は `Unknown` である。
 
 <1>2. `insert_rc` は、一度作った節点の継続を書き換えない。
-  BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
+  BY EXT クレートの項目, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
@@ -1208,7 +1227,9 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
      CODE src/rc_ir/rc_insert.rs: build_releases
   これらの関数は `RcExprNode` を作って返すだけで、返した節点の継続を差し替える式を持たない。呼び出し元が
   するのは、返された節点を別の構成子の継続 (`cont` または `node`) として渡すことだけであり、
-  `build_releases` と `build_retains` も渡された節点を継続として**包む**。よって出力の `Retain` 節点の
+  `build_releases` と `build_retains` も渡された節点を継続として**包む**。`EXT クレートの項目` より、
+  このモジュールの項目はこのファイルに書かれたものだけなので、`insert_rc` が走らせる式はここに
+  挙げた関数の本体で尽きる。よって出力の `Retain` 節点の
   継続は、それが作られた時点の継続である。
 
 <1>3. CASE `t` が `L8` の 1 で作られた。
@@ -1320,13 +1341,20 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
 
 <1>4. CASE (d)。`Let(x, Match(v, arms), k')` の選ばれたアームの入口で、`v` の各 leaf の参照は移動するか、
       `insert_into_match` が置いた `Release(v, [])` が処分する。
-  BY D9, D16, D21, A16, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
+  BY D9, D16, D21, A16, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::needs_rc,
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed
   `v` が unbox union のとき、変位アームの payload 束縛と catch-all アームの payload 束縛は移動の表の
   行である。移動の表の行が名指すのは scrutinee の**活性**変位の参照なので、選ばれたアームの `tag` が
   実行時のタグに等しいことが要る -- D21 より活性化は実行時のタグに `tag` が等しいアームを選び、A16 より
   そのようなアームか catch-all アームが在る。D16 より scrutinee の inhabited な leaf はその変位の下に
-  あるものだけである。`v` が boxed union のとき、`insert_into_match` は `release_container` が真になり、
-  各変位アームの先頭に `Release(v, [])` を置く (`head.push(scrut.clone())` と `build_releases(head, body)`)。
+  あるものだけである。`v` が boxed union のとき、`insert_into_match` はこの節点で
+  `release_container = scrut.ty.is_box(self.type_env)` を真にし、
+  `release_container && arm.tag.is_some() && self.needs_rc(&scrut)` の枝で各変位アームの先頭に
+  `Release(v, [])` を置く (`head.push(scrut.clone())` と `build_releases(head, body)`)。
+  第 3 項は真である -- `needs_rc(v)` は `!v.ty.is_fully_unboxed(type_env)` であり、
+  `is_fully_unboxed` は `if self.is_box(type_env) { return false; }` で始まるので boxed な `ty(v)` では
+  偽である。
   catch-all アームでは payload 束縛が移動の表の行である。
 
 <1>5. QED
