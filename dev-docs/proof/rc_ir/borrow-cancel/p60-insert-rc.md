@@ -683,8 +683,11 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
   `B(p, ρ)[id] = 0` である。
 - **(b)** したがって `B(p, ρ)[id] ≥ 0` である。
 - **(c)** `p.outstanding` が空であるとき `B(p, ρ)` は空である。
-- **(d)** `un_bump` が `InBracket` で `p` を選ぶとき、その `Release` が `ρ` で実際に処分する参照の
-  多重集合は、各名前で `B(p, ρ)` を超えない。すなわち D27 の引き算は打ち切られない。
+- **(d)** `un_bump` が `InBracket` で `p` を選ぶとき、D27 がその訪問で `B(p, ρ)` から引く名前の
+  多重集合 -- その `Release` が `ρ` で実際に処分する参照を、それを持つ leaf の `origin` の `identity` で
+  名付けて数えたもの -- は、各名前で `B(p, ρ)` を超えない。すなわち D27 の引き算は打ち切られない。
+  D27 が「**引くのも名前の多重集合である** -- 第 1 項が名前で数えているので、参照の多重集合を引くと
+  水準が合わない」と述べるのがこの水準である。
 
 **証明**
 
@@ -711,8 +714,9 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
 
 <1>3. `p` が `pending` に在る間、`B(p, ρ)` と `p.outstanding` を動かすのは `un_bump` が `InBracket` で
       `p` を選ぶ `Release` の訪問だけであり、その訪問は `p.outstanding` から
-      `R := acted_references(v, π)` を引き、`B(p, ρ)` からその `Release` が `ρ` で実際に処分する参照の
-      多重集合 `A` を引く。
+      `R := acted_references(v, π)` を引き、`B(p, ρ)` から名前の多重集合 `A` -- その `Release` が `ρ` で
+      実際に処分する参照を、それを持つ leaf の `origin` の `identity` で名付けて数えたもの -- を引く。
+      `R` も `A` も `VarPath` を鍵とする多重集合である。
   BY D27, CODE src/rc_ir/borrow.rs: un_bump, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::merge
   `outstanding` を書き換える式は `un_bump` の `innermost.outstanding.subtract(un_bumped)` の 1 つだけで
@@ -2803,15 +2807,16 @@ D6 のスロット -- が要る)。よって時点ごとの量は、その時点
     `L21` (a) より `Anc(s) ⊆ acted_on(s) = {id(s)} ∪ candidates(s)` (D15) なので
     `Anc(s) \ {id(s)} ⊆ candidates(s) \ {id(s)}` であり、それは `other_objects(v, π)` に含まれる。
   <2>3. 続けて `un_bump(pending, acted_references(v, π))` が呼ばれる。返り値が `InBracket` のとき、
-        選ばれた要素の `B(p, ρ)` からこの `Release` が `ρ` で実際に処分する参照の多重集合が引かれる。
+        選ばれた要素の `B(p, ρ)` から、この `Release` が `ρ` で実際に処分する参照を、それを持つ leaf の
+        `origin` の `identity` で名付けて数えた**名前の**多重集合が引かれる。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release` の腕,
        CODE src/rc_ir/borrow.rs: un_bump, D27
   <2>4. CASE `un_bump` が `InBracket` を返す。(i) が成り立つ。
     BY <2>3, L5a, D27, L5b, L21
     この `Release` が処分するのは `π` の下の inhabited な各 leaf の参照であり (D10)、`Down(id)` が
     減る量 `d` はそのうち `id ∈ Anc(s)` であるスロットの個数である。`B(p, ρ)` は `origin` の
-    `identity` を鍵とする多重集合なので (D27)、そこから引かれる「実際に処分する参照の多重集合」も
-    同じ鍵で数えたものであり、`Sub(id)` に落ちる分はちょうど
+    `identity` を鍵とする多重集合であり (D27)、<2>3 よりそこから引かれる名前の多重集合も
+    同じ鍵で数えたものなので、`Sub(id)` に落ちる分はちょうど
     `id(s) ∈ Sub(id)` すなわち `id ∈ Anc(s)` であるスロットの分、すなわち `d` である。`L5a` (d) より
     引き算は打ち切られない -- 選ばれた要素の `B(p, ρ)` は各名前でその量を下回らない -- ので、引かれる
     量はそのまま `B(p, ρ)` から落ちる。`L5b` より `Sub(id) ⊆ Ids(C)` の名前が付く分はほかに無い。よって
