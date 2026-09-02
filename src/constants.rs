@@ -41,6 +41,7 @@ pub const C_DOUBLE_NAME: &str = "CDouble";
 
 pub const IOSTATE_NAME: &str = "IOState";
 pub const BOOL_NAME: &str = "Bool";
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const ARRAY_NAME: &str = "Array";
 pub const PUNCHED_ARRAY_NAME: &str = "PunchedArray";
 pub const LAZY_NAME: &str = "Lazy";
@@ -107,7 +108,7 @@ pub const UNION_IS_SYMBOL: &str = "is_";
 pub const UNION_MOD_SYMBOL: &str = "mod_";
 
 // Names used by compiler.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const FUNPTR_NAME: &str = "#FunPtr";
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
 // The internal boxed type holding an array's refcount and raw element buffer. Like `#DynamicObject`,
@@ -119,7 +120,7 @@ pub const STRUCT_PUNCH_SYMBOL: &str = "#punch_";
 pub const STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL: &str = "#punch_fu_";
 pub const STRUCT_PLUG_IN_SYMBOL: &str = "#plug_in_";
 pub const STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL: &str = "#plug_in_fu_";
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 /// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
 /// it is the one local name that the free variables of an expression leave out.
@@ -376,7 +377,7 @@ pub const DW_ATE_UNSIGNED: u32 = 7;
 pub const DW_ATE_UNSINGED_CHAR: u32 = 8;
 
 // Max number of arguments of function pointer lambda.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const FUNPTR_ARGS_MAX: u32 = 100;
 // The max size of tuples which are defined in any program.
 // Any bigger tuples are defined on demand.

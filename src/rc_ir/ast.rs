@@ -166,7 +166,7 @@ pub enum RcExpr {
 /// the whole value. A `Retain`/`Release` path stops at the root of an unboxed-union subtree (a
 /// physical refcount operation must be tag-safe), whereas an analysis path may descend past a known
 /// tag.
-// PROOF: P1, P2, P2a, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type FieldPath = Vec<usize>;
 
 /// The boxed leaf whose runtime uniqueness an inline-LLVM op branches on: which operand carries the

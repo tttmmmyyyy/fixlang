@@ -549,7 +549,7 @@ impl LiftedLambdas {
 
     // Remember the value a capture list of `cap`'s type constructor carries, and hold that type
     // constructor until it is registered.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn record_capture_list(&mut self, cap: &CaptureStruct, tree: &ClosureTree) {
         self.trees.insert(cap.tycon.name.clone(), tree.clone());
         self.new_tycons
@@ -583,7 +583,7 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 // Lift every lambda in the program to a global function, until lifting one leaves nothing more to
 // lift. A lambda lifted here is a global function of its own, which the next pass over the symbols
 // walks in turn.
-// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_times: bool) {
     let _sw = StopWatch::new("closure_specialization::lift_all", show_build_times);
 
@@ -642,7 +642,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
 //
 // The bodies every copy is made from are the ones lifting left behind, so a copy names the same
 // functions its original does and the table answers for all of them.
-// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 fn realize_all(
     prg: &mut Program,
     lifted: &Rc<RefCell<LiftedLambdas>>,
