@@ -842,9 +842,15 @@ enum については元と同じ変位で、その変位が保持する各値を
   <1>1 の唯一の呼び出しに渡る `prog` は `borrow_ify` の 1 回の呼び出しが返した値である。
   `optimize_rc_program` は `prog = borrow_ify(&prog, type_env, config.develop_mode)` の後に
   `cancel(&prog, type_env)` を呼び、間にあるのは `validate(&prog, "after borrow_ify")` の呼び出しだけで
-  あり、`validate` は `prog` を共有参照で受け取るので `prog` を変えない。
+  ある。`validate` は `prog` を共有参照で受け取るので、`RcProgram` の欄への代入はできない。内部可変性を
+  通した書き込みの道は残る --- `Validator::check_rhs` は `llvm_gen.result_prov(&x.ty, &arg_tys,
+  self.type_env)` を呼び、その `Arc<TypeNode>` は `OnceLock` の欄を 3 つ持つ。その道を塞ぐのは A3 の
+  「**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。**」の節であり、
+  A3 自身が「`validate` がその 1 つであり」とこの関数を名指す。よって `cancel` に渡る値は `borrow_ify` が
+  返した値と等しい。
   BY <1>1, CODE src/build/build_object_files.rs: optimize_rc_program,
-     CODE src/rc_ir/validate.rs: validate
+     CODE src/rc_ir/validate.rs: validate, CODE src/rc_ir/validate.rs: Validator::check_rhs,
+     CODE src/ast/types.rs: TypeNode, A3
 
 ### L3 (走査する本体は `RewriteCtx::rewrite` の出力である)
 
