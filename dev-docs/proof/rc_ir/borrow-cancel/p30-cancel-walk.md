@@ -511,10 +511,11 @@ enum については元と同じ変位で、その変位が保持する各値を
   <2>8. QED
     <2>5 の 2 つの返り値は引数の値で決まる。`unwrap_newtypes_memoized` の再帰について、その返り値の値と
     それが `unwrapped` に加える対の値が、引数の値と `unwrapped` の値で決まることを、その再帰の上の
-    帰納で示す --- 再帰が停止することは A10 の最後の節が与える。memo の引きは `Hash` と `PartialEq` で
-    行われ、<2>6 よりその 2 つは値で決まる。`unwrap_newtypes_node` の腕のうち `Arc::ptr_eq` を読むのは
-    `Type::TyApp` の腕だけであり、<2>7 よりその読みは返る値を変えない。残る腕が読むのは
-    `toplevel_tycon`・`type_env.unwrapped_newtype_info`・`collect_type_arguments`・
+    帰納で示す --- 再帰が停止することは A10 の「さらに、到達する各型について `instance_field_types` が
+    行う newtype の展開 (`unwrap_newtypes_memoized`) は abort せず停止する。」が与える。memo の引きは
+    `Hash` と `PartialEq` で行われ、<2>6 よりその 2 つは値で決まる。`unwrap_newtypes_node` の腕のうち
+    `Arc::ptr_eq` を読むのは `Type::TyApp` の腕だけであり、<2>7 よりその読みは返る値を変えない。残る腕が
+    読むのは `toplevel_tycon`・`TypeEnv::unwrapped_newtype_info`・`collect_type_arguments`・
     `declared_field_types` であって、どれも引数の値から決まる。よって
     `instance_field_types` の返り値の値は、`unwrapped` を空から作るので引数の値で決まり、
     `unpunched_field_types`・`is_fully_unboxed`・`unit_step`・`truncate_to_unit`・`boxed_leaf_paths` の
@@ -2603,7 +2604,7 @@ P16 の (d) は保たれ、P17 の「最内」はその後も由来の訪問順�
 空のときに偽になり、そのとき返り値は空である。走査する本体にアームが 0 個の `Match` が無いことは L4 が
 述べ、その根拠は A9 である。P16 の (e3) の展開が (e1) か (e2) で終わることも A9 に依る。
 
-**注記 7 (層 4 が P16 と L11 から読むもの)**。P19 は実行路で量化した言明であり、P16 は実行路を量化
+**注記 7 (層 4 が読むもの)**。P19 は実行路で量化した言明であり、P16 は実行路を量化
 しない。この文書が層 4 へ渡すのは次の 3 つである。
 
 - **L11** --- 実行路の上で `m` が `n` より真に前にあるならば、走査は `m` を `n` より前に訪問する。走査が
