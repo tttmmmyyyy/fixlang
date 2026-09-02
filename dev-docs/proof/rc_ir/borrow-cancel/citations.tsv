@@ -124,7 +124,7 @@ src/constants.rs	FUNPTR_NAME	P1,P2	5f81220a51a7
 src/constants.rs	PUNCHED_TYPE_SYMBOL	P1,P2	866c661bcaee
 src/constants.rs	RefcntState	P26	192fb7a3bcd5
 src/constants.rs	TUPLE_NAME	P7a,P7d,P7e	3f3e005e8759
-src/constants.rs	TUPLE_UNBOX	P5,P6,P7	15f3c49df732
+src/constants.rs	TUPLE_UNBOX	D/A,P5,P6,P7	15f3c49df732
 src/elaboration/desugar_opaque.rs	OpaqueInfo	P1,P2	1585b0e1c670
 src/elaboration/desugar_opaque.rs	Program::register_opaque_tycon	P7a,P7d,P7e	fc5202f8b47e
 src/elaboration/desugar_opaque.rs	collect_opaque_infos	P1,P2,P7a,P7d,P7e	a060a45a2d95

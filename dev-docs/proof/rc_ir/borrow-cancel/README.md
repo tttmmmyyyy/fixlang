@@ -1315,7 +1315,7 @@ leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言�
 | 空集合 | 何も置かない。その leaf は inhabited にならない (存在しない union 変位、または中断する演算の結果) |
 | 単一の `Arg(j, σ)` | 第 `j` オペランドの leaf `σ` と**同じ参照**。新しい参照を作らない。結果のその leaf が inhabited であることと、第 `j` オペランドの leaf `σ` が inhabited であることは同値である |
 | 単一の `Fresh` | 新しく割り当てたオブジェクトへの新しい参照 |
-| 単一の `Unknown` | 既存のオブジェクトへの新しい参照 (retain を伴う読み出し)。そのオブジェクトは、この op のオペランドの leaf が指すオブジェクトから到達できるか、グローバル値が到達する (`CODE src/rc_ir/provenance.rs: LeafOrigin`)。**この限定が成り立たない op が 2 種ある。** オペランドを適用する op (`LLVMGen::applies_a_function_operand`) では、適用した関数の中で新しく割り当てられたオブジェクトが結果に出る。`InlineLLVMBoxedFromRetainedPtrIOS` は `result_prov` を override せず既定の `Unknown` を取るが、オペランドは `Std::Ptr` で boxed leaf を持たないので、到達できる元が無い -- そのオブジェクトは C の側から渡された番地が指すものである。**`InlineLLVMBoxedFromRetainedPtrIOS` の段はオブジェクトを割り当てない** -- その番地が指すオブジェクトは `boxed_to_retained_ptr` がその番地を環境へ渡した時点で既に在り、この段は環境が持つ参照を Fix の側へ移すだけである (`CODE src/fixstd/builtin.rs: InlineLLVMBoxedFromRetainedPtrIOS`, `boxed_to_retained_ptr_ios`, A17 の (i-b))。**この節が与えるのは「この段は割り当てない」までであって、「その番地が指すオブジェクトが実行の最初の
+| 単一の `Unknown` | 既存のオブジェクトへの新しい参照 (retain を伴う読み出し)。そのオブジェクトは、この op のオペランドの leaf が指すオブジェクトから到達できるか、グローバル値が到達する (`CODE src/rc_ir/provenance.rs: LeafOrigin`)。**この限定が成り立たない op が 2 種ある。** オペランドを適用する op (`LLVMGen::applies_a_function_operand`) では、適用した関数の中で新しく割り当てられたオブジェクトが結果に出る。`InlineLLVMBoxedFromRetainedPtrIOS` は `result_prov` を override せず既定の `Unknown` を取るが、オペランドは `Std::Ptr` で boxed leaf を持たないので、到達できる元が無い -- そのオブジェクトは C の側から渡された番地が指すものである。**`InlineLLVMBoxedFromRetainedPtrIOS` の段はオブジェクトを割り当てない** -- その番地が指すオブジェクトは `boxed_to_retained_ptr` がその番地を環境へ渡した時点で既に在り、この段は環境が持つ参照を Fix の側へ移すだけである。**この op の生成が呼ぶ `create_obj` は割り当てない** -- 返り値の型は `(IOState, a)` の tuple で、tuple は unbox (`CODE src/constants.rs: TUPLE_UNBOX`) なので `create_obj` は malloc の枝を通らない (`CODE src/fixstd/builtin.rs: InlineLLVMBoxedFromRetainedPtrIOS`, `boxed_to_retained_ptr_ios`, A17 の (i-b))。**この節が与えるのは「この段は割り当てない」までであって、「その番地が指すオブジェクトが実行の最初の
 時点より後に割り当てられた」ではない** -- 環境が最初の時点に持ち込んだ番地なら、そのオブジェクトは
 最初の時点より前に割り当てられている (A17 の (i-d))。`p50-observation.md` の `L11` はその後者を要るので、
 **その節点の実行を広がりから除く仮定を今も負っている**。**オペランドを適用する op の側は、この行が読まれる。** `p51-runs.md` の `L2b` が、`Unknown` を宣言する その種の op の結果 leaf が指す先を縛るのにここしか根拠を持たない -- そこから「適用した関数が返した値から到達できる」へ渡るのは D24 の (E4) と、段の記述が `Obl` について網羅であることである。**「この行を読まずに書く」と書くと、その場合が場合分けから落ちる。** |
@@ -2176,8 +2176,9 @@ README から消えた後もその形で残っていた。**検証が要るか�
   依らない。
 
   **`vars` は、A6 と A11 を満たすプログラムの本体について `VarTable::of` か `VarTable::body_only` が
-  作った表である。** 証明は `bindings` の鍵の有限性と、束縛が名指す名前がその表に在ることを使うので、
-  手で組んだ表には立たない。**この制限は言明の一部であって、読む段が自分で補うものではない。**
+  作った表である。** 製品のコードが作る表はこの 2 つの構成子を通るものだけであり
+  (`VarTable::empty` を直に呼ぶ残る 1 か所は `#[cfg(test)]` の下の作り手である)、この命題を引く段が
+  扱うのもそれである。**この制限は言明の一部であって、読む段が自分で補うものではない。**
 
   **表を跨ぐ形はこの命題の主張ではない。** `bindings` が等しい相異なる 2 つの `VarTable` について答えが
   等しいことは別の主張であり、それを要る段は自分で示す。
