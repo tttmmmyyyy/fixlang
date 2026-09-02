@@ -78,8 +78,8 @@ L11、L13 が当たらない。**
 「**束縛を持たない名前は、必ず最上位の記号の名前である。**」が、`B` に現れて束縛を持たない `RcVar` の
 名前をそこへ入れる。P2 はその 2 種の `x` に
 ついて、`π` を問わず `origin(x, π)` が panic せずに答えを
-返して停止することを述べる。**よって、この文書が扱う `origin` の呼び出しの中で走る `assert!` はどれも
-発火しない。** L2 (c) と L9 の `<2>3` の `<3>3` がこれを読む。
+返して停止することを述べる。**よって、この文書が扱う `origin` の呼び出しの中で走る `assert!`・
+`assert_eq!`・`panic!` はどれも発火しない。** L2 (c) と L9 の `<2>3` の `<3>3` がこれを読む。
 
 **鍵の答え。** 1 つの `VarTable` と 1 つの `TypeEnv` を固定する。P2a より、`origin` の返り値は鍵
 `(x, π)` とその 2 つだけで決まり、`vars.origins` が保持する memo の状態に依らない。よって鍵 `K` に
@@ -1726,8 +1726,18 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
        与える。(iv) は <2>4a である。
 
 <1>8. CASE: 段 E4a (`Llvm` かつ E3 でなく、`λ` の宣言が単一の `Arg(j, σ')`)。
-  <2>1. `u_j := t_{ty(args[j])}(σ')` とおくと、`origin(args[j], u_j)` は `reached` の要素である。
-    BY L8 (a) (`λ` は `ty(x)` の boxed leaf なので `decl` に宣言を持つ), L8 (d3)
+  <2>1. `u_j := t_{ty(args[j])}(σ')` とおくと、この `truncate_to_unit` の呼び出しは値を返し、
+        `origin(args[j], u_j)` は `reached` の要素である。
+    `truncate_to_unit` は `UnitStep::NoUnit` の腕で `panic!`、`UnitStep::Capture` の腕で
+    `assert_eq!`、`held_field_type` で panic しうる。この呼び出しは `origin_from_leaves_under` の中に
+    在り、それは `origin(x, π)` の中で走る。補題 Q の ASSUME より `origin(x, π)` は呼ばれるので、
+    第 1 節の「鍵の範囲」と P2 より、その呼び出しは panic せずに答えを返す。よってその中で走る
+    `truncate_to_unit` も値を返す。
+    BY L8 (a) (`λ` は `ty(x)` の boxed leaf なので `decl` に宣言を持つ), L8 (d3),
+       補題 Q の ASSUME (`origin(x, π)` は呼ばれる), 第 1 節の「鍵の範囲」, P2,
+       CODE src/rc_ir/ownership.rs: truncate_to_unit (`panic!` と `assert_eq!` と
+       `held_field_type` を持つ),
+       CODE src/rc_ir/ownership.rs: origin_from_leaves_under (`truncate_to_unit` をここで呼ぶ)
   <2>2. `cand(x, π) ⊇ cand(args[j], u_j)`。
     <3>1. `reached` の全要素が等しいとき、鍵 `(x, π)` の答えは `origin(args[j], u_j)` そのものである。
       BY <2>1, L4 (b), P2a (`origin(・, ・)` の記法は鍵の答えを指す)
