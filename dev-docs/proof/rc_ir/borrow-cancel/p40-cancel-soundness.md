@@ -1353,7 +1353,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
          CODE src/ast/types.rs: TypeNode::is_funptr, CODE src/fixstd/builtin.rs: bulitin_tycons
       `ty(w).is_box` が偽であることは本場合の仮定である。A12 は「`Match` の scrutinee が union であること、
       `Destructure` の容器が構造体であること」を述べ、README の A12 は「**この仮定が型の `variant` を
-      述べる各節では、その型の `is_closure()` は偽である**」と続けるので `ty(w).is_closure` は偽である。
+      述べる各節では、その型の `is_closure()` は偽である。**」と続けるので `ty(w).is_closure` は偽で
+      ある。
       `is_struct` と `is_union` はその型の `TyConInfo` の `variant` が `Struct` か `Union` であることで
       あり、`Std::Array` の `variant` は `Array`、`Std::#FunPtr{n}` の `variant` は `Primitive` なので、
       `ty(w)` については `is_array` も `is_funptr` も偽である
@@ -2109,7 +2110,10 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
 
 1. `B` から作られる `VarTable` と `B'` から作られる `VarTable` は、`var_tys`・`param_tys`・
    `closure_targets` が等しく、`bindings` は鍵の集合と各鍵の `Binding` の変位・`RcVar`・添字・変位番号・
-   型が等しい (`Binding::Llvm` が運ぶ op は同じ原本の複製であって同じオブジェクトではない)。鍵が等しい
+   型が等しい (`Binding::Llvm` が運ぶ op は同じ原本の複製であって同じオブジェクトではない)。
+   **対応する 2 つの `Binding::Llvm` が運ぶ op は、同じ引数に対して同じ `Provenance` を返し、
+   `borrows_operand` にも同じ値を返す。**
+   鍵が等しい
    2 つの `origin` の答えは等しい。さらに `B` を本体に持つ関数と `B'` を本体に持つ関数の `params`・
    `capture`・`borrowed_units` は等しい。
 2. `ρ` の上の位置 (D6) と `ρ'` の上の位置は、変数と leaf を同じくする対応で 1 対 1 に対応し、その対応は
@@ -2134,6 +2138,17 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
         運ぶ op はこの水準では等しいと言えない** -- <2>3a がそれを扱う。
     BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var,
        CODE src/rc_ir/ownership.rs: Binding, <2>1
+  <2>2a. `B` と `B'` はどちらも A6 と A11 を満たし、その `VarTable` は `VarTable::of` か
+         `VarTable::body_only` が作った表である。すなわち P2a を読む条件が両側で満たされる。
+    BY A6, A11, P9, L30, L32, D2, CODE src/rc_ir/ownership.rs: VarTable::of,
+       CODE src/rc_ir/ownership.rs: VarTable::body_only, CODE src/rc_ir/borrow.rs: cancel
+    `B` は `borrow_ify` の出力の本体である (第 1 節)。A6 は「出力についての同じ性質は仮定ではなく P9 が
+    示す」と述べ、A11 は「**この仮定が語るのは `borrow_ify` の入力である。** 出力についての同じ性質は、
+    この仮定と P9 から出る」と述べるので、`B` について A6 と A11 は P9 と合わせて読む。`B'` は L30 と
+    L32 の 5 より `B` から `Retain`/`Release` 節点をいくつか取り除いた木であり、D2 よりこの 2 種は変数を
+    束縛しないので、束縛名の集合も束縛と使用の対応も `B` のものである。よって `B'` も A6 と A11 を
+    満たす。表を作るのは `VarTable::of` (関数の本体) か `VarTable::body_only` (グローバル初期化子の
+    `init`) であり、`cancel` はその 2 つしか呼ばない。
   <2>3. `cancel` は `prog.funcs.values()` の各 `f` について `f.clone()` を作って `clone.body` にだけ
         書き込み、鍵に `f.name.clone()` を据えるので、`params`・`capture`・`borrowed_units` は
         変わらない。グローバル初期化子はパラメータも capture も持たない (D1)。`VarTable::of` は
@@ -2144,7 +2159,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
     BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/ast.rs: RcFunc,
        CODE src/rc_ir/ownership.rs: VarTable::of,
        CODE src/rc_ir/ownership.rs: VarTable::body_only, D1, EXT derive(Clone)
-  <2>3a. 2 つの表の対応する `Binding::Llvm` が運ぶ op は、同じ引数に対して同じ `Provenance` を返す。
+  <2>3a. 2 つの表の対応する `Binding::Llvm` が運ぶ op は、同じ引数に対して同じ `Provenance` を返し、
+         `borrows_operand` にも同じ値を返す。
     <3>1. `B'` の `RcRhs::Llvm` が持つ op は `B` のものの複製であり、同じオブジェクトであるとは限らない。
           `drop_nodes_inner` の右辺が `Match` でない `Let` の腕は
           `RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete))` を積む。`RcRhs` は
@@ -2163,15 +2179,25 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
       返す」と述べ、続けて「**この 2 節を合わせると「op の複製は原本と同じ宣言を返す」が出る。**
       `rhs.clone()` や `fresh_rename_function` が作る複製の op は、原本と同じ引数を渡されれば同じ
       `Provenance` を返す」と述べる。A3 はこの 1 文を要る段の見分け方を「複製された op の宣言を原本の
-      ものと同じだと読む段が、それである」と書いており、<3>1 よりこの段がそれである。
+      ものと同じだと読む段が、それである」と書いており、<3>1 よりこの段がそれである。決定性は
+      `borrows_operand` についても同じ文が述べ、`FullName` の欄を読まないことも A3 が
+      「**`result_prov` と `borrows_operand` は自分の `FullName` の欄を読まない。**」として述べる。
   <2>3b. 鍵 `(x, π)` が等しい 2 つの表の `origin` の答えは等しい。
     <3>0. P2a より、1 つの表を固定すれば `origin` の答えは `vars.origins` の memo の状態に依らないので、
-          各表の `origin` は鍵の関数である。よって 2 つの答えを比べるのに、memo が空の状態からの評価を
+          各表の `origin` は鍵の関数である。**P2a はその `vars` を限る** -- 「**`vars` は、A6 と A11 を
+          満たすプログラムの本体について `VarTable::of` か `VarTable::body_only` が作った表である。**」と
+          述べ、「**この制限は言明の一部であって、読む段が自分で補うものではない。**」と続ける。その制限が
+          両側で満たされることは <2>2a が与える。**表を跨ぐ形は P2a の主張ではない** -- P2a は
+          「**表を跨ぐ形はこの命題の主張ではない。** `bindings` が等しい相異なる 2 つの `VarTable` に
+          ついて答えが等しいことは別の主張であり、それを要る段は自分で示す。」と述べ、その形を要る段を
+          「相異なる 2 つの `VarTable` の値について `origin` の答えを比べる段が、それである」と見分ける。
+          この `<2>3b` がその段であり、以下の帰納がそれを示す。各表の `origin` が鍵の関数なので、2 つの
+          答えを比べるのに、memo が空の状態からの評価を
           取ってよい。その評価では `origin` は memo に当たらず `grow_stack(|| origin_inner(...))` を
           1 回呼ぶ (A15 より `grow_stack` は閉包をちょうど 1 回呼ぶ) ので、呼び出しの木は
           `origin_inner` の再帰の木である。P2 よりその評価は停止するので木は有限であり、その高さに
           ついての帰納法が整礎である。
-      BY P2, P2a, A15, CODE src/rc_ir/ownership.rs: origin
+      BY P2, P2a, A15, CODE src/rc_ir/ownership.rs: origin, <2>2a
     <3>1. `origin_inner` が `vars` から読むのは `bindings.get(var)` だけである。`var_tys`・`param_tys`・
           `closure_targets`・`origins` を読まない。
       BY CODE src/rc_ir/ownership.rs: origin_inner
@@ -2253,9 +2279,14 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
 <1>3. 3 が成り立つ。
   <2>1. D34 の表の 6 行のうち、`Retain` の行と `Release` の行を除く 4 行 -- 生成、所有する初期値、
         借用する初期値、消費 -- が 2 つの活性化で起こす増減は等しい。
-    BY D34, D10, D9, D14, L32, <1>1, <1>2, 本補題の仮定
+    BY D34, D10, D9, D14, L32, <1>1, <1>2, A3, 本補題の仮定
     生成の行と消費の行が名指す leaf は、D10 の生成の表と D9 の消費の表が定めるとおり、節点の形と、
-    それが名指す変数の値と、`App` については呼び出し先の所有 (D14) で決まる。L32 の 5 より `Del` の
+    それが名指す変数の値と、`App` については呼び出し先の所有 (D14) で決まる。**`Llvm` の節点については
+    その 2 つの行が `result_prov` と `borrows_operand` を読むので、2 つの本体の op が同じ宣言を返すことが
+    要る** -- `B'` の op は `B` の op の複製であって同じオブジェクトではない。それを与えるのは <1>1 の
+    第 2 文であり、その支えは A3 の「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に
+    対して常に同じ値を返す」と「**この 2 節を合わせると「op の複製は原本と同じ宣言を返す」が出る。**」で
+    ある。L32 の 5 より `Del` の
     要素は `Retain` 節点と `Release` 節点だけなので、この 2 つの行を起こす節点はどちらの活性化も同じ
     だけ実行している (本補題の仮定)。値が対応することは本補題の仮定が、`borrowed_units` が等しいことは
     <1>1 が与える。初期値の 2 行はパラメータ・capture の leaf についてであり、<1>1 より `params` と
