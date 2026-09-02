@@ -3368,24 +3368,32 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         の段の実行時の呼び出し先 (D23) を `g`、`g` の第 `i` パラメータを `p_i` と書く。`g` は
         `borrow_ify` の出力の `funcs` の関数である。また `call_rc` が引く `params` が `Some` であるとき、
         `params[i]` は `p_i` の名前と型である。
-    BY D23, P30, A6, A13, A14, P9, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
-       CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/ownership.rs: resolve_callee_params
+    BY D23, P30, A6, A13, A14, P9, D6, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+       CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: param_names_and_types,
+       CODE src/rc_ir/ownership.rs: resolve_callee_params,
+       CODE src/rc_ir/ownership.rs: collect_bindings
     D23 は `App` の呼び出し先を実行時に `callee` の値が指す関数と定め、「**D9 の `App` の行と D10 の
     生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数である。**」と述べたうえで、「D9 の
     `App` の行が読む所有は D14 が `RcFunc::borrowed_units` から定めるものなので、**その呼び出し先は
     プログラムの `funcs` の関数である**」と続ける。`call_rc` は
     `self.callee_params.get(&FuncRef { name: callee.name })` を引き、`borrow_ify` は出力の各版 `func` に
     ついて `callee_params.insert(func.name, param_names_and_types(func))` を行うので、`Some` が返るのは
-    `callee.name` が出力の `funcs` の鍵であるときであり、返るのはその関数のパラメータの名前と型の列で
-    ある。そのとき A6 と A13 と P9 より `callee.name` は `V` の本体の束縛名ではないので
+    `callee.name` が出力の `funcs` の鍵であるときである。**`param_names_and_types` が返すのは
+    `func.params.iter().chain(func.capture.iter())` の名前と型の列であり、パラメータの列の後ろに
+    capture が続く。** A14 より `args.len()` はその関数のパラメータの個数に等しいので、`i < args.len()`
+    である添字はパラメータの側に落ち、`params[i]` は `g` の第 `i` パラメータの名前と型である。
+    そのとき A6 と A13 と P9 より `callee.name` は `V` の本体の束縛名ではなく、`collect_bindings` が
+    `vars.closure_targets` に入れる鍵は `Let(x, RcRhs::Closure(fref, _), k)` の束縛変数 `x` の名前だけ
+    なので (D6 より束縛を持つ名前は局所名であり、A13 より出力の `funcs` の鍵は局所名ではない)、
     `resolve_callee_params` の `closure_targets` の枝は当たらず、`resolve_callee_params` も同じ関数の
     `params` を返す。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
     `resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の呼び出し先
     (D23) と同じ `RcFunc` である」と述べる。`V` の本体は `borrow_ify` の出力の本体なので、その `params` は
-    実行時の呼び出し先 `g` のパラメータの列である。`params[i]` が範囲内であることは A14 が与える --
+    実行時の呼び出し先 `g` のものである。`params[i]` が範囲内であることは A14 が与える --
     「`App(callee, args)` の `args` の個数は、呼び出し先のパラメータの個数に**等しい**」であり、
     「**「呼び出し先」は D23 の実行時の関数と、`resolve_callee_params` が静的に引く関数の両方に
-    ついて読む。**」と続く。`p` は第 `i` 引数なので `i < args.len() = params.len()` である。
+    ついて読む。**」と続く。`p` は第 `i` 引数なので `i < args.len()` であり、それは `g` の
+    パラメータの個数である。
   <2>0a. `u ∈ rc_units(ty(p), type_env)` であり、`ty(p) = ty(p_i)` なので
          `u ∈ rc_units(ty(p_i), type_env)` でもある。**`call_rc` が `(p, u)` を見るのはこの所属に
          よる** -- その繰り返しは `for unit in rc_units(&arg.ty, self.type_env)` であり、`callee_owns`
