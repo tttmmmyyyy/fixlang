@@ -8,15 +8,22 @@
 オブジェクトとグローバル状態のオブジェクト (D26) は「所有、参照、義務」の節が定める。**段の素動作と
 段内の点も D24 が定める。**解放について閉じていること (D11a) も同じく `README.md` が定める。この文書は
 それを引くだけで、実行のモデルを自分では置かない。
-この文書が自分で置くのは、局所定義「本体の変数表」「`cancel` の所有述語」「`H` の分解」「段の素動作と
-段内の点」「段内の点で閉じている」と、補題 L0d、L0b、L0c、L0、L0a、L1、L2、L2b、L3、L5、および
-外部の結果 `EXT LLVM モジュールの記号名` だけである。
+この文書が自分で置くのは、局所定義「本体の変数表」「`cancel` の所有述語」「段の素動作と段内の点」
+「段内の点で閉じている」と、補題 L0d、L0b、L0c、L0、L0a、L1、L2、L2b、L3、L4、L5 と、第 4 節末尾の
+「系 (環境が何も持たずに終わる実行)」、および外部の結果 `EXT LLVM モジュールの記号名` だけである。
 
-P29 は層 0 の命題であり、その証明はどの命題も引かない。P30 は層 4 の命題であり、その証明は P1、P9、P12、
+P29 は層 0 の命題であり、その証明はどの命題も引かない。P30 は層 2 の命題であり、その証明は P1、P9、P12、
 P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**だけである --
-参照の持ち手がちょうど 1 つであることを、下の「`H` の分解」が読む。P27 が使うのは D11 と D12 という述語
+参照の持ち手がちょうど 1 つであることを、L4 (`H` の分解) が読む。P27 が使うのは D11 と D12 という述語
 そのものであって、それを `borrow_ify` と `cancel` が保存することではない。補題 L0 は P30 の言明に
 `cancel` が読む所有についての主張を足したものであり、L0b と L0c と L0d を引く。
+
+**コード生成は単位ごとに走るので、`L0d` の主語は分割前のプログラムと単位の切片の 2 つである。**D24 は
+「プログラム `P` の実行は、`P` を分割して生成した単位を結合したものの実行である」と述べ、`P.funcs` の
+各項目がちょうど 1 つの単位へ入ること、単位が定義しない名前についてその単位が持つのは宣言だけで
+あること、リンクがその宣言をその名前を持つ単位が実装した本体へ解決することを定める。**`L0b`・`L0`・
+`P29`・`P30` の `Q` は分割前のプログラム (`P`、`P'`) である。**`L0d` はその `Q` を主語に取り、1 つの
+単位のモジュールの中の勘定と、単位を跨ぐ解決とを分けて述べる。
 
 **`L3` は D11a を実行の側で果たす補題である。**D11a は、参照カウントが 1 以上である計数下オブジェクトが
 どれも解放されていない点を解放について閉じていると呼び、「**プログラムのすべての本体が D11 を満たすとき、
@@ -56,33 +63,56 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 
 ### L0d (名前で得た LLVM 関数が実装する `RcFunc`)
 
-**L0d.** ASSUME  NEW `Q`: RcProgram、
+**L0d.** ASSUME  NEW `Q`: RcProgram -- コード生成が単位へ分割するプログラム (D24)、
                  **(N3)** `Q` の `funcs` の各鍵の名前は局所名 (`FullName::is_local` が真) ではなく、
                  コード生成が読む `global_types` はその名前を持たないか、funptr 型で持つ、
                  A22
-         PROVE   **(a)** `implement_rc_program` が作る表 `func_vals` は、`Q.funcs` の各鍵 `fref` に
-                 対して、`Q.funcs[fref]` の本体を実装した LLVM 関数を与える。
+         PROVE   **(a)** 1 つの単位の切片 `U` を渡した `implement_rc_program` が作る表 `func_vals` は、
+                 `U.funcs` の各鍵 `fref` に対して、`Q.funcs[fref]` の本体を実装した LLVM 関数を与える。
                  **(b)** `Q.funcs` の鍵の名前 `n` について、コード生成が `n` の値として返すのは
                  `declare_lambda_function` が funptr 型で登録した LLVM 関数そのもの (アクセサの呼び出し
-                 ではない) であり、それは `func_vals[FuncRef{n}]`、すなわち `Q.funcs[FuncRef{n}]` の
-                 本体を実装した LLVM 関数である。
+                 ではない) であり、**実行時にその値が指す関数は `Q.funcs[FuncRef{n}]` の本体を実装した
+                 ものである**。
+
+**主語が 2 つあるのは、コード生成が単位ごとに走るからである。**D24 は「プログラム `P` の実行は、`P` を
+分割して生成した単位を結合したものの実行である」と述べ、`divide_among_units` が `P.funcs` の各項目を
+その名前が決めるちょうど 1 つの単位へ入れること、コード生成が単位ごとに `implement_rc_program` をその
+単位の切片について 1 回走らせることを定める。(a) は 1 つのモジュールの中の勘定であり、(b) は名前が
+実行時に何を指すかという単位を跨ぐ言明である。(N3) の `global_types` は
+`global_types_including_synthesized` が `Q` から 1 度だけ作って全単位が共有する表なので
+(`CODE src/build/build_object_files.rs: build_object_files`)、単位ごとに別ではなく、(N3) は分割前の
+`Q` について読める。
+
+<1>0. 各単位の切片 `U` について、`U.funcs` の鍵は `Q.funcs` の鍵の部分集合であり、各鍵 `fref` の値は
+      `Q.funcs[fref]` である。
+  `unit_programs[i].funcs` へ項目を入れるのは 2 か所である。`divide_among_units` は `Q.funcs` の各項目
+  `(fref, func)` を `unit_of[&fref.name]` の単位へそのまま入れ、`import_what_each_unit_reaches` は
+  `copyable_funcs` -- `Q.funcs` の項目を名前で引ける形に写したもの -- の値を鍵 `FuncRef { name }` で
+  入れる。`publish_and_prune` が呼ぶ `eliminate_unreachable` は `funcs` から項目を落とすだけで、鍵に
+  対する値を替えない。
+  BY CODE src/build/divide_program.rs: divide_among_units, import_what_each_unit_reaches,
+     copyable_funcs, publish_and_prune,
+     CODE src/rc_ir/dead_code_elim.rs: eliminate_unreachable
 
 <1>1. (a) が成り立つ。
-  `implement_rc_program` は `Q.funcs` の各 `(fref, func)` について LLVM 関数を 1 つ決めて `func_vals` に
+  `implement_rc_program` は `U.funcs` の各 `(fref, func)` について LLVM 関数を 1 つ決めて `func_vals` に
   入れ、続く走査で `implement_rc_function(func, func_vals[fref], ..)` を呼ぶ。`implement_rc_function` は
-  その LLVM 関数に `entry` ブロックを付けて `func.body` を出す。
-  BY CODE src/rc_ir/codegen.rs: Generator::implement_rc_program,
+  その LLVM 関数に `entry` ブロックを付けて `func.body` を出す。`<1>0` よりその `func` は
+  `Q.funcs[fref]` である。
+  BY <1>0, CODE src/rc_ir/codegen.rs: Generator::implement_rc_program,
      CODE src/rc_ir/codegen.rs: Generator::implement_rc_function
 
 <1>2. コード生成が `n` の値として返すのは、`declared_globals` に `n` で登録された `ValueAccessor` が
       答える値である。
-  変数を読む腕は `get_scoped_obj(&n)` を呼び、`get_scoped_obj` は `get_scoped_value` の答えの
-  `accessor` に `get` を掛ける。`get_scoped_value` は `var.is_local()` のときだけスコープを引き、
-  そうでなければ `get_or_declare_global` を通る。(N3) より `n` は局所名ではないので後者である。
-  `get_or_declare_global` は `declared_globals` に在ればそれを返し、無ければ `declare_program_global` を
-  呼んで登録させ、それが `None` を返せば panic する。
-  BY (N3), CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_value,
-     Generator::get_or_declare_global
+  変数を読む腕 -- `eval_rc_rhs` の `RcRhs::Var` の腕と、`eval_rc_expr_inner` が `App` の callee・引数・
+  capture・scrutinee・容器を読む腕 -- は `get_scoped_obj` か `get_scoped_obj_noretain` を呼び、
+  どちらも `get_scoped_value` の答えの `accessor` に `get` を掛ける。`get_scoped_value` は
+  `var.is_local()` のときだけスコープを引き、そうでなければ `get_or_declare_global` を通る。(N3) より
+  `n` は局所名ではないので後者である。`get_or_declare_global` は `declared_globals` に在ればそれを返し、
+  無ければ `declare_program_global` を呼んで登録させ、それが `None` を返せば panic する。
+  BY (N3), CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs, Generator::eval_rc_expr_inner,
+     CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
+     Generator::get_scoped_value, Generator::get_or_declare_global
 
 <1>3. `n` について `declared_globals` に登録が在るならば、その登録は `declare_lambda_function` が
       `fn_ty.is_funptr()` の枝で行ったものであり、登録された値はその呼び出しが作った LLVM 関数である。
@@ -99,8 +129,9 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   BY (N3), CODE src/generator.rs: Generator::add_global_object, Generator::declare_program_global,
      Generator::declare_lambda_function
 
-<1>4. コード生成が `n` の値を読むとき、`declared_globals` は `n` の登録を持ち、そこに登録された LLVM
-      関数は `func_vals[FuncRef{n}]` と同じものである。
+<1>4. CASE この単位の切片 `U` が `n` を定義する。すなわち `FuncRef{n}` が `U.funcs` の鍵である。
+      このとき、コード生成が `n` の値を読む時点で `declared_globals` は `n` の登録を持ち、そこに
+      登録された LLVM 関数は `func_vals[FuncRef{n}]` と同じものである。
   <2>1. `n` について `declare_lambda_function` を呼ぶ道は 2 つであり、どちらも
         `module.add_function(&object_file_symbol_name(n), ..)` で LLVM 関数を作り、
         `fn_ty.is_funptr()` のときだけ `add_global_object` でその関数を登録して、その関数を返す。
@@ -111,19 +142,26 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
        CODE src/rc_ir/codegen.rs: Generator::implement_rc_program
   <2>1a. 相異なる 2 つの鍵の名前は相異なる記号名を持ち、鍵の名前の記号名は `::` を含む。
     `FullName::to_string` は名前空間の各成分を `::` で継いだ列に `::` と `name` を継いだ文字列である。
-    名前空間の成分も `name` も `::` を含まない -- 名前空間の成分は、module 宣言と namespace 宣言が与える
-    `namespace_item` (大文字で始まる語を `.` で継いだもの) か、最上位の記号の名前を名前空間へ移したもので
-    あり、記号の名前は Fix の識別子にコンパイラが `#<タグ><10 進数字>` の形の接尾辞を足したものである
-    (A13)。Fix の識別子を作る文字は英数字と `_` (と値の名前の頭の `@`) だけなので、どれも `:` を持たない。
-    よって `to_string` は相異なる名前に相異なる文字列を与える。
+    名前空間の成分も `name` も `::` を含まない。**名前空間の成分の在りかは 2 つである。**1 つは module
+    宣言と namespace 宣言が与える `namespace_item` -- `capital_name` を `.` で継いだもの -- であり
+    (`CODE src/parse/grammer.pest: module_defn, global_defns_in_namespace, namespace_item,
+    capital_name`)、もう 1 つは `fresh_closure_ref` が持ち上げた lambda の名前空間を作るとき
+    `FullName::to_namespace` で記号の名前を名前空間の末尾へ移したものである
+    (`CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref`, `CODE src/ast/name.rs:
+    FullName::to_namespace`)。後者の成分は Fix の識別子にコンパイラが `#<タグ><10 進数字>` の形の
+    接尾辞を足したものである (A13)。Fix の識別子を作る文字は英数字と `_` (と値の名前の頭の `@`) だけ
+    なので、どれも `:` を持たない。よって `to_string` は相異なる名前に相異なる文字列を与える。
     `object_file_symbol_name` はその文字列の `SYMBOL_VERSION_SEPARATOR` を
     `SYMBOL_VERSION_SEPARATOR_SUBSTITUTE` に置き替えるだけであり、置き替える前の文字列が substitute を
     含まないことをその関数の表明が検査する -- 含むプログラムはコンパイルされず、この場合の段は存在しない --
     ので、置換も相異なる文字列を相異なる文字列へ移す。(N3) より鍵の名前は局所名ではなく、`is_local` は
     名前空間が空であることなので、鍵の名前空間は空でなく、その記号名は `::` を含む。
     BY (N3), A13, CODE src/ast/name.rs: FullName::to_string, FullName::is_local, NameSpace::to_string,
+       FullName::to_namespace,
        CODE src/generator.rs: object_file_symbol_name,
-       CODE src/parse/grammer.pest: name_char, namespace_item
+       CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
+       CODE src/parse/grammer.pest: name_char, namespace_item, capital_name, module_defn,
+       global_defns_in_namespace
   <2>2. 第 1 ループが鍵 `FuncRef{n}` の項目に着く時点で、モジュールは記号名 `object_file_symbol_name(n)`
         の関数を持たない。
     <3>1. 第 1 ループが鍵 `FuncRef{n}` の項目に着くまでに走りうる `module.add_function` の呼び出しの
@@ -137,8 +175,8 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
       **第 1 ループの中で走りうるもの**は、`global_accessor_name` の値 -- `Get#` を冠する名前 -- を渡す
       `declare_program_global` の 1 か所である。その名前は最初の `::` より前に `#` を持つ。鍵の名前の
       記号名は最も外側の名前空間の成分から始まり、その成分は module 宣言が与える `namespace_item` なので
-      `#` を持たない -- 最上位の記号の名前の名前空間の最も外側の成分はその記号が住む module の名前であり
-      (`CODE src/ast/name.rs: NameSpace::module` の doc -- 「The module the path lies in, which is the
+      `#` を持たない -- 名前の名前空間の最も外側の成分はその名前が住む module の名前であり
+      (`CODE src/ast/name.rs: FullName::module` の doc -- 「The module the name lies in, which is the
       first name of its namespace.」)、持ち上げた lambda の名前の名前空間はその記号の名前を末尾に足した
       ものである (`fresh_closure_ref`)。
       **残る 8 か所は本体を出す段で走る**ので、第 1 ループの後である (`build_object_files` が
@@ -152,7 +190,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
       BY A13, <2>1a, CODE src/generator.rs: object_file_symbol_name, global_accessor_name,
          Generator::declare_lambda_function, Generator::declare_program_global,
          Generator::emit_rc_helper_call,
-         CODE src/ast/name.rs: NameSpace::module,
+         CODE src/ast/name.rs: FullName::module,
          CODE src/build/build_object_files.rs: build_object_files,
          CODE src/rc_ir/codegen.rs: Generator::implement_rc_program, Generator::implement_rc_global,
          CODE src/object.rs: create_traverser, get_traverser_ptr,
@@ -204,7 +242,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     <3>3. QED
       BY <3>1, <3>2
   <2>4. `func_vals[FuncRef{n}]` は `<2>3` のその 1 度が作った LLVM 関数である。
-    `implement_rc_program` は `Q.funcs` の各項目 `(fref, func)` について `func.name.name` を取り、まず
+    `implement_rc_program` は `U.funcs` の各項目 `(fref, func)` について `func.name.name` を取り、まず
     `module.get_function(&object_file_symbol_name(func.name.name))` を引き、在ればそれを使い、無ければ
     `declare_program_global` を、それも `None` なら `declare_lambda_function` を呼び、得た関数を
     `func_vals[fref]` に入れる。A22 より `func.name` は鍵 `fref` に等しいので、鍵 `FuncRef{n}` の項目に
@@ -221,14 +259,46 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     `func_vals[FuncRef{n}]` はその 1 度が作った関数である。よって 2 つは同じものである。
     BY <1>3, <2>3, <2>4
 
+<1>4a. CASE この単位の切片 `U` が `n` を定義しない。すなわち `FuncRef{n}` は `U.funcs` の鍵ではない。
+       このとき、コード生成が `n` の値を読む時点で `declared_globals` は `n` の登録を持ち、この単位は
+       その名前の本体を出さない。すなわちこの単位が `n` について持つのは宣言だけである。
+  <2>1. `n` の値を読む時点で `declared_globals` は `n` の登録を持ち、それを行ったのは
+        `declare_lambda_function` の funptr の枝である。
+    `<1>2` より、その読みは `get_or_declare_global(n)` を通る。`declared_globals` が `n` を持てば
+    それを返して終わる。持たなければ `declare_program_global(n)` を呼び、(N3) より `global_types` は
+    `n` を funptr 型で持つか、`n` を持たないかのどちらかである。funptr 型で持つならば
+    `declare_lambda_function(&ty, n)` が走り、その `fn_ty.is_funptr()` の枝が `add_global_object` で
+    登録する。持たないならば `declare_program_global(n)` は `global_types.get(n)` が `None` の腕で
+    `None` を返し、`get_or_declare_global` の `unwrap_or_else` が panic する -- そのときプログラムは
+    コンパイルされず、この場合の段は存在しない。どちらにせよ登録を行うのは `<1>3` より
+    `declare_lambda_function` の funptr の枝である。
+    BY (N3), <1>2, <1>3, CODE src/generator.rs: Generator::get_or_declare_global,
+       Generator::declare_program_global, Generator::declare_lambda_function,
+       Generator::add_global_object
+  <2>2. この単位は `n` の本体を出さない。
+    `<1>1` よりこの単位が本体を出す LLVM 関数は `func_vals` の値であり、その鍵は `U.funcs` の鍵で
+    ある。この場合 `FuncRef{n}` はその鍵ではない。`declare_lambda_function` は `module.add_function` で
+    作った関数をそのまま返し、ブロックを付けない。
+    BY <1>1, CODE src/rc_ir/codegen.rs: Generator::implement_rc_program,
+       CODE src/generator.rs: Generator::declare_lambda_function
+  <2>3. QED
+    D24 が「**単位が定義しない名前について、その単位が持つのは宣言だけである。** リンクがその宣言を、
+    その名前を持つ単位が実装した本体へ解決する」と述べる。`<2>1` と `<2>2` が、この単位が `n` について
+    持つのが本体の無い登録であることを与える。
+    BY D24, <2>1, <2>2
+
 <1>5. (b) が成り立つ。
-  `<1>4` より、`n` の値を読むコード生成の時点で `declared_globals` は `n` の登録を持つ。`<1>2` より
-  コード生成が返すのはその登録の `ValueAccessor` が答える値である。`<1>3` よりその登録は
-  `declare_lambda_function` の funptr の枝が置いた `ValueAccessor::Global(fun, ty)` であり、
-  `ty.is_funptr()` なので `ValueAccessor::get` は `fun.as_global_value().as_basic_value_enum()` を
-  返す -- アクセサを呼ばず、関数そのものを値とする。`<1>4` よりその関数は `func_vals[FuncRef{n}]` で
-  あり、`<1>1` よりそれは `Q.funcs[FuncRef{n}]` の本体を実装した LLVM 関数である。
-  BY <1>1, <1>2, <1>3, <1>4, CODE src/generator.rs: ValueAccessor::get
+  `<1>2` より、`n` の値を読むコード生成が返すのは `declared_globals` の `n` の登録の `ValueAccessor` が
+  答える値である。`<1>3` よりその登録は `declare_lambda_function` の funptr の枝が置いた
+  `ValueAccessor::Global(fun, ty)` であり、`ty.is_funptr()` なので `ValueAccessor::get` は
+  `fun.as_global_value().as_basic_value_enum()` を返す -- アクセサを呼ばず、関数そのものを値とする。
+  `FuncRef{n}` が `U.funcs` の鍵であるかどうかで 2 つの場合に尽きる。鍵であるならば、`<1>4` より
+  その関数は `func_vals[FuncRef{n}]` であり、`<1>1` よりそれは `Q.funcs[FuncRef{n}]` の本体を実装した
+  LLVM 関数である。鍵でないならば、`<1>4a` よりこの単位が持つのは `n` の宣言だけである。
+  **いずれの場合も、D24 が「したがって、実行時に名前 `n` が指す関数は `P.funcs[FuncRef{n}]` の本体を
+  実装したものである -- どの単位がそれを実装したかに依らない」と述べる。**その `P` がこの補題の `Q` で
+  ある。よってその値が実行時に指す関数は `Q.funcs[FuncRef{n}]` の本体を実装したものである。
+  BY D24, <1>1, <1>2, <1>3, <1>4, <1>4a, CODE src/generator.rs: ValueAccessor::get
 
 <1>6. QED
   BY <1>1, <1>5
@@ -238,13 +308,8 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 **DEF 本体の変数表**
 `vars` は、その節点を含む本体の**変数表** `VarTable` である。関数の本体については
 `VarTable::of(func)` が、グローバル初期化子の `init` については `VarTable::body_only(init)` が作る
-(`CODE src/rc_ir/ownership.rs: VarTable`)。`VarTable::of` はその関数の各パラメータと capture に
-`Binding::Param` を置き、続けて `collect_bindings` を本体に掛ける。`VarTable::body_only` は
-`collect_bindings` だけを掛ける。`collect_bindings` は、本体の各 `Let(x, rhs, k)` について `x` に
-`rhs` の形が決める `Binding` を置き、`rhs` が `Closure(fref, _)` のときは `closure_targets` に
-`(x.name, fref)` を挿入し、各 `Destructure` のフィールド変数と各 `Match` アームの payload 変数にも
-`Binding` を置く (`CODE src/rc_ir/ownership.rs: collect_bindings`)。以下で `vars.closure_targets` と
-`vars.bindings` と言うのはこの表の欄である。
+(`CODE src/rc_ir/ownership.rs: VarTable`, `VarTable::of`, `VarTable::body_only`)。以下で
+`vars.closure_targets` と `vars.bindings` と言うのはこの表の欄である。
 
 **L0b.** ASSUME  NEW `Q`: RcProgram、
                  **(N1)** `Q` のすべての束縛変数の名前は相異なり、`Q` の `funcs` のどの鍵の名前とも
@@ -260,6 +325,9 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
                  その段の実行時の呼び出し先 (D23) と同じ `RcFunc` である。したがって `params` も
                  その `borrowed_units` も、実行時の呼び出し先のものである。
 
+**「`Q` から生成したコード」は D24 の意味である** -- `Q` を単位へ分割して単位ごとに生成し、結合した
+ものである。この節点を含む本体を出す単位の切片を `U` と書く。
+
 <1>1. `resolve_callee_params(callee, vars, Q)` が `Some(params)` を返すのは 2 つの場合であり、
       `None` を返すのはそれ以外である。
   1 つは `vars.closure_targets` が `callee.name` を持つ場合、もう 1 つは `Q.funcs` が
@@ -269,9 +337,12 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 
 <1>2. `vars.closure_targets` が `callee.name` を持つのは、この本体に `Let(callee, Closure(fref, caps), k)`
       が在るとき、かつそのときに限る。そのとき返るのは `Q.funcs[fref]` のパラメータである。
+  `VarTable::of` は関数の各パラメータと capture に `Binding::Param` を置いてから `collect_bindings` を
+  本体に掛け、`VarTable::body_only` は `collect_bindings` だけを掛ける (DEF 本体の変数表)。
   `collect_bindings` が `closure_targets` に挿入するのは `RcRhs::Closure(fref, _)` の腕の 1 か所だけで
-  あり、挿入する鍵はその `Let` の束縛変数の名前である (DEF 本体の変数表)。
-  BY <1>1, DEF 本体の変数表, CODE src/rc_ir/ownership.rs: collect_bindings, resolve_callee_params
+  あり、挿入する鍵はその `Let` の束縛変数の名前である。
+  BY <1>1, DEF 本体の変数表, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only,
+     collect_bindings, resolve_callee_params
 
 <1>3. `<1>2` の場合、実行時の呼び出し先は `Q.funcs[fref]` である。
   <2>1. `callee` の値は、その `Let` が束縛した値である。
@@ -283,21 +354,26 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     BY (N1), (N2), <1>2, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
        Generator::bind_and_continue, CODE src/generator.rs: Generator::scope_push,
        Generator::get_scoped_obj
-  <2>2. その値は funptr の欄に `func_vals[fref]` を持つクロージャである。
+  <2>2. その値は funptr の欄に `func_vals[fref]` を持つクロージャである。ここで `fref` はこの節点を
+        含む本体を出している単位の切片 `U` の `funcs` の鍵である。
     `Let` の右辺が `Closure(fref, caps)` のとき、`eval_rc_rhs` は `build_rc_closure` を呼び、
-    `build_rc_closure` は `CLOSURE_FUNPTR_IDX` の欄に `func_vals[func]` を入れる。
-    BY <2>1, CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs, Generator::build_rc_closure
+    `build_rc_closure` は `CLOSURE_FUNPTR_IDX` の欄に `func_vals[func]` を入れる。`func_vals` は
+    `U.funcs` の鍵で索かれるので、`fref` がその鍵でなければコード生成はそこで止まり、そのプログラムは
+    コンパイルされず、この場合の段は存在しない。
+    BY <2>1, CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs, Generator::build_rc_closure,
+       Generator::implement_rc_program
   <2>3. QED
     D23 より、`callee` の値がクロージャのとき実行時の呼び出し先はその funptr の指す関数である
     (`apply_lambda` は `get_lambda_func_ptr` が返す関数ポインタを `build_indirect_call` で呼び、
-    `get_lambda_func_ptr` は `is_closure()` のとき `CLOSURE_FUNPTR_IDX` の欄を読む)。L0d (a) より
-    `func_vals[fref]` は `Q.funcs[fref]` の本体を実装した LLVM 関数である。
+    `get_lambda_func_ptr` は `is_closure()` のとき `CLOSURE_FUNPTR_IDX` の欄を読む)。`<2>2` より
+    `fref` は `U.funcs` の鍵なので L0d (a) が当たり、`func_vals[fref]` は `Q.funcs[fref]` の本体を
+    実装した LLVM 関数である。
     BY D23, L0d, <2>2, CODE src/generator.rs: Generator::apply_lambda,
        CODE src/generator.rs: Generator::get_lambda_func_ptr
 
 <1>4. `Q.funcs` が `FuncRef { name: callee.name }` を持つ場合、実行時の呼び出し先はその関数である。
-  <2>1. コード生成が `callee.name` の値として返すのは、`Q.funcs[FuncRef{callee.name}]` の本体を実装した
-        LLVM 関数そのものであり、その値は funptr である。
+  <2>1. コード生成が `callee.name` の値として返すのは funptr であり、実行時にそれが指す関数は
+        `Q.funcs[FuncRef{callee.name}]` の本体を実装したものである。
     L0d (b) を `n = callee.name` に当てる。`App` の腕はその名前を `get_scoped_obj` で引く。
     BY L0d, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
        CODE src/generator.rs: Generator::get_scoped_obj
@@ -350,14 +426,19 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
        CODE src/ast/program.rs: Program::global_types
   <2>3. 持ち上げた lambda に `fresh_closure_ref` が付ける名前は、最上位の記号の名前ではない。
     その名前の名前空間は `current_symbol` の名前を末尾の成分とする -- `FullName::to_namespace` が
-    `name` を名前空間の末尾へ移す。A13 より最上位の記号の名前は Fix のソースに書かれた値の名前に接尾辞を
-    足したものであり、値の名前の名前空間の各成分は `namespace_item`、すなわち大文字で始まる語を `.` で
-    継いだものである。記号の名前の `name` は `name_head` が定めるとおり小文字か `_` か `@` で始まる。
-    よって持ち上げた lambda の名前の名前空間の末尾の成分は大文字で始まらず、最上位の記号の名前の
-    名前空間の成分はどれも大文字で始まるので、両者は異なる名前である。
+    `name` を名前空間の末尾へ移す。最上位の記号の名前の名前空間の各成分は、module 宣言と namespace 宣言が
+    与える `namespace_item` であり、`namespace_item` は `capital_name` を `.` で継いだもの、
+    `capital_name` は `ASCII_ALPHA_UPPER` で始まる語である
+    (`CODE src/parse/grammer.pest: module_defn, global_defns_in_namespace, namespace_item,
+    capital_name`)。最上位の記号の `name` は Fix のソースに書かれた値の名前にコンパイラが
+    `#<タグ><10 進数字>` の形の接尾辞を足したものであり (A13)、値の名前は `name_head` が定めるとおり
+    小文字か `_` か `@` で始まる (`CODE src/parse/grammer.pest: name, name_head`)。よって持ち上げた
+    lambda の名前の名前空間の末尾の成分は大文字で始まらず、最上位の記号の名前の名前空間の成分はどれも
+    大文字で始まるので、両者は異なる名前である。
     BY A13, CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
        CODE src/ast/name.rs: FullName::to_namespace,
-       CODE src/parse/grammer.pest: name_head, capital_name, namespace_item
+       CODE src/parse/grammer.pest: name, name_head, capital_name, namespace_item, module_defn,
+       global_defns_in_namespace
   <2>4. `P.globals` の `symbol` は、最上位の記号のうち型が funptr でないものの名前であり、`P.funcs` の
         どの鍵の名前とも異なる。
     `<1>1` より `symbol` と鍵は lowering の出力のものであり、`lower_symbol` は最上位の記号を、その型が
