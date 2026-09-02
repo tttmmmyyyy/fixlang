@@ -4,9 +4,10 @@
 名指すコミット)
 
 このファイルは主定理 T を証明する。T は合成であり、引用する命題の**言明**だけを使う (証明は
-読まない)。第 2 節の `BY` の行が引くのは次のものである。
+読まない)。このファイルが引くのは次のものである。**P2a を除き、どれも第 2 節の `BY` の行が引く。**
 
-- **命題**: P9・P12・P14・P14a・P14b・P22・P23・P24・P26・P27。
+- **命題**: P2a・P9・P12・P14・P14a・P14b・P22・P23・P24・P26・P27。**P2a を引くのは第 4 節の
+  「開発ビルドでだけ走る検査」の項であり、そこだけである。**
 - **定義**: D1・D2・D11・D12・D14・D18・D19・D23・D24・D30。
 - **仮定**: A1・A2 (前提 H1・H2 として)、A3・A13・A15・A17・A18・A19・A20 (前提 H3 が束ねる
   第 4 節の仮定の中から名指す)。
@@ -1001,10 +1002,33 @@ A3 (元数) と A9 と A12 は `check_rhs`、A11 は `check_expr_inner` と `che
 `check_ownership_is_levelled` は `expect` 1 つと `assert!` 1 つからなり、`validate` の中の検査は
 `panic!` を呼ぶ (`CODE src/rc_ir/borrow.rs: check_clone_names_are_fresh`,
 `CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled`,
-`CODE src/rc_ir/validate.rs: validate`)。**どれも自分が調べる対象を共有参照で受け取り、値を
-返さない** -- `check_clone_names_are_fresh` と `validate` は `&RcProgram` を、
-`check_ownership_is_levelled` は `&self` と `&RcFunc` を取る。よってプログラムを書き換えることは
-しない。
+`CODE src/rc_ir/validate.rs: validate`)。どれも調べる対象を共有参照で受け取り、値を返さない --
+`check_clone_names_are_fresh` と `validate` は `&RcProgram` を、`check_ownership_is_levelled` は
+`&self` と `&RcFunc` を取る。
+
+**`&RcProgram` を取る 2 つには、`<1>1` の `<2>2` と同じ議論が当たる。** EXT 共有参照が書き込める先
+より、その呼び出しが書けるのは `UnsafeCell` の中に在る記憶域だけであり、`RcProgram` から到達できる
+内部可変性 -- `TypeNode` の 3 つの `OnceLock` と、`Box<dyn LLVMGen>` の op がその道で持つ型 -- が
+値の等しさを動かさないことを、A3 の「値の等しさ」の節が言う。
+
+**`check_ownership_is_levelled` の `&self` は書き込みの道を持つ。**その `&self` は `&RewriteCtx`
+であり、`RewriteCtx` は `vars: VarTable` を欄に持ち、`VarTable` は
+`origins: RefCell<Map<VarPath, Origin>>` を持つ (`CODE src/rc_ir/borrow.rs: RewriteCtx`,
+`CODE src/rc_ir/ownership.rs: VarTable`)。本体は `levelled_sites` が挙げる各 site について
+`origin(&self.vars, self.type_env, ..)` を呼び、`origin` は答えを
+`vars.origins.borrow_mut().insert(..)` で記録する (`CODE src/rc_ir/borrow.rs:
+RewriteCtx::check_ownership_is_levelled`, `CODE src/rc_ir/ownership.rs: origin`)。すなわちこの検査は
+共有参照から memo を書く。
+
+**その書き込みが書き換えの答えを動かさないことを言うのは P2a である。**`borrow_ify` は借用版に
+ついて `if develop_mode { ctx.check_ownership_is_levelled(&clone); }` を
+`clone.body = ctx.rewrite(&clone.body);` の**直前**に置き、この 2 つは同じ `ctx` の同じ `vars` を
+読む (`CODE src/rc_ir/borrow.rs: borrow_ify`)。P2a は、1 つの `VarTable` の値と 1 つの `TypeEnv` の
+値を固定したとき、鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならばその 2 つは
+等しく、答えは `vars.origins` が保持する memo の状態に依らないと述べる。この検査が書くのはその memo
+だけなので、`ctx.rewrite` が引く `origin` の答えは検査の有無で変わらない。コードは
+`RewriteCtx::rewrite` に `// PROOF: P2a` を付けてこの読みを指す
+(`CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite`)。
 
 よって次の 2 つが言える。表明がすべて成り立つ入力については、`borrow_ify` が組み立てる `RcProgram` は
 `develop_mode` によらず同じであり、T の主語は 2 つのビルドで同じプログラムである --
