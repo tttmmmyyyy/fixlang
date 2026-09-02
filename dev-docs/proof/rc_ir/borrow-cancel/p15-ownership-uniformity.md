@@ -2034,9 +2034,13 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 <1>5. グローバル初期化子の版では `owns_unit(v, u)` は真を返す。
   その `RewriteCtx` は `is_borrow_version: false` で作られるので `<1>3` の呼び出しは起きない。`<1>2` の
-  呼び出しについては、`vars` が `VarTable::body_only` で作られ `param_tys` が空なので、`owns_object` は
-  どの `(r, p)` にも真を返し、`owns_unit` はその全称なので真である。
-  BY <1>2, CODE src/rc_ir/borrow.rs: borrow_ify のグローバルを写す繰り返し,
+  呼び出しについては、`owns_unit` はまず `origin(v, u).candidates()` を評価する。`v` はその版が
+  書き換える本体 -- 入力のグローバル初期化子の `init` -- の `App` の引数なので、その名前は
+  `vars.bindings` に束縛を持つ (節点が束縛する変数) か、持たない (D6 の第 3 の形) かのどちらかであり、
+  どちらも P2 の範囲である。よって `origin(v, u)` は中断せずに答えを返す。続いて、`vars` が
+  `VarTable::body_only` で作られ `param_tys` が空なので、`owns_object` はどの `(r, p)` にも真を返し、
+  `owns_unit` はその全称なので真である。
+  BY <1>2, D6, P2, CODE src/rc_ir/borrow.rs: borrow_ify のグローバルを写す繰り返し,
      CODE src/rc_ir/ownership.rs: VarTable::body_only, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
      RewriteCtx::owns_unit, RewriteCtx::rewrite_rc
 
