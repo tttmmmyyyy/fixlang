@@ -1458,19 +1458,20 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
 `L11` は、`R` を増やす節点 -- `Retain` -- が、その変数を名指す構文の直前にしか立たないことを示す。
 README の A19 が (O1) と (O2) と呼ぶ 2 つを、この節が言明として書く。
 
-**(O1) 由来の形。** `insert_rc` の出力の各本体、各実行路 `ρ`、`ρ` を辿る各活性化について、(a) 各時点の
+**(O1) 由来の形。** `insert_rc` の出力の各本体、各実行路 `ρ`、`ρ` を辿る各活性化が、第 9 節の
+`DEF 由来の形` の 3 つの節を満たすこと。すなわち (a) 各時点の
 各計数下の別名類 `C` について `held_ρ(・, C) ≥ 0` であり、(b) D7 の読む構文が読む値の各スロット、および
 `Retain(v, π)`・`Release(v, π)` が触れる各スロットについて、そのスロットが属する計数下の別名類は、その
 節点の入口で `held ≥ 1` であり、(c) 関数本体・初期化子の終端の `Ret` の消費を行った直後の点でも
 `held ≥ 0` である。これは D11 を別名類の粒度へ絞った主張であり、A19 (ii-a) が要求するものである
 -- (c) は A19 (ii-a) の「非負であることは、終端の `Ret` の消費を行った直後の時点についても言う」の
-分である。**第 10 節の `L19` が示す。** 併せて `L20` が、`L4` と `L7` が前提に持つ「各別名類の生成
-事象は `ρ` の上に高々 1 つ」を示す。
+分である。**第 10 節の `L19` (a)-(c) が示す。** 併せて `L20` が、`L4` と `L7` が前提に持つ
+「各計数下の別名類 `C` の開始事象 (`DEF 開始事象`) は `ρ` の上に高々 1 つである」を示す。
 
 **節点の実行の途中の点は (O1) の外にある。** A19 (ii-a) が量化するのは節点の訪問の入口である時点だけで
-あり (第 1 節)、README の A19 は「節点の実行の途中で非負性を要る段は、`p60-insert-rc.md` の
-`L17` (c) を読む」と、その粒度を要る読み手を `L17` (c) へ回す。`L19` (d) がその不等式を
-`insert_rc` の出力の各節点へ広げ、そこから節点の実行の途中の各点での `held ≥ 0` を出す。
+あり (第 1 節)、その粒度は A19 が (ii-c) として別に立てている。README の A19 は (ii-c) について
+「果たす者は `insert_rc` であり、`p60-insert-rc.md` の `L19` (d) が `insert_rc` の出力について示す」と
+書く。`L19` (d) がそれであり、そこから節点の実行の途中の各点での `held ≥ 0` を出す。
 
 **(O2) 帳簿の遅れが無いこと。** 各時点の各計数下の別名類について、`bumps ≥ 1` ならば
 `held ≥ 1 + bumps` である。`L7` より `U + X ≥ D` と同値であり、A19 (ii-b) が要求するものである。
@@ -1508,20 +1509,31 @@ A19 (ii) の範囲は「**`borrow_ify` の入力の各本体と、`borrow_ify` �
 
 ## 9. A19 を読む 2 つの形
 
-README の A19 は 2 種の読み手を持つ。P18a・P18c・P19・P21 が読むのは (ii-b) -- 走査の `pending` を
-主語にする形 -- であり、P14 と P18c が読むのは次の形 ((ii-a)) である。
+README の A19 は (ii-a) と (ii-b) に別々の読み手を挙げる -- (ii-a) の項は「**(ii-a) 由来の形** --
+読む者: P14、P18a、P18c。」で始まり、(ii-b) の項は「**(ii-b) 帳簿の形** -- 読む者: P18a、P18c、P19、
+P21。」で始まる。P18a と P18c はどちらの項にも挙がっており、A19 の脇はそれを「**P18a と P18c は
+`cancel` の入力について (ii-a) も読む**」と述べる。(ii-b) は走査の `pending` を主語にする形であり、
+(ii-a) は次の形である。
 
-**DEF 由来の形**。`ρ` の上の各時点 `τ` について次の 2 つが成り立つこと。
+**DEF 由来の形**。次の 3 つが成り立つこと。
 
-- **(a)** 各計数下の別名類 `C` について `held_ρ(τ, C) ≥ 0` である。
+- **(a)** `ρ` の上の各時点 `τ` と各計数下の別名類 `C` について `held_ρ(τ, C) ≥ 0` である。
 - **(b)** D7 の読む構文が読む値の各スロット、および `Retain(v, π)`・`Release(v, π)` が触れる各スロットに
   ついて、そのスロットが属する計数下の別名類 `C` は、その時点で `held_ρ(τ, C) ≥ 1` である。
+- **(c)** 関数本体・初期化子の終端の `Ret` の消費 (D9) を行った直後の点でも、各計数下の別名類 `C` に
+  ついて `held_ρ(・, C) ≥ 0` である。
+
+**3 つの節は A19 (ii-a) の 3 つの節そのものである。** (a) と (b) は第 1 節が引く A19 (ii-a) の本文
+「各時点と各計数下の別名類について、その類が持つ参照の個数は非負であり、読む構文と
+`Retain`/`Release` がその類を名指す時点では 1 以上である」の 2 つ、(c) は続く
+「**非負であることは、終端の `Ret` の消費を行った直後の時点についても言う。**」である。
+(c) を落とすと、この文書の量化は A19 (ii-a) より弱いものになる。
 
 「由来」-- `origin` の再帰を実行が辿った枝に沿って追い切った先 -- は `p13-disposals-and-pending.md` の
-ρ-終端であり、別名類は ρ-終端が等しいスロットの集まりなので (D33)、「由来ごとの参照の
-個数」は `held_ρ(·, C)` である。
+ρ-終端であり、別名類は ρ-終端が等しいスロットの集まりなので (D33)、その類が持つ参照の個数は
+`held_ρ(·, C)` である。
 
-**この 2 つの形はどちらも他方を導かない。** 9.1 と 9.2 がそれぞれの向きの反例を挙げる。
+**(ii-a) と (ii-b) はどちらも他方を導かない。** 9.1 と 9.2 がそれぞれの向きの反例を挙げる。
 
 ### 9.1 `L12` (`C1` は由来の形を満たし、A19 (ii) を破る)
 
@@ -1572,13 +1584,22 @@ README の A19 は 2 種の読み手を持つ。P18a・P18c・P19・P21 が読�
   ある。`Eval(m)` は `m` を読み `held(C_1) = 1` である。`Release(m, [])` は `(m, [])` に触れ
   `held(C_1) = 1` である。終端の `Ret(u)` は D7 の読む構文ではない。
 
+<1>4a. 由来の形の (c) が成り立つ。
+  BY <1>1, <1>2, 第 1 節の `C1` の本体, 第 1 節の `C1` の道具立て, D4, D9,
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+  `C1` の `main` の終端は `Ret(u)` であり、`ty(u) = I` は第 1 節の道具立てより `is_fully_unboxed` が真
+  なので D4 の第 1 規則より boxed leaf を持たない。よって D9 の消費の表の「本体の終端の `Ret(x)`」の
+  行が挙げる leaf は無く、この消費は `held` を動かさない。<1>2 よりその点までに `held(C_1)` は
+  `Release(m, [])` の後 0、`held(C_2)` は `App(f, [q])` の消費の後 0 であり、<1>1 より計数下の類は
+  この 2 つで尽きるので、消費の直後の点でどちらも `0 ≥ 0` である。
+
 <1>5. `C1` は A19 (ii) を破る。
   BY p13 の反例 `C1`
   `App(f, [p])` の消費の後、`Retain(m, [])` の要素は `pending` に残り `bumps(C_1) = 1` であるのに
   `held(C_1) = 1` である。第 1 節の読みでは `bumps ≥ 1` のとき `held ≥ 1 + bumps` が要る。
 
 <1>6. QED
-  BY <1>3, <1>4, <1>5
+  BY <1>3, <1>4, <1>4a, <1>5
 
 ### 9.2 `L13` (A19 (ii) を満たし、由来の形を破る本体 `B_1`)
 
@@ -1658,12 +1679,16 @@ Ret(u)))))
   その時点の `held(C_o) = 0` である。
 
 <1>6. `B_1` は `insert_rc` の出力ではない。
-  BY A13, 4.1 節の名前の取り方,
+  BY A15, A25, 4.1 節の名前の取り方,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
      CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
      CODE src/rc_ir/rc_insert.rs: RcInserter::needs_rc, CODE src/ast/name.rs: FullName::is_local,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
-     CODE src/rc_ir/rc_insert.rs: build_retains
+     CODE src/rc_ir/rc_insert.rs: build_retains, CODE src/rc_ir/rc_insert.rs: build_releases
   `Let(y, App(id, [o]), cont)` を書き換える呼び出しの `live_cont` は `o` を含む -- `insert_into_eval` は
   返す `live_before` に `o` を入れる。`o` は局所名であり (`is_local` は名前空間が空かを答え、4.1 節の
   名前の取り方より `o` の名前は名前空間を持たない)、`rhs_operands(App(id, [o]))` は `o` に
@@ -1671,7 +1696,14 @@ Ret(u)))))
   `if self.is_box(type_env) { return false; }` で始まるので boxed な `ty(o) = Arr` では偽である。
   よって
   `retains_before` に `o` が入り、`build_retains` が `Retain(o, [])` をこの `Let` の直前に置く。
-  `B_1` はその節点を持たない。
+  `B_1` はその節点を持たない。**その骨格が `B_1` 自身であることは次のとおりである。** A25 より
+  `insert_rc` の入力の本体は `Retain`/`Release` を含まない。A15 より `insert_into_expr` は
+  `insert_into_expr_inner` をちょうど 1 回呼び、その 5 つの腕 (`Ret`、`Match` の右辺の `Let`、
+  その他の `Let`、`Destructure`、`Eval`) はいずれも骨格節点と同じ構成子・同じ変数・同じ右辺の節点を
+  作り直し、その外側に `build_retains` の鎖と `build_releases` の鎖を積むだけである
+  (`insert_into_func` が根の外に積む `unused` の鎖も `build_releases` である)。よって出力から
+  `Retain`/`Release` 節点を取り除くと骨格が戻る。`B_1` は `Retain`/`Release` を 1 つも持たないので、
+  `B_1` が `insert_rc` の出力であるならばその骨格は `B_1` 自身であり、上の勘定がそれに当たる。
 
 <1>7. QED
   BY <1>3, <1>4, <1>5, <1>6
@@ -1684,13 +1716,15 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
 
 `insert_rc` の側の義務は、この 2 つに分かれる。
 
-- **由来の形 ((ii-a))** = 第 8 節の **(O1)**。走査を読まないので、`insert_rc` の liveness の規律だけで
+- **A19 (ii-a)** は `DEF 由来の形` の 3 つの節であり、それが `insert_rc` の出力について成り立つという
+  言明が第 8 節の **(O1)** である。走査を読まないので、`insert_rc` の liveness の規律だけで
   書ける。`C2` はこれを破り (`Retain(o, [])` の時点で `held(C_o) = 0`)、`L10` がその形を弾く。
-- **帳簿の形 ((ii-b))** = **(O1) + (O2)**。`L7` の恒等式より、(O1) の下でこの形は `U + X ≥ D` に
-  等しい。`C1` はこれだけを破る (`L12`)。
+- **A19 (ii-b)** は「`bumps ≥ 1` である時点で `held ≥ 1 + bumps`」であり、それが `insert_rc` の出力に
+  ついて成り立つという言明が第 8 節の **(O2)** である。`L7` の恒等式より、`L4` と `L6` の前提の下で
+  この形は `U + X ≥ D` と同値である。`C1` は (ii-b) だけを破る (`L12`)。
 
-**第 10 節が (O1) を、第 11 節が (O2) を示す。** よって `insert_rc` の出力について A19 の 2 つの形は
-どちらも成り立つ。
+**第 10 節が (O1) を、第 11 節が (O2) を示す。** よって `insert_rc` の出力について A19 の (ii-a) と
+(ii-b) はどちらも成り立つ。
 
 ## 10. (O1) の証明 -- 別名類の粒度の RC 規律
 
