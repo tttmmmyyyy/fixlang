@@ -3346,10 +3346,13 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
   A15 より `split_body` は `split_body_inner` をちょうど 1 回呼ぶ。
 
 <1>3. (b) の `Release` の行。
-  BY CODE src/rc_ir/borrow.rs: split_body_inner, CODE src/rc_ir/borrow.rs: split_rc,
-     CODE src/rc_ir/borrow.rs: rc_node, A15
+  BY <1>2, CODE src/rc_ir/borrow.rs: split_body_inner, CODE src/rc_ir/borrow.rs: split_rc,
+     CODE src/rc_ir/borrow.rs: rc_node, A15, EXT `Iterator::fold`, EXT `Iterator::rev`
   `split_body_inner` の `RcExpr::Release(v, path, state, k)` の腕は同じ `split_rc` を
-  `is_release = true` で呼び、`rc_node` はそのとき `RcExpr::Release(var, path, state, k)` を作る。
+  `is_release = true` で呼ぶので、<1>2 の `fold` についての読み -- 積む順、最も外側に来る unit、
+  そして `units_under` が空の列を返すときに初期値 `k` がそのまま返ること -- がそのまま当たる。
+  違うのは `rc_node` が作る節点だけで、`is_release` が真のときそれは
+  `RcExpr::Release(var, path, state, k)` である。
 
 <1>4. (b) の残る 5 行。
   BY CODE src/rc_ir/borrow.rs: split_body_inner, CODE src/rc_ir/ast.rs: MatchArm::with_body,
