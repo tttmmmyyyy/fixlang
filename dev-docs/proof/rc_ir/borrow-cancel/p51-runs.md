@@ -427,7 +427,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   <2>1. `P'` の束縛変数の名前は、`P` の束縛変数の名前か、`clone_func` が作る複製の名前である。
     `borrow_ify` は出力の各版を、原本 `func.clone()` の本体を `RewriteCtx::rewrite` で書き換えたものか、
     `clone_func` の複製の本体を同じく書き換えたものとして作る。グローバル初期化子も同じ `rewrite` を
-    通る。P24 の第 4 項より、書き換えが本体について変えるのは `Retain`/`Release` の節点と `App` の
+    通る。P24 の第 5 項より、書き換えが本体について変えるのは `Retain`/`Release` の節点と `App` の
     callee の名前だけであり、`Let` の束縛変数は元の本体のものに等しい。足される `Retain`/`Release` は
     束縛を持たない (D2)。
     BY D2, P24, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
@@ -458,7 +458,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 <1>2. `P'` は L0b の (N2) を満たす。
   `borrow_ify` は出力の各本体を、原本 `func.clone()` の本体か `clone_func` の複製の本体を
   `RewriteCtx::rewrite` で写して作る。複製は束縛変数の一斉の付け替えであり、それ以外の違いを持たない
-  (P9) ので、束縛と使用の対応を保つ。P24 の第 4 項より、書き換えが本体について変えるのは
+  (P9) ので、束縛と使用の対応を保つ。P24 の第 5 項より、書き換えが本体について変えるのは
   `Retain`/`Release` の節点と `App` の callee の名前だけであり、節点の種類・その順序・`Let` の束縛変数・
   `Match` のアームの構成は元の本体のものに等しい。落とす節点も足す節点も束縛を持たない (D2)。よって
   A11 が `P` について与えるスコープの規律は `P'` でも成り立つ。
@@ -558,7 +558,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
           `Some` である。
       A24 は `borrow_ify` の入力 `P` の各関数について「その本体に `InlineLLVMFixBody` の `Llvm` 節点が
       在るならば、その関数の `capture` は `Some` である」を述べる。`P'` の各版は、原本 `func.clone()` の
-      本体か `clone_func` の複製の本体を `RewriteCtx::rewrite` で写して作られ、P24 の第 4 項より
+      本体か `clone_func` の複製の本体を `RewriteCtx::rewrite` で写して作られ、P24 の第 5 項より
       書き換えが本体について変えるのは `Retain`/`Release` の節点と `App` の callee の名前だけなので、
       `Llvm` の op は元の本体のものに等しい。P9 より複製は束縛変数の一斉の付け替えであり、`clone_func`
       は原本の `capture` を `fresh_rename_function` が付け替えた形で持つので、`Some` であることは
