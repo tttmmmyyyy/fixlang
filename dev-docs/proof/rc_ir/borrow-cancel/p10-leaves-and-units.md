@@ -83,8 +83,24 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 この関係は memo の状態に依らない。`origin_inner` が行う `origin` の呼び出しとその引数は、`vars`、`E`、
 `u`、`sig` だけで決まる -- `Join` の腕は `arm_results` の各要素について、`Llvm` の腕は `decl` と `args`
-から作った対について呼ぶのであって、先に返った `origin` の値を読んで呼び先を決める腕は無い
-(`CODE src/rc_ir/ownership.rs: origin_inner`, `CODE src/rc_ir/ownership.rs: origin_from_leaves_under`)。
+から作った対について呼ぶのであって、先に返った `origin` の値を読んで呼び先を決める腕は無い。
+`arm_results` と `args` は `vars.bindings` が持つ `Binding` の欄である。
+
+**`decl` がその 4 つで決まることは A3 が言う。**`decl` は
+`llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の返り値であり、`llvm_gen` と `result_ty` は
+`Binding::Llvm` の欄、`arg_tys` は `args` の型の列である。`LLVMGen::result_prov` は `&self` を取るので、
+内部可変性を持つ op は呼ぶたびに違う `Provenance` を返せる。そのとき
+`decl.leaf_origins_at(path).and_then(as_arg_projection)` の場合分けが変わり、`Some((j, p))` の腕が
+呼ぶ対も、`None` の腕で `origin_from_leaves_under` が `decl.leaf_origins_under(path)` から組む
+`operand_units` の各対も変わる。すなわち呼び先の対そのものが変わる。A3 の「`result_prov` と
+`borrows_operand` は決定的である -- 同じ引数に対して常に同じ値を返す」がそれを排除する。
+
+依拠するもの: A3 (`result_prov` は決定的である)、
+`CODE src/rc_ir/ownership.rs: origin_inner`、`CODE src/rc_ir/ownership.rs: origin_from_leaves_under`、
+`CODE src/rc_ir/ownership.rs: as_arg_projection`、`CODE src/rc_ir/ownership.rs: Binding`、
+`CODE src/ast/inline_llvm.rs: LLVMGen::result_prov`、
+`CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at`、
+`CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`。
 
 **DEF cls** -- 型 `t` の**クラス** `cls(t)` を、次の順に最初に当たるもので定める。6 つの条件がすべて
 真偽値を持つとき `cls(t)` は定まる。`<1>1` を満たす型についてそれが成り立つことは `<1>3c` と `<1>3e` が
