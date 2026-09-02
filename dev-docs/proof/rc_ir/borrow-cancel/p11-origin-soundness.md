@@ -782,9 +782,17 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
     BY <2>1, CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
        Generator::get_scoped_obj_field (`get_scoped_obj_field` は `get_scoped_obj` を呼ぶ。この 3 つに
        名前を渡す呼び出しを `src/` 全体で数えると、`src/rc_ir/codegen.rs` に 12 か所、`Llvm` 節点の
-       オペランドを読む `src/fixstd/builtin.rs` の op の生成コードに 127 か所ある。残る 2 か所 --
+       オペランドを読む `src/fixstd/builtin.rs` の op の生成コードに 127 か所、`src/generator.rs` に
+       2 か所、`src/ast/export_statement.rs` と `src/build/build_object_files.rs` に 1 か所ずつある。
+       `src/generator.rs` の 2 か所は、`get_scoped_obj_field` の中の `get_scoped_obj` と、
+       `Generator::build_capture_project` の `self.get_scoped_obj_noretain(cap_name)` である。
+       後者を呼ぶのは `src/fixstd/builtin.rs` の `InlineLLVMCaptureProjectBody` の生成コードだけなので、
+       これも `Llvm` 節点のオペランドを読む道である。残る 2 か所 --
        `src/ast/export_statement.rs` と `src/build/build_object_files.rs` -- は環境 (D22) の側で
        あって、本体の節点ではない),
+       CODE src/generator.rs: Generator::build_capture_project,
+       CODE src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody (`gc.build_capture_project(..)` を
+       呼ぶ唯一の場所である),
        CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_rhs,
        Generator::eval_rc_match (`RcExpr::Let` の `RcRhs::Llvm` の腕は `llvm_gen.generate_tail` を
        呼び、オペランドを自分では読まない),
