@@ -1268,8 +1268,9 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
 
 <1>2. `owns_object(root, path)` は `self.vars.param_tys` に `root` が無いとき真を返す。これは P7e の (b)
-      が「`r` がこの版のパラメータ・capture でないとき、`owns_object(r, p)` は `p` によらず真である」と
-      述べるものである。
+      が「そうでないとき、`owns_object(r, p)` は `p` によらず真である」と述べるものである -- P7e の (a) が
+      「`r` がこの版のパラメータ・capture であるとき」を扱うので、(b) の「そうでないとき」は `r` が
+      この版のパラメータ・capture でないときである。
   BY P7e, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
 
 <1>3. グローバル初期化子の `RewriteCtx` の `vars` は `VarTable::body_only(&g.init)` であり、`param_tys` は
