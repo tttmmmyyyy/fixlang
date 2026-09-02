@@ -25,7 +25,7 @@ P1 と P2 は共通の補題 (型の上の walk が停止すること、`unit_st
 `<1>29a` は README の P2a (`origin` の答えは memo に依らない) と同じ内容の局所補題であり、`<1>34` の
 `<2>1` の `<3>5` が読む。その証明は命題を 1 つも引かない。仮定は A3 -- `result_prov` の決定性と、
 共有参照で受け取る計算が値の等しさを変えないことの 2 節 -- のほか、`<1>25` と `<1>21` を経て A6 と
-A11 を引き、定義 D1、D2、D6 を引く。外部の結果は `EXT Rust の可視性`、`EXT Rust の借用規則`、
+A11 を引き、定義 D1、D2、D6 を引く。外部の結果は `EXT Rust の可視性`、`EXT Rust の内部可変性`、
 `EXT derive した PartialEq と Eq`、`EXT HashSet の等価性`、`EXT 1 要素の集合の反復` の 5 つである。
 
 P1 は 2 つの静的な列挙 (`boxed_leaf_paths` と `rc_units`) の対応についての主張なので、D16 の
@@ -77,13 +77,28 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 一時値はその temporary scope の終わりで drop される。
 
-**EXT Rust の可視性** -- Rust Reference の "Visibility and Privacy" が次を述べる。項目 -- 構造体の
-フィールドを含む -- は既定で非公開であり、非公開の項目を名前で参照できるのは、それを宣言するモジュールと
-その子孫のモジュールだけである。`pub(crate)` を付けた項目を名前で参照できるのは、そのクレートの中だけで
-ある。`<1>29a` の `<2>1` の `<3>1` と `<3>2` がこれを引く。
+**EXT Rust の可視性** -- Rust Reference の "Visibility and Privacy" が次を述べる。
 
-**EXT Rust の借用規則** -- 安全な Rust では、共有参照 `&T` から `T` の値を可変に借りることはできず、
-`T` が占める記憶域へ書き込む道は `UnsafeCell` を通じて内部可変性を持つ欄だけである。`RefCell` と
+> By default, everything is _private_, with two exceptions: Associated items in a `pub` Trait are
+> public by default; Enum variants in a `pub` enum are also public by default.
+>
+> If an item is private, it may be accessed by the current module and its descendants.
+>
+> `pub(crate)` makes an item visible within the current crate.
+
+構造体のフィールドもこの既定の下にある -- 同じ節の例が `pub struct Bar { field: i32 }` を
+「a public struct with a private field」と注釈する。`<1>29a` の `<2>1` の `<3>1` と `<3>2` が
+これを引く。
+
+**EXT Rust の内部可変性** -- Rust Reference の "Interior Mutability" が、共有参照の指す値を書き替える
+ことについて次を述べる。
+
+> This goes against the usual requirement that the value pointed to by a shared reference is not
+> mutated.
+>
+> `std::cell::UnsafeCell<T>` type is the only allowed way to disable this requirement.
+
+すなわち、共有参照 `&T` が指す記憶域へ書き込む道は `UnsafeCell` を通る欄だけである。`RefCell` と
 `OnceLock` はその欄を持つ型である。`<1>29a` の `<2>1` の `<3>3` がこれを引く。
 
 **EXT HashSet の等価性** -- 標準ライブラリの `HashSet<T, S>` の `PartialEq` は、両者の
@@ -1630,8 +1645,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     名前を持つ `RcVar` の型はどの出現でも同じなので、記録される型は `ty(u)` である。
     BY <1>3a, <2>1, <2>2
 
-<1>22. `<1>21` と同じ本体と表 `vars` -- 本体を 1 つ取り、`vars` をそれについて `VarTable::of` または
-   `VarTable::body_only` が作る表としたもの -- を取る。`collect_bindings` の各節点での挿入の順序は
+<1>22. `<1>21` と同じ本体と表 `vars` を取る。`collect_bindings` の各節点での挿入の順序は
    次の通りである。節点 `n` の呼び出しが行う挿入の全体を
    `Ins(n)` と書くと、`Ins(n)` は `<1>21` の列の連続する区間を占め、`n` の子の `Ins` は `Ins(n)` に
    含まれる。
@@ -2279,7 +2293,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
       BY EXT Rust の可視性, CODE src/rc_ir/ownership.rs: VarTable (`var_tys` の宣言),
          CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
          CODE src/rc_ir/ownership.rs: collect_bindings
-    <3>3. `origin` は `&VarTable` を取るので、`EXT Rust の借用規則` より `bindings` と `var_tys` の
+    <3>3. `origin` は `&VarTable` を取るので、`EXT Rust の内部可変性` より `bindings` と `var_tys` の
        `Map` そのものを置き替えることも、その要素を可変に借りることもできない。共有参照から届くのは
        内部可変性を持つ欄だけであり、`origins` の `RefCell` がその 1 つである。
 
@@ -2300,7 +2314,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `impl PartialEq for TypeNode` が読むのは `ty` だけであり、3 つの memo の値はどれも `ty` の
        関数である。よってその欄が埋まっても、(b) が挙げるものは値として変わらない。
       BY A3 (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない),
-         EXT Rust の借用規則, <3>1, <3>2,
+         EXT Rust の内部可変性, <3>1, <3>2,
          CODE src/rc_ir/ownership.rs: origin, VarTable, origin_inner, origin_from_leaves_under,
             truncate_to_unit, unit_step,
          CODE src/ast/types.rs: TypeNode (`hash_cache` / `ground_cache` / `depth_cache` の宣言と
