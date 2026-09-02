@@ -20,7 +20,7 @@ use std::{
 /// The map the compiler holds its data in. `fxhash` is fast on the short string keys the compiler
 /// looks values up by, and hashes from a fixed seed, at the cost of the resistance to chosen-key
 /// collisions a random seed gives.
-// PROOF: P1, P2, P2a, P3, P4, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub type Map<K, V> = FxHashMap<K, V>;
 
 /// A map holding the given key-value pairs. When a key is given more than once, the value that
@@ -34,7 +34,7 @@ pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K
 }
 
 /// The set the compiler holds its data in, hashed by `fxhash` as `Map` is.
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type Set<T> = FxHashSet<T>;
 
 /// A set holding the given elements, with an element that appears several times held once.
