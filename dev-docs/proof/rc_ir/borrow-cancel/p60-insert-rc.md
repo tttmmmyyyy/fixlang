@@ -88,11 +88,36 @@ D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて 
 **時点。** この文書では**時点**とは節点の訪問の入口を指す。`held_ρ(n, C)`、`bumps_ρ(n, C)` は、
 `ρ` の上の節点 `n` の入口における値である。
 
-**EXT 呼び出しの入れ子** (README が `EXT` の名札を与える「外部の結果」の群の項目)。1 つのスレッドの
+**外部の結果。** README が `EXT` の名札を与える群の項目を、この文書は次の 6 つ据える。
+
+**EXT 呼び出しの入れ子**。1 つのスレッドの
 計算において、関数の呼び出しは開始と終了について入れ子をなす。すなわち、呼び出し `c` の実行中に
 始まった呼び出しは `c` が戻る前に戻り、`c` の実行中のどの時点でも戻っていない呼び出しは、`c` と
 その祖先 -- `c` を実行している呼び出しの列 -- である。停止する計算が行う呼び出しは有限個であり、その
 どれもが戻る。
+
+**EXT `Iterator::fold`**。反復子 `it` が生む元を順に `a_1, …, a_n` とすると、`it.fold(init, f)` は
+`f(… f(f(init, a_1), a_2) …, a_n)` を返す。`n = 0` のときは `init` をそのまま返す
+(Rust の標準ライブラリ `core::iter::Iterator::fold`)。
+
+**EXT `Iterator::rev`**。`it.rev()` は、`it` が生む元を逆順に生む反復子である。生む元の多重集合は
+変わらない (`core::iter::Iterator::rev`)。
+
+**EXT `Iterator::all`**。`it.all(p)` は、`it` が生むすべての元について `p` が真を返すとき、また
+そのときに限り真を返す (`core::iter::Iterator::all`)。
+
+**EXT 述語による除去**。`Vec::retain(p)` と `HashSet::retain(p)` は、`p` が偽を返す元をすべて
+取り除き、真を返す元をすべて残す。`Vec` では残る元の順序も変わらない
+(`alloc::vec::Vec::retain`, `std::collections::HashSet::retain`)。この文書が `Set` と書くのは
+`FxHashSet` の別名である (`CODE src/misc.rs: Set`)。
+
+**EXT `Vec::extend`**。`v.extend(it)` は、`it` が生む元を順に `v` の末尾へ足す
+(`alloc::vec::Vec` の `Extend` の実装)。
+
+**EXT 導出した `PartialEq`**。`#[derive(PartialEq)]` が作る等号は、2 つの値が同じ構成子であって、
+同じ位置の各欄がその欄の型の `PartialEq` で等しいとき、またそのときに限り真である。`HashSet` の
+等号は、大きさが等しくどちらの元も他方に含まれること -- すなわち集合としての等しさ -- である
+(`core::cmp::PartialEq` の derive マクロ、`std::collections::HashSet` の `PartialEq` の実装)。
 
 **A19 (ii) の読み。** README の形で読む。**(ii-a)** は、各時点と各**計数下の**別名類 `C` に
 ついて `held_ρ(τ, C) ≥ 0` であり、読む構文と `Retain`/`Release` がその類を名指す時点では
@@ -280,9 +305,11 @@ Ret(w)))))
     ときだけ `x = w` を足したものである。<2>2 より `live_cont = {w}` は `w` を含むので、この条件は偽で
     ある。
   <2>5. 返る節点は `Let(w, App(f, [p]), Ret(w))` である。
-    BY <2>3, <2>4, CODE src/rc_ir/rc_insert.rs: build_releases, CODE src/rc_ir/rc_insert.rs: build_retains
-    `build_releases(∅, cont)` と `build_retains(∅, node)` はどちらも引数の節点をそのまま返す
-    (空の `Vec` の `fold` は初期値を返す)。
+    BY <2>3, <2>4, CODE src/rc_ir/rc_insert.rs: build_releases,
+       CODE src/rc_ir/rc_insert.rs: build_retains, EXT `Iterator::fold`, EXT `Iterator::rev`
+    `build_releases(vars, cont)` と `build_retains(vars, cont)` はどちらも
+    `vars.into_iter().rev().fold(cont, …)` である。`EXT Iterator::rev` より逆順の反復子も空であり、
+    `EXT Iterator::fold` より元が 1 つも無い `fold` は初期値 `cont` をそのまま返す。
   <2>6. QED
     BY <2>2, <2>3, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let
     `live_before` は `live_cont` から `x = w` を除き、各オペランドの局所名を足したものである。
@@ -972,8 +999,12 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
 
 <1>1. `build_retains(vars, cont)` が作る各 `Retain` 節点は `Retain(v, vec![], RcState::Unknown, ·)` の
       形であり、その継続は同じ呼び出しが作る次の `Retain` 節点か `cont` である。
-  BY CODE src/rc_ir/rc_insert.rs: build_retains
-  `vars.into_iter().rev().fold(cont, ...)` は `cont` から始めて外へ向かって節点を積む。
+  BY CODE src/rc_ir/rc_insert.rs: build_retains, EXT `Iterator::fold`, EXT `Iterator::rev`
+  `build_retains` は `vars.into_iter().rev().fold(cont, |c, v| … RcExpr::Retain(v, vec![],
+  RcState::Unknown, c) …)` である。`EXT Iterator::rev` より走る順は `vars` の逆順であり、
+  `EXT Iterator::fold` より各段は直前の段の結果を継続に据えた `Retain` 節点を作るので、`cont` から
+  始めて外へ向かって節点が積まれ、`vars` の第 1 元の節点が最も外側に来る。作られる節点の path は
+  `vec![]`、`RcState` は `Unknown` である。
 
 <1>2. `insert_rc` は、一度作った節点の継続を書き換えない。
   BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
@@ -1687,13 +1718,15 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
 <1>1. `free_locals(m)` は、`m` を根とする部分木が参照する局所名から、その部分木が束縛する局所名を
       除いたものである。
   BY CODE src/rc_ir/rc_insert.rs: free_locals,
-     CODE src/rc_ir/rc_insert.rs: collect_referenced_and_bound
-  `free_locals` は `collect_referenced_and_bound` で `refs` と `bound` を集め、`refs` から `bound` の
-  元を落とす。`collect_referenced_and_bound` は `Ret` の変数、`Let` の右辺の各変数 (`Match` の
+     CODE src/rc_ir/rc_insert.rs: collect_referenced_and_bound,
+     CODE src/rc_ir/rc_insert.rs: insert_if_local, EXT 述語による除去
+  `free_locals` は `collect_referenced_and_bound` で `refs` と `bound` を集め、
+  `refs.retain(|n| !bound.contains(n))` を掛けて `refs` を返す。`EXT 述語による除去` より、この
+  呼び出しは `bound` に入る元をすべて取り除き、入らない元をすべて残す。
+  `collect_referenced_and_bound` は `Ret` の変数、`Let` の右辺の各変数 (`Match` の
   scrutinee を含む)、`Destructure` の容器、`Retain`/`Release`/`Eval` の変数を `refs` に入れ、`Let` の
   束縛変数、`Match` の各アームの payload、`Destructure` の各フィールド変数を `bound` に入れ、継続と
-  アーム本体へ降りる。局所名の判定は `insert_if_local` が行う
-  (`CODE src/rc_ir/rc_insert.rs: insert_if_local`)。
+  アーム本体へ降りる。局所名の判定は `insert_if_local` が行う。
 
 <1>2. `m` が本体の根であるとき `A(m) = ∅` である。
   BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func, CODE src/rc_ir/rc_insert.rs: insert_rc
@@ -2131,8 +2164,9 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
         `v` を名指す回数は `[v ∉ Λ(m') かつ v の最後の出現が Borrow]` である。
     BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
        CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs: build_retains,
-       CODE src/rc_ir/rc_insert.rs: build_releases, L15
-    ループは `operands.iter().rev()` を走り、`live_after_operand` を `live_cont`(= `Λ(m')`) の写しから
+       CODE src/rc_ir/rc_insert.rs: build_releases, L15, EXT `Iterator::rev`
+    ループは `operands.iter().rev()` を走り (`EXT Iterator::rev` よりそれは `operands` を逆順に
+    走る)、`live_after_operand` を `live_cont`(= `Λ(m')`) の写しから
     始めて各局所オペランドの名前を足していく。よって `v` の出現 `i` における `used_later` は
     「`v ∈ Λ(m')` または `v` の出現が `i` より後ろにある」である。`Own` の出現は `used_later` が真で
     `needs_rc(v)` のとき `retains_before` に入り、`Borrow` の出現は `used_later` が偽で `needs_rc(v)`
@@ -2829,9 +2863,12 @@ D6 のスロット -- が要る)。よって時点ごとの量は、その時点
 
 <1>2. `consume_objects(pending, objects)` は、`outstanding` が `objects` のいずれかを名指す要素を
       すべて `pending` から取り除く。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects
-  `pending.retain` の閉包は、`objects` のいずれかを `retain.outstanding.names` が真とするとき
-  `false` を返す。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
+     CODE src/rc_ir/borrow.rs: PendingRetains, EXT 述語による除去
+  `PendingRetains` は `Vec<PendingRetain>` である。`consume_objects` が呼ぶ `pending.retain` の閉包は、
+  `objects` のいずれかを `retain.outstanding.names` が真とするとき `false` を返し、そうでないとき
+  `true` を返す。`EXT 述語による除去` より、その呼び出しは前者の要素をすべて取り除き、後者の要素を
+  すべて残す。
 
 <1>3. CASE 事象が `consume(var, path)` の呼び出しである。
   BY <1>0, <1>1, <1>2, L21, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
@@ -3275,14 +3312,16 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
 <1>2. (b) の `Retain` の行。
   BY CODE src/rc_ir/borrow.rs: split_body, CODE src/rc_ir/borrow.rs: split_body_inner,
      CODE src/rc_ir/borrow.rs: split_rc, CODE src/rc_ir/borrow.rs: rc_node,
-     CODE src/rc_ir/borrow.rs: expr_node, A15
+     CODE src/rc_ir/borrow.rs: expr_node, A15, EXT `Iterator::fold`, EXT `Iterator::rev`
   `split_body_inner` の `RcExpr::Retain(v, path, state, k)` の腕は、まず `k` を `split_body` で写し、
   その結果を `split_rc(v, path, *state, false, k, &node.source, type_env)` に渡す。`split_rc` は
   `units_under(&v.ty, path, type_env).into_iter().rev().fold(k, |cont, unit| rc_node(is_release,
-  v.clone(), unit, state, cont, source))` であり、`rev().fold` は `k` から始めて外へ向かって節点を
-  積むので、第 1 の unit が最も外側に来る。`rc_node` は `is_release` が偽のとき
-  `RcExpr::Retain(var, path, state, k)` を作る。`units_under` が空の列を返せば `fold` は `k` を
-  そのまま返す。A15 より `split_body` は `split_body_inner` をちょうど 1 回呼ぶ。
+  v.clone(), unit, state, cont, source))` である。`EXT Iterator::rev` より走る順は `units_under` が
+  返す列の逆順であり、`EXT Iterator::fold` より各段は直前の段の結果を継続に据えた節点を作るので、
+  `k` から始めて外へ向かって節点が積まれ、第 1 の unit が最も外側に来る。`rc_node` は `is_release` が
+  偽のとき `RcExpr::Retain(var, path, state, k)` を作る。`units_under` が空の列を返せば逆順の
+  反復子も空であり、`EXT Iterator::fold` より `fold` は初期値 `k` をそのまま返す。
+  A15 より `split_body` は `split_body_inner` をちょうど 1 回呼ぶ。
 
 <1>3. (b) の `Release` の行。
   BY CODE src/rc_ir/borrow.rs: split_body_inner, CODE src/rc_ir/borrow.rs: split_rc,
@@ -3407,9 +3446,10 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
     `units_under` の `None` の腕は `vec![path.clone()]` を返す。唯一の元は `π` 自身なので `π` で
     始まり、`Leaves(τ, π)` の各元は `π` で始まるのでちょうど 1 つの元について `Leaves(τ, u)` に入る。
   <2>2. CASE `subtree_type(τ, π) = Some(σ)`。
-    BY CODE src/rc_ir/ownership.rs: units_under, <1>5, <1>2a, A10
+    BY CODE src/rc_ir/ownership.rs: units_under, <1>5, <1>2a, A10, EXT `Vec::extend`
     `units_under` の `Some` の腕は `rc_units(σ)` の各 `u` について
-    `let mut unit_path = path.clone(); unit_path.extend(u);` を返すので、各元は `π ++ u` の形であり
+    `let mut unit_path = path.clone(); unit_path.extend(u);` を返す。`EXT Vec::extend` より
+    `unit_path` は `π` の後ろに `u` の添字を順に並べたもの、すなわち `π ++ u` であり、
     `π` で始まる。<1>5 より `Leaves(τ, π) = {π ++ ν : ν ∈ boxed_leaf_paths(σ)}` であり、`π ++ ν` が
     `π ++ u` で始まるのは `ν` が `u` で始まるときに限る。A10 の「`unpunched_field_types` を
     繰り返し取って到達する型」の節より `σ` -- `τ` から `unpunched_field_types` を繰り返し取って到達する
@@ -3564,7 +3604,8 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
        CODE src/rc_ir/ownership.rs: Origin::acted_on,
        CODE src/rc_ir/ownership.rs: Origin::of_candidates,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
-       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+       EXT `Iterator::all`, EXT 導出した `PartialEq`
     鍵 `(x, π)` を取る。P2 の言明は `vars.origins` の状態に条件を置かず、範囲に入る `(x, π)` について
     `origin(x, π)` が panic せずに答えを返して停止すると述べるので、どの memo の状態から呼んでも
     それが成り立つ。とくに空の memo と `vars_B` から `(x, π)` について `origin` を呼ぶ計算は
@@ -3605,8 +3646,10 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
       から決まり、`origin` の値は帰納法の仮定より等しいので、`reached` の元の集合は 2 つの側で等しい。
       返り値はその集合から決まる -- `reached` の元がすべて等しいときはその共通の値であり、そうでない
       ときは各元の `acted_on` を集めた**集合**を `of_candidates` に渡したものである。どちらも
-      `reached` の並べ方に依らない (`reached.iter().all(|o| o == first)` は「元がすべて互いに等しい」
-      と同値であり、`Origin` の等号は `Join` の `candidates` を集合として比べる)。
+      `reached` の並べ方に依らない。`reached.iter().all(|o| o == first)` は、`EXT Iterator::all` より
+      「`reached` のすべての元が第 1 元に等しい」であり、`EXT 導出した PartialEq` より `Origin` の
+      等号は同値関係 -- `Set<VarPath>` の欄も集合として比べる -- なので、これは「元がすべて互いに
+      等しい」と同値であって、並べ方に依らない。
     - `Binding::Field(container, idx)` の腕は `container.ty.is_box(type_env)` で枝が分かれ、<2>1 より
       `container` と `idx` は等しいので 2 つの側は同じ枝に入る。boxed の枝は `Exactly((var, path))` を
       返し、unbox の枝は `origin(vars, type_env, &container.name, &([idx] ++ path))` を返すので、
