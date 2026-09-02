@@ -416,8 +416,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      残りの文字を `parse::<u32>()` に掛ける。ほかに abort する場所を持たない。
     BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME
   <2>2. (b) の第 1 文が成り立つ。`<1>3b` が挙げる `tycons` への 6 つの書き込みのうち、鍵を置くのは
-     `TypeEnv::default` (空の `Map`)、`Program::calculate_type_env` が呼ぶ `TypeEnv::new`、
-     `TypeEnv::add_tycons` の 3 つであり、残る 3 つは既に在る値を書き替えるだけである。よって
+     `TypeEnv::default` (空の `Map`)、`TypeEnv::new`、`TypeEnv::add_tycons` の 3 つであり、残る
+     3 つは既に在る値を書き替えるだけである。**この 2 つの構成子は `pub` なので、呼ぶ場所を
+     クレート全体で数え上げる。**`src/` で `TypeEnv::new` を呼ぶのは 3 か所であり、製品のコードでは
+     `Program::calculate_type_env` だけ、残る 2 つ (`src/rc_ir/ownership.rs` と
+     `src/rc_ir/validate.rs`) は `#[cfg(test)] mod tests` の中である。`TypeEnv::default` を呼ぶのは
+     3 か所 (`src/ast/traits.rs` の `TraitEnv::validate_overlapping_instances` と、
+     `src/elaboration/typecheck.rs`、`src/rc_ir/ownership.rs` の `#[cfg(test)] mod tests`) だが、
+     どれも空の `Map` を置くので鍵を 1 つも置かない。よって
      `E` の鍵は次の 4 か所から来る。`add_tycons` を呼ぶ場所は `closure_specialization::lift_all`、
      `closure_specialization::realize_all`、`defunctionalize_fix::run_one`、
      `desugar_opaque::register_opaque_tycon` の 4 つである。
