@@ -287,11 +287,14 @@ Ret(w)))))
 <1>5. `insert_into_expr(Let(w, App(f, [p]), Ret(w)), ∅)` は
       `(Let(w, App(f, [p]), Ret(w)), {p})` を返す。
   <2>1. この呼び出しは `insert_into_operation_let(w, App(f, [p]), Ret(w), source, ∅)` に入る。
-    BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の `RcExpr::Let(x, rhs, cont)` の腕
-    右辺は `Match` ではない。
+    BY A15, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の `RcExpr::Let(x, rhs, cont)` の腕
+    A15 より `insert_into_expr` は `insert_into_expr_inner` をちょうど 1 回呼ぶ。右辺は `Match` では
+    ないので、その腕は `insert_into_operation_let` へ振り分ける。
   <2>2. `live_cont = {w}` である。
-    BY <1>4, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let
-    この関数はまず `self.insert_into_expr(cont, live_after)` を呼ぶ。
+    BY <1>4, A15, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let
+    この関数はまず `self.insert_into_expr(cont, live_after)` を呼ぶ。A15 よりその呼び出しは
+    `insert_into_expr_inner` をちょうど 1 回呼ぶので、返る値は <1>4 のものである。
   <2>3. `retains_before` と `releases_after` はどちらも空である。
     BY CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs:
        RcInserter::insert_into_operation_let, <1>2, <2>2
@@ -319,8 +322,12 @@ Ret(w)))))
       `(Retain(p, [], Unknown, Let(u, App(f, [p]), Let(w, App(f, [p]), Ret(w)))), {p})` を返す。
   <2>1. この呼び出しは `insert_into_operation_let(u, App(f, [p]), ·, source, ∅)` に入り、
         `live_cont = {p}` である。
-    BY <1>5, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の
+    BY <1>5, A15, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の
        `RcExpr::Let(x, rhs, cont)` の腕
+    A15 より `insert_into_expr` は `insert_into_expr_inner` をちょうど 1 回呼ぶ。右辺は `Match` では
+    ないのでその腕は `insert_into_operation_let` へ振り分け、`live_cont` は継続についての
+    `insert_into_expr` の返り値、すなわち <1>5 の `{p}` である。
   <2>2. `retains_before = [p]` であり、`releases_after` は空である。
     BY <2>1, <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs:
        RcInserter::insert_into_operation_let
@@ -338,8 +345,12 @@ Ret(w)))))
     `live_before` は `{p} \ {u} = {p}` に `p` を足したもので `{p}` である。
 
 <1>7. `insert_into_expr(S_main, ∅)` は `(B_0, ∅)` を返す。
-  BY <1>6, <1>1, CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs:
+  BY <1>6, <1>1, A15, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr,
+     CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs:
      RcInserter::insert_into_operation_let
+  A15 より `insert_into_expr` は `insert_into_expr_inner` をちょうど 1 回呼び、右辺は `Match` では
+  ないのでその腕は `insert_into_operation_let` へ振り分ける。継続についての呼び出しの返り値は
+  <1>6 のものである。
   `rhs_operands(Llvm(alloc, []))` は空の列である (`alloc` はオペランドを持たない)。よって
   `retains_before` と `releases_after` は空である。`x = p` については `live_cont = {p}` が `p` を含むので
   `after` に入らない。`live_before` は `{p} \ {p} = ∅` である。
