@@ -3592,9 +3592,14 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
    写さないこと、`uncurry` の後の `simplify_symbol_names` が名前しか替えないことを読む。報告する穴は
    無い。
 
-5. **引用と `// PROOF:` の対応。** この文書が引く記号はすべて実在し、
-   `python3 dev-docs/proof/proof_links.py --write` が `citations.tsv` と各記号の `// PROOF:` の欄を
-   この文書の引用から作る。存在しない記号を 1 つ足すと指摘を出すことを確かめた。
+5. **引用と `// PROOF:` の対応。** `python3 dev-docs/proof/proof_links.py --write` が `citations.tsv` と
+   各記号の `// PROOF:` の欄をこの文書の引用から作る。**道具が記号の実在まで検査するのは `.rs` の引用
+   だけである** -- `CODE` の行を拾う正規表現が受け取るのは `.rs` と `.fix` の引用であり、`.fix` に
+   ついては記号を見ずにファイルの存在だけを見る。`.pest` の引用はその正規表現に当たらず、記号を持たない
+   `.md` の引用も当たらない。`.rs` の引用については、存在しない記号を 1 つ足すと道具が指摘を出すことを
+   確かめた。道具の範囲の外に在る 6 件 -- `src/fixstd/std.fix` の `assert_unique` (`assert_unique :` の
+   宣言とその定義) と `mutate_unique_io`、`src/parse/grammer.pest` の `capital_name`・`type_name`・
+   `ffi_c_fun_ty`、`src/docs/std_unsafe_is_unique.md` -- は手で開いて確かめた。
 
 6. **D30 と P28 は段内の点まで届いている (L5a、L6、L9、L12、L13)。** README の P26 は「**範囲に入るのは、
    共通接頭の段のあいだの時点で起きる観測だけではない。** 共通接頭の段の**中で**起きる観測も入る」と述べ、
