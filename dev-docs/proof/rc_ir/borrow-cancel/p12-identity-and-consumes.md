@@ -1228,8 +1228,9 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 <1>15. CASE `Some(Llvm(gen, args, result_ty))` で `<1>4` の `S` が単一の `Fresh` または単一の `Unknown`。
   <2>1. `as_arg_projection(S)` は `None` を返すので、腕は
-        `origin_from_leaves_under(vars, type_env, &decl, args, λ, &here_identity)` に進む。
-        `here_identity` は `(x, λ)` である。`<1>4` より、その腕が作る `decl` はこの CASE が主語にする
+        `origin_from_leaves_under(vars, type_env, &decl, args, λ, &here_identity)` の値を
+        `unwrap_or_else(here)` に渡し、その結果を返す。`here_identity` は `(x, λ)` であり、
+        `here()` は `Exactly((x, λ))` である。`<1>4` より、その腕が作る `decl` はこの CASE が主語にする
         `decl` と同じ値である。
     BY <1>1, <1>4, CODE src/rc_ir/ownership.rs: as_arg_projection, origin_inner の
        `Some(Binding::Llvm(..))` の腕の `None =>` の枝
@@ -1246,8 +1247,11 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
     その値を返す。
     BY <2>1, <2>2, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   <2>4. QED
-    `<2>3` と `Origin::identity` より `id(x, λ) = (x, λ)` である。
-    BY <1>5a, <2>3, CODE src/rc_ir/ownership.rs: Origin::identity
+    `<2>3` より `origin_from_leaves_under` は `Some(Origin::Exactly((x, λ)))` を返すので、`<2>1` の
+    `unwrap_or_else(here)` はその中身をそのまま返し、腕の値は `Exactly((x, λ))` である。`<1>1` より
+    `origin(x, λ)` の値はその `origin_inner` の呼び出しが返した値なので、`Origin::identity` より
+    `id(x, λ) = (x, λ)` である。
+    BY <1>1, <1>5a, <2>1, <2>3, CODE src/rc_ir/ownership.rs: Origin::identity
 
 <1>16. CASE `Some(Llvm(gen, args, result_ty))` で `<1>4` の `S` の元数が 2 以上。
   `<1>5` よりこの場合は起きない。
