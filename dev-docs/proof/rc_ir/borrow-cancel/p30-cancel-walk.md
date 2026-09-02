@@ -1745,10 +1745,14 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
      DEF INV
 <1>3. CASE 状態が「複製」で作られた。EXT Clone より `pending.clone()` は元の状態と同じ長さで、第 `i`
       要素の `node` は元の第 `i` 要素の `node` と等しく、第 `i` 要素の `outstanding` は元の
-      `outstanding` と等しい。(ii)、(iii)、(iv) は値だけで決まるので、<1>1 より成り立つ。(i) は
-      「`P` の時点までに訪問された」を含むが、訪問された節点の集合は時が進んでも要素を失わないので、元の
-      状態で成り立てば複製の時点でも成り立ち、由来も変わらない。
-  BY <1>1, DEF INV, DEF 訪問, EXT Clone
+      `outstanding` と等しい。(i) は「`P` の時点までに訪問された」を含むが、訪問された節点の集合は時が
+      進んでも要素を失わないので、元の状態で成り立てば複製の時点でも成り立つ。由来は `node` から P15 の
+      前半で一意に定まるので、`node` が等しい複製の要素の由来は元の要素の由来と同じである。(ii) と (iii)
+      は要素の `node` と `outstanding` の値だけで決まるので、由来が同じことと合わせて <1>1 から遺伝する。
+      (iv) は訪問の時刻を読むが、それは走査全体についての事実であり、複製は要素の `node` も並びも保つので、
+      元の状態について <1>1 が与える「`P[i]` の由来は `P[j]` の由来より前に訪問された」がそのまま複製の
+      同じ添字の対に当たる。
+  BY <1>1, P15, DEF INV, DEF 訪問, EXT Clone
 <1>4. CASE 状態が「追加」で作られた。すなわち `Retain` 節点 `t = Retain(v, path, _, k)` の訪問が
       `pending.push(PendingRetain { node: retain, outstanding })` を実行した。ここで
       `retain = node_id(node)` であり `node` は `t` の節点、`outstanding = self.acted_references(v, path)`
