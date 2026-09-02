@@ -152,6 +152,30 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 `let candidates = reached.iter().flat_map(..)`)。よって内側が `Join` のとき、その `identity` は外側の
 候補集合に入る。
 
+**外部の結果。** README の第 2 節は、文書の外の名前つき結果を `EXT <名前>` の名札で第 1 節に据え、
+`BY` からその名前で引くことを求める。この文書が引くのは次の 4 つである。
+
+**EXT auto trait と共有** (Rust の言語規則)。
+
+1. `RefCell<T>` は `Sync` を実装しない。
+2. `Sync` は auto trait であり、構造体がそれを実装するのは各欄の型がそれを実装するときに限る。
+   手で `unsafe impl Sync` を書いた型はこの限りでない。
+3. `&T` が `Send` を実装することと `T` が `Sync` を実装することは同値である。
+4. 1 つの値は各時点でちょうど 1 つの所有者を持つ。値がスレッドの間を渡るとき、渡す動作は、渡す前の
+   アクセスと渡した後のアクセスを順序づける。
+5. `&T` が `Send` でない型 `T` については、2 つのスレッドが 1 つの `T` の値への共有参照を同時に持つ
+   ことはない。したがって、その値に対して共有参照を通じて行われる動作は 2 つのスレッドで重ならず、
+   時間で全順序に並ぶ。
+
+**EXT 呼び出しの入れ子**。関数の 1 つの実行が別の関数を呼ぶとき、その呼び出しは呼び出し元の実行が
+返るより前に返る。すなわち入れ子の呼び出しは後入れ先出しの順に返る。
+
+**EXT 導出した Clone** (Rust の言語規則)。`#[derive(Clone)]` が与える `clone` は、列挙型については
+同じ構成子の値を返し、各欄にその型の `clone` が返す複製を置く。
+
+**EXT 整礎性**。(a) 自然数の狭義減少する無限列は無い。(b) ある集合の上の関係が、その関係を辿って
+無限に降りる列を 1 つも持たないとき、その関係は整礎であり、その上の整礎帰納が使える。
+
 ## 2. L6 -- D9 の「移動」と `origin_inner` の別名の辺
 
 **別名の辺**とは、`origin_inner` が `origin` を再帰呼び出しする先をいう
@@ -465,7 +489,8 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
       BY <1>1, <2>1, L6, P2a (第 1 節の「鍵の答え」),
          CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under
     <3>3. QED
-      BY <3>1, <3>1a, <3>1b, <3>1c, <3>2, L14, P2a -- 鍵の再帰の辺の関係は整礎である (L14)。その関係の
+      BY <3>1, <3>1a, <3>1b, <3>1c, <3>2, L14 (a), EXT 整礎性 ((b) 整礎な関係の上では整礎帰納が
+         使える), P2a -- 鍵の再帰の辺の関係は整礎である (L14 (a))。その関係の
          上の整礎帰納で示す。子の呼び出しが返した値はその子の鍵の答えである (P2a)。
          (r1) が返す値の `VarPath` はその呼び出しの鍵そのもの (<3>1a)。
          (r2) が返す値には帰納法の仮定が当たり、その子の鍵はこの鍵から辺 1 本で着く (L6)。(r3) が
@@ -485,9 +510,9 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
          CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Llvm(..))` の腕,
          CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     <3>3. QED
-      BY <3>1, <3>2, L14 -- 2 つを繋ぐと、鍵 `(var, path)` から再帰の辺を 1 回以上辿って
+      BY <3>1, <3>2, L14 (a) -- 2 つを繋ぐと、鍵 `(var, path)` から再帰の辺を 1 回以上辿って
          `(var, path)` 自身に着く。すなわち鍵の辺の上に閉路がある。その閉路を繰り返せば無限に降りる
-         鍵の列ができるので、L14 に反する。
+         鍵の列ができるので、L14 (a) に反する。
   <2>4a. 第 2 の道が `Exactly((var, path))` を返すのが H6 である。
     BY <2>1, <2>4, L8 (d1), CODE src/rc_ir/ownership.rs: origin_from_leaves_under -- この道が返すのは
        `reached` の全要素が等しいときの `first.clone()` であり、`reached` の元は
@@ -510,15 +535,15 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
     <3>3. どの子の呼び出しも `Exactly((var, path))` を返さない。
       返すとすると、`<2>3a` よりその子の鍵から再帰の辺を 0 回以上辿って `(var, path)` に着く。`<3>2` と
       繋ぐと、鍵 `(var, path)` から再帰の辺を 1 回以上辿って `(var, path)` 自身に着く。その閉路を
-      繰り返せば無限に降りる鍵の列ができるので、L14 に反する。
-      BY <2>3a, <3>2, L14
+      繰り返せば無限に降りる鍵の列ができるので、L14 (a) に反する。
+      BY <2>3a, <3>2, L14 (a)
     <3>4. QED
       前の 4 つの道については `<3>1` と `<3>3` から出る。`Join` の腕については、`of_candidates(C, h)` が
       `Exactly` を返すのは `|C| = 1` のときであり、そのとき返るのは `C` の唯一の元を持つ
       `Exactly` である。その元は子の呼び出しが返した値に現れる `VarPath` なので (`<3>1`、L2 (a) と
       L2 (b))、`<2>3a` よりその子の鍵から再帰の辺を 0 回以上辿って着く鍵である。それが `(var, path)` で
-      あれば `<3>3` と同じ閉路ができ、L14 に反する。
-      BY <2>3a, <3>1, <3>2, <3>3, L2, L14, CODE src/rc_ir/ownership.rs: Origin::of_candidates
+      あれば `<3>3` と同じ閉路ができ、L14 (a) に反する。
+      BY <2>3a, <3>1, <3>2, <3>3, L2, L14 (a), CODE src/rc_ir/ownership.rs: Origin::of_candidates
   <2>5. QED
     BY <2>1, <2>2, <2>3, <2>3a, <2>4, <2>4a, <2>4b
 
@@ -568,7 +593,9 @@ README の定義・仮定とコードだけである。よって第 2 節と第 
   BY CODE src/rc_ir/ownership.rs: Origin::identity, Origin::candidates, Origin::of_candidates
 <1>4. `Origin` は `Clone` を導出するので、`Join` の値は複製によっても現れる。複製は `identity` と
       `candidates` をそのまま運ぶ。
-  BY CODE src/rc_ir/ownership.rs: Origin (`#[derive(Clone, Debug, PartialEq, Eq)]`)
+  BY EXT 導出した Clone (`#[derive(Clone)]` の `clone` は同じ構成子の値を返し、各欄にその型の
+     `clone` が返す複製を置く),
+     CODE src/rc_ir/ownership.rs: Origin (`#[derive(Clone, Debug, PartialEq, Eq)]`)
 <1>5. QED
   BY <1>1, <1>2, <1>3, <1>4
 
@@ -591,7 +618,7 @@ README の定義・仮定とコードだけである。よって第 2 節と第 
 <1>3. (c)。
   <2>1. `Join` の値を作る式は `Origin::of_candidates` の中の 1 か所だけであり、その枝は
         `candidates.len()` が 1 でないときに走る。複製は `candidates` をそのまま運ぶ。
-    BY L1, CODE src/rc_ir/ownership.rs: Origin::of_candidates
+    BY L1, EXT 導出した Clone, CODE src/rc_ir/ownership.rs: Origin::of_candidates
   <2>2. `of_candidates` はその枝へ進む前に `assert!(!candidates.is_empty(), ..)` を評価する。
     BY CODE src/rc_ir/ownership.rs: Origin::of_candidates
   <2>3. その `assert!` は発火せず、`candidates` は空でない。
@@ -1027,16 +1054,20 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
      `VarTable::of` と `VarTable::body_only` が空で作る。読み書きするのは `origin` のこの 2 行だけで
      あり、取り除く操作はどこにも無い),
      A15 (`grow_stack` は閉包をちょうど 1 回呼び、その返り値を返す)
-<1>1a. 1 つの `VarTable` に対する `origin` の呼び出しは 1 つの制御の流れの上にあり、`origins` への
-       `insert` は時間で全順序に並ぶ。
-  Rust の auto trait の規則を 3 段で辿る。`RefCell<T>` は `Sync` を実装しない。`Sync` は
-  `#[derive]` ではなく auto trait であり、欄に `Sync` でない型を持つ構造体は `Sync` にならないので、
-  `origins: RefCell<Map<VarPath, Origin>>` を欄に持つ `VarTable` も `Sync` ではない。`&T: Send` は
-  `T: Sync` と同値なので、`&VarTable` は `Send` ではなく、別のスレッドへ渡らない。よってこの表を
-  読み書きする呼び出しは 1 つの流れの上に並ぶ。
-  BY <1>1, Rust の auto trait の規則 (`RefCell<T>: !Sync`、`Sync` でない欄を持つ構造体は `Sync` で
-     ない、`&T: Send ⟺ T: Sync`),
-     CODE src/rc_ir/ownership.rs: VarTable (`origins` は `RefCell<Map<VarPath, Origin>>` の欄である)
+<1>1a. 1 つの `VarTable` の `origins` への `insert` は、時間で全順序に並ぶ。
+  `insert` は `origin(vars: &VarTable, ..)` の中の 1 行であり、共有参照 `&VarTable` を通じた動作で
+  ある。`VarTable` は `origins: RefCell<Map<VarPath, Origin>>` を欄に持つので `Sync` ではなく
+  (EXT 1, 2)、したがって `&VarTable` は `Send` ではない (EXT 3)。よってその表への動作が 2 つの
+  スレッドで重なることはなく、時間で全順序に並ぶ (EXT 5)。
+  **結論に要るのは全順序であって「1 つの制御の流れ」ではない。** `&VarTable` が `Send` でないことは、
+  `VarTable` の**値そのもの**が別のスレッドへ move されることを排除しない。それでも順序は付く --
+  値の所有者は各時点で 1 つであり、渡す動作が前後のアクセスを順序づけるからである (EXT 4)。
+  BY <1>1, EXT auto trait と共有 (1 から 5),
+     CODE src/rc_ir/ownership.rs: VarTable (`origins` は `RefCell<Map<VarPath, Origin>>` の欄である。
+     `src/` 全体を `unsafe impl` で検索して当たる行は無いので、EXT 2 の但し書きに当たる型はこの
+     クレートに無い),
+     CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow_mut().insert(..)` はこの関数の中の
+     1 行であり、`vars` は共有参照である)
 <1>2. どの鍵についても `origin` の呼び出しは停止する。
   BY L10 (a') (`vars.bindings` に束縛を持つ名前は、その関数のパラメータ・capture か、値を与える 3 構文が
      束縛する変数であり、どれもプログラムの束縛変数である。束縛を持たない名前は P2 が第 2 の場合として
@@ -1059,8 +1090,10 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
     `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の返り値から鍵を決めることは、A3 の決定性の
     節が片付ける** -- `result_prov` は `&self` を取るので、同じ引数に同じ値を返すことを言う者が無ければ
     2 回の評価が違う鍵の集合を作りうる。よって `origin_inner(K)` のどの実行も同じ辺を辿る。
-    BY <2>1, A3 (`result_prov` と `borrows_operand` は決定的である), 再帰の辺の定義,
+    BY <2>1, A3 (`result_prov` と `borrows_operand` は決定的である), L14 の再帰の辺の定義,
        <1>2 (その呼び出しは停止する),
+       EXT 呼び出しの入れ子 (`origin_inner(K)` が呼ぶ `origin(K')` は、`origin_inner(K)` が返るより
+       前に返る),
        CODE src/rc_ir/ownership.rs: origin_inner
   <2>3. `origin(K')` が返った時点で `origins` は `K'` を含む。
     BY <2>2, <1>3
@@ -1072,10 +1105,11 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
        `c_0` の `insert` より前に返る。返った時点で `K'` は `origins` に在る (<2>3) ので、`K'` を入れる
        最初の `insert` は `c_0` の `insert` より前である。すなわち `t(K') < t(K)`。
 <1>5. QED
-  BY <1>3, <1>4 -- (b) は <1>4 の前半そのものである。(a) は次のとおり: 無限に降りる列
+  BY <1>3, <1>4, EXT 整礎性 ((a) 自然数の狭義減少する無限列は無い) -- (b) は <1>4 の前半そのもので
+     ある。(a) は次のとおり: 無限に降りる列
      `K_0 -> K_1 -> K_2 -> ...` が在るとすると、`origin(K_0)` は呼ばれるので `t(K_0)` が定まり
      (<1>3)、<1>4 を各辺に順に当てると `origin(K_i)` はどれも呼ばれ、
-     `t(K_0) > t(K_1) > t(K_2) > ...` となる。自然数の無限の狭義減少列は無い。
+     `t(K_0) > t(K_1) > t(K_2) > ...` となる。`t` は自然数の値なので、EXT 整礎性 (a) に反する。
 
 ## 5. DEF-1 -- D17 の「対応するスロット」を鎖の形に書き直したもの
 
@@ -1182,8 +1216,9 @@ PROVE: DEF-1 の鎖は有限で止まり、その停止点 `(u, σ_end, μ)` は
 止まりうるからである (P3 の同じ節)。
 
 証明は、`origin` が `(x, π)` から行う再帰呼び出しの関係の上の整礎帰納による。この関係が整礎であることは
-L14 が与える。**`π` に「`origin(x, π)` が呼ばれる」を課すのは L14 のためである** -- L14 は無条件では
-なく、「`origin` が呼ばれる鍵 `K_0` を取る」ことを前提に、`K_0` から到達する鍵の上での整礎性を言う。
+L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課すのは L14 (a) のためである** -- L14 (a) は
+無条件ではなく、「`origin` が呼ばれる鍵 `K_0` を取る」ことを前提に、`K_0` から到達する鍵の上での
+整礎性を言う。
 その証明が使う `t(K)` は `origins` への実際の `insert` の順番なので、呼ばれていない鍵には定まらない。
 **この条件は Q を使う側が果たす** -- 系 1 と系 2 はどちらも `origin(x, π)` の値を主語に取るので、その
 呼び出しが在る。DEF-1 の各段は `origin_inner` の再帰呼び出しの 1 つに一致する (L6) ので、鎖の各段で
@@ -1712,7 +1747,8 @@ L14 が与える。**`π` に「`origin(x, π)` が呼ばれる」を課すの�
     1 つに一致する (L6) ので、鎖の各段はその関係の辺 1 本を進む。
     BY ASSUME, <1>1, <1>2 (停止条件では鎖の長さは 0 である), <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, <1>9
        (段では帰納法の仮定が次の 3 つ組からの鎖の有限性を与える), L6,
-       L14 (a) (再帰呼び出しの関係は、呼ばれる鍵から到達する鍵の上で整礎である)
+       L14 (a) (再帰呼び出しの関係は、呼ばれる鍵から到達する鍵の上で整礎である),
+       EXT 整礎性 ((b) 整礎な関係の上では整礎帰納が使える)
   <2>3. QED
     BY <2>1, <2>2, <1>0, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, <1>9 -- <2>1 の 9 つの場合が
        上の 9 つの CASE であり、どの場合も (i)、(ii)、(iii)、(iv) が成り立つ。<1>0 が、(iii) のうち
@@ -1790,7 +1826,8 @@ inhabited な leaf であるとき、次の 2 つが成り立つ。
   `(v, π', λ')` は Q の ASSUME を満たすので、帰納法の仮定がそこから先の段について同じことを与える。
   鎖の第 2 段以降は `(v, π', λ')` から始まる鎖の段である (DEF-1 -- 規則は現在の 3 つ組だけで決まる)。
   各段が進む先の leaf が D17 の写り方と一致することは、DEF-1 の表の第 4 列が段ごとに述べる。
-  BY Q ((iv)), L6 (DEF-1 の各段は `origin_inner` の再帰の辺 1 本である), L14 (a), DEF-1 (表の第 4 列),
+  BY Q ((iv)), L6 (DEF-1 の各段は `origin_inner` の再帰の辺 1 本である), L14 (a),
+     EXT 整礎性 ((b) 整礎な関係の上では整礎帰納が使える), DEF-1 (表の第 4 列),
      D17 (辺ごとの `λ` の写り方と、辺の行き先の 3 行), D33 (歩みは D20 の別名の辺を辿り、その行き先は
      D17 が定める `λ` に対応する位置である)
 <1>2. 鎖が止まる位置は、D33 が歩みを止める位置と一致する。
