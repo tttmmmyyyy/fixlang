@@ -71,9 +71,7 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
 - `pty(r)` は `vars.param_tys.get(r)` (`CODE src/rc_ir/ownership.rs: VarTable`)。
 - `owns(r, p)` は `ctx.owns_object(r, p)` (`CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object`)。
 - `ty(x)` は `x` が得る値の型である。A12 より同じ名前の `RcVar` が持つ型は一致するので、これは `x` の
-  出現によらない。`x` がこの版のパラメータ・capture のとき、`VarTable::of` が `param_tys` と `var_tys` の
-  両方に同じ型を入れるので `pty(x) = Some(ty(x))` である
-  (`CODE src/rc_ir/ownership.rs: VarTable::of`)。
+  出現によらない。`pty(x)` とこの型の関係は L1e が述べる。
 
 `FieldPath` は `Vec<usize>` である (`CODE src/rc_ir/ast.rs: FieldPath`)。`π[0..k]` は `π` の先頭 `k` 個の
 要素からなる path、`|π|` は `π` の長さである。
@@ -573,6 +571,49 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   やはり偽である。
   BY <1>2, <1>3, <1>4, <1>5, A10, L1b, DEF 扱う型, CODE src/ast/types.rs: TypeNode::is_array,
      TypeNode::is_funptr, CODE src/fixstd/builtin.rs: is_array_tycon, is_funptr_tycon
+
+### L1e (`Binding::Param` を持つ名前は、この版のパラメータ・capture である)
+
+**言明**。第 1 節が固定する出力版とその `vars` について、次の 3 つは同値である。
+
+- **(i)** `vars.bindings.get(x)` が `Some(Binding::Param)` である。
+- **(ii)** `x` はこの版のパラメータか capture である。
+- **(iii)** `pty(x)` が値を持つ。
+
+3 つが成り立つとき `pty(x) = Some(ty(x))` である。
+
+**(i) から (ii) へ渡る向きは、`collect_bindings` が `Binding::Param` を 1 度も記録しないことに立つ。**
+`VarTable::of` が語るのは (ii) から (i) と (iii) を出す向きだけである。
+
+<1>1. 固定した版が関数の版であるとき、その `vars` は `VarTable::of` がその版の `RcFunc` から作った表で
+      あり、グローバル初期化子の版であるとき `VarTable::body_only(g.init)` である。
+  `RewriteCtx::new` は `vars` に `VarTable::of(func)` を置き、`borrow_ify` のグローバルを写す繰り返しは
+  `VarTable::body_only(&g.init)` で作った表を `RewriteCtx` に据える。
+  BY CODE src/rc_ir/borrow.rs: RewriteCtx::new, borrow_ify
+
+<1>2. `VarTable::of(g)` が `bindings` に `Binding::Param` を入れるのは `g` のパラメータ・capture の各
+      名前についてであり、`collect_bindings` が `bindings` に入れる `Binding` は `Move`・`Llvm`・
+      `Producer`・`Payload`・`Field`・`Join` の 6 種で、`Binding::Param` を 1 度も入れない。
+  `collect_bindings` は `Let` の右辺で場合を分けて `Move` / `Llvm` / `Producer` / `Join` を入れ、`Match`
+  のアームの payload 変数に `Payload` を、`Destructure` のフィールド変数に `Field` を入れる。
+  BY CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+
+<1>3. 関数の版では 3 つは同値であり、そのとき `pty(x) = Some(ty(x))` である。
+  `<1>1` よりこの版の `vars` は `VarTable::of` がその版の `RcFunc` から作った表である。`<1>2` より
+  `Binding::Param` を入れるのはその `RcFunc` のパラメータ・capture についての行だけなので、(i) と (ii)
+  は同値である。(ii) と (iii) の同値と、そのときの `pty(x) = Some(ty(x))` は L1c である。
+  BY <1>1, <1>2, L1c
+
+<1>4. グローバル初期化子の版では 3 つとも偽である。
+  `<1>1` よりこの版の `vars` は `VarTable::body_only(g.init)` である。`<1>2` より `collect_bindings` は
+  `Binding::Param` を入れないので (i) は偽であり、L1c より `param_tys` は空なので (iii) も偽である。
+  この版が書き換える本体は `init` であり、D1 より `init` はパラメータも capture も持たないので (ii) も
+  偽である。
+  BY <1>1, <1>2, D1, L1c
+
+<1>5. QED
+  `<1>1` より版は 2 種であり、`<1>3` と `<1>4` がそれぞれを扱った。
+  BY <1>1, <1>3, <1>4
 
 ### L2 (`units_under` の 2 つの形)
 
@@ -1140,11 +1181,8 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 
 <1>0. `pty(r) = Some(τ)` であることと `r` がこの版のパラメータ・capture であることは同値であり、
       そのとき `τ = ty(r)` である。
-  固定した版が関数の版のとき、その `RewriteCtx` の `vars` は `VarTable::of(func)` であり、L1c がこれを
-  与える。グローバル初期化子の版のとき、`vars` は `VarTable::body_only(g.init)` なので L1c より
-  `param_tys` は空であり、`init` はパラメータも capture も持たない (D1) ので、同値の両側とも成り立た
-  ない。
-  BY D1, L1c, CODE src/rc_ir/borrow.rs: RewriteCtx::new, borrow_ify
+  L1e の (ii) と (iii) の同値と、そのときの等式である。
+  BY L1e
 
 <1>1. CASE `pty(r) = None` -- `<1>0` より言明の (b) の場合
   <2>1. `owns(r, q)` は、任意の `q` について真を返す。
@@ -2421,9 +2459,9 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     BY CODE src/rc_ir/ownership.rs: origin_inner
   <2>2. QED
     `<2>1` より `cand(x, π) = {(x, π)}` かつ `cand(x, λ) = {(x, λ)}` なので、`(x, π)` が所有されるとは
-    `owns(x, π)` が真ということであり、示すのは `owns(x, λ)` が真であることである。`pty(x)` で場合を
-    分ける。`pty(x) = None` のとき、第 3 節の (b) より `owns(x, λ)` は真である。`pty(x) = Some(τ)` の
-    とき、第 3 節の (a) より `τ = ty(x)` であり
+    `owns(x, π)` が真ということであり、示すのは `owns(x, λ)` が真であることである。`x` がこの版の
+    パラメータ・capture であるかどうかで場合を分ける。そうでないとき、第 3 節の (b) より `owns(x, λ)` は
+    `λ` によらず真である。そうであるとき、第 3 節の (a) より
     `owns(x, λ) = owns(x, trunc(ty(x), λ))`、`owns(x, π) = owns(x, trunc(ty(x), π))` である。
     DEF unit を覆う対 より `trunc(ty(x), λ) = trunc(ty(x), π)` なので、この 2 つは同じ呼び出しであり、
     仮定より真である。
@@ -2682,13 +2720,13 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 <1>2. CASE `Some(Binding::Param)`
   この腕は `path` を読まずに `here()` を返すので `cand(x, π) = {(x, π)}` かつ
-  `cand(x, λ) = {(x, λ)}` である。`x` はこの版のパラメータ・capture なので第 1 節より
-  `pty(x) = Some(ty(x))` であり、第 3 節の (a) が使えて
+  `cand(x, λ) = {(x, λ)}` である。この腕の条件は L1e の (i) なので、L1e より `x` はこの版のパラメータ・
+  capture であり、第 3 節の (a) が使えて
   `owns(x, λ) = owns(x, trunc(ty(x), λ))`、`owns(x, π) = owns(x, trunc(ty(x), π))` である。
   DEF unit を覆う対 より `trunc(ty(x), λ) = trunc(ty(x), π)` なので `owns(x, λ) = owns(x, π)` であり、
   仮定よりこれは偽である。`Inh_x(π) ⊆ Λ_{ty(x)}(π)` なので、`Inh_x(π)` の各 `λ` について
   `cand(x, λ) = {(x, λ)}` は `owns` が偽である元を持つ。
-  BY P7e, DEF unit を覆う対, CODE src/rc_ir/ownership.rs: origin_inner, VarTable::of
+  BY L1e, P7e, DEF unit を覆う対, CODE src/rc_ir/ownership.rs: origin_inner
 
 <1>3. CASE `Some(Binding::Move(w))` または `Some(Binding::Payload(s, None))`
   <2>1. 任意の `ρ` について `origin(x, ρ) = origin(w, ρ)` (resp. `origin(s, ρ)`) である。
