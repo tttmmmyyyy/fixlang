@@ -164,7 +164,8 @@ D27 が定める `B(p, ρ)` のうち、`C` のスロットの `origin` の iden
 「**`insert_rc` と `split_rc_units` は束縛を作らず、名前を替えず、`Match` のアームを消さない。**」と
 「**したがって、`borrow_ify` の入力について語る仮定は、`insert_rc` の入力と出力についても読める。**」を
 述べ、A6・A9・A13 のそれぞれが「**`insert_rc` の入力と出力について読む段は A2 を引く。**」と書く。
-A11 は「**この仮定が語るのは `borrow_ify` の入力である。**」と範囲を述べるので同じ形で読む。
+A11 は「**この仮定が語るのは `borrow_ify` の入力である。**」と範囲を述べるので、A11 を引く段も A2 を
+併せて引く。
 **この文書でこの 4 つを引く段は、どれも A2 を併せて引く。** 上流について読む段だけを一覧にすると、
 段が増えるたびに一覧が古くなるので、規則として書く。**`L11` はこの規則の外にある** -- その主語は
 `borrow_ify` の入力と出力であり、A13 の範囲にそのまま入る。
@@ -3909,9 +3910,11 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
     `rc_units(σ) = {[]}` である。`boxed_leaf_paths(σ)` のどの元も空列で始まり、unit は 1 つしか
     無いので「ちょうど 1 つ」が成り立つ。
   <2>4. CASE `unit_step(σ) = Fields { held_fields, .. }`。
-    BY <1>1, 帰納法の仮定, CODE src/rc_ir/ownership.rs: rc_units_go
+    BY <1>1, 帰納法の仮定, CODE src/rc_ir/ownership.rs: rc_units_go,
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
     `rc_units_go` の `Fields` の腕は `held_fields` の各 `(i, fty)` について `path.push(i)` の後に
-    再帰する。<1>1 より `go` も同じ `(i, fty)` の列を同じ形で走る。よって
+    再帰する。<1>1 より `go` は `ty.unpunched_field_types(type_env)` -- `held_fields` に等しい列 --
+    のループに入り、その各 `(i, fty)` について `path.push(i)` の後に再帰する。よって
     `rc_units(σ) = ⊎_i {[i] ++ u : u ∈ rc_units(fty_i)}`、
     `boxed_leaf_paths(σ) = ⊎_i {[i] ++ λ : λ ∈ boxed_leaf_paths(fty_i)}` である。`[i] ++ λ` が
     `[j] ++ u` で始まるのは `i = j` かつ `λ` が `u` で始まるときに限るので、帰納法の仮定を `fty_i` に
