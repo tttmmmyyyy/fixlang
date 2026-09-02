@@ -321,7 +321,7 @@ pub fn make_arrow_name_abs() -> FullName {
 }
 
 // The type constructor of function types: `a -> b` is this constructor applied to `a` and `b`.
-// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_arrow_tycon() -> TyCon {
     TyCon::new(make_arrow_name_abs())
 }

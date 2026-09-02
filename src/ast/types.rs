@@ -2145,6 +2145,7 @@ pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
 }
 
 /// The function type `src -> dst`.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
     type_fun_with_arrow_src(src, dst, None)
 }
