@@ -1569,8 +1569,9 @@ develop mode の門を持つ。
 **(ii-a) と (ii-b) は各実行路 `ρ` と `ρ` を辿る各活性化についての言明であり、1 つの本体を見て読める。**
 P14 は `borrow_ify` の**入力**について (ii-a) を読み、P18a・P18c・P19・P21 は `cancel` の**入力**に
 ついて (ii-b) を読む。**P18a と P18c は `cancel` の入力について (ii-a) も読む** -- 類が持つ参照の個数が
-非負であることを、`p13-disposals-and-pending.md` の `L14b` が使う。果たす者に `insert_rc` と `borrow_ify` の 2 人を挙げているのは
-この形を指す -- `insert_rc` の出力で成り立ち、`borrow_ify` がそれを保つ。
+非負であることを、`p13-disposals-and-pending.md` の `L14b` が使う。**果たす者を 3 人挙げるうち、この形を指すのは `insert_rc` と `borrow_ify` の 2 人である** --
+`insert_rc` の出力で成り立ち、`borrow_ify` がそれを保つ。`split_rc_units` は `Retain`/`Release` を
+unit の鎖へ割る段で (ii-a) を保つ側であり、この形とは別に数える。
 
 **「各時点」は、その活性化が生きている (D23) 間の、その活性化の節点の訪問の入口である時点である。**
 `bumps` を定める D27 が `B(p, ρ)` を走査中の位置 -- 節点の訪問の入口 -- でしか定めないので、この 2 つを
