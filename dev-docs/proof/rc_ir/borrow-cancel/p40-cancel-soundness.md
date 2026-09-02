@@ -24,7 +24,7 @@ README の第 1 節が挙げる 2 種である -- 「**対象コミットより�
 これらは `p30 の L10`、`p13 の L17` のようにファイル名を添えて引用する。
 
 **外部の結果**は `EXT <名前>` の名札で引く。この文書が引くのは Rust の言語規則と標準ライブラリ、および
-`dyn_clone` crate の 7 つで、その完全な言明は次のとおりである。Rust の言語規則の 3 つは Rust Reference の
+`dyn_clone` crate の 8 つで、その完全な言明は次のとおりである。Rust の言語規則の 4 つは Rust Reference の
 原文を引く。
 
 - **EXT 可視性と私有性** --- Rust Reference の "Visibility and Privacy" が次を述べる。
@@ -59,6 +59,18 @@ README の第 1 節が挙げる 2 種である -- 「**対象コミットより�
   モジュールを持たない。EXT 可視性と私有性 と合わせると、そのファイルが宣言する非公開の項目を名指せるのは
   そのファイルの中だけである。書かれた `mod` の項目が `#[cfg(test)] mod tests` の 1 つだけであれば、
   子孫はそのモジュールだけである。
+- **EXT trait の実装は既定と再定義で尽きる** --- Rust Reference の "Implementations" が次を述べる。
+
+  > An implementation is an item that associates items with an *implementing type*.
+
+  > A trait implementation must define all non-default associated items declared by the implemented
+  > trait, may redefine default associated items defined by the implemented trait, and cannot define
+  > any other items.
+
+  すなわち、既定の本体を持つ trait のメソッドについて、ある型のためにそれが実行する本体は、その型の
+  `impl Tr for T` ブロックがそのメソッドを再定義していればその定義、していなければ trait 側の既定の
+  本体である。よって、その本体の全体は「trait の既定の本体」と「そのメソッドを再定義する `impl` の
+  一覧」で尽きる。
 - **EXT 共有参照は代入を許さない** --- Rust Reference の "Pointer types" が共有参照について次を述べる。
 
   > When a shared reference to a value is created, it prevents direct mutation of the value. Interior
@@ -103,7 +115,7 @@ identity で名付けた多重集合」と定める。**`outstanding` に
 | P23 | 証明済み。(S-a) は `L42` に、(S-b) は `L44` の (c) に、(S-c) は `L44` の (e) に載る。(S-c) は D11a の接頭条件つきで示す |
 | P24 | 証明済み。第 5 の箇条は `rewrite_inner` の 8 腕についての構造帰納で出る |
 
-**各段が依拠するのは、冒頭が挙げる README の定義・仮定・命題と、そこに据えた 7 つの外部の結果 (`EXT`)
+**各段が依拠するのは、冒頭が挙げる README の定義・仮定・命題と、そこに据えた 8 つの外部の結果 (`EXT`)
 と、引用したコードだけである。** 局所の仮説は 1 つある -- **`borrow_ify` が A19 の (ii-c) を保つこと**で
 あり、第 2 節の `前提 (ii-c) の保存` が置き、果たす者を `p20-borrow-ify.md` と書く。**P18c・P21・P23 は
 入力を `borrow_ify` の出力に限る** -- `L41a` が読む A19 (ii-a)・(ii-b)・(ii-c) と P14a の範囲がそこだから
@@ -1056,8 +1068,12 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
         すなわち `InBracket` を返し、選んだ要素の `outstanding` から `un_bumped` を引いた結果が空に
         なったときだけであり、そのとき返る `NodeId` は取り除かれた要素の `node` すなわち `t` である。
         `un_bump` を呼ぶのは `RcExpr::Release(v, path, _, k)` の腕だけなので、`n*` は `Release` 節点で
-        ある。
-    BY L34, <1>5, p30 の L5, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
+        ある。`un_bump` は `pub` を持たない `borrow.rs` の自由関数なので、EXT 可視性と私有性 より
+        それを名指せるのは `borrow.rs` のモジュールとその子孫だけであり、`borrow.rs` は `mod` の項目を
+        1 つも持たないので EXT モジュールは `mod` が導入する よりそのモジュールは子孫を持たない。
+        よってこの数え上げは `borrow.rs` の中の出現を尽くせば足りる。
+    BY L34, <1>5, p30 の L5, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+       CODE src/rc_ir/borrow.rs: un_bump, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
   <2>5. QED
     `n*` は `ρ` の上に直後の節点を持つので、L34 の 3 つの場合のいずれかである。<2>2 と <2>3 がそのうち
     2 つを排除する。L32 の 4 より `n*(ρ) ∈ un_bump_releases[t]` である。
@@ -1178,10 +1194,13 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
     BY D24, D9
   <2>2a. 2 つ目の活性化が返す参照。D24 の (E4) より、これも `Obl` に入る。**`o` の `_value` の欄へ
         書き込まれるのはこの 2 つ目の返り値だけである** -- (E4) は「2 つ目の返り値は `o` の `_value` の
-        欄へ書き込まれる」と述べる。D24 の (E2) は「既に在るオブジェクトの leaf」を `Obl` を離れる参照の
-        行き先の 1 つとして挙げるので、この参照は書き込みによって `Obl` を離れ、その持ち手は `o` に
-        なる (D25 の 2 つ目)。
-    BY D24, D25
+        欄へ書き込まれる」と述べる。**この書き戻しは (F) の解放の中の動作である** -- D24 の (F) は
+        「**この段は `_value` の欄の参照を動かす。**」に続けて「`b` が返した `IO` の動作の結果は `o` の
+        `_value` の leaf へ戻る」と述べ、「したがって**「`o` が持つ参照をすべて処分し」が指すのは、この
+        往復の後に `o` が持つ参照である**」と続ける。よってこの参照は書き戻しによって `Obl` を離れ、その
+        持ち手は `o` になる (D25 の 2 つ目)。**その参照は同じ解放が処分する** -- <1>2 より `o` が持つ
+        参照の処分は `Obl` を変えない。
+    BY D24, D25, <1>2
   <2>3. QED
     BY <2>1, <2>2, <2>2a, D24
     D24 の (F) がこの解放について参照を作ると述べるのは <2>1 の retain だけであり、解放の中で `Obl` へ
@@ -1278,11 +1297,14 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
           `Provenance::uniform_bottom(result_ty, ・)`、`Provenance::fresh_under(result_ty, ・, ・)`、
           `Provenance::build_shape(result_ty, ・, ・)`、または同じ 2 つを `result_ty` に掛ける
           `replaced_field_prov` を返す。**`Provenance::empty()` と `Provenance` の `Default` は
-          `result_prov` の実装に現れない** -- `Provenance::empty()` を呼ぶのは
-          `src/rc_ir/provenance.rs` の単体テストだけであり、`Default` を呼ぶ生産コードは無い。この
-          2 つは鍵を 1 つも持たない値を作るので、この数え上げが要る。
+          `result_prov` の実装に現れない** -- 上の 29 個と既定の実装のどれもそれを呼ばない。この
+          2 つは鍵を 1 つも持たない値を作るので、この数え上げが要る。**数え上げの範囲を閉じるのは
+          EXT trait の実装は既定と再定義で尽きる である** -- ある op の `result_prov` が実行する本体は、
+          その型の `impl LLVMGen for` がそれを再定義していればその定義、していなければ trait 側の既定の
+          本体であり、ほかに本体は無い。
       BY CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, CODE src/fixstd/builtin.rs: replaced_field_prov,
-         CODE src/rc_ir/provenance.rs: Provenance::empty, CODE src/rc_ir/provenance.rs: Provenance, A3
+         CODE src/rc_ir/provenance.rs: Provenance::empty, CODE src/rc_ir/provenance.rs: Provenance, A3,
+         EXT trait の実装は既定と再定義で尽きる
     <3>3. QED
       BY <3>1, <3>2, <2>1
       `<2>1` より `result_ty = ty(u)` である。
