@@ -393,8 +393,9 @@ enum については元と同じ変位で、その変位が保持する各値を
       `a_unit_read_out_of_a_container_keeps_the_containers_origin` (各 1 か所)、`borrow.rs` の
       `infer_ownership`、`level_ownership`、`RewriteCtx::comes_from_a_value_used_later`、
       `RewriteCtx::owns_unit`、`RewriteCtx::check_ownership_is_levelled`、`CancelAnalysis::consume`、
-      `CancelAnalysis::other_objects` (各 1 か所) である。DEF 本文 より、標準ライブラリの関数へ渡す
-      閉包の中に書かれた呼び出しもこの数え上げに入っている。
+      `CancelAnalysis::other_objects` (各 1 か所) である。DEF 本文 より、閉包の中に書かれた呼び出しは
+      それを書いた関数の呼び出しとして数える --- 渡す先が標準ライブラリであっても `grow_stack` のような
+      このクレートの関数であっても同じなので、この数え上げはそれを含んでいる。
   BY CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: origin_inner,
      CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
      CODE src/rc_ir/ownership.rs: acted_references, CODE src/rc_ir/borrow.rs: infer_ownership,
