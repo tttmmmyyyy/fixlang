@@ -1111,8 +1111,11 @@ D11 を満たすとする。このとき次の 2 つが成り立つ。
     <3>0. CASE op が `InlineLLVMBoxedFromRetainedPtrIOS` である。
       A3 の `Unknown` の行は、この op について「オペランドは `Std::Ptr` で boxed leaf を持たないので、
       到達できる元が無い -- そのオブジェクトは C の側から渡された番地が指すものである」と述べ、その leaf に
-      ついて行を読まないよう指示する。生成コードは第 1 オペランド `ptr` の第 0 欄の番地を結果の第 1 欄へ
-      入れるだけである (`CODE src/fixstd/builtin.rs: InlineLLVMBoxedFromRetainedPtrIOS`)。この op を包む
+      ついて行を読まないよう指示する。生成コードは、結果の組を `create_obj` で作り、その第 0 欄に
+      オペランド `ios` を、第 1 欄に第 1 オペランド `ptr` の第 0 欄の番地を入れる。結果の型は
+      `(IOState, a)` の unbox の組なので `create_obj` は割り当てを行わない
+      (`CODE src/fixstd/builtin.rs: InlineLLVMBoxedFromRetainedPtrIOS`, `CODE src/object.rs: create_obj`)。
+      この op を包む
       公開関数 `Std::FFI::boxed_from_retained_ptr` の doc は「Creates a boxed value from a retained
       pointer obtained by `boxed_to_retained_ptr`」「It is the user's responsibility to ensure that the
       argument is actually a pointer to the type of the return value, and undefined behavior will occur
