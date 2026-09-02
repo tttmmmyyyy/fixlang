@@ -1084,15 +1084,19 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `is_fully_unboxed`・`is_closure`・`is_box`・`is_array` と `unpunched_field_types` であり、
   `unpunched_field_types` と `is_fully_unboxed` は最上位 tycon の宣言を `type_env` から引く。A10 より、
   `τ` から `unpunched_field_types` を繰り返し取る歩みは有限であり、その各段の型は ground で飽和していて
-  tycon が `type_env` にあるので、この降下は中断せずに終わる (`is_unbox` は `is_closure()` を先に見て
-  短絡し、`go` は `unpunched_field_types` を呼ぶ前に `is_closure` を見るので、`toplevel_tycon_info` の
-  `assert!(!self.is_closure())` も通る)。`leaf ∈ leaves(τ)` については、L9a より `τ` の `leaf` に沿う
+  tycon が `type_env` にあるので、この降下は中断せずに終わる。この降下が通る `toplevel_tycon_info` の
+  `assert!(!self.is_closure())` も通る -- `unpunched_field_types` はその関数を呼び、`is_fully_unboxed` は
+  `is_box` を経て `is_unbox` を呼び、`is_unbox` は `is_closure()` を先に見て短絡するので、closure 型では
+  `toplevel_tycon_info` に届かない。closure でない型では表明の条件がそのまま成り立つ。`go` は
+  `unpunched_field_types` を呼ぶ前に `is_closure` を見るので、`go` がその関数を呼ぶ型も closure ではない。
+  `leaf ∈ leaves(τ)` については、L9a より `τ` の `leaf` に沿う
   歩みは (A) `Unit` で終わるか、(B) `Capture` で終わり、そこで `leaf` が選ぶ添字が `capture_idx` に
   等しいかのどちらかである。(A) で歩みの長さが `|leaf|` ならば L1 の場合 (a)、それより短ければ場合 (b) の
   `Unit` の行、(B) ならば場合 (b) の `Capture` (`π[m] = capture_idx`) の行が当てはまり、どれも `trunc` は
   値を返す。
   BY A10, L1, L1b, L9a, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
-     CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
+     TypeNode::is_closure, TypeNode::toplevel_tycon_info, TypeNode::unpunched_field_types
 
 <1>1. `owns_object_yet(V, type_env, r, p, OL)` は、まず `leaves(τ)` を計算し、続けて `under(τ, p)` の
       各要素 `unit` について「`trunc(τ, unit)` を鍵 `key` とし、`leaves(τ)` のうち `trunc(τ, ・) = key` を
@@ -1493,6 +1497,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     よって `boxed_leaf_paths` の `go` は `ty(c)` について `unpunched_field_types` の下へ降り、第 `idx`
     フィールドについて `ty(y)` から始めた `go` の結果の前に `idx` を置いたものを積む。
     BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
+       TypeNode::toplevel_tycon_info,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>3. QED
     この step の ASSUME より `covered(ty(y), ρ)` の元 `λ` が取れる。`covered(ty(y), ρ) ⊆ leaves(ty(y))`
@@ -1522,6 +1527,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `go` は `ty(s)` について `unpunched_field_types` の下へ降り、第 `t` 変位について `ty(y)` から始めた
     `go` の結果の前に `t` を置いたものを積む。
     BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union,
+       TypeNode::toplevel_tycon_info,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>3. QED
     この step の ASSUME より `covered(ty(y), ρ)` の元 `λ` が取れる。`covered(ty(y), ρ) ⊆ leaves(ty(y))`
@@ -1813,14 +1819,18 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   `is_box`・`is_array` と `unpunched_field_types` であり、`unpunched_field_types` と `is_fully_unboxed` は
   最上位 tycon の宣言を `type_env` から引く。A10 より、`τ` から `unpunched_field_types` を繰り返し取る
   歩みは有限であり、その各段の型は ground で飽和していて tycon が `type_env` にあるので、この降下は
-  中断せずに終わる (`is_unbox` は `is_closure()` を先に見て短絡し、`go` は `unpunched_field_types` を
-  呼ぶ前に `is_closure` を見るので、`toplevel_tycon_info` の `assert!(!self.is_closure())` も通る)。
+  中断せずに終わる。この降下が通る `toplevel_tycon_info` の `assert!(!self.is_closure())` も通る --
+  `unpunched_field_types` はその関数を呼び、`is_fully_unboxed` は `is_box` を経て `is_unbox` を呼び、
+  `is_unbox` は `is_closure()` を先に見て短絡するので、closure 型では `toplevel_tycon_info` に届かない。
+  closure でない型では表明の条件がそのまま成り立つ。`go` は `unpunched_field_types` を呼ぶ前に
+  `is_closure` を見るので、`go` がその関数を呼ぶ型も closure ではない。
   `leaf ∈ leaves(τ)` については、L9a より `τ` の `leaf` に沿う歩みは (A) `Unit` で終わるか、(B) `Capture`
   で終わって `leaf[m] = capture_idx` であるかのどちらかである。(A) で歩みの長さが `|leaf|` ならば L1 の
   場合 (a)、それより短ければ場合 (b) の `Unit` の行、(B) ならば場合 (b) の `Capture`
   (`π[m] = capture_idx`) の行が当てはまり、どれも `trunc` は値を返す。
   BY <1>2, A10, L1, L1b, L9a, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
-     CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
+     TypeNode::is_closure, TypeNode::toplevel_tycon_info, TypeNode::unpunched_field_types
 
 <1>4. QED
   `pty_f(r)` は `Option` なので `None` か `Some(τ)` のどちらかである。`None` の場合は `<1>1` が両辺とも
@@ -2146,7 +2156,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `unbox struct { _arr : Array a, _idx : I64 }` なので、この場合は実際に起こりうる**
   (`CODE src/fixstd/std.fix: PunchedArray`)。
   BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
-     TypeNode::is_union, TypeNode::is_punched_array, CODE src/rc_ir/ownership.rs: unit_step
+     TypeNode::is_union, TypeNode::is_punched_array, TypeNode::toplevel_tycon_info,
+     CODE src/rc_ir/ownership.rs: unit_step
 
 <1>3a. unbox 容器の `Field(c, idx)` について、`leaves(ty(c))` のうち `[idx]` を前置に持つものは
        `{ [idx] ++ μ : μ ∈ leaves(ty(x)) }` であり、したがって
@@ -2198,7 +2209,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   空でない。
   BY A12, L1a, L1d, L8, CODE src/rc_ir/ownership.rs: unit_step, truncate_to_unit,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
-     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union,
+     TypeNode::toplevel_tycon_info
 
 <1>6. 単一 `Arg(j, σ)` の `(args[j], σ)` は unit を覆い、`Λ_{ty(args[j])}(σ) = { σ }` である。
   A3 より `σ ∈ leaves(ty(args[j]))` である。`boxed_leaf_paths` の `go` は leaf を積んだ位置で戻るので、
