@@ -1849,9 +1849,13 @@ P7a の意味の site の全部が覆われる。
     `owns_object` は `under(τ, p)` の各要素 `unit` について `(r, trunc(τ, unit)) ∈ owned_units` を
     要求する。L9 より `trunc(τ, unit) ∈ units(τ)` である。`borrow_ify` は入力の各関数について
     `owned_units.extend(param_capture_units(func))` を行い、`param_capture_units` は各パラメータ・capture
-    `p` と各 `unit ∈ rc_units(p.ty)` について `(p.name, unit)` を並べる。`<2>1` より `r` は `func` の
-    パラメータか capture であり `τ = ty(r)` なので、`(r, trunc(τ, unit))` はこの集合に入る。
-    BY <2>1, <2>3, L9, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, borrow_ify, param_capture_units
+    `p` と各 `unit ∈ rc_units(p.ty)` について `(p.name, unit)` を並べる。`<2>1` の表は
+    `VarTable::of(f_own)` なので L1c が使えて、`pty(r) = Some(τ)` であることは `r` が `f_own` の
+    パラメータか capture であることと同値であり、そのとき `τ = ty(r)` である。`f_own` は `func` の複製
+    なので `r` は `func` のパラメータか capture でもあり、A12 よりその `RcVar` の型 `p.ty` は
+    `ty(r) = τ` である。よって `(r, trunc(τ, unit))` はこの集合に入る。
+    BY <2>1, <2>3, A12, L1c, L9,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, borrow_ify, param_capture_units
   <2>5. QED
     BY <2>2, <2>3, <2>4
 
