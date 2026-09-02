@@ -20,7 +20,7 @@
 P3 と P4 は、1 つの補題 Q (第 6 節) の 2 通りの読みである。Q は `origin` が辿る別名の辺を 1 本ずつ D9 の
 移動の表と A3 の宣言に突き合わせる帰納法で示す。
 
-- 第 1 節が、この文書が固定する本体と `VarTable`、DEF-0、および 7 つの外部の結果 (`EXT`) -- `RcVar` が
+- 第 1 節が、この文書が固定する本体と `VarTable`、DEF-0、および 8 つの外部の結果 (`EXT`) -- `RcVar` が
   実行路の 1 つの位置で持つ値を 3 つの場合に分けたのが DEF-0 であり、D6 のスロットが
   在るのはそのうち 2 つの場合である。節点が束縛する変数について、その束縛の D2 のスコープの根の節点を
   **授与位置**と呼び、束縛の 4 つの形ごとに名指す。
@@ -160,7 +160,7 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 候補集合に入る。
 
 **外部の結果。** README の第 2 節は、文書の外の名前つき結果を `EXT <名前>` の名札で第 1 節に据え、
-`BY` からその名前で引くことを求める。この文書が引くのは次の 7 つである。
+`BY` からその名前で引くことを求める。この文書が引くのは次の 8 つである。
 
 **EXT auto trait と共有** (Rust の言語規則)。
 
@@ -186,6 +186,10 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 
 **EXT 標準ライブラリのハッシュ** (Rust)。(1) `impl<T: Hash + ?Sized> Hash for Arc<T>` の `hash` は、
 指す先の `T` の `hash` を呼ぶ。(2) `HashMap::get(k)` は鍵 `k` の `Hash` の実装を走らせて索く。
+
+**EXT 内部可変性** (Rust)。(1) `RefCell<T>` の中身は、共有参照 `&RefCell<T>` から `borrow_mut` で
+書き替えられる。(2) `OnceLock<T>::get_or_init(&self, f)` は、欄がまだ空なら共有参照 `&self` を通じて
+`f()` の値でそれを埋め、以後の呼び出しは同じ値を返す。欄は一度だけ書かれる。
 
 **EXT 整礎性**。(a) 自然数の狭義減少する無限列は無い。(b) ある集合の上の関係が、その関係を辿って
 無限に降りる列を 1 つも持たないとき、その関係は整礎であり、その上の整礎帰納が使える。
@@ -2131,8 +2135,10 @@ let seen : Std::I64 = Main::peek(m, two)
        `&mut Set<VarPath>` であり、`owned_leaves.insert` のほかに書き込みを行わず、呼ぶのはこの
        3 つである),
        CODE src/rc_ir/borrow.rs: owns_object_yet (`owned_leaves` を `&Set<VarPath>` で受け取る),
+       EXT 内部可変性 ((1) `RefCell` の中身は共有参照から書き替えられるので、`&VarTable` からでも
+       `origins` に書ける),
        CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow_mut().insert(key, answer.clone())` が
-       memo を書く。`origins` は `RefCell` なので `&VarTable` からでも書ける)
+       memo を書く)
   <2>2. `covered_leaves` と `owns_object_yet` はどちらも `TypeNode` の `OnceLock` の memo を書きうる。
         **「`VarTable` の 5 つの欄のうち `RefCell` を持つのは `origins` だけである」では、内部可変性の
         数え上げは尽きない** -- `param_tys`・`var_tys`・`bindings` は `Arc<TypeNode>` を持ち、
@@ -2147,11 +2153,12 @@ let seen : Std::I64 = Main::peek(m, two)
         (EXT 標準ライブラリのハッシュ (2))。鍵の型は `Arc<TypeNode>` であり、その `hash` は指す先の
         `TypeNode` の `hash` を呼ぶ (EXT 標準ライブラリのハッシュ (1))。
         `impl Hash for TypeNode` は `type_hash` を呼び、`type_hash` は `hash_cache.get_or_init` を
-        走らせる -- 共有参照から `hash_cache` を書く。この道で書かれるのは `hash_cache` であり、
+        走らせる -- 共有参照から `hash_cache` を埋める (EXT 内部可変性 (2))。この道で書かれるのは
+        `hash_cache` であり、
         `TypeNode` が持つ `OnceLock` の欄は `hash_cache`・`ground_cache`・`depth_cache` の 3 つで
         尽きるので、この 2 つと `origin` が書く `TypeNode` の memo は、どれも `<1>3` の言明の中に
         ある。
-    BY EXT 標準ライブラリのハッシュ,
+    BY EXT 標準ライブラリのハッシュ, EXT 内部可変性,
        CODE src/rc_ir/borrow.rs: level_ownership, covered_leaves,
        CODE src/rc_ir/borrow.rs: owns_object_yet (`vars.param_tys.get(root)` が返す型に
        `boxed_leaf_paths` を掛ける),
