@@ -1943,32 +1943,69 @@ let seen : Std::I64 = Main::peek(m, two)
      CODE src/rc_ir/ownership.rs: as_arg_projection (`VarTable` を引数に取らない),
      CODE src/rc_ir/ownership.rs: truncate_to_unit (引数は型・path・`TypeEnv` であり `VarTable` を
      取らない)
-<1>3. `level_ownership` が書くのは 2 つである -- `infer_ownership` の局所変数 `owned_leaves` と、
-      それが呼ぶ `origin` を通じて `VarTable` の `origins` の memo である。`VarTable` の残りの欄
-      (`bindings`、`closure_targets`、`param_tys`、`var_tys`) にも `TypeEnv` にも書かない。
-  BY CODE src/rc_ir/borrow.rs: level_ownership -- 引数は `&VarTable`、`&TypeEnv`、site、
-     `&mut Set<VarPath>` であり、自分が行う書き込みは `owned_leaves.insert` だけである。呼ぶのは
-     `origin`、`owns_object_yet`、`covered_leaves` の 3 つである,
-     CODE src/rc_ir/borrow.rs: owns_object_yet (`&Set<VarPath>` を読むだけで、どこにも書かない),
-     CODE src/rc_ir/ownership.rs: origin -- `vars.origins.borrow_mut().insert(key, answer.clone())` が
-     memo を書く。`origins` は `RefCell` なので `&VarTable` からでも書ける,
-     CODE src/rc_ir/ownership.rs: VarTable -- 5 つの欄のうち `RefCell` を持つのは `origins` だけである
-<1>3a. memo への書き込みは鍵の答えを変えない。
+<1>3. `level_ownership` の実行が書き込むのは 3 種である -- `infer_ownership` の局所変数
+      `owned_leaves`、それが呼ぶ `origin` を通じた `VarTable` の `origins` の memo、そして
+      到達する `TypeNode` の `OnceLock` の memo (`hash_cache`・`ground_cache`・`depth_cache`) で
+      ある。**`VarTable` の残りの欄
+      (`bindings`、`closure_targets`、`param_tys`、`var_tys`) と `TypeEnv` の値は変わらない。**
+  <2>1. `level_ownership` 自身が行う書き込みは `owned_leaves.insert` だけであり、呼ぶのは `origin`、
+        `owns_object_yet`、`covered_leaves` の 3 つである。`owns_object_yet` は `&Set<VarPath>` を
+        読むだけで、どこにも書かない。`origin` は `origins` の memo を書く。
+    BY CODE src/rc_ir/borrow.rs: level_ownership (引数は `&VarTable`、`&TypeEnv`、site、
+       `&mut Set<VarPath>` である), owns_object_yet,
+       CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow_mut().insert(key, answer.clone())` が
+       memo を書く。`origins` は `RefCell` なので `&VarTable` からでも書ける)
+  <2>2. `covered_leaves` は `TypeNode` の `OnceLock` の memo を書きうる。
+        **「`VarTable` の 5 つの欄のうち `RefCell` を持つのは `origins` だけである」では、内部可変性の
+        数え上げは尽きない** -- `param_tys`・`var_tys`・`bindings` は `Arc<TypeNode>` を持ち、
+        `TypeNode` は `OnceLock` の欄を 3 つ持つからである。道は実在する。`level_ownership` は
+        `vars.param_tys.get(root)` が返す型を `covered_leaves` へ渡し、`covered_leaves` は
+        `boxed_leaf_paths` を呼び、その走査は `unpunched_field_types` を呼ぶ。
+        `unpunched_field_types` は `instance_field_types` を経て、tycon が kind `*` でない型変数を
+        持つとき `unwrap_newtypes_memoized` を呼び、そこで `Map<Arc<TypeNode>, Arc<TypeNode>>` を
+        `Arc<TypeNode>` の鍵で引く。`Map` は `FxHashMap` なので鍵は hash される。
+        `impl Hash for TypeNode` は `type_hash` を呼び、`type_hash` は `hash_cache.get_or_init` を
+        走らせる -- 共有参照から `hash_cache` を書く。この道で書かれるのは `hash_cache` であり、
+        `TypeNode` が持つ `OnceLock` の欄は 3 つで尽きるので、`origin` と `owns_object_yet` が残る
+        2 つを書いたとしても `<1>3` の言明の外へは出ない。
+    BY CODE src/rc_ir/borrow.rs: level_ownership, covered_leaves,
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types, TypeNode::instance_field_types,
+       TypeNode::unwrap_newtypes_memoized, TypeNode::type_hash, TypeNode,
+       CODE src/ast/types.rs: impl Hash for TypeNode,
+       CODE src/misc.rs: Map (`FxHashMap` の別名である)
+  <2>3. その書き込みは、`VarTable` の残りの欄と `TypeEnv` が持つ値の等しさを変えない。
+    BY <2>2, A3 (「**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変え
+       ない。** 到達できる型が内部可変性を持つ欄を持つときは、その欄は**一度だけ書かれる memo で
+       あって、その値はその型の `PartialEq` が読む成分の関数である**」、および
+       「**「内部可変性を持たない」と書くと偽になる。**」の節 -- `TypeNode` の `hash_cache`・
+       `ground_cache`・`depth_cache` を名指し、「**その 3 つは一度だけ書かれる memo であり、
+       `impl PartialEq for TypeNode` は `ty` だけを読み、3 つの memo の値はどれも `ty` の関数で
+       ある**」「**`impl Hash for TypeNode` は `type_hash` を呼ぶので `hash_cache` を読み、かつ
+       書く。**反映されるのは `ty` だけなので、等しい 2 つの値は等しくハッシュされる」と述べる)
+  <2>4. QED
+    BY <2>1, <2>2, <2>3
+<1>3a. `origins` の memo への書き込みは鍵の答えを変えない。
   P2a は 1 つの `VarTable` の値と 1 つの `TypeEnv` の値を固定したうえで、鍵 `(x, π)` が等しい 2 つの
   `origin` の呼び出しの返り値が等しいこと、すなわち「答えは `vars.origins` が保持する memo の状態に
-  依らない」ことを述べる。`<1>3` より `level_ownership` が書くのは同じ 1 つの `VarTable` の `origins` と
-  局所変数 `owned_leaves` の 2 つだけなので、P2a の範囲がそのまま当たる。
+  依らない」ことを述べる。`<1>3` より `level_ownership` は同じ 1 つの `VarTable` の `origins` を書き、
+  `bindings` と `TypeEnv` の値は動かさないので、P2a の固定した範囲がそのまま当たる。
   **表を跨ぐ形は引かない** -- P2a は「`bindings` が等しい相異なる 2 つの `VarTable` について答えが
   等しい」ことを主張しないので、この段はその形を使わない。
   BY P2a, <1>3
 <1>4. QED
   `<1>2` が挙げる入力 -- `VarTable` の `bindings`、`TypeEnv`、`bindings` が持つ `LLVMGen` の
-  `result_prov` の返り値、および `origins` の memo -- のうち、`level_ownership` が書くのは memo だけで
-  ある (`<1>3`)。`owned_leaves` はその並びに入らない。`<1>3a` より memo への書き込みは答えを変えない。
+  `result_prov` の返り値、および `origins` の memo -- のうち、`level_ownership` の実行が**値として**
+  変えるのは `origins` の memo だけである (`<1>3`) -- `TypeNode` の memo への書き込みは `bindings` と
+  `TypeEnv` の値を動かさない。`owned_leaves` はその並びに入らない。`bindings` と `TypeEnv` の値が
+  動かないので (`<1>3`)、`origin_inner` がそれらの型について呼ぶ `is_box`・`truncate_to_unit`・
+  `result_prov` も同じ答えを返す -- 前の 2 つは型の値の関数であり、`result_prov` は決定的である
+  (A3)。`<1>3a` より `origins` の memo への書き込みは答えを変えない。
   **比較は 1 つの `VarTable` の値の上で行う** -- `level_ownership` は `bindings` を書かないので
   (`<1>3`)、その有無で変わるのは同じ表の `origins` だけであり、P2a の固定した範囲を出ない。
   よって P3 と P4 の真偽は `level_ownership` の有無で変わらない。
-  BY P2a, <1>1, <1>2, <1>3, <1>3a
+  BY P2a, A3 (値の等しさの節と、「**`result_prov` と `borrows_operand` は決定的である**」の節),
+     <1>1, <1>2, <1>3, <1>3a
 
 **観察 (この文書の命題の外)。** `level_ownership` の発火判定は、site の `origin` の候補のうち 1 つでも
 `owns_object_yet` が真であれば真になる (`CODE src/rc_ir/borrow.rs: level_ownership`, `owns_object_yet`)。
