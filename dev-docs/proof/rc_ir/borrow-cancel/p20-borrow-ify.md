@@ -772,7 +772,15 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
   その周回の内側のループは、`vars.param_tys` が `root_var` を持つ各 `(root_var, root_path)` について
   `owned_leaves.insert` を呼ぶ。`<1>1` よりそのすべてが偽を返すので、すべてすでに入っている。`<1>3` より
   その `collect_consumes` の入力は `OL` である。
-  BY <1>1, <1>3, CODE src/rc_ir/borrow.rs: infer_ownership
+  **言明が名指す `origin(var, path).candidates()` は、その周回の呼び出しが返したものである。**
+  `var_tables` は `infer_ownership` のループの外で 1 度だけ作られるので、1 つの関数について `origin` に
+  渡る第 1 引数 (`VarTable` の値) と第 2 引数 (`type_env`) はどの周回でも同じである。P2a が
+  「1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値を固定する。その 2 つを第 1・第 2 引数とし、
+  鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならば、その 2 つの返り値は等しい」と
+  述べるので、2 つは同じ集合である。`origin(var, path)` が値を返すのは、`var` がプログラムの束縛変数で
+  あるとき P2 が、`vars.bindings` が `var` を鍵に持たないとき (D6 の第 3 の形) L6c が与える。
+  BY D6, L6c, P2, P2a, <1>1, <1>3, CODE src/rc_ir/borrow.rs: infer_ownership,
+     CODE src/rc_ir/ownership.rs: origin, VarTable
 
 ### 3.5 P8 (c) -- D9 の消費との対応
 
