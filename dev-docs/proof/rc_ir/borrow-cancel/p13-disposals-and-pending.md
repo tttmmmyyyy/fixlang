@@ -2819,28 +2819,26 @@ P17 が扱う (第 4 節の `L6` と、`L11` の `<2>2` の場合分け)。**消
        `Destructure`、本体 (D23) の終端の `Ret`。このうち `App` の所有位置の引数**以外**の 6 種に
        ついて、消費される `VarPath` の集合 -- 対 `(名指す変数, leaf)` の集合 -- は、`V` の本体と
        `Pre(V)` の対応する節点では等しく、`Pre(V)` と `F` の本体の対応する節点では `rename` で写して
-       一致する。
-  BY <1>1c, <1>1d, P9, A3, A12, A23, D4, D9,
-     CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/borrow.rs: RewriteCtx::route,
-     CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+       一致する。**`route` が callee の名前を差し替えた `App` 節点の callee の位置だけは別である** --
+       そこで `V` の本体が消費する `VarPath` の第 1 成分は、出力の `funcs` の鍵であり、`rename` の像に
+       無い。
+  BY <1>1c, <1>1d, P9, P12, A3, A12, A13, D6, D9,
+     CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/borrow.rs: RewriteCtx::route
   D9 の消費の表は 6 行を持ち、その `App` の行が callee の leaf と所有位置の引数の leaf の 2 つの位置を
   挙げるので、消費の位置は 7 種である。
 
   `V` の本体と `Pre(V)` の間は <1>1d による -- 書き換えが変えるのは `Retain`/`Release` 節点と
   `App` の callee の**名前**だけである。この 6 種のうち 5 種が読むもの (`Closure` の capture、`Llvm` の
   op とオペランド、`Destructure` の容器とフィールド、終端の `Ret` の変数) は書き換えが触れないので、
-  変数も leaf も両側で同じである。**残る `App` の callee の位置では名前が動くので、`VarPath` の集合が
-  等しいことは leaf の集合が等しいことから出ない。** そこは両側で空である。`route` が callee の名前を
-  差し替えるのは `borrow_versions` に鍵を持つ直接呼び出しに限られ、`borrow_ify` が `borrow_versions` に
-  入れるのは `func.capture.is_none()` の関数だけである。A12 の `RcFunc` の欄の整合より `capture` が
-  `Some` であることと `fn_ty.is_closure()` が真であることは同値なので、その関数の `fn_ty` は closure 型
-  ではない。A23 は、`Lowerer::lower_lam` が `prog.funcs` に入れる関数の `fn_ty` は closure 型であり
-  `lower_lambda_as_function` がその関数に `capture` を与えること、funptr 型の lambda を作るのは
-  `uncurry::funptr_lambda` だけであることを述べるので、`capture` を持たない関数の `fn_ty` は funptr 型で
-  ある。A12 の「さらに `ty(callee)` は実行時の呼び出し先の `fn_ty` である」より `ty(callee)` はその型で
-  あり、`is_funptr` の型は `is_fully_unboxed` が真で boxed leaf を持たない (D4 の第 1 規則)。よって
-  callee の位置で消費される leaf は両側で 1 つも無く、`VarPath` の集合は空どうしで等しい。`route` は
-  `callee.clone()` の `name` の欄だけを差し替えるので `ty(callee)` も動かない。
+  変数も leaf も両側で同じである。**残る `App` の callee の位置では名前が動きうるので、`VarPath` の
+  集合が等しいことは leaf の集合が等しいことから出ない。** `route` は、名前を差し替えないときは
+  `callee.clone()` をそのまま返し、差し替えるときは `callee.clone()` の `name` の欄だけを
+  `borrow_version.name` に置く。前者では `callee` は両側で同じ `RcVar` なので `VarPath` の集合は
+  等しい。後者では、P12 の「呼び出し先が入力の関数を名指すとき、返る名前は出力の `funcs` の鍵である」
+  より差し替わった名前は出力の `funcs` の鍵であり、A13 の「**最上位の記号の名前は局所名ではない。**
+  `FullName::is_local` が偽であり、`prog.funcs` の鍵と `global_types` の鍵はどちらもそのような名前で
+  ある」よりそれは局所名ではない。`rename` が写すのは `Pre(V)` の束縛名であり、D6 より束縛を持つ名前は
+  局所名なので、差し替わった名前は `rename` の像に無い。これが言明の但し書きである。
 
   `Pre(V)` と `F` の本体の間は `rename` である。6 種のうち 5 種 -- `App` の callee、`Closure` の
   capture、boxed 容器と unbox 容器の `Destructure`、終端の `Ret` -- は、名指す変数の boxed leaf を
@@ -3023,7 +3021,9 @@ P17 が扱う (第 4 節の `L6` と、`L11` の `<2>2` の場合分け)。**消
       `p` が `rename` の像に無いときは、<3>2 より `Pre(V)` で `p` は束縛を持たないので、
       `origin_inner` の `None` の腕が `here()` すなわち `Exactly((p, μ))` を返す。`V` のパラメータ名と
       capture 名 -- `ctx.vars.param_tys` の鍵 -- はどれも `rename` の像なので (<3>2)、像に無い名前は
-      その鍵ではない。`p = rename[p0]` のときは、<1>1e よりこの CASE の 6 種の消費は `V` の本体と
+      その鍵ではない。`p = rename[p0]` のときは、<1>1e の但し書きが除く位置 -- `route` が名前を
+      差し替えた `App` の callee -- はこの場合に当たらない。その位置で消費される `VarPath` の第 1 成分は
+      `rename` の像に無いからである。よって <1>1e よりこの CASE の 6 種の消費は `V` の本体と
       `F` の本体で `rename` で写して一致し、<2>1 よりその 6 種は所有の割り当てを読まないので、`F` の
       本体でも `(p0, μ)` は D9 の意味で消費される。`origin_V(p, μ) = ren[origin_F(p0, μ)]` は
       <3>3 である。D15 より候補は `Origin` の名前の成分なので、候補の全体も `ren` で写り、
