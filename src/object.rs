@@ -769,7 +769,7 @@ impl ObjectFieldType {
     /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
     ///   (`Std::PunchedArray`), which the source therefore does not own; the copy skips it and
     ///   leaves `dst_buffer[idx]` uninitialized.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn clone_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,
@@ -802,6 +802,7 @@ impl ObjectFieldType {
     ///   writes is a first write.
     /// * `state` — the reference-counting state of the fields, which is what `src` reaches. An
     ///   operation whose annotation covers its clone path proves it local and passes it here.
+    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn clone_struct<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
@@ -827,6 +828,7 @@ impl ObjectFieldType {
     ///   this writes are first writes.
     /// * `state` — the reference-counting state of the payload, which is what `src` reaches. An
     ///   operation whose annotation covers its clone path proves it local and passes it here.
+    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn clone_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
