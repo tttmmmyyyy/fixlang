@@ -2389,7 +2389,8 @@ D21 が挙げる「オペランドから結果が決まらない 4 種」の各�
 
 <1>3. D21 の 4 種の位置のうち、`Retain`/`Release` 節点の上に無いものは `B_V` と `B'_V` で 1 対 1 に
       対応する。`Retain`/`Release` 節点の上にありうるのは (F) の解放と、その節点が束縛を持たない名前を
-      名指すときの (E7) の段の 2 つであり、そこは片側にしか位置が無いことがありうる。
+      名指すときの (E7) の段の 2 つである。後者は `B_V` の側の節点については両側で 1 対 1 に対応し、
+      片側にしか位置が無いのは (F) の解放と、`B'_V` にだけ在る (A-前)・(A-後) の節点の上の位置である。
   4 種は、一意性の観測点 (D18)、外部の状態を読む `Llvm` の演算、**実行時の参照カウントで分岐する
   `Llvm` の演算**、子の活性化を作る段である。第 3 の種を宣言で読まないのは D21 と D30 による -- D21 は
   「分岐する op と `LLVMGen::unique_check_operand` を宣言する op は一致しない (D30 の (X2))」と書き、
@@ -2409,16 +2410,18 @@ D21 が挙げる「オペランドから結果が決まらない 4 種」の各�
   `get_scoped_obj_noretain` を呼び、`ValueAccessor::get` の `Global` の枝は getter を `build_call` する
   (`CODE src/generator.rs: Generator::get_scoped_obj_noretain`, `get_scoped_value`,
   `ValueAccessor::get`)。よってその節点が束縛を持たない名前 (D6 の記号の位置) を名指すとき、その段は
-  まだ初期化されていない記号について (E7) を起こす。**`B_V` の `Retain`/`Release` 節点はそのような名前を
-  名指さない** -- A25 より `insert_rc` の入力に `Retain`/`Release` は無く、`insert_rc` がそれを挿入する
-  4 か所はどれも `v.name.is_local()` の門の下にあり (`CODE src/rc_ir/rc_insert.rs:
-  RcInserter::insert_into_eval`, `insert_into_operation_let`, `retain_if_live`)、`split_rc_units` は
-  path を割るだけで変数を変えない (A2)。A13 より最上位の記号の名前は局所名ではない。L16 より `B'_V` の
-  (K) の節点は `B_V` の節点と同じ変数を名指すので、これらも名指さない。残る (A-前) と (A-後) は
-  `B'_V` にだけ在る節点である。
-  BY A2, A13, A25, D6, D18, D21, D24, D30, L16, <1>2,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval, insert_into_operation_let,
-     retain_if_live, CODE src/generator.rs: Generator::get_scoped_obj_noretain, get_scoped_value,
+  まだ初期化されていない記号について (E7) を起こす。**そのような名前を名指す `B_V` の `Retain`/`Release`
+  節点は `B'_V` に残る。** `g` を束縛を持たない名前とすると、L6c より
+  `origin(g, π) = Origin::Exactly((g, π))` なので `cand(g, π) = {(g, π)}` である。`VarTable::of` と
+  `VarTable::body_only` が `param_tys` に入れる鍵はパラメータ・capture の名前だけなので、`g` はその鍵では
+  なく、L4 より `ctx.owns_object(g, π)` は真である。`owns_unit(g, π)` は `cand(g, π)` の全元についての
+  `owns_object` の全称なので真であり、L16 の (K) よりその節点は `B'_V` に同じ変数・同じ path・同じ位置で
+  立つ。よってその節点の上の (E7) の位置は両側で 1 対 1 に対応する。残る (A-前) と (A-後) は `B'_V` に
+  だけ在る節点であり、その上の (E7) の位置は `<1>5` が扱う。
+  BY D6, D18, D21, D24, D30, L4, L6c, L16, <1>2,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+     CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only,
+     CODE src/generator.rs: Generator::get_scoped_obj_noretain, get_scoped_value,
      ValueAccessor::get
 
 <1>4. `callee` の名前が違うことは、この対応を妨げない。
@@ -2434,10 +2437,10 @@ D21 が挙げる「オペランドから結果が決まらない 4 種」の各�
       よらず、その他の位置に与えたデータは同じである。
       **(E7) の結果は記号の値なので、選び方を 1 つ指定する。** (E7) の段の結果 -- アクセサが記号の
       記憶域へ格納する値 -- は、その記号を読む後の節点が読むものである (D24 の (E7))。`<1>3` より
-      その位置が `Retain`/`Release` 節点の上に在るのは `B'_V` にだけ在る (A-前)・(A-後) の節点で
-      あり、`α` の構成はその結果を使わない。逆に `B_V` で束縛を持たない名前を名指す節点はどれも
-      `Retain`/`Release` 節点ではないので `<1>2` の対応に入る (`<1>3`)。`α` の側でその節点に与える
-      (E7) の結果は、`α'` におけるその記号の値を取る。
+      その位置が片側にしか無いのは `B'_V` にだけ在る (A-前)・(A-後) の節点の上であり、`α` の構成は
+      その結果を使わない。`B_V` で束縛を持たない名前を名指す節点は、`Retain`/`Release` 節点であれば
+      `<1>3` より `B'_V` に残って両側で対応し、そうでなければ `<1>2` の対応に入る。`α` の側でその節点に
+      与える (E7) の結果は、`α'` におけるその記号の値を取る。
   BY D6, D21, D24, L5, <1>2, <1>3
 
 <1>6. QED
@@ -2449,6 +2452,14 @@ D21 が挙げる「オペランドから結果が決まらない 4 種」の各�
   束縛しない (L5) ので、値を作る節点は `<1>2` の対応で 1 対 1 に並び、各節点の値はオペランドの値か
   共有した結果のどちらかで決まる。よって対応する位置で対応する変数が得る値は `α'` のものと等しい。
   BY D21, L5, L16, <1>1, <1>2, <1>3, <1>4, <1>5
+
+**`Retain`/`Release` 節点が記号の位置を名指す形は在る**。`insert_rc` が `Release` を置く位置のうち、
+`v.name.is_local()` の門の下に無いものが在る -- `insert_into_match` の
+`release_container && arm.tag.is_some() && needs_rc(&scrut)` の枝が boxed union の変位アームの頭へ置く
+`Release(scrut, ..)` がそれで、`scrut` に `is_local()` の検査は無い
+(`CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match`)。`README.md` の A19 の脇が
+「boxed union の変位アームの頭に置かれた `Release`」と名指すのはこの節点である。よって `<1>3` はこの形を
+数え上げで退けず、そのような節点が `B'_V` に残ることで扱う。
 
 ### 9.7 由来ごとの義務
 

@@ -549,11 +549,11 @@ src/rc_ir/provenance.rs	uniform	P3,P4	b868bec59aed
 src/rc_ir/provenance.rs	uniform_bottom	P3,P4	e195f0090e0f
 src/rc_ir/rc_insert.rs	RcInserter::arm_free_locals	(P-insert)	5b7c599cd710
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_destructure	(P-insert)	0a43269d0fec
-src/rc_ir/rc_insert.rs	RcInserter::insert_into_eval	P8,P9,P10,P11,P12,P13,P14,P14a,P14b,(P-insert)	e5d132af2294
+src/rc_ir/rc_insert.rs	RcInserter::insert_into_eval	(P-insert)	e5d132af2294
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_expr	(P-insert)	1a267de15e8b
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_expr_inner	D/A,(P-insert)	eeb257d5edee
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_func	(P-insert)	ae9e1a3c5466
-src/rc_ir/rc_insert.rs	RcInserter::insert_into_match	D/A,(P-insert)	45e21b5870b7
+src/rc_ir/rc_insert.rs	RcInserter::insert_into_match	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,(P-insert)	45e21b5870b7
 src/rc_ir/rc_insert.rs	RcInserter::insert_into_operation_let	(P-insert)	d7e64d3a040b
 src/rc_ir/rc_insert.rs	RcInserter::needs_rc	(P-insert)	532c01d554aa
 src/rc_ir/rc_insert.rs	RcInserter::retain_if_live	(P-insert)	a4dad5564dd6
@@ -562,9 +562,7 @@ src/rc_ir/rc_insert.rs	build_retains	D/A,(P-insert)	16167d750f5b
 src/rc_ir/rc_insert.rs	collect_referenced_and_bound	(P-insert)	a5ae29f0e853
 src/rc_ir/rc_insert.rs	free_locals	(P-insert)	fa0ab50a0fe8
 src/rc_ir/rc_insert.rs	insert_if_local	(P-insert)	98666b6f345e
-src/rc_ir/rc_insert.rs	insert_into_operation_let	P8,P9,P10,P11,P12,P13,P14,P14a,P14b	d7e64d3a040b
 src/rc_ir/rc_insert.rs	insert_rc	P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P30,(P-insert)	ddc722babbda
-src/rc_ir/rc_insert.rs	retain_if_live	P8,P9,P10,P11,P12,P13,P14,P14a,P14b	a4dad5564dd6
 src/rc_ir/rc_insert.rs	rhs_operands	(P-insert)	1d8e7e575c71
 src/rc_ir/rename.rs	assign_fresh_name	D/A,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P27,P29,P30,(P-insert)	e52d71f7810c
 src/rc_ir/rename.rs	assign_fresh_names_to_binders	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b	2696c8cd590a
