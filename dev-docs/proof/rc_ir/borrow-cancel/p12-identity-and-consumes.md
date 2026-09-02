@@ -998,8 +998,8 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 <1>5a. `id(x, λ) = (x, λ)` であるとき、(i) と (ii) が成り立つ。
   (i): 前提より `(x, λ)` は `ρ` の位置であり、DEF 路の位置 より `λ` は `ty(x)` の boxed leaf で
-  ある。(ii): `obj(x, λ) = obj(x, λ)` は等号の反射律である。
-  BY DEF 路の位置
+  ある。(ii): `obj(x, λ) = obj(x, λ)` は EXT 等号の性質 の反射性である。
+  BY EXT 等号の性質, DEF 路の位置
 
 <1>6. CASE `None | Some(Param) | Some(Producer)`。
   <2>1. 答えは `here()` すなわち `Exactly((x, λ))` であり、`id(x, λ) = (x, λ)` である。
