@@ -2255,8 +2255,9 @@ let seen : Std::I64 = Main::peek(m, two)
 `origin` を問う (`CODE src/rc_ir/ownership.rs: rhs_consumes`, `destructure_consumes`,
 `CODE src/rc_ir/borrow.rs: CancelAnalysis::consume`)。P5 (c) が結ぶ 2 つの量はどちらも leaf ごとの量で
 あり、unit の側の答えを読まない。unit の答えと leaf の答えの食い違いを扱うのは P7a であり、その言明は
-`levelled_sites` の site と `infer_ownership` の不動点に限り、かつ inhabited (D16) な leaf に限る形で
-それを述べる。
+P7a の意味の site -- その版が書き換える本体を `for_each_node` で歩いて挙げた `Retain`/`Release` 節点の
+`(v, path)` と、`App` の各引数と各 unit の対 -- と `infer_ownership` の不動点に限り、かつ
+inhabited (D16) な leaf に限る形でそれを述べる。
 
 ## 8. `level_ownership` が P3 と P4 に及ぼすもの
 
@@ -2266,6 +2267,14 @@ let seen : Std::I64 = Main::peek(m, two)
 <1>1. P3 と P4 の言明が読む関数は `origin` であり、D17 の対応するスロットを決めるのは `origin_inner` と
       `origin_from_leaves_under` である。
   BY README の P3 と P4 の言明, D13, D17
+<1>1a. README の P3 と P4 の言明の先頭の節「**解析がその鍵で `origin` を呼び**」が覆う鍵の集合は、
+       `level_ownership` の有無で動く -- `level_ownership` は `origin` の呼び出し元の 1 つだからで
+       ある。それでも 2 つの言明の真偽は動かない。系 1 と系 2 はこの `vars` と `type_env` について
+       `origin(x, π)` が呼ばれる**任意の**鍵について立つので、その集合が増えても言明は各鍵で成り立ち、
+       減っても残る鍵で成り立つ。
+  BY 系 1, 系 2, 補題 Q (ASSUME が鍵に課すのは「`origin(x, π)` が呼ばれる」ことだけである),
+     README の P3 と P4 の言明,
+     CODE src/rc_ir/borrow.rs: level_ownership (`origin` を呼ぶ)
 <1>2. この 3 つが読むのは `VarTable` の `bindings` と `origins` の memo、`TypeEnv`、および `bindings` が
       持つ `LLVMGen` の `result_prov` の返り値だけである。**`var_tys` と `param_tys` は読まない** --
       `Llvm` の腕が使うオペランドの型は、`Binding::Llvm` が持つ `Vec<RcVar>` の要素の `ty` の欄から来る。
@@ -2290,17 +2299,25 @@ let seen : Std::I64 = Main::peek(m, two)
        `&mut Set<VarPath>` であり、`owned_leaves.insert` のほかに書き込みを行わず、呼ぶのはこの
        3 つである),
        CODE src/rc_ir/borrow.rs: owns_object_yet (`owned_leaves` を `&Set<VarPath>` で受け取る),
+       EXT 借用規則 (共有参照を通じて書き込めるのは内部可変性を持つ欄だけである。`Set<VarPath>` は
+       その欄を持たない),
        EXT 内部可変性 ((1) `RefCell` の中身は共有参照から書き替えられるので、`&VarTable` からでも
        `origins` に書ける),
        CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow_mut().insert(key, answer.clone())` が
        memo を書く)
-  <2>2. `covered_leaves` と `owns_object_yet` はどちらも `TypeNode` の `OnceLock` の memo を書きうる。
+  <2>2. `level_ownership` が呼ぶ 3 つはどれも `TypeNode` の `OnceLock` の memo を書きうる。
         **「`VarTable` の 5 つの欄のうち `RefCell` を持つのは `origins` だけである」では、内部可変性の
         数え上げは尽きない** -- `param_tys`・`var_tys`・`bindings` は `Arc<TypeNode>` を持ち、
-        `TypeNode` は `OnceLock` の欄を 3 つ持つからである。**道は 2 本ある** -- `level_ownership` は
+        `TypeNode` は `OnceLock` の欄を 3 つ持つからである。**道を数えるのではなく、`TypeNode` が持つ
+        `OnceLock` の欄を数える。** 道は 3 本ある -- `level_ownership` は
         `vars.param_tys.get(root)` が返す型を `covered_leaves` へ渡し、`owns_object_yet` も
-        `vars.param_tys.get(root)` が返す型を取って同じ `boxed_leaf_paths` を呼ぶ。`covered_leaves`
-        1 本を数えると `owns_object_yet` の側が落ちる。以下はその共通の道である。
+        `vars.param_tys.get(root)` が返す型を取って同じ `boxed_leaf_paths` を呼び、**`origin` は
+        `origin_inner` の `Binding::Llvm` の腕で `llvm_gen.result_prov(result_ty, &arg_tys, type_env)`
+        を呼ぶ**。README の A3 がこの 3 本目を名指している -- 「**`Box<dyn LLVMGen>` の op が内部可変性に
+        届くのもこの道である**」。`result_prov` が返す `Provenance` は、既定と 29 個の override の
+        いずれについても `Provenance::uniform`・`build_shape`・`uniform_bottom`・`fresh_under`・
+        `replaced_field_prov` のいずれかを通り、その 5 つはどれも
+        `LeafMap::build_shape` を経て `boxed_leaf_paths` を呼ぶ。以下は 3 本の共通の道である。
         `boxed_leaf_paths` の走査は `unpunched_field_types` を呼ぶ。
         `unpunched_field_types` は `instance_field_types` を経て、tycon が kind `*` でない型変数を
         持つとき `unwrap_newtypes_memoized` を呼び、そこで `Map<Arc<TypeNode>, Arc<TypeNode>>` を
@@ -2311,12 +2328,17 @@ let seen : Std::I64 = Main::peek(m, two)
         走らせる -- 共有参照から `hash_cache` を埋める (EXT 内部可変性 (2))。この道で書かれるのは
         `hash_cache` であり、
         `TypeNode` が持つ `OnceLock` の欄は `hash_cache`・`ground_cache`・`depth_cache` の 3 つで
-        尽きるので、この 2 つと `origin` が書く `TypeNode` の memo は、どれも `<1>3` の言明の中に
-        ある。
+        尽きるので、道が何本であっても、書かれる memo はこの段の親の言明の中にある。
     BY EXT 標準ライブラリのハッシュ, EXT 内部可変性,
+       A3 (「**`Box<dyn LLVMGen>` の op が内部可変性に届くのもこの道である**」),
        CODE src/rc_ir/borrow.rs: level_ownership, covered_leaves,
        CODE src/rc_ir/borrow.rs: owns_object_yet (`vars.param_tys.get(root)` が返す型に
        `boxed_leaf_paths` を掛ける),
+       CODE src/rc_ir/ownership.rs: origin_inner (`Binding::Llvm` の腕が `result_prov` を呼ぶ),
+       CODE src/rc_ir/provenance.rs: Provenance::build_shape, Provenance::uniform,
+       Provenance::uniform_bottom, Provenance::fresh_under,
+       CODE src/fixstd/builtin.rs: replaced_field_prov,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape (`boxed_leaf_paths` を呼ぶ),
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
        CODE src/ast/types.rs: TypeNode::unpunched_field_types, TypeNode::instance_field_types,
        TypeNode::unwrap_newtypes_memoized, TypeNode::type_hash, TypeNode,
@@ -2351,9 +2373,10 @@ let seen : Std::I64 = Main::peek(m, two)
   (A3)。`<1>3a` より `origins` の memo への書き込みは答えを変えない。
   **比較は 1 つの `VarTable` の値の上で行う** -- `level_ownership` は `bindings` を書かないので
   (`<1>3`)、その有無で変わるのは同じ表の `origins` だけであり、P2a の固定した範囲を出ない。
-  よって P3 と P4 の真偽は `level_ownership` の有無で変わらない。
+  鍵ごとの答えが動かないことと、言明の前件が覆う鍵の集合が動いても真偽が動かないこと (`<1>1a`) を
+  合わせて、P3 と P4 の真偽は `level_ownership` の有無で変わらない。
   BY P2a, A3 (値の等しさの節と、「**`result_prov` と `borrows_operand` は決定的である**」の節),
-     <1>1, <1>2, <1>3, <1>3a
+     <1>1, <1>1a, <1>2, <1>3, <1>3a
 
 **観察 (この文書の命題の外)。** `level_ownership` の発火判定は、site の `origin` の候補のうち 1 つでも
 `owns_object_yet` が真であれば真になる (`CODE src/rc_ir/borrow.rs: level_ownership`, `owns_object_yet`)。
