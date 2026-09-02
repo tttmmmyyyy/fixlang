@@ -838,7 +838,8 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `is_fully_unboxed` を見て `NoUnit` を返し、`rc_units_go` は `NoUnit` で何も積まない。
   BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step, rc_units_go
 
-<1>2. `is_fully_unboxed(τ)` が偽ならば `leaves(τ) ≠ ∅` かつ `units(τ) ≠ ∅` である。
+<1>2. ASSUME (U) `is_fully_unboxed(τ)` が偽である
+      PROVE  `leaves(τ) ≠ ∅` かつ `units(τ) ≠ ∅`
       `τ` から `unpunched_field_types(・)` の対の第 2 成分を取る歩みについての帰納で示す。すなわち
       `unpunched_field_types(τ)` の各対の第 2 成分について結論が成り立つことを帰納法の仮定とする。
       L1b よりその第 2 成分も扱う型であり、DEF 扱う型 と A10 よりその歩みは有限なので、この帰納は
@@ -865,15 +866,15 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
     抜けて `is_closure` の腕に入る。
     BY CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step, rc_units_go
-  <2>4. `is_box(τ)`、`is_array(τ)`、`is_closure(τ)`、`is_funptr(τ)` がどれも偽のとき、
-        `leaves(τ) ≠ ∅` かつ `units(τ) ≠ ∅` である。
+  <2>4. ASSUME (V) `is_box(τ)`、`is_array(τ)`、`is_closure(τ)`、`is_funptr(τ)` がどれも偽である
+        PROVE  `leaves(τ) ≠ ∅` かつ `units(τ) ≠ ∅`
     <3>1. `unpunched_field_types(τ)` のある対 `(idx, fty)` について `is_fully_unboxed(fty)` は偽である。
-      `<2>1` より、この場合 `is_fully_unboxed(τ)` は `unpunched_field_types(τ)` の全対についての全称で
-      あり、`<1>2` の仮定よりそれは偽である。
+      `<2>1` と (V) より、この場合 `is_fully_unboxed(τ)` は `unpunched_field_types(τ)` の全対についての
+      全称であり、(U) よりそれは偽である。
       BY <2>1
     <3>2. `go` は `τ` の位置で `unpunched_field_types(τ)` の各対の下へ降りる。
-      `is_fully_unboxed(τ)` は `<1>2` の仮定より偽であり、`is_closure(τ)`・`is_box(τ)`・`is_array(τ)` は
-      `<2>4` の場合の条件より偽である。L1a の `go` の欄はこの 4 つがどれも偽のとき
+      (U) より `is_fully_unboxed(τ)` は偽であり、(V) より `is_closure(τ)`・`is_box(τ)`・`is_array(τ)` は
+      偽である。L1a の `go` の欄はこの 4 つがどれも偽のとき
       `unpunched_field_types(τ)` の各対の下へ降りると述べる。
       BY L1a
     <3>3. `leaves(τ) ≠ ∅` である。
@@ -893,8 +894,8 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   <2>5. QED
     まず `is_closure(τ)` の真偽で場を分ける。真のときは `<2>3` が当てはまる。偽のときは残る 3 つの述語で
     分ける -- `is_box(τ) ∨ is_array(τ)` ならば `<2>2` が当てはまり、どちらも偽で `is_funptr(τ)` ならば
-    `<2>1` より `is_fully_unboxed(τ)` が真になって `<1>2` の仮定に反し、4 つがどれも偽ならば `<2>4` が
-    結論を与える。この分け方は場を尽くし、各場は他と重ならない。`leaves(τ)` は `path` を空列として
+    `<2>1` より `is_fully_unboxed(τ)` が真になって (U) に反し、4 つがどれも偽ならば `<2>4` の ASSUME が
+    満たされてその結論が出る。この分け方は場を尽くし、各場は他と重ならない。`leaves(τ)` は `path` を空列として
     始めた `go` が積んだものの全体、`units(τ)` は同じく `rc_units_go` が積んだものの全体なので、`<2>2` と
     `<2>3` の場合はどちらも 1 つ以上積まれて空でない。
     BY <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
