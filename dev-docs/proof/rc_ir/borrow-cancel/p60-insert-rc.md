@@ -1815,7 +1815,7 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
   <2>5. CASE `m = Let(x, Match(scrut, arms), cont)`。
     BY 帰納法の仮定, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
        CODE src/rc_ir/rc_insert.rs: RcInserter::arm_free_locals,
-       CODE src/rc_ir/rc_insert.rs: insert_if_local, <1>1, <1>3, A6, A11
+       CODE src/rc_ir/rc_insert.rs: insert_if_local, <1>1, <1>3, A6, A11, D2
     この関数は `live_cont = insert_into_expr(cont, live_after)` を取り、
     `live_after_match = live_cont \ {x}` の下で各アーム本体を書き換え、返った `body_live` をすべて
     `live_before_arms` に集めて各アームの payload を除き、最後に `x` を除いて `scrut` を足す。
@@ -1824,9 +1824,14 @@ D9 の末尾の段落が「上の 2 つの表と D10 の生成の表で、参照
     `live_after_match` に入らないので、`live_before_arms` は
     `(∪_j (free_locals(arm_j.body) \ {payload_j})) ∪ live_after_match` である。A6 と A11 より、ある
     アームが束縛する名前を別のアームや `cont` が参照することはないので、この和は
-    `collect_referenced_and_bound` がアームについて集める `refs \ bound` と一致する。よって `Λ(m)` は
+    `collect_referenced_and_bound` がアームについて集める `refs \ bound` と一致する。
+    最後の `x` の除去はこの和のうち `live_after_match` の分にしか掛からない --
+    `x ∉ ∪_j free_locals(arm_j.body)` だからである。A11 よりアーム本体の中の `x` という名前の使用は
+    その位置でスコープに入っている束縛に解決し、D2 のスコープの規則より `Let(x, Match(..), cont)` が
+    束縛する `x` のスコープは `cont` の部分木であってアーム本体を含まず、A6 より `x` という名前を
+    束縛するものはプログラム全体で 1 つだけなので、アーム本体は `x` を参照しない。よって `Λ(m)` は
     `(∪_j (free_locals(arm_j.body) \ {payload_j})) ∪ (free_locals(cont) \ {x}) ∪ {scrut} ∪ A(m)` で
-    あり、<1>1 よりこれは `free_locals(m) ∪ A(m)` である。
+    あり (`x ∉ A(m)` は <1>3)、<1>1 よりこれは `free_locals(m) ∪ A(m)` である。
   <2>6. CASE `m` が `Retain` または `Release` である。
     BY A25
     A25 より骨格はこの 2 種を含まないので、この場合は起きない。
