@@ -1263,8 +1263,9 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 `Binding::Llvm` の腕が `result_prov` を呼ぶので、その答えが呼ぶたびに変わると `origin` の答えも変わる。
 
 **`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。** 到達できる型が
-内部可変性を持つ欄を持つときは、その欄は**一度だけ書かれる memo**であって、その型の `PartialEq` と
-`Hash` が読まない。**決定性より強い節が要るのは、`RcProgram` を共有参照で受け取る関数がそれを
+内部可変性を持つ欄を持つときは、その欄は**一度だけ書かれる memo であって、その値はその型の
+`PartialEq` が読む成分の関数である**。よってその欄が埋まっても値の等しさは動かず、`Hash` がその memo を
+通して反映するのもその成分だけである。**決定性より強い節が要るのは、`RcProgram` を共有参照で受け取る関数がそれを
 変えないことを言う段があるからである** -- `validate` がその 1 つであり、`RcIrValidator::check_rhs` は
 `result_prov` を呼ぶ。決定性は「同じ引数に同じ値を返す」までしか言わず、op や型が自分の中に持つ状態が
 動かないことを言わない。
@@ -1273,8 +1274,10 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 通じて `TypeNode` に届き、`TypeNode` は `hash_cache`・`ground_cache`・`depth_cache` という `OnceLock` の
 欄を 3 つ持つ。`TypeNode::is_ground` は共有参照から `ground_cache.get_or_init` を実行する
 (`CODE src/ast/types.rs: TypeNode`, `TypeNode::is_ground`)。**その 3 つは一度だけ書かれる memo であり、
-`impl PartialEq for TypeNode` は `ty` だけを読む** (`CODE src/ast/types.rs: TypeNode` の `PartialEq` の
-実装) ので、この節は等しさの水準で立つ。`Box<dyn LLVMGen>` の op は内部可変性を持つ欄を持たない。
+`impl PartialEq for TypeNode` は `ty` だけを読み、3 つの memo の値はどれも `ty` の関数である**
+(`CODE src/ast/types.rs: TypeNode` の `PartialEq` の実装, `TypeNode::type_hash`, `TypeNode::is_ground`)
+ので、この節は等しさの水準で立つ。**`impl Hash for TypeNode` は `type_hash` を呼ぶので `hash_cache` を
+読み、かつ書く。** 反映されるのは `ty` だけなので、等しい 2 つの値は等しくハッシュされる。`Box<dyn LLVMGen>` の op は内部可変性を持つ欄を持たない。
 
 **手書きの `PartialEq` が欄の真部分集合しか読まない型は、この族である。** `NameSpace` の実装は
 `names` だけを読み `is_absolute` を読まない。**等しさを主語にする節は、その実装が読む成分について
