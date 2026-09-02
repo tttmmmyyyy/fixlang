@@ -75,7 +75,7 @@ impl OwnedLeaves {
 /// Infer parameter ownership for every function of `prog` by a fixed point: start every parameter
 /// leaf `Borrow`, then repeatedly demote to `Own` any leaf that a consume site traces back to, until
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
-// PROOF: D/A, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
     let var_tables: Map<FuncRef, VarTable> = prog
         .funcs
@@ -133,7 +133,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> OwnedLeaves {
 /// `owns_unit` answers once for such a pair, while the node it decides acts on each boxed leaf under
 /// the unit. Where those leaves come from roots the version owns differently, no single answer is
 /// right, so the leaves are levelled (`level_ownership`) before any of them is read.
-// PROOF: D/A, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> {
     let mut sites = vec![];
     for_each_node(&func.body, &mut |node| match node.expr.as_ref() {
@@ -159,7 +159,7 @@ fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> 
 /// and `Own` disposes a reference the borrowed leaf was only lent. Owning all of them is the answer
 /// the reference counting can express, and a value owned where it could have been borrowed costs a
 /// count rather than correctness. Ownership only grows here, so the fixed point still terminates.
-// PROOF: D/A, P2a, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn level_ownership(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -197,7 +197,7 @@ fn level_ownership(
 /// leaves into `owned_units`, so a unit's other leaves are owned by that step whether or not the
 /// inference ever named them. Reading the leaves directly here would miss exactly those, and the
 /// unit would be rewritten as owned while the levelling never fired.
-// PROOF: D/A, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
 fn owns_object_yet(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -986,7 +986,7 @@ impl<'a> RewriteCtx<'a> {
     /// or from a producer (a fresh value, a call result, a boxed-container read), is owned; a leaf
     /// that comes from a borrowed parameter is not. A leaf that may be one of several objects is
     /// owned only when it is owned whichever it is.
-    // PROOF: P2a, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn owns_unit(&self, arg: &RcVar, unit: &FieldPath) -> bool {
         origin(&self.vars, self.type_env, &arg.name, unit)
             .candidates()
@@ -1005,7 +1005,7 @@ impl<'a> RewriteCtx<'a> {
     ///
     /// Only the borrow version needs checking. The all-owning original holds every parameter and
     /// capture unit in `owned_units`, so `owns_object` is true of each of its objects.
-    // PROOF: P2a, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, T (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, T (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_ownership_is_levelled(&self, func: &RcFunc) {
         for (v, unit) in levelled_sites(func, self.type_env) {
             let where_from = origin(&self.vars, self.type_env, &v.name, &unit);
@@ -1027,7 +1027,7 @@ impl<'a> RewriteCtx<'a> {
     }
 
     /// Whether this version owns the object a leaf comes from.
-    // PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn owns_object(&self, root: &FullName, path: &FieldPath) -> bool {
         match self.vars.param_tys.get(root) {
             // The value is owned only when every reference-counting unit the path covers is owned.
@@ -1533,7 +1533,7 @@ impl<'a> CancelAnalysis<'a> {
     }
 
     /// Mark every retain the right-hand side consumes as needed.
-    // PROOF: D/A, P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn consume_rhs(
         &mut self,
         pending: &mut PendingRetains,

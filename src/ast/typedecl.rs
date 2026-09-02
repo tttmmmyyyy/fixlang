@@ -222,6 +222,7 @@ impl TypeDefn {
     }
 
     // Set kinds to type variables in `self.value` using kind information in `self.tyvars`.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_kinds_in_value(&mut self) -> Result<(), Errors> {
         let mut kind_scope = KindScope::default();
         for tv in &self.tyvars {

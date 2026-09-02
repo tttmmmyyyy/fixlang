@@ -540,7 +540,7 @@ pub(crate) fn destructure_consumes(
 /// (`owns` decides, for the callee's parameter leaf), a captured value, and the closure callee. A
 /// `Var` move and a `Match` consume nothing here — a move is an alias, and a match's consumes live in
 /// its arms. `result_ty` is the type the right-hand side binds, needed to read an op's passthrough.
-// PROOF: D/A, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
     rhs: &RcRhs,
     result_ty: &Arc<TypeNode>,
@@ -938,7 +938,7 @@ pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPa
 
 /// The reference-counting units under a path of a value's type: the units of the subtree the path
 /// names, or the path itself when it already names a unit (a boxed value, a union, or a leaf).
-// PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn units_under(
     ty: &Arc<TypeNode>,
     path: &FieldPath,
