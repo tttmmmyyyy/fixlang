@@ -776,7 +776,7 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
 /// capture, `let` bindings, destructure fields, match-arm payloads) and rewrite all occurrences,
 /// keeping global name uniqueness. References to top-level functions stay free here, for routing to
 /// retarget. Returns the clone and the binder renaming.
-// PROOF: D/A, P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, T (dev-docs/proof/rc_ir/borrow-cancel)
 fn clone_func(
     func: &RcFunc,
     new_ref: FuncRef,
