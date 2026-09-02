@@ -1881,10 +1881,14 @@ P6 より、`n` が `Retain` のとき `(ActRefs^inh_ρ(n))^obj` は `n` が `ρ
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の
          `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, L2
     <3>3. `arm_exits[j] = pending(n)` である。
-      BY L2, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Ret(_)` の腕, <3>1, <3>2
-      `RcExpr::Ret(_)` の腕は `pending` を変えずに `pending` を返す。L2 (i) より、`arm_j.body` の訪問
-      から `n` の訪問までは継続の辺だけを辿る `walk` の呼び出しの入れ子であり、L2 (i) が挙げる腕は
-      いずれも継続の訪問の返り値をそのまま自分の返り値とする。
+      BY L1, L2, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, <3>1, <3>2
+      L2 (i) より、`arm_j.body` の訪問から `n` の訪問までは継続の辺だけを辿る `walk` の呼び出しの
+      入れ子である。`walk_inner` の 7 つの腕のうち `RcExpr::Ret(_)` を除く 6 つ -- `RcExpr::Retain`、
+      `RcExpr::Release`、`RcExpr::Let(_, RcRhs::Match(_, arms), k)`、`RcExpr::Let(x, rhs, k)`、
+      `RcExpr::Destructure`、`RcExpr::Eval` -- は、いずれも本体の最後の式が
+      `self.walk(k, ・, returns_from_func)` であり、その値を腕の値とする。L1 より `walk` は
+      `walk_inner` の値をそのまま返すので、この入れ子の各段は継続の訪問の返り値をそのまま返す。
+      `RcExpr::Ret(_)` の腕は渡された `pending` を変えずに返す。
     <3>4. `merged` の各要素 `p` について、`p.node` は `pending(M)` のある要素の `node` であり、
           `p.outstanding` は各 `arm_exits[j']` の中の `node` が `p.node` に等しい要素の `outstanding`
           と等しい。とくに `arm_exits[j]` にそのような要素 `p^{(j)}` が在る。
