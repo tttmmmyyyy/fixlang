@@ -565,6 +565,10 @@ L8c はこの補題を引かないので、`<1>2`・`<2>2a`・`<2>3`・`<2>5` �
 さらに、実行が参照カウント状態の欄に書き込む動作は 3 つであり、そのうち `RefcntState::GLOBAL` を書くのは
 `mark_global` の走査だけである。`GLOBAL` の状態が他の値へ書き換えられることはない。
 
+**そして、`borrow_ify` の入力・出力・`cancel` の出力のいずれかの本体にある `Llvm` の演算は、
+`assume_unique` の欄を持つならばその欄が偽であり、`assume_local` の欄を持つならばその欄が偽である。**
+この節を観測点の op に限らないのは、L7a と L10 が観測点でない op についてもこれを読むからである。
+
 <1>1. D18 の観測点の演算は `InlineLLVMIsUniqueFunctionBody` か `InlineLLVMArrayIsStorageUniqueBody` の
       どちらかである。`make_std_mod` は `Std::unsafe_is_unique` に `is_unique_function()` を、
       `Std::Array::_unsafe_is_storage_unique` に `array_is_storage_unique_function()` を登録し、前者は
@@ -574,8 +578,9 @@ L8c はこの補題を引かないので、`<1>2`・`<2>2a`・`<2>3`・`<2>5` �
   BY D18, CODE src/fixstd/stdlib.rs: make_std_mod,
      CODE src/fixstd/builtin.rs: is_unique_function, array_is_storage_unique_function
 
-<1>2. `q` が `borrow_ify` の入力・出力・`cancel` の出力のいずれかの本体にあるとき、その演算の
-      `assume_unique` と `assume_local` はどちらも偽である。`assume_unique` を真にするのは
+<1>2. `borrow_ify` の入力・出力・`cancel` の出力のいずれかの本体にある `Llvm` の演算は、`assume_unique`
+      の欄を持つならばその欄が偽であり、`assume_local` の欄を持つならばその欄が偽である。とくに `q` の
+      演算 (`<1>1`) がそうである。`assume_unique` を真にするのは
       `LLVMGen::assuming_unique` を呼ぶ `unique_check_elim::specialize` だけであり、`assume_local` を
       真にするのは `LLVMGen::assuming_local` を呼ぶ `locality::specialize` だけである。
       `optimize_rc_program` はこの 2 つを `borrow_ify` と `cancel` の後に走らせる。
@@ -702,8 +707,8 @@ L8c はこの補題を引かないので、`<1>2`・`<2>2a`・`<2>3`・`<2>5` �
   決まり、`LOCAL` と `THREADED` の腕はどちらも参照カウントが `1` であるかで決まる。複数スレッドの
   ビルドでは `<1>5` の 3 つの腕がその 3 つの状態に当たり、単一スレッドのビルドでは `<1>5c` より
   `THREADED` のオブジェクトが無いので、`<1>5` の 2 つの腕が `LOCAL` と `GLOBAL` に当たる。D7 より
-  `H(o)` はその参照カウントであり、`<1>7` より `GLOBAL` は D26 のグローバル状態である。言明の後半は
-  `<1>5a` と `<1>5b` である。
+  `H(o)` はその参照カウントであり、`<1>7` より `GLOBAL` は D26 のグローバル状態である。言明の第 2 段落は
+  `<1>5a` と `<1>5b`、第 3 段落は `<1>2` である。
   BY D7, D26, <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>5a, <1>5b, <1>5c, <1>6, <1>7
 
 **観測値は local と threaded を区別しない。** `<1>6` の threaded の腕は、カウントが 1 であるとき
@@ -1087,11 +1092,26 @@ D30 の共通接頭が終わるとき、その出口は (X1) か (X2)
        InlineLLVMArrayCopyCapacityBoundsUnchecked
 
   <2>1. `O` は計数下 (D26) である。`<2>0` の 4 か所はいずれも `build_branch_by_is_unique` を通り、その
-        `global_bb` の腕は無条件に `shared_bb` へ跳ぶ。よってグローバル状態のオブジェクトはどちらの実行
+        `global_bb` の腕は無条件に `shared_bb` へ跳ぶ。**`global_bb` が在ることには根拠が要る** --
+        `build_branch_by_refcnt_state` が `global_bb` を `Some` で返すのは `state.dispatches()` が真の
+        ときだけである (L0 の `<1>5`)。4 か所のうち `make_array_unique_with_hole`・
+        `make_struct_union_unique`・`InlineLLVMArraySetCapacityBoundsUnchecked` の `force_unique` の枝は、
+        `force_unique_or_assert` と `force_unique_or_assert_with_hole` を通って
+        `assumed_state(self.assume_local)` を渡す。L0 より、`borrow_ify` の入力・出力と `cancel` の
+        出力のいずれかの本体にある `Llvm` の演算の `assume_local` は偽であり -- この命題が範囲に取る
+        2 つはその中に在る -- 、`assumed_state(false)` は `RcState::Unknown` で
+        `dispatches()` は真である (L0 の `<1>4`)。残る 1 か所 --
+        `InlineLLVMArrayAppendCapacityUnchecked` が `src` について立てる分岐 -- は `RcState::Unknown` を
+        直に渡す。よってどの場合も `global_bb` は在る。
+        よってグローバル状態のオブジェクトはどちらの実行
         でも共有の腕を取り、分岐は違わない。**片方の実行でだけグローバル状態である場合は無い** -- D29 の
         最後の行より、対応する 2 つのオブジェクトは計数下かグローバル状態か (D26) の区別も一致する。
         D26 よりオブジェクトは計数下かグローバル状態かのどちらかである。
-    BY D26, D29, <2>0, CODE src/generator.rs: Generator::build_branch_by_is_unique
+    BY D26, D29, L0, <2>0, CODE src/generator.rs: Generator::build_branch_by_is_unique,
+       Generator::build_branch_by_refcnt_state,
+       CODE src/fixstd/builtin.rs: assumed_state, force_unique_or_assert,
+       force_unique_or_assert_with_hole, InlineLLVMArraySetCapacityBoundsUnchecked::generate,
+       InlineLLVMArrayAppendCapacityUnchecked::generate
   <2>2. `<2>0` の 4 か所はいずれも、分岐が `build_branch_by_is_unique` の読んだカウントが 1 であるかで
         決まり、1 の腕では複製を作らない。`make_array_unique_with_hole` と `make_struct_union_unique` は
         オペランドの値をそのまま通し、共有の腕では新しい記憶域・新しいオブジェクトを割り当てて要素・
