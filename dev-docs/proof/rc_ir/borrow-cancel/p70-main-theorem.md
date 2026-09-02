@@ -560,8 +560,9 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
        `f_own.name` を鍵に取り、第 2 のループは `clone.name` に等しい `borrow_version` を鍵に
        取る。第 3 のループは `name` も鍵も変えない。
     3. **`p0.funcs` の各関数の `name` は `p1.funcs` の鍵である。**第 1 のループは
-       `prog.funcs.values()` を走り、各 `func` について `func.name` を鍵に挿入する。その後の挿入も
-       `values_mut` も鍵を取り除かない。
+       `prog.funcs.values()` を走る。EXT 反復子の `iter`・`map`・`collect` より `values` は写像の
+       各値をちょうど 1 つずつ渡すので、`p0.funcs` のどの関数についても `func.name` を鍵とする挿入が
+       1 回行われる。その後の挿入も `values_mut` も鍵を取り除かない。
   - **`globals`**: `prog.globals.iter().map(|g| RcGlobalInit { symbol: g.symbol.clone(),
     ty: g.ty.clone(), init: ctx.rewrite(&g.init), owns_initializer: true, owns_storage: true })`
     を `collect` した列である。EXT 反復子の `iter`・`map`・`collect` より、`iter` は
@@ -571,10 +572,6 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     `symbol` と `ty` にその要素のものの複製を置くので、第 `i` 要素の `symbol` と `ty` は
     `p0.globals` の第 `i` 要素のものに等しい。
   - **`roots`**: `roots: prog.roots.clone()`。よって `p1.roots` は `p0.roots` に等しい。
-
-  上の 3 つのループのうち 2 つは `prog.funcs.values()` と `clones` を走る。EXT 反復子の
-  `iter`・`map`・`collect` より、`values` は `p0.funcs` の各関数をちょうど 1 回ずつ渡すので、
-  第 1 のループはそのすべてについて挿入を行う。
 
     BY EXT 反復子の `iter`・`map`・`collect`, EXT 写像の `insert` と `values_mut`,
        `CODE src/rc_ir/borrow.rs: borrow_ify`,
