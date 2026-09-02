@@ -68,7 +68,7 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
 この文書は補題を `L1` から `L6` と呼ぶ。`BY` の行ではそれらを名前で引用する。補題の証明の内部の
 ステップは引用しない。
 
-外部の結果を 2 つ使う。名札は README の「証明の記法」が定める `EXT <名前>` である。
+外部の結果を 3 つ使う。名札は README の「証明の記法」が定める `EXT <名前>` である。
 
 - **`EXT stacker の maybe_grow`**: `stacker::maybe_grow(red_zone, stack_size, callback)`
   は `callback` をちょうど 1 回呼び、その値を返す (`CODE stacker-0.1.23/src/lib.rs: maybe_grow`)。
@@ -78,6 +78,10 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
   ちょうど 1 回ずつ適用し、`f` が偽を返した要素を `v` から取り除く。残る要素は値も相対順序も変わらない。
   この文書は `PendingRetains` の `retain` としてこれを使う -- `PendingRetains` は
   `Vec<PendingRetain>` の別名である (`CODE src/rc_ir/borrow.rs: PendingRetains`)。
+- **`EXT Vec::clone`** (Rust 標準ライブラリ): 要素の型が `Clone` であるとき、`v.clone()` は `v` と
+  同じ長さの `Vec` を返し、その第 `i` 要素は `v` の第 `i` 要素の `clone()` である。すなわち複製は
+  要素をその並びのまま持つ。`#[derive(Clone)]` が作る `clone()` は、各フィールドの `clone()` を
+  呼んで同じ変位の値を組み立てる。この文書は `PendingRetains` の `clone` としてこれを使う。
 
 ## 2. 局所の定義
 
@@ -1755,9 +1759,11 @@ P6 より、`n` が `Retain` のとき `(ActRefs^inh_ρ(n))^obj` は `n` が `ρ
     <3>1. `pending(arm_j.body)` は `pending(n).clone()` であり、要素の `node`・`outstanding`・並びは
           `pending(n)` と等しい。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の
-         `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, CODE src/rc_ir/borrow.rs: PendingRetain, L2
+         `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, CODE src/rc_ir/borrow.rs: PendingRetain, L2,
+         EXT Vec::clone
       この腕は各 `arm` について `self.walk(&arm.body, pending.clone(), false)` を呼ぶ。
-      `PendingRetain` は `Clone` を derive し、`Vec::clone` は要素をその並びのまま複製する。
+      `PendingRetain` は `Clone` を derive し、`node` と `outstanding` の 2 つの欄だけを持つので、
+      EXT Vec::clone より複製は要素をその並びのまま持ち、各要素の 2 つの欄は原本のものと等しい。
     <3>2. QED
       BY <3>1, 帰納法の仮定, DEF bump の帰属
       表の第 5 行より、複製された要素の `B_ρ` は元の要素のものである。
