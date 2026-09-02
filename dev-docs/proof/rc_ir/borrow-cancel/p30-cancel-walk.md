@@ -3,13 +3,13 @@
 この文書は README の層 1 の命題 P2a と、層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の定義
 D1 - D34 と仮定 A1 - A26 の上に立つ。P2a を除く層 1 の命題と、層 2 の命題は引用しない。
 
-この文書が読んだコードのコミットは `31506c4aa941f4a13453dcff2f065128725a4f8c` である。README が証明の
+この文書が読んだコードのコミットは `63bf6963e1e7b51aa575be3aa982af50d3733b25` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書の `CODE` 引用が
-名指すファイルは 15 個ある。そのうち 14 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
+名指すファイルは 16 個ある。そのうち 15 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
 `src/rc_ir/ast.rs`、`src/rc_ir/provenance.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/rename.rs`、
-`src/ast/types.rs`、`src/ast/name.rs`、`src/misc.rs`、`src/build/build_object_files.rs`、
-`src/main.rs`、`src/object.rs`、`src/tool/log_file.rs`、`src/tests/test_util.rs` --- に
-変わったのは `// PROOF:` コメントだけである。
+`src/ast/types.rs`、`src/ast/name.rs`、`src/ast/program.rs`、`src/misc.rs`、
+`src/build/build_object_files.rs`、`src/main.rs`、`src/object.rs`、`src/tool/log_file.rs`、
+`src/tests/test_util.rs` --- に変わったのは `// PROOF:` コメントだけである。
 
 残る 1 個 `src/rc_ir/validate.rs` には、コメント以外の変更がある。`Validator::check_rhs` の署名が
 `(&mut self, x: &RcVar, rhs: &RcRhs)` になり、その `Llvm` の腕が `llvm_gen.result_prov(&x.ty, &arg_tys,
@@ -29,9 +29,9 @@ P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P1
 README の第 2 節の記法に、次の 3 つを加える。
 
 - **局所の定義**。この文書の中だけで使う語を定め、`BY` の行では `DEF <名前>` で引用する。定義は第 1 節に
-  置く。定めるものが 1 つに決まることを補題が与えるときは、その補題の後に置く --- `DEF 節点の量` は L0 の
-  後、`DEF INV` は P15 の後である。
-- **局所の補題**。この文書の中だけで使う補題を `L0` - `L12` と番号を付けて述べ、`BY` の行では
+  置く。定めるものが 1 つに決まることを補題が与えるときは、その補題の後に置く --- `DEF 節点の量` は
+  L0b の後である。
+- **局所の補題**。この文書の中だけで使う補題を `L0` - `L13` と番号を付けて述べ、`BY` の行では
   `L<n>` で引用する。あいだに挟む補題には `L8a` のように枝番を振り、既存の番号は振り直さない。各補題は、
   それより前に置かれた補題と命題と、README の D/A だけを引用する。
 - **外部の結果**。`BY` の行では `EXT <名前>` として引く。Rust の言語と標準ライブラリの契約のうち
@@ -73,18 +73,7 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 節点 `n` の**部分木** `N(n)` を、`n` と、`n` の各子 `c` についての `N(c)` との合併とする。
 
-**節点の道**を、本体の根からその節点まで、上の表が挙げる子のどれを選んだかを順に並べた列とする。D2 は
-本体を式の節点の有限の**木**と定め、木の位置が相異なれば節点も相異なるものと定めるので、各節点はその道で
-ちょうど 1 つに定まり、相異なる節点の道は相異なる。
-
-**`N(n)` は、`n` の道を接頭として持つ道の節点の全体である。** `n` の部分木の大きさについての帰納による ---
-`n` 自身の道は `n` の道を接頭として持ち、`n` の各子 `c` の道は `n` の道に選択を 1 つ継ぎ足したものなので、
-帰納法の仮定より `N(c)` は `c` の道を、したがって `n` の道を接頭として持つ道の節点からなる。逆に `n` の道を
-真の接頭として持つ道は、`n` のどれか 1 つの子の道を接頭として持つ。
-
-この形から 2 つが出る。**相異なる子の部分木は交わらない。** `n` の相異なる 2 つの子の道は、`n` の道に
-相異なる選択を 1 つずつ継ぎ足したものなので、その両方を接頭として持つ道は無い。**`n` はどの子の部分木にも
-入らない。** `n` の道は各子の道より 1 つ短いので、子の道を接頭として持たない。
+**節点の道**を、本体の根からその節点まで、上の表が挙げる子のどれを選んだかを順に並べた列とする。
 
 ### DEF 訪問
 
@@ -108,28 +97,17 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 - `R2 ⊆ R1` とは、各位置について `R2` の個数が `R1` の個数以下であることをいう。
 - `R1 - R2` とは、各位置の個数の差である (`R2 ⊆ R1` のときだけ書く)。
 - **空**とは、参照を 1 つも持たないことをいう。
-- 2 つの `References` の値が**等しい**とは、`PartialEq` が真を返すこと、すなわち各位置の個数が
-  一致することをいう。`References` は `PartialEq` を derive し、その中身は `Map` (`FxHashMap`) なので、
-  等しさは鍵と値の対の集合の一致である (`CODE src/rc_ir/ownership.rs: References`,
-  `CODE src/misc.rs: Map`)。
-
-`⊆` は推移的である (各位置の個数についての不等式の推移律)。
+- 2 つの `References` の値が**等しい**とは、`PartialEq` が真を返すことをいう。
 
 ### DEF 割り当て
 
 `Arc::new(v)` の 1 回の呼び出しは、アロケータから 1 つのメモリブロックを取る。このブロックを**割り当て**と
 呼ぶ。相異なる 2 つの `Arc::new` の呼び出しが取るブロックを、相異なる割り当てという。割り当ての**占める
 番地**とは、そのブロックが占める番地の集合の元である。`Arc::new` が返した値と、`Arc::clone` がそれから
-作った値を、その割り当ての**ハンドル**と呼ぶ。ハンドルの個数は `Arc::clone` で 1 増え、ハンドルが drop
-されるたびに 1 減る (EXT Arc の契約)。
+作った値を、その割り当ての**ハンドル**と呼ぶ。
 
-ハンドルの個数が 1 以上である間、その割り当ては**生存している**という。ブロックがアロケータへ返ることを、
-その**割り当てが解放される**という。EXT Arc の契約 より、生存している割り当ては解放されていない。よって
-EXT アロケータの契約 より、同時に生存している相異なる 2 つの割り当ては記憶域を共有せず、したがって一方の
-占める番地はどれも他方の占める番地と相異なる。
-
-**この文書が節点の同一性に使うのは、`Arc<RcExpr>` が保持する `RcExpr` の番地である。** EXT Arc の契約 の
-最後の行より、その番地はその割り当ての占める番地の 1 つである。
+ハンドルが 1 つ以上存在する間、その割り当ては**生存している**という。ブロックがアロケータへ返ることを、
+その**割り当てが解放される**という。
 
 **この 2 つの語は D7 の語とは別の概念を指す。**「割り当てが解放される」「生存している」は、コンパイラの
 プロセスの中の Rust の `Arc` についての語である。D7 の「オブジェクトが解放される」は、コンパイルされた
@@ -138,62 +116,9 @@ EXT アロケータの契約 より、同時に生存している相異なる 2 
 
 ### DEF 引数で決まる関数
 
-関数の返り値が**引数で決まる**とは、引数の値が等しい 2 回の呼び出しが同じ値を返すことをいう。この文書は
-この性質を 3 つの群について使い、群ごとに根拠が違う。
-
-- **標準ライブラリの操作** --- `Map::get`、`Set`・`Vec`・`Map` の操作、`<[T]>::starts_with`、
-  `<[T]>::first`、`Clone::clone`、`Option` と `Iterator` の組み合わせ子。根拠は外部の結果であり、その
-  言明は `EXT Map と Set`、`EXT スライスの接頭と先頭`、`EXT Clone`、`EXT Vec::iter と slice::iter`、
-  `EXT Iterator::all と any`、`EXT Iterator::map と collect`、`EXT Iterator::filter_map` が述べる。
-  `Set` の反復の順序は定めないので、`Set` から作られるのは要素の集合であって並びではない。
-- **`LLVMGen::result_prov`** --- 根拠は **A3** の「**`result_prov` と `borrows_operand` は決定的である**
-  -- 同じ引数に対して常に同じ値を返す。」である。これは外部の結果ではないので、この文書はこれを使う段の
-  `BY` に A3 を挙げる。
-- **型と `Provenance` の上の関数** --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
-  `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
-  `Origin::identity`、`Origin::candidates`。この 8 つは型・path・`TypeEnv`・`Provenance`・`Origin` の
-  値だけを引数に取り、`VarTable` も走査の状態も引数に取らない。根拠は 2 つに分かれる。
-
-  **6 つは内部可変性を持つ値に触れない。** `TypeNode::is_box`、`Provenance::leaf_origins_at`、
-  `Provenance::leaf_origins_under`、`as_arg_projection`、`Origin::identity`、`Origin::candidates` が
-  それであり、その本文は引数から到達できる値だけを読み、可変な静的変数にも触れない。`is_box` は
-  `is_unbox` を経て `toplevel_tycon_info` の `type_env.tycons().get(&tycon)` に落ちるが、その鍵の型
-  `TyCon` は `FullName` の欄を 1 つ持つだけであり、`FullName` と `NameSpace` の手書きの `Hash` が読むのは
-  `Vec<String>` と `String` だけなので、内部可変性を持たない。残る 5 つは引数の
-  `Provenance`・`Set<LeafOrigin>`・`Origin` を読むだけである
-  (`CODE src/ast/types.rs: TypeNode::is_box`, `CODE src/ast/types.rs: TypeNode::is_unbox`,
-  `CODE src/ast/types.rs: TypeNode::toplevel_tycon_info`, `CODE src/ast/types.rs: TyCon`,
-  `CODE src/ast/name.rs: FullName`, `CODE src/ast/name.rs: NameSpace`,
-  `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at`,
-  `CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`,
-  `CODE src/rc_ir/ownership.rs: as_arg_projection`, `CODE src/rc_ir/ownership.rs: Origin::identity`,
-  `CODE src/rc_ir/ownership.rs: Origin::candidates`)。
-
-  **残る 2 つは触れる。** `boxed_leaf_paths` は `is_fully_unboxed` から `unpunched_field_types`、
-  `instance_field_types` を経て `unwrap_newtypes_memoized` に入り、`truncate_to_unit` は `unit_step` から
-  同じ道に入る。その memo の型は `Map<Arc<TypeNode>, Arc<TypeNode>>` であり、鍵を引くたびに
-  `impl Hash for TypeNode` が `TypeNode::type_hash` を呼んで `hash_cache` の `OnceLock` を共有参照から
-  書く。memo 自身は `instance_field_types` の 1 回の呼び出しごとに空から作られるので、呼び出しを跨いで
-  持ち越す状態はこの `OnceLock` の欄だけである
-  (`CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths`, `CODE src/ast/types.rs: TypeNode::is_fully_unboxed`,
-  `CODE src/ast/types.rs: TypeNode::unpunched_field_types`,
-  `CODE src/ast/types.rs: TypeNode::instance_field_types`,
-  `CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized`,
-  `CODE src/ast/types.rs: TypeNode::type_hash`, `CODE src/ast/types.rs: TypeNode`,
-  `CODE src/rc_ir/ownership.rs: truncate_to_unit`, `CODE src/rc_ir/ownership.rs: unit_step`)。
-
-  **この 2 つの根拠は A3 である。** A3 は「**`RcProgram` から到達できる値の等しさは、それを共有参照で
-  受け取る計算が変えない。**」と述べ、その欄を「**一度だけ書かれる memo であって、その値はその型の
-  `PartialEq` が読む成分の関数である**」とし、「よってその欄が埋まっても値の等しさは動かず、`Hash` が
-  その memo を通して反映するのもその成分だけである。」と続ける。`Arc<TypeNode>` は `RcProgram` の欄から
-  辿って現れる型なので、この節がその `OnceLock` の 3 つの欄に当たる。よって memo が埋まっても、引数の値の
-  等しさも、memo の鍵の一致も、その鍵のハッシュも動かず、この 2 つの返り値は引数の値で決まる。この文書は
-  この 2 つを使う段の `BY` に A3 を挙げる。
-
-**この 8 つのうち 2 つは、並びではなく集合が決まる。** `Provenance::leaf_origins_under` の doc は、渡す
-要素を `in no particular order` と述べる (`CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under`)
-ので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は
-`Join` の変位について `Set` の反復から `Vec` を作るので、引数で決まるのはその元の集合である。
+関数の返り値が**引数で決まる**とは、引数の値が等しい 2 回の呼び出しが同じ値を返すことをいう。返り値が
+`Set` の反復から作られる列であるように、決まるのが並びではなく元の集合であるときは、**元の集合が引数で
+決まる**という。
 
 ### 外部の結果
 
@@ -212,6 +137,53 @@ safe Rust で書かれた関数の本文が名指せる値は、自分の引数 
 **EXT static は Sync を要る**
 safe Rust の `static` 項目の型は `Sync` でなければならない。`Sync` は auto trait であり、`RefCell<T>` は
 `Sync` を実装しないので、`RefCell` の欄を持つ構造体も `Sync` でない。
+
+**EXT 可視性と私有性**
+Rust Reference の "Visibility and Privacy" が次を述べる。
+
+> By default, everything is *private*, with two exceptions: Associated items in a `pub` Trait are
+> public by default; Enum variants in a `pub` enum are also public by default.
+
+> With the notion of an item being either public or private, Rust allows item accesses in two cases:
+>
+> 1. If an item is public, then it can be accessed externally from some module `m` if you can access
+>    all the item's ancestor modules from `m`. You can also potentially be able to name the item
+>    through re-exports. See below.
+> 2. If an item is private, it may be accessed by the current module and its descendants.
+
+同じ節が `pub(crate)` について次を述べる。
+
+> `pub(crate)` makes an item visible within the current crate.
+
+すなわち、`pub` の付かない項目 --- 自由関数、型、inherent な `impl` の中のメソッド、構造体のフィールド
+--- を名指せるのは、それを宣言したモジュールとその子孫のモジュールの中だけである。`pub(crate)` の付いた
+項目を名指せるのは、そのクレートの中だけである。
+
+**EXT モジュールは `mod` が導入する**
+Rust Reference の "Modules" が次を述べる。
+
+> A module is a container for zero or more items.
+
+> A *module item* is a module, surrounded in braces, named, and prefixed with the keyword `mod`. A
+> module item introduces a new, named module into the tree of modules making up a crate.
+
+> Modules can nest arbitrarily.
+
+すなわち、1 つのファイルの本体が `mod` の項目を 1 つも書かなければ、そのファイルのモジュールは子孫の
+モジュールを持たない。EXT 可視性と私有性 と合わせると、そのファイルが宣言する非公開の項目を名指せるのは
+そのファイルの中だけである。書かれた `mod` の項目が `#[cfg(test)] mod tests` の 1 つだけであれば、
+子孫はそのモジュールだけである。
+
+**EXT 共有参照は代入を許さない**
+Rust Reference の "Pointer types" が共有参照について次を述べる。
+
+> When a shared reference to a value is created, it prevents direct mutation of the value. Interior
+> mutability provides an exception for this in certain circumstances. As the name suggests, any
+> number of shared references to a value may exist. A shared reference type is written `&type`, or
+> `&'a type` when you need to specify an explicit lifetime.
+
+すなわち `&T` を通じて `T` の欄へ代入することはできない。`&T` から値を動かす道として残るのは、その型が
+`UnsafeCell` を通じて持つ内部可変性だけである。
 
 **EXT 型のサイズ**
 型の値が占める記憶域の大きさを、その型の**サイズ**という。構造体の各フィールドと、enum の 1 つの変位が
@@ -275,6 +247,12 @@ safe Rust の `static` 項目の型は `Sync` でなければならない。`Syn
 生じない反復子である。`f` は各要素についてちょうど 1 回、先頭から順に呼ばれ、生じる要素の順序は `it` の
 順序である。
 
+**EXT Iterator::fold と rev**
+`it.fold(init, f)` は、累積値を `init` から始め、`it` が渡す各要素 `x` について累積値を
+`f(累積値, x)` で置き換え、最後の累積値を返す。`f` は各要素についてちょうど 1 回、`it` の順序で呼ばれる。
+`it.rev()` は、両端から取り出せる反復子 `it` の要素を末尾から先頭へ 1 度ずつ渡す反復子である。
+`Vec<T>` の `into_iter()` はその要素を先頭から順に 1 度ずつ渡し、両端から取り出せる。
+
 **EXT Iterator::rposition**
 `it.rposition(f)` は、`f` を満たす要素が在るとき、そのうち先頭から数えた添字が最大のものの添字を `Some` で
 返し、無いとき `None` を返す。判定は後ろから行われ、最初に真を返した時点で止まる。
@@ -323,7 +301,7 @@ enum については元と同じ変位で、その変位が保持する各値を
 **この規則は等しさで閉じる。** 上に挙げた基底の型では `clone` は同じ値を返し、`Vec`・`Set`・`Map`・組・
 `#[derive(PartialEq)]` を持つ構造体と enum の等しさは成分ごとの等しさで決まるので、成分の `clone` が元と
 等しければ全体も元と等しい。**`PartialEq` を手書きで実装する型については、その実装が読む成分について
-同じことを確かめる。** この文書に現れるその型は `NameSpace` の 1 つである。
+同じことを確かめる。** 次の段落が `NameSpace` についてそれを行う。
 
 `Origin` は `Clone` と `PartialEq` を derive した enum であり、変位 `Exactly` は `VarPath` を 1 つ、変位
 `Join` は `VarPath` と `Set<VarPath>` を保持する。`VarPath` は組 `(FullName, FieldPath)`、`FieldPath` は
@@ -344,7 +322,7 @@ enum については元と同じ変位で、その変位が保持する各値を
 
 ### DEF 基本操作
 
-走査が `PendingRetains` の値を作る操作に、次の 6 つの名を与える。この 6 つで尽きることは L8 が示す。
+走査が `PendingRetains` の値を作る操作のうち、次の 6 つに名を与える。
 
 | 名 | 作られ方 |
 |---|---|
@@ -362,16 +340,14 @@ enum については元と同じ変位で、その変位が保持する各値を
 走査が作る `PendingRetains` の値を**状態**と呼ぶ。「追加」「消費」「引き」は直前の状態をその場で書き換え、
 「複製」と「併合」は新しい値を作る。各状態は、それを作る基本操作が実行される時点で生じる。状態 `Q` が
 状態 `P` より**前に作られた**とは、`Q` の生じる時点が `P` の生じる時点より前であることをいい、この関係を
-**生成順序**と呼ぶ。時点の前後関係なので、生成順序は狭義の半順序である。1 回の `cancel_body` の実行が作る
-状態が有限個であることと、初期状態を除く各状態がそれより前に作られた状態から上の操作 1 つで作られること、
-およびその上の生成順序が整礎であることは、L8a が示す。
+**生成順序**と呼ぶ。
 
 ### DEF 除去事象
 
-基本操作 1 つが、状態の集まり `P1, ..., Pm` を入力として状態 `P'` を作り、ある `Pi` に `node` が `x` で
-ある要素があり、`P'` にはそれが無いとき、この操作を `x` の**除去事象**と呼ぶ。「併合」の入力は
+基本操作 1 つが、状態の集まり `Q1, ..., Qm` を入力として状態 `Q'` を作り、ある `Qi` に `node` が `x` で
+ある要素があり、`Q'` にはそれが無いとき、この操作を `x` の**除去事象**と呼ぶ。「併合」の入力は
 `pending_in` と各 `arm_exits[j]` の全部であり、ほかの操作の入力は 1 つである。「追加」「消費」「引き」は
-状態をその場で書き換えるので、入力は書き換えの前の値、`P'` は後の値である。
+状態をその場で書き換えるので、入力は書き換えの前の値、`Q'` は後の値である。
 
 ## 2. 予備の補題と P2a
 
@@ -408,7 +384,7 @@ enum については元と同じ変位で、その変位が保持する各値を
      CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
      CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 本文
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 本文, EXT 可視性と私有性
 <1>0a. `VarTable` のどの値 `t` についても、`t` への参照を引数 (`self` を含む) として受け取らず `t` を
        自分で作りもしない関数の本文は、`t` に届かない。したがって `origin(vars, ・, ・, ・)` の 1 回の
        呼び出しの中で `vars` を引数として受け取る本文は、`origin`、`origin_inner`、
@@ -444,6 +420,134 @@ enum については元と同じ変位で、その変位が保持する各値を
     届かない --- 自分で作った `VarTable` の値は `vars` ではない --- ので、その中の呼び出しの引数に
     `vars` は現れない。
     BY <2>1, <2>2, <2>3, EXT 呼び出しの入れ子
+<1>0b. 次の関数の返り値は引数で決まる (DEF 引数で決まる関数)。`Map::get`、`Set`・`Vec`・`Map` の操作、
+       `<[T]>::starts_with`、`<[T]>::first`、`Clone::clone`、`Option` と `Iterator` の組み合わせ子、
+       `LLVMGen::result_prov`、`TypeNode::is_box`、`Provenance::leaf_origins_at`、
+       `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
+       `Origin::identity`、`Origin::candidates`。ただし `Provenance::leaf_origins_under` と
+       `Origin::candidates` については、引数で決まるのは並びではなく元の集合である。
+  <2>1. 標準ライブラリの操作 --- `Map::get`、`Set`・`Vec`・`Map` の操作、`<[T]>::starts_with`、
+        `<[T]>::first`、`Clone::clone`、`Option` と `Iterator` の組み合わせ子 --- については、外部の結果が
+        それを述べる。`Set` の反復の順序は定めないので、`Set` から作られるのは要素の集合であって並びでは
+        ない。
+    BY DEF 引数で決まる関数, EXT Map と Set, EXT collect into Map と Set, EXT スライスの接頭と先頭,
+       EXT Clone, EXT Vec::iter と slice::iter, EXT Iterator::all と any,
+       EXT Iterator::map と collect, EXT Iterator::filter_map, EXT Iterator::rposition
+  <2>2. `LLVMGen::result_prov` については A3 が述べる。A3 は「**`result_prov` と `borrows_operand` は
+        決定的である** -- 同じ引数に対して常に同じ値を返す。」と書き、その果たす者を
+        `impl LLVMGen for` の 78 個の通読としている。
+    BY A3, DEF 引数で決まる関数
+  <2>3. 残る 8 つ --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
+        `Provenance::leaf_origins_under`、`as_arg_projection`、`truncate_to_unit`、`boxed_leaf_paths`、
+        `Origin::identity`、`Origin::candidates` --- が引数に取るのは、型・path・`TypeEnv`・
+        `Provenance`・`Set<LeafOrigin>`・`Origin` の値だけであり、`VarTable` も走査の状態も引数に
+        取らない。
+    BY CODE src/ast/types.rs: TypeNode::is_box,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+       CODE src/rc_ir/ownership.rs: as_arg_projection,
+       CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+       CODE src/rc_ir/ownership.rs: Origin::identity, CODE src/rc_ir/ownership.rs: Origin::candidates
+  <2>4. <2>3 の 8 つのうち 6 つ --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
+        `Provenance::leaf_origins_under`、`as_arg_projection`、`Origin::identity`、
+        `Origin::candidates` --- は内部可変性を持つ値に触れない。その本文は引数から到達できる値だけを
+        読み、可変な静的変数にも触れない。`is_box` は `is_unbox` を経て `toplevel_tycon_info` の
+        `type_env.tycons().get(&tycon)` に落ちるが、その鍵の型 `TyCon` は `FullName` の欄を 1 つ持つだけ
+        であり、`FullName` と `NameSpace` の手書きの `Hash` が読むのは `Vec<String>` と `String` だけ
+        なので、内部可変性を持たない。残る 5 つは引数の `Provenance`・`Set<LeafOrigin>`・`Origin` を
+        読むだけである。よってこの 6 つの返り値は引数の値で決まる。**そのうち 2 つは、並びではなく元の
+        集合が決まる。** `Provenance::leaf_origins_under` の doc は、渡す要素を `in no particular order`
+        と述べるので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は `Join` の変位に
+        ついて `Set` の反復から `Vec` を作り、EXT Map と Set は `Set` の反復の順序を定めないので、
+        引数で決まるのはその元の集合である。
+    BY <2>3, EXT Map と Set, CODE src/ast/types.rs: TypeNode::is_box,
+       CODE src/ast/types.rs: TypeNode::is_unbox,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info, CODE src/ast/types.rs: TyCon,
+       CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: NameSpace,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+       CODE src/rc_ir/ownership.rs: as_arg_projection, CODE src/rc_ir/ownership.rs: Origin::identity,
+       CODE src/rc_ir/ownership.rs: Origin::candidates, DEF 引数で決まる関数
+  <2>5. 残る 2 つ --- `boxed_leaf_paths` と `truncate_to_unit` --- は触れる。`boxed_leaf_paths` は
+        `is_fully_unboxed` から `unpunched_field_types`、`instance_field_types` を経て
+        `unwrap_newtypes_memoized` に入り、`truncate_to_unit` は `unit_step` から同じ道に入る。その memo
+        `unwrapped` の型は `Map<Arc<TypeNode>, Arc<TypeNode>>` であり、鍵を引くたびに
+        `impl Hash for TypeNode` が `TypeNode::type_hash` を呼んで `hash_cache` の `OnceLock` を共有参照
+        から書く。**`unwrapped` 自身は `instance_field_types` の 1 回の呼び出しごとに空から作られるので、
+        呼び出しを跨いで持ち越す状態は `TypeNode` の 3 つの `OnceLock` の欄だけである。**
+    BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types,
+       CODE src/ast/types.rs: TypeNode::instance_field_types,
+       CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
+       CODE src/ast/types.rs: TypeNode::type_hash, CODE src/ast/types.rs: TypeNode,
+       CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/ownership.rs: unit_step
+  <2>6. `TypeNode` の 3 つの `OnceLock` の欄が埋まっても、`Arc<TypeNode>` の値の等しさも、そのハッシュも
+        動かない。**この節は `type_env` を通じてだけ現れる `TypeNode` にも当たる。**
+    <3>1. A3 は「**その 3 つは一度だけ書かれる memo であり、`impl PartialEq for TypeNode` は `ty` だけを
+          読み、3 つの memo の値はどれも `ty` の関数である**」と述べ、「**`impl Hash for TypeNode` は
+          `type_hash` を呼ぶので `hash_cache` を読み、かつ書く。**」「反映されるのは `ty` だけなので、
+          等しい 2 つの値は等しくハッシュされる。」と続ける。
+      BY A3
+    <3>2. <3>1 の 3 文は、`TypeNode` という**型**と、その型が持つ 3 つの欄と 2 つの実装についての言明で
+          ある。主語は `TypeNode` の値がどこから到達できるかを条件にしていないので、`RcProgram` から
+          到達できない `TypeNode` の値 --- `type_env` の `TyConInfo` が持つ欄の型と、そこから
+          `declared_field_types` の代入が作る型 --- にも当たる。
+      BY <3>1, A3, CODE src/ast/types.rs: TypeNode, CODE src/ast/types.rs: TypeNode::instance_field_types
+    <3>3. QED
+      <3>1 の 3 文より、3 つの欄の値は `ty` の関数であり、`PartialEq` は `ty` だけを読み、`Hash` が
+      反映するのも `ty` だけである。よって欄が埋まっても値の等しさもハッシュも動かない。<3>2 より
+      これは `type_env` を通じてだけ現れる値にも当たる。
+      BY <3>1, <3>2
+  <2>7. `unwrap_newtypes_node` の `Type::TyApp` の腕は `Arc::ptr_eq` を読むが、その真偽は返る `Arc` の
+        同一性を変えるだけで、返る値を変えない。
+    <3>1. その腕は、`Arc::ptr_eq(&new_fun_ty, fun_ty) && Arc::ptr_eq(&new_arg_ty, arg_ty)` が真のとき
+          `self.clone()` を返し、偽のとき `self.set_tyapp_fun(new_fun_ty).set_tyapp_arg(new_arg_ty)` を
+          返す。`self.clone()` は `self` と同じ割り当てのハンドルであり、その `ty` は
+          `Type::TyApp(fun_ty, arg_ty)` である。`set_tyapp_fun` と `set_tyapp_arg` は `self` の複製の
+          `ty` の成分を差し替えるので、後者の `ty` は `Type::TyApp(new_fun_ty, new_arg_ty)` である。
+      BY CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node, CODE src/ast/types.rs: Type,
+         CODE src/ast/types.rs: TypeNode::set_tyapp_fun, CODE src/ast/types.rs: TypeNode::set_tyapp_arg
+    <3>2. `impl PartialEq for Type` の `TyApp` の腕は、2 つの成分に `type_node_eq` を掛ける。
+          `type_node_eq(lhs, rhs)` の本文は `Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty` であり、
+          `Arc::ptr_eq` が真ならば 2 つは同じ値なので `lhs.ty == rhs.ty` も真である。よって
+          `type_node_eq(lhs, rhs)` が真であることと `lhs.ty == rhs.ty` は同値であり、`Type` の等しさは
+          値で決まる。
+      BY CODE src/ast/types.rs: Type, CODE src/ast/types.rs: type_node_eq
+    <3>3. QED
+      `Arc::ptr_eq(&new_fun_ty, fun_ty)` が真のとき `new_fun_ty` と `fun_ty` は同じ割り当てのハンドル
+      なので値が等しく、`new_arg_ty` と `arg_ty` についても同じである。よって <3>1 の 2 つの枝が返す値の
+      `ty` は、<3>2 の意味でどちらも `Type::TyApp(new_fun_ty, new_arg_ty)` と等しい。`TypeNode` の
+      `PartialEq` は `ty` だけを読むので (<2>6)、2 つの枝は等しい値を返す。
+      BY <3>1, <3>2, <2>6, CODE src/ast/types.rs: TypeNode
+  <2>8. QED
+    <2>5 の 2 つの返り値は引数の値で決まる。`unwrap_newtypes_memoized` の再帰について、その返り値の値と
+    それが `unwrapped` に加える対の値が、引数の値と `unwrapped` の値で決まることを、その再帰の上の
+    帰納で示す --- 再帰が停止することは A10 の「さらに、到達する各型について `instance_field_types` が
+    行う newtype の展開 (`unwrap_newtypes_memoized`) は abort せず停止する。」が与える。memo の引きは
+    `Hash` と `PartialEq` で行われ、<2>6 よりその 2 つは値で決まる。`unwrap_newtypes_node` の腕のうち
+    `Arc::ptr_eq` を読むのは `Type::TyApp` の腕だけであり、<2>7 よりその読みは返る値を変えない。残る腕が
+    読むのは `toplevel_tycon`・`TypeEnv::unwrapped_newtype_info`・`collect_type_arguments`・
+    `declared_field_types` と、そこから得た `TyConInfo` の欄、および引数を取らない `make_unit_ty` で
+    あって、どれも引数の値から決まる。よって
+    `instance_field_types` の返り値の値は、`unwrapped` を空から作るので引数の値で決まり、
+    `unpunched_field_types`・`is_fully_unboxed`・`unit_step`・`truncate_to_unit`・`boxed_leaf_paths` の
+    返り値もそれぞれの再帰の上の帰納で引数の値から決まる。**`Arc` の同一性を読む場所はこの道に 2 つしか
+    無い** --- `unwrap_newtypes_node` の `Arc::ptr_eq` (<2>7) と `type_node_eq` の `Arc::ptr_eq`
+    (<3>2 の意味で値と同値) であり、`leaf_map.rs`・`ownership.rs`・`provenance.rs` には 1 つも無い。
+    <2>1、<2>2、<2>4 と合わせて、挙げた関数はすべて引数で決まる。
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, A10, DEF 引数で決まる関数,
+       CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
+       CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
+       CODE src/ast/types.rs: TypeNode::instance_field_types,
+       CODE src/ast/types.rs: TypeNode::declared_field_types,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types,
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon,
+       CODE src/ast/types.rs: TypeNode::collect_type_arguments,
+       CODE src/ast/program.rs: TypeEnv::unwrapped_newtype_info,
+       CODE src/rc_ir/ownership.rs: unit_step,
+       CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+       CODE src/ast/types.rs: type_node_eq
 <1>1. `origin(vars, type_env, x, π)` の本文は 4 つの文と末尾式である。
       `let key = (x.clone(), π.to_vec());`、
       `if let Some(known) = vars.origins.borrow().get(&key) { return known.clone(); }`、
@@ -458,17 +562,20 @@ enum については元と同じ変位で、その変位が保持する各値を
       表が持つ値と等しい。
   BY CODE src/rc_ir/ownership.rs: origin, A15, EXT Map と Set, EXT Clone
 <1>2. `vars.origins` の鍵の集合は増えるだけであり、鍵 `k` が入るのは、鍵が `k` である外れの呼び出しが
-      `origin_inner` から戻った後に限る。`origins` は `VarTable` の非公開の欄であり、`ownership.rs` の
-      中で --- その `#[cfg(test)] mod tests` を含めて --- この欄に触れるのは `VarTable::empty` の
-      `RefCell::default()` と <1>1 の `get` と `insert` の 3 か所だけである。EXT Map と Set より
-      `insert` は鍵を失わせない。
+      `origin_inner` から戻った後に限る。`origins` は `VarTable` の非公開の欄であり、`ownership.rs` は
+      `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たないので、この欄を名指す式が書けるのは
+      `ownership.rs` の中だけである。そこで --- その `#[cfg(test)] mod tests` を含めて --- この欄に
+      触れるのは `VarTable::empty` の `RefCell::default()` と <1>1 の `get` と `insert` の 3 か所だけで
+      ある。EXT Map と Set より `insert` は鍵を失わせない。
   BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
-     CODE src/rc_ir/ownership.rs: origin, <1>1, EXT Map と Set
+     CODE src/rc_ir/ownership.rs: origin, <1>1, EXT Map と Set, EXT 可視性と私有性,
+     EXT モジュールは `mod` が導入する
 <1>2a. `vars` を第 1 引数とする `origin` の呼び出しが起きるどの時点でも、`vars.bindings` は同じ値で
        ある。すなわち鍵の集合が同じであり、各鍵の `Binding` の変位が同じで、その変位が保持する値が
        等しく、`Binding::Llvm` の `Box<dyn LLVMGen>` は同じ引数に同じ宣言を返す。
-  <2>1. `bindings` は `VarTable` の非公開の欄であり、`ownership.rs` の中で --- その
-        `#[cfg(test)] mod tests` を含めて --- この欄に触れる関数は 5 つだけである。書き手は 4 つ ---
+  <2>1. `bindings` は `VarTable` の非公開の欄であり、`ownership.rs` は `mod` 宣言を
+        `#[cfg(test)] mod tests` の 1 つしか持たないので、この欄を名指す式が書けるのは `ownership.rs`
+        とそのモジュールの中だけである。そこでこの欄に触れる関数は 5 つだけである。書き手は 4 つ ---
         `VarTable::empty` の `Map::default()`、`VarTable::of` の `vars.bindings.insert`、
         `collect_bindings` の 3 つの `vars.bindings.insert`、`#[cfg(test)] mod tests` の `table` の
         `vars.bindings.insert` --- であり、読み手は `origin_inner` の `vars.bindings.get(var)` 1 つで
@@ -476,15 +583,19 @@ enum については元と同じ変位で、その変位が保持する各値を
         そこからは触れない。
     BY CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
        CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: collect_bindings,
-       CODE src/rc_ir/ownership.rs: origin_inner
+       CODE src/rc_ir/ownership.rs: origin_inner, EXT 可視性と私有性,
+       EXT モジュールは `mod` が導入する
   <2>2. `bindings` への書き込みは、`VarTable::of`、`VarTable::body_only`、または
         `#[cfg(test)] mod tests` の `table` の 1 回の呼び出しの実行区間の中でだけ起きる。<2>1 の 4 つの
         書き手のうち `VarTable::empty` と `collect_bindings` は `ownership.rs` の非公開の項目であり、
-        `VarTable::empty` を呼ぶのはこの 3 つだけ、`collect_bindings` を呼ぶのはこの 3 つのうち
-        `VarTable::of` と `VarTable::body_only`、および `collect_bindings` 自身だけである。
+        `ownership.rs` の `mod` 宣言は `#[cfg(test)] mod tests` の 1 つだけなので、その呼び出しは
+        `ownership.rs` とそのモジュールの中にしか書けない。そこで `VarTable::empty` を呼ぶのはこの
+        3 つだけ、`collect_bindings` を呼ぶのはこの 3 つのうち `VarTable::of` と `VarTable::body_only`、
+        および `collect_bindings` 自身だけである。
     BY <2>1, CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
        CODE src/rc_ir/ownership.rs: VarTable::body_only,
-       CODE src/rc_ir/ownership.rs: collect_bindings, EXT 呼び出しの入れ子, DEF 本文
+       CODE src/rc_ir/ownership.rs: collect_bindings, EXT 呼び出しの入れ子, DEF 本文,
+       EXT 可視性と私有性, EXT モジュールは `mod` が導入する
   <2>3. `VarTable` の値が作られるのは `VarTable::empty` の 1 か所だけなので、どの `VarTable` の値も
         <2>2 の 3 つのいずれかの 1 回の呼び出しの中で作られる。その呼び出しの中で、その表を第 1 引数と
         する `origin` の呼び出しは起きない --- <1>0a の前半より、その表に届く本文はそれを作った
@@ -552,12 +663,13 @@ enum については元と同じ変位で、その変位が保持する各値を
           `origin_from_leaves_under` の 1 か所である。`origin` の本文に `origin` の呼び出しは書かれて
           いない。
       BY <1>0
-    <3>3. `origin_from_leaves_under` は `ownership.rs` の非公開の自由関数であり、`ownership.rs` の中で
-          それを呼ぶのは `origin_inner` の 1 か所と `#[cfg(test)] mod tests` の 2 か所だけである。
-          `ownership.rs` は `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たないので、その呼び出しは
-          このファイルの中にしか書けない。
+    <3>3. `origin_from_leaves_under` は `ownership.rs` の非公開の自由関数であり、`ownership.rs` は
+          `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たないので、その呼び出しはこのファイルと
+          そのモジュールの中にしか書けない。そこでそれを呼ぶのは `origin_inner` の 1 か所と
+          `#[cfg(test)] mod tests` の 2 か所だけである。
       BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-         CODE src/rc_ir/ownership.rs: origin_inner, DEF 本文
+         CODE src/rc_ir/ownership.rs: origin_inner, DEF 本文, EXT 可視性と私有性,
+         EXT モジュールは `mod` が導入する
     <3>4. QED
       <3>1 と <3>2 より、第 1 引数が `vars` である `origin` の呼び出しはこの 7 か所を通ってだけ起きる。
       <3>3 より、この `origin_inner` の呼び出しの中で走る `origin_from_leaves_under` は、その本文が
@@ -582,19 +694,20 @@ enum については元と同じ変位で、その変位が保持する各値を
         `origin` を 1 回呼び、`None` のときは `origin_from_leaves_under(vars, type_env, &decl, args, π, ・)`
         を呼ぶ。後者は `decl.leaf_origins_under(π)` と `args` と `type_env` から `Set` の値
         `operand_units` を作り、その各元 `(j, unit)` について鍵 `(args[j].name, unit)` の `origin` を
-        1 回呼ぶ。DEF 引数で決まる関数 より、`decl` も `operand_units` も `vars.bindings.get(x)` が返した
-        束縛と `type_env` と `π` で決まる。`decl` については A3 が、`arg_tys`・`leaf_origins_at`・
-        `leaf_origins_under`・`as_arg_projection`・`truncate_to_unit` については DEF 引数で決まる関数 が
-        与える。`operand_units` は `Set` なので反復の順序は定まらないが、呼ぶ鍵の集合は定まる。どの鍵も
-        `origin` の返り値を読まない。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       CODE src/rc_ir/ownership.rs: as_arg_projection, DEF 引数で決まる関数, A3
+        1 回呼ぶ。<1>0b より、`decl` も `operand_units` も `vars.bindings.get(x)` が返した束縛と
+        `type_env` と `π` で決まる --- `decl` については `LLVMGen::result_prov` の行が、`operand_units`
+        については `arg_tys`・`leaf_origins_at`・`leaf_origins_under`・`as_arg_projection`・
+        `truncate_to_unit` の行が与える。`operand_units` は `Set` なので反復の順序は定まらないが、呼ぶ
+        鍵の集合は定まる。どの鍵も `origin` の返り値を読まない。
+    BY <1>0b, CODE src/rc_ir/ownership.rs: origin_inner,
+       CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       CODE src/rc_ir/ownership.rs: as_arg_projection, DEF 引数で決まる関数
   <2>4. QED
-    DEF 引数で決まる関数 より `vars.bindings.get(x)` の値は `vars.bindings` と `x` で決まる。`Binding` の
+    <1>0b より `vars.bindings.get(x)` の値は `vars.bindings` と `x` で決まる。`Binding` の
     変位は `Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、`Join` の 7 つであり、<2>1 から
     <2>3 がこの 7 つと、`get` が `None` を返す場合を尽くす。<2>0 より、第 1 引数が `vars` であって直に
     起きる `origin` の呼び出しは、この 2 つの本文に書かれたものだけである。
-    BY <2>0, <2>1, <2>2, <2>3, CODE src/rc_ir/ownership.rs: Binding, DEF 引数で決まる関数
+    BY <1>0b, <2>0, <2>1, <2>2, <2>3, CODE src/rc_ir/ownership.rs: Binding, DEF 引数で決まる関数
 <1>4. 値を返す `origin` の呼び出し `c` について、`c` の中には、鍵が等しく一方が他方に真に含まれる 2 つの
       外れの `origin` の呼び出しは無い。ここで外側の候補には `c` 自身も数える。この 2 つ組を**入れ子の対**
       と呼ぶ。
@@ -660,12 +773,12 @@ enum については元と同じ変位で、その変位が保持する各値を
   `ownership::acted_references(vars, type_env, v, π)` は、`boxed_leaf_paths(&v.ty, type_env)` のうち
   `π` を接頭辞に持つ各 leaf について `origin(vars, type_env, &v.name, &leaf)` の `identity` を数えたもので
   あり、`CancelAnalysis::other_objects(v, π)` は同じ leaf について同じ `origin` を呼び、その `candidates`
-  のうち `identity` と異なるものを並べる。DEF 引数で決まる関数 より `boxed_leaf_paths` と
-  `Origin::identity` は引数で決まるので、`acted_references` の返り値は `vars`、`type_env`、`v`、`π` だけ
-  で決まる。`Origin::candidates` については引数で決まるのは元の集合だけなので (DEF 引数で決まる関数)、
-  `other_objects` について決まるのも、返る `Vec` の元の集合だけである。
-  BY <1>1, <1>2, <1>5, CODE src/rc_ir/ownership.rs: acted_references,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数, A3, EXT Clone
+  のうち `identity` と異なるものを並べる。<1>0b より `boxed_leaf_paths` と `Origin::identity` は引数で
+  決まるので、`acted_references` の返り値は `vars`、`type_env`、`v`、`π` だけで決まる。
+  `Origin::candidates` については引数で決まるのは元の集合だけなので (<1>0b)、`other_objects` について
+  決まるのも、返る `Vec` の元の集合だけである。
+  BY <1>0b, <1>1, <1>2, <1>5, CODE src/rc_ir/ownership.rs: acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF 引数で決まる関数, EXT Clone
 
 ### P2a (`origin` の答えは memo に依らない)
 
@@ -673,45 +786,124 @@ enum については元と同じ変位で、その変位が保持する各値を
 第 2 引数とし、鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならば、その 2 つの
 返り値は等しい。すなわち答えは `vars.origins` が保持する memo の状態に依らない。
 
+**`vars` は、A6 と A11 を満たすプログラムの本体について `VarTable::of` か `VarTable::body_only` が
+作った表である。** 製品のコードが作る表はこの 2 つの構成子を通るものだけであり (`VarTable::empty` を直に
+呼ぶ残る 1 か所は `#[cfg(test)]` の下の作り手である)、この命題を引く段が扱うのもそれである。**この制限は
+言明の一部であって、読む段が自分で補うものではない。**
+
+**L0 はこの制限を持たない。** L0 が量化するのは `VarTable` のどの値でもある `vars` であり、言明の
+`vars` はその特別な場合である。
+
 **証明**
 
 <1>1. QED
   L0 は 1 つの `VarTable` の値 `vars` を固定し、`vars` を第 1 引数として行われる `origin` の呼び出しに
   ついて、鍵 `(x, π)` が等しい 2 つがどちらも値を返すならばその 2 つの返り値が等しいことを述べる。
-  P2a が量化するのは、`vars` を第 1 引数とし、固定した 1 つの `TypeEnv` の値を第 2 引数とする `origin` の
-  呼び出しであり、これは L0 が量化する呼び出しの一部である。よって L0 の言明は P2a の言明を含む。
+  L0 は `vars` の作られ方を問わないので、言明が制限する `vars` --- A6 と A11 を満たすプログラムの本体に
+  ついて `VarTable::of` か `VarTable::body_only` が作った表 --- もその範囲にある。P2a が量化するのは、
+  その `vars` を第 1 引数とし、固定した 1 つの `TypeEnv` の値を第 2 引数とする `origin` の呼び出しで
+  あり、これは L0 が量化する呼び出しの一部である。よって L0 の言明は P2a の言明を含む。
   BY L0
+
+### L0a (部分木の形)
+
+DEF 部分木 の節点・子・部分木・節点の道について、次の 4 つが成り立つ。
+
+1. 各節点はその道でちょうど 1 つに定まり、相異なる節点の道は相異なる。
+2. `N(n)` は、`n` の道を接頭として持つ道の節点の全体である。
+3. `n` の相異なる 2 つの子 `c`、`c'` について、`N(c)` と `N(c')` は交わらない。
+4. `n` はどの子の部分木にも入らない。したがって `N(n)` の上の構造帰納法 --- `n` の各子について成り
+   立つことから `n` について結論する形 --- は整礎である。
+
+**証明**
+
+<1>1. 1 が成り立つ。D2 は本体を式の節点の有限の**木**と定め、木の位置が相異なれば節点も相異なるものと
+      定める。木の位置は根からの選択の列で一意に定まるので、各節点はその道でちょうど 1 つに定まり、
+      相異なる節点の道は相異なる。
+  BY D2, DEF 部分木
+<1>1a. 節点の道の長さには最大値 `M` が在り、道の長さが `M` の節点は子を持たない。**したがって、節点に
+       ついての言明を、道の長さが `M` の節点から 0 の節点へ下る帰納で示せる** --- 節点 `n` の各子の道は
+       `n` の道に選択を 1 つ継ぎ足したものなので、長さが 1 大きい。この帰納は、`n` の各子について
+       成り立つことから `n` について結論する形であり、DEF 部分木 の `N(n)` の上の構造帰納法と同じもので
+       ある。D2 より本体は有限の木なので節点は有限個であり、<1>1 より相異なる節点の道は相異なるから、
+       道も有限個で、その長さには最大値が在る。
+  BY <1>1, D2, DEF 部分木
+<1>2. 2 が成り立つ。<1>1a の帰納による --- `n` 自身の道は `n` の道を接頭として持ち、`n` の各子 `c` の
+      道は `n` の道に選択を 1 つ継ぎ足したものなので、帰納法の仮定より `N(c)` は `c` の道を、したがって
+      `n` の道を接頭として持つ道の節点からなる。逆に `n` の道を真の接頭として持つ道は、`n` のどれか
+      1 つの子の道を接頭として持つ。
+  BY <1>1, <1>1a, DEF 部分木
+<1>3. 3 が成り立つ。`n` の相異なる 2 つの子の道は、`n` の道に相異なる選択を 1 つずつ継ぎ足したもので
+      あるから、その両方を接頭として持つ道は無い。<1>2 より `N(c)` と `N(c')` の元はそれぞれ `c` の道と
+      `c'` の道を接頭として持つので、2 つは交わらない。
+  BY <1>1, <1>2, DEF 部分木
+<1>4. QED
+  4 が成り立つ。`n` の道は各子の道より 1 つ短いので、子の道を接頭として持たない。<1>2 より `n` は
+  どの `N(c)` にも入らない。構造帰納法が整礎であることは <1>1a が与える。D2 より本体は有限の木なので、
+  `N(n)` は有限集合である。
+  BY <1>1, <1>1a, <1>2, <1>3, D2, DEF 部分木
+
+### L0b (走査は `vars` と `type_env` の欄を動かさない)
+
+1 回の `cancel_body` の実行を通じて、その `CancelAnalysis` の値の `vars` の欄と `type_env` の欄は
+同じ値である。すなわち、その 2 つの欄が指す `VarTable` と `TypeEnv` は最初から最後まで同じ値である。
+
+**証明**
+
+<1>1. この 2 つの欄は、`cancel` の `cancel_body` の閉包が `CancelAnalysis` の値を構築するときに
+      置かれ、その値は閉包の局所変数 `analysis` である。閉包の本文がその値を名指すのは
+      `analysis.walk(body, PendingRetains::default(), true)` と `analysis.cancelled()` の 2 か所だけで
+      ある。
+  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: CancelAnalysis
+<1>2. `CancelAnalysis` は `borrow.rs` の非公開の型であり、その 7 つの欄はいずれも非公開である。
+      `borrow.rs` は `mod` 宣言を 1 つも持たないので子孫のモジュールも無く、その欄を名指す式は
+      `borrow.rs` の中にしか書けない。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
+<1>3. <1>1 の値の欄を名指せる本文は、`CancelAnalysis` のメソッドの本文と `cancel_body` の閉包の本文
+      だけである。<1>2 よりその欄を名指す式は `borrow.rs` の中にしか書けず、
+      EXT 参照は引数を通ってだけ届く より、ある本文がこの値に届くのは、その値かそれへの参照が引数
+      (`self` を含む) として渡ったときか、自分でその値を作ったときに限る。`borrow.rs` で
+      `CancelAnalysis` の値かそれへの参照を引数に取るのは、その `impl` ブロックのメソッドの `self` だけ
+      である --- `borrow.rs` に `CancelAnalysis` という語が現れるのは、<1>1 の構築、型の宣言、その
+      `impl` ブロックの見出しの 3 か所だけであり、ほかにこの型を引数に書いた署名は無い。この値を作るのは
+      <1>1 の 1 か所である。
+  BY <1>1, <1>2, CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: cancel,
+     EXT 参照は引数を通ってだけ届く
+<1>4. `CancelAnalysis` のメソッドは 9 つあり、`&mut self` を取るのは `walk`、`walk_inner`、
+      `consume_rhs`、`consume`、`consume_objects`、`merge` の 6 つ、`&self` を取るのは
+      `acted_references`、`other_objects`、`cancelled` の 3 つである。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled
+<1>5. QED
+  <1>4 の 6 つの本文と `cancel_body` の閉包の本文で `vars` と `type_env` の欄が現れるのは、どれも値を
+  読んで別の関数へ渡す位置であり、どちらの欄への代入も書かれていない。残る 3 つは `self` を共有参照で
+  受け取るので、EXT 共有参照は代入を許さない よりこの値のどの欄へも代入できない。その例外の内部可変性が
+  与えるのは、欄が指す先を書き換える道だけであり、欄そのもの --- どの `VarTable` と `TypeEnv` を指すか
+  --- を差し替える道ではない。<1>2 と <1>3 より、これ以外に欄を動かしうる本文は無い。
+  BY <1>1, <1>2, <1>3, <1>4, CODE src/rc_ir/borrow.rs: cancel,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis, EXT 共有参照は代入を許さない
 
 ### DEF 節点の量
 
 1 回の `cancel_body` の実行を固定し、その `CancelAnalysis` の値の `vars` の欄を `vars`、`type_env` の欄を
-`type_env` と書く。**この 2 つの欄はその実行のあいだずっと同じ値である。** 2 つは `cancel` の
-`cancel_body` が `CancelAnalysis` の値を構築するときに置かれ、走査はこの 2 つの欄を差し替えない。
-`CancelAnalysis` は `borrow.rs` の非公開の型でその欄も非公開であり、`borrow.rs` は `mod` 宣言を 1 つも
-持たないので、欄への書き込みは `borrow.rs` の中にしか書けない。構築の後にこの値へ可変参照を得るのは
-`&mut self` を取る 6 つのメソッド --- `walk`、`walk_inner`、`consume_rhs`、`consume`、
-`consume_objects`、`merge` --- だけであり、この 6 つの本文で `self.vars` と `self.type_env` が現れるのは、
-どれも値を読んで別の関数へ渡す位置である (`CODE src/rc_ir/borrow.rs: CancelAnalysis`,
-`CODE src/rc_ir/borrow.rs: cancel`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`,
-`CODE src/rc_ir/borrow.rs: CancelAnalysis::merge`)。
+`type_env` と書く。L0b より、この 2 つはその実行のあいだ同じ値である。
 
 その上で、`Retain` 節点 `t = Retain(v, path, _, _)` と `Release` 節点 `r = Release(v, path, _, _)` に
 ついて次の値を定める。
 
 - `ActRefs(t) :=` `ownership::acted_references(vars, type_env, v, path)` の値、
-  `ActRefs(r) :=` `ownership::acted_references(vars, type_env, v, path)` の値。これは `vars`、`type_env`、
-  `v`、`path` で決まる量であって、走査のどの時点についてのものかを問わない。
+  `ActRefs(r) :=` `ownership::acted_references(vars, type_env, v, path)` の値。
 
-**この量が 1 つに定まるのは L0 による。** L0 は、`vars` を第 1 引数とする `origin` の呼び出しが memo の
-状態に依らず鍵で決まる値を返すことと、そこから `ownership::acted_references(vars, type_env, v, π)` の
-返り値も走査のどの時点で読んでも同じであることを述べる。この定義をここに置くのはそのためである。
-`CancelAnalysis::acted_references(v, path)` はその値を返す
-(`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。`ActRefs(t)` は D15 の
+L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走査のどの時点で読んでも同じである。
+定義をここに置くのはそのためである。`CancelAnalysis::acted_references(v, path)` は、値を返すときこの値を
+返す (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。`ActRefs(t)` は D15 の
 `ActRefs(v, path)` である。
 
 ### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ)
@@ -734,8 +926,8 @@ enum については元と同じ変位で、その変位が保持する各値を
 
 ### L2 (`References` の表現)
 
-`CancelAnalysis` の走査が扱う `References` の値は、どの鍵についてもその値が 1 以上である。さらに
-`CancelAnalysis::acted_references` が返す値は空でない。よってこの 5 つが成り立つ。
+`CancelAnalysis` の走査が扱う `References` の値は、どの鍵についてもその値が 1 以上である。よってこの
+6 つが成り立つ。以下 `R`、`R1`、`R2` は走査が扱う `References` の値である。
 
 1. `R.is_empty()` が真であることと `R` が空 (DEF 参照の多重集合) であることは同値である。
 2. `R1.covers(&R2)` が真であることと `R2 ⊆ R1` であることは同値である。
@@ -744,8 +936,9 @@ enum については元と同じ変位で、その変位が保持する各値を
    `R1.objects()` は `R1` が参照を持つ位置をちょうど 1 度ずつ並べた列である。
 4. `R2 ⊆ R1` のとき `R1.subtract(&R2)` は `R1` を `R1 - R2` に書き換え、panic しない。また
    `R1 - R2 ⊆ R1` である。
-5. `CancelAnalysis::acted_references(v, path)` が値を返すとき、その値は空でない。すなわち、DEF 節点の量 の
-   `ActRefs(t)` と `ActRefs(r)` はどちらも空でない。
+5. `CancelAnalysis::acted_references(v, path)` が値を返すとき、その値は空でない。
+6. `R1` と `R2` が等しい (DEF 参照の多重集合) ことと、各位置についての 2 つの個数が一致することは
+   同値である。
 
 **証明**
 
@@ -771,7 +964,7 @@ enum については元と同じ変位で、その変位が保持する各値を
       要求する理由である。** `covers` を落とすと、`R1` が持たない鍵を `R2` が持つとき `expect` が発火し、
       `R2` の値が `R1` の値を超えるとき減算が underflow する。
   BY CODE src/rc_ir/ownership.rs: References::subtract, CODE src/rc_ir/ownership.rs: References::covers,
-     EXT Map と Set, EXT Iterator::all と any
+     EXT Map と Set, EXT Iterator::all と any, EXT IntoIterator と for
 <1>4. `References::covers(other)` は、`other` のどの鍵についても、自分がその鍵を持ちその値以上であることを
       言う。各鍵の値が 1 以上のとき、これは各位置の個数の不等式、すなわち `other ⊆ self` と同値で
       ある (`other` が持たない位置の個数は 0 で、不等式は自動的に成り立つ)。よって 2 が成り立つ。
@@ -792,25 +985,32 @@ enum については元と同じ変位で、その変位が保持する各値を
      CODE src/rc_ir/ownership.rs: References::names, CODE src/rc_ir/ownership.rs: References::objects,
      <1>1, <1>3, EXT Map と Set, EXT Iterator::all と any, EXT Iterator::map と collect
 <1>7. 走査が扱う `References` の値は、`CancelAnalysis::acted_references` が返したもの、それを `subtract`
-      で減らしたもの、およびそれらの複製だけである。
+      で減らしたもの、およびそれらの複製だけである。`References` のフィールドは非公開なので、
+      EXT 可視性と私有性 より `References` の値を構築できるのは `ownership.rs` の中だけであり、
+      `ownership.rs` は `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たない。
   BY CODE src/rc_ir/ownership.rs: References (フィールドは非公開なので `ownership` の外では作れない),
      CODE src/rc_ir/ownership.rs: acted_references (`References(references)` がこのモジュールでの唯一の
      構築点), CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕
      (`outstanding` は `self.acted_references` の値), CODE src/rc_ir/borrow.rs: un_bump
      (`innermost.outstanding.subtract(un_bumped)`), CODE src/rc_ir/borrow.rs: CancelAnalysis::merge
-     (`outstanding.clone()`)
+     (`outstanding.clone()`), EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>7a. 走査が `References::subtract` を呼ぶのは `un_bump` の中の
        `innermost.outstanding.subtract(un_bumped)` の 1 か所だけであり、その文に到達するのは直前の
        `if !innermost.outstanding.covers(un_bumped) { return UnBump::OutsideBracket; }` を通り抜けたとき、
        すなわち `innermost.outstanding.covers(un_bumped)` が真のときに限る。よって <1>3 の仮説は、走査が
        行うすべての `subtract` の呼び出しで満たされる。
   BY CODE src/rc_ir/borrow.rs: un_bump, <1>7
+<1>7b. 6 が成り立つ。`References` は `PartialEq` を derive し、そのフィールドは `Map` (`FxHashMap`)
+       1 つなので、2 つの値が等しいことは 2 つの `Map` が等しいこと、すなわち鍵と値の対の集合が一致する
+       ことである。各鍵の値が 1 以上のとき、鍵と値の対の集合の一致は各位置についての個数の一致と同値で
+       ある --- 一方が持たない位置の個数は 0 だからである。
+  BY CODE src/rc_ir/ownership.rs: References, CODE src/misc.rs: Map, DEF 参照の多重集合, EXT Map と Set,
+     EXT Clone
 <1>8. QED
   <1>7 が走査の扱う値の出どころを尽くし、<1>1、<1>2 が `acted_references` の値について、<1>3 と <1>7a が
   `subtract` で減らした値について、各鍵の値が 1 以上であることを与える。複製は EXT Clone より元と同じ鍵と
-  値を持つ。1 から 4 は <1>4、<1>5、<1>6 が与える。5 は <1>2 の `assert!` と、L0 が与える
-  `CancelAnalysis::acted_references(v, path)` の値の時点によらなさが与える (DEF 節点の量)。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>7a, L0, EXT Clone, DEF 節点の量
+  値を持つ。1 から 4 は <1>4、<1>5、<1>6 が、5 は <1>2 が、6 は <1>7b が与える。
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>7a, <1>7b, EXT Clone
 
 ### L2a (根の値が在るあいだ、木の割り当てはすべて生存している)
 
@@ -826,12 +1026,12 @@ enum については元と同じ変位で、その変位が保持する各値を
   BY CODE src/rc_ir/ast.rs: RcExprNode, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
      CODE src/rc_ir/ast.rs: MatchArm, DEF 部分木
 <1>2. QED
-  木 `N(n)` の構造についての帰納法で示す。DEF 部分木 より子は真の部分木なので、この帰納法は整礎である。
-  `n` の値が在れば、その `expr` の欄が `Arc<RcExpr>` のハンドルを 1 つ持ち、EXT Arc の契約 より、ハンドルが
-  1 つでも在るあいだそのブロックはアロケータへ返らないので、DEF 割り当て よりその割り当ては生存している。
-  そのハンドルが指すブロックの中に `RcExpr` の値が在り、<1>1 よりその中に `n` の各子の `RcExprNode` の値が
+  木 `N(n)` の構造についての帰納法で示す。L0a の 4 よりこの帰納法は整礎である。`n` の値が在れば、その
+  `expr` の欄が `Arc<RcExpr>` のハンドルを 1 つ持つので、DEF 割り当て よりその割り当ては生存している。
+  EXT Arc の契約 より、ハンドルが 1 つでも在るあいだそのブロックはアロケータへ返らないので、その
+  ハンドルが指すブロックの中に `RcExpr` の値が在る。<1>1 よりその中に `n` の各子の `RcExprNode` の値が
   在るので、帰納法の仮定が各子の部分木について同じことを与える。
-  BY <1>1, DEF 部分木, DEF 割り当て, EXT Arc の契約
+  BY <1>1, L0a, DEF 部分木, DEF 割り当て, EXT Arc の契約
 
 ### L2b (`cancel` の呼び出しは `borrow_ify` の出力を受け取る)
 
@@ -840,22 +1040,24 @@ enum については元と同じ変位で、その変位が保持する各値を
 
 **証明**
 
-<1>1. `cancel` は `pub(crate)` なので、その呼び出しはこのクレートの中にしか書けない。クレートの中で
-      `cancel` を呼ぶのは、`build_object_files.rs` の `optimize_rc_program` の 1 か所である。
-  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/build/build_object_files.rs: optimize_rc_program
+<1>1. `cancel` は `pub(crate)` なので、EXT 可視性と私有性 よりその呼び出しはこのクレートの中にしか
+      書けない。クレートの中で `cancel` を呼ぶのは、`build_object_files.rs` の `optimize_rc_program` の
+      1 か所である。
+  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/build/build_object_files.rs: optimize_rc_program,
+     EXT 可視性と私有性
 <1>2. QED
   <1>1 の唯一の呼び出しに渡る `prog` は `borrow_ify` の 1 回の呼び出しが返した値である。
   `optimize_rc_program` は `prog = borrow_ify(&prog, type_env, config.develop_mode)` の後に
   `cancel(&prog, type_env)` を呼び、間にあるのは `validate(&prog, "after borrow_ify")` の呼び出しだけで
-  ある。`validate` は `prog` を共有参照で受け取るので、`RcProgram` の欄への代入はできない。内部可変性を
-  通した書き込みの道は残る --- `Validator::check_rhs` は `llvm_gen.result_prov(&x.ty, &arg_tys,
-  self.type_env)` を呼び、その `Arc<TypeNode>` は `OnceLock` の欄を 3 つ持つ。その道を塞ぐのは A3 の
-  「**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。**」の節であり、
-  A3 自身が「`validate` がその 1 つであり」とこの関数を名指す。よって `cancel` に渡る値は `borrow_ify` が
-  返した値と等しい。
+  ある。`validate` は `prog` を共有参照で受け取るので、EXT 共有参照は代入を許さない より `RcProgram` の
+  欄への代入はできない。同じ節が例外に挙げる内部可変性を通した書き込みの道は残る ---
+  `Validator::check_rhs` は `llvm_gen.result_prov(&x.ty, &arg_tys, self.type_env)` を呼び、その
+  `Arc<TypeNode>` は `OnceLock` の欄を 3 つ持つ。その道を塞ぐのは A3 の「**`RcProgram` から到達できる値の
+  等しさは、それを共有参照で受け取る計算が変えない。**」の節であり、A3 自身が「`validate` がその 1 つで
+  あり」とこの関数を名指す。よって `cancel` に渡る値は `borrow_ify` が返した値と等しい。
   BY <1>1, CODE src/build/build_object_files.rs: optimize_rc_program,
      CODE src/rc_ir/validate.rs: validate, CODE src/rc_ir/validate.rs: Validator::check_rhs,
-     CODE src/ast/types.rs: TypeNode, A3
+     CODE src/ast/types.rs: TypeNode, A3, EXT 共有参照は代入を許さない
 
 ### L3 (走査する本体は `RewriteCtx::rewrite` の出力である)
 
@@ -886,6 +1088,205 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
   その木だけである。
   BY <1>1, <1>2, <1>3
 
+### L3a (`rewrite_inner` の 1 回の呼び出しの形)
+
+`RewriteCtx::rewrite_inner(node)` の 1 回の呼び出しについて、次の 3 つが成り立つ。
+
+1. この呼び出しは `self.rewrite` を `node` の各子 (DEF 部分木) についてちょうど 1 回ずつ呼び、ほかに
+   `self.rewrite` を呼ばない。
+2. 返す木の位置は、それらの `self.rewrite` の呼び出しが返した木の位置と、この呼び出しの中で `expr_node`
+   (`rc_node` と `prepend_rc` が呼ぶものを含む) が作った節点の**全体**である。すなわち、受け取った木も
+   作った節点も 1 つ残らず返す木に入り、返す木にはそれ以外の位置が無い。
+3. それらの `self.rewrite` の呼び出しの実行区間は互いに交わらず、この呼び出しの中の `expr_node` の実行は
+   どの `self.rewrite` の実行区間の中にも無い。
+
+**証明**
+
+<1>0. `expr_node` の呼び出しと `RewriteCtx::rewrite` の呼び出しは `borrow.rs` の中にしか書けない。
+      `borrow.rs` の中で `expr_node` を呼ぶのは、`RewriteCtx::rewrite_inner`、`rc_node`、
+      `split_body_inner`、`drop_nodes_inner` の 4 つの本文だけであり、`RewriteCtx::rewrite` を呼ぶのは
+      `borrow_ify`、`RewriteCtx::rewrite_inner`、`RewriteCtx::rewrite_rc` の 3 つの本文だけである。
+      `expr_node` は `borrow.rs` の非公開の自由関数、`RewriteCtx::rewrite` は `RewriteCtx` の非公開の
+      メソッドであり、`borrow.rs` は `mod` 宣言を 1 つも持たないので子孫のモジュールも無い。
+  BY CODE src/rc_ir/borrow.rs: expr_node, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, CODE src/rc_ir/borrow.rs: rc_node,
+     CODE src/rc_ir/borrow.rs: split_body_inner, CODE src/rc_ir/borrow.rs: drop_nodes_inner,
+     CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc,
+     DEF 本文, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
+<1>1. `expr_node(expr, source)` は `Arc::new(expr)` を 1 つ作り、それを `expr` フィールドに持つ
+      `RcExprNode` を返す。
+  BY CODE src/rc_ir/borrow.rs: expr_node
+<1>1a. `route`、`call_rc`、`RewriteCtx::owns_unit`、`units_under` の 1 回の呼び出しの中では、`expr_node`
+       も `RewriteCtx::rewrite` も走らない。よってその呼び出しは `RcExprNode` の値を 1 つも作らず、
+       `self.rewrite` の呼び出しも 1 つも起こさない。
+  <2>1. `route` または `call_rc` の 1 回の呼び出しの中で走る `borrow.rs` の関数は、この 2 つと
+        `RewriteCtx::routing_is_safe`、`RewriteCtx::routing_saves_retain`、
+        `RewriteCtx::any_owned_unit`、`RewriteCtx::owns_unit`、`RewriteCtx::owns_object`、
+        `RewriteCtx::comes_from_a_value_used_later`、`used_later`、`rhs_uses` で尽きる。
+        `borrow.rs` の関数としては、`route` は `routing_is_safe` と `routing_saves_retain` を、
+        `call_rc` は `owns_unit` を、`routing_is_safe` は `any_owned_unit` を、
+        `routing_saves_retain` は `used_later`、`owns_unit`、`comes_from_a_value_used_later` を、
+        `any_owned_unit` は `owns_unit` を、`owns_unit` は `owns_object` を、
+        `comes_from_a_value_used_later` は `used_later` を、`used_later` は `rhs_uses` と自身を、
+        `rhs_uses` は `used_later` を呼ぶ。`owns_object` が呼ぶ `borrow.rs` の関数は無い。
+        **この 10 個の本文に書かれた呼び出しのうち、`borrow.rs` の項目に解決するのは上に挙げた
+        ものだけであり、残りはすべて `borrow.rs` の外で定義された項目に解決する。** DEF 本文 より、
+        この 10 個が引数として渡すクロージャの本文はそれを書いた関数の本文の一部なので、その中に
+        書かれた呼び出しもこの数え上げに入っている --- 渡す先が標準ライブラリであっても
+        `borrow.rs` の外の項目であっても同じである。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::routing_is_safe,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::routing_saves_retain,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::any_owned_unit,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::comes_from_a_value_used_later,
+       CODE src/rc_ir/borrow.rs: used_later, CODE src/rc_ir/borrow.rs: rhs_uses, DEF 本文
+  <2>2. `RewriteCtx::owns_unit` の 1 回の呼び出しの中で走る `borrow.rs` の関数は、`owns_unit` と
+        `owns_object` の 2 つだけである。<2>1 の数え上げで `owns_unit` が呼ぶ `borrow.rs` の関数は
+        `owns_object` だけであり、`owns_object` が呼ぶ `borrow.rs` の関数は無い。
+    BY <2>1, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+  <2>3. `units_under` の 1 回の呼び出しの中で走る `borrow.rs` の関数は 1 つも無い。`units_under` の中で
+        走る `ownership.rs` の関数は `subtree_type`、`rc_units`、`rc_units_go`、`unit_step`、
+        `held_field_type` で尽き、残りは `src/ast/types.rs` の型についての関数と標準ライブラリの関数で
+        ある。この 5 つの本文にも `units_under` の本文にも `borrow.rs` の項目への参照は無い。
+    BY CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
+       CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
+       CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: held_field_type, DEF 本文
+  <2>4. QED
+    <1>0 が挙げる本文 --- `expr_node` を呼ぶ 4 つと `RewriteCtx::rewrite` を呼ぶ 3 つ、重複する
+    `rewrite_inner` を 1 つと数えて 6 つ --- は、
+    <2>1 の 10 個にも <2>2 の 2 つにも入らず、<2>3 より `units_under` の中では `borrow.rs` の関数が
+    1 つも走らない。`borrow.rs` の外で定義された関数の本文は `borrow.rs` の中に無いので、<1>0 より
+    `expr_node` も `RewriteCtx::rewrite` も呼べない。よってこの 4 つの呼び出しの中で `expr_node` も
+    `RewriteCtx::rewrite` も走らない。`RcExprNode` の値を `Arc::new` から作るのは `expr_node` だけで
+    ある (<1>1)。
+    BY <1>0, <1>1, <2>1, <2>2, <2>3, DEF 本文
+<1>2. `rc_node(is_release, var, path, state, k, source)` は `expr_node` を 1 回呼んでその値を返す。
+      `prepend_rc(units, is_release, k)` は `units` を逆順にたたみ込み、`units` の要素ごとに `rc_node`
+      を 1 回呼ぶ。`units` が空なら `k` をそのまま返す。どちらも `self.rewrite` を呼ばない。
+  BY CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: prepend_rc, <1>0, <1>1,
+     EXT Iterator::fold と rev
+<1>3. `RewriteCtx::rewrite_rc(v, path, state, is_release, k, source)` は `self.rewrite(k)` をちょうど
+      1 回呼び、ほかに `self.rewrite` を呼ばず、その値の上に `rc_node` で 0 個以上の節点を積んだものを
+      返す。返す木の位置は、その `self.rewrite(k)` が返した木の位置と、`rc_node` が積んだ節点の
+      **全体**である。**`self.rewrite(k)` はこの本文の最初の文であり、`rc_node` の実行はすべて
+      それが返った後に起きる。**
+  <2>1. 本文は最初に `let k = self.rewrite(k);` を実行する。`self.is_borrow_version` が偽のときは
+        `rc_node(is_release, v.clone(), path.clone(), state, k, source)` を返す。真のときは
+        `kept.into_iter().rev().fold(k, |cont, unit| rc_node(is_release, v.clone(), unit, state, cont, source))`
+        を返す。この `fold` の値は、`k` の上に `kept` の要素ごとに `rc_node` の節点を 1 つ積んだ木で
+        ある。どちらの枝の `rc_node` も、最初の文が返った後に実行される。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, EXT Iterator::fold と rev
+  <2>2. `kept` は `units_under(&v.ty, path, self.type_env)` を `self.owns_unit(v, unit)` で絞った
+        `Vec<FieldPath>` である。`units_under` の返り値の型は `Vec<FieldPath>`、`owns_unit` の返り値の
+        型は `bool`、`FieldPath` は `Vec<usize>` であり、どれも `RcExprNode` を含まない。よって `kept`
+        は木の節点を持ち込まない。<1>1a より、この 2 つの呼び出しの中で `self.rewrite` も `expr_node` も
+        走らない。
+    BY <1>1a, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc,
+       CODE src/rc_ir/ownership.rs: units_under,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit, CODE src/rc_ir/ast.rs: FieldPath
+  <2>3. QED
+    <2>1 の 2 つの枝はどちらも、`self.rewrite(k)` が返した木の上に `rc_node` の節点を 0 個以上積んだ木を
+    返す。積むのは `fold` なので、作った節点は 1 つ残らずその木に入る。<1>2 より `rc_node` は
+    `expr_node` で 1 節点を作り、`self.rewrite` を呼ばない。<2>2 よりほかの値は木の節点にならず、
+    `kept` を作る 2 つの呼び出しも `self.rewrite` を呼ばない。よって `self.rewrite` の呼び出しは
+    最初の文の 1 回だけであり、`rc_node` の実行はその後である。
+    BY <1>1a, <1>2, <2>1, <2>2, EXT Iterator::fold と rev
+<1>4. `rewrite_inner(node)` の 8 つの腕はいずれも、`self.rewrite` を `node` の各子についてちょうど
+      1 回ずつ呼び、ほかに `self.rewrite` を呼ばず、その戻り値の上に `expr_node` / `rc_node` /
+      `prepend_rc` で有限個の節点を積んだ木を返す。返す木の位置は、それらの `self.rewrite` の呼び出しが
+      返した木の位置と、この呼び出しの中で `expr_node` (`rc_node` と `prepend_rc` が呼ぶものを含む) が
+      作った節点の**全体**である。すなわち、受け取った木も作った節点も 1 つ残らず返す木に入り、返す木に
+      はそれ以外の位置が無い。**さらに、それらの `self.rewrite` の呼び出しの実行区間は互いに交わらず、
+      この呼び出しの中の `expr_node` の実行はどの `self.rewrite` の実行区間の中にも無い。**
+  <2>1. `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕が `self.rewrite` を呼ぶのは
+        `self.rewrite(k)` の 1 回だけであり、その上に `prepend_rc(after, true, ...)`、
+        `expr_node(RcExpr::Let(...))`、`prepend_rc(before, false, ...)` で節点を積む。この腕に落ちる
+        節点の子は継続 `k` だけである (DEF 部分木)。返す木の位置は、その `self.rewrite(k)` が返した
+        木の位置と、これらが積んだ節点の全体である。この腕の `expr_node` の実行はすべて
+        `self.rewrite(k)` が返った後に起きる。
+    <3>1. この腕の本文は 5 つの文である。`let callee = self.route(x, callee, args, k);`、
+          `let (before, after) = self.call_rc(&callee, args);`、
+          `let k = prepend_rc(after, true, self.rewrite(k));`、
+          `let app = expr_node(RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k), &node.source);`、
+          `prepend_rc(before, false, app)`。
+      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕
+    <3>2. `route` の返り値の型は `RcVar` であり、`call_rc` の返り値の型は
+          `(Vec<(RcVar, FieldPath)>, Vec<(RcVar, FieldPath)>)` である。`RcVar` の 5 つのフィールドの型は
+          `FullName`、`Arc<TypeNode>`、`Option<Span>`、`Option<Name>`、`bool` であり、`FieldPath` は
+          `Vec<usize>` である。いずれの型も `RcExprNode` を含まないので、`callee`、`before`、`after`、
+          `x.clone()`、`args.clone()` は木の節点を持ち込まない。
+      BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+         CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath
+    <3>3. QED
+      <3>1 の第 1 文と第 2 文の `route` と `call_rc` は節点を作らず `self.rewrite` も呼ばない
+      (<1>1a) ので、この腕が `self.rewrite` を呼ぶのは第 3 文の `self.rewrite(k)` の 1 回だけであり、
+      この腕がこの呼び出しの中で作る節点は第 3 文から第 5 文のものだけである。DEF 部分木 より
+      この腕に落ちる節点の子は継続 `k` だけなので、`self.rewrite` はこの節点の各子についてちょうど
+      1 回ずつ呼ばれている。第 3 文から第 5 文が木を組み立て、その材料は `self.rewrite(k)` が返した
+      木と、`prepend_rc` と `expr_node` が作る節点だけである (<1>2、<3>2)。第 3 文の
+      `prepend_rc(after, ...)` が作る節点は `k` に、第 4 文の `expr_node` が作る節点は `app` に、
+      第 5 文の `prepend_rc(before, ...)` が作る節点は返り値に入り、`k` は `app` の中に、`app` は
+      返り値の中にあるので、作った節点は 1 つ残らず返り値の木に入る。第 3 文では `self.rewrite(k)` が
+      引数として先に評価され、その値を受け取ってから `prepend_rc` が走るので、この腕の `expr_node` の
+      実行はすべて `self.rewrite(k)` が返った後である。
+      BY <1>1a, <1>2, <3>1, <3>2, DEF 部分木
+  <2>2. `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕は、`arms` の各 `arm` について
+        `self.rewrite(&arm.body)` を 1 回ずつ呼び、`self.rewrite(k)` を 1 回呼び、`expr_node` で
+        1 節点を積む。アームの列は `arms.iter().map(|arm| arm.with_body(self.rewrite(&arm.body))).collect()`
+        で作られるので、EXT Iterator::map と collect より閉包は `arms` の各要素についてちょうど 1 回、
+        先頭から順に呼ばれ、作られる列の第 `i` 要素は `arms[i]` について `with_body` が返したアームで
+        ある。すなわち `self.rewrite(&arm.body)` の呼び出しはアームごとにちょうど 1 回であり、閉包が
+        順に呼ばれるので 2 つのアームの呼び出しの実行区間は交わらない。`arm.with_body(body)` は
+        `body` をそのアームの本体に据えたアームを返す。`MatchArm` の残る 3 フィールド `tag`、
+        `payload`、`payload_state` は `RcExprNode` を持たないので、この節点の子は `self.rewrite` の
+        各呼び出しが返した木の根だけである (DEF 部分木)。アームの列を作る文が先に走り、続く
+        `expr_node(...)` の引数として `self.rewrite(k)` が評価されてから `expr_node` が呼ばれるので、
+        この腕の `self.rewrite(k)` の実行区間はどのアームの呼び出しとも交わらず、`expr_node` の実行は
+        どの `self.rewrite` の実行区間の中にも無い。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
+       CODE src/rc_ir/ast.rs: MatchArm::with_body, CODE src/rc_ir/ast.rs: MatchArm, DEF 部分木,
+       EXT Vec::iter と slice::iter, EXT Iterator::map と collect, EXT 呼び出しの入れ子
+  <2>3. `RcExpr::Let(x, rhs, k)` の腕は `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。
+        `rhs.clone()` は木の位置を持ち込まない。この腕に落ちる `rhs` は `RcRhs::Match` ではなく
+        (`match` の腕はこの順に並んでいる)、`Match` でない右辺を持つ `Let` 節点の子は継続だけだから
+        である (DEF 部分木)。`expr_node` の引数として `self.rewrite(k)` が先に評価されるので、
+        `expr_node` の実行はそれが返った後である。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, rhs, k)` の腕,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, DEF 部分木
+  <2>4. `RcExpr::Retain(v, path, state, k)` の腕と `RcExpr::Release(v, path, state, k)` の腕は
+        `self.rewrite_rc` を 1 回呼び、その値を返す。<1>3 よりその呼び出しは `self.rewrite(k)` を
+        ちょうど 1 回、最初の文として行い、`rc_node` の実行はその後である。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Retain(v, path, state, k)` の腕,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Release(v, path, state, k)` の腕,
+       <1>3
+  <2>5. `RcExpr::Destructure(container, fields, state, k)` の腕と `RcExpr::Eval(v, k)` の腕は
+        `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。この 2 種の節点の子は継続だけで
+        あり (DEF 部分木)、腕が複製する `container`、`fields`、`v` は `RcVar` と `Vec<(usize, RcVar)>`
+        なので木の位置を持ち込まない。どちらの腕も `expr_node` の引数として `self.rewrite(k)` を先に
+        評価するので、`expr_node` の実行はそれが返った後である。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Destructure(container, fields, state, k)` の腕,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Eval(v, k)` の腕,
+       CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, DEF 部分木
+  <2>6. `RcExpr::Ret(v)` の腕は `expr_node` で 1 節点を作って返し、`self.rewrite` を呼ばない。この節点に
+        子は無い。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Ret(v)` の腕, DEF 部分木
+  <2>7. QED
+    `RcExpr` の変位は `Let`, `Retain`, `Release`, `Destructure`, `Eval`, `Ret` の 6 つで、`RcRhs` の
+    変位は `Var`, `App`, `Closure`, `Llvm`, `Match` の 5 つである。<2>1 から <2>6 は
+    `Let` (右辺が `App`)、`Let` (右辺が `Match`)、`Let` (右辺がそれ以外)、`Retain`、`Release`、
+    `Destructure`、`Eval`、`Ret` の 8 つを尽くし、これは `rewrite_inner` の `match` の 8 つの腕である。
+    どの腕でも `self.rewrite` の呼び出しは順に行われ、`expr_node` の実行はそのすべてが返った後なので、
+    EXT 呼び出しの入れ子 より実行区間は互いに交わらず、`expr_node` の実行はどの実行区間の中にも無い。
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, EXT 呼び出しの入れ子
+<1>5. QED
+  `rewrite_inner` の本文は `node.expr.as_ref()` についての `match` であり、1 回の呼び出しはその 8 つの
+  腕のうち 1 つを実行する。<1>4 はその 8 つを尽くし、どの腕についても 1、2、3 を与える。
+  BY <1>4, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
+
 ### L4 (走査する本体の `Match` はアームを 1 つ以上持つ)
 
 ASSUME  NEW `prog`: `RcProgram`,
@@ -912,10 +1313,14 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, CODE src/rc_ir/borrow.rs: rc_node,
        CODE src/rc_ir/borrow.rs: prepend_rc, CODE src/rc_ir/ast.rs: RcRhs
   <2>3. QED
-    `rewrite_inner` は各子について `rewrite` を呼び、L1 よりそれは `rewrite_inner` を 1 回呼ぶ。木の
-    構造についての帰納法 (DEF 部分木より整礎) と <2>1、<2>2 より、返る木の `Match` は入力の木の `Match`
-    と 1 対 1 に対応し、アームの個数が等しい。
-    BY <2>1, <2>2, L1, DEF 部分木
+    L3a の 1 より `rewrite_inner` は `self.rewrite` を `node` の各子についてちょうど 1 回ずつ呼び、L1 より
+    その呼び出しは `rewrite_inner` を 1 回呼ぶ。L3a の 2 より、返る木の位置は、それらの呼び出しが返した
+    木の位置と、この呼び出しの中で作られた節点の全体である。木 `N(node)` の構造についての帰納法 (L0a の 4
+    より整礎) で示す --- 各子について返る木の `Match` は帰納法の仮定が扱い、この呼び出しの中で作られる
+    節点のうち `Match` を右辺に持つのは <2>1 の腕が作る 1 つだけで (<2>2)、そのアームの個数は `node` の
+    `Match` のものに等しい。よって返る木の `Match` は入力の木の `Match` と 1 対 1 に対応し、アームの個数が
+    等しい。
+    BY <2>1, <2>2, L0a, L1, L3a, DEF 部分木
 <1>2. 本補題の仮定の `borrow_ify` の呼び出しが `rewrite` に渡す本体は、その入力プログラムの関数の本体
       `f_own.body`、その複製 `clone.body`、または入力プログラムのグローバル初期化子 `g.init` である。
       `f_own` は `func.clone()` であり、`clone` は `clone_func` の値である。
@@ -943,13 +1348,13 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
     BY CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/ast.rs: RcRhs,
        EXT Vec::iter と slice::iter, EXT Iterator::map と collect
   <2>5. QED
-    木 `N(body)` の構造についての帰納法で示す。DEF 部分木 より子は真の部分木なので、この帰納法は整礎で
-    ある。<2>2 より `rename_expr(n, renaming)` は `rename_expr_inner(n, renaming)` の値である。<2>3 と
+    木 `N(body)` の構造についての帰納法で示す。L0a の 4 よりこの帰納法は整礎である。<2>2 より
+    `rename_expr(n, renaming)` は `rename_expr_inner(n, renaming)` の値である。<2>3 と
     <2>4 より、その値の節点は `n` と同じ式の変位を持ち、その子 (`Match` のアーム本体と継続) は、`n` の
     対応する子について `rename_expr` が返した木である。よって帰納法の仮定と合わせて、返る木の位置は `n` の
     木の位置と 1 対 1 に対応し、対応する位置の式は同じ変位であり、<2>4 より `Match` のアームの個数は
     等しい。<2>1 でこれを `body` に適用する。
-    BY <2>1, <2>2, <2>3, <2>4, DEF 部分木
+    BY <2>1, <2>2, <2>3, <2>4, L0a, DEF 部分木
 <1>4. 本補題の仮定の `borrow_ify` の呼び出しの入力プログラムのすべての `Match` は 1 つ以上のアームを持つ。
   BY A9, 本補題の仮定
 <1>5. QED
@@ -981,8 +1386,12 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
      CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, EXT Arc の契約, DEF 割り当て,
      EXT 型のサイズ, EXT bool のサイズ
 <1>2. 同時に生存している相異なる 2 つの割り当てについて、一方の占める番地はどれも他方の占める番地と
-      相異なる。
-  BY DEF 割り当て, EXT アロケータの契約
+      相異なる。割り当てが生存しているとは、そのハンドルが 1 つ以上存在することであり (DEF 割り当て)、
+      EXT Arc の契約 より、ハンドルが 1 つでも在るあいだそのブロックはアロケータへ返らない。よって
+      同時に生存している 2 つの割り当てのブロックはどちらもアロケータへ返っておらず、
+      EXT アロケータの契約 よりその 2 つは記憶域を共有しない。すなわち一方の占める番地の集合と
+      他方の占める番地の集合は交わらない。
+  BY DEF 割り当て, EXT Arc の契約, EXT アロケータの契約
 <1>2a. 2 つの節点 `p`、`q` の `p.expr` と `q.expr` の割り当てが相異なり、かつ同時に生存しているならば、
        `node_id(p) ≠ node_id(q)` である。<1>1 より `node_id(p)` は `p.expr` の割り当ての占める番地であり、
        `node_id(q)` は `q.expr` の割り当ての占める番地であって、<1>2 よりこの 2 つは相異なる。
@@ -991,154 +1400,11 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       実行した `Arc::new` の呼び出しが取った割り当てを持ち、**相異なる位置の割り当ては相異なる `Arc::new`
       の呼び出しが取ったもの、すなわち相異なる割り当てである**。さらに、それらの割り当てはその呼び出しが
       返るまですべて生存している。
-  木 `N(node)` の構造についての帰納法で示す。DEF 部分木より子は真の部分木なので、この帰納法は整礎である。
+  木 `N(node)` の構造についての帰納法で示す。L0a の 4 よりこの帰納法は整礎である。
   <2>0a. 帰納法の仮定: `node` の各子 `c` について、`rewrite(c)` の 1 回の呼び出しが返す木の各位置は、その
          呼び出しの間に `expr_node` が実行した `Arc::new` の呼び出しが取った割り当てを持ち、相異なる位置の
          割り当ては相異なり、それらはその呼び出しが返るまですべて生存している。
     BY 帰納法の仮定
-  <2>1. `expr_node(expr, source)` は `Arc::new(expr)` を 1 つ作り、それを `expr` フィールドに持つ
-        `RcExprNode` を返す。
-    BY CODE src/rc_ir/borrow.rs: expr_node
-  <2>2. `rc_node(is_release, var, path, state, k, source)` は `expr_node` を 1 回呼んでその値を返す。
-        `prepend_rc(units, is_release, k)` は `units` を逆順にたたみ込み、`units` の要素ごとに `rc_node`
-        を 1 回呼ぶ。`units` が空なら `k` をそのまま返す。
-    BY CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: prepend_rc, <2>1
-  <2>3. `RewriteCtx::rewrite_rc(v, path, state, is_release, k, source)` は `self.rewrite(k)` を 1 回呼び、
-        その値の上に `rc_node` で 0 個以上の節点を積んだものを返す。返す木の位置は、その `self.rewrite(k)`
-        が返した木の位置と、`rc_node` が積んだ節点の**全体**である。
-    <3>1. 本文は最初に `let k = self.rewrite(k);` を実行する。`self.is_borrow_version` が偽のときは
-          `rc_node(is_release, v.clone(), path.clone(), state, k, source)` を返す。真のときは
-          `kept.into_iter().rev().fold(k, |cont, unit| rc_node(is_release, v.clone(), unit, state, cont, source))`
-          を返す。この `fold` の値は、`k` の上に `kept` の要素ごとに `rc_node` の節点を 1 つ積んだ木で
-          ある。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
-    <3>2. `kept` は `units_under(&v.ty, path, self.type_env)` を `self.owns_unit(v, unit)` で絞った
-          `Vec<FieldPath>` である。`units_under` の返り値の型は `Vec<FieldPath>`、`owns_unit` の返り値の
-          型は `bool`、`FieldPath` は `Vec<usize>` であり、どれも `RcExprNode` を含まない。よって `kept`
-          は木の節点を持ち込まない。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, CODE src/rc_ir/ownership.rs: units_under,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit, CODE src/rc_ir/ast.rs: FieldPath
-    <3>3. QED
-      <3>1 の 2 つの枝はどちらも、`self.rewrite(k)` が返した木の上に `rc_node` の節点を 0 個以上積んだ木を
-      返す。積むのは `fold` なので、作った節点は 1 つ残らずその木に入る。<2>2 より `rc_node` は
-      `expr_node` で 1 節点を作る。<3>2 よりほかの値は木の節点にならない。
-      BY <2>2, <3>1, <3>2
-  <2>4. `rewrite_inner(node)` の 8 つの腕はいずれも、`self.rewrite` を `node` の各子についてちょうど
-        1 回ずつ呼び、その戻り値の上に `expr_node` / `rc_node` / `prepend_rc` で有限個の節点を積んだ木を
-        返す。返す木の位置は、それらの `self.rewrite` の呼び出しが返した木の位置と、この呼び出しの中で
-        `expr_node` (`rc_node` と `prepend_rc` が呼ぶものを含む) が作った節点の**全体**である。すなわち、
-        受け取った木も作った節点も 1 つ残らず返す木に入り、返す木にはそれ以外の位置が無い。
-    <3>1. `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕が `self.rewrite` を呼ぶのは
-          `self.rewrite(k)` の 1 回だけであり、その上に `prepend_rc(after, true, ...)`、
-          `expr_node(RcExpr::Let(...))`、`prepend_rc(before, false, ...)` で節点を積む。この腕に落ちる
-          節点の子は継続 `k` だけである (DEF 部分木)。返す木の位置は、その `self.rewrite(k)` が返した
-          木の位置と、これらが積んだ節点の全体である。
-      <4>1. この腕の本文は 5 つの文である。`let callee = self.route(x, callee, args, k);`、
-            `let (before, after) = self.call_rc(&callee, args);`、
-            `let k = prepend_rc(after, true, self.rewrite(k));`、
-            `let app = expr_node(RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k), &node.source);`、
-            `prepend_rc(before, false, app)`。
-        BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕
-      <4>2. `route` の返り値の型は `RcVar` であり、`call_rc` の返り値の型は
-            `(Vec<(RcVar, FieldPath)>, Vec<(RcVar, FieldPath)>)` である。`RcVar` の 5 つのフィールドの型は
-            `FullName`、`Arc<TypeNode>`、`Option<Span>`、`Option<Name>`、`bool` であり、`FieldPath` は
-            `Vec<usize>` である。いずれの型も `RcExprNode` を含まないので、`callee`、`before`、`after`、
-            `x.clone()`、`args.clone()` は木の節点を持ち込まない。
-        BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
-           CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath
-      <4>2a. `route` と `call_rc` の 1 回の呼び出しは `expr_node` も `RewriteCtx::rewrite` も実行
-             しない。よって `RcExprNode` の値を 1 つも作らず、`self.rewrite` の呼び出しも 1 つも
-             起こさない。
-        <5>1. `expr_node` は `borrow.rs` の非公開の自由関数であり、`RewriteCtx::rewrite` は
-              `RewriteCtx` の非公開のメソッドである。`borrow.rs` は `mod` 宣言を 1 つも持たないので、
-              この 2 つが見える子モジュールも無く、その呼び出しは `borrow.rs` の中にしか書けない。
-              `borrow.rs` の中で `expr_node` を呼ぶのは、`RewriteCtx::rewrite_inner`、`rc_node`、
-              `split_body_inner`、`drop_nodes_inner` の 4 つの本文だけである。
-          BY CODE src/rc_ir/borrow.rs: expr_node, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
-             CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: split_body_inner,
-             CODE src/rc_ir/borrow.rs: drop_nodes_inner, DEF 本文
-        <5>2. `route` または `call_rc` の 1 回の呼び出しの中で走る `borrow.rs` の関数は、この 2 つと
-              `RewriteCtx::routing_is_safe`、`RewriteCtx::routing_saves_retain`、
-              `RewriteCtx::any_owned_unit`、`RewriteCtx::owns_unit`、`RewriteCtx::owns_object`、
-              `RewriteCtx::comes_from_a_value_used_later`、`used_later`、`rhs_uses` で尽きる。
-              `borrow.rs` の関数としては、`route` は `routing_is_safe` と `routing_saves_retain` を、
-              `call_rc` は `owns_unit` を、`routing_is_safe` は `any_owned_unit` を、
-              `routing_saves_retain` は `used_later`、`owns_unit`、`comes_from_a_value_used_later` を、
-              `any_owned_unit` は `owns_unit` を、`owns_unit` は `owns_object` を、
-              `comes_from_a_value_used_later` は `used_later` を、`used_later` は `rhs_uses` と自身を、
-              `rhs_uses` は `used_later` を呼ぶ。`owns_object` が呼ぶ `borrow.rs` の関数は無い。
-              **この 10 個の本文に書かれた呼び出しのうち、`borrow.rs` の項目に解決するのは上に挙げた
-              ものだけであり、残りはすべて `borrow.rs` の外で定義された項目に解決する。** DEF 本文 より、
-              この 10 個が引数として渡すクロージャの本文はそれを書いた関数の本文の一部なので、その中に
-              書かれた呼び出しもこの数え上げに入っている --- 渡す先が標準ライブラリであっても
-              `borrow.rs` の外の項目であっても同じである。
-          BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::routing_is_safe,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::routing_saves_retain,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::any_owned_unit,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::comes_from_a_value_used_later,
-             CODE src/rc_ir/borrow.rs: used_later, CODE src/rc_ir/borrow.rs: rhs_uses, DEF 本文
-        <5>3. QED
-          <5>2 の 10 個はどれも <5>1 の 4 つではないので、その本文に `expr_node` の呼び出しは書かれて
-          いない。この 10 個に `RewriteCtx::rewrite` は無く、<5>2 はこの 2 つの呼び出しの中で走る
-          `borrow.rs` の関数を尽くしているので、`RewriteCtx::rewrite` も走らない。`borrow.rs` の外で
-          定義された関数の本文は `borrow.rs` の中に無いので、<5>1 よりそのどちらも呼べない。よって
-          `route` と `call_rc` の呼び出しの中で `expr_node` も `RewriteCtx::rewrite` も走らない。
-          `expr_node` は `Arc::new` を 1 つ作って `RcExprNode` を返す唯一の場所である (<2>1)。
-          BY <2>1, <5>1, <5>2, DEF 本文
-      <4>3. QED
-        <4>1 の第 1 文と第 2 文の `route` と `call_rc` は節点を作らず `self.rewrite` も呼ばない
-        (<4>2a) ので、この腕が `self.rewrite` を呼ぶのは第 3 文の `self.rewrite(k)` の 1 回だけであり、
-        この腕がこの呼び出しの中で作る節点は第 3 文から第 5 文のものだけである。DEF 部分木 より
-        この腕に落ちる節点の子は継続 `k` だけなので、`self.rewrite` はこの節点の各子についてちょうど
-        1 回ずつ呼ばれている。第 3 文から第 5 文が木を組み立て、その材料は `self.rewrite(k)` が返した
-        木と、`prepend_rc` と `expr_node` が作る節点だけである (<2>2、<4>2)。第 3 文の
-        `prepend_rc(after, ...)` が作る節点は `k` に、第 4 文の `expr_node` が作る節点は `app` に、
-        第 5 文の `prepend_rc(before, ...)` が作る節点は返り値に入り、`k` は `app` の中に、`app` は
-        返り値の中にあるので、作った節点は 1 つ残らず返り値の木に入る。
-        BY <2>2, <4>1, <4>2, <4>2a, DEF 部分木
-    <3>2. `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕は、`arms` の各 `arm` について
-          `self.rewrite(&arm.body)` を 1 回ずつ呼び、`self.rewrite(k)` を 1 回呼び、`expr_node` で
-          1 節点を積む。アームの列は `arms.iter().map(|arm| arm.with_body(self.rewrite(&arm.body))).collect()`
-          で作られるので、EXT Iterator::map と collect より閉包は `arms` の各要素についてちょうど 1 回、
-          先頭から順に呼ばれ、作られる列の第 `i` 要素は `arms[i]` について `with_body` が返したアームで
-          ある。すなわち `self.rewrite(&arm.body)` の呼び出しはアームごとにちょうど 1 回である。
-          `arm.with_body(body)` は `body` をそのアームの本体に据えたアームを返す。`MatchArm` の残る
-          3 フィールド `tag`、`payload`、`payload_state` は `RcExprNode` を持たないので、この節点の子は
-          `self.rewrite` の各呼び出しが返した木の根だけである (DEF 部分木)。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
-         CODE src/rc_ir/ast.rs: MatchArm::with_body, CODE src/rc_ir/ast.rs: MatchArm, DEF 部分木,
-         EXT Vec::iter と slice::iter, EXT Iterator::map と collect
-    <3>3. `RcExpr::Let(x, rhs, k)` の腕は `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。
-          `rhs.clone()` は木の位置を持ち込まない。この腕に落ちる `rhs` は `RcRhs::Match` ではなく
-          (`match` の腕はこの順に並んでいる)、`Match` でない右辺を持つ `Let` 節点の子は継続だけだから
-          である (DEF 部分木)。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, rhs, k)` の腕,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, DEF 部分木
-    <3>4. `RcExpr::Retain(v, path, state, k)` の腕と `RcExpr::Release(v, path, state, k)` の腕は
-          `self.rewrite_rc` を 1 回呼び、その値を返す。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Retain(v, path, state, k)` の腕,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Release(v, path, state, k)` の腕,
-         <2>3
-    <3>5. `RcExpr::Destructure(container, fields, state, k)` の腕と `RcExpr::Eval(v, k)` の腕は
-          `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。この 2 種の節点の子は継続だけで
-          あり (DEF 部分木)、腕が複製する `container`、`fields`、`v` は `RcVar` と `Vec<(usize, RcVar)>`
-          なので木の位置を持ち込まない。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Destructure(container, fields, state, k)` の腕,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Eval(v, k)` の腕,
-         CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, DEF 部分木
-    <3>6. `RcExpr::Ret(v)` の腕は `expr_node` で 1 節点を作って返す。この節点に子は無い。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Ret(v)` の腕, DEF 部分木
-    <3>7. QED
-      `RcExpr` の変位は `Let`, `Retain`, `Release`, `Destructure`, `Eval`, `Ret` の 6 つで、`RcRhs` の
-      変位は `Var`, `App`, `Closure`, `Llvm`, `Match` の 5 つである。<3>1 から <3>6 は
-      `Let` (右辺が `App`)、`Let` (右辺が `Match`)、`Let` (右辺がそれ以外)、`Retain`、`Release`、
-      `Destructure`、`Eval`、`Ret` の 8 つを尽くし、これは `rewrite_inner` の `match` の 8 つの腕である。
-      BY <3>1, <3>2, <3>3, <3>4, <3>5, <3>6, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
   <2>5. `rewrite` の 1 回の呼び出しについて、次の 2 つが成り立つ。**(a)** この呼び出しの中で `expr_node`
         が作った各節点と、この呼び出しが `self.rewrite` を呼んで受け取った各木の各位置は、この呼び出しが
         返す木の位置である。**(b)** それらの割り当ては、それが作られた時点からこの呼び出しが返るまで
@@ -1147,18 +1413,20 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
     <3>0. 木の根の `RcExprNode` の値が 1 つ在るあいだ、その木のすべての位置の `Arc` のハンドルが 1 つ以上
           存在し、その割り当ては生存している。
       BY L2a
-    <3>1. (a) が成り立つ。<2>4 より、`rewrite_inner(node)` が返す木の位置は、`self.rewrite` の各呼び出しが
-          返した木の位置と、この呼び出しの中で `expr_node` が作った節点の全体である。L1 より
+    <3>1. (a) が成り立つ。L3a の 2 より、`rewrite_inner(node)` が返す木の位置は、`self.rewrite` の各
+          呼び出しが返した木の位置と、この呼び出しの中で `expr_node` が作った節点の全体である。L1 より
           `rewrite(node)` はその値をそのまま返す。
-      BY <2>4, L1
+      BY L3a, L1
     <3>1a. この呼び出しの中で `expr_node` が作った各節点は作られた時点から、この呼び出しが
            `self.rewrite` を呼んで受け取った各木は受け取った時点から、どちらもこの呼び出しが返るまで、
-           その割り当てが生存している。<2>4 の各腕は、`expr_node` が作った節点と `self.rewrite` が返した
-           木を、作った (受け取った) 直後に、その上に積む節点の子として、または戻り値として据える。どの腕
-           も、作った節点も受け取った木も捨てない。よってそれらはその時点からこの呼び出しが返るまで、
+           その割り当てが生存している。`rewrite_inner` の各腕は、`expr_node` が作った節点と
+           `self.rewrite` が返した木を、局所変数に束縛して保持し、その上に積む節点の子として、または
+           戻り値として据える --- `rewrite_rc` は `self.rewrite(k)` の値を `k` に束縛し、`kept` を
+           計算してから `fold` の初期値に据えるので、そのあいだ `k` がハンドルを保持する。どの腕も、
+           作った節点も受け取った木も捨てない。よってそれらはその時点からこの呼び出しが返るまで、
            組み立て中の木の部分木の根であり続け、<3>0 よりその部分木のすべての位置の割り当てが生存して
            いる。
-      BY <2>4, <3>0, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+      BY L3a, <3>0, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
          CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, CODE src/rc_ir/borrow.rs: prepend_rc,
          DEF 割り当て
     <3>2. `arm.with_body(body)` の中の `self.clone()` は入力側のアームの本体の `Arc` のハンドルを 1 つ作り、
@@ -1166,7 +1434,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
           節点のハンドルであり、`expr_node` が作った割り当てのものではない。
       BY CODE src/rc_ir/ast.rs: MatchArm::with_body,
          CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
-         <2>4, DEF 割り当て
+         L3a, DEF 割り当て
     <3>3. QED
       <3>1 が (a) を与える。(b) のうち、この呼び出しの中で `expr_node` が作った節点については <3>1a が
       そのまま与える。その下の呼び出しが `expr_node` で作った割り当てについては、<2>0a よりそれはその子の
@@ -1177,14 +1445,15 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       BY <2>0a, <3>0, <3>1, <3>1a, <3>2
   <2>6. QED
     <2>0a の帰納法の仮定より、各子について `rewrite` が返す木の相異なる位置の割り当ては、相異なる
-    `Arc::new` の呼び出しが取ったものである。<2>4 より `rewrite_inner(node)` が返す木の位置は、各子に
+    `Arc::new` の呼び出しが取ったものである。L3a の 2 より `rewrite_inner(node)` が返す木の位置は、各子に
     ついて `rewrite` が返した木の位置と、この呼び出しの中で `expr_node` が新しく作った節点の全体である。
-    相異なる子の木の位置は相異なる `rewrite` の呼び出しの中の `Arc::new` の呼び出しが取った割り当てを
-    持ち、1 つの `Arc::new` の呼び出しは 1 つの `rewrite` の呼び出しの中でしか実行されないので、それらは
-    互いに相異なる。この呼び出しの中で `expr_node` が新しく作る節点は、<2>1 より新しい `Arc::new` の
-    呼び出しであり、子の呼び出しの中の `Arc::new` とも互いとも相異なる。L1 より `rewrite(node)` は
-    `rewrite_inner(node)` の値をそのまま返す。生存については <2>0a と <2>5 の (b) が与える。
-    BY <2>0a, <2>1, <2>2, <2>3, <2>4, <2>5, L1, DEF 部分木
+    **相異なる 2 つの子 `c`、`c'` について、この呼び出しが行う `rewrite(c)` と `rewrite(c')` の実行区間は
+    交わらない** (L3a の 3、L1、EXT 呼び出しの入れ子)。よって一方の実行区間の中で実行された `Arc::new` は
+    他方の実行区間の中では実行されておらず、<2>0a より 2 つの子の木の割り当ては相異なる。**この呼び出しの
+    中で `expr_node` が実行する `Arc::new` は、どの子の `rewrite` の実行区間の中にも無い** (L3a の 3)
+    ので、子の木の割り当てとも、互いとも相異なる。L1 より `rewrite(node)` は `rewrite_inner(node)` の値を
+    そのまま返す。生存については <2>0a と <2>5 の (b) が与える。
+    BY <2>0a, <2>5, L1, L3a, DEF 割り当て, EXT 呼び出しの入れ子
 <1>4. `cancel_body(vars, body)` の実行中、`body` の木の割り当てはすべて生存している。
   <2>1. `cancel` の `funcs` を作る閉包は、`prog.funcs.values()` の各 `f` について
         `clone.body = cancel_body(&vars, &f.body)` を実行する。`cancel_body` の実行中、`f` は `prog` から
@@ -1214,7 +1483,8 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       ある (DEF 訪問) ので、閉じるべきなのは `walk` の呼び出し元だけではなく `walk_inner` の呼び出し元でも
       ある。**
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, DEF 訪問, DEF 本文
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, DEF 訪問, DEF 本文,
+     EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>1a. `borrow.rs` の中で `CancelAnalysis::walk` を呼ぶのは、`cancel` の中の
        `analysis.walk(body, PendingRetains::default(), true)` と、`walk_inner` の中の 7 か所だけである。
        その 7 か所は、`Retain` の腕、`Release` の腕、`Match` の腕の 2 か所 (アームと継続)、
@@ -1286,7 +1556,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, CODE src/rc_ir/borrow.rs: un_bump,
-       CODE src/rc_ir/borrow.rs: PendingRetain, CODE src/rc_ir/ownership.rs: References
+       CODE src/rc_ir/borrow.rs: PendingRetain, CODE src/rc_ir/ownership.rs: References, EXT Clone
   <2>2a. `borrow.rs` の外で定義された関数の本文は `borrow.rs` の中に無いので、<1>1 より `walk` も
          `walk_inner` も呼べない。DEF 本文 より、`borrow.rs` の中に書かれたクロージャを引数に取る
          標準ライブラリの関数についても同じである --- そのクロージャの本文は、それを書いた `borrow.rs` の
@@ -1304,7 +1574,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 <1>3. 任意の節点 `n`、任意の `pending`、任意の `returns_from_func` について、
       `walk(n, pending, returns_from_func)` の 1 回の呼び出しの実行中、`N(n)` の各節点はちょうど 1 回
       訪問され、`N(n)` の外の節点は訪問されない。
-  木 `N(n)` の構造についての帰納法で示す。DEF 部分木より子は真の部分木なので、この帰納法は整礎である。
+  木 `N(n)` の構造についての帰納法で示す。L0a の 4 よりこの帰納法は整礎である。
   <2>1. 帰納法の仮定: `n` の各子 `c` と任意の引数について、`walk(c, ・, ・)` の 1 回の呼び出しの実行中、
         `N(c)` の各節点はちょうど 1 回訪問され、`N(c)` の外の節点は訪問されない。
     BY 帰納法の仮定
@@ -1321,15 +1591,17 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
   <2>3. CASE `n` の式が `RcExpr::Retain(v, path, _, k)` である。
     <3>1. この腕は `self.walk(k, pending, returns_from_func)` を 1 回呼び、ほかに `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕, <1>2
-    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。
-      BY DEF 部分木
+    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。L0a の 4 より `n` は
+          `N(k)` に入らない。
+      BY L0a, DEF 部分木
     <3>3. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2
   <2>4. CASE `n` の式が `RcExpr::Release(v, path, _, k)` である。
     <3>1. この腕は `self.walk(k, pending, returns_from_func)` を 1 回呼び、ほかに `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕, <1>2
-    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。
-      BY DEF 部分木
+    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。L0a の 4 より `n` は
+          `N(k)` に入らない。
+      BY L0a, DEF 部分木
     <3>3. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2
   <2>5. CASE `n` の式が `RcExpr::Let(_, RcRhs::Match(_, arms), k)` である。
@@ -1342,16 +1614,18 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
           よって <3>1 の `self.walk(&arm.body, ・, ・)` は `arms` の各要素についてちょうど 1 回である。
       BY EXT Vec::iter と slice::iter, EXT Iterator::map と collect
     <3>3. `n` の子は `arms` の各 `arm.body` と `k` であり、`N(n)` は `{n}` とそれらの部分木の非交和で
-          ある。
-      BY DEF 部分木
+          ある。L0a の 3 より相異なる子の部分木は交わらず、L0a の 4 より `n` はどの子の部分木にも
+          入らない。
+      BY L0a, DEF 部分木
     <3>4. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2, <3>3
   <2>6. CASE `n` の式が `RcExpr::Let(x, rhs, k)` で `rhs` が `RcRhs::Match(..)` でない。
     <3>1. この腕は `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼び、その後
           `self.walk(k, pending, returns_from_func)` を 1 回呼ぶ。ほかに `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(x, rhs, k)` の腕, <1>2
-    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。
-      BY DEF 部分木
+    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。L0a の 4 より `n` は
+          `N(k)` に入らない。
+      BY L0a, DEF 部分木
     <3>3. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2
   <2>7. CASE `n` の式が `RcExpr::Destructure(container, fields, _state, k)` である。
@@ -1360,15 +1634,17 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
           `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Destructure(container, fields, _state, k)` の腕,
          <1>2
-    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。
-      BY DEF 部分木
+    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。L0a の 4 より `n` は
+          `N(k)` に入らない。
+      BY L0a, DEF 部分木
     <3>3. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2
   <2>8. CASE `n` の式が `RcExpr::Eval(_, k)` である。
     <3>1. この腕は `self.walk(k, pending, returns_from_func)` を 1 回呼び、ほかに `walk` も `walk_inner` も呼ばない。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Eval(_, k)` の腕, <1>2
-    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。
-      BY DEF 部分木
+    <3>2. `n` の子は `k` だけであり、`N(n)` は `{n}` と `N(k)` の非交和である。L0a の 4 より `n` は
+          `N(k)` に入らない。
+      BY L0a, DEF 部分木
     <3>3. QED
       BY <2>1, <2>2, <2>2a, <3>1, <3>2
   <2>9. CASE `n` の式が `RcExpr::Ret(_)` である。
@@ -1417,7 +1693,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       走査の状態、第 2 引数は `self.acted_references(v, path)` の値である。
   BY CODE src/rc_ir/borrow.rs: un_bump,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
-     L2, DEF 本文
+     L2, DEF 本文, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>1. `pending.iter().rposition(|retain| retain.outstanding.shares_an_object(un_bumped))` は、述語を
       満たす要素の添字のうち最大のものを `Some` で返し、そのような要素が無ければ `None` を返す。
       `let Some(index) = ... else { return UnBump::NoBracket; };` により、`None` のとき `NoBracket` を
@@ -1532,7 +1808,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
         は、`other` がその鍵を持つときその値への共有参照を `Some` で、持たないとき `None` を返す
         (EXT Map と Set)。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF 参照の多重集合, EXT Map と Set,
-       EXT Vec::iter と slice::iter, EXT Iterator::all と any
+       EXT Vec::iter と slice::iter, EXT Iterator::all と any, EXT IntoIterator と for
   <2>2. 第 1 の連言肢 `entered_with.contains(&retain)` は `retain` だけで決まる。
     BY <2>1
   <2>3. CASE すべての `j'` について `arm_states[j']` が `retain` を鍵に持ち、その値が互いに等しい。
@@ -1582,7 +1858,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       `outstanding` が `uniform[node]` と等しい `References` である (EXT Clone)。`merge` はほかに返り値を
       作らない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, EXT Vec::iter と slice::iter,
-     EXT Iterator::filter_map, EXT Map と Set, EXT Clone
+     EXT Iterator::filter_map, EXT Iterator::map と collect, EXT Map と Set, EXT Clone
 <1>8. `arm_states` の各表と `pending_in` の反復について、`arm_states` の表は `Map` (ハッシュ表) なので
       反復の順序は定まらないが、<1>3 により `is_uniform` は反復の順序によらず、<1>4 により `uniform` は
       要素を失わないので、`uniform` の最終的な内容は反復の順序によらない。返り値は `pending_in` の順序で
@@ -1600,7 +1876,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体の各節点 `n` につい
         呼ぶ。「複製」はこの列に現れない。また、走査が `PendingRetains` の値を作るのは DEF 基本操作 の
         6 種だけである。
 
-**証明** 木 `N(n)` の構造についての帰納法で示す。DEF 部分木より子は真の部分木なので整礎である。
+**証明** 木 `N(n)` の構造についての帰納法で示す。L0a の 4 よりこの帰納法は整礎である。
 
 <1>0. 本補題の仮定は P15 の言明の仮説である。P15 より、走査はこの本体の各位置をちょうど 1 回訪問するので、
       各節点の「訪問」(DEF 訪問) は 1 つに定まり、`pending(n)` と `pending_out(n)` はその 1 つの訪問に
@@ -1686,9 +1962,9 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行に�
   <2>2. 1 回の訪問が実行する基本操作は有限個である。「初期」は訪問の中では実行されない。「追加」は
         `Retain` の腕で 1 回、「引き」は `Release` の腕で 1 回、「複製」は `Match` の腕でアームごとに
         1 回、「併合」は `Match` の腕で 1 回である。「消費」は `consume_objects` の呼び出しごとに 1 回で、
-        その呼び出しは `Release` の腕で高々 2 回、`Let` (右辺が `Match` でない) の腕で `rhs_consumes` が
-        返す `Vec` の要素ごとに 1 回、`Destructure` の腕で `destructure_consumes` が返す `Vec` の要素
-        ごとに 1 回である (L6)。`Vec` の長さは有限であり、`arms` も `Vec` である。
+        その呼び出しは `Release` の腕で高々 2 回、`Let` (右辺が `Match` でない) の腕で `consume_rhs` が
+        `rhs_consumes` に積ませた `Vec` の要素ごとに 1 回、`Destructure` の腕で `destructure_consumes` が
+        返す `Vec` の要素ごとに 1 回である (L6)。`Vec` の長さは有限であり、`arms` も `Vec` である。
     BY L6, DEF 基本操作, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume
   <2>3. QED
@@ -1713,9 +1989,9 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行に�
 状態 `P` (DEF 基本操作) について、次の 4 つの連言を `INV(P)` と書く。「`P` の時点」とは、`P` を作った
 基本操作が実行された時点をいう。
 
-- **(i)** `P` の各要素 `e` について、`e.node` は、`P` の時点までに訪問された `Retain` 節点 `t` の
-  `node_id(t)` である。P15 の前半より、1 つの本体の中でこの `t` は一意に定まる。これを `e` の**由来**と
-  呼び、`orig(e)` と書く。
+- **(i)** `P` の各要素 `e` について、`P` の時点までに訪問された `Retain` 節点 `t` であって
+  `e.node = node_id(t)` であるものが**ちょうど 1 つ**ある。この `t` を `e` の**由来**と呼び、`orig(e)` と
+  書く。(ii) と (iv) はこの記法を使うので、(i) が成り立つ状態についての条件である。
 - **(ii)** `P` の各要素 `e` について、`e.outstanding` は空でなく、`e.outstanding ⊆ ActRefs(orig(e))` で
   ある。
 - **(iii)** `P` の相異なる 2 つの要素は相異なる `node` を持つ。
@@ -1740,6 +2016,11 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
        それより前にあるので、帰納法の仮定はその入力すべてに使える。初期状態には入力が無いので、その場合は
        帰納法の仮定を使わずに示す。
   BY L8a, <1>0a, <1>0b, DEF 基本操作
+<1>0d. `NodeId` の値 `x` について、`node_id(t) = x` である `Retain` 節点 `t` はこの本体に高々 1 つで
+       ある。P15 の前半より、この本体の相異なる位置は相異なる `NodeId` を持つ。よって状態 `P` の要素 `e`
+       について「`P` の時点までに訪問された `Retain` 節点 `t` であって `e.node = node_id(t)` である
+       ものが在る」ことを示せば、そのような `t` はちょうど 1 つであり、DEF INV の (i) が成り立つ。
+  BY P15, 本補題の仮定, DEF INV
 <1>1. 帰納法の仮定: この状態より前に作られたすべての状態について `INV` が成り立つ。
   BY 帰納法の仮定
 <1>2. CASE 状態が「初期」で作られた。`PendingRetains` は `Vec<PendingRetain>` の別名なので、
@@ -1750,47 +2031,49 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 <1>3. CASE 状態が「複製」で作られた。EXT Clone より `pending.clone()` は元の状態と同じ長さで、第 `i`
       要素の `node` は元の第 `i` 要素の `node` と等しく、第 `i` 要素の `outstanding` は元の
       `outstanding` と等しい。(i) は「`P` の時点までに訪問された」を含むが、訪問された節点の集合は時が
-      進んでも要素を失わないので、元の状態で成り立てば複製の時点でも成り立つ。由来は `node` から P15 の
-      前半で一意に定まるので、`node` が等しい複製の要素の由来は元の要素の由来と同じである。(ii) と (iii)
+      進んでも要素を失わないので、元の状態で成り立てば複製の時点でも成り立つ。<1>0d より由来は `node` で
+      一意に定まるので、`node` が等しい複製の要素の由来は元の要素の由来と同じである。(ii) と (iii)
       は要素の `node` と `outstanding` の値だけで決まるので、由来が同じことと合わせて <1>1 から遺伝する。
       (iv) は訪問の時刻を読むが、それは走査全体についての事実であり、複製は要素の `node` も並びも保つので、
       元の状態について <1>1 が与える「`P[i]` の由来は `P[j]` の由来より前に訪問された」がそのまま複製の
       同じ添字の対に当たる。
-  BY <1>1, P15, DEF INV, DEF 訪問, EXT Clone
+  BY <1>0d, <1>1, P15, DEF INV, DEF 訪問, EXT Clone
 <1>4. CASE 状態が「追加」で作られた。すなわち `Retain` 節点 `t = Retain(v, path, _, k)` の訪問が
       `pending.push(PendingRetain { node: retain, outstanding })` を実行した。ここで
       `retain = node_id(node)` であり `node` は `t` の節点、`outstanding = self.acted_references(v, path)`
       である。L0 よりこの値は走査のどの時点で読んでも同じなので、DEF 節点の量 の `ActRefs(t)` である。
-      書き換え前の状態を `P0` とする。
+      書き換え前の状態を `Q0` とする。
   <2>1. この操作は `Vec` の末尾に要素を 1 つ加えるだけであり、既存の要素の値と並びを変えない。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
        EXT Vec::push
-  <2>2. `P0` は `t` の訪問が始まる前に作られた状態である。この腕は `pending.push` より前に `pending` に
-        触れないので、`P0` は `walk_inner` に引数として渡された値 `pending(t)` であり、それは呼び出しの
-        前に作られている。よって <1>1 の (i) より、`P0` の各要素の由来は `t` の訪問が始まる前に訪問されて
+  <2>2. `Q0` は `t` の訪問が始まる前に作られた状態である。この腕は `pending.push` より前に `pending` に
+        触れないので、`Q0` は `walk_inner` に引数として渡された値 `pending(t)` であり、それは呼び出しの
+        前に作られている。よって <1>1 の (i) より、`Q0` の各要素の由来は `t` の訪問が始まる前に訪問されて
         おり、P15 の後半 (各位置はちょうど 1 回訪問される) よりそれは `t` ではない。
     BY <1>1, P15, DEF 訪問, DEF 基本操作,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕
-  <2>3. (i) が成り立つ。新しい要素の `node` は `node_id(t)` であり、`t` の訪問はこの時点で始まっている。
-        既存の要素は <1>1 の (i) のままで、由来も変わらない。
-    BY <1>1, <2>1, DEF 訪問
+  <2>3. (i) が成り立つ。新しい要素の `node` は `node_id(t)` であり、`t` の訪問はこの時点で始まっている
+        ので、<1>0d よりその由来は `t` にちょうど 1 つ定まる。既存の要素は <1>1 の (i) のままで、由来も
+        変わらない。
+    BY <1>0d, <1>1, <2>1, DEF 訪問
   <2>4. (ii) が成り立つ。新しい要素の由来は <2>3 より `t` であり、その `outstanding` は
-        `self.acted_references(v, path)` すなわち `ActRefs(t)` である (DEF 節点の量)。L2 の 5 よりそれは
-        空でなく、`ActRefs(t) ⊆ ActRefs(t)` である (DEF 参照の多重集合)。既存の要素は <1>1 の (ii) の
-        ままである。
-    BY <1>1, <2>1, <2>3, L0, L2, DEF 節点の量, DEF 参照の多重集合
+        `self.acted_references(v, path)` が返した値である。この要素が `pending` に積まれているので
+        その呼び出しは値を返しており、L2 の 5 よりその値は空でない。L0b と L0 より、その値は
+        DEF 節点の量 の `ActRefs(t)` である。`ActRefs(t) ⊆ ActRefs(t)` である (DEF 参照の多重集合)。
+        既存の要素は <1>1 の (ii) のままである。
+    BY <1>1, <2>1, <2>3, L0, L0b, L2, DEF 節点の量, DEF 参照の多重集合
   <2>5. (iii) が成り立つ。
-    <3>1. `P0` のどの要素も `node` が `node_id(t)` と等しくない。
-      <4>1. `P0` のある要素 `e` が `e.node = node_id(t)` を満たすと仮定する。
+    <3>1. `Q0` のどの要素も `node` が `node_id(t)` と等しくない。
+      <4>1. `Q0` のある要素 `e` が `e.node = node_id(t)` を満たすと仮定する。
         BY 背理法の仮定
-      <4>2. <1>1 の (i) より、`orig(e)` は `P0` の時点までに訪問された `Retain` 節点であり、
+      <4>2. <1>1 の (i) より、`orig(e)` は `Q0` の時点までに訪問された `Retain` 節点であり、
             `node_id(orig(e)) = e.node = node_id(t)` である。
         BY <1>1, <4>1
       <4>3. P15 の前半より、この本体の相異なる位置は相異なる `NodeId` を持つ。よって `orig(e)` と `t` は
             同じ位置である。
         BY P15, <4>2
       <4>4. QED (矛盾)
-        <2>2 より `P0` の各要素の由来は `t` ではない。<4>3 はそれに反する。
+        <2>2 より `Q0` の各要素の由来は `t` ではない。<4>3 はそれに反する。
         BY <2>2, <4>3
     <3>2. QED
       BY <1>1, <2>1, <3>1
@@ -1802,20 +2085,22 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
     BY <2>3, <2>4, <2>5, <2>6
 <1>5. CASE 状態が「消費」で作られた。L6 より、これは要素を取り除くだけであり、残る要素の値と並びを変え
       ない。よって (i)、(ii)、(iii)、(iv) はいずれも <1>1 の対応する節から遺伝する ((i) の「`P` の時点
-      までに訪問された」は時が進んでも保たれる)。
-  BY <1>1, L6, DEF INV, DEF 訪問
+      までに訪問された」は時が進んでも保たれ、<1>0d より由来は `node` で一意に定まるので変わらない)。
+  BY <1>0d, <1>1, L6, DEF INV, DEF 訪問
 <1>6. CASE 状態が「引き」で作られた。すなわち `Release` 節点の訪問が `un_bump(&mut pending, &un_bumped)`
       を実行した。
   <2>1. CASE L5 の 1 または 2。`pending` は変わらないので、<1>1 の各節がそのまま成り立つ ((i) の
         「`P` の時点までに訪問された」は時が進んでも保たれる)。
-    BY <1>1, L5, DEF 訪問
+    BY <1>0d, <1>1, L5, DEF 訪問
   <2>2. CASE L5 の 3。添字 `i` の要素の `outstanding` が `outstanding - un_bumped` になり、それが空なら
         その要素が取り除かれる。ほかの要素の値と相対順序は変わらない。
-    <3>1. (i) が成り立つ。要素の `node` は変わらず、要素は減るだけである。
-      BY <1>1, L5, DEF 訪問
+    <3>1. (i) が成り立つ。要素の `node` は変わらず、要素は減るだけなので、<1>1 の (i) がそのまま残る
+          要素に当たる。
+      BY <1>0d, <1>1, L5, DEF 訪問
     <3>2. (ii) が成り立つ。差が空になった要素はそのとき取り除かれるので、残る要素の `outstanding` は
-          空でない。L2 の 4 より `outstanding - un_bumped ⊆ outstanding` であり、`⊆` は推移的なので
-          (DEF 参照の多重集合)、<1>1 の (ii) から `outstanding - un_bumped ⊆ ActRefs(orig(e))` が従う。
+          空でない。L2 の 4 より `outstanding - un_bumped ⊆ outstanding` である。`⊆` は各位置についての
+          個数の不等式なので (DEF 参照の多重集合)、整数の `≤` の推移律より推移的であり、<1>1 の (ii) から
+          `outstanding - un_bumped ⊆ ActRefs(orig(e))` が従う。
       BY <1>1, L5, L2, DEF 参照の多重集合
     <3>3. (iii) が成り立つ。要素は減るだけで `node` は変わらない。
       BY <1>1, L5
@@ -1838,35 +2123,38 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
     BY <1>1
   <2>3. (i) が成り立つ。L7 の 6 より、`merged` の各要素の `node` は `pending_in` のある要素の `node` で
         ある。<2>2 の (i) より、それは `pending_in` の時点までに訪問された `Retain` 節点の `node_id` で
-        あり、`merged` の時点はそれより後である。由来は `pending_in` のその要素の由来と同じである。
-    BY L7, <2>1, <2>2, DEF 訪問
+        あり、`merged` の時点はそれより後である。<1>0d より由来はちょうど 1 つ定まり、それは
+        `pending_in` のその要素の由来と同じである。
+    BY <1>0d, L7, <2>1, <2>2, DEF 訪問
   <2>4. (ii) が成り立つ。
     <3>1. `merged` の各要素 `e` の `outstanding` は、L7 の 6 と 4 より、ある `j` について
           `arm_states[j]` が `e.node` に与える値、すなわち `arm_exits[j]` の要素 `e'` で
           `e'.node = e.node` であるものの `outstanding` と等しい。
       BY L7, <2>1
-    <3>2. `orig(e') = orig(e)` である。`e'.node = e.node` であり、由来は `node` から P15 の前半で一意に
+    <3>2. `orig(e') = orig(e)` である。`e'.node = e.node` であり、<1>0d より由来は `node` で一意に
           定まる。
-      BY P15, DEF INV, <3>1, <2>1, <2>3
+      BY <1>0d, DEF INV, <3>1, <2>1, <2>3
     <3>3. QED
       <2>1 の `INV(arm_exits[j])` の (ii) より `e'.outstanding` は空でなく
       `e'.outstanding ⊆ ActRefs(orig(e'))` である。<3>1 と <3>2 より `e.outstanding` はそれと等しい値で
-      あり、その由来も同じである。
-      BY <2>1, <3>1, <3>2, DEF 参照の多重集合
+      あり、その由来も同じである。L2 の 6 より、等しい 2 つの値は各位置についての個数が一致するので、
+      `e.outstanding` も空でなく `e.outstanding ⊆ ActRefs(orig(e))` である。
+      BY <2>1, <3>1, <3>2, L2, DEF 参照の多重集合
   <2>5. (iii) が成り立つ。L7 の 6 より、`merged` の要素は `pending_in` の要素から `filter_map` で作られ、
         1 つの入力要素からは高々 1 つの出力要素ができ、`node` は変わらない。<2>2 の (iii) より
         `pending_in` の相異なる要素は相異なる `node` を持つ。
     BY L7, <2>1, <2>2
   <2>6. (iv) が成り立つ。L7 の 6 より、`merged` は `pending_in` の部分列であり、順序は保たれる。要素の
-        `node` は変わらないので由来も変わらない。<2>2 の (iv) よりその並びは由来の訪問順である。
-    BY L7, <2>1, <2>2, <2>3
+        `node` は変わらないので <1>0d より由来も変わらない。<2>2 の (iv) よりその並びは由来の訪問順で
+        ある。
+    BY <1>0d, L7, <2>1, <2>2, <2>3
   <2>7. QED
     BY <2>3, <2>4, <2>5, <2>6
 <1>8. QED
   DEF 基本操作 と L8 より、状態の作られ方は「初期」「複製」「追加」「消費」「引き」「併合」の 6 種で
   尽きるので、<1>2 から <1>7 が場合を尽くす。<1>0c より、この場合分けを生成順序についての帰納法の
   1 段として使ってよい。
-  BY <1>0a, <1>0b, <1>0c, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, DEF 基本操作, L8
+  BY <1>0a, <1>0b, <1>0c, <1>0d, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, DEF 基本操作, L8
 
 ## 6. P16 (`pending` の不変条件)
 
@@ -1888,12 +2176,16 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての呼び出しについて無条件に果たす**ので、
 この命題は README の P16 --- 仮説を持たない言明 --- として立つ。
 
-<1>0. 言明の (e) が主語にする「`pending` から取り除かれた `Retain`」と、DEF 除去事象 の除去事象は
-      1 対 1 である。よって各除去事象について上の 3 つを示せば、言明の (e) が出る。
+<1>0. 言明の (e) が主語にする「`pending` から取り除かれた `Retain`」は、`NodeId` の値ごとに読む。
+      すなわち、`node` が `x` である要素が `pending` から取り除かれることと、`x` の除去事象
+      (DEF 除去事象) が在ることは同値である。よって各除去事象について上の 3 つを示せば、言明の (e) が
+      出る。
   <2>1. `NodeId` の値 `x` を 1 つ取る。走査が `PendingRetains` の値を作るのは DEF 基本操作 の 6 種だけで
         あり (L8)、各状態はそれを作る基本操作が実行される時点で生じる (DEF 基本操作)。よって `node` が
         `x` である要素が `pending` から取り除かれるとは、その要素を持つ状態を入力に取り、それを持たない
         状態を作る基本操作が在ることであり、これは DEF 除去事象 の言う `x` の除去事象そのものである。
+        **1 つの除去事象が `node` の相異なる 2 つの値の要素を同時に取り除くことも、1 つの `x` について
+        除去事象が複数在ることもありうる。** この段が言うのは、`x` を固定したときの同値だけである。
     BY L8, DEF 基本操作, DEF 除去事象
   <2>2. QED
     上の 3 つの場合は、言明の (e1)(e2)(e3) をそれぞれ含む。(e1) は「取り除かれた要素の `outstanding` は
@@ -2023,7 +2315,7 @@ L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべて
 
 <1>0a. `un_bump` は `borrow.rs` の非公開の自由関数であり、`borrow.rs` は `mod` 宣言を 1 つも持たないので、
        その呼び出しは `borrow.rs` の中にしか書けない。
-  BY CODE src/rc_ir/borrow.rs: un_bump
+  BY CODE src/rc_ir/borrow.rs: un_bump, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>1. `borrow.rs` の中で `un_bump` を呼ぶのは `walk_inner` の `RcExpr::Release(v, path, _, k)` の腕
       1 か所だけであり、その第 1 引数はその時点の走査の状態、第 2 引数は
       `un_bumped = self.acted_references(v, path)` である。
@@ -2074,7 +2366,8 @@ L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての�
       `cancel_body` の 1 回の実行の中で走査が作った状態である (DEF 基本操作)。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
-     L1, DEF 訪問, DEF 基本操作, EXT Vec::iter と slice::iter, EXT Iterator::map と collect
+     L1, DEF 訪問, DEF 基本操作, EXT Vec::iter と slice::iter, EXT Iterator::map と collect,
+     EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>1. L9 の (iii) を各 `arm_exits[j]` に適用すると、L7 の仮定が満たされる。<1>0 より各 `arm_exits[j]` は
       走査が作った状態なので、L9 が当たる。以下 L7 の 1 から 6 を使う。
   BY <1>0, L9, L7
@@ -2114,7 +2407,7 @@ L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての�
 
 ## 9. 層 4 へ渡す補題
 
-次の 3 つは P15 - P18 の証明には使わないが、`cancel` の走査の性質なのでここで示す。
+次の 4 つは P15 - P18 の証明には使わないが、`cancel` の走査の性質なのでここで示す。
 
 ### L10 (記録は増えるだけ)
 
@@ -2141,7 +2434,8 @@ L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての�
       `self.un_bump_releases.entry(retain).or_default().push(node_id(node))` の 2 か所だけである。
       どちらも鍵を取り除かず、値の `Vec` から要素を取り除かない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
+     EXT Map と Set, EXT Vec::push
 <1>4. `Retain` 節点 `t` の訪問は `self.all_retains.push(node_id(t))` と
       `self.un_bump_releases.entry(node_id(t)).or_default()` を実行する。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
@@ -2222,11 +2516,11 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
     <3>3. `k_M ∈ N(k_M)` なので、<3>1 より `k_M` は <2>2 の `self.walk(k_M, ・, ・)` の呼び出しの中で
           訪問される。
       BY <2>2, <3>1, DEF 部分木
-    <3>4. `k_M` は `N(arm_i.body)` の要素ではない。DEF 部分木 より `M` の相異なる子の部分木は交わらず、
+    <3>4. `k_M` は `N(arm_i.body)` の要素ではない。L0a の 3 より `M` の相異なる子の部分木は交わらず、
           `arm_i.body` と `k_M` は `M` の相異なる子である。`k_M ∈ N(k_M)` なので `k_M ∉ N(arm_i.body)`
           である。よって <3>1 より、<2>2 の `self.walk(&arm_i.body, ・, ・)` の呼び出しの中で `k_M` は
           訪問されない。
-      BY <2>2, <3>1, DEF 部分木
+      BY <2>2, <3>1, L0a, DEF 部分木
     <3>5. QED
       <2>2 より `self.walk(&arm_i.body, ・, ・)` の呼び出しは `self.walk(k_M, ・, ・)` の呼び出しより
       前に返る。<3>2 より `m` の訪問はその前者の呼び出しの中で始まり、<3>3 と <3>4 より `k_M` の訪問は
@@ -2263,6 +2557,33 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
   BY L5
 <1>4. QED
   BY <1>1, <1>2, <1>3
+
+### L13 (`merge` を越えて残る要素の `outstanding`)
+
+ASSUME  NEW `prog`: `RcProgram`,
+        `prog` は `borrow_ify` の 1 回の呼び出しが返した値である
+PROVE   `cancel(prog, type_env)` の走査が行う `merge` の呼び出しについて、その返り値の各要素 `e` の
+        `outstanding` は、各アームの出口 `arm_exits[j]` にある `node` が `e.node` である要素の
+        `outstanding` と等しく、その値はどの `j` についても等しい。
+
+**証明**
+
+<1>1. この `merge` の呼び出しは `walk_inner` の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕の
+      `self.merge(&pending, &arm_exits)` であり、各 `arm_exits[j]` は
+      `self.walk(&arms[j].body, ・, false)` の返り値 `pending_out(arms[j].body)`、すなわちこの走査が
+      作った状態である。よって L9 が当たり、その (iii) より `arm_exits[j]` の相異なる要素は相異なる
+      `node` を持つので、L7 の仮定が満たされる。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
+     L1, L9, DEF 訪問, DEF 基本操作, 本補題の仮定
+<1>2. 返り値の要素 `e` について、`uniform` は `e.node` を鍵に持ち、`e.outstanding` は `uniform[e.node]` と
+      等しい。L7 の 6 より、返り値の要素は `pending_in` の要素のうち `node` を `uniform` が鍵に持つもの
+      から作られ、その `outstanding` は `uniform[node]` と等しい `References` である。
+  BY L7, <1>1
+<1>3. QED
+  <1>2 より `uniform` は `e.node` を鍵に持つので、L7 の 4 より `U(e.node)` が成り立ち、`uniform[e.node]`
+  は各 `arm_states[j]` が `e.node` に与える共通の値と等しい。L7 の 1 より `arm_states[j]` が `e.node` に
+  与える値は、`arm_exits[j]` の `node` が `e.node` である唯一の要素の `outstanding` である。
+  BY L7, <1>1, <1>2
 
 ## 10. 言明についての注記
 
@@ -2312,7 +2633,7 @@ P16 の (d) は保たれ、P17 の「最内」はその後も由来の訪問順�
 空のときに偽になり、そのとき返り値は空である。走査する本体にアームが 0 個の `Match` が無いことは L4 が
 述べ、その根拠は A9 である。P16 の (e3) の展開が (e1) か (e2) で終わることも A9 に依る。
 
-**注記 7 (層 4 が P16 と L11 から読むもの)**。P19 は実行路で量化した言明であり、P16 は実行路を量化
+**注記 7 (層 4 が読むもの)**。P19 は実行路で量化した言明であり、P16 は実行路を量化
 しない。この文書が層 4 へ渡すのは次の 3 つである。
 
 - **L11** --- 実行路の上で `m` が `n` より真に前にあるならば、走査は `m` を `n` より前に訪問する。走査が
@@ -2320,5 +2641,5 @@ P16 の (d) は保たれ、P17 の「最内」はその後も由来の訪問順�
 - **P16 の (e3)** --- その除去は `merge` によるものであり、各アームへ渡った複製の側に同じ `Retain` の
   除去事象がある。1 つの実行路は各 `Match` でアームを 1 つ選ぶので (D3)、その選択に沿った 1 つが、その
   実行路の上での除去事象を名指す。展開が有限で終わり、その葉が (e1) か (e2) であることも P16 が述べる。
-- **`merge` を越えて残る要素の `outstanding`** --- それは各アームの出口での共通の値と等しい (P18 の証明の
-  <1>5)。P16 の (b) と合わせると、それは由来の `ActRefs` に含まれ、空でない。
+- **L13** --- `merge` を越えて残る要素の `outstanding` は、各アームの出口での共通の値と等しい。P16 の
+  (b) と合わせると、それは由来の `ActRefs` に含まれ、空でない。

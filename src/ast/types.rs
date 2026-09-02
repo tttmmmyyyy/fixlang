@@ -837,7 +837,7 @@ impl TypeNode {
 
     /// A copy of this application with `fun` as the type being applied, keeping the argument.
     /// Panics for a type that is not a type application.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_tyapp_fun(&self, fun: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -852,7 +852,7 @@ impl TypeNode {
 
     /// A copy of this application with `arg` as the argument, keeping the type being applied.
     /// Panics for a type that is not a type application.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_tyapp_arg(&self, arg: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -1081,7 +1081,7 @@ impl TypeNode {
     }
 
     /// One node of the `unwrap_newtypes` walk, with the type this node stands for on the way out.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unwrap_newtypes_node(
         self: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -1146,7 +1146,7 @@ impl TypeNode {
     /// substituted for the declaration's type variables. The types are as the declaration writes
     /// them, so one can name a newtype the program has unwrapped; `instance_field_types` answers
     /// with the types values are built at.
-    // PROOF: D/A, P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn declared_field_types(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_arguments();
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
@@ -1211,7 +1211,7 @@ impl TypeNode {
 
     /// The arguments applied to this type's head, in the order they are applied: `f a b c` gives
     /// `vec![a, b, c]`.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn collect_type_arguments(&self) -> Vec<Arc<TypeNode>> {
         let mut ret: Vec<Arc<TypeNode>> = vec![];
         match &self.ty {
@@ -1363,7 +1363,7 @@ impl TypeNode {
 
     /// The type constructor at the head of this type, as `Array` heads `Array I64`. A type
     /// variable and an associated type application have none.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn toplevel_tycon(&self) -> Option<Arc<TyCon>> {
         match &self.ty {
             Type::TyVar(_) => None,
@@ -1845,7 +1845,7 @@ impl Clone for TypeNode {
 
 /// A type expression, which is a type variable, a type constructor, or one of these applied to
 /// arguments.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, Hash, Serialize, Deserialize, Clone)]
 pub enum Type {
     /// A type variable, e.g. `a`.
@@ -1861,6 +1861,7 @@ pub enum Type {
 
 /// Whether two nodes hold the same type expression. Two occurrences of one node are the same type
 /// without looking inside, which is what keeps comparing a type that shares a subterm cheap.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn type_node_eq(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
     Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty
 }
