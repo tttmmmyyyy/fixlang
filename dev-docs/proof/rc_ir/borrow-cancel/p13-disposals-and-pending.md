@@ -553,10 +553,17 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
         BY CODE src/rc_ir/ownership.rs: resolve_callee_params
       <4>1a. `n` の段の**実行時の**呼び出し先 (D23) を `g` と書くと、`g` は `prog` の `funcs` の関数で
              あり、そのパラメータの列は `params` である。
-        BY P30, <2>4, <4>1, D23, CODE src/build/build_object_files.rs: optimize_rc_program,
+        BY P30, <2>4, <4>1, A3, D23, CODE src/build/build_object_files.rs: optimize_rc_program,
            CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel
         第 1 節より `B` は `cancel` の入力の本体であり、`prog` はそのプログラムである。
-        `optimize_rc_program` は `borrow_ify` の返り値をそのまま `cancel` に渡し、`borrow_ify` と
+        `optimize_rc_program` は `borrow_ify` の返り値を束縛 `prog` に置き、その束縛をそのまま
+        `cancel` に渡す。2 つのあいだに在るのは `validate(&prog, "after borrow_ify")` の 1 つで
+        あり、これは `RcProgram` を共有参照で受け取る計算なので、A3 の「**`RcProgram` から到達
+        できる値の等しさは、それを共有参照で受け取る計算が変えない。**」よりその値を変えない。
+        A3 はこの節の読む者としてこの呼び出しを名指す --「**決定性より強い節が要るのは、
+        `RcProgram` を共有参照で受け取る関数がそれを変えないことを言う段があるからである** --
+        `validate` がその 1 つであり、`Validator::check_rhs` は `result_prov` を呼ぶ。」。
+        `borrow_ify` と
         `cancel` はどちらも `pub(crate)` なのでクレートの外から呼ぶ者は居ない。よって `prog` は
         `borrow_ify` の出力である。<2>4 と <4>1 より
         `params` は `resolve_callee_params(callee, vars, prog)` の返り値である。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
@@ -2603,13 +2610,19 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
     `d(C) = held_ρ(n, C) - 1 ≥ bumps_ρ(n, C)` である。
   <2>4. CASE `C` の ρ-終端が借用する (D14) パラメータ・capture の leaf であり、`bumps_ρ(n, C) = 0` で
         ある。
-    BY P14a, D34, DEF 節点の時点, <2>1, L17,
+    BY P14a, A3, D34, DEF 節点の時点, <2>1, L17,
        CODE src/build/build_object_files.rs: optimize_rc_program,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel
     P14a は「`borrow_ify` の出力の各本体、各実行路、各活性化について、ρ-終端が借用する (D14)
     パラメータ・capture の leaf である**計数下**の別名類 (D26) は、活性化の間ずっと参照を少なくとも
     1 つ持つ」と述べる。第 1 節より `B` は `cancel` の入力の本体であり、`optimize_rc_program` は
-    `borrow_ify` の返り値をそのまま `cancel` に渡し、`borrow_ify` と `cancel` はどちらも `pub(crate)`
+    `borrow_ify` の返り値を束縛 `prog` に置いてその束縛をそのまま `cancel` に渡す。2 つのあいだに
+    在るのは `validate(&prog, "after borrow_ify")` の 1 つであり、これは `RcProgram` を共有参照で
+    受け取る計算なので、A3 の「**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る
+    計算が変えない。**」よりその値を変えない。A3 はこの節の読む者としてこの呼び出しを名指す --
+    「**決定性より強い節が要るのは、`RcProgram` を共有参照で受け取る関数がそれを変えないことを言う
+    段があるからである** -- `validate` がその 1 つであり、`Validator::check_rhs` は `result_prov` を
+    呼ぶ。」。`borrow_ify` と `cancel` はどちらも `pub(crate)`
     なのでクレートの外から呼ぶ者は居ないので、`B` は `borrow_ify` の出力の本体である。L17 より `C` は計数下である。D34 がその「参照の個数」の帰属を定め、DEF 節点の時点より
     `τ(n)` はこの活性化が生きている間の時点である。よって `held_ρ(n, C) ≥ 1` であり、
     `d(C) = held_ρ(n, C) - 1 ≥ 0 = bumps_ρ(n, C)` である。
