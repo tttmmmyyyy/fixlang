@@ -181,7 +181,7 @@ fn returned_var(node: &RcExprNode) -> &RcVar {
 }
 
 /// Where the object at a leaf comes from.
-// PROOF: D/A, P1, P2, P2a, P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Origin {
     /// The leaf denotes exactly this object.
@@ -645,7 +645,7 @@ fn passthrough_arg_leaves(
 }
 
 /// Push every boxed leaf of a value onto `out`.
-// PROOF: P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 fn push_boxed_leaves(
     var: &FullName,
     ty: &Arc<TypeNode>,

@@ -353,7 +353,7 @@ impl TyCon {
     /// # Arguments
     /// * `punched_at` — the position of the field made the hole, counted from 0 in the order the
     ///   fields are declared.
-    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn into_punched_type_name(&mut self, punched_at: usize) {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
@@ -373,7 +373,7 @@ impl TyCon {
 
 /// The declaration a type constructor comes from: the kind of declaration it is, the parameters it
 /// takes, and what its values hold. A type alias is declared by `TyAliasInfo`.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TyConInfo {
     /// The kind of the type constructor, which follows from the parameters it takes.
@@ -406,7 +406,7 @@ pub struct TyConInfo {
 impl TyConInfo {
     /// Gives every type name standing in the declared field types its full name, read in the
     /// context `ctx` carries.
-    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -416,7 +416,7 @@ impl TyConInfo {
     }
 
     /// Expands every type alias standing in the declared field types.
-    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -2998,7 +2998,7 @@ pub fn unfixed_type_variable_error(
 
 /// Whether a type variable name represents an opaque type variable, which a source line writes
 /// with a leading `?`.
-// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_opaque_tyvar(name: &str) -> bool {
     name.starts_with('?')
 }
