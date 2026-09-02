@@ -158,7 +158,7 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 候補集合に入る。
 
 **外部の結果。** README の第 2 節は、文書の外の名前つき結果を `EXT <名前>` の名札で第 1 節に据え、
-`BY` からその名前で引くことを求める。この文書が引くのは次の 5 つである。
+`BY` からその名前で引くことを求める。この文書が引くのは次の 6 つである。
 
 **EXT auto trait と共有** (Rust の言語規則)。
 
@@ -181,6 +181,9 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 
 **EXT 導出した Clone** (Rust の言語規則)。`#[derive(Clone)]` が与える `clone` は、列挙型については
 同じ構成子の値を返し、各欄にその型の `clone` が返す複製を置く。
+
+**EXT 標準ライブラリのハッシュ** (Rust)。(1) `impl<T: Hash + ?Sized> Hash for Arc<T>` の `hash` は、
+指す先の `T` の `hash` を呼ぶ。(2) `HashMap::get(k)` は鍵 `k` の `Hash` の実装を走らせて索く。
 
 **EXT 整礎性**。(a) 自然数の狭義減少する無限列は無い。(b) ある集合の上の関係が、その関係を辿って
 無限に降りる列を 1 つも持たないとき、その関係は整礎であり、その上の整礎帰納が使える。
@@ -2076,13 +2079,16 @@ let seen : Std::I64 = Main::peek(m, two)
         `boxed_leaf_paths` の走査は `unpunched_field_types` を呼ぶ。
         `unpunched_field_types` は `instance_field_types` を経て、tycon が kind `*` でない型変数を
         持つとき `unwrap_newtypes_memoized` を呼び、そこで `Map<Arc<TypeNode>, Arc<TypeNode>>` を
-        `Arc<TypeNode>` の鍵で引く。`Map` は `FxHashMap` なので鍵は hash される。
+        `Arc<TypeNode>` の鍵で引く。`Map` は `FxHashMap` なので、`get` はその鍵を hash する
+        (EXT 標準ライブラリのハッシュ (2))。鍵の型は `Arc<TypeNode>` であり、その `hash` は指す先の
+        `TypeNode` の `hash` を呼ぶ (EXT 標準ライブラリのハッシュ (1))。
         `impl Hash for TypeNode` は `type_hash` を呼び、`type_hash` は `hash_cache.get_or_init` を
         走らせる -- 共有参照から `hash_cache` を書く。この道で書かれるのは `hash_cache` であり、
         `TypeNode` が持つ `OnceLock` の欄は `hash_cache`・`ground_cache`・`depth_cache` の 3 つで
         尽きるので、この 2 つと `origin` が書く `TypeNode` の memo は、どれも `<1>3` の言明の中に
         ある。
-    BY CODE src/rc_ir/borrow.rs: level_ownership, covered_leaves,
+    BY EXT 標準ライブラリのハッシュ,
+       CODE src/rc_ir/borrow.rs: level_ownership, covered_leaves,
        CODE src/rc_ir/borrow.rs: owns_object_yet (`vars.param_tys.get(root)` が返す型に
        `boxed_leaf_paths` を掛ける),
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
