@@ -303,10 +303,13 @@ Ret(w)))))
   `is_fully_unboxed` が真なので `needs_rc` は偽である。
 
 <1>2. `p`、`u`、`w`、`z`、`b` の名前は `is_local` が真であり、`f` の名前は偽である。
-  BY A13, 4.1 節の名前の取り方, CODE src/ast/name.rs: FullName::is_local
+  BY A2, A13, 4.1 節の名前の取り方, CODE src/ast/name.rs: FullName::is_local
   `is_local` は名前空間が空かを答える。4.1 節の名前の取り方より `p`、`u`、`w`、`z`、`b` の名前は
   名前空間を持たない。`f` は `prog.funcs` の鍵であり、A13 は「最上位の記号の名前は局所名
   ではない」-- `FullName::is_local` が偽であり、`prog.funcs` の鍵はそのような名前である -- と述べる。
+  A13 は `borrow_ify` の入力について語るが、A13 自身が「**`insert_rc` の入力と出力について読む段は
+  A2 を引く。**」と述べ、A2 が「**したがって、`borrow_ify` の入力について語る仮定は、`insert_rc` の
+  入力と出力についても読める。**」を与えるので、この本体についてこれを読める。
 
 <1>3. `insert_rc` は `main` について `RcInserter::insert_into_func(main)` を呼び、それは
       `self.insert_into_expr(func.body, &Set::default())` を呼ぶ。
@@ -382,10 +385,12 @@ Ret(w)))))
 
 <1>7. `insert_into_expr(S_main, ∅)` は `(B_0, ∅)` を返す。
   BY <1>6, <1>1, A15, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
      CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs:
      RcInserter::insert_into_operation_let
   A15 より `insert_into_expr` は `insert_into_expr_inner` をちょうど 1 回呼び、右辺は `Match` では
-  ないのでその腕は `insert_into_operation_let` へ振り分ける。継続についての呼び出しの返り値は
+  ないので `insert_into_expr_inner` の `RcExpr::Let(x, rhs, cont)` の腕は
+  `insert_into_operation_let` へ振り分ける。継続についての呼び出しの返り値は
   <1>6 のものである。
   `rhs_operands(Llvm(alloc, []))` は空の列である (`alloc` はオペランドを持たない)。よって
   `retains_before` と `releases_after` は空である。`x = p` については `live_cont = {p}` が `p` を含むので
@@ -504,12 +509,21 @@ D9 の消費は 2 つの `App(f, [p])` の引数の位置の 2 つであり、`�
   同じプログラムの `f` にこれが当たる。
 
 <1>2. `ρ_0` の上で `C_p` のスロットを名指す D9 の消費は、2 つの `App(f, [p])` の引数の位置の 2 つである。
-  BY D9, <1>1, L2, CODE src/rc_ir/ownership.rs: rhs_consumes
-  D9 の `App` の行より、呼び出し先が所有する位置の引数の leaf が消費される。<1>1 よりどちらの
-  `App(f, [p])` も `(p, [])` を消費する。同じ行の callee の leaf は `(f, ·)` であって `C_p` のスロット
-  ではない -- L2 より `C_p` のスロットは `(p, [])` だけである。`B_0` に `Closure`、`Destructure`、
-  `Llvm` の消費する形は無く、終端の `Ret(w)` は `ty(w) = I` に boxed leaf を持たないので何も消費しない
-  (D4)。
+  BY L1, L2, L15, <1>1, D4, D6, D9, D23, 4.1 節の道具立て
+  `L1` より `B_0` の 5 つの節点は `Let(p, Llvm(alloc, []), ・)`、`Retain(p, [])`、2 つの
+  `Let(・, App(f, [p]), ・)`、`Ret(w)` である。D9 の消費の表の 6 行をこの 5 つに当てる。
+  **`App` の行**: 呼び出し先が所有する位置の引数の leaf が消費される。D23 より D9 の `App` の行が
+  言う呼び出し先はプログラムの `funcs` の関数であり、`L15` (e) よりその全パラメータの unit が
+  所有されるので、どちらの `App(f, [p])` も引数の位置の leaf を消費する。`L2` より `ty(p)` の boxed
+  leaf は `[]` の 1 つでそのスロットは `(p, []) ∈ C_p` なので、2 つの `App` はそれぞれ `C_p` の
+  スロットを 1 つ消費する。同じ行が挙げる callee の leaf は `(f, ・)` であり、`L2` よりそれは D6 の
+  記号の位置であってスロットではないので `C_p` のスロットではない。
+  **`Llvm` の行**: `B_0` の唯一の `Llvm` 節点は `Llvm(alloc, [])` であり、4.1 節の道具立てより
+  `alloc` はオペランドを持たないので、この行が挙げる leaf は無い。
+  **`Closure` の行と `Destructure` の 2 行**: `B_0` にその構文の節点は無い (`L1`)。
+  **終端の `Ret(x)` の行**: 終端は `Ret(w)` であり、`ty(w) = I` は 4.1 節の仮定より
+  `is_fully_unboxed` が真なので D4 の第 1 規則より boxed leaf を持たない。
+  よって `C_p` のスロットを名指す消費は 2 つの `App` の引数の位置の 2 つである。
 
 <1>3. `ρ_0` の上に `Release` 節点は無い。
   BY L1
@@ -708,8 +722,7 @@ Ret(u)))))))
 **DEF 開始事象**。別名類 `C` の**開始事象**とは、
 D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終端が D10 の生成で
 作られる行、`C` の終端が所有するパラメータ・capture の leaf である行、`C` の終端が借用する
-パラメータ・capture の leaf である行 -- のいずれかに当たる `ρ` の上の事象をいう。D10 の生成の表は
-5 行を持ち、パラメータ・capture が値を得ることはその表に無いので、開始事象は D10 の生成より広い。
+パラメータ・capture の leaf である行 -- のいずれかに当たる `ρ` の上の事象をいう。
 
 ### 5.1 `L4` (`held` は開始と増減で決まる)
 
@@ -786,6 +799,15 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
   | `Release(o, [])` | 1 | 1 | 0 |
   | `Ret(u)` | 0 | 0 | 0 |
 
+  `held` は `L4` の等式 `held = 1 + R - D` である。<1>1 の 4 つの事象のうち生成は開始値 1 を与え、
+  以後の各行の `R` は `Retain(o, [])` が実行済みなら 1・そうでなければ 0、`D` は消費と `Release`
+  のうち実行済みの個数である。よって `held` は 1 (生成の後)、0 (消費の後)、1 (`Retain` の後)、
+  0 (`Release` の後) と動き、各行の入口の値が表の第 2 列である。
+  `Fut` は残る消費と `Release` の個数である。`DEF Fut` より `n` 自身の実行が行う事象も「`n` より後」に
+  数えるので、`Let(y, App(id, [o]), ·)` の入口では消費と `Release` の 2 つ、`Retain(o, [])` から
+  `Release(o, [])` までの各入口では `Release` の 1 つ、`Ret(u)` の入口では 0 である。
+  `Ret#` は残る `Retain` の個数であり、`DEF Ret#` も `n` 自身が `Retain` であるときそれを数えるので、
+  `Retain(o, [])` の入口までが 1、それ以後が 0 である。
 <1>2a. `C_y` の上の事象は、`ρ` の順に、生成 (`App(id, [o])` の結果)、消費 (`App(f, [y])` の引数) の
        2 つである。`C_y` の開始の時点は `Let(y, App(id, [o]), ·)` の実行の直後であり、`ρ` の上で
        それ以後の節点は `Retain(o, [])` から `Ret(u)` までの 5 つである。
@@ -807,6 +829,11 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
   | `Release(o, [])` | 0 | 0 | 0 |
   | `Ret(u)` | 0 | 0 | 0 |
 
+  <1>2a より `C_y` の上の事象は生成と消費の 2 つだけであり、`R = 0` なので `L4` の等式より `held` は
+  生成の後 1、消費の後 0 である。`Fut` は残る消費の個数であり、`DEF Fut` より
+  `Let(u, App(f, [y]), ·)` の入口ではその節点自身の消費を数えるので 1、それ以後は 0 である。
+  `Retain(o, [])` と `Release(o, [])` は <1>2a より `C_y` のスロットを名指さないので `Ret#` と `Fut` の
+  どちらにも寄与せず、`Ret#` はどの行でも 0 である。
 <1>3. QED
   BY <1>0, <1>1a, <1>2, <1>2a, <1>2b
   <1>0 より量化する類は `C_o` と `C_y` の 2 つである。`C_o` について、<1>1a より走る節点は <1>2 の
