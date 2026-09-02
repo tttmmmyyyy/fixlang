@@ -1101,7 +1101,8 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
       ものである。
   製品のコードで `TypeEnv::new` を呼ぶ式は `Program::calculate_type_env` の中の 1 つである -- EXT 名前に
   よる数え上げ より、`src/` の全体について識別子 `TypeEnv::new` を検索すると 3 件が得られ、残る 2 件は
-  `#[cfg(test)]` の下の作り手である。`Program::calculate_type_env` は写像を `bulitin_tycons()` から
+  `src/rc_ir/validate.rs` と `src/rc_ir/ownership.rs` の `#[cfg(test)]` のモジュールの中の作り手で
+  ある。`Program::calculate_type_env` は写像を `bulitin_tycons()` から
   始め、各型宣言について、その tycon がすでに写像にあるか型別名にあるときは診断を出して次の宣言へ進み、
   無いときだけ `insert` する。構造体の宣言についてはさらに、`TyCon::into_punched_type_name` が名前の
   末尾に `PUNCHED_TYPE_SYMBOL` と穴の添字を足した鍵で `insert` する。`Std::Array` の名前は `ARRAY_NAME`
