@@ -3199,17 +3199,24 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
 
 <1>6. `Λ([])` の leaf `[0, 0]` のすべての候補について `owns_object` は真である。すなわち、節 2 から
       inhabited の限定を外した形はこの site で真である。
-  `Λ([]) = leaves(Outer) = {[0, 0], [1]}` であり、`λ = [0, 0]` を取る。`Outer` の leaf `[0, 0]` の宣言は
+  `<1>5` よりこの site は `(ρ(x), [])` であり、`rename_var` は型を残すので `ty(ρ(x)) = Outer`、`<1>1` より
+  `Λ([]) = leaves(Outer) = {[0, 0], [1]}` である。`λ = [0, 0]` を取る。
+  まず入力の側の `origin(vars_f, x, [0, 0])` を求める。`Outer` の leaf `[0, 0]` の宣言は
   空集合なので、`leaf_origins_at([0, 0])` は空集合を持つ `Some` を返し、`as_arg_projection` は要素数が 1 で
   ない集合に `None` を返す。よって `origin_from_leaves_under` に入り、その `leaf_origins_under([0, 0])` は
   その空集合 1 つだけを与えるので `operand_units` は空、`produced_here` は偽、`reached` は空になり、
   `reached.first()?` が `None` を返して `unwrap_or_else(here)` が `Exactly((x, [0, 0]))` を返す。
-  `x` は本体の `Let` が `Llvm` の右辺で束縛する変数なので `vars.bindings.get(x)` は
-  `Some(Binding::Llvm(..))` であり、L13 より `owns_object(ρ(x), [0, 0])` は真である。よって
-  `λ = [0, 0]` のすべての候補について `owns_object` は真である。
-  BY <1>1, L13, L15, CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov,
-     CODE src/rc_ir/ownership.rs: collect_bindings, origin_inner, origin_from_leaves_under,
-     as_arg_projection
+  `x` は `func` に現れる名前 (DEF 現れる名前) なので L15 が使えて、借用版の
+  `origin(vars_c, ρ(x), [0, 0])` はその `ρ` による像 `Exactly((ρ(x), [0, 0]))` である。すなわちこの leaf の
+  候補は `{(ρ(x), [0, 0])}` 1 つである。
+  `func` のパラメータは `z` だけなので L1c より `pty_f(x)` は値を返さず、`owns_object_yet` は
+  `param_tys.get(root)` が `None` のとき真を返すので `yet_f(x, [0, 0])` は真である。L16 より
+  `ctx.owns_object(ρ(x), [0, 0])` も真である。よって `λ = [0, 0]` のすべての候補について `owns_object` は
+  真である。
+  BY <1>1, <1>5, L1c, L15, L16, DEF 現れる名前,
+     CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov,
+     CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under, as_arg_projection,
+     CODE src/rc_ir/borrow.rs: owns_object_yet, CODE src/rc_ir/rename.rs: rename_var
 
 <1>7. leaf `[0, 0]` はどの活性化でも inhabited にならない。
   `union_make_1` は `x` の値の変位を 1 にする。leaf `[0, 0]` が `Outer` の根の unbox union の節で選ぶ
