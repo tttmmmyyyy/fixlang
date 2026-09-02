@@ -135,6 +135,7 @@ impl TypeEnv {
     /// The declaration of `tycon` if a value of it has become a value of its one field, and `None`
     /// otherwise. A recorded newtype is one this environment declares, which `unwrap_newtypes`
     /// states where it records them.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unwrapped_newtype_info(&self, tycon: &TyCon) -> Option<&TyConInfo> {
         if !self.unwrapped_newtypes.contains(tycon) {
             return None;

@@ -42,6 +42,7 @@ src/ast/program.rs	TypeEnv::default	P1,P2,P7a,P7d,P7e	d2f0e508e184
 src/ast/program.rs	TypeEnv::new	P1,P2,P7a,P7d,P7e	f7740b2940ef
 src/ast/program.rs	TypeEnv::resolve_type_aliases_in_tycons	P1,P2,P7a,P7d,P7e	aab046069e97
 src/ast/program.rs	TypeEnv::unwrap_newtypes	P1,P2,P7a,P7d,P7e	690307333938
+src/ast/program.rs	TypeEnv::unwrapped_newtype_info	P1,P2	e25ae0a2a03c
 src/ast/traits.rs	TraitEnv::validate_trait_impl	D/A,P26	cc65ecca6614
 src/ast/typedecl.rs	Field	P1,P2	1beeee10ad33
 src/ast/typedecl.rs	Field::resolve_namespace	P1,P2,P7a,P7d,P7e	4db94f4be1c6
@@ -96,8 +97,10 @@ src/ast/types.rs	TypeNode::toplevel_tycon_satisfies	P1,P2	704a2f7f7d60
 src/ast/types.rs	TypeNode::type_hash	P1,P2,P2a,P3,P4,P15,P16,P17,P18,T	19915b74d10a
 src/ast/types.rs	TypeNode::unpunched_field_types	P1,P2,P2a,P3,P4,P5,P6,P7,P7c,P7f,P15,P16,P17,P18,P18a,P18b	ecae1220e285
 src/ast/types.rs	TypeNode::unwrap_newtypes_memoized	P1,P2,P2a,P3,P4,P15,P16,P17,P18	b775960e33b3
+src/ast/types.rs	TypeNode::unwrap_newtypes_node	P1,P2	58f7c241baaf
 src/ast/types.rs	impl Clone for TypeNode	P1,P2	102b1463683d
 src/ast/types.rs	impl Hash for TypeNode	P1,P2,P3,P4	be2e413d0b6d
+src/ast/types.rs	impl PartialEq for Type	P1,P2	90d16bb627e2
 src/ast/types.rs	impl PartialEq for TypeNode	P1,P2	bdc0f3dd3070
 src/ast/types.rs	is_opaque_tyvar	P1,P2,P7a,P7d,P7e	6a391148be06
 src/ast/types.rs	type_assocty	P1,P2	e870cc8cf32d
@@ -119,6 +122,7 @@ src/configuration.rs	Configuration::runs_from	T	ddc1ffa30c40
 src/constants.rs	CAP_LIST_PREFIX	P1,P2,P7a,P7d,P7e	17701702d896
 src/constants.rs	CAP_NAME	P27,P29,P30	ab454a035e77
 src/constants.rs	CLOSURE_CAPTURE_IDX	P1,P2	8ac4c663fef1
+src/constants.rs	CLOSURE_FIELD_COUNT	P1,P2	3e3f60cca61a
 src/constants.rs	FUNPTR_ARGS_MAX	P1,P2	5054470d6f01
 src/constants.rs	FUNPTR_NAME	P1,P2	5f81220a51a7
 src/constants.rs	PUNCHED_TYPE_SYMBOL	P1,P2	866c661bcaee
