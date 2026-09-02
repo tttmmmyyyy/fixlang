@@ -319,19 +319,47 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   BY A13
 
 <1>3. コード生成が読む `global_types` は、`P.funcs` の鍵の名前を持たないか、funptr 型で持つ。
-  コード生成に渡る `global_types` は `global_types_including_synthesized` が作る。それは 3 系統の項目から
-  なる -- `Program::global_types` (最上位の記号の名前からその型への写像) の全項目、`fn_ty` が funptr で
-  ある `funcs` の各項目をその `fn_ty` で上書き挿入したもの、そして `program.globals` の各要素をその
-  `symbol` と `ty` で上書き挿入したものである。第 2 系統より、funptr の関数の名前は funptr 型で在る。
-  funptr でない関数の名前について、第 2 系統は項目を作らないので、残る 2 系統を見ればよい。`<1>1` より
-  鍵と `symbol` は lowering の出力のものであり、`lower_symbol` は funptr 型の記号を `funcs` の鍵にし、
-  それ以外の型の記号をグローバル初期化子の `symbol` にする。よって funptr でない関数の名前は最上位の
-  記号の名前でも初期化子の `symbol` でもなく、第 1 系統にも第 3 系統にも項目が無い -- 持ち上げた lambda に
-  付ける鍵は `fresh_closure_ref` が `current_symbol` の名前空間の下に作る `closure#N` であり、その doc が
-  「`<symbol>::closure#N` names no source-level value」と述べる。
-  BY <1>1, CODE src/build/divide_program.rs: global_types_including_synthesized,
-     CODE src/ast/program.rs: Program::global_types,
-     CODE src/rc_ir/lower.rs: Lowerer::lower_symbol, Lowerer::fresh_closure_ref
+  <2>1. `declare_program_global` が引く `global_types` は、`global_types_including_synthesized` の
+        返り値である。
+    `divide_among_units` はその返り値を `DividedProgram::global_types` に入れ、`build_object_files` は
+    その欄を取り出して単位ごとに `Generator::new` の `global_types` 引数へ渡す。`Generator` はそれを
+    同名の欄に持ち、`declare_program_global` は `self.global_types.get(name)` を引く。
+    BY CODE src/build/divide_program.rs: divide_among_units, global_types_including_synthesized,
+       DividedProgram, CODE src/build/build_object_files.rs: build_object_files,
+       CODE src/generator.rs: Generator::new, Generator::declare_program_global
+  <2>2. `global_types_including_synthesized(P, ・)` は 3 系統の項目からなる。引数の `global_types` --
+        `Program::global_types`、すなわち最上位の記号の名前からその型への写像 -- の全項目、`fn_ty` が
+        funptr である `P.funcs` の各項目をその `fn_ty` で上書き挿入したもの、そして `P.globals` の
+        各要素をその `symbol` と `ty` で上書き挿入したものである。
+    BY CODE src/build/divide_program.rs: global_types_including_synthesized,
+       CODE src/ast/program.rs: Program::global_types
+  <2>3. 持ち上げた lambda に `fresh_closure_ref` が付ける名前は、最上位の記号の名前ではない。
+    その名前の名前空間は `current_symbol` の名前を末尾の成分とする -- `FullName::to_namespace` が
+    `name` を名前空間の末尾へ移す。A13 より最上位の記号の名前は Fix のソースに書かれた値の名前に接尾辞を
+    足したものであり、値の名前の名前空間の各成分は `namespace_item`、すなわち大文字で始まる語を `.` で
+    継いだものである。記号の名前の `name` は `name_head` が定めるとおり小文字か `_` か `@` で始まる。
+    よって持ち上げた lambda の名前の名前空間の末尾の成分は大文字で始まらず、最上位の記号の名前の
+    名前空間の成分はどれも大文字で始まるので、両者は異なる名前である。
+    BY A13, CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
+       CODE src/ast/name.rs: FullName::to_namespace,
+       CODE src/parse/grammer.pest: name_head, capital_name, namespace_item
+  <2>4. `P.globals` の `symbol` は、最上位の記号のうち型が funptr でないものの名前であり、`P.funcs` の
+        どの鍵の名前とも異なる。
+    `<1>1` より `symbol` と鍵は lowering の出力のものであり、`lower_symbol` は最上位の記号を、その型が
+    funptr なら `funcs` の鍵 (鍵の名前はその記号の名前そのもの) に、そうでなければグローバル初期化子の
+    `symbol` にする。相異なる記号は相異なる名前を持つので、非 funptr の記号の名前は funptr の記号の名前
+    と異なる。`funcs` の残る鍵は持ち上げた lambda のものであり、`<2>3` よりそれは最上位の記号の名前では
+    ないので `symbol` とも異なる。
+    BY <1>1, <2>3, CODE src/rc_ir/lower.rs: Lowerer::lower_symbol
+  <2>5. QED
+    `<2>1` よりコード生成が読むのは `global_types_including_synthesized` の返り値である。funptr の関数の
+    名前については、`<2>2` の第 2 系統がそれを `fn_ty` で入れ、`<2>4` より第 3 系統はその鍵を上書き
+    しないので、funptr 型で在る。funptr でない関数の名前については、第 2 系統は `fn_ty.is_funptr()` の
+    項目しか入れないので当たらない。`<1>1` よりその鍵は lowering の出力のものであり、`lower_symbol` が
+    `funcs` の鍵にする最上位の記号は funptr のものだけなので、それは持ち上げた lambda の名前である。
+    `<2>3` よりそれは最上位の記号の名前ではないので第 1 系統に項目が無く、`<2>4` より `P.globals` の
+    `symbol` でもないので第 3 系統にも項目が無い。
+    BY <1>1, <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/lower.rs: Lowerer::lower_symbol
 
 <1>4. QED
   BY <1>2, <1>3
