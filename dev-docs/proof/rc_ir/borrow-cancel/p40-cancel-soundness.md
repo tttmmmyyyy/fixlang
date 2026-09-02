@@ -18,8 +18,8 @@
 (`N` は別名類ごとの `bumps` の和である)。
 これらは `p30 の L10`、`p13 の L17` のようにファイル名を添えて引用する。
 
-**外部の結果**は `EXT <名前>` の名札で引く。この文書が引くのは Rust 標準ライブラリの 2 つで、その完全な
-言明は次のとおりである。
+**外部の結果**は `EXT <名前>` の名札で引く。この文書が引くのは Rust の言語規則と標準ライブラリ、および
+`dyn_clone` crate の 4 つで、その完全な言明は次のとおりである。
 
 - **EXT Arc の割り当ての安定性** --- `std::sync::Arc<T>` の値は、制御ブロックと `T` を 1 つのヒープ
   割り当ての中に置く。`Arc::as_ref`(`Deref`) が返す `&T` の番地はその割り当ての中の `T` の番地であり、
@@ -27,6 +27,12 @@
   解放されるのは最後の強参照が落ちたときであり、共有参照が生きている間は落ちない。
 - **EXT Vec::clone** --- `Vec<T>` (`T: Clone`) の `clone` は、長さが原本と等しく、第 `i` 要素が原本の
   第 `i` 要素の `clone` である新しい `Vec` を返す。要素の並びは原本のものである。
+- **EXT derive(Clone)** --- 構造体または列挙型に `#[derive(Clone)]` を付けて得られる `clone` は、原本と
+  同じ変位の値であって、その各欄が原本の対応する欄の `Clone::clone` である値を返す。欄を落とすことも、
+  並べ替えることも、別の値を置くこともない。
+- **EXT dyn_clone の trait object の複製** --- `dyn_clone::clone_trait_object!(Tr)` は
+  `impl Clone for Box<dyn Tr>` を与える。その `clone` は中身の具体型の `Clone::clone` を呼び、その値を
+  新しい `Box` に置いて返す。**複製が原本と同じオブジェクトであるとは限らない。**
 
 `B_ρ` の個数が 0 以上であることは README の P18b が言う -- P18b は `B(p, ρ)` を「その `Retain` が `ρ` で
 実際に作った参照のうち、`ρ` 上でまだ処分されていないもの」を数えた多重集合と読む。**`outstanding` に
@@ -583,11 +589,12 @@ source、`Match` のアームの本数と並び、および継続の順序は変
 <1>2. CASE `n` の式が `Let(_, Match(_, arms), k)` である。D3 より `ρ` の上の `n` の直後の節点は、`ρ` が
       選んだアームの本体である。`walk_inner` のこの腕は各アームについて
       `self.walk(&arm.body, pending.clone(), false)` を呼ぶ。`PendingRetains` は `Vec<PendingRetain>` で
-      あり、`PendingRetain` は `Clone` を derive してその 2 つの欄を複製する。EXT Vec::clone より、複製の
+      あり、`PendingRetain` は `#[derive(Clone)]` を持つので、EXT derive(Clone) より複製の `node` と
+      `outstanding` は原本のものの `clone` である。EXT Vec::clone より、複製の
       長さと各位置の要素は原本のものに等しいので、アーム本体の入口状態は `pending(n)` と等しい値である。
   BY D3, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
      CODE src/rc_ir/borrow.rs: PendingRetain, CODE src/rc_ir/borrow.rs: PendingRetains,
-     EXT Vec::clone, p30 の L1
+     EXT Vec::clone, EXT derive(Clone), p30 の L1
 <1>3. CASE `n` がアーム本体の終端の `Ret` である。D3 より、`Ret` の後に実行路が続くのは、`n` が、その
       実行路が入ったアームの本体の実行路を終える `Ret` であるときに限り、そのとき直後の節点はその `Match`
       節点 `M` の継続 `k_M` である。L33a より `n = ret(arm_i.body)` である。`walk_inner` の `M` の腕は
@@ -1633,17 +1640,24 @@ source、`Match` のアームの本数と並び、および継続の順序は変
         変わらない。グローバル初期化子はパラメータも capture も持たない (D1)。`VarTable::of` は
         パラメータと capture について `Binding::Param` と `param_tys`・`var_tys` を置き、残りを
         `collect_bindings` から取る。`VarTable::body_only` は `collect_bindings` だけを取る。
-    BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/ownership.rs: VarTable::of,
-       CODE src/rc_ir/ownership.rs: VarTable::body_only, D1
+        `RcFunc` は `#[derive(Clone)]` を持つので、EXT derive(Clone) より `f.clone()` の各欄は `f` の
+        対応する欄の `clone` である。
+    BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/ast.rs: RcFunc,
+       CODE src/rc_ir/ownership.rs: VarTable::of,
+       CODE src/rc_ir/ownership.rs: VarTable::body_only, D1, EXT derive(Clone)
   <2>3a. 2 つの表の対応する `Binding::Llvm` が運ぶ op は、同じ引数に対して同じ `Provenance` を返す。
-    <3>1. `B'` の `RcRhs::Llvm` が持つ op は `B` のものの複製であり、同じオブジェクトではない。
+    <3>1. `B'` の `RcRhs::Llvm` が持つ op は `B` のものの複製であり、同じオブジェクトであるとは限らない。
           `drop_nodes_inner` の右辺が `Match` でない `Let` の腕は
-          `RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete))` を積むので、`RcRhs::Llvm` が
-          持つ `Box<dyn LLVMGen>` は `clone` された別のオブジェクトである。`collect_bindings` はさらに
-          `llvm_gen.clone()` を `Binding::Llvm` の第 1 欄に置くので、2 つの表の op は 2 段の複製で
+          `RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete))` を積む。`RcRhs` は
+          `#[derive(Clone)]` を持つので、EXT derive(Clone) より `rhs.clone()` は `RcRhs::Llvm` の第 1 欄に
+          `Box<dyn LLVMGen>` の `clone` を置く。`LLVMGen` は `DynClone` を継承し、
+          `dyn_clone::clone_trait_object!(LLVMGen)` がその `Clone` を与えるので、EXT dyn_clone の trait
+          object の複製 より、その複製が原本と同じオブジェクトであるとは限らない。`collect_bindings` は
+          さらに `llvm_gen.clone()` を `Binding::Llvm` の第 1 欄に置くので、2 つの表の op は 2 段の複製で
           隔たっている。
       BY CODE src/rc_ir/borrow.rs: drop_nodes_inner, CODE src/rc_ir/ast.rs: RcRhs,
-         CODE src/rc_ir/ownership.rs: collect_bindings
+         CODE src/ast/inline_llvm.rs: LLVMGen, CODE src/rc_ir/ownership.rs: collect_bindings,
+         EXT derive(Clone), EXT dyn_clone の trait object の複製
     <3>2. QED
       BY <3>1, A3
       A3 は「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を
@@ -1852,9 +1866,10 @@ P14a、P18a を読む段はこれに立つ。**この 4 つはどれも「各実
 <1>1. `cancel` の出力の各関数の `name`・`params`・`capture`・`borrowed_units` は、入力の同じ名前の関数の
       ものに等しい。とくに `B'` の所有と借用の割り当て (D14) は `B` のものと同じである。`cancel` は
       `prog.funcs.values()` の各 `f` について `f.clone()` を作って `clone.body` にだけ書き込み、鍵に
-      `f.name.clone()` を据えるので、この 4 つは変わらない。グローバル初期化子はパラメータも capture も
-      持たない (D1)。
-  BY CODE src/rc_ir/borrow.rs: cancel, D14, D1
+      `f.name.clone()` を据えるので、この 4 つは変わらない -- `RcFunc` は `#[derive(Clone)]` を持つので、
+      EXT derive(Clone) より `f.clone()` の各欄は `f` の対応する欄の `clone` である。グローバル初期化子は
+      パラメータも capture も持たない (D1)。
+  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/ast.rs: RcFunc, D14, D1, EXT derive(Clone)
 <1>1a. `Del` の節点はどれも `ρ` の終端の `Ret` より真に前にある。よって、`ρ` の終端の `Ret` の消費を
        行った後の最後の位置を除く各時点について、それに対応する時点で `α'` は生きている (D23)。最後の
        位置では 2 つの活性化はどちらも終わっており、D21 の制限はその時点について何も課さない。
@@ -2384,9 +2399,10 @@ P21 (b) ではなく、点の粒度の `L44` の (e) である。**
 <1>1. `P'` の所有と借用の割り当て (D14) は `P` のものと同じである。
   <2>1. `cancel` は `prog.funcs.values()` の各 `f` について `let mut clone = f.clone();` を作り、
         `clone.body` にだけ書き込んで `(f.name.clone(), clone)` を `funcs` に入れる。よって
-        `borrowed_units`、`params`、`capture` は変わらない。グローバル初期化子はパラメータも capture も
-        持たない (D1)。
-    BY CODE src/rc_ir/borrow.rs: cancel, D1
+        `borrowed_units`、`params`、`capture` は変わらない -- `RcFunc` は `#[derive(Clone)]` を持つので、
+        EXT derive(Clone) より `f.clone()` の各欄は `f` の対応する欄の `clone` である。グローバル初期化子は
+        パラメータも capture も持たない (D1)。
+    BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/ast.rs: RcFunc, D1, EXT derive(Clone)
   <2>2. QED
     D14 の割り当ては `RcFunc::borrowed_units` が定めるので、<2>1 より変わらない。
     BY D14, <2>1
@@ -2513,16 +2529,18 @@ P21 (b) ではなく、点の粒度の `L44` の (e) である。**
 <1>1. `roots` は変わらない。`borrow_ify` の返す `RcProgram` の `roots` は `prog.roots.clone()` であり、
       `cancel` の返す `RcProgram` の `roots` も `prog.roots.clone()` である。
   BY CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel
-<1>2. `cancel` の出力の各関数は、入力の関数の `clone()` に `body` だけを書き込んだものである。よって
+<1>2. `cancel` の出力の各関数は、入力の関数の `clone()` に `body` だけを書き込んだものである。`RcFunc` は
+      `#[derive(Clone)]` を持つので、EXT derive(Clone) より複製の各欄は原本の対応する欄の `clone` であり、
       `fn_ty`、`ret_ty`、`params`、`inline_into_callers` は変わらない。
-  BY CODE src/rc_ir/borrow.rs: cancel
+  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/ast.rs: RcFunc, EXT derive(Clone)
 <1>2a. `cancel` は `RcFunc` の `body` 以外の欄を 1 つも変えない。とくに `borrowed_units` と `capture` は
        入力のものに等しい。
-  BY CODE src/rc_ir/borrow.rs: cancel, D1, P14b
+  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/ast.rs: RcFunc, D1, P14b, EXT derive(Clone)
   D1 より `RcFunc` は `name`・`fn_ty`・`params`・`capture`・`ret_ty`・`body`・`source`・
   `borrowed_units`・`inline_into_callers` の 9 個の欄を持つ。`cancel` は `prog.funcs.values()` の各 `f`
   について `let mut clone = f.clone();` を作って `clone.body` にだけ書き込み、`(f.name.clone(), clone)` を
-  出力の `funcs` に入れるので、残る 8 個は入力のものに等しい。`borrow_ify` は `borrowed_units` を書く
+  出力の `funcs` に入れる。`RcFunc` は `#[derive(Clone)]` を持つので、EXT derive(Clone) より複製の各欄は
+  原本の対応する欄の `clone` であり、残る 8 個は入力のものに等しい。`borrow_ify` は `borrowed_units` を書く
   (<1>3 の `<2>1` のループ) ので、この節は `cancel` についてだけである。
   **この節は P14b の結論を運ばない。** P14b が述べる「借用する unit を持つ本体の活性化を作る段は (E3) に
   限る」は実行 (D24) の上の言明であり、欄と本体の一致からは出ない。P14b は `cancel` の出力を自分の範囲に
