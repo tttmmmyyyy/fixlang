@@ -2597,8 +2597,11 @@ A19 (ii-a)、A19 (ii-b)、P14a、P18a、P18b、P18c、D11 の 3 つの節 -- は
           対応する値を置く。さらに、この節点が子の活性化を作るとき、その子の事象が参照カウントに与える
           変化は 2 つの実行で同じである。`d` は変わらない。
       <4>1. `q` は `Del` に入らないので、L30 と L31 より `ρ'` の対応する節点は `q` と同じ式の
-            変位・変数・path・`RcState` を持つ。<2>2 の (a) より、その点までに値を得ている各変数の値は
-            2 つの実行で対応する。
+            変位・変数・path・`RcState` を持ち、**`Let` の右辺 (`Llvm` の op とオペランド、`Closure` の
+            `FuncRef` と capture、`App` の callee と引数、`Var` の変数、`Match` の scrutinee)、
+            `Destructure` のフィールドの列、`Match` のアームの本数と並びとその `tag`・`payload`・
+            `payload_state` も `q` のものである** -- L30 の言明がこの一覧を持つ。<2>2 の (a) より、
+            その点までに値を得ている各変数の値は 2 つの実行で対応する。
         BY L30, L31, <2>2
       <4>1a. `q` の式が `Let(_, RcRhs::Match(v, arms), k)` であるとき、2 つの活性化は同じアームへ進む。
         BY D21, D29, <4>1
@@ -2795,17 +2798,19 @@ A19 (ii-a)、A19 (ii-b)、P14a、P18a、P18b、P18c、D11 の 3 つの節 -- は
 
 ## 4. P18c (義務集合の側の同じ不等式)
 
-**言明 (README)** --- 走査中の各位置と各実行路について、各計数下オブジェクト `O` について
-`Obl(O) ≥ n(O)` である。ここで `Obl(O)` は義務集合が持つ `O` への参照の個数、`n(O)` は P18a のものである。
+**言明 (README)** --- **`borrow_ify` の出力を入力とし**、走査中の各位置と各実行路について、各計数下
+オブジェクト `O` について `Obl(O) ≥ n(O)` である。ここで `Obl(O)` は義務集合が持つ `O` への参照の個数、
+`n(O)` は P18a のものである。
 
 **証明する形**。示すのは、**`borrow_ify` の出力**の各本体 `B` の各実行路 `ρ` と、それを辿る各活性化
 (D21) と、`ρ` の上の各節点 `q` と各計数下オブジェクト `O` について `Obl(q, O) ≥ N(q, O)` である。
 **入力を `borrow_ify` の出力に限るのは、P21・P23 と同じ理由による** -- `<1>1` が読む L42 は L41a を経て
-A19 の (ii-a)・(ii-b) と P14a を活性化に当てるので、その範囲を出られない。A19 の (ii-b) の範囲は
+A19 の (ii-a)・(ii-b)・(ii-c) と P14a を活性化に当てるので、その範囲を出られない。A19 の (ii-b) の範囲は
 「`borrow_ify` の入力の各本体と、`borrow_ify` がそれを写した各本体」、P14a の範囲は「`borrow_ify` の
-出力の各本体」であり、この文書では第 1 節が `optimize_rc_program` からその限定を出している。
-**この限定は主定理の鎖を切らない** -- P18c を読むのは `cancel` の健全性の鎖であり、その入力は
-まさに `borrow_ify` の出力だからである。
+出力の各本体」であり、この文書では第 1 節が `optimize_rc_program` からその限定を出している。(ii-c) の
+`borrow_ify` の側は `前提 (ii-c) の保存` が置く。**この限定は主定理の鎖を切らない** -- P18c を読むのは
+`cancel` の健全性の鎖であり、その入力はまさに `borrow_ify` の出力だからである。README の P18c の言明も
+「**`borrow_ify` の出力を入力とし**、」で始まる。
 
 活性化が D21 の制限 (A19 (i) の不等式) を満たすことは、D21 が制限を満たすものだけを活性化とすることから
 出る -- ここで量化するのは `B` の活性化そのものであって、`L44` が構成する入力側の活性化ではない。
@@ -2815,9 +2820,9 @@ A19 の (ii-a)・(ii-b) と P14a を活性化に当てるので、その範囲�
 <1>1. QED
   BY L42, DEF N, D27, D21
   走査中の位置は D27 に従って節点の訪問の入口であり、DEF N より P18a の `n(O)` はその位置の `N(q, O)` で
-  ある。節点の入口は終端の `Ret` の消費より前にあるので L42 の範囲に入り、L42 の「とくに」の節が
-  `Obl(q, O) ≥ N(q, O)` を述べる。L42 を読むのに要る D21 の制限は、量化する活性化が D21 の意味の活性化で
-  あることから出る。
+  ある。節点の入口は終端の `Ret` の消費より前にあるので L42 の範囲に入り、L42 が
+  `Obl(q, O) ≥ b(q, O) = N(q, O)` を述べる。L42 を読むのに要る D21 の制限は、量化する活性化が D21 の
+  意味の活性化であることから出る。
 
 ## 5. P19 (削除される retain の性質)
 
@@ -2861,9 +2866,22 @@ A19 の (ii-a)・(ii-b) と P14a を活性化に当てるので、その範囲�
           `self.owned_units` は `all_owned_units(prog, type_env)` の値である。`all_owned_units` は各関数の
           各パラメータ・capture の各 unit のうち `borrowed_units` に入らないものを集めるので、この述語が
           真であることは、呼び出し先がその leaf の unit を所有する (D14) ことに等しい。unit は
-          呼び出し先のパラメータの型 `p.ty` で取る。
+          呼び出し先のパラメータの型 `p.ty` で取る。**この同値には 3 つが要る。** `all_owned_units` は
+          **全関数**のパラメータ・capture の unit を 1 つの `Set<VarPath>` に集め、鍵は
+          `(p.name, unit)` なので、(i) **パラメータ名がプログラム全体で一意**でなければ、別の関数の
+          同名のパラメータの unit がこの述語を真にしうる。それを与えるのは A6 -- 「`borrow_ify` の入力の
+          すべての束縛変数の名前は相異なり、**どの関数の名前とも異なる**」-- と、出力についての同じ
+          性質を与える P9 である。(ii) `leaf` は `p.ty` の boxed leaf でなければ `truncate_to_unit` が
+          型に合わない path を歩いて panic する。`rhs_consumes` が渡す `leaf` は引数の型の boxed leaf で
+          あり、A12 の「**`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型**」がその型を
+          `p.ty` に一致させる。(iii) `truncate_to_unit(p.ty, leaf)` の値が `rc_units(p.ty)` の元で
+          なければ、`all_owned_units` が集めた鍵のどれとも一致しない。それを与えるのは P1 -- 「A10 を
+          満たす任意の型 `τ` について、`boxed_leaf_paths(τ)` の各 leaf の `truncate_to_unit(τ, ・)` は
+          `rc_units(τ)` の要素であ」る -- である。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs, CODE src/rc_ir/borrow.rs: cancel,
-         CODE src/rc_ir/ownership.rs: all_owned_units, D14
+         CODE src/rc_ir/ownership.rs: all_owned_units,
+         CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/ownership.rs: rhs_consumes,
+         D14, A6, A12, A10, P1, P9
     <3>2. `rhs_consumes` が `RcRhs::App(callee, args)` について報告する leaf の集合は、D9 の `App` の行が
           名指す leaf をすべて含む。`rhs_consumes` は callee の全 boxed leaf と、
           `resolve_callee_params` が返すパラメータについて `owns` が真である引数 leaf を報告し、
