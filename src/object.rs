@@ -2083,7 +2083,7 @@ pub fn write_alloc_offset<'c, 'm>(
 /// A fresh object of type `ty`, with its control block initialized and its remaining fields left
 /// undefined for the caller to fill in. A boxed type is allocated on the heap and comes back as a
 /// pointer to it; an unboxed type comes back as an undefined aggregate value.
-// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
     // Captured values. Used only for creating dynamic object.

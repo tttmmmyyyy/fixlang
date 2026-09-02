@@ -301,7 +301,7 @@ src/object.rs	ObjectFieldType::traverse_array_buf	D/A	73e1ad4e79ca
 src/object.rs	build_free_boxed	D/A,P28	d79415db8029
 src/object.rs	build_malloc	P26	57f5c494571d
 src/object.rs	build_traverse	P26	90e003680ea6
-src/object.rs	create_obj	P26,P28	55a56677f8db
+src/object.rs	create_obj	D/A,P26,P28	55a56677f8db
 src/object.rs	get_array_storage	P26	a417e5ff90d9
 src/object.rs	lambda_function_type	P27,P29,P30	12512f00c4bd
 src/object.rs	lambda_return_part_types	P27,P29,P30	e5804412a933
