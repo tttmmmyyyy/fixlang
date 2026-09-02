@@ -3016,15 +3016,25 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | `p12-identity-and-consumes.md` | 第 5 周 | 0 | 2 | BAD-CITATION 8、NOT-OBVIOUS 6 | 修理済み。**第 6 周の検証** |
 | `p13-disposals-and-pending.md` | 第 6 周 | 1 | 0 | BAD-CITATION 4、UNDEFINED 2、NOT-OBVIOUS 6、HEDGE 1 | 修理済み。**第 7 周の検証** |
 | `p15-ownership-uniformity.md` | 第 6 周 (382 段) | 0 | 2 | NOT-OBVIOUS 5 | 修理済み。**第 7 周の検証** |
-| `p20-borrow-ify.md` | 第 5 周 | 1 | -- | BAD-CITATION 4、NOT-OBVIOUS 6 | 修理済み。**第 6 周の検証** |
+| `p20-borrow-ify.md` | 第 5 周 | 1 | -- | BAD-CITATION 4、NOT-OBVIOUS 6 | 修理済み。**第 6 周の検証**。**A19 (ii-c) の保存 (7.3) を果たす** |
 | `p30-cancel-walk.md` | 第 6 周 (366 段) | **0** | **0** | BAD-CITATION 1、NOT-OBVIOUS 20 | 修理済み。**第 7 周の検証** |
-| `p40-cancel-soundness.md` | 第 6 周 (400 段) | **5** | **4** | BAD-CITATION 13、NOT-OBVIOUS 14、UNDEFINED 1 | **修理**。A19 の (ii-c) と D27 の延長に合わせる |
+| `p40-cancel-soundness.md` | 第 6 周 (400 段) | 5 | 4 | BAD-CITATION 13、NOT-OBVIOUS 14、UNDEFINED 1 | 修理済み。**第 7 周の検証** |
 | `p50-observation.md` | 第 6 周 | 0 | 1 | BAD-CITATION 8、NOT-OBVIOUS 12 | 修理済み。**第 7 周の検証** |
 | `p51-runs.md` | 第 5 周 | 1 | 3 | NOT-OBVIOUS 8、BAD-CITATION 4 | 修理済み。**第 6 周の検証** |
-| `p60-insert-rc.md` | 第 5 周 | 1 | 11 | NOT-OBVIOUS 13、BAD-CITATION 2 | 修理済み。**第 6 周の検証** |
+| `p60-insert-rc.md` | 第 6 周 (360 段) | **4** | **9** | UNDEFINED 1、BAD-CITATION 4、HEDGE 1、NOT-OBVIOUS 45 段 | **修理** |
 | `p70-main-theorem.md` | 第 5 周 | 2 | -- | NOT-OBVIOUS 3、散文 7 | 修理済み。**第 6 周の検証** |
 
 `--` は、その周の検証がその欄を挙げなかったことを表す。
+
+### 7.3 果たされていない義務
+
+**A19 (ii-c) の `borrow_ify` の側。** (ii-c) が示されているのは `insert_rc` の出力についてだけであり
+(`p60-insert-rc.md` の `L19` (d))、**`borrow_ify` が写した本体について保つことは示されていない。**
+`p40-cancel-soundness.md` は第 2 節に `前提 (ii-c) の保存` を置き、`L41a` の段内の点の非負性を
+そこへ載せている。**果たす者は `p20-borrow-ify.md` である。**
+
+**この義務が果たされるまで、P18c・P21・P23 はその前提の下で証明済みである。**
+表の「証明」の欄はその形で読む。
 
 
 **T が閉じることは、T が引く命題が閉じることを意味しない。**各命題の状態はこの表が述べる。誰も果たさない
