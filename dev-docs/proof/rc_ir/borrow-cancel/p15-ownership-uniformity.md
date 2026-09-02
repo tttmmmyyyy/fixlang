@@ -1338,7 +1338,8 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 
 ### L12 (候補は訪れた対である)
 
-**言明**。`act(x, π) ⊆ Reach(x, π)` である。とくに `cand(x, π) ⊆ Reach(x, π)` である。
+**言明**。`act(x, π) ⊆ Reach(x, π)` である。とくに `cand(x, π) ⊆ Reach(x, π)` である。さらに、
+`origin(x, π)` が値を返すとき `cand(x, π)` は空でない。
 
 <1>1. `Origin` の値を作るのは、`here()` すなわち `Origin::Exactly((var, path))`、
       `origin_from_leaves_under` の `Origin::Exactly(here.clone())`、`Origin::of_candidates(S, id)`、
@@ -1361,6 +1362,16 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   `|S| = 1` のとき `Exactly` を返し `act = S`。`|S| ≥ 2` のとき `Join { identity: id, candidates: S }` を
   返し `<1>2` より `act = S ∪ {id}`。`S` が空のときは `assert!` で中断する。
   BY <1>2, CODE src/rc_ir/ownership.rs: Origin::of_candidates
+
+<1>3a. `origin(x, π)` が値を返すとき `cand(x, π)` は空でない。
+  `<1>1` より、`origin` が返す `Origin` は `here()` か `origin_from_leaves_under` の
+  `Origin::Exactly(here.clone())` が作った `Exactly` であるか、`of_candidates(S, id)` が返したもので
+  ある -- 部分結果をそのまま返す 6 か所が返すのも、その先の呼び出しが作ったこの 2 つのどちらかである。
+  `Exactly(p)` の `candidates()` は 1 元の列 `[p]` であり、空でない (`<1>2`)。`of_candidates(S, id)` は
+  `S` が空のとき `assert!` で中断するので、`origin` が値を返した以上 `S` は空でない。そのとき
+  `of_candidates` は `|S| = 1` で唯一の元の `Exactly` を、`|S| ≥ 2` で `candidates` を `S` とする
+  `Join` を返すので、どちらでも `candidates()` は空でない。
+  BY <1>1, <1>2, CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::candidates
 
 <1>4. `Reach(x, π)` の要素 `(y, ρ)` について、`origin(y, ρ)` の `act` は `Reach(x, π)` に含まれる。
       L11a の `Reach` についての帰納で示す。すなわち、DEF 再帰で訪れる対 の表が `(y, ρ)` から進む各相手
@@ -1391,8 +1402,9 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     BY <1>1, <1>3, <2>1, <2>2, <2>3, L11a
 
 <1>5. QED
-  `<1>4` を `(y, ρ) = (x, π)` に当てる。`cand ⊆ act` は `<1>2` による。
-  BY <1>2, <1>4
+  `<1>4` を `(y, ρ) = (x, π)` に当てる。`cand ⊆ act` は `<1>2` による。言明の最後の節は `<1>3a` で
+  ある。
+  BY <1>2, <1>3a, <1>4
 
 ### L13 (`Binding::Param` を持たない名前は `param_tys` の鍵でない)
 
@@ -2805,12 +2817,11 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   あり、`Λ_{ty(x)}(π) = {π}` である。`Inh_x(π) ⊆ {π}` であり、`λ = π` のとき
   `cand(x, λ) = cand(x, π)` は仮定より全部偽である。`cand(x, π)` は空でない -- `x` は `vars.bindings` に
   `Binding::Llvm` を持つ束縛変数なので、P2 (固定した版が借用版のときは P9 と合わせて読む) より
-  `origin(x, π)` は panic せずに答えを返し、その答えが `Exactly` ならば `candidates()` は 1 元の列、
-  `Join` ならばそれを作った `of_candidates` の `assert!` が通っているので `candidates` は空でない。
+  `origin(x, π)` は panic せずに答えを返し、L12 の最後の節より `cand(x, π)` は空でない。
   よって `cand(x, λ)` に `owns` が偽である元がある。
-  BY L18a, P2, P9, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, Provenance::build_shape,
-     CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, LeafMap::get, LeafMap::build_shape,
-     CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::candidates
+  BY L12, L18a, P2, P9, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+     Provenance::build_shape,
+     CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, LeafMap::get, LeafMap::build_shape
 
 <1>8. CASE `Some(Binding::Llvm(gen, args, rty))` で `decl.leaf_origins_at(π).and_then(as_arg_projection)`
       が `None`
@@ -2899,15 +2910,13 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `cand(v, u)` は空でない。`v` は `V` が書き換える本体に現れる `RcVar` の名前なので、その名前は
   `vars.bindings` に束縛を持つ (パラメータ・capture の `Binding::Param` か、`collect_bindings` が節点から
   記録した束縛) か、持たない (D6 の第 3 の形) かのどちらかであり、どちらも P2 の範囲である (固定した版が
-  借用版のときは P9 と合わせて読む)。よって `origin(v, u)` は panic せずに答えを返し、その答えが
-  `Exactly` ならば `candidates()` は 1 元の列、`Join` ならばそれを作った `of_candidates` の `assert!` が
-  通っているので `candidates` は空でない。
+  借用版のときは P9 と合わせて読む)。よって `origin(v, u)` は panic せずに答えを返し、L12 の最後の節より
+  `cand(v, u)` は空でない。
   `V` が関数の版ならば `(v, u)` は DEF site より `levelled_sites` が挙げる site であり、グローバル
   初期化子の版ならば第 5 節の読み方より P7d は任意の `(v, u)` について答える。いまは `infer_ownership` の
   不動点なので、いずれも P7d よりその候補はすべて真かすべて偽である。節 1 が偽とは「すべて真」が
   成り立たないことなので、「すべて偽」である。
-  BY P2, P7d, P9, D6, DEF site, CODE src/rc_ir/ownership.rs: Origin::candidates,
-     Origin::of_candidates, VarTable::of, collect_bindings,
+  BY P2, P7d, P9, D6, L12, DEF site, CODE src/rc_ir/ownership.rs: VarTable::of, collect_bindings,
      CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
 
 <1>4. 節 1 が偽ならば節 2 も偽である。
