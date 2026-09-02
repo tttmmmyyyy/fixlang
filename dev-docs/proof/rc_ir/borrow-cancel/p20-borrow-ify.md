@@ -724,12 +724,23 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
   各元について `origin` を 1 回、各 site について `level_ownership` を 1 回呼ぶ。`level_ownership` は
   `origin` を 1 回呼び、各候補について `owns_object_yet` と `covered_leaves` を呼ぶ。`origin` の停止は、
   第 1 成分がプログラムの束縛変数であるとき P2 が、`vars.bindings` が鍵に持たない名前 (D6 の第 3 の形)
-  であるとき L6c が与える。`owns_object_yet` は `under` と
-  `boxed_leaf_paths` を呼び、A10 よりどちらも有限で停止する。`collect_consumes` が積む対の全体が有限で
-  あることは `<1>3` が与える。
+  であるとき L6c が与える。`owns_object_yet` は `boxed_leaf_paths` を 1 回、`under` を 1 回、
+  `truncate_to_unit` を 2 か所 -- `under` が返す各 unit の鍵と、`boxed_leaf_paths` が返す各 leaf の鍵 --
+  で呼ぶ。A10 より、`boxed_leaf_paths` と `rc_units` の歩みも、`subtree_type` と `truncate_to_unit` が
+  取るフィールドの型の歩みも有限であり、`truncate_to_unit` の繰り返しは path の長さで抑えられる。
+  **この 3 つは中断しうる。** `truncate_to_unit` は `unit_step` が `NoUnit` を返す位置で `panic!` し、
+  `Capture` を返す位置で path の添字が capture の添字でなければ `assert_eq!` で止まる
+  (`CODE src/rc_ir/ownership.rs: truncate_to_unit`)。`under` は `subtree_type` を通り、`unit_step` が
+  `Fields` を返す位置で `held_field_type` を呼ぶので、その添字がその値の持つフィールドを名指さなければ
+  `panic!` する (`CODE src/rc_ir/ownership.rs: units_under`, `subtree_type`, `held_field_type`)。
+  **中断も停止である** -- どの場合も歩みはそこで終わり、周回が終わらないことは無い。中断する
+  `(root, path)` を持つ入力では `infer_ownership` は値を返さず、`borrow_ify` も出力を返さないので、
+  P8 (b) と P8 (c) はその入力について空虚に真である。L8 の `<1>3` が `owns_object` について切り出す
+  のと同じ面である。`collect_consumes` が積む対の全体が有限であることは `<1>3` が与える。
   BY A10, A15, D2, D6, L6c, P2, <1>3, <1>4a, CODE src/rc_ir/borrow.rs: infer_ownership, levelled_sites,
      level_ownership, owns_object_yet, covered_leaves, CODE src/rc_ir/ast.rs: for_each_node,
-     CODE src/misc.rs: grow_stack
+     CODE src/rc_ir/ownership.rs: truncate_to_unit, units_under, subtree_type, held_field_type,
+     unit_step, rc_units, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/misc.rs: grow_stack
 
 <1>6. QED
   `<1>1` と `<1>2` より、`changed` が真になる周回では `owned_leaves` は真に大きくなる。`<1>3` と `<1>4`
