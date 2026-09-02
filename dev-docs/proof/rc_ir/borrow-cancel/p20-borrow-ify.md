@@ -149,6 +149,25 @@ D11 の (S-c) の接頭条件 -- その活性化がその点まで解放につ�
 - **`p13-disposals-and-pending.md` の `L7`** -- `leaves(τ)` の相異なる 2 元は、一方が他方の接頭辞に
   ならない。
 
+**外部の結果**。この文書が引く、文書の外の名前つき結果を `EXT <名前>` の名札で据える。`BY` はこの名前で
+引く。
+
+- **EXT 集合と写像** -- `crate::misc::Set` は `FxHashSet`、`Map` は `FxHashMap` であり、どちらも
+  ハッシャを替えた `std::collections::HashSet` と `HashMap` である
+  (`CODE src/misc.rs: Set`, `Map`)。`HashSet::insert(v)` は、集合が `v` を持っていなければ `v` を加えて
+  `true` を返し、持っていれば集合を変えずに `false` を返す。`HashSet::contains` は集合を変えない。
+  `Extend::extend(iter)` は `iter` が返す各元を加え、それ以外の変更をしない。`HashMap` は 1 つの鍵に
+  高々 1 つの値を持ち、`HashMap::insert(k, v)` はその鍵の値を `v` にする。`HashMap::values` と
+  `HashMap::values_mut` は、その時点の各エントリの値をちょうど 1 度ずつ返す。
+- **EXT 反復子の並び** -- `Iterator::filter(f)` は、元の反復子が返す元のうち `f` が真であるものを、元の
+  順序のまま返す。`Iterator::chain(other)` は、自分の全元に続いて `other` の全元を、それぞれ 1 度ずつ
+  順に返す。`Iterator::rev()` は両端反復子の元を逆順に返す。`Iterator::fold(init, f)` は `acc = init` から
+  始めて、反復子が返す各元 `x` について `acc = f(acc, x)` を順に行い、最後の `acc` を返す。
+- **EXT 導出した相等** -- `#[derive(PartialEq)]` を付けた構造体の 2 つの値が等しいのは、対応する各
+  フィールドが等しいときであり、そのときに限る。
+- **EXT 10 進表記** -- `format!("{}", n)` が `usize` の値 `n` について書き出す文字列は、10 進数字だけから
+  なる。
+
 **`p15` が固定するもの。** `p15` は 1 つの出力版とその `RewriteCtx` を固定して書かれており、そこでの
 `owns(r, p)` はその版の `ctx.owns_object(r, p)`、`cand(x, π)` はその版の `vars` についての
 `origin(x, π).candidates()` である (`p15` の第 1 節)。この文書が `p15` の補題と P7a を引くのは、`V` の
@@ -224,7 +243,7 @@ D11 の (S-c) の接頭条件 -- その活性化がその点まで解放につ�
   BY CODE src/rc_ir/borrow.rs: param_capture_units
 
 <1>3. 1 つ目の `extend` は入力の各関数について走るので、それが入れるのは (a) である。
-  BY <1>1, <1>2, CODE src/rc_ir/borrow.rs: borrow_ify
+  BY EXT 集合と写像, <1>1, <1>2, CODE src/rc_ir/borrow.rs: borrow_ify
 
 <1>4. 2 つ目の `insert` は `borrow_versions.get(&func.name)` が `Some` のときだけ走り、`func.params` の各元
       `p` と `leaves(ty(p))` の各元 `leaf` について、`owned_leaves.owns(&p.name, &leaf)` が真のときに
@@ -353,7 +372,7 @@ D11 の (S-c) の接頭条件 -- その活性化がその点まで解放につ�
       ついて `borrow_versions.get(&func.name)` を引き、`Some` のとき `clones.push((borrow_version, ..))` を
       行う。`<1>2` より `borrow_versions` の鍵はすべて入力の関数の名前なので、このループはそのすべてを
       引き当てる。
-  BY <1>2, CODE src/rc_ir/borrow.rs: borrow_ify
+  BY EXT 集合と写像, <1>2, CODE src/rc_ir/borrow.rs: borrow_ify
 
 <1>4. 出力の `funcs` に元を入れるのは 2 か所である。入力の各関数について
       `funcs.insert(f_own.name.clone(), f_own)` (`f_own.name` は `func.name` である)、`clones` の各元に
@@ -601,7 +620,7 @@ P8 の後半は「D9 の意味で消費される」と言う。D9 の `App` の�
   <2>4. QED
     初期値は空であり、`<2>1`-`<2>3` より 1 周目で `changed` は偽のままである。`insert` が 1 度も真を
     返さないので `owned_leaves` は空のまま返る。
-    BY <2>1, <2>2, <2>3, CODE src/rc_ir/borrow.rs: infer_ownership
+    BY EXT 集合と写像, <2>1, <2>2, <2>3, CODE src/rc_ir/borrow.rs: infer_ownership
 
 <1>7. QED
   `<1>4` より、`f` の唯一の実行路で、A1 の割り当ての下でパラメータ leaf `(x, [])` の参照が D9 の意味で
@@ -636,13 +655,13 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
 <1>1. `owned_leaves` を変える箇所は 2 つである。消費の段の
       `owned_leaves.insert((root_var.clone(), root_path.clone()))` と、`level_ownership` の中の
       `owned_leaves.insert((root.clone(), leaf))` である。どちらも挿入だけで、取り除かない。
-  BY CODE src/rc_ir/borrow.rs: infer_ownership, level_ownership
+  BY EXT 集合と写像, CODE src/rc_ir/borrow.rs: infer_ownership, level_ownership
 
 <1>2. `changed` が真になるのは、`<1>1` のどちらかの `insert` が真を返したときだけである。消費の段は
       `insert` の返り値で `changed` を立て、平準化の段は `changed |= level_ownership(..)` であり、
       `level_ownership` は `owns_a_candidate` が偽なら `false` を返し、真のときは `insert` の返り値の
       論理和を返す。ループは `changed` が偽のとき `break` する。
-  BY CODE src/rc_ir/borrow.rs: infer_ownership, level_ownership
+  BY EXT 集合と写像, CODE src/rc_ir/borrow.rs: infer_ownership, level_ownership
 
 <1>3. 消費の段が挿入しうる元の全体は有限である。
   <2>1. `collect_consumes(&func.body, vars, prog, own, type_env, &mut consumed)` が `consumed` に積む対の
@@ -749,7 +768,7 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
   `<1>1` と `<1>2` より、`changed` が真になる周回では `owned_leaves` は真に大きくなる。`<1>3` と `<1>4`
   よりその大きさには上界があるので、`changed` が真である周回は有限回しかなく、その次の 1 周で `changed` は
   偽になり `break` する。各周回は `<1>5` より有限の仕事しかしない。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5
+  BY EXT 集合と写像, <1>1, <1>2, <1>3, <1>4, <1>5
 
 ### 3.4 P8 (b) -- 不動点の閉包
 
@@ -766,7 +785,7 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
   ある (消費の段は `insert` の返り値で `changed` を立て、平準化の段は `changed |= level_ownership(..)` で
   あり、`level_ownership` は `owns_a_candidate` が偽なら `false` を、真なら `insert` の返り値の論理和を
   返す)。`<1>1` よりその周回ではどの `insert` も真を返さない。`insert` が偽を返すとき集合は変わらない。
-  BY <1>1, CODE src/rc_ir/borrow.rs: infer_ownership, level_ownership
+  BY EXT 集合と写像, <1>1, CODE src/rc_ir/borrow.rs: infer_ownership, level_ownership
 
 <1>3. その周回で各関数について `collect_consumes` に渡される `own` は、返される `OL` と同じである。
   BY <1>2
@@ -782,7 +801,7 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
   鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならば、その 2 つの返り値は等しい」と
   述べるので、2 つは同じ集合である。`origin(var, path)` が値を返すのは、`var` がプログラムの束縛変数で
   あるとき P2 が、`vars.bindings` が `var` を鍵に持たないとき (D6 の第 3 の形) L6c が与える。
-  BY D6, L6c, P2, P2a, <1>1, <1>3, CODE src/rc_ir/borrow.rs: infer_ownership,
+  BY D6, EXT 集合と写像, L6c, P2, P2a, <1>1, <1>3, CODE src/rc_ir/borrow.rs: infer_ownership,
      CODE src/rc_ir/ownership.rs: origin, VarTable
 
 ### 3.5 P8 (c) -- D9 の消費との対応
@@ -988,7 +1007,7 @@ D9 の `App` の引数の行は「呼び出し先がその位置の **unit** を
   <2>1. `fresh_rename_function` は `params.iter().chain(cap.iter())` の各元について `assign_fresh_name` を
         呼び、次に `assign_fresh_names_to_binders(body, ..)` を呼ぶ。`renaming` に元を入れるのは
         `assign_fresh_name` の `renaming.insert` だけである。
-    BY CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
+    BY EXT 反復子の並び, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
   <2>2. `assign_fresh_names_to_binders_inner` は、`RcExpr::Let(x, rhs, k)` の `x`、`rhs` が
         `RcRhs::Match(_, arms)` のときの各 `arm.payload`、`RcExpr::Destructure(_, fields, ..)` の各
         フィールド変数について `assign_fresh_name` を呼び、`k` と各 `arm.body` へ降りる。
@@ -1005,15 +1024,15 @@ D9 の `App` の引数の行は「呼び出し先がその位置の **unit** を
   `rhs` が `Match(_, arms)` のとき各 `arm.payload` に 1 度、`Destructure` で各フィールド変数に 1 度
   呼び、`k` と各 `arm.body` へ 1 度ずつ降りる。`Ret` では降りない。よって走査は本体の各節点をちょうど
   1 度訪れ、各束縛子についてちょうど 1 度呼ぶ。
-  BY A15, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_names_to_binders,
-     assign_fresh_names_to_binders_inner, CODE src/misc.rs: grow_stack
+  BY A15, EXT 反復子の並び, CODE src/rc_ir/rename.rs: fresh_rename_function,
+     assign_fresh_names_to_binders, assign_fresh_names_to_binders_inner, CODE src/misc.rs: grow_stack
 
 <1>4. `renaming` は写像であり、定義域の各名前に像を 1 つだけ持つ。
   `<1>3a` より `assign_fresh_name` の呼び出しの列は、`func` のパラメータ・capture の名前と `func.body` の
   各束縛子の名前をちょうど 1 度ずつ並べたものである。A6 より入力のすべての束縛名は互いに相異なるので、
   この列に同じ名前は 2 度現れない。`renaming` に元を入れるのは `assign_fresh_name` の `renaming.insert`
   だけである (`<1>3`)。よって 1 つの名前についての `insert` は 1 度きりであり、上書きは起きない。
-  BY A6, <1>3, <1>3a, CODE src/rc_ir/rename.rs: assign_fresh_name
+  BY A6, EXT 集合と写像, <1>3, <1>3a, CODE src/rc_ir/rename.rs: assign_fresh_name
 
 <1>5. `rename_expr_inner` は `RcExpr` の 6 種のそれぞれを同じ種の節点に写し、`FieldPath`・`RcState`・
       `source` をそのまま写し、`RcVar` の出現を `rename_var` で写す。`rename_rhs` は `RcRhs` の 5 種の
@@ -1029,7 +1048,7 @@ D9 の `App` の引数の行は「呼び出し先がその位置の **unit** を
   `assign_fresh_name` は `counter` を 1 増やしてから `name#b<counter>` を作り、`<1>4` より 1 つの束縛子に
   ついて 1 度だけ呼ばれる。`"b" ++ dec(c)` は `#` を含まないので、追加された `#` が像の最後の `#` であり、
   像から `c` が読み取れる。相異なる呼び出しは相異なる `c` を使う。
-  BY <1>4, CODE src/rc_ir/rename.rs: assign_fresh_name
+  BY EXT 10 進表記, <1>4, CODE src/rc_ir/rename.rs: assign_fresh_name
 
 <1>8. QED
   `<1>5` と `<1>6` より、写された本体は元の本体と同じ形の木であり、変わるのは `renaming` の定義域にある
@@ -1056,7 +1075,7 @@ D9 の `App` の引数の行は「呼び出し先がその位置の **unit** を
 <1>2. `<1>1` の `name` フィールドを `#` で区切った最後の断片は、`b` の後に 10 進数字が 1 個以上続く形で
       ある。
   `counter` の 10 進表記は 10 進数字だけからなり `#` を含まないので、追加された `#` が最後の `#` である。
-  BY <1>1
+  BY EXT 10 進表記, <1>1
 
 <1>3. 入力の束縛名の `name` フィールドを `#` で区切った最後の断片は、`<1>2` の形ではない。
   BY A13
@@ -1067,9 +1086,10 @@ D9 の `App` の引数の行は「呼び出し先がその位置の **unit** を
   BY CODE src/rc_ir/borrow.rs: borrow_ify, clone_func, CODE src/rc_ir/rename.rs: assign_fresh_name
 
 <1>5. QED
-  `FullName` の相等は `namespace` と `name` で決まるので、`name` フィールドが異なれば名前は異なる。
-  形についての後半は `<1>1` と `<1>4` による。
-  BY <1>1, <1>2, <1>3, <1>4, CODE src/ast/name.rs: FullName
+  `FullName` は `namespace` と `name` の 2 つのフィールドを持ち `PartialEq` を derive するので、
+  EXT 導出した相等 より、`name` フィールドが異なれば名前は異なる。形についての後半は `<1>1` と `<1>4` に
+  よる。
+  BY EXT 導出した相等, <1>1, <1>2, <1>3, <1>4, CODE src/ast/name.rs: FullName
 
 **この言明を検査するコード**。`develop_mode` のとき、`borrow_ify` は `check_clone_names_are_fresh(prog,
 clones.iter().map(|(_, _, rename)| rename))` を呼ぶ。これは入力プログラムのパラメータ・capture と
@@ -1146,8 +1166,9 @@ clones.iter().map(|(_, _, rename)| rename))` を呼ぶ。これは入力プロ�
 <1>5. `clone_func` が導入した名前は `borrow_versions` の値ではない。
   `<1>3` より借用版の名前の最後の断片は `borrow` であり、4.2 の言明より複製の名前の最後の断片は `b` の
   後に 10 進数字が 1 個以上続く形である。`borrow` の 2 文字目は 10 進数字ではないので、2 つは異なる。
-  `FullName` の相等は `namespace` と `name` で決まるので、`name` フィールドが異なれば名前は異なる。
-  BY 4.2 の言明, <1>3, CODE src/ast/name.rs: FullName
+  `FullName` は `namespace` と `name` の 2 つのフィールドを持ち `PartialEq` を derive するので、
+  EXT 導出した相等 より、`name` フィールドが異なれば名前は異なる。
+  BY EXT 導出した相等, 4.2 の言明, <1>3, CODE src/ast/name.rs: FullName
 
 <1>6. QED
   L6 より出力の `funcs` の鍵の集合は「入力の各関数の名前」と「`borrow_versions` の各値」の合併であり、
@@ -1182,12 +1203,12 @@ Retain(v, u_1, s, Retain(v, u_2, s, ... Retain(v, u_r, s, ctx.rewrite(k)) ... ))
 
 <1>4. `kept` は `under(ty(v), path)` を `self.owns_unit(v, unit)` で絞ったものであり、
       `Iterator::filter` は元の並びを保つので、`kept` は `u_1, ..., u_r` である。
-  BY <1>3, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
+  BY EXT 反復子の並び, <1>3, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
 
 <1>5. `kept.into_iter().rev().fold(k, |cont, unit| rc_node(is_release, v.clone(), unit, state, cont, source))`
       は、`u_r` を最も内側に、`u_1` を最も外側に置いた節点の鎖を返す。`r = 0` のときは `k` を返す。
   `rev()` により fold は `u_r` から始まり、各段が直前の結果を継続として包む。
-  BY <1>4, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
+  BY EXT 反復子の並び, <1>4, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
 
 <1>6. `rc_node(is_release, var, path, state, k, source)` は、`is_release` が真なら
       `RcExpr::Release(var, path, state, k)` を、偽なら `RcExpr::Retain(var, path, state, k)` を作る。
@@ -1237,7 +1258,7 @@ Let(x, App(callee', args),
       source span は `None` である。
   `units.into_iter().rev().fold(k, ..)` は最後の元から包み始め、`rc_node` に `RcState::Unknown` と `&None` を
   渡す。
-  BY CODE src/rc_ir/borrow.rs: prepend_rc
+  BY EXT 反復子の並び, CODE src/rc_ir/borrow.rs: prepend_rc
 
 <1>3. `<1>1` の第 2 引数より、`before` の節点は `is_release` が偽なので `Retain`、`after` の節点は真なので
       `Release` である。
@@ -1467,7 +1488,7 @@ P12 (c) が、「局所変数を経由する間接呼び出しでは `route` は
       上書きされる。ループは `funcs` を組み立てた後に走り、`borrow_ify` はその後 `funcs` を返すだけで
       ある。D14 も「`borrowed_units` に unit を**入れる**のは `borrow_ify` の末尾ただ 1 か所であり」
       「他の書き込みは空集合を置くか既存の鍵を改名するだけである」と述べる。
-  BY D14, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
+  BY D14, EXT 集合と写像, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
 
 <1>2a. 出力のグローバル初期化子について、この命題は集合を述べない。
   `RcGlobalInit` は `symbol`、`ty`、`init`、`owns_initializer`、`owns_storage` の 5 つのフィールドを
