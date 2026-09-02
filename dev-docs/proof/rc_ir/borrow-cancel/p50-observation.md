@@ -1699,8 +1699,9 @@ D24 は「C のエントリ点から始まる実行では、その時点に参�
         `prog.funcs` のエントリにする。`Lowerer::lower_app` は callee を `lower_to_var` に掛け、
         `lower_var` はグローバルの名前をそのまま `RcVar` にする。よって `App(callee, args)` の
         `callee.name` はその funptr 記号の名前であり、`<2>1` と `<2>2` よりそれは `prog.funcs` の鍵で
-        ある。A23 より `lower_to_var` が `Expr::Lam` に与える型は closure 型なので、`funptr_lambda` が
-        作った funptr 型の `Lam` は式の内側に現れず、`lower_symbol` の funptr の枝が直に受け取る。
+        ある。A23 より `lower_to_var` に着く `Expr::Lam` の節点が**持つ**型は closure 型なので、
+        `funptr_lambda` が作った funptr 型の `Lam` は `lower_to_var` に着かず、`lower_symbol` の funptr の
+        枝が直に受け取る。
     BY A23, <2>1, <2>2, CODE src/rc_ir/lower.rs: Lowerer::lower_symbol, Lowerer::lower_app, lower_var,
        Lowerer::lower_to_var
   <2>6. QED
