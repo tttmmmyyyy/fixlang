@@ -306,7 +306,7 @@ impl<'a> RcInserter<'a> {
     }
 
     /// A `let x = match scrut { arms }; cont`.
-    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert_into_match(
         &self,
         x: RcVar,
