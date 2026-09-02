@@ -2881,8 +2881,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
   `UnitStep::Capture` に来るので `subtree_type` は `None` を返し、`units_under(τ, t) = [t]` である。
 
 <1>1c. `V` は入力のちょうど 1 つの版から作られる。その入力の版を `F` と書き、`rename` を `V` の本体が
-       `F` の本体から受けた名前替え (P9) とする。`V` が借用版でないときは `rename` は恒等写像であり
-       (`borrow_ify` が `clone_func` を呼ぶのは借用版についてだけである)、`F = V` である。`F` の本体を
+       `F` の本体から受けた名前替え (P9) とする。`V` が借用版でないときは `rename` は恒等写像である
+       (`borrow_ify` が `clone_func` を呼ぶのは借用版についてだけである)。`F` の本体を
        `rename` で写した本体を **`Pre(V)`** と書く。
   BY P9, CODE src/rc_ir/borrow.rs: borrow_ify
   `borrow_ify` が出力の版を作るのは 3 か所だけである -- `prog.funcs` の各 `func` について原本の版を
