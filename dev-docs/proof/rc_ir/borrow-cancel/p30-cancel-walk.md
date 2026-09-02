@@ -903,8 +903,8 @@ L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走�
 
 ### L2 (`References` の表現)
 
-`CancelAnalysis` の走査が扱う `References` の値は、どの鍵についてもその値が 1 以上である。さらに
-`CancelAnalysis::acted_references` が返す値は空でない。よってこの 5 つが成り立つ。
+`CancelAnalysis` の走査が扱う `References` の値は、どの鍵についてもその値が 1 以上である。よってこの
+6 つが成り立つ。以下 `R`、`R1`、`R2` は走査が扱う `References` の値である。
 
 1. `R.is_empty()` が真であることと `R` が空 (DEF 参照の多重集合) であることは同値である。
 2. `R1.covers(&R2)` が真であることと `R2 ⊆ R1` であることは同値である。
@@ -913,8 +913,9 @@ L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走�
    `R1.objects()` は `R1` が参照を持つ位置をちょうど 1 度ずつ並べた列である。
 4. `R2 ⊆ R1` のとき `R1.subtract(&R2)` は `R1` を `R1 - R2` に書き換え、panic しない。また
    `R1 - R2 ⊆ R1` である。
-5. `CancelAnalysis::acted_references(v, path)` が値を返すとき、その値は空でない。すなわち、DEF 節点の量 の
-   `ActRefs(t)` と `ActRefs(r)` はどちらも空でない。
+5. `CancelAnalysis::acted_references(v, path)` が値を返すとき、その値は空でない。
+6. `R1` と `R2` が等しい (DEF 参照の多重集合) ことと、各位置についての 2 つの個数が一致することは
+   同値である。
 
 **証明**
 
@@ -961,25 +962,31 @@ L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走�
      CODE src/rc_ir/ownership.rs: References::names, CODE src/rc_ir/ownership.rs: References::objects,
      <1>1, <1>3, EXT Map と Set, EXT Iterator::all と any, EXT Iterator::map と collect
 <1>7. 走査が扱う `References` の値は、`CancelAnalysis::acted_references` が返したもの、それを `subtract`
-      で減らしたもの、およびそれらの複製だけである。
+      で減らしたもの、およびそれらの複製だけである。`References` のフィールドは非公開なので、
+      EXT 可視性と私有性 より `References` の値を構築できるのは `ownership.rs` の中だけであり、
+      `ownership.rs` は `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たない。
   BY CODE src/rc_ir/ownership.rs: References (フィールドは非公開なので `ownership` の外では作れない),
      CODE src/rc_ir/ownership.rs: acted_references (`References(references)` がこのモジュールでの唯一の
      構築点), CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕
      (`outstanding` は `self.acted_references` の値), CODE src/rc_ir/borrow.rs: un_bump
      (`innermost.outstanding.subtract(un_bumped)`), CODE src/rc_ir/borrow.rs: CancelAnalysis::merge
-     (`outstanding.clone()`)
+     (`outstanding.clone()`), EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>7a. 走査が `References::subtract` を呼ぶのは `un_bump` の中の
        `innermost.outstanding.subtract(un_bumped)` の 1 か所だけであり、その文に到達するのは直前の
        `if !innermost.outstanding.covers(un_bumped) { return UnBump::OutsideBracket; }` を通り抜けたとき、
        すなわち `innermost.outstanding.covers(un_bumped)` が真のときに限る。よって <1>3 の仮説は、走査が
        行うすべての `subtract` の呼び出しで満たされる。
   BY CODE src/rc_ir/borrow.rs: un_bump, <1>7
+<1>7b. 6 が成り立つ。`References` は `PartialEq` を derive し、そのフィールドは `Map` (`FxHashMap`)
+       1 つなので、2 つの値が等しいことは 2 つの `Map` が等しいこと、すなわち鍵と値の対の集合が一致する
+       ことである。各鍵の値が 1 以上のとき、鍵と値の対の集合の一致は各位置についての個数の一致と同値で
+       ある --- 一方が持たない位置の個数は 0 だからである。
+  BY CODE src/rc_ir/ownership.rs: References, CODE src/misc.rs: Map, DEF 参照の多重集合, EXT Map と Set
 <1>8. QED
   <1>7 が走査の扱う値の出どころを尽くし、<1>1、<1>2 が `acted_references` の値について、<1>3 と <1>7a が
   `subtract` で減らした値について、各鍵の値が 1 以上であることを与える。複製は EXT Clone より元と同じ鍵と
-  値を持つ。1 から 4 は <1>4、<1>5、<1>6 が与える。5 は <1>2 の `assert!` と、L0 が与える
-  `CancelAnalysis::acted_references(v, path)` の値の時点によらなさが与える (DEF 節点の量)。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>7a, L0, EXT Clone, DEF 節点の量
+  値を持つ。1 から 4 は <1>4、<1>5、<1>6 が、5 は <1>2 が、6 は <1>7b が与える。
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>7a, <1>7b, EXT Clone
 
 ### L2a (根の値が在るあいだ、木の割り当てはすべて生存している)
 
@@ -995,12 +1002,12 @@ L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走�
   BY CODE src/rc_ir/ast.rs: RcExprNode, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
      CODE src/rc_ir/ast.rs: MatchArm, DEF 部分木
 <1>2. QED
-  木 `N(n)` の構造についての帰納法で示す。DEF 部分木 より子は真の部分木なので、この帰納法は整礎である。
-  `n` の値が在れば、その `expr` の欄が `Arc<RcExpr>` のハンドルを 1 つ持ち、EXT Arc の契約 より、ハンドルが
-  1 つでも在るあいだそのブロックはアロケータへ返らないので、DEF 割り当て よりその割り当ては生存している。
-  そのハンドルが指すブロックの中に `RcExpr` の値が在り、<1>1 よりその中に `n` の各子の `RcExprNode` の値が
+  木 `N(n)` の構造についての帰納法で示す。L0a の 4 よりこの帰納法は整礎である。`n` の値が在れば、その
+  `expr` の欄が `Arc<RcExpr>` のハンドルを 1 つ持つので、DEF 割り当て よりその割り当ては生存している。
+  EXT Arc の契約 より、ハンドルが 1 つでも在るあいだそのブロックはアロケータへ返らないので、その
+  ハンドルが指すブロックの中に `RcExpr` の値が在る。<1>1 よりその中に `n` の各子の `RcExprNode` の値が
   在るので、帰納法の仮定が各子の部分木について同じことを与える。
-  BY <1>1, DEF 部分木, DEF 割り当て, EXT Arc の契約
+  BY <1>1, L0a, DEF 部分木, DEF 割り当て, EXT Arc の契約
 
 ### L2b (`cancel` の呼び出しは `borrow_ify` の出力を受け取る)
 
@@ -1009,22 +1016,24 @@ L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走�
 
 **証明**
 
-<1>1. `cancel` は `pub(crate)` なので、その呼び出しはこのクレートの中にしか書けない。クレートの中で
-      `cancel` を呼ぶのは、`build_object_files.rs` の `optimize_rc_program` の 1 か所である。
-  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/build/build_object_files.rs: optimize_rc_program
+<1>1. `cancel` は `pub(crate)` なので、EXT 可視性と私有性 よりその呼び出しはこのクレートの中にしか
+      書けない。クレートの中で `cancel` を呼ぶのは、`build_object_files.rs` の `optimize_rc_program` の
+      1 か所である。
+  BY CODE src/rc_ir/borrow.rs: cancel, CODE src/build/build_object_files.rs: optimize_rc_program,
+     EXT 可視性と私有性
 <1>2. QED
   <1>1 の唯一の呼び出しに渡る `prog` は `borrow_ify` の 1 回の呼び出しが返した値である。
   `optimize_rc_program` は `prog = borrow_ify(&prog, type_env, config.develop_mode)` の後に
   `cancel(&prog, type_env)` を呼び、間にあるのは `validate(&prog, "after borrow_ify")` の呼び出しだけで
-  ある。`validate` は `prog` を共有参照で受け取るので、`RcProgram` の欄への代入はできない。内部可変性を
-  通した書き込みの道は残る --- `Validator::check_rhs` は `llvm_gen.result_prov(&x.ty, &arg_tys,
-  self.type_env)` を呼び、その `Arc<TypeNode>` は `OnceLock` の欄を 3 つ持つ。その道を塞ぐのは A3 の
-  「**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。**」の節であり、
-  A3 自身が「`validate` がその 1 つであり」とこの関数を名指す。よって `cancel` に渡る値は `borrow_ify` が
-  返した値と等しい。
+  ある。`validate` は `prog` を共有参照で受け取るので、EXT 共有参照は代入を許さない より `RcProgram` の
+  欄への代入はできない。同じ節が例外に挙げる内部可変性を通した書き込みの道は残る ---
+  `Validator::check_rhs` は `llvm_gen.result_prov(&x.ty, &arg_tys, self.type_env)` を呼び、その
+  `Arc<TypeNode>` は `OnceLock` の欄を 3 つ持つ。その道を塞ぐのは A3 の「**`RcProgram` から到達できる値の
+  等しさは、それを共有参照で受け取る計算が変えない。**」の節であり、A3 自身が「`validate` がその 1 つで
+  あり」とこの関数を名指す。よって `cancel` に渡る値は `borrow_ify` が返した値と等しい。
   BY <1>1, CODE src/build/build_object_files.rs: optimize_rc_program,
      CODE src/rc_ir/validate.rs: validate, CODE src/rc_ir/validate.rs: Validator::check_rhs,
-     CODE src/ast/types.rs: TypeNode, A3
+     CODE src/ast/types.rs: TypeNode, A3, EXT 共有参照は代入を許さない
 
 ### L3 (走査する本体は `RewriteCtx::rewrite` の出力である)
 
@@ -1055,6 +1064,202 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
   その木だけである。
   BY <1>1, <1>2, <1>3
 
+### L3a (`rewrite_inner` の 1 回の呼び出しの形)
+
+`RewriteCtx::rewrite_inner(node)` の 1 回の呼び出しについて、次の 3 つが成り立つ。
+
+1. この呼び出しは `self.rewrite` を `node` の各子 (DEF 部分木) についてちょうど 1 回ずつ呼び、ほかに
+   `self.rewrite` を呼ばない。
+2. 返す木の位置は、それらの `self.rewrite` の呼び出しが返した木の位置と、この呼び出しの中で `expr_node`
+   (`rc_node` と `prepend_rc` が呼ぶものを含む) が作った節点の**全体**である。すなわち、受け取った木も
+   作った節点も 1 つ残らず返す木に入り、返す木にはそれ以外の位置が無い。
+3. それらの `self.rewrite` の呼び出しの実行区間は互いに交わらず、この呼び出しの中の `expr_node` の実行は
+   どの `self.rewrite` の実行区間の中にも無い。
+
+**証明**
+
+<1>0. `expr_node` の呼び出しと `RewriteCtx::rewrite` の呼び出しは `borrow.rs` の中にしか書けない。
+      `borrow.rs` の中で `expr_node` を呼ぶのは、`RewriteCtx::rewrite_inner`、`rc_node`、
+      `split_body_inner`、`drop_nodes_inner` の 4 つの本文だけであり、`RewriteCtx::rewrite` を呼ぶのは
+      `borrow_ify`、`RewriteCtx::rewrite_inner`、`RewriteCtx::rewrite_rc` の 3 つの本文だけである。
+      `expr_node` は `borrow.rs` の非公開の自由関数、`RewriteCtx::rewrite` は `RewriteCtx` の非公開の
+      メソッドであり、`borrow.rs` は `mod` 宣言を 1 つも持たないので子孫のモジュールも無い。
+  BY CODE src/rc_ir/borrow.rs: expr_node, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, CODE src/rc_ir/borrow.rs: rc_node,
+     CODE src/rc_ir/borrow.rs: split_body_inner, CODE src/rc_ir/borrow.rs: drop_nodes_inner,
+     CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc,
+     DEF 本文, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
+<1>1. `expr_node(expr, source)` は `Arc::new(expr)` を 1 つ作り、それを `expr` フィールドに持つ
+      `RcExprNode` を返す。
+  BY CODE src/rc_ir/borrow.rs: expr_node
+<1>1a. `route`、`call_rc`、`RewriteCtx::owns_unit`、`units_under` の 1 回の呼び出しの中では、`expr_node`
+       も `RewriteCtx::rewrite` も走らない。よってその呼び出しは `RcExprNode` の値を 1 つも作らず、
+       `self.rewrite` の呼び出しも 1 つも起こさない。
+  <2>1. `route` または `call_rc` の 1 回の呼び出しの中で走る `borrow.rs` の関数は、この 2 つと
+        `RewriteCtx::routing_is_safe`、`RewriteCtx::routing_saves_retain`、
+        `RewriteCtx::any_owned_unit`、`RewriteCtx::owns_unit`、`RewriteCtx::owns_object`、
+        `RewriteCtx::comes_from_a_value_used_later`、`used_later`、`rhs_uses` で尽きる。
+        `borrow.rs` の関数としては、`route` は `routing_is_safe` と `routing_saves_retain` を、
+        `call_rc` は `owns_unit` を、`routing_is_safe` は `any_owned_unit` を、
+        `routing_saves_retain` は `used_later`、`owns_unit`、`comes_from_a_value_used_later` を、
+        `any_owned_unit` は `owns_unit` を、`owns_unit` は `owns_object` を、
+        `comes_from_a_value_used_later` は `used_later` を、`used_later` は `rhs_uses` と自身を、
+        `rhs_uses` は `used_later` を呼ぶ。`owns_object` が呼ぶ `borrow.rs` の関数は無い。
+        **この 10 個の本文に書かれた呼び出しのうち、`borrow.rs` の項目に解決するのは上に挙げた
+        ものだけであり、残りはすべて `borrow.rs` の外で定義された項目に解決する。** DEF 本文 より、
+        この 10 個が引数として渡すクロージャの本文はそれを書いた関数の本文の一部なので、その中に
+        書かれた呼び出しもこの数え上げに入っている --- 渡す先が標準ライブラリであっても
+        `borrow.rs` の外の項目であっても同じである。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::routing_is_safe,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::routing_saves_retain,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::any_owned_unit,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::comes_from_a_value_used_later,
+       CODE src/rc_ir/borrow.rs: used_later, CODE src/rc_ir/borrow.rs: rhs_uses, DEF 本文
+  <2>2. `RewriteCtx::owns_unit` の 1 回の呼び出しの中で走る `borrow.rs` の関数は、`owns_unit` と
+        `owns_object` の 2 つだけである。<2>1 の数え上げで `owns_unit` が呼ぶ `borrow.rs` の関数は
+        `owns_object` だけであり、`owns_object` が呼ぶ `borrow.rs` の関数は無い。
+    BY <2>1, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+  <2>3. `units_under` の 1 回の呼び出しの中で走る `borrow.rs` の関数は 1 つも無い。`units_under` の中で
+        走る `ownership.rs` の関数は `subtree_type`、`rc_units`、`rc_units_go`、`unit_step`、
+        `held_field_type` で尽き、残りは `src/ast/types.rs` の型についての関数と標準ライブラリの関数で
+        ある。この 5 つの本文にも `units_under` の本文にも `borrow.rs` の項目への参照は無い。
+    BY CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
+       CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
+       CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: held_field_type, DEF 本文
+  <2>4. QED
+    <1>0 が挙げる 7 つの本文 --- `expr_node` を呼ぶ 4 つと `RewriteCtx::rewrite` を呼ぶ 3 つ --- は、
+    <2>1 の 10 個にも <2>2 の 2 つにも入らず、<2>3 より `units_under` の中では `borrow.rs` の関数が
+    1 つも走らない。`borrow.rs` の外で定義された関数の本文は `borrow.rs` の中に無いので、<1>0 より
+    `expr_node` も `RewriteCtx::rewrite` も呼べない。よってこの 4 つの呼び出しの中で `expr_node` も
+    `RewriteCtx::rewrite` も走らない。`RcExprNode` の値を `Arc::new` から作るのは `expr_node` だけで
+    ある (<1>1)。
+    BY <1>0, <1>1, <2>1, <2>2, <2>3, DEF 本文
+<1>2. `rc_node(is_release, var, path, state, k, source)` は `expr_node` を 1 回呼んでその値を返す。
+      `prepend_rc(units, is_release, k)` は `units` を逆順にたたみ込み、`units` の要素ごとに `rc_node`
+      を 1 回呼ぶ。`units` が空なら `k` をそのまま返す。どちらも `self.rewrite` を呼ばない。
+  BY CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: prepend_rc, <1>0, <1>1
+<1>3. `RewriteCtx::rewrite_rc(v, path, state, is_release, k, source)` は `self.rewrite(k)` をちょうど
+      1 回呼び、ほかに `self.rewrite` を呼ばず、その値の上に `rc_node` で 0 個以上の節点を積んだものを
+      返す。返す木の位置は、その `self.rewrite(k)` が返した木の位置と、`rc_node` が積んだ節点の
+      **全体**である。**`self.rewrite(k)` はこの本文の最初の文であり、`rc_node` の実行はすべて
+      それが返った後に起きる。**
+  <2>1. 本文は最初に `let k = self.rewrite(k);` を実行する。`self.is_borrow_version` が偽のときは
+        `rc_node(is_release, v.clone(), path.clone(), state, k, source)` を返す。真のときは
+        `kept.into_iter().rev().fold(k, |cont, unit| rc_node(is_release, v.clone(), unit, state, cont, source))`
+        を返す。この `fold` の値は、`k` の上に `kept` の要素ごとに `rc_node` の節点を 1 つ積んだ木で
+        ある。どちらの枝の `rc_node` も、最初の文が返った後に実行される。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
+  <2>2. `kept` は `units_under(&v.ty, path, self.type_env)` を `self.owns_unit(v, unit)` で絞った
+        `Vec<FieldPath>` である。`units_under` の返り値の型は `Vec<FieldPath>`、`owns_unit` の返り値の
+        型は `bool`、`FieldPath` は `Vec<usize>` であり、どれも `RcExprNode` を含まない。よって `kept`
+        は木の節点を持ち込まない。<1>1a より、この 2 つの呼び出しの中で `self.rewrite` も `expr_node` も
+        走らない。
+    BY <1>1a, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc,
+       CODE src/rc_ir/ownership.rs: units_under,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit, CODE src/rc_ir/ast.rs: FieldPath
+  <2>3. QED
+    <2>1 の 2 つの枝はどちらも、`self.rewrite(k)` が返した木の上に `rc_node` の節点を 0 個以上積んだ木を
+    返す。積むのは `fold` なので、作った節点は 1 つ残らずその木に入る。<1>2 より `rc_node` は
+    `expr_node` で 1 節点を作り、`self.rewrite` を呼ばない。<2>2 よりほかの値は木の節点にならず、
+    `kept` を作る 2 つの呼び出しも `self.rewrite` を呼ばない。よって `self.rewrite` の呼び出しは
+    最初の文の 1 回だけであり、`rc_node` の実行はその後である。
+    BY <1>1a, <1>2, <2>1, <2>2
+<1>4. `rewrite_inner(node)` の 8 つの腕はいずれも、`self.rewrite` を `node` の各子についてちょうど
+      1 回ずつ呼び、ほかに `self.rewrite` を呼ばず、その戻り値の上に `expr_node` / `rc_node` /
+      `prepend_rc` で有限個の節点を積んだ木を返す。返す木の位置は、それらの `self.rewrite` の呼び出しが
+      返した木の位置と、この呼び出しの中で `expr_node` (`rc_node` と `prepend_rc` が呼ぶものを含む) が
+      作った節点の**全体**である。すなわち、受け取った木も作った節点も 1 つ残らず返す木に入り、返す木に
+      はそれ以外の位置が無い。**さらに、それらの `self.rewrite` の呼び出しの実行区間は互いに交わらず、
+      この呼び出しの中の `expr_node` の実行はどの `self.rewrite` の実行区間の中にも無い。**
+  <2>1. `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕が `self.rewrite` を呼ぶのは
+        `self.rewrite(k)` の 1 回だけであり、その上に `prepend_rc(after, true, ...)`、
+        `expr_node(RcExpr::Let(...))`、`prepend_rc(before, false, ...)` で節点を積む。この腕に落ちる
+        節点の子は継続 `k` だけである (DEF 部分木)。返す木の位置は、その `self.rewrite(k)` が返した
+        木の位置と、これらが積んだ節点の全体である。この腕の `expr_node` の実行はすべて
+        `self.rewrite(k)` が返った後に起きる。
+    <3>1. この腕の本文は 5 つの文である。`let callee = self.route(x, callee, args, k);`、
+          `let (before, after) = self.call_rc(&callee, args);`、
+          `let k = prepend_rc(after, true, self.rewrite(k));`、
+          `let app = expr_node(RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k), &node.source);`、
+          `prepend_rc(before, false, app)`。
+      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕
+    <3>2. `route` の返り値の型は `RcVar` であり、`call_rc` の返り値の型は
+          `(Vec<(RcVar, FieldPath)>, Vec<(RcVar, FieldPath)>)` である。`RcVar` の 5 つのフィールドの型は
+          `FullName`、`Arc<TypeNode>`、`Option<Span>`、`Option<Name>`、`bool` であり、`FieldPath` は
+          `Vec<usize>` である。いずれの型も `RcExprNode` を含まないので、`callee`、`before`、`after`、
+          `x.clone()`、`args.clone()` は木の節点を持ち込まない。
+      BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+         CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath
+    <3>3. QED
+      <3>1 の第 1 文と第 2 文の `route` と `call_rc` は節点を作らず `self.rewrite` も呼ばない
+      (<1>1a) ので、この腕が `self.rewrite` を呼ぶのは第 3 文の `self.rewrite(k)` の 1 回だけであり、
+      この腕がこの呼び出しの中で作る節点は第 3 文から第 5 文のものだけである。DEF 部分木 より
+      この腕に落ちる節点の子は継続 `k` だけなので、`self.rewrite` はこの節点の各子についてちょうど
+      1 回ずつ呼ばれている。第 3 文から第 5 文が木を組み立て、その材料は `self.rewrite(k)` が返した
+      木と、`prepend_rc` と `expr_node` が作る節点だけである (<1>2、<3>2)。第 3 文の
+      `prepend_rc(after, ...)` が作る節点は `k` に、第 4 文の `expr_node` が作る節点は `app` に、
+      第 5 文の `prepend_rc(before, ...)` が作る節点は返り値に入り、`k` は `app` の中に、`app` は
+      返り値の中にあるので、作った節点は 1 つ残らず返り値の木に入る。第 3 文では `self.rewrite(k)` が
+      引数として先に評価され、その値を受け取ってから `prepend_rc` が走るので、この腕の `expr_node` の
+      実行はすべて `self.rewrite(k)` が返った後である。
+      BY <1>1a, <1>2, <3>1, <3>2, DEF 部分木
+  <2>2. `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕は、`arms` の各 `arm` について
+        `self.rewrite(&arm.body)` を 1 回ずつ呼び、`self.rewrite(k)` を 1 回呼び、`expr_node` で
+        1 節点を積む。アームの列は `arms.iter().map(|arm| arm.with_body(self.rewrite(&arm.body))).collect()`
+        で作られるので、EXT Iterator::map と collect より閉包は `arms` の各要素についてちょうど 1 回、
+        先頭から順に呼ばれ、作られる列の第 `i` 要素は `arms[i]` について `with_body` が返したアームで
+        ある。すなわち `self.rewrite(&arm.body)` の呼び出しはアームごとにちょうど 1 回であり、閉包が
+        順に呼ばれるので 2 つのアームの呼び出しの実行区間は交わらない。`arm.with_body(body)` は
+        `body` をそのアームの本体に据えたアームを返す。`MatchArm` の残る 3 フィールド `tag`、
+        `payload`、`payload_state` は `RcExprNode` を持たないので、この節点の子は `self.rewrite` の
+        各呼び出しが返した木の根だけである (DEF 部分木)。アームの列を作る文が先に走り、続く
+        `expr_node(...)` の引数として `self.rewrite(k)` が評価されてから `expr_node` が呼ばれるので、
+        この腕の `self.rewrite(k)` の実行区間はどのアームの呼び出しとも交わらず、`expr_node` の実行は
+        どの `self.rewrite` の実行区間の中にも無い。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
+       CODE src/rc_ir/ast.rs: MatchArm::with_body, CODE src/rc_ir/ast.rs: MatchArm, DEF 部分木,
+       EXT Vec::iter と slice::iter, EXT Iterator::map と collect, EXT 呼び出しの入れ子
+  <2>3. `RcExpr::Let(x, rhs, k)` の腕は `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。
+        `rhs.clone()` は木の位置を持ち込まない。この腕に落ちる `rhs` は `RcRhs::Match` ではなく
+        (`match` の腕はこの順に並んでいる)、`Match` でない右辺を持つ `Let` 節点の子は継続だけだから
+        である (DEF 部分木)。`expr_node` の引数として `self.rewrite(k)` が先に評価されるので、
+        `expr_node` の実行はそれが返った後である。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, rhs, k)` の腕,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, DEF 部分木
+  <2>4. `RcExpr::Retain(v, path, state, k)` の腕と `RcExpr::Release(v, path, state, k)` の腕は
+        `self.rewrite_rc` を 1 回呼び、その値を返す。<1>3 よりその呼び出しは `self.rewrite(k)` を
+        ちょうど 1 回、最初の文として行い、`rc_node` の実行はその後である。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Retain(v, path, state, k)` の腕,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Release(v, path, state, k)` の腕,
+       <1>3
+  <2>5. `RcExpr::Destructure(container, fields, state, k)` の腕と `RcExpr::Eval(v, k)` の腕は
+        `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。この 2 種の節点の子は継続だけで
+        あり (DEF 部分木)、腕が複製する `container`、`fields`、`v` は `RcVar` と `Vec<(usize, RcVar)>`
+        なので木の位置を持ち込まない。どちらの腕も `expr_node` の引数として `self.rewrite(k)` を先に
+        評価するので、`expr_node` の実行はそれが返った後である。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Destructure(container, fields, state, k)` の腕,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Eval(v, k)` の腕,
+       CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, DEF 部分木
+  <2>6. `RcExpr::Ret(v)` の腕は `expr_node` で 1 節点を作って返し、`self.rewrite` を呼ばない。この節点に
+        子は無い。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Ret(v)` の腕, DEF 部分木
+  <2>7. QED
+    `RcExpr` の変位は `Let`, `Retain`, `Release`, `Destructure`, `Eval`, `Ret` の 6 つで、`RcRhs` の
+    変位は `Var`, `App`, `Closure`, `Llvm`, `Match` の 5 つである。<2>1 から <2>6 は
+    `Let` (右辺が `App`)、`Let` (右辺が `Match`)、`Let` (右辺がそれ以外)、`Retain`、`Release`、
+    `Destructure`、`Eval`、`Ret` の 8 つを尽くし、これは `rewrite_inner` の `match` の 8 つの腕である。
+    どの腕でも `self.rewrite` の呼び出しは順に行われ、`expr_node` の実行はそのすべてが返った後なので、
+    EXT 呼び出しの入れ子 より実行区間は互いに交わらず、`expr_node` の実行はどの実行区間の中にも無い。
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, EXT 呼び出しの入れ子
+<1>5. QED
+  <1>4 が 1、2、3 をそのまま与える。
+  BY <1>4
+
 ### L4 (走査する本体の `Match` はアームを 1 つ以上持つ)
 
 ASSUME  NEW `prog`: `RcProgram`,
@@ -1081,10 +1286,14 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, CODE src/rc_ir/borrow.rs: rc_node,
        CODE src/rc_ir/borrow.rs: prepend_rc, CODE src/rc_ir/ast.rs: RcRhs
   <2>3. QED
-    `rewrite_inner` は各子について `rewrite` を呼び、L1 よりそれは `rewrite_inner` を 1 回呼ぶ。木の
-    構造についての帰納法 (DEF 部分木より整礎) と <2>1、<2>2 より、返る木の `Match` は入力の木の `Match`
-    と 1 対 1 に対応し、アームの個数が等しい。
-    BY <2>1, <2>2, L1, DEF 部分木
+    L3a の 1 より `rewrite_inner` は `self.rewrite` を `node` の各子についてちょうど 1 回ずつ呼び、L1 より
+    その呼び出しは `rewrite_inner` を 1 回呼ぶ。L3a の 2 より、返る木の位置は、それらの呼び出しが返した
+    木の位置と、この呼び出しの中で作られた節点の全体である。木 `N(node)` の構造についての帰納法 (L0a の 4
+    より整礎) で示す --- 各子について返る木の `Match` は帰納法の仮定が扱い、この呼び出しの中で作られる
+    節点のうち `Match` を右辺に持つのは <2>1 の腕が作る 1 つだけで (<2>2)、そのアームの個数は `node` の
+    `Match` のものに等しい。よって返る木の `Match` は入力の木の `Match` と 1 対 1 に対応し、アームの個数が
+    等しい。
+    BY <2>1, <2>2, L0a, L1, L3a, DEF 部分木
 <1>2. 本補題の仮定の `borrow_ify` の呼び出しが `rewrite` に渡す本体は、その入力プログラムの関数の本体
       `f_own.body`、その複製 `clone.body`、または入力プログラムのグローバル初期化子 `g.init` である。
       `f_own` は `func.clone()` であり、`clone` は `clone_func` の値である。
@@ -1112,13 +1321,13 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
     BY CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/ast.rs: RcRhs,
        EXT Vec::iter と slice::iter, EXT Iterator::map と collect
   <2>5. QED
-    木 `N(body)` の構造についての帰納法で示す。DEF 部分木 より子は真の部分木なので、この帰納法は整礎で
-    ある。<2>2 より `rename_expr(n, renaming)` は `rename_expr_inner(n, renaming)` の値である。<2>3 と
+    木 `N(body)` の構造についての帰納法で示す。L0a の 4 よりこの帰納法は整礎である。<2>2 より
+    `rename_expr(n, renaming)` は `rename_expr_inner(n, renaming)` の値である。<2>3 と
     <2>4 より、その値の節点は `n` と同じ式の変位を持ち、その子 (`Match` のアーム本体と継続) は、`n` の
     対応する子について `rename_expr` が返した木である。よって帰納法の仮定と合わせて、返る木の位置は `n` の
     木の位置と 1 対 1 に対応し、対応する位置の式は同じ変位であり、<2>4 より `Match` のアームの個数は
     等しい。<2>1 でこれを `body` に適用する。
-    BY <2>1, <2>2, <2>3, <2>4, DEF 部分木
+    BY <2>1, <2>2, <2>3, <2>4, L0a, DEF 部分木
 <1>4. 本補題の仮定の `borrow_ify` の呼び出しの入力プログラムのすべての `Match` は 1 つ以上のアームを持つ。
   BY A9, 本補題の仮定
 <1>5. QED
@@ -1150,8 +1359,12 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
      CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, EXT Arc の契約, DEF 割り当て,
      EXT 型のサイズ, EXT bool のサイズ
 <1>2. 同時に生存している相異なる 2 つの割り当てについて、一方の占める番地はどれも他方の占める番地と
-      相異なる。
-  BY DEF 割り当て, EXT アロケータの契約
+      相異なる。割り当てが生存しているとは、そのハンドルが 1 つ以上存在することであり (DEF 割り当て)、
+      EXT Arc の契約 より、ハンドルが 1 つでも在るあいだそのブロックはアロケータへ返らない。よって
+      同時に生存している 2 つの割り当てのブロックはどちらもアロケータへ返っておらず、
+      EXT アロケータの契約 よりその 2 つは記憶域を共有しない。すなわち一方の占める番地の集合と
+      他方の占める番地の集合は交わらない。
+  BY DEF 割り当て, EXT Arc の契約, EXT アロケータの契約
 <1>2a. 2 つの節点 `p`、`q` の `p.expr` と `q.expr` の割り当てが相異なり、かつ同時に生存しているならば、
        `node_id(p) ≠ node_id(q)` である。<1>1 より `node_id(p)` は `p.expr` の割り当ての占める番地であり、
        `node_id(q)` は `q.expr` の割り当ての占める番地であって、<1>2 よりこの 2 つは相異なる。
@@ -1160,154 +1373,11 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       実行した `Arc::new` の呼び出しが取った割り当てを持ち、**相異なる位置の割り当ては相異なる `Arc::new`
       の呼び出しが取ったもの、すなわち相異なる割り当てである**。さらに、それらの割り当てはその呼び出しが
       返るまですべて生存している。
-  木 `N(node)` の構造についての帰納法で示す。DEF 部分木より子は真の部分木なので、この帰納法は整礎である。
+  木 `N(node)` の構造についての帰納法で示す。L0a の 4 よりこの帰納法は整礎である。
   <2>0a. 帰納法の仮定: `node` の各子 `c` について、`rewrite(c)` の 1 回の呼び出しが返す木の各位置は、その
          呼び出しの間に `expr_node` が実行した `Arc::new` の呼び出しが取った割り当てを持ち、相異なる位置の
          割り当ては相異なり、それらはその呼び出しが返るまですべて生存している。
     BY 帰納法の仮定
-  <2>1. `expr_node(expr, source)` は `Arc::new(expr)` を 1 つ作り、それを `expr` フィールドに持つ
-        `RcExprNode` を返す。
-    BY CODE src/rc_ir/borrow.rs: expr_node
-  <2>2. `rc_node(is_release, var, path, state, k, source)` は `expr_node` を 1 回呼んでその値を返す。
-        `prepend_rc(units, is_release, k)` は `units` を逆順にたたみ込み、`units` の要素ごとに `rc_node`
-        を 1 回呼ぶ。`units` が空なら `k` をそのまま返す。
-    BY CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: prepend_rc, <2>1
-  <2>3. `RewriteCtx::rewrite_rc(v, path, state, is_release, k, source)` は `self.rewrite(k)` を 1 回呼び、
-        その値の上に `rc_node` で 0 個以上の節点を積んだものを返す。返す木の位置は、その `self.rewrite(k)`
-        が返した木の位置と、`rc_node` が積んだ節点の**全体**である。
-    <3>1. 本文は最初に `let k = self.rewrite(k);` を実行する。`self.is_borrow_version` が偽のときは
-          `rc_node(is_release, v.clone(), path.clone(), state, k, source)` を返す。真のときは
-          `kept.into_iter().rev().fold(k, |cont, unit| rc_node(is_release, v.clone(), unit, state, cont, source))`
-          を返す。この `fold` の値は、`k` の上に `kept` の要素ごとに `rc_node` の節点を 1 つ積んだ木で
-          ある。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
-    <3>2. `kept` は `units_under(&v.ty, path, self.type_env)` を `self.owns_unit(v, unit)` で絞った
-          `Vec<FieldPath>` である。`units_under` の返り値の型は `Vec<FieldPath>`、`owns_unit` の返り値の
-          型は `bool`、`FieldPath` は `Vec<usize>` であり、どれも `RcExprNode` を含まない。よって `kept`
-          は木の節点を持ち込まない。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, CODE src/rc_ir/ownership.rs: units_under,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit, CODE src/rc_ir/ast.rs: FieldPath
-    <3>3. QED
-      <3>1 の 2 つの枝はどちらも、`self.rewrite(k)` が返した木の上に `rc_node` の節点を 0 個以上積んだ木を
-      返す。積むのは `fold` なので、作った節点は 1 つ残らずその木に入る。<2>2 より `rc_node` は
-      `expr_node` で 1 節点を作る。<3>2 よりほかの値は木の節点にならない。
-      BY <2>2, <3>1, <3>2
-  <2>4. `rewrite_inner(node)` の 8 つの腕はいずれも、`self.rewrite` を `node` の各子についてちょうど
-        1 回ずつ呼び、その戻り値の上に `expr_node` / `rc_node` / `prepend_rc` で有限個の節点を積んだ木を
-        返す。返す木の位置は、それらの `self.rewrite` の呼び出しが返した木の位置と、この呼び出しの中で
-        `expr_node` (`rc_node` と `prepend_rc` が呼ぶものを含む) が作った節点の**全体**である。すなわち、
-        受け取った木も作った節点も 1 つ残らず返す木に入り、返す木にはそれ以外の位置が無い。
-    <3>1. `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕が `self.rewrite` を呼ぶのは
-          `self.rewrite(k)` の 1 回だけであり、その上に `prepend_rc(after, true, ...)`、
-          `expr_node(RcExpr::Let(...))`、`prepend_rc(before, false, ...)` で節点を積む。この腕に落ちる
-          節点の子は継続 `k` だけである (DEF 部分木)。返す木の位置は、その `self.rewrite(k)` が返した
-          木の位置と、これらが積んだ節点の全体である。
-      <4>1. この腕の本文は 5 つの文である。`let callee = self.route(x, callee, args, k);`、
-            `let (before, after) = self.call_rc(&callee, args);`、
-            `let k = prepend_rc(after, true, self.rewrite(k));`、
-            `let app = expr_node(RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k), &node.source);`、
-            `prepend_rc(before, false, app)`。
-        BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕
-      <4>2. `route` の返り値の型は `RcVar` であり、`call_rc` の返り値の型は
-            `(Vec<(RcVar, FieldPath)>, Vec<(RcVar, FieldPath)>)` である。`RcVar` の 5 つのフィールドの型は
-            `FullName`、`Arc<TypeNode>`、`Option<Span>`、`Option<Name>`、`bool` であり、`FieldPath` は
-            `Vec<usize>` である。いずれの型も `RcExprNode` を含まないので、`callee`、`before`、`after`、
-            `x.clone()`、`args.clone()` は木の節点を持ち込まない。
-        BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
-           CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath
-      <4>2a. `route` と `call_rc` の 1 回の呼び出しは `expr_node` も `RewriteCtx::rewrite` も実行
-             しない。よって `RcExprNode` の値を 1 つも作らず、`self.rewrite` の呼び出しも 1 つも
-             起こさない。
-        <5>1. `expr_node` は `borrow.rs` の非公開の自由関数であり、`RewriteCtx::rewrite` は
-              `RewriteCtx` の非公開のメソッドである。`borrow.rs` は `mod` 宣言を 1 つも持たないので、
-              この 2 つが見える子モジュールも無く、その呼び出しは `borrow.rs` の中にしか書けない。
-              `borrow.rs` の中で `expr_node` を呼ぶのは、`RewriteCtx::rewrite_inner`、`rc_node`、
-              `split_body_inner`、`drop_nodes_inner` の 4 つの本文だけである。
-          BY CODE src/rc_ir/borrow.rs: expr_node, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
-             CODE src/rc_ir/borrow.rs: rc_node, CODE src/rc_ir/borrow.rs: split_body_inner,
-             CODE src/rc_ir/borrow.rs: drop_nodes_inner, DEF 本文
-        <5>2. `route` または `call_rc` の 1 回の呼び出しの中で走る `borrow.rs` の関数は、この 2 つと
-              `RewriteCtx::routing_is_safe`、`RewriteCtx::routing_saves_retain`、
-              `RewriteCtx::any_owned_unit`、`RewriteCtx::owns_unit`、`RewriteCtx::owns_object`、
-              `RewriteCtx::comes_from_a_value_used_later`、`used_later`、`rhs_uses` で尽きる。
-              `borrow.rs` の関数としては、`route` は `routing_is_safe` と `routing_saves_retain` を、
-              `call_rc` は `owns_unit` を、`routing_is_safe` は `any_owned_unit` を、
-              `routing_saves_retain` は `used_later`、`owns_unit`、`comes_from_a_value_used_later` を、
-              `any_owned_unit` は `owns_unit` を、`owns_unit` は `owns_object` を、
-              `comes_from_a_value_used_later` は `used_later` を、`used_later` は `rhs_uses` と自身を、
-              `rhs_uses` は `used_later` を呼ぶ。`owns_object` が呼ぶ `borrow.rs` の関数は無い。
-              **この 10 個の本文に書かれた呼び出しのうち、`borrow.rs` の項目に解決するのは上に挙げた
-              ものだけであり、残りはすべて `borrow.rs` の外で定義された項目に解決する。** DEF 本文 より、
-              この 10 個が引数として渡すクロージャの本文はそれを書いた関数の本文の一部なので、その中に
-              書かれた呼び出しもこの数え上げに入っている --- 渡す先が標準ライブラリであっても
-              `borrow.rs` の外の項目であっても同じである。
-          BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::routing_is_safe,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::routing_saves_retain,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::any_owned_unit,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
-             CODE src/rc_ir/borrow.rs: RewriteCtx::comes_from_a_value_used_later,
-             CODE src/rc_ir/borrow.rs: used_later, CODE src/rc_ir/borrow.rs: rhs_uses, DEF 本文
-        <5>3. QED
-          <5>2 の 10 個はどれも <5>1 の 4 つではないので、その本文に `expr_node` の呼び出しは書かれて
-          いない。この 10 個に `RewriteCtx::rewrite` は無く、<5>2 はこの 2 つの呼び出しの中で走る
-          `borrow.rs` の関数を尽くしているので、`RewriteCtx::rewrite` も走らない。`borrow.rs` の外で
-          定義された関数の本文は `borrow.rs` の中に無いので、<5>1 よりそのどちらも呼べない。よって
-          `route` と `call_rc` の呼び出しの中で `expr_node` も `RewriteCtx::rewrite` も走らない。
-          `expr_node` は `Arc::new` を 1 つ作って `RcExprNode` を返す唯一の場所である (<2>1)。
-          BY <2>1, <5>1, <5>2, DEF 本文
-      <4>3. QED
-        <4>1 の第 1 文と第 2 文の `route` と `call_rc` は節点を作らず `self.rewrite` も呼ばない
-        (<4>2a) ので、この腕が `self.rewrite` を呼ぶのは第 3 文の `self.rewrite(k)` の 1 回だけであり、
-        この腕がこの呼び出しの中で作る節点は第 3 文から第 5 文のものだけである。DEF 部分木 より
-        この腕に落ちる節点の子は継続 `k` だけなので、`self.rewrite` はこの節点の各子についてちょうど
-        1 回ずつ呼ばれている。第 3 文から第 5 文が木を組み立て、その材料は `self.rewrite(k)` が返した
-        木と、`prepend_rc` と `expr_node` が作る節点だけである (<2>2、<4>2)。第 3 文の
-        `prepend_rc(after, ...)` が作る節点は `k` に、第 4 文の `expr_node` が作る節点は `app` に、
-        第 5 文の `prepend_rc(before, ...)` が作る節点は返り値に入り、`k` は `app` の中に、`app` は
-        返り値の中にあるので、作った節点は 1 つ残らず返り値の木に入る。
-        BY <2>2, <4>1, <4>2, <4>2a, DEF 部分木
-    <3>2. `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕は、`arms` の各 `arm` について
-          `self.rewrite(&arm.body)` を 1 回ずつ呼び、`self.rewrite(k)` を 1 回呼び、`expr_node` で
-          1 節点を積む。アームの列は `arms.iter().map(|arm| arm.with_body(self.rewrite(&arm.body))).collect()`
-          で作られるので、EXT Iterator::map と collect より閉包は `arms` の各要素についてちょうど 1 回、
-          先頭から順に呼ばれ、作られる列の第 `i` 要素は `arms[i]` について `with_body` が返したアームで
-          ある。すなわち `self.rewrite(&arm.body)` の呼び出しはアームごとにちょうど 1 回である。
-          `arm.with_body(body)` は `body` をそのアームの本体に据えたアームを返す。`MatchArm` の残る
-          3 フィールド `tag`、`payload`、`payload_state` は `RcExprNode` を持たないので、この節点の子は
-          `self.rewrite` の各呼び出しが返した木の根だけである (DEF 部分木)。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
-         CODE src/rc_ir/ast.rs: MatchArm::with_body, CODE src/rc_ir/ast.rs: MatchArm, DEF 部分木,
-         EXT Vec::iter と slice::iter, EXT Iterator::map と collect
-    <3>3. `RcExpr::Let(x, rhs, k)` の腕は `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。
-          `rhs.clone()` は木の位置を持ち込まない。この腕に落ちる `rhs` は `RcRhs::Match` ではなく
-          (`match` の腕はこの順に並んでいる)、`Match` でない右辺を持つ `Let` 節点の子は継続だけだから
-          である (DEF 部分木)。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, rhs, k)` の腕,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, DEF 部分木
-    <3>4. `RcExpr::Retain(v, path, state, k)` の腕と `RcExpr::Release(v, path, state, k)` の腕は
-          `self.rewrite_rc` を 1 回呼び、その値を返す。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Retain(v, path, state, k)` の腕,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Release(v, path, state, k)` の腕,
-         <2>3
-    <3>5. `RcExpr::Destructure(container, fields, state, k)` の腕と `RcExpr::Eval(v, k)` の腕は
-          `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。この 2 種の節点の子は継続だけで
-          あり (DEF 部分木)、腕が複製する `container`、`fields`、`v` は `RcVar` と `Vec<(usize, RcVar)>`
-          なので木の位置を持ち込まない。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Destructure(container, fields, state, k)` の腕,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Eval(v, k)` の腕,
-         CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, DEF 部分木
-    <3>6. `RcExpr::Ret(v)` の腕は `expr_node` で 1 節点を作って返す。この節点に子は無い。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Ret(v)` の腕, DEF 部分木
-    <3>7. QED
-      `RcExpr` の変位は `Let`, `Retain`, `Release`, `Destructure`, `Eval`, `Ret` の 6 つで、`RcRhs` の
-      変位は `Var`, `App`, `Closure`, `Llvm`, `Match` の 5 つである。<3>1 から <3>6 は
-      `Let` (右辺が `App`)、`Let` (右辺が `Match`)、`Let` (右辺がそれ以外)、`Retain`、`Release`、
-      `Destructure`、`Eval`、`Ret` の 8 つを尽くし、これは `rewrite_inner` の `match` の 8 つの腕である。
-      BY <3>1, <3>2, <3>3, <3>4, <3>5, <3>6, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
-         CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
   <2>5. `rewrite` の 1 回の呼び出しについて、次の 2 つが成り立つ。**(a)** この呼び出しの中で `expr_node`
         が作った各節点と、この呼び出しが `self.rewrite` を呼んで受け取った各木の各位置は、この呼び出しが
         返す木の位置である。**(b)** それらの割り当ては、それが作られた時点からこの呼び出しが返るまで
@@ -1316,18 +1386,20 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
     <3>0. 木の根の `RcExprNode` の値が 1 つ在るあいだ、その木のすべての位置の `Arc` のハンドルが 1 つ以上
           存在し、その割り当ては生存している。
       BY L2a
-    <3>1. (a) が成り立つ。<2>4 より、`rewrite_inner(node)` が返す木の位置は、`self.rewrite` の各呼び出しが
-          返した木の位置と、この呼び出しの中で `expr_node` が作った節点の全体である。L1 より
+    <3>1. (a) が成り立つ。L3a の 2 より、`rewrite_inner(node)` が返す木の位置は、`self.rewrite` の各
+          呼び出しが返した木の位置と、この呼び出しの中で `expr_node` が作った節点の全体である。L1 より
           `rewrite(node)` はその値をそのまま返す。
-      BY <2>4, L1
+      BY L3a, L1
     <3>1a. この呼び出しの中で `expr_node` が作った各節点は作られた時点から、この呼び出しが
            `self.rewrite` を呼んで受け取った各木は受け取った時点から、どちらもこの呼び出しが返るまで、
-           その割り当てが生存している。<2>4 の各腕は、`expr_node` が作った節点と `self.rewrite` が返した
-           木を、作った (受け取った) 直後に、その上に積む節点の子として、または戻り値として据える。どの腕
-           も、作った節点も受け取った木も捨てない。よってそれらはその時点からこの呼び出しが返るまで、
+           その割り当てが生存している。`rewrite_inner` の各腕は、`expr_node` が作った節点と
+           `self.rewrite` が返した木を、局所変数に束縛して保持し、その上に積む節点の子として、または
+           戻り値として据える --- `rewrite_rc` は `self.rewrite(k)` の値を `k` に束縛し、`kept` を
+           計算してから `fold` の初期値に据えるので、そのあいだ `k` がハンドルを保持する。どの腕も、
+           作った節点も受け取った木も捨てない。よってそれらはその時点からこの呼び出しが返るまで、
            組み立て中の木の部分木の根であり続け、<3>0 よりその部分木のすべての位置の割り当てが生存して
            いる。
-      BY <2>4, <3>0, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+      BY L3a, <3>0, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
          CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, CODE src/rc_ir/borrow.rs: prepend_rc,
          DEF 割り当て
     <3>2. `arm.with_body(body)` の中の `self.clone()` は入力側のアームの本体の `Arc` のハンドルを 1 つ作り、
@@ -1335,7 +1407,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
           節点のハンドルであり、`expr_node` が作った割り当てのものではない。
       BY CODE src/rc_ir/ast.rs: MatchArm::with_body,
          CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
-         <2>4, DEF 割り当て
+         L3a, DEF 割り当て
     <3>3. QED
       <3>1 が (a) を与える。(b) のうち、この呼び出しの中で `expr_node` が作った節点については <3>1a が
       そのまま与える。その下の呼び出しが `expr_node` で作った割り当てについては、<2>0a よりそれはその子の
@@ -1346,14 +1418,15 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       BY <2>0a, <3>0, <3>1, <3>1a, <3>2
   <2>6. QED
     <2>0a の帰納法の仮定より、各子について `rewrite` が返す木の相異なる位置の割り当ては、相異なる
-    `Arc::new` の呼び出しが取ったものである。<2>4 より `rewrite_inner(node)` が返す木の位置は、各子に
+    `Arc::new` の呼び出しが取ったものである。L3a の 2 より `rewrite_inner(node)` が返す木の位置は、各子に
     ついて `rewrite` が返した木の位置と、この呼び出しの中で `expr_node` が新しく作った節点の全体である。
-    相異なる子の木の位置は相異なる `rewrite` の呼び出しの中の `Arc::new` の呼び出しが取った割り当てを
-    持ち、1 つの `Arc::new` の呼び出しは 1 つの `rewrite` の呼び出しの中でしか実行されないので、それらは
-    互いに相異なる。この呼び出しの中で `expr_node` が新しく作る節点は、<2>1 より新しい `Arc::new` の
-    呼び出しであり、子の呼び出しの中の `Arc::new` とも互いとも相異なる。L1 より `rewrite(node)` は
-    `rewrite_inner(node)` の値をそのまま返す。生存については <2>0a と <2>5 の (b) が与える。
-    BY <2>0a, <2>1, <2>2, <2>3, <2>4, <2>5, L1, DEF 部分木
+    **相異なる 2 つの子 `c`、`c'` について、この呼び出しが行う `rewrite(c)` と `rewrite(c')` の実行区間は
+    交わらない** (L3a の 3、L1、EXT 呼び出しの入れ子)。よって一方の実行区間の中で実行された `Arc::new` は
+    他方の実行区間の中では実行されておらず、<2>0a より 2 つの子の木の割り当ては相異なる。**この呼び出しの
+    中で `expr_node` が実行する `Arc::new` は、どの子の `rewrite` の実行区間の中にも無い** (L3a の 3)
+    ので、子の木の割り当てとも、互いとも相異なる。L1 より `rewrite(node)` は `rewrite_inner(node)` の値を
+    そのまま返す。生存については <2>0a と <2>5 の (b) が与える。
+    BY <2>0a, <2>5, L1, L3a, DEF 割り当て, EXT 呼び出しの入れ子
 <1>4. `cancel_body(vars, body)` の実行中、`body` の木の割り当てはすべて生存している。
   <2>1. `cancel` の `funcs` を作る閉包は、`prog.funcs.values()` の各 `f` について
         `clone.body = cancel_body(&vars, &f.body)` を実行する。`cancel_body` の実行中、`f` は `prog` から
