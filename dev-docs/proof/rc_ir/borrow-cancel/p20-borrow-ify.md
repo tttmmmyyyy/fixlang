@@ -2173,10 +2173,11 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
     BY CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_symbol,
        CODE src/ast/types.rs: TypeNode::is_funptr
   <2>2. `Lowerer::lower_lam` は `fresh_closure_ref()` が作る名前を鍵に入れる。`Lowerer` が `funcs` に
-        鍵を入れるのはこの 2 か所だけである。この鍵の関数の `fn_ty` は `lower_to_var` が `Expr::Lam` の
-        節点に与える型 `lam_ty` であり、その `capture` は `lam_ty.is_closure()` が真のときだけ `Some` で
-        ある (偽のときは `captures` が空であることを表明して `None` を入れる)。
-    BY CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_to_var, Lowerer::lower_lam,
+        鍵を入れるのはこの 2 か所だけである。この鍵の関数を作るのは `lower_lambda_as_function` であり、
+        その `fn_ty` は `Expr::Lam` の節点が持つ型 `lam.type_` -- 以下 `lam_ty` -- である。その `capture`
+        は `lam_ty.is_closure()` が真のときだけ `Some` である (偽のときは `captures` が空であることを
+        表明して `None` を入れる)。
+    BY CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_lam,
        Lowerer::fresh_closure_ref, Lowerer::lower_lambda_as_function,
        CODE src/ast/types.rs: TypeNode::is_closure
   <2>3. `lower_program` の出力から `borrow_ify` の入力までの間に、`funcs` に鍵を足すパスは無い。
