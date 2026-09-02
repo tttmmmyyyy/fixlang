@@ -204,6 +204,48 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      CODE src/rc_ir/ast.rs: RcVar (`ty` の doc「always concrete (monomorphic)」),
      CODE src/ast/program.rs: Program::validate_layouts
 
+<1>1a. **(型の項は有限である)** `TypeNode` の値 `n` の**直接の部分**を、`n.ty` が
+   `Type::TyApp(fun, arg)` のとき `fun` と `arg`、`Type::AssocTy(_, args)` のとき `args` の各要素、
+   `Type::TyVar(_)` と `Type::TyCon(_)` のとき無しと定める。このとき、`n` から直接の部分の辺を
+   0 回以上辿って着ける `TypeNode` の値は有限個である。したがって、辿る辺が直接の部分だけである
+   再帰は停止する。この段は `<1>1` を読まない -- 型が RC IR に現れるかどうかに依らず、`TypeNode` の
+   任意の値について成り立つ。
+  <2>1. 1 つの値の直接の部分は有限個である。`Type` の変位は `TyVar`、`TyCon`、`TyApp`、`AssocTy` の
+     4 つであり、はじめの 2 つは 0 個、`TyApp` は 2 個、`AssocTy` は `args` の長さだけを持つ。
+    BY CODE src/ast/types.rs: Type
+  <2>2. `TypeNode` の値の `ty` の欄が書かれるのは、その値が作られるときだけである。`src/` で
+     `TypeNode` の `ty` に代入するのは `src/ast/types.rs` の 8 か所 -- `set_ty`、`set_tyvar_kind`、
+     `set_tyvar`、`set_tycon_tc`、`set_tyapp_fun`、`set_tyapp_arg`、`set_assocty_name`、
+     `set_assocty_args` -- であり、どれも `self.clone()` が作った局所の値に代入してから `Arc::new`
+     で包んで返す。`ty` の欄に値を置く残りは `TypeNode::new` と `impl Clone for TypeNode` の
+     構造体リテラルであり、どちらも新しい値を作る。既に在る値の `ty` を書き替える道は無い --
+     `TypeNode` は `Arc<TypeNode>` を通じてしか渡されず、`Arc` が渡すのは `&TypeNode` であって、
+     `src/` は `TypeNode` について `Arc::get_mut` も `Arc::make_mut` も呼ばず、`&mut TypeNode` を
+     受け取る関数も持たない。ほかのファイルに在る `.ty` への代入は `Scheme`、`Field`、`QualType`、
+     `Predicate` といった別の型の欄への代入であり、そこが替わるのは `Arc<TypeNode>` そのもので
+     あって節点の中身ではない。
+    BY CODE src/ast/types.rs: TypeNode (`ty` の宣言), CODE src/ast/types.rs: TypeNode::new,
+       CODE src/ast/types.rs: TypeNode::set_ty, CODE src/ast/types.rs: TypeNode::set_tyvar_kind,
+       CODE src/ast/types.rs: TypeNode::set_tyvar, CODE src/ast/types.rs: TypeNode::set_tycon_tc,
+       CODE src/ast/types.rs: TypeNode::set_tyapp_fun, CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
+       CODE src/ast/types.rs: TypeNode::set_assocty_name,
+       CODE src/ast/types.rs: TypeNode::set_assocty_args,
+       CODE src/ast/types.rs: impl Clone for TypeNode
+  <2>3. 値が作られる時点で、その直接の部分はどれも既に在る値である。`Type::TyApp` と
+     `Type::AssocTy` を組み立てるのは `type_tyapp`、`type_assocty`、および `<2>2` の
+     `set_tyapp_fun`・`set_tyapp_arg`・`set_assocty_name`・`set_assocty_args` であり、どれも
+     引数として渡された `Arc<TypeNode>` か、複製元の `ty` が既に持っていた `Arc<TypeNode>` を置く。
+     `TypeNode` が導出する `Deserialize` も、`ty` の欄を読み終えてから節点を組み立てるので、
+     部分は節点より先に作られる。
+    BY <2>2, CODE src/ast/types.rs: type_tyapp, CODE src/ast/types.rs: type_assocty,
+       CODE src/ast/types.rs: TypeNode (`Serialize` と `Deserialize` の導出)
+  <2>4. QED
+    1 回の実行で作られる `TypeNode` の値に、作られた順の番号を与える。`<2>2` と `<2>3` より、直接の
+    部分の辺はこの番号を狭義に減らすので、`n` から降りる辺の道はどれも有限であり、その長さは `n` の
+    番号で上から抑えられる。`<2>1` より各段の分岐は有限である。有限分岐で深さが有限の木は有限なので、
+    `n` から着ける値は有限個であり、辺が直接の部分だけである再帰はそのすべてを訪れて終わる。
+    BY <2>1, <2>2, <2>3
+
 <1>2. **(H2: 変数のスコープ規律)** 本体 -- 関数の `body` またはグローバル初期化子の `init` -- を 1 つ
    取り、`vars` をそれについて `VarTable::of` または `VarTable::body_only` が作る表とする。その本体の
    各節点 `n` が使う変数はどれも、`Scope(n)` (下の `DEF Scope`) の要素であるか、`vars.bindings` の
@@ -603,8 +645,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        **`set_source_if_none` も abort しない** -- `info.source` を見て、`None` なら `set_source` が
        節点を複製して `info.source` を置き替えた新しい `Arc` を返し、`Some` なら自分の `Arc` を複製
        する。どちらの枝も場合分けと複製だけである。
-       型は有限の項なので再帰は停止する。返る列の長さは `ti.fields` の長さである。
-      BY CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
+       `substitute_type` が再帰する先は `TyApp` の `fun` と `arg`、および `AssocTy` の `args` の
+       各要素であり、これは `<1>1a` の直接の部分の辺そのものなので、`<1>1a` より再帰は停止する。
+       返る列の長さは `ti.fields` の長さである。
+      BY <1>1a, CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
          CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
          CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
          CODE src/ast/types.rs: TypeNode::set_assocty_args,
@@ -1909,7 +1953,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `is_closure() || toplevel_tycon_info(E).is_unbox` であり、`is_closure` は
        `toplevel_tycon_satisfies` を経て `toplevel_tycon()` を 1 回呼んで名前を 1 回比べるだけ、
        `toplevel_tycon_info` は `toplevel_tycon()` を 1 回呼んで `E.tycons()` を 1 回引くだけで
-       ある。`toplevel_tycon()` は `Type::TyApp` の関数側への再帰であり、型は有限の項なので停止する。
+       ある。`toplevel_tycon()` が再帰する先は `Type::TyApp` の関数側だけであり、それは `<1>1a` の
+       直接の部分の辺なので、`<1>1a` より停止する。
      - `Binding::Join` の腕の `origin(...).acted_on()` と `candidates` (`Set`) への挿入。
        `acted_on` は `identity()` と `candidates()` を呼んで有限の `Vec` を作り、`candidates()` は
        `Origin::Join` が持つ有限の `Set` を 1 回走査する。`arm_results` は有限である (`<1>26`)。
@@ -1923,7 +1968,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        走査、`truncate_to_unit` の呼び出し (`<1>1` と `<1>9` より停止する)、`operand_units` (`Set`)
        への挿入、`reached` (有限の `Vec`) の走査と `Origin` どうしの等価比較、各 `Origin` の
        `acted_on()` の呼び出し、`candidates` (`Set`) の構成、`Origin::of_candidates`。
-    BY A15, <1>1, <1>9, <1>26, <1>28,
+    BY A15, <1>1, <1>1a, <1>9, <1>26, <1>28,
        CODE src/rc_ir/ownership.rs: origin, origin_inner, origin_from_leaves_under,
           as_arg_projection, Origin::acted_on, Origin::candidates, Origin::of_candidates,
        CODE src/ast/types.rs: TypeNode::is_box, TypeNode::is_unbox, TypeNode::is_closure,
