@@ -111,6 +111,9 @@ P9 と合わせて読む」。A9 についてはその項が「`borrow_ify` と 
   よって「`Q` が成り立つ場合」と「`Q` が成り立たない場合」の 2 つは、場合を尽くす。
 - **EXT 等号の性質**。等号は反射的 (`a = a`)、対称的 (`a = b` ならば `b = a`)、推移的 (`a = b` かつ
   `b = c` ならば `a = c`) である。
+- **EXT `Iterator::enumerate` と `Iterator::filter`**。`Iterator::enumerate` は、元の列の第 `n` 元に
+  添字 `n` を対にした列を返す。添字は 0 から始まり、1 ずつ増える。`Iterator::filter` は、述語が真である
+  元だけを元の順序のまま残す。
 
 ### A16 の 2 つの節
 
@@ -869,10 +872,12 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 <1>2c. `unpunched_field_types` が返す対の第 1 成分は互いに相異なる。
   この関数は `instance_field_types` が返す列に `enumerate()` を掛けて添字を付け、`filter` で穴の
-  フィールドを落とす。`enumerate()` が付ける添字は 0 から始まる狭義単調増加の列であり、`filter` は
-  順序を保つので、残った対の第 1 成分も狭義単調増加であり、したがって互いに相異なる。よって
+  フィールドを落とす。EXT `Iterator::enumerate` と `Iterator::filter` より、付く添字は 0 から始まって
+  1 ずつ増える狭義単調増加の列であり、`filter` は順序を保つので、残った対の第 1 成分も狭義単調増加で
+  あり、したがって互いに相異なる。よって
   `<1>2a` の最後の場合で連ねられる `Push(q ++ [i])` の `i` は互いに相異なる。
-  BY CODE src/ast/types.rs: TypeNode::unpunched_field_types
+  BY EXT `Iterator::enumerate` と `Iterator::filter`,
+     CODE src/ast/types.rs: TypeNode::unpunched_field_types
 
 <1>3. `Push(q)` の異なる 2 つの位置にある成分 `P`、`P'` について、`P` は `P'` の前置ではない。
       とくに (前置が等号を含むので) `P ≠ P'` であり、`Push(q)` の成分は互いに相異なる。
