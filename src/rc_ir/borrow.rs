@@ -629,7 +629,7 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
 }
 
 /// The name/type of each parameter and capture, in order.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn param_names_and_types(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
     func.params
         .iter()

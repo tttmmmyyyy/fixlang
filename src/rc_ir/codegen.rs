@@ -186,7 +186,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Generate the code for an RC IR expression, dispatching on the kind of node and following its
     /// continuation. The node's debug location is already in effect. Returns the produced object
     /// when `tail` is false; when `tail` is true the return has been built and `None` is returned.
-    // PROOF: P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_expr_inner(
         &mut self,
         node: &RcExprNode,
@@ -422,7 +422,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Evaluate a `Var` or `Closure` right-hand side to an object. `App`, `Match`, and `Llvm` are
     /// handled directly in `eval_rc_expr_inner`.
-    // PROOF: P3, P4, P7a, P7d, P7e, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_rhs(
         &mut self,
         rhs: &RcRhs,
