@@ -1081,6 +1081,7 @@ impl TypeNode {
     }
 
     /// One node of the `unwrap_newtypes` walk, with the type this node stands for on the way out.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unwrap_newtypes_node(
         self: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -1864,6 +1865,7 @@ fn type_node_eq(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
     Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty
 }
 
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for Type {
     /// Compares the parts of the type expression, taking two occurrences of one node as equal on
     /// sight (`type_node_eq`). The derived `Hash` agrees with this, reading the expression a node

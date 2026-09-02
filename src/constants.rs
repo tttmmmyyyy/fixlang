@@ -174,6 +174,7 @@ pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 /// How many fields a closure has: the function pointer and the capture.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const CLOSURE_FIELD_COUNT: usize = 2;
 // Field layout of the unbox `Array` value: a `SubObject` pointer to the `#ArrayStorage`, then the
 // register-resident size and capacity.
