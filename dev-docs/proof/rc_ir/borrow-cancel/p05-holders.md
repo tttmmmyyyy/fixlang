@@ -1050,7 +1050,7 @@ D24 の活性化の林が挙げる 5 種のうち、(E3) 以外の 4 種には�
         限らない**」、「この op は `fix(f)` のクロージャをその場で組み立てて `f` に渡し、返った関数に
         改めてオペランド `x` を渡すので、`apply_lambda` を 2 回呼び、1 回目に渡す値はどのオペランドでも
         ない」), `<3>4a`
-      `<4>3.` `fix(f)` の組み立ては (γ) ではない。
+      `<4>2a.` この op が組み立てる `fix(f)` の型 `fixf_ty` は closure 型である。
         `<5>1.` `Std::fix` の値は `\f -> \x -> fix_body(b, f, x)` であり、その scheme の型は
           `type_fun(type_fun(fixed_ty, fixed_ty), fixed_ty)`、すなわち
           `((a -> b) -> (a -> b)) -> (a -> b)` である。この op はその内側の lambda の本体なので、
@@ -1066,24 +1066,22 @@ D24 の活性化の林が挙げる 5 種のうち、(E3) 以外の 4 種には�
           `expr_llvm` である)
           `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
           `let fixf_ty = f.ty.get_lambda_dst();` を取る)
-        `<5>2.` `fixf_ty` は closure 型である。`fixed_ty = type_fun(a, b)` の頂の tycon は矢印で
-          あり、型変数の代入は型変数を置き換えるだけで頂の tycon を変えない。`is_closure()` が見るのは
-          頂の tycon が矢印であることだけなので、代入後の `fixed_ty` すなわち `fixf_ty` について
-          `is_closure()` は真である。
+        `<5>2.` QED
+          `fixed_ty = type_fun(a, b)` の頂の tycon は矢印であり、型変数の代入は型変数を置き換える
+          だけで頂の tycon を変えない。`is_closure()` が見るのは頂の tycon が矢印であることだけなので、
+          代入後の `fixed_ty` すなわち `fixf_ty` について `is_closure()` は真である。
           BY `<5>1`
           `CODE src/fixstd/builtin.rs: fix` (`let fixed_ty = type_fun(type_tyvar_star("a"),
           type_tyvar_star("b"));`)
           `CODE src/ast/types.rs: TypeNode::is_closure`
           (`self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())`)
-        `<5>3.` closure 型の object type は `is_unbox` が真なので、`create_obj` は割り当てを行わず
-          undef の集約を返す。
-          BY `<5>2`
-          `CODE src/object.rs: ty_to_object_ty` (`ty.is_closure()` の枝は `is_unbox` を真にする)
-          `CODE src/object.rs: create_obj` (`object_type.is_unbox` の枝は割り当てをせず
-          `struct_type.get_undef()` を返す)
-        `<5>4.` QED
-          割り当てが無いので (γ) ではない。
-          BY `<5>3` DEF (γ)
+      `<4>3.` `fix(f)` の組み立ては (γ) ではない。
+        closure 型の object type は `is_unbox` が真なので、`create_obj` は割り当てを行わず undef の
+        集約を返す。割り当てが無いので (γ) ではない。
+        BY `<4>2a` DEF (γ)
+        `CODE src/object.rs: ty_to_object_ty` (`ty.is_closure()` の枝は `is_unbox` を真にする)
+        `CODE src/object.rs: create_obj` (`object_type.is_unbox` の枝は割り当てをせず
+        `struct_type.get_undef()` を返す)
       `<4>4.` `fix(f)` の boxed leaf は capture の位置 1 つであり、そこに入るのはオペランド `cap` の
         値である。この組み立てで参照は作られない。よって 1 回目の適用が渡すのはオペランド `cap` の
         参照であり、`<3>1` の 4 つ目の行き先の (α) である。2 回目の適用が渡すのは、callee については
@@ -1091,7 +1089,7 @@ D24 の活性化の林が挙げる 5 種のうち、(E3) 以外の 4 種には�
         BY D24 の (E2) の「**作る活性化の初期 `Obl` は、この段が離した参照とは限らない。**」の段落
         (「`InlineLLVMFixBody` の 1 回目の適用に渡る `fix(f)` はこの段が組み立てた値であって
         オペランドではない。その capture の欄が持つのはオペランド `cap` の参照であり、読みが retain を
-        伴わない ... ので、この組み立てで参照は作られない」),
+        伴わない ... ので、この組み立てで参照は作られない」), `<4>2a`,
         D4 (規則 2 -- クロージャは capture の位置 1 つを leaf とする),
         A24 (`fix` の op は capture を持つ本体にだけ在るので、`cap_name` の束縛が在る), `<3>1`, `<3>4a`
         `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
@@ -1103,7 +1101,7 @@ D24 の活性化の林が挙げる 5 種のうち、(E3) 以外の 4 種には�
       `<4>5.` QED
         `<4>1` が 8 種すべてについてオペランドの参照を `<3>1` に帰し、`<4>2` から `<4>4` が、渡す値が
         オペランドでない場合を `<3>1` と `<3>4a` に帰する。
-        BY `<4>1`, `<4>2`, `<4>3`, `<4>4`
+        BY `<4>1`, `<4>2`, `<4>2a`, `<4>3`, `<4>4`
     `<3>6.` QED
       `<3>1` から `<3>5` が、この実行が `H`、`A`、`B`、`C`、`Obj`、`Cnt` を動かす経路を尽くす --
       `Obl(a)` を離れる参照 (`<3>1`、`<3>2`)、書き込まれた単位がそれまで持っていた参照の処分
