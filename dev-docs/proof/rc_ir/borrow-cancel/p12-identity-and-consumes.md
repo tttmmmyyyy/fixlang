@@ -2446,7 +2446,7 @@ A12 は「この仮定が型の `variant` を述べる各節では、その型�
 
 ### D9 の `App` の行と `collect_consumes` の粒度が違う
 
-D9 の `App` の行は「呼び出し先がその位置の **unit** を所有する引数の leaf」と unit 粒度で述べ、
+D9 の `App` の行は「呼び出し先がその位置の unit を所有する (D14) 引数の leaf」と **unit** の粒度で述べ、
 `collect_consumes` の `owns` は leaf 粒度の集合への所属である
 (`CODE src/rc_ir/ownership.rs: collect_consumes`, `CODE src/rc_ir/borrow.rs: OwnedLeaves`)。P7 は
 DEF leaf 粒度の所有 でこの 2 つを橋渡ししている。`README.md` の P8 は、同じ食い違いのために `App` の
