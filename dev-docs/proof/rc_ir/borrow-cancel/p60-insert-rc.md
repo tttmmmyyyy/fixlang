@@ -24,7 +24,7 @@ D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて 
 `src/rc_ir/borrow.rs` の `split_rc_units`・`split_body`・`split_body_inner`・`split_rc`、およびこれらが
 呼ぶ `src/rc_ir/ownership.rs` の `units_under`・`subtree_type`・`rc_units`・`rc_units_go`・`unit_step` と
 `src/rc_ir/leaf_map.rs` の `boxed_leaf_paths` である。
-対象コミットは `f7d5469f1c7bef5b7eaade9cb8a4e9d56c9b0290` である。
+対象コミットは README 第 1 節が据える `b6c51fb892746e493e155d9d59ea05d02d7357db` である。
 
 **結論を先に書く。**
 
