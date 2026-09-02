@@ -385,7 +385,8 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain,
      EXT Iterator::any, DEF 要素が名指すオブジェクト
   本体は `pending.retain(...)` であり、その述語は `objects.iter().any(|object|
-  retain.outstanding.names(object))` が真の要素について `false` を返す。`retain` は `false` を返した要素を落とし、他の要素はそのまま残す。
+  retain.outstanding.names(object))` が真の要素について `false` を返す。`retain` は `false` を返した
+  要素を落とし、他の要素はそのまま残す。
   DEF 要素が名指すオブジェクト より、その述語が真であることは要素がそのオブジェクトを名指すことである。
 
 <1>2. `Obj(n) ⊆ ActRefs(v, π).objects() ∪ Others(v, π)` である。
@@ -409,8 +410,8 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
     .shares_an_object(un_bumped))` は `None` を返す。
   <2>3. `r.outstanding.shares_an_object(un_bumped)` が偽であることは、`un_bumped.objects()` のどの
         オブジェクト `o` についても `r.outstanding.names(o)` が偽であることと同値である。
-    BY CODE src/rc_ir/ownership.rs: References::shares_an_object, References::objects, References::names,
-       EXT Iterator::any
+    BY CODE src/rc_ir/ownership.rs: References::shares_an_object, References::objects,
+       References::names, EXT Iterator::any
     `shares_an_object` は `other.0.keys().any(|object| self.0.contains_key(object))`、`objects` は
     `self.0.keys()` の複製、`names` は `self.0.contains_key` である。
   <2>4. 訪問が `walk(k, pending, ·)` に渡す `pending` は、L5 の 1 の呼び出しの後で、かつ <2>1 により
