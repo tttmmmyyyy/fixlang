@@ -326,6 +326,10 @@ capture (D23 の入力の束縛、D2 のスコープ) はスロットを持つ�
 3 つ目で、その値はその記号の値だが (`CODE src/rc_ir/lower.rs: Lowerer::lower_var` の `resolve` が `None` を
 返す腕)、**スロットではない**。
 
+**束縛を持つ名前が局所名であることは、A13 の果たす者から出る。** その 2 人は `Lowerer::fresh_var` と
+`clone_fresh` であり、後者は `simplify` が束縛の位置に名前を書く道である。**lowering だけを辿ると
+`simplify` の段が落ちる。**
+
 **束縛を持たない名前は、必ず最上位の記号の名前である。** lowering がそのような `RcVar` を作るのは 2 か所
 だけで、どちらも `resolve` が `None` を返す腕である (`CODE src/rc_ir/lower.rs: Lowerer::lower_var`,
 `Lowerer::lower_llvm`)。A13 が「直接呼び出しが名指す関数の名前と、グローバル値を読む `RcVar` の名前」を
