@@ -725,18 +725,24 @@ README の定義・仮定とコードだけである。よって第 2 節と第 
   <2>2. 局所でない名前の値は、`declare_program_global` が用意する 2 つのうちの一方である -- 型が
         `is_funptr` なら `declare_lambda_function` が返す LLVM 関数の番地、そうでなければ
         `add_global_object` が登録するグローバルのアクセサが返す値である。
-    **RC IR の `RcVar` の値がこの経路を通ることを言うのは `get_scoped_obj` と
-    `get_scoped_obj_noretain` である** -- どちらも `get_scoped_value(name)` を呼んでその `accessor` を
-    引き、`codegen.rs` はこの 2 つを通してのみ `RcVar` の値を読む
-    (`CODE src/generator.rs: Generator::get_scoped_obj`, `Generator::get_scoped_obj_noretain`,
-    `CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`, `Generator::eval_rc_rhs`,
-    `Generator::eval_rc_match` -- `codegen.rs` の中で `RcVar` の名前から値を得る式は、この 2 つの
-    method の呼び出し 12 か所だけである)。
+    **数え上げるのは名前から値を引く関数であって、それを呼ぶファイルではない。** 名前から
+    `ScopedValue` を引くのは `get_scoped_value` だけであり、それを呼ぶのは `get_scoped_obj` と
+    `get_scoped_obj_noretain` の 2 つだけである (`get_scoped_obj_field` は前者を呼ぶ)。**`Llvm` 節点の
+    オペランドはこの 3 つを `builtin.rs` の側から通る** -- `codegen.rs` の `RcRhs::Llvm` の腕は
+    `llvm_gen.generate_tail(..)` を呼ぶだけで、オペランドを読むのは op の生成コードだからである。
+    D6 より (v-3) の名前は `Llvm` のオペランドとしても現れうるので、この道も数える。どちらの側でも
+    値は `get_scoped_value` を通り、局所でない名前は `get_or_declare_global` へ行く。
     BY <2>1, CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
-       CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_rhs,
+       Generator::get_scoped_obj_field (`get_scoped_obj` を呼ぶ),
+       CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner (`RcExpr::Let` の `RcRhs::Llvm` の腕は
+       `llvm_gen.generate_tail` を呼び、オペランドを自分では読まない), Generator::eval_rc_rhs,
        Generator::eval_rc_match,
+       CODE src/ast/inline_llvm.rs: LLVMGen::generate_tail (`self.generate(gc, ty)` を呼ぶ),
+       CODE src/fixstd/builtin.rs (op の生成コードが `Llvm` 節点のオペランドを読む式は、上の 3 つの
+       method の呼び出し 127 か所である),
        CODE src/generator.rs: Generator::get_scoped_value (`var.is_local()` が偽なら
-       `get_or_declare_global` へ行く),
+       `get_or_declare_global` へ行く。名前から `ScopedValue` を引く式はこの 1 つであり、これを呼ぶのは
+       `get_scoped_obj` と `get_scoped_obj_noretain` の 2 つだけである),
        CODE src/generator.rs: Generator::get_or_declare_global (`declare_program_global` を呼ぶ),
        CODE src/generator.rs: Generator::declare_program_global (`ty.is_funptr()` なら
        `declare_lambda_function` を返し、そうでなければアクセサ関数を作って `add_global_object` に
