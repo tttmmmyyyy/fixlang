@@ -305,6 +305,7 @@ src/fixstd/std.fix	Bool	P5,P6,P7	-
 src/fixstd/std.fix	PunchedArray	P7a,P7d,P7e	-
 src/fixstd/std.fix	assert_unique	D/A,P26	-
 src/fixstd/std.fix	boxed_from_retained_ptr	D/A	-
+src/fixstd/std.fix	boxed_to_retained_ptr	D/A	-
 src/fixstd/std.fix	mutate_unique_io	D/A,P26	-
 src/fixstd/stdlib.rs	make_std_mod	D/A,P1,P2,P7a,P7d,P7e,P26	6da374621d89
 src/generator.rs	Generator::add_global_object	D/A,P3,P4,P27,P28,P29,P30	c05ffb02bb44

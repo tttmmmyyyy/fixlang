@@ -1962,6 +1962,17 @@ leaf が持つ `O` への参照の個数の和に等しい。**その時点に�
 
 (ii) 環境が読むオブジェクトは、その時点で環境が持つ参照が指すオブジェクトか、そこから到達できる
 オブジェクトである。
+(ii-c) **環境は `get_funptr_retain` と `get_funptr_release` が渡した番地を呼びうる** --
+`std.fix` の doc が「To release / retain the value in a foreign language, call the function pointer
+obtained by `get_funptr_release` or `get_funptr_retain` on the pointer.」と書く機能である
+(`CODE src/fixstd/std.fix: boxed_to_retained_ptr`)。**その呼び出しは D24 の段であり、その番地が指す
+オブジェクトへの参照を、retain なら 1 つ作って環境の持ち分に足し、release なら環境の持ち分から 1 つ
+処分する。** **環境は、自分が持たない参照を処分しない。** 果たす者: その外部のコードを書く側。検査: 無し。
+
+**この節が無いと、その呼び出しが `H` を動かすのにどの段でもないことになる。** 環境が解放済みの番地に
+release を呼ぶ実行では、参照が 1 つだけ処分されるという勘定が破れる。**その形はここで除く** --
+(i-b) が `boxed_from_retained_ptr` について置くのと同じ形の節である。
+
 (iii) 環境の動作も D24 の段としてこの実行の 1 つの列に並ぶ。段は不可分なので、環境が動くのは段と段の
 あいだである。
 
@@ -3148,7 +3159,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | `p30-cancel-walk.md` | 第 6 周 (366 段) | **0** | **0** | BAD-CITATION 1、NOT-OBVIOUS 20 | **2 周続けてゼロ**。修理済み。**第 7 周の検証** |
 | `p40-cancel-soundness.md` | 第 6 周 (400 段) | 5 | 4 | BAD-CITATION 13、NOT-OBVIOUS 14、UNDEFINED 1 | 修理済み。**第 7 周の検証** |
 | `p50-observation.md` | 第 6 周 | **0** | 1 | BAD-CITATION 8、NOT-OBVIOUS 12 | 修理済み。**第 7 周の検証** |
-| `p51-runs.md` | 第 7 周 (205 段) | 2 | 9 | NOT-OBVIOUS 9 | **修理** |
+| `p51-runs.md` | 第 7 周 (219 段) | 2 | 9 | NOT-OBVIOUS 9 | 修理済み。**第 8 周の検証** |
 | `p60-insert-rc.md` | 第 6 周 (360 段) | 4 | 9 | UNDEFINED 1、BAD-CITATION 4、HEDGE 1、NOT-OBVIOUS 45 段 | 修理済み。**第 7 周の検証** |
 | `p70-main-theorem.md` | 第 6 周 (31 段) | **0** (散文 6) | 1 | NOT-OBVIOUS 1、表の落ち 12、引用 13 | 修理済み。**第 7 周の検証** |
 
