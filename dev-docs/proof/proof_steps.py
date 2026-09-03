@@ -15,6 +15,12 @@ Lamport の構造化証明は段 `<k>n` の木であり、規則はどれも構�
 - **スコープ規則**: 段が引ける `<k>n` は、**厳密に先行する兄弟と、祖先の先行する兄弟**だけである。
   兄弟の証明の内側を引く形をここで挙げる。
 - **支えの無い段**: `BY` も部分証明も持たない段。
+- **読点の落ちたトークン**: 1 つのトークンの中に 2 つ目の**事実**の名札が現れる形。`BY A, B C` の
+  ように読点が落ちると、`B` の分類が通ったまま `C` が消える。**接頭辞だけで分類すると、後ろに
+  付いたものが見えなくなる。**
+  事実の後ろに続く `DEF` と `EXT` は落ちではない -- `BY <事実> DEF <名前>` は Lamport の正規の形で
+  ある。ただしその `<名前>` も名札として実在を検査するので、`DEF` の後ろに定義でないものを書いた形は
+  「名札の不在」に出る。
 - **名札の接頭辞が無い引用**: その文書が `DEF` / `EXT` として宣言した名前を、接頭辞なしで引いた形。
   規則違反ではあるが指すものは定まっているので、未分類とは分けて数える。
 
@@ -47,6 +53,8 @@ FACT = re.compile(
     r"|前提|言明|仮定|帰納法の仮定|帰納の仮定|系\d*"
     r")"
 )
+SECOND_LABEL = re.compile(r"\s(?:CODE\s|[DAP]\d+[a-z]*(?:\s|$)|[LR]\d+[a-z]*(?:\s|$))")
+TRAILING_LABEL = re.compile(r"\b(DEF|EXT)\s+(.+)$")
 HEDGE = ["明らかに", "自明", "同様にして", "容易に", "であろう", "と思われる", "おそらく", "はずである"]
 
 
@@ -145,7 +153,7 @@ def check(path_of_file):
     text = open(path_of_file, encoding="utf-8").read()
     declared = declared_labels(text)
     steps = parse(text)
-    unclassified, missing, violations, unsupported, bare = [], [], [], [], []
+    unclassified, missing, violations, unsupported, bare, run_on = [], [], [], [], [], []
     tokens_seen = 0
     for level, number, ancestors, reasons, supported in steps:
         here = ancestors + [(level, number)]
@@ -175,6 +183,14 @@ def check(path_of_file):
                         unclassified.append(f"<{level}>{number}: {token[:60]}")
                     continue
                 in_code = False
+                rest = token[FACT.match(token).end():].split("(")[0].split("「")[0]
+                trailing = TRAILING_LABEL.search(rest)
+                if trailing:
+                    name = normalize_label(trailing.group(2))
+                    if (trailing.group(1), name) not in declared:
+                        missing.append(f"<{level}>{number}: {trailing.group(1)} {name}")
+                elif SECOND_LABEL.search(rest):
+                    run_on.append(f"<{level}>{number}: {token[:60]}")
                 for reference in REFERENCE.finditer(token):
                     referenced_level = int(reference.group(1))
                     if not in_scope(here, referenced_level, reference.group(2)):
@@ -189,6 +205,7 @@ def check(path_of_file):
         "violations": violations,
         "unsupported": unsupported,
         "bare": bare,
+        "run_on": run_on,
         "hedges": hedges,
     }
 
@@ -209,15 +226,18 @@ def main(roots):
     for path_of_file in files_under(roots):
         result = check(path_of_file)
         problems = (result["unclassified"] + result["missing"] + result["violations"]
-                    + result["unsupported"] + result["bare"] + result["hedges"])
+                    + result["unsupported"] + result["bare"] + result["run_on"]
+                    + result["hedges"])
         print(f"{path_of_file}: 段 {result['steps']}、BY のトークン {result['tokens']}、"
               f"未分類 {len(result['unclassified'])}、名札の不在 {len(result['missing'])}、"
               f"スコープ違反 {len(result['violations'])}、支えの無い段 {len(result['unsupported'])}、"
-              f"接頭辞の無い名札 {len(result['bare'])}、ぼかし語 {len(result['hedges'])}")
+              f"接頭辞の無い名札 {len(result['bare'])}、読点の落ち {len(result['run_on'])}、"
+              f"ぼかし語 {len(result['hedges'])}")
         for kind, items in (("未分類", result["unclassified"]), ("名札の不在", result["missing"]),
                             ("スコープ違反", result["violations"]),
                             ("支えの無い段", result["unsupported"]),
-                            ("接頭辞の無い名札", result["bare"]), ("ぼかし語", result["hedges"])):
+                            ("接頭辞の無い名札", result["bare"]),
+                            ("読点の落ち", result["run_on"]), ("ぼかし語", result["hedges"])):
             for item in items:
                 print(f"  {kind}: {item}")
         failed += len(problems)
