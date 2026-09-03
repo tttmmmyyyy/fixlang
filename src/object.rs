@@ -489,7 +489,7 @@ impl ObjectFieldType {
     /// * `size` — the array's element count; the elements walked are `[0, size)`.
     /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
     ///   (`Std::PunchedArray`), which the storage therefore does not own, so it is skipped.
-    // PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P28 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn traverse_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -559,7 +559,7 @@ impl ObjectFieldType {
     /// # Arguments
     /// * `begin` — the index the store starts at, counted from `buffer`'s first element. The
     ///   slots it covers are allocated and uninitialized, and each is a first write.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn append_value_into_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,

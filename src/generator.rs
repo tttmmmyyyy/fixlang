@@ -1964,7 +1964,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Retain `obj`: increment the reference count of every boxed object it owns, once.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn retain(&mut self, obj: Object<'c>, state: RcState) {
         let one = self.context.i64_type().const_int(1, false);
         let prefix = format!("retain{}", state.name_suffix());
@@ -2008,7 +2008,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Retain an object `amount` times: every boxed leaf reached has its reference count increased
     /// by `amount`, an i64 count.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_retain(&mut self, obj: Object<'c>, amount: IntValue<'c>, state: RcState) {
         if obj.is_box(self.type_env()) {
             self.build_if_nonnull(&obj, "retain", |gc| {

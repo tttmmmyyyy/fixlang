@@ -419,8 +419,9 @@ D24 は 1 つの段を不可分な動作の有限列へ分解し、その動作�
     第 1 の形が作る参照は、その値の inhabited で計数下の各 boxed leaf につき 1 つである (A5)。
     第 2 の形が作る参照は、書き込まれた持ち手の単位ごとに 1 つである -- 単位が参照を持つのはそこへ
     書いた瞬間からであり (`<1>0b` の (c))、書かれた単位のうち inhabited で非 null で計数下を指すものが
-    参照をちょうど 1 つ持つ (`<1>0b` の (b))。
-    BY `<1>0b`, A4, A5, D16, D26
+    参照をちょうど 1 つ持つ (`<1>0b` の (b))。1 つの retain が `count` を一度に足す形でも、参照は
+    書き込まれるスロットごとに 1 つである (`<2>3` の `append_value_into_array_buf` の doc)。
+    BY `<2>3`, `<1>0b`, A5, D16, D26
     `CODE src/generator.rs: Generator::retain` (「Retain `obj`: increment the reference count of
     every boxed object it owns, once.」)
     `CODE src/generator.rs: Generator::build_retain` (「Retain an object `amount` times: every boxed
@@ -1223,13 +1224,13 @@ D24 は 1 つの段を不可分な動作の有限列へ分解し、その動作�
 
       - `<1>0e` の (a) の形。その retain が名指す値の inhabited な各 leaf について、指す先が計数下
         ならば (β) 1 つ (持ち手は `Obl(a)`) と (δ) 1 つであり、生成コードの順により (β) が (δ) より
-        前に立つ。グローバル状態を指す leaf については素動作が無い。README がこの形の代表に挙げるのは
+        前に立つ。グローバル状態を指す leaf については素動作が無い。D24 がこの形の代表に挙げるのは
         `InlineLLVMWithRetainedFunctionBody` であり、オペランドを適用する前にそのオペランドを
         retain し、適用の後に release する。
       - `<1>0e` の (b) の形。書き込まれた各持ち手の単位について、指す先が計数下ならば (β) 1 つで
         あり、その持ち手はこの実行が書き込むオブジェクトの持ち手の単位である。`#ArrayStorage` へ
         書き込む形ではその単位は記憶域のスロットであり (`<1>0b` の (a))、その単位が参照を持つのは
-        そこへ書いた瞬間からである (`<1>0b` の (c))。README がこの形の代表に挙げるのは
+        そこへ書いた瞬間からである (`<1>0b` の (c))。D24 がこの形の代表に挙げるのは
         `make_struct_union_unique` の共有の腕と `clone_array_buf` であり、後者は
         `InlineLLVMArrayAppendCapacityUnchecked` の共有の腕が `dst` の記憶域へ写した各要素を
         retain する道である。
