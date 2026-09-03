@@ -1604,6 +1604,13 @@ inhabited でない leaf と同じに扱う。
 
 **`insert_rc` の入力と出力について読む段は A2 を引く。**
 
+**`clone_fresh` が作る名前は、それを写す本体に既に在るどの名前とも異なる。** 果たす者: `clone_fresh` の
+counter (`CODE src/rc_ir/rename.rs: assign_fresh_name`)。検査: 無し。
+**`borrow_ify` の複製については `check_clone_names_are_fresh` が develop mode でまさにこれを表明するが、
+`simplify` の側にその検査は無い。** 名前の形からは出ない -- `Lowerer::fresh_var` が作る接尾辞は
+`#<md5 の hex 前置><10 進数字>`、`assign_fresh_name` が足すのは `#<パスのタグ><10 進数字>` であり、
+hex の前置がそのタグで始まって残りが 10 進数字である場合を、形だけでは排除できない。
+
 `borrow_ify` の入力に現れる**すべての名前**について -- 束縛名、直接呼び出しが名指す関数の名前、グローバル
 値を読む `RcVar` の名前、**`prog.funcs` の鍵**、**各 `RcFunc` の `name`**、**`prog.globals` の各エントリの
 `symbol`**、**`Program::global_types` の鍵**を含む -- その `name` フィールドを
