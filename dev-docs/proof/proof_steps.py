@@ -18,7 +18,8 @@ Lamport の構造化証明は段 `<k>n` の木であり、規則はどれも構�
 - **名札の実在**: `DEF <名前>`・`EXT <名前>` として引かれた名前が、その文書で宣言されているか。
 - **スコープ規則**: 段が引ける `<k>n` は、**厳密に先行する兄弟と、祖先の先行する兄弟**だけである。
   兄弟の証明の内側を引く形をここで挙げる。
-- **支えの無い段**: `BY` も部分証明も持たない段。
+- **支えの無い段**: `BY` も部分証明も持たない段。**記法を導入するだけの `DEFINE` の段は除く** --
+  主張を持たないので支えも要らない。
 - **読点の落ちたトークン**: 1 つのトークンの中に 2 つ目の**事実**の名札が現れる形。`BY A, B C` の
   ように読点が落ちると、`B` の分類が通ったまま `C` が消える。**接頭辞だけで分類すると、後ろに
   付いたものが見えなくなる。**
@@ -70,18 +71,24 @@ def normalize_label(name):
 def declared_labels(text):
     """その文書が宣言した名札。
 
-    宣言の形は 3 通りある -- `**DEF 名前**`、見出しの `## DEF 名前`、そして記法を並べる箇条書きが
-    使う `` - **`名前`** `` である。3 つ目は `DEF` の語を伴わないので、引く側も接頭辞なしで引く。"""
+    宣言の形は 4 通りある -- `**DEF 名前**`、見出しの `## DEF 名前`、記法を並べる箇条書きが使う
+    `` - **`名前`** ``、そして名札の語ごとバッククォートに入れる `` - **`EXT 名前`** `` である。
+    3 つ目は `DEF` の語を伴わないので、引く側も接頭辞なしで引く。"""
     names = set()
     for match in re.finditer(r"\*\*(DEF|EXT)\s+([^*]+?)\*\*", text):
         names.add((match.group(1), normalize_label(match.group(2))))
     for match in re.finditer(r"^#+\s*(DEF|EXT)\s+(.+?)\s*$", text, re.M):
         names.add((match.group(1), normalize_label(match.group(2))))
     for match in re.finditer(r"\*\*`([^`]+)`\*\*", text):
-        stem = normalize_label(match.group(1).split("(")[0].split(":=")[0])
+        inner = match.group(1)
+        kinds = ("DEF", "EXT")
+        labelled = re.match(r"(DEF|EXT)\s+(.+)$", inner)
+        if labelled:
+            kinds, inner = (labelled.group(1),), labelled.group(2)
+        stem = normalize_label(inner.split("(")[0].split(":=")[0])
         if stem:
-            names.add(("DEF", stem))
-            names.add(("EXT", stem))
+            for kind in kinds:
+                names.add((kind, stem))
     return names
 
 
@@ -121,11 +128,13 @@ def parse(text):
         level, number = int(match.group(2)), match.group(3)
         del path[level - 1:]
         path.append((level, number))
-        body, index = [], index + 1
+        body, index = [lines[index][match.end():]], index + 1
         while index < len(lines) and not STEP.match(lines[index]):
             body.append(lines[index])
             index += 1
         has_substeps = index < len(lines) and int(STEP.match(lines[index]).group(2)) > level
+        defines = bool(re.match(r"^\s*(?:\*\*)?DEFINE\b", "\n".join(body).strip() or "x"))
+
         reasons = []
         for offset, line in enumerate(body):
             by = BY.match(line)
@@ -139,7 +148,8 @@ def parse(text):
                     break
                 text_of_by.append(following.strip())
             reasons.append(" ".join(text_of_by))
-        steps.append((level, number, list(path[:-1]), reasons, bool(reasons) or has_substeps))
+        steps.append((level, number, list(path[:-1]), reasons,
+                      bool(reasons) or has_substeps or defines))
     return steps
 
 

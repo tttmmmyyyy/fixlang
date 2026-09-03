@@ -21,12 +21,17 @@
 
 錨で分けるのは、証明が自分の言明や `CODE` の doc コメントも「」で引くからである。全部を枠に
 当てると、そちらが食い違いとして出てしまう。
+
+**引用は「」だけではない。** 仮定の文面を再掲するとき、証明は blockquote (`> `) を使うことがある。
+実測で、**その形に A19 (ii-c) の量化を落とした引用が隠れていた** -- 「」だけを見る道具はそこを通す。
+blockquote も同じ錨の規則で当てる。
 """
 import os
 import re
 import sys
 
 QUOTE = re.compile(r"「(.+?)」", re.S)
+BLOCKQUOTE = re.compile(r"(?:^>[^\n]*\n?)+", re.M)
 ANCHOR = 24
 
 
@@ -77,15 +82,18 @@ def check(directory):
         if not name.endswith(".md") or name == "README.md":
             continue
         text = open(os.path.join(directory, name), encoding="utf-8").read()
-        for match in QUOTE.finditer(text):
-            quote = strip_spaces(match.group(1))
+        pieces = list(QUOTE.finditer(text))
+        pieces += [match for match in BLOCKQUOTE.finditer(text)]
+        for match in pieces:
+            body = match.group(1) if match.re is QUOTE else re.sub(r"^>\s?", "", match.group(0), flags=re.M)
+            quote = strip_spaces(body)
             if not quote or contains(frame, quote):
                 continue
             if not any(anchor in frame for anchor in anchors(quote)):
                 continue
             line = text.count("\n", 0, match.start()) + 1
             emphasis = contains(strip_emphasis(frame), strip_emphasis(quote))
-            found.append((name, line, match.group(1), nearest(frame, quote), emphasis))
+            found.append((name, line, body, nearest(frame, quote), emphasis))
     return found
 
 
