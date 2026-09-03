@@ -33,7 +33,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `origin`).
-// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert), T (dev-docs/proof/rc_ir/borrow-cancel)
 enum Binding {
     /// A parameter or capture — the origin of a leaf.
     Param,
