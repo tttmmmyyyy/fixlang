@@ -10,6 +10,8 @@
 | `proof_quotes.py` | 証明が「」で引く枠の文が、枠の現在の本文と 1 字ずつ一致するか |
 | `proof_steps.py` | 段の数、`BY` のトークンの分類、`DEF`/`EXT` 名札の実在、`<k>n` のスコープ規則、支えの無い段、読点の落ち |
 | `proof_readers.py` | 枠が証明ファイルを読み手として名指す箇所の一覧 (照合の材料) |
+| `proof_prose.py` | 引用でない地の文のうち、枠に当てる要のあるものとコードに当てる要のあるものの一覧 |
+| `proof_steps.py --cites <名前>` | その名前を `BY` で引く段の一覧 (仮定や定義が動いたときに読み直す段) |
 
 ## 走らせ方
 
@@ -18,6 +20,8 @@ python3 dev-docs/proof/proof_links.py
 python3 dev-docs/proof/proof_quotes.py dev-docs/proof/rc_ir/borrow-cancel
 python3 dev-docs/proof/proof_steps.py dev-docs/proof/rc_ir/borrow-cancel
 python3 dev-docs/proof/proof_readers.py dev-docs/proof/rc_ir/borrow-cancel/README.md <出力先>
+python3 dev-docs/proof/proof_prose.py dev-docs/proof/rc_ir/borrow-cancel/<証明ファイル>
+python3 dev-docs/proof/proof_steps.py --cites A19 dev-docs/proof/rc_ir/borrow-cancel
 ```
 
 **枠 (`README.md`) を動かしたら、`proof_quotes.py` をその場で走らせる。**
@@ -35,9 +39,20 @@ python3 dev-docs/proof/proof_readers.py dev-docs/proof/rc_ir/borrow-cancel/READM
 
 ## 道具が見ないもの
 
-**これらは構文でなく内容を見る検査なので、読む者がやる。**
+**道具が出すのは「当てる要のある箇所の一覧」までである。当てるのは読む者がやる。**
+言い替えた地の文とコードを数えた文は `proof_prose.py` が**漏れなく挙げる**が、
+枠の本文とコードのどちらに当てるかは文ごとに違うので、判定は機械にできない。
 
-- 枠を「」で引かずに、枠が何を書いているかを**言い替えた**地の文。
-- 枠に在るのに**引いていない**節 (`proof_readers.py` は材料を出すだけで、判定はしない)。
+**内容を見る検査は、機械にできない。**
+
 - `BY` が挙げた根拠が結論を**支えているか**。
 - 数え上げが**尽きているか** (在りかを述語で書き、その述語で全項目を分類し直す)。
+- 引用した箇所が、コードの**意味**として主張どおりか。
+- 枠に在るのに**引いていない**節が、その段にとって要るものか
+  (`proof_readers.py` は名指しの一覧を出すだけで、判定はしない)。
+
+**まだ機械化していないもの。**
+
+- **枠が動いたとき、どのファイルを読み直す要があるかの述語。** いまは全ファイルを毎周検証している。
+  各ファイルが `BY` で引く枠の項目は `proof_steps.py --cites` で取れるので、
+  **その項目が最後の検証より後に動いたか**を見れば、静かなファイルを根拠つきで飛ばせる。

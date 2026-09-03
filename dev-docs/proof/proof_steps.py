@@ -4,6 +4,10 @@
 使い方: `python3 dev-docs/proof/proof_steps.py [ファイルまたはディレクトリ ...]`。
 引数を省くと `dev-docs/proof` の下の証明ファイルを全部見る。違反が 1 件でもあれば終了コード 1。
 
+`--cites <名前>` を付けると、検査の代わりに**その名前を `BY` で引く段の一覧**を出す
+(`--cites A19` のように使う)。仮定の項が動いたとき、それを引く段を全部挙げるのに使う --
+**実測で、その一覧を作らせたときにだけ出た誤読が 3 度ある。**
+
 Lamport の構造化証明は段 `<k>n` の木であり、規則はどれも構文的なので機械が全数を見られる。
 検査は 5 つ。
 
@@ -210,6 +214,18 @@ def check(path_of_file):
     }
 
 
+def citing(path_of_file, name):
+    """`name` を `BY` で引く段。仮定や定義が動いたとき、読み直す段を挙げるのに使う。"""
+    text = open(path_of_file, encoding="utf-8").read()
+    found = []
+    for level, number, ancestors, reasons, _ in parse(text):
+        for reason in reasons:
+            if any(token.startswith(name) for token in split_tokens(reason)):
+                path = "".join(f"<{l}>{n} " for l, n in ancestors)
+                found.append((f"{path}<{level}>{number}".strip(), reason[:120]))
+    return found
+
+
 def files_under(roots):
     for root in roots:
         if os.path.isfile(root):
@@ -245,4 +261,17 @@ def main(roots):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:] or ["dev-docs/proof"]))
+    arguments = sys.argv[1:]
+    if "--cites" in arguments:
+        at = arguments.index("--cites")
+        name = arguments[at + 1]
+        roots = arguments[:at] + arguments[at + 2:]
+        total = 0
+        for path_of_file in files_under(roots or ["dev-docs/proof"]):
+            for step, reason in citing(path_of_file, name):
+                total += 1
+                print(f"{path_of_file}: {step}")
+                print(f"  BY {reason}")
+        print(f"\n{name} を引く段 {total} 件")
+        sys.exit(0)
+    sys.exit(main(arguments or ["dev-docs/proof"]))
