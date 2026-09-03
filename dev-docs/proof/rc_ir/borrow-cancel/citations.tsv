@@ -360,6 +360,7 @@ src/object.rs	FIELDS_BY_NAME	P2a,P15,P16,P17,P18	cbd73d77d530
 src/object.rs	ObjectFieldType	P2a,P15,P16,P17,P18	65792a4a6a6d
 src/object.rs	ObjectFieldType::append_value_into_array_buf	P27,P29,P30	d9f186fc7143
 src/object.rs	ObjectFieldType::clone_array_buf	P27,P28,P29,P30	996b221b4e44
+src/object.rs	ObjectFieldType::clone_array_range	P27,P29,P30	07f674337637
 src/object.rs	ObjectFieldType::clone_struct	P27,P28,P29,P30	7c326d6d8e14
 src/object.rs	ObjectFieldType::clone_union	P27,P28,P29,P30	536e66a020b5
 src/object.rs	ObjectFieldType::get_struct_fields	D/A,P7a,P7d,P7e,P27,P29,P30	adccf6cb3234

@@ -729,6 +729,7 @@ impl ObjectFieldType {
     ///
     /// # Arguments
     /// * `dst_buffer` — allocated and uninitialized; every slot this writes is a first write.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_array_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src_buffer: PointerValue<'c>,
