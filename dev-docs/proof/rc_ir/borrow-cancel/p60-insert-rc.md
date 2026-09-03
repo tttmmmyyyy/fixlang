@@ -343,8 +343,10 @@ Ret(w)))))
 
 <1>4. `insert_into_expr(Ret(w), ∅)` は `(Ret(w), {w})` を返す。
   BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の `RcExpr::Ret(x)` の腕,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live, <1>1, <1>2, A15
-  この腕は `live = live_after ∪ {x}` を作り (`insert_if_local`、<1>2 より `w` は入る)、
+     CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
+     CODE src/rc_ir/rc_insert.rs: insert_if_local, <1>1, <1>2, A15
+  この腕は `live = live_after ∪ {x}` を作り (`insert_if_local` は `name.is_local()` のときだけ
+  その名前を集合へ入れる。<1>2 より `w` は局所名なので入る)、
   `retain_if_live(&x, live_after, ret)` を呼ぶ。`live_after = ∅` は `w` を含まないので、`retain_if_live`
   の条件 `live.contains(&var.name)` が偽であり、節点はそのまま返る。A15 より `insert_into_expr` は
   `insert_into_expr_inner` をちょうど 1 回呼ぶ。
@@ -2684,8 +2686,10 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   <2>1. `H := live_at_arm_head`、`M := live_after_match`、`U_j := arm_free_locals(arm_j)`、
         `P_j := {payload_j} ∩ free_locals(arm_j.body)` と置くと、`Λ(m) = H ∪ {scrut}`、
         `Λ(m') = U_j ∪ P_j ∪ M` であり、`H = M ∪ (∪_i U_i)` である。
-    BY <2>0, L14, A2, A9, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
-       CODE src/rc_ir/rc_insert.rs: RcInserter::arm_free_locals
+    BY <2>0, L14, A2, A6, A9, A11, D2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::arm_free_locals,
+       CODE src/rc_ir/rc_insert.rs: free_locals,
+       CODE src/rc_ir/rc_insert.rs: collect_referenced_and_bound
     `live_at_arm_head` は `live_after_match.clone()` から始めて各アームの `arm_free_locals` の名前を
     足したものなので、`H = M ∪ (∪_i U_i)` である。
     **アームが 1 つ以上あることが要る。** `insert_into_match` が返す `live_before` は
@@ -2696,7 +2700,12 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     入力と出力についても読める。**」を与えるので、`insert_rc` の入力の骨格の各 `Match` は
     アームを 1 つ以上持つ。
     `L14` (a) より `Λ(m) = free_locals(m) ∪ A(m)` であり、`free_locals(m)` は
-    `{scrut} ∪ (∪_i U_i) ∪ (free_locals(cont) \ {x})`、`M = live_cont \ {x}` は
+    `{scrut} ∪ (∪_i U_i) ∪ (free_locals(cont) \ {x})` である。**この分解はスコープの規律に立つ** --
+    `free_locals` は `m` の部分木が参照する局所名から、その部分木が束縛する局所名を落としたもので
+    あり (`collect_referenced_and_bound`)、A11 より各使用はその位置でスコープに入っている束縛に
+    解決し、A6 より 1 つの名前を束縛するものはプログラム全体で 1 つなので、D2 のスコープの規則より
+    `scrut` と各 `U_i` の名前は `m` の部分木が束縛する名前と交わらず、`x` の束縛のスコープは `cont` の
+    部分木に収まる。`M = live_cont \ {x}` は
     `(free_locals(cont) ∪ A(m)) \ {x}` なので `Λ(m) = {scrut} ∪ (∪_i U_i) ∪ M = {scrut} ∪ H`。
     アーム本体は `insert_into_expr(arm.body, &live_after_match)` で書き換えられるので `L14` (a) より
     `Λ(m') = free_locals(arm_j.body) ∪ M = U_j ∪ P_j ∪ M`。
@@ -4631,8 +4640,13 @@ unit が無い (`L15` (e)、`L26` (a)) ので、`L13a` (c) より `β ≡ 0` で
   下げない。よって第 `i` 節点の入口でも `μ ≥ 1` である。
 
 <1>3. (S3)。
-  BY L26, L29, L20, DEF 開始事象, D10
-  `DEF 開始事象` より開始事象は D10 の初期値の行と D10 の生成の表の各行に当たる事象であり、
+  BY <1>1, L15, L26, L29, L20, DEF 開始事象, D10, D14, D34
+  `DEF 開始事象` は開始事象を D34 の 3 行 -- `C` の終端が D10 の生成で作られる行、`C` の終端が
+  所有するパラメータ・capture の leaf である行、`C` の終端が借用するパラメータ・capture の leaf で
+  ある行 -- に当たる事象と定める。**第 3 の行はこの段の主語には当たらない** -- <1>1 の (S1) より
+  `P'` のすべての関数の `borrowed_units` は空であり、D14 より借用する unit が 1 つも無い
+  (`L15` (e) と `L26` (a) がそれを与える)。残る 2 行のうち第 2 の行は D10 の初期値の行であり、
+  第 1 の行は D10 の生成の表の各行である。
   D10 の生成の表に `Retain`/`Release` の行は無いので、それらは写しの節点と本体の入口にだけ付く。
   `L26` (b) と `L29` (c) より写しと別名類は 2 つの側で対応するので、`ρ'` の上の開始事象は
   `ρ` の上の開始事象と 1 対 1 に対応する。`L20` より後者は各計数下の別名類について高々 1 つである。
