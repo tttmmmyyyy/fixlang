@@ -165,6 +165,7 @@ impl TypeEnv {
     }
 
     /// The declaration of every type constructor this environment holds, by its name.
+    // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycons(&self) -> &Map<TyCon, TyConInfo> {
         &self.tycons
     }

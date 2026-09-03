@@ -40,6 +40,7 @@ use std::sync::{Arc, OnceLock};
 /// One field of the LLVM struct a Fix object is laid out as: either runtime machinery (the control
 /// block, the traverse function, a union's tag) or a piece of the Fix value itself (a scalar, a
 /// subobject, a union's payload buffer, an array).
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone)]
 pub enum ObjectFieldType {
     /// The reference count and the flags the runtime keeps for every boxed object, which a boxed

@@ -373,7 +373,7 @@ impl TyCon {
 
 /// The declaration a type constructor comes from: the kind of declaration it is, the parameters it
 /// takes, and what its values hold. A type alias is declared by `TyAliasInfo`.
-// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TyConInfo {
     /// The kind of the type constructor, which follows from the parameters it takes.
@@ -670,13 +670,13 @@ impl TypeNode {
     }
 
     /// Where this type was written; a type the compiler builds itself carries none.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_source(&self) -> &Option<Span> {
         &self.info.source
     }
 
     /// A copy of this type written at `src`, leaving this node as it is.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_source(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone();
         ret.info.source = src;
@@ -685,7 +685,7 @@ impl TypeNode {
 
     /// A copy of this type written at `src` where it carries no source of its own, and this type
     /// itself where it does.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_source_if_none(self: &Arc<TypeNode>, src: Option<Span>) -> Arc<TypeNode> {
         if self.info.source.is_none() {
             self.set_source(src)
@@ -882,7 +882,7 @@ impl TypeNode {
 
     /// A copy of this associated type application applied to `args`, keeping the name. Panics for
     /// a type that is not an associated type application.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_assocty_args(&self, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -2242,7 +2242,7 @@ impl TypeNode {
     /// `free_vars` answers the same question by collecting the variables, which walks a type that
     /// shares a subterm once per occurrence rather than once per node. Every type reaching code
     /// generation is asked this, so it is answered here and kept on the node.
-    // PROOF: D/A, T (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_ground(&self) -> bool {
         *self.ground_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) => false,
@@ -2258,7 +2258,7 @@ impl TypeNode {
     /// This measures the type expression the program wrote or the compiler built: a chain of a
     /// thousand types that each hold the next is a thousand types of depth one. What grows this is
     /// a type reached from itself at a larger type argument.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn depth(&self) -> usize {
         *self.depth_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) | Type::TyCon(_) => 1,

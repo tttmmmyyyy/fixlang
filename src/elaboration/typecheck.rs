@@ -151,6 +151,7 @@ where
 ///
 /// No type on the right hand side names a type variable the substitution replaces, so replacing
 /// every such variable of a type takes one walk over that type.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Substitution {
     /// The type replacing each type variable, by the variable's name.
@@ -173,7 +174,7 @@ impl Substitution {
     }
 
     /// The substitution that replaces the type variable named `var` by `ty`, and nothing else.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn single(var: &str, ty: Arc<TypeNode>) -> Self {
         let mut data = Map::<String, Arc<TypeNode>>::default();
         data.insert(var.to_string(), ty);
@@ -202,7 +203,7 @@ impl Substitution {
     /// # Returns
     /// Whether the two agreed. Where they disagree, the replacements taken from `other` before the
     /// disagreement stay, so a caller that carries on has to drop this substitution.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn merge(&mut self, other: &Self) -> bool {
         for (var, ty) in &other.data {
             if self.data.contains_key(var) {
@@ -226,7 +227,7 @@ impl Substitution {
     /// A type none of whose variables this substitution replaces is returned as
     /// it came: the common case of a substitution that says nothing about a type
     /// walks the type and hands back the same node.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
@@ -2144,6 +2145,7 @@ impl TypeCheckContext {
     /// an associated type on either side becomes a pending equality, to be settled once enough is
     /// known about its arguments. Two types no substitution can make equal give
     /// `UnificationErr::Disjoint`.
+    // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unify(
         &mut self,
         ty1: &Arc<TypeNode>,

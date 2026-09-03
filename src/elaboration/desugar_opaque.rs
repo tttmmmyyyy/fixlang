@@ -720,6 +720,7 @@ fn build_undefined_expr() -> Arc<ExprNode> {
 ///
 /// Example: `?it (Array I64)` with resolution `?it (Array a) -> ArrayIterator a`
 /// is resolved to `ArrayIterator I64`.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn resolve_opaque_type_in_type(
     ty: &Arc<TypeNode>,
     opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
