@@ -1219,7 +1219,7 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       生成の 7 行と、参照を処分する段の中で起きる (F) の解放が `Destructor` のオブジェクトについて
       行う retain。**(K-ii)** 表に行を持たない、段の中の retain であって、
       `InlineLLVMWithRetainedFunctionBody` が出すものか、複製・割り当てたオブジェクトの欄へ書く
-      4 か所が出すもの。
+      3 か所が出すもの。
       `S` の中で (F) の解放が始めた活性化の木 (D24 の (F)) の節点も、その本体についてこの 2 種によって
       参照を作る。
   **(K-i) の側。**D24 の (E2) の `H` の表が 7 行を挙げる -- `Retain` の行、`Llvm` の行、
@@ -1273,7 +1273,9 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
     ある** (D25 の 2 番目)。」と述べる形であり、`clone_struct`、`clone_array_range`
     (`clone_array_buf` が呼ぶ)、`initialize_array_buf_by_value`、`append_value_into_array_buf` の
     4 か所である。**`clone_union` はここに数えない** -- それは `retain_union` を通って第 2 群の
-    `retain_release_mark_union` へ着くので、`gc.retain(` の出現を持たない。**これは (K-ii) である。**
+    `retain_release_mark_union` へ着くので、`gc.retain(` の出現を持たない。**そのうち
+    `initialize_array_buf_by_value` は `src/` に呼び出し元を持たない**ので、どの段もその retain を
+    出さない。残る 3 か所が (K-ii) である。
   - **第 7 群 (どの段も実行しない retain)。1 か所。**
     `InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody` の `generate` が定義する補助関数
     `retain#<型>` の本体である。この op の段が出すのは
@@ -1628,8 +1630,8 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
      CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody,
      CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand, LLVMGen::result_prov
 
-<1>7b. CASE 相殺しない retain (`<1>1` の第 6 群)。
-  4 か所を 2 つに分ける。
+<1>7b. CASE 相殺しない retain (`<1>1` の第 6 群のうち、段が実行する 3 か所)。
+  3 か所を 2 つに分ける。
   **複製が原本の記憶域から読んだ値を retain する形** -- `clone_struct` は各フィールドを
   `move_out_struct_field` で原本 `src` の記憶域から取り出してから retain し、`clone_array_range`
   (`clone_array_buf` が呼ぶ) は `src_buffer` の各スロットを `build_load` で読んでから retain する。
@@ -1637,16 +1639,15 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   この op のオペランドである。`clone_array_buf` を呼ぶ 4 か所も、原本の配列の記憶域を読む。
   読み出されたオブジェクトは、この節点が**記憶域から読んだ**オブジェクト -- 原本の struct・union・
   `#ArrayStorage` -- から到達できる (D25) ので、`<1>1a` が当たる。
-  **オペランドの値を割り当てた記憶域のスロットへ書く形** -- `initialize_array_buf_by_value` は `value` を
-  スロットごとに retain してからループの後で release し、`append_value_into_array_buf` は
-  `build_retain(value, count)` を出してから格納し、最後に release する。どちらも `value` はその op の
-  オペランドであり、それを包む op (`InlineLLVMArrayAppendValueCapacityUnchecked` など) は
-  `borrows_operand` を override しないので、D9 の `Llvm` の行はその leaf を消費とする。
-  **生成コードがこれらの retain より前に `value` の leaf の参照を手放す素動作を出さないことは、上の
-  順序が与える。**よって `<1>1e` が当たる。
+  **オペランドの値を割り当てた記憶域のスロットへ書く形** -- `append_value_into_array_buf` は
+  `build_retain(value, count)` を出してから `count` 個のスロットへ格納し、最後に `value` を release
+  する。それを呼ぶのは `InlineLLVMArrayAppendValueCapacityUnchecked` であり、その `value` はこの op の
+  オペランドである。この op は `borrows_operand` を override しないので既定の偽であり、D9 の `Llvm` の
+  行はその leaf を消費とする。**生成コードがこの retain より前に `value` の leaf の参照を手放す素動作を
+  出さないことは、上の順序が与える。**よって `<1>1e` が当たる。
   BY D9, D25, <1>1, <1>1a, <1>1e,
      CODE src/object.rs: ObjectFieldType::clone_struct, ObjectFieldType::clone_union,
-     ObjectFieldType::clone_array_buf, ObjectFieldType::initialize_array_buf_by_value,
+     ObjectFieldType::clone_array_buf, ObjectFieldType::clone_array_range,
      ObjectFieldType::append_value_into_array_buf, ObjectFieldType::move_out_struct_field,
      CODE src/fixstd/builtin.rs: make_struct_union_unique,
      InlineLLVMArrayAppendValueCapacityUnchecked,
