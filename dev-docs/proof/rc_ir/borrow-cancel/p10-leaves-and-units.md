@@ -988,12 +988,21 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     値として等しい引数を渡した 2 つの呼び出しを並べ、素の動作の列を先頭から突き合わせる。`<2>1` から
     `<2>5` はこの道の各関数が読むものを尽くしており、そのどれもが引数の値、`E` の値、`TyConInfo` の
     欄の値、その呼び出しがその場で作る局所の値、そして下位の呼び出しの返り値である。`<2>6` より、
-    走らせることで書かれる memo はその値を動かさない。`<2>1a` より `Arc::ptr_eq` の分岐も返り値の値を
-    変えない。よって 2 つの呼び出しは、対応する各点で同じ値を読み、同じ分岐を選び、同じ引数の値で
-    同じ関数を呼ぶ。したがって、ともに停止して等しい値を返すか、ともに同じ `panic!` / `assert` /
-    添字付けに達するか、ともに停止しない。`<2>4` と `<2>5` はこの結論を `unit_step`・`is_box`・
-    `unpunched_field_types`・`truncate_to_unit` のどれについても同じ形で与える。
-    BY <2>1, <2>1a, <2>2, <2>3, <2>4, <2>5, <2>6
+    走らせることで書かれる memo はその値を動かさない。`<2>1a` より、型を写す 2 つの関数が置く
+    `Arc::ptr_eq` の分岐も返り値の値を変えない。**`TypeNode` の等価比較も節点の対を同じ `Arc` かどうかで
+    先に片付けるが、返す真偽値は型の式の比較のものであり、abort もしない** -- `impl PartialEq for Type`
+    の doc が「Compares the parts of the type expression, taking two occurrences of one node as equal on
+    sight」と述べるとおり、同じ節点の 2 つの出現を等しいと答えるほかは型の式の部分を比べるだけであり、
+    `impl PartialEq for TypeNode` が読むのは `ty` だけで、その再帰が辿るのは `<1>1a` の直接の部分の辺
+    なので停止する。この道がその比較を行うのは、`<2>2` の `Map` が `Arc<TypeNode>` の鍵を突き合わせる
+    ところと、`<2>3` の `Substitution::merge` が同じ鍵の値を `==` で突き合わせるところである。
+    よって 2 つの呼び出しは、対応する各点で同じ値を読み、下位の呼び出しを同じ引数の値で行って同じ値を
+    受け取る。分岐を決める値がどれも一致するので、ともに停止して等しい値を返すか、ともに同じ
+    `panic!` / `assert` / 添字付けに達するか、ともに停止しない。`<2>4` と `<2>5` はこの結論を
+    `unit_step`・`is_box`・`unpunched_field_types`・`truncate_to_unit` のどれについても同じ形で与える。
+    BY <1>1a, <2>1, <2>1a, <2>2, <2>3, <2>4, <2>5, <2>6,
+       CODE src/ast/types.rs: impl PartialEq for Type,
+       CODE src/ast/types.rs: impl PartialEq for TypeNode
 
 <1>10. `<1>1` を満たす型 `t` について、`unit_step(t, E)` の返す `UnitStep` は `cls(t)` で決まり、
    次の表の通りである。
