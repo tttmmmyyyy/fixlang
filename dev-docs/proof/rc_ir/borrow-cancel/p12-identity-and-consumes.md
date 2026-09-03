@@ -1533,8 +1533,8 @@ L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
   <2>2. `σ'` は `ty(args[j])` の boxed leaf であり、`args[j]` の値で inhabited である。
     A3 の「単一の `Arg(j, σ)`」の行は、宣言が第 `j` オペランドの leaf `σ` を名指すこと、および結果の
     その leaf が inhabited であることと第 `j` オペランドの leaf `σ` が inhabited であることが同値である
-    ことを述べる。前提より `λ` は inhabited である。
-    BY A3
+    ことを述べる。L4 の前提より `(x, λ)` は `ρ` の位置であり、L0b (b) より `λ` は inhabited である。
+    BY A3, L0b, DEF 路の位置
   <2>3. `(args[j], σ')` は `ρ` の位置である。
     BY L0b, DEF 路の位置, <1>3, <2>2
   <2>4. `obj(x, λ) = obj(args[j], σ')`。
