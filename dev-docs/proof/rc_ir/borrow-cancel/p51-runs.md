@@ -107,17 +107,28 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
       答える値である。
   **コード生成が変数の名前から値を得る道は `get_scoped_value` の 1 か所である** -- `src/` でその関数を
   呼ぶのは `get_scoped_obj` と `get_scoped_obj_noretain` の 2 つだけであり、どちらもその答えの
-  `accessor` に `get` を掛ける。`RcExpr` を出す腕はそのどちらかを呼ぶ -- `eval_rc_rhs` の
-  `RcRhs::Var` の腕、`eval_rc_expr_inner` の `Retain`/`Release`/`Eval`/`Destructure`/`App` の腕、
-  `build_rc_closure` の capture の読み、`eval_rc_match` の scrutinee の読みである。
-  `get_scoped_value` は `var.is_local()` のときだけスコープを引き、そうでなければ
-  `get_or_declare_global` を通る。(N3) より `n` は局所名ではないので後者である。
+  `accessor` に `get` を掛ける。`get_scoped_value` は `var.is_local()` のときだけスコープを引き、
+  そうでなければ `get_or_declare_global` を通る。(N3) より `n` は局所名ではないので後者である。
   `get_or_declare_global` は `declared_globals` に在ればそれを返し、無ければ
   `declare_program_global` を呼んで登録させ、それが `None` を返せば panic する。
-  BY (N3), CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs, Generator::eval_rc_expr_inner,
+  **名前から値を読む場所は述語で決める** -- `get_scoped_obj(`・`get_scoped_obj_noretain(`・
+  `get_scoped_obj_field(` (3 つ目は `get_scoped_obj` を呼ぶ) の全出現であり、`src/` に定義を除いて
+  143 か所ある。**一覧で書くと op が 1 つ増えるたびに古くなる。**その 143 か所は 3 群に分かれ、
+  どれも上の道を通る。`RcExpr` の節点について呼ぶもの (`eval_rc_expr_inner` の `Ret`/`Retain`/
+  `Release`/`Eval`/`Destructure`/`App` の腕、`eval_rc_rhs` の `RcRhs::Var` の腕、`eval_rc_match` の
+  scrutinee と payload の読み、`build_rc_closure` の capture の読み)。`Llvm` 節点のオペランドに
+  ついて呼ぶもの -- `Let(x, Llvm(gen, args), k)` の腕は `llvm_gen.generate_tail` を呼び、各 op の
+  `generate` / `generate_tail` が自分のオペランドを名前から読む (`src/fixstd/builtin.rs` に 127 か所、
+  `build_capture_project` に 1 か所)。そして環境がグローバルを読むもの
+  (`ExportStatement::implement` と `build_main_function`、D22)。
+  BY (N3), D22, CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs, Generator::eval_rc_expr_inner,
      Generator::build_rc_closure, Generator::eval_rc_match,
+     CODE src/ast/inline_llvm.rs: LLVMGen::generate, LLVMGen::generate_tail,
      CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
-     Generator::get_scoped_value, Generator::get_or_declare_global
+     Generator::get_scoped_obj_field, Generator::build_capture_project,
+     Generator::get_scoped_value, Generator::get_or_declare_global,
+     CODE src/ast/export_statement.rs: ExportStatement::implement,
+     CODE src/build/build_object_files.rs: build_main_function
 
 <1>3. `n` について `declared_globals` に登録が在るならば、その登録は `declare_lambda_function` が
       `fn_ty.is_funptr()` の枝で行ったものであり、登録された値はその呼び出しが作った LLVM 関数である。
@@ -134,6 +145,65 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   BY (N3), CODE src/generator.rs: Generator::add_global_object, Generator::declare_program_global,
      Generator::declare_lambda_function
 
+<1>3a. 相異なる 2 つの鍵の名前は相異なる記号名を持ち、鍵の名前の記号名は `::` を含む。
+  `FullName::to_string` は名前空間の各成分を `::` で継いだ列に `::` と `name` を継いだ文字列である。
+  名前空間の成分も `name` も `::` を含まない。**名前空間の成分の在りかは述語で決める** -- 成分は
+  module 宣言と namespace 宣言が与える `namespace_item` (`capital_name` を `.` で継いだもの) か、
+  `FullName::to_namespace` が名前を名前空間の末尾へ移したものかのどちらかであり、後者の在りかは
+  `to_namespace()` の全出現である。`src/` に 48 か所あり、末尾へ移る名前は 3 族に分かれる --
+  **トレイト名** (`CODE src/ast/program.rs: Program::trait_member_symbols`)、**型名**
+  (`CODE src/ast/program.rs: Program::add_methods` のゲッタ・セッタ)、**値の名前**
+  (`fresh_closure_ref` が持ち上げる lambda と、`CODE src/elaboration/desugar_opaque.rs:
+  Program::desugar_opaque_types` が作る `#wrap_opaque`) である。トレイト名と型名は `capital_name`、
+  値の名前は `name` であり、どちらも Fix の識別子にコンパイラが `#<タグ><10 進数字>` の形の接尾辞を
+  足しうる形である (A13)。Fix の識別子を作る文字は英数字と `_` (と値の名前の頭の `@`) だけなので、
+  どの成分も `:` を持たない。よって `to_string` は相異なる名前に相異なる文字列を与える。
+  `object_file_symbol_name` はその文字列の `SYMBOL_VERSION_SEPARATOR` を
+  `SYMBOL_VERSION_SEPARATOR_SUBSTITUTE` に置き替えるだけであり、置き替える前の文字列が substitute を
+  含まないことをその関数の表明が検査する -- 含むプログラムはコンパイルされず、この場合の段は存在しない --
+  ので、置換も相異なる文字列を相異なる文字列へ移す。(N3) より鍵の名前は局所名ではなく、`is_local` は
+  名前空間が空であることなので、鍵の名前空間は空でなく、その記号名は `::` を含む。
+  BY (N3), A13, CODE src/ast/name.rs: FullName::to_string, FullName::is_local, NameSpace::to_string,
+     FullName::to_namespace,
+     CODE src/generator.rs: object_file_symbol_name,
+     CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
+     CODE src/parse/grammer.pest: name_char, namespace_item, capital_name, module_defn,
+     global_defns_in_namespace
+
+<1>3b. この単位のモジュールに記号名 `object_file_symbol_name(n)` の関数を作る `module.add_function`
+       の呼び出しは、`declare_lambda_function` の 1 か所だけである。
+  `src/` の `module.add_function(` は 17 か所であり、`object_file_symbol_name` の値をそのまま名前に
+  するのは `declare_lambda_function` の 1 か所である。残る 16 か所を、渡す名前の形で分ける。
+  **`::` を 1 つも持たない名前**を渡すのは 9 か所である -- 走時の記号名 `fixruntime_...`・`sprintf`・
+  `pthread_once`・`malloc`・`realloc` を渡す `runtime.rs` の 7 か所、`<接頭辞>_<型のハッシュ>` を渡す
+  `emit_rc_helper_call` の 1 か所、そして走査関数の名前 `trav_<work><状態>_<型のハッシュ>` と
+  `fixruntime_empty_traverser`・`fixruntime_empty_traverser_dynamic` を渡す `object.rs` の
+  `create_traverser` と `get_traverser_ptr` である。`<1>3a` より鍵の名前の記号名は `::` を含むので、
+  これらは `object_file_symbol_name(n)` ではない。
+  **最初の `::` より前に `#` を持つ名前**を渡すのは 6 か所である -- `global_accessor_name` の `Get#`
+  (`declare_program_global`)、`InitValue#` と `InitOnce#` (`implement_rc_global` の 2 か所)、
+  `release#` と `retain#` (`builtin.rs` の 2 か所) である。鍵の名前の記号名は最も外側の名前空間の
+  成分から始まり、その成分はその名前が住む module の名前 -- module 宣言が与える `namespace_item` --
+  なので `#` を持たない (`CODE src/ast/name.rs: FullName::module` の doc -- 「The module the name lies
+  in, which is the first name of its namespace.」)。`<1>3a` の 3 族はどれも `FullName::to_namespace`
+  が名前を名前空間の**末尾**へ移す形なので、最も外側の成分を替えない。
+  **残る 1 か所は `FFI_CALL` が呼ぶ C の関数の名前である** (`ffi.rs` の
+  `CSignature::get_or_declare_in_module`)。**これは形では分けられない** -- 文法の `ffi_c_fun_char` は
+  `(` 以外の任意の文字を許すので、その名前は鍵の記号名と同じ綴りでありうる。A26a が「`FFI_CALL` が
+  名指す C 関数の名前は、このプログラムのどのグローバルの `object_file_symbol_name` とも異なる」を
+  与えるので、これも `object_file_symbol_name(n)` ではない。
+  BY A13, A26a, <1>3a, CODE src/generator.rs: object_file_symbol_name, global_accessor_name,
+     Generator::declare_lambda_function, Generator::declare_program_global,
+     Generator::emit_rc_helper_call,
+     CODE src/ast/name.rs: FullName::module,
+     CODE src/rc_ir/codegen.rs: Generator::implement_rc_global,
+     CODE src/object.rs: create_traverser, get_traverser_ptr,
+     CODE src/fixstd/builtin.rs: InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
+     InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody,
+     CODE src/fixstd/runtime.rs: build_runtime, CODE src/ffi.rs: CSignature::get_or_declare_in_module,
+     CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
+     CODE src/parse/grammer.pest: ffi_c_fun_char, namespace_item
+
 <1>4. CASE この単位の切片 `U` が `n` を定義する。すなわち `FuncRef{n}` が `U.funcs` の鍵である。
       このとき、コード生成が `n` の値を読む時点で `declared_globals` は `n` の登録を持ち、そこに
       登録された LLVM 関数は `func_vals[FuncRef{n}]` と同じものである。
@@ -145,81 +215,27 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     第 3 枝で `declare_lambda_function(&func.fn_ty, &func.name.name)` を呼ぶ。
     BY CODE src/generator.rs: Generator::declare_lambda_function, Generator::declare_program_global,
        CODE src/rc_ir/codegen.rs: Generator::implement_rc_program
-  <2>1a. 相異なる 2 つの鍵の名前は相異なる記号名を持ち、鍵の名前の記号名は `::` を含む。
-    `FullName::to_string` は名前空間の各成分を `::` で継いだ列に `::` と `name` を継いだ文字列である。
-    名前空間の成分も `name` も `::` を含まない。**名前空間の成分の在りかは 2 つである。**1 つは module
-    宣言と namespace 宣言が与える `namespace_item` -- `capital_name` を `.` で継いだもの -- であり
-    (`CODE src/parse/grammer.pest: module_defn, global_defns_in_namespace, namespace_item,
-    capital_name`)、もう 1 つは `fresh_closure_ref` が持ち上げた lambda の名前空間を作るとき
-    `FullName::to_namespace` で記号の名前を名前空間の末尾へ移したものである
-    (`CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref`, `CODE src/ast/name.rs:
-    FullName::to_namespace`)。後者の成分は Fix の識別子にコンパイラが `#<タグ><10 進数字>` の形の
-    接尾辞を足したものである (A13)。Fix の識別子を作る文字は英数字と `_` (と値の名前の頭の `@`) だけ
-    なので、どれも `:` を持たない。よって `to_string` は相異なる名前に相異なる文字列を与える。
-    `object_file_symbol_name` はその文字列の `SYMBOL_VERSION_SEPARATOR` を
-    `SYMBOL_VERSION_SEPARATOR_SUBSTITUTE` に置き替えるだけであり、置き替える前の文字列が substitute を
-    含まないことをその関数の表明が検査する -- 含むプログラムはコンパイルされず、この場合の段は存在しない --
-    ので、置換も相異なる文字列を相異なる文字列へ移す。(N3) より鍵の名前は局所名ではなく、`is_local` は
-    名前空間が空であることなので、鍵の名前空間は空でなく、その記号名は `::` を含む。
-    BY (N3), A13, CODE src/ast/name.rs: FullName::to_string, FullName::is_local, NameSpace::to_string,
-       FullName::to_namespace,
-       CODE src/generator.rs: object_file_symbol_name,
-       CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
-       CODE src/parse/grammer.pest: name_char, namespace_item, capital_name, module_defn,
-       global_defns_in_namespace
   <2>2. 第 1 ループが鍵 `FuncRef{n}` の項目に着く時点で、モジュールは記号名 `object_file_symbol_name(n)`
         の関数を持たない。
-    <3>1. 第 1 ループが鍵 `FuncRef{n}` の項目に着くまでに走りうる `module.add_function` の呼び出しの
-          うち、`object_file_symbol_name(n)` を名前とするのは `declare_lambda_function` の 1 か所だけで
-          ある。
-      `src/` の `module.add_function(` は 17 か所であり、`object_file_symbol_name` の値をそのまま名前に
-      するのは `declare_lambda_function` の 1 か所である。残る 16 か所を挙げる。
-      **第 1 ループより前に走るもの**は、走時の記号名 `fixruntime_...`・`sprintf`・`pthread_once`・
-      `malloc`・`realloc` を渡す `runtime.rs` の 7 か所である。どれも `::` を含まず、`<2>1a` より鍵の
-      名前の記号名は `::` を含むので、これらは `object_file_symbol_name(n)` ではない。
-      **第 1 ループの中で走りうるもの**は、`global_accessor_name` の値 -- `Get#` を冠する名前 -- を渡す
-      `declare_program_global` の 1 か所である。その名前は最初の `::` より前に `#` を持つ。鍵の名前の
-      記号名は最も外側の名前空間の成分から始まり、その成分は module 宣言が与える `namespace_item` なので
-      `#` を持たない -- 名前の名前空間の最も外側の成分はその名前が住む module の名前であり
-      (`CODE src/ast/name.rs: FullName::module` の doc -- 「The module the name lies in, which is the
-      first name of its namespace.」)、持ち上げた lambda の名前の名前空間はその記号の名前を末尾に足した
-      ものである (`fresh_closure_ref`)。
-      **残る 8 か所は本体を出す段で走る**ので、第 1 ループの後である (`build_object_files` が
-      `implement_rc_program` を 1 度呼び、その第 2・第 3 ループが本体を出す)。`InitValue#` と `InitOnce#`
-      を冠する名前 (`implement_rc_global` の 2 か所)、`release#` と `retain#` を冠する名前 (`builtin.rs`
-      の 2 か所)、`<接頭辞>_<型のハッシュ>` (`emit_rc_helper_call` の 1 か所)、走査関数の名前 `trav_...` と
-      `fixruntime_empty_traverser`・`fixruntime_empty_traverser_dynamic` (`object.rs` の
-      `create_traverser` と `get_traverser_ptr`)、そして `FFI_CALL` が呼ぶ C の関数の名前 (`ffi.rs` の
-      1 か所) である。**最後のものは形では分けられない** -- 文法の `ffi_c_fun_char` は `(` 以外の任意の
-      文字を許すので、その名前は鍵の記号名と同じ綴りでありうる。分けるのは走る時期である。
-      BY A13, <2>1a, CODE src/generator.rs: object_file_symbol_name, global_accessor_name,
-         Generator::declare_lambda_function, Generator::declare_program_global,
-         Generator::emit_rc_helper_call,
-         CODE src/ast/name.rs: FullName::module,
-         CODE src/build/build_object_files.rs: build_object_files,
-         CODE src/rc_ir/codegen.rs: Generator::implement_rc_program, Generator::implement_rc_global,
-         CODE src/object.rs: create_traverser, get_traverser_ptr,
-         CODE src/fixstd/builtin.rs: InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
-         InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody,
-         CODE src/fixstd/runtime.rs: build_runtime, CODE src/ffi.rs: CSignature::get_or_declare_in_module,
-         CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
-         CODE src/parse/grammer.pest: ffi_c_fun_char, namespace_item
-    <3>2. QED
-      `implement_rc_program` の前にモジュールへ関数を入れるのは `build_runtime` の `Declare` の呼び出し
-      だけである -- `build_object_files` はその呼び出しを `implement_rc_program` の直前に置き、
-      `build_exported_c_functions` と `build_main_function` を後に置く。その名前は `<3>1` が挙げる走時の
-      記号名なので、`<3>1` より `object_file_symbol_name(n)` ではない。第 1 ループの 3 枝が呼ぶのは
-      `module.get_function`、`declare_program_global`、`declare_lambda_function` だけであり、そのうち
-      モジュールに関数を作るのは `declare_lambda_function` の `add_function` と `declare_program_global`
-      のアクセサの行の 2 つである。`<1>3` より (N3) の下で後者は鍵の名前について走らないので、より前の
-      項目が入れる関数は、その鍵の名前 `n'` について `declare_lambda_function` が作る記号名
-      `object_file_symbol_name(n')` の関数だけである。鍵は相異なる
-      ので `n' ≠ n` であり、`<2>1a` よりその記号名は `object_file_symbol_name(n)` と異なる。
-      `EXT LLVM モジュールの記号名` より、記号名は関数を高々 1 つ決める。
-      BY (N3), EXT LLVM モジュールの記号名, <1>3, <2>1, <2>1a, <3>1,
-         CODE src/build/build_object_files.rs: build_object_files,
+    <3>1. 第 1 ループが鍵 `FuncRef{n}` の項目に着くまでに走った `module.add_function` の呼び出しの
+          うち、`object_file_symbol_name(n)` を名前とするものは無い。
+      `<1>3b` より、その名前を作りうるのは `declare_lambda_function` の 1 か所である。第 1 ループの
+      前に走るのは `build_runtime` の `Declare` の呼び出しだけであり (`build_object_files` はそれを
+      `implement_rc_program` の直前に置く)、そこは `declare_lambda_function` を呼ばない。第 1 ループの
+      3 枝が呼ぶのは `module.get_function`、`declare_program_global`、`declare_lambda_function` だけで
+      あり、`<1>3` より (N3) の下で `declare_program_global` はアクセサを登録する行に着かないので、
+      より前の項目が `declare_lambda_function` に渡す名前はその項目の鍵の名前 `n'` である。鍵は
+      相異なるので `n' ≠ n` であり、`<1>3a` よりその記号名は `object_file_symbol_name(n)` と異なる。
+      BY (N3), <1>3, <1>3a, <1>3b, CODE src/build/build_object_files.rs: build_object_files,
          CODE src/rc_ir/codegen.rs: Generator::implement_rc_program,
-         CODE src/generator.rs: Generator::declare_program_global
+         CODE src/generator.rs: Generator::declare_program_global,
+         CODE src/fixstd/runtime.rs: build_runtime
+    <3>2. QED
+      モジュールが記号名 `s` の関数を持つのは、`module.add_function` がその名前で関数を作った後だけで
+      ある (`EXT LLVM モジュールの記号名` -- `Module::get_function(s)` は記号名が `s` の関数が在れば
+      それを返し、無ければ `None` を返す)。`<3>1` より、この時点までにその名前で関数を作った呼び出しは
+      無い。
+      BY EXT LLVM モジュールの記号名, <3>1
   <2>3. `n` について `declare_lambda_function` が走るのは、第 1 ループの鍵 `FuncRef{n}` の項目の第 2 枝
         か第 3 枝の、ちょうど 1 度である。その項目は第 1 枝を取らない。さらに、コード生成が `n` の値を
         読むとき、その時点で `declared_globals` は `n` の登録を持つ。
@@ -265,8 +281,9 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     BY <1>3, <2>3, <2>4
 
 <1>4a. CASE この単位の切片 `U` が `n` を定義しない。すなわち `FuncRef{n}` は `U.funcs` の鍵ではない。
-       このとき、コード生成が `n` の値を読む時点で `declared_globals` は `n` の登録を持ち、この単位は
-       その名前の本体を出さない。すなわちこの単位が `n` について持つのは宣言だけである。
+       このとき、コード生成が `n` の値を読む時点で `declared_globals` は `n` の登録を持ち、その登録が
+       持つ LLVM 関数の記号名は `object_file_symbol_name(n)` であって、この単位はその名前の本体を
+       出さない。すなわちこの単位が `n` について持つのは宣言だけである。
   <2>1. `n` の値を読む時点で `declared_globals` は `n` の登録を持ち、それを行ったのは
         `declare_lambda_function` の funptr の枝である。
     `<1>2` より、その読みは `get_or_declare_global(n)` を通る。`declared_globals` が `n` を持てば
@@ -280,6 +297,22 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     BY (N3), <1>2, <1>3, CODE src/generator.rs: Generator::get_or_declare_global,
        Generator::declare_program_global, Generator::declare_lambda_function,
        Generator::add_global_object
+  <2>1a. `<2>1` の `declare_lambda_function` が作る LLVM 関数の記号名は
+         `object_file_symbol_name(n)` である。この単位のモジュールで、その記号名を持つ関数はそれ 1 つ
+         だけである。
+    `declare_lambda_function` は `module.add_function(&object_file_symbol_name(n), ..)` を呼ぶ。
+    `EXT LLVM モジュールの記号名` より、`add_function` が渡された名前と別の記号名を付けるのは、その
+    名前の関数がモジュールに既に在るときだけである。`<1>3b` より、`object_file_symbol_name(n)` を
+    名前として関数を作りうる呼び出しは `declare_lambda_function` の 1 か所であり、**その 1 か所を
+    `FFI_CALL` の C 関数名から分けるのは A26a である** -- この単位はこの名前の本体を出す段を持たない
+    ので、`<1>4` の `<2>2` `<3>1` が使う「走る時期」による分離は当たらない。`declare_lambda_function`
+    が `n` について走るのはこの 1 度である -- `<1>3` より `declared_globals` の `n` の登録は高々 1 つ
+    であり、`get_or_declare_global` は登録が在れば `declare_program_global` を呼ばず、`FuncRef{n}` は
+    `U.funcs` の鍵ではないので第 1 ループもこの名前について呼ばない。他の名前 `n'` について走る呼び出し
+    が作るのは `<1>3a` より別の記号名である。よって衝突は起きず、改名も起きない。
+    BY A26a, EXT LLVM モジュールの記号名, <1>3, <1>3a, <1>3b, <2>1,
+       CODE src/generator.rs: Generator::declare_lambda_function, Generator::get_or_declare_global,
+       CODE src/rc_ir/codegen.rs: Generator::implement_rc_program
   <2>2. この単位は `n` の本体を出さない。
     `<1>1` よりこの単位が本体を出す LLVM 関数は `func_vals` の値であり、その鍵は `U.funcs` の鍵で
     ある。この場合 `FuncRef{n}` はその鍵ではない。`declare_lambda_function` は `module.add_function` で
@@ -289,8 +322,12 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   <2>3. QED
     D24 が「**単位が定義しない名前について、その単位が持つのは宣言だけである。** リンクがその宣言を、
     その名前を持つ単位が実装した本体へ解決する」と述べる。`<2>1` と `<2>2` が、この単位が `n` について
-    持つのが本体の無い登録であることを与える。
-    BY D24, <2>1, <2>2
+    持つのが本体の無い登録であることを与え、`<2>1a` が、その宣言の記号名が
+    `object_file_symbol_name(n)` であって、この単位でそれが別のものへ解決されないことを与える。
+    **後者を与えるのは A26a である** -- A26a はこの補題を読む者として名指されており、その仮定が無いと、
+    同じ綴りの C 関数名を `FFI_CALL` が持つプログラムで `CSignature::get_or_declare_in_module` が
+    この宣言を返し、その名前が記号でなく C 関数へ解決される。
+    BY A26a, D24, <2>1, <2>1a, <2>2
 
 <1>5. (b) が成り立つ。
   `<1>2` より、`n` の値を読むコード生成が返すのは `declared_globals` の `n` の登録の `ValueAccessor` が
@@ -299,11 +336,19 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   `fun.as_global_value().as_basic_value_enum()` を返す -- アクセサを呼ばず、関数そのものを値とする。
   `FuncRef{n}` が `U.funcs` の鍵であるかどうかで 2 つの場合に尽きる。鍵であるならば、`<1>4` より
   その関数は `func_vals[FuncRef{n}]` であり、`<1>1` よりそれは `Q.funcs[FuncRef{n}]` の本体を実装した
-  LLVM 関数である。鍵でないならば、`<1>4a` よりこの単位が持つのは `n` の宣言だけである。
+  LLVM 関数である。**鍵である場合は 2 通りある** -- D24 は、`divide_among_units` が `Q.funcs` の各項目を
+  1 つの単位へ入れ、そのうえで「`import_what_each_unit_reaches` が写しを配る -- その名前に届く各単位へ
+  `funcs` の項目を複製し、写しはその単位の内部の定義になる」と述べ、「**定義を持つ単位は分割が決めた
+  1 つだが、その本体を持つ単位は 1 つとは限らない。**」と続ける。どちらでも `<1>0` より
+  `U.funcs[FuncRef{n}]` は `Q.funcs[FuncRef{n}]` なので、出る本体は同じである。
+  鍵でないならば、`<1>4a` よりこの単位が持つのは記号名 `object_file_symbol_name(n)` の宣言だけで
+  ある。
   **いずれの場合も、D24 が「したがって、実行時に名前 `n` が指す関数は `P.funcs[FuncRef{n}]` の本体を
   実装したものである -- どの単位がそれを実装したかに依らない」と述べる。**その `P` がこの補題の `Q` で
   ある。よってその値が実行時に指す関数は `Q.funcs[FuncRef{n}]` の本体を実装したものである。
-  BY D24, <1>1, <1>2, <1>3, <1>4, <1>4a, CODE src/generator.rs: ValueAccessor::get
+  **`<1>4a` の場合にその解決を与えるのは A26a である** -- `<1>4a` が結論する「宣言の記号名が
+  `object_file_symbol_name(n)` である」がその仮定の上に立つ。
+  BY A26a, D24, <1>0, <1>1, <1>2, <1>3, <1>4, <1>4a, CODE src/generator.rs: ValueAccessor::get
 
 <1>6. QED
   BY <1>1, <1>5
