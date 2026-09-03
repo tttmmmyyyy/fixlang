@@ -1204,7 +1204,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// A global object is never unique, so the count is read only after the state says the object
     /// is local. Where `state` says so already, the state is not read and the global case does not
     /// exist — the check becomes the comparison against one alone.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_branch_by_is_unique(
         self: &mut Generator<'c, 'm>,
         obj_ptr: PointerValue<'c>,
