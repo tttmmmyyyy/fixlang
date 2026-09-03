@@ -723,6 +723,7 @@ pub struct InlineLLVMIntLit {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIntLit {
+    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let obj = create_obj(
             ty.clone(),
@@ -6207,6 +6208,7 @@ impl InlineLLVMMakeUnionBody {
 // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMakeUnionBody {
+    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the payload the constructed variant carries.
         let payload = gc.get_scoped_obj(&self.field_name);
