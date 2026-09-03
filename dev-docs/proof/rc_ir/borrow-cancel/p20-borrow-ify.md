@@ -1606,8 +1606,8 @@ P12 (c) が、「局所変数を経由する間接呼び出しでは `route` は
 なる。
 
 **系 3 (パラメータ unit の所有と `owns_object` が合う)**。出力の版 `V` の `RewriteCtx` を `ctx` とし、
-`p` を `V` のパラメータか capture、`u ∈ units(ty(p))` とする。このとき `ctx.owns_object(p.name, u)` は、
-D14 の意味で `V` が `(p, u)` を所有することと同値である。
+`p` を `V` のパラメータか capture、`u ∈ units(ty(p))` とする。このとき `ctx.owns_object(p.name, u)` は
+**値を返し**、その値は D14 の意味で `V` が `(p, u)` を所有することと同値である。
 
 <1>1. L1 より `under(ty(p), u) = [u]` であり、L6 (`p15-ownership-uniformity.md`) より `trunc(ty(p), u) = u`
       である。
@@ -1621,8 +1621,11 @@ D14 の意味で `V` が `(p, u)` を所有することと同値である。
   BY D1, CODE src/rc_ir/borrow.rs: RewriteCtx::new, borrow_ify,
      CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only
 
-<1>3. L4 と `<1>1` と `<1>2` より、`ctx.owns_object(p.name, u)` は `(p.name, u) ∈ owned_units` と同値で
-      ある。
+<1>3. L4 と `<1>1` と `<1>2` より、`ctx.owns_object(p.name, u)` は値を返し、その値は
+      `(p.name, u) ∈ owned_units` と同値である。
+  L4 は `param_tys` が `root` を持つ腕を `under(ty(p), path)` の各 `unit` についての
+  `owned_units.contains(&(root, trunc(ty(p), unit)))` として述べる。`<1>1` よりこの呼び出しで
+  `under` と `trunc` はどちらも値を返すので、この判定は中断せず真偽値を返す。
   BY L4, <1>1, <1>2
 
 <1>4. QED
@@ -2656,12 +2659,16 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
   D10 の初期値は、所有するパラメータ・capture の unit の下の inhabited な各 leaf につき 1 つである。
   パラメータ leaf の由来は自分自身である (`Binding::Param` の腕は `here()` を返すので DEF 由来の 1 歩 の
   「上のどれでもない」に当たる)。`ι = ι_全` のときは全 unit が所有されるので、両辺はどの inhabited な
-  パラメータ leaf も 1 と数える。`ι = ι_V` のときは、第 8 節の系 3 と P7e より
-  `ctx.owns_object(p, σ) = ctx.owns_object(p, trunc(ty(p), σ))` であり、これは `V` が unit
-  `trunc(ty(p), σ)` を D14 の意味で所有することと同値なので、両辺は同じ leaf を数える。P1 は
+  パラメータ leaf も 1 と数える。`ι = ι_V` のときは、P1 は
   **A10 を満たす**型についての言明であり、A10 はプログラムに現れる型の全体についてそれを与えるので
   `ty(p)` に当たる。P1 より
   `trunc(ty(p), σ)` は `units(ty(p))` の元であり、D10 の初期値が渡る unit の 1 つである。
+  **P7e (a) の等号は値の等号として読める。** P7e は「**(a) の等号は、両辺が同時に値を返してその値が
+  等しいか、同時に中断するかのどちらかであることをいう。**」と定める。第 8 節の系 3 は
+  `trunc(ty(p), σ) ∈ units(ty(p))` の下で右辺 `ctx.owns_object(p, trunc(ty(p), σ))` が**値を返す**ことを
+  与えるので、P7e (a) より左辺 `ctx.owns_object(p, σ)` も値を返し、2 つは等しい。系 3 はさらに右辺の値が
+  `V` が unit `trunc(ty(p), σ)` を D14 の意味で所有することと同値であると述べるので、両辺は同じ leaf を
+  数える。
   BY A10, D10, D14, P1, P7e, 第 8 節の系 3, CODE src/rc_ir/ownership.rs: origin_inner
 
 <1>2. 生成が合う。
@@ -3426,7 +3433,11 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
         パラメータか capture である。D6 より `σ` は `ty(u)` の inhabited な boxed leaf であり、P1 は
         **A10 を満たす**型についての言明で、A10 はプログラムに現れる型の全体についてそれを与えるので、
         P1 より `trunc(ty(u), σ) ∈ units(ty(u))` である。第 8 節の系 3 はその仮説 -- unit であること --
-        の下で立つ。よって系 3 と P7e より `owns_object(u, σ)` が偽であることは
+        の下で立ち、`owns_object(u, trunc(ty(u), σ))` が値を返すことと、その値が `V` がその unit を
+        D14 の意味で所有することと同値であることを与える。P7e は「**(a) の等号は、両辺が同時に値を
+        返してその値が等しいか、同時に中断するかのどちらかであることをいう。**」と定めるので、
+        右辺が値を返すことから `owns_object(u, σ)` も値を返し、2 つは等しい。よって
+        `owns_object(u, σ)` が偽であることは
         `V` が unit `trunc(ty(u), σ)` を D14 の意味で借用することである。`σ` はその unit の下の
         inhabited な leaf であり、L9 より `obj(x, λ) = obj(T_ρ(x, λ)) = obj(u, σ)` なので、`<1>4` より
         `p` において解放されていない。
@@ -3448,8 +3459,11 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
         L19 より所有されない由来 `T_ρ(a, λ) = (u', σ')` の `u'` は `V` のパラメータか capture である。
         D6 より `σ'` は `ty(u')` の inhabited な boxed leaf であり、P1 は **A10 を満たす**型についての
         言明で、A10 はプログラムに現れる型の全体についてそれを与えるので、P1 より
-        `trunc(ty(u'), σ') ∈ units(ty(u'))` である。第 8 節の系 3 はその仮説の下で立ち、系 3 と P7e より
-        `V` はその unit を D14 の意味で借用するので、`<1>4` による。
+        `trunc(ty(u'), σ') ∈ units(ty(u'))` である。第 8 節の系 3 はその仮説の下で立ち、
+        `owns_object(u', trunc(ty(u'), σ'))` が値を返すことと、その値が D14 の所有と同値であることを
+        与える。P7e は「**(a) の等号は、両辺が同時に値を返してその値が等しいか、同時に中断するかの
+        どちらかであることをいう。**」と定めるので、右辺が値を返すことから `owns_object(u', σ')` も値を
+        返し、2 つは等しい。よって `V` はその unit を D14 の意味で借用するので、`<1>4` による。
     BY A10, D6, D14, L19, P1, P7e, P11, 第 8 節の系 3, <1>2, <1>4, <2>0
   <2>2. (A-後) の `Release(a, u)` が触れるオブジェクトは `p` において解放されていない。
         P11 より `arg_owned(i, u)` は真なので、`<2>0` より `u` の下の inhabited な各 leaf `λ` の
@@ -3575,9 +3589,11 @@ capture であり `ctx.owns_object(p, σ)` が偽であるとき 1、そうで�
 <1>5. `ctx.owns_object(p, σ)` が偽であることと、`V` が `(p, trunc(ty(p), σ))` を D14 の意味で借用する
       こととは同値である。
   BY D14, P7e, 第 8 節の系 3, <1>4
-  P7e より `owns_object(p, σ) = owns_object(p, trunc(ty(p), σ))` である。`<1>4` より
-  `trunc(ty(p), σ) ∈ units(ty(p))` なので、第 8 節の系 3 よりそれは `V` がその unit を D14 の意味で所有
-  することと同値である。D14 より各 unit は所有か借用のどちらかであり、両方ではない。
+  `<1>4` より `trunc(ty(p), σ) ∈ units(ty(p))` なので、第 8 節の系 3 より
+  `owns_object(p, trunc(ty(p), σ))` は値を返し、その値は `V` がその unit を D14 の意味で所有すること
+  と同値である。P7e は「**(a) の等号は、両辺が同時に値を返してその値が等しいか、同時に中断するかの
+  どちらかであることをいう。**」と定めるので、右辺が値を返すことから `owns_object(p, σ)` も値を返し、
+  2 つは等しい。D14 より各 unit は所有か借用のどちらかであり、両方ではない。
 
 <1>6. QED
   1 から 2 へは `<1>1`・`<1>2`・`<1>3`・`<1>5` が与える。2 から 1 へは `<1>5` が与える。
