@@ -36,10 +36,11 @@ A19 (i)・(ii-a)・(ii-b) と P14a の上である。A19 (i) は D21 が活性�
 - `acted_on(x, π)` は `origin(x, π).acted_on()` を集合とみなしたもの
   (`CODE src/rc_ir/ownership.rs: Origin::acted_on`)。D15 より
   `acted_on(x, π) = {origin(x, π).identity()} ∪ origin(x, π).candidates()` である。
-- `L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の要素のうち `π` を前置に持つものの集合。D4 より、これが
-  「`v` の `π` の下の boxed leaf」の全体である。inhabited (D16) でないものを含む。`L(v) = L(v, [])` と書く。
-- `ActRefs(v, π)` は `acted_references(vars, type_env, v, π)` (D15)。
-- `Others(v, π)` は `CancelAnalysis::other_objects(v, π)` の返す列を集合とみなしたもの
+- **DEF L** `L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の要素のうち `π` を前置に持つものの集合。
+  D4 より、これが「`v` の `π` の下の boxed leaf」の全体である。inhabited (D16) でないものを含む。
+  `L(v) = L(v, [])` と書く。
+- **DEF ActRefs** `ActRefs(v, π)` は `acted_references(vars, type_env, v, π)` (D15)。
+- **DEF Others** `Others(v, π)` は `CancelAnalysis::other_objects(v, π)` の返す列を集合とみなしたもの
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 
 **`origin(x, π)` は `(x, π)` で決まる 1 つの値である。** よってこの文書は `origin(x, π)`、したがって
@@ -452,14 +453,16 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release` の腕
 
 <1>2. `other_objects(v, π)` の返り値の元の全体は `Others(v, π)` である。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, 第 1 節の記法
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF Others
 
 <1>3. `CancelAnalysis::acted_references(v, π)` は `acted_references(self.vars, self.type_env, v, π)` の
       値をそのまま返す (空でないことを表明した後で)。`self.vars` と `self.type_env` は `B` のものである。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references, CODE src/rc_ir/borrow.rs: cancel
 
 <1>4. QED
-  BY <1>1, <1>2, <1>3, 第 1 節の記法
+  BY <1>1, <1>2, <1>3, DEF ActRefs
+  <1>3 の `self.acted_references(v, π)` は `self.vars`・`self.type_env` が `B` のものなので
+  `acted_references(vars, type_env, v, π)` であり、DEF ActRefs よりそれは `ActRefs(v, π)` である。
 
 ### L6 (`Release` の訪問の後に `pending` に残るもの)
 
@@ -1431,12 +1434,12 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
         この 3 種のどれとも異なる。**A12 が型の `variant` を述べる各節では、その型の `is_closure()` は
         偽である** -- A12 はこの文をその各節の一部として置く。
       <4>4. QED
-        BY <2>2, <4>1, <4>2, <4>3, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+        BY <4>1, <4>2, <4>3, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
         `is_fully_unboxed` は、`is_box` が真なら偽、`is_closure` が真なら偽、`is_array` が真なら偽、
         `is_funptr` が真なら真を返し、そのいずれでもないとき `unpunched_field_types` の各フィールドの
-        型がすべて `is_fully_unboxed` であるかを答える。`is_box` はこの CASE の仮定 (<2>2) より偽、
-        残る 3 つは <4>3 より偽なので、判定は最後の行に来る。<4>1 と <4>2 よりその全称は偽なので
-        `is_fully_unboxed(container.ty, type_env)` は偽である。
+        型がすべて `is_fully_unboxed` であるかを答える。`is_box` はこの CASE の仮定 (`container.ty.is_box(type_env)`
+        が偽) より偽、残る 3 つは <4>3 より偽なので、判定は最後の行に来る。<4>1 と <4>2 よりその全称は
+        偽なので `is_fully_unboxed(container.ty, type_env)` は偽である。
     <3>3. `[idx] ++ λ ∈ boxed_leaf_paths(ty(container))` である。これが (i) である。
       BY D4, <3>2a
       D4 の第 5 規則より、この規則に来る型の leaf は `unpunched_field_types` が返す各フィールド `i` に
@@ -1525,12 +1528,12 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
         この 3 種のどれとも異なる。**A12 が型の `variant` を述べる各節では、その型の `is_closure()` は
         偽である** -- A12 はこの文をその各節の一部として置く。
       <4>4. QED
-        BY <2>2, <4>1, <4>2, <4>3, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+        BY <4>1, <4>2, <4>3, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
         `is_fully_unboxed` は、`is_box` が真なら偽、`is_closure` が真なら偽、`is_array` が真なら偽、
         `is_funptr` が真なら真を返し、そのいずれでもないとき `unpunched_field_types` の各フィールドの
-        型がすべて `is_fully_unboxed` であるかを答える。`is_box` はこの CASE の仮定 (<2>2) より偽、
-        残る 3 つは <4>3 より偽なので、判定は最後の行に来る。<4>1 と <4>2 よりその全称は偽なので
-        `is_fully_unboxed(scrut.ty, type_env)` は偽である。
+        型がすべて `is_fully_unboxed` であるかを答える。`is_box` はこの CASE の仮定 (`scrut.ty.is_box(type_env)`
+        が偽) より偽、残る 3 つは <4>3 より偽なので、判定は最後の行に来る。<4>1 と <4>2 よりその全称は
+        偽なので `is_fully_unboxed(scrut.ty, type_env)` は偽である。
     <3>2. `[tag] ++ λ ∈ boxed_leaf_paths(ty(scrut))` である。これが (i) である。
       BY D4, <3>1, <3>1a
       D4 の第 5 規則より、この規則に来る型の leaf は `unpunched_field_types` が返す各フィールド `i`
@@ -1879,14 +1882,14 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
 <1>1. `ActRefs(v, π)` は `L(v, π)` の各 leaf `λ` を `origin(v, λ).identity()` で名付けて数えた多重集合で
       あり、`ActRefs^inh_ρ(n)` は `Inh_ρ(v, π, n)` の各 leaf を同じ名付けで数えた多重集合である。
       `Inh_ρ(v, π, n) ⊆ L(v, π)` である。
-  BY D15, DEF 実行時の作用, 第 1 節の記法
+  BY D15, DEF 実行時の作用, DEF L
   D15 より `acted_references(v, π)` は `π` の下のすべての boxed leaf の `origin(v, ・).identity()` を
-  数えた多重集合であり、第 1 節の記法より `π` の下の boxed leaf の全体は `L(v, π)` である。
+  数えた多重集合であり、DEF L より `π` の下の boxed leaf の全体は `L(v, π)` である。
 
 <1>2. `L(v, π)` の各元 `λ` は `boxed_leaf_paths(ty(v), type_env)` の元であり、`ρ` の上で `v` は値を
       得ている。
-  BY 第 1 節の記法, D3, A11, L7b
-  第 1 節の記法より `L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の部分集合である。`n` は `ρ` の上の
+  BY DEF L, D3, A11, L7b
+  DEF L より `L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の部分集合である。`n` は `ρ` の上の
   節点であり、`v` を名指す。`v` が `vars.bindings` に束縛を持つときは、A11 より `v` はその位置で
   スコープに入っている束縛に解決するので、`ρ` の上で `v` は先に値を得ている。持たないときは、`L7b` より
   `v` を名指す `n` の段で `v` は値を持つ。
@@ -1965,7 +1968,7 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
     <3>1. `pending(k)` は `pending(n)` の末尾に `PendingRetain { node: node_id(n), outstanding:
           ActRefs(v, path) }` を足したものである。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-         CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references, L2, 第 1 節の記法
+         CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references, L2, DEF ActRefs
       この腕は `pending.push(PendingRetain { node: retain, outstanding })` を行い、`outstanding` は
       `self.acted_references(v, path)` である。`PendingRetain` はこの 2 つのフィールドだけを持つ
       (`CODE src/rc_ir/borrow.rs: PendingRetain`)。L2 (i) よりこの腕は `walk(k, pending, ·)` を 1 回呼ぶ。
