@@ -1003,13 +1003,13 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
     <3>2. `fun` は `v` の名前が `declared_globals` に持つ 1 つの欄から来るので、`v` の名前だけで
           決まる。
       BY <1>1c ((d) の funptr の枝),
+         README の第 4 節 (「**コード生成が `expect` や `unreachable!` で止まる形も、`develop_mode` の
+         門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の活性化は存在
+         しない。」),
          CODE src/generator.rs: Generator::get_or_declare_global (`declared_globals` に在ればその
          `ScopedValue` を返し、無ければ `declare_program_global` で用意してからその欄を返す),
          CODE src/generator.rs: Generator::declare_program_global (`ty.is_funptr()` の枝が用意するのは
          その名前の 1 つの関数である),
-         README の第 4 節 (「**コード生成が `expect` や `unreachable!` で止まる形も、`develop_mode` の
-         門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の活性化は存在
-         しない。」),
          CODE src/generator.rs: Generator::add_global_object (`declared_globals` へ入れるのはここだけで
          あり、同じ名前を 2 度入れようとすると `panic_with_msg` で止まる。その `panic_with_msg` は
          `develop_mode` の門を持たないので、README の第 4 節の 2 段目に当たり、走る本体では
