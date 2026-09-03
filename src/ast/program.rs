@@ -135,7 +135,7 @@ impl TypeEnv {
     /// The declaration of `tycon` if a value of it has become a value of its one field, and `None`
     /// otherwise. A recorded newtype is one this environment declares, which `unwrap_newtypes`
     /// states where it records them.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unwrapped_newtype_info(&self, tycon: &TyCon) -> Option<&TyConInfo> {
         if !self.unwrapped_newtypes.contains(tycon) {
             return None;
@@ -165,13 +165,14 @@ impl TypeEnv {
     }
 
     /// The declaration of every type constructor this environment holds, by its name.
-    // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycons(&self) -> &Map<TyCon, TyConInfo> {
         &self.tycons
     }
 
     /// The kind of every name this environment gives a meaning to, type constructors and type
     /// aliases together in one table.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn kinds(&self) -> Map<TyCon, Arc<Kind>> {
         let mut res = Map::default();
         for (tc, ti) in self.tycons.as_ref().iter() {
@@ -190,6 +191,7 @@ impl TypeEnv {
     /// The answer comes from the name alone, so ask it while a value of the struct is still built as
     /// that struct. A newtype keeps its declaration after `unwrap_newtypes` records it, so this
     /// still names the struct of a newtype whose values have become values of its one field.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_struct_act(&self, name: &FullName) -> Option<(TyCon, Name)> {
         if name.is_local() {
             return None;
@@ -998,6 +1000,7 @@ impl Program {
 
     /// The name of every type constructor and of every type alias the program declares, which are
     /// the names a type written in a source can resolve to.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycon_names_with_aliases(&self) -> Set<FullName> {
         let mut res: Set<FullName> = Default::default();
         for (k, _) in self.type_env().tycons.iter() {
@@ -2638,6 +2641,7 @@ impl Program {
 
     /// The kind of every type constructor, associated type, trait and trait alias the program
     /// declares, which is what a written type is kind-checked against.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn kind_env(&self) -> KindEnv {
         KindEnv {
             tycons: self.type_env().kinds(),
