@@ -1,15 +1,15 @@
 # P2a, P15 - P18: `cancel` の走査
 
-この文書は README の層 1 の命題 P2a と、層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の定義
-D1 - D34 と仮定 A1 - A26 の上に立つ。P2a を除く層 1 の命題と、層 2 の命題は引用しない。
+この文書は README の層 1 の命題 P2a と、層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の第 3 節が
+置く定義と第 4 節が置く仮定の上に立つ。P2a を除く層 1 の命題と、層 2 の命題は引用しない。
 
-この文書が読んだコードのコミットは `63bf6963e1e7b51aa575be3aa982af50d3733b25` である。README が証明の
+この文書が読んだコードのコミットは `e5f2b9c79460be3ae60b46e3900267c36ac98692` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書の `CODE` 引用が
-名指すファイルは 16 個ある。そのうち 15 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
+名指すファイルは 17 個ある。そのうち 16 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
 `src/rc_ir/ast.rs`、`src/rc_ir/provenance.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/rename.rs`、
-`src/ast/types.rs`、`src/ast/name.rs`、`src/ast/program.rs`、`src/misc.rs`、
-`src/build/build_object_files.rs`、`src/main.rs`、`src/object.rs`、`src/tool/log_file.rs`、
-`src/tests/test_util.rs` --- に変わったのは `// PROOF:` コメントだけである。
+`src/ast/types.rs`、`src/ast/name.rs`、`src/ast/program.rs`、`src/elaboration/typecheck.rs`、
+`src/misc.rs`、`src/build/build_object_files.rs`、`src/main.rs`、`src/object.rs`、
+`src/tool/log_file.rs`、`src/tests/test_util.rs` --- に変わったのは `// PROOF:` コメントだけである。
 
 残る 1 個 `src/rc_ir/validate.rs` には、コメント以外の変更がある。`Validator::check_rhs` の署名が
 `(&mut self, x: &RcVar, rhs: &RcRhs)` になり、その `Llvm` の腕が `llvm_gen.result_prov(&x.ty, &arg_tys,
@@ -34,9 +34,10 @@ README の第 2 節の記法に、次の 3 つを加える。
 - **局所の補題**。この文書の中だけで使う補題を `L0` - `L13` と番号を付けて述べ、`BY` の行では
   `L<n>` で引用する。あいだに挟む補題には `L8a` のように枝番を振り、既存の番号は振り直さない。各補題は、
   それより前に置かれた補題と命題と、README の D/A だけを引用する。
-- **外部の結果**。`BY` の行では `EXT <名前>` として引く。Rust の言語と標準ライブラリの契約のうち
-  この文書が使うものを、第 1 節の「外部の結果」で
-  完全な言明とともに述べる。
+- **外部の結果**。`BY` の行では `EXT <名前>` として引く。Rust の言語と標準ライブラリの契約、および
+  `Cargo.toml` が宣言するビルド構成のうちこの文書が使うものを、第 1 節の「外部の結果」で
+  完全な言明とともに述べる。ビルド構成をここに置くのは、`CODE` が名指せるのが `.rs` と `.fix` の
+  ファイルの記号だからである。
 
 `CODE` の引用はファイル名と記号の道で書く。引用するコードはすべてこのリポジトリの中にある。
 
@@ -56,6 +57,15 @@ README の第 2 節の記法に、次の 3 つを加える。
 **本体**は活性化の主語 --- ある関数の `body` か、あるグローバル初期化子の `init` --- である。この文書は
 その 2 つの意味でも「本体」を使うので、Rust の関数の側にはこの語を当てない。`match` の腕のように関数より
 小さい単位について「本文」と書くときも、指すのはその腕に書かれた式と文の全体である。
+
+### DEF このクレート
+
+この文書が「**このクレート**」と書くとき指すのは、EXT このリポジトリのターゲット が挙げる 2 つの
+クレート --- lib の `fixlang` と bin の `fix` --- のいずれか 1 つである。
+
+**数え上げの走査の範囲を `src/` の全体と定め、走査が挙げた一覧を、どちらのクレートで読んでも実際の
+集合の上位集合として読む。** この文書の数え上げはどれも「挙げた以外の場所には無い」と言う向きに使うので、
+上位集合で読んで結論が保たれる。
 
 ### DEF 部分木
 
@@ -88,11 +98,8 @@ D2 の意味での本体の木の位置を**節点**と呼ぶ。節点 `n` の**
 
 ### DEF 参照の多重集合
 
-`References` は `Map<VarPath, usize>` を 1 つ持つ構造体である (`CODE src/rc_ir/ownership.rs: References`)。
-これを、鍵を**位置** (`VarPath`)、値をその位置について数えた参照の個数とする多重集合とみなす。
-**鍵は D6 の位置であって D25 のオブジェクトではない。** コードの `References::shares_an_object`、
-`References::names`、`References::objects` は名前が「オブジェクト」と言うが、扱うのは `VarPath` の鍵で
-ある。次の記法を使う。
+`References` の値を、その `Map<VarPath, usize>` の鍵を**位置** (`VarPath`)、値をその位置について数えた
+参照の個数とする多重集合とみなす (`CODE src/rc_ir/ownership.rs: References`)。次の記法を使う。
 
 - `R2 ⊆ R1` とは、各位置について `R2` の個数が `R1` の個数以下であることをいう。
 - `R1 - R2` とは、各位置の個数の差である (`R2 ⊆ R1` のときだけ書く)。
@@ -173,6 +180,39 @@ Rust Reference の "Modules" が次を述べる。
 モジュールを持たない。EXT 可視性と私有性 と合わせると、そのファイルが宣言する非公開の項目を名指せるのは
 そのファイルの中だけである。書かれた `mod` の項目が `#[cfg(test)] mod tests` の 1 つだけであれば、
 子孫はそのモジュールだけである。
+
+**EXT 文は書かれた順に実行される**
+Rust Reference の "Block expressions" が次を述べる。
+
+> When evaluating a block expression, each statement, except for item declaration statements, is
+> executed sequentially.
+
+> Then the final operand is executed, if given.
+
+すなわち、ブロックの中の 2 つの文は書かれた順に実行され、末尾式はすべての文の後に評価される。
+
+**EXT 演算対象は式より先に評価される**
+Rust Reference の "Evaluation order of operands" が、呼び出し式 (call expression) とメソッド呼び出し式
+(method call expression) を含む一覧を挙げたうえで、次を述べる。
+
+> The operands of these expressions are evaluated prior to applying the effects of the expression.
+> Expressions taking multiple operands are evaluated left to right as written in the source code.
+
+同じ節が次の注を置く。
+
+> Since this is applied recursively, these expressions are also evaluated from innermost to
+> outermost, ignoring siblings until there are no inner subexpressions.
+
+すなわち、呼び出しの引数はその呼び出しより先に、左から右の順に評価され、入れ子になった呼び出しは
+内側から順に評価される。
+
+**EXT このリポジトリのターゲット**
+`Cargo.toml` は 3 つのターゲットを宣言する --- `[lib] name = "fixlang", path = "src/lib.rs"`、
+`[[bin]] name = "fix", path = "src/main.rs"`、`[[bench]] name = "typecheck", harness = false`
+(既定のパス `benches/typecheck.rs`) である。`src/lib.rs` と `src/main.rs` は同じ 28 個のモジュールを
+`mod` で導入し、`src/main.rs` はさらに `#[cfg(test)] mod tests` を導入する。すなわち `src/` の 1 つの
+ファイルは lib と bin の 2 つのクレートに属し、どちらのクレートの項目も `src/` のファイルが宣言する。
+ベンチのターゲットは第 3 のクレートであり、`fixlang` を外部クレートとして読む。
 
 **EXT 共有参照は代入を許さない**
 Rust Reference の "Pointer types" が共有参照について次を述べる。
@@ -337,17 +377,19 @@ enum については元と同じ変位で、その変位が保持する各値を
 `CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`, `CODE src/rc_ir/borrow.rs: un_bump`,
 `CODE src/rc_ir/borrow.rs: CancelAnalysis::merge`)
 
-走査が作る `PendingRetains` の値を**状態**と呼ぶ。「追加」「消費」「引き」は直前の状態をその場で書き換え、
-「複製」と「併合」は新しい値を作る。各状態は、それを作る基本操作が実行される時点で生じる。状態 `Q` が
-状態 `P` より**前に作られた**とは、`Q` の生じる時点が `P` の生じる時点より前であることをいい、この関係を
-**生成順序**と呼ぶ。
+走査が作る `PendingRetains` の値を**状態**と呼ぶ。各状態は、それを作る基本操作が実行される時点で生じる。
+状態 `Q` が状態 `P` より**前に作られた**とは、`Q` の生じる時点が `P` の生じる時点より前であることをいい、
+この関係を**生成順序**と呼ぶ。
+
+基本操作の**入力**と**出力**を次で定める。「初期」に入力は無く、出力は `PendingRetains::default()` の値で
+ある。「複製」の入力は複製される 1 つの状態、出力はその複製である。「追加」「消費」「引き」の入力は
+その操作が書き換える `Vec` の書き換え前の値 1 つ、出力は書き換え後の値である。「併合」の入力は
+`pending_in` と各 `arm_exits[j]` の全部、出力は `merge` の返り値である。
 
 ### DEF 除去事象
 
-基本操作 1 つが、状態の集まり `Q1, ..., Qm` を入力として状態 `Q'` を作り、ある `Qi` に `node` が `x` で
-ある要素があり、`Q'` にはそれが無いとき、この操作を `x` の**除去事象**と呼ぶ。「併合」の入力は
-`pending_in` と各 `arm_exits[j]` の全部であり、ほかの操作の入力は 1 つである。「追加」「消費」「引き」は
-状態をその場で書き換えるので、入力は書き換えの前の値、`Q'` は後の値である。
+基本操作 1 つの入力の状態の集まり `Q1, ..., Qm` (DEF 基本操作) のある `Qi` に `node` が `x` である要素が
+あり、その操作の出力 `Q'` にはそれが無いとき、この操作を `x` の**除去事象**と呼ぶ。
 
 ## 2. 予備の補題と P2a
 
