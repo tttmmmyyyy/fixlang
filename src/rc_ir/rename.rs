@@ -60,7 +60,7 @@ fn assign_fresh_name(
 }
 
 /// Record a fresh name for every variable bound in a function body.
-// PROOF: P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_names_to_binders(
     node: &RcExprNode,
     pass_tag: &str,
