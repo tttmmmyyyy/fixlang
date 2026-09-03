@@ -114,13 +114,14 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   **名前から値を読む場所は述語で決める** -- `get_scoped_obj(`・`get_scoped_obj_noretain(`・
   `get_scoped_obj_field(` (3 つ目は `get_scoped_obj` を呼ぶ) の全出現であり、`src/` に定義を除いて
   143 か所ある。**一覧で書くと op が 1 つ増えるたびに古くなる。**その 143 か所は 3 群に分かれ、
-  どれも上の道を通る。`RcExpr` の節点について呼ぶもの (`eval_rc_expr_inner` の `Ret`/`Retain`/
-  `Release`/`Eval`/`Destructure`/`App` の腕、`eval_rc_rhs` の `RcRhs::Var` の腕、`eval_rc_match` の
-  scrutinee と payload の読み、`build_rc_closure` の capture の読み)。`Llvm` 節点のオペランドに
-  ついて呼ぶもの -- `Let(x, Llvm(gen, args), k)` の腕は `llvm_gen.generate_tail` を呼び、各 op の
-  `generate` / `generate_tail` が自分のオペランドを名前から読む (`src/fixstd/builtin.rs` に 127 か所、
-  `build_capture_project` に 1 か所)。そして環境がグローバルを読むもの
-  (`ExportStatement::implement` と `build_main_function`、D22)。
+  どれも上の道を通る。**`RcExpr` の節点について呼ぶもの、`src/rc_ir/codegen.rs` に 12 か所** --
+  `eval_rc_expr_inner` の `Ret`/`Retain`/`Release`/`Eval`/`Destructure`/`App` の腕、`eval_rc_rhs` の
+  `RcRhs::Var` の腕、`eval_rc_match` の scrutinee と payload の読み、`build_rc_closure` の capture の
+  読みである。**`Llvm` 節点のオペランドについて呼ぶもの、`src/fixstd/builtin.rs` に 127 か所と
+  `src/generator.rs` に 2 か所** -- `Let(x, Llvm(gen, args), k)` の腕は `llvm_gen.generate_tail` を
+  呼び、各 op の `generate` / `generate_tail` が自分のオペランドを名前から読む
+  (`get_scoped_obj_field` と `build_capture_project` がその 2 か所である)。**環境がグローバルを読む
+  もの、2 か所** -- `ExportStatement::implement` と `build_main_function` である (D22)。
   BY (N3), D22, CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs, Generator::eval_rc_expr_inner,
      Generator::build_rc_closure, Generator::eval_rc_match,
      CODE src/ast/inline_llvm.rs: LLVMGen::generate, LLVMGen::generate_tail,
@@ -174,13 +175,13 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
        の呼び出しは、`declare_lambda_function` の 1 か所だけである。
   `src/` の `module.add_function(` は 17 か所であり、`object_file_symbol_name` の値をそのまま名前に
   するのは `declare_lambda_function` の 1 か所である。残る 16 か所を、渡す名前の形で分ける。
-  **`::` を 1 つも持たない名前**を渡すのは 9 か所である -- 走時の記号名 `fixruntime_...`・`sprintf`・
+  **`::` を 1 つも持たない名前**を渡すのは 10 か所である -- 走時の記号名 `fixruntime_...`・`sprintf`・
   `pthread_once`・`malloc`・`realloc` を渡す `runtime.rs` の 7 か所、`<接頭辞>_<型のハッシュ>` を渡す
   `emit_rc_helper_call` の 1 か所、そして走査関数の名前 `trav_<work><状態>_<型のハッシュ>` と
   `fixruntime_empty_traverser`・`fixruntime_empty_traverser_dynamic` を渡す `object.rs` の
   `create_traverser` と `get_traverser_ptr` である。`<1>3a` より鍵の名前の記号名は `::` を含むので、
   これらは `object_file_symbol_name(n)` ではない。
-  **最初の `::` より前に `#` を持つ名前**を渡すのは 6 か所である -- `global_accessor_name` の `Get#`
+  **最初の `::` より前に `#` を持つ名前**を渡すのは 5 か所である -- `global_accessor_name` の `Get#`
   (`declare_program_global`)、`InitValue#` と `InitOnce#` (`implement_rc_global` の 2 か所)、
   `release#` と `retain#` (`builtin.rs` の 2 か所) である。鍵の名前の記号名は最も外側の名前空間の
   成分から始まり、その成分はその名前が住む module の名前 -- module 宣言が与える `namespace_item` --
