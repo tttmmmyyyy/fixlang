@@ -724,6 +724,7 @@ enum については元と同じ変位で、その変位が保持する各値を
       `if let Some(known) = vars.origins.borrow().get(&key) { return known.clone(); }`、
       `let answer = grow_stack(|| origin_inner(vars, type_env, x, π));`、
       `vars.origins.borrow_mut().insert(key, answer.clone());`、そして末尾式 `answer` である。
+      EXT 文は書かれた順に実行される より、この 4 つの文はこの順に実行され、末尾式はその後に評価される。
       第 2 の文で返る呼び出しを**当たり**、第 2 の文で返らずに第 3 の文へ進む呼び出しを**外れ**と呼ぶ。
       この 2 つは呼び出しを尽くす。当たりの呼び出しは `vars.origins` の鍵 `key` の値の
       複製を返し、`origin` も `origin_inner` も呼ばない。外れの呼び出しは A15 より `origin_inner` を
@@ -731,7 +732,8 @@ enum については元と同じ変位で、その変位が保持する各値を
       であり、`insert` に渡るのは `answer.clone()` で、当たりが返すのは `known.clone()` である。
       EXT Clone より、`key` は `(x, π)` と等しく、`insert` に渡る値は返る値と等しく、当たりが返す値は
       表が持つ値と等しい。
-  BY CODE src/rc_ir/ownership.rs: origin, A15, EXT Map と Set, EXT Clone
+  BY CODE src/rc_ir/ownership.rs: origin, A15, EXT Map と Set, EXT Clone,
+     EXT 文は書かれた順に実行される
 <1>2. `vars.origins` の鍵の集合は増えるだけであり、鍵 `k` が入るのは、鍵が `k` である外れの呼び出しが
       `origin_inner` から戻った後に限る。`origins` は `VarTable` の非公開の欄であり、`ownership.rs` は
       `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たないので、この欄を名指す式が書けるのは
@@ -910,14 +912,15 @@ enum については元と同じ変位で、その変位が保持する各値を
   <2>6. CASE `b_1` が当たりである。<1>1 より、`b_1` が始まる時点で `vars.origins` は鍵 `k_1` を持つ。
         <2>3 より `d_1` は外れなので、`d_1` が始まる時点で `vars.origins` は `k_1` を持たない。<1>2 より
         鍵 `k_1` が入るのは鍵 `k_1` の外れの呼び出しが `insert` を実行するときだけなので、そのような
-        呼び出し `f` の `insert` が `d_1` の始まりと `b_1` の始まりの間にある。<1>1 より `insert` は `f` が
-        末尾式の直前の文なので、`f` は `d_1` の実行区間の中で返る。EXT 呼び出しの入れ子 より `f` と `d_1` の
+        呼び出し `f` の `insert` が `d_1` の始まりと `b_1` の始まりの間にある。<1>1 より `insert` は `f` の
+        末尾式の直前の文であり、EXT 文は書かれた順に実行される より `f` はその後に末尾式を評価して返る。
+        よって `f` は `d_1` の実行区間の中で返る。EXT 呼び出しの入れ子 より `f` と `d_1` の
         実行区間は交わらないか一方が他方に含まれるかであり、交わるので後者である。`d_1` が `f` に含まれる
         なら `f` は `d_1` より後に返るが、`f` は `d_1` の実行区間の中で返るのでそれは無い。よって `f` は
         `d_1` に含まれ、`b_1` が始まる時点で `d_1` はまだ返っていないので `f ≠ d_1`、すなわち `f` は
         `d_1` に真に含まれる。よって `(d_1, f)` は `c` の中の入れ子の対であり、<2>3 よりその外側 `d_1` が
         始まる時刻は `a` より遅い。これは <2>2 の取り方に反する。
-    BY <1>1, <1>2, <2>2, <2>3, <2>4, EXT 呼び出しの入れ子
+    BY <1>1, <1>2, <2>2, <2>3, <2>4, EXT 呼び出しの入れ子, EXT 文は書かれた順に実行される
   <2>7. QED (矛盾)
     <2>5 と <2>6 は `b_1` について場合を尽くす。
     BY <2>5, <2>6
@@ -1387,8 +1390,10 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
         `rc_node(is_release, v.clone(), path.clone(), state, k, source)` を返す。真のときは
         `kept.into_iter().rev().fold(k, |cont, unit| rc_node(is_release, v.clone(), unit, state, cont, source))`
         を返す。この `fold` の値は、`k` の上に `kept` の要素ごとに `rc_node` の節点を 1 つ積んだ木で
-        ある。どちらの枝の `rc_node` も、最初の文が返った後に実行される。
-    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, EXT Iterator::fold と rev
+        ある。EXT 文は書かれた順に実行される より、どちらの枝の `rc_node` も、最初の文が返った後に
+        実行される。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc, EXT Iterator::fold と rev,
+       EXT 文は書かれた順に実行される
   <2>2. `kept` は `units_under(&v.ty, path, self.type_env)` を `self.owns_unit(v, unit)` で絞った
         `Vec<FieldPath>` である。`units_under` の返り値の型は `Vec<FieldPath>`、`owns_unit` の返り値の
         型は `bool`、`FieldPath` は `Vec<usize>` であり、どれも `RcExprNode` を含まない。よって `kept`
@@ -1402,8 +1407,8 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
     返す。積むのは `fold` なので、作った節点は 1 つ残らずその木に入る。<1>2 より `rc_node` は
     `expr_node` で 1 節点を作り、`self.rewrite` を呼ばない。<2>2 よりほかの値は木の節点にならず、
     `kept` を作る 2 つの呼び出しも `self.rewrite` を呼ばない。よって `self.rewrite` の呼び出しは
-    最初の文の 1 回だけであり、`rc_node` の実行はその後である。
-    BY <1>1a, <1>2, <2>1, <2>2, EXT Iterator::fold と rev
+    最初の文の 1 回だけであり、EXT 文は書かれた順に実行される より `rc_node` の実行はその後である。
+    BY <1>1a, <1>2, <2>1, <2>2, EXT Iterator::fold と rev, EXT 文は書かれた順に実行される
 <1>4. `rewrite_inner(node)` の 8 つの腕はいずれも、`self.rewrite` を `node` の各子についてちょうど
       1 回ずつ呼び、ほかに `self.rewrite` を呼ばず、その戻り値の上に `expr_node` / `rc_node` /
       `prepend_rc` で有限個の節点を積んだ木を返す。返す木の位置は、それらの `self.rewrite` の呼び出しが
@@ -1439,10 +1444,13 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
       木と、`prepend_rc` と `expr_node` が作る節点だけである (<1>2、<3>2)。第 3 文の
       `prepend_rc(after, ...)` が作る節点は `k` に、第 4 文の `expr_node` が作る節点は `app` に、
       第 5 文の `prepend_rc(before, ...)` が作る節点は返り値に入り、`k` は `app` の中に、`app` は
-      返り値の中にあるので、作った節点は 1 つ残らず返り値の木に入る。第 3 文では `self.rewrite(k)` が
-      引数として先に評価され、その値を受け取ってから `prepend_rc` が走るので、この腕の `expr_node` の
-      実行はすべて `self.rewrite(k)` が返った後である。
-      BY <1>1a, <1>2, <3>1, <3>2, DEF 部分木
+      返り値の中にあるので、作った節点は 1 つ残らず返り値の木に入る。第 3 文では
+      EXT 演算対象は式より先に評価される より `self.rewrite(k)` が引数として先に評価され、その値を
+      受け取ってから `prepend_rc` が走る。EXT 文は書かれた順に実行される より第 4 文と第 5 文は
+      第 3 文の後に実行される。よってこの腕の `expr_node` の実行はすべて `self.rewrite(k)` が返った
+      後である。
+      BY <1>1a, <1>2, <3>1, <3>2, DEF 部分木, EXT 文は書かれた順に実行される,
+         EXT 演算対象は式より先に評価される
   <2>2. `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕は、`arms` の各 `arm` について
         `self.rewrite(&arm.body)` を 1 回ずつ呼び、`self.rewrite(k)` を 1 回呼び、`expr_node` で
         1 節点を積む。アームの列は `arms.iter().map(|arm| arm.with_body(self.rewrite(&arm.body))).collect()`
@@ -1452,20 +1460,23 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
         順に呼ばれるので 2 つのアームの呼び出しの実行区間は交わらない。`arm.with_body(body)` は
         `body` をそのアームの本体に据えたアームを返す。`MatchArm` の残る 3 フィールド `tag`、
         `payload`、`payload_state` は `RcExprNode` を持たないので、この節点の子は `self.rewrite` の
-        各呼び出しが返した木の根だけである (DEF 部分木)。アームの列を作る文が先に走り、続く
-        `expr_node(...)` の引数として `self.rewrite(k)` が評価されてから `expr_node` が呼ばれるので、
+        各呼び出しが返した木の根だけである (DEF 部分木)。EXT 文は書かれた順に実行される より
+        アームの列を作る文が先に走り、EXT 演算対象は式より先に評価される より続く `expr_node(...)` の
+        引数として `self.rewrite(k)` が評価されてから `expr_node` が呼ばれる。よって
         この腕の `self.rewrite(k)` の実行区間はどのアームの呼び出しとも交わらず、`expr_node` の実行は
         どの `self.rewrite` の実行区間の中にも無い。
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
        CODE src/rc_ir/ast.rs: MatchArm::with_body, CODE src/rc_ir/ast.rs: MatchArm, DEF 部分木,
-       EXT Vec::iter と slice::iter, EXT Iterator::map と collect, EXT 呼び出しの入れ子
+       EXT Vec::iter と slice::iter, EXT Iterator::map と collect, EXT 呼び出しの入れ子,
+       EXT 文は書かれた順に実行される, EXT 演算対象は式より先に評価される
   <2>3. `RcExpr::Let(x, rhs, k)` の腕は `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。
         `rhs.clone()` は木の位置を持ち込まない。この腕に落ちる `rhs` は `RcRhs::Match` ではなく
         (`match` の腕はこの順に並んでいる)、`Match` でない右辺を持つ `Let` 節点の子は継続だけだから
-        である (DEF 部分木)。`expr_node` の引数として `self.rewrite(k)` が先に評価されるので、
-        `expr_node` の実行はそれが返った後である。
+        である (DEF 部分木)。EXT 演算対象は式より先に評価される より `expr_node` の引数として
+        `self.rewrite(k)` が先に評価されるので、`expr_node` の実行はそれが返った後である。
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Let(x, rhs, k)` の腕,
-       CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, DEF 部分木
+       CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, DEF 部分木,
+       EXT 演算対象は式より先に評価される
   <2>4. `RcExpr::Retain(v, path, state, k)` の腕と `RcExpr::Release(v, path, state, k)` の腕は
         `self.rewrite_rc` を 1 回呼び、その値を返す。<1>3 よりその呼び出しは `self.rewrite(k)` を
         ちょうど 1 回、最初の文として行い、`rc_node` の実行はその後である。
@@ -1475,11 +1486,13 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
   <2>5. `RcExpr::Destructure(container, fields, state, k)` の腕と `RcExpr::Eval(v, k)` の腕は
         `self.rewrite(k)` を 1 回呼び、`expr_node` で 1 節点を積む。この 2 種の節点の子は継続だけで
         あり (DEF 部分木)、腕が複製する `container`、`fields`、`v` は `RcVar` と `Vec<(usize, RcVar)>`
-        なので木の位置を持ち込まない。どちらの腕も `expr_node` の引数として `self.rewrite(k)` を先に
-        評価するので、`expr_node` の実行はそれが返った後である。
+        なので木の位置を持ち込まない。EXT 演算対象は式より先に評価される より、どちらの腕も
+        `expr_node` の引数として `self.rewrite(k)` を先に評価するので、`expr_node` の実行はそれが
+        返った後である。
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Destructure(container, fields, state, k)` の腕,
        CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Eval(v, k)` の腕,
-       CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, DEF 部分木
+       CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcVar, DEF 部分木,
+       EXT 演算対象は式より先に評価される
   <2>6. `RcExpr::Ret(v)` の腕は `expr_node` で 1 節点を作って返し、`self.rewrite` を呼ばない。この節点に
         子は無い。
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner の `RcExpr::Ret(v)` の腕, DEF 部分木
@@ -1488,8 +1501,9 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
     変位は `Var`, `App`, `Closure`, `Llvm`, `Match` の 5 つである。<2>1 から <2>6 は
     `Let` (右辺が `App`)、`Let` (右辺が `Match`)、`Let` (右辺がそれ以外)、`Retain`、`Release`、
     `Destructure`、`Eval`、`Ret` の 8 つを尽くし、これは `rewrite_inner` の `match` の 8 つの腕である。
-    どの腕でも `self.rewrite` の呼び出しは順に行われ、`expr_node` の実行はそのすべてが返った後なので、
-    EXT 呼び出しの入れ子 より実行区間は互いに交わらず、`expr_node` の実行はどの実行区間の中にも無い。
+    <2>1 から <2>6 より、どの腕でも `self.rewrite` の呼び出しは順に行われ、`expr_node` の実行は
+    そのすべてが返った後なので、EXT 呼び出しの入れ子 より実行区間は互いに交わらず、`expr_node` の実行は
+    どの実行区間の中にも無い。
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
        CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, EXT 呼び出しの入れ子
 <1>5. QED
@@ -1907,19 +1921,23 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 <1>1. `pending.iter().rposition(|retain| retain.outstanding.shares_an_object(un_bumped))` は、述語を
       満たす要素の添字のうち最大のものを `Some` で返し、そのような要素が無ければ `None` を返す。
       `let Some(index) = ... else { return UnBump::NoBracket; };` により、`None` のとき `NoBracket` を
-      返す。この文までに `pending` を変える操作は無い。
-  BY CODE src/rc_ir/borrow.rs: un_bump, EXT Vec::iter と slice::iter, EXT Iterator::rposition
+      返す。この文は本文の最初の文であり、EXT 文は書かれた順に実行される よりこの文までに `pending` を
+      変える操作は無い。
+  BY CODE src/rc_ir/borrow.rs: un_bump, EXT Vec::iter と slice::iter, EXT Iterator::rposition,
+     EXT 文は書かれた順に実行される
 <1>2. `let innermost = &mut pending[index];` は添字 `index` の要素への可変参照である。
       `if !innermost.outstanding.covers(un_bumped) { return UnBump::OutsideBracket; }` により、`covers`
-      が偽のとき `OutsideBracket` を返す。この文までに `pending` を変える操作は無い。
-  BY CODE src/rc_ir/borrow.rs: un_bump, <1>1
+      が偽のとき `OutsideBracket` を返す。この 2 文は <1>1 の文の直後に書かれており、
+      EXT 文は書かれた順に実行される よりこの文までに `pending` を変える操作は無い。
+  BY CODE src/rc_ir/borrow.rs: un_bump, <1>1, EXT 文は書かれた順に実行される
 <1>3. `covers` が真のとき、`innermost.outstanding.subtract(un_bumped)` は panic せず、
       `innermost.outstanding` を `pending[index].outstanding - un_bumped` に書き換える。
   BY CODE src/rc_ir/borrow.rs: un_bump, L2, <1>0
-<1>4. `let retain = innermost.node;` は <1>3 の後に実行されるが、`subtract` は `outstanding` しか変え
+<1>4. `let retain = innermost.node;` は <1>3 の文の後に書かれており、
+      EXT 文は書かれた順に実行される よりその後に実行される。`subtract` は `outstanding` しか変え
       ないので、`retain` は書き換え前後で同じ `pending[index].node` である。
   BY CODE src/rc_ir/borrow.rs: un_bump, CODE src/rc_ir/ownership.rs: References::subtract,
-     CODE src/rc_ir/borrow.rs: PendingRetain
+     CODE src/rc_ir/borrow.rs: PendingRetain, <1>3, EXT 文は書かれた順に実行される
 <1>5. `if innermost.outstanding.is_empty() { pending.remove(index); }` は、L2 の 1 より <1>3 の差が空の
       ときちょうど添字 `index` の要素を取り除き、空でないとき何もしない。`Vec::remove` は後続の要素を
       1 つずつ前へ詰めるだけなので、残る要素の値と相対順序は変わらない。
@@ -1927,8 +1945,9 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 <1>6. `UnBump::InBracket(retain)` を返す。
   BY CODE src/rc_ir/borrow.rs: un_bump, <1>4
 <1>7. <1>1 から <1>6 の間に `pending` に触れるのは <1>3 と <1>5 だけであり、どちらも添字 `index` の
-      要素にしか触れない。
-  BY CODE src/rc_ir/borrow.rs: un_bump, <1>3, <1>5
+      要素にしか触れない。本文の文はこの順に書かれており、EXT 文は書かれた順に実行される より
+      ほかの文がそのあいだに実行されることはない。
+  BY CODE src/rc_ir/borrow.rs: un_bump, <1>3, <1>5, EXT 文は書かれた順に実行される
 <1>8. QED
   場合分けは「共有する要素が無い」「あって `covers` が偽」「あって `covers` が真」であり、尽くしている。
   BY <1>0, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7
@@ -2112,11 +2131,12 @@ PROVE   `cancel(prog, type_env)` が走査する本体の各節点 `n` につい
       さらに `self.consume_objects(&mut pending, &objects)` を 1 回呼ぶ (「消費」)。その後
       `self.walk(k, pending, returns_from_func)` の値を返す。`un_bump` の返り値についての場合分けは
       `UnBump` の 3 変位を尽くしており、`InBracket` の枝が触れるのは `self.un_bump_releases` だけ、
-      `NoBracket` の枝 (`UnBump::NoBracket => {}`) は何もしない。よって `pending(k)` は `pending(n)` に
+      `NoBracket` の枝 (`UnBump::NoBracket => {}`) は何もしない。EXT 文は書かれた順に実行される より
+      この 4 つはこの順に実行される。よって `pending(k)` は `pending(n)` に
       有限個の基本操作を行ったものであり、`pending_out(n) = pending_out(k)` である。この腕はほかに
       `PendingRetains` の値を作らない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
-     CODE src/rc_ir/borrow.rs: UnBump, L6, <1>1, <1>1a
+     CODE src/rc_ir/borrow.rs: UnBump, L6, <1>1, <1>1a, EXT 文は書かれた順に実行される
 <1>4. CASE `n` の式が `RcExpr::Let(_, RcRhs::Match(_, arms), k)` である。この腕は各アームについて
       `pending.clone()` (「複製」) を渡して `walk` を呼び、`pending` 自身は変えない。その後
       `self.merge(&pending, &arm_exits)` (「併合」) で `merged` を作り、
@@ -2257,11 +2277,12 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
   <2>1. この操作は `Vec` の末尾に要素を 1 つ加えるだけであり、既存の要素の値と並びを変えない。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
        EXT Vec::push
-  <2>2. `Q0` は `t` の訪問が始まる前に作られた状態である。この腕は `pending.push` より前に `pending` に
-        触れないので、`Q0` は `walk_inner` に引数として渡された値 `pending(t)` であり、それは呼び出しの
+  <2>2. `Q0` は `t` の訪問が始まる前に作られた状態である。この腕には `pending.push` より前に `pending`
+        に触れる文が書かれておらず、EXT 文は書かれた順に実行される よりほかの文がそのあいだに実行される
+        ことはないので、`Q0` は `walk_inner` に引数として渡された値 `pending(t)` であり、それは呼び出しの
         前に作られている。よって <1>1 の (i) より、`Q0` の各要素の由来は `t` の訪問が始まる前に訪問されて
         おり、P15 の後半 (各位置はちょうど 1 回訪問される) よりそれは `t` ではない。
-    BY <1>1, P15, DEF 訪問, DEF 基本操作,
+    BY <1>1, P15, DEF 訪問, DEF 基本操作, EXT 文は書かれた順に実行される,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕
   <2>3. (i) が成り立つ。新しい要素の `node` は `node_id(t)` であり、`t` の訪問はこの時点で始まっている
         ので、<1>0d よりその由来は `t` にちょうど 1 つ定まる。既存の要素は <1>1 の (i) のままで、由来も
@@ -2481,11 +2502,12 @@ L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべて
 <1>9. (e3) の展開は有限で終わり、その葉は (e1) か (e2) である。ここで**展開**とは、次の木をいう。根は
       いま考えている除去事象である。(e3) が成り立つ除去事象の子は、各アームについてその (e3) が名指す
       除去事象を 1 つずつ選んだものである。(e1) または (e2) が成り立つ除去事象に子は付けない。
-  <2>1. (e3) が指す除去事象は、`Match` 節点 `n` のアームの走査の中で起きる。その走査は `n` の訪問の中で
+  <2>1. (e3) が指す除去事象は、`Match` 節点 `n` のアームの走査の中で起きる。アームの列を作る文は
+        `self.merge` を呼ぶ文より前に書かれており、EXT 文は書かれた順に実行される よりその走査は
         `self.merge` の呼び出しより前に完了しているので、そこで作られる状態は `merged` より前に作られて
         いる。よって (e3) の各子は、生成順序について親より真に前にある。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
-       DEF 基本操作, <1>8
+       DEF 基本操作, <1>8, EXT 文は書かれた順に実行される
   <2>2. (e3) の子はアームごとに 1 つずつ選べるので有限個であり、L4 より 1 つ以上ある。
     BY L4, <1>8
   <2>2a. 除去事象 `E` にその事象が作る状態 `P'(E)` を対応させると、<2>1 より (e3) の各子 `E'` について
@@ -2707,8 +2729,14 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
     BY D3
   <2>2. `M` の訪問は、まず `arms` の各アームについて `self.walk(&arm.body, pending.clone(), false)` を
         呼び、それらが返った後で `self.merge` を呼び、その後で
-        `self.walk(k_M, merged, returns_from_func)` を呼ぶ。
-    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕
+        `self.walk(k_M, merged, returns_from_func)` を呼ぶ。この 3 つはこの順に書かれた 3 つの文に在り、
+        EXT 文は書かれた順に実行される よりこの順に実行される。アームの列を作る文が
+        `arms.iter().map(...).collect()` で各アームの呼び出しを済ませることは
+        EXT Iterator::map と collect が与え、`self.merge` と `self.walk(k_M, ・, ・)` の引数が
+        その呼び出しより先に評価されることは EXT 演算対象は式より先に評価される が与える。
+    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
+       EXT 文は書かれた順に実行される, EXT 演算対象は式より先に評価される,
+       EXT Vec::iter と slice::iter, EXT Iterator::map と collect
   <2>2a. 任意の節点 `n` について `ret(n) ∈ N(n)` である。D3 より `ret(n)` は `n` から継続だけを辿って
          着く `Ret` 節点であり、DEF 部分木 より、`Ret` 以外の 5 種の節点の継続 `k` はその節点の子である
          (`Let(_, Match(_, arms), k)` の子はアーム本体と `k`、残る 4 種の子は `k`)。
