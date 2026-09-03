@@ -1,6 +1,6 @@
 # P1 (leaf と unit の対応) と P2 (`origin` の全域性と停止性) の証明
 
-この文書が読んだコードのコミットは `7d3f95ce5202e5a5c19adedce37e32a5c4d8093d` である。README が証明の
+この文書が読んだコードのコミットは `95665b5b78d0499a1d216a887cac5f0d76a65b40` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が引くファイルに
 変わったのは `// PROOF:` コメントと、`Validator::check_rhs` に足された検査 -- 各 `Llvm` 節点の
 `result_prov` が 1 つの結果 leaf に 2 つ以上の source を宣言しないことを develop mode で確かめるもの --
@@ -199,13 +199,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    できるならば、`t'` からフィールドの辺で到達できる型は `t` からも到達できるので、`t'` も `<1>1` を
    満たす。以下で `<1>1` を部分木の型に当てるのはこれによる。
 
-   **(i) の等式は A10 の「飽和は ground から出ない」の段落が与える。**A10 の第 1 文は引数の個数を
-   「その tycon に kind の要求するだけ」と書くので、それを `E.tycons()[&tc].tyvars.len()` と書き直す
-   には、その kind がちょうど `tyvars.len()` 個の引数を要求することが要る。A10 のその段落が
-   「`declared_field_types` はそこで `assert_eq!(args.len(), tycon_info.tyvars.len())` に当たって
-   止まる」と述べ、続けて「`unpunched_field_types` を呼ぶ歩みが abort しないことを言う議論はこの節を
-   読む」と述べるのがそれである。すなわち A10 の言う飽和は、`collect_type_arguments()` の長さが
-   その `TyConInfo` の `tyvars` の長さに等しいことである。
+   **(i) の等式は A10 が飽和の意味として直に述べている。**A10 の第 1 文は引数の個数を「その tycon に
+   kind の要求するだけ」と書き、続く段落がそれを個数の等式に直す --「**飽和とは、
+   `collect_type_arguments().len()` が `tycon_info.tyvars.len()` に等しいことである。**」。同じ段落が
+   その根拠も添えて、「宣言の kind はその `tyvars` の個数だけ引数を要求する」ことと、「組み込みの各行も
+   `kind` と `tyvars` の長さが揃う」ことを述べる。その等式の `tycon_info` は `t` の型構成子の宣言、
+   すなわちこの段が上に置いた「そのとき `toplevel_tycon_info` が返すのは `E.tycons()[&tc]` である」の
+   `E.tycons()[&tc]` である。よって A10 の飽和は `t.collect_type_arguments().len()` が
+   `E.tycons()[&tc].tyvars.len()` に等しいこと、すなわち (i) の等式である。
 
    **3 つはどれも A10 である。** A10 の第 1 文のうち「プログラムに現れる型は ground であり、
    **その tycon に kind の要求するだけの引数が与えられており**、その tycon は `type_env` にあり、…」が
@@ -343,8 +344,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    - (vii) `Let(x, RcRhs::Llvm(llvm_gen, args), k)` について、`llvm_gen` は `args` の型の列と
      `ty(x)` の上で定義されている。この文書が読むのはそのうち次の 3 つである。
      - `args` の名前の列は `llvm_gen.free_vars()` に等しい。
-     - `llvm_gen` が `InlineLLVMStructPunchBody` であるとき、`ty(x).is_box(E)` と
-       `ty(x).is_array()` はどちらも偽であり、`ty(x).field_types(E)` は長さ 2 の列を返す。その第
+     - `llvm_gen` が `InlineLLVMStructPunchBody` であるとき、`ty(x).is_box(E)`、`ty(x).is_array()`、
+       `ty(x).is_closure()` はいずれも偽であり、`ty(x).field_types(E)` は長さ 2 の列を返す。その第
        `PUNCHED_STRUCT_FIELD` 成分の型を `pt` と書くと、`pt` は `<1>1` を満たす構造体であり、
        `pt.is_closure()` は偽であって、`pt.toplevel_tycon_info(E).fields[llvm_gen.field_idx]` の
        `is_punched` は真である。
@@ -362,8 +363,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    struct の成分を「A10 を満たす構造体」と書く。`<1>1` は A10 をこの文書の記法で述べたものなので
    (第 3 節)、(vii) はそこを
    `<1>1` と書く。**同じ項が「第 `field_idx` フィールドが穴である」と言うのは、`pt` の `TyConInfo`
-   の `fields` の第 `field_idx` 成分の `is_punched` についてである。**`pt.is_closure()` が偽である
-   ことは、A12 のその項が「`is_closure()` は偽である」と併せて述べる。
+   の `fields` の第 `field_idx` 成分の `is_punched` についてである。**`ty(x).is_closure()` が偽で
+   あることは、A12 のその項が「**`is_closure()` も偽であり**」と `is_box`・`is_array` に並べて述べ、
+   根拠を括弧に添える (「`struct_punch` が結果の型を `make_tuple_ty` で作り、tuple は構造体である」)。
+   `pt.is_closure()` が偽であることは、A12 のその項が「`is_closure()` は偽である」と併せて述べる。
 
    **(iv) と (v) は、A12 の「`Match` の scrutinee が union であること」と「`Destructure` の容器が
    構造体であること」を、その型の `TyConInfo` の `variant` として書いたものである。**タプルもこの形に
@@ -403,7 +406,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    | `bulitin_tycons` | `Arrow` | 1 個。`tyvars` は `a` と `b` |
    | `bulitin_tycons` | `DynamicObject` | 1 個 (`#DynamicObject`)。`is_unbox: false`、`tyvars: vec![]` |
    | `bulitin_tycons` | `ArrayStorage` | 1 個 (`#ArrayStorage`)。`is_unbox: false`、`tyvars: vec![make_tyvar("a", ...)]` |
-   | `TypeDefn::tycon_info` | `Struct` か `Union` | 宣言ごとに 1 個 (穴つきの形を含む)。`tyvars` は `self.tyvars` |
+   | `TypeDefn::tycon_info` | `Struct` か `Union` | union の宣言 1 つにつき 1 個、`n` フィールドの構造体の宣言 1 つにつき `n + 1` 個 (穴の無い形と、フィールドごとの穴つきの形)。`tyvars` はどの形でも `self.tyvars` |
    | `CaptureStruct::new` | `Struct` | capture 構造体ごとに 1 個。`tyvars: vec![]` |
    | `register_opaque_tycon` | `Opaque` | 不透明型ごとに 1 個。`is_unbox: false` |
 
@@ -985,12 +988,21 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     値として等しい引数を渡した 2 つの呼び出しを並べ、素の動作の列を先頭から突き合わせる。`<2>1` から
     `<2>5` はこの道の各関数が読むものを尽くしており、そのどれもが引数の値、`E` の値、`TyConInfo` の
     欄の値、その呼び出しがその場で作る局所の値、そして下位の呼び出しの返り値である。`<2>6` より、
-    走らせることで書かれる memo はその値を動かさない。`<2>1a` より `Arc::ptr_eq` の分岐も返り値の値を
-    変えない。よって 2 つの呼び出しは、対応する各点で同じ値を読み、同じ分岐を選び、同じ引数の値で
-    同じ関数を呼ぶ。したがって、ともに停止して等しい値を返すか、ともに同じ `panic!` / `assert` /
-    添字付けに達するか、ともに停止しない。`<2>4` と `<2>5` はこの結論を `unit_step`・`is_box`・
-    `unpunched_field_types`・`truncate_to_unit` のどれについても同じ形で与える。
-    BY <2>1, <2>1a, <2>2, <2>3, <2>4, <2>5, <2>6
+    走らせることで書かれる memo はその値を動かさない。`<2>1a` より、型を写す 2 つの関数が置く
+    `Arc::ptr_eq` の分岐も返り値の値を変えない。**`TypeNode` の等価比較も節点の対を同じ `Arc` かどうかで
+    先に片付けるが、返す真偽値は型の式の比較のものであり、abort もしない** -- `impl PartialEq for Type`
+    の doc が「Compares the parts of the type expression, taking two occurrences of one node as equal on
+    sight」と述べるとおり、同じ節点の 2 つの出現を等しいと答えるほかは型の式の部分を比べるだけであり、
+    `impl PartialEq for TypeNode` が読むのは `ty` だけで、その再帰が辿るのは `<1>1a` の直接の部分の辺
+    なので停止する。この道がその比較を行うのは、`<2>2` の `Map` が `Arc<TypeNode>` の鍵を突き合わせる
+    ところと、`<2>3` の `Substitution::merge` が同じ鍵の値を `==` で突き合わせるところである。
+    よって 2 つの呼び出しは、対応する各点で同じ値を読み、下位の呼び出しを同じ引数の値で行って同じ値を
+    受け取る。分岐を決める値がどれも一致するので、ともに停止して等しい値を返すか、ともに同じ
+    `panic!` / `assert` / 添字付けに達するか、ともに停止しない。`<2>4` と `<2>5` はこの結論を
+    `unit_step`・`is_box`・`unpunched_field_types`・`truncate_to_unit` のどれについても同じ形で与える。
+    BY <1>1a, <2>1, <2>1a, <2>2, <2>3, <2>4, <2>5, <2>6,
+       CODE src/ast/types.rs: impl PartialEq for Type,
+       CODE src/ast/types.rs: impl PartialEq for TypeNode
 
 <1>10. `<1>1` を満たす型 `t` について、`unit_step(t, E)` の返す `UnitStep` は `cls(t)` で決まり、
    次の表の通りである。
@@ -2076,17 +2088,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        その `expect` は発火しない。
       BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, EXT スライスの split_first,
          CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
-    <3>3a. `cls(result_ty)` は `UN` か `ST` である。`<1>3a` (vii) より `result_ty.is_box(E)` と
-       `result_ty.is_array()` は偽である。`result_ty.is_closure()` も偽である -- `<3>1` より
-       `result_ty.field_types(E)` は値を返し、`field_types` は `toplevel_tycon_info` を呼ぶので、
-       その `assert!(!self.is_closure())` が通っている。`cls(result_ty) = NB` の場合は、
+    <3>3a. `cls(result_ty)` は `UN` か `ST` である。`<1>3a` (vii) より `result_ty.is_box(E)`、
+       `result_ty.is_array()`、`result_ty.is_closure()` はいずれも偽なので、`DEF cls` の `CL`、`BX`、
+       `AR` の 3 行はどれも当たらない。`cls(result_ty) = NB` の場合は、
        `DEF UNST-道` の条件を `j = 0` に読むと `result_ty` の UNST-道は `[]` だけであり、
        `cls(end(result_ty, [])) = NB` は `<1>14` の 2 つの集合のどちらの条件にも当たらないので
        `L(result_ty)` は空であり、`<1>27b` より `build_shape` の閉包は 1 度も呼ばれない。よって
        以下は `cls(result_ty)` が `NB` でない場合を見ればよい。残るのは `UN` と `ST` である。
-      BY <1>1, <1>3a, <1>14, <1>27b, <3>1, DEF cls, DEF UNST-道,
-         CODE src/ast/types.rs: TypeNode::field_types,
-         CODE src/ast/types.rs: TypeNode::toplevel_tycon_info
+      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, DEF UNST-道
     <3>3b. `L(result_ty)` の要素のうち `PUNCHED_STRUCT_FIELD` で始まるものは、
        `(PUNCHED_STRUCT_FIELD, s)` が `F(result_ty)` の要素であるとき
        `{ [PUNCHED_STRUCT_FIELD] ++ r : r は L(s) の要素 }` であり、`F(result_ty)` が
@@ -2137,12 +2146,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>4a. `arg_leaf_path` の `assert_ne!` は発火しない。`assert_ne!` が発火するのは、`path` が
        `[PUNCHED_STRUCT_FIELD, self.field_idx] ++ ・` の形のときだけである。`<3>3b` より、そのような
        `path` が `L(result_ty)` に在るのは `(PUNCHED_STRUCT_FIELD, s')` が `F(result_ty)` の要素で
-       あって `L(s')` が `self.field_idx` で始まる要素を持つときに限る。`<3>3a` より
-       `result_ty.is_closure()` は偽であり、`<1>3a` (vii) より `result_ty.is_box(E)` も偽なので、
+       あって `L(s')` が `self.field_idx` で始まる要素を持つときに限る。`<1>3a` (vii) より
+       `result_ty.is_closure()` も `result_ty.is_box(E)` も偽なので、
        `<1>3c` (d) を `result_ty` に当てられる。それよりその `s'` は
        `result_ty.field_types(E)[PUNCHED_STRUCT_FIELD]`、すなわち `<3>4` の `s` である。`<3>4` より
        そのような要素は無い。
-      BY <1>3a, <1>3c, <3>1, <3>3a, <3>3b, <3>4,
+      BY <1>3a, <1>3c, <3>1, <3>3b, <3>4,
          CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
     <3>5. QED
       閉包の残りは `Vec` の連結と `sole_origin` だけである。
@@ -2347,8 +2356,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
     <3>4. QED
       (a) は `<3>1` と `<3>2`、および `<3>3` の第 1 段落 --「`origin` は `&VarTable` を取るので、
-      `bindings` と `var_tys` の `Map` そのものを置き替えることも、その要素を可変に借りることも
-      できない」-- である。(b) は `<3>3`、(c) は `<3>3a` である。
+      `EXT Rust の内部可変性` より `bindings` と `var_tys` の `Map` そのものを置き替えることも、
+      その要素を可変に借りることもできない」-- である。(b) は `<3>3`、(c) は `<3>3a` である。
       BY <3>1, <3>2, <3>3, <3>3a
   <2>1a. `origin_from_leaves_under(vars, E, decl, args, path, here)` の返り値は、`decl`、`args`、
      `path`、`here`、`E`、および自分が行う `origin` の呼び出しの返り値だけで決まる。とくに
@@ -3016,9 +3025,9 @@ D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が�
   あり、**その tycon に kind の要求するだけの引数が与えられており**、その tycon は `type_env` にあり、
   …」の部分そのものである。省略記号が置き替えるのは `no_size_in_place` の降下についての節で、この
   文書はそれを読まない (この項の末尾)。
-  **引数の個数を `tyvars` の長さと書き直すのは A10 の「飽和は ground から出ない」の
-  段落による** --「`declared_field_types` はそこで
-  `assert_eq!(args.len(), tycon_info.tyvars.len())` に当たって止まる」。(ii) と (iii) は A10 の
+  **引数の個数を `tyvars` の長さと書き直すのは A10 の飽和の定義による** --「**飽和とは、
+  `collect_type_arguments().len()` が `tycon_info.tyvars.len()` に等しいことである。**」。
+  (ii) と (iii) は A10 の
   「`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が
   `type_env` にある -- がすべて成り立ち、その歩みは有限である。さらに、到達する各型について
   `instance_field_types` が行う newtype の展開 (`unwrap_newtypes_memoized`) は abort せず停止する」
@@ -3078,7 +3087,8 @@ D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が�
   A10 をこの文書の記法で述べたものなので、(vii) はそこを `<1>1` と書く。同じ条件の「第 `field_idx`
   フィールドが穴である」を、(vii) はその成分の `TyConInfo` の `fields` の `is_punched` として書き、
   A12 の同じ条件が併せて述べる「`is_closure()` は偽である」を一緒に挙げる。`<1>28` の `<2>2f` の
-  `<3>4` がこの 2 つを読む。
+  `<3>4` がこの 2 つを読む。同じ条件が `ty(x)` について並べる `is_box`・`is_array`・`is_closure` の
+  3 つも (vii) はそのまま写し、`<1>28` の `<2>2f` の `<3>3a` がその 3 つを読む。
 
   (vii) が要る理由は、これが無いと `result_prov` の 29 個の override のうち 5 個が abort しうるので
   P2 が偽になることである。`InlineLLVMStructGetBody` と `InlineLLVMUnionAsBody` は `arg_tys[0]`
@@ -3089,9 +3099,9 @@ D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が�
 
 **P1 の定義域。** `<1>20` が示すのは `<1>1` を満たす型についての P1 であり、`<1>1` は A10 を
 この文書の記法で述べたものなので、それは README の P1 --「**A10 を満たす**任意の型 `τ` について」--
-そのものである。A10 が型に条件を置くことが空虚でないのは `<1>19a` による -- `<1>1` の (i) を
-満たさない型については `boxed_leaf_paths` も `rc_units` も `toplevel_tycon_info` の `unwrap` で
-abort し、P1 の言明の 2 つの辺が意味を持たない。
+そのものである。A10 が型に条件を置くことが空虚でないのは `<1>19a` による -- `t.is_closure()` が偽で
+`t.toplevel_tycon()` が `None` を返すか返す型構成子が `E` に無い型については、`boxed_leaf_paths` も
+`rc_units` も `toplevel_tycon_info` の `unwrap` で abort し、P1 の言明の 2 つの辺が意味を持たない。
 
 ## 4. leaf と unit がずれる 2 か所が P1 に効いた場所
 
