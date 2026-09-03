@@ -495,7 +495,7 @@ impl TyAliasInfo {
 pub const MAX_TYPE_DEPTH: usize = 500;
 
 /// A node of a type expression, together with the information the compiler carries alongside it.
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Serialize, Deserialize)]
 pub struct TypeNode {
     /// The type expression, which is what equality and hashing of a node read.

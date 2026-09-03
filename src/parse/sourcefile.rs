@@ -13,7 +13,7 @@ use std::{
 /// The content and the hash are computed on the first request and kept, so a file that is asked
 /// for many times is read once. The path is what a serialized `SourceFile` carries; the content
 /// and the hash are read again wherever it is deserialized.
-// PROOF: D/A, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
     /// The path the file is read from. It names the file: two `SourceFile`s are equal, and are
