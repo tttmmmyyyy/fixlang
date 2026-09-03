@@ -177,14 +177,14 @@ src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked	D/A,P26,P27,P28,P29
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::generate	P26	4058fb759569
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMArrayAppendValueCapacityUnchecked	P26,P27,P29,P30	63ea2bf9f417
-src/fixstd/builtin.rs	InlineLLVMArrayAppendValueCapacityUnchecked::result_prov	P1,P2,P26	1937952562a5
+src/fixstd/builtin.rs	InlineLLVMArrayAppendValueCapacityUnchecked::result_prov	P1,P2,P26,P27,P29,P30	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMArrayBorrowElementsBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
 src/fixstd/builtin.rs	InlineLLVMArrayBorrowElementsBody::generate	P26	dd3d00a36b45
 src/fixstd/builtin.rs	InlineLLVMArrayCopyCapacityBoundsUnchecked	P26	dce8bb7ea5af
 src/fixstd/builtin.rs	InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov	P1,P2,P26,(P-insert)	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMArrayGrowSizeBody	P26	2d8056c69787
 src/fixstd/builtin.rs	InlineLLVMArrayGrowSizeBody::result_prov	P1,P2,P26	1937952562a5
-src/fixstd/builtin.rs	InlineLLVMArrayIsStorageUniqueBody	D/A	4d1c37616886
+src/fixstd/builtin.rs	InlineLLVMArrayIsStorageUniqueBody	D/A,P27,P29,P30	4d1c37616886
 src/fixstd/builtin.rs	InlineLLVMArrayIsStorageUniqueBody::generate	P26	e32a8290379f
 src/fixstd/builtin.rs	InlineLLVMArrayIsStorageUniqueBody::observes_uniqueness	P26	0dbb1939b295
 src/fixstd/builtin.rs	InlineLLVMArrayIsStorageUniqueBody::result_prov	P1,P2	3a2ad73dad20
@@ -199,7 +199,7 @@ src/fixstd/builtin.rs	InlineLLVMArrayPunchBody	P3,P4,P26	b27238710971
 src/fixstd/builtin.rs	InlineLLVMArrayPunchBody::result_prov	P1,P2,P26	d07c92323ade
 src/fixstd/builtin.rs	InlineLLVMArraySetBody	P26	69cac4f10bd1
 src/fixstd/builtin.rs	InlineLLVMArraySetBody::result_prov	P1,P2,P26	1937952562a5
-src/fixstd/builtin.rs	InlineLLVMArraySetCapacityBoundsUnchecked	P26	651386057771
+src/fixstd/builtin.rs	InlineLLVMArraySetCapacityBoundsUnchecked	P26,P27,P29,P30	651386057771
 src/fixstd/builtin.rs	InlineLLVMArraySetCapacityBoundsUnchecked::generate	P26	212b043ed32f
 src/fixstd/builtin.rs	InlineLLVMArraySetCapacityBoundsUnchecked::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMArraySwapBody	P26	530f5a86a643
@@ -218,7 +218,7 @@ src/fixstd/builtin.rs	InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody	D/A,P
 src/fixstd/builtin.rs	InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody	D/A,P27,P28,P29,P30	45558c1323f9
 src/fixstd/builtin.rs	InlineLLVMIntLit	P7a,P7d,P7e	b8126e10483f
 src/fixstd/builtin.rs	InlineLLVMIntLit::generate	P7a,P7d,P7e	ec8727004b40
-src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody	D/A	1da0d65c3df8
+src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody	D/A,P27,P29,P30	1da0d65c3df8
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::generate	P26	cf1c72be74b6
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::observes_uniqueness	P26	0dbb1939b295
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::result_prov	P1,P2	ccb214ee1107
@@ -269,13 +269,13 @@ src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody::generate	P26	50b1a36d0
 src/fixstd/builtin.rs	PUNCHED_STRUCT_FIELD	P1,P2	aba96959fc58
 src/fixstd/builtin.rs	apply_io_act_to_data_ptr	P26,P28	d938bb5ef06b
 src/fixstd/builtin.rs	array_is_storage_unique_function	D/A,P26	73914035b361
-src/fixstd/builtin.rs	array_tail_destination	P26	497fe76a14ba
+src/fixstd/builtin.rs	array_tail_destination	P26,P27,P29,P30	497fe76a14ba
 src/fixstd/builtin.rs	assumed_state	P26	94231012a564
 src/fixstd/builtin.rs	boxed_from_retained_ptr_ios	D/A	767a95dce0ce
 src/fixstd/builtin.rs	boxed_to_retained_ptr_ios	D/A,P7a,P7d,P7e	65a4511404e3
 src/fixstd/builtin.rs	bulitin_tycons	D/A,P1,P2,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P27,P28,P29,P30	4dc11f509041
 src/fixstd/builtin.rs	fix_body	D/A,P27,P29,P30	a45709f796ae
-src/fixstd/builtin.rs	force_unique_or_assert	P26	57ffe5ab0aa5
+src/fixstd/builtin.rs	force_unique_or_assert	P26,P27,P29,P30	57ffe5ab0aa5
 src/fixstd/builtin.rs	force_unique_or_assert_with_hole	D/A,P26,P27,P29,P30	d343a7084e1d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeStructBody	P3,P4,(P-insert)	c4dab170b90d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeUnionBody	P3,P4	5ba9e8112ba7
@@ -321,7 +321,7 @@ src/fixstd/stdlib.rs	make_std_mod	D/A,P1,P2,P7a,P7d,P7e,P26	6da374621d89
 src/generator.rs	Generator::add_global_object	D/A,P3,P4,P27,P28,P29,P30	c05ffb02bb44
 src/generator.rs	Generator::apply_lambda	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P28,P29,P30	53f3b45ec98b
 src/generator.rs	Generator::build_assert_unique	P26	0ebdad575d3d
-src/generator.rs	Generator::build_branch_by_is_unique	P26	86f1e644d331
+src/generator.rs	Generator::build_branch_by_is_unique	P26,P27,P29,P30	86f1e644d331
 src/generator.rs	Generator::build_branch_by_refcnt_state	P26	d75157785307
 src/generator.rs	Generator::build_capture_project	P3,P4,P27,P29,P30	d36efba9fc72
 src/generator.rs	Generator::build_ffi_call_core	P26	45120916e63b

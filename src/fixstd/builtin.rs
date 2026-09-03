@@ -2265,7 +2265,7 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
         Box::new(c)
     }
 
-    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -2488,7 +2488,7 @@ fn realloc_array<'c, 'm>(
 /// Gives an array a storage of `cap_name` elements, keeping the elements it already holds, and
 /// returns the array with its capacity field updated. The caller must ensure the new capacity holds
 /// the array's current size; a smaller one leaves elements outside the storage.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
     /// The local binding holding the array to resize.
@@ -7063,7 +7063,7 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// Tests whether a boxed value is the only reference to its object, by reading the object's
 /// reference count in place, and returns that flag paired with the value handed back unchanged.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIsUniqueFunctionBody {
     /// The local binding holding the value to test.
@@ -7286,7 +7286,7 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// unique. The attributes mirror the generic op so the borrow pass treats the array as consumed and
 /// reports sharing correctly. Provenance recognizes this op alongside the generic one (see
 /// `provenance.rs`).
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayIsStorageUniqueBody {
     var_name: FullName,
@@ -8180,7 +8180,7 @@ fn assumed_state(assume_local: bool) -> RcState {
 ///   registers the punch and the plug it carries its update out with. The value is then returned as
 ///   it stands, and compiler development mode checks that against its reference count.
 /// * `state` — the reference-counting state the clone's uniqueness check reads the count under.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn force_unique_or_assert<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: Object<'c>,
@@ -8234,7 +8234,7 @@ fn force_unique_or_assert_with_hole<'c, 'm>(
 /// elsewhere, the length it had, and a pointer to the first slot past that length. The caller
 /// guarantees the slots it fills are within `dst`'s capacity, and grows the length itself once they
 /// hold elements.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn array_tail_destination<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     dst: Object<'c>,
