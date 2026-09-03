@@ -16,14 +16,14 @@
 `(&mut self, x: &RcVar, rhs: &RcRhs)` になり、その `Llvm` の腕が `llvm_gen.result_prov(&x.ty, &arg_tys,
 self.type_env)` を呼んで、1 つの結果 leaf に宣言された source の個数が 2 以上のとき `panic!` する検査が
 入った。README の第 1 節がこの変更を挙げ、A3 の「**複数の元を宣言する op は存在しない。**」を果たす者と
-して数える。この文書が `validate` を引くのは L2b の `<1>2` の 1 か所であり、そこはこの検査を含む
-`validate` について読む。
+して数える。この文書が `validate` を引くのは L2b の `<1>2` と `<1>3` の 2 か所であり、どちらもこの検査を
+含む `validate` について読む。
 
 P15 の言明は `cancel` の入力を「`borrow_ify` の出力」に限る。P16 - P18 もその入力に対する走査についての
 言明なので、この文書は全体を通じて、`cancel` の引数 `prog` が `borrow_ify` の 1 回の呼び出しの返り値で
-ある場合を扱う。この仮説を `ASSUME` の形で明示するのは L3、L4、L8、L8a、L9、L11 である。**L2b が
-それを `cancel` のすべての呼び出しについて無条件に果たす**ので、P16 と P18 は README が書くとおりの、
-仮説を持たない言明として立つ。
+ある場合を扱う。この仮説を `ASSUME` の形で明示するのは L3、L4、L8、L8a、L9、L11、L13 の 7 本である。
+**L2b がそれを `cancel` のすべての呼び出しについて無条件に果たす**ので、P16 と P18 は README が書くとおり
+の、仮説を持たない言明として立つ。
 
 ## 0. この文書が使う記法
 
@@ -31,7 +31,7 @@ README の第 2 節の記法に、次の 3 つを加える。
 
 - **局所の定義**。この文書の中だけで使う語を定め、`BY` の行では `DEF <名前>` で引用する。定義は第 1 節に
   置く。定めるものが 1 つに決まることを補題が与えるときは、その補題の後に置く --- `DEF 節点の量` は
-  L0b の後である。
+  L0c の後である。
 - **局所の補題**。この文書の中だけで使う補題を `L0` - `L13` と番号を付けて述べ、`BY` の行では
   `L<n>` で引用する。あいだに挟む補題には `L8a` のように枝番を振り、既存の番号は振り直さない。各補題は、
   それより前に置かれた補題と命題と、README の D/A だけを引用する。
@@ -1061,20 +1061,41 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
   BY <1>1, <1>2, <1>3, <1>4, CODE src/rc_ir/borrow.rs: cancel,
      CODE src/rc_ir/borrow.rs: CancelAnalysis, EXT 共有参照は代入を許さない
 
+### L0c (`ActRefs` は節点で決まる)
+
+1 回の `cancel_body` の実行を固定し、その `CancelAnalysis` の値の `vars` の欄が指す表を `vars`、
+`type_env` の欄が指す値を `type_env` と書く。このとき次の 3 つが成り立つ。
+
+1. `vars` と `type_env` は、その実行のあいだ同じ値である。
+2. `Retain` 節点 `t = Retain(v, path, _, _)` と `Release` 節点 `r = Release(v, path, _, _)` について、
+   `ownership::acted_references(vars, type_env, v, path)` の値は走査のどの時点で読んでも同じであり、
+   `vars`、`type_env`、`v`、`path` で決まる。
+3. `CancelAnalysis::acted_references(v, path)` は、値を返すときその値を返す。
+
+**証明**
+
+<1>1. 1 が成り立つ。
+  BY L0b
+<1>2. 2 が成り立つ。L0 の後半が `ownership::acted_references(vars, type_env, v, π)` の返り値について
+      それを述べる。<1>1 より、その実行のあいだ第 1・第 2 引数は同じ値である。
+  BY L0, <1>1
+<1>3. QED
+  3 が成り立つ。`CancelAnalysis::acted_references(v, path)` の本文は
+  `ownership::acted_references(self.vars, self.type_env, &v.name, path)` を呼び、その値が空のときは
+  表明が発火してコンパイラが停止し、そうでないときその値を返す。<1>1 より `self.vars` と
+  `self.type_env` はその実行のあいだ同じ値である。
+  BY <1>1, <1>2, CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references
+
 ### DEF 節点の量
 
-1 回の `cancel_body` の実行を固定し、その `CancelAnalysis` の値の `vars` の欄を `vars`、`type_env` の欄を
-`type_env` と書く。L0b より、この 2 つはその実行のあいだ同じ値である。
-
-その上で、`Retain` 節点 `t = Retain(v, path, _, _)` と `Release` 節点 `r = Release(v, path, _, _)` に
-ついて次の値を定める。
+1 回の `cancel_body` の実行を固定し、その `CancelAnalysis` の値の `vars` の欄が指す表を `vars`、
+`type_env` の欄が指す値を `type_env` と書く。`Retain` 節点 `t = Retain(v, path, _, _)` と `Release`
+節点 `r = Release(v, path, _, _)` について次の値を定める。
 
 - `ActRefs(t) :=` `ownership::acted_references(vars, type_env, v, path)` の値、
   `ActRefs(r) :=` `ownership::acted_references(vars, type_env, v, path)` の値。
 
-L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走査のどの時点で読んでも同じである。
-定義をここに置くのはそのためである。`CancelAnalysis::acted_references(v, path)` は、値を返すときこの値を
-返す (`CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references`)。`ActRefs(t)` は D15 の
+この値が節点だけで決まることは L0c が示す。定義をここに置くのはそのためである。`ActRefs(t)` は D15 の
 `ActRefs(v, path)` である。
 
 ### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ)
@@ -1206,29 +1227,47 @@ L0 より、この値は `vars`、`type_env`、`v`、`path` で決まり、走�
 
 ### L2b (`cancel` の呼び出しは `borrow_ify` の出力を受け取る)
 
-`cancel(prog, type_env)` のすべての呼び出しについて、`prog` は `borrow_ify` の 1 回の呼び出しが返した
-値である。
+`cancel(prog, type_env)` のすべての呼び出しについて、`prog` が指すのは `borrow_ify` の 1 回の呼び出しが
+返した値**そのもの**である。とくに、その値の各位置の `Arc<RcExpr>` は `borrow_ify` が置いたハンドルと
+同じ割り当てを指す。
+
+**言明が述べるのは同一性であって、D1a の等しさではない。** D1a は「`Arc` の参照カウントも、木が式を共有
+する度合いも、成分ではない」と述べるので、D1a の等号は 2 つの `RcProgram` の `Arc` の番地について何も
+言わない。P15 の前半は `node_id` --- `Arc<RcExpr>` の割り当ての占める番地 --- を主語にするので、そこへ
+渡すには同一性が要る。
 
 **証明**
 
 <1>1. `cancel` は `pub(crate)` なので、EXT 可視性と私有性 よりその呼び出しはこのクレートの中にしか
-      書けない。クレートの中で `cancel` を呼ぶのは、`build_object_files.rs` の `optimize_rc_program` の
-      1 か所である。
+      書けない。EXT このリポジトリのターゲット より、そのクレートの項目は `src/` のファイルが宣言する。
+      `src/` の全体を `cancel(` で走査すると、関数定義の頭を除いて 1 か所が挙がる ---
+      `build_object_files.rs` の `optimize_rc_program` である。
   BY CODE src/rc_ir/borrow.rs: cancel, CODE src/build/build_object_files.rs: optimize_rc_program,
-     EXT 可視性と私有性
-<1>2. QED
-  <1>1 の唯一の呼び出しに渡る `prog` は `borrow_ify` の 1 回の呼び出しが返した値である。
-  `optimize_rc_program` は `prog = borrow_ify(&prog, type_env, config.develop_mode)` の後に
-  `cancel(&prog, type_env)` を呼び、間にあるのは `validate(&prog, "after borrow_ify")` の呼び出しだけで
-  ある。`validate` は `prog` を共有参照で受け取るので、EXT 共有参照は代入を許さない より `RcProgram` の
-  欄への代入はできない。同じ節が例外に挙げる内部可変性を通した書き込みの道は残る ---
-  `Validator::check_rhs` は `llvm_gen.result_prov(&x.ty, &arg_tys, self.type_env)` を呼び、その
-  `Arc<TypeNode>` は `OnceLock` の欄を 3 つ持つ。その道を塞ぐのは A3 の「**`RcProgram` から到達できる値の
-  等しさは、それを共有参照で受け取る計算が変えない。**」の節であり、A3 自身が「`validate` がその 1 つで
-  あり」とこの関数を名指す。よって `cancel` に渡る値は `borrow_ify` が返した値と等しい。
+     EXT 可視性と私有性, EXT このリポジトリのターゲット, DEF このクレート
+<1>2. `optimize_rc_program` の局所変数 `prog` は、`prog = borrow_ify(&prog, type_env,
+      config.develop_mode);` の文の後、`prog = cancel(&prog, type_env);` の文が `cancel` を呼ぶ時点まで、
+      `borrow_ify` が返した値を保持する。この 2 つの文のあいだに在るのは
+      `validate(&prog, "after borrow_ify");` の 1 文だけであり、EXT 文は書かれた順に実行される より
+      ほかの文はこのあいだに実行されない。`validate` は `prog` を共有参照で受け取るので、
+      EXT 共有参照は代入を許さない より `prog` そのものへも `RcProgram` の欄へも代入できない。
+      `cancel` に渡る `&prog` は、EXT 演算対象は式より先に評価される より第 3 の文の代入より先に
+      評価される。
   BY <1>1, CODE src/build/build_object_files.rs: optimize_rc_program,
+     CODE src/rc_ir/validate.rs: validate, EXT 文は書かれた順に実行される,
+     EXT 演算対象は式より先に評価される, EXT 共有参照は代入を許さない
+<1>3. QED
+  <1>2 より、`cancel` が受け取るのは `borrow_ify` が返した値そのものである。残るのは内部可変性を
+  通した書き込みの道だけであり、それは `Arc<RcExpr>` の割り当てを動かさない ---
+  `Validator::check_rhs` は `llvm_gen.result_prov(&x.ty, &arg_tys, self.type_env)` を呼び、その
+  `Arc<TypeNode>` は `OnceLock` の欄を 3 つ持つ。A3 は「**`RcProgram` から到達できる値の
+  等しさは、それを共有参照で受け取る計算が変えない。**」と述べ、「`validate` がその 1 つで
+  あり」とこの関数を名指す。同じ節は、その欄が「**一度だけ書かれる memo であって、その値はその型の
+  `PartialEq` が読む成分の関数である**」と述べる。書かれるのは `TypeNode` の欄であって
+  `RcExprNode` の `expr` の欄ではないので、木の各位置の `Arc<RcExpr>` のハンドルが指す割り当ては
+  動かない。
+  BY <1>1, <1>2, CODE src/build/build_object_files.rs: optimize_rc_program,
      CODE src/rc_ir/validate.rs: validate, CODE src/rc_ir/validate.rs: Validator::check_rhs,
-     CODE src/ast/types.rs: TypeNode, A3, EXT 共有参照は代入を許さない
+     CODE src/rc_ir/ast.rs: RcExprNode, CODE src/ast/types.rs: TypeNode, A3
 
 ### L3 (走査する本体は `RewriteCtx::rewrite` の出力である)
 
@@ -2212,7 +2251,8 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 <1>4. CASE 状態が「追加」で作られた。すなわち `Retain` 節点 `t = Retain(v, path, _, k)` の訪問が
       `pending.push(PendingRetain { node: retain, outstanding })` を実行した。ここで
       `retain = node_id(node)` であり `node` は `t` の節点、`outstanding = self.acted_references(v, path)`
-      である。L0 よりこの値は走査のどの時点で読んでも同じなので、DEF 節点の量 の `ActRefs(t)` である。
+      である。L0c の 2 と 3 よりこの値は走査のどの時点で読んでも同じなので、DEF 節点の量 の
+      `ActRefs(t)` である。
       書き換え前の状態を `Q0` とする。
   <2>1. この操作は `Vec` の末尾に要素を 1 つ加えるだけであり、既存の要素の値と並びを変えない。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
@@ -2229,10 +2269,10 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
     BY <1>0d, <1>1, <2>1, DEF 訪問
   <2>4. (ii) が成り立つ。新しい要素の由来は <2>3 より `t` であり、その `outstanding` は
         `self.acted_references(v, path)` が返した値である。この要素が `pending` に積まれているので
-        その呼び出しは値を返しており、L2 の 5 よりその値は空でない。L0b と L0 より、その値は
+        その呼び出しは値を返しており、L2 の 5 よりその値は空でない。L0c の 2 と 3 より、その値は
         DEF 節点の量 の `ActRefs(t)` である。`ActRefs(t) ⊆ ActRefs(t)` である (DEF 参照の多重集合)。
         既存の要素は <1>1 の (ii) のままである。
-    BY <1>1, <2>1, <2>3, L0, L0b, L2, DEF 節点の量, DEF 参照の多重集合
+    BY <1>1, <2>1, <2>3, L0c, L2, DEF 節点の量, DEF 参照の多重集合
   <2>5. (iii) が成り立つ。
     <3>1. `Q0` のどの要素も `node` が `node_id(t)` と等しくない。
       <4>1. `Q0` のある要素 `e` が `e.node = node_id(t)` を満たすと仮定する。
