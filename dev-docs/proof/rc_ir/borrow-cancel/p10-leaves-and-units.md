@@ -344,8 +344,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    - (vii) `Let(x, RcRhs::Llvm(llvm_gen, args), k)` について、`llvm_gen` は `args` の型の列と
      `ty(x)` の上で定義されている。この文書が読むのはそのうち次の 3 つである。
      - `args` の名前の列は `llvm_gen.free_vars()` に等しい。
-     - `llvm_gen` が `InlineLLVMStructPunchBody` であるとき、`ty(x).is_box(E)` と
-       `ty(x).is_array()` はどちらも偽であり、`ty(x).field_types(E)` は長さ 2 の列を返す。その第
+     - `llvm_gen` が `InlineLLVMStructPunchBody` であるとき、`ty(x).is_box(E)`、`ty(x).is_array()`、
+       `ty(x).is_closure()` はいずれも偽であり、`ty(x).field_types(E)` は長さ 2 の列を返す。その第
        `PUNCHED_STRUCT_FIELD` 成分の型を `pt` と書くと、`pt` は `<1>1` を満たす構造体であり、
        `pt.is_closure()` は偽であって、`pt.toplevel_tycon_info(E).fields[llvm_gen.field_idx]` の
        `is_punched` は真である。
@@ -363,8 +363,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    struct の成分を「A10 を満たす構造体」と書く。`<1>1` は A10 をこの文書の記法で述べたものなので
    (第 3 節)、(vii) はそこを
    `<1>1` と書く。**同じ項が「第 `field_idx` フィールドが穴である」と言うのは、`pt` の `TyConInfo`
-   の `fields` の第 `field_idx` 成分の `is_punched` についてである。**`pt.is_closure()` が偽である
-   ことは、A12 のその項が「`is_closure()` は偽である」と併せて述べる。
+   の `fields` の第 `field_idx` 成分の `is_punched` についてである。**`ty(x).is_closure()` が偽で
+   あることは、A12 のその項が「**`is_closure()` も偽であり**」と `is_box`・`is_array` に並べて述べ、
+   根拠を括弧に添える (「`struct_punch` が結果の型を `make_tuple_ty` で作り、tuple は構造体である」)。
+   `pt.is_closure()` が偽であることは、A12 のその項が「`is_closure()` は偽である」と併せて述べる。
 
    **(iv) と (v) は、A12 の「`Match` の scrutinee が union であること」と「`Destructure` の容器が
    構造体であること」を、その型の `TyConInfo` の `variant` として書いたものである。**タプルもこの形に
@@ -2077,17 +2079,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        その `expect` は発火しない。
       BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, EXT スライスの split_first,
          CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
-    <3>3a. `cls(result_ty)` は `UN` か `ST` である。`<1>3a` (vii) より `result_ty.is_box(E)` と
-       `result_ty.is_array()` は偽である。`result_ty.is_closure()` も偽である -- `<3>1` より
-       `result_ty.field_types(E)` は値を返し、`field_types` は `toplevel_tycon_info` を呼ぶので、
-       その `assert!(!self.is_closure())` が通っている。`cls(result_ty) = NB` の場合は、
+    <3>3a. `cls(result_ty)` は `UN` か `ST` である。`<1>3a` (vii) より `result_ty.is_box(E)`、
+       `result_ty.is_array()`、`result_ty.is_closure()` はいずれも偽なので、`DEF cls` の `CL`、`BX`、
+       `AR` の 3 行はどれも当たらない。`cls(result_ty) = NB` の場合は、
        `DEF UNST-道` の条件を `j = 0` に読むと `result_ty` の UNST-道は `[]` だけであり、
        `cls(end(result_ty, [])) = NB` は `<1>14` の 2 つの集合のどちらの条件にも当たらないので
        `L(result_ty)` は空であり、`<1>27b` より `build_shape` の閉包は 1 度も呼ばれない。よって
        以下は `cls(result_ty)` が `NB` でない場合を見ればよい。残るのは `UN` と `ST` である。
-      BY <1>1, <1>3a, <1>14, <1>27b, <3>1, DEF cls, DEF UNST-道,
-         CODE src/ast/types.rs: TypeNode::field_types,
-         CODE src/ast/types.rs: TypeNode::toplevel_tycon_info
+      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, DEF UNST-道
     <3>3b. `L(result_ty)` の要素のうち `PUNCHED_STRUCT_FIELD` で始まるものは、
        `(PUNCHED_STRUCT_FIELD, s)` が `F(result_ty)` の要素であるとき
        `{ [PUNCHED_STRUCT_FIELD] ++ r : r は L(s) の要素 }` であり、`F(result_ty)` が
@@ -2138,12 +2137,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     <3>4a. `arg_leaf_path` の `assert_ne!` は発火しない。`assert_ne!` が発火するのは、`path` が
        `[PUNCHED_STRUCT_FIELD, self.field_idx] ++ ・` の形のときだけである。`<3>3b` より、そのような
        `path` が `L(result_ty)` に在るのは `(PUNCHED_STRUCT_FIELD, s')` が `F(result_ty)` の要素で
-       あって `L(s')` が `self.field_idx` で始まる要素を持つときに限る。`<3>3a` より
-       `result_ty.is_closure()` は偽であり、`<1>3a` (vii) より `result_ty.is_box(E)` も偽なので、
+       あって `L(s')` が `self.field_idx` で始まる要素を持つときに限る。`<1>3a` (vii) より
+       `result_ty.is_closure()` も `result_ty.is_box(E)` も偽なので、
        `<1>3c` (d) を `result_ty` に当てられる。それよりその `s'` は
        `result_ty.field_types(E)[PUNCHED_STRUCT_FIELD]`、すなわち `<3>4` の `s` である。`<3>4` より
        そのような要素は無い。
-      BY <1>3a, <1>3c, <3>1, <3>3a, <3>3b, <3>4,
+      BY <1>3a, <1>3c, <3>1, <3>3b, <3>4,
          CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
     <3>5. QED
       閉包の残りは `Vec` の連結と `sole_origin` だけである。
@@ -3079,7 +3078,8 @@ D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が�
   A10 をこの文書の記法で述べたものなので、(vii) はそこを `<1>1` と書く。同じ条件の「第 `field_idx`
   フィールドが穴である」を、(vii) はその成分の `TyConInfo` の `fields` の `is_punched` として書き、
   A12 の同じ条件が併せて述べる「`is_closure()` は偽である」を一緒に挙げる。`<1>28` の `<2>2f` の
-  `<3>4` がこの 2 つを読む。
+  `<3>4` がこの 2 つを読む。同じ条件が `ty(x)` について並べる `is_box`・`is_array`・`is_closure` の
+  3 つも (vii) はそのまま写し、`<1>28` の `<2>2f` の `<3>3a` がその 3 つを読む。
 
   (vii) が要る理由は、これが無いと `result_prov` の 29 個の override のうち 5 個が abort しうるので
   P2 が偽になることである。`InlineLLVMStructGetBody` と `InlineLLVMUnionAsBody` は `arg_tys[0]`
