@@ -7,6 +7,7 @@
     python3 dev-docs/proof/proof_index.py <証明のディレクトリ> --frontier  # 読み直す要のある項目
     python3 dev-docs/proof/proof_index.py <証明のディレクトリ> --assign    # 同一性を振る
     python3 dev-docs/proof/proof_index.py <証明のディレクトリ> --accept    # 読み直した印を進める
+    python3 dev-docs/proof/proof_index.py <証明のディレクトリ> --show a3f9c21  # id の中身を出す
 
 **項目**とは、定義 (`D*`)・仮定 (`A*`)・主張 (`P*` と各証明の `L*`) である。3 つは
 「証明を持つか、持たないなら誰が果たすか」で分かれる -- 定義と仮定は証明を持たず、主張は持つ。
@@ -235,7 +236,33 @@ def write_ledger(directory, items, edges, was):
                       f"{os.path.basename(items[cited]['file'])}:{items[cited]['name']}\n")
 
 
+def show(directory, wanted):
+    """id が指す項目の本文と、それを引いている項目を出す。
+
+    **id から中身へ引く道は道具が与える。** 「台帳を見て `grep` してください」は道具ではない --
+    引くたびに人が段取りを組み直すことになり、**引くのが面倒だから引かない**という道が開く。
+    記憶から書いた引用がこの証明に 8 か所あった。"""
+    items, edges = build(directory)
+    if wanted not in items:
+        print(f"{wanted}: そのような項目は無い")
+        return 1
+    item = items[wanted]
+    print(f"{item['file']}:{item['line']}  {item['name']}  指紋 {item['digest']}\n")
+    print(item["statement"])
+    citers = sorted((items[a]["name"], os.path.basename(items[a]["file"]))
+                    for a, b in edges if b == wanted)
+    print(f"\n-- これを引いている項目 {len(citers)} 個")
+    for name, where in citers:
+        print(f"   {name} ({where})")
+    return 0
+
+
 def main(arguments):
+    if "--show" in arguments:
+        at = arguments.index("--show")
+        roots = [a for a in arguments if not a.startswith("--")]
+        directory = roots[0] if len(roots) > 1 else "dev-docs/proof/rc_ir/borrow-cancel"
+        return show(directory, arguments[at + 1])
     roots = [a for a in arguments if not a.startswith("--")] or ["dev-docs/proof/rc_ir/borrow-cancel"]
     for directory in roots:
         if "--assign" in arguments:
