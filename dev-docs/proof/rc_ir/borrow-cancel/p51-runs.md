@@ -1219,7 +1219,8 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       生成の 7 行と、参照を処分する段の中で起きる (F) の解放が `Destructor` のオブジェクトについて
       行う retain。**(K-ii)** 表に行を持たない、段の中の retain であって、
       `InlineLLVMWithRetainedFunctionBody` が出すものか、複製・割り当てたオブジェクトの欄へ書く
-      3 か所が出すもの。
+      4 か所 (`clone_struct`、`clone_union`、`clone_array_range`、`append_value_into_array_buf`) が
+      出すもの。
       `S` の中で (F) の解放が始めた活性化の木 (D24 の (F)) の節点も、その本体についてこの 2 種によって
       参照を作る。
   **(K-i) の側。**D24 の (E2) の `H` の表が 7 行を挙げる -- `Retain` の行、`Llvm` の行、
@@ -1255,8 +1256,10 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
     `build_retain` が boxed の枝で `retain_nonnull_boxed` を、unbox の枝で各フィールドへ降りて
     `retain` / `build_retain` を呼び、unbox union については `retain_release_mark_union` が活性変位へ
     降りる (`generator.rs` に 4 か所、`object.rs` に 2 か所)。**これは他の群の retain を leaf ごとの
-    増加として実装するものであって、別の参照を作らない** -- A4 が、`Retain(v, π)` を `π` の下の
-    inhabited な各 boxed leaf の参照カウントの +1 として実装すると述べるのがこの形である。
+    増加として実装するものであって、それ自身が別の参照を作るのではない** -- A4 が、`Retain(v, π)` を
+    `π` の下の inhabited な各 boxed leaf の参照カウントの +1 として実装すると述べるのがこの形である。
+    **`clone_union` が `retain_union` を通ってここへ着く道だけは別である** -- そこが出す retain は
+    第 6 群と同じ形であり、(K-ii) である。
   - **第 3 群 (グローバルの読み)。1 か所。**`get_scoped_obj` の `retain_on_read` の行である。
     `add_global_object` はその旗を `!ty.is_box(..)` のときだけ立てるので、これが走るのは unbox な
     グローバルを読むときである。A8 より、グローバル値が到達するオブジェクトへの `Retain` は参照カウントを
@@ -1272,10 +1275,10 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
     相殺しない**ので、段の境界でも `H` を上げる。**その参照の持ち手は、割り当てたオブジェクトの欄で
     ある** (D25 の 2 番目)。」と述べる形であり、`clone_struct`、`clone_array_range`
     (`clone_array_buf` が呼ぶ)、`initialize_array_buf_by_value`、`append_value_into_array_buf` の
-    4 か所である。**`clone_union` はここに数えない** -- それは `retain_union` を通って第 2 群の
-    `retain_release_mark_union` へ着くので、`gc.retain(` の出現を持たない。**そのうち
-    `initialize_array_buf_by_value` は `src/` に呼び出し元を持たない**ので、どの段もその retain を
-    出さない。残る 3 か所が (K-ii) である。
+    4 か所である。**`clone_union` はこの 4 か所に数えない** -- それは `retain_union` を通って第 2 群の
+    `retain_release_mark_union` へ着くので `gc.retain(` の出現を持たないが、同じ形であり (K-ii) で
+    ある。**4 か所のうち `initialize_array_buf_by_value` は `src/` に呼び出し元を持たない**ので、
+    どの段もその retain を出さない。残る 3 か所と `clone_union` が (K-ii) である。
   - **第 7 群 (どの段も実行しない retain)。1 か所。**
     `InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody` の `generate` が定義する補助関数
     `retain#<型>` の本体である。この op の段が出すのは
@@ -1630,14 +1633,16 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
      CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody,
      CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand, LLVMGen::result_prov
 
-<1>7b. CASE 相殺しない retain (`<1>1` の第 6 群のうち、段が実行する 3 か所)。
-  3 か所を 2 つに分ける。
+<1>7b. CASE 相殺しない retain (`<1>1` の (K-ii) のうち、複製・割り当てたオブジェクトの欄へ書く形)。
+  4 か所を 2 つに分ける。
   **複製が原本の記憶域から読んだ値を retain する形** -- `clone_struct` は各フィールドを
   `move_out_struct_field` で原本 `src` の記憶域から取り出してから retain し、`clone_array_range`
   (`clone_array_buf` が呼ぶ) は `src_buffer` の各スロットを `build_load` で読んでから retain する。
-  `clone_struct` と `clone_union` を呼ぶのは `make_struct_union_unique` の共有の腕であり、その `obj` は
-  この op のオペランドである。`clone_array_buf` を呼ぶ 4 か所も、原本の配列の記憶域を読む。
-  読み出されたオブジェクトは、この節点が**記憶域から読んだ**オブジェクト -- 原本の struct・union・
+  `clone_union` は原本 `src` の payload バッファを `extract_field` で取り出して複製 `dst` へ入れ、
+  `retain_union` で活性変位の payload を retain する -- boxed な union についてその取り出しは原本の
+  記憶域の読みである。`clone_struct` と `clone_union` を呼ぶのは `make_struct_union_unique` の共有の腕で
+  あり、その `obj` はこの op のオペランドである。`clone_array_buf` を呼ぶ 4 か所も、原本の配列の記憶域を
+  読む。読み出されたオブジェクトは、この節点が**記憶域から読んだ**オブジェクト -- 原本の struct・union・
   `#ArrayStorage` -- から到達できる (D25) ので、`<1>1a` が当たる。
   **オペランドの値を割り当てた記憶域のスロットへ書く形** -- `append_value_into_array_buf` は
   `build_retain(value, count)` を出してから `count` 個のスロットへ格納し、最後に `value` を release
