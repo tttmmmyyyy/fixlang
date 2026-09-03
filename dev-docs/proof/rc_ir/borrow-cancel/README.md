@@ -3241,16 +3241,16 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | `p05-holders.md` | 第 7 周 (262 段) | 1 | 3 | BAD-CITATION 4、NOT-OBVIOUS 2 | 修理済み。**第 8 周の検証** |
 | `p10-leaves-and-units.md` | 第 7 周 (509 段) | **0** (散文 1) | **0** | NOT-OBVIOUS 2 | **3 周続けて段のゼロ**。修理済み。**第 8 周の検証** |
 | `p11-origin-soundness.md` | 第 7 周 (298 段) | **0** | **0** | UNDEFINED 1、BAD-CITATION 1、NOT-OBVIOUS 5 | 修理済み。**第 8 周の検証** |
-| `p12-identity-and-consumes.md` | 第 7 周 (400 段) | **0** (散文 2) | **0** | NOT-OBVIOUS 5、BAD-CITATION 0 | **修理中** |
+| `p12-identity-and-consumes.md` | 第 7 周 (400 段) | **0** (散文 2) | **0** | NOT-OBVIOUS 5、BAD-CITATION 0 | 修理済み。**第 8 周の検証** |
 | `p13-disposals-and-pending.md` | 第 7 周 (431 段) | **0** (散文 1) | 2 (散文 4) | BAD-CITATION 4、UNDEFINED 1、NOT-OBVIOUS 10 | 修理済み。**第 8 周の検証** |
-| `p15-ownership-uniformity.md` | 第 7 周 (382 段) | **0** (散文 1) | 2 | BAD-CITATION 2、NOT-OBVIOUS 4 | **修理中** |
+| `p15-ownership-uniformity.md` | 第 7 周 (382 段) | **0** (散文 1) | 2 | BAD-CITATION 2、NOT-OBVIOUS 4 | 修理済み。**第 8 周の検証** |
 | `p20-borrow-ify.md` | 第 7 周 (566 段) | 2 | **0** | 散文の BAD-CITATION 3、NOT-OBVIOUS 5 | 修理済み。**第 8 周の検証** |
 | `p30-cancel-walk.md` | 第 7 周 (366 段) | 1 | **0** | UNDEFINED 1、NOT-OBVIOUS 15 | 修理済み。**第 8 周の検証** |
 | `p40-cancel-soundness.md` | 第 7 周 (438 段) | 4 | 4 | BAD-CITATION 4、UNDEFINED 1、NOT-OBVIOUS 11 | 修理済み。**第 8 周の検証** |
-| `p50-observation.md` | 第 7 周 (254 段) | **0** (散文 2) | 3 | NOT-OBVIOUS 11 | **修理中** |
+| `p50-observation.md` | 第 7 周 (254 段) | **0** (散文 2) | 3 | NOT-OBVIOUS 11 | 修理済み。**第 8 周の検証** |
 | `p51-runs.md` | 第 7 周 (205 段) | 2 | 9 | NOT-OBVIOUS 9 | 修理済み。**第 8 周の検証** |
 | `p60-insert-rc.md` | 第 7 周 (373 段) | 1 | 6 | UNDEFINED 2、NOT-OBVIOUS 7 | 修理済み。**第 8 周の検証** |
-| `p70-main-theorem.md` | 第 7 周 (31 段) | **0** (散文 7) | **0** (散文 1) | 段は 31 件すべて OK。表の落ち 9、NOT-OBVIOUS 1 | **修理中** |
+| `p70-main-theorem.md` | 第 7 周 (31 段) | **0** (散文 7) | **0** (散文 1) | 段は 31 件すべて OK。表の落ち 9、NOT-OBVIOUS 1 | 修理済み。**第 8 周の検証** |
 
 `--` は、その周の検証がその欄を挙げなかったことを表す。
 
@@ -3277,6 +3277,8 @@ A19 の前書きの数え上げ、第 4 節の仮定の集合 -- **第 10 節に
 段の種類の一覧、仮定の前書きの一覧、仮定の集合の範囲、素動作の在りかの述語の綴り。
 **枠は「在りかは述語で決める」を D24 と A25 と A3 で説いていながら、自分の項目の数え上げには
 当てていなかった。**
+
+**第 7 周は完了した。13 本すべてを検証し、13 本すべてを修理した。**
 
 **この周に機械検査を 3 本足した** (`dev-docs/proof/README.md`)。
 `proof_quotes.py` は枠の「」引用を、`proof_steps.py` は段の構造を、`proof_readers.py` は
