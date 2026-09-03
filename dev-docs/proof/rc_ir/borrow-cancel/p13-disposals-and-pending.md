@@ -3902,8 +3902,8 @@ CancelAnalysis::walk_inner` の `RcExpr::Retain(v, path, _, k)` の腕)。`App(f
 `InBracket` を返し、`cancelled()` が `Retain(m, [])` とその `Release` を返す。消した後は `App(f, [p])` が
 `O_p` を解放し、`Eval(m)` が解放済みの `O_p` を読む -- (S-c) 違反である。
 
-**この形は `insert_rc` の出力ではない。** README の A19 が「したがって **`C1` と `C2` はどちらも
-`insert_rc` の出力ではない** (`L10`)。`Retain` の直後の節点がその変数を名指さないので、節点 1 つを見る
-だけで弾ける。」と述べる。**この文書が置く反例は `C1` だけである。** その `L10` は
+**この形は `insert_rc` の出力ではない。** README の A19 が「したがって **`C1` は `insert_rc` の
+出力ではない** (`L10`)。`Retain` の直後の節点がその変数を名指さないので、節点 1 つを見るだけで
+弾ける。」と述べる。**この文書が置く反例は `C1` だけである。** その `L10` は
 `p60-insert-rc.md` の補題である。`C1` の `Retain(m, [])` の直後の節点は
 `Let(u, App(f, [p]), ...)` であり、`m` を名指さない。
