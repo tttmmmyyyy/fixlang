@@ -920,6 +920,7 @@ pub fn make_byte_array_copy<'c, 'm>(
 
 /// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
 /// null terminator, copied out of a global into a fresh array.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStringBuf {
     /// The literal's bytes, without the null terminator.
@@ -3678,7 +3679,7 @@ pub fn swap_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// The body of the array punch: the element at the index bound to `idx_name` is moved out of the
 /// array bound to `arr_name`, leaving that slot as the hole, and is returned together with the
 /// punched array.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayPunchBody {
     pub(crate) force_unique: bool,
@@ -4489,6 +4490,7 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
 // Allocate a struct/tuple and fill it with the operand values, in field-declaration order. The
 // struct type is the value type of the enclosing expression. This is the RC IR counterpart of the
 // `Expr::MakeStruct` AST node, reading its operands as pre-evaluated atoms.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeStructBody {
     pub field_names: Vec<FullName>,
@@ -6000,7 +6002,7 @@ fn make_struct_union_unique<'c, 'm>(
 
 /// The body of a struct's `set_x`: the value bound to `value_name` takes the place of field
 /// `field_idx` of the struct bound to `struct_name`, and the value it displaces is released.
-// PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructSetBody {
     pub value_name: FullName,
@@ -6786,7 +6788,7 @@ pub fn union_mod_function(
 /// Inline-LLVM body of the `_undefined_internal` builtin: with runtime checks on it prints the
 /// message and aborts, and with them off it emits an `unreachable` instruction. Either way the
 /// expression stands for a value of the result type that is never produced.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUndefinedInternalBody {
     /// The variable holding the message printed before aborting.

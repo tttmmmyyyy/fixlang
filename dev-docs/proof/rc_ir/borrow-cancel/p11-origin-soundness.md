@@ -1,6 +1,6 @@
 # P3 / P4 -- `origin` の健全性
 
-この文書が読んだコードのコミットは `ee06417d8e3c0a6c743f4e554a8bc152ea48adcd` である。README が証明の
+この文書が読んだコードのコミットは `1510d91674b9ad34971db2b7d3f9f6d5a8192f83` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が `CODE` で引く
 11 ファイル (`src/rc_ir/ownership.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/provenance.rs`、
 `src/rc_ir/borrow.rs`、`src/rc_ir/codegen.rs`、`src/generator.rs`、`src/ast/types.rs`、
@@ -17,18 +17,18 @@
 | P3 (`origin` の健全性 -- `Exactly`) | 証明した (第 6 節の系 1)。参照の同一は README の P3 と同じくスロット `(x, λ)` が D8 の意味の参照を持つ場合に限り、オブジェクトの同一はその条件なしに、位置 (D6) の上で立つ。前提の「`origin(x, π)` が呼ばれる」は、README の P3 が言明の先頭に置く「**解析がその鍵で `origin` を呼び**」である (系 1 の脇) |
 | P4 (`origin` の健全性 -- `Join`) | 証明した (第 6 節の系 2)。同じ 3 つの節が付く。さらに系 2 は、README の P4 が「いずれか」と述べる候補を 1 つに決める (系 2 の脇) |
 
-P3 と P4 は、1 つの補題 Q (第 6 節) の 2 通りの読みである。Q は `origin` が辿る別名の辺を 1 本ずつ D9 の
+P3 と P4 は、1 つの補題 Q (第 6 節) の 2 通りの読みである。Q は `origin` が辿る再帰の辺を 1 本ずつ D9 の
 移動の表と A3 の宣言に突き合わせる帰納法で示す。
 
 - 第 1 節が、この文書が固定する本体と `VarTable`、DEF-0、および 10 の外部の結果 (`EXT`) -- `RcVar` が
   実行路の 1 つの位置で持つ値を 3 つの場合に分けたのが DEF-0 であり、D6 のスロットが
   在るのはそのうち 2 つの場合である。節点が束縛する変数について、その束縛の D2 のスコープの根の節点を
   **授与位置**と呼び、束縛の 4 つの形ごとに名指す。
-- 第 2 節が L6 (`origin_inner` の別名の辺と、各辺が読む D9 の移動の行)、第 2.1 節が L8 (`Llvm` の腕が
-  答えるもの)。
+- 第 2 節が `DEF 再帰の辺` と L6 (`origin_inner` の再帰の辺と、各辺が読む D9 の移動の行)、
+  第 2.1 節が L8 (`Llvm` の腕が答えるもの)。
 - 第 3 節が L9 (`origin_inner` が `Exactly((var, path))` を答える道と、その道が D10 の生成の表のどこに
   当たるか)。
-- 第 4 節が L1 から L5、L10 (変数に値を与える構文と、値が束縛の後 変わらないこと)、L11 (別名の辺の
+- 第 4 節が L1 から L5、L10 (変数に値を与える構文と、値が束縛の後 変わらないこと)、L11 (再帰の辺の
   行き先の `RcVar` も値を持つこと)、L12 (値の leaf が参照を持つのは計数下のオブジェクトを指すときで
   あること)、`DEF 値からの到達` と L13 (束縛を持たない名前の値はグローバル状態のオブジェクトだけを
   指すこと)、L15 (この文書が `origin` に問う鍵はすべて P2 の範囲にあること)、L16 (鍵ごとの答えが
@@ -133,7 +133,7 @@ L11、L13 が当たらない。**
 L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを述べ、補題 Q の (iii) はその形で (v-3) を
 排除する。
 
-この 3 つが尽きており互いに排他であることは、L10 (a') が述べる。その排他性が、(v-1) と (v-2) が
+この 3 つが尽きており互いに排他であることは、L10 (e3) が述べる。その排他性が、(v-1) と (v-2) が
 名指す値を 1 つに決める。
 
 `Origin` の構成子と読み出しは次のとおりである (`CODE src/rc_ir/ownership.rs: Origin`, `Origin::identity`,
@@ -198,12 +198,16 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 モジュールとその子孫のモジュールだけである。よってそのような項目の呼び出しと欄への書き込みは、その
 モジュールの中を数え上げれば尽きる。
 
-## 2. L6 -- D9 の「移動」と `origin_inner` の別名の辺
+## 2. L6 -- D9 の「移動」と `origin_inner` の再帰の辺
 
-**別名の辺**とは、`origin_inner` が `origin` を再帰呼び出しする先をいう
-(`CODE src/rc_ir/ownership.rs: origin_inner`)。
+**DEF 再帰の辺**。鍵 `(v, q)` から鍵 `(v', q')` への**再帰の辺**とは、
+`origin_inner(vars, type_env, v, q)` の実行が `origin(vars, type_env, v', q')` を呼ぶことをいう
+(`CODE src/rc_ir/ownership.rs: origin_inner`)。これは `origin` の再帰呼び出しの上の関係である。
+**D20 の別名の辺は位置 (D6) の間の関係であり、その存在はその辺を定める節点が実行路の上に在ることと、
+両端がその路の位置であることに条件づけられている** (D20)。2 つの関係の対応は 補題 Q の (iv) と 系 3 が
+述べる。
 
-**L6 (`origin_inner` の別名の辺)**: 別名の辺は次の第 1 の表の E1 から E7 で尽きている。各辺が辿る先へ
+**L6 (`origin_inner` の再帰の辺)**: 再帰の辺は次の第 1 の表の E1 から E7 で尽きている。各辺が辿る先へ
 参照と値を渡す構文を述べる D9 の移動の表の行は、第 2 の表のとおりである。**E3 と E4 はどちらも
 D9 の `Llvm` の素通し leaf の行の下にある** -- E3 は問うた path 自身が単一の `Arg` を宣言された
 leaf である場合、E4 はその path の下の leaf が単一の `Arg` を宣言されている場合であり、どちらもその行が
@@ -246,7 +250,7 @@ leaf である場合、E4 はその path の下の leaf が単一の `Arg` を�
     BY <2>1, <2>2, <2>3 -- 8 つの場合が 6 本の腕に分かれ、`None`、`Param`、`Producer` の 3 つが 1 本目に
        束ねられている。
 
-<1>2. 別名の辺は第 1 の表の E1 から E7 で尽きている。
+<1>2. 再帰の辺は第 1 の表の E1 から E7 で尽きている。
   BY <1>1, CODE src/rc_ir/ownership.rs: origin_inner -- `origin` を再帰呼び出しするのは `Move` の腕、
      `Join` の腕、`Llvm` の腕の 2 つの枝、`Field` の `else` の枝、`Payload` の `None` の枝と
      `Some(tag) if !scrut.ty.is_box(type_env)` の枝である。残る枝 (`None | Param | Producer` の腕、
@@ -320,13 +324,24 @@ A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返
     BY CODE src/rc_ir/provenance.rs: Provenance (`Provenance(LeafMap<LeafOrigins>)`),
        CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape -- `boxed_leaf_paths(ty, type_env)` の各要素を
        鍵にして `collect` する
-  <2>2. `result_prov` の呼び出しは値を返し (A3)、返す `Provenance` は、既定と 29 個の override の
-        いずれについても、`Provenance::uniform`、`Provenance::build_shape`、
-        `Provenance::uniform_bottom`、`Provenance::fresh_under`、`replaced_field_prov` のいずれかを
-        `result_ty` に対して呼んだ値である。
-    BY A3 (`result_prov` の呼び出しは abort せず `Provenance` を返す),
-       CODE src/ast/inline_llvm.rs: LLVMGen::result_prov,
-       CODE src/fixstd/builtin.rs の 29 個の `result_prov` の本体,
+  <2>2. `result_prov` の呼び出しは値を返し (A3)、返す `Provenance` は、`Provenance::uniform`、
+        `Provenance::build_shape`、`Provenance::uniform_bottom`、`Provenance::fresh_under`、
+        `replaced_field_prov` のいずれかを `result_ty` に対して呼んだ値である。
+        **在りかは述語で決める** -- `LLVMGen::result_prov` の既定の本体と、`src/fixstd/builtin.rs` を
+        `fn result_prov` で走査して得る本体の全体である。その個数は A3 が数える。**`CODE` は
+        5 つの構成子の代表を挙げる** -- 全部を並べた一覧は、op が 1 つ増えるたびに古くなる。
+    BY A3 (`result_prov` の呼び出しは abort せず `Provenance` を返す。「`impl LLVMGen for` は 78 個
+       あり、`result_prov` を override するのは 29 個、その 29 個が leaf に置く集合はすべて要素数 0 か
+       1 である (`sole_origin` / `Set::default()` / `uniform` / `uniform_bottom` / `fresh_under` の
+       いずれかで作られる)」),
+       CODE src/ast/inline_llvm.rs: LLVMGen::result_prov (既定の本体は `Provenance::uniform` を
+       `result_ty` に対して呼ぶ),
+       CODE src/fixstd/builtin.rs: InlineLLVMStringBuf (`Provenance::uniform` の代表),
+       CODE src/fixstd/builtin.rs: InlineLLVMMakeStructBody (`Provenance::build_shape` の代表),
+       CODE src/fixstd/builtin.rs: InlineLLVMUndefinedInternalBody (`Provenance::uniform_bottom` の
+       代表),
+       CODE src/fixstd/builtin.rs: InlineLLVMArrayPunchBody (`Provenance::fresh_under` の代表),
+       CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody (`replaced_field_prov` の代表),
        CODE src/fixstd/builtin.rs: replaced_field_prov (`result_ty` が boxed なら
        `Provenance::uniform`、そうでなければ `Provenance::build_shape`)
   <2>3. <2>2 の 5 つはいずれも `LeafMap::build_shape(result_ty, ..)` を通り、鍵の集合を変えない。
@@ -407,10 +422,16 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
 `here()` は `Origin::Exactly((var, path))` を返す閉包である
 (`CODE src/rc_ir/ownership.rs: origin_inner` の先頭)。
 
-**L9 (`here()` の答えに着く道)**: `origin_inner(vars, type_env, var, path)` が
+**L9 (`here()` の答えに着く道)**: **`var` を `B` に現れる `RcVar` の名前とする。**
+`origin_inner(vars, type_env, var, path)` が
 `Origin::Exactly((var, path))` に着く道は次の表の H1 から H7 である。H1 から H5 では `match` の腕が
 `here()` をそのまま返し、この 5 つは `here()` をそのまま返す枝の全体である。H6 と H7 では `Llvm` の腕が
 `origin_from_leaves_under` を通ってその値に着く。
+
+**前提を置くのは、この証明が L15 と L16 を読むからである。** その 2 つはどちらも、主語の名前が
+`B` に現れる `RcVar` の名前であることを前提に置く補題であり、L9 の前提と `<1>0` がそれを満たす。
+**この文書が L9 を引くのは、どれも 補題 Q の ASSUME を満たす変数についてである** -- DEF-0 が
+「値を持つ」を定めるのは本体に現れる `RcVar` についてなので、その変数はこの前提を満たす。
 
 | 道 | 着き方 | D10 での位置 |
 |---|---|---|
@@ -422,8 +443,25 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
 | H6 `Llvm` かつ `π` の下のある leaf の宣言が `Fresh` か `Unknown` を含み、`reached` の全要素が等しい | `origin_from_leaves_under` が `Exactly(here)` を `reached` に積み、それが答えになる | 生成の表の `Llvm` の行 |
 | H7 `Llvm` かつ `π` の下の leaf の宣言がすべて空集合 | `origin_from_leaves_under` が `None` を返し `unwrap_or_else(here)` | 生成の表の `Llvm` の行が覆う。ただし A3 と D16 よりその leaf は inhabited にならないので参照は生じない |
 
+<1>0. 第 1 成分が `B` に現れる `RcVar` の名前である鍵から再帰の辺を 0 回以上辿って着く鍵は、その
+      第 1 成分も `B` に現れる `RcVar` の名前である。とくに `(var, path)` から着く鍵がそうである
+      (L9 の前提)。
+  1 本の辺については、`origin_inner` が再帰呼び出しに
+  渡す名前が `vars.bindings` の `Binding` が持つ `RcVar` -- `Move(y)` の `y`、`Payload(s, ・)` の
+  `s`、`Field(c, i)` の `c`、`Llvm(・, args, ・)` の `args[j]`、`Join(rs)` の各要素 -- の `name` で
+  あり、`collect_bindings` はその `RcVar` を `B` の節点の欄から入れるからである。辿った辺の本数に
+  ついての帰納で、0 回以上の場合に届く。
+  BY L9 の前提, L6 (再帰の辺 E1 から E7 の行き先の `RcVar` は、`B` の節点の欄から来る),
+     CODE src/rc_ir/ownership.rs: collect_bindings (`Binding::Move`・`Binding::Payload`・
+     `Binding::Field`・`Binding::Llvm`・`Binding::Join` に入る `RcVar` は、その `Binding` を作る
+     節点の欄である),
+     CODE src/rc_ir/ownership.rs: origin_inner (各腕が再帰呼び出しに渡すのは、その腕が受け取った
+     `Binding` の `RcVar` の `name` である),
+     EXT 整礎性 ((a) 自然数の狭義減少する無限列は無く、(b) その上の帰納が使える -- 辿った辺の
+     本数は自然数である)
+
 <1>1. `origin_inner` の `match` の腕のうち `here()` をそのまま返す枝は、H1 から H5 の 5 つで尽きている。
-  BY L6 (別名の辺は E1 から E7 で尽きている), CODE src/rc_ir/ownership.rs: origin_inner -- 6 本の腕の
+  BY L6 (再帰の辺は E1 から E7 で尽きている), CODE src/rc_ir/ownership.rs: origin_inner -- 6 本の腕の
      うち `here()` をそのまま返すのは、
      `None | Some(Binding::Param) | Some(Binding::Producer)` の腕 (H1、H2、H3)、
      `Some(Binding::Field(container, idx))` の `container.ty.is_box(type_env)` の枝 (H4)、
@@ -453,23 +491,29 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
       BY <3>1, CODE src/rc_ir/ownership.rs: origin_from_leaves_under (`flat_map(|reached_origin|
          reached_origin.acted_on())`)
     <3>3. `|candidates| ≥ 2` である。
-      BY <3>1, <3>2, L2 (b), L2 (c), L15 -- `o_1` と `o_2` は
+      BY <3>1, <3>2, L9 の前提 (`var` は `B` に現れる `RcVar` の名前である), L2 (b), L2 (c), L15,
+         CODE src/rc_ir/ownership.rs: origin (`origin_inner` を走らせる式は `origin` の中の 1 つで
+         ある) -- `o_1` と `o_2` は
          `origin_from_leaves_under` が `reached` に積んだ値であり、この `origin_inner` の実行の中で
-         作られたものである。L15 より、それを含む `origin` の呼び出しは panic せずに
-         返るので、L2 (c) の前提が満たされる。`|candidates| = 1` とすると、`act(o_1)` と `act(o_2)` は
+         作られたものである。その実行を走らせるのは `origin(var, path)` の呼び出しであり、
+         L9 の前提が L15 の前提を満たすので、L15 より その呼び出しは panic せずに
+         返る。よって L2 (c) の前提が満たされる。`|candidates| = 1` とすると、`act(o_1)` と `act(o_2)` は
          どちらもその 1 元集合である。L2 (c) より `Join` の `act` は 2 元以上なので `o_1` と `o_2` は
          どちらも `Exactly` であり、L2 (b) よりその `act` は自分の `VarPath` の 1 元集合なので
          `o_1 = o_2` となって <3>1 に反する。
     <3>4. QED
       BY <3>3, CODE src/rc_ir/ownership.rs: Origin::of_candidates -- 要素数が 1 でない集合には
          `Join` を返す。
-  <2>3a. `origin(v, q)` が呼ばれるとき、それが返す `Origin` に現れる `VarPath` は、鍵 `(v, q)` から
-         **再帰の辺** (L14) を 0 回以上辿って着く鍵である。**再帰の辺は L14 が定めるものであり、
-         L6 よりそれは E1 から E7 が名指す再帰呼び出しの辺で尽きる。** 鍵についての言明にできるのは、
+  <2>3a. **`v` を `B` に現れる `RcVar` の名前とする。** `origin(v, q)` が呼ばれるとき、それが返す
+         `Origin` に現れる `VarPath` は、鍵 `(v, q)` から
+         **再帰の辺** (`DEF 再帰の辺`) を 0 回以上辿って着く鍵である。**再帰の辺は `DEF 再帰の辺` が
+         定めるものであり、L6 よりそれは E1 から E7 で尽きる。** 鍵についての言明にできるのは、
          `origin` の答えが鍵ごとに 1 つに決まり、それが
          その鍵について `origin_inner` が答えた値だからである (L16)。
-         **前提を置くのは L14 (a) のためである** -- L14 (a) の整礎性は、`origin` が呼ばれる鍵から
-         到達する鍵の上でしか言えない。
+         **前提を 2 つ置くのは L14 (a) と L16 のためである** -- L14 (a) の整礎性は、`origin` が
+         呼ばれる鍵から到達する鍵の上でしか言えず、L16 は鍵の第 1 成分が `B` に現れる `RcVar` の
+         名前であることを前提に置く。`<1>0` より、その鍵から到達する鍵の第 1 成分も `B` に現れる
+         `RcVar` の名前である。
     <3>1. `Origin` の値を作る式は 3 つある -- `origin_inner` の `here()`、`origin_from_leaves_under` の
           `Origin::Exactly(here.clone())`、そして `Origin::of_candidates` である。
       BY L1 (`Origin::Join { .. }` を作る式は `of_candidates` の中の 1 か所だけであり、どの `Origin` の
@@ -513,10 +557,11 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
           `reached` の全要素が等しいときに返す `first.clone()`。`reached` の各元は、子の呼び出しが
           返した値か `Origin::Exactly(here.clone())` である。(r4) `of_candidates(C, h)` の値 --
           `Binding::Join` の腕と `origin_from_leaves_under` の末尾。
-      BY <1>1, <2>1, L6, L16 (鍵の答え),
+      BY <1>1, <2>1, <1>0 (この帰納が扱う鍵の第 1 成分は `B` に現れる `RcVar` の名前であり、L16 の
+         前提を満たす), L6, L16 (鍵の答え),
          CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under
     <3>3. QED
-      BY <3>1, <3>1a, <3>1b, <3>1c, <3>2, L6 (L14 が定める再帰の辺は E1 から E7 で尽きる),
+      BY <3>1, <3>1a, <3>1b, <3>1c, <3>2, <1>0, L16, L6 (再帰の辺は E1 から E7 で尽きる),
          L14 (a), L14 (b) (`origin(K)` が呼ばれ再帰の辺 `K -> K'` が在れば `origin(K')` も呼ばれる
          ので、帰納法の仮定の前提が各段で満たされる),
          EXT 整礎性 ((b) 整礎な関係の上では整礎帰納が
@@ -535,8 +580,10 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
         `origin(args[j], unit)` -- は、どれも `Exactly((var, path))` を返さない。
     <3>1. そのような呼び出しが `Exactly((var, path))` を返すならば、その呼び出しの鍵から再帰の辺を
           0 回以上辿って鍵 `(var, path)` に着く。
-      BY <2>3a -- その呼び出しは `origin_inner(var, path)` の実行が行う `origin` の呼び出しなので、
-         `<2>3a` の前提 (その鍵で `origin` が呼ばれる) を満たす,
+      BY <2>3a, <1>0 -- その呼び出しは `origin_inner(var, path)` の実行が行う `origin` の呼び出しな
+         ので `<2>3a` の第 2 の前提 (その鍵で `origin` が呼ばれる) を満たし、その鍵は `(var, path)`
+         から再帰の辺 1 本で着くので `<1>0` が第 1 の前提 (第 1 成分が `B` に現れる `RcVar` の名前で
+         ある) を与える,
          CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Llvm(..))` の腕,
          CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     <3>2. 鍵 `(var, path)` からその呼び出しの鍵へは、再帰の辺が 1 本ある。
@@ -568,18 +615,20 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
          CODE src/rc_ir/ownership.rs: origin_inner
     <3>3. どの子の呼び出しも `Exactly((var, path))` を返さない。
       返すとすると、`<2>3a` よりその子の鍵から再帰の辺を 0 回以上辿って `(var, path)` に着く -- 子の
-      呼び出しは `origin_inner(var, path)` の実行が行う `origin` の呼び出しなので、`<2>3a` の前提を
-      満たす。`<3>2` と
+      呼び出しは `origin_inner(var, path)` の実行が行う `origin` の呼び出しなので `<2>3a` の第 2 の
+      前提を満たし、その鍵は `(var, path)` から辺 1 本で着くので (`<3>2`) `<1>0` が第 1 の前提を
+      与える。`<3>2` と
       繋ぐと、鍵 `(var, path)` から再帰の辺を 1 回以上辿って `(var, path)` 自身に着く。その閉路を
       繰り返せば無限に降りる鍵の列ができるので、L14 (a) に反する。
-      BY <2>3a, <3>2, L14 (a), CODE src/rc_ir/ownership.rs: origin_inner
+      BY <2>3a, <1>0, <3>2, L14 (a), CODE src/rc_ir/ownership.rs: origin_inner
     <3>4. QED
       前の 4 つの道については `<3>1` と `<3>3` から出る。`Join` の腕については、`of_candidates(C, h)` が
       `Exactly` を返すのは `|C| = 1` のときであり、そのとき返るのは `C` の唯一の元を持つ
       `Exactly` である。その元は子の呼び出しが返した値に現れる `VarPath` なので (`<3>1`、L2 (a) と
-      L2 (b))、`<2>3a` よりその子の鍵から再帰の辺を 0 回以上辿って着く鍵である。それが `(var, path)` で
-      あれば `<3>3` と同じ閉路ができ、L14 (a) に反する。
-      BY <2>3a, <3>1, <3>2, <3>3, L2, L14 (a), CODE src/rc_ir/ownership.rs: Origin::of_candidates
+      L2 (b))、`<2>3a` よりその子の鍵から再帰の辺を 0 回以上辿って着く鍵である -- その子の鍵は
+      `(var, path)` から辺 1 本で着くので (`<3>2`)、`<1>0` が `<2>3a` の第 1 の前提を与える。それが
+      `(var, path)` であれば `<3>3` と同じ閉路ができ、L14 (a) に反する。
+      BY <2>3a, <1>0, <3>1, <3>2, <3>3, L2, L14 (a), CODE src/rc_ir/ownership.rs: Origin::of_candidates
   <2>5. QED
     BY <2>1, <2>2, <2>3, <2>3a, <2>4, <2>4a, <2>4b
 
@@ -612,8 +661,8 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
 
 以下の補題は、この文書のすべての証明が使う。よって第 2 節と第 3 節の証明もこれらを引く。
 
-**この節の補題のうち第 2 節・第 3 節の補題を引くのは L14 だけであり、それが引くのは L6 である。**
-L15 の脇も L6 を読む。
+**この節の補題のうち第 2 節・第 3 節の補題を引くのは L14 だけであり、それが引くのは L6 と
+第 2 節の `DEF 再帰の辺` である。** L14 はこの節の L10 (a') も引く。L15 の脇も L6 を読む。
 残る L1 から L5、L10 から L13、L15、L16 が引くのは、README の定義・仮定・命題 (P2、P2a)、コード、
 `EXT` の外部の結果、およびこの節の先行する補題である -- L2 は L1 を、L3 は L2 を、L4 は L2 と L3 を、
 L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引く。**循環は生じない** -- L6 の
@@ -763,13 +812,20 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
     その時点にその記号の記憶域が持つ値である。
   - **(e3)** DEF-0 の 3 つの場合は尽きており、互いに排他である。
 
-<1>1. (a)。
+<1>1. (a)。**「`Match` の各アームはその `payload` に値を与える」は、boxed union の変位アームについても
+      言う。** D9 の値の水準の 6 行が持つアームの行は 2 つ -- unbox union の変位アームと catch-all --
+      であり、boxed union の変位アームを覆うのは D2 の `MatchArm` の `payload` 欄と束縛の及ぶ範囲の
+      段落である。
   BY D2 (節点の 6 種の表 -- `Let` は `rhs` の値を `x` に束縛し、`Destructure` は各 `(i, x)` の `x` に
      第 `i` フィールドを束縛し、`Retain` は参照を作り、`Release` は参照を処分し、`Eval` は評価して
-     捨て、`Ret` はその式の値を述べる), D9 の移動の表の値の水準の 6 行 (「unbox union の変位アームの
+     捨て、`Ret` はその式の値を述べる),
+     D2 の `MatchArm` の `payload` 欄 (「`Match` の各アーム `MatchArm` は 4 個のフィールドを持つ」--
+     その 1 つが「`payload` (payload 変数)」である) と束縛の及ぶ範囲の段落 (「`Match` のアームの
+     `payload` のスコープはそのアームの `body` の部分木である」-- すなわち、変位が boxed か unbox かに
+     依らず、どのアームもその `payload` を束縛する), D9 の移動の表の値の水準の 6 行 (「unbox union の変位アームの
      payload 束縛: payload 変数の値は scrutinee の値の活性変位の payload である」と「catch-all アームの
-     payload 束縛: payload 変数の値は scrutinee の値そのものである」の 2 行が、アームの `payload` が
-     値を得る束縛であることを述べる), D2 の束縛の及ぶ範囲の段落 (パラメータと capture のスコープは
+     payload 束縛: payload 変数の値は scrutinee の値そのものである」の 2 行が、その 2 つの場合について
+     値が何であるかを名指す), D2 の束縛の及ぶ範囲の段落 (パラメータと capture のスコープは
      本体の全体である), D23 (活性化の入力の束縛が各パラメータと capture に 1 つずつの値を与える)
 <1>1a. (a')。
   BY CODE src/rc_ir/ownership.rs: VarTable::of (関数の本体について、`func.params` と `func.capture` の
@@ -824,10 +880,14 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
     D6 より (v-3) の名前は `Llvm` のオペランドとしても現れうるので、この道も数える。どちらの側でも
     値は `get_scoped_value` を通り、局所でない名前は `get_or_declare_global` へ行く。
     **`declare_program_global` はこの 2 つのどちらも用意しない場合を持つ** -- `global_types` に無い
-    名前には `None` を返し、そのとき `get_or_declare_global` は `panic!` で止まる。**表明が発火するなら
-    そのプログラムは走らず、その本体の活性化は存在しない**ので、走る本体ではその名前は `global_types` の
-    鍵であり、`declare_program_global` は 2 つのうちの一方を用意する。
-    BY <2>1, CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
+    名前には `None` を返し、そのとき `get_or_declare_global` は `panic!` で止まる。**その `panic!` は
+    `develop_mode` の門を持たない。** README の第 4 節はその形を「**検査して診断を出す。**」の段に
+    入れ、そのプログラムは走らないのでその本体の活性化は存在しない。よって走る本体ではその名前は
+    `global_types` の鍵であり、`declare_program_global` は 2 つのうちの一方を用意する。
+    BY <2>1, README の第 4 節 (「**コード生成が `expect` や `unreachable!` で止まる形も、
+       `develop_mode` の門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の
+       活性化は存在しない。」),
+       CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
        Generator::get_scoped_obj_field (`get_scoped_obj_field` は `get_scoped_obj` を呼ぶ。この 3 つに
        名前を渡す呼び出しを `src/` 全体で数えると、`src/rc_ir/codegen.rs` に 12 か所、`Llvm` 節点の
        オペランドを読む `src/fixstd/builtin.rs` の op の生成コードに 127 か所、`src/generator.rs` に
@@ -892,8 +952,34 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
   <2>4. QED
     BY <2>0, <2>1, <2>2, <2>3
 <1>2. `ρ` は本体の木の各位置を高々 1 度しか通る。
-  BY D2 (分岐は `Match` のアームだけであり、節点が自分自身を含むことはないので、本体は有限の木である),
-     D3 (実行路は根から継続へ、アームでは アーム本体を辿ってから `k` へ進む)
+  <2>1. 本体は有限の木である。
+    BY D2 (分岐は `Match` のアームだけであり、節点が自分自身を含むことはないので、本体は有限の木で
+       ある)
+  <2>2. 節点 `n` の部分木の大きさについての帰納で、`n` から始まる実行路は `n` の部分木の各位置を
+        高々 1 度しか通らず、その外の位置を通らない。**README の D3 は「`n` から始まる実行路は
+        `ret(n)` で終わる」を同じ帰納で示している。**
+    <3>1. `n` が `Ret` のとき、`n` から始まる実行路は `n` だけからなる。
+      BY D3 (関数本体の根から辿ってきて `Ret` に着いたら、そこで終わる),
+         D2 (`Ret` は継続を持たず、唯一の終端子である)
+    <3>2. `n` が `Let(x, Match(s, arms), k)` のとき、実行路は `n` の後、アームを 1 つ選んで
+          そのアーム本体の実行路を辿り、その後 `k` へ進む。選んだアーム本体と `k` はどちらも `n` の
+          部分木であり、`n` より小さく、互いに素であり、どちらも `n` を含まない。
+      BY D3 (`Let(x, Match(v, arms), k)` では、アームを 1 つ選び、そのアーム本体の実行路を辿り、
+         その後 `k` へ進む), <2>1,
+         D2 (本体は式の節点の木であり、位置が相異なれば節点も相異なる。アームの `body` と継続 `k` は
+         `n` の相異なる部分木なので、木の性質により互いに素である)
+    <3>3. `n` がそれ以外のとき、実行路は `n` の後、継続 `k` へ進む。`k` は `n` の部分木であり、
+          `n` より小さく、`n` を含まない。
+      BY D3 (`Ret` を除く 5 種の節点では、その継続へ進む),
+         D2 (`Ret` を除く 5 種はちょうど 1 つの継続を持つ)
+    <3>4. QED
+      BY <2>1, <3>1, <3>2, <3>3 -- `n` から始まる実行路は `n` を 1 度通り、その後は `n` より小さい
+         部分木から始まる実行路の連結である -- `<3>1` では 0 個、`<3>3` では `k` の 1 つ、`<3>2` では
+         アーム本体と `k` の 2 つである。帰納法の仮定をその各々に当てると、どれもその部分木の中に
+         留まって各位置を高々 1 度しか通らず、`<3>2` の 2 つの部分木は互いに素なので、連結も
+         `n` の部分木の各位置を高々 1 度しか通らない。`n` 自身はどの部分木にも入らない。
+  <2>3. QED
+    BY <2>1, <2>2, D3 (実行路は本体の根から辿って得られる) -- 本体の根に <2>2 を当てる。
 <1>3. (v-1) の場合。`v` に値を与える束縛は本体に 1 つであり (A6、<1>1)、`ρ` はその束縛の節点も `v` の
       授与位置も高々 1 度しか通らない (<1>2) ので、その束縛が `v` に与える値は 1 つに定まる。`ρ` 上で
       `v` が値を持つのは授与位置以後の位置に限り (DEF-0 の (v-1))、そのどの位置でも `v` の値はその 1 つで
@@ -918,14 +1004,18 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
     <3>2. `fun` は `v` の名前が `declared_globals` に持つ 1 つの欄から来るので、`v` の名前だけで
           決まる。
       BY <1>1c ((d) の funptr の枝),
+         README の第 4 節 (「**コード生成が `expect` や `unreachable!` で止まる形も、`develop_mode` の
+         門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の活性化は存在
+         しない。」),
          CODE src/generator.rs: Generator::get_or_declare_global (`declared_globals` に在ればその
          `ScopedValue` を返し、無ければ `declare_program_global` で用意してからその欄を返す),
          CODE src/generator.rs: Generator::declare_program_global (`ty.is_funptr()` の枝が用意するのは
          その名前の 1 つの関数である),
          CODE src/generator.rs: Generator::add_global_object (`declared_globals` へ入れるのはここだけで
-         あり、同じ名前を 2 度入れようとすると `panic_with_msg` で止まる。**表明が発火するならその
-         プログラムは走らず、その本体の活性化は存在しない**ので、走る本体では 1 つの名前の欄は 1 つで
-         ある)
+         あり、同じ名前を 2 度入れようとすると `panic_with_msg` で止まる。その `panic_with_msg` は
+         `develop_mode` の門を持たないので、README の第 4 節が「**検査して診断を出す。**」と呼ぶ段に
+         当たり、走る本体では
+         1 つの名前の欄は 1 つである)
     <3>3. QED
       BY <3>1, <3>2 -- `v` の値を作る式は記憶域を読まず (<3>1)、その式が返すグローバル値 `fun` は
          `v` の名前だけで決まる (<3>2)。よって `ρ` のどの位置でも `v` の値は同じ 1 つの LLVM
@@ -1091,10 +1181,11 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
        値を持ち、その値は `v` が値を持つどの位置でも同じである。
 <1>4. QED
   BY <1>1, <1>1a, <1>1b, <1>1c, <1>1d, <1>3, <1>3a, <1>3b -- (a) は <1>1、(a') は <1>1a、(c) は
-     <1>1b、(d) は <1>1c、(e) は <1>1d が与える。(b) は、DEF-0 の 3 つの場合が尽きており (<1>1a)、
+     <1>1b、(d) は <1>1c、(e) は <1>1d が与える。(b) は、DEF-0 の 3 つの場合が尽きており (<1>1d の
+     (e3))、
      どの場合も `N` 以後 `v` の値が変わらないこと (<1>3、<1>3a、<1>3b) から出る。
 
-**L11 (別名の辺の行き先の `RcVar` も値を持つ)**: 活性化 `α`、それが辿る実行路 `ρ`、`ρ` 上の位置 `P`、
+**L11 (再帰の辺の行き先の `RcVar` も値を持つ)**: 活性化 `α`、それが辿る実行路 `ρ`、`ρ` 上の位置 `P`、
 `P` で値を持つ (DEF-0) `RcVar` `x` を取る。`x` の名前が `vars.bindings` に持つ束縛が名指す `RcVar` --
 `Move(y)` の `y`、`Payload(s, ・)` の `s`、`Field(c, i)` の `c`、`Llvm(gen, args, ・)` の各 `args[j]`、
 `Join(rs)` のうち `α` が選んだアームの本体の終端の `Ret` が名指す変数 `r_0` -- は、いずれも `P` で値を
@@ -1271,7 +1362,7 @@ D25 が定めるのがオブジェクトからオブジェクトへの到達だ�
 中で走る `assert!`・`assert_eq!`・`panic!` はどれも発火しない**。
 
 **この文書が `origin` に問う鍵の第 1 成分はどれもこの形である。** 問う相手は `B` の節点が名指す
-`RcVar` であり、再帰の辺が進む先の `RcVar` も `B` の節点の欄から来る (L6)。L2 (c)、L9、L14、L16、
+`RcVar` であり、再帰の辺が進む先の `RcVar` も `B` の節点の欄から来る (L6)。L2 (c)、L9、L16、
 補題 Q がこれを読む。
 
 <1>1. `x` の名前が `vars.bindings` に束縛を持つとき、`x` はプログラムの束縛変数であり、P2 の第 1 の
@@ -1286,7 +1377,8 @@ D25 が定めるのがオブジェクトからオブジェクトへの到達だ�
 <1>3. QED
   BY <1>1, <1>2, L10 (a') (名前は束縛を持つか持たないかのどちらかである),
      P2 (その 2 種の `x` について、`π` を問わず `origin(x, π)` は panic せずに答えを返し、停止する)
-     -- 表明が発火すればその呼び出しは panic して返らないので、P2 の言う「panic せずに答えを返す」と
+     -- 表明が発火すればその呼び出しは panic して返らないので、P2 の言う「panic せずに答えを返し、
+     停止する」と
      相容れない。
 
 **L16 (鍵の答え)**: `x` を `B` に現れる `RcVar` の名前、`π` を path とし、`K = (x, π)` とする。
@@ -1314,9 +1406,8 @@ D25 が定めるのがオブジェクトからオブジェクトへの到達だ�
   BY <1>1, <1>2, <1>3 -- <1>1 と <1>2 より鍵 `K` について返る値は 1 つであり、<1>3 より
      `origin_inner(K)` の 1 つの実行が返す値はその値である。
 
-**L14 (`origin` の再帰呼び出しの鍵の関係は整礎である)**: 鍵 `(v, q)` の間の**再帰の辺**
-`(v, q) -> (v', q')` を、「`origin_inner(vars, type_env, v, q)` の実行が
-`origin(vars, type_env, v', q')` を呼ぶこと」と定める。次の 2 つが成り立つ。
+**L14 (`origin` の再帰呼び出しの鍵の関係は整礎である)**: 鍵の間の再帰の辺 (`DEF 再帰の辺`) について
+次の 2 つが成り立つ。
 
 - **(a)** `origin` が呼ばれる鍵 `K_0` を取ると、`K_0` から再帰の辺を辿って無限に降りる鍵の列は無い。
   すなわちこの関係は `K_0` から到達する鍵の上で整礎であり、その上の整礎帰納が使える。
@@ -1359,13 +1450,22 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
      但し書きに当たる型はこのクレートに無い),
      CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow_mut().insert(..)` はこの関数の中の
      1 行であり、`vars` は共有参照である)
-<1>2. どの鍵についても `origin` の呼び出しは停止する。
-  この関係に現れる鍵の第 1 成分は、どれも `B` に現れる `RcVar` の名前である -- `K_0` については
-  L15 がそう述べ、再帰の辺が進む先については、`origin_inner` がその名前を節点の欄が
-  持つ `RcVar` (`Move(y)` の `y`、`Payload(s, ・)` の `s`、`Field(c, i)` の `c`、
-  `Llvm(・, args, ・)` の `args[j]`、`Join(rs)` の各要素) から取るからである。L15 がその名前を
-  P2 の範囲に入れる。
-  BY L15, L6 (再帰の辺 E1 から E7 の行き先の `RcVar` は、`B` の節点の欄から来る)
+<1>2. どの鍵についても `origin` の呼び出しは panic せずに答えを返し、停止する。
+  鍵の第 1 成分 `v` は、`vars.bindings` に束縛を持つか持たないかのどちらかであり、**この 2 つが
+  P2 の 2 つの場合である。** 持つとき、L10 (a') より `v` は `B` が関数 `f` の `body` であるときの
+  `f` のパラメータか capture、または値を与える 3 構文が束縛する変数であり、P2 の脇が
+  「**「プログラムの束縛変数」は、節点が束縛する変数と、その本体のパラメータ・capture の
+  両方である。**」と述べるとおり P2 の第 1 の場合に当たる。持たないとき、P2 が第 2 の場合として
+  挙げる「`vars.bindings` に束縛を持たない名前 (D6 の第 3 の形)」そのものである。**場合分けが
+  `vars.bindings` の membership で尽きるので、この段は鍵の第 1 成分に他の条件を置かない。**
+  BY L10 (a') (`vars.bindings` に入る名前は、`B` が関数 `f` の `body` であるときの `f` のパラメータと
+     capture、および値を与える 3 構文が束縛する変数だけである),
+     P2 (範囲は「`x` がプログラムの束縛変数であるか、`vars.bindings` に束縛を持たない名前
+     (D6 の第 3 の形) であるようなすべての `(x, π)`」であり、脇が
+     「**「プログラムの束縛変数」は、節点が束縛する変数と、その本体のパラメータ・capture の
+     両方である。**」と定める。その範囲で `origin` は `π` を問わず panic せずに答えを返し、停止する。
+     第 2 の場合について脇は「その場合 `origin_inner` は `None` の腕に入り、即座に `here()` を
+     返す。」と述べる)
 <1>3. `origin(K)` が呼ばれるならば、その呼び出しが返った時点で `origins` は `K` を含む。`origins` へ
       要素を入れる `insert` は <1>1 の 1 か所だけであり、その呼び出しは時間で全順序に並んで自然数で
       番号づけられる (<1>1a)。`K` を入れる最初の `insert` が何番目かを `t(K)` と書く。**`t(K)` は
@@ -1384,7 +1484,7 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
     `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の返り値から鍵を決めることは、A3 の決定性の
     節が片付ける** -- `result_prov` は `&self` を取るので、同じ引数に同じ値を返すことを言う者が無ければ
     2 回の評価が違う鍵の集合を作りうる。よって `origin_inner(K)` のどの実行も同じ辺を辿る。
-    BY <2>1, A3 (`result_prov` と `borrows_operand` は決定的である), L14 の再帰の辺の定義,
+    BY <2>1, A3 (`result_prov` と `borrows_operand` は決定的である), DEF 再帰の辺,
        <1>2 (その呼び出しは停止する),
        EXT 呼び出しの入れ子 (`origin_inner(K)` が呼ぶ `origin(K')` は、`origin_inner(K)` が返るより
        前に返る),
@@ -1555,7 +1655,9 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
   <2>1. `origin(x, π) = Exactly((x, π))` であり `cand(x, π) = {(x, π)}`。
     BY CODE src/rc_ir/ownership.rs: origin_inner の `None | Some(Binding::Param) | Some(Binding::Producer)`
        の腕、`Some(Binding::Field(..))` の `container.ty.is_box` の枝、`Some(Binding::Payload(..))` の
-       `Some(_)` の枝, L9, L2 (b), L16 (`origin(・, ・)` の記法は鍵の答えを指す)
+       `Some(_)` の枝, L9, L2 (b), L16 (`origin(・, ・)` の記法は鍵の答えを指す),
+       補題 Q の ASSUME と DEF-0 (`x` は `P` で値を持つ `RcVar` なので `B` に現れる。これが L9 と
+       L16 の前提である)
   <2>2. 停止点は `(x, π, λ)` である。
     BY DEF-1 の S1
   <2>3. QED
@@ -2032,7 +2134,9 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
           `Join(rs)` は E2 である。`Field(c, i)` は `c` が boxed なら `here()` (S1 の H4)、そうでなければ
           E5 である。`Payload(s, None)` は E6、`Payload(s, Some(t))` は `s` が boxed なら `here()`
           (S1 の H5)、そうでなければ E7 である。
-      BY L9, L6, CODE src/rc_ir/ownership.rs: origin_inner
+      BY L9, L6, CODE src/rc_ir/ownership.rs: origin_inner,
+         補題 Q の ASSUME と DEF-0 (`x` は `P` で値を持つ `RcVar` なので `B` に現れる。これが
+         L9 の前提である)
     <3>3. `Llvm` の腕は、`leaf_origins_at(π)` が単一の `Arg(j, σ)` であれば E3 である。そうでないとき、
           `λ` は `ty(x)` の boxed leaf なので `decl` に宣言を持ち、その宣言は単一の `Arg` (E4a)、単一の
           `Fresh` または単一の `Unknown` (S2)、空集合、要素数 2 以上のいずれかである。
@@ -2150,7 +2254,8 @@ P4 を示し、さらにそれより強い** -- Q はその「いずれか」が
      他方の接頭辞になることは無い), 補題 Q の ASSUME (`λ ⊒ π` であり `λ` は `ty(x)` の boxed leaf
      である), Q ((iv) -- 各段の行き先の 3 つ組も Q の ASSUME を満たすので、鎖のどの 3 つ組でも
      `λ_cur ⊒ π_cur` と「`λ_cur` は `ty(x_cur)` の boxed leaf である」が成り立つ)
-<1>1. 鎖の各段は D20 の別名の辺であり、写した列はその辺を 1 本ずつ進む。
+<1>1. 鎖の各段は D20 の別名の辺であり、写した列はその辺を 1 本ずつ進む。**鎖のどの 3 つ組も
+      補題 Q の ASSUME を満たす。**
   L14 (a) が与える整礎関係 -- `(x, π)` から到達する鍵の上の再帰の辺の関係 -- の上の整礎帰納による。
   鎖が停止条件で始まるときは段が無いので空虚である。そうでないとき、Q の (iv) より第 1 段は D20 の
   別名の辺であり、その行き先 `(v, π', λ')` について `v` は `P` で値を持ち、`λ'` は `ty(v)` の `P` で
@@ -2168,7 +2273,9 @@ P4 を示し、さらにそれより強い** -- Q はその「いずれか」が
   `Unknown` である位置 (DEF-1 の S2)、boxed 容器の `Destructure` の名前付きフィールド (H4)、
   boxed union の変位アームの payload (H5) である。DEF-1 の S1 は H1 から H5 の 5 つ、S2 は残る 1 つで
   あり、この 2 つは D33 の一覧を尽くす。
-  BY D33 (歩みを止める 3 つの箇条), DEF-1 の S1 と S2, L9 (H1 から H5)
+  BY D33 (歩みを止める 3 つの箇条), DEF-1 の S1 と S2, L9 (H1 から H5),
+     <1>1 (鎖のどの 3 つ組も補題 Q の ASSUME を満たすので、その現在の変数は `P` で値を持つ `RcVar`
+     である), DEF-0 (値を持つのは本体に現れる `RcVar` なので、その変数は L9 の前提を満たす)
 <1>3. QED
   BY <1>0, <1>1, <1>2, D33 (`ρ` 歩みは、D20 の別名の辺を辿り、止まる位置で終わる列である), Q ((iv) が
      鎖の各段の両端を `P` の位置にするので、写した列は D33 が歩む位置の列である)
@@ -2280,14 +2387,14 @@ inhabited (D16) な leaf に限る形でそれを述べる。
 
 <1>1. P3 と P4 の言明が読む関数は `origin` であり、D17 の対応するスロットを決めるのは `origin_inner` と
       `origin_from_leaves_under` である。
-  BY README の P3 と P4 の言明, D13, D17
-<1>1a. README の P3 と P4 の言明の先頭の節「**解析がその鍵で `origin` を呼び**」が覆う鍵の集合は、
+  BY P3 (言明が読む関数は `origin` である), P4 (同じ), D13, D17
+<1>1a. P3 と P4 の言明の先頭の節「**解析がその鍵で `origin` を呼び**」が覆う鍵の集合は、
        `level_ownership` の有無で動く -- `level_ownership` は `origin` の呼び出し元の 1 つだからで
        ある。それでも 2 つの言明の真偽は動かない。系 1 と系 2 はこの `vars` と `type_env` について
        `origin(x, π)` が呼ばれる**任意の**鍵について立つので、その集合が増えても言明は各鍵で成り立ち、
        減っても残る鍵で成り立つ。
   BY 系 1, 系 2, 補題 Q (ASSUME が鍵に課すのは「`origin(x, π)` が呼ばれる」ことだけである),
-     README の P3 と P4 の言明,
+     P3 (言明の先頭の節「**解析がその鍵で `origin` を呼び**」), P4 (同じ節を持つ),
      CODE src/rc_ir/borrow.rs: level_ownership (`origin` を呼ぶ)
 <1>2. この 3 つが読むのは `VarTable` の `bindings` と `origins` の memo、`TypeEnv`、および `bindings` が
       持つ `LLVMGen` の `result_prov` の返り値だけである。**`var_tys` と `param_tys` は読まない** --

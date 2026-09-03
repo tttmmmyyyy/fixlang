@@ -190,7 +190,7 @@ src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsInternalBody::result_prov	P1,
 src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody	P26,P28	00c2f4f36bfe
 src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
 src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody::result_prov	P1,P2,P26	ca9cb2866793
-src/fixstd/builtin.rs	InlineLLVMArrayPunchBody	P26	b27238710971
+src/fixstd/builtin.rs	InlineLLVMArrayPunchBody	P3,P4,P26	b27238710971
 src/fixstd/builtin.rs	InlineLLVMArrayPunchBody::result_prov	P1,P2,P26	d07c92323ade
 src/fixstd/builtin.rs	InlineLLVMArraySetBody	P26	69cac4f10bd1
 src/fixstd/builtin.rs	InlineLLVMArraySetBody::result_prov	P1,P2,P26	1937952562a5
@@ -216,6 +216,7 @@ src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody	D/A	1da0d65c3df8
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::generate	P26	cf1c72be74b6
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::observes_uniqueness	P26	0dbb1939b295
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::result_prov	P1,P2	ccb214ee1107
+src/fixstd/builtin.rs	InlineLLVMMakeStructBody	P3,P4	6b2ac61a32df
 src/fixstd/builtin.rs	InlineLLVMMakeStructBody::result_prov	P1,P2,P26	1a642826f71d
 src/fixstd/builtin.rs	InlineLLVMMakeUnionBody	P7a,P7d,P7e	fabb9c76bdf4
 src/fixstd/builtin.rs	InlineLLVMMakeUnionBody::result_prov	P1,P2,P7a,P7d,P7e,P26	89f1790a61f1
@@ -224,6 +225,7 @@ src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody	P26,P27,P29,P30	a0d4955
 src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody::result_prov	P1,P2	65b3bcb09139
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody	P26	6852fc34787b
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody::result_prov	P1,P2,P26	1937952562a5
+src/fixstd/builtin.rs	InlineLLVMStringBuf	P3,P4	a31d053c0edb
 src/fixstd/builtin.rs	InlineLLVMStringBuf::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMStructGetBody	D/A	428475e589a9
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_operand	P26,(P-insert)	7374525f2b11
@@ -235,9 +237,9 @@ src/fixstd/builtin.rs	InlineLLVMStructPlugInBody::result_prov	P1,P2,P7a,P7d,P7e	
 src/fixstd/builtin.rs	InlineLLVMStructPunchBody	D/A,P26	ce4710c5eac1
 src/fixstd/builtin.rs	InlineLLVMStructPunchBody::arg_leaf_path	P1,P2,P7a,P7d,P7e	6ca1aea15f39
 src/fixstd/builtin.rs	InlineLLVMStructPunchBody::result_prov	P1,P2,P7a,P7d,P7e,P26	229df60797a4
-src/fixstd/builtin.rs	InlineLLVMStructSetBody	D/A,P26,P27,P28,P29,P30	277ce3ca4dae
+src/fixstd/builtin.rs	InlineLLVMStructSetBody	D/A,P3,P4,P26,P27,P28,P29,P30	277ce3ca4dae
 src/fixstd/builtin.rs	InlineLLVMStructSetBody::result_prov	P1,P2,P7a,P7d,P7e	3c84bfe9e211
-src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody	D/A	a09aabcd9fc7
+src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody	D/A,P3,P4	a09aabcd9fc7
 src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody::generate	D/A	69c9033e7624
 src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody::result_prov	P1,P2	5d9a24bc427b
 src/fixstd/builtin.rs	InlineLLVMUnionAsBody	D/A	ce678df6dc50
