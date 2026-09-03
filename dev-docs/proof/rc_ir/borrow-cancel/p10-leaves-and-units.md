@@ -1,6 +1,6 @@
 # P1 (leaf と unit の対応) と P2 (`origin` の全域性と停止性) の証明
 
-この文書が読んだコードのコミットは `7d3f95ce5202e5a5c19adedce37e32a5c4d8093d` である。README が証明の
+この文書が読んだコードのコミットは `0f857ab62ee36da56c6aeb5fe896a0f595200e5e` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が引くファイルに
 変わったのは `// PROOF:` コメントと、`Validator::check_rhs` に足された検査 -- 各 `Llvm` 節点の
 `result_prov` が 1 つの結果 leaf に 2 つ以上の source を宣言しないことを develop mode で確かめるもの --
