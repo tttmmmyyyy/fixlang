@@ -41,7 +41,13 @@ CITATION = re.compile(r"\b([DAP]\d+[a-z]*|L\d+[a-z]*)\b")
 
 
 def digest(text):
-    return hashlib.sha256(re.sub(r"\s+", "", text).encode("utf-8")).hexdigest()[:7]
+    """言明の指紋。同一性の印は除く。
+
+    印はこの道具自身の帳簿なので、指紋に入れると**印を振った瞬間に全項目が「動いた」になる。**
+    実測で、印を振った直後の一覧が 102 項目すなわち枠の全部を挙げた。
+    `proof_links.py` が `// PROOF:` のコメントを除くのと同じ理由である。"""
+    return hashlib.sha256(
+        re.sub(r"\s+", "", IDENTITY.sub("", text)).encode("utf-8")).hexdigest()[:7]
 
 
 def statement_of(lines, start, end):
