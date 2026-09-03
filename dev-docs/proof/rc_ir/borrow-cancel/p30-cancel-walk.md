@@ -244,6 +244,9 @@ Rust Reference の "Pointer types" が共有参照について次を述べる。
 `T` のサイズが 0 でないとき、その `T` の値が占める番地はそのブロックが占める番地であり、とくに返る参照の
 番地はそのブロックの占める番地の 1 つである。
 
+`Arc::ptr_eq(a, b)` は、`a` と `b` が同じ割り当てのハンドルであるとき真を返し、そうでないとき偽を返す。
+真のとき、`a` が指す `T` の値と `b` が指す `T` の値は 1 つの割り当ての中の同じ値である。
+
 **EXT アロケータの契約**
 アロケータが返した 2 つのメモリブロックが同時に *currently allocated* である (どちらもまだアロケータへ
 返っていない) とき、その 2 つは記憶域を共有しない。すなわち、一方の占める番地の集合と他方の占める番地の
@@ -619,19 +622,21 @@ enum については元と同じ変位で、その変位が保持する各値を
           `Type::TyApp(fun_ty, arg_ty)` である。`set_tyapp_fun` と `set_tyapp_arg` は `self` の複製の
           `ty` の成分を差し替えるので、後者の `ty` は `Type::TyApp(new_fun_ty, new_arg_ty)` である。
       BY CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node, CODE src/ast/types.rs: Type,
-         CODE src/ast/types.rs: TypeNode::set_tyapp_fun, CODE src/ast/types.rs: TypeNode::set_tyapp_arg
+         CODE src/ast/types.rs: TypeNode::set_tyapp_fun, CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
+         EXT Arc の契約
     <3>2. `impl PartialEq for Type` の `TyApp` の腕は、2 つの成分に `type_node_eq` を掛ける。
           `type_node_eq(lhs, rhs)` の本文は `Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty` であり、
-          `Arc::ptr_eq` が真ならば 2 つは同じ値なので `lhs.ty == rhs.ty` も真である。よって
-          `type_node_eq(lhs, rhs)` が真であることと `lhs.ty == rhs.ty` は同値であり、`Type` の等しさは
-          値で決まる。
-      BY CODE src/ast/types.rs: Type, CODE src/ast/types.rs: type_node_eq
+          EXT Arc の契約 より `Arc::ptr_eq` が真ならば 2 つは同じ値なので `lhs.ty == rhs.ty` も真で
+          ある。よって `type_node_eq(lhs, rhs)` が真であることと `lhs.ty == rhs.ty` は同値であり、
+          `Type` の等しさは値で決まる。
+      BY CODE src/ast/types.rs: Type, CODE src/ast/types.rs: type_node_eq, EXT Arc の契約
     <3>3. QED
       `Arc::ptr_eq(&new_fun_ty, fun_ty)` が真のとき `new_fun_ty` と `fun_ty` は同じ割り当てのハンドル
-      なので値が等しく、`new_arg_ty` と `arg_ty` についても同じである。よって <3>1 の 2 つの枝が返す値の
+      なので値が等しく (EXT Arc の契約)、`new_arg_ty` と `arg_ty` についても同じである。よって
+      <3>1 の 2 つの枝が返す値の
       `ty` は、<3>2 の意味でどちらも `Type::TyApp(new_fun_ty, new_arg_ty)` と等しい。`TypeNode` の
       `PartialEq` は `ty` だけを読むので (<2>6)、2 つの枝は等しい値を返す。
-      BY <3>1, <3>2, <2>6, CODE src/ast/types.rs: TypeNode
+      BY <3>1, <3>2, <2>6, CODE src/ast/types.rs: TypeNode, EXT Arc の契約
   <2>7a. `declared_field_types` は `Substitution::substitute_type` を呼ぶ。その本文は `Arc::ptr_eq` を
          2 か所で読むが、どちらの読みも返る値を変えず、返り値の値は引数の値で決まる。
     <3>1. `declared_field_types` の本文は、`collect_type_arguments` の結果を `tycon_info.tyvars` に
@@ -708,6 +713,7 @@ enum については元と同じ変位で、その変位が保持する各値を
     `leaf_map.rs`・`ownership.rs`・`provenance.rs` には 1 行も無い。
     <2>1、<2>2、<2>4 と合わせて、挙げた関数はすべて引数で決まる。
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, <2>7a, A10, DEF 引数で決まる関数, DEF このクレート,
+       EXT Arc の契約,
        CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
        CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
        CODE src/ast/types.rs: TypeNode::instance_field_types,
