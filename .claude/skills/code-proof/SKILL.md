@@ -91,6 +91,38 @@ When two proofs need the same fact, it is lifted out — into a preceding siblin
 
 The verifier's findings are answered by inserting steps, and renumbering would break every citation in the document. So **insert with a letter suffix**: a step between `<1>1` and `<1>2` is `<1>1a`, then `<1>1b`. Lamport's own worked proof does this. Numbers and suffixed numbers are never reused within one proof, even after a deletion.
 
+### Never write a range, a count, or any other derived figure
+
+A range of names -- `P8 - P14b`, `D1`-`D34`, "assumptions A1 through A26" -- names its endpoints and
+leaves its members to be reconstructed. Nothing can resolve it: not a reader who does not know which
+numbers exist, not a tool, and not the author a year later. Measured, a lettered number placed
+between two others (`A26a`) dropped out of a range that read "A1 through A26", and two steps that
+claimed to check every assumption silently skipped it.
+
+The same holds for a count. "The 78 implementations", "the six arms of the match", "the three places
+that write the field" -- each is a figure derived from the code or from the frame, and each goes
+stale the moment either moves, silently, because a wrong number reads exactly like a right one.
+Measured across six proof documents, half of the counted claims sat next to the enumeration they
+counted, so the figure carried nothing the list did not already carry.
+
+**Write what the figure was derived from.** Name the members, or give the predicate that selects
+them -- "every `impl LLVMGen` whose `result_prov` returns a `Fresh` leaf" resolves forever, while
+"the 29 such implementations" resolves until someone adds one. Where a count is the claim itself --
+zero occurrences, or exactly one call site when uniqueness is the point -- it stays, because there
+the figure is the property rather than a description of it.
+
+### Identity is not a number
+
+A step cites `P28` and a document is named `p20-borrow-ify.md`, so numbers and names look like
+identities. They are not. A number is a display: it orders items for a reader, and ordering is the
+one thing that changes when an item is inserted. Making it the identity is what forces the letter
+suffixes of the preceding section, and those suffixes are what ranges then lose.
+
+Give each item an identity that carries no meaning -- a short random string -- and let the number
+stay a display that may be reassigned freely. A tool then answers "what cites this" and "what moved
+under this" from the identities, and renumbering costs nothing. Keep the number in the prose: an
+identity is for machines to follow, and a reader who meets `a3f9c21` in a `BY` line learns nothing.
+
 ### Calculational steps
 
 A chain of relations may replace a run of steps when each link is short:
