@@ -740,8 +740,13 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
         `prog: &RcProgram` から借用したものであり、この 2 つの呼び出しの間に木を変える操作は無い --
         `cancel` が持つのは共有参照 `prog: &RcProgram` だけで、EXT 共有参照は代入を許さない より
         その先の値へ代入することはできず、`funcs` と `globals` を作る写像はそれぞれの `f.body` /
-        `g.init` を読むだけである。
-    BY CODE src/rc_ir/borrow.rs: cancel, EXT 共有参照は代入を許さない
+        `g.init` を読むだけである。**内部可変性の例外はここでは働かない** -- A3 は
+        「**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない。** 到達できる型が
+        内部可変性を持つ欄を持つときは、その欄は**一度だけ書かれる memo であって、その値はその型の
+        `PartialEq` が読む成分の関数である**」と述べ、D1a は「**内部可変性の memo も成分ではない** (A3)。」と
+        書く。すなわちその欄が埋まっても D1a の意味の木は変わらず、D2 が節点と呼ぶ位置の集合も各位置の
+        内容も動かない。
+    BY CODE src/rc_ir/borrow.rs: cancel, EXT 共有参照は代入を許さない, A3, D1a, D2
   <2>2. `node_id(n)` は `n.expr` が指す `RcExpr` の番地である。`RcExprNode` の `expr` は
         `Arc<RcExpr>` であり、EXT Arc の割り当ての安定性 より、その番地は同じ割り当てについて何度取っても
         等しく、`Arc` の値を move しても動かず、共有参照が生きている間は割り当ても落ちない。
@@ -944,7 +949,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
       これらの腕が `pending` に触れる操作はこの 3 つだけである。
   BY D3, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume, p30 の L1, p30 の L6
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume, p30 の L1, p30 の L6, L50
+  `pending(n)` と `pending(k)` が節点ごとに 1 つに定まることは L50 の 1 が述べる。
 <1>2. CASE `n` の式が `Let(_, Match(_, arms), k)` である。D3 より `ρ` の上の `n` の直後の節点は、`ρ` が
       選んだアームの本体である。`walk_inner` のこの腕は各アームについて
       `self.walk(&arm.body, pending.clone(), false)` を呼ぶ。`PendingRetains` は `Vec<PendingRetain>` で
@@ -1052,8 +1058,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
       `RcExpr::Release(v, path, _, k)` の腕の `let others = self.other_objects(v, path);` の直後の
       `self.consume_objects(&mut pending, &others)`、および同じ腕の `UnBump::OutsideBracket` の枝の
       `self.consume_objects(&mut pending, &objects)` である。`merge`、`cancelled`、`un_bump` はこの
-      呼び出しを持たない。`consume_rhs` がこの呼び出しに届くのは `consume` を通してであり、<1>3 が
-      その 1 か所を展開する。<1>1a より、この数え上げは `borrow.rs` の中の出現を尽くせば足りる。
+      呼び出しを持たない。`consume_rhs` がこの呼び出しに届くのは `consume` を通してである。
+      <1>1a より、この数え上げは `borrow.rs` の中の出現を尽くせば足りる。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
@@ -1114,7 +1120,9 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
       この腕がそれより前に行う `others(r)` についての `consume_objects` を施したものである。L36 より
       `consume_objects` は要素を取り除くだけで加えないので、由来が `t` の要素は `pending(r)` にも在る。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release(v, path, _, k)` の腕,
-     L36, <1>2
+     L36, L50, <1>2
+  `pending(r)` が 1 つに定まり、`un_bump_releases[t]` の要素を節点と同一視してよいことは L50 の
+  1 と 3 が述べる。
 <1>4. QED
   BY <1>3, L35
 
@@ -1142,7 +1150,10 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
       あり、`out(t, n0) = ActRefs(t)` である。`t` は `Retain` 節点なので継続を持ち、`ρ` の上で `n0` は
       存在する。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-     DEF 節点の量, L34, D2
+     DEF 節点の量, L34, D2, L46, L50
+  `t` の訪問が積む `outstanding` は `DEF 節点の量` の `ActRefs(t)` であり、その値が走査のどの段階で
+  読んでも同じであることは L46 が述べる。`pending(n0)` と `e_t(n0)` が 1 つに定まることは L50 の 1 で
+  ある。
 <1>2. `ρ` の上で `t` より後の 2 つの節点 `n`、`n'` が `ρ` の上で隣り合い、`t` が `n` で pending でない
       ならば、`t` は `n'` でも pending でない。
   <2>1. CASE L34 の 1。`pending(n')` は `pending(n)` に `push`・`consume_objects`・`un_bump` を施した
@@ -1232,7 +1243,10 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
         `uniform.get(&retain.node)` の複製を新しい `outstanding` に据える。P18 よりその値はすべての
         アームの出口に現れる共通の値であり、L34 の 3 より `arm_exits[i] = pending(n)` なので、その共通の
         値は `out(t, n)` に等しい。よって変わらない。
-    BY <1>1, L34, L36, p30 の L5, P18, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF 節点の量
+    BY <1>1, L34, L36, p30 の L5, P18, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF 節点の量,
+       L46
+    引かれる `ActRefs(n)` と、区間の最初に置かれる `ActRefs(t)` が、走査のどの段階で読んでも同じ値で
+    あることは L46 が述べる。
   <2>3. 区間の最後で、`n*(ρ)` の `subtract` の後にこの `outstanding` は空になる。
     BY <1>6
   <2>4. QED
@@ -1256,7 +1270,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
 
 <1>1. `Σ_{r ∈ R_ρ(t)} ActRefs(r) = ActRefs(t)` である。`R_ρ(t)` の各要素は `I_ρ(t)` に入るので `ρ` の上に
       あり、`ρ` の上で実行される。
-  BY L38
+  BY L38, L46
+  この等式の両辺の `ActRefs` が走査のどの段階で読んでも同じ値であることは L46 が述べる。
 <1>2. `ρ` の上の各 `Retain`/`Release` 節点 `m` と各名前 `o` について、`o` が `ρ` で活性 (`p13` の
       `DEF 名前の活性`) ならば `ActRefs(m)[o] = ActRefs^inh_ρ(m)[o]` であり、活性でなければ
       `ActRefs^inh_ρ(m)[o] = 0` である。
@@ -2083,7 +2098,8 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
 <1>4. `t ∈ CT` が `q` で pending であるとき、`t` と、`q` より前に実行された `R_ρ(t)` の要素の寄与の和は、
       名前ごとに `ActRefs^inh_ρ(t) - Σ_{r ∈ R_ρ(t), r は q より前} ActRefs^inh_ρ(r)` であり、これは
       `B_ρ(q, e_t(q))` に等しい。
-  BY D27, L38, <1>2
+  BY D27, L38, L50, <1>2
+  `e_t(q)` が 1 つに定まることは L50 の 1 である。
   D27 は、`Retain` の訪問で押し込まれた要素の `B` を `ActRefs^inh_ρ(t)` と定め、`un_bump` が
   `InBracket` でその要素を選ぶ `Release` の訪問でだけ `ActRefs^inh_ρ` を引き、複製・`merge`・その他の
   節点では値を運ぶだけである。その要素を選ぶ `Release` は L38 の 3 の `R_ρ(t)` の要素である。
@@ -2332,7 +2348,8 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
         `bindings`・`var_tys`・`closure_targets` に何も入れない。`returned_var` も同じ 2 つの腕で継続へ
         降りる。よって <2>1 の木の変形は `var_tys` と `closure_targets` を変えず、`bindings` については
         鍵の集合と、各鍵の `Binding` の変位・`RcVar`・添字・変位番号・型を変えない。**`Binding::Llvm` が
-        運ぶ op はこの水準では等しいと言えない** -- <2>3a がそれを扱う。
+        運ぶ op はこの水準では等しいと言えない** -- 2 つの表の op は複製で隔たっているので、この段は
+        それについて何も述べない。
     BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var,
        CODE src/rc_ir/ownership.rs: Binding, <2>1
   <2>2a. `B` と `B'` はどちらも A6 と A11 を満たし、その `VarTable` は `VarTable::of` か
@@ -2643,7 +2660,7 @@ A19 (ii-a)、A19 (ii-b)、P14a、P18a、P18b、P18c、D11 の 3 つの節 -- は
     BY DEF 欠損, D29, D10, D23, <1>1
   <2>2. 帰納法の仮定: `ρ` の上の節点 `q` の入口の点について (a)、(b)、(c) が成り立つ。`q` の実行が
         終わった点を `q'` とする。基底の節点についてこれを与えるのは <2>1 であり、それ以外の節点に
-        ついては、`ρ` の上でその直前にある節点についての <2>3・<2>4・<2>5 が与える。
+        ついては、`ρ` の上でその直前にある節点について本帰納法が示した `q'` での (a)、(b)、(c) である。
     BY 帰納法の仮定, <2>1
   <2>2a. `α` は `q` の入口の点で D21 の制限を満たす。
     BY L43c, <2>2, <1>1a
@@ -3087,7 +3104,12 @@ A19 の (ii-a)・(ii-b)・(ii-c) と P14a を活性化に当てるので、そ�
           `(p.name, unit)` なので、(i) **パラメータ名がプログラム全体で一意**でなければ、別の関数の
           同名のパラメータの unit がこの述語を真にしうる。それを与えるのは A6 -- 「`borrow_ify` の入力の
           すべての束縛変数の名前は相異なり、**どの関数の名前とも異なる**」-- と、出力についての同じ
-          性質を与える P9 である。(ii) `leaf` は `p.ty` の boxed leaf でなければ `truncate_to_unit` が
+          性質を与える P9 である。**パラメータがそこでいう束縛変数に数えられることは P2 が書き出して
+          いる** -- 「**「プログラムの束縛変数」は、節点が束縛する変数と、その本体のパラメータ・capture の
+          両方である。**」であり、D6 も「`VarTable::of` と `VarTable::body_only` がその表に入れる鍵は、
+          パラメータ・capture の名前と節点が束縛する変数の名前だけで、どれも `Lowerer::fresh_var` が
+          `FullName::local` で作ったものである」として同じ 2 種を挙げる。(ii) `leaf` は `p.ty` の
+          boxed leaf でなければ `truncate_to_unit` が
           型に合わない path を歩いて panic する。`rhs_consumes` が渡す `leaf` は引数の型の boxed leaf で
           あり、A12 の「**`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型**」がその型を
           `p.ty` に一致させる。(iii) `truncate_to_unit(p.ty, leaf)` の値が `rc_units(p.ty)` の元で
@@ -3098,7 +3120,7 @@ A19 の (ii-a)・(ii-b)・(ii-c) と P14a を活性化に当てるので、そ�
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs, CODE src/rc_ir/borrow.rs: cancel,
          CODE src/rc_ir/ownership.rs: all_owned_units,
          CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/ownership.rs: rhs_consumes,
-         D14, A6, A12, A10, P1, P9
+         D6, D14, A6, A12, A10, P1, P2, P9
     <3>2. `rhs_consumes` が `RcRhs::App(callee, args)` について報告する leaf の集合は、D9 の `App` の行が
           名指す leaf をすべて含む。`rhs_consumes` は callee の全 boxed leaf と、
           `resolve_callee_params` が返すパラメータについて `owns` が真である引数 leaf を報告し、
