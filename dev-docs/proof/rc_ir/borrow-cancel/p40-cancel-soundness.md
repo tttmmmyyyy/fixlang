@@ -140,7 +140,8 @@ identity で名付けた多重集合」と定める。**`outstanding` に
 
 ## 1. 記法
 
-1 つの関数 (またはグローバル初期化子) の本体 `B` を固定し、`B` から作られる `VarTable` を `vars`、
+**DEF 本体ごとの記法** --- 1 つの関数 (またはグローバル初期化子) の本体 `B` を固定し、
+`B` から作られる `VarTable` を `vars`、
 プログラムの `TypeEnv` を `type_env` と書く (`CODE src/rc_ir/ownership.rs: VarTable::of`,
 `CODE src/rc_ir/ownership.rs: VarTable::body_only`)。この 2 つは本体ごとに 1 つなので、以下では
 `origin` と `acted_references` の第 1・第 2 引数を落として書く。
@@ -153,7 +154,7 @@ identity で名付けた多重集合」と定める。**`outstanding` に
 - `L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の要素のうち `π` を前置に持つものの集合。D4 より、これが
   「`v` の `π` の下の boxed leaf」の全体であり、inhabited (D16) でないものを含む。
 
-**2 つの「オブジェクト」を書き分ける。** D15 と `References` が「オブジェクト」と呼ぶのは `VarPath` の
+**DEF 名前とオブジェクト** --- D15 と `References` が「オブジェクト」と呼ぶのは `VarPath` の
 値であり、この文書ではこれを**名前**と呼び、`o` で表す。D7 が「オブジェクト」と呼ぶのは実行時のヒープの
 オブジェクトであり、この文書ではこれを**オブジェクト**と呼び、`O` で表す。名前 `o` が実行路 `ρ` で
 **活性**であること、および活性な名前が指すオブジェクト `obj_ρ(o)` は、`p13` の `DEF 名前の活性` が
@@ -1091,7 +1092,7 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
       `objects = acted_on(var, path)` である。`consume` を呼ぶのは、`consume_rhs` と、`walk_inner` の
       `RcExpr::Destructure(container, fields, _state, k)` の腕の 2 か所である。`consume` も `pub` を
       持たない inherent なメソッドなので、<1>1a と同じ根拠でその呼び出しは `borrow.rs` の中にしか無い。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume, 第 1 節の記法,
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume, DEF 本体ごとの記法,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Destructure(container, fields, _state, k)` の腕,
      EXT 可視性と私有性, EXT モジュールは `mod` が導入する
@@ -1134,8 +1135,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
       `un_bumped` と**位置を共有する**要素があり、そのうち最も後ろの要素の `node` が `t` の `NodeId`
       であるときである。すなわちその要素は由来が `t` の要素である。`p30` の `L5` は「要素 `e` が
       `References` の値 `R` と**位置を共有する**とは、`e.outstanding.shares_an_object(R)` が真である
-      ことをいう」と定め、その鍵が `VarPath` -- この文書の名前 (第 1 節の記法) -- であることを述べる。
-  BY p30 の L5, <1>1, 第 1 節の記法
+      ことをいう」と定め、その鍵が `VarPath` -- この文書の名前 (`DEF 名前とオブジェクト`) -- であることを述べる。
+  BY p30 の L5, <1>1, DEF 名前とオブジェクト
 <1>3. <1>2 の第 1 引数は、`r` の訪問が `un_bump` を呼ぶところの `pending` であり、それは `pending(r)` に、
       この腕がそれより前に行う `others(r)` についての `consume_objects` を施したものである。L36 より
       `consume_objects` は要素を取り除くだけで加えないので、由来が `t` の要素は `pending(r)` にも在る。
@@ -1681,7 +1682,7 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
     BY DEF 類ごとの義務, DEF 節点の実行の素動作, D27
   <2>2. `p` の由来 (DEF 訪問) を `t = Retain(v, π)` とすると、`o = id(v, λ)` である `λ ∈ L(v, π)` が
         在る。その `λ` は `π` の下の inhabited (D16) かつ計数下 (D26) の boxed leaf である。
-    BY D27, P16, 第 1 節の記法, D4, D16, D26, L45
+    BY D27, P16, DEF 本体ごとの記法, D4, D16, D26, L45
     D27 は、`p` が `pending` に入るときの `B_ρ` を、`π` の下の inhabited かつ計数下の各 leaf を
     `origin` の identity で名付けて数えたものと定め、以後の操作はその多重集合から引くか、値をそのまま
     運ぶだけである。よって `B_ρ(n, p)` が 1 以上を与える名前はその数え上げに現れる名前であり、`L(v, π)`
@@ -2200,7 +2201,8 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
       `n(q) = q`、そうでなければ `n(q)` は `ρ` の上で `q` の次にある節点である。
   BY L41e
 <1>2. 2 の前半が成り立つ。すなわち `q` で pending である `t ∈ CT` は `n(q)` でも pending である。
-  <2>1. CASE `q` が `Retain` 節点である。<1>1 より `n(q) = q` なので言明は自明に成り立つ。
+  <2>1. CASE `q` が `Retain` 節点である。<1>1 より `n(q) = q` なので、示すべきは「`q` で pending で
+        ある `t ∈ CT` は `q` でも pending である」であり、これはその前提そのものである。
     BY <1>1
   <2>2. CASE `q` が `Retain` 節点でない。<1>1 より `n(q)` は `ρ` の上で `q` の次にある節点である。
         L38 より、`t` が pending である `ρ` の上の節点の全体 `I_ρ(t)` は `ρ` の上の連続する区間で
@@ -2211,8 +2213,9 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
   <2>3. QED
     BY <2>1, <2>2
 <1>3. 2 の後半が成り立つ。すなわちその要素の `B_ρ` は `q` の入口の点での値に等しい。
-  <2>1. CASE `q` が `Retain` 節点である。<1>1 より `n(q) = q` なので言明は自明に成り立つ。
-    BY <1>1
+  <2>1. CASE `q` が `Retain` 節点である。<1>1 より `n(q) = q` なので、`B_ρ(n(q), ・)` は `q` の訪問の
+        入口で読んだ値そのものである (`DEF N`)。
+    BY <1>1, DEF N
   <2>2. CASE `q` が `Retain` 節点でない。`q` の訪問が `pending` に施す操作は、L34 の 3 つの場合で
         尽きる -- 1 の場合は `push`・`consume_objects`・`un_bump`、2 の場合はアームへの複製、3 の
         場合は `merge` である。
@@ -2486,7 +2489,7 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
          CODE src/rc_ir/ownership.rs: Origin::acted_on, <2>2, 帰納法の仮定
     <3>4. CASE 腕が `Binding::Llvm(llvm_gen, args, result_ty)` である。この腕は `arg_tys` を `args` の
           型から作り、`decl = llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を取る。<2>2 より
-          `args` と `result_ty` は 2 つの表で等しく、第 1 節の記法 より `type_env` は 1 つなので、
+          `args` と `result_ty` は 2 つの表で等しく、`DEF 本体ごとの記法` より `type_env` は 1 つなので、
           <2>3a より `decl` は 2 つで等しい。`as_arg_projection` は `decl` と `path` だけを読む。
           `origin_from_leaves_under` は `decl`・`args`・`path`・`type_env` から `operand_units` と
           `produced_here` を作り、`operand_units` の各元について `origin(vars, type_env, args[j].name,
@@ -2494,7 +2497,7 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
           よりその答えも等しく、返り値も等しい。
       BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: as_arg_projection,
          CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-         CODE src/rc_ir/ownership.rs: truncate_to_unit, <2>2, <2>3a, 第 1 節の記法, 帰納法の仮定
+         CODE src/rc_ir/ownership.rs: truncate_to_unit, <2>2, <2>3a, DEF 本体ごとの記法, 帰納法の仮定
     <3>5. QED
       BY <3>0, <3>1, <3>2, <3>3, <3>4, CODE src/rc_ir/ownership.rs: origin_inner,
          CODE src/rc_ir/ownership.rs: Binding
@@ -2502,8 +2505,8 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
       `Join`、`Llvm`、`Field`、`Payload` の 6 つの腕を持ち、`Field` と `Payload` は `is_box` で
       さらに分かれる。<3>2、<3>3、<3>4 がこれを尽くす。
   <2>4. QED
-    BY <2>2, <2>3, <2>3a, <2>3b, 第 1 節の記法, CODE src/rc_ir/borrow.rs: cancel
-    第 1 節の記法 より `type_env` はプログラムの `TypeEnv` であり、`cancel` は受け取った `type_env` を
+    BY <2>2, <2>3, <2>3a, <2>3b, DEF 本体ごとの記法, CODE src/rc_ir/borrow.rs: cancel
+    `DEF 本体ごとの記法` より `type_env` はプログラムの `TypeEnv` であり、`cancel` は受け取った `type_env` を
     そのまま `CancelAnalysis` と `all_owned_units` に渡して型を作らないので、2 つの本体の `origin` は
     同じ `type_env` の下で読む。**P2a は 1 つの `VarTable` の値を固定した形の主張であり、相異なる
     2 つの表について答えを比べる形はその主張ではない** -- その形を <2>3b が `origin` の再帰の上の帰納で
