@@ -1403,13 +1403,20 @@ L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
       型の `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が
       構造体であることをその節の 1 つに挙げる。**
       BY A12, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info
-    <3>2. `is_array(ty(c))` と `is_funptr(ty(c))` は偽である。
+    <3>2. `is_array(ty(c))` と `is_funptr(ty(c))` は panic せずに計算でき、どちらも偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
-      `ArrayStorage`・`Opaque` のいずれか 1 つである。`is_array(ty(c))` が真ならば `ty(c)` の最上位の
+      `ArrayStorage`・`Opaque` のいずれか 1 つである。`<3>1` は `is_struct(ty(c))` が真であることを
+      `toplevel_tycon_info` 経由で示すので、`toplevel_tycon_info` は panic せず、`ty(c)` の最上位の
+      tycon は `type_env.tycons()` の鍵である。L3a の第 3 の主張より、`type_env.tycons()` のどの鍵の
+      名前も `FUNPTR_NAME` を前置に持ちながら残りが `u32` として読めない形を取らないので、
+      `is_funptr_tycon` はこの tycon に対して panic せず、`is_funptr(ty(c))` は panic せずに真か偽の
+      いずれかの値を返す。
+      `is_array(ty(c))` が真ならば `ty(c)` の最上位の
       tycon は `Std::Array` であり、L3a より `toplevel_tycon_info(ty(c), type_env)` の `variant` は
       `Array` である。`is_funptr(ty(c))` が真ならば `ty(c)` の最上位の tycon は `is_funptr_tycon` を
       満たし、L3a より同じくその `variant` は `Primitive` である。
-      `<3>1` より `ty(c)` の `variant` は `Struct` なので、どちらでもない。
+      `<3>1` より `ty(c)` の `variant` は `Struct` なので、どちらも真ではあり得ず、
+      `is_array(ty(c))` と `is_funptr(ty(c))` はどちらも偽である。
       BY L3a, <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
          TypeNode::toplevel_tycon_info
     <3>3. `is_fully_unboxed(ty(c))` は偽である。
@@ -1505,13 +1512,20 @@ L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
       型の `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Match` の scrutinee が
       union であることをその節の 1 つに挙げる。**
       BY A12, CODE src/ast/types.rs: TypeNode::is_union, TypeNode::toplevel_tycon_info
-    <3>2. `is_array(ty(s))` と `is_funptr(ty(s))` は偽である。
+    <3>2. `is_array(ty(s))` と `is_funptr(ty(s))` は panic せずに計算でき、どちらも偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
-      `ArrayStorage`・`Opaque` のいずれか 1 つである。`is_array(ty(s))` が真ならば `ty(s)` の最上位の
+      `ArrayStorage`・`Opaque` のいずれか 1 つである。`<3>1` は `is_union(ty(s))` が真であることを
+      `toplevel_tycon_info` 経由で示すので、`toplevel_tycon_info` は panic せず、`ty(s)` の最上位の
+      tycon は `type_env.tycons()` の鍵である。L3a の第 3 の主張より、`type_env.tycons()` のどの鍵の
+      名前も `FUNPTR_NAME` を前置に持ちながら残りが `u32` として読めない形を取らないので、
+      `is_funptr_tycon` はこの tycon に対して panic せず、`is_funptr(ty(s))` は panic せずに真か偽の
+      いずれかの値を返す。
+      `is_array(ty(s))` が真ならば `ty(s)` の最上位の
       tycon は `Std::Array` であり、L3a より `toplevel_tycon_info(ty(s), type_env)` の `variant` は
       `Array` である。`is_funptr(ty(s))` が真ならば `ty(s)` の最上位の tycon は `is_funptr_tycon` を
       満たし、L3a より同じくその `variant` は `Primitive` である。
-      `<3>1` より `ty(s)` の `variant` は `Union` なので、どちらでもない。
+      `<3>1` より `ty(s)` の `variant` は `Union` なので、どちらも真ではあり得ず、
+      `is_array(ty(s))` と `is_funptr(ty(s))` はどちらも偽である。
       BY L3a, <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
          TypeNode::toplevel_tycon_info
     <3>3. `is_fully_unboxed(ty(s))` は偽である。
