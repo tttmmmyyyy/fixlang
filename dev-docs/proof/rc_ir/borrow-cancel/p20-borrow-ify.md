@@ -873,12 +873,31 @@ leaf `(v, λ)` について、`origin(v, λ).candidates()` の元のうち `vars
   `<1>1` の積まれた元に P8 (b) の閉包条件を適用する。
   BY P8 (b), <1>1
 
-**アーム本体の `Ret` について**。`collect_consumes_go` の `RcExpr::Ret` の腕は、関数本体の終端の `Ret` だけ
-でなく、`Match` のアーム本体の `Ret` についても `push_boxed_leaves` を呼ぶ
-(`CODE src/rc_ir/ownership.rs: collect_consumes_go` -- `RcRhs::Match` の腕は各アーム本体へ降りる)。
-D9 はアーム本体の `Ret` を消費とせず移動とするので、これは過剰報告である (D9 の `collect_consumes` に
-ついての注)。`<1>2` の議論は「積まれた元に P8 (b) を当てる」だけなので、過剰報告された元についても
-同じ結論が出る。第 9.4 節の `L11` がこれを使う。
+**アーム本体の `Ret` は過剰報告である**。D9 はアーム本体の `Ret` を消費とせず移動とするので、次の
+補題が挙げる元は D9 の意味の消費ではない (D9 の `collect_consumes` についての注)。それでも P8 (b) の
+閉包条件は積まれた元の全体に掛かるので、その元についても同じ結論が出る。第 9.4 節の `L11` がこれを使う。
+
+#### L7a (アーム本体の `Ret` が名指す leaf も `collect_consumes` が積む)
+
+**言明**。入力の関数 `f` の `Match` のアーム本体の `Ret(x)` について、`x` の各 boxed leaf `λ` の対
+`(x.name, λ)` は、`own` の値によらず `collect_consumes(&f.body, vars, prog, own, type_env, &mut consumed)`
+が `consumed` に積む元である。
+
+<1>1. 走査はアーム本体の節点を訪れる。
+  `collect_consumes_go` の `RcExpr::Let(x, rhs, k)` の腕は、`rhs` が `RcRhs::Match(_, arms)` のとき
+  各 `arm` について `collect_consumes_go(&arm.body, ..)` を呼ぶ。
+  BY CODE src/rc_ir/ownership.rs: collect_consumes_go
+
+<1>2. `RcExpr::Ret(x)` の腕は `push_boxed_leaves(&x.name, &x.ty, type_env, out)` を呼び、
+      `push_boxed_leaves` は `boxed_leaf_paths(ty(x), type_env)` の各元 `λ` について `(x.name, λ)` を
+      `out` に積む。この腕は `owns` を読まない。
+  BY CODE src/rc_ir/ownership.rs: collect_consumes_go, push_boxed_leaves,
+     CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+
+<1>3. QED
+  `<1>1` よりアーム本体の `Ret` の節点は走査が訪れる節点であり、`<1>2` がその節点で積まれる元と、それが
+  `own` に依らないことを与える。`collect_consumes` は `collect_consumes_go` を本体の根から 1 回呼ぶ。
+  BY <1>1, <1>2, CODE src/rc_ir/ownership.rs: collect_consumes
 
 ### 3.6 `App` の引数の行について
 
@@ -929,8 +948,8 @@ D9 の `App` の引数の行は「呼び出し先がその位置の unit を所�
 
 <1>2. `cand_f(v, λ)` の元 `(r, p)` で `vars_f.param_tys` が `r` を鍵に持つもの (その型を `τ`) について、
       `(r, p) ∈ OL` である。
-  所有を読まない消費については P8 (c) が、アーム本体の `Ret` については第 3.5 節の注と P8 (b) が与える。
-  BY P8 (b), P8 (c), 3.5 の注
+  所有を読まない消費については P8 (c) が、アーム本体の `Ret` については L7a と P8 (b) が与える。
+  BY L7a, P8 (b), P8 (c)
 
 <1>3. `<1>2` の `p` は `leaves(τ)` の元である。
   次の言明を、`origin` の再帰についての帰納で示す。**`ρ' ∈ leaves(ty(y))` であるとき、`act_f(y, ρ')` の
