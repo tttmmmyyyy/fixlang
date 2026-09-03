@@ -47,8 +47,9 @@ L12 が回す帰納の尺度は `|Reach(・)|` であり、それが狭義に減
 この 2 つの帰納のどちらにも現れない**ので、宣言についての追加の仮定は要らない。第 6 節の最後の小節が
 その理由を述べる。
 
-この帰納が固定した出力版の本体を追えるのは、その本体が A6・A11・A12 の性質を持つからである。3 つの仮定の
-範囲は `borrow_ify` の入力なので、借用版へそれを渡す段が要る。L0 がその段であり、DEF 再帰で訪れる対 が
+この帰納が固定した出力版の本体を追えるのは、その本体が A6・A11・A12 の性質を持つからである。README は
+A6 と A11 の範囲を `borrow_ify` の入力に限ると書く。A12 に範囲の記述は無いが、この文書は出力版の本体に
+ついてもこの 3 つを読むので、いずれも借用版へそれを渡す段が要る。L0 がその段であり、DEF 再帰で訪れる対 が
 それを読む。L21 と L22 が `Binding::Llvm` の腕で読む L19 と L20 は `rty` について語るので、それを
 `Λ_{ty(x)}(π)` と `Inh_x(π)` に読み替える `rty = ty(x)` を L18a が与える。
 
@@ -77,8 +78,8 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
 要素からなる path、`|π|` は `π` の長さである。
 
 **ファイル全体についての数え上げを引くときは、`CODE <ファイル>: <数え上げた集合の名前>` と書く。**
-主張がそのファイルの中のある集合の全体についてのものであることを、この形が示す。L15 の `<1>5` と L17 の
-`<1>1` がこの形を使う。
+主張がそのファイルの中のある集合の全体についてのものであることを、この形が示す。L15 の `<1>5` の `<2>2`
+と L17 の `<1>1` がこの形を使う。
 
 **EXT Rust の可視性**
 Rust では、可視性の修飾子 (`pub`、`pub(crate)`、`pub(in ...)`) を持たない項目 -- struct のフィールド、
@@ -91,8 +92,9 @@ Rust では、可視性の修飾子 (`pub`、`pub(crate)`、`pub(in ...)`) を�
 区別する。この文書の等式「`f = g`」は、README が P7e (a) の等号について置く読みで読む --
 「両辺が同時に値を返してその値が等しいか、同時に中断するかのどちらかであることをいう」。
 
-**A6・A11・A12 を固定した出力版の本体について読む段は、すべて L0 に立つ。** この 3 つの仮定の範囲は
-`borrow_ify` の**入力**である。固定した版が借用版であるとき、その本体は入力の関数の本体の束縛変数を
+**A6・A11・A12 を固定した出力版の本体について読む段は、すべて L0 に立つ。** README は A6 と A11 の範囲を
+`borrow_ify` の**入力**に限ると書く。A12 に範囲の記述は無いが、この文書は出力版の本体についてもこの 3 つを
+読む。固定した版が借用版であるとき、その本体は入力の関数の本体の束縛変数を
 付け替えた複製である (P9)。L0 が 3 つの性質を出力の各版の本体へ渡す。**この文を要る段の見分け方は
 こうである** -- 固定した版の本体の束縛名・スコープ・型の整合を言う段が、それである。
 
@@ -443,10 +445,12 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 
 <1>2. QED
   `<1>1` より `param_tys` の鍵は `g` のパラメータ・capture の名前ちょうどであり、その値は `g` がその
-  名前に宣言した型 `p.ty` である。`g` のパラメータ・capture の `RcVar` はその型 `p.ty` を持ち、A12 より
-  同じ名前の `RcVar` が持つ型は一致するので、`ty(r) = p.ty = τ` である。`VarTable::body_only` は
-  `param_tys` に何も入れないので空である。
-  BY <1>1, A12
+  名前に宣言した型 `p.ty` である。`g` のパラメータ・capture の `RcVar` はその型 `p.ty` を持つ。`g` が
+  `borrow_ify` の入力の関数であれば A12 が直接この一致を与え、`g` が固定した出力版の本体であれば L0 が
+  同じ性質を渡す (`f_own` の版とグローバル初期化子の版は入力の本体そのものであり、借用版は L0 の `<1>5`
+  が与える)。よってどちらの場合も `ty(r) = p.ty = τ` である。`VarTable::body_only` は `param_tys` に
+  何も入れないので空である。
+  BY <1>1, A12, L0
 
 ### L1d (`type_env` は組み込みの宣言をそのまま持つ)
 
@@ -1293,7 +1297,8 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 
 **第 1 節の `vars` が条件を満たすこと。** 第 1 節が固定する出力版の本体について A6・A11・A12 が述べる
 性質が成り立つことは L0 が与える。固定した版が借用版であるとき、その本体は入力の関数の本体の束縛変数を
-付け替えた複製であり (P9)、A6・A11・A12 の範囲は `borrow_ify` の入力なので、この 1 段が要る。
+付け替えた複製であり (P9)、A6 と A11 の範囲は `borrow_ify` の入力である (A12 に範囲の記述は無いが、
+この文書は出力版の本体についてもこの 3 つを読む) ので、この 1 段が要る。
 
 **`vars_f` について読む者。** 入力の関数 `func` は `borrow_ify` の入力の関数なので A6・A11・A12 を
 満たし、`ty(・)` も `func` に現れる名前について A12 が定める。よって L11a・L12・L14 を
@@ -1761,11 +1766,15 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     再帰的に呼び、帰納法の仮定も `origin` について立てている。等式の両辺を 1 つの値として読むには、
     鍵 `(y, ρ)` が等しい 2 つの `origin` の呼び出しが等しい値を返すことが要る。それを与えるのが
     P2a である -- `vars_f` と `type_env` を第 1・第 2 引数に固定した呼び出しについて、および
-    `vars_c` と `type_env` を固定した呼び出しについて、鍵の等しい 2 つの返り値は等しい。したがって
-    両辺の `origin` の答えは `vars.origins` が保持する memo の状態に依らない量であり、この帰納の
+    `vars_c` と `type_env` を固定した呼び出しについて、鍵の等しい 2 つの返り値は等しい。P2a が
+    要求するのは、その `vars` が A6 と A11 を満たす本体について `VarTable::of` (か `body_only`) が
+    作った表であることである。`vars_f = VarTable::of(func)` は `borrow_ify` の入力の関数 `func` から
+    作った表であり、A6 と A11 が直接この条件を与える。`vars_c = VarTable::of(clone)` は借用版 `clone`
+    から作った表であり、L0 より借用版の本体も A6 と A11 を満たすので、こちらもこの条件に入る。
+    したがって両辺の `origin` の答えは `vars.origins` が保持する memo の状態に依らない量であり、この帰納の
     各段が結ぶ等式は 1 つの値どうしの等式である。A15 と P2 より再帰は停止するので、この対応は
     全域である。
-    BY <2>1, <2>2, <2>3, <2>4, <2>5, A15, P2, P2a, L11a, DEF 再帰で訪れる対,
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, A6, A11, A15, L0, P2, P2a, L11a, DEF 再帰で訪れる対,
        CODE src/rc_ir/ownership.rs: origin, origin_inner, Binding
 
 <1>7. QED
@@ -2644,21 +2653,33 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   変数である。
   BY <1>1, <1>1b, D2, D3, D6, L20a
 
+<1>2a. 名前 `y` が活性化のある位置までに値を得ているならば、その値は以後のどの位置でも変わらない。
+  `vars.bindings.get(y)` が `Some(・)` であれば `y` は束縛を持つ名前であり、D6 の「変数の値は、それを
+  束縛する節点の後は変わらない」により、その束縛する節点より後のどの位置でも値は変わらない。`None` で
+  あれば `y` は記号の位置であり (D6)、D6 はその値を「その記号の値」という位置に依らない量として定めるので、
+  どの位置で読んでも同じ値である。どちらの場合も、`y` がある位置までに値を得ていれば、それ以後のどの
+  位置でもその値は変わらない。
+  BY D6
+
 **アーム結果はこの step に入らない。** `Binding::Join(arm_results)` の `arm_results` は各アームの
 結果の変数を並べたものであり、活性化が選ばなかったアームの本体は走らないので、その結果の変数は値を
 得ていない。(m3) が要るのは選ばれたアームの結果の変数だけであり、それは (m3) の証明が別に与える。
 
 <1>3. (m1) が成り立つ。
-  D2 より `Let(x, rhs, k)` は `rhs` の値を `x` に束縛し、D7 より `Var` は値を渡すだけである。コード生成も
-  そうなっている -- `eval_rc_rhs` の `RcRhs::Var(v)` の腕は `get_scoped_obj(&v.name)` を返し、
-  `bind_and_continue` がそれを `x` の名前で `scope_push` する。
-  BY <1>1, <1>2, D2, D7, CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs,
+  D2 より `Let(x, rhs, k)` は `rhs` の値を `x` に束縛し、D7 より `Var` は値を渡すだけなので、この節点の
+  実行の直後、`x` の値はその直前の `w` の値と同じである。コード生成もそうなっている -- `eval_rc_rhs` の
+  `RcRhs::Var(v)` の腕は `get_scoped_obj(&v.name)` を返し、`bind_and_continue` がそれを `x` の名前で
+  `scope_push` する。`<1>2a` より `x` の値も `w` の値も、この節点の実行より後、固定した位置まで変わらない
+  ので、固定した位置でも `x` の値は `w` の値である。
+  BY <1>1, <1>2, <1>2a, D2, D7, CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs,
      Generator::bind_and_continue, Generator::eval_rc_expr_inner
 
 <1>4. (m2) が成り立つ。
   `eval_rc_match` は、`arm.tag` が `None` のアームの payload を `get_scoped_obj_noretain(&scrut.name)` に
-  束縛する。すなわち scrutinee の値そのものである。
-  BY <1>1, <1>2, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
+  束縛する。すなわち、そのアームへ入る節点の実行の直後、`x` の値はその直前の `s` の値そのものである。
+  `<1>2a` より `x` の値も `s` の値も、それ以後固定した位置まで変わらないので、固定した位置でも `x` の値は
+  `s` の値である。
+  BY <1>1, <1>2, <1>2a, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
 
 <1>5. (m3) が成り立つ。
   <2>1. この活性化はこの `Match` でちょうど 1 つのアームを選び、そのアーム本体の実行路を辿ってから
@@ -2690,10 +2711,12 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 <1>6. (m4) が成り立つ。
   D2 より `Destructure(c, fs, s, k)` は容器 `c` をフィールドに分解し、各 `(i, x)` の `x` に第 `i`
-  フィールドを束縛する。コード生成もそうなっている -- `eval_rc_expr_inner` の `Destructure` の腕は
+  フィールドを束縛するので、この節点の実行の直後、`x` の値はその直前の `c` の値の第 `idx` フィールドである。
+  コード生成もそうなっている -- `eval_rc_expr_inner` の `Destructure` の腕は
   `get_struct_fields` に `fields` の添字の列を渡し、返る 1 対 1 の列を対応するフィールド変数の名前で
-  `scope_push` する。
-  BY <1>1, <1>2, D2, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
+  `scope_push` する。`<1>2a` より `x` の値も `c` の値も、この節点の実行より後、固定した位置まで変わらない
+  ので、固定した位置でも `x` の値は `c` の値の第 `idx` フィールドである。
+  BY <1>1, <1>2, <1>2a, D2, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
      CODE src/object.rs: ObjectFieldType::get_struct_fields
 
 <1>7. (m5) が成り立つ。
@@ -2724,8 +2747,11 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     `eval_rc_match` は、`arm.tag` が `Some(_)` のアームの payload を
     `get_union_value_noretain_norelease(scrut_obj, &arm.payload.ty)` に束縛する。これは union の payload
     バッファを変位の型として読んだものであり、`ty(s)` が unbox なので retain も伴わない。`<2>3` より
-    その変位は `s` の値の実行時のタグ `t` の変位である。
-    BY <2>1, <2>2, <2>3, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match,
+    その変位は、そのアームへ入る節点の実行の直前の `s` の値の実行時のタグ `t` の変位であり、その節点の
+    実行の直後、`x` の値はその payload である。`<1>2a` より `x` の値も `s` の値 (したがってその実行時の
+    タグ) も、それ以後固定した位置まで変わらないので、固定した位置でも `s` の値の実行時のタグは `t` で
+    あり、`x` の値はその第 `t` 変位の payload である。
+    BY <2>1, <2>2, <2>3, <1>2a, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match,
        CODE src/object.rs: ObjectFieldType::get_union_value_noretain_norelease,
        ObjectFieldType::get_value_from_union_buf
 
@@ -2867,6 +2893,13 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     `S_λ = {Fresh}` と `S_λ = {Unknown}` も起きない -- L20 (a) よりそのとき `produced_here` が真になり、
     `<2>2` に反するからである。
     BY A3, L18a, L19, L20, <2>2
+  <2>4a. `args[j]` は `vars.bindings` に束縛を持つ (記号の位置でない)。
+    `vars.bindings.get(args[j])` が `None` であるとすると、`origin_inner` の `None` の腕は `here()` を
+    返すので `cand(args[j], w) = {(args[j], w)}` であり、L13 より `owns(args[j], w)` は真である。しかし
+    `<2>3` より `(args[j], w)` は全部偽、すなわち `cand(args[j], w)` のすべての元について `owns` が偽で
+    あり、その唯一の元 `(args[j], w)` について `owns` が真かつ偽になって矛盾する。よって
+    `vars.bindings.get(args[j])` は `None` でない。
+    BY <2>3, L13, CODE src/rc_ir/ownership.rs: origin_inner
   <2>5. QED
     `λ ∈ Inh_x(π)` を取り、`S_λ = {Arg(j, σ)}` とする (`<2>4`)。L19 より
     `origin(x, λ) = origin(args[j], σ)` かつ `σ ∈ leaves(ty(args[j]))` である。L20 (a) より
@@ -2878,12 +2911,13 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     に値を得ている。
     A3 の表の「単一の `Arg(j, σ)`」の行は、結果のその leaf が inhabited であることと第 `j` オペランドの
     leaf `σ` が inhabited であることが同値だと述べる。その行が語るのはこの節点が走る瞬間の結果と
-    オペランドであり、`Inh_x(π)` と `Inh_{args[j]}(w)` は固定した 1 つの位置の量である。D6 より変数の値は
-    それを束縛する節点の後は変わらず、D16 の inhabited は値だけを見るので、`x` と `args[j]` のどちらの値も
-    その瞬間と固定した位置とで同じであり、同じ leaf が inhabited である。よって `σ ∈ Inh_{args[j]}(w)` で
-    ある。L18 より `(args[j], w)` は unit を覆い、`<2>3` より全部偽なので、帰納法の仮定より
-    `cand(args[j], σ) = cand(x, λ)` に `owns` が偽の元がある。
-    BY <2>3, <2>4, A3, D6, D16, L18, L18a, L19, L20, L20a, L20b,
+    オペランドであり、`Inh_x(π)` と `Inh_{args[j]}(w)` は固定した 1 つの位置の量である。`x` は
+    `Binding::Llvm` を持つ束縛変数であり、`<2>4a` より `args[j]` も束縛を持つ名前なので、D6 より両者の
+    値はそれを束縛する節点の後は変わらない。D16 の inhabited は値だけを見るので、`x` と `args[j]` の
+    どちらの値もその瞬間と固定した位置とで同じであり、同じ leaf が inhabited である。よって
+    `σ ∈ Inh_{args[j]}(w)` である。L18 より `(args[j], w)` は unit を覆い、`<2>3` より全部偽なので、
+    帰納法の仮定より `cand(args[j], σ) = cand(x, λ)` に `owns` が偽の元がある。
+    BY <2>3, <2>4, <2>4a, A3, D6, D16, L18, L18a, L19, L20, L20a, L20b,
        CODE src/rc_ir/ownership.rs: truncate_to_unit, collect_bindings
 
 <1>9. QED
@@ -2958,9 +2992,9 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   BY <1>4
 
 <1>6. QED
-  README の P7a は「成り立つのは **1 ⟹ 3** と **2 ⟹ 1** である。」と述べ、続けて
-  「`Inh(v, u) ≠ ∅` を足せば 3 つは同値になるが、下流はそれを要らない。」と述べる。この節が閉じるのは
-  その 2 つの含意である -- `<1>2` が 1 ⟹ 3 を、`<1>5` が 2 ⟹ 1 を与える。残る 3 ⟹ 2 と 3 ⟹ 1 は
+  README の P7a は「成り立つのは **1 ⟹ 3** と **2 ⟹ 1** である。」と述べ、また
+  「`Inh(v, u) ≠ ∅` を足せば 3 つは同値になるが、下流はそれを要らない。」とも述べる。この節が閉じるのは
+  前者の 2 つの含意である -- `<1>2` が 1 ⟹ 3 を、`<1>5` が 2 ⟹ 1 を与える。残る 3 ⟹ 2 と 3 ⟹ 1 は
   偽であり (R2)、README も「**3 ⟹ 2 と 3 ⟹ 1 は偽である。**」と述べる。
   BY <1>2, <1>5
 
@@ -2968,8 +3002,9 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 節 2 は偽になる。R2 がその本体を挙げる。`Inh(v, u) ≠ ∅` を仮定に足せば、`<1>2` と `<1>5` に
 「節 3 から節 2」(`Inh(v, u)` の元を 1 つ取る) が加わって 3 つは同値になる。
 
-**この 2 つの向きが P10 と P14 に与えるもの。** A5 より、値が保持する参照は inhabited な leaf に
-ちょうど 1 つずつあり、inhabited でない leaf は参照を持たない。A4 よりコード生成の `Retain(v, u)` /
+**この 2 つの向きが P10 と P14 に与えるもの。** A5 より、値が保持する参照は、inhabited (D16) であって
+計数下のオブジェクト (D26) を指す leaf にちょうど 1 つずつあり、inhabited でない leaf も、グローバル
+状態のオブジェクトを指す inhabited な leaf も参照を持たない (D26)。A4 よりコード生成の `Retain(v, u)` /
 `Release(v, u)` は `u` の下の inhabited な leaf の参照カウントだけを ±1 する。よって節 3 は「残した
 節点が触れる参照はすべてこの版のものである」を、節 2 の否定は「落とした節点が触れたはずの参照は
 どれもこの版のものでない」を与える。
@@ -3119,14 +3154,16 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
 <1>2c. `<1>2` の入力プログラムは、第 4 節の仮定のうち入力プログラムを縛る残りのものをすべて満たす。
+  **この節の仮定とは、README 第 4 節の `A<番号>` という見出しを持つ項目の全体である。** 番号には枝番が
+  付くので (A26a)、この全体は A1 から A26 の 26 件と A26a を合わせて 27 件である。
   **どの仮定が入力プログラムを縛るかは、次の述語で決まる** -- **その仮定の言明の真偽が、`borrow_ify` の
   入力プログラムをどう取るかで動きうるか。** 動きうるものはこの構成について確かめる。動かないものは
   どう取っても真偽が同じなので、この構成が果たすべきものを持たない。
-  第 4 節の仮定は A1 から A26 の 26 件である。真偽が動かないのは次の 10 件で、その言明の各節が主語に
+  真偽が動かないのは次の 10 件で、その言明の各節が主語に
   するのはこの構成が選ばないもの -- `LLVMGen` の宣言 (A3)、コード生成 (A4、A26)、値と leaf の模型
   (A5)、`resolve_callee_params` (A7)、`mark_global` (A8)、`stacker` (A15)、環境 (A17)、`builtin.rs` の
   op の集合 (A21)、`insert_rc` の入力プログラム (A25) -- である。
-  残る 16 件を順に見る。A1 と A2 は `<1>2` が与えた。
+  残る 17 件を順に見る。A1 と A2 は `<1>2` が与えた。
   A6: 束縛名は `z`・`x`・`w` の 3 つで互いに異なり、関数の名前 `f` とも異なる。
   A9 と A16: この本体に `Match` は無い。
   A10: 現れる型は `Array I64`・`I64`・`Inner`・`Outer` の 4 つである。どれも型変数を持たない ground な型で、
@@ -3154,11 +3191,17 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   「このプログラムが作って環境へ番地を渡したもの」に限るが、番地を渡す op
   (`boxed_to_retained_ptr` の `InlineLLVMBoxedToRetainedPtrIOS`) はこの本体に無いので 1 つも無く、
   D25 よりその時点に生きているオブジェクトは無い。ある点まで生きているオブジェクトが 1 つも無いとする。
-  オブジェクトを割り当てる素動作は、割り当てられたオブジェクトの `H` が 1 から始まるので D24 の `H` の
-  表に行を持ち (段の記述は網羅である)、その表で新しいオブジェクトを作るのは単一の `Fresh` を宣言する
-  `Llvm` の結果 leaf の行と `Closure` の結果の行の 2 つである。この本体に `Closure` 節点は無く、
-  `Llvm` の結果 leaf の宣言は `union_make_1` の `[1]` が単一の `Arg(0, [])`、`[0, 0]` が空集合であり
-  (`<1>2a`)、`int_lit_0` の結果の型 `I64` は boxed leaf を持たないので、`Fresh` を宣言する leaf は無い。
+  `create_obj` を呼ぶのは `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕 (`llvm_gen.generate` を経て) と
+  `Closure` 節点を作る段だけであり、`Ret`・`Retain`・`Release` の腕は呼ばない
+  (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`)。この本体に `Closure` 節点は無く、`Llvm`
+  の `Let` は `union_make_1` と `int_lit_0` の 2 つである。`InlineLLVMMakeUnionBody::generate` は結果の型
+  `Outer` について、`InlineLLVMIntLit::generate` は結果の型 `I64` について `create_obj` を呼ぶ
+  (`CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::generate, InlineLLVMIntLit::generate`)。`Outer`
+  は unbox union と宣言されているので `ty_to_object_ty` の `Union` の枝が `object_type.is_unbox` に
+  `TyConInfo` の `is_unbox` (真) をそのまま写し、`I64` はプリミティブなので同じ関数の `Primitive` の枝が
+  `is_unbox` の真を課す (`CODE src/object.rs: ty_to_object_ty`)。よってどちらの呼び出しも
+  `object_type.is_unbox` が真の枝を取り、`create_obj` は割り当てを行わず undef の集約を返す
+  (`CODE src/object.rs: create_obj`)。したがってこの本体のどの素動作もオブジェクトを割り当てない。
   子の活性化を作る段も無い -- `globals` が空なので (E5) と (E7) の段は無く、この本体に `App` が無いので
   (E3) の段も無く、`union_make_1` と `int_lit_0` は `applies_a_function_operand` を宣言しないので (A3)
   オペランドを適用する `Llvm` の段も無く、(F) の解放が活性化を作るのは `Destructor` のオブジェクトに
@@ -3174,26 +3217,33 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   1 から始まり、`Release(x, [])` が 1 引いて 0 になる。(ii-a): `held` は各時点で 0 以上であり、この類を
   名指す構文 -- `union_make_1` の読みと `Release(x, [])` -- の時点ではどちらも 1 である。終端の `Ret(w)` の
   消費の直後も 0 である。(ii-b): この本体に `Retain` は無いので `bumps` はどの時点でも 0 であり、条件は
-  空に成り立つ。(i): これは仮定ではなく D21 が活性化に課す制限であり、D11 と D12 が条件を課す活性化は
+  空に成り立つ。(ii-c): 表 (D34) がこの類の `held` を動かす段内の点は `Release(x, [])` を運ぶ素動作の
+  直後だけであり、それ以外の段内の点は直前の置き場所の値のままである (D34)。したがってこの本体のどの
+  段内の点でも `held` は 1 (その素動作より前) か 0 (その素動作以後) のいずれかであり、どちらも 0 以上で
+  ある。(i): これは仮定ではなく D21 が活性化に課す制限であり、D11 と D12 が条件を課す活性化は
   各時点と各段内の点でその不等式を満たすものに限られる (D21)。よってこの本体の側に果たすべきものは無い。
-  `obj(z, [])` がグローバル状態である活性化では計数下の別名類が 1 つも無いので、(ii-a) と (ii-b) は
+  `obj(z, [])` がグローバル状態である活性化では計数下の別名類が 1 つも無いので、(ii-a)・(ii-b)・(ii-c) は
   空に成り立つ。`borrow_ify` がこの本体を写した本体は、束縛名を付け替え (P9)、
   `RewriteCtx::rewrite` を掛けたものである。`rewrite_inner` が `Retain`/`Release` の腕で呼ぶ
   `rewrite_rc` は、その節点を `units_under(ty(v), path)` のうち `owns_unit` が真である unit の節点の列に
   置き換える。A2 と L6 より `under(ty(x), []) = [[]]` なので、写した本体は元の本体か、そこから
   唯一の `Release(x, [])` を落としたものである。落とした本体では `held` は 1 のまま終端に着き、`bumps` は
-  0 のままなので、(ii-a) と (ii-b) はやはり成り立つ。
+  0 のままなので、(ii-a)・(ii-b)・(ii-c) はやはり成り立つ (段内の点は 1 のまま動かない)。
   A20: この本体に `App` は無く、`f` を呼ぶ本体もこのプログラムに無いので、この節は空に成り立つ。
   A22: `funcs` の唯一の鍵は `f` であり、その `RcFunc` の `name` に等しい。
   A23: この構成は RC IR のプログラムを直に据えるので、`Lowerer::lower_to_var` に着く `Expr::Lam` の
   節点も、`Lowerer::lower_lam` が `funcs` に入れる関数も無い。A23 の 2 つの節はその 2 つを主語にするので、
   空に成り立つ。
   A24: この本体に `InlineLLVMFixBody` の `Llvm` 節点は無い。
-  BY <1>1, <1>2, <1>2a, A2, A3, A17, A18, A19, A23, D1, D4, D10, D14, D20, D21, D24, D25, D26, D33,
-     D34, L6, P9,
+  A26a: この本体に `FFI_CALL` の `Llvm` 節点は無く (現れる op は `union_make_1` と `int_lit_0` だけである)、
+  `globals` も空である (`<1>2`)。よってこの条件は空に成り立つ。
+  BY <1>1, <1>2, <1>2a, A2, A3, A17, A18, A19, A23, A26a, D1, D4, D10, D14, D20, D21, D24, D25, D26,
+     D33, D34, L6, P9,
      CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
-     CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody, InlineLLVMIntLit,
-     InlineLLVMBoxedToRetainedPtrIOS, boxed_to_retained_ptr_ios
+     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
+     CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::generate, InlineLLVMIntLit::generate,
+     InlineLLVMBoxedToRetainedPtrIOS, boxed_to_retained_ptr_ios,
+     CODE src/object.rs: create_obj, ty_to_object_ty
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空である。
   <2>1. `collect_consumes` はこの本体について何も報告しない。
@@ -3344,14 +3394,16 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
      CODE src/fixstd/builtin.rs: InlineLLVMIntLit
 
 <1>2a. `<1>2` の入力プログラムは、第 4 節の仮定のうち入力プログラムを縛る残りのものをすべて満たす。
+  **この節の仮定とは、README 第 4 節の `A<番号>` という見出しを持つ項目の全体である。** 番号には枝番が
+  付くので (A26a)、この全体は A1 から A26 の 26 件と A26a を合わせて 27 件である。
   **どの仮定が入力プログラムを縛るかは、次の述語で決まる** -- **その仮定の言明の真偽が、`borrow_ify` の
   入力プログラムをどう取るかで動きうるか。** 動きうるものはこの構成について確かめる。動かないものは
   どう取っても真偽が同じなので、この構成が果たすべきものを持たない。
-  第 4 節の仮定は A1 から A26 の 26 件である。真偽が動かないのは次の 10 件で、その言明の各節が主語に
+  真偽が動かないのは次の 10 件で、その言明の各節が主語に
   するのはこの構成が選ばないもの -- `LLVMGen` の宣言 (A3)、コード生成 (A4、A26)、値と leaf の模型
   (A5)、`resolve_callee_params` (A7)、`mark_global` (A8)、`stacker` (A15)、環境 (A17)、`builtin.rs` の
   op の集合 (A21)、`insert_rc` の入力プログラム (A25) -- である。
-  残る 16 件を順に見る。A1 と A2 は `<1>2` が与えた。
+  残る 17 件を順に見る。A1 と A2 は `<1>2` が与えた。
   A6: 束縛名は `x` と `w` の 2 つで互いに異なり、関数の名前 `f` とも異なる。
   A9 と A16: この本体に `Match` は無い。
   A10: 現れる型は `Mix`・`I64`・`Array I64` の 3 つである。どれも型変数を持たない ground な型で、その
@@ -3378,10 +3430,15 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   「このプログラムが作って環境へ番地を渡したもの」に限るが、番地を渡す op
   (`boxed_to_retained_ptr` の `InlineLLVMBoxedToRetainedPtrIOS`) はこの本体に無いので 1 つも無く、
   D25 よりその時点に生きているオブジェクトは無い。ある点まで生きているオブジェクトが 1 つも無いとする。
-  オブジェクトを割り当てる素動作は、割り当てられたオブジェクトの `H` が 1 から始まるので D24 の `H` の
-  表に行を持ち (段の記述は網羅である)、その表で新しいオブジェクトを作るのは単一の `Fresh` を宣言する
-  `Llvm` の結果 leaf の行と `Closure` の結果の行の 2 つである。この本体に `Closure` 節点は無く、
-  `int_lit_0` の結果の型 `I64` は boxed leaf を持たないので、`Fresh` を宣言する leaf は無い。
+  `create_obj` を呼ぶのは `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕 (`llvm_gen.generate` を経て) と
+  `Closure` 節点を作る段だけであり、`Ret`・`Retain`・`Release` の腕は呼ばない
+  (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`)。この本体に `Closure` 節点は無く、`Llvm`
+  の `Let` は `int_lit_0` の 1 つである。`InlineLLVMIntLit::generate` は結果の型 `I64` について
+  `create_obj` を呼ぶ (`CODE src/fixstd/builtin.rs: InlineLLVMIntLit::generate`)。`I64` はプリミティブ
+  なので `ty_to_object_ty` の `Primitive` の枝が `object_type.is_unbox` の真を課す
+  (`CODE src/object.rs: ty_to_object_ty`)。よってこの呼び出しは `object_type.is_unbox` が真の枝を取り、
+  `create_obj` は割り当てを行わず undef の集約を返す (`CODE src/object.rs: create_obj`)。したがって
+  この本体のどの素動作もオブジェクトを割り当てない。
   子の活性化を作る段も無い -- `globals` が空なので (E5) と (E7) の段は無く、この本体に `App` が無いので
   (E3) の段も無く、`int_lit_0` は `applies_a_function_operand` を宣言しないので (A3) オペランドを
   適用する `Llvm` の段も無く、(F) の解放が活性化を作るのは `Destructor` のオブジェクトについてだが、
@@ -3393,11 +3450,14 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   限らない (D21)。
   A19: D20 の別名の辺はこの本体に 1 つも無いので、計数下の別名類はスロット 1 つずつからなる。タグが `n` の
   活性化では inhabited な leaf が無いので類も無く、タグが `a` で `obj(x, [1])` がグローバル状態の活性化
-  でも計数下の類が無いので、どちらでも (ii-a) と (ii-b) は空に成り立つ。タグが `a` で `obj(x, [1])` が
-  計数下の活性化では、類は `(x, [1])` の 1 つで、`x` は所有するパラメータなので D34 より `held` は 1 から
+  でも計数下の類が無いので、どちらでも (ii-a)・(ii-b)・(ii-c) は空に成り立つ。タグが `a` で `obj(x, [1])`
+  が計数下の活性化では、類は `(x, [1])` の 1 つで、`x` は所有するパラメータなので D34 より `held` は 1 から
   始まり、`Release(x, [])` が 1 引いて 0 になる。(ii-a): `held` は各時点で 0 以上であり、この類を名指す
   構文は `Release(x, [])` だけで、その時点では 1 である。終端の `Ret(w)` の消費の直後も 0 である。
-  (ii-b): この本体に `Retain` は無いので `bumps` はどの時点でも 0 であり、条件は空に成り立つ。(i): これは
+  (ii-b): この本体に `Retain` は無いので `bumps` はどの時点でも 0 であり、条件は空に成り立つ。(ii-c):
+  表 (D34) がこの類の `held` を動かす段内の点は `Release(x, [])` を運ぶ素動作の直後だけであり、それ以外
+  の段内の点は直前の置き場所の値のままである (D34)。したがってこの本体のどの段内の点でも `held` は 1
+  (その素動作より前) か 0 (その素動作以後) のいずれかであり、どちらも 0 以上である。(i): これは
   仮定ではなく D21 が活性化に課す制限であり、D11 と D12 が条件を課す活性化は各時点と各段内の点で
   その不等式を満たすものに限られる (D21)。よってこの本体の側に果たすべきものは無い。
   `borrow_ify` がこの本体を写した本体は、束縛名を付け替え (P9)、
@@ -3405,18 +3465,22 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `rewrite_rc` は、その節点を `units_under(ty(v), path)` のうち `owns_unit` が真である unit の節点の列に
   置き換える。A2 と L6 より `under(ty(x), []) = [[]]` なので、写した本体は元の本体か、そこから唯一の
   `Release(x, [])` を落としたものである。落とした本体では `held` は 1 のまま終端に着き、`bumps` は
-  0 のままなので、(ii-a) と (ii-b) はやはり成り立つ。
+  0 のままなので、(ii-a)・(ii-b)・(ii-c) はやはり成り立つ (段内の点は 1 のまま動かない)。
   A20: この本体に `App` は無く、`f` を呼ぶ本体もこのプログラムに無いので、この節は空に成り立つ。
   A22: `funcs` の唯一の鍵は `f` であり、その `RcFunc` の `name` に等しい。
   A23: この構成は RC IR のプログラムを直に据えるので、`Lowerer::lower_to_var` に着く `Expr::Lam` の
   節点も、`Lowerer::lower_lam` が `funcs` に入れる関数も無い。A23 の 2 つの節はその 2 つを主語にするので、
   空に成り立つ。
   A24: この本体に `InlineLLVMFixBody` の `Llvm` 節点は無い。
-  BY <1>1, <1>2, A2, A3, A17, A18, A19, A23, D1, D4, D10, D14, D16, D20, D21, D24, D25, D26, D33,
-     D34, L6, P9,
+  A26a: この本体に `FFI_CALL` の `Llvm` 節点は無く (現れる op は `int_lit_0` だけである)、`globals` も
+  空である (`<1>2`)。よってこの条件は空に成り立つ。
+  BY <1>1, <1>2, A2, A3, A17, A18, A19, A23, A26a, D1, D4, D10, D14, D16, D20, D21, D24, D25, D26,
+     D33, D34, L6, P9,
      CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
-     CODE src/fixstd/builtin.rs: InlineLLVMIntLit, InlineLLVMBoxedToRetainedPtrIOS,
-     boxed_to_retained_ptr_ios
+     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
+     CODE src/fixstd/builtin.rs: InlineLLVMIntLit::generate, InlineLLVMBoxedToRetainedPtrIOS,
+     boxed_to_retained_ptr_ios,
+     CODE src/object.rs: create_obj, ty_to_object_ty
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空であり、`f` は借用版を持ち、そこで
       `owns_object(ρ(x), [])` は偽である。
