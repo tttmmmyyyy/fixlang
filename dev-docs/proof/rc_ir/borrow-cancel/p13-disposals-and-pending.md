@@ -261,9 +261,10 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
      CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
   `borrow_ify` と `cancel` はどちらも `pub(crate)` なので、`EXT 可視性と私有性` よりそれを名指せるのは
   このクレートの中だけであり、`EXT このリポジトリのターゲット` よりそのクレートの項目は `src/` の
-  ファイルが宣言する。`src/` の `.rs` の全体で、`borrow_ify` を名指す式は
+  ファイルが宣言する。`src/` の `.rs` の全体を走査すると、`borrow_ify` を呼ぶ式は
   `optimize_rc_program` の `prog = borrow_ify(&prog, type_env, config.develop_mode);` の 1 つ、`cancel` を
-  名指す式は同じ関数の `prog = cancel(&prog, type_env);` の 1 つである。その 2 つのあいだに在るのは
+  呼ぶ式は同じ関数の `prog = cancel(&prog, type_env);` の 1 つである。この 2 つの項目を名指す箇所は、
+  `borrow.rs` の宣言と `build_object_files.rs` の `use` 項目とこの 2 つの呼び出しで尽きる。その 2 つのあいだに在るのは
   `validate(&prog, "after borrow_ify")` の 1 つだけであり、`prog` の束縛はそのまま `cancel` に渡る。
   よって `cancel` の入力は `borrow_ify` の出力であり、第 1 節より `B` はその入力の本体である。
   `cancel` は各関数について `VarTable::of(f)`、各グローバル初期化子について
