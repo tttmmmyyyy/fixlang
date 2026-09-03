@@ -274,7 +274,7 @@ README の A19 は (ii-a) と (ii-b) の果たす者に `insert_rc` を挙げる
   作る木 (`L21`)、木の根で読むと `held` と `bumps` になること (`L22`)、処分の事象に対する走査の応答
   (`L23`)、その部分木についての不等式 (`L24`)、そこから出る `held ≥ 1 + bumps` (`L25`)。
 - **L38** (第 12 節)。A19 (ii-b) が活性化の終わりの 1 点先では偽であること。
-- **L26** - **L32** (第 13 節)。`split_rc_units` について。書き換えの形 (`L26`)、unit による leaf の分割
+- **L26** - **L29**、**L31**、**L32** (第 13 節)。`split_rc_units` について。書き換えの形 (`L26`)、unit による leaf の分割
   (`L27`)、`insert_rc` の出す path が空列であること (`L28`)、束縛・`origin`・別名類・`held` が変わらない
   こと (`L29`)、A19 (ii-a) の保存 (`L31`)、出力が (S) を満たすので `L25` から
   A19 (ii-b) が出ること (`L32`)。
@@ -2356,7 +2356,7 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
   この名前であり、D6 よりその対は記号の位置であってスロットではない。
 
 <1>5. (e)。
-  BY D14, EXT クレートの項目, EXT 条件つきコンパイル,
+  BY D14, EXT クレートの項目, EXT ビルドの対象, EXT 条件つきコンパイル,
      CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function,
      CODE src/rc_ir/simplify.rs: simplify, CODE src/rc_ir/rc_insert.rs: insert_rc,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
@@ -2364,8 +2364,10 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
      CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: clone_func,
      CODE src/rc_ir/specialization.rs: CloneRegistry::finish_clone,
      CODE src/build/build_object_files.rs: optimize_rc_program
-  `RcFunc` の `borrowed_units` の欄に値を書く式は 6 つである。**`EXT クレートの項目` より、クレートの
-  全ファイルを読んで得たこの一覧は完全である。**
+  `RcFunc` の `borrowed_units` の欄に値を書く式は 7 つである。**在りかは述語で決める** -- `RcFunc` の
+  リテラルでこの欄に値を置く式、`..` の構造体更新でこの欄を運ぶ式、そしてこの欄への代入である。
+  **`EXT ビルドの対象` と `EXT クレートの項目` より、`src/` の全ファイルの全文を読んで得たこの一覧は
+  完全である。**
 
   1. `Lowerer::lower_lambda_as_function` が `RcFunc` を組むときに置く `Set::default()`。
   2. `borrow_ify` の末尾の `func.borrowed_units = param_capture_units(func, type_env)…`。
@@ -2373,10 +2375,10 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
   4. `CloneRegistry::finish_clone` の `name == func.name` の枝が返す `RcFunc { body, ..func.clone() }`
      -- この欄には `func` の値がそのまま入る。
   5. 同じ関数の残る枝が、複製の鍵を改名して組む式。
-  6. `#[cfg(test)]` の下の 2 つの構成 (`src/rc_ir/validate.rs` のテスト用の `RcFunc` と、
-     `src/rc_ir/dead_code_elim.rs` のテスト用の `RcFunc`)。どちらも `Set::default()` を置く。
+  6. `#[cfg(test)]` の下の `src/rc_ir/validate.rs` のテスト用の `RcFunc` が置く `Set::default()`。
+  7. `#[cfg(test)]` の下の `src/rc_ir/dead_code_elim.rs` のテスト用の `RcFunc` が置く `Set::default()`。
 
-  6 は `EXT 条件つきコンパイル` より `fix` の実行可能ファイルを作るビルドに入らない。2・3・4・5 は
+  6 と 7 は `EXT 条件つきコンパイル` より `fix` の実行可能ファイルを作るビルドに入らない。2・3・4・5 は
   いずれも `borrow_ify` の中か、`optimize_rc_program` が `borrow_ify` より後に呼ぶパス
   (`unique_check_elim` と `locality`) の中に在るので、`insert_rc` の出力には掛からない。
   `lower_and_insert_rc` は `lower_program` の後に `simplify` と `insert_rc` を掛けるだけであり、
@@ -3985,8 +3987,10 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
 この節がそれを扱う。
 
 `split_rc_units` は `optimize_rc_program` の中で `insert_rc` の直後・`borrow_ify` の直前に走り、その間に
-他のパスは無い (`CODE src/build/build_object_files.rs: lower_and_insert_rc`,
-`CODE src/build/build_object_files.rs: optimize_rc_program`)。よってこの節の入力は `insert_rc` の出力で
+プログラムを書き換えるパスは無い (`CODE src/build/build_object_files.rs: lower_and_insert_rc`,
+`CODE src/build/build_object_files.rs: optimize_rc_program`)。**間に走るものは 1 つある** --
+`config.develop_mode` のときだけ走る `validate` であり、それは `&RcProgram` を受け取って検査するだけで
+書き換えない (`CODE src/rc_ir/validate.rs: validate`)。よってこの節の入力は `insert_rc` の出力で
 ある。
 
 ### 13.1 記法
