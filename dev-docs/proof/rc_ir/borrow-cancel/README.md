@@ -3279,14 +3279,14 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | `p10-leaves-and-units.md` | 第 7 周 (509 段) | **0** (散文 1) | **0** | NOT-OBVIOUS 2 | **3 周続けて段のゼロ**。修理済み。**第 8 周の検証** |
 | `p11-origin-soundness.md` | 第 7 周 (298 段) | **0** | **0** | UNDEFINED 1、BAD-CITATION 1、NOT-OBVIOUS 5 | 修理済み。**第 8 周の検証** |
 | `p12-identity-and-consumes.md` | 第 7 周 (400 段) | **0** (散文 2) | **0** | NOT-OBVIOUS 5、BAD-CITATION 0 | 修理済み。**第 8 周の検証** |
-| `p13-disposals-and-pending.md` | 第 7 周 (431 段) | **0** (散文 1) | 2 (散文 4) | BAD-CITATION 4、UNDEFINED 1、NOT-OBVIOUS 10 | 修理済み。**第 8 周の検証** |
+| `p13-disposals-and-pending.md` | 第 8 周 (446 段) | **0** | **0** (形式 1) | BAD-CITATION 8、NOT-OBVIOUS 4 | **修理中**。**2 周続けて段のゼロ** |
 | `p15-ownership-uniformity.md` | 第 7 周 (382 段) | **0** (散文 1) | 2 | BAD-CITATION 2、NOT-OBVIOUS 4 | 修理済み。**第 8 周の検証** |
-| `p20-borrow-ify.md` | 第 7 周 (566 段) | 2 | **0** | 散文の BAD-CITATION 3、NOT-OBVIOUS 5 | 修理済み。**第 8 周の検証** |
+| `p20-borrow-ify.md` | 第 8 周 (576 段) | **0** | **0** | BAD-CITATION 1、NOT-OBVIOUS 4、`BY` の節番号 52 | **修理中** |
 | `p30-cancel-walk.md` | 第 7 周 (366 段) | 1 | **0** | UNDEFINED 1、NOT-OBVIOUS 15 | 修理済み。**第 8 周の検証** |
 | `p40-cancel-soundness.md` | 第 7 周 (438 段) | 4 | 4 | BAD-CITATION 4、UNDEFINED 1、NOT-OBVIOUS 11 | 修理済み。**第 8 周の検証** |
 | `p50-observation.md` | 第 7 周 (254 段) | **0** (散文 2) | 3 | NOT-OBVIOUS 11 | 修理済み。**第 8 周の検証** |
-| `p51-runs.md` | 第 7 周 (205 段) | 2 | 9 | NOT-OBVIOUS 9 | 修理済み。**第 8 周の検証** |
-| `p60-insert-rc.md` | 第 7 周 (373 段) | 1 | 6 | UNDEFINED 2、NOT-OBVIOUS 7 | 修理済み。**第 8 周の検証** |
+| `p51-runs.md` | 第 8 周 (219 段) | 2 | 8 | BAD-CITATION 2、NOT-OBVIOUS 3 | 修理済み。**第 9 周の検証** |
+| `p60-insert-rc.md` | 第 8 周 (382 段) | 2 | 2 | BAD-CITATION 2、NOT-OBVIOUS 5 | 修理済み。**第 9 周の検証** |
 | `p70-main-theorem.md` | 第 7 周 (31 段) | **0** (散文 7) | **0** (散文 1) | 段は 31 件すべて OK。表の落ち 9、NOT-OBVIOUS 1 | 修理済み。**第 8 周の検証** |
 
 `--` は、その周の検証がその欄を挙げなかったことを表す。
