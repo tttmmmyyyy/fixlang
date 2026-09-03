@@ -427,7 +427,7 @@ src/rc_ir/ast.rs	FieldPath	P1,P2,P2a,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18	dd85d9
 src/rc_ir/ast.rs	MatchArm	D/A,P1,P2,P2a,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18	8fb0b636664e
 src/rc_ir/ast.rs	MatchArm::with_body	P2a,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	5b7fed80948d
 src/rc_ir/ast.rs	RcExpr	D/A,P1,P2,P2a,P5,P6,P7,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	d1fa97d4a7df
-src/rc_ir/ast.rs	RcExprNode	P2a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24	815e164e90eb
+src/rc_ir/ast.rs	RcExprNode	P2a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	815e164e90eb
 src/rc_ir/ast.rs	RcFunc	D/A,P18c,P19,P20,P21,P22,P23,P24,P27,P29,P30,T	cc81ec93e7b4
 src/rc_ir/ast.rs	RcGlobalInit	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b	a8273109dc41
 src/rc_ir/ast.rs	RcProgram	D/A,T	8d1268887ec1
@@ -616,7 +616,7 @@ src/rc_ir/rc_insert.rs	insert_if_local	(P-insert)	98666b6f345e
 src/rc_ir/rc_insert.rs	insert_rc	P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P30,(P-insert)	ddc722babbda
 src/rc_ir/rc_insert.rs	rhs_operands	(P-insert)	1d8e7e575c71
 src/rc_ir/rename.rs	assign_fresh_name	D/A,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P27,P29,P30,(P-insert)	e52d71f7810c
-src/rc_ir/rename.rs	assign_fresh_names_to_binders	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b	2696c8cd590a
+src/rc_ir/rename.rs	assign_fresh_names_to_binders	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,(P-insert)	2696c8cd590a
 src/rc_ir/rename.rs	assign_fresh_names_to_binders_inner	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b	c2f0b830f73f
 src/rc_ir/rename.rs	clone_fresh	(P-insert)	4f96fc782576
 src/rc_ir/rename.rs	fresh_rename_function	D/A,P2a,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P27,P29,P30	592cc4b5a304
@@ -625,7 +625,11 @@ src/rc_ir/rename.rs	rename_expr_inner	P2a,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P1
 src/rc_ir/rename.rs	rename_rhs	D/A,P2a,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P26	0f15930e08dc
 src/rc_ir/rename.rs	rename_var	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18c,P19,P20,P21,P22,P23,P24,(P-insert)	022b66f7191a
 src/rc_ir/rename.rs	substitute_expr	(P-insert)	6fe3b670e890
+src/rc_ir/simplify.rs	case_of_case	(P-insert)	453bc63b97b5
+src/rc_ir/simplify.rs	case_of_known_union	(P-insert)	f8decb20293c
+src/rc_ir/simplify.rs	destructure_of_struct	(P-insert)	a4359d678ac3
 src/rc_ir/simplify.rs	simplify	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P30,(P-insert)	1afff04e2a88
+src/rc_ir/simplify.rs	single_subst	(P-insert)	fd0ec61ed32d
 src/rc_ir/specialization.rs	CloneRegistry::finish_clone	(P-insert)	028573b3c364
 src/rc_ir/specialization.rs	request	D/A	ab18cf61ff78
 src/rc_ir/unique_check_elim.rs	specialize	P26,T	008baf2ff41e
@@ -634,6 +638,6 @@ src/rc_ir/validate.rs	Validator::check_expr_inner	D/A,P1,P2	e5773a3c9ccf
 src/rc_ir/validate.rs	Validator::check_rhs	D/A,P1,P2,P2a,P15,P16,P17,P18	2aae57955a93
 src/rc_ir/validate.rs	Validator::use_var	P1,P2	3e2474264149
 src/rc_ir/validate.rs	check_capture_projection	D/A	15d032014fb2
-src/rc_ir/validate.rs	validate	P1,P2,P2a,P15,P16,P17,P18,T	998d88676f1b
+src/rc_ir/validate.rs	validate	P1,P2,P2a,P15,P16,P17,P18,(P-insert),T	998d88676f1b
 src/tests/test_util.rs	BUILD_FIX	P2a,P15,P16,P17,P18	ea98bc90b5ec
 src/tool/log_file.rs	LOG_FILE	P2a,P15,P16,P17,P18	2daba438d65d
