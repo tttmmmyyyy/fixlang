@@ -199,13 +199,14 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    できるならば、`t'` からフィールドの辺で到達できる型は `t` からも到達できるので、`t'` も `<1>1` を
    満たす。以下で `<1>1` を部分木の型に当てるのはこれによる。
 
-   **(i) の等式は A10 の「飽和は ground から出ない」の段落が与える。**A10 の第 1 文は引数の個数を
-   「その tycon に kind の要求するだけ」と書くので、それを `E.tycons()[&tc].tyvars.len()` と書き直す
-   には、その kind がちょうど `tyvars.len()` 個の引数を要求することが要る。A10 のその段落が
-   「`declared_field_types` はそこで `assert_eq!(args.len(), tycon_info.tyvars.len())` に当たって
-   止まる」と述べ、続けて「`unpunched_field_types` を呼ぶ歩みが abort しないことを言う議論はこの節を
-   読む」と述べるのがそれである。すなわち A10 の言う飽和は、`collect_type_arguments()` の長さが
-   その `TyConInfo` の `tyvars` の長さに等しいことである。
+   **(i) の等式は A10 が飽和の意味として直に述べている。**A10 の第 1 文は引数の個数を「その tycon に
+   kind の要求するだけ」と書き、続く段落がそれを個数の等式に直す --「**飽和とは、
+   `collect_type_arguments().len()` が `tycon_info.tyvars.len()` に等しいことである。**」。同じ段落が
+   その根拠も添えて、「宣言の kind はその `tyvars` の個数だけ引数を要求する」ことと、「組み込みの各行も
+   `kind` と `tyvars` の長さが揃う」ことを述べる。その等式の `tycon_info` は `t` の型構成子の宣言、
+   すなわちこの段が上に置いた「そのとき `toplevel_tycon_info` が返すのは `E.tycons()[&tc]` である」の
+   `E.tycons()[&tc]` である。よって A10 の飽和は `t.collect_type_arguments().len()` が
+   `E.tycons()[&tc].tyvars.len()` に等しいこと、すなわち (i) の等式である。
 
    **3 つはどれも A10 である。** A10 の第 1 文のうち「プログラムに現れる型は ground であり、
    **その tycon に kind の要求するだけの引数が与えられており**、その tycon は `type_env` にあり、…」が
@@ -3016,9 +3017,9 @@ D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が�
   あり、**その tycon に kind の要求するだけの引数が与えられており**、その tycon は `type_env` にあり、
   …」の部分そのものである。省略記号が置き替えるのは `no_size_in_place` の降下についての節で、この
   文書はそれを読まない (この項の末尾)。
-  **引数の個数を `tyvars` の長さと書き直すのは A10 の「飽和は ground から出ない」の
-  段落による** --「`declared_field_types` はそこで
-  `assert_eq!(args.len(), tycon_info.tyvars.len())` に当たって止まる」。(ii) と (iii) は A10 の
+  **引数の個数を `tyvars` の長さと書き直すのは A10 の飽和の定義による** --「**飽和とは、
+  `collect_type_arguments().len()` が `tycon_info.tyvars.len()` に等しいことである。**」。
+  (ii) と (iii) は A10 の
   「`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が
   `type_env` にある -- がすべて成り立ち、その歩みは有限である。さらに、到達する各型について
   `instance_field_types` が行う newtype の展開 (`unwrap_newtypes_memoized`) は abort せず停止する」
