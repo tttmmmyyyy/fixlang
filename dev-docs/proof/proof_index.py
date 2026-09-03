@@ -56,10 +56,15 @@ CLAIM_HEAD = re.compile(r"^#+\s+(?:[\d.]+[a-z]?\s+)?`?(L\d+[a-z]*)`?\s*\(")
 # **項も項目である。** `A19 (ii-c)` は独立した主張で、独立に引かれる -- 実測で 16 の項目が項の形で
 # 引かれ、引用は 598 回あった。項目を丸ごと 1 つと数えると、**`(i)` を 1 語直しただけで `(ii-b)` しか
 # 引いていない 50 か所が「読み直せ」に出る。** 項を項目にすると波及がその項だけに閉じる。
-CLAUSE = re.compile(r"^(?:- )?\*\*\(([a-z]|i+|ii-[a-c]|iii|S-[a-c]|[EFXRK]\d?)\)")
+# **項を項目にするのは、節と散文を構文で分けられないので保留する。** 散文の書き出し
+# `**(ii-b) は保存では通らない**` は節の見出しと同じ形をしており、推測すると実測で重複した項目が
+# 9 個でき、辺 52 本が節でなく散文に着いた。**過大報告は安全側、誤った宛先は危険側である。**
+# 分けるには節に印を付ける要があり、それは書式の変更なので別に決める。
+CLAUSE = None
+
 THEOREM = re.compile(r"^#+\s+(T)\b")
 CITATION = re.compile(r"\b([DAP]\d+[a-z]*|L\d+[a-z]*)\b")
-# **引用も項の粒度で読む。** `A19 (ii-c)` は `A19` ではない。
+# 項の粒度の引用。いまは項が項目でないので使わない。
 CITED_CLAUSE = re.compile(r"\b([DAP]\d+[a-z]*)\s+\(([a-z]|i+|ii-[a-c]|iii|S-[a-c]|[EFXRK]\d?)\)")
 
 
@@ -114,9 +119,10 @@ def items_in(path):
                 heads.append((index, owner))
                 break
         else:
-            clause = CLAUSE.match(line) if clauses and owner else None
-            if clause:
-                heads.append((index, f"{owner} ({clause.group(1)})"))
+            if CLAUSE is not None and clauses and owner:
+                clause = CLAUSE.match(line)
+                if clause:
+                    heads.append((index, f"{owner} ({next(g for g in clause.groups() if g)})"))
     found = []
     for order, (index, name) in enumerate(heads):
         end = heads[order + 1][0] if order + 1 < len(heads) else len(lines)
