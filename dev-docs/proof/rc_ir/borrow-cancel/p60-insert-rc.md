@@ -632,9 +632,9 @@ D9 の消費は 2 つの `App(f, [p])` の引数の位置の 2 つであり、`�
 <1>4. `P_0` のどちらの本体についても、その活性化の各時点で、計数下の別名類 `C` が
       `held(・, C) ≥ 1` を満たすならば `H(obj(C)) ≥ 1` であり、その活性化がその時点まで解放に
       ついて閉じている (D11a) ならば `obj(C)` はその時点で解放されていない。
-  BY <1>1, <1>2, <1>3, D11a, D21, D33, L13a
+  BY <1>1, <1>2, <1>3, A19, D11a, D21, D33, L13a
   D21 は「**活性化は、その各時点と各段内の点 (D24) で A19 (i) の不等式を満たすものに限る。**」と
-  定める。<1>1 と
+  定め、その不等式の本文 -- 角括弧、総和 `S`、`d(C)` -- は A19 (i) が置く。<1>1 と
   `L13a` (c) より `β ≡ 0` なので、A19 (i) の角括弧は 0 であり `d(C') = held(・, C')` である。
   <1>2 と <1>3 より、どちらの本体でもスロットを持つ別名類は 1 つだけなので、A19 (i) の総和 `S` は
   `C` を含むならその 1 項だけからなる。よって `H(obj(C)) ≥ held(・, C) ≥ 1` である。D11a は、
@@ -2208,15 +2208,19 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
   真の型は boxed leaf を持たない。D6 よりスロットは boxed leaf についてのみ在る。
 
 <1>4. (d)。
-  BY A2, D6, EXT クレートの項目,
+  BY A2, A13, D2, D6, EXT クレートの項目,
      CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: VarTable::of,
      CODE src/rc_ir/ownership.rs: VarTable::body_only,
      CODE src/rc_ir/lower.rs: Lowerer::fresh_var, CODE src/rc_ir/lower.rs:
      Lowerer::lower_lambda_as_function, CODE src/ast/name.rs: FullName::is_local,
      CODE src/ast/name.rs: FullName::local,
      CODE src/build/build_object_files.rs: lower_and_insert_rc,
-     CODE src/rc_ir/simplify.rs: simplify, CODE src/rc_ir/rename.rs: clone_fresh,
-     CODE src/rc_ir/rename.rs: assign_fresh_name, CODE src/rc_ir/rename.rs: substitute_expr,
+     CODE src/rc_ir/simplify.rs: simplify, CODE src/rc_ir/simplify.rs: case_of_known_union,
+     CODE src/rc_ir/simplify.rs: destructure_of_struct, CODE src/rc_ir/simplify.rs: case_of_case,
+     CODE src/rc_ir/simplify.rs: single_subst, CODE src/rc_ir/rename.rs: clone_fresh,
+     CODE src/rc_ir/rename.rs: assign_fresh_name,
+     CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders,
+     CODE src/rc_ir/rename.rs: substitute_expr,
      CODE src/rc_ir/rename.rs: rename_expr, CODE src/rc_ir/rename.rs: rename_var
   `vars.bindings` に鍵が入るのは 2 か所である -- `VarTable::of` が入れる関数のパラメータと capture の
   名前と、`collect_bindings` が入れる `Let`・`Destructure`・`Match` の束縛変数の名前である
@@ -2227,22 +2231,33 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
   書く。`FullName::local` が作る名前の名前空間は空であり、`is_local` は名前空間が空かを答えるので、
   束縛を持つ名前は局所名である。対偶より局所でない名前は `vars.bindings` に束縛を持たない。
   **この本体は lowering の出力そのものではない。** `lower_and_insert_rc` は `lower_program` の後に
-  `simplify` を掛けてから `insert_rc` を呼ぶので、束縛の位置に名前を書く式は 2 種ある。lowering の
+  `simplify` を掛けてから `insert_rc` を呼ぶので、束縛の位置に名前を書く式は lowering の外にもある。
+  D6 はその 2 人を「その 2 人は `Lowerer::fresh_var` と `clone_fresh` であり、後者は `simplify` が
+  束縛の位置に名前を書く道である。」と名指し、A13 の果たす者もこの 2 人である。
   `Lowerer::fresh_var` (パラメータと capture は `lower_lambda_as_function` が、残りは各 `lower_*` が
-  呼ぶ) と、`simplify` が呼ぶ `clone_fresh` と `substitute_expr` である。`EXT クレートの項目` より
-  `src/rc_ir/simplify.rs` の項目はそのファイルに書かれたものだけなので、この 2 つの呼び出しの
-  一覧は完全である。
-  `clone_fresh` は `assign_fresh_names_to_binders` を通じて各束縛変数に
-  `assign_fresh_name` を当て、`assign_fresh_name` は `name.clone()` の `name` 欄だけを
-  `format!("{}#{}{}", ...)` で書き替えるので、名前空間の欄は変わらない。
-  `substitute_expr` は `rename_expr` を通じて各変数 -- 束縛の位置のものを含む -- の名前を写像の像へ
-  置き替えるが、`simplify` の 4 つの呼び出しが渡す写像の定義域はどれも 1 つの名前であり、それは
-  その書き換えが**取り除く**節点が束縛する変数の名前である (`case_of_known_union` のアームの
-  payload と `Match` の束縛変数、`destructure_of_struct` の各フィールド変数、case-of-case の外側の
-  アームの payload)。写す先の部分式がその名前を改めて束縛することはない -- `Lowerer::fresh_var` は
-  `self.fresh_counter` を 1 つ進めてから `FullName::local(&format!("{}#{}{}", hint, self.symbol_tag,
-  self.fresh_counter))` を作るので、2 つの束縛変数が同じ名前を持つことがないからである。よって
-  `substitute_expr` は束縛の位置の名前を書き替えない。以上より `is_local` は
+  呼ぶ) は `FullName::local` で名前を作るので名前空間は空である。`clone_fresh` は
+  `assign_fresh_names_to_binders` を通じて各束縛変数に `assign_fresh_name` を当て、
+  `assign_fresh_name` は `name.clone()` の `name` 欄だけを `format!("{}#{}{}", ...)` で書き替えるので、
+  名前空間の欄は元の名前のものである。よってどちらの作る名前も、元が局所名なら局所名である。
+  **`simplify` のもう 1 つの書き換え `substitute_expr` は、束縛の位置の名前を替えない。**
+  `rename_expr` は `Let` の `x`、`Destructure` のフィールド変数、`Match` の payload にも `rename_var`
+  を当てるが、`rename_var` が名前を替えるのは写像の鍵であるときだけである。`EXT クレートの項目` より
+  `src/rc_ir/simplify.rs` の項目はそのファイルに書かれたものだけなので、その呼び出しの一覧は完全で
+  あり、4 つある。**そのうち 3 つは `single_subst` を通るので定義域は 1 つの名前である** --
+  `case_of_known_union` のアームの payload と `Match` の束縛変数、case-of-case の外側のアームの
+  payload である。**残る 1 つ、`destructure_of_struct` の定義域は 1 つではない** --
+  `for (idx, fv) in fields { subst.insert(fv.name.clone(), args[*idx].name.clone()); }` が、
+  取り除く `Destructure` が名指す**各**フィールド変数を鍵に入れる。
+  **4 つのどれでも、鍵はその書き換えが取り除く節点が束縛する名前であり、写す先はその束縛のスコープ
+  (D2) の中の部分式である。** 写す先がその名前を改めて束縛しないことは、2 人の作り手から出る --
+  `Lowerer::fresh_var` は `self.fresh_counter` を 1 つ進めてから
+  `FullName::local(&format!("{}#{}{}", hint, self.symbol_tag, self.fresh_counter))` を作るので、
+  lowering の出力の束縛名は互いに相異なる。case-of-case の写す先
+  `moved = clone_fresh(&outer.body, PASS_TAG, counter)` の束縛名は `fresh_var` が作ったものではなく、
+  `assign_fresh_name` が `counter` を 1 つ進めてから作ったものであり、その名前が写す先に既に在る
+  どの名前とも異なることは、D6 が「**逆に、`vars.bindings` に束縛を持つ名前は局所名である。**」を
+  `clone_fresh` を果たす者に数えて置くところである。よって `substitute_expr` は束縛の位置の名前を
+  替えない。以上より `is_local` は
   この段を渡って保たれる。`insert_rc` 自身が束縛を作らないことは A2 が述べる。
   D6 の「**値を得る形は 3 つあり、スロットが在るのはそのうち 2 つである。**」の 3 つ目が
   この名前であり、D6 よりその対は記号の位置であってスロットではない。
@@ -3788,9 +3803,10 @@ Ret(x)))
   <2>1. `B_2` の各活性化の各時点で、計数下の別名類 `C'` が `held(・, C') ≥ 1` を満たすならば
         `H(obj(C')) ≥ 1` であり、その活性化がその時点まで解放について閉じている (D11a) ならば
         `obj(C')` はその時点で解放されていない。
-    BY <1>2, L13a, L15, D11a, D21, D33
+    BY <1>2, A19, L13a, L15, D11a, D21, D33
     D21 は「**活性化は、その各時点と各段内の点 (D24) で A19 (i) の不等式を満たすものに限る。**」と
-    定める。`L15` (e) と `L13a` (c) より `β ≡ 0` なので、A19 (i) の角括弧は 0 であり
+    定め、その不等式の本文 -- 角括弧、総和 `S`、`d(C)` -- は A19 (i) が置く。
+    `L15` (e) と `L13a` (c) より `β ≡ 0` なので、A19 (i) の角括弧は 0 であり
     各類について `d(・) = held(・, ・)` である。<1>2 より `B_2` の唯一の実行路の上でスロットを持つ
     別名類は `C` だけなので、A19 (i) の総和 `S` は `C'` を含むならその 1 項だけからなる。よって
     `H(obj(C')) ≥ held(・, C') ≥ 1` である。D11a は、解放について閉じている時点では `H(O) ≥ 1` である
