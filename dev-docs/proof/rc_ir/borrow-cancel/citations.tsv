@@ -217,6 +217,7 @@ src/fixstd/builtin.rs	InlineLLVMFixBody::generate_tail	D/A,P26	b42d29e5682c
 src/fixstd/builtin.rs	InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody	D/A,P27,P28,P29,P30	80a6ab3e25f3
 src/fixstd/builtin.rs	InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody	D/A,P27,P28,P29,P30	45558c1323f9
 src/fixstd/builtin.rs	InlineLLVMIntLit	P7a,P7d,P7e	b8126e10483f
+src/fixstd/builtin.rs	InlineLLVMIntLit::generate	P7a,P7d,P7e	ec8727004b40
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody	D/A	1da0d65c3df8
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::generate	P26	cf1c72be74b6
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::observes_uniqueness	P26	0dbb1939b295
@@ -224,6 +225,7 @@ src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::result_prov	P1,P2	ccb214ee
 src/fixstd/builtin.rs	InlineLLVMMakeStructBody	P3,P4	6b2ac61a32df
 src/fixstd/builtin.rs	InlineLLVMMakeStructBody::result_prov	P1,P2,P26	1a642826f71d
 src/fixstd/builtin.rs	InlineLLVMMakeUnionBody	P7a,P7d,P7e	fabb9c76bdf4
+src/fixstd/builtin.rs	InlineLLVMMakeUnionBody::generate	P7a,P7d,P7e	ec2b7246ebad
 src/fixstd/builtin.rs	InlineLLVMMakeUnionBody::result_prov	P1,P2,P7a,P7d,P7e,P26	89f1790a61f1
 src/fixstd/builtin.rs	InlineLLVMMakeUnionBody::variant_index	P1,P2	d9866f31d5fe
 src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody	P26,P27,P29,P30	a0d4955d7f54
@@ -388,13 +390,13 @@ src/object.rs	ObjectFieldType::write_to_array_buf	P27,P29,P30	3a2778a3c144
 src/object.rs	build_free_boxed	D/A,P28	d79415db8029
 src/object.rs	build_malloc	P26	57f5c494571d
 src/object.rs	build_traverse	P26	90e003680ea6
-src/object.rs	create_obj	D/A,P26,P27,P28,P29,P30	55a56677f8db
+src/object.rs	create_obj	D/A,P7a,P7d,P7e,P26,P27,P28,P29,P30	55a56677f8db
 src/object.rs	create_traverser	P27,P29,P30	29c19472acf8
 src/object.rs	get_array_storage	P26	a417e5ff90d9
 src/object.rs	get_traverser_ptr	P27,P29,P30	2815e61b62e9
 src/object.rs	lambda_function_type	P27,P29,P30	12512f00c4bd
 src/object.rs	lambda_return_part_types	P27,P29,P30	e5804412a933
-src/object.rs	ty_to_object_ty	P27,P28,P29,P30	bd40ee79d08f
+src/object.rs	ty_to_object_ty	P7a,P7d,P7e,P27,P28,P29,P30	bd40ee79d08f
 src/optimization/capture_struct.rs	CaptureStruct	P5,P6,P7	f1c6191c420c
 src/optimization/capture_struct.rs	CaptureStruct::new	P1,P2,P5,P6,P7,P7a,P7d,P7e	79b12cf140d7
 src/optimization/closure_specialization.rs	ClosureSpecializationVisitor::decapture_lambda	P1,P2	36c2dc7a5422

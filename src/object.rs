@@ -1532,7 +1532,7 @@ fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
 /// # Arguments
 /// * `capture` - the types a `#DynamicObject` holds captured, which become its trailing fields.
 ///   It is empty for every other type, whose fields follow from the type alone.
-// PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7d, P7e, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn ty_to_object_ty(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>,
@@ -2094,7 +2094,7 @@ pub fn write_alloc_offset<'c, 'm>(
 /// A fresh object of type `ty`, with its control block initialized and its remaining fields left
 /// undefined for the caller to fill in. A boxed type is allocated on the heap and comes back as a
 /// pointer to it; an unboxed type comes back as an undefined aggregate value.
-// PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7a, P7d, P7e, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
     // Captured values. Used only for creating dynamic object.
