@@ -545,15 +545,15 @@ enum については元と同じ変位で、その変位が保持する各値を
         である。**在りかは述語で決める** --- `src/` の全体を、型が `RefCell`・`Cell`・`OnceCell`・
         `OnceLock`・`Mutex`・`RwLock`・`UnsafeCell`・`Atomic*` を含む欄の宣言で走査し、そのうち
         この 2 つの引数の型から到達できるものを取る。A3 の「**在りかは `_cache.get_or_init` の全出現で
-        決める**」と同じ形である。**この 5 つはどれも一度だけ書かれる memo であり、その値は memo する
-        対象の関数である。**
+        決める**」と同じ形である。**そのうち `SourceFile` の 2 つは `TypeNode` の値の等しさを動かさない
+        ので、呼び出しを跨いで持ち越す状態は `TypeNode` の 3 つの `OnceLock` の欄だけである。**
     <3>1. この 2 つが受け取る値の型は `Arc<TypeNode>`、`FieldPath` (`Vec<usize>`)、`TypeEnv` である。
           `TypeEnv` の 3 欄は `Arc<Map<TyCon, TyConInfo>>`、`Arc<Map<TyCon, TyAliasInfo>>`、
           `Arc<Set<TyCon>>` であり、`TyConInfo` の 8 欄は `Arc<Kind>`、`TyConVariant`、`bool`、
           `Vec<Arc<TyVar>>`、`Vec<Field>`、`Option<Span>`、`Option<String>`、`Option<TyCon>`、
           `TyAliasInfo` の 4 欄は `Arc<Kind>`、`Arc<TypeNode>`、`Vec<Arc<TyVar>>`、`Option<Span>`、
           `Field` の 6 欄は `Name`、`Arc<TypeNode>` 2 つ、`bool`、`Option<Span>` 2 つである。
-          `TypeNode` の 3 欄は `Type`、`TypeInfo`、および 3 つの `OnceLock` であり、`TypeInfo` の
+          `TypeNode` の 5 欄は `Type`、`TypeInfo`、および 3 つの `OnceLock` であり、`TypeInfo` の
           1 欄は `Option<Span>`、`Span` の 3 欄は `SourceFile`、`usize` 2 つ、`SourceFile` の 3 欄は
           `PathBuf` と `Arc<Mutex<Option<String>>>` 2 つである。この閉包の中で上の走査に当たるのは、
           `TypeNode` の 3 つの `OnceLock` と `SourceFile` の 2 つの `Mutex` だけである。
