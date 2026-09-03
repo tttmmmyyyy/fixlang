@@ -4,12 +4,14 @@
 使い方:
 
     python3 dev-docs/proof/proof_refs.py <証明のディレクトリ>            # 検査する
+    python3 dev-docs/proof/proof_refs.py <証明のディレクトリ> --frontier  # 読み直す要のある箇所だけ
     python3 dev-docs/proof/proof_refs.py <証明のディレクトリ> --write    # 埋め込みを生成し直す
     python3 dev-docs/proof/proof_refs.py <証明のディレクトリ> --accept   # 読み直した印を進める
     python3 dev-docs/proof/proof_refs.py --new                           # 未使用の名前を 1 つ作る
 
-証明は枠 (`README.md`) の定義・仮定・命題を引く。**引くときに番号や節名や個数を書くと、枠が動いた
-分だけ黙って古くなる** -- 実測で、その形の欠陥がこの証明で最も多かった。仕組みはこうである。
+証明は枠 (`README.md`) の定義・仮定・命題を引き、証明どうしも互いの補題を引く。**引くときに番号や
+節名や個数を書くと、引かれた側が動いた分だけ黙って古くなる** -- 実測で、その形の欠陥がこの証明で
+最も多かった。仕組みはこうである。
 
     枠:    <label name=d050777>**(ii-c) (段内の点の非負性)。…**</label>
 
@@ -31,6 +33,27 @@
 - **不一致の集合が、そのまま「読み直す要のある段」である。** 枠の 2 つのコミットを差分する要は無い。
 - **引きたい塊に名札が無ければ、名札を付けに行く。** 付けるのは追記なので誰がやってもよい。
   **枠の本文を変えるのは枠の持ち主だけである。**
+
+**名札はどのファイルにも付く。** 枠の仮定にも、証明の補題の言明にも付く。引くのもどのファイルからでも
+よい。**対称にするのは、修理が起こした波及を次の周回で拾うためである** -- 補題の言明が変われば、
+それを引く証明が不一致になる。**この形なら `BY` のグラフを辿る要が無い** -- 段が他の段に依存するのは
+その言明を引くことなので、言明に名札が付いていれば波及は不一致として自然に出る。
+
+**回し方はこうである。**
+
+1. どこかの塊を直す。
+2. `--frontier` が、その塊を引いている箇所を出す。
+3. その箇所を読み直して直す。
+4. 直した者が `--accept` で指紋を進める。
+5. **3 の修理が別の塊を動かしていれば、次の `--frontier` にそれが出る。**
+6. 空になるまで繰り返す。
+
+**止まることは層の規則が保証する** -- 枠の第 5 節が「各命題は自分より前の命題だけを引用してよい」と
+定めるので、引用の関係は整礎である。
+
+**この繰り返しが与えるのは整合であって、正しさではない。** 不一致が空になっても、
+**最初から尽きていない数え上げや、最初から結論を支えていない `BY`** は残る。
+**それを見るのは全体の検証であり、繰り返しはその代わりにならない。**
 
 閉じないもの: **枠が自分自身を数え上げている箇所。** 仮定の前書きが自分の項を並べる形は、
 枠の持ち主が見る。
@@ -70,9 +93,10 @@ def duplicated(text):
     return twice
 
 
-def proof_files(directory):
+def documents(directory):
+    """名札を持ちうるファイル。枠も証明も同じに扱う。"""
     for name in sorted(os.listdir(directory)):
-        if name.endswith(".md") and name != "README.md":
+        if name.endswith(".md"):
             yield os.path.join(directory, name)
 
 
@@ -122,30 +146,39 @@ def main(arguments):
         print(secrets.token_hex(4)[:7])
         return 0
     write, accept = "--write" in arguments, "--accept" in arguments
+    frontier = "--frontier" in arguments
     roots = [a for a in arguments if not a.startswith("--")] or ["dev-docs/proof/rc_ir/borrow-cancel"]
     problems = 0
     for directory in roots:
-        frame_path = os.path.join(directory, "README.md")
-        frame = open(frame_path, encoding="utf-8").read()
-        known = labels(frame)
-        for name in duplicated(frame):
-            print(f"{frame_path}: 名札 {name} が 2 度付いている")
-            problems += 1
+        known, owner, seen_names = {}, {}, set()
+        for path in documents(directory):
+            text = open(path, encoding="utf-8").read()
+            for name in duplicated(text):
+                print(f"{path}: 名札 {name} が 2 度付いている")
+                problems += 1
+            for name, entry in labels(text).items():
+                if name in seen_names:
+                    print(f"{path}: 名札 {name} は {owner[name]} にも付いている")
+                    problems += 1
+                seen_names.add(name)
+                known[name], owner[name] = entry, path
         cited = set()
-        for path in proof_files(directory):
+        for path in documents(directory):
             unknown, changed, stale = visit(path, known, write, accept)
             cited.update(match.group(2) for match in CITE.finditer(open(path, encoding="utf-8").read()))
             for line, name in unknown:
-                print(f"{path}:{line}: 名札 {name} が枠に無い")
+                print(f"{path}:{line}: 名札 {name} がどこにも無い")
             for line, name, seen, now in changed:
-                print(f"{path}:{line}: {name} は読んだ版 {seen} から {now} へ動いた -- 読み直すこと")
-            if stale and not (write or accept):
+                print(f"{path}:{line}: {name} ({owner[name]}) は読んだ版 {seen} から {now} へ動いた"
+                      f" -- 読み直すこと")
+            if stale and not (write or accept or frontier):
                 print(f"{path}: 埋め込みが枠と食い違う引用 {stale} 件 (`--write` で直る)")
             problems += len(unknown) + len(changed) + (0 if (write or accept) else stale)
-        for name, (_, _, line) in sorted(known.items(), key=lambda pair: pair[1][2]):
-            if name not in cited:
-                print(f"{frame_path}:{line}: 名札 {name} を引く証明が無い")
-        print(f"{directory}: 枠の名札 {len(known)}、引かれているもの {len(cited & set(known))}")
+        if not frontier:
+            for name, (_, _, line) in sorted(known.items(), key=lambda pair: pair[1][2]):
+                if name not in cited:
+                    print(f"{owner[name]}:{line}: 名札 {name} を引く者が無い")
+        print(f"{directory}: 名札 {len(known)}、引かれているもの {len(cited & set(known))}")
     return 1 if problems else 0
 
 
