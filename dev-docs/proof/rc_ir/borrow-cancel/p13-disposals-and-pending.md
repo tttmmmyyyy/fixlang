@@ -2,8 +2,9 @@
 
 **対象コミット**: `b6c51fb892746e493e155d9d59ea05d02d7357db`
 
-この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義 D1-D34 と仮定 A1 から A26、および
-命題 P1、P2、P2a、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P16、P17、P18、P24、
+この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義 D1、D1a、D2 から D27、D11a、D29 から D34
+(README は番号 D28 を使っていない) と、仮定 A1 から A26 および A26a、および
+命題 P1、P2、P2a、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P15、P16、P17、P18、P24、
 P30 の**言明**の上に立つ。それらの証明は `p10-leaves-and-units.md`、
 `p12-identity-and-consumes.md`、`p15-ownership-uniformity.md`、`p20-borrow-ify.md`、
 `p30-cancel-walk.md`、`p40-cancel-soundness.md`、`p51-runs.md` にあり、この文書はその言明だけを使う。
@@ -41,17 +42,13 @@ A19 (i)・(ii-a)・(ii-b) と P14a の上である。A19 (i) は D21 が活性�
 - `Others(v, π)` は `CancelAnalysis::other_objects(v, π)` の返す列を集合とみなしたもの
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 
-**`origin(x, π)` は `(x, π)` で決まる 1 つの値である。** この節は `B` について `vars` と `type_env` を
-1 つずつ固定するので、P2a がそのまま当たる -- P2a は「**1 つの `VarTable` の値 `vars` と 1 つの
-`TypeEnv` の値を固定する。** その 2 つを第 1・第 2 引数とし、鍵 `(x, π)` が等しい 2 つの `origin` の
-呼び出しがどちらも値を返すならば、その 2 つの返り値は等しい。すなわち答えは `vars.origins` が保持する
-memo の状態に依らない」と述べる。`origin` は答えを `vars.origins` に記録し、次の呼び出しはそれを先に
-読んで返すが (`CODE src/rc_ir/ownership.rs: origin`)、返り値はその memo の状態によらない。よってこの
-文書は `origin(x, π)`、したがって `acted_on(x, π)` と `ActRefs(v, π)` を、走査のどの位置でも、活性化の
-どの時点でも同じ値として書く。
+**`origin(x, π)` は `(x, π)` で決まる 1 つの値である。** よってこの文書は `origin(x, π)`、したがって
+`acted_on(x, π)` と `ActRefs(v, π)` を、走査のどの位置でも、活性化のどの時点でも同じ値として書く。
+**これを与えるのは `L0` である** -- P2a はその言明の中で `vars` の作られ方を限るので、`B` の `vars` が
+その制限を満たすことを示す段が要る。
 
 **表を跨ぐ形は P2a の主張ではない。** P2a は「`bindings` が等しい相異なる 2 つの `VarTable` について
-答えが等しいことは別の主張であり、それを要る段は自分で示す」と続ける。この文書でその形を要るのは
+答えが等しいことは別の主張であり、それを要る段は自分で示す」と述べる。この文書でその形を要るのは
 `L16` であり、その証明が `origin` の展開の上の帰納で独自に示す。
 
 `VarPath` は対 `(FullName, FieldPath)` である (`CODE src/rc_ir/ast.rs: VarPath`)。変数 `v` (`RcVar`) と
@@ -63,12 +60,14 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
 
 第 7 節からは実行時のオブジェクト (D7) を相手にするので、2 つを**名前**と**オブジェクト**に書き分ける。
 名前が指すオブジェクトは `obj(x, λ)` (D6) と `obj_ρ(o)` (第 7.2 節の DEF 名前の活性) が与える。1 つの
-オブジェクトを 2 つの名前が指す本体は在る (第 7.5.8 節の `C2`) ので、この区別は表記だけのものではない。
+オブジェクトを 2 つの名前が指す本体は在る (第 7.5.7 節の `C1` の `(m, [])` と `(p, [])`) ので、この
+区別は表記だけのものではない。
 
-この文書は補題を `L1` から `L6` と呼ぶ。`BY` の行ではそれらを名前で引用する。補題の証明の内部の
+この文書は補題を `L0` から `L6` と呼ぶ。`BY` の行ではそれらを名前で引用する。補題の証明の内部の
 ステップは引用しない。
 
-外部の結果を 6 つ使う。名札は README の「証明の記法」が定める `EXT <名前>` である。
+外部の結果を 10 個使う。名札は README の「証明の記法」が定める `EXT <名前>` である。Rust の言語規則の
+3 つは Rust Reference の原文を引く。
 
 - **`EXT stacker の maybe_grow`**: `stacker::maybe_grow(red_zone, stack_size, callback)`
   は `callback` をちょうど 1 回呼び、その値を返す (`CODE stacker-0.1.23/src/lib.rs: maybe_grow`)。
@@ -89,6 +88,50 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
   1 つも無ければ偽を返す。すなわち真は「述語が真である要素が在る」と同値である。
 - **`EXT Iterator::all`** (Rust 標準ライブラリ): `it.all(f)` は、`f` がすべての要素について真を返す
   ときに真を、偽を返す要素が在るときに偽を返す。要素が 1 つも無いときは真である。
+- **`EXT 可視性と私有性`**: Rust Reference の "Visibility and Privacy" が次を述べる。
+
+  > By default, everything is _private_, with two exceptions: Associated items in a `pub` Trait are
+  > public by default; Enum variants in a `pub` enum are also public by default.
+
+  > With the notion of an item being either public or private, Rust allows item accesses in two cases:
+  >
+  > 1. If an item is public, then it can be accessed externally from some module `m` if you can access
+  >    all the item's ancestor modules from `m`. You can also potentially be able to name the item
+  >    through re-exports.
+  > 2. If an item is private, it may be accessed by the current module and its descendants.
+
+  同じ節が `pub(crate)` について次を述べる。
+
+  > `pub(crate)` makes an item visible within the current crate.
+
+  すなわち、`pub(crate)` の付いた項目を名指せるのは、そのクレートの中だけである。
+- **`EXT このリポジトリのターゲット`**: `Cargo.toml` は 3 つのターゲットを宣言する --
+  `[lib] name = "fixlang", path = "src/lib.rs"`、`[[bin]] name = "fix", path = "src/main.rs"`、
+  `[[bench]] name = "typecheck", harness = false` (既定のパス `benches/typecheck.rs`) である。
+  `src/lib.rs` と `src/main.rs` は同じ 26 個のモジュールを `mod` で導入し、`src/main.rs` はさらに
+  `#[cfg(test)] mod tests` を導入する。すなわち `src/` の 1 つのファイルは lib と bin の 2 つの
+  クレートに属し、どちらのクレートの項目も `src/` のファイルが宣言する。ベンチのターゲットは第 3 の
+  クレートであり、`fixlang` を外部クレートとして読む。**`pub(crate)` の項目の呼び出し元を数える段は、
+  この 2 つのクレートの全体、すなわち `src/` の `.rs` の全体を走査する。**
+- **`EXT 可変参照は排他である`**: Rust Reference の "Pointer types" が可変参照について次を述べる。
+
+  > Mutable references point to memory which is owned by some other value. A mutable reference type
+  > is written `&mut type` or `&'a mut type`.
+
+  > A mutable reference (that hasn't been borrowed) is the only way to access the value it points
+  > to, so is not `Copy`.
+
+  すなわち、借用されていない `&mut T` が生きている間、それが指す値へ届く道はその参照だけである。
+- **`EXT match は最初に一致した腕を取る`**: Rust Reference の "Match expressions" が次を述べる。
+
+  > the resulting value is sequentially compared to the patterns in the arms until a match is found.
+
+  > The first arm with a matching pattern is chosen as the branch target of the `match`, any
+  > variables bound by the pattern are assigned to local variables in the arm's block, and control
+  > enters the block.
+
+  すなわち、腕は書かれた順に試され、最初に一致した腕だけが走る。前の腕の型が一致するときは、後ろの
+  腕は走らない。
 
 ## 2. 局所の定義
 
@@ -199,6 +242,54 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   その分担の上に立っている。
 
 ## 4. 予備の補題
+
+### L0 (`B` は `borrow_ify` の出力の本体であり、`origin` の答えは位置にも時点にもよらない)
+
+**言明**。次の 2 つが成り立つ。
+
+- **(i)** `cancel` の入力プログラム `p` は `borrow_ify` の出力である。したがって第 1 節が固定した本体 `B`
+  は `borrow_ify` の出力の本体である。
+- **(ii)** `B` の `vars`・`type_env` について、`origin(vars, type_env, x, π)` の返り値は、走査のどの
+  位置でも、活性化のどの時点でも同じ値である。
+
+**証明**
+
+<1>1. (i) が成り立ち、`vars` は `B` について `VarTable::of` か `VarTable::body_only` が作った表である。
+  BY EXT 可視性と私有性, EXT このリポジトリのターゲット,
+     CODE src/build/build_object_files.rs: optimize_rc_program,
+     CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel,
+     CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
+  `borrow_ify` と `cancel` はどちらも `pub(crate)` なので、`EXT 可視性と私有性` よりそれを名指せるのは
+  このクレートの中だけであり、`EXT このリポジトリのターゲット` よりそのクレートの項目は `src/` の
+  ファイルが宣言する。`src/` の `.rs` の全体で、`borrow_ify` を名指す式は
+  `optimize_rc_program` の `prog = borrow_ify(&prog, type_env, config.develop_mode);` の 1 つ、`cancel` を
+  名指す式は同じ関数の `prog = cancel(&prog, type_env);` の 1 つである。その 2 つのあいだに在るのは
+  `validate(&prog, "after borrow_ify")` の 1 つだけであり、`prog` の束縛はそのまま `cancel` に渡る。
+  よって `cancel` の入力は `borrow_ify` の出力であり、第 1 節より `B` はその入力の本体である。
+  `cancel` は各関数について `VarTable::of(f)`、各グローバル初期化子について
+  `VarTable::body_only(&g.init)` を作り、第 1 節の `vars` はその 2 つのどちらかである。
+
+<1>2. `B` は A6 と A11 を満たす。
+  BY A6, A11, P9
+  A6 と A11 は `borrow_ify` の入力について語る。A6 の脇は「出力について読む者は P9 と合わせて読む」と、
+  A11 の脇は「**この仮定が語るのは `borrow_ify` の入力である。** 出力についての同じ性質は、この仮定と
+  P9 から出る -- 複製の本体は原本の束縛変数を一斉に付け替えたものでそれ以外の違いを持たないので、
+  束縛と使用の対応がそのまま写る。」と定める。<1>1 より `B` は `borrow_ify` の出力の本体である。
+
+<1>3. (ii) が成り立つ。
+  BY P2a, <1>1, <1>2, CODE src/rc_ir/ownership.rs: origin
+  P2a は「**1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値を固定する。** その 2 つを
+  第 1・第 2 引数とし、鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならば、その
+  2 つの返り値は等しい。すなわち答えは `vars.origins` が保持する memo の状態に依らない」と述べ、
+  その制限を「**`vars` は、A6 と A11 を満たすプログラムの本体について `VarTable::of` か
+  `VarTable::body_only` が作った表である。**」と置いて、「**この制限は言明の一部であって、読む段が
+  自分で補うものではない。**」と続ける。<1>1 と <1>2 がその制限を満たす。第 1 節は `B` について
+  `vars` と `type_env` を 1 つずつ固定するので、走査の位置と活性化の時点で変わりうるのは
+  `vars.origins` の memo の状態だけであり (`origin` は答えをそこに記録して次の呼び出しに返す)、
+  P2a がその依存を否定する。
+
+<1>4. QED
+  BY <1>1, <1>3
 
 ### L1 (`walk` は `walk_inner` を 1 回呼ぶ)
 
@@ -537,9 +628,10 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 
 <1>8. CASE `n` の式が `RcExpr::Let(x, RcRhs::App(callee, args), k)` である。
   <2>1. `n` の訪問は `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼ぶ。
-    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
-    `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕が先に置かれているので、右辺が `Match` でない `Let` は
-    次の `RcExpr::Let(x, rhs, k)` の腕に来る。
+    BY EXT match は最初に一致した腕を取る, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
+    `walk_inner` の `match` は `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕を
+    `RcExpr::Let(x, rhs, k)` の腕より前に置く。`EXT match は最初に一致した腕を取る` より腕は書かれた順に
+    試されるので、右辺が `Match` でない `Let` は後ろの `RcExpr::Let(x, rhs, k)` の腕に来る。
   <2>2. `consume_rhs(pending, rhs, result_ty)` は、空の `consumed` を作り、`rhs_consumes(rhs, result_ty,
         self.vars, self.prog, self.type_env, &owns, &mut consumed)` を呼び、`consumed` の各元
         `(var, leaf)` について `self.consume(pending, &var, &leaf)` を呼ぶ。`consumed` は `rhs_consumes`
@@ -576,19 +668,16 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
         BY CODE src/rc_ir/ownership.rs: resolve_callee_params
       <4>1a. `n` の段の**実行時の**呼び出し先 (D23) を `g` と書くと、`g` は `prog` の `funcs` の関数で
              あり、そのパラメータの列は `params` である。
-        BY P30, <2>4, <4>1, A3, D23, CODE src/build/build_object_files.rs: optimize_rc_program,
-           CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel
-        第 1 節より `B` は `cancel` の入力の本体であり、`prog` はそのプログラムである。
-        `optimize_rc_program` は `borrow_ify` の返り値を束縛 `prog` に置き、その束縛をそのまま
-        `cancel` に渡す。2 つのあいだに在るのは `validate(&prog, "after borrow_ify")` の 1 つで
-        あり、これは `RcProgram` を共有参照で受け取る計算なので、A3 の「**`RcProgram` から到達
+        BY P30, <2>4, <4>1, A3, D23, L0
+        第 1 節より `B` は `cancel` の入力の本体であり、`prog` はそのプログラムである。`L0` (i) より
+        `prog` は `borrow_ify` の出力である。その `prog` を `cancel` に渡すまでに走るのは
+        `validate(&prog, "after borrow_ify")` の 1 つだけであり (`L0` の証明がその 1 つを挙げる)、
+        これは `RcProgram` を共有参照で受け取る計算なので、A3 の「**`RcProgram` から到達
         できる値の等しさは、それを共有参照で受け取る計算が変えない。**」よりその値を変えない。
         A3 はこの節の読む者としてこの呼び出しを名指す --「**決定性より強い節が要るのは、
         `RcProgram` を共有参照で受け取る関数がそれを変えないことを言う段があるからである** --
         `validate` がその 1 つであり、`Validator::check_rhs` は `result_prov` を呼ぶ。」。
-        `borrow_ify` と
-        `cancel` はどちらも `pub(crate)` なのでクレートの外から呼ぶ者は居ない。よって `prog` は
-        `borrow_ify` の出力である。<2>4 と <4>1 より
+        <2>4 と <4>1 より
         `params` は `resolve_callee_params(callee, vars, prog)` の返り値である。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
         `resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の呼び出し先
         (D23) と同じ `RcFunc` である。`cancel` の中で `CancelAnalysis::consume_rhs` が `rhs_consumes` を
@@ -2819,20 +2908,19 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
     `d(C) = held_ρ(n, C) - 1 ≥ bumps_ρ(n, C)` である。
   <2>4. CASE `C` の `ρ` 終端が借用する (D14) パラメータ・capture の leaf であり、`bumps_ρ(n, C) = 0` で
         ある。
-    BY P14a, A3, D34, DEF 節点の時点, <2>1, L17,
-       CODE src/build/build_object_files.rs: optimize_rc_program,
-       CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel
+    BY P14a, P15, A3, D34, DEF 節点の時点, <2>1, L0, L17
     P14a は「`borrow_ify` の出力の各本体、各実行路、各活性化について、ρ-終端が借用する (D14)
     パラメータ・capture の leaf である**計数下**の別名類 (D26) は、活性化の間ずっと参照を少なくとも
-    1 つ持つ」と述べる。第 1 節より `B` は `cancel` の入力の本体であり、`optimize_rc_program` は
-    `borrow_ify` の返り値を束縛 `prog` に置いてその束縛をそのまま `cancel` に渡す。2 つのあいだに
-    在るのは `validate(&prog, "after borrow_ify")` の 1 つであり、これは `RcProgram` を共有参照で
-    受け取る計算なので、A3 の「**`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る
-    計算が変えない。**」よりその値を変えない。A3 はこの節の読む者としてこの呼び出しを名指す --
+    1 つ持つ」と述べる。`L0` (i) より `B` は `borrow_ify` の出力の本体である -- P15 も
+    「**`cancel` の入力が `borrow_ify` の出力であることは、`optimize_rc_program` の 1 か所を読めば
+    決まる。** どちらもクレートの外から呼べないからである」と同じことを述べる。`cancel` がその本体を
+    受け取るまでに走るのは `validate(&prog, "after borrow_ify")` の 1 つだけであり、これは
+    `RcProgram` を共有参照で受け取る計算なので、A3 の「**`RcProgram` から到達できる値の等しさは、
+    それを共有参照で受け取る計算が変えない。**」よりその値を変えない。A3 はこの節の読む者として
+    この呼び出しを名指す --
     「**決定性より強い節が要るのは、`RcProgram` を共有参照で受け取る関数がそれを変えないことを言う
     段があるからである** -- `validate` がその 1 つであり、`Validator::check_rhs` は `result_prov` を
-    呼ぶ。」。`borrow_ify` と `cancel` はどちらも `pub(crate)`
-    なのでクレートの外から呼ぶ者は居ないので、`B` は `borrow_ify` の出力の本体である。L17 より `C` は計数下である。D34 がその「参照の個数」の帰属を定め、DEF 節点の時点より
+    呼ぶ。」。L17 より `C` は計数下である。D34 がその「参照の個数」の帰属を定め、DEF 節点の時点より
     `τ(n)` はこの活性化が生きている間の時点である。よって `held_ρ(n, C) ≥ 1` であり、
     `d(C) = held_ρ(n, C) - 1 ≥ 0 = bumps_ρ(n, C)` である。
   <2>5. QED
