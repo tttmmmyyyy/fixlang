@@ -1640,6 +1640,7 @@ impl Program {
     ///
     /// Assumes that `resolve_namespace_and_check_type_in_modules` has already
     /// run over all global values.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn instantiate_symbol(
         &mut self,
         sym: &mut Symbol,
@@ -1698,6 +1699,7 @@ impl Program {
     /// Instantiates every symbol queued in `deferred_instantiation`, moving each
     /// into `symbols`. Instantiation queues further symbols, so this runs until
     /// the queue drains.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn instantiate_symbols(&mut self, tc: &TypeCheckContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         while !self.deferred_instantiation.is_empty() {
@@ -1822,6 +1824,7 @@ impl Program {
     /// value is instantiated at for the type the reference has, queueing each such instantiation.
     /// An expression whose type still holds a type variable is reported as one whose type cannot be
     /// inferred.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn instantiate_expr(&mut self, expr: &Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
         let ret = match &*expr.expr {
             Expr::Var(v) => {
@@ -1919,6 +1922,7 @@ impl Program {
     /// Ask that the generic value `name` be instantiated at type `ty`, and return the name that
     /// instantiation is known by. Asking twice for the same name and type yields that one name and
     /// queues one symbol, whose expression is filled in when the queue is drained.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn require_instantiation(
         &mut self,
         name: &FullName,
@@ -1974,6 +1978,7 @@ impl Program {
 
     /// The global value of each trait member, paired with the name it is registered under, built
     /// from the trait environment alone.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn trait_member_symbols(&self) -> Vec<(FullName, GlobalValue)> {
         let mut member_symbols: Vec<(FullName, GlobalValue)> = vec![];
         for (trait_id, trait_) in &self.trait_env.traits {
@@ -2862,7 +2867,7 @@ impl Program {
     /// and the functorial actions for each field of a struct, and a constructor, an extractor, a
     /// test and a modifier for each variant of a union. Each is defined in the namespace of the
     /// type, under the name a source writes it by, with the documentation shown for it.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_methods(self: &mut Program) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for defn in &self.type_defns.clone() {

@@ -517,6 +517,7 @@ impl ObjectFieldType {
     ///
     /// # Arguments
     /// * `buffer` — allocated and uninitialized; every slot this writes is a first write.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn initialize_array_buf_by_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -558,6 +559,7 @@ impl ObjectFieldType {
     /// # Arguments
     /// * `begin` — the index the store starts at, counted from `buffer`'s first element. The
     ///   slots it covers are allocated and uninitialized, and each is a first write.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn append_value_into_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
@@ -665,6 +667,7 @@ impl ObjectFieldType {
     /// # Arguments
     /// * `len` - the number of elements the array holds, against which `idx` is bounds-checked.
     ///   `None` omits the check.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn read_from_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: Option<IntValue<'c>>,
@@ -686,6 +689,7 @@ impl ObjectFieldType {
     ///   `None` omits the check.
     /// * `release_old_value` - `true` when the slot holds a live element, whose reference is
     ///   released before the store; `false` when the slot is uninitialized.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn write_to_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: Option<IntValue<'c>>,
@@ -725,6 +729,7 @@ impl ObjectFieldType {
     ///
     /// # Arguments
     /// * `dst_buffer` — allocated and uninitialized; every slot this writes is a first write.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_array_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src_buffer: PointerValue<'c>,
@@ -770,7 +775,7 @@ impl ObjectFieldType {
     /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
     ///   (`Std::PunchedArray`), which the source therefore does not own; the copy skips it and
     ///   leaves `dst_buffer[idx]` uninitialized.
-    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn clone_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,
@@ -803,7 +808,7 @@ impl ObjectFieldType {
     ///   writes is a first write.
     /// * `state` — the reference-counting state of the fields, which is what `src` reaches. An
     ///   operation whose annotation covers its clone path proves it local and passes it here.
-    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn clone_struct<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
@@ -829,7 +834,7 @@ impl ObjectFieldType {
     ///   this writes are first writes.
     /// * `state` — the reference-counting state of the payload, which is what `src` reaches. An
     ///   operation whose annotation covers its clone path proves it local and passes it here.
-    // PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn clone_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
@@ -854,7 +859,7 @@ impl ObjectFieldType {
 
     /// Emit the reference-counting work for the payload a union's buffer holds: a retain, a
     /// release, a mark global or a mark threaded, on the variant the tag names.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn retain_release_mark_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -919,6 +924,7 @@ impl ObjectFieldType {
     }
 
     /// Increment the reference count of the payload a union buffer holds, `amount` times.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn retain_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -969,7 +975,7 @@ impl ObjectFieldType {
 
     /// The value a union carries, read as `variant_ty`, owned by the caller: the value is retained
     /// and the union released, which cancel each other out for an unboxed union.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_union_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -1066,7 +1072,7 @@ impl ObjectFieldType {
     /// The field of a struct at `field_idx`, taken at the struct's own reference to it: nothing is
     /// retained, so the caller either reads it while the struct is alive or takes the reference over
     /// by dropping the struct without releasing that field.
-    // PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn move_out_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,

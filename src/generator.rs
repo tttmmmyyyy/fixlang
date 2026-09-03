@@ -1117,7 +1117,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The value of field `field_idx` of the object `var` is bound to, read the way
     /// `get_scoped_obj` reads it.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj_field(
         self: &mut Self,
         var: &FullName,
@@ -1964,6 +1964,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Retain `obj`: increment the reference count of every boxed object it owns, once.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn retain(&mut self, obj: Object<'c>, state: RcState) {
         let one = self.context.i64_type().const_int(1, false);
         let prefix = format!("retain{}", state.name_suffix());
@@ -2007,6 +2008,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Retain an object `amount` times: every boxed leaf reached has its reference count increased
     /// by `amount`, an i64 count.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_retain(&mut self, obj: Object<'c>, amount: IntValue<'c>, state: RcState) {
         if obj.is_box(self.type_env()) {
             self.build_if_nonnull(&obj, "retain", |gc| {
@@ -2061,6 +2063,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Increment by `amount` the reference count of a boxed object, in the way its refcount state
     /// calls for. The caller guarantees the object is a non-null boxed pointer (e.g. a non-empty
     /// capture object).
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn retain_nonnull_boxed(
         &mut self,
         obj: &Object<'c>,
@@ -2916,7 +2919,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// * `cap_tys` — the types of all the captured values, which give the capture object its struct
     ///   layout.
     /// * `result_ty` — the type of the projected value.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_capture_project(
         &mut self,
         cap_name: &FullName,
