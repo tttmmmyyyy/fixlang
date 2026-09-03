@@ -305,7 +305,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     名前の関数がモジュールに既に在るときだけである。`<1>3b` より、`object_file_symbol_name(n)` を
     名前として関数を作りうる呼び出しは `declare_lambda_function` の 1 か所であり、**その 1 か所を
     `FFI_CALL` の C 関数名から分けるのは A26a である** -- この単位はこの名前の本体を出す段を持たない
-    ので、`<1>4` の `<2>2` `<3>1` が使う「走る時期」による分離は当たらない。`declare_lambda_function`
+    ので、`<1>4` の場合が使う「第 1 ループの項目の順序」による分離は当たらない。`declare_lambda_function`
     が `n` について走るのはこの 1 度である -- `<1>3` より `declared_globals` の `n` の登録は高々 1 つ
     であり、`get_or_declare_global` は登録が在れば `declare_program_global` を呼ばず、`FuncRef{n}` は
     `U.funcs` の鍵ではないので第 1 ループもこの名前について呼ばない。他の名前 `n'` について走る呼び出し
@@ -1216,8 +1216,9 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
 
 <1>1. `S` の中で参照を作る素動作は、次の 2 種で尽きる。**(K-i)** D24 の (E2) の `H` の表が挙げる
       生成の 7 行と、参照を処分する段の中で起きる (F) の解放が `Destructor` のオブジェクトについて
-      行う retain。**(K-ii)** 表に行を持たない、段の中の retain であって、`InlineLLVMWithRetained
-      FunctionBody` が出すものか、複製・割り当てたオブジェクトの欄へ書く 4 か所が出すもの。
+      行う retain。**(K-ii)** 表に行を持たない、段の中の retain であって、
+      `InlineLLVMWithRetainedFunctionBody` が出すものか、複製・割り当てたオブジェクトの欄へ書く
+      4 か所が出すもの。
       `S` の中で (F) の解放が始めた活性化の木 (D24 の (F)) の節点も、その本体についてこの 2 種によって
       参照を作る。
   **(K-i) の側。**D24 の (E2) の `H` の表が 7 行を挙げる -- `Retain` の行、`Llvm` の行、
@@ -1269,8 +1270,9 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
     (`clone_array_buf` が呼ぶ)、`initialize_array_buf_by_value`、`append_value_into_array_buf` の
     4 か所である。**`clone_union` はここに数えない** -- それは `retain_union` を通って第 2 群の
     `retain_release_mark_union` へ着くので、`gc.retain(` の出現を持たない。**これは (K-ii) である。**
-  - **第 7 群 (どの段も実行しない retain)。1 か所。**`InlineLLVMGetRetainFunctionOfBoxedValue
-    FunctionBody` の `generate` が定義する補助関数 `retain#<型>` の本体である。この op の段が出すのは
+  - **第 7 群 (どの段も実行しない retain)。1 か所。**
+    `InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody` の `generate` が定義する補助関数
+    `retain#<型>` の本体である。この op の段が出すのは
     その関数の**定義**とその番地であって、retain ではない。その本体が走るのは環境がその番地を呼ぶとき
     であり、**環境がその番地を呼ぶ動作を段として持つ種は D24 の (E1)-(E8) に無い。**A17 は環境が
     `boxed_to_retained_ptr` の渡した参照を**持つ**ことを述べるが、環境が参照を**作る**ことは述べない。
@@ -1501,9 +1503,9 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       union を処分する 1 か所 (`get_union_value`)。**書き換える前の古い値**を処分する 2 か所
       (`write_to_array_buf` の古い要素、`InlineLLVMStructSetBody` の古い欄)。**この節点のオペランド**を
       処分する 7 か所 (`InlineLLVMArrayAppendCapacityUnchecked` の 2 か所、`make_struct_union_unique` の
-      共有の腕、`InlineLLVMUnionModBody` の不一致の腕の `modifier`、`InlineLLVMWithRetained
-      FunctionBody` の `x`、`initialize_array_buf_by_value` と `append_value_into_array_buf` の
-      `value`)。そして `get_funptr_release` が定義する補助関数の本体 1 か所 (どの段も実行しない。
+      共有の腕、`InlineLLVMUnionModBody` の不一致の腕の `modifier`、
+      `InlineLLVMWithRetainedFunctionBody` の `x`、`initialize_array_buf_by_value` と
+      `append_value_into_array_buf` の `value`)。そして `get_funptr_release` が定義する補助関数の本体 1 か所 (どの段も実行しない。
       `<1>1` の第 7 群と同じ形)。適用が返した値を処分するものはこの中に無いので、その参照は `p` で
       `Obl` に在る。D25 が挙げるのは未処分の参照の持ち手なので、D8 より
       `H(o') ≥ 1` であり、`p` は解放について閉じているので L2 (a-1) より `o'` は `p` で生きている。
