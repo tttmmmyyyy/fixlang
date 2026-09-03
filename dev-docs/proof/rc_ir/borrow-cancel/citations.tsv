@@ -209,8 +209,8 @@ src/fixstd/builtin.rs	InlineLLVMDestructorMake::result_prov	P1,P2,P26	1937952562
 src/fixstd/builtin.rs	InlineLLVMFixBody	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P28,P29,P30	60fdab56c3bc
 src/fixstd/builtin.rs	InlineLLVMFixBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
 src/fixstd/builtin.rs	InlineLLVMFixBody::generate_tail	D/A,P26	b42d29e5682c
-src/fixstd/builtin.rs	InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody	P27,P29,P30	80a6ab3e25f3
-src/fixstd/builtin.rs	InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody	P27,P29,P30	45558c1323f9
+src/fixstd/builtin.rs	InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody	D/A,P27,P29,P30	80a6ab3e25f3
+src/fixstd/builtin.rs	InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody	D/A,P27,P29,P30	45558c1323f9
 src/fixstd/builtin.rs	InlineLLVMIntLit	P7a,P7d,P7e	b8126e10483f
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody	D/A	1da0d65c3df8
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::generate	P26	cf1c72be74b6

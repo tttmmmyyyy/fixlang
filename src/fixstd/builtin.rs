@@ -7650,7 +7650,7 @@ pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
@@ -7762,7 +7762,7 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
