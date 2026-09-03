@@ -714,6 +714,7 @@ fn param_ownership_shape(
 
 /// The variables bound to an `App` or `Match` in tail position. Such a call must not be turned into
 /// a non-tail one by an after-call release.
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
 fn tail_result_vars(body: &RcExprNode) -> Set<FullName> {
     let mut out = Set::default();
     mark_tail(body, true, &mut out);
@@ -724,6 +725,7 @@ fn tail_result_vars(body: &RcExprNode) -> Set<FullName> {
 /// whether the subtree itself sits in tail position: a binding is in tail position when its
 /// continuation does nothing but return it (`trivially_returns`) and the subtree holding it is too,
 /// and a match arm inherits the tail position of the match.
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
 fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
     match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => {
