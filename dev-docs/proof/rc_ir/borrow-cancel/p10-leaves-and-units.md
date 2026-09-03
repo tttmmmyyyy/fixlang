@@ -406,7 +406,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    | `bulitin_tycons` | `Arrow` | 1 個。`tyvars` は `a` と `b` |
    | `bulitin_tycons` | `DynamicObject` | 1 個 (`#DynamicObject`)。`is_unbox: false`、`tyvars: vec![]` |
    | `bulitin_tycons` | `ArrayStorage` | 1 個 (`#ArrayStorage`)。`is_unbox: false`、`tyvars: vec![make_tyvar("a", ...)]` |
-   | `TypeDefn::tycon_info` | `Struct` か `Union` | 宣言ごとに 1 個 (穴つきの形を含む)。`tyvars` は `self.tyvars` |
+   | `TypeDefn::tycon_info` | `Struct` か `Union` | union の宣言 1 つにつき 1 個、`n` フィールドの構造体の宣言 1 つにつき `n + 1` 個 (穴の無い形と、フィールドごとの穴つきの形)。`tyvars` はどの形でも `self.tyvars` |
    | `CaptureStruct::new` | `Struct` | capture 構造体ごとに 1 個。`tyvars: vec![]` |
    | `register_opaque_tycon` | `Opaque` | 不透明型ごとに 1 個。`is_unbox: false` |
 
@@ -2347,8 +2347,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
          CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
     <3>4. QED
       (a) は `<3>1` と `<3>2`、および `<3>3` の第 1 段落 --「`origin` は `&VarTable` を取るので、
-      `bindings` と `var_tys` の `Map` そのものを置き替えることも、その要素を可変に借りることも
-      できない」-- である。(b) は `<3>3`、(c) は `<3>3a` である。
+      `EXT Rust の内部可変性` より `bindings` と `var_tys` の `Map` そのものを置き替えることも、
+      その要素を可変に借りることもできない」-- である。(b) は `<3>3`、(c) は `<3>3a` である。
       BY <3>1, <3>2, <3>3, <3>3a
   <2>1a. `origin_from_leaves_under(vars, E, decl, args, path, here)` の返り値は、`decl`、`args`、
      `path`、`here`、`E`、および自分が行う `origin` の呼び出しの返り値だけで決まる。とくに
@@ -3090,9 +3090,9 @@ D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が�
 
 **P1 の定義域。** `<1>20` が示すのは `<1>1` を満たす型についての P1 であり、`<1>1` は A10 を
 この文書の記法で述べたものなので、それは README の P1 --「**A10 を満たす**任意の型 `τ` について」--
-そのものである。A10 が型に条件を置くことが空虚でないのは `<1>19a` による -- `<1>1` の (i) を
-満たさない型については `boxed_leaf_paths` も `rc_units` も `toplevel_tycon_info` の `unwrap` で
-abort し、P1 の言明の 2 つの辺が意味を持たない。
+そのものである。A10 が型に条件を置くことが空虚でないのは `<1>19a` による -- `t.is_closure()` が偽で
+`t.toplevel_tycon()` が `None` を返すか返す型構成子が `E` に無い型については、`boxed_leaf_paths` も
+`rc_units` も `toplevel_tycon_info` の `unwrap` で abort し、P1 の言明の 2 つの辺が意味を持たない。
 
 ## 4. leaf と unit がずれる 2 か所が P1 に効いた場所
 
