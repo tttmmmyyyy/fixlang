@@ -1771,10 +1771,12 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
     BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: VarTable::of,
        D6, D8, D34, A8, D26
   <2>3. QED
-    BY <2>1, <2>2, <1>4, L40, D10, CODE src/rc_ir/ownership.rs: VarTable::of,
+    BY <2>1, <2>2, <1>4, L40, D10, P2a, CODE src/rc_ir/ownership.rs: VarTable::of,
        CODE src/rc_ir/ownership.rs: collect_bindings
     <2>1 が挙げる 4 つの腕のうち、`None` の腕に当たる leaf は <2>2 が計数下でないとして除く。
-    `Binding::Param` を置くのは `VarTable::of` がパラメータと capture について行う 1 か所だけなので、
+    `Binding::Param` を置くのは `VarTable::of` がパラメータと capture について行う 1 か所だけなので
+    (`ownership.rs` の残る 1 か所は `#[cfg(test)] mod tests` の中の表の作り手であり、P2a が
+    「製品のコードが作る表はこの 2 つの構成子を通るものだけであり」としてそれを範囲の外に置く)、
     `Param` の腕に当たるのはパラメータ・capture の leaf である。残るのは `Binding::Producer` の腕と、
     宣言が単一の `Arg` でない `Binding::Llvm`、boxed 容器の `Binding::Field`、boxed scrutinee の
     `Binding::Payload(_, Some(_))` の 3 つの腕である。L40 より歩みの各位置の path は boxed leaf なので、
@@ -3659,4 +3661,5 @@ Retain(v, [], s,
 `L44` の (b) が `H'(q, O) = H(q, O) - d(q, O)` を与えるので、P21 (a) はそのまま出る。
 
 **対になることは `L32` の 3 が与える。** `Del` の各 `Release` はちょうど 1 つの `t ∈ CT` の
-`un_bump_releases[t]` に属するので、「その `Retain` と対になる `Release`」は 1 つに定まる。
+`un_bump_releases[t]` に属するので、README の P21 (a) が「**その `Retain`
+と対になる削除済みの `Release` がまだ処分していないもの**」と書く対応は 1 つに定まる。
