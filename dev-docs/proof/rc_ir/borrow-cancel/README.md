@@ -3188,17 +3188,17 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | ファイル | 直近の検証 | FALSE | INCOMPLETE | NOT-OBVIOUS ほか | 次にすること |
 |---|---|---|---|---|---|
 | `p05-holders.md` | 第 6 周 (224 段) | **0** | 5 | BAD-CITATION 5、NOT-OBVIOUS 8 | 修理済み。**第 7 周の検証** |
-| `p10-leaves-and-units.md` | 第 6 周 (509 段) | **0** | **0** | NOT-OBVIOUS 8 | **2 周続けてゼロ**。修理済み。**第 7 周の検証** |
-| `p11-origin-soundness.md` | 第 6 周 (298 段) | 2 | 5 | UNDEFINED 1、NOT-OBVIOUS 6 | 修理済み。**第 7 周の検証** |
+| `p10-leaves-and-units.md` | 第 7 周 (509 段) | **0** (散文 1) | **0** | NOT-OBVIOUS 2 | **3 周続けて段のゼロ**。修理済み。**第 8 周の検証** |
+| `p11-origin-soundness.md` | 第 7 周 (298 段) | **0** | **0** | UNDEFINED 1、BAD-CITATION 1、NOT-OBVIOUS 5 | 修理済み。**第 8 周の検証** |
 | `p12-identity-and-consumes.md` | 第 6 周 (373 段) | **0** (散文 2) | 2 | BAD-CITATION 1、NOT-OBVIOUS 10 | 修理済み。**第 7 周の検証** |
-| `p13-disposals-and-pending.md` | 第 6 周 | 1 | 0 | BAD-CITATION 4、UNDEFINED 2、NOT-OBVIOUS 6 | 修理済み。**第 7 周の検証** |
+| `p13-disposals-and-pending.md` | 第 7 周 (431 段) | **0** (散文 1) | 2 (散文 4) | BAD-CITATION 4、UNDEFINED 1、NOT-OBVIOUS 10 | 修理済み。**第 8 周の検証** |
 | `p15-ownership-uniformity.md` | 第 6 周 (382 段) | **0** | 2 | NOT-OBVIOUS 5 | 修理済み。**第 7 周の検証** |
-| `p20-borrow-ify.md` | 第 6 周 (551 段) | 3 | **0** | BAD-CITATION 3、UNDEFINED 2、NOT-OBVIOUS 11 | 修理済み (A19 (ii-c) を果たした)。**第 7 周の検証** |
-| `p30-cancel-walk.md` | 第 6 周 (366 段) | **0** | **0** | BAD-CITATION 1、NOT-OBVIOUS 20 | **2 周続けてゼロ**。修理済み。**第 7 周の検証** |
-| `p40-cancel-soundness.md` | 第 6 周 (400 段) | 5 | 4 | BAD-CITATION 13、NOT-OBVIOUS 14、UNDEFINED 1 | 修理済み。**第 7 周の検証** |
-| `p50-observation.md` | 第 6 周 | **0** | 1 | BAD-CITATION 8、NOT-OBVIOUS 12 | 修理済み。**第 7 周の検証** |
-| `p51-runs.md` | 第 7 周 (219 段) | 2 | 9 | NOT-OBVIOUS 9 | 修理済み。**第 8 周の検証** |
-| `p60-insert-rc.md` | 第 7 周 (382 段) | 1 | 6 | UNDEFINED 2、NOT-OBVIOUS 7 | 修理済み。**第 8 周の検証** |
+| `p20-borrow-ify.md` | 第 7 周 (566 段) | 2 | **0** | 散文の BAD-CITATION 3、NOT-OBVIOUS 5 | 修理済み。**第 8 周の検証** |
+| `p30-cancel-walk.md` | 第 7 周 (366 段) | 1 | **0** | UNDEFINED 1、NOT-OBVIOUS 15 | 修理済み。**第 8 周の検証** |
+| `p40-cancel-soundness.md` | 第 7 周 (438 段) | 4 | 4 | BAD-CITATION 4、UNDEFINED 1、NOT-OBVIOUS 11 | 修理済み。**第 8 周の検証** |
+| `p50-observation.md` | 第 7 周 (254 段) | **0** (散文 2) | 3 | NOT-OBVIOUS 11 | **修理中** |
+| `p51-runs.md` | 第 7 周 (205 段) | 2 | 9 | NOT-OBVIOUS 9 | 修理済み。**第 8 周の検証** |
+| `p60-insert-rc.md` | 第 7 周 (373 段) | 1 | 6 | UNDEFINED 2、NOT-OBVIOUS 7 | 修理済み。**第 8 周の検証** |
 | `p70-main-theorem.md` | 第 6 周 (31 段) | **0** (散文 6) | 1 | NOT-OBVIOUS 1、表の落ち 12、引用 13 | 修理済み。**第 7 周の検証** |
 
 `--` は、その周の検証がその欄を挙げなかったことを表す。
@@ -3208,6 +3208,16 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 **FALSE の数が第 5 周より増えているのは、検証が強くなった分と、枠が動いた分である** --
 この周のあいだに走査を 3 本足した (A19 を引く段の一覧、引用の帰属による分別、README について
 述べる文)。**周どうしの数はそのままでは比べられない。**
+
+**第 7 周は落ちる周である。** 検証を終えた 9 本で、**段の FALSE は第 6 周の 24 件から 10 件へ落ちた。**
+**段の FALSE がゼロのファイルが 4 本** (`p10`・`p11`・`p13`・`p50`)、**そのうち INCOMPLETE もゼロなのが
+2 本** (`p10`・`p11`) である。**残る 10 件のうち 7 件は A19 (ii-c) の引用の捏造という 1 つの族であり**、
+その原因 (制限が次の文に在ること) はこの周に取り除いた。
+
+**この周に出た新しい形は、逆向きの追随漏れである** -- **枠が埋めた節を「まだ無い」と書き、その分を
+自分の前提として負い続ける形。**`p50-observation.md` が 2 か所でこれをやっており、**README はその 2 つの
+節の読み手としてそのファイルを名指していた。** 検証の側に「README がその文書を名指す箇所を全部取り、
+名指された段が実際にそれを引いているかを確かめる」走査を足した。
 
 ### 7.3 果たされていない義務
 
