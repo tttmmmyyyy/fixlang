@@ -237,6 +237,35 @@ site を 1 つも挙げない。P7a と P7d はその点を避けて site を本
   `<1>2` の 2 つの形が場合を尽くしており、`<1>4` と `<1>5` がそれぞれを与える。
   BY <1>2, <1>4, <1>5
 
+### L1a (unit の下の leaf は、その unit へ切り詰まる leaf である)
+
+**言明**。A10 を満たす型 `τ`、`u ∈ units(τ)`、`λ ∈ leaves(τ)` について、`u ⊑ λ` であることと
+`trunc(τ, λ) = u` であることとは同値である。
+
+<1>1. `trunc(τ, λ)` は `λ` の接頭辞である。
+  `truncate_to_unit` は `out` を空の列から始め、`path` の添字を先頭から順に走る。`UnitStep::Fields` の腕は
+  今の添字を `out` に push して次の添字へ進み、`UnitStep::Capture` の腕は今の添字を push して `break` し、
+  `UnitStep::Unit` の腕は何も push せず `break` し、`UnitStep::NoUnit` の腕は `panic!` する。よって値を
+  返すときの `out` は `path` の接頭辞である。
+  BY CODE src/rc_ir/ownership.rs: truncate_to_unit
+
+<1>2. `units(τ)` の相異なる 2 元は、一方が他方の接頭辞にならない。
+  `rc_units_go` は現在の型の `unit_step` で場合を分ける。`UnitStep::NoUnit` の腕は何も積まず降りず、
+  `UnitStep::Unit` の腕は今の path を 1 つ積んで降りず、`UnitStep::Capture` の腕は今の path に
+  `capture_idx` を足したものを 1 つ積んで降りず、`UnitStep::Fields` の腕は何も積まずに各
+  `held_fields` の添字を足して再帰する。よって積まれる path `π` について、`π` の真の接頭辞の位置では
+  `unit_step` が `UnitStep::Fields` を返しており、その位置では何も積まれない。`unit_step` はその位置の型
+  だけで決まるので (`unit_step` は型を引数に取る関数である)、1 つの位置が `Fields` と `Unit`/`Capture` の
+  両方を返すことはない。したがって積まれた 2 つの path の一方が他方の真の接頭辞になることはない。
+  BY CODE src/rc_ir/ownership.rs: rc_units, rc_units_go, unit_step
+
+<1>3. QED
+  P1 は **A10 を満たす**型についての言明なので `τ` に当たり、P1 より `trunc(τ, λ) ∈ units(τ)` である。
+  `trunc(τ, λ) = u` ならば `<1>1` より `u ⊑ λ` である。逆に `u ⊑ λ` とすると、`u` と `trunc(τ, λ)` は
+  どちらも `units(τ)` の元であって `λ` の接頭辞なので (`<1>1`)、短い方が長い方の接頭辞である。`<1>2` より
+  2 つは等しい。
+  BY P1, <1>1, <1>2
+
 ### L2 (`owned_units` に入るもの)
 
 **言明**。`borrow_ify` が組み立てる `owned_units` は、次の 2 種の元だけからなる。
