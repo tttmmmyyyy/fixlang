@@ -1,6 +1,6 @@
 # P3 / P4 -- `origin` の健全性
 
-この文書が読んだコードのコミットは `ee06417d8e3c0a6c743f4e554a8bc152ea48adcd` である。README が証明の
+この文書が読んだコードのコミットは `1510d91674b9ad34971db2b7d3f9f6d5a8192f83` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が `CODE` で引く
 11 ファイル (`src/rc_ir/ownership.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/provenance.rs`、
 `src/rc_ir/borrow.rs`、`src/rc_ir/codegen.rs`、`src/generator.rs`、`src/ast/types.rs`、
