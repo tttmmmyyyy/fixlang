@@ -103,7 +103,7 @@ README の A19 は「**「各時点」は、その活性化が生きている (D
 (`p20-borrow-ify.md` の第 13 節) である。」と 2 人挙げ、この文書が果たすのは前者である。
 第 10.7 節の `L19` (d) がその段であり、その言明も同じ範囲で量化する。
 
-**外部の結果。** README が `EXT` の名札を与える群の項目を、この文書は次の 9 つ据える。
+**外部の結果。** README が `EXT` の名札を与える群の項目を、この文書は次の 10 個据える。
 
 **EXT 呼び出しの入れ子**。1 つのスレッドの
 計算において、関数の呼び出しは開始と終了について入れ子をなす。すなわち、呼び出し `c` の実行中に
@@ -140,11 +140,19 @@ within the module) and any item within a crate has a canonical module path denot
 within the crate's module tree」と述べ、モジュールについて「A module is a container for zero or more
 items」「A module without a body is loaded from an external file」「the module's contents are in a
 file with the name of the module plus the `.rs` extension」と述べる (Rust Reference の
-"Crates and source files" と "Modules")。すなわちクレートの項目は、クレート根から `mod` 宣言を
-たどって得られる各モジュールの本体 -- ブロックか、その宣言が読み込むファイル -- に書かれた項目で
-尽きる。よって、あるファイルの全文を読んで得た項目の一覧は、そのモジュールの項目の一覧として
-完全であり、クレートの全ファイルを読んで得た一覧は、そのクレートの項目・トレイト実装・式の一覧として
-完全である。
+"Crates and source files" と "Modules")。すなわちクレートは、クレート根から `mod` 宣言をたどって
+得られるモジュールの木であり、各モジュールの**内容**はブロックか、その宣言が読み込む 1 つのファイル
+である。よって、あるモジュールの内容を持つファイルの全文を読めば、そのモジュールの内容 -- 項目、
+トレイト実装、およびそれらの本体に書かれた式 -- をすべて読んだことになり、クレートの全ファイルの
+全文を読めば、そのクレートの内容をすべて読んだことになる。**式まで届くのは「the module's contents
+are in a file」の側である** -- 「A module is a container for zero or more items」が数えるのは
+項目だけである。
+
+**EXT ビルドの対象**。`Cargo.toml` は 2 つのターゲットを宣言する -- `[lib]` は
+`path = "src/lib.rs"`、`[[bin]]` は `path = "src/main.rs"` である。`src/lib.rs` と `src/main.rs` は
+どちらも同じ名前のモジュール (`ast`、`build`、… `rc_ir`、…) を `mod` 宣言でたどるので、**同じ
+ファイルが 2 つのクレートに属する**。よって「この式はクレートに 1 つも無い」を確かめる走査の範囲は、
+`src/` の全ファイルである。
 
 **EXT 条件つきコンパイル**。Rust Reference は `cfg` 属性について「If the predicates are true, the
 form is rewritten to not have the `cfg` attributes on it. If any predicate is false, the form is
@@ -1235,20 +1243,25 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   `vec![]`、`RcState` は `Unknown` である。
 
 <1>2. `insert_rc` は、一度作った節点の継続を書き換えない。
-  BY EXT クレートの項目, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
-     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
+  BY EXT クレートの項目, EXT ビルドの対象, CODE src/rc_ir/ast.rs: RcExprNode,
+     CODE src/rc_ir/rc_insert.rs: insert_rc,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
      CODE src/rc_ir/rc_insert.rs: build_retains,
      CODE src/rc_ir/rc_insert.rs: build_releases
-  これらの関数は `RcExprNode` を作って返すだけで、返した節点の継続を差し替える式を持たない。呼び出し元が
-  するのは、返された節点を別の構成子の継続 (`cont` または `node`) として渡すことだけであり、
-  `build_releases` と `build_retains` も渡された節点を継続として**包む**。`EXT クレートの項目` より、
-  このモジュールの項目はこのファイルに書かれたものだけなので、`insert_rc` が走らせる式はここに
-  挙げた関数の本体で尽きる。よって出力の `Retain` 節点の
-  継続は、それが作られた時点の継続である。
+  **在りかは述語で決める。** `insert_rc` が走らせる関数を一覧にすると、関数が 1 つ増えるたびに
+  古くなる。節点の継続は `RcExprNode` の `expr` 欄 (`Arc<RcExpr>`) が持つので、一度作った節点の
+  継続を書き換える式は、その節点への可変参照を持ち、`expr` 欄へ代入するか `Arc` の中身を可変に
+  借りるものである。**その 3 つを述語としてクレートの全ファイルに掛ける** -- `&mut RcExprNode` を
+  取る関数の宣言、`RcExprNode` 型の値の `expr` 欄への代入、`Arc::get_mut` と `Arc::make_mut` の
+  呼び出しである。第 1 と第 2 は 1 つも無く、第 3 は `src/elaboration/typecheck.rs` の 2 つだけで
+  どちらも `Arc<RcExpr>` を借りない。**走査の範囲は `src/` の全ファイルである** --
+  `EXT ビルドの対象` がそれを与え、`EXT クレートの項目` よりその全文を読めばクレートの内容を
+  すべて読んだことになる。
+  よって `RcExprNode` の値は作られた後に変わらず、`insert_rc` が走らせるどの式も、返された節点を
+  別の構成子の継続 (`cont` または `node`) として渡すか、本体の位置 -- `insert_into_func` の
+  `func.body`、`insert_rc` の `glob.init` -- へ書き換えの結果の木そのものを置くだけである
+  (`build_releases` と `build_retains` も渡された節点を継続として**包む**)。よって出力の
+  `Retain` 節点の継続は、それが作られた時点の継続である。
 
 <1>3. CASE `t` が `L8` の 1 で作られた。
   BY L8, <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
