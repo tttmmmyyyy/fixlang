@@ -34,7 +34,7 @@ IDENTITY = re.compile(r"<!--#([0-9a-f]{7})-->")
 # 枠の項目は太字の見出し (`**D12 (…)**`、`- **P28** (…)`)、証明の主張は `#` の見出しである。
 # 項目の見出しは題を括弧で持つ (`**D1 (プログラム)**`、`- **P28** (参照の持ち手は…)`)。
 # 散文の太字 (`**D24 の網羅の節**`) と分けるのはこの括弧である。
-FRAME_ITEM = re.compile(r"^(?:- )?\*\*([DAP]\d+[a-z]*)(?:\s*\(|\*\*\s*\()")
+FRAME_ITEM = re.compile(r"^(?:- )?\*\*(T|[DAP]\d+[a-z]*)(?:\s*\(|\*\*\s*\()")
 CLAIM_HEAD = re.compile(r"^#+\s+(?:[\d.]+[a-z]?\s+)?`?(L\d+[a-z]*)`?\s*\(")
 THEOREM = re.compile(r"^#+\s+(T)\b")
 CITATION = re.compile(r"\b([DAP]\d+[a-z]*|L\d+[a-z]*)\b")
@@ -70,8 +70,19 @@ def items_in(path):
     lines = open(path, encoding="utf-8").read().split("\n")
     frame = os.path.basename(path) == "README.md"
     patterns = (FRAME_ITEM, THEOREM) if frame else (CLAIM_HEAD,)
+    # **枠の項目は定義・仮定・命題の節にしかない。** その外の散文にも `**A19 (ii) が…**` のように
+    # 見出しと同じ形の太字が現れるので、節で囲まないと散文が項目になり、**その手前の項目が
+    # 残りの節を丸ごと抱え込む** (実測で 1 つの項目が 321 行と辺 68 本を持った)。
+    span = range(len(lines))
+    if frame:
+        heads_of_sections = [i for i, l in enumerate(lines) if re.match(r"^## \d+\.", l)]
+        starts = [i for i in heads_of_sections if re.match(r"^## 3\.", lines[i])]
+        ends = [i for i in heads_of_sections if re.match(r"^## 6\.", lines[i])]
+        if starts and ends:
+            span = range(starts[0], ends[0])
     heads = []
-    for index, line in enumerate(lines):
+    for index in span:
+        line = lines[index]
         for pattern in patterns:
             match = pattern.match(line)
             if match:
