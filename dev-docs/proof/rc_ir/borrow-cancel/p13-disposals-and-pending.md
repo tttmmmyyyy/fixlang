@@ -1405,14 +1405,20 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
         L8 の仮定より `λ ∈ boxed_leaf_paths(ty(x))` であり、D4 の第 1 規則は `is_fully_unboxed` が
         真の型が leaf を持たないと述べる。
       <4>3. `container.ty` について `is_closure`、`is_funptr`、`is_array` はいずれも偽である。
-        BY <3>1, CODE src/ast/types.rs: TypeNode::is_closure,
+        BY <3>1, A12, CODE src/ast/types.rs: TypeNode::is_closure,
            CODE src/ast/types.rs: TypeNode::is_funptr, CODE src/ast/types.rs: TypeNode::is_array,
+           CODE src/ast/types.rs: TypeNode::is_struct,
+           CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
            CODE src/ast/types.rs: TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
         この 3 つの判定は、最上位 tycon がそれぞれ `Std::->`、`Std::FunPtr_*` のいずれか、
         `Std::Array` であることを問う。`bulitin_tycons` はこの 3 種にそれぞれ `TyConVariant::Arrow`、
-        `TyConVariant::Primitive`、`TyConVariant::Array` を与える。<3>1 より `container.ty` の最上位
-        tycon は構造体として宣言されたもの、すなわち `TyConVariant::Struct` である。1 つの tycon の
-        変位は 1 つなので、`container.ty` の最上位 tycon はこの 3 種のどれとも異なる。
+        `TyConVariant::Primitive`、`TyConVariant::Array` を与える。**A12 の「構造体である」から
+        `TyConVariant::Struct` へ渡るのは `is_struct` である** -- その本体は
+        `self.toplevel_tycon_info(type_env)` の `variant` を読み、`TyConVariant::Struct` のときにだけ
+        真を返す。<3>1 より `container.ty` は構造体なので、その最上位 tycon の `variant` は
+        `TyConVariant::Struct` である。1 つの tycon の変位は 1 つなので、`container.ty` の最上位 tycon は
+        この 3 種のどれとも異なる。**A12 が型の `variant` を述べる各節では、その型の `is_closure()` は
+        偽である** -- A12 はこの文をその各節の一部として置く。
       <4>4. QED
         BY <2>2, <4>1, <4>2, <4>3, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
         `is_fully_unboxed` は、`is_box` が真なら偽、`is_closure` が真なら偽、`is_array` が真なら偽、
@@ -1485,14 +1491,20 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
         L8 の仮定より `λ ∈ boxed_leaf_paths(ty(x))` であり、D4 の第 1 規則は `is_fully_unboxed` が
         真の型が leaf を持たないと述べる。
       <4>3. `scrut.ty` について `is_closure`、`is_funptr`、`is_array` はいずれも偽である。
-        BY <3>1, CODE src/ast/types.rs: TypeNode::is_closure,
+        BY <3>1, A12, CODE src/ast/types.rs: TypeNode::is_closure,
            CODE src/ast/types.rs: TypeNode::is_funptr, CODE src/ast/types.rs: TypeNode::is_array,
+           CODE src/ast/types.rs: TypeNode::is_union,
+           CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
            CODE src/ast/types.rs: TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
         この 3 つの判定は、最上位 tycon がそれぞれ `Std::->`、`Std::FunPtr_*` のいずれか、
         `Std::Array` であることを問う。`bulitin_tycons` はこの 3 種にそれぞれ `TyConVariant::Arrow`、
-        `TyConVariant::Primitive`、`TyConVariant::Array` を与える。<3>1 より `scrut.ty` の最上位
-        tycon は union として宣言されたもの、すなわち `TyConVariant::Union` である。1 つの tycon の
-        変位は 1 つなので、`scrut.ty` の最上位 tycon はこの 3 種のどれとも異なる。
+        `TyConVariant::Primitive`、`TyConVariant::Array` を与える。**A12 の「union である」から
+        `TyConVariant::Union` へ渡るのは `is_union` である** -- その本体は
+        `self.toplevel_tycon_info(type_env)` の `variant` を読み、`TyConVariant::Union` のときにだけ
+        真を返す。<3>1 より `scrut.ty` は union なので、その最上位 tycon の `variant` は
+        `TyConVariant::Union` である。1 つの tycon の変位は 1 つなので、`scrut.ty` の最上位 tycon は
+        この 3 種のどれとも異なる。**A12 が型の `variant` を述べる各節では、その型の `is_closure()` は
+        偽である** -- A12 はこの文をその各節の一部として置く。
       <4>4. QED
         BY <2>2, <4>1, <4>2, <4>3, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
         `is_fully_unboxed` は、`is_box` が真なら偽、`is_closure` が真なら偽、`is_array` が真なら偽、
@@ -2242,8 +2254,10 @@ DEF 名前の活性による。よって 7.5.4 が `INV(n)` を示せば P18a �
 `(x, λ)` の **`ρ` 歩み**と呼ぶ。
 
 **この 3 つの語は D33 の 3 つの語である。** D33 は同じ 3 つを D20 の別名の辺の側から定めており、
-2 つの読みが同じ列と同じ停止位置を与えることは `L12b` が示す。**README の A19・D34・P14a が
-「ρ-終端」と書くのは、この `ρ` 終端である。**
+2 つの読みが同じ列と同じ停止位置を与えることは `L12b` が示す。**README の A19 (i) と P14a が
+「ρ-終端」と書くのは、この `ρ` 終端である。** D34 はその語を書かず「`C` の終端」「`T_ρ(C)`」と書き、
+「**ここでいう終端は D33 の `ρ` 終端である。** A19 (i) と P14a が「ρ-終端」と書くのはこの語であり、
+この定義は「`C` の終端」「`T_ρ(C)`」と書く。**同じものである。**」と、3 つを同一視する。
 
 **主語を位置に取る理由。** D20 は「**辺が在るのは、その辺を定める節点が実行路の上に在り、かつその
 節点と leaf `λ` が作る 2 つの対がどちらもその路の位置であるときであり、そのときに限る。**」と定める
@@ -3234,9 +3248,15 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
   `callee.clone()` をそのまま返し、差し替えるときは `callee.clone()` の `name` の欄だけを
   `borrow_version.name` に置く。前者では `callee` は両側で同じ `RcVar` なので `VarPath` の集合は
   等しい。後者では、P12 の「呼び出し先が入力の関数を名指すとき、返る名前は出力の `funcs` の鍵である」
-  より差し替わった名前は出力の `funcs` の鍵であり、A13 の「**最上位の記号の名前は局所名ではない。**
+  より差し替わった名前は出力の `funcs` の鍵である。**出力の鍵は入力の鍵と借用版の鍵の 2 種であり、
+  どちらも局所名ではない。** 入力の鍵については A13 の「**最上位の記号の名前は局所名ではない。**
   `FullName::is_local` が偽であり、`prog.funcs` の鍵と `global_types` の鍵はどちらもそのような名前で
-  ある」よりそれは局所名ではない。`rename` が写すのは `Pre(V)` の束縛名であり、D6 より束縛を持つ名前は
+  ある」がそれを与える。借用版の鍵は `borrow_funcref` が作るものであり、その本体は入力の名前の
+  `name` の欄に `"#borrow"` を継ぎ足すだけで `namespace` の欄を写す
+  (`CODE src/rc_ir/borrow.rs: borrow_funcref`)。`FullName::is_local` は `self.namespace.is_local()`
+  であり、`NameSpace::is_local` は `self.names.len() == 0` なので (`CODE src/ast/name.rs:
+  FullName::is_local`, `CODE src/ast/name.rs: NameSpace::is_local`)、判定は `namespace` だけで決まり、
+  借用版の鍵も局所名ではない。`rename` が写すのは `Pre(V)` の束縛名であり、D6 より束縛を持つ名前は
   局所名なので、差し替わった名前は `rename` の像に無い。これが言明の但し書きである。
 
   `Pre(V)` と `F` の本体の間は `rename` である。6 種のうち 5 種 -- `App` の callee、`Closure` の
@@ -3564,6 +3584,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         `params[i]` は `p_i` の名前と型である。
     BY D23, P30, A6, A13, A14, P9, D6, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: param_names_and_types,
+       CODE src/rc_ir/borrow.rs: borrow_funcref,
+       CODE src/ast/name.rs: FullName::is_local, CODE src/ast/name.rs: NameSpace::is_local,
        CODE src/rc_ir/ownership.rs: resolve_callee_params,
        CODE src/rc_ir/ownership.rs: collect_bindings
     D23 は `App` の呼び出し先を実行時に `callee` の値が指す関数と定め、「**D9 の `App` の行と D10 の
@@ -3578,7 +3600,9 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
     である添字はパラメータの側に落ち、`params[i]` は `g` の第 `i` パラメータの名前と型である。
     そのとき A6 と A13 と P9 より `callee.name` は `V` の本体の束縛名ではなく、`collect_bindings` が
     `vars.closure_targets` に入れる鍵は `Let(x, RcRhs::Closure(fref, _), k)` の束縛変数 `x` の名前だけ
-    なので (D6 より束縛を持つ名前は局所名であり、A13 より出力の `funcs` の鍵は局所名ではない)、
+    なので (D6 より束縛を持つ名前は局所名であり、出力の `funcs` の鍵は局所名ではない -- 入力の鍵に
+    ついては A13 が、借用版の鍵については `borrow_funcref` が `namespace` の欄を写すことがそれを
+    与える)、
     `resolve_callee_params` の `closure_targets` の枝は当たらず、`resolve_callee_params` も同じ関数の
     `params` を返す。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
     `resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の呼び出し先
