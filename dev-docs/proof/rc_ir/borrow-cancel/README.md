@@ -3167,7 +3167,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | `p40-cancel-soundness.md` | 第 6 周 (400 段) | 5 | 4 | BAD-CITATION 13、NOT-OBVIOUS 14、UNDEFINED 1 | 修理済み。**第 7 周の検証** |
 | `p50-observation.md` | 第 6 周 | **0** | 1 | BAD-CITATION 8、NOT-OBVIOUS 12 | 修理済み。**第 7 周の検証** |
 | `p51-runs.md` | 第 7 周 (219 段) | 2 | 9 | NOT-OBVIOUS 9 | 修理済み。**第 8 周の検証** |
-| `p60-insert-rc.md` | 第 6 周 (360 段) | 4 | 9 | UNDEFINED 1、BAD-CITATION 4、HEDGE 1、NOT-OBVIOUS 45 段 | 修理済み。**第 7 周の検証** |
+| `p60-insert-rc.md` | 第 7 周 (382 段) | 1 | 6 | UNDEFINED 2、NOT-OBVIOUS 7 | 修理済み。**第 8 周の検証** |
 | `p70-main-theorem.md` | 第 6 周 (31 段) | **0** (散文 6) | 1 | NOT-OBVIOUS 1、表の落ち 12、引用 13 | 修理済み。**第 7 周の検証** |
 
 `--` は、その周の検証がその欄を挙げなかったことを表す。
