@@ -65,6 +65,10 @@ Rust の言語規則 (auto trait、借用規則、参照の届く範囲) や呼�
 
 定義は依存の順に並べる。番号は導入の順ではなく、文書中で固定された名札である。番号 D28 は使っていない。
 
+**ビルド構成の事実は `EXT` で据える。** `CODE` が名指せるのは `.rs` と `.fix` の記号だけなので
+(`dev-docs/proof/proof_links.py`)、`Cargo.toml` が宣言するターゲットのような事実は引けない。
+それを負う段は、証明ファイルの第 1 節に `EXT` として言明を据え、その名で引く。
+
 **定義の中に、支えの要る主張を置かない。** 定義が定めるのは語の意味だけである。その語について
 示すことが在るなら、それは段であり、`BY` を持ち、判定を受ける。**定義の中に「依拠するもの」を
 添えて主張を置くと、その主張は段でないので誰の検証も受けない。**
@@ -1451,9 +1455,17 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 **「内部可変性を持たない」と書くと偽になる。** `RcProgram` は `RcFunc` の `fn_ty` と `RcVar` の `ty` を
 通じて `TypeNode` に届き、`TypeNode` は `hash_cache`・`ground_cache`・`depth_cache` という `OnceLock` の
 欄を 3 つ持つ。**その 3 つを共有参照から埋めるのは、`<欄>.get_or_init` を呼ぶメソッドである** --
-`TypeNode::type_hash`・`TypeNode::is_ground`・`TypeNode::depth` の 3 つで、
-**在りかは `_cache.get_or_init` の全出現で決める** (`CODE src/ast/types.rs: TypeNode`,
-`TypeNode::is_ground`, `TypeNode::type_hash`, `TypeNode::depth`)。**その 3 つは一度だけ書かれる memo であり、
+`TypeNode::type_hash`・`TypeNode::is_ground`・`TypeNode::depth` の 3 つである (`CODE src/ast/types.rs:
+TypeNode`, `TypeNode::is_ground`, `TypeNode::type_hash`, `TypeNode::depth`)。
+
+**`OnceLock` の 3 欄だけを数えると足りない。** `TypeNode` は `info.source` から `Span.input` を経て
+`SourceFile` に届き、その `string` と `hash` は `Arc<Mutex<Option<String>>>` である
+(`CODE src/parse/sourcefile.rs: SourceFile`)。**この 2 つも一度だけ書かれる memo であり、
+`impl PartialEq for TypeNode` が読むのは `ty` だけなので、埋まっても値の等しさは動かない。**
+
+**在りかは型で決める。** `RefCell`・`Cell`・`OnceCell`・`OnceLock`・`Mutex`・`RwLock`・`UnsafeCell`・
+`Atomic*` のいずれかを含む欄の宣言を走査し、その値から到達できるものを取る。
+**特定のメソッド名や特定の欄で数え上げると、別の型を経て届く道が落ちる。****その 3 つは一度だけ書かれる memo であり、
 `impl PartialEq for TypeNode` は `ty` だけを読み、3 つの memo の値はどれも `ty` の関数である**
 (`CODE src/ast/types.rs: TypeNode` の `PartialEq` の実装, `TypeNode::type_hash`, `TypeNode::is_ground`)
 ので、この節は等しさの水準で立つ。**`impl Hash for TypeNode` は `type_hash` を呼ぶので `hash_cache` を
