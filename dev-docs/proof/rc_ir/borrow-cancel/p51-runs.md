@@ -417,15 +417,17 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     (`apply_lambda` は `get_lambda_func_ptr` が返す関数ポインタを `build_indirect_call` で呼び、
     `get_lambda_func_ptr` は `is_closure()` のとき `CLOSURE_FUNPTR_IDX` の欄を読む)。`<2>2` より
     `fref` は `U.funcs` の鍵なので L0d (a) が当たり、`func_vals[fref]` は `Q.funcs[fref]` の本体を
-    実装した LLVM 関数である。
-    BY D23, L0d, <2>2, CODE src/generator.rs: Generator::apply_lambda,
+    実装した LLVM 関数である。**L0d の ASSUME は `Q` と (N3) と A22 であり、その 3 つはこの補題の
+    ASSUME に在る。**
+    BY (N3), A22, D23, L0d, <2>2, CODE src/generator.rs: Generator::apply_lambda,
        CODE src/generator.rs: Generator::get_lambda_func_ptr
 
 <1>4. `Q.funcs` が `FuncRef { name: callee.name }` を持つ場合、実行時の呼び出し先はその関数である。
   <2>1. コード生成が `callee.name` の値として返すのは funptr であり、実行時にそれが指す関数は
         `Q.funcs[FuncRef{callee.name}]` の本体を実装したものである。
-    L0d (b) を `n = callee.name` に当てる。`App` の腕はその名前を `get_scoped_obj` で引く。
-    BY L0d, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
+    L0d (b) を `n = callee.name` に当てる。**L0d の ASSUME は `Q` と (N3) と A22 であり、その 3 つは
+    この補題の ASSUME に在る。**`App` の腕はその名前を `get_scoped_obj` で引く。
+    BY (N3), A22, L0d, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
        CODE src/generator.rs: Generator::get_scoped_obj
   <2>2. QED
     D23 より、`callee` の値が funptr のとき実行時の呼び出し先はそれ自身である
@@ -475,20 +477,55 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     BY CODE src/build/divide_program.rs: global_types_including_synthesized,
        CODE src/ast/program.rs: Program::global_types
   <2>3. 持ち上げた lambda に `fresh_closure_ref` が付ける名前は、最上位の記号の名前ではない。
-    その名前の名前空間は `current_symbol` の名前を末尾の成分とする -- `FullName::to_namespace` が
-    `name` を名前空間の末尾へ移す。最上位の記号の名前の名前空間の各成分は、module 宣言と namespace 宣言が
-    与える `namespace_item` であり、`namespace_item` は `capital_name` を `.` で継いだもの、
-    `capital_name` は `ASCII_ALPHA_UPPER` で始まる語である
-    (`CODE src/parse/grammer.pest: module_defn, global_defns_in_namespace, namespace_item,
-    capital_name`)。最上位の記号の `name` は Fix のソースに書かれた値の名前にコンパイラが
-    `#<タグ><10 進数字>` の形の接尾辞を足したものであり (A13)、値の名前は `name_head` が定めるとおり
-    小文字か `_` か `@` で始まる (`CODE src/parse/grammer.pest: name, name_head`)。よって持ち上げた
-    lambda の名前の名前空間の末尾の成分は大文字で始まらず、最上位の記号の名前の名前空間の成分はどれも
-    大文字で始まるので、両者は異なる名前である。
-    BY A13, CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
-       CODE src/ast/name.rs: FullName::to_namespace,
-       CODE src/parse/grammer.pest: name, name_head, capital_name, namespace_item, module_defn,
-       global_defns_in_namespace
+    <3>1. 名前空間の成分は、module 宣言と namespace 宣言が与える `namespace_item` か、
+          `FullName::to_namespace` が名前を名前空間の末尾へ移したものである。後者の在りかは
+          `to_namespace()` の全出現 (`src/` に 48 か所) であり、末尾へ移る名前は 3 族に分かれる --
+          **トレイト名** (`CODE src/ast/program.rs: Program::trait_member_symbols`)、**型名**
+          (`CODE src/ast/program.rs: Program::add_methods` のゲッタ・セッタ)、**値の名前**
+          (`fresh_closure_ref` が持ち上げる lambda と、`CODE src/elaboration/desugar_opaque.rs:
+          Program::desugar_opaque_types` が作る `#wrap_opaque`) である。
+      **一覧で書くと族が 1 つ増えるたびに古くなるので、在りかを述語で決める。**`namespace_item` は
+      `capital_name` を `.` で継いだもの、`capital_name` は `ASCII_ALPHA_UPPER` で始まる語である。
+      トレイト名も型名も宣言の頭に書かれる `capital_name` である。値の名前は `name_head` が定めるとおり
+      小文字か `_` か `@` で始まる。
+      BY CODE src/ast/name.rs: FullName::to_namespace,
+         CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
+         CODE src/ast/program.rs: Program::trait_member_symbols, Program::add_methods,
+         CODE src/elaboration/desugar_opaque.rs: Program::desugar_opaque_types,
+         CODE src/parse/grammer.pest: name, name_head, capital_name, namespace_item, module_defn,
+         global_defns_in_namespace
+    <3>1a. `#wrap_opaque` の名前は `Program::symbols` の鍵ではない。
+      `Program::symbols` に項目を入れるのは `instantiate_symbols` であり、それが移すのは
+      `deferred_instantiation` に積まれた記号だけである。そこへ積むのは `require_instantiation` で
+      あり、それを呼ぶのは `instantiate_expr` の `Expr::Var` の腕である。`#wrap_opaque` の適用を作るのは
+      `Program::desugar_opaque_types` の `wrap_with_opaque` であり、それはグローバル値の式全体の**外側**に
+      置く。`instantiate_symbol` は `remove_opaque_wrapper_func` を `instantiate_expr` の**前**に置き、
+      `remove_opaque_wrapper_func` はその外側の適用を外して被適用項を返す (doc -- 「Remove the
+      #wrap_opaque application from the top level of an expression. Transforms `#wrap_opaque(expr)` to
+      `expr`. Only checks the outermost application.」)。よって `#wrap_opaque` を名指す `Expr::Var` は
+      `instantiate_expr` に届かず、その名前は待ち行列にも `symbols` にも入らない。
+      BY CODE src/ast/program.rs: Program::instantiate_symbols, Program::instantiate_symbol,
+         Program::instantiate_expr, Program::require_instantiation,
+         CODE src/elaboration/desugar_opaque.rs: Program::desugar_opaque_types,
+         remove_opaque_wrapper_func, wrap_with_opaque
+    <3>2. 最上位の記号の名前 -- `Program::global_types` の鍵、すなわち `Program::symbols` の鍵 --
+          の名前空間の成分はどれも大文字で始まる。
+      `Program::global_types` は `self.symbols` の各鍵をそのまま鍵とする。`<3>1` の 3 族のうち値の名前が
+      末尾に来るのは 2 つであり、`fresh_closure_ref` が作るのは `FuncRef` であって `Program::symbols` の
+      鍵ではなく、`#wrap_opaque` は `<3>1a` より `Program::symbols` の鍵ではない。残る成分は
+      `namespace_item`・トレイト名・型名であり、`<3>1` よりどれも大文字で始まる。最適化のパスが
+      `symbols` に入れる版は元の記号の `name` に `#<タグ><10 進数字>` の形の接尾辞を足したものであり
+      (A13)、名前空間を替えない。
+      BY A13, <3>1, <3>1a, CODE src/ast/program.rs: Program::global_types
+    <3>3. QED
+      `fresh_closure_ref` が付ける名前の名前空間は `current_symbol` の名前を末尾の成分とする --
+      `FullName::to_namespace` が `name` を名前空間の末尾へ移す。最上位の記号の `name` は Fix のソースに
+      書かれた値の名前にコンパイラが `#<タグ><10 進数字>` の形の接尾辞を足したものであり (A13)、値の
+      名前は小文字か `_` か `@` で始まる (`<3>1`)。よって持ち上げた lambda の名前の名前空間の末尾の
+      成分は大文字で始まらず、`<3>2` より最上位の記号の名前の名前空間の成分はどれも大文字で始まるので、
+      両者は異なる名前である。
+      BY A13, <3>1, <3>2, CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
+         CODE src/ast/name.rs: FullName::to_namespace
   <2>4. `P.globals` の `symbol` は、最上位の記号のうち型が funptr でないものの名前であり、`P.funcs` の
         どの鍵の名前とも異なる。
     `<1>1` より `symbol` と鍵は lowering の出力のものであり、`lower_symbol` は最上位の記号を、その型が
@@ -629,11 +666,17 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
          比べて、`<元の名前>#borrow` を鍵とする項目だけを余分に持つ。
     `global_types_including_synthesized(prog, global_types)` は、引数の `global_types` (最上位の記号の
     名前からその型への写像) を写した上に、`prog.funcs` のうち `fn_ty.is_funptr()` である項目をその
-    `fn_ty` で、`prog.globals` の各要素をその `symbol` と `ty` で上書き挿入する。引数の `global_types` は
-    `borrow_ify` に渡される `RcProgram` から作られるものではないので `P` と `P'` で同じである。
+    `fn_ty` で、`prog.globals` の各要素をその `symbol` と `ty` で上書き挿入する。**引数の
+    `global_types` は `P` と `P'` で同じ値である** -- `build_object_files` はそれを
+    `let global_types = Arc::new(program.global_types());` で `Program` から 1 度だけ作り、その 1 つを
+    `optimize_rc_program` にも `divide_among_units` にも渡す。`optimize_rc_program` の中で
+    `borrow_ify` が走るので、その前後でこの表は動かない。`Program::global_types` が読むのは
+    `Program::symbols` であって `RcProgram` ではない。
     `<2>1` より `P'.funcs` の鍵は `P.funcs` の鍵と `borrow_funcref` が作る `<元の名前>#borrow` で尽き、
     `P'.globals` の `symbol` の集合は `P.globals` のものに等しい。
-    BY <2>1, CODE src/build/divide_program.rs: global_types_including_synthesized
+    BY <2>1, CODE src/build/divide_program.rs: global_types_including_synthesized,
+       CODE src/build/build_object_files.rs: build_object_files, optimize_rc_program,
+       CODE src/ast/program.rs: Program::global_types
   <2>2. `P.funcs` の鍵の名前について (N3) が成り立つ。
     局所名でないことは A13 が与える。A13 より `P` に現れるどの名前も `#` で区切った最後の断片が
     `borrow` ではないので、`P.funcs` の鍵は `<元の名前>#borrow` の形の名前と異なる。よって `<2>1a` の
@@ -772,9 +815,14 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     (M3) の関数は `<2>4c` より `capture` を持つ `P'` の関数の LLVM 関数であり、`<2>1` より capture を
     持つ関数には借用版が作られないので原本である。
     `<2>2` より原本の `borrowed_units` は空である。
-    BY D23, L0d, <1>3, <2>1, <2>2, <2>3, <2>4, <2>4a, <2>4b, <2>4c, <2>4d,
+    **L0d を `Q = P'` に当てる 2 か所の ASSUME は `Q` と (N3) と A22 である。**(N3) は `<1>3` が、
+    A22 はこの言明の仮定が与える -- `borrow_ify` は原本を `f_own.name` で、複製を `borrow_version` で
+    `funcs` に入れ、`clone_func` は複製の `name` をその `borrow_version` にするので、A22 は `P'` に
+    ついても成り立つ (`<1>4` と同じ理由)。
+    BY A22, D23, L0d, <1>3, <1>4, <2>1, <2>2, <2>3, <2>4, <2>4a, <2>4b, <2>4c, <2>4d,
        CODE src/rc_ir/ownership.rs: resolve_callee_params,
-       CODE src/rc_ir/codegen.rs: Generator::build_rc_closure
+       CODE src/rc_ir/codegen.rs: Generator::build_rc_closure,
+       CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
 
 <1>6. (b) が成り立つ。
   <2>1. `params` は `g` のパラメータの列である。
