@@ -1419,17 +1419,26 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
     <3>2. QED
       `<3>1` の 2 つの場合を分ける。
       **新しく割り当てたオブジェクトの場合**は `<1>1c` が扱う。
-      **オペランドが指すオブジェクトの場合**、D24 の (E2) の行き先の段落がこの場合を名指して扱う --
-      「その腕は `create_obj` を呼ばずオペランドのオブジェクトをそのまま返すので (A3 の但し書き)、
-      消費されたオペランドの参照はそのまま結果の leaf の参照になる -- 処分でも新しい割り当てでもない」。
-      すなわちその leaf については参照は**移る**のであって作られないので、この場合は言明の量化の外に
-      ある。
-      **D10 の生成の表と D24 の (E2) の `H` の表は、この leaf -- 単一の `Arg` でない宣言を持つ結果の
-      leaf -- を生成の行に置く。**2 つの読みが食い違うのはこの場合だけであり、**採るのは行き先の段落の
-      側である。**その段落は「A3 の但し書き」、すなわち `Fresh` の行がオブジェクトの同一性については
-      字義どおりでないという A3 の節を根拠に挙げてこの場合を名指し、D24 は生成の行の読みを取ると
-      「その参照が処分に落ちて `H` が 0 になり、起きない解放がモデルに現れる」と述べる。
-      BY A3, D10, D24 (E2), <1>1c, <3>1
+      **オペランドが指すオブジェクトの場合**、どちらの読みを取るかは A3 の「**宣言が決める。**」の節が
+      決める -- 「結果の leaf の宣言が単一の `Arg(j, σ)` であるとき、その leaf は移った参照を持つ --
+      (E2) の行き先の段落が「消費されたオペランドの参照はそのまま結果の leaf の参照になる」と書くのは
+      この場合である。宣言がそれ以外のとき、その leaf は生成の行が言う新しい参照を持つ。**参照カウントで
+      分岐する op のように、実行路によって同じ leaf が両方の形を取りうるときも、宣言が単一の `Arg` か
+      どうかがどちらの読みかを決める** -- 宣言は実行路に依らないからである。」この場合の宣言は単一の
+      `Fresh` なので、その leaf は生成の行が言う**新しい参照**を持つ。すなわちこの場合は言明の量化に
+      入り、その参照が指すのは `<3>1` よりオペランドのオブジェクトである。
+      **そのオペランドの leaf を D9 の `Llvm` の行は消費とする。**宣言が単一の `Arg` でないので素通しでは
+      なく、`borrows_operand(i)` も偽である -- 共有の腕が `gc.release(obj, state)` でそのオペランドの
+      参照を処分する (`make_struct_union_unique`。配列については `make_array_unique_with_hole` が
+      `release_replaced_array` を呼ぶ) のに対し、A3 は「`borrows_operand(i)` が真のとき、生成コードは
+      第 `i` オペランドの参照を処分しない」と述べるからである。
+      **一意の腕はそのオペランドの参照を手放さない** -- `make_struct_union_unique` が `create_obj` と
+      `clone_struct`/`clone_union` と `gc.release` を出すのは共有の腕だけであり、2 つの腕は排他である。
+      よって `<1>1e` が当たる。
+      BY A3, D9, D24 (E2), <1>1c, <1>1e, <3>1,
+         CODE src/fixstd/builtin.rs: make_struct_union_unique, force_unique_or_assert_with_hole,
+         make_array_unique_with_hole, release_replaced_array,
+         CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand
   <2>2. CASE 宣言が単一の `Unknown`。
     <3>0. CASE op が `InlineLLVMBoxedFromRetainedPtrIOS` である。
       A3 の `Unknown` の行は、この op について「オペランドは `Std::Ptr` で boxed leaf を持たないので、
@@ -1438,22 +1447,18 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       オペランド `ios` を、第 1 欄に第 1 オペランド `ptr` の第 0 欄の番地を入れる。結果の型は
       `(IOState, a)` の unbox の組なので `create_obj` は割り当てを行わない
       (`CODE src/fixstd/builtin.rs: InlineLLVMBoxedFromRetainedPtrIOS`, `CODE src/object.rs: create_obj`)。
-      この op を包む
-      公開関数 `Std::FFI::boxed_from_retained_ptr` の doc は「Creates a boxed value from a retained
-      pointer obtained by `boxed_to_retained_ptr`」「It is the user's responsibility to ensure that the
-      argument is actually a pointer to the type of the return value, and undefined behavior will occur
-      if it is not」と述べる。すなわち番地は `boxed_to_retained_ptr` が渡したものであり、**A17 (i-b) が
-      「`boxed_to_retained_ptr` が渡した番地について、環境はその参照を持ち、`boxed_from_retained_ptr` で
-      Fix の側へ返すまで処分しない」と言う。**その番地が指すオブジェクトを `o` とする。`o` がグローバル状態
+      **どの番地が渡されるかは A17 (i-b) が決める** -- 「`boxed_to_retained_ptr` が渡した番地について、
+      環境はその参照を持ち、`boxed_from_retained_ptr` で Fix の側へ返すまで処分しない」、そして
+      「**それ以外の番地を `boxed_from_retained_ptr` に渡す実行は、このモデルの外にある**」。
+      その番地が指すオブジェクトを `o` とする。`o` がグローバル状態
       (D26) ならば A8 より解放されない。`o` が計数下ならば、環境が `o` への未処分の参照を 1 つ持つので
       (D25 の 3 つ目の持ち手)、D8 より `H(o) ≥ 1` であり、`p` は解放について閉じているので `o` は `p` で
-      解放されていない。その形でない番地を渡す実行は、doc が言うとおりこの文書のモデルの外にある。
+      解放されていない。
       **この行は D24 の `H` の表の `InlineLLVMBoxedFromRetainedPtrIOS` の行でもある** --
       そこでは `H` は変わらず、環境が持っていた参照が `E` から `Obl(a)` へ渡るので、この段は新しい参照を
       作らない。
       BY A3, A8, A17, D8, D11a, D22, D24 (E2 の `H` の表), D25, D26,
-         CODE src/fixstd/builtin.rs: InlineLLVMBoxedFromRetainedPtrIOS,
-         CODE src/fixstd/std.fix: boxed_from_retained_ptr, boxed_to_retained_ptr
+         CODE src/fixstd/builtin.rs: InlineLLVMBoxedFromRetainedPtrIOS, CODE src/object.rs: create_obj
     <3>0a. CASE op が `applies_a_function_operand` を宣言する。
       A3 の `Unknown` の行は、参照の作られる先を「この op のオペランドの leaf が指すオブジェクトから
       到達できるか、グローバル値が到達する (`CODE src/rc_ir/provenance.rs: LeafOrigin`)」と限定した
@@ -1484,15 +1489,35 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       「既存のオブジェクトへの新しい参照 (retain を伴う読み出し)」と述べるので、`o` はその leaf が指す
       オブジェクトそのものか、そこから記憶域を辿って着くオブジェクトである。
       その leaf が指す各計数下オブジェクト `o'` について、L1 (b) より `b` の終端の `Ret` が消費した参照は
-      この段を実行している活性化の `Obl` に入る。**その参照は `p` でまだ処分されていない** -- D24 の網羅より
-      `Obl` を離れる参照の行き先は各段の記述が挙げるものだけであり、この節点について D9 の `Llvm` の行が
-      挙げるのはオペランドの leaf であって `b` の返り値の leaf ではなく、`b` の返り値の leaf の参照が
-      `Obl` を離れるのは結果の leaf へ移るときだけである (D24 の (E4)、`<2>0`)。よって D8 より
-      `H(o') ≥ 1` であり、`p` は解放について閉じているので L2 (a) より `o'` は `p` で生きている。
+      この段を実行している活性化の `Obl` に入る。**その参照は `p` でまだ処分されていない。**段の境界に
+      ついての網羅ではこれを言えない -- D24 は「**この網羅は段の境界についてである。** 1 つの段の生成
+      コードは、この表に行を持たない素動作を段の中で出しうる。」と述べ、`p` は段内の点だからである。
+      **段内の点で言うには、その op の `generate` が出す release を読む。**D24 が「**在りかは述語で
+      決める** -- `gc.retain(`・`gc.build_retain(`・`gc.release(` を出す生成コードの全体であり」と述べる
+      とおりに走査すると、`src/` の `gc.release(`・`self.release(`・`release_nonnull_boxed(` は 15 か所で
+      あり、**そのどれも、適用が返した値の leaf の参照を処分しない。**内訳は次のとおりである。
+      `RcExpr::Release` の 2 か所 (`eval_rc_expr_inner` の `skip_null_check` の 2 枝)。boxed 容器と
+      unbox 容器の `Destructure` の 2 か所 (`get_struct_fields`)。boxed union の payload の読み出しが
+      union を処分する 1 か所 (`get_union_value`)。**書き換える前の古い値**を処分する 2 か所
+      (`write_to_array_buf` の古い要素、`InlineLLVMStructSetBody` の古い欄)。**この節点のオペランド**を
+      処分する 7 か所 (`InlineLLVMArrayAppendCapacityUnchecked` の 2 か所、`make_struct_union_unique` の
+      共有の腕、`InlineLLVMUnionModBody` の不一致の腕の `modifier`、`InlineLLVMWithRetained
+      FunctionBody` の `x`、`initialize_array_buf_by_value` と `append_value_into_array_buf` の
+      `value`)。そして `get_funptr_release` が定義する補助関数の本体 1 か所 (どの段も実行しない。
+      `<1>1` の第 7 群と同じ形)。適用が返した値を処分するものはこの中に無いので、その参照は `p` で
+      `Obl` に在る。D25 が挙げるのは未処分の参照の持ち手なので、D8 より
+      `H(o') ≥ 1` であり、`p` は解放について閉じているので L2 (a-1) より `o'` は `p` で生きている。
       L2 (b) がそこから到達できるオブジェクトへ広げる。グローバル状態のオブジェクトは A8 より解放されない。
       `b` が返した参照をそのまま持つ leaf は `<2>0` が除く。
       BY A3, A8, A26, D7, D8, D9, D11a, D24, D24 (E4), D24 (F), D24 (活性化の林), D25, D26, L1, L2,
-         <1>1a, <2>0
+         <1>1, <1>1a, <2>0,
+         CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
+         CODE src/object.rs: ObjectFieldType::get_struct_fields, ObjectFieldType::get_union_value,
+         ObjectFieldType::write_to_array_buf, ObjectFieldType::initialize_array_buf_by_value,
+         ObjectFieldType::append_value_into_array_buf,
+         CODE src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked, make_struct_union_unique,
+         InlineLLVMStructSetBody, InlineLLVMUnionModBody, InlineLLVMWithRetainedFunctionBody,
+         InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody
     <3>1. CASE op が `InlineLLVMBoxedFromRetainedPtrIOS` でも `applies_a_function_operand` を宣言する
           op でもない。
       A3 の `Unknown` の行の限定が当たる -- 参照が作られるオブジェクト `o` は、この op のオペランドの
