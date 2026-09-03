@@ -2232,7 +2232,7 @@ pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNo
 }
 
 /// What a type node carries beside the type itself.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
     /// The span of the source text the type was written at. A type the compiler builds itself has
