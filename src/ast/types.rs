@@ -34,6 +34,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, OnceLock};
 
 /// A type variable, identified by its name.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TyVar {
     /// The name the variable is written with, e.g. `a`.
@@ -145,6 +146,7 @@ impl AssocType {
 }
 
 /// The kind of a type, which classifies types the way a type classifies values.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 pub enum Kind {
     /// `*`, the kind of a type that has values of its own.
@@ -182,7 +184,7 @@ impl Kind {
 
 /// What kind of declaration a type constructor comes from, which settles how its values are laid out
 /// and what the fields recorded for it mean.
-// PROOF: P1, P2, P5, P6, P7, P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone, Hash)]
 pub enum TyConVariant {
     /// A built-in type laid out as a single machine scalar, such as `Std::I64` or `Std::Ptr`.
@@ -453,6 +455,7 @@ impl TyConInfo {
 }
 
 /// A declaration of a type alias: the type it stands for, and the parameters it takes.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TyAliasInfo {
     /// The kind of the type constructor the alias names.
@@ -2229,6 +2232,7 @@ pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNo
 }
 
 /// What a type node carries beside the type itself.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
     /// The span of the source text the type was written at. A type the compiler builds itself has
@@ -2242,7 +2246,7 @@ impl TypeNode {
     /// `free_vars` answers the same question by collecting the variables, which walks a type that
     /// shares a subterm once per occurrence rather than once per node. Every type reaching code
     /// generation is asked this, so it is answered here and kept on the node.
-    // PROOF: D/A, P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_ground(&self) -> bool {
         *self.ground_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) => false,
@@ -2258,7 +2262,7 @@ impl TypeNode {
     /// This measures the type expression the program wrote or the compiler built: a chain of a
     /// thousand types that each hold the next is a thousand types of depth one. What grows this is
     /// a type reached from itself at a larger type argument.
-    // PROOF: D/A, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn depth(&self) -> usize {
         *self.depth_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) | Type::TyCon(_) => 1,

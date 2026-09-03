@@ -5,12 +5,12 @@
 
 この文書が読んだコードのコミットは `e5f2b9c79460be3ae60b46e3900267c36ac98692` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書の `CODE` 引用が
-名指すファイルは 19 個ある。そのうち 18 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
+名指すファイルは 20 個ある。そのうち 19 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
 `src/rc_ir/ast.rs`、`src/rc_ir/provenance.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/rename.rs`、
 `src/ast/types.rs`、`src/ast/typedecl.rs`、`src/ast/name.rs`、`src/ast/program.rs`、
-`src/elaboration/typecheck.rs`、`src/elaboration/desugar_opaque.rs`、`src/misc.rs`、
-`src/build/build_object_files.rs`、`src/main.rs`、`src/object.rs`、`src/tool/log_file.rs`、
-`src/tests/test_util.rs` --- に変わったのは `// PROOF:` コメントだけである。
+`src/elaboration/typecheck.rs`、`src/elaboration/desugar_opaque.rs`、`src/parse/sourcefile.rs`、
+`src/misc.rs`、`src/build/build_object_files.rs`、`src/main.rs`、`src/object.rs`、
+`src/tool/log_file.rs`、`src/tests/test_util.rs` --- に変わったのは `// PROOF:` コメントだけである。
 
 残る 1 個 `src/rc_ir/validate.rs` には、コメント以外の変更がある。`Validator::check_rhs` の署名が
 `(&mut self, x: &RcVar, rhs: &RcRhs)` になり、その `Llvm` の腕が `llvm_gen.result_prov(&x.ty, &arg_tys,
@@ -210,7 +210,7 @@ Rust Reference の "Evaluation order of operands" が、呼び出し式 (call ex
 **EXT このリポジトリのターゲット**
 `Cargo.toml` は 3 つのターゲットを宣言する --- `[lib] name = "fixlang", path = "src/lib.rs"`、
 `[[bin]] name = "fix", path = "src/main.rs"`、`[[bench]] name = "typecheck", harness = false`
-(既定のパス `benches/typecheck.rs`) である。`src/lib.rs` と `src/main.rs` は同じ 28 個のモジュールを
+(既定のパス `benches/typecheck.rs`) である。`src/lib.rs` と `src/main.rs` は同じ 26 個のモジュールを
 `mod` で導入し、`src/main.rs` はさらに `#[cfg(test)] mod tests` を導入する。すなわち `src/` の 1 つの
 ファイルは lib と bin の 2 つのクレートに属し、どちらのクレートの項目も `src/` のファイルが宣言する。
 ベンチのターゲットは第 3 のクレートであり、`fixlang` を外部クレートとして読む。
@@ -409,8 +409,8 @@ enum については元と同じ変位で、その変位が保持する各値を
 
 **証明**
 
-<1>0. `origin` の呼び出しがこのクレートの中に書かれているのは 17 か所であり、それを含む関数は 12 個で
-      ある。12 個は、`ownership.rs` の `origin_inner` (6 か所)、`origin_from_leaves_under`
+<1>0. `origin` の呼び出しは、次の 12 個の関数の本文に書かれた 17 か所のほかには、このクレートのどこにも
+      書かれていない。12 個は、`ownership.rs` の `origin_inner` (6 か所)、`origin_from_leaves_under`
       (1 か所)、`acted_references` (1 か所)、その `#[cfg(test)] mod tests` の `origin_of` と
       `a_unit_read_out_of_a_container_keeps_the_containers_origin` (各 1 か所)、`borrow.rs` の
       `infer_ownership`、`level_ownership`、`RewriteCtx::comes_from_a_value_used_later`、
@@ -539,57 +539,61 @@ enum については元と同じ変位で、その変位が保持する各値を
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
        CODE src/rc_ir/ownership.rs: as_arg_projection, CODE src/rc_ir/ownership.rs: Origin::identity,
        CODE src/rc_ir/ownership.rs: Origin::candidates, DEF 引数で決まる関数
-  <2>5. 残る 2 つ --- `boxed_leaf_paths` と `truncate_to_unit` --- は触れる。この 2 つの呼び出しの中で
-        走る関数は、`boxed_leaf_paths` の内部関数 `go`、`is_fully_unboxed`、`is_box`、`is_unbox`、
-        `is_closure`、`is_array`、`is_funptr`、`is_punched_array`、`toplevel_tycon_satisfies`、
-        `toplevel_tycon`、`toplevel_tycon_info`、`unpunched_field_types`、`instance_field_types`、
-        `declared_field_types`、`collect_type_arguments`、`unwrap_newtypes_memoized`、
-        `unwrap_newtypes_node`、`type_node_eq`、`TypeEnv::tycons`、`TypeEnv::unwrapped_newtype_info`、
-        `make_unit_ty`、`Substitution::default`・`single`・`merge`・`substitute_type`、`get_source`、
-        `set_source_if_none`、`set_source`、`set_tyapp_fun`、`set_tyapp_arg`、`set_assocty_args`、
-        `unit_step`、`held_field_type`、および標準ライブラリの操作で尽きる (`truncate_to_unit` は
-        `unit_step` と `held_field_type` から `unpunched_field_types` を経て同じ道に入る)。
-        **このうち共有参照から書ける欄に触れるのは、`OnceLock` の `get_or_init` を呼ぶ 3 つのメソッド ---
-        `TypeNode::type_hash`、`TypeNode::is_ground`、`TypeNode::depth` --- だけである。** A3 は
-        「**その 3 つを共有参照から埋めるのは、`<欄>.get_or_init` を呼ぶメソッドである**」と書き、
-        「**在りかは `_cache.get_or_init` の全出現で決める**」と述べる。`src/` の全体を
-        `get_or_init` で走査すると 4 か所が挙がり、うち 3 か所がこの 3 つのメソッド、残る 1 か所は
-        `src/object.rs` の `static FIELDS_BY_NAME` である。この道はその `static` に触れない。
-    <3>1. `unwrap_newtypes_memoized` の memo `unwrapped` は、呼び出しを跨いで持ち越されない。その型は
+  <2>5. 残る 2 つ --- `boxed_leaf_paths` と `truncate_to_unit` --- は触れる。**この 2 つが引数として
+        受け取る値から到達できる欄のうち、共有参照から書けるのは 5 つだけである** ---
+        `TypeNode` の `hash_cache`・`ground_cache`・`depth_cache` と、`SourceFile` の `string`・`hash`
+        である。**在りかは述語で決める** --- `src/` の全体を、型が `RefCell`・`Cell`・`OnceCell`・
+        `OnceLock`・`Mutex`・`RwLock`・`UnsafeCell`・`Atomic*` を含む欄の宣言で走査し、そのうち
+        この 2 つの引数の型から到達できるものを取る。A3 の「**在りかは `_cache.get_or_init` の全出現で
+        決める**」と同じ形である。**この 5 つはどれも一度だけ書かれる memo であり、その値は memo する
+        対象の関数である。**
+    <3>1. この 2 つが受け取る値の型は `Arc<TypeNode>`、`FieldPath` (`Vec<usize>`)、`TypeEnv` である。
+          `TypeEnv` の 3 欄は `Arc<Map<TyCon, TyConInfo>>`、`Arc<Map<TyCon, TyAliasInfo>>`、
+          `Arc<Set<TyCon>>` であり、`TyConInfo` の 8 欄は `Arc<Kind>`、`TyConVariant`、`bool`、
+          `Vec<Arc<TyVar>>`、`Vec<Field>`、`Option<Span>`、`Option<String>`、`Option<TyCon>`、
+          `TyAliasInfo` の 4 欄は `Arc<Kind>`、`Arc<TypeNode>`、`Vec<Arc<TyVar>>`、`Option<Span>`、
+          `Field` の 6 欄は `Name`、`Arc<TypeNode>` 2 つ、`bool`、`Option<Span>` 2 つである。
+          `TypeNode` の 3 欄は `Type`、`TypeInfo`、および 3 つの `OnceLock` であり、`TypeInfo` の
+          1 欄は `Option<Span>`、`Span` の 3 欄は `SourceFile`、`usize` 2 つ、`SourceFile` の 3 欄は
+          `PathBuf` と `Arc<Mutex<Option<String>>>` 2 つである。この閉包の中で上の走査に当たるのは、
+          `TypeNode` の 3 つの `OnceLock` と `SourceFile` の 2 つの `Mutex` だけである。
+      BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: truncate_to_unit,
+         CODE src/rc_ir/ownership.rs: unit_step, CODE src/ast/program.rs: TypeEnv,
+         CODE src/ast/types.rs: TyConInfo, CODE src/ast/types.rs: TyAliasInfo,
+         CODE src/ast/types.rs: Kind, CODE src/ast/types.rs: TyConVariant,
+         CODE src/ast/types.rs: TyVar, CODE src/ast/typedecl.rs: Field,
+         CODE src/ast/types.rs: TypeNode, CODE src/ast/types.rs: TypeInfo,
+         CODE src/parse/sourcefile.rs: Span, CODE src/parse/sourcefile.rs: SourceFile,
+         CODE src/rc_ir/ast.rs: FieldPath, DEF このクレート
+    <3>2. `SourceFile` の 2 つの memo は、`TypeNode` の値の等しさを動かさない。
+          `impl PartialEq for TypeNode` は `ty` だけを読み、`Span` はそこに現れない ---
+          `Span` が現れるのは `TypeInfo` の `source` の欄である。`impl PartialEq for SourceFile` も
+          `file_path` だけを読む。
+      BY CODE src/ast/types.rs: TypeNode, CODE src/ast/types.rs: TypeInfo,
+         CODE src/parse/sourcefile.rs: SourceFile, CODE src/parse/sourcefile.rs: Span
+    <3>3. `unwrap_newtypes_memoized` の memo `unwrapped` は、呼び出しを跨いで持ち越されない。その型は
           `Map<Arc<TypeNode>, Arc<TypeNode>>` であり、鍵を引くたびに `impl Hash for TypeNode` が
           `TypeNode::type_hash` を呼んで `hash_cache` の `OnceLock` を共有参照から書くが、`unwrapped`
           自身は `instance_field_types` の 1 回の呼び出しごとに `Map::default()` で空から作られる。
       BY CODE src/ast/types.rs: TypeNode::instance_field_types,
          CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
          CODE src/ast/types.rs: TypeNode::type_hash, CODE src/ast/types.rs: TypeNode, EXT Map と Set
-    <3>2. `set_source_if_none` は既に在る `TypeNode` の欄を書かない。その本文は、自分の `info.source` が
+    <3>4. `set_source_if_none` は既に在る `TypeNode` の欄を書かない。その本文は、自分の `info.source` が
           `None` のとき `set_source` を呼び、そうでないとき `self.clone()` を返す。`set_source` は
           `self.clone()` で新しい `TypeNode` を作ってからその `info.source` を書き、`Arc::new` で包んで
           返す。`impl Clone for TypeNode` は 3 つの `OnceLock` を `OnceLock::new()` で空にするので、
-          この複製は原本の memo も引き継がない。
-      BY CODE src/ast/types.rs: TypeNode::set_source_if_none, CODE src/ast/types.rs: TypeNode::set_source,
+          この複製は原本の memo も引き継がない。この道が `TypeInfo` の欄に触れるのはここだけである。
+      BY <3>1, CODE src/ast/types.rs: TypeNode::set_source_if_none,
+         CODE src/ast/types.rs: TypeNode::set_source,
          CODE src/ast/types.rs: TypeNode::get_source, CODE src/ast/types.rs: TypeNode
-    <3>3. `toplevel_tycon_info` は `type_env` の表を読むだけで、何も書かない。その本文は
+    <3>5. `toplevel_tycon_info` は `type_env` の表を読むだけで、何も書かない。その本文は
           `type_env.tycons().get(&tycon).unwrap()` であり、`TypeEnv::tycons` は表への共有参照を返す。
-          返る `TyConInfo` の 8 欄は `Arc<Kind>`、`TyConVariant`、`bool`、`Vec<Arc<TyVar>>`、
-          `Vec<Field>`、`Option<Span>`、`Option<String>`、`Option<TyCon>` であり、`get_or_init` を
-          呼ぶ欄を直接には持たない。`Field` の `ty` を通じて `TypeNode` の 3 つの `OnceLock` には届くが、
-          それは上の 3 つのメソッドを経る道である。
-      BY CODE src/ast/types.rs: TypeNode::toplevel_tycon_info, CODE src/ast/program.rs: TypeEnv::tycons,
-         CODE src/ast/types.rs: TyConInfo, CODE src/ast/typedecl.rs: Field
-    <3>4. QED
-      <3>1・<3>2・<3>3 が、この道で共有参照から書かれうる欄を尽くす。残るのは A3 が名指す 3 つの
-      `OnceLock` である。
-      BY <3>1, <3>2, <3>3, A3, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
-         CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
-         CODE src/ast/types.rs: TypeNode::unpunched_field_types,
-         CODE src/ast/types.rs: TypeNode::instance_field_types,
-         CODE src/ast/types.rs: TypeNode::declared_field_types,
-         CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
-         CODE src/ast/types.rs: TypeNode::is_ground, CODE src/ast/types.rs: TypeNode::depth,
-         CODE src/ast/types.rs: TypeNode::type_hash, CODE src/object.rs: FIELDS_BY_NAME,
-         CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/ownership.rs: unit_step,
-         CODE src/rc_ir/ownership.rs: held_field_type, DEF このクレート
+      BY CODE src/ast/types.rs: TypeNode::toplevel_tycon_info, CODE src/ast/program.rs: TypeEnv::tycons
+    <3>6. QED
+      <3>1 が、この道で共有参照から書かれうる欄を 5 つに尽くす。<3>2 と <3>4 が `SourceFile` の 2 つと
+      `TypeInfo` の欄を片付け、残るのは A3 が名指す `TypeNode` の 3 つの `OnceLock` である。<3>3 と
+      <3>5 が、この道が持ち越す状態はそのほかに無いことを与える。
+      BY <3>1, <3>2, <3>3, <3>4, <3>5, A3
   <2>6. `TypeNode` の 3 つの `OnceLock` の欄が埋まっても、`Arc<TypeNode>` の値の等しさも、そのハッシュも
         動かない。**この節は `type_env` を通じてだけ現れる `TypeNode` にも当たる。**
     <3>1. A3 は「**その 3 つは一度だけ書かれる memo であり、`impl PartialEq for TypeNode` は `ty` だけを
@@ -689,19 +693,19 @@ enum については元と同じ変位で、その変位が保持する各値を
     `unpunched_field_types`・`is_fully_unboxed`・`unit_step`・`truncate_to_unit`・`boxed_leaf_paths` の
     返り値もそれぞれの再帰の上の帰納で引数の値から決まる。
 
-    **`Arc` の同一性を読む場所は、クレート全体を `Arc::ptr_eq` で走査して決める。** `src/` の全体に
-    `Arc::ptr_eq` を含む行は 10 行あり、うち 1 行は `src/elaboration/typecheck.rs` のコメントである。
-    残る 9 行のうち 3 行はテスト (`src/elaboration/typecheck.rs` の `#[cfg(test)] mod tests` に 1 行、
-    `src/tests/test_type_node_identity.rs` に 2 行) にあり、<2>5 が挙げた関数の中には無い。
-    製品のコードの 6 行のうち、<2>5 が挙げた関数の中に在るのは 4 行である ---
-    `unwrap_newtypes_node` の 1 行 (<2>7)、`type_node_eq` の 1 行、
-    `substitute_type` の 2 行 (<2>7a) である。`type_node_eq` の本文は
+    **この帰納が読んだ本文で `Arc` の同一性が読まれていないかを、クレート全体の走査で確かめる。**
+    `src/` の全体に `Arc::ptr_eq` を含む行は 10 行あり、うち 1 行は
+    `src/elaboration/typecheck.rs` のコメントである。残る 9 行のうち 3 行はテスト
+    (`src/elaboration/typecheck.rs` の `#[cfg(test)] mod tests` に 1 行、
+    `src/tests/test_type_node_identity.rs` に 2 行) に在る。製品のコードの 6 行のうち、この帰納が
+    本文を読んだ関数に在るのは 4 行である --- `unwrap_newtypes_node` の 1 行 (<2>7)、
+    `type_node_eq` の 1 行、`substitute_type` の 2 行 (<2>7a) である。`type_node_eq` の本文は
     `Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty` であり、`Arc::ptr_eq` が真ならば 2 つは同じ割り当ての
     ハンドルなので `lhs.ty == rhs.ty` も真である。よってこの読みは `PartialEq` の答えを変えない。
-    残る 2 行は
-    `src/elaboration/desugar_opaque.rs` の `resolve_opaque_type_in_type` と
-    `src/elaboration/typecheck.rs` の `TypeCheckContext::unify` にあり、どちらも <2>5 が挙げた関数では
-    ない。`leaf_map.rs`・`ownership.rs`・`provenance.rs` には 1 行も無い。
+    残る 2 行は `src/elaboration/desugar_opaque.rs` の `resolve_opaque_type_in_type` と
+    `src/elaboration/typecheck.rs` の `TypeCheckContext::unify` に在り、どちらもこの帰納が本文を
+    読んだ関数ではなく、読んだ本文のどれもこの 2 つを呼ばない。
+    `leaf_map.rs`・`ownership.rs`・`provenance.rs` には 1 行も無い。
     <2>1、<2>2、<2>4 と合わせて、挙げた関数はすべて引数で決まる。
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, <2>7a, A10, DEF 引数で決まる関数, DEF このクレート,
        CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
