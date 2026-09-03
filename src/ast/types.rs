@@ -34,6 +34,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, OnceLock};
 
 /// A type variable, identified by its name.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TyVar {
     /// The name the variable is written with, e.g. `a`.
@@ -145,6 +146,7 @@ impl AssocType {
 }
 
 /// The kind of a type, which classifies types the way a type classifies values.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 pub enum Kind {
     /// `*`, the kind of a type that has values of its own.
@@ -182,7 +184,7 @@ impl Kind {
 
 /// What kind of declaration a type constructor comes from, which settles how its values are laid out
 /// and what the fields recorded for it mean.
-// PROOF: P1, P2, P5, P6, P7, P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone, Hash)]
 pub enum TyConVariant {
     /// A built-in type laid out as a single machine scalar, such as `Std::I64` or `Std::Ptr`.
@@ -373,7 +375,7 @@ impl TyCon {
 
 /// The declaration a type constructor comes from: the kind of declaration it is, the parameters it
 /// takes, and what its values hold. A type alias is declared by `TyAliasInfo`.
-// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TyConInfo {
     /// The kind of the type constructor, which follows from the parameters it takes.
@@ -453,6 +455,7 @@ impl TyConInfo {
 }
 
 /// A declaration of a type alias: the type it stands for, and the parameters it takes.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TyAliasInfo {
     /// The kind of the type constructor the alias names.
@@ -670,13 +673,13 @@ impl TypeNode {
     }
 
     /// Where this type was written; a type the compiler builds itself carries none.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_source(&self) -> &Option<Span> {
         &self.info.source
     }
 
     /// A copy of this type written at `src`, leaving this node as it is.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_source(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone();
         ret.info.source = src;
@@ -685,7 +688,7 @@ impl TypeNode {
 
     /// A copy of this type written at `src` where it carries no source of its own, and this type
     /// itself where it does.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_source_if_none(self: &Arc<TypeNode>, src: Option<Span>) -> Arc<TypeNode> {
         if self.info.source.is_none() {
             self.set_source(src)
@@ -882,7 +885,7 @@ impl TypeNode {
 
     /// A copy of this associated type application applied to `args`, keeping the name. Panics for
     /// a type that is not an associated type application.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_assocty_args(&self, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -2229,6 +2232,7 @@ pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNo
 }
 
 /// What a type node carries beside the type itself.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
     /// The span of the source text the type was written at. A type the compiler builds itself has

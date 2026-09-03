@@ -400,7 +400,7 @@ impl TypeAlias {
     }
 }
 
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct Field {
     pub name: Name,

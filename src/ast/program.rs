@@ -58,7 +58,7 @@ use std::vec;
 
 /// What a program declares about its types: the type constructors and the type aliases it can name,
 /// and which of the newtypes among them a value has stopped being built at.
-// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TypeEnv {
     /// The declaration of every type constructor, built-in and user-defined, by its name.
@@ -165,6 +165,7 @@ impl TypeEnv {
     }
 
     /// The declaration of every type constructor this environment holds, by its name.
+    // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycons(&self) -> &Map<TyCon, TyConInfo> {
         &self.tycons
     }
