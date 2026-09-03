@@ -56,6 +56,7 @@ FACT = re.compile(
     r"|p\d\d[A-Za-z0-9_-]*(?:\.md)?\s*の\s*"   # 別のファイルの補題・反例 (枠の第 5 節が認める形)
     r"|\(H[\d-]*[a-z]?\)"      # 言明の仮説
     r"|ASSUME|PROVE|NEW|CASE|IH"
+    r"|本補題の仮定|本場合の仮定|背理法の仮定"   # 言明・CASE・背理法が置く仮定
     r"|前提|言明|仮定|帰納法の仮定|帰納の仮定|系\d*"
     r")"
 )
@@ -74,12 +75,18 @@ def declared_labels(text):
 
     宣言の形は 4 通りある -- `**DEF 名前**`、見出しの `## DEF 名前`、記法を並べる箇条書きが使う
     `` - **`名前`** ``、そして名札の語ごとバッククォートに入れる `` - **`EXT 名前`** `` である。
-    3 つ目は `DEF` の語を伴わないので、引く側も接頭辞なしで引く。"""
+    3 つ目は `DEF` の語を伴わないので、引く側も接頭辞なしで引く。
+
+    **括弧より前を名前として登録する。** 引く側は `(` の前で切った形で引くので
+    (`EXT derive(Clone)` を `derive` として照合する)、宣言の側も同じ形を持たないと、その名札を引く
+    段が全部「名札の不在」に出る。"""
     names = set()
     for match in re.finditer(r"\*\*(DEF|EXT)\s+([^*]+?)\*\*", text):
         names.add((match.group(1), normalize_label(match.group(2))))
+        names.add((match.group(1), normalize_label(match.group(2).split("(")[0])))
     for match in re.finditer(r"^#+\s*(DEF|EXT)\s+(.+?)\s*$", text, re.M):
         names.add((match.group(1), normalize_label(match.group(2))))
+        names.add((match.group(1), normalize_label(match.group(2).split("(")[0])))
     for match in re.finditer(r"\*\*`([^`]+)`\*\*", text):
         inner = match.group(1)
         kinds = ("DEF", "EXT")
@@ -164,9 +171,25 @@ def in_scope(path, level, number):
     return order_key(number) < order_key(path[level - 1][1])
 
 
+CROSS_FILE = re.compile(r"^(p\d\d)[A-Za-z0-9_-]*(?:\.md)?\s*の\s*")
+
+
+def labels_of_sibling(path_of_file, prefix):
+    """`p13 の DEF 名前の活性` の名札は、引く側でなく `p13` の文書が宣言する。
+
+    その文書を同じディレクトリから引き、宣言を返す。見つからなければ `None` -- 引く側の文書を
+    その名札の不在で責めないためである。"""
+    directory = os.path.dirname(os.path.abspath(path_of_file))
+    for name in sorted(os.listdir(directory)):
+        if name.startswith(prefix) and name.endswith(".md"):
+            return declared_labels(open(os.path.join(directory, name), encoding="utf-8").read())
+    return None
+
+
 def check(path_of_file):
     text = open(path_of_file, encoding="utf-8").read()
     declared = declared_labels(text)
+    siblings = {}
     steps = parse(text)
     unclassified, missing, violations, unsupported, bare, run_on = [], [], [], [], [], []
     tokens_seen = 0
@@ -200,9 +223,16 @@ def check(path_of_file):
                 in_code = False
                 rest = token[FACT.match(token).end():].split("(")[0].split("「")[0]
                 trailing = TRAILING_LABEL.search(rest)
+                cross = CROSS_FILE.match(token)
                 if trailing:
-                    name = normalize_label(trailing.group(2))
-                    if (trailing.group(1), name) not in declared:
+                    name = normalize_label(trailing.group(2).split("(")[0])
+                    home = declared
+                    if cross:
+                        prefix = cross.group(1)
+                        if prefix not in siblings:
+                            siblings[prefix] = labels_of_sibling(path_of_file, prefix)
+                        home = siblings[prefix]
+                    if home is not None and (trailing.group(1), name) not in home:
                         missing.append(f"<{level}>{number}: {trailing.group(1)} {name}")
                 elif SECOND_LABEL.search(rest):
                     run_on.append(f"<{level}>{number}: {token[:60]}")

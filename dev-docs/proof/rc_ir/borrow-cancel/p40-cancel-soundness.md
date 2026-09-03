@@ -16,7 +16,7 @@ README の第 1 節が挙げる 2 種である -- 「**対象コミットより�
 引用する外部の補題は 2 つのファイルにある。`p30-cancel-walk.md` の `L1` (`walk` と `rewrite` は内側を
 1 回呼ぶ)、`L5` (`un_bump` の作用)、`L6` (消費の作用)、`L10` (記録は増えるだけ)。
 `p13-disposals-and-pending.md` の第 7 節の局所の定義 -- `DEF 実行時の作用` (`Inh_ρ`、`ActRefs^inh_ρ`)、
-`DEF 名前の活性` (`obj_ρ`)、`DEF bump の帰属` (`B_ρ`)、`DEF ρ-歩みと ρ-終端`、`DEF N` (`N_ρ`) -- と、補題 `L7`
+`DEF 名前の活性` (`obj_ρ`)、`DEF bump の帰属` (`B_ρ`)、`DEF N` (`N_ρ`) -- と、補題 `L7`
 (boxed leaf の路は反鎖をなす)、`L9` (`identity` は inhabited を決める)、`L10a` (静的な数え上げと実行時の
 作用が活性な名前で一致する)、`L11` (非活性な名前では `B` は空)、`L14` (`identity` は自分の別名類の
 位置である)、`L17`
@@ -99,6 +99,8 @@ identity で名付けた多重集合」と定める。**`outstanding` に
 ついて使うのは `covers`、すなわち `outstanding[o] ≥ B_ρ(・, ・)[o]` の向きだけである。**
 
 別名類 (`obj(C)`、`T_ρ(C)`) は **D33**、類ごとの参照 `held_ρ` は **D34** であり、どちらも `README.md` に在る。
+**この文書が ρ-歩み・ρ-終端と書くのは、D33 の `ρ` 歩み・`ρ` 終端である。** D33 は「**この 3 つの語も
+ここにしかない**」と定めるので、指すものはそこで定まる 1 つである。
 
 この文書が導入する補題は `L30` から番号を付ける。`p30` と `p13` の補題の番号と衝突させないためである。
 **番号は固定された名札であって、ファイルの中の並びではない。** 補題どうしの引用に循環は無い。
@@ -1437,7 +1439,7 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
 2. `σ` が `boxed_leaf_paths(ty(u))` の要素であるとき、`origin_inner(u, σ)` が呼ぶ `origin(u', σ')` の
    `σ'` は `boxed_leaf_paths(ty(u'))` の要素である。
 
-したがって、スロット (D6) から始まる別名類の ρ-歩み (`p13` の `DEF ρ-歩みと ρ-終端`) の各位置 `(u, σ)`
+したがって、スロット (D6) から始まる別名類の ρ-歩み (D33) の各位置 `(u, σ)`
 について、`σ` は `ty(u)` の boxed leaf である。**とくに、`origin_from_leaves_under` が
 `truncate_to_unit(ty(args[j]), σ')` を行き先の path として辿る辺 -- 行き先の path が leaf でないことが
 ありうる唯一の辺であり、D17 の第 3 行の但し書きがそれを述べる -- は、歩みの上では取られない。**
@@ -1578,9 +1580,9 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: Binding
 <1>4. QED
-  BY <1>1, <1>2, <1>3, D6, p13 の DEF ρ-歩みと ρ-終端
+  BY <1>1, <1>2, <1>3, D6, D33
   D6 よりスロット `(x, λ)` の `λ` は `ty(x)` の inhabited な boxed leaf である。歩みはスロットから始まり、
-  各段で `origin_inner` が呼ぶ `origin` の引数へ進むので (`p13` の `DEF ρ-歩みと ρ-終端`)、<1>1 と <1>3 を
+  各段で `origin_inner` が呼ぶ `origin` の引数へ進むので (D33)、<1>1 と <1>3 を
   歩みの長さについて繰り返せば、各位置の path は boxed leaf である。<1>2 より、boxed leaf の位置では
   `origin_from_leaves_under` は `origin` を呼ばないので、その辺は歩みの上では取られない。
 
@@ -1617,18 +1619,18 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
     BY <2>1, <2>2, <2>3
 <1>2. `C` が `τ` までに値を得た変数のスロット `(u, σ)` を含むならば、`C` の ρ-終端 `T_ρ(C)` の変数も
       `τ` までに値を得ている。よって D34 の「開始の時点」より `C` は `τ` で開始している。
-  BY <1>1, p13 の DEF ρ-歩みと ρ-終端, D33, D34
+  BY <1>1, D33, D34
   D33 より `C` のスロットはどれも `ρ` を辿って同じ終端に着く。ρ-終端は `(u, σ)` から始まる ρ-歩みの
   最後の位置であり、歩みの各段は `origin_inner` が呼ぶ `origin` の引数へ進む。<1>1 をその段数について
   繰り返す。
 <1>2a. スロット `(v, λ)` (D6) について、`id(v, λ)` は `(v, λ)` から始まる ρ-歩み
-      (`p13` の `DEF ρ-歩みと ρ-終端`) の上の位置である。とくに <1>1 より、その位置の変数は `v` より
+      (D33) の上の位置である。とくに <1>1 より、その位置の変数は `v` より
       後に値を得ることがない。
   <2>0. ρ-歩みの残りの長さについての帰納法で示す。L40 より歩みの各位置 `(u, σ)` の `σ` は `ty(u)` の
         boxed leaf であり、歩みは `origin_inner` が `origin` を呼ばない位置で終わる。P2 より
         `origin(v, λ)` は停止するので、その再帰の深さは有限であり、歩みも有限である。よってこの
         帰納法は整礎である。
-    BY L40, P2, p13 の DEF ρ-歩みと ρ-終端
+    BY L40, P2, D33
   <2>1. CASE 位置 `(u, σ)` で `origin_inner` が `origin` を呼ばない。このとき `identity` は `(u, σ)` で
         ある。
     <3>1. `None`/`Param`/`Producer` の腕、`container.ty.is_box` が真の `Binding::Field` の腕、
@@ -1651,7 +1653,7 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
         `scrut.ty.is_box` が偽の `Binding::Payload(_, Some(tag))`、`as_arg_projection` が `Some((j, p))`
         を返す `Binding::Llvm` である。`identity` は次の位置のものであり、その位置は ρ-歩みの次の位置で
         あるから、帰納法の仮定が当たる。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, p13 の DEF ρ-歩みと ρ-終端, 帰納法の仮定
+    BY CODE src/rc_ir/ownership.rs: origin_inner, D33, 帰納法の仮定
   <2>3. CASE 位置 `(u, σ)` の腕が `Binding::Join(arm_results)` である。この腕は
         `Origin::of_candidates(candidates, (u, σ))` を返す。ここで `candidates` は各アームの結果 `w` に
         ついての `origin(w, σ).acted_on()` の合併である。
@@ -1665,7 +1667,7 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
           ので、帰納法の仮定より `c` は `(w, σ)` から始まる歩みの上の位置であり、したがって `(u, σ)` から
           始まる歩みの上の位置である。
       BY CODE src/rc_ir/ownership.rs: Origin::of_candidates, CODE src/rc_ir/ownership.rs: origin_inner,
-         D15, D17, D21, p13 の DEF ρ-歩みと ρ-終端, 帰納法の仮定
+         D15, D17, D21, D33, 帰納法の仮定
     <3>3. QED
       BY <3>1, <3>2
   <2>4. QED
@@ -1766,7 +1768,7 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
       第 2 行と第 3 行が初期値 (所有する場合と借用する場合)、第 4 行が `Retain`、第 5 行が `Release`、
       第 6 行が消費である。
   BY D34, D10
-<1>4. D10 の生成の表の 5 行が名指す leaf は、いずれもその類の ρ-終端 (`p13` の `DEF ρ-歩みと ρ-終端`)
+<1>4. D10 の生成の表の 5 行が名指す leaf は、いずれもその類の ρ-終端 (D33)
       である。
   <2>1. D10 の生成の 5 行が名指す値の束縛は順に、`Binding::Llvm` (宣言が単一の `Arg` でない leaf)、
         `RcRhs::App` の `Binding::Producer`、`RcRhs::Closure` の `Binding::Producer`、boxed 容器の
@@ -1784,10 +1786,10 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
     D10 の生成の `Llvm` の行が名指すのは結果の leaf なので、`λ` は結果を束縛する変数の型の boxed leaf
     である。L40 の 1 がこの呼び出しについて言明のとおりを述べる。
   <2>4. QED
-    BY <2>1, <2>2, <2>3, D33, p13 の DEF ρ-歩みと ρ-終端
+    BY <2>1, <2>2, <2>3, D33
     D33 は「**歩みは有限である** -- 各段は `origin_inner` が `origin` を呼ぶ腕に 1 対 1 で
     対応し、P2 よりその再帰は停止する。」と述べるので、歩みが止まる位置は `origin_inner` が `origin` を
-    呼ばない位置である。`p13` の `DEF ρ-歩みと ρ-終端` が同じことを述べる。
+    呼ばない位置である。
 <1>5. 計数下の `O` について `obj(C) = O` である類 `C` の ρ-終端は、D10 の生成が作る leaf か、パラメータ・
       capture の leaf である。
   <2>1. ρ-終端に当たる `origin_inner` の腕は、`None`/`Param`/`Producer` の腕、`Binding::Llvm` の
@@ -1802,7 +1804,7 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
         `Binding::Llvm` の宣言が単一の
         `Arg` でない腕が ρ-終端であるのは、歩みの各位置の path が boxed leaf だからである -- L40 の
         1 より、boxed leaf の位置ではこの腕の `origin_from_leaves_under` は `origin` を呼ばない。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, A9, L40, <1>4, p13 の DEF ρ-歩みと ρ-終端
+    BY CODE src/rc_ir/ownership.rs: origin_inner, A9, L40, <1>4, D33
   <2>2. `None` の腕に当たるのは `vars.bindings` に束縛を持たない名前である。D6 より、その値はその記号の
         値であり、そこが指すのは funptr かグローバル状態のオブジェクトのどちらかであって、どちらも
         D8 の意味の参照を持たない。D34 は、束縛を持たない名前を ρ-終端とする類が計数下でないことを
