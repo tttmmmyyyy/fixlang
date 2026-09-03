@@ -151,7 +151,7 @@ payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llv
 
 ## 2. 型と変数表についての補題
 
-### L0 (固定した出力版の本体は A6・A11・A12 を満たす)
+### L0 (固定した出力版の本体は A6・A11・A12 を満たす) <!--#9cef509-->
 
 **言明**。第 1 節が固定する出力版の本体 -- 関数の版ならその関数の `body`、グローバル初期化子の版なら
 その `init` -- について、A6・A11・A12 が述べる性質が成り立つ。すなわち、束縛変数の名前は互いに異なって
@@ -216,7 +216,7 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   `<1>5` が 3 つの性質を与える。
   BY A6, A11, A12, <1>1, <1>3, <1>4, <1>5
 
-### L1 (2 つの歩きは同じ場合分けをする)
+### L1 (2 つの歩きは同じ場合分けをする) <!--#fd9b709-->
 
 **言明**。型 `τ` と path `π` を取り、歩みの長さを `m`、その列を `cur_0, ..., cur_m` とする。
 
@@ -319,7 +319,7 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   言明の対応する行を与える。
   BY <1>6, <1>7, <1>8, <1>9, <1>10, <1>11, <1>5, CODE src/rc_ir/ownership.rs: UnitStep
 
-### L1a (`unit_step` の 4 つの答えと、2 つの走査の降下)
+### L1a (`unit_step` の 4 つの答えと、2 つの走査の降下) <!--#cd71109-->
 
 **言明**。型 `σ` を取り、`boxed_leaf_paths` の内部関数 `go` と `rc_units_go` が `σ` に着いた時点の path を
 `path` とする。`step(σ)` の 4 つの答えは、型についての述語と 2 つの走査の振る舞いを次のように決める。
@@ -369,7 +369,7 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   なく、`Unit` (`is_union(σ) ∨ is_punched_array(σ)` による) か `Fields` である。
   BY <1>1, <1>2, <1>3
 
-### L1b (扱う型は A10 を満たす)
+### L1b (扱う型は A10 を満たす) <!--#fb62043-->
 
 **言明**。DEF 扱う型 の意味の扱う型はすべて A10 を満たす。さらに、`τ` が扱う型であるとき次の型も
 扱う型である。
@@ -431,7 +431,7 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   ある。
   BY <1>2, <1>3, <1>4, <1>5, DEF 扱う型
 
-### L1c (`param_tys` の鍵はパラメータ・capture である)
+### L1c (`param_tys` の鍵はパラメータ・capture である) <!--#fa1a6ce-->
 
 **言明**。関数 `g` と `vars = VarTable::of(g)` について、`vars.param_tys.get(r)` が `Some(τ)` である
 ことと、`r` が `g` のパラメータか capture であることは同値であり、そのとき `τ = ty(r)` である。本体だけ
@@ -452,7 +452,7 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   何も入れないので空である。
   BY <1>1, A12, L0
 
-### L1d (`type_env` は組み込みの宣言をそのまま持つ)
+### L1d (`type_env` は組み込みの宣言をそのまま持つ) <!--#33ee52f-->
 
 **言明**。プログラムの `type_env` について、`type_env.tycons()` が `make_array_tycon()` に与える
 `TyConInfo` の `variant` は `TyConVariant::Array` であり、各 `make_funptr_tycon(n)` に与える `TyConInfo` の
@@ -577,7 +577,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   BY <1>2, <1>3, <1>4, <1>5, A10, L1b, DEF 扱う型, CODE src/ast/types.rs: TypeNode::is_array,
      TypeNode::is_funptr, CODE src/fixstd/builtin.rs: is_array_tycon, is_funptr_tycon
 
-### L1e (`Binding::Param` を持つ名前は、この版のパラメータ・capture である)
+### L1e (`Binding::Param` を持つ名前は、この版のパラメータ・capture である) <!--#14909ed-->
 
 **言明**。第 1 節が固定する出力版とその `vars` について、次の 3 つは同値である。
 
@@ -620,7 +620,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `<1>1` より版は 2 種であり、`<1>3` と `<1>4` がそれぞれを扱った。
   BY <1>1, <1>3, <1>4
 
-### L2 (`units_under` の 2 つの形)
+### L2 (`units_under` の 2 つの形) <!--#9f11796-->
 
 **言明**。`sub(τ, π)` が `Some(σ)` を返すとき `under(τ, π) = { π ++ u : u ∈ units(σ) }` であり、`None` を
 返すとき `under(τ, π) = [π]` である。`sub(τ, π)` が中断するとき `under(τ, π)` は中断する。
@@ -633,7 +633,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `under` は `sub` を呼んでから分岐するので、`sub` が中断すれば `under` も中断する。
   BY <1>1
 
-### L3 (`Unit` の型の unit はただ 1 つ)
+### L3 (`Unit` の型の unit はただ 1 つ) <!--#f221813-->
 
 **言明**。`step(σ) = UnitStep::Unit` のとき `units(σ) = [[]]` である。
 
@@ -648,7 +648,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `<1>1` より最初の呼び出しの `path` は空列なので、`<1>2` の腕が積むのは `[]` 1 つだけである。
   BY <1>1, <1>2
 
-### L4 (`trunc` の答えを再び歩く)
+### L4 (`trunc` の答えを再び歩く) <!--#3eb1174-->
 
 **言明**。`trunc(τ, π)` が値 `t` を返すとき、次が成り立つ。
 
@@ -694,7 +694,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   (`π[m] = capture_idx`) の行だけである。この 3 つを `<1>1`、`<1>2`、`<1>3` が扱った。
   BY <1>1, <1>2, <1>3, L1
 
-### L5 (歩みの合成)
+### L5 (歩みの合成) <!--#323bb77-->
 
 **言明**。`sub(τ, p) = Some(σ)` のとき、任意の path `q` について次が成り立つ。
 
@@ -749,7 +749,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 <1>7. QED
   BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6
 
-### L6 (unit は自分自身へ切り詰まる)
+### L6 (unit は自分自身へ切り詰まる) <!--#e74af85-->
 
 **言明**。`u ∈ units(τ)` のとき `trunc(τ, u) = u` であり、`under(τ, u) = [u]` である。さらに次の 2 つの
 うちちょうど 1 つが成り立つ。
@@ -801,7 +801,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   与え、`|u| ≠ |u| - 1` なので、2 つが同時に成り立つことはない。
   BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, DEF 歩み
 
-### L7 (unit の下の leaf はその unit へ切り詰まる)
+### L7 (unit の下の leaf はその unit へ切り詰まる) <!--#212f2e7-->
 
 **言明**。`u ∈ units(τ)` とし、`λ ∈ leaves(τ)` が `u` を前置に持つとする。このとき
 `trunc(τ, λ) = u` である。さらに `Λ_τ(u) := { λ ∈ leaves(τ) : u ⊑ λ }` は空でない。
@@ -834,7 +834,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   L6 は (i) と (ii) のちょうど 1 つが成り立つと述べる。
   BY <1>1, <1>2, <1>3, L6
 
-### L8 (leaf と unit は同時に空になる)
+### L8 (leaf と unit は同時に空になる) <!--#1d99428-->
 
 **言明**。`leaves(τ) = ∅` と `units(τ) = ∅` と `is_fully_unboxed(τ)` は同値である。
 
@@ -909,7 +909,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 <1>3. QED
   BY <1>1, <1>2
 
-### L9 (`units_under` の要素は unit へ切り詰まる)
+### L9 (`units_under` の要素は unit へ切り詰まる) <!--#49b83ad-->
 
 **言明**。`trunc(τ, ・)` が `under(τ, p)` の各要素について値を返すとき、その値は `units(τ)` の要素である。
 
@@ -942,7 +942,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   言明の仮定が成り立たない。
   BY <1>1, <1>2, L2
 
-### L9a (leaf に沿う歩みの終わり方)
+### L9a (leaf に沿う歩みの終わり方) <!--#24f7933-->
 
 **言明**。`λ ∈ leaves(τ)` とし、`m_λ` を `τ` の `λ` に沿う歩みの長さ、`cur_0, ..., cur_{m_λ}` をその型の
 列とする。このとき `m_λ ≤ |λ|` であり、`i < m_λ` の各位置で `step(cur_i)` は `Fields { held_fields, .. }`
@@ -1019,7 +1019,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   ある。
   BY <1>1, <1>3, <1>4, <1>5
 
-### L10 (leaf に届く path では歩みが中断しない)
+### L10 (leaf に届く path では歩みが中断しない) <!--#ef258a5-->
 
 **言明**。`covered(τ, p) ≠ ∅` のとき、`trunc(τ, p)` と `sub(τ, p)` は値を返し、`under(τ, p)` の各要素
 `unit` について `trunc(τ, unit)` も値を返す。
@@ -1069,7 +1069,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `covered(τ, p)` の元 `λ` は `p ⊑ λ` か `λ ⊑ p` を満たす。
   BY <1>2, <1>3, <1>4, CODE src/rc_ir/borrow.rs: covered_leaves
 
-### L11 (`covered_leaves` が空でなければ、それを所有すれば足りる)
+### L11 (`covered_leaves` が空でなければ、それを所有すれば足りる) <!--#ebd5605-->
 
 **言明**。`V` を任意の `VarTable`、`r` を `V.param_tys.get(r) = Some(τ)` である名前、`p` を path とし、
 `OL` を `VarPath` の集合とする。`covered(τ, p) ⊆ { λ : (r, λ) ∈ OL }` であり、かつ
@@ -1306,7 +1306,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 `Reach(vars_f, ・, ・)`、`cand` と `act` と `id` は `cand(vars_f, ・, ・)` などである。読む者は L15 の
 `<1>6`、P7d の `<1>1a` と `<1>7` の `<2>2` である。L14a はこの読み方の下で立つ補題である。
 
-### L11a (`Reach` の要素数は整礎な尺度である)
+### L11a (`Reach` の要素数は整礎な尺度である) <!--#7bdd3d4-->
 
 **言明**。対 `(x, π)` を取り、`(y, ρ)` を DEF 再帰で訪れる対 の表が `(x, π)` から 1 歩で進む相手とする。
 このとき `Reach(y, ρ) ⊊ Reach(x, π)` であり、したがって `|Reach(y, ρ)| < |Reach(x, π)|` である。
@@ -1348,7 +1348,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   有限なので、その要素数は自然数であり、狭義の包含は要素数を狭義に減らす。
   BY <1>1, <1>2, DEF 再帰で訪れる対
 
-### L12 (候補は訪れた対である)
+### L12 (候補は訪れた対である) <!--#44a9669-->
 
 **言明**。`act(x, π) ⊆ Reach(x, π)` である。とくに `cand(x, π) ⊆ Reach(x, π)` である。さらに、
 `origin(x, π)` が値を返すとき `cand(x, π)` は空でない。
@@ -1417,7 +1417,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   `<1>4` を `(y, ρ) = (x, π)` に当てる。`cand ⊆ act` は `<1>2` による。言明の最後の節は `<1>3a` である。
   BY <1>2, <1>3a, <1>4
 
-### L13 (`Binding::Param` を持たない名前は `param_tys` の鍵でない)
+### L13 (`Binding::Param` を持たない名前は `param_tys` の鍵でない) <!--#c7416c2-->
 
 **言明**。`vars.bindings.get(w)` が `None` であるか、`Some(Binding::Move(..))`、
 `Some(Binding::Producer)`、`Some(Binding::Llvm(..))`、`Some(Binding::Field(..))`、
@@ -1463,7 +1463,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
      CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, owns_object_yet,
      CODE src/rc_ir/ownership.rs: Origin::of_candidates, origin_inner, origin_from_leaves_under
 
-### L14 (訪れた対は leaf に届く)
+### L14 (訪れた対は leaf に届く) <!--#c7d11e5-->
 
 **言明**。`u ∈ units(ty(v))` とする。`Reach(v, u)` の各要素 `(y, ρ)` について
 `covered(ty(y), ρ) ≠ ∅` である。
@@ -1562,7 +1562,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   `<1>7` が)。基底は `<1>1` である。`Reach(v, u)` は最小の閉じた集合なので、この帰納が全体を覆う。
   BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, DEF 再帰で訪れる対
 
-### L14a (訪れた対の変数は本体に現れる)
+### L14a (訪れた対の変数は本体に現れる) <!--#2d18d2a-->
 
 **言明**。`func` を入力の関数、`vars_f = VarTable::of(func)` とし、`x` を `func` に現れる名前
 (第 1 節の DEF 現れる名前) とする。`Reach(vars_f, x, π)` の各要素 `(y, ρ)` について、`y` も `func` に
@@ -1591,7 +1591,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   `func` に現れる名前である。
   BY <1>1, L11a, DEF 再帰で訪れる対, DEF 現れる名前
 
-### L15 (借用版は名前替えである)
+### L15 (借用版は名前替えである) <!--#c3b2aa3-->
 
 **言明**。`func` を入力の関数、`clone` をその借用版、`rename` を `clone_func` が返す写像とし、`ρ` を
 `rename` を `rename` の鍵でない名前上の恒等写像で延ばしたものとする。`vars_f = VarTable::of(func)`、
@@ -1781,7 +1781,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   第 1 の項は `<1>2` と `<1>3` が、第 2 の項は `<1>6` が与える。
   BY <1>2, <1>3, <1>6
 
-### L16 (借用版の `owns_object` は推論の `owns_object_yet` である)
+### L16 (借用版の `owns_object` は推論の `owns_object_yet` である) <!--#90c9817-->
 
 **言明**。`OL` を `infer_ownership` の不動点の `owned_leaves` とし、`owned_units` を `borrow_ify` が組む
 集合、`ctx` を `clone` (`func` の借用版) の `RewriteCtx` とする。このとき、`func` に現れる
@@ -2049,7 +2049,7 @@ site `(v, u)` と `Λ(u) = Λ_{ty(v)}(u)` について、次の 3 つの節を�
 
 R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録である。限定を外すと節 2 から節 1 へ渡れない。
 
-### L17 (`owns_unit` を呼ぶ位置は site を出ない)
+### L17 (`owns_unit` を呼ぶ位置は site を出ない) <!--#9f8089c-->
 
 **言明**。ある出力版の `RewriteCtx` が `owns_unit(v, u)` を呼ぶとき、`(v, u)` はその版の site
 (DEF site) である。その版がグローバル初期化子のものであれば、さらに `owns_unit(v, u)` は真を返す。
@@ -2116,7 +2116,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>6. QED
   BY <1>1, <1>2, <1>3, <1>4, <1>5
 
-### L18 (unit を覆う対と、その下の leaf の写り方)
+### L18 (unit を覆う対と、その下の leaf の写り方) <!--#af00c3a-->
 
 **DEF unit を覆う対**
 対 `(x, π)` が **unit を覆う**とは、`Λ_{ty(x)}(π) ≠ ∅` であり、かつ `Λ_{ty(x)}(π)` の各 leaf `λ` について
@@ -2244,7 +2244,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   DEF 再帰で訪れる対 の表の進む相手を尽くす (「呼ぶ相手」が無い 3 行は新しい対を作らない)。
   BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>6, <1>7, DEF 再帰で訪れる対
 
-### L18a (`Binding::Llvm` の第 3 成分は束縛変数の型である)
+### L18a (`Binding::Llvm` の第 3 成分は束縛変数の型である) <!--#6c73144-->
 
 **言明**。`vars.bindings.get(x)` が `Some(Binding::Llvm(gen, args, rty))` であるとき `rty = ty(x)` で
 ある。したがって `leaves(rty) = leaves(ty(x))` であり、任意の `π` について
@@ -2264,7 +2264,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   ある (第 1 節の `ty`)。`leaves(・)` と `Λ_{・}(π)` は型だけの関数なので、後半が従う。
   BY <1>1, A12, L0
 
-### L19 (`Llvm` が束縛する値の leaf の `origin`)
+### L19 (`Llvm` が束縛する値の leaf の `origin`) <!--#18e0a91-->
 
 **言明**。`vars.bindings.get(x)` が `Some(Binding::Llvm(gen, args, rty))` であるとし、`decl` を
 `gen.result_prov(rty, arg_tys, type_env)`、`λ ∈ leaves(rty)`、`S_λ` を `decl.leaf_origins_at(λ)` が返す
@@ -2327,7 +2327,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `<1>1` が場を尽くし、`<1>2`、`<1>5`、`<1>6` がそれぞれを与える。
   BY <1>1, <1>2, <1>5, <1>6
 
-### L20 (`origin_from_leaves_under` が返す候補)
+### L20 (`origin_from_leaves_under` が返す候補) <!--#cd28c3f-->
 
 **言明**。`vars.bindings.get(x)` が `Some(Binding::Llvm(gen, args, rty))` であり、`π` について
 `decl.leaf_origins_at(π).and_then(as_arg_projection)` が `None` であるとする。
@@ -2389,7 +2389,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>7. QED
   BY <1>1, <1>2, <1>3, <1>5, <1>6
 
-### L20a (使用される変数はその位置までに値を得ている)
+### L20a (使用される変数はその位置までに値を得ている) <!--#57d5753-->
 
 **言明**。1 つの活性化 (D21) とその辿る実行路 `ρ` を固定し、`ρ` の上の位置 `n` を取る。`n` の節点が
 **使用**する各変数 -- `Let(x, Var(y), k)` の `y`、`App` の callee と各引数、`Closure` の各 capture、
@@ -2450,7 +2450,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   一度値を得た変数は以後の位置でも「その時点までに値を得た変数」である。
   BY <1>1, <1>2, <1>3, <1>3a, A11, D6
 
-### L20b (名前を束縛する構文は 1 つ)
+### L20b (名前を束縛する構文は 1 つ) <!--#2c53bd2-->
 
 **言明**。固定した出力版の本体について、`vars.bindings.get(x)` が `Some(Binding::Move(..))`、
 `Some(Binding::Join(..))`、`Some(Binding::Field(..))`、`Some(Binding::Payload(..))`、
@@ -2474,7 +2474,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   その唯一の構文からのものである。
   BY <1>1, D2, CODE src/rc_ir/ownership.rs: collect_bindings
 
-### L21 (静的な向き -- unit が所有ならその下の leaf も所有)
+### L21 (静的な向き -- unit が所有ならその下の leaf も所有) <!--#66922eb-->
 
 **言明**。`(x, π)` が unit を覆う (L18 の DEF) とする。`cand(x, π)` のすべての元 `(r, p)` について
 `owns(r, p)` が真ならば、`Λ_{ty(x)}(π)` の各 leaf `λ` について、`cand(x, λ)` のすべての元についても
@@ -2603,7 +2603,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   BY <1>1, <1>2, <1>3, <1>4, <1>5, A3, L11a, DEF 再帰で訪れる対,
      CODE src/rc_ir/ownership.rs: Binding, origin_inner, as_arg_projection
 
-### L21a (別名の辺は値を運ぶ)
+### L21a (別名の辺は値を運ぶ) <!--#42f1c2e-->
 
 **言明**。1 つの活性化 (D21) とその辿る実行路の 1 つの位置を固定し、`x` がその位置までに値を得ている
 ものとする。`vars.bindings.get(x)` に応じて次が成り立つ。
@@ -2758,7 +2758,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>8. QED
   BY <1>3, <1>4, <1>5, <1>6, <1>7
 
-### L22 (実行時の向き -- unit が非所有ならその下の inhabited な leaf も非所有)
+### L22 (実行時の向き -- unit が非所有ならその下の inhabited な leaf も非所有) <!--#4e2b22e-->
 
 **言明**。1 つの活性化 (D21) とその実行路の 1 つの位置を固定する。`x` がその位置までに値を得ており、
 `(x, π)` が unit を覆う (L18 の DEF) とする。`Inh_x(π)` を、その位置の `x` の値について inhabited (D16)
@@ -3009,7 +3009,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 節点が触れる参照はすべてこの版のものである」を、節 2 の否定は「落とした節点が触れたはずの参照は
 どれもこの版のものでない」を与える。
 
-### L23 (類が参照を持つ点で、そのオブジェクトは解放されていない)
+### L23 (類が参照を持つ点で、そのオブジェクトは解放されていない) <!--#5d2d9a7-->
 
 **言明**。1 つの本体の活性化 (D21) と、それが辿る実行路 `ρ` を取る。`n` をその活性化の時点、段内の点
 (D24)、または読み・触れる動作の直前の点 (D11 の (S-c) が条件を課す点) とする。`C` をこの活性化の

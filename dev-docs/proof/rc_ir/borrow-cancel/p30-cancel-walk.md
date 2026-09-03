@@ -397,7 +397,7 @@ enum については元と同じ変位で、その変位が保持する各値を
 
 ## 2. 予備の補題と P2a
 
-### L0 (`origin` の返り値は memo に依らない)
+### L0 (`origin` の返り値は memo に依らない) <!--#d14daf5-->
 
 1 つの `VarTable` の値 `vars` を固定する。以下この補題の中では、**呼び出し**も「`origin` の呼び出し」も、
 `vars` を第 1 引数として行われる `origin` の呼び出しを指す。**第 2 引数は問わない。** memo の鍵は
@@ -989,7 +989,7 @@ enum については元と同じ変位で、その変位が保持する各値を
   あり、これは L0 が量化する呼び出しの一部である。よって L0 の言明は P2a の言明を含む。
   BY L0
 
-### L0a (部分木の形)
+### L0a (部分木の形) <!--#66923b2-->
 
 DEF 部分木 の節点・子・部分木・節点の道について、次の 4 つが成り立つ。
 
@@ -1027,7 +1027,7 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
   `N(n)` は有限集合である。
   BY <1>1, <1>1a, <1>2, <1>3, D2, DEF 部分木
 
-### L0b (走査は `vars` と `type_env` の欄を動かさない)
+### L0b (走査は `vars` と `type_env` の欄を動かさない) <!--#c6ca156-->
 
 1 回の `cancel_body` の実行を通じて、その `CancelAnalysis` の値の `vars` の欄と `type_env` の欄は
 同じ値である。すなわち、その 2 つの欄が指す `VarTable` と `TypeEnv` は最初から最後まで同じ値である。
@@ -1074,7 +1074,7 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
   BY <1>1, <1>2, <1>3, <1>4, CODE src/rc_ir/borrow.rs: cancel,
      CODE src/rc_ir/borrow.rs: CancelAnalysis, EXT 共有参照は代入を許さない
 
-### L0c (`ActRefs` は節点で決まる)
+### L0c (`ActRefs` は節点で決まる) <!--#7a6e645-->
 
 1 回の `cancel_body` の実行を固定し、その `CancelAnalysis` の値の `vars` の欄が指す表を `vars`、
 `type_env` の欄が指す値を `type_env` と書く。このとき次の 3 つが成り立つ。
@@ -1111,7 +1111,7 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
 この値が節点だけで決まることは L0c が示す。定義をここに置くのはそのためである。`ActRefs(t)` は D15 の
 `ActRefs(v, path)` である。
 
-### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ)
+### L1 (`walk` と `rewrite` は内側を 1 回呼ぶ) <!--#dad309f-->
 
 `CancelAnalysis::walk(node, pending, returns_from_func)` の 1 回の呼び出しは
 `CancelAnalysis::walk_inner(node, pending, returns_from_func)` をちょうど 1 回呼んでその値を返し、
@@ -1129,7 +1129,7 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
   1 回呼んでその値を返し、<1>4 の閉包は `rewrite_inner` を 1 回呼んでその値を返す。
   BY A15, <1>3, <1>4
 
-### L2 (`References` の表現)
+### L2 (`References` の表現) <!--#e805823-->
 
 `CancelAnalysis` の走査が扱う `References` の値は、どの鍵についてもその値が 1 以上である。よってこの
 6 つが成り立つ。以下 `R`、`R1`、`R2` は走査が扱う `References` の値である。
@@ -1217,7 +1217,7 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
   値を持つ。1 から 4 は <1>4、<1>5、<1>6 が、5 は <1>2 が、6 は <1>7b が与える。
   BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>7a, <1>7b, EXT Clone
 
-### L2a (根の値が在るあいだ、木の割り当てはすべて生存している)
+### L2a (根の値が在るあいだ、木の割り当てはすべて生存している) <!--#9109725-->
 
 `RcExprNode` の値 `n` が在るあいだ、`n` を根とする木のすべての位置の `Arc<RcExpr>` のハンドルが 1 つ以上
 存在し、DEF 割り当て よりその割り当ては生存している。
@@ -1238,7 +1238,7 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
   在るので、帰納法の仮定が各子の部分木について同じことを与える。
   BY <1>1, L0a, DEF 部分木, DEF 割り当て, EXT Arc の契約
 
-### L2b (`cancel` の呼び出しは `borrow_ify` の出力を受け取る)
+### L2b (`cancel` の呼び出しは `borrow_ify` の出力を受け取る) <!--#2055c19-->
 
 `cancel(prog, type_env)` のすべての呼び出しについて、`prog` が指すのは `borrow_ify` の 1 回の呼び出しが
 返した値**そのもの**である。とくに、その値の各位置の `Arc<RcExpr>` は `borrow_ify` が置いたハンドルと
@@ -1282,7 +1282,7 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
      CODE src/rc_ir/validate.rs: validate, CODE src/rc_ir/validate.rs: Validator::check_rhs,
      CODE src/rc_ir/ast.rs: RcExprNode, CODE src/ast/types.rs: TypeNode, A3
 
-### L3 (走査する本体は `RewriteCtx::rewrite` の出力である)
+### L3 (走査する本体は `RewriteCtx::rewrite` の出力である) <!--#d766c00-->
 
 ASSUME  NEW `prog`: `RcProgram`,
         `prog` は `borrow_ify` の 1 回の呼び出しが返した値である
@@ -1311,7 +1311,7 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
   その木だけである。
   BY <1>1, <1>2, <1>3
 
-### L3a (`rewrite_inner` の 1 回の呼び出しの形)
+### L3a (`rewrite_inner` の 1 回の呼び出しの形) <!--#b8db6e6-->
 
 `RewriteCtx::rewrite_inner(node)` の 1 回の呼び出しについて、次の 3 つが成り立つ。
 
@@ -1521,7 +1521,7 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
   腕のうち 1 つを実行する。<1>4 はその 8 つを尽くし、どの腕についても 1、2、3 を与える。
   BY <1>4, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
 
-### L4 (走査する本体の `Match` はアームを 1 つ以上持つ)
+### L4 (走査する本体の `Match` はアームを 1 つ以上持つ) <!--#d0a7003-->
 
 ASSUME  NEW `prog`: `RcProgram`,
         `prog` は `borrow_ify` の 1 回の呼び出しが返した値である
@@ -1900,7 +1900,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 
 ## 4. 基本操作の補題
 
-### L5 (`un_bump` の作用)
+### L5 (`un_bump` の作用) <!--#19296b2-->
 
 要素 `e` が `References` の値 `R` と**位置を共有する**とは、`e.outstanding.shares_an_object(R)`
 が真であることをいう。走査が扱う `References` の値については、これは `e.outstanding` と `R` の双方が
@@ -1962,7 +1962,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
   場合分けは「共有する要素が無い」「あって `covers` が偽」「あって `covers` が真」であり、尽くしている。
   BY <1>0, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7
 
-### L6 (消費の作用)
+### L6 (消費の作用) <!--#13b0da2-->
 
 `CancelAnalysis::consume_objects(pending, objects)` が `pending` に対して行うのは次のことである。
 `objects` のいずれかについて `outstanding.names` が真である要素をすべて取り除き、取り除いた各要素の
@@ -2000,7 +2000,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 <1>5. QED
   BY <1>1, <1>2, <1>3, <1>4
 
-### L7 (`merge` の作用)
+### L7 (`merge` の作用) <!--#ba7c23f-->
 
 `self.merge(pending_in, arm_exits)` の 1 回の呼び出しについて、各 `arm_exits[j]` の相異なる要素は相異なる
 `node` を持つとする。このとき次が成り立つ。
@@ -2117,7 +2117,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
 <1>9. QED
   BY <1>1, <1>2, <1>3, <1>5, <1>6, <1>7, <1>8
 
-### L8 (出口状態は入口状態から基本操作で得られる)
+### L8 (出口状態は入口状態から基本操作で得られる) <!--#76826c6-->
 
 ASSUME  NEW `prog`: `RcProgram`,
         `prog` は `borrow_ify` の 1 回の呼び出しが返した値である
@@ -2194,7 +2194,7 @@ PROVE   `cancel(prog, type_env)` が走査する本体の各節点 `n` につい
   BY <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
      CODE src/rc_ir/borrow.rs: cancel, L5, L6, L7
 
-### L8a (状態は有限個であり、生成順序は整礎である)
+### L8a (状態は有限個であり、生成順序は整礎である) <!--#c68ae08-->
 
 ASSUME  NEW `prog`: `RcProgram`,
         `prog` は `borrow_ify` の 1 回の呼び出しが返した値である
@@ -2248,7 +2248,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行に�
 - **(iii)** `P` の相異なる 2 つの要素は相異なる `node` を持つ。
 - **(iv)** 添字 `i < j` について、`P[i]` の由来は `P[j]` の由来より前に訪問された。
 
-### L9 (走査が作る状態は `INV` を満たす)
+### L9 (走査が作る状態は `INV` を満たす) <!--#850be28-->
 
 ASSUME  NEW `prog`: `RcProgram`,
         `prog` は `borrow_ify` の 1 回の呼び出しが返した値である
@@ -2669,7 +2669,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 
 次の 4 つは P15 - P18 の証明には使わないが、`cancel` の走査の性質なのでここで示す。
 
-### L10 (記録は増えるだけ)
+### L10 (記録は増えるだけ) <!--#3b81b08-->
 
 走査の実行中、`self.needed_retains` は要素を失わず、`self.all_retains` は要素を失わず、
 `self.un_bump_releases` は鍵を失わず、その各値の `Vec` も要素を失わない。また、`Retain` 節点 `t` の訪問の
@@ -2708,7 +2708,7 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
   失われない。
   BY <1>1, <1>2, <1>3, <1>4, EXT Vec::push, EXT Map と Set
 
-### L11 (訪問順序は実行路の順序を含む)
+### L11 (訪問順序は実行路の順序を含む) <!--#6af2e86-->
 
 ASSUME  NEW `prog`: `RcProgram`,
         `prog` は `borrow_ify` の 1 回の呼び出しが返した値である
@@ -2800,7 +2800,7 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
   5 つを <1>2 と <1>3 が尽くし、`Ret` を <1>4 が扱う。
   BY <1>0, <1>1, <1>2, <1>3, <1>4, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs
 
-### L12 (`OutsideBracket` の後始末)
+### L12 (`OutsideBracket` の後始末) <!--#aaebecb-->
 
 `un_bump` が `OutsideBracket` を返したとき、`walk_inner` の `RcExpr::Release(v, path, _, k)` の腕は、
 `un_bumped` と位置を共有する `pending` の要素をすべて取り除き、その `node` を
@@ -2824,7 +2824,7 @@ PROVE   `cancel(prog, type_env)` が走査する各本体について、その�
 <1>4. QED
   BY <1>1, <1>2, <1>3
 
-### L13 (`merge` を越えて残る要素の `outstanding`)
+### L13 (`merge` を越えて残る要素の `outstanding`) <!--#f8c911e-->
 
 ASSUME  NEW `prog`: `RcProgram`,
         `prog` は `borrow_ify` の 1 回の呼び出しが返した値である
