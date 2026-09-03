@@ -18,6 +18,9 @@
 - **数を主張する文**: 数と助数詞を持ち、**`src/` に実在する識別子**を伴う文。実在で絞るのは、
   数式の記号 (`C_1` など) を落とすためである。**その識別子を並べて出す**ので、読む者はそれを
   クレート全体に当てるだけでよい。
+  **助数詞「つ」は、コードの構造を数える語 (腕・構成子・変位・欄・呼び出し・分岐など) が続くときだけ
+  数える。** 無条件に入れると「2 つのスロット」のような数式の文が 3 倍混じる (実測)。
+  **その形で「`origin_inner` の match は 8 つの腕」の誤りが 1 周見逃されていた。**
 - **表明に触れる文**: `assert!`・`panic!`・`expect`・`unreachable!` に触れる文。
   表明を命題の根拠にしている段がここに出る。
 """
@@ -29,7 +32,8 @@ NAMES_FRAME = re.compile(r"README|枠が|枠は|枠の")
 FRAME_ITEM = re.compile(r"[ADP]\d+[a-z]*|\(E\d+\)|\(S-[a-z]\)|D\d+ の")
 DOUBT = re.compile(r"だけ|のみ|しか|持たない|尽き|尽くす|に限|でない|ではない|書いていない|述べない"
                    r"|より弱|より強|1 つも|どれも|すべて|全部|唯一|無い")
-COUNT = re.compile(r"\d+\s*(個|か所|箇所|件|種|行|本|通り)")
+COUNT = re.compile(r"\d+\s*(?:個|か所|箇所|件|種|行|本|通り"
+                   r"|つ\s*の\s*(?:腕|構成子|変位|欄|呼び出し|実装|分岐|枝|メソッド|関数))")
 IDENTIFIER = re.compile(r"`([A-Za-z_][A-Za-z0-9_:<>]*(?:\([^`]*\))?)`|`(src/[A-Za-z0-9_/.]+)`")
 ASSERTION = re.compile(r"assert!|assert_eq!|panic!|panic_with_msg|expect\(|unreachable!|debug_assert")
 SENTENCE = re.compile(r"[^。]*。")
