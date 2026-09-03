@@ -738,7 +738,7 @@ fn build_exported_c_functions<'c, 'm>(
 /// The body goes onto the declaration an `FFI_CALL` of `main` has left, where a program calls its
 /// own entry point. `Program::validate_c_function_calls` has held that call to
 /// `c_entry_point_signature`, so the declaration found here is the one this function builds.
-// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNode>) {
     let main_function =
         c_entry_point_signature().get_or_declare_in_module(&C_ENTRY_POINT_NAME.to_string(), gc);

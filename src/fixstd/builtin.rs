@@ -2171,7 +2171,7 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// The code generator for `Array::_unsafe_append_value_capacity_unchecked`, which fills the slots
 /// past the array's length with copies of one value.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayAppendValueCapacityUnchecked {
     arr_name: FullName,
@@ -2677,7 +2677,7 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// The code generator for `Array::_unsafe_append_capacity_unchecked`, which consumes `src` into the
 /// slots past `dst`'s length.
-// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayAppendCapacityUnchecked {
     dst_name: FullName,
@@ -3206,6 +3206,7 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// drop the last other reference between the count being read and this release, and a
 /// `#ArrayStorage` carries no length, so the value is the only thing that knows how many elements
 /// to release.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn release_replaced_array<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
@@ -3276,7 +3277,7 @@ fn build_punched_array<'c, 'm>(
 /// # Arguments
 /// * `hole` — `Some(idx)` makes the clone skip the element at `idx`, leaving that slot
 ///   uninitialized for the caller to fill.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn make_array_unique_with_hole<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     array: Object<'c>,
@@ -5999,7 +6000,7 @@ fn make_struct_union_unique<'c, 'm>(
 
 /// The body of a struct's `set_x`: the value bound to `value_name` takes the place of field
 /// `field_idx` of the struct bound to `struct_name`, and the value it displaces is released.
-// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructSetBody {
     pub value_name: FullName,
@@ -6625,7 +6626,7 @@ pub fn union_is_body(union_arg_name: &Name, field_idx: usize) -> Arc<ExprNode> {
 
 /// Applies a function to the payload of a given variant and puts the result back into the union.
 /// A union holding another variant comes back as it was.
-// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnionModBody {
     /// The local binding holding the union to modify.
@@ -6957,7 +6958,7 @@ pub fn hole_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMWithRetainedFunctionBody {
     f_name: FullName,

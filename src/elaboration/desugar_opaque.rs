@@ -87,6 +87,7 @@ struct OpaqueInfo {
 
 impl Program {
     /// Desugar opaque type variables. See the module-level comment for an overview.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn desugar_opaque_types(&mut self) {
         let gv_names: Vec<FullName> = self.global_values.keys().cloned().collect();
 
@@ -694,6 +695,7 @@ fn build_wrap_scheme(
 /// The wrapper App inherits the inner expression's source span so that type
 /// errors raised while type-checking the body are attributed to the
 /// user-written expression rather than appearing without a location.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn wrap_with_opaque(wrap_name: &FullName, inner: Arc<ExprNode>) -> Arc<ExprNode> {
     let src = inner.source.clone();
     expr_app(expr_var(wrap_name.clone(), None), vec![inner], src)
@@ -815,6 +817,7 @@ pub fn resolve_opaque_type_in_type(
 
 /// Remove the #wrap_opaque application from the top level of an expression.
 /// Transforms `#wrap_opaque(expr)` to `expr`. Only checks the outermost application.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn remove_opaque_wrapper_func(expr: Arc<ExprNode>) -> Arc<ExprNode> {
     if let Expr::App(func, args) = expr.expr.as_ref() {
         if args.len() == 1 {
