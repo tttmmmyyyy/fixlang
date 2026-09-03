@@ -25,7 +25,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # `CODE src/rc_ir/ownership.rs: origin, origin_inner`. One citation names a file and then a
 # comma-separated list of that file's symbols, so the head and the symbol are matched separately and
 # the list is walked by `citations_in`.
-CITATION_HEAD = re.compile(r"CODE\s+([A-Za-z0-9_/.]+\.(?:rs|fix))\s*:\s*")
+CITATION_HEAD = re.compile(r"CODE\s+([A-Za-z0-9_/.]+\.(?:rs|fix|pest))\s*:\s*")
 CITATION_SYMBOL = re.compile(
     r"\s*`?(impl\s+[A-Za-z_][A-Za-z0-9_]*\s+for\s+[A-Za-z_][A-Za-z0-9_]*"
     r"|[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)`?"
@@ -165,6 +165,18 @@ def citations_of(directory):
     return cited
 
 
+def rule_span(lines, symbol):
+    """The half-open line range of a pest rule's definition, or `None` where it is not found.
+
+    A grammar names its rules `name = { ... }`, so a rule is found by its name at the head of a
+    line and ends where the braces the definition opens close again."""
+    starts = re.compile(r"^\s*" + re.escape(symbol) + r"\s*=")
+    for index, line in enumerate(lines):
+        if starts.match(line):
+            return item_body(lines, index)
+    return None
+
+
 def item_span(lines, symbol):
     """The half-open line range of a Rust item's definition, or `None` where it is not found.
 
@@ -270,15 +282,17 @@ def main():
             if not os.path.exists(path):
                 findings.append(f"{source}: cited by {sorted(props)} and does not exist")
                 continue
-            if not source.endswith(".rs"):
+            if not source.endswith((".rs", ".pest")):
                 rows.append((source, symbol, props, "-"))
                 continue
             lines = open(path, encoding="utf-8").readlines()
-            span = item_span(lines, symbol)
+            span = rule_span(lines, symbol) if source.endswith(".pest") else item_span(lines, symbol)
             if span is None:
                 findings.append(f"{source}: `{symbol}` is cited and not found")
                 continue
             rows.append((source, symbol, props, digest(lines, span)))
+            if source.endswith(".pest"):
+                continue
             at = annotation_line(lines, span[0])
             edits.setdefault(source, {}).setdefault(at, set()).update(props)
         comments = {

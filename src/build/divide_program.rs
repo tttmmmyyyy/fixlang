@@ -319,7 +319,7 @@ fn names_reached_elsewhere(unit_program: &RcProgram, mut visit: impl FnMut(&Full
 /// computes it once.
 ///
 /// Copying is a fixed point, since a copied body reaches names of its own.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn import_what_each_unit_reaches(
     unit_programs: &mut [RcProgram],
     imported: &mut [Set<FullName>],

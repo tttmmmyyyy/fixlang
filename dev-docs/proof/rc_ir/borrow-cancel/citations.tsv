@@ -124,7 +124,7 @@ src/build/divide_program.rs	DividedProgram	P27,P29,P30	2598f1705d68
 src/build/divide_program.rs	copyable_funcs	P27,P29,P30	bd1275c86a01
 src/build/divide_program.rs	divide_among_units	D/A,P27,P29,P30	e44292292560
 src/build/divide_program.rs	global_types_including_synthesized	P27,P29,P30	0a2100db70d3
-src/build/divide_program.rs	import_what_each_unit_reaches	P27,P29,P30	27b713e28a5d
+src/build/divide_program.rs	import_what_each_unit_reaches	D/A,P27,P29,P30	27b713e28a5d
 src/build/divide_program.rs	publish_and_prune	P27,P29,P30	00bb3f5995d4
 src/commands/check.rs	check	P26	bebc25a47ac6
 src/configuration.rs	Configuration::enable_borrow_optimization	T	23c6af072902
@@ -294,7 +294,7 @@ src/fixstd/runtime.rs	build_runtime	P27,P29,P30	12274ea66952
 src/fixstd/std.fix	Bool	P5,P6,P7	-
 src/fixstd/std.fix	PunchedArray	P7a,P7d,P7e	-
 src/fixstd/std.fix	assert_unique	D/A,P26	-
-src/fixstd/std.fix	boxed_from_retained_ptr	P27,P29,P30	-
+src/fixstd/std.fix	boxed_from_retained_ptr	D/A,P27,P29,P30	-
 src/fixstd/std.fix	boxed_to_retained_ptr	P27,P29,P30	-
 src/fixstd/std.fix	mutate_unique_io	D/A,P26	-
 src/fixstd/stdlib.rs	make_std_mod	D/A,P1,P2,P7a,P7d,P7e,P26	6da374621d89
@@ -388,6 +388,17 @@ src/optimization/uncurry.rs	funptr_lambda	D/A,P26	ab312f11d72b
 src/optimization/uncurry.rs	replace_closure_call_to_funptr_call	P26	a87d49aea6e4
 src/optimization/uncurry.rs	replace_closure_call_to_funptr_call_subexprs	P26	bdde19a58810
 src/optimization/uncurry.rs	run	D/A,P26	57b93136a0b4
+src/parse/grammer.pest	capital_name	P1,P2,P7a,P7d,P7e,P26,P27,P29,P30	12411c7d19d5
+src/parse/grammer.pest	ffi_c_fun_char	D/A,P27,P29,P30	cb2a7b62052d
+src/parse/grammer.pest	ffi_c_fun_ty	P26	6d345ff5b4b1
+src/parse/grammer.pest	global_defns_in_namespace	P27,P29,P30	582c1a34ab3c
+src/parse/grammer.pest	module_defn	P27,P29,P30	8d213b03e469
+src/parse/grammer.pest	name	P27,P29,P30	ebe63b9933fa
+src/parse/grammer.pest	name_char	D/A,P5,P6,P7,P27,P29,P30	517887a91350
+src/parse/grammer.pest	name_head	P27,P29,P30	93239e468914
+src/parse/grammer.pest	namespace_item	P27,P29,P30	2b78e9f6a044
+src/parse/grammer.pest	type_defn	P7a,P7d,P7e	5b3a7d124b0d
+src/parse/grammer.pest	type_name	P1,P2,P7a,P7d,P7e,P26	0103733f9915
 src/parse/parser.rs	parse_ffi_c_fun_ty	D/A	55b0765b6306
 src/parse/parser.rs	parse_module	P1,P2,P7a,P7d,P7e	5055d7358b53
 src/parse/parser.rs	parse_type_defn	P1,P2	5178e3f56376

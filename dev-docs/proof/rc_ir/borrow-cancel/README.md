@@ -65,8 +65,8 @@ Rust の言語規則 (auto trait、借用規則、参照の届く範囲) や呼�
 
 定義は依存の順に並べる。番号は導入の順ではなく、文書中で固定された名札である。番号 D28 は使っていない。
 
-**ビルド構成の事実は `EXT` で据える。** `CODE` が名指せるのは `.rs` と `.fix` の記号だけなので
-(`dev-docs/proof/proof_links.py`)、`Cargo.toml` が宣言するターゲットのような事実は引けない。
+**ビルド構成の事実は `EXT` で据える。** `CODE` が名指せるのはソースの項目 -- `.rs` の項目、
+`.pest` の規則、`.fix` のファイル -- なので、`Cargo.toml` が宣言するターゲットのような事実は引けない。
 それを負う段は、証明ファイルの第 1 節に `EXT` として言明を据え、その名で引く。
 
 **定義の中に、支えの要る主張を置かない。** 定義が定めるのは語の意味だけである。その語について
@@ -785,6 +785,10 @@ D9 の `App` の行が読む所有は D14 が `RcFunc::borrowed_units` から定
 **プログラム `P` の実行は、`P` を分割して生成した単位を結合したものの実行である。**
 `divide_among_units` は `P.funcs` の各項目と `P.globals` の各項目を、その名前が決めるちょうど 1 つの
 単位へ入れる (`CODE src/build/divide_program.rs: divide_among_units` -- `unit_of[&fref.name]`)。
+**そのうえで、`import_what_each_unit_reaches` が写しを配る** -- その名前に届く各単位へ
+`funcs` の項目を複製し、写しはその単位の内部の定義になる
+(`CODE src/build/divide_program.rs: import_what_each_unit_reaches`)。**定義を持つ単位は分割が決めた
+1 つだが、その本体を持つ単位は 1 つとは限らない。**
 コード生成は単位ごとに `implement_rc_program` を 1 回走らせ、渡すのはその単位の切片である
 (`CODE src/build/build_object_files.rs: build_object_files`)。**単位が定義しない名前について、その単位が
 持つのは宣言だけである。** リンクがその宣言を、その名前を持つ単位が実装した本体へ解決する。
@@ -1397,6 +1401,12 @@ leaf ごとに `LeafOrigin` の集合 (`LeafOrigins`) を宣言する。宣言�
 **その節点の実行を広がりから除く仮定を今も負っている**。**オペランドを適用する op の側は、この行が読まれる。** `p51-runs.md` の `L2b` が、`Unknown` を宣言する その種の op の結果 leaf が指す先を縛るのにここしか根拠を持たない -- そこから「適用した関数が返した値から到達できる」へ渡るのは D24 の (E4) と、段の記述が `Obl` について網羅であることである。**「この行を読まずに書く」と書くと、その場合が場合分けから落ちる。** |
 | 複数の元 | 実行路ごとにそのいずれか。いずれの路でも新しい参照 |
 
+**宣言が決める。** 結果の leaf の宣言が単一の `Arg(j, σ)` であるとき、その leaf は移った参照を持つ --
+(E2) の行き先の段落が「消費されたオペランドの参照はそのまま結果の leaf の参照になる」と書くのはこの
+場合である。宣言がそれ以外のとき、その leaf は生成の行が言う新しい参照を持つ。
+**参照カウントで分岐する op のように、実行路によって同じ leaf が両方の形を取りうるときも、
+宣言が単一の `Arg` かどうかがどちらの読みかを決める** -- 宣言は実行路に依らないからである。
+
 `borrows_operand(i)` が真のとき、生成コードは第 `i` オペランドの参照を処分しない。
 
 **実行時に参照カウントで分岐する op の `Fresh` の行は、オブジェクトの同一性については字義どおりでは
@@ -1911,7 +1921,11 @@ D14 は「借用する unit の参照は呼び出し元が処分する」とし�
 環境とは、RC IR プログラムの外側にあってその本体を起動するコードである。環境について次を仮定する。
 (i) 環境が活性化を作るとき、D10 の初期値が要求する参照を渡し、それ以後それを持たない。
 (i-b) `boxed_to_retained_ptr` が渡した番地について、環境はその参照を持ち、`boxed_from_retained_ptr` で
-Fix の側へ返すまで処分しない。
+Fix の側へ返すまで処分しない。**それ以外の番地を `boxed_from_retained_ptr` に渡す実行は、このモデルの
+外にある** -- `std.fix` の doc が「It is the user's responsibility to ensure that the argument is
+actually a pointer to the type of the return value, and undefined behavior will occur if it is not.」
+と書くとおり、その振る舞いは定まらない (`CODE src/fixstd/std.fix: boxed_from_retained_ptr`)。
+(E6) が実行時検査を切ったビルドの `undefined` について置くのと同じ形の節である。
 (i-c) 実行の最初の時点に在る参照は、環境が持つか、環境が持ち込んだオブジェクトの leaf が持つ。すなわち
 各計数下オブジェクト `O` について `H(O)` は、環境が持つ `O` への参照の個数と、生きているオブジェクトの
 leaf が持つ `O` への参照の個数の和に等しい。**その時点に生きている各計数下オブジェクトは、少なくとも
@@ -3127,7 +3141,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | `p30-cancel-walk.md` | 第 6 周 (366 段) | **0** | **0** | BAD-CITATION 1、NOT-OBVIOUS 20 | **2 周続けてゼロ**。修理済み。**第 7 周の検証** |
 | `p40-cancel-soundness.md` | 第 6 周 (400 段) | 5 | 4 | BAD-CITATION 13、NOT-OBVIOUS 14、UNDEFINED 1 | 修理済み。**第 7 周の検証** |
 | `p50-observation.md` | 第 6 周 | **0** | 1 | BAD-CITATION 8、NOT-OBVIOUS 12 | 修理済み。**第 7 周の検証** |
-| `p51-runs.md` | 第 6 周 (172 段) | 9 | 1 | BAD-CITATION 2、UNDEFINED 1、NOT-OBVIOUS 11 | 修理済み。**第 7 周の検証** |
+| `p51-runs.md` | 第 7 周 (205 段) | 2 | 9 | NOT-OBVIOUS 9 | **修理** |
 | `p60-insert-rc.md` | 第 6 周 (360 段) | 4 | 9 | UNDEFINED 1、BAD-CITATION 4、HEDGE 1、NOT-OBVIOUS 45 段 | 修理済み。**第 7 周の検証** |
 | `p70-main-theorem.md` | 第 6 周 (31 段) | **0** (散文 6) | 1 | NOT-OBVIOUS 1、表の落ち 12、引用 13 | 修理済み。**第 7 周の検証** |
 
