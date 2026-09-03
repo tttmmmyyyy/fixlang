@@ -266,19 +266,21 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 <1>2a. `origin(vars, type_env, x, π)` の 1 回の呼び出しの中で `origin` の呼び出しが始まるのは、その
       呼び出しが `origin_inner` を評価する場合の、その評価の中だけである。
   `origin` は `ownership.rs` の `pub(crate)` の関数なので、EXT 可視性 より、それを呼ぶ式はこのクレートの
-  ソース `src/` の中にしかない。`<1>1` より `origin` の本体が行う呼び出しは、`vars.origins.borrow()` と
+  ソース `src/` の中にしかない。`<1>1` より `origin` の本体が行う呼び出しは、`FullName::clone` と
+  `<[usize]>::to_vec` (鍵 `(var.clone(), path.to_vec())` の組み立て)、`vars.origins.borrow()` と
   `Map::get` (記録の検査)、`Origin::clone` (記録の値と答えの複製)、
   `grow_stack(|| origin_inner(..))`、`vars.origins.borrow_mut()` と
   `Map::insert` (記録の書き込み) である。`grow_stack(f)` は `f` をちょうど 1 回呼びその返り値を返す (A15)
-  ので、その中で始まる `origin` の呼び出しは `origin_inner` の評価の中で始まる。残る 5 つの受け手のうち
-  `RefCell` の操作は標準ライブラリ、`Map` すなわち `FxHashMap` の操作は外部クレートのコードなので、
-  どれも `src/` の外に在り、EXT 可視性 より `origin` を名指す式を持たない。`Origin` は
-  `#[derive(Clone)]` を持ち、その欄の型は `VarPath` -- `FullName` と `Vec<usize>` の対、`FullName` も
-  `Clone` を derive する -- と `Set<VarPath>` すなわち外部クレートの `FxHashSet` である。EXT `derive` した
+  ので、その中で始まる `origin` の呼び出しは `origin_inner` の評価の中で始まる。残る 7 つの受け手のうち
+  `<[usize]>::to_vec` と `RefCell` の操作は標準ライブラリ、`Map` すなわち `FxHashMap` の操作は外部クレートの
+  コードなので、どれも `src/` の外に在り、EXT 可視性 より `origin` を名指す式を持たない。`FullName` と
+  `Origin` はどちらも `#[derive(Clone)]` を持ち、`Origin` の欄の型は `VarPath` -- `FullName` と
+  `Vec<usize>` の対、`FullName` も `Clone` を derive する -- と `Set<VarPath>` すなわち外部クレートの
+  `FxHashSet` である。EXT `derive` した
   `Clone` より derive した実装が呼ぶのは
-  欄の `Clone::clone` だけなので、`Origin::clone` の実行の中で始まる呼び出しは `Clone::clone` の実装に
-  限り、その実装はどれも derive したものか標準ライブラリ・外部クレートのものであって、`origin` を名指す
-  式を持たない。
+  欄の `Clone::clone` だけなので、`FullName::clone` と `Origin::clone` の実行の中で始まる呼び出しは
+  `Clone::clone` の実装に限り、その実装はどれも derive したものか標準ライブラリ・外部クレートのもので
+  あって、`origin` を名指す式を持たない。
   BY A15, EXT 可視性, EXT `derive` した `Clone`, CODE src/rc_ir/ownership.rs: origin, Origin,
      CODE src/rc_ir/ast.rs: VarPath, FieldPath, CODE src/ast/name.rs: FullName,
      CODE src/misc.rs: grow_stack, Map, Set
