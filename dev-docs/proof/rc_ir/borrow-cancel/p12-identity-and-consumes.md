@@ -1145,7 +1145,7 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
      TypeEnv::add_tycons, TypeEnv::kinds, TypeEnv::is_struct_act,
      TypeEnv::resolve_type_aliases_in_tycons, Program::calculate_type_env,
      Program::tycon_names_with_aliases, Program::resolve_namespace_not_in_expr, Program::kind_env,
-     KindEnv
+     CODE src/ast/kind_scope.rs: KindEnv
 
 <1>4. `<1>3` の 6 つのうち 4 つは、どの鍵の項の `variant` も変えない。`TypeEnv::default` は空の写像を
       置き、`TypeEnv::unwrap_newtypes`、`TypeEnv::resolve_type_aliases_in_tycons`、
