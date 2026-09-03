@@ -2021,8 +2021,16 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       落ちることはなく、各鍵の値はその鍵を `node` とする唯一の要素の `outstanding` への共有参照である。
       よって 1 が成り立つ。外側の `collect` の行き先は `Vec` なので、EXT Iterator::map と collect より
       `arm_states` は `arm_exits` と同じ長さで、第 `j` 要素は `arm_exits[j]` から作られる。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, 本補題の仮定, EXT collect into Map と Set,
-     EXT Vec::iter と slice::iter, EXT Iterator::map と collect
+      **`arm_states` の各値は走査が扱う `References` の値である。** `merge` は非公開の型
+      `CancelAnalysis` の非公開のメソッドであり、`borrow.rs` は `mod` 宣言を 1 つも持たないので、その
+      呼び出しは `borrow.rs` の中にしか書けず、そこでそれを呼ぶのは `walk_inner` の
+      `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕 1 か所だけである。よって L2 の 1 から 6 が
+      `arm_states` の値と `pending_in` の各要素の `outstanding` に当たる。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, CODE src/rc_ir/borrow.rs: CancelAnalysis,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
+     本補題の仮定, L2, EXT collect into Map と Set,
+     EXT Vec::iter と slice::iter, EXT Iterator::map と collect, DEF 本文,
+     EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>2. `entered_with` は `pending_in.iter().map(|retain| retain.node).collect()` である。行き先は
       `Set<NodeId>` なので、EXT collect into Map と Set より `entered_with` の要素の集合は
       `pending_in` の各要素の `node` の集合に等しい。よって 2 が成り立つ。
@@ -2050,9 +2058,12 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
     BY <2>1, EXT Map と Set
   <2>5. CASE すべての `j'` が `retain` を鍵に持つが、2 つの `j'` の値が互いに等しくない。このとき、
         `retain` を鍵に持つどの `arm_states[j]` の反復についても、その `outstanding` と等しくない値を
-        持つ `j'` が在るので (すべての `j'` の値が `arm_states[j]` の値と等しければ、それらは互いに
-        等しい)、`all` は偽であり、第 2 の連言肢は偽である。
-    BY <2>1
+        持つ `j'` が在る。すべての `j'` の値が `arm_states[j]` の値と等しいとすると、L2 の 6 より
+        どの `j'` の値も各位置について `arm_states[j]` の値と同じ個数を持つので、2 つの `j'` の値は
+        各位置について同じ個数を持ち、L2 の 6 よりそれらは互いに等しい --- 本場合の仮定に反する。
+        よって `all` は偽であり、第 2 の連言肢は偽である。<1>1 より `arm_states` の値は走査が扱う
+        `References` の値なので、L2 が当たる。
+    BY <1>1, <2>1, L2, DEF 参照の多重集合
   <2>6. QED
     <2>3、<2>4、<2>5 は、`retain` を鍵に持つ `arm_states[j']` の有無と値の一致について場合を尽くす。
     3 つのどの場合でも第 2 の連言肢の値は `j` によらず、それが真であるのは <2>3 の場合に限る。<2>2 と
@@ -2201,12 +2212,12 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行に�
     L8 より、走査が `PendingRetains` の値を作るのは DEF 基本操作 の 6 種だけである。「初期」は
     `cancel_body` の実行につき 1 回であり (`cancel` の `analysis.walk(body, PendingRetains::default(), true)`)、
     残る 5 種は <2>2 より 1 回の訪問につき有限個で、<2>1 より訪問は有限回である。よって状態は有限個である。
-    BY <2>1, <2>2, L8, DEF 基本操作, CODE src/rc_ir/borrow.rs: cancel
+    BY <2>1, <2>2, L8, 本補題の仮定, DEF 基本操作, CODE src/rc_ir/borrow.rs: cancel
 <1>2. 2 が成り立つ。L8 より、走査が `PendingRetains` の値を作るのは DEF 基本操作 の 6 種だけである。
       「初期」以外の 5 種は、DEF 除去事象 が述べるとおり既に在る状態を入力に取る --- 「複製」「追加」
       「消費」「引き」は 1 つ、「併合」は `pending_in` と各 `arm_exits[j]` である。入力はその操作が走る
-      時点で既に在るので、生成順序でその操作が作る状態より前にある。
-  BY L8, DEF 基本操作, DEF 除去事象
+      時点で既に在るので、生成順序でその操作が作る状態より前にある。L8 の仮定は本補題の仮定である。
+  BY L8, 本補題の仮定, DEF 基本操作, DEF 除去事象
 <1>3. QED
   3 が成り立つ。生成順序は時点の前後関係なので狭義の半順序であり (DEF 基本操作)、<1>1 よりこの実行が
   作る状態は有限個である。有限集合上の狭義半順序に無限の下降列は無い。
@@ -2404,35 +2415,39 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
 (e3) その事象は「併合」であり、各アームの状態の鎖 (L8) の中に、同じ `node` の除去事象がある。そして
 (e3) の展開は有限で終わり、その葉は (e1) か (e2) である。**
 
-**証明** 以下、`cancel` の入力 `prog` は `borrow_ify` の 1 回の呼び出しが返した値である。これは
-L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての呼び出しについて無条件に果たす**ので、
-この命題は README の P16 --- 仮説を持たない言明 --- として立つ。
+**証明**
 
-<1>0. 言明の (e) が主語にする「`pending` から取り除かれた `Retain`」は、`NodeId` の値ごとに読む。
+<1>0. **この証明が引く L4、L8、L8a、L9 の仮定 --- `cancel` の入力 `prog` が `borrow_ify` の 1 回の
+      呼び出しが返した値であること --- は、`cancel` のすべての呼び出しについて満たされる。** よって
+      この命題は README の P16 --- 仮説を持たない言明 --- として立つ。また、言明の (e) が主語にする
+      「`pending` から取り除かれた `Retain`」は、`NodeId` の値ごとに読む。
       すなわち、`node` が `x` である要素が `pending` から取り除かれることと、`x` の除去事象
       (DEF 除去事象) が在ることは同値である。よって各除去事象について上の 3 つを示せば、言明の (e) が
       出る。
+  <2>0. 第 1 文が成り立つ。L2b が `cancel(prog, type_env)` のすべての呼び出しについて `prog` が
+        `borrow_ify` の 1 回の呼び出しが返した値そのものであることを述べる。
+    BY L2b
   <2>1. `NodeId` の値 `x` を 1 つ取る。走査が `PendingRetains` の値を作るのは DEF 基本操作 の 6 種だけで
         あり (L8)、各状態はそれを作る基本操作が実行される時点で生じる (DEF 基本操作)。よって `node` が
         `x` である要素が `pending` から取り除かれるとは、その要素を持つ状態を入力に取り、それを持たない
         状態を作る基本操作が在ることであり、これは DEF 除去事象 の言う `x` の除去事象そのものである。
         **1 つの除去事象が `node` の相異なる 2 つの値の要素を同時に取り除くことも、1 つの `x` について
         除去事象が複数在ることもありうる。** この段が言うのは、`x` を固定したときの同値だけである。
-    BY L8, DEF 基本操作, DEF 除去事象
+    BY <2>0, L8, DEF 基本操作, DEF 除去事象
   <2>2. QED
     上の 3 つの場合は、言明の (e1)(e2)(e3) をそれぞれ含む。(e1) は「取り除かれた要素の `outstanding` は
     その事象の中で空になった」であり、言明の「`outstanding` が空になった」である。(e2) は「その事象は、
     取り除かれた `node` を `self.needed_retains` に入れる」であり、その `node` が `needed_retains` に
     入ったことを含む。(e3) は言明と同じ文である。
-    BY <2>1
+    BY <2>0, <2>1
 <1>1. (a) が成り立つ。
-  BY L9 の (i), DEF INV
+  BY <1>0, L9 の (i), DEF INV
 <1>2. (b) が成り立つ。
-  BY L9 の (ii), DEF INV, DEF 参照の多重集合
+  BY <1>0, L9 の (ii), DEF INV, DEF 参照の多重集合
 <1>3. (c) が成り立つ。
-  BY L9 の (iii), DEF INV
+  BY <1>0, L9 の (iii), DEF INV
 <1>4. (d) が成り立つ。
-  BY L9 の (iv), DEF INV
+  BY <1>0, L9 の (iv), DEF INV
 <1>5. 除去事象を起こしうる基本操作は「消費」「引き」「併合」の 3 つだけである。
   <2>1. 「初期」は入力の状態を持たないので、除去事象ではない。
     BY DEF 除去事象, DEF 基本操作
@@ -2444,7 +2459,7 @@ L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべて
        EXT Vec::push
   <2>4. QED
     L8 より基本操作は 6 種で尽きる。
-    BY <2>1, <2>2, <2>3, DEF 基本操作, L8
+    BY <1>0, <2>1, <2>2, <2>3, DEF 基本操作, L8
 <1>6. CASE 除去事象が「消費」である。L6 より、`consume_objects` は取り除いた各要素の `node` を
       `self.needed_retains` に入れる。よって (e2) が成り立つ。
   BY L6
@@ -2462,7 +2477,7 @@ L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべて
         `self.merge(&pending, &arm_exits)` であり、各 `arm_exits[j]` は `self.walk(&arms[j].body, ・, false)`
         の戻り値である。L1 と DEF 訪問 よりそれは `pending_out(arms[j].body)`、すなわちこの走査が作った
         状態である。よって L9 の (iii) がそれに当たり、L7 の仮定が満たされる。
-    BY L9, L1, DEF 基本操作, DEF 訪問
+    BY <1>0, L9, L1, DEF 基本操作, DEF 訪問
   <2>2. CASE ある `j` について `arm_states[j]` が `x` を鍵に持つ。
     <3>1. L7 の 3 の条件 `U(x)` は成り立たない。
       <4>1. `U(x)` が成り立つと仮定する。
@@ -2493,7 +2508,7 @@ L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべて
           得られる。<3>2 でその鎖の最初の状態は `node` が `x` の要素を持ち、L7 の 1 と本場合の仮定より
           その鎖の最後の状態は持たない。よってその鎖の中に、`node` が `x` の要素を持つ状態を入力とし、
           持たない状態を作る操作、すなわち `x` の除去事象がある。
-      BY L8, L7, <2>1, <2>3, <3>2, DEF 除去事象
+      BY <1>0, L8, L7, <2>1, <2>3, <3>2, DEF 除去事象
     <3>4. QED (e3) が成り立つ。
       BY <3>3
   <2>4. QED
@@ -2509,11 +2524,11 @@ L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべて
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
        DEF 基本操作, <1>8, EXT 文は書かれた順に実行される
   <2>2. (e3) の子はアームごとに 1 つずつ選べるので有限個であり、L4 より 1 つ以上ある。
-    BY L4, <1>8
+    BY <1>0, L4, <1>8
   <2>2a. 除去事象 `E` にその事象が作る状態 `P'(E)` を対応させると、<2>1 より (e3) の各子 `E'` について
          `P'(E')` は `P'(E)` より生成順序で真に前にある。L8a の 3 よりこの実行が作る状態の上の生成順序は
          整礎なので、この対応を通した整礎帰納法が展開の節点の上で使える。
-    BY L8a, <2>1
+    BY <1>0, L8a, <2>1
   <2>2b. 各除去事象 `E` について、`E` を根とする展開は有限の木である。<2>2a の整礎帰納法による。`E` に
          子が付かないとき、展開は 1 節点の木である。子が付くとき、<2>2 よりその個数は有限であり、<2>1 と
          <2>2a よりどの子も `E` より生成順序で真に前にあるので、帰納法の仮定より各子を根とする展開は
@@ -2584,11 +2599,12 @@ L4、L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべて
 ついて `arm_exits[j']` に `node` が `x` の要素があってそれらの `outstanding` が互いに等しいことである。
 「`Retain` が `pending` に在る/現れる」は「その `NodeId` を `node` とする要素がある」と読む。
 
-**証明** 以下、`cancel` の入力 `prog` は `borrow_ify` の 1 回の呼び出しが返した値である。これは
-L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての呼び出しについて無条件に果たす**ので、
-この命題は README の P18 --- 仮説を持たない言明 --- として立つ。
+**証明**
 
-<1>0. 言明の `merge` は、`walk_inner` の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕の
+<1>0. **この証明が引く L8、L8a、L9 の仮定 --- `cancel` の入力 `prog` が `borrow_ify` の 1 回の呼び出しが
+      返した値であること --- は、`cancel` のすべての呼び出しについて満たされる (L2b)。** よってこの
+      命題は README の P18 --- 仮説を持たない言明 --- として立つ。
+      言明の `merge` は、`walk_inner` の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕の
       `self.merge(&pending, &arm_exits)` の呼び出しである。`merge` は非公開の型 `CancelAnalysis` の
       非公開のメソッドであり、`borrow.rs` は `mod` 宣言を 1 つも持たないので、その呼び出しは `borrow.rs`
       の中にしか書けず、`borrow.rs` の中でそれを呼ぶのはこの 1 か所だけである。この呼び出しにおいて
@@ -2597,12 +2613,12 @@ L8、L8a、L9 の仮定であり、**L2b がそれを `cancel` のすべての�
       第 `j` 要素、すなわち `self.walk(&arms[j].body, ・, false)` の返り値 `pending_out(arms[j].body)`
       である (L1、DEF 訪問、EXT Iterator::map と collect)。よって `pending_in` と各 `arm_exits[j]` は、この
       `cancel_body` の 1 回の実行の中で走査が作った状態である (DEF 基本操作)。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
+  BY L2b, CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
      L1, DEF 訪問, DEF 基本操作, EXT Vec::iter と slice::iter, EXT Iterator::map と collect,
      EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>1. L9 の (iii) を各 `arm_exits[j]` に適用すると、L7 の仮定が満たされる。<1>0 より各 `arm_exits[j]` は
-      走査が作った状態なので、L9 が当たる。以下 L7 の 1 から 6 を使う。
+      走査が作った状態であり、L9 の仮定も満たされるので、L9 が当たる。以下 L7 の 1 から 6 を使う。
   BY <1>0, L9, L7
 <1>1a. `arm_states[j]` が `x` を鍵に持つことと、`arm_exits[j]` に `node` が `x` の要素があることは
        同値であり、そのときの値はその要素の `outstanding` である。
