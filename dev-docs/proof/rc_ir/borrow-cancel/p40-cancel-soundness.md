@@ -532,7 +532,9 @@ README の第 7.3 節は果たされていない義務を「**無し。** A19 (i
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
      CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: origin,
      CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
-     CODE src/rc_ir/ownership.rs: collect_bindings, A3, P2a,
+     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: Binding,
+     CODE src/ast/types.rs: TypeNode, CODE src/parse/sourcefile.rs: SourceFile,
+     CODE src/rc_ir/ast.rs: RcVar, A3, P2a,
      EXT 可視性と私有性, EXT モジュールは `mod` が導入する, EXT 共有参照は代入を許さない
   `CancelAnalysis` とその欄はどれも `pub` を持たないので、EXT 可視性と私有性 よりそれを名指せるのは
   `borrow.rs` のモジュールとその子孫だけであり、`borrow.rs` は `mod` の項目を 1 つも持たないので
@@ -540,15 +542,35 @@ README の第 7.3 節は果たされていない義務を「**無し。** A19 (i
   `borrow.rs` の中にしか書けない。`borrow.rs` で `CancelAnalysis` の値を作るのは `cancel` の中の
   `cancel_body` の 1 か所だけであり、`impl CancelAnalysis` の関数のどれも `self.vars` と
   `self.type_env` へ代入しない。**欄の型は共有参照なので、その先の値の欄へ代入することもできない**
-  (EXT 共有参照は代入を許さない)。**その例外は内部可変性であり、`VarTable` はそれを 1 つ持つ** --
-  `origins` の `RefCell` である (`CODE src/rc_ir/ownership.rs: VarTable`)。`origin` は共有参照から
-  `vars.origins.borrow_mut().insert(key, answer.clone())` を実行する
-  (`CODE src/rc_ir/ownership.rs: origin`)。この欄が動いても `origin` の答えが動かないことは P2a が言う。
-  `origin` が `vars` から読む残りの欄 `bindings` は、`VarTable::of` と
-  `VarTable::body_only` が `collect_bindings` で作った後 書き込まれない -- `VarTable` を `&mut` で
-  受け取るのはこの 3 つと `collect_bindings` だけである。`type_env` から到達する `TypeNode` の
-  `OnceLock` の欄については A3 が「到達できる型が内部可変性を持つ欄を持つときは、その欄は**一度だけ
-  書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である**」と述べる。
+  (EXT 共有参照は代入を許さない)。**残るのは内部可変性であり、その在りかは型で決める** -- A3 は
+  「**在りかは型で決める。** `RefCell`・`Cell`・`OnceCell`・`OnceLock`・`Mutex`・`RwLock`・`UnsafeCell`・
+  `Atomic*` のいずれかを含む欄の宣言を走査し、その値から到達できるものを取る。**特定のメソッド名や特定の
+  欄で数え上げると、別の型を経て届く道が落ちる。**」と述べる。`VarTable` の 5 欄からその走査が取るのは
+  次の 3 つである。
+  - `origins` の `RefCell<Map<VarPath, Origin>>` (`CODE src/rc_ir/ownership.rs: VarTable`)。`origin` は
+    共有参照から `vars.origins.borrow_mut().insert(key, answer.clone())` を実行する
+    (`CODE src/rc_ir/ownership.rs: origin`)。この欄が動いても `origin` の答えが動かないことは P2a が言う。
+  - `param_tys` と `var_tys` の `Arc<TypeNode>`、および `bindings` の `Binding::Llvm` の第 3 欄の
+    `Arc<TypeNode>` から届く `TypeNode` の `hash_cache`・`ground_cache`・`depth_cache` の 3 つの
+    `OnceLock` (`CODE src/ast/types.rs: TypeNode`)。`bindings` の `Binding` が運ぶ `RcVar` の `ty` も
+    同じ型へ届き (`CODE src/rc_ir/ast.rs: RcVar`, `CODE src/rc_ir/ownership.rs: Binding`)、
+    `Binding::Llvm` の第 1 欄の `Box<dyn LLVMGen>` が欄に持つ型も同じである。
+  - `TypeNode` の `info.source` から `Span.input` を経て届く `SourceFile` の `string` と `hash` の
+    `Arc<Mutex<Option<String>>>` (`CODE src/parse/sourcefile.rs: SourceFile`)。`RcVar` の `source` も
+    同じ型へ届く。
+
+  この 3 つのどれも `origin` の答えを動かさない。1 つ目は P2a が、残る 2 つは A3 が
+  「到達できる型が内部可変性を持つ欄を持つときは、その欄は**一度だけ
+  書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である**」と述べ、`TypeNode` の
+  3 つの `OnceLock` と `SourceFile` の 2 つの `Mutex` をその形の欄として名指す。
+  `origin` が `vars` から読む残りの欄 `bindings` の写像そのものは、表が構成子から返った後は書き込まれ
+  ない。その型 `Map<FullName, Binding>` は上の走査が取る型を 1 つも含まないので、書き込みには
+  `VarTable` の `&mut` の借用が要る (EXT 共有参照は代入を許さない)。`CancelAnalysis` が持つのは共有参照
+  だけであり (`CODE src/rc_ir/borrow.rs: CancelAnalysis`)、共有参照から `&mut` の借用は作れない。
+  **`&mut VarTable` を受け取る関数は `collect_bindings` ただ 1 つであり**
+  (`CODE src/rc_ir/ownership.rs: collect_bindings`)、それを呼ぶのは `VarTable::of` と
+  `VarTable::body_only` が自分の作った局所の値に対して行う 2 か所である
+  (`CODE src/rc_ir/ownership.rs: VarTable::of`, `VarTable::body_only`)。
 <1>3. `self.vars` は、A6 と A11 を満たす本体について `VarTable::of` か `VarTable::body_only` が作った
       表である。
   BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/ownership.rs: VarTable::of,
@@ -1795,9 +1817,11 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
   <2>2. CASE `β(C) = 0` かつ `τ` が節点の入口の点でない。A19 の (ii-c) より `held_ρ(τ, C) ≥ 0` であり、
         DEF 類ごとの義務 より `obl_ρ(τ, C) = held_ρ(τ, C) ≥ 0` である。
     BY A19, 前提 (ii-c) の保存, DEF 類ごとの義務, DEF 節点の入口の点
-    A19 の (ii-c) は「**(ii-c) (段内の点の非負性)。節点の実行の途中の各点 (D24 の段内の点) でも、各計数
-    下の別名類 `C` について `held ≥ 0` である。**」と述べる。この文書が扱う本体は `borrow_ify` の出力
-    なので、その範囲について (ii-c) を持つのは `前提 (ii-c) の保存` である。
+    A19 の (ii-c) は「**(ii-c) (段内の点の非負性)。節点の実行の途中の各点 (D24 の段内の点) と、その点で
+    `held_ρ` が定まる各計数下の別名類について、`held ≥ 0` である。**」と述べる。**量化は太字の中に在り、
+    「その点で `held_ρ` が定まる」の制限もその中に在る** -- 本場合の `C` は `held_ρ(τ, ・)` が定まる類
+    なのでその制限を満たす。この文書が扱う本体は `borrow_ify` の出力なので、その範囲について (ii-c) を
+    持つのは `前提 (ii-c) の保存` である。
   <2>3. CASE `β(C) = 1`。P14a より `held_ρ(τ, C) ≥ 1` であり、
         `obl_ρ(τ, C) = held_ρ(τ, C) - 1 ≥ 0` である。
     BY P14a, DEF 類ごとの義務, D34
@@ -3326,9 +3350,10 @@ README はこの限定の理由を続けて述べる。「入力を `borrow_ify`
   原本の対応する欄の `clone` であり、残る 8 個は入力のものに等しい。`borrow_ify` は `borrowed_units` を
   書き替える (`CODE src/rc_ir/borrow.rs: borrow_ify` -- `for func in funcs.values_mut()` のループ) ので、
   この節は `cancel` についてだけである。
-  **この節は P14b の結論を運ばない。** P14b が述べる「借用する unit を持つ本体の活性化を作る段は (E3) に
-  限る」は実行 (D24) の上の言明であり、欄と本体の一致からは出ない。P14b は `cancel` の出力を自分の範囲に
-  入れて述べる。
+  **この節は P14b の結論を運ばない。** P14b が述べるのは「**`borrow_ify` の出力と、`cancel` がそれを写した
+  プログラムの両方**について、その実行 (D24) において、借用する unit を持つ本体の活性化を作る段は、
+  (E3) の呼び出しの段に限る。」であり、これは実行 (D24) の上の言明で、欄と本体の一致からは出ない。P14b は
+  `cancel` の出力を自分の範囲に入れて述べる。
 <1>3. `borrow_ify` の出力の各関数は入力のちょうど 1 つの関数から作られ、その `fn_ty`、`ret_ty`、
       `params` の型、`inline_into_callers` は元の関数のものと等しい。
   <2>1. 元の版 `f_own` は `func.clone()` に `body` を書き込んだものであり、その後
