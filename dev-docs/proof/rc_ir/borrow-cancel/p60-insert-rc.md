@@ -2347,11 +2347,11 @@ P18a・P19・P21 が読む形は P14 には強すぎる。
   `Lowerer::fresh_var` は `self.fresh_counter` を 1 つ進めてから
   `FullName::local(&format!("{}#{}{}", hint, self.symbol_tag, self.fresh_counter))` を作るので、
   lowering の出力の束縛名は互いに相異なる。case-of-case の写す先
-  `moved = clone_fresh(&outer.body, PASS_TAG, counter)` の束縛名は `fresh_var` が作ったものではなく、
-  `assign_fresh_name` が `counter` を 1 つ進めてから作ったものであり、その名前が写す先に既に在る
-  どの名前とも異なることは、D6 が「**逆に、`vars.bindings` に束縛を持つ名前は局所名である。**」を
-  `clone_fresh` を果たす者に数えて置くところである。よって `substitute_expr` は束縛の位置の名前を
-  替えない。以上より `is_local` は
+  `moved = clone_fresh(&outer.body, PASS_TAG, counter)` の束縛名は、`fresh_var` ではなく
+  `assign_fresh_name` が `counter` を 1 つ進めてから作ったものである。**その名前が写す先に既に在る
+  どの名前とも異なることを置くのは D6 である** -- D6 は `clone_fresh` を、束縛の位置に名前を書く
+  2 人目として数えたうえで「**逆に、`vars.bindings` に束縛を持つ名前は局所名である。**」を述べる。
+  よって `substitute_expr` は束縛の位置の名前を替えない。以上より `is_local` は
   この段を渡って保たれる。`insert_rc` 自身が束縛を作らないことは A2 が述べる。
   D6 の「**値を得る形は 3 つあり、スロットが在るのはそのうち 2 つである。**」の 3 つ目が
   この名前であり、D6 よりその対は記号の位置であってスロットではない。
