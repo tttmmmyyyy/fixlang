@@ -77,6 +77,7 @@ impl NameSpace {
     }
 
     /// Whether the path holds no name, as the path of a name written with no qualification does.
+    // PROOF: P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         self.names.len() == 0
     }
@@ -300,7 +301,7 @@ impl FullName {
     }
 
     /// Whether the name is written with no namespace, as a local variable's is.
-    // PROOF: P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P18a, P18b, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         return self.namespace.is_local();
     }
