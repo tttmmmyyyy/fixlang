@@ -986,7 +986,7 @@ impl<'a> RewriteCtx<'a> {
     /// or from a producer (a fresh value, a call result, a boxed-container read), is owned; a leaf
     /// that comes from a borrowed parameter is not. A leaf that may be one of several objects is
     /// owned only when it is owned whichever it is.
-    // PROOF: P1, P2, P2a, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn owns_unit(&self, arg: &RcVar, unit: &FieldPath) -> bool {
         origin(&self.vars, self.type_env, &arg.name, unit)
             .candidates()
@@ -1005,7 +1005,7 @@ impl<'a> RewriteCtx<'a> {
     ///
     /// Only the borrow version needs checking. The all-owning original holds every parameter and
     /// capture unit in `owned_units`, so `owns_object` is true of each of its objects.
-    // PROOF: P1, P2, P2a, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, T (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, T (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_ownership_is_levelled(&self, func: &RcFunc) {
         for (v, unit) in levelled_sites(func, self.type_env) {
             let where_from = origin(&self.vars, self.type_env, &v.name, &unit);
@@ -1422,7 +1422,7 @@ struct CancelAnalysis<'a> {
 impl<'a> CancelAnalysis<'a> {
     /// The references a reference-count node of this function acts on, which decide whether a
     /// release un-bumps a retain (`ownership::acted_references`).
-    // PROOF: P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     fn acted_references(&self, v: &RcVar, path: &FieldPath) -> References {
         let references = acted_references(self.vars, self.type_env, v, path);
         // Reference counting is inserted only for a value that holds a reference, and
@@ -1561,7 +1561,7 @@ impl<'a> CancelAnalysis<'a> {
 
     /// A consume of a leaf: every retain pending on an object the leaf may belong to is
     /// load-bearing here.
-    // PROOF: P2a, P3, P4, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P2a, P3, P4, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
     fn consume(&mut self, pending: &mut PendingRetains, var: &FullName, path: &[usize]) {
         let objects: Vec<VarPath> = origin(self.vars, self.type_env, var, path)
             .acted_on()
