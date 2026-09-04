@@ -111,7 +111,7 @@ payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llv
 パラメータ・capture の型を数えるのは、本体が一度も読まないパラメータの型が本体に現れないからである。
 根の型と、根の型から `unpunched_field_types(・)` が返す対の第 2 成分を有限回取って到達する型とを
 合わせて**扱う型**と呼ぶ。
-**以下の補題が量化する型 -- `τ`、`σ`、および `ty(・)` の形で現れる型 -- は、すべて扱う型を渡る。**
+**以下の命題が量化する型 -- `τ`、`σ`、および `ty(・)` の形で現れる型 -- は、すべて扱う型を渡る。**
 扱う型が A10 を満たすことは L1b が与え、この文書が P1 を当てるのはその上である。
 
 **DEF 歩み**
@@ -149,7 +149,7 @@ payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llv
 束縛名を付け替えるからである (P9)。`infer_ownership` は入力の関数の表と site を読むので、その水準の
 主張は `vars_f` の側で書き、出力版の `owns` へ渡すのは L15 と L16 である。
 
-## 2. 型と変数表についての補題
+## 2. 型と変数表についての命題
 
 ### L0 (固定した出力版の本体は A6・A11・A12 を満たす) <!--#9cef509-->
 
@@ -159,7 +159,7 @@ payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llv
 その版のパラメータと capture に限り、A12 が対にする各組の型は一致する。
 
 `borrow_ify` が作る出力版は 3 種である。入力の各関数の全所有版 `f_own`、借用版を持つ関数の借用版、
-および各グローバル初期化子のものである (`CODE src/rc_ir/borrow.rs: borrow_ify`)。この補題を読むのは
+および各グローバル初期化子のものである (`CODE src/rc_ir/borrow.rs: borrow_ify`)。この命題を読むのは
 DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 と、その上に立つ L18・L21・L22 と
 `P7a の 2 つの向き` が第 1 節の `vars` について読む。
 
@@ -460,7 +460,7 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 `variant` が `TyConVariant::Struct` または `TyConVariant::Union` であるとき、`is_array(σ)` も
 `is_funptr(σ)` も偽である。
 
-**この補題が要るのは、`is_array` と `is_funptr` が名前の比較だからである。** `is_array(σ)` は `σ` の最上位
+**この命題が要るのは、`is_array` と `is_funptr` が名前の比較だからである。** `is_array(σ)` は `σ` の最上位
 tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs: TypeNode::is_array`,
 `CODE src/fixstd/builtin.rs: is_array_tycon`)、`is_funptr(σ)` はその名前が namespace `Std` を持ち
 `#FunPtr` に 10 進表記が続く形かを問う (`CODE src/ast/types.rs: TypeNode::is_funptr`,
@@ -1076,7 +1076,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 `covered(τ, p) ≠ ∅` または `under(τ, p) = []` であるとき、`owns_object_yet(V, type_env, r, p, OL)` は
 真である。
 
-**表を明示するのは、この補題を `vars` と `vars_f` の両方について読むからである。** `owns_object_yet` が
+**表を明示するのは、この命題を `vars` と `vars_f` の両方について読むからである。** `owns_object_yet` が
 表から読むのは `param_tys.get(root)` の 1 か所だけなので (`<1>1`)、言明は `τ` を通してしか表に依らない。
 
 <1>0. `under(τ, p)` と、その各要素についての `trunc(τ, ・)` は中断しない。
@@ -1260,7 +1260,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   BY <1>0, <1>1, <1>2
 
 
-## 4. `origin` の候補についての補題
+## 4. `origin` の候補についての命題
 
 **DEF 再帰で訪れる対**
 1 つの本体と、その `VarTable::of` を固定する。**固定する表は第 1 節の `vars` に限らない** -- A6・A11・
@@ -1304,7 +1304,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 満たし、`ty(・)` も `func` に現れる名前について A12 が定める。よって L11a・L12・L14 を
 `vars_f = VarTable::of(func)` と `func.body` について読んでよく、そのとき `Reach` は
 `Reach(vars_f, ・, ・)`、`cand` と `act` と `id` は `cand(vars_f, ・, ・)` などである。読む者は L15 の
-`<1>6`、P7d の `<1>1a` と `<1>7` の `<2>2` である。L14a はこの読み方の下で立つ補題である。
+`<1>6`、P7d の `<1>1a` と `<1>7` の `<2>2` である。L14a はこの読み方の下で立つ命題である。
 
 ### L11a (`Reach` の要素数は整礎な尺度である) <!--#7bdd3d4-->
 
@@ -2250,7 +2250,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 ある。したがって `leaves(rty) = leaves(ty(x))` であり、任意の `π` について
 `Λ_{rty}(π) = Λ_{ty(x)}(π)` である。
 
-**この補題が要るのは、L19 と L20 が `rty` について語り、L21 と L22 がその答えを `Λ_{ty(x)}(π)` と
+**この命題が要るのは、L19 と L20 が `rty` について語り、L21 と L22 がその答えを `Λ_{ty(x)}(π)` と
 `Inh_x(π)` に読み替えて使うからである。**
 
 <1>1. `collect_bindings` は `Let(x, Llvm(gen, args), k)` の腕で `bindings` に
@@ -2279,7 +2279,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   A3 は、`result_prov` を override する 29 個の宣言が leaf に置く集合の要素数がすべて 0 か 1 であり、
   複数の元を宣言する op はこのコミットのプログラムに存在しないと述べる。`LeafOrigin` は `Arg`、`Fresh`、
   `Unknown` の 3 つの構成子を持つ。A3 はさらに `result_prov` が決定的である -- 同じ引数に対して常に
-  同じ値を返す -- ことを述べるので、`decl` は呼び出しの時点によらない。よってこの補題が数え上げる
+  同じ値を返す -- ことを述べるので、`decl` は呼び出しの時点によらない。よってこの命題が数え上げる
   `origin_inner` の腕の分かれ目も、鍵から決まる。
   BY A3, CODE src/rc_ir/provenance.rs: LeafOrigin, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
 
@@ -2349,7 +2349,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `operand_units` に入れ、`Fresh` か `Unknown` なら `produced_here` を真にする。
   `leaf_origins_under(π)` は `π` を前置に持つ `rty` の leaf の値を並べるので、渡るのは
   `{ S_λ : λ ∈ Λ_{rty}(π) }` である。A3 より `result_prov` は決定的なので `decl` は
-  `(gen, rty, arg_tys, type_env)` から決まる 1 つの値であり、この補題が数え上げる `origin_inner` と
+  `(gen, rty, arg_tys, type_env)` から決まる 1 つの値であり、この命題が数え上げる `origin_inner` と
   `origin_from_leaves_under` の腕の分かれ目も鍵から決まる。
   BY A3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
      CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
@@ -2405,7 +2405,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 スロットを持たず、その位置は D6 の意味の記号の位置である。`Let(x, Var(g), k)` の `g` や、
 `App` の callee がグローバル値であるときの callee がこれである。
 
-**この補題が要るのは、A11 が答えないからである。** A11 は「変数の使用は、その位置でスコープに入って
+**この命題が要るのは、A11 が答えないからである。** A11 は「変数の使用は、その位置でスコープに入って
 いる束縛に解決する」までしか言わず、スコープに入っている束縛の変数がその時点までに値を得ていることは
 言わない。それを与えるのは D2 のスコープの規則と D3 の実行路の進み方である。
 
@@ -3023,7 +3023,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 このとき、`n` において `O` は解放されていない。
 
-**この補題が要るのは、D11 が 1 つの活性化について課す条件だからである。** README の P28 の系は実行 (D24)
+**この命題が要るのは、D11 が 1 つの活性化について課す条件だからである。** README の P28 の系は実行 (D24)
 についての言明であり、その前提はプログラムが D12 を満たすことである。D11 を検査している段はそれを与件に
 できないので、代わりに D21 が活性化に課す制限 (A19 (i) の不等式) から `H(O) ≥ 1` を出し、それを (H-c) と
 合わせる。

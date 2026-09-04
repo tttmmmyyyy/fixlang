@@ -75,6 +75,8 @@ CLAUSE = None
 
 THEOREM = re.compile(r"^#+\s+(T)\b")
 CITATION = re.compile(r"\b([DAP]\d+[a-z]*|L\d+[a-z]*)\b")
+# 変換後の参照。**格納されるのは id だけで、題は描画のときに命題から取る。**
+REF = re.compile(r"<ref id=([0-9a-f]{7})/>")
 # 項の粒度の引用。いまは項が項目でないので使わない。
 CITED_CLAUSE = re.compile(r"\b([DAP]\d+[a-z]*)\s+\(([a-z]|i+|ii-[a-c]|iii|S-[a-c]|[EFXRK]\d?)\)")
 
@@ -238,6 +240,7 @@ def build(directory):
                 if full in frame:
                     targets.add(frame[full]["identity"])
                     clauses.add(match.group(1))
+            targets.update(REF.findall(text))
             for name in set(CITATION.findall(text)) - clauses:
                 home = frame if name[0] in "DAP" else by_file.get(key, {})
                 if name in home:
@@ -286,6 +289,78 @@ def bundle(directory, path, only=None):
         out.append(item["statement"])
         out.append("")
     return "\n".join(out), len(cited)
+
+
+def resolution(directory):
+    """名前から id への表。名前はファイルの中でしか一意でないので、ファイルごとに持つ。"""
+    frame, per_file = {}, {}
+    for path in documents(directory):
+        key = os.path.basename(path).split("-")[0]
+        table = {}
+        for item in items_in(path)[0]:
+            if item["identity"]:
+                table[item["name"]] = item["identity"]
+        per_file[key] = table
+        if os.path.basename(path) == "README.md":
+            frame = table
+    return frame, per_file
+
+
+def convert(directory, path):
+    """`BY` の行の名前を `<ref id=.../>` にする。解決しない名前は残し、数えて返す。
+
+    **変換するのは `BY` の行だけである。** そこは読点で区切られた引用の列であり、名前が名前以外の
+    ものである余地が無い。散文の中の名前を綴りで探すと、参照でないものを参照にする -- 実測で、
+    Rust の型変数 `&T` が主定理 `T` の id に潰れた。"""
+    frame, per_file = resolution(directory)
+    here = per_file.get(os.path.basename(path).split("-")[0], {})
+    lines = open(path, encoding="utf-8").read().split("\n")
+    done, left = 0, []
+
+    def one(match):
+        nonlocal done
+        name = match.group(0)
+        identity = (frame if name[0] in "DAP" else here).get(name)
+        if not identity:
+            left.append(name)
+            return name
+        done += 1
+        return f"<ref id={identity}/>"
+
+    def cross(match):
+        """`p13 の L14` -- 別のファイルの命題。**組で先に処理する。**
+
+        名前だけを見て変換すると、引く側に同じ名前の命題が在るときそちらへ潰れる。実測で、
+        往復の検査が辺 14 本の食い違いとして出した。"""
+        nonlocal done
+        owner = per_file.get(match.group(1), {})
+        identity = owner.get(match.group(2))
+        if not identity:
+            left.append(match.group(0))
+            return match.group(0)
+        done += 1
+        return f"<ref id={identity}/>"
+
+    for index, line in enumerate(lines):
+        if line.strip().startswith("BY "):
+            line = CROSS_FILE.sub(cross, line)
+            lines[index] = CITATION.sub(one, line)
+    return "\n".join(lines), done, left
+
+
+def render(directory, text):
+    """`<ref id=.../>` を、その命題の題と id に展開する。**題は命題から取るので保守されない。**"""
+    titles = {}
+    for path in documents(directory):
+        found, lines = items_in(path)
+        for item in found:
+            if item["identity"]:
+                titles[item["identity"]] = (title_of(lines[item["line"] - 1]) or item["name"],
+                                            os.path.basename(path))
+    def one(match):
+        title, where = titles.get(match.group(1), ("?", "?"))
+        return f"{title} ({match.group(1)})"
+    return REF.sub(one, text)
 
 
 def uncovered(directory):
@@ -376,6 +451,18 @@ def default_directory():
 
 
 def main(arguments):
+    if "--render" in arguments:
+        path = arguments[arguments.index("--render") + 1]
+        directory = os.path.dirname(path) or "."
+        print(render(directory, open(path, encoding="utf-8").read()), end="")
+        return 0
+    if "--convert" in arguments:
+        path = arguments[arguments.index("--convert") + 1]
+        directory = os.path.dirname(path) or "."
+        out, done, left = convert(directory, path)
+        open(path, "w", encoding="utf-8").write(out)
+        print(f"{path}: {done} 件を id にした" + (f"、解決しなかった {len(left)} 件" if left else ""))
+        return 0
     if "--bundle" in arguments:
         at = arguments.index("--bundle")
         path = arguments[at + 1]

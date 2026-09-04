@@ -48,7 +48,8 @@ LABEL = re.compile(r"^(DEF|EXT)\s+(.+)$")
 CODE = re.compile(r"^CODE\s+[A-Za-z0-9_/.]+\.(rs|fix|pest)\s*:")
 FACT = re.compile(
     r"^("
-    r"[DAP]\d+[a-z]*"          # 定義・仮定・命題
+    r"<ref id=[0-9a-f]{7}/>"   # 命題・定義・仮定への参照
+    r"|[DAP]\d+[a-z]*"          # 定義・仮定・命題
     r"|[LR]\d+[a-z]*"          # その文書の局所命題と反例
     r"|DEF-\d+"                # 枝番を持つ局所定義
     r"|<\d+>\d+[a-z]*"         # 段
