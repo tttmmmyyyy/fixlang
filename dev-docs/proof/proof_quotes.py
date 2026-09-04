@@ -19,6 +19,15 @@
   実測では、太字の中に在る限定を太字の外へ出した引用が、限定の無い言明を支えていた。
 - **枠の外**: 24 字の錨がどこにも無い。自分の文書の再掲か、コードの doc コメントの引用である。
 
+**1 字ずつ一致していても、別の項目の文でありうる。** 引用は枠のどこかの部分文字列でありさえすれば
+一致するので、`D10` の文を `D9` として引く段も、隣り合う 2 つの項目を 1 つの引用に畳んだ段も通る。
+実測で、前者が 4 件、後者が 12 件あった。だから**引用がどの項目から来たかを、その文の在りかで決め、
+引く段の `BY` がその項目 (またはそれを覆う項目) を挙げているかを見る。**
+
+- **出どころの食い違い (帰属)**: 引く段の `BY` が、引用の出どころの項目を挙げていない。
+- **出どころの食い違い (境界)**: 引用が隣り合う 2 つの項目にまたがる。**読み手が 2 文を 1 文に
+  畳んでいる形で、後ろの文が置く限定が落ちる。**
+
 錨で分けるのは、証明が自分の言明や `CODE` の doc コメントも「」で引くからである。全部を枠に
 当てると、そちらが食い違いとして出てしまう。
 
@@ -29,6 +38,9 @@ blockquote も同じ錨の規則で当てる。
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import proof_index
 
 QUOTE = re.compile(r"「(.+?)」", re.S)
 BLOCKQUOTE = re.compile(r"(?:^>[^\n]*\n?)+", re.M)
@@ -50,6 +62,41 @@ def strip_spaces(text):
 def strip_emphasis(text):
     """強調の `*` を落とす。太字の範囲だけが違う引用を、本文の違う引用と分けるために使う。"""
     return text.replace("*", "")
+
+
+def offsets(text):
+    """空白と印を落とした文字列と、その各文字が元の本文の何文字目かの表。
+
+    **引用がどの項目から来たかを決めるのに要る。** 照合は空白を落とした上でやるので、
+    当たった位置を元の本文へ戻せないと、どの項目の中かが分からない。"""
+    kept, index = [], []
+    at = 0
+    while at < len(text):
+        marker = IDENTITY.match(text, at)
+        if marker:
+            at = marker.end()
+            continue
+        if not text[at].isspace():
+            kept.append(text[at])
+            index.append(at)
+        at += 1
+    return "".join(kept), index
+
+
+def source_of(frame, index, items, quote):
+    """引用が枠のどの項目から来たか。錨の当たった位置を項目の範囲に当てる。"""
+    for anchor in anchors(quote):
+        at = frame.find(anchor)
+        if at < 0:
+            continue
+        start, stop = index[at], index[min(at + len(quote), len(index) - 1)]
+        covering = [item for item in items if item["offset"] <= start < item["end"]]
+        if not covering:
+            return None
+        # **覆う項目は複数ある** -- 親と子が重なる。引く側は親を挙げてもよいので、全部返す。
+        inner = min(covering, key=lambda item: item["end"] - item["offset"])
+        return covering, inner, stop > inner["end"]
+    return None
 
 
 def contains(frame, quote):
@@ -81,6 +128,38 @@ def nearest(frame, quote):
     return None
 
 
+STEP_START = re.compile(r"^\s*(?:\*\*)?`?<\d+>\d+[a-z]*`?\.")
+BY_LINE = re.compile(r"^\s*BY\s")
+REF = re.compile(r"<ref id=([0-9a-f]{7})/>")
+
+
+def frame_items(directory):
+    """枠の項目を、本文の中の文字位置つきで。"""
+    path = os.path.join(directory, "README.md")
+    found, lines = proof_index.items_in(path)
+    starts, at = [], 0
+    for line in lines:
+        starts.append(at)
+        at += len(line) + 1
+    out = []
+    for item in found:
+        first, last = item["span"]
+        out.append({"identity": item["identity"], "name": item["name"],
+                    "offset": starts[first],
+                    "end": starts[last] if last < len(starts) else at})
+    return [item for item in out if item["identity"]]
+
+
+def citing_by(lines, line):
+    """引用の在る行から、その段の `BY` の行を探す。見つからなければ `None`。"""
+    for index in range(line, min(line + 60, len(lines))):
+        if index > line and STEP_START.match(lines[index]):
+            break
+        if BY_LINE.match(lines[index]):
+            return lines[index]
+    return None
+
+
 def check(directory):
     """1 つの証明のディレクトリを見て、食い違った引用を返す。"""
     frame = strip_spaces(open(os.path.join(directory, "README.md"), encoding="utf-8").read())
@@ -106,6 +185,61 @@ def check(directory):
     return found
 
 
+def misattributed(directory):
+    """枠と一致する引用のうち、引く段の `BY` がその項目を挙げていないもの。
+
+    **引用が部分文字列として正しくても、別の項目の文でありうる。** 実測で、`D10` の文を `D9` として
+    引く段が 3 つ、`D24` の文を `D10` として引く段が 1 つあった -- どれも 1 字ずつ一致するので、
+    照合だけの検査は通す。**引用がどの項目から来たかは、その文の在りかで決まる。**
+
+    **項目の境界をまたぐ引用も挙げる。** 項目の途中で切れた引用は、その項目が続けて置く限定を
+    落としている可能性がある -- 実測で最も多い欠陥である。"""
+    raw = open(os.path.join(directory, "README.md"), encoding="utf-8").read()
+    frame, index = offsets(raw)
+    items = frame_items(directory)
+    out = []
+    for name in sorted(os.listdir(directory)):
+        if not name.endswith(".md") or name == "README.md":
+            continue
+        text = open(os.path.join(directory, name), encoding="utf-8").read()
+        if "<!--not-a-proof-->" in text[:400]:
+            continue
+        lines = text.split("\n")
+        for match in list(QUOTE.finditer(text)) + list(BLOCKQUOTE.finditer(text)):
+            body = (match.group(1) if match.re is QUOTE
+                    else re.sub(r"^>\s?", "", match.group(0), flags=re.M))
+            quote = strip_spaces(body)
+            if len(quote) < ANCHOR or not contains(frame, quote):
+                continue
+            where = source_of(frame, index, items, quote)
+            if not where:
+                continue
+            covering, item, crosses = where
+            line = text.count("\n", 0, match.start())
+            by = citing_by(lines, line)
+            if by is None:
+                continue
+            named = set(REF.findall(by))
+            if not named & {one["identity"] for one in covering}:
+                out.append((name, line + 1, covering, quote[:60], "帰属"))
+            elif crosses:
+                out.append((name, line + 1, covering, quote[:60], "境界"))
+    return out
+
+
+def report_attribution(directory):
+    """帰属の食い違いを印字し、件数を返す。"""
+    rows = misattributed(directory)
+    for name, line, covering, quote, kind in rows:
+        names = [one["name"] or one["identity"] for one in covering]
+        label = ("引く段の `BY` がこの引用の出どころを挙げていない" if kind == "帰属"
+                 else "引用が 2 つの項目にまたがる -- 2 文を 1 文に畳んでいる")
+        print(f"{os.path.join(directory, name)}:{line}: {label}")
+        print(f"  出どころ: {' < '.join(names)}")
+        print(f"  引用: {quote}")
+    return rows
+
+
 def main(directories):
     text_differences = emphasis_differences = 0
     for directory in directories:
@@ -121,7 +255,9 @@ def main(directories):
             if near:
                 print(f"  枠　: {near[:200]}")
     if text_differences or emphasis_differences:
-        print(f"\n本文の食い違い {text_differences} 件、強調の範囲だけの差 {emphasis_differences} 件")
+        attribution = sum(len(report_attribution(directory)) for directory in directories)
+        print(f"\n本文の食い違い {text_differences} 件、強調の範囲だけの差 {emphasis_differences} 件、"
+              f"出どころの食い違い {attribution} 件")
     return 1 if text_differences or emphasis_differences else 0
 
 
