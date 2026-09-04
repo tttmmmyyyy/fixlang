@@ -40,7 +40,6 @@ use std::sync::Arc;
 type SpecializationKey = Vec<Uniqueness>;
 
 /// Specialize `prog` and eliminate the unique checks each specialization makes provable.
-// PROOF: P26, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let analysis = analyze_program(prog, type_env);
     let mut spec = Specializer {

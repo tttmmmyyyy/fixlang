@@ -63,7 +63,7 @@ CLAIM_HEAD = re.compile(r"^#+\s.*?\b(L\d+[a-z]*)\b|^\*\*(L\d+[a-z]*)[^*]*\*\*")
 # ファイルの題が名乗る枠の命題。**言明が枠に、証明がこのファイルに在る**形である。
 # 局所の命題に属さない引用は、この命題のものとして数える -- 節の前書きも、
 # 局所の命題を 1 つも立てずに枠の命題を直接示すファイルも、これで拾う。
-FILE_PROVES = re.compile(r"\b(T|P\d+[a-z]*)\b")
+FILE_PROVES = re.compile(r"\b(T|[AP]\d+[a-z]*)\b")
 # **項も項目である。** `A19 (ii-c)` は独立した主張で、独立に引かれる -- 実測で 16 の項目が項の形で
 # 引かれ、引用は 598 回あった。項目を丸ごと 1 つと数えると、**`(i)` を 1 語直しただけで `(ii-b)` しか
 # 引いていない 50 か所が「読み直せ」に出る。** 項を項目にすると波及がその項だけに閉じる。
@@ -174,10 +174,20 @@ def items_in(path):
     return found, lines
 
 
+# **証明でない文書は、自分でそう名乗る。** 名前で見分けると、名前の付け方が変わった日に黙って
+# 証明が 1 本落ちる。
+NOT_A_PROOF = "<!--not-a-proof-->"
+
+
 def documents(directory):
     for name in sorted(os.listdir(directory)):
-        if name.endswith(".md") and name not in ("citations.tsv",):
-            yield os.path.join(directory, name)
+        if not name.endswith(".md"):
+            continue
+        path = os.path.join(directory, name)
+        with open(path, encoding="utf-8") as handle:
+            if NOT_A_PROOF in handle.read(400):
+                continue
+        yield path
 
 
 def assign(directory):

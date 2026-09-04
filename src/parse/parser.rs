@@ -534,7 +534,6 @@ fn parse_str_as_rule<T>(
 
 /// The program of the one module `pair` declares: its declaration, its import statements, and
 /// everything defined in it. `src` is the source it was parsed from, which its spans point into.
-// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 fn parse_module(
     pair: Pair<Rule>,
     src: SourceFile,
@@ -1399,7 +1398,6 @@ fn parse_module_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> ModuleInfo {
     }
 }
 
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn, Errors> {
     assert_eq!(pair.as_rule(), Rule::type_defn);
     let span = Span::from_pair(&ctx.source, &pair);

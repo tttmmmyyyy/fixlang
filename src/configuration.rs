@@ -862,7 +862,6 @@ impl Configuration {
     /// The scope is the compiler's own passes. LLVM's pipeline follows the optimization level alone
     /// (`llvm_passes`), so that a build made to exercise a Fix pass keeps the LLVM effort its level
     /// asks for.
-    // PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn force_all_optimizations(&self) -> bool {
         false
     }
@@ -871,7 +870,6 @@ impl Configuration {
     ///
     /// # Arguments
     /// * `level` — the lowest optimization level the pass is written to run at.
-    // PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
     fn runs_from(&self, level: FixOptimizationLevel) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= level
     }
@@ -958,7 +956,6 @@ impl Configuration {
     /// then cancels the reference counting the borrow makes net-zero. Its full benefit relies on
     /// closure specialization and inlining (which are also `Max`-only), and it adds compile-time
     /// analysis, so it runs only at `Max` and above; `Basic` stays lighter for faster compilation.
-    // PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn enable_borrow_optimization(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }

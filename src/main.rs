@@ -78,7 +78,6 @@ use std::{
 
 /// The allocator the compiler process itself runs on. A program the compiler builds allocates
 /// through the Fix runtime instead.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 

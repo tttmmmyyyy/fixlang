@@ -222,7 +222,6 @@ impl CSignature {
 
     /// The signature of the C function generated for a value exported at `exported_ty`, whose every
     /// position `ExportedFunctionType::validate` has admitted as one the C ABI can carry.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn of_ffi_export(exported_ty: &ExportedFunctionType, type_env: &TypeEnv) -> CSignature {
         let boundary_tycon = |ty: &Arc<TypeNode>| {
             c_boundary_tycon(ty, type_env)
@@ -254,7 +253,7 @@ impl CSignature {
     /// The function `name` of this signature in the module, declaring it where nothing declares it
     /// yet. Every description of one C name goes through here, which is what puts the calls a
     /// program makes and the definition it exports on one function.
-    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_or_declare_in_module<'c, 'm>(
         &self,
         name: &Name,
@@ -328,7 +327,7 @@ impl CSignature {
 /// eightbytes (System V AMD64), or by whether it is a homogeneous floating-point aggregate
 /// (AAPCS64), and the shapes on which that agrees with Fix's element-wise layout differ from target
 /// to target.
-// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn c_boundary_tycon(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon>> {
     let head = ty.toplevel_tycon()?;
     if ty.is_box(type_env) {

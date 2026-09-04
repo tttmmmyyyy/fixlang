@@ -86,7 +86,6 @@ fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
 
 /// Builds the program specified in the configuration, linking the object files and the runtime into
 /// the output file.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build(config: &Configuration) -> Result<(), Errors> {
     assert!(config.subcommand.build_binary());
 

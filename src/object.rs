@@ -40,7 +40,6 @@ use std::sync::{Arc, OnceLock};
 /// One field of the LLVM struct a Fix object is laid out as: either runtime machinery (the control
 /// block, the traverse function, a union's tag) or a piece of the Fix value itself (a scalar, a
 /// subobject, a union's payload buffer, an array).
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone)]
 pub enum ObjectFieldType {
     /// The reference count and the flags the runtime keeps for every boxed object, which a boxed
@@ -414,7 +413,6 @@ impl ObjectFieldType {
     ///
     /// # Arguments
     /// * `state` — what is known about the reference-counting state of the elements.
-    // PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     fn traverse_array_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
@@ -489,7 +487,7 @@ impl ObjectFieldType {
     /// * `size` — the array's element count; the elements walked are `[0, size)`.
     /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
     ///   (`Std::PunchedArray`), which the storage therefore does not own, so it is skipped.
-    // PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn traverse_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -517,7 +515,6 @@ impl ObjectFieldType {
     ///
     /// # Arguments
     /// * `buffer` — allocated and uninitialized; every slot this writes is a first write.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn initialize_array_buf_by_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
@@ -559,7 +556,6 @@ impl ObjectFieldType {
     /// # Arguments
     /// * `begin` — the index the store starts at, counted from `buffer`'s first element. The
     ///   slots it covers are allocated and uninitialized, and each is a first write.
-    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn append_value_into_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buffer: PointerValue<'c>,
@@ -667,7 +663,6 @@ impl ObjectFieldType {
     /// # Arguments
     /// * `len` - the number of elements the array holds, against which `idx` is bounds-checked.
     ///   `None` omits the check.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn read_from_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: Option<IntValue<'c>>,
@@ -689,7 +684,6 @@ impl ObjectFieldType {
     ///   `None` omits the check.
     /// * `release_old_value` - `true` when the slot holds a live element, whose reference is
     ///   released before the store; `false` when the slot is uninitialized.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn write_to_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: Option<IntValue<'c>>,
@@ -729,7 +723,6 @@ impl ObjectFieldType {
     ///
     /// # Arguments
     /// * `dst_buffer` — allocated and uninitialized; every slot this writes is a first write.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_array_range<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src_buffer: PointerValue<'c>,
@@ -775,7 +768,6 @@ impl ObjectFieldType {
     /// * `hole` — `Some(idx)` names the slot whose element was moved out of the array
     ///   (`Std::PunchedArray`), which the source therefore does not own; the copy skips it and
     ///   leaves `dst_buffer[idx]` uninitialized.
-    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn clone_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,
@@ -808,7 +800,6 @@ impl ObjectFieldType {
     ///   writes is a first write.
     /// * `state` — the reference-counting state of the fields, which is what `src` reaches. An
     ///   operation whose annotation covers its clone path proves it local and passes it here.
-    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn clone_struct<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
@@ -834,7 +825,6 @@ impl ObjectFieldType {
     ///   this writes are first writes.
     /// * `state` — the reference-counting state of the payload, which is what `src` reaches. An
     ///   operation whose annotation covers its clone path proves it local and passes it here.
-    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn clone_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
@@ -859,7 +849,7 @@ impl ObjectFieldType {
 
     /// Emit the reference-counting work for the payload a union's buffer holds: a retain, a
     /// release, a mark global or a mark threaded, on the variant the tag names.
-    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     fn retain_release_mark_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -924,7 +914,6 @@ impl ObjectFieldType {
     }
 
     /// Increment the reference count of the payload a union buffer holds, `amount` times.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn retain_union<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -975,7 +964,7 @@ impl ObjectFieldType {
 
     /// The value a union carries, read as `variant_ty`, owned by the caller: the value is retained
     /// and the union released, which cancel each other out for an unboxed union.
-    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_union_value<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -996,7 +985,6 @@ impl ObjectFieldType {
 
     /// The value a union carries, read as `variant_ty` and borrowed: the reference count of neither
     /// the value nor the union moves, so the value lives only as long as the union does.
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_union_value_noretain_norelease<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
@@ -1010,7 +998,6 @@ impl ObjectFieldType {
 
     /// The contents of a union's payload buffer read as `variant_ty`, by a bit cast: the buffer is
     /// at least as wide as the variant, and the variant starts at its beginning.
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_value_from_union_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         buf: BasicValueEnum<'c>,
@@ -1072,7 +1059,7 @@ impl ObjectFieldType {
     /// The field of a struct at `field_idx`, taken at the struct's own reference to it: nothing is
     /// retained, so the caller either reads it while the struct is alive or takes the reference over
     /// by dropping the struct without releasing that field.
-    // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn move_out_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
@@ -1085,7 +1072,7 @@ impl ObjectFieldType {
 
     /// The struct with `field` stored at `field_idx`, taking over the caller's reference to `field`.
     /// The value the field held before stays live and is the caller's to account for.
-    // PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn move_into_struct_field<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: Object<'c>,
@@ -1099,7 +1086,7 @@ impl ObjectFieldType {
     /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
     /// the struct: each returned field owns its reference and so outlives the struct it came from,
     /// and the fields left behind are dropped.
-    // PROOF: D/A, P7a, P7d, P7e, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
@@ -1424,7 +1411,6 @@ pub fn union_tag_value<'c>(context: &'c Context, variant_idx: usize) -> IntValue
 /// The parts a lambda of type `ty` returns, in `type_parts` order: a boxed result is the single
 /// heap pointer, an unboxed one its parts. These are exactly the parts of the `Object` the lambda's
 /// body returns, so a call site and a `return` agree on them.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lambda_return_part_types<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
@@ -1440,7 +1426,6 @@ pub fn lambda_return_part_types<'c, 'm>(
 /// The LLVM signature every lambda of type `ty` is defined and called with: the arguments, then the
 /// CAP pointer when the lambda is a closure, and the result either returned directly or written
 /// through an out-pointer that precedes them all.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lambda_function_type<'c, 'm>(
     ty: &Arc<TypeNode>,
     gc: &mut Generator<'c, 'm>,
@@ -1500,7 +1485,6 @@ pub fn struct_field_idx(is_unbox: bool) -> u32 {
 /// The fields a primitive type is laid out as, by the primitive's name: one scalar, except for
 /// `IOState`, which carries nothing.
 fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
-    // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     static FIELDS_BY_NAME: OnceLock<Map<FullName, Vec<ObjectFieldType>>> = OnceLock::new();
     let fields_by_name = FIELDS_BY_NAME.get_or_init(|| {
         [
@@ -1532,7 +1516,6 @@ fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
 /// # Arguments
 /// * `capture` - the types a `#DynamicObject` holds captured, which become its trailing fields.
 ///   It is empty for every other type, whose fields follow from the type alone.
-// PROOF: P7a, P7d, P7e, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn ty_to_object_ty(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>,
@@ -1669,7 +1652,6 @@ pub fn ty_to_object_ty(
 
 /// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real
 /// type so the reference-count helpers and buffer GEPs operate on it directly.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn get_array_storage<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Object<'c>) -> Object<'c> {
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let storage_ty = make_array_storage_ty(elem_ty);
@@ -1725,7 +1707,6 @@ pub fn alloc_array_storage<'c, 'm>(
 /// within the header, at a fixed low address, and no capacity or index the program computed reaches
 /// it. Deferring that initialization would put a value the program chose into the faulting address
 /// and turn this into a wild write.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_malloc<'c, 'm>(
     gc: &Generator<'c, 'm>,
     sizeof: IntValue<'c>,
@@ -2013,7 +1994,7 @@ fn build_alloc_array_storage<'c, 'm>(
 }
 
 /// Free the allocation a boxed object of type `ty` lives in.
-// PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_free_boxed<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ptr: PointerValue<'c>,
@@ -2094,7 +2075,7 @@ pub fn write_alloc_offset<'c, 'm>(
 /// A fresh object of type `ty`, with its control block initialized and its remaining fields left
 /// undefined for the caller to fill in. A boxed type is allocated on the heap and comes back as a
 /// pointer to it; an unboxed type comes back as an undefined aggregate value.
-// PROOF: D/A, P7a, P7d, P7e, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
     // Captured values. Used only for creating dynamic object.
@@ -2219,7 +2200,6 @@ pub fn create_obj<'c, 'm>(
 /// # Returns
 /// Where the type leaves the traverser no work to do, the address of an empty function, so that a
 /// caller holding this pointer always has one to call.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn get_traverser_ptr<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
@@ -2268,7 +2248,6 @@ pub fn get_traverser_ptr<'c, 'm>(
 ///
 /// # Returns
 /// `None` where the traverser would have no work to do, which lets a caller emit no call at all.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn create_traverser<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>,
@@ -2379,7 +2358,6 @@ pub fn create_traverser<'c, 'm>(
 
 /// Emit the body of a traverser: perform `work` on every boxed object `obj` directly owns, walking
 /// through its unboxed structure to reach them.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_traverse<'c, 'm>(
     obj: Object<'c>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.

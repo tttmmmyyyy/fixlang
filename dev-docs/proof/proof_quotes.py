@@ -89,6 +89,8 @@ def check(directory):
         if not name.endswith(".md") or name == "README.md":
             continue
         text = open(os.path.join(directory, name), encoding="utf-8").read()
+        if "<!--not-a-proof-->" in text[:400]:
+            continue
         pieces = list(QUOTE.finditer(text))
         pieces += [match for match in BLOCKQUOTE.finditer(text)]
         for match in pieces:

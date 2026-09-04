@@ -19,7 +19,6 @@ use crate::{
     misc::{insert_to_map_vec, Map},
 };
 
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run(prg: &mut Program) {
     // Get all names and unique them.
     let mut all_names = vec![];
@@ -141,7 +140,6 @@ struct SimplifyName {
 }
 
 impl ExprVisitor for SimplifyName {
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let var = expr.get_var();
         let name = &var.clone().name;
@@ -169,7 +167,6 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let mut changed = false;
         let mut llvm = expr.get_llvm().as_ref().clone();
