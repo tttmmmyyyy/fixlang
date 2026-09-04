@@ -102,7 +102,7 @@ let fixf = fixf.insert_field(gc, CLOSURE_CAPTURE_IDX, cap_obj.value(gc));
   オペランドをそのまま返す `InlineLLVMMarkThreadedFunctionBody` や、容器へ入れる
   `InlineLLVMMakeStructBody` などがその値を結果に出す。
 
-## `L0` の数え上げが除いてよいもの
+## `L0` の数え上げが除いてよいもの <!--#388034d-->
 
 - **FFI の戻り値**。型検査は `FFI_CALL` の結果型を `type_tycon(ret_ty)` -- 引数を 1 つも取らない型構築子
   そのもの、`FFI_CALL_IO` と `FFI_CALL_IOS` ならそれを `(IOState, ret)` に包んだもの -- に定める

@@ -11,7 +11,7 @@
 
 **項目**とは、定義 (`D*`)・仮定 (`A*`)・主張 (`P*` と各証明の `L*`) である。3 つは
 「証明を持つか、持たないなら誰が果たすか」で分かれる -- 定義と仮定は証明を持たず、主張は持つ。
-**補題と命題の区別は無い。** どちらも主張であり、置き場所が違うだけだった。
+**主張はすべて命題である。** 枠に置くか証明ファイルに置くかの違いしかない。
 
 **同一性は 7 桁の 16 進のランダムで、項目の見出しに `<!--#a3f9c21-->` として置く。**
 番号 (`D12`・`P28`・`L14`) は表示であって同一性ではない -- 番号を同一性にすると番号を振り直せなく
@@ -50,9 +50,20 @@ IDENTITY = re.compile(r"<!--#([0-9a-f]{7})-->")
 # 見出しは 2 つの形しかない -- `**D1 (プログラム)**` と `- **P28** (参照の持ち手は…)`。
 # **太字が括弧の直後で閉じることを条件にする。** そうしないと散文の
 # `**P5 (a) はこの数え上げに載っている。**` を見出しと読む (実測で 3 度やった)。
-FRAME_ITEM = re.compile(r"^\*\*(T|[DAP]\d+[a-z]*)\s*\([^)]*\)\*\*"
-                        r"|^- \*\*(T|[DAP]\d+[a-z]*)\*\*\s*\(")
-CLAIM_HEAD = re.compile(r"^#+\s+(?:[\d.]+[a-z]?\s+)?`?(L\d+[a-z]*)`?\s*\(")
+# **見出しは「太字が名前を名乗り、題を括弧で持つ行」である。** 箇条書きの `- ` が付くかどうかと、
+# 括弧が太字の内と外のどちらに在るかは、書き手によって違う -- 実測で 3 通りあり、
+# `- **D27 (bump の帰属)** --` の形を落として**その定義への引用 115 件が宙に浮いていた。**
+# 括弧を要求するのは、散文の太字 (`**D24 の網羅の節**`) と分けるためである。
+FRAME_ITEM = re.compile(r"^(?:- )?\*\*(T|[DAP]\d+[a-z]*)\s*"
+                        r"(?:\([^)]*\)\*\*|\*\*\s*\()")
+# **命題の見出しとは、命題の名前を名乗っている見出しである。** 名前の後に何が続くかは問わない --
+# 実測で名乗り方が 6 通りあり、括弧を要求していたために `## 2. L6 -- D9 の…` の形を落として、
+# **そのファイルの引用が 1 本もグラフに入っていなかった。**
+CLAIM_HEAD = re.compile(r"^#+\s.*?\b(L\d+[a-z]*)\b|^\*\*(L\d+[a-z]*)[^*]*\*\*")
+# ファイルの題が名乗る枠の命題。**言明が枠に、証明がこのファイルに在る**形である。
+# 局所の命題に属さない引用は、この命題のものとして数える -- 節の前書きも、
+# 局所の命題を 1 つも立てずに枠の命題を直接示すファイルも、これで拾う。
+FILE_PROVES = re.compile(r"\b(T|P\d+[a-z]*)\b")
 # **項も項目である。** `A19 (ii-c)` は独立した主張で、独立に引かれる -- 実測で 16 の項目が項の形で
 # 引かれ、引用は 598 回あった。項目を丸ごと 1 つと数えると、**`(i)` を 1 語直しただけで `(ii-b)` しか
 # 引いていない 50 か所が「読み直せ」に出る。** 項を項目にすると波及がその項だけに閉じる。
@@ -78,16 +89,26 @@ def digest(text):
         re.sub(r"\s+", "", IDENTITY.sub("", text)).encode("utf-8")).hexdigest()[:7]
 
 
-def statement_of(lines, start, end):
-    """項目の言明。証明の主張は `**言明**。` の段落、枠の項目は見出しから次の項目までである。"""
+def statement_of(lines, start, end, frame):
+    """項目の言明。
+
+    **枠の項目は全体が言明である。証明の項目は言明の段落だけである** -- 証明が変わっても、その主張を
+    引く側は影響を受けない。言明は `**言明**` の段落、無ければ見出しの直後の段落である。"""
+    if frame:
+        return "\n".join(lines[start:end])
     for index in range(start, min(end, start + 12)):
         if lines[index].startswith("**言明**"):
-            body, cursor = [], index
-            while cursor < end and lines[cursor].strip():
-                body.append(lines[cursor])
-                cursor += 1
-            return "\n".join(body)
-    return "\n".join(lines[start:end])
+            start = index
+            break
+    else:
+        start += 1
+        while start < end and not lines[start].strip():
+            start += 1
+    body = []
+    while start < end and lines[start].strip():
+        body.append(lines[start])
+        start += 1
+    return "\n".join(body)
 
 
 def items_in(path):
@@ -110,6 +131,11 @@ def items_in(path):
         if starts and ends:
             span = range(starts[0], ends[0])
     heads, owner = [], None
+    if not frame:
+        # 局所の命題に属さない本文は、このファイルが証明する枠の命題のものである。
+        proves = FILE_PROVES.findall(lines[0]) if lines else []
+        for name in dict.fromkeys(proves):
+            heads.append((0, name))
     for index in span:
         line = lines[index]
         for pattern in patterns:
@@ -129,13 +155,17 @@ def items_in(path):
     found = []
     for order, (index, name) in enumerate(heads):
         end = heads[order + 1][0] if order + 1 < len(heads) else len(lines)
-        end = min([end] + [i for i in section_heads if i > index])
+        # **節の境界で切るのは枠だけである。** 枠の項目は節の中の 1 段落だが、証明の命題は
+        # その証明の全体であり、節をいくつ跨いでもよい。
+        if frame:
+            end = min([end] + [i for i in section_heads if i > index])
         identity = IDENTITY.search(lines[index])
         found.append({
             "name": name,
+            "heading": lines[index],
             "identity": identity.group(1) if identity else None,
             "line": index + 1,
-            "statement": statement_of(lines, index, end),
+            "statement": statement_of(lines, index, end, frame),
             "span": (index, end),
             "file": path,
         })
@@ -217,6 +247,74 @@ def build(directory):
     return items, edges
 
 
+TITLE = re.compile(r"^\*\*(?:T|[DAP]\d+[a-z]*)\s*\((.*?)\)\*\*"
+                   r"|^- \*\*(?:T|[DAP]\d+[a-z]*)\*\*\s*\((.*?)\)"
+                   r"|^#+\s+(?:[\d.]+[a-z]?\s+)?`?L\d+[a-z]*`?\s*\((.*?)\)")
+
+
+def title_of(line):
+    """項目の見出しが持つ題。定義なら定義される語、仮定と主張なら言明の要約である。
+
+    **これは表示であって同一性ではない。** 項目から取ってくるので、項目の題が変われば表示も変わり、
+    引く側は 1 か所も古くならない。**引く側に書いてよいのは id だけである。**"""
+    match = TITLE.match(line.strip())
+    return next((g for g in match.groups() if g), None) if match else None
+
+
+def bundle(directory, path, only=None):
+    """1 つのファイル (または 1 つの項目) が引く項目の本文を、読む順に組み立てる。
+
+    **これがエージェントの読むものである。** 引く側には id しか無いので、id の指す本文を束が運ぶ。
+    束が本文を運ぶなら、引く場所ごとに本文を再掲する要は無い -- **同じ本文が束と証明の 2 か所に
+    在ると、片方だけが古くなる。**"""
+    items, edges = build(directory)
+    here = [i for i in items.values() if os.path.samefile(i["file"], path)]
+    if only:
+        here = [i for i in here if only in (i["name"], i["identity"])]
+        if not here:
+            sys.exit(f"{path} に {only} は無い")
+    wanted = {t for identity, t in edges if identity in {i["identity"] for i in here}}
+    cited = sorted((items[t] for t in wanted if t in items),
+                   key=lambda i: (i["file"], i["line"]))
+    out = [f"# {os.path.basename(path)}" + (f" の {only}" if only else "") + " が引く項目",
+           "", "道具が組み立てた束である。手で編集しない。", ""]
+    for item in cited:
+        lines = open(item["file"], encoding="utf-8").read().split("\n")
+        title = title_of(lines[item["line"] - 1]) or item["name"]
+        out.append(f"## {title} ({item['identity']}) -- {os.path.basename(item['file'])}")
+        out.append("")
+        out.append(item["statement"])
+        out.append("")
+    return "\n".join(out), len(cited)
+
+
+def uncovered(directory):
+    """命題に属さない本文と、解決しない引用。**形で命題を見つける以上、漏れは必ず出る。**
+
+    出るようにしておけば、漏れは静かに消えるかわりに毎回数えられる -- 実測で、命題の名乗り方が
+    7 通りあり、そのうち 2 通りを落として**本文の 44% がどの命題にも属していなかった**。"""
+    items, edges = build(directory)
+    known = set()
+    for path in documents(directory):
+        for item in items_in(path)[0]:
+            known.add(item["name"])
+    lost, orphan = [], []
+    for path in documents(directory):
+        found, lines = items_in(path)
+        covered = set()
+        for item in found:
+            covered.update(range(*item["span"]))
+        live = [i for i, l in enumerate(lines) if l.strip()]
+        outside = [i for i in live if i not in covered]
+        if outside:
+            orphan.append((path, len(outside), len(live)))
+        for index in live:
+            for name in CITATION.findall(lines[index]):
+                if name not in known and not CROSS_FILE.search(lines[index]):
+                    lost.append((path, index + 1, name))
+    return orphan, lost
+
+
 def ledger_path(directory):
     return os.path.join(directory, "items.tsv")
 
@@ -278,6 +376,14 @@ def default_directory():
 
 
 def main(arguments):
+    if "--bundle" in arguments:
+        at = arguments.index("--bundle")
+        path = arguments[at + 1]
+        only = arguments[arguments.index("--item") + 1] if "--item" in arguments else None
+        text, count = bundle(os.path.dirname(path) or ".", path, only)
+        print(text)
+        print(f"<!-- 引く項目 {count} 個 -->", file=sys.stderr)
+        return 0
     if "--show" in arguments:
         at = arguments.index("--show")
         roots = [a for a in arguments if not a.startswith("--")]
@@ -305,7 +411,13 @@ def main(arguments):
             print(f"{directory}: 読み直す要のある項目 {len({c for c, _ in moved})} 個、"
                   f"引用の辺 {len(moved)} 本")
             continue
-        print(f"{directory}: 項目 {len(items)} 個、引用の辺 {len(edges)} 本、動いた辺 {len(moved)} 本")
+        orphan, lost = uncovered(directory)
+        outside = sum(n for _, n, _ in orphan)
+        live = sum(n for _, _, n in orphan)
+        print(f"{directory}: 命題 {len(items)} 個、引用の辺 {len(edges)} 本、動いた辺 {len(moved)} 本")
+        print(f"{directory}: どの命題にも属さない本文 {outside} 行、解決しない引用 {len(set(lost))} 件")
+        for path, n, total in orphan:
+            print(f"  {os.path.basename(path)}: {n}/{total} 行がどの命題にも属さない")
         continue
         kinds = {"定義": 0, "仮定": 0, "命題": 0, "主張 (証明の中)": 0, "定理": 0}
         total, unnamed = 0, 0
