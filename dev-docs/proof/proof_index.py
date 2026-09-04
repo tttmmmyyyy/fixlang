@@ -319,6 +319,56 @@ def title_of(line):
     return next((g for g in match.groups() if g), None) if match else None
 
 
+def fix_value_span(lines, symbol):
+    """Fix のグローバル値の定義の行の範囲。宣言の行から、次の最上位の宣言の手前まで。"""
+    name = re.escape(symbol)
+    # 値の宣言・定義 (`f : ...` / `f = ...`)、型の宣言 (`type F a = ...`)、trait の宣言。
+    # 名前空間の中では字下げされるので、行頭の空白を許す。
+    head = re.compile(rf"^(\s*)(?:{name}\s*[:=]|(?:type|trait)\s+{name}\b)")
+    for index, line in enumerate(lines):
+        match = head.match(line)
+        if not match:
+            continue
+        indent = len(match.group(1))
+        end = index + 1
+        while end < len(lines):
+            following = lines[end]
+            if following.strip() and len(following) - len(following.lstrip()) <= indent \
+                    and not head.match(following):
+                break
+            end += 1
+        return index, end
+    return None
+
+
+def cited_code(path, repo):
+    """その証明が `CODE` で引く記号の本体。**読む者に開かせるのでなく、束が運ぶ。**
+
+    実測で、1 つのファイルの検証が 208 記号を開くのに tool 呼び出し 130 回を使った。
+    引用の一覧は `proof_links` が持っているので、器を 2 つ書かない。"""
+    import proof_links
+    text = open(path, encoding="utf-8").read()
+    out, seen = [], set()
+    for source, symbol in proof_links.citations_in(text):
+        if (source, symbol) in seen:
+            continue
+        seen.add((source, symbol))
+        full = os.path.join(repo, source)
+        if not os.path.exists(full):
+            out.append((source, symbol, None))
+            continue
+        lines = open(full, encoding="utf-8", errors="ignore").read().split("\n")
+        # 引く先はソースの項目であり、その形は言語で決まる -- Rust の項目、pest の規則、Fix の値。
+        if source.endswith(".pest"):
+            span = proof_links.rule_span(lines, symbol)
+        elif source.endswith(".fix"):
+            span = fix_value_span(lines, symbol)
+        else:
+            span = proof_links.item_span(lines, symbol)
+        out.append((source, symbol, "\n".join(lines[span[0]:span[1]]) if span else None))
+    return out
+
+
 def bundle(directory, path, only=None):
     """1 つのファイル (または 1 つの項目) が引く項目の本文を、読む順に組み立てる。
 
@@ -343,6 +393,23 @@ def bundle(directory, path, only=None):
         out.append("")
         out.append(item["statement"])
         out.append("")
+    if not only:
+        repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        code = cited_code(path, repo)
+        out.append("# この証明が `CODE` で引くコード")
+        out.append("")
+        out.append("**引用の台帳はこれで作る。** 見つからなかった記号は `BAD-CITATION` である。")
+        out.append("")
+        for source, symbol, text in code:
+            out.append(f"## `{source}: {symbol}`")
+            out.append("")
+            if text is None:
+                out.append("**この記号は見つからない。**")
+            else:
+                out.append("```rust")
+                out.append(text)
+                out.append("```")
+            out.append("")
     return "\n".join(out), len(cited)
 
 

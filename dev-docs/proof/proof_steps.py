@@ -177,7 +177,7 @@ def parse(text):
         steps.append((level, number, list(path[:-1]), reasons,
                       bool(reasons) or has_substeps or defines,
                       bool(re.match(r"^(?:\*\*)?(?:`)?CASE\b", head)),
-                      bool(re.match(r"^(?:\*\*)?(?:`)?QED\b", head)), owner))
+                      bool(re.match(r"^(?:\*\*)?(?:`)?QED\b", head)), owner, head))
         owner = next_owner
     return steps
 
@@ -228,7 +228,7 @@ def check(path_of_file):
     def supports(level, ancestors):
         """その水準・その親の下の各段が、`BY` と自分の部分木で引いている同水準の段。"""
         edges = {}
-        for other_level, number, other_ancestors, reasons, _, _, _, other_owner in steps:
+        for other_level, number, other_ancestors, reasons, _, _, _, other_owner, _ in steps:
             if other_level != level or (other_owner, tuple(other_ancestors)) != ancestors:
                 continue
             here = ancestors[1] + ((other_level, number),)
@@ -240,7 +240,7 @@ def check(path_of_file):
         return edges
 
     cases_open = {}
-    for level, number, ancestors, reasons, supported, is_case, is_qed, owner in steps:
+    for level, number, ancestors, reasons, supported, is_case, is_qed, owner, _ in steps:
         key = (owner, tuple(ancestors))
         if is_case:
             cases_open.setdefault(key, []).append(number)
@@ -260,7 +260,7 @@ def check(path_of_file):
                 if case not in reached:
                     uncited_cases.append(
                         f"<{level}>{number} (QED) の支えが <{level}>{case} (CASE) に届かない")
-    for level, number, ancestors, reasons, supported, is_case, is_qed, owner in steps:
+    for level, number, ancestors, reasons, supported, is_case, is_qed, owner, _ in steps:
         here = ancestors + [(level, number)]
         if not supported:
             unsupported.append(f"<{level}>{number}")
