@@ -295,13 +295,13 @@ impl FullName {
     }
 
     /// The name `name` written with no namespace.
-    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P31 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn local(name: &str) -> Self {
         Self::new(&NameSpace::local(), name)
     }
 
     /// Whether the name is written with no namespace, as a local variable's is.
-    // PROOF: P7c, P7f, P18a, P18b, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P18a, P18b, P27, P29, P30, P31 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         return self.namespace.is_local();
     }
