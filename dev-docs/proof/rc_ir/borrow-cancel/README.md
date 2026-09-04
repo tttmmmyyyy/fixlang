@@ -2194,6 +2194,20 @@ P1 の定義域はこの広い方であり、型の歩みを扱う命題が P1 �
 **自由度を狭める向きの節である。** `Llvm` の op は原理的には処分と読みを任意の順に出せるが、 <!--#c612e07-->
 想定されている使い方はその自由度を要らない。
 
+**A27 (状態の欄を書くのは 3 つの生成コードだけ)** -- 果たす者: 下の `SCAN`。 <!--#0ab1ef4-->
+オブジェクトの制御ブロックの**状態の欄** (`RefcntState`) へ書き込む生成コードは、`create_obj` が
+割り当てたオブジェクトへ `LOCAL` を書く箇所、`build_mark_boxed_with` が印を付ける箇所、そして
+`build_branch_by_is_unique` の threaded の腕がカウント 1 のとき `LOCAL` を書く箇所の 3 つである。
+**環境がこの欄を書かないことは A17 (ii-b) が言う。** <!--#4eb73ec-->
+
+**この仮定を果たすのは走査である。** 在りかを述語で書き、その述語を機械が走らせて要素を挙げる。 <!--#5919471-->
+挙がった各要素が何であるかは、`--` の後に書く。
+
+SCAN src/ `.set_refcnt_state(`
+  = src/object.rs: create_obj -- 割り当てたオブジェクトへ `LOCAL`
+  = src/generator.rs: build_mark_boxed_with -- `mark_global` なら `GLOBAL`、`mark_threaded` なら `THREADED`
+  = src/generator.rs: build_branch_by_is_unique -- threaded の腕がカウント 1 のとき `LOCAL`
+
 **A25 (骨格は `Retain`/`Release` を持たない)** -- 果たす者: lowering と `simplify`。検査: <!--#d80dde9-->
 `RcInserter::insert_into_expr_inner` の `panic!` (`CODE src/rc_ir/rc_insert.rs:
 RcInserter::insert_into_expr_inner`)。

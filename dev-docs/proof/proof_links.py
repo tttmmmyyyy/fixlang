@@ -178,10 +178,20 @@ def citations_of(directory):
     return cited
 
 
-# A closure claim over the code: `BY SCAN <root> `<literal>`` followed by one `= <file>: <symbol>`
-# line per member. The tool runs the search and compares the members it finds with the ones listed.
-SCAN_HEAD = re.compile(r"^\s*BY\s+SCAN\s+(\S+)\s+`([^`]+)`\s*$", re.M)
-SCAN_MEMBER = re.compile(r"^\s*=\s*([A-Za-z0-9_/.]+)\s*:\s*(\S+)\s*$")
+# How an assumption's discharger states where an effect occurs: `SCAN <root> `<literal>`` followed
+# by one `= <file>: <symbol>` line per member. The tool runs the search and compares.
+#
+# **This belongs to the discharge of an assumption, not to a step.** A step that enumerates the
+# code is doing an assumption's work inline, where nobody names a discharger and nothing checks the
+# enumeration. Measured, three files carried that shape and it was the largest family round 8 found.
+#
+# **The literal is what makes it runnable.** A predicate in prose -- "the calls to `set_refcnt_state`"
+# -- cannot be run, so the enumeration it heads is checked by nobody. Writing `.set_refcnt_state(`
+# says the same thing in a form the tool executes.
+SCAN_HEAD = re.compile(r"^\s*SCAN\s+(\S+)\s+`([^`]+)`\s*$", re.M)
+# A member may carry a note after `--`: the search is a lexical over-approximation, so the
+# discharger says of each hit what it is. The note is not compared; its absence is not an error.
+SCAN_MEMBER = re.compile(r"^\s*=\s*([A-Za-z0-9_/.]+)\s*:\s*(\S+)\s*(?:--.*)?$")
 ITEM_HEAD = re.compile(
     r"^(\s*)(?:pub(?:\([a-z()]+\))?\s+)?(?:async\s+|unsafe\s+|extern\s+\"[A-Za-z]+\"\s+)*"
     r"(?:fn|struct|enum|trait|type|union|const|static)\s+(\w+)")
@@ -263,10 +273,18 @@ def check_scans(directory):
             found = {(os.path.relpath(where, REPO), name) for where, name, is_test in hits if not is_test}
             listed = set(members)
             for missing in sorted(found - listed):
-                problems.append((path, line, literal, "挙げていない", missing))
+                problems.append((path, line, literal, "走査に出るのに挙げていない", missing))
             for extra in sorted(listed - found):
-                problems.append((path, line, literal, "走査に出ない", extra))
+                problems.append((path, line, literal, "挙げているのに走査に出ない", extra))
     return problems
+
+
+def report_scans(directory):
+    """`SCAN` の食い違いを印字し、件数を返す。"""
+    rows = check_scans(directory)
+    for path, line, literal, kind, (where, symbol) in rows:
+        print(f"{os.path.relpath(path, REPO)}:{line}: SCAN `{literal}`: {kind} -- {where}: {symbol}")
+    return rows
 
 
 def rule_span(lines, symbol):
@@ -379,6 +397,7 @@ def main():
         strip_comments()
     findings = []
     for directory in proof_dirs():
+        findings += report_scans(directory)
         cited = citations_of(directory)
         rows, edits = [], {}
         for (source, symbol), props in sorted(cited.items()):

@@ -236,6 +236,10 @@ def assign(directory):
         for item in found:
             if item["identity"]:
                 continue
+            # **ファイルの題が名乗る命題には振らない。** 言明が枠に、証明がこのファイルに在るだけで、
+            # 同一性は枠の項目のものである。振ると 1 つの命題が 2 つの同一性を持つ。
+            if item["line"] == 1:
+                continue
             while True:
                 fresh = secrets.token_hex(4)[:7]
                 if fresh not in taken:
@@ -646,7 +650,17 @@ def ambiguous(directory):
         for match in REF.finditer(text):
             if match.group(1) not in live:
                 dangling.append((path, text.count("\n", 0, match.start()) + 1, match.group(1)))
-    return {key: rows for key, rows in names.items() if len(rows) > 1}, dangling
+    # **枠の命題の名前は、コーパス全体で 1 つの同一性を持つ。** 言明が枠に、証明が別のファイルに
+    # 在る形では、両方に印を振ると 1 つの命題が 2 つの同一性を持つ -- 実測で、`--assign` が
+    # 14 本の題に印を振り、引用の辺が 921 本ずれた。
+    across = {}
+    for path in documents(directory):
+        for item in items_in(path)[0]:
+            if item["name"] and item["name"][0] in "DAPT" and item["identity"]:
+                across.setdefault(item["name"], set()).add(item["identity"])
+    doubled = {("コーパス全体", name): [{"line": 0}] * len(ids)
+               for name, ids in across.items() if len(ids) > 1}
+    return {**{key: rows for key, rows in names.items() if len(rows) > 1}, **doubled}, dangling
 
 
 def ledger_path(directory):

@@ -1,4 +1,4 @@
-# P31: `insert_rc` と `split_rc_units` の出力と A19 <!--#ca74916-->
+# P31: `insert_rc` と `split_rc_units` の出力と A19
 
 この文書は、README の A19 が `insert_rc` に帰した義務 -- (ii-a)・(ii-b)・(ii-c) -- を扱う。README の定義
 D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて `p13-disposals-and-pending.md` から次の

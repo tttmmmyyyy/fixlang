@@ -1,4 +1,4 @@
-# P5, P6, P7 -- identity とオブジェクト、`acted_references`、消費の網羅性 <!--#5336725--> <!--#ea984ee--> <!--#b7bb848-->
+# P5, P6, P7 -- identity とオブジェクト、`acted_references`、消費の網羅性
 
 この文書は `README.md` の P5 (a)、P5 (b)、P5 (c)、P6、P7 を証明する。主語となる語彙は D13 が定める --
 `origin` の返り値と、その 2 つの形 `Exactly(u, σ)` と `Join { identity, candidates }` である。段が `BY` で
