@@ -35,9 +35,16 @@ BLOCKQUOTE = re.compile(r"(?:^>[^\n]*\n?)+", re.M)
 ANCHOR = 24
 
 
+IDENTITY = re.compile(r"<!--#[0-9a-f]{7}-->")
+
+
 def strip_spaces(text):
-    """空白を全部落とす。証明ファイルは枠の 1 文を複数行に折って引くので、行の折り方の差を消す。"""
-    return re.sub(r"\s+", "", text)
+    """空白と同一性の印を落とす。証明ファイルは枠の 1 文を複数行に折って引くので、行の折り方の差を消す。
+
+    **同一性の印を落とすのは、印が文の途中に置かれるからである。** 印を残すと、印をまたぐ引用が
+    すべて食い違いに出る (実測で 69 件中 62 件)。
+    """
+    return IDENTITY.sub("", re.sub(r"\s+", "", text))
 
 
 def strip_emphasis(text):
