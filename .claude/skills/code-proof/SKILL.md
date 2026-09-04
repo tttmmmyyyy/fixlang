@@ -354,6 +354,28 @@ So the brief tells the agent to **commit as it goes** rather than once at the en
 
 The orchestrator's own work fills the gaps: while two agents run, edit the frame, read the reports that have landed, and prepare the next brief. Waiting is not the cost; re-reading is.
 
+## Reading and writing a document whose citations are identities
+
+Once citations carry identities rather than numbers, a `BY` line no longer says what it rests on, so
+**nobody reads the file itself.** The reading copy is generated: each citation expanded to the title
+its proposition carries, and the cited propositions' text assembled beside it. Hand an agent that,
+not the source.
+
+The gain is not neutrality. A citation that reads `A3` sends the reader to the frame to find out
+what `A3` says; one that reads `the declared model is faithful` is read where it stands.
+
+**Writing goes the other way.** An author writes the name and lets the tool put the identity in, so
+nothing has to remember a random string. The tool converts inside `BY` lines only, leaving
+quotations and code spans alone, and it reports every name that does not resolve rather than
+guessing.
+
+**Verify a conversion by rebuilding the citation graph from the converted text and diffing it
+against the graph before.** Substitution over prose is how a reference gets written where none
+belongs, and the damage is invisible on the page, since a wrong identity looks exactly like a right
+one. Measured, that diff caught three separate corruptions that reading could not: a cross-file
+citation collapsed onto the citing file's own proposition of the same name, identities written into
+quotations of the frame, and quotations that span lines left unguarded.
+
 ## Briefing a prover
 
 Give it: the target commit; `README.md` in full; the proposition it owns and the file to write; the statements (not the proofs) of the propositions it may cite; the *proof language*, *how fine a step must be* and *words that are not allowed* sections of this file, **inline**; and, on a later round, the verifier findings against its file.
