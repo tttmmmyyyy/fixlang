@@ -132,6 +132,17 @@ def items_in(path):
         ends = [i for i in heads_of_sections if re.match(r"^## 6\.", lines[i])]
         if starts and ends:
             span = range(starts[0], ends[0])
+    # **印の付いた行は項目である。** 項目の中の 1 つの節を独立に引く段があるので、その節が動いた
+    # ときに起きるのはその節を引く段だけでよい -- 実測で、`A19` の 1 つの節を直すと、ほかの節しか
+    # 引いていない 50 か所が「読み直せ」に出ていた。
+    # **親の範囲は子を含んだままにする。** 親を引く段は全体に依拠しているので、子が動いたら
+    # 起きるべきである。過大に起こすのは安全な側で、起こし損ねるのは危険な側である。
+    children = []
+    if frame:
+        parents = {index for index in span
+                   if any(pattern.match(lines[index]) for pattern in patterns)}
+        children = [(index, None) for index in span
+                    if index not in parents and IDENTITY.search(lines[index])]
     heads, owner = [], None
     if not frame:
         # 局所の命題に属さない本文は、このファイルが証明する枠の命題のものである。
@@ -154,9 +165,15 @@ def items_in(path):
     # **項目は自分の節で終わる。** 次の項目の見出しまでで切ると、節の最後の項目が次の節の前書きを
     # 抱え込み、**その前書きを直しただけで、その項目を引く全員が読み直しに挙がる** (実測で 79 件)。
     section_heads = [i for i, l in enumerate(lines) if re.match(r"^#+ ", l)]
+    parent_starts = [index for index, _ in heads]
     found = []
-    for order, (index, name) in enumerate(heads):
-        end = heads[order + 1][0] if order + 1 < len(heads) else len(lines)
+    for order, (index, name) in enumerate(sorted(heads + children)):
+        later = [start for start in parent_starts + [i for i, _ in children] if start > index]
+        if (index, name) in children:
+            end = min(later) if later else len(lines)
+        else:
+            after = [start for start in parent_starts if start > index]
+            end = min(after) if after else len(lines)
         # **節の境界で切るのは枠だけである。** 枠の項目は節の中の 1 段落だが、証明の命題は
         # その証明の全体であり、節をいくつ跨いでもよい。
         if frame:
@@ -214,6 +231,29 @@ def assign(directory):
             added += 1
         if added:
             open(path, "w", encoding="utf-8").write("\n".join(lines))
+    return added
+
+
+def mark_claims(directory):
+    """定義・仮定の中の主張の行に印を振る。
+
+    **振り過ぎても安全である** -- 親の範囲は子を含んだままなので、親を引く段は今までどおり
+    子の変更でも起きる。主張でない行に振ったときに起きるのは、誰も引かない項目が 1 つ増えることだけ。
+    **振らないでおくと危険である** -- 1 つの節を直すたびに、ほかの節しか引いていない段まで起きる。"""
+    taken = set()
+    for path in documents(directory):
+        taken.update(IDENTITY.findall(open(path, encoding="utf-8").read()))
+    added = 0
+    for path, line, _, _ in reversed(unproved_claims(directory)):
+        lines = open(path, encoding="utf-8").read().split("\n")
+        while True:
+            fresh = secrets.token_hex(4)[:7]
+            if fresh not in taken:
+                break
+        taken.add(fresh)
+        lines[line - 1] = lines[line - 1].rstrip() + f" <!--#{fresh}-->"
+        open(path, "w", encoding="utf-8").write("\n".join(lines))
+        added += 1
     return added
 
 
@@ -447,6 +487,30 @@ def uncovered(directory):
     return orphan, lost
 
 
+# 項目の中で太字から始まる行。**主張はこの形で書かれる** -- 定義の本文が語の意味だけを述べる
+# あいだ、それ以外の太字は「…である」と主張している。
+CLAIM_LINE = re.compile(r"^\*\*[^*]")
+
+
+def unproved_claims(directory):
+    """項目の中の、印を持たない主張の行。**印が無い主張は、引くことも指紋を取ることもできない。**
+
+    数えるだけで、印は振らない -- 形で推測して振ると散文に振る。実測で、推測した版が
+    重複した項目 9 個と、散文に着いた辺 52 本を作った。どこが主張かは人が決める。"""
+    out = []
+    for path in documents(directory):
+        # **証明ファイルの太字は段の一部である。** そこは囲む命題に属していて、独立に引かれない。
+        # governed されていない主張が生まれるのは、証明を持たない項目 -- 定義と仮定 -- の中である。
+        if os.path.basename(path) != "README.md":
+            continue
+        found, lines = items_in(path)
+        for item in found:
+            for index in range(*item["span"]):
+                if CLAIM_LINE.match(lines[index]) and not IDENTITY.search(lines[index]):
+                    out.append((path, index + 1, item["name"], lines[index].strip()))
+    return out
+
+
 def ledger_path(directory):
     return os.path.join(directory, "items.tsv")
 
@@ -535,6 +599,8 @@ def main(arguments):
         return show(directory, arguments[at + 1])
     roots = [a for a in arguments if not a.startswith("--")] or [default_directory()]
     for directory in roots:
+        if "--mark-claims" in arguments:
+            print(f"{directory}: 主張の行に印を {mark_claims(directory)} 個振った")
         if "--assign" in arguments:
             print(f"{directory}: 同一性を {assign(directory)} 個振った")
         items, edges = build(directory)
@@ -560,6 +626,8 @@ def main(arguments):
         live = sum(n for _, _, n in orphan)
         print(f"{directory}: 命題 {len(items)} 個、引用の辺 {len(edges)} 本、動いた辺 {len(moved)} 本")
         print(f"{directory}: どの命題にも属さない本文 {outside} 行、解決しない引用 {len(set(lost))} 件")
+        claims = unproved_claims(directory)
+        print(f"{directory}: 項目の中で印を持たない主張の行 {len(claims)} 件")
         for path, n, total in orphan:
             print(f"  {os.path.basename(path)}: {n}/{total} 行がどの命題にも属さない")
         continue
