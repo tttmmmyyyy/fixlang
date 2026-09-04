@@ -37,6 +37,38 @@ COUNT = re.compile(r"\d+\s*(?:個|か所|箇所|件|種|行|本|通り"
 IDENTIFIER = re.compile(r"`([A-Za-z_][A-Za-z0-9_:<>]*(?:\([^`]*\))?)`|`(src/[A-Za-z0-9_/.]+)`")
 ASSERTION = re.compile(r"assert!|assert_eq!|panic!|panic_with_msg|expect\(|unreachable!|debug_assert")
 SENTENCE = re.compile(r"[^。]*。")
+# 数え上げの相手になりうる出現数の上界。これを超える識別子は一覧を出さない。
+SPARSE = 30
+
+
+def occurrences(names, root="src"):
+    """`src/` の各ファイルでの、その識別子の出現回数。製品コードと `#[cfg(test)]` を分けて数える。
+
+    **数を主張する文の傍に置く材料である。判定はしない** -- 段が数えているのは「代入する式」
+    「呼び出し元」「出現」と文ごとに違うので、機械にはどれを数えているか決まらない。
+    ただし出現の総数は上界であり、**段の数がそれを超えていれば必ず誤りである。**
+
+    実測で、この材料を持たない検証者は自分でリポジトリを数え直した -- 2 本の検証がそれぞれ
+    10 件前後の数え上げを手で確かめている。"""
+    wanted = {name: re.compile(r"\b" + re.escape(name) + r"\b") for name in names}
+    found = {name: [] for name in names}
+    for directory, _, files in os.walk(root):
+        for file_name in files:
+            if not file_name.endswith((".rs", ".fix", ".pest")):
+                continue
+            path = os.path.join(directory, file_name)
+            with open(path, encoding="utf-8", errors="ignore") as source:
+                text = source.read()
+            product, test = text, ""
+            at = text.find("#[cfg(test)]")
+            if at >= 0:
+                product, test = text[:at], text[at:]
+            for name, pattern in wanted.items():
+                here = len(pattern.findall(product))
+                there = len(pattern.findall(test))
+                if here or there:
+                    found[name].append((path, here, there))
+    return found
 
 
 def crate_identifiers(root="src"):
@@ -100,8 +132,23 @@ def main(paths):
         for sentence in implied:
             print(f"  {sentence}")
         print("\n-- コードに当てる文 (数を主張するもの)")
+        wanted = {n.split("(")[0].split("::")[-1] for names, _ in counts for n in names}
+        table = occurrences(sorted(wanted)) if wanted else {}
         for names, sentence in counts:
             print(f"  [{' '.join(names)}] {sentence}")
+            for one in names:
+                key = one.split("(")[0].split("::")[-1]
+                where = table.get(key) or []
+                total = sum(here for _, here, _ in where)
+                tests = sum(there for _, _, there in where)
+                # **数え上げの相手になりうる識別子だけを出す。** 1,000 回出る名前を段が
+                # 数え上げることはないので、その一覧は材料でなく雑音である。
+                if total > SPARSE:
+                    continue
+                spread = "、".join(f"{path} {here}" for path, here, _ in where if here)
+                print(f"      `{key}` の出現: 製品 {total}"
+                      + (f" (テスト {tests})" if tests else "")
+                      + (f" -- {spread}" if spread else ""))
         print("\n-- 表明に触れる文")
         for sentence in assertions:
             print(f"  {sentence}")
