@@ -583,7 +583,7 @@ def unproved_claims(directory):
 
     数えるだけで、印は振らない -- 形で推測して振ると散文に振る。実測で、推測した版が
     重複した項目 9 個と、散文に着いた辺 52 本を作った。どこが主張かは人が決める。"""
-    out = []
+    out, seen = [], set()
     for path in documents(directory):
         # **証明ファイルの太字は段の一部である。** そこは囲む命題に属していて、独立に引かれない。
         # governed されていない主張が生まれるのは、証明を持たない項目 -- 定義と仮定 -- の中である。
@@ -592,7 +592,11 @@ def unproved_claims(directory):
         found, lines = items_in(path)
         for item in found:
             for index in range(*item["span"]):
-                if CLAIM_LINE.match(lines[index]) and not IDENTITY.search(lines[index]):
+                # **1 つの行は 1 度だけ数える。** 親と子は範囲が重なるので、覆う項目ごとに
+                # 数えると同じ行を 2 度挙げ、印が 2 つ付く (実測で 58 行)。
+                if (CLAIM_LINE.match(lines[index]) and not IDENTITY.search(lines[index])
+                        and (path, index) not in seen):
+                    seen.add((path, index))
                     out.append((path, index + 1, item["name"], lines[index].strip()))
     return out
 
