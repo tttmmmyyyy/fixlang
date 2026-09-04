@@ -220,7 +220,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    develop build だけである。**これは A10 の但し書きである。`borrow_ify` と `cancel` は最適化の後に
    走るので、release build ではこの 2 つが読む型のうち最適化が作ったものに `validate_layouts` は
    掛からない。
-  BY A10, CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+  BY <ref id=8412761/>, CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
      CODE src/ast/types.rs: TypeNode::collect_type_arguments,
      CODE src/ast/types.rs: TypeNode::unpunched_field_types,
      CODE src/ast/types.rs: TypeNode::instance_field_types,
@@ -311,7 +311,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    この形であり、関数ごとに `func.params` と `func.capture` を `bind` してから `check_expr` を呼び、
    グローバル初期化子については `bind` を 1 度も呼ばずに `check_expr` を呼ぶ。**`validate` は
    `develop_mode` のときだけ走る** -- A11 の但し書きがこれを言う。
-  BY A6, A11, D1, D2, D6, CODE src/rc_ir/validate.rs: validate,
+  BY <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=a502f3e/>, <ref id=b3dfa37/>, <ref id=596a46d/>, CODE src/rc_ir/validate.rs: validate,
      CODE src/rc_ir/validate.rs: Validator::check_expr_inner,
      CODE src/rc_ir/validate.rs: Validator::check_rhs,
      CODE src/rc_ir/validate.rs: Validator::use_var,
@@ -321,7 +321,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    空でない。A9 の第 1 文が `borrow_ify` の入力プログラムについてこれを述べ、第 2 文が範囲を
    `cancel` の入力と出力へ伸ばす。**プログラムを名指すのが要るのは、A9 が全プログラムについての
    言明ではないからである。**
-  BY A9, CODE src/rc_ir/validate.rs: Validator::check_rhs (`RcRhs::Match` の腕の `arms.is_empty()`
+  BY <ref id=1172c08/>, CODE src/rc_ir/validate.rs: Validator::check_rhs (`RcRhs::Match` の腕の `arms.is_empty()`
      検査)
 
 <1>3a. **(H4: 束縛の形と型が合っている)** 関数の `body` とグローバル初期化子の `init` のどちらに
@@ -381,7 +381,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    「boxed leaf」は D4 の意味、すなわち `boxed_leaf_paths(ty(args[j]))` が列挙する path であり、
    この文書の記法では `L(ty(args[j]))` の要素である。宣言の well-formedness は、`LLVMGen` の
    宣言についての仮定 A3 が述べる。
-  BY A3, A12, CODE src/rc_ir/ast.rs: RcRhs (`Var` の doc「Move / rename `y := x`, consuming `x`」),
+  BY <ref id=e11772a/>, <ref id=83d98e9/>, CODE src/rc_ir/ast.rs: RcRhs (`Var` の doc「Move / rename `y := x`, consuming `x`」),
      CODE src/rc_ir/ast.rs: MatchArm (`tag` と `payload` の doc),
      CODE src/rc_ir/ast.rs: RcExpr (`Destructure` の doc「Destructure a struct/tuple container into
        its fields at once ... Each `(index, var)` binds field `index` to `var`」),
@@ -980,7 +980,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      共有参照で受け取る計算が変えない。** 到達できる型が内部可変性を持つ欄を持つときは、その欄は
      **一度だけ書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である**」より、
      その書き込みは型の値を変えない。
-    BY A3 (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない), <2>2,
+    BY <ref id=e11772a/> (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない), <2>2,
        CODE src/ast/types.rs: TypeNode (`hash_cache` の宣言),
        CODE src/ast/types.rs: TypeNode::type_hash,
        CODE src/ast/types.rs: impl Hash for TypeNode
@@ -1018,29 +1018,29 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
   <2>1. CASE `cls(t) = NB`。定義より `t.is_fully_unboxed(E)` が真であり、`unit_step` の最初の検査が
      これなので `UnitStep::NoUnit` を返す。
-    BY D5, DEF cls, CODE src/rc_ir/ownership.rs: unit_step
+    BY <ref id=9cba81c/>, DEF cls, CODE src/rc_ir/ownership.rs: unit_step
   <2>2. CASE `cls(t) = CL`。定義より `is_fully_unboxed` は偽、`is_closure()` は真である。`unit_step`
      は 2 番目の検査で
      `UnitStep::Capture { capture_idx: CLOSURE_CAPTURE_IDX as usize, field_count: CLOSURE_FIELD_COUNT }`
      を返す。
-    BY D5, DEF cls, CODE src/rc_ir/ownership.rs: unit_step, CODE src/constants.rs: CLOSURE_CAPTURE_IDX
+    BY <ref id=9cba81c/>, DEF cls, CODE src/rc_ir/ownership.rs: unit_step, CODE src/constants.rs: CLOSURE_CAPTURE_IDX
   <2>3. CASE `cls(t) = BX`。定義より `is_fully_unboxed` と `is_closure` は偽、`is_box(E)` は真で
      ある。`unit_step` の 3 番目の検査は `is_box || is_union || is_array || is_punched_array` の
      選言なので真になり、`UnitStep::Unit` を返す。
-    BY D5, DEF cls, CODE src/rc_ir/ownership.rs: unit_step
+    BY <ref id=9cba81c/>, DEF cls, CODE src/rc_ir/ownership.rs: unit_step
   <2>4. CASE `cls(t) = AR`。定義より `is_fully_unboxed`、`is_closure`、`is_box` は偽、`is_array()` は
      真である。`<2>3` と同じ選言の第 3 項が真になり `UnitStep::Unit` を返す。
-    BY D5, DEF cls, CODE src/rc_ir/ownership.rs: unit_step
+    BY <ref id=9cba81c/>, DEF cls, CODE src/rc_ir/ownership.rs: unit_step
   <2>5. CASE `cls(t) = UN`。定義より `is_fully_unboxed`、`is_closure`、`is_box`、`is_array` は偽、
      `is_union(E)` か `is_punched_array()` のどちらかが真である。同じ選言の第 2 項 (unbox union) か
      第 4 項 (punched array) が真になり `UnitStep::Unit` を返す。
-    BY D5, DEF cls, CODE src/rc_ir/ownership.rs: unit_step
+    BY <ref id=9cba81c/>, DEF cls, CODE src/rc_ir/ownership.rs: unit_step
   <2>6. CASE `cls(t) = ST`。定義より `is_fully_unboxed`、`is_closure`、`is_box`、`is_union`、
      `is_array`、`is_punched_array` がすべて偽である。よって `unit_step` は 3 つの検査をすべて通り
      抜け、
      `UnitStep::Fields { field_count: t.toplevel_tycon_info(E).fields.len(), held_fields: t.unpunched_field_types(E) }`
      を返す。`held_fields` は `F(t)` そのものである。
-    BY D5, DEF cls, DEF F, CODE src/rc_ir/ownership.rs: unit_step
+    BY <ref id=9cba81c/>, DEF cls, DEF F, CODE src/rc_ir/ownership.rs: unit_step
   <2>7. QED
     `<1>4` より場合は尽きており排他である。
     BY <1>4, <2>1, <2>2, <2>3, <2>4, <2>5, <2>6
@@ -1058,28 +1058,28 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    | `ST` | `F(t)` の各 `(i, f)` について `go(f, path ++ [i], out)` |
 
   <2>1. CASE `cls(t) = NB`。`go` の最初の検査 `is_fully_unboxed` が真なので即 `return` する。
-    BY D4, DEF cls, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
+    BY <ref id=0594f24/>, DEF cls, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
   <2>2. CASE `cls(t) = CL`。`is_fully_unboxed` は偽、`is_closure()` は真である。`go` は
      `path.push(CLOSURE_CAPTURE_IDX as usize)`、`out.push(path.clone())`、`path.pop()` を行って
      `return` する。積まれる path は `path ++ [c]` である。
-    BY D4, DEF cls, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`),
+    BY <ref id=0594f24/>, DEF cls, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`),
        CODE src/constants.rs: CLOSURE_CAPTURE_IDX
   <2>3. CASE `cls(t) = BX`。`is_fully_unboxed` と `is_closure` は偽、`is_box(E)` は真である。`go` は
      `out.push(path.clone())` を行って `return` する。
-    BY D4, DEF cls, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
+    BY <ref id=0594f24/>, DEF cls, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
   <2>4. CASE `cls(t) = AR`。`is_fully_unboxed`、`is_closure`、`is_box` は偽、`is_array()` は真で
      ある。`go` は `is_array` の検査で `out.push(path.clone())` を行って `return` する。
-    BY D4, DEF cls, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
+    BY <ref id=0594f24/>, DEF cls, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
   <2>5. CASE `cls(t) = UN`。`is_fully_unboxed`、`is_closure`、`is_box`、`is_array` は偽である。`go`
      にはこの 4 つの検査しか無いので、そのすべてを通り抜けて最後の
      `for (i, fty) in ty.unpunched_field_types(type_env)` に進み、各要素について `path.push(i)`、
      `go(&fty, ..., path, out)`、`path.pop()` を行う。D4 の第 5 項が言うとおり、`F(t)` は穴 (punched
      field) を含まないので、穴の下へは降りない。
-    BY D4, DEF cls, DEF F, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
+    BY <ref id=0594f24/>, DEF cls, DEF F, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
   <2>6. CASE `cls(t) = ST`。`is_fully_unboxed`、`is_closure`、`is_box`、`is_array` は偽である (`ST`
      はこの 4 つに加えて `is_union` と `is_punched_array` も偽である場合だが、`go` はその 2 つを
      問わない)。`<2>5` と同じ最後のループに進む。
-    BY D4, DEF cls, DEF F, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
+    BY <ref id=0594f24/>, DEF cls, DEF F, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (内部関数 `go`)
   <2>7. QED
     `<1>4` より場合は尽きており排他である。`UN` と `ST` で振る舞いが同じことが、この 2 つの walk の
     違いの全部である。`unit_step` は `UN` で止まり (`<1>10`)、`go` は `UN` で降りる。
@@ -1639,12 +1639,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      その閉包はちょうど 1 度呼ばれ、閉包が自分を呼ぶ先は継続だけなので、D2 の有限の木の上で
      継続の鎖は有限である。1 つの節点の訪問が行う `insert` は、`Let` で 1 つと各アームの payload で
      1 つずつ、`Destructure` で `fields` の長さだけ、残る 3 種で 0 個であり、どれも有限である。
-    BY A15, D2, CODE src/rc_ir/ownership.rs: collect_bindings,
+    BY <ref id=3e6b0e0/>, <ref id=b3dfa37/>, CODE src/rc_ir/ownership.rs: collect_bindings,
        CODE src/rc_ir/ownership.rs: returned_var, CODE src/misc.rs: grow_stack
   <2>4. `<2>1` から `<2>3` より挿入は有限列をなす。挿入される名前は、パラメータ、capture、`Let` の
      束縛変数、`Destructure` のフィールド変数、`Match` のアームの payload であり、どれもプログラムの
      束縛変数である。A6 よりこれらの名前は相異なる。
-    BY A6, <2>1, <2>2, <2>3, CODE src/rc_ir/ownership.rs: collect_bindings
+    BY <ref id=33c54dc/>, <2>1, <2>2, <2>3, CODE src/rc_ir/ownership.rs: collect_bindings
   <2>5. QED
     BY <2>4
 
@@ -1991,7 +1991,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
    `<1>27b` と `<1>27c` を適用するのはこの型についてである。
   <2>1. `impl LLVMGen for` は 78 個あり、`result_prov` を override するのは 29 個である。残る 49 個は
      既定の実装を取る。
-    BY A3, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
+    BY <ref id=e11772a/>, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
   <2>1a. `origin_inner` の `Llvm` の腕が `result_prov` に渡す `result_ty` と `arg_tys` は、
      `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の `ty(x)` と `args` の各要素の型である。
      `Binding::Llvm(llvm_gen, args, result_ty)` を作るのは `collect_bindings` のこの腕だけであり、
@@ -2194,7 +2194,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
   <2>1. A3 は「複数の元を宣言する op は存在しない」と述べ、その根拠を数え上げで与える --
      `impl LLVMGen for` は 78 個、`result_prov` を override するのは 29 個、その 29 個が leaf に置く
      集合はすべて要素数 0 か 1 である。
-    BY A3
+    BY <ref id=e11772a/>
   <2>2. 残る 49 個が取る既定の実装は `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)`
      であり、`uniform` は各 leaf に `sole_origin(LeafOrigin::Unknown)`、すなわち 1 要素の集合を
      置く。
@@ -2206,7 +2206,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     その元が `Arg(j, leaf)` である leaf は、A3 の表の「単一の `Arg(j, σ)`」の行が扱うものである。
     その `j` が `args` の添字であり (すなわち `args.len()` 未満であり)、`leaf` が
     `L(ty(args[j]))` の要素であることは `<1>3a` (viii) が述べる。
-    BY A3, <1>3a, <2>1, <2>2
+    BY <ref id=e11772a/>, <1>3a, <2>1, <2>2
 
 <1>29. `<1>21` と同じ本体と表 `vars` を取る。`origin(vars, E, x, pi)` の**呼び出しの木** -- 根を
    その呼び出しとし、各節点の子をその実行が行う `origin` の呼び出しとする木 -- は有限である。
@@ -2216,7 +2216,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `grow_stack(f)` が `f` をちょうど 1 回呼びその返り値を返すことは A15 である -- `grow_stack` の
      本体は `stacker::maybe_grow` への 1 行の委譲であり、閉包が何回呼ばれるかを決めるのは
      `stacker` crate である。
-    BY A15, CODE src/rc_ir/ownership.rs: origin, CODE src/misc.rs: grow_stack
+    BY <ref id=3e6b0e0/>, CODE src/rc_ir/ownership.rs: origin, CODE src/misc.rs: grow_stack
   <2>2. `origin` の呼び出しの木を考える。根は最初の呼び出しであり、節点 `origin(_, _, y, _)` の子は
      その実行が行う `origin` の呼び出しである。memo が当たった呼び出しは葉である。
     BY <2>1
@@ -2257,7 +2257,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        走査、`truncate_to_unit` の呼び出し (`<1>1` と `<1>9` より停止する)、`operand_units` (`Set`)
        への挿入、`reached` (有限の `Vec`) の走査と `Origin` どうしの等価比較、各 `Origin` の
        `acted_on()` の呼び出し、`candidates` (`Set`) の構成、`Origin::of_candidates`。
-    BY A15, <1>1, <1>1a, <1>9, <1>26, <1>28,
+    BY <ref id=3e6b0e0/>, <1>1, <1>1a, <1>9, <1>26, <1>28,
        CODE src/rc_ir/ownership.rs: origin, origin_inner, origin_from_leaves_under,
           as_arg_projection, Origin::acted_on, Origin::candidates, Origin::of_candidates,
        CODE src/ast/types.rs: TypeNode::is_box, TypeNode::is_unbox, TypeNode::is_closure,
@@ -2333,7 +2333,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        **一度だけ書かれる memo であって、その値はその型の `PartialEq` が読む成分の関数である**。」
        `impl PartialEq for TypeNode` が読むのは `ty` だけであり、3 つの memo の値はどれも `ty` の
        関数である。よってその欄が埋まっても、(b) が挙げるものは値として変わらない。
-      BY A3 (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない),
+      BY <ref id=e11772a/> (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない),
          EXT Rust の内部可変性, <3>1, <3>2,
          CODE src/rc_ir/ownership.rs: origin, VarTable, origin_inner, origin_from_leaves_under,
             truncate_to_unit, unit_step,
@@ -2351,7 +2351,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        返す」より、その返り値は `result_ty`、`arg_tys`、`E` だけで決まる。**op が自分の中に持つ
        内部可変性は、この段に入らない** -- `LLVMGen::result_prov` は `&self` を取るので op はそれを
        持ちうるが、決定性の節はその有無に依らず答えを引数の関数にする。
-      BY A3 (`result_prov` と `borrows_operand` は決定的である),
+      BY <ref id=e11772a/> (`result_prov` と `borrows_operand` は決定的である),
          CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding,
          CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
     <3>4. QED
@@ -2482,7 +2482,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `leaf_origins_at` と `leaf_origins_under` は `decl` が包む `Map` を `path` で引くだけであり、
      `as_arg_projection` は渡された `Set` の大きさと元だけを見る。`unit` は
      `truncate_to_unit(&args[j].ty, leaf, E)` であり、`<1>9a` よりその値は引数の値だけで決まる。
-    BY A3 (`result_prov` と `borrows_operand` は決定的である), <1>9a,
+    BY <ref id=e11772a/> (`result_prov` と `borrows_operand` は決定的である), <1>9a,
        CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
        CODE src/rc_ir/ownership.rs: as_arg_projection,
@@ -2507,7 +2507,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
        `(var.clone(), path.to_vec())` の構成、`Map` の 1 回の探索と 1 回の挿入、`Origin` の複製、
        および `grow_stack` の 1 段であり、そのどれも panic しない。`grow_stack` が呼ぶ
        `origin_inner` が abort しないことは、この段の主張に含まれない。
-      BY A15, CODE src/rc_ir/ownership.rs: origin, CODE src/misc.rs: grow_stack,
+      BY <ref id=3e6b0e0/>, CODE src/rc_ir/ownership.rs: origin, CODE src/misc.rs: grow_stack,
          CODE src/misc.rs: Map
     <3>2. `if let` の走査対象が作る一時値は、その `if let` 文の終わりで落ちる。`origin_inner` を
        呼ぶのはその次の文なので、その `Ref` は既に落ちている。
@@ -2643,7 +2643,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
      `vars.bindings` に束縛を持たない名前 (D6 の第 3 の形) である場合も、その 2 つの言明の範囲に
      入る。その場合に `origin` が返す値は `Origin::Exactly((x, pi))` である -- `origin_inner` は
      `vars.bindings.get(var)` が `None` の腕で `here()` を返し、`origin` はその値を記録して返す。
-    BY D6, <1>29, <1>30, CODE src/rc_ir/ownership.rs: origin_inner,
+    BY <ref id=596a46d/>, <1>29, <1>30, CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin
   <2>2b. `<1>29` と `<1>30` の言明はどちらも、`vars` が `VarTable::of(func)` の作る表か
      `VarTable::body_only(body)` の作る表かを問わない。その 2 つの言明が `vars` に置く条件は、
@@ -2655,7 +2655,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
     P2 が量化する 2 つの場合はどちらも `<2>2a` の範囲に入り、`pi` についての一般性は `<2>1` と
     `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 7 つの仮定は `<1>29` と
     `<1>30` が読むものである。
-    BY A3, A6, A9, A10, A11, A12, A15, <1>29, <1>30, <2>1, <2>2, <2>2a, <2>2b,
+    BY <ref id=e11772a/>, <ref id=33c54dc/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=3e6b0e0/>, <1>29, <1>30, <2>1, <2>2, <2>2a, <2>2b,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel,
        CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
 

@@ -177,13 +177,13 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   続く形なので、A13 より入力プログラムに現れるどの名前とも異なる。出力の `funcs` の鍵は入力の関数の
   名前か、`borrow_funcref` が作る `<元の名前>#borrow` であり、後者の最後の断片は `borrow` なので、
   これとも異なる。
-  BY A13, P9, CODE src/rc_ir/borrow.rs: clone_func, borrow_funcref,
+  BY <ref id=cb35ab1/>, <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: clone_func, borrow_funcref,
      CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
 
 <1>3. 借用版について A6 の性質が成り立つ。
   A6 より入力の関数の束縛名は互いに異なる。`<1>2` より `rename` の像の名前は互いに異なるので、その
   像も互いに異なる。`<1>2` より像はどちらのプログラムのどの関数の名前とも異なる。
-  BY A6, <1>2
+  BY <ref id=33c54dc/>, <1>2
 
 <1>4. 借用版について A11 の性質が成り立つ。
   `fresh_rename_function` は束縛の位置に `assign_fresh_name` を掛け、`rename_expr` は本体の各 `RcVar`
@@ -193,7 +193,7 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   スコープに見る束縛は、入力の対応する位置の使用が見る束縛の像ちょうどである。入力が A11 を満たすので、
   借用版でも使用は自分の位置でスコープに入っている束縛に解決し、自由な局所名はパラメータと capture の
   像に限る。
-  BY A11, <1>2, D2, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name, rename_expr
+  BY <ref id=3905b4e/>, <1>2, <ref id=b3dfa37/>, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name, rename_expr
 
 <1>5. 借用版について A12 の性質が成り立つ。
   `rename_var` は `RcVar` の名前だけを差し替えて型を残し、`rename_rhs` は右辺の構成子も `Llvm` の op も
@@ -208,13 +208,13 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   `rename_var` が型を残すので `ty(callee)` は動かない。`RcRhs::Closure` の `FuncRef` も
   `rename_rhs` がそのまま写す。`RcFunc` の欄どうしの整合は、`clone_func` が `params` と `capture` に
   `rename_var` を掛け `fn_ty` と `ret_ty` を写すことによる。
-  BY A12, A13, D6, <1>2, CODE src/rc_ir/borrow.rs: clone_func,
+  BY <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=596a46d/>, <1>2, CODE src/rc_ir/borrow.rs: clone_func,
      CODE src/rc_ir/rename.rs: rename_expr, rename_rhs, rename_var
 
 <1>6. QED
   `<1>1` の 2 種については、A6・A11・A12 が入力の本体に直接当たる。借用版については `<1>3`・`<1>4`・
   `<1>5` が 3 つの性質を与える。
-  BY A6, A11, A12, <1>1, <1>3, <1>4, <1>5
+  BY <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <1>1, <1>3, <1>4, <1>5
 
 ### L1 (2 つの歩きは同じ場合分けをする) <!--#fd9b709-->
 
@@ -387,7 +387,7 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   一斉に付け替えたものであって (P9)、`rename_var` は名前だけを差し替えて型を残す。A10 は、プログラムに
   現れる型が ground であり、その tycon に kind の要求するだけの引数が与えられており、その tycon が
   `type_env` にあり、`no_size_in_place` の in-place の降下が有限であると述べる。
-  BY A10, D1, P9, DEF 扱う型, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
+  BY <ref id=8412761/>, <ref id=a502f3e/>, <ref id=63eadd9/>, DEF 扱う型, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
      CODE src/rc_ir/rename.rs: rename_var
 
 <1>2. 扱う型はすべて A10 を満たす。
@@ -395,14 +395,14 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
         到達する型 -- は、ground であり、その tycon に kind の要求するだけの引数が与えられており、
         その tycon は `type_env` にある。またその歩みは有限である。
     A10 の到達型の節がこの 4 つを述べ、DEF 扱う型 の第 2 の種はまさにその節が名指す型である。
-    BY A10, DEF 扱う型
+    BY <ref id=8412761/>, DEF 扱う型
   <2>2. その各型 `σ` について、`no_size_in_place` の in-place の降下は有限である。
     A10 は「`no_size_in_place` の降下は unbox のフィールドだけを辿るのに対し、`unit_step` の `Fields` の
     腕と `subtree_type` / `truncate_to_unit` はフィールドの型を boxed であっても取るので、こちらの方が
     広い」と述べる。すなわち `σ` からの in-place の降下で到達する型は、`σ` から
     `unpunched_field_types` を繰り返し取って到達する型でもある。`σ` 自身が根の型からその歩みで到達する
     型なので、`σ` からの降下は根の型からのその歩みの部分であり、`<2>1` よりその歩みは有限である。
-    BY <2>1, A10
+    BY <2>1, <ref id=8412761/>
   <2>3. QED
     `<1>1` が根の型について A10 の 4 つを与える。第 2 の種については `<2>1` が前の 3 つを、`<2>2` が
     4 つ目を与える。
@@ -413,17 +413,17 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   DEF 歩み は、`step(cur_i)` が `Fields { held_fields, .. }` であって `held_fields` が添字 `π[i]` の対を
   含むときに、`cur_{i+1}` をその対の型と定める。L1a (a) より
   `held_fields = unpunched_field_types(cur_i)` である。
-  BY L1a, DEF 歩み
+  BY <ref id=cd71109/>, DEF 歩み
 
 <1>4. `sub(τ, π) = Some(σ)` のとき、`σ` は DEF 歩み の `cur_{|π|}` である。
-  BY L1
+  BY <ref id=fd9b709/>
 
 <1>5. `go` と `rc_units_go` が `τ` の位置から降りて着く型は、`unpunched_field_types(τ)` の対の第 2 成分で
       ある。
   L1a の表より、`go` が降りるのは `unpunched_field_types(τ)` の各対の下であり、`rc_units_go` が降りるのは
   `Fields { held_fields, .. }` の `held_fields` の各対の下であって、L1a (a) より
   `held_fields = unpunched_field_types(τ)` である。
-  BY L1a
+  BY <ref id=cd71109/>
 
 <1>6. QED
   `<1>2` が前半を与える。後半の 3 つは `<1>3`、`<1>4`、`<1>5` より、扱う型から
@@ -450,7 +450,7 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   同じ性質を渡す (`f_own` の版とグローバル初期化子の版は入力の本体そのものであり、借用版は L0 の `<1>5`
   が与える)。よってどちらの場合も `ty(r) = p.ty = τ` である。`VarTable::body_only` は `param_tys` に
   何も入れないので空である。
-  BY <1>1, A12, L0
+  BY <1>1, <ref id=83d98e9/>, <ref id=9cef509/>
 
 ### L1d (`type_env` は組み込みの宣言をそのまま持つ) <!--#33ee52f-->
 
@@ -574,7 +574,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   始まらない。`is_array(σ)` はその tycon が `make_array_tycon()` に等しいかを問うので偽である。
   `is_funptr(σ)` は `is_funptr_tycon` に問い、それは名前が `#FunPtr` で始まらないので `None` を返すから、
   やはり偽である。
-  BY <1>2, <1>3, <1>4, <1>5, A10, L1b, DEF 扱う型, CODE src/ast/types.rs: TypeNode::is_array,
+  BY <1>2, <1>3, <1>4, <1>5, <ref id=8412761/>, <ref id=fb62043/>, DEF 扱う型, CODE src/ast/types.rs: TypeNode::is_array,
      TypeNode::is_funptr, CODE src/fixstd/builtin.rs: is_array_tycon, is_funptr_tycon
 
 ### L1e (`Binding::Param` を持つ名前は、この版のパラメータ・capture である) <!--#14909ed-->
@@ -607,14 +607,14 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `<1>1` よりこの版の `vars` は `VarTable::of` がその版の `RcFunc` から作った表である。`<1>2` より
   `Binding::Param` を入れるのはその `RcFunc` のパラメータ・capture についての行だけなので、(i) と (ii)
   は同値である。(ii) と (iii) の同値と、そのときの `pty(x) = Some(ty(x))` は L1c である。
-  BY <1>1, <1>2, L1c
+  BY <1>1, <1>2, <ref id=fa1a6ce/>
 
 <1>4. グローバル初期化子の版では 3 つとも偽である。
   `<1>1` よりこの版の `vars` は `VarTable::body_only(g.init)` である。`<1>2` より `collect_bindings` は
   `Binding::Param` を入れないので (i) は偽であり、L1c より `param_tys` は空なので (iii) も偽である。
   この版が書き換える本体は `init` であり、D1 より `init` はパラメータも capture も持たないので (ii) も
   偽である。
-  BY <1>1, <1>2, D1, L1c
+  BY <1>1, <1>2, <ref id=a502f3e/>, <ref id=fa1a6ce/>
 
 <1>5. QED
   `<1>1` より版は 2 種であり、`<1>3` と `<1>4` がそれぞれを扱った。
@@ -659,26 +659,26 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 <1>1. CASE L1 の場合 (a) (`m = |π|`)
   L1 (a) より `t = π` であるから、`trunc(τ, t)` は `trunc(τ, π)` と同じ呼び出しで `t` を返し、
   `under(τ, t)` は `under(τ, π)` と同じ呼び出しである。
-  BY L1
+  BY <ref id=fd9b709/>
 
 <1>2. CASE L1 の場合 (b) の `Unit` の行
   <2>1. `t = π[0..m]` であり `|t| = m` である。
-    BY L1
+    BY <ref id=fd9b709/>
   <2>2. `τ` の `t` に沿う歩みの長さは `m` であり、その列は `cur_0, ..., cur_m` である。
     `i < m` について `t[i] = π[i]` なので、DEF 歩み が `cur_1, ..., cur_m` を定める条件は `π` のときと
     同じである。`|t| = m` なので `cur_{m+1}` を定める条件の 1 つ目 (`i < |t|`) が破れる。
     BY <2>1, DEF 歩み
   <2>3. `trunc(τ, t) = t` であり、`sub(τ, t) = Some(cur_m)` である。
     `<2>2` より `t` については L1 の場合 (a) が当てはまる。
-    BY <2>2, L1
+    BY <2>2, <ref id=fd9b709/>
   <2>4. QED
     `<2>3` と L2 より `under(τ, t) = { t ++ u : u ∈ units(cur_m) }` であり、この場合 `step(cur_m) = Unit`
     なので L3 より `units(cur_m) = [[]]`、すなわち `under(τ, t) = [t]` である。
-    BY <2>3, L2, L3
+    BY <2>3, <ref id=9f11796/>, <ref id=f221813/>
 
 <1>3. CASE L1 の場合 (b) の `Capture` の行 (`π[m] = capture_idx`)
   <2>1. `t = π[0..m+1]` であり `|t| = m + 1`、`t[m] = π[m] = capture_idx` である。
-    BY L1
+    BY <ref id=fd9b709/>
   <2>2. `τ` の `t` に沿う歩みの長さは `m` であり、その列は `cur_0, ..., cur_m` である。
     `i < m` について `t[i] = π[i]` なので `cur_1, ..., cur_m` は `π` のときと同じである。
     `step(cur_m) = Capture` は `Fields` ではないので、DEF 歩み は `cur_{m+1}` を定めない。
@@ -687,12 +687,12 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
     `<2>2` より `t` については L1 の場合 (b) が当てはまり、`step(cur_m) = Capture` かつ
     `t[m] = capture_idx` なので、`sub(τ, t) = None` かつ `trunc(τ, t) = t[0..m+1] = t` である。
     L2 より `under(τ, t) = [t]` である。
-    BY <2>1, <2>2, L1, L2
+    BY <2>1, <2>2, <ref id=fd9b709/>, <ref id=9f11796/>
 
 <1>4. QED
   L1 の場合分けのうち、`trunc(τ, π)` が値を返すのは (a) と、(b) の `Unit` の行と `Capture`
   (`π[m] = capture_idx`) の行だけである。この 3 つを `<1>1`、`<1>2`、`<1>3` が扱った。
-  BY <1>1, <1>2, <1>3, L1
+  BY <1>1, <1>2, <1>3, <ref id=fd9b709/>
 
 ### L5 (歩みの合成) <!--#323bb77-->
 
@@ -709,7 +709,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `sub(τ, p) = Some(σ)` なので L1 より `τ` の `p` に沿う歩みの長さは `|p|` であり、その最後の型は `σ` で
   ある。DEF 歩み は添字 `i < |p|` について `p ++ q` の第 `i` 要素 (`= p[i]`) だけを読むので、最初の
   `|p| + 1` 個は一致する。
-  BY L1, DEF 歩み
+  BY <ref id=fd9b709/>, DEF 歩み
 
 <1>2. 各 `j ≥ 0` について、`τ` の `p ++ q` に沿う歩みが `cur_{|p| + j}` を定めることと、`σ` の `q` に
       沿う歩みが `cur_j` を定めることは同値であり、定めるときその 2 つは同じ型である。
@@ -722,13 +722,13 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `<1>1` より `sub(τ, p ++ q)` のループの最初の `|p|` 周はすべて `Fields` の腕を通り (`sub(τ, p)` が
   `Some` を返したので、L1 の場合 (a) が `(τ, p)` に当てはまる)、`cur = σ` になる。残りの周は
   `sub(σ, q)` のループそのものである。
-  BY <1>1, <1>2, L1, CODE src/rc_ir/ownership.rs: subtree_type
+  BY <1>1, <1>2, <ref id=fd9b709/>, CODE src/rc_ir/ownership.rs: subtree_type
 
 <1>4. `trunc(τ, p ++ q) = p ++ trunc(σ, q)` である。
   `<1>1` より `trunc(τ, p ++ q)` のループの最初の `|p|` 周はすべて `Fields` の腕を通り、`out` に
   `p[0], ..., p[|p|-1]` を積んで `cur = σ` になる。残りの周は `trunc(σ, q)` のループそのものであり、
   そこで `out` に積まれるもの (と `break` / 中断) は `trunc(σ, q)` と同じである。
-  BY <1>1, <1>2, L1, CODE src/rc_ir/ownership.rs: truncate_to_unit
+  BY <1>1, <1>2, <ref id=fd9b709/>, CODE src/rc_ir/ownership.rs: truncate_to_unit
 
 <1>5. `leaves(τ)` のうち `p` を前置に持つものの全体は `{ p ++ λ : λ ∈ leaves(σ) }` である。
   `sub(τ, p) = Some(σ)` なので L1 の場合 (a) が `(τ, p)` に当てはまり、`τ` の `p` に沿う歩みの長さは
@@ -737,14 +737,14 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   その各段で `held_fields` の同じ対の下へ降りるので、`go` は `path = p` で `σ` に着く。`go` はその位置で
   `σ` について走るので、`p` を前置に持つ path として積むのは、`σ` から始めた `go` が積む path の前に
   `p` を置いたものに限る。
-  BY L1, L1a, DEF 歩み, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+  BY <ref id=fd9b709/>, <ref id=cd71109/>, DEF 歩み, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
 <1>6. `units(τ) ⊇ { p ++ u : u ∈ units(σ) }` である。
   L1 の場合 (a) と DEF 歩み より、`τ` の `p` に沿う歩みの各段 `i < |p|` で `step(cur_i)` は
   `Fields { held_fields, .. }` であって `held_fields` は添字 `p[i]` の対を含む。L1a (a) より
   `rc_units_go` はその各段で同じ対の下へ降りるので、`path = p` で `cur_{|p|} = σ` に達し、そこから
   `units(σ)` の各要素を `p` の後ろに積む。
-  BY L1, L1a, DEF 歩み, CODE src/rc_ir/ownership.rs: rc_units_go
+  BY <ref id=fd9b709/>, <ref id=cd71109/>, DEF 歩み, CODE src/rc_ir/ownership.rs: rc_units_go
 
 <1>7. QED
   BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6
@@ -776,12 +776,12 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 <1>3. 場合 (i) では `trunc(τ, u) = u` かつ `sub(τ, u) = Some(cur_{|u|})` であり、
       `unit_step(cur_{|u|}) = Unit` である。
   `<1>2` と L1 の場合 (a) による。`cur_{|u|}` は `path = u` の位置の型なので `unit_step` は `Unit` である。
-  BY <1>1, <1>2, L1
+  BY <1>1, <1>2, <ref id=fd9b709/>
 
 <1>4. 場合 (i) では `under(τ, u) = [u]` である。
   `<1>3` と L2 より `under(τ, u) = { u ++ w : w ∈ units(cur_{|u|}) }` であり、`<1>3` と L3 より
   `units(cur_{|u|}) = [[]]` である。
-  BY <1>3, L2, L3
+  BY <1>3, <ref id=9f11796/>, <ref id=f221813/>
 
 <1>5. 場合 (ii) では、`τ` の `u` に沿う歩みの長さは `|q| = |u| - 1` であり、`unit_step(cur_{|q|})` は
       `Capture { capture_idx, .. }` かつ `u[|q|] = capture_idx` である。
@@ -792,7 +792,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 <1>6. 場合 (ii) では `trunc(τ, u) = u` かつ `sub(τ, u) = None`、したがって `under(τ, u) = [u]` である。
   `<1>5` と L1 の場合 (b) の `Capture` (`u[|q|] = capture_idx`) の行より
   `trunc(τ, u) = u[0..|q|+1] = u` かつ `sub(τ, u) = None` である。L2 より `under(τ, u) = [u]` である。
-  BY <1>5, L1, L2
+  BY <1>5, <ref id=fd9b709/>, <ref id=9f11796/>
 
 <1>7. QED
   `<1>1` の 2 つの場合を `<1>3`/`<1>4` と `<1>6` が扱った。言明の (i) は `<1>2` と `<1>3`、(ii) は
@@ -811,7 +811,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   (DEF 歩み は添字 `i < |u|` について `λ[i] = u[i]` だけを読む)。L6 の (i) より `unit_step(cur_{|u|})`
   は `Unit` である。`λ = u` なら L1 の場合 (a) より `trunc(τ, λ) = u`。`λ ≠ u` すなわち `|λ| > |u|` なら
   L1 の場合 (b) の `Unit` の行より `trunc(τ, λ) = λ[0..|u|] = u`。
-  BY L1, L6, DEF 歩み
+  BY <ref id=fd9b709/>, <ref id=e74af85/>, DEF 歩み
 
 <1>2. L6 の (ii) のとき、`trunc(τ, λ) = u` である。
   `u = q ++ [capture_idx]` であり、`u ⊑ λ` なので `λ[|q|] = capture_idx` である。L6 の (ii) より `τ` の
@@ -821,18 +821,18 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   沿う歩みのものと一致する。`unit_step(cur_{|q|})` が `Fields` でないので、`τ` の `λ` に沿う歩みの長さも
   `|q|` である。`|λ| ≥ |u| = |q| + 1 > |q|` なので L1 の場合 (b) の `Capture` の行が当てはまり、
   `trunc(τ, λ) = λ[0..|q|+1] = u` である。
-  BY L1, L6, DEF 歩み
+  BY <ref id=fd9b709/>, <ref id=e74af85/>, DEF 歩み
 
 <1>3. `Λ_τ(u)` は空でない。
   `τ` は扱う型なので L1b より A10 を満たし、P1 の定義域に入る。P1 の後半より、`u` はある
   `λ ∈ leaves(τ)` の `trunc(τ, λ)` である。`trunc` が `out` に積むのは
   引数の path の要素を順に取ったものなので、`trunc(τ, λ)` は `λ` の接頭辞である。よって `u ⊑ λ` であり
   `λ ∈ Λ_τ(u)` である。
-  BY P1, L1b, DEF 扱う型, CODE src/rc_ir/ownership.rs: truncate_to_unit
+  BY <ref id=3597669/>, <ref id=fb62043/>, DEF 扱う型, CODE src/rc_ir/ownership.rs: truncate_to_unit
 
 <1>4. QED
   L6 は (i) と (ii) のちょうど 1 つが成り立つと述べる。
-  BY <1>1, <1>2, <1>3, L6
+  BY <1>1, <1>2, <1>3, <ref id=e74af85/>
 
 ### L8 (leaf と unit は同時に空になる) <!--#1d99428-->
 
@@ -881,7 +881,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
       (U) より `is_fully_unboxed(τ)` は偽であり、(V) より `is_closure(τ)`・`is_box(τ)`・`is_array(τ)` は
       偽である。L1a の `go` の欄はこの 4 つがどれも偽のとき
       `unpunched_field_types(τ)` の各対の下へ降りると述べる。
-      BY L1a
+      BY <ref id=cd71109/>
     <3>3. `leaves(τ) ≠ ∅` である。
       `<3>1` の `fty` は `unpunched_field_types(τ)` の対の第 2 成分なので、`<3>1` と帰納法の仮定より
       `leaves(fty) ≠ ∅` である。`<3>2` より
@@ -893,7 +893,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
       `path` を積むので `units(τ) ≠ ∅` である。`Fields { held_fields, .. }` のとき L1a (a) より
       `held_fields = unpunched_field_types(τ)` であり `rc_units_go` は対 `(idx, fty)` の下へ降りるので、
       `<3>1` と帰納法の仮定 `units(fty) ≠ ∅` から `units(τ) ≠ ∅` が出る。
-      BY <3>1, <3>2, L1a, CODE src/rc_ir/ownership.rs: rc_units_go
+      BY <3>1, <3>2, <ref id=cd71109/>, CODE src/rc_ir/ownership.rs: rc_units_go
     <3>5. QED
       BY <3>3, <3>4
   <2>5. QED
@@ -916,7 +916,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 <1>1. CASE `sub(τ, p) = Some(σ)`
   L2 より `under(τ, p) = { p ++ w : w ∈ units(σ) }` である。L6 より `trunc(σ, w) = w` なので、L5 より
   `trunc(τ, p ++ w) = p ++ trunc(σ, w) = p ++ w` である。L5 より `p ++ w ∈ units(τ)` である。
-  BY L2, L5, L6
+  BY <ref id=9f11796/>, <ref id=323bb77/>, <ref id=e74af85/>
 
 <1>2. CASE `sub(τ, p) = None`
   L2 より `under(τ, p) = [p]` である。L1 の場合 (b) より、`trunc(τ, p)` が値を返すのは `Unit` の行か
@@ -924,23 +924,23 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   <2>1. `rc_units_go` は `path = p[0..m]` で `cur_m` に達する。
     `i < m` の各位置で `unit_step(cur_i)` は `Fields { held_fields, .. }` であって `p[i]` は
     `held_fields` に含まれる (DEF 歩み)。L1a (a) より `rc_units_go` はその各段で同じ対の下へ降りる。
-    BY L1a, DEF 歩み, CODE src/rc_ir/ownership.rs: rc_units_go
+    BY <ref id=cd71109/>, DEF 歩み, CODE src/rc_ir/ownership.rs: rc_units_go
   <2>1a. `Unit` の行では `p[0..m] ∈ units(τ)` である。
     `<2>1` より `rc_units_go` は `path = p[0..m]` で `cur_m` に達し、`unit_step(cur_m) = Unit` なので
     `path` を積む。
-    BY <2>1, L1a
+    BY <2>1, <ref id=cd71109/>
   <2>2. `Capture` の行では `p[0..m+1] ∈ units(τ)` である。
     `<2>1` より `rc_units_go` は `path = p[0..m]` で `cur_m` に達し、
     `unit_step(cur_m) = Capture { capture_idx, .. }` なので `path ++ [capture_idx]` を積む。
     `p[m] = capture_idx` なのでこれは `p[0..m+1]` である。
-    BY <2>1, L1a
+    BY <2>1, <ref id=cd71109/>
   <2>3. QED
-    BY L1, <2>1a, <2>2
+    BY <ref id=fd9b709/>, <2>1a, <2>2
 
 <1>3. QED
   `sub(τ, p)` は `Some` か `None` を返すか中断する。中断するとき `under(τ, p)` も中断する (L2) ので
   言明の仮定が成り立たない。
-  BY <1>1, <1>2, L2
+  BY <1>1, <1>2, <ref id=9f11796/>
 
 ### L9a (leaf に沿う歩みの終わり方) <!--#24f7933-->
 
@@ -959,7 +959,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
       `is_closure` が真であるとき。
   L1a の表より、`go` が path を積むのは `Capture` の行 (`path ++ [CLOSURE_CAPTURE_IDX]` を積む) と、
   `Unit` の行のうち `is_box(σ) ∨ is_array(σ)` の側 (`path` を積む) だけである。
-  BY L1a
+  BY <ref id=cd71109/>
 
 <1>2. `go` が `λ` を積む位置に至るまでの各位置で `go` は降りている。その位置の型を順に
       `g_0 = τ, g_1, ...` と書くと、`g_{i+1}` は `unpunched_field_types(g_i)` の添字 `λ[i]` の対の第 2
@@ -968,7 +968,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `go` が `path` を伸ばすのは降りるときだけであり、積む位置の `path` は場合 (i) では `λ`、場合 (ii) では
   `μ` である。よってそこに至るまでの各位置で `go` はその path の次の添字の対の下へ降りている。L1a より、
   降りる先は `unpunched_field_types` の対である。
-  BY <1>1, L1a, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+  BY <1>1, <ref id=cd71109/>, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
 <1>3. `i ≤ m_λ` について `cur_i = g_i` であり、`i < m_λ` の各位置で `step(cur_i)` は
       `Fields { held_fields, .. }` であって `held_fields` は添字 `λ[i]` の対を含む。また `m_λ ≤ |λ|` で
@@ -977,7 +977,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `λ[i]` の対を含むことを要求し、`cur_{i+1} = held_field_type(held_fields, λ[i], _)` と定める。L1a (a) より
   `held_fields = unpunched_field_types(cur_i)` なので、これは `<1>2` の `g` の漸化式と同じである。基底は
   `cur_0 = g_0 = τ` である。`m_λ ≤ |λ|` は DEF 歩み が `i < |λ|` のときにしか次の型を定めないことによる。
-  BY <1>2, L1a, DEF 歩み, CODE src/rc_ir/ownership.rs: held_field_type
+  BY <1>2, <ref id=cd71109/>, DEF 歩み, CODE src/rc_ir/ownership.rs: held_field_type
 
 <1>4. CASE `<1>1` の場合 (i)
   <2>1. `m_λ < |λ|` のとき `step(cur_{m_λ}) = Unit` である。
@@ -985,11 +985,11 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
     より `step(g_{m_λ})` は `Fields` か `Unit` である。`Fields { held_fields, .. }` だとすると、L1a (a)
     より `held_fields = unpunched_field_types(g_{m_λ})` であり、`<1>2` よりそれは添字 `λ[m_λ]` の対を
     含むので、DEF 歩み は `cur_{m_λ+1}` を定める。これは `m_λ` が歩みの長さであることに反する。
-    BY <1>2, <1>3, L1a, DEF 歩み
+    BY <1>2, <1>3, <ref id=cd71109/>, DEF 歩み
   <2>2. `m_λ = |λ|` のとき `step(cur_{m_λ}) = Unit` である。
     `<1>3` より `cur_{|λ|} = g_{|λ|}` であり、場合 (i) の条件よりその位置で `is_box` か `is_array` が
     真なので、L1a より `step(cur_{m_λ}) = Unit` である。
-    BY <1>3, L1a
+    BY <1>3, <ref id=cd71109/>
   <2>3. QED
     `<1>3` より `m_λ ≤ |λ|` なので `<2>1` と `<2>2` が場を尽くし、どちらも (A) を与える。
     BY <1>3, <2>1, <2>2
@@ -1000,19 +1000,19 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
     より `step(g_{m_λ})` は `Fields` か `Unit` である。`Fields { held_fields, .. }` だとすると、L1a (a) と
     `<1>2` より `held_fields` は添字 `λ[m_λ]` の対を含むので DEF 歩み が `cur_{m_λ+1}` を定め、`m_λ` が
     歩みの長さであることに反する。
-    BY <1>2, <1>3, L1a, DEF 歩み
+    BY <1>2, <1>3, <ref id=cd71109/>, DEF 歩み
   <2>2. `m_λ = |μ|` のとき (B) が成り立つ。
     `<1>3` より `cur_{|μ|} = g_{|μ|}` であり、場合 (ii) の条件よりその位置で `is_closure` が真なので、
     L1a より `step(cur_{m_λ}) = Capture { capture_idx: CLOSURE_CAPTURE_IDX, .. }` である。
     `λ = μ ++ [CLOSURE_CAPTURE_IDX]` より `m_λ = |μ| = |λ| - 1 < |λ|` かつ
     `λ[m_λ] = CLOSURE_CAPTURE_IDX = capture_idx` である。
-    BY <1>3, L1a
+    BY <1>3, <ref id=cd71109/>
   <2>3. QED
     `<1>3` より `m_λ ≤ |λ| = |μ| + 1` である。`m_λ = |μ| + 1` だとすると DEF 歩み より
     `step(cur_{|μ|}) = Fields` だが、`<1>3` より `cur_{|μ|} = g_{|μ|}` であり、場合 (ii) の条件より
     その位置で `is_closure` が真なので L1a より `step(cur_{|μ|}) = Capture` である。よって `m_λ ≤ |μ|` で
     あり、`<2>1` と `<2>2` が場を尽くす。
-    BY <1>3, <2>1, <2>2, L1a, DEF 歩み
+    BY <1>3, <2>1, <2>2, <ref id=cd71109/>, DEF 歩み
 
 <1>6. QED
   `<1>1` の 2 つの場合を `<1>4` と `<1>5` が扱った。`i < m_λ` についての主張と `m_λ ≤ |λ|` は `<1>3` で
@@ -1029,7 +1029,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
       `λ[i]` の対を含み、さらに (A) `step(cur_{m_λ}) = Unit` であるか、(B) `m_λ < |λ|` かつ
       `step(cur_{m_λ}) = Capture { capture_idx, .. }` かつ `λ[m_λ] = capture_idx` であるかの
       どちらかである。
-  BY L9a
+  BY <ref id=24f7933/>
 
 <1>2. `p` が `λ` と比較可能 (`p ⊑ λ` または `λ ⊑ p`) のとき、`trunc(τ, p)` と `sub(τ, p)` は値を返す。
   <2>1. `k = min(m_λ, |p|)` と置くと、`i < k` の各位置で `p[i] = λ[i]` であり、`τ` の `p` に沿う歩みの
@@ -1041,7 +1041,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   <2>2. CASE `|p| ≤ m_λ`
     `<2>1` より `k = |p|` であり、`τ` の `p` に沿う歩みの長さは `|p|` である。L1 の場合 (a) より
     `sub(τ, p) = Some(cur_{|p|})` かつ `trunc(τ, p) = p` であり、どちらも値である。
-    BY <2>1, L1
+    BY <2>1, <ref id=fd9b709/>
   <2>3. CASE `m_λ < |p|`
     `<2>1` より `k = m_λ` であり、`τ` の `p` に沿う歩みの `cur_{m_λ}` は `λ` のものと同じである。
     `<1>1` の (A) では `step(cur_{m_λ}) = Unit` なので、`τ` の `p` に沿う歩みの長さは `m_λ < |p|` で
@@ -1050,7 +1050,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
     `m_λ < |λ|` で `p` と `λ` は比較可能なので `p[m_λ] = λ[m_λ] = capture_idx` である。L1 の場合 (b) の
     `Capture` (`p[m] = capture_idx`) の行より `sub(τ, p) = None`、`trunc(τ, p) = p[0..m_λ+1]` である。
     どちらも値である。
-    BY <1>1, <2>1, L1
+    BY <1>1, <2>1, <ref id=fd9b709/>
   <2>4. QED
     `|p| ≤ m_λ` と `m_λ < |p|` が場を尽くす。
     BY <2>2, <2>3
@@ -1063,7 +1063,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `<1>2` と `<1>3` より `sub(τ, p)` は値を返す。`None` のとき L2 より `under(τ, p) = [p]` であり、
   `trunc(τ, p)` は値を返す。`Some(σ)` のとき L2 より要素は `p ++ w` (`w ∈ units(σ)`) の形であり、L6 より
   `trunc(σ, w) = w` は値を返すので、L5 より `trunc(τ, p ++ w) = p ++ w` も値を返す。
-  BY <1>2, <1>3, L2, L5, L6
+  BY <1>2, <1>3, <ref id=9f11796/>, <ref id=323bb77/>, <ref id=e74af85/>
 
 <1>5. QED
   `covered(τ, p)` の元 `λ` は `p ⊑ λ` か `λ ⊑ p` を満たす。
@@ -1082,7 +1082,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 <1>0. `under(τ, p)` と、その各要素についての `trunc(τ, ・)` は中断しない。
   `covered(τ, p) ≠ ∅` のときは L10 による。`under(τ, p) = []` のときは、L2 より `sub(τ, p)` は値を
   返しており `under(τ, p)` も中断せず、要素が無いのでその各要素についての主張は空に成り立つ。
-  BY L2, L10
+  BY <ref id=9f11796/>, <ref id=ef258a5/>
 
 <1>0a. `leaves(τ)` の計算と、その各 `leaf` についての `trunc(τ, leaf)` は中断しない。
   `τ` は扱う型なので L1b より A10 を満たす。`leaves(τ)` を計算する `go` が呼ぶのは
@@ -1099,7 +1099,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   等しいかのどちらかである。(A) で歩みの長さが `|leaf|` ならば L1 の場合 (a)、それより短ければ場合 (b) の
   `Unit` の行、(B) ならば場合 (b) の `Capture` (`π[m] = capture_idx`) の行が当てはまり、どれも `trunc` は
   値を返す。
-  BY A10, L1, L1b, L9a, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+  BY <ref id=8412761/>, <ref id=fd9b709/>, <ref id=fb62043/>, <ref id=24f7933/>, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
      TypeNode::is_closure, TypeNode::toplevel_tycon_info, TypeNode::unpunched_field_types
 
@@ -1117,15 +1117,15 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 
 <1>3. CASE `sub(τ, p) = Some(σ)` かつ `under(τ, p) ≠ []`
   <2>1. `under(τ, p)` の要素は `p ++ w` (`w ∈ units(σ)`) の形であり、`trunc(τ, p ++ w) = p ++ w` である。
-    BY L2, L5, L6
+    BY <ref id=9f11796/>, <ref id=323bb77/>, <ref id=e74af85/>
   <2>2. 各 `w ∈ units(σ)` について、`λ_w ∈ leaves(σ)` で `trunc(σ, λ_w) = w` であるものが取れる。
     `τ` は扱う型であり `sub(τ, p) = Some(σ)` なので、L1b より `σ` も扱う型であって A10 を満たし、
     P1 の定義域に入る。
-    BY P1, L1b, DEF 扱う型
+    BY <ref id=3597669/>, <ref id=fb62043/>, DEF 扱う型
   <2>3. `p ++ λ_w ∈ covered(τ, p)` であり `trunc(τ, p ++ λ_w) = p ++ w` である。
     L5 より `p ++ λ_w ∈ leaves(τ)` であり、`p ⊑ p ++ λ_w` なので `covered` の条件を満たす。
     L5 と `<2>2` より `trunc(τ, p ++ λ_w) = p ++ trunc(σ, λ_w) = p ++ w` である。
-    BY L5, <2>2, CODE src/rc_ir/borrow.rs: covered_leaves
+    BY <ref id=323bb77/>, <2>2, CODE src/rc_ir/borrow.rs: covered_leaves
   <2>4. QED
     `<1>0a` より `leaves(τ)` の計算とその各 leaf についての `trunc` は中断しない。`<2>1` の各
     `unit = p ++ w` について、`<2>3` の `p ++ λ_w` が `<1>1` の要求する leaf である。仮定より
@@ -1134,14 +1134,14 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 
 <1>4. CASE `sub(τ, p) = None`
   <2>1. `under(τ, p) = [p]` であり、`key = trunc(τ, p)` である。
-    BY L2, <1>1
+    BY <ref id=9f11796/>, <1>1
   <2>2. `τ` の `p` に沿う歩みの長さを `m` とすると `m < |p|` であり、`trunc(τ, p)` が値を返すので
         `unit_step(cur_m)` は `Unit` か `Capture` (`p[m] = capture_idx`) であり、`key` はそれぞれ
         `p[0..m]`、`p[0..m+1]` である。
     `<1>0` と `<2>1` より `under(τ, p) = [p]` の唯一の要素についての `trunc(τ, p)` は中断しない。
     `sub(τ, p) = None` なので L1 の場合 (a) は当てはまらず、場合 (b) の 5 行のうち `trunc` が値を返す
     のは `Unit` の行と `Capture` (`p[m] = capture_idx`) の行だけである。
-    BY <1>0, <2>1, L1
+    BY <1>0, <2>1, <ref id=fd9b709/>
   <2>3. `covered(τ, p)` の要素 `λ` で `|λ| ≤ m` であるものについては、`unit_step(cur_m) = Unit` であり、
         `λ = p[0..m] = key` かつ `trunc(τ, λ) = key` である。
     `<2>2` より `m < |p|` なので `|λ| ≤ m < |p|` であり、`λ` と `p` が比較可能であることは `λ ⊑ p` を
@@ -1152,7 +1152,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
     `|λ| < m` だとすると DEF 歩み より `unit_step(cur_{|λ|}) = Fields` になって矛盾するので `|λ| = m` で
     あり、`λ = p[0..m]` である。`<2>2` よりこの場合 `key = p[0..m]` なので `λ = key` である。`τ` の `λ` に
     沿う歩みの長さは `|λ|` なので、L1 の場合 (a) より `trunc(τ, λ) = λ = key` である。
-    BY <2>2, L1, L9a, DEF 歩み, CODE src/rc_ir/borrow.rs: covered_leaves
+    BY <2>2, <ref id=fd9b709/>, <ref id=24f7933/>, DEF 歩み, CODE src/rc_ir/borrow.rs: covered_leaves
   <2>4. `covered(τ, p)` の各要素 `λ` について `trunc(τ, λ) = key` である。
     `|λ| ≤ m` のときは `<2>3` による。`|λ| > m` のとき、`λ` は `p` と比較可能なので `λ[0..m] = p[0..m]`
     であり、`λ[m] = p[m]` である (`|λ| > m` かつ `|p| > m` で、短い方が長い方の接頭辞)。DEF 歩み より
@@ -1161,7 +1161,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
     その長さは `m` であって `m < |λ|` である。L1 の場合 (b) より `trunc(τ, λ)` は `Unit` の行なら
     `λ[0..m] = p[0..m]`、`Capture` の行なら `λ[0..m+1] = p[0..m+1]` であり、`<2>2` よりどちらも `key` に
     等しい。
-    BY <2>2, <2>3, L1, DEF 歩み
+    BY <2>2, <2>3, <ref id=fd9b709/>, DEF 歩み
   <2>5. QED
     `<1>0a` より `leaves(τ)` の計算とその各 leaf についての `trunc` は中断しない。`<2>1` より
     `under(τ, p) = [p]` は空でないので、言明の仮定の 2 つの選言肢のうち成り立つのは
@@ -1176,7 +1176,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   `sub(τ, p)` は `Some` を返すか `None` を返すかのどちらかである。`under(τ, p) = []` の場合を `<1>2` が、
   `under(τ, p) ≠ []` の場合を `sub` の答えで分けて `<1>3` と `<1>4` が扱った (`sub(τ, p) = None` のとき
   L2 より `under(τ, p) = [p]` であり、これは `[]` ではない)。
-  BY <1>0, <1>0a, <1>2, <1>3, <1>4, L2
+  BY <1>0, <1>0a, <1>2, <1>3, <1>4, <ref id=9f11796/>
 
 ## 3. P7e の証明
 
@@ -1193,7 +1193,7 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
 <1>0. `pty(r) = Some(τ)` であることと `r` がこの版のパラメータ・capture であることは同値であり、
       そのとき `τ = ty(r)` である。
   L1e の (ii) と (iii) の同値と、そのときの等式である。
-  BY L1e
+  BY <ref id=14909ed/>
 
 <1>1. CASE `pty(r) = None` -- `<1>0` より言明の (b) の場合
   <2>1. `owns(r, q)` は、任意の `q` について真を返す。
@@ -1215,19 +1215,19 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object の `Some(root_ty)` の腕
   <2>3. CASE L1 の場合 (a) が `(τ, p)` に当てはまる
     L1 (a) より `trunc(τ, p) = p` であるから、右辺は `owns(r, p)`、すなわち左辺と同じ呼び出しである。
-    BY L1
+    BY <ref id=fd9b709/>
   <2>4. CASE L1 の場合 (b) の `Unit` の行または `Capture` (`p[m] = capture_idx`) の行が `(τ, p)` に
         当てはまる
     <3>1. `t = trunc(τ, p)` は値を返す。
-      BY L1
+      BY <ref id=fd9b709/>
     <3>2. `sub(τ, p) = None` であり、`under(τ, p) = [p]` である。
-      BY L1, L2
+      BY <ref id=fd9b709/>, <ref id=9f11796/>
     <3>3. `owns(r, p) = ((r, t) ∈ OU)` である。
       `<3>2` より `under(τ, p)` の唯一の要素は `p` であり、`<2>2` よりその要素に掛けるのは
       `trunc(τ, p) = t` である。
       BY <2>2, <3>1, <3>2
     <3>4. `under(τ, t) = [t]` であり `trunc(τ, t) = t` である。
-      BY <3>1, L4
+      BY <3>1, <ref id=3eb1174/>
     <3>5. `owns(r, t) = ((r, t) ∈ OU)` である。
       `<3>4` より `under(τ, t)` の唯一の要素は `t` であり、`<2>2` よりその要素に掛けるのは
       `trunc(τ, t) = t` である。
@@ -1238,20 +1238,20 @@ tycon が `make_array_tycon()` に等しいかを問い (`CODE src/ast/types.rs:
   <2>5. CASE L1 の場合 (b) の残りの 3 行 (`Fields` で `π[m]` が held でない行、`Capture` で
         `p[m] ≠ capture_idx` の行、`NoUnit` の行) が `(τ, p)` に当てはまる
     <3>1. `trunc(τ, p)` は中断する。よって右辺は中断する。
-      BY L1
+      BY <ref id=fd9b709/>
     <3>2. `owns(r, p)` は中断する。
       `Fields` の行では L1 より `sub(τ, p)` が中断し、L2 より `under(τ, p)` が中断するので、`<2>2` の
       左辺の評価が中断する。残る 2 行では L1 より `sub(τ, p) = None` なので L2 より
       `under(τ, p) = [p]` であり、`<2>2` はその要素に `trunc(τ, p)` を掛ける。これは `<3>1` より
       中断する。
-      BY <2>2, <3>1, L1, L2
+      BY <2>2, <3>1, <ref id=fd9b709/>, <ref id=9f11796/>
     <3>3. QED
       両辺が中断する。
       BY <3>1, <3>2
   <2>6. QED
     L1 は `(τ, p)` について場合 (a) と場合 (b) の 5 行に場を尽くして分ける。`<2>3` が (a) を、`<2>4` が
     (b) の 2 行を、`<2>5` が (b) の残り 3 行を扱った。
-    BY <2>3, <2>4, <2>5, L1
+    BY <2>3, <2>4, <2>5, <ref id=fd9b709/>
 
 <1>3. QED
   `pty(r)` は `Option` なので `None` か `Some(τ)` のどちらかである。`<1>0` より、前者は `r` がこの版の
@@ -1340,7 +1340,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `<2>1` より `x` はこの本体の束縛変数であり、これは P2 に反する。A11 が言うのがこの停止性の根拠で
     ある。**固定した表が第 1 節の `vars` であって固定した版が借用版であるとき、A11 の性質は L0 が、
     P2 は P9 と合わせて渡す** -- A11 も P2 も範囲は `borrow_ify` の入力である。
-    BY <2>1, A11, L0, P2, P9,
+    BY <2>1, <ref id=3905b4e/>, <ref id=9cef509/>, <ref id=0edb0ba/>, <ref id=63eadd9/>,
        CODE src/rc_ir/ownership.rs: origin, origin_inner, VarTable::empty
 
 <1>3. QED
@@ -1361,7 +1361,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
       `first.clone()`) だけである。どの作り方に入るかは鍵から決まる -- `Binding::Llvm` の腕の分かれ目
       だけが `decl = gen.result_prov(rty, arg_tys, type_env)` を読み、A3 より `result_prov` は
       決定的だからである。
-  BY A3, CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under, Origin::of_candidates,
+  BY <ref id=e11772a/>, CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under, Origin::of_candidates,
      as_arg_projection
 
 <1>2. `Origin::Exactly(p)` について `act = cand = {p}` であり、`Origin::Join { identity, candidates }`
@@ -1411,7 +1411,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `act ⊆ S ∪ {(y, ρ)}` であり、どちらも `Reach(x, π)` に属する。帰納法の仮定を使ったのは `<2>2` と
     `<2>3` であり、どちらも表が `(y, ρ)` から進む相手についてのものなので、L11a よりこの帰納は整礎で
     ある。
-    BY <1>1, <1>3, <2>1, <2>2, <2>3, L11a
+    BY <1>1, <1>3, <2>1, <2>2, <2>3, <ref id=7bdd3d4/>
 
 <1>5. QED
   `<1>4` を `(y, ρ) = (x, π)` に当てる。`cand ⊆ act` は `<1>2` による。言明の最後の節は `<1>3a` である。
@@ -1445,7 +1445,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   `fresh_rename_function` は 1 つの `counter` を `&mut` で持ち回り、各束縛名について
   `assign_fresh_name` を 1 度だけ呼んで `name#b<counter>` を作るので、`rename` の像の名前は相異なる
   `counter` の値を持ち、互いに異なる。よって、入力で互いに異なるこれらの名前の像も互いに異なる。
-  BY A6, P9, CODE src/rc_ir/ownership.rs: collect_bindings,
+  BY <ref id=33c54dc/>, <ref id=63eadd9/>, CODE src/rc_ir/ownership.rs: collect_bindings,
      CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
      CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
 
@@ -1471,16 +1471,16 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 <1>1. 基底: `covered(ty(v), u) ≠ ∅` である。
   L7 より `Λ_{ty(v)}(u) ≠ ∅` であり、その各元 `λ` は `u ⊑ λ` を満たすので `covered(ty(v), u)` の条件を
   満たす。
-  BY L7, CODE src/rc_ir/borrow.rs: covered_leaves
+  BY <ref id=212f2e7/>, CODE src/rc_ir/borrow.rs: covered_leaves
 
 <1>2. `Binding::Move(w)` と `Binding::Payload(s, None)` の辺は性質を保つ。
   どちらも path を変えず、A12 より move-bind の両辺の型は等しく、catch-all アームの payload と
   scrutinee の型も等しいので `ty(w) = ty(y)`、`ty(s) = ty(y)` である。
-  BY A12
+  BY <ref id=83d98e9/>
 
 <1>3. `Binding::Join(arm_results)` の辺は性質を保つ。
   path を変えず、A12 よりアームの結果と `Match` の束縛変数の型は等しい。
-  BY A12
+  BY <ref id=83d98e9/>
 
 <1>4. `Binding::Field(c, idx)` (`c` が unbox) の辺は性質を保つ。すなわち
       ASSUME `covered(ty(y), ρ) ≠ ∅`
@@ -1502,7 +1502,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     ので全称の腕に入る。よって `is_fully_unboxed(ty(c))` も偽である。
     よって `boxed_leaf_paths` の `go` は `ty(c)` について `unpunched_field_types` の下へ降り、第 `idx`
     フィールドについて `ty(y)` から始めた `go` の結果の前に `idx` を置いたものを積む。
-    BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
+    BY <ref id=83d98e9/>, <ref id=33ee52f/>, <ref id=1d99428/>, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
        TypeNode::toplevel_tycon_info,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>3. QED
@@ -1532,7 +1532,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `is_fully_unboxed(ty(s))` も偽である。よって `boxed_leaf_paths` の
     `go` は `ty(s)` について `unpunched_field_types` の下へ降り、第 `t` 変位について `ty(y)` から始めた
     `go` の結果の前に `t` を置いたものを積む。
-    BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union,
+    BY <ref id=83d98e9/>, <ref id=33ee52f/>, <ref id=1d99428/>, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union,
        TypeNode::toplevel_tycon_info,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   <2>3. QED
@@ -1545,14 +1545,14 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 <1>6. `Binding::Llvm` の単一 `Arg(j, σ)` の辺は性質を保つ。
   A3 より、単一の `Arg(j, σ)` の宣言は第 `j` オペランドの leaf `σ` を名指す。すなわち
   `σ ∈ leaves(ty(args[j]))` である。`σ ⊑ σ` なので `σ ∈ covered(ty(args[j]), σ)` である。
-  BY A3, CODE src/rc_ir/borrow.rs: covered_leaves
+  BY <ref id=e11772a/>, CODE src/rc_ir/borrow.rs: covered_leaves
 
 <1>7. `Binding::Llvm` の `origin_from_leaves_under` の辺は性質を保つ。
   `operand_units` の元は `(j, truncate_to_unit(&args[j].ty, leaf, type_env))` の形であり、`leaf` は
   `LeafOrigin::Arg(j, leaf)` の宣言が名指す第 `j` オペランドの leaf である (A3)。`trunc` の答えは引数の
   接頭辞なので `w := trunc(ty(args[j]), leaf) ⊑ leaf` であり、`leaf ∈ leaves(ty(args[j]))` なので
   `leaf ∈ covered(ty(args[j]), w)` である。
-  BY A3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under, truncate_to_unit,
+  BY <ref id=e11772a/>, CODE src/rc_ir/ownership.rs: origin_from_leaves_under, truncate_to_unit,
      CODE src/rc_ir/borrow.rs: covered_leaves
 
 <1>8. QED
@@ -1589,7 +1589,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   (`Move` の `w`、`Join` の各アーム結果、`Field` の容器、`Payload` の scrutinee、`Llvm` の `args[j]`) の
   名前であり、`<1>1` よりそれは `for_each_var` が訪れる変数の名前、すなわち DEF 現れる名前 が挙げる
   `func` に現れる名前である。
-  BY <1>1, L11a, DEF 再帰で訪れる対, DEF 現れる名前
+  BY <1>1, <ref id=7bdd3d4/>, DEF 再帰で訪れる対, DEF 現れる名前
 
 ### L15 (借用版は名前替えである) <!--#c3b2aa3-->
 
@@ -1606,7 +1606,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 
 <1>1. `clone` の本体・パラメータ・capture は、`func` のそれの束縛変数を `rename` で一斉に付け替えたもの
       であり、それ以外の違いを持たない。
-  BY P9, CODE src/rc_ir/borrow.rs: clone_func
+  BY <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: clone_func
 
 <1>2. `rename` の鍵は `func` のパラメータ・capture の名前と、`func.body` の `Let` の束縛変数・
       `Destructure` のフィールド変数・`Match` のアームの payload 変数の名前ちょうどである。`ρ` は
@@ -1632,7 +1632,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     区切った最後の断片は `b` の後に 10 進数字だけが続く形である。A13 は、`borrow_ify` の入力に現れる
     すべての名前について最後の断片がその形ではないと述べる。`func` に現れる名前 (第 1 節の
     DEF 現れる名前) はその集合に含まれるので、`rename` の像のどの名前とも異なる。
-    BY A13, DEF 現れる名前, CODE src/rc_ir/rename.rs: assign_fresh_name,
+    BY <ref id=cb35ab1/>, DEF 現れる名前, CODE src/rc_ir/rename.rs: assign_fresh_name,
        CODE src/rc_ir/borrow.rs: clone_func
   <2>4. QED
     鍵についての第 1 の節は `<2>1` である。単射性は次のとおりである。`func` に現れる 2 つの相異なる
@@ -1683,7 +1683,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     `InlineLLVMStructPlugInBody` は欄 `field_idx : usize`、`InlineLLVMStructSetBody` は欄
     `field_idx : u32`、`InlineLLVMMakeUnionBody` と `InlineLLVMUnionAsBody` は `variant_index()`
     (欄 `field_idx : usize`) である。残る 23 個の本体は `self` の欄を読まない。
-    BY A3, CODE src/fixstd/builtin.rs: 全 result_prov の override,
+    BY <ref id=e11772a/>, CODE src/fixstd/builtin.rs: 全 result_prov の override,
        CODE src/ast/inline_llvm.rs: LLVMGen::result_prov,
        CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov,
        InlineLLVMStructPunchBody::result_prov, InlineLLVMStructPunchBody::arg_leaf_path,
@@ -1698,7 +1698,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     欄だけである。同じものから同じ答えが出ることを与えるのは A3 の決定性の節である --
     `result_prov` は同じ引数に対して常に同じ値を返す。よって
     `gen'.result_prov(rty, arg_tys, type_env) = gen.result_prov(rty, arg_tys, type_env)` である。
-    BY <1>4, <2>1, <2>2, A3, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
+    BY <1>4, <2>1, <2>2, <ref id=e11772a/>, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
 
 <1>6. `func` に現れる名前 `x` と任意の path `π` について
       `origin(vars_c, type_env, ρ(x), π) = ρ(origin(vars_f, type_env, x, π))` である。
@@ -1711,7 +1711,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     ついて `Reach(vars_f, y, ρ') ⊆ Reach(vars_f, x, π)` なので、この帰納の中で作られる `VarPath` の
     変数はすべて `Reach(vars_f, x, π)` の要素の変数である。L14a よりそれらは `func` に現れる名前であり、
     `<1>2` より `ρ` はその上で単射である。
-    BY <1>2, DEF 再帰で訪れる対, L11a, L12, L14a
+    BY <1>2, DEF 再帰で訪れる対, <ref id=7bdd3d4/>, <ref id=44a9669/>, <ref id=2d18d2a/>
   <2>2. `vars_f.bindings.get(x)` が `None` / `Some(Binding::Param)` / `Some(Binding::Producer)` /
         boxed 容器の `Some(Binding::Field(c, idx))` / boxed scrutinee の
         `Some(Binding::Payload(s, Some(t)))` のいずれかであるとき、両側の `origin_inner` は
@@ -1774,7 +1774,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     したがって両辺の `origin` の答えは `vars.origins` が保持する memo の状態に依らない量であり、この帰納の
     各段が結ぶ等式は 1 つの値どうしの等式である。A15 と P2 より再帰は停止するので、この対応は
     全域である。
-    BY <2>1, <2>2, <2>3, <2>4, <2>5, A6, A11, A15, L0, P2, P2a, L11a, DEF 再帰で訪れる対,
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=3e6b0e0/>, <ref id=9cef509/>, <ref id=0edb0ba/>, <ref id=b1f6e13/>, <ref id=7bdd3d4/>, DEF 再帰で訪れる対,
        CODE src/rc_ir/ownership.rs: origin, origin_inner, Binding
 
 <1>7. QED
@@ -1796,10 +1796,10 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   `ρ(r)` はそれらの像のどれとも異なる。よって `ρ(r)` は `vars_c.param_tys` の鍵でない。`owns_object` は
   `param_tys.get(root)` が `None` の腕で真を返し、`owns_object_yet` も `param_tys.get(root)` が `None` の
   ときに真を返す。
-  BY L15, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, owns_object_yet
+  BY <ref id=c3b2aa3/>, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, owns_object_yet
 
 <1>2. `pty_f(r) = Some(τ)` のとき、`ctx.vars.param_tys[ρ(r)] = τ` である。
-  BY L15
+  BY <ref id=c3b2aa3/>
 
 <1>3. `owned_units` は、`(ρ(r), k)` を含むことと、「`leaves(τ)` のある `leaf` について
       `trunc(τ, leaf) = k` かつ `(r, leaf) ∈ OL`」が成り立つことが同値である。
@@ -1816,7 +1816,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     行ってから `name#b<counter>` を作るので、この 1 回の `borrow_ify` の実行が作る名前はどれも相異なる
     `counter` の値を持ち、`#` で区切った最後の断片 `b<counter>` が相異なる。よって `g` の借用版の
     パラメータ名は `ρ(r)` と異なる。
-    BY P9, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
+    BY <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
        CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
   <2>2. QED
     `OwnedLeaves::owns(var, path)` は `(var, path) ∈ OL` である。
@@ -1838,7 +1838,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   で終わって `leaf[m] = capture_idx` であるかのどちらかである。(A) で歩みの長さが `|leaf|` ならば L1 の
   場合 (a)、それより短ければ場合 (b) の `Unit` の行、(B) ならば場合 (b) の `Capture`
   (`π[m] = capture_idx`) の行が当てはまり、どれも `trunc` は値を返す。
-  BY <1>2, A10, L1, L1b, L9a, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+  BY <1>2, <ref id=8412761/>, <ref id=fd9b709/>, <ref id=fb62043/>, <ref id=24f7933/>, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
      TypeNode::is_closure, TypeNode::toplevel_tycon_info, TypeNode::unpunched_field_types
 
@@ -1876,7 +1876,7 @@ P7a の意味の site の全部が覆われる。
   `(v, path)`、および `Let(_, App(_, args), _)` の各引数 `arg` と各 `unit ∈ rc_units(arg.ty)` について
   `(arg, unit)`。後者は定義から `units(ty(arg))` の元である。前者は A2 より `path` が `ty(v)` の
   `rc_units` の元である。
-  BY A2, CODE src/rc_ir/borrow.rs: levelled_sites
+  BY <ref id=8e3aff3/>, CODE src/rc_ir/borrow.rs: levelled_sites
 
 <1>1a. `levelled_sites(func)` の各 site `(v, u)` について、`v.name` は `func` に現れる名前
        (第 1 節の DEF 現れる名前) であり、`cand(vars_f, v, u)` の各元 `(r, p)` の `r` も `func` に
@@ -1887,7 +1887,7 @@ P7a の意味の site の全部が覆われる。
   `v.name` は `func` に現れる名前である。DEF 再帰で訪れる対 より L12 と L14a を `vars_f` について読んで
   よい。L12 より `cand(vars_f, v, u) ⊆ Reach(vars_f, v.name, u)` であり、L14a より
   `Reach(vars_f, v.name, u)` の各要素の変数は `func` に現れる名前である。
-  BY DEF 再帰で訪れる対, L12, L14a, CODE src/rc_ir/borrow.rs: levelled_sites,
+  BY DEF 再帰で訪れる対, <ref id=44a9669/>, <ref id=2d18d2a/>, CODE src/rc_ir/borrow.rs: levelled_sites,
      CODE src/rc_ir/ast.rs: for_each_node, for_each_var, for_each_var_of_node, for_each_var_of_rhs
 
 <1>2. グローバル初期化子の `RewriteCtx` では、`owns_object` は任意の `(r, p)` について真を返す。
@@ -1912,7 +1912,7 @@ P7a の意味の site の全部が覆われる。
     L10 より `under(τ, p)` もその各要素に
     ついての `trunc(τ, ・)` も中断しない。`owns_object` が呼ぶのはこの 2 つと `owned_units.contains` だけ
     である。
-    BY <1>1, <2>1, DEF 再帰で訪れる対, L1c, L10, L12, L14,
+    BY <1>1, <2>1, DEF 再帰で訪れる対, <ref id=fa1a6ce/>, <ref id=ef258a5/>, <ref id=44a9669/>, <ref id=c7d11e5/>,
        CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
   <2>4. `pty(r) = Some(τ)` のとき、`owns_object(r, p)` は真である。
     `owns_object` は `under(τ, p)` の各要素 `unit` について `(r, trunc(τ, unit)) ∈ owned_units` を
@@ -1923,7 +1923,7 @@ P7a の意味の site の全部が覆われる。
     パラメータか capture であることと同値であり、そのとき `τ = ty(r)` である。`f_own` は `func` の複製
     なので `r` は `func` のパラメータか capture でもあり、A12 よりその `RcVar` の型 `p.ty` は
     `ty(r) = τ` である。よって `(r, trunc(τ, unit))` はこの集合に入る。
-    BY <2>1, <2>3, A12, L1c, L9,
+    BY <2>1, <2>3, <ref id=83d98e9/>, <ref id=fa1a6ce/>, <ref id=49b83ad/>,
        CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, borrow_ify, param_capture_units
   <2>5. QED
     BY <2>2, <2>3, <2>4
@@ -1940,7 +1940,7 @@ P7a の意味の site の全部が覆われる。
   付け替えたものであり、変数の型は変わらないので、積まれる対は `ρ` で写ったものちょうどである。候補の
   対応は L15 の第 2 の項による。その項は「`func` に現れる各名前 `x`」についての言明であり、site の
   `v.name` がそれを満たすことは `<1>1a` が与える。
-  BY <1>1a, P9, L15, CODE src/rc_ir/borrow.rs: levelled_sites, CODE src/rc_ir/ast.rs: for_each_node
+  BY <1>1a, <ref id=63eadd9/>, <ref id=c3b2aa3/>, CODE src/rc_ir/borrow.rs: levelled_sites, CODE src/rc_ir/ast.rs: for_each_node
 
 <1>5. 不動点において、各関数の各 site について `level_ownership(vars_f, type_env, (v, u), OL)` は `false` を
       返す。
@@ -1960,7 +1960,7 @@ P7a の意味の site の全部が覆われる。
     `<1>1a` より各候補の `r` は `func` に現れる名前なので L16 が使えて
     `ctx.owns_object(ρ(r), p) = yet_f(r, p)` であり、`<1>4` より借用版の site の候補は
     `ρ(cand(vars_f, v, u))` である。よってすべての候補について `owns_object` は偽である。
-    BY <2>1, <1>1a, <1>4, L16
+    BY <2>1, <1>1a, <1>4, <ref id=90c9817/>
 
 <1>7. CASE `level_ownership` の `owns_a_candidate` が真である site
   <2>1. `cand(vars_f, v, u)` の各元 `(r, p)` で `pty_f(r) = Some(τ)` であるものについて、
@@ -1976,12 +1976,12 @@ P7a の意味の site の全部が覆われる。
     あり、L12 より `(r, p) ∈ Reach(vars_f, v, u)` である。L14 より
     `covered(ty(r), p) ≠ ∅` である。`vars_f = VarTable::of(func)` であり `pty_f(r) = Some(τ)` なので、
     L1c より `τ = ty(r)` であり、`covered(τ, p) ≠ ∅` である。
-    BY <1>1, DEF 再帰で訪れる対, L1c, L12, L14
+    BY <1>1, DEF 再帰で訪れる対, <ref id=fa1a6ce/>, <ref id=44a9669/>, <ref id=c7d11e5/>
   <2>3. その各元について `yet_f(r, p)` は真である。
     L11 は任意の `VarTable` `V` について `owns_object_yet(V, type_env, r, p, OL)` を扱うので、
     `V = vars_f` に当てる。`pty_f(r) = Some(τ)` はその仮定 `V.param_tys.get(r) = Some(τ)` であり、
     残る 2 つの仮定を `<2>1` と `<2>2` が与える。
-    BY <2>1, <2>2, L11
+    BY <2>1, <2>2, <ref id=ebd5605/>
   <2>4. `cand(vars_f, v, u)` の各元 `(r, p)` で `pty_f(r) = None` であるものについても
         `yet_f(r, p)` は真である。
     `owns_object_yet` は `param_tys.get(root)` が `None` のとき真を返す。`yet_f` が引く表は
@@ -1990,7 +1990,7 @@ P7a の意味の site の全部が覆われる。
   <2>5. QED
     `<2>3` と `<2>4` よりすべての候補について `yet_f` は真である。`<1>1a` より各候補の `r` は `func` に
     現れる名前なので L16 が使えて、`<1>4` と合わせてすべての候補について `owns_object` は真である。
-    BY <2>3, <2>4, <1>1a, <1>4, L16
+    BY <2>3, <2>4, <1>1a, <1>4, <ref id=90c9817/>
 
 <1>8. QED
   `<1>3a` が `f_own` とグローバル初期化子を扱った。借用版については、`<1>5` より各 site で
@@ -2089,7 +2089,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `Retain`/`Release` 節点の `path` も、名指す変数の型も、入力の本体のものと同じである。A2 より入力の
   `Retain`/`Release` の `path` は `units(ty(v))` の元なので、借用版の節点についてもそうである。L6 より
   `under(ty(v), path) = [path]` である。
-  BY A2, L6, P9, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc, borrow_ify
+  BY <ref id=8e3aff3/>, <ref id=e74af85/>, <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc, borrow_ify
 
 <1>4. `<1>2` と `<1>3` の `(v, u)` は、その版が書き換える本体の site (DEF site) である。
   `rewrite_inner` は本体の木を継続とアーム本体へ降りて歩くので、`<1>2` と `<1>3` の呼び出しが起きる節点は
@@ -2109,7 +2109,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   どちらも P2 の範囲である。よって `origin(v, u)` は中断せずに答えを返す。続いて、`vars` が
   `VarTable::body_only` で作られ `param_tys` が空なので、`owns_object` はどの `(r, p)` にも真を返し、
   `owns_unit` はその全称なので真である。
-  BY <1>2, D6, P2, CODE src/rc_ir/borrow.rs: borrow_ify のグローバルを写す繰り返し,
+  BY <1>2, <ref id=596a46d/>, <ref id=0edb0ba/>, CODE src/rc_ir/borrow.rs: borrow_ify のグローバルを写す繰り返し,
      CODE src/rc_ir/ownership.rs: VarTable::body_only, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
      RewriteCtx::owns_unit, RewriteCtx::rewrite_rc
 
@@ -2139,13 +2139,13 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>1. (a) が成り立つ。
   L7 より `Λ_{ty(v)}(u) ≠ ∅` であり、その各 leaf `λ` について `trunc(ty(v), λ) = u` である。L6 より
   `trunc(ty(v), u) = u` である。
-  BY L6, L7
+  BY <ref id=e74af85/>, <ref id=212f2e7/>
 
 <1>2. `Move(w)`、`Join` のアーム結果 `a`、catch-all の `Payload` の scrutinee `s` については、A12 より
       その型は `ty(x)` に等しいので、`Λ` も `trunc` も変わらず、性質はそのまま移る。
   A12 は move-bind の両辺の型、アームの結果と `Match` の束縛変数の型、catch-all アームの payload と
   scrutinee の型が一致することを述べる。
-  BY A12
+  BY <ref id=83d98e9/>
 
 <1>3. unbox 容器の `Field(c, idx)` について、`is_fully_unboxed(ty(c))`・`is_closure(ty(c))`・
       `is_box(ty(c))`・`is_array(ty(c))`・`is_union(ty(c))` はどれも偽であり、`ty(x)` は
@@ -2165,7 +2165,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   残る分かれ目は `is_punched_array(ty(c))` だけである。**`Std::PunchedArray a` は
   `unbox struct { _arr : Array a, _idx : I64 }` なので、この場合は実際に起こりうる**
   (`CODE src/fixstd/std.fix: PunchedArray`)。
-  BY A12, L1d, L8, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
+  BY <ref id=83d98e9/>, <ref id=33ee52f/>, <ref id=1d99428/>, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
      TypeNode::is_union, TypeNode::is_punched_array, TypeNode::toplevel_tycon_info,
      CODE src/rc_ir/ownership.rs: unit_step
 
@@ -2177,7 +2177,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   (`step(ty(c))` が `Unit` の場合も、`is_box` と `is_array` が偽なので `go` は降りる側である)。`go` は
   第 `idx` 対について `ty(x)` から始めた `go` の結果の前に `idx` を置いたものを積み、他の対の下で積む
   path は第 1 添字が `idx` と異なる。`Λ_{ty(x)}(π) ≠ ∅` なので像も空でない。
-  BY <1>3, L1a, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+  BY <1>3, <ref id=cd71109/>, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
 <1>4. unbox 容器の `Field(c, idx)` について、`(c, [idx] ++ π)` は unit を覆い、`Λ` は表のとおりに写る。
   <2>1. CASE `step(ty(c)) = Fields { held_fields, .. }`
@@ -2187,7 +2187,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     `trunc(ty(c), [idx] ++ ρ) = [idx] ++ trunc(ty(x), ρ)` である。これと `(x, π)` が unit を覆うことから
     `trunc(ty(c), [idx] ++ λ) = [idx] ++ trunc(ty(x), λ) = [idx] ++ trunc(ty(x), π)
     = trunc(ty(c), [idx] ++ π)` が出る。
-    BY <1>3, L5, CODE src/rc_ir/ownership.rs: subtree_type, held_field_type
+    BY <1>3, <ref id=323bb77/>, CODE src/rc_ir/ownership.rs: subtree_type, held_field_type
   <2>2. CASE `step(ty(c)) = Unit`
     `truncate_to_unit(ty(c), q, type_env)` は、`q` が空でなければ第 1 周で `Unit` の腕に入って `break`
     し、`out` が空のまま `[]` を返す。`q` が空ならループに入らず `[]` を返す。よって
@@ -2217,7 +2217,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `unpunched_field_types` の下へ降り、第 `t` 変位について `ty(x)` から始めた `go` の結果の前に `t` を
   置いたものを積む。よって `Λ_{ty(s)}([t] ++ π) = { [t] ++ λ : λ ∈ Λ_{ty(x)}(π) }` であり、これは
   空でない。
-  BY A12, L1a, L1d, L8, CODE src/rc_ir/ownership.rs: unit_step, truncate_to_unit,
+  BY <ref id=83d98e9/>, <ref id=cd71109/>, <ref id=33ee52f/>, <ref id=1d99428/>, CODE src/rc_ir/ownership.rs: unit_step, truncate_to_unit,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_union,
      TypeNode::toplevel_tycon_info
@@ -2228,7 +2228,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `Λ_{ty(args[j])}(σ) = { σ }` は空でない。DEF unit を覆う対 が要求する残りは、この集合の各 leaf `λ`
   について `trunc(ty(args[j]), λ) = trunc(ty(args[j]), σ)` であることだが、`λ = σ` しかないので両辺は
   同じ呼び出しであり、第 1 節の等式の読み方より成り立つ。
-  BY A3, DEF unit を覆う対, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+  BY <ref id=e11772a/>, DEF unit を覆う対, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
 <1>7. `origin_from_leaves_under` の `(args[j], w)` は unit を覆う。
   `ty(args[j])` は本体に現れる `RcVar` の型なので根の型であり、L1b より A10 を満たして P1 の定義域に
@@ -2236,7 +2236,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `leaf ∈ leaves(ty(args[j]))` なので、P1 より `w ∈ units(ty(args[j]))` である。L7 より
   `Λ_{ty(args[j])}(w) ≠ ∅` であり、その各 leaf `μ` について `trunc(ty(args[j]), μ) = w` である。L6 より
   `trunc(ty(args[j]), w) = w` なので、この 2 つは等しい。
-  BY A3, P1, L1b, L6, L7, DEF 扱う型, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+  BY <ref id=e11772a/>, <ref id=3597669/>, <ref id=fb62043/>, <ref id=e74af85/>, <ref id=212f2e7/>, DEF 扱う型, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
 
 <1>8. QED
   `<1>1` が (a) を扱った。(b) については、`<1>2` から `<1>6` が表の 4 行を、`<1>7` が
@@ -2262,7 +2262,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>2. QED
   A12 より同じ名前の `RcVar` が持つ型は一致するので、`<1>1` の `x.ty` は `x` が得る値の型 `ty(x)` で
   ある (第 1 節の `ty`)。`leaves(・)` と `Λ_{・}(π)` は型だけの関数なので、後半が従う。
-  BY <1>1, A12, L0
+  BY <1>1, <ref id=83d98e9/>, <ref id=9cef509/>
 
 ### L19 (`Llvm` が束縛する値の leaf の `origin`) <!--#18e0a91-->
 
@@ -2281,7 +2281,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `Unknown` の 3 つの構成子を持つ。A3 はさらに `result_prov` が決定的である -- 同じ引数に対して常に
   同じ値を返す -- ことを述べるので、`decl` は呼び出しの時点によらない。よってこの命題が数え上げる
   `origin_inner` の腕の分かれ目も、鍵から決まる。
-  BY A3, CODE src/rc_ir/provenance.rs: LeafOrigin, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
+  BY <ref id=e11772a/>, CODE src/rc_ir/provenance.rs: LeafOrigin, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
 
 <1>2. `S_λ = {Arg(j, σ)}` のとき `origin(x, λ) = origin(args[j], σ)` であり
       `σ ∈ leaves(ty(args[j]))` である。
@@ -2290,7 +2290,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   要素数 1 の集合の唯一の元が `Arg(j, p)` のとき `Some((j, p))` を返す。よって `Some((j, σ))` の腕に入り
   `origin(vars, type_env, &args[j].name, &σ)` を返す。A3 より単一の `Arg(j, σ)` は第 `j` オペランドの
   leaf `σ` を名指す。
-  BY A3, CODE src/rc_ir/ownership.rs: origin_inner, as_arg_projection,
+  BY <ref id=e11772a/>, CODE src/rc_ir/ownership.rs: origin_inner, as_arg_projection,
      CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at
 
 <1>3. `S_λ = ∅` または `S_λ = {Fresh}` または `S_λ = {Unknown}` のとき、`as_arg_projection` は `None` を
@@ -2351,7 +2351,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `{ S_λ : λ ∈ Λ_{rty}(π) }` である。A3 より `result_prov` は決定的なので `decl` は
   `(gen, rty, arg_tys, type_env)` から決まる 1 つの値であり、この命題が数え上げる `origin_inner` と
   `origin_from_leaves_under` の腕の分かれ目も鍵から決まる。
-  BY A3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+  BY <ref id=e11772a/>, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
      CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
      CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under,
      CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
@@ -2412,12 +2412,12 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>1. RC IR の束縛は 4 種であり、そのスコープは次のとおりである。パラメータと capture は本体の全体、
       `Let(x, rhs, k)` の `x` は `k` の部分木、`Destructure(c, fs, s, k)` の各フィールド変数は `k` の
       部分木、`Match` のアームの `payload` はそのアームの `body` の部分木である。
-  BY D2
+  BY <ref id=b3dfa37/>
 
 <1>2. パラメータと capture は、活性化が始まった時点で値を得ている。
   D23 より、関数の本体の活性化は各パラメータと capture に 1 つずつの値を持つ。グローバル初期化子の
   `init` はパラメータも capture も持たない (D1)。
-  BY D1, D23
+  BY <ref id=a502f3e/>, <ref id=ff5985d/>
 
 <1>3. 残る 3 種の束縛について、活性化がそのスコープの中の位置に居るならば、その束縛変数は既に値を
       得ている。
@@ -2429,7 +2429,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `Match` の節点から始まり、コード生成はアーム本体を評価する前に payload を `scope_push` するので、
   アーム本体の各位置ではその変数が値を得ている。D9 の移動の表の payload 束縛の 2 行と D10 の生成の表の
   boxed union の payload の行が、その変数が受け取る値を述べる。
-  BY D2, D3, D9, D10, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
+  BY <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=9d74736/>, <ref id=f06144e/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
 
 <1>3a. `n` の節点が使用する変数のうち `vars.bindings` に束縛を持たないものは、`n` において値を得て
        いる。
@@ -2439,7 +2439,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   記号の位置が値を持つ時点をその記号のグローバル化の段 (D24 の (E5)) より後に限る。`n` はその名前を
   読む節点なので、**D6 の「それでも `g` を読む節点は必ず値を読む」がこの位置に当たる** -- まだ初期化
   されていなければ、その節点の段が先に (E7) と (E5) を走らせるからである。
-  BY A13, D6, D24
+  BY <ref id=cb35ab1/>, <ref id=596a46d/>, <ref id=e3436e8/>
 
 <1>4. QED
   `n` の節点が使用する変数は、`vars.bindings` に束縛を持つか持たないかのどちらかである。持たないものは
@@ -2448,7 +2448,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   パラメータ・capture は `<1>2` により活性化の初めから値を得ており、残る 3 種は `<1>3` によりその
   スコープの中の各位置で値を得ている。D6 より変数の値はそれを束縛する節点の後は変わらないので、
   一度値を得た変数は以後の位置でも「その時点までに値を得た変数」である。
-  BY <1>1, <1>2, <1>3, <1>3a, A11, D6
+  BY <1>1, <1>2, <1>3, <1>3a, <ref id=3905b4e/>, <ref id=596a46d/>
 
 ### L20b (名前を束縛する構文は 1 つ) <!--#2c53bd2-->
 
@@ -2464,7 +2464,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   以外の違いを持たない (P9)。`fresh_rename_function` は 1 つの `counter` を `&mut` で持ち回り、各
   束縛名について `assign_fresh_name` を 1 度だけ呼んで `name#b<counter>` を作るので、像の名前は相異なる
   `counter` の値を持ち互いに異なる。入力で互いに異なる名前の像も互いに異なる。
-  BY A6, P9, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
+  BY <ref id=33c54dc/>, <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func,
      CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
 
 <1>2. QED
@@ -2472,7 +2472,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   変数、`Match` のアームの payload 変数の 3 か所であり、D2 よりこの 3 つが本体の束縛である。`<1>1` より
   1 つの名前を束縛する構文は高々 1 つなので、`collect_bindings` が `x` について記録した `Binding` は
   その唯一の構文からのものである。
-  BY <1>1, D2, CODE src/rc_ir/ownership.rs: collect_bindings
+  BY <1>1, <ref id=b3dfa37/>, CODE src/rc_ir/ownership.rs: collect_bindings
 
 ### L21 (静的な向き -- unit が所有ならその下の leaf も所有) <!--#66922eb-->
 
@@ -2498,7 +2498,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     `owns(x, λ) = owns(x, trunc(ty(x), λ))`、`owns(x, π) = owns(x, trunc(ty(x), π))` である。
     DEF unit を覆う対 より `trunc(ty(x), λ) = trunc(ty(x), π)` なので、この 2 つは同じ呼び出しであり、
     仮定より真である。
-    BY <2>1, P7e, DEF unit を覆う対
+    BY <2>1, <ref id=63981a3/>, DEF unit を覆う対
 
 <1>2. CASE `Some(Binding::Move(w))`、`Some(Binding::Join(arm_results))`、
       `Some(Binding::Payload(s, None))` のいずれか
@@ -2509,7 +2509,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     L18 より進む相手は unit を覆い、`Λ` は変わらない。`<2>1` より `(x, π)` が所有されることは
     `(w, π)` (resp. `(s, π)`) が所有されることであり、帰納法の仮定よりその `Λ` の各 leaf について
     `(w, λ)` は所有される。`<2>1` より `cand(x, λ) = cand(w, λ)` である。
-    BY <2>1, L18
+    BY <2>1, <ref id=af00c3a/>
   <2>3. `Join(arm_results)` では、任意の `ρ` について `cand(x, ρ) = ⋃_{a ∈ arm_results} act(a, ρ)` で
         ある。
     `Binding::Join` の腕は各アーム結果の `origin(a, ρ).acted_on()` を集めて `of_candidates` に渡し、
@@ -2522,7 +2522,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     帰納法の仮定より各 `λ` について `(a, λ)` は所有される。`cand(x, λ) = ⋃_a act(a, λ)` であり、
     `act(a, λ) = cand(a, λ) ∪ {id(a, λ)}` である (第 1 節の `id`)。`id(a, λ)` は、`origin(a, λ)` が
     `Exactly` のときは `cand(a, λ)` の元であり、`Join` のときは L13 より `owns` が真である。
-    BY <2>3, L13, L18, CODE src/rc_ir/ownership.rs: Origin::acted_on, Origin::identity
+    BY <2>3, <ref id=c7416c2/>, <ref id=af00c3a/>, CODE src/rc_ir/ownership.rs: Origin::acted_on, Origin::identity
   <2>5. QED
     BY <2>2, <2>4
 
@@ -2537,7 +2537,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     ことである。帰納法の仮定より、`Λ_{ty(c)}([idx] ++ π)` の各 leaf `[idx] ++ λ` について
     `(c, [idx] ++ λ)` は所有される。`<2>1` を `ρ = λ` に当てると `cand(x, λ) = cand(c, [idx] ++ λ)` で
     ある。
-    BY <2>1, L18
+    BY <2>1, <ref id=af00c3a/>
   <2>2a. `Binding::Payload(s, Some(t))` (`s` が unbox) について結論が出る。
     L18 (b) より進む相手 `(s, [t] ++ π)` は unit を覆い、その `Λ` は
     `{ [t] ++ λ : λ ∈ Λ_{ty(x)}(π) }` である。`<2>1` を `ρ = π` に当てると
@@ -2545,7 +2545,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     ことである。帰納法の仮定より、`Λ_{ty(s)}([t] ++ π)` の各 leaf `[t] ++ λ` について
     `(s, [t] ++ λ)` は所有される。`<2>1` を `ρ = λ` に当てると `cand(x, λ) = cand(s, [t] ++ λ)` で
     ある。
-    BY <2>1, L18
+    BY <2>1, <ref id=af00c3a/>
   <2>2b. QED
     この CASE の 2 つの腕を `<2>2` と `<2>2a` が扱った。
     BY <2>2, <2>2a
@@ -2557,7 +2557,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   積んだ位置で戻るので、1 つの leaf が別の leaf の真の接頭辞に
   なることはない。よって `π` を前置に持つ leaf は `π` だけなので `Λ_{ty(x)}(π) = {π}` である。すなわち
   `λ = π` しかなく、結論は仮定そのものである。
-  BY L18a, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, Provenance::build_shape,
+  BY <ref id=6c73144/>, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at, Provenance::build_shape,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, LeafMap::get, LeafMap::build_shape
 
 <1>5. CASE `Some(Binding::Llvm(gen, args, rty))` で `decl.leaf_origins_at(π).and_then(as_arg_projection)`
@@ -2571,10 +2571,10 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     こと、すなわち `S_λ = ∅` であることと同値である。L19 よりそのとき
     `origin(x, λ) = Exactly((x, λ))` である。`x` の binding は `Binding::Llvm` なので L13 より
     `owns(x, λ)` は真である。
-    BY L13, L18a, L19, L20
+    BY <ref id=c7416c2/>, <ref id=6c73144/>, <ref id=18e0a91/>, <ref id=cd28c3f/>
   <2>2. `reached` が空でないとき、`reached` の各元 `o` について、`o` の候補はすべて `owns` で真である。
     L20 (d) より `cand(o) ⊆ cand(x, π)` であり、仮定より `cand(x, π)` の元はすべて真である。
-    BY L20
+    BY <ref id=cd28c3f/>
   <2>3. `reached` が空でないとき、`Λ_{ty(x)}(π)` の各 `λ` について `(x, λ)` は所有される。
     L18a より `rty = ty(x)` なので `Λ_{ty(x)}(π) = Λ_{rty}(π)` であり、その各 `λ` は `leaves(rty)` の
     元である。L19 より `S_λ` は 3 つの形のいずれかである。`S_λ = ∅` と `S_λ = {Fresh}` と `S_λ = {Unknown}` では
@@ -2585,7 +2585,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     `(args[j], w)` は unit を覆う。`trunc` の答えは引数の接頭辞なので `w ⊑ σ` であり、
     `σ ∈ leaves(ty(args[j]))` (L19) なので `σ ∈ Λ_{ty(args[j])}(w)` である。帰納法の仮定より
     `(args[j], σ)` は所有される。
-    BY <2>2, L13, L18, L18a, L19, L20, CODE src/rc_ir/ownership.rs: truncate_to_unit
+    BY <2>2, <ref id=c7416c2/>, <ref id=af00c3a/>, <ref id=6c73144/>, <ref id=18e0a91/>, <ref id=cd28c3f/>, CODE src/rc_ir/ownership.rs: truncate_to_unit
   <2>4. QED
     BY <2>1, <2>3
 
@@ -2600,7 +2600,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `(w, π)`・`(s, π)`、`Join` の `(a, π)`)、`<1>3` (`(c, [idx] ++ π)`・`(s, [t] ++ π)`)、`<1>5`
   (`(args[j], w)`) であり、どれも DEF 再帰で訪れる対 の表が `(x, π)` から進む相手なので、L11a より
   この帰納は整礎である。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, A3, L11a, DEF 再帰で訪れる対,
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <ref id=e11772a/>, <ref id=7bdd3d4/>, DEF 再帰で訪れる対,
      CODE src/rc_ir/ownership.rs: Binding, origin_inner, as_arg_projection
 
 ### L21a (別名の辺は値を運ぶ) <!--#42f1c2e-->
@@ -2630,7 +2630,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 <1>1a. `x` を束縛する構文は 1 つであり、それは `<1>1` が `vars.bindings.get(x)` の値について挙げる
        構文である。
   L20b である。この step が扱う 5 種の `Binding` は L20b が挙げるものに含まれる。
-  BY <1>1, L20b
+  BY <1>1, <ref id=2c53bd2/>
 
 <1>1b. `x` が値を得るのは、`<1>1a` の構文がそれを束縛する位置においてだけである。したがって、`x` が
        ある位置までに値を得ているならば、活性化の辿る実行路はその節点を通っている。
@@ -2640,7 +2640,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   同値より、この版のパラメータ・capture であるのは `vars.bindings.get(x)` が `Some(Binding::Param)` で
   ある名前ちょうどなので、`x` は第 2 の形でもない。残るのは第 1 の形であり、`<1>1a` より `x` を束縛
   する構文は 1 つである。
-  BY <1>1, <1>1a, D6, L1e, CODE src/rc_ir/ownership.rs: collect_bindings
+  BY <1>1, <1>1a, <ref id=596a46d/>, <ref id=14909ed/>, CODE src/rc_ir/ownership.rs: collect_bindings
 
 <1>2. `Binding::Move(w)` の `w`、`Binding::Payload(s, tag)` の `s`、`Binding::Field(c, idx)` の `c` は、
       `x` がその位置までに値を得ているならば、その位置までに値を得ている。
@@ -2651,7 +2651,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `k` へ進むところで、`Match` のアームの payload はそのアーム本体へ入るところで値を得る)。L20a を
   その節点の位置に当てると `w` / `s` / `c` はそこまでに値を得ており、D6 より以後の位置でも値を得た
   変数である。
-  BY <1>1, <1>1b, D2, D3, D6, L20a
+  BY <1>1, <1>1b, <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=596a46d/>, <ref id=57d5753/>
 
 <1>2a. 名前 `y` が活性化のある位置までに値を得ているならば、その値は以後のどの位置でも変わらない。
   `vars.bindings.get(y)` が `Some(・)` であれば `y` は束縛を持つ名前であり、D6 の「変数の値は、それを
@@ -2659,7 +2659,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   あれば `y` は記号の位置であり (D6)、D6 はその値を「その記号の値」という位置に依らない量として定めるので、
   どの位置で読んでも同じ値である。どちらの場合も、`y` がある位置までに値を得ていれば、それ以後のどの
   位置でもその値は変わらない。
-  BY D6
+  BY <ref id=596a46d/>
 
 **アーム結果はこの step に入らない。** `Binding::Join(arm_results)` の `arm_results` は各アームの
 結果の変数を並べたものであり、活性化が選ばなかったアームの本体は走らないので、その結果の変数は値を
@@ -2671,7 +2671,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `RcRhs::Var(v)` の腕は `get_scoped_obj(&v.name)` を返し、`bind_and_continue` がそれを `x` の名前で
   `scope_push` する。`<1>2a` より `x` の値も `w` の値も、この節点の実行より後、固定した位置まで変わらない
   ので、固定した位置でも `x` の値は `w` の値である。
-  BY <1>1, <1>2, <1>2a, D2, D7, CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs,
+  BY <1>1, <1>2, <1>2a, <ref id=b3dfa37/>, <ref id=56c2068/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs,
      Generator::bind_and_continue, Generator::eval_rc_expr_inner
 
 <1>4. (m2) が成り立つ。
@@ -2688,25 +2688,25 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     ただ 1 つであり、`x` が値を得るのはこの節点で `k` へ進むところなので (D2、D3、`<1>1b`)、`x` が
     その位置までに値を得ているならば活性化はこの節点を通っている。D21 より活性化はその `Match` で
     ちょうど 1 つのアームを選び、D3 より辿る実行路はそのアーム本体の実行路を辿ってから `k` へ進む。
-    BY <1>1, <1>1a, <1>1b, D2, D3, D21
+    BY <1>1, <1>1a, <1>1b, <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=c232680/>
   <2>2. そのアーム本体の実行路の最後の節点は `Ret(a*)` であり、`a*` は `arm_results` の元である。
     D2 より `Ret` は唯一の終端子であり、残る 5 種はちょうど 1 つの継続を持つ。D3 より、アーム本体の
     実行路はアーム本体の根から継続を辿って `Ret` に着いて終わる (途中の `Match` はアーム本体の実行路を
     辿ってからその継続へ進む)。`collect_bindings` は `arm_results[i]` に `returned_var(&arms[i].body)`
     を置き、`returned_var` はその継続の鎖を辿って着く `Ret` が名指す変数を返す。
-    BY <1>1, D2, D3, CODE src/rc_ir/ownership.rs: collect_bindings, returned_var
+    BY <1>1, <ref id=b3dfa37/>, <ref id=ca36627/>, CODE src/rc_ir/ownership.rs: collect_bindings, returned_var
   <2>3. `a*` はこの位置までに値を得ている。
     `<2>1` と `<2>2` より `Ret(a*)` の節点は活性化の辿る実行路の上にあり、`x` が値を得る位置より前で
     ある。L20a をその節点の位置に当てると `a*` はそこまでに値を得ており、D6 より以後の位置でも値を
     得た変数である。
-    BY <2>1, <2>2, D6, L20a
+    BY <2>1, <2>2, <ref id=596a46d/>, <ref id=57d5753/>
   <2>4. QED
     D2 より `Let(x, Match(..), k)` は `Match` の値を `x` に束縛し、アーム本体の `Ret(v)` の値は `v` で
     ある。コード生成もそうなっている -- `eval_rc_expr_inner` の `RcExpr::Ret(x)` の腕は
     `get_scoped_obj(&x.name)` を返し、`eval_rc_match` は各アームについて `eval_rc_expr(&arm.body, ..)`
     の値を `incomings` に積んで phi で合流させ、`bind_and_continue` がその値を `x` の名前で
     `scope_push` する。選ばれたアームを通る実行では phi の値はそのアームの `incomings` の値である。
-    BY <2>1, <2>2, <2>3, D2, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match,
+    BY <2>1, <2>2, <2>3, <ref id=b3dfa37/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match,
        Generator::eval_rc_expr_inner, Generator::bind_and_continue
 
 <1>6. (m4) が成り立つ。
@@ -2716,7 +2716,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `get_struct_fields` に `fields` の添字の列を渡し、返る 1 対 1 の列を対応するフィールド変数の名前で
   `scope_push` する。`<1>2a` より `x` の値も `c` の値も、この節点の実行より後、固定した位置まで変わらない
   ので、固定した位置でも `x` の値は `c` の値の第 `idx` フィールドである。
-  BY <1>1, <1>2, <1>2a, D2, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
+  BY <1>1, <1>2, <1>2a, <ref id=b3dfa37/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
      CODE src/object.rs: ObjectFieldType::get_struct_fields
 
 <1>7. (m5) が成り立つ。
@@ -2725,7 +2725,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     唯一の構文である。payload 変数が値を得るのはそのアームへ入るところなので (D2 と D3、`<1>1b`、および
     `eval_rc_match` がアーム本体を評価する前に payload を `scope_push` すること)、`x` がこの位置までに
     値を得ているならば活性化はそのアームを選んでいる。
-    BY <1>1, <1>1a, <1>1b, D2, D3, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
+    BY <1>1, <1>1a, <1>1b, <ref id=b3dfa37/>, <ref id=ca36627/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
   <2>2. `s` はこの位置までに値を得ている。
     `<1>2` を `Binding::Payload(s, Some(t))` に当てる。
     BY <1>2
@@ -2742,7 +2742,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     ので switch は `else_bb` へ跳ぶ (アームが 1 つだけのときは `cases` が空で `else_bb` への無条件
     分岐になり、その 1 つのアームが catch-all である)。すなわち選ばれるアームの `tag` は `None` で
     あり、`<2>1` の `Some(t)` と食い違うので、この場合は起こらない。
-    BY <2>1, A16, D21, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
+    BY <2>1, <ref id=f769887/>, <ref id=c232680/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
   <2>4. QED
     `eval_rc_match` は、`arm.tag` が `Some(_)` のアームの payload を
     `get_union_value_noretain_norelease(scrut_obj, &arm.payload.ty)` に束縛する。これは union の payload
@@ -2776,7 +2776,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   この 4 つの場合 -- `bindings.get(x)` が `None`、`Producer`、boxed 容器の `Field`、boxed scrutinee の
   `Payload` -- はどれも L13 の言明が挙げるものなので、L13 より `owns(x, π)` は真である。これは
   「全部偽」に反する。
-  BY L13, CODE src/rc_ir/ownership.rs: origin_inner
+  BY <ref id=c7416c2/>, CODE src/rc_ir/ownership.rs: origin_inner
 
 <1>2. CASE `Some(Binding::Param)`
   この腕は `path` を読まずに `here()` を返すので `cand(x, π) = {(x, π)}` かつ
@@ -2786,7 +2786,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   DEF unit を覆う対 より `trunc(ty(x), λ) = trunc(ty(x), π)` なので `owns(x, λ) = owns(x, π)` であり、
   仮定よりこれは偽である。`Inh_x(π) ⊆ Λ_{ty(x)}(π)` なので、`Inh_x(π)` の各 `λ` について
   `cand(x, λ) = {(x, λ)}` は `owns` が偽である元を持つ。
-  BY L1e, P7e, DEF unit を覆う対, CODE src/rc_ir/ownership.rs: origin_inner
+  BY <ref id=14909ed/>, <ref id=63981a3/>, DEF unit を覆う対, CODE src/rc_ir/ownership.rs: origin_inner
 
 <1>3. CASE `Some(Binding::Move(w))` または `Some(Binding::Payload(s, None))`
   <2>1. 任意の `ρ` について `origin(x, ρ) = origin(w, ρ)` (resp. `origin(s, ρ)`) である。
@@ -2794,12 +2794,12 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   <2>2. `x` の値は `w` の値 (resp. `s` の値) と同じ値であり、`w` (resp. `s`) はこの位置までに値を得て
         いる。
     L21a の (m1) (resp. (m2)) である。
-    BY L21a
+    BY <ref id=42f1c2e/>
   <2>3. QED
     `<2>2` より `Inh_x(π) = Inh_w(π)` である (D16 は値だけを見る)。L18 より `(w, π)` は unit を覆い
     `Λ` は変わらない。`<2>1` より `(w, π)` は全部偽なので、帰納法の仮定より `Inh_w(π)` の各 `λ` に
     ついて `cand(w, λ) = cand(x, λ)` に `owns` が偽の元がある。
-    BY <2>1, <2>2, D16, L18
+    BY <2>1, <2>2, <ref id=66c9670/>, <ref id=af00c3a/>
 
 <1>4. CASE `Some(Binding::Join(arm_results))`
   <2>1. `cand(x, ρ) = ⋃_{a ∈ arm_results} act(a, ρ)` である。
@@ -2809,7 +2809,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
         名指す変数を `a*` とすると、`a* ∈ arm_results` であり、`a*` はこの位置までに値を得ていて、
         `x` の値は `a*` の値と同じ値である。
     L21a の (m3) である。
-    BY L21a
+    BY <ref id=42f1c2e/>
   <2>3. `(a*, π)` は全部偽である。
     `<2>1` より `cand(a*, π) ⊆ act(a*, π) ⊆ cand(x, π)` である。
     BY <2>1
@@ -2817,25 +2817,25 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     `<2>2` より `Inh_x(π) = Inh_{a*}(π)` である。L18 より `(a*, π)` は unit を覆い `Λ` は変わらない。
     `<2>3` と帰納法の仮定より、`Inh_{a*}(π)` の各 `λ` について `cand(a*, λ)` に `owns` が偽の元があり、
     `<2>1` より `cand(a*, λ) ⊆ cand(x, λ)` である。
-    BY <2>1, <2>2, <2>3, D16, L18
+    BY <2>1, <2>2, <2>3, <ref id=66c9670/>, <ref id=af00c3a/>
 
 <1>5. CASE `Some(Binding::Field(c, idx))` で `c` が unbox
   <2>1. 任意の `ρ` について `origin(x, ρ) = origin(c, [idx] ++ ρ)` である。
     BY CODE src/rc_ir/ownership.rs: origin_inner
   <2>2. `c` はこの位置までに値を得ており、`x` の値は `c` の値の第 `idx` フィールドである。
     L21a の (m4) である。
-    BY L21a
+    BY <ref id=42f1c2e/>
   <2>3. `λ ∈ Inh_x(π)` と `[idx] ++ λ ∈ Inh_c([idx] ++ π)` は同値である。
     A12 より `ty(c)` は構造体なので `is_union(ty(c))` は偽であり、`[idx] ++ λ` が `ty(c)` の根で通る節は
     unbox union ではない。よって `[idx] ++ λ` が通る unbox union の節と、それぞれで選ぶ変位番号は、`λ` が
     `ty(x)` で通るものと同じである。`<2>2` より `x` の値は `c` の値のその位置の部分値なので、各節の
     タグも同じである。D16 はこの一致だけを見る。
-    BY <2>2, A12, D16, CODE src/ast/types.rs: TypeNode::is_union
+    BY <2>2, <ref id=83d98e9/>, <ref id=66c9670/>, CODE src/ast/types.rs: TypeNode::is_union
   <2>4. QED
     L18 より `(c, [idx] ++ π)` は unit を覆い、その `Λ` は `{ [idx] ++ λ : λ ∈ Λ_{ty(x)}(π) }` である。
     `<2>1` より `(c, [idx] ++ π)` は全部偽なので、帰納法の仮定と `<2>3` より、`Inh_x(π)` の各 `λ` に
     ついて `cand(c, [idx] ++ λ) = cand(x, λ)` に `owns` が偽の元がある。
-    BY <2>1, <2>3, L18
+    BY <2>1, <2>3, <ref id=af00c3a/>
 
 <1>6. CASE `Some(Binding::Payload(s, Some(t)))` で `s` が unbox
   <2>1. 任意の `ρ` について `origin(x, ρ) = origin(s, [t] ++ ρ)` である。
@@ -2844,18 +2844,18 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
         `s` の値の第 `t` 変位の payload である。
     L21a の (m5) である。この腕の条件より `ty(s)` は boxed でなく、A12 より union なので、(m5) の前提が
     成り立つ。
-    BY A12, L21a
+    BY <ref id=83d98e9/>, <ref id=42f1c2e/>
   <2>3. `λ ∈ Inh_x(π)` と `[t] ++ λ ∈ Inh_s([t] ++ π)` は同値である。
     A12 より `ty(s)` は union であり、この腕の条件より unbox である。よって `[t] ++ λ` が `ty(s)` の根で
     通る節は unbox union であり、そこで選ぶ変位番号は `t` である。`<2>2` よりその位置の `s` のタグは
     `t` なので、この節の条件は成り立つ。残りの節は `λ` が `ty(x)` で通るものと同じであり、`<2>2` より
     `x` の値は `s` の値の第 `t` 変位の payload なのでタグも同じである。D16 はこれらの節だけを見る。
-    BY <2>2, A12, D16
+    BY <2>2, <ref id=83d98e9/>, <ref id=66c9670/>
   <2>4. QED
     L18 より `(s, [t] ++ π)` は unit を覆い、その `Λ` は `{ [t] ++ λ : λ ∈ Λ_{ty(x)}(π) }` である。
     `<2>1` より `(s, [t] ++ π)` は全部偽なので、帰納法の仮定と `<2>3` より、`Inh_x(π)` の各 `λ` に
     ついて `cand(s, [t] ++ λ) = cand(x, λ)` に `owns` が偽の元がある。
-    BY <2>1, <2>3, L18
+    BY <2>1, <2>3, <ref id=af00c3a/>
 
 <1>7. CASE `Some(Binding::Llvm(gen, args, rty))` で `decl.leaf_origins_at(π).and_then(as_arg_projection)`
       が `Some((j, σ))`
@@ -2867,7 +2867,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `Binding::Llvm` を持つ束縛変数なので、P2 (固定した版が借用版のときは P9 と合わせて読む) より
   `origin(x, π)` は panic せずに答えを返し、L12 の最後の節より `cand(x, π)` は空でない。
   よって `cand(x, λ)` に `owns` が偽である元がある。
-  BY L12, L18a, P2, P9, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+  BY <ref id=44a9669/>, <ref id=6c73144/>, <ref id=0edb0ba/>, <ref id=63eadd9/>, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
      Provenance::build_shape,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, LeafMap::get, LeafMap::build_shape
 
@@ -2876,15 +2876,15 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   <2>1. `reached` は空でない。
     L20 (c) より、空ならば `origin(x, π) = Exactly((x, π))` であり、`x` の binding は `Binding::Llvm` な
     ので L13 より `owns(x, π)` は真である。これは「全部偽」に反する。
-    BY L13, L20
+    BY <ref id=c7416c2/>, <ref id=cd28c3f/>
   <2>2. `produced_here` は偽である。
     L20 (e) より、真ならば `(x, π) ∈ cand(x, π)` であり、L13 より `owns(x, π)` は真である。これは
     「全部偽」に反する。
-    BY L13, L20
+    BY <ref id=c7416c2/>, <ref id=cd28c3f/>
   <2>3. `operand_units` の各 `(j, w)` について `(args[j], w)` は全部偽である。
     L20 (b) より `origin(args[j], w) ∈ reached` であり、`<2>1` より `reached` は空でないので L20 (d) より
     `cand(args[j], w) ⊆ cand(x, π)` である。
-    BY <2>1, L20
+    BY <2>1, <ref id=cd28c3f/>
   <2>4. `Inh_x(π)` の各 `λ` について `S_λ = {Arg(j, σ)}` の形である。
     L18a より `rty = ty(x)` なので `Inh_x(π) ⊆ Λ_{ty(x)}(π) = Λ_{rty}(π)` であり、その各 `λ` は
     `leaves(rty)` の元である。
@@ -2892,14 +2892,14 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     A3 の表の第 1 行が、空集合と宣言された leaf は inhabited にならないと述べるからである。
     `S_λ = {Fresh}` と `S_λ = {Unknown}` も起きない -- L20 (a) よりそのとき `produced_here` が真になり、
     `<2>2` に反するからである。
-    BY A3, L18a, L19, L20, <2>2
+    BY <ref id=e11772a/>, <ref id=6c73144/>, <ref id=18e0a91/>, <ref id=cd28c3f/>, <2>2
   <2>4a. `args[j]` は `vars.bindings` に束縛を持つ (記号の位置でない)。
     `vars.bindings.get(args[j])` が `None` であるとすると、`origin_inner` の `None` の腕は `here()` を
     返すので `cand(args[j], w) = {(args[j], w)}` であり、L13 より `owns(args[j], w)` は真である。しかし
     `<2>3` より `(args[j], w)` は全部偽、すなわち `cand(args[j], w)` のすべての元について `owns` が偽で
     あり、その唯一の元 `(args[j], w)` について `owns` が真かつ偽になって矛盾する。よって
     `vars.bindings.get(args[j])` は `None` でない。
-    BY <2>3, L13, CODE src/rc_ir/ownership.rs: origin_inner
+    BY <2>3, <ref id=c7416c2/>, CODE src/rc_ir/ownership.rs: origin_inner
   <2>5. QED
     `λ ∈ Inh_x(π)` を取り、`S_λ = {Arg(j, σ)}` とする (`<2>4`)。L19 より
     `origin(x, λ) = origin(args[j], σ)` かつ `σ ∈ leaves(ty(args[j]))` である。L20 (a) より
@@ -2917,7 +2917,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     どちらの値もその瞬間と固定した位置とで同じであり、同じ leaf が inhabited である。よって
     `σ ∈ Inh_{args[j]}(w)` である。L18 より `(args[j], w)` は unit を覆い、`<2>3` より全部偽なので、
     帰納法の仮定より `cand(args[j], σ) = cand(x, λ)` に `owns` が偽の元がある。
-    BY <2>3, <2>4, <2>4a, A3, D6, D16, L18, L18a, L19, L20, L20a, L20b,
+    BY <2>3, <2>4, <2>4a, <ref id=e11772a/>, <ref id=596a46d/>, <ref id=66c9670/>, <ref id=af00c3a/>, <ref id=6c73144/>, <ref id=18e0a91/>, <ref id=cd28c3f/>, <ref id=57d5753/>, <ref id=2c53bd2/>,
        CODE src/rc_ir/ownership.rs: truncate_to_unit, collect_bindings
 
 <1>9. QED
@@ -2930,7 +2930,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `<1>1` から `<1>8` はこの分け方を尽くす。帰納法の仮定を使ったのは `<1>3` (`(w, π)`・`(s, π)`)、
   `<1>4` (`(a*, π)`)、`<1>5` (`(c, [idx] ++ π)`)、`<1>6` (`(s, [t] ++ π)`)、`<1>8` (`(args[j], w)`)
   であり、どれも DEF 再帰で訪れる対 の表が `(x, π)` から進む相手なので、L11a よりこの帰納は整礎である。
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, A3, L11a, DEF 再帰で訪れる対,
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, <ref id=e11772a/>, <ref id=7bdd3d4/>, DEF 再帰で訪れる対,
      CODE src/rc_ir/ownership.rs: Binding, origin_inner, as_arg_projection
 
 ### P7a の 2 つの向き
@@ -2949,7 +2949,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   変数の型は入力の本体のものと同じであり、A2 より入力のその `path` は `units(ty(v))` の元なので、`V` の
   本体でもそうである。
   L18 (a) より `(v, u)` は unit を覆う。
-  BY A2, P9, L18, DEF site, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
+  BY <ref id=8e3aff3/>, <ref id=63eadd9/>, <ref id=af00c3a/>, DEF site, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
 
 <1>1a. 固定した位置で `v` は値を得ている。
   読み方より、固定した位置は `v` が値を得ている位置として取ったものである。**site の節点を訪れる位置は
@@ -2957,14 +2957,14 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `v` を引数に持つ `Let(_, App(_, args), _)` であり、L20a が使用する変数として挙げる列にこの 2 つ --
   「`Retain` / `Release` / `Eval` / `Ret` が名指す変数」と「`App` の callee と各引数」-- はどちらも
   入っているので、活性化がその節点を訪れるならば `v` はそこまでに値を得ている。
-  BY D6, L20a, DEF site
+  BY <ref id=596a46d/>, <ref id=57d5753/>, DEF site
 
 <1>2. 節 1 から節 3 へ渡る。
   節 1 は「`cand(v, u)` のすべての元 `(r, p)` について `owns(r, p)` が真」である (第 1 節の
   `owns_unit`)。`<1>1` と L21 より `Λ(u)` の**すべての** leaf `λ` について `cand(v, λ)` のすべての元に
   ついて `owns` が真である。
   `Inh(v, u) ⊆ Λ(u)` なので、とくに inhabited な leaf についてそうである。これが節 3 である。
-  BY <1>1, L18, L21, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
+  BY <1>1, <ref id=af00c3a/>, <ref id=66922eb/>, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
 
 <1>3. 節 1 が偽ならば、`cand(v, u)` のすべての元について `owns` は偽である。
   `cand(v, u)` は空でない。`v` は `V` が書き換える本体に現れる `RcVar` の名前なので、その名前は
@@ -2976,7 +2976,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   初期化子の版ならば第 5 節の読み方より P7d は任意の `(v, u)` について答える。いまは `infer_ownership` の
   不動点なので、いずれも P7d よりその候補はすべて真かすべて偽である。節 1 が偽とは「すべて真」が
   成り立たないことなので、「すべて偽」である。
-  BY P2, P7d, P9, D6, L12, DEF site, CODE src/rc_ir/ownership.rs: VarTable::of, collect_bindings,
+  BY <ref id=0edb0ba/>, <ref id=f7a1148/>, <ref id=63eadd9/>, <ref id=596a46d/>, <ref id=44a9669/>, DEF site, CODE src/rc_ir/ownership.rs: VarTable::of, collect_bindings,
      CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
 
 <1>4. 節 1 が偽ならば節 2 も偽である。
@@ -2985,7 +2985,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `owns` が偽の元がある。節 2 は、`Inh(v, u)` のある `λ` の**すべての**候補について `owns` が真である
   ことなので (第 6 節の読み方が `Λ(u)` の inhabited な leaf の集合を `Inh(v, u)` と書く)、これは節 2 の
   否定である。
-  BY <1>1, <1>1a, <1>3, L18, L22
+  BY <1>1, <1>1a, <1>3, <ref id=af00c3a/>, <ref id=4e2b22e/>
 
 <1>5. 節 2 から節 1 へ渡る。
   `<1>4` の対偶である。
@@ -3049,12 +3049,12 @@ D21 の制限は各時点と各段内の点で当たるので、その点の `he
   `d(C) = held_ρ(n, C) - 0 ≥ 1` である。(H-b) より `S` の残りの元はどれも `d(C') ≥ 0` を満たし、
   A19 (i) の角括弧の項は 0 か 1 である。よって A19 (i) の右辺は `d(C)` 以上、すなわち 1 以上であり、
   `H(O) ≥ 1` である。
-  BY A19, D14, D21, D24, D26, D33, D34
+  BY <ref id=9f1cf6c/>, <ref id=ef8efc4/>, <ref id=c232680/>, <ref id=e3436e8/>, <ref id=88a06de/>, <ref id=30d6238/>, <ref id=9d5d254/>
 
 <1>2. QED
   `<1>1` より `n` において `H(O) ≥ 1` であり、`O` は計数下 (D26) である。(H-c) より活性化は `n` まで
   解放について閉じているので、D11a の定めるところにより `n` において `O` は解放されていない。
-  BY <1>1, D11a, D26
+  BY <1>1, <ref id=859cf84/>, <ref id=88a06de/>
 
 ### R1 (節 2 と節 3 の inhabited の限定が要ること)
 
@@ -3077,7 +3077,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `q : I64` へ降りる。`Array I64` は `is_array` で自分の path を積み、`I64` は `is_fully_unboxed` で
   何も積まない。`unit_step` は `is_union` で `UnitStep::Unit` を返すので、L3 より `units(Outer) = [[]]`
   である。
-  BY L3, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step
+  BY <ref id=f221813/>, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step
 
 <1>2. 次の関数だけを `funcs` に持ち、`globals` が空である入力プログラムを取る。`z : Array I64` は
       `f` の唯一のパラメータであり、`w : I64` は定数を束縛する。`f.borrowed_units` は空とする。
@@ -3125,7 +3125,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `held_ρ(・, C) = 1` である。
   L23 の (H-c): (S-c) は各時点について、「その活性化がその時点まで解放について閉じている」
   (D11a) ことを条件に主張する節なので、その位置の (S-c) を示しているこの議論は接頭条件を与件に持つ。
-  BY D6, D7, D8, D9, D10, D11, D11a, D12, D14, D16, D20, D26, D33, D34, A3, A8, L23, <1>1,
+  BY <ref id=596a46d/>, <ref id=56c2068/>, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=95427eb/>, <ref id=859cf84/>, <ref id=3d96eb8/>, <ref id=ef8efc4/>, <ref id=66c9670/>, <ref id=9c7c27a/>, <ref id=88a06de/>, <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=e11772a/>, <ref id=b6673ca/>, <ref id=5d2d9a7/>, <1>1,
      CODE src/rc_ir/ownership.rs: VarTable::of,
      CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov, InlineLLVMIntLit
 
@@ -3149,7 +3149,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `units(Array I64) = [[]]`、L2 より `under(Array I64, []) = [[]]` である。鍵は
   `trunc(Array I64, []) = []` (空の path なのでループに入らない) であり、`leaves(Array I64) = {[]}` なので
   要求されるのは `(z, []) ∈ S` である。
-  BY L2, L3, CODE src/rc_ir/borrow.rs: owns_object_yet,
+  BY <ref id=9f11796/>, <ref id=f221813/>, CODE src/rc_ir/borrow.rs: owns_object_yet,
      CODE src/rc_ir/ownership.rs: unit_step, subtree_type, units_under, truncate_to_unit,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
@@ -3237,8 +3237,8 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   A24: この本体に `InlineLLVMFixBody` の `Llvm` 節点は無い。
   A26a: この本体に `FFI_CALL` の `Llvm` 節点は無く (現れる op は `union_make_1` と `int_lit_0` だけである)、
   `globals` も空である (`<1>2`)。よってこの条件は空に成り立つ。
-  BY <1>1, <1>2, <1>2a, A2, A3, A17, A18, A19, A23, A26a, D1, D4, D10, D14, D20, D21, D24, D25, D26,
-     D33, D34, L6, P9,
+  BY <1>1, <1>2, <1>2a, <ref id=8e3aff3/>, <ref id=e11772a/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=9f1cf6c/>, <ref id=3647480/>, <ref id=29a890a/>, <ref id=a502f3e/>, <ref id=0594f24/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=9c7c27a/>, <ref id=c232680/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>,
+     <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=e74af85/>, <ref id=63eadd9/>,
      CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
      CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
      CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::generate, InlineLLVMIntLit::generate,
@@ -3287,7 +3287,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   どの辺が入っても、`observing` が空である限り不動点は空である。よって `borrow_versions` は `f` を持つ。
   `borrow_ify` が借用版の `owned_units` に入れるのは `owned_leaves` が所有する leaf の像だけなので、
   `(ρ(z), [])` は `owned_units` に無い。L16 と `<1>2b` より `owns_object(ρ(z), [])` は偽である。
-  BY <1>2, <1>2b, <1>3, L16, CODE src/rc_ir/borrow.rs: func_has_borrowable_param,
+  BY <1>2, <1>2b, <1>3, <ref id=90c9817/>, CODE src/rc_ir/borrow.rs: func_has_borrowable_param,
      funcs_observing_uniqueness, borrow_ify,
      CODE src/ast/inline_llvm.rs: LLVMGen::observes_uniqueness,
      CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody, InlineLLVMIntLit
@@ -3296,7 +3296,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `<1>2a` より `origin(vars_f, x, []) = Exactly((z, []))` であり、L15 より借用版の
   `origin(vars_c, ρ(x), [])` はその `ρ` による像 `Exactly((ρ(z), []))` である。すなわち借用版の site
   `(ρ(x), [])` の候補は `{(ρ(z), [])}` である。`owns_unit` はその全称なので、`<1>4` より偽である。
-  BY <1>2a, <1>4, L15, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
+  BY <1>2a, <1>4, <ref id=c3b2aa3/>, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit
 
 <1>6. `Λ([])` の leaf `[0, 0]` のすべての候補について `owns_object` は真である。すなわち、節 2 から
       inhabited の限定を外した形はこの site で真である。
@@ -3314,7 +3314,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `param_tys.get(root)` が `None` のとき真を返すので `yet_f(x, [0, 0])` は真である。L16 より
   `ctx.owns_object(ρ(x), [0, 0])` も真である。よって `λ = [0, 0]` のすべての候補について `owns_object` は
   真である。
-  BY <1>1, <1>5, L1c, L15, L16, DEF 現れる名前,
+  BY <1>1, <1>5, <ref id=fa1a6ce/>, <ref id=c3b2aa3/>, <ref id=90c9817/>, DEF 現れる名前,
      CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov,
      CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under, as_arg_projection,
      CODE src/rc_ir/borrow.rs: owns_object_yet, CODE src/rc_ir/rename.rs: rename_var
@@ -3323,7 +3323,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `union_make_1` は `x` の値の変位を 1 にする。leaf `[0, 0]` が `Outer` の根の unbox union の節で選ぶ
   変位番号は 0 なので、D16 の条件はどの時点でも成り立たない。A3 の表の第 1 行も、空集合と宣言された
   leaf が inhabited にならないと述べる。
-  BY A3, D16, CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov
+  BY <ref id=e11772a/>, <ref id=66c9670/>, CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov
 
 <1>8. QED
   `<1>2` と `<1>2c` より、この入力プログラムは第 4 節の仮定のうち入力プログラムを縛るものをすべて
@@ -3343,7 +3343,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `is_closure`、`is_box` (unbox なので偽)、`is_array` のどれでもないので `unpunched_field_types` の下へ
   降り、`I64` からは何も、`Array I64` からは `[1]` を積む。`unit_step` は `is_union` で `UnitStep::Unit`
   を返すので L3 より `units(Mix) = [[]]` である。
-  BY L3, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step
+  BY <ref id=f221813/>, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: unit_step
 
 <1>2. 次の関数だけを `funcs` に持ち、`globals` が空である入力プログラムを取る。`x : Mix` は `f` の唯一の
       パラメータ、`w : I64` は定数を束縛する。`f.borrowed_units` は空とする。
@@ -3389,7 +3389,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   L23 の (H-c): (S-c) は各時点について、
   「その活性化がその時点まで解放について閉じている」(D11a) ことを条件に主張する節なので、その位置の
   (S-c) を示しているこの議論は接頭条件を与件に持つ。
-  BY D6, D7, D8, D9, D10, D11, D11a, D12, D14, D16, D20, D26, D33, D34, A8, L23, <1>1,
+  BY <ref id=596a46d/>, <ref id=56c2068/>, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=95427eb/>, <ref id=859cf84/>, <ref id=3d96eb8/>, <ref id=ef8efc4/>, <ref id=66c9670/>, <ref id=9c7c27a/>, <ref id=88a06de/>, <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=b6673ca/>, <ref id=5d2d9a7/>, <1>1,
      CODE src/rc_ir/ownership.rs: VarTable::of,
      CODE src/fixstd/builtin.rs: InlineLLVMIntLit
 
@@ -3474,8 +3474,8 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   A24: この本体に `InlineLLVMFixBody` の `Llvm` 節点は無い。
   A26a: この本体に `FFI_CALL` の `Llvm` 節点は無く (現れる op は `int_lit_0` だけである)、`globals` も
   空である (`<1>2`)。よってこの条件は空に成り立つ。
-  BY <1>1, <1>2, A2, A3, A17, A18, A19, A23, A26a, D1, D4, D10, D14, D16, D20, D21, D24, D25, D26,
-     D33, D34, L6, P9,
+  BY <1>1, <1>2, <ref id=8e3aff3/>, <ref id=e11772a/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=9f1cf6c/>, <ref id=3647480/>, <ref id=29a890a/>, <ref id=a502f3e/>, <ref id=0594f24/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=66c9670/>, <ref id=9c7c27a/>, <ref id=c232680/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>,
+     <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=e74af85/>, <ref id=63eadd9/>,
      CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
      CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
      CODE src/fixstd/builtin.rs: InlineLLVMIntLit::generate, InlineLLVMBoxedToRetainedPtrIOS,
@@ -3500,7 +3500,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `observing` は空のまま返り、`funcs_observing_uniqueness` は `f` を含まない (この議論は `callees` に
   どの辺が入るかに依らない)。よって借用版があり、その `owned_units` に `(ρ(x), [])` は入らないので、
   L16 と上の計算より `owns_object(ρ(x), [])` は偽である。
-  BY L2, L3, L16, <1>1, <1>2, CODE src/rc_ir/borrow.rs: infer_ownership, level_ownership,
+  BY <ref id=9f11796/>, <ref id=f221813/>, <ref id=90c9817/>, <1>1, <1>2, CODE src/rc_ir/borrow.rs: infer_ownership, level_ownership,
      owns_object_yet, func_has_borrowable_param, funcs_observing_uniqueness, borrow_ify,
      CODE src/rc_ir/ownership.rs: collect_consumes_go, origin_inner,
      CODE src/ast/inline_llvm.rs: LLVMGen::observes_uniqueness,
@@ -3518,7 +3518,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   成り立たない。よって `Inh(ρ(x), []) = ∅` である。節 3 の全称は空なので真、節 2 の存在は空なので偽で
   ある。節 1 は `owns_unit(ρ(x), [])` であり、`<1>3` と L15 より
   `cand(ρ(x), []) = {(ρ(x), [])}` の唯一の候補について `owns_object` が偽なので偽である。
-  BY <1>1, <1>3, D6, D16, L15, P9, DEF site,
+  BY <1>1, <1>3, <ref id=596a46d/>, <ref id=66c9670/>, <ref id=c3b2aa3/>, <ref id=63eadd9/>, DEF site,
      CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
      CODE src/rc_ir/rename.rs: rename_var
 

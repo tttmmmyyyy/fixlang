@@ -306,15 +306,42 @@ def resolution(directory):
     return frame, per_file
 
 
-def convert(directory, path):
-    """`BY` の行の名前を `<ref id=.../>` にする。解決しない名前は残し、数えて返す。
+# **引用と再掲の中は書き替えない。** 枠の文をそのまま写した箇所を書き替えると、写しが枠と
+# 一致しなくなり、引用の照合が全部食い違いに出る。**行ごとに見てはならない** -- 実測で、
+# 1 行の中で閉じる引用だけを守った版が、行を跨ぐ引用 17 件を壊した。
+PROTECTED = re.compile(r"「.*?」|`[^`\n]*`|^>[^\n]*", re.S | re.M)
+BY_LINE = re.compile(r"^(\s*)BY\s", re.M)
+STEP_LINE = re.compile(r"^\s*(?:\*\*)?`?<\d+>")
 
-    **変換するのは `BY` の行だけである。** そこは読点で区切られた引用の列であり、名前が名前以外の
-    ものである余地が無い。散文の中の名前を綴りで探すと、参照でないものを参照にする -- 実測で、
-    Rust の型変数 `&T` が主定理 `T` の id に潰れた。"""
+
+def by_spans(text):
+    """`BY` の行と、それに続く深く字下げされた行の、文字位置の範囲。"""
+    lines = text.split("\n")
+    offset, spans, inside, indent, start = 0, [], False, 0, 0
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("BY "):
+            if inside:
+                spans.append((start, offset))
+            inside, indent, start = True, len(line) - len(line.lstrip()), offset
+        elif inside and (not stripped or STEP_LINE.match(line)
+                         or len(line) - len(line.lstrip()) <= indent):
+            spans.append((start, offset))
+            inside = False
+        offset += len(line) + 1
+    if inside:
+        spans.append((start, offset))
+    return spans
+
+
+def convert(directory, path):
+    """`BY` が挙げる命題・定義・仮定を `<ref id=.../>` にする。
+
+    **書き替えるのは `BY` の行だけで、その中の引用は除く。** `BY` の外の散文で名前を綴りから探すと、
+    参照でないものを参照にする -- 実測で、Rust の型変数 `&T` が主定理 `T` の id に潰れた。"""
     frame, per_file = resolution(directory)
     here = per_file.get(os.path.basename(path).split("-")[0], {})
-    lines = open(path, encoding="utf-8").read().split("\n")
+    text = open(path, encoding="utf-8").read()
     done, left = 0, []
 
     def one(match):
@@ -333,19 +360,34 @@ def convert(directory, path):
         名前だけを見て変換すると、引く側に同じ名前の命題が在るときそちらへ潰れる。実測で、
         往復の検査が辺 14 本の食い違いとして出した。"""
         nonlocal done
-        owner = per_file.get(match.group(1), {})
-        identity = owner.get(match.group(2))
+        identity = per_file.get(match.group(1), {}).get(match.group(2))
         if not identity:
             left.append(match.group(0))
             return match.group(0)
         done += 1
         return f"<ref id={identity}/>"
 
-    for index, line in enumerate(lines):
-        if line.strip().startswith("BY "):
-            line = CROSS_FILE.sub(cross, line)
-            lines[index] = CITATION.sub(one, line)
-    return "\n".join(lines), done, left
+    guarded = [m.span() for m in PROTECTED.finditer(text)]
+    out, cursor = [], 0
+    for start, stop in by_spans(text):
+        out.append(text[cursor:start])
+        piece, at = text[start:stop], start
+        # 引用に当たる部分はそのまま、それ以外だけを書き替える。
+        inner, seen = [], start
+        for a, b in guarded:
+            if b <= start or a >= stop:
+                continue
+            inner.append((max(a, start), min(b, stop)))
+        rebuilt = []
+        for a, b in inner:
+            rebuilt.append(CITATION.sub(one, CROSS_FILE.sub(cross, text[seen:a])))
+            rebuilt.append(text[a:b])
+            seen = b
+        rebuilt.append(CITATION.sub(one, CROSS_FILE.sub(cross, text[seen:stop])))
+        out.append("".join(rebuilt))
+        cursor = stop
+    out.append(text[cursor:])
+    return "".join(out), done, left
 
 
 def render(directory, text):
