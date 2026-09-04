@@ -1596,7 +1596,7 @@ TypeNode`, `TypeNode::is_ground`, `TypeNode::type_hash`, `TypeNode::depth`)。
 `InlineLLVMArrayAppendCapacityUnchecked` の共有の腕は `dst_len` 以降のスロットへ全部書いてから
 最後に `size` を伸ばすので、`size` で切ると、書いたスロットの参照が段の途中の点でどの持ち手にも
 属さなくなる (`CODE src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked`)。
-**生成だけを挙げると、同じ op の一意の腕が落ちる** -- その腕は要素を写して移すので、
+**生成だけを挙げると、同じ op の一意の腕が落ちる** -- その腕は要素を写して移すので、 <!--#5526cc7-->
 スロットへ参照を入れるのは受け渡しである。
 
 **処分する個数はこれとは別に数える。** `Array` 値のトラバーサは、`#ArrayStorage` のカウントが 0 に <!--#2ef7d37-->
