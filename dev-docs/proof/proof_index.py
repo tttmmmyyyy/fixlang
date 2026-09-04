@@ -709,7 +709,11 @@ def main(arguments):
         roots = [a for a in arguments if not a.startswith("--")]
         directory = roots[0] if len(roots) > 1 else default_directory()
         return show(directory, arguments[at + 1])
-    roots = [a for a in arguments if not a.startswith("--")] or [default_directory()]
+    # 値を取る旗の直後の引数は、見に行くディレクトリではない。
+    takes_value = {"--file", "--item", "--show", "--bundle", "--render", "--convert"}
+    roots = [a for i, a in enumerate(arguments)
+             if not a.startswith("--") and (i == 0 or arguments[i - 1] not in takes_value)]
+    roots = roots or [default_directory()]
     for directory in roots:
         if "--mark-claims" in arguments:
             print(f"{directory}: 主張の行に印を {mark_claims(directory)} 個振った")
@@ -725,8 +729,13 @@ def main(arguments):
             continue
         if not os.path.exists(ledger_path(directory)) or "--write" in arguments:
             write_ledger(directory, items, edges, was)
+        # **1 つのファイルを直す者には、そのファイルの分だけを渡す。** 全体の一覧を渡すと、
+        # 自分の担当でない行を読むことになる。
+        only = arguments[arguments.index("--file") + 1] if "--file" in arguments else None
         for citing, cited in moved:
             here, there = items[citing], items[cited]
+            if only and os.path.basename(here["file"]) != os.path.basename(only):
+                continue
             print(f"{here['file']}:{here['line']}: {here['name']} が引く "
                   f"{there['name']} ({os.path.basename(there['file'])}) が動いた -- 読み直すこと")
         if "--frontier" in arguments:
