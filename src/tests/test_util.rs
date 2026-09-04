@@ -21,6 +21,7 @@ use std::{
 use tempfile::TempDir;
 
 /// Guards the one `cargo build` of the `fix` binary a test process runs.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 static BUILD_FIX: Once = Once::new();
 
 /// Build the `fix` binary in release mode. Incremental compilation makes this a

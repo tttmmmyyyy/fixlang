@@ -20,6 +20,10 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import proof_index
+import sys
+
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # `CODE src/rc_ir/ownership.rs: origin, origin_inner`. One citation names a file and then a
@@ -141,19 +145,28 @@ def citations_of(directory):
     same weight: an item a definition rests on has moved out from under the whole proof when it
     changes. They are collected under `FRAME`."""
     readme = open(os.path.join(directory, "README.md"), encoding="utf-8").read()
+    # Which propositions a file proves is read off the file itself -- its title names the ones
+    # whose statement lives elsewhere, and its headings name the ones it states. A hand-kept table
+    # saying the same thing goes stale, and the one that stood here carried ranges (`P8 - P14`),
+    # which drop every lettered proposition inserted between their endpoints.
     by_file = {}
-    for row in STATUS_ROW.finditer(readme):
-        # A file may hold several rows -- one per group of propositions whose state differs -- and
-        # every one of them names propositions the file proves.
-        by_file.setdefault(row.group(2), []).extend(propositions_of(row.group(1)))
+    for path in proof_index.documents(directory):
+        name = os.path.basename(path)
+        if name == "README.md":
+            continue
+        found, _ = proof_index.items_in(path)
+        # The file's title names the propositions it proves; its headings name the ones local to it.
+        # Only the first are meaningful to someone reading the code, since a local name means
+        # nothing outside its own file.
+        by_file[name] = [item["name"] for item in found if item["name"] and item["line"] == 1]
     cited = {}
     for path in sorted(glob.glob(os.path.join(directory, "*.md"))):
         name = os.path.basename(path)
         if name == "README.md":
             continue
         props = by_file.get(name)
-        if props is None and name.startswith("p"):
-            print(f"{os.path.relpath(path, REPO)}: no row in the README's status table")
+        if not props and name.startswith("p"):
+            print(f"{os.path.relpath(path, REPO)}: names no proposition it proves")
             continue
         # A document that proves no proposition discharges an assumption instead, so its citations
         # carry the frame's weight: the enumeration behind an assumption has moved out from under

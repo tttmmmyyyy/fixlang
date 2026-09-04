@@ -1177,7 +1177,7 @@ impl ExprNode {
 
     /// The names this expression uses without binding them itself, global names included, walked
     /// afresh each time. `free_vars` reads the same set from this node's cache.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn calc_free_vars(&self) -> Set<FullName> {
         match &*self.expr {
             Expr::Var(var) => vec![var.name.clone()].into_iter().collect(),

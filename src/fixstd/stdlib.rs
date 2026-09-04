@@ -112,7 +112,7 @@ fn register_deprecated_cast(
 
 /// Builds the `Std` module: the source `std.fix` parsed, plus the type aliases, trait instances and
 /// global values whose definitions the compiler supplies.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P7a, P7d, P7e, P26, A21 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std", config)?;
 

@@ -9,6 +9,7 @@ use std::hash::{Hash, Hasher};
 pub type Name = String;
 
 /// The path of names an entity is written under: the `Std::Iterator` of `Std::Iterator::empty`.
+// PROOF: P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NameSpace {
     /// The names of the path, the outermost first.
@@ -76,6 +77,7 @@ impl NameSpace {
     }
 
     /// Whether the path holds no name, as the path of a name written with no qualification does.
+    // PROOF: P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         self.names.len() == 0
     }
@@ -99,6 +101,7 @@ impl NameSpace {
     ///
     /// # Examples
     /// `NameSpace::from_strs(&["Std", "Iterator"]).to_string()` is `"Std::Iterator"`.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn to_string(&self) -> String {
         self.names.join(NAMESPACE_SEPARATOR)
     }
@@ -232,6 +235,7 @@ impl NameSpace {
 
 /// An entity's name together with the path it is written under: `Std::Iterator::empty` is the name
 /// `empty` under the namespace `Std::Iterator`.
+// PROOF: P2a, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FullName {
     /// The path the entity is written under.
@@ -291,11 +295,13 @@ impl FullName {
     }
 
     /// The name `name` written with no namespace.
+    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn local(name: &str) -> Self {
         Self::new(&NameSpace::local(), name)
     }
 
     /// Whether the name is written with no namespace, as a local variable's is.
+    // PROOF: P7c, P7f, P18a, P18b, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         return self.namespace.is_local();
     }
@@ -344,6 +350,7 @@ impl FullName {
     /// # Examples
     /// `FullName::from_strs(&["Std", "Iterator"], "empty").to_string()` is
     /// `"Std::Iterator::empty"`.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn to_string(&self) -> String {
         let ns = self.namespace.to_string();
         if ns.is_empty() {
@@ -360,6 +367,7 @@ impl FullName {
     }
 
     /// The whole name read as a path, with the entity's name as its last name.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn to_namespace(&self) -> NameSpace {
         let mut names = self.namespace.names.clone();
         names.push(self.name.clone());
@@ -370,6 +378,7 @@ impl FullName {
     }
 
     /// The module the name lies in, which is the first name of its namespace.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn module(&self) -> Name {
         self.namespace.module()
     }

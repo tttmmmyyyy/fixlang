@@ -45,7 +45,7 @@ use std::sync::Arc;
 const PASS_TAG: &str = "cc";
 
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn simplify(prog: &mut RcProgram, config: &Configuration) {
     let mut counter = 0;
     for func in prog.funcs.values_mut() {
@@ -193,6 +193,7 @@ fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
 /// case-of-known-constructor on a union: `let x = union_tag(payload); let m = match x { .. }; k`,
 /// where `x` is consumed only by the match, collapses to the `tag` arm — its payload bound to the
 /// construction's operand, its result flowing into `m` — dropping both the construction and the match.
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     let RcExpr::Let(x, rhs, k) = node.expr.as_ref() else {
         return None;
@@ -217,6 +218,7 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
 /// case-of-known-constructor on a struct: `let x = make_struct(a, b, ..); destructure x { .i -> fi };
 /// k`, where `x` is consumed only by the destructure, binds each field variable directly to the
 /// operand that built that field, dropping both the construction and the destructure.
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
     let RcExpr::Let(x, RcRhs::Llvm(gen, args), k) = node.expr.as_ref() else {
         return None;
@@ -259,6 +261,7 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
 /// at every level would double the term at every level. Where the inner arms build pairwise
 /// distinct constructors, each outer arm moves to one inner arm and the result always shrinks, by
 /// the constructions and the outer match that go away.
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     let RcExpr::Let(s, RcRhs::Match(inner_scrut, inner_arms), k) = node.expr.as_ref() else {
         return None;
@@ -509,6 +512,7 @@ fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {
 }
 
 /// A one-entry substitution map.
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn single_subst(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
     let mut subst: Map<FullName, FullName> = Map::default();
     subst.insert(from.clone(), to.clone());

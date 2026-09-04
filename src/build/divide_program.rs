@@ -42,6 +42,7 @@ const MOVED_INITIALIZER_NODE_LIMIT: u64 = 200;
 
 /// The program's RC IR divided among the compilation units, and what a unit needs to know about the
 /// others to generate code from its own slice.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub struct DividedProgram {
     /// One unit's slice of the program, in the order of the units it was divided among.
     pub unit_programs: Vec<RcProgram>,
@@ -73,7 +74,7 @@ pub struct DividedProgram {
 /// * `global_types` — the type of every symbol of the program, which the types of the versions the
 ///   optimizer synthesized are added to.
 /// * `root_value_names` — the values the C world enters the program through.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn divide_among_units(
     program: RcProgram,
     units: &[CompileUnit],
@@ -237,6 +238,7 @@ fn unit_of_each_entry(units: &[CompileUnit]) -> Map<FullName, usize> {
 ///
 /// A unit declares a name another unit defines from this, and a synthesized version is not among
 /// the program's symbols, so its own type is all there is to declare it from.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn global_types_including_synthesized(
     program: &RcProgram,
     global_types: &Map<FullName, Arc<TypeNode>>,
@@ -258,6 +260,7 @@ fn global_types_including_synthesized(
 }
 
 /// The functions a unit calling one may take a copy of, by name.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn copyable_funcs(program: &RcProgram) -> Map<FullName, RcFunc> {
     program
         .funcs
@@ -316,7 +319,7 @@ fn names_reached_elsewhere(unit_program: &RcProgram, mut visit: impl FnMut(&Full
 /// computes it once.
 ///
 /// Copying is a fixed point, since a copied body reaches names of its own.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn import_what_each_unit_reaches(
     unit_programs: &mut [RcProgram],
     imported: &mut [Set<FullName>],
@@ -562,6 +565,7 @@ fn give_the_main_unit_the_root_values(
 /// Publish to the linker the names one unit's code reaches in another, drop from each unit what its
 /// own code cannot reach, and return both sets of published names: the program's, and one per unit
 /// of the names that unit defines under external linkage.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn publish_and_prune(
     unit_programs: &mut [RcProgram],
     defined_in_program: &Map<FullName, usize>,

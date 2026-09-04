@@ -222,18 +222,23 @@ CROSS_FILE = re.compile(r"(p\d{2})[a-z0-9-]*(?:\.md)?\s*の\s*`?(L\d+[a-z]*)`?")
 
 def build(directory):
     """全項目と、項目から項目への引用の辺。"""
-    items, by_file = {}, {}
+    items, by_file, parsed = {}, {}, {}
     for path in documents(directory):
-        found, lines = items_in(path)
+        parsed[path] = items_in(path)
+        found, _ = parsed[path]
         by_file[os.path.basename(path).split("-")[0]] = {i["name"]: i for i in found}
-        for item in found:
-            item["digest"] = digest(item["statement"])
-            if item["identity"]:
-                items[item["identity"]] = item
     frame = by_file.get("README.md", by_file.get("README", {}))
+    # **ファイルの題が名乗る命題は、枠に在るその命題そのものである。** 言明が枠に、証明がこの
+    # ファイルに在るだけなので、同一性は 1 つである。
+    for found, _ in parsed.values():
+        for item in found:
+            if item["identity"] is None and item["name"] in frame:
+                item["identity"] = frame[item["name"]]["identity"]
+            item["digest"] = digest(item["statement"])
+            if item["identity"] and item["identity"] not in items:
+                items[item["identity"]] = item
     edges = set()
-    for path in documents(directory):
-        found, lines = items_in(path)
+    for path, (found, lines) in parsed.items():
         key = os.path.basename(path).split("-")[0]
         for item in found:
             text = "\n".join(lines[item["span"][0] + 1:item["span"][1]])

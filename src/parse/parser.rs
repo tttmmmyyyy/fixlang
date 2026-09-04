@@ -534,6 +534,7 @@ fn parse_str_as_rule<T>(
 
 /// The program of the one module `pair` declares: its declaration, its import statements, and
 /// everything defined in it. `src` is the source it was parsed from, which its spans point into.
+// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 fn parse_module(
     pair: Pair<Rule>,
     src: SourceFile,
@@ -1398,6 +1399,7 @@ fn parse_module_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> ModuleInfo {
     }
 }
 
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn, Errors> {
     assert_eq!(pair.as_rule(), Rule::type_defn);
     let span = Span::from_pair(&ctx.source, &pair);
@@ -2624,7 +2626,7 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
 // Parses one type written in a C function signature into the Fix type constructor that represents
 // it. A C type name such as `CInt` becomes the sized type it has on the target, and `()` becomes
 // the unit type, which stands for `void`.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: A21 (dev-docs/proof/rc_ir/borrow-cancel)
 fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     assert_eq!(pair.as_rule(), Rule::ffi_c_fun_ty);
     let mut name = if pair.as_str() == "()" {
