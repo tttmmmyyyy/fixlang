@@ -123,9 +123,13 @@ def items_in(path):
                 clause = CLAUSE.match(line)
                 if clause:
                     heads.append((index, f"{owner} ({next(g for g in clause.groups() if g)})"))
+    # **項目は自分の節で終わる。** 次の項目の見出しまでで切ると、節の最後の項目が次の節の前書きを
+    # 抱え込み、**その前書きを直しただけで、その項目を引く全員が読み直しに挙がる** (実測で 79 件)。
+    section_heads = [i for i, l in enumerate(lines) if re.match(r"^#+ ", l)]
     found = []
     for order, (index, name) in enumerate(heads):
         end = heads[order + 1][0] if order + 1 < len(heads) else len(lines)
+        end = min([end] + [i for i in section_heads if i > index])
         identity = IDENTITY.search(lines[index])
         found.append({
             "name": name,
@@ -263,13 +267,23 @@ def show(directory, wanted):
     return 0
 
 
+def default_directory():
+    """引数の無いときに見るディレクトリ。証明が 1 つだけならそれを、複数あるなら名指しを求める。"""
+    root = "dev-docs/proof"
+    found = [os.path.join(base, "") for base, _, files in os.walk(root) if "README.md" in files
+             and os.path.abspath(base) != os.path.abspath(root)]
+    if len(found) == 1:
+        return found[0]
+    sys.exit(f"証明のディレクトリを引数で指定すること -- {root} の下に {len(found)} 個ある")
+
+
 def main(arguments):
     if "--show" in arguments:
         at = arguments.index("--show")
         roots = [a for a in arguments if not a.startswith("--")]
-        directory = roots[0] if len(roots) > 1 else "dev-docs/proof/rc_ir/borrow-cancel"
+        directory = roots[0] if len(roots) > 1 else default_directory()
         return show(directory, arguments[at + 1])
-    roots = [a for a in arguments if not a.startswith("--")] or ["dev-docs/proof/rc_ir/borrow-cancel"]
+    roots = [a for a in arguments if not a.startswith("--")] or [default_directory()]
     for directory in roots:
         if "--assign" in arguments:
             print(f"{directory}: 同一性を {assign(directory)} 個振った")
