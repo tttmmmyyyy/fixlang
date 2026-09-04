@@ -178,6 +178,97 @@ def citations_of(directory):
     return cited
 
 
+# A closure claim over the code: `BY SCAN <root> `<literal>`` followed by one `= <file>: <symbol>`
+# line per member. The tool runs the search and compares the members it finds with the ones listed.
+SCAN_HEAD = re.compile(r"^\s*BY\s+SCAN\s+(\S+)\s+`([^`]+)`\s*$", re.M)
+SCAN_MEMBER = re.compile(r"^\s*=\s*([A-Za-z0-9_/.]+)\s*:\s*(\S+)\s*$")
+ITEM_HEAD = re.compile(
+    r"^(\s*)(?:pub(?:\([a-z()]+\))?\s+)?(?:async\s+|unsafe\s+|extern\s+\"[A-Za-z]+\"\s+)*"
+    r"(?:fn|struct|enum|trait|type|union|const|static)\s+(\w+)")
+IMPL_HEAD = re.compile(r"^\s*(?:pub(?:\([a-z()]+\))?\s+)?impl\b[^{]*?(?:for\s+)?(\w+)\s*\{")
+
+
+def item_at(lines, index):
+    """The item a line belongs to, as the corpus writes it: `Owner::name`, or `name`.
+
+    A closure claim names where each occurrence sits, so the scan has to answer in the same
+    vocabulary the proof uses."""
+    name = owner = None
+    for at in range(index, -1, -1):
+        if name is None:
+            head = ITEM_HEAD.match(lines[at])
+            if head:
+                name = head.group(2)
+                continue
+        else:
+            block = IMPL_HEAD.match(lines[at])
+            if block:
+                owner = block.group(1)
+                break
+            if ITEM_HEAD.match(lines[at]) and not lines[at].startswith((" ", "\t")):
+                break
+    if name is None:
+        return None
+    return f"{owner}::{name}" if owner else name
+
+
+def scan_hits(root, literal):
+    """Every item of `root` whose text contains `literal`, and whether it sits under `#[cfg(test)]`."""
+    found = []
+    for directory, _, files in os.walk(root):
+        for file_name in sorted(files):
+            if not file_name.endswith((".rs", ".fix", ".pest")):
+                continue
+            path = os.path.join(directory, file_name)
+            with open(path, encoding="utf-8", errors="ignore") as source:
+                lines = source.read().split("\n")
+            tests_from = next((i for i, line in enumerate(lines) if "#[cfg(test)]" in line), len(lines))
+            for index, line in enumerate(lines):
+                if literal not in line:
+                    continue
+                name = item_at(lines, index)
+                if name:
+                    found.append((path, name, index >= tests_from))
+    return found
+
+
+def scans_in(path):
+    """Every `SCAN` a proof file states, with the members it lists."""
+    lines = open(path, encoding="utf-8").read().split("\n")
+    out = []
+    for index, line in enumerate(lines):
+        head = SCAN_HEAD.match(line)
+        if not head:
+            continue
+        members, at = [], index + 1
+        while at < len(lines):
+            member = SCAN_MEMBER.match(lines[at])
+            if not member:
+                break
+            members.append((member.group(1), member.group(2)))
+            at += 1
+        out.append((index + 1, head.group(1), head.group(2), members))
+    return out
+
+
+def check_scans(directory):
+    """Compare what each `SCAN` lists with what the search finds. Returns the differences."""
+    problems = []
+    for path in sorted(glob.glob(os.path.join(directory, "*.md"))):
+        with open(path, encoding="utf-8") as handle:
+            if "<!--not-a-proof-->" in handle.read(400):
+                continue
+        for line, root, literal, members in scans_in(path):
+            hits = scan_hits(os.path.join(REPO, root), literal)
+            found = {(os.path.relpath(where, REPO), name) for where, name, is_test in hits if not is_test}
+            listed = set(members)
+            for missing in sorted(found - listed):
+                problems.append((path, line, literal, "挙げていない", missing))
+            for extra in sorted(listed - found):
+                problems.append((path, line, literal, "走査に出ない", extra))
+    return problems
+
+
 def rule_span(lines, symbol):
     """The half-open line range of a pest rule's definition, or `None` where it is not found.
 

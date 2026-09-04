@@ -111,10 +111,18 @@ def statement_of(lines, start, end, frame):
         start += 1
         while start < end and not lines[start].strip():
             start += 1
+    # **言明は段が始まるまでである。空行では切らない。** 言明が (i)(ii) や場合分けや式を持つと
+    # 段落をまたぐので、空行で切ると先が落ちる -- 実測で 5 つの命題の言明が第 1 段落だけになり、
+    # それを引く 13 か所の段が束だけでは検証できなかった。
     body = []
-    while start < end and lines[start].strip():
-        body.append(lines[start])
+    while start < end:
+        line = lines[start]
+        if STEP_LINE.match(line) or line.startswith("#"):
+            break
+        body.append(line)
         start += 1
+    while body and not body[-1].strip():
+        body.pop()
     return "\n".join(body)
 
 
