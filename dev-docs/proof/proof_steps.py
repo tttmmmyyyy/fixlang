@@ -182,13 +182,19 @@ def parse(text):
     return steps
 
 
-def in_scope(path, level, number):
+def in_scope(path, level, number, cases=()):
     """`<level>number` を、`path` (自分を末尾に含む) の段から引いてよいか。
 
     引けるのは、厳密に先行する兄弟と、祖先の先行する兄弟だけである。自分より深い水準は引けない --
-    それは兄弟の証明の内側である。"""
+    それは兄弟の証明の内側である。
+
+    **ただし祖先が `CASE` なら、その番号で引いてよい。** `CASE` が置くのは仮説であって証明ではなく、
+    仮説はその証明の中で有効である。実測で、この形の 4 件を違反として挙げ、検証者が 1 件ずつ
+    仮説の引用であることを確かめて返してきた。"""
     if level > len(path):
         return False
+    if (level, number) in path[:-1] and (level, number) in cases:
+        return True
     return order_key(number) < order_key(path[level - 1][1])
 
 
@@ -216,6 +222,7 @@ def check(path_of_file):
     steps = parse(text)
     unclassified, missing, violations, unsupported, bare, run_on = [], [], [], [], [], []
     uncited_cases = []
+    case_steps = {(level, number) for level, number, _, _, _, is_case, _, _, _ in steps if is_case}
     tokens_seen = 0
     # **場合分けを閉じる `QED` は、その場合を全部引く。** 腕を 1 つ落とした場合分けは、
     # コンパイラのパスの証明が壊れる最も多い形である。引かれなかった場合は、`QED` がその場合を
@@ -305,7 +312,7 @@ def check(path_of_file):
                     run_on.append(f"<{level}>{number}: {token[:60]}")
                 for reference in REFERENCE.finditer(token):
                     referenced_level = int(reference.group(1))
-                    if not in_scope(here, referenced_level, reference.group(2)):
+                    if not in_scope(here, referenced_level, reference.group(2), case_steps):
                         violations.append(
                             f"<{level}>{number} -> <{referenced_level}>{reference.group(2)}")
     hedges = [word for word in HEDGE if word in text]

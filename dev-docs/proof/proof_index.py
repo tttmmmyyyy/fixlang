@@ -326,6 +326,21 @@ def title_of(line):
     return next((g for g in match.groups() if g), None) if match else None
 
 
+def with_annotations(lines, start):
+    """項目の定義の行より上に在る doc コメントと属性まで範囲を広げる。
+
+    **証明はそこを引く。** 実測で、`#[derive(Clone)]` と `/// … in no particular order` が
+    落ちた束を渡された検証者が、それを確かめるためにリポジトリを開き直した。"""
+    at = start
+    while at > 0:
+        above = lines[at - 1].strip()
+        if above.startswith(("///", "//!", "//", "#[")) or above.endswith("]") and above.startswith("#"):
+            at -= 1
+        else:
+            break
+    return at
+
+
 def fix_value_span(lines, symbol):
     """Fix のグローバル値の定義の行の範囲。宣言の行から、次の最上位の宣言の手前まで。"""
     name = re.escape(symbol)
@@ -372,7 +387,10 @@ def cited_code(path, repo):
             span = fix_value_span(lines, symbol)
         else:
             span = proof_links.item_span(lines, symbol)
-        out.append((source, symbol, "\n".join(lines[span[0]:span[1]]) if span else None))
+        if span:
+            out.append((source, symbol, "\n".join(lines[with_annotations(lines, span[0]):span[1]])))
+        else:
+            out.append((source, symbol, None))
     return out
 
 
