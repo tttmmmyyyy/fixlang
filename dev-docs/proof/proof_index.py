@@ -59,7 +59,12 @@ FRAME_ITEM = re.compile(r"^(?:- )?\*\*(T|[DAP]\d+[a-z]*)\s*"
 # **命題の見出しとは、命題の名前を名乗っている見出しである。** 名前の後に何が続くかは問わない --
 # 実測で名乗り方が 6 通りあり、括弧を要求していたために `## 2. L6 -- D9 の…` の形を落として、
 # **そのファイルの引用が 1 本もグラフに入っていなかった。**
-CLAIM_HEAD = re.compile(r"^#+\s.*?\b(L\d+[a-z]*)\b|^\*\*(L\d+[a-z]*)[^*]*\*\*")
+# **見出しが命題を名乗るのは、名前が題の位置に在り、区切りで終わるときである。** 名前を文中に
+# 含むだけの散文の見出し (`### L4 の前件 -- 解析が呼ぶ鍵に限ること`) を命題として登録すると、
+# その名前を引く段が散文を指す。実測で、その形で 10 件の引用が命題でなく散文へ向いていた。
+CLAIM_HEAD = re.compile(
+    r"^#+\s+(?:[\d.]+[a-z]?\s+)?`?(L\d+[a-z]*)`?\s*(?:\(|--|:|、|$)"
+    r"|^\*\*`?(L\d+[a-z]*)`?(?:\s*\([^)]*\))?\*\*")
 # ファイルの題が名乗る枠の命題。**言明が枠に、証明がこのファイルに在る**形である。
 # 局所の命題に属さない引用は、この命題のものとして数える -- 節の前書きも、
 # 局所の命題を 1 つも立てずに枠の命題を直接示すファイルも、これで拾う。
@@ -150,7 +155,9 @@ def items_in(path):
         for name in dict.fromkeys(proves):
             heads.append((0, name))
     for index in span:
-        line = lines[index]
+        # **印を外してから形を見る。** 印は道具自身が行末に書き足すものなので、
+        # 付けた瞬間に「名前で終わる見出し」が名前で終わらなくなる。
+        line = IDENTITY.sub("", lines[index]).rstrip()
         for pattern in patterns:
             match = pattern.match(line)
             if match:
@@ -394,6 +401,18 @@ def bundle(directory, path, only=None):
         out.append(item["statement"])
         out.append("")
     if not only:
+        # **どの命題にも属さない枠の本文も運ぶ。** 節の前書きは項目ではないが、証明はそこを引く --
+        # 実測で、検証者が「束が本文を持たない」と 3 か所で報告した。
+        found, lines = items_in(os.path.join(directory, "README.md"))
+        covered = set()
+        for item in found:
+            covered.update(range(*item["span"]))
+        rest = [line for index, line in enumerate(lines) if index not in covered]
+        if any(line.strip() for line in rest):
+            out.append("# 枠のうち、どの命題にも属さない本文")
+            out.append("")
+            out.extend(rest)
+            out.append("")
         repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         code = cited_code(path, repo)
         out.append("# この証明が `CODE` で引くコード")
@@ -578,6 +597,28 @@ def unproved_claims(directory):
     return out
 
 
+def ambiguous(directory):
+    """1 つの名前が 2 つの項目に付いている箇所と、項目でないものを指す参照。
+
+    **名前が一意でないと、引用は黙って片方を選ぶ。** 実測で、命題の名前を文中に含む散文の見出しが
+    命題として登録され、その名前を引く 34 件の参照が命題でなく散文を指していた --
+    引く側は正しい id に見えるので、読んでも分からない。"""
+    names, dangling = {}, []
+    live = set()
+    for path in documents(directory):
+        for item in items_in(path)[0]:
+            if item["identity"]:
+                live.add(item["identity"])
+            if item["name"]:
+                names.setdefault((os.path.basename(path), item["name"]), []).append(item)
+    for path in documents(directory):
+        text = open(path, encoding="utf-8").read()
+        for match in REF.finditer(text):
+            if match.group(1) not in live:
+                dangling.append((path, text.count("\n", 0, match.start()) + 1, match.group(1)))
+    return {key: rows for key, rows in names.items() if len(rows) > 1}, dangling
+
+
 def ledger_path(directory):
     return os.path.join(directory, "items.tsv")
 
@@ -693,6 +734,13 @@ def main(arguments):
         live = sum(n for _, _, n in orphan)
         print(f"{directory}: 命題 {len(items)} 個、引用の辺 {len(edges)} 本、動いた辺 {len(moved)} 本")
         print(f"{directory}: どの命題にも属さない本文 {outside} 行、解決しない引用 {len(set(lost))} 件")
+        names, dangling = ambiguous(directory)
+        print(f"{directory}: 1 つの名前が 2 つの項目に付く箇所 {len(names)} 件、"
+              f"項目でないものを指す参照 {len(dangling)} 件")
+        for (where, name), rows in sorted(names.items()):
+            print(f"  {where} の {name}: " + "、".join(f"{one['line']} 行" for one in rows))
+        for path, line, identity in dangling:
+            print(f"  {os.path.basename(path)}:{line}: {identity} は項目でない")
         claims = unproved_claims(directory)
         print(f"{directory}: 項目の中で印を持たない主張の行 {len(claims)} 件")
         for path, n, total in orphan:

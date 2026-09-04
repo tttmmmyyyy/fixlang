@@ -422,7 +422,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     `fref` は `U.funcs` の鍵なので L0d (a) が当たり、`func_vals[fref]` は `Q.funcs[fref]` の本体を
     実装した LLVM 関数である。**L0d の ASSUME は `Q` と (N3) と A22 であり、その 3 つはこの命題の
     ASSUME に在る。**
-    BY (N3), <ref id=8d3e4af/>, <ref id=ff5985d/>, <ref id=25f7f06/>, <2>2, CODE src/generator.rs: Generator::apply_lambda,
+    BY (N3), <ref id=8d3e4af/>, <ref id=ff5985d/>, <ref id=3eee4d8/>, <2>2, CODE src/generator.rs: Generator::apply_lambda,
        CODE src/generator.rs: Generator::get_lambda_func_ptr
 
 <1>4. `Q.funcs` が `FuncRef { name: callee.name }` を持つ場合、実行時の呼び出し先はその関数である。
@@ -430,7 +430,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
         `Q.funcs[FuncRef{callee.name}]` の本体を実装したものである。
     L0d (b) を `n = callee.name` に当てる。**L0d の ASSUME は `Q` と (N3) と A22 であり、その 3 つは
     この命題の ASSUME に在る。**`App` の腕はその名前を `get_scoped_obj` で引く。
-    BY (N3), <ref id=8d3e4af/>, <ref id=25f7f06/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
+    BY (N3), <ref id=8d3e4af/>, <ref id=3eee4d8/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
        CODE src/generator.rs: Generator::get_scoped_obj
   <2>2. QED
     D23 より、`callee` の値が funptr のとき実行時の呼び出し先はそれ自身である
@@ -575,7 +575,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 
 <1>4. QED
   L0b を `Q = P` に当てる。A22 は L0b の仮定でもあり、この命題の仮定に在る。
-  BY <ref id=8d3e4af/>, <ref id=890138b/>, <1>1, <1>2, <1>3
+  BY <ref id=8d3e4af/>, <ref id=35510ec/>, <1>1, <1>2, <1>3
 
 **注**。`resolve_callee_params` が `None` を返す場合について P29 は何も言わない。そのとき
 `rhs_consumes` は全位置を所有として扱う (`CODE src/rc_ir/ownership.rs: rhs_consumes` -- `callee_params`
@@ -704,7 +704,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   L0b を `Q = P'` に当てる。A22 は `P'` についても成り立つ -- `borrow_ify` は原本を `f_own.name` で、
   複製を `borrow_version` で `funcs` に入れ、`clone_func` は複製の `name` をその `borrow_version` に
   する。
-  BY <ref id=8d3e4af/>, <ref id=890138b/>, <1>1, <1>2, <1>3, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
+  BY <ref id=8d3e4af/>, <ref id=35510ec/>, <1>1, <1>2, <1>3, CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
 
 <1>5. (a) の後半が成り立つ。
   <2>1. `borrow_ify` が `borrow_versions` に入れるのは、`funcs_observing_uniqueness` が挙げず、
@@ -822,7 +822,7 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     A22 はこの言明の仮定が与える -- `borrow_ify` は原本を `f_own.name` で、複製を `borrow_version` で
     `funcs` に入れ、`clone_func` は複製の `name` をその `borrow_version` にするので、A22 は `P'` に
     ついても成り立つ (`<1>4` と同じ理由)。
-    BY <ref id=8d3e4af/>, <ref id=ff5985d/>, <ref id=25f7f06/>, <1>3, <1>4, <2>1, <2>2, <2>3, <2>4, <2>4a, <2>4b, <2>4c, <2>4d,
+    BY <ref id=8d3e4af/>, <ref id=ff5985d/>, <ref id=3eee4d8/>, <1>3, <1>4, <2>1, <2>2, <2>3, <2>4, <2>4a, <2>4b, <2>4c, <2>4d,
        CODE src/rc_ir/ownership.rs: resolve_callee_params,
        CODE src/rc_ir/codegen.rs: Generator::build_rc_closure,
        CODE src/rc_ir/borrow.rs: borrow_ify, clone_func
@@ -1568,7 +1568,7 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       L2 (b) がそこから到達できるオブジェクトへ広げる。グローバル状態のオブジェクトは A8 より解放されない。
       `b` が返した参照をそのまま持つ leaf は `<2>0` が除く。
       BY <ref id=e11772a/>, <ref id=b6673ca/>, <ref id=c9e4cca/>, <ref id=fd95f12/>, <ref id=56c2068/>, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=859cf84/>, <ref id=e3436e8/>, <ref id=e3436e8/> (E4), <ref id=e3436e8/> (E9), <ref id=e3436e8/> (F), <ref id=e3436e8/> (活性化の林), <ref id=0b850c9/>,
-         <ref id=88a06de/>, <ref id=8259a3c/>, <ref id=881a063/>, <1>1, <1>1a, <2>0,
+         <ref id=88a06de/>, <ref id=f3dcc8f/>, <ref id=881a063/>, <1>1, <1>1a, <2>0,
          CODE src/generator.rs: Generator::apply_lambda,
          CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
          CODE src/object.rs: ObjectFieldType::get_struct_fields, ObjectFieldType::get_union_value,
@@ -2020,7 +2020,7 @@ README の (R3) は従う。
       L4 より `H(o) ≥ 1` である -- L4 の 4 つの仮定は (K0)、(K1)、(K2)、A20 であり、この命題の仮定に
       在る。この点は (E5) の段の中の段内の点であり、`<1>0` より解放について閉じているので、L2 (a-1) より
       `o` はその点で生きている。グローバル状態のオブジェクトなら A8 より解放されない。
-      BY (K0), (K1), (K2), <ref id=680aaa9/>, <ref id=b6673ca/>, <ref id=ec8d1a0/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=881a063/>, <ref id=5739b3f/>, DEF 段の素動作と段内の点, <1>0, <3>1
+      BY (K0), (K1), (K2), <ref id=680aaa9/>, <ref id=b6673ca/>, <ref id=ec8d1a0/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=881a063/>, <ref id=61b8f53/>, DEF 段の素動作と段内の点, <1>0, <3>1
     <3>3. QED
       D32 の (読み-2) よりこの走査が読むのは起点と、そこから到達できるオブジェクトである。`<1>0` より
       その点は解放について閉じているので、L2 (b) がそこから到達できるオブジェクトへ `<3>2` を広げる。
@@ -2061,7 +2061,7 @@ README の (R3) は従う。
     あり -- L4 の 4 つの仮定は (K0)、(K1)、(K2)、A20 であり、この命題の仮定に在る --、`<1>0` よりその
     時点は解放について閉じているので L2 (a-1) より `o` は生きている (グローバル状態なら A8 より解放
     されない)。後者へは L2 (b) が広げる。
-    BY (K0), (K1), (K2), <ref id=680aaa9/>, <ref id=b6673ca/>, <ref id=c9e4cca/>, <ref id=ec8d1a0/>, <ref id=859cf84/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=881a063/>, <ref id=5739b3f/>, DEF 段の素動作と段内の点, <1>0
+    BY (K0), (K1), (K2), <ref id=680aaa9/>, <ref id=b6673ca/>, <ref id=c9e4cca/>, <ref id=ec8d1a0/>, <ref id=859cf84/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=881a063/>, <ref id=61b8f53/>, DEF 段の素動作と段内の点, <1>0
   <2>6. QED
     D32 は `ρ` の読みを (読み-1)、(読み-2)、(読み-3) の 3 つに尽くし、(読み-2) は 3 つの走査に尽きる。
     BY <ref id=1b00a9e/>, <2>1, <2>2, <2>3, <2>4, <2>5
@@ -2103,7 +2103,7 @@ README の (R3) は従う。
     <3>1. `o` は解放されていないので、`<1>0` の第 2 の節の対偶より `H(o) ≥ 1` であり、L4 より
           `o` への処分されていない参照が在って、P28 (a) よりそれはちょうど 1 つの持ち手を持つ。
           L4 の 4 つの仮定は (K0)、(K1)、(K2)、A20 であり、この命題の仮定に在る。
-      BY (K0), (K1), (K2), <ref id=680aaa9/>, <ref id=ec8d1a0/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=5739b3f/>, <ref id=0d151d9/>, <1>0, <2>1
+      BY (K0), (K1), (K2), <ref id=680aaa9/>, <ref id=ec8d1a0/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=61b8f53/>, <ref id=0d151d9/>, <1>0, <2>1
     <3>2. その持ち手は生きている活性化ではない。
       L5 (c) より、正常終了する実行の最後の時点で持ち手は生きているオブジェクトか環境だけである。L5 の
       (J0) は (K0) が、(J1) は (K1) と D12 が、(J2) はこの段の仮定が、(J3) は (K2) が、A20 はこの命題の

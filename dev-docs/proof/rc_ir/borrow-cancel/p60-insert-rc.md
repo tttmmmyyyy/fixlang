@@ -1478,7 +1478,7 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   catch-all アームでは payload 束縛が移動の表の行である。
 
 <1>5. QED
-  BY <1>1, <1>2, <1>3, <1>4, <ref id=d686a93/>, <ref id=9d74736/>
+  BY <1>1, <1>2, <1>3, <1>4, <ref id=19c0e5a/>, <ref id=9d74736/>
   `L9` の 4 つの場合が尽くす。(a)(b)(c) と、(d) のうち scrutinee が unbox であるか catch-all アームが
   選ばれる場合は <1>1 から <1>4 が消費か移動を与える。(d) の残る場合 -- scrutinee が boxed で変位アームが
   選ばれる場合 -- は <1>4 が `Release(v, [])` による処分を与える。
@@ -1493,12 +1493,12 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   BY 第 1 節の `C1` の本体
 
 <1>2. `C1` の `main` は `L9` を破る。
-  BY <1>1, <ref id=d686a93/>, CODE src/rc_ir/rc_insert.rs: rhs_operands
+  BY <1>1, <ref id=19c0e5a/>, CODE src/rc_ir/rc_insert.rs: rhs_operands
   `n_t = Let(u, App(f, [p]), ·)` は `L9` の (a) の形だが、`rhs_operands(App(f, [p]))` は
   `[(f, Own), (p, Own)]` であって `m` を含まない。(b)(c)(d) の形でもない。
 
 <1>3. QED
-  BY <1>2, <ref id=d686a93/>
+  BY <1>2, <ref id=19c0e5a/>
   `L9` は `insert_rc` の出力のすべての `Retain` について成り立つ。
 
 ### 7.5 `L11` (`L9` の形は `cancel` の入力まで残る) <!--#53bfb96-->
@@ -1560,7 +1560,7 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   付け替えは節点の種類・並び・どの変数を名指すかを変えないので、`L9` の形は保たれる。
 
 <1>6. QED
-  BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <ref id=d686a93/>
+  BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <ref id=19c0e5a/>
   `insert_rc` の出力が持つ形 (`L9`) は `split_rc_units` (<1>1) と `borrow_ify` (<1>2、<1>3、<1>3a、
   <1>5) を通って残り、`borrow_ify` が足す `Retain` も同じ形を持つ (<1>4)。
 
@@ -3898,7 +3898,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 (O2) -- 第 8 節の言明 -- が出る。**`split_rc_units` の出力について。** 第 13 節の `L32` が、その出力も
 (S) を満たすことを示す。
 
-## 12. `L38`: A19 (ii-b) が延びない点 <!--#4a8540e-->
+## 12. A19 (ii-b) が延びない点 <!--#4a8540e-->
 
 `L19` (c) は、関数本体・初期化子の終端の `Ret` の消費の後、各計数下の別名類の `held` が 0 であることを
 示す。A19 (ii-a) はこの点でも成り立つ (`0 ≥ 0`)。この節は A19 (ii-b) がこの点では偽であることを、
@@ -4314,7 +4314,7 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
 **証明**
 
 <1>1. `Retain` について (a)。
-  BY <ref id=d686a93/>
+  BY <ref id=19c0e5a/>
   `L9` は、`insert_rc` の出力の各 `Retain` 節点が `Retain(v, [], RcState::Unknown, k)` の形であることを
   述べる。
 

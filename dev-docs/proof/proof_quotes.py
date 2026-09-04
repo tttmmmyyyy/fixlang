@@ -86,6 +86,10 @@ def offsets(text):
 def source_of(frame, index, items, quote):
     """引用が枠のどの項目から来たか。錨の当たった位置を項目の範囲に当てる。"""
     for anchor in anchors(quote):
+        # **同じ錨が 2 か所に在るときは帰属を決めない。** 最初の出現を答えると、同じ書き出しを
+        # 持つ項目が並ぶところで別の項目に帰属する -- 実測で `P6` の引用を `P3` と答えた。
+        if frame.count(anchor) != 1:
+            continue
         at = frame.find(anchor)
         if at < 0:
             continue
@@ -150,8 +154,22 @@ def frame_items(directory):
     return [item for item in out if item["identity"]]
 
 
+HEADING = re.compile(r"^#+\s")
+
+
 def citing_by(lines, line):
-    """引用の在る行から、その段の `BY` の行を探す。見つからなければ `None`。"""
+    """引用の在る段の `BY` の行。引用が段の中に無ければ `None`。
+
+    **段の外の引用にはこの検査を当てない。** 散文の引用に手近な `BY` を結び付けると、
+    その段が引いていないものを引用の出どころとして責める -- 実測で 3 件そうなった。
+    散文の引用を見るのは `proof_prose.py` の側である。"""
+    for index in range(line, -1, -1):
+        if STEP_START.match(lines[index]):
+            break
+        if HEADING.match(lines[index]):
+            return None
+    else:
+        return None
     for index in range(line, min(line + 60, len(lines))):
         if index > line and STEP_START.match(lines[index]):
             break
@@ -220,7 +238,12 @@ def misattributed(directory):
             if by is None:
                 continue
             named = set(REF.findall(by))
-            if not named & {one["identity"] for one in covering}:
+            # 名前のまま残っている引用も引用である。変換が届いていない形 (`D24 の (E7)`、
+            # 括弧の中の `L10 (b)`) を違反として挙げない。
+            named |= {one["name"] for one in covering
+                      if one["name"] and re.search(rf"\b{one['name']}\b", by)}
+            if not named & ({one["identity"] for one in covering}
+                            | {one["name"] for one in covering if one["name"]}):
                 out.append((name, line + 1, covering, quote[:60], "帰属"))
             elif crosses:
                 out.append((name, line + 1, covering, quote[:60], "境界"))

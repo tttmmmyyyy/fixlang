@@ -987,7 +987,7 @@ enum については元と同じ変位で、その変位が保持する各値を
   ついて `VarTable::of` か `VarTable::body_only` が作った表 --- もその範囲にある。P2a が量化するのは、
   その `vars` を第 1 引数とし、固定した 1 つの `TypeEnv` の値を第 2 引数とする `origin` の呼び出しで
   あり、これは L0 が量化する呼び出しの一部である。よって L0 の言明は P2a の言明を含む。
-  BY <ref id=bd281aa/>
+  BY <ref id=d14daf5/>
 
 ### L0a (部分木の形) <!--#66923b2-->
 
@@ -1091,7 +1091,7 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
   BY <ref id=c6ca156/>
 <1>2. 2 が成り立つ。L0 の後半が `ownership::acted_references(vars, type_env, v, π)` の返り値について
       それを述べる。<1>1 より、その実行のあいだ第 1・第 2 引数は同じ値である。
-  BY <ref id=bd281aa/>, <1>1
+  BY <ref id=d14daf5/>, <1>1
 <1>3. QED
   3 が成り立つ。`CancelAnalysis::acted_references(v, path)` の本文は
   `ownership::acted_references(self.vars, self.type_env, &v.name, path)` を呼び、その値が空のときは
