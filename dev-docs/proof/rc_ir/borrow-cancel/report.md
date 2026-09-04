@@ -126,7 +126,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | `p50-observation.md` | 第 7 周 (254 段) | **0** (散文 2) | 3 | NOT-OBVIOUS 11 | 修理済み。**第 8 周の検証** |
 | `p51-runs.md` | 第 8 周 (219 段) | 2 | 8 | BAD-CITATION 2、NOT-OBVIOUS 3 | 修理済み。**第 9 周の検証** |
 | `p60-insert-rc.md` | 第 8 周 (382 段) | 2 | 2 | BAD-CITATION 2、NOT-OBVIOUS 5 | 修理済み。**第 9 周の検証** |
-| `p70-main-theorem.md` | 第 7 周 (31 段) | **0** (散文 7) | **0** (散文 1) | 段は 31 件すべて OK。表の落ち 9、NOT-OBVIOUS 1 | 修理済み。**第 8 周の検証** |
+| `p70-main-theorem.md` | 第 8 周 (31 ステップ) | **0** | 1 | NOT-OBVIOUS 2、散文 8 (うち枠の仮定の数え上げの落ち 1) | **修理済み**。数え上げの落ちは検査になった |
 
 `--` は、その周の検証がその欄を挙げなかったことを表す。
 

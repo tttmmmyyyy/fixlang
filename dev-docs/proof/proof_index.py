@@ -663,6 +663,35 @@ def ambiguous(directory):
     return {**{key: rows for key, rows in names.items() if len(rows) > 1}, **doubled}, dangling
 
 
+# 仮定の表の行。**枠の仮定の集合を数え上げる文書が持つ形である。**
+ASSUMPTION_ROW = re.compile(r"^\| \*{0,2}(A\d+[a-z]?)\*{0,2} \|")
+
+
+def enumerations(directory):
+    """枠の仮定を表で数え上げている文書が、落としている仮定。
+
+    **数え上げは引用ではないので、指紋のグラフでは見張れない。** 表は「仮定の集合の全体」を
+    主張していて、個々の仮定を引いていない -- 実測で、枠に仮定を 1 つ足した同じコミットが、
+    その集合を数え上げる表に行を足し忘れ、`--frontier` は 1 件も挙げなかった。"""
+    frame = {item["name"] for item in items_in(os.path.join(directory, "README.md"))[0]
+             if item["name"] and item["name"].startswith("A")}
+    out = []
+    for path in documents(directory):
+        if os.path.basename(path) == "README.md":
+            continue
+        listed = set()
+        for line in open(path, encoding="utf-8"):
+            row = ASSUMPTION_ROW.match(line)
+            if row:
+                listed.add(row.group(1))
+        # 表を持たない文書は数え上げていない。持つ文書は全部を持たなければならない。
+        if len(listed) < len(frame) // 2:
+            continue
+        for missing in sorted(frame - listed):
+            out.append((path, missing))
+    return out
+
+
 def ledger_path(directory):
     return os.path.join(directory, "items.tsv")
 
@@ -794,6 +823,10 @@ def main(arguments):
             print(f"  {where} の {name}: " + "、".join(f"{one['line']} 行" for one in rows))
         for path, line, identity in dangling:
             print(f"  {os.path.basename(path)}:{line}: {identity} は項目でない")
+        missed = enumerations(directory)
+        print(f"{directory}: 仮定の数え上げが落としている仮定 {len(missed)} 件")
+        for path, name in missed:
+            print(f"  {os.path.basename(path)}: {name} が表に無い")
         claims = unproved_claims(directory)
         print(f"{directory}: 項目の中で印を持たない主張の行 {len(claims)} 件")
         for path, n, total in orphan:
