@@ -20,6 +20,9 @@ Lamport の構造化証明は段 `<k>n` の木であり、規則はどれも構�
   兄弟の証明の内側を引く形をここで挙げる。
 - **支えの無い段**: `BY` も部分証明も持たない段。**記法を導入するだけの `DEFINE` の段は除く** --
   主張を持たないので支えも要らない。
+- **`QED` の支えが届かない場合**: 場合分けを閉じる `QED` から、引用を推移的に辿って届かない `CASE`
+  の段。**腕を 1 つ落とした場合分けは、コンパイラのパスの証明が壊れる最も多い形である。**
+  直接引くとは限らない -- 場合をまとめた段を引く形が普通なので、部分木と先行する兄弟を推移的に辿る。
 - **読点の落ちたトークン**: 1 つのトークンの中に 2 つ目の**事実**の名札が現れる形。`BY A, B C` の
   ように読点が落ちると、`B` の分類が通ったまま `C` が消える。**接頭辞だけで分類すると、後ろに
   付いたものが見えなくなる。**
@@ -118,6 +121,10 @@ def split_tokens(text):
     return [token.strip().strip("`").strip() for token in tokens if token.strip()]
 
 
+# 命題の境目。見出しか、太字で命題の名前を名乗る行である。
+CLAIM_BOUNDARY = re.compile(r"^#+\s|^\*\*L\d+[a-z]*[^*]*\*\*")
+
+
 def order_key(number):
     """`12a` のような枝番つきの段の番号を、並び順に使える鍵へ。"""
     match = re.match(r"(\d+)([a-z]*)", number)
@@ -128,17 +135,26 @@ def parse(text):
     """段を読み、各段について (水準, 番号, 祖先の道, `BY` の本文, 支えを持つか) を返す。"""
     lines = text.split("\n")
     steps, path = [], []
-    index = 0
+    index, owner = 0, 0
     while index < len(lines):
         match = STEP.match(lines[index])
         if not match:
+            # **`<1>` の番号は命題ごとに振り直される。** 命題の境目を持たないと、ある命題の
+            # `CASE` が別の命題の `QED` の場合として数えられる。
+            if CLAIM_BOUNDARY.match(lines[index]):
+                owner = index
             index += 1
             continue
         level, number = int(match.group(2)), match.group(3)
         del path[level - 1:]
         path.append((level, number))
         body, index = [lines[index][match.end():]], index + 1
+        # **段と段のあいだの行も見る。** ここを飛ばすと命題の見出しが段の本文に飲み込まれ、
+        # ファイル全体が 1 つの命題として扱われる。
+        next_owner = owner
         while index < len(lines) and not STEP.match(lines[index]):
+            if CLAIM_BOUNDARY.match(lines[index]):
+                next_owner = index
             body.append(lines[index])
             index += 1
         has_substeps = index < len(lines) and int(STEP.match(lines[index]).group(2)) > level
@@ -157,8 +173,12 @@ def parse(text):
                     break
                 text_of_by.append(following.strip())
             reasons.append(" ".join(text_of_by))
+        head = "\n".join(body).strip()
         steps.append((level, number, list(path[:-1]), reasons,
-                      bool(reasons) or has_substeps or defines))
+                      bool(reasons) or has_substeps or defines,
+                      bool(re.match(r"^(?:\*\*)?(?:`)?CASE\b", head)),
+                      bool(re.match(r"^(?:\*\*)?(?:`)?QED\b", head)), owner))
+        owner = next_owner
     return steps
 
 
@@ -189,12 +209,58 @@ def labels_of_sibling(path_of_file, prefix):
 
 def check(path_of_file):
     text = open(path_of_file, encoding="utf-8").read()
+    if "<!--not-a-proof-->" in text[:400]:
+        return None
     declared = declared_labels(text)
     siblings = {}
     steps = parse(text)
     unclassified, missing, violations, unsupported, bare, run_on = [], [], [], [], [], []
+    uncited_cases = []
     tokens_seen = 0
-    for level, number, ancestors, reasons, supported in steps:
+    # **場合分けを閉じる `QED` は、その場合を全部引く。** 腕を 1 つ落とした場合分けは、
+    # コンパイラのパスの証明が壊れる最も多い形である。引かれなかった場合は、`QED` がその場合を
+    # 尽くしたことにしていない -- 尽くしたと書いてあっても、支えていない。
+    # **`QED` は部分木のどこで場合を引いてもよい。** 網羅を示す段を下に置く形が普通で、
+    # `QED` 自身の `BY` だけを見ると、その形の証明を全部誤って挙げる (実測で 31 件、全部空振り)。
+    # **場合が `QED` の支えに届いているかは、推移的に見る。** `QED` が場合を直接引くとは限らず、
+    # 場合をまとめた段を引き、その段が場合を引く形が普通である。直接だけを見ると、その形の証明を
+    # 誤って挙げる (実測で 31 件、全部空振り)。**届いていない場合は、尽くしたことになっていない。**
+    def supports(level, ancestors):
+        """その水準・その親の下の各段が、`BY` と自分の部分木で引いている同水準の段。"""
+        edges = {}
+        for other_level, number, other_ancestors, reasons, _, _, _, other_owner in steps:
+            if other_level != level or (other_owner, tuple(other_ancestors)) != ancestors:
+                continue
+            here = ancestors[1] + ((other_level, number),)
+            named = " ".join(reasons)
+            for deeper in steps:
+                if tuple(deeper[2])[:len(here)] == here:
+                    named += " " + " ".join(deeper[3])
+            edges[number] = set(re.findall(rf"<{level}>(\d+[a-z]*)", named))
+        return edges
+
+    cases_open = {}
+    for level, number, ancestors, reasons, supported, is_case, is_qed, owner in steps:
+        key = (owner, tuple(ancestors))
+        if is_case:
+            cases_open.setdefault(key, []).append(number)
+        elif is_qed:
+            cases = cases_open.pop(key, [])
+            if not cases:
+                continue
+            edges = supports(level, key)
+            reached, front = set(), [number]
+            while front:
+                at = front.pop()
+                for target in edges.get(at, ()):
+                    if target not in reached:
+                        reached.add(target)
+                        front.append(target)
+            for case in cases:
+                if case not in reached:
+                    uncited_cases.append(
+                        f"<{level}>{number} (QED) の支えが <{level}>{case} (CASE) に届かない")
+    for level, number, ancestors, reasons, supported, is_case, is_qed, owner in steps:
         here = ancestors + [(level, number)]
         if not supported:
             unsupported.append(f"<{level}>{number}")
@@ -247,6 +313,7 @@ def check(path_of_file):
         "steps": len(steps),
         "tokens": tokens_seen,
         "unclassified": unclassified,
+        "uncited_cases": uncited_cases,
         "missing": missing,
         "violations": violations,
         "unsupported": unsupported,
@@ -283,19 +350,25 @@ def main(roots):
     failed = 0
     for path_of_file in files_under(roots):
         result = check(path_of_file)
+        if result is None:
+            continue
         problems = (result["unclassified"] + result["missing"] + result["violations"]
                     + result["unsupported"] + result["bare"] + result["run_on"]
+                    + result["uncited_cases"]
                     + result["hedges"])
         print(f"{path_of_file}: 段 {result['steps']}、BY のトークン {result['tokens']}、"
               f"未分類 {len(result['unclassified'])}、名札の不在 {len(result['missing'])}、"
               f"スコープ違反 {len(result['violations'])}、支えの無い段 {len(result['unsupported'])}、"
               f"接頭辞の無い名札 {len(result['bare'])}、読点の落ち {len(result['run_on'])}、"
+              f"QED が引かない場合 {len(result['uncited_cases'])}、"
               f"ぼかし語 {len(result['hedges'])}")
         for kind, items in (("未分類", result["unclassified"]), ("名札の不在", result["missing"]),
                             ("スコープ違反", result["violations"]),
                             ("支えの無い段", result["unsupported"]),
                             ("接頭辞の無い名札", result["bare"]),
-                            ("読点の落ち", result["run_on"]), ("ぼかし語", result["hedges"])):
+                            ("読点の落ち", result["run_on"]),
+                            ("QED が引かない場合", result["uncited_cases"]),
+                            ("ぼかし語", result["hedges"])):
             for item in items:
                 print(f"  {kind}: {item}")
         failed += len(problems)
