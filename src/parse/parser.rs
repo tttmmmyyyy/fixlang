@@ -2865,12 +2865,12 @@ fn parse_expr_string_lit(
     Ok(make_string_lit(string, Some(span)))
 }
 
-/// Read `count` hexadecimal digits from `chars` and return the number they spell.
+/// Read `digits` hexadecimal digits from `chars` and return the number they spell.
 /// The grammar admits a `\x` or `\u` escape sequence only with its full complement of
 /// hexadecimal digits, so the characters are there and each of them is a digit.
-fn take_hex_digits(chars: &mut impl Iterator<Item = char>, count: u32) -> u32 {
+fn take_hex_number(chars: &mut impl Iterator<Item = char>, digits: u32) -> u32 {
     let mut code: u32 = 0;
-    for _ in 0..count {
+    for _ in 0..digits {
         let digit = chars.next().unwrap().to_digit(16).unwrap();
         code = code * 16 + digit;
     }
@@ -2902,7 +2902,7 @@ fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, E
                 } else if c == 't' {
                     out.push('\t');
                 } else if c == 'u' {
-                    let code = take_hex_digits(&mut chars, 4);
+                    let code = take_hex_number(&mut chars, 4);
                     let c = match char::from_u32(code) {
                         None => {
                             return Err(Errors::from_msg_srcs(
@@ -2937,7 +2937,7 @@ fn parse_expr_u8_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> 
             'r' => 13,
             't' => 9,
             '0' => 0,
-            'x' => take_hex_digits(&mut chars, 2) as u8,
+            'x' => take_hex_number(&mut chars, 2) as u8,
             c => unreachable!("`u8_lit_char` admits no escape sequence `\\{}`.", c),
         },
         c => {

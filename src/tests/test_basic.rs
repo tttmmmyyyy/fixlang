@@ -3269,7 +3269,7 @@ pub fn test_u8_literal() {
 /// A `U8` literal holds one byte, and `parse_expr_u8_lit` asserts that of the character it is
 /// handed, so admitting one here would panic the compiler in place of a diagnostic.
 #[test]
-pub fn test_u8_literal_rejects_non_ascii() {
+pub fn test_u8_literal_of_a_non_ascii_character_is_rejected() {
     let source = r#"
             module Main;
             main : IO ();
