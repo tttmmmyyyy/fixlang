@@ -396,7 +396,8 @@ SCAN src/ `unsafe impl`
 
 **前提 `VarTable` の `origins` の欄に触れる式の在りか** --- その欄は `pub` を持たないので、それを
 名指せるのは `src/rc_ir/ownership.rs` とその子孫のモジュールだけである (`EXT 可視性`)。欄アクセスの
-字面が在る項目は次で尽き、その欄を持つ `VarTable` の値を組み立てるのは `VarTable::empty` である。
+字面が在る項目は次で尽き、その欄を持つ `VarTable` の値を組み立てるのは `VarTable::empty` である
+(前提 `VarTable` を組み立てる式の在りか)。
 
 SCAN src/ `.origins`
   = src/rc_ir/ownership.rs: origin -- 自由関数 `origin` が直前の `impl Origin` の名前を冠して挙がる。`borrow()` の読みと `borrow_mut().insert(..)` の書きの 2 行
@@ -1768,14 +1769,15 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
       無い。
   **読み書きの在りかを与えるのは走査である。** `origins` の欄は `pub` を持たないので、それを名指せる
   のは `src/rc_ir/ownership.rs` とその子孫のモジュールだけであり (`EXT 可視性`)、欄アクセスの字面が
-  在る項目は第 1 節の前提が挙げる 1 つ -- `origin` -- だけである。欄を持つ値を組み立てるのは
-  `VarTable::empty` であり、そこが置くのは空の表である。よって `insert` はこの 1 か所、取り除く操作は
-  どこにも無い。
+  在る項目は第 1 節の前提が挙げる `origin` だけである。欄を持つ値を組み立てるのは
+  `VarTable::empty` であり (前提 `VarTable` を組み立てる式の在りか)、そこが置くのは空の表である。
+  よって `insert` は `origin` の中の 1 つであり、取り除く操作はどこにも無い。
   BY CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow().get(&key)` が当たれば `known.clone()` を
      返し、そうでなければ `grow_stack(|| origin_inner(..))` の値を
      `vars.origins.borrow_mut().insert(key, answer.clone())` で入れてから返す。この関数が
      `origins` を名指すのはこの 2 行であり、除去を呼ぶ式は持たない),
-     前提 `VarTable` の `origins` の欄に触れる式の在りか, EXT 可視性,
+     前提 `VarTable` の `origins` の欄に触れる式の在りか,
+     前提 `VarTable` を組み立てる式の在りか, EXT 可視性,
      CODE src/rc_ir/ownership.rs: VarTable (`origins` は `pub` の付かない
      `RefCell<Map<VarPath, Origin>>` の欄である),
      CODE src/rc_ir/ownership.rs: VarTable::empty (`origins: RefCell::default()` -- 空の表を置く),
