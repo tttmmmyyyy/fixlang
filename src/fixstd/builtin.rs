@@ -417,9 +417,6 @@ pub fn is_array_tycon(tc: &TyCon) -> bool {
     *tc == make_array_tycon()
 }
 
-<<<<<<< HEAD
-=======
->>>>>>> repair-p15-r10
 // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_punched_array_tycon() -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME))
