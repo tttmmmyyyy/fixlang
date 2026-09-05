@@ -61,9 +61,9 @@ P26 の言明は 2 文からなる。第 1 文は共通接頭の上の各観測�
 
 第 6 節から第 10 節は、直った 5 つの反例を 1 つの列として記録する -- 門が無かったとき、門が直接呼び出し
 だけを閉じていたとき、門がクロージャを `prog.funcs` の本体からだけ集めていたとき、門が関数を適用する仕組みを
-`App` だけだと数えていたとき、門が解放の走らせるデストラクタを数えていなかったとき。README の「較正」の節の
-較正表は P26 の節を較正するバグとして #551 を挙げ、第 6 節がその反証である。D18 はその節を見出しの名前
-「門が無かったときの反例」で引く。
+`App` だけだと数えていたとき、門が解放の走らせるデストラクタを数えていなかったとき。`report.md` の「較正」の
+節の較正表は P26 の節を較正するバグとして #551 を挙げ、この文書の第 6 節がその反証である。D18 はその節を
+見出しの名前「門が無かったときの反例」で引く。
 この 5 節は、対象コミットに無いコードについての記録であるから、構造化証明の形 (`<k>n` の段と `CODE` の
 引用) を取らず、散文で書く。
 
@@ -82,6 +82,9 @@ P26 の言明は 2 文からなる。第 1 文は共通接頭の上の各観測�
 呼ぶ命令を組む位置を数え上げれば足りる。文書の外の結果の名札である。README の A3 は「**その規則を負う段
 は、それぞれ `EXT` の名札を持つ。** 名札の言明は各証明ファイルの第 1 節に据える」と述べ、この段落がその
 言明である。`BY` からはこの名前で引く。
+
+**EXT derive した `PartialEq` の等号**。`#[derive(PartialEq)]` を持つ struct の 2 つの値が等しいのは、
+その各欄の値が等しいときに限る。文書の外の結果の名札である。`BY` からはこの名前で引く。
 
 ### 在りかの前提
 
@@ -169,6 +172,31 @@ SCAN src/ `mark_threaded_function(`
 
 SCAN src/ `build_object_files(`
   = src/build/build.rs: build
+
+**前提 走査の仕事の値を組む在りか** --- `TraverserWorkType` は `u32` の欄を 1 つ持つ tuple struct であり、
+その値を組む式は、tuple struct の構成子を `TraverserWorkType(...)` と書くか、`impl TraverserWorkType` の
+中で `Self(...)` と書くかである。`TraverserWorkType(` の字面が在る項目、`Self(TRAVERSER_WORK` の字面が
+在る項目、`TraverserWorkType::mark_threaded(` の字面が在る項目、`TRAVERSER_WORK_MARK_THREADED` の字面が
+在る項目は次で尽きる。
+
+SCAN src/ `TraverserWorkType(`
+  = src/constants.rs: TraverserWorkType -- 宣言
+  = src/object.rs: create_traverser -- switch の腕ごとに `TraverserWorkType(*work)` を組む
+
+SCAN src/ `Self(TRAVERSER_WORK`
+  = src/constants.rs: TraverserWorkType::mark_global
+  = src/constants.rs: TraverserWorkType::mark_threaded
+  = src/constants.rs: TraverserWorkType::release
+
+SCAN src/ `TraverserWorkType::mark_threaded(`
+  = src/generator.rs: Generator::build_mark_boxed_with -- 表明の中の比較
+  = src/generator.rs: Generator::mark_threaded
+
+SCAN src/ `TRAVERSER_WORK_MARK_THREADED`
+  = src/ast/types.rs: TypeNode::traverser_name -- 走査関数の記号の名前を組む
+  = src/constants.rs: TRAVERSER_WORK_MARK_THREADED -- 定義
+  = src/constants.rs: TraverserWorkType::mark_threaded -- 定義
+  = src/object.rs: create_traverser -- `config.threaded` のときだけ switch の腕を足す
 
 **前提 一意性の分岐を組む在りか** --- `Generator::build_is_refcnt_one`、
 `Generator::build_branch_by_is_unique`、`force_unique_or_assert`、`force_unique_or_assert_with_hole`、
@@ -274,6 +302,38 @@ SCAN src/ `run_io_or_ios_runner(`
 SCAN src/ `run_io(`
   = src/ast/export_statement.rs: ExportStatement::implement -- `IOType::IO` の腕
   = src/fixstd/builtin.rs: run_io_or_ios_runner
+
+**前提 `applies_a_function_operand` の宣言の在りか** --- `fn applies_a_function_operand` の字面が
+在る項目は次で尽きる。
+
+SCAN src/ `fn applies_a_function_operand`
+  = src/ast/inline_llvm.rs: applies_a_function_operand -- `LLVMGen` の既定
+  = src/fixstd/builtin.rs: InlineLLVMArrayBorrowElementsBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMUnionModBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::applies_a_function_operand
+
+**前提 式の型の欄を書く在りか** --- `ExprNode` は式の型を `type_` の欄に持ち、その式の自由変数の memo を
+非公開の `free_vars` の欄に持つ。欄を名指す struct リテラルはこの非公開の欄も名指すので、`ExprNode` を
+組む式は `free_vars:` の字面が在る項目に現れ、`type_` の欄へ代入する式は `.type_ = ` の字面が在る項目に
+現れる。**残る形 -- `..` で別の `ExprNode` の欄をそのまま取る形と、`ExprNode` の値をまるごと写す形 -- は、
+別の `ExprNode` の `type_` の欄をそのまま写す。** その 2 つの字面が在る項目は次で尽きる。
+
+SCAN src/ `free_vars:`
+  = src/ast/expr.rs: Expr::into_expr_node_with_aux_src -- `type_: None` を置く
+  = src/ast/expr.rs: ExprNode -- 宣言
+  = src/ast/expr.rs: ExprNode::clone_all -- `type_: self.type_.clone()`
+  = src/ast/expr.rs: ExprNode::clone_except_fvs -- `type_: self.type_.clone()`
+  = src/ast/types.rs: TypeNode::free_vars -- `TypeNode` の側の局所束縛
+
+SCAN src/ `.type_ = `
+  = src/ast/expr.rs: ExprNode::set_type -- `ret.type_ = Some(ty)`
+  = src/ast/pattern.rs: PatternNode::set_type -- `PatternInfo` の同名の欄
+  = src/elaboration/desugar_opaque.rs: resolve_opaque_tycon_in_pattern -- `PatternInfo` の同名の欄
 
 **前提 funptr の tycon を型に組む在りか** --- `type_funptr` を呼ぶ式が在る項目と、
 `make_funptr_tycon` を呼ぶ式が在る項目は次で尽きる。
@@ -673,6 +733,22 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
       `Ret` ではないので、活性化を終わらせもしない (D23)。
   BY <ref id=f06144e/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=081e39f/>, <ref id=74e7403/>, <ref id=2ab8ecd/>, <ref id=0b1cac5/>, DEF 共通接頭の段の中の対応
 
+<1>2b. P28 の (a)、およびその系「持ち手が在るオブジェクトは解放されていない」は、この命題が並べる
+      2 つの実行のどちらのプログラムについても読める。P28 は 3 つの限定を持つ -- D12 の意味で RC 規律を
+      満たすプログラムであること、借用する unit を持つ本体の活性化を作る段が (E3) に限られること、
+      「**そのプログラムは、`insert_rc` の入力から `cancel` の出力までのどこかに現れるものである**」こと
+      -- であり、結論は A20 の下で述べられる。
+      `π` が `borrow_ify` のとき。入力 `P` の D12 は A1 が与え、A1 が「そのプログラムのすべての関数の
+      `borrowed_units` は空である」と言うので借用する unit を持つ本体が無く、第 2 の限定も A20 も空虚で
+      ある。出力 `P'` の D12 は P14 が与える -- P14 が入力に求める「D12 の意味で RC 規律を満たし、かつ
+      A1 と A2 を満たすプログラム」は A1 と A2 が与える。第 2 の限定は P14b の第 1 の範囲
+      (`borrow_ify` の出力) が、A20 は A20 自身の第 1 の範囲が与える。範囲については、`P` は
+      `borrow_ify` の入力、`P'` はその出力であって、どちらも `insert_rc` の入力から `cancel` の出力までの
+      間に在る。
+      `π` が `cancel` のとき。L6a が 2 つのプログラムについて同じ 4 つを与える。**L6a はこの命題を
+      引かないので、この段が L6a を引くことで循環は生じない。**
+  BY <ref id=0d151d9/>, <ref id=627e117/>, <ref id=8e3aff3/>, <ref id=6d644e6/>, <ref id=dbdbf7e/>, <ref id=680aaa9/>, <ref id=de755aa/>
+
 <1>3. DEF 共通接頭の段の中の対応 より、2 つの段の素動作は順序を保って 1 対 1 に対応する。対応する
       動作の対についての帰納で (a)(b)(c) を運ぶ。以下 `<2>1` から `<2>4` が、D24 が挙げる 6 種の
       素動作を尽くし、`<2>5` が活性化の生成と終了を、`<2>6` が (c) を扱う。
@@ -718,12 +794,19 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
         (A17 (i-d))、その番地について環境が参照を持つことは A17 (i-b) が、その節点が番地を渡すことは
         D22 の第 3 の箇条が言う。その節点は 2 つの実行の対応する位置に同じ op として在って対応する
         値を与えられるので、2 つの段は対応するオブジェクトへ同じ向きの 1 つを作る / 処分し、その持ち手は
-        どちらも環境である (D25 の 3 番目)。**その番地が指すオブジェクトがその点で生きていることは
-        A17 (ii-c) が与える** -- 「**環境がその番地を呼ぶのは、その番地が指すオブジェクトへの参照を自分が
-        持っている点でだけである。**」であり、環境が参照を持つことから D8 で `H(o) ≥ 1` が出る。
+        どちらも環境である (D25 の 3 番目)。
+        **その番地が指すオブジェクト `o` はその点で生きている (D25)。** D25 は、割り当てた素動作より後で
+        あって解放する素動作より前であることを「生きている」と定める。前者は、`o` の番地を環境へ渡した
+        `boxed_to_retained_ptr` の節点がこの点より前に実行され、その節点のオペランドの leaf が `o` を
+        指していたことによる -- leaf が `o` を指すのは `o` を割り当てた素動作より後である。後者は次で
+        出る。A17 (ii-c) は「**環境がその番地を呼ぶのは、その番地が指すオブジェクトへの参照を自分が
+        持っている点でだけである。**」と述べるので、環境はその点で `o` への処分されていない参照を持つ。
+        `<1>2b` の P28 (a) より、その参照は D25 の 3 種の持ち手のちょうど 1 つ -- ここでは環境 -- に
+        属する。`<1>2b` の系「持ち手が在るオブジェクトは解放されていない」より、`o` はその点で解放されて
+        いない。環境が参照を持つことから D8 で `H(o) ≥ 1` も出る。
         **この節は retain の段にも release の段にも掛かる**ので、どちらの向きでも動作が当たるのは (b) の
         1 対 1 の中のオブジェクトである。
-    BY <ref id=e11772a/>, <ref id=4f63121/>, <ref id=c9e4cca/>, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=66c9670/>, <ref id=243ae2c/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=7218f92/>, <ref id=081e39f/>, <ref id=74e7403/>, <ref id=2ab8ecd/>, <ref id=0b1cac5/>, <ref id=746e87a/>, <1>1a,
+    BY <ref id=e11772a/>, <ref id=4f63121/>, <ref id=c9e4cca/>, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=66c9670/>, <ref id=243ae2c/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=7218f92/>, <ref id=081e39f/>, <ref id=74e7403/>, <ref id=2ab8ecd/>, <ref id=0b1cac5/>, <ref id=746e87a/>, <1>1a, <1>2b,
        帰納法の仮定
   <2>2. **割り当て。** D24 の (E2) の `H` の表より、オブジェクトを新しく割り当てるのは
         `Closure(f, caps)` の結果の capture object と、`result_prov` が単一の `Fresh` を宣言する `Llvm` の
@@ -975,20 +1058,44 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
      CODE src/object.rs: create_obj
 
 <1>5c. `config.threaded` が偽のビルドでは、状態の欄が `THREADED` を持つオブジェクトは実行のどの時点にも
-      無い。`<1>5a` より `THREADED` を書くのは `build_mark_boxed_with` の `mark_threaded` の側だけで
-      あり、そこへ届くのは `Generator::mark_threaded` である。前提 `Std::mark_threaded` の op の在りか
-      より、`Generator::mark_threaded` を呼ぶ式が在るのは `InlineLLVMMarkThreadedFunctionBody::generate`
-      であり、この op の字面を持つ項目のうち op の値を組むのは `mark_threaded_function` であって、
+      無い。`<1>5a` より `THREADED` を書くのは `build_mark_boxed_with` が `marks_global` を偽と判定する
+      側だけである。`build_mark_boxed_with` の先頭の
+      `assert!(work == TraverserWorkType::mark_global() || work == TraverserWorkType::mark_threaded())`
+      は `develop_mode` の門を持たないので、`work` がその 2 つのどちらでもない呼び出しを組むプログラムは
+      コード生成で止まり、二値にならない。README の「「果たす者」と「検査」の読み方」は
+      「**コード生成が `expect` や `unreachable!` で止まる形も、`develop_mode` の門を持たない限りこの段に
+      入る** -- そのプログラムは走らないので、その本体の活性化は存在しない」と述べ、その 3 段の 2 段目が
+      これである。よって二値になるプログラムでは、`marks_global` が偽である活性化の `work` は
+      `TraverserWorkType::mark_threaded()` に等しい。
+
+      **その値を組む式は 4 つで尽きる。** 前提 走査の仕事の値を組む在りか より、`TraverserWorkType` の値を
+      組む式が在るのは `TraverserWorkType::release`・`TraverserWorkType::mark_global`・
+      `TraverserWorkType::mark_threaded` の 3 つの構成子と、`create_traverser` の
+      `TraverserWorkType(*work)` である。`TraverserWorkType` は `u32` の欄を 1 つ持ち `PartialEq` を
+      derive するので、`TraverserWorkType::mark_threaded()` に等しい値はその欄に
+      `TRAVERSER_WORK_MARK_THREADED` を持つ (EXT derive した `PartialEq` の等号)。
+      `TRAVERSER_WORK_RELEASE`・`TRAVERSER_WORK_MARK_GLOBAL`・`TRAVERSER_WORK_MARK_THREADED` は
+      `0`・`1`・`2` であって相異なるので、3 つの構成子のうちその値を置くのは
+      `TraverserWorkType::mark_threaded` だけであり、`create_traverser` が `TraverserWorkType(*work)` に
+      渡す `*work` の候補に `TRAVERSER_WORK_MARK_THREADED` が入るのは `gc.config.threaded` が真のときだけ
+      である。同じ前提より `TraverserWorkType::mark_threaded()` を呼ぶ式が在るのは
+      `Generator::mark_threaded` と、上の表明の中の比較だけであって、後者は値を渡さない。
+
+      前提 `Std::mark_threaded` の op の在りか より、`Generator::mark_threaded` を呼ぶ式が在るのは
+      `InlineLLVMMarkThreadedFunctionBody::generate` であり、この op の字面を持つ項目のうち op の値を組むのは `mark_threaded_function` であって、
       `make_std_mod` はそれを `Std::mark_threaded` の本体として登録する。
       `Program::check_multi_threading_requirement` は、`config.threaded` が偽のとき
       `Std::mark_threaded` の実体化がプログラムに 1 つでも在れば診断を出して `Err` を返し、`build` は
       それを `build_object_files` の呼び出しより前に `?` で伝播する。同じ前提より
       `build_object_files` を呼ぶ式が在るのは `build` である。よって、単一スレッドのビルドでは、
-      `Std::mark_threaded` を持つプログラムは
-      二値にならず実行が存在せず、二値になるプログラムはこの op を持たないので `THREADED` を書く
-      コードを 1 命令も生成しない。
-  BY 前提 `Std::mark_threaded` の op の在りか, <1>5a,
+      `Std::mark_threaded` を持つプログラムは二値にならず実行が存在せず、二値になるプログラムはこの op を
+      持たないので `THREADED` を書くコードを 1 命令も生成しない。
+  BY 前提 `Std::mark_threaded` の op の在りか, 前提 走査の仕事の値を組む在りか, <1>5a,
+     EXT derive した `PartialEq` の等号,
+     README の「「果たす者」と「検査」の読み方」,
      CODE src/generator.rs: Generator::mark_threaded, Generator::build_mark_boxed_with,
+     CODE src/constants.rs: TraverserWorkType, TRAVERSER_WORK_MARK_THREADED,
+     CODE src/object.rs: create_traverser,
      CODE src/fixstd/builtin.rs: mark_threaded_function, InlineLLVMMarkThreadedFunctionBody::generate,
      CODE src/fixstd/stdlib.rs: make_std_mod,
      CODE src/ast/program.rs: Program::check_multi_threading_requirement,
@@ -1321,9 +1428,9 @@ optimize_rc_program`)。
       それを写したプログラム) が与える。範囲については、`P'` は `cancel` の出力そのものである。
   BY <ref id=dbdbf7e/>, <ref id=dea458b/>
 
-<1>4. A20 は 2 つのプログラムのどちらについても置かれている。A20 は「**`borrow_ify` の出力と、`cancel` が
-      それを写したプログラムの両方**について、その関数が借用する (D14) unit の参照を、呼び出し元は
-      呼び出しが返るまで処分しない」と述べる。
+<1>4. A20 は 2 つのプログラムのどちらについても置かれている。A20 は「その関数が借用する (D14) unit の
+      参照を、呼び出し元は呼び出しが返るまで処分しない」を、
+      「**`borrow_ify` の出力と、`cancel` がそれを写したプログラムの両方**」について述べる。
   BY <ref id=680aaa9/>
 
 <1>5. QED
@@ -1843,12 +1950,28 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       変えるのは、`Retain`/`Release` の節点と、`App` の callee の名前だけである。** 節点の種類・その順序・
       `Let` の束縛変数・`Match` のアームの構成・`Llvm` の op とオペランド・`Destructure` のフィールドは、
       いずれも元の本体のものに等しい (複製の名前替えを P9 で戻したうえで)」と述べる。**その 2 つは別の
-      オブジェクトである** -- `rename_rhs` の `Llvm` の腕は `llvm_gen.clone()` を作り、
-      `RewriteCtx::rewrite_inner` の `Let` の腕は `rhs.clone()` を返す。A3 の「**この 2 節を合わせると
-      「op の複製は原本と同じ宣言を返す」が出る。**」がその 2 つを結ぶので、`result_prov`・`borrows_operand`・
-      `applies_a_function_operand` の答えは原本のものである。
-  BY <ref id=e11772a/>, <ref id=63eadd9/>, <ref id=746e87a/>, CODE src/rc_ir/rename.rs: rename_rhs,
-     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
+      オブジェクトである** -- A3 は `rename_rhs` の `Llvm` の腕の `llvm_gen.clone()` と
+      `RewriteCtx::rewrite_inner` の `Let` の腕の `rhs.clone()` について「**複製・書き換えの両側で op は
+      別のオブジェクトである**」と書く。すなわち 2 つは同じ op の別のオブジェクトである。
+      `result_prov` と `borrows_operand` については、A3 の「**この 2 節を合わせると
+      「op の複製は原本と同じ宣言を返す」が出る。**」がその 2 つのオブジェクトの答えを結ぶ。
+      `applies_a_function_operand` については、その宣言を書く本体がどれも `self` を読まない --
+      前提 `applies_a_function_operand` の宣言の在りか より、この宣言を書く項目は `LLVMGen` の既定と
+      8 つの override であり、9 つの本体はいずれも `self` の欄を 1 つも読まずに `false` / `true` の
+      リテラルを返す。よってこの宣言の答えは op だけで決まり、2 つのオブジェクトで等しい。
+  BY <ref id=e11772a/>, <ref id=63eadd9/>, <ref id=746e87a/>,
+     前提 `applies_a_function_operand` の宣言の在りか,
+     CODE src/rc_ir/rename.rs: rename_rhs,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+     CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand,
+     CODE src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand,
+     InlineLLVMUnionModBody::applies_a_function_operand,
+     InlineLLVMWithRetainedFunctionBody::applies_a_function_operand,
+     InlineLLVMArrayBorrowElementsBody::applies_a_function_operand,
+     InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand,
+     InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand,
+     InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand,
+     InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand
 
 <1>4. `rewrite_rc` が節点を落とすのは `is_borrow_version` が真のときだけである。偽のときは
       `rc_node(is_release, v.clone(), path.clone(), state, k, source)` をそのまま返す。
@@ -2261,9 +2384,14 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
     BY 前提 funptr の tycon を型に組む在りか,
        CODE src/optimization/uncurry.rs: funptr_lambda, replace_closure_call_to_funptr_call,
        replace_closure_call_to_funptr_call_subexprs
-  <2>2a. 式が funptr 型を持つのは、`type_funptr` が作った型を `set_type` で与えられたときか、funptr 型を
-        持つ式の型を `set_type` で写されたときである。**型検査が推論した型を式に記録する経路もこの 2 つで
-        尽きる** -- `TypeCheckContext::unify_type_of_expr` は各式に推論した型を付けて返すが、その型は
+  <2>2a. 式が funptr 型を持つのは、`type_funptr` が作った型を `ExprNode::set_type` で与えられたときか、
+        funptr 型を持つ式の `type_` の欄を写されたときである。前提 式の型の欄を書く在りか より、
+        `ExprNode` を組むのは `Expr::into_expr_node_with_aux_src` (`type_` に `None` を置く)、
+        `ExprNode::clone_all` と `ExprNode::clone_except_fvs` (`type_: self.type_.clone()` で自分の欄を
+        写す) であり、`type_` の欄へ代入するのは `ExprNode::set_type` (`ret.type_ = Some(ty)`) である。
+        同じ前提より、残る形は別の `ExprNode` の同じ欄をそのまま写すので、写す場合に入る。
+        **型検査が推論した型を式に記録する経路もこの 2 つで尽きる** --
+        `TypeCheckContext::unify_type_of_expr` は各式に推論した型を付けて返すが、その型は
         制約系へ入った型の代入像であり、**単一化は与えられた型から新しい tycon を作らない** --
         `TypeCheckContext::unify` の各腕は、2 つの型を突き合わせて等しい tycon を受け入れるか、
         `TyApp` の関数と引数へ降りるか、`unify_tyvar` で型変数に相手の型そのものを束縛するか、
@@ -2298,7 +2426,9 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         `replace_closure_call_to_funptr_call_subexprs` は部分式を辿って
         `replace_closure_call_to_funptr_call` を当て、その答えの部分式を組み直すだけで、式の型を別の式へ
         写さない。
-    BY <2>1, <2>2, README の「「果たす者」と「検査」の読み方」,
+    BY <2>1, <2>2, 前提 式の型の欄を書く在りか, README の「「果たす者」と「検査」の読み方」,
+       CODE src/ast/expr.rs: ExprNode::set_type, ExprNode::clone_all, ExprNode::clone_except_fvs,
+       Expr::into_expr_node_with_aux_src,
        CODE src/optimization/uncurry.rs: run, funptr_lambda,
        replace_closure_call_to_funptr_call, replace_closure_call_to_funptr_call_subexprs,
        CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr,
@@ -3288,7 +3418,7 @@ DEF 共通接頭の段の中の対応 の下で、
 対する反証である。**その欠陥は直っている** -- 今のコードでは `observe` の本体が `observes_uniqueness()` の
 真な op を持つので `observe ∈ observing` となり、`borrow_ify` の
 `if observing.contains(&func.name) { continue; }` がこの関数を飛ばして借用版を作らない。
-README の「較正」の節の較正表は、P26 の節を較正するバグとして #551 を挙げる。この節がその反証であり、D18 は
+`report.md` の「較正」の節の較正表は、P26 の節を較正するバグとして #551 を挙げる。この節がその反証であり、D18 は
 「`p50-observation.md` の「門が無かったときの反例」の反例は `Array I64` を使って
 `_unsafe_is_storage_unique` でも書ける」と書いてこの節を見出しの名前で引く。
 
@@ -3430,7 +3560,7 @@ Release(o, []) ; Release(w, []) ; k')` になる。
 修正前のコードは P26 を破る。同じ出力は D11 を満たす -- 出力の実行で `o*` の参照は、`M` が 1 つ (呼び出しの
 後の `Release(o, [])` が処分する)、`F` の `y'` が 1 つ (`Release(y2', [])` が処分する) であり、過剰処分
 (S-a) も漏れ (S-b) も解放後の読み (S-c) も起きない。すなわちこれは、D11 を満たしたまま P26 だけを破る入力で
-あり、README の「較正」の節が求めた「この節だけを破る例」である。
+あり、`report.md` の「較正」の節が求めた「この節だけを破る例」である。
 
 ## 7. 記録 (2) -- 門が直接呼び出しだけを閉じていたときの反例
 
@@ -4123,11 +4253,11 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
 書いておく。
 
 - **(X2) の向きは `cancel` と逆になりうる。** L7a の `<1>2` が `cancel` について使ったのは
-  L6 の `H' ≤ H` である。`borrow_ify` にはその向きの不等式が無い。README の「測って外した設計 -- 呼び出し側の
-  局所条件」の節は、`routing_saves_retain` の判定を「1 つでも得をする unit が在る、かつ C の unit が 1 つも
-  無い」に変えれば「振り替えた呼び出しのどの計数下オブジェクトについても出力のカウントが入力以下になる」と
-  書いており、**いまの判定ではそれが成り立たない**ことをそこで述べている。C の場合 (所有していて呼び出しで
-  死ぬ unit) では出力のカウントの方が高い。実行時に参照カウントで分岐する op は
+  L6 の `H' ≤ H` である。`borrow_ify` にはその向きの不等式が無い。`report.md` の「測って外した設計 --
+  呼び出し側の局所条件」の節は、`routing_saves_retain` の判定を「1 つでも得をする unit が在る、かつ C の
+  unit が 1 つも無い」に変えれば「振り替えた呼び出しのどの計数下オブジェクトについても出力のカウントが
+  入力以下になる」と書いており、**いまの判定ではそれが成り立たない**ことをそこで述べている。C の場合
+  (所有していて呼び出しで死ぬ unit) では出力のカウントの方が高い。実行時に参照カウントで分岐する op は
   `funcs_observing_uniqueness` の門が閉じる対象ではないので (門が読むのは `observes_uniqueness` である)、
   窓の中でカウントの高い側が共有の腕を取る形は排除されていない。
 - **(X3) の出口 -- 対応する 2 つの段が同じオブジェクトを解放しない。** `borrow_ify` は借用した参照の処分を
@@ -4152,10 +4282,10 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
    「広がりの中のスロットが指す計数下の
    オブジェクトは `t0` より後に割り当てられた」を帰納で示す命題であり、この op の結果はその帰納の外に
    出る -- 「環境が最初の時点に持ち込んだ番地なら、そのオブジェクトは最初の時点より前に割り当てられて
-   いる (A17 の (i-d))」。よって L11 は
-   「広がりの中に `InlineLLVMBoxedFromRetainedPtrIOS` の節点の実行が無い」を仮定として負い、それを
-   L12 と L13 が運ぶ。**参照の持ち手の側は `README.md` が既に持っている** -- `boxed_to_retained_ptr` が渡した参照を環境が持つことは
-   A17 (i-b) が、`boxed_from_retained_ptr` がそれを活性化へ移すことは D24 の (E2) の `H` の表が言う。
+   いる (A17 の (i-d))」。よって L11 は、広がりの中に `InlineLLVMBoxedFromRetainedPtrIOS` の節点の実行が
+   無いことを仮定として負い、それを L12 と L13 が運ぶ。**参照の持ち手の側は `README.md` が既に持って
+   いる** -- `boxed_to_retained_ptr` が渡した参照を環境が持つことは A17 (i-b) が、
+   `boxed_from_retained_ptr` がそれを活性化へ移すことは D24 の (E2) の `H` の表が言う。
    足りないのは**その番地が指すオブジェクトが `t0` より後に割り当てられたこと**であり、A3 のこの節も
    この 2 つも、割り当ての時点を言わない。果たす者: 誰も。
 
@@ -4174,9 +4304,9 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
    規則 (e) と (f) の辺の行き先は `closure_targets` なので、そこが届かないと L10 の `<1>6` と `<1>6b` が
    閉じない。果たす者: 誰も。
 
-4. **A23 が名指す数え上げはこの文書に在る (穴ではない)。** README の A23 と「検証状況」の節はどちらも、
-   funptr 型の `Expr::Lam` が式の内側へ移らないことを `L9b` の `<2>2a` が示すと書く。その段は `uncurry` の中で
-   funptr 型が式に付く位置を 3 つに数え上げ、`uncurry` より前に funptr 型が制約系へ入る経路が無いこと、
+4. **A23 が名指す数え上げはこの文書に在る (穴ではない)。** README の A23 と `report.md` の「検証状況」の
+   節はどちらも、funptr 型の `Expr::Lam` が式の内側へ移らないことを `L9b` の `<2>2a` が示すと書く。
+   その段は `uncurry` の中で funptr 型が式に付く位置を 3 つに数え上げ、`uncurry` より前に funptr 型が制約系へ入る経路が無いこと、
    型検査が `Expr::Lam` の節点に置く期待型が funptr 型であれば `type_fun(arg_ty, body_ty)` との単一化が
    tycon の食い違いで失敗すること、`replace_closure_call_to_funptr_call_subexprs` が式の型を別の式へ
    写さないこと、`uncurry` の後の `simplify_symbol_names` が名前しか替えないことを読む。報告する穴は
