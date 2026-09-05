@@ -1739,14 +1739,20 @@ SCAN src/ `truncate_to_unit(`
   <2>5. QED
     BY <2>3, <2>4
 
-<1>20. **P1 が成り立つ。** すなわち `<1>1` を満たす型 `t` について、`L(t)` の各要素 `lam` の
+<1>20. **P1 が成り立つ。** すなわち A28 を満たす型環境 `E` の下で、`<1>1` を満たす型 `t` について、
+   `L(t)` の各要素 `lam` の
    `T(t, lam)` は `U(t)` の要素であり、`U(t)` の各要素 `u` はある `L(t)` の要素の `T(t, ・)` で
    ある。`<1>1` は A10 をこの文書の記法で述べたものなので (第 3 節)、これは README の P1
-   --「**A10 を満たす**任意の型 `τ` について」-- そのものである。
+   --「**A10 を満たす**任意の型 `τ` について」-- である。
+
+   **A28 は型ではなく型環境に掛かるので、P1 が型に置く条件には入らない。**`<1>18` と `<1>19` は
+   `<1>3e` を経て `<1>3c` を読み、`<1>3c` の `<2>1` の `<3>5` が `<1>3ba` を、`<1>3ba` の `<2>2` が
+   A28 を読む。A28 は第 4 節の仮定の 1 つであり、T の前提が量化する集合はその全体なので、この文書は
+   それを固定した `E` について P1 を結論する。
 
    A10 が型に条件を置くことが空虚でないのは `<1>19a` による。`t.is_closure()` が偽で型構成子が `E`
    に無い型については `L(t)` も `U(t)` も定まらず、P1 の言明の 2 つの辺が意味を持たない。
-  BY <1>18, <1>19, <1>19a
+  BY <ref id=3d4be43/>, <1>18, <1>19, <1>19a
 
 <1>21. `VarTable::of(func)` または `VarTable::body_only(body)` が作る表 `vars` について、
    `vars.bindings` への挿入は 1 つの有限列をなし、その列に現れる名前は相異なる。`ord(y)` を、`y` が
@@ -2780,7 +2786,7 @@ SCAN src/ `truncate_to_unit(`
     `<2>2` から `<2>7` が尽くしている。
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, <2>8, CODE src/rc_ir/ownership.rs: Binding
 
-<1>31. **P2 が成り立つ。** すなわち、A3、A6、A9、A10、A11、A12、A15 を満たすプログラムに
+<1>31. **P2 が成り立つ。** すなわち、A3、A6、A9、A10、A11、A12、A15、A28 を満たすプログラムに
    ついて、`vars` をその 1 つの本体 -- 関数の `body` またはグローバル初期化子の `init` -- について
    `VarTable::of` または `VarTable::body_only` が作る表、`x` を任意の `FullName`、`pi` を任意の
    `FieldPath` とすると、`origin(vars, E, x, pi)` は panic せずに `Origin` の値を返し、停止する。
@@ -2790,10 +2796,11 @@ SCAN src/ `truncate_to_unit(`
    置き、その表で `RewriteCtx` と `CancelAnalysis` を作る。README の P7a も、site を関数に限らない
    形で書く理由を「`owns_unit` がグローバル初期化子の版でも呼ばれるからである」と述べる。
 
-   条件節がこの 7 つを挙げるのは、`<1>29` と `<1>30` がその全部の上に立つからである。`<1>1` は
+   条件節がこの 8 つを挙げるのは、`<1>29` と `<1>30` がその全部の上に立つからである。`<1>1` は
    A10、`<1>2` は A11 を A6 と D6 と合わせたもの、`<1>3a` は A12 と A3 の 1 段をこの文書の記法で
    述べたものであり (第 3 節)、A3 の残りは `<1>28` と `<1>28a`、A6 は `<1>2` と `<1>21`、A9 は
-   `<1>3`、A15 は `<1>29` が読む。
+   `<1>3`、A15 は `<1>29`、A28 は `<1>3ba` が読む。A28 が届く道は `<1>3ba` から `<1>3c` と
+   `<1>3ca` を経て `<1>9` と `<1>10`、そして `<1>28` と `<1>30` である。
 
    P2 が量化するのは、`x` がプログラムの束縛変数である場合と、`x` が `vars.bindings` に束縛を
    持たない名前 (D6 の第 3 の形) である場合であり、どちらもこの主張の特別な場合である。
@@ -2823,7 +2830,7 @@ SCAN src/ `truncate_to_unit(`
     P2 が量化する 2 つの場合はどちらも `<2>2a` の範囲に入り、`pi` についての一般性は `<2>1` と
     `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 7 つの仮定は `<1>29` と
     `<1>30` が読むものである。
-    BY <ref id=e11772a/>, <ref id=33c54dc/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=3e6b0e0/>, <1>29, <1>30, <2>1, <2>2, <2>2a, <2>2b,
+    BY <ref id=e11772a/>, <ref id=33c54dc/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=3e6b0e0/>, <ref id=3d4be43/>, <1>29, <1>30, <2>1, <2>2, <2>2a, <2>2b,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel,
        CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
 
@@ -2873,8 +2880,8 @@ SCAN src/ `truncate_to_unit(`
     `U(t)` の要素である。
     BY <2>1, <2>3, <2>4, DEF unit に届く
 
-<1>33. **(P1 の系 1: `origin` が辿る path はどれも unit に届く)** `<1>31` と同じ 7 つの仮定 --
-   A3、A6、A9、A10、A11、A12、A15 -- を満たすプログラムの本体 -- 関数の `body` またはグローバル
+<1>33. **(P1 の系 1: `origin` が辿る path はどれも unit に届く)** `<1>31` と同じ 8 つの仮定 --
+   A3、A6、A9、A10、A11、A12、A15、A28 -- を満たすプログラムの本体 -- 関数の `body` またはグローバル
    初期化子の `init` -- を 1 つ取り、`vars` をそれについて `VarTable::of` または
    `VarTable::body_only` が作る表とする。`x` を `ty(x)` が定まる名前、すなわちその本体に現れる
    `RcVar` の名前 (`<1>3a` (vi)) とする。このとき、`pi` が `L(ty(x))` の要素または `U(ty(x))` の
@@ -3090,7 +3097,7 @@ SCAN src/ `truncate_to_unit(`
     位置に限られるので、道の長さは有限で上から抑えられる。よって帰納法は呼び出しの下流の全体に届く。
     BY <1>21, <1>25, <1>29b, <2>5, <2>6, DEF 呼び出しの辺, DEF 呼び出しの下流
 
-<1>34. **(P1 の系 2: `origin` が返す path も unit に届く)** `<1>33` と同じ 7 つの仮定と、同じ
+<1>34. **(P1 の系 2: `origin` が返す path も unit に届く)** `<1>33` と同じ 8 つの仮定と、同じ
    本体・表 `vars`・名前 `x` を取る。`pi` が `L(ty(x))` の要素または `U(ty(x))` の要素であるとき、
    `origin(vars, E, x, pi)` の返り値に現れる各 `VarPath` `(u, sig)` (identity と candidates の両方)
    について、`u` が `vars.var_tys` に型を持つならば `sig` は `ty(u)` の unit に届く。すなわち
@@ -3104,9 +3111,10 @@ SCAN src/ `truncate_to_unit(`
    `is_fully_unboxed(I64)` は空の連言として真になる。すなわち `cls(I64) = NB` であり、`<1>10` より
    `unit_step(I64, E)` は `UnitStep::NoUnit` で、`T(I64, [0])` はループの第 0 周で `panic!` に達する。
    **`origin` の答えの `VarPath` の第 2 成分を `units_under` と `T` に掛ける読み手は、`owns_object` と
-   `owns_object_yet` の 2 つである。**`src/` で `truncate_to_unit` を呼ぶ製品のコードは 6 か所であり、
-   path を `origin` の答えから得るのはこの 2 つだけで、残る 4 か所が渡すのは `boxed_leaf_paths` が
-   挙げる leaf か、`rhs_consumes` が報告する leaf か、`result_prov` の宣言が名指す leaf である。
+   `owns_object_yet` である。**前提 `truncate_to_unit` を呼ぶ在りか が `src/` の呼び出し元を挙げ、
+   その分類が、path を `origin` の答えから得るのはこの 2 つであり、残りが渡すのは `boxed_leaf_paths` が
+   挙げる leaf か、`rhs_consumes` が報告する leaf か、`result_prov` の宣言が名指す leaf であることを
+   述べる。
    `owns_object` へ対を渡すのは `owns_unit` と `check_ownership_is_levelled`、`owns_object_yet` へ
    対を渡すのは `level_ownership` であり、3 つとも問うのは site の unit についての `origin(v, u)` な
    ので、この条件を満たす。第 5 節がその site を数え上げる。
@@ -3315,10 +3323,10 @@ leaf を持つ、という 2 つの事実の上に立っている。どちらか
 再帰の各辺 (move-bind、`Match` のアームの結果、変位アームの payload、catch-all の payload、
 unbox 容器のフィールド、`Llvm` の 2 つの道) が保つ。
 
-**`origin` の答えに `units_under` と `truncate_to_unit` を当てるコードは 2 つある。**`src/` で
-`truncate_to_unit` を呼ぶ製品のコードは 6 か所であり、そのうち path を `origin` の答えから得るのは
-`borrow.rs` の `owns_object` と `owns_object_yet` だけである。残る 4 か所が渡すのは、
-`boxed_leaf_paths` が挙げる leaf 2 か所 (`owns_object_yet` の中でキーと突き合わせる側と、
+**`origin` の答えに `units_under` と `truncate_to_unit` を当てるコードは 2 つある。**在りかを挙げるのは
+前提 `truncate_to_unit` を呼ぶ在りか である。そのうち path を `origin` の答えから得るのは
+`borrow.rs` の `owns_object` と `owns_object_yet` であり、残りが渡すのは、
+`boxed_leaf_paths` が挙げる leaf (`owns_object_yet` の中でキーと突き合わせる側と、
 `borrow_ify` が借用版の `owned_units` を組む箇所)、`rhs_consumes` が報告する leaf
 (`CancelAnalysis::consume_rhs` の `owns`)、`result_prov` の宣言が名指す leaf
 (`origin_from_leaves_under`) である。
