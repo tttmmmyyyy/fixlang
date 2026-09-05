@@ -1469,11 +1469,13 @@ Let(x, App(callee', args),
     関数の名前である。A22 よりそれは入力の `prog.funcs` の鍵であり、その関数が `f` である。
     `<2>0` の (c) より入力の対応する `App` の callee の名前も `callee.name` である。A6 より入力の
     どの束縛名も関数の名前と異なるので、その `App` について `resolve_callee_params` は
-    `closure_targets` の枝で外れ (その鍵は `RcRhs::Closure` を右辺に持つ `Let` の束縛変数の名前で
-    ある)、`prog.funcs` の枝で `f` を引く。A14 はその `App` の `args` の個数を、
+    `closure_targets` の枝で外れ (前提 `VarTable::closure_targets` の在りか より、その欄へ鍵を入れるのは
+    `collect_bindings` の `RcRhs::Closure` の腕だけであり、その鍵は `RcRhs::Closure` を右辺に持つ
+    `Let` の束縛変数の名前である)、`prog.funcs` の枝で `f` を引く。A14 はその `App` の `args` の個数を、
     `resolve_callee_params` が静的に引く関数のパラメータの個数に等しいとするので
     `args.len() = |f.params|` であり、`<2>0` の (a) よりその個数はこの `App` の `args` の個数である。
-    BY <ref id=33c54dc/>, <ref id=f8ae607/>, <ref id=8d3e4af/>, <ref id=33e3457/>, <ref id=5604af5/>, <1>4, <2>0, CODE src/rc_ir/ownership.rs: resolve_callee_params,
+    BY <ref id=33c54dc/>, <ref id=f8ae607/>, <ref id=8d3e4af/>, <ref id=33e3457/>, <ref id=5604af5/>, <1>4, <2>0,
+       前提 `VarTable::closure_targets` の在りか, CODE src/rc_ir/ownership.rs: resolve_callee_params,
        collect_bindings
   <2>2. CASE `route` が名前を差し替えなかった。
     `ps = param_names_and_types(f)` は `f.params` に `f.capture` を鎖にした列なので
@@ -2143,7 +2145,8 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
         `vars.bindings.get(w)` は `Some(Binding::Join(..))` か `Some(Binding::Llvm(..))` である。
     P2 より `origin` の再帰は有限なので、その再帰の上の帰納で示す。`Origin::Join` の値を作るのは
     `Origin::of_candidates` の `candidates.len() ≥ 2` の腕だけであり、その `identity` は引数として
-    渡された `VarPath` である。`of_candidates` の呼び出しは 2 か所ある。1 つは `origin_inner` の
+    渡された `VarPath` である。前提 `Origin::of_candidates` を呼ぶ在りか より、その定義のほかに
+    `of_candidates` を呼ぶ式が在る項目は 2 つである。1 つは `origin_inner` の
     `Binding::Join(arm_results)` の腕で、渡すのは `(var, path)` であり、その `var` は `bindings` が
     `Binding::Join` を持つ変数である。もう 1 つは `origin_from_leaves_under` の末尾で、渡すのは引数
     `here` であり、その唯一の呼び出し元は `origin_inner` の `Binding::Llvm` の腕で
@@ -2155,7 +2158,8 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
     ある。`origin` の memo は答えをそのまま記録して返す。よって返る `Join` は上の 2 か所のどちらかが
     作ったものか、再帰の返り値をそのまま運んだものであり、後者については帰納法の仮定がその返り値に
     ついて言明を与えるので、どちらの場合も `identity` は上の 2 種のどちらかである。
-    BY <ref id=0edb0ba/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin, origin_inner, origin_from_leaves_under,
+    BY <ref id=0edb0ba/>, 帰納法の仮定, 前提 `Origin::of_candidates` を呼ぶ在りか,
+       CODE src/rc_ir/ownership.rs: origin, origin_inner, origin_from_leaves_under,
        Origin::of_candidates, Origin::identity
   <2>3. QED
     `<2>1` の場合は `<1>3` による。`Origin::Join` の場合、`<2>2` の `Binding::Join` と `Binding::Llvm` は
@@ -2404,13 +2408,15 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
       関数の版のときはそちらが、グローバル初期化子の版のときは `VarTable::body_only` が当たる。どちらも
       `closure_targets` を `collect_bindings` に埋めさせる。
       `resolve_callee_params` は `vars.closure_targets` を `callee'.name` で引き、外れたときは
-      `FuncRef { name: callee'.name }` が `prog.funcs` の鍵かを見る。`closure_targets` に元を入れるのは
-      `collect_bindings` の `RcRhs::Closure` の腕だけで、鍵はその本体の `Let` の束縛変数の名前 --
+      `FuncRef { name: callee'.name }` が `prog.funcs` の鍵かを見る。前提 `VarTable::closure_targets` の
+      在りか より、`VarTable` のその欄へ鍵を入れるのは `collect_bindings` の `RcRhs::Closure` の腕
+      だけで、鍵はその本体の `Let` の束縛変数の名前 --
       `B'_V` は出力プログラムの本体なので、すなわち出力の束縛名 (DEF 出力の束縛名) -- である。L6 より
       `callee_params` の鍵は出力の `funcs` の鍵ちょうどであり、4.4 の系 より出力の束縛名は出力の
       `funcs` の鍵ではないので、`callee'.name` は `closure_targets` の鍵ではない。よって第 2 の枝が
       当たり、`callee'.name` は出力の `funcs` の鍵なので `Some` が返る。
-      BY <ref id=33e3457/>, <ref id=33d5f52/>, DEF 出力の束縛名, CODE src/rc_ir/ownership.rs: resolve_callee_params,
+      BY <ref id=33e3457/>, <ref id=33d5f52/>, DEF 出力の束縛名, 前提 `VarTable::closure_targets` の在りか,
+         CODE src/rc_ir/ownership.rs: resolve_callee_params,
          collect_bindings, VarTable::of, VarTable::body_only
     <3>2. QED
       P30 より、`borrow_ify` の出力の `App` について `resolve_callee_params` が解決する関数が
