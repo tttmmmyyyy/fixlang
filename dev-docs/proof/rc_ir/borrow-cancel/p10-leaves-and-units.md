@@ -6,7 +6,7 @@
 `result_prov` が 1 つの結果 leaf に 2 つ以上の source を宣言しないことを develop mode で確かめるもの --
 だけである。README の第 1 節がこの 2 つを挙げる。
 
-この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A3、A6、A9、A10、A11、A12、A15 の
+この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A3、A6、A9、A10、A11、A12、A15、A28 の
 上である。証明は 1 本の構造化証明で、その QED が次の 3 つである。
 
 - **P1** (leaf と unit の対応)。README の P1 が量化する型、すなわち **A10 を満たす**任意の型に
@@ -35,6 +35,10 @@ inhabited は現れない。実行時にどの leaf が参照を持つかは P1 
 `<1>1` は README の A10 を、`<1>2` は A11 を A6 と D6 と合わせて、`<1>3a` は A12 と A3 の 1 段を、
 この文書の記法で述べたものである。README の文面との差と、P1 の定義域については第 3 節に書く。
 
+**A28 (組み込みの tycon の項目は組み込みが置いたもの) は `<1>3ba` が読む。**そこから `<1>3c` と
+`<1>3ca` を経て、P1 (`<1>20`) と P2 (`<1>31`) の両方がこの仮定に立つ。A28 は型ではなく型環境 `E` に
+掛かる条件なので、P1 の言明が量化する型の側の条件 (A10) には入らない。
+
 ## 1. 記法
 
 型環境 `E` を 1 つ固定する。以下、型に関する関数の `type_env` 引数は `E` に固定し、書かない。
@@ -52,7 +56,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 (`CODE src/ast/types.rs: TypeNode::unpunched_field_types`)。これは対 `(添字, 型)` の列である。
 
 **EXT Rust の一時値のスコープ** -- Rust Reference の "Destructors" の節の "Temporary scopes" が
-次を述べる。`<1>30` の `<2>1` がこれを引く。
+次を述べる。`<1>30` の `<2>1` の `<3>2` と `<3>3` がこれを引く。
 
 > The _temporary scope_ of an expression is the scope that is used for the temporary variable that
 > holds the result of that expression when used in a place context, unless it is promoted.
@@ -115,14 +119,15 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 **EXT HashSet の等価性** -- 標準ライブラリの `HashSet<T, S>` の `PartialEq` は、両者の
 要素数が等しく、かつ一方のすべての要素が他方に含まれるときにだけ真を返す。すなわち `==` は集合と
-しての等価性であり、反復の順序に依らない。`<1>29a` の `<2>1a` の `<3>3` がこれを引く。`crate::misc` の
+しての等価性であり、反復の順序に依らない。`<1>29a` の `<2>1a` の `<3>3` と `<1>29a` の `<2>1b` が
+これを引く。`crate::misc` の
 `Set<T>` は `FxHashSet<T>`、すなわちハッシャだけを差し替えた `HashSet<T, S>` である
 (`CODE src/misc.rs: Set`)。
 
 **EXT RefCell の借用** -- 標準ライブラリの `RefCell<T>` について、`borrow` は返した `Ref` が drop
 されるまで共有の借用を保ち、`borrow_mut` は返した `RefMut` が drop されるまで可変の借用を保つ。
 `borrow` はその値が可変に借用されている間 panic し、`borrow_mut` はその値が共有または可変に借用されて
-いる間 panic する。それ以外の場合はどちらも panic しない。`<1>30` の `<2>1` がこれを引く。
+いる間 panic する。それ以外の場合はどちらも panic しない。`<1>30` の `<2>1` の `<3>4` がこれを引く。
 
 **EXT derive した PartialEq と Eq** -- `#[derive(PartialEq)]` が enum に作る `eq` は、2 つの値の
 変位が等しく、かつ対応する各成分が `==` で等しいときにだけ真を返す。`Eq` を実装する型の `==` は
@@ -132,6 +137,7 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 **EXT 1 要素の集合の反復** -- 要素をちょうど 1 つ持つ `HashSet<T, S>` について、
 `into_iter().next()` と `iter().next()` はどちらも `Some` を返し、その中身はその 1 つの要素で
 ある (`into_iter` は要素そのもの、`iter` はそれへの共有参照)。`<1>29a` の `<2>1a` の `<3>6`、
+`<1>29a` の `<2>1b`、
 `<1>30` の `<2>6` と `<2>7` の `<3>1`・`<3>6`、`<1>34` の `<2>1` の `<3>3` がこれを引く。
 
 **EXT Iterator の enumerate と filter** -- 標準ライブラリの `Iterator` について、`enumerate` は
@@ -142,6 +148,33 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 **EXT スライスの split_first** -- 標準ライブラリの `<[T]>::split_first` は、空でないスライスに
 対して `Some((先頭の要素, 残り))` を返し、空のスライスに対して `None` を返す。`<1>28` の `<2>2f` の
 `<3>3` と `<2>2g` の `<3>2` がこれを引く。
+
+**EXT Iterator の map と zip** -- 標準ライブラリの `Iterator` について、`map(f)` はもとの列の各要素に
+`f` を当てた列を返し、列の長さを変えない。`a.zip(b)` は `a` と `b` の同じ位置の要素の対を、短い方の
+長さだけ並べた列を返す。したがって長さの等しい 2 つの列を `zip` すると、両者の各位置の対がちょうど
+1 度ずつ渡される。`<1>9a` の `<2>1a` がこれを引く。
+
+**EXT Vec の等価性** -- 標準ライブラリの `Vec<T>` の `PartialEq` は、両者の長さが等しく、かつ同じ
+位置の要素どうしが `==` で等しいときにだけ真を返す。`<1>9a` の `<2>1a` がこれを引く。
+
+**EXT Rust の評価の決定性** -- Rust の 1 つの関数呼び出しの実行は、次の 4 つが同じであれば、同じ
+分岐を選び、同じ関数を値として等しい引数で同じ順に呼び、同じ値を返す。
+
+- (i) 引数の値。
+- (ii) その実行が記憶域から読む値。
+- (iii) その実行が呼ぶ関数の返り値。
+- (iv) その実行が比べる 2 つの番地が一致するかどうか (`Arc::ptr_eq` と、`impl PartialEq for Type` が
+  節点の対について置く同じ形の比較がこれである)。
+
+この道には並行性も乱数も外部入力も無い。`<1>9a` の `<2>7` の `<3>2` と `<3>3` がこれを引く。
+
+**DEF この道の関数** -- `truncate_to_unit(ty, path, E)` の実行が直接または間接に呼ぶ関数のうち、
+`src/` に本体を持つものの全体を、**この道の関数**と呼ぶ。`<1>9a` の `<2>1` から `<2>5` が、その各々が
+何を読むかを述べる。
+
+**DEF 下位の呼び出しの列** -- ある関数呼び出しの 1 回の実行が行う「この道の関数」の呼び出しを、
+開始の時間順に並べた列を、その実行の**下位の呼び出しの列**と呼ぶ。実行が停止しなければ無限列に
+なりうる。
 
 **DEF 呼び出しの辺** -- 表 `vars` と型環境 `E` を固定する。対 `(u, sig)` から対 `(u', sig')` への
 **呼び出しの辺**とは、`origin_inner(vars, E, u, sig)` の実行が `origin(vars, E, u', sig')` を呼ぶことを
@@ -187,6 +220,90 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 **DEF unit に届く** -- path `p` が型 `t` の **unit に届く**とは、`T(t, p)` が abort せずに値を返し、
 その値が `U(t)` の要素であることをいう。
+
+### 在りかの前提
+
+**コードのどこに何が在るかの数え上げは、段の中で行わない。** 記号を名指す `CODE` の引用はその記号の
+本体しか与えないので、「ほかの記号はそれをしない」の側はそこから出ない。以下を名前つきの前提として
+置き、`BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
+
+**果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
+走らせて下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。走査は字面の上位近似
+なので、一覧には宣言だけの項目も、署名や散文としてその字面を含む項目も入る。`#[cfg(test)]` の下の
+項目は走査が除く。項目の名前は走査が呼ぶ名前である -- 自由関数がその直前の `impl` の名前を冠して
+挙がる形を含む。
+
+**前提 `TyConInfo` の値を作る在りか** --- `TyConInfo` の構造体リテラルを書く項目は次で尽きる。走査は
+その型の宣言と、返り値の型としてその名前を書く署名も挙げる。
+
+SCAN src/ `TyConInfo {`
+  = src/ast/typedecl.rs: TypeDefn::tycon_info -- 構造体リテラルと、返り値の型としての署名
+  = src/ast/types.rs: TyCon::TyConInfo -- 型の宣言と `impl TyConInfo` の見出し
+  = src/ast/types.rs: TypeNode::toplevel_tycon_info -- 返り値の型としての署名
+  = src/build/divide_program.rs: declaration_of -- 返り値の型としての署名
+  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 構造体リテラル
+  = src/fixstd/builtin.rs: bulitin_tycons -- 構造体リテラル
+  = src/optimization/capture_struct.rs: CaptureStruct::new -- 構造体リテラル
+
+**前提 `ty` の欄への代入の在りか** --- `ty` という名前の欄への代入を書く項目は次で尽きる。
+`src/ast/types.rs` のうち `TypeNode` の `ty` の欄へ代入するのは 8 つの setter であり、どれも
+`self.clone()` が作った局所の値へ代入してから `Arc::new` で包んで返す。同じファイルの `Scheme` の
+3 つが替えるのは、`Scheme` が持つ `Arc<TypeNode>` の欄そのものである。ほかのファイルの項目が替える
+のは、`Field`・`QualType`・`Predicate`・`Symbol` といった別の型が持つ `Arc<TypeNode>` の欄である。
+
+SCAN src/ `.ty = `
+  = src/ast/predicate.rs: Predicate::resolve_namespace -- `Predicate` の欄
+  = src/ast/predicate.rs: Predicate::resolve_type_aliases -- `Predicate` の欄
+  = src/ast/predicate.rs: Predicate::set_kinds -- `Predicate` の欄
+  = src/ast/program.rs: TypeEnv::unwrap_newtypes -- `Field` の欄
+  = src/ast/program.rs: TypeEnv::add_tycons -- `Field` の欄
+  = src/ast/program.rs: Program::instantiate_symbol -- `Symbol` の欄
+  = src/ast/qual_type.rs: QualType::resolve_namespace -- `QualType` の欄
+  = src/ast/qual_type.rs: QualType::resolve_type_aliases -- `QualType` の欄
+  = src/ast/traits.rs: TraitImpl::set_kinds_in_qual_pred_and_member_sigs -- メンバの署名の欄
+  = src/ast/typedecl.rs: Field::resolve_namespace -- `Field` の欄
+  = src/ast/typedecl.rs: Field::resolve_type_aliases -- `Field` の欄
+  = src/ast/typedecl.rs: Field::set_kinds -- `Field` の欄
+  = src/ast/types.rs: TypeNode::set_ty -- 局所の複製の `ty`
+  = src/ast/types.rs: TypeNode::set_tyvar_kind -- 局所の複製の `ty`
+  = src/ast/types.rs: TypeNode::set_tyvar -- 局所の複製の `ty`
+  = src/ast/types.rs: TypeNode::set_tycon_tc -- 局所の複製の `ty`
+  = src/ast/types.rs: TypeNode::set_tyapp_fun -- 局所の複製の `ty`
+  = src/ast/types.rs: TypeNode::set_tyapp_arg -- 局所の複製の `ty`
+  = src/ast/types.rs: TypeNode::set_assocty_name -- 局所の複製の `ty`
+  = src/ast/types.rs: TypeNode::set_assocty_args -- 局所の複製の `ty`
+  = src/ast/types.rs: Scheme::set_kinds -- `Scheme` の欄
+  = src/ast/types.rs: Scheme::resolve_namespace -- `Scheme` の欄
+  = src/ast/types.rs: Scheme::resolve_type_aliases -- `Scheme` の欄
+  = src/elaboration/typecheck.rs: Substitution::substitute_predicate -- `Predicate` の欄
+  = src/elaboration/typecheck.rs: Substitution::substitute_qualtype -- `QualType` の欄
+  = src/elaboration/typecheck.rs: TypeCheckContext::reduce_predicate_noalias -- `Predicate` の欄
+  = src/optimization/unwrap_newtype.rs: run_on_symbol -- `Symbol` の欄
+
+**前提 型の節点への可変参照の在りか** --- `&mut TypeNode` の字面を含む項目も、`Arc::get_mut` の字面を
+含む項目も `src/` に無い。`Arc::make_mut` を書くのは 1 つの項目だけであり、そこが可変に借りるのは
+`Arc<Map<..>>` の欄 (`assumed_preds` と `assumed_eqs`) である。すなわち `Arc<TypeNode>` から
+`TypeNode` の可変参照を取る道は `src/` に無い。
+
+SCAN src/ `&mut TypeNode`
+
+SCAN src/ `Arc::get_mut`
+
+SCAN src/ `Arc::make_mut`
+  = src/elaboration/typecheck.rs: TypeCheckContext::instantiate_scheme -- `Arc<Map<..>>` の欄を借りる
+
+**前提 `truncate_to_unit` を呼ぶ在りか** --- `truncate_to_unit` を呼ぶ式が在る項目は次で尽きる。
+走査はその宣言も挙げる。path を `origin` の答えから得るのは `owns_object` と `owns_object_yet` で
+あり、残りが渡すのは `boxed_leaf_paths` が挙げる leaf か、`rhs_consumes` が報告する leaf か、
+`result_prov` の宣言が名指す leaf である。
+
+SCAN src/ `truncate_to_unit(`
+  = src/rc_ir/borrow.rs: borrow_ify -- 借用版の `owned_units` を組む `boxed_leaf_paths` の leaf
+  = src/rc_ir/borrow.rs: consume_rhs -- `rhs_consumes` が報告する leaf
+  = src/rc_ir/borrow.rs: owns_object -- `origin` の答えの path を `units_under` が割った unit
+  = src/rc_ir/borrow.rs: owns_object_yet -- 鍵の側は `origin` の答えの unit、突き合わせる側は `boxed_leaf_paths` の leaf
+  = src/rc_ir/ownership.rs: origin_from_leaves_under -- `result_prov` の宣言が名指す leaf
+  = src/rc_ir/ownership.rs: truncate_to_unit -- 宣言
 
 ## 2. 証明
 
