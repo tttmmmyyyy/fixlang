@@ -626,17 +626,26 @@ enum については元と同じ変位で、その変位が保持する各値を
           `Arc<Set<TyCon>>` であり、`TyConInfo` の 8 欄は `Arc<Kind>`、`TyConVariant`、`bool`、
           `Vec<Arc<TyVar>>`、`Vec<Field>`、`Option<Span>`、`Option<String>`、`Option<TyCon>`、
           `TyAliasInfo` の 4 欄は `Arc<Kind>`、`Arc<TypeNode>`、`Vec<Arc<TyVar>>`、`Option<Span>`、
-          `Field` の 6 欄は `Name`、`Arc<TypeNode>` 2 つ、`bool`、`Option<Span>` 2 つである。
-          `TypeNode` の 5 欄は `Type`、`TypeInfo`、および 3 つの `OnceLock` であり、`TypeInfo` の
+          `Field` の 6 欄は `Name` (`String`)、`Arc<TypeNode>` 2 つ、`bool`、`Option<Span>` 2 つで
+          ある。`TypeNode` の 5 欄は `Type`、`TypeInfo`、および 3 つの `OnceLock` である。
+          **`Type` の 4 変位が保持するのは、`Arc<TyVar>`、`Arc<TyCon>`、`Arc<TypeNode>` 2 つ、そして
+          `AssocType` と `Vec<Arc<TypeNode>>` である。** `TyVar` の 2 欄は `Name` と `Arc<Kind>`、
+          `Kind` の 2 変位が保持するのは `Arc<Kind>` 2 つ (`Star` は何も保持しない)、`TyCon` の 1 欄と
+          `AssocType` の第 1 欄は `FullName`、`AssocType` の第 2 欄は `Option<Span>` である。
+          `FullName` の 2 欄は `NameSpace` と `String`、`NameSpace` の 2 欄は `Vec<String>` と `bool`、
+          `TyConVariant` の 8 変位はどれも値を保持しない。`TypeInfo` の
           1 欄は `Option<Span>`、`Span` の 3 欄は `SourceFile`、`usize` 2 つ、`SourceFile` の 3 欄は
-          `PathBuf` と `Arc<Mutex<Option<String>>>` 2 つである。この閉包の中で上の数え上げに当たるのは、
-          `TypeNode` の 3 つの `OnceLock` と `SourceFile` の 2 つの `Mutex` だけである。
+          `PathBuf` と `Arc<Mutex<Option<String>>>` 2 つである。挙げた型の欄のうち上の数え上げに
+          当たるのは、`TypeNode` の 3 つの `OnceLock` と `SourceFile` の 2 つの `Mutex` だけである。
       BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: truncate_to_unit,
          CODE src/rc_ir/ownership.rs: unit_step, CODE src/ast/program.rs: TypeEnv,
          CODE src/ast/types.rs: TyConInfo, CODE src/ast/types.rs: TyAliasInfo,
          CODE src/ast/types.rs: Kind, CODE src/ast/types.rs: TyConVariant,
          CODE src/ast/types.rs: TyVar, CODE src/ast/typedecl.rs: Field,
          CODE src/ast/types.rs: TypeNode, CODE src/ast/types.rs: TypeInfo,
+         CODE src/ast/types.rs: Type, CODE src/ast/types.rs: TyCon,
+         CODE src/ast/types.rs: AssocType, CODE src/ast/name.rs: Name,
+         CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: NameSpace,
          CODE src/parse/sourcefile.rs: Span, CODE src/parse/sourcefile.rs: SourceFile,
          CODE src/rc_ir/ast.rs: FieldPath, DEF このクレート
     <3>2. `SourceFile` の 2 つの memo は、`TypeNode` の値の等しさを動かさない。
@@ -660,9 +669,19 @@ enum については元と同じ変位で、その変位が保持する各値を
       BY <3>1, CODE src/ast/types.rs: TypeNode::set_source_if_none,
          CODE src/ast/types.rs: TypeNode::set_source,
          CODE src/ast/types.rs: TypeNode::get_source, CODE src/ast/types.rs: TypeNode
-    <3>5. `toplevel_tycon_info` は `type_env` の表を読むだけで、何も書かない。その本文は
-          `type_env.tycons().get(&tycon).unwrap()` であり、`TypeEnv::tycons` は表への共有参照を返す。
-      BY CODE src/ast/types.rs: TypeNode::toplevel_tycon_info, CODE src/ast/program.rs: TypeEnv::tycons
+    <3>5. `toplevel_tycon_info` は `type_env` の表を読むだけで、何も書かない。その本文は 3 つの文で
+          ある --- `assert!(!self.is_closure());`、`let tycon = self.toplevel_tycon().unwrap();`、
+          そして末尾式 `type_env.tycons().get(&tycon).unwrap()` である。第 1 の文が呼ぶ `is_closure` の
+          本文は `self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())`、
+          `toplevel_tycon_satisfies` の本文は `self.toplevel_tycon()` の値についての match、
+          第 2 の文が呼ぶ `toplevel_tycon` の本文は `self.ty` についての 4 つの腕であり、どれも
+          `self` の欄を読むだけである。末尾式の `TypeEnv::tycons` は表への共有参照を返す。
+      BY CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+         CODE src/ast/types.rs: TypeNode::is_closure,
+         CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+         CODE src/ast/types.rs: TypeNode::toplevel_tycon,
+         CODE src/fixstd/builtin.rs: make_arrow_name_abs,
+         CODE src/ast/program.rs: TypeEnv::tycons
     <3>6. QED
       <3>1 が、この道で共有参照から書かれうる欄を 5 つに尽くす。<3>2 と <3>4 が `SourceFile` の 2 つと
       `TypeInfo` の欄を片付け、残るのは A3 が名指す `TypeNode` の 3 つの `OnceLock` である。<3>3 と
