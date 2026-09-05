@@ -77,3 +77,12 @@ and_short_circuit = (
     let b = 5 in
     if b >= 0 && b < 10 { b } else { 0 - b }
 );
+
+// A trait implementation, whose member name on the left-hand side is a declaration name too.
+trait a : Doubled {
+    doubled : a -> a;
+}
+
+impl I64 : Doubled {
+    doubled = |n| n * 2;
+}

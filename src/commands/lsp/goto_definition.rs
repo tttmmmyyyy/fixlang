@@ -33,8 +33,7 @@ pub(super) fn handle_goto_definition(
     };
 
     // The source location the name at the cursor is defined at. Every node the cursor can land on
-    // is answered here, so that a node whose answer is "nowhere to jump to" says so rather than
-    // reaching the end of the function.
+    // is answered here, and a node that names nothing to jump to answers with `None`.
     let def_src = match node {
         EndNode::Expr(var, _) | EndNode::Pattern(var, _) => {
             let full_name = &var.name;
