@@ -180,10 +180,11 @@ Rust 標準ライブラリの反復子について、次の 5 つの契約を使
   集合に等しくする。鍵 `k` の値は、第 1 成分が `k` である対のうち最後に渡されたものの第 2 成分で
   ある。
 
-**EXT 写像の `insert` と `values_mut`**
-コンパイラの写像型 `Map<K, V>` は `FxHashMap<K, V>` の別名であり、`insert` と `values_mut` は Rust
-標準ライブラリの `HashMap` のものである (`CODE src/misc.rs: Map`)。次の 2 つの契約を使う。
+**EXT 写像の `default`・`insert`・`values_mut`**
+コンパイラの写像型 `Map<K, V>` は `FxHashMap<K, V>` の別名であり、`default`・`insert`・`values_mut`
+は Rust 標準ライブラリの `HashMap` のものである (`CODE src/misc.rs: Map`)。次の 3 つの契約を使う。
 
+- `Map::default()` は、鍵を 1 つも持たない写像を返す。
 - `m.insert(k, v)` は、`m` が鍵 `k` を持たないとき対 `(k, v)` を加え、持つときその鍵の値を `v` で
   置き換える。どちらの場合も `k` 以外の鍵とその値は変わらず、鍵が失われることはない。
 - `m.values_mut()` は、`m` の各値への可変参照をちょうど 1 つずつ渡す反復子を返す。鍵の集合も、鍵から
@@ -626,7 +627,8 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
 
   **<2>1.** `borrow_ify` が返す `RcProgram` の 3 つの欄を、コードの上で読む。
 
-  - **`funcs`**: 型は `Map<FuncRef, RcFunc>` であり、空の `Map` から始まる。これに触れるのは
+  - **`funcs`**: 型は `Map<FuncRef, RcFunc>` であり、`Map::default()` が返す写像から始まる。
+    EXT 写像の `default`・`insert`・`values_mut` より、その写像は鍵を 1 つも持たない。これに触れるのは
     3 つのループだけである。
 
     第 1 のループは `prog.funcs.values()` の各 `func` について `f_own = func.clone()` を作り、
@@ -647,12 +649,13 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     ```
 
     この 3 つのループが `funcs` に対して呼ぶのは `insert` と `values_mut` の 2 つだけである。EXT 写像の
-    `insert` と `values_mut` より、`insert` は鍵を足すか既にある鍵の値を差し替えるかのどちらかであり、
-    `values_mut` は鍵の集合を変えずに値への可変参照を渡す。どちらも鍵を取り除かない。ここから 3 つが
-    出る。
+    `default`・`insert`・`values_mut` より、`insert` は鍵を足すか既にある鍵の値を差し替えるかの
+    どちらかであり、`values_mut` は鍵の集合を変えずに値への可変参照を渡す。どちらも鍵を取り除かない。
+    ここから 3 つが出る。
 
     1. `p1.funcs` の各エントリは、2 つの挿入のループのどちらかが入れた値の `borrowed_units` を
-       第 3 のループが書き替えたものである。**(T4) が名指す 4 つの欄 -- `fn_ty` / `ret_ty` /
+       第 3 のループが書き替えたものである。**空の写像から始まり、鍵を足すのは 2 つの挿入だけで
+       ある。****(T4) が名指す 4 つの欄 -- `fn_ty` / `ret_ty` /
        `params` の型 / `inline_into_callers` -- は、第 3 のループが書き替える欄ではない。**
     2. **`p1.funcs` のどのエントリも、鍵はその関数の `name` に等しい。**第 1 のループは
        `f_own.name` を鍵に取り、第 2 のループは `clone.name` に等しい `borrow_version` を鍵に
@@ -697,16 +700,22 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     `p0.globals` の第 `i` 要素のものに等しい。
   - **`roots`**: `roots: prog.roots.clone()`。よって `p1.roots` は `p0.roots` に等しい。
 
-  **この段が「複製」と書くところでは、複製は元と等しい。** 複製されるのは `FullName` (鍵と
-  `symbol`)、`Arc<TypeNode>` (`ty`)、`Set<FullName>` (`roots`)、`RcFunc` (`f_own`) である
-  (`CODE src/rc_ir/ast.rs: RcProgram`, `RcFunc`, `RcGlobalInit`, `CODE src/ast/name.rs: FullName`,
-  `NameSpace`)。EXT Clone を順に当てる。
+  **この段が「複製」と書くところでは、複製は元と等しい。** 複製されるのは `FuncRef` (`funcs` の鍵と
+  `RcFunc` の `name`)、`FullName` (`symbol`)、`Arc<TypeNode>` (`ty`)、`Set<FullName>` (`roots`)、
+  `RcFunc` (`f_own`) である
+  (`CODE src/rc_ir/ast.rs: RcProgram`, `RcFunc`, `FuncRef`, `RcGlobalInit`,
+  `CODE src/ast/name.rs: FullName`, `NameSpace`)。EXT Clone を順に当てる。
 
   - `FullName` は `PartialEq` を derive した構造体で、そのフィールドは `NameSpace` と `String` で
     ある。`String` の複製は元と等しい。`NameSpace` の `PartialEq` は手書きであり、A3 が
     「`NameSpace` の実装は `names` だけを読み `is_absolute` を読まない」と述べる。`names` は
     `Vec<String>` なのでその複製は元と等しく、したがって `NameSpace` の複製も `FullName` の複製も
     元と等しい。H3 が A3 を与える。
+  - **`FuncRef` は `Clone`・`PartialEq`・`Hash` を derive した構造体で、その唯一のフィールドは
+    `name: FullName` である。**よって `FuncRef` の複製は `FullName` の複製を欄に持ち、`FullName` に
+    ついて示したことから元と等しく、等しい 2 つの `FuncRef` は等しくハッシュされる (下の
+    `FullName` の `Hash` についての節)。`RcProgram` の `funcs` は `Map<FuncRef, RcFunc>` であり、
+    `RcFunc` の `name` は `FuncRef` である。
   - `Arc<TypeNode>` の複製は元と同じ `TypeNode` を指すので、`TypeNode` の等しさを読む要はない。
   - `Set<FullName>` の複製は元の各要素の複製を要素とするので、`FullName` について示したことから
     元と等しい。**`FullName` の `Hash` も手書きだが、`PartialEq` が読む成分 -- `namespace` の
@@ -715,19 +724,20 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     フィールドの複製である。とくに `f_own.name` は `func.name` に等しい。
 
     BY H3, <ref id=e11772a/>, EXT Clone, EXT 反復子の `iter`・`values`・`map`・`collect`,
-       EXT 写像の `insert` と `values_mut`,
+       EXT 写像の `default`・`insert`・`values_mut`,
        `CODE src/rc_ir/borrow.rs: borrow_ify`,
        `CODE src/rc_ir/borrow.rs: clone_func`, `CODE src/rc_ir/ast.rs: RcProgram`, `RcFunc`,
-       `RcGlobalInit`, `CODE src/ast/name.rs: FullName`, `NameSpace`
+       `FuncRef`, `RcGlobalInit`, `CODE src/ast/name.rs: FullName`, `NameSpace`
 
   **<2>1a.** 第 2 のループが入れる各借用版の名前は、`p0.funcs` のどの鍵とも、`p0.funcs` のどの
   関数の `name` とも異なる。
 
   第 2 のループの鍵 `borrow_version` は、`borrow_ify` が `borrow_versions` に入れた値である。
   その値を作るのは `borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name))` の 1 行
-  だけであり、`borrow_funcref` は元の名前の `name` フィールドの文字列に `"#borrow"` を継ぎ足す
-  (`borrow_name.name.push_str("#borrow")`)。よって借用版の名前を `#` で区切った最後の断片は
-  `borrow` である。
+  だけである。`borrow_funcref` は `FuncRef` を受け取って `FuncRef` を返し、その `name` の欄が持つ
+  `FullName` の複製の `name` フィールドの文字列に `"#borrow"` を継ぎ足す
+  (`borrow_name.name.push_str("#borrow")`)。`FuncRef` の唯一のフィールドが `name: FullName` で
+  あることは `<2>1` が読んだ。よって借用版の名前を `#` で区切った最後の断片は `borrow` である。
 
   A13 は、`borrow_ify` の**入力に現れるすべての名前**について、`name` フィールドを `#` で区切った
   最後の断片が `borrow` ではないと述べ、その理由として `borrow_funcref` が借用版の名前を
@@ -736,7 +746,7 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   そこに収まる各関数の `name` にも A13 が当たる。
 
     BY <2>1, H3, <ref id=cb35ab1/>, `CODE src/rc_ir/borrow.rs: borrow_ify`,
-       `CODE src/rc_ir/borrow.rs: borrow_funcref`
+       `CODE src/rc_ir/borrow.rs: borrow_funcref`, `CODE src/rc_ir/ast.rs: FuncRef`
 
   **<2>2.** P24 は、`borrow_ify` と `cancel` について、次の**5 つ**を述べる。
 
@@ -781,13 +791,14 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
 
   EXT 反復子の `iter`・`values`・`map`・`collect` より、`values` は `p1.funcs` の各関数を
   ちょうど 1 回ずつ渡し、`map` はその 1 つ 1 つを対 `(f.name.clone(), clone)` に写し、対の反復子の `Map` への
-  `collect` は鍵の集合を渡された各対の第 1 成分の集合に等しくする。よって `p2.funcs` の鍵の集合は
+  `collect` は鍵の集合を渡された各対の第 1 成分の集合に等しくする。`f.name` は `FuncRef` であり、
+  その複製が元と等しいことは `<2>1` が示した。よって `p2.funcs` の鍵の集合は
   `{ f.name : f ∈ p1.funcs.values() }` である。`<2>1` の 2 より
   `p1.funcs` のどのエントリも鍵はその `name` に等しいので、この集合は `p1.funcs` の鍵の集合に
   等しい。`<2>1` の 3 と合わせて、**`p0.funcs` の各関数の `name` は `p2.funcs` の鍵である。**
 
     BY <2>1, EXT Clone, EXT 反復子の `iter`・`values`・`map`・`collect`,
-       `CODE src/rc_ir/borrow.rs: cancel`, `CODE src/rc_ir/ast.rs: RcProgram`
+       `CODE src/rc_ir/borrow.rs: cancel`, `CODE src/rc_ir/ast.rs: RcProgram`, `RcFunc`, `FuncRef`
 
   **<2>3a.** `cancel` が返す `globals` と `roots` を、コードの上で読む。`cancel` が返す `globals` は
   次の 1 つの式が作る列である。
