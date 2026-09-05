@@ -1973,20 +1973,39 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
       `func` のパラメータ・capture の名前ちょうどで、その型は `func` のものである。
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::new, borrow_ify, CODE src/rc_ir/ownership.rs: VarTable::of
 
-<1>3. `param_tys` が `r` を鍵に持つとき (その型を `τ`)、`under(τ, p)` の各 `unit` について
-      `trunc(τ, unit) ∈ units(τ)` である。
-  第 1 節に写した `p15` の `L9` は仮説つきである -- 「`trunc(τ, ・)` が `under(τ, p)` の各要素について
-  値を返すとき、その値は `units(τ)` の要素である」。言明は `ctx.owns_object(r, p)` が値を返す `(r, p)` に
-  限っており、L4 より `owns_object` のこの場合の腕は `under(τ, p)` の各 `unit` について
-  `trunc(τ, unit)` を計算して `owned_units` を引くので、値を返すことがその仮説を与える。
-  BY <ref id=d22b24a/>, <ref id=49b83ad/>, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+<1>3. `param_tys` が `r` を鍵に持ち (その型を `τ`)、`ctx.owns_object(r, p)` が値を返すとき、
+      `under(τ, p)` の各 `unit` について `trunc(τ, unit)` は値を返し、その値は `units(τ)` の要素である。
+  `<1>1` と `<1>2` より `r` は入力の関数 `func` のパラメータか capture であり、`τ` はその型なので、A10 は
+  `τ` について ground・飽和・tycon が `type_env` にあることを与える。
+  <2>1. CASE `sub(τ, p)` が `Some(σ)` である。
+    `units_under` はこの腕で `units(σ)` の各元 `w` について `p ++ w` を並べた列を返す。L1c (b) より
+    `p ++ w ∈ units(τ)` であり、第 1 節に写した `p15` の `L6` より `trunc(τ, p ++ w)` は値 `p ++ w` を
+    返す。
+    BY <ref id=8412761/>, <ref id=2e1dccd/>, <ref id=e74af85/>,
+       CODE src/rc_ir/ownership.rs: units_under
+  <2>2. CASE `sub(τ, p)` が `None` である。
+    `units_under` はこの腕で `[p]` の 1 元の列を返す。L4 よりこの場合の `owns_object` は
+    `under(τ, p)` に `Iterator::all` を掛け、各元 `unit` について `trunc(τ, unit)` を計算して
+    `owned_units` を引く。`EXT 反復子の並び` より `all` は元を順に見て、偽を返した元でそこで止まる。
+    元が 1 つしかないので、`all` が値を返したならその 1 元について閉包が値を返しており、したがって
+    `trunc(τ, p)` は値を返す。第 1 節に写した `p15` の `L9` の仮説 -- 「`trunc(τ, ・)` が
+    `under(τ, p)` の各要素について値を返す」-- がこの 1 元の列について満たされるので、その `L9` より
+    `trunc(τ, p) ∈ units(τ)` である。
+    BY <ref id=d22b24a/>, <ref id=49b83ad/>, EXT 反復子の並び,
+       CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+  <2>3. QED
+    `units_under` は `sub(τ, p)` の 2 つの腕で場合を尽くす。
+    BY <2>1, <2>2, CODE src/rc_ir/ownership.rs: units_under
 
 <1>4. QED
   `borrow_ify` は入力の各関数について `owned_units.extend(param_capture_units(func, type_env))` を行い、
   `param_capture_units` は各パラメータ・capture `p` と各 `unit ∈ units(ty(p))` について `(p.name, unit)` を
   並べる。`<1>2` より `r` は `func` のパラメータか capture で `τ = ty(r)` なので、`<1>3` の各
-  `(r, trunc(τ, unit))` はこの集合に入る。L4 よりこれが `owns_object(r, p)` の真であることである。
-  BY <ref id=d22b24a/>, <1>1, <1>2, <1>3, CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
+  `(r, trunc(τ, unit))` はこの集合に入る。よって L4 の第 2 の場合の `all` に渡る閉包は `under(τ, p)` の
+  各元について真を返し、`EXT 反復子の並び` より `all` は `true` を返す。L4 よりこれが
+  `owns_object(r, p)` の真であることである。
+  BY <ref id=d22b24a/>, EXT 集合と写像, EXT 反復子の並び, <1>1, <1>2, <1>3,
+     CODE src/rc_ir/borrow.rs: borrow_ify, param_capture_units
 
 ### 9.3 由来
 
