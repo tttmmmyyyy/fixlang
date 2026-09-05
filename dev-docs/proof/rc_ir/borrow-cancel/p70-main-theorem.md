@@ -22,7 +22,7 @@
   `borrow_funcref`。`Map` の別名は第 1 節の EXT の言明が引く。
 - **外部の結果**: EXT 共有参照が書き込める先、EXT 非公開の欄に触れられる範囲、EXT 計算は読んだ値で
   決まる、EXT 条件としてしか読まれない引数、EXT 反復子の `iter`・`values`・`map`・`collect`、
-  EXT 写像の `insert` と `values_mut`。第 1 節の「外部の結果」がその完全な言明を据える。
+  EXT 写像の `insert` と `values_mut`、EXT Clone。第 1 節の「外部の結果」がその完全な言明を据える。
 
 T の言明はこのほかに、D7・D21・D25・D26・D31 を名前で引く。
 
@@ -201,6 +201,18 @@ Rust 標準ライブラリの反復子について、次の 5 つの契約を使
   置き換える。どちらの場合も `k` 以外の鍵とその値は変わらず、鍵が失われることはない。
 - `m.values_mut()` は、`m` の各値への可変参照をちょうど 1 つずつ渡す反復子を返す。鍵の集合も、鍵から
   値への対応も変えない。
+
+**EXT Clone**
+`#[derive(Clone)]` が作る実装は、構造体については各フィールドをその型の `clone` で写した値を返す。
+`<Vec<T> as Clone>::clone` は元と同じ長さの `Vec` を作り、その第 `i` 要素を元の第 `i` 要素の `clone`
+とする。`<Set<K> as Clone>::clone` は元の各要素の `clone` を要素とする `Set` を返す。
+`<Arc<T> as Clone>::clone` は元と同じ割り当てを指すハンドルを返すので、複製と元は同じ `T` の値を
+指す。`<String as Clone>::clone` と `<bool as Clone>::clone` は同じ値を返す。
+
+**この規則は等しさで閉じる。** 基底の型では `clone` が同じ値を返し、`Vec`・`Set`・`Arc` と
+`#[derive(PartialEq)]` を持つ構造体の等しさは成分ごとの等しさで決まるので、成分の複製が元と等しければ
+全体も元と等しい。**`PartialEq` を手書きで実装する型については、その実装が読む成分について同じことを
+確かめる。**
 
 ## 2. 証明
 
@@ -695,9 +707,19 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     `p0.globals` の第 `i` 要素のものに等しい。
   - **`roots`**: `roots: prog.roots.clone()`。よって `p1.roots` は `p0.roots` に等しい。
 
-    BY EXT 反復子の `iter`・`values`・`map`・`collect`, EXT 写像の `insert` と `values_mut`,
+  **この段が「複製」と書くところでは、複製は元と等しい。** 複製されるのは `RcFunc` (`f_own` と
+  `clone`)、`FullName` (鍵と `symbol`)、`Arc<TypeNode>` (`ty`)、`Set<FullName>` (`roots`) である
+  (`CODE src/rc_ir/ast.rs: RcProgram`, `RcFunc`, `RcGlobalInit`, `CODE src/ast/name.rs: FullName`,
+  `NameSpace`)。EXT Clone より、`Arc` の複製は元と同じ値を指し、`Set` の複製は元の各要素の複製を
+  要素とし、`#[derive(Clone)]` の構造体の複製は各フィールドの複製を持つ。**手書きの `PartialEq` を
+  持つのは `NameSpace` だけである** -- A3 は「`NameSpace` の実装は `names` だけを読み `is_absolute`
+  を読まない」と述べ、`names` は `Vec<String>` なのでその複製は元と等しい。H3 が A3 を与える。
+
+    BY H3, <ref id=e11772a/>, EXT Clone, EXT 反復子の `iter`・`values`・`map`・`collect`,
+       EXT 写像の `insert` と `values_mut`,
        `CODE src/rc_ir/borrow.rs: borrow_ify`,
-       `CODE src/rc_ir/borrow.rs: clone_func`, `CODE src/rc_ir/ast.rs: RcProgram`
+       `CODE src/rc_ir/borrow.rs: clone_func`, `CODE src/rc_ir/ast.rs: RcProgram`, `RcFunc`,
+       `RcGlobalInit`, `CODE src/ast/name.rs: FullName`, `NameSpace`
 
   **<2>1a.** 第 2 のループが入れる各借用版の名前は、`p0.funcs` のどの鍵とも、`p0.funcs` のどの
   関数の `name` とも異なる。
@@ -765,8 +787,8 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   `p1.funcs` のどのエントリも鍵はその `name` に等しいので、この集合は `p1.funcs` の鍵の集合に
   等しい。`<2>1` の 3 と合わせて、**`p0.funcs` の各関数の `name` は `p2.funcs` の鍵である。**
 
-    BY <2>1, EXT 反復子の `iter`・`values`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`,
-       `CODE src/rc_ir/ast.rs: RcProgram`
+    BY <2>1, EXT Clone, EXT 反復子の `iter`・`values`・`map`・`collect`,
+       `CODE src/rc_ir/borrow.rs: cancel`, `CODE src/rc_ir/ast.rs: RcProgram`
 
   **<2>3a.** `cancel` が返す `globals` と `roots` を、コードの上で読む。`cancel` が返す `globals` は
   次の 1 つの式が作る列である。
@@ -795,7 +817,8 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   複製を置くので、第 `i` 要素の `symbol` と `ty` は `p1.globals` の第 `i` 要素のものに等しい。
   `roots` は `roots: prog.roots.clone()` なので `p2.roots` は `p1.roots` に等しい。
 
-    BY EXT 反復子の `iter`・`values`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`
+    BY <2>1, EXT Clone, EXT 反復子の `iter`・`values`・`map`・`collect`,
+       `CODE src/rc_ir/borrow.rs: cancel`
 
   **<2>3b.** `cancel` は `App` の callee の名前を変えない。
 
@@ -821,7 +844,8 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   `Retain`/`Release` の節点と `App` の callee の名前を「変えてよいもの」に並べるだけで、`cancel` の
   側で callee が動かないことを言わない。(T4) の `App` の callee の節はそれを要る。
 
-    BY <2>3, <2>3a, H3, <ref id=3e6b0e0/>, <ref id=b3dfa37/>, <ref id=0b1cac5/>, <ref id=746e87a/>, `CODE src/rc_ir/borrow.rs: cancel`,
+    BY <2>3, <2>3a, H3, <ref id=3e6b0e0/>, <ref id=b3dfa37/>, <ref id=0b1cac5/>, <ref id=746e87a/>, EXT Clone,
+       `CODE src/rc_ir/borrow.rs: cancel`,
        `CODE src/rc_ir/borrow.rs: drop_nodes`, `CODE src/rc_ir/borrow.rs: drop_nodes_inner`
 
   **<2>4.** `owns_initializer` と `owns_storage` について。`<2>2` の 3 を 2 つのパスに続けて
