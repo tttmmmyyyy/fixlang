@@ -272,6 +272,11 @@ SCAN src/ `build_capture_project(`
   = src/generator.rs: build_capture_project -- 定義
   = src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody::generate -- 呼び出し
 
+**前提 `unsafe impl` の在りか** --- `unsafe impl` の字面が在る項目は無い。よって `Send` と `Sync` を
+手で実装した型はこのクレートに無く、`EXT auto trait と共有` の 2 の但し書きに当たる型も無い。
+
+SCAN src/ `unsafe impl`
+
 **前提 `VarTable` の `origins` の欄に触れる式の在りか** --- その欄は `pub` を持たないので、それを
 名指せるのは `src/rc_ir/ownership.rs` とその子孫のモジュールだけである (`EXT 可視性`)。欄アクセスの
 字面が在る項目は次で尽き、その欄を持つ `VarTable` の値を組み立てるのは `VarTable::empty` である。
@@ -1599,12 +1604,21 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
 <1>1. `origin(K)` は、`vars.origins` に鍵 `K` が在ればその値の複製を返し、無ければ `origin_inner(K)` を
       走らせ、その返り値を鍵 `K` で `origins` に入れてから返す。`origins` から要素が取り除かれることは
       無い。
+  **読み書きの在りかを与えるのは走査である。** `origins` の欄は `pub` を持たないので、それを名指せる
+  のは `src/rc_ir/ownership.rs` とその子孫のモジュールだけであり (`EXT 可視性`)、欄アクセスの字面が
+  在る項目は第 1 節の前提が挙げる 1 つ -- `origin` -- だけである。欄を持つ値を組み立てるのは
+  `VarTable::empty` であり、そこが置くのは空の表である。よって `insert` はこの 1 か所、取り除く操作は
+  どこにも無い。
   BY CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow().get(&key)` が当たれば `known.clone()` を
      返し、そうでなければ `grow_stack(|| origin_inner(..))` の値を
-     `vars.origins.borrow_mut().insert(key, answer.clone())` で入れてから返す),
-     CODE src/rc_ir/ownership.rs: VarTable (`origins` は `RefCell<Map<VarPath, Origin>>` であり、
-     `VarTable::of` と `VarTable::body_only` が空で作る。読み書きするのは `origin` のこの 2 行だけで
-     あり、取り除く操作はどこにも無い),
+     `vars.origins.borrow_mut().insert(key, answer.clone())` で入れてから返す。この 2 行のほかに
+     `origins` を名指す式は無く、除去も呼ばない),
+     前提 `VarTable` の `origins` の欄に触れる式の在りか, EXT 可視性,
+     CODE src/rc_ir/ownership.rs: VarTable (`origins` は `pub` の付かない
+     `RefCell<Map<VarPath, Origin>>` の欄である),
+     CODE src/rc_ir/ownership.rs: VarTable::empty (`origins: RefCell::default()` -- 空の表を置く),
+     CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only (どちらも `VarTable::empty` から
+     始める),
      <ref id=3e6b0e0/> (`grow_stack` は閉包をちょうど 1 回呼び、その返り値を返す)
 <1>1a. 1 つの `VarTable` の `origins` への `insert` は、時間で全順序に並び、その順序を保ったまま
        自然数で番号づけられる。
@@ -1621,9 +1635,9 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
   有限個であることが要る。`insert` はコンパイラのプロセスの実行の動作なので、EXT 動作の番号づけが
   それを与える。
   BY <1>1, EXT auto trait と共有 (1 から 5), EXT 動作の番号づけ,
-     CODE src/rc_ir/ownership.rs: VarTable (`origins` は `RefCell<Map<VarPath, Origin>>` の欄である。
-     `src/` 全体を `unsafe impl` で検索して当たる行は無いので、EXT auto trait と共有 の 2 の
-     但し書きに当たる型はこのクレートに無い),
+     前提 `unsafe impl` の在りか (EXT auto trait と共有 の 2 の但し書きに当たる型はこのクレートに
+     無い),
+     CODE src/rc_ir/ownership.rs: VarTable (`origins` は `RefCell<Map<VarPath, Origin>>` の欄である),
      CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow_mut().insert(..)` はこの関数の中の
      1 行であり、`vars` は共有参照である)
 <1>2. どの鍵についても `origin` の呼び出しは panic せずに答えを返し、停止する。
