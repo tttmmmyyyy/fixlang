@@ -2380,7 +2380,7 @@ pub fn create_traverser<'c, 'm>(
 
 /// Emit the body of a traverser: perform `work` on every boxed object `obj` directly owns, walking
 /// through its unboxed structure to reach them.
-// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_traverse<'c, 'm>(
     obj: Object<'c>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
