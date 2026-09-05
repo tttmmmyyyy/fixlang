@@ -3155,11 +3155,11 @@ SCAN src/ `truncate_to_unit(`
    `is_box`、`is_closure`、`is_array`、`is_funptr` はすべて偽で `F(I64)` は空であり、
    `is_fully_unboxed(I64)` は空の連言として真になる。すなわち `cls(I64) = NB` であり、`<1>10` より
    `unit_step(I64, E)` は `UnitStep::NoUnit` で、`T(I64, [0])` はループの第 0 周で `panic!` に達する。
+   前提 `truncate_to_unit` を呼ぶ在りか が `src/` の呼び出し元を挙げ、その分類が、path を `origin` の
+   答えから得るのはどれで、残りが渡すのが `boxed_leaf_paths` の挙げる leaf か `rhs_consumes` の報告
+   する leaf か `result_prov` の宣言が名指す leaf かを述べる。
    **`origin` の答えの `VarPath` の第 2 成分を `units_under` と `T` に掛ける読み手は、`owns_object` と
-   `owns_object_yet` である。**前提 `truncate_to_unit` を呼ぶ在りか が `src/` の呼び出し元を挙げ、
-   その分類が、path を `origin` の答えから得るのはこの 2 つであり、残りが渡すのは `boxed_leaf_paths` が
-   挙げる leaf か、`rhs_consumes` が報告する leaf か、`result_prov` の宣言が名指す leaf であることを
-   述べる。
+   `owns_object_yet` である。**
    `owns_object` へ対を渡すのは `owns_unit` と `check_ownership_is_levelled`、`owns_object_yet` へ
    対を渡すのは `level_ownership` であり、3 つとも問うのは site の unit についての `origin(v, u)` な
    ので、この条件を満たす。第 5 節がその site を数え上げる。
