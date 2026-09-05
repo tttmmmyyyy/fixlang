@@ -88,14 +88,21 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 
 <1>0. 各単位の切片 `U` について、`U.funcs` の鍵は `Q.funcs` の鍵の部分集合であり、各鍵 `fref` の値は
       `Q.funcs[fref]` である。
-  `unit_programs[i].funcs` へ項目を入れるのは 2 か所である。`divide_among_units` は `Q.funcs` の各項目
-  `(fref, func)` を `unit_of[&fref.name]` の単位へそのまま入れ、`import_what_each_unit_reaches` は
-  `copyable_funcs` -- `Q.funcs` の項目を名前で引ける形に写したもの -- の値を鍵 `FuncRef { name }` で
-  入れる。`publish_and_prune` が呼ぶ `eliminate_unreachable` は `funcs` から項目を落とすだけで、鍵に
-  対する値を替えない。
+  **在りかは述語で決める** -- `RcProgram` の `funcs` へ項目を入れる式は、その写像に `insert` を掛ける
+  全出現であり、`src/` に 9 か所ある (改行を跨ぐものを含む)。**一覧で書くとパスが 1 つ増えるたびに
+  古くなる。**そのうち `unit_programs` の要素を書き換えるのは 2 か所である。`divide_among_units` は
+  `Q.funcs` の各項目 `(fref, func)` を `unit_of[&fref.name]` の単位へそのまま入れ、
+  `import_what_each_unit_reaches` は `copyable_funcs` -- `Q.funcs` の項目を名前で引ける形に写したもの --
+  の値を鍵 `FuncRef { name }` で入れる。残る 7 か所は別の写像を組み立てる -- `lower_program` と
+  `Lowerer::lower_lam` が `Lowerer` の `funcs` へ、`borrow_ify` が自分の出力の `funcs` へ (2 か所)、
+  `insert_rc` が `new_funcs` へ、`src/rc_ir/locality.rs` と `src/rc_ir/unique_check_elim.rs` が
+  それぞれの `output_funcs` へ入れる。項目を落とす側は、`publish_and_prune` が呼ぶ
+  `eliminate_unreachable` の `prog.funcs.retain(..)` だけであり、鍵に対する値を替えない。
   BY CODE src/build/divide_program.rs: divide_among_units, import_what_each_unit_reaches,
      copyable_funcs, publish_and_prune,
-     CODE src/rc_ir/dead_code_elim.rs: eliminate_unreachable
+     CODE src/rc_ir/dead_code_elim.rs: eliminate_unreachable,
+     CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_lam,
+     CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/rc_insert.rs: insert_rc
 
 <1>1. (a) が成り立つ。
   `implement_rc_program` は `U.funcs` の各 `(fref, func)` について LLVM 関数を 1 つ決めて `func_vals` に
@@ -155,12 +162,15 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   `FullName::to_namespace` が名前を名前空間の末尾へ移したものかのどちらかであり、後者の在りかは
   `to_namespace()` の全出現である。`src/` に 48 か所あり、末尾へ移る名前は 3 族に分かれる --
   **トレイト名** (`CODE src/ast/program.rs: Program::trait_member_symbols`)、**型名**
-  (`CODE src/ast/program.rs: Program::add_methods` のゲッタ・セッタ)、**値の名前**
-  (`fresh_closure_ref` が持ち上げる lambda と、`CODE src/elaboration/desugar_opaque.rs:
-  Program::desugar_opaque_types` が作る `#wrap_opaque`) である。トレイト名と型名は `capital_name`、
-  値の名前は `name` であり、どちらも Fix の識別子にコンパイラが `#<タグ><10 進数字>` の形の接尾辞を
-  足しうる形である (A13)。Fix の識別子を作る文字は英数字と `_` (と値の名前の頭の `@`) だけなので、
-  どの成分も `:` を持たない。よって `to_string` は相異なる名前に相異なる文字列を与える。
+  (`CODE src/ast/program.rs: Program::add_methods` のゲッタ・セッタ)、**値の名前**である。値の名前を
+  末尾へ移すのは 3 か所で、`fresh_closure_ref` が持ち上げる lambda の名前、
+  `CODE src/elaboration/desugar_opaque.rs: Program::desugar_opaque_types` が作る `#wrap_opaque`、
+  そして `CODE src/elaboration/desugar_opaque.rs: collect_opaque_infos` が不透明型の tycon に付ける
+  名前である。トレイト名と型名は `capital_name`、値の名前は `name` であり、どちらも Fix の識別子にコンパイラが
+  `#<タグ><10 進数字>` の形の接尾辞を足しうる形である (A13)。Fix の識別子を作る文字は英数字と `_`
+  (と値の名前の頭の `@`) だけなので、どの成分も `:` を持たない。**コンパイラが自分で作る名前も同じで
+  ある** -- `#wrap_opaque` と不透明型の tycon の名前 (`?` に続く型変数の名前) はどちらも `:` を持たない。
+  よって `to_string` は相異なる名前に相異なる文字列を与える。
   `object_file_symbol_name` はその文字列の `SYMBOL_VERSION_SEPARATOR` を
   `SYMBOL_VERSION_SEPARATOR_SUBSTITUTE` に置き替えるだけであり、置き替える前の文字列が substitute を
   含まないことをその関数の表明が検査する -- 含むプログラムはコンパイルされず、この場合の段は存在しない --
@@ -181,8 +191,16 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   `pthread_once`・`malloc`・`realloc` を渡す `runtime.rs` の 7 か所、`<接頭辞>_<型のハッシュ>` を渡す
   `emit_rc_helper_call` の 1 か所、そして走査関数の名前 `trav_<work><状態>_<型のハッシュ>` と
   `fixruntime_empty_traverser`・`fixruntime_empty_traverser_dynamic` を渡す `object.rs` の
-  `create_traverser` と `get_traverser_ptr` である。`<1>3a` より鍵の名前の記号名は `::` を含むので、
-  これらは `object_file_symbol_name(n)` ではない。
+  `create_traverser` と `get_traverser_ptr` である。**後ろの 2 種が `::` を持たないことは、名前を組む
+  関数が決める。**`emit_rc_helper_call` が組むのは `format!("{}_{}", prefix, obj.ty.hash())` であり、
+  `TypeNode::hash` は `format!("{:x}", md5::compute(..))`、すなわち 16 進数字だけの列を返す。`prefix` は
+  この関数を呼ぶ 4 か所が渡す `retain<接尾辞>`・`release<接尾辞>`・`mark_global`・`mark_threaded` の
+  いずれかで、`RcState::name_suffix` が返すのは空文字列か `_local` である。`create_traverser` が組むのは
+  `TypeNode::traverser_name` の返り値 `format!("{}{}_{}", work_name, state.name_suffix(),
+  self.hash_with_capture(capture))` であり、`work_name` は `trav_dyn`・`trav_release`・
+  `trav_mark_global`・`trav_mark_threaded` の 4 つ、`TypeNode::hash_with_capture` も
+  `format!("{:x}", md5::compute(..))` を返す。どの断片も `:` を持たない。`<1>3a` より鍵の名前の記号名は
+  `::` を含むので、これらは `object_file_symbol_name(n)` ではない。
   **最初の `::` より前に `#` を持つ名前**を渡すのは 5 か所である -- `global_accessor_name` の `Get#`
   (`declare_program_global`)、`InitValue#` と `InitOnce#` (`implement_rc_global` の 2 か所)、
   `release#` と `retain#` (`builtin.rs` の 2 か所) である。鍵の名前の記号名は最も外側の名前空間の
@@ -197,7 +215,10 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   与えるので、これも `object_file_symbol_name(n)` ではない。
   BY <ref id=cb35ab1/>, <ref id=29a890a/>, <1>3a, CODE src/generator.rs: object_file_symbol_name, global_accessor_name,
      Generator::declare_lambda_function, Generator::declare_program_global,
-     Generator::emit_rc_helper_call,
+     Generator::emit_rc_helper_call, Generator::retain, Generator::release, Generator::mark_global,
+     Generator::mark_threaded,
+     CODE src/ast/types.rs: TypeNode::hash, TypeNode::hash_with_capture, TypeNode::traverser_name,
+     CODE src/rc_ir/ast.rs: RcState::name_suffix,
      CODE src/ast/name.rs: FullName::module,
      CODE src/rc_ir/codegen.rs: Generator::implement_rc_global,
      CODE src/object.rs: create_traverser, get_traverser_ptr,
@@ -222,16 +243,34 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
         の関数を持たない。
     <3>1. 第 1 ループが鍵 `FuncRef{n}` の項目に着くまでに走った `module.add_function` の呼び出しの
           うち、`object_file_symbol_name(n)` を名前とするものは無い。
-      `<1>3b` より、その名前を作りうるのは `declare_lambda_function` の 1 か所である。第 1 ループの
-      前に走るのは `build_runtime` の `Declare` の呼び出しだけであり (`build_object_files` はそれを
-      `implement_rc_program` の直前に置く)、そこは `declare_lambda_function` を呼ばない。第 1 ループの
+      `<1>3b` より、その名前を作りうるのは `declare_lambda_function` の 1 か所である。
+      **第 1 ループの前に走るのは 4 つである** -- `build_object_files` は単位ごとのスレッドの中で、
+      `Generator::create_module`、`Generator::new`、`config.debug_info` が真のときの
+      `gc.create_debug_info()`、`build_runtime` の `Declare` の呼び出しを、この順に
+      `gc.implement_rc_program(&unit_program)` の前に置く。**この 4 つは
+      `declare_lambda_function` へ届かない。**`src/` で `declare_lambda_function` を呼ぶのは
+      `declare_program_global` と `implement_rc_program` の 2 か所、`declare_program_global` を呼ぶのは
+      `get_or_declare_global`・`implement_rc_program`・`implement_rc_global` の 3 か所、
+      `get_or_declare_global` を呼ぶのは `get_scoped_value` の 1 か所であり、`implement_rc_program` を
+      呼ぶのはこの `build_object_files` の 1 か所、`implement_rc_global` を呼ぶのは
+      `implement_rc_program` の第 2 ループの 1 か所である。よって第 1 ループの前にこの道へ入るには
+      `get_scoped_value` を通る要があるが、`<1>2` よりそこへ入る 143 か所は、`RcExpr` の節点の生成と
+      `Llvm` 節点のオペランドの読み -- どちらも `implement_rc_program` の第 2 ループが呼ぶ
+      `implement_rc_function` の中で走る -- と、`build_object_files` が `implement_rc_program` の**後**に
+      置く `ExportStatement::implement` と `build_main_function` である。`create_module` はモジュールを
+      作り、`Generator::new` は欄を埋め、`create_debug_info` は `add_basic_value_flag` と
+      `create_debug_info_builder` を呼び、`build_runtime` の `Declare` は走時関数の宣言を出す。
+      第 1 ループの
       3 枝が呼ぶのは `module.get_function`、`declare_program_global`、`declare_lambda_function` だけで
       あり、`<1>3` より (N3) の下で `declare_program_global` はアクセサを登録する行に着かないので、
       より前の項目が `declare_lambda_function` に渡す名前はその項目の鍵の名前 `n'` である。鍵は
       相異なるので `n' ≠ n` であり、`<1>3a` よりその記号名は `object_file_symbol_name(n)` と異なる。
-      BY (N3), <1>3, <1>3a, <1>3b, CODE src/build/build_object_files.rs: build_object_files,
-         CODE src/rc_ir/codegen.rs: Generator::implement_rc_program,
-         CODE src/generator.rs: Generator::declare_program_global,
+      BY (N3), <1>2, <1>3, <1>3a, <1>3b, CODE src/build/build_object_files.rs: build_object_files,
+         CODE src/rc_ir/codegen.rs: Generator::implement_rc_program, Generator::implement_rc_function,
+         Generator::implement_rc_global,
+         CODE src/generator.rs: Generator::declare_program_global, Generator::create_module,
+         Generator::new, Generator::create_debug_info, Generator::get_scoped_value,
+         Generator::get_or_declare_global,
          CODE src/fixstd/runtime.rs: build_runtime
     <3>2. QED
       モジュールが記号名 `s` の関数を持つのは、`module.add_function` がその名前で関数を作った後だけで
