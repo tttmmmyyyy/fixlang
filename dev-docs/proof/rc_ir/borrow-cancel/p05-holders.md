@@ -202,10 +202,10 @@ SCAN src/ `applies_a_function_operand`
   = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand -- `true`
   = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand -- `true`
   = src/generator.rs: Generator -- 読み (develop mode の検査)
-  = src/generator.rs: apply_lambda -- 読み
+  = src/generator.rs: Generator::apply_lambda -- 読み
   = src/rc_ir/borrow.rs: binds_a_destructor -- 読み
   = src/rc_ir/borrow.rs: funcs_observing_uniqueness -- 読み
-  = src/rc_ir/codegen.rs: eval_rc_expr_inner -- 読み
+  = src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner -- 読み
 
 **前提 相殺する形の順序** --- 1 つの節点の実行の生成コードが、`Generator::retain` か
 `Generator::build_retain` の呼び出しでその活性化の義務集合へ入る参照を作り (`<1>0e` の (a) の形)、

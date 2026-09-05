@@ -131,10 +131,10 @@ SCAN src/ `assume_local = true`
   = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::assuming_local
 
 SCAN src/ `.assuming_unique(`
-  = src/rc_ir/unique_check_elim.rs: elide_unique_check_if_provable
+  = src/rc_ir/unique_check_elim.rs: Specializer::elide_unique_check_if_provable
 
 SCAN src/ `.assuming_local(`
-  = src/rc_ir/locality.rs: annotate_op
+  = src/rc_ir/locality.rs: Walk::annotate_op
 
 SCAN src/ `unique_check_elim::`
   = src/build/build_object_files.rs: optimize_rc_program
@@ -161,10 +161,10 @@ SCAN src/ `InlineLLVMMarkThreadedFunctionBody`
   = src/ast/inline_llvm.rs: assuming_unique -- doc の散文
   = src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody -- 宣言と `impl LLVMGen`
   = src/fixstd/builtin.rs: VAR_NAME -- `mark_threaded_function` の中の局所 `const` が名前を取る
-  = src/generator.rs: build_release_boxed_with -- doc の散文
+  = src/generator.rs: Generator::build_release_boxed_with -- doc の散文
 
 SCAN src/ `mark_threaded_function(`
-  = src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody::mark_threaded_function -- 定義
+  = src/fixstd/builtin.rs: mark_threaded_function -- 定義
   = src/fixstd/stdlib.rs: make_std_mod -- `Std::mark_threaded` に登録する
 
 SCAN src/ `build_object_files(`
@@ -176,9 +176,9 @@ SCAN src/ `build_object_files(`
 項目は次で尽きる。
 
 SCAN src/ `build_is_refcnt_one(`
-  = src/generator.rs: build_assert_unique -- develop モードの表明
-  = src/generator.rs: build_branch_by_is_unique -- 複製の要否を決める分岐
-  = src/generator.rs: build_is_refcnt_one -- 定義
+  = src/generator.rs: Generator::build_assert_unique -- develop モードの表明
+  = src/generator.rs: Generator::build_branch_by_is_unique -- 複製の要否を決める分岐
+  = src/generator.rs: Generator::build_is_refcnt_one -- 定義
 
 SCAN src/ `build_branch_by_is_unique(`
   = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::generate -- `src` について
@@ -187,7 +187,7 @@ SCAN src/ `build_branch_by_is_unique(`
   = src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate -- D18 の観測点
   = src/fixstd/builtin.rs: make_array_unique_with_hole
   = src/fixstd/builtin.rs: make_struct_union_unique
-  = src/generator.rs: build_branch_by_is_unique -- 定義
+  = src/generator.rs: Generator::build_branch_by_is_unique -- 定義
 
 SCAN src/ `force_unique_or_assert(`
   = src/fixstd/builtin.rs: InlineLLVMArrayAppendValueCapacityUnchecked::generate
@@ -225,33 +225,33 @@ SCAN src/ `array_tail_destination(`
 
 SCAN src/ `.build_call(`
   = src/fixstd/builtin.rs: realloc_array -- runtime の関数
-  = src/generator.rs: build_ffi_call_core -- `FFI_CALL` が呼ぶ C の関数
-  = src/generator.rs: build_lifetime_marker -- LLVM の intrinsic
-  = src/generator.rs: build_traverser_work -- 型ごとの走査関数
-  = src/generator.rs: call_runtime -- runtime の関数
-  = src/generator.rs: emit_rc_helper_call -- 生成された RC の補助関数
-  = src/generator.rs: get -- `ValueAccessor::get` のグローバルのアクセサ
-  = src/generator.rs: restore_stack -- runtime の関数
-  = src/generator.rs: save_stack -- runtime の関数
-  = src/generator.rs: traverse_boxed_refs -- 型ごとの走査関数
+  = src/generator.rs: Generator::build_ffi_call_core -- `FFI_CALL` が呼ぶ C の関数
+  = src/generator.rs: Generator::build_lifetime_marker -- LLVM の intrinsic
+  = src/generator.rs: Generator::build_traverser_work -- 型ごとの走査関数
+  = src/generator.rs: Generator::call_runtime -- runtime の関数
+  = src/generator.rs: Generator::emit_rc_helper_call -- 生成された RC の補助関数
+  = src/generator.rs: ValueAccessor::get -- `ValueAccessor::get` のグローバルのアクセサ
+  = src/generator.rs: Generator::restore_stack -- runtime の関数
+  = src/generator.rs: Generator::save_stack -- runtime の関数
+  = src/generator.rs: Generator::traverse_boxed_refs -- 型ごとの走査関数
   = src/object.rs: build_malloc -- runtime の関数
-  = src/rc_ir/codegen.rs: store_init_value -- `InitValue#<symbol>`
+  = src/rc_ir/codegen.rs: Generator::store_init_value -- `InitValue#<symbol>`
 
 SCAN src/ `.build_indirect_call(`
-  = src/generator.rs: apply_lambda -- クロージャ・funptr の適用
-  = src/generator.rs: traverse_boxed_refs -- 型ごとの走査関数
+  = src/generator.rs: Generator::apply_lambda -- クロージャ・funptr の適用
+  = src/generator.rs: Generator::traverse_boxed_refs -- 型ごとの走査関数
 
 SCAN src/ `apply_lambda(`
   = src/ast/export_statement.rs: ExportStatement::implement
   = src/fixstd/builtin.rs: InlineLLVMArrayBorrowElementsBody::generate
   = src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail
-  = src/fixstd/builtin.rs: InlineLLVMGetBoxedDataPtrFunctionBody::apply_io_act_to_data_ptr -- 自由関数 `apply_io_act_to_data_ptr`
+  = src/fixstd/builtin.rs: apply_io_act_to_data_ptr -- 自由関数 `apply_io_act_to_data_ptr`
   = src/fixstd/builtin.rs: InlineLLVMUnionModBody::generate
   = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate
   = src/fixstd/builtin.rs: run_ios_runner
-  = src/generator.rs: apply_lambda -- 定義
-  = src/generator.rs: build_run_destructor
-  = src/rc_ir/codegen.rs: eval_rc_expr_inner -- `RcRhs::App` の腕
+  = src/generator.rs: Generator::apply_lambda -- 定義
+  = src/generator.rs: Generator::build_run_destructor
+  = src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner -- `RcRhs::App` の腕
 
 SCAN src/ `run_ios_runner(`
   = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::generate
@@ -269,7 +269,7 @@ SCAN src/ `apply_io_act_to_data_ptr(`
 
 SCAN src/ `run_io_or_ios_runner(`
   = src/build/build_object_files.rs: build_main_function
-  = src/generator.rs: build_run_destructor
+  = src/generator.rs: Generator::build_run_destructor
 
 SCAN src/ `run_io(`
   = src/ast/export_statement.rs: ExportStatement::implement -- `IOType::IO` の腕

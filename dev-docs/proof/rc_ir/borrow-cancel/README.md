@@ -2209,8 +2209,8 @@ P1 の定義域はこの広い方であり、型の歩みを扱う命題が P1 �
 
 SCAN src/ `.set_refcnt_state(`
   = src/object.rs: create_obj -- 割り当てたオブジェクトへ `LOCAL`
-  = src/generator.rs: build_mark_boxed_with -- `mark_global` なら `GLOBAL`、`mark_threaded` なら `THREADED`
-  = src/generator.rs: build_branch_by_is_unique -- threaded の腕がカウント 1 のとき `LOCAL`
+  = src/generator.rs: Generator::build_mark_boxed_with -- `mark_global` なら `GLOBAL`、`mark_threaded` なら `THREADED`
+  = src/generator.rs: Generator::build_branch_by_is_unique -- threaded の腕がカウント 1 のとき `LOCAL`
 
 **A28 (組み込みの tycon の項目は組み込みが置いたもの)** -- 果たす者: 下の 3 つの `SCAN`。 <!--#3d4be43-->
 `E.tycons()` の項目のうち、鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは、`bulitin_tycons()` が

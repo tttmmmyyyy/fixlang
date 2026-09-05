@@ -555,34 +555,34 @@ README の第 7.3 節は果たされていない義務を「**無し。** A19 (i
 `un_bump_releases` の値の `Vec` に要素を入れる式は、それぞれ `walk_inner` の中の 1 つだけである。
 
 SCAN src/ `self.all_retains`
-  = src/rc_ir/borrow.rs: walk_inner -- `RcExpr::Retain` の腕の `push`
-  = src/rc_ir/borrow.rs: cancelled -- 読み
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk_inner -- `RcExpr::Retain` の腕の `push`
+  = src/rc_ir/borrow.rs: CancelAnalysis::cancelled -- 読み
 
 SCAN src/ `un_bump_releases`
   = src/rc_ir/borrow.rs: cancel -- 構成子が空の写像を置く
   = src/rc_ir/borrow.rs: CancelAnalysis -- 欄の宣言
-  = src/rc_ir/borrow.rs: walk_inner -- `Retain` の腕の `entry(..).or_default()` と `Release` の腕の `push`
-  = src/rc_ir/borrow.rs: cancelled -- 読み
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk_inner -- `Retain` の腕の `entry(..).or_default()` と `Release` の腕の `push`
+  = src/rc_ir/borrow.rs: CancelAnalysis::cancelled -- 読み
 
 **前提 消費の呼び出しの在りか** --- `consume_objects`・`consume`・`consume_rhs` を呼ぶ式が在る項目は
 次で尽きる。
 
 SCAN src/ `self.consume_objects(`
-  = src/rc_ir/borrow.rs: walk_inner -- `RcExpr::Release` の腕の 2 つ
-  = src/rc_ir/borrow.rs: consume -- 末尾の 1 つ
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk_inner -- `RcExpr::Release` の腕の 2 つ
+  = src/rc_ir/borrow.rs: CancelAnalysis::consume -- 末尾の 1 つ
 
 SCAN src/ `self.consume(`
-  = src/rc_ir/borrow.rs: walk_inner -- `RcExpr::Destructure` の腕
-  = src/rc_ir/borrow.rs: consume_rhs -- `rhs_consumes` が積んだ各対について
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk_inner -- `RcExpr::Destructure` の腕
+  = src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs -- `rhs_consumes` が積んだ各対について
 
 SCAN src/ `self.consume_rhs(`
-  = src/rc_ir/borrow.rs: walk_inner -- 右辺が `Match` でない `RcExpr::Let` の腕
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk_inner -- 右辺が `Match` でない `RcExpr::Let` の腕
 
 **前提 `un_bump` の呼び出しの在りか** --- 自由関数 `un_bump` を呼ぶ式が在る項目は `walk_inner` だけである。
 
 SCAN src/ `un_bump(`
   = src/rc_ir/borrow.rs: un_bump -- 定義
-  = src/rc_ir/borrow.rs: walk_inner -- `RcExpr::Release` の腕
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk_inner -- `RcExpr::Release` の腕
 
 **前提 解析の値と表の作り手の在りか** --- `CancelAnalysis` の値を作る式、`VarTable` を可変に借りる関数、
 その関数を呼ぶ式、および `vars`・`type_env` の欄へ代入する式が在る項目は次で尽きる。`.vars = ` の走査は
@@ -592,12 +592,12 @@ SCAN src/ `CancelAnalysis {`
   = src/rc_ir/borrow.rs: cancel -- `cancel_body` に渡す値を作る
 
 SCAN src/ `&mut VarTable`
-  = src/rc_ir/ownership.rs: VarTable::collect_bindings -- 唯一の受け取り手
+  = src/rc_ir/ownership.rs: collect_bindings -- 唯一の受け取り手
 
 SCAN src/ `collect_bindings(`
   = src/rc_ir/ownership.rs: VarTable::of -- 自分の作った局所の表に対して
   = src/rc_ir/ownership.rs: VarTable::body_only -- 自分の作った局所の表に対して
-  = src/rc_ir/ownership.rs: VarTable::collect_bindings -- 定義と、その中の継続・アーム本体への再帰
+  = src/rc_ir/ownership.rs: collect_bindings -- 定義と、その中の継続・アーム本体への再帰
 
 SCAN src/ `.vars = `
 
@@ -612,15 +612,15 @@ SCAN src/ `Binding::Param`
   = src/rc_ir/ownership.rs: origin_inner -- パターン
 
 SCAN src/ `Binding::Producer`
-  = src/rc_ir/ownership.rs: VarTable::collect_bindings -- `RcRhs::App` と `RcRhs::Closure` の結果について置く
+  = src/rc_ir/ownership.rs: collect_bindings -- `RcRhs::App` と `RcRhs::Closure` の結果について置く
   = src/rc_ir/ownership.rs: origin_inner -- パターン
 
 SCAN src/ `Binding::Field(`
-  = src/rc_ir/ownership.rs: VarTable::collect_bindings -- `Destructure` の名前付きフィールドについて置く
+  = src/rc_ir/ownership.rs: collect_bindings -- `Destructure` の名前付きフィールドについて置く
   = src/rc_ir/ownership.rs: origin_inner -- パターン
 
 SCAN src/ `Binding::Payload(`
-  = src/rc_ir/ownership.rs: VarTable::collect_bindings -- `Match` のアームの payload について置く
+  = src/rc_ir/ownership.rs: collect_bindings -- `Match` のアームの payload について置く
   = src/rc_ir/ownership.rs: origin_inner -- パターン
 
 **この 5 つは枠の仮定に置くのが本来である。** ここに置いているのは、この文書が自分の段からそれを引ける

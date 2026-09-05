@@ -1224,13 +1224,13 @@ SCAN src/ `Mutex<`
 SCAN src/ `RwLock<`
 
 SCAN src/ `Atomic`
-  = src/commands/lsp/server.rs: LatestContent::launch_language_server -- LSP の待ち時間の設定
+  = src/commands/lsp/server.rs: launch_language_server -- LSP の待ち時間の設定
   = src/commands/lsp/server.rs: apply_analyze_config -- 同上
   = src/commands/lsp/server.rs: diagnostics_thread -- 同上
   = src/commands/lsp/server.rs: handle_initialized -- 同上
-  = src/generator.rs: build_is_refcnt_one -- 生成する LLVM の命令の順序づけ
-  = src/generator.rs: build_release_boxed_with -- 同上
-  = src/generator.rs: retain_nonnull_boxed -- 同上
+  = src/generator.rs: Generator::build_is_refcnt_one -- 生成する LLVM の命令の順序づけ
+  = src/generator.rs: Generator::build_release_boxed_with -- 同上
+  = src/generator.rs: Generator::retain_nonnull_boxed -- 同上
 
 SCAN src/ `strong_count`
 

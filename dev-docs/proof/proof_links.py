@@ -196,7 +196,28 @@ SCAN_MEMBER = re.compile(r"^\s*=\s*([A-Za-z0-9_/.]+)\s*:\s*(\S+)\s*(?:--.*)?$")
 ITEM_HEAD = re.compile(
     r"^(\s*)(?:pub(?:\([a-z()]+\))?\s+)?(?:async\s+|unsafe\s+|extern\s+\"[A-Za-z]+\"\s+)*"
     r"(?:fn|struct|enum|trait|type|union|const|static)\s+(\w+)")
-IMPL_HEAD = re.compile(r"^\s*(?:pub(?:\([a-z()]+\))?\s+)?impl\b[^{]*?(?:for\s+)?(\w+)\s*\{")
+IMPL_HEAD = re.compile(r"^\s*(?:pub(?:\([a-z()]+\))?\s+)?impl\b(.*)$")
+TYPE_HEAD = re.compile(r"^\s*(?:pub(?:\([a-z()]+\))?\s+)?(?:struct|enum|union)\b")
+
+
+def impl_of(line):
+    """The type an `impl` line writes code for, or `None` where the line opens no `impl`.
+
+    The name is the head's last path segment, after `for` where the block implements a trait. Type
+    arguments are dropped so that `impl<T> Scope<T>` answers with the name `Scope` names elsewhere,
+    and a `where` clause is cut so that a header running past its own line still answers."""
+    match = IMPL_HEAD.match(line)
+    if not match:
+        return None
+    head = match.group(1).split("{")[0].split(" where")[0]
+    while True:
+        cut = re.sub(r"<[^<>]*>", " ", head)
+        if cut == head:
+            break
+        head = cut
+    head = head.rpartition(" for ")[2]
+    names = re.findall(r"\w+", head)
+    return names[-1] if names else None
 
 
 def item_at(lines, index):
@@ -210,11 +231,13 @@ def item_at(lines, index):
             head = ITEM_HEAD.match(lines[at])
             if head:
                 name = head.group(2)
+                if not head.group(1):
+                    break  # 字下げの無い項目は、どの `impl` の中にも無い。
                 continue
         else:
-            block = IMPL_HEAD.match(lines[at])
+            block = impl_of(lines[at])
             if block:
-                owner = block.group(1)
+                owner = block
                 break
             if ITEM_HEAD.match(lines[at]) and not lines[at].startswith((" ", "\t")):
                 break
@@ -223,30 +246,38 @@ def item_at(lines, index):
     return f"{owner}::{name}" if owner else name
 
 
+SOURCES = {}
+
+
+def sources_under(root):
+    """The source files under `root`, read once: a scan re-reads the tree for every literal."""
+    if root not in SOURCES:
+        read = []
+        for directory, _, files in os.walk(root):
+            for file_name in sorted(files):
+                if file_name.endswith((".rs", ".fix", ".pest")):
+                    path = os.path.join(directory, file_name)
+                    with open(path, encoding="utf-8", errors="ignore") as source:
+                        read.append((path, source.read().split("\n")))
+        SOURCES[root] = sorted(read)
+    return SOURCES[root]
+
+
 def scan_hits(root, literal):
     """Every item of `root` whose text contains `literal`, and whether it sits under `#[cfg(test)]`."""
     found = []
-    for directory, _, files in os.walk(root):
-        for file_name in sorted(files):
-            if not file_name.endswith((".rs", ".fix", ".pest")):
+    for path, lines in sources_under(root):
+        # **`#[cfg(test)]` はその直後の項目にしか掛からない。** そこから末尾までをテストと
+        # 見ると、その後ろに置かれた製品の項目まで落ちる -- 実測で、1 ファイルの 352 行目の
+        # 属性が、1,403 行目の製品の関数をテストにしていた。
+        tests = [item_body(lines, index + 1)
+                 for index, line in enumerate(lines) if "#[cfg(test)]" in line]
+        for index, line in enumerate(lines):
+            if literal not in line:
                 continue
-            path = os.path.join(directory, file_name)
-            with open(path, encoding="utf-8", errors="ignore") as source:
-                lines = source.read().split("\n")
-            # **`#[cfg(test)]` はその直後の項目にしか掛からない。** そこから末尾までをテストと
-            # 見ると、その後ろに置かれた製品の項目まで落ちる -- 実測で、1 ファイルの 352 行目の
-            # 属性が、1,403 行目の製品の関数をテストにしていた。
-            tests = []
-            for index, line in enumerate(lines):
-                if "#[cfg(test)]" in line:
-                    tests.append(item_body(lines, index + 1))
-            for index, line in enumerate(lines):
-                if literal not in line:
-                    continue
-                name = item_at(lines, index)
-                if name:
-                    in_test = any(start <= index < stop for start, stop in tests)
-                    found.append((path, name, in_test))
+            name = item_at(lines, index)
+            if name:
+                found.append((path, name, any(start <= index < stop for start, stop in tests)))
     return found
 
 
@@ -288,11 +319,9 @@ def check_scans(directory):
 
 
 def report_scans(directory):
-    """`SCAN` の食い違いを印字し、件数を返す。"""
-    rows = check_scans(directory)
-    for path, line, literal, kind, (where, symbol) in rows:
-        print(f"{os.path.relpath(path, REPO)}:{line}: SCAN `{literal}`: {kind} -- {where}: {symbol}")
-    return rows
+    """`SCAN` の食い違いを、ほかの指摘と同じ 1 行の形で返す。"""
+    return [f"{os.path.relpath(path, REPO)}:{line}: SCAN `{literal}`: {kind} -- {where}: {symbol}"
+            for path, line, literal, kind, (where, symbol) in check_scans(directory)]
 
 
 def rule_span(lines, symbol):
@@ -344,6 +373,24 @@ def item_span(lines, symbol):
     return None
 
 
+def item_spans(lines, symbol):
+    """Every range of the file the symbol names, in the order they are written.
+
+    A type is named by its declaration and by the `impl` blocks written for it in the same file: in
+    Rust that is where the type's behaviour is, so a step citing the type rests on those blocks and
+    has to be re-read when they change. A trait is named by its declaration alone -- the blocks that
+    implement it belong to the types that carry it, and a corpus-wide enumeration of them is what
+    `SCAN` is for."""
+    span = item_span(lines, symbol)
+    if span is None:
+        return []
+    if not TYPE_HEAD.match(lines[span[0]]):
+        return [span]
+    spans = [span] + [item_body(lines, index) for index, line in enumerate(lines)
+                      if index != span[0] and impl_of(line) == symbol.rpartition("::")[2]]
+    return sorted(set(spans))
+
+
 def item_body(lines, index):
     """The half-open line range of the item whose definition starts at `index`."""
     depth, seen = 0, False
@@ -357,13 +404,13 @@ def item_body(lines, index):
     return index, len(lines)
 
 
-def digest(lines, span):
-    """The digest of an item's source text, with the `// PROOF:` lines inside it left out.
+def digest(lines, spans):
+    """The digest of the source text a symbol names, with the `// PROOF:` lines inside it left out.
 
     An item's annotation, and the annotations of the items nested in it, move whenever the
     propositions do. Reading them into the digest would report the item as changed every time the
     proof's own bookkeeping changes, which is the one thing the digest must not do."""
-    body = "".join(l for l in lines[span[0]:span[1]] if not PROOF_COMMENT.match(l))
+    body = "".join(l for start, stop in spans for l in lines[start:stop] if not PROOF_COMMENT.match(l))
     return hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
 
 
@@ -417,15 +464,20 @@ def main():
                 rows.append((source, symbol, props, "-"))
                 continue
             lines = open(path, encoding="utf-8").readlines()
-            span = rule_span(lines, symbol) if source.endswith(".pest") else item_span(lines, symbol)
-            if span is None:
+            if source.endswith(".pest"):
+                span = rule_span(lines, symbol)
+                spans = [span] if span else []
+            else:
+                spans = item_spans(lines, symbol)
+            if not spans:
                 findings.append(f"{source}: `{symbol}` is cited and not found")
                 continue
-            rows.append((source, symbol, props, digest(lines, span)))
+            rows.append((source, symbol, props, digest(lines, spans)))
             if source.endswith(".pest"):
                 continue
-            at = annotation_line(lines, span[0])
-            edits.setdefault(source, {}).setdefault(at, set()).update(props)
+            for start, _ in spans:
+                at = annotation_line(lines, start)
+                edits.setdefault(source, {}).setdefault(at, set()).update(props)
         comments = {
             source: {at: comment_for(props, directory) for at, props in items.items()}
             for source, items in edits.items()

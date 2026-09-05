@@ -164,7 +164,7 @@ inhabited (D16) でない元を含む。この集合を `v` の `π` の下の b
 SCAN src/ `origins`
   = src/rc_ir/ownership.rs: VarTable -- 欄の宣言
   = src/rc_ir/ownership.rs: VarTable::empty -- `origins: RefCell::default()`
-  = src/rc_ir/ownership.rs: Origin::origin -- 自由関数 `origin` の記録の読みと書き
+  = src/rc_ir/ownership.rs: origin -- 自由関数 `origin` の記録の読みと書き
   = src/rc_ir/ownership.rs: Origin::identity -- doc の散文
   = src/rc_ir/ownership.rs: origin_inner -- 別の識別子 `leaf_origins_at` と doc の散文
   = src/rc_ir/ownership.rs: origin_from_leaves_under -- 別の識別子 `leaf_origins_under` と `//` コメント
@@ -176,12 +176,12 @@ SCAN src/ `origins`
   = src/rc_ir/provenance.rs: Provenance::leaf_origins_under -- 別の識別子 `leaf_origins_under` の宣言
   = src/rc_ir/provenance.rs: Provenance::compose -- 閉包の引数 `origins` と局所変数 `operand_origins`
   = src/rc_ir/provenance.rs: Provenance::fmt -- 局所束縛 `origins`
-  = src/rc_ir/provenance.rs: Provenance::leaf_source_to_string -- 引数 `origins`
-  = src/rc_ir/provenance.rs: Uniqueness::resolve_leaf -- 引数 `origins`
+  = src/rc_ir/provenance.rs: leaf_source_to_string -- 引数 `origins`
+  = src/rc_ir/provenance.rs: resolve_leaf -- 引数 `origins`
   = src/rc_ir/provenance.rs: resolve -- 閉包の引数 `origins`
   = src/rc_ir/provenance.rs: leaf_is_unique -- 局所変数 `origins`
   = src/rc_ir/provenance.rs: is_unique_result -- 別の識別子 `leaf_origins_at`
-  = src/rc_ir/validate.rs: check_rhs -- ループ変数 `origins`
+  = src/rc_ir/validate.rs: Validator::check_rhs -- ループ変数 `origins`
 
 **前提 名前の複製と照合の実装の在りか** --- `src/ast/` の項目のうち字面 `origin` を含むのは、
 deprecation の欄 `origin_namespace` を宣言する項目と、その欄を置く項目・読む項目である。
@@ -253,16 +253,16 @@ SCAN src/ `register_opaque_tycon`
 `collect_consumes_go` も挙げる。
 
 SCAN src/ `collect_consumes`
-  = src/rc_ir/borrow.rs: OwnedLeaves::infer_ownership -- 自由関数 `infer_ownership` の中の呼び出し
+  = src/rc_ir/borrow.rs: infer_ownership -- 自由関数 `infer_ownership` の中の呼び出し
   = src/rc_ir/ownership.rs: collect_consumes -- 宣言と `collect_consumes_go` の呼び出し
   = src/rc_ir/ownership.rs: collect_consumes_go -- 宣言と自身への再帰
 
 SCAN src/ `infer_ownership`
-  = src/rc_ir/borrow.rs: OwnedLeaves::infer_ownership -- 宣言
+  = src/rc_ir/borrow.rs: infer_ownership -- 宣言
   = src/rc_ir/borrow.rs: borrow_ify -- 自分の第 1 引数を渡す呼び出し
 
 SCAN src/ `rhs_consumes`
-  = src/rc_ir/borrow.rs: consume_rhs -- `CancelAnalysis::consume_rhs` の中の呼び出し
+  = src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs -- `CancelAnalysis::consume_rhs` の中の呼び出し
   = src/rc_ir/ownership.rs: collect_consumes_go -- `RcExpr::Let` の腕の呼び出し
   = src/rc_ir/ownership.rs: rhs_consumes -- 宣言
 
