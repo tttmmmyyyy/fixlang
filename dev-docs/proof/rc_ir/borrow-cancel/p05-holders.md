@@ -293,8 +293,8 @@ SCAN src/ `applies_a_function_operand`
   `<2>3.` 環境は実行の途中で新しいオブジェクトを持ち込まない。よって最初の切れ目より後に `Obj` へ
     入るオブジェクトは、(γ) が割り当てたものだけである。
     BY <ref id=c9e4cca/> (i-d) (「**最初の時点より後の (E1) が環境から受け取る boxed な値も同じである** -- 環境が
-    Fix の boxed な値の番地を得る道はその対しかないので、**環境は実行の途中で新しいオブジェクトを
-    持ち込まない。**」)
+    Fix の boxed な値の番地を得る道はその対しかないので、」、「**環境は実行の途中で新しい
+    オブジェクトを持ち込まない。**」)
   `<2>4.` QED
     `Obj(p_0)` は環境が持ち込んだオブジェクトの全体であり (A17 (i-c))、`<2>1` より
     その各々は `p_0` から生きている。以後 `Obj` は (γ) で増え (ε) で減り、`<2>3` よりそのほかに
@@ -333,18 +333,25 @@ SCAN src/ `applies_a_function_operand`
     ついては、持ち手の単位は leaf ではなくスロットである。** 各スロットが、その要素の型の
     `boxed_leaf_paths` が列挙する leaf を 1 組ずつ持つ。D25 の 2 つ目の持ち手はこの読みで数える。」),
     D25 (2 番目の持ち手), DEF 記憶域のスロット
-  `<2>2a.` `#ArrayStorage` のオブジェクトのカウントが 0 になった点では、その数え上げは `size` を
-    超えない。そこでトラバーサが処分するのは、その時点の添字 `0` から `size - 1` のスロットのうち
-    その記憶域が所有するものであり、その処分はカウントを 0 にした素動作に付く。
-    `<3>1.` `Array` 値のトラバーサは、`traverse_array_buf` を `hole` に `None` を渡して呼ぶので、
-      添字 `0` から `size - 1` のスロットを 1 つずつ歩く。
-      BY <ref id=4f63121/> (「**持ち手の数え上げが `size` を超える点では、その記憶域のカウントは 0 にならない**」、
-      「**処分する個数はこれとは別に数える。** `Array` 値のトラバーサは、`#ArrayStorage` のカウントが
-      0 になった段で、**その値が所有するスロット**を 1 つずつ処分する」、「**その処分は、
-      `#ArrayStorage` のカウントを 0 にした素動作に付く**」), `<2>1`, `<2>2`
+  `<2>2a.` `#ArrayStorage` のオブジェクトのカウントが 0 になった点について、次の 3 つが成り立つ。
+          **(i)** 持ち手の単位の数え上げは `size` を超えない。
+          **(ii)** そこでトラバーサが歩くスロットは、`Array` 値のトラバーサでは添字が `0` から
+          `size - 1` のもの全体であり、`Std::PunchedArray` 値のトラバーサではそこから穴の添字の
+          スロットを除いたものである。除かれるスロットの要素は配列から移し出されていて、その記憶域は
+          それを所有せず、そのスロットは書かれていない。トラバーサは歩いたスロットを 1 つずつ処分し、
+          その段でその記憶域の要素を処分するのはこの 2 つのトラバーサだけである。
+          **(iii)** その処分は、その記憶域のカウントを 0 にした素動作に付く。
+    `<3>1.` `Array` 値のトラバーサは、添字 `0` から `size - 1` のスロットを 1 つずつ歩いて処分する。
+      A5 が `Array` の値についてその範囲を述べ、`build_traverse` の `is_array()` の枝が
+      `traverse_array_buf` を `hole` に `None` を渡して呼び、その枝は `[0, size)` を 1 回歩く。
+      BY <ref id=4f63121/> (「**処分する個数はこれとは別に数える。** `Array` 値のトラバーサは、
+      `#ArrayStorage` のカウントが 0 になった段で、**その値が所有するスロット**を 1 つずつ処分する」、
+      「`Array` の値では `0` から `size - 1` までのスロットの全体であり」), `<2>1`, `<2>2`
       `CODE src/object.rs: ObjectFieldType::traverse_array_buf` (「`size` -- the array's element
       count; the elements walked are `[0, size)`」、`hole` が `None` の枝は `traverse_array_range` を
       1 回呼ぶ)
+      `CODE src/object.rs: build_traverse` (`obj.ty.is_array()` の枝が、その記憶域に対して
+      `traverse_array_buf` を `hole` に `None` を渡して呼ぶ)
     `<3>2.` `Std::PunchedArray` 値のトラバーサは、内側の配列の記憶域について同じ走査を、穴の添字の
       スロットを飛ばして行う。飛ばされるスロットの要素は配列から移し出されていて、その記憶域は
       それを所有しない。よってそのスロットは書かれておらず (第 1.1 節)、`<2>1` と `<2>2` より
@@ -365,8 +372,16 @@ SCAN src/ `applies_a_function_operand`
       `CODE src/object.rs: build_traverse` (「the storage's own destructor is free-only, so the array
       value drives element release」 -- `is_array()` の枝と `is_punched_array()` の枝がどちらも
       `build_traverser_work_nonnull_boxed_with(&storage, ...)` の中で `traverse_array_buf` を呼ぶ)
+    `<3>3a.` `#ArrayStorage` のオブジェクトのカウントが 0 になった点では、持ち手の単位の数え上げは
+      `size` を超えない。A5 は、数え上げが `size` を超える点ではその記憶域のカウントが 0 に
+      ならないと述べるので、その対偶である。
+      BY <ref id=4f63121/> (「**持ち手の数え上げが `size` を超える点では、その記憶域のカウントは 0 にならない**」),
+      `<2>2`, EXT 排中律
+    `<3>3b.` その処分は、その記憶域のカウントを 0 にした素動作に付く。
+      BY <ref id=4f63121/> (「**その処分は、`#ArrayStorage` のカウントを 0 にした素動作に付く**」), `<3>3`
     `<3>4.` QED
-      BY `<3>1`, `<3>2`, `<3>3`
+      (i) は `<3>3a`、(ii) は `<3>1`・`<3>2`・`<3>3`、(iii) は `<3>3b` である。
+      BY `<3>1`, `<3>2`, `<3>3`, `<3>3a`, `<3>3b`
   `<2>3.` 割り当てられた直後のオブジェクトの持ち手の単位は参照を 1 つも持たず、単位が参照を持つのは
     (α) か (β) がそれを書いた瞬間からである。
     BY <ref id=e3436e8/> (「**割り当てられた直後のオブジェクトの持ち手の単位は、参照を 1 つも持たない。**」、
@@ -374,7 +389,10 @@ SCAN src/ `applies_a_function_operand`
     `CODE src/object.rs: create_obj` (「A fresh object of type `ty`, with its control block
     initialized and its remaining fields left undefined for the caller to fill in」)
   `<2>4.` QED
-    (a) は `<2>1` と `<2>2`、(b) は `<2>1` と `<2>2`、(c) は `<2>3`、(d) は `<2>2a` である。
+    (a) は `<2>1` と `<2>2`、(b) は `<2>1` と `<2>2`、(c) は `<2>3` である。(d) のうち「`o` が持つ
+    参照はすべて記憶域のスロットが持つものである」は、`<2>2` (`#ArrayStorage` の持ち手の単位は
+    記憶域のスロットである) と `<2>2a` の (i) から出る。歩くスロットの範囲と除かれるスロットに
+    ついての節は `<2>2a` の (ii)、処分の付く先は `<2>2a` の (iii) である。
     BY `<2>1`, `<2>2`, `<2>2a`, `<2>3`, DEF 持ち手の単位, DEF 書かれた, DEF 記憶域のスロット
 
 `<1>0c.` 第 1.3 節の 3 つの取り決めについて次の 3 つが成り立つ。
@@ -402,17 +420,29 @@ SCAN src/ `applies_a_function_operand`
       入る側は `Obl(a)` である。D25 の第 1 種の持ち手は**生きている**活性化なので、その動作の時点で
       `a` は `Liv` の元でなければならない。
       BY <ref id=0b850c9/> (第 1 種の持ち手), <ref id=f06144e/> (初期値の行), DEF 受け渡し (α), DEF `Liv`
-    `<3>2.` `a` を作る段の記述はどれも、活性化を作ることと、その参照が `Obl(a)` の初期値になることを
-      この順に述べる -- (E1) は「関数の本体 `B` の活性化 `a` を作り、`a` の初期 `Obl` (D10 の初期値) の
+    `<3>2.` 活性化を作る段は 5 種であり (D24 の「活性化の林」)、そのどれについても、第 1.3 節が
+      初期 `Obl` を作る (α) の列の直前に取る切れ目は `a` を作る段の中に在り、そこで `Obl(a)` は
+      空である。
+      (E1)・(E3)・(F) の記述は、活性化を作ることとその参照が `Obl(a)` の初期値になることをこの順に
+      述べる -- (E1) は「関数の本体 `B` の活性化 `a` を作り、`a` の初期 `Obl` (D10 の初期値) の
       各参照を `E` から渡す」、(E3) は「呼び出し先 (D23) の本体の新しい活性化 `b` が作られて、それらの
       参照が `Obl(b)` の初期値になる」、(F) は「`o` の `_value` の leaf が持つ参照は `o` を離れ、
-      適用が作る活性化 `b` の `Obl(b)` の初期値に入る」である。よって第 1.3 節がその列の直前に取る
-      切れ目は、`a` を作る段の中に在り、そこで `Obl(a)` は空である -- D10 の初期値を運ぶのはその列
-      だからである。列が空のとき ((E7) の `init` の活性化。D1 より `init` はパラメータも capture も
-      持たない) は、その段が活性化を作る区切りで `Obl(a)` が空の多重集合である。
+      適用が作る活性化 `b` の `Obl(b)` の初期値に入る」である。よってその切れ目はその段の中に在り、
+      そこで `Obl(a)` は空である -- D10 の初期値を運ぶのはその列だからである。列が空のとき
+      ((E7) の `init` の活性化。D1 より `init` はパラメータも capture も持たない) は、その段が
+      活性化を作る区切りで `Obl(a)` が空の多重集合である。
+      **オペランドを適用する `Llvm` の (E2) の段は、この順序を述べない。** それでもこの段が作る
+      活性化について同じことが言える -- D24 の (E2) は、この段が渡す参照の行き先を
+      「**この段が作る活性化の `Obl`**」と述べ、「**この段は活性化を 1 つ作るごとに区切られる。**」と
+      述べるので、活性化を作ることも初期 `Obl` を運ぶ (α) の列も 1 つの段の中にある。よって
+      第 1.3 節がその列の直前に取る切れ目もその段の中に在り、そこで `Obl` は空である -- ここでも
+      D10 の初期値を運ぶのはその列だからである。
       BY <ref id=e3436e8/> の (E1), <ref id=e3436e8/> の (E3), <ref id=e3436e8/> の (F) (「**この段は `_value` の欄の参照を動かす。**
       `o` の `_value` の leaf が持つ参照は `o` を離れ、適用が作る活性化 `b` の `Obl(b)` の初期値に
       入る (D9 の `App` の行の消費)」), <ref id=e3436e8/> の (E7) (「`Obl(b)` は空で始まる」),
+      <ref id=e3436e8/> の (E2) (「**この段が作る活性化の `Obl`**」、
+      「**この段は活性化を 1 つ作るごとに区切られる。**」),
+      <ref id=e3436e8/> の「活性化の林」(「**活性化を作る段はこの 5 種で尽きる。**」),
       <ref id=f06144e/> (初期値の行), D1, `<3>1`
     `<3>3.` D23 が置く 2 つの条件 -- 始まった**時点**での位置が `B(a)` の根であること、始まった
       **時点**での `Obl` が D10 の初期値であること -- は、D24 の時点についての条件である。切れ目の
@@ -424,9 +454,14 @@ SCAN src/ `applies_a_function_operand`
     `<3>4.` 時点で読んだその 2 つの条件は、第 1.3 節の取り方の下で満たされる。(E1)・(E3)・(E7) が
       作る活性化については、`a` が生きている最初の時点はその段の直後であり、そこでは初期 `Obl` を作る
       (α) の列が終わっているので `Obl(a)` は D10 の初期値であり、`a` はまだ節点を 1 つも実行して
-      いないので位置は `B(a)` の根である。(F) の解放が作る活性化はその段の中で終わるので、それが
-      生きている時点は無く、この 2 つの条件が課すものも無い。
-      BY `<3>2`, `<3>3`, <ref id=e3436e8/> の (F) (「**(F) が作る活性化はその段の中で終わるので、その内側に D24 の
+      いないので位置は `B(a)` の根である。**オペランドを適用する `Llvm` の (E2) の段が作る活性化に
+      ついても同じである** -- その段は活性化を 1 つ作るごとに区切られるので、その活性化が生きている
+      最初の時点はその段の直後であり、そこでも初期 `Obl` を作る (α) の列は終わっている。(F) の解放が
+      作る活性化はその段の中で終わるので、それが生きている時点は無く、この 2 つの条件が課すものも
+      無い。
+      BY `<3>2`, `<3>3`, <ref id=e3436e8/> の (E2) (「**この段は活性化を 1 つ作るごとに区切られる。** `a` はその活性化が
+      終わるまで中断中であり、(E4) の後、同じ位置で次の段を実行する」),
+      <ref id=e3436e8/> の (F) (「**(F) が作る活性化はその段の中で終わるので、その内側に D24 の
       時点は無い。**」), <ref id=ff5985d/> (位置の行), `<1>0`, DEF 時点
     `<3>5.` その切れ目は `a` のどの節点の実行よりも前である。`a` が節点を実行するのは `a` が生きて
       いる間だけであり (D23 -- 位置は活性化が始まった時点で `B(a)` の根に在る)、`<3>2` よりその
@@ -445,7 +480,7 @@ SCAN src/ `applies_a_function_operand`
   `<2>4.` 素動作の順序は勘定に効く。(δ) が `H` を 0 にしたところで (F) の解放が起きるので、同じ
     オブジェクトについての (β) と (δ) を入れ替えると、その段の出口に在るオブジェクトの集合が変わる。
     BY <ref id=e3436e8/> の (F) (「ある段が参照を処分して計数下のオブジェクト (D26) `o` の `H(o)` が 0 になった
-    とき、`o` は**その同じ段の中で解放される**」), DEF 生成 (β), DEF 処分 (δ)
+    とき、`o` は」、「**その同じ段の中で解放される**」), DEF 生成 (β), DEF 処分 (δ)
   `<2>5.` QED
     BY `<2>1`, `<2>2`, `<2>3`, `<2>4`
 
@@ -457,8 +492,8 @@ SCAN src/ `applies_a_function_operand`
     BY <ref id=9d5d254/> (「**段内の点における `held`。** P28 (b) は各時点と各段内の点 (D24) について A19 (i) の
     不等式を要求するので、`held` は段内の点でも定まっていなければならない。**段内の点でない切れ目へ
     延ばしてよい。** 処分とそれが起こす解放のあいだのように、素動作の切れ目であって D24 の段内の点で
-    ないものが在る。上の 3 つの箇条はその切れ目でも同じ値を与えるので、**延ばした値はこの定義の値と
-    一致する。** 延ばす証明ファイルは、延ばした先でもこの 3 つの箇条に従う」)
+    ないものが在る。上の 3 つの箇条はその切れ目でも同じ値を与えるので、」、「**延ばした値は
+    この定義の値と一致する。** 延ばす証明ファイルは、延ばした先でもこの 3 つの箇条に従う」)
   `<2>2.` 第 1.5 節の 3 つの箇条は、D34 の 3 つの箇条の「段内の点」を「切れ目」に読み替えたもので
     ある。段内の点は切れ目なので (`<1>0`)、読み替えた箇条は D34 の箇条をそのまま含む。第 3 行の
     開始値を置く「その活性化が生きている活性化 (D23) になる点」は、第 1.3 節が `a` の `Liv` への
@@ -487,7 +522,8 @@ SCAN src/ `applies_a_function_operand`
 
 `<1>0e.` ASSUME NEW `a`: 生きている活性化、NEW `n`: `a` が自分の位置 (D23) で実行する節点
         PROVE  `n` の生成コードが段の中で出す retain と release のうち、D9 の消費の表・D10 の生成の
-               表・D24 の (E2) の書き込みの処分が挙げるもののほかにあるものは、次の 2 つの形で尽きる。
+               表・D24 の (E2) の書き込みの処分・D24 の (F) の解放が挙げるもののほかにあるものは、
+               次の 3 つの形で尽きる。
                **(a)** その retain が作る参照の持ち手が `Obl(a)` (D25 の 1 番目) である形。この形の
                生成コードは同じ参照をこの節点の実行の中で release し、その release は retain より
                後に立つ。作られる参照は、その retain が名指す値の inhabited (D16) で計数下 (D26) の
@@ -495,10 +531,12 @@ SCAN src/ `applies_a_function_operand`
                **(b)** その retain が作る参照の持ち手が、その生成コードが書き込むオブジェクトの持ち手の
                単位 (D25 の 2 番目、第 1.1 節) である形。作られる参照は書き込まれた各単位につき 1 つで
                あり、この形は `Obl(a)` を動かさない。
+               **(c)** 名指す値の inhabited (D16) な boxed leaf がどれも計数下 (D26) でない形。
+               この形は参照を作らず、処分せず、`H` も `Obl(a)` も持ち手の単位も動かさない。
 
   **在りかは述語で決める。** D24 が置く述語は `Generator::retain`・`Generator::build_retain`・
   `Generator::release` の**呼び出し**を出す生成コードの全体であり、下の `CODE` はその述語が挙げる
-  もののうち 2 つの形の代表である。
+  もののうち 3 つの形の代表である。
 
   `<2>1.` 1 つの段の生成コードは、D24 の段の表に行を持たない素動作を段の中で出しうる。素動作の粒度で
     勘定する段はその op の `generate` が出す retain と release を読み、その在りかは述語が決める。形は
@@ -522,7 +560,7 @@ SCAN src/ `applies_a_function_operand`
     BY `<2>1`, `<2>2`, 前提 相殺する形の順序,
     <ref id=e3436e8/> の (E2) (「**この段は活性化を 1 つ作るごとに区切られる。** `a` はその活性化が終わるまで
     中断中であり、(E4) の後、同じ位置で次の段を実行する」)
-    `CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody` (`generate` は
+    `CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate` (
     `gc.retain(x.clone(), RcState::Unknown)` を置き、`gc.apply_lambda(f, vec![x.clone()], false)` を
     呼び、その後に `gc.release(x, RcState::Unknown)` を置く)
   `<2>3.` 第 2 の形は相殺せず、その参照の持ち手は D25 の 2 番目、すなわちその生成コードが書き込む
@@ -543,6 +581,21 @@ SCAN src/ `applies_a_function_operand`
   `<2>4.` 第 2 の形は `Obl(a)` を動かさない。(β) は作った参照をちょうど 1 つの持ち手に入れ、その
     持ち手は `<2>3` よりオブジェクトの持ち手の単位である。
     BY `<2>3`, DEF 生成 (β)
+  `<2>4a.` 名指す値の inhabited (D16) な boxed leaf がどれも計数下 (D26) でない retain と release は、
+    参照を作らず、処分せず、`H` も `Obl(a)` も持ち手の単位も動かさない。グローバル状態のオブジェクト
+    への `Retain`/`Release` は `H` を変えず (A8)、そのオブジェクトを指す leaf は D8 の意味の参照を
+    持たない (D26)。逆に、名指す値が計数下のオブジェクトを指す inhabited な boxed leaf を持つ
+    retain は、その leaf の指すオブジェクトのカウントを 1 上げるので、参照を 1 つ作る (A5、D8)。
+    **この形の代表は、`Generator::get_scoped_obj` が記号の位置 (D6) を読むときに `retain_on_read`
+    に従って出す retain である** -- 記号の位置が指すのは funptr かグローバル状態のオブジェクトで
+    あり (D6)、funptr の型は `is_fully_unboxed` なので boxed leaf を持たない (D4 の規則 1)。
+    BY <ref id=b6673ca/>, <ref id=88a06de/>, <ref id=ec8d1a0/>, <ref id=4f63121/>, <ref id=596a46d/> (「そこが指すのは funptr かグローバル状態のオブジェクト」),
+    <ref id=0594f24/> (規則 1), D16
+    `CODE src/generator.rs: Generator::get_scoped_obj` (`retain_on_read` が真のとき `build_retain` を
+    出し、偽のとき出さない)
+    `CODE src/generator.rs: Generator::retain` (「Retain `obj`: increment the reference count of
+    every boxed object it owns, once.」)
+    `CODE src/ast/types.rs: TypeNode::is_fully_unboxed` (`self.is_funptr()` の枝が `true` を返す)
   `<2>5.` 個数は次のとおりである。retain は名指した値が持つ各参照のカウントを 1 つずつ上げるので、
     第 1 の形が作る参照は、その値の inhabited で計数下の各 boxed leaf につき 1 つである (A5)。
     第 2 の形が作る参照は、書き込まれた持ち手の単位ごとに 1 つである -- 単位が参照を持つのはそこへ
@@ -555,7 +608,11 @@ SCAN src/ `applies_a_function_operand`
     `CODE src/generator.rs: Generator::build_retain` (「Retain an object `amount` times: every boxed
     leaf reached has its reference count increased by `amount`, an i64 count.」)
   `<2>6.` QED
-    BY `<2>1`, `<2>2`, `<2>2a`, `<2>3`, `<2>4`, `<2>5`
+    形が 3 つで尽きるのは次による。D24 は、1 つの段の生成コードがその段の中で出す**素動作**を
+    2 つの形に分ける (`<2>1`)。素動作を起こす retain と release はその 2 つ、すなわち第 1 の形と
+    第 2 の形である。素動作を起こさない retain と release -- 名指す値の inhabited な boxed leaf が
+    どれも計数下でないもの -- が第 3 の形であり、その形が素動作を起こさないことは `<2>4a` が述べる。
+    BY `<2>1`, `<2>2`, `<2>2a`, `<2>3`, `<2>4`, `<2>4a`, `<2>5`
 
 `<1>1.` ASSUME NEW `p`: `X` の切れ目
         PROVE  「`p` で処分されていない各参照が、D25 の 3 種の持ち手 -- `Liv(p)` の活性化の `Obl`、
@@ -796,8 +853,11 @@ SCAN src/ `applies_a_function_operand`
     スコープは本体の全体である」), A11 (「変数の使用は、その位置でスコープに入っている束縛に解決する」。
     A11 が語るのは `borrow_ify` の入力であり、`P` がその範囲に在ることは P28 の ASSUME の (H3) が
     与える), P28 の ASSUME の (H3), D6, EXT 自然数の帰納法
-  `<2>7a.` D10 の表の外で `Obl(a)` を動かす素動作について、どの切れ目でも、それが `Obl(a)` へ入れた
-    参照の個数は、それが `Obl(a)` から出した参照の個数以上である。
+  `<2>7a.` D10 の表の外で `Obl(a)` を動かす素動作は 2 つの族で尽き、その 2 つの族について次の 2 つが
+    成り立つ。
+          **(i)** どの切れ目でも、その族が `Obl(a)` へ入れた参照の個数は、その族が `Obl(a)` から
+          出した参照の個数以上である。
+          **(ii)** その族の素動作はどれも `held` を動かさない。
     `<3>1.` D10 の表の外で `Obl(a)` を動かす素動作は 2 つの族で尽きる。1 つは、1 つの段の生成コードが
       その段の中で出す、D24 の段の表に行を持たない素動作である (D24 の網羅の節)。もう 1 つは、(F) の
       解放が `Destructor` について行う動きであり、`_dtor` の欄の関数に適用の分の参照を与える retain、
@@ -821,7 +881,8 @@ SCAN src/ `applies_a_function_operand`
       2 つ目の入力は 1 つ目の結果である」)
     `<3>2.` 第 1 の族のうち `Obl(a)` を動かすのは、`<1>0e` の (a) の形だけである。`<1>0e` の (b) の
       形が作る参照の持ち手は書き込まれたオブジェクトの持ち手の単位であって `Obl(a)` ではないので、
-      その形は `Obl(a)` を動かさない。**在りかを一覧でなく `<1>0e` の述語で決めるのは、op が 1 つ
+      その形は `Obl(a)` を動かさない。`<1>0e` の (c) の形は参照を作らず処分しないので、これも
+      `Obl(a)` を動かさない。**在りかを一覧でなく `<1>0e` の述語で決めるのは、op が 1 つ
       増えるたびに一覧が古くなるからである** (D24)。
       BY `<3>1`, `<1>0e`, `<1>0b`, <ref id=0b850c9/> (1 番目と 2 番目の持ち手), DEF 生成 (β)
     `<3>3.` どちらの族も、`held` を動かさない。D34 の第 4 行と第 5 行が数えるのは RC IR の
@@ -847,9 +908,10 @@ SCAN src/ `applies_a_function_operand`
       D8 は同じオブジェクトへの参照を区別しないので、要るのは個数の順序だけである -- `<3>3a` と
       `<3>3b` が、出す素動作から同じ族の先行する入れる素動作への 1 対 1 の対応を与えるので、どの
       切れ目でも出した個数は入れた個数を超えない。
-      BY `<3>1`, `<3>2`, `<3>3a`, `<3>3b`, <ref id=ec8d1a0/> (「参照は D10 の**生成**によって作られ、D10 の**消費**または `Release` に
-      よって処分される」、同じオブジェクトへの参照は区別されない), DEF 受け渡し (α), DEF 生成 (β), DEF 処分 (δ)
+      BY `<3>1`, `<3>2`, `<3>3a`, `<3>3b`, <ref id=ec8d1a0/> (「参照は D10 の**生成**によって作られ、D10 の」、
+      「**消費**または `Release` によって処分される」、同じオブジェクトへの参照は区別されない), DEF 受け渡し (α), DEF 生成 (β), DEF 処分 (δ)
     `<3>5.` QED
+      族が 2 つで尽きることは `<3>1`、(i) は `<3>4`、(ii) は `<3>3` である。
       BY `<3>1`, `<3>2`, `<3>3`, `<3>3a`, `<3>3b`, `<3>4`
   `<2>8.` QED
     `p` までに起きた `a` の事象の個数についての帰納。基底は `a` が始まる前であり、そこでは開始した類が
@@ -860,8 +922,8 @@ SCAN src/ `applies_a_function_operand`
     置かれるので、どの切れ目でも両辺が受けた事象の集まりは同じである。第 3 行の開始値だけが
     `Obl(a)` の側に相手を持たず、`β(C)` がそれを `d` から引く。**参照は区別されないので (D8)、
     `Obl(a)` が `p` に持つ `O` への参照の個数は、D10 の表が入れた分と出した分の差に、表の外の族が
-    入れた分と出した分の差を足したものである。後者は `<2>7a` より非負であり、その族は `held` を
-    動かさない (`<2>7a`)。よって表の外の族は右辺を下げず、右辺は左辺を下回らない。**
+    入れた分と出した分の差を足したものである。後者は `<2>7a` の (i) より非負であり、その族は
+    `held` を動かさない (`<2>7a` の (ii))。よって表の外の族は右辺を下げず、右辺は左辺を下回らない。**
     ASSUME より `p` までの `X` の動作はすべて素動作なので、`p` までの
     除去はどれも持ち手が持つ参照を取り除くものであり、`Obl(a)` は `p` まで参照の多重集合として定まる。
     `<2>3` から `<2>6` の対応は類ごとなので、帰納は各類について `d_p(C)` がその類に対応する `Obl(a)`
@@ -1015,7 +1077,9 @@ SCAN src/ `applies_a_function_operand`
         BY <ref id=e3436e8/> (「**段の記述は `Obl` について網羅である。** ... **すなわち、ここに挙がっていない動きは
         起きない。**」、「**この網羅は段の境界についてである。** 1 つの段の生成コードは、この表に
         行を持たない素動作を段の中で出しうる。」), `<1>0e`
-      `<4>2.` 第 1 の族のうち `Obl` を動かすのは `<1>0e` の (a) の形だけであり、その形の retain と
+      `<4>2.` 第 1 の族のうち `Obl` を動かすのは `<1>0e` の (a) の形だけである -- (b) の形が作る
+        参照の持ち手はオブジェクトの持ち手の単位であり、(c) の形は参照を作らず処分しない
+        (`<1>0e`)。(a) の形の retain と
         release は 1 対 1 で対をなし、release は同じ節点の実行の中で retain より後に立つ
         (`<1>0e` の (a))。よってその節点の実行が終わった切れ目で、この族は `Obl` に何も残さない。
         BY `<1>0e`, 前提 相殺する形の順序
@@ -1124,7 +1188,8 @@ SCAN src/ `applies_a_function_operand`
         呼び出し先は `_dtor` の値が指す関数である (D23)。
         よって D9 の `App` の行がその callee の全 boxed leaf を消費する。`_dtor` の値の boxed leaf
         は、その型が closure 型ならば capture の位置 1 つ (D4 の規則 2)、funptr 型ならば無く
-        (D4 の規則 1)、capture の unit は必ず所有されるので (D14) D10 の初期値がその参照を `Obl(b1)`
+        (`is_funptr` が真の型は `is_fully_unboxed` であり、D4 の規則 1 がその型に leaf を与えない)、
+        capture の unit は必ず所有されるので (D14) D10 の初期値がその参照を `Obl(b1)`
         に入れる。**`Obl` を離れる参照の行き先と、作られる参照の持ち手と、`H` の動きは段ごとに
         書き尽くされているので (D24 の網羅の節)、この 3 つ以外の行き先は無い。**
         `_value` の leaf が指す先がグローバル状態のときは、その leaf は参照を持たないので (α) が無い。
@@ -1163,6 +1228,7 @@ SCAN src/ `applies_a_function_operand`
     ある」), D9 (消費の表の `App` の行 -- callee の全 boxed leaf), D10 (初期値の行),
     D14 (「**capture の unit は必ず所有される。**」), D4 (規則 1 と規則 2),
     A8, D26 (グローバル状態のオブジェクトを指す leaf は参照を持たず、`H` も動かない), DEF 受け渡し (α), DEF 生成 (β), DEF 解放 (ε)
+    `CODE src/ast/types.rs: TypeNode::is_fully_unboxed` (`self.is_funptr()` の枝が `true` を返す)
     `CODE src/generator.rs: Generator::build_run_destructor` (`_value` と `_dtor` を
     `move_out_struct_field` で取り出し、`build_retain(dtor.clone(), one, RcState::Unknown)` を置いてから
     `apply_lambda(dtor, vec![value], false)` を呼び、`run_io_or_ios_runner` の結果を
@@ -1204,7 +1270,7 @@ SCAN src/ `applies_a_function_operand`
       参照を持たない。指す先は funptr かグローバル状態のオブジェクトであり、グローバル状態の
       オブジェクトを指す leaf は D8 の意味の参照を持たない。よって `Obl(a)`、`H`、`B`、`C` の
       どれも動かない。
-      BY <ref id=596a46d/> (「その対を記号の位置と呼ぶ。... 記号の位置は**値とオブジェクトを持ち、参照を持たない**」、
+      BY <ref id=596a46d/> (「その対を記号の位置と呼ぶ。... 記号の位置は」、「**値とオブジェクトを持ち、参照を持たない**」、
       「そこが指すのは funptr かグローバル状態のオブジェクト(A8、D26)であり、どちらも D8 の意味の
       参照を持たない」), A8, D26, D8
     `<3>3.` QED
@@ -1231,7 +1297,7 @@ SCAN src/ `applies_a_function_operand`
       BY <ref id=b6673ca/>, <ref id=88a06de/>
     `<3>4.` (δ) が `H` を 0 にしたオブジェクトについては、`<1>6` の解放が同じ段の中で続く。
       BY <ref id=e3436e8/> の (F) (「ある段が参照を処分して計数下のオブジェクト (D26) `o` の `H(o)` が 0 になった
-      とき、`o` は**その同じ段の中で解放される**」), `<1>6`
+      とき、`o` は」、「**その同じ段の中で解放される**」), `<1>6`
     `<3>5.` QED
       BY `<3>1`, `<3>2`, `<3>3`, `<3>4`, DEF 処分 (δ)
   `<2>4.` CASE `Destructure(c, fs, s, k)` で `c` が boxed。
@@ -1363,9 +1429,9 @@ SCAN src/ `applies_a_function_operand`
       D21 (「分岐する op と `LLVMGen::unique_check_operand` を宣言する op は一致しない (D30 の (X2))」),
       D30 の (X2) (「**数え上げるのは生成コードの分岐であって、`LLVMGen::unique_check_operand` の
       宣言ではない。**」), `<1>4c` (D11 の (S-a))
-      `CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody` (`force_unique_or_assert` の結果に
+      `CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody::generate` (`force_unique_or_assert` の結果に
       `ObjectFieldType::move_into_struct_field` で `value` オペランドの参照を書き込む)
-      `CODE src/fixstd/builtin.rs: InlineLLVMUnionModBody` (タグが合う腕は `apply_lambda(modifier, ...)`
+      `CODE src/fixstd/builtin.rs: InlineLLVMUnionModBody::generate` (タグが合う腕は `apply_lambda(modifier, ...)`
       で modifier の参照を作られた活性化へ渡し、合わない腕は `gc.release(modifier, RcState::Unknown)` で
       処分する)
     `<3>2.` `<3>1` の各参照について、行き先が処分であるものは (δ) 1 つであり、`H` が 0 になれば
@@ -1384,10 +1450,12 @@ SCAN src/ `applies_a_function_operand`
       オブジェクト (D25 の 2 つ目) であり、この段が離す `Obl` の参照でも、結果の leaf に作られる参照
       でもない。**既に在るオブジェクトの leaf へ書き込む段は、この処分を伴う。**」), A8, D26, `<1>6`
       DEF 処分 (δ)
-      `CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody` (`move_out_struct_field` で古い値を取り出し
+      `CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody::generate` (`move_out_struct_field` で古い値を取り出し
       `gc.release(old_value, ...)` を置いてから `move_into_struct_field` を呼ぶ)
-    `<3>2b.` この実行の生成コードは、`<3>1`・`<3>2`・`<3>2a` が挙げるもののほかにも段の中で素動作を
-      出す。それは `<1>0e` の 2 つの形で尽き、どちらも (β) か (δ) である。**在りかを一覧でなく
+    `<3>2b.` この実行の生成コードは、`<3>1`・`<3>2`・`<3>2a` が挙げるもののほかにも段の中で retain と
+      release を出す ((F) の解放が行うものを除く -- それは `<1>6` が数える)。それは `<1>0e` の
+      3 つの形で尽き、(a) と (b) が出すのは (β) か (δ) であり、
+      (c) は素動作を起こさない。**在りかを一覧でなく
       `<1>0e` の述語で決めるのは、op が 1 つ増えるたびに一覧が古くなるからである** (D24)。
 
       - `<1>0e` の (a) の形。その retain が名指す値の inhabited な各 leaf について、指す先が計数下
@@ -1402,18 +1470,20 @@ SCAN src/ `applies_a_function_operand`
         `make_struct_union_unique` の共有の腕と `clone_array_buf` であり、後者は
         `InlineLLVMArrayAppendCapacityUnchecked` の共有の腕が `dst` の記憶域へ写した各要素を
         retain する道である。
+      - `<1>0e` の (c) の形。素動作は無い -- 参照が作られも処分されもせず、`H` も `Obl(a)` も
+        持ち手の単位も動かない (`<1>0e` の (c))。記号の位置 (D6) を読む retain がこれである。
 
       (b) の形は段の境界でも `H` を動かすが、その参照の持ち手はこの実行が書き込むオブジェクトの
       持ち手の単位であり (D25 の 2 つ目)、`Obl(a)` を動かさない (`<1>0e` の (b))。
-      BY `<1>0e`, `<1>0b`, <ref id=e3436e8/> (「**在りかは述語で決める** -- `Generator::retain`・
+      BY `<1>0e`, `<1>0b`, `<1>6`, <ref id=e3436e8/> (「**在りかは述語で決める** -- `Generator::retain`・
       `Generator::build_retain`・`Generator::release` の呼び出しを出す生成コードの全体であり、一覧で
       書くと op が 1 つ増えるたびに古くなる。」、「**述語は名前の綴りでなく、呼ばれる項目で書く。**」),
       D25 (2 番目の持ち手), D16, D26, A5, A8,
       DEF 生成 (β), DEF 処分 (δ), DEF 記憶域のスロット
-      `CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody` (`generate` は
+      `CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate` (
       `gc.retain(x.clone(), RcState::Unknown)` を置き、`gc.apply_lambda(f, vec![x.clone()], false)` を
       呼び、その後に `gc.release(x, RcState::Unknown)` を置く)
-      `CODE src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked` (`generate` は
+      `CODE src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::generate` (
       `build_branch_by_is_unique(src_ptr, ...)` で分岐し、共有の腕で
       `ObjectFieldType::clone_array_buf(gc, src_len, src_buf, dst_write, elem_ty, None, ...)` を呼ぶ)
       `CODE src/object.rs: ObjectFieldType::clone_array_buf` (`clone_array_range` が、要素を
@@ -1451,9 +1521,9 @@ SCAN src/ `applies_a_function_operand`
       A17 (i-b) (環境はその参照を `boxed_from_retained_ptr` で Fix の側へ返すまで
       持つ), D9 (移動の表の「`Llvm` の素通し leaf」の行), D10 (移動は `Obl` を変えない), D6, D8,
       D25, A8, D26, `<3>1`, DEF 受け渡し (α), DEF 生成 (β), DEF 割り当て (γ)
-      `CODE src/fixstd/builtin.rs: InlineLLVMBoxedFromRetainedPtrIOS` (`generate` は `Ptr` の
-      オペランドから番地を取り出して結果の欄へ入れるだけで、retain を 1 つも出さない。`result_prov` を
-      override しない)
+      `CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS`
+      (`generate` は `Ptr` のオペランドから番地を取り出して結果の欄へ入れるだけで、retain を 1 つも
+      出さない。この `impl` は `result_prov` を override しない)
       `CODE src/ast/inline_llvm.rs: LLVMGen::result_prov` (既定は
       `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)`)
     `<3>4.` この実行が作る活性化から受け取る結果の leaf については、`<3>3` の表を読まない。その参照は
@@ -1491,12 +1561,13 @@ SCAN src/ `applies_a_function_operand`
         `<4>2` と `<4>3` より、渡す値が closure 型のときはその capture の leaf の参照が 1 つ渡り、
         funptr 型のときは渡る参照が無い。渡る場合の行き先は `<4>1` と `<4>3` より `Obl(b)` である。
         BY `<4>1`, `<4>2`, `<4>3`, `<3>4`, DEF 受け渡し (α)
-        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
+        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail` (
         `let f_fixf = gc.apply_lambda(f, vec![fixf], false).unwrap();` の結果を
         `gc.apply_lambda(f_fixf, vec![x], tail)` の callee に据える)
-        `CODE src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody`,
-        `InlineLLVMUnsafeMutateBoxedIOSInternalBody`, `InlineLLVMArrayMutateElementsInternalBody`,
-        `InlineLLVMArrayMutateElementsIosInternalBody` (どれも `generate` が
+        `CODE src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::generate`,
+        `InlineLLVMUnsafeMutateBoxedIOSInternalBody::generate`,
+        `InlineLLVMArrayMutateElementsInternalBody::generate`,
+        `InlineLLVMArrayMutateElementsIosInternalBody::generate` (どれも
         `apply_io_act_to_data_ptr` の結果を `run_ios_runner` へ渡す)
         `CODE src/fixstd/builtin.rs: apply_io_act_to_data_ptr` (`gc.apply_lambda(io_act,
         vec![data_ptr_obj], false)` を返す)
@@ -1528,7 +1599,7 @@ SCAN src/ `applies_a_function_operand`
           BY <ref id=e3436e8/> の (E2) (「オペランドを適用する」の段落 -- 「この op は `fix(f)` のクロージャを
           その場で組み立てて `f` に渡し、返った関数に改めてオペランド `x` を渡すので、`apply_lambda` を
           2 回呼び、1 回目に渡す値はどのオペランドでもない」)
-          `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
+          `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail` (
           `let fixf_ty = f.ty.get_lambda_dst();` を取り、その型の `create_obj` の結果へ
           `insert_field(CLOSURE_CAPTURE_IDX, cap_obj_ptr)` を行う)
         `<5>2.` closure 型に `ty_to_object_ty` が与える object type は `is_unbox` が真である。
@@ -1555,9 +1626,10 @@ SCAN src/ `applies_a_function_operand`
         A24 (`fix` の op は capture を持つ本体にだけ在るので、`cap_name` の束縛が在る。A24 が語るのは
         `borrow_ify` の入力であり、`P` がその範囲に在ることは P28 の ASSUME の (H3) が与える),
         P28 の ASSUME の (H3), `<3>1`, `<3>4a`, DEF 受け渡し (α)
-        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
-        `insert_field(CLOSURE_CAPTURE_IDX, cap_obj_ptr)` に `get_scoped_obj(cap_name)` の値を入れる。
-        `free_vars_mut` は `[x_name, f_name, cap_name]` を返すので `cap` はこの節点のオペランドである)
+        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail` (
+        `insert_field(CLOSURE_CAPTURE_IDX, cap_obj_ptr)` に `get_scoped_obj(cap_name)` の値を入れる),
+        `InlineLLVMFixBody::free_vars_mut` (`[x_name, f_name, cap_name]` を返すので `cap` はこの
+        節点のオペランドである)
         `CODE src/generator.rs: Scope::push_local` (局所の束縛は `retain_on_read: false` で積まれる)
         `CODE src/generator.rs: Generator::get_scoped_obj` (`retain_on_read` が偽のとき retain を
         出さない)
@@ -1588,7 +1660,7 @@ SCAN src/ `applies_a_function_operand`
     割り当て。
     生成コードが段の中で出す残りの素動作もこの族に入る -- `<1>0e` の (a) の形は、その retain が名指す
     値の leaf ごとの生成と処分なので (あ)、(b) の形は書き込まれた持ち手の単位ごとの生成なので (え)
-    である。
+    である。(c) の形は素動作を起こさない。
     (あ) と (い) は有限である -- 1 つの節点が名指す値は有限個であり (D2 -- `args` も `fs` も列で
     ある)、1 つの型の leaf の列挙は有限である (D4、A10)。(え) も有限である -- 1 つの節点が割り当てる
     オブジェクトも、書き込む持ち手の単位も、無限個あるならこの実行は終わらない。(う) は、この実行が
@@ -1662,15 +1734,21 @@ SCAN src/ `applies_a_function_operand`
   `<1>7`・`<1>5`・`<1>6` を引くのは、`s` の全体について読むときは `s` の各節点について、`p` の直後の
   動作について読むときはその節点についてである。
 
-  `<2>1.` 段の外で参照が動くことは無い。実行は段の列であり、参照を作る動作は 3 か所ともどれも段の中で
-    起き、参照を渡す動作と処分する動作は (E1) から (E9) と (F) が段ごとに述べる。環境が
-    `get_funptr_retain` / `get_funptr_release` の番地を呼んで作り処分する参照も段の中で動く --
+  `<2>1.` 段の外で参照が動くことは無い。実行は段の列である。**参照を作る動作を数え上げる段は
+    3 つを見る** (D24) -- D24 の「実行の最初の時点」の段落が挙げる 3 か所 (D10 の生成の表、(F) の
+    retain、`InlineLLVMBoxedFromRetainedPtrIOS` が環境から受け取る行) はどれも段の中で起き、1 つの
+    段の生成コードがその段の中で出す `<1>0e` の (a) と (b) の形も定義上その段の中に在り、(E9) は
+    段そのものが参照を 1 つ作る段である。参照を渡す動作と処分する動作は (E1) から (E9) と (F) が段ごとに述べる。
+    環境が `get_funptr_retain` / `get_funptr_release` の番地を呼んで作り処分する参照も段の中で動く --
     その呼び出しは (E9) の段だからである。**終わらない段の後に
     切れ目は無い** -- その段は自分の行う動作をすべて終えないので、その後に段は無く、素動作も無い。
     よって第 2 の主張はそこを外してよい。
     BY <ref id=e3436e8/> (「プログラム `P` の**実行**とは、**段**の有限または無限の列である」、「参照を作るのは
     D10 の生成の表、(F) の retain、そして `InlineLLVMBoxedFromRetainedPtrIOS` が環境から受け取る行の
-    3 か所だけであり、どれも段の中で起きる」), D24 の (E1) から (E9) と (F),
+    3 か所だけであり、どれも段の中で起きる」、
+    「**この 2 つの形は (E2) の段が中で出す素動作の分類である。(E9) の retain はどちらでもない。**」、
+    「**参照を作る動作を数え上げる段は、この 2 つの形に (E9) を足して 3 つを見る。**」),
+    `<1>0e`, D24 の (E1) から (E9) と (F),
     D24 の (E9) (「**(E9) 環境の参照の操作の段。** 環境が、`get_funptr_retain` か
     `get_funptr_release` が渡した番地を呼ぶ (A17 (ii-c))。」),
     A17 (ii-c) (「**その段は D24 の (E9) である。**」),
@@ -1687,8 +1765,8 @@ SCAN src/ `applies_a_function_operand`
     `<3>3a.` この段はオブジェクトを持ち込まないので、`Obj` も `Cnt` も動かさない。環境が実行の途中で
       受け取る boxed な値は、このプログラムが作って環境へ番地を渡したものに限る。
       BY <ref id=c9e4cca/> (i-d) (「**最初の時点より後の (E1) が環境から受け取る boxed な値も同じである** -- 環境が
-      Fix の boxed な値の番地を得る道はその対しかないので、**環境は実行の途中で新しいオブジェクトを
-      持ち込まない。**」), `<1>0a`, DEF `Obj`, DEF `Cnt`
+      Fix の boxed な値の番地を得る道はその対しかないので、」、「**環境は実行の途中で新しい
+      オブジェクトを持ち込まない。**」), `<1>0a`, DEF `Obj`, DEF `Cnt`
     `<3>4.` QED
       `a` が `Liv` に入ることは変化を起こさないので (`<3>3`)、この段が起こす変化は、`a` の初期 `Obl`
       の各参照についての (α) (`E` から `Obl(a)` へ) の列である。段の後の `Obl(a)` は D10 の
@@ -1807,9 +1885,9 @@ SCAN src/ `applies_a_function_operand`
     A17 (ii-b) より環境が書き換えるのは計数下オブジェクトの inhabited な boxed leaf ではないので、
     `B_p` が数える対の条件 -- 持ち手の単位が `O` への参照を 1 つ持つこと -- はこの段で変わらない。
     `Obj` と `Cnt` も動かない。
-    BY <ref id=e3436e8/> の (E8) (「**この段は参照を作らず、渡さず、処分しない。** A17 (ii-b) より環境が書き換える
-    のは計数下オブジェクトの inhabited な boxed leaf ではないので、どの leaf がどのオブジェクトを
-    指すかはこの段で変わらず、`Obl` も `H` も動かない」), A17 (ii-b),
+    BY <ref id=e3436e8/> の (E8) (「**この段は参照を作らず、渡さず、処分しない。**」、
+    「A17 (ii-b) より環境が書き換えるのは計数下オブジェクトの inhabited な boxed leaf ではないので、
+    どの leaf がどのオブジェクトを指すかはこの段で変わらず、`Obl` も `H` も動かない」), A17 (ii-b),
     DEF `B_p`, DEF `A_p`, DEF `C_p`, DEF `Obj`, DEF `Cnt`
   `<2>8b.` CASE (E9) 環境の参照の操作の段。retain の段は、その番地が指すオブジェクトが計数下ならば
     (β) 1 つ (持ち手は `E`)、グローバル状態ならば素動作が無い。release の段は、計数下ならば (δ) 1 つ
@@ -1921,17 +1999,26 @@ SCAN src/ `applies_a_function_operand`
 
 ## 4. (H2) と (H3) を果たす者
 
-`borrow_ify` の入力については A1 が「すべての関数の `borrowed_units` は空である」と述べるので、
-(H2) の 3 節はどれも空虚に成り立ち、(b) の角括弧は 0 である。
+**(H3) が許すプログラムは 3 群に分かれる。** `borrow_ify` の入力とその上流 (`insert_rc` の入力と
+出力)、`borrow_ify` の出力 (すなわち `cancel` の入力)、そして `cancel` の出力である。以下はこの
+3 群について (H2) を果たす者を挙げる。
 
-`borrow_ify` の出力については、(H2-b) を果たすのは A20 の「その関数が借用する (D14) unit の参照を、
-呼び出し元は呼び出しが返るまで処分しない」であり、(H2-c) を果たすのは A20 の「**さらに、借用位置へ
-渡された参照は、呼び出しの間 呼び出し先の `Obl` に入らない。**」と「**この節はその取り決めを
-呼び出しの鎖の全体へ延ばす** -- 呼び出し元自身がその unit を借用している入れ子の形でも、参照の
-持ち手は鎖を遡った先の活性化のままである」である。
+`borrow_ify` の入力については A1 が「すべての関数の `borrowed_units` は空である」と述べるので、
+(H2) の 3 節はどれも空虚に成り立ち、(b) の角括弧は 0 である。**その上流について (H2) を果たす者は
+ここに無い** -- A1 が語るのは `borrow_ify` の入力であり、A2 が上流へ渡すのは A6・A9・A13 である。
+その範囲でこの命題を読む者が (H2) を渡す。
+
+`borrow_ify` の出力と `cancel` の出力については、(H2-b) を果たすのは A20 の「その関数が借用する
+(D14) unit の参照を、呼び出し元は呼び出しが返るまで処分しない」であり、(H2-c) を果たすのは A20 の
+「**さらに、借用位置へ渡された参照は、呼び出しの間 呼び出し先の `Obl` に入らない。**」と
+「**この節はその取り決めを呼び出しの鎖の全体へ延ばす** -- 呼び出し元自身がその unit を借用している
+入れ子の形でも、参照の持ち手は鎖を遡った先の活性化のままである」である。**A20 はこの 2 群を
+どちらも覆う** -- その言明は「**`borrow_ify` の出力と、`cancel` がそれを写したプログラムの両方**に
+ついて」である。
 **(H2-a) を果たすのは P14b である**。
 P14b の言明は「**`borrow_ify` の出力と、`cancel` がそれを写したプログラムの両方**について、その実行
 (D24) において、借用する unit を持つ本体の活性化を作る段は、(E3) の呼び出しの段に限る」であり、
+これも同じ 2 群を名指す。
 README の P28 の項が「**`borrow_ify` の出力についてこの前提を果たすのは P14b である。**」と書く。
 **層 0 のこの文書は P14b を引けないので、P28 はそれを前提として取り、命題としては引かない。**
 
