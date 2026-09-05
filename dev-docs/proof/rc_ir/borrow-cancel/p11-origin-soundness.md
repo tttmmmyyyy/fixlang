@@ -1083,8 +1083,9 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
     始まる実行路に帰納法の仮定を当てる。
     BY <2>1, <2>2, <2>3, <2>4
 
-<1>0a. コード生成の実行が `panic!` に着くとき、そのプログラムの本体の活性化は存在しない。
-       `panic_with_msg` は `panic_notrace` を経て `panic!` を呼ぶので、これに当たる。
+<1>0a. `develop_mode` の門を持たない `panic!` にコード生成の実行が着くとき、そのプログラムの本体の
+       活性化は存在しない。`panic_with_msg` は `panic_notrace` を経て `panic!` を呼ぶので、
+       これに当たる。
   BY README の第 4 節 (「**コード生成が `expect` や `unreachable!` で止まる形も、`develop_mode` の
      門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の活性化は存在
      しない。」),
@@ -1112,9 +1113,10 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
   **在りかを与えるのは走査である。** `bindings` の欄は `pub` を持たないので、それへ書き込む式が
   在りうるのは `src/rc_ir/ownership.rs` とその子孫のモジュールだけであり (`EXT 可視性`)、その
   字面を持つ項目は第 1 節の前提が挙げる。挙がった `src/rc_ir/ownership.rs` の項目は
-  `VarTable::of`・`collect_bindings`・`origin_inner` の 3 つで、最後は読みである。欄を持つ値を
-  組み立てるのは `VarTable::empty` であり (前提 `VarTable` を組み立てる式の在りか)、そこが置くのは
-  空の表である。よって表に入る名前はこの 2 つが入れたものだけである。
+  `VarTable::of`・`collect_bindings`・`origin_inner` であり、`origin_inner` のものは読みである。
+  欄を持つ値を組み立てるのは `VarTable::empty` であり (前提 `VarTable` を組み立てる式の在りか)、
+  そこが置くのは空の表である。よって表に入る名前は `VarTable::of` と `collect_bindings` が
+  入れたものだけである。
   BY 前提 `VarTable` の `bindings` の欄に触れる式の在りか, 前提 `VarTable` を組み立てる式の在りか,
      EXT 可視性,
      CODE src/rc_ir/ownership.rs: VarTable (`bindings` は `pub` の付かない欄である),
