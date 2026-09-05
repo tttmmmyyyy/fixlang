@@ -187,6 +187,10 @@ def citing_by(lines, line):
     return None
 
 
+# 引用の前で「`README.md` の …」「`report.md` の第 7.3 節は …」のように出どころを名指す形。
+ATTRIBUTION = re.compile(r"(?:README|report)(?:\.md)?`?\s*の[^「]{0,40}$")
+
+
 def comparison_text(directory):
     """引用を突き合わせる本文 -- 枠と、その隣に置かれた証明でない文書。
 
@@ -219,7 +223,12 @@ def check(directory):
             quote = strip_spaces(body)
             if not quote or contains(frame, quote):
                 continue
-            if not any(anchor in frame for anchor, _ in anchors(quote)):
+            # **引用の前で文書を名指しているなら、錨が 1 つも当たらなくても指摘する。** 錨の門は
+            # 枠の外を引く引用 (コードの doc、Rust の規則) を通すために在るが、原文が動いて引用が
+            # どの錨も当てなくなった箇所まで黙って通してしまう -- 実測で、枠でない文書の 1 文を
+            # 書き替えたときに、それを引く 1 か所が誰にも挙げられなかった。
+            attributed = ATTRIBUTION.search(text[max(0, match.start() - 60):match.start()])
+            if not attributed and not any(anchor in frame for anchor, _ in anchors(quote)):
                 continue
             line = text.count("\n", 0, match.start()) + 1
             emphasis = contains(strip_emphasis(frame), strip_emphasis(quote))
