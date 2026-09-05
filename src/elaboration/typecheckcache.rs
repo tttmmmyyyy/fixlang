@@ -193,18 +193,21 @@ impl TypeCheckCache for FileCache {
 /// stored longest ago.
 const CACHE_GENERATION: u64 = 3;
 
+/// The stored expressions, grouped by the entity they belong to. Within a group the version stored
+/// most recently comes first, and at most `CACHE_GENERATION` versions are held.
+type CacheEntries = BTreeMap<EntityIdentity, VecDeque<(VersionHash, TypedExpr)>>;
+
 /// A cache that holds its entries in memory, so they last as long as the process that filled it.
 pub struct MemoryCache {
-    /// The stored expressions, grouped by the entity they belong to. Within a group the version
-    /// stored most recently comes first, and at most `CACHE_GENERATION` versions are held.
-    data: Mutex<BTreeMap<EntityIdentity, VecDeque<(VersionHash, TypedExpr)>>>,
+    /// The entries, behind a lock, since the threads that check a program together share them.
+    data: Mutex<CacheEntries>,
 }
 
 impl MemoryCache {
     /// Creates a cache holding no entries.
     pub fn new() -> Self {
         MemoryCache {
-            data: Mutex::new(BTreeMap::default()),
+            data: Mutex::new(CacheEntries::default()),
         }
     }
 
@@ -214,9 +217,7 @@ impl MemoryCache {
     /// that happens: the lock is held over the map alone, so a caller that goes on with them reads
     /// what the panicking thread had already stored. The language server type-checks a program the
     /// compiler can panic on, and keeps the cache across such a run.
-    fn lock_data(
-        &self,
-    ) -> MutexGuard<'_, BTreeMap<EntityIdentity, VecDeque<(VersionHash, TypedExpr)>>> {
+    fn lock_data(&self) -> MutexGuard<'_, CacheEntries> {
         self.data
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -235,13 +236,13 @@ impl TypeCheckCache for MemoryCache {
     ) {
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
-        let mut data = self.lock_data();
-        let entries = data.entry(entity_id).or_insert_with(|| VecDeque::new());
+        let mut entries = self.lock_data();
+        let versions = entries.entry(entity_id).or_insert_with(|| VecDeque::new());
         // If the cache is full, remove the oldest entry.
-        while entries.len() >= CACHE_GENERATION as usize {
-            entries.pop_back();
+        while versions.len() >= CACHE_GENERATION as usize {
+            versions.pop_back();
         }
-        entries.push_front((version_hash, expr.clone()));
+        versions.push_front((version_hash, expr.clone()));
     }
 
     /// Searches the entity's versions for the one stored under `version_hash`.
@@ -253,9 +254,9 @@ impl TypeCheckCache for MemoryCache {
     ) -> Option<TypedExpr> {
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
-        let data = self.lock_data();
-        let entries = data.get(&entity_id)?;
-        let expr = entries
+        let entries = self.lock_data();
+        let versions = entries.get(&entity_id)?;
+        let expr = versions
             .iter()
             .find(|(hash, _)| hash == &version_hash)?
             .1

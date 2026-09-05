@@ -1,15 +1,15 @@
 //! Compile errors as the language server publishes them.
 //!
-//! Most programmers meet an error in their editor rather than in the output of `fix build`, so a
-//! check that the compiler reports something says nothing until the same report reaches the editor,
-//! anchored to the source it is about.
+//! Programmers meet a compile error in their editor, so a check that the compiler reports
+//! something says nothing until the same report reaches the editor, anchored to the source it is
+//! about.
 
 #[cfg(test)]
 mod tests {
     use super::super::completion_harness::LspCompletionCtx;
     use super::super::lsp_client::LspClient;
     use crate::tests::test_util::copy_dir_recursive;
-    use serde_json::Value;
+    use serde_json::{json, Value};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::Duration;
@@ -28,11 +28,7 @@ mod tests {
 
     /// The diagnostics the server publishes for `file` of the project, after opening and saving it.
     fn diagnostics_of(project_dir: &Path, file: &Path) -> Vec<Value> {
-        let mut client = LspClient::new(project_dir).expect("Failed to start LSP");
-        client
-            .initialize(project_dir, Duration::from_secs(5))
-            .expect("Failed to initialize LSP");
-        client.open_document(file).expect("Failed to open document");
+        let mut client = open_session(project_dir, file, Duration::from_secs(5));
         client.save_document(file).expect("Failed to save document");
         client.wait_for_server(Duration::from_secs(10));
         client.get_diagnostics(file)
@@ -365,11 +361,12 @@ mod tests {
     /// The time one diagnostics pass is given to end.
     const PASS_TIMEOUT: Duration = Duration::from_secs(180);
 
-    /// A session over the project, with `file` opened.
-    fn open_session(project_dir: &Path, file: &Path) -> LspClient {
+    /// A session over the project, with `file` opened. `initialize_timeout` is how long the
+    /// response to `initialize` is waited for.
+    fn open_session(project_dir: &Path, file: &Path, initialize_timeout: Duration) -> LspClient {
         let mut client = LspClient::new(project_dir).expect("Failed to start LSP");
         client
-            .initialize(project_dir, Duration::from_secs(10))
+            .initialize(project_dir, initialize_timeout)
             .expect("Failed to initialize LSP");
         client.open_document(file).expect("Failed to open document");
         client
@@ -396,6 +393,17 @@ mod tests {
     const PROGRAM_WITHOUT_AN_ERROR: &str =
         "module Main;\n\nmain : IO ();\nmain = println(\"x\");\n";
 
+    /// A project directory holding the given files, under a fresh temporary directory.
+    fn project_with(files: &[(&str, &str)]) -> (TempDir, PathBuf) {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let project_dir = temp_dir.path().join("proj");
+        fs::create_dir_all(&project_dir).expect("Failed to create the project directory");
+        for (name, content) in files {
+            fs::write(project_dir.join(name), content).expect("Failed to write a project file");
+        }
+        (temp_dir, project_dir)
+    }
+
     /// A diagnostics pass whose analysis ends in a panic ends that pass alone: the program the
     /// editor writes next is analyzed, and its report reaches the editor without the server being
     /// restarted.
@@ -408,7 +416,7 @@ mod tests {
         let (_temp_dir, project_dir) = setup_test_env("diagnostics_after_panic");
         let main_fix = Path::new("main.fix");
 
-        let mut client = open_session(&project_dir, main_fix);
+        let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
         save_and_wait_for_a_pass(
             &mut client,
             main_fix,
@@ -461,7 +469,7 @@ mod tests {
         fs::write(project_dir.join(main_fix), PROGRAM_WITH_AN_UNKNOWN_NAME)
             .expect("Failed to write the program the session starts from");
 
-        let mut client = open_session(&project_dir, main_fix);
+        let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
         save_and_wait_for_a_pass(
             &mut client,
             main_fix,
@@ -496,6 +504,52 @@ mod tests {
         assert!(
             diagnostics.is_empty(),
             "the report of the pass before the failing one is expected to be taken back, but \
+             `main.fix` carries {:?}",
+            diagnostics
+        );
+    }
+
+    /// A repair the programmer types without saving takes the report back, so the squiggle leaves
+    /// the screen as the error does.
+    ///
+    /// The pass an edit asks for runs over the buffers the editor holds, and the file on disk still
+    /// carries the error at that point. A pass reading the disk instead would answer with the error
+    /// the programmer has just removed.
+    #[test]
+    fn test_a_repair_the_editor_has_not_saved_takes_the_report_back() {
+        let (_temp_dir, project_dir) = project_with(&[
+            (
+                "fixproj.toml",
+                "[general]\nname = \"unsaved\"\nversion = \"0.1.0\"\n\n[build]\nfiles = [\"main.fix\"]\n",
+            ),
+            ("main.fix", PROGRAM_WITH_AN_UNKNOWN_NAME),
+        ]);
+        let main_fix = Path::new("main.fix");
+
+        let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
+        save_and_wait_for_a_pass(&mut client, main_fix, "the first pass is expected to end");
+        sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
+
+        // The repair, which stays in the editor: the file on disk keeps the error.
+        let uri = format!("file://{}", project_dir.join(main_fix).display());
+        let passes_before = client.count_progress_end_messages();
+        client
+            .send_notification(
+                "textDocument/didChange",
+                json!({
+                    "textDocument": { "uri": uri, "version": 2 },
+                    "contentChanges": [ { "text": PROGRAM_WITHOUT_AN_ERROR } ]
+                }),
+            )
+            .expect("Failed to send didChange");
+        client
+            .wait_for_progress_end_count(passes_before + 1, PASS_TIMEOUT)
+            .expect("the pass over the repaired buffer is expected to end");
+
+        let diagnostics = client.get_diagnostics(main_fix);
+        assert!(
+            diagnostics.is_empty(),
+            "the report is expected to be taken back once the buffer carries no error, but \
              `main.fix` carries {:?}",
             diagnostics
         );

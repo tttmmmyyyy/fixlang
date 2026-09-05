@@ -39,12 +39,13 @@ use lsp_types::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::VecDeque;
+use std::fs;
 use std::mem;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::time::Duration;
 use std::{
-    io::{Read, Write},
+    io::{stdin, stdout, Read, Write},
     path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -53,22 +54,33 @@ use std::{
     },
 };
 
+/// A message of the JSON-RPC protocol the client and the server speak. One shape carries every
+/// kind of message: a request names a `method` and carries an `id`, a notification names a
+/// `method` alone, and a response carries the `id` of the request it answers together with a
+/// `result` or an `error`.
 #[derive(Deserialize, Serialize)]
 pub struct JSONRPCMessage {
+    /// The version of the protocol, which is `"2.0"`.
     pub jsonrpc: String,
+    /// The number that ties a response to the request it answers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<u32>,
+    /// The name of the method a request or a notification asks for.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub method: Option<String>,
+    /// The arguments of that method, shaped by the method itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<Value>,
+    /// The answer of a request that succeeded.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
+    /// The answer of a request that failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<Value>,
 }
 
 impl JSONRPCMessage {
+    /// A message carrying the given parts, stamped with the version of the protocol.
     pub fn new(
         id: Option<u32>,
         method: Option<String>,
@@ -87,32 +99,34 @@ impl JSONRPCMessage {
     }
 }
 
-// Requests sent to diagnostic thread.
+/// A request sent to the diagnostics thread.
 enum DiagnosticsMessage {
-    // Run diagnostics, elaborating against these live (possibly unsaved)
-    // buffer contents (absolute path -> content) layered over the on-disk
-    // sources. An empty map means "use the on-disk sources as-is", which
-    // is what the initial run uses.
+    /// Run diagnostics, elaborating against these live (possibly unsaved) buffer contents
+    /// (absolute path -> content) layered over the on-disk sources. An empty map elaborates the
+    /// on-disk sources as they stand, which is what the initial run does.
     Run(Arc<Map<PathBuf, String>>),
-    // Stop the diagnostics thread.
+    /// Stop the diagnostics thread.
     Stop,
 }
 
-// The result of diagnostics.
+/// The result of one diagnostics run.
 pub struct DiagnosticsResult {
+    /// The elaborated program.
     pub program: Program,
-    // Absolute paths of the source files that belong to this project (i.e.
-    // listed in `fixproj.toml`'s `files` section, excluding dependencies),
-    // mapped to their exact textual content as captured when `program` was
-    // elaborated. The keys identify which symbols are user-defined; the
-    // values record the source as the AST saw it, so a comparison against
-    // the current editor buffer detects drift.
+    /// Absolute paths of the source files that belong to this project (i.e.
+    /// listed in `fixproj.toml`'s `files` section, excluding dependencies),
+    /// mapped to their exact textual content as captured when `program` was
+    /// elaborated. The keys identify which symbols are user-defined; the
+    /// values record the source as the AST saw it, so a comparison against
+    /// the current editor buffer detects drift.
     pub user_source_contents: Map<PathBuf, String>,
 }
 
-// Document symbol request which are waiting for diagnostics.
+/// A `textDocument/documentSymbol` request that is waiting for diagnostics to become available.
 pub struct PendingDocumentSymbolRequest {
+    /// The LSP request id used to correlate the eventual response.
     id: u32,
+    /// The original request parameters, replayed once diagnostics are ready.
     params: DocumentSymbolParams,
 }
 
@@ -124,19 +138,24 @@ pub struct PendingWorkspaceSymbolRequest {
     params: WorkspaceSymbolParams,
 }
 
-// The latest content of each file (which may not have been saved to disk yet) and its associated information
+/// The latest content of one file, which may still be waiting to be saved to disk, together with
+/// what has been parsed out of it.
 pub struct LatestContent {
-    // The path.
+    /// The path of the file.
     pub path: PathBuf,
-    // The latest content of the file.
+    /// The latest content of the file.
     pub content: String,
-    // Module name. None if not parsed yet or failed to parse.
+    /// The module the content declares. `None` while the content is still to be parsed, and once
+    /// it has been parsed without success.
     pub module_info: Option<ModuleInfo>,
-    // Import statements. None if not parsed yet or failed to parse.
+    /// The import statements the content writes. `None` while the content is still to be parsed,
+    /// and once it has been parsed without success.
     pub import_stmts: Option<Vec<ImportStatement>>,
 }
 
 impl LatestContent {
+    /// A record of `content` for `path`, whose module and import statements are parsed when they
+    /// are first asked for.
     fn new(path: PathBuf, content: String) -> Self {
         LatestContent {
             path,
@@ -146,6 +165,8 @@ impl LatestContent {
         }
     }
 
+    /// The import statements the content writes, parsed on the first call. `None` says the
+    /// content does not parse.
     pub(super) fn get_import_stmts(&mut self) -> &Option<Vec<ImportStatement>> {
         if self.import_stmts.is_none() {
             let import_stmts = parse_str_import_statements(self.path.clone(), &self.content);
@@ -158,6 +179,8 @@ impl LatestContent {
         &self.import_stmts
     }
 
+    /// The module the content declares, parsed on the first call. `None` says the content does
+    /// not parse.
     pub(super) fn get_module_info(&mut self) -> &Option<ModuleInfo> {
         if self.module_info.is_none() {
             let module_info = parse_str_module_defn(self.path.clone(), &self.content);
@@ -171,9 +194,10 @@ impl LatestContent {
     }
 }
 
-// Launch the language server
+/// Run the language server: read the client's messages off stdin and answer them, until the
+/// client asks the server to exit or closes the pipe.
 pub fn launch_language_server() {
-    let mut stdin = std::io::stdin();
+    let mut stdin = stdin();
 
     // Prepare a channel to send requests to the diagnostics thread.
     let (diag_req_send, diag_req_recv) = mpsc::channel::<DiagnosticsMessage>();
@@ -182,13 +206,10 @@ pub fn launch_language_server() {
     // Prepare a channel to response from the diagnostics thread.
     let (diag_res_send, diag_res_recv) = mpsc::channel::<DiagnosticsResult>();
 
-    // Session-scoped typecheck cache, shared between the diagnostics
-    // thread and the feature handlers. Owned here (rather than inside
-    // `diagnostics_thread`) so that feature requests arriving before
-    // the first successful diagnostics run — or while the saved
-    // buffer doesn't parse and `last_diag` therefore stays `None` —
-    // can still drive their own elaborate without paying disk I/O
-    // for every cache lookup.
+    // Session-scoped typecheck cache, owned by this loop and shared with the diagnostics thread
+    // and the feature handlers. A feature request arriving before the first successful
+    // diagnostics run — or while the saved buffer fails to parse and `last_diag` therefore stays
+    // `None` — drives an elaborate of its own, and this cache answers it out of memory.
     let typecheck_cache: SharedTypeCheckCache = Arc::new(typecheckcache::MemoryCache::new());
 
     // Analyze (diagnostics) settings, configurable from the client via
@@ -207,7 +228,7 @@ pub fn launch_language_server() {
     // client's responses to these carry no `method` and are ignored.
     let mut server_request_id: u32 = 0;
 
-    // Maps to get file contents from Uris.
+    // The latest content of each open buffer, under the URI naming it.
     let mut uri_to_latest_content: Map<Uri, LatestContent> = Map::default();
 
     // The pending document symbol requests.
@@ -219,10 +240,10 @@ pub fn launch_language_server() {
         VecDeque::new();
 
     loop {
-        // If new diagnostics are available, send store it to `last_diag`.
+        // Take in whatever the diagnostics thread has finished, keeping the newest result.
         let mut diagnostics_updated = false;
-        while let Ok(res) = diag_res_recv.try_recv() {
-            last_diag = Some(res);
+        while let Ok(diagnostics_result) = diag_res_recv.try_recv() {
+            last_diag = Some(diagnostics_result);
             diagnostics_updated = true;
         }
         if diagnostics_updated {
@@ -252,8 +273,8 @@ pub fn launch_language_server() {
         }
 
         // Read a line to get the content length.
-        let mut content_length = String::new();
-        let res = stdin.read_line(&mut content_length);
+        let mut header_line = String::new();
+        let res = stdin.read_line(&mut header_line);
         match res {
             // `read_line` returns `Ok(0)` when stdin has reached EOF, which
             // happens when the parent editor process dies and closes the pipe.
@@ -273,20 +294,20 @@ pub fn launch_language_server() {
                 continue;
             }
         }
-        if content_length.trim().is_empty() {
+        if header_line.trim().is_empty() {
             continue;
         }
 
         // Check if the line starts with "Content-Length:".
-        if !content_length.starts_with("Content-Length:") {
+        if !header_line.starts_with("Content-Length:") {
             let mut msg = "Expected `Content-Length:`. The line is: \n".to_string();
-            msg.push_str(&format!("{:?}", content_length));
+            msg.push_str(&format!("{:?}", header_line));
             write_log!("{}", msg);
             continue;
         }
 
         // Ignore the `Content-Length:` prefix and parse the rest as a number.
-        let content_length: Result<usize, _> = content_length
+        let content_length: Result<usize, _> = header_line
             .split_off("Content-Length:".len())
             .trim()
             .parse();
@@ -690,6 +711,7 @@ pub fn launch_language_server() {
     }
 }
 
+/// Read the `params` of a message as `T`. A payload that does not read as `T` is logged.
 fn parase_params<T: DeserializeOwned>(params: Value) -> Option<T> {
     let params: Result<T, _> = serde_json::from_value(params);
     if params.is_err() {
@@ -701,6 +723,8 @@ fn parase_params<T: DeserializeOwned>(params: Value) -> Option<T> {
     params.ok()
 }
 
+/// The `id` of `message`. A message that carries none is logged under `method`, the method that
+/// expected one.
 fn parse_id(message: &JSONRPCMessage, method: &str) -> Option<u32> {
     if message.id.is_none() {
         write_log!(
@@ -725,6 +749,8 @@ fn send_request<T: Serialize>(id: u32, method: String, params: Option<T>) {
     send_message(&msg);
 }
 
+/// Answer the client's request `id`: an `Ok` becomes the response's `result`, an `Err` becomes
+/// its `error`.
 pub(super) fn send_response<T: Serialize, E: Serialize>(id: u32, result: Result<T, E>) {
     let (res, err) = match result {
         Ok(res) => (Some(res), None),
@@ -740,6 +766,8 @@ pub(super) fn send_response<T: Serialize, E: Serialize>(id: u32, result: Result<
     send_message(&msg);
 }
 
+/// Send a notification — a message carrying a `method` and no `id`, which the client answers
+/// with nothing — to the client.
 fn send_notification<T: Serialize>(method: String, params: Option<T>) {
     let msg = JSONRPCMessage::new(
         None,
@@ -751,17 +779,16 @@ fn send_notification<T: Serialize>(method: String, params: Option<T>) {
     send_message(&msg);
 }
 
+/// Write `msg` to stdout, headed by the `Content-Length` the protocol asks for.
 fn send_message(msg: &JSONRPCMessage) {
     let msg = serde_json::to_string(msg).unwrap();
     let content_length = msg.len();
     write_log!("Sending message: {}", msg);
     print!("Content-Length: {}\r\n\r\n{}", content_length, msg);
-    std::io::stdout()
-        .flush()
-        .expect("Failed to flush the stdout.");
+    stdout().flush().expect("Failed to flush the stdout.");
 }
 
-// Handle "initialize" method.
+/// Answer the `initialize` request with the capabilities this server offers.
 fn handle_initialize(id: u32, _params: &InitializeParams) {
     // Return server capabilities.
     let result = InitializeResult {
@@ -883,17 +910,18 @@ fn handle_initialized(
     );
 }
 
-// Handle "shutdown" method.
+/// Answer the `shutdown` request: stop the diagnostics thread, then reply to the client.
 fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>) {
     // Shutdown the diagnostics thread.
     send_to_diagnostics_thread(&diag_send, DiagnosticsMessage::Stop);
 
     // Respond to the client.
-    let param = Ok::<_, ()>(serde_json::to_value(None::<()>).unwrap());
-    send_response(id, param);
+    let response = Ok::<_, ()>(serde_json::to_value(None::<()>).unwrap());
+    send_response(id, response);
 }
 
-// Handle "textDocument/didOpen" method.
+/// Record the content of the buffer the editor opened, so that the features reading live buffers
+/// see it (handler for "textDocument/didOpen").
 fn handle_textdocument_did_open(
     params: &DidOpenTextDocumentParams,
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
@@ -935,11 +963,11 @@ fn handle_textdocument_did_change(
     // Store the content of the file into `uri_to_content`. This must
     // happen even when on-type analysis is off, so other features
     // (completion, hover) still see the live buffer.
-    if let Some(change) = params.content_changes.last() {
+    if let Some(last_change) = params.content_changes.last() {
         let path = uri_to_path(&params.text_document.uri);
         uri_to_latest_content.insert(
             params.text_document.uri.clone(),
-            LatestContent::new(path, change.text.clone()),
+            LatestContent::new(path, last_change.text.clone()),
         );
     }
 
@@ -1076,6 +1104,7 @@ fn run_diagnostics_pass(
     res_send: &Sender<DiagnosticsResult>,
     prev_err_paths: &mut Set<PathBuf>,
 ) {
+    /// The name the client shows this pass's progress indicator under.
     const WORK_DONE_PROGRESS_TOKEN: &str = "diagnostics";
     send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
     send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Analyzing");
@@ -1128,9 +1157,14 @@ fn run_diagnostics_and_publish(
     *prev_err_paths = send_diagnostics_notification(errs, prev_err_paths.clone());
 }
 
-// Send the diagnostics notification to the client.
-// Return the paths of the files that have errors.
-// - `prev_err_paths`: The paths of the files that have errors in the previous diagnostics. This is used to clear the diagnostics for the files that have no errors.
+/// Publish `errs` to the client as the diagnostics of the files they name, and clear the
+/// diagnostics of the files that carried some last time and are named no longer. Returns the
+/// paths this call published on.
+///
+/// # Arguments
+///
+/// * `prev_err_paths` - The paths the previous call published on. A path in it that `errs` leaves
+///   unnamed has its diagnostics cleared, which is what takes a repaired error off the screen.
 fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>) -> Set<PathBuf> {
     let mut err_paths = Set::default();
 
@@ -1142,53 +1176,46 @@ fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>)
     // than an empty path: publishing them at `cdir.join("")` would target the
     // project directory's URI, which editors cannot attach a diagnostic to, so
     // the message would be silently dropped.
-    for (path, errs) in errs.organize_by_path(&PathBuf::from(PROJECT_FILE_PATH)) {
+    for (path, file_errs) in errs.organize_by_path(&PathBuf::from(PROJECT_FILE_PATH)) {
         err_paths.insert(path.clone());
         prev_err_paths.remove(&path);
 
-        // Convert path to uri.
-        let uri = path_to_uri(&cdir.join(path));
-        if uri.is_err() {
-            write_log!("Failed to convert path to uri: {:?}", uri.unwrap_err());
-            continue;
-        }
-        let uri = uri.unwrap();
-
-        // Send the diagnostics notification for each file.
-        let params = PublishDiagnosticsParams {
-            uri,
-            diagnostics: errs
+        publish_diagnostics_of_file(
+            &cdir.join(path),
+            file_errs
                 .iter()
                 .map(|err| error_to_diagnostics(err, &cdir))
                 .collect(),
-            version: None,
-        };
-        send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
+        );
     }
 
     // Clear the diagnostics for the files that have no errors.
     for path in prev_err_paths {
-        // Convert path to uri.
-        let uri = path_to_uri(&cdir.join(path));
-        if uri.is_err() {
-            write_log!("{}", (uri.unwrap_err()));
-            continue;
-        }
-        let uri = uri.unwrap();
-
-        // Send the empty diagnostics notification for each file.
-        let params = PublishDiagnosticsParams {
-            uri,
-            diagnostics: vec![],
-            version: None,
-        };
-        send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
+        publish_diagnostics_of_file(&cdir.join(path), vec![]);
     }
 
     err_paths
 }
 
-// Convert an `Error` into a diagnostic message.
+/// Send `diagnostics` as the whole set of reports on `path`, which an empty vector clears.
+fn publish_diagnostics_of_file(path: &PathBuf, diagnostics: Vec<Diagnostic>) {
+    let uri = match path_to_uri(path) {
+        Ok(uri) => uri,
+        Err(why) => {
+            write_log!("Failed to convert path to uri: {:?}", why);
+            return;
+        }
+    };
+    let params = PublishDiagnosticsParams {
+        uri,
+        diagnostics,
+        version: None,
+    };
+    send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
+}
+
+/// Convert an `Error` into the diagnostic the client shows: the first span of the error carries
+/// the message, and the spans after it become its related locations.
 fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> Diagnostic {
     // Show error at the first span in `err`.
     let range = err
@@ -1246,24 +1273,28 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> Diagnostic {
     }
 }
 
-// Get the file content at the specified path at the time of the last diagnostics.
-//
-// - `program`: The `Program` obtained from the last diagnostics result
+/// The content of the file at `queried_path` as the last diagnostics run read it. The error
+/// describes what stood in the way, and names the file it is about.
+///
+/// # Arguments
+///
+/// * `program` - The program the last diagnostics run elaborated, which carries the sources it
+///   was elaborated from.
 pub(super) fn get_file_content_at_previous_diagnostics(
     program: &Program,
-    path: &Path,
+    queried_path: &Path,
 ) -> Result<String, String> {
     for mi in &program.modules {
         let src = &mi.source.input;
-        let path_abs = to_absolute_path(&path);
+        let path_abs = to_absolute_path(&queried_path);
         if path_abs.is_err() {
             let msg = format!(
                 "Failed to get the absolute path of the file: \"{}\"",
-                path.to_string_lossy().to_string()
+                queried_path.to_string_lossy().to_string()
             );
             return Err(msg);
         }
-        let path = path_abs.ok().unwrap();
+        let queried_path_abs = path_abs.ok().unwrap();
         let src_file_path_abs = to_absolute_path(&src.file_path);
         if src_file_path_abs.is_err() {
             let msg = format!(
@@ -1273,7 +1304,7 @@ pub(super) fn get_file_content_at_previous_diagnostics(
             return Err(msg);
         }
         let src_file_path = src_file_path_abs.ok().unwrap();
-        if src_file_path == path {
+        if src_file_path == queried_path_abs {
             let content = src.string();
             if let Err(_e) = content {
                 let msg = format!(
@@ -1287,7 +1318,7 @@ pub(super) fn get_file_content_at_previous_diagnostics(
     }
     let msg = format!(
         "No saved content for the file: \"{}\"\n",
-        path.to_string_lossy().to_string()
+        queried_path.to_string_lossy().to_string()
     );
     return Err(msg);
 }
@@ -1301,23 +1332,17 @@ pub fn run_diagnostics(
     typecheck_cache: SharedTypeCheckCache,
     live_overrides: Arc<Map<PathBuf, String>>,
 ) -> Result<DiagnosticsResult, Errors> {
-    // Why we don't gate this on a content-changed check: the cost
-    // (~95% of the wall time) lives inside the typecheck loop, and the
-    // shared `TypeCheckCache` keys results by
-    // `(name, scheme, module_dependency_hash)`. The dep-hash folds in
-    // the source hash of every transitive dependency, so an edited file
-    // only invalidates its own module's globals plus those of every
-    // module that imports it (transitively); everything else stays a
-    // cache hit and skips the actual type inference. In effect we
-    // already only re-typecheck the changed file and its downstream
-    // dependents.
+    // Every call elaborates the whole project, and the shared `TypeCheckCache` is what keeps that
+    // cheap. It keys results by `(name, scheme, module_dependency_hash)`, and the dependency hash
+    // folds in the source hash of every transitive dependency, so an edited file invalidates the
+    // globals of its own module and of the modules that import it, transitively; every other
+    // global stays a cache hit and skips type inference. The typecheck loop is where ~95% of the
+    // wall time goes, so the work that remains is the changed file and its dependents.
     //
-    // What an explicit "did anything change?" gate would still buy:
-    // skipping the per-gv iteration overhead — `tc.clone()`, closure
-    // boxing, cache lookup, etc., ~30 µs per global × ~1900 globals ≈
-    // tens of ms — for the no-op case where nothing actually changed.
-    // Worth doing if it becomes a common workflow, but not the primary
-    // lever for diagnostics speed.
+    // What a gate on "did anything change?" would buy on top of that is the per-global overhead
+    // of the loop itself — `tc.clone()`, boxing the closure, the cache lookup — which measures
+    // about 30 µs per global, so tens of milliseconds over the ~1900 globals of a project, on a
+    // run where nothing changed at all.
 
     // Read the project file.
     let proj_file = ProjectFile::read_root_file()?;
@@ -1341,7 +1366,7 @@ pub fn run_diagnostics(
         };
         if let Some(content) = live_overrides.get(&abs) {
             user_source_contents.insert(abs, content.clone());
-        } else if let Ok(content) = std::fs::read_to_string(&abs) {
+        } else if let Ok(content) = fs::read_to_string(&abs) {
             user_source_contents.insert(abs, content);
         }
     }
@@ -1373,7 +1398,8 @@ pub fn run_diagnostics(
     })
 }
 
-// Create work done progress.
+/// Ask the client to create a progress indicator named `token`. `id` names this server-initiated
+/// request, so that the client's answer can be told apart from the answers to other requests.
 pub fn send_work_done_progress_create(token: &str, id: u32) {
     let progress = WorkDoneProgressCreateParams {
         token: ProgressToken::String(token.to_string()),
@@ -1385,7 +1411,7 @@ pub fn send_work_done_progress_create(token: &str, id: u32) {
     );
 }
 
-// Begin work done progress.
+/// Show the progress indicator named `token`, under the heading `title`.
 pub fn send_work_done_progress_begin(token: &str, title: &str) {
     let begin = WorkDoneProgressBegin {
         title: title.to_string(),
@@ -1400,7 +1426,7 @@ pub fn send_work_done_progress_begin(token: &str, title: &str) {
     send_notification("$/progress".to_string(), Some(params));
 }
 
-// End work done progress.
+/// Close the progress indicator named `token`.
 pub fn send_work_done_progress_end(token: &str) {
     let end = WorkDoneProgressEnd { message: None };
     let params = ProgressParams {
