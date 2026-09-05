@@ -160,7 +160,10 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
   名前空間の成分も `name` も `::` を含まない。**名前空間の成分の在りかは述語で決める** -- 成分は
   module 宣言と namespace 宣言が与える `namespace_item` (`capital_name` を `.` で継いだもの) か、
   `FullName::to_namespace` が名前を名前空間の末尾へ移したものかのどちらかであり、後者の在りかは
-  `to_namespace()` の全出現である。`src/` に 48 か所あり、末尾へ移る名前は 3 族に分かれる --
+  `to_namespace()` の全出現である。`src/` に 48 か所あり、うち 2 か所
+  (`CODE src/ast/import.rs: ImportStatement::import_to_use_with_spans`,
+  `ImportStatement::add_import`) は import 文の項目の列を取り出す読みであって新しい名前を作らない。
+  残る 46 か所が末尾へ移す名前は 3 族に分かれる --
   **トレイト名** (`CODE src/ast/program.rs: Program::trait_member_symbols`)、**型名**
   (`CODE src/ast/program.rs: Program::add_methods` のゲッタ・セッタ)、**値の名前**である。値の名前を
   末尾へ移すのは 3 か所で、`fresh_closure_ref` が持ち上げる lambda の名前、
@@ -486,7 +489,7 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
 ### L0c (入力の関数の名前が (N3) を満たす) <!--#b2d588b-->
 
 **言明**。A13 を満たす `borrow_ify` の入力プログラム `P` を取る。`P.funcs` の各鍵の名前は局所名では
-ない。さらに **(N0)** `P.funcs` のどの鍵の名前も `P.globals` のどの要素の `symbol` とも異ならば、
+ない。さらに **(N0)** `P.funcs` のどの鍵の名前も `P.globals` のどの要素の `symbol` とも異なるならば、
 コード生成が読む `global_types` は `P.funcs` のどの鍵の名前も持たないか、funptr 型で持つ。
 
 **(N0) を果たすのは `divide_into_units` である。**その関数は `funcs` の鍵の名前と `globals` の `symbol`
@@ -1182,9 +1185,9 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   在るので既に在る。
   **`InlineLLVMBoxedFromRetainedPtrIOS` の行**が渡すのは環境が持っていた参照であり、A17 の (i-d) より
   環境が持つ boxed な値はこのプログラムが作って番地を渡したものである。
-  **段の中で相殺する retain**が名指すのはオペランドの値である -- D24 は「`InlineLLVMWithRetainedFunctionBody`
-  はオペランドを retain し、適用の後に release する」と述べる。オペランドの値が指すオブジェクトは既に
-  在る。**相殺しない retain**が名指すのは原本の側の値である -- D24 は「複製を作る腕が複製の欄へ retain
+  **段の中で相殺する retain**が名指すのはオペランドの値である -- D24 は
+  「`InlineLLVMWithRetainedFunctionBody` はオペランドを retain し、適用の後に release する」と述べる。
+  オペランドの値が指すオブジェクトは既に在る。**相殺しない retain**が名指すのは原本の側の値である -- D24 は「複製を作る腕が複製の欄へ retain
   する形である」と述べる。原本のオブジェクトも既に在る。
   **(E9) の retain** については A17 (ii-c) が「**環境がその番地を呼ぶのは、その番地が指すオブジェクトへの
   参照を自分が持っている点でだけである。**」と述べ、(i-d) より環境が持つ boxed な値はこのプログラムが
@@ -1363,8 +1366,8 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   中で (F) の解放が始めた活性化の木の元であり、(H2) よりどちらの本体も D11 を満たす。`a'` が辿った節点の列は
   `B(a')` の実行路 (D3) である (D21, D23)。**その活性化に D11 を当ててよいことは
   D21 が言う** -- 「**実行 (D24) が作る活性化がこの制限を満たすことは P28 (b) が示す**」、そして
-  「**D11 と D12 は、この意味のすべての活性化について条件を課す。**」`a'` は `p` まで閉じている -- この段の仮定の「`p` まで
-  閉じている」は `p` 以前の各段内の点についての条件であり (DEF 段内の点で閉じている)、`a'` の時点も
+  「**D11 と D12 は、この意味のすべての活性化について条件を課す。**」`a'` は `p` まで閉じている --
+  この段の仮定の「`p` まで閉じている」は `p` 以前の各段内の点についての条件であり (DEF 段内の点で閉じている)、`a'` の時点も
   段内の点であって (D24) `p` 以前に在るので、D11a の「`τ` まで閉じている」がそこから出る。
   節点が記憶域から読むオブジェクトは、D7 の読む構文がその位置で読みうるオブジェクト -- 名指された値の
   inhabited な各 boxed leaf が指すオブジェクト -- のうちに在る (D7、D32 の (読み-1))。よって (S-c) が
@@ -1528,8 +1531,8 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       ついては `make_array_unique_with_hole` が `release_replaced_array` を呼ぶ)、`<3>1a` の残る 2 か所の
       うち `InlineLLVMArraySetCapacityBoundsUnchecked` では共有の腕が `release_replaced_array` で古い
       記憶域を処分し、`InlineLLVMArrayAppendCapacityUnchecked` の `Fresh` の結果は `<3>1a` より
-      `make_array_unique_with_hole` を経由する道の上に在る。**一意の腕はそのオペランドの参照を手放さない** -- 補助関数を経由する道では
-      `make_struct_union_unique` が `create_obj` と `clone_struct`/`clone_union` と `gc.release` を
+      `make_array_unique_with_hole` を経由する道の上に在る。**一意の腕はそのオペランドの参照を
+      手放さない** -- 補助関数を経由する道では `make_struct_union_unique` が `create_obj` と `clone_struct`/`clone_union` と `gc.release` を
       出すのは共有の腕だけであり、`InlineLLVMArraySetCapacityBoundsUnchecked` の一意腕は `realloc_array`
       を呼ぶだけで `gc.release` を出さない。いずれの道でも 2 つの腕は排他である。A3 は
       「`borrows_operand(i)` が真のとき、生成コードは第 `i` オペランドの参照を処分しない」と述べるので、
@@ -2003,8 +2006,8 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
     オブジェクトを持ち込む形は無い** -- A17 の (i-d) が「**最初の時点より後の (E1) が環境から受け取る
     boxed な値も同じである**-- 環境が Fix の boxed な値の番地を得る道はその対しかないので、」と述べ、
     続けて「**環境は実行の途中で新しいオブジェクトを持ち込まない。**」と述べるので、この 2 つで尽きる。
-    前者は `<2>1` より段が
-    有限個で `<2>2` より 1 つの段の割り当てが有限個なので有限個であり、後者は `<2>3a` より有限個である。
+    前者は `<2>1` より段が有限個で `<2>2` より 1 つの段の割り当てが有限個なので有限個であり、後者は
+    `<2>3a` より有限個である。
     BY <ref id=c9e4cca/>, <ref id=e3436e8/>, <2>1, <2>2, <2>3, <2>3a
 
 <1>5. QED
