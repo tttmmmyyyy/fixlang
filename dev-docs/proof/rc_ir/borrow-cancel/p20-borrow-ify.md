@@ -499,6 +499,78 @@ leaf であり、`decl.leaf_origins_at(σ).and_then(as_arg_projection)` が `Non
 <1>3. QED
   BY <1>1, <1>2
 
+### L6d (`act` の元の path はその変数の型の boxed leaf である) <!--#90d8526-->
+
+**言明**。`vars` を、A6 と A11 を満たすプログラムの本体について `VarTable::of` か `VarTable::body_only` が
+作った表とし、以下 `origin`・`cand`・`act` はその表について読む。`y` を名前、`ρ'` を `ty(y)` の boxed leaf
+とする。このとき `act(y, ρ')` の各元 `(z, σ)` について `σ ∈ leaves(ty(z))` である。`Origin::acted_on` は
+`identity()` を先頭にそれと異なる `candidates()` の元を続けた列なので、`cand(y, ρ')` の各元についても同じ
+ことが言える。
+
+**主語は名前であって実行路の上のスロットではない。** `origin_inner` の `Binding::Join` の腕は**すべての
+アーム**の結果へ再帰するので、1 つの実行路が選ばなかったアームの結果もこの命題の範囲に入る。
+DEF 由来の 1 歩 と D17 が `Binding::Join` の辺を選ばれたアームへしか進めないのに対し、この命題は
+`origin` の再帰そのものの上に立つ。
+
+<1>1. `origin(vars, type_env, y, ρ')` は panic せずに答えを返し、停止する。
+  `vars.bindings` が `y` を鍵に持つとき、その鍵は `VarTable::of` が入れるパラメータ・capture の名前か
+  `collect_bindings` が入れる節点の束縛変数の名前なので、P2 の第 1 の場合 (プログラムの束縛変数) に
+  当たる。鍵に持たないときは P2 の第 2 の場合であり、L6c も同じ答えを与える。
+  BY <ref id=0edb0ba/>, <ref id=0ad40c6/>, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only,
+     collect_bindings
+
+<1>2. QED
+  `origin` の再帰についての帰納で示す。`<1>1` より `origin(y, ρ')` は停止するので再帰の木は有限であり、
+  帰納が回る。
+  <2>1. CASE `vars.bindings.get(y)` が `None`、`Some(Binding::Param)`、`Some(Binding::Producer)`、
+        boxed 容器の `Some(Binding::Field(..))`、boxed scrutinee の `Some(Binding::Payload(_, Some(_)))`
+        のいずれかである。
+    これらの腕は `here()` すなわち `Origin::Exactly((y, ρ'))` を返すので `act(y, ρ') = {(y, ρ')}` で
+    あり、`ρ' ∈ leaves(ty(y))` である。
+    BY CODE src/rc_ir/ownership.rs: origin_inner, Origin::acted_on, Origin::candidates
+  <2>2. CASE `Some(Binding::Llvm(..))` で `decl.leaf_origins_at(ρ').and_then(as_arg_projection)` が
+        `None` である。
+    L6a よりこの腕は `Origin::Exactly((y, ρ'))` を返す。L6a が要求する「`σ` が `ty(u)` の boxed leaf で
+    ある」は、この命題の仮説 `ρ' ∈ leaves(ty(y))` である。
+    BY <ref id=087a6d3/>, CODE src/rc_ir/ownership.rs: Origin::acted_on
+  <2>3. CASE `Some(Binding::Move(z))` または catch-all の `Some(Binding::Payload(z, None))`。
+    どちらの腕も `origin(z, ρ')` をそのまま返す。A12 より move-bind の両辺の型は等しく、catch-all
+    アームの payload と scrutinee の型も等しいので `ty(z) = ty(y)` であり、`ρ' ∈ leaves(ty(z))` で
+    ある。帰納法の仮定による。
+    BY <ref id=83d98e9/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner
+  <2>4. CASE unbox 容器の `Some(Binding::Field(c, idx))` または unbox scrutinee の
+        `Some(Binding::Payload(sc, Some(t)))`。
+    どちらの腕も添字を 1 つ前に足した path で `origin(c, [idx] ++ ρ')` (resp. `origin(sc, [t] ++ ρ')`) を
+    返す。A12 より `ty(y)` は `ty(c)` の第 `idx` フィールドの型 (resp. `ty(sc)` の第 `t` 変位の payload の
+    型) であり、D4 の第 5 の規則より unbox の集約と union はフィールド・変位の下へ降りて leaf を挙げるので、
+    足した path はその型の leaf である。帰納法の仮定による。
+    BY <ref id=83d98e9/>, <ref id=0594f24/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner,
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
+  <2>5. CASE `Some(Binding::Llvm(gen, args, _))` で `decl.leaf_origins_at(ρ')` が単一の `Arg(j, σ)` で
+        ある。
+    この腕は `origin(args[j], σ)` を返す。A3 の「**単一の `Arg(j, σ)` の宣言は well-formed である。**
+    `j` は `args` の添字であり、`σ` はその型の boxed leaf である」より、`args[j]` は存在し
+    `σ ∈ leaves(ty(args[j]))` である。帰納法の仮定による。
+    BY <ref id=e11772a/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner, as_arg_projection
+  <2>6. CASE `Some(Binding::Join(arm_results))`。
+    この腕は各 `a ∈ arm_results` について `act(a, ρ')` を集めた集合 `S` を作り、
+    `Origin::of_candidates(S, (y, ρ'))` を返す。A12 よりアームの結果と `Match` の束縛変数の型は等しいので
+    `ρ' ∈ leaves(ty(a))` であり、帰納法の仮定より `S` の各元の path はその変数の型の leaf である。
+    `of_candidates` は `|S| = 1` のとき `Exactly(p)` を返し (`p` は `S` の唯一の元)、`|S| ≥ 2` のとき
+    `Join { identity: (y, ρ'), candidates: S }` を返す。`Origin::acted_on` は `identity()` を先頭に
+    それと異なる `candidates()` の元を続けるので、前者では `act(y, ρ') = S`、後者では
+    `act(y, ρ') = {(y, ρ')} ∪ S` である。どちらの場合も `act(y, ρ') ⊆ S ∪ {(y, ρ')}` であり、
+    `ρ' ∈ leaves(ty(y))` なので `(y, ρ')` の path も leaf である。
+    BY <ref id=83d98e9/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner, Origin::of_candidates,
+       Origin::acted_on
+  <2>7. QED
+    `Binding` は `Param`、`Producer`、`Move`、`Field`、`Payload`、`Llvm`、`Join` の 7 種であり、
+    `bindings.get` はそれに `None` を加える。`Field` と `Payload` を容器・scrutinee が boxed か
+    unbox かで、`Payload` をさらに catch-all かどうかで、`Llvm` を `as_arg_projection` の答えで
+    分けた `<2>1`-`<2>6` がこれを尽くす。
+    BY <ref id=0ad40c6/>, <ref id=0edb0ba/>, <2>1, <2>2, <2>3, <2>4, <2>5, <2>6,
+       CODE src/rc_ir/ownership.rs: Binding, origin_inner
+
 ## 3. P8 -- 推論の停止性と安全性
 
 ### 3.1 P8 の言明が読む所有権の割り当て
@@ -622,15 +694,19 @@ P8 の後半は「D9 の意味で消費される」と言う。D9 の `App` の�
   <2>5. QED
     `<2>2` と `<2>3` より `App` の直後の `Obl` は空である。(S-a) は `<2>2` と `<2>3` が、(S-b) は
     `<2>3` と `<2>4` が与える。(S-c) は、この実行路の読む構文が `App` の 1 つだけで、それが読みうる
-    オブジェクトが `obj(x, [])` であることによる -- 計数下のときは、その読みの直前の点である `App` の
-    節点の入口 (`<2>1` よりこの節点は実行路の最初の節点なので、この活性化の開始の時点でもある) で
-    `<2>2` より `Obl` がその参照を持つ。D21 は「活性化は、その各時点と各段内の点 (D24) で A19 (i) の
+    オブジェクトが `obj(x, [])` であることによる。計数下の場合を見る。`<2>1` よりこの節点は実行路の
+    最初の節点なので、その入口はこの活性化の開始の時点であり、そこで `<2>2` より `Obl` は
+    `obj(x, [])` への参照を持つ。**その読みの直前の点でも `Obl` はその参照を持つ。** A26 は「1 つの節点に
+    ついて、D7 の読む構文がオブジェクトの**記憶域から読む**動作は、その節点が行うどの参照の**手放し**
+    よりも前に起きる」と述べ、「「手放し」は D10 の消費と `Release` の両方である。渡す先のある消費を
+    含む」と定める。この節点が `Obl` から参照を取り除く事象は `<2>3` の消費だけであり (D10)、A26 より
+    それはこの読みより後に起きるからである。D21 は「活性化は、その各時点と各段内の点 (D24) で A19 (i) の
     不等式を満たすものに限る」と述べ、A19 (i) の本文はその不等式の `Σ d(C)` を「その活性化の義務集合が
     持つ `O` への参照の個数である」と述べる。角括弧は 0 以上なので
     `H(obj(x, [])) ≥ Obl(obj(x, [])) ≥ 1` である。(S-c) の
     接頭条件よりこの活性化はその点まで解放について閉じているので、D11a よりその点で解放されていない。
     グローバル状態のときは解放されることが無い (A8、D26)。
-    BY <ref id=b6673ca/>, <ref id=9f1cf6c/>, <ref id=56c2068/>, <ref id=95427eb/>, <ref id=859cf84/>, <ref id=c232680/>, <ref id=88a06de/>, <2>1, <2>1a, <2>2, <2>3, <2>4
+    BY <ref id=b6673ca/>, <ref id=9f1cf6c/>, <ref id=fd95f12/>, <ref id=269cfa6/>, <ref id=56c2068/>, <ref id=95427eb/>, <ref id=859cf84/>, <ref id=c232680/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=88a06de/>, <2>1, <2>1a, <2>2, <2>3, <2>4
 
 <1>5. `Q` は D12 の意味で RC 規律を満たし、A1 と A2 を満たす。
   BY <ref id=627e117/>, <ref id=8e3aff3/>, <ref id=3d96eb8/>, <1>2, <1>3, <1>4
@@ -696,6 +772,13 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
 ### 3.3 P8 (a) -- 停止性
 
 **言明**。`infer_ownership(prog, type_env)` は停止する。
+
+**この節が示す「停止する」は、周回が無限に続かないことである。** P2 の言明は「panic せずに答えを返し、
+停止する」と 2 つを並べ、答えを返すことをこの語と別に置く。`infer_ownership` については、`<1>5` が挙げる
+`truncate_to_unit` と `held_field_type` の表明が発火する `(root, path)` を持つ入力が在り、その入力では
+`infer_ownership` は値を返さずに終わる。**その入力では `borrow_ify` も出力を返さないので、P8 (b) と
+P8 (c) はその入力について空虚に真である。** L8 の `<1>3` が `owns_object` について切り出すのと同じ面で
+ある。
 
 <1>1. `owned_leaves` を変える箇所は 2 つである。消費の段の
       `owned_leaves.insert((root_var.clone(), root_path.clone()))` と、`level_ownership` の中の
@@ -805,10 +888,8 @@ D9 の消費の 6 行のうち `App` の引数の行にだけ現れることを�
   (`CODE src/rc_ir/ownership.rs: truncate_to_unit`)。`under` は `subtree_type` を通り、`unit_step` が
   `Fields` を返す位置で `held_field_type` を呼ぶので、その添字がその値の持つフィールドを名指さなければ
   `panic!` する (`CODE src/rc_ir/ownership.rs: units_under`, `subtree_type`, `held_field_type`)。
-  **中断も停止である** -- どの場合も歩みはそこで終わり、周回が終わらないことは無い。中断する
-  `(root, path)` を持つ入力では `infer_ownership` は値を返さず、`borrow_ify` も出力を返さないので、
-  P8 (b) と P8 (c) はその入力について空虚に真である。L8 の `<1>3` が `owns_object` について切り出す
-  のと同じ面である。`collect_consumes` が積む対の全体が有限であることは `<1>3` が与える。
+  どの場合も歩みはそこで終わるので、1 周回の仕事は有限である。中断する `(root, path)` を持つ入力に
+  ついては、この節の冒頭が扱う。`collect_consumes` が積む対の全体が有限であることは `<1>3` が与える。
   BY <ref id=8412761/>, <ref id=3e6b0e0/>, <ref id=b3dfa37/>, <ref id=596a46d/>, <ref id=0ad40c6/>, <ref id=0edb0ba/>, <1>3, <1>4a, CODE src/rc_ir/borrow.rs: infer_ownership, levelled_sites,
      level_ownership, owns_object_yet, covered_leaves, CODE src/rc_ir/ast.rs: for_each_node,
      CODE src/rc_ir/ownership.rs: truncate_to_unit, units_under, subtree_type, held_field_type,
@@ -985,57 +1066,13 @@ D9 の `App` の引数の行は「呼び出し先がその位置の unit を所�
   BY <ref id=62856b5/>, <ref id=1d914dc/> (b), <ref id=1d914dc/> (c)
 
 <1>3. `<1>2` の `p` は `leaves(τ)` の元である。
-  次の言明を、`origin` の再帰についての帰納で示す。**`ρ' ∈ leaves(ty(y))` であるとき、`act_f(y, ρ')` の
-  各元 `(z, σ)` について `σ ∈ leaves(ty(z))` である。** `origin(y, ρ')` が停止するので再帰の木は有限で
-  あり、帰納が回る -- `y` がプログラムの束縛変数であるときは P2 が、`vars_f.bindings` が `y` を鍵に
-  持たないとき (D6 の第 3 の形) は L6c が、それを与える。`λ ∈ leaves(ty(v))` なのでこれを `(v, λ)` に
-  当てると、`cand_f(v, λ) ⊆ act_f(v, λ)` より言明が出る。
-  <2>1. CASE `vars_f.bindings.get(y)` が `None`、`Some(Binding::Param)`、`Some(Binding::Producer)`、
-        boxed 容器の `Some(Binding::Field(..))`、boxed scrutinee の `Some(Binding::Payload(_, Some(_)))`
-        のいずれかである。
-    これらの腕は `here()` すなわち `Origin::Exactly((y, ρ'))` を返すので `act_f(y, ρ') = {(y, ρ')}` で
-    あり、`ρ' ∈ leaves(ty(y))` である。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, Origin::acted_on, Origin::candidates
-  <2>2. CASE `Some(Binding::Llvm(..))` で `decl.leaf_origins_at(ρ').and_then(as_arg_projection)` が
-        `None` である。
-    L6a よりこの腕は `Origin::Exactly((y, ρ'))` を返す。
-    BY <ref id=087a6d3/>, CODE src/rc_ir/ownership.rs: Origin::acted_on
-  <2>3. CASE `Some(Binding::Move(z))` または catch-all の `Some(Binding::Payload(z, None))`。
-    どちらの腕も `origin(z, ρ')` をそのまま返す。A12 より move-bind の両辺の型は等しく、catch-all
-    アームの payload と scrutinee の型も等しいので `ty(z) = ty(y)` であり、`ρ' ∈ leaves(ty(z))` で
-    ある。帰納法の仮定による。
-    BY <ref id=83d98e9/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner
-  <2>4. CASE unbox 容器の `Some(Binding::Field(c, idx))` または unbox scrutinee の
-        `Some(Binding::Payload(sc, Some(t)))`。
-    どちらの腕も添字を 1 つ前に足した path で `origin(c, [idx] ++ ρ')` (resp. `origin(sc, [t] ++ ρ')`) を
-    返す。A12 より `ty(y)` は `ty(c)` の第 `idx` フィールドの型 (resp. `ty(sc)` の第 `t` 変位の payload の
-    型) であり、D4 の第 5 の規則より unbox の集約と union はフィールド・変位の下へ降りて leaf を挙げるので、
-    足した path はその型の leaf である。帰納法の仮定による。
-    BY <ref id=83d98e9/>, <ref id=0594f24/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner,
-       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
-  <2>5. CASE `Some(Binding::Llvm(gen, args, _))` で `decl.leaf_origins_at(ρ')` が単一の `Arg(j, σ)` で
-        ある。
-    この腕は `origin(args[j], σ)` を返す。A3 の「**単一の `Arg(j, σ)` の宣言は well-formed である。**
-    `j` は `args` の添字であり、`σ` はその型の boxed leaf である」より、`args[j]` は存在し
-    `σ ∈ leaves(ty(args[j]))` である。帰納法の仮定による。
-    BY <ref id=e11772a/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner, as_arg_projection
-  <2>6. CASE `Some(Binding::Join(arm_results))`。
-    この腕は各 `a ∈ arm_results` について `act_f(a, ρ')` を集めた集合 `S` を作り、
-    `Origin::of_candidates(S, (y, ρ'))` を返す。A12 よりアームの結果と `Match` の束縛変数の型は等しいので
-    `ρ' ∈ leaves(ty(a))` であり、帰納法の仮定より `S` の各元の path はその変数の型の leaf である。
-    `of_candidates` は `|S| = 1` のとき `Exactly(p)` を返し (`p` は `S` の唯一の元)、`|S| ≥ 2` のとき
-    `Join { identity: (y, ρ'), candidates: S }` を返す。`Origin::acted_on` は `identity()` を先頭に
-    それと異なる `candidates()` の元を続けるので、前者では `act_f(y, ρ') = S`、後者では
-    `act_f(y, ρ') = {(y, ρ')} ∪ S` である。どちらの場合も `act_f(y, ρ') ⊆ S ∪ {(y, ρ')}` であり、
-    `ρ' ∈ leaves(ty(y))` なので `(y, ρ')` の path も leaf である。
-    BY <ref id=83d98e9/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: origin_inner, Origin::of_candidates,
-       Origin::acted_on
-  <2>7. QED
-    `Binding` は `Param`、`Producer`、`Move`、`Field`、`Payload`、`Llvm`、`Join` の 7 種であり、
-    `bindings.get` はそれに `None` を加える。`Field` と `Payload` を容器・scrutinee が boxed か
-    unbox かで、`Payload` をさらに catch-all かどうかで、`Llvm` を `as_arg_projection` の答えで
-    分けた `<2>1`-`<2>6` がこれを尽くす。
-    BY <ref id=0ad40c6/>, <ref id=0edb0ba/>, <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, CODE src/rc_ir/ownership.rs: Binding, origin_inner
+  `vars_f` は入力の関数 `func` の本体について `VarTable::of` が作った表であり、A6 と A11 は
+  `borrow_ify` の入力についての仮定なので `func` に当たる。`λ ∈ leaves(ty(v))` なので、L6d を `(v, λ)` に
+  当てると `act_f(v, λ)` の各元の path はその変数の型の boxed leaf であり、`cand_f(v, λ) ⊆ act_f(v, λ)` より
+  `(r, p)` もそうである。`<1>2` の `r` は `vars_f.param_tys` が型 `τ` で持つ名前なので `τ = ty(r)` で
+  ある。
+  BY <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=90d8526/>, <1>2,
+     CODE src/rc_ir/ownership.rs: VarTable::of, Origin::acted_on
 
 <1>4. `covered_leaves(τ, p) = {p}` である。
   `<1>3` より `p ∈ leaves(τ)` である。第 1 節に写した `p13-disposals-and-pending.md` の `L7` は
@@ -1999,10 +2036,16 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
 
 <1>1. `V` が `f_own` かグローバル初期化子であるとき、言明は L8 による。
   <2>1. `act(a, λ)` の各元 `(r, p)` について `p` は `ty(r)` の boxed leaf である。
-    `act(a, λ) = cand(a, λ) ∪ {identity(a, λ)}` であり (`Origin::acted_on`)、`cand` と `identity` は
-    `origin` の再帰が辿る 1 歩の繰り返しから作られる (D17)。L9 より、1 歩の先のスロットも元の変数の型の
-    boxed leaf である。
-    BY <ref id=d59f90b/>, <ref id=10752aa/>, CODE src/rc_ir/ownership.rs: Origin::acted_on
+    `ctx.vars` は `B_V` について `VarTable::of` か `VarTable::body_only` が作った表である -- `V` が
+    `f_own` のときは `RewriteCtx::new(&f_own, false, ..)` が `VarTable::of(f_own)` を、グローバル
+    初期化子の版のときは `borrow_ify` が `VarTable::body_only(&g.init)` を置く。この場合の `B_V` は
+    `borrow_ify` の入力の本体なので、A6 と A11 がそれについて成り立つ。`λ ∈ leaves(ty(a))` は言明の
+    仮説である。よって L6d を `(a, λ)` に当てる。**この段が L9 でなく L6d を引くのは、`act(a, λ)` が
+    `Binding::Join` のすべてのアームの結果を含むからである** -- L9 は `ρ` の上のスロットについての
+    言明であり、`ρ` が選ばなかったアームの結果には当たらない。
+    BY <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=90d8526/>,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::new, borrow_ify,
+       CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, Origin::acted_on
   <2>2. `ctx.owns_object(r, p)` は値を返す。
     `r` が `ctx.vars.param_tys` の鍵でなければ、L4 の第 1 の腕は中断せず真を返す。鍵であれば (その型を
     `τ`)、`<2>1` より `p` は `τ` の boxed leaf である。A10 はプログラムに現れる型の全体についてそれを
