@@ -2150,6 +2150,81 @@ pub fn test_string_literal() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a `\uXXXX` escape naming a surrogate code point is reported, since a surrogate
+/// is not a character and so has no UTF-8 encoding.
+#[test]
+pub fn test_string_literal_surrogate_escape_is_reported() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = println("\uD800");
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Invalid unicode character",
+    );
+}
+
+/// Verifies that the escape sequences a string literal does not have are rejected: `\x` and `\0`
+/// belong to `U8` literals alone, `\u` needs all four of its digits, and `\q` names nothing.
+#[test]
+pub fn test_string_literal_rejects_escapes_it_does_not_have() {
+    for escape in ["\\q", "\\0", "\\x41", "\\u12"] {
+        let source = format!(
+            r#"
+    module Main;
+    main : IO ();
+    main = println("{}");
+    "#,
+            escape
+        );
+        assert_grammar_rejects(&source);
+    }
+}
+
+/// Verifies the `e` form of a decimal literal: it multiplies by that power of ten, it accepts an
+/// explicit `+`, and it carries the literal's sign.
+#[test]
+pub fn test_number_literal_exponent() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 4e2, 400);;
+        assert_eq(|_|"", 1e+5, 100000);;
+        assert_eq(|_|"", 0e0, 0);;
+        assert_eq(|_|"", -1e3, -1000);;
+        assert_eq(|_|"", 1e3_I64, 1000);;
+        assert_eq(|_|"", 1e2_U8, 100_U8);;
+        assert_eq(|_|"", 1.5e2, 150.0);;
+        assert_eq(|_|"", 1.5e-2, 0.015);;
+        assert_eq(|_|"", 1.5e+2_F32, 150.0_F32);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies that a decimal literal with a negative exponent and no decimal point is reported:
+/// it is an integer literal, and the value it names is not an integer.
+#[test]
+pub fn test_integer_literal_with_a_negative_exponent_is_reported() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 1e-5, 0);;
+        pure()
+    );
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "cannot be parsed as an integer",
+    );
+}
+
 #[test]
 pub fn test65() {
     // Test tuple pattern matching.
