@@ -413,7 +413,17 @@ def bundle(directory, path, only=None):
     束が本文を運ぶなら、引く場所ごとに本文を再掲する要は無い -- **同じ本文が束と証明の 2 か所に
     在ると、片方だけが古くなる。**"""
     items, edges = build(directory)
-    here = [i for i in items.values() if os.path.samefile(i["file"], path)]
+    # **そのファイルに在る項目は、そのファイルを読んで決める。** 言明が枠に在る命題は同一性を枠と
+    # 共有するので、全体の表を引くと枠のファイルの項目として返り、このファイルの分が 1 つも取れない --
+    # 実測で、局所の補題を持たない 3 本の束が空になった。
+    frame_names = {item["name"]: item["identity"]
+                   for item in items_in(os.path.join(directory, "README.md"))[0] if item["name"]}
+    mine = set()
+    for item in items_in(path)[0]:
+        identity = item["identity"] or frame_names.get(item["name"])
+        if identity:
+            mine.add(identity)
+    here = [items[identity] for identity in mine if identity in items]
     if only:
         here = [i for i in here if only in (i["name"], i["identity"])]
         if not here:
