@@ -196,7 +196,8 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
   `namespace_item` は `capital_name` を `.` で継いだもの、`capital_name` は `ASCII_ALPHA_UPPER` で
   始まる語なので、**記号名の先頭の成分は英大文字で始まり `#` を持たない**。`<1>3a` の 3 族はどれも
   `FullName::to_namespace` が名前を名前空間の**末尾**へ移す形なので、最も外側の成分を替えない。
-  `object_file_symbol_name` が置き替えるのは `@` であって先頭の英大文字ではない。
+  `object_file_symbol_name` が置き替えるのは `SYMBOL_VERSION_SEPARATOR`、すなわち `@` であって、
+  先頭の成分の文字ではない。
   **英小文字で始まる名前**を渡すのは 10 か所である -- 走時の記号名 `fixruntime_...`・`sprintf`・
   `pthread_once`・`malloc`・`realloc` を渡す `runtime.rs` の 7 か所、`<接頭辞>_<型のハッシュ>` を渡す
   `emit_rc_helper_call` の 1 か所、そして走査関数の名前 `trav_<work><状態>_<型のハッシュ>` と
@@ -227,6 +228,7 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
      CODE src/rc_ir/ast.rs: RcState::name_suffix,
      CODE src/ast/name.rs: FullName::module,
      CODE src/parse/grammer.pest: capital_name,
+     CODE src/constants.rs: SYMBOL_VERSION_SEPARATOR,
      CODE src/rc_ir/codegen.rs: Generator::implement_rc_global,
      CODE src/object.rs: create_traverser, get_traverser_ptr,
      CODE src/fixstd/builtin.rs: InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
@@ -533,24 +535,39 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
        CODE src/ast/program.rs: Program::global_types
   <2>3. 持ち上げた lambda に `fresh_closure_ref` が付ける名前は、最上位の記号 -- `Program::symbols` の
         鍵、すなわち `Program::global_types` の鍵 -- の名前ではない。
-    <3>0. `lower_program` に渡る記号の名前の集合は `Program::global_types` の鍵の集合であり、
-          `lower_symbol` は funptr の記号を鍵がその記号の名前である `funcs` の項目に、funptr でない
-          記号を `symbol` がその記号の名前である `globals` の要素にする。持ち上げた lambda を `funcs` に
-          入れるのは `Lowerer::lower_lam` である。
+    <3>0. `Program::symbols` の各項目の鍵は、その項目の `Symbol` の `name` に等しい。
+      **在りかは述語で決める** -- `Program` の `symbols` の欄へ項目を入れる式であり、`src/` でその欄と、
+      その欄へ代入される写像とに `insert`・`extend` を掛ける全出現である。**一覧で書くとパスが 1 つ
+      増えるたびに古くなる。**鍵を新しく作るのは 7 か所で、どれも同じ名前をその `Symbol` の `name` に
+      置く -- `Program::instantiate_symbols` は `sym.name` を鍵に取り、`uncurry::run` の funptr 版と
+      `closure_specialization` の特殊化版は `Symbol { name: name.clone(), .. }` を `name` で入れ、
+      `split_struct_args::split_one_argument` の twin、`defunctionalize_fix` の持ち上げた関数
+      (`into_symbol` が `func_name` を `name` に置く)、`closure_specialization::register_lifted_lambdas`
+      が持ち上げた lambda はどれもその `Symbol` の `name` を鍵に取り、`simplify_symbol_names::run` は
+      `sym.name = new_name` の後で `new_name` を鍵にする。残る式は、`Program::symbols` から取り出した項目をその鍵のまま入れ直すか、
+      項目を落とすだけである。**`Symbol` の `name` を書き換える式は `simplify_symbol_names::run` の
+      1 か所だけである。**
+      BY CODE src/ast/program.rs: Program::instantiate_symbols, Symbol,
+         CODE src/optimization/simplify_symbol_names.rs: run
+    <3>0a. `lower_program` に渡る記号の名前の集合は `Program::global_types` の鍵の集合であり、
+           `lower_symbol` は funptr の記号を鍵がその記号の名前である `funcs` の項目に、funptr でない
+           記号を `symbol` がその記号の名前である `globals` の要素にする。持ち上げた lambda を `funcs`
+           に入れるのは `Lowerer::lower_lam` である。
       `build_object_files` は `program.global_types()` の返り値と `program.symbols.values()` を並べて
       取り、後者を `lower_and_insert_rc` を経て `lower_program` の `symbols` に渡す。
-      `Program::global_types` は `self.symbols` の各鍵をそのまま鍵とする。
-      BY CODE src/build/build_object_files.rs: build_object_files, lower_and_insert_rc,
+      `Program::global_types` は `self.symbols` の各鍵をそのまま鍵とし、`lower_symbol` が読むのは
+      `sym.name` なので、2 つの集合が同じであることは `<3>0` が与える。
+      BY <3>0, CODE src/build/build_object_files.rs: build_object_files, lower_and_insert_rc,
          CODE src/ast/program.rs: Program::global_types,
          CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_symbol, Lowerer::lower_lam
     <3>1. 持ち上げた lambda の名前は、funptr の最上位の記号の名前と等しくない。
-      `<3>0` より、等しければその名前で `Lowerer` の `funcs` へ 2 度挿入が起き、2 度目の
+      `<3>0a` より、等しければその名前で `Lowerer` の `funcs` へ 2 度挿入が起き、2 度目の
       `assert!(previous.is_none(), "two RC IR functions are named ...")` が発火する。この表明は
       `develop_mode` の門を持たないので、そのプログラムはコンパイルされず、lowering の出力から作られる
       `borrow_ify` の入力 `P` も存在しない。
-      BY <3>0, CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_lam
+      BY <3>0a, CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_lam
     <3>2. 持ち上げた lambda の名前は、funptr でない最上位の記号の名前とも等しくない。
-      `<3>0` より、等しければその名前は `P.funcs` の鍵であり、かつ `P.globals` のある要素の `symbol` で
+      `<3>0a` より、等しければその名前は `P.funcs` の鍵であり、かつ `P.globals` のある要素の `symbol` で
       ある。(N0) がそれを禁じる。**(N0) を果たすのは `divide_into_units` である** -- その関数は
       `funcs` の鍵の名前と `globals` の `symbol` を 1 つの列に集めて整列し、隣り合う 2 つが等しければ
       `panic!("the program defines `{}` twice, ...")` で止まる。この panic は `develop_mode` の門を
@@ -558,12 +575,12 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
       (N0) が破れたプログラムはコードを生成せず、その実行も段も存在しない。**D24 が「プログラム `P` の
       実行は、`P` を分割して生成した単位を結合したものの実行である」と定めるので、`P` から生成した
       コードについて語るとき `divide_into_units` は `P` に掛かる。**
-      BY (N0), <3>0, <ref id=e3436e8/>, CODE src/build/divide_program.rs: divide_into_units,
+      BY (N0), <3>0a, <ref id=e3436e8/>, CODE src/build/divide_program.rs: divide_into_units,
          CODE src/build/build_object_files.rs: build_object_files
     <3>3. QED
-      `<3>0` より `lower_symbol` は最上位の記号を funptr かそうでないかで振り分けるので、`<3>1` と
+      `<3>0a` より `lower_symbol` は最上位の記号を funptr かそうでないかで振り分けるので、`<3>1` と
       `<3>2` が 2 つの場合を尽くす。
-      BY <3>0, <3>1, <3>2
+      BY <3>0a, <3>1, <3>2
   <2>4. `P.globals` の `symbol` は、最上位の記号のうち型が funptr でないものの名前であり、`P.funcs` の
         どの鍵の名前とも異なる。
     `<1>1` より `symbol` と鍵は lowering の出力のものであり、`lower_symbol` は最上位の記号を、その型が
