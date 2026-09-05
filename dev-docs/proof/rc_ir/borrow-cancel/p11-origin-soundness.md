@@ -4,7 +4,7 @@
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が `CODE` で引く
 ファイル (`src/rc_ir/ownership.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/provenance.rs`、
 `src/rc_ir/borrow.rs`、`src/rc_ir/codegen.rs`、`src/generator.rs`、`src/ast/types.rs`、
-`src/ast/inline_llvm.rs`、`src/fixstd/builtin.rs`、`src/fixstd/runtime.rs`、
+`src/ast/name.rs`、`src/ast/inline_llvm.rs`、`src/fixstd/builtin.rs`、`src/fixstd/runtime.rs`、
 `src/parse/sourcefile.rs`、`src/misc.rs`、`src/constants.rs`、`src/error.rs`) に変わったのは
 `// PROOF:` コメントだけである。
 **この一覧は本文の `CODE` の行を数え上げて作る** -- 手で並べた一覧は、証明が新しいファイルを引くたびに
@@ -1665,11 +1665,23 @@ D25 が定めるのがオブジェクトからオブジェクトへの到達だ�
        `make_arrow_name_abs()` に等しいかどうか),
        CODE src/ast/types.rs: TypeNode::is_array, TypeNode::toplevel_tycon_satisfies (`is_array` は
        最上位の tycon が `is_array_tycon` を満たすかどうかである),
-       CODE src/fixstd/builtin.rs: is_array_tycon, make_array_name (`is_array_tycon` は tycon が
-       `make_array_tycon()` に等しいことであり、その名前は `Std` の下の `ARRAY_NAME` である),
-       CODE src/fixstd/builtin.rs: make_arrow_name_abs (`Std` の下の `ARROW_NAME` である),
+       CODE src/fixstd/builtin.rs: is_array_tycon (tycon が `make_array_tycon()` に等しいことである),
+       CODE src/fixstd/builtin.rs: make_array_tycon (`TyCon::new(make_array_name())` である),
+       CODE src/fixstd/builtin.rs: make_array_name (`FullName::from_strs(&[STD_NAME], ARRAY_NAME)` で
+       ある),
+       CODE src/ast/types.rs: TyCon (`name` の 1 欄を持ち `PartialEq` を導出するので、2 つの `TyCon` が
+       等しいのはその `FullName` が等しいときである),
+       CODE src/ast/types.rs: TyCon::new (`name` の欄に引数の `FullName` を置く),
+       CODE src/ast/name.rs: FullName (`namespace` と `name` の 2 欄を持ち `PartialEq` を導出する),
+       CODE src/ast/name.rs: FullName::from_strs (`FullName::new(&NameSpace::from_strs(ns), name)` で
+       ある), CODE src/ast/name.rs: FullName::new (`name` の欄に第 2 引数の文字列を置く),
+       CODE src/fixstd/builtin.rs: make_arrow_name_abs (`FullName::from_strs(&[STD_NAME], ARROW_NAME)`
+       に `set_absolute` を掛けたものであり、`set_absolute` は `namespace` の欄だけを書き替える),
+       CODE src/ast/name.rs: FullName::set_absolute (`self.namespace.is_absolute` に `true` を置く),
        CODE src/constants.rs: ARRAY_NAME, ARROW_NAME, FUNPTR_NAME -- `"Array"` も `"Arrow"` も
-       `"#FunPtr"` で始まらないので、<2>1 の `tc` の名前はそのどちらとも異なる
+       `"#FunPtr"` で始まらないので、<2>1 の `tc` の名前の `name` の欄はそのどちらとも異なり、
+       <2>1 の `tc` は `make_array_tycon()` と等しくなく、その名前は `make_arrow_name_abs()` と
+       等しくない
   <2>4. QED
     BY <2>2, <2>3, <ref id=83d98e9/> (束縛を持たない `RcVar` の型は、その名前の記号の型である), <ref id=0594f24/> の第 1 の規則
        (`is_fully_unboxed` が真の型は leaf を持たない),
