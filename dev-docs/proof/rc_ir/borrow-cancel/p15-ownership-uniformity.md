@@ -1211,8 +1211,12 @@ namespace が `Std` で名前が `#FunPtr` で始まるとき、残りを `parse
   `τ` は扱う型なので L1b より A10 を満たす。`leaves(τ)` を計算する `go` が呼ぶのは
   `is_fully_unboxed`・`is_closure`・`is_box`・`is_array` と `unpunched_field_types` であり、
   `unpunched_field_types` と `is_fully_unboxed` は最上位 tycon の宣言を `type_env` から引く。A10 より、
-  `τ` から `unpunched_field_types` を繰り返し取る歩みは有限であり、その各段の型は ground で飽和していて
-  tycon が `type_env` にあるので、この降下は中断せずに終わる。この降下が通る `toplevel_tycon_info` の
+  `τ` から `unpunched_field_types` を繰り返し取る歩みは有限である。A10 よりその各段の型は ground で
+  飽和していて tycon が `type_env` にあるので、`declared_field_types` の
+  `assert_eq!(args.len(), tycon_info.tyvars.len())` と `toplevel_tycon_info` の
+  `tycons().get(&tycon).unwrap()` は通る。`instance_field_types` が行う newtype の展開が abort せず
+  停止することは、A10 の最後の節が別に与える -- A10 は、その面が ground・飽和・`type_env` の 3 つからは
+  出ないと述べる。よってこの降下は中断せずに終わる。この降下が通る `toplevel_tycon_info` の
   `assert!(!self.is_closure())` も通る -- `unpunched_field_types` はその関数を呼び、`is_fully_unboxed` は
   `is_box` を経て `is_unbox` を呼び、`is_unbox` は `is_closure()` を先に見て短絡するので、closure 型では
   `toplevel_tycon_info` に届かない。closure でない型では表明の条件がそのまま成り立つ。`go` は
@@ -1231,7 +1235,8 @@ namespace が `Std` で名前が `#FunPtr` で始まるとき、残りを `parse
   BY <ref id=8412761/>, <ref id=fd9b709/>, <ref id=fb62043/>, <ref id=33ee52f/>, <ref id=24f7933/>, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
      TypeNode::is_closure, TypeNode::is_funptr, TypeNode::toplevel_tycon_info,
-     TypeNode::unpunched_field_types, CODE src/fixstd/builtin.rs: is_funptr_tycon
+     TypeNode::unpunched_field_types, TypeNode::instance_field_types, TypeNode::declared_field_types,
+     CODE src/fixstd/builtin.rs: is_funptr_tycon
 
 <1>1. `owns_object_yet(V, type_env, r, p, OL)` は、まず `leaves(τ)` を計算し、続けて `under(τ, p)` の
       各要素 `unit` について「`trunc(τ, unit)` を鍵 `key` とし、`leaves(τ)` のうち `trunc(τ, ・) = key` を
@@ -1961,8 +1966,12 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
   L1b より A10 を満たす。`leaves(τ)` を計算する `go` が呼ぶのは `is_fully_unboxed`・`is_closure`・
   `is_box`・`is_array` と `unpunched_field_types` であり、`unpunched_field_types` と `is_fully_unboxed` は
   最上位 tycon の宣言を `type_env` から引く。A10 より、`τ` から `unpunched_field_types` を繰り返し取る
-  歩みは有限であり、その各段の型は ground で飽和していて tycon が `type_env` にあるので、この降下は
-  中断せずに終わる。この降下が通る `toplevel_tycon_info` の `assert!(!self.is_closure())` も通る --
+  歩みは有限である。A10 よりその各段の型は ground で飽和していて tycon が `type_env` にあるので、
+  `declared_field_types` の `assert_eq!(args.len(), tycon_info.tyvars.len())` と
+  `toplevel_tycon_info` の `tycons().get(&tycon).unwrap()` は通る。`instance_field_types` が行う
+  newtype の展開が abort せず停止することは、A10 の最後の節が別に与える -- A10 は、その面が
+  ground・飽和・`type_env` の 3 つからは出ないと述べる。よってこの降下は中断せずに終わる。
+  この降下が通る `toplevel_tycon_info` の `assert!(!self.is_closure())` も通る --
   `unpunched_field_types` はその関数を呼び、`is_fully_unboxed` は `is_box` を経て `is_unbox` を呼び、
   `is_unbox` は `is_closure()` を先に見て短絡するので、closure 型では `toplevel_tycon_info` に届かない。
   closure でない型では表明の条件がそのまま成り立つ。`go` は `unpunched_field_types` を呼ぶ前に
@@ -1980,7 +1989,8 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
   BY <1>2, <ref id=8412761/>, <ref id=fd9b709/>, <ref id=fb62043/>, <ref id=33ee52f/>, <ref id=24f7933/>, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
      TypeNode::is_closure, TypeNode::is_funptr, TypeNode::toplevel_tycon_info,
-     TypeNode::unpunched_field_types, CODE src/fixstd/builtin.rs: is_funptr_tycon
+     TypeNode::unpunched_field_types, TypeNode::instance_field_types, TypeNode::declared_field_types,
+     CODE src/fixstd/builtin.rs: is_funptr_tycon
 
 <1>4. QED
   `pty_f(r)` は `Option` なので `None` か `Some(τ)` のどちらかである。`None` の場合は `<1>1` が両辺とも
