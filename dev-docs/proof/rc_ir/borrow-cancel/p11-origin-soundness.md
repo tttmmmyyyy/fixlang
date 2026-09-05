@@ -367,7 +367,7 @@ SCAN src/ `init_flag_ptr`
   = src/rc_ir/codegen.rs: Generator::implement_rc_global -- 旗のロード、旗への store、`pthread_once` へ渡す引数
 
 **前提 `origin` を呼ぶ式の在りか** --- `origin` の呼び出しの字面が在る項目は次で尽きる。**走査の根は
-`src/` である** -- `src/rc_ir/` に狭めると、この道が外へ出た先が見えない。
+`src/` である** -- 呼び出しの在りかを 1 つのディレクトリに狭めると、道が外へ出た先が落ちる。
 `borrow_ify` と `cancel` が住む `src/rc_ir/borrow.rs` の側を読むのは第 7 節である。
 
 SCAN src/ `origin(`
