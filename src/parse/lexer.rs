@@ -16,11 +16,9 @@
 use crate::parse::parser::{FixParser, Rule};
 use pest::Parser;
 
-/// A highlight category for a single lexical token. Intentionally coarse:
-/// these are the distinctions that can be drawn purely lexically, without an
-/// AST or type information. Finer distinctions (function vs. variable,
-/// type vs. trait) would require the elaborated program and are left to a
-/// future AST-based overlay.
+/// A highlight category for a single lexical token. The categories are the
+/// distinctions that spelling and neighboring tokens settle on their own,
+/// without an AST or type information.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LexTokenKind {
     /// `//` line comment or `/* */` block comment.
@@ -41,11 +39,9 @@ pub enum LexTokenKind {
     Namespace,
     /// A lowercase / `_` / `@`-prefixed identifier (value or field name).
     ///
-    /// Identifiers are NOT distinguished further at the lexical level: whether
-    /// a name is a local, a global, a function or a value cannot be known from
-    /// position alone (a positional guess colors the binder and the use of the
-    /// same name differently). The semantic-tokens layer leaves these uncolored
-    /// and lets an AST overlay classify them once elaboration succeeds.
+    /// One category covers locals, globals, functions and values alike: which
+    /// of them a name is follows from elaboration, and a guess made from
+    /// position colors a binder and a use of the same name differently.
     Variable,
     /// A field accessor: a getter/setter/modifier/act function (`@x`, `set_x`,
     /// `mod_x`, `act_x`) or an index-syntax field/tuple accessor (`^field`,
@@ -57,8 +53,6 @@ pub enum LexTokenKind {
 
 /// Whether an identifier denotes a field accessor function by its spelling:
 /// a getter (`@x`), setter (`set_x`), modifier (`mod_x`) or act (`act_x`).
-/// Shared by the lexer and the semantic-tokens overlay so they agree on what
-/// the base layer already colors as a property.
 pub fn is_accessor_name(s: &str) -> bool {
     s.starts_with('@') || s.starts_with("set_") || s.starts_with("mod_") || s.starts_with("act_")
 }
@@ -67,14 +61,17 @@ pub fn is_accessor_name(s: &str) -> bool {
 /// string and its highlight category.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LexToken {
+    /// Byte offset of the token's first byte in the source string.
     pub start: usize,
+    /// Byte offset one past the token's last byte.
     pub end: usize,
+    /// The category the token is colored as.
     pub kind: LexTokenKind,
 }
 
-// Map a grammar rule (the inner rule of a `lex_token`) to a highlight
-// category. `None` means "do not color" (whitespace and unrecognized
-// punctuation, which the grammar matches via `lex_other`).
+/// Map a grammar rule (the inner rule of a `lex_token`) to a highlight
+/// category. `None` marks a token left uncolored: whitespace and the
+/// punctuation the grammar matches via `lex_other`.
 fn kind_of_rule(rule: Rule) -> Option<LexTokenKind> {
     match rule {
         Rule::lex_line_comment | Rule::lex_block_comment => Some(LexTokenKind::Comment),
@@ -92,9 +89,8 @@ fn kind_of_rule(rule: Rule) -> Option<LexTokenKind> {
 
 /// Scan `content` into a flat stream of highlight tokens. Whitespace and
 /// uncolored punctuation are omitted. The returned tokens are ordered by, and
-/// do not overlap in, their source position. This function never fails: on the
-/// (theoretically impossible) event that the scanner rule does not match, it
-/// returns an empty vector rather than erroring.
+/// do not overlap in, their source position. The scan succeeds on every input:
+/// where the scanner rule leaves the source unmatched, the result is empty.
 pub fn lex_tokens(content: &str) -> Vec<LexToken> {
     let mut pairs = match FixParser::parse(Rule::lex_tokens, content) {
         Ok(pairs) => pairs,
@@ -131,9 +127,9 @@ pub fn lex_tokens(content: &str) -> Vec<LexToken> {
     tokens
 }
 
-// Reclassify identifiers spelled like a field accessor (`@x`, `set_x`, `mod_x`,
-// `act_x`) as properties. Purely lexical, so it applies before type checking.
-// (`^field` accessors are recognized directly by the grammar.)
+/// Reclassify identifiers spelled like a field accessor (`@x`, `set_x`, `mod_x`,
+/// `act_x`) as properties. The spelling settles this, so it applies before type
+/// checking. (`^field` accessors are recognized directly by the grammar.)
 fn refine_accessors(content: &str, tokens: &mut [LexToken]) {
     for tok in tokens.iter_mut() {
         if tok.kind == LexTokenKind::Variable && is_accessor_name(&content[tok.start..tok.end]) {
@@ -142,12 +138,10 @@ fn refine_accessors(content: &str, tokens: &mut [LexToken]) {
     }
 }
 
-// Lexical refinement: a `Type` token immediately followed by a `::` operator
-// is acting as a namespace qualifier (e.g. `Std` in `Std::Array`), so recolor
-// it as `Namespace`. The final capitalized segment (not followed by `::`)
-// stays a `Type`. This gives qualifiers a distinct color from the entity they
-// qualify, which is a purely positional decision and so safe even on broken
-// input.
+/// Recolor as `Namespace` every `Type` token immediately followed by a `::`
+/// operator, since it qualifies rather than names an entity (e.g. `Std` in
+/// `Std::Array`); the final capitalized segment stays a `Type`. Position alone
+/// settles this, so it holds on broken input too.
 fn refine_namespaces(content: &str, tokens: &mut [LexToken]) {
     for i in 0..tokens.len() {
         if tokens[i].kind != LexTokenKind::Type {

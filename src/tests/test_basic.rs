@@ -2131,9 +2131,11 @@ pub fn test63() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a string literal resolves its escape sequences: `\uXXXX` names a character by
+/// its code point, `\"` and `\\` stand for a double quote and a backslash, and `\t` and `\n`
+/// equal the tab and the newline written directly in the source.
 #[test]
 pub fn test_string_literal() {
-    // Test escape sequence.
     let source = r#"
     module Main; 
     main : IO ();
@@ -3239,9 +3241,11 @@ pub fn test_is_unique_true_branch_invalidated_by_sharing() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies the byte a character literal stands for: an ASCII character, the escape sequences
+/// `\0`, `\t`, `\r`, `\n`, `\\`, `\'` and `\"`, a double quote written on its own, and `\xHH`
+/// with either case of hexadecimal digit, up to `\xff` at the top of the `U8` range.
 #[test]
 pub fn test_u8_literal() {
-    // Test U8 literal
     let source = r#"
             module Main;             
             main : IO ();
@@ -3282,9 +3286,11 @@ pub fn test_u8_literal_of_a_non_ascii_character_is_rejected() {
     assert_grammar_rejects(&source);
 }
 
+/// Verifies that `U8` and `I32` arithmetic wraps around at the ends of the type's range, that
+/// division truncates toward zero while the remainder carries the dividend's sign, and that a
+/// comparison reads `U8` as unsigned and `I32` as signed.
 #[test]
 pub fn test97() {
-    // Test arithmetic operation of U8, I32
     let source = r#"
         module Main; 
         main : IO ();

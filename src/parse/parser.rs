@@ -1151,8 +1151,8 @@ fn parse_deprecated_statement(
     let fullname_pair = pairs.next().unwrap();
     let (relative_path, name_span) = parse_fullname(fullname_pair, ctx);
     let target_path = relative_path.join_under(&ctx.namespace);
-    // Parse the message string literal. Surface escape-sequence errors
-    // (e.g. invalid `\uXXXX`) instead of silently falling back to raw text.
+    // The message's escape sequences are resolved here, and an invalid one
+    // (e.g. `\uXXXX` naming no character) is reported.
     let (message, _) = parse_string_lit_content(pairs.next().unwrap(), ctx)?;
     Ok(DeprecationStatement {
         target_path,
@@ -2663,10 +2663,10 @@ fn parse_ffi_param_tys(
     Ok(param_tys)
 }
 
-// Parses a number literal. A `_`-suffix such as `_U8` gives the literal's type; without one, a
-// literal containing a decimal point is `F64` and a literal without one is `I64`. A decimal or
-// octal integer literal must lie in the range of that type; a hexadecimal or binary one may fill
-// its bit width, so `0b11111111_I8` is `-1`.
+/// Parses a number literal. A `_`-suffix such as `_U8` gives the literal's type; without one, a
+/// literal containing a decimal point is `F64` and a literal without one is `I64`. A decimal or
+/// octal integer literal must lie in the range of that type; a hexadecimal or binary one may fill
+/// its bit width, so `0b11111111_I8` is `-1`.
 fn parse_expr_number_lit(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2861,6 +2861,8 @@ fn parse_string_lit_content(
     Ok((string, span))
 }
 
+/// Parses a string literal into the expression that builds the `String` value it writes,
+/// with its escape sequences resolved.
 fn parse_expr_string_lit(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2927,11 +2929,13 @@ fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, E
     Ok(String::from_iter(out.iter()))
 }
 
+/// Parses a character literal into the expression for the `U8` value of the byte between the
+/// single quotes. An escape sequence stands for the byte it names, `'\n'` for 10 and `'\x7f'`
+/// for 127.
 fn parse_expr_u8_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_u8_lit);
     let span = Span::from_pair(&ctx.source, &pair);
     let raw = pair.into_inner().next().unwrap().as_str().to_string();
-    // Resolve escape sequences.
     let mut chars = raw.chars();
     let byte: u8 = match chars.next().unwrap() {
         '\\' => match chars.next().unwrap() {
