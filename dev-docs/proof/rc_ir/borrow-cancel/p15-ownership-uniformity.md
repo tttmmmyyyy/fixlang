@@ -492,8 +492,12 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 **leaf と unit がずれるのはここである。**`is_fully_unboxed(σ)` と `is_closure(σ)` が偽で、
 `is_union(σ)` または `is_punched_array(σ)` が真であり、`is_box(σ)` も `is_array(σ)` も偽のとき、
 `step(σ) = Unit` なので `rc_units_go` は `path` を積んで止まるのに、`go` は
-`unpunched_field_types(σ)` の下へ降りる。`Std::PunchedArray a` は `unbox struct { _arr : Array a, _idx : I64 }`
-であり (`CODE src/fixstd/std.fix: PunchedArray`)、`is_punched_array` が真なのでこの形になる。
+`unpunched_field_types(σ)` の下へ降りる。`Std::PunchedArray a` がその形の型である。宣言は
+`unbox struct { _arr : Array a, _idx : I64 }` であり (`CODE src/fixstd/std.fix: PunchedArray`)、
+その最上位 tycon は `Std::PunchedArray` なので `is_punched_array` は真である
+(`CODE src/ast/types.rs: TypeNode::is_punched_array`, `TypeNode::toplevel_tycon_satisfies`,
+`CODE src/fixstd/builtin.rs: is_punched_array_tycon`, `make_punched_array_tycon`,
+`CODE src/constants.rs: PUNCHED_ARRAY_NAME`)。
 
 <1>1. `unit_step` は上から順に、`is_fully_unboxed(σ)` で `NoUnit` を、`is_closure(σ)` で
       `Capture { capture_idx: CLOSURE_CAPTURE_IDX, field_count: CLOSURE_FIELD_COUNT }` を、
@@ -2297,12 +2301,15 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `unpunched_field_types` の全対についての全称である。`ty(c)` はこの 4 つの述語をどれも満たさないので
   全称の腕に入り、`ty(x)` がその 1 つなので `is_fully_unboxed(ty(c))` も偽である。`unit_step` は上から順に
   `is_fully_unboxed`、`is_closure`、`is_box || is_union || is_array || is_punched_array` を見るので、
-  残る分かれ目は `is_punched_array(ty(c))` だけである。**`Std::PunchedArray a` は
-  `unbox struct { _arr : Array a, _idx : I64 }` なので、この場合は実際に起こりうる**
-  (`CODE src/fixstd/std.fix: PunchedArray`)。
+  残る分かれ目は `is_punched_array(ty(c))` だけである。**この場合は実際に起こりうる** --
+  `Std::PunchedArray a` は `unbox struct { _arr : Array a, _idx : I64 }` と宣言されており、
+  その最上位 tycon は `Std::PunchedArray` なので `is_punched_array` が真である。
   BY <ref id=83d98e9/>, <ref id=9cef509/>, <ref id=33ee52f/>, <ref id=1d99428/>, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
      TypeNode::is_union, TypeNode::is_punched_array, TypeNode::toplevel_tycon_info,
-     CODE src/rc_ir/ownership.rs: unit_step
+     TypeNode::toplevel_tycon_satisfies,
+     CODE src/rc_ir/ownership.rs: unit_step, CODE src/fixstd/std.fix: PunchedArray,
+     CODE src/fixstd/builtin.rs: is_punched_array_tycon, make_punched_array_tycon,
+     CODE src/constants.rs: PUNCHED_ARRAY_NAME
 
 <1>3a. unbox 容器の `Field(c, idx)` について、`leaves(ty(c))` のうち `[idx]` を前置に持つものは
        `{ [idx] ++ μ : μ ∈ leaves(ty(x)) }` であり、したがって
