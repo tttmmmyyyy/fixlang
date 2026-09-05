@@ -2491,19 +2491,25 @@ SCAN src/ `truncate_to_unit(`
        その `expect` は発火しない。
       BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, EXT スライスの split_first,
          CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
-    <3>3a. `cls(result_ty)` は `UN` か `ST` である。`<1>3a` (vii) より `result_ty.is_box(E)`、
-       `result_ty.is_array()`、`result_ty.is_closure()` はいずれも偽なので、`DEF cls` の `CL`、`BX`、
-       `AR` の 3 行はどれも当たらない。`cls(result_ty) = NB` の場合は、
+    <3>3a. 次の 2 つの少なくとも一方が成り立つ。
+
+       - (a) `L(result_ty)` は空であり、`build_shape` の閉包は 1 度も呼ばれない。
+       - (b) `cls(result_ty)` は `UN` か `ST` である。
+
+       `<1>3a` (vii) より `result_ty.is_box(E)`、`result_ty.is_array()`、`result_ty.is_closure()` は
+       いずれも偽なので、`DEF cls` の `CL`、`BX`、`AR` の 3 行はどれも当たらない。`<1>4` より
+       `cls(result_ty)` は残る `NB`、`UN`、`ST` のどれかである。`cls(result_ty) = NB` のときは、
        `DEF UNST-道` の条件を `j = 0` に読むと `result_ty` の UNST-道は `[]` だけであり、
        `cls(end(result_ty, [])) = NB` は `<1>14` の 2 つの集合のどちらの条件にも当たらないので
-       `L(result_ty)` は空であり、`<1>27b` より `build_shape` の閉包は 1 度も呼ばれない。よって
-       以下は `cls(result_ty)` が `NB` でない場合を見ればよい。残るのは `UN` と `ST` である。
-      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, DEF UNST-道
-    <3>3b. `L(result_ty)` の要素のうち `PUNCHED_STRUCT_FIELD` で始まるものは、
-       `(PUNCHED_STRUCT_FIELD, s)` が `F(result_ty)` の要素であるとき
+       `L(result_ty)` は空であって、`<1>27b` より閉包は 1 度も呼ばれない。これが (a) である。
+       残る `UN` と `ST` が (b) である。
+      BY <1>1, <1>3a, <1>4, <1>14, <1>27b, DEF cls, DEF UNST-道
+    <3>3b. `<3>3a` の (b) が成り立つとき、`L(result_ty)` の要素のうち `PUNCHED_STRUCT_FIELD` で
+       始まるものは、`(PUNCHED_STRUCT_FIELD, s)` が `F(result_ty)` の要素であるとき
        `{ [PUNCHED_STRUCT_FIELD] ++ r : r は L(s) の要素 }` であり、`F(result_ty)` が
        `PUNCHED_STRUCT_FIELD` を第 1 成分に持つ要素を持たないときは 1 つも無い。
-       `<3>3a` と `<1>11` より `go(result_ty, [], out)` が積むのは `F(result_ty)` の各 `(i, f)` に
+       (b) より `cls(result_ty)` は `UN` か `ST` なので、`<1>11` より `go(result_ty, [], out)` が
+       積むのは `F(result_ty)` の各 `(i, f)` に
        ついての `go(f, [i], out)` が積むものの合併であり、`<1>1` (ii) より `f` は `<1>1` を満たすので
        `<1>14a` よりそれは `{ [i] ++ r : r は L(f) の要素 }` である。`<1>12` より `F(result_ty)` の
        添字は相異なるので、`PUNCHED_STRUCT_FIELD` で始まる要素はその添字を持つ 1 つの `(i, f)` から
@@ -2547,15 +2553,24 @@ SCAN src/ `truncate_to_unit(`
         残る `NB`、`BX`、`AR`、`UN`、`ST` を尽くしている。
         BY <1>4, <4>2, <4>4, <4>5, <4>6
     <3>4a. `arg_leaf_path` の `assert_ne!` は発火しない。`assert_ne!` が発火するのは、`path` が
-       `[PUNCHED_STRUCT_FIELD, self.field_idx] ++ ・` の形のときだけである。`<3>3b` より、そのような
-       `path` が `L(result_ty)` に在るのは `(PUNCHED_STRUCT_FIELD, s')` が `F(result_ty)` の要素で
-       あって `L(s')` が `self.field_idx` で始まる要素を持つときに限る。`<1>3a` (vii) より
-       `result_ty.is_closure()` も `result_ty.is_box(E)` も偽なので、
-       `<1>3c` (d) を `result_ty` に当てられる。それよりその `s'` は
-       `result_ty.field_types(E)[PUNCHED_STRUCT_FIELD]`、すなわち `<3>4` の `s` である。`<3>4` より
-       そのような要素は無い。
-      BY <1>3a, <1>3c, <3>1, <3>3b, <3>4,
-         CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
+       `[PUNCHED_STRUCT_FIELD, self.field_idx] ++ ・` の形のときだけである。
+      <4>1. CASE `<3>3a` の (a)。`build_shape` の閉包は 1 度も呼ばれず、`arg_leaf_path` を呼ぶのは
+         その閉包だけなので、`assert_ne!` は評価されない。
+        BY <3>3a, CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::result_prov,
+           CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
+      <4>2. CASE `<3>3a` の (b)。`<1>27b` より閉包が受け取る `path` は `L(result_ty)` の要素である。
+         `<3>3b` より、上の形の `path` が `L(result_ty)` に在るのは
+         `(PUNCHED_STRUCT_FIELD, s')` が `F(result_ty)` の要素で
+         あって `L(s')` が `self.field_idx` で始まる要素を持つときに限る。`<1>3a` (vii) より
+         `result_ty.is_closure()` も `result_ty.is_box(E)` も偽なので、
+         `<1>3c` (d) を `result_ty` に当てられる。それよりその `s'` は
+         `result_ty.field_types(E)[PUNCHED_STRUCT_FIELD]`、すなわち `<3>4` の `s` である。`<3>4` より
+         そのような要素は無い。
+        BY <1>3a, <1>3c, <1>27b, <3>1, <3>3a, <3>3b, <3>4,
+           CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
+      <4>3. QED
+        `<3>3a` の (a) と (b) を `<4>1` と `<4>2` が尽くしている。
+        BY <3>3a, <4>1, <4>2
     <3>5. QED
       閉包の残りは `Vec` の連結と `sole_origin` だけである。
       BY <1>1, <1>27b, <3>1, <3>2, <3>3, <3>3a, <3>3b, <3>4, <3>4a,
@@ -3096,7 +3111,7 @@ SCAN src/ `truncate_to_unit(`
     BY <1>2, <1>21, <1>29, <1>30
   <2>3. QED
     P2 が量化する 2 つの場合はどちらも `<2>2a` の範囲に入り、`pi` についての一般性は `<2>1` と
-    `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 7 つの仮定は `<1>29` と
+    `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 8 つの仮定は `<1>29` と
     `<1>30` が読むものである。
     BY <ref id=e11772a/>, <ref id=33c54dc/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=3e6b0e0/>, <ref id=3d4be43/>, <1>29, <1>30, <2>1, <2>2, <2>2a, <2>2b,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel,
