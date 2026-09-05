@@ -1034,3 +1034,53 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
     };
     content
 }
+
+#[cfg(test)]
+mod tests {
+    use super::uri_to_path;
+    use lsp_types::Uri;
+    use std::path::PathBuf;
+    use std::str::FromStr;
+
+    /// The path a URI names is what its percent-escapes decode to, and a URI whose escapes decode
+    /// to bytes that are not UTF-8 names no path.
+    #[test]
+    fn test_uri_to_path_decodes_the_escapes_it_can_read() {
+        let path = |uri: &str| uri_to_path(&Uri::from_str(uri).expect("the uri parses"));
+
+        assert_eq!(
+            path("file:///p/caf%C3%A9.fix"),
+            Some(PathBuf::from("/p/café.fix")),
+            "escapes carrying a whole UTF-8 sequence name the file those bytes spell"
+        );
+        assert_eq!(
+            path("file:///p/%6C%69%62.fix"),
+            Some(PathBuf::from("/p/lib.fix")),
+            "an ASCII character written as an escape names the file the character itself does"
+        );
+        assert_eq!(
+            path("file:///p/%25.fix"),
+            Some(PathBuf::from("/p/%.fix")),
+            "an escaped `%` names a file whose name carries a `%`"
+        );
+        assert_eq!(
+            path("file:///p/plain.fix"),
+            Some(PathBuf::from("/p/plain.fix")),
+            "a uri carrying no escape names the path it writes"
+        );
+
+        for uri in [
+            "file:///p/%FF.fix",    // a byte no UTF-8 sequence uses
+            "file:///p/%80.fix",    // a continuation byte with nothing to continue
+            "file:///p/%C3%28.fix", // a two-byte sequence whose second byte continues nothing
+            "file:///p/%E3%81.fix", // a three-byte sequence cut short
+        ] {
+            assert_eq!(
+                path(uri),
+                None,
+                "the escapes of \"{}\" decode to bytes that are not UTF-8, so it names no path",
+                uri
+            );
+        }
+    }
+}
