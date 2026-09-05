@@ -1163,7 +1163,8 @@ SCAN src/ `applies_a_function_operand`
         呼び出し先は `_dtor` の値が指す関数である (D23)。
         よって D9 の `App` の行がその callee の全 boxed leaf を消費する。`_dtor` の値の boxed leaf
         は、その型が closure 型ならば capture の位置 1 つ (D4 の規則 2)、funptr 型ならば無く
-        (D4 の規則 1)、capture の unit は必ず所有されるので (D14) D10 の初期値がその参照を `Obl(b1)`
+        (`is_funptr` が真の型は `is_fully_unboxed` であり、D4 の規則 1 がその型に leaf を与えない)、
+        capture の unit は必ず所有されるので (D14) D10 の初期値がその参照を `Obl(b1)`
         に入れる。**`Obl` を離れる参照の行き先と、作られる参照の持ち手と、`H` の動きは段ごとに
         書き尽くされているので (D24 の網羅の節)、この 3 つ以外の行き先は無い。**
         `_value` の leaf が指す先がグローバル状態のときは、その leaf は参照を持たないので (α) が無い。
@@ -1202,6 +1203,7 @@ SCAN src/ `applies_a_function_operand`
     ある」), D9 (消費の表の `App` の行 -- callee の全 boxed leaf), D10 (初期値の行),
     D14 (「**capture の unit は必ず所有される。**」), D4 (規則 1 と規則 2),
     A8, D26 (グローバル状態のオブジェクトを指す leaf は参照を持たず、`H` も動かない), DEF 受け渡し (α), DEF 生成 (β), DEF 解放 (ε)
+    `CODE src/ast/types.rs: TypeNode::is_fully_unboxed` (`self.is_funptr()` の枝が `true` を返す)
     `CODE src/generator.rs: Generator::build_run_destructor` (`_value` と `_dtor` を
     `move_out_struct_field` で取り出し、`build_retain(dtor.clone(), one, RcState::Unknown)` を置いてから
     `apply_lambda(dtor, vec![value], false)` を呼び、`run_io_or_ios_runner` の結果を
@@ -1701,15 +1703,21 @@ SCAN src/ `applies_a_function_operand`
   `<1>7`・`<1>5`・`<1>6` を引くのは、`s` の全体について読むときは `s` の各節点について、`p` の直後の
   動作について読むときはその節点についてである。
 
-  `<2>1.` 段の外で参照が動くことは無い。実行は段の列であり、参照を作る動作は 3 か所ともどれも段の中で
-    起き、参照を渡す動作と処分する動作は (E1) から (E9) と (F) が段ごとに述べる。環境が
-    `get_funptr_retain` / `get_funptr_release` の番地を呼んで作り処分する参照も段の中で動く --
+  `<2>1.` 段の外で参照が動くことは無い。実行は段の列である。**参照を作る動作を数え上げる段は
+    3 つを見る** (D24) -- D24 の「実行の最初の時点」の段落が挙げる 3 か所 (D10 の生成の表、(F) の
+    retain、`InlineLLVMBoxedFromRetainedPtrIOS` が環境から受け取る行) はどれも段の中で起き、1 つの
+    段の生成コードがその段の中で出す `<1>0e` の 2 つの形も定義上その段の中に在り、(E9) は段そのものが
+    参照を 1 つ作る段である。参照を渡す動作と処分する動作は (E1) から (E9) と (F) が段ごとに述べる。
+    環境が `get_funptr_retain` / `get_funptr_release` の番地を呼んで作り処分する参照も段の中で動く --
     その呼び出しは (E9) の段だからである。**終わらない段の後に
     切れ目は無い** -- その段は自分の行う動作をすべて終えないので、その後に段は無く、素動作も無い。
     よって第 2 の主張はそこを外してよい。
     BY <ref id=e3436e8/> (「プログラム `P` の**実行**とは、**段**の有限または無限の列である」、「参照を作るのは
     D10 の生成の表、(F) の retain、そして `InlineLLVMBoxedFromRetainedPtrIOS` が環境から受け取る行の
-    3 か所だけであり、どれも段の中で起きる」), D24 の (E1) から (E9) と (F),
+    3 か所だけであり、どれも段の中で起きる」、
+    「**この 2 つの形は (E2) の段が中で出す素動作の分類である。(E9) の retain はどちらでもない。**」、
+    「**参照を作る動作を数え上げる段は、この 2 つの形に (E9) を足して 3 つを見る。**」),
+    `<1>0e`, D24 の (E1) から (E9) と (F),
     D24 の (E9) (「**(E9) 環境の参照の操作の段。** 環境が、`get_funptr_retain` か
     `get_funptr_release` が渡した番地を呼ぶ (A17 (ii-c))。」),
     A17 (ii-c) (「**その段は D24 の (E9) である。**」),
