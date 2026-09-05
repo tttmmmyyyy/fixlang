@@ -74,13 +74,7 @@ TRAILING_LABEL = re.compile(r"\b(DEF|EXT)\s+(.+)$")
 HEDGE = ["明らかに", "自明", "同様にして", "容易に", "であろう", "と思われる", "おそらく", "はずである"]
 
 
-def normalize_label(name):
-    """名札の名前を、引用と宣言で同じ形にする。
-
-    `` ` `` と空白は書き方の差なので落とす。**末尾の句読点も落とす** -- 宣言が
-    `**DEF 共通接頭の段の中の対応。**` と句点を太字の内側に置く形があり、引く側は句点を付けないので、
-    その名札を引く段が全部「名札の不在」に出ていた (実測で 1 ファイル 9 件、全部空振り)。"""
-    return re.sub(r"[\s`]+", "", name).rstrip("。、.,:：")
+normalize_label = proof_syntax.normalize_label
 
 
 def declared_labels(text):

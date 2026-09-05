@@ -476,6 +476,61 @@ def depends(directory, path):
             for kind, names in kinds.items()}
 
 
+CITED_LABEL = re.compile(r"`?(p\d\d)[A-Za-z0-9_-]*(?:\.md)?`?\s*の\s*`?(DEF|EXT|前提)\s+([^`,、\n)]+)")
+LABEL_DECLARATION = re.compile(r"^#+\s*(DEF|EXT|前提)\s+(.+?)\s*$"
+                               r"|^(?:- )?\*\*(DEF|EXT|前提)\s+([^*]+?)\*\*")
+
+
+def declared_label(line):
+    """その行が宣言する名札の (種類, 書かれた名前)。宣言でなければ `None`。"""
+    match = LABEL_DECLARATION.match(line)
+    if not match:
+        return None
+    kind, name = (match.group(1), match.group(2)) if match.group(1) else (match.group(3), match.group(4))
+    return kind, name.strip()
+
+
+def label_body(lines, index):
+    """名札の宣言の行から、次の見出し・段・名札の宣言までの範囲。"""
+    stop = index + 1
+    while stop < len(lines):
+        line = lines[stop]
+        if line.startswith("#") or proof_syntax.STEP.match(line) or declared_label(line):
+            break
+        stop += 1
+    return index, stop
+
+
+def cited_labels(directory, path):
+    """他のファイルで宣言された名札のうち、このファイルが引くもの。その宣言の本文つき。
+
+    **名札は項目ではないので、引用の辺には乗らない。** 束が運ばないと、引用先だけを読む者には
+    その語の意味が届かない -- 実測で、1 つのファイルの 6 段が「引用先を読めない」で落ちた。"""
+    out = []
+    seen = set()
+    text = open(path, encoding="utf-8").read()
+    for prefix, kind, rest in CITED_LABEL.findall(text):
+        home = next((other for other in documents(directory)
+                     if os.path.basename(other).startswith(prefix)), None)
+        if home is None or os.path.samefile(home, path):
+            continue
+        lines = open(home, encoding="utf-8").read().split("\n")
+        best = None
+        for index, line in enumerate(lines):
+            declared = declared_label(line)
+            if not declared or declared[0] != kind:
+                continue
+            key = proof_syntax.normalize_label(declared[1])
+            if (proof_syntax.normalize_label(rest).startswith(key)
+                    and (best is None or len(key) > len(best[2]))):
+                best = (index, declared[1], key)
+        if best and (prefix, kind, best[2]) not in seen:
+            seen.add((prefix, kind, best[2]))
+            start, stop = label_body(lines, best[0])
+            out.append((os.path.basename(home), kind, best[1], "\n".join(lines[start:stop]).strip()))
+    return out
+
+
 def bundle(directory, path, only=None):
     """1 つのファイル (または 1 つの項目) が引く項目の本文を、読む順に組み立てる。
 
@@ -525,6 +580,15 @@ def bundle(directory, path, only=None):
             out.append("")
             out.extend(rest)
             out.append("")
+        labels = cited_labels(directory, path)
+        if labels:
+            out.append("# 他のファイルが宣言する名札")
+            out.append("")
+            for home, kind, name, body in labels:
+                out.append(f"## {kind} {name} -- {home}")
+                out.append("")
+                out.append(body)
+                out.append("")
         repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         code = cited_code(path, repo)
         out.append("# この証明が `CODE` で引くコード")
