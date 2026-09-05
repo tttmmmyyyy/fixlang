@@ -211,8 +211,8 @@ descendants」と述べる (Rust Reference の "Visibility and Privacy")。す�
 字面の上位近似なので、一覧には構成でなくパターンとしてその字面を持つ項目も入る。`#[cfg(test)]` の下の
 項目は走査が除く。
 
-**前提 `LeafOrigin::Arg` の在りか** --- `LeafOrigin::Arg` の字面を持つ項目は次で尽きる。そのうち
-`LLVMGen::result_prov` の実装は 6 つであり、`--` の後にそれを書く。
+**前提 `LeafOrigin::Arg` の在りか** --- `LeafOrigin::Arg` の字面を持つ項目は次で尽きる。
+`LLVMGen::result_prov` の実装であるかどうかは `--` の後に書く。
 
 SCAN src/ `LeafOrigin::Arg`
   = src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov -- `result_prov` の実装
@@ -269,7 +269,7 @@ SCAN src/ `finish_clone(`
   = src/rc_ir/unique_check_elim.rs: Specializer::materialize_clone -- 呼び出し
 
 **前提 `borrows_operand` の本体の在りか** --- `LLVMGen::borrows_operand` の本体が在る項目は次で尽きる。
-既定の本体を除く 13 個が override である。
+trait の既定の本体であるか override であるかは `--` の後に書く。
 
 SCAN src/ `fn borrows_operand`
   = src/ast/inline_llvm.rs: borrows_operand -- trait の既定の本体
@@ -3193,7 +3193,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
      CODE src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov,
      CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov,
      CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov
-  残る 10 個は `result_locality` を override するが `result_prov` は override しない。
+  残るものは `result_locality` を override するが `result_prov` は override しない。
   `EXT クレートの項目` より、<1>1 の各 `impl` ブロックはそれぞれ 1 か所にしかなく、その本体を
   読んで得たメソッドの一覧は完全である。
 
@@ -3299,8 +3299,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 <1>6. QED
   BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>5a
-  (a) について、`borrows_operand(i)` が真になるのは <1>1 の override のいずれかであり、そのうち 10 個は
-  既定の `result_prov` を持ち `Arg` を宣言しない (<1>2、<1>3)。
+  (a) について、`borrows_operand(i)` が真になるのは <1>1 の override のいずれかであり、そのうち
+  <1>3 が挙げる 3 個を除くものは既定の `result_prov` を持ち `Arg` を宣言しない (<1>2、<1>3)。
   `InlineLLVMArrayCopyCapacityBoundsUnchecked`
   は結果の各 leaf に単一の `Fresh` を置くので `Arg` を宣言しない (<1>3a)。残る 2 個は、
   `borrows_operand(i)` が真であるとき結果に leaf が無い (<1>4、<1>5) ので、やはり `Arg(i, σ)` を
