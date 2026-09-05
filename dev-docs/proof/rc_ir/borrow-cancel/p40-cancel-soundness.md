@@ -21,7 +21,7 @@ README の第 1 節が挙げる 2 種である -- 「**対象コミットより�
 (boxed leaf の路は反鎖をなす)、`L9` (`identity` は inhabited を決める)、`L10a` (静的な数え上げと実行時の
 作用が活性な名前で一致する)、`L10c` (`ActRefs^inh_ρ` の名前は位置であり、写した先が実行時の作用で
 ある)、`L8a` (`origin` の memo を使わない展開は有限である)、`L11` (非活性な名前では `B` は空)、
-`L14` (`identity` は自分の別名類の
+`L11a` (`InBracket` の引き算は切り捨てを起こさない)、`L14` (`identity` は自分の別名類の
 位置である)、`L17`
 (`N` は別名類ごとの `bumps` の和である)。
 これらは `p30 の L10`、`p13 の L17` のようにファイル名を添えて引用する。
@@ -322,11 +322,14 @@ P21 の脇を引くところだけは、引く側の語である「位置」を�
 
 ### DEF 節点の実行の素動作
 
-節点 `q` の実行の点で `α` が行う素動作 (D24) のうち、次の 6 種にそれぞれ名前を与える。**この 6 種が
-`α` の側を尽くすことは `L47` が示す。** **`q` の実行の点には、`α` が実行しない段 -- 環境の段と、別の
-制御の流れの活性化の段 -- の素動作も在りうる。** `q` が子の活性化を作る節点であるあいだ `α` は
-中断中であり、A17 (iii) はその間に環境の段が並びうると述べる。その素動作をこの 6 種は数えず、それが
-`Obl(α)` と `held_ρ` を動かさないことを `L49` の `<1>1` が述べる。
+**節点 `q` の実行に属する段**を次で定める -- `α` が `q` の位置で実行する段、`q` の実行が作る活性化と
+その子孫の活性化が実行する段、および `q` の中で D24 の (E7) が作る初期化子の活性化が終わるところで走る
+(E5) の段である。節点 `q` の実行に属する段が `q` の実行の点で行う素動作 (D24) のうち、次の 6 種に
+それぞれ名前を与える。**この 6 種が `q` の実行に属する素動作を尽くすことは `L47` が示す。**
+**`q` の実行の点には、`q` の実行に属さない段 -- 別の制御の流れの活性化の段と、環境の段 -- の素動作も
+在りうる。** `q` が子の活性化を作る節点であるあいだ `α` は中断中であり、A17 (iii) はその間に環境の段が
+並びうると述べる。その素動作をこの 6 種は数えず、それが `Obl(α)` と `held_ρ` を動かさないことを
+`L49` の 2 が述べる。
 
 - **D10 の行が定める作成と処分**。`q` について D10 の生成の表・消費 (D9)・`Retain` の行・`Release` の行が
   定めるものであり、D24 の (E2)・(E3)・(E4) がその行き先と `H` の動きを書く。**1 つの行が複数の leaf を
@@ -480,7 +483,7 @@ P21 の脇を引くところだけは、引く側の語である「位置」を�
 と定める。内側の和は、`ρ` で活性であって `obj_ρ(o) = O` である名前 `o` を渡る。`B_ρ(q, p)` は D27 の
 `B(p, ρ)` を節点 `q` の訪問の入口で読んだものであり、`p13` の `DEF bump の帰属` が同じ規則を表で書く。
 
-この量が README の P18a の `n(O)` であり `p13` の `DEF N` の `N_ρ(q, O)` であることは `L41` が述べる。
+この量が README の P18a の `n(O)` であり `p13` の `DEF N` の `N_ρ(q, O)` であることは `L41` の 1 が述べる。
 
 ### DEF 消費点
 
@@ -544,7 +547,7 @@ README の第 7.3 節は果たされていない義務を「**無し。** A19 (i
 
 **コードのどこに何が在るかの数え上げは、段の中で行わない。** 段が自分で「クレートに 3 か所」と数えると、
 その数え上げには果たす者が居らず、検査するものも無い。**記号を名指す `CODE` の引用はその記号の本体しか
-与えないので、「ほかの記号はそれをしない」の側はそこから出ない。** 以下の 5 つを名前つきの前提として置き、
+与えないので、「ほかの記号はそれをしない」の側はそこから出ない。** 以下の 6 つを名前つきの前提として置き、
 `BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
 
 **果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
@@ -623,7 +626,44 @@ SCAN src/ `Binding::Payload(`
   = src/rc_ir/ownership.rs: collect_bindings -- `Match` のアームの payload について置く
   = src/rc_ir/ownership.rs: origin_inner -- パターン
 
-**この 5 つは枠の仮定に置くのが本来である。** ここに置いているのは、この文書が自分の段からそれを引ける
+**前提 `result_prov` の本体の在りか** --- `LLVMGen::result_prov` の本体を書く項目は次で尽きる。
+**そのどれもが、`Provenance::uniform`・`Provenance::uniform_bottom`・`Provenance::fresh_under`・
+`Provenance::build_shape`・`replaced_field_prov` のいずれかを第 1 引数 `result_ty` に掛けた値を返す。**
+各項目が返す形は `--` の後に書く。
+
+SCAN src/ `fn result_prov`
+  = src/ast/inline_llvm.rs: result_prov -- 既定の本体。`uniform(result_ty, ・, Unknown)`
+  = src/fixstd/builtin.rs: InlineLLVMStringBuf::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayUnsafeEmpty::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayTruncateBoundsUnchecked::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendValueCapacityUnchecked::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMArraySetCapacityBoundsUnchecked::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayGrowSizeBody::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMArraySetBody::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMArraySwapBody::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayPunchBody::result_prov -- `fresh_under(result_ty, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMPunchedArrayPlugBody::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov -- `uniform(result_ty, ・, Unknown)` か `build_shape(result_ty, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMMakeStructBody::result_prov -- `build_shape(result_ty, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayLitBody::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMStructPunchBody::result_prov -- `fresh_under(result_ty, ・, ・)` か `build_shape(result_ty, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMStructPlugInBody::result_prov -- `replaced_field_prov(result_ty, ・, ・, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMStructSetBody::result_prov -- `replaced_field_prov(result_ty, ・, ・, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov -- `build_shape(result_ty, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov -- `uniform(result_ty, ・, Unknown)` か `build_shape(result_ty, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMUndefinedInternalBody::result_prov -- `uniform_bottom(result_ty, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::result_prov -- `uniform(result_ty, ・, Unknown)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayIsStorageUniqueBody::result_prov -- `uniform(result_ty, ・, Unknown)`
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::result_prov -- `fresh_under(result_ty, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::result_prov -- `fresh_under(result_ty, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::result_prov -- `fresh_under(result_ty, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::result_prov -- `fresh_under(result_ty, ・, ・)`
+  = src/fixstd/builtin.rs: InlineLLVMDestructorMake::result_prov -- `uniform(result_ty, ・, Fresh)`
+  = src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody::result_prov -- `uniform(result_ty, ・, Unknown)`
+
+**この 6 つは枠の仮定に置くのが本来である。** ここに置いているのは、この文書が自分の段からそれを引ける
 ようにするためであり、`前提 (ii-c) の保存` と同じ形である。
 
 ## 3. 局所の命題
