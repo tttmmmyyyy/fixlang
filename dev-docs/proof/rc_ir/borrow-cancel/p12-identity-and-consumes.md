@@ -382,8 +382,11 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
       呼び出しが `origin_inner` を評価する場合の、その評価の中だけである。
   <2>1. `origin` の本体が行う呼び出しは、鍵 `(var.clone(), path.to_vec())` を組み立てる
         `FullName::clone` と `<[usize]>::to_vec`、記録を検査する `RefCell::borrow` と `Map::get`、
-        記録の値と答えを複製する `Origin::clone`、`grow_stack(|| origin_inner(..))`、および記録を
-        書き込む `RefCell::borrow_mut` と `Map::insert` である。
+        記録の値と答えを複製する `Origin::clone`、`grow_stack(|| origin_inner(..))`、記録を
+        書き込む `RefCell::borrow_mut` と `Map::insert`、および本体が作った値が落ちるときに走る処理 --
+        記録が当たる枝で落ちる鍵 `key`、`borrow()` が返す `Ref`、`borrow_mut()` が返す `RefMut` --
+        である。**落ちる値の処理を数えるのは、それが本体の書く式に現れない呼び出しだからである。**
+        `Map::insert` が置き替えた値を落とす処理も同じ形であり、`<2>3` がそれを扱う。
     BY <1>1, CODE src/rc_ir/ownership.rs: origin
   <2>2. `grow_stack(|| origin_inner(..))` の実行の中で始まる `origin` の呼び出しは、`origin_inner` の
         評価の中で始まる。
@@ -396,21 +399,29 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
   <2>3. `<2>1` の受け手のうち `grow_stack` を除くものの実行の中で入る `src/` の項目は、`FullName` と
         `NameSpace` と `Origin` の `Clone` の実装、および `FullName` と `NameSpace` の
         `Hash`・`PartialEq`・`Eq` の実装で尽きる。
-    `<[usize]>::to_vec` と `RefCell` の `borrow`・`borrow_mut` は標準ライブラリの項目、`Map` すなわち
-    `FxHashMap` の `get`・`insert` は外部クレートの項目である。この `get` と `insert` は鍵の型
+    `<[usize]>::to_vec`、`RefCell` の `borrow`・`borrow_mut`、`borrow` が返す `Ref` と `borrow_mut` が
+    返す `RefMut` の `Drop` は標準ライブラリの項目である。`Map` すなわち `FxHashMap<K, V>` は
+    `std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>` の別名であって、`fxhash` クレートが
+    与えるのはハッシャ `FxHasher` である。よってその `get`・`insert` は標準ライブラリの項目であり、
+    `FxHasher` の `Hasher` の実装は外部クレートの項目である。同じく `Set<VarPath>` すなわち
+    `FxHashSet<VarPath>` は `std::collections::HashSet` の別名なので、その `Clone` も標準ライブラリの
+    項目である。この `get` と `insert` は鍵の型
     `VarPath = (FullName, FieldPath)` の `Hash` と `Eq` を呼び、`insert` は置き換えた値を落とす。
     対の `Hash` と `Eq`、`FieldPath` すなわち `Vec<usize>` の `Hash` と `Eq`、および `String`・
-    `Vec<String>`・`bool` の同じトレイトは標準ライブラリに在り、`Set<VarPath>` すなわち `FxHashSet` の
-    `Clone` は外部クレートに在る。`Origin` は `#[derive(Clone)]` を持ち、その欄の型は `VarPath` と
+    `Vec<String>`・`bool` の同じトレイトは標準ライブラリに在る。
+    `Origin` は `#[derive(Clone)]` を持ち、その欄の型は `VarPath` と
     `Set<VarPath>` である。`FullName` は `Clone` と `PartialEq` と `Eq` を derive し、その欄の型は
     `NameSpace` と `String` である。`NameSpace` は `Clone` を derive し、`Hash` と `PartialEq` と `Eq` は
     `impl Hash for NameSpace`・`impl PartialEq for NameSpace`・`impl Eq for NameSpace` として
     `src/ast/name.rs` に書かれ、その欄の型は `Vec<String>` と `bool` である。`FullName` の `Hash` も
     `impl Hash for FullName` として同じファイルに書かれている。EXT `derive` した `Clone` と
     EXT `derive` した `PartialEq` より、derive した実装が
-    呼ぶのは欄の同じトレイトのメソッドだけである。前提 書かれた `Drop` の在りか より `FullName`・
-    `NameSpace`・`Origin` はどれも `Drop` を実装しないので、EXT 値を落とす処理 より、その値が落ちるとき
-    走るのは欄の値を落とす処理だけである。
+    呼ぶのは欄の同じトレイトのメソッドだけである。落ちる値 -- 鍵 `key` (型 `VarPath`)、`insert` が
+    置き替えた `Origin`、`Ref`、`RefMut` -- について。前提 書かれた `Drop` の在りか より `src/` で
+    `Drop` を実装する型は `Finally`・`StopWatch`・`LspClient` の 3 つなので、`VarPath` も `FullName` も
+    `NameSpace` も `Origin` も `Drop` を実装せず、EXT 値を落とす処理 より、その値が落ちるとき走るのは
+    欄の値を落とす処理だけである。降りて着く欄の型は `String`・`Vec<String>`・`Vec<usize>`・`bool`・
+    `Set<VarPath>` であり、その `Drop` は標準ライブラリの項目である。
     BY 前提 書かれた `Drop` の在りか, EXT `derive` した `Clone`, EXT `derive` した `PartialEq`,
        EXT 値を落とす処理, CODE src/rc_ir/ownership.rs: Origin,
        CODE src/rc_ir/ast.rs: VarPath, FieldPath, CODE src/ast/name.rs: FullName, NameSpace,
