@@ -8,7 +8,7 @@ use std::{
     io::{Read, Write},
     panic::RefUnwindSafe,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 /// A type-check cache held by the threads that check a program together.
@@ -193,19 +193,34 @@ impl TypeCheckCache for FileCache {
 /// stored longest ago.
 const CACHE_GENERATION: u64 = 3;
 
+/// The stored expressions, grouped by the entity they belong to. Within a group the version stored
+/// most recently comes first, and at most `CACHE_GENERATION` versions are held.
+type CacheEntries = BTreeMap<EntityIdentity, VecDeque<(VersionHash, TypedExpr)>>;
+
 /// A cache that holds its entries in memory, so they last as long as the process that filled it.
 pub struct MemoryCache {
-    /// The stored expressions, grouped by the entity they belong to. Within a group the version
-    /// stored most recently comes first, and at most `CACHE_GENERATION` versions are held.
-    data: Mutex<BTreeMap<EntityIdentity, VecDeque<(VersionHash, TypedExpr)>>>,
+    /// The entries, behind a lock, since the threads that check a program together share them.
+    data: Mutex<CacheEntries>,
 }
 
 impl MemoryCache {
     /// Creates a cache holding no entries.
     pub fn new() -> Self {
         MemoryCache {
-            data: Mutex::new(BTreeMap::default()),
+            data: Mutex::new(CacheEntries::default()),
         }
+    }
+
+    /// The entries, locked.
+    ///
+    /// A thread that panics while it holds the lock poisons it, and the entries are whole when
+    /// that happens: the lock is held over the map alone, so a caller that goes on with them reads
+    /// what the panicking thread had already stored. The language server type-checks a program the
+    /// compiler can panic on, and keeps the cache across such a run.
+    fn lock_data(&self) -> MutexGuard<'_, CacheEntries> {
+        self.data
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -219,15 +234,15 @@ impl TypeCheckCache for MemoryCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) {
-        let mut data = self.data.lock().unwrap();
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
-        let entries = data.entry(entity_id).or_insert_with(|| VecDeque::new());
+        let mut entries = self.lock_data();
+        let versions = entries.entry(entity_id).or_insert_with(|| VecDeque::new());
         // If the cache is full, remove the oldest entry.
-        while entries.len() >= CACHE_GENERATION as usize {
-            entries.pop_back();
+        while versions.len() >= CACHE_GENERATION as usize {
+            versions.pop_back();
         }
-        entries.push_front((version_hash, expr.clone()));
+        versions.push_front((version_hash, expr.clone()));
     }
 
     /// Searches the entity's versions for the one stored under `version_hash`.
@@ -237,11 +252,11 @@ impl TypeCheckCache for MemoryCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) -> Option<TypedExpr> {
-        let data = self.data.lock().unwrap();
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
-        let entries = data.get(&entity_id)?;
-        let expr = entries
+        let entries = self.lock_data();
+        let versions = entries.get(&entity_id)?;
+        let expr = versions
             .iter()
             .find(|(hash, _)| hash == &version_hash)?
             .1
@@ -252,12 +267,15 @@ impl TypeCheckCache for MemoryCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{entity_identity, FileCache};
+    use super::{entity_identity, FileCache, MemoryCache, TypeCheckCache};
     use crate::{
+        ast::expr::expr_var,
         ast::name::FullName,
+        ast::program::TypedExpr,
         ast::types::{type_tyvar_star, Scheme},
         fixstd::builtin::{make_bool_ty, make_i64_ty},
     };
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     /// A field accessor and a value the user writes are two entities whose names differ only in a
     /// character a file name cannot carry. Their cache files must stay apart: a shared file hands
@@ -313,6 +331,38 @@ mod tests {
             entity_identity(&in_a, &scheme),
             entity_identity(&in_b, &scheme),
             "two values whose names differ in the namespace alone meet in one entry",
+        );
+    }
+
+    /// The entries answer after a thread panicked while it held them, and hold what was stored
+    /// before the panic.
+    ///
+    /// The language server type-checks a program the compiler answers with a panic and goes on to
+    /// the next program with the same cache, so a lock that answered a poisoning by panicking would
+    /// turn one such program into a session whose every later run fails at the first entry it
+    /// reaches.
+    #[test]
+    fn entries_answer_after_a_thread_panicked_holding_them() {
+        let cache = MemoryCache::new();
+        let name = FullName::from_strs(&["Main"], "answer");
+        let scheme = Scheme::from_type(make_i64_ty());
+        let expr = TypedExpr::from_expr(expr_var(name.clone(), None));
+        cache.save_cache(&expr, &name, &scheme, "0");
+
+        let held = catch_unwind(AssertUnwindSafe(|| {
+            let _entries = cache.lock_data();
+            panic!("a thread that panics while it holds the entries");
+        }));
+        assert!(held.is_err(), "the panic is what poisons the lock");
+
+        assert!(
+            cache.load_cache(&name, &scheme, "0").is_some(),
+            "the entry stored before the panic is expected to answer",
+        );
+        cache.save_cache(&expr, &name, &scheme, "1");
+        assert!(
+            cache.load_cache(&name, &scheme, "1").is_some(),
+            "an entry stored after the panic is expected to answer",
         );
     }
 }
