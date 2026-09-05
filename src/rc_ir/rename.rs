@@ -126,7 +126,7 @@ fn rename_expr(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprN
 }
 
 /// Rebuild one node with its variable occurrences rewritten, over its rewritten continuation.
-// PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     let expr = match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => RcExpr::Let(
