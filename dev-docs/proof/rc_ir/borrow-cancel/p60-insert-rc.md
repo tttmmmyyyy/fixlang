@@ -2126,8 +2126,10 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
 - **核節点**: 骨格節点と同じ種類の節点 (`Let`、`Destructure`、`Eval`、`Ret`)。
 - **アームの頭の `Release` 鎖**: `m` が `Let(x, Match(scrut, arms), cont)` であるとき、
   `insert_into_match` が各アームの本体の頭に `build_releases(head, body)` で積む `Release` 節点の列
-  (空のこともある) (`CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match`)。他の 5 種の骨格節点は
-  この部分を持たない。
+  (空のこともある) (`CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match`)。骨格節点は
+  `Let`(`Match` でない右辺)・`Let`(`Match` の右辺)・`Destructure`・`Eval`・`Ret` の 5 種であり
+  (D2 の 6 種から、A25 が骨格から除く `Retain`・`Release` を落とし、`Let` を右辺で 2 つに分けたもの)、
+  他の 4 種はこの部分を持たない。
 - **後置 `Release` 鎖**: `build_releases` が積む `Release` 節点の列 (空のこともある)。核節点と `m` の
   継続の写しの間に立つ。`Ret` はこの部分を持たない (`insert_into_expr_inner` の `RcExpr::Ret` の腕は
   `build_releases` を呼ばない)。
@@ -2181,6 +2183,8 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
 - **(f)** 計数下の別名類の ρ-終端は、パラメータ・capture の leaf か、D10 の生成の表の各行が参照を作る
   位置のスロットかのいずれかである。
 - **(g)** 活性化が保持する参照を動かす `ρ` の上の事象は、`DEF 割り当て μ` が挙げる 6 種で尽きる。
+- **(h)** D33 の ρ-歩みの 1 歩が**スロット**へ進むとき、その進む先のスロットの変数は、`ρ` の上で
+  いま居る位置の変数より前に値を得る。
 
 **(g) を段として立てるのは、定義の中に置くと誰の検査も受けないからである** (README 第 3 節)。
 `L17` (b)(c)、`L19` (a)(d)、`L24` `<1>2` がこの網羅の上に立つ。
@@ -2215,6 +2219,26 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   `Llvm` の素通し leaf の結果 `x` は `Binding::Llvm(gen, args, ty)`、`Match` のアーム本体の `Ret(x)` が
   値を渡す先の `Match` の束縛変数は `Binding::Join(arm_results)` である。
 
+<1>1a. (h)。
+  BY <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=596a46d/>, <ref id=d59f90b/>, <ref id=30d6238/>, <ref id=9d74736/>, <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=8e3aff3/>,
+     CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: collect_bindings
+  D33 の ρ-歩みの 1 歩は、いま居る位置 `(w, μ)` から、`w` の束縛が `μ` について持つ D20 の別名の辺の
+  行き先 (D17) へ進む。束縛の種類で分ける。
+  - `Binding::Move(y)`、`Binding::Field(container, idx)` の unbox の枝、`Binding::Payload(scrut, ・)` の
+    辿る枝、`Binding::Llvm` の単一 `Arg(j, σ)` の枝では、`origin_inner` が `origin` を呼ぶ相手は
+    それぞれ `y`・`container`・`scrut`・`args[j]` であり、どれも `w` を束縛する節点がその位置で
+    名指す変数である。A11 よりその使用はその位置でスコープに入っている束縛に解決し、A6 より
+    その名前を束縛するものはプログラム全体で 1 つだけなので、D2 のスコープの規則よりその束縛の節点は
+    `ρ` の上でこの節点より前にある。D6 よりスロットはその変数が値を得た後に在るので、進む先の変数は
+    `w` より前に値を得る。A6 と A11 を `insert_rc` の入力と出力について読めるのは A2 による。
+  - `Binding::Join(arm_results)` の辺は、D17 よりその活性化が選んだアームの結果 `Ret(a)` の `a` へ
+    進む。**この場合は上の議論が当たらない** -- D6 が「`a` は `k` の位置ではスコープに無い」と明記する
+    とおり、`a` は `w` を束縛する節点の位置でスコープに入っていない。代わりに D3 を読む。`w` を束縛
+    するのは `Let(w, Match(scrut, arms), k)` であり、D3 より実行路はアームを 1 つ選んでそのアーム本体を
+    辿り、その後 `k` へ進むので、`a` を束縛する節点 -- アーム本体の中に在るか、その `Match` を囲む
+    スコープに在る -- は `ρ` の上でこの `Match` 節点が `w` を束縛するより前にある。D6 よりスロットは
+    その変数が値を得た後に在るので、`a` は `w` より前に値を得る。
+
 <1>2. これらの束縛のもとで、移動先のスロット `s'` の ρ-歩みの次の位置 (D6) は移動元の位置である。
       移動元の変数が局所名であるときそれはスロットであり、局所名でないときは記号の位置である。
   BY <1>1, <ref id=596a46d/>, <ref id=9d74736/>, <ref id=d59f90b/>, CODE src/rc_ir/ownership.rs: origin_inner
@@ -2231,16 +2255,33 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   `Ret(x)` の `(x, λ)` である。
 
 <1>3. (a)。
-  BY <1>2, <ref id=0594f24/>, <ref id=596a46d/>, <ref id=9d74736/>, <ref id=88a06de/>, <ref id=30d6238/>, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+  BY <1>2, <ref id=0594f24/>, <ref id=596a46d/>, <ref id=9d74736/>, <ref id=88a06de/>, <ref id=30d6238/>, <ref id=3d4be43/>,
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_box,
+     CODE src/ast/types.rs: TypeNode::is_unbox, CODE src/ast/types.rs: TypeNode::is_closure,
+     CODE src/ast/types.rs: TypeNode::is_array, CODE src/ast/types.rs: TypeNode::is_funptr,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+     CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/fixstd/builtin.rs: make_array_tycon,
+     CODE src/fixstd/builtin.rs: bulitin_tycons
   移動元がスロット `s` であるとき、`s'` の ρ-歩みは 1 歩で `s` に着き、以後は `s` の ρ-歩みそのもの
   である。よって 2 つの ρ-終端は等しい。別名類は ρ-終端が等しいスロットの集まりなので (D33)、`s` と
   `s'` は同じ類に属する。
   移動元が記号の位置 `(g, λ)` であるとき、D6 より別名類の歩みは記号の位置で終わるので `s'` の ρ-終端は
   `(g, λ)` である。D9 の値の水準の行より移動先の値は移動元の値なので `s'` が指すオブジェクトは
   `obj(g, λ)` であり、D6 よりそれは funptr かグローバル状態のオブジェクトである。D26 より
-  グローバル状態のオブジェクトは計数下ではない。funptr の型については、`is_fully_unboxed` が
-  `if self.is_funptr() { return true; }` で真を返すので、D4 の第 1 規則よりその型は boxed leaf を
-  持たず、記号の位置を作らない。よって `s'` が属する類は計数下ではない。
+  グローバル状態のオブジェクトは計数下ではない。funptr の型については、`is_fully_unboxed` の
+  `if self.is_funptr() { return true; }` に着いて真が返る。**先の 3 つの早期 return が発火しない
+  ことは次のとおりである。** `is_funptr` は最上位の tycon が `is_funptr_tycon` を満たすことなので、
+  その tycon は名前空間が `Std` の 1 段で名前が `FUNPTR_NAME` (`"#FunPtr"`) で始まるものである。
+  A28 より `E.tycons()` のその鍵の項目は `bulitin_tycons()` が置いたものであり、その `is_unbox` は
+  真、`variant` は `Primitive` である。よって `is_unbox` は
+  `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` の第 2 項で真、`is_box` は
+  その否定なので偽であり、第 1 の early return は発火しない。`is_closure` は最上位の tycon が
+  `make_arrow_name_abs()` の名前を持つことであり、その名前は `#FunPtr` で始まらないので偽であり、
+  第 2 の early return も発火しない。`is_array` は最上位の tycon が `make_array_tycon()` に等しい
+  ことであり、A28 よりその鍵は `Std::Array` なので `#FunPtr` で始まる鍵とは異なり、第 3 の
+  early return も発火しない。
+  よって D4 の第 1 規則よりその型は boxed leaf を持たず、記号の位置を作らない。よって `s'` が
+  属する類は計数下ではない。
 
 <1>4. D34 の表は 6 行を持つ。最初の 3 行は `held_ρ(・, C)` に開始値 1 を
       与え、そのうちパラメータ・capture の inhabited (D16) な leaf については、その leaf の unit を
@@ -2332,10 +2373,10 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
 <1>6a. 計数下の別名類 `C` について、D34 が `held_ρ(・, C)` を定め始める時点 -- `C` の ρ-終端の変数が
        値を得る時点 -- において、値を得ている `C` のスロットは ρ-終端 1 つだけであり、そこで
        `held_ρ(・, C) = 1 = Σ_{s ∈ C} μ(s) + β(C)` である。
-  BY <ref id=8e3aff3/>, <1>4, <1>4a, <1>4c, <ref id=b3dfa37/>, <ref id=596a46d/>, <ref id=ef8efc4/>, <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=3905b4e/>, DEF 割り当て `μ`, 言明の `β` の定義
-  D33 の ρ-歩みの各段は、いま居る位置の変数の束縛が名指す変数へ進む。A11 よりその名指しはその束縛の
-  位置でスコープに入っている束縛に解決し、D2 のスコープの規則よりその変数はいま居る位置の変数より前に
-  値を得る。よって `C` のスロットのうち ρ-終端でないものの変数は、ρ-終端の変数より後に値を得る。
+  BY <1>1a, <1>4, <1>4a, <1>4c, <ref id=b3dfa37/>, <ref id=596a46d/>, <ref id=ef8efc4/>, <ref id=30d6238/>, <ref id=9d5d254/>, DEF 割り当て `μ`, 言明の `β` の定義
+  <1>1a より ρ-歩みの 1 歩が進む先のスロットの変数は、いま居る位置の変数より前に値を得る。
+  よって `C` のスロットのうち ρ-終端でないものの変数は、ρ-終端の変数より後に値を得る
+  (ρ-終端は自分の歩みの最後の位置であり、その歩みの各段が変数を前へ辿る)。
   D6 よりスロットはその変数が値を得た後に在り、`DEF 割り当て μ` の 6 種はいずれもその位置のスロットに
   ついて値を動かすので、まだ値を得ていないスロットの `μ` は 0 である。
   <1>4c より計数下の類の ρ-終端はパラメータ・capture の leaf か D10 の生成の表の位置のいずれかで
@@ -2348,7 +2389,7 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   あり、和は 1 である。
 
 <1>7. QED
-  BY <1>0, <1>3, <1>4, <1>4a, <1>4b, <1>4c, <1>5, <1>5a, <1>6, <1>6a, <ref id=a502f3e/>, <ref id=ef8efc4/>, <ref id=9d5d254/>, DEF 割り当て `μ`
+  BY <1>0, <1>1a, <1>3, <1>4, <1>4a, <1>4b, <1>4c, <1>5, <1>5a, <1>6, <1>6a, <ref id=a502f3e/>, <ref id=ef8efc4/>, <ref id=9d5d254/>, DEF 割り当て `μ`
   (a) は <1>3 である。(b) について、`C` を計数下の別名類とする。<1>6a が、D34 が
   `held_ρ(・, C)` を定め始める時点で等式が成り立つことを与える。その時点より後について、
   右辺を動かす事象は <1>0 より `DEF 割り当て μ` の 6 種で尽き、左辺を動かす事象は D34 の表の 6 行で
@@ -2360,7 +2401,7 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   (c) は `β` の定義である -- すべての unit が所有されるとき、どの類の ρ-終端も借用する unit の下の
   leaf ではないので `β(C) = 0` である。グローバル初期化子の `init` は D1 よりパラメータも capture も
   持たないので、その本体の類の ρ-終端はパラメータ・capture の leaf ではない。(d) は <1>4a、(e) は
-  <1>4b、(f) は <1>4c、(g) は <1>0 である。
+  <1>4b、(f) は <1>4c、(g) は <1>0、(h) は <1>1a である。
 
 ### 10.2 `L14` (`live_before` は自由変数と `live_after` の和である) <!--#66e786e-->
 
