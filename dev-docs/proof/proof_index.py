@@ -460,6 +460,11 @@ def bundle(directory, path, only=None):
         if not here:
             sys.exit(f"{path} に {only} は無い")
     wanted = {t for identity, t in edges if identity in {i["identity"] for i in here}}
+    # **このファイルが証明する命題の言明は枠に在る。** その言明を引く段は自分の同一性を引くので、
+    # 引用の辺としては自分への辺になり、辺の一覧から落ちる -- 実測で、`ASSUME` の 4 つの条件節を
+    # 引く 4 段が、その条件節をどこにも持たない束を渡されていた。
+    wanted |= {i["identity"] for i in here
+               if items.get(i["identity"], {}).get("file", "").endswith("README.md")}
     cited = sorted((items[t] for t in wanted if t in items),
                    key=lambda i: (i["file"], i["line"]))
     out = [f"# {os.path.basename(path)}" + (f" の {only}" if only else "") + " が引く項目",

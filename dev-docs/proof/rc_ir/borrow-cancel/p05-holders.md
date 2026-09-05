@@ -170,55 +170,6 @@ D24 は 1 つの段を不可分な動作の有限列へ分解し、その動作�
   分けて第 `i` 部分の濃度が `n_i` である分割が在ることとは同値である。
 - **EXT 非負整数の和** -- 有限個の非負整数の和が 0 であるならば、その各項は 0 である。
 
-### 1.7 この文書が置く前提
-
-**コードのどこに何が在るか、生成コードがどの順に何を出すかの数え上げは、段の中で行わない。** 段が
-自分で数えると、その数え上げには果たす者が居らず、検査するものも無い。次の 2 つを名前つきの前提として
-置き、`BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
-**この 2 つは枠の仮定に置くのが本来である。** ここに置いているのは、この文書が自分の段からそれを
-引けるようにするためである。
-
-**前提 オペランドを適用する op の在りか** --- `LLVMGen::applies_a_function_operand` を override する
-項目は、次の走査が挙げるもので尽きる。既定は `false` である
-(`CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand`)。走査は字面の上位近似なので、
-一覧には読みだけの項目も入る。override する各項目は `true` を返す
-(`CODE src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand`,
-`CODE src/fixstd/builtin.rs: InlineLLVMUnionModBody::applies_a_function_operand`,
-`CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::applies_a_function_operand`,
-`CODE src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand`,
-`CODE src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand`,
-`CODE src/fixstd/builtin.rs: InlineLLVMArrayBorrowElementsBody::applies_a_function_operand`,
-`CODE src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand`,
-`CODE src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand`)。
-
-SCAN src/ `applies_a_function_operand`
-  = src/ast/inline_llvm.rs: applies_a_function_operand -- 既定の宣言
-  = src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand -- `true`
-  = src/fixstd/builtin.rs: InlineLLVMUnionModBody::applies_a_function_operand -- `true`
-  = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::applies_a_function_operand -- `true`
-  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand -- `true`
-  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand -- `true`
-  = src/fixstd/builtin.rs: InlineLLVMArrayBorrowElementsBody::applies_a_function_operand -- `true`
-  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand -- `true`
-  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand -- `true`
-  = src/generator.rs: Generator -- 読み (develop mode の検査)
-  = src/generator.rs: Generator::apply_lambda -- 読み
-  = src/rc_ir/borrow.rs: binds_a_destructor -- 読み
-  = src/rc_ir/borrow.rs: funcs_observing_uniqueness -- 読み
-  = src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner -- 読み
-
-**前提 相殺する形の順序** --- 1 つの節点の実行の生成コードが、`Generator::retain` か
-`Generator::build_retain` の呼び出しでその活性化の義務集合へ入る参照を作り (`<1>0e` の (a) の形)、
-同じ節点の実行の中の `Generator::release` の呼び出しがその参照を処分するとき、その `release` の
-呼び出しはその retain の呼び出しより後に立つ。**この形の対は 1 対 1 である** -- 1 つの節点の実行が
-この形の対を 2 つ以上持つときも、各 `release` は自分の相手の `retain` を持つ。
-
-**果たすのは生成コードである。** D24 の「段の中で相殺するもの」の箇条が、その代表として
-`InlineLLVMWithRetainedFunctionBody` について「オペランドを retain し、適用の後に release する」と
-書く。**この前提が要るのは、その箇条が順序を 1 つの op について書き、`Generator::retain`・
-`Generator::build_retain`・`Generator::release` の呼び出しを出す生成コードの全体について書いて
-いないからである。**
-
 ## 2. 証明
 
 **P28.** ASSUME NEW `P`: プログラムであって次の 3 つを満たすもの、
@@ -555,9 +506,9 @@ SCAN src/ `applies_a_function_operand`
     粒度で `Obl` を勘定する段は、この 2 つを数える。**」), D25 (1 番目の持ち手)
   `<2>2a.` 第 1 の形の release は、同じ節点の実行の中で retain より後に立つ。D24 の箇条は順序を
     `InlineLLVMWithRetainedFunctionBody` について書くので、その代表の側から類の全体へ渡すのは
-    `前提 相殺する形の順序` である。**節点の実行が 2 つ以上の段にまたがることがある** -- その op が
+    <ref id=8ee6ff0/> である。**節点の実行が 2 つ以上の段にまたがることがある** -- その op が
     オペランドを適用するとき、D24 の (E2) の段はその活性化を作るところで区切られるからである。
-    BY `<2>1`, `<2>2`, 前提 相殺する形の順序,
+    BY `<2>1`, `<2>2`, <ref id=8ee6ff0/>,
     <ref id=e3436e8/> の (E2) (「**この段は活性化を 1 つ作るごとに区切られる。** `a` はその活性化が終わるまで
     中断中であり、(E4) の後、同じ位置で次の段を実行する」)
     `CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate` (
@@ -893,7 +844,7 @@ SCAN src/ `applies_a_function_operand`
       対応は 1 対 1 である。`<3>2` よりこの族で `Obl(a)` を動かすのは `<1>0e` の (a) の形だけで
       あり、その形では release が retain より後に立つ (`<1>0e` の (a))。1 つの節点の実行がこの形の
       対を 2 つ以上持つときも、対はそれぞれ自分の retain を持つ。
-      BY `<3>2`, `<1>0e`, 前提 相殺する形の順序
+      BY `<3>2`, `<1>0e`, <ref id=8ee6ff0/>
     `<3>3b.` 第 2 の族が `Obl(a)` から出す (α) は、どれも同じ族の入れる素動作より後に立つ。
       retain は `_dtor` の適用より前に立ち、`_dtor` の適用の返りは runner の適用より前に立ち
       (2 つ目の適用の入力は 1 つ目の結果である)、runner の適用の返りは `_value` の leaf への
@@ -1082,7 +1033,7 @@ SCAN src/ `applies_a_function_operand`
         (`<1>0e`)。(a) の形の retain と
         release は 1 対 1 で対をなし、release は同じ節点の実行の中で retain より後に立つ
         (`<1>0e` の (a))。よってその節点の実行が終わった切れ目で、この族は `Obl` に何も残さない。
-        BY `<1>0e`, 前提 相殺する形の順序
+        BY `<1>0e`, <ref id=8ee6ff0/>
       `<4>3.` 第 2 の族は、retain が作った参照を `_dtor` の適用へ渡し、2 つの返りでこの活性化へ戻し、
         最後にその結果を `o` の `_value` の leaf へ書き込む。(F) の解放はそれを起こした処分を含む段の
         中で終わるので、その節点の実行が終わった切れ目で、この族は `Obl` に何も残さない。
@@ -1578,12 +1529,12 @@ SCAN src/ `applies_a_function_operand`
       ものである。
       `<4>1.` この形の op について、`Obl(a)` から作られた活性化へ渡るオペランドの参照は `<3>1` が
         挙げるものである。D24 の (E2) が、この形の op の `Obl(a)` の動きを D9 の `Llvm` の行と A3 の
-        宣言が決めると述べる。この形の op がどれであるかは `前提 オペランドを適用する op の在りか` が
+        宣言が決めると述べる。この形の op がどれであるかは <ref id=c3c0aad/> が
         与え、既定は偽なので、そこに挙がらない op はこの形ではない。
         BY <ref id=e3436e8/> の (E2) の「オペランドを適用する」の段落 (「`Obl(a)` からオペランドの参照が離れる動きは
         D9 の `Llvm` の行が、結果の leaf に参照が生じる動きは A3 の宣言が決めるので、上の表の行は
         そのままである」), A3, D9 (消費の表の `Llvm` の行), `<3>1`,
-        前提 オペランドを適用する op の在りか
+        <ref id=c3c0aad/>
       `<4>2.` 渡す値がオペランドでない場合を、D24 の (E2) は `InlineLLVMFixBody` で名指す -- 1 回目の
         適用が渡す `fix(f)` はこの節点が組み立てた値でありどのオペランドでもないこと、そしてこの節点が
         活性化を 2 つ作ることである。2 回目の適用の callee は 1 回目の結果であり、その参照は

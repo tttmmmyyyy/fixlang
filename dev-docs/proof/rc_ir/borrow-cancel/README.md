@@ -975,6 +975,10 @@ inhabited な全 boxed leaf の参照 -- が `Obl(b)` を離れ、`b` を作っ�
 
 **この 2 つの形は (E2) の段が中で出す素動作の分類である。(E9) の retain はどちらでもない。** <!--#7bbe29e-->
 (E9) は段そのものが参照を 1 つ作る段であり、その持ち手は環境である (A17 (ii-c))。
+**名指す値の inhabited (D16) な boxed leaf がどれも計数下 (D26) でない retain も、この 2 つのどちらでも <!--#4b0f1f1-->
+ない。** その retain は参照を作らないので、`H` も `Obl` も持ち手の単位も動かさない。この形の代表は、
+`Generator::get_scoped_obj` が `retain_on_read` に従って出す retain のうち、名指す値がグローバル状態の
+オブジェクトを指すものである。
 **参照を作る動作を数え上げる段は、この 2 つの形に (E9) を足して 3 つを見る。** <!--#ff4ead2-->
 **段の種を足したら、参照を作る動作の在りかを数え上げる節にも行を足す** -- 第 10 節が <!--#7ef4ddf-->
 「新しい項を仮定に置いたら、その項が名指す定義の数え上げに行を足す」と書く規律の、向きを逆にした形である。
@@ -2233,6 +2237,41 @@ SCAN src/ `.add_tycons(`
   = src/optimization/defunctionalize_fix.rs: run_one -- 鍵は `#FixCap@` 始まり
   = src/optimization/closure_specialization.rs: lift_all -- 鍵は `#CapList@` 始まり
   = src/optimization/closure_specialization.rs: realize_all -- 鍵は `#CapList@` 始まり
+
+**A29 (オペランドを適用する op の在りか)** -- 果たす者: 下の `SCAN`。 <!--#c3c0aad-->
+`LLVMGen::applies_a_function_operand` を override する項目は、下の走査が挙げるもので尽きる。
+既定は `false` である (`CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand`)。
+override する各項目は `true` を返す。
+
+**走査は字面の上位近似なので、一覧には読みだけの項目も入る。** どの項目が override でどれが読みかは、 <!--#f3ddd51-->
+`--` の後に書く。
+
+SCAN src/ `applies_a_function_operand`
+  = src/ast/inline_llvm.rs: applies_a_function_operand -- 既定の宣言
+  = src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand -- `true`
+  = src/fixstd/builtin.rs: InlineLLVMUnionModBody::applies_a_function_operand -- `true`
+  = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::applies_a_function_operand -- `true`
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand -- `true`
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand -- `true`
+  = src/fixstd/builtin.rs: InlineLLVMArrayBorrowElementsBody::applies_a_function_operand -- `true`
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand -- `true`
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand -- `true`
+  = src/generator.rs: Generator -- 読み (develop mode の検査)
+  = src/generator.rs: Generator::apply_lambda -- 読み
+  = src/rc_ir/borrow.rs: binds_a_destructor -- 読み
+  = src/rc_ir/borrow.rs: funcs_observing_uniqueness -- 読み
+  = src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner -- 読み
+
+**A30 (段の中で相殺する retain と release の順序)** -- 果たす者: コード生成。検査: 無し。 <!--#8ee6ff0-->
+1 つの節点の実行の生成コードが、`Generator::retain` か `Generator::build_retain` の呼び出しで
+その活性化の義務集合へ入る参照を作り、同じ節点の実行の中の `Generator::release` の呼び出しが
+その参照を処分するとき、その `release` の呼び出しはその `retain` の呼び出しより後に立つ。
+**この形の対は 1 対 1 である** -- 1 つの節点の実行がこの形の対を 2 つ以上持つときも、各 `release` は <!--#9cabcf6-->
+自分の相手の `retain` を持つ。
+
+**D24 の「段の中で相殺するもの」の箇条が順序を書くのは 1 つの op についてである。** この仮定は同じ <!--#a3a3323-->
+順序を、`Generator::retain`・`Generator::build_retain`・`Generator::release` の呼び出しを出す
+生成コードの全体について言う。
 
 **A25 (骨格は `Retain`/`Release` を持たない)** -- 果たす者: lowering と `simplify`。検査: <!--#d80dde9-->
 `RcInserter::insert_into_expr_inner` の `panic!` (`CODE src/rc_ir/rc_insert.rs:

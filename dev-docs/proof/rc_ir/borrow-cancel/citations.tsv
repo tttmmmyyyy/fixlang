@@ -4,7 +4,7 @@ src/ast/export_statement.rs	ExportStatement::implement	D/A,P26,P27,P28,P29,P30	5
 src/ast/export_statement.rs	ExportedFunctionType::validate	P26	0a4f1eb99d50
 src/ast/expr.rs	ExprNode::calc_free_vars	A21	ac95e2934241
 src/ast/inline_llvm.rs	LLVMGen	P18c,P19,P20,P21,P22,P23,P24	5ae1e7679158
-src/ast/inline_llvm.rs	LLVMGen::applies_a_function_operand	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P28,P29,P30	f689627e06f1
+src/ast/inline_llvm.rs	LLVMGen::applies_a_function_operand	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P29,P30	f689627e06f1
 src/ast/inline_llvm.rs	LLVMGen::assuming_local	P26	09fefe7e9a4c
 src/ast/inline_llvm.rs	LLVMGen::assuming_unique	P26	53d511ed234b
 src/ast/inline_llvm.rs	LLVMGen::borrows_operand	D/A,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P30,P31,A19	24aaf8c4764a
@@ -170,13 +170,13 @@ src/elaboration/typecheck.rs	TypeCheckContext::unify_tyvar	P26	0a6324d9bdcc
 src/ffi.rs	CSignature::get_or_declare_in_module	D/A,P27,P29,P30	65818f246a29
 src/ffi.rs	CSignature::of_ffi_export	P26	ed5fe25c470a
 src/ffi.rs	c_boundary_tycon	D/A,P26,P28	2c5a42247af5
-src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked	D/A,P26,P27,P28,P29,P30	264240c82453
-src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::generate	P26	4058fb759569
+src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked	D/A,P26,P27,P29,P30	264240c82453
+src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::generate	P26,P28	4058fb759569
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMArrayAppendValueCapacityUnchecked	P27,P29,P30	69e93e01b3ee
 src/fixstd/builtin.rs	InlineLLVMArrayAppendValueCapacityUnchecked::generate	P26	e7bd915f4209
 src/fixstd/builtin.rs	InlineLLVMArrayAppendValueCapacityUnchecked::result_prov	P1,P2,P26,P27,P29,P30	1937952562a5
-src/fixstd/builtin.rs	InlineLLVMArrayBorrowElementsBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
+src/fixstd/builtin.rs	InlineLLVMArrayBorrowElementsBody::applies_a_function_operand	P26	2aaa91f7d7c6
 src/fixstd/builtin.rs	InlineLLVMArrayBorrowElementsBody::generate	P26	dd3d00a36b45
 src/fixstd/builtin.rs	InlineLLVMArrayCopyCapacityBoundsUnchecked::generate	P26	253fe7375d87
 src/fixstd/builtin.rs	InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov	P1,P2,P26,P31,A19	1937952562a5
@@ -187,13 +187,11 @@ src/fixstd/builtin.rs	InlineLLVMArrayIsStorageUniqueBody::generate	P26	e32a82903
 src/fixstd/builtin.rs	InlineLLVMArrayIsStorageUniqueBody::observes_uniqueness	P26	0dbb1939b295
 src/fixstd/builtin.rs	InlineLLVMArrayIsStorageUniqueBody::result_prov	P1,P2,P26	3a2ad73dad20
 src/fixstd/builtin.rs	InlineLLVMArrayLitBody::result_prov	P1,P2,P26	1937952562a5
-src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsInternalBody	P28	7d2138c6aa7b
-src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
-src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsInternalBody::generate	P26	382deafde32c
+src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand	P26	2aaa91f7d7c6
+src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsInternalBody::generate	P26,P28	382deafde32c
 src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsInternalBody::result_prov	P1,P2,P26	7a94c5a74bc6
-src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody	P28	4ad0574bdb64
-src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
-src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody::generate	P26	ed3f7d13a3bf
+src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand	P26	2aaa91f7d7c6
+src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody::generate	P26,P28	ed3f7d13a3bf
 src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody::result_prov	P1,P2,P26	ca9cb2866793
 src/fixstd/builtin.rs	InlineLLVMArrayPunchBody::generate	P26	8150d01e25de
 src/fixstd/builtin.rs	InlineLLVMArrayPunchBody::result_prov	P1,P2,P26	d07c92323ade
@@ -207,13 +205,14 @@ src/fixstd/builtin.rs	InlineLLVMArraySwapBody::result_prov	P1,P2,P26	1937952562a
 src/fixstd/builtin.rs	InlineLLVMArrayTruncateBoundsUnchecked::generate	P26	2a0c62fb6cfd
 src/fixstd/builtin.rs	InlineLLVMArrayTruncateBoundsUnchecked::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMArrayUnsafeEmpty::result_prov	P1,P2,P26	1937952562a5
-src/fixstd/builtin.rs	InlineLLVMBoxedFromRetainedPtrIOS	D/A,P27,P28,P29,P30	0753dafffd25
+src/fixstd/builtin.rs	InlineLLVMBoxedFromRetainedPtrIOS	D/A,P27,P29,P30	0753dafffd25
 src/fixstd/builtin.rs	InlineLLVMBoxedToRetainedPtrIOS	P7a,P7d,P7e	81c3e6ff4c50
 src/fixstd/builtin.rs	InlineLLVMCaptureProjectBody	D/A,T	8c11581716e7
 src/fixstd/builtin.rs	InlineLLVMDestructorMake::result_prov	P1,P2,P26	1937952562a5
-src/fixstd/builtin.rs	InlineLLVMFixBody	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P28,P29,P30	cfdea13e9329
-src/fixstd/builtin.rs	InlineLLVMFixBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
-src/fixstd/builtin.rs	InlineLLVMFixBody::generate_tail	P26,A21	b42d29e5682c
+src/fixstd/builtin.rs	InlineLLVMFixBody	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P29,P30	cfdea13e9329
+src/fixstd/builtin.rs	InlineLLVMFixBody::applies_a_function_operand	P26	2aaa91f7d7c6
+src/fixstd/builtin.rs	InlineLLVMFixBody::free_vars_mut	P28	451c87b47679
+src/fixstd/builtin.rs	InlineLLVMFixBody::generate_tail	P26,P28,A21	b42d29e5682c
 src/fixstd/builtin.rs	InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody	D/A,P27,P28,P29,P30	ed16bbacbef7
 src/fixstd/builtin.rs	InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody	D/A,P27,P28,P29,P30	99c077ade510
 src/fixstd/builtin.rs	InlineLLVMIntLit	P7a,P7d,P7e	2df5b751a4a6
@@ -244,8 +243,8 @@ src/fixstd/builtin.rs	InlineLLVMStructPunchBody	D/A	a5a8cbc33d20
 src/fixstd/builtin.rs	InlineLLVMStructPunchBody::arg_leaf_path	P1,P2,P7a,P7d,P7e	6ca1aea15f39
 src/fixstd/builtin.rs	InlineLLVMStructPunchBody::generate	P26	02f46185db92
 src/fixstd/builtin.rs	InlineLLVMStructPunchBody::result_prov	P1,P2,P7a,P7d,P7e,P26	229df60797a4
-src/fixstd/builtin.rs	InlineLLVMStructSetBody	D/A,P27,P28,P29,P30	41d508563154
-src/fixstd/builtin.rs	InlineLLVMStructSetBody::generate	P26	2a6811908f6a
+src/fixstd/builtin.rs	InlineLLVMStructSetBody	D/A,P27,P29,P30	41d508563154
+src/fixstd/builtin.rs	InlineLLVMStructSetBody::generate	P26,P28	2a6811908f6a
 src/fixstd/builtin.rs	InlineLLVMStructSetBody::result_prov	P1,P2,P7a,P7d,P7e	3c84bfe9e211
 src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody	D/A	2fecbef2ffeb
 src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody::generate	D/A	69c9033e7624
@@ -255,20 +254,18 @@ src/fixstd/builtin.rs	InlineLLVMUnionAsBody::borrows_operand	P31,A19	9cf13ce7dc5
 src/fixstd/builtin.rs	InlineLLVMUnionAsBody::free_vars_mut	P1,P2	09050cb74009
 src/fixstd/builtin.rs	InlineLLVMUnionAsBody::result_prov	D/A,P1,P2,P7a,P7d,P7e,P26,P31,A19	c6fd4d8d28d7
 src/fixstd/builtin.rs	InlineLLVMUnionAsBody::variant_index	P1,P2	d9866f31d5fe
-src/fixstd/builtin.rs	InlineLLVMUnionModBody	P27,P28,P29,P30	ff7be511a395
-src/fixstd/builtin.rs	InlineLLVMUnionModBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
-src/fixstd/builtin.rs	InlineLLVMUnionModBody::generate	D/A,P26	7ba2a3e62623
-src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedIOSInternalBody	P28	5d0f9ec86f0b
-src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
-src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedIOSInternalBody::generate	P26	1fb66c7b9b98
+src/fixstd/builtin.rs	InlineLLVMUnionModBody	P27,P29,P30	ff7be511a395
+src/fixstd/builtin.rs	InlineLLVMUnionModBody::applies_a_function_operand	P26	2aaa91f7d7c6
+src/fixstd/builtin.rs	InlineLLVMUnionModBody::generate	D/A,P26,P28	7ba2a3e62623
+src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand	P26	2aaa91f7d7c6
+src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedIOSInternalBody::generate	P26,P28	1fb66c7b9b98
 src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedIOSInternalBody::result_prov	P1,P2,P26	f50a6d5f0e0c
-src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedInternalFunctionBody	P28	62e13f1a49ae
-src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
-src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedInternalFunctionBody::generate	P26	1d2155c193ce
+src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand	P26	2aaa91f7d7c6
+src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedInternalFunctionBody::generate	P26,P28	1d2155c193ce
 src/fixstd/builtin.rs	InlineLLVMUnsafeMutateBoxedInternalFunctionBody::result_prov	P1,P2,P26	2986ab52e872
-src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody	P27,P28,P29,P30	b0bdbfa04ee3
-src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
-src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody::generate	P26	50b1a36d06f9
+src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody	P27,P29,P30	b0bdbfa04ee3
+src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody::applies_a_function_operand	P26	2aaa91f7d7c6
+src/fixstd/builtin.rs	InlineLLVMWithRetainedFunctionBody::generate	P26,P28	50b1a36d06f9
 src/fixstd/builtin.rs	PUNCHED_STRUCT_FIELD	P1,P2	aba96959fc58
 src/fixstd/builtin.rs	apply_io_act_to_data_ptr	P26,P28	d938bb5ef06b
 src/fixstd/builtin.rs	array_append_capacity_unchecked	P26	acd612ac4f7f
@@ -289,6 +286,7 @@ src/fixstd/builtin.rs	force_unique_or_assert	P26,P27,P29,P30	57ffe5ab0aa5
 src/fixstd/builtin.rs	force_unique_or_assert_with_hole	D/A,P26,P27,P29,P30	d343a7084e1d
 src/fixstd/builtin.rs	grow_size_array	P26	b9ef1d0f312f
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMArrayPunchBody	P3,P4	db626fb226dd
+src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS	P28	57cde69b0c03
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMCaptureProjectBody	P3,P4	230ff569a672
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeStructBody	P3,P4,P31,A19	c4dab170b90d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeUnionBody	P3,P4	5ba9e8112ba7
