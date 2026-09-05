@@ -569,7 +569,7 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
       `collect_bindings` は `bindings` と `var_tys` と `closure_targets` にしか入れない。
       `VarTable::body_only(b)` も `VarTable::empty()` から始め、`collect_bindings(b, ..)` だけを呼ぶ。
       `VarTable::empty()` の `param_tys` は空の写像である。
-  BY CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, VarTable::empty, collect_bindings
+  BY CODE src/rc_ir/ownership.rs: collect_bindings, VarTable::of, VarTable::body_only, VarTable::empty
 
 <1>2. QED
   `<1>1` より `param_tys` の鍵は `g` のパラメータ・capture の名前ちょうどであり、その値は `g` がその
@@ -681,7 +681,7 @@ namespace が `Std` で名前が `#FunPtr` で始まるとき、残りを `parse
       `Producer`・`Payload`・`Field`・`Join` の 6 種で、`Binding::Param` を 1 度も入れない。
   `collect_bindings` は `Let` の右辺で場合を分けて `Move` / `Llvm` / `Producer` / `Join` を入れ、`Match`
   のアームの payload 変数に `Payload` を、`Destructure` のフィールド変数に `Field` を入れる。
-  BY CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+  BY CODE src/rc_ir/ownership.rs: collect_bindings, VarTable::of, VarTable::body_only
 
 <1>3. 関数の版では 3 つは同値であり、そのとき `pty(x) = Some(ty(x))` である。
   `<1>1` よりこの版の `vars` は `VarTable::of` がその版の `RcFunc` から作った表である。`<1>2` より
@@ -1461,8 +1461,8 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
       `first.clone()`) だけである。どの作り方に入るかは鍵から決まる -- `Binding::Llvm` の腕の分かれ目
       だけが `decl = gen.result_prov(rty, arg_tys, type_env)` を読み、A3 より `result_prov` は
       決定的だからである。
-  BY <ref id=e11772a/>, CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under, Origin::of_candidates,
-     as_arg_projection
+  BY <ref id=e11772a/>, CODE src/rc_ir/ownership.rs: origin_inner, origin_from_leaves_under,
+     as_arg_projection, Origin::of_candidates
 
 <1>2. `Origin::Exactly(p)` について `act = cand = {p}` であり、`Origin::Join { identity, candidates }`
       について `cand = candidates`、`act = candidates ∪ {identity}` である。
@@ -1535,7 +1535,7 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
   `param_tys` にその型を入れる。`collect_bindings` は `bindings` と `var_tys` と `closure_targets` にしか
   入れず、鍵を取り除かない。`VarTable::body_only` はパラメータ・capture の行を通らないので `param_tys` は
   空のままである。
-  BY CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, VarTable::empty, collect_bindings
+  BY CODE src/rc_ir/ownership.rs: collect_bindings, VarTable::of, VarTable::body_only, VarTable::empty
 
 <1>2. `<1>1` のパラメータ・capture の名前は、`collect_bindings` が記録する束縛名と異なる。
   `collect_bindings` が `bindings` に入れるのは、`Pre(V)` の `Let` の束縛変数、`Destructure` の
@@ -2198,7 +2198,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `Retain`/`Release` 節点の `path` も、名指す変数の型も、入力の本体のものと同じである。A2 より入力の
   `Retain`/`Release` の `path` は `units(ty(v))` の元なので、借用版の節点についてもそうである。L6 より
   `under(ty(v), path) = [path]` である。
-  BY <ref id=8e3aff3/>, <ref id=e74af85/>, <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc, borrow_ify
+  BY <ref id=8e3aff3/>, <ref id=e74af85/>, <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: borrow_ify, RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc
 
 <1>4. `<1>2` と `<1>3` の `(v, u)` は、`V` の site (DEF site) である。
   `rewrite_inner` は `Pre(V)` の木を継続とアーム本体へ降りて歩くので、`<1>2` と `<1>3` の呼び出しが
@@ -3385,8 +3385,8 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
      <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=e74af85/>, <ref id=63eadd9/>,
      CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
      CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
-     CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::generate, InlineLLVMIntLit::generate,
-     InlineLLVMBoxedToRetainedPtrIOS, boxed_to_retained_ptr_ios,
+     CODE src/fixstd/builtin.rs: boxed_to_retained_ptr_ios, InlineLLVMMakeUnionBody::generate,
+     InlineLLVMIntLit::generate, InlineLLVMBoxedToRetainedPtrIOS,
      CODE src/object.rs: create_obj, ty_to_object_ty
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空である。
@@ -3628,8 +3628,8 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
      <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=e74af85/>, <ref id=63eadd9/>,
      CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
      CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
-     CODE src/fixstd/builtin.rs: InlineLLVMIntLit::generate, InlineLLVMBoxedToRetainedPtrIOS,
-     boxed_to_retained_ptr_ios,
+     CODE src/fixstd/builtin.rs: boxed_to_retained_ptr_ios, InlineLLVMIntLit::generate,
+     InlineLLVMBoxedToRetainedPtrIOS,
      CODE src/object.rs: create_obj, ty_to_object_ty
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空であり、`f` は借用版を持ち、そこで
