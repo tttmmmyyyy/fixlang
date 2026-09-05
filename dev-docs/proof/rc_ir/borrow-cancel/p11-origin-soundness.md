@@ -198,6 +198,92 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 モジュールとその子孫のモジュールだけである。よってそのような項目の呼び出しと欄への書き込みは、その
 モジュールの中を数え上げれば尽きる。
 
+### 在りかの前提
+
+**コードのどこに何が在るかの数え上げは、段の中で行わない。** 段が自分で在りかを数え上げると、その
+数え上げには果たす者が居らず、検査するものも無い。**記号を名指す `CODE` の引用はその記号の本体しか
+与えないので、「ほかの記号はそれをしない」の側はそこから出ない。** 在りかは名前つきの前提として置き、
+`BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
+
+**果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
+`src/` の全体に走らせて、下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。走査は
+字面の上位近似なので、一覧には構成でなくパターンとしてその字面を持つ項目も入る。`#[cfg(test)]` の下の
+項目は走査が除く。項目の名前は走査が呼ぶ名前である -- 自由関数がその直前の `impl` の名前を冠して
+挙がる形を含む。
+
+**前提 `result_prov` の本体の在りか** --- `LLVMGen::result_prov` の本体が在る項目は次で尽きる。
+**そのどれもが、返す `Provenance` を `Provenance::uniform`・`Provenance::build_shape`・
+`Provenance::uniform_bottom`・`Provenance::fresh_under`・`replaced_field_prov` のいずれかを第 1 引数
+`result_ty` に対して呼んで作る。** どれを呼ぶかは `--` の後に書く。
+
+SCAN src/ `fn result_prov`
+  = src/ast/inline_llvm.rs: result_prov -- trait の既定の本体。`Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMStringBuf::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayUnsafeEmpty::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayTruncateBoundsUnchecked::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendValueCapacityUnchecked::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArraySetCapacityBoundsUnchecked::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayGrowSizeBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArraySetBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArraySwapBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayPunchBody::result_prov -- `Provenance::fresh_under`
+  = src/fixstd/builtin.rs: InlineLLVMPunchedArrayPlugBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov -- 容器が boxed なら `Provenance::uniform`、unbox なら `Provenance::build_shape`
+  = src/fixstd/builtin.rs: InlineLLVMMakeStructBody::result_prov -- `Provenance::build_shape`
+  = src/fixstd/builtin.rs: InlineLLVMArrayLitBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMStructPunchBody::result_prov -- 穴の開いた成分が boxed なら `Provenance::fresh_under`、unbox なら `Provenance::build_shape`
+  = src/fixstd/builtin.rs: InlineLLVMStructPlugInBody::result_prov -- `replaced_field_prov`
+  = src/fixstd/builtin.rs: InlineLLVMStructSetBody::result_prov -- `replaced_field_prov`
+  = src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov -- `Provenance::build_shape`
+  = src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov -- scrutinee が boxed なら `Provenance::uniform`、unbox なら `Provenance::build_shape`
+  = src/fixstd/builtin.rs: InlineLLVMUndefinedInternalBody::result_prov -- `Provenance::uniform_bottom`
+  = src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayIsStorageUniqueBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::result_prov -- `Provenance::fresh_under`
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::result_prov -- `Provenance::fresh_under`
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::result_prov -- `Provenance::fresh_under`
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::result_prov -- `Provenance::fresh_under`
+  = src/fixstd/builtin.rs: InlineLLVMDestructorMake::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody::result_prov -- `Provenance::uniform`
+
+**前提 `Origin::Exactly` を作る式の在りか** --- `Origin::Exactly` の字面が在る項目は次で尽きる。
+`Origin::Join` を作る式の在りかは L1 が述べる。
+
+SCAN src/ `Origin::Exactly(`
+  = src/rc_ir/ownership.rs: Origin::identity -- `match` のパターンであって構成ではない
+  = src/rc_ir/ownership.rs: Origin::candidates -- `match` のパターンであって構成ではない
+  = src/rc_ir/ownership.rs: Origin::of_candidates -- `1 =>` の腕が構成する
+  = src/rc_ir/ownership.rs: origin_inner -- 閉包 `here` が構成する
+  = src/rc_ir/ownership.rs: origin_from_leaves_under -- `reached.push(Origin::Exactly(here.clone()))`
+
+**前提 `get_scoped_value` を呼ぶ式の在りか** --- `get_scoped_value` の字面が在る項目は次で尽きる。
+
+SCAN src/ `get_scoped_value(`
+  = src/generator.rs: get_scoped_value -- 定義
+  = src/generator.rs: get_scoped_obj -- 呼び出し
+  = src/generator.rs: get_scoped_obj_noretain -- 呼び出し
+
+**前提 `build_capture_project` を呼ぶ式の在りか** --- `build_capture_project` の字面が在る項目は
+次で尽きる。
+
+SCAN src/ `build_capture_project(`
+  = src/generator.rs: build_capture_project -- 定義
+  = src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody::generate -- 呼び出し
+
+**前提 `unsafe impl` の在りか** --- `unsafe impl` の字面が在る項目は無い。よって `Send` と `Sync` を
+手で実装した型はこのクレートに無く、`EXT auto trait と共有` の 2 の但し書きに当たる型も無い。
+
+SCAN src/ `unsafe impl`
+
+**前提 `VarTable` の `origins` の欄に触れる式の在りか** --- その欄は `pub` を持たないので、それを
+名指せるのは `src/rc_ir/ownership.rs` とその子孫のモジュールだけである (`EXT 可視性`)。欄アクセスの
+字面が在る項目は次で尽き、その欄を持つ `VarTable` の値を組み立てるのは `VarTable::empty` である。
+
+SCAN src/ `.origins`
+  = src/rc_ir/ownership.rs: Origin::origin -- 自由関数 `origin` が直前の `impl Origin` の名前を冠して挙がる。`borrow()` の読みと `borrow_mut().insert(..)` の書きの 2 行
+
 ## 2. D9 の「移動」と `origin_inner` の再帰の辺 <!--#747d82d-->
 
 **DEF 再帰の辺**。鍵 `(v, q)` から鍵 `(v', q')` への**再帰の辺**とは、
@@ -328,21 +414,20 @@ A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返
   <2>2. `result_prov` の呼び出しは値を返し (A3)、返す `Provenance` は、`Provenance::uniform`、
         `Provenance::build_shape`、`Provenance::uniform_bottom`、`Provenance::fresh_under`、
         `replaced_field_prov` のいずれかを `result_ty` に対して呼んだ値である。
-        **在りかは述語で決める** -- `LLVMGen::result_prov` の既定の本体と、`src/fixstd/builtin.rs` を
-        `fn result_prov` で走査して得る本体の全体である。その個数は A3 が数える。**`CODE` は
-        5 つの構成子の代表を挙げる** -- 全部を並べた一覧は、op が 1 つ増えるたびに古くなる。
-    BY <ref id=e11772a/> (`result_prov` の呼び出しは abort せず `Provenance` を返す。「`impl LLVMGen for` は 78 個
-       あり、`result_prov` を override するのは 29 個、その 29 個が leaf に置く集合はすべて要素数 0 か
-       1 である (`sole_origin` / `Set::default()` / `uniform` / `uniform_bottom` / `fresh_under` の
-       いずれかで作られる)」),
+        **在りかを与えるのは走査である** -- `LLVMGen::result_prov` の本体が在る項目を第 1 節の前提が
+        挙げ、その各項目が 5 つのどれを呼ぶかもそこに書いてある。
+    BY <ref id=e11772a/> (`result_prov` の呼び出しは abort せず `Provenance` を返す),
+       前提 `result_prov` の本体の在りか,
        CODE src/ast/inline_llvm.rs: LLVMGen::result_prov (既定の本体は `Provenance::uniform` を
        `result_ty` に対して呼ぶ),
-       CODE src/fixstd/builtin.rs: InlineLLVMStringBuf (`Provenance::uniform` の代表),
-       CODE src/fixstd/builtin.rs: InlineLLVMMakeStructBody (`Provenance::build_shape` の代表),
-       CODE src/fixstd/builtin.rs: InlineLLVMUndefinedInternalBody (`Provenance::uniform_bottom` の
-       代表),
-       CODE src/fixstd/builtin.rs: InlineLLVMArrayPunchBody (`Provenance::fresh_under` の代表),
-       CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody (`replaced_field_prov` の代表),
+       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMMakeStructBody (`result_prov` は
+       `Provenance::build_shape` を `result_ty` に対して呼ぶ),
+       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMUndefinedInternalBody (`result_prov` は
+       `Provenance::uniform_bottom` を `result_ty` に対して呼ぶ),
+       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMArrayPunchBody (`result_prov` は
+       `Provenance::fresh_under` を `result_ty` に対して呼ぶ),
+       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStructSetBody (`result_prov` は
+       `replaced_field_prov` に `result_ty` を渡す),
        CODE src/fixstd/builtin.rs: replaced_field_prov (`result_ty` が boxed なら
        `Provenance::uniform`、そうでなければ `Provenance::build_shape`)
   <2>3. <2>2 の 5 つはいずれも `LeafMap::build_shape(result_ty, ..)` を通り、鍵の集合を変えない。
@@ -516,16 +601,24 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
          呼ばれる鍵から到達する鍵の上でしか言えず、L16 は鍵の第 1 成分が `B` に現れる `RcVar` の
          名前であることを前提に置く。`<1>0` より、その鍵から到達する鍵の第 1 成分も `B` に現れる
          `RcVar` の名前である。
-    <3>1. `Origin` の値を作る式は 3 つある -- `origin_inner` の `here()`、`origin_from_leaves_under` の
-          `Origin::Exactly(here.clone())`、そして `Origin::of_candidates` である。
-      BY <ref id=d6c2508/> (`Origin::Join { .. }` を作る式は `of_candidates` の中の 1 か所だけであり、どの `Origin` の
+    <3>1. `#[cfg(test)]` のモジュールを除くと、`Origin` の値を作る式は 3 つである --
+          `origin_inner` の `here()`、`origin_from_leaves_under` の `Origin::Exactly(here.clone())`、
+          そして `Origin::of_candidates` である。**除くのは、そのモジュールの項目が製品のコードの
+          実行路に無いからである** -- 第 1 節が `VarTable::empty` の呼び出し元について同じ形で
+          除いている。
+      BY 前提 `Origin::Exactly` を作る式の在りか (走査は `#[cfg(test)]` の下の項目を除く。
+         挙がる 5 項目のうち `Origin::identity` と `Origin::candidates` の 2 つはパターンであって
+         構成ではない),
+         <ref id=d6c2508/> (`Origin::Join { .. }` を作る式は `of_candidates` の中の 1 か所だけであり、どの `Origin` の
          値も `Exactly` か `of_candidates` が作った `Join` かその複製である),
          CODE src/rc_ir/ownership.rs: origin_inner (`here` は
          `Origin::Exactly((var.clone(), path.to_vec()))` を返す閉包である),
          CODE src/rc_ir/ownership.rs: origin_from_leaves_under
          (`reached.push(Origin::Exactly(here.clone()))`),
          CODE src/rc_ir/ownership.rs: Origin::of_candidates (`1 =>` の腕が `Origin::Exactly` を、
-         `_ =>` の腕が `Origin::Join` を作る)
+         `_ =>` の腕が `Origin::Join` を作る),
+         CODE src/rc_ir/ownership.rs: Origin::identity, Origin::candidates (`Origin::Exactly` を
+         `match` のパターンとして持つ)
     <3>1a. 前の 2 つが作る `Exactly` の `VarPath` は、その呼び出し自身の `(var, path)` である。
       BY CODE src/rc_ir/ownership.rs: origin_inner (`here` の本体、および
          `origin_from_leaves_under` に渡す `here_identity` が `(var.clone(), path.to_vec())` であること),
@@ -664,8 +757,9 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
 
 以下の命題は、この文書のすべての証明が使う。よって第 2 節と第 3 節の証明もこれらを引く。
 
-**この節の命題のうち第 2 節・第 3 節の命題を引くのは L14 だけであり、それが引くのは L6 と
-第 2 節の `DEF 再帰の辺` である。** L14 はこの節の L10 (a') も引く。L15 の脇も L6 を読む。
+**この節の命題のうち第 2 節・第 3 節のものへ届くのは L14 だけであり、その `BY` が引くのは第 2 節の
+`DEF 再帰の辺` である。** L14 の脇は L6 の表も読む -- E5 と E7 の辺が path の先頭に添字を足すことが
+そこから来る。L14 はこの節の L10 (a') も引く。L15 の脇も L6 を読む。
 残る L1 から L5、L10 から L13、L15、L16 が引くのは、README の定義・仮定・命題 (P2、P2a)、コード、
 `EXT` の外部の結果、およびこの節の先行する命題である -- L2 は L1 を、L3 は L2 を、L4 は L2 と L3 を、
 L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引く。**循環は生じない** -- L6 の
@@ -877,7 +971,8 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
         `add_global_object` が登録するグローバルのアクセサが返す値である。
     **数え上げるのは名前から値を引く関数であって、それを呼ぶファイルではない。** 名前から
     `ScopedValue` を引くのは `get_scoped_value` だけであり、それを呼ぶのは `get_scoped_obj` と
-    `get_scoped_obj_noretain` の 2 つだけである (`get_scoped_obj_field` は前者を呼ぶ)。**`Llvm` 節点の
+    `get_scoped_obj_noretain` の 2 つだけである -- 第 1 節の前提がその走査である
+    (`get_scoped_obj_field` は前者を呼ぶ)。**`Llvm` 節点の
     オペランドはこの 3 つを `builtin.rs` の側から通る** -- `codegen.rs` の `RcRhs::Llvm` の腕は
     `llvm_gen.generate_tail(..)` を呼ぶだけで、オペランドを読むのは op の生成コードだからである。
     D6 より (v-3) の名前は `Llvm` のオペランドとしても現れうるので、この道も数える。どちらの側でも
@@ -890,6 +985,8 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
     BY <2>1, README の第 4 節 (「**コード生成が `expect` や `unreachable!` で止まる形も、
        `develop_mode` の門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の
        活性化は存在しない。」),
+       前提 `get_scoped_value` を呼ぶ式の在りか,
+       前提 `build_capture_project` を呼ぶ式の在りか,
        CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
        Generator::get_scoped_obj_field (`get_scoped_obj_field` は `get_scoped_obj` を呼ぶ。この 3 つに
        名前を渡す呼び出しを `src/` 全体で数えると、`src/rc_ir/codegen.rs` に 12 か所、`Llvm` 節点の
@@ -902,8 +999,8 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
        `src/ast/export_statement.rs` と `src/build/build_object_files.rs` -- は環境 (<ref id=243ae2c/>) の側で
        あって、本体の節点ではない),
        CODE src/generator.rs: Generator::build_capture_project,
-       CODE src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody (`gc.build_capture_project(..)` を
-       呼ぶ唯一の場所である),
+       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMCaptureProjectBody (`generate` が
+       `gc.build_capture_project(..)` を呼ぶ),
        CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_rhs,
        Generator::eval_rc_match (`RcExpr::Let` の `RcRhs::Llvm` の腕は `llvm_gen.generate_tail` を
        呼び、オペランドを自分では読まない),
@@ -917,7 +1014,11 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
        CODE src/generator.rs: Generator::declare_program_global (`global_types` に無い名前には
        `None` を返す。在るとき、`ty.is_funptr()` なら
        `declare_lambda_function` を返し、そうでなければアクセサ関数を作って `add_global_object` に
-       登録する), CODE src/generator.rs: Generator::add_global_object,
+       登録する),
+       CODE src/generator.rs: Generator::declare_lambda_function (`fn_ty.is_funptr()` のとき、
+       作った関数を `self.add_global_object(name.clone(), func, fn_ty.clone())` で登録してから返す。
+       これが funptr の枝で `declared_globals` の欄を書く者である),
+       CODE src/generator.rs: Generator::add_global_object,
        CODE src/generator.rs: ValueAccessor::get (`is_funptr` の枝は `fun.as_global_value()` を、
        そうでない枝はアクセサの呼び出しの結果を、その名前の値とする)
   <2>3. QED
@@ -1015,6 +1116,9 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
          `ScopedValue` を返し、無ければ `declare_program_global` で用意してからその欄を返す),
          CODE src/generator.rs: Generator::declare_program_global (`ty.is_funptr()` の枝が用意するのは
          その名前の 1 つの関数である),
+         CODE src/generator.rs: Generator::declare_lambda_function (`fn_ty.is_funptr()` のとき、
+         作った関数を `add_global_object` で `declared_globals` へ登録してから返す。
+         `declare_program_global` の funptr の枝はこの関数を呼んで戻るので、欄を書くのはここである),
          CODE src/generator.rs: Generator::add_global_object (`declared_globals` へ入れるのはここだけで
          あり、同じ名前を 2 度入れようとすると `panic_with_msg` で止まる。その `panic_with_msg` は
          `develop_mode` の門を持たないので、README の第 4 節が「**検査して診断を出す。**」と呼ぶ段に
@@ -1073,8 +1177,14 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
            その関数を旗 `InitFlag#<symbol>` とともに `pthread_once` へ渡す。旗の型と初期値は
            `pthread_once_init_flag_type` と `pthread_once_init_flag_value` である。旗は記号ごとに
            1 つである -- 記憶域を持たない単位はそれを `External` で宣言し、持つ単位が定義する),
-           CODE src/fixstd/runtime.rs: build_pthread_once_function (`RUNTIME_PTHREAD_ONCE` は
-           libc の `pthread_once` である)
+           CODE src/generator.rs: Generator::call_runtime (名前で `module` から関数を引き、その関数
+           への `build_call` を出す。よって `call_runtime(RUNTIME_PTHREAD_ONCE, ..)` はその名前の
+           関数の呼び出しである),
+           CODE src/fixstd/runtime.rs: RUNTIME_PTHREAD_ONCE (定数の値は `"pthread_once"` であり、
+           その doc が libc の `pthread_once` を名指す),
+           CODE src/fixstd/runtime.rs: build_pthread_once_function (その名前の関数を
+           `module.add_function` で宣言する。本体を持たないので、呼び出しに着くのは libc の側の
+           定義である)
       <4>2a. `config.threaded` が偽のビルドでは、その store が走るのは旗 `InitFlag#<symbol>` を 0 と
              読んだアクセサの実行の中だけであり、旗は一度 0 でなくなれば以後 0 に戻らない。
              **アクセサは入口の基本ブロックで真っ先に旗をロードする** -- その読みより前にアクセサは
@@ -1305,7 +1415,7 @@ leaf `λ` が D8 の意味の参照を持つことと、その leaf が指すオ
 持つ参照について述べる。(v-3) のときスロットは無いが、値の leaf は在るので、言明はそのまま読める。
 
 **A5 の配列の記憶域の例外は、この命題に当たらない。** その例外が読み替えるのは `#ArrayStorage` の
-オブジェクトが**保持する**参照の単位 -- leaf ではなく `0` から `size - 1` の要素の位置 -- であって、
+オブジェクトが**保持する**参照の単位 -- leaf ではなくその記憶域の各スロット -- であって、
 D25 の 2 つ目の持ち手の数え方である。この命題が数えるのは変数の値の leaf が持つ参照であり、`Array` にも
 `#ArrayStorage` にも `boxed_leaf_paths` が返す leaf は 1 つである (A5)。
 
@@ -1357,10 +1467,45 @@ D25 が定めるのがオブジェクトからオブジェクトへの到達だ�
       グローバルのアクセサが返す値である。
   BY <1>1a, <ref id=49da857/> (d)
 <1>3. 型が `is_funptr` のとき、`ty(v)` は boxed leaf を持たない。よって主張は空虚である。
-  BY <ref id=83d98e9/> (束縛を持たない `RcVar` の型は、その名前の記号の型である), <ref id=0594f24/> の第 1 の規則
-     (`is_fully_unboxed` が真の型は leaf を持たない),
-     CODE src/ast/types.rs: TypeNode::is_fully_unboxed (`is_funptr` の型に真を返す),
-     CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (`is_fully_unboxed` の型で走査が `return` する)
+  <2>1. `ty(v)` の最上位の tycon `tc` は、名前空間が `Std` の 1 段であって名前が `#FunPtr` で始まる。
+        よってその tycon は `bulitin_tycons()` が置く鍵の 1 つであり、`type_env.tycons()` がその鍵の
+        下に持つ項目は `make_funptr_tycon(n)` の項目 -- `is_unbox` が真、`variant` が
+        `TyConVariant::Primitive` であるもの -- である。
+    BY <ref id=8412761/> (プログラムに現れる型は ground であり、その tycon は `type_env` にある),
+       <ref id=3d4be43/> (`E.tycons()` の項目のうち鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは
+       `bulitin_tycons()` がその鍵の下に置いた項目であり、`tc.name.namespace` が `Std` の 1 段で
+       `tc.name.name` が `FUNPTR_NAME` で始まる鍵の項目がそうである),
+       CODE src/ast/types.rs: TypeNode::is_funptr, TypeNode::toplevel_tycon_satisfies
+       (`is_funptr` が真であるのは、最上位の tycon が在って `is_funptr_tycon` がそれに `Some` を
+       返すときである),
+       CODE src/fixstd/builtin.rs: is_funptr_tycon (`Some` を返すのは、名前空間が `Std` の 1 段で
+       あって名前が `FUNPTR_NAME` で始まるときである),
+       CODE src/fixstd/builtin.rs: bulitin_tycons (`make_funptr_tycon(arity)` の項目は
+       `is_unbox: true`、`variant: TyConVariant::Primitive` である),
+       CODE src/constants.rs: FUNPTR_NAME (`"#FunPtr"`)
+  <2>2. `is_box(ty(v))` は偽である。
+    BY <2>1, CODE src/ast/types.rs: TypeNode::is_unbox (`is_closure() || toplevel_tycon_info(type_env).is_unbox`
+       -- 前者が真なら `is_unbox` は真であり、偽なら後者を読む。後者は `type_env.tycons()` を最上位の
+       tycon で引いた項目の `is_unbox` の欄であり、<2>1 よりそれは真である),
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info (型の `TyConInfo` は、その最上位の
+       tycon で `type_env.tycons()` を引いた 1 つである),
+       CODE src/ast/types.rs: TypeNode::is_box (`!self.is_unbox(type_env)`)
+  <2>3. `is_closure(ty(v))` と `is_array(ty(v))` はどちらも偽である。
+    BY <2>1, CODE src/ast/types.rs: TypeNode::is_closure (最上位の tycon の名前が
+       `make_arrow_name_abs()` に等しいかどうか),
+       CODE src/ast/types.rs: TypeNode::is_array, TypeNode::toplevel_tycon_satisfies (`is_array` は
+       最上位の tycon が `is_array_tycon` を満たすかどうかである),
+       CODE src/fixstd/builtin.rs: is_array_tycon, make_array_name (`is_array_tycon` は tycon が
+       `make_array_tycon()` に等しいことであり、その名前は `Std` の下の `ARRAY_NAME` である),
+       CODE src/fixstd/builtin.rs: make_arrow_name_abs (`Std` の下の `ARROW_NAME` である),
+       CODE src/constants.rs: ARRAY_NAME, ARROW_NAME, FUNPTR_NAME -- `"Array"` も `"Arrow"` も
+       `"#FunPtr"` で始まらないので、<2>1 の `tc` の名前はそのどちらとも異なる
+  <2>4. QED
+    BY <2>2, <2>3, <ref id=83d98e9/> (束縛を持たない `RcVar` の型は、その名前の記号の型である), <ref id=0594f24/> の第 1 の規則
+       (`is_fully_unboxed` が真の型は leaf を持たない),
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed (`is_box`・`is_closure`・`is_array` が
+       いずれも偽で `is_funptr` が真の型に真を返す),
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (`is_fully_unboxed` の型で走査が `return` する)
 <1>4. そうでないとき `v` はグローバル値であり、`P` における `v` の値の inhabited な各 boxed leaf が
       指すオブジェクトはグローバル状態である。**言明が要るのは深さ 1 -- 値自身の各 boxed leaf -- だけ
       なので、この段はそこまでを述べる。**
@@ -1389,9 +1534,9 @@ D25 が定めるのがオブジェクトからオブジェクトへの到達だ�
        以後そのオブジェクトはグローバル状態であり、`P` における `v` の読みはその時点より後である
        (<2>1)。
 <1>5. QED
-  BY <1>1, <1>1a, <1>2, <1>3, <1>4, <ref id=eb90864/> -- <1>2 の 2 つの場合のうち funptr の側は <1>3 が空虚にし、
-     残る側は <1>4 が与える。<ref id=eb90864/> が、グローバル状態のオブジェクトを指す leaf は <ref id=ec8d1a0/> の意味の参照を
-     持たないことを与える。
+  BY <1>1, <1>1a, <1>2, <1>3, <1>4, <ref id=eb90864/> -- <1>2 の 2 つの場合のうち funptr の側は <1>3 が空虚にする。
+     残る側は <1>4 が与える。グローバル状態のオブジェクトを指す leaf が <ref id=ec8d1a0/> の意味の参照を
+     持たないことは <ref id=eb90864/> が与える。
 
 **L15 (鍵の範囲)**: `x` を `B` に現れる `RcVar` の名前とする。`x` は P2 の範囲にある -- すなわち <!--#0376e8d-->
 プログラムの束縛変数であるか、`vars.bindings` に束縛を持たない名前 (D6 の第 3 の形) である。よって
@@ -1460,12 +1605,21 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
 <1>1. `origin(K)` は、`vars.origins` に鍵 `K` が在ればその値の複製を返し、無ければ `origin_inner(K)` を
       走らせ、その返り値を鍵 `K` で `origins` に入れてから返す。`origins` から要素が取り除かれることは
       無い。
+  **読み書きの在りかを与えるのは走査である。** `origins` の欄は `pub` を持たないので、それを名指せる
+  のは `src/rc_ir/ownership.rs` とその子孫のモジュールだけであり (`EXT 可視性`)、欄アクセスの字面が
+  在る項目は第 1 節の前提が挙げる 1 つ -- `origin` -- だけである。欄を持つ値を組み立てるのは
+  `VarTable::empty` であり、そこが置くのは空の表である。よって `insert` はこの 1 か所、取り除く操作は
+  どこにも無い。
   BY CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow().get(&key)` が当たれば `known.clone()` を
      返し、そうでなければ `grow_stack(|| origin_inner(..))` の値を
-     `vars.origins.borrow_mut().insert(key, answer.clone())` で入れてから返す),
-     CODE src/rc_ir/ownership.rs: VarTable (`origins` は `RefCell<Map<VarPath, Origin>>` であり、
-     `VarTable::of` と `VarTable::body_only` が空で作る。読み書きするのは `origin` のこの 2 行だけで
-     あり、取り除く操作はどこにも無い),
+     `vars.origins.borrow_mut().insert(key, answer.clone())` で入れてから返す。この関数が
+     `origins` を名指すのはこの 2 行であり、除去を呼ぶ式は持たない),
+     前提 `VarTable` の `origins` の欄に触れる式の在りか, EXT 可視性,
+     CODE src/rc_ir/ownership.rs: VarTable (`origins` は `pub` の付かない
+     `RefCell<Map<VarPath, Origin>>` の欄である),
+     CODE src/rc_ir/ownership.rs: VarTable::empty (`origins: RefCell::default()` -- 空の表を置く),
+     CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only (どちらも `VarTable::empty` から
+     始める),
      <ref id=3e6b0e0/> (`grow_stack` は閉包をちょうど 1 回呼び、その返り値を返す)
 <1>1a. 1 つの `VarTable` の `origins` への `insert` は、時間で全順序に並び、その順序を保ったまま
        自然数で番号づけられる。
@@ -1482,9 +1636,9 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
   有限個であることが要る。`insert` はコンパイラのプロセスの実行の動作なので、EXT 動作の番号づけが
   それを与える。
   BY <1>1, EXT auto trait と共有 (1 から 5), EXT 動作の番号づけ,
-     CODE src/rc_ir/ownership.rs: VarTable (`origins` は `RefCell<Map<VarPath, Origin>>` の欄である。
-     `src/` 全体を `unsafe impl` で検索して当たる行は無いので、EXT auto trait と共有 の 2 の
-     但し書きに当たる型はこのクレートに無い),
+     前提 `unsafe impl` の在りか (EXT auto trait と共有 の 2 の但し書きに当たる型はこのクレートに
+     無い),
+     CODE src/rc_ir/ownership.rs: VarTable (`origins` は `RefCell<Map<VarPath, Origin>>` の欄である),
      CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow_mut().insert(..)` はこの関数の中の
      1 行であり、`vars` は共有参照である)
 <1>2. どの鍵についても `origin` の呼び出しは panic せずに答えを返し、停止する。
@@ -1685,8 +1839,8 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
 <1>0. (H) を仮定すると、`x` は DEF-0 の (v-1) か (v-2) であり、`(x, λ)` は `P` のスロット (D6) であって、
       ちょうど 1 つの D8 の参照を持つ。
   BY (H), <ref id=596d4c9/> (対偶 -- (v-3) の名前の値の inhabited な leaf はグローバル状態のオブジェクトを指す),
-     <ref id=88a06de/> (計数下とグローバル状態は排他である), 前提 (`x` は `P` で値を持ち、`λ` は `ty(x)` の `P` で
-     inhabited な boxed leaf である), <ref id=596a46d/>, <ref id=eb90864/>
+     <ref id=88a06de/> (計数下とグローバル状態は排他である), <ref id=95f1cbf/> の ASSUME (`x` は `P` で値を持ち、
+     `λ` は `ty(x)` の `P` で inhabited な boxed leaf である), <ref id=596a46d/>, <ref id=eb90864/>
 
 <1>1. CASE: 停止条件 S1 (`origin_inner` が `here()` を答える)。
   <2>1. `origin(x, π) = Exactly((x, π))` であり `cand(x, π) = {(x, π)}`。
@@ -1841,9 +1995,11 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
     である」がその節の 1 つである。同じ節が `is_array` と `is_funptr` も偽にする。`is_array()` が真に
     なるのは最上位の tycon が `Std::Array` であるときに限り、`is_funptr()` が真になるのは最上位の
     tycon がいずれかの `Std::#FunPtr{n}` であるときに限る。型の `TyConInfo` はその最上位の tycon で
-    `type_env` を引いた 1 つであり、この節より `ty(c)` のそれの `variant` は `Struct`、`Std::Array` の
-    それは `Array`、`Std::#FunPtr{n}` のそれは `Primitive` なので、`ty(c)` の最上位の tycon は
-    `Std::Array` でもいずれかの `Std::#FunPtr{n}` でもない。
+    `type_env.tycons()` を引いた 1 つであり、`Std::Array` と `Std::#FunPtr{n}` はどちらも
+    `bulitin_tycons()` が置く鍵なので、A28 よりその鍵の下の項目は `bulitin_tycons()` が置いた項目で
+    ある -- 前者の `variant` は `Array`、後者のそれは `Primitive` である。ところが A12 のこの節より
+    `ty(c)` の `variant` は `Struct` なので、`ty(c)` の最上位の tycon は `Std::Array` でも
+    いずれかの `Std::#FunPtr{n}` でもない。
     残る `is_fully_unboxed` は、この 4 つが偽なので unpunched な各フィールドの型が
     すべて fully unboxed であることに帰着するが、フィールド `i` の型 `ty(x)` は boxed leaf `λ` を
     持つので fully unboxed ではない -- fully unboxed な型に `boxed_leaf_paths` は leaf を返さない。
@@ -1858,8 +2014,13 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
        CODE src/ast/types.rs: TypeNode::is_fully_unboxed (`is_box`・`is_closure`・`is_array` に偽を
        返した後、`is_funptr` なら真、そうでなければ unpunched な各フィールドの型についての `all`),
        CODE src/ast/types.rs: TypeNode::is_struct (`toplevel_tycon_info` の `variant` が `Struct` か),
-       CODE src/fixstd/builtin.rs: bulitin_tycons (`Std::Array` の `variant` は
-       `TyConVariant::Array`、`Std::#FunPtr{n}` のそれは `TyConVariant::Primitive` である),
+       <ref id=3d4be43/> (`E.tycons()` の項目のうち鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは、
+       `bulitin_tycons()` がその鍵の下に置いた項目である。とくに `make_array_tycon()` の項目と、
+       `tc.name.namespace` が `Std` の 1 段であって `tc.name.name` が `FUNPTR_NAME` で始まる鍵の
+       項目がそうである),
+       CODE src/fixstd/builtin.rs: bulitin_tycons (`make_array_tycon()` の項目の `variant` は
+       `TyConVariant::Array`、`make_funptr_tycon(arity)` の項目のそれは `TyConVariant::Primitive`
+       である),
        CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr,
        TypeNode::toplevel_tycon_satisfies (`is_array` は最上位の tycon が `is_array_tycon` を満たすか
        どうか、`is_funptr` は `is_funptr_tycon` がその tycon に `Some` を返すかどうかであり、
@@ -1919,9 +2080,11 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
     union である」がその節の 1 つである。同じ節が `is_array` と `is_funptr` も偽にする。`is_array()` が
     真になるのは最上位の tycon が `Std::Array` であるときに限り、`is_funptr()` が真になるのは最上位の
     tycon がいずれかの `Std::#FunPtr{n}` であるときに限る。型の `TyConInfo` はその最上位の tycon で
-    `type_env` を引いた 1 つであり、この節より `ty(s)` のそれの `variant` は `Union`、`Std::Array` の
-    それは `Array`、`Std::#FunPtr{n}` のそれは `Primitive` なので、`ty(s)` の最上位の tycon は
-    `Std::Array` でもいずれかの `Std::#FunPtr{n}` でもない。
+    `type_env.tycons()` を引いた 1 つであり、`Std::Array` と `Std::#FunPtr{n}` はどちらも
+    `bulitin_tycons()` が置く鍵なので、A28 よりその鍵の下の項目は `bulitin_tycons()` が置いた項目で
+    ある -- 前者の `variant` は `Array`、後者のそれは `Primitive` である。ところが A12 のこの節より
+    `ty(s)` の `variant` は `Union` なので、`ty(s)` の最上位の tycon は `Std::Array` でも
+    いずれかの `Std::#FunPtr{n}` でもない。
     残る `is_fully_unboxed` は、この 4 つが偽なので unpunched な
     各変位の payload の型がすべて fully unboxed であることに帰着するが、変位 `t` の payload の型
     `ty(x)` は boxed leaf `λ` を持つので fully unboxed ではない。
@@ -1934,8 +2097,13 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
        `unpunched_field_types` のループへ降りる,
        CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
        CODE src/ast/types.rs: TypeNode::is_union (`toplevel_tycon_info` の `variant` が `Union` か),
-       CODE src/fixstd/builtin.rs: bulitin_tycons (`Std::Array` の `variant` は
-       `TyConVariant::Array`、`Std::#FunPtr{n}` のそれは `TyConVariant::Primitive` である),
+       <ref id=3d4be43/> (`E.tycons()` の項目のうち鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは、
+       `bulitin_tycons()` がその鍵の下に置いた項目である。とくに `make_array_tycon()` の項目と、
+       `tc.name.namespace` が `Std` の 1 段であって `tc.name.name` が `FUNPTR_NAME` で始まる鍵の
+       項目がそうである),
+       CODE src/fixstd/builtin.rs: bulitin_tycons (`make_array_tycon()` の項目の `variant` は
+       `TyConVariant::Array`、`make_funptr_tycon(arity)` の項目のそれは `TyConVariant::Primitive`
+       である),
        CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr,
        TypeNode::toplevel_tycon_satisfies (`is_array` は最上位の tycon が `is_array_tycon` を満たすか
        どうか、`is_funptr` は `is_funptr_tycon` がその tycon に `Some` を返すかどうかであり、
@@ -1965,8 +2133,8 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
     <3>3. `s` の値は、`s` が値を得た後の `ρ` 上のすべての位置で同じである。
       BY <ref id=49da857/> (b)
     <3>4. QED
-      BY <3>1, <3>2, <3>3, <2>1a -- 前半は <3>1 である。後半は、`P` はアームに入った時点以後にあり、
-         その時点のタグは `t` であり、その間 `s` の値は変わらないことから出る。
+      BY <3>1, <3>2, <3>3, <2>1a -- 前半は <3>1 である。後半は次の 3 つから出る。`P` はアームに
+         入った時点以後にある。その時点で `s` のタグは `t` である。その間 `s` の値は変わらない。
   <2>4. `P` における `x` の値は `s` の値の変位 `t` の payload であり、`[t] ++ λ` は `P` で inhabited で
         ある。
     BY <2>2, <2>3, <2>1a, <ref id=66c9670/>, <ref id=9c7c27a/> (unbox union の変位アームの scrutinee から payload 変数への別名の辺),
