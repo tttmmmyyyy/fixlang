@@ -8,9 +8,9 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname},
     tests::test_util::{
-        assert_grammar_accepts, emitted_llvm_ir, fix_command, run_source_assert_failed,
-        run_source_capture, test_files_in_directory, test_source, test_source_fail,
-        test_source_fail_excludes, test_source_with_c, EmittedIr,
+        assert_grammar_accepts, assert_grammar_rejects, emitted_llvm_ir, fix_command,
+        run_source_assert_failed, run_source_capture, test_files_in_directory, test_source,
+        test_source_fail, test_source_fail_excludes, test_source_with_c, EmittedIr,
     },
 };
 use rand::{thread_rng, Rng};
@@ -2139,6 +2139,8 @@ pub fn test_string_literal() {
     main : IO ();
     main = (
         assert_eq(|_|"heart", "\u2764", "❤");;
+        assert_eq(|_|"double quote", "\"", "\u0022");;
+        assert_eq(|_|"backslash", "\\", "\u005C");;
         assert_eq(|_|"tab", "あ\tいうえお", "あ	いうえお");;
         assert_eq(|_|"tab", "あ\nいうえお", "あ
 いうえお");;
@@ -3255,10 +3257,28 @@ pub fn test_u8_literal() {
                 assert_eq(|_|"", '"', 34_U8);;
                 assert_eq(|_|"", '\"', 34_U8);;
                 assert_eq(|_|"", '\x7f', 127_U8);;
+                assert_eq(|_|"", '\xff', 255_U8);;
+                assert_eq(|_|"", '\xFF', 255_U8);;
                 pure()
             );
         "#;
     test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies that the grammar rejects a non-ASCII character between single quotes.
+/// A `U8` literal holds one byte, and `parse_expr_u8_lit` asserts that of the character it is
+/// handed, so admitting one here would panic the compiler in place of a diagnostic.
+#[test]
+pub fn test_u8_literal_rejects_non_ascii() {
+    let source = r#"
+            module Main;
+            main : IO ();
+            main = (
+                let c = 'あ';
+                pure()
+            );
+        "#;
+    assert_grammar_rejects(&source);
 }
 
 #[test]

@@ -299,6 +299,26 @@ mod tests {
         assert_eq!(lex("\"a\\\"b\""), vec![(String, "\"a\\\"b\"".into())]);
     }
 
+    /// Verifies that a char literal holding a double quote is one token, so the quote inside it
+    /// does not open a string that swallows the rest of the line.
+    #[test]
+    fn char_literal_holding_a_double_quote() {
+        assert_eq!(lex("'\"'"), vec![(String, "'\"'".into())]);
+        assert_eq!(lex("'\\\"'"), vec![(String, "'\\\"'".into())]);
+        assert_eq!(
+            lex("q = '\"'; s = \"ab\""),
+            vec![
+                (Variable, "q".into()),
+                (Operator, "=".into()),
+                (String, "'\"'".into()),
+                (Operator, ";".into()),
+                (Variable, "s".into()),
+                (Operator, "=".into()),
+                (String, "\"ab\"".into()),
+            ]
+        );
+    }
+
     /// Verifies that a `//` line comment runs to end of line and the next line
     /// resumes normal lexing.
     #[test]
