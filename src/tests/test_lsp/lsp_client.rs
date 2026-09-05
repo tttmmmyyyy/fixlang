@@ -143,7 +143,7 @@ impl LspClient {
         std::thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
             loop {
-                let result: Result<Value, String> = (|| {
+                let read_message: Result<Value, String> = (|| {
                     // Read Content-Length header
                     let mut header_line = String::new();
                     reader
@@ -185,7 +185,7 @@ impl LspClient {
                     Ok(message)
                 })();
 
-                match result {
+                match read_message {
                     Ok(message) => {
                         process_message(message, &shared_clone);
                     }
@@ -389,13 +389,13 @@ impl LspClient {
     /// Returns a map of file paths to their diagnostic messages
     pub fn get_all_diagnostics(&self) -> Map<PathBuf, Vec<Value>> {
         let diagnostics = self.shared.diagnostics.lock().unwrap();
-        let mut result = Map::default();
+        let mut diagnostics_by_path = Map::default();
         for (file_path, diagnostics_value) in diagnostics.iter() {
             if let Some(arr) = diagnostics_value.as_array() {
-                result.insert(file_path.clone(), arr.clone());
+                diagnostics_by_path.insert(file_path.clone(), arr.clone());
             }
         }
-        result
+        diagnostics_by_path
     }
 
     /// Verify that there are no diagnostic errors for any file

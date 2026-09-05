@@ -235,13 +235,13 @@ impl TypeCheckCache for MemoryCache {
     ) {
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
-        let mut data = self.lock_data();
-        let entries = data.entry(entity_id).or_insert_with(|| VecDeque::new());
+        let mut entries = self.lock_data();
+        let versions = entries.entry(entity_id).or_insert_with(|| VecDeque::new());
         // If the cache is full, remove the oldest entry.
-        while entries.len() >= CACHE_GENERATION as usize {
-            entries.pop_back();
+        while versions.len() >= CACHE_GENERATION as usize {
+            versions.pop_back();
         }
-        entries.push_front((version_hash, expr.clone()));
+        versions.push_front((version_hash, expr.clone()));
     }
 
     /// Searches the entity's versions for the one stored under `version_hash`.
@@ -253,9 +253,9 @@ impl TypeCheckCache for MemoryCache {
     ) -> Option<TypedExpr> {
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
-        let data = self.lock_data();
-        let entries = data.get(&entity_id)?;
-        let expr = entries
+        let entries = self.lock_data();
+        let versions = entries.get(&entity_id)?;
+        let expr = versions
             .iter()
             .find(|(hash, _)| hash == &version_hash)?
             .1

@@ -221,8 +221,8 @@ pub fn launch_language_server() {
     loop {
         // If new diagnostics are available, send store it to `last_diag`.
         let mut diagnostics_updated = false;
-        while let Ok(res) = diag_res_recv.try_recv() {
-            last_diag = Some(res);
+        while let Ok(diagnostics_result) = diag_res_recv.try_recv() {
+            last_diag = Some(diagnostics_result);
             diagnostics_updated = true;
         }
         if diagnostics_updated {
@@ -949,11 +949,11 @@ fn handle_textdocument_did_change(
     // Store the content of the file into `uri_to_content`. This must
     // happen even when on-type analysis is off, so other features
     // (completion, hover) still see the live buffer.
-    if let Some(change) = params.content_changes.last() {
+    if let Some(last_change) = params.content_changes.last() {
         let path = uri_to_path(&params.text_document.uri);
         uri_to_latest_content.insert(
             params.text_document.uri.clone(),
-            LatestContent::new(path, change.text.clone()),
+            LatestContent::new(path, last_change.text.clone()),
         );
     }
 
@@ -1275,19 +1275,19 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> Diagnostic {
 // - `program`: The `Program` obtained from the last diagnostics result
 pub(super) fn get_file_content_at_previous_diagnostics(
     program: &Program,
-    path: &Path,
+    queried_path: &Path,
 ) -> Result<String, String> {
     for mi in &program.modules {
         let src = &mi.source.input;
-        let path_abs = to_absolute_path(&path);
+        let path_abs = to_absolute_path(&queried_path);
         if path_abs.is_err() {
             let msg = format!(
                 "Failed to get the absolute path of the file: \"{}\"",
-                path.to_string_lossy().to_string()
+                queried_path.to_string_lossy().to_string()
             );
             return Err(msg);
         }
-        let path = path_abs.ok().unwrap();
+        let queried_path_abs = path_abs.ok().unwrap();
         let src_file_path_abs = to_absolute_path(&src.file_path);
         if src_file_path_abs.is_err() {
             let msg = format!(
@@ -1297,7 +1297,7 @@ pub(super) fn get_file_content_at_previous_diagnostics(
             return Err(msg);
         }
         let src_file_path = src_file_path_abs.ok().unwrap();
-        if src_file_path == path {
+        if src_file_path == queried_path_abs {
             let content = src.string();
             if let Err(_e) = content {
                 let msg = format!(
@@ -1311,7 +1311,7 @@ pub(super) fn get_file_content_at_previous_diagnostics(
     }
     let msg = format!(
         "No saved content for the file: \"{}\"\n",
-        path.to_string_lossy().to_string()
+        queried_path.to_string_lossy().to_string()
     );
     return Err(msg);
 }
