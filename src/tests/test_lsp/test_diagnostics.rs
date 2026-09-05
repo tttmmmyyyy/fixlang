@@ -363,6 +363,29 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// The time one diagnostics pass is given to end.
+    const PASS_TIMEOUT: Duration = Duration::from_secs(180);
+
+    /// A session over the project, with `file` opened.
+    fn open_session(project_dir: &Path, file: &Path) -> LspClient {
+        let mut client = LspClient::new(project_dir).expect("Failed to start LSP");
+        client
+            .initialize(project_dir, Duration::from_secs(10))
+            .expect("Failed to initialize LSP");
+        client.open_document(file).expect("Failed to open document");
+        client
+    }
+
+    /// Saves `file` and waits until the pass the save asks for has ended, calling `expectation`
+    /// what the wait is for.
+    fn save_and_wait_for_a_pass(client: &mut LspClient, file: &Path, expectation: &str) {
+        let passes_before = client.count_progress_end_messages();
+        client.save_document(file).expect("Failed to save document");
+        client
+            .wait_for_progress_end_count(passes_before + 1, PASS_TIMEOUT)
+            .expect(expectation);
+    }
+
     /// The opening of the message a pass publishes when its analysis fails.
     const ANALYSIS_FAILURE_REPORT: &str = "Analysis of this program failed";
 
@@ -401,20 +424,12 @@ mod tests {
         let (_temp_dir, project_dir) = setup_test_env("diagnostics_after_panic");
         let main_fix = Path::new("main.fix");
 
-        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
-        client
-            .initialize(&project_dir, Duration::from_secs(10))
-            .expect("Failed to initialize LSP");
-        client
-            .open_document(main_fix)
-            .expect("Failed to open document");
-        let passes_before_the_panic = client.count_progress_end_messages();
-        client
-            .save_document(main_fix)
-            .expect("Failed to save document");
-        client
-            .wait_for_progress_end_count(passes_before_the_panic + 1, Duration::from_secs(180))
-            .expect("the pass over the program that panics is expected to end");
+        let mut client = open_session(&project_dir, main_fix);
+        save_and_wait_for_a_pass(
+            &mut client,
+            main_fix,
+            "the pass over the program that panics is expected to end",
+        );
 
         // What the rest of this test measures exists only after a pass has panicked, so the panic
         // is asserted rather than assumed: a case project the compiler learns to analyze makes
@@ -437,16 +452,14 @@ mod tests {
         // The repair the editor writes, which carries one ordinary error.
         fs::write(project_dir.join(main_fix), PROGRAM_WITH_AN_UNKNOWN_NAME)
             .expect("Failed to write the repaired program");
-        let passes_before_the_repair = client.count_progress_end_messages();
         client
             .change_document(main_fix)
             .expect("Failed to change document");
-        client
-            .save_document(main_fix)
-            .expect("Failed to save document");
-        client
-            .wait_for_progress_end_count(passes_before_the_repair + 1, Duration::from_secs(180))
-            .expect("the pass over the repaired program is expected to end");
+        save_and_wait_for_a_pass(
+            &mut client,
+            main_fix,
+            "the pass over the repaired program is expected to end",
+        );
 
         let diagnostics = client.get_diagnostics(main_fix);
         sole_diagnostic_containing(&diagnostics, UNKNOWN_NAME_REPORT);
@@ -473,17 +486,11 @@ mod tests {
         let program_the_analysis_fails_on = fs::read_to_string(project_dir.join(main_fix))
             .expect("Failed to read the case project's program");
 
-        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
-        client
-            .initialize(&project_dir, Duration::from_secs(10))
-            .expect("Failed to initialize LSP");
-        client
-            .open_document(main_fix)
-            .expect("Failed to open document");
+        let mut client = open_session(&project_dir, main_fix);
 
         // The pass the server starts with, over the program the analysis fails on.
         client
-            .wait_for_progress_end_count(1, Duration::from_secs(180))
+            .wait_for_progress_end_count(1, PASS_TIMEOUT)
             .expect("the first pass over the program the analysis fails on is expected to end");
         assert_eq!(
             client.count_diagnostics_notifications_containing(ANALYSIS_FAILURE_REPORT),
@@ -492,13 +499,11 @@ mod tests {
         );
 
         // A second pass over the same program, which fails the same way.
-        let passes_before_the_second = client.count_progress_end_messages();
-        client
-            .save_document(main_fix)
-            .expect("Failed to save document");
-        client
-            .wait_for_progress_end_count(passes_before_the_second + 1, Duration::from_secs(180))
-            .expect("the second pass over the program the analysis fails on is expected to end");
+        save_and_wait_for_a_pass(
+            &mut client,
+            main_fix,
+            "the second pass over the program the analysis fails on is expected to end",
+        );
         assert_eq!(
             client.count_diagnostics_notifications_containing(ANALYSIS_FAILURE_REPORT),
             1,
@@ -508,25 +513,21 @@ mod tests {
         // The repair, which the analysis finishes.
         fs::write(project_dir.join(main_fix), PROGRAM_WITH_AN_UNKNOWN_NAME)
             .expect("Failed to write the repaired program");
-        let passes_before_the_repair = client.count_progress_end_messages();
-        client
-            .save_document(main_fix)
-            .expect("Failed to save document");
-        client
-            .wait_for_progress_end_count(passes_before_the_repair + 1, Duration::from_secs(180))
-            .expect("the pass over the repaired program is expected to end");
+        save_and_wait_for_a_pass(
+            &mut client,
+            main_fix,
+            "the pass over the repaired program is expected to end",
+        );
         sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
 
         // The program the analysis fails on, written a second time.
         fs::write(project_dir.join(main_fix), &program_the_analysis_fails_on)
             .expect("Failed to write the program the analysis fails on");
-        let passes_before_the_relapse = client.count_progress_end_messages();
-        client
-            .save_document(main_fix)
-            .expect("Failed to save document");
-        client
-            .wait_for_progress_end_count(passes_before_the_relapse + 1, Duration::from_secs(180))
-            .expect("the pass over the program the analysis fails on again is expected to end");
+        save_and_wait_for_a_pass(
+            &mut client,
+            main_fix,
+            "the pass over the program the analysis fails on again is expected to end",
+        );
         assert_eq!(
             client.count_diagnostics_notifications_containing(ANALYSIS_FAILURE_REPORT),
             2,
@@ -552,28 +553,20 @@ mod tests {
         fs::write(project_dir.join(main_fix), PROGRAM_WITH_AN_UNKNOWN_NAME)
             .expect("Failed to write the program the session starts from");
 
-        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+        let mut client = open_session(&project_dir, main_fix);
         client
-            .initialize(&project_dir, Duration::from_secs(10))
-            .expect("Failed to initialize LSP");
-        client
-            .open_document(main_fix)
-            .expect("Failed to open document");
-        client
-            .wait_for_progress_end_count(1, Duration::from_secs(180))
+            .wait_for_progress_end_count(1, PASS_TIMEOUT)
             .expect("the pass over the program carrying an ordinary error is expected to end");
         sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
 
         // The program written next, which the analysis fails on.
         fs::write(project_dir.join(main_fix), &program_the_analysis_fails_on)
             .expect("Failed to write the program the analysis fails on");
-        let passes_before_the_failure = client.count_progress_end_messages();
-        client
-            .save_document(main_fix)
-            .expect("Failed to save document");
-        client
-            .wait_for_progress_end_count(passes_before_the_failure + 1, Duration::from_secs(180))
-            .expect("the pass over the program the analysis fails on is expected to end");
+        save_and_wait_for_a_pass(
+            &mut client,
+            main_fix,
+            "the pass over the program the analysis fails on is expected to end",
+        );
 
         // What the rest of this test measures exists only after a pass has failed, so the failure
         // is asserted rather than assumed.
@@ -589,13 +582,11 @@ mod tests {
         // The program written last, which the analysis finishes with nothing to report.
         fs::write(project_dir.join(main_fix), PROGRAM_WITHOUT_AN_ERROR)
             .expect("Failed to write the program carrying no error");
-        let passes_before_the_clean_one = client.count_progress_end_messages();
-        client
-            .save_document(main_fix)
-            .expect("Failed to save document");
-        client
-            .wait_for_progress_end_count(passes_before_the_clean_one + 1, Duration::from_secs(180))
-            .expect("the pass over the program carrying no error is expected to end");
+        save_and_wait_for_a_pass(
+            &mut client,
+            main_fix,
+            "the pass over the program carrying no error is expected to end",
+        );
 
         let diagnostics = client.get_diagnostics(main_fix);
         assert!(

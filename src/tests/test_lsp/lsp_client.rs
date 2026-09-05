@@ -44,12 +44,16 @@ pub struct LspClient {
     next_id: u32,
 }
 
+/// Whether `message` is a `textDocument/publishDiagnostics` notification.
+fn is_publish_diagnostics(message: &Value) -> bool {
+    message.get("method").and_then(|m| m.as_str()) == Some("textDocument/publishDiagnostics")
+}
+
 /// Process a received message and update internal state
 fn process_message(message: Value, shared: &SharedState) {
     /// Handle a `textDocument/publishDiagnostics` notification.
     fn process_publish_diagnostics(message: &Value, shared: &SharedState) {
-        if message.get("method").and_then(|m| m.as_str()) != Some("textDocument/publishDiagnostics")
-        {
+        if !is_publish_diagnostics(message) {
             return;
         }
         let Some(params) = message.get("params") else {
@@ -309,8 +313,7 @@ impl LspClient {
             .unwrap()
             .iter()
             .filter(|message| {
-                message.get("method").and_then(|m| m.as_str())
-                    == Some("textDocument/publishDiagnostics")
+                is_publish_diagnostics(message)
                     && message
                         .pointer("/params/diagnostics")
                         .and_then(|d| d.as_array())

@@ -853,6 +853,16 @@ fn send_to_diagnostics_thread(send: &Sender<DiagnosticsMessage>, msg: Diagnostic
 /// The end of a message about a failure of the compiler itself: what the reader can do with it.
 const BUG_REPORT_REQUEST: &str = "This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this at https://github.com/tttmmmyyyy/fixlang";
 
+/// Publish `msg` as a report of a failure of the compiler itself, ending it with the request to
+/// report the bug. The report carries no span, so it reaches the project file. Returns the paths
+/// it reaches.
+fn publish_compiler_failure(msg: &str) -> Set<PathBuf> {
+    send_diagnostics_notification(
+        Errors::from_msg(format!("{} {}", msg, BUG_REPORT_REQUEST)),
+        Set::default(),
+    )
+}
+
 /// Handle the LSP `initialized` notification: spawn the diagnostics
 /// thread and prime it with an initial diagnostics run.
 fn handle_initialized(
@@ -871,10 +881,7 @@ fn handle_initialized(
             diagnostics_thread(diag_req_recv, diag_res_send, typecheck_cache, debounce_ms);
         });
         if let Err(payload) = res {
-            send_diagnostics_notification(
-                Errors::from_msg(format!("Diagnostics stopped. {}", BUG_REPORT_REQUEST)),
-                Set::default(),
-            );
+            publish_compiler_failure("Diagnostics stopped.");
             write_log!(
                 "Panic occurred in the diagnostics thread: \n{}",
                 any_to_string(payload.as_ref())
@@ -1111,13 +1118,9 @@ fn run_diagnostics_pass(
             if !*last_pass_failed {
                 // Naming the files the report reaches to the pass that publishes next is what
                 // clears it.
-                let reported = send_diagnostics_notification(
-                    Errors::from_msg(format!(
-                        "Analysis of this program failed, so the diagnostics shown are those of \
-                         the program analyzed before it. The next edit runs the analysis again. {}",
-                        BUG_REPORT_REQUEST
-                    )),
-                    Set::default(),
+                let reported = publish_compiler_failure(
+                    "Analysis of this program failed, so the diagnostics shown are those of the \
+                     program analyzed before it. The next edit runs the analysis again.",
                 );
                 prev_err_paths.extend(reported);
                 *last_pass_failed = true;
