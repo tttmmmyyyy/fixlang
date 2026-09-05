@@ -1388,11 +1388,14 @@ SCAN src/ `truncate_to_unit(`
     BY <2>4
   <2>5. 分解の一意性。`lam` が `L(t)` の要素で `lam = p ++ e` が `<2>4a` の分解であるとする。`q` が
      `lam` の別の前置で `t` の UNST-道であり `cls(end(t, q))` が `UN` でも `ST` でもないとする。
+     ここで `s_j` は `lam` に沿う位置 `j` の型、すなわち `s_0 := t`、`s_{j+1} := fld(s_j, lam[j])` と
+     する。`p` も `q` も `lam` の前置なので、`|p|` 以下・`|q|` 以下の位置については、この `s_j` は
+     `p` について `DEF UNST-道` が置く `s_j` とも、`q` について同じ定義が置く `s_j` とも一致する。
      `|q|` が `|p|` 未満なら、`p` が UNST-道であることから `cls(end(t, q)) = cls(s_{|q|})` は `UN` か
      `ST` であり、仮定に反する。`|q|` が `|p|` より大きいなら、`q` が UNST-道であることから
      `cls(s_{|p|}) = cls(end(t, p))` は `UN` か `ST` であり、`<2>4a` の `cls(end(t, p))` が `BX`、
      `AR`、`CL` のどれかであることに反する。よって `|q| = |p|`、すなわち `q = p` である。
-    BY <2>4a, DEF UNST-道
+    BY <2>4a, DEF UNST-道, DEF fld
   <2>6. QED
     BY <2>1, <2>4a, <2>5
 
@@ -1760,8 +1763,9 @@ SCAN src/ `truncate_to_unit(`
      どれも節点の子なので、この再帰は木の各節点をちょうど 1 度訪れて終わる。`Match` の腕が呼ぶ
      `returned_var` も停止する -- `returned_var` の本体は `grow_stack` に包まれており、A15 より
      その閉包はちょうど 1 度呼ばれ、閉包が自分を呼ぶ先は継続だけなので、D2 の有限の木の上で
-     継続の鎖は有限である。1 つの節点の訪問が行う `insert` は、`Let` で 1 つと各アームの payload で
-     1 つずつ、`Destructure` で `fields` の長さだけ、残る 3 種で 0 個であり、どれも有限である。
+     継続の鎖は有限である。D2 より式は 6 種であり、1 つの節点の訪問が行う `insert` は、`Let` で 1 つと
+     各アームの payload で 1 つずつ、`Destructure` で `fields` の長さだけ、残る 4 種 --
+     `Retain`、`Release`、`Eval`、`Ret` -- で 0 個であり、どれも有限である。
     BY <ref id=3e6b0e0/>, <ref id=b3dfa37/>, CODE src/rc_ir/ownership.rs: collect_bindings,
        CODE src/rc_ir/ownership.rs: returned_var, CODE src/misc.rs: grow_stack
   <2>4. `<2>1` から `<2>3` より挿入は有限列をなす。挿入される名前は、パラメータ、capture、`Let` の
@@ -2044,12 +2048,16 @@ SCAN src/ `truncate_to_unit(`
     BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: as_arg_projection
   <2>5. `Llvm` の腕で `origin_from_leaves_under` を呼ぶときは、`operand_units` の要素数だけ呼ぶ。
      `operand_units` は `decl.leaf_origins_under(path)` が渡す各 `LeafOrigins` の各要素から作る
-     `Set` である。`Provenance` は `LeafMap`、すなわち有限の `Map<FieldPath, LeafOrigins>` を包む値で
-     あり、`LeafOrigins` は有限の `Set<LeafOrigin>` である。よって `operand_units` は有限である。
+     `Set` である。`Provenance` は `LeafMap<LeafOrigins>` を包む値、`LeafMap<T>` は
+     `Map<FieldPath, T>` を包む値、`LeafOrigins` は `Set<LeafOrigin>` であり、`Map` と `Set` は
+     どちらも有限の写像・集合である。よって `operand_units` は有限である。
     BY CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
        CODE src/rc_ir/provenance.rs: Provenance,
+       CODE src/rc_ir/provenance.rs: LeafOrigins,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
-       CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under
+       CODE src/rc_ir/leaf_map.rs: LeafMap,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under,
+       CODE src/misc.rs: Map, CODE src/misc.rs: Set
   <2>6. QED
     BY <2>1, <2>2, <2>3, <2>4, <2>5
 
@@ -2065,10 +2073,9 @@ SCAN src/ `truncate_to_unit(`
    呼ばれる。とくに受け取る `path` は `L(ty)` の要素であり、**`L(ty)` が空ならば閉包は 1 度も
    呼ばれない**。閉包を引数に取らない残りの 3 つは abort せず停止する。
 
-   **`impl Provenance` のメソッドは 14 個であり、この 4 つのほかに `empty`、`arg_passthrough`、
-   `join`、`leaf_origins_at`、`leaves`、`leaf_origins_under`、`compose`、`project`、
-   `set_leaves_under`、`demote` の 10 個を持つ。**`result_prov` の呼び出しが `Provenance` を作るのに
-   この 4 つしか使わないことは、既定の実装と 29 個の override を 1 つずつ開く数え上げが与える。
+   **この 4 つだけを主語に取るのは、`result_prov` の呼び出しが `Provenance` を作るのにこの 4 つしか
+   使わないからである。**それを与えるのは、既定の実装と 29 個の override の本体を 1 つずつ開く
+   `<1>28` の数え上げである。
   <2>1. `Provenance::build_shape(ty, E, leaf)` は `LeafMap::build_shape(ty, E, leaf)` を呼ぶ。
      `LeafMap::build_shape` は `boxed_leaf_paths(ty, E)` を 1 度呼び、返った列に
      `into_iter().map(|path| { let fact = leaf(&path); (path, fact) })` を当てて `Map` に集める。
@@ -2098,12 +2105,8 @@ SCAN src/ `truncate_to_unit(`
        CODE src/rc_ir/provenance.rs: Provenance::set_leaves_under,
        CODE src/rc_ir/leaf_map.rs: LeafMap::map_leaves_under
   <2>5. QED
-    `<2>1` が `build_shape` を、`<2>2` から `<2>4` が残る 3 つを尽くしている。`impl Provenance` の
-    本体が持つメソッドは 14 個であり、この 4 つのほかは `empty`、`arg_passthrough`、`join`、
-    `leaf_origins_at`、`leaves`、`leaf_origins_under`、`compose`、`project`、`set_leaves_under`、
-    `demote` である。
-    BY <2>1, <2>2, <2>3, <2>4, CODE src/rc_ir/provenance.rs: Provenance (`impl Provenance` の
-       14 個のメソッド)
+    `<2>1` が `build_shape` を、`<2>2` から `<2>4` が残る 3 つを尽くしている。
+    BY <2>1, <2>2, <2>3, <2>4
 
 <1>27c. `<1>1` を満たす型 `t` について、`t.is_unbox(E)` と `t.is_box(E)` は abort せずに真偽値を
    返す。
@@ -2118,10 +2121,11 @@ SCAN src/ `truncate_to_unit(`
     BY <ref id=e11772a/>, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
   <2>1a. `origin_inner` の `Llvm` の腕が `result_prov` に渡す `result_ty` と `arg_tys` は、
      `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の `ty(x)` と `args` の各要素の型である。
-     `Binding::Llvm(llvm_gen, args, result_ty)` を作るのは `collect_bindings` のこの腕だけであり、
-     そこが `result_ty` に置くのは `x.ty` である。腕の中で `arg_tys` を作るのは
+     `<1>21` と `<1>22` が `vars.bindings` への挿入をすべて挙げており、そのうち `Binding::Llvm` を
+     置くのは `collect_bindings` の `RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕だけで
+     あって、そこが `result_ty` に置くのは `x.ty` である。腕の中で `arg_tys` を作るのは
      `args.iter().map(|a| a.ty.clone())` の 1 行である。
-    BY CODE src/rc_ir/ownership.rs: collect_bindings,
+    BY <1>21, <1>22, CODE src/rc_ir/ownership.rs: collect_bindings,
        CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding
   <2>2. 既定の実装は `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` の 1 文であり、
      `<1>27b` より abort しない。
@@ -2467,7 +2471,8 @@ SCAN src/ `truncate_to_unit(`
        関数である。よってその欄が埋まっても、(b) が挙げるものは値として変わらない。
       BY <ref id=e11772a/> (`RcProgram` から到達できる値の等しさは、それを共有参照で受け取る計算が変えない),
          EXT Rust の内部可変性, <3>1, <3>2,
-         CODE src/rc_ir/ownership.rs: origin, VarTable, origin_inner, origin_from_leaves_under,
+         CODE src/rc_ir/ownership.rs: VarTable,
+         CODE src/rc_ir/ownership.rs: origin, origin_inner, origin_from_leaves_under,
             truncate_to_unit, unit_step,
          CODE src/ast/types.rs: TypeNode (`hash_cache` / `ground_cache` / `depth_cache` の宣言と
             `PartialEq` の実装), TypeNode::type_hash, TypeNode::unpunched_field_types,
@@ -2543,6 +2548,27 @@ SCAN src/ `truncate_to_unit(`
     <3>7. QED
       `<3>4` から `<3>6` は `reached` についての 3 つの場合を尽くしている。
       BY <3>4, <3>5, <3>6
+  <2>1b. `origin_inner` の `Binding::Join(arm_results)` の腕の返り値は、`arm_results`、`var`、
+     `path`、および自分が行う `origin` の呼び出しの返り値だけで決まる。とくに `candidates` の反復の
+     順序には依らない。
+    <3>1. この腕は `arm_results` の各要素について `origin(vars, E, &arm_result.name, path)` を呼び、
+       返った `Origin` の `acted_on()` の各元を `candidates` (`Set<VarPath>`) に入れ、
+       `Origin::of_candidates(candidates, &(var.clone(), path.to_vec()))` を返す。`acted_on()` は
+       `identity()` を先頭に置き、それと異なる `candidates()` の元を続けた列であり、その元の集合は
+       その `Origin` の値で決まる。`Set` への挿入がなす集合は挿入の順序に依らないので、`candidates` は
+       `arm_results` と各子の返り値で決まる。
+      BY CODE src/rc_ir/ownership.rs: origin_inner,
+         CODE src/rc_ir/ownership.rs: Origin::acted_on,
+         CODE src/rc_ir/ownership.rs: Origin::candidates, CODE src/misc.rs: Set
+    <3>2. `of_candidates` は `candidates.len()` で場合を分け、1 のときは `into_iter().next()` が返す
+       元を `Origin::Exactly` に置き、それ以外のときは `candidates` そのものを `Origin::Join` の
+       同名の欄に、`here` の複製を `identity` の欄に置く。`EXT 1 要素の集合の反復` より、要素数 1 の
+       集合の `into_iter().next()` はその 1 つの元である。`EXT HashSet の等価性` より `Set` の等価性は
+       集合としての等価性なので、要素数 2 以上のときに置かれる `Set` も反復の順序に依らず等しい。
+      BY EXT 1 要素の集合の反復, EXT HashSet の等価性,
+         CODE src/rc_ir/ownership.rs: Origin::of_candidates, CODE src/misc.rs: Set
+    <3>3. QED
+      BY <3>1, <3>2
   <2>2. `origin_inner(vars, E, u, sig)` の返り値は、`vars.bindings`、`E`、`u`、`sig`、および自分が
      行う `origin` の呼び出しの返り値だけで決まる。この関数が `vars` から読むのは
      `vars.bindings.get(var)` だけであり、その `Binding` から値として読むものは `<2>1` (b) が
@@ -2552,8 +2578,10 @@ SCAN src/ `truncate_to_unit(`
      あり、それが引数だけで決まることは `<2>1` (c) が与える。**その節が要るのは、`decl` が変われば
      `origin_inner` の `Llvm` の腕が `decl.leaf_origins_at(path).and_then(as_arg_projection)` の
      結果で別の道を選びうるからである。**残るものが表を作り終えたのちは変わらないことは `<2>1` (b)
-     が与える。`Llvm` の腕が `origin_from_leaves_under` を呼ぶ道については `<2>1a` がこれを与える。
-    BY <1>9a, <2>1, <2>1a,
+     が与える。`Llvm` の腕が `origin_from_leaves_under` を呼ぶ道については `<2>1a` が、
+     `Binding::Join` の腕については `<2>1b` がこれを与える。どちらも `Set` を組んでから
+     `Origin::of_candidates` に渡すので、反復の順序に依らないことを別に言う要がある。
+    BY <1>9a, <2>1, <2>1a, <2>1b,
        CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
        CODE src/rc_ir/ownership.rs: truncate_to_unit,
