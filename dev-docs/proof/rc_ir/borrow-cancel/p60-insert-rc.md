@@ -185,6 +185,34 @@ modules from `m`. … If an item is private, it may be accessed by the current m
 descendants」と述べる (Rust Reference の "Visibility and Privacy")。すなわち、`pub` を持たない
 項目を名指せる式は、その項目を宣言するモジュールとその子孫のモジュールの中にしかない。
 
+### 1.1 在りかの前提
+
+**コードのどこに何が在るかの数え上げは、段の中で行わない。** 段が自分で在りかを数え上げると、その
+数え上げには果たす者が居らず、検査するものも無い。在りかは名前つきの前提として置き、`BY` の行では
+その名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
+
+**果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
+`src/` の全体に走らせて、下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。走査は
+字面の上位近似なので、一覧には構成でなくパターンとしてその字面を持つ項目も入る。`#[cfg(test)]` の下の
+項目は走査が除く。
+
+**前提 `LeafOrigin::Arg` の在りか** --- `LeafOrigin::Arg` の字面を持つ項目は次で尽きる。そのうち
+`LLVMGen::result_prov` の実装は 6 つであり、`--` の後にそれを書く。
+
+SCAN src/ `LeafOrigin::Arg`
+  = src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov -- `result_prov` の実装
+  = src/fixstd/builtin.rs: InlineLLVMMakeStructBody::result_prov -- `result_prov` の実装
+  = src/fixstd/builtin.rs: InlineLLVMStructPunchBody::result_prov -- `result_prov` の実装
+  = src/fixstd/builtin.rs: replaced_field_prov -- `InlineLLVMStructPlugInBody::result_prov` と `InlineLLVMStructSetBody::result_prov` が呼ぶ補助関数
+  = src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov -- `result_prov` の実装
+  = src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov -- `result_prov` の実装
+  = src/rc_ir/ownership.rs: origin_from_leaves_under -- パターン (宣言を読む側)
+  = src/rc_ir/ownership.rs: as_arg_projection -- パターン (宣言を読む側)
+  = src/rc_ir/provenance.rs: Provenance::arg_passthrough -- 構成。呼ぶのは `Provenance` の解析であって `result_prov` の実装ではない
+  = src/rc_ir/provenance.rs: Provenance::compose -- パターン (宣言を読む側)
+  = src/rc_ir/provenance.rs: leaf_source_to_string -- パターン (表示)
+  = src/rc_ir/provenance.rs: resolve_leaf -- パターン (宣言を読む側)
+
 **DEF ii-a と ii-b の読み**。README の形で A19 (ii) を読む。**(ii-a)** は、各時点と各**計数下の**別名類 `C` に
 ついて `held_ρ(τ, C) ≥ 0` であり、読む構文と `Retain`/`Release` がその類を名指す時点では
 `held_ρ(τ, C) ≥ 1` であることである。**非負であることは、終端の `Ret` の消費を行った直後の時点に
@@ -2482,10 +2510,13 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   ついての条件なので、この 1 つの leaf の unit が決める。
 
 <1>4b. (e)。
-  BY <ref id=f06144e/>, <ref id=d59f90b/>, <ref id=e11772a/>, <ref id=30d6238/>,
+  BY <ref id=f06144e/>, <ref id=d59f90b/>, <ref id=e11772a/>, <ref id=30d6238/>, <ref id=0594f24/>,
      CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin_inner,
      CODE src/rc_ir/ownership.rs: as_arg_projection,
-     CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+     CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+     CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+     CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under,
+     CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   D10 の生成の表は 5 行を持つ。`App(callee, args)` と `Closure(f, caps)` の結果は `collect_bindings` が
   `Binding::Producer` を入れ、`origin_inner` の `Producer` の腕は `here()` を返す。boxed 容器の
   `Destructure` の名前付きフィールドは `Binding::Field` の容器が boxed の枝、boxed union の変位アームの
@@ -2493,14 +2524,18 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   `Llvm` の結果のうち `result_prov` の宣言が単一の `Arg` でない leaf は `Binding::Llvm` の腕の
   `as_arg_projection` が `None` を返す枝に入る。A3 よりこのコミットの宣言は単一の `Fresh`・単一の
   `Unknown`・空集合のいずれかである。前 2 者では D17 の第 2 項より鎖がそこで止まる。空集合のときは
-  `origin_from_leaves_under` が `reached` に元を 1 つも積まず -- その leaf の宣言が空集合なので
-  `operand_units` は空、`produced_here` は偽である -- `reached.first()?` で `None` を返すので、
-  `origin_inner` は `unwrap_or_else(here)` で自分自身を答える。いずれの行でも `origin` を
+  `origin_from_leaves_under` が `reached` に元を 1 つも積まず、`reached.first()?` で `None` を返すので、
+  `origin_inner` は `unwrap_or_else(here)` で自分自身を答える。**`reached` が空であることは
+  `leaf_origins_under` が渡す宣言がその leaf 自身の 1 つだけであることによる** --
+  `leaf_origins_under(path)` は `LeafMap::leaves_under(path)`、すなわち path が `path` で始まる leaf の
+  宣言の列であり、D4 の判定は leaf を置く位置でその位置の下へ降りないので boxed leaf の path は互いに
+  他の接頭にならず、`path` が leaf であるときその列は `path` 自身の 1 つである。その宣言が空集合なので
+  `operand_units` は空、`produced_here` は偽である。いずれの行でも `origin` を
   呼ばずに自分自身を答えるので、ρ-歩みはその位置で終わり、そのスロットは自分が属する類の ρ-終端で
   ある。
 
 <1>4c. (f)。
-  BY <ref id=596a46d/>, <ref id=f06144e/>, <ref id=d59f90b/>, <ref id=e11772a/>, <ref id=30d6238/>, CODE src/rc_ir/ownership.rs: origin_inner,
+  BY <1>4b, <ref id=596a46d/>, <ref id=f06144e/>, <ref id=d59f90b/>, <ref id=e11772a/>, <ref id=30d6238/>, CODE src/rc_ir/ownership.rs: origin_inner,
      CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: as_arg_projection,
      CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   ρ-歩みが止まるのは `origin_inner` が `origin` を呼ばずに `here()` を答える腕であり、それは
@@ -2508,8 +2543,8 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   `Binding::Payload` の `Some(_)` かつ scrutinee が boxed の枝、`Binding::Llvm` の
   `as_arg_projection` が `None` を返す枝 (A3 よりこのコミットの宣言は単一の `Fresh`・単一の
   `Unknown`・空集合のいずれかである。前 2 者では D17 の第 2 項よりそこで止まり、空集合のときは
-  `origin_from_leaves_under` が `reached` に元を 1 つも積まずに `None` を返すので、`origin_inner` が
-  `unwrap_or_else(here)` で自分自身を答える) の 6 つである。束縛の無い腕が
+  <1>4b のとおり `origin_from_leaves_under` が `reached` に元を 1 つも積まずに `None` を返すので、
+  `origin_inner` が `unwrap_or_else(here)` で自分自身を答える) の 6 つである。束縛の無い腕が
   答える位置は D6 の記号の位置であってスロットではなく、D6 よりそれを終端とする類は計数下の類の
   範囲の外である。残る 5 つのうち `Binding::Param` はパラメータ・capture の leaf であり、
   `Producer` は `App` と `Closure` の結果、`Field` の boxed の枝は boxed 容器の `Destructure` の
@@ -3072,8 +3107,11 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 <1>5a. `LeafOrigin::Arg` を含む `Provenance` を返す `result_prov` の実装は下に挙げるもので尽き、
       そのどれでも結果の leaf からそれが宣言する `(i, σ)` への対応は単射である。
-  BY <ref id=e11772a/>, <ref id=83d98e9/>, <ref id=0594f24/>, EXT クレートの項目, EXT ビルドの対象,
-     EXT 条件つきコンパイル,
+  BY <ref id=e11772a/>, <ref id=83d98e9/>, <ref id=0594f24/>, 前提 `LeafOrigin::Arg` の在りか,
+     CODE src/fixstd/builtin.rs: PLUG_IN_PUNCHED_ARG,
+     CODE src/fixstd/builtin.rs: PLUG_IN_FIELD_ARG,
+     CODE src/fixstd/builtin.rs: STRUCT_SET_STRUCT_ARG,
+     CODE src/fixstd/builtin.rs: STRUCT_SET_VALUE_ARG,
      CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, CODE src/rc_ir/provenance.rs: LeafOrigin,
      CODE src/rc_ir/provenance.rs: Provenance::arg_passthrough,
      CODE src/rc_ir/provenance.rs: Provenance, CODE src/rc_ir/provenance.rs: sole_origin,
@@ -3087,13 +3125,11 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
      CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody::result_prov,
      CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov,
      CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov
-  **在りかは述語で決める** -- `LeafOrigin::Arg` を構成する式を含む `result_prov` の実装である。
-  `EXT ビルドの対象` より走査の範囲は `src/` の全ファイルであり、`EXT クレートの項目` よりその全文を
-  読めばクレートの内容をすべて読んだことになる。A3 の数え上げより `result_prov` を override するのは
-  78 個の `impl LLVMGen for` のうち 29 個であり、そのうち `LeafOrigin::Arg` を置くのは次のもので
-  尽きる (`Provenance::arg_passthrough` も `Arg` を置くが、それを呼ぶのは `Provenance` の解析の
-  `seed_param` であって `result_prov` の実装ではない。`#[cfg(test)]` の下の `Arg` を作る 2 つの式は
-  `EXT 条件つきコンパイル` より `fix` の実行可能ファイルを作るビルドに入らない)。既定の `result_prov`
+  **在りかは前提 `LeafOrigin::Arg` の在りかが与える** (第 1.1 節)。その一覧のうち
+  `LLVMGen::result_prov` の実装は 6 つであり、下に 1 つずつ当たる。残る項目は、宣言を**読む**側の
+  パターン (`origin_from_leaves_under`・`as_arg_projection`・`Provenance::compose`・
+  `leaf_source_to_string`・`resolve_leaf`) と、`Provenance::arg_passthrough` -- `Arg` を置くが
+  `result_prov` の実装ではない -- である。既定の `result_prov`
   は `Unknown` を置く (<1>2) ので `Arg` を含まない。
   - `InlineLLVMStructGetBody::result_prov` の unbox の枝は、結果の leaf `π` に
     `Arg(0, [field_idx] ++ π)` を置く。`π ↦ [field_idx] ++ π` は単射である。
@@ -3111,7 +3147,11 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `Arg(value_arg, rest)` を、残る leaf `[f] ++ rest` (`f ≠ field_idx`) に
     `Arg(struct_arg, [f] ++ rest)` を置く。各枝の中では単射であり、2 つの枝は相異なるオペランドの
     添字を置く -- `struct_plug_in` は `(PLUG_IN_PUNCHED_ARG, PLUG_IN_FIELD_ARG) = (0, 1)`、
-    `struct_set` は `(STRUCT_SET_STRUCT_ARG, STRUCT_SET_VALUE_ARG) = (1, 0)` である。
+    `struct_set` は `(STRUCT_SET_STRUCT_ARG, STRUCT_SET_VALUE_ARG) = (1, 0)` である
+    (`CODE src/fixstd/builtin.rs: PLUG_IN_PUNCHED_ARG`,
+    `CODE src/fixstd/builtin.rs: PLUG_IN_FIELD_ARG`,
+    `CODE src/fixstd/builtin.rs: STRUCT_SET_STRUCT_ARG`,
+    `CODE src/fixstd/builtin.rs: STRUCT_SET_VALUE_ARG`)。
   - `InlineLLVMMakeUnionBody::result_prov` の unbox の枝は、結果の leaf `[variant_idx] ++ rest` に
     `Arg(0, rest)` を置き、他の変位の leaf には空集合を置く。`Arg` を置く leaf の上で単射である。
   - `InlineLLVMUnionAsBody::result_prov` の unbox の枝は、結果の leaf `π` に
