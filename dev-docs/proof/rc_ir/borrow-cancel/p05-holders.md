@@ -531,9 +531,8 @@ SCAN src/ `applies_a_function_operand`
                **(b)** その retain が作る参照の持ち手が、その生成コードが書き込むオブジェクトの持ち手の
                単位 (D25 の 2 番目、第 1.1 節) である形。作られる参照は書き込まれた各単位につき 1 つで
                あり、この形は `Obl(a)` を動かさない。
-               **(c)** 名指す値の inhabited (D16) な boxed leaf がどれもグローバル状態 (D26) の
-               オブジェクトを指す形。この形は参照を作らず、処分せず、`H` も `Obl(a)` も持ち手の単位も
-               動かさない。
+               **(c)** 名指す値の inhabited (D16) な boxed leaf がどれも計数下 (D26) でない形。
+               この形は参照を作らず、処分せず、`H` も `Obl(a)` も持ち手の単位も動かさない。
 
   **在りかは述語で決める。** D24 が置く述語は `Generator::retain`・`Generator::build_retain`・
   `Generator::release` の**呼び出し**を出す生成コードの全体であり、下の `CODE` はその述語が挙げる
@@ -582,20 +581,20 @@ SCAN src/ `applies_a_function_operand`
   `<2>4.` 第 2 の形は `Obl(a)` を動かさない。(β) は作った参照をちょうど 1 つの持ち手に入れ、その
     持ち手は `<2>3` よりオブジェクトの持ち手の単位である。
     BY `<2>3`, DEF 生成 (β)
-  `<2>4a.` 第 3 の形は参照を作らず、処分せず、`H` も `Obl(a)` も持ち手の単位も動かさない。
-    グローバル状態のオブジェクトへの `Retain`/`Release` は `H` を変えず (A8)、そのオブジェクトを
-    指す leaf は D8 の意味の参照を持たない (D26)。**この形は `Generator::get_scoped_obj` が
-    記号の位置 (D6) を読むときに出す** -- `ScopedValue` を作るのは `Scope::push_local` と
-    `Generator::add_global_object` の 2 か所であり、前者は `retain_on_read` を偽に置き、後者が真に
-    置くのは unbox のグローバルについてである。記号の位置が指すのは funptr かグローバル状態の
-    オブジェクトであり (D6)、funptr の型は boxed leaf を持たない (D4 の規則 1)。
-    BY <ref id=b6673ca/>, <ref id=88a06de/>, <ref id=ec8d1a0/>, <ref id=596a46d/> (「そこが指すのは funptr かグローバル状態のオブジェクト」),
+  `<2>4a.` 名指す値の inhabited (D16) な boxed leaf がどれも計数下 (D26) でない retain と release は、
+    参照を作らず、処分せず、`H` も `Obl(a)` も持ち手の単位も動かさない。グローバル状態のオブジェクト
+    への `Retain`/`Release` は `H` を変えず (A8)、そのオブジェクトを指す leaf は D8 の意味の参照を
+    持たない (D26)。逆に、名指す値が計数下のオブジェクトを指す inhabited な boxed leaf を持つ
+    retain は、その leaf の指すオブジェクトのカウントを 1 上げるので、参照を 1 つ作る (A5、D8)。
+    **この形の代表は、`Generator::get_scoped_obj` が記号の位置 (D6) を読むときに `retain_on_read`
+    に従って出す retain である** -- 記号の位置が指すのは funptr かグローバル状態のオブジェクトで
+    あり (D6)、funptr の型は `is_fully_unboxed` なので boxed leaf を持たない (D4 の規則 1)。
+    BY <ref id=b6673ca/>, <ref id=88a06de/>, <ref id=ec8d1a0/>, <ref id=4f63121/>, <ref id=596a46d/> (「そこが指すのは funptr かグローバル状態のオブジェクト」),
     <ref id=0594f24/> (規則 1), D16
-    `CODE src/generator.rs: Scope::push_local` (局所の束縛は `retain_on_read: false` で積まれる)
-    `CODE src/generator.rs: Generator::add_global_object` (「A boxed global is moved out when read,
-    so it needs no retain」 -- `retain_on_read` に `!ty.is_box(self.type_env())` を置く)
     `CODE src/generator.rs: Generator::get_scoped_obj` (`retain_on_read` が真のとき `build_retain` を
     出し、偽のとき出さない)
+    `CODE src/generator.rs: Generator::retain` (「Retain `obj`: increment the reference count of
+    every boxed object it owns, once.」)
     `CODE src/ast/types.rs: TypeNode::is_fully_unboxed` (`self.is_funptr()` の枝が `true` を返す)
   `<2>5.` 個数は次のとおりである。retain は名指した値が持つ各参照のカウントを 1 つずつ上げるので、
     第 1 の形が作る参照は、その値の inhabited で計数下の各 boxed leaf につき 1 つである (A5)。
@@ -609,12 +608,11 @@ SCAN src/ `applies_a_function_operand`
     `CODE src/generator.rs: Generator::build_retain` (「Retain an object `amount` times: every boxed
     leaf reached has its reference count increased by `amount`, an i64 count.」)
   `<2>6.` QED
-    形が 3 つで尽きるのは次による。参照を作る retain については、作られた参照の持ち手は D25 の
-    3 種のいずれかである。持ち手が環境 `E` である参照を作る段は (E9) だけであり、それは節点の実行では
-    ない (D24 の (E9))。残る 2 種が第 1 の形と第 2 の形である。参照を作らず処分しない retain と
-    release -- 名指す値の inhabited な boxed leaf がどれも計数下でないもの -- が第 3 の形である
-    (`<2>4a`)。
-    BY `<2>1`, `<2>2`, `<2>2a`, `<2>3`, `<2>4`, `<2>4a`, `<2>5`, <ref id=0b850c9/>, <ref id=8c40929/>, <ref id=88a06de/>
+    形が 3 つで尽きるのは次による。D24 は、1 つの段の生成コードがその段の中で出す**素動作**を
+    2 つの形に分ける (`<2>1`)。素動作を起こす retain と release はその 2 つ、すなわち第 1 の形と
+    第 2 の形である。素動作を起こさない retain と release -- 名指す値の inhabited な boxed leaf が
+    どれも計数下でないもの -- が第 3 の形であり、その形が素動作を起こさないことは `<2>4a` が述べる。
+    BY `<2>1`, `<2>2`, `<2>2a`, `<2>3`, `<2>4`, `<2>4a`, `<2>5`
 
 `<1>1.` ASSUME NEW `p`: `X` の切れ目
         PROVE  「`p` で処分されていない各参照が、D25 の 3 種の持ち手 -- `Liv(p)` の活性化の `Obl`、
