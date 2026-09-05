@@ -362,10 +362,17 @@ SCAN src/ `global_var_ptr`
 SCAN src/ `init_flag_ptr`
   = src/rc_ir/codegen.rs: Generator::implement_rc_global -- 旗のロード、旗への store、`pthread_once` へ渡す引数
 
-**前提 `origin` を呼ぶ式の在りか** --- `origin` の呼び出しの字面が在る項目は次で尽きる。
+**前提 `origin` を呼ぶ式の在りか** --- `origin` の呼び出しの字面が在る項目は次で尽きる。**走査の根は
+`src/` である** -- `src/rc_ir/` に狭めると、この道が外へ出た先が見えない。
 `borrow_ify` と `cancel` が住む `src/rc_ir/borrow.rs` の側を読むのは第 7 節である。
 
-SCAN src/rc_ir/ `origin(`
+SCAN src/ `origin(`
+  = src/fixstd/builtin.rs: InlineLLVMMakeStructBody::result_prov -- `sole_origin(` の字面
+  = src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov -- `sole_origin(` の字面
+  = src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov -- `sole_origin(` の字面
+  = src/fixstd/builtin.rs: InlineLLVMStructPunchBody::result_prov -- `sole_origin(` の字面
+  = src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov -- `sole_origin(` の字面
+  = src/fixstd/builtin.rs: replaced_field_prov -- `sole_origin(` の字面
   = src/rc_ir/borrow.rs: infer_ownership -- 呼び出し
   = src/rc_ir/borrow.rs: level_ownership -- 呼び出し
   = src/rc_ir/borrow.rs: RewriteCtx::owns_unit -- 呼び出し
