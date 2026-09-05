@@ -757,12 +757,30 @@ enum については元と同じ変位で、その変位が保持する各値を
           `ty` は `Type::TyApp(new_fun, new_arg)` である。`impl PartialEq for Type` の `TyApp` の腕は
           2 つの成分に `type_node_eq` を掛け、`type_node_eq(lhs, rhs)` の本文は
           `Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty` なので、この 2 つは等しい。
-          `impl PartialEq for TypeNode` は `ty` だけを読む (<2>6)。`Type::AssocTy` の腕も同じ形で
-          あり、`impl PartialEq for Type` の `AssocTy` の腕は名前の一致と各引数の `type_node_eq` である。
+          `impl PartialEq for TypeNode` は `ty` だけを読む (<2>6)。
       BY <3>2, <2>6, CODE src/ast/types.rs: Type, CODE src/ast/types.rs: type_node_eq,
          CODE src/ast/types.rs: TypeNode, EXT Arc の契約
+    <3>3a. `Type::AssocTy` の腕の 2 つの枝も、条件が真のとき等しい値を返す。条件は
+           `new_args.iter().zip(args).all(|(new_arg, arg)| Arc::ptr_eq(new_arg, arg))` であり、
+           EXT Iterator::zip と EXT Iterator::all と any より、これは `new_args` と `args` が同じ長さで
+           あって対応する各対に `Arc::ptr_eq` が真であることをいう --- `new_args` は
+           `args.iter().map(...).collect::<Vec<_>>()` なので EXT Iterator::map と collect より
+           `args` と同じ長さである。EXT Arc の契約 より、`Arc::ptr_eq` が真な対の 2 つの値は等しい。
+           真の枝が返す `ty.clone()` の `ty` は `Type::AssocTy(assoc_ty, args)` であり、偽の枝が返す
+           `ty.set_assocty_args(new_args)` の `ty` は `Type::AssocTy(assoc_ty, new_args)` である ---
+           `set_assocty_args` は `self.clone()` の `ty` の引数列だけを差し替えて `Arc::new` で包み、
+           名前 `assoc_ty` をそのまま運ぶ。`impl PartialEq for Type` の `AssocTy` の腕は、名前の等しさと
+           引数列の長さの一致と、対応する各対の `type_node_eq` を要求する。名前は同じ値、長さは等しく、
+           各対は同じ値なので `type_node_eq` はどれも真である。`impl PartialEq for TypeNode` は `ty`
+           だけを読む (<2>6)。
+      BY <3>2, <2>6, CODE src/ast/types.rs: Type, CODE src/ast/types.rs: type_node_eq,
+         CODE src/ast/types.rs: TypeNode, CODE src/ast/types.rs: AssocType,
+         CODE src/ast/types.rs: TypeNode::set_assocty_args,
+         CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
+         EXT Arc の契約, EXT Iterator::zip, EXT Iterator::all と any,
+         EXT Iterator::map と collect
     <3>4. QED
-      <3>3 より、`Arc::ptr_eq` の 2 つの読みはどちらも、返る値を選び替えるだけで値を変えない。残る腕が
+      <3>3 と <3>3a より、`Arc::ptr_eq` の 2 つの読みはどちらも、返る値を選び替えるだけで値を変えない。残る腕が
       読むのは `data` の引き (鍵は `Name` すなわち `String`)、`get_source`、`set_source_if_none` である。
       `get_source` は `self.info.source` への共有参照を返し、`set_source_if_none` は `set_source` を
       経て `self.clone()` の `info.source` を書いた新しいノードを返すか `self.clone()` を返すかであり、
@@ -770,7 +788,7 @@ enum については元と同じ変位で、その変位が保持する各値を
       `self.clone()` の `ty` の成分を差し替えて `Arc::new` で包む。よって `substitute_type` の返り値の
       `ty` は、その再帰の上の帰納で引数の値から決まり、<2>6 より `TypeNode` の値の等しさは `ty` で
       決まる。<3>1 より、`declared_field_types` が組み立てる `Substitution` も引数の値で決まる。
-      BY <3>1, <3>2, <3>3, <2>6, DEF 引数で決まる関数, EXT Map と Set,
+      BY <3>1, <3>2, <3>3, <3>3a, <2>6, DEF 引数で決まる関数, EXT Map と Set,
          CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
          CODE src/ast/types.rs: TypeNode::set_source_if_none, CODE src/ast/types.rs: TypeNode::set_source,
          CODE src/ast/types.rs: TypeNode::get_source, CODE src/ast/types.rs: TypeNode
