@@ -1220,6 +1220,8 @@ D30 が言い ((X3) は `π` が `borrow_ify` のときに開く)、その 2 つ
 > なく、`borrow` でもない。後者は `borrow_funcref` が借用版の名前を `<元の名前>#borrow` として
 > 作るからで ... これが無いと借用版の名前が入力の名前と衝突しうる。
 
+省略した箇所は、README がそこに置く `CODE` の引用である。
+
 (T4) がこれを読むのは 1 か所である -- 「借用版の名前は `p0.funcs` のどの鍵とも どの関数の `name`
 とも異なる」を示す `<1>10` の `<2>1a` である。(T4) の残りは A13 に依らない。関数の対応は鍵ではなく
 P24 の対応でつなぎ、「`p0.funcs` の各関数の `name` が `p2.funcs` の鍵である」は、挿入も
@@ -1231,9 +1233,12 @@ README の第 4 節は、`develop_mode` のときだけ走る表明を「3 段�
 A13** を挙げる。**A12** の最初の箇条 (`Llvm` 節点の `args` の名前の列) の検査、**A3** の 2 つの
 検査 (`applies_a_function_operand` と `result_prov` の元数)、そして **A10** の「ただし最適化が
 作る型を再検査するのは develop build だけである」も同じである。すなわち出荷ビルドでは、この
-**6 つ**の仮定はこれらの検査を持たない。**A3 の 2 つの節と A12 の最初の箇条については、README が
-果たす者に挙げるのがその検査そのものなので、出荷ビルドではその節を支える者が居ない。**残る
-A9・A11・A13・A10 は、検査とは別の果たす者 (lowering、`validate_layouts`) を持つ。
+**6 つ**の仮定はこれらの検査を持たない。**A3 の 2 つの節については、README が果たす者に挙げるのが
+その検査そのものなので、出荷ビルドではその節を支える者が居ない。**残る A9・A11・A12・A13・A10 は、
+検査とは別の果たす者を持つ -- A9・A11・A13 は lowering、**A12 の最初の箇条は演算を作る側**、A10 は
+飽和については kind の体系である。**A10 の `validate_layouts` が果たすのは大きさの部分だけである**
+-- 第 3 節の表がそのとおりに書いており、飽和については `validate_layouts` はその走査自身が同じ
+`assert` で止まる側にある。
 
 A3 の 2 つの検査は別の場所に在る。`applies_a_function_operand` のものは
 `Generator::apply_lambda` の表明であり、`borrow_ify` と `cancel` の外 -- コード生成の側 -- に在る。
@@ -1273,12 +1278,17 @@ RewriteCtx::check_ownership_is_levelled`, `CODE src/rc_ir/ownership.rs: origin`)
 
 **その書き込みが書き換えの答えを動かさないことを言うのは P2a である。**`borrow_ify` は借用版に
 ついて `if develop_mode { ctx.check_ownership_is_levelled(&clone); }` を
-`clone.body = ctx.rewrite(&clone.body);` の**直前**に置き、この 2 つは同じ `ctx` の同じ `vars` を
-読む (`CODE src/rc_ir/borrow.rs: borrow_ify`)。P2a は、1 つの `VarTable` の値と 1 つの `TypeEnv` の
-値を固定したとき、鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならばその 2 つは
-等しく、答えは `vars.origins` が保持する memo の状態に依らないと述べる。コードは
-`RewriteCtx::rewrite` に `// PROOF: P2a` を付けてこの読みを指す
-(`CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite`)。
+`clone.body = ctx.rewrite(&clone.body);` の**直前**に置く (`CODE src/rc_ir/borrow.rs: borrow_ify`)。
+**この 2 つが `origin` に渡す `vars` は、同じ `ctx` の同じ表である。**検査の側は
+`origin(&self.vars, self.type_env, &v.name, &unit)` を直に呼ぶ (前段)。書き換えの側は、
+`RewriteCtx::rewrite` の本体が `grow_stack(|| self.rewrite_inner(node))` であり (A15 よりその閉包を
+ちょうど 1 回呼ぶ)、`rewrite_inner` の `Retain`/`Release` の腕が `RewriteCtx::rewrite_rc` を呼び、
+その借用版の枝が `RewriteCtx::owns_unit` を呼び、`owns_unit` が
+`origin(&self.vars, self.type_env, &arg.name, unit)` を呼ぶ
+(`CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite`, `RewriteCtx::rewrite_inner`,
+`RewriteCtx::rewrite_rc`, `RewriteCtx::owns_unit`)。P2a は、1 つの `VarTable` の値と 1 つの
+`TypeEnv` の値を固定したとき、鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならば
+その 2 つは等しく、答えは `vars.origins` が保持する memo の状態に依らないと述べる。
 
 **P2a を当てるには、その言明が `vars` に置く制限を満たすことが要る。** P2a は
 「**`vars` は、A6 と A11 を満たすプログラムの本体について `VarTable::of` か `VarTable::body_only` が
@@ -1404,18 +1414,22 @@ SCAN src/ `Rc::into_inner(`
 `source: Option<Span>` が同じ `SourceFile` へ届く (`CODE src/rc_ir/ast.rs: RcVar`, `RcExprNode`, `CODE src/ast/types.rs:
 TypeInfo`)。
 
-残る欄は、この 3 つのいずれの宣言も含まない。`RcFunc` の `name` (`FuncRef` = `FullName` =
-`NameSpace` と `String`)・`borrowed_units` (`Set<VarPath>`、`VarPath` = `(FullName, FieldPath)`、
-`FieldPath` = `Vec<usize>`)・`inline_into_callers` (`bool`)、`RcVar` の `name`・`debug_name`
-(`Name` = `String`)・`skip_null_check` (`bool`)、`body` の `RcRhs::Closure` が運ぶ `FuncRef`、
+残る欄は、この 3 つのいずれの宣言も含まない。`RcFunc` の `name` (`FuncRef`、その欄は `FullName`
+1 つで、`FullName` の欄は `NameSpace` と `String`)・`borrowed_units` (`Set<VarPath>`、`VarPath` は
+`(FullName, FieldPath)`、`FieldPath` は `Vec<usize>`)・`inline_into_callers` (`bool`)、`RcVar` の
+`name`・`debug_name` (`Name` は `String`)・`skip_null_check` (`bool`)、`body` の
+`RcRhs::Closure` が運ぶ `FuncRef`、
 `MatchArm` の `tag` (`Option<usize>`)・`payload_state` (`RcState` -- 5 つの状態を持つだけの
 enum)、`RewriteCtx` の `is_borrow_version` (`bool`)・`owned_units`・`borrow_versions`・`tail`
 (名前の集合・写像)、`vars.bindings` の鍵 (`FullName`) と `Param`/`Producer` の腕 (どちらもデータを
 持たない) と `Field` の第 2 成分 (`usize`)・`Payload` の第 2 成分 (`Option<usize>`)、
 `vars.closure_targets` (`Map<FullName, FuncRef>`) は、いずれも `bool`・`usize`・`String` の列と、
 それらを運ぶだけの enum・struct・集合・写像である
-(`CODE src/rc_ir/ast.rs: RcVar`, `RcRhs`, `MatchArm`, `RcState`, `CODE src/ast/name.rs: FullName`,
-`NameSpace`, `CODE src/rc_ir/ownership.rs: Binding`, `VarTable`)。
+(`CODE src/rc_ir/ast.rs: RcVar`, `RcRhs`, `MatchArm`, `RcState`, `FuncRef`, `VarPath`, `FieldPath`,
+`CODE src/ast/name.rs: FullName`, `NameSpace`, `Name`,
+`CODE src/rc_ir/ownership.rs: Binding`, `VarTable`)。**この数え上げが展開する 4 つの別名の宣言は
+この引用が運ぶ** -- `FuncRef` は唯一のフィールドが `name: FullName` である構造体、`VarPath` は
+`(FullName, FieldPath)`、`FieldPath` は `Vec<usize>`、`Name` は `String` である。
 
 **走査が挙げる残りの項目は、この 2 つの型のどの欄からも届かない。** 届く欄の全体は、この節が
 `TypeNode` へ届く道・`SourceFile` へ届く道・残る欄として数え上げたものであり、そこに現れる内部
