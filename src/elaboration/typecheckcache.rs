@@ -214,7 +214,9 @@ impl MemoryCache {
     /// that happens: the lock is held over the map alone, so a caller that goes on with them reads
     /// what the panicking thread had already stored. The language server type-checks a program the
     /// compiler can panic on, and keeps the cache across such a run.
-    fn lock_data(&self) -> MutexGuard<'_, BTreeMap<EntityIdentity, VecDeque<(VersionHash, TypedExpr)>>> {
+    fn lock_data(
+        &self,
+    ) -> MutexGuard<'_, BTreeMap<EntityIdentity, VecDeque<(VersionHash, TypedExpr)>>> {
         self.data
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())

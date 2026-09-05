@@ -443,7 +443,9 @@ mod tests {
             reports
         );
         assert_eq!(
-            failure_report_paths[0].file_name().and_then(|name| name.to_str()),
+            failure_report_paths[0]
+                .file_name()
+                .and_then(|name| name.to_str()),
             Some("fixproj.toml"),
             "the failure is expected to be reported on the project file, but it is on {:?}",
             failure_report_paths[0]
