@@ -2592,7 +2592,8 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
 
 **言明**。骨格節点 `m` について次の 5 つが成り立つ。
 
-- **(a)** `Λ(m)` の各名前は、`ρ` の上で `m` の検査点に至るまでに値を得ている。
+- **(a)** `Λ(m)` の各名前を束縛するのは、`m` の真の祖先の骨格節点か、その本体のパラメータ・capture
+  である。したがってその各名前は局所名であり、`ρ` の上で `m` の検査点に至るまでに値を得ている。
 - **(b)** `m` の核節点が名指す局所変数は、すべて `Λ(m)` に入る。「名指す」とは、`Ret(x)` の `x`、
   `Let` の右辺の各変数 (`Match` の scrutinee を含む)、`Destructure` の容器、`Eval` の変数を指す。
 - **(c)** `needs_rc(v)` が偽の変数 `v` はスロットを持たない。
@@ -2639,12 +2640,16 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
     パラメータ・capture が残る。`A(m_0)` の側は帰納法の仮定である。`m_0` の真の祖先も `m_0` 自身も
     `m` の真の祖先である。
   <2>3. QED
-    BY <2>1, <2>2, <ref id=8e3aff3/>, <ref id=66e786e/>, <ref id=ca36627/>, <ref id=596a46d/>, <ref id=b3dfa37/>
+    BY <2>1, <2>2, <ref id=8e3aff3/>, <ref id=66e786e/>, <ref id=ca36627/>, <ref id=596a46d/>, <ref id=b3dfa37/>,
+       CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: collect_bindings
     `L14` (a) より `Λ(m) = free_locals(m) ∪ A(m)` なので、<2>1 と <2>2 よりその各名前を束縛するのは
     `m` の真の祖先の骨格節点かパラメータ・capture である。D3 より `ρ` は本体の根から `m` まで祖先を
     順に辿るので、`m` の真の祖先の節点は `m` の検査点より前に実行される。D6 より節点が束縛する変数は
     その節点を実行する段で値を得、パラメータ・capture は活性化が始まる時点で値を得る。よって
     `Λ(m)` の各名前は `m` の検査点に至るまでに値を得ている。
+    局所名であることは D6 から出る -- `VarTable::of` はパラメータと capture の名前を、
+    `collect_bindings` は節点が束縛する変数の名前を `vars.bindings` に入れ、D6 は
+    「**逆に、`vars.bindings` に束縛を持つ名前は局所名である。**」と述べる。
 
 <1>2. (b)。
   BY <ref id=8e3aff3/>, <ref id=66e786e/>, <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=b3dfa37/>, CODE src/rc_ir/rc_insert.rs: free_locals,
@@ -3080,7 +3085,9 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     全体で 1 つだけなので、`ops` に `x` は現れない。
   <2>2. `ops` の各名前 `v` について、`n_v` を `v` の `Own` の出現回数とすると、前置 `Retain` 鎖が
         `v` を名指す回数は `n_v - [v ∉ Λ(m') かつ v の最後の出現が Own]` であり、後置 `Release` 鎖が
-        `v` を名指す回数は `[v ∉ Λ(m') かつ v の最後の出現が Borrow]` である。
+        `v` を名指す回数は `[v ∉ Λ(m') かつ v の最後の出現が Borrow]` である。コードはどちらも
+        `needs_rc` で絞るが、`needs_rc` が偽の名前はスロットを持たない (`L15` (c)) ので、以下の
+        勘定では区別しない。
     BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
        CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs: build_retains,
        CODE src/rc_ir/rc_insert.rs: build_releases, <ref id=dca1c02/>, EXT `Iterator::rev`
@@ -3092,6 +3099,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     のとき `releases_after` に入る。`used_later` が偽になるのは `v ∉ Λ(m')` のときの最後の出現だけで
     ある。
   <2>3. 後置 `Release` 鎖は、さらに `x ∉ Λ(m')` のとき `x` を名指す `Release` を 1 つ置く。
+        コードは `needs_rc` でも絞るが、`needs_rc` が偽の名前はスロットを持たない (`L15` (c)) ので、
+        以下の勘定では区別しない。
     BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let, <ref id=dca1c02/>
     `after` は `releases_after` に、`!live_cont.contains(&x.name) && self.needs_rc(&x)` のとき `x` を
     足したものである。
@@ -3170,7 +3179,9 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
         局所名でないときは、<1>0 よりこの変数はスロットを持たないので、`container` のスロットを
         主語にする以下の各等式は量化する対象を 1 つも持たず、フィールド変数のスロットについての
         等式だけが残る。前置 `Retain` 鎖もそのとき空である -- `retain_if_live` は
-        `var.name.is_local()` を要求する。
+        `var.name.is_local()` を要求する。コードは前置 `Retain` も後置 `Release` も `needs_rc` で
+        絞るが、`needs_rc` が偽の名前はスロットを持たない (`L15` (c)) ので、以下の勘定では
+        区別しない。
     BY <1>0, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
        CODE src/rc_ir/rc_insert.rs: insert_if_local,
        CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live, <ref id=dca1c02/>
@@ -3209,24 +3220,40 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `is_box` は `!is_unbox` を返すので、容器は boxed か unbox かのいずれかである。
 
 <1>4. **CASE (T1)** で `m = Eval(x, cont)`。
-  BY <1>0, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval, <ref id=9d74736/>, <ref id=56c2068/>, <ref id=dca1c02/>
+  BY <1>0, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
+     CODE src/rc_ir/rc_insert.rs: insert_if_local, CODE src/rc_ir/rc_insert.rs: build_releases,
+     <ref id=9d74736/>, <ref id=56c2068/>, <ref id=dca1c02/>
+  `insert_into_eval` は `live_cont` (= `Λ(m')`) に `insert_if_local(&mut live_before, &x.name)` で
+  `x` を足したものを返し、`insert_if_local` は `name.is_local()` のときだけ集合へ入れるので
   `Λ(m) = Λ(m') ∪ ({x} ∩ 局所名)` である。前置 `Retain` 鎖は空であり、後置 `Release` 鎖は
-  `x` が局所名で `x ∉ Λ(m')` かつ `needs_rc(x)` のとき `Release(x, [])` を 1 つ置く。D9 の 2 つの表に `Eval` の行は無いので核節点は
+  `x` が局所名で `x ∉ Λ(m')` かつ `needs_rc(x)` のとき `build_releases(vec![x], cont)` で
+  `Release(x, [])` を 1 つ置く -- **その path が空列であることは `build_releases` の本体による**
+  (`RcExpr::Release(v, vec![], RcState::Unknown, c)`)。D9 の 2 つの表に `Eval` の行は無いので核節点は
   `μ` を変えない。よって遷移の後 `μ(x, λ) = 1 - [x ∉ Λ(m')] = [x ∈ Λ(m')]` であり、他の名前は変わら
   ない。核節点は `x` を読み (D7)、その入口で `μ(x, λ) = 1` である。`Release` の入口でも 1 である。
-  (c) について、核節点は `μ` を下げないので `k = 0` であり、`Release(x, [])` は `x` の各スロットを
+  (c) について、核節点は `μ` を下げないので `k = 0` であり、`Release(x, [])` は path が空列なので
+  `x` の各スロットを
   1 回ずつ下げてその入口の値は 1 である。`x` が局所名でないときは <1>0 より `x` はスロットを持たず、
-  `Release` も置かれないので、この場合の勘定は空である。
+  `Release` も置かれないので、この場合の勘定は空である。`needs_rc(x)` が偽のときも `L15` (c) より
+  `x` はスロットを持たないので、勘定は同じく空である。
 
 <1>5. **CASE (T2)**。`m = Let(x, Match(scrut, arms), cont)`、`ρ` が選ぶアームを `j` とする。
   <2>0. `scrut` が局所名でないとき、<1>0 より `scrut` はスロットを持たず、この場合の `scrut` の列の
-        勘定は空である。`H` は `insert_if_local` が作る live 集合の和なので局所名だけからなり、
+        勘定は空である。`H` は局所名だけからなるので `scrut` を含まず、
         `retain_if_live` は `var.name.is_local()` を要求するので前置 `Retain` は置かれず、
         `DB_j ⊆ H` にも `scrut` は入らない。頭の `Release(scrut, [])` は置かれうるが、動かすスロットが
         無い。以下 `scrut` は局所名とする。
-    BY <1>0, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
+    BY <1>0, <ref id=dca1c02/>, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
        CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::arm_free_locals,
+       CODE src/rc_ir/rc_insert.rs: free_locals,
        CODE src/rc_ir/rc_insert.rs: insert_if_local
+    `insert_into_match` は `live_at_arm_head` を `live_after_match.clone()` から始めて各アームの
+    `arm_free_locals` の名前を足したものとして作り、`live_after_match` は `live_cont` から `x` を
+    除いたものである。`live_cont` は `insert_into_expr(cont, live_after)` の返り値、すなわち
+    `Λ(cont)` であり、`L15` (a) よりその各名前は局所名である。`arm_free_locals` が返すのは
+    `free_locals(arm.body)` から payload を除いたものであり、`free_locals` が集める名前は
+    `insert_if_local` が `name.is_local()` の門を通したものだけである。よって `H` は局所名だけからなる。
   <2>1. `H := live_at_arm_head`、`M := live_after_match`、`U_j := arm_free_locals(arm_j)`、
         `P_j := {payload_j} ∩ free_locals(arm_j.body)` と置くと、`Λ(m) = H ∪ {scrut}`、
         `Λ(m') = U_j ∪ P_j ∪ M` であり、`H = M ∪ (∪_i U_i)` である。
@@ -3268,9 +3295,23 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `Λ(m')` であり、`release_container` は `scrut.ty.is_box(self.type_env)` である。
   <2>3. `DB_j` の各名前 `n` (`scrut` を含みうる) について `n ∉ Λ(m')` であり、`Λ(m) \ Λ(m')` は
         `DB_j ∪ ({scrut} \ H)`、`Λ(m') \ Λ(m)` は `P_j` である。
-    BY <ref id=8e3aff3/>, <2>1, <ref id=33c54dc/>
-    `DB_j = H \ (U_j ∪ M)` であり `Λ(m') = U_j ∪ P_j ∪ M`。`payload_j` は A6 より `H` に入らないので
-    `DB_j ∩ Λ(m') = ∅`。`Λ(m) \ Λ(m') = (H ∪ {scrut}) \ (U_j ∪ P_j ∪ M)` であり、`payload_j` は
+    BY <ref id=8e3aff3/>, <2>1, <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=b3dfa37/>, <ref id=dca1c02/>,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::arm_free_locals
+    `DB_j = H \ (U_j ∪ M)` であり `Λ(m') = U_j ∪ P_j ∪ M`。**`payload_j` が `H` に入らないことは
+    A6・A11・D2 のスコープの規則による** -- `H = M ∪ (∪_i U_i)` (<2>1) であり、`U_i` は
+    `arm_free_locals(arm_i)` すなわち `free_locals(arm_i.body)` から `arm_i` の payload を除いたもので
+    ある。`i = j` の分は `payload_j` を除いてある。`i ≠ j` の分について、A11 よりアーム `i` の本体の
+    中の `payload_j` という名前の使用はその位置でスコープに入っている束縛に解決し、D2 のスコープの
+    規則より `payload_j` のスコープはアーム `j` の本体の部分木であってアーム `i` の本体を含まず、
+    A6 よりその名前を束縛するものはプログラム全体で 1 つだけなので、`payload_j ∉ U_i` である。
+    `M` の分について、`M = live_cont \ {x}` であり `live_cont = Λ(cont)` なので、`L15` (a) より
+    `Λ(cont)` の各名前を束縛するのは `cont` の真の祖先の骨格節点かパラメータ・capture であり、
+    アームの payload はそのどちらでもない。よって `payload_j ∉ H` であり、
+    `DB_j ∩ Λ(m') = ∅`。**`payload_j ≠ scrut` も同じ 3 つから出る** -- `scrut` は `Match` 節点の位置で
+    使われる名前であり、A11 よりその使用はその位置でスコープに入っている束縛に解決し、D2 より
+    `payload_j` のスコープはアーム `j` の本体であってその位置を含まず、A6 よりその名前を束縛するものは
+    プログラム全体で 1 つだけである。
+    `Λ(m) \ Λ(m') = (H ∪ {scrut}) \ (U_j ∪ P_j ∪ M)` であり、`payload_j` は
     `H ∪ {scrut}` に入らないので `= (H \ (U_j ∪ M)) ∪ ({scrut} \ (U_j ∪ M))`。`scrut ∈ H` のとき
     第 2 項は第 1 項に含まれ、`scrut ∉ H` のとき `scrut ∉ M ∪ (∪_i U_i)` なので第 2 項は `{scrut}` で
     ある。`Λ(m') \ Λ(m) = (U_j ∪ P_j ∪ M) \ (H ∪ {scrut}) = P_j` (`U_j ∪ M ⊆ H`)。
@@ -3322,14 +3363,32 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 <1>6. **CASE (T3)**。`m` はアーム本体の終端の `Ret(r)`、その `Match` を `Let(x, Match(s, arms), cont)`
       とする。
-  <2>1. `Λ(m) = M ∪ ({r} ∩ 局所名)`、`Λ(m') = live_cont` であり `M = live_cont \ {x}` である。
-    BY <ref id=66e786e/>, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の `RcExpr::Ret(x)` の腕,
-       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
+  <2>1. `A(m) = M` であり、`Λ(m) = M ∪ ({r} ∩ 局所名)`、`Λ(m') = live_cont`、
+        `M = live_cont \ {x}` である。
+    BY <ref id=66e786e/>, <ref id=b3dfa37/>, <ref id=ca36627/>,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の `RcExpr::Ret(x)` の腕,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
+       CODE src/rc_ir/rc_insert.rs: free_locals, CODE src/rc_ir/rc_insert.rs: insert_if_local
+    `insert_into_match` はアーム本体の**根**について `insert_into_expr(arm.body, &live_after_match)` を
+    呼ぶので、その根を書き換える呼び出しの `live_after` は `M := live_after_match` である。
+    **`m` はアーム本体の終端の `Ret` であって根とは限らない** -- 根から `m` までの伝播が要る。
+    `Ret` でない骨格節点 4 種を書き換える 4 つの関数はいずれも継続について
+    `self.insert_into_expr(cont, live_after)` を呼ぶので、継続を書き換える呼び出しの `live_after` は
+    その節点を書き換える呼び出しのものに等しい。D2 より `Ret` 以外の 5 種はちょうど 1 つの継続を持ち、
+    D3 よりアーム本体の終端の `Ret` はその根から継続だけを辿って着く節点なので、その鎖の長さについての
+    帰納で `A(m) = M` である。
     アーム本体は `live_after = M` で書き換えられるので `L14` (a) より
-    `Λ(m) = free_locals(Ret(r)) ∪ M`。
+    `Λ(m) = free_locals(Ret(r)) ∪ M` であり、`free_locals(Ret(r))` は `insert_if_local` の門より
+    `r` が局所名なら `{r}`、そうでなければ空である。
   <2>2. 前置 `Retain` 鎖は `r ∈ M` のとき `Retain(r, [])` を 1 つ置き、`Match` の核節点と `cont` の
-        間の `Release` 鎖は `x ∉ live_cont` のとき `Release(x, [])` を 1 つ置く。
-    BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の `RcExpr::Ret(x)` の腕,
+        間の `Release` 鎖は `x ∉ live_cont` のとき `Release(x, [])` を 1 つ置く。コードはどちらも
+        `needs_rc` で絞り、前者はさらに `r` が局所名であることを要求するが、`needs_rc` が偽の名前は
+        スロットを持たず (`L15` (c))、局所名でない名前もスロットを持たない (<1>0) ので、以下の
+        勘定では区別しない。
+    BY <1>0, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の `RcExpr::Ret(x)` の腕,
        CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match, <ref id=dca1c02/>
   <2>3. 核節点 `Ret(r)` は `μ(x, λ)` を 1 上げる。`r` が局所名であるときは併せて `r` の inhabited な
@@ -3339,8 +3398,13 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     型は等しいので leaf は対応する。`r` が局所名でないときは <1>0 より `(r, λ)` はスロットではないので
     `μ` を下げる項が無い。
   <2>4. QED
-    BY <ref id=8e3aff3/>, <1>0, <2>1, <2>2, <2>3, <ref id=33c54dc/>
-    A6 より `x ≠ r` であり、`r ∈ M ⟺ r ∈ live_cont` である。`r` が局所名であるとき、遷移の後
+    BY <ref id=8e3aff3/>, <1>0, <2>1, <2>2, <2>3, <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=b3dfa37/>
+    **`x ≠ r` は A6・A11・D2 のスコープの規則から出る** -- `r` はアーム本体の終端の `Ret` の位置で
+    使われる名前であり、A11 よりその使用はその位置でスコープに入っている束縛に解決する。D2 より
+    `Let(x, Match(..), cont)` が束縛する `x` のスコープは `cont` の部分木であってアーム本体を含まない
+    ので、`r` の使用が `x` の束縛に解決することはなく、A6 よりその名前を束縛するものはプログラム全体で
+    1 つだけなので `x ≠ r` である。`M = live_cont \ {x}` なので
+    `r ∈ M ⟺ r ∈ live_cont` である。`r` が局所名であるとき、遷移の後
     `μ(r, λ) = 1 + [r ∈ M] - 1 = [r ∈ Λ(m')]` である。`r` が局所名でないときは <1>0 より `r` は
     スロットを持たず、<2>1 より `Λ(m) = M` であり、`r` についての勘定は空である。どちらでも
     `μ(x, λ) = 1 - [x ∉ live_cont] = [x ∈ Λ(m')]` である。他の名前は `Λ(m)` と `Λ(m')` の両方に入るか
