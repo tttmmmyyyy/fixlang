@@ -19,7 +19,7 @@
   `TypeNode::type_hash` がその memo へ書くこと、`InlineLLVMCaptureProjectBody` の欄、`borrow_ify` と
   `cancel` が `RcProgram` を組み立てる 3 つの欄、`cancel` の本体の書き換えが `drop_nodes` を呼ぶ
   こと、`drop_nodes` と `drop_nodes_inner` が `Let` の右辺を丸ごと写すこと、`clone_func`、
-  `borrow_funcref`。`Map` の別名は第 1 節の EXT の言明が引く。
+  `borrow_funcref`、`FullName` と `NameSpace` の欄。`Map` の別名は第 1 節の EXT の言明が引く。
 - **外部の結果**: EXT 共有参照が書き込める先、EXT 非公開の欄に触れられる範囲、EXT 計算は読んだ値で
   決まる、EXT 条件としてしか読まれない引数、EXT 反復子の `iter`・`values`・`map`・`collect`、
   EXT 写像の `insert` と `values_mut`、EXT Clone。第 1 節の「外部の結果」がその完全な言明を据える。
@@ -44,6 +44,9 @@ T の言明はこのほかに、D7・D21・D25・D26・D31 を名前で引く。
 **3 つとも実行の中の値であって、パスを数学の関数として当てたものではない。** `<1>1` が、この 3 つが
 `p1 = borrow_ify(p0, type_env, develop_mode)` と `p2 = cancel(p1, type_env)` を満たすことを、
 2 つの呼び出しの位置とそこを流れる `prog` の値から読む。この 3 つの名前はこのファイルの中でだけ使う。
+
+**`p0` を渡した値として取るのは、A1 と A2 の主語が `borrow_ify` に渡されるプログラムだからである。**
+下の H1 と H2 は、その 2 つを `p0` について述べたものである。
 
 **T** (パイプラインが保存するもの)
 
