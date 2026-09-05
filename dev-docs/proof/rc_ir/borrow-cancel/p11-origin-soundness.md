@@ -731,9 +731,9 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
           実行路に無いからである** -- 第 1 節が `VarTable::empty` の呼び出し元について同じ形で
           除いている。
       BY 前提 `Origin::Exactly` を作る式の在りか (走査は `#[cfg(test)]` の下の項目を除く。
-         挙がる 5 項目のうち `Origin::identity` と `Origin::candidates` の 2 つはパターンであって
+         挙がった項目のうち `Origin::identity` と `Origin::candidates` はパターンであって
          構成ではない),
-         <ref id=d6c2508/> (`Origin::Join { .. }` を作る式は `of_candidates` の中の 1 か所だけであり、どの `Origin` の
+         <ref id=d6c2508/> (`Origin::Join { .. }` を作るのは `Origin::of_candidates` だけであり、どの `Origin` の
          値も `Exactly` か `of_candidates` が作った `Join` かその複製である),
          CODE src/rc_ir/ownership.rs: origin_inner (`here` は
          `Origin::Exactly((var.clone(), path.to_vec()))` を返す閉包である),
@@ -753,11 +753,12 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
       BY CODE src/rc_ir/ownership.rs: Origin::of_candidates -- `1 =>` の腕は `candidates` の唯一の元を
          `Origin::Exactly` に置き、`_ =>` の腕は `identity` に `h` を、`candidates` に `C` を置く,
          CODE src/rc_ir/ownership.rs: Origin::identity, Origin::candidates
-    <3>1c. `of_candidates` を呼ぶのは `ownership.rs` の 2 か所だけであり、どちらでも `h` はその
+    <3>1c. `of_candidates` を呼ぶのは `origin_inner` の `Some(Binding::Join(..))` の腕と
+           `origin_from_leaves_under` の末尾であり、どちらでも `h` はその
            呼び出し自身の `(var, path)`
            であり、`C` の各元は、その呼び出しが畳み込む `Origin` のいずれかに現れる `VarPath` である。
       BY <ref id=e05fb56/> (a) (`acted_on()` の元は `identity` か `candidates` の元である), <ref id=d2c1f1f/>,
-         <ref id=d6c2508/> (`Origin` という識別子は `ownership.rs` の外に現れない),
+         前提 `of_candidates` を呼ぶ式の在りか,
          EXT 可視性 (`pub` の付かない項目を名指せるのは、それを定義するモジュールとその子孫だけで
          ある),
          CODE src/rc_ir/ownership.rs: Origin::of_candidates (`fn` に `pub` が付かないので、この関数を
@@ -890,20 +891,26 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
 証明は第 4 節のどの命題も引かず、L8 の証明が引くのは L16 だけなので、順序は
 「L1 から L5、L10 から L13 → L6 → L15 → L16 → L14 → L8 → L9」に並ぶ。
 
-**L1 (`Origin::Join` は `of_candidates` だけが作る)**: `Origin::Join { .. }` を値として作る式は <!--#d6c2508-->
-`Origin::of_candidates` の中の 1 か所だけである。よって、どの `Origin` の値も、`Exactly` であるか、
+**L1 (`Origin::Join` は `of_candidates` だけが作る)**: `Origin::Join { .. }` を値として作るのは <!--#d6c2508-->
+`Origin::of_candidates` だけである。よって、どの `Origin` の値も、`Exactly` であるか、
 `of_candidates` が作った `Join` (あるいはその複製) である。
 
-<1>1. 識別子 `Origin` は、`src/` の中で `src/rc_ir/ownership.rs` の外に現れない。すなわち
-      `Origin::Join { .. }` という式を書きうるのはこのファイルの中だけである。`ProjectOrigin` と
-      `LeafOrigin` は別の識別子である。
-  BY CODE src/rc_ir/ownership.rs: Origin -- `src/` 全体を `Origin` で検索し、`ProjectOrigin` と
-     `LeafOrigin` を除くと、当たるのは `src/rc_ir/ownership.rs` の行だけである。
-<1>2. 完全修飾の道 (`crate::rc_ir::ownership::Origin::Join { .. }`) も現れない。
-  BY <1>1 -- その道も識別子 `Origin` を含むので、<1>1 の検索に当たる。
-<1>3. `ownership.rs` の中で `Origin::Join` と書かれているのは 3 か所であり、`Origin::identity` と
-      `Origin::candidates` の 2 つはパターン、`Origin::of_candidates` の 1 つが構成である。
-  BY CODE src/rc_ir/ownership.rs: Origin::identity, Origin::candidates, Origin::of_candidates
+<1>1. `Origin` の `Join` 変位を値として作る式は、その字面に変位の名前 `Join` を含む。よってその式が
+      在りうるのは、第 1 節の前提が挙げる項目の中だけである。**在りかを与えるのは走査である** --
+      挙がった各項目が何であるかは、その前提の `--` の後に書いてある。
+  BY 前提 `Origin` の `Join` 変位を作る式の在りか,
+     CODE src/rc_ir/ownership.rs: Origin (`Join` は `Origin` の変位の名前である)
+<1>2. 挙がった項目のうち `src/rc_ir/ownership.rs` の外にあるものは、どれも `Origin` の `Join` 変位を
+      作らない -- 前提の `--` が述べるとおり、英語の doc かコメント、または
+      `std::thread::JoinHandle` の綴りだからである。
+  BY <1>1, 前提 `Origin` の `Join` 変位を作る式の在りか
+<1>3. `src/rc_ir/ownership.rs` の中で挙がった項目のうち、`Origin::Join { .. }` を値として作るのは
+      `Origin::of_candidates` だけである。`Origin::identity` と `Origin::candidates` の
+      `Origin::Join` は `match` のパターン、`Origin` に挙がったのは変位の宣言であり、
+      `Binding`・`collect_bindings` と `origin_inner` の `Binding::Join` は別の型 `Binding` の
+      変位である。`Origin::acted_on` と `origin_inner` に挙がった残りは英語の doc である。
+  BY <1>1, <1>2, CODE src/rc_ir/ownership.rs: Origin, Origin::identity, Origin::candidates,
+     Origin::of_candidates, Origin::acted_on, Binding, collect_bindings, origin_inner
 <1>4. `Origin` は `Clone` を導出するので、`Join` の値は複製によっても現れる。複製は `identity` と
       `candidates` をそのまま運ぶ。
   BY EXT 導出した Clone (`#[derive(Clone)]` の `clone` は同じ構成子の値を返し、各欄にその型の
