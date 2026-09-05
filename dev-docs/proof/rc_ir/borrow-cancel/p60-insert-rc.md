@@ -35,7 +35,7 @@ D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて 
 - **`(P-insert)` は偽である。** `insert_rc` が実際に出力する 5 節点の本体が反例である (第 4 節)。破れは
   1 か所の数え落としから来る -- 言明が数える「残りの消費と `Release`」には、まだ実行されていない
   `Retain` が作る参照の分が入っており、その分を引いていない。**これはコードの欠陥ではない。** 反例の本体は
-  D12 を満たし、A19 (ii) も満たす (第 4 節の `L30`)。
+  D12 を満たし、A19 (ii) の 3 つの節もすべて満たす (第 4 節の `L30`)。
 - **数え落としを直した形だけでは A19 (ii) は出ない。** 直した形は `p13-disposals-and-pending.md` の
   反例 `C1` が満たし、`C1` は A19 (ii) を破る (第 5 節)。よって A19 (ii) へ渡るには、直した形に加えて
   `insert_rc` の出力を `C1` から区別する事実が要る。すなわち `(P-insert)` は、強すぎる読みでは
@@ -213,8 +213,8 @@ A11 は「**この仮定が語るのは `borrow_ify` の入力である。**」�
 **DEF 例の名前の取り方**。例のプログラムのパラメータと束縛変数の名前は、いずれも名前空間を持たない
 ものを取る。例の関数は、その名前を鍵として `prog.funcs` に置く。
 
-**DEF `C1` の本体**。`C1` は 2 つの関数からなる。関数 `f` (パラメータ `b : Arr`、`borrowed_units` は
-空、返り値の型 `I`) の本体は `Let(z, Llvm(zero, []), Release(b, [], s, Ret(z)))` であり、関数 `main`
+**DEF `C1` の本体**。`C1` は 2 つの関数からなる。関数 `f` (パラメータ `b : Arr`、**capture 無し**、
+`borrowed_units` は空、返り値の型 `I`) の本体は `Let(z, Llvm(zero, []), Release(b, [], s, Ret(z)))` であり、関数 `main`
 (パラメータ無し、capture 無し、返り値の型 `I`) の本体は次である。
 
 ```
@@ -264,7 +264,7 @@ README の A19 は (ii-a) と (ii-b) の果たす者に `insert_rc` を挙げる
 
 - **R1**、**L1** - **L3**、**L30** (第 4 節)。`insert_rc` が反例の骨格 `S_main` を本体 `B_0` へ写す
   こと (`L1`)、`B_0` の実行路と別名類 (`L2`)、その上の `held` と `Fut` (`L3`)、そこから出る
-  `(P-insert)` の破れ (R1)、およびその出力が D12 と A19 (ii) を満たすこと -- すなわち破れが言明の側に
+  `(P-insert)` の破れ (R1)、およびその出力が D12 と A19 (ii) の 3 つの節を満たすこと -- すなわち破れが言明の側に
   あること (`L30`)。
 - **R2**、**L4**、**L5** (第 5 節)。`held` が開始と増減で決まること (`L4`)、`Fut` から未実行の
   `Retain` の分を引いた形 `(P-insert-net)` を `p13-disposals-and-pending.md` の反例 `C1` が満たすこと
@@ -300,9 +300,10 @@ README の A19 は (ii-a) と (ii-b) の果たす者に `insert_rc` を挙げる
 
 `DEF 例の型と op` の `Arr`・`I`・`alloc`・`zero` と、`DEF 例の名前の取り方` を使う。
 
-**DEF 骨格 `S_f` と `S_main`**。次の 2 つの骨格を、関数 `f` と `main` の本体とする。
+**DEF 骨格 `S_f` と `S_main`**。次の 2 つの木を、関数 `f` と `main` の本体として `insert_rc` の入力に
+据える。`DEF 骨格` より、この 2 つは骨格である。
 
-骨格 `S_f` (関数 `f`、パラメータ `b : Arr`、`borrowed_units` は空、返り値の型 `I`):
+骨格 `S_f` (関数 `f`、パラメータ `b : Arr`、**capture 無し**、`borrowed_units` は空、返り値の型 `I`):
 
 ```
 Let(z, Llvm(zero, []), Ret(z))
@@ -317,7 +318,8 @@ Let(w, App(f, [p]),
 Ret(w))))
 ```
 
-どちらも `Retain`/`Release` を含まないので骨格である。
+**capture の有無を書くのは、`insert_into_func` が未使用の capture にも `Release` を被せるからである。**
+どちらの関数も capture を持たないので、その `Release` はどちらの出力にも立たない。
 
 ### 4.2 `L1` (`insert_rc` が出力する本体) <!--#48a9624-->
 
@@ -484,13 +486,17 @@ Ret(w)))))
   D3 の規則で分岐が生じるのは `Let(x, Match(v, arms), k)` の行だけである。
 
 <1>2. `ρ_0` の上のスロットのうち、変数が `p`、`u`、`w` のいずれかであるものは `(p, [])` だけである。
-  BY <ref id=0594f24/>, <ref id=596a46d/>, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+      `[]` は `ty(p) = Arr` の inhabited (D16) な boxed leaf であり、`p` が値を得た後 `(p, [])` は
+      D6 のスロットである。
+  BY <ref id=0594f24/>, <ref id=596a46d/>, <ref id=66c9670/>, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
      CODE src/ast/types.rs: TypeNode::is_unbox
   `is_fully_unboxed` は `if self.is_box(type_env) { return false; }` で始まるので、boxed な `Arr` では
   偽である。`is_unbox` は `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` であり
   `is_box` はその否定なので、`is_box` が真の `Arr` では `is_closure` が偽である。よって D4 の判定は
   第 1 規則 (`is_fully_unboxed`) と第 2 規則 (クロージャ) を抜けて第 3 規則 (`is_box`) に着き、
-  `boxed_leaf_paths(Arr) = {[]}` である。
+  `boxed_leaf_paths(Arr) = {[]}` である。この leaf は第 3 規則が積んだものであって unbox union の節を
+  1 つも通らないので、D16 より常に inhabited である。D6 よりスロットは、その実行路の上でその時点までに
+  値を得た変数と、その型の inhabited な boxed leaf の対であり、`(p, [])` はその形である。
   `ty(u) = ty(w) = I` は `DEF 例の型と op` より `is_fully_unboxed` が真なので、D4 の第 1 規則より leaf を
   持たない。
 
@@ -614,7 +620,8 @@ D9 の消費は 2 つの `App(f, [p])` の引数の位置の 2 つであり、`�
 初期化子を持たないプログラムに `insert_rc` を掛けた出力を `P_0` とする。
 
 - **(a)** `P_0` は D12 の意味で RC 規律を満たす。
-- **(b)** `B_0` は A19 (ii) (`DEF ii-a と ii-b の読み`) を満たす。
+- **(b)** `B_0` は A19 (ii) の 3 つの節をすべて満たす -- (ii-a) と (ii-b) は
+  `DEF ii-a と ii-b の読み` の形で、(ii-c) は第 1 節の `DEF 時点` が引く形で。
 
 すなわち `(P-insert)` の破れ (R1) はコードの欠陥ではなく、言明の側の欠陥である。
 
@@ -707,7 +714,7 @@ D9 の消費は 2 つの `App(f, [p])` の引数の位置の 2 つであり、`�
 <1>8. `Retain(p, [])` の訪問が押し込む要素の `outstanding` は `{(p, []): 1}` であり、最初の
       `App(f, [p])` の訪問がその要素を `pending` から取り除く。よって `bumps_ρ0(・, C_p)` は
       `Retain(p, [])` の後から最初の `App` の消費までが 1 で、他の時点では 0 である。
-  BY <ref id=4eea96b/>, <ref id=764c202/>, <ref id=cbc4a1c/>, <ref id=8093b68/>, CODE src/rc_ir/ownership.rs: acted_references,
+  BY <ref id=4eea96b/>, <ref id=764c202/>, <ref id=cbc4a1c/>, <ref id=8093b68/>, <ref id=66c9670/>, <ref id=596a46d/>, <ref id=88a06de/>, CODE src/rc_ir/ownership.rs: acted_references,
      CODE src/rc_ir/ownership.rs: Origin::acted_on,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
@@ -717,14 +724,17 @@ D9 の消費は 2 つの `App(f, [p])` の引数の位置の 2 つであり、`�
   `walk_inner` の `RcExpr::Retain` の腕は `outstanding` に `acted_references(p, [])` を置く。D15 より
   それは `[]` の下の各 boxed leaf の `origin` の `identity` を数えたものであり、`L2` より `ty(p)` の
   boxed leaf は `[]` の 1 つ、`origin(p, []) = Exactly((p, []))` なので
-  `{(p, []): 1}` である。D27 より押し込まれた要素の `B` も `{(p, []): 1}` である。最初の
+  `{(p, []): 1}` である。D27 が数えるのは inhabited (D16) かつ計数下 (D26) の leaf に限るが、
+  `L2` より `ρ_0` を辿るどの活性化でも `(p, [])` は `ρ_0` の上のスロットであり、D6 よりスロットの
+  leaf は inhabited であって、`L2` より `obj(C_p)` は計数下なので、押し込まれた要素の `B` も
+  `{(p, []): 1}` である。最初の
   `App(f, [p])` の訪問は `consume_rhs` を通じて `rhs_consumes` が挙げる leaf について `consume` を
   呼び、`L3` よりそれは `(p, [])` を含む。`consume` は
   `origin(p, []).acted_on() = [(p, [])]` を `consume_objects` へ渡し、その要素の `outstanding` は
   `(p, [])` を名指すので取り除かれる。`walk_inner` が `pending` に要素を足すのは `RcExpr::Retain` の
   腕だけであり、`B_0` の `Retain` 節点はこの 1 つである。
 
-<1>9. (b)。
+<1>9. (ii-a) と (ii-b)。
   BY <1>3, <1>6, <1>8, DEF ii-a と ii-b の読み
   `DEF ii-a と ii-b の読み` では (ii-a) は「各時点で `held ≥ 0`、読む構文と `Retain`/`Release` がその類を名指す
   時点では `held ≥ 1`、終端の `Ret` の消費を行った直後の時点でも `held ≥ 0`」であり、(ii-b) は
@@ -734,8 +744,15 @@ D9 の消費は 2 つの `App(f, [p])` の引数の位置の 2 つであり、`�
   `bumps ≥ 1` であるのは `Retain(p, [])` の後から最初の `App` の消費までであり、<1>3 より
   その間 `held = 2 = 1 + 1` である。
 
+<1>9a. (ii-c)。
+  BY <1>1, <ref id=48a9624/>, <ref id=f941b4f/>, DEF 時点
+  `L1` と <1>1 より `B_0` は `insert_rc` の出力の本体である。`L19` (d) の第 2 文が、`insert_rc` の
+  出力の各本体の各節点の実行の途中の各点 (D24 の段内の点) について、その点で `held_ρ` が定まる各計数下の
+  別名類 `C` の `held_ρ(・, C)` が 0 以上であることを与える。`DEF 時点` が引く A19 (ii-c) の量化は
+  その形である。
+
 <1>10. QED
-  BY <1>7, <1>9
+  BY <1>7, <1>9, <1>9a
 
 **破れているのは言明の側である。** `Fut_ρ(n, C)` は `n` より後の処分だけを数え、`n` より後の `Retain` が
 作る参照を数えない。`held_ρ(n, C)` はその時点の参照の個数なので、後で `Retain` が増やす分を先取りして
@@ -743,8 +760,8 @@ D9 の消費は 2 つの `App(f, [p])` の引数の位置の 2 つであり、`�
 
 ## 5. R2: 数え落としを直した形は A19 (ii) を果たさない
 
-**DEF 関数 `id`**。`DEF 例の型と op` に、関数 `id` (パラメータ `a : Arr`、`borrowed_units` は空、
-返り値の型 `Arr`、本体 `Ret(a)`) を足す。`id` を使うのは `L13` である。
+**DEF 関数 `id`**。`DEF 例の型と op` に、関数 `id` (パラメータ `a : Arr`、**capture 無し**、
+`borrowed_units` は空、返り値の型 `Arr`、本体 `Ret(a)`) を足す。`id` を使うのは `L13` である。
 
 **DEF `Ret#`**。`ρ` の上の節点 `n` と別名類 `C` について、`Ret#_ρ(n, C)` を、`ρ` の上で `n` より後にある
 `Retain(v, π)` 節点であって `(v, λ) ∈ C` である `λ` を `π` の下に持つものについて、そのような `λ` の
@@ -1726,7 +1743,7 @@ P21。」で始まる。P18a と P18c はどちらの項にも挙がっており
 ### 9.2 `L13` (A19 (ii) を満たし、由来の形を破る本体 `B_1`) <!--#eab5fd1-->
 
 `DEF 例の型と op`・`DEF 例の名前の取り方`・`DEF 関数 id` を使う。本体 `B_1` (`main`、パラメータ
-無し、返り値の型 `I`) を次で定める。
+無し、**capture 無し**、返り値の型 `I`) を次で定める。
 
 ```
 Let(o, Llvm(alloc, []),
@@ -3920,7 +3937,8 @@ unbox 構造体について、結果の leaf `[i] ++ σ` を単一の `Arg(i, σ
 (`CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMMakeStructBody`)。`borrows_operand` は既定の
 偽である (`CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand`)。
 
-骨格 `S_g` (関数 `g`、パラメータ `m : Arr`、`borrowed_units` は空、返り値の型 `Pair`):
+骨格 `S_g` (関数 `g`、パラメータ `m : Arr`、**capture 無し**、`borrowed_units` は空、返り値の型
+`Pair`):
 
 ```
 Let(x, Llvm(make_pair, [m, m]), Ret(x))
