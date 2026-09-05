@@ -1083,12 +1083,12 @@ fn diagnostics_thread(
 /// from reaching the thread.
 ///
 /// Elaboration panics on some programs, and an editor reaches such a program on the way to a
-/// finished one, so a panic here ends the pass alone. The thread stays, which is what lets the pass
-/// the next edit asks for run and publish the diagnostics of the repaired program. The diagnostics
-/// of the last pass that finished stay on screen until then.
+/// finished one, so a panic here ends the pass alone. The thread stays alive, so the next edit
+/// gets a pass of its own, and that pass publishes the diagnostics of the repaired program. Until
+/// then the screen keeps the diagnostics of the last pass that finished.
 ///
-/// `last_pass_failed` says whether the pass before this one failed, so that a program which keeps
-/// failing is reported once instead of on every keystroke; a pass that publishes clears it.
+/// `last_pass_failed` says whether the pass before this one failed, so that one report covers a
+/// whole streak of failing passes; a pass that publishes clears it.
 fn run_diagnostics_pass(
     overrides: Arc<Map<PathBuf, String>>,
     typecheck_cache: &SharedTypeCheckCache,
@@ -1100,10 +1100,10 @@ fn run_diagnostics_pass(
     send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
     send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Analyzing");
 
-    // Publishing is inside the boundary along with the analysis, because it panics on a program
-    // under repair too: a span reaching past the end of the file it names fails where it is turned
-    // into a range of the protocol. `AssertUnwindSafe` covers `prev_err_paths`, which a pass that
-    // fails leaves as the pass that published last left it.
+    // Publishing runs inside `catch_unwind` along with the analysis, because it panics on a
+    // program under repair too: a span reaching past the end of the file it names fails where it
+    // is turned into a range of the protocol. `AssertUnwindSafe` covers `prev_err_paths`: a pass
+    // that fails leaves it as the last pass that published left it.
     let res = catch_unwind(AssertUnwindSafe(|| {
         run_diagnostics_and_publish(overrides, typecheck_cache, res_send, prev_err_paths)
     }));
@@ -1116,8 +1116,8 @@ fn run_diagnostics_pass(
                 any_to_string(payload.as_ref())
             );
             if !*last_pass_failed {
-                // Naming the files the report reaches to the pass that publishes next is what
-                // clears it.
+                // Adding the files the report reaches to `prev_err_paths` is what makes the
+                // next pass that publishes clear the report.
                 let reported_paths = publish_compiler_failure(
                     "Analysis of this program failed, so the diagnostics shown are those of the \
                      program analyzed before it. The next edit runs the analysis again.",

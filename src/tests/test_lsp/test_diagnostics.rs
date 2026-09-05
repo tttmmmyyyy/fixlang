@@ -376,8 +376,8 @@ mod tests {
         client
     }
 
-    /// Saves `file` and waits until the pass the save asks for has ended, calling `expectation`
-    /// what the wait is for.
+    /// Saves `file` and waits until the pass the save asks for has ended. `expectation` names
+    /// what the wait is for, and is shown when the wait times out.
     fn save_and_wait_for_a_pass(client: &mut LspClient, file: &Path, expectation: &str) {
         let passes_before = client.count_progress_end_messages();
         client.save_document(file).expect("Failed to save document");
@@ -417,8 +417,8 @@ mod tests {
     /// has a file to show it on, and the pass that succeeds takes it back.
     ///
     /// A program being repaired passes through shapes the compiler answers with a panic, and the
-    /// case project holds one of them. A panic that took the diagnostics thread with it left the
-    /// session with no report on any file, however the program was repaired afterwards.
+    /// case project holds one of them. A panic that takes the diagnostics thread with it leaves
+    /// the session with no report on any file, however the program is repaired afterwards.
     #[test]
     fn test_the_next_program_is_analyzed_after_a_pass_panics() {
         let (_temp_dir, project_dir) = setup_test_env("diagnostics_after_panic");
@@ -432,8 +432,8 @@ mod tests {
         );
 
         // What the rest of this test measures exists only after a pass has panicked, so the panic
-        // is asserted rather than assumed: a case project the compiler learns to analyze makes
-        // this test say so, in place of passing while measuring nothing.
+        // is asserted rather than assumed: should the compiler learn to analyze the case project,
+        // this test fails and says so.
         let reports = client.get_all_diagnostics();
         let failure_report_paths = analysis_failure_report_paths(&reports);
         assert_eq!(
