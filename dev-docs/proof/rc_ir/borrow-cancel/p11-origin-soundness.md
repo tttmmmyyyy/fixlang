@@ -402,21 +402,20 @@ A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返
   <2>2. `result_prov` の呼び出しは値を返し (A3)、返す `Provenance` は、`Provenance::uniform`、
         `Provenance::build_shape`、`Provenance::uniform_bottom`、`Provenance::fresh_under`、
         `replaced_field_prov` のいずれかを `result_ty` に対して呼んだ値である。
-        **在りかは述語で決める** -- `LLVMGen::result_prov` の既定の本体と、`src/fixstd/builtin.rs` を
-        `fn result_prov` で走査して得る本体の全体である。その個数は A3 が数える。**`CODE` は
-        5 つの構成子の代表を挙げる** -- 全部を並べた一覧は、op が 1 つ増えるたびに古くなる。
-    BY <ref id=e11772a/> (`result_prov` の呼び出しは abort せず `Provenance` を返す。「`impl LLVMGen for` は 78 個
-       あり、`result_prov` を override するのは 29 個、その 29 個が leaf に置く集合はすべて要素数 0 か
-       1 である (`sole_origin` / `Set::default()` / `uniform` / `uniform_bottom` / `fresh_under` の
-       いずれかで作られる)」),
+        **在りかを与えるのは走査である** -- `LLVMGen::result_prov` の本体が在る項目を第 1 節の前提が
+        挙げ、その各項目が 5 つのどれを呼ぶかもそこに書いてある。
+    BY <ref id=e11772a/> (`result_prov` の呼び出しは abort せず `Provenance` を返す),
+       前提 `result_prov` の本体の在りか,
        CODE src/ast/inline_llvm.rs: LLVMGen::result_prov (既定の本体は `Provenance::uniform` を
        `result_ty` に対して呼ぶ),
-       CODE src/fixstd/builtin.rs: InlineLLVMStringBuf (`Provenance::uniform` の代表),
-       CODE src/fixstd/builtin.rs: InlineLLVMMakeStructBody (`Provenance::build_shape` の代表),
-       CODE src/fixstd/builtin.rs: InlineLLVMUndefinedInternalBody (`Provenance::uniform_bottom` の
-       代表),
-       CODE src/fixstd/builtin.rs: InlineLLVMArrayPunchBody (`Provenance::fresh_under` の代表),
-       CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody (`replaced_field_prov` の代表),
+       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMMakeStructBody (`result_prov` は
+       `Provenance::build_shape` を `result_ty` に対して呼ぶ),
+       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMUndefinedInternalBody (`result_prov` は
+       `Provenance::uniform_bottom` を `result_ty` に対して呼ぶ),
+       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMArrayPunchBody (`result_prov` は
+       `Provenance::fresh_under` を `result_ty` に対して呼ぶ),
+       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStructSetBody (`result_prov` は
+       `replaced_field_prov` に `result_ty` を渡す),
        CODE src/fixstd/builtin.rs: replaced_field_prov (`result_ty` が boxed なら
        `Provenance::uniform`、そうでなければ `Provenance::build_shape`)
   <2>3. <2>2 の 5 つはいずれも `LeafMap::build_shape(result_ty, ..)` を通り、鍵の集合を変えない。
