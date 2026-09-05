@@ -125,8 +125,8 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | `p40-cancel-soundness.md` | 第 8 周 (448 ステップ) | 4 | 5 | BAD-CITATION 4、UNDEFINED 1、NOT-OBVIOUS 53 | **一部修理** (FALSE・INCOMPLETE・BAD-CITATION・UNDEFINED は全件、NOT-OBVIOUS は 10 件)。`L44` を 7 命題に割った。**第 9 周の検証** |
 | `p50-observation.md` | 第 8 周 (259 ステップ) | **0** | 4 | NOT-OBVIOUS 13、BAD-CITATION 2 | **修理済み** (19 件すべて)。数え上げ 9 件は「前提」+ `SCAN` へ。**第 9 周の検証** |
 | `p51-runs.md` | 第 8 周 (219 段) | 2 | 8 | BAD-CITATION 2、NOT-OBVIOUS 3 | 修理済み。**第 9 周の検証** |
-| `p60-insert-rc.md` | 第 8 周 (382 段) | 2 | 2 | BAD-CITATION 2、NOT-OBVIOUS 5 | 修理済み。**第 9 周の検証** |
-| `p70-main-theorem.md` | 第 8 周 (31 ステップ) | **0** | 1 | NOT-OBVIOUS 2、散文 8 (うち枠の仮定の数え上げの落ち 1) | **修理済み**。数え上げの落ちは検査になった |
+| `p60-insert-rc.md` | 第 8 周 (384 ステップ) | 2 | 2 | BAD-CITATION 2、NOT-OBVIOUS 5 | **修理済み**。節番号での引用 32 件を名前へ。**第 9 周の検証** |
+| `p70-main-theorem.md` | 第 8 周 (31 ステップ) | **0** | 1 | NOT-OBVIOUS 2、散文 8 | **修理済み** (T4 の本体の節を除く全件)。**第 9 周の検証** |
 
 `--` は、その周の検証がその欄を挙げなかったことを表す。
 

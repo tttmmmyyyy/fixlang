@@ -548,8 +548,15 @@ def convert(directory, path):
         return f"<ref id={identity}/>"
 
     # 引用・コード・再掲に加えて、**名札の名前**も守る。
-    guarded = sorted([m.span() for m in PROTECTED.finditer(text)]
-                     + [m.span() for m in proof_syntax.LABEL_NAME.finditer(text)])
+    # **重なる範囲は 1 つに束ねる。** 名札の名前はその中のバッククォートの範囲と重なるので、
+    # 束ねずに並べると重なった分を 2 度書き出す (実測で 4 か所の名札が二重になった)。
+    guarded = []
+    for start, stop in sorted([m.span() for m in PROTECTED.finditer(text)]
+                              + [m.span() for m in proof_syntax.LABEL_NAME.finditer(text)]):
+        if guarded and start <= guarded[-1][1]:
+            guarded[-1] = (guarded[-1][0], max(guarded[-1][1], stop))
+        else:
+            guarded.append((start, stop))
     out, cursor = [], 0
     for start, stop in by_spans(text):
         out.append(text[cursor:start])

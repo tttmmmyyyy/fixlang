@@ -656,7 +656,7 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     `p0.globals` の第 `i` 要素のものに等しい。
   - **`roots`**: `roots: prog.roots.clone()`。よって `p1.roots` は `p0.roots` に等しい。
 
-    BY EXT 反復子の `iter`・`values`・`map`・`collect``iter`・`values`・`map`・`collect`, EXT 写像の `insert` と `values_mut``insert` と `values_mut`,
+    BY EXT 反復子の `iter`・`values`・`map`・`collect`, EXT 写像の `insert` と `values_mut`,
        `CODE src/rc_ir/borrow.rs: borrow_ify`,
        `CODE src/rc_ir/borrow.rs: clone_func`, `CODE src/rc_ir/ast.rs: RcProgram`
 
@@ -726,7 +726,7 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   `p1.funcs` のどのエントリも鍵はその `name` に等しいので、この集合は `p1.funcs` の鍵の集合に
   等しい。`<2>1` の 3 と合わせて、**`p0.funcs` の各関数の `name` は `p2.funcs` の鍵である。**
 
-    BY <2>1, EXT 反復子の `iter`・`values`・`map`・`collect``iter`・`values`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`,
+    BY <2>1, EXT 反復子の `iter`・`values`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`,
        `CODE src/rc_ir/ast.rs: RcProgram`
 
   **<2>3a.** `cancel` が返す `globals` と `roots` を、コードの上で読む。`cancel` は
@@ -739,7 +739,7 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   複製を置くので、第 `i` 要素の `symbol` と `ty` は `p1.globals` の第 `i` 要素のものに等しい。
   `roots` は `roots: prog.roots.clone()` なので `p2.roots` は `p1.roots` に等しい。
 
-    BY EXT 反復子の `iter`・`values`・`map`・`collect``iter`・`values`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`
+    BY EXT 反復子の `iter`・`values`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`
 
   **<2>3b.** `cancel` は `App` の callee の名前を変えない。
 
