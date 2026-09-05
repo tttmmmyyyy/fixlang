@@ -554,14 +554,14 @@ leaf であり、`decl.leaf_origins_at(σ).and_then(as_arg_projection)` が `Non
 ことが言える。
 
 **主語は名前であって実行路の上のスロットではない。** `origin_inner` の `Binding::Join` の腕は**すべての
-アーム**の結果へ再帰するので、1 つの実行路が選ばなかったアームの結果もこの命題の範囲に入る。
-DEF 由来の 1 歩 と D17 が `Binding::Join` の辺を選ばれたアームへしか進めないのに対し、この命題は
-`origin` の再帰そのものの上に立つ。
+アーム**の結果へ再帰するので、`act(y, ρ')` は 1 つの実行路が選ばなかったアームの結果も含む。
+この命題は `origin` の再帰そのものの上に立つので、その全部に当たる。
 
 <1>1. `origin(vars, type_env, y, ρ')` は panic せずに答えを返し、停止する。
-  `vars.bindings` が `y` を鍵に持つとき、その鍵は `VarTable::of` が入れるパラメータ・capture の名前か
-  `collect_bindings` が入れる節点の束縛変数の名前なので、P2 の第 1 の場合 (プログラムの束縛変数) に
-  当たる。鍵に持たないときは P2 の第 2 の場合であり、L6c も同じ答えを与える。
+  `vars.bindings` が `y` を鍵に持つとき、その鍵は `VarTable::of` が入れるパラメータ・capture の名前か、
+  `collect_bindings` が入れる節点の束縛変数の名前である (`VarTable::body_only` は後者だけを入れる)。
+  どちらも P2 の第 1 の場合 (プログラムの束縛変数) に当たる。鍵に持たないときは P2 の第 2 の場合であり、
+  L6c も同じ答えを与える。
   BY <ref id=0edb0ba/>, <ref id=0ad40c6/>, CODE src/rc_ir/ownership.rs: collect_bindings, VarTable::of,
      VarTable::body_only
 
