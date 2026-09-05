@@ -130,7 +130,7 @@ impl<T: Clone> LeafMap<T> {
     }
 
     /// Every boxed leaf's fact, in no particular order.
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P5, P6, P7, P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn leaves(&self) -> impl Iterator<Item = &T> {
         self.0.values()
     }

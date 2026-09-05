@@ -71,7 +71,7 @@ fn assign_fresh_names_to_binders(
 }
 
 /// Record the fresh name of every binder of one node, then descend into its continuation and arms.
-// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_names_to_binders_inner(
     node: &RcExprNode,
     pass_tag: &str,
