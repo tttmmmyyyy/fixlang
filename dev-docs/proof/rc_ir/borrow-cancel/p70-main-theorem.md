@@ -203,16 +203,17 @@ Rust 標準ライブラリの反復子について、次の 5 つの契約を使
   値への対応も変えない。
 
 **EXT Clone**
-`#[derive(Clone)]` が作る実装は、構造体については各フィールドをその型の `clone` で写した値を返す。
+`#[derive(Clone)]` が作る実装は、構造体については各フィールドをその型の `clone` で写した値を返し、
+enum については元と同じ変位で、その変位が保持する各値をその型の `clone` で写した値を返す。
 `<Vec<T> as Clone>::clone` は元と同じ長さの `Vec` を作り、その第 `i` 要素を元の第 `i` 要素の `clone`
 とする。`<Set<K> as Clone>::clone` は元の各要素の `clone` を要素とする `Set` を返す。
 `<Arc<T> as Clone>::clone` は元と同じ割り当てを指すハンドルを返すので、複製と元は同じ `T` の値を
 指す。`<String as Clone>::clone` と `<bool as Clone>::clone` は同じ値を返す。
 
 **この規則は等しさで閉じる。** 基底の型では `clone` が同じ値を返し、`Vec`・`Set`・`Arc` と
-`#[derive(PartialEq)]` を持つ構造体の等しさは成分ごとの等しさで決まるので、成分の複製が元と等しければ
-全体も元と等しい。**`PartialEq` を手書きで実装する型については、その実装が読む成分について同じことを
-確かめる。**
+`#[derive(PartialEq)]` を持つ構造体と enum の等しさは成分ごとの等しさで決まるので、成分の複製が元と
+等しければ全体も元と等しい。**`PartialEq` を手書きで実装する型については、その実装が読む成分に
+ついて同じことを確かめる。**
 
 ## 2. 証明
 
@@ -707,13 +708,21 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     `p0.globals` の第 `i` 要素のものに等しい。
   - **`roots`**: `roots: prog.roots.clone()`。よって `p1.roots` は `p0.roots` に等しい。
 
-  **この段が「複製」と書くところでは、複製は元と等しい。** 複製されるのは `RcFunc` (`f_own` と
-  `clone`)、`FullName` (鍵と `symbol`)、`Arc<TypeNode>` (`ty`)、`Set<FullName>` (`roots`) である
+  **この段が「複製」と書くところでは、複製は元と等しい。** 複製されるのは `FullName` (鍵と
+  `symbol`)、`Arc<TypeNode>` (`ty`)、`Set<FullName>` (`roots`)、`RcFunc` (`f_own`) である
   (`CODE src/rc_ir/ast.rs: RcProgram`, `RcFunc`, `RcGlobalInit`, `CODE src/ast/name.rs: FullName`,
-  `NameSpace`)。EXT Clone より、`Arc` の複製は元と同じ値を指し、`Set` の複製は元の各要素の複製を
-  要素とし、`#[derive(Clone)]` の構造体の複製は各フィールドの複製を持つ。**手書きの `PartialEq` を
-  持つのは `NameSpace` だけである** -- A3 は「`NameSpace` の実装は `names` だけを読み `is_absolute`
-  を読まない」と述べ、`names` は `Vec<String>` なのでその複製は元と等しい。H3 が A3 を与える。
+  `NameSpace`)。EXT Clone を順に当てる。
+
+  - `FullName` は `PartialEq` を derive した構造体で、そのフィールドは `NameSpace` と `String` で
+    ある。`String` の複製は元と等しい。`NameSpace` の `PartialEq` は手書きであり、A3 が
+    「`NameSpace` の実装は `names` だけを読み `is_absolute` を読まない」と述べる。`names` は
+    `Vec<String>` なのでその複製は元と等しく、したがって `NameSpace` の複製も `FullName` の複製も
+    元と等しい。H3 が A3 を与える。
+  - `Arc<TypeNode>` の複製は元と同じ `TypeNode` を指すので、`TypeNode` の等しさを読む要はない。
+  - `Set<FullName>` の複製は元の各要素の複製を要素とするので、`FullName` について示したことから
+    元と等しい。
+  - `RcFunc` は `#[derive(Clone)]` を持つので、`f_own` の各フィールドは `func` の対応する
+    フィールドの複製である。とくに `f_own.name` は `func.name` に等しい。
 
     BY H3, <ref id=e11772a/>, EXT Clone, EXT 反復子の `iter`・`values`・`map`・`collect`,
        EXT 写像の `insert` と `values_mut`,
@@ -844,7 +853,7 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
   `Retain`/`Release` の節点と `App` の callee の名前を「変えてよいもの」に並べるだけで、`cancel` の
   側で callee が動かないことを言わない。(T4) の `App` の callee の節はそれを要る。
 
-    BY <2>3, <2>3a, H3, <ref id=3e6b0e0/>, <ref id=b3dfa37/>, <ref id=0b1cac5/>, <ref id=746e87a/>, EXT Clone,
+    BY <2>1, <2>3, <2>3a, H3, <ref id=3e6b0e0/>, <ref id=b3dfa37/>, <ref id=0b1cac5/>, <ref id=746e87a/>, EXT Clone,
        `CODE src/rc_ir/borrow.rs: cancel`,
        `CODE src/rc_ir/borrow.rs: drop_nodes`, `CODE src/rc_ir/borrow.rs: drop_nodes_inner`
 
