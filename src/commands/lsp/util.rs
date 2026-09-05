@@ -246,9 +246,7 @@ pub(super) fn resolve_source_pos(
     }
     let latest_content = uri_to_content.get(uri).unwrap();
 
-    let path = uri_to_path(uri)?;
-
-    let saved_content = get_file_content_at_previous_diagnostics(program, &path);
+    let saved_content = get_file_content_at_previous_diagnostics(program, &latest_content.path);
     if let Err(e) = saved_content {
         write_log!("{}", e);
         return None;
@@ -265,7 +263,7 @@ pub(super) fn resolve_source_pos(
     };
 
     Some(SourcePos {
-        input: SourceFile::from_file_path(path),
+        input: SourceFile::from_file_path(latest_content.path.clone()),
         pos: position_to_bytes(&saved_content, pos_in_saved),
     })
 }

@@ -10,8 +10,13 @@ use crate::misc::to_absolute_path;
 use crate::write_log;
 use lsp_types::{DocumentSymbol, DocumentSymbolParams, SymbolKind};
 
-// Handle "textDocument/documentSymbol" method.
+/// Handle a `textDocument/documentSymbol` request.
+///
+/// Replies with the symbols the file defines. A file the request names no path for — a URI that
+/// does not decode, or one naming nothing on disk — is answered with an empty list, so that the
+/// client has its answer rather than a request left open.
 pub(super) fn handle_document_symbol(id: u32, params: &DocumentSymbolParams, program: &Program) {
+    let no_symbols = || send_response(id, Ok::<_, ()>(Vec::<DocumentSymbol>::new()));
     let canonicalize_path = |path| {
         let path = to_absolute_path(path);
         if let Err(e) = path {
@@ -23,11 +28,15 @@ pub(super) fn handle_document_symbol(id: u32, params: &DocumentSymbolParams, pro
     };
 
     let Some(path) = uri_to_path(&params.text_document.uri) else {
+        no_symbols();
         return;
     };
     let path = match canonicalize_path(&path) {
         Some(path) => path,
-        None => return,
+        None => {
+            no_symbols();
+            return;
+        }
     };
 
     let mut symbols = Vec::new();

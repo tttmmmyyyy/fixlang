@@ -24,7 +24,7 @@
 // local-vs-global colors once the file type-checks.
 
 use super::server::{send_response, DiagnosticsResult, LatestContent};
-use super::util::{corresponding_line_map, uri_to_path};
+use super::util::corresponding_line_map;
 use crate::ast::expr::{Expr, ExprNode};
 use crate::ast::name::FullName;
 use crate::ast::pattern::{Pattern, PatternNode};
@@ -676,7 +676,7 @@ pub(super) fn handle_semantic_tokens_full(
 
     // Look up the elaborated snapshot for this file (if any) and overlay it.
     let overlay = last_diag.and_then(|diag| {
-        let abs_file = to_absolute_path(&uri_to_path(uri)?).ok()?;
+        let abs_file = to_absolute_path(&latest.path).ok()?;
         let snapshot = diag.user_source_contents.get(&abs_file)?;
         let mut raw = vec![];
         collect_overlay(&diag.program, &abs_file, snapshot, &mut raw);

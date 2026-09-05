@@ -24,7 +24,7 @@ mod tests {
         (temp_dir, project_dir)
     }
 
-    /// A URI naming a file whose name is not UTF-8 leaves the server serving.
+    /// A URI naming a file whose name is not UTF-8 is answered, and leaves the server serving.
     ///
     /// A file name on Linux is any sequence of bytes, and an editor holding one percent-encodes it
     /// byte by byte, which puts escapes such as `%FF` — the start of no UTF-8 sequence — in the URI
@@ -65,7 +65,16 @@ mod tests {
             )
             .expect("Failed to send documentSymbol");
         client.wait_for_server(Duration::from_secs(2));
-        let _ = client.get_response(id);
+        let symbols = client
+            .get_response(id)
+            .expect("the request is expected to be answered");
+        assert_eq!(
+            symbols["result"],
+            json!([]),
+            "a file the server has no path for is expected to be answered with no symbols, but \
+             the answer is {:?}",
+            symbols
+        );
 
         // The pass this asks for is what says the server is still running: a server that ended on
         // the message above sends no progress, and the wait times out.
