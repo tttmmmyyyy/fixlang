@@ -1413,6 +1413,12 @@ payload は、どれも D10 の生成の表が行を持つ位置なので第 1 �
 `borrow_ify` に渡されるプログラムは D12 の意味で RC 規律を満たす。またそのプログラムのすべての関数の
 `borrowed_units` は空である。すなわちすべてのパラメータ・capture の unit が所有される。
 
+**「`borrow_ify` に渡されるプログラム」と「`split_rc_units` の出力」は同じプログラムである** -- <!--#b635bd2-->
+`optimize_rc_program` は前者を後者に置いて `borrow_ify` を呼ぶ
+(`CODE src/build/build_object_files.rs: optimize_rc_program`)。**主定理 T が前提を後者の名前で書き、
+この節と A2 が前者の名前で書くのは、T がパイプラインの位置を主語にし、この 2 つが呼び出しの引数を
+主語にするからである。**
+
 **A2 (単位への正規化)** -- 果たす者: `insert_rc` と `split_rc_units`。 <!--#8e3aff3-->
 `borrow_ify` に渡されるプログラムのすべての `Retain`/`Release` 節点の path は、その変数の型の `rc_units` の
 要素である。`insert_rc` が出す `Retain`/`Release` の path はすべて空列であり、`split_rc_units` はそれを
