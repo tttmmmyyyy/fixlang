@@ -152,51 +152,6 @@ payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llv
 束縛名を付け替えるからである (P9)。`infer_ownership` は入力の関数の表と site を読むので、その水準の
 主張は `vars_f` の側で書き、出力版の `owns` へ渡すのは L15 と L16 である。
 
-### 在りかの前提
-
-**コードのどこに何が在るかの数え上げは、段の中で行わない。** 段が自分で在りかを数え上げると、その
-数え上げには果たす者が居らず、検査するものも無い。**記号を名指す `CODE` の引用はその記号の本体しか
-与えないので、「ほかの記号はそれをしない」の側はそこから出ない。** 在りかは名前つきの前提として置き、
-`BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
-
-**果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
-`src/` の全体に走らせて、下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。
-走査は字面の上位近似なので、一覧には欄の宣言も入る。`#[cfg(test)]` の下の項目は走査が除く。
-
-**前提 `tycons` の欄を書く在りか** --- `TypeEnv` の `tycons` の欄を宣言する箇所と、その欄へ値を置く式が
-在る項目は次で尽きる。
-
-SCAN src/ `tycons: Arc`
-  = src/ast/program.rs: TypeEnv -- 欄の宣言
-  = src/ast/program.rs: TypeEnv::default -- 空の表を置く
-  = src/ast/program.rs: TypeEnv::new -- 引数の表をそのまま置く
-
-SCAN src/ `.tycons = `
-  = src/ast/program.rs: TypeEnv::unwrap_newtypes -- 各 `TyConInfo` の `fields[..].ty` に `unwrap_newtypes` を掛けた表を置く
-  = src/ast/program.rs: TypeEnv::add_tycons -- 引数の各対を `insert` した表を置く
-  = src/ast/program.rs: TypeEnv::resolve_type_aliases_in_tycons -- 各 `TyConInfo` に `TyConInfo::resolve_type_aliases` を掛けた表を置く
-  = src/ast/program.rs: Program::resolve_namespace_not_in_expr -- 各 `TyConInfo` に `TyConInfo::resolve_namespace` を掛けた表を置く
-
-**前提 `tycons` の表を作る呼び出しの在りか** --- `TypeEnv::new` と `TypeEnv::add_tycons` を呼ぶ式が在る
-項目は次で尽きる。
-
-SCAN src/ `TypeEnv::new(`
-  = src/ast/program.rs: Program::calculate_type_env -- `bulitin_tycons()` から始めた表を渡す
-
-SCAN src/ `.add_tycons(`
-  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 鍵は不透明型の型変数の名前
-  = src/optimization/closure_specialization.rs: lift_all -- 鍵は `CaptureStruct` が作る tycon
-  = src/optimization/closure_specialization.rs: realize_all -- 鍵は `CaptureStruct` が作る tycon
-  = src/optimization/defunctionalize_fix.rs: run_one -- 鍵は `CaptureStruct` が作る tycon
-
-**前提 capture の tycon を作る在りか** --- `CaptureStruct::new` を呼ぶ式が在る項目は次で尽きる。
-その呼び出しが第 1 引数 `prefix` に渡す値を `--` の後に書く。
-
-SCAN src/ `CaptureStruct::new(`
-  = src/optimization/closure_specialization.rs: LiftedLambdas::capture_struct_of -- `CAP_LIST_PREFIX`
-  = src/optimization/closure_specialization.rs: ClosureSpecializationVisitor::decapture_lambda -- `CAP_LIST_PREFIX`
-  = src/optimization/defunctionalize_fix.rs: FixDefunctionalizer::lift -- `"#FixCap"`
-
 ## 2. 型と変数表についての命題
 
 ### L0 (固定した出力版の本体は A6・A11・A12 を満たす) <!--#9cef509-->
@@ -556,55 +511,9 @@ namespace が `Std` で名前が `#FunPtr` で始まるとき、残りを `parse
 <1>4. `type_env.tycons()` の項目のうち鍵が `make_array_tycon()` であるものは、`bulitin_tycons()` が
       その鍵の下に置いた項目である。したがってその `TyConInfo` の `variant` は `TyConVariant::Array`
       である。
-  <2>1. `type_env.tycons()` は、空の表か、`calculate_type_env` が `TypeEnv::new` に渡した表に、
-        `add_tycons` の呼び出しが渡した対を `insert` したものである。
-    前提 `tycons` の欄を書く在りか より、この欄へ値を置くのは `TypeEnv::default` (空の表)、
-    `TypeEnv::new` (引数の表)、`TypeEnv::unwrap_newtypes`、`TypeEnv::add_tycons`、
-    `TypeEnv::resolve_type_aliases_in_tycons`、`Program::resolve_namespace_not_in_expr` である。
-    このうち鍵の集合を変えるのは最初の 3 つだけである -- `unwrap_newtypes` は各 `TyConInfo` の
-    `fields[..].ty` に `unwrap_newtypes` を掛け、`resolve_type_aliases_in_tycons` は各 `TyConInfo` に
-    `TyConInfo::resolve_type_aliases` を掛け、それは各 `Field` の `ty` だけを書き替え、
-    `Program::resolve_namespace_not_in_expr` は各 `TyConInfo` に `TyConInfo::resolve_namespace` を掛け、
-    それは各 `Field` の `syn_ty` と `ty` だけを書き替えるので、どれも鍵にも `variant` の欄にも触れない。
-    前提 `tycons` の表を作る呼び出しの在りか より、`TypeEnv::new` を呼ぶのは `calculate_type_env` だけで
-    ある。
-    BY 前提 `tycons` の欄を書く在りか, 前提 `tycons` の表を作る呼び出しの在りか,
-       CODE src/ast/program.rs: TypeEnv, TypeEnv::default, TypeEnv::new, TypeEnv::unwrap_newtypes,
-       TypeEnv::add_tycons, TypeEnv::resolve_type_aliases_in_tycons,
-       Program::resolve_namespace_not_in_expr,
-       CODE src/ast/types.rs: TyConInfo::resolve_type_aliases, TyConInfo::resolve_namespace,
-       CODE src/ast/typedecl.rs: Field::resolve_type_aliases, Field::resolve_namespace
-  <2>2. `calculate_type_env` が `TypeEnv::new` に渡す表では、鍵 `make_array_tycon()` の項目は
-        `bulitin_tycons()` が置いたものである。
-    `calculate_type_env` は `bulitin_tycons()` から始め、`self.type_defns` を渡る繰り返しで鍵を足す。
-    その繰り返しが `tycons` へ入れる鍵は 2 種である。第 1 種は型宣言の `tycon()` であり、その鍵が既に
-    在れば診断を出して `continue` するので、`bulitin_tycons()` が置いた鍵の項目は動かない。第 2 種は
-    `tycon().into_punched_type_name(i)` であり、`PUNCHED_TYPE_SYMBOL` (`#PunchedAt`) と 10 進表記を
-    末尾に足した名前なので、`<1>2` より `make_array_tycon()` の名前 `Array` と異なる。
-    BY <1>2, CODE src/ast/program.rs: Program::calculate_type_env,
-       CODE src/ast/types.rs: TyCon::into_punched_type_name,
-       CODE src/constants.rs: PUNCHED_TYPE_SYMBOL,
-       CODE src/fixstd/builtin.rs: bulitin_tycons
-  <2>3. `add_tycons` の呼び出しが渡す鍵は `make_array_tycon()` と異なる。
-    前提 `tycons` の表を作る呼び出しの在りか より、`add_tycons` を呼ぶのは `register_opaque_tycon`、
-    `run_one`、`lift_all`、`realize_all` である。`register_opaque_tycon` が渡す鍵は
-    `FullName::new(&gv_name.to_namespace(), &opq_var.name)` であり、`opq_var` は `is_opaque_tyvar` が
-    真の型変数なので、その名前は `?` で始まる。残る 3 つが渡すのは `CaptureStruct::new` が作る tycon で
-    あり、その名前は `format!("{}@{}", prefix, owner.name)` である。前提 capture の tycon を作る在りか
-    より、`prefix` に渡るのは `"#FixCap"` と `CAP_LIST_PREFIX` (`"#CapList"`) なので、その名前は
-    `#FixCap@` か `#CapList@` で始まる。どれも `<1>2` の `Array` と異なる。
-    BY <1>2, 前提 `tycons` の表を作る呼び出しの在りか, 前提 capture の tycon を作る在りか,
-       CODE src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon, collect_opaque_infos,
-       CODE src/ast/types.rs: is_opaque_tyvar,
-       CODE src/optimization/capture_struct.rs: CaptureStruct::new,
-       CODE src/optimization/defunctionalize_fix.rs: run_one,
-       CODE src/optimization/closure_specialization.rs: lift_all, realize_all,
-       CODE src/constants.rs: CAP_LIST_PREFIX
-  <2>4. QED
-    `<2>1` より、鍵 `make_array_tycon()` の項目は `calculate_type_env` が渡した表のものか、
-    `add_tycons` の呼び出しが入れたものである。`<2>3` より後者ではなく、`<2>2` より前者は
-    `bulitin_tycons()` が置いた項目である。`<1>2` よりその `variant` は `TyConVariant::Array` である。
-    BY <1>2, <2>1, <2>2, <2>3
+  前半は A28 の言明である -- A28 は `make_array_tycon()` の項目をその「とくに」の節で名指す。
+  後半は `<1>2` による。
+  BY <1>2, <ref id=3d4be43/>
 
 <1>5. 扱う型 `σ` について `is_funptr(σ)` は値を返す。
   `is_funptr` は `toplevel_tycon_satisfies` に `is_funptr_tycon(tc).is_some()` を渡す。
