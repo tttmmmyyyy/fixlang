@@ -63,8 +63,8 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
 オブジェクトを 2 つの名前が指す本体は在る (第 7.5.7 節の `C1` の `(m, [])` と `(p, [])`) ので、この
 区別は表記だけのものではない。
 
-この文書は命題を `L0` から `L6` と呼ぶ。`BY` の行ではそれらを名前で引用する。命題の証明の内部の
-ステップは引用しない。
+この文書は第 4 節の命題を `L0` から `L6a` と呼ぶ。`BY` の行ではそれらを名前で引用する。命題の証明の
+内部のステップは引用しない。
 
 外部の結果を使う。名札は README の「証明の記法」が定める `EXT <名前>` である。
 
@@ -206,6 +206,70 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 `B` の節点 `n` について、`Obj(n) = ⋃_{(w, λ) ∈ Disp(n)} acted_on(w, λ)` と定める。P7c の言明の
 「その構文が触れうるオブジェクト (D15 の `acted_on`)」がこれである。
 
+### DEF 解析にかかる本体
+
+本体 `B'` と、`B'` について `VarTable::of` か `VarTable::body_only` が作った表 `vars'` の組が
+**解析にかかる**とは、次の 3 つが成り立つことをいう。
+
+- **(1)** `B'` のどの `Match` も 1 つ以上のアームを持つ (A9 の形)。`B'` のどの `Match(s, arms)` に
+  ついても、`arms` が catch-all アームを持つか `s` の値が取りうる実行時のタグがいずれかのアームの
+  `tag` であり、catch-all アームは `arms` の最後にある (A16 の形)。
+- **(2)** `B'` に現れる型と、そこから `unpunched_field_types` を繰り返し取って到達する型は、どれも
+  A10 を満たす。
+- **(3)** `B'` の束縛変数の名前は相異なり、どの関数の名前とも異なる (A6 の形)。`B'` の変数の使用は
+  その位置でスコープに入っている束縛に解決する (A11 の形)。`B'` の束縛の形と型は A12 が挙げる
+  とおりに整合する。
+
+**`L7a`・`L8` の (i) と (B)・`L8a` は、この条件の下で本体を量化する。** その 3 つが本体について読むのは
+この 3 つだけであり、D23 の意味の本体でない `Pre(V)` (D35) -- `borrow_ify` の出力の版が書き換える前の
+中間の本体 -- にもこの条件は当たる。`borrow_ify` の入力の各本体と `cancel` の入力の各本体が
+これを満たすことは `L6a` が、`Pre(V)` が満たすことは `L16` の `<1>1c` が示す。
+
+### 在りかの前提
+
+**コードのどこに何が在るかの数え上げは、段の中で行わない。** 記号を名指す `CODE` の引用はその記号の
+本体しか与えないので、「ほかの記号はそれをしない」の側はそこから出ない。以下の 3 つを名前つきの前提と
+して置き、`BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
+
+**果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
+`src/` の全体に走らせて、下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。走査は
+字面の上位近似なので、一覧には読みだけの項目も、別の識別子や散文の一部としてその字面を含む項目も入る。
+`#[cfg(test)]` の下の項目は走査が除く。
+
+**前提 `borrow_ify` と `cancel` の呼び出しの在りか** --- 自由関数 `borrow_ify` と `cancel` を呼ぶ式が
+在る項目は、それぞれの宣言のほかには `optimize_rc_program` だけである。
+
+SCAN src/ `borrow_ify(`
+  = src/build/build_object_files.rs: optimize_rc_program -- `prog = borrow_ify(&prog, type_env, config.develop_mode)`
+  = src/rc_ir/borrow.rs: borrow_ify -- 宣言
+
+SCAN src/ `cancel(`
+  = src/build/build_object_files.rs: optimize_rc_program -- `prog = cancel(&prog, type_env)`
+  = src/rc_ir/borrow.rs: cancel -- 宣言
+
+**前提 `walk_inner` の呼び出しの在りか** --- `CancelAnalysis::walk_inner` を呼ぶ式が在る項目は
+`CancelAnalysis::walk` だけである。走査は同じ字面を名前に含む `src/rc_ir/locality.rs` の
+別の型 `Walk` のメソッドも挙げる。
+
+SCAN src/ `walk_inner`
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk -- `grow_stack` へ渡す閉包の中の呼び出し
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk_inner -- 宣言
+  = src/rc_ir/locality.rs: Walk::walk -- 別の型 `Walk` の同名のメソッドの呼び出し
+  = src/rc_ir/locality.rs: Walk::walk_inner -- 別の型 `Walk` の同名のメソッドの宣言
+  = src/rc_ir/locality.rs: Walk::walk_rhs -- 別の型 `Walk` の同名のメソッドの呼び出し
+
+**前提 `declared_globals` の項目の在りか** --- `Generator` の `declared_globals` の欄を名指す式が在るのは、
+欄の宣言、空の写像を置く `Generator::new`、項目を入れる `Generator::add_global_object`、項目を読む
+`Generator::get_or_declare_global` である。**この表に項目を入れる式は `add_global_object` の `insert`
+だけである。**
+
+SCAN src/ `declared_globals`
+  = src/generator.rs: Object::ptr_to_field_as -- `Scope` の doc の散文 (走査は直前の項目に付ける)
+  = src/generator.rs: Generator -- 欄の宣言と doc の散文
+  = src/generator.rs: Generator::new -- 空の写像を置く `Default::default()`
+  = src/generator.rs: Generator::add_global_object -- 既存の鍵の検査と `insert`
+  = src/generator.rs: Generator::get_or_declare_global -- 項目の読み
+
 ## 3. 証明する形
 
 **P7c** (README 第 5 節)。
@@ -262,16 +326,15 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 **証明**
 
 <1>1. (i) が成り立ち、`vars` は `B` について `VarTable::of` か `VarTable::body_only` が作った表である。
-  BY EXT 可視性と私有性, EXT このリポジトリのターゲット,
+  BY EXT 可視性と私有性, EXT このリポジトリのターゲット, 前提 `borrow_ify` と `cancel` の呼び出しの在りか,
      CODE src/build/build_object_files.rs: optimize_rc_program,
      CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel,
      CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
   `borrow_ify` と `cancel` はどちらも `pub(crate)` なので、`EXT 可視性と私有性` よりそれを名指せるのは
   このクレートの中だけであり、`EXT このリポジトリのターゲット` よりそのクレートの項目は `src/` の
-  ファイルが宣言する。`src/` の `.rs` の全体を走査すると、`borrow_ify` を呼ぶ式は
-  `optimize_rc_program` の `prog = borrow_ify(&prog, type_env, config.develop_mode);` の 1 つ、`cancel` を
-  呼ぶ式は同じ関数の `prog = cancel(&prog, type_env);` の 1 つである。この 2 つの項目を名指す箇所は、
-  `borrow.rs` の宣言と `build_object_files.rs` の `use` 項目とこの 2 つの呼び出しで尽きる。その 2 つのあいだに在るのは
+  ファイルが宣言する。前提 `borrow_ify` と `cancel` の呼び出しの在りか より、その 2 つを呼ぶ式は
+  `optimize_rc_program` の `prog = borrow_ify(&prog, type_env, config.develop_mode);` と
+  `prog = cancel(&prog, type_env);` の 2 つで尽きる。その 2 つのあいだに在るのは
   `validate(&prog, "after borrow_ify")` の 1 つだけであり、`prog` の束縛はそのまま `cancel` に渡る。
   よって `cancel` の入力は `borrow_ify` の出力であり、第 1 節より `B` はその入力の本体である。
   `cancel` は各関数について `VarTable::of(f)`、各グローバル初期化子について
@@ -368,12 +431,12 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 <1>4a. 走査で起こる訪問 -- DEF 訪問の意味の `walk_inner` の呼び出し -- と `walk` の呼び出しは、
        1 対 1 に対応する。`walk(m, P, r)` の呼び出しに対応する訪問は `m` の訪問 `walk_inner(m, P, r)`
        である。
-  BY <ref id=084b52a/>, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk,
+  BY <ref id=084b52a/>, 前提 `walk_inner` の呼び出しの在りか,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, DEF 訪問
   L1 より `walk` の 1 回の呼び出しは `walk_inner` をちょうど 1 回、同じ引数で呼ぶ。逆向きは、
-  `walk_inner` を呼ぶ位置が `walk` の本体の
-  `grow_stack(|| self.walk_inner(node, pending, returns_from_func))` ただ 1 か所だからである
-  (`src/rc_ir/borrow.rs` に `walk_inner` の呼び出しはこの 1 か所しかない)。
+  前提 `walk_inner` の呼び出しの在りか より、`walk_inner` を呼ぶ式が在るのが `walk` の本体の
+  `grow_stack(|| self.walk_inner(node, pending, returns_from_func))` だけだからである。
 
 <1>5. QED
   <1>1 と <1>3 と <1>4a より、`n` の訪問が起これば `n` から出る各辺の先の節点の訪問がちょうど 1 回ずつ
@@ -476,7 +539,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 `UnBump::OutsideBracket` を返すならば、訪問がその後 `self.walk(k, pending, ·)` に渡す `pending` の
 どの要素も、`Obj(n)` のどのオブジェクトも名指さない。
 
-この命題は P7c の言明には無い。P18a が要る形として置く。
+この命題は P7c の言明には無い。P7f が要る形として置く -- 第 6 節がこれから P7f を出す。
 
 **証明**
 
@@ -1198,15 +1261,30 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
   `RcRhs::Var(v)` の腕が `self.get_scoped_obj(&v.name)` を呼ぶ。`get_scoped_obj` と
   `get_scoped_obj_noretain` はどちらも `get_scoped_value` を呼ぶ。
 
-<1>3. `n` の段はその記号のアクセサを通って `w` の値を得る。
-  BY <1>1, <1>2, <1>2a, <ref id=596a46d/>, CODE src/generator.rs: Generator::get_scoped_value,
+<1>2b. `get_or_declare_global(var)` が値を返すとき、その `ScopedValue` の `accessor` は
+       `ValueAccessor::Global(fun, ty)` の形である。
+  BY 前提 `declared_globals` の項目の在りか,
      CODE src/generator.rs: Generator::get_or_declare_global,
+     CODE src/generator.rs: Generator::add_global_object,
+     CODE src/generator.rs: Generator::declare_program_global,
+     CODE src/generator.rs: Generator::declare_lambda_function
+  `get_or_declare_global` は、`self.declared_globals` に `var` の項目が在ればそれを返し、無ければ
+  `self.declare_program_global(var)` を呼んでから `self.declared_globals[var]` の写しを返す。
+  どちらの道でも返るのは `declared_globals` の項目であり、前提 `declared_globals` の項目の在りか より
+  この表に項目を入れる式は `add_global_object` の `insert` だけである。`add_global_object` が入れる
+  `ScopedValue` の `accessor` は `ValueAccessor::Global(function, ty)` である。
+  項目がまだ無い側で `declared_globals[var]` が項目を持つのは `declare_program_global` による --
+  `ty.is_funptr()` が真なら `declare_lambda_function` が `add_global_object(name, func, fn_ty)` を、
+  偽ならアクセサ関数を作って `add_global_object(name, acc_fn, ty)` を呼ぶ。
+
+<1>3. `n` の段はその記号のアクセサを通って `w` の値を得る。
+  BY <1>1, <1>2, <1>2a, <1>2b, <ref id=596a46d/>, CODE src/generator.rs: Generator::get_scoped_value,
      CODE src/generator.rs: ValueAccessor::get
   <1>1 と D6 より `w` は最上位の記号の名前であり、D6 の「**最上位の記号の名前は局所名ではない。**」より
-  局所名ではない。`get_scoped_value` は `var.is_local()` が偽の名前を `get_or_declare_global` へ回して
-  `ValueAccessor::Global` を返し、`ValueAccessor::get` は、funptr の型ならその関数の番地を取り、
-  そうでなければその記号のアクセサ関数を呼ぶ。<1>2 の場合は `n` が `w` を読むこと自体がこの読みで
-  あり、<1>2a の場合は `get_scoped_value` の呼び出しがそれである。
+  局所名ではない。`get_scoped_value` は `var.is_local()` が偽の名前を `get_or_declare_global` へ回すので、
+  <1>2b よりその `accessor` は `ValueAccessor::Global(fun, ty)` である。`ValueAccessor::get` は、
+  funptr の型ならその関数の番地を取り、そうでなければその記号のアクセサ関数を呼ぶ。<1>2 の場合は
+  `n` が `w` を読むこと自体がこの読みであり、<1>2a の場合は `get_scoped_value` の呼び出しがそれである。
 
 <1>4. QED
   BY <1>1, <1>2, <1>2a, <1>3, <ref id=596a46d/>, <ref id=56c2068/>, <ref id=243ae2c/>, <ref id=e3436e8/>
