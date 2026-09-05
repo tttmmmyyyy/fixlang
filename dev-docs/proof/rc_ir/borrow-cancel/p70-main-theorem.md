@@ -1225,8 +1225,8 @@ A3 (元数) と A9 と A12 は `check_rhs`、A11 は `check_expr_inner` と `che
 `panic!` を呼ぶ (`CODE src/rc_ir/borrow.rs: check_clone_names_are_fresh`,
 `CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled`,
 `CODE src/rc_ir/validate.rs: validate`)。どれも調べる対象を共有参照で受け取り、値を返さない --
-`check_clone_names_are_fresh` と `validate` は `&RcProgram` を、`check_ownership_is_levelled` は
-`&self` と `&RcFunc` を取る。
+`check_clone_names_are_fresh` は `&RcProgram` と、複製の名前替えの写像への共有参照を渡す反復子を、
+`validate` は `&RcProgram` を、`check_ownership_is_levelled` は `&self` と `&RcFunc` を取る。
 
 **`&RcProgram` を取る 2 つは、`RcProgram` から到達できる値の等しさを動かさない。** EXT 共有参照が
 書き込める先より、その呼び出しが書けるのは `UnsafeCell` の中に在る記憶域だけである。`RcProgram` から
