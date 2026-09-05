@@ -66,19 +66,16 @@ impl TypeDefn {
         self.value.find_node_at(pos)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.value.resolve_namespace(ctx)?;
         Ok(())
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.value.resolve_type_aliases(type_env)?;
         Ok(())
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycon(&self) -> TyCon {
         TyCon::new(self.name.clone())
     }
@@ -223,7 +220,6 @@ impl TypeDefn {
     }
 
     // Set kinds to type variables in `self.value` using kind information in `self.tyvars`.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_kinds_in_value(&mut self) -> Result<(), Errors> {
         let mut kind_scope = KindScope::default();
         for tv in &self.tyvars {

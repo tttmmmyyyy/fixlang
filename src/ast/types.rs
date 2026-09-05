@@ -219,7 +219,7 @@ const C_SCALAR_NAMES: &[&str] = &[
 
 /// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
 /// it. A type constructor is determined by its name.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
     /// The name the type is declared under.
@@ -355,7 +355,7 @@ impl TyCon {
     /// # Arguments
     /// * `punched_at` — the position of the field made the hole, counted from 0 in the order the
     ///   fields are declared.
-    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn into_punched_type_name(&mut self, punched_at: usize) {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
@@ -3003,7 +3003,7 @@ pub fn unfixed_type_variable_error(
 
 /// Whether a type variable name represents an opaque type variable, which a source line writes
 /// with a leading `?`.
-// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_opaque_tyvar(name: &str) -> bool {
     name.starts_with('?')
 }

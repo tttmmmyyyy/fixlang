@@ -232,13 +232,20 @@ def scan_hits(root, literal):
             path = os.path.join(directory, file_name)
             with open(path, encoding="utf-8", errors="ignore") as source:
                 lines = source.read().split("\n")
-            tests_from = next((i for i, line in enumerate(lines) if "#[cfg(test)]" in line), len(lines))
+            # **`#[cfg(test)]` はその直後の項目にしか掛からない。** そこから末尾までをテストと
+            # 見ると、その後ろに置かれた製品の項目まで落ちる -- 実測で、1 ファイルの 352 行目の
+            # 属性が、1,403 行目の製品の関数をテストにしていた。
+            tests = []
+            for index, line in enumerate(lines):
+                if "#[cfg(test)]" in line:
+                    tests.append(item_body(lines, index + 1))
             for index, line in enumerate(lines):
                 if literal not in line:
                     continue
                 name = item_at(lines, index)
                 if name:
-                    found.append((path, name, index >= tests_from))
+                    in_test = any(start <= index < stop for start, stop in tests)
+                    found.append((path, name, in_test))
     return found
 
 

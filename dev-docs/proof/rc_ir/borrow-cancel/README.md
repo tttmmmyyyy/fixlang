@@ -2208,6 +2208,27 @@ SCAN src/ `.set_refcnt_state(`
   = src/generator.rs: build_mark_boxed_with -- `mark_global` なら `GLOBAL`、`mark_threaded` なら `THREADED`
   = src/generator.rs: build_branch_by_is_unique -- threaded の腕がカウント 1 のとき `LOCAL`
 
+**A28 (funptr の tycon は組み込みのものだけ)** -- 果たす者: 下の 3 つの `SCAN`。 <!--#3d4be43-->
+`E.tycons()` の項目のうち、鍵 `tc` の `tc.name.namespace` が `Std` の 1 段であって `tc.name.name` が
+`FUNPTR_NAME` (`"#FunPtr"`) で始まるものは、`bulitin_tycons()` が `make_funptr_tycon(n)`
+(`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下) の鍵の下に置いた項目である。
+
+**この仮定を果たすのは、`tycons` の表を据える箇所と足す箇所の走査である。** 据える 2 か所はどちらも <!--#a3d055e-->
+`bulitin_tycons()` から始めるか空から始め、足す 4 か所が入れる鍵の名前は `?`・`#FixCap@`・`#CapList@`
+のいずれかで始まるので、`#FunPtr` で始まる鍵を後から入れる者は居ない。
+
+SCAN src/ `TypeEnv::new(`
+  = src/ast/program.rs: Program::calculate_type_env -- `bulitin_tycons()` から始める
+
+SCAN src/ `TypeEnv::default(`
+  = src/ast/traits.rs: TraitEnv::validate_overlapping_instances -- 空の表を置く
+
+SCAN src/ `.add_tycons(`
+  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 鍵は `?` 始まり
+  = src/optimization/defunctionalize_fix.rs: run_one -- 鍵は `#FixCap@` 始まり
+  = src/optimization/closure_specialization.rs: lift_all -- 鍵は `#CapList@` 始まり
+  = src/optimization/closure_specialization.rs: realize_all -- 鍵は `#CapList@` 始まり
+
 **A25 (骨格は `Retain`/`Release` を持たない)** -- 果たす者: lowering と `simplify`。検査: <!--#d80dde9-->
 `RcInserter::insert_into_expr_inner` の `panic!` (`CODE src/rc_ir/rc_insert.rs:
 RcInserter::insert_into_expr_inner`)。

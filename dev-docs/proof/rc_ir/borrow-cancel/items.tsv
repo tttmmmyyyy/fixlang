@@ -25,6 +25,7 @@ citing	cited	read	citing_name	cited_name
 012bc5a	4fe00a7	27ed7cd	README.md:P19	p40-cancel-soundness.md:L33
 012bc5a	4ff3e8d	f2e7f80	README.md:P19	p40-cancel-soundness.md:L43
 012bc5a	561540d	4811762	README.md:P19	README.md:P30
+012bc5a	561fd05	a52d666	README.md:P19	p40-cancel-soundness.md:L49
 012bc5a	56c2068	c73a4c2	README.md:P19	README.md:D7
 012bc5a	596a46d	4a7274c	README.md:P19	README.md:D6
 012bc5a	5c1f4e7	fc0aa56	README.md:P19	p13-disposals-and-pending.md:L17
@@ -40,7 +41,7 @@ citing	cited	read	citing_name	cited_name
 012bc5a	859cf84	633cc16	README.md:P19	README.md:D11a
 012bc5a	88a06de	364bf84	README.md:P19	README.md:D26
 012bc5a	89569b4	5cdf3a0	README.md:P19	p40-cancel-soundness.md:L41a
-012bc5a	941af96	e303c76	README.md:P19	p40-cancel-soundness.md:L50
+012bc5a	941af96	29c06fb	README.md:P19	p40-cancel-soundness.md:L50
 012bc5a	948f840	f37c08a	README.md:P19	README.md:P18b
 012bc5a	95427eb	99f85d7	README.md:P19	README.md:D11
 012bc5a	965e588	f70f97e	README.md:P19	p40-cancel-soundness.md:L41c
@@ -52,7 +53,7 @@ citing	cited	read	citing_name	cited_name
 012bc5a	a502f3e	2ea5dda	README.md:P19	README.md:D1
 012bc5a	b154692	8ff766f	README.md:P19	p40-cancel-soundness.md:L45
 012bc5a	b3dfa37	0f5493f	README.md:P19	README.md:D2
-012bc5a	ba12699	6bb1c6b	README.md:P19	p40-cancel-soundness.md:L47
+012bc5a	ba12699	0677b4e	README.md:P19	p40-cancel-soundness.md:L47
 012bc5a	c232680	dc08f6e	README.md:P19	README.md:D21
 012bc5a	c6ed0c5	01818e8	README.md:P19	p40-cancel-soundness.md:L43c
 012bc5a	ca36627	ebf8b0c	README.md:P19	README.md:D3
@@ -293,6 +294,7 @@ citing	cited	read	citing_name	cited_name
 0b1cac5	4fe00a7	27ed7cd	README.md:P22	p40-cancel-soundness.md:L33
 0b1cac5	4ff3e8d	f2e7f80	README.md:P22	p40-cancel-soundness.md:L43
 0b1cac5	561540d	4811762	README.md:P22	README.md:P30
+0b1cac5	561fd05	a52d666	README.md:P22	p40-cancel-soundness.md:L49
 0b1cac5	56c2068	c73a4c2	README.md:P22	README.md:D7
 0b1cac5	596a46d	4a7274c	README.md:P22	README.md:D6
 0b1cac5	5c1f4e7	fc0aa56	README.md:P22	p13-disposals-and-pending.md:L17
@@ -308,7 +310,7 @@ citing	cited	read	citing_name	cited_name
 0b1cac5	859cf84	633cc16	README.md:P22	README.md:D11a
 0b1cac5	88a06de	364bf84	README.md:P22	README.md:D26
 0b1cac5	89569b4	5cdf3a0	README.md:P22	p40-cancel-soundness.md:L41a
-0b1cac5	941af96	e303c76	README.md:P22	p40-cancel-soundness.md:L50
+0b1cac5	941af96	29c06fb	README.md:P22	p40-cancel-soundness.md:L50
 0b1cac5	948f840	f37c08a	README.md:P22	README.md:P18b
 0b1cac5	95427eb	99f85d7	README.md:P22	README.md:D11
 0b1cac5	965e588	f70f97e	README.md:P22	p40-cancel-soundness.md:L41c
@@ -320,7 +322,7 @@ citing	cited	read	citing_name	cited_name
 0b1cac5	a502f3e	2ea5dda	README.md:P22	README.md:D1
 0b1cac5	b154692	8ff766f	README.md:P22	p40-cancel-soundness.md:L45
 0b1cac5	b3dfa37	0f5493f	README.md:P22	README.md:D2
-0b1cac5	ba12699	6bb1c6b	README.md:P22	p40-cancel-soundness.md:L47
+0b1cac5	ba12699	0677b4e	README.md:P22	p40-cancel-soundness.md:L47
 0b1cac5	c232680	dc08f6e	README.md:P22	README.md:D21
 0b1cac5	c6ed0c5	01818e8	README.md:P22	p40-cancel-soundness.md:L43c
 0b1cac5	ca36627	ebf8b0c	README.md:P22	README.md:D3
@@ -435,7 +437,6 @@ citing	cited	read	citing_name	cited_name
 0c081dc	30d6238	587f0f4	p40-cancel-soundness.md:L43b	README.md:D33
 0c081dc	33c54dc	03bfc88	p40-cancel-soundness.md:L43b	README.md:A6
 0c081dc	3905b4e	75d7acf	p40-cancel-soundness.md:L43b	README.md:A11
-0c081dc	3e6b0e0	8dcc12c	p40-cancel-soundness.md:L43b	README.md:A15
 0c081dc	4a0c14c	6e456b1	p40-cancel-soundness.md:L43b	p40-cancel-soundness.md:L30
 0c081dc	596a46d	4a7274c	p40-cancel-soundness.md:L43b	README.md:D6
 0c081dc	63eadd9	eb5fbe7	p40-cancel-soundness.md:L43b	README.md:P9
@@ -451,9 +452,11 @@ citing	cited	read	citing_name	cited_name
 0c081dc	b1f6e13	285f48a	p40-cancel-soundness.md:L43b	README.md:P2a
 0c081dc	b3dfa37	0f5493f	p40-cancel-soundness.md:L43b	README.md:D2
 0c081dc	d59f90b	6e2889d	p40-cancel-soundness.md:L43b	README.md:D17
+0c081dc	df74e59	47e1888	p40-cancel-soundness.md:L43b	p13-disposals-and-pending.md:L8a
 0c081dc	e11772a	2f6d106	p40-cancel-soundness.md:L43b	README.md:A3
 0c081dc	ef8efc4	6cc5ae1	p40-cancel-soundness.md:L43b	README.md:D14
 0c081dc	f06144e	ddb95b8	p40-cancel-soundness.md:L43b	README.md:D10
+0c081dc	ff5985d	157eda6	p40-cancel-soundness.md:L43b	README.md:D23
 0ca4686	a502f3e	2ea5dda	README.md:None	README.md:D1
 0d151d9	0594f24	c0c685d	README.md:P28	README.md:D4
 0d151d9	081e39f	52cd0b2	README.md:P28	README.md:D30
@@ -527,6 +530,7 @@ citing	cited	read	citing_name	cited_name
 0edb0ba	33c54dc	03bfc88	README.md:P2	README.md:A6
 0edb0ba	3597669	03541db	README.md:P2	README.md:P1
 0edb0ba	3905b4e	75d7acf	README.md:P2	README.md:A11
+0edb0ba	3d4be43	4541261	README.md:P2	README.md:A28
 0edb0ba	3e6b0e0	8dcc12c	README.md:P2	README.md:A15
 0edb0ba	596a46d	4a7274c	README.md:P2	README.md:D6
 0edb0ba	63981a3	5fb4f02	README.md:P2	README.md:P7e
@@ -615,6 +619,7 @@ citing	cited	read	citing_name	cited_name
 12f00f8	4fe00a7	27ed7cd	README.md:P21	p40-cancel-soundness.md:L33
 12f00f8	4ff3e8d	f2e7f80	README.md:P21	p40-cancel-soundness.md:L43
 12f00f8	561540d	4811762	README.md:P21	README.md:P30
+12f00f8	561fd05	a52d666	README.md:P21	p40-cancel-soundness.md:L49
 12f00f8	56c2068	c73a4c2	README.md:P21	README.md:D7
 12f00f8	596a46d	4a7274c	README.md:P21	README.md:D6
 12f00f8	5c1f4e7	fc0aa56	README.md:P21	p13-disposals-and-pending.md:L17
@@ -630,7 +635,7 @@ citing	cited	read	citing_name	cited_name
 12f00f8	859cf84	633cc16	README.md:P21	README.md:D11a
 12f00f8	88a06de	364bf84	README.md:P21	README.md:D26
 12f00f8	89569b4	5cdf3a0	README.md:P21	p40-cancel-soundness.md:L41a
-12f00f8	941af96	e303c76	README.md:P21	p40-cancel-soundness.md:L50
+12f00f8	941af96	29c06fb	README.md:P21	p40-cancel-soundness.md:L50
 12f00f8	948f840	f37c08a	README.md:P21	README.md:P18b
 12f00f8	95427eb	99f85d7	README.md:P21	README.md:D11
 12f00f8	965e588	f70f97e	README.md:P21	p40-cancel-soundness.md:L41c
@@ -642,7 +647,7 @@ citing	cited	read	citing_name	cited_name
 12f00f8	a502f3e	2ea5dda	README.md:P21	README.md:D1
 12f00f8	b154692	8ff766f	README.md:P21	p40-cancel-soundness.md:L45
 12f00f8	b3dfa37	0f5493f	README.md:P21	README.md:D2
-12f00f8	ba12699	6bb1c6b	README.md:P21	p40-cancel-soundness.md:L47
+12f00f8	ba12699	0677b4e	README.md:P21	p40-cancel-soundness.md:L47
 12f00f8	c232680	dc08f6e	README.md:P21	README.md:D21
 12f00f8	c422d87	de5bab9	README.md:P21	README.md:D18
 12f00f8	c6ed0c5	01818e8	README.md:P21	p40-cancel-soundness.md:L43c
@@ -788,6 +793,7 @@ citing	cited	read	citing_name	cited_name
 1d33077	4fe00a7	27ed7cd	README.md:P18c	p40-cancel-soundness.md:L33
 1d33077	4ff3e8d	f2e7f80	README.md:P18c	p40-cancel-soundness.md:L43
 1d33077	561540d	4811762	README.md:P18c	README.md:P30
+1d33077	561fd05	a52d666	README.md:P18c	p40-cancel-soundness.md:L49
 1d33077	56c2068	c73a4c2	README.md:P18c	README.md:D7
 1d33077	596a46d	4a7274c	README.md:P18c	README.md:D6
 1d33077	5c1f4e7	fc0aa56	README.md:P18c	p13-disposals-and-pending.md:L17
@@ -803,7 +809,7 @@ citing	cited	read	citing_name	cited_name
 1d33077	859cf84	633cc16	README.md:P18c	README.md:D11a
 1d33077	88a06de	364bf84	README.md:P18c	README.md:D26
 1d33077	89569b4	5cdf3a0	README.md:P18c	p40-cancel-soundness.md:L41a
-1d33077	941af96	e303c76	README.md:P18c	p40-cancel-soundness.md:L50
+1d33077	941af96	29c06fb	README.md:P18c	p40-cancel-soundness.md:L50
 1d33077	948f840	f37c08a	README.md:P18c	README.md:P18b
 1d33077	95427eb	99f85d7	README.md:P18c	README.md:D11
 1d33077	965e588	f70f97e	README.md:P18c	p40-cancel-soundness.md:L41c
@@ -815,7 +821,7 @@ citing	cited	read	citing_name	cited_name
 1d33077	a502f3e	2ea5dda	README.md:P18c	README.md:D1
 1d33077	b154692	8ff766f	README.md:P18c	p40-cancel-soundness.md:L45
 1d33077	b3dfa37	0f5493f	README.md:P18c	README.md:D2
-1d33077	ba12699	6bb1c6b	README.md:P18c	p40-cancel-soundness.md:L47
+1d33077	ba12699	0677b4e	README.md:P18c	p40-cancel-soundness.md:L47
 1d33077	c232680	dc08f6e	README.md:P18c	README.md:D21
 1d33077	c6ed0c5	01818e8	README.md:P18c	p40-cancel-soundness.md:L43c
 1d33077	ca36627	ebf8b0c	README.md:P18c	README.md:D3
@@ -1036,7 +1042,7 @@ citing	cited	read	citing_name	cited_name
 23ac734	5b098d9	69a0459	p40-cancel-soundness.md:L37	p40-cancel-soundness.md:L35
 23ac734	7855e90	32f7977	p40-cancel-soundness.md:L37	p40-cancel-soundness.md:L36
 23ac734	7d5a1de	4d498d3	p40-cancel-soundness.md:L37	p40-cancel-soundness.md:L32
-23ac734	941af96	e303c76	p40-cancel-soundness.md:L37	p40-cancel-soundness.md:L50
+23ac734	941af96	29c06fb	p40-cancel-soundness.md:L37	p40-cancel-soundness.md:L50
 23ae30e	0b850c9	4947f09	p50-observation.md:L11	README.md:D25
 23ae30e	11c4639	d75a51e	p50-observation.md:L11	p50-observation.md:L9a
 23ae30e	596a46d	4a7274c	p50-observation.md:L11	README.md:D6
@@ -1427,6 +1433,7 @@ citing	cited	read	citing_name	cited_name
 3597669	1172c08	baa923b	README.md:P1	README.md:A9
 3597669	33c54dc	03bfc88	README.md:P1	README.md:A6
 3597669	3905b4e	75d7acf	README.md:P1	README.md:A11
+3597669	3d4be43	4541261	README.md:P1	README.md:A28
 3597669	3e6b0e0	8dcc12c	README.md:P1	README.md:A15
 3597669	596a46d	4a7274c	README.md:P1	README.md:D6
 3597669	63981a3	5fb4f02	README.md:P1	README.md:P7e
@@ -1894,7 +1901,7 @@ citing	cited	read	citing_name	cited_name
 4ff3e8d	5adaf7f	70b4cb2	p40-cancel-soundness.md:L43	p40-cancel-soundness.md:L38
 4ff3e8d	7d5a1de	4d498d3	p40-cancel-soundness.md:L43	p40-cancel-soundness.md:L32
 4ff3e8d	8093b68	a6547ab	p40-cancel-soundness.md:L43	README.md:D27
-4ff3e8d	941af96	e303c76	p40-cancel-soundness.md:L43	p40-cancel-soundness.md:L50
+4ff3e8d	941af96	29c06fb	p40-cancel-soundness.md:L43	p40-cancel-soundness.md:L50
 4ff3e8d	948f840	f37c08a	p40-cancel-soundness.md:L43	README.md:P18b
 4ff3e8d	c4ea962	c505121	p40-cancel-soundness.md:L43	p13-disposals-and-pending.md:L11
 5116349	2055c19	a91cb39	README.md:P18	p30-cancel-walk.md:L2b
@@ -2132,7 +2139,7 @@ citing	cited	read	citing_name	cited_name
 5adaf7f	7855e90	32f7977	p40-cancel-soundness.md:L38	p40-cancel-soundness.md:L36
 5adaf7f	7af2e2e	5883e74	p40-cancel-soundness.md:L38	p40-cancel-soundness.md:L34
 5adaf7f	7d5a1de	4d498d3	p40-cancel-soundness.md:L38	p40-cancel-soundness.md:L32
-5adaf7f	941af96	e303c76	p40-cancel-soundness.md:L38	p40-cancel-soundness.md:L50
+5adaf7f	941af96	29c06fb	p40-cancel-soundness.md:L38	p40-cancel-soundness.md:L50
 5adaf7f	b3dfa37	0f5493f	p40-cancel-soundness.md:L38	README.md:D2
 5b098d9	13b0da2	4e5de78	p40-cancel-soundness.md:L35	p30-cancel-walk.md:L6
 5b098d9	19296b2	96f6aa1	p40-cancel-soundness.md:L35	p30-cancel-walk.md:L5
@@ -2237,7 +2244,7 @@ citing	cited	read	citing_name	cited_name
 5c1f4e7	f710a7d	14ff8c1	p13-disposals-and-pending.md:L17	p13-disposals-and-pending.md:L6
 5c1f4e7	ff5985d	157eda6	p13-disposals-and-pending.md:L17	README.md:D23
 5c7bebf	68112c9	7a09069	p40-cancel-soundness.md:L41e	p40-cancel-soundness.md:L33a
-5c7bebf	941af96	e303c76	p40-cancel-soundness.md:L41e	p40-cancel-soundness.md:L50
+5c7bebf	941af96	29c06fb	p40-cancel-soundness.md:L41e	p40-cancel-soundness.md:L50
 5c7bebf	9d5d254	3d7162e	p40-cancel-soundness.md:L41e	README.md:D34
 5c7bebf	9d74736	9c30beb	p40-cancel-soundness.md:L41e	README.md:D9
 5c7bebf	b3dfa37	0f5493f	p40-cancel-soundness.md:L41e	README.md:D2
@@ -2741,6 +2748,7 @@ citing	cited	read	citing_name	cited_name
 746e87a	4fe00a7	27ed7cd	README.md:P24	p40-cancel-soundness.md:L33
 746e87a	4ff3e8d	f2e7f80	README.md:P24	p40-cancel-soundness.md:L43
 746e87a	561540d	4811762	README.md:P24	README.md:P30
+746e87a	561fd05	a52d666	README.md:P24	p40-cancel-soundness.md:L49
 746e87a	56c2068	c73a4c2	README.md:P24	README.md:D7
 746e87a	596a46d	4a7274c	README.md:P24	README.md:D6
 746e87a	5c1f4e7	fc0aa56	README.md:P24	p13-disposals-and-pending.md:L17
@@ -2756,7 +2764,7 @@ citing	cited	read	citing_name	cited_name
 746e87a	859cf84	633cc16	README.md:P24	README.md:D11a
 746e87a	88a06de	364bf84	README.md:P24	README.md:D26
 746e87a	89569b4	5cdf3a0	README.md:P24	p40-cancel-soundness.md:L41a
-746e87a	941af96	e303c76	README.md:P24	p40-cancel-soundness.md:L50
+746e87a	941af96	29c06fb	README.md:P24	p40-cancel-soundness.md:L50
 746e87a	948f840	f37c08a	README.md:P24	README.md:P18b
 746e87a	95427eb	99f85d7	README.md:P24	README.md:D11
 746e87a	965e588	f70f97e	README.md:P24	p40-cancel-soundness.md:L41c
@@ -2768,7 +2776,7 @@ citing	cited	read	citing_name	cited_name
 746e87a	a502f3e	2ea5dda	README.md:P24	README.md:D1
 746e87a	b154692	8ff766f	README.md:P24	p40-cancel-soundness.md:L45
 746e87a	b3dfa37	0f5493f	README.md:P24	README.md:D2
-746e87a	ba12699	6bb1c6b	README.md:P24	p40-cancel-soundness.md:L47
+746e87a	ba12699	0677b4e	README.md:P24	p40-cancel-soundness.md:L47
 746e87a	c232680	dc08f6e	README.md:P24	README.md:D21
 746e87a	c6ed0c5	01818e8	README.md:P24	p40-cancel-soundness.md:L43c
 746e87a	ca36627	ebf8b0c	README.md:P24	README.md:D3
@@ -2959,7 +2967,7 @@ citing	cited	read	citing_name	cited_name
 7af2e2e	13b0da2	4e5de78	p40-cancel-soundness.md:L34	p30-cancel-walk.md:L6
 7af2e2e	4fe00a7	27ed7cd	p40-cancel-soundness.md:L34	p40-cancel-soundness.md:L33
 7af2e2e	68112c9	7a09069	p40-cancel-soundness.md:L34	p40-cancel-soundness.md:L33a
-7af2e2e	941af96	e303c76	p40-cancel-soundness.md:L34	p40-cancel-soundness.md:L50
+7af2e2e	941af96	29c06fb	p40-cancel-soundness.md:L34	p40-cancel-soundness.md:L50
 7af2e2e	ca36627	ebf8b0c	p40-cancel-soundness.md:L34	README.md:D3
 7af2e2e	dad309f	1952d8f	p40-cancel-soundness.md:L34	p30-cancel-walk.md:L1
 7bb9768	30d6238	587f0f4	p13-disposals-and-pending.md:L11b	README.md:D33
@@ -3294,11 +3302,17 @@ citing	cited	read	citing_name	cited_name
 9357e31	d2c1f1f	dc46011	p11-origin-soundness.md:L6	p11-origin-soundness.md:L4
 9357e31	e11772a	2f6d106	p11-origin-soundness.md:L6	README.md:A3
 9357e31	f06144e	ddb95b8	p11-origin-soundness.md:L6	README.md:D10
+941af96	081e39f	52cd0b2	p40-cancel-soundness.md:L50	README.md:D30
+941af96	0add4e1	cca2da5	p40-cancel-soundness.md:L50	README.md:None
+941af96	0b1cac5	42c3e23	p40-cancel-soundness.md:L50	README.md:P22
 941af96	24bf090	f19156b	p40-cancel-soundness.md:L50	README.md:P15
+941af96	33ec05e	4cac03e	p40-cancel-soundness.md:L50	README.md:D19
 941af96	a423f41	d43facf	p40-cancel-soundness.md:L50	README.md:P16
 941af96	b3dfa37	0f5493f	p40-cancel-soundness.md:L50	README.md:D2
-941af96	ba12699	6bb1c6b	p40-cancel-soundness.md:L50	p40-cancel-soundness.md:L47
+941af96	ba12699	0677b4e	p40-cancel-soundness.md:L50	p40-cancel-soundness.md:L47
+941af96	c9e4cca	201624a	p40-cancel-soundness.md:L50	README.md:A17
 941af96	ca36627	ebf8b0c	p40-cancel-soundness.md:L50	README.md:D3
+941af96	e3436e8	b04bee5	p40-cancel-soundness.md:L50	README.md:D24
 9429db0	087a6d3	369e536	p20-borrow-ify.md:L10	p20-borrow-ify.md:L6a
 9429db0	10752aa	19d6854	p20-borrow-ify.md:L10	p20-borrow-ify.md:L9
 9429db0	1172c08	baa923b	p20-borrow-ify.md:L10	README.md:A9
@@ -4282,6 +4296,7 @@ c471a2a	33ec05e	4cac03e	README.md:T	README.md:D19
 c471a2a	3597669	03541db	README.md:T	README.md:P1
 c471a2a	3647480	3b54e58	README.md:T	README.md:A23
 c471a2a	3905b4e	75d7acf	README.md:T	README.md:A11
+c471a2a	3d4be43	4541261	README.md:T	README.md:A28
 c471a2a	3d96eb8	e2e2c5a	README.md:T	README.md:D12
 c471a2a	3e6b0e0	8dcc12c	README.md:T	README.md:A15
 c471a2a	3f1bb47	ea46784	README.md:T	README.md:A4
@@ -4660,6 +4675,7 @@ dbd8854	4a0c14c	6e456b1	README.md:P20	p40-cancel-soundness.md:L30
 dbd8854	4fe00a7	27ed7cd	README.md:P20	p40-cancel-soundness.md:L33
 dbd8854	4ff3e8d	f2e7f80	README.md:P20	p40-cancel-soundness.md:L43
 dbd8854	561540d	4811762	README.md:P20	README.md:P30
+dbd8854	561fd05	a52d666	README.md:P20	p40-cancel-soundness.md:L49
 dbd8854	56c2068	c73a4c2	README.md:P20	README.md:D7
 dbd8854	596a46d	4a7274c	README.md:P20	README.md:D6
 dbd8854	5c1f4e7	fc0aa56	README.md:P20	p13-disposals-and-pending.md:L17
@@ -4675,7 +4691,7 @@ dbd8854	8093b68	a6547ab	README.md:P20	README.md:D27
 dbd8854	859cf84	633cc16	README.md:P20	README.md:D11a
 dbd8854	88a06de	364bf84	README.md:P20	README.md:D26
 dbd8854	89569b4	5cdf3a0	README.md:P20	p40-cancel-soundness.md:L41a
-dbd8854	941af96	e303c76	README.md:P20	p40-cancel-soundness.md:L50
+dbd8854	941af96	29c06fb	README.md:P20	p40-cancel-soundness.md:L50
 dbd8854	948f840	f37c08a	README.md:P20	README.md:P18b
 dbd8854	95427eb	99f85d7	README.md:P20	README.md:D11
 dbd8854	965e588	f70f97e	README.md:P20	p40-cancel-soundness.md:L41c
@@ -4687,7 +4703,7 @@ dbd8854	9f1cf6c	63a22c7	README.md:P20	README.md:A19
 dbd8854	a502f3e	2ea5dda	README.md:P20	README.md:D1
 dbd8854	b154692	8ff766f	README.md:P20	p40-cancel-soundness.md:L45
 dbd8854	b3dfa37	0f5493f	README.md:P20	README.md:D2
-dbd8854	ba12699	6bb1c6b	README.md:P20	p40-cancel-soundness.md:L47
+dbd8854	ba12699	0677b4e	README.md:P20	p40-cancel-soundness.md:L47
 dbd8854	c232680	dc08f6e	README.md:P20	README.md:D21
 dbd8854	c6ed0c5	01818e8	README.md:P20	p40-cancel-soundness.md:L43c
 dbd8854	ca36627	ebf8b0c	README.md:P20	README.md:D3
@@ -4819,6 +4835,7 @@ dea458b	4a0c14c	6e456b1	README.md:P23	p40-cancel-soundness.md:L30
 dea458b	4fe00a7	27ed7cd	README.md:P23	p40-cancel-soundness.md:L33
 dea458b	4ff3e8d	f2e7f80	README.md:P23	p40-cancel-soundness.md:L43
 dea458b	561540d	4811762	README.md:P23	README.md:P30
+dea458b	561fd05	a52d666	README.md:P23	p40-cancel-soundness.md:L49
 dea458b	56c2068	c73a4c2	README.md:P23	README.md:D7
 dea458b	596a46d	4a7274c	README.md:P23	README.md:D6
 dea458b	5c1f4e7	fc0aa56	README.md:P23	p13-disposals-and-pending.md:L17
@@ -4834,7 +4851,7 @@ dea458b	8093b68	a6547ab	README.md:P23	README.md:D27
 dea458b	859cf84	633cc16	README.md:P23	README.md:D11a
 dea458b	88a06de	364bf84	README.md:P23	README.md:D26
 dea458b	89569b4	5cdf3a0	README.md:P23	p40-cancel-soundness.md:L41a
-dea458b	941af96	e303c76	README.md:P23	p40-cancel-soundness.md:L50
+dea458b	941af96	29c06fb	README.md:P23	p40-cancel-soundness.md:L50
 dea458b	948f840	f37c08a	README.md:P23	README.md:P18b
 dea458b	95427eb	99f85d7	README.md:P23	README.md:D11
 dea458b	965e588	f70f97e	README.md:P23	p40-cancel-soundness.md:L41c
@@ -4846,7 +4863,7 @@ dea458b	9f1cf6c	63a22c7	README.md:P23	README.md:A19
 dea458b	a502f3e	2ea5dda	README.md:P23	README.md:D1
 dea458b	b154692	8ff766f	README.md:P23	p40-cancel-soundness.md:L45
 dea458b	b3dfa37	0f5493f	README.md:P23	README.md:D2
-dea458b	ba12699	6bb1c6b	README.md:P23	p40-cancel-soundness.md:L47
+dea458b	ba12699	0677b4e	README.md:P23	p40-cancel-soundness.md:L47
 dea458b	c232680	dc08f6e	README.md:P23	README.md:D21
 dea458b	c6ed0c5	01818e8	README.md:P23	p40-cancel-soundness.md:L43c
 dea458b	ca36627	ebf8b0c	README.md:P23	README.md:D3

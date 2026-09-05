@@ -230,7 +230,6 @@ impl FixDefunctionalizer {
     // Build the lifted global `G` for `fix(f)`, and return a reference to `G` (typed
     // `FixCap -> a -> b`) together with the capture-struct expression built from the current scope.
     // `G(cap)` then reconstructs the recursive value `fix(f) : a -> b`.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lift(&mut self, f: &Arc<ExprNode>, state: &VisitState) -> (Arc<ExprNode>, Arc<ExprNode>) {
         // `f = |self| f_body`, single-parameter before uncurrying.
         let (self_params, f_body) = f.destructure_lam();

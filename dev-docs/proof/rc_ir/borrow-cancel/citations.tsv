@@ -28,8 +28,8 @@ src/ast/name.rs	NameSpace::to_string	P27,P29,P30	4ec970617b24
 src/ast/pattern.rs	Pattern::validate_match_cases_exhaustiveness	D/A	60f1ed66b7fc
 src/ast/program.rs	Program::add_boxed_impls	P26,A21	3328bbee359d
 src/ast/program.rs	Program::add_methods	P26,P27,P29,P30	f83b77a0035b
-src/ast/program.rs	Program::add_tuple_defn	P1,P2,P7a,P7d,P7e	03eb5184d8c9
-src/ast/program.rs	Program::add_type_defns	P1,P2,P7a,P7d,P7e	68d150fce92e
+src/ast/program.rs	Program::add_tuple_defn	P7a,P7d,P7e	03eb5184d8c9
+src/ast/program.rs	Program::add_type_defns	P7a,P7d,P7e	68d150fce92e
 src/ast/program.rs	Program::calculate_type_env	P1,P2,P5,P6,P7,P7a,P7d,P7e	96dc393a1cf3
 src/ast/program.rs	Program::check_multi_threading_requirement	P26	899e0b7e86e2
 src/ast/program.rs	Program::create_typechecker	P26	11ef5b91fe84
@@ -38,7 +38,7 @@ src/ast/program.rs	Program::instantiate_expr	P27,P29,P30	cdd3aff5544f
 src/ast/program.rs	Program::instantiate_symbol	P27,P29,P30	b33314f30bb1
 src/ast/program.rs	Program::instantiate_symbols	P27,P29,P30	b0fbc6fd4cd3
 src/ast/program.rs	Program::kind_env	P5,P6,P7	497193693551
-src/ast/program.rs	Program::link	P1,P2,P7a,P7d,P7e	85e41115230c
+src/ast/program.rs	Program::link	P7a,P7d,P7e	85e41115230c
 src/ast/program.rs	Program::require_instantiation	P27,P29,P30	a9fe2cee9d2c
 src/ast/program.rs	Program::resolve_namespace_not_in_expr	P1,P2,P5,P6,P7,P7a,P7d,P7e	faca10d9216b
 src/ast/program.rs	Program::single_module	P7a,P7d,P7e	c5e7764ff878
@@ -62,18 +62,14 @@ src/ast/typedecl.rs	Field::resolve_namespace	P1,P2,P7a,P7d,P7e	4db94f4be1c6
 src/ast/typedecl.rs	Field::resolve_type_aliases	P1,P2,P7a,P7d,P7e	f4ee12ffb5a7
 src/ast/typedecl.rs	TypeDefn::applied_type	P26	5f801d4d3b7c
 src/ast/typedecl.rs	TypeDefn::kind	D/A	31efd5d2f087
-src/ast/typedecl.rs	TypeDefn::resolve_namespace	P1,P2	596c34ae3564
-src/ast/typedecl.rs	TypeDefn::resolve_type_aliases	P1,P2	bb5a7b2ef3d9
-src/ast/typedecl.rs	TypeDefn::set_kinds_in_value	P1,P2	d10301993e0e
-src/ast/typedecl.rs	TypeDefn::tycon	P1,P2	fe839bfbc2f6
 src/ast/typedecl.rs	TypeDefn::tycon_info	P1,P2,P26	f04fd919ce0d
 src/ast/typedecl.rs	TypeDefn::validate_tyvars	P1,P2	7216a81f3d2f
 src/ast/types.rs	Kind	P2a,P15,P16,P17,P18	03bd795e3938
 src/ast/types.rs	Scheme::check_kinds	D/A	8a88faed2aa7
 src/ast/types.rs	Scheme::generalize	P26	7c0ad1260a57
 src/ast/types.rs	TyAliasInfo	P2a,P15,P16,P17,P18	6a70cbc2a64f
-src/ast/types.rs	TyCon	P2a,P15,P16,P17,P18	d033379707ed
-src/ast/types.rs	TyCon::into_punched_type_name	P1,P2,P5,P6,P7,P7a,P7d,P7e	be6ceb6b9928
+src/ast/types.rs	TyCon	P1,P2,P2a,P15,P16,P17,P18	d033379707ed
+src/ast/types.rs	TyCon::into_punched_type_name	P5,P6,P7,P7a,P7d,P7e	be6ceb6b9928
 src/ast/types.rs	TyConInfo	P1,P2,P2a,P5,P6,P7,P15,P16,P17,P18	e2f309478269
 src/ast/types.rs	TyConInfo::resolve_namespace	P1,P2,P5,P6,P7,P7a,P7d,P7e	6a0535783f94
 src/ast/types.rs	TyConInfo::resolve_type_aliases	P1,P2,P5,P6,P7,P7a,P7d,P7e	2d8bd2c4afd1
@@ -121,7 +117,7 @@ src/ast/types.rs	impl Clone for TypeNode	P1,P2	102b1463683d
 src/ast/types.rs	impl Hash for TypeNode	P1,P2,P3,P4	be2e413d0b6d
 src/ast/types.rs	impl PartialEq for Type	P1,P2	90d16bb627e2
 src/ast/types.rs	impl PartialEq for TypeNode	P1,P2	bdc0f3dd3070
-src/ast/types.rs	is_opaque_tyvar	P1,P2,P5,P6,P7,P7a,P7d,P7e	6a391148be06
+src/ast/types.rs	is_opaque_tyvar	P5,P6,P7,P7a,P7d,P7e	6a391148be06
 src/ast/types.rs	type_assocty	P1,P2	e870cc8cf32d
 src/ast/types.rs	type_fun	P26	e57e667fefea
 src/ast/types.rs	type_funptr	P26	3c1291d61de1
@@ -143,20 +139,19 @@ src/configuration.rs	Configuration::enable_borrow_optimization	T	23c6af072902
 src/configuration.rs	Configuration::force_all_optimizations	T	98585398a522
 src/configuration.rs	Configuration::runs_from	T	ddc1ffa30c40
 src/constants.rs	ARRAY_NAME	P5,P6,P7	0c545701061f
-src/constants.rs	CAP_LIST_PREFIX	P1,P2,P5,P6,P7,P7a,P7d,P7e	17701702d896
+src/constants.rs	CAP_LIST_PREFIX	P5,P6,P7,P7a,P7d,P7e	17701702d896
 src/constants.rs	CAP_NAME	P27,P29,P30	ab454a035e77
 src/constants.rs	CLOSURE_CAPTURE_IDX	P1,P2	8ac4c663fef1
 src/constants.rs	CLOSURE_FIELD_COUNT	P1,P2	3e3f60cca61a
 src/constants.rs	FUNPTR_ARGS_MAX	P1,P2,P5,P6,P7	5054470d6f01
 src/constants.rs	FUNPTR_NAME	P1,P2,P5,P6,P7	5f81220a51a7
-src/constants.rs	PUNCHED_TYPE_SYMBOL	P1,P2,P5,P6,P7	866c661bcaee
+src/constants.rs	PUNCHED_TYPE_SYMBOL	P5,P6,P7	866c661bcaee
 src/constants.rs	RefcntState	P26	192fb7a3bcd5
 src/constants.rs	TUPLE_NAME	P7a,P7d,P7e	3f3e005e8759
 src/constants.rs	TUPLE_UNBOX	D/A,P5,P6,P7	15f3c49df732
-src/elaboration/desugar_opaque.rs	OpaqueInfo	P1,P2	1585b0e1c670
 src/elaboration/desugar_opaque.rs	Program::desugar_opaque_types	P27,P29,P30	c56131df5dd5
 src/elaboration/desugar_opaque.rs	Program::register_opaque_tycon	P7a,P7d,P7e	fc5202f8b47e
-src/elaboration/desugar_opaque.rs	collect_opaque_infos	P1,P2,P7a,P7d,P7e	a060a45a2d95
+src/elaboration/desugar_opaque.rs	collect_opaque_infos	P7a,P7d,P7e	a060a45a2d95
 src/elaboration/desugar_opaque.rs	register_opaque_tycon	P1,P2,P5,P6,P7	fc5202f8b47e
 src/elaboration/desugar_opaque.rs	remove_opaque_wrapper_func	P27,P29,P30	797bdebc555e
 src/elaboration/desugar_opaque.rs	resolve_opaque_type_in_type	P2a,P15,P16,P17,P18	fb927ee1a67c
@@ -317,7 +312,7 @@ src/fixstd/std.fix	assert_unique	D/A,P26	-
 src/fixstd/std.fix	boxed_from_retained_ptr	D/A	-
 src/fixstd/std.fix	boxed_to_retained_ptr	D/A	-
 src/fixstd/std.fix	mutate_unique_io	D/A,P26	-
-src/fixstd/stdlib.rs	make_std_mod	D/A,P1,P2,P7a,P7d,P7e,P26,A21	6da374621d89
+src/fixstd/stdlib.rs	make_std_mod	D/A,P7a,P7d,P7e,P26,A21	6da374621d89
 src/generator.rs	Generator::add_global_object	D/A,P3,P4,P27,P28,P29,P30	c05ffb02bb44
 src/generator.rs	Generator::apply_lambda	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P28,P29,P30	53f3b45ec98b
 src/generator.rs	Generator::build_assert_unique	P26	0ebdad575d3d
@@ -399,15 +394,11 @@ src/object.rs	lambda_return_part_types	P27,P29,P30	e5804412a933
 src/object.rs	ty_to_object_ty	P7a,P7d,P7e,P27,P28,P29,P30	bd40ee79d08f
 src/optimization/capture_struct.rs	CaptureStruct	P5,P6,P7	f1c6191c420c
 src/optimization/capture_struct.rs	CaptureStruct::new	P1,P2,P5,P6,P7,P7a,P7d,P7e	79b12cf140d7
-src/optimization/closure_specialization.rs	ClosureSpecializationVisitor::decapture_lambda	P1,P2	36c2dc7a5422
-src/optimization/closure_specialization.rs	LiftedLambdas::capture_struct_of	P1,P2	b1b391b33646
-src/optimization/closure_specialization.rs	LiftedLambdas::insert	P1,P2	de476953b13f
 src/optimization/closure_specialization.rs	lift_all	P1,P2,P5,P6,P7,P7a,P7d,P7e	a18af9cfea16
 src/optimization/closure_specialization.rs	realize_all	P1,P2,P5,P6,P7,P7a,P7d,P7e	5b170eb58830
 src/optimization/closure_specialization.rs	record_capture_list	P1,P2,P5,P6,P7	df63a1a79d1e
 src/optimization/closure_specialization.rs	take_new_tycons	P1,P2	431536d97eac
 src/optimization/dead_symbol_elimination.rs	run	P26	86c915702e45
-src/optimization/defunctionalize_fix.rs	FixDefunctionalizer::lift	P1,P2	aaf9f08bf64e
 src/optimization/defunctionalize_fix.rs	run_one	P1,P2,P5,P6,P7,P7a,P7d,P7e	e44ddb2d9ced
 src/optimization/optimization.rs	run	P26	8d2f94fffa57
 src/optimization/simplify_symbol_names.rs	SimplifyName::end_visit_llvm	P26	e9fd08a9c000
@@ -417,7 +408,7 @@ src/optimization/uncurry.rs	funptr_lambda	D/A,P26	ab312f11d72b
 src/optimization/uncurry.rs	replace_closure_call_to_funptr_call	P26	a87d49aea6e4
 src/optimization/uncurry.rs	replace_closure_call_to_funptr_call_subexprs	P26	bdde19a58810
 src/optimization/uncurry.rs	run	D/A,P26	57b93136a0b4
-src/parse/grammer.pest	capital_name	P1,P2,P7a,P7d,P7e,P26,P27,P29,P30	12411c7d19d5
+src/parse/grammer.pest	capital_name	P7a,P7d,P7e,P26,P27,P29,P30	12411c7d19d5
 src/parse/grammer.pest	ffi_c_fun_char	D/A,P27,P29,P30	cb2a7b62052d
 src/parse/grammer.pest	ffi_c_fun_ty	P26	6d345ff5b4b1
 src/parse/grammer.pest	global_defns_in_namespace	P27,P29,P30	582c1a34ab3c
@@ -427,10 +418,9 @@ src/parse/grammer.pest	name_char	D/A,P5,P6,P7,P27,P29,P30	517887a91350
 src/parse/grammer.pest	name_head	P27,P29,P30	93239e468914
 src/parse/grammer.pest	namespace_item	P27,P29,P30	2b78e9f6a044
 src/parse/grammer.pest	type_defn	P7a,P7d,P7e	5b3a7d124b0d
-src/parse/grammer.pest	type_name	P1,P2,P7a,P7d,P7e,P26	0103733f9915
+src/parse/grammer.pest	type_name	P7a,P7d,P7e,P26	0103733f9915
 src/parse/parser.rs	parse_ffi_c_fun_ty	A21	55b0765b6306
-src/parse/parser.rs	parse_module	P1,P2,P7a,P7d,P7e	5055d7358b53
-src/parse/parser.rs	parse_type_defn	P1,P2	5178e3f56376
+src/parse/parser.rs	parse_module	P7a,P7d,P7e	5055d7358b53
 src/parse/sourcefile.rs	SourceFile	D/A,P2a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,T	b9f6e8e54f93
 src/parse/sourcefile.rs	Span	P2a,P15,P16,P17,P18,T	938e0ac09831
 src/rc_ir/ast.rs	FieldPath	P1,P2,P2a,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18	dd85d967b3d7
