@@ -94,6 +94,14 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
   ときに真を、偽を返す要素が在るときに偽を返す。要素が 1 つも無いときは真である。
 - **`EXT Vec::first`** (Rust 標準ライブラリ): `v.first()` は、`v` が空のとき `None` を、そうでないとき
   先頭の要素への参照の `Some` を返す。
+- **`EXT 写像と集合の基本演算`** (Rust 標準ライブラリ): この文書が扱う写像はどれも `crate::misc` の
+  `Map`、集合はどれも `Set` であり、その 2 つは `std::collections` の `HashMap` と `HashSet` の
+  ハッシャを差し替えた別名である (`CODE src/misc.rs: Map`, `Set`)。`m.get(k)` は `k` が鍵として在る
+  ときその値への参照の `Some` を、無いとき `None` を返す。`m.contains_key(k)` は `m.get(k)` が
+  `Some` であることと同値である。`m.keys()` は鍵の全体を、`m.values()` はその鍵の下の値の全体を、
+  `m.iter()` はその対の全体を、どれもちょうど 1 つずつ渡す。`m.insert(k, v)` は
+  `k` を鍵として `v` を置き、直前の値を `Option` で返す。`s.insert(x)` は `x` を集合に入れ、
+  `s.contains(x)` は `x` が集合に在ることと同値である。**鍵と要素は `Eq` の意味で区別される。**
 - **`EXT Option の取り出し`** (Rust 標準ライブラリと言語規則): `Option` を返す関数の中の `e?` は、`e` が
   `None` のときその関数を `None` で返し、`Some(v)` のとき `v` を値とする。`o.unwrap_or_else(f)` は、
   `o` が `Some(v)` のとき `v` を、`None` のとき `f()` を返す。`o.is_some_and(f)` は、`o` が `Some(v)` で
@@ -394,7 +402,8 @@ P5 (c) が述べる包含 `⋃_{λ ∈ L(v, π)} acted_on(v, λ) ⊆ ActRefs(v, 
       `vars`・`type_env`・`v`・`π` で決まり、後者は `boxed_leaf_paths(ty(v), type_env)` の各元 `λ` の
       うち `π` を前置に持つものについて `origin(vars, type_env, v, λ)` を呼び、その `candidates()` から
       `identity()` を除いた元を集める。
-  BY DEF ActRefs, DEF Others, CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
+  BY DEF ActRefs, DEF Others, EXT 写像と集合の基本演算,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects,
      CODE src/rc_ir/ownership.rs: References::objects, CODE src/rc_ir/borrow.rs: cancel
   `CancelAnalysis::acted_references(v, π)` は `acted_references(self.vars, self.type_env, v, π)` の値を
@@ -628,7 +637,7 @@ P5 (c) が述べる包含 `⋃_{λ ∈ L(v, π)} acted_on(v, λ) ⊆ ActRefs(v, 
   <2>3. `r.outstanding.shares_an_object(un_bumped)` が偽であることは、`un_bumped.objects()` のどの
         オブジェクト `o` についても `r.outstanding.names(o)` が偽であることと同値である。
     BY CODE src/rc_ir/ownership.rs: References::shares_an_object, References::objects,
-       References::names, EXT Iterator::any
+       References::names, EXT Iterator::any, EXT 写像と集合の基本演算
     `shares_an_object` は `other.0.keys().any(|object| self.0.contains_key(object))`、`objects` は
     `self.0.keys()` の複製、`names` は `self.0.contains_key` である。
   <2>4. 訪問が `walk(k, pending, ·)` に渡す `pending` は、L5 の 1 の呼び出しの後で、かつ <2>1 により
@@ -939,11 +948,16 @@ P5 (c) が述べる包含 `⋃_{λ ∈ L(v, π)} acted_on(v, λ) ⊆ ActRefs(v, 
   <2>3. `passthrough_arg_leaves(llvm_gen, result_ty, args, type_env)` が返す集合は、
         `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の結果 leaf のうち、その `LeafOrigins` が
         ちょうど 1 元であってその元が `LeafOrigin::Arg(j, σ)` であるものについての `(j, σ)` の全体である。
-    BY CODE src/rc_ir/ownership.rs: passthrough_arg_leaves,
+    BY <ref id=e11772a/>, EXT 写像と集合の基本演算, CODE src/rc_ir/ownership.rs: passthrough_arg_leaves,
        CODE src/rc_ir/ownership.rs: as_arg_projection,
-       CODE src/rc_ir/provenance.rs: Provenance::leaves
-    `leaves()` は各 boxed leaf の `LeafOrigins` を渡し、`as_arg_projection` は元の個数が 1 でない集合と、
-    唯一の元が `Fresh` か `Unknown` である集合に `None` を返す。
+       CODE src/rc_ir/provenance.rs: Provenance::leaves,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::leaves,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape
+    `Provenance::leaves` の本体は `self.0.leaves()` であり、`LeafMap::leaves` の本体は `self.0.values()`
+    である。A3 より `result_prov` が返す `Provenance` はその型の各 boxed leaf に `LeafOrigins` を置いた
+    ものであり、`LeafMap::build_shape` はその鍵を `boxed_leaf_paths(ty, type_env)` に取るので、
+    `leaves()` が渡すのは各 boxed leaf の `LeafOrigins` である。`as_arg_projection` は元の個数が
+    1 でない集合と、唯一の元が `Fresh` か `Unknown` である集合に `None` を返す。
   <2>4. `Disp(n)` は <2>2 が `out` に入れる集合に等しい。
     BY <2>2, <2>3, DEF 処分 leaf
     DEF 処分 leaf の `Llvm` の行の条件「`borrows_operand(i)` が偽であり、かつ `result_prov` のどの結果
@@ -1259,7 +1273,7 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
     `LeafMap::build_shape` は `boxed_leaf_paths(ty, type_env)` の各元を鍵にして値を置く。
   <2>2. `leaf_origins_at(λ)` は `self.0.get(λ)` であり、`λ ∈ boxed_leaf_paths(ty(x))` なので
         `Some` を返す。
-    BY <2>1, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+    BY <2>1, EXT 写像と集合の基本演算, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
        CODE src/rc_ir/leaf_map.rs: LeafMap::get
   <2>3. QED
     BY <2>1, <2>2, <ref id=e11772a/>
@@ -1606,14 +1620,18 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
         L8 の仮定より `λ ∈ boxed_leaf_paths(ty(x))` であり、D4 の第 1 規則は `is_fully_unboxed` が
         真の型が leaf を持たないと述べる。
       <4>3. `container.ty` について `is_closure`、`is_funptr`、`is_array` はいずれも偽である。
-        BY <3>1, <ref id=83d98e9/>, CODE src/ast/types.rs: TypeNode::is_closure,
+        BY <3>1, <ref id=83d98e9/>, <ref id=3d4be43/>, CODE src/ast/types.rs: TypeNode::is_closure,
            CODE src/ast/types.rs: TypeNode::is_funptr, CODE src/ast/types.rs: TypeNode::is_array,
            CODE src/ast/types.rs: TypeNode::is_struct,
+           CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
            CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
            CODE src/ast/types.rs: TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
-        この 3 つの判定は、最上位 tycon がそれぞれ `Std::->`、`Std::FunPtr_*` のいずれか、
-        `Std::Array` であることを問う。`bulitin_tycons` はこの 3 種にそれぞれ `TyConVariant::Arrow`、
-        `TyConVariant::Primitive`、`TyConVariant::Array` を与える。**A12 の「構造体である」から
+        この 3 つの判定の本体はどれも `self.toplevel_tycon_satisfies(<述語>)` であり、
+        `toplevel_tycon_satisfies` は最上位 tycon が在ればそれに述語を当て、無ければ偽を返す。よって
+        3 つが問うのは、最上位 tycon がそれぞれ `Std::->`、`Std::FunPtr_*` のいずれか、`Std::Array`
+        であることである。`bulitin_tycons` はこの 3 種にそれぞれ `TyConVariant::Arrow`、
+        `TyConVariant::Primitive`、`TyConVariant::Array` を与え、A28 より、`type_env.tycons()` が
+        その 3 つの鍵の下に持つ項目は `bulitin_tycons` が置いたその項目である。**A12 の「構造体である」から
         `TyConVariant::Struct` へ渡るのは `is_struct` である** -- その本体は
         `self.toplevel_tycon_info(type_env)` の `variant` を読み、`TyConVariant::Struct` のときにだけ
         真を返す。<3>1 より `container.ty` は構造体なので、その最上位 tycon の `variant` は
@@ -1700,14 +1718,18 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
         L8 の仮定より `λ ∈ boxed_leaf_paths(ty(x))` であり、D4 の第 1 規則は `is_fully_unboxed` が
         真の型が leaf を持たないと述べる。
       <4>3. `scrut.ty` について `is_closure`、`is_funptr`、`is_array` はいずれも偽である。
-        BY <3>1, <ref id=83d98e9/>, CODE src/ast/types.rs: TypeNode::is_closure,
+        BY <3>1, <ref id=83d98e9/>, <ref id=3d4be43/>, CODE src/ast/types.rs: TypeNode::is_closure,
            CODE src/ast/types.rs: TypeNode::is_funptr, CODE src/ast/types.rs: TypeNode::is_array,
            CODE src/ast/types.rs: TypeNode::is_union,
+           CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
            CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
            CODE src/ast/types.rs: TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
-        この 3 つの判定は、最上位 tycon がそれぞれ `Std::->`、`Std::FunPtr_*` のいずれか、
-        `Std::Array` であることを問う。`bulitin_tycons` はこの 3 種にそれぞれ `TyConVariant::Arrow`、
-        `TyConVariant::Primitive`、`TyConVariant::Array` を与える。**A12 の「union である」から
+        この 3 つの判定の本体はどれも `self.toplevel_tycon_satisfies(<述語>)` であり、
+        `toplevel_tycon_satisfies` は最上位 tycon が在ればそれに述語を当て、無ければ偽を返す。よって
+        3 つが問うのは、最上位 tycon がそれぞれ `Std::->`、`Std::FunPtr_*` のいずれか、`Std::Array`
+        であることである。`bulitin_tycons` はこの 3 種にそれぞれ `TyConVariant::Arrow`、
+        `TyConVariant::Primitive`、`TyConVariant::Array` を与え、A28 より、`type_env.tycons()` が
+        その 3 つの鍵の下に持つ項目は `bulitin_tycons` が置いたその項目である。**A12 の「union である」から
         `TyConVariant::Union` へ渡るのは `is_union` である** -- その本体は
         `self.toplevel_tycon_info(type_env)` の `variant` を読み、`TyConVariant::Union` のときにだけ
         真を返す。<3>1 より `scrut.ty` は union なので、その最上位 tycon の `variant` は
@@ -2146,7 +2168,8 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
 <1>1a. `consume_objects(pending, objects)` は、`objects` のいずれかについて `outstanding.names(object)`
        が真である要素を取り除いてその `node` を `self.needed_retains` に入れ、残る要素の `node`・
        `outstanding`・並びを変えない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain, EXT Iterator::any
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain, EXT Iterator::any,
+     EXT 写像と集合の基本演算
   本体は `pending.retain(|retain| { if objects.iter().any(|object| retain.outstanding.names(object))
   { self.needed_retains.insert(retain.node); return false; } true })` である。
 
@@ -2284,7 +2307,7 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
           `p.outstanding` は各 `arm_exits[j']` の中の `node` が `p.node` に等しい要素の `outstanding`
           と等しい。とくに `arm_exits[j]` にそのような要素 `p^{(j)}` がちょうど 1 つ在る。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, <ref id=5116349/>, <1>1b, <3>3,
-         EXT Iterator::all
+         EXT Iterator::all, EXT 写像と集合の基本演算
       <3>3 より `arm_exits[j] = pending(n)` は走査中のある位置の `pending` なので、<1>1b より
       `p.node` を `node` に持つ要素はその中に高々 1 つである。
       `merge` の返り値は `pending_in.iter().filter_map(|retain| uniform.get(&retain.node).map(
@@ -2384,7 +2407,7 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
   活性なら等しく、活性でなければ右辺が 0 で左辺は 0 以上である。
 
 <1>4. `p.outstanding` は `B_ρ(n, p)` を `covers` する。
-  BY <1>3, <ref id=cbc4a1c/>, EXT Iterator::all, EXT Option の取り出し,
+  BY <1>3, <ref id=cbc4a1c/>, EXT Iterator::all, EXT Option の取り出し, EXT 写像と集合の基本演算,
      CODE src/rc_ir/ownership.rs: References::covers
   D15 より `covers(R)` は各オブジェクトについて自分の個数が `R` 以上かを答える。`covers` の本体は
   `other.0.iter().all(|(object, count)| self.0.get(object).is_some_and(|held_count| held_count >=
@@ -3565,7 +3588,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
        ついて `cancel` が `VarTable::of` か `VarTable::body_only` で作る表は、`bindings`・
        `closure_targets`・`param_tys`・`var_tys` の 4 つの欄が等しい。`origin_inner` が読むのは
        `bindings` だけである。
-  BY <1>1d, CODE src/rc_ir/borrow.rs: RewriteCtx::new, CODE src/rc_ir/borrow.rs: cancel,
+  BY <1>1d, EXT 写像と集合の基本演算, CODE src/rc_ir/borrow.rs: RewriteCtx::new,
+     CODE src/rc_ir/borrow.rs: cancel,
      CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
      CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var,
      CODE src/rc_ir/ownership.rs: origin_inner
@@ -3668,7 +3692,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         あり、`grow_stack(f)` の本体は `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` である。
       <4>1. `rename` の各項は `assign_fresh_name` の 1 回の呼び出しが書き込むものであり、`F` の各束縛名に
             ついてその呼び出しはちょうど 1 回である。`pass_tag` は `"b"` である。
-        BY <4>0, <ref id=63eadd9/>, <ref id=b3dfa37/>, CODE src/rc_ir/borrow.rs: clone_func,
+        BY <4>0, <ref id=63eadd9/>, <ref id=b3dfa37/>, EXT 写像と集合の基本演算,
+           CODE src/rc_ir/borrow.rs: clone_func,
            CODE src/rc_ir/rename.rs: fresh_rename_function,
            CODE src/rc_ir/rename.rs: assign_fresh_name
         `clone_func` は `fresh_rename_function(&func.params, &func.capture, &func.body, "b",
@@ -3806,7 +3831,7 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
   <2>3. `origin_V(p, μ)` の各候補 `(r, q)` について `owns_object(r, q)` は真である。
     <3>1. `owns_object(r, q)` は、`r` が `V` の `vars.param_tys` の鍵でないとき -- すなわち `V` の
           パラメータでも capture でもないとき -- 真である。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
+      BY EXT 写像と集合の基本演算, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
          CODE src/rc_ir/ownership.rs: VarTable::of
       `self.vars.param_tys.get(root)` が `None` の腕が `true` を返す。`VarTable::of` は
       `func.params` と `func.capture` の名前だけを `param_tys` の鍵にする。
@@ -3928,7 +3953,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         の段の実行時の呼び出し先 (D23) を `g`、`g` の第 `i` パラメータを `p_i` と書く。`g` は
         `borrow_ify` の出力の `funcs` の関数である。また `call_rc` が引く `params` が `Some` であるとき、
         `params[i]` は `p_i` の名前と型である。
-    BY <ref id=ff5985d/>, <ref id=561540d/>, <ref id=33c54dc/>, <ref id=cb35ab1/>, <ref id=f8ae607/>, <ref id=63eadd9/>, <ref id=596a46d/>, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+    BY <ref id=ff5985d/>, <ref id=561540d/>, <ref id=33c54dc/>, <ref id=cb35ab1/>, <ref id=f8ae607/>, <ref id=63eadd9/>, <ref id=596a46d/>, EXT 写像と集合の基本演算,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: param_names_and_types,
        CODE src/rc_ir/borrow.rs: borrow_funcref,
        CODE src/ast/name.rs: FullName::is_local, CODE src/ast/name.rs: NameSpace::is_local,
