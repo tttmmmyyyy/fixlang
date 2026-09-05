@@ -786,11 +786,17 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
     BY <ref id=8d3e4af/>, <ref id=843e506/>, CODE src/rc_ir/borrow.rs: RewriteCtx::route, borrow_ify,
        CODE src/rc_ir/ownership.rs: resolve_callee_params
   <2>4a. 借用版の名前が `RcVar` として現れるのは、`App` の `callee` の位置だけである。
-    `borrow_ify` が出力の本体に借用版の名前を書くのは `route` の返り値だけであり、それは
-    `RcRhs::App(callee, args)` の `callee` に置かれる。`clone_func` が導入するのは束縛変数の名前だけで
-    あって関数の名前ではない (P9 の言明)。A13 より、`P` に現れるどの名前も `#borrow` で終わらないので、
-    入力から運ばれた名前がたまたま借用版の名前と一致することも無い。
-    BY <ref id=cb35ab1/>, <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::route, borrow_ify
+    `borrow_ify` が出力の本体に借用版の名前を書くのは `route` の返り値だけである -- `rewrite_inner` の
+    `App` の腕は `route` の返り値 `callee` を `RcRhs::App(callee, args)` の `callee` に置き、同じ
+    `callee` を `call_rc` にも渡すが、**`call_rc` が返す 2 つの列に積むのは `(arg.clone(), unit)` の
+    対だけであり、`callee` はどちらの列にも現れない。**`prepend_rc` はその対の `var` と `path` から
+    `rc_node` を組むので、そこに立つ `Retain`/`Release` 節点が名指す `RcVar` は `args` の元である。
+    `rewrite_inner` の残る腕はどれも節点を組み直すだけで、`RcVar` を新しく書かない。
+    `clone_func` が導入するのは束縛変数の名前だけであって関数の名前ではない (P9 の言明)。A13 より、`P` に
+    現れるどの名前も `#borrow` で終わらないので、入力から運ばれた名前がたまたま借用版の名前と一致する
+    ことも無い。
+    BY <ref id=cb35ab1/>, <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::route,
+       RewriteCtx::call_rc, prepend_rc, rc_node, borrow_ify
   <2>4b. 実行時の関数の値が持つ LLVM 関数の番地は、次の 3 つのいずれかが置いたものである。
     A21 が、Fix の関数型の値に LLVM 関数の番地を書き込むのは次の 3 か所だけであり、ほかのどの構文も op も
     既にある関数の値を写すだけであると述べる。
@@ -885,9 +891,14 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
   <2>1. `params` は `g` のパラメータの列である。
     BY <1>4
   <2>2. `all_owned_units(P', type_env)` は、`P'` の各関数 `f` の各パラメータ・capture `p` と `ty(p)` の
-        各 unit `u` について、`u` が `f.borrowed_units` に入らないとき、かつそのときに限り `(p.name, u)`
-        を含む。
-    BY CODE src/rc_ir/ownership.rs: all_owned_units
+        各 unit `u` について、対 `(p.name, u)` が `f.borrowed_units` に入らないとき、かつそのときに限り
+        その対を含む。
+    `all_owned_units` は `let unit_path = (p.name.clone(), unit);` を組んでから
+    `if !func.borrowed_units.contains(&unit_path)` で判定する。**`borrowed_units` が持つのも対である** --
+    その型は `Set<VarPath>` で、`VarPath` は `(FullName, FieldPath)` であり、欄の doc が
+    「one `(parameter-name, unit-path)` each」と述べる。
+    BY CODE src/rc_ir/ownership.rs: all_owned_units,
+       CODE src/rc_ir/ast.rs: RcFunc, VarPath
   <2>3. `(g.params[i].name, u)` を `all_owned_units` に入れうる関数は `g` だけである。
     `<2>2` より `(g.params[i].name, u)` を入れるのは、`g.params[i].name` を名前とするパラメータか
     capture を持つ関数である。パラメータと capture は束縛変数であり、`<1>1` より `P'` の束縛変数の名前は
@@ -899,8 +910,9 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
     `truncate_to_unit(ty(params[i]), λ)` は値を返し、それは `rc_units(ty(params[i]))` の元 -- すなわち
     `<2>2` の `u` が渡る集合の元 -- である。`<2>1` より `params[i]` は `g.params[i]` であり、`<2>3` より
     その名前で `owned_units` に入る項目は `g` が入れたものだけである。よって `<2>2` より、その項目が
-    在ることと `truncate_to_unit(ty(params[i]), λ)` が `g.borrowed_units` に入らないことは同値であり、
-    D14 より後者は `g` がその unit を所有することである。
+    在ることと、対 `(params[i].name, truncate_to_unit(ty(params[i]), λ))` が `g.borrowed_units` に
+    入らないことは同値である。D14 は `borrowed_units` を、その関数が借用する unit の集合と定めるので、
+    後者は `g` がその unit を所有することである。
     BY <ref id=8412761/>, <ref id=ef8efc4/>, <ref id=3597669/>, <2>1, <2>2, <2>3, DEF `cancel` の所有述語
 
 <1>7. QED
