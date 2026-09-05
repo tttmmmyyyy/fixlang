@@ -1,7 +1,8 @@
 # P26 -- 一意性は悪化しない
 
-この文書は `README.md` の P26 を扱う。立つのは `README.md` の定義と仮定、および命題 P1-P24、P28、
-P30 の**言明**である。実行の水準の定義 -- 環境 D22、活性化 D23、実行 D24、参照の持ち手 D25、対応する
+この文書は `README.md` の P26 を扱う。立つのは `README.md` の定義・仮定と、命題の**言明**である。
+引いている項目の一覧は、`proof_index.py --render` が生成するヘッダがグラフから作る。
+実行の水準の定義 -- 環境 D22、活性化 D23、実行 D24、参照の持ち手 D25、対応する
 2 つの実行と共通接頭 D30、実行の終わり方 D31、実行の読み D32 -- は README の「プログラムの実行」の節に
 ある。対応する活性化 D29 は、1 つの本体についての構成なので README の「中間表現」の節にある。
 
@@ -246,6 +247,77 @@ SCAN src/ `make_struct_union_unique(`
 SCAN src/ `array_tail_destination(`
   = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::generate
   = src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::generate
+
+**前提 参照を作る生成コードの在りか** --- `Generator::retain` と `Generator::build_retain` を呼ぶ式が
+在る項目、および `ObjectFieldType` の複写の補助関数 -- `clone_array_buf`、`clone_array_range`、
+`clone_struct`、`clone_union`、`append_value_into_array_buf`、`initialize_array_buf_by_value` -- と
+`ObjectFieldType::retain_union` の名前が在る項目は次で尽きる。D24 は参照を作る生成コードについて
+「**在りかは述語で決める**」と書き、「**述語は名前の綴りでなく、呼ばれる項目で書く。**」と続ける。
+走査は字面の上位近似なので、一覧には Rust の `Set`・`Vec`・`Map`・`String` の `retain` を呼ぶ項目も、
+doc の散文だけを持つ項目も、定義そのものも入る。挙がった各項目が何であるかは `--` の後に書く。
+
+SCAN src/ `.retain(`
+  = src/ast/expr.rs: ExprNode::calc_free_vars -- Rust の `Set::retain`
+  = src/ast/types.rs: Scheme::generalize -- Rust の `Vec::retain`
+  = src/commands/docs.rs: to_markdown_link -- Rust の `String::retain`
+  = src/fixstd/builtin.rs: InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::generate -- 環境へ番地を渡す内部関数の本体。retain してから返る
+  = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate -- オペランドを retain し、適用の後に release する
+  = src/generator.rs: Generator::build_retain -- 定義。unbox の集約の成分へ降りる
+  = src/metafiles/trust_store.rs: TrustStore::record -- Rust の `Vec::retain`
+  = src/object.rs: ObjectFieldType::clone_array_range -- 写した各要素を retain し、行き先の記憶域のスロットへ書く
+  = src/object.rs: ObjectFieldType::clone_struct -- 写した各フィールドを retain し、`dst` の欄へ書く
+  = src/object.rs: ObjectFieldType::get_struct_fields -- boxed 容器から取り出した各フィールドを retain して返す
+  = src/object.rs: ObjectFieldType::get_union_value -- boxed union から取り出した payload を retain して返す
+  = src/object.rs: ObjectFieldType::initialize_array_buf_by_value -- 定義
+  = src/object.rs: ObjectFieldType::read_from_array_buf -- 読み出した要素を retain して返す
+  = src/object.rs: ObjectFieldType::retain_release_mark_union -- `retain_union` の本体。unbox union の活性変位の payload へ降りる
+  = src/optimization/rename.rs: rename_free_names -- Rust の `Map::retain`
+  = src/rc_ir/borrow.rs: CancelAnalysis::consume_objects -- Rust の `Vec::retain`
+  = src/rc_ir/dead_code_elim.rs: eliminate_unreachable -- Rust の `Map::retain` と `Vec::retain`
+  = src/rc_ir/rc_insert.rs: free_locals -- Rust の `Set::retain`
+
+SCAN src/ `.build_retain(`
+  = src/generator.rs: Generator::build_capture_project -- capture の欄から読み出した値を retain して返す
+  = src/generator.rs: Generator::build_retain -- 定義。自分自身へ降りる
+  = src/generator.rs: Generator::build_run_destructor -- `_dtor` の欄の関数に適用の分を与える
+  = src/generator.rs: Generator::get_scoped_obj -- `retain_on_read` が真の読み。retain した値を返す
+  = src/generator.rs: Generator::retain -- `build_retain` への委譲
+  = src/object.rs: ObjectFieldType::append_value_into_array_buf -- 書き込む値を count 回 retain し、記憶域のスロットへ書く
+  = src/object.rs: ObjectFieldType::retain_release_mark_union -- 上と同じ項目
+  = src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner -- `RcExpr::Retain` 節点の実装
+  = src/rc_ir/codegen.rs: Generator::eval_rc_match -- boxed union の変位アームの payload 束縛
+
+SCAN src/ `retain_union`
+  = src/generator.rs: Generator::build_retain -- unbox の集約の union の成分について
+  = src/object.rs: ObjectFieldType::clone_union -- 複写した payload について
+  = src/object.rs: ObjectFieldType::retain_union -- 定義。`retain_release_mark_union` へ委譲する
+
+SCAN src/ `clone_array_buf`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::generate -- `src` の共有の腕。行き先は `array_tail_destination` が返す `dst_write`
+  = src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::generate -- 行き先は `array_tail_destination` が返す `dst_write`
+  = src/fixstd/builtin.rs: InlineLLVMArraySetCapacityBoundsUnchecked::generate -- 共有の腕。行き先は `alloc_array_storage` が割り当てた `new_storage`
+  = src/fixstd/builtin.rs: make_array_unique_with_hole -- 共有の腕。行き先は `alloc_array_storage` が割り当てた `new_storage`
+  = src/object.rs: ObjectFieldType::clone_array_buf -- 定義。`clone_array_range` へ委譲する
+
+SCAN src/ `clone_array_range`
+  = src/object.rs: ObjectFieldType::clone_array_buf -- 委譲
+  = src/object.rs: ObjectFieldType::clone_array_range -- 定義
+
+SCAN src/ `clone_struct`
+  = src/fixstd/builtin.rs: make_struct_union_unique -- 共有の腕。行き先は `create_obj` が割り当てた `cloned_obj`
+  = src/object.rs: ObjectFieldType::clone_struct -- 定義
+
+SCAN src/ `clone_union`
+  = src/fixstd/builtin.rs: make_struct_union_unique -- 共有の腕。行き先は `create_obj` が割り当てた `cloned_obj`
+  = src/object.rs: ObjectFieldType::clone_union -- 定義。`retain_union` を `dst` に対して呼ぶ
+
+SCAN src/ `append_value_into_array_buf`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendValueCapacityUnchecked::generate -- 行き先は `force_unique_or_assert` が返す配列の記憶域
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendValueCapacityUnchecked::internal_rc_targets -- doc の散文
+  = src/object.rs: ObjectFieldType::append_value_into_array_buf -- 定義
+
+SCAN src/ `initialize_array_buf_by_value`
+  = src/object.rs: ObjectFieldType::initialize_array_buf_by_value -- 定義。呼ぶ式は在らない
 
 **前提 LLVM の関数を呼ぶ命令を組む在りか** --- `inkwell` の `build_call` と `build_indirect_call` を
 呼ぶ式が在る項目と、`Generator::apply_lambda`、`run_ios_runner`、`apply_io_act_to_data_ptr`、
@@ -756,6 +828,8 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
       どれでもない。** … **書き込みは、その値を渡した素動作に付随して起きる** -- 書き込みとその素動作の
       あいだに段内の点は挟まらないので、点の上の帰納は 6 種だけを場合に持てばよい」と述べ、その読む者を
       この命題に名指す。`<2>2a` が、付随して書き込まれる内容が対応することを与える。
+      **変数の束縛も場合ではない。** 節点の実行は素動作を 1 つも出さないことがあるので、束縛は 6 種の
+      どれにも乗らない。`<2>5a` が、段の中で走る活性化の節点が束縛する変数について (b) を置き直す。
   <2>1. **参照の受け渡し・生成・処分。** どの参照がどこへ動くかは、D9 の消費・移動の表と D10 の生成の表が
         節点と inhabited (D16) な leaf ごとに決め、行き先 (別の持ち手か処分か) は D24 の (E2) の表が
         決める。**対応する 2 つの節点が同じ種類・同じ path を持つことは、`borrow_ify` については L8 の (2)
@@ -776,8 +850,8 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
         持ち手の単位である**」である。**後者の書き込む先は新しいオブジェクトとは限らない** -- D24 は
         「**書き込む先が新しいか既存かをこの節は問わない。**」と述べ、`InlineLLVMArrayAppendCapacityUnchecked`
         の共有の腕を既存の記憶域へ書く例に挙げる。**その先は、この段が割り当てたオブジェクトか、その op の
-        オペランドの leaf が指すオブジェクトである** -- 前者は D30 が対応させ、後者は帰納法の仮定 (b) が
-        対応させる。
+        オペランドの inhabited な boxed leaf が指すオブジェクトである** (L0a) -- 前者は D30 が対応させ、
+        後者は帰納法の仮定 (b) が対応させる。
         対応する 2 つの `Llvm` 節点は同じ op を持ち (`borrow_ify` については L8 の (2)、`cancel` に
         ついては P22 と P24、どちらも A3 の「op の複製は原本と同じ宣言を返す」の下で同じ宣言を返す)、
         帰納法の仮定 (a)(b) より対応する値を与えられるので、2 つの実行は同じ leaf について同じ向きの
@@ -806,7 +880,7 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
         いない。環境が参照を持つことから D8 で `H(o) ≥ 1` も出る。
         **この節は retain の段にも release の段にも掛かる**ので、どちらの向きでも動作が当たるのは (b) の
         1 対 1 の中のオブジェクトである。
-    BY <ref id=e11772a/>, <ref id=4f63121/>, <ref id=c9e4cca/>, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=66c9670/>, <ref id=243ae2c/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=7218f92/>, <ref id=081e39f/>, <ref id=74e7403/>, <ref id=2ab8ecd/>, <ref id=0b1cac5/>, <ref id=746e87a/>, <1>1a, <1>2b,
+    BY <ref id=e11772a/>, <ref id=4f63121/>, <ref id=c9e4cca/>, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=66c9670/>, <ref id=243ae2c/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=7218f92/>, <ref id=081e39f/>, <ref id=74e7403/>, <ref id=2ab8ecd/>, <ref id=0b1cac5/>, <ref id=746e87a/>, <ref id=def436e/>, <1>1a, <1>2b,
        帰納法の仮定
   <2>2. **割り当て。** D24 の (E2) の `H` の表より、オブジェクトを新しく割り当てるのは
         `Closure(f, caps)` の結果の capture object と、`result_prov` が単一の `Fresh` を宣言する `Llvm` の
@@ -915,6 +989,43 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
         対応する 2 つは対応する位置にあるので同時に終わる。よって (a) が保たれる。
     BY <ref id=3f1bb47/>, <ref id=cb35ab1/>, <ref id=c232680/>, <ref id=243ae2c/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=081e39f/>, <ref id=74e7403/>, <ref id=843e506/>, <ref id=0b1cac5/>, <ref id=746e87a/>, <ref id=841b298/>,
        DEF 共通接頭の段の中の対応, DEF 対応する本体, <1>1, <2>1, 帰納法の仮定
+  <2>5a. **段の中で走る活性化の節点が束縛する変数。** `<1>1a` は段の最初の段内の点についてしか (b) の
+        変数の節を置かず、段の中で走る活性化 -- (F) の解放が作る活性化とその子孫 -- は自分の段を持たない
+        (`<1>1`) ので、その節点の実行が束縛する変数について (b) を置き直す段が要る。素動作を 1 つも
+        出さない節点の実行 (`Let(x, Llvm(int_add, [a, b]), k)` がその形である) は、上の場合のどれにも
+        当たらない。
+        D21 は「活性化が渡すのは、辿る実行路だけではなく、**各位置での値の割り当ても含む組**である」と
+        述べ、続けて「**その割り当ては、オペランドから結果が決まらない構文の結果を含む。** 4 種ある。」と
+        書く。すなわちその 4 種以外の構文の結果は、オペランドの値から決まる。帰納法の仮定 (a) より
+        2 つの活性化は対応して対応する位置にあり、対応する 2 つの節点は同じ種類・同じ op を持ち
+        (`borrow_ify` については L8 の (2)、`cancel` については P22 と P24)、名指す変数は名前替えの下で
+        対応するので、帰納法の仮定 (b) よりオペランドの値は対応する。よって結果の値も対応する --
+        **スカラの成分については (b) の対応は等号なので、等しいオペランドから等しい結果が出る** (A4)。
+        **新しいオブジェクトを割り当てる節点については、結果の leaf が指すのは `<2>2` が対応させた 2 つの
+        オブジェクトである** -- 割り当てるのは `Closure(f, caps)` の capture object と、`result_prov` が
+        単一の `Fresh` を宣言する `Llvm` の結果の leaf であり (D24 の (E2) の `H` の表、A3)、その 2 つは
+        素動作なのでこの帰納の場合に在る。
+        4 種については次のとおりである。
+        **一意性の観測点** (D18) では、2 つの観測値が違えばそこが D30 の (X1) の出口であり
+        (`DEF 観測の事象と観測の点` がその 2 つの事象を対にし、D30 が「**対応する 2 つの活性化の対応する
+        節点で起きる一意性の観測 (D18) は、互いの対である。**」と述べる)、共通接頭はその手前で終わって
+        いるので、言明が量化する範囲では 2 つの観測値は等しい。
+        **外部の状態を読む `Llvm` の演算**については、D30 が 2 つの実行を、環境が与える入力 -- FFI の
+        呼び出しが返す値を含む -- を同じにして取る。
+        **実行時の参照カウントで分岐する `Llvm` の演算**については、分岐が違えばそこが D30 の (X2) の
+        出口であり、同じ腕を取るとき、一意の腕はオペランドのオブジェクトをそのまま返し (A3)、共有の腕が
+        割り当てる 2 つのオブジェクトは `<2>2` が対応させる。
+        **子の活性化を作る段**については、返る値はその活性化の終端の `Ret` が渡すものであり、`<2>1` の
+        受け渡しの場合と帰納法の仮定 (b) が対応させる。その活性化の本体が対応することは `<2>5` が与える。
+        **funptr の成分については、対応する 2 つの番地が対応する版を名指す** -- `cancel` については D29 の
+        「**funptr の番地は等号では読めない** … **その成分については、対応する 2 つの番地が対応する版を
+        名指す**」が、`borrow_ify` については L8c の言明の同じ形の節が与える。D29 は
+        「**funptr の成分を「対応する版を名指す」と読む段は、その値がオブジェクトの中から来たかどうかを
+        問わない。**」と書いて、その読みを節点が作る値へ広げる。
+        D6 より変数の値はそれを束縛する節点の後は変わらないので、この対応はその点以後の各段内の点で
+        保たれる。
+    BY <ref id=e11772a/>, <ref id=3f1bb47/>, <ref id=c422d87/>, <ref id=596a46d/>, <ref id=c232680/>, <ref id=e3436e8/>, <ref id=7218f92/>, <ref id=081e39f/>, <ref id=74e7403/>, <ref id=2ab8ecd/>, <ref id=0b1cac5/>, <ref id=746e87a/>,
+       DEF 観測の事象と観測の点, <1>1, <1>1a, <2>1, <2>2, <2>5, 帰納法の仮定
   <2>6. **1 本の道 (c)。** `<1>1` より段の中で作られる活性化はその段の中で終わり、それを作った活性化は
         そのあいだ節点を進めない。よって段内の点でも、生きている活性化は根から下への 1 本の道をなす。
         D24 の「活性化の林」の段落が D24 の時点についてこれを述べ、`<1>1` がそれを段の中へ延ばす。
@@ -923,8 +1034,10 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
     `<2>1` から `<2>4` が D24 の 6 種の素動作を、`<2>5` が活性化の生成と
     終了を尽くし、`<2>6` が (c) を運ぶ。記憶域への書き込みはこの 6 種のどれでもないが、D24 より書き込みは
     その値を渡した素動作に付随して起き、そのあいだに段内の点は挟まらないので場合を 1 つ増やさず、
-    `<2>2a` がその内容の対応を与える。`<1>2a` が、対を持たない動作がこの帰納を動かさないことを与える。
-    BY <ref id=e3436e8/>, <2>1, <2>2, <2>2a, <2>3, <2>4, <2>5, <2>6, <1>2a
+    `<2>2a` がその内容の対応を与える。**変数の束縛も素動作ではない** -- 段の最初の点については `<1>1a` が、
+    段の中で走る活性化の節点については `<2>5a` が (b) の変数の節を運ぶ。`<1>2a` が、対を持たない動作が
+    この帰納を動かさないことを与える。
+    BY <ref id=e3436e8/>, <2>1, <2>2, <2>2a, <2>3, <2>4, <2>5, <2>5a, <2>6, <1>1a, <1>2a
 
 <1>4. QED
   (d) は `<1>1` である。(a)(b)(c) については `<1>2` が基底を、`<1>3` が帰納段を与え、`<1>2a` が、対を
@@ -1162,6 +1275,133 @@ shared = false` になる。対象コミットの二値ではこのプログラ�
 であり、P26 の第 1 文の含意はそのまま成り立つ
 (`CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate`)。
 
+## L0a (生成コードが作った参照を書き込む先) <!--#def436e-->
+
+**言明**。生成コードが `Generator::retain` か `Generator::build_retain` の呼び出しで作った参照を、その
+呼び出しを出す項目自身がオブジェクトの記憶域へ書き込むのは、`ObjectFieldType::clone_array_range`、
+`ObjectFieldType::clone_struct`、`ObjectFieldType::clone_union`、
+`ObjectFieldType::append_value_into_array_buf` だけである。
+`Let(x, Llvm(gen, args), k)` の節点の実行がそのいずれかを走らせるとき、**書き込む先のオブジェクトは、
+その節点の実行が割り当てたオブジェクトか、`args` のいずれかの inhabited (D16) な boxed leaf が指す
+オブジェクトである。**
+
+D24 は、段の記述が `Obl` について網羅であることの脇で、生成コードが 2 つの表の外で出す retain と release を
+2 つの形に分ける。「相殺しないもの」について D24 は「**その参照の持ち手は、その生成コードが書き込む
+オブジェクトの持ち手の単位である**」と書き、「**書き込む先が新しいか既存かをこの節は問わない。**」と
+続ける。この命題はその書き込む先を数え上げる。
+
+<1>1. 前提 参照を作る生成コードの在りか の `.retain(` と `.build_retain(` の走査が挙げる項目のうち、
+      `ExprNode::calc_free_vars`、`Scheme::generalize`、`to_markdown_link`、`TrustStore::record`、
+      `rename_free_names`、`CancelAnalysis::consume_objects`、`eliminate_unreachable`、`free_locals` は
+      Rust の `Set`・`Vec`・`Map`・`String` の `retain` を呼ぶ項目であり、LLVM の命令を組まないので
+      生成コードではない。`Generator::retain` と `Generator::build_retain` は定義であって互いに委譲する --
+      前者は `emit_rc_helper_call` に閉包を渡し、`emit_rc_helper_call` はその閉包が本体を組んだ補助関数を
+      `build_call` で呼ぶ。
+      `ObjectFieldType::retain_release_mark_union` は `retain_union` の本体であり、同じ前提より
+      `retain_union` を呼ぶのは `Generator::build_retain` と `ObjectFieldType::clone_union` である。
+      `ObjectFieldType::initialize_array_buf_by_value` は記憶域のスロットへ書くが、同じ前提より
+      それを呼ぶ式は在らないので、どの節点の実行にも現れない。
+  BY 前提 参照を作る生成コードの在りか, CODE src/generator.rs: Generator::retain, Generator::build_retain,
+     Generator::emit_rc_helper_call,
+     CODE src/object.rs: ObjectFieldType::retain_union, ObjectFieldType::retain_release_mark_union,
+     ObjectFieldType::initialize_array_buf_by_value
+
+<1>2. `<1>1` が除いた項目を除く残りのうち、作った参照をオブジェクトの記憶域へ書き込むのは言明が挙げる
+      ものだけである。残る各項目の本体は次のとおりである。
+      `InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::generate` は、環境へ番地を渡す内部関数の
+      本体として `gc.retain(obj, RcState::Unknown)` を置き、そのまま `build_return` する。
+      `InlineLLVMWithRetainedFunctionBody::generate` は `gc.retain(x, ..)` の後に `apply_lambda` を呼び、
+      `gc.release(x, ..)` する。`ObjectFieldType::get_struct_fields`・`get_union_value`・
+      `read_from_array_buf` と `Generator::build_capture_project` は、読み出した値を retain して返す。
+      `Generator::get_scoped_obj` は `retain_on_read` が真のとき読んだ値を retain して返す。
+      `Generator::build_run_destructor` は `_dtor` の欄の値を retain して `apply_lambda` へ渡す --
+      同じ項目が `move_into_struct_field` で `_value` の欄へ書き戻すのは、その retain が作った参照では
+      なく、走らせた `IO` の動作が返した値である (D24 の (F))。`Generator::eval_rc_expr_inner` の
+      `RcExpr::Retain` の腕と `Generator::eval_rc_match` の変位アームの腕は、作った参照をその節点の
+      束縛と結果へ渡す。**どれも、自分が作った参照をオブジェクトの記憶域へ書き込まない。**
+  BY <ref id=e3436e8/>, <1>1,
+     CODE src/generator.rs: Generator::build_capture_project, Generator::get_scoped_obj,
+     Generator::build_run_destructor,
+     CODE src/object.rs: ObjectFieldType::get_struct_fields, ObjectFieldType::get_union_value,
+     ObjectFieldType::read_from_array_buf, ObjectFieldType::move_into_struct_field,
+     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_match,
+     CODE src/fixstd/builtin.rs: InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::generate,
+     InlineLLVMWithRetainedFunctionBody::generate
+
+<1>3. `clone_struct` と `clone_union` が書き込む先は、その節点の実行が割り当てたオブジェクトである。
+      `clone_struct` は写した各フィールドを retain して `dst` の欄へ `move_into_struct_field` で書く --
+      その項目は `dst` に `insert_field_object` を掛けるので、書く先は `dst` である。`clone_union` は
+      複写した payload について `retain_union` を `dst` に対して呼ぶ。前提 参照を作る
+      生成コードの在りか より、この 2 つを呼ぶ式が在るのは `make_struct_union_unique` だけであり、
+      そこが渡す `dst` は同じ腕の `create_obj(obj.ty.clone(), ..)` が割り当てた `cloned_obj` である。
+  BY 前提 参照を作る生成コードの在りか,
+     CODE src/object.rs: ObjectFieldType::clone_struct, ObjectFieldType::clone_union,
+     ObjectFieldType::move_into_struct_field, create_obj,
+     CODE src/generator.rs: Object::insert_field_object,
+     CODE src/fixstd/builtin.rs: make_struct_union_unique
+
+<1>4. `clone_array_range` が書き込む先は `dst_buffer` の各スロットであり、`append_value_into_array_buf` が
+      書き込む先は `buffer` の各スロットである。前提 参照を作る生成コードの在りか より、
+      `clone_array_range` を呼ぶ式が在るのは `clone_array_buf` だけである -- その `Some(hole)` の腕は
+      `array_buf_after_hole` で `src_buffer` と `dst_buffer` の穴の後ろの位置を取り、そこから
+      `clone_array_range` を呼ぶので、書き込む先はやはり `dst_buffer` の中である。`clone_array_buf` を
+      呼ぶ式が在るのは
+      `make_array_unique_with_hole`・`InlineLLVMArraySetCapacityBoundsUnchecked::generate`・
+      `InlineLLVMArrayAppendCapacityUnchecked::generate`・
+      `InlineLLVMArrayCopyCapacityBoundsUnchecked::generate`、
+      `append_value_into_array_buf` を呼ぶ式が在るのは
+      `InlineLLVMArrayAppendValueCapacityUnchecked::generate` だけである。行き先は、
+      前の 2 つでは `alloc_array_storage` が割り当てた `new_storage` のバッファ、
+      次の 2 つでは `array_tail_destination` が返す `dst_write`、
+      最後の 1 つでは `force_unique_or_assert(gc, array, ..)` が返す配列の記憶域のバッファである。
+  BY 前提 参照を作る生成コードの在りか,
+     CODE src/object.rs: ObjectFieldType::clone_array_range, ObjectFieldType::clone_array_buf,
+     ObjectFieldType::array_buf_after_hole,
+     ObjectFieldType::append_value_into_array_buf, alloc_array_storage, get_array_storage_buf,
+     get_array_storage, build_gep_array_elem,
+     CODE src/fixstd/builtin.rs: make_array_unique_with_hole, array_tail_destination,
+     InlineLLVMArraySetCapacityBoundsUnchecked::generate,
+     InlineLLVMArrayAppendCapacityUnchecked::generate,
+     InlineLLVMArrayCopyCapacityBoundsUnchecked::generate,
+     InlineLLVMArrayAppendValueCapacityUnchecked::generate
+
+<1>5. `<1>4` の行き先は、その節点の実行が割り当てたオブジェクトか、オペランドの boxed leaf が指す
+      オブジェクトである。`alloc_array_storage` は `create_obj` を呼んでオブジェクトを割り当てる。
+      `array_tail_destination` は `force_unique_or_assert(gc, dst, force_unique, state)` の結果から
+      `get_array_storage_buf` でバッファを取り (それは `get_array_storage` が返す記憶域の
+      `STORAGE_BUF_IDX` の欄であり、`build_gep_array_elem` はその中の位置を指す)、
+      `force_unique_or_assert` は
+      `force_unique_or_assert_with_hole` へ委譲して、配列については `force_unique` が真なら
+      `make_array_unique_with_hole` を、偽なら `val` をそのまま返す。`make_array_unique_with_hole` は
+      一意の腕で渡された配列の値をそのまま返し、共有の腕では `alloc_array_storage` が割り当てた
+      `new_storage` を `ARRAY_STORAGE_IDX` に据えた値を返す。渡される値は、
+      `InlineLLVMArrayAppendCapacityUnchecked::generate` と
+      `InlineLLVMArrayCopyCapacityBoundsUnchecked::generate` では
+      `gc.get_scoped_obj(&self.dst_name)`、`InlineLLVMArrayAppendValueCapacityUnchecked::generate` では
+      `gc.get_scoped_obj(&self.arr_name)` である。A12 の第 1 の箇条より `Let(x, Llvm(gen, args), k)` の
+      `args` の名前の列は `gen.free_vars()` に等しいので、その名前は `args` のいずれかである。
+      L0 の `<1>3a` より、配列の値の boxed leaf `[]` が指すオブジェクトはその記憶域である。
+      その leaf は unbox union の節を 1 つも通らないので inhabited である (D16、D4 の規則 4)。
+  BY <ref id=83d98e9/>, <ref id=0594f24/>, <ref id=66c9670/>, <ref id=6bf2817/>, <1>4,
+     CODE src/object.rs: alloc_array_storage, create_obj, get_array_storage_buf, get_array_storage,
+     build_gep_array_elem,
+     CODE src/fixstd/builtin.rs: array_tail_destination, force_unique_or_assert,
+     force_unique_or_assert_with_hole, make_array_unique_with_hole,
+     InlineLLVMArrayAppendCapacityUnchecked::generate,
+     InlineLLVMArrayCopyCapacityBoundsUnchecked::generate,
+     InlineLLVMArrayAppendValueCapacityUnchecked::generate
+
+<1>6. QED
+  `<1>1` と `<1>2` が、作った参照を記憶域へ書き込む項目を言明の挙げるものに絞る。`<1>3` が
+  `clone_struct` と `clone_union` の行き先を、`<1>4` と `<1>5` が `clone_array_range` と
+  `append_value_into_array_buf` の行き先を、その節点の実行が割り当てたオブジェクトか、
+  オペランドの inhabited な boxed leaf が指すオブジェクトかに分ける。
+  BY <1>1, <1>2, <1>3, <1>4, <1>5
+
+**この命題は L5・L5a・L9a・L11 を引かない**ので、その 4 つがこの命題を引くことで循環は生じない。
+引くのは README の定義・仮定と L0、および `src/generator.rs`・`src/object.rs`・`src/rc_ir/codegen.rs`・
+`src/fixstd/builtin.rs` のコードだけである。
+
 ## 4. `cancel` の半分
 
 ## L6 (`cancel` は参照カウントを上げない) <!--#a748958-->
@@ -1174,7 +1414,9 @@ D30 の共通接頭の段の各段内の点 `p`
 **量化が段内の点であるのは、観測の事象が段の中でも起きるからである** (`DEF 観測の事象と観測の点` の
 (O-b))。D24 の時点は段の最初の段内の点なので、この言明は時点についての形を含む。
 
-**入力を `borrow_ify` の出力に限るのは、L7 がこの命題を P23 と併せて読むからである。**P23 の言明は
+**入力を `borrow_ify` の出力に限るのは、L7 がこの命題を L6a と併せて読み、L6a が P23 を引くからである。**
+L7 の `<1>4` がこの命題を、`<1>5` が L6a を読み、L6a の `<1>3` は `cancel` の出力の D12 を P23 から取る。
+P23 の言明は
 `borrow_ify` の出力を入力とする場合についてのものであり、D12 を満たすだけのプログラムについては何も言わない。
 `cancel` を呼ぶのは `optimize_rc_program` の 1 か所であり、そこで渡るのはまさに `borrow_ify` の出力である
 (`cancel` も `borrow_ify` も `pub(crate)` なのでクレートの外から呼べない、
@@ -1716,11 +1958,13 @@ D30 の共通接頭が終わるとき、その出口は (X1) か (X2)
       BY <ref id=56c2068/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=081e39f/>, <ref id=01865dc/>, <2>2, <3>1, <3>2
     <3>4. QED
       段の素動作の列は、その段が実行する節点ごとの列と、節点の実行に属さない動作からなる。後者のうち
-      D24 の 6 種の素動作に当たるのは 4 つである -- (E1) が活性化の初期 `Obl` へ渡す参照、(E4) の返りが
-      呼び出し元へ渡す参照、(E7) の返りが `E` へ渡す参照、そして (E5) のグローバル化である。どれも
-      受け渡しかグローバル化であって `H` を動かさないので、解放を起こさない (D24 の (E1)、(E4)、(E5)、
+      D24 の 6 種の素動作に当たるのは、次のものである -- (E1) が活性化の初期 `Obl` へ渡す参照の受け渡し、
+      (E4) の返りが呼び出し元へ渡す参照の受け渡し、(E7) の返りが `E` へ渡す参照の受け渡し、(E5) の
+      グローバル化、そして (E9) の段が行う参照の生成と処分である。初めの 4 つはどれも受け渡しか
+      グローバル化であって `H` を動かさないので、解放を起こさない (D24 の (E1)、(E4)、(E5)、
       (E7))。活性化を作る動作と活性化が終わる動作も列の元だが (DEF 共通接頭の段の中の対応)、6 種の素動作
       ではなく、`H` を動かさない。(E6) と (E8) は参照を作らず、渡さず、処分しない (D24 の (E6)、(E8))。
+      残る (E9) の生成と処分を以下で扱う。
       **(E9) の段は節点を実行しないので、その素動作の列は全体がこの後者である。** D24 の (E9) より、その
       素動作は「**retain の段はその番地が指すオブジェクトへの参照を 1 つ作り、環境の持ち分に足す**」か
       「**release の段は環境の持ち分から参照を 1 つ処分する**」かのどちらかで、`H` を 1 上げるか 1 下げる。
@@ -2284,8 +2528,12 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         を呼ぶのは `run_io_or_ios_runner` と `ExportStatement::implement` であって、op の生成コードは
         1 つも無い。
     BY <1>3a
-  <2>2. この 8 つはいずれも `applies_a_function_operand` に `true` を返す。既定は偽である。
-    BY CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand,
+  <2>2. この 8 つはいずれも `applies_a_function_operand` に `true` を返し、**そう宣言する op はこの 8 つで
+        尽きる**。前提 `applies_a_function_operand` の宣言の在りか より、`fn applies_a_function_operand` の
+        字面が在るのは `LLVMGen` の既定の宣言とこの 8 つの override だけである。既定は `false` を返すので、
+        override を持たない op はどれも偽を宣言する。
+    BY 前提 `applies_a_function_operand` の宣言の在りか,
+       CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand,
        CODE src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand,
        InlineLLVMUnionModBody::applies_a_function_operand,
        InlineLLVMWithRetainedFunctionBody::applies_a_function_operand,
@@ -2297,7 +2545,8 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   <2>3. QED
     D24 は「その op の生成コードがオペランドを関数として適用するとき
     (`LLVMGen::applies_a_function_operand` が真を宣言する op)、適用された関数の本体の活性化が作られる」と
-    書く。`<2>1` がその op の集合を与え、`<2>2` がその 8 つが宣言を真にすることを与える。D24 は
+    書く。`<2>1` が、生成コードから `apply_lambda` へ届く op がこの 8 つであることを与え、`<2>2` が、
+    その 8 つが宣言を真にし、宣言を真にする op がこの 8 つで尽きることを与える。D24 は
     この段を活性化 1 つごとに区切り、8 つのうち 5 つ -- `fix` と `_mutate_boxed_internal` /
     `_mutate_elements_internal` の 4 種 -- が 1 つの節点についてこの種の段を 2 つ持つと述べる。
     BY <ref id=e3436e8/>, <2>1, <2>2
@@ -2734,8 +2983,7 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   差は残る 1 種 -- 生きている活性化の義務集合 -- の分である。`<1>0` より対はちょうど 1 対 1 である。
 
   **P28 の持ち手の分割は段内の点についても読む。** P28 の言明は「その実行 (D24) の**各時点と各段内の点**
-  (D24) について」と量化するので、分割は素動作と素動作のあいだの
-  各点で成り立つ。第 12 節の項目 6 が同じことを書く。
+  (D24) について」と量化するので、分割は素動作と素動作のあいだの各点で成り立つ。
   BY <ref id=627e117/>, <ref id=680aaa9/>, <ref id=ec8d1a0/>, <ref id=3d96eb8/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=6d644e6/>, <ref id=dbdbf7e/>, <ref id=0d151d9/>, <1>0, <1>1
 
 <1>3. 対応する生きている活性化の対 `(a, a_in)` について、`B(a)` が借用版でないならば次が成り立つ。
@@ -2942,9 +3190,11 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
         同一性については字義どおりでない -- はここに当たらない。`result_prov` の既定は `Unknown` であり、A3 より
         override するのは 29 個である。以下の (α) から (δ) はその 29 個を尽くし、`Fresh` を宣言するのは
         (α) から (γ) である。
-        (α) `InlineLLVMMakeStructBody`、`InlineLLVMMakeUnionBody`、`replaced_field_prov`
-        (`InlineLLVMStructSetBody` と `InlineLLVMStructPlugInBody` の 2 つが使う) は、
-        結果が boxed のときにだけ根の path に `Fresh` を置き、そうでないときは各 leaf に `Arg` を置く。
+        (α) `InlineLLVMMakeStructBody` と `replaced_field_prov` (`InlineLLVMStructSetBody` と
+        `InlineLLVMStructPlugInBody` の 2 つが使う) は、結果が boxed のときにだけ根の path に `Fresh` を
+        置き、そうでないときは各 leaf に `Arg` を置く。`InlineLLVMMakeUnionBody` も結果が boxed のときにだけ
+        根の path に `Fresh` を置き、そうでないときは、構成する変位の下の leaf に `Arg` を、他の変位の下の
+        leaf に空集合 (`Set::default()`) を置く。
         (β) `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、
         `InlineLLVMUnsafeMutateBoxedIOSInternalBody`、`InlineLLVMArrayMutateElementsInternalBody`、
         `InlineLLVMArrayMutateElementsIosInternalBody`、`InlineLLVMArrayPunchBody` は
@@ -3187,13 +3437,14 @@ A3 自身が「**この節が与えるのは「この段は割り当てない」
       共有の腕、`clone_array_buf`)」を挙げ、「**その参照の持ち手は、その生成コードが書き込むオブジェクトの
       持ち手の単位である**」と書く。**書き込む先はこの段が割り当てたオブジェクトとは限らない** -- D24 は
       「**書き込む先が新しいか既存かをこの節は問わない。**」と述べ、`InlineLLVMArrayAppendCapacityUnchecked`
-      の共有の腕が `clone_array_buf` を `dst` の既存の記憶域へ呼ぶことをその例に挙げる。**どちらの場合も
-      書き込む先は `t0` より後に割り当てられている。** 新しいオブジェクトであれば、その割り当ては広がりの
-      中の節点の実行で起きるので (`<1>1a`)、`t0` より後である。既存のオブジェクトであれば、それはその op の
-      オペランドの leaf が指すオブジェクトである -- `array_tail_destination` は `dst` を
-      `gc.get_scoped_obj(&self.dst_name)` から取り、L0 の `<1>3a` より配列の値の leaf が指すのはその記憶域で
-      ある -- ので (I1) による。書き込まれる参照が指すのは、複製の元 -- その op の
-      オペランドの leaf が指すオブジェクトの中身 -- なので、(I1) と (I2) による。
+      の共有の腕が `clone_array_buf` を `dst` の既存の記憶域へ呼ぶことをその例に挙げる。
+      L0a より、書き込む先はその節点の実行が割り当てたオブジェクトか、その op のオペランドの inhabited な
+      boxed leaf が指すオブジェクトである。**どちらの場合も書き込む先は `t0` より後に割り当てられている。**
+      前者であれば、その割り当ては広がりの中の節点の実行で起きるので (`<1>1a`)、`t0` より後である。
+      後者であれば、そのオペランドの leaf の位置 (D6) は、その活性化のスロットであるか、束縛を持たない
+      名前の記号の位置である。前者は (I1) により `t0` より後であり、後者が指すのは funptr かグローバル状態の
+      オブジェクトであって計数下ではない (D6、A8、D26)。書き込まれる参照が指すのは、
+      複製の元 -- その op のオペランドの leaf が指すオブジェクトの中身 -- なので、(I1) と (I2) による。
 
       3 つ目は **(F) の解放が `Std::FFI::Destructor` について走らせる動作**である。その動作は
       `_dtor` 欄の関数を `_value` 欄の値へ適用し、返った `IO` の動作の結果を `_value` の leaf へ書き戻す
@@ -3215,10 +3466,8 @@ A3 自身が「**この節が与えるのは「この段は割り当てない」
       割り当てられたオブジェクトに広がりの中の節点の実行が書き込むことは無い -- 書き込む先はその実行を
       行う活性化のスロットが名指すオブジェクトか、この段が割り当てたオブジェクトか、上の解放される
       オブジェクトであり、(I1) よりどれも `t0` より後に割り当てられたものかグローバル状態である。
-  BY <ref id=b6673ca/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=596a46d/>, <ref id=9d74736/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>, <ref id=6bf2817/>, <1>1a, <1>2,
-     CODE src/generator.rs: Generator::build_run_destructor,
-     CODE src/fixstd/builtin.rs: array_tail_destination,
-     InlineLLVMArrayAppendCapacityUnchecked::generate
+  BY <ref id=b6673ca/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=596a46d/>, <ref id=66c9670/>, <ref id=9d74736/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>, <ref id=def436e/>, <1>1a, <1>2,
+     CODE src/generator.rs: Generator::build_run_destructor
 
 <1>4. QED
   BY <1>1, <1>1a, <1>2, <1>3
@@ -4304,15 +4553,7 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
    規則 (e) と (f) の辺の行き先は `closure_targets` なので、そこが届かないと L10 の `<1>6` と `<1>6b` が
    閉じない。果たす者: 誰も。
 
-4. **A23 が名指す数え上げはこの文書に在る (穴ではない)。** README の A23 と `report.md` の「検証状況」の
-   節はどちらも、funptr 型の `Expr::Lam` が式の内側へ移らないことを `L9b` の `<2>2a` が示すと書く。
-   その段は `uncurry` の中で funptr 型が式に付く位置を 3 つに数え上げ、`uncurry` より前に funptr 型が制約系へ入る経路が無いこと、
-   型検査が `Expr::Lam` の節点に置く期待型が funptr 型であれば `type_fun(arg_ty, body_ty)` との単一化が
-   tycon の食い違いで失敗すること、`replace_closure_call_to_funptr_call_subexprs` が式の型を別の式へ
-   写さないこと、`uncurry` の後の `simplify_symbol_names` が名前しか替えないことを読む。報告する穴は
-   無い。
-
-5. **引用と `// PROOF:` の対応。** `python3 dev-docs/proof/proof_links.py --write` が `citations.tsv` と
+4. **引用と `// PROOF:` の対応。** `python3 dev-docs/proof/proof_links.py --write` が `citations.tsv` と
    各記号の `// PROOF:` の欄をこの文書の引用から作る。**道具が記号の実在まで検査するのは `.rs` の引用
    だけである** -- `CODE` の行を拾う正規表現が受け取るのは `.rs` と `.fix` の引用であり、`.fix` に
    ついては記号を見ずにファイルの存在だけを見る。`.pest` の引用はその正規表現に当たらず、記号を持たない
@@ -4320,35 +4561,6 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
    確かめた。道具の範囲の外に在る 6 件 -- `src/fixstd/std.fix` の `assert_unique` (`assert_unique :` の
    宣言とその定義) と `mutate_unique_io`、`src/parse/grammer.pest` の `capital_name`・`type_name`・
    `ffi_c_fun_ty`、`src/docs/std_unsafe_is_unique.md` -- は手で開いて確かめた。
-
-6. **D30 と P28 は段内の点まで届いている (L5a、L6、L9、L12、L13)。** README の P26 は「**範囲に入るのは、
-   共通接頭の段のあいだの時点で起きる観測だけではない。** 共通接頭の段の**中で**起きる観測も入る」と述べ、
-   `Std::FFI::Destructor` の `_dtor` が `unsafe_is_unique` を含みうることをその理由に挙げる。
-   この文書が要ったのは 2 つで、どちらも `README.md` が持っている。
-
-   - **素動作の順序。** D30 の伸びる条件は「**その段の素動作の列が対応する**」を含み、(X3) は
-     「対応する 2 つの段の素動作の列が対応しない」である。第 2 節の DEF 共通接頭の段の中の対応 が
-     その読みであり、L5a がそれを読む。**果たす者は要らない** -- 共通接頭は「伸びる限りの部分」として
-     定めるものなので、条件を細かくすれば接頭が早く終わるだけであり、細かくした分は (X3) の出口に
-     落ちる。P26 の第 2 文は (X3) の向きを主張しない。
-   - **P28 の量化。** P28 の言明は「その実行 (D24) の**各時点と各段内の点** (D24) について」であり、L9 の
-     `<1>2` はそれを読んで段内の点で持ち手の分割を使う。P28 の帰納は素動作の粒度で進むので、この量化は
-     証明の形を変えない。
-
-   果たす者: D30 と P28 の言明そのもの。
-
-7. **環境が参照を操作する段は (E9) として枠に在る (穴ではない)。** D24 の (E9) が、`get_funptr_retain` と
-   `get_funptr_release` が渡した番地を環境が呼ぶ段を段の 1 種として定め、A17 (ii-c) は「**その段は D24 の
-   (E9) である。**」と書く。段の種の上で場合分けする段はそこを読む -- L6 の `<1>4` が `H` を動かす行として、
-   L9 の `<1>1` の `<2>2` が環境が持つ分を動かす経路として、L5a の `<1>3` の `<2>1` と L7a の `<1>2a` の
-   `<2>3` の `<3>4` が素動作の場合として、L9 の `<1>3` の `<2>7` と L11 の `<1>3` が `Obl` もオブジェクトの欄も
-   動かさない段として、L5 の `<1>4a` が活性化の位置を動かさない段として、L9a の `<1>1` と `<1>3` が
-   活性化を作らない段として、L8c の `<1>2a` と L9b の `<1>4` の `<2>4a` がオブジェクトの保持する値を
-   書き換えない段として挙げる。**その段が走らせるのは生成コードである** -- D24 の (E9) が
-   `InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody` と
-   `InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody` の作る内部関数を名指すので、生成コードの
-   数え上げで閉じる段はその段を別に扱う要が無い -- L0 の `<1>5a` と L9a の `<1>3a` がそう読む。
-   報告する穴は無い。
 
 ## 13. この文書が読んだコードの版
 
