@@ -1550,8 +1550,8 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
         `borrow.rs` 自身を除いて `src/build/build_object_files.rs` の `use` の 1 行だけが挙がる。
         よって `borrow.rs` の関数の呼び出しが書かれているのは、`borrow.rs` と
         `src/build/build_object_files.rs` の本文だけである。**同じく `src/` の全体で
-        `build_object_files::` を数え上げると、`src/build/build.rs` と `src/tests/` の 2 本だけが
-        挙がる。** 上の段が挙げた 7 つのファイルはこのどれでもないので、この呼び出しの中で
+        `build_object_files::` を数え上げると、`src/build/build.rs` の 1 行と `src/tests/` の
+        2 行だけが挙がる。** 上の段が挙げた 7 つのファイルはこのどれでもないので、この呼び出しの中で
         `borrow.rs` の関数は走らない。
     BY <1>0, CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
        CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
