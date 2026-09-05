@@ -431,8 +431,9 @@ P5 (c) が述べる包含 `⋃_{λ ∈ L(v, π)} acted_on(v, λ) ⊆ ActRefs(v, 
 
 <1>3. QED
   BY <ref id=0b3e0e1/>, <1>1, <1>2
-  P5 (c) は「`ActRefs(v, π).objects()` と `other_objects(v, π)` の和 …
-  は、`π` の下の各 boxed leaf `λ` について `origin(v, λ).acted_on()` をすべて含む」と述べる。
+  P5 (c) は「`Release(v, π)` の走査が `un_bump` と `consume_objects` に渡すオブジェクトの和 --
+  すなわち `ActRefs(v, π).objects()` と `other_objects(v, π)` の和 -- は、`π` の下の各 boxed leaf `λ` に
+  ついて `origin(v, λ).acted_on()` をすべて含む」と述べる。
   <1>2 よりその 3 つの量は活性化を読まないので、この包含は活性化の選び方によらない 1 つの言明である。
 
 ### L1 (`walk` は `walk_inner` を 1 回呼ぶ) <!--#084b52a-->
@@ -1446,8 +1447,8 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
   ときに主張する。`Binding::Join` の腕については、`ρ` が選んだアームの結果変数 `x' = arm_results[j]`
   についてだけ主張する。(i) と (B) は解析にかかるどの本体についても成り立ち、`ρ` を読まない。**
   `L16` が `Pre(V)` (D35) について (i) と (B) を読む。**本体について読むのは DEF 解析にかかる本体 の
-  条件だけである** -- 以下の段が A6・A11・A12 を名前で引くのは、その (3) がこの 3 つの仮定をそのまま
-  置いているからである。
+  条件だけである** -- 以下の段が A16 を名前で引くのはその (1) が、A6・A11・A12 を名前で引くのは
+  その (3) が、その仮定をそのまま置いているからである。
 
   **(ii) の「値を得ている」は D6 の 3 つの形を渡る。** 節点が束縛する変数と、パラメータ・capture と、
   `vars.bindings` に束縛を持たない名前である。3 つ目についてその値が在るのは、その名前を名指す節点の
@@ -3435,8 +3436,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
 **2 つの本体を書き分ける。** 消費の仮定と (B) は `V` の本体 -- `cancel` の入力 -- についてのもので
 あり、(A) と (C) の `Retain` 節点、および `owns_unit` と `levelled_sites` が読むものは `Pre(V)` に
 ついてのものである。`rewrite_rc` が落とす節点は `Pre(V)` の節点であり、`levelled_sites` を呼ぶ各所が
-渡すのも書き換え前の本体である (`<1>1d`)。書き換えは `Retain`/`Release` 節点を足し引きするので、この 2 つの本体で `levelled_sites` の
-値は違いうる。
+渡すのも書き換え前の本体である (`<1>1d`)。書き換えは `Retain`/`Release` 節点を足し引きするので、
+この 2 つの本体で `levelled_sites` の値は違いうる。
 
 (C) は `insert_rc` の側の義務に属する -- その消費が処分する参照を用意した `Retain` が同じ実行路の上に
 在ることは、`insert_rc` の使用回数の勘定が与えるものであり、`borrow_ify` はそれを写すだけである
@@ -3973,7 +3974,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         の段の実行時の呼び出し先 (D23) を `g`、`g` の第 `i` パラメータを `p_i` と書く。`g` は
         `borrow_ify` の出力の `funcs` の関数である。また `call_rc` が引く `params` が `Some` であるとき、
         `params[i]` は `p_i` の名前と型である。
-    BY <ref id=ff5985d/>, <ref id=561540d/>, <ref id=33c54dc/>, <ref id=cb35ab1/>, <ref id=f8ae607/>, <ref id=63eadd9/>, <ref id=596a46d/>, EXT 写像と集合の基本演算,
+    BY <ref id=ff5985d/>, <ref id=561540d/>, <ref id=33c54dc/>, <ref id=cb35ab1/>, <ref id=f8ae607/>,
+       <ref id=63eadd9/>, <ref id=596a46d/>, EXT 写像と集合の基本演算,
        EXT Iterator::chain, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: param_names_and_types,
        CODE src/rc_ir/borrow.rs: borrow_funcref,
