@@ -641,8 +641,23 @@ leaf であり、`decl.leaf_origins_at(σ).and_then(as_arg_projection)` が `Non
       `Origin::Exactly((var, path))` を返す。この腕は `origin` を呼ばず、ほかの関数も呼ばない。
   BY CODE src/rc_ir/ownership.rs: origin_inner
 
+<1>2a. `vars.origins` が鍵 `(x, π)` に値を持つとき、その値は `origin_inner(vars, type_env, x, π)` の値で
+       ある。
+  前提 `VarTable` の `origins` の欄を触る在りか より、その表を読み書きする式が在る項目は `origin` と
+  `VarTable` の宣言と `VarTable::empty` だけである。`VarTable::empty` が据えるのは
+  `RefCell::default()` であり、`EXT 集合と写像` よりその中身は空の写像である。`origin` がその表へ
+  書くのは `vars.origins.borrow_mut().insert(key, answer.clone())` の 1 か所で、鍵は
+  `(var.clone(), path.to_vec())`、値は `grow_stack(|| origin_inner(vars, type_env, var, path))` の値で
+  あり、`<1>1` (A15) よりそれは `origin_inner(vars, type_env, var, path)` の値である。よって鍵
+  `(x, π)` の下に在りうる値はその 1 種だけである。
+  BY 前提 `VarTable` の `origins` の欄を触る在りか, EXT 集合と写像, <ref id=3e6b0e0/>, <1>1,
+     CODE src/rc_ir/ownership.rs: origin, VarTable::empty
+
 <1>3. QED
-  BY <1>1, <1>2
+  `<1>1` より `origin` は memo が外れたとき `origin_inner` の値を返し、当たったときはその鍵の下の値を
+  返す。前者は `<1>2` が、後者は `<1>2a` と `<1>2` が `Origin::Exactly((x, π))` を与える。停止するのは
+  `<1>2` よりその腕が何も呼ばないからである。
+  BY <1>1, <1>2, <1>2a
 
 ### L6d (`act` の元の path はその変数の型の boxed leaf である) <!--#90d8526-->
 
