@@ -489,9 +489,13 @@ enum については元と同じ変位で、その変位が保持する各値を
         (`src/main.rs` の `GLOBAL: MiMalloc`、`src/object.rs` の `FIELDS_BY_NAME: OnceLock<Map<FullName,
         Vec<ObjectFieldType>>>`、`src/tests/test_util.rs` の `BUILD_FIX: Once`、`src/tool/log_file.rs` の
         `LOG_FILE: Lazy<Mutex<File>>`) であり、DEF このクレート よりこの 4 つはどちらのクレートの
-        `static` 項目の集合の上位集合でもある。`MiMalloc` は欄を持たず、`Once` は
-        内部の状態語だけを持ち、`Lazy<Mutex<File>>` はファイルハンドルだけを持つ。`FIELDS_BY_NAME` の
-        値の型は `Map<FullName, Vec<ObjectFieldType>>` であり、`FullName` は `NameSpace` と `String`、
+        `static` 項目の集合の上位集合でもある。**この 4 つの型が保持する値を、型の宣言から辿る。**
+        EXT `MiMalloc`・`Once`・`Lazy`・`Mutex`・`File` が保持する値 より、`MiMalloc` は値を保持せず、
+        `Once` は状態語と待っているスレッドの列だけを保持し、`Lazy<Mutex<File>>` が保持するのは
+        `Mutex<File>` の値と関数ポインタ `fn() -> Mutex<File>` であって、`Mutex<File>` が保持するのは
+        `File` の値と OS の錠、`File` が保持するのは OS のファイル記述子である。`FIELDS_BY_NAME` の
+        値の型は `OnceLock<Map<FullName, Vec<ObjectFieldType>>>` であり、`FullName` は `NameSpace` と
+        `String`、`NameSpace` は `Vec<String>` と `bool`、
         `ObjectFieldType` の 19 変位が保持するのは `Arc<TypeNode>`・`Vec<Arc<TypeNode>>`・`bool` だけで
         ある。どの型からも `VarTable` に到達できない。`VarTable` 自身を
         `static` に置けないことも別に出る --- `VarTable` は `origins: RefCell<Map<VarPath, Origin>>` の
@@ -503,6 +507,7 @@ enum については元と同じ変位で、その変位が保持する各値を
        CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: NameSpace,
        CODE src/tests/test_util.rs: BUILD_FIX,
        CODE src/tool/log_file.rs: LOG_FILE, EXT static は Sync を要る,
+       EXT `MiMalloc`・`Once`・`Lazy`・`Mutex`・`File` が保持する値,
        EXT 参照は引数を通ってだけ届く, DEF このクレート
   <2>1a. `origin` の本文は `grow_stack` へ `vars` を捕捉した閉包を渡すので、`grow_stack` の本文とその中で
          走る `stacker` の本文は、`vars` に到達できる値を引数として受け取る。しかしこの 2 つのどちらにも
@@ -851,7 +856,7 @@ enum については元と同じ変位で、その変位が保持する各値を
     <2>1、<2>2、<2>4 と合わせて、挙げた関数はすべて引数で決まる。
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <2>7, <2>7a, <ref id=8412761/>, DEF 引数で決まる関数, DEF このクレート,
        EXT Arc の契約, EXT 参照は引数を通ってだけ届く,
-       CODE src/constants.rs: CLOSURE_CAPTURE_IDX, CLOSURE_FIELD_COUNT,
+       CODE src/constants.rs: CLOSURE_CAPTURE_IDX, CODE src/constants.rs: CLOSURE_FIELD_COUNT,
        CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
        CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
        CODE src/ast/types.rs: TypeNode::instance_field_types,
@@ -863,7 +868,8 @@ enum については元と同じ変位で、その変位が保持する各値を
        CODE src/ast/types.rs: TypeNode::is_punched_array,
        CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
        CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
-       CODE src/fixstd/builtin.rs: make_arrow_name_abs, is_array_tycon, is_funptr_tycon,
+       CODE src/fixstd/builtin.rs: make_arrow_name_abs,
+       CODE src/fixstd/builtin.rs: is_array_tycon, CODE src/fixstd/builtin.rs: is_funptr_tycon,
        CODE src/fixstd/builtin.rs: is_punched_array_tycon,
        CODE src/rc_ir/ownership.rs: held_field_type,
        CODE src/ast/types.rs: TypeNode::toplevel_tycon,
@@ -1082,18 +1088,32 @@ enum については元と同じ変位で、その変位が保持する各値を
   <2>5. CASE `b_1` が外れである。`(d_1, b_1)` は `c` の中の入れ子の対であり、<2>3 よりその外側 `d_1` が
         始まる時刻は `a` より遅い。これは <2>2 の取り方に反する。
     BY <2>2, <2>3, <2>4
-  <2>6. CASE `b_1` が当たりである。<1>1 より、`b_1` が始まる時点で `vars.origins` は鍵 `k_1` を持つ。
-        <2>3 より `d_1` は外れなので、`d_1` が始まる時点で `vars.origins` は `k_1` を持たない。<1>2 より
-        鍵 `k_1` が入るのは鍵 `k_1` の外れの呼び出しが `insert` を実行するときだけなので、そのような
-        呼び出し `f` の `insert` が `d_1` の始まりと `b_1` の始まりの間にある。<1>1 より `insert` は `f` の
-        末尾式の直前の文であり、EXT 文は書かれた順に実行される より `f` はその後に末尾式を評価して返る。
-        よって `f` は `d_1` の実行区間の中で返る。EXT 呼び出しの入れ子 より `f` と `d_1` の
-        実行区間は交わらないか一方が他方に含まれるかであり、交わるので後者である。`d_1` が `f` に含まれる
-        なら `f` は `d_1` より後に返るが、`f` は `d_1` の実行区間の中で返るのでそれは無い。よって `f` は
-        `d_1` に含まれ、`b_1` が始まる時点で `d_1` はまだ返っていないので `f ≠ d_1`、すなわち `f` は
-        `d_1` に真に含まれる。よって `(d_1, f)` は `c` の中の入れ子の対であり、<2>3 よりその外側 `d_1` が
-        始まる時刻は `a` より遅い。これは <2>2 の取り方に反する。
-    BY <1>1, <1>2, <2>2, <2>3, <2>4, EXT 呼び出しの入れ子, EXT 文は書かれた順に実行される
+  <2>6. CASE `b_1` が当たりである。
+    <3>1. 鍵 `k_1` の外れの呼び出し `f` が在り、その `insert` を実行する時点 `τ` は `d_1` の始まりと
+          `b_1` の始まりの間にある。<1>1 より、`b_1` が始まる時点で `vars.origins` は鍵 `k_1` を持つ。
+          <2>3 より `d_1` は外れなので、`d_1` が始まる時点で `vars.origins` は `k_1` を持たない。<1>2 より
+          鍵 `k_1` が入るのは鍵 `k_1` の外れの呼び出しが `insert` を実行するときだけである。
+      BY <1>1, <1>2, <2>3, <2>4
+    <3>2. `τ` は `d_1` の実行区間の中にある。<2>4 より `b_1` は `d_1` に真に含まれるので、`b_1` が始まる
+          時点は `d_1` が始まった後、`d_1` が返る前である。<3>1 より `τ` はそれより前であり、`d_1` が
+          始まった後である。
+      BY <2>4, <3>1, EXT 呼び出しの入れ子
+    <3>3. `f` の実行区間も `τ` を含む。`τ` は `f` の本文の第 4 の文を実行する時点なので (<1>1)、`f` は
+          その時点で始まっていて返っていない。
+      BY <1>1, <3>1
+    <3>4. `d_1` が `f` に含まれることは無い。`τ` において `f` は自分の本文の文を実行しているので、`f` の
+          中で始まって未だ返っていない呼び出しは `τ` に無い。<3>2 より `d_1` は `τ` において始まっていて
+          返っていないので、`d_1` は `f` の中で始まった呼び出しではない。`d_1 = f` でもない --- <1>1 より
+          `insert` は `f` の末尾式の直前の文であり、その末尾式は変数 `answer` であって呼び出しを含まない
+          ので、EXT 文は書かれた順に実行される より `τ` より後に `f` の中で始まる呼び出しは無い。ところが
+          <3>1 と <2>4 より `b_1` は `τ` より後に始まり、`d_1` の中で始まる呼び出しである。
+      BY <1>1, <2>4, <3>1, <3>2, <3>3, EXT 文は書かれた順に実行される
+    <3>5. QED (矛盾)
+      <3>2 と <3>3 より `f` と `d_1` の実行区間はどちらも `τ` を含むので交わり、EXT 呼び出しの入れ子 より
+      一方が他方に含まれる。<3>4 よりその向きは `f` が `d_1` に含まれる側であり、`d_1 = f` でもないので
+      `f` は `d_1` に真に含まれる。よって `(d_1, f)` は `c` の中の入れ子の対であり、<2>3 よりその外側
+      `d_1` が始まる時刻は `a` より遅い。これは <2>2 の取り方に反する。
+      BY <2>2, <2>3, <3>1, <3>2, <3>3, <3>4, EXT 呼び出しの入れ子
   <2>7. QED (矛盾)
     <2>5 と <2>6 は `b_1` について場合を尽くす。
     BY <2>5, <2>6
@@ -1573,7 +1593,7 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
     BY <1>0, CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
        CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
        CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: held_field_type,
-       CODE src/constants.rs: CLOSURE_CAPTURE_IDX, CLOSURE_FIELD_COUNT,
+       CODE src/constants.rs: CLOSURE_CAPTURE_IDX, CODE src/constants.rs: CLOSURE_FIELD_COUNT,
        CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_closure,
        CODE src/ast/types.rs: TypeNode::is_box, CODE src/ast/types.rs: TypeNode::is_unbox,
        CODE src/ast/types.rs: TypeNode::is_union, CODE src/ast/types.rs: TypeNode::is_array,
@@ -1590,7 +1610,8 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
        CODE src/ast/program.rs: TypeEnv::tycons,
        CODE src/ast/program.rs: TypeEnv::unwrapped_newtype_info,
        CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
-       CODE src/fixstd/builtin.rs: make_arrow_name_abs, is_array_tycon, is_funptr_tycon,
+       CODE src/fixstd/builtin.rs: make_arrow_name_abs,
+       CODE src/fixstd/builtin.rs: is_array_tycon, CODE src/fixstd/builtin.rs: is_funptr_tycon,
        CODE src/fixstd/builtin.rs: is_punched_array_tycon, CODE src/fixstd/builtin.rs: make_unit_ty,
        CODE src/build/build_object_files.rs: optimize_rc_program,
        DEF 本文, DEF このクレート, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
