@@ -8,7 +8,7 @@ use std::{
     io::{Read, Write},
     panic::RefUnwindSafe,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 /// A type-check cache held by the threads that check a program together.
@@ -207,6 +207,18 @@ impl MemoryCache {
             data: Mutex::new(BTreeMap::default()),
         }
     }
+
+    /// The entries, locked.
+    ///
+    /// A thread that panics while it holds the lock poisons it, and the entries are whole when
+    /// that happens: the lock is held over the map alone, so a caller that goes on with them reads
+    /// what the panicking thread had already stored. The language server type-checks a program the
+    /// compiler can panic on, and keeps the cache across such a run.
+    fn lock_data(&self) -> MutexGuard<'_, BTreeMap<EntityIdentity, VecDeque<(VersionHash, TypedExpr)>>> {
+        self.data
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 }
 
 impl TypeCheckCache for MemoryCache {
@@ -219,9 +231,9 @@ impl TypeCheckCache for MemoryCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) {
-        let mut data = self.data.lock().unwrap();
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
+        let mut data = self.lock_data();
         let entries = data.entry(entity_id).or_insert_with(|| VecDeque::new());
         // If the cache is full, remove the oldest entry.
         while entries.len() >= CACHE_GENERATION as usize {
@@ -237,9 +249,9 @@ impl TypeCheckCache for MemoryCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) -> Option<TypedExpr> {
-        let data = self.data.lock().unwrap();
         let entity_id = entity_identity(name, type_);
         let version_hash = version_hash.to_string();
+        let data = self.lock_data();
         let entries = data.get(&entity_id)?;
         let expr = entries
             .iter()

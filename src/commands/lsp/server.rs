@@ -27,8 +27,8 @@ use lsp_types::{
     DiagnosticSeverity, DiagnosticTag, DidChangeConfigurationParams, DidChangeTextDocumentParams,
     DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
     GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
-    InitializedParams, NumberOrString, OneOf, Position, PositionEncodingKind, ProgressParams,
-    ProgressParamsValue, ProgressToken, PublishDiagnosticsParams, Range, ReferenceParams,
+    InitializedParams, NumberOrString, OneOf, PositionEncodingKind, ProgressParams,
+    ProgressParamsValue, ProgressToken, PublishDiagnosticsParams, ReferenceParams,
     RenameOptions, RenameParams, SaveOptions, SemanticTokensFullOptions, SemanticTokensOptions,
     SemanticTokensParams, SemanticTokensServerCapabilities, ServerCapabilities,
     TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
@@ -850,6 +850,10 @@ fn send_to_diagnostics_thread(send: &Sender<DiagnosticsMessage>, msg: Diagnostic
     }
 }
 
+/// The message the client is shown once the diagnostics thread itself is gone, which leaves the
+/// project unanalyzed until the server is started again.
+const DIAGNOSTICS_STOPPED_MESSAGE: &str = "Diagnostics stopped. This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this at https://github.com/tttmmmyyyy/fixlang";
+
 /// Handle the LSP `initialized` notification: spawn the diagnostics
 /// thread and prime it with an initial diagnostics run.
 fn handle_initialized(
@@ -867,14 +871,15 @@ fn handle_initialized(
         let res = std::panic::catch_unwind(move || {
             diagnostics_thread(diag_req_recv, diag_res_send, typecheck_cache, debounce_ms);
         });
-        if res.is_err() {
-            // If a panic occurs in the diagnostics thread,
-            send_diagnostics_error_message(
-                "Diagnostics stopped. This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this at https://github.com/tttmmmyyyy/fixlang".to_string(),
+        if let Err(payload) = res {
+            send_diagnostics_notification(
+                Errors::from_msg(DIAGNOSTICS_STOPPED_MESSAGE.to_string()),
+                Set::default(),
             );
-            let mut msg = "Panic occurred in the diagnostics thread: \n".to_string();
-            msg.push_str(&format!("{}", any_to_string(res.err().as_ref().unwrap())));
-            write_log!("{}", msg);
+            write_log!(
+                "Panic occurred in the diagnostics thread: \n{}",
+                any_to_string(payload.as_ref())
+            );
         }
     });
 
@@ -1032,8 +1037,8 @@ fn diagnostics_thread(
     let mut prev_err_paths = Set::default();
     // The latest coalesced request waiting to run, if any.
     let mut pending: Option<Arc<Map<PathBuf, String>>> = None;
-    // The panic message of the pass that failed last, while every pass since has failed with it.
-    let mut last_failure: Option<String> = None;
+    // Whether the pass before this one failed, which decides whether a failure is reported again.
+    let mut last_pass_failed = false;
 
     loop {
         // With nothing pending, block until a request arrives. With a
@@ -1051,7 +1056,7 @@ fn diagnostics_thread(
                         &typecheck_cache,
                         &res_send,
                         &mut prev_err_paths,
-                        &mut last_failure,
+                        &mut last_pass_failed,
                     );
                     continue;
                 }
@@ -1068,7 +1073,7 @@ fn diagnostics_thread(
     }
 }
 
-/// The message the client is shown for a pass whose analysis ended in a panic.
+/// The message the client is shown for a pass that ended in a panic.
 const ANALYSIS_FAILED_MESSAGE: &str = "Analysis of this program failed, so the diagnostics shown are those of the program analyzed before it. The next edit runs the analysis again. This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this at https://github.com/tttmmmyyyy/fixlang";
 
 /// Report the progress of one diagnostics pass to the client, run it, and keep a panic inside it
@@ -1079,36 +1084,43 @@ const ANALYSIS_FAILED_MESSAGE: &str = "Analysis of this program failed, so the d
 /// the next edit asks for run and publish the diagnostics of the repaired program. The diagnostics
 /// of the last pass that finished stay on screen until then.
 ///
-/// `last_failure` holds the panic message of the pass before, so that a program which keeps
-/// failing is reported once instead of on every keystroke; a pass that finishes empties it.
+/// `last_pass_failed` says whether the pass before this one failed, so that a program which keeps
+/// failing is reported once instead of on every keystroke; a pass that publishes clears it.
 fn run_diagnostics_pass(
     overrides: Arc<Map<PathBuf, String>>,
     typecheck_cache: &SharedTypeCheckCache,
     res_send: &Sender<DiagnosticsResult>,
     prev_err_paths: &mut Set<PathBuf>,
-    last_failure: &mut Option<String>,
+    last_pass_failed: &mut bool,
 ) {
     const WORK_DONE_PROGRESS_TOKEN: &str = "diagnostics";
     send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
     send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Analyzing");
 
-    // The `&mut` the analysis takes across this boundary is `prev_err_paths`, which a pass leaves
-    // as the last pass that published found it until it publishes itself.
+    // Publishing is inside the boundary along with the analysis, because it panics on a program
+    // under repair too: a span reaching past the end of the file it names fails where it is turned
+    // into a range of the protocol. `AssertUnwindSafe` covers `prev_err_paths`, which a pass that
+    // fails leaves as the pass that published last left it.
     let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
         run_diagnostics_and_publish(overrides, typecheck_cache, res_send, prev_err_paths)
     }));
 
     match res {
-        Ok(()) => *last_failure = None,
+        Ok(()) => *last_pass_failed = false,
         Err(payload) => {
-            let panic_msg = any_to_string(payload.as_ref());
-            write_log!("Panic occurred in a diagnostics pass: \n{}", panic_msg);
-            if last_failure.as_ref() != Some(&panic_msg) {
-                send_diagnostics_error_message(ANALYSIS_FAILED_MESSAGE.to_string());
-                // The report is published under the project file, so naming that file here is
-                // what lets the pass that finishes next clear it.
-                prev_err_paths.insert(PathBuf::from(PROJECT_FILE_PATH));
-                *last_failure = Some(panic_msg);
+            write_log!(
+                "Panic occurred in a diagnostics pass: \n{}",
+                any_to_string(payload.as_ref())
+            );
+            if !*last_pass_failed {
+                // Naming the files the report reaches to the pass that publishes next is what
+                // clears it.
+                let reported = send_diagnostics_notification(
+                    Errors::from_msg(ANALYSIS_FAILED_MESSAGE.to_string()),
+                    Set::default(),
+                );
+                prev_err_paths.extend(reported);
+                *last_pass_failed = true;
             }
         }
     }
@@ -1204,55 +1216,6 @@ fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>)
     }
 
     err_paths
-}
-
-/// Send the diagnostics notification to the client which informs that an error occurred.
-///
-/// The message belongs to no source, so it is published under the project file
-/// (`fixproj.toml`), the way `send_diagnostics_notification` publishes an error that carries no
-/// span: a diagnostic published against the project directory's URI is one an editor has no file
-/// to attach it to, and is dropped without being shown.
-fn send_diagnostics_error_message(msg: String) {
-    let Some(cdir) = get_current_dir() else {
-        return;
-    };
-    // Convert path to uri.
-    let project_file_uri = path_to_uri(&cdir.join(PROJECT_FILE_PATH));
-    if project_file_uri.is_err() {
-        write_log!(
-            "Failed to convert path to uri: {:?}",
-            project_file_uri.unwrap_err()
-        );
-        return;
-    }
-    let project_file_uri = project_file_uri.unwrap();
-
-    // Send the diagnostics notification for each file.
-    let params = PublishDiagnosticsParams {
-        uri: project_file_uri,
-        diagnostics: vec![Diagnostic {
-            range: Range {
-                start: Position {
-                    line: 0,
-                    character: 0,
-                },
-                end: Position {
-                    line: 0,
-                    character: 0,
-                },
-            },
-            severity: Some(DiagnosticSeverity::ERROR),
-            code: None,
-            code_description: None,
-            source: None,
-            message: msg,
-            tags: None,
-            related_information: None,
-            data: None,
-        }],
-        version: None,
-    };
-    send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
 }
 
 // Convert an `Error` into a diagnostic message.
