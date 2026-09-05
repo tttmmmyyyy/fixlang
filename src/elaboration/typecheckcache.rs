@@ -199,6 +199,7 @@ type CacheEntries = BTreeMap<EntityIdentity, VecDeque<(VersionHash, TypedExpr)>>
 
 /// A cache that holds its entries in memory, so they last as long as the process that filled it.
 pub struct MemoryCache {
+    /// The entries, behind a lock, since the threads that check a program together share them.
     data: Mutex<CacheEntries>,
 }
 

@@ -1,8 +1,8 @@
 //! Compile errors as the language server publishes them.
 //!
-//! Most programmers meet an error in their editor rather than in the output of `fix build`, so a
-//! check that the compiler reports something says nothing until the same report reaches the editor,
-//! anchored to the source it is about.
+//! Programmers meet a compile error in their editor, so a check that the compiler reports
+//! something says nothing until the same report reaches the editor, anchored to the source it is
+//! about.
 
 #[cfg(test)]
 mod tests {

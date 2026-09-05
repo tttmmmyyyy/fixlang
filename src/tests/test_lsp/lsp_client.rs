@@ -15,15 +15,20 @@ use std::time::{Duration, Instant};
 /// to share the same data across threads.
 #[derive(Clone)]
 struct SharedState {
+    /// Every message the server sent, oldest first, for the test to look through.
     message_queue: Arc<Mutex<VecDeque<Value>>>,
+    /// The response to each request the client sent, under the request's id.
     responses: Arc<Mutex<Map<u32, Value>>>,
+    /// The diagnostics last published for each file, under the file's absolute path.
     diagnostics: Arc<Mutex<Map<PathBuf, Value>>>,
     /// Number of `$/progress` end notifications received so far.
     progress_end_count: Arc<Mutex<usize>>,
+    /// The protocol error the reader thread stopped on, which `finish` hands to the test.
     reader_thread_error: Arc<Mutex<Option<String>>>,
 }
 
 impl SharedState {
+    /// A state holding no messages, no responses, no diagnostics and no error.
     fn new() -> Self {
         SharedState {
             message_queue: Arc::new(Mutex::new(VecDeque::new())),
@@ -35,12 +40,22 @@ impl SharedState {
     }
 }
 
+/// A test's end of a session with `fix language-server`: it runs the server as a child process,
+/// speaks the protocol to it over that process's pipes, and keeps what the server sent back so
+/// that a test can assert on it.
 pub struct LspClient {
+    /// The server process, which `Drop` kills.
     process: Child,
+    /// The pipe the client writes its messages into.
     stdin: ChildStdin,
+    /// The project root, in absolute form. The paths a test passes are taken as relative to it.
     working_dir: PathBuf,
+    /// The version last sent for each opened document, under the document's absolute path. The
+    /// protocol asks each change to carry a version higher than the one before it.
     document_versions: Map<PathBuf, i32>,
+    /// What the reader thread has taken in from the server.
     shared: SharedState,
+    /// The id the next request the client sends will carry.
     next_id: u32,
 }
 
@@ -271,7 +286,8 @@ impl LspClient {
         Ok(())
     }
 
-    /// Wait for server messages for the specified duration
+    /// Sleep for `duration`, giving the reader thread that long to take in whatever the server
+    /// sends meanwhile.
     pub fn wait_for_server(&mut self, duration: Duration) {
         thread::sleep(duration);
     }
@@ -281,9 +297,8 @@ impl LspClient {
         self.shared.message_queue.lock().unwrap().pop_front()
     }
 
-    /// Get a response for a specific request ID
-    /// Returns None if the response has not been received yet
-    /// Removes the response from the internal map when retrieved
+    /// The response to the request `id`, taken out of the responses so that it is handed over
+    /// once. `None` says the response is yet to arrive.
     pub fn get_response(&mut self, id: u32) -> Option<Value> {
         self.shared.responses.lock().unwrap().remove(&id)
     }
@@ -347,9 +362,8 @@ impl LspClient {
 
     /// Trigger diagnostics for `file` and wait until the server has processed the results.
     ///
-    /// The server sends `$/progress` notifications with `kind: "end"` when
-    /// diagnostics complete. We watch for this to know when the result is
-    /// ready, rather than sleeping for an arbitrary duration.
+    /// The server sends a `$/progress` notification with `kind: "end"` when diagnostics
+    /// complete, and the wait ends on that notification.
     ///
     /// After diagnostics complete, the result is on the internal channel
     /// but the server's main loop must call `try_recv` to pick it up.
@@ -372,8 +386,8 @@ impl LspClient {
         self.wait_for_server(Duration::from_secs(1));
     }
 
-    /// Get diagnostics for a specific file
-    /// Returns a vector of diagnostic messages (empty if no diagnostics)
+    /// The diagnostics the server last published for `file_path`, which is taken as relative to
+    /// the project root. A file the server has published nothing for carries an empty vector.
     pub fn get_diagnostics(&self, file_path: &Path) -> Vec<Value> {
         let absolute_path = self.working_dir.join(file_path);
         let diagnostics = self.shared.diagnostics.lock().unwrap();
@@ -385,8 +399,7 @@ impl LspClient {
         Vec::new()
     }
 
-    /// Get all diagnostics for all files
-    /// Returns a map of file paths to their diagnostic messages
+    /// The diagnostics the server last published for each file, under the file's absolute path.
     pub fn get_all_diagnostics(&self) -> Map<PathBuf, Vec<Value>> {
         let diagnostics = self.shared.diagnostics.lock().unwrap();
         let mut diagnostics_by_path = Map::default();
@@ -398,8 +411,8 @@ impl LspClient {
         diagnostics_by_path
     }
 
-    /// Verify that there are no diagnostic errors for any file
-    /// Returns an error if any diagnostics contain errors
+    /// Checks that the diagnostics of every file are empty, answering with an error that names a
+    /// file carrying any and shows what it carries.
     pub fn verify_no_diagnostic_errors(&self) -> Result<(), String> {
         let diagnostics = self.shared.diagnostics.lock().unwrap();
         for (file_path, diagnostics_value) in diagnostics.iter() {
@@ -415,7 +428,8 @@ impl LspClient {
         Ok(())
     }
 
-    /// Execute initialization sequence with custom timeout
+    /// Run the initialization handshake: send the `initialize` request, wait for its response,
+    /// then send the `initialized` notification the server starts its diagnostics on.
     ///
     /// # Arguments
     /// * `root_path` - Project root directory path (can be relative or absolute)
@@ -466,6 +480,7 @@ impl LspClient {
     ///
     /// Returns an error if the document is already opened.
     pub fn open_document(&mut self, file_path: &Path) -> Result<(), String> {
+        /// The version the protocol counts an opened document from.
         const INITIAL_VERSION_NUMBER: i32 = 1;
 
         let absolute_path = self.working_dir.join(file_path);
@@ -546,7 +561,7 @@ impl LspClient {
         )
     }
 
-    /// Shutdown
+    /// Ask the server to shut down and exit, and wait for its process to end.
     ///
     /// # Arguments
     /// * `exit_timeout` - Maximum time to wait for the process to exit after sending exit notification
@@ -581,10 +596,8 @@ impl LspClient {
         Ok(())
     }
 
-    /// Check for reader thread errors and panic if any occurred
-    ///
-    /// This should be called at the end of tests to ensure that
-    /// LSP protocol errors in the reader thread are properly reported.
+    /// The protocol error the reader thread met, as an `Err`. Called at the end of a test, so
+    /// that an error met on a thread of its own reaches the test's result.
     pub fn finish(&self) -> Result<(), String> {
         let error = self.shared.reader_thread_error.lock().unwrap();
         if let Some(err_msg) = error.as_ref() {
@@ -595,10 +608,11 @@ impl LspClient {
 }
 
 impl Drop for LspClient {
+    /// Kills the server process, ending the session however the test left it.
+    ///
+    /// The reader thread is left to itself: it ends once the process it reads from closes its
+    /// stdout, and a join here would block for as long as the process lives.
     fn drop(&mut self) {
-        // Kill process if still running
         let _ = self.process.kill();
-        // Note: We don't join the reader thread here as it may block.
-        // The thread will be detached and will exit when stdout is closed.
     }
 }
