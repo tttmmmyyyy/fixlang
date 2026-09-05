@@ -318,9 +318,10 @@ SCAN src/ `fn applies_a_function_operand`
   = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::applies_a_function_operand
 
 **前提 式の型の欄を書く在りか** --- `ExprNode` は式の型を `type_` の欄に持ち、その式の自由変数の memo を
-非公開の `free_vars` の欄に持つ。`ExprNode` の struct リテラルはその非公開の欄を名指すので、`free_vars:`
-の字面が在る項目が `ExprNode` を組む式の在りかであり、`type_` の欄へ代入する式の在りかは `.type_ = ` の
-字面が在る項目である。次で尽きる。
+非公開の `free_vars` の欄に持つ。欄を名指す struct リテラルはこの非公開の欄も名指すので、`ExprNode` を
+組む式は `free_vars:` の字面が在る項目に現れ、`type_` の欄へ代入する式は `.type_ = ` の字面が在る項目に
+現れる。**残る形 -- `..` で別の `ExprNode` の欄をそのまま取る形と、`ExprNode` の値をまるごと写す形 -- は、
+別の `ExprNode` の `type_` の欄をそのまま写す。** その 2 つの字面が在る項目は次で尽きる。
 
 SCAN src/ `free_vars:`
   = src/ast/expr.rs: Expr::into_expr_node_with_aux_src -- `type_: None` を置く
@@ -665,8 +666,8 @@ README の P26 は出口の向きを主張しない。
 - **(d)** 段の中で作られた活性化は、その段の中で終わる。すなわち (F) の解放が作る活性化とその子孫の
   節点の実行は、その解放を含む段の中の動作である。
 
-L8c と L6a はこの命題を引かないので、`<1>2`・`<1>2a`・`<1>2b`・`<2>1`・`<2>2a`・`<2>3` がその 2 つを
-引くことで循環は生じない。
+L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`・`<2>3` が L8c を引くことで循環は
+生じない。
 
 <1>1. 段の中で作られた活性化は、その段の中で終わる。段は不可分であり (D24)、(F) の解放が作る活性化は
       それを起こした段の中で終わる (D24 の (F))。D24 は、その活性化の
@@ -742,7 +743,8 @@ L8c と L6a はこの命題を引かないので、`<1>2`・`<1>2a`・`<1>2b`・
       ある。出力 `P'` の D12 は P14 が、第 2 の限定は P14b の第 1 の範囲 (`borrow_ify` の出力) が、A20 は
       A20 の第 1 の範囲が与える。範囲については、`P` は `borrow_ify` の入力、`P'` はその出力であって
       どちらも `insert_rc` の入力から `cancel` の出力までの間に在る。
-      `π` が `cancel` のとき。L6a が 2 つのプログラムについて同じ 4 つを与える。
+      `π` が `cancel` のとき。L6a が 2 つのプログラムについて同じ 4 つを与える。**L6a はこの命題を
+      引かないので、この段が L6a を引くことで循環は生じない。**
   BY <ref id=0d151d9/>, <ref id=627e117/>, <ref id=6d644e6/>, <ref id=dbdbf7e/>, <ref id=680aaa9/>, <ref id=de755aa/>
 
 <1>3. DEF 共通接頭の段の中の対応 より、2 つの段の素動作は順序を保って 1 対 1 に対応する。対応する
@@ -2387,6 +2389,7 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         `ExprNode` を組むのは `Expr::into_expr_node_with_aux_src` (`type_` に `None` を置く)、
         `ExprNode::clone_all` と `ExprNode::clone_except_fvs` (`type_: self.type_.clone()` で自分の欄を
         写す) であり、`type_` の欄へ代入するのは `ExprNode::set_type` (`ret.type_ = Some(ty)`) である。
+        同じ前提より、残る形は別の `ExprNode` の同じ欄をそのまま写すので、写す場合に入る。
         **型検査が推論した型を式に記録する経路もこの 2 つで
         尽きる** -- `TypeCheckContext::unify_type_of_expr` は各式に推論した型を付けて返すが、その型は
         制約系へ入った型の代入像であり、**単一化は与えられた型から新しい tycon を作らない** --
