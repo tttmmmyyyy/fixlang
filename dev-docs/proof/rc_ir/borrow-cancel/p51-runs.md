@@ -1636,18 +1636,34 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       オブジェクトであり、A26 の第 2 節の第 1 の主語に当たる。それより深いオブジェクトは第 2 の主語 --
       そこから到達できる (D25) オブジェクト -- に当たる。いずれにせよ `<1>1a` がそれを扱う。
       第 2 の場合。グローバル値が到達するオブジェクトは A8 より解放されない。
-      第 3 の場合。その割り当てを行ったのは、この段が作った活性化 `b` か、`b` の子孫の活性化である。
-      D24 の活性化の林の段落は、(E1) が作る活性化を根とし、(E3) と (E7)、(E2) のうちオペランドを適用
+      第 3 の場合。**その割り当てを行ったのは、この節点のいずれかの段が作った活性化か、その子孫の
+      活性化である。**A3 の `Unknown` の行が言う「適用した関数」はこの節点が行う適用の相手であり、
+      **この節点の段は 1 つとは限らない** -- D24 の (E2) は「**この段は活性化を 1 つ作るごとに
+      区切られる。**」「1 つの節点が活性化を 2 つ作るときは、この種の段がその節点について 2 つ在る」と
+      述べ、続けて「**8 種の宣言する op のうち 5 種が 2 つ作る** -- `fix` と、
+      `_mutate_boxed_internal` / `_mutate_elements_internal` の 4 種であり、いずれも 1 回目の適用の結果を
+      2 回目の適用の呼び出し先に据える」と述べる。子孫については、
+      D24 の活性化の林の段落が、(E1) が作る活性化を根とし、(E3) と (E7)、(E2) のうちオペランドを適用
       する `Llvm` の段、および (F) の解放が `Destructor` について作る段が作る活性化を子と呼んだうえで、
       「**活性化を作る段はこの 5 種で尽きる。**」と述べる。よって子を作る段は (E1) を除く 4 種であり、
-      子孫はその辺で `b` から辿れるものに限る。**(F) の解放が作る段をこの 4 種に数えるのは、
+      子孫はその辺で辿れるものに限る。**(F) の解放が作る段をこの 4 種に数えるのは、
       デストラクタの本体が Fix の関数であって `App` を持ちうるからである** (D24 の (F))。
-      `b` が終わった後にこの段がそれらのオブジェクトへ届く道は、`b` の
-      終端の `Ret` が渡した参照だけである。**この段自身の生成コードが `b` の呼び出しから得る Rust の値は
-      その 1 つの返り値だけである** -- `apply_lambda` は `Option<Object<'c>>` を返すだけであり
+      **この節点のある段が作った活性化 `b'` が終わった後、この段の生成コードが `b'` の内側で
+      割り当てられたオブジェクトへ届く道は、`b'` の終端の `Ret` が渡した値の leaf を経るものに限る。**
+      **生成コードが 1 つの適用から得る Rust の値はその 1 つの返り値だけである** --
+      `apply_lambda` は `Option<Object<'c>>` を返すだけであり
       (`CODE src/generator.rs: Generator::apply_lambda`)、呼び出し元の生成コードはその返り値以外に
-      `b` の内側のオブジェクトを指すハンドルを持たない。よってこの段が `b` の内側で割り当てられた
-      オブジェクトへ届く道は、その返り値の leaf を経る他に無い。**`Obl` の側もこれと同じ形を述べる** --
+      `b'` の内側のオブジェクトを指すハンドルを持たない。
+      **`b'` がこの段より前の段が作った活性化であるとき、その返り値をこの節点の生成コードが読むのは、
+      次の適用の呼び出し先に据える 1 か所だけである。**2 つ作る 5 種を読むと、`InlineLLVMFixBody` は
+      `f_fixf` を `gc.apply_lambda(f_fixf, vec![x], tail)` へ渡してそれ以後読まず、
+      `_mutate_boxed_internal` の 2 種と `_mutate_elements_internal` の 2 種は
+      `apply_io_act_to_data_ptr` が返した `io_act` を `run_ios_runner(gc, &io_act, ..)` へ渡してそれ以後
+      読まない。**その 1 か所が渡すのは次の活性化の入力の束縛であって、この段が結果の leaf に置く参照では
+      ない。**よって、この段が結果の leaf に置く参照が指す `o` が、この節点のいずれかの段が作った活性化の
+      内側で割り当てられたものであるとき、この段の生成コードがそこへ届く道は、**この段が作った活性化
+      `b` の終端の `Ret` が渡した値の leaf を経るもの**である -- 残る手持ちはオペランド (第 1 の場合) と
+      グローバル (第 2 の場合) だけだからである。**`Obl` の側もこれと同じ形を述べる** --
       D24 の (E4) は「`b` を作ったのが (E2) のうちオペランドを適用する `Llvm` の段であれば、それらの
       参照はその段を実行した活性化の `Obl` に入り、その活性化は同じ位置で続きを実行する」と述べ、D24 は
       「**段の記述は `Obl` について網羅である。**」「**すなわち、ここに挙がっていない動きは起きない。**」
@@ -1687,7 +1703,13 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
          ObjectFieldType::append_value_into_array_buf,
          CODE src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked, make_struct_union_unique,
          InlineLLVMStructSetBody, InlineLLVMUnionModBody, InlineLLVMWithRetainedFunctionBody,
-         InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody
+         InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
+         InlineLLVMFixBody::generate_tail,
+         InlineLLVMUnsafeMutateBoxedInternalFunctionBody::generate,
+         InlineLLVMUnsafeMutateBoxedIOSInternalBody::generate,
+         InlineLLVMArrayMutateElementsInternalBody::generate,
+         InlineLLVMArrayMutateElementsIosInternalBody::generate,
+         apply_io_act_to_data_ptr, run_ios_runner
     <3>1. CASE op が `InlineLLVMBoxedFromRetainedPtrIOS` でも `applies_a_function_operand` を宣言する
           op でもない。
       A3 の `Unknown` の行の限定が当たる -- 参照が作られるオブジェクト `o` は、この op のオペランドの
