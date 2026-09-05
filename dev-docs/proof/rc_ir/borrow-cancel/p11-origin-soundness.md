@@ -49,8 +49,9 @@ path に別の答えを与え、leaf の側の `identity` が unit の側の答�
 本体 (D23) -- ある関数 `f` の `body` か、あるグローバル初期化子 `g` の `init` -- とする。`type_env` を
 そのプログラムの `TypeEnv`、`vars` を `B` について作られた `VarTable` -- `B` が `f.body` なら
 `VarTable::of(f)`、`B` が `g.init` なら `VarTable::body_only(&g.init)` -- とする。
-**この 2 つが `VarTable` を作る形の全体である** -- `VarTable` の値を組み立てる式の在りかと
-`VarTable::empty` を呼ぶ式の在りかは、この節の前提が走査で挙げる
+**この 2 つが `VarTable` を作る形の全体である** -- 前提 `VarTable` を組み立てる式の在りかが挙げる
+項目のうち値を組み立てるのは `VarTable::empty` であり、前提 `VarTable::empty` を呼ぶ式の在りかが
+挙げる項目は `VarTable::of` と `VarTable::body_only` である
 (`CODE src/rc_ir/ownership.rs: VarTable::of`, `VarTable::body_only`, `VarTable::empty`)。
 
 **`borrow_ify` の入力に固定するのは、この文書が引く仮定と命題の範囲がそこだからである。** A6 と A13 は
@@ -154,7 +155,7 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 候補集合に入る。
 
 **外部の結果。** README の第 2 節は、文書の外の名前つき結果を `EXT <名前>` の名札で第 1 節に据え、
-`BY` からその名前で引くことを求める。この文書が引くのは次の 11 である。
+`BY` からその名前で引くことを求める。この文書が引く外部の結果は次である。
 
 **EXT auto trait と共有** (Rust の言語規則)。
 
@@ -177,6 +178,9 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 
 **EXT 導出した Clone** (Rust の言語規則)。`#[derive(Clone)]` が与える `clone` は、列挙型については
 同じ構成子の値を返し、各欄にその型の `clone` が返す複製を置く。
+
+**EXT 導出した PartialEq** (Rust の言語規則)。`#[derive(PartialEq)]` が構造体に与える `eq` は、
+2 つの値の欄を対応するものどうしで比べ、すべての欄が等しいときに限り真を返す。
 
 **EXT 標準ライブラリのハッシュ** (Rust)。(1) `impl<T: Hash + ?Sized> Hash for Arc<T>` の `hash` は、
 指す先の `T` の `hash` を呼ぶ。(2) `HashMap::get(k)` は鍵 `k` の `Hash` の実装を走らせて索く。
@@ -1669,6 +1673,7 @@ D25 が定めるのがオブジェクトからオブジェクトへの到達だ�
        CODE src/fixstd/builtin.rs: make_array_tycon (`TyCon::new(make_array_name())` である),
        CODE src/fixstd/builtin.rs: make_array_name (`FullName::from_strs(&[STD_NAME], ARRAY_NAME)` で
        ある),
+       EXT 導出した PartialEq (導出した `eq` は欄を対応するものどうしで比べる),
        CODE src/ast/types.rs: TyCon (`name` の 1 欄を持ち `PartialEq` を導出するので、2 つの `TyCon` が
        等しいのはその `FullName` が等しいときである),
        CODE src/ast/types.rs: TyCon::new (`name` の欄に引数の `FullName` を置く),
