@@ -318,4 +318,32 @@ mod tests {
         assert_eq!(text, "old_func");
         ctx.shutdown();
     }
+
+    /// The name a value is declared and defined under — a global value's, and a trait member's in
+    /// an implementation — is answered like any other position: the server replies that there is
+    /// nowhere to jump to, and goes on serving.
+    ///
+    /// The cursor lands there whenever the programmer asks for the definition of the value they
+    /// are looking at, and the reply is the whole of what the request can say about it. A handler
+    /// that treats the case as one that cannot arise ends the server process, which takes the
+    /// diagnostics, the completion and the hover of the session with it.
+    #[test]
+    fn test_goto_from_the_name_a_value_is_declared_under() {
+        let mut ctx = LspTestCtx::setup("goto_local", &["lib.fix"]);
+        // Line 7 is `simple_let : I64;`, line 8 is `simple_let = (`, and line 86 is the
+        // `doubled = |n| n * 2;` of the implementation of `Doubled` for `I64`. Each carries the
+        // name it declares at its start.
+        for (line, character) in [(7, 0), (7, 3), (8, 0), (8, 3), (86, 4), (86, 8)] {
+            let result = ctx.goto_definition("lib.fix", line, character);
+            assert!(
+                result.is_null(),
+                "the name at ({}, {}) is declared where it stands, so the reply is expected to \
+                 name no location, but it is {:?}",
+                line,
+                character,
+                result
+            );
+        }
+        ctx.shutdown();
+    }
 }

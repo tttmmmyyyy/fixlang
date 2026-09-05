@@ -32,94 +32,56 @@ pub(super) fn handle_goto_definition(
         return;
     };
 
-    // The source location where the item is defined.
-    let mut def_src;
-
-    // First check if the node is an expression or a pattern.
-    let var_name = match &node {
-        EndNode::Expr(var, _) => Some(var.name.clone()),
-        EndNode::Pattern(var, _) => Some(var.name.clone()),
-        EndNode::Type(_) => None,
-        EndNode::Trait(_) => None,
-        EndNode::Module(_) => None,
-        EndNode::TypeOrTrait(_) => None,
-        EndNode::AssocType(_) => None,
-        EndNode::Field(_, _) => None,
-        EndNode::Variant(_, _) => None,
-        // The cursor is on the declaration name itself; there is no other definition to jump to.
-        EndNode::ValueDecl(_) => None,
-        // A `_` type wildcard has no declaration to jump to.
-        EndNode::InferredType(_) => None,
+    // The source location the name at the cursor is defined at. Every node the cursor can land on
+    // is answered here, and a node that names nothing to jump to answers with `None`.
+    let def_src = match node {
+        EndNode::Expr(var, _) | EndNode::Pattern(var, _) => {
+            let full_name = &var.name;
+            if full_name.is_local() {
+                find_local_occurrences(program, &pos, full_name).map(|o| o.definition)
+            } else {
+                program
+                    .global_values
+                    .get(full_name)
+                    .and_then(|gv| gv.decl_src.clone())
+            }
+        }
+        EndNode::Type(tycon) => find_tycon_def_src(program, tycon),
+        EndNode::Trait(trait_) => find_trait_or_alias_def_src(program, trait_),
+        EndNode::TypeOrTrait(name) => find_tycon_def_src(program, TyCon { name: name.clone() })
+            .or_else(|| find_trait_or_alias_def_src(program, TraitId::from_fullname(name))),
+        EndNode::Module(mod_name) => program
+            .modules
+            .iter()
+            .find(|mi| mi.name == mod_name)
+            .map(|mi| mi.source.clone()),
+        EndNode::AssocType(assoc_type) => {
+            // The associated type is declared by the trait it belongs to.
+            let trait_id = assoc_type.trait_id();
+            program
+                .trait_env
+                .traits
+                .get(&trait_id)
+                .and_then(|ti| ti.assoc_types.get(&assoc_type.name.name))
+                .and_then(|atd| atd.name_src.clone())
+        }
+        EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
+            find_field_def_src(program, &tc, &name)
+        }
+        // The cursor is on the declaration name itself, or on a `_` the compiler filled in.
+        // Neither names a definition elsewhere.
+        EndNode::ValueDecl(_) | EndNode::InferredType(_) => None,
     };
-    if let Some(var_name) = var_name {
-        let full_name = &var_name;
-        if full_name.is_local() {
-            def_src = find_local_occurrences(program, &pos, full_name).map(|o| o.definition);
-        } else {
-            def_src = program
-                .global_values
-                .get(full_name)
-                .and_then(|gv| gv.decl_src.clone());
-        }
-    } else {
-        // Then handle the case of a type or a trait or a module.
-        match node {
-            EndNode::Expr(_, _) => {
-                unreachable!()
-            }
-            EndNode::Pattern(_, _) => {
-                unreachable!()
-            }
-            EndNode::Type(tycon) => {
-                def_src = find_tycon_def_src(program, tycon);
-            }
-            EndNode::Trait(trait_) => {
-                def_src = find_trait_or_alias_def_src(program, trait_);
-            }
-            EndNode::TypeOrTrait(name) => {
-                def_src = find_tycon_def_src(program, TyCon { name: name.clone() });
-                if def_src.is_none() {
-                    def_src = find_trait_or_alias_def_src(program, TraitId::from_fullname(name));
-                }
-            }
-            EndNode::Module(mod_name) => {
-                if let Some(mi) = program.modules.iter().find(|mi| mi.name == mod_name) {
-                    def_src = Some(mi.source.clone());
-                } else {
-                    def_src = None;
-                }
-            }
-            EndNode::AssocType(assoc_type) => {
-                // Find the associated type definition in the trait.
-                let trait_id = assoc_type.trait_id();
-                def_src = program
-                    .trait_env
-                    .traits
-                    .get(&trait_id)
-                    .and_then(|ti| ti.assoc_types.get(&assoc_type.name.name))
-                    .and_then(|atd| atd.name_src.clone());
-            }
-            EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
-                def_src = find_field_def_src(program, &tc, &name);
-            }
-            EndNode::ValueDecl(_) => {
-                unreachable!()
-            }
-            EndNode::InferredType(_) => {
-                def_src = None;
-            }
-        }
-    }
 
     // If the source is not found, respond with None.
-    if def_src.is_none() {
+    let Some(def_src) = def_src else {
         send_response(id, Ok::<_, ()>(None::<()>));
         return;
-    }
-    let def_src = def_src.unwrap();
+    };
 
     // Create response value.
     let Some(cdir) = get_current_dir() else {
+        send_response(id, Ok::<_, ()>(None::<()>));
         return;
     };
     let location = span_to_location(&def_src, &cdir);
