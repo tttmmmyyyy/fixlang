@@ -233,7 +233,6 @@ impl TypeEnv {
 
 /// A Fix value at one concrete type, under a name of its own. A generic definition becomes one
 /// symbol per type it is used at, and the program that reaches code generation is made of these.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct Symbol {
     /// The name this symbol is known by, unique across the program. Instantiation builds it from
@@ -1700,7 +1699,6 @@ impl Program {
     /// Instantiates every symbol queued in `deferred_instantiation`, moving each
     /// into `symbols`. Instantiation queues further symbols, so this runs until
     /// the queue drains.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn instantiate_symbols(&mut self, tc: &TypeCheckContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         while !self.deferred_instantiation.is_empty() {

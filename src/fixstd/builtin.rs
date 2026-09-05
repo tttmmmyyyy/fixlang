@@ -326,10 +326,12 @@ pub fn make_arrow_tycon() -> TyCon {
     TyCon::new(make_arrow_name_abs())
 }
 
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_dynamic_object_name() -> FullName {
     FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)
 }
 
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_dynamic_object_tycon() -> TyCon {
     TyCon::new(make_dynamic_object_name())
 }
@@ -1027,7 +1029,7 @@ impl LLVMGen for InlineLLVMFixBody {
         self.generate_tail(gc, ty, false).unwrap()
     }
 
-    // PROOF: P26, P28, A21 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P28, P29, P30, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate_tail<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -7965,7 +7967,7 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
 
 /// Applies `io_act` to `data_ptr` wrapped as a Fix `Ptr` value, and returns the IO action it
 /// yields.
-// PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn apply_io_act_to_data_ptr<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     io_act: Object<'c>,
@@ -8043,7 +8045,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         true
     }
 
-    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments.
         let io_act = gc.get_scoped_obj(&self.io_act_name);
@@ -8366,7 +8368,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         true
     }
 
-    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments.
         let io_act = gc.get_scoped_obj(&self.io_act_name);
@@ -8652,7 +8654,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
         true
     }
 
-    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let io_act = gc.get_scoped_obj(&self.io_act_name);
         let array = gc.get_scoped_obj(&self.arr_name);
@@ -8801,7 +8803,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
         true
     }
 
-    // PROOF: P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let io_act = gc.get_scoped_obj(&self.io_act_name);
         let array = gc.get_scoped_obj(&self.arr_name);
@@ -9139,7 +9141,7 @@ pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object
 
 /// Given a value of type `IOState -> (IOState, a)`, runs it on `ios`, or on a fresh `IOState` when
 /// `ios` is `None`, and returns the resulting `IOState` and `a`.
-// PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_ios_runner<'b, 'm, 'c>(
     gc: &mut Generator<'c, 'm>,
     runner: &Object<'c>,

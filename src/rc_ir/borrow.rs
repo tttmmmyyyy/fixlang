@@ -1053,7 +1053,7 @@ impl<'a> RewriteCtx<'a> {
     /// The reference-count operations a call site takes over: for each argument unit, a release after
     /// the call when an owned value is passed to a borrowed position, and a retain before the call
     /// when a borrowed value is passed to an owning position.
-    // PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn call_rc(
         &self,
         callee: &RcVar,
@@ -1121,7 +1121,7 @@ fn expr_node(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
 }
 
 /// A `Release` (when `is_release`) or `Retain` of `var` at `path` wrapping continuation `k`.
-// PROOF: P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rc_node(
     is_release: bool,
     var: RcVar,
@@ -1139,7 +1139,7 @@ fn rc_node(
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
-// PROOF: P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn prepend_rc(units: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
     units.into_iter().rev().fold(k, |cont, (var, path)| {
         rc_node(is_release, var, path, RcState::Unknown, cont, &None)

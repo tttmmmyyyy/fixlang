@@ -567,6 +567,7 @@ fn build_object_files_cache_hash_or_warn(
 /// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
 /// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
 /// position-independent.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn get_target_machine(
     opt_level: OptimizationLevel,
     config: &Configuration,

@@ -1,6 +1,7 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
 use std::env;
 
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
 
@@ -115,6 +116,7 @@ pub const UNION_MOD_SYMBOL: &str = "mod_";
 // Names used by compiler.
 // PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const FUNPTR_NAME: &str = "#FunPtr";
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
 // The internal boxed type holding an array's refcount and raw element buffer. Like `#DynamicObject`,
 // its `#` prefix makes it un-nameable in source, so it cannot leak out of `Array`'s interface.

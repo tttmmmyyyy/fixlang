@@ -86,7 +86,7 @@ impl NameSpace {
     }
 
     /// Whether the path holds no name, as the path of a name written with no qualification does.
-    // PROOF: P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         self.names.len() == 0
     }
@@ -180,6 +180,7 @@ impl NameSpace {
 
     /// The module the path lies in, which is the first of its names. The path must hold at least
     /// one name.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn module(&self) -> Name {
         self.names[0].clone()
     }

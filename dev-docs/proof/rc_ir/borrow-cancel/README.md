@@ -2268,6 +2268,7 @@ SCAN src/ `.set_refcnt_state(`
 `is_funptr` / `is_fully_unboxed` を読む段である** -- `p10-leaves-and-units.md` の `<1>3ba`、
 `p11-origin-soundness.md` の `L13` `<2>1` と `L17` の (E5)・(E7) の CASE、
 `p12-identity-and-consumes.md` の `L3a`、`p13-disposals-and-pending.md` の `<4>3` の 2 か所、
+`p51-runs.md` の `L1` `<1>3` `<2>3`、
 `p40-cancel-soundness.md` の `L40` の組み込みの `variant` を読む段、
 `p60-insert-rc.md` の `L13a` `<1>3`。
 
