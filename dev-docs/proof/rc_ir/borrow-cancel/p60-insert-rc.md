@@ -1365,27 +1365,62 @@ A19 が「すなわち **(ii-b) は「走査の帳簿がその類の処分に遅
 
 ### 7.1 `L8` (`Retain` を作る位置は 4 つである) <!--#664b958-->
 
-**言明**。`insert_rc` が `RcExpr::Retain` を作る位置は `build_retains` の呼び出し 2 か所だけであり、
-その呼び出し元は次の 4 か所である。
+**言明**。
 
-1. `RcInserter::insert_into_operation_let` の `build_retains(retains_before, node)`。`node` は
-   その呼び出しが作った `Let(x, rhs, cont)` である。
-2. `RcInserter::insert_into_expr_inner` の `RcExpr::Ret(x)` の腕の `retain_if_live(&x, live_after, ret)`。
-   `ret` はその腕が作った `Ret(x)` である。
-3. `RcInserter::insert_into_destructure` の `retain_if_live(&container, &live_cont, node)`。`node` は
-   その呼び出しが作った `Destructure(container, fields, Unknown, cont)` である。
-4. `RcInserter::insert_into_match` の `retain_if_live(&scrut, &live_at_arm_head, node)`。`node` は
-   その呼び出しが作った `Let(x, Match(scrut, new_arms), cont)` である。
+- **(0)** `insert_rc` の出力の各本体の各節点は、`src/rc_ir/rc_insert.rs` の 7 つの `RcExprNode` の
+  構成式のいずれかが作ったものである。そのうち `RcExpr::Retain` を作るのは `build_retains` の中の
+  1 つだけ、`RcExpr::Release` を作るのは `build_releases` の中の 1 つだけである。
+- **(a)** `insert_rc` が `RcExpr::Retain` を作る位置は `build_retains` の呼び出し 2 か所だけであり、
+  その呼び出し元は次の 4 か所である。
+
+  1. `RcInserter::insert_into_operation_let` の `build_retains(retains_before, node)`。`node` は
+     その呼び出しが作った `Let(x, rhs, cont)` である。
+  2. `RcInserter::insert_into_expr_inner` の `RcExpr::Ret(x)` の腕の
+     `retain_if_live(&x, live_after, ret)`。`ret` はその腕が作った `Ret(x)` である。
+  3. `RcInserter::insert_into_destructure` の `retain_if_live(&container, &live_cont, node)`。`node` は
+     その呼び出しが作った `Destructure(container, fields, Unknown, cont)` である。
+  4. `RcInserter::insert_into_match` の `retain_if_live(&scrut, &live_at_arm_head, node)`。`node` は
+     その呼び出しが作った `Let(x, Match(scrut, new_arms), cont)` である。
 
 **証明**
 
-<1>1. `insert_rc` の出力の `RcExpr::Retain` 節点は、すべて `build_retains` の中の 1 つの式が作った
-      ものである。
-  BY <ref id=d80dde9/>, EXT クレートの項目, CODE src/rc_ir/rc_insert.rs: build_retains
-  `src/rc_ir/rc_insert.rs` で `RcExpr::Retain` を構成する式はこの 1 つである -- `EXT クレートの項目`
-  より、このモジュールの項目はこのファイルに書かれたものだけなので、ファイルの全文を読んで得た
-  この一覧は完全である。A25 より骨格 (`DEF 骨格`) は
-  `Retain` 節点を含まないので、出力の `Retain` 節点はこのパスが作ったものに限る。
+<1>0. `insert_rc` の出力の各本体の各節点は、`src/rc_ir/rc_insert.rs` の 7 つの `RcExprNode` の構成式の
+      いずれかが作ったものである。**走査の範囲を 1 つのファイルへ狭めていない** -- この段が数え上げるのは
+      「クレートのどこに `RcExprNode` を作る式が在るか」ではなく、「`insert_rc` が出力に置く木の節点が
+      どの式から来るか」であり、その式は `insert_rc` の呼び出しの木を辿って読める。
+  BY <ref id=3e6b0e0/>, <ref id=d80dde9/>, EXT クレートの項目, CODE src/rc_ir/rc_insert.rs: insert_rc,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
+     CODE src/rc_ir/rc_insert.rs: build_retains, CODE src/rc_ir/rc_insert.rs: build_releases
+  `insert_rc` が出力に置く本体は、関数については `insert_into_func` が `func.body` に代入する値、
+  グローバル初期化子については `insert_rc` が `glob.init` に代入する値である。前者は
+  `build_releases(unused, body)`、後者は `insert_into_expr` の返り値の第 1 成分である。A15 より
+  `insert_into_expr` は `insert_into_expr_inner` をちょうど 1 回呼ぶ。
+  `insert_into_expr_inner` の 6 つの腕のうち、A25 より骨格 (`DEF 骨格`) は `Retain`/`Release` を
+  含まないので `RcExpr::Retain(..) | RcExpr::Release(..)` の腕は通らない。残る 5 つの腕は、
+  `RcExpr::Ret(x)` の腕が節点を 1 つ作って `retain_if_live` に渡し、他の 4 つは
+  `insert_into_operation_let`・`insert_into_destructure`・`insert_into_eval`・`insert_into_match` へ
+  振り分ける。**どの腕も入力の節点をそのまま返さず、`RcExpr` を新たに構成して `RcExprNode` に
+  包む。** 継続とアーム本体の節点は、それぞれについての `insert_into_expr` の呼び出しが返す木の節点で
+  あるから、入力の骨格の節点数についての帰納で、出力の木の各節点は
+  `insert_into_expr_inner` の `Ret` の腕・`insert_into_eval`・`insert_into_operation_let`・
+  `insert_into_destructure`・`insert_into_match`・`build_retains`・`build_releases` の 7 つの
+  `RcExprNode` の構成式のいずれかが作ったものである。`EXT クレートの項目` より、このモジュールの項目は
+  このファイルに書かれたものだけなので、ファイルの全文を読んで得たこの 7 つの一覧は完全である。
+
+<1>1. (0)。したがって `insert_rc` の出力の `RcExpr::Retain` 節点は、すべて `build_retains` の中の
+      1 つの式が作ったものである。
+  BY <1>0, CODE src/rc_ir/rc_insert.rs: build_retains, CODE src/rc_ir/rc_insert.rs: build_releases
+  <1>0 が第 1 文を与える。その 7 つの構成式のうち、`RcExpr::Retain` を作るのは `build_retains` の中の
+  `RcExpr::Retain(v, vec![], RcState::Unknown, c)` の 1 つだけ、`RcExpr::Release` を作るのは
+  `build_releases` の中の `RcExpr::Release(v, vec![], RcState::Unknown, c)` の 1 つだけである --
+  残る 5 つが作るのは `Ret`・`Eval`・`Let`・`Destructure`・`Let(Match)` である。
 
 <1>2. `build_retains` を呼ぶのは `insert_into_operation_let` と `retain_if_live` の 2 か所である。
   BY EXT クレートの項目, EXT 非公開の項目の可視範囲,
@@ -1406,9 +1441,9 @@ A19 が「すなわち **(ii-b) は「走査の帳簿がその類の処分に遅
   このファイルに書かれたものだけである。
 
 <1>4. QED
-  BY <1>1, <1>2, <1>3
-  <1>1 より `Retain` 節点を作る位置は `build_retains` の呼び出しに尽き、<1>2 と <1>3 よりその呼び出し元は
-  言明の 4 か所である。
+  BY <1>0, <1>1, <1>2, <1>3
+  (0) は <1>0 と <1>1 である。(a) について、<1>1 より `Retain` 節点を作る位置は `build_retains` の
+  呼び出しに尽き、<1>2 と <1>3 よりその呼び出し元は言明の 4 か所である。
 
 ### 7.2 `L9` (`Retain` はその変数を名指す構文の直前に立つ) <!--#19c0e5a-->
 
@@ -1514,8 +1549,11 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
 
 ### 7.3 `L9` の系: `n_t` に着くと `v` の参照は手を離れる <!--#d686a93-->
 
-**言明**。`L9` の各場合について、`n_t` は `v` の inhabited な各 boxed leaf の参照を D9 の意味で消費するか
-移動させる。ただし場合 (d) で scrutinee が boxed であって選ばれたアームが変位アーム (`tag` が `Some`) で
+**言明**。**`insert_rc` の出力の各本体について**、`L9` の各場合の `n_t` は、`v` の inhabited な各
+boxed leaf の参照を D9 の意味で消費するか移動させる。**主語を `insert_rc` の出力に限るのは、下の
+`<1>1` `<2>3` が `L15` (e) -- 出力のすべての関数の `borrowed_units` が空であること -- を読むから
+である。** `L11` は `L9` の構文の形を `cancel` の入力まで運ぶが、そこには借用する unit を持つ借用版が
+在るので、この系はそこへは延びない。ただし場合 (d) で scrutinee が boxed であって選ばれたアームが変位アーム (`tag` が `Some`) で
 あるときは、`n_t` は移動も消費もせず、`insert_into_match` がそのアームの頭に置いた `Release(v, [])` が
 その参照を処分する。D9 は「`Eval(v, k)` と `Let(x, Match(v, arms), k)` の `Match` 節点自身は、参照を
 作らず、移さず、手放さない」と述べており、この場合の処分は `Match` 節点ではなくその `Release` が行う。
@@ -1634,7 +1672,7 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
 
 <1>3a. `rewrite_inner` の `App` の腕は callee を `route` の結果で差し替える。差し替わりうる名前は
        局所名ではないので、`insert_rc` が `Retain` を置いた変数ではありえない。
-  BY <ref id=843e506/>, <ref id=cb35ab1/>, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+  BY <ref id=843e506/>, <ref id=cb35ab1/>, <ref id=664b958/>, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
      CODE src/rc_ir/borrow.rs: borrow_funcref,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
      CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
@@ -1644,9 +1682,10 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   後者では名前が変わらない。前者で名前が変わるとき、元の名前は `borrow_ify` の入力の `funcs` の鍵で
   あり、A13 の「最上位の記号の名前は局所名ではない」の節よりそれは局所名ではない。返る名前は
   `borrow_funcref` が元の名前の最後の断片に `#borrow` を足したものであり、名前空間の欄を書き替えない。
-  `FullName::is_local` は名前空間が空かを答えるので、返る名前も局所名ではない。一方 `insert_rc` が
-  `Retain` を置くのは `insert_into_operation_let` の `if v.name.is_local()` の門の中と、`retain_if_live` の
-  `var.name.is_local()` を要求する枝だけなので、`Retain(v, π)` の `v` は局所名である。よって
+  `FullName::is_local` は名前空間が空かを答えるので、返る名前も局所名ではない。一方 `L8` (a) より
+  `insert_rc` が `Retain` を置くのは `insert_into_operation_let` の `if v.name.is_local()` の門の中と、
+  `retain_if_live` の `var.name.is_local()` を要求する枝の 2 種で尽きるので、`Retain(v, π)` の `v` は
+  局所名である。よって
   差し替えが起きる callee の名前は `v` と異なり、`rhs_operands` はその `App` について `v` を
   `Ownership::Own` で挙げたままである。
 
@@ -1658,12 +1697,29 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
 
 <1>5. `clone_func` が作る借用版は元の本体の束縛変数を一斉に付け替えたものである。
   BY <ref id=63eadd9/>
-  付け替えは節点の種類・並び・どの変数を名指すかを変えないので、`L9` の形は保たれる。
+  P9 より複製はそれ以外の違いを持たないので、節点の種類も並びも変わらない。一斉の付け替えは
+  1 つの束縛名を 1 つの新しい名前へ写す全単射であり、束縛とその使用の両方を同じ像へ写すので、
+  `Retain` が名指す束縛と、その直後の構文が名指す束縛との一致は保たれる。よって `L9` の (a)-(d) の
+  形は、名前を像へ読み替えた形で保たれる。
+
+<1>5a. `cancel` の入力は、`insert_rc` の出力に `split_rc_units` と `borrow_ify` をこの順に掛けた
+      ものであり、間にプログラムを書き換えるパスは無い。
+  BY <ref id=24bf090/>, CODE src/build/build_object_files.rs: lower_and_insert_rc,
+     CODE src/build/build_object_files.rs: optimize_rc_program,
+     CODE src/build/build_object_files.rs: build_object_files,
+     CODE src/rc_ir/validate.rs: validate
+  P15 は「**`cancel` の入力が `borrow_ify` の出力であることは、`optimize_rc_program` の 1 か所を
+  読めば決まる。**」と述べる。`build_object_files` は `lower_and_insert_rc` の返り値をそのまま
+  `optimize_rc_program` に渡し、`lower_and_insert_rc` は `insert_rc` を掛けて返る。
+  `optimize_rc_program` はその値に `split_rc_units` を掛け、続けて `borrow_ify`、`cancel` を掛ける。
+  間に挟まるのは `config.develop_mode` のときだけ走る `validate` の呼び出しであり、それは
+  `&RcProgram` を受け取って検査するだけで書き換えない。
 
 <1>6. QED
-  BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <ref id=19c0e5a/>
-  `insert_rc` の出力が持つ形 (`L9`) は `split_rc_units` (<1>1) と `borrow_ify` (<1>2、<1>3、<1>3a、
-  <1>5) を通って残り、`borrow_ify` が足す `Retain` も同じ形を持つ (<1>4)。
+  BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>5a, <ref id=19c0e5a/>
+  <1>5a より `cancel` の入力の各本体は、`insert_rc` の出力の本体に `split_rc_units` と `borrow_ify` を
+  掛けたものである。`insert_rc` の出力が持つ形 (`L9`) は `split_rc_units` (<1>1) と `borrow_ify`
+  (<1>2、<1>3、<1>3a、<1>5) を通って残り、`borrow_ify` が足す `Retain` も同じ形を持つ (<1>4)。
 
 ## 8. (O1) と (O2) の言明
 
@@ -4424,17 +4480,12 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
   `L9` は、`insert_rc` の出力の各 `Retain` 節点が `Retain(v, [], RcState::Unknown, k)` の形であることを
   述べる。
 
-<1>2. `src/rc_ir/rc_insert.rs` で `RcExpr::Release` を構成する式は `build_releases` の中の 1 つだけで
-      あり、そこでは path が `vec![]` である。`insert_rc` の出力の `Release` 節点はすべてこの式が
-      作ったものである。
-  BY <ref id=d80dde9/>, EXT クレートの項目, EXT 非公開の項目の可視範囲, CODE src/rc_ir/rc_insert.rs: build_releases,
-     CODE src/rc_ir/rc_insert.rs: insert_rc
-  `build_releases` は `RcExpr::Release(v, vec![], RcState::Unknown, c)` を作る。`EXT クレートの項目`
-  より、このモジュールの項目はこのファイルに書かれたものだけなので、ファイルの全文を読んで得た
-  この一覧は完全である。`insert_rc` が呼ぶのは `RcInserter` の非公開のメソッドだけであり、
-  `EXT 非公開の項目の可視範囲` よりそれを呼ぶ式はこのモジュールの中にしかないので、`insert_rc` の
-  呼び出しの木はこのファイルの外に出ない。A25 より骨格 (`DEF 骨格`) は `Release` 節点を含まないので、
-  出力の `Release` 節点はすべてこの式が作ったものである。
+<1>2. `insert_rc` の出力の `Release` 節点はすべて `build_releases` の中の 1 つの式が作ったものであり、
+      そこでは path が `vec![]` である。
+  BY <ref id=664b958/>, CODE src/rc_ir/rc_insert.rs: build_releases
+  `L8` (0) より、出力の各節点は `src/rc_ir/rc_insert.rs` の 7 つの `RcExprNode` の構成式のいずれかが
+  作ったものであり、そのうち `RcExpr::Release` を作るのは `build_releases` の中の 1 つだけである。
+  その式は `RcExpr::Release(v, vec![], RcState::Unknown, c)` であり、path は `vec![]` である。
 
 <1>3. (b)。
   BY <1>1, <1>2, <ref id=1ab62dc/>, <ref id=38dde17/>, <ref id=8412761/>
@@ -4681,19 +4732,15 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
     (E7) が走るのは、まだ初期化されていないグローバルを読む者が居るときである (D22 の
     「グローバルのアクセサ」は初期化済みの旗を見る)。局所名の変数を名指す `Retain`/`Release` は
     グローバルの記憶域を読まないので、(E7) を起こしうるのは局所名でない変数を名指す節点だけである。
-    `src/rc_ir/rc_insert.rs` で `RcExpr::Retain` と `RcExpr::Release` を構成する式は `build_retains` と
-    `build_releases` の中の 1 つずつである -- `EXT クレートの項目` より、このモジュールの項目は
-    このファイルに書かれたものだけなので、ファイルの全文を読んで得た一覧は完全である。`insert_rc` が
-    呼ぶのは `RcInserter` の非公開のメソッドだけであり、`EXT 非公開の項目の可視範囲` よりそれを呼ぶ式は
-    このモジュールの中にしかないので、`insert_rc` の呼び出しの木はこのファイルの外に出ない。A25 より
-    骨格はこの 2 種を含まないので、`insert_rc` の出力の
-    `Retain`/`Release` 節点はこの 2 つが作ったものに限る。
-    **数えるのは、その 2 つの関数へ変数を渡す式である。** `L8` より `build_retains` の呼び出し元は
+    `L8` (0) より、`insert_rc` の出力の `Retain`/`Release` 節点は `build_retains` と
+    `build_releases` の中の 1 つずつの式が作ったものに限る。
+    **数えるのは、その 2 つの関数へ変数を渡す式である。** `L8` (a) より `build_retains` の呼び出し元は
     4 か所であり、そのうち `insert_into_operation_let` の呼び出しは `retains_before` を、残る
     3 か所 (`Ret` の腕・`insert_into_destructure`・`insert_into_match`) は `retain_if_live` の
     唯一の引数を渡すので、渡す式は 4 つである。`build_releases` の呼び出し元は 6 か所であり
     (`build_releases` はこのモジュールの非公開の項目なので、`EXT 非公開の項目の可視範囲` より
-    それを呼ぶ式はこのファイルの中にしかない)、
+    それを呼ぶ式はこのモジュールの中にしかなく、`EXT クレートの項目` よりこのモジュールの項目は
+    このファイルに書かれたものだけである)、
     渡す式は 9 つである -- `insert_into_func` の `unused` (1)、`insert_into_operation_let` の
     `after` に入る `releases_after` と `x` (2)、`insert_into_eval` の `vec![x]` (1)、
     `insert_into_destructure` の `dead` (1)、`insert_into_match` の `head` に入る dead-branch・
