@@ -1497,7 +1497,7 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 ない path を歩く。表のこの行が「第 `j` オペランドの leaf `σ`」と書くのは、そのオペランドとその leaf が
 実在することを含んでいる。
 
-**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す。 <!--#24e75e3-->
+**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す。 <!--#24e75e3-->
 `LLVMGen::result_prov` は `&self` を取るので、内部可変性を持つ op は同じ引数に違う答えを返せる。果たす者は
 `impl LLVMGen for` の 78 個の通読である (A21 が `llvmgen-function-values.md` について取っているのと同じ
 形)。**これが無いと `p30-cancel-walk.md` の `L0`、したがって P2a が閉じない** -- `origin_inner` の
@@ -1571,7 +1571,7 @@ TypeNode`, `TypeNode::is_ground`, `TypeNode::type_hash`, `TypeNode::depth`)。
 `p11` と `p12` は `p30` より前に読まれる。1 つにまとめるには P2a を層 0 へ下ろす必要があり、その証明が
 `origin` の停止性 (P2) を読むので下ろせない。
 
-**`result_prov` と `borrows_operand` は自分の `FullName` の欄を読まない。** `LLVMGen::result_prov` は `&self` を取るので op が <!--#6426b39-->
+**`result_prov`、`borrows_operand`、`applies_a_function_operand` は自分の `FullName` の欄を読まない。** `LLVMGen::result_prov` は `&self` を取るので op が <!--#6426b39-->
 持つ変数名を読めるが、どの op もそうしない -- `result_prov` を override する 29 個のうち `self` の欄を読む
 のは 6 つで、読む欄はいずれも `usize` か `u32` の添字である。この性質が要るのは、`rename_rhs` の `Llvm` の
 腕が `llvm_gen` を clone して `free_vars_mut()` が挙げる名前を書き替えるからで

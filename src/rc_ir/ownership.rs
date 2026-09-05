@@ -923,7 +923,7 @@ pub(crate) fn acted_references(
 
 /// The owned parameter/capture units of every function: each version's units minus the ones it
 /// borrows (`RcFunc::borrowed_units`, the annotation borrow-ification writes).
-// PROOF: D/A, P7c, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7c, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {
     let mut owned = Set::default();
     for func in prog.funcs.values() {

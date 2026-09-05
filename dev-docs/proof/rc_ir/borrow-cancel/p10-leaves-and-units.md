@@ -2536,11 +2536,11 @@ SCAN src/ `truncate_to_unit(`
        集めて `arg_tys` を作り、`llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を 1 度呼んで
        `decl` を得たのち、`decl`、`args`、`path`、`var` を読む。この腕にも `origin_inner` の
        ほかの腕にも、`llvm_gen` を読む式はこの呼び出し以外に無い。A3 の
-       「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を
+       「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を
        返す」より、その返り値は `result_ty`、`arg_tys`、`E` だけで決まる。**op が自分の中に持つ
        内部可変性は、この段に入らない** -- `LLVMGen::result_prov` は `&self` を取るので op はそれを
        持ちうるが、決定性の節はその有無に依らず答えを引数の関数にする。
-      BY <ref id=e11772a/> (`result_prov` と `borrows_operand` は決定的である),
+      BY <ref id=e11772a/> (`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である),
          CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding,
          CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
     <3>4. QED
@@ -2686,7 +2686,7 @@ SCAN src/ `truncate_to_unit(`
        CODE src/ast/types.rs: TypeNode::is_box
   <2>4. `Llvm` の腕の呼び先も同じ 4 つで決まる。この腕は `args` の各要素の `ty` から `arg_tys` を
      作り、`decl = llvm_gen.result_prov(result_ty, &arg_tys, E)` を 1 度呼ぶ。A3 の
-     「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」
+     「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」
      より `decl` は `result_ty`、`arg_tys`、`E` の値で決まる。次に
      `decl.leaf_origins_at(path).and_then(as_arg_projection)` で場合を分け、`Some((j, p))` なら
      `origin(vars, E, &args[j].name, &p)` を 1 つ呼び、`None` なら `origin_from_leaves_under` が
@@ -2694,7 +2694,7 @@ SCAN src/ `truncate_to_unit(`
      `leaf_origins_at` と `leaf_origins_under` は `decl` が包む `Map` を `path` で引くだけであり、
      `as_arg_projection` は渡された `Set` の大きさと元だけを見る。`unit` は
      `truncate_to_unit(&args[j].ty, leaf, E)` であり、`<1>9a` よりその値は引数の値だけで決まる。
-    BY <ref id=e11772a/> (`result_prov` と `borrows_operand` は決定的である), <1>9a,
+    BY <ref id=e11772a/> (`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である), <1>9a,
        CODE src/rc_ir/ownership.rs: origin_inner,
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
        CODE src/rc_ir/ownership.rs: as_arg_projection,

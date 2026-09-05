@@ -1675,7 +1675,7 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
     `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の返り値から鍵を決めることは、A3 の決定性の
     節が片付ける** -- `result_prov` は `&self` を取るので、同じ引数に同じ値を返すことを言う者が無ければ
     2 回の評価が違う鍵の集合を作りうる。よって `origin_inner(K)` のどの実行も同じ辺を辿る。
-    BY <2>1, <ref id=e11772a/> (`result_prov` と `borrows_operand` は決定的である), DEF 再帰の辺,
+    BY <2>1, <ref id=e11772a/> (`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である), DEF 再帰の辺,
        <1>2 (その呼び出しは停止する),
        EXT 呼び出しの入れ子 (`origin_inner(K)` が呼ぶ `origin(K')` は、`origin_inner(K)` が返るより
        前に返る),
@@ -2377,7 +2377,7 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
           `gen.result_prov(ty(x), arg_tys, type_env)` の返り値を読むので、その呼び出しが同じ引数に同じ
           値を返すことが要る。
       BY <ref id=9a6b1cd/> (a), <ref id=9a6b1cd/> (b), <ref id=9a6b1cd/> (c), <ref id=9a6b1cd/> (d), <ref id=95f1cbf/> の前提 (`λ` は `ty(x)` の boxed leaf である),
-         <ref id=e11772a/> (「**`result_prov` と `borrows_operand` は決定的である**」-- 同じ引数に対して常に同じ値を
+         <ref id=e11772a/> (「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である**」-- 同じ引数に対して常に同じ値を
          返す)
     <3>4. 空集合と要素数 2 以上は起きない。
       BY <ref id=e11772a/> (空集合と宣言された leaf は inhabited にならない。「**複数の元を宣言する op は存在しない。**」),
@@ -2764,7 +2764,7 @@ inhabited (D16) な leaf に限る形でそれを述べる。
   (`<1>3`)、その有無で変わるのは同じ表の `origins` だけであり、P2a の固定した範囲を出ない。
   鍵ごとの答えが動かないことと、言明の前件が覆う鍵の集合が動いても真偽が動かないこと (`<1>1a`) を
   合わせて、P3 と P4 の真偽は `level_ownership` の有無で変わらない。
-  BY <ref id=b1f6e13/>, <ref id=e11772a/> (値の等しさの節と、「**`result_prov` と `borrows_operand` は決定的である**」の節),
+  BY <ref id=b1f6e13/>, <ref id=e11772a/> (値の等しさの節と、「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である**」の節),
      <1>1, <1>1a, <1>2, <1>3, <1>3a
 
 **観察 (この文書の命題の外)。** `level_ownership` の発火判定は、site の `origin` の候補のうち 1 つでも

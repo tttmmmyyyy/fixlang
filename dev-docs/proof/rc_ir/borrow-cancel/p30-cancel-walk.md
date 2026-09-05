@@ -531,7 +531,7 @@ enum については元と同じ変位で、その変位が保持する各値を
     BY DEF 引数で決まる関数, EXT Map と Set, EXT collect into Map と Set, EXT スライスの接頭と先頭,
        EXT Clone, EXT Vec::iter と slice::iter, EXT Iterator::all と any,
        EXT Iterator::map と collect, EXT Iterator::filter_map, EXT Iterator::rposition
-  <2>2. `LLVMGen::result_prov` については A3 が述べる。A3 は「**`result_prov` と `borrows_operand` は
+  <2>2. `LLVMGen::result_prov` については A3 が述べる。A3 は「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は
         決定的である** -- 同じ引数に対して常に同じ値を返す。」と書き、その果たす者を
         `impl LLVMGen for` の 78 個の通読としている。
     BY <ref id=e11772a/>, DEF 引数で決まる関数
@@ -941,7 +941,7 @@ enum については元と同じ変位で、その変位が保持する各値を
           `bindings` が保持する値の等しさは動かない。
       BY <3>1, <ref id=e11772a/>
     <3>3. QED
-      A3 の「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す。」
+      A3 の「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す。」
       より、`Binding::Llvm` の `Box<dyn LLVMGen>` は同じ引数に同じ宣言を返す。
       BY <3>1, <3>2, <ref id=e11772a/>
   <2>4. QED

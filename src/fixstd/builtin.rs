@@ -58,7 +58,7 @@ use std::sync::Arc;
 // The type constructors the compiler provides itself — the primitive types, the function arrow,
 // `Array` and its storage, and the dynamic object — each with the kind, boxedness and document that
 // a user-defined type would get from its declaration.
-// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P28, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
@@ -374,7 +374,7 @@ pub fn make_funptr_tycon(arity: u32) -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))
 }
 
-// PROOF: P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7, P7a, P7d, P7e, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_array_tycon() -> TyCon {
     TyCon::new(make_array_name())
 }
@@ -385,7 +385,7 @@ pub fn make_array_name() -> FullName {
 }
 
 // If given tycon is function pointer, returns its arity
-// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
     if tc.name.namespace != NameSpace::new(vec![STD_NAME.to_string()]) {
         return None;
@@ -4372,6 +4372,7 @@ impl InlineLLVMStructGetBody {
     /// A field that does hold one is read by taking ownership of the container instead: as a borrow
     /// the result would alias the container's leaf, and reference-count insertion releases a
     /// *variable* at its last use without following aliases, so that leaf would be released twice.
+    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_container(field_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
         field_ty.is_fully_unboxed(type_env)
     }
@@ -4829,7 +4830,7 @@ impl InlineLLVMStructPunchBody {
     /// The path of the argument's boxed leaf that the result's boxed leaf at `path` carries, where
     /// the struct is unboxed. A leaf of the punched-struct component sits at the path it had in the
     /// argument; a leaf of the moved-out field sits under the punched field.
-    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7a, P7d, P7e, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn arg_leaf_path(&self, path: &FieldPath) -> FieldPath {
         // A boxed leaf of the result descends through the field or through the punched struct.
         let (head, rest) = path
@@ -4918,7 +4919,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7a, P7d, P7e, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -5104,7 +5105,7 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7a, P7d, P7e, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -5160,7 +5161,7 @@ const PLUG_IN_FIELD_ARG: usize = 1;
 /// with what is known about it intact. The struct operand's leaf at the replaced field reaches no
 /// result path and so stays consumed, which is what `set` does with it: it releases the value it
 /// replaces. A punched struct holds nothing at that field, so a `plug_in` operand has no leaf there.
-// PROOF: D/A, P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn replaced_field_prov(
     result_ty: &Arc<TypeNode>,
     type_env: &TypeEnv,
@@ -6107,7 +6108,7 @@ impl LLVMGen for InlineLLVMStructSetBody {
         Box::new(c)
     }
 
-    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7a, P7d, P7e, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -6267,7 +6268,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         vec![&mut self.field_name]
     }
 
-    // PROOF: P1, P2, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7a, P7d, P7e, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -6417,6 +6418,7 @@ impl InlineLLVMUnionAsBody {
     /// A payload that does hold one is read by taking ownership of the union instead: as a borrow the
     /// result would alias the union's leaf, and reference-count insertion releases a *variable* at its
     /// last use without following aliases.
+    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_union(payload_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
         payload_ty.is_fully_unboxed(type_env)
     }

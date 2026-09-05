@@ -1666,7 +1666,7 @@ memo が当たった位置で止まる。`origin_inner` が呼ぶ相手を辿る
   帰納法の仮定よりどれも有限なので、`E(a_k)` は有限である。`grow_stack` が本体をちょうど 1 回呼ぶ
   ことは A15 による。`E(a_k)` の値が 1 つに定まることは A3 による -- `origin_inner` の
   `Binding::Llvm` の腕は `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を呼び、A3 は
-  「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」と
+  「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」と
   述べる。これが無いと `origin_inner` を同じ対に当てた 2 つの評価が違う値を返しうるので、`E(a_k)` の
   値も、それが `r_k` に等しいことも定まらない。
 
@@ -2410,8 +2410,8 @@ DEF 名前の活性による。よって 7.5.4 が `INV(n)` を示せば P18a �
   BY <ref id=f8fa0e9/>, <ref id=e11772a/>, <ref id=ca36627/>, <1>1a, DEF `ρ` 歩みと `ρ` 終端
   `origin_inner` が `(x, λ)` についてどの群に入るかは、`Binding::Llvm` の腕では
   `decl.leaf_origins_at(λ).and_then(as_arg_projection)`、すなわち
-  `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の返り値で決まるので、A3 の「**`result_prov` と
-  `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」が要る。これが無いと、群も、
+  `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の返り値で決まるので、A3 の「**`result_prov`、`borrows_operand`、
+  `applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」が要る。これが無いと、群も、
   (b) の枝が渡す相手 `(args[j], p)` も `(x, λ)` の関数にならない。
   L7a は `origin_inner` の枝を 3 群に分け、その 3 つが場合を尽くすと述べる。(a) の 6 つの枝は
   `origin` を 1 回も呼ばないので、その対は `ρ` 終端であり、この段の仮定から外れる。(b) の 5 つの腕は
@@ -3302,10 +3302,10 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
   その変数の型だけで決める。P9 より `rename` は束縛変数の名前だけを替えるので変数の型を変えず、A12 より
   同じ名前の `RcVar` が持つ型は一致するので、この 5 種は写して一致する。
   残る `Llvm` の位置は `borrows_operand` と `result_prov` の宣言を読み、`rename_rhs` の `Llvm` の腕は
-  `llvm_gen` を clone して `free_vars_mut()` が挙げる名前を書き替える。A3 は「**`result_prov` と
-  `borrows_operand` は自分の `FullName` の欄を読まない。**」と述べ、`result_prov` を override する
+  `llvm_gen` を clone して `free_vars_mut()` が挙げる名前を書き替える。A3 は「**`result_prov`、`borrows_operand`、
+  `applies_a_function_operand` は自分の `FullName` の欄を読まない。**」と述べ、`result_prov` を override する
   29 個と `borrows_operand` を override する 13 個が読む欄を数え上げている。さらに A3 は
-  「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」と
+  「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」と
   述べる。**この 2 節の両方が要る** -- `rename_rhs` も `rewrite_inner` も op を clone するので、
   両側の op は別のオブジェクトであり、決定性が答えを引数の関数にし、`FullName` の欄を読まないことが
   名前替えを答えから外す。よってこの 2 つの宣言は両側で等しい。
@@ -3463,9 +3463,9 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         読み、<3>1 よりその型は等しい。`Binding::Llvm` の枝分かれは
         `decl.leaf_origins_at(ν).and_then(as_arg_projection)` を読み、`decl` は
         `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` である。2 つの `llvm_gen` は
-        `free_vars_mut()` が挙げる `FullName` の欄だけが違い、A3 は「**`result_prov` と
-        `borrows_operand` は自分の `FullName` の欄を読まない。**」「**`result_prov` と
-        `borrows_operand` は決定的である**」と述べ、<3>1 より `result_ty` と `arg_tys` は等しいので、
+        `free_vars_mut()` が挙げる `FullName` の欄だけが違い、A3 は「**`result_prov`、`borrows_operand`、
+        `applies_a_function_operand` は自分の `FullName` の欄を読まない。**」「**`result_prov`、`borrows_operand`、
+        `applies_a_function_operand` は決定的である**」と述べ、<3>1 より `result_ty` と `arg_tys` は等しいので、
         `decl` は 2 つの側で等しい。L7a の (b) と (c) が挙げる相手 -- `(y', ν)`、`(args[j], p)`、
         `(container, [idx] ++ ν)`、`(scrut, ν)`、`(scrut, [tag] ++ ν)`、`(arm_results[j'], ν)` --
         は、変数の側が <3>2 の対応で `ren` の像へ写り、`FieldPath` の側は `decl` と `idx` と `tag` から

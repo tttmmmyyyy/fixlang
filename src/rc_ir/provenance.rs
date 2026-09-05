@@ -114,6 +114,7 @@ impl Provenance {
 
     /// The provenance whose every boxed leaf at path `π` is `Arg(arg_index, π)` — the whole value of
     /// input `arg_index` carried through unchanged.
+    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn arg_passthrough(ty: &Arc<TypeNode>, type_env: &TypeEnv, arg_index: usize) -> Provenance {
         Provenance::build_shape(ty, type_env, &|path: &FieldPath| {
             sole_origin(LeafOrigin::Arg(arg_index, path.clone()))

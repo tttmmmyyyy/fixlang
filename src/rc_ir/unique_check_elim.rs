@@ -141,6 +141,7 @@ impl<'a> Specializer<'a> {
 
     /// Materialize one clone: rewrite the original body under the clone's inputs, flipping the checks
     /// its key makes provable and routing its direct calls.
+    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn materialize_clone(&mut self, fref: &FuncRef, key: &SpecializationKey) -> RcFunc {
         let func = self.prog.funcs[fref].clone();
         let inputs = self.input_uniqueness(&func, key);

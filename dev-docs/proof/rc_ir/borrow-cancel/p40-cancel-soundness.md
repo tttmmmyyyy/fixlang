@@ -2733,13 +2733,13 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
          EXT derive(Clone), EXT dyn_clone の trait object の複製
     <3>2. QED
       BY <3>1, <ref id=e11772a/>
-      A3 は「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を
+      A3 は「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を
       返す」と述べ、続けて「**この 2 節を合わせると「op の複製は原本と同じ宣言を返す」が出る。**
       `rhs.clone()` や `fresh_rename_function` が作る複製の op は、原本と同じ引数を渡されれば同じ
       `Provenance` を返す」と述べる。A3 はこの 1 文を要る段の見分け方を「複製された op の宣言を原本の
       ものと同じだと読む段が、それである」と書いており、<3>1 よりこの段がそれである。決定性は
       `borrows_operand` についても同じ文が述べ、`FullName` の欄を読まないことも A3 が
-      「**`result_prov` と `borrows_operand` は自分の `FullName` の欄を読まない。**」として述べる。
+      「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は自分の `FullName` の欄を読まない。**」として述べる。
   <2>3b. 鍵 `(x, π)` が等しい 2 つの表の `origin` の答えは等しい。
     <3>0. 各表の `origin` の答えは、`origin_inner` の再帰呼び出しを memo を使わずに展開して得られる
           有限の木 `E(x, π)` (`p13` の `L8a`) の値であり、その木の高さについての帰納法は整礎である。
@@ -2858,7 +2858,7 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
     それが名指す変数の値と、`App` については呼び出し先の所有 (D14) で決まる。**`Llvm` の節点については
     その 2 つの行が `result_prov` と `borrows_operand` を読むので、2 つの本体の op が同じ宣言を返すことが
     要る** -- `B'` の op は `B` の op の複製であって同じオブジェクトではない。それを与えるのは <1>1 の
-    第 2 文であり、その支えは A3 の「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に
+    第 2 文であり、その支えは A3 の「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に
     対して常に同じ値を返す」と「**この 2 節を合わせると「op の複製は原本と同じ宣言を返す」が出る。**」で
     ある。L32 の 5 より `Del` の
     要素は `Retain` 節点と `Release` 節点だけなので、この 2 つの行を起こす節点はどちらの活性化も同じ

@@ -5037,9 +5037,9 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
         `args` の各元の型の列である。
     BY <2>1, <ref id=e11772a/>
     <2>1 より `args`・結果の型・`type_env` は 2 つの側で等しい。`rhs.clone()` は右辺を欄ごとに写す
-    ので、複製の各欄は原本のものに等しく、A3 の「**`result_prov` と `borrows_operand` は自分の
+    ので、複製の各欄は原本のものに等しく、A3 の「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は自分の
     `FullName` の欄を読まない。**」の節より、答えは `self` が持つ名前にも依らない。A3 の決定性の節 --
-    「**`result_prov` と `borrows_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」-- より、
+    「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」-- より、
     2 つの呼び出しは同じ `Provenance` を返す。
   <2>3. `Org_B(x, π)` を、`vars_B` と `type_env` を第 1・第 2 引数として `origin` が鍵 `(x, π)` に
         返す値とする。この値は 1 つに決まり、`origin_inner(vars_B, type_env, x, π)` の値に等しい --
