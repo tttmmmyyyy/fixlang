@@ -9,8 +9,9 @@ mod tests {
     use super::super::completion_harness::setup_test_env;
     use super::super::lsp_client::LspClient;
     use serde_json::{json, Value};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::time::Duration;
+    use tempfile::TempDir;
 
     /// The response to the request `id`, waited for until it arrives.
     fn wait_for_response(client: &mut LspClient, id: u32) -> Value {
@@ -61,10 +62,7 @@ mod tests {
     }
 
     /// A session over the case project, with `file` opened and analyzed once.
-    fn open_session(
-        project: &str,
-        file: &Path,
-    ) -> (tempfile::TempDir, std::path::PathBuf, LspClient) {
+    fn open_session(project: &str, file: &Path) -> (TempDir, PathBuf, LspClient) {
         let (temp_dir, project_dir) = setup_test_env(project);
         let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
         client

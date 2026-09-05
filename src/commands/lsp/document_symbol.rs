@@ -9,6 +9,7 @@ use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
 use crate::misc::to_absolute_path;
 use crate::write_log;
 use lsp_types::{DocumentSymbol, DocumentSymbolParams, SymbolKind};
+use std::path::{Path, PathBuf};
 
 /// Handle a `textDocument/documentSymbol` request.
 ///
@@ -16,27 +17,20 @@ use lsp_types::{DocumentSymbol, DocumentSymbolParams, SymbolKind};
 /// does not decode, or one naming nothing on disk — is answered with an empty list, so that the
 /// client has its answer rather than a request left open.
 pub(super) fn handle_document_symbol(id: u32, params: &DocumentSymbolParams, program: &Program) {
-    let no_symbols = || send_response(id, Ok::<_, ()>(Vec::<DocumentSymbol>::new()));
-    let canonicalize_path = |path| {
-        let path = to_absolute_path(path);
-        if let Err(e) = path {
-            let msg = e.to_string();
-            write_log!("{}", msg);
-            return None;
+    let canonicalize_path = |path: &Path| -> Option<PathBuf> {
+        match to_absolute_path(path) {
+            Ok(path) => Some(path),
+            Err(why) => {
+                write_log!("{}", why);
+                None
+            }
         }
-        path.ok()
     };
 
-    let Some(path) = uri_to_path(&params.text_document.uri) else {
-        no_symbols();
+    let path = uri_to_path(&params.text_document.uri).and_then(|path| canonicalize_path(&path));
+    let Some(path) = path else {
+        send_response(id, Ok::<_, ()>(Vec::<DocumentSymbol>::new()));
         return;
-    };
-    let path = match canonicalize_path(&path) {
-        Some(path) => path,
-        None => {
-            no_symbols();
-            return;
-        }
     };
 
     let mut symbols = Vec::new();
