@@ -80,6 +80,7 @@
 
 #### Tool
 
+- #560, #570: LSP: A URI whose percent-escapes do not decode as UTF-8 no longer ends the language server. A file name on Linux is any sequence of bytes, so an editor holding one that is not UTF-8 sends such a URI, and opening one file like that took the diagnostics, the completion and the hover of the whole session down; the server now goes on, leaving that one file unanswered.
 - #559, #569: LSP: Asking for the definition of a global value while the cursor is on the name it is declared or defined under no longer ends the language server. The server exited, taking the diagnostics, the completion and the hover of the session with it and leaving a restart as the only way back; it now answers that there is nowhere to jump to.
 - #558, #567: LSP: A program the compiler answers with a panic — a shape a program passes through while it is being repaired — no longer stops the diagnostics of the session. The language server published nothing on any file for the rest of the session, however the program was repaired afterwards, and restarting it was the only way back. It now analyzes the next program the editor writes, and keeps the diagnostics of the last program it analyzed on screen until then.
 - #211, #400, #501: `--emit-llvm`, `--emit-rc-ir` and `--emit-symbols` now write their dumps however much of the build is cached. A build repeated in a directory answered from its object files and wrote no dump while exiting 0, so a dump an earlier build had left in place was read as this build's.

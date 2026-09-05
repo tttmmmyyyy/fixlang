@@ -22,14 +22,21 @@ use std::path::{Component, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-// Convert a `lsp_types::Uri` into a `PathBuf`.
-pub(super) fn uri_to_path(uri: &Uri) -> PathBuf {
-    PathBuf::from(
-        urlencoding::decode(&uri.path().to_string())
-            .ok()
-            .unwrap()
-            .as_ref(),
-    )
+/// The path a `lsp_types::Uri` names. `None` says the percent-escapes of the URI decode to bytes
+/// that are not UTF-8.
+///
+/// Such a path is one this server has nothing to say about: `path_to_uri`, which every answer
+/// carrying a location goes through, takes each component of a path as a `str`, so a file whose
+/// name is not UTF-8 has no URI to publish a diagnostic under.
+pub(super) fn uri_to_path(uri: &Uri) -> Option<PathBuf> {
+    let path = uri.path().to_string();
+    match urlencoding::decode(&path) {
+        Ok(decoded) => Some(PathBuf::from(decoded.as_ref())),
+        Err(why) => {
+            write_log!("Failed to decode the path of the uri \"{}\": {}", path, why);
+            None
+        }
+    }
 }
 
 /// Map each line of `content0` to the corresponding line in `content1`, or
@@ -239,9 +246,7 @@ pub(super) fn resolve_source_pos(
     }
     let latest_content = uri_to_content.get(uri).unwrap();
 
-    let path = uri_to_path(uri);
-
-    let saved_content = get_file_content_at_previous_diagnostics(program, &path);
+    let saved_content = get_file_content_at_previous_diagnostics(program, &latest_content.path);
     if let Err(e) = saved_content {
         write_log!("{}", e);
         return None;
@@ -258,7 +263,7 @@ pub(super) fn resolve_source_pos(
     };
 
     Some(SourcePos {
-        input: SourceFile::from_file_path(path),
+        input: SourceFile::from_file_path(latest_content.path.clone()),
         pos: position_to_bytes(&saved_content, pos_in_saved),
     })
 }
@@ -1028,4 +1033,54 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
         value: docs,
     };
     content
+}
+
+#[cfg(test)]
+mod tests {
+    use super::uri_to_path;
+    use lsp_types::Uri;
+    use std::path::PathBuf;
+    use std::str::FromStr;
+
+    /// The path a URI names is what its percent-escapes decode to, and a URI whose escapes decode
+    /// to bytes that are not UTF-8 names no path.
+    #[test]
+    fn test_uri_to_path_decodes_the_escapes_it_can_read() {
+        let path = |uri: &str| uri_to_path(&Uri::from_str(uri).expect("the uri parses"));
+
+        assert_eq!(
+            path("file:///p/caf%C3%A9.fix"),
+            Some(PathBuf::from("/p/café.fix")),
+            "escapes carrying a whole UTF-8 sequence name the file those bytes spell"
+        );
+        assert_eq!(
+            path("file:///p/%6C%69%62.fix"),
+            Some(PathBuf::from("/p/lib.fix")),
+            "an ASCII character written as an escape names the file the character itself does"
+        );
+        assert_eq!(
+            path("file:///p/%25.fix"),
+            Some(PathBuf::from("/p/%.fix")),
+            "an escaped `%` names a file whose name carries a `%`"
+        );
+        assert_eq!(
+            path("file:///p/plain.fix"),
+            Some(PathBuf::from("/p/plain.fix")),
+            "a uri carrying no escape names the path it writes"
+        );
+
+        for uri in [
+            "file:///p/%FF.fix",    // a byte no UTF-8 sequence uses
+            "file:///p/%80.fix",    // a continuation byte with nothing to continue
+            "file:///p/%C3%28.fix", // a two-byte sequence whose second byte continues nothing
+            "file:///p/%E3%81.fix", // a three-byte sequence cut short
+        ] {
+            assert_eq!(
+                path(uri),
+                None,
+                "the escapes of \"{}\" decode to bytes that are not UTF-8, so it names no path",
+                uri
+            );
+        }
+    }
 }
