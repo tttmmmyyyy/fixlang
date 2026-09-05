@@ -1,0 +1,10 @@
+module Main;
+
+// Applying an alias that declares one type variable twice to two different types ends the
+// analysis in a panic.
+type Al a a = a;
+
+type S = unbox struct { x : Al I64 Bool };
+
+main : IO ();
+main = println("x");

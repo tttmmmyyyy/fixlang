@@ -40,6 +40,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::mem;
+use std::panic::AssertUnwindSafe;
 use std::path::Path;
 use std::time::Duration;
 use std::{
@@ -1031,6 +1032,8 @@ fn diagnostics_thread(
     let mut prev_err_paths = Set::default();
     // The latest coalesced request waiting to run, if any.
     let mut pending: Option<Arc<Map<PathBuf, String>>> = None;
+    // The panic message of the pass that failed last, while every pass since has failed with it.
+    let mut last_failure: Option<String> = None;
 
     loop {
         // With nothing pending, block until a request arrives. With a
@@ -1043,11 +1046,12 @@ fn diagnostics_thread(
             match req_recv.recv_timeout(debounce) {
                 Ok(msg) => Some(msg),
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    run_diagnostics_and_publish(
+                    run_diagnostics_pass(
                         pending.take().unwrap(),
                         &typecheck_cache,
                         &res_send,
                         &mut prev_err_paths,
+                        &mut last_failure,
                     );
                     continue;
                 }
@@ -1064,25 +1068,71 @@ fn diagnostics_thread(
     }
 }
 
-/// Run one diagnostics pass over `overrides`, publish the resulting
+/// The message the client is shown for a pass whose analysis ended in a panic.
+const ANALYSIS_FAILED_MESSAGE: &str = "Analysis of this program failed, so the diagnostics shown are those of the program analyzed before it. The next edit runs the analysis again. This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this at https://github.com/tttmmmyyyy/fixlang";
+
+/// Report the progress of one diagnostics pass to the client, run it, and keep a panic inside it
+/// from reaching the thread.
+///
+/// Elaboration panics on some programs, and an editor reaches such a program on the way to a
+/// finished one, so a panic here ends the pass alone. The thread stays, which is what lets the pass
+/// the next edit asks for run and publish the diagnostics of the repaired program. The diagnostics
+/// of the last pass that finished stay on screen until then.
+///
+/// `last_failure` holds the panic message of the pass before, so that a program which keeps
+/// failing is reported once instead of on every keystroke; a pass that finishes empties it.
+fn run_diagnostics_pass(
+    overrides: Arc<Map<PathBuf, String>>,
+    typecheck_cache: &SharedTypeCheckCache,
+    res_send: &Sender<DiagnosticsResult>,
+    prev_err_paths: &mut Set<PathBuf>,
+    last_failure: &mut Option<String>,
+) {
+    const WORK_DONE_PROGRESS_TOKEN: &str = "diagnostics";
+    send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
+    send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Analyzing");
+
+    // The `&mut` the analysis takes across this boundary is `prev_err_paths`, which a pass leaves
+    // as the last pass that published found it until it publishes itself.
+    let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        run_diagnostics_and_publish(overrides, typecheck_cache, res_send, prev_err_paths)
+    }));
+
+    match res {
+        Ok(()) => *last_failure = None,
+        Err(payload) => {
+            let panic_msg = any_to_string(payload.as_ref());
+            write_log!("Panic occurred in a diagnostics pass: \n{}", panic_msg);
+            if last_failure.as_ref() != Some(&panic_msg) {
+                send_diagnostics_error_message(ANALYSIS_FAILED_MESSAGE.to_string());
+                // The report is published under the project file, so naming that file here is
+                // what lets the pass that finishes next clear it.
+                prev_err_paths.insert(PathBuf::from(PROJECT_FILE_PATH));
+                *last_failure = Some(panic_msg);
+            }
+        }
+    }
+
+    // The end of the progress is sent for a pass that panicked too, so that the client's
+    // "Analyzing" indicator closes and a client waiting on the end goes on. It comes after
+    // everything the pass publishes, which makes it the mark that the pass is over.
+    send_work_done_progress_end(WORK_DONE_PROGRESS_TOKEN);
+}
+
+/// Analyze the project over `overrides`, publish the resulting
 /// `textDocument/publishDiagnostics` notifications, and forward the
 /// elaborated program to the main thread. `prev_err_paths` carries the
 /// set of files that had diagnostics last time so cleared files can be
-/// reset; it is updated in place.
+/// reset; it is replaced once the notifications are out, so that a panic
+/// on the way leaves the set naming the files published last.
 fn run_diagnostics_and_publish(
     overrides: Arc<Map<PathBuf, String>>,
     typecheck_cache: &SharedTypeCheckCache,
     res_send: &Sender<DiagnosticsResult>,
     prev_err_paths: &mut Set<PathBuf>,
 ) {
-    const WORK_DONE_PROGRESS_TOKEN: &str = "diagnostics";
-    send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
-    send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Analyzing");
-
     // Run diagnostics against the coalesced live overrides.
     let res = run_diagnostics(typecheck_cache.clone(), overrides);
-
-    send_work_done_progress_end(WORK_DONE_PROGRESS_TOKEN);
 
     // Send the result to the main thread and language client.
     let errs = match res {
@@ -1093,7 +1143,7 @@ fn run_diagnostics_and_publish(
         }
         Err(errs) => errs,
     };
-    *prev_err_paths = send_diagnostics_notification(errs, mem::take(prev_err_paths));
+    *prev_err_paths = send_diagnostics_notification(errs, prev_err_paths.clone());
 }
 
 // Send the diagnostics notification to the client.
@@ -1156,22 +1206,30 @@ fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>)
     err_paths
 }
 
-// Send the diagnostics notification to the client which informs that an error occurred.
+/// Send the diagnostics notification to the client which informs that an error occurred.
+///
+/// The message belongs to no source, so it is published under the project file
+/// (`fixproj.toml`), the way `send_diagnostics_notification` publishes an error that carries no
+/// span: a diagnostic published against the project directory's URI is one an editor has no file
+/// to attach it to, and is dropped without being shown.
 fn send_diagnostics_error_message(msg: String) {
     let Some(cdir) = get_current_dir() else {
         return;
     };
     // Convert path to uri.
-    let cdir_uri = path_to_uri(&cdir);
-    if cdir_uri.is_err() {
-        write_log!("Failed to convert path to uri: {:?}", cdir_uri.unwrap_err());
+    let project_file_uri = path_to_uri(&cdir.join(PROJECT_FILE_PATH));
+    if project_file_uri.is_err() {
+        write_log!(
+            "Failed to convert path to uri: {:?}",
+            project_file_uri.unwrap_err()
+        );
         return;
     }
-    let cdir_uri = cdir_uri.unwrap();
+    let project_file_uri = project_file_uri.unwrap();
 
     // Send the diagnostics notification for each file.
     let params = PublishDiagnosticsParams {
-        uri: cdir_uri,
+        uri: project_file_uri,
         diagnostics: vec![Diagnostic {
             range: Range {
                 start: Position {

@@ -8,8 +8,10 @@
 mod tests {
     use super::super::completion_harness::LspCompletionCtx;
     use super::super::lsp_client::LspClient;
+    use crate::misc::Map;
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::Value;
+    use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::Duration;
     use tempfile::TempDir;
@@ -359,5 +361,90 @@ mod tests {
         );
 
         ctx.shutdown();
+    }
+
+    /// The paths of the files carrying the report of a pass whose analysis failed.
+    fn analysis_failure_reports(reports: &Map<PathBuf, Vec<Value>>) -> Vec<PathBuf> {
+        reports
+            .iter()
+            .filter(|(_, diagnostics)| {
+                !diagnostics_containing(diagnostics, "Analysis of this program failed").is_empty()
+            })
+            .map(|(path, _)| path.clone())
+            .collect()
+    }
+
+    /// A diagnostics pass whose analysis ends in a panic ends that pass alone: the program the
+    /// editor writes next is analyzed, and its report reaches the editor without the server being
+    /// restarted. The report of the failed pass is anchored to the project file, where an editor
+    /// has a file to show it on, and the pass that succeeds takes it back.
+    ///
+    /// A program being repaired passes through shapes the compiler answers with a panic, and the
+    /// case project holds one of them. A panic that took the diagnostics thread with it left the
+    /// session with no report on any file, however the program was repaired afterwards.
+    #[test]
+    fn test_the_next_program_is_analyzed_after_a_pass_panics() {
+        let (_temp_dir, project_dir) = setup_test_env("diagnostics_after_panic");
+        let main_fix = Path::new("main.fix");
+
+        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+        client
+            .initialize(&project_dir, Duration::from_secs(10))
+            .expect("Failed to initialize LSP");
+        client
+            .open_document(main_fix)
+            .expect("Failed to open document");
+        let passes_before_the_panic = client.count_progress_end_messages();
+        client
+            .save_document(main_fix)
+            .expect("Failed to save document");
+        client
+            .wait_for_progress_end_count(passes_before_the_panic + 1, Duration::from_secs(180))
+            .expect("the pass over the program that panics is expected to end");
+
+        // What the rest of this test measures exists only after a pass has panicked, so the panic
+        // is asserted rather than assumed: a case project the compiler learns to analyze makes
+        // this test say so, in place of passing while measuring nothing.
+        let reports = client.get_all_diagnostics();
+        let failures = analysis_failure_reports(&reports);
+        assert_eq!(
+            failures.len(),
+            1,
+            "the analysis of the case project is expected to fail once, but the reports are {:?}",
+            reports
+        );
+        assert_eq!(
+            failures[0].file_name().and_then(|name| name.to_str()),
+            Some("fixproj.toml"),
+            "the failure is expected to be reported on the project file, but it is on {:?}",
+            failures[0]
+        );
+
+        // The repair the editor writes, which carries one ordinary error.
+        fs::write(
+            project_dir.join(main_fix),
+            "module Main;\n\nmain : IO ();\nmain = println(nonexistent_name);\n",
+        )
+        .expect("Failed to write the repaired program");
+        let passes_before_the_repair = client.count_progress_end_messages();
+        client
+            .change_document(main_fix)
+            .expect("Failed to change document");
+        client
+            .save_document(main_fix)
+            .expect("Failed to save document");
+        client
+            .wait_for_progress_end_count(passes_before_the_repair + 1, Duration::from_secs(180))
+            .expect("the pass over the repaired program is expected to end");
+
+        let diagnostics = client.get_diagnostics(main_fix);
+        sole_diagnostic_containing(&diagnostics, "Unknown name `nonexistent_name`");
+
+        let reports = client.get_all_diagnostics();
+        assert!(
+            analysis_failure_reports(&reports).is_empty(),
+            "the report of the failed pass is expected to be cleared, but the reports are {:?}",
+            reports
+        );
     }
 }
