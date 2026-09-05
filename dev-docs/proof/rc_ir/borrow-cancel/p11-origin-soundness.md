@@ -389,13 +389,6 @@ SCAN src/ `get_scoped_value(`
   = src/generator.rs: Generator::get_scoped_obj -- 呼び出し
   = src/generator.rs: Generator::get_scoped_obj_noretain -- 呼び出し
 
-**前提 `build_capture_project` を呼ぶ式の在りか** --- `build_capture_project` の字面が在る項目は
-次で尽きる。
-
-SCAN src/ `build_capture_project(`
-  = src/generator.rs: Generator::build_capture_project -- 定義
-  = src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody::generate -- 呼び出し
-
 **前提 `unsafe impl` の在りか** --- `unsafe impl` の字面が在る項目は無い。よって `Send` と `Sync` を
 手で実装した型はこのクレートに無く、`EXT auto trait と共有` の 2 の但し書きに当たる型も無い。
 
@@ -1057,6 +1050,48 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
     その時点にその記号の記憶域が持つ値である。
   - **(e3)** DEF-0 の 3 つの場合は尽きており、互いに排他である。
 
+<1>0. 節点 `n` から始まる実行路 `σ` について次が成り立つ。`σ` の最初の位置は `n` であり、`σ` は `n` の
+      部分木の位置だけを通り、各位置を高々 1 度しか通らない。さらに、`n` の部分木の根 `r` と `σ` が
+      通る位置 `M` について、`M` が `r` の部分木に在るならば、`σ` は `r` を `M` までに (`M` 自身を
+      含めて) 通る。
+  <2>1. 本体は有限の木である。
+    BY <ref id=b3dfa37/> (分岐は `Match` のアームだけであり、節点が自分自身を含むことはないので、本体は有限の木で
+       ある)
+  <2>2. `n` が `Ret` のとき、`σ` は `n` だけからなる。
+    BY <ref id=ca36627/> (関数本体の根から辿ってきて `Ret` に着いたら、そこで終わる),
+       <ref id=b3dfa37/> (`Ret` は継続を持たず、唯一の終端子である)
+  <2>3. `n` が `Let(x, Match(s, arms), k)` のとき、`σ` は `n` の後、アームを 1 つ選んで
+        そのアーム本体の実行路を辿り、その後 `k` から始まる実行路を辿る。選んだアーム本体と `k` は
+        どちらも `n` の部分木であり、`n` より小さく、互いに素であり、どちらも `n` を含まない。
+    BY <ref id=ca36627/> (`Let(x, Match(v, arms), k)` では、アームを 1 つ選び、そのアーム本体の実行路を辿り、
+       その後 `k` へ進む), <2>1,
+       <ref id=b3dfa37/> (本体は式の節点の木であり、位置が相異なれば節点も相異なる。アームの `body` と継続 `k` は
+       `n` の相異なる部分木なので、木の性質により互いに素である)
+  <2>4. `n` がそれ以外のとき、`σ` は `n` の後、継続 `k` から始まる実行路を辿る。`k` は `n` の部分木で
+        あり、`n` より小さく、`n` を含まない。
+    BY <ref id=ca36627/> (`Ret` を除く 5 種の節点では、その継続へ進む),
+       <ref id=b3dfa37/> (`Ret` を除く 5 種はちょうど 1 つの継続を持つ)
+  <2>5. QED
+    `n` の部分木の大きさについての帰納による。`σ` は `n` を 1 度通り、その後は `n` より小さい
+    部分木から始まる実行路の連結である -- `<2>2` では 0 個、`<2>4` では `k` の 1 つ、`<2>3` では
+    アーム本体と `k` の 2 つである。帰納法の仮定をその各々に当てると、どれもその部分木の中に留まって
+    各位置を高々 1 度しか通らず、`<2>3` の 2 つの部分木は互いに素なので、連結も `n` の部分木の各位置を
+    高々 1 度しか通らない。`n` 自身はどの部分木にも入らないので、最初の位置は `n` である。
+    後半も同じ帰納で出る -- `r = n` のときは `σ` の最初の位置が `n` なので成り立ち、`r ≠ n` のときは
+    `r` は上の連結が使う部分木のちょうど 1 つに在り、`M` もその同じ部分木に在るので、その部分木から
+    始まる実行路に帰納法の仮定を当てる。
+    BY <2>1, <2>2, <2>3, <2>4
+
+<1>0a. コード生成の実行が `panic!` に着くとき、そのプログラムの本体の活性化は存在しない。
+       `panic_with_msg` は `panic_notrace` を経て `panic!` を呼ぶので、これに当たる。
+  BY README の第 4 節 (「**コード生成が `expect` や `unreachable!` で止まる形も、`develop_mode` の
+     門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の活性化は存在
+     しない。」),
+     EXT panic (`panic!`・`unreachable!`・`Option::expect` の失敗はどれも同じく panic を起こし、
+     panic を起こした式は値を返さず、その先の動作を行わない),
+     CODE src/error.rs: panic_with_msg (`panic_notrace` を呼ぶ), CODE src/error.rs: panic_notrace
+     (`panic!` を呼ぶ)
+
 <1>1. (a)。**「`Match` の各アームはその `payload` に値を与える」は、boxed union の変位アームについても
       言う。** D9 の値の水準の 6 行が持つアームの行は 2 つ -- unbox union の変位アームと catch-all --
       であり、boxed union の変位アームを覆うのは D2 の `MatchArm` の `payload` 欄と束縛の及ぶ範囲の
@@ -1073,7 +1108,19 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
      値が何であるかを名指す), <ref id=b3dfa37/> の束縛の及ぶ範囲の段落 (パラメータと capture のスコープは
      本体の全体である), <ref id=ff5985d/> (活性化の入力の束縛が各パラメータと capture に 1 つずつの値を与える)
 <1>1a. (a')。
-  BY CODE src/rc_ir/ownership.rs: VarTable::of (関数の本体について、`func.params` と `func.capture` の
+  **在りかを与えるのは走査である。** `bindings` の欄は `pub` を持たないので、それへ書き込む式が
+  在りうるのは `src/rc_ir/ownership.rs` とその子孫のモジュールだけであり (`EXT 可視性`)、その
+  字面を持つ項目は第 1 節の前提が挙げる。挙がった `src/rc_ir/ownership.rs` の項目は
+  `VarTable::of`・`collect_bindings`・`origin_inner` の 3 つで、最後は読みである。欄を持つ値を
+  組み立てるのは `VarTable::empty` であり (前提 `VarTable` を組み立てる式の在りか)、そこが置くのは
+  空の表である。よって表に入る名前はこの 2 つが入れたものだけである。
+  BY 前提 `VarTable` の `bindings` の欄に触れる式の在りか, 前提 `VarTable` を組み立てる式の在りか,
+     EXT 可視性,
+     CODE src/rc_ir/ownership.rs: VarTable (`bindings` は `pub` の付かない欄である),
+     CODE src/rc_ir/ownership.rs: VarTable::empty (5 欄をすべて空で置く),
+     CODE src/rc_ir/ownership.rs: origin_inner (`vars.bindings.get(var)` は読みであって書き込みでは
+     ない),
+     CODE src/rc_ir/ownership.rs: VarTable::of (関数の本体について、`func.params` と `func.capture` の
      各 `p` に `Binding::Param` を入れ、続けて `collect_bindings` を呼ぶ),
      CODE src/rc_ir/ownership.rs: VarTable::body_only (グローバル初期化子の本体について、`collect_bindings` だけを
      呼ぶ。<ref id=a502f3e/> より `init` はパラメータも capture も持たない),
@@ -1100,12 +1147,15 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
        そのアーム本体の実行路を終える), <ref id=c232680/> (`α` が選ぶアームは決まっている), <1>1,
        <ref id=9d74736/> の移動の表の値の水準の行 (「`Match` のアーム本体の `Ret(x)`: `Match` の束縛変数の値は `x` の値で
        ある。」)
-  <2>3. (c3)。授与位置はそのスコープの根の節点であり (DEF-0 の (v-1))、`ρ` が部分木の節点を通るには
-        その部分木の根の節点を先に通る。
-    BY DEF-0 の (v-1) (授与位置はスコープの根の節点である),
+  <2>3. (c3)。授与位置はそのスコープの根の節点であり (DEF-0 の (v-1))、`ρ` は本体の根から始まる
+        実行路なので、`<1>0` の後半を本体の根と授与位置に当てると、`ρ` は授与位置を `M` までに
+        通る。
+    BY <1>0 (`n` を本体の根、`r` を授与位置、`M` をその節点として読む),
+       DEF-0 の (v-1) (授与位置はスコープの根の節点である),
        <ref id=b3dfa37/> (束縛の及ぶ範囲の段落 -- `Let` と `Destructure` が束縛する変数のスコープは `k` の部分木、
-       `Match` のアームの `payload` のスコープはそのアームの `body` の部分木である),
-       <ref id=ca36627/> (実行路は根から辿るので、部分木の節点を通る前にその根の節点を通る)
+       `Match` のアームの `payload` のスコープはそのアームの `body` の部分木である。よって授与位置は
+       そのスコープの部分木の根であり、`M` はその部分木に在る),
+       <ref id=ca36627/> (実行路は本体の根から辿って得られる)
   <2>4. QED
     BY <2>1, <2>2, <2>3
 <1>1c. (d)。
@@ -1117,46 +1167,30 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
   <2>2. 局所でない名前の値は、`declare_program_global` が用意する 2 つのうちの一方である -- 型が
         `is_funptr` なら `declare_lambda_function` が返す LLVM 関数の番地、そうでなければ
         `add_global_object` が登録するグローバルのアクセサが返す値である。
-    **数え上げるのは名前から値を引く関数であって、それを呼ぶファイルではない。** 名前から
-    `ScopedValue` を引くのは `get_scoped_value` だけであり、それを呼ぶのは `get_scoped_obj` と
-    `get_scoped_obj_noretain` の 2 つだけである -- 第 1 節の前提がその走査である
-    (`get_scoped_obj_field` は前者を呼ぶ)。**`Llvm` 節点の
-    オペランドはこの 3 つを `builtin.rs` の側から通る** -- `codegen.rs` の `RcRhs::Llvm` の腕は
-    `llvm_gen.generate_tail(..)` を呼ぶだけで、オペランドを読むのは op の生成コードだからである。
-    D6 より (v-3) の名前は `Llvm` のオペランドとしても現れうるので、この道も数える。どちらの側でも
-    値は `get_scoped_value` を通り、局所でない名前は `get_or_declare_global` へ行く。
+    **在りかを与えるのは走査である。** 局所でない名前の `ScopedValue` を持つ表は `declared_globals`
+    であり、その欄は `pub` を持たないので、それを名指せるのは `src/generator.rs` とその子孫の
+    モジュールだけである (`EXT 可視性`)。第 1 節の前提がその字面を持つ項目を挙げ、表を名前で引くのは
+    `get_or_declare_global`、表へ項目を入れるのは `add_global_object` であり、`Generator::new` が
+    置くのは空の表である。`add_global_object` を呼ぶ式の在りかも第 1 節の前提が挙げ、呼ぶのは
+    `declare_program_global` と `declare_lambda_function` の 2 つである。よって表に在る
+    `ScopedValue` は、その 2 つが登録した 2 つの形のいずれかである。
+    表を引く `get_or_declare_global` を呼ぶのは `get_scoped_value` の局所でない枝であり、
+    `get_scoped_value` を呼ぶ式の在りかも第 1 節の前提が挙げる。どの呼び出し元も、返った
+    `ScopedValue` の `accessor` に `get` を掛けてその名前の値とする。
     **`declare_program_global` はこの 2 つのどちらも用意しない場合を持つ** -- `global_types` に無い
     名前には `None` を返し、そのとき `get_or_declare_global` は `panic!` で止まる。**その `panic!` は
-    `develop_mode` の門を持たない。** README の第 4 節はその形を「**検査して診断を出す。**」の段に
-    入れ、そのプログラムは走らないのでその本体の活性化は存在しない。よって走る本体ではその名前は
-    `global_types` の鍵であり、`declare_program_global` は 2 つのうちの一方を用意する。
-    BY <2>1, README の第 4 節 (「**コード生成が `expect` や `unreachable!` で止まる形も、
-       `develop_mode` の門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の
-       活性化は存在しない。」),
+    `develop_mode` の門を持たない**ので、`<1>0a` よりその本体の活性化は存在しない。よって走る本体では
+    その名前は `global_types` の鍵であり、`declare_program_global` は 2 つのうちの一方を用意する。
+    BY <2>1, <1>0a,
+       前提 `declared_globals` の欄に触れる式の在りか,
+       前提 `add_global_object` を呼ぶ式の在りか,
        前提 `get_scoped_value` を呼ぶ式の在りか,
-       前提 `build_capture_project` を呼ぶ式の在りか,
-       CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
-       Generator::get_scoped_obj_field (`get_scoped_obj_field` は `get_scoped_obj` を呼ぶ。この 3 つに
-       名前を渡す呼び出しを `src/` 全体で数えると、`src/rc_ir/codegen.rs` に 12 か所、`Llvm` 節点の
-       オペランドを読む `src/fixstd/builtin.rs` の op の生成コードに 127 か所、`src/generator.rs` に
-       2 か所、`src/ast/export_statement.rs` と `src/build/build_object_files.rs` に 1 か所ずつある。
-       `src/generator.rs` の 2 か所は、`get_scoped_obj_field` の中の `get_scoped_obj` と、
-       `Generator::build_capture_project` の `self.get_scoped_obj_noretain(cap_name)` である。
-       後者を呼ぶのは `src/fixstd/builtin.rs` の `InlineLLVMCaptureProjectBody` の生成コードだけなので、
-       これも `Llvm` 節点のオペランドを読む道である。残る 2 か所 --
-       `src/ast/export_statement.rs` と `src/build/build_object_files.rs` -- は環境 (<ref id=243ae2c/>) の側で
-       あって、本体の節点ではない),
-       CODE src/generator.rs: Generator::build_capture_project,
-       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMCaptureProjectBody (`generate` が
-       `gc.build_capture_project(..)` を呼ぶ),
-       CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_rhs,
-       Generator::eval_rc_match (`RcExpr::Let` の `RcRhs::Llvm` の腕は `llvm_gen.generate_tail` を
-       呼び、オペランドを自分では読まない),
-       CODE src/ast/inline_llvm.rs: LLVMGen::generate_tail (`self.generate(gc, ty)` を呼ぶので、
-       オペランドを読むのは各 op の `generate` である),
+       EXT 可視性,
+       CODE src/generator.rs: Generator (`declared_globals` は `pub` の付かない
+       `Map<FullName, ScopedValue>` の欄である),
+       CODE src/generator.rs: Generator::new (`declared_globals` に空の表を置く),
        CODE src/generator.rs: Generator::get_scoped_value (`var.is_local()` が偽なら
-       `get_or_declare_global` へ行く。名前から `ScopedValue` を引く式はこの 1 つであり、これを呼ぶのは
-       `get_scoped_obj` と `get_scoped_obj_noretain` の 2 つだけである),
+       `get_or_declare_global` へ行く),
        CODE src/generator.rs: Generator::get_or_declare_global (`declare_program_global` が `None` を
        返すと `panic!` で止まり、そうでなければ `declared_globals` の欄を返す),
        CODE src/generator.rs: Generator::declare_program_global (`global_types` に無い名前には
@@ -1204,35 +1238,8 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
   <2>4. QED
     BY <2>0, <2>1, <2>2, <2>3
 <1>2. `ρ` は本体の木の各位置を高々 1 度しか通らない。
-  <2>1. 本体は有限の木である。
-    BY <ref id=b3dfa37/> (分岐は `Match` のアームだけであり、節点が自分自身を含むことはないので、本体は有限の木で
-       ある)
-  <2>2. 節点 `n` の部分木の大きさについての帰納で、`n` から始まる実行路は `n` の部分木の各位置を
-        高々 1 度しか通らず、その外の位置を通らない。**README の D3 は「`n` から始まる実行路は
-        `ret(n)` で終わる」を同じ帰納で示している。**
-    <3>1. `n` が `Ret` のとき、`n` から始まる実行路は `n` だけからなる。
-      BY <ref id=ca36627/> (関数本体の根から辿ってきて `Ret` に着いたら、そこで終わる),
-         <ref id=b3dfa37/> (`Ret` は継続を持たず、唯一の終端子である)
-    <3>2. `n` が `Let(x, Match(s, arms), k)` のとき、実行路は `n` の後、アームを 1 つ選んで
-          そのアーム本体の実行路を辿り、その後 `k` へ進む。選んだアーム本体と `k` はどちらも `n` の
-          部分木であり、`n` より小さく、互いに素であり、どちらも `n` を含まない。
-      BY <ref id=ca36627/> (`Let(x, Match(v, arms), k)` では、アームを 1 つ選び、そのアーム本体の実行路を辿り、
-         その後 `k` へ進む), <2>1,
-         <ref id=b3dfa37/> (本体は式の節点の木であり、位置が相異なれば節点も相異なる。アームの `body` と継続 `k` は
-         `n` の相異なる部分木なので、木の性質により互いに素である)
-    <3>3. `n` がそれ以外のとき、実行路は `n` の後、継続 `k` へ進む。`k` は `n` の部分木であり、
-          `n` より小さく、`n` を含まない。
-      BY <ref id=ca36627/> (`Ret` を除く 5 種の節点では、その継続へ進む),
-         <ref id=b3dfa37/> (`Ret` を除く 5 種はちょうど 1 つの継続を持つ)
-    <3>4. QED
-      `n` から始まる実行路は `n` を 1 度通り、その後は `n` より小さい部分木から始まる実行路の連結で
-      ある -- `<3>1` では 0 個、`<3>3` では `k` の 1 つ、`<3>2` ではアーム本体と `k` の 2 つである。
-      帰納法の仮定をその各々に当てると、どれもその部分木の中に留まって各位置を高々 1 度しか通らず、
-      `<3>2` の 2 つの部分木は互いに素なので、連結も `n` の部分木の各位置を高々 1 度しか通らない。
-      `n` 自身はどの部分木にも入らない。
-      BY <2>1, <3>1, <3>2, <3>3
-  <2>3. QED
-    BY <2>1, <2>2, <ref id=ca36627/> (実行路は本体の根から辿って得られる) -- 本体の根に <2>2 を当てる。
+  BY <1>0 (`n` を本体の根として読む -- `n` から始まる実行路は `n` の部分木の各位置を高々 1 度しか
+     通らない), <ref id=ca36627/> (実行路は本体の根から辿って得られる)
 <1>3. (v-1) の場合。`v` に値を与える束縛は本体に 1 つであり (A6、<1>1)、`ρ` はその束縛の節点も `v` の
       授与位置も高々 1 度しか通らない (<1>2) ので、その束縛が `v` に与える値は 1 つに定まる。`ρ` 上で
       `v` が値を持つのは授与位置以後の位置に限り (DEF-0 の (v-1))、そのどの位置でも `v` の値はその 1 つで
@@ -1256,10 +1263,13 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
          返すだけで、`build_call` の枝へ行かない)
     <3>2. `fun` は `v` の名前が `declared_globals` に持つ 1 つの欄から来るので、`v` の名前だけで
           決まる。
-      BY <1>1c ((d) の funptr の枝),
-         README の第 4 節 (「**コード生成が `expect` や `unreachable!` で止まる形も、`develop_mode` の
-         門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の活性化は存在
-         しない。」),
+      **表へ項目を入れる式の在りかを与えるのは走査である** -- 第 1 節の前提が挙げるとおり、
+      `declared_globals` へ入れるのは `add_global_object` であり、同じ名前を 2 度入れようとすると
+      `panic_with_msg` で止まる。その `panic_with_msg` は `develop_mode` の門を持たないので、
+      `<1>0a` より、そのプログラムの本体の活性化は存在しない。よって走る本体では 1 つの名前の欄は
+      1 つである。
+      BY <1>1c ((d) の funptr の枝), <1>0a,
+         前提 `declared_globals` の欄に触れる式の在りか,
          CODE src/generator.rs: Generator::get_or_declare_global (`declared_globals` に在ればその
          `ScopedValue` を返し、無ければ `declare_program_global` で用意してからその欄を返す),
          CODE src/generator.rs: Generator::declare_program_global (`ty.is_funptr()` の枝が用意するのは
@@ -1267,11 +1277,8 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
          CODE src/generator.rs: Generator::declare_lambda_function (`fn_ty.is_funptr()` のとき、
          作った関数を `add_global_object` で `declared_globals` へ登録してから返す。
          `declare_program_global` の funptr の枝はこの関数を呼んで戻るので、欄を書くのはここである),
-         CODE src/generator.rs: Generator::add_global_object (`declared_globals` へ入れるのはここだけで
-         あり、同じ名前を 2 度入れようとすると `panic_with_msg` で止まる。その `panic_with_msg` は
-         `develop_mode` の門を持たないので、README の第 4 節が「**検査して診断を出す。**」と呼ぶ段に
-         当たり、走る本体では
-         1 つの名前の欄は 1 つである)
+         CODE src/generator.rs: Generator::add_global_object (同じ名前が既に在れば `panic_with_msg`
+         で止まり、そうでなければ `accessor` を持つ `ScopedValue` を `declared_globals` へ入れる)
     <3>3. QED
       `v` の値を作る式は記憶域を読まず (`<3>1`)、その式が返すグローバル値 `fun` は `v` の名前だけで
       決まる (`<3>2`)。よって `ρ` のどの位置でも `v` の値は同じ 1 つの LLVM グローバル値である。
@@ -1309,12 +1316,14 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
       デストラクタの結果を `_value` の欄へ戻す動作 -- はそこへ届かない。届く道は、その番地へ store を
       出す生成コードと、番地を渡された環境の 2 つだけである。
       <4>1. `v` が名指す記号の記憶域は、LLVM のグローバル変数 `GlobalVar#<symbol>` である。生成コードが
-            そこへ store を出すのは `store_init_value` の `build_store` ただ 1 か所であり、その番地
-            (`global_var_ptr`) が現れるのは `implement_rc_global` の中の 3 つ -- `store_init_value` へ
-            渡す 2 つの引数 (非 threaded の枝と threaded の枝であり、1 つのビルドではその一方だけが
-            生成される) と、アクセサの末尾の `build_load` -- だけである。どれもその番地を値として外へ
-            渡さない。
-        BY CODE src/rc_ir/codegen.rs: Generator::implement_rc_global (`global_var` を作り、その
+            そこへ store を出すのは `store_init_value` の `build_store` だけである。
+            **番地の在りかを与えるのは走査である** -- 第 1 節の前提が挙げるとおり、その番地を持つ
+            局所変数 `global_var_ptr` が現れるのは `implement_rc_global` と `store_init_value` の
+            2 つの項目であり、`implement_rc_global` はその番地を `store_init_value` へ渡す引数
+            (非 threaded の枝と threaded の枝であり、1 つのビルドではその一方だけが生成される) と
+            アクセサの末尾の `build_load` にしか使わない。どれもその番地を値として外へ渡さない。
+        BY 前提 記号の記憶域の番地が現れる式の在りか,
+           CODE src/rc_ir/codegen.rs: Generator::implement_rc_global (`global_var` を作り、その
            `global_var_ptr` を `store_init_value` と末尾の `build_load` にだけ渡す),
            CODE src/rc_ir/codegen.rs: Generator::store_init_value (`InitValue#<symbol>` を呼び、
            返った値を `global_var_ptr` へ `build_store` する)
@@ -1337,14 +1346,17 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
              読んだアクセサの実行の中だけであり、旗は一度 0 でなくなれば以後 0 に戻らない。
              **アクセサは入口の基本ブロックで真っ先に旗をロードする** -- その読みより前にアクセサは
              どの関数も呼ばない。
-        BY <4>1, CODE src/rc_ir/codegen.rs: Generator::implement_rc_global -- `config.threaded` が
+             **旗の番地の在りかを与えるのは走査である** -- 第 1 節の前提が挙げるとおり、その番地を
+             持つ局所変数 `init_flag_ptr` が現れるのは `implement_rc_global` の 1 つだけであり、
+             そこでの使い道は旗のロード、旗への store、`pthread_once` へ渡す引数 (threaded の枝
+             だけ) である。値として外へ渡らない。
+        BY <4>1, 前提 初期化済みの旗の番地が現れる式の在りか,
+           CODE src/rc_ir/codegen.rs: Generator::implement_rc_global -- `config.threaded` が
            偽のとき、アクセサは入口の基本ブロックで旗をロードして 0 のときだけ `flag_is_zero` の
            ブロックへ分岐し、その
            ブロックが `store_init_value` を呼んでから旗へ 1 を書く。入口の基本ブロックはその
-           ロードと分岐だけからなり、呼び出しを持たない。旗へ store を出す生成コードは
-           この 1 か所だけであり、書く値は 1 である。旗の静的な初期値は 0 である。旗の番地
-           (`init_flag_ptr`) が現れるのは `implement_rc_global` の中の 3 つ -- 旗のロード、この
-           store、`pthread_once` へ渡す引数 (threaded の枝だけ) -- であり、値として外へ渡らない,
+           ロードと分岐だけからなり、呼び出しを持たない。旗へ store を出すのはその 1 つであり、
+           書く値は 1 である。旗の静的な初期値は 0 である,
            <ref id=243ae2c/> (環境の `FFI_CALL` の行 -- 環境は「Fix の側から番地を渡され、その番地の指すものを
            読み書きする」ので、渡されていない番地を書かない)
       <4>2b. `config.threaded` が偽のビルドでは、`<3>1a` の読みの後に走るその store は、`α` が
