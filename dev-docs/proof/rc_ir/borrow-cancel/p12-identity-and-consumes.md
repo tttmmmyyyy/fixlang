@@ -225,6 +225,14 @@ SCAN src/ `rhs_consumes`
 **この前提は枠の仮定に置くべきものである。** 枠へ移すときは `SCAN` の走査ごと移し、引く段の `BY` を
 枠の仮定の名前へ差し替える。
 
+**前提 型環境を作る在りか** --- `Program::calculate_type_env` を呼ぶ式が在るのは `elaborate` である。
+走査はその宣言と、`Program` の `type_env` の欄の doc の散文も挙げる。
+
+SCAN src/ `calculate_type_env`
+  = src/ast/program.rs: Program -- 欄 `type_env` の doc の散文
+  = src/ast/program.rs: Program::calculate_type_env -- 宣言
+  = src/elaboration/mod.rs: elaborate -- 呼び出し
+
 ### A16 の 2 つの節
 
 この文書が読む A16 の節を、引用の形で書き出す。
@@ -1968,9 +1976,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       `Llvm` 節点はオペランドを 1 つも持たない。返せるオペランドのオブジェクトが無いので、`gen` は
       A3 の但し書きが述べる op ではない。
 
-      **プログラムは `std.fix` とこの関数 `f` だけからなるものを取る。** よって `Std` の名前空間に
-      型を宣言するのは `std.fix` だけであり、0 要素のタプルの型宣言を `type_defns` に積むのは
-      `Program::add_tuple_defns` だけである。
+      **プログラムは `std.fix` とこの関数 `f` だけからなるものを取り、`f` の名前は `std.fix` の
+      どのグローバルの名前とも異なるものを取る。**
 
       `f` のパラメータは `c : Bool` の 1 つ、capture は無く、`borrowed_units` は空 (A1) である。本体は
       次のとおりで、`m`・`x_0`・`x_1` は型 `T`、`p_0`・`p_1` は `()` である。
@@ -1984,7 +1991,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       A6 (`c`・`m`・`x_0`・`x_1`・`p_0`・`p_1` は相異なる名前)、A9 (アームは 2 つ)、
       A12 (アームの結果と `Match` の束縛変数の型、payload と変位の型、`Llvm` 節点の `args` の名前の列が
       `gen.free_vars()` -- 空の列 -- に等しいこと)、A16 の (網羅) (2 つのアームが `Bool` の 2 変位を
-      尽くす) と (位置) (catch-all アームが無いので空虚に真)。**A10 と A11 も満たす。** `T`・`Bool`・`()`
+      尽くす) と (位置) (catch-all アームが無いので空虚に真)。**A1 の前半 -- プログラムが D12 の意味で
+      RC 規律を満たすこと -- を示すのは `<1>6b` である。** **A10 と A11 も満たす。** `T`・`Bool`・`()`
       はどれも実在の Fix プログラムに現れる型 -- 文字列リテラルの `Array U8`、`Std::Bool`、0 要素の
       タプル -- なので、A10 がそれらについて ground・飽和・tycon が `type_env` にあること・
       `unpunched_field_types` の歩みが有限であることを与える。各変数の使用はその位置でスコープに入って
@@ -2016,6 +2024,22 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
          `fields` は型 `()` の 2 つの変位である。
        - **(iv)** `is_closure(T)`・`is_closure(())`・`is_closure(Bool)` はどれも偽である。
 
+  **まず、`type_defns` の項目と `type_env.tycons()` の項の対応を置く。** §1 より `type_env` は
+  `borrow_ify` の入力プログラムの `TypeEnv` であり、前提 型環境を作る在りか より、その表を作るのは
+  `elaborate` の中の `Program::calculate_type_env` の呼び出しである。`calculate_type_env` は
+  `bulitin_tycons()` から始めた写像 `tycons` と空の写像 `aliases` を置き、`type_defns` を順に見て、
+  `tycons` か `aliases` が既にその項目の `tycon()` -- `TypeDefn` の `name` を名前に持つ `TyCon` -- を
+  鍵に持つときは `Errors` を足して `continue` し、そうでないときは `type_decl.tycon()` を鍵、
+  `type_decl.tycon_info(&[])` を項とする組を `tycons` (型別名なら `aliases`) に入れる。末尾で
+  `errors.to_result()` を返し、`elaborate` はその値に `?` を当てるので、`Errors` が空でなければ
+  `elaborate` はプログラムを返さず、その本体の活性化は存在しない。**よって、活性化を持つプログラムでは
+  `continue` の枝が 1 度も通らない。** すなわち `type_defns` のどの 2 つの項目も `tycon()` が異なり、
+  どの項目の `tycon()` も `bulitin_tycons()` の鍵ではない。したがって `type_defns` の項目 `d` に
+  ついて、`type_env.tycons()` は鍵 `d.tycon()` の下に `d.tycon_info(&[])` を持つ。**同じ腕は構造体の
+  宣言について、名前の末尾に `PUNCHED_TYPE_SYMBOL` (`#PunchedAt`) と欄の添字を足した鍵の組も入れるが**
+  (`TyCon::into_punched_type_name`)、その名前は `#PunchedAt` を含むので、それを含まない名前の鍵が
+  この入れ方で入ることは無い。
+
   (i) について。`<1>1` より `T` は `type_tyapp(make_array_ty(), make_u8_ty())` である。
   `make_array_ty()` は `type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))` であり、
   `TypeNode::toplevel_tycon` は `TyApp` の腕で関数側へ降りるので、`T` の最上位の tycon はその
@@ -2029,21 +2053,24 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   `apply_type_args(&tycon(make_tuple_name_abs(0)), &[])` を返す。`apply_type_args` は引数が無いとき
   `type_tycon(tycon)` を返すので、`()` の最上位の tycon は `TyCon { name: make_tuple_name_abs(0) }` で
   ある。`make_tuple_name_abs(0)` は `make_tuple_name(0)` -- `FullName::from_strs(&[STD_NAME], "Tuple0")`
-  -- を absolute にしたものである。`Program::add_tuple_defns` は使われた各大きさについて
-  `Program::add_tuple_defn` を通じて `tuple_defn(size)` を `type_defns` に積み、
-  `Program::calculate_type_env` は各型宣言について `type_decl.tycon()` -- `TypeDefn` の `name` を名前に
-  持つ `TyCon` -- を鍵に `type_decl.tycon_info(&[])` を入れる。`NameSpace` の `PartialEq` と `Hash` は
+  -- を absolute にしたものである。`NameSpace` の `PartialEq` と `Hash` は
   `is_absolute` を読まず、`FullName` の `Hash` は名前空間の `names` と `name` だけを読み、`FullName` の
-  `PartialEq` は derive されたものなので、absolute かどうかは鍵の一致に効かない。`calculate_type_env` は既に
-  写像か型別名に在る tycon の宣言を `insert` へ進めないが、`<1>1` よりこの鍵を宣言するのは
-  `Program::add_tuple_defns` が積む `tuple_defn(0)` だけである。`TypeDefn::tycon_info` は
+  `PartialEq` は derive されたものなので、absolute かどうかは鍵の一致に効かない。
+  `elaborate` は `Program::add_tuple_defns` を `Program::calculate_type_env` より前に呼ぶ。
+  `add_tuple_defns` はプログラムが使う各大きさについて `Program::add_tuple_defn` を通じて
+  `tuple_defn(size)` を `type_defns` に 1 度ずつ積み、`<1>1` よりこのプログラムは 0 要素のタプルの型を
+  使う。よって `tuple_defn(0)` は `type_defns` の項目であり、その `name` は `make_tuple_name(0)` --
+  上の鍵 -- なので、上の対応より `type_env.tycons()` のその鍵の項は `tuple_defn(0)` の
+  `tycon_info(&[])` である。`TypeDefn::tycon_info` は
   `TypeDeclValue::Struct(s)` の腕で `(TyConVariant::Struct, s.is_unbox, s.fields.clone())` を置き、
   `tuple_defn(0)` の `fields` は `(0..0)` を写した列なので空、`is_unbox` は `TUPLE_UNBOX` である。
 
   (iii) について。`<1>1` より `Bool` は `std.fix` の `type Bool = unbox union { _false : (), _true : () };`
-  が宣言する型である。`<1>1` よりこの鍵を宣言するのは `std.fix` のこの 1 行だけであり、
-  `Program::calculate_type_env` がその宣言の `tycon()` を鍵に
-  `tycon_info(&[])` を入れる。`TypeDefn::tycon_info` は `TypeDeclValue::Union(u)` の腕で
+  が宣言する型 `Std::Bool` であり、その宣言は `type_defns` の項目である。`TypeDefn::tycon` より
+  その宣言の `tycon()` の名前は名前空間が `STD_NAME` (`Std`) ただ 1 つで名前が `BOOL_NAME` (`Bool`) で
+  あり、それが `Bool` の最上位の tycon である。よって上の対応より
+  `type_env.tycons()` のその鍵の項はその宣言の `tycon_info(&[])` である。`TypeDefn::tycon_info` は
+  `TypeDeclValue::Union(u)` の腕で
   `(TyConVariant::Union, u.is_unbox, u.fields.clone())` を置く。宣言は `unbox` なので `is_unbox` は
   真であり、変位は `_false` と `_true` の 2 つでどちらも型 `()` である。
 
@@ -2052,13 +2079,15 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   したものである。`FullName` は `PartialEq` を derive するので、EXT `derive` した `PartialEq` より
   `namespace` と `name` を比べる。(i)(ii)(iii) の 3 つの名前の `name` は `ARRAY_NAME` (`Array`)・
   `Tuple0`・`BOOL_NAME` (`Bool`) であり、どれも `ARROW_NAME` (`Arrow`) と異なる。
-  BY EXT `derive` した `PartialEq`, <1>1,
+  BY 前提 型環境を作る在りか, EXT `derive` した `PartialEq`, <1>1,
      CODE src/ast/types.rs: TypeNode::toplevel_tycon, TypeNode::toplevel_tycon_satisfies,
      CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_closure,
      CODE src/ast/types.rs: type_tyapp, type_tycon, tycon, apply_type_args, TyCon, TyCon::new,
+     CODE src/ast/types.rs: TyCon::into_punched_type_name,
      CODE src/ast/typedecl.rs: TypeDefn::tycon, TypeDefn::tycon_info,
      CODE src/ast/program.rs: Program::add_tuple_defn, Program::add_tuple_defns,
      CODE src/ast/program.rs: Program::calculate_type_env,
+     CODE src/elaboration/mod.rs: elaborate,
      CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: FullName::from_strs,
      CODE src/ast/name.rs: impl Hash for FullName,
      CODE src/ast/name.rs: impl PartialEq for NameSpace, CODE src/ast/name.rs: impl Hash for NameSpace,
@@ -2066,7 +2095,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
      CODE src/fixstd/builtin.rs: make_arrow_name_abs, make_tuple_ty, make_tuple_name,
      CODE src/fixstd/builtin.rs: make_tuple_name_abs, tuple_defn,
      CODE src/fixstd/std.fix: Bool,
-     CODE src/constants.rs: STD_NAME, ARRAY_NAME, ARROW_NAME, TUPLE_NAME, BOOL_NAME, TUPLE_UNBOX
+     CODE src/constants.rs: STD_NAME, ARRAY_NAME, ARROW_NAME, TUPLE_NAME, BOOL_NAME, TUPLE_UNBOX,
+     CODE src/constants.rs: PUNCHED_TYPE_SYMBOL
 
 <1>2. `boxed_leaf_paths(T, type_env)` は `{[]}` であり、`[]` は `T` の値で inhabited である。`p_0` と
       `p_1` の型の `boxed_leaf_paths` は空であり、`boxed_leaf_paths(Bool, type_env)` も空である。
