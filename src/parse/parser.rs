@@ -1153,10 +1153,7 @@ fn parse_deprecated_statement(
     let target_path = relative_path.join_under(&ctx.namespace);
     // Parse the message string literal. Surface escape-sequence errors
     // (e.g. invalid `\uXXXX`) instead of silently falling back to raw text.
-    let msg_pair = pairs.next().unwrap();
-    let msg_span = Span::from_pair(&ctx.source, &msg_pair);
-    let raw = msg_pair.into_inner().next().unwrap().as_str();
-    let message = unescape_string_lit_inner(raw, &Some(msg_span))?;
+    let (message, _) = parse_string_lit(pairs.next().unwrap(), ctx)?;
     Ok(DeprecationStatement {
         target_path,
         target_name_src: name_span,
@@ -2854,14 +2851,21 @@ fn parse_expr_array_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<
     Ok(expr_array_lit(elems, Some(span)))
 }
 
-fn parse_expr_string_lit(
-    pair: Pair<Rule>,
-    ctx: &mut ParseContext,
-) -> Result<Arc<ExprNode>, Errors> {
+/// Reads an `expr_string_lit` pair into the string it writes, with its escape sequences
+/// resolved, and the span of the literal.
+fn parse_string_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<(String, Span), Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_string_lit);
     let span = Span::from_pair(&ctx.source, &pair);
     let raw = pair.into_inner().next().unwrap().as_str();
     let string = unescape_string_lit_inner(raw, &Some(span.clone()))?;
+    Ok((string, span))
+}
+
+fn parse_expr_string_lit(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<Arc<ExprNode>, Errors> {
+    let (string, span) = parse_string_lit(pair, ctx)?;
     Ok(make_string_lit(string, Some(span)))
 }
 
