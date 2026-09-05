@@ -541,19 +541,9 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
   <2>3. 持ち上げた lambda に `fresh_closure_ref` が付ける名前は、最上位の記号 -- `Program::symbols` の
         鍵、すなわち `Program::global_types` の鍵 -- の名前ではない。
     <3>0. `Program::symbols` の各項目の鍵は、その項目の `Symbol` の `name` に等しい。
-      **在りかは述語で決める** -- `Program` の `symbols` の欄へ項目を入れる式であり、`src/` でその欄と、
-      その欄へ代入される写像とに `insert`・`extend` を掛ける全出現である。**一覧で書くとパスが 1 つ
-      増えるたびに古くなる。**鍵を新しく作るのは 7 か所で、どれも同じ名前をその `Symbol` の `name` に
-      置く -- `Program::instantiate_symbols` は `sym.name` を鍵に取り、`uncurry::run` の funptr 版と
-      `closure_specialization` の特殊化版は `Symbol { name: name.clone(), .. }` を `name` で入れ、
-      `split_struct_args::split_one_argument` の twin、`defunctionalize_fix` の持ち上げた関数
-      (`into_symbol` が `func_name` を `name` に置く)、`closure_specialization::register_lifted_lambdas`
-      が持ち上げた lambda はどれもその `Symbol` の `name` を鍵に取り、`simplify_symbol_names::run` は
-      `sym.name = new_name` の後で `new_name` を鍵にする。残る式は、`Program::symbols` から取り出した項目をその鍵のまま入れ直すか、
-      項目を落とすだけである。**`Symbol` の `name` を書き換える式は `simplify_symbol_names::run` の
-      1 か所だけである。**
-      BY CODE src/ast/program.rs: Program::instantiate_symbols, Symbol,
-         CODE src/optimization/simplify_symbol_names.rs: run
+      A31 がまさにこれを述べる。**この不変条件をこの文書が示さないのは、A31 が果たす者を
+      「`Program` を組み立てるコード」に置き、読む者としてこの `L0c` を名指しているからである。**
+      BY <ref id=f745696/>
     <3>0a. `lower_program` に渡る記号の名前の集合は `Program::global_types` の鍵の集合であり、
            `lower_symbol` は funptr の記号を鍵がその記号の名前である `funcs` の項目に、funptr でない
            記号を `symbol` がその記号の名前である `globals` の要素にする。持ち上げた lambda を `funcs`
