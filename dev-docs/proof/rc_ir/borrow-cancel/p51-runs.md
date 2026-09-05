@@ -1063,11 +1063,20 @@ capture の leaf から独立に定める。L3 が (E3) の段について読む
     BY <1>2b, <1>2c, CODE src/generator.rs: Generator::apply_lambda,
        CODE src/rc_ir/codegen.rs: Generator::implement_rc_function
   <2>3. capture パラメータの型は boxed であり、その `boxed_leaf_paths` も `rc_units` も 1 元である。
-    lowering は capture 変数の型を `make_dynamic_object_ty()` とする。それは `Std::#DynamicObject` の
-    tycon であり、その `TyConInfo` は `is_unbox: false` を持つので boxed である。よって D4 の規則 3 と
-    D5 の `unit_step` の `is_box` の腕がどちらも自分自身 1 つを返す。
-    BY <ref id=0594f24/>, <ref id=9cba81c/>, CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function,
-       CODE src/fixstd/builtin.rs: make_dynamic_object_ty, bulitin_tycons
+    lowering は capture 変数の型を `make_dynamic_object_ty()` とする。**その tycon は
+    `make_dynamic_object_tycon()` が返す tycon である** -- `make_dynamic_object_ty` が作るのは
+    `tycon(FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME))` であり、`make_dynamic_object_tycon` が
+    返すのは `TyCon::new(make_dynamic_object_name())`、`make_dynamic_object_name` が返すのは
+    `FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)` であって、2 つは同じ `FullName` の `TyCon` で
+    ある。`bulitin_tycons()` はその鍵の下に `is_unbox: false` を持つ `TyConInfo` を置き、A28 より、
+    `bulitin_tycons()` の置く鍵の項目は `bulitin_tycons()` が置いたものである。よって型環境が
+    この tycon に返す `TyConInfo` は `is_unbox: false` を持ち、この型は boxed である。したがって D4 の
+    規則 3 と D5 の `unit_step` の `is_box` の腕がどちらも自分自身 1 つを返す。
+    BY <ref id=0594f24/>, <ref id=9cba81c/>, <ref id=3d4be43/>,
+       CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function,
+       CODE src/fixstd/builtin.rs: make_dynamic_object_ty, make_dynamic_object_tycon,
+       make_dynamic_object_name, bulitin_tycons,
+       CODE src/constants.rs: DYNAMIC_OBJECT_NAME
   <2>4. capture の unit は所有される。
     D14 が「capture の unit は必ず所有される」を与える。
     BY <ref id=ef8efc4/>
