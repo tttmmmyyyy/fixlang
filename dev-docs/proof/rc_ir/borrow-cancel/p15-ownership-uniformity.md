@@ -2946,8 +2946,9 @@ capture、`Llvm` の各オペランド、`Match` の scrutinee、`Destructure` �
     L21a の (m3) である。
     BY <ref id=42f1c2e/>
   <2>3. `(a*, π)` は全部偽である。
-    `<2>1` より `cand(a*, π) ⊆ act(a*, π) ⊆ cand(x, π)` である。
-    BY <2>1
+    `<2>2` より `a* ∈ arm_results` なので、`<2>1` より
+    `cand(a*, π) ⊆ act(a*, π) ⊆ cand(x, π)` である。
+    BY <2>1, <2>2
   <2>4. QED
     `<2>2` より `Inh_x(π) = Inh_{a*}(π)` である。L18 より `(a*, π)` は unit を覆い `Λ` は変わらない。
     `<2>3` と帰納法の仮定より、`Inh_{a*}(π)` の各 `λ` について `cand(a*, λ)` に `owns` が偽の元があり、
