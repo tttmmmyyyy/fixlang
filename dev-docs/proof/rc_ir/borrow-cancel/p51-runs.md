@@ -190,27 +190,30 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
        の呼び出しは、`declare_lambda_function` の 1 か所だけである。
   `src/` の `module.add_function(` は 17 か所であり、`object_file_symbol_name` の値をそのまま名前に
   するのは `declare_lambda_function` の 1 か所である。残る 16 か所を、渡す名前の形で分ける。
-  **`::` を 1 つも持たない名前**を渡すのは 10 か所である -- 走時の記号名 `fixruntime_...`・`sprintf`・
+  **鍵の名前の記号名は、その名前が住む module の名前で始まる。**記号名は最も外側の名前空間の成分から
+  始まり、その成分はその module の名前である (`CODE src/ast/name.rs: FullName::module` の doc --
+  「The module the name lies in, which is the first name of its namespace.」)。module 宣言が与える
+  `namespace_item` は `capital_name` を `.` で継いだもの、`capital_name` は `ASCII_ALPHA_UPPER` で
+  始まる語なので、**記号名の先頭の成分は英大文字で始まり `#` を持たない**。`<1>3a` の 3 族はどれも
+  `FullName::to_namespace` が名前を名前空間の**末尾**へ移す形なので、最も外側の成分を替えない。
+  `object_file_symbol_name` が置き替えるのは `@` であって先頭の英大文字ではない。
+  **英小文字で始まる名前**を渡すのは 10 か所である -- 走時の記号名 `fixruntime_...`・`sprintf`・
   `pthread_once`・`malloc`・`realloc` を渡す `runtime.rs` の 7 か所、`<接頭辞>_<型のハッシュ>` を渡す
   `emit_rc_helper_call` の 1 か所、そして走査関数の名前 `trav_<work><状態>_<型のハッシュ>` と
   `fixruntime_empty_traverser`・`fixruntime_empty_traverser_dynamic` を渡す `object.rs` の
-  `create_traverser` と `get_traverser_ptr` である。**後ろの 2 種が `::` を持たないことは、名前を組む
-  関数が決める。**`emit_rc_helper_call` が組むのは `format!("{}_{}", prefix, obj.ty.hash())` であり、
-  `TypeNode::hash` は `format!("{:x}", md5::compute(..))`、すなわち 16 進数字だけの列を返す。`prefix` は
-  この関数を呼ぶ 4 か所が渡す `retain<接尾辞>`・`release<接尾辞>`・`mark_global`・`mark_threaded` の
-  いずれかで、`RcState::name_suffix` が返すのは空文字列か `_local` である。`create_traverser` が組むのは
+  `create_traverser` と `get_traverser_ptr` である。**先頭の文字は名前を組む関数が決める。**走時の
+  記号名は `runtime.rs` の `RUNTIME_*` の定数の値である。`emit_rc_helper_call` が組むのは
+  `format!("{}_{}", prefix, obj.ty.hash())` であり、`prefix` はこの関数を呼ぶ 4 か所が渡す
+  `retain<接尾辞>`・`release<接尾辞>`・`mark_global`・`mark_threaded` のいずれかである
+  (`RcState::name_suffix` が返す接尾辞は先頭に付かない)。`create_traverser` が組むのは
   `TypeNode::traverser_name` の返り値 `format!("{}{}_{}", work_name, state.name_suffix(),
   self.hash_with_capture(capture))` であり、`work_name` は `trav_dyn`・`trav_release`・
-  `trav_mark_global`・`trav_mark_threaded` の 4 つ、`TypeNode::hash_with_capture` も
-  `format!("{:x}", md5::compute(..))` を返す。どの断片も `:` を持たない。`<1>3a` より鍵の名前の記号名は
-  `::` を含むので、これらは `object_file_symbol_name(n)` ではない。
+  `trav_mark_global`・`trav_mark_threaded` の 4 つである。よってこれらは
+  `object_file_symbol_name(n)` ではない。
   **最初の `::` より前に `#` を持つ名前**を渡すのは 5 か所である -- `global_accessor_name` の `Get#`
   (`declare_program_global`)、`InitValue#` と `InitOnce#` (`implement_rc_global` の 2 か所)、
-  `release#` と `retain#` (`builtin.rs` の 2 か所) である。鍵の名前の記号名は最も外側の名前空間の
-  成分から始まり、その成分はその名前が住む module の名前 -- module 宣言が与える `namespace_item` --
-  なので `#` を持たない (`CODE src/ast/name.rs: FullName::module` の doc -- 「The module the name lies
-  in, which is the first name of its namespace.」)。`<1>3a` の 3 族はどれも `FullName::to_namespace`
-  が名前を名前空間の**末尾**へ移す形なので、最も外側の成分を替えない。
+  `release#` と `retain#` (`builtin.rs` の 2 か所) である。上に見たとおり記号名の先頭の成分は `#` を
+  持たないので、これらも `object_file_symbol_name(n)` ではない。
   **残る 1 か所は `FFI_CALL` が呼ぶ C の関数の名前である** (`ffi.rs` の
   `CSignature::get_or_declare_in_module`)。**これは形では分けられない** -- 文法の `ffi_c_fun_char` は
   `(` 以外の任意の文字を許すので、その名前は鍵の記号名と同じ綴りでありうる。A26a が「`FFI_CALL` が
@@ -220,9 +223,10 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
      Generator::declare_lambda_function, Generator::declare_program_global,
      Generator::emit_rc_helper_call, Generator::retain, Generator::release, Generator::mark_global,
      Generator::mark_threaded,
-     CODE src/ast/types.rs: TypeNode::hash, TypeNode::hash_with_capture, TypeNode::traverser_name,
+     CODE src/ast/types.rs: TypeNode::hash_with_capture, TypeNode::traverser_name,
      CODE src/rc_ir/ast.rs: RcState::name_suffix,
      CODE src/ast/name.rs: FullName::module,
+     CODE src/parse/grammer.pest: capital_name,
      CODE src/rc_ir/codegen.rs: Generator::implement_rc_global,
      CODE src/object.rs: create_traverser, get_traverser_ptr,
      CODE src/fixstd/builtin.rs: InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
@@ -1187,8 +1191,8 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   環境が持つ boxed な値はこのプログラムが作って番地を渡したものである。
   **段の中で相殺する retain**が名指すのはオペランドの値である -- D24 は
   「`InlineLLVMWithRetainedFunctionBody` はオペランドを retain し、適用の後に release する」と述べる。
-  オペランドの値が指すオブジェクトは既に在る。**相殺しない retain**が名指すのは原本の側の値である -- D24 は「複製を作る腕が複製の欄へ retain
-  する形である」と述べる。原本のオブジェクトも既に在る。
+  オペランドの値が指すオブジェクトは既に在る。**相殺しない retain**が名指すのは原本の側の値である --
+  D24 は「複製を作る腕が複製の欄へ retain する形である」と述べる。原本のオブジェクトも既に在る。
   **(E9) の retain** については A17 (ii-c) が「**環境がその番地を呼ぶのは、その番地が指すオブジェクトへの
   参照を自分が持っている点でだけである。**」と述べ、(i-d) より環境が持つ boxed な値はこのプログラムが
   作って番地を渡したものである。
@@ -1367,8 +1371,9 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   `B(a')` の実行路 (D3) である (D21, D23)。**その活性化に D11 を当ててよいことは
   D21 が言う** -- 「**実行 (D24) が作る活性化がこの制限を満たすことは P28 (b) が示す**」、そして
   「**D11 と D12 は、この意味のすべての活性化について条件を課す。**」`a'` は `p` まで閉じている --
-  この段の仮定の「`p` まで閉じている」は `p` 以前の各段内の点についての条件であり (DEF 段内の点で閉じている)、`a'` の時点も
-  段内の点であって (D24) `p` 以前に在るので、D11a の「`τ` まで閉じている」がそこから出る。
+  この段の仮定の「`p` まで閉じている」は `p` 以前の各段内の点についての条件であり
+  (DEF 段内の点で閉じている)、`a'` の時点も段内の点であって (D24) `p` 以前に在るので、D11a の
+  「`τ` まで閉じている」がそこから出る。
   節点が記憶域から読むオブジェクトは、D7 の読む構文がその位置で読みうるオブジェクト -- 名指された値の
   inhabited な各 boxed leaf が指すオブジェクト -- のうちに在る (D7、D32 の (読み-1))。よって (S-c) が
   当たり、読んだ各オブジェクトは**その読みの直前の点**で解放されていない。
@@ -1532,8 +1537,8 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       うち `InlineLLVMArraySetCapacityBoundsUnchecked` では共有の腕が `release_replaced_array` で古い
       記憶域を処分し、`InlineLLVMArrayAppendCapacityUnchecked` の `Fresh` の結果は `<3>1a` より
       `make_array_unique_with_hole` を経由する道の上に在る。**一意の腕はそのオペランドの参照を
-      手放さない** -- 補助関数を経由する道では `make_struct_union_unique` が `create_obj` と `clone_struct`/`clone_union` と `gc.release` を
-      出すのは共有の腕だけであり、`InlineLLVMArraySetCapacityBoundsUnchecked` の一意腕は `realloc_array`
+      手放さない** -- 補助関数を経由する道では `make_struct_union_unique` が `create_obj` と
+      `clone_struct`/`clone_union` と `gc.release` を出すのは共有の腕だけであり、`InlineLLVMArraySetCapacityBoundsUnchecked` の一意腕は `realloc_array`
       を呼ぶだけで `gc.release` を出さない。いずれの道でも 2 つの腕は排他である。A3 は
       「`borrows_operand(i)` が真のとき、生成コードは第 `i` オペランドの参照を処分しない」と述べるので、
       いずれの道でも `borrows_operand(i)` が偽であることがこの消費を支える。
