@@ -198,24 +198,46 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   BY <ref id=cb35ab1/>, <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: clone_func, borrow_funcref,
      CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
 
+<1>2a. `rename_expr(node, renaming)` が返す木は、`node` の木と次の点で一致する。節点の種類とその並び、
+       `Retain`/`Release` の path と state、`Destructure` が名指すフィールドの添字とその state、
+       `Eval` と `Ret` の位置、`Let` の右辺の構成子、`Llvm` の op の値と `args` の長さ、`Closure` の
+       `FuncRef`、`Match` の各アームの `tag` と `payload_state`。相違は、各 `RcVar` の名前が
+       `renaming` の像に差し替わっていることだけであり、`RcVar` の型の欄は残る。
+  `rename_expr` の本体は `grow_stack(|| rename_expr_inner(node, renaming))` であり、A15 より
+  `grow_stack` は閉包をちょうど 1 回呼んでその返り値を返すので、`rename_expr` が返すのは
+  `rename_expr_inner(node, renaming)` である。`rename_expr_inner` は D2 の 6 種の節点それぞれについて
+  同じ構成子を組み直し、`Let` の束縛変数・`Retain`/`Release` が名指す変数・`Eval` と `Ret` が名指す
+  変数に `rename_var` を掛け、`path` と `state` をそのまま写し、継続に `rename_expr` を掛ける。
+  `Destructure` の腕は容器に `rename_var` を掛け、各対 `(i, v)` の添字 `i` をそのまま写して `v` に
+  `rename_var` を掛ける。`Let` の右辺には `rename_rhs` を掛ける。`rename_rhs` は `RcRhs` の 5 種の
+  構成子を保ち、`Var` の変数・`App` の callee と各引数・`Closure` の各 capture・`Llvm` の各オペランド
+  に `rename_var` を掛け、`Closure` の `FuncRef` をそのまま写し、`Llvm` の op は `clone()` して
+  `free_vars_mut()` が返す名前だけを差し替え、`Match` は scrutinee に `rename_var` を掛けて各アームの
+  `tag` と `payload_state` をそのまま写し、`payload` に `rename_var` を、`body` に `rename_expr` を
+  掛ける。`rename_var` は名前を `renaming` で引いて差し替えるだけで、型の欄を残す。
+  BY <ref id=3e6b0e0/>, <ref id=b3dfa37/>, CODE src/rc_ir/rename.rs: rename_expr, rename_expr_inner,
+     rename_rhs, rename_var
+
 <1>3. 借用版の `Pre(V)` について A6 の性質が成り立つ。
   A6 より入力の関数の束縛名は互いに異なる。`<1>2` より `rename` の像の名前は互いに異なるので、その
   像も互いに異なる。`<1>2` より像はどちらのプログラムのどの関数の名前とも異なる。
   BY <ref id=33c54dc/>, <1>2
 
 <1>4. 借用版の `Pre(V)` について A11 の性質が成り立つ。
-  `fresh_rename_function` は束縛の位置に `assign_fresh_name` を掛け、`rename_expr` は本体の各 `RcVar`
-  を同じ `renaming` で引く。`<1>2` より像の名前は入力に現れるどの名前とも異なり、像の中では互いに
-  異なるので、鍵でない名前を恒等に写す延長は入力に現れる名前の上で単射である。`<1>2` より木の形は
-  変わらないので、D2 のスコープの規則が定める入れ子も同じである。よって借用版のある位置の使用が
+  `fresh_rename_function` は束縛の位置に `assign_fresh_name` を掛けて `renaming` を組み、本体に
+  `rename_expr` を掛ける。`<1>2a` より `rename_expr` は本体の各 `RcVar` の名前を同じ `renaming` で
+  引く。`<1>2` より像の名前は入力に現れるどの名前とも異なり、像の中では互いに
+  異なるので、鍵でない名前を恒等に写す延長は入力に現れる名前の上で単射である。`<1>2` と `<1>2a` より
+  木の形は変わらないので、D2 のスコープの規則が定める入れ子も同じである。よって借用版のある位置の使用が
   スコープに見る束縛は、入力の対応する位置の使用が見る束縛の像ちょうどである。入力が A11 を満たすので、
   借用版でも使用は自分の位置でスコープに入っている束縛に解決し、自由な局所名はパラメータと capture の
   像に限る。
-  BY <ref id=3905b4e/>, <1>2, <ref id=b3dfa37/>, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name, rename_expr
+  BY <ref id=3905b4e/>, <1>2, <1>2a, <ref id=b3dfa37/>, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
 
 <1>5. 借用版の `Pre(V)` について A12 の性質が成り立つ。
-  `rename_var` は `RcVar` の名前だけを差し替えて型を残し、`rename_rhs` は右辺の構成子も `Llvm` の op も
-  `Destructure` が名指すフィールドも `Match` が名指す変位も変えない。A12 が対にする各組 -- move-bind の
+  `<1>2a` より、名前替えは `RcVar` の名前だけを差し替えて型を残し、右辺の構成子も `Llvm` の op も
+  `Destructure` が名指すフィールドの添字も `Match` のアームの `tag` も変えない。A12 が対にする各組 --
+  move-bind の
   両辺、アームの結果と `Match` の束縛変数、payload と変位、catch-all の payload と scrutinee、
   `Destructure` のフィールド変数とフィールド、`App` の各引数と呼び出し先のパラメータ、`App` の結果、
   同じ名前の `RcVar`、束縛を持たない `RcVar`、そして `Llvm` 節点の型についての 4 つ -- は、どちらの側も
@@ -223,17 +245,17 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   ある。直接呼び出しの callee と、束縛を持たない `RcVar` の名前は最上位の記号の名前であり、
   A13 と D6 より局所名でないので `renaming` の鍵ではなく、名前も型も動かない -- 名指す関数も
   その `params` も入力のものである。局所変数を経由する間接呼び出しでは callee は鍵でありうるが、
-  `rename_var` が型を残すので `ty(callee)` は動かない。`RcRhs::Closure` の `FuncRef` も
-  `rename_rhs` がそのまま写す。`RcFunc` の欄どうしの整合は、`clone_func` が `params` と `capture` に
+  `<1>2a` より型を残すので `ty(callee)` は動かない。`RcRhs::Closure` の `FuncRef` も
+  `<1>2a` よりそのまま写る。`RcFunc` の欄どうしの整合は、`clone_func` が `params` と `capture` に
   `rename_var` を掛け `fn_ty` と `ret_ty` を写すことによる。
   A12 の残る 3 つの節 -- `Match` の scrutinee が union であること、`Destructure` の容器が構造体で
   あること、`Destructure` が名指すフィールドと `Match` が名指す変位がその型が実際に持つ (punched でない)
-  ものであること -- も同じ理由で移る。`rename_expr` は `Match` の scrutinee と `Destructure` の容器に
-  `rename_var` を掛けるだけなので `ty(scrut)` と `ty(container)` は入力のものであり、`rename_rhs` は
-  名指すフィールドの添字も変位の番号も写すだけだからである。A12 がこの 3 つの節に伴わせる
+  ものであること -- も同じ理由で移る。`<1>2a` より `Match` の scrutinee と `Destructure` の容器には
+  `rename_var` が掛かるだけなので `ty(scrut)` と `ty(container)` は入力のものであり、
+  名指すフィールドの添字もアームの `tag` もそのまま写るからである。A12 がこの 3 つの節に伴わせる
   「その型の `is_closure()` は偽である」も、型が動かないので同じく移る。
-  BY <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=596a46d/>, <1>2, CODE src/rc_ir/borrow.rs: clone_func,
-     CODE src/rc_ir/rename.rs: rename_expr, rename_rhs, rename_var
+  BY <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=596a46d/>, <1>2, <1>2a,
+     CODE src/rc_ir/borrow.rs: clone_func, CODE src/rc_ir/rename.rs: rename_var
 
 <1>6. QED
   `<1>1` の 2 種については、A6・A11・A12 が入力の本体に直接当たる。借用版については `<1>3`・`<1>4`・
@@ -266,18 +288,24 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 節 2・節 3 は `Post(V)` の活性化について読む。
 
 <1>1. (書1)・(書2)・(書3) の形が成り立つ。
-  `rewrite` は `rewrite_inner` を呼び、`rewrite_inner` は節点の種類で分岐する。
+  `rewrite` の本体は `grow_stack(|| self.rewrite_inner(node))` であり、A15 より `grow_stack` は閉包を
+  ちょうど 1 回呼んでその返り値を返すので、`rewrite` が返すのは `rewrite_inner(node)` である。
+  `rewrite_inner` は節点の種類で分岐する。
   `Let(x, App(callee, args), k)` の腕は `route` の返り値を callee に据え、`call_rc` が返す 2 つの列を
   `prepend_rc` で、第 1 の列はこの節点の直前に、第 2 の列は書き換えた継続の先頭に置く。`prepend_rc` が
   `rc_node` で作るのは `Retain`/`Release` の節点であり、`call_rc` が返す対の第 1 成分は `args` の要素で
   ある。`route` は `callee.clone()` を返すか、その `name` だけを借用版の名前に替えたものを返す。
   `Retain`/`Release` の腕は `rewrite_rc` を呼び、それは継続を書き換えたうえで、`is_borrow_version` が
   偽なら同じ `(v, path, state)` の節点を 1 つ、真なら `units_under(ty(v), path)` のうち `owns_unit` が
-  真である unit ごとに `v` を名指す節点を並べた列を返す。`Let(x, Match(scrut, arms), k)` の腕は各アームの
-  本体と継続を書き換えて同じ `x` と同じ `scrut` で組み直し、`Let(x, rhs, k)` の残りの腕は `rhs.clone()`
-  を据え、`Destructure`・`Eval`・`Ret` の腕も同じ内容で組み直す。
-  BY CODE src/rc_ir/borrow.rs: prepend_rc, rc_node, expr_node, RewriteCtx::rewrite,
-     RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc, RewriteCtx::call_rc, RewriteCtx::route
+  真である unit ごとに `v` を名指す節点を並べた列を返す。`Let(x, Match(scrut, arms), k)` の腕は各アームを
+  `arm.with_body(self.rewrite(&arm.body))` に、継続を `self.rewrite(k)` に替えて、同じ `x` と同じ
+  `scrut` で組み直す。`MatchArm::with_body` は `body` の欄だけを差し替えて残りの欄を `self.clone()` から
+  取るので、アームの `tag`・`payload`・`payload_state` は `Pre(V)` のものである。
+  `Let(x, rhs, k)` の残りの腕は `rhs.clone()` を据え、`Destructure`・`Eval`・`Ret` の腕も同じ内容で
+  組み直す。
+  BY <ref id=3e6b0e0/>, CODE src/rc_ir/borrow.rs: prepend_rc, rc_node, expr_node, RewriteCtx::rewrite,
+     RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc, RewriteCtx::call_rc, RewriteCtx::route,
+     CODE src/rc_ir/ast.rs: MatchArm::with_body
 
 <1>2. (a) が成り立つ。
   `VarTable::of` は `params` と `capture` の各 `p` について `param_tys` に `(p.name, p.ty)` を入れ、
