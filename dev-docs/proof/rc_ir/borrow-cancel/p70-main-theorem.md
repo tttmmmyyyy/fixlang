@@ -974,7 +974,7 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 | **A3** | 宣言されたモデルの忠実さ | **誰も**。ただし `applies_a_function_operand` については `Generator::apply_lambda` の develop mode の検査が、`result_prov` の元数については `validate` の `check_rhs` の develop mode の検査が果たす | D1a (内部可変性の memo は成分でないことの根拠)、D9、D10、D17、D20、D21、D24、D29、D30、A26 (`Unknown` の行が参照を作る先)、P2a (決定性の節)、P5 (a)。「値の等しさ」の節の読み手として `validate` を名指す -- このファイルでは `<1>1` の `<2>2` と第 4 節の「開発ビルドでだけ走る検査」がそこに立つ。元数の節を読むのは「名前は別名類を決める」-- A19 (ii-b) の (O2) が使う性質 -- である (`report.md` の第 7 節) |
 | **A4** | コード生成の忠実さ | **誰も** | D29、D30。「活性化の側も要る」の節は `p50-observation.md` の `L5` と `L6` が読む |
 | A5 | 型が leaf の上位近似。`#ArrayStorage` のオブジェクトについては、持ち手の単位は leaf ではなくスロットである | `leaf_map.rs` の設計 | D16 (null ポインタの leaf を数えない節)、D21 (開始の時点で A19 (i) の不等式が出ること)、D24 の「相殺しないもの」の節 (`InlineLLVMArrayAppendCapacityUnchecked` の共有の腕が持ち手を書き込む先)、D25、D29 (対応するオブジェクトが保持する値の節)、P7a、A19 (i) |
-| A6 | 名前の一意性 | lowering | D6、P9、A11、P2a の言明 (その `vars` を作る本体が A6 と A11 を満たすこと)、層 1 の命題 P1-P7 (`borrow_ify` の出力については P9 と合わせて読む)。A2 の項が「A6・A9・A13 を上流について読む段は、この節を引く」と書く |
+| A6 | 名前の一意性 | lowering | D6、P9、A11、P2a の言明 (その `vars` を作る本体が A6 と A11 を満たすこと)、A6 自身の項が挙げる「層 1 の命題 (P1-P7)」(`borrow_ify` の出力については P9 と合わせて読む)。A2 の項が「A6・A9・A13 を上流について読む段は、この節を引く」と書く |
 | A7 | 呼び出し先の解決 | `resolve_callee_params` の設計 | README は読み手を名指さない。番号で走らせると `p51-runs.md` (`resolve_callee_params` が `None` を返す位置を所有として扱う節)、`p40-cancel-soundness.md` (D9 の行が名指す集合との包含)、`p15-ownership-uniformity.md` の `R1` と `R2` の表、`report.md` の第 8 節 (#551 の 1 件目の直しが健全な近似である根拠) |
 | A8 | グローバルは線形規律の外 | `mark_global` | D6 (記号の位置が指す先)、D26、D24 の (E7)、P27 の系 |
 | A9 | `Match` はアームを持つ | lowering (検査は develop mode の `validate` の `check_rhs`) | P16。A2 の項が「A6・A9・A13 を上流について読む段は、この節を引く」と書く |
@@ -1346,6 +1346,7 @@ SCAN src/ `Mutex<`
   = src/dependency/lockfile.rs: ProjectsInfo -- 依存の解決が持つ表
   = src/elaboration/typecheckcache.rs: MemoryCache -- 型検査キャッシュが持つ表
   = src/parse/sourcefile.rs: SourceFile -- `string`・`hash`
+  = src/tests/test_lsp/lsp_client.rs: (項目の外) -- その型の欄を説明するコメント
   = src/tests/test_lsp/lsp_client.rs: SharedState -- テストの LSP クライアントが持つ状態
   = src/tool/log_file.rs: LOG_FILE -- ログの `static`
   = src/tool/log_file.rs: open_log_file -- その `static` を作る
@@ -1353,10 +1354,12 @@ SCAN src/ `Mutex<`
 SCAN src/ `RwLock<`
 
 SCAN src/ `Atomic`
+  = src/commands/lsp/server.rs: (項目の外) -- `use` による取り込み
   = src/commands/lsp/server.rs: launch_language_server -- LSP の待ち時間の設定
   = src/commands/lsp/server.rs: apply_analyze_config -- 同上
   = src/commands/lsp/server.rs: diagnostics_thread -- 同上
   = src/commands/lsp/server.rs: handle_initialized -- 同上
+  = src/generator.rs: (項目の外) -- `use` による取り込み
   = src/generator.rs: Generator::build_is_refcnt_one -- 生成する LLVM の命令の順序づけ
   = src/generator.rs: Generator::build_release_boxed_with -- 同上
   = src/generator.rs: Generator::retain_nonnull_boxed -- 同上
