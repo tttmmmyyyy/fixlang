@@ -1189,7 +1189,7 @@ impl TypeNode {
     ///
     /// This is what a walk over the values a type holds descends: reference counting reaches a hole's
     /// slot through no path, and reading one would read a value that has moved on.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unpunched_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
         let tycon_info = self.toplevel_tycon_info(type_env);
         self.instance_field_types(tycon_info, type_env)
