@@ -1461,10 +1461,45 @@ D25 が定めるのがオブジェクトからオブジェクトへの到達だ�
       グローバルのアクセサが返す値である。
   BY <1>1a, <ref id=49da857/> (d)
 <1>3. 型が `is_funptr` のとき、`ty(v)` は boxed leaf を持たない。よって主張は空虚である。
-  BY <ref id=83d98e9/> (束縛を持たない `RcVar` の型は、その名前の記号の型である), <ref id=0594f24/> の第 1 の規則
-     (`is_fully_unboxed` が真の型は leaf を持たない),
-     CODE src/ast/types.rs: TypeNode::is_fully_unboxed (`is_funptr` の型に真を返す),
-     CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (`is_fully_unboxed` の型で走査が `return` する)
+  <2>1. `ty(v)` の最上位の tycon `tc` は、名前空間が `Std` の 1 段であって名前が `#FunPtr` で始まる。
+        よってその tycon は `bulitin_tycons()` が置く鍵の 1 つであり、`type_env.tycons()` がその鍵の
+        下に持つ項目は `make_funptr_tycon(n)` の項目 -- `is_unbox` が真、`variant` が
+        `TyConVariant::Primitive` であるもの -- である。
+    BY <ref id=8412761/> (プログラムに現れる型は ground であり、その tycon は `type_env` にある),
+       <ref id=3d4be43/> (`E.tycons()` の項目のうち鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは
+       `bulitin_tycons()` がその鍵の下に置いた項目であり、`tc.name.namespace` が `Std` の 1 段で
+       `tc.name.name` が `FUNPTR_NAME` で始まる鍵の項目がそうである),
+       CODE src/ast/types.rs: TypeNode::is_funptr, TypeNode::toplevel_tycon_satisfies
+       (`is_funptr` が真であるのは、最上位の tycon が在って `is_funptr_tycon` がそれに `Some` を
+       返すときである),
+       CODE src/fixstd/builtin.rs: is_funptr_tycon (`Some` を返すのは、名前空間が `Std` の 1 段で
+       あって名前が `FUNPTR_NAME` で始まるときである),
+       CODE src/fixstd/builtin.rs: bulitin_tycons (`make_funptr_tycon(arity)` の項目は
+       `is_unbox: true`、`variant: TyConVariant::Primitive` である),
+       CODE src/constants.rs: FUNPTR_NAME (`"#FunPtr"`)
+  <2>2. `is_box(ty(v))` は偽である。
+    BY <2>1, CODE src/ast/types.rs: TypeNode::is_unbox (`is_closure() || toplevel_tycon_info(type_env).is_unbox`
+       -- 前者が真なら `is_unbox` は真であり、偽なら後者を読む。後者は `type_env.tycons()` を最上位の
+       tycon で引いた項目の `is_unbox` の欄であり、<2>1 よりそれは真である),
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info (型の `TyConInfo` は、その最上位の
+       tycon で `type_env.tycons()` を引いた 1 つである),
+       CODE src/ast/types.rs: TypeNode::is_box (`!self.is_unbox(type_env)`)
+  <2>3. `is_closure(ty(v))` と `is_array(ty(v))` はどちらも偽である。
+    BY <2>1, CODE src/ast/types.rs: TypeNode::is_closure (最上位の tycon の名前が
+       `make_arrow_name_abs()` に等しいかどうか),
+       CODE src/ast/types.rs: TypeNode::is_array, TypeNode::toplevel_tycon_satisfies (`is_array` は
+       最上位の tycon が `is_array_tycon` を満たすかどうかである),
+       CODE src/fixstd/builtin.rs: is_array_tycon, make_array_name (`is_array_tycon` は tycon が
+       `make_array_tycon()` に等しいことであり、その名前は `Std` の下の `ARRAY_NAME` である),
+       CODE src/fixstd/builtin.rs: make_arrow_name_abs (`Std` の下の `ARROW_NAME` である),
+       CODE src/constants.rs: ARRAY_NAME, ARROW_NAME, FUNPTR_NAME -- `"Array"` も `"Arrow"` も
+       `"#FunPtr"` で始まらないので、<2>1 の `tc` の名前はそのどちらとも異なる
+  <2>4. QED
+    BY <2>2, <2>3, <ref id=83d98e9/> (束縛を持たない `RcVar` の型は、その名前の記号の型である), <ref id=0594f24/> の第 1 の規則
+       (`is_fully_unboxed` が真の型は leaf を持たない),
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed (`is_box`・`is_closure`・`is_array` が
+       いずれも偽で `is_funptr` が真の型に真を返す),
+       CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths (`is_fully_unboxed` の型で走査が `return` する)
 <1>4. そうでないとき `v` はグローバル値であり、`P` における `v` の値の inhabited な各 boxed leaf が
       指すオブジェクトはグローバル状態である。**言明が要るのは深さ 1 -- 値自身の各 boxed leaf -- だけ
       なので、この段はそこまでを述べる。**
