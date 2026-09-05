@@ -1071,7 +1071,7 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
       `TraverserWorkType::mark_threaded` の 3 つの構成子と、`create_traverser` の
       `TraverserWorkType(*work)` である。`TraverserWorkType` は `u32` の欄を 1 つ持ち `PartialEq` を
       derive するので、`TraverserWorkType::mark_threaded()` に等しい値はその欄に
-      `TRAVERSER_WORK_MARK_THREADED` を持つ (`EXT derive した `PartialEq` の等号`)。
+      `TRAVERSER_WORK_MARK_THREADED` を持つ (EXT derive した `PartialEq` の等号)。
       `TRAVERSER_WORK_RELEASE`・`TRAVERSER_WORK_MARK_GLOBAL`・`TRAVERSER_WORK_MARK_THREADED` は
       `0`・`1`・`2` であって相異なるので、3 つの構成子のうちその値を置くのは
       `TraverserWorkType::mark_threaded` だけであり、`create_traverser` が `TraverserWorkType(*work)` に
@@ -2390,8 +2390,8 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         `ExprNode::clone_all` と `ExprNode::clone_except_fvs` (`type_: self.type_.clone()` で自分の欄を
         写す) であり、`type_` の欄へ代入するのは `ExprNode::set_type` (`ret.type_ = Some(ty)`) である。
         同じ前提より、残る形は別の `ExprNode` の同じ欄をそのまま写すので、写す場合に入る。
-        **型検査が推論した型を式に記録する経路もこの 2 つで
-        尽きる** -- `TypeCheckContext::unify_type_of_expr` は各式に推論した型を付けて返すが、その型は
+        **型検査が推論した型を式に記録する経路もこの 2 つで尽きる** --
+        `TypeCheckContext::unify_type_of_expr` は各式に推論した型を付けて返すが、その型は
         制約系へ入った型の代入像であり、**単一化は与えられた型から新しい tycon を作らない** --
         `TypeCheckContext::unify` の各腕は、2 つの型を突き合わせて等しい tycon を受け入れるか、
         `TyApp` の関数と引数へ降りるか、`unify_tyvar` で型変数に相手の型そのものを束縛するか、
@@ -4256,8 +4256,8 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
   L6 の `H' ≤ H` である。`borrow_ify` にはその向きの不等式が無い。`report.md` の「測って外した設計 --
   呼び出し側の局所条件」の節は、`routing_saves_retain` の判定を「1 つでも得をする unit が在る、かつ C の
   unit が 1 つも無い」に変えれば「振り替えた呼び出しのどの計数下オブジェクトについても出力のカウントが
-  入力以下になる」と書いており、**いまの判定ではそれが成り立たない**ことをそこで述べている。C の場合 (所有していて呼び出しで
-  死ぬ unit) では出力のカウントの方が高い。実行時に参照カウントで分岐する op は
+  入力以下になる」と書いており、**いまの判定ではそれが成り立たない**ことをそこで述べている。C の場合
+  (所有していて呼び出しで死ぬ unit) では出力のカウントの方が高い。実行時に参照カウントで分岐する op は
   `funcs_observing_uniqueness` の門が閉じる対象ではないので (門が読むのは `observes_uniqueness` である)、
   窓の中でカウントの高い側が共有の腕を取る形は排除されていない。
 - **(X3) の出口 -- 対応する 2 つの段が同じオブジェクトを解放しない。** `borrow_ify` は借用した参照の処分を
@@ -4283,8 +4283,9 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
    オブジェクトは `t0` より後に割り当てられた」を帰納で示す命題であり、この op の結果はその帰納の外に
    出る -- 「環境が最初の時点に持ち込んだ番地なら、そのオブジェクトは最初の時点より前に割り当てられて
    いる (A17 の (i-d))」。よって L11 は、広がりの中に `InlineLLVMBoxedFromRetainedPtrIOS` の節点の実行が
-   無いことを仮定として負い、それを L12 と L13 が運ぶ。**参照の持ち手の側は `README.md` が既に持っている** -- `boxed_to_retained_ptr` が渡した参照を環境が持つことは
-   A17 (i-b) が、`boxed_from_retained_ptr` がそれを活性化へ移すことは D24 の (E2) の `H` の表が言う。
+   無いことを仮定として負い、それを L12 と L13 が運ぶ。**参照の持ち手の側は `README.md` が既に持って
+   いる** -- `boxed_to_retained_ptr` が渡した参照を環境が持つことは A17 (i-b) が、
+   `boxed_from_retained_ptr` がそれを活性化へ移すことは D24 の (E2) の `H` の表が言う。
    足りないのは**その番地が指すオブジェクトが `t0` より後に割り当てられたこと**であり、A3 のこの節も
    この 2 つも、割り当ての時点を言わない。果たす者: 誰も。
 
@@ -4304,8 +4305,8 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
    閉じない。果たす者: 誰も。
 
 4. **A23 が名指す数え上げはこの文書に在る (穴ではない)。** README の A23 と `report.md` の「検証状況」の
-   節はどちらも、funptr 型の `Expr::Lam` が式の内側へ移らないことを `L9b` の `<2>2a` が示すと書く。その段は `uncurry` の中で
-   funptr 型が式に付く位置を 3 つに数え上げ、`uncurry` より前に funptr 型が制約系へ入る経路が無いこと、
+   節はどちらも、funptr 型の `Expr::Lam` が式の内側へ移らないことを `L9b` の `<2>2a` が示すと書く。
+   その段は `uncurry` の中で funptr 型が式に付く位置を 3 つに数え上げ、`uncurry` より前に funptr 型が制約系へ入る経路が無いこと、
    型検査が `Expr::Lam` の節点に置く期待型が funptr 型であれば `type_fun(arg_ty, body_ty)` との単一化が
    tycon の食い違いで失敗すること、`replace_closure_call_to_funptr_call_subexprs` が式の型を別の式へ
    写さないこと、`uncurry` の後の `simplify_symbol_names` が名前しか替えないことを読む。報告する穴は
