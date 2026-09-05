@@ -12,7 +12,7 @@ mod tests {
     use serde_json::{json, Value};
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use tempfile::TempDir;
 
     /// Copies the named case project into a temporary directory and returns it with the project's
@@ -372,6 +372,34 @@ mod tests {
         client
     }
 
+    /// The diagnostics of `file` once they answer `settled`, and the ones on screen when the wait
+    /// runs out.
+    ///
+    /// An edit asks for a pass, and what ends next can be a pass asked for earlier — the one a
+    /// session starts with, or the one a save asked for — so the count of passes that have ended
+    /// tells one from the other only where no other pass is in flight. Waiting for the reports
+    /// themselves is what does tell them apart. A report that never arrives leaves the assertion
+    /// that follows to fail on what is on screen at the end of the wait.
+    fn wait_until_diagnostics(
+        client: &mut LspClient,
+        file: &Path,
+        settled: impl Fn(&[Value]) -> bool,
+    ) -> Vec<Value> {
+        let deadline = Instant::now() + PASS_TIMEOUT;
+        loop {
+            let diagnostics = client.get_diagnostics(file);
+            if settled(&diagnostics) || Instant::now() >= deadline {
+                return diagnostics;
+            }
+            client.wait_for_server(Duration::from_millis(100));
+        }
+    }
+
+    /// Whether the reports carry the one whose message contains `text`.
+    fn carries_report(diagnostics: &[Value], text: &str) -> bool {
+        !diagnostics_containing(diagnostics, text).is_empty()
+    }
+
     /// Saves `file` and waits until the pass the save asks for has ended. `expectation` names
     /// what the wait is for, and is shown when the wait times out.
     fn save_and_wait_for_a_pass(client: &mut LspClient, file: &Path, expectation: &str) {
@@ -394,6 +422,11 @@ mod tests {
         "module Main;\n\nmain : IO ();\nmain = println(\"x\");\n";
 
     /// A project directory holding the given files, under a fresh temporary directory.
+    ///
+    /// The path handed back is canonical, which is what makes the URI a test builds from it the
+    /// URI the client builds: a temporary directory reaches its files through a symbolic link on
+    /// some systems, and the server keeps one record per URI, so two spellings of one path leave
+    /// two records of one file and the analysis reads whichever the map hands it first.
     fn project_with(files: &[(&str, &str)]) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let project_dir = temp_dir.path().join("proj");
@@ -401,6 +434,9 @@ mod tests {
         for (name, content) in files {
             fs::write(project_dir.join(name), content).expect("Failed to write a project file");
         }
+        let project_dir = project_dir
+            .canonicalize()
+            .expect("Failed to canonicalize the project directory");
         (temp_dir, project_dir)
     }
 
@@ -448,7 +484,10 @@ mod tests {
             "the pass over the repaired program is expected to end",
         );
 
-        sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
+        let diagnostics = wait_until_diagnostics(&mut client, main_fix, |d| {
+            carries_report(d, UNKNOWN_NAME_REPORT)
+        });
+        sole_diagnostic_containing(&diagnostics, UNKNOWN_NAME_REPORT);
     }
 
     /// The reports of the pass before a failing one stay on the files they name, and the pass that
@@ -475,7 +514,10 @@ mod tests {
             main_fix,
             "the pass over the program carrying an ordinary error is expected to end",
         );
-        sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
+        let diagnostics = wait_until_diagnostics(&mut client, main_fix, |d| {
+            carries_report(d, UNKNOWN_NAME_REPORT)
+        });
+        sole_diagnostic_containing(&diagnostics, UNKNOWN_NAME_REPORT);
 
         // The program written next, which the analysis fails on.
         fs::write(project_dir.join(main_fix), &program_the_analysis_fails_on)
@@ -500,7 +542,7 @@ mod tests {
             "the pass over the program carrying no error is expected to end",
         );
 
-        let diagnostics = client.get_diagnostics(main_fix);
+        let diagnostics = wait_until_diagnostics(&mut client, main_fix, |d| d.is_empty());
         assert!(
             diagnostics.is_empty(),
             "the report of the pass before the failing one is expected to be taken back, but \
@@ -528,7 +570,10 @@ mod tests {
 
         let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
         save_and_wait_for_a_pass(&mut client, main_fix, "the first pass is expected to end");
-        sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
+        let diagnostics = wait_until_diagnostics(&mut client, main_fix, |d| {
+            carries_report(d, UNKNOWN_NAME_REPORT)
+        });
+        sole_diagnostic_containing(&diagnostics, UNKNOWN_NAME_REPORT);
 
         // The repair, which stays in the editor: the file on disk keeps the error.
         let uri = format!("file://{}", project_dir.join(main_fix).display());
@@ -546,7 +591,7 @@ mod tests {
             .wait_for_progress_end_count(passes_before + 1, PASS_TIMEOUT)
             .expect("the pass over the repaired buffer is expected to end");
 
-        let diagnostics = client.get_diagnostics(main_fix);
+        let diagnostics = wait_until_diagnostics(&mut client, main_fix, |d| d.is_empty());
         assert!(
             diagnostics.is_empty(),
             "the report is expected to be taken back once the buffer carries no error, but \

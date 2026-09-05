@@ -9,23 +9,28 @@ use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
 use crate::misc::to_absolute_path;
 use crate::write_log;
 use lsp_types::{DocumentSymbol, DocumentSymbolParams, SymbolKind};
+use std::path::{Path, PathBuf};
 
-// Handle "textDocument/documentSymbol" method.
+/// Handle a `textDocument/documentSymbol` request.
+///
+/// Replies with the symbols the file defines. A file the request names no path for — a URI that
+/// does not decode, or one naming nothing on disk — is answered with an empty list, so that the
+/// client has its answer rather than a request left open.
 pub(super) fn handle_document_symbol(id: u32, params: &DocumentSymbolParams, program: &Program) {
-    let canonicalize_path = |path| {
-        let path = to_absolute_path(path);
-        if let Err(e) = path {
-            let msg = e.to_string();
-            write_log!("{}", msg);
-            return None;
+    let canonicalize_path = |path: &Path| -> Option<PathBuf> {
+        match to_absolute_path(path) {
+            Ok(path) => Some(path),
+            Err(why) => {
+                write_log!("{}", why);
+                None
+            }
         }
-        path.ok()
     };
 
-    let path = uri_to_path(&params.text_document.uri);
-    let path = match canonicalize_path(&path) {
-        Some(path) => path,
-        None => return,
+    let path = uri_to_path(&params.text_document.uri).and_then(|path| canonicalize_path(&path));
+    let Some(path) = path else {
+        send_response(id, Ok::<_, ()>(Vec::<DocumentSymbol>::new()));
+        return;
     };
 
     let mut symbols = Vec::new();
