@@ -209,6 +209,28 @@ SCAN src/ `funcs.insert(`
   = src/rc_ir/rc_insert.rs: insert_rc -- 同じ鍵で `Map` を組み直す
   = src/rc_ir/unique_check_elim.rs: specialize -- 一意性検査の除去が複製を `output_funcs` へ入れる
 
+**前提 `Origin::of_candidates` を呼ぶ在りか** --- `Origin::of_candidates` を呼ぶ式が在る項目は次で
+尽きる。
+
+SCAN src/ `of_candidates(`
+  = src/rc_ir/ownership.rs: Origin::of_candidates -- 定義
+  = src/rc_ir/ownership.rs: origin_from_leaves_under -- 末尾で `here` を identity に渡す
+  = src/rc_ir/ownership.rs: origin_inner -- `Binding::Join` の腕で `(var, path)` を identity に渡す
+
+**前提 `VarTable::closure_targets` の在りか** --- 名前 `closure_targets` が現れる項目は次で尽きる。
+`src/rc_ir/provenance.rs` の項目が持つのは `Interpreter` の同名の欄であって `VarTable` のそれではない。
+
+SCAN src/ `closure_targets`
+  = src/rc_ir/borrow.rs: funcs_observing_uniqueness -- 同名の局所の `Set<FuncRef>`
+  = src/rc_ir/ownership.rs: VarTable -- 欄の宣言
+  = src/rc_ir/ownership.rs: VarTable::empty -- 空の表を置く
+  = src/rc_ir/ownership.rs: collect_bindings -- `RcRhs::Closure` の腕が鍵を入れる
+  = src/rc_ir/ownership.rs: resolve_callee_params -- 読み
+  = src/rc_ir/provenance.rs: Interpreter -- 同名の欄の宣言
+  = src/rc_ir/provenance.rs: Interpreter::interpret_app -- 同名の欄の読み
+  = src/rc_ir/provenance.rs: Interpreter::interpret_rhs -- 同名の欄への書き込み
+  = src/rc_ir/provenance.rs: Interpreter::new -- 同名の欄の初期化
+
 **`develop_mode` について。** `borrow_ify` は `develop_mode` が真のとき `check_clone_names_are_fresh` と
 `RewriteCtx::check_ownership_is_levelled` を呼ぶ。どちらも `assert!` を行うだけで出力を作らない
 (`CODE src/rc_ir/borrow.rs: borrow_ify`, `check_clone_names_are_fresh`,
