@@ -1497,6 +1497,13 @@ leaf である。これが無いと `origin_inner` が `args[j]` で添字を外
 ない path を歩く。表のこの行が「第 `j` オペランドの leaf `σ`」と書くのは、そのオペランドとその leaf が
 実在することを含んでいる。
 
+**1 つの `Llvm` 節点の結果の相異なる 2 つの leaf が、同じ `Arg(j, σ)` を宣言することはない。** <!--#702dc94-->
+すなわち、単一の `Arg` を宣言する結果 leaf からオペランドの leaf への写像は単射である。**これが無いと、
+D9 の移動の表が 1 つのオペランドの leaf から 2 本の辺を挙げる** -- `p60-insert-rc.md` の `DEF 割り当て μ`
+はその leaf の `μ` を 1 つの節点で 2 下げるので、`L17` (b) の「すべてのスロットで `μ ≥ 0`」が破れる。
+**A5 では塞げない** -- A5 が「同じ参照を持つ 2 つの leaf は同じオブジェクトを指す」の形で通るのは両端が <!--#398e5fc-->
+計数下のときだけなので、オペランドの leaf がグローバル状態のオブジェクトを指す場合が残る。
+
 **`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す。 <!--#24e75e3-->
 `LLVMGen::result_prov` は `&self` を取るので、内部可変性を持つ op は同じ引数に違う答えを返せる。果たす者は
 `impl LLVMGen for` の 78 個の通読である (A21 が `llvmgen-function-values.md` について取っているのと同じ
@@ -2223,7 +2230,8 @@ P1 の定義域はこの広い方であり、型の歩みを扱う命題が P1 �
 オブジェクトの制御ブロックの**状態の欄** (`RefcntState`) へ書き込む生成コードは、`create_obj` が
 割り当てたオブジェクトへ `LOCAL` を書く箇所、`build_mark_boxed_with` が印を付ける箇所、そして
 `build_branch_by_is_unique` の threaded の腕がカウント 1 のとき `LOCAL` を書く箇所の 3 つである。
-**環境がこの欄を書かないことは A17 (ii-b) が言う。** <!--#4eb73ec-->
+**環境がこの欄を書かないことは A17 (ii-b) が言う。** 読む者は `p50-observation.md` の <!--#8984f8f-->
+`L0` -- 状態の欄がどう動くかを追う段である。 <!--#4eb73ec-->
 
 **この仮定を果たすのは走査である。** 在りかを述語で書き、その述語を機械が走らせて要素を挙げる。 <!--#5919471-->
 挙がった各要素が何であるかは、`--` の後に書く。
@@ -2241,7 +2249,9 @@ SCAN src/ `.set_refcnt_state(`
 
 **この仮定を果たすのは、`tycons` の表を据える箇所と足す箇所の走査である。** 据える 2 か所はどちらも <!--#a3d055e-->
 `bulitin_tycons()` から始めるか空から始め、足す 4 か所が入れる鍵の名前は `?`・`#FixCap@`・`#CapList@`
-のいずれかで始まるので、`#FunPtr` で始まる鍵を後から入れる者は居ない。
+のいずれかで始まるので、`#FunPtr` で始まる鍵を後から入れる者は居ない。**読む者は、組み込みの型について `is_array` /
+`is_funptr` / `is_fully_unboxed` を読む段である** -- `p10-leaves-and-units.md` の `<1>3ba`、
+`p12-identity-and-consumes.md` の `L3a`、`p60-insert-rc.md` の `L13a` `<1>3`。
 
 SCAN src/ `TypeEnv::new(`
   = src/ast/program.rs: Program::calculate_type_env -- `bulitin_tycons()` から始める
@@ -2262,6 +2272,8 @@ override する各項目は `true` を返す。
 
 **走査は字面の上位近似なので、一覧には読みだけの項目も入る。** どの項目が override でどれが読みかは、 <!--#f3ddd51-->
 `--` の後に書く。
+
+**読む者は `p05-holders.md` である** -- 適用した関数の中で作られた参照がどの op から出るかを絞る段が引く。 <!--#462eeb0-->
 
 SCAN src/ `applies_a_function_operand`
   = src/ast/inline_llvm.rs: applies_a_function_operand -- 既定の宣言
@@ -2285,6 +2297,9 @@ SCAN src/ `applies_a_function_operand`
 その参照を処分するとき、その `release` の呼び出しはその `retain` の呼び出しより後に立つ。
 **この形の対は 1 対 1 である** -- 1 つの節点の実行がこの形の対を 2 つ以上持つときも、各 `release` は <!--#9cabcf6-->
 自分の相手の `retain` を持つ。
+
+**読む者は `p05-holders.md` である** -- 素動作の粒度で `Obl` を勘定する段が、その段の中の点で `Obl` が <!--#164828d-->
+下がらないことに引く。
 
 **D24 の「段の中で相殺するもの」の箇条が順序を書くのは 1 つの op についてである。** この仮定は同じ <!--#a3a3323-->
 順序を、`Generator::retain`・`Generator::build_retain`・`Generator::release` の呼び出しを出す
