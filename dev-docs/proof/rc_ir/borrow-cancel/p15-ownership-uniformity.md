@@ -1713,11 +1713,14 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
   `Binding::Field(container, _)` の `container` (`RcExpr::Destructure` の容器)、
   `Binding::Payload(scrut, _)` の `scrut` (`RcRhs::Match` の scrutinee)、`Binding::Join(arm_results)` の
   各元 (`returned_var` が返す、各アーム本体の終端の `Ret` が名指す変数) である。`for_each_var` は
-  `for_each_node` で本体の全節点 -- アーム本体の節点も含む -- を歩き、各節点について
-  `for_each_var_of_node` と `for_each_var_of_rhs` を呼ぶ。この 2 つは `RcRhs::Var` のオペランド、
+  `for_each_node` で本体を歩き、各節点について `for_each_var_of_node` と `for_each_var_of_rhs` を呼ぶ。
+  `for_each_node` の本体は `grow_stack(|| for_each_node_inner(node, visit))` であり、A15 より
+  `grow_stack` は閉包をちょうど 1 回呼ぶ。`for_each_node_inner` は各節点で `visit` を呼んだ後、`Match` の
+  各アーム本体と継続の両方へ降りるので、この歩きは本体の全節点 -- アーム本体の節点も含む -- を訪れる。
+  `for_each_var_of_node` と `for_each_var_of_rhs` は `RcRhs::Var` のオペランド、
   `RcRhs::Llvm` の各オペランド、`Destructure` の容器、`RcRhs::Match` の scrutinee、`Ret` が名指す変数の
   いずれも訪れる。
-  BY CODE src/rc_ir/ownership.rs: collect_bindings, returned_var,
+  BY <ref id=3e6b0e0/>, CODE src/rc_ir/ownership.rs: collect_bindings, returned_var,
      CODE src/rc_ir/ast.rs: for_each_node, for_each_node_inner, for_each_var, for_each_var_of_node,
      for_each_var_of_rhs
 
@@ -1753,10 +1756,13 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
       `rename` の像に入らない。
   <2>1. `rename` の鍵は言明の第 1 の節が挙げる名前ちょうどであり、いずれも `func` に現れる名前である。
     `fresh_rename_function` は `params` と `cap` の各名前について `assign_fresh_name` を呼び、続けて
-    `assign_fresh_names_to_binders` が本体を歩いて `Let` の束縛変数、`Match` のアームの payload 変数、
-    `Destructure` のフィールド変数について同じことをする。`renaming` に鍵が入るのはこの 2 か所だけで
-    ある。
-    BY CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name,
+    `assign_fresh_names_to_binders` を本体に掛ける。その本体は
+    `grow_stack(|| assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter))` であり、
+    A15 より `grow_stack` は閉包をちょうど 1 回呼ぶので、この歩きは
+    `assign_fresh_names_to_binders_inner` の歩きである。それは `Let` の束縛変数、`Match` のアームの
+    payload 変数、`Destructure` のフィールド変数について `assign_fresh_name` を呼ぶ。`renaming` に鍵が
+    入るのはこの 2 か所だけである。
+    BY <ref id=3e6b0e0/>, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name,
        assign_fresh_names_to_binders, assign_fresh_names_to_binders_inner
   <2>2. `rename` の像の名前は互いに異なる。
     `assign_fresh_name` は `*counter += 1` を行ってから `name#b<counter>` を作る (`clone_func` が渡す
