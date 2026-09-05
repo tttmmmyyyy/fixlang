@@ -2207,15 +2207,17 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 <1>1. `owns_unit` を呼ぶのは `any_owned_unit`、`routing_saves_retain`、`call_rc`、`rewrite_rc` の 4 か所で
       ある。
-  `owns_unit` は `src/rc_ir/borrow.rs` の `impl RewriteCtx` の中で `fn` として宣言されている --
-  `pub` も `pub(crate)` も付かない -- ので、そのファイルは `mod` 宣言を持たず、
-  EXT Rust の可視性 よりその呼び出しはこのファイルの中に
+  `owns_unit` は `src/rc_ir/borrow.rs` の `impl RewriteCtx` の中で `fn` として宣言されており、
+  `pub` も `pub(crate)` も付かない。またこのファイルは `mod` 宣言を 1 つも持たないので、下位モジュールを
+  持たない。この 2 つと EXT Rust の可視性 より、その呼び出しはこのファイルの中に
   しかない。このファイルの中で識別子 `owns_unit` が現れるのは、この宣言と、`any_owned_unit` の
   `rc_units(&arg.ty, ..).iter().any(|unit| self.owns_unit(arg, unit))`、`routing_saves_retain` の
   `!(self.owns_unit(arg, unit) && ..)`、`call_rc` の `let arg_owned = self.owns_unit(arg, &unit);`、
   `rewrite_rc` の `.filter(|unit| self.owns_unit(v, unit))`、および 2 つの doc コメントである。
   BY EXT Rust の可視性,
-     CODE src/rc_ir/borrow.rs: 識別子 owns_unit の全出現, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+     CODE src/rc_ir/borrow.rs: 識別子 owns_unit の全出現,
+     CODE src/rc_ir/borrow.rs: 下位モジュールの宣言の全出現,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
      RewriteCtx::any_owned_unit, RewriteCtx::routing_saves_retain,
      RewriteCtx::call_rc, RewriteCtx::rewrite_rc
 
