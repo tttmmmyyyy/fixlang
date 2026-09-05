@@ -65,6 +65,7 @@ impl Default for VisitState {
     }
 }
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub trait ExprVisitor {
     fn start_visit_var(
         &mut self,

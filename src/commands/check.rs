@@ -5,6 +5,7 @@ use crate::metafiles::project_file::ProjectFile;
 use crate::misc::info_msg;
 use std::path::PathBuf;
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn check(mut config: Configuration) -> Result<(), Errors> {
     info_msg("Checking...");
 

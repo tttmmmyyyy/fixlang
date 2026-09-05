@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 pub const WRITE_LOG: bool = false;
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 
 fn open_log_file() -> Mutex<File> {

@@ -41,15 +41,15 @@ A proof is a numbered list of steps. The last step of every list is `QED`, whose
 ### `BY` — the citation
 
 ```
-BY <2>1, <1>3, P4, A1, D2 DEF unit_key CODE `src/rc_ir/borrow.rs: CancelAnalysis::un_bump`
+BY <2>1, <1>3, P4, A1, D2 DEF unit_key CODE src/rc_ir/borrow.rs: CancelAnalysis::un_bump EXT Rust aliasing rules
 ```
 
 A `BY` line lists **everything** the step rests on, in these four groups (omit an empty group):
 
 - **Facts**: steps in scope (`<k>n`), propositions (`P<n>`), assumptions (`A<n>`), definitions used as facts (`D<n>`).
 - **`DEF`**: the definitions whose bodies are unfolded in this step. Citing `D2` as a fact means using what it states; citing it under `DEF` means substituting its text.
-- **`CODE`**: the source this step reads, as *file*: *symbol path* — a function, a method, a type, a match arm identified by its pattern. Never a line number: line numbers move, and a citation the reader cannot resolve after one edit is a citation nobody checks.
-- **External results**: a named theorem from outside the document, given its full statement in the definitions section.
+- **`CODE`**: the source this step reads, as *file*: *symbol path* — a function, a method, a type, a match arm identified by its pattern, written without backticks so that one form matches everywhere. Never a line number: line numbers move, and a citation the reader cannot resolve after one edit is a citation nobody checks. **`CODE` reaches items of the source only** — a `.rs` item, a grammar rule, a source file of the language under compilation. A fact that lives outside them, such as a target declared in a build manifest, is set down as an external result and cited that way.
+- **`EXT <name>`**: a named result from outside the document — a language rule, a library's contract, a theorem — with its full statement set down in the citing document's own preliminaries and cited by that name. **The label differs from `DEF` so that the `BY` line alone says whether a citation resolves inside the document or outside it.**
 
 The rule behind the format: **a reader who is handed only the cited items must reach the step's conclusion**. Anything they would additionally need is missing from the `BY`.
 
@@ -74,7 +74,7 @@ A step may itself be an assume/prove; its assumptions then hold only inside that
 - `SUFFICES <statement>` — proving the statement proves the current goal. The step's own proof shows that implication; the rest of the proof then works on the new goal. Use it to strip a quantifier or set up a contradiction without adding a level.
 - `CASE <condition>` — abbreviates "assume the condition, prove the current goal". A case split is a run of `CASE` steps followed by `QED`, and **the `QED` must cite the cases and show they are exhaustive**. A case split over a Rust `match` cites the enum's definition for exhaustiveness; one over a condition cites the excluded middle. A split that silently omits an arm is the most common way a proof of a compiler pass goes wrong, so the verifier checks exhaustiveness by name against the type.
 - `PICK x SUCH THAT P(x)` — introduces `x` and asserts `P(x)`; the step's proof shows such an `x` exists.
-- `DEFINE name == expression` — names an expression for the rest of the current level. A definition local to a proof, as opposed to a `D<n>` in the definitions section, which is global.
+- `DEFINE name == expression` — names an expression for the rest of the current level. A definition local to a proof, as opposed to a `D<n>` in the definitions section, which is global. **A `DEFINE` step carries no `BY` and asserts nothing.** It introduces notation, so it has nothing to support; a claim written under `DEFINE` sits where no verifier looks for one, and is never checked.
 
 ### Hierarchical numbering, and what a step may cite
 
@@ -90,6 +90,99 @@ When two proofs need the same fact, it is lifted out — into a preceding siblin
 ### Inserting a step
 
 The verifier's findings are answered by inserting steps, and renumbering would break every citation in the document. So **insert with a letter suffix**: a step between `<1>1` and `<1>2` is `<1>1a`, then `<1>1b`. Lamport's own worked proof does this. Numbers and suffixed numbers are never reused within one proof, even after a deletion.
+
+### Never write a range, a count, or any other derived figure
+
+A range of names -- `P8 - P14b`, `D1`-`D34`, "assumptions A1 through A26" -- names its endpoints and
+leaves its members to be reconstructed. Nothing can resolve it: not a reader who does not know which
+numbers exist, not a tool, and not the author a year later. Measured, a lettered number placed
+between two others (`A26a`) dropped out of a range that read "A1 through A26", and two steps that
+claimed to check every assumption silently skipped it.
+
+The same holds for a count. "The 78 implementations", "the six arms of the match", "the three places
+that write the field" -- each is a figure derived from the code or from the frame, and each goes
+stale the moment either moves, silently, because a wrong number reads exactly like a right one.
+Measured across six proof documents, half of the counted claims sat next to the enumeration they
+counted, so the figure carried nothing the list did not already carry.
+
+**Write what the figure was derived from.** Name the members, or give the predicate that selects
+them -- "every `impl LLVMGen` whose `result_prov` returns a `Fresh` leaf" resolves forever, while
+"the 29 such implementations" resolves until someone adds one. Where a count is the claim itself --
+zero occurrences, or exactly one call site when uniqueness is the point -- it stays, because there
+the figure is the property rather than a description of it.
+
+### Locate by predicate, and test the predicate
+
+The rule against counts extends to inventories. A list of where something occurs — the call sites, the
+places a field is written, the constructs that create a reference — is stale as soon as one is added,
+and its staleness is invisible: a list that used to be complete reads exactly like one that is.
+**State where something occurs as a predicate that decides membership, and let the reader run it.**
+
+- **Write the predicate over the item called, not over the spelling of a name.** A predicate phrased
+  as a name pattern — "the calls written `gc.retain(`", "the calls to a method named `get_or_init`" —
+  answers for text rather than for code, and misses every occurrence that reaches the same item by
+  another spelling or through another type. Measured, a name-shaped predicate missed the occurrences
+  arriving through a wrapper type, and a second one missed a whole family reached through a smart
+  pointer.
+- **Run the predicate before relying on it.** Classify every occurrence with it and see what the
+  classification returns. Measured, running one predicate returned occurrences that appeared in
+  neither the list it replaced nor the predicate itself, and one syntactic occurrence turned out to
+  serve two of the classes at once. Replacing a list with a predicate is necessary and not
+  sufficient.
+- **A document defines its own item sets by predicate too.** "the assumptions of this section" is
+  the set of items bearing this section's assumption heading — not "A1 through A26", which drops
+  every lettered insertion. This is the same rule turned on the document, and it is the one place
+  authors reliably forget to apply it.
+- **State the fulfilling side by predicate as well.** Where a proposition carries a precondition,
+  say by predicate which code has to satisfy it. A list of the readers alone leaves each reader free
+  to assume silently that it qualifies.
+
+### Identity is not a number
+
+A step cites `P28` and a document is named `p20-borrow-ify.md`, so numbers and names look like
+identities. They are not. A number is a display: it orders items for a reader, and ordering is the
+one thing that changes when an item is inserted. Making it the identity is what forces the letter
+suffixes of the preceding section, and those suffixes are what ranges then lose.
+
+Give each item an identity that carries no meaning -- a short random string -- and let the number
+stay a display that may be reassigned freely. A tool then answers "what cites this" and "what moved
+under this" from the identities, and renumbering costs nothing. Keep the number in the prose: an
+identity is for machines to follow, and a reader who meets `a3f9c21` in a `BY` line learns nothing.
+
+### What a citation may name
+
+A citation is checkable when the thing it names cannot become a different thing. Names can be held
+still; positions cannot.
+
+- **Cite by name, never by position.** A section number, a paragraph ordinal, a line number and a
+  range all name a slot rather than a thing, and an edit elsewhere slides a different thing into the
+  slot without touching the citation. Give a name to every statement, corollary and invariant that
+  needs citing — a `P<n>`, a lemma, or a `DEF <name>` — and cite the name. Measured, one document
+  put section numbers in `BY` **52 times**; all 52 resolved and none was wrong, and the cost was
+  paid entirely by the checkers, which could not tell those citations from unresolvable ones.
+- **A citation into part of an item quotes the part.** "the last paragraph of `A13`", "the first
+  sentence of `D24` (F)" is a position inside a name; one inserted paragraph moves it silently.
+  Quote the sentence beside the reference, so that what was meant survives the move. Measured, a
+  step citing "the last paragraph of `A13`" was resting on `A13`'s third, and the last paragraph
+  said something else.
+- **Prose may point where `BY` may not.** A statement's commentary may name a later proposition,
+  because commentary gives the motive rather than the support; the `BY` line may not, because it
+  gives the support. Write the same distinction in the proofs: motive in the prose, support in `BY`.
+- **Never copy a table that moves.** A status table, a count, an inventory — anything regenerated as
+  the work proceeds — goes stale in the copy first, and the reader of the copy has no way to see it.
+  Cite what the row records, in a form the reader can confirm by opening the original.
+
+### A rule that reads two ways
+
+**A rule that admits two readings cannot be obeyed or checked.** Nobody can say whether a document
+follows it, so the question is settled per reader and the answers differ. When two parts of a
+document state a rule and its exception without saying which wins, that is the same defect.
+
+**A checker that keeps returning "cannot decide" is reporting a defect in the rule, not noise in the
+document.** Treat a persistent undecidable bucket as a rule to narrow, and narrow it until the
+bucket is empty; the alternative is a bucket nobody triages, which is where the real violations then
+sit. Measured, one such bucket held 52 genuine violations for a full round because its other
+contents were legitimate citations the checker did not know.
 
 ### Calculational steps
 
@@ -156,6 +249,15 @@ The definitions carry every proof in the document, so an undefined word in one c
 
 Two rules keep definitions through that check:
 
+- **A definition states meaning and nothing else.** A definition that carries a claim, with its own
+  justification attached, has put an assertion where no verifier looks: assertions are steps, and a
+  step is what carries a `BY` and receives a verdict. What is to be shown about the notion is a
+  proposition.
+- **A restriction belongs in the sentence it restricts.** A qualification parked in the next
+  sentence, or outside the emphasis that a reader's eye follows, is dropped when the item is quoted
+  or paraphrased, and what is then cited is the unrestricted claim. Measured, one assumption whose
+  restriction sat in the following sentence was mis-cited in the widened form by **three documents
+  independently**, and twice by the same insertion of words taken from that following sentence.
 - **A definition that quantifies over constructs enumerates them.** "the constructs that read a value", "the ones that create a reference", "the ones that consume" — each is a closed list in the language under proof, and writing the list is what makes the definition checkable. Given as a property instead, every prover derives the list itself, and they derive different ones.
 - **A definition that names a function of the code says whether that function *is* the definition or merely implements it.** Where the two can differ — the function reports a superset, or answers for a case the definition leaves out — say so in the definition, and name the reader that depends on the difference. A prover told the function is the definition cannot see that gap, and the gap is where a bug sits.
 - **A definition drawn from an enumerating function says whether the enumeration is exact or an over-approximation, and of what.** A function that enumerates the positions a value *could* hold something enumerates, at run time, a superset of the positions it *does*. Writing "exactly one per enumerated position" turns a static possibility into a dynamic fact, and every proposition built on it then proves something that is not true. The passes themselves usually work on the over-approximation quite deliberately, so the definition has to carry both the static set and the dynamic subset, and each proposition has to say which one it means.
@@ -220,8 +322,14 @@ Run it twice, and only twice. Running it continuously produces churn against a f
 
    A prover on a real subsystem is a long-running, expensive agent, so send a layer out a couple at a time — see *Two agents at a time*. When one is interrupted, its file is on disk: commit what is there and **resume that agent** rather than launching a fresh one, since the reading it has already done is most of what it spent.
 5. **Run the verifiers.** One subagent per proposition, each given only what the *Briefing a verifier* section allows, dispatched a couple at a time — see *Two agents at a time*. Wait for all.
-6. **Iterate.** Hand each verifier's findings to that file's prover. `NOT-OBVIOUS` is answered by inserting substeps, never by rewording the step to sound more certain. `FALSE`, `UNDEFINED`, `BAD-CITATION` and `HEDGE` are answered as the section below prescribes. Then verify again — with **fresh** verifier subagents, which have not seen the previous round's findings, so the check is never anchored to what it already accepted.
-7. **Stop at the fixed point.** The document is finished when one full round over every proposition returns no finding of any kind. Record the round in the status table.
+
+   **Which files need verifying is a predicate, not a round number**: *has a verification run on this file since the file last changed, and since every item it cites last changed?* A repair always changes its file, so a repaired file always needs verifying again — the repair answers findings, and whether the answers are right is what the next verification says. A file that has changed for neither reason is skipped with a reason, not counted as done.
+6. **Iterate.** Hand each verifier's findings to that file's prover — **the report itself, not a summary of it.** A finding names the step it is about and says what the reader had to supply; a summary keeps the families and loses both. Measured, a repair given ten named findings out of fifty-three answered the ten and reported that it could not locate the rest. `NOT-OBVIOUS` is answered by inserting substeps, never by rewording the step to sound more certain. `FALSE`, `UNDEFINED`, `BAD-CITATION` and `HEDGE` are answered as the section below prescribes. Then verify again — with **fresh** verifier subagents, which have not seen the previous round's findings, so the check is never anchored to what it already accepted.
+7. **Stop at the fixed point.** The document is finished when **two consecutive rounds** over every proposition return no finding of any kind. One clean round is not enough: **that round's own repairs are the next round's defects**, and measured, repairs written to answer findings introduced fresh ones at a rate that kept files oscillating between clean and not. Record the rounds in the status table.
+
+   **`NOT-OBVIOUS` counts.** A step the verifier marked so is a step whose citations did not carry it — the verifier supplied the rest — and that is the one failure the whole style exists to prevent. The objection that the line between obvious and not moves with the reader is answered by what the verifier is required to write beside the verdict: *what it had to supply*. That turns the finding into a repair anyone can make and anyone can check — insert the supplied fact as a substep with its own citation — and the repair always exists, since a step can always be split further.
+
+   Excluding it lets a document close while steps whose citations do not carry them stand in it. Measured, one round returned 83 of them against 6 that were false, so excluding it excludes most of what the round found.
 8. **Report.** Run the critic a second time before this, on the closed document, and carry what it says about the result's limits into the report. What was proved; under which assumptions; which assumptions nobody discharges; how many rounds it took; and every code bug the attempt turned up, in `bug-hunt` shape. Then update the hunt log's neighbours in memory if the proof changed what is known about the subsystem.
 
 ### Give every agent its own worktree
@@ -247,6 +355,28 @@ Keep about two of these agents in flight. They are the expensive kind — each r
 So the brief tells the agent to **commit as it goes** rather than once at the end: a finished section is worth committing even though the file is not done. Then an interrupted agent has something to resume onto, and *resume* it — the transcript holds the citations it has already opened.
 
 The orchestrator's own work fills the gaps: while two agents run, edit the frame, read the reports that have landed, and prepare the next brief. Waiting is not the cost; re-reading is.
+
+## Reading and writing a document whose citations are identities
+
+Once citations carry identities rather than numbers, a `BY` line no longer says what it rests on, so
+**nobody reads the file itself.** The reading copy is generated: each citation expanded to the title
+its proposition carries, and the cited propositions' text assembled beside it. Hand an agent that,
+not the source.
+
+The gain is not neutrality. A citation that reads `A3` sends the reader to the frame to find out
+what `A3` says; one that reads `the declared model is faithful` is read where it stands.
+
+**Writing goes the other way.** An author writes the name and lets the tool put the identity in, so
+nothing has to remember a random string. The tool converts inside `BY` lines only, leaving
+quotations and code spans alone, and it reports every name that does not resolve rather than
+guessing.
+
+**Verify a conversion by rebuilding the citation graph from the converted text and diffing it
+against the graph before.** Substitution over prose is how a reference gets written where none
+belongs, and the damage is invisible on the page, since a wrong identity looks exactly like a right
+one. Measured, that diff caught three separate corruptions that reading could not: a cross-file
+citation collapsed onto the citing file's own proposition of the same name, identities written into
+quotations of the frame, and quotations that span lines left unguarded.
 
 ## Briefing a prover
 

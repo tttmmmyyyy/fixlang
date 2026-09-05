@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 /// A variable of the RC IR. Because a fresh name is minted at every binding, a name resolves its
 /// binding uniquely, without scope tracking.
-// PROOF: P1, P2, P2a, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcVar {
     /// The name this variable is bound under, unique across the program.
@@ -36,6 +36,7 @@ pub struct RcVar {
 
 /// A reference to a top-level RC IR function: a lifted lambda body, a global function, or an
 /// uncurried function-pointer version.
+// PROOF: P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct FuncRef {
     /// The name the function is defined under. It is the whole of the reference: a function is
@@ -62,7 +63,7 @@ pub struct RcProgram {
 
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and
 /// uncurried funptr versions.
-// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcFunc {
     /// The name this function is defined and called under, unique across the program: lowering mints
@@ -109,12 +110,12 @@ pub struct RcFunc {
 
 /// A variable together with a path into its value. Where the path is truncated to a reference-
 /// counting unit, the pair names one unit of that variable — the form the ownership tables hold.
-// PROOF: P1, P2, P5, P6, P7, P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub type VarPath = (FullName, FieldPath);
 
 /// An RC IR expression together with its source span. An expression's value type is that of the
 /// variable its final `Ret` returns, so it is read from that variable.
-// PROOF: P2a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcExprNode {
     /// The expression this node stands for. It is shared through an `Arc`, so cloning a node is
@@ -166,11 +167,12 @@ pub enum RcExpr {
 /// the whole value. A `Retain`/`Release` path stops at the root of an unboxed-union subtree (a
 /// physical refcount operation must be tag-safe), whereas an analysis path may descend past a known
 /// tag.
-// PROOF: P1, P2, P2a, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub type FieldPath = Vec<usize>;
 
 /// The boxed leaf whose runtime uniqueness an inline-LLVM op branches on: which operand carries the
 /// container, and the path to the leaf within that operand's value.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 pub struct UniqueCheckOperand {
     /// The position, among the operation's arguments, of the operand holding the container.
     pub container_index: usize,
@@ -199,7 +201,7 @@ pub enum RcTarget {
 /// catch-all arm, whose payload is the whole scrutinee.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
-// PROOF: D/A, P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct MatchArm {
     /// The variant number this arm matches, or `None` for a catch-all arm.
@@ -213,10 +215,11 @@ pub struct MatchArm {
     pub body: RcExprNode,
 }
 
+// PROOF: D/A, P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl MatchArm {
     /// This arm with `body` in place of its own: it matches the same variant and binds the same
     /// payload, and evaluates to what `body` gives.
-    // PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn with_body(&self, body: RcExprNode) -> MatchArm {
         MatchArm {
             body,
@@ -227,7 +230,7 @@ impl MatchArm {
 
 /// A compound expression. It appears only as the right-hand side of a `Let`; the arguments of `App`
 /// and `Llvm` are atoms (variables).
-// PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub enum RcRhs {
     /// Move / rename `y := x`, consuming `x`.
@@ -249,7 +252,7 @@ pub enum RcRhs {
 
 /// The reference-counting state dispatch of a `Retain` or `Release`. Lowering emits `Unknown`,
 /// which is always sound; locality inference specializes it.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 pub enum RcState {
     /// Read the object's refcount state at run time and dispatch three ways.
@@ -265,6 +268,7 @@ pub enum RcState {
     Global,
 }
 
+// PROOF: D/A, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl RcState {
     /// Whether code generation must read the object's state byte to decide how to count it.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -282,6 +286,7 @@ impl RcState {
     /// The suffix a reference-counting helper generated under this state carries in its name. The
     /// helpers and traversers are memoized by name, so this is what keys one per (type, state) and
     /// gives the states that generate the same code a single definition.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn name_suffix(self) -> &'static str {
         if self.dispatches() {
             ""
@@ -317,7 +322,7 @@ pub enum OwnershipShape {
 
 /// The initializer of a global value, run once when a reader first asks for the value. The whole
 /// graph the value reaches is marked global (refcount-exempt) before it is stored.
-// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcGlobalInit {
     /// The name the global value is defined and read under.

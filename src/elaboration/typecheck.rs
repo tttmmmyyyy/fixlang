@@ -151,12 +151,14 @@ where
 ///
 /// No type on the right hand side names a type variable the substitution replaces, so replacing
 /// every such variable of a type takes one walk over that type.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Substitution {
     /// The type replacing each type variable, by the variable's name.
     pub data: Map<Name, Arc<TypeNode>>,
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Default for Substitution {
     /// A substitution that replaces no type variable.
     fn default() -> Self {
@@ -166,6 +168,7 @@ impl Default for Substitution {
     }
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Substitution {
     /// Whether this substitution replaces no type variable, so that applying it changes nothing.
     pub fn is_empty(&self) -> bool {
@@ -173,7 +176,7 @@ impl Substitution {
     }
 
     /// The substitution that replaces the type variable named `var` by `ty`, and nothing else.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn single(var: &str, ty: Arc<TypeNode>) -> Self {
         let mut data = Map::<String, Arc<TypeNode>>::default();
         data.insert(var.to_string(), ty);
@@ -202,7 +205,7 @@ impl Substitution {
     /// # Returns
     /// Whether the two agreed. Where they disagree, the replacements taken from `other` before the
     /// disagreement stay, so a caller that carries on has to drop this substitution.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn merge(&mut self, other: &Self) -> bool {
         for (var, ty) in &other.data {
             if self.data.contains_key(var) {
@@ -226,7 +229,7 @@ impl Substitution {
     /// A type none of whose variables this substitution replaces is returned as
     /// it came: the common case of a substitution that says nothing about a type
     /// walks the type and hands back the same node.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
@@ -649,6 +652,7 @@ impl TypeCheckContext {
     /// unification mismatch is swallowed (`Ok(())`) so the caller can
     /// keep elaborating siblings; non-unification errors (e.g. an
     /// associated-type reduction failure) always propagate.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unify_or_tolerated_mismatch(
         &mut self,
         expected: &Arc<TypeNode>,
@@ -1108,6 +1112,7 @@ impl TypeCheckContext {
     /// Perform typechecking: update the type substitution so that `ei` has
     /// type `ty`, and return the given AST augmented with inferred
     /// information.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unify_type_of_expr(
         &mut self,
         ei: &Arc<ExprNode>,
@@ -1159,7 +1164,7 @@ impl TypeCheckContext {
     /// later stage — as the `Expr::MakeStruct` arm holds them in the
     /// struct's declaration order for code generation — reorders them
     /// after the walk rather than before it.
-    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unify_type_of_expr_inner(
         &mut self,
         ei: &Arc<ExprNode>,
@@ -2142,6 +2147,7 @@ impl TypeCheckContext {
     /// an associated type on either side becomes a pending equality, to be settled once enough is
     /// known about its arguments. Two types no substitution can make equal give
     /// `UnificationErr::Disjoint`.
+    // PROOF: P2a, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unify(
         &mut self,
         ty1: &Arc<TypeNode>,
@@ -2265,6 +2271,7 @@ impl TypeCheckContext {
 
     /// Binds the type variable `tyvar1` to `ty2` by extending the substitution,
     /// rejecting a binding that would be circular or kind-mismatched.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unify_tyvar(
         &mut self,
         tyvar1: Arc<TyVar>,

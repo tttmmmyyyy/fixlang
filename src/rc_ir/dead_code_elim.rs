@@ -17,7 +17,7 @@ use crate::rc_ir::ast::{FuncRef, RcExpr, RcExprNode, RcProgram, RcRhs};
 /// globals and whose edges are the names one body mentions. Fix expressions are pure and a global is
 /// a call-once initializer run when a reader first asks for it, so a global no reader mentions
 /// computes a value nothing observes, and it is dropped like an uncalled function.
-// PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P27, P29, P30, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn eliminate_unreachable(prog: &mut RcProgram) {
     let globals: Map<FullName, &RcExprNode> = prog
         .globals

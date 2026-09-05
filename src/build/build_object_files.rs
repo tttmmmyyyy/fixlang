@@ -73,7 +73,7 @@ pub struct BuildObjFilesResult {
 /// * `global_types` — the type of a global that a lowered function references as an LLVM operand.
 ///   Such a global may be defined in another unit, so this covers the whole program.
 /// * `roots` — the names code generation reaches the lowered program through from outside it.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -96,7 +96,7 @@ fn lower_and_insert_rc(
 /// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
 /// borrowed parameters on the functions (`RcFunc::borrowed_units`), which `param_ownership_shapes`
 /// reads back as the owned complement.
-// PROOF: D/A, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, P30, (P-insert), T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, P30, P31, A19, T (dev-docs/proof/rc_ir/borrow-cancel)
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
@@ -248,7 +248,7 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
 }
 
 /// Compile the program into object files, and return their paths for the linker.
-// PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_object_files<'c>(
     mut program: Program,
     config: &Configuration,
@@ -567,6 +567,7 @@ fn build_object_files_cache_hash_or_warn(
 /// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
 /// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
 /// position-independent.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn get_target_machine(
     opt_level: OptimizationLevel,
     config: &Configuration,
@@ -738,7 +739,7 @@ fn build_exported_c_functions<'c, 'm>(
 /// The body goes onto the declaration an `FFI_CALL` of `main` has left, where a program calls its
 /// own entry point. `Program::validate_c_function_calls` has held that call to
 /// `c_entry_point_signature`, so the declaration found here is the one this function builds.
-// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNode>) {
     let main_function =
         c_entry_point_signature().get_or_declare_in_module(&C_ENTRY_POINT_NAME.to_string(), gc);

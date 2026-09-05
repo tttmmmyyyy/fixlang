@@ -770,6 +770,7 @@ impl Pattern {
     /// * `cond_tc`, `cond_ti` — the union the matched value has, and its declaration.
     /// * `match_src` — the span of the whole `match`, where a report of uncovered variants points.
     /// * `pats` — the arm patterns, in the order they are written.
+    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate_match_cases_exhaustiveness(
         cond_tc: &TyCon,
         cond_ti: &TyConInfo,

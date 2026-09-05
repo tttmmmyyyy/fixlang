@@ -54,7 +54,7 @@ enum LoweredSymbol {
 /// `symbols` holds it (`Program::global_types`). `roots` names what code generation reaches the
 /// lowered program from outside it; it becomes `RcProgram::roots`, and the build driver takes it
 /// from `Program::root_value_names`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lower_program(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -152,7 +152,7 @@ impl<'a> Lowerer<'a> {
     /// # Arguments
     /// * `hint` — the readable part of the name, shown in an RC IR dump.
     /// * `source` — where the value the variable holds is written, for diagnostics and debug info.
-    // PROOF: D/A, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn fresh_var(&mut self, hint: &str, ty: Arc<TypeNode>, source: Option<Span>) -> RcVar {
         self.fresh_counter += 1;
         let name = FullName::local(&format!(
@@ -314,7 +314,7 @@ impl<'a> Lowerer<'a> {
     /// stores them; for a funptr (no captures) it is empty. `inline_into_callers` says whether the
     /// back end is asked to inline every call of the function. The body is lowered under a fresh
     /// environment holding only the parameters and the projected captures.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30, P31, A19, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lambda_as_function(
         &mut self,
         lam: &ExprNode,
@@ -396,7 +396,7 @@ impl<'a> Lowerer<'a> {
     /// Lower `expr` to the single variable holding its value, appending to `bindings` everything
     /// that must be evaluated to reach it. An expression that is already an atom — a local variable,
     /// a global name — becomes that atom and appends nothing.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_to_var(&mut self, expr: &ExprNode, bindings: &mut Vec<PendingBinding>) -> RcVar {
         // A deeply nested expression recurses deeply here (as it does in RC insertion and code
         // generation); grow the stack on demand so a large program does not overflow it.
@@ -428,7 +428,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a variable reference to the atom holding its value: a local is the RC IR variable
     /// currently bound to it, and a global is an atom carrying the symbol's name, which code
     /// generation materializes.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_var(&mut self, v: &Arc<Var>, ty: &Arc<TypeNode>, source: &Option<Span>) -> RcVar {
         match self.resolve(&v.name) {
             // A local: reuse the variable already bound (it is already an atom).
@@ -455,7 +455,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an inline-LLVM operation: its free variables become its operands, in the fixed order
     /// the generator reads them, and the appended binding holds the value the operation produces.
-    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P27, P29, P30, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_llvm(
         &mut self,
         inline: &Arc<InlineLLVM>,
@@ -541,7 +541,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a lambda written in place to a closure value: its body becomes a top-level function
     /// under a fresh name, and the binding appended builds the closure from that function and the
     /// values it captures, in the order the closure stores them.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lam(
         &mut self,
         expr: &ExprNode,
@@ -643,7 +643,6 @@ impl<'a> Lowerer<'a> {
     /// Lower a `match`: the matched value becomes a variable, each arm is lowered against it, and
     /// the appended binding selects one arm on that value. The result variable holds the value of
     /// whichever arm is taken.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_match(
         &mut self,
         cond: &ExprNode,
@@ -776,6 +775,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an array literal: the elements are lowered left to right, and the appended binding
     /// builds an array holding them in that order.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_array_lit(
         &mut self,
         elems: &[Arc<ExprNode>],

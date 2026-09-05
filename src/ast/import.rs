@@ -131,6 +131,7 @@ impl ImportStatement {
     ///   name]`. The first becomes the span of the imported module, and each of the rest the span
     ///   of the `ImportTreeNode` that name becomes. Names a shorter `path_spans` leaves uncovered
     ///   carry no span.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn import_to_use_with_spans(
         importer: Name,
         name: FullName,
@@ -237,6 +238,7 @@ impl ImportStatement {
     /// in `name`'s module and carries no `hiding` clause, and becomes a statement of its own where
     /// `imports` holds no such statement. An `imports` that already reaches `name` is left as it
     /// stands.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_import(imports: &mut Vec<ImportStatement>, importer: Name, name: FullName) {
         // If it's already accessible, do nothing.
         if is_accessible(&imports, &name) {

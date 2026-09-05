@@ -1,7 +1,8 @@
-# `LLVMGen` の 78 実装のうち、関数の値を作るもの
+# A21 を果たす側 -- 関数の値に番地を書き込む段の数え上げ
 
-README の A21 は「Fix の関数型の値に LLVM 関数の番地を書き込むのは、クロージャを作る段、funptr のグローバル
-を読む段、そして `InlineLLVMFixBody` の 3 か所だけである」を置き、その果たす者を `builtin.rs` の op の集合と
+README の A21 は「Fix の関数型の値に LLVM 関数の番地を書き込むのは、クロージャを作る段
+(`build_rc_closure`)、funptr のグローバルを読む段 (`ValueAccessor::get` の `is_funptr` の枝)、そして
+`InlineLLVMFixBody` の 3 か所だけである」を置き、その果たす者を `builtin.rs` の op の集合と
 する。この文書がその数え上げである。`p51-runs.md` の `L0` が A21 を引く。
 **`src/fixstd/builtin.rs` の `impl LLVMGen for` 78 個すべてと、それらが呼ぶヘルパを読んだ。**
 
@@ -102,7 +103,7 @@ let fixf = fixf.insert_field(gc, CLOSURE_CAPTURE_IDX, cap_obj.value(gc));
   オペランドをそのまま返す `InlineLLVMMarkThreadedFunctionBody` や、容器へ入れる
   `InlineLLVMMakeStructBody` などがその値を結果に出す。
 
-## `L0` の数え上げが除いてよいもの
+## `L0` の数え上げが除いてよいもの <!--#388034d-->
 
 - **FFI の戻り値**。型検査は `FFI_CALL` の結果型を `type_tycon(ret_ty)` -- 引数を 1 つも取らない型構築子
   そのもの、`FFI_CALL_IO` と `FFI_CALL_IOS` ならそれを `(IOState, ret)` に包んだもの -- に定める

@@ -103,7 +103,7 @@ impl ExportStatement {
 
     // Implement the exported C function.
     // Requires `self.function_type` and `self.value_expr` to already be set.
-    // PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn implement<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) {
         let function_type = self.function_type.as_ref().unwrap();
         let ExportedFunctionType {
@@ -235,6 +235,7 @@ pub enum IOType {
 impl ExportedFunctionType {
     // Check if a type is valid for a value which is exported.
     // - src: Used for error messages.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate(
         scm: Arc<Scheme>,
         type_env: &TypeEnv,

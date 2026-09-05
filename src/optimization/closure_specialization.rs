@@ -494,7 +494,6 @@ struct LiftedLambdas {
 
 impl LiftedLambdas {
     // Record a lambda just lifted, under the name of the global function it became.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn insert(&mut self, name: FullName, cap: CaptureStruct, func_ty: Arc<TypeNode>) {
         self.record_capture_list(&cap, &ClosureTree::leaf(name.clone()));
         self.lambdas.insert(name, LiftedLambda { cap, func_ty });
@@ -528,7 +527,6 @@ impl LiftedLambdas {
     // The capture struct a value of `tree` is: the lifted lambda's, with each known field narrowed
     // to the capture struct of what it holds. The type constructor is named after the copy that
     // receives it, so the type and the tree determine each other.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn capture_struct_of(&mut self, tree: &ClosureTree) -> CaptureStruct {
         if let Some(cap) = self.caps.get(tree) {
             return cap.clone();
@@ -583,7 +581,7 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 // Lift every lambda in the program to a global function, until lifting one leaves nothing more to
 // lift. A lambda lifted here is a global function of its own, which the next pass over the symbols
 // walks in turn.
-// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_times: bool) {
     let _sw = StopWatch::new("closure_specialization::lift_all", show_build_times);
 
@@ -642,7 +640,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
 //
 // The bodies every copy is made from are the ones lifting left behind, so a copy names the same
 // functions its original does and the table answers for all of them.
-// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn realize_all(
     prg: &mut Program,
     lifted: &Rc<RefCell<LiftedLambdas>>,
@@ -1474,7 +1472,6 @@ impl ClosureSpecializationVisitor {
     // Decapture a lambda expression.
     //
     // Returns the value the lambda is, and the expression that generates its capture list.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn decapture_lambda(
         &mut self,
         lam: Arc<ExprNode>,

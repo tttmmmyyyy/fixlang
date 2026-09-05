@@ -289,6 +289,7 @@ impl Error {
 
 /// Panics with `msg`, having installed a panic hook that prints the message alone, so that the
 /// thread name, the panic location and the backtrace note stay out of the compiler's output.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 fn panic_notrace(msg: &str) -> ! {
     panic::set_hook(Box::new(move |info| {
         let msg = any_to_string(info.payload());
@@ -310,6 +311,7 @@ pub fn any_to_string(any: &dyn Any) -> String {
 }
 
 /// Ends the process, printing `msg` in the form a reported error takes.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn panic_with_msg(msg: &str) -> ! {
     let errs = Errors::from_msg(msg.to_string());
     panic_notrace(&errs.to_string())
