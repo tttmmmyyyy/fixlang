@@ -2865,9 +2865,10 @@ fn parse_expr_string_lit(
     Ok(make_string_lit(string, Some(span)))
 }
 
-/// Read `digits` hexadecimal digits from `chars` and return the number they spell.
-/// The grammar admits a `\x` or `\u` escape sequence only with its full complement of
-/// hexadecimal digits, so the characters are there and each of them is a digit.
+/// Read `digits` hexadecimal digits from `chars` and return the number they spell,
+/// the first digit being the most significant one.
+/// The grammar admits a `\x` or `\u` escape sequence only when all of its hexadecimal
+/// digits follow it, so every character read here is present and is a hexadecimal digit.
 fn take_hex_number(chars: &mut impl Iterator<Item = char>, digits: u32) -> u32 {
     let mut code: u32 = 0;
     for _ in 0..digits {
