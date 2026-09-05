@@ -2737,9 +2737,9 @@ let m : Main::Choice = match cond {
 let seen : Std::I64 = Main::peek(m, two)
 ```
 
-**この食い違いに依拠する読み手は無い。** `borrow_ify` と `cancel` が住む `src/rc_ir/borrow.rs` に
-`origin` の呼び出しは 7 か所ある。**この一覧はそのファイルの `origin(` の呼び出しを数え上げて作る。**
-そのうち 3 つは leaf の path しか渡さない。
+**この食い違いに依拠する読み手は無い。** `borrow_ify` と `cancel` が住む `src/rc_ir/borrow.rs` の
+`origin` の呼び出しの在りかは、第 1 節の前提 `origin` を呼ぶ式の在りかが走査で挙げる。挙がった
+`src/rc_ir/borrow.rs` の項目のうち、次の 3 つは leaf の path しか渡さない。
 
 - `infer_ownership` は `collect_consumes` が報告した `(var, path)` を渡す
   (`CODE src/rc_ir/borrow.rs: infer_ownership`)。`collect_consumes` が `out` に積むのは
@@ -2752,8 +2752,9 @@ let seen : Std::I64 = Main::peek(m, two)
 - `CancelAnalysis::other_objects` は `boxed_leaf_paths` の各要素を渡す
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 
-残る 4 つが leaf でない path を渡しうる。どれも答えの候補が名指す**根**について `owns_object` /
-`owns_object_yet` か `used_later` を引くだけで、leaf の `identity` を unit の答えから引かない。
+挙がった残りの項目が leaf でない path を渡しうる。どれも答えの候補が名指す**根**について
+`owns_object` / `owns_object_yet` か `used_later` を引くだけで、leaf の `identity` を unit の答えから
+引かない。
 
 - `RewriteCtx::owns_unit` は候補すべてに `owns_object` を要求する
   (`CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit`)。
