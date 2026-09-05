@@ -3,10 +3,10 @@
 **対象コミット**: `b6c51fb892746e493e155d9d59ea05d02d7357db`
 
 この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義と仮定のうち `BY` の行が引くものと、
-命題 P1、P2、P2a、P5、P6、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P15、P16、P17、P18、P24、
-P30 の**言明**の上に立つ。それらの証明は `p10-leaves-and-units.md`、
-`p12-identity-and-consumes.md`、`p15-ownership-uniformity.md`、`p20-borrow-ify.md`、
-`p30-cancel-walk.md`、`p40-cancel-soundness.md`、`p51-runs.md` にあり、この文書はその言明だけを使う。
+README が言明を置く他の命題の**言明**の上に立つ。それらの命題の証明は別の文書に在り、この文書はその
+言明だけを使う。**引く項目の一覧はここに手で持たない** --
+`python3 dev-docs/proof/proof_index.py --render <このファイル>` が生成するヘッダが、引用のグラフから
+同じ一覧を作る。
 
 **別名類は D33 が、`held` は D34 が定める。この 2 つがこの文書に残す 5 つを、第 7.5 節が果たす。**
 `ρ` 歩みの 1 歩が D20 の別名の辺であること (`L11b`)、D33 の `ρ` 歩みがこの文書の `ρ` 歩みと同じ列で
@@ -1077,7 +1077,8 @@ src/rc_ir/borrow.rs: cancel`)、定めるものが無い。`ρ` の上で `n` �
 | `arm_j` の本体の `Ret` (`n'` はその `Match` の継続 `k_M`) | `merged` の各要素 `p` について、`arm_exits[j]` の中で `node` が `p.node` に等しい要素 `p^{(j)}` の `B_ρ(n, p^{(j)})` |
 
 `consume_objects` が取り除いた要素については定めるものが無い。この表が場合を尽くすことと、最後の 2 行の
-`p^{(j)}` が存在することは、`L11` の証明の中で示す。
+`node` が等しい要素 -- 第 6 行の `p^{(j)}` -- が存在してただ 1 つであることは、`L11` の証明の中で示す。
+**ただ 1 つであることが要る** -- 2 つ在れば第 5 行と第 6 行の右辺が定まらない。
 
 `B_ρ(n, p)` を、P18b と P18a の言明の `B(p, ρ)` として読む。この帰属は README の D27 と同じものである --
 D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)` は、`π` の下の inhabited (D16) かつ
@@ -2066,7 +2067,8 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
 - **(i)** `o` が `ρ` で活性ならば `p.outstanding[o] = B_ρ(n, p)[o]` である。
 - **(ii)** `o` が `ρ` で活性でないならば `B_ρ(n, p)[o] = 0` である。
 
-また、DEF bump の帰属の表は `ρ` の上の場合を尽くし、その最後の 2 行の `p^{(j)}` は存在する。
+また、DEF bump の帰属の表は `ρ` の上の場合を尽くし、その最後の 2 行が名指す `node` の等しい要素 --
+第 6 行の `p^{(j)}` -- は存在してただ 1 つである。
 
 **証明** `ρ` の上の節点の並びについての帰納法で示す。D3 より実行路は有限の列である。
 
@@ -2082,6 +2084,17 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain, EXT Iterator::any
   本体は `pending.retain(|retain| { if objects.iter().any(|object| retain.outstanding.names(object))
   { self.needed_retains.insert(retain.node); return false; } true })` である。
+
+<1>1b. 走査中のどの位置についても、そこでの `pending` の 2 つの要素の `node` が等しいならば、その 2 つは
+       `pending` の同じ要素である。すなわち `node` の値ごとに要素は高々 1 つである。
+  BY <ref id=a423f41/>, <ref id=24bf090/>, <ref id=a500a92/>, DEF 訪問, DEF bump の帰属
+  DEF 訪問と DEF bump の帰属より、`ρ` の上の節点 `n` の訪問に渡された `pending(n)` は走査中の 1 つの
+  位置における `pending` である。
+  P16 (a) は「各要素の `node` は、その位置までに訪れた `Retain` 節点である」と、P16 (c) は
+  「1 つの `Retain` 節点は `pending` に高々 1 回現れる」と述べる。`L0` (i) より `B` は `borrow_ify` の
+  出力の本体であり、P15 は「`cancel` の入力すなわち `borrow_ify` の出力の各本体について、相異なる位置は
+  相異なる `NodeId` を持つ」と述べるので、`node` の値は `B` の位置を 1 つに決める。よって `node` の
+  等しい 2 つの要素は同じ `Retain` 節点のものであり、P16 (c) よりそれは `pending` に高々 1 回現れる。
 
 <1>2. 帰納段。`ρ` の上の節点 `n` について (i) と (ii) が成り立つとし、`ρ` の上の `n` の直後の節点 `n'` に
       ついて示す。`n` の式で場合を分ける。
@@ -2175,8 +2188,10 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
       `PendingRetain` は `Clone` を derive し、`node` と `outstanding` の 2 つの欄だけを持つので、
       EXT Vec::clone より複製は要素をその並びのまま持ち、各要素の 2 つの欄は原本のものと等しい。
     <3>2. QED
-      BY <3>1, 帰納法の仮定, DEF bump の帰属
-      表の第 5 行より、複製された要素の `B_ρ` は元の要素のものである。
+      BY <3>1, <1>1b, 帰納法の仮定, DEF bump の帰属
+      表の第 5 行より、複製された要素の `B_ρ` は `node` が等しい元の要素のものであり、<1>1b より
+      `pending(n)` にその `node` を持つ要素は高々 1 つなので、この右辺は 1 つに定まる。<3>1 より
+      複製は元の要素と同じ `node` を持つので、その 1 つは複製元の要素である。
 
   <2>5. CASE `n` の式が `RcExpr::Ret(_)` であり、`n` は `B` の終端の `Ret` ではない。
     <3>1. `n` はある `Match` 節点 `M` のあるアーム `arm_j` の本体の実行路を終える `Ret` であり、
@@ -2202,8 +2217,11 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
       `RcExpr::Ret(_)` の腕は渡された `pending` を変えずに返す。
     <3>4. `merged` の各要素 `p` について、`p.node` は `pending(M)` のある要素の `node` であり、
           `p.outstanding` は各 `arm_exits[j']` の中の `node` が `p.node` に等しい要素の `outstanding`
-          と等しい。とくに `arm_exits[j]` にそのような要素 `p^{(j)}` が在る。
-      BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, <ref id=5116349/>, EXT Iterator::all
+          と等しい。とくに `arm_exits[j]` にそのような要素 `p^{(j)}` がちょうど 1 つ在る。
+      BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, <ref id=5116349/>, <1>1b, <3>3,
+         EXT Iterator::all
+      <3>3 より `arm_exits[j] = pending(n)` は走査中のある位置の `pending` なので、<1>1b より
+      `p.node` を `node` に持つ要素はその中に高々 1 つである。
       `merge` の返り値は `pending_in.iter().filter_map(|retain| uniform.get(&retain.node).map(
       |outstanding| PendingRetain { node: retain.node, outstanding: outstanding.clone() }))` であり、
       `uniform` に `retain` が入るのは `is_uniform` すなわち
