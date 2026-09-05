@@ -2502,8 +2502,12 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         を呼ぶのは `run_io_or_ios_runner` と `ExportStatement::implement` であって、op の生成コードは
         1 つも無い。
     BY <1>3a
-  <2>2. この 8 つはいずれも `applies_a_function_operand` に `true` を返す。既定は偽である。
-    BY CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand,
+  <2>2. この 8 つはいずれも `applies_a_function_operand` に `true` を返し、**そう宣言する op はこの 8 つで
+        尽きる**。前提 `applies_a_function_operand` の宣言の在りか より、`fn applies_a_function_operand` の
+        字面が在るのは `LLVMGen` の既定の宣言とこの 8 つの override だけである。既定は `false` を返すので、
+        override を持たない op はどれも偽を宣言する。
+    BY 前提 `applies_a_function_operand` の宣言の在りか,
+       CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand,
        CODE src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand,
        InlineLLVMUnionModBody::applies_a_function_operand,
        InlineLLVMWithRetainedFunctionBody::applies_a_function_operand,
@@ -2515,7 +2519,8 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   <2>3. QED
     D24 は「その op の生成コードがオペランドを関数として適用するとき
     (`LLVMGen::applies_a_function_operand` が真を宣言する op)、適用された関数の本体の活性化が作られる」と
-    書く。`<2>1` がその op の集合を与え、`<2>2` がその 8 つが宣言を真にすることを与える。D24 は
+    書く。`<2>1` が、生成コードから `apply_lambda` へ届く op がこの 8 つであることを与え、`<2>2` が、
+    その 8 つが宣言を真にし、宣言を真にする op がこの 8 つで尽きることを与える。D24 は
     この段を活性化 1 つごとに区切り、8 つのうち 5 つ -- `fix` と `_mutate_boxed_internal` /
     `_mutate_elements_internal` の 4 種 -- が 1 つの節点についてこの種の段を 2 つ持つと述べる。
     BY <ref id=e3436e8/>, <2>1, <2>2
