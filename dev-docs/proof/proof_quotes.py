@@ -41,13 +41,14 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import proof_index
+import proof_syntax
 
 QUOTE = re.compile(r"「(.+?)」", re.S)
 BLOCKQUOTE = re.compile(r"(?:^>[^\n]*\n?)+", re.M)
 ANCHOR = 24
 
 
-IDENTITY = re.compile(r"<!--#[0-9a-f]{7}-->")
+IDENTITY = proof_syntax.IDENTITY
 
 
 def strip_spaces(text):
@@ -132,9 +133,9 @@ def nearest(frame, quote):
     return None
 
 
-STEP_START = re.compile(r"^\s*(?:\*\*)?`?<\d+>\d+[a-z]*`?\.")
-BY_LINE = re.compile(r"^\s*BY\s")
-REF = re.compile(r"<ref id=([0-9a-f]{7})/>")
+STEP_START = proof_syntax.STEP
+BY_LINE = proof_syntax.BY
+REF = proof_syntax.REF
 
 
 def frame_items(directory):
@@ -174,7 +175,20 @@ def citing_by(lines, line):
         if index > line and STEP_START.match(lines[index]):
             break
         if BY_LINE.match(lines[index]):
-            return lines[index]
+            # **`BY` は 1 行とは限らない。** 続きの行は深く字下げされて並ぶので、そこも同じ
+            # `BY` として読む -- 1 行目しか見ないと、続きの行に在る引用が「挙げていない」に出る
+            # (実測で 2 件)。
+            indent = len(lines[index]) - len(lines[index].lstrip())
+            block, at = [lines[index]], index + 1
+            while at < len(lines):
+                following = lines[at]
+                if (not following.strip() or STEP_START.match(following)
+                        or BY_LINE.match(following)
+                        or len(following) - len(following.lstrip()) <= indent):
+                    break
+                block.append(following)
+                at += 1
+            return " ".join(block)
     return None
 
 
@@ -186,7 +200,7 @@ def check(directory):
         if not name.endswith(".md") or name == "README.md":
             continue
         text = open(os.path.join(directory, name), encoding="utf-8").read()
-        if "<!--not-a-proof-->" in text[:400]:
+        if proof_syntax.NOT_A_PROOF in text[:400]:
             continue
         pieces = list(QUOTE.finditer(text))
         pieces += [match for match in BLOCKQUOTE.finditer(text)]
@@ -220,7 +234,7 @@ def misattributed(directory):
         if not name.endswith(".md") or name == "README.md":
             continue
         text = open(os.path.join(directory, name), encoding="utf-8").read()
-        if "<!--not-a-proof-->" in text[:400]:
+        if proof_syntax.NOT_A_PROOF in text[:400]:
             continue
         lines = text.split("\n")
         for match in list(QUOTE.finditer(text)) + list(BLOCKQUOTE.finditer(text)):

@@ -44,9 +44,12 @@ import os
 import re
 import sys
 
-STEP = re.compile(r"^(\s*)(?:#+\s*)?(?:\*\*)?`?<(\d+)>(\d+[a-z]*)`?\.")
-BY = re.compile(r"^\s*BY\s+(.*)$")
-REFERENCE = re.compile(r"<(\d+)>(\d+[a-z]*)")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import proof_syntax
+
+STEP = proof_syntax.STEP
+BY = proof_syntax.BY
+REFERENCE = proof_syntax.STEP_REFERENCE
 # 名札は 3 種である -- `DEF` はこの文書が定めた語、`EXT` は文書の外の結果、
 # `前提` はコードの在りかについての事実で、走査 (`SCAN`) が果たす。
 LABEL = re.compile(r"^(DEF|EXT|前提)\s+(.+)$")
@@ -204,7 +207,7 @@ def in_scope(path, level, number, cases=()):
     return order_key(number) < order_key(path[level - 1][1])
 
 
-CROSS_FILE = re.compile(r"^(p\d\d)[A-Za-z0-9_-]*(?:\.md)?\s*の\s*")
+CROSS_FILE = proof_syntax.CROSS_FILE_PREFIX
 
 
 def labels_of_sibling(path_of_file, prefix):
@@ -221,7 +224,7 @@ def labels_of_sibling(path_of_file, prefix):
 
 def check(path_of_file):
     text = open(path_of_file, encoding="utf-8").read()
-    if "<!--not-a-proof-->" in text[:400]:
+    if proof_syntax.NOT_A_PROOF in text[:400]:
         return None
     declared = declared_labels(text)
     siblings = {}

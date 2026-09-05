@@ -43,7 +43,10 @@ import re
 import secrets
 import sys
 
-IDENTITY = re.compile(r"<!--#([0-9a-f]{7})-->")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import proof_syntax
+
+IDENTITY = proof_syntax.IDENTITY
 # 枠の項目は太字の見出し (`**D12 (…)**`、`- **P28** (…)`)、証明の主張は `#` の見出しである。
 # 項目の見出しは題を括弧で持つ (`**D1 (プログラム)**`、`- **P28** (参照の持ち手は…)`)。
 # 散文の太字 (`**D24 の網羅の節**`) と分けるのはこの括弧である。
@@ -79,9 +82,9 @@ FILE_PROVES = re.compile(r"\b(T|[AP]\d+[a-z]*)\b")
 CLAUSE = None
 
 THEOREM = re.compile(r"^#+\s+(T)\b")
-CITATION = re.compile(r"\b([DAP]\d+[a-z]*|L\d+[a-z]*)\b")
+CITATION = proof_syntax.CITATION
 # 変換後の参照。**格納されるのは id だけで、題は描画のときに命題から取る。**
-REF = re.compile(r"<ref id=([0-9a-f]{7})/>")
+REF = proof_syntax.REF
 # 項の粒度の引用。いまは項が項目でないので使わない。
 CITED_CLAUSE = re.compile(r"\b([DAP]\d+[a-z]*)\s+\(([a-z]|i+|ii-[a-c]|iii|S-[a-c]|[EFXRK]\d?)\)")
 
@@ -208,7 +211,7 @@ def items_in(path):
 
 # **証明でない文書は、自分でそう名乗る。** 名前で見分けると、名前の付け方が変わった日に黙って
 # 証明が 1 本落ちる。
-NOT_A_PROOF = "<!--not-a-proof-->"
+NOT_A_PROOF = proof_syntax.NOT_A_PROOF
 
 
 def documents(directory):
@@ -276,7 +279,7 @@ def mark_claims(directory):
     return added
 
 
-CROSS_FILE = re.compile(r"(p\d{2})[a-z0-9-]*(?:\.md)?\s*の\s*`?(L\d+[a-z]*)`?")
+CROSS_FILE = proof_syntax.CROSS_FILE
 
 
 def build(directory):
@@ -492,7 +495,7 @@ def resolution(directory):
 # 1 行の中で閉じる引用だけを守った版が、行を跨ぐ引用 17 件を壊した。
 PROTECTED = re.compile(r"「.*?」|`[^`\n]*`|^>[^\n]*", re.S | re.M)
 BY_LINE = re.compile(r"^(\s*)BY\s", re.M)
-STEP_LINE = re.compile(r"^\s*(?:\*\*)?`?<\d+>")
+STEP_LINE = proof_syntax.STEP
 
 
 def by_spans(text):

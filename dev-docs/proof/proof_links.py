@@ -22,6 +22,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import proof_index
+import proof_syntax
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -273,7 +274,7 @@ def check_scans(directory):
     problems = []
     for path in sorted(glob.glob(os.path.join(directory, "*.md"))):
         with open(path, encoding="utf-8") as handle:
-            if "<!--not-a-proof-->" in handle.read(400):
+            if proof_syntax.NOT_A_PROOF in handle.read(400):
                 continue
         for line, root, literal, members in scans_in(path):
             hits = scan_hits(os.path.join(REPO, root), literal)

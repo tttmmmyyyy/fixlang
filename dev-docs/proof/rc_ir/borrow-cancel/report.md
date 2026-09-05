@@ -116,12 +116,12 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 |---|---|---|---|---|---|
 | `p05-holders.md` | 第 8 周 (276 ステップ) | **0** | 2 | BAD-CITATION 6、NOT-OBVIOUS 4、HEDGE 1 | **修理済み** (13 件すべて)。`BY` の未分類 17・名札の不在 20 も 0 に。**第 9 周の検証** |
 | `p10-leaves-and-units.md` | 第 8 周 (509 ステップ) | 1 | 3 | NOT-OBVIOUS 5、BAD-CITATION 2 | **修理済み** (11 件すべて)。**第 9 周の検証** |
-| `p11-origin-soundness.md` | 第 8 周 (306 段) | **0** | 1 | NOT-OBVIOUS 4 | **修理待ち** |
+| `p11-origin-soundness.md` | 第 8 周 (306 ステップ) | **0** | 1 | NOT-OBVIOUS 4 | **修理済み** (全件)。`BY` の未分類 20・名札の不在 1 も 0 に。**第 9 周の検証** |
 | `p12-identity-and-consumes.md` | 第 8 周 (401 ステップ) | 1 | 1 | BAD-CITATION 10 (id の付け替えで解決)、NOT-OBVIOUS 3 | **修理済み** (全件)。**第 9 周の検証** |
 | `p13-disposals-and-pending.md` | 第 8 周 (446 段) | **0** | **0** (形式 1) | BAD-CITATION 8、NOT-OBVIOUS 4 | **修理中**。**2 周続けて段のゼロ** |
 | `p15-ownership-uniformity.md` | 第 8 周 (384 ステップ) | **0** | 5 | NOT-OBVIOUS 11、BAD-CITATION 2 | **修理済み** (18 件すべて)。**第 9 周の検証** |
 | `p20-borrow-ify.md` | 第 8 周 (576 段) | **0** | **0** | BAD-CITATION 1、NOT-OBVIOUS 4、`BY` の節番号 52 | **修理中** |
-| `p30-cancel-walk.md` | 第 8 周 (386 段) | **0** | **0** | BAD-CITATION 2、NOT-OBVIOUS 3 | **修理待ち** |
+| `p30-cancel-walk.md` | 第 8 周 (386 ステップ) | **0** | **0** | BAD-CITATION 2、NOT-OBVIOUS 3 | **修理済み** (全件)。「位置」の 3 つの意味を割り、`CASE` の仮説に名前を与えた。**第 9 周の検証** |
 | `p40-cancel-soundness.md` | 第 8 周 (448 ステップ) | 4 | 5 | BAD-CITATION 4、UNDEFINED 1、NOT-OBVIOUS 53 | **一部修理** (FALSE・INCOMPLETE・BAD-CITATION・UNDEFINED は全件、NOT-OBVIOUS は 10 件)。`L44` を 7 命題に割った。**第 9 周の検証** |
 | `p50-observation.md` | 第 8 周 (259 ステップ) | **0** | 4 | NOT-OBVIOUS 13、BAD-CITATION 2 | **修理済み** (19 件すべて)。数え上げ 9 件は「前提」+ `SCAN` へ。**第 9 周の検証** |
 | `p51-runs.md` | 第 8 周 (219 段) | 2 | 8 | BAD-CITATION 2、NOT-OBVIOUS 3 | 修理済み。**第 9 周の検証** |
