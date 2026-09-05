@@ -2025,8 +2025,14 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
        - **(iv)** `is_closure(T)`・`is_closure(())`・`is_closure(Bool)` はどれも偽である。
 
   **まず、`type_defns` の項目と `type_env.tycons()` の項の対応を置く。** §1 より `type_env` は
-  `borrow_ify` の入力プログラムの `TypeEnv` であり、前提 型環境を作る在りか より、その表を作るのは
-  `elaborate` の中の `Program::calculate_type_env` の呼び出しである。`calculate_type_env` は
+  `borrow_ify` の入力プログラムの `TypeEnv` である。A28 を果たす走査より、`tycons` の表を据えるのは
+  2 か所で、どちらも `bulitin_tycons()` から始めるか空から始め、表に足す 4 か所が入れる鍵の名前は
+  `?`・`#FixCap@`・`#CapList@` のいずれかで始まる。空から始める側の表が持つ鍵は、その 4 か所が
+  入れたものだけなので、名前がその 3 つのどれでも始まらない鍵はそこに無い。(ii) と (iii) が扱う
+  2 つの鍵の名前は `Tuple0` と `Bool` であり、どちらもその 3 つで始まらない。A10 より `()` と `Bool` の
+  最上位の tycon は `type_env.tycons()` の鍵なので、この表を据えたのは `bulitin_tycons()` から始める側
+  -- `Program::calculate_type_env` -- であり、前提 型環境を作る在りか より、その呼び出しは
+  `elaborate` の中にある。その 2 つの鍵の項も、足す 4 か所ではなく据えた側が置いたものである。`calculate_type_env` は
   `bulitin_tycons()` から始めた写像 `tycons` と空の写像 `aliases` を置き、`type_defns` を順に見て、
   `tycons` か `aliases` が既にその項目の `tycon()` -- `TypeDefn` の `name` を名前に持つ `TyCon` -- を
   鍵に持つときは `Errors` を足して `continue` し、そうでないときは `type_decl.tycon()` を鍵、
@@ -2084,7 +2090,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   したものである。`FullName` は `PartialEq` を derive するので、EXT `derive` した `PartialEq` より
   `namespace` と `name` を比べる。(i)(ii)(iii) の 3 つの名前の `name` は `ARRAY_NAME` (`Array`)・
   `Tuple0`・`BOOL_NAME` (`Bool`) であり、どれも `ARROW_NAME` (`Arrow`) と異なる。
-  BY 前提 型環境を作る在りか, EXT `derive` した `PartialEq`, <1>1,
+  BY 前提 型環境を作る在りか, EXT `derive` した `PartialEq`, <ref id=a3d055e/>, <ref id=8412761/>, <1>1,
      CODE src/ast/types.rs: TypeNode::toplevel_tycon, TypeNode::toplevel_tycon_satisfies,
      CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_closure,
      CODE src/ast/types.rs: type_tyapp, type_tycon, tycon, apply_type_args, TyCon, TyCon::new,
