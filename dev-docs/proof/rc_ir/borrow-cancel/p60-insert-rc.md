@@ -4769,7 +4769,9 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 `DEF 例の型と op` と `DEF 例の名前の取り方` を使う。
 
-**DEF `Pair` と `make_pair`**。`Pair` を `Arr` を 2 つ持つ unbox 構造体とする。
+**DEF `Pair` と `make_pair`**。`Pair` を `Arr` を 2 つ持つ unbox 構造体とし、その最上位の tycon は
+`make_array_tycon()` とは異なるものとする (`Std::Array` は 1 引数の組み込みであって、この例の
+2 フィールドの構造体宣言ではない)。
 `make_pair : (Arr, Arr) -> Pair` は `InlineLLVMMakeStructBody` であり、その `result_prov` は
 unbox 構造体について、結果の leaf `[i] ++ σ` を単一の `Arg(i, σ)` と宣言する
 (`CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMMakeStructBody`)。`borrows_operand` は既定の
@@ -4841,14 +4843,22 @@ Ret(x)))
      CODE src/rc_ir/ownership.rs: Origin::identity,
      CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_unbox,
+     CODE src/ast/types.rs: TypeNode::is_box, CODE src/ast/types.rs: TypeNode::is_array,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+     CODE src/fixstd/builtin.rs: is_array_tycon, CODE src/fixstd/builtin.rs: make_array_tycon,
      <ref id=30d6238/>
   `Match` が無いので実行路は 1 本である。`is_fully_unboxed` は
   `if self.is_box(type_env) { return false; }` で始まるので boxed な `Arr` では偽であり、`Pair` は
-  boxed なフィールドを持つのでその再帰でも偽である。`is_unbox` は
-  `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` であり `is_box` はその否定なので、
+  boxed なフィールドを持つのでその再帰でも偽である。`is_box` の本体は `!self.is_unbox(type_env)` で
+  あり、`is_unbox` は `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` なので、
   `is_box` が真の `Arr` では `is_closure` が偽である。`Pair` は `DEF Pair と make_pair` より
-  unbox 構造体であってクロージャではない。よって D4 の判定はどちらの型でも第 1 規則と第 2 規則を抜け、
-  `boxed_leaf_paths(Arr) = {[]}` (第 3 規則)、`boxed_leaf_paths(Pair) = {[0], [1]}` (第 5 規則) で
+  unbox 構造体であってクロージャではない。**`Pair` について第 4 規則 (`is_array`) も外れる** --
+  `is_array` は `toplevel_tycon_satisfies` に `is_array_tycon` を渡したものであり、
+  `is_array_tycon(tc)` は `*tc == make_array_tycon()` を問うが、`DEF Pair と make_pair` より
+  `Pair` の最上位の tycon はそれとは異なる。
+  よって D4 の判定は `Arr` については第 1 規則と第 2 規則を抜けて第 3 規則に着き、`Pair` については
+  第 1・第 2・第 3・第 4 規則を抜けて第 5 規則に着くので、
+  `boxed_leaf_paths(Arr) = {[]}`、`boxed_leaf_paths(Pair) = {[0], [1]}` で
   ある。`collect_bindings` は `x` に
   `Binding::Llvm(make_pair, [m, m], Pair)` を入れる。`DEF Pair と make_pair` より `make_pair` の
   `result_prov` は結果の leaf `[i] ++ σ` を単一の `Arg(i, σ)` と宣言するので、
@@ -4874,15 +4884,18 @@ Ret(x)))
 <1>3. `m` が計数下のオブジェクト `O_m` を受け取る活性化について、`μ`、`held`、`bumps` は次のように
       動く。
   BY <1>1, <1>2, <ref id=c2ea78f/>, <ref id=dca1c02/>, DEF 割り当て `μ`, DEF `Pair` と `make_pair`, DEF `nm(s)`,
-     <ref id=9d74736/>, <ref id=f06144e/>, <ref id=cbc4a1c/>, <ref id=8093b68/>, <ref id=e11772a/>, <ref id=66c9670/>, <ref id=88a06de/>,
+     <ref id=9d74736/>, <ref id=f06144e/>, <ref id=cbc4a1c/>, <ref id=8093b68/>, <ref id=e11772a/>, <ref id=66c9670/>, <ref id=88a06de/>, <ref id=e3436e8/>, <ref id=9d5d254/>, <ref id=9f1cf6c/>,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
+     CODE src/rc_ir/borrow.rs: cancel,
      CODE src/rc_ir/ownership.rs: acted_references, CODE src/rc_ir/ownership.rs: rhs_consumes,
      CODE src/rc_ir/ownership.rs: passthrough_arg_leaves,
      CODE src/rc_ir/ownership.rs: as_arg_projection,
      CODE src/rc_ir/provenance.rs: Provenance, CODE src/rc_ir/provenance.rs: LeafOrigin
 
-  | 時点 | `μ(m, [])` | `μ(x, [0])` | `μ(x, [1])` | `held` | `bumps` |
+  | 点 | `μ(m, [])` | `μ(x, [0])` | `μ(x, [1])` | `held` | `bumps` |
   |---|---|---|---|---|---|
   | `Retain(m, [])` の入口 | 1 | 0 | 0 | 1 | 0 |
   | `Let(x, …)` の入口 | 2 | 0 | 0 | 2 | 1 |
@@ -4912,8 +4925,15 @@ Ret(x)))
   `passthrough_arg_leaves` は `{(0, []), (1, [])}` を返す。
   `rhs_consumes` の `Llvm` の腕は `if !passthrough.contains(&(i, leaf))` の門で leaf を積むので、
   `m` の唯一の boxed leaf `[]` はオペランド 0 についても 1 についてもこの集合に入り、積まれない。
-  よってこの要素は落ちない。終端の `Ret` の腕は
+  **`consume_rhs` が `consume` を呼ぶのは `rhs_consumes` が積んだ各元についてだけである**ので、
+  この訪問はどの要素も `pending` から落とさない。終端の `Ret` の腕は
   `returns_from_func` が真なので要素を `needed_retains` に入れるが、`pending` からは取り除かない。
+  **最上位の走査が `returns_from_func = true` で始まることは `cancel` にある** --
+  `analysis.walk(body, PendingRetains::default(), true)` である。
+  **表の最終行の点で `bumps` が値を持つことは D34 と D27 による** -- D34 の第 1 の箇条は表の第 6 行
+  (D9 の消費) の事象をそれを運ぶ素動作の直後の段内の点 (D24) に置くので、終端の `Ret` の消費の直後は
+  段内の点であり、D27 の最後の段落より節点の実行の途中の点における `B(p, ρ)` はその節点の訪問の
+  入口における値である。A19 (ii-b) が定める `bumps` の帰属をその値に当てると 1 である。
 
 <1>4. `B_2` は D11 を満たす。
   <2>1. `B_2` の各活性化の各時点で、計数下の別名類 `C'` が `held(・, C') ≥ 1` を満たすならば
@@ -4936,7 +4956,7 @@ Ret(x)))
     呼び出し元へ渡して空になる。(S-a): `Obl` から参照を取り除く操作は終端の `Ret` の消費だけであり、
     その時点の `Obl` はその 2 つの参照を持つ。(S-b): その消費の後 `Obl` は空である。
   <2>3. `m` が計数下のオブジェクトを受け取る活性化について、(S-c) が成り立つ。
-    BY <2>1, <1>2, <1>3, <ref id=56c2068/>, <ref id=95427eb/>, <ref id=859cf84/>, <ref id=e3436e8/>, <ref id=fd95f12/>
+    BY <2>1, <1>2, <1>3, <ref id=56c2068/>, <ref id=95427eb/>, <ref id=859cf84/>, <ref id=e3436e8/>, <ref id=fd95f12/>, <ref id=f06144e/>
     D7 の読む構文はこの本体に `Let(x, Llvm(make_pair, [m, m]), ・)` の 1 つだけ在り、その各オペランドの
     leaf `(m, [])` を読む。触れるのは `Retain(m, [])` である。D24 の「**読みの直前の点では、勘定は
     直前の段内の点のものである。**」より、読み・触れる動作の直前の点の勘定は直前の段内の点のもので
@@ -5014,7 +5034,7 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
   `split_body` の像に置き換え、`RcProgram`・`RcFunc`・`RcGlobalInit` の他のフィールドを 1 つも変えない。
   とくに `borrowed_units` を変えない。
 - **(b)** `split_body` は本体の木を次の規則で写す。
-  - `Retain(v, π, s, k)` は、`units_under(ty(v), π) = [u_1, …, u_n]` として
+  - `t := Retain(v, π, s, k)` は、`units_under(ty(v), π) = [u_1, …, u_n]` として
     `Retain(v, u_1, s, Retain(v, u_2, s, … Retain(v, u_n, s, split_body(k)) …))` に写る。`n = 0` の
     ときは `split_body(k)` そのものに写る。この `n` 個の節点を `t` の**鎖**と呼ぶ。
   - `Release(v, π, s, k)` は、節点の種類が `Release` であることだけが違う同じ形に写る。
@@ -5064,11 +5084,13 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
 
 <1>4. (b) の残る 5 行。
   BY CODE src/rc_ir/borrow.rs: split_body_inner, CODE src/rc_ir/ast.rs: MatchArm::with_body,
-     CODE src/rc_ir/borrow.rs: expr_node, <ref id=3e6b0e0/>
+     CODE src/rc_ir/borrow.rs: expr_node, <ref id=3e6b0e0/>, <ref id=b3dfa37/>
   `split_body_inner` の残る 5 つの腕は、いずれも同じ構成子を、同じ変数・同じ右辺・同じ `RcState` と、
   `split_body` で写した継続 (と写したアーム本体) から作り直す。`Match` の腕は
   `arm.with_body(split_body(&arm.body, type_env))` を使い、`with_body` は `body` 以外のフィールドを
-  複製する (`MatchArm { body, ..self.clone() }`)。
+  複製する (`MatchArm { body, ..self.clone() }`)。**`body` 以外が `tag`・`payload`・`payload_state` の
+  3 つで尽きることは D2 による** -- D2 は「`Match` の各アーム `MatchArm` は 4 個の
+  フィールドを持つ」と述べ、その 4 つを `tag`・`payload`・`payload_state`・`body` と挙げる。
 
 <1>5. QED
   BY <1>1, <1>2, <1>3, <1>4, <ref id=b3dfa37/>
@@ -5092,6 +5114,25 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
 
 **証明**
 
+<1>0. **接頭不変性。** A10 を満たす任意の型 `σ` と任意の path `p` について、`boxed_leaf_paths` の
+      `go` を `(σ, path = p)` で呼んだときに `out` へ積まれる元は、`(σ, path = [])` で呼んだときに
+      積まれる各元 `ν` に `p` を前置した `p ++ ν` の全体である。`rc_units_go` についても同じことが
+      成り立つ。とくに `rc_units(σ)` は `rc_units_go` を `path = []` で呼んだときに積まれる元の
+      全体であり、`boxed_leaf_paths(σ)` は `go` を `path = []` で呼んだときに積まれる元の全体である。
+  BY <ref id=8412761/>, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+     CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go
+  `go` が `path` に対して行うのは、`path.push(i)` -- 再帰 -- `path.pop()` の組と、
+  `out.push(path.clone())` だけである。よって降下のどの位置でも `path` は呼び出し時の値にその位置まで
+  降りた添字を順に足したものであり、そこで積まれる元はその写しである。A10 より
+  `unpunched_field_types` を繰り返し取る歩みは有限なので、降下の深さについての帰納で、`p` から
+  始めた歩みが積む元は `[]` から始めた歩みが積む元に `p` を前置したものである。`rc_units_go` の
+  `Capture`・`Unit`・`Fields` の 3 腕も同じ形であり (`NoUnit` は何も積まない)、`unit_step` の
+  `Fields` の腕が降りるフィールドについて同じ帰納が回る。
+  `rc_units` の本体は `let mut out = vec![]; rc_units_go(ty, type_env, &mut vec![], &mut out); out`
+  であり、`boxed_leaf_paths` の本体は
+  `let mut out = Vec::new(); go(ty, type_env, &mut Vec::new(), &mut out); out` である。どちらも
+  `path` に空の `Vec` を渡すので、最上位の呼び出しでは `path` は空列である。
+
 <1>1. `unit_step(σ) = Fields { held_fields, .. }` である型 `σ` について、`boxed_leaf_paths` の `go` は
       `σ` の位置で最初の 4 つの `if` をすべて抜けて `for (i, fty) in ty.unpunched_field_types(type_env)`
       のループに入り、その `(i, fty)` の列は `held_fields` に等しい。
@@ -5106,32 +5147,39 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
               `rc_units(fty)` の元で始まる」が成り立つこと
       PROVE  `boxed_leaf_paths(σ)` の各元はちょうど 1 つの `rc_units(σ)` の元で始まる
   <2>1. CASE `unit_step(σ) = NoUnit`。
-    BY CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: rc_units_go,
+    BY <1>0, CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: rc_units,
+       CODE src/rc_ir/ownership.rs: rc_units_go,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
     `unit_step` がこれを返すのは `σ.is_fully_unboxed(type_env)` が真のときである。`rc_units_go` の
-    `NoUnit` の腕は `out` に何も積まないので `rc_units(σ)` は空であり、`boxed_leaf_paths` の `go` は
-    最初の `if ty.is_fully_unboxed(type_env) { return; }` で返るので `boxed_leaf_paths(σ)` も空である。
-    量化する元が無いので空虚に真である。
+    `NoUnit` の腕は `out` に何も積まないので、<1>0 より `rc_units(σ)` は空であり、`boxed_leaf_paths`
+    の `go` は最初の `if ty.is_fully_unboxed(type_env) { return; }` で返るので `boxed_leaf_paths(σ)` も
+    空である。量化する元が無いので空虚に真である。
   <2>2. CASE `unit_step(σ) = Capture { capture_idx, .. }`。
-    BY CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: rc_units_go,
+    BY <1>0, CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: rc_units,
+       CODE src/rc_ir/ownership.rs: rc_units_go,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
     `unit_step` がこれを返すのは `is_fully_unboxed` が偽で `σ.is_closure()` が真のときであり、
     `capture_idx` は `CLOSURE_CAPTURE_IDX as usize` である。`rc_units_go` の `Capture` の腕は
-    `path.push(capture_idx)` の後に `path.clone()` を積むので `rc_units(σ) = {[capture_idx]}` である。
+    `path.push(capture_idx)` の後に `path.clone()` を積むので、<1>0 より最上位の呼び出しの `path` は
+    空列であって `rc_units(σ) = {[capture_idx]}` である。
     `go` は最初の `if` を抜けて `if ty.is_closure()` の枝に入り、`path.push(CLOSURE_CAPTURE_IDX as
     usize)` の後に積んで返るので `boxed_leaf_paths(σ) = {[capture_idx]}` である。唯一の leaf が唯一の
     unit で始まる。
   <2>3. CASE `unit_step(σ) = Unit`。
-    BY CODE src/rc_ir/ownership.rs: rc_units_go
-    `rc_units_go` の `Unit` の腕は `path.clone()` を積む。最上位の呼び出しでは `path` は空列なので
-    `rc_units(σ) = {[]}` である。`boxed_leaf_paths(σ)` のどの元も空列で始まり、unit は 1 つしか
-    無いので「ちょうど 1 つ」が成り立つ。
+    BY <1>0, CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go
+    `rc_units_go` の `Unit` の腕は `path.clone()` を積む。<1>0 より最上位の呼び出しでは `path` は
+    空列なので `rc_units(σ) = {[]}` である。`boxed_leaf_paths(σ)` のどの元も空列で始まり、unit は
+    1 つしか無いので「ちょうど 1 つ」が成り立つ。
   <2>4. CASE `unit_step(σ) = Fields { held_fields, .. }`。
-    BY <1>1, 帰納法の仮定, CODE src/rc_ir/ownership.rs: rc_units_go,
+    BY <1>0, <1>1, 帰納法の仮定, CODE src/rc_ir/ownership.rs: rc_units,
+       CODE src/rc_ir/ownership.rs: rc_units_go,
        CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
     `rc_units_go` の `Fields` の腕は `held_fields` の各 `(i, fty)` について `path.push(i)` の後に
     再帰する。<1>1 より `go` は `ty.unpunched_field_types(type_env)` -- `held_fields` に等しい列 --
-    のループに入り、その各 `(i, fty)` について `path.push(i)` の後に再帰する。よって
+    のループに入り、その各 `(i, fty)` について `path.push(i)` の後に再帰する。**その再帰が積む元を
+    `[i]` の前置で読めるのは <1>0 の接頭不変性による** -- 最上位の呼び出しの `path` は空列なので、
+    第 `i` フィールドについての再帰は `path = [i]` で始まり、そこが積む元は `fty_i` を最上位として
+    呼んだときに積む元に `[i]` を前置したものである。よって
     `rc_units(σ) = ⊎_i {[i] ++ u : u ∈ rc_units(fty_i)}`、
     `boxed_leaf_paths(σ) = ⊎_i {[i] ++ λ : λ ∈ boxed_leaf_paths(fty_i)}` である。`[i] ++ λ` が
     `[j] ++ u` で始まるのは `i = j` かつ `λ` が `u` で始まるときに限るので、帰納法の仮定を `fty_i` に
@@ -5143,7 +5191,7 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
 
 <1>2a. A10 を満たす任意の型 `σ` について、`boxed_leaf_paths(σ)` の各元はちょうど 1 つの
        `rc_units(σ)` の元で始まる。
-  BY <1>2, <ref id=8412761/>
+  BY <1>0, <1>2, <ref id=8412761/>
   A10 より `boxed_leaf_paths` も `rc_units` も停止するので、`unit_step` の `Fields` の腕が降りる
   フィールドの型の降下は有限である。<1>2 を段とする整礎帰納で、その降下で到達する各型 `σ` について
   「`boxed_leaf_paths(σ)` の各元はちょうど 1 つの `rc_units(σ)` の元で始まる」が成り立つ。
@@ -5163,7 +5211,7 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
 
 <1>5. `subtree_type(τ, π) = Some(σ)` のとき、`Leaves(τ, π) = {π ++ ν : ν ∈ boxed_leaf_paths(σ)}` で
       ある。
-  BY <1>1, CODE src/rc_ir/ownership.rs: subtree_type, CODE src/rc_ir/ownership.rs: held_field_type,
+  BY <1>0, <1>1, CODE src/rc_ir/ownership.rs: subtree_type, CODE src/rc_ir/ownership.rs: held_field_type,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
   `subtree_type` は `π` の各添字 `idx` について、`unit_step(cur)` が `Fields` を返すときだけ `cur` を
   `held_field_type(held_fields, idx, "subtree_type")` へ降ろし、`NoUnit`・`Capture`・`Unit` のときは
@@ -5173,7 +5221,10 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
   `held_field_type(held_fields, idx, ・)` と同じものである。`go` はパスを `path.push(i)` で伸ばしながら
   降りるので `path = π` になる位置はちょうど 1 つでありそこでの型は `σ` である。`Fields` の枝は
   `out.push` を持たないので `π` の真の接頭の位置では leaf を積まず、`π` で始まる leaf はすべてこの
-  位置から下で積まれる。その分はちょうど `π ++ boxed_leaf_paths(σ)` である。
+  位置から下で積まれる。**その分が `π ++ boxed_leaf_paths(σ)` であることは <1>0 の接頭不変性による**
+  -- その位置からの降下は `go` を `(σ, path = π)` で呼んだものであり、<1>0 よりそれが積む元は
+  `(σ, path = [])` で呼んだときに積む元、すなわち `boxed_leaf_paths(σ)` の各元に `π` を前置した
+  ものである。
 
 <1>6. (a)。
   <2>1. CASE `subtree_type(τ, π) = None`。
@@ -5203,17 +5254,28 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
   `π ++ ν ∈ Leaves(τ, π)` であり、`π ++ ν` は `π ++ u_0` で始まる。
 
 <1>8. (c)。
-  BY CODE src/rc_ir/ownership.rs: subtree_type, CODE src/rc_ir/ownership.rs: units_under,
-     CODE src/rc_ir/ownership.rs: rc_units_go, <1>6
+  BY <1>0, <1>6, CODE src/rc_ir/ownership.rs: subtree_type, CODE src/rc_ir/ownership.rs: units_under,
+     CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
+     CODE src/rc_ir/ownership.rs: unit_step,
+     CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_box,
+     DEF 例の型と op, DEF `Pair` と `make_pair`, EXT `Vec::extend`
   `subtree_type(τ, [])` は空のループを抜けて `Some(τ)` を返すので、`units_under(τ, [])` は
-  `rc_units(τ)` の各元に空の接頭を足したもの、すなわち `rc_units(τ)` である。長さについては、
+  `rc_units(τ)` の各元に空の接頭を足したもの、すなわち `rc_units(τ)` である
+  (`EXT Vec::extend` より `unit_path` は `[]` の後ろに `u` の添字を順に並べたもの、すなわち `u` で
+  ある)。長さについては、<1>0 より最上位の呼び出しの `path` は空列であり、
   `rc_units_go` の 4 つの腕より、`unit_step(τ)` が `NoUnit` なら 0、`Unit` か `Capture` なら 1、
-  `Fields` なら各フィールドの `rc_units` の連結であって 0 にも 2 以上にもなる。長さが 0 のときは、
+  `Fields` なら各フィールドの `rc_units` の連結であって 0 にも 2 以上にもなる。
+  **3 つの長さはどれも起きる。** `DEF 例の型と op` の `I` は `is_fully_unboxed` が真なので
+  `unit_step` は `NoUnit` を返し、長さは 0 である。同じ定義の `Arr` は boxed なので
+  `is_fully_unboxed` が偽・`is_closure` が偽・`is_box` が真であり、`unit_step` は `Unit` を返して
+  長さは 1 である。`DEF Pair と make_pair` の `Pair` は `Arr` を 2 つ持つ unbox 構造体なので
+  `unit_step` は `Fields` を返し、その 2 つのフィールドがそれぞれ長さ 1 を寄せるので長さは 2 である。
+  長さが 0 のときは、
   <1>6 (a) より `boxed_leaf_paths(τ)` の各元がある unit で始まらねばならず、unit が無いので
   `boxed_leaf_paths(τ)` は空である。
 
 <1>9. QED
-  BY <1>6, <1>7, <1>8
+  BY <1>0, <1>6, <1>7, <1>8
 
 ### 13.4 `L28` (`insert_rc` の出す path は空列であり、割った後は unit である) <!--#1ca2b50-->
 
