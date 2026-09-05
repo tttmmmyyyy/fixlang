@@ -640,7 +640,7 @@ pub fn make_tuple_name_abs(size: u32) -> FullName {
 }
 
 // Get Unit type.
-// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_unit_ty() -> Arc<TypeNode> {
     make_tuple_ty(vec![])
 }

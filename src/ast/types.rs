@@ -87,6 +87,7 @@ impl TyVar {
 }
 
 /// An associated type as a type names it, e.g. `Item` in `Item iter`.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AssocType {
     /// The name the associated type is declared under, whose namespace is the trait declaring it.
@@ -96,6 +97,7 @@ pub struct AssocType {
     pub src: Option<Span>,
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for AssocType {
     /// Compares the name alone, which is what decides which associated type this is; where the
     /// name was written stays out of the comparison.
@@ -104,8 +106,10 @@ impl PartialEq for AssocType {
     }
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Eq for AssocType {}
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for AssocType {
     /// Hashes the name alone, agreeing with the equality of `PartialEq`.
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -113,6 +117,7 @@ impl Hash for AssocType {
     }
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl AssocType {
     /// Gives this associated type's name its full name, read in the context `ctx` carries.
     ///

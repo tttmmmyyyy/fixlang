@@ -44,7 +44,7 @@ use crate::rc_ir::leaf_map::{LeafKey, LeafMap};
 use std::sync::Arc;
 
 /// The origin of one boxed leaf.
-// PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7d, P7e, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum LeafOrigin {
     /// A newly produced value: an allocation, or a force-unique op's result. Resolves to `Unique`.
@@ -58,7 +58,7 @@ pub enum LeafOrigin {
 
 /// The origin of one boxed leaf as a set of `LeafOrigin`s: usually a singleton, several after a
 /// branch join, empty for an absent union variant (the bottom of the lattice).
-// PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type LeafOrigins = Set<LeafOrigin>;
 
 /// The origins of a leaf that has just the one.
@@ -70,11 +70,11 @@ pub fn sole_origin(src: LeafOrigin) -> LeafOrigins {
 }
 
 /// The provenance of a whole value: the source of each of its boxed leaves.
-// PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Provenance(LeafMap<LeafOrigins>);
 
-// PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Provenance {
     /// A value with no boxed leaf (a scalar or a fieldless aggregate).
     // PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -217,7 +217,7 @@ impl Provenance {
     }
 }
 
-// PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 impl std::fmt::Display for Provenance {
     /// A readable one-line rendering, for the RC IR dump: a value with no boxed leaf as `unboxed`, a
     /// boxed value (one leaf at the root) as its source, and anything else as its leaves rendered

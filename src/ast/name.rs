@@ -6,6 +6,7 @@ use std::hash::{Hash, Hasher};
 
 /// The name of a module, a namespace, a type, a trait, a value or a field, as it is written in
 /// source.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type Name = String;
 
 /// The path of names an entity is written under: the `Std::Iterator` of `Std::Iterator::empty`.

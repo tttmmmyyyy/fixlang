@@ -62,7 +62,7 @@ pub struct RcProgram {
 
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and
 /// uncurried funptr versions.
-// PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct RcFunc {
     /// The name this function is defined and called under, unique across the program: lowering mints

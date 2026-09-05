@@ -282,16 +282,18 @@ def mark_claims(directory):
 CROSS_FILE = proof_syntax.CROSS_FILE
 
 
-def build(directory):
-    """全項目と、項目から項目への引用の辺。"""
-    items, by_file, parsed = {}, {}, {}
+def read_all(directory):
+    """全ファイルの項目と、名前から項目を引く索引 (ファイルごとと、枠の分)。
+
+    **ファイルの題が名乗る命題は、枠に在るその命題そのものである。** 言明が枠に、証明がこの
+    ファイルに在るだけなので、同一性は 1 つである。"""
+    by_file, parsed = {}, {}
     for path in documents(directory):
         parsed[path] = items_in(path)
         found, _ = parsed[path]
         by_file[os.path.basename(path).split("-")[0]] = {i["name"]: i for i in found}
     frame = by_file.get("README.md", by_file.get("README", {}))
-    # **ファイルの題が名乗る命題は、枠に在るその命題そのものである。** 言明が枠に、証明がこの
-    # ファイルに在るだけなので、同一性は 1 つである。
+    items = {}
     for found, _ in parsed.values():
         for item in found:
             if item["identity"] is None and item["name"] in frame:
@@ -299,29 +301,58 @@ def build(directory):
             item["digest"] = digest(item["statement"])
             if item["identity"] and item["identity"] not in items:
                 items[item["identity"]] = item
+    return items, parsed, by_file, frame
+
+
+def cited_in(text, key, by_file, frame):
+    """その本文が引く項目の同一性。**引用の読み方はここだけに在る。**"""
+    targets = set()
+    for match in CROSS_FILE.finditer(text):
+        owner = by_file.get(match.group(1), {})
+        if match.group(2) in owner:
+            targets.add(owner[match.group(2)]["identity"])
+    # 項つきの引用を先に取り、その親は取らない -- `A19 (ii-c)` を引く段は `A19` の
+    # ほかの項が動いても読み直す要が無い。
+    clauses = set()
+    for match in CITED_CLAUSE.finditer(text):
+        full = f"{match.group(1)} ({match.group(2)})"
+        if full in frame:
+            targets.add(frame[full]["identity"])
+            clauses.add(match.group(1))
+    targets.update(REF.findall(text))
+    for name in set(CITATION.findall(text)) - clauses:
+        home = frame if name[0] in "DAP" else by_file.get(key, {})
+        if name in home:
+            targets.add(home[name]["identity"])
+    return targets
+
+
+def cited_by_file(directory, path):
+    """1 つのファイルの本文が引く項目の同一性と、そのファイルの項目の同一性。
+
+    **辺の一覧では答えられない。** 枠に言明を持つ命題は同一性を枠と共有するので、辺を引くと
+    枠の言明の中の参照までこのファイルのものとして返る -- 実測で、1 度も現れない 2 つの命題が
+    依拠の一覧に載り、その本文が束に載っていた。"""
+    _, parsed, by_file, frame = read_all(directory)
+    found, lines = parsed[path]
+    key = os.path.basename(path).split("-")[0]
+    mine = {item["identity"] for item in found if item["identity"]}
+    targets = set()
+    for item in found:
+        body = "\n".join(lines[item["span"][0] + 1:item["span"][1]])
+        targets |= cited_in(body, key, by_file, frame)
+    return targets - mine, mine
+
+
+def build(directory):
+    """全項目と、項目から項目への引用の辺。"""
+    items, parsed, by_file, frame = read_all(directory)
     edges = set()
     for path, (found, lines) in parsed.items():
         key = os.path.basename(path).split("-")[0]
         for item in found:
-            text = "\n".join(lines[item["span"][0] + 1:item["span"][1]])
-            targets = set()
-            for match in CROSS_FILE.finditer(text):
-                owner = by_file.get(match.group(1), {})
-                if match.group(2) in owner:
-                    targets.add(owner[match.group(2)]["identity"])
-            # 項つきの引用を先に取り、その親は取らない -- `A19 (ii-c)` を引く段は `A19` の
-            # ほかの項が動いても読み直す要が無い。
-            clauses = set()
-            for match in CITED_CLAUSE.finditer(text):
-                full = f"{match.group(1)} ({match.group(2)})"
-                if full in frame:
-                    targets.add(frame[full]["identity"])
-                    clauses.add(match.group(1))
-            targets.update(REF.findall(text))
-            for name in set(CITATION.findall(text)) - clauses:
-                home = frame if name[0] in "DAP" else by_file.get(key, {})
-                if name in home:
-                    targets.add(home[name]["identity"])
+            body = "\n".join(lines[item["span"][0] + 1:item["span"][1]])
+            targets = cited_in(body, key, by_file, frame)
             targets.discard(item["identity"])
             edges.update((item["identity"], target) for target in targets)
     return items, edges
@@ -434,17 +465,10 @@ def depends(directory, path):
     **依拠の一覧は手で書かない。** 手で書くと、仮定が 1 つ増えたときに黙って古くなる --
     実測で、枠に立てた仮定をステップは引いているのに、冒頭の一覧と 4 つの命題の条件節が
     その名前を持っていなかった。**グラフはそのファイルが引く先を正確に持っている。**"""
-    items, edges = build(directory)
-    frame_names = {item["name"]: item["identity"]
-                   for item in items_in(os.path.join(directory, "README.md"))[0] if item["name"]}
-    mine = set()
-    for item in items_in(path)[0]:
-        identity = item["identity"] or frame_names.get(item["name"])
-        if identity:
-            mine.add(identity)
-    cited = {items[t]["name"] for c, t in edges
-             if c in mine and t in items and items[t]["file"].endswith("README.md")
-             and items[t]["name"]}
+    items, _ = build(directory)
+    targets, _ = cited_by_file(directory, path)
+    cited = {items[t]["name"] for t in targets
+             if t in items and items[t]["file"].endswith("README.md") and items[t]["name"]}
     kinds = {"定義": [], "仮定": [], "命題": []}
     for name in cited:
         kinds["定義" if name[0] == "D" else "仮定" if name[0] == "A" else "命題"].append(name)
@@ -458,26 +482,23 @@ def bundle(directory, path, only=None):
     **これがエージェントの読むものである。** 引く側には id しか無いので、id の指す本文を束が運ぶ。
     束が本文を運ぶなら、引く場所ごとに本文を再掲する要は無い -- **同じ本文が束と証明の 2 か所に
     在ると、片方だけが古くなる。**"""
-    items, edges = build(directory)
-    # **そのファイルに在る項目は、そのファイルを読んで決める。** 言明が枠に在る命題は同一性を枠と
-    # 共有するので、全体の表を引くと枠のファイルの項目として返り、このファイルの分が 1 つも取れない --
-    # 実測で、局所の補題を持たない 3 本の束が空になった。
-    frame_names = {item["name"]: item["identity"]
-                   for item in items_in(os.path.join(directory, "README.md"))[0] if item["name"]}
-    mine = set()
-    for item in items_in(path)[0]:
-        identity = item["identity"] or frame_names.get(item["name"])
-        if identity:
-            mine.add(identity)
+    items, _ = build(directory)
+    wanted, mine = cited_by_file(directory, path)
+    # **このファイルが証明する命題の言明は枠に在る。** 段はその言明を引かずに証明することがあるので、
+    # 言明そのものを束が運ぶ -- それが無いと、読む者は何を証明しているのかを確かめられない。
     here = [items[identity] for identity in mine if identity in items]
     if only:
         here = [i for i in here if only in (i["name"], i["identity"])]
         if not here:
             sys.exit(f"{path} に {only} は無い")
-    wanted = {t for identity, t in edges if identity in {i["identity"] for i in here}}
-    # **このファイルが証明する命題の言明は枠に在る。** その言明を引く段は自分の同一性を引くので、
-    # 引用の辺としては自分への辺になり、辺の一覧から落ちる -- 実測で、`ASSUME` の 4 つの条件節を
-    # 引く 4 段が、その条件節をどこにも持たない束を渡されていた。
+        _, parsed, by_file, frame = read_all(directory)
+        found, lines = parsed[path]
+        key = os.path.basename(path).split("-")[0]
+        wanted = set()
+        for item in found:
+            if item in here:
+                body = "\n".join(lines[item["span"][0] + 1:item["span"][1]])
+                wanted |= cited_in(body, key, by_file, frame)
     wanted |= {i["identity"] for i in here
                if items.get(i["identity"], {}).get("file", "").endswith("README.md")}
     cited = sorted((items[t] for t in wanted if t in items),
