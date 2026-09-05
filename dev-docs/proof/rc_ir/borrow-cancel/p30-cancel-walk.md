@@ -155,6 +155,14 @@ safe Rust で書かれた関数の本文が名指せる値は、自分の引数 
 safe Rust の `static` 項目の型は `Sync` でなければならない。`Sync` は auto trait であり、`RefCell<T>` は
 `Sync` を実装しないので、`RefCell` の欄を持つ構造体も `Sync` でない。
 
+**EXT `MiMalloc`・`Once`・`Lazy`・`Mutex`・`File` が保持する値**
+`mimalloc::MiMalloc` は値を 1 つも保持しない unit 構造体である。`std::sync::Once` が保持するのは、
+初期化がどこまで進んだかを表す状態語と、その完了を待っているスレッドの列である。
+`once_cell::sync::Lazy<T, F>` が保持するのは、`T` の値 (まだ初期化されていなければ無い) と `F` の値で
+あり、`F` の既定は関数ポインタの型 `fn() -> T` である。`std::sync::Mutex<T>` が保持するのは `T` の値と
+OS の与える錠である。`std::fs::File` が保持するのは OS のファイル記述子である。
+どの型も型引数 `T`・`F` の外に値を保持しない。
+
 **EXT 可視性と私有性**
 Rust Reference の "Visibility and Privacy" が次を述べる。
 
@@ -243,6 +251,9 @@ Rust Reference の "Pointer types" が共有参照について次を述べる。
 **EXT bool のサイズ**
 `bool` のサイズは 1 である。
 
+**EXT usize の値**
+`usize` の値は 0 以上の整数である。`<usize as Default>::default()` は `0` を返す。
+
 **EXT Arc の契約**
 `Arc::new(v)` は、`v` を保持するメモリブロックをアロケータから取り、そのブロックへのハンドルを 1 つ返す。
 `<Arc<T> as Clone>::clone` は同じブロックへのハンドルをもう 1 つ作り、強参照カウントを 1 増やす。
@@ -328,6 +339,9 @@ Rust Reference の "Pointer types" が共有参照について次を述べる。
 `Map<K, V>` は `FxHashMap<K, V>`、`Set<K>` は `FxHashSet<K>` の別名である
 (`CODE src/misc.rs: Map`, `CODE src/misc.rs: Set`)。次の契約を使う。
 
+- `<Map<K, V> as Default>::default()` と `<Set<K> as Default>::default()` は、項目を 1 つも持たない
+  `Map`・`Set` を返す。
+- `m.is_empty()`、`s.is_empty()` は、その `Map`・`Set` が項目を 1 つも持たないことと同値である。
 - `m.get(&k)` は、`m` が鍵 `k` を持つときその値への共有参照を `Some` で返し、持たないとき `None` を返す。
 - `m.insert(k, v)` は、`m` が鍵 `k` を持たないとき `(k, v)` を加え、持つときその鍵の値を `v` で置き換える。
   どちらの場合も、`k` 以外の鍵とその値は変わらず、鍵が失われることはない。
