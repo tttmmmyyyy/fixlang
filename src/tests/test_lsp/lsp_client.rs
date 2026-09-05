@@ -277,7 +277,6 @@ impl LspClient {
     }
 
     /// Pop one message from the message queue
-    #[allow(dead_code)]
     pub fn pop_message(&mut self) -> Option<Value> {
         self.shared.message_queue.lock().unwrap().pop_front()
     }
@@ -287,18 +286,6 @@ impl LspClient {
     /// Removes the response from the internal map when retrieved
     pub fn get_response(&mut self, id: u32) -> Option<Value> {
         self.shared.responses.lock().unwrap().remove(&id)
-    }
-
-    /// Get all currently available response IDs (for debugging)
-    #[allow(dead_code)]
-    pub fn get_response_ids(&self) -> Vec<u32> {
-        self.shared
-            .responses
-            .lock()
-            .unwrap()
-            .keys()
-            .cloned()
-            .collect()
     }
 
     /// The number of `textDocument/publishDiagnostics` notifications received that carry a
@@ -387,7 +374,6 @@ impl LspClient {
 
     /// Get diagnostics for a specific file
     /// Returns a vector of diagnostic messages (empty if no diagnostics)
-    #[allow(dead_code)]
     pub fn get_diagnostics(&self, file_path: &Path) -> Vec<Value> {
         let absolute_path = self.working_dir.join(file_path);
         let diagnostics = self.shared.diagnostics.lock().unwrap();
@@ -464,6 +450,14 @@ impl LspClient {
         ))
     }
 
+    /// The content of the document at `absolute_path`, and the URI naming it.
+    fn read_document(absolute_path: &Path) -> Result<(String, String), String> {
+        let text = fs::read_to_string(absolute_path)
+            .map_err(|e| format!("Failed to read file {:?}: {:?}", absolute_path, e))?;
+        let uri = format!("file://{}", absolute_path.display());
+        Ok((text, uri))
+    }
+
     /// Send didOpen notification for a document
     ///
     /// Takes a file path relative to the project root, reads the file content,
@@ -481,9 +475,7 @@ impl LspClient {
             return Err(format!("Document {:?} is already opened", file_path));
         }
 
-        let text = fs::read_to_string(&absolute_path)
-            .map_err(|e| format!("Failed to read file {:?}: {:?}", absolute_path, e))?;
-        let uri = format!("file://{}", absolute_path.display());
+        let (text, uri) = Self::read_document(&absolute_path)?;
 
         // Set initial version
         self.document_versions
@@ -507,12 +499,9 @@ impl LspClient {
     /// Takes a file path relative to the project root, reads the file content,
     /// increments the document version, and sends a didChange notification to the language server.
     /// The document must have been opened with open_document first.
-    #[allow(dead_code)]
     pub fn change_document(&mut self, file_path: &Path) -> Result<(), String> {
         let absolute_path = self.working_dir.join(file_path);
-        let text = fs::read_to_string(&absolute_path)
-            .map_err(|e| format!("Failed to read file {:?}: {:?}", absolute_path, e))?;
-        let uri = format!("file://{}", absolute_path.display());
+        let (text, uri) = Self::read_document(&absolute_path)?;
 
         // Increment version
         let version = self
@@ -544,9 +533,7 @@ impl LspClient {
     /// and sends a didSave notification to the language server.
     pub fn save_document(&mut self, file_path: &Path) -> Result<(), String> {
         let absolute_path = self.working_dir.join(file_path);
-        let text = fs::read_to_string(&absolute_path)
-            .map_err(|e| format!("Failed to read file {:?}: {:?}", absolute_path, e))?;
-        let uri = format!("file://{}", absolute_path.display());
+        let (text, uri) = Self::read_document(&absolute_path)?;
 
         self.send_notification(
             "textDocument/didSave",

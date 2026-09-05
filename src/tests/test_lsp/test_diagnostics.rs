@@ -29,11 +29,7 @@ mod tests {
 
     /// The diagnostics the server publishes for `file` of the project, after opening and saving it.
     fn diagnostics_of(project_dir: &Path, file: &Path) -> Vec<Value> {
-        let mut client = LspClient::new(project_dir).expect("Failed to start LSP");
-        client
-            .initialize(project_dir, Duration::from_secs(5))
-            .expect("Failed to initialize LSP");
-        client.open_document(file).expect("Failed to open document");
+        let mut client = open_session(project_dir, file, Duration::from_secs(5));
         client.save_document(file).expect("Failed to save document");
         client.wait_for_server(Duration::from_secs(10));
         client.get_diagnostics(file)
@@ -366,11 +362,12 @@ mod tests {
     /// The time one diagnostics pass is given to end.
     const PASS_TIMEOUT: Duration = Duration::from_secs(180);
 
-    /// A session over the project, with `file` opened.
-    fn open_session(project_dir: &Path, file: &Path) -> LspClient {
+    /// A session over the project, with `file` opened. `initialize_timeout` is how long the
+    /// response to `initialize` is waited for.
+    fn open_session(project_dir: &Path, file: &Path, initialize_timeout: Duration) -> LspClient {
         let mut client = LspClient::new(project_dir).expect("Failed to start LSP");
         client
-            .initialize(project_dir, Duration::from_secs(10))
+            .initialize(project_dir, initialize_timeout)
             .expect("Failed to initialize LSP");
         client.open_document(file).expect("Failed to open document");
         client
@@ -424,7 +421,7 @@ mod tests {
         let (_temp_dir, project_dir) = setup_test_env("diagnostics_after_panic");
         let main_fix = Path::new("main.fix");
 
-        let mut client = open_session(&project_dir, main_fix);
+        let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
         save_and_wait_for_a_pass(
             &mut client,
             main_fix,
@@ -488,7 +485,7 @@ mod tests {
         let program_the_analysis_fails_on = fs::read_to_string(project_dir.join(main_fix))
             .expect("Failed to read the case project's program");
 
-        let mut client = open_session(&project_dir, main_fix);
+        let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
 
         // The pass the server starts with, over the program the analysis fails on.
         client
@@ -555,7 +552,7 @@ mod tests {
         fs::write(project_dir.join(main_fix), PROGRAM_WITH_AN_UNKNOWN_NAME)
             .expect("Failed to write the program the session starts from");
 
-        let mut client = open_session(&project_dir, main_fix);
+        let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
         client
             .wait_for_progress_end_count(1, PASS_TIMEOUT)
             .expect("the pass over the program carrying an ordinary error is expected to end");

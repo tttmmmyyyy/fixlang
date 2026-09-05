@@ -1179,46 +1179,37 @@ fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>)
         err_paths.insert(path.clone());
         prev_err_paths.remove(&path);
 
-        // Convert path to uri.
-        let uri = path_to_uri(&cdir.join(path));
-        if uri.is_err() {
-            write_log!("Failed to convert path to uri: {:?}", uri.unwrap_err());
-            continue;
-        }
-        let uri = uri.unwrap();
-
-        // Send the diagnostics notification for each file.
-        let params = PublishDiagnosticsParams {
-            uri,
-            diagnostics: errs
-                .iter()
+        publish_diagnostics_of_file(
+            &cdir.join(path),
+            errs.iter()
                 .map(|err| error_to_diagnostics(err, &cdir))
                 .collect(),
-            version: None,
-        };
-        send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
+        );
     }
 
     // Clear the diagnostics for the files that have no errors.
     for path in prev_err_paths {
-        // Convert path to uri.
-        let uri = path_to_uri(&cdir.join(path));
-        if uri.is_err() {
-            write_log!("{}", (uri.unwrap_err()));
-            continue;
-        }
-        let uri = uri.unwrap();
-
-        // Send the empty diagnostics notification for each file.
-        let params = PublishDiagnosticsParams {
-            uri,
-            diagnostics: vec![],
-            version: None,
-        };
-        send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
+        publish_diagnostics_of_file(&cdir.join(path), vec![]);
     }
 
     err_paths
+}
+
+/// Send `diagnostics` as the whole set of reports on `path`, which an empty vector clears.
+fn publish_diagnostics_of_file(path: &PathBuf, diagnostics: Vec<Diagnostic>) {
+    let uri = match path_to_uri(path) {
+        Ok(uri) => uri,
+        Err(why) => {
+            write_log!("Failed to convert path to uri: {:?}", why);
+            return;
+        }
+    };
+    let params = PublishDiagnosticsParams {
+        uri,
+        diagnostics,
+        version: None,
+    };
+    send_notification("textDocument/publishDiagnostics".to_string(), Some(&params));
 }
 
 // Convert an `Error` into a diagnostic message.
