@@ -73,7 +73,7 @@ leaf を落とすのに A3 の表の第 1 行を使う (L22 の `Binding::Llvm` 
 (グローバル初期化子の版では `Pre(V)` から) 作られるので、**`vars` は `Pre(V)` の表である**
 (`CODE src/rc_ir/borrow.rs: borrow_ify`, `RewriteCtx::new`, `RewriteCtx::rewrite`)。
 **`V` の site (第 6 節の DEF site) は `Pre(V)` から集め、活性化 (D21) は `Post(V)` のものを取る。**
-この 2 つを繋ぐのは L0a である。**「本体」の語を単独で使わず、どちらかを名指す。**
+この 2 つを繋ぐのは L0a である。**`V` の本体と書かず、`Pre(V)` か `Post(V)` を名指す。**
 
 - `step(τ)` は `unit_step(τ, type_env)` (`CODE src/rc_ir/ownership.rs: unit_step`)。
 - `units(τ)` は `rc_units(τ, type_env)`、`leaves(τ)` は `boxed_leaf_paths(τ, type_env)`
@@ -503,10 +503,10 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 - `boxed_leaf_paths` の `go` と `rc_units_go` が `τ` の位置から降りて着く各型。
 
 <1>1. 根の型は A10 を満たす。
-  DEF 扱う型 より根の型はパラメータ・capture の `RcVar` の型か、本体に現れる `RcVar` の型か、
+  DEF 扱う型 より根の型はパラメータ・capture の `RcVar` の型か、`Pre(V)` に現れる `RcVar` の型か、
   `Llvm` 節点の結果の型である (D1 より `RcFunc` はパラメータの列と capture を持ち、その各 `RcVar` は
   型を持つ)。固定した出力版のこの 3 種は、入力のプログラムに現れる型である -- `f_own` の版と
-  グローバル初期化子の版の本体・パラメータ・capture は入力のものそのものであり (`borrow_ify` は
+  グローバル初期化子の版の `Pre(V)`・パラメータ・capture は入力のものそのものであり (`borrow_ify` は
   `func.clone()` を写し、グローバルは `g.init` を写す)、借用版のそれらは入力の関数のものの束縛変数を
   一斉に付け替えたものであって (P9)、`rename_var` は名前だけを差し替えて型を残す。A10 は、プログラムに
   現れる型が ground であり、その tycon に kind の要求するだけの引数が与えられており、その tycon が
@@ -692,7 +692,7 @@ namespace が `Std` で名前が `#FunPtr` で始まるとき、残りを `parse
 <1>4. グローバル初期化子の版では 3 つとも偽である。
   `<1>1` よりこの版の `vars` は `VarTable::body_only(g.init)` である。`<1>2` より `collect_bindings` は
   `Binding::Param` を入れないので (i) は偽であり、L1c より `param_tys` は空なので (iii) も偽である。
-  この版が書き換える本体は `init` であり、D1 より `init` はパラメータも capture も持たないので (ii) も
+  この版の `Pre(V)` は `init` であり、D1 より `init` はパラメータも capture も持たないので (ii) も
   偽である。
   BY <1>1, <1>2, <ref id=a502f3e/>, <ref id=fa1a6ce/>
 
@@ -1395,10 +1395,10 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 固定した表から決まり、`Reach(x, π)` は 1 つの集合として定まる
 (`CODE src/rc_ir/ownership.rs: origin_inner`, `as_arg_projection`)。
 
-**第 1 節の `vars` が条件を満たすこと。** 第 1 節が固定する出力版の本体について A6・A11・A12 が述べる
-性質が成り立つことは L0 が与える。固定した版が借用版であるとき、その本体は入力の関数の本体の束縛変数を
-付け替えた複製であり (P9)、A6 と A11 の範囲は `borrow_ify` の入力である (A12 に範囲の記述は無いが、
-この文書は出力版の本体についてもこの 3 つを読む) ので、この 1 段が要る。
+**第 1 節の `vars` が条件を満たすこと。** `vars` は `Pre(V)` の表であり (第 1 節)、`Pre(V)` について
+A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固定した版が借用版であるとき、`Pre(V)` は入力の
+関数の本体の束縛変数を付け替えた複製であり (P9)、A6 と A11 の範囲は `borrow_ify` の入力である
+(A12 に範囲の記述は無いが、この文書は出力版についてもこの 3 つを読む) ので、この 1 段が要る。
 
 **`vars_f` について読む者。** 入力の関数 `func` は `borrow_ify` の入力の関数なので A6・A11・A12 を
 満たし、`ty(・)` も `func` に現れる名前について A12 が定める。よって L11a・L12・L14 を
@@ -1528,7 +1528,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 あり、その第 2 引数を渡すのは `Binding::Join` の腕の `(var, path)` と、`Binding::Llvm` の腕が
 `origin_from_leaves_under` へ渡す `here_identity = (var, path)` の 2 か所だからである。
 
-<1>1. `vars.param_tys` の鍵は、この本体のパラメータ・capture の名前ちょうどである。また
+<1>1. `vars.param_tys` の鍵は、この版のパラメータ・capture の名前ちょうどである。また
       `vars.bindings` はその各名前を鍵に持つ。
   `VarTable::of` と `VarTable::body_only` はどちらも `VarTable::empty()` から始め、その `param_tys` は
   空の写像である。`VarTable::of` は各パラメータ・capture について `bindings` に `Binding::Param` を、
@@ -1538,11 +1538,12 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   BY CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, VarTable::empty, collect_bindings
 
 <1>2. `<1>1` のパラメータ・capture の名前は、`collect_bindings` が記録する束縛名と異なる。
-  `collect_bindings` が `bindings` に入れるのは、本体の `Let` の束縛変数、`Destructure` のフィールド変数、
-  `Match` のアームの payload 変数である。固定した版で場合を分ける。`f_own` の版とグローバル初期化子の
-  版では、パラメータ・capture も本体も入力のものそのものである -- `borrow_ify` は `func.clone()` を
-  写し、グローバルは `g.init` を写す -- ので、A6 がこれらの名前が互いに、またパラメータ・capture の
-  名前とも異なることを直接与える。借用版では、パラメータ・capture と本体は入力の関数のそれの束縛変数を
+  `collect_bindings` が `bindings` に入れるのは、`Pre(V)` の `Let` の束縛変数、`Destructure` の
+  フィールド変数、`Match` のアームの payload 変数である。固定した版で場合を分ける。`f_own` の版と
+  グローバル初期化子の版では、パラメータ・capture も `Pre(V)` も入力のものそのものである --
+  `borrow_ify` は `func.clone()` を写し、グローバルは `g.init` を写す -- ので、A6 がこれらの名前が
+  互いに、またパラメータ・capture の名前とも異なることを直接与える。借用版では、パラメータ・capture と
+  `Pre(V)` は入力の関数のそれの束縛変数を
   `rename` で一斉に付け替えたものであって、それ以外の違いを持たない (P9、`clone_func`)。
   `fresh_rename_function` は 1 つの `counter` を `&mut` で持ち回り、各束縛名について
   `assign_fresh_name` を 1 度だけ呼んで `name#b<counter>` を作るので、`rename` の像の名前は相異なる
@@ -1553,7 +1554,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
 
 <1>3. QED
   言明が挙げる場合を 2 つに分ける。`vars.bindings.get(w)` が `None` のとき、`<1>1` の後半より `w` は
-  この本体のパラメータ・capture ではなく、`<1>1` の前半より `param_tys` の鍵でもない。
+  この版のパラメータ・capture ではなく、`<1>1` の前半より `param_tys` の鍵でもない。
   `Some` の 6 つの `Binding` はいずれも `collect_bindings` が入れるものなので、そのとき `w` は
   `collect_bindings` が記録する束縛名であり、`<1>2` よりパラメータ・capture の名前と異なるので、
   `<1>1` の前半より `param_tys` の鍵ではない。どちらの場合も `pty(w)` は `None` である。
@@ -1872,7 +1873,7 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
     要求するのは、その `vars` が A6 と A11 を満たす本体について `VarTable::of` (か `body_only`) が
     作った表であることである。`vars_f = VarTable::of(func)` は `borrow_ify` の入力の関数 `func` から
     作った表であり、A6 と A11 が直接この条件を与える。`vars_c = VarTable::of(clone)` は借用版 `clone`
-    から作った表であり、L0 より借用版の本体も A6 と A11 を満たすので、こちらもこの条件に入る。
+    から作った表であり、L0 より借用版の `Pre(V)` も A6 と A11 を満たすので、こちらもこの条件に入る。
     したがって両辺の `origin` の答えは `vars.origins` が保持する memo の状態に依らない量であり、この帰納の
     各段が結ぶ等式は 1 つの値どうしの等式である。A15 と P2 より再帰は停止するので、この対応は
     全域である。
@@ -2354,7 +2355,7 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   BY <ref id=e11772a/>, DEF unit を覆う対, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
 <1>7. `origin_from_leaves_under` の `(args[j], w)` は unit を覆う。
-  `ty(args[j])` は本体に現れる `RcVar` の型なので根の型であり、L1b より A10 を満たして P1 の定義域に
+  `ty(args[j])` は `Pre(V)` に現れる `RcVar` の型なので根の型であり、L1b より A10 を満たして P1 の定義域に
   入る。`w = truncate_to_unit(&args[j].ty, leaf, type_env)` であり、A3 より
   `leaf ∈ leaves(ty(args[j]))` なので、P1 より `w ∈ units(ty(args[j]))` である。L7 より
   `Λ_{ty(args[j])}(w) ≠ ∅` であり、その各 leaf `μ` について `trunc(ty(args[j]), μ) = w` である。L6 より
