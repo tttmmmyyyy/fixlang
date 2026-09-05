@@ -527,6 +527,19 @@ A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返
   - **(d3)** `π` の下のある leaf の宣言が `Arg(j, σ')` を含むとき、
     `origin(args[j], t_{ty(args[j])}(σ'))` は `reached` の要素である (辺 E4)。
 
+<1>0. `x` は `B` に現れる `RcVar` の名前であり、`args` の各要素も `B` に現れる `RcVar` である。
+      よってこの証明が引く L16 の前提 -- 鍵の第 1 成分が `B` に現れる `RcVar` の名前であること --
+      は、鍵 `(x, π)` についても鍵 `(args[j], ・)` についても満たされる。
+  この命題の前提より `x` の `Binding` は `Llvm(..)` であって `Binding::Param` ではないので、
+  L10 (a') より `x` は L10 (a) の 3 構文のいずれかが束縛する変数である。`Binding::Llvm` を作る
+  のは `collect_bindings` の `RcExpr::Let` の腕の `RcRhs::Llvm(llvm_gen, args)` の枝であり、
+  その `args` は `B` のその `Let` 節点の欄である。
+  BY <ref id=9a6b1cd/> の前提 (`x` の `Binding` は `Llvm(gen, args, ty(x))` である), <ref id=49da857/> (a), <ref id=49da857/> (a'),
+     CODE src/rc_ir/ownership.rs: Binding (`Param` と `Llvm` は相異なる構成子である),
+     CODE src/rc_ir/ownership.rs: collect_bindings (`RcRhs::Llvm(llvm_gen, args)` の枝が
+     `Binding::Llvm(llvm_gen.clone(), args.clone(), x.ty.clone())` を作る。その `args` は
+     走査中の `Let` 節点の欄である)
+
 <1>1. `decl` が記録する leaf の集合は `leaves(ty(x))` そのものであり、`decl.leaf_origins_at(p)` は
       `p ∈ leaves(ty(x))` のときその leaf の `LeafOrigins` を `Some` で返し、そうでないとき `None` を
       返す。
@@ -585,7 +598,8 @@ A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返
 
 <1>4. 第 3 の場合、鍵 `(x, π)` の答えは鍵 `(args[j], σ)` の答えである (辺 E3)。これは D9 の移動の表の
       `Llvm` の行と A3 の「単一の `Arg(j, σ)`」の行に一致する。
-  BY <1>3, <ref id=3c6aa4c/> (鍵の答え),
+  BY <1>0 (`x` も `args[j]` も `B` に現れる `RcVar` の名前なので、<ref id=3c6aa4c/> の前提を満たす),
+     <1>3, <ref id=3c6aa4c/> (鍵の答え),
      CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Llvm(..))` の腕の `Some((j, σ))` の枝
      -- この枝は `origin(vars, type_env, &args[j].name, &p)` の返り値をそのまま返すので、
      `origin_inner(x, π)` が答える値は鍵 `(args[j], σ)` の答えである,
@@ -593,7 +607,8 @@ A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返
 
 <1>5. 残る 4 つの場合は `origin_from_leaves_under(vars, type_env, &decl, args, π, &(x, π))` に入り、
       それが `None` を返すとき、鍵 `(x, π)` の答えは `Exactly((x, π))` である。
-  BY <1>3, <ref id=3c6aa4c/> (鍵の答え),
+  BY <1>0 (`x` は `B` に現れる `RcVar` の名前なので、<ref id=3c6aa4c/> の前提を満たす),
+     <1>3, <ref id=3c6aa4c/> (鍵の答え),
      CODE src/rc_ir/ownership.rs: origin_inner の `Some(Binding::Llvm(..))` の腕の `None =>` の枝
      -- `here_identity` は `(var.clone(), path.to_vec())` であり、`unwrap_or_else(here)` の `here` は
      `Origin::Exactly((var.clone(), path.to_vec()))` を返す閉包である
@@ -611,7 +626,8 @@ A3 は `result_prov` が leaf ごとに `LeafOrigins` (`Set<LeafOrigin>`) を返
         **`produced_here` が真のときはその列の後ろに `Exactly(here)` が 1 つ積まれる** (`<2>2`) ので、
         この記述が `reached` の全体を述べるのは `produced_here` が偽のときだけである。(d3) が言うのは
         `origin(args[j], u_j)` が `reached` の要素であることなので、どちらの場合でも成り立つ。
-    BY <2>1, <2>2, <ref id=3c6aa4c/> (鍵の答え),
+    BY <1>0 (`args[j]` は `B` に現れる `RcVar` の名前なので、<ref id=3c6aa4c/> の前提を満たす),
+       <2>1, <2>2, <ref id=3c6aa4c/> (鍵の答え),
        CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   <2>4. (d2)。宣言がすべて空集合ならループは 1 度も回らず、`operand_units` は空、`produced_here` は
         偽であり、`reached` は空である。`reached.first()?` が `None` を返すので、<1>5 より答えは
@@ -888,7 +904,7 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
 残る L1 から L5、L10 から L13、L15、L16 が引くのは、README の定義・仮定・命題 (P2、P2a)、コード、
 `EXT` の外部の結果、およびこの節の先行する命題である -- L2 は L1 を、L3 は L2 を、L4 は L2 と L3 を、
 L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引く。**循環は生じない** -- L6 の
-証明は第 4 節のどの命題も引かず、L8 の証明が引くのは L16 だけなので、順序は
+証明は第 4 節のどの命題も引かず、L8 の証明が引くのは L16 と L10 だけなので、順序は
 「L1 から L5、L10 から L13 → L6 → L15 → L16 → L14 → L8 → L9」に並ぶ。
 
 **L1 (`Origin::Join` は `of_candidates` だけが作る)**: `Origin::Join { .. }` を値として作るのは <!--#d6c2508-->
