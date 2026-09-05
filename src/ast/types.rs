@@ -1572,6 +1572,7 @@ impl TypeNode {
     }
 
     /// A shared node holding `ty`, written nowhere.
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn new_arc(ty: Type) -> Arc<Self> {
         Arc::new(Self::new(ty))
     }
@@ -1881,7 +1882,7 @@ pub enum Type {
 
 /// Whether two nodes hold the same type expression. Two occurrences of one node are the same type
 /// without looking inside, which is what keeps comparing a type that shares a subterm cheap.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn type_node_eq(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
     Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty
 }
@@ -2230,13 +2231,13 @@ pub fn type_assocty(assoc_ty: AssocType, args: Vec<Arc<TypeNode>>) -> Arc<TypeNo
 }
 
 /// The type that is the type constructor `tycon`, with no argument applied.
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyCon(tycon.clone()))
 }
 
 /// The type constructor named `name`.
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn tycon(name: FullName) -> Arc<TyCon> {
     Arc::new(TyCon { name })
 }
@@ -2245,7 +2246,7 @@ pub fn tycon(name: FullName) -> Arc<TyCon> {
 ///
 /// # Examples
 /// `apply_type_args(Array, [I64])` is `Array I64`, and `apply_type_args(Array, [])` is `Array`.
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
     let mut applied = type_tycon(tycon);
     for arg in args {
@@ -2255,7 +2256,7 @@ pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNo
 }
 
 /// What a type node carries beside the type itself.
-// PROOF: P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
     /// The span of the source text the type was written at. A type the compiler builds itself has

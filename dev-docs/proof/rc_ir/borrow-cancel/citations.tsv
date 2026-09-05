@@ -21,7 +21,7 @@ src/ast/inline_llvm.rs	LLVMGen::generate_tail	P27,P29,P30	2a615b2fb097
 src/ast/inline_llvm.rs	LLVMGen::observes_uniqueness	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26	b3c76bd06dac
 src/ast/inline_llvm.rs	LLVMGen::result_prov	D/A,P1,P2,P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18c,P19,P20,P21,P22,P23,P24,P26,P27,P28,P29,P30,P31,A19	84846b9c9d85
 src/ast/inline_llvm.rs	LLVMGen::unique_check_operand	D/A	8b4dc048a673
-src/ast/name.rs	FullName	P2a,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,T	839e104531c8
+src/ast/name.rs	FullName	P1,P2,P2a,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,T	839e104531c8
 src/ast/name.rs	FullName::from_strs	P3,P4,P5,P6,P7	49c1c45e87ed
 src/ast/name.rs	FullName::is_local	P7c,P7f,P18a,P18b,P27,P29,P30,P31,A19	42fc496e725b
 src/ast/name.rs	FullName::local	P31,A19	47c06982e039
@@ -31,7 +31,7 @@ src/ast/name.rs	FullName::set_absolute	P3,P4	f47966be063d
 src/ast/name.rs	FullName::to_namespace	P27,P29,P30	bb19891f8d40
 src/ast/name.rs	FullName::to_string	P27,P29,P30	cf55213855f5
 src/ast/name.rs	Name	P2a,P15,P16,P17,P18	893e63cc0a6e
-src/ast/name.rs	NameSpace	P2a,P5,P6,P7,P15,P16,P17,P18,T	318448ada45f
+src/ast/name.rs	NameSpace	P1,P2,P2a,P5,P6,P7,P15,P16,P17,P18,T	318448ada45f
 src/ast/name.rs	NameSpace::from_strs	P5,P6,P7	6e45c9839cc7
 src/ast/name.rs	NameSpace::is_local	P7c,P7f,P18a,P18b	0e7ef63c88ab
 src/ast/name.rs	NameSpace::new	P5,P6,P7	8e4abd8e7834
@@ -88,7 +88,7 @@ src/ast/types.rs	TyConInfo::resolve_type_aliases	P1,P2	2d8bd2c4afd1
 src/ast/types.rs	TyConVariant	P1,P2,P2a,P5,P6,P7,P7c,P7f,P15,P16,P17,P18,P18a,P18b	18d30eb4b988
 src/ast/types.rs	TyVar	P2a,P15,P16,P17,P18	f82865907fcd
 src/ast/types.rs	Type	P1,P2,P2a,P15,P16,P17,P18	544672d3752e
-src/ast/types.rs	TypeInfo	P2a,P15,P16,P17,P18,T	c2acfa2857d7
+src/ast/types.rs	TypeInfo	P1,P2,P2a,P15,P16,P17,P18,T	c2acfa2857d7
 src/ast/types.rs	TypeNode	D/A,P1,P2,P2a,P3,P4,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,T	8fed650d1ea5
 src/ast/types.rs	TypeNode::collect_type_arguments	P1,P2,P2a,P15,P16,P17,P18	6d18a772c333
 src/ast/types.rs	TypeNode::declared_field_types	D/A,P1,P2,P2a,P5,P6,P7,P15,P16,P17,P18	eda5fdc86a3c
@@ -109,6 +109,7 @@ src/ast/types.rs	TypeNode::is_unbox	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P15,P16
 src/ast/types.rs	TypeNode::is_union	D/A,P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	eaa9230b88af
 src/ast/types.rs	TypeNode::kind	D/A	a08211f10d71
 src/ast/types.rs	TypeNode::new	P1,P2	407c8d3d0a39
+src/ast/types.rs	TypeNode::new_arc	P1,P2	19e3000c12c2
 src/ast/types.rs	TypeNode::set_assocty_args	P1,P2,P2a,P15,P16,P17,P18	24abf982807a
 src/ast/types.rs	TypeNode::set_assocty_name	P1,P2	4cf5badd7071
 src/ast/types.rs	TypeNode::set_source	P1,P2,P2a,P15,P16,P17,P18	0ef112a184f4
@@ -127,18 +128,18 @@ src/ast/types.rs	TypeNode::type_hash	D/A,P1,P2,P2a,P3,P4,P15,P16,P17,P18,T	19915
 src/ast/types.rs	TypeNode::unpunched_field_types	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b	ecae1220e285
 src/ast/types.rs	TypeNode::unwrap_newtypes_memoized	P1,P2,P2a,P3,P4,P15,P16,P17,P18	b775960e33b3
 src/ast/types.rs	TypeNode::unwrap_newtypes_node	P1,P2,P2a,P15,P16,P17,P18	58f7c241baaf
-src/ast/types.rs	apply_type_args	P5,P6,P7	885102d86c9b
+src/ast/types.rs	apply_type_args	P1,P2,P5,P6,P7	885102d86c9b
 src/ast/types.rs	impl Clone for TypeNode	P1,P2	102b1463683d
 src/ast/types.rs	impl Hash for TypeNode	P1,P2,P3,P4	be2e413d0b6d
 src/ast/types.rs	impl PartialEq for Type	P1,P2	90d16bb627e2
 src/ast/types.rs	impl PartialEq for TypeNode	P1,P2	bdc0f3dd3070
-src/ast/types.rs	tycon	P5,P6,P7	fa47a2dc4c4e
+src/ast/types.rs	tycon	P1,P2,P5,P6,P7	fa47a2dc4c4e
 src/ast/types.rs	type_assocty	P1,P2	e870cc8cf32d
 src/ast/types.rs	type_fun	P26	e57e667fefea
 src/ast/types.rs	type_funptr	P26	3c1291d61de1
-src/ast/types.rs	type_node_eq	P2a,P15,P16,P17,P18	76e210edaad9
+src/ast/types.rs	type_node_eq	P1,P2,P2a,P15,P16,P17,P18	76e210edaad9
 src/ast/types.rs	type_tyapp	P1,P2,P5,P6,P7	cb99462cb86f
-src/ast/types.rs	type_tycon	P5,P6,P7	93d1da8365a9
+src/ast/types.rs	type_tycon	P1,P2,P5,P6,P7	93d1da8365a9
 src/build/build.rs	build	P26	a09e5051ebcc
 src/build/build_object_files.rs	build_main_function	D/A,P26,P27,P28,P29,P30	ac9bcf7f4d89
 src/build/build_object_files.rs	build_object_files	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18c,P19,P20,P21,P22,P23,P24,P27,P29,P30,P31,A19	db59d512862f
@@ -164,7 +165,7 @@ src/constants.rs	CLOSURE_FIELD_COUNT	P1,P2,P2a,P15,P16,P17,P18	3e3f60cca61a
 src/constants.rs	FUNPTR_ARGS_MAX	P1,P2,P5,P6,P7,P7a,P7d,P7e	5054470d6f01
 src/constants.rs	FUNPTR_NAME	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e,P26	5f81220a51a7
 src/constants.rs	RefcntState	P26	ab45f83edf4d
-src/constants.rs	STD_NAME	P5,P6,P7	2ce290984024
+src/constants.rs	STD_NAME	P1,P2,P5,P6,P7	2ce290984024
 src/constants.rs	SYMBOL_VERSION_SEPARATOR	P27,P29,P30	66bb7067040b
 src/constants.rs	TRAVERSER_WORK_MARK_THREADED	P26	a1f193eac558
 src/constants.rs	TUPLE_NAME	P5,P6,P7	3f3e005e8759
@@ -317,9 +318,9 @@ src/fixstd/builtin.rs	is_array_tycon	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P15,P1
 src/fixstd/builtin.rs	is_funptr_tycon	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18,P26,P31,A19	d27235989faf
 src/fixstd/builtin.rs	is_punched_array_tycon	P1,P2,P2a,P15,P16,P17,P18	86bb2a262fc0
 src/fixstd/builtin.rs	is_unique_function	D/A,P26	46c96d982dfb
-src/fixstd/builtin.rs	make_array_name	P3,P4,P5,P6,P7,P7a,P7d,P7e	11ce81f652a5
+src/fixstd/builtin.rs	make_array_name	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e	11ce81f652a5
 src/fixstd/builtin.rs	make_array_ty	P5,P6,P7	c2397973f0df
-src/fixstd/builtin.rs	make_array_tycon	P3,P4,P5,P6,P7,P7a,P7d,P7e,P31,A19	911fb67cd90e
+src/fixstd/builtin.rs	make_array_tycon	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e,P31,A19	911fb67cd90e
 src/fixstd/builtin.rs	make_array_unique_with_hole	P26,P27,P29,P30	112d914f574b
 src/fixstd/builtin.rs	make_arrow_name_abs	P1,P2,P2a,P3,P4,P5,P6,P7,P15,P16,P17,P18,P26	c751172b9601
 src/fixstd/builtin.rs	make_arrow_tycon	P1,P2,P26	b1d03c9ddab2
@@ -327,11 +328,12 @@ src/fixstd/builtin.rs	make_boxed_trait	P26	06b8f2c701f9
 src/fixstd/builtin.rs	make_dynamic_object_ty	P27,P29,P30	2a58de9d63f1
 src/fixstd/builtin.rs	make_funptr_name	P1,P2,P5,P6,P7,P7a,P7d,P7e,P26	34284cce7fb0
 src/fixstd/builtin.rs	make_funptr_tycon	P1,P2,P5,P6,P7,P7a,P7d,P7e,P26	c0fafed01fb9
+src/fixstd/builtin.rs	make_punched_array_tycon	P1,P2	13766cb4a4ef
 src/fixstd/builtin.rs	make_string_lit	P5,P6,P7,P26	09f6b13cd2cf
 src/fixstd/builtin.rs	make_struct_union_unique	D/A,P26,P27,P28,P29,P30	d88c213c8b1a
-src/fixstd/builtin.rs	make_tuple_name	P5,P6,P7	bb738d48dcf0
-src/fixstd/builtin.rs	make_tuple_name_abs	P5,P6,P7	2dfc51329cde
-src/fixstd/builtin.rs	make_tuple_ty	P5,P6,P7	e63eef57cb8c
+src/fixstd/builtin.rs	make_tuple_name	P1,P2,P5,P6,P7	bb738d48dcf0
+src/fixstd/builtin.rs	make_tuple_name_abs	P1,P2,P5,P6,P7	2dfc51329cde
+src/fixstd/builtin.rs	make_tuple_ty	P1,P2,P5,P6,P7	e63eef57cb8c
 src/fixstd/builtin.rs	make_unit_ty	P1,P2,P2a,P5,P6,P7,P15,P16,P17,P18	272a1957ae37
 src/fixstd/builtin.rs	mark_threaded_function	P26	bbadc0f9cc77
 src/fixstd/builtin.rs	punched_array_plug	P26	6413109c2c14

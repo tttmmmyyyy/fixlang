@@ -4,7 +4,7 @@ use std::env;
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
 
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const STD_NAME: &str = "Std";
 pub const FFI_NAME: &str = "FFI";
 pub const IO_NAME: &str = "IO";
