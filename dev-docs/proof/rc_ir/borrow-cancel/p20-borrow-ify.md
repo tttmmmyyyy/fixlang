@@ -138,14 +138,14 @@ site を 1 つも挙げない。P7a と P7d はその点を避けて site を本
 - **`p15` の `L12`** -- `act(x, π) ⊆ Reach(x, π)` であり、とくに `cand(x, π) ⊆ Reach(x, π)` である。
   `Reach(x, π)` は `origin` の再帰が `(x, π)` から訪れる対の集合である (`p15` の第 4 節の
   `DEF 再帰で訪れる対`)。
-- **`p15` の `L13`** -- `vars.bindings.get(w)` が `collect_bindings` の入れる `Binding` (`Move`、
-  `Producer`、`Llvm`、`Field`、`Payload`、`Join`) のいずれかであるとき、`vars.param_tys` は `w` を鍵に
-  持たない。したがって `owns_object(w, σ)` と `owns_object_yet(.., w, σ, ..)` はどちらも任意の `σ` に
-  ついて真である。
+- **`p15` の `L13`** -- `vars.bindings.get(w)` が `None` であるか、`collect_bindings` が入れる `Binding`
+  (`Move`、`Producer`、`Llvm`、`Field`、`Payload`、`Join`) のいずれかであるとき、`vars.param_tys` は
+  `w` を鍵に持たない。したがって `owns_object(w, σ)` と `owns_object_yet(.., w, σ, ..)` はどちらも任意の
+  `σ` について真である。
 - **`p15` の `L14a`** -- `x` を `func` に現れる名前とする。`origin` の再帰が `(x, π)` から訪れる各対
   `(y, ρ)` について、`y` も `func` に現れる名前である。ここで「`func` に現れる名前」とは、`func` の
   パラメータ・capture の名前と、`func.body` に現れる `RcVar` の名前の全体である
-  (`p15` の第 1 節の (N))。
+  (`p15` の第 1 節の `DEF 現れる名前`)。
 - **`p15` の `L15`** -- `rename` を `clone_func` が返す写像、`ρ_f` をそれを鍵でない名前の上の恒等写像で
   延ばしたものとすると、(i) `ρ_f` は `func` に現れる名前の上で**単射**であり、`func` に現れる名前のうち
   `rename` の鍵でないものは `rename` の像に入らない。`vars_c.param_tys` の鍵は `vars_f.param_tys` の鍵の
@@ -1059,7 +1059,7 @@ D9 の `App` の引数の行は「呼び出し先がその位置の unit を所�
 
 <1>0. `cand_f(v, λ)` の各元 `(r, p)` について、`r` は `func` に現れる名前である。
   `v` は `func.body` に現れる `RcVar` の名前か `func` のパラメータ・capture の名前であり、どちらも
-  `func` に現れる名前である (第 1 節に写した `p15` の第 1 節の (N) の集合)。第 1 節の `p15` の `L12` より
+  `func` に現れる名前である (第 1 節に写した `p15` の `DEF 現れる名前` の集合)。第 1 節の `p15` の `L12` より
   `cand_f(v, λ) ⊆ Reach(v, λ)` であり、`p15` の `L14a` より `Reach(v, λ)` の各元の変数も `func` に
   現れる名前である。
   BY <ref id=44a9669/>, <ref id=2d18d2a/>
