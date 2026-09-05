@@ -1453,7 +1453,8 @@ SCAN src/ `applies_a_function_operand`
       `CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody::generate` (`move_out_struct_field` で古い値を取り出し
       `gc.release(old_value, ...)` を置いてから `move_into_struct_field` を呼ぶ)
     `<3>2b.` この実行の生成コードは、`<3>1`・`<3>2`・`<3>2a` が挙げるもののほかにも段の中で retain と
-      release を出す。それは `<1>0e` の 3 つの形で尽き、(a) と (b) が出すのは (β) か (δ) であり、
+      release を出す ((F) の解放が行うものを除く -- それは `<1>6` が数える)。それは `<1>0e` の
+      3 つの形で尽き、(a) と (b) が出すのは (β) か (δ) であり、
       (c) は素動作を起こさない。**在りかを一覧でなく
       `<1>0e` の述語で決めるのは、op が 1 つ増えるたびに一覧が古くなるからである** (D24)。
 
@@ -1474,7 +1475,7 @@ SCAN src/ `applies_a_function_operand`
 
       (b) の形は段の境界でも `H` を動かすが、その参照の持ち手はこの実行が書き込むオブジェクトの
       持ち手の単位であり (D25 の 2 つ目)、`Obl(a)` を動かさない (`<1>0e` の (b))。
-      BY `<1>0e`, `<1>0b`, <ref id=e3436e8/> (「**在りかは述語で決める** -- `Generator::retain`・
+      BY `<1>0e`, `<1>0b`, `<1>6`, <ref id=e3436e8/> (「**在りかは述語で決める** -- `Generator::retain`・
       `Generator::build_retain`・`Generator::release` の呼び出しを出す生成コードの全体であり、一覧で
       書くと op が 1 つ増えるたびに古くなる。」、「**述語は名前の綴りでなく、呼ばれる項目で書く。**」),
       D25 (2 番目の持ち手), D16, D26, A5, A8,
