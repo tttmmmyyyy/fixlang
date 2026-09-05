@@ -113,8 +113,8 @@ D11 の (S-c) の接頭条件 -- その活性化がその点まで解放につ�
 `Destructure` のフィールド変数、`MatchArm` の `payload` の 3 つである
 (`CODE src/rc_ir/ast.rs: RcExpr`, `MatchArm`)。**DEF 出力の束縛名** -- 同じものを出力プログラムについて言う。
 
-**DEF 出力の版** -- 出力プログラムの `funcs` の各元と、出力の各グローバル初期化子をいう。第 8 節の
-`L6` より、`funcs` の元は各 `f_own` と各 `f_borrow` である。
+**DEF 出力の版** -- 出力プログラムの `funcs` の各元と、出力の各グローバル初期化子をいう。`L6`
+(`callee_params` と出力の `funcs` が持つ鍵) より、`funcs` の元は各 `f_own` と各 `f_borrow` である。
 
 **DEF site** -- 出力の版が書き換える本体 -- 関数の `body` かグローバル初期化子の `init` -- を
 `for_each_node` で歩いて挙げた、`Retain`/`Release` 節点の `(v, path)` と、`App` の各引数 `arg` と各
@@ -172,11 +172,16 @@ site を 1 つも挙げない。P7a と P7d はその点を避けて site を本
   `true` を返し、持っていれば集合を変えずに `false` を返す。`HashSet::contains` は集合を変えない。
   `Extend::extend(iter)` は `iter` が返す各元を加え、それ以外の変更をしない。`HashMap` は 1 つの鍵に
   高々 1 つの値を持ち、`HashMap::insert(k, v)` はその鍵の値を `v` にする。`HashMap::values` と
-  `HashMap::values_mut` は、その時点の各エントリの値をちょうど 1 度ずつ返す。
+  `HashMap::values_mut` は、その時点の各エントリの値をちょうど 1 度ずつ返す。`HashMap::default()` は
+  空の写像である。`RefCell::<T>::default()` は `T::default()` を包む `RefCell` であり、
+  `RefCell::borrow` と `RefCell::borrow_mut` はその中身への参照を返す。
 - **EXT 反復子の並び** -- `Iterator::filter(f)` は、元の反復子が返す元のうち `f` が真であるものを、元の
   順序のまま返す。`Iterator::chain(other)` は、自分の全元に続いて `other` の全元を、それぞれ 1 度ずつ
   順に返す。`Iterator::rev()` は両端反復子の元を逆順に返す。`Iterator::fold(init, f)` は `acc = init` から
   始めて、反復子が返す各元 `x` について `acc = f(acc, x)` を順に行い、最後の `acc` を返す。
+  `Iterator::enumerate()` は、元の反復子が返す第 `k` 元 (`k` は 0 から数える) を対 `(k, 元)` に替えて
+  順に返す。`Iterator::all(f)` は、反復子が返す元を順に `f` に渡し、`f` が偽を返した元でそこで止まって
+  `false` を返す。すべての元について `f` が真を返せば `true` を返し、元が 1 つも無ければ `true` を返す。
 - **EXT 導出した相等** -- `#[derive(PartialEq)]` を付けた構造体の 2 つの値が等しいのは、対応する各
   フィールドが等しいときであり、そのときに限る。
 - **EXT 10 進表記** -- `format!("{}", n)` が `usize` の値 `n` について書き出す文字列は、10 進数字だけから
@@ -238,6 +243,18 @@ SCAN src/ `closure_targets`
   = src/rc_ir/provenance.rs: Interpreter::interpret_app -- 同名の欄の読み
   = src/rc_ir/provenance.rs: Interpreter::interpret_rhs -- 同名の欄への書き込み
   = src/rc_ir/provenance.rs: Interpreter::new -- 同名の欄の初期化
+
+**前提 `VarTable` の `origins` の欄を触る在りか** --- 欄 `origins` を読み書きする式が在る項目は、次の
+2 つの走査が挙げるもので尽きる。1 つ目は欄を経由する式を、2 つ目は欄の宣言と欄を据える式を挙げる。
+
+SCAN src/ `.origins`
+  = src/rc_ir/ownership.rs: origin -- memo を引き、`origin_inner` の答えをその鍵に記録する
+
+SCAN src/ `origins:`
+  = src/rc_ir/ownership.rs: VarTable -- 欄の宣言
+  = src/rc_ir/ownership.rs: VarTable::empty -- `RefCell::default()` を据える
+  = src/rc_ir/provenance.rs: leaf_source_to_string -- 同名の引数
+  = src/rc_ir/provenance.rs: resolve_leaf -- 同名の引数
 
 **`develop_mode` について。** `borrow_ify` は `develop_mode` が真のとき `check_clone_names_are_fresh` と
 `RewriteCtx::check_ownership_is_levelled` を呼ぶ。どちらも `assert!` を行うだけで出力を作らない
