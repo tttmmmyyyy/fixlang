@@ -341,6 +341,21 @@ def title_of(line):
     return next((g for g in match.groups() if g), None) if match else None
 
 
+IMPL_FOR = re.compile(r"^\s*(?:pub(?:\([a-z()]+\))?\s+)?impl\b[^{]*\bfor\s+(\w+)\b")
+
+
+def impl_blocks(lines, symbol):
+    """その型の `impl` の本体を、同じファイルから全部集める。型でなければ空。"""
+    import proof_links
+    out = []
+    for index, line in enumerate(lines):
+        match = IMPL_FOR.match(line)
+        if match and match.group(1) == symbol.rpartition("::")[2]:
+            start, stop = proof_links.item_body(lines, index)
+            out.append("\n".join(lines[start:stop]))
+    return ("\n\n" + "\n\n".join(out)) if out else ""
+
+
 def with_annotations(lines, start):
     """項目の定義の行より上に在る doc コメントと属性まで範囲を広げる。
 
@@ -403,7 +418,12 @@ def cited_code(path, repo):
         else:
             span = proof_links.item_span(lines, symbol)
         if span:
-            out.append((source, symbol, "\n".join(lines[with_annotations(lines, span[0]):span[1]])))
+            body = "\n".join(lines[with_annotations(lines, span[0]):span[1]])
+            # **型を引いたら、その `impl` も運ぶ。** 型の宣言は欄しか述べないので、その型の
+            # メソッドの振る舞いを主張するステップは引用先からは確かめられない -- 実測で、
+            # 8 件がそうなっていて、検証者は 8 件ともリポジトリを開き直した。
+            body += impl_blocks(lines, symbol)
+            out.append((source, symbol, body))
         else:
             out.append((source, symbol, None))
     return out
