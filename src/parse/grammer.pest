@@ -71,8 +71,8 @@ string_char = {
 expr_u8_lit = { "'" ~ u8_lit_char ~ "'" }
 
 u8_lit_char = {
-    !("\"" | "\\") ~ ASCII
-    | "\\" ~ ("\'" | "\\" | "n" | "r" | "t" | "0")
+    !"\\" ~ ASCII
+    | "\\" ~ ("\'" | "\"" | "\\" | "n" | "r" | "t" | "0")
     | "\\" ~ ("x" ~ ASCII_HEX_DIGIT{2})
 }
 

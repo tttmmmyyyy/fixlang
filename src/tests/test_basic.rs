@@ -3252,6 +3252,8 @@ pub fn test_u8_literal() {
                 assert_eq(|_|"", '\n', 10_U8);;
                 assert_eq(|_|"", '\\', 92_U8);;
                 assert_eq(|_|"", '\'', 39_U8);;
+                assert_eq(|_|"", '"', 34_U8);;
+                assert_eq(|_|"", '\"', 34_U8);;
                 assert_eq(|_|"", '\x7f', 127_U8);;
                 pure()
             );

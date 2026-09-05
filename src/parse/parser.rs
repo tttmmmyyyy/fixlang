@@ -2918,46 +2918,33 @@ fn parse_expr_u8_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> 
     let string = pair.into_inner().next().unwrap().as_str().to_string();
     // Resolve escape sequences.
     let mut chars = string.chars();
-    let byte: u8;
-    loop {
-        match chars.next() {
-            None => {
-                unreachable!()
-            }
-            Some(c) => {
-                if c != '\\' {
-                    let mut buf = [0 as u8];
-                    c.encode_utf8(&mut buf);
-                    byte = buf[0];
-                } else {
-                    let c = chars.next().unwrap();
-                    if c == '\'' {
-                        byte = 39;
-                    } else if c == '\\' {
-                        byte = 92;
-                    } else if c == 'n' {
-                        byte = 10;
-                    } else if c == 'r' {
-                        byte = 13;
-                    } else if c == 't' {
-                        byte = 9;
-                    } else if c == '0' {
-                        byte = 0;
-                    } else if c == 'x' {
-                        let mut code: u8 = 0;
-                        for i in 0..2 {
-                            let d = chars.next().unwrap().to_digit(16).unwrap() as u8;
-                            code += d << 4 * (1 - i);
-                        }
-                        byte = code;
-                    } else {
-                        unreachable!()
-                    }
+    let byte: u8 = match chars.next().unwrap() {
+        '\\' => match chars.next().unwrap() {
+            '\'' => 39,
+            '"' => 34,
+            '\\' => 92,
+            'n' => 10,
+            'r' => 13,
+            't' => 9,
+            '0' => 0,
+            'x' => {
+                let mut code: u8 = 0;
+                for i in 0..2 {
+                    let d = chars.next().unwrap().to_digit(16).unwrap() as u8;
+                    code += d << 4 * (1 - i);
                 }
-                break;
+                code
             }
+            _ => unreachable!(),
+        },
+        c => {
+            assert!(
+                c.is_ascii(),
+                "`u8_lit_char` admits only ASCII characters outside of escape sequences."
+            );
+            c as u8
         }
-    }
+    };
     expr_int_lit(byte as u64, make_u8_ty(), Some(span))
 }
 
