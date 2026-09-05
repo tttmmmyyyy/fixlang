@@ -94,6 +94,10 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
   ときに真を、偽を返す要素が在るときに偽を返す。要素が 1 つも無いときは真である。
 - **`EXT Vec::first`** (Rust 標準ライブラリ): `v.first()` は、`v` が空のとき `None` を、そうでないとき
   先頭の要素への参照の `Some` を返す。
+- **`EXT Iterator::enumerate`** (Rust 標準ライブラリ): `it.enumerate()` は `it` の第 `k` 要素に添字 `k`
+  を組にして渡す。よって渡る添字は 0 から順の相異なる整数である。
+- **`EXT Iterator::chain`** (Rust 標準ライブラリ): `a.chain(b)` は `a` の要素をその並びのまま渡してから
+  `b` の要素をその並びのまま渡す。渡るのはその 2 つの要素で尽きる。
 - **`EXT 写像と集合の基本演算`** (Rust 標準ライブラリ): この文書が扱う写像はどれも `crate::misc` の
   `Map`、集合はどれも `Set` であり、その 2 つは `std::collections` の `HashMap` と `HashSet` の
   ハッシャを差し替えた別名である (`CODE src/misc.rs: Map`, `Set`)。`m.get(k)` は `k` が鍵として在る
@@ -283,6 +287,14 @@ SCAN src/ `walk_inner`
 欄の宣言、空の写像を置く `Generator::new`、項目を入れる `Generator::add_global_object`、項目を読む
 `Generator::get_or_declare_global` である。**この表に項目を入れる式は `add_global_object` の `insert`
 だけである。**
+
+**前提 `levelled_sites` の呼び出しの在りか** --- 自由関数 `levelled_sites` を呼ぶ式が在る項目は、
+その宣言のほかには `infer_ownership` と `RewriteCtx::check_ownership_is_levelled` である。
+
+SCAN src/ `levelled_sites`
+  = src/rc_ir/borrow.rs: infer_ownership -- `prog.funcs` の各関数についての呼び出し
+  = src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled -- 借用版の書き換え前の本体についての呼び出し
+  = src/rc_ir/borrow.rs: levelled_sites -- 宣言
 
 SCAN src/ `declared_globals`
   = src/generator.rs: Object::ptr_to_field_as -- `Scope` の doc の散文 (走査は直前の項目に付ける)
@@ -1191,7 +1203,7 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
 
 <1>3. `go` の各呼び出しの入口の `path` は、その祖先の呼び出しが足した添字の列である。相異なる 2 つの
       呼び出しの入口の `path` は相異なる。
-  BY <ref id=8412761/>, <1>2, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+  BY <ref id=8412761/>, <1>2, EXT Iterator::enumerate, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::unpunched_field_types
   A10 が `go` の再帰の停止性を与える -- 「`unpunched_field_types` を繰り返し取って到達する型についても、
   上の 3 つ -- ground、飽和、tycon が `type_env` にある -- がすべて成り立ち、その歩みは有限である」
@@ -3420,9 +3432,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
 
 **2 つの本体を書き分ける。** 消費の仮定と (B) は `V` の本体 -- `cancel` の入力 -- についてのもので
 あり、(A) と (C) の `Retain` 節点、および `owns_unit` と `levelled_sites` が読むものは `Pre(V)` に
-ついてのものである。`rewrite_rc` が落とす節点は `Pre(V)` の節点であり、`levelled_sites` を呼ぶ 2 か所
-(`infer_ownership` と `check_ownership_is_levelled`) が渡すのもどちらも書き換え前の本体である
-(`<1>1d`)。書き換えは `Retain`/`Release` 節点を足し引きするので、この 2 つの本体で `levelled_sites` の
+ついてのものである。`rewrite_rc` が落とす節点は `Pre(V)` の節点であり、`levelled_sites` を呼ぶ各所が
+渡すのも書き換え前の本体である (`<1>1d`)。書き換えは `Retain`/`Release` 節点を足し引きするので、この 2 つの本体で `levelled_sites` の
 値は違いうる。
 
 (C) は `insert_rc` の側の義務に属する -- その消費が処分する参照を用意した `Retain` が同じ実行路の上に
@@ -3490,10 +3501,11 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
 <1>1d. `V` の本体は `ctx.rewrite(Pre(V))` であり、`ctx = RewriteCtx` の `vars` は `Pre(V)` から作られる。
        書き換えが変えるのは `Retain`/`Release` 節点 (P10、P11) と `App` の callee の名前 (P12) だけで
        あり、ほかの節点は種・変数・path・並びを変えずに組み直される。とくに `Pre(V)` と `V` の本体は
-       `App` 節点の位置と `args` を共有する。また `levelled_sites` を呼ぶ 2 か所はどちらも書き換え前の
+       `App` 節点の位置と `args` を共有する。また `levelled_sites` を呼ぶ各所は書き換え前の
        本体を渡す。以下、`ctx.vars` と `type_env` で計算した `origin` を `origin_V`、`F` の本体の
        `VarTable` と `type_env` で計算した `origin` を `origin_F` と書く。
-  BY <1>0, <1>1c, <ref id=a985128/>, <ref id=eaf9b51/>, <ref id=843e506/>, CODE src/rc_ir/borrow.rs: borrow_ify,
+  BY <1>0, <1>1c, <ref id=a985128/>, <ref id=eaf9b51/>, <ref id=843e506/>,
+     前提 `levelled_sites` の呼び出しの在りか, CODE src/rc_ir/borrow.rs: borrow_ify,
      CODE src/rc_ir/borrow.rs: RewriteCtx::new, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
      CODE src/rc_ir/borrow.rs: infer_ownership,
      CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled
@@ -3509,9 +3521,9 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
   `callee` を `route` の結果に差し替え、`call_rc` が返す `before` と `after` の節点を前後に置き、
   `x` と `args` はそのまま複製する。残る 5 つの腕 -- `Let` の `Match` とそれ以外、`Destructure`、
   `Eval`、`Ret` -- は、束縛変数・右辺・容器・フィールド・scrutinee・返す変数をそのまま複製し、継続と
-  アーム本体を書き換えた木で組み直す。`levelled_sites` の呼び出しは 2 か所である -- `infer_ownership` が
-  `prog.funcs` の各関数について呼ぶもの (入力の本体) と、`check_ownership_is_levelled` が `clone` に
-  ついて呼ぶもの (借用版の書き換え前の本体) である。
+  アーム本体を書き換えた木で組み直す。前提 `levelled_sites` の呼び出しの在りか より、`levelled_sites` を
+  呼ぶ式が在るのは `infer_ownership` と `check_ownership_is_levelled` である -- 前者は `prog.funcs` の
+  各関数について呼び (入力の本体)、後者は `clone` について呼ぶ (借用版の書き換え前の本体)。
 
 <1>1e. D9 の消費の表が挙げる消費の位置は 7 種である -- `App` の callee、`App` の所有位置の引数、
        `Closure` の capture、`Llvm` のオペランド、boxed 容器の `Destructure`、unbox 容器の
@@ -3831,7 +3843,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
   <2>3. `origin_V(p, μ)` の各候補 `(r, q)` について `owns_object(r, q)` は真である。
     <3>1. `owns_object(r, q)` は、`r` が `V` の `vars.param_tys` の鍵でないとき -- すなわち `V` の
           パラメータでも capture でもないとき -- 真である。
-      BY EXT 写像と集合の基本演算, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
+      BY EXT 写像と集合の基本演算, EXT Iterator::chain,
+         CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
          CODE src/rc_ir/ownership.rs: VarTable::of
       `self.vars.param_tys.get(root)` が `None` の腕が `true` を返す。`VarTable::of` は
       `func.params` と `func.capture` の名前だけを `param_tys` の鍵にする。
@@ -3901,6 +3914,7 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         あるから、<4>1 が結論を与える。
     <3>4. QED
       BY <1>1a, <1>1b, <2>1a, <2>2, <3>1, <3>2, <3>3, <3>3a, <ref id=3597669/>, <ref id=8412761/>, <ref id=63981a3/>, <ref id=63eadd9/>,
+         EXT Iterator::chain,
          CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: param_capture_units
       `origin_V(p, μ)` の候補 `(r, q)` を取る。`r` が `V` の `vars.param_tys` の鍵でないときは
       <3>1 が結論を与える。以下 `r` がその鍵であるとし、`t = truncate_to_unit(ty(r), q, type_env)` と
@@ -3954,7 +3968,7 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         `borrow_ify` の出力の `funcs` の関数である。また `call_rc` が引く `params` が `Some` であるとき、
         `params[i]` は `p_i` の名前と型である。
     BY <ref id=ff5985d/>, <ref id=561540d/>, <ref id=33c54dc/>, <ref id=cb35ab1/>, <ref id=f8ae607/>, <ref id=63eadd9/>, <ref id=596a46d/>, EXT 写像と集合の基本演算,
-       CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+       EXT Iterator::chain, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: param_names_and_types,
        CODE src/rc_ir/borrow.rs: borrow_funcref,
        CODE src/ast/name.rs: FullName::is_local, CODE src/ast/name.rs: NameSpace::is_local,
