@@ -927,7 +927,9 @@ fn handle_textdocument_did_open(
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
 ) {
     // Store the content of the file into the maps.
-    let path = uri_to_path(&params.text_document.uri);
+    let Some(path) = uri_to_path(&params.text_document.uri) else {
+        return;
+    };
     uri_to_latest_content.insert(
         params.text_document.uri.clone(),
         LatestContent::new(path, params.text_document.text.clone()),
@@ -964,11 +966,12 @@ fn handle_textdocument_did_change(
     // happen even when on-type analysis is off, so other features
     // (completion, hover) still see the live buffer.
     if let Some(last_change) = params.content_changes.last() {
-        let path = uri_to_path(&params.text_document.uri);
-        uri_to_latest_content.insert(
-            params.text_document.uri.clone(),
-            LatestContent::new(path, last_change.text.clone()),
-        );
+        if let Some(path) = uri_to_path(&params.text_document.uri) {
+            uri_to_latest_content.insert(
+                params.text_document.uri.clone(),
+                LatestContent::new(path, last_change.text.clone()),
+            );
+        }
     }
 
     // Trigger on-type analysis over the live buffers, unless disabled.
@@ -988,11 +991,12 @@ fn handle_textdocument_did_save(
 ) {
     // Store the content of the file into maps.
     if let Some(text) = &params.text {
-        let path = uri_to_path(&params.text_document.uri);
-        uri_to_latest_content.insert(
-            params.text_document.uri.clone(),
-            LatestContent::new(path, text.clone()),
-        );
+        if let Some(path) = uri_to_path(&params.text_document.uri) {
+            uri_to_latest_content.insert(
+                params.text_document.uri.clone(),
+                LatestContent::new(path, text.clone()),
+            );
+        }
     } else {
         let msg = "No text data in \"textDocument/didSave\" notification.".to_string();
         write_log!("{}", msg);

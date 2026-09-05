@@ -22,7 +22,9 @@ pub(super) fn handle_document_symbol(id: u32, params: &DocumentSymbolParams, pro
         path.ok()
     };
 
-    let path = uri_to_path(&params.text_document.uri);
+    let Some(path) = uri_to_path(&params.text_document.uri) else {
+        return;
+    };
     let path = match canonicalize_path(&path) {
         Some(path) => path,
         None => return,

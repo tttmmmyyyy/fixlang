@@ -22,14 +22,21 @@ use std::path::{Component, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-// Convert a `lsp_types::Uri` into a `PathBuf`.
-pub(super) fn uri_to_path(uri: &Uri) -> PathBuf {
-    PathBuf::from(
-        urlencoding::decode(&uri.path().to_string())
-            .ok()
-            .unwrap()
-            .as_ref(),
-    )
+/// The path a `lsp_types::Uri` names. `None` says the percent-escapes of the URI decode to bytes
+/// that are not UTF-8.
+///
+/// Such a path is one this server has nothing to say about: `path_to_uri`, which every answer
+/// carrying a location goes through, takes each component of a path as a `str`, so a file whose
+/// name is not UTF-8 has no URI to publish a diagnostic under.
+pub(super) fn uri_to_path(uri: &Uri) -> Option<PathBuf> {
+    let path = uri.path().to_string();
+    match urlencoding::decode(&path) {
+        Ok(decoded) => Some(PathBuf::from(decoded.as_ref())),
+        Err(why) => {
+            write_log!("Failed to decode the path of the uri \"{}\": {}", path, why);
+            None
+        }
+    }
 }
 
 /// Map each line of `content0` to the corresponding line in `content1`, or
@@ -239,7 +246,7 @@ pub(super) fn resolve_source_pos(
     }
     let latest_content = uri_to_content.get(uri).unwrap();
 
-    let path = uri_to_path(uri);
+    let path = uri_to_path(uri)?;
 
     let saved_content = get_file_content_at_previous_diagnostics(program, &path);
     if let Err(e) = saved_content {
