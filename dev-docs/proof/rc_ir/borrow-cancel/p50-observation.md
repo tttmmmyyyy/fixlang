@@ -1320,18 +1320,23 @@ D24 は、段の記述が `Obl` について網羅であることの脇で、生
      InlineLLVMWithRetainedFunctionBody::generate
 
 <1>3. `clone_struct` と `clone_union` が書き込む先は、その節点の実行が割り当てたオブジェクトである。
-      `clone_struct` は写した各フィールドを retain して `dst` の欄へ `move_into_struct_field` で書き、
-      `clone_union` は複写した payload について `retain_union` を `dst` に対して呼ぶ。前提 参照を作る
+      `clone_struct` は写した各フィールドを retain して `dst` の欄へ `move_into_struct_field` で書く --
+      その項目は `dst` に `insert_field_object` を掛けるので、書く先は `dst` である。`clone_union` は
+      複写した payload について `retain_union` を `dst` に対して呼ぶ。前提 参照を作る
       生成コードの在りか より、この 2 つを呼ぶ式が在るのは `make_struct_union_unique` だけであり、
       そこが渡す `dst` は同じ腕の `create_obj(obj.ty.clone(), ..)` が割り当てた `cloned_obj` である。
   BY 前提 参照を作る生成コードの在りか,
      CODE src/object.rs: ObjectFieldType::clone_struct, ObjectFieldType::clone_union,
      ObjectFieldType::move_into_struct_field, create_obj,
+     CODE src/generator.rs: Object::insert_field_object,
      CODE src/fixstd/builtin.rs: make_struct_union_unique
 
 <1>4. `clone_array_range` が書き込む先は `dst_buffer` の各スロットであり、`append_value_into_array_buf` が
       書き込む先は `buffer` の各スロットである。前提 参照を作る生成コードの在りか より、
-      `clone_array_range` を呼ぶ式が在るのは `clone_array_buf` だけ、`clone_array_buf` を呼ぶ式が在るのは
+      `clone_array_range` を呼ぶ式が在るのは `clone_array_buf` だけである -- その `Some(hole)` の腕は
+      `array_buf_after_hole` で `src_buffer` と `dst_buffer` の穴の後ろの位置を取り、そこから
+      `clone_array_range` を呼ぶので、書き込む先はやはり `dst_buffer` の中である。`clone_array_buf` を
+      呼ぶ式が在るのは
       `make_array_unique_with_hole`・`InlineLLVMArraySetCapacityBoundsUnchecked::generate`・
       `InlineLLVMArrayAppendCapacityUnchecked::generate`・
       `InlineLLVMArrayCopyCapacityBoundsUnchecked::generate`、
@@ -1342,6 +1347,7 @@ D24 は、段の記述が `Obl` について網羅であることの脇で、生
       最後の 1 つでは `force_unique_or_assert(gc, array, ..)` が返す配列の記憶域のバッファである。
   BY 前提 参照を作る生成コードの在りか,
      CODE src/object.rs: ObjectFieldType::clone_array_range, ObjectFieldType::clone_array_buf,
+     ObjectFieldType::array_buf_after_hole,
      ObjectFieldType::append_value_into_array_buf, alloc_array_storage, get_array_storage_buf,
      get_array_storage, build_gep_array_elem,
      CODE src/fixstd/builtin.rs: make_array_unique_with_hole, array_tail_destination,
