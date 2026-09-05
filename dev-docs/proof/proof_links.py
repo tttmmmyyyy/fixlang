@@ -345,9 +345,10 @@ def item_span(lines, symbol):
     braces from the first one on or after the definition line, so an item without a body ends at its
     own line.
     """
-    block = re.fullmatch(r"impl\s+(\w+)\s+for\s+(\w+)", symbol)
+    block = re.fullmatch(r"impl\s+(?:(\w+)\s+for\s+)?(\w+)", symbol)
     if block:
-        starts = re.compile(r"^\s*impl\b.*\b" + block.group(1) + r"\b.*\bfor\s+" + block.group(2) + r"\b")
+        trait = r".*\b" + block.group(1) + r"\b.*\bfor\s+" if block.group(1) else r"\s+"
+        starts = re.compile(r"^\s*impl\b" + trait + block.group(2) + r"\b")
         scope, owner = None, ""
     else:
         owner, _, name = symbol.rpartition("::")
