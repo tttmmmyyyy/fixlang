@@ -1416,7 +1416,7 @@ impl TypeNode {
 
     /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
     /// the values it captured.
-    // PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_closure(&self) -> bool {
         self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())
     }

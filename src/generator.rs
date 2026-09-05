@@ -2578,7 +2578,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Emit a call to the runtime function named `func_name`, which the module must already
     /// declare.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn call_runtime(
         &self,
         func_name: &str,
@@ -2701,7 +2701,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// another unit may call has to be one dead-code elimination keeps. `divide_among_units` takes a
     /// unit's roots from `DividedProgram::published_here`, which is what `published_to_the_linker`
     /// reads here, so narrowing the condition below narrows the root set with it.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn declare_lambda_function(
         &mut self,
         fn_ty: &Arc<TypeNode>,

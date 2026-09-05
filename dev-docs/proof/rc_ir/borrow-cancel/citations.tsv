@@ -86,7 +86,7 @@ src/ast/types.rs	TypeNode::get_source	P1,P2,P2a,P15,P16,P17,P18	c02893955b55
 src/ast/types.rs	TypeNode::instance_field_types	D/A,P1,P2,P2a,P3,P4,P15,P16,P17,P18	27064fdf0a46
 src/ast/types.rs	TypeNode::is_array	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	d430c390ceb3
 src/ast/types.rs	TypeNode::is_box	P1,P2,P2a,P3,P4,P7a,P7d,P7e,P15,P16,P17,P18,P26,P31,A19	f364e8b05513
-src/ast/types.rs	TypeNode::is_closure	P1,P2,P2a,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P26	938ff5f09f64
+src/ast/types.rs	TypeNode::is_closure	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P26	938ff5f09f64
 src/ast/types.rs	TypeNode::is_fully_unboxed	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P27,P28,P29,P30,P31,A19	8b7f69faf6d2
 src/ast/types.rs	TypeNode::is_funptr	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P26	2c9fa9ac23a2
 src/ast/types.rs	TypeNode::is_ground	D/A,T	b2b0748bba35
@@ -138,13 +138,14 @@ src/commands/check.rs	check	P26	bebc25a47ac6
 src/configuration.rs	Configuration::enable_borrow_optimization	T	23c6af072902
 src/configuration.rs	Configuration::force_all_optimizations	T	98585398a522
 src/configuration.rs	Configuration::runs_from	T	ddc1ffa30c40
-src/constants.rs	ARRAY_NAME	P5,P6,P7,P7a,P7d,P7e	0c545701061f
+src/constants.rs	ARRAY_NAME	P3,P4,P5,P6,P7,P7a,P7d,P7e	0c545701061f
+src/constants.rs	ARROW_NAME	P3,P4	d4b49d5aba86
 src/constants.rs	CAP_LIST_PREFIX	P5,P6,P7,P7a,P7d,P7e	17701702d896
 src/constants.rs	CAP_NAME	P27,P29,P30	ab454a035e77
 src/constants.rs	CLOSURE_CAPTURE_IDX	P1,P2,P2a,P15,P16,P17,P18	8ac4c663fef1
 src/constants.rs	CLOSURE_FIELD_COUNT	P1,P2,P2a,P15,P16,P17,P18	3e3f60cca61a
 src/constants.rs	FUNPTR_ARGS_MAX	P1,P2,P5,P6,P7,P7a,P7d,P7e	5054470d6f01
-src/constants.rs	FUNPTR_NAME	P1,P2,P5,P6,P7,P7a,P7d,P7e,P26	5f81220a51a7
+src/constants.rs	FUNPTR_NAME	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e,P26	5f81220a51a7
 src/constants.rs	PUNCHED_TYPE_SYMBOL	P5,P6,P7,P7a,P7d,P7e	866c661bcaee
 src/constants.rs	RefcntState	P26	ab45f83edf4d
 src/constants.rs	TUPLE_UNBOX	D/A,P5,P6,P7	15f3c49df732
@@ -194,7 +195,6 @@ src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody	P28	4ad0574bd
 src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
 src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody::generate	P26	ed3f7d13a3bf
 src/fixstd/builtin.rs	InlineLLVMArrayMutateElementsIosInternalBody::result_prov	P1,P2,P26	ca9cb2866793
-src/fixstd/builtin.rs	InlineLLVMArrayPunchBody	P3,P4	231a9c1e02ef
 src/fixstd/builtin.rs	InlineLLVMArrayPunchBody::generate	P26	8150d01e25de
 src/fixstd/builtin.rs	InlineLLVMArrayPunchBody::result_prov	P1,P2,P26	d07c92323ade
 src/fixstd/builtin.rs	InlineLLVMArraySetBody::generate	P26	4c8e55de329a
@@ -209,7 +209,7 @@ src/fixstd/builtin.rs	InlineLLVMArrayTruncateBoundsUnchecked::result_prov	P1,P2,
 src/fixstd/builtin.rs	InlineLLVMArrayUnsafeEmpty::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMBoxedFromRetainedPtrIOS	D/A,P27,P28,P29,P30	0753dafffd25
 src/fixstd/builtin.rs	InlineLLVMBoxedToRetainedPtrIOS	P7a,P7d,P7e	81c3e6ff4c50
-src/fixstd/builtin.rs	InlineLLVMCaptureProjectBody	D/A,P3,P4,T	8c11581716e7
+src/fixstd/builtin.rs	InlineLLVMCaptureProjectBody	D/A,T	8c11581716e7
 src/fixstd/builtin.rs	InlineLLVMDestructorMake::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMFixBody	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P27,P28,P29,P30	cfdea13e9329
 src/fixstd/builtin.rs	InlineLLVMFixBody::applies_a_function_operand	P26,P28	2aaa91f7d7c6
@@ -222,7 +222,6 @@ src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody	D/A,P27,P29,P30	3ee7207b4a9
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::generate	P26	cf1c72be74b6
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::observes_uniqueness	P26	0dbb1939b295
 src/fixstd/builtin.rs	InlineLLVMIsUniqueFunctionBody::result_prov	P1,P2,P26	ccb214ee1107
-src/fixstd/builtin.rs	InlineLLVMMakeStructBody	P3,P4	96c85f611805
 src/fixstd/builtin.rs	InlineLLVMMakeStructBody::result_prov	P1,P2,P26	1a642826f71d
 src/fixstd/builtin.rs	InlineLLVMMakeUnionBody	P7a,P7d,P7e	aeaeb1f7f92a
 src/fixstd/builtin.rs	InlineLLVMMakeUnionBody::generate	P7a,P7d,P7e	ec2b7246ebad
@@ -233,7 +232,6 @@ src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody::generate	P26	d060e7694
 src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody::result_prov	P1,P2,P26	65b3bcb09139
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody::generate	P26	e9c407350555
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody::result_prov	P1,P2,P26	1937952562a5
-src/fixstd/builtin.rs	InlineLLVMStringBuf	P3,P4	2fbf0b466f6f
 src/fixstd/builtin.rs	InlineLLVMStringBuf::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMStructGetBody	D/A	4049770e475e
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_operand	P26,P31,A19	7374525f2b11
@@ -246,10 +244,10 @@ src/fixstd/builtin.rs	InlineLLVMStructPunchBody	D/A	a5a8cbc33d20
 src/fixstd/builtin.rs	InlineLLVMStructPunchBody::arg_leaf_path	P1,P2,P7a,P7d,P7e	6ca1aea15f39
 src/fixstd/builtin.rs	InlineLLVMStructPunchBody::generate	P26	02f46185db92
 src/fixstd/builtin.rs	InlineLLVMStructPunchBody::result_prov	P1,P2,P7a,P7d,P7e,P26	229df60797a4
-src/fixstd/builtin.rs	InlineLLVMStructSetBody	D/A,P3,P4,P27,P28,P29,P30	41d508563154
+src/fixstd/builtin.rs	InlineLLVMStructSetBody	D/A,P27,P28,P29,P30	41d508563154
 src/fixstd/builtin.rs	InlineLLVMStructSetBody::generate	P26	2a6811908f6a
 src/fixstd/builtin.rs	InlineLLVMStructSetBody::result_prov	P1,P2,P7a,P7d,P7e	3c84bfe9e211
-src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody	D/A,P3,P4	2fecbef2ffeb
+src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody	D/A	2fecbef2ffeb
 src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody::generate	D/A	69c9033e7624
 src/fixstd/builtin.rs	InlineLLVMUndefinedInternalBody::result_prov	P1,P2,P26	5d9a24bc427b
 src/fixstd/builtin.rs	InlineLLVMUnionAsBody	D/A	ebe18a92e1eb
@@ -290,17 +288,21 @@ src/fixstd/builtin.rs	fix_body	D/A,P27,P29,P30	a45709f796ae
 src/fixstd/builtin.rs	force_unique_or_assert	P26,P27,P29,P30	57ffe5ab0aa5
 src/fixstd/builtin.rs	force_unique_or_assert_with_hole	D/A,P26,P27,P29,P30	d343a7084e1d
 src/fixstd/builtin.rs	grow_size_array	P26	b9ef1d0f312f
+src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMArrayPunchBody	P3,P4	db626fb226dd
+src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMCaptureProjectBody	P3,P4	230ff569a672
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeStructBody	P3,P4,P31,A19	c4dab170b90d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeUnionBody	P3,P4	5ba9e8112ba7
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMStringBuf	P5,P6,P7	f40ea3f1cbb7
+src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMStructSetBody	P3,P4	fec40e725f56
+src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMUndefinedInternalBody	P3,P4	c63285c1709c
 src/fixstd/builtin.rs	is_array_tycon	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18	b0eefd8bc04d
 src/fixstd/builtin.rs	is_funptr_tycon	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18,P26	d27235989faf
 src/fixstd/builtin.rs	is_punched_array_tycon	P1,P2,P2a,P15,P16,P17,P18	86bb2a262fc0
 src/fixstd/builtin.rs	is_unique_function	D/A,P26	46c96d982dfb
-src/fixstd/builtin.rs	make_array_name	P7a,P7d,P7e	11ce81f652a5
+src/fixstd/builtin.rs	make_array_name	P3,P4,P7a,P7d,P7e	11ce81f652a5
 src/fixstd/builtin.rs	make_array_tycon	P5,P6,P7,P7a,P7d,P7e	911fb67cd90e
 src/fixstd/builtin.rs	make_array_unique_with_hole	P26,P27,P29,P30	112d914f574b
-src/fixstd/builtin.rs	make_arrow_name_abs	P1,P2,P2a,P15,P16,P17,P18,P26	c751172b9601
+src/fixstd/builtin.rs	make_arrow_name_abs	P1,P2,P2a,P3,P4,P15,P16,P17,P18,P26	c751172b9601
 src/fixstd/builtin.rs	make_arrow_tycon	P1,P2,P26	b1d03c9ddab2
 src/fixstd/builtin.rs	make_boxed_trait	P26	06b8f2c701f9
 src/fixstd/builtin.rs	make_dynamic_object_ty	P27,P29,P30	2a58de9d63f1
@@ -321,6 +323,7 @@ src/fixstd/builtin.rs	set_array_common	P26	d0c3c3f96291
 src/fixstd/builtin.rs	swap_array_common	P26	b82aa1db5fcb
 src/fixstd/builtin.rs	tuple_defn	P1,P2,P5,P6,P7	87c0549cd2d4
 src/fixstd/builtin.rs	union_mod_function	P26	c707b908e27e
+src/fixstd/runtime.rs	RUNTIME_PTHREAD_ONCE	P3,P4	b6cb61ae37f6
 src/fixstd/runtime.rs	build_pthread_once_function	P3,P4	30df3f16b29f
 src/fixstd/runtime.rs	build_runtime	P27,P29,P30	12274ea66952
 src/fixstd/std.fix	Bool	P5,P6,P7	-
@@ -347,9 +350,9 @@ src/generator.rs	Generator::build_run_destructor	D/A,P26,P27,P28,P29,P30	add7538
 src/generator.rs	Generator::build_traverser_work	D/A,P26	7f44d98475e9
 src/generator.rs	Generator::build_traverser_work_nonnull_boxed	P26	9f9fe7c16357
 src/generator.rs	Generator::build_traverser_work_nonnull_boxed_with	D/A,P26,P27,P28,P29,P30	f6637e5ceb38
-src/generator.rs	Generator::call_runtime	P26	15a58f726eae
+src/generator.rs	Generator::call_runtime	P3,P4,P26	15a58f726eae
 src/generator.rs	Generator::current_function	P27,P29,P30	5da58f805c4b
-src/generator.rs	Generator::declare_lambda_function	P27,P29,P30	e091531ab3d5
+src/generator.rs	Generator::declare_lambda_function	P3,P4,P27,P29,P30	e091531ab3d5
 src/generator.rs	Generator::declare_program_global	P3,P4,P27,P29,P30	ba2a67ad0c2e
 src/generator.rs	Generator::emit_rc_helper_call	P26,P27,P29,P30	44aac53fb64a
 src/generator.rs	Generator::get_lambda_func_ptr	P27,P29,P30	7fb0c56a5446

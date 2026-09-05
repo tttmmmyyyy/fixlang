@@ -28,6 +28,7 @@ pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
 pub const RUNTIME_PTR_ADD_OFFSET: &str = "fixruntime_ptr_add_offset";
 /// libc `pthread_once`, which runs an initializer at the first thread to reach it and makes every
 /// other thread wait for that run to finish.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
 /// The runtime function giving the number of command line arguments the program was started with.
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";

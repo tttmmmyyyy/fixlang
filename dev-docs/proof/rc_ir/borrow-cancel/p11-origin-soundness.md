@@ -261,15 +261,15 @@ SCAN src/ `Origin::Exactly(`
 **前提 `get_scoped_value` を呼ぶ式の在りか** --- `get_scoped_value` の字面が在る項目は次で尽きる。
 
 SCAN src/ `get_scoped_value(`
-  = src/generator.rs: get_scoped_value -- 定義
-  = src/generator.rs: get_scoped_obj -- 呼び出し
-  = src/generator.rs: get_scoped_obj_noretain -- 呼び出し
+  = src/generator.rs: Generator::get_scoped_value -- 定義
+  = src/generator.rs: Generator::get_scoped_obj -- 呼び出し
+  = src/generator.rs: Generator::get_scoped_obj_noretain -- 呼び出し
 
 **前提 `build_capture_project` を呼ぶ式の在りか** --- `build_capture_project` の字面が在る項目は
 次で尽きる。
 
 SCAN src/ `build_capture_project(`
-  = src/generator.rs: build_capture_project -- 定義
+  = src/generator.rs: Generator::build_capture_project -- 定義
   = src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody::generate -- 呼び出し
 
 **前提 `unsafe impl` の在りか** --- `unsafe impl` の字面が在る項目は無い。よって `Send` と `Sync` を
@@ -282,7 +282,7 @@ SCAN src/ `unsafe impl`
 字面が在る項目は次で尽き、その欄を持つ `VarTable` の値を組み立てるのは `VarTable::empty` である。
 
 SCAN src/ `.origins`
-  = src/rc_ir/ownership.rs: Origin::origin -- 自由関数 `origin` が直前の `impl Origin` の名前を冠して挙がる。`borrow()` の読みと `borrow_mut().insert(..)` の書きの 2 行
+  = src/rc_ir/ownership.rs: origin -- 自由関数 `origin` が直前の `impl Origin` の名前を冠して挙がる。`borrow()` の読みと `borrow_mut().insert(..)` の書きの 2 行
 
 ## 2. D9 の「移動」と `origin_inner` の再帰の辺 <!--#747d82d-->
 
