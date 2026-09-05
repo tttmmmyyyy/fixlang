@@ -94,8 +94,8 @@ inhabited (D16) でない元を含む。この集合を `v` の `π` の下の b
 `ActRefs(v, π)` は D15 の `acted_references(v, π)` である。`VarPath` は対 `(FullName, FieldPath)` である
 (`CODE src/rc_ir/ast.rs: VarPath`)。等号はこの対の等号である。
 
-この文書は命題を `L0`、`L0a`、`L0b`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L3a`、`L4`、`L5a`、`L5`、`L6`
-(この順に並べる)、反例を `R1` と呼ぶ。**`BY` の行で
+この文書は命題を `L0`、`L0a`、`L0b`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L3a`、`L4`、`L5a`、`L5`、`L5b`、
+`L6` (この順に並べる)、反例を `R1` と呼ぶ。**`BY` の行で
 引用してよいのは、それぞれの言明だけである。** 言明が複数の主張からなる命題は主張に (a)、(b)、… の名札を
 付け、`L5 (c)` のように引用する。同じ規則を P6 (a)、P6 (b)、P7 (a)、P7 (b) にも使う -- これらは
 この文書が P6 と P7 を分けた主張であり、引用してよいのはその言明である。
@@ -2569,7 +2569,8 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
 
 これに命題 L6 を添える。README の P7 の言明には無いが、報告しない箇所が参照の収支を狂わせないことを
 述べるので、ここで併せて示す。L6 は (a) と同じく DEF leaf 粒度の所有 を満たす `own` についての言明で
-ある。
+ある。**(a) と L6 の両方が、`App` の引数 leaf と呼び出し先のパラメータの対応を読む。** それを 1 つの
+命題に括り出したものが L5b である。
 
 第 1 引数を関数の本体に限るのは、`collect_consumes` の呼び出しがその形のものだけだからであり、それを
 与えるのは `L5 (b')` と `L5 (n)` である。**D9 の消費の表の最後の行は「本体 (D23) の終端の `Ret(x)`」で
@@ -2590,7 +2591,7 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
 `p` を関数のパラメータ、`λ` を `ty(p)` の boxed leaf とする。`own` が DEF leaf 粒度の所有 を満たすとは、
 `(p.name, λ) ∈ own` であることが「`p` の unit `truncate_to_unit(ty(p), λ, type_env)` が D14 の意味で
 所有される」ことと同値であることをいう。**`truncate_to_unit(ty(p), λ, type_env)` が `rc_units(ty(p))` の
-要素であること -- すなわちこの対応が定まること -- は、定義ではなく P7 (a) の `<2>2b` が示す。**
+要素であること -- すなわちこの対応が定まること -- は、定義ではなく L5b (b) が示す。**
 
 `infer_ownership` が渡す `owned_leaves` は不動点計算の途中の集合であり、それが DEF leaf 粒度の所有 に
 一致するかどうかは P8 が扱う。`cancel` の側の `CancelAnalysis::consume_rhs` は `collect_consumes` を
@@ -2822,6 +2823,40 @@ leaf に前置したものだからである。
   BY <1>1, <1>3, <1>7, <1>7a, <1>8, <1>9, <1>10, <1>11, <1>12, <1>14, <1>15, <1>16, <1>17, <1>18,
      <1>19, <1>20, <1>20a
 
+### L5b (積む引数 leaf は呼び出し先のパラメータの leaf である) <!--#3f20968-->
+
+**言明**。関数の本体を第 1 引数に渡した `collect_consumes` の呼び出しについて、その走査が `rhs_consumes` を
+呼ぶ `Let(x, App(callee, args), k)` の節点で `resolve_callee_params` が `Some(params)` を返すとき、
+次の 2 つが成り立つ。
+
+- **(a)** `params` は D9 の `App` の行が言う呼び出し先 (D23) のパラメータの列である。
+- **(b)** `boxed_leaf_paths(ty(args[i]), type_env)` の各元 `leaf` は `ty(params[i])` の boxed leaf でも
+  あり、`truncate_to_unit(ty(params[i]), leaf, type_env)` は `rc_units(ty(params[i]))` の要素である。
+  すなわち対 `(params[i], leaf)` について DEF leaf 粒度の所有 の対応が定まる。
+
+**この命題を P7 (a) の外に置くのは、L6 の `<1>8a` が同じ対応を読むからである。** 段が引けるのは
+先行する兄弟と祖先の先行する兄弟だけなので、P7 (a) の下位の段は L6 から引けない。
+
+<1>1. (a) が成り立つ。
+  D23 は「D9 の `App` の行と D10 の生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数で
+  ある」と定め、P29 が、`resolve_callee_params` が `Some(params)` を返すならば `params` はその段の
+  実行時の呼び出し先のパラメータの列であると述べる。P29 は `borrow_ify` の入力の `App` についての
+  言明であり、`L5 (n)` よりこの呼び出しが走るのは `borrow_ify` の入力の本体についてである。
+  BY <ref id=ff5985d/>, <ref id=c5547e4/> (n), <ref id=7a4d9dc/>
+
+<1>2. (b) が成り立つ。
+  `<1>1` より `params` は D9 の `App` の行が言う呼び出し先のパラメータの列である。A12 の
+  「`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型」の行より
+  `ty(args[i]) = ty(params[i])` なので、`leaf` は `ty(params[i])` の boxed leaf でもある。
+  `ty(params[i])` はプログラムに現れる型なので A10 を満たし、P1 より
+  `truncate_to_unit(ty(params[i]), leaf, type_env)` は `rc_units(ty(params[i]))` の要素である。
+  DEF leaf 粒度の所有 は `p` を関数のパラメータ、`λ` を `ty(p)` の boxed leaf として述べられているので、
+  この 2 つでその対応が `(params[i], leaf)` について定まる。
+  BY <ref id=8412761/>, <ref id=83d98e9/>, <ref id=3597669/>, DEF leaf 粒度の所有, <1>1
+
+<1>3. QED
+  BY <1>1, <1>2
+
 ### P7 (a) D9 の消費はすべて報告される
 
 この節は `own` が DEF leaf 粒度の所有 を満たすことを前提に置く。`own` を読む出どころは (i) だけで
@@ -2835,19 +2870,13 @@ leaf に前置したものだからである。
     BY <ref id=9d74736/>, <ref id=c5547e4/> (i)
   <2>2a. `resolve_callee_params` が `Some(params)` を返すとき、`params` は D9 の `App` の行が言う
          呼び出し先 (D23) のパラメータの列である。
-    D23 は「D9 の `App` の行と D10 の生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数で
-    ある」と定め、P29 が、`resolve_callee_params` が `Some(params)` を返すならば `params` はその段の
-    実行時の呼び出し先のパラメータの列であると述べる。P29 は `borrow_ify` の入力の `App` についての
-    言明であり、`L5 (n)` よりこの呼び出しが走るのは `borrow_ify` の入力の本体についてである。
-    BY <ref id=ff5985d/>, <ref id=c5547e4/> (n), <ref id=7a4d9dc/>
+    L5b (a) がこれを与える。`<2>1` よりこの節点で走るのは `rhs_consumes` である。
+    BY <ref id=3f20968/> (a), <2>1
   <2>2b. `L5 (i)` が回る `leaf` は `ty(params[i])` の boxed leaf でもあり、`(params[i], leaf)` について
          DEF leaf 粒度の所有 の対応が定まる。
-    `L5 (i)` が回るのは `boxed_leaf_paths(ty(args[i]), type_env)` の元である。A12 の
-    「`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型」の行より
-    `ty(args[i]) = ty(params[i])` なので、`leaf` は `ty(params[i])` の boxed leaf でもある。
-    `ty(params[i])` はプログラムに現れる型なので A10 を満たし、P1 より
-    `truncate_to_unit(ty(params[i]), leaf, type_env)` は `rc_units(ty(params[i]))` の要素である。
-    BY <ref id=8412761/>, <ref id=83d98e9/>, <ref id=c5547e4/> (i), <ref id=3597669/>, DEF leaf 粒度の所有, <2>2a
+    `L5 (i)` が回るのは `boxed_leaf_paths(ty(args[i]), type_env)` の元であり、L5b (b) がその元に
+    ついてこの 2 つを与える。
+    BY <ref id=3f20968/> (b), <ref id=c5547e4/> (i), <2>1
   <2>3. D9 の行の後半「呼び出し先がその位置の unit を所有する (D14) 引数の leaf」は、`resolve_callee_params` が
         `Some(params)` のとき `owns(&params[i], &leaf)` が積む。`<2>2a` より `params` は D9 の行が言う
         呼び出し先のパラメータであり、`<2>2b` より DEF leaf 粒度の所有 の対応が定まる。その対応より、
@@ -3027,16 +3056,16 @@ leaf に前置したものだからである。
   BY <ref id=9d74736/>, <ref id=f06144e/>, <ref id=c5547e4/> (e), <ref id=9d4ff56/>
 
 <1>8a. `rhs_consumes` の `RcRhs::App` の腕が、`resolve_callee_params` が `Some(params)` を返し
-       `owns(&params[i], &leaf)` が偽のときに積まない引数 leaf (`L5 (i)`)。D23 は D9 の `App` の行が言う
-       「呼び出し先」を実行時の関数と定め、P29 は、`resolve_callee_params` が `Some(params)` を返すならば
-       `params` はその実行時の呼び出し先のパラメータの列であると述べる。`L5 (n)` よりこの呼び出しは
-       `borrow_ify` の入力の本体について走るので、P29 をそのまま当てられる。DEF leaf 粒度の所有 より、
+       `owns(&params[i], &leaf)` が偽のときに積まない引数 leaf (`L5 (i)`)。L5b (a) より `params` は
+       D9 の `App` の行が言う呼び出し先 (D23) のパラメータの列であり、`L5 (i)` が回る `leaf` は
+       `boxed_leaf_paths(ty(args[i]), type_env)` の元なので、L5b (b) より対 `(params[i], leaf)` に
+       ついて DEF leaf 粒度の所有 の対応が定まる。その対応より、
        この述語が偽であることは、`params[i]` のその leaf の unit を呼び出し先が**借用する** (D14) ことと
        同値である。D9 の `App` の行は消費を呼び出し先が所有する位置の leaf に
        限っているので、これは消費ではない。D14 より借用する unit の参照は呼び出し元が処分し、D10 は
        `Obl` を動かす事象を `Retain`・`Release`・生成・消費・移動で尽くすので、この leaf について
        `Obl` は変わらない。
-  BY <ref id=9d74736/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=ff5985d/>, DEF leaf 粒度の所有, <ref id=c5547e4/> (i), <ref id=c5547e4/> (n), <ref id=7a4d9dc/>
+  BY <ref id=9d74736/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=ff5985d/>, DEF leaf 粒度の所有, <ref id=c5547e4/> (i), <ref id=3f20968/> (a), <ref id=3f20968/> (b)
 
 <1>9. QED
   報告しない箇所は次で全部である。`L5 (m)` より積む出どころは L5 の (c)、(d)、(h)、(i)、(k) の 5 つ
@@ -3076,7 +3105,7 @@ L0b、DEF 位置の値 の等しさからオブジェクトの一致が出るこ
 DEF 辺の leaf 対応 が D9 の値の水準の 6 行と一致することは L1 の `<1>1a`、DEF 辺の存在 と
 DEF `ρ` の上で実行された辺 の連言が D20 の「辺が在る」と一致することは L1 (b)、
 DEF 名前の指すオブジェクト の `ν` が写像として定まることは P6 (b) の `<1>0`、DEF leaf 粒度の所有 の
-対応が定まることは P7 (a) の `<2>2b` である。
+対応が定まることは L5b (b) である。
 
 ### D9 の値の水準の行を leaf の粒度で読む規則
 
