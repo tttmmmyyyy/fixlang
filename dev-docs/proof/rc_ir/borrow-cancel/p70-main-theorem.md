@@ -727,7 +727,8 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     元と等しい。H3 が A3 を与える。
   - `Arc<TypeNode>` の複製は元と同じ `TypeNode` を指すので、`TypeNode` の等しさを読む要はない。
   - `Set<FullName>` の複製は元の各要素の複製を要素とするので、`FullName` について示したことから
-    元と等しい。
+    元と等しい。**`FullName` の `Hash` も手書きだが、`PartialEq` が読む成分 -- `namespace` の
+    `names` と `name` -- だけを読むので、等しい 2 つの値は等しくハッシュされる。**
   - `RcFunc` は `#[derive(Clone)]` を持つので、`f_own` の各フィールドは `func` の対応する
     フィールドの複製である。とくに `f_own.name` は `func.name` に等しい。
 
