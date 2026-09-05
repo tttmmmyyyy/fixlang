@@ -69,6 +69,16 @@ FACT = re.compile(
     r"|言明|仮定|帰納法の仮定|帰納の仮定|系\d*"
     r")"
 )
+# **`CODE` の一覧は、別の引用が始まるまで続く。** 一覧の中の記号を FACT の形で読むと、大文字で
+# 始まる記号 (`VarTable::of`) が仮説の名札に当たって一覧が切れ、その後ろの記号が全部「未分類」に
+# 落ちる -- 実測で 3 つのファイルで 7 件・4 件・2 件が出た。**一覧を終わらせるのは、別の引用の形を
+# 持つトークンだけである。**
+CODE_ENDS = re.compile(
+    r"^(<ref id=[0-9a-f]{7}/>"
+    r"|<\d+>\d+[a-z]*"
+    r"|p\d\d[A-Za-z0-9_-]*(?:\.md)?\s*の\s*"
+    r"|ASSUME|PROVE|NEW|CASE|IH"
+    r"|本命題の仮定|本場合の仮定|背理法の仮定)")
 SECOND_LABEL = re.compile(r"\s(?:CODE\s|[DAP]\d+[a-z]*(?:\s|$)|[LR]\d+[a-z]*(?:\s|$))")
 TRAILING_LABEL = re.compile(r"\b(DEF|EXT)\s+(.+)$")
 HEDGE = ["明らかに", "自明", "同様にして", "容易に", "であろう", "と思われる", "おそらく", "はずである"]
@@ -282,6 +292,8 @@ def check(path_of_file):
                     name = normalize_label(label.group(2).split("(")[0])
                     if (label.group(1), name) not in declared:
                         missing.append(f"<{level}>{number}: {label.group(1)} {name}")
+                    continue
+                if in_code and not CODE_ENDS.match(token):
                     continue
                 if not FACT.match(token):
                     if in_code:

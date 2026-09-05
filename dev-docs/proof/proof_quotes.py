@@ -86,15 +86,16 @@ def offsets(text):
 
 def source_of(frame, index, items, quote):
     """引用が枠のどの項目から来たか。錨の当たった位置を項目の範囲に当てる。"""
-    for anchor in anchors(quote):
+    for anchor, offset in anchors(quote):
         # **同じ錨が 2 か所に在るときは帰属を決めない。** 最初の出現を答えると、同じ書き出しを
         # 持つ項目が並ぶところで別の項目に帰属する -- 実測で `P6` の引用を `P3` と答えた。
         if frame.count(anchor) != 1:
             continue
-        at = frame.find(anchor)
-        if at < 0:
+        head = frame.find(anchor) - offset
+        if head < 0:
             continue
-        start, stop = index[at], index[min(at + len(quote), len(index) - 1)]
+        start = index[min(head, len(index) - 1)]
+        stop = index[min(head + len(quote), len(index) - 1)]
         covering = [item for item in items if item["offset"] <= start < item["end"]]
         if not covering:
             return None
@@ -117,19 +118,25 @@ def contains(frame, quote):
 
 
 def anchors(quote):
-    """引用の頭・真ん中・末尾から取った錨。どれか 1 つが枠に在れば、枠を引いた引用である。"""
+    """引用の頭・真ん中・末尾から取った錨と、それぞれが引用の中で始まる位置。
+
+    **位置を返すのは、錨の当たった先から引用の範囲を戻すためである。** 錨の位置を引用の先頭と
+    見ると、真ん中や末尾の錨が当たったときに範囲が錨の分だけ後ろへずれ、項目の末尾を越えて
+    「引用が 2 つの項目にまたがる」を誤って出す。"""
     if len(quote) < ANCHOR:
-        return [quote]
+        return [(quote, 0)]
     middle = (len(quote) - ANCHOR) // 2
-    return [quote[:ANCHOR], quote[middle:middle + ANCHOR], quote[-ANCHOR:]]
+    return [(quote[:ANCHOR], 0), (quote[middle:middle + ANCHOR], middle),
+            (quote[-ANCHOR:], len(quote) - ANCHOR)]
 
 
 def nearest(frame, quote):
     """引用が枠のどのあたりを引こうとしたかを、錨の位置で示す。"""
-    for anchor in anchors(quote):
+    for anchor, offset in anchors(quote):
         at = frame.find(anchor)
         if at >= 0:
-            return frame[max(0, at - 20):at + len(quote) + 20]
+            head = at - offset
+            return frame[max(0, head - 20):head + len(quote) + 20]
     return None
 
 
@@ -197,7 +204,7 @@ def check(directory):
             quote = strip_spaces(body)
             if not quote or contains(frame, quote):
                 continue
-            if not any(anchor in frame for anchor in anchors(quote)):
+            if not any(anchor in frame for anchor, _ in anchors(quote)):
                 continue
             line = text.count("\n", 0, match.start()) + 1
             emphasis = contains(strip_emphasis(frame), strip_emphasis(quote))

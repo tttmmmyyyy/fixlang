@@ -827,6 +827,39 @@ def headings_of(path):
     return set(re.findall(r"^#+\s+(?:[\d.]+\s+)?(.+?)\s*$", text, re.M))
 
 
+NUMBERED_SECTION = re.compile(r"第\s*([\d.]+)\s*節")
+NAMED_DOCUMENT = re.compile(r"(README|report|p\d\d[A-Za-z0-9_-]*)(?:\.md)?[`」]?\s*の\s*$")
+
+
+def section_numbers(path):
+    """その文書の見出しが持つ番号。"""
+    text = open(path, encoding="utf-8").read()
+    return {match.group(1).rstrip(".")
+            for match in re.finditer(r"^#+\s+([\d.]+)", text, re.M)}
+
+
+def numbered_sections(directory):
+    """番号で引いた節のうち、引き先の文書がその番号の見出しを持たないもの。
+
+    **節を番号で引くと、番号は文書を跨いで同じ形をしているので、どの文書の節かが読み手に決まらない** --
+    実測で、枠と主定理の文書が合わせて 39 か所、自分が持たない「第 6 節」から「第 10 節」を指しており、
+    実物は証明の外の記録 (`report.md`) の節だった。"""
+    numbers = {os.path.basename(path): section_numbers(path) for path in documents(directory)}
+    out = []
+    for path in documents(directory):
+        text = open(path, encoding="utf-8").read()
+        for match in NUMBERED_SECTION.finditer(text):
+            named = NAMED_DOCUMENT.search(text[max(0, match.start() - 40):match.start()])
+            home = os.path.basename(path)
+            if named:
+                home = next((name for name in numbers if name.startswith(named.group(1))), None)
+                if home is None:
+                    continue
+            if match.group(1).rstrip(".") not in numbers[home]:
+                out.append((path, text.count("\n", 0, match.start()) + 1, home, match.group(1)))
+    return out
+
+
 def section_references(directory):
     """名前で引いた節のうち、その文書がその名前の見出しを持たないもの。
 
@@ -1043,6 +1076,10 @@ def main(arguments):
         for path, number, where, name, elsewhere in sections:
             found = f"{elsewhere}.md に在る" if elsewhere else "どちらにも無い"
             print(f"  {os.path.basename(path)}:{number}: {where}.md の「{name}」の節 -- {found}")
+        numbered = numbered_sections(directory)
+        print(f"{directory}: その文書に無い節を番号で引いている箇所 {len(numbered)} 件")
+        for path, number, home, section in numbered:
+            print(f"  {os.path.basename(path)}:{number}: {home} の第 {section} 節は無い")
         claims = unproved_claims(directory)
         print(f"{directory}: 項目の中で印を持たない主張の行 {len(claims)} 件")
         for path, n, total in orphan:
