@@ -166,15 +166,17 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 - (iv) その実行が比べる 2 つの番地が一致するかどうか (`Arc::ptr_eq` と、`impl PartialEq for Type` が
   節点の対について置く同じ形の比較がこれである)。
 
-この道には並行性も乱数も外部入力も無い。`<1>9a` の `<2>7` の `<3>2` と `<3>3` がこれを引く。
+この道には並行性も乱数も外部入力も無い。`<1>9a` の `<2>7` の `<3>2`・`<3>3`・`<3>4` がこれを引く。
 
 **DEF この道の関数** -- `truncate_to_unit(ty, path, E)` の実行が直接または間接に呼ぶ関数のうち、
 `src/` に本体を持つものの全体を、**この道の関数**と呼ぶ。`<1>9a` の `<2>1` から `<2>5` が、その各々が
 何を読むかを述べる。
 
-**DEF 下位の呼び出しの列** -- ある関数呼び出しの 1 回の実行が行う「この道の関数」の呼び出しを、
-開始の時間順に並べた列を、その実行の**下位の呼び出しの列**と呼ぶ。実行が停止しなければ無限列に
-なりうる。
+**DEF 下位の呼び出しの列** -- ある関数呼び出しの 1 回の実行が行う「この道の関数」の呼び出しについて、
+その**開始**の事象 (呼ぶ関数と引数の値を持つ) と**返り**の事象 (返る値を持つ) を、起きた時間順に
+並べた列を、その実行の**下位の呼び出しの列**と呼ぶ。実行が停止しなければ無限列になりうる。
+**2 つの実行の列が対応する**とは、一方の第 `i` 項が在れば他方の第 `i` 項も在り、その 2 つが同じ種の
+事象であって、開始なら同じ関数を値として等しい引数で呼び、返りなら値として等しい値を返すことをいう。
 
 **DEF 呼び出しの辺** -- 表 `vars` と型環境 `E` を固定する。対 `(u, sig)` から対 `(u', sig')` への
 **呼び出しの辺**とは、`origin_inner(vars, E, u, sig)` の実行が `origin(vars, E, u', sig')` を呼ぶことを
@@ -347,9 +349,7 @@ SCAN src/ `truncate_to_unit(`
    abort せず停止する」が (iii) を与える。第 3 節がこの対応を述べる。
 
    **A10 を果たす `validate_layouts` は elaboration で必ず走るが、最適化が作る型を再検査するのは
-   develop build だけである。**これは A10 の但し書きである。`borrow_ify` と `cancel` は最適化の後に
-   走るので、release build ではこの 2 つが読む型のうち最適化が作ったものに `validate_layouts` は
-   掛からない。
+   develop build だけである。**これは A10 の但し書きであり、`<1>1` はそれを含めて A10 を引き継ぐ。
   BY <ref id=8412761/>, CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
      CODE src/ast/types.rs: TypeNode::collect_type_arguments,
      CODE src/ast/types.rs: TypeNode::unpunched_field_types,
@@ -366,25 +366,26 @@ SCAN src/ `truncate_to_unit(`
   <2>1. 1 つの値の直接の部分は有限個である。`Type` の変位は `TyVar`、`TyCon`、`TyApp`、`AssocTy` の
      4 つであり、はじめの 2 つは 0 個、`TyApp` は 2 個、`AssocTy` は `args` の長さだけを持つ。
     BY CODE src/ast/types.rs: Type
-  <2>2. `TypeNode` の値の `ty` の欄が書かれるのは、その値が作られるときだけである。`src/ast/types.rs`
-     の `.ty` への代入は 11 か所であり、その内訳は `TypeNode` の 8 つの setter -- `set_ty`、
+  <2>2. `TypeNode` の値の `ty` の欄が書かれるのは、その値が作られるときだけである。
+     前提 `ty` の欄への代入の在りか が `src/` のすべての代入を挙げる。`src/ast/types.rs` の分は、
+     `TypeNode` の 8 つの setter -- `set_ty`、
      `set_tyvar_kind`、`set_tyvar`、`set_tycon_tc`、`set_tyapp_fun`、`set_tyapp_arg`、
      `set_assocty_name`、`set_assocty_args` -- と、`Scheme` の `ty` の欄への 3 つ
      (`Scheme::set_kinds`、`Scheme::resolve_namespace`、`Scheme::resolve_type_aliases`) である。
      前者はどれも `self.clone()` が作った局所の値に代入してから `Arc::new` で包んで返し、後者が
      替えるのは `Scheme` が持つ `Arc<TypeNode>` そのものであって節点の中身ではない。`ty` の欄に値を
      置く残りは `TypeNode::new` と `impl Clone for TypeNode` の構造体リテラル、および `TypeNode` が
-     導出する `Deserialize` であり、どれも新しい値を作る。ほかのファイルに在る `.ty` への代入も、
+     導出する `Deserialize` であり、どれも新しい値を作る。同じ前提が挙げるほかのファイルの代入は、
      `Field`、`QualType`、`Predicate`、`Symbol` といった別の型が持つ `Arc<TypeNode>` の欄を替える
      ものである。
-     既に在る値の `ty` に代入できるのは、その `TypeNode` を所有するコードか、`&mut TypeNode` を
-     持つコードだけである。`EXT Rust の内部可変性` より、共有参照 `&TypeNode` が指す記憶域への
+     代入以外の道で既に在る値の `ty` を書くには、その `TypeNode` を所有するか、`&mut TypeNode` を
+     持つかのどちらかが要る。`EXT Rust の内部可変性` より、共有参照 `&TypeNode` が指す記憶域への
      書き込みは `UnsafeCell` を通る欄に限られ、`ty` は `Type` 型の素の欄だからである。
      `TypeNode` が渡されるのは `Arc<TypeNode>` を通じてであり、`Arc` が渡すのは `&TypeNode` で
-     ある。`src/` に `&mut TypeNode` を受け取る関数は無く、`Arc::get_mut` の出現も無い。
-     `Arc::make_mut` の出現は `src/elaboration/typecheck.rs` の 2 つだけで、どちらも
-     `Arc<Map<..>>` の欄 (`assumed_preds` と `assumed_eqs`) に対するものである。
-    BY EXT Rust の内部可変性,
+     ある。前提 型の節点への可変参照の在りか より、`Arc<TypeNode>` から `TypeNode` の可変参照を
+     取る道は `src/` に無い。
+    BY EXT Rust の内部可変性, 前提 `ty` の欄への代入の在りか,
+       前提 型の節点への可変参照の在りか,
        CODE src/ast/types.rs: TypeNode (`ty` の宣言), CODE src/ast/types.rs: TypeNode::new,
        CODE src/ast/types.rs: TypeNode::set_ty, CODE src/ast/types.rs: TypeNode::set_tyvar_kind,
        CODE src/ast/types.rs: TypeNode::set_tyvar, CODE src/ast/types.rs: TypeNode::set_tycon_tc,
@@ -528,8 +529,9 @@ SCAN src/ `truncate_to_unit(`
      CODE src/ast/typedecl.rs: TypeDefn::tycon_info,
      CODE src/fixstd/builtin.rs: tuple_defn
 
-<1>3b. 製品のコードが `TyConInfo` の値を作る場所は、次の 4 つの関数だけである (`ownership.rs` に残る
-   2 か所は `#[cfg(test)] mod tests` の中にある)。各関数が置く `variant` と、この証明が読むフィールドは
+<1>3b. 製品のコードが `TyConInfo` の値を作る場所は、次の 4 つの関数だけである。
+   前提 `TyConInfo` の値を作る在りか が `src/` のすべての構造体リテラルを挙げ、残る 3 項目は
+   型の宣言と 2 つの署名である。各関数が置く `variant` と、この証明が読むフィールドは
    次のとおりである。
 
    | 作る関数 | `variant` | 個数と、この証明が読むフィールド |
@@ -588,8 +590,9 @@ SCAN src/ `truncate_to_unit(`
    1 つも含まず、残る 3 つは既に在る `TyConInfo` の欄を書き替えるだけである (次の段落)。
    `TypeEnv::new` が置くのは
    `Program::calculate_type_env` が渡す `Map`、すなわち `bulitin_tycons()` の各行と、各型宣言に
-   ついての `TypeDefn::tycon_info` の返り値である。`TypeEnv::add_tycons` が置くのは、`add_tycons` を
-   呼ぶ 4 か所が渡す `TyConInfo`、すなわち `CaptureStruct::new` が作った `tycon_info`
+   ついての `TypeDefn::tycon_info` の返り値である。`TypeEnv::add_tycons` が置くのは、A28 の走査
+   `SCAN src/ .add_tycons(` が挙げる 4 か所が渡す `TyConInfo`、すなわち `CaptureStruct::new` が
+   作った `tycon_info`
    (`closure_specialization` の `lift_all` と `realize_all` が `record_capture_list` と
    `take_new_tycons` を経て渡すもの、および `defunctionalize_fix::run_one` が渡すもの) と、
    `register_opaque_tycon` がその場で作る `TyConInfo` である。**すなわちこの 2 つが置く値はどれも、
@@ -601,8 +604,11 @@ SCAN src/ `truncate_to_unit(`
    `Program::resolve_namespace_not_in_expr` -- が書き替えるのは、既に在る `TyConInfo` の
    `fields[..].ty` と `fields[..].syn_ty` だけである。**どれも `fields` の長さを変えず、`variant`、
    `tyvars`、`is_unbox`、`fields[i].is_punched` にも触れない。`TyConInfo` は `Serialize` も
-   `Deserialize` も導出しないので、キャッシュから読まれる `TyConInfo` も無い。
-  BY EXT Rust の可視性, EXT Rust のモジュールの木,
+   `Deserialize` も導出しないので、キャッシュから読まれる `TyConInfo` も無い。前提 型の節点への
+   可変参照の在りか より `Arc::get_mut` は `src/` に無く、`Arc::make_mut` を書く 1 項目が借りるのは
+   `Arc<Map<..>>` の欄なので、`tycons` が包む `Map` の項目をその場で書き替える道も無い。
+  BY EXT Rust の可視性, EXT Rust のモジュールの木, <ref id=3d4be43/>,
+     前提 `TyConInfo` の値を作る在りか, 前提 型の節点への可変参照の在りか,
      CODE src/ast/types.rs: TyConInfo, CODE src/fixstd/builtin.rs: bulitin_tycons,
      CODE src/constants.rs: FUNPTR_ARGS_MAX, CODE src/ast/typedecl.rs: TypeDefn::tycon_info,
      CODE src/ast/typedecl.rs: TypeDefn::validate_tyvars,
@@ -985,9 +991,11 @@ SCAN src/ `truncate_to_unit(`
      `args` の各要素に `substitute_type` を当てた `new_args` を作り、
      `new_args.iter().zip(args).all(|(new_arg, arg)| Arc::ptr_eq(new_arg, arg))` が真のときは節点を
      そのまま複製して返し、偽のときは `set_assocty_args(new_args)` を返す。分岐の条件が列の上の
-     全称であるところが `Type::TyApp` の腕と異なる。`map` は列の長さを保つので `new_args` と `args` の
-     長さは等しく、`zip` は全要素の対を渡す。よって真の腕に入るとき `new_args` の各要素は `args` の
-     同じ位置の要素と同じ `Arc` であり、`Vec` の等価性は長さと要素ごとの等価性なので `new_args` は
+     全称であるところが `Type::TyApp` の腕と異なる。`EXT Iterator の map と zip` より `map` は列の
+     長さを保つので `new_args` と `args` の
+     長さは等しく、`zip` は各位置の対を渡す。よって真の腕に入るとき `new_args` の各要素は `args` の
+     同じ位置の要素と同じ `Arc` であり、`EXT Vec の等価性` より `Vec` の等価性は長さと同じ位置の
+     要素どうしの等価性なので `new_args` は
      `args` と値としても等しい。複製されるもとの節点の `ty` は `Type::AssocTy(assoc_ty, args)` で
      ある。偽の腕が呼ぶ `set_assocty_args` は、`self.ty` が `Type::AssocTy` のときその第 1 成分を
      保って第 2 成分を `new_args` に替えるので、作る節点の `ty` は
@@ -998,7 +1006,8 @@ SCAN src/ `truncate_to_unit(`
 
      **同じ関数の `Type::TyVar` の腕が呼ぶ `set_source_if_none` も値を変えない** -- 書き替えるのは
      `info.source` であり、`impl PartialEq for TypeNode` はそれを読まない。
-    BY <2>1, CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
+    BY <2>1, EXT Iterator の map と zip, EXT Vec の等価性,
+       CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
        CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
        CODE src/ast/types.rs: TypeNode::set_assocty_args,
        CODE src/ast/types.rs: TypeNode::set_source_if_none,
@@ -1075,25 +1084,48 @@ SCAN src/ `truncate_to_unit(`
        CODE src/ast/types.rs: TypeNode (`hash_cache` の宣言),
        CODE src/ast/types.rs: TypeNode::type_hash,
        CODE src/ast/types.rs: impl Hash for TypeNode
-  <2>7. QED
-    値として等しい引数を渡した 2 つの呼び出しを並べ、素の動作の列を先頭から突き合わせる。`<2>1` から
-    `<2>5` はこの道の各関数が読むものを尽くしており、そのどれもが引数の値、`E` の値、`TyConInfo` の
-    欄の値、その呼び出しがその場で作る局所の値、そして下位の呼び出しの返り値である。`<2>6` より、
-    走らせることで書かれる memo はその値を動かさない。`<2>1a` より、型を写す 2 つの関数が置く
-    `Arc::ptr_eq` の分岐も返り値の値を変えない。**`TypeNode` の等価比較も節点の対を同じ `Arc` かどうかで
-    先に片付けるが、返す真偽値は型の式の比較のものであり、abort もしない** -- `impl PartialEq for Type`
-    の doc が「Compares the parts of the type expression, taking two occurrences of one node as equal on
-    sight」と述べるとおり、同じ節点の 2 つの出現を等しいと答えるほかは型の式の部分を比べるだけであり、
-    `impl PartialEq for TypeNode` が読むのは `ty` だけで、その再帰が辿るのは `<1>1a` の直接の部分の辺
-    なので停止する。この道がその比較を行うのは、`<2>2` の `Map` が `Arc<TypeNode>` の鍵を突き合わせる
-    ところと、`<2>3` の `Substitution::merge` が同じ鍵の値を `==` で突き合わせるところである。
-    よって 2 つの呼び出しは、対応する各点で同じ値を読み、下位の呼び出しを同じ引数の値で行って同じ値を
-    受け取る。分岐を決める値がどれも一致するので、ともに停止して等しい値を返すか、ともに同じ
-    `panic!` / `assert` / 添字付けに達するか、ともに停止しない。`<2>4` と `<2>5` はこの結論を
-    `unit_step`・`is_box`・`unpunched_field_types`・`truncate_to_unit` のどれについても同じ形で与える。
-    BY <1>1a, <2>1, <2>1a, <2>2, <2>3, <2>4, <2>5, <2>6,
-       CODE src/ast/types.rs: impl PartialEq for Type,
+  <2>6a. `TypeNode` の等価比較は、比べる 2 つの値だけで決まる真偽値を返し、abort しない。
+     `impl PartialEq for TypeNode` が読むのは `ty` だけであり、`impl PartialEq for Type` の doc は
+     「Compares the parts of the type expression, taking two occurrences of one node as equal on
+     sight」と述べる。すなわち同じ節点の 2 つの出現を等しいと答える道を持つが、返す真偽値は型の式の
+     比較のものである。その再帰が辿るのは `<1>1a` の直接の部分の辺なので停止する。この道がこの比較を
+     行うのは、`<2>2` の `Map` が `Arc<TypeNode>` の鍵を突き合わせるところと、`<2>3` の
+     `Substitution::merge` が同じ鍵の値を `==` で突き合わせるところである。
+    BY <1>1a, <2>2, <2>3, CODE src/ast/types.rs: impl PartialEq for Type,
        CODE src/ast/types.rs: impl PartialEq for TypeNode
+  <2>7. QED
+    値として等しい引数を渡した 2 つの呼び出しを `C` と `C'` とし、`DEF 下位の呼び出しの列` が
+    それぞれに与える列を先頭から 1 対 1 に並べる。
+    <3>1. `<2>1` から `<2>5` は、この道の各関数が読むものを尽くしている。挙がるのはどれも、引数の
+       値、`E` の値、`TyConInfo` の欄の値、その呼び出しがその場で作る局所の値、そして下位の
+       呼び出しの返り値である。
+      BY <2>1, <2>2, <2>3, <2>4, <2>5
+    <3>2. `EXT Rust の評価の決定性` の (iv) が許す番地の比較が答えに漏れる場所は、この道に 3 つある。
+       型を写す 2 つの関数が置く `Arc::ptr_eq` の分岐 (`<2>1a`)、`Map` の鍵をハッシュするときに
+       書かれる memo (`<2>6`)、そして `TypeNode` の等価比較 (`<2>6a`) である。3 つとも、番地が
+       一致するかどうかに依らず同じ値を返す。`Arc::ptr_eq` の 2 つの腕はどちらも下位の呼び出しを
+       行わないので、どちらの腕を取るかは下位の呼び出しの列にも現れない。
+      BY <2>1a, <2>6, <2>6a, EXT Rust の評価の決定性,
+         CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
+         CODE src/elaboration/typecheck.rs: Substitution::substitute_type
+    <3>3. `n` についての帰納で、`C` と `C'` の列の先頭 `n` 項が `DEF 下位の呼び出しの列` の意味で
+       対応することを示す。`n = 0` では主張は空虚である。先頭 `n` 項が対応するとして、第 `n + 1` 項を
+       見る。その時点で走っている最も内側の呼び出しを `K` とすると、次に起きること -- 下位の呼び出しを
+       開始するか、`K` が値を返すか、`K` が abort するか、どれも起きないか -- と、開始ならその関数と
+       引数の値、返りならその値は、`EXT Rust の評価の決定性` より `K` の (i) 引数の値、(ii) `K` が
+       記憶域から読む値、(iii) `K` がそこまでに受け取った下位の呼び出しの返り値、(iv) `K` が比べる
+       番地の一致だけで決まる。`K` の開始の事象と `K` が受け取った返りの事象はどれも先頭 `n` 項に
+       在るので、(i) と (iii) は帰納法の仮定より `C` と `C'` で等しい。(ii) は `<3>1` より `E` の値と
+       `TyConInfo` の欄の値であり、`C` と `C'` はその同じ値を持つ。(iv) は `<3>2` より答えを動かさ
+       ない。よって第 `n + 1` 項も対応し、一方に在れば他方にも在る。
+      BY <3>1, <3>2, EXT Rust の評価の決定性, DEF 下位の呼び出しの列
+    <3>4. QED
+      `<3>3` より `C` と `C'` の列は全体として対応する。`K` を根の呼び出しに取った `<3>3` の帰納段が、
+      根についても同じ 4 つで振る舞いを決めるので、`C` と `C'` は、ともに停止して等しい値を返すか、
+      ともに同じ `panic!` / `assert` / 添字付けに達するか、ともに停止しない。`<2>4` と `<2>5` は
+      この結論を `unit_step`・`is_box`・`unpunched_field_types`・`truncate_to_unit` のどれについても
+      同じ形で与える。
+      BY <2>4, <2>5, <3>1, <3>2, <3>3, EXT Rust の評価の決定性, DEF 下位の呼び出しの列
 
 <1>10. `<1>1` を満たす型 `t` について、`unit_step(t, E)` の返す `UnitStep` は `cls(t)` で決まり、
    次の表の通りである。
