@@ -53,11 +53,12 @@
 - **A19 を読む 2 つの命題は、別のものを要求している。** P18a・P18c・P19・P21 が読む形 (走査の帳簿) と、
   P14 が読む形 (由来ごとの非負性と、名指す由来に参照が 1 つ以上残っていること) は、どちらも他方を
   導かない。`C1` が前者だけを破り、第 9 節の `B_1` が後者だけを破る (第 9 節)。**A19 は 2 つに割れる。**
-- **(O1) は証明されている。** `insert_rc` の liveness は使用だけから作られる集合であり、`Retain` と
-  `Release` の位置はそれだけで決まる。第 10 節が、**各検査点において 1 つのスロットに割り当たる参照の
+- **(O1) は証明されている。** `insert_rc` の liveness は使用だけから作られる集合である (`L14` (a) --
+  `Λ(m) = free_locals(m) ∪ A(m)`)。第 10 節が、**各検査点において 1 つのスロットに割り当たる参照の
   個数はその変数が live かどうかで決まる** (`L18`) ことを示し、そこから別名類の粒度の RC 規律
   (`L19` (a)-(c)) と、「各計数下の別名類 `C` の開始事象 (`DEF 開始事象`) は `ρ` の上に高々 1 つで
-  ある」(`L20`) を出す。`L4` と `L7` の前提「ちょうど 1 つ」へは、`L13a` (f) が渡す (`L25` `<1>2c`)。
+  ある」(`L20`) を出す。`L4` と `L7` の前提「ちょうど 1 つ」へは、`L13a` (f) と (h) が渡す
+  (`L25` `<1>2c`)。
   (ii-a) が
   節点の入口の外に置く
   1 点 -- 終端の `Ret` の消費を行った直後 -- は `L19` (c) が `held = 0` の等式で与える。
@@ -5408,6 +5409,8 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
      CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
      CODE src/rc_ir/ownership.rs: unit_step,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_box,
+     CODE src/ast/types.rs: TypeNode::is_closure, CODE src/ast/types.rs: TypeNode::is_union,
+     CODE src/ast/types.rs: TypeNode::is_array, CODE src/ast/types.rs: TypeNode::is_punched_array,
      DEF 例の型と op, DEF `Pair` と `make_pair`, EXT `Vec::extend`
   `subtree_type(τ, [])` は空のループを抜けて `Some(τ)` を返すので、`units_under(τ, [])` は
   `rc_units(τ)` の各元に空の接頭を足したもの、すなわち `rc_units(τ)` である
@@ -5416,10 +5419,13 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
   `rc_units_go` の 4 つの腕より、`unit_step(τ)` が `NoUnit` なら 0、`Unit` か `Capture` なら 1、
   `Fields` なら各フィールドの `rc_units` の連結であって 0 にも 2 以上にもなる。
   **3 つの長さはどれも起きる。** `DEF 例の型と op` の `I` は `is_fully_unboxed` が真なので
-  `unit_step` は `NoUnit` を返し、長さは 0 である。同じ定義の `Arr` は boxed なので
-  `is_fully_unboxed` が偽・`is_closure` が偽・`is_box` が真であり、`unit_step` は `Unit` を返して
-  長さは 1 である。`DEF Pair と make_pair` の `Pair` は `Arr` を 2 つ持つ unbox 構造体なので
-  `unit_step` は `Fields` を返し、その 2 つのフィールドがそれぞれ長さ 1 を寄せるので長さは 2 である。
+  `unit_step` は最初の `if` で `NoUnit` を返し、長さは 0 である。同じ定義の `Arr` は boxed なので
+  `is_fully_unboxed` が偽・`is_closure` が偽・`is_box` が真であり、`unit_step` は第 3 の `if` で
+  `Unit` を返して長さは 1 である。`DEF Pair と make_pair` の `Pair` は `Arr` を 2 つ持つ unbox
+  構造体なので、`is_fully_unboxed` は偽 (boxed なフィールドを持つ)、`is_closure` は偽 (構造体)、
+  `is_box` は偽 (unbox)、`is_union` は偽 (構造体)、`is_array` は偽 (`DEF Pair と make_pair` の
+  取り決め)、`is_punched_array` は偽 (`Std::PunchedArray` の tycon ではない) であり、`unit_step` は
+  `Fields` を返す。その 2 つのフィールドはどちらも `Arr` で長さ 1 を寄せるので、長さは 2 である。
   長さが 0 のときは、
   <1>6 (a) より `boxed_leaf_paths(τ)` の各元がある unit で始まらねばならず、unit が無いので
   `boxed_leaf_paths(τ)` は空である。
