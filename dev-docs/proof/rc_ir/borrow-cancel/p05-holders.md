@@ -216,9 +216,10 @@ D24 は、段が参照の勘定に与える変化を不可分な動作の有限�
 `<1>0.` 第 1.2 節の 6 種の素動作と第 1.4 節の点は、D24 の定義をこの文書の記法へ移したものである。
   よって PROVE が量化する切れ目は P28 の量化範囲を覆う。
 
-  `<2>1.` D24 は 1 つの段を不可分な動作の有限列 -- 参照の受け渡し、生成、割り当て、処分、解放、
-    グローバル化の 6 種 -- へ分解する。第 1.2 節の (α)(β)(γ)(δ)(ε)(ζ) はこの 6 種をこの順に名づけた
-    ものである。割り当てとその欄を埋める受け渡しを別の動作に数えることも、割り当ての直後に持ち手の
+  `<2>1.` D24 は、段が参照の勘定に与える変化を追うために、段を不可分な動作の有限列 -- 参照の
+    受け渡し、生成、割り当て、処分、解放、グローバル化の 6 種 -- へ分解する。第 1.2 節の
+    (α)(β)(γ)(δ)(ε)(ζ) はこの 6 種をこの順に名づけたものであり、この文書はその 6 種を素動作と呼ぶ。
+    割り当てとその欄を埋める受け渡しを別の動作に数えることも、割り当ての直後に持ち手の
     単位が参照を持たないことも、オブジェクトの記憶域への書き込みを素動作に数えないことも、D24 の
     とおりである。
     BY <ref id=e3436e8/> の (F) (「追うには段を不可分な動作の有限列へ分解する -- 参照の受け渡し、生成、割り当て、
@@ -268,9 +269,9 @@ D24 は、段が参照の勘定に与える変化を不可分な動作の有限�
         **(a)** `#ArrayStorage` のオブジェクトの持ち手の単位は、その記憶域の各スロットとその要素の型
         の boxed leaf との対であり、そのほかのオブジェクトの持ち手の単位はそのオブジェクトが保持する
         値の boxed leaf である。`size` はこの数え上げを切らない。
-        **(b)** 書かれた持ち手の単位のうち、inhabited (D16) であって null ポインタでなく、計数下
-        (D26) のオブジェクトを指すものが、参照をちょうど 1 つ持つ。そのほかの書かれた単位は参照を
-        持たない。
+        **(b)** 持ち手の単位が参照を持つことと、その単位が書かれていること (第 1.1 節) とは同値で
+        あり、書かれた単位が持つ参照はちょうど 1 つである。書かれた単位は inhabited (D16) であって
+        null ポインタでなく、計数下 (D26) のオブジェクトを指す。
         **(c)** 割り当てられた直後の単位は書かれておらず、参照を 1 つも持たない。単位が参照を持つのは
         (α) か (β) がそこへ参照を書いた瞬間からである。
         **(d)** `#ArrayStorage` のオブジェクト `o` のカウントが 0 になった点では、`o` が持つ参照は
@@ -351,7 +352,13 @@ D24 は、段が参照の勘定に与える変化を不可分な動作の有限�
     `CODE src/object.rs: create_obj` (「A fresh object of type `ty`, with its control block
     initialized and its remaining fields left undefined for the caller to fill in」)
   `<2>4.` QED
-    (a) は `<2>1` と `<2>2`、(b) は `<2>1` と `<2>2`、(c) は `<2>3` である。(d) のうち「`o` が持つ
+    (a) は `<2>1` と `<2>2`、(c) は `<2>3` である。(b) は次による -- DEF 書かれた より書かれた単位に
+    は (α) か (β) が入れた参照が在り、逆に単位が参照を持つのは (α) か (β) がそこへ参照を書いた瞬間
+    からであって (`<2>2`、`<2>3`)、その参照が別の持ち手へ移るか処分された単位は書かれていない
+    (DEF 書かれた) ので、参照を持つことと書かれていることは同値である。個数がちょうど 1 で
+    あることと、書かれた単位が inhabited で非 null で計数下のオブジェクトを指すことは `<2>1` と
+    `<2>2` が与える -- A5 は参照を inhabited で計数下の leaf にちょうど 1 つずつ置き、null の leaf に
+    はオブジェクトも参照も無いと述べる。(d) のうち「`o` が持つ
     参照はすべて記憶域のスロットが持つものである」は、`<2>2` (`#ArrayStorage` の持ち手の単位は
     記憶域のスロットである) と `<2>2a` の (i) から出る。歩くスロットの範囲と除かれるスロットに
     ついての節は `<2>2a` の (ii)、処分の付く先は `<2>2a` の (iii) である。
@@ -493,8 +500,9 @@ D24 は、段が参照の勘定に与える変化を不可分な動作の有限�
                **(b)** その retain が作る参照の持ち手が、その生成コードが書き込むオブジェクトの持ち手の
                単位 (D25 の 2 番目、第 1.1 節) である形。作られる参照は書き込まれた各単位につき 1 つで
                あり、この形は `Obl(a)` を動かさない。
-               **(c)** 名指す値の inhabited (D16) な boxed leaf がどれも計数下 (D26) でない形。
-               この形は参照を作らず、処分せず、`H` も `Obl(a)` も持ち手の単位も動かさない。
+               **(c)** 素動作を 1 つも起こさない形。この形は参照を作らず、処分せず、`H` も
+               `Obl(a)` も持ち手の単位も動かさない。名指す値の inhabited (D16) な boxed leaf が
+               どれも計数下 (D26) でない retain と release はこの形である。
 
   **在りかは述語で決める。** D24 が置く述語は `Generator::retain`・`Generator::build_retain`・
   `Generator::release` の**呼び出し**を出す生成コードの全体であり、下の `CODE` はその述語が挙げる
@@ -535,8 +543,8 @@ D24 は、段が参照の勘定に与える変化を不可分な動作の有限�
     D25 (2 番目の持ち手), `<1>0b`, A5 (配列の記憶域の例外)
     `CODE src/object.rs: ObjectFieldType::clone_struct` (「Copy the value-carrying fields of the
     struct object `src` into `dst`, retaining each boxed field so that both objects own it」)
-    `CODE src/object.rs: ObjectFieldType::clone_array_buf` (`clone_array_range` が、要素を
-    `dst_buffer` の同じ添字へ store してから `gc.retain` を出す)
+    `CODE src/object.rs: ObjectFieldType::clone_array_buf` (「Copy the `len` elements of an array's
+    buffer from `src_buffer` into `dst_buffer`, retaining each one so that both buffers own it」)
     `CODE src/object.rs: ObjectFieldType::append_value_into_array_buf` (「Store `value` into
     `[begin, begin + count)` of an array's buffer. Each slot is given its own reference through a
     single reference-count add of `count`」)
@@ -546,11 +554,10 @@ D24 は、段が参照の勘定に与える変化を不可分な動作の有限�
   `<2>4a.` 名指す値の inhabited (D16) な boxed leaf がどれも計数下 (D26) でない retain と release は、
     参照を作らず、処分せず、`H` も `Obl(a)` も持ち手の単位も動かさない。グローバル状態のオブジェクト
     への `Retain`/`Release` は `H` を変えず (A8)、そのオブジェクトを指す leaf は D8 の意味の参照を
-    持たない (D26)。逆に、名指す値が計数下のオブジェクトを指す inhabited な boxed leaf を持つ
-    retain は、その leaf の指すオブジェクトのカウントを 1 上げるので、参照を 1 つ作る (A5、D8)。
-    **この形の代表は、`Generator::get_scoped_obj` が記号の位置 (D6) を読むときに `retain_on_read`
-    に従って出す retain である** -- 記号の位置が指すのは funptr かグローバル状態のオブジェクトで
-    あり (D6)、funptr の型は `is_fully_unboxed` なので boxed leaf を持たない (D4 の規則 1)。
+    持たない (D26)。**この形の代表は、`Generator::get_scoped_obj` が記号の位置 (D6) を読むときに
+    `retain_on_read` に従って出す retain である** -- 記号の位置が指すのは funptr かグローバル状態の
+    オブジェクトであり (D6)、funptr の型は `is_fully_unboxed` なので boxed leaf を持たない
+    (D4 の規則 1)。
     BY <ref id=b6673ca/>, <ref id=88a06de/>, <ref id=ec8d1a0/>, <ref id=4f63121/>, <ref id=596a46d/> (「そこが指すのは funptr かグローバル状態のオブジェクト」),
     <ref id=0594f24/> (規則 1), D16
     `CODE src/generator.rs: Generator::get_scoped_obj` (`retain_on_read` が真のとき `build_retain` を
@@ -561,8 +568,8 @@ D24 は、段が参照の勘定に与える変化を不可分な動作の有限�
   `<2>5.` 個数は次のとおりである。retain は名指した値が持つ各参照のカウントを 1 つずつ上げるので、
     第 1 の形が作る参照は、その値の inhabited で計数下の各 boxed leaf につき 1 つである (A5)。
     第 2 の形が作る参照は、書き込まれた持ち手の単位ごとに 1 つである -- 単位が参照を持つのはそこへ
-    書いた瞬間からであり (`<1>0b` の (c))、書かれた単位のうち inhabited で非 null で計数下を指すものが
-    参照をちょうど 1 つ持つ (`<1>0b` の (b))。1 つの retain が `count` を一度に足す形でも、参照は
+    書いた瞬間からであり (`<1>0b` の (c))、書かれた単位が参照をちょうど 1 つ持つ
+    (`<1>0b` の (b))。1 つの retain が `count` を一度に足す形でも、参照は
     書き込まれるスロットごとに 1 つである (`<2>3` の `append_value_into_array_buf` の doc)。
     BY `<2>3`, `<1>0b`, <ref id=4f63121/>, <ref id=66c9670/>, <ref id=88a06de/>
     `CODE src/generator.rs: Generator::retain` (「Retain `obj`: increment the reference count of
@@ -571,10 +578,16 @@ D24 は、段が参照の勘定に与える変化を不可分な動作の有限�
     leaf reached has its reference count increased by `amount`, an i64 count.」)
   `<2>6.` QED
     形が 3 つで尽きるのは次による。D24 は、1 つの段の生成コードがその段の中で出す**素動作**を
-    2 つの形に分ける (`<2>1`)。素動作を起こす retain と release はその 2 つ、すなわち第 1 の形と
-    第 2 の形である。素動作を起こさない retain と release -- 名指す値の inhabited な boxed leaf が
-    どれも計数下でないもの -- が第 3 の形であり、その形が素動作を起こさないことは `<2>4a` が述べる。
-    BY `<2>1`, `<2>2`, `<2>2a`, `<2>3`, `<2>4`, `<2>4a`, `<2>5`
+    2 つの形に分ける (`<2>1`)。素動作を 1 つ以上起こす retain と release はその 2 つ、すなわち
+    第 1 の形と第 2 の形である。素動作を 1 つも起こさない retain と release が第 3 の形であり、
+    2 つの場合は排中律で尽きている。
+    第 3 の形が 3 つの量を動かさないのは、動かす道がどれも素動作だからである -- `H` が動くのは
+    参照が作られるか処分されるとき、すなわち (β)(γ)(δ)(ε) であり (D8)、`Obl(a)` が動くのは参照が
+    そこへ入るか離れるとき、すなわち (α)(β)(δ) であり、持ち手の単位が参照を得るのも失うのも
+    (α)(β)(δ)(ε) である (`<1>0b` の (b) と (c))。名指す値の inhabited な boxed leaf がどれも
+    計数下でない retain と release がこの形に入ることは `<2>4a` が述べる。
+    BY `<2>1`, `<2>2`, `<2>2a`, `<2>3`, `<2>4`, `<2>4a`, `<2>5`, `<1>0b`, <ref id=ec8d1a0/>,
+    DEF 受け渡し (α), DEF 生成 (β), DEF 割り当て (γ), DEF 処分 (δ), DEF 解放 (ε), EXT 排中律
 
 `<1>1.` ASSUME NEW `p`: `X` の切れ目
         PROVE  「`p` で処分されていない各参照が、D25 の 3 種の持ち手 -- `Liv(p)` の活性化の `Obl`、
