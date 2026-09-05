@@ -3810,6 +3810,7 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
   L42 の `<1>4` の `<2>1` と、L38a と L39 が引く `L15` の `<1>2` の `<2>2` の `<3>2` がそれを引くので、
   A24 と A21 も L40・L41・L42 のすべてに載る。
   BY <ref id=cb35ab1/>, <ref id=9f1cf6c/>, <ref id=680aaa9/>, <ref id=ebec376/>, <ref id=3647480/>, <ref id=675b350/>, <ref id=fd95f12/>, <ref id=f06144e/>, <ref id=95427eb/>, <ref id=859cf84/>, <ref id=c232680/>, <ref id=6daeb85/>, <ref id=f925a19/>, <ref id=b833589/>,
+     DEF INV, <ref id=f493506/>, <ref id=9eebb06/>, <ref id=f6445fd/>,
      <ref id=94e04ed/>, <ref id=30bdc02/>, <ref id=652dec5/>
 
 <1>2. QED
