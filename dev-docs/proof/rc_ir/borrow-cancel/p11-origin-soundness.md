@@ -198,6 +198,80 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 モジュールとその子孫のモジュールだけである。よってそのような項目の呼び出しと欄への書き込みは、その
 モジュールの中を数え上げれば尽きる。
 
+### 在りかの前提
+
+**コードのどこに何が在るかの数え上げは、段の中で行わない。** 段が自分で在りかを数え上げると、その
+数え上げには果たす者が居らず、検査するものも無い。**記号を名指す `CODE` の引用はその記号の本体しか
+与えないので、「ほかの記号はそれをしない」の側はそこから出ない。** 在りかは名前つきの前提として置き、
+`BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
+
+**果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
+`src/` の全体に走らせて、下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。走査は
+字面の上位近似なので、一覧には構成でなくパターンとしてその字面を持つ項目も入る。`#[cfg(test)]` の下の
+項目は走査が除く。項目の名前は走査が呼ぶ名前である -- 自由関数がその直前の `impl` の名前を冠して
+挙がる形を含む。
+
+**前提 `result_prov` の本体の在りか** --- `LLVMGen::result_prov` の本体が在る項目は次で尽きる。
+**そのどれもが、返す `Provenance` を `Provenance::uniform`・`Provenance::build_shape`・
+`Provenance::uniform_bottom`・`Provenance::fresh_under`・`replaced_field_prov` のいずれかを第 1 引数
+`result_ty` に対して呼んで作る。** どれを呼ぶかは `--` の後に書く。
+
+SCAN src/ `fn result_prov`
+  = src/ast/inline_llvm.rs: result_prov -- trait の既定の本体。`Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMStringBuf::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayUnsafeEmpty::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayTruncateBoundsUnchecked::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendValueCapacityUnchecked::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArraySetCapacityBoundsUnchecked::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayGrowSizeBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArraySetBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArraySwapBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayPunchBody::result_prov -- `Provenance::fresh_under`
+  = src/fixstd/builtin.rs: InlineLLVMPunchedArrayPlugBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov -- 容器が boxed なら `Provenance::uniform`、unbox なら `Provenance::build_shape`
+  = src/fixstd/builtin.rs: InlineLLVMMakeStructBody::result_prov -- `Provenance::build_shape`
+  = src/fixstd/builtin.rs: InlineLLVMArrayLitBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMStructPunchBody::result_prov -- 穴の開いた成分が boxed なら `Provenance::fresh_under`、unbox なら `Provenance::build_shape`
+  = src/fixstd/builtin.rs: InlineLLVMStructPlugInBody::result_prov -- `replaced_field_prov`
+  = src/fixstd/builtin.rs: InlineLLVMStructSetBody::result_prov -- `replaced_field_prov`
+  = src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov -- `Provenance::build_shape`
+  = src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov -- scrutinee が boxed なら `Provenance::uniform`、unbox なら `Provenance::build_shape`
+  = src/fixstd/builtin.rs: InlineLLVMUndefinedInternalBody::result_prov -- `Provenance::uniform_bottom`
+  = src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMArrayIsStorageUniqueBody::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::result_prov -- `Provenance::fresh_under`
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::result_prov -- `Provenance::fresh_under`
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::result_prov -- `Provenance::fresh_under`
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::result_prov -- `Provenance::fresh_under`
+  = src/fixstd/builtin.rs: InlineLLVMDestructorMake::result_prov -- `Provenance::uniform`
+  = src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody::result_prov -- `Provenance::uniform`
+
+**前提 `Origin::Exactly` を作る式の在りか** --- `Origin::Exactly` の字面が在る項目は次で尽きる。
+`Origin::Join` を作る式の在りかは L1 が述べる。
+
+SCAN src/ `Origin::Exactly(`
+  = src/rc_ir/ownership.rs: Origin::identity -- `match` のパターンであって構成ではない
+  = src/rc_ir/ownership.rs: Origin::candidates -- `match` のパターンであって構成ではない
+  = src/rc_ir/ownership.rs: Origin::of_candidates -- `1 =>` の腕が構成する
+  = src/rc_ir/ownership.rs: origin_inner -- 閉包 `here` が構成する
+  = src/rc_ir/ownership.rs: origin_from_leaves_under -- `reached.push(Origin::Exactly(here.clone()))`
+
+**前提 `get_scoped_value` を呼ぶ式の在りか** --- `get_scoped_value` の字面が在る項目は次で尽きる。
+
+SCAN src/ `get_scoped_value(`
+  = src/generator.rs: get_scoped_value -- 定義
+  = src/generator.rs: get_scoped_obj -- 呼び出し
+  = src/generator.rs: get_scoped_obj_noretain -- 呼び出し
+
+**前提 `VarTable` の `origins` の欄に触れる式の在りか** --- その欄は `pub` を持たないので、それを
+名指せるのは `src/rc_ir/ownership.rs` とその子孫のモジュールだけである (`EXT 可視性`)。欄アクセスの
+字面が在る項目は次で尽き、その欄を持つ `VarTable` の値を組み立てるのは `VarTable::empty` である。
+
+SCAN src/ `.origins`
+  = src/rc_ir/ownership.rs: Origin::origin -- 自由関数 `origin` が直前の `impl Origin` の名前を冠して挙がる。`borrow()` の読みと `borrow_mut().insert(..)` の書きの 2 行
+
 ## 2. D9 の「移動」と `origin_inner` の再帰の辺 <!--#747d82d-->
 
 **DEF 再帰の辺**。鍵 `(v, q)` から鍵 `(v', q')` への**再帰の辺**とは、
