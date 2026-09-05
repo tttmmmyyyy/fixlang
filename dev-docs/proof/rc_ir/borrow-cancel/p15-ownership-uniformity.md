@@ -123,12 +123,12 @@ scrutinee とアームの payload 変数、`App` の callee と各引数、`Clos
 次の 3 種を**根の型**と呼ぶ。**関数のパラメータ・capture が宣言する型** (`RcFunc::params` と
 `RcFunc::capture` の `RcVar` の型)、`Pre(V)` に現れる `RcVar` の型、`Llvm` 節点の結果の型 `rty` で
 ある。パラメータ・capture の型を数えるのは、本体が一度も読まないパラメータの型がその本体に現れない
-からである。`Post(V)` に現れる `RcVar` の型もこの 3 種のいずれかである -- L0a (c) が、2 つの本体の
-`RcVar` は `App` の callee を除いて同じであり、callee の 2 つも型が等しいと述べる。
-根の型と、根の型から `unpunched_field_types(・)` が返す対の第 2 成分を有限回取って到達する型とを
-合わせて**扱う型**と呼ぶ。
+からである。根の型と、根の型から `unpunched_field_types(・)` が返す対の第 2 成分を有限回取って到達する型
+とを合わせて**扱う型**と呼ぶ。
 **以下の命題が量化する型 -- `τ`、`σ`、および `ty(・)` の形で現れる型 -- は、すべて扱う型を渡る。**
 扱う型が A10 を満たすことは L1b が与え、この文書が P1 を当てるのはその上である。
+**`Post(V)` に現れる `RcVar` の型も根の型である** -- L0a (c) が、`Post(V)` の各 `RcVar` は `App` の
+callee を除いて `Pre(V)` のものそのものであり、callee の 2 つも型が等しいと述べる。
 
 **DEF 歩み**
 型 `τ` と path `π` に対し、型の列 `cur_0, cur_1, ...` を次で定める。`cur_0 = τ`。`i < |π|` かつ `cur_i` が
@@ -560,9 +560,8 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 **言明**。`g` を、`borrow_ify` の入力の関数か、`borrow_ify` が作る出力版のうち関数の版 (`f_own` の版と
 借用版) の `RcFunc` とし、`vars = VarTable::of(g)` とする。このとき `vars.param_tys.get(r)` が
 `Some(τ)` であることと、`r` が `g` のパラメータか capture であることは同値であり、そのとき
-`τ = ty(r)` である
-(`ty(・)` は `g` の本体とパラメータ・capture について読む)。本体だけから作る `VarTable::body_only(b)`
-では `param_tys` は空である。
+`τ = ty(r)` である (`ty(・)` は `g` の本体とパラメータ・capture について読む)。本体だけから作る
+`VarTable::body_only(b)` では `param_tys` は空である。
 
 <1>1. `VarTable::of(g)` は `VarTable::empty()` から始め、`g.params` と `g.capture` の各 `p` について
       `param_tys` に `(p.name, p.ty)` を入れ、`var_tys` にも同じ `p.ty` を入れる。続けて呼ぶ
@@ -1543,8 +1542,8 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
   グローバル初期化子の版では、パラメータ・capture も `Pre(V)` も入力のものそのものである --
   `borrow_ify` は `func.clone()` を写し、グローバルは `g.init` を写す -- ので、A6 がこれらの名前が
   互いに、またパラメータ・capture の名前とも異なることを直接与える。借用版では、パラメータ・capture と
-  `Pre(V)` は入力の関数のそれの束縛変数を
-  `rename` で一斉に付け替えたものであって、それ以外の違いを持たない (P9、`clone_func`)。
+  `Pre(V)` は入力の関数のそれの束縛変数を `rename` で一斉に付け替えたものであって、それ以外の違いを
+  持たない (P9、`clone_func`)。
   `fresh_rename_function` は 1 つの `counter` を `&mut` で持ち回り、各束縛名について
   `assign_fresh_name` を 1 度だけ呼んで `name#b<counter>` を作るので、`rename` の像の名前は相異なる
   `counter` の値を持ち、互いに異なる。よって、入力で互いに異なるこれらの名前の像も互いに異なる。
@@ -2202,8 +2201,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 <1>4. `<1>2` と `<1>3` の `(v, u)` は、`V` の site (DEF site) である。
   `rewrite_inner` は `Pre(V)` の木を継続とアーム本体へ降りて歩くので、`<1>2` と `<1>3` の呼び出しが
-  起きる節点は `Pre(V)` の節点である。DEF site の歩き `for_each_node` も継続とアーム本体の両方へ降りるので、その節点を
-  訪れる。`<1>2` の `(arg, unit)` は `Let(_, App(_, args), _)` の節点の引数と
+  起きる節点は `Pre(V)` の節点である。DEF site の歩き `for_each_node` も継続とアーム本体の両方へ降りる
+  ので、その節点を訪れる。`<1>2` の `(arg, unit)` は `Let(_, App(_, args), _)` の節点の引数と
   `rc_units(arg.ty, type_env) = units(ty(arg))` の元の対、`<1>3` の `(v, path)` は
   `Retain(v, path, ..)` / `Release(v, path, ..)` 節点の変数と path であり、DEF site はその節点について
   ちょうどこの対を挙げる。関数の版ではこの集合は `levelled_sites` が挙げるものである。
@@ -2212,8 +2211,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 <1>5. グローバル初期化子の版では `owns_unit(v, u)` は真を返す。
   その `RewriteCtx` は `is_borrow_version: false` で作られるので `<1>3` の呼び出しは起きない。`<1>2` の
-  呼び出しについては、`owns_unit` はまず `origin(v, u).candidates()` を評価する。`v` は `Pre(V)`
-  -- 入力のグローバル初期化子の `init` -- の `App` の引数なので、その名前は
+  呼び出しについては、`owns_unit` はまず `origin(v, u).candidates()` を評価する。`v` は `Pre(V)` --
+  入力のグローバル初期化子の `init` -- の `App` の引数なので、その名前は
   `vars.bindings` に束縛を持つ (節点が束縛する変数) か、持たない (D6 の第 3 の形) かのどちらかであり、
   どちらも P2 の範囲である。よって `origin(v, u)` は中断せずに答えを返す。続いて、`vars` が
   `VarTable::body_only` で作られ、L1c よりその `param_tys` が空なので、`owns_object` はどの `(r, p)` にも
@@ -2355,8 +2354,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   BY <ref id=e11772a/>, DEF unit を覆う対, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
 <1>7. `origin_from_leaves_under` の `(args[j], w)` は unit を覆う。
-  `ty(args[j])` は `Pre(V)` に現れる `RcVar` の型なので根の型であり、L1b より A10 を満たして P1 の定義域に
-  入る。`w = truncate_to_unit(&args[j].ty, leaf, type_env)` であり、A3 より
+  `ty(args[j])` は `Pre(V)` に現れる `RcVar` の型なので根の型であり、L1b より A10 を満たして
+  P1 の定義域に入る。`w = truncate_to_unit(&args[j].ty, leaf, type_env)` であり、A3 より
   `leaf ∈ leaves(ty(args[j]))` なので、P1 より `w ∈ units(ty(args[j]))` である。L7 より
   `Λ_{ty(args[j])}(w) ≠ ∅` であり、その各 leaf `μ` について `trunc(ty(args[j]), μ) = w` である。L6 より
   `trunc(ty(args[j]), w) = w` なので、この 2 つは等しい。
@@ -2518,8 +2517,8 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 **言明**。`Post(V)` の 1 つの活性化 (D21) とその辿る実行路 `ρ` を固定し、`ρ` の上の位置 `n` を取る。
 `n` の節点が **使用**する各変数 -- `Let(x, Var(y), k)` の `y`、`App` の callee と各引数、`Closure` の各
 capture、`Llvm` の各オペランド、`Match` の scrutinee、`Destructure` の容器、`Retain` / `Release` /
-`Eval` / `Ret` が名指す変数 -- は、`ρ` の上で `n` までに値を得ている (D6)。`n` が `Match` のアーム本体の中の
-節点であるときも同じである。
+`Eval` / `Ret` が名指す変数 -- は、`ρ` の上で `n` までに値を得ている (D6)。`n` が `Match` のアーム本体の
+中の節点であるときも同じである。
 
 **この節点が束縛する変数は入らない。** `Let` の束縛変数、`Destructure` のフィールド変数、`Match` の
 アームの payload 変数は、その節点が値を与える側であり、上の列挙に無い。
