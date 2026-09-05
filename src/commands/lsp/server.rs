@@ -1084,8 +1084,9 @@ fn run_diagnostics_pass(
     // program under repair too: a span reaching past the end of the file it names fails where it
     // is turned into a range of the protocol. `AssertUnwindSafe` covers `prev_err_paths`: a pass
     // that fails leaves it as the last pass that published left it.
-    let res: Result<(), Box<dyn std::any::Any + Send>> =
-        Ok(run_diagnostics_and_publish(overrides, typecheck_cache, res_send, prev_err_paths));
+    let res = catch_unwind(AssertUnwindSafe(|| {
+        run_diagnostics_and_publish(overrides, typecheck_cache, res_send, prev_err_paths)
+    }));
 
     if let Err(payload) = res {
         write_log!(
