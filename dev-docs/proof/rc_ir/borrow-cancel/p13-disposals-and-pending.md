@@ -362,6 +362,45 @@ SCAN src/ `declared_globals`
 <1>4. QED
   BY <1>1, <1>3
 
+### L0a (P5 (c) が述べるのは `B` だけで定まる量の包含である) <!--#540b4ca-->
+
+**言明**。`B` の変数 `v` と `FieldPath` `π` について、P5 (c) の言明が名指す 3 つの量 --
+`ActRefs(v, π).objects()`、`Others(v, π)`、`π` の下の各 boxed leaf `λ` についての
+`acted_on(v, λ)` -- は、どれも `B`・`vars`・`type_env` と対 `(v, π)` だけで定まる。したがって
+P5 (c) が述べる包含 `⋃_{λ ∈ L(v, π)} acted_on(v, λ) ⊆ ActRefs(v, π).objects() ∪ Others(v, π)` は、
+`B` の活性化の選び方によらない 1 つの言明である。
+
+**この命題が要る場所。** P5 の言明は 1 つの本体 (D23) とその 1 回の活性化を固定して 3 つを述べる。
+(a) と (b) は実行路の位置とスロットを主語に持つが、(c) の主語は上の 3 つの量だけである。第 4 節の `L6`
+と第 5 節の `<1>12` は活性化を固定せずに P5 (c) を引くので、量化を外してよいことを述べるこの段が要る。
+
+**証明**
+
+<1>1. `ActRefs(v, π)` は `acted_references(vars, type_env, v, π)` であり、`Others(v, π)` は
+      `CancelAnalysis::other_objects(v, π)` の返す列を集合とみなしたものである。前者の値は
+      `vars`・`type_env`・`v`・`π` で決まり、後者は `boxed_leaf_paths(ty(v), type_env)` の各元 `λ` の
+      うち `π` を前置に持つものについて `origin(vars, type_env, v, λ)` を呼び、その `candidates()` から
+      `identity()` を除いた元を集める。
+  BY DEF ActRefs, DEF Others, CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects,
+     CODE src/rc_ir/ownership.rs: References::objects, CODE src/rc_ir/borrow.rs: cancel
+  `CancelAnalysis::acted_references(v, π)` は `acted_references(self.vars, self.type_env, v, π)` の値を
+  返し、`self.vars` と `self.type_env` は `B` について `cancel_body` が作ったものである。
+  `References::objects` は `self.0.keys().cloned().collect()` である。
+
+<1>2. `origin(vars, type_env, v, λ)` の返り値は、走査のどの位置でも、活性化のどの時点でも同じ値である。
+      よって <1>1 の 3 つの量はどれも `B`・`vars`・`type_env` と対 `(v, π)` だけで定まる。
+  BY <ref id=a500a92/>, <1>1, DEF L
+  L0 (ii) がこの一意性を与える。`L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の元のうち `π` を
+  前置に持つものの集合であり、`ty(v)` と `type_env` で決まる。`acted_on(v, λ)` は
+  `origin(v, λ).acted_on()` である。
+
+<1>3. QED
+  BY <ref id=0b3e0e1/>, <1>1, <1>2
+  P5 (c) は「`ActRefs(v, π).objects()` と `other_objects(v, π)` の和 …
+  は、`π` の下の各 boxed leaf `λ` について `origin(v, λ).acted_on()` をすべて含む」と述べる。
+  <1>2 よりその 3 つの量は活性化を読まないので、この包含は活性化の選び方によらない 1 つの言明である。
+
 ### L1 (`walk` は `walk_inner` を 1 回呼ぶ) <!--#084b52a-->
 
 **言明**。`CancelAnalysis::walk(node, pending, returns_from_func)` の 1 回の呼び出しは、
@@ -554,11 +593,12 @@ SCAN src/ `declared_globals`
   DEF 要素が名指すオブジェクト より、その述語が真であることは要素がそのオブジェクトを名指すことである。
 
 <1>2. `Obj(n) ⊆ ActRefs(v, π).objects() ∪ Others(v, π)` である。
-  BY <ref id=0b3e0e1/>, DEF 処分 leaf, DEF 触れうるオブジェクト
+  BY <ref id=0b3e0e1/>, <ref id=540b4ca/>, DEF 処分 leaf, DEF 触れうるオブジェクト
   DEF 処分 leaf の `Release` の行と DEF 触れうるオブジェクトより
   `Obj(n) = ⋃_{λ ∈ L(v, π)} acted_on(v, λ)` である。P5 (c) が、`ActRefs(v, π).objects()` と
   `other_objects(v, π)` の和が `π` の下の各 boxed leaf `λ` について `origin(v, λ).acted_on()` をすべて
-  含むと述べる。`π` の下の boxed leaf の全体は `L(v, π)` である (第 1 節の記法)。
+  含むと述べる。`π` の下の boxed leaf の全体は `L(v, π)` である (第 1 節の記法)。この命題は活性化を
+  固定しないが、`L0a` より P5 (c) の包含は活性化の選び方によらない 1 つの言明である。
 
 <1>3. `un_bumped.objects()` の元の全体は `ActRefs(v, π).objects()` の元の全体である。
   BY <ref id=6ced3f0/>
@@ -888,10 +928,11 @@ SCAN src/ `declared_globals`
   <2>3. `Obj(n) = ⋃_{λ ∈ L(v, path)} acted_on(v, λ)` である。
     BY DEF 処分 leaf, DEF 触れうるオブジェクト
   <2>4. `Obj(n) ⊆ ActRefs(v, path).objects() ∪ Others(v, path)` である。
-    BY <ref id=0b3e0e1/>, <2>3
+    BY <ref id=0b3e0e1/>, <ref id=540b4ca/>, <2>3
     P5 (c) が、`ActRefs(v, π).objects()` と `other_objects(v, π)` の和が `π` の下の各 boxed leaf `λ` に
     ついて `origin(v, λ).acted_on()` をすべて含むと述べる。`π` の下の boxed leaf の全体は `L(v, path)` で
-    ある (第 1 節の記法)。
+    ある (第 1 節の記法)。この節は活性化を固定しないが、`L0a` より P5 (c) の包含は活性化の選び方に
+    よらない 1 つの言明である。
   <2>5. `n` は `B` の終端の `Ret` ではない。
     BY <ref id=b3dfa37/>
   <2>6. QED
