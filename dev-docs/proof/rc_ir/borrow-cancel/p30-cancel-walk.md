@@ -1547,8 +1547,8 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
       `RcExprNode` を返す。
   BY CODE src/rc_ir/borrow.rs: expr_node
 <1>1a. `route`、`call_rc`、`RewriteCtx::owns_unit`、`units_under` の 1 回の呼び出しの中では、`expr_node`
-       も `RewriteCtx::rewrite` も走らない。よってその呼び出しは `RcExprNode` の値を 1 つも作らず、
-       `self.rewrite` の呼び出しも 1 つも起こさない。
+       も `RewriteCtx::rewrite` も走らない。よってその呼び出しの中で `expr_node` は節点を 1 つも作らず、
+       その呼び出しは `self.rewrite` の呼び出しも 1 つも起こさない。
   <2>1. `route` または `call_rc` の 1 回の呼び出しの中で走る `borrow.rs` の関数は、この 2 つと
         `RewriteCtx::routing_is_safe`、`RewriteCtx::routing_saves_retain`、
         `RewriteCtx::any_owned_unit`、`RewriteCtx::owns_unit`、`RewriteCtx::owns_object`、
@@ -1645,8 +1645,7 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
     <2>1 の 10 個にも <2>2 の 2 つにも入らず、<2>3 より `units_under` の中では `borrow.rs` の関数が
     1 つも走らない。`borrow.rs` の外で定義された関数の本文は `borrow.rs` の中に無いので、<1>0 より
     `expr_node` も `RewriteCtx::rewrite` も呼べない。よってこの 4 つの呼び出しの中で `expr_node` も
-    `RewriteCtx::rewrite` も走らない。`RcExprNode` の値を `Arc::new` から作るのは `expr_node` だけで
-    ある (<1>1)。
+    `RewriteCtx::rewrite` も走らず、その呼び出しの中で `expr_node` は節点を 1 つも作らない。
     BY <1>0, <1>1, <2>1, <2>2, <2>3, DEF 本文
 <1>2. `rc_node(is_release, var, path, state, k, source)` は `expr_node` を 1 回呼んでその値を返す。
       `prepend_rc(units, is_release, k)` は `units` を逆順にたたみ込み、`units` の要素ごとに `rc_node`
@@ -1708,9 +1707,10 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
       BY CODE src/rc_ir/borrow.rs: RewriteCtx::route, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
          CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath
     <3>3. QED
-      <3>1 の第 1 文と第 2 文の `route` と `call_rc` は節点を作らず `self.rewrite` も呼ばない
-      (<1>1a) ので、この腕が `self.rewrite` を呼ぶのは第 3 文の `self.rewrite(k)` の 1 回だけであり、
-      この腕がこの呼び出しの中で作る節点は第 3 文から第 5 文のものだけである。DEF 部分木 より
+      <3>1 の第 1 文と第 2 文の `route` と `call_rc` の中で `expr_node` は節点を作らず、その 2 つは
+      `self.rewrite` も呼ばない (<1>1a) ので、この腕が `self.rewrite` を呼ぶのは第 3 文の
+      `self.rewrite(k)` の 1 回だけであり、この腕がこの呼び出しの中で `expr_node` で作る節点は
+      第 3 文から第 5 文のものだけである。DEF 部分木 より
       この腕に落ちる節点の子は継続 `k` だけなので、`self.rewrite` はこの節点の各子についてちょうど
       1 回ずつ呼ばれている。第 3 文から第 5 文が木を組み立て、その材料は `self.rewrite(k)` が返した
       木と、`prepend_rc` と `expr_node` が作る節点だけである (<1>2、<3>2)。第 3 文の
