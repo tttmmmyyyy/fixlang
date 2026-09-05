@@ -23,7 +23,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
 
     /// Emit the op, threading `tail` for a possible tail return. The default computes `generate` and
     /// returns it, building the tail return when `tail`. `fix` overrides this to emit a real tail call.
-    // PROOF: P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate_tail<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,

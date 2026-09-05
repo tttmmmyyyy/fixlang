@@ -17,15 +17,17 @@ src/ast/inline_llvm.rs	LLVMGen::borrows_operand	D/A,P7a,P7d,P7e,P8,P9,P10,P11,P1
 src/ast/inline_llvm.rs	LLVMGen::free_vars	P1,P2,P5,P6,P7	3f221f4f0c3d
 src/ast/inline_llvm.rs	LLVMGen::free_vars_mut	D/A,P7a,P7d,P7e	b61e043f01c5
 src/ast/inline_llvm.rs	LLVMGen::generate	P27,P29,P30	5c603f24fdfc
-src/ast/inline_llvm.rs	LLVMGen::generate_tail	P3,P4,P27,P29,P30	2a615b2fb097
+src/ast/inline_llvm.rs	LLVMGen::generate_tail	P27,P29,P30	2a615b2fb097
 src/ast/inline_llvm.rs	LLVMGen::observes_uniqueness	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26	b3c76bd06dac
 src/ast/inline_llvm.rs	LLVMGen::result_prov	D/A,P1,P2,P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18c,P19,P20,P21,P22,P23,P24,P26,P27,P28,P29,P30,P31,A19	84846b9c9d85
 src/ast/inline_llvm.rs	LLVMGen::unique_check_operand	D/A	8b4dc048a673
-src/ast/name.rs	FullName	P2a,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,T	839e104531c8
-src/ast/name.rs	FullName::from_strs	P5,P6,P7	49c1c45e87ed
+src/ast/name.rs	FullName	P2a,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,T	839e104531c8
+src/ast/name.rs	FullName::from_strs	P3,P4,P5,P6,P7	49c1c45e87ed
 src/ast/name.rs	FullName::is_local	P7c,P7f,P18a,P18b,P27,P29,P30,P31,A19	42fc496e725b
 src/ast/name.rs	FullName::local	P31,A19	47c06982e039
 src/ast/name.rs	FullName::module	P27,P29,P30	52b56f73dfb6
+src/ast/name.rs	FullName::new	P3,P4	a6d8c2456725
+src/ast/name.rs	FullName::set_absolute	P3,P4	f47966be063d
 src/ast/name.rs	FullName::to_namespace	P27,P29,P30	bb19891f8d40
 src/ast/name.rs	FullName::to_string	P27,P29,P30	cf55213855f5
 src/ast/name.rs	Name	P2a,P15,P16,P17,P18	893e63cc0a6e
@@ -78,8 +80,8 @@ src/ast/types.rs	Kind	P2a,P15,P16,P17,P18	9265f4984b1d
 src/ast/types.rs	Scheme::check_kinds	D/A	8a88faed2aa7
 src/ast/types.rs	Scheme::generalize	P26	7c0ad1260a57
 src/ast/types.rs	TyAliasInfo	P2a,P15,P16,P17,P18	2e352ea3d888
-src/ast/types.rs	TyCon	P1,P2,P2a,P5,P6,P7,P15,P16,P17,P18	32fb465582ea
-src/ast/types.rs	TyCon::new	P5,P6,P7	c56ed76475cd
+src/ast/types.rs	TyCon	P1,P2,P2a,P3,P4,P5,P6,P7,P15,P16,P17,P18	32fb465582ea
+src/ast/types.rs	TyCon::new	P3,P4,P5,P6,P7	c56ed76475cd
 src/ast/types.rs	TyConInfo	P1,P2,P2a,P15,P16,P17,P18	d92a25b02f47
 src/ast/types.rs	TyConInfo::resolve_namespace	P1,P2	6a0535783f94
 src/ast/types.rs	TyConInfo::resolve_type_aliases	P1,P2	2d8bd2c4afd1
@@ -182,6 +184,8 @@ src/elaboration/typecheck.rs	TypeCheckContext::unify_or_tolerated_mismatch	P26	2
 src/elaboration/typecheck.rs	TypeCheckContext::unify_type_of_expr	P26	9f6fcd7b0499
 src/elaboration/typecheck.rs	TypeCheckContext::unify_type_of_expr_inner	D/A,P26,A21	c3b65b0be2be
 src/elaboration/typecheck.rs	TypeCheckContext::unify_tyvar	P26	0a6324d9bdcc
+src/error.rs	panic_notrace	P3,P4	1513a8a545d2
+src/error.rs	panic_with_msg	P3,P4	dd531b375c3d
 src/ffi.rs	CSignature::get_or_declare_in_module	D/A,P27,P29,P30	65818f246a29
 src/ffi.rs	CSignature::of_ffi_export	P26	ed5fe25c470a
 src/ffi.rs	c_boundary_tycon	D/A,P26,P28	2c5a42247af5
@@ -304,7 +308,6 @@ src/fixstd/builtin.rs	force_unique_or_assert_with_hole	D/A,P26,P27,P29,P30	d343a
 src/fixstd/builtin.rs	grow_size_array	P26	b9ef1d0f312f
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMArrayPunchBody	P3,P4	db626fb226dd
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS	P28	57cde69b0c03
-src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMCaptureProjectBody	P3,P4	230ff569a672
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeStructBody	P3,P4,P31,A19	c4dab170b90d
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeUnionBody	P3,P4	5ba9e8112ba7
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMStringBuf	P5,P6,P7	f40ea3f1cbb7
@@ -316,7 +319,7 @@ src/fixstd/builtin.rs	is_punched_array_tycon	P1,P2,P2a,P15,P16,P17,P18	86bb2a262
 src/fixstd/builtin.rs	is_unique_function	D/A,P26	46c96d982dfb
 src/fixstd/builtin.rs	make_array_name	P3,P4,P5,P6,P7,P7a,P7d,P7e	11ce81f652a5
 src/fixstd/builtin.rs	make_array_ty	P5,P6,P7	c2397973f0df
-src/fixstd/builtin.rs	make_array_tycon	P5,P6,P7,P7a,P7d,P7e,P31,A19	911fb67cd90e
+src/fixstd/builtin.rs	make_array_tycon	P3,P4,P5,P6,P7,P7a,P7d,P7e,P31,A19	911fb67cd90e
 src/fixstd/builtin.rs	make_array_unique_with_hole	P26,P27,P29,P30	112d914f574b
 src/fixstd/builtin.rs	make_arrow_name_abs	P1,P2,P2a,P3,P4,P5,P6,P7,P15,P16,P17,P18,P26	c751172b9601
 src/fixstd/builtin.rs	make_arrow_tycon	P1,P2,P26	b1d03c9ddab2
@@ -352,12 +355,13 @@ src/fixstd/std.fix	boxed_from_retained_ptr	D/A	-
 src/fixstd/std.fix	boxed_to_retained_ptr	D/A	-
 src/fixstd/std.fix	mutate_unique_io	D/A,P26	-
 src/fixstd/stdlib.rs	make_std_mod	D/A,P26,A21	6da374621d89
+src/generator.rs	Generator	P3,P4	67318a1cbe18
 src/generator.rs	Generator::add_global_object	D/A,P3,P4,P27,P28,P29,P30	c05ffb02bb44
 src/generator.rs	Generator::apply_lambda	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P28,P29,P30	53f3b45ec98b
 src/generator.rs	Generator::build_assert_unique	P26	0ebdad575d3d
 src/generator.rs	Generator::build_branch_by_is_unique	P26,P27,P29,P30	86f1e644d331
 src/generator.rs	Generator::build_branch_by_refcnt_state	P26	d75157785307
-src/generator.rs	Generator::build_capture_project	P3,P4,P27,P29,P30	d36efba9fc72
+src/generator.rs	Generator::build_capture_project	P27,P29,P30	d36efba9fc72
 src/generator.rs	Generator::build_ffi_call_core	P26	45120916e63b
 src/generator.rs	Generator::build_if_nonnull	P26	38a3eb268753
 src/generator.rs	Generator::build_is_refcnt_one	P26	826396fb13e6
@@ -380,13 +384,13 @@ src/generator.rs	Generator::declare_program_global	P3,P4,P27,P29,P30	ba2a67ad0c2
 src/generator.rs	Generator::emit_rc_helper_call	P26,P27,P29,P30	44aac53fb64a
 src/generator.rs	Generator::get_lambda_func_ptr	P27,P29,P30	7fb0c56a5446
 src/generator.rs	Generator::get_or_declare_global	P3,P4,P7c,P7f,P18a,P18b,P27,P29,P30	528a6fcc3916
-src/generator.rs	Generator::get_scoped_obj	P3,P4,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P27,P28,P29,P30	8931a2ab6068
-src/generator.rs	Generator::get_scoped_obj_field	P3,P4,P27,P29,P30	405bcba9e06d
-src/generator.rs	Generator::get_scoped_obj_noretain	P3,P4,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P27,P29,P30	d306c3e81007
+src/generator.rs	Generator::get_scoped_obj	P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P27,P28,P29,P30	8931a2ab6068
+src/generator.rs	Generator::get_scoped_obj_field	P27,P29,P30	405bcba9e06d
+src/generator.rs	Generator::get_scoped_obj_noretain	P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P27,P29,P30	d306c3e81007
 src/generator.rs	Generator::get_scoped_value	D/A,P3,P4,P7c,P7f,P18a,P18b,P27,P29,P30	c6a7bbca6b83
 src/generator.rs	Generator::mark_global	D/A,P26,P27,P28,P29,P30	a286105176a5
 src/generator.rs	Generator::mark_threaded	D/A,P26,P27,P29,P30	0a998e05aae3
-src/generator.rs	Generator::new	P27,P29,P30	af5d82b5074f
+src/generator.rs	Generator::new	P3,P4,P27,P29,P30	af5d82b5074f
 src/generator.rs	Generator::release	P27,P29,P30	266fa63b0bb8
 src/generator.rs	Generator::restore_stack	P26	be5150f899f2
 src/generator.rs	Generator::retain	P27,P28,P29,P30	7b5aac52138a
@@ -566,9 +570,9 @@ src/rc_ir/borrow.rs	used_later	P2a,P15,P16,P17,P18	2efecf89721b
 src/rc_ir/codegen.rs	Generator::bind_and_continue	P7a,P7d,P7e,P27,P29,P30	2ce49ba493cb
 src/rc_ir/codegen.rs	Generator::binding_fuses_into_return	P7a,P7d,P7e	a082312fb500
 src/rc_ir/codegen.rs	Generator::build_rc_closure	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P28,P29,P30	0a833fde2c28
-src/rc_ir/codegen.rs	Generator::eval_rc_expr_inner	P3,P4,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P26,P27,P29,P30	7eb323ab25c9
-src/rc_ir/codegen.rs	Generator::eval_rc_match	D/A,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b,P27,P29,P30	6e49f545164d
-src/rc_ir/codegen.rs	Generator::eval_rc_rhs	P3,P4,P7a,P7c,P7d,P7e,P7f,P18a,P18b,P27,P29,P30	bdc976128ed9
+src/rc_ir/codegen.rs	Generator::eval_rc_expr_inner	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P26,P27,P29,P30	7eb323ab25c9
+src/rc_ir/codegen.rs	Generator::eval_rc_match	D/A,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b,P27,P29,P30	6e49f545164d
+src/rc_ir/codegen.rs	Generator::eval_rc_rhs	P7a,P7c,P7d,P7e,P7f,P18a,P18b,P27,P29,P30	bdc976128ed9
 src/rc_ir/codegen.rs	Generator::implement_rc_function	D/A,P27,P29,P30	c52d57516388
 src/rc_ir/codegen.rs	Generator::implement_rc_global	D/A,P3,P4,P26,P27,P28,P29,P30	188a23cf64a9
 src/rc_ir/codegen.rs	Generator::implement_rc_program	P26,P27,P29,P30	3966bbffa8f8

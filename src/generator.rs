@@ -547,6 +547,7 @@ impl<'c> Scope<'c> {
 
 /// The state of code generation for one LLVM module: the module being written, where in it the next
 /// instruction goes, what is in scope there, and the caches shared across the whole module.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub struct Generator<'c, 'm> {
     /// The LLVM context every type and value built here belongs to.
     pub context: &'c Context,
@@ -698,6 +699,7 @@ impl<'c> OutPointer<'c> {
     }
 }
 
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 impl<'c, 'm> Generator<'c, 'm> {
     /// The module-level constant holding `s` as a null-terminated string. One constant is created
     /// per distinct string, and every later call for that string returns it again.
@@ -921,7 +923,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// * `imported` — the names whose home is another unit and which this module holds a copy of
     ///   for its own calls.
     /// * `shared_globals` — the globals a unit other than the one owning them reads.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(
         ctx: &'c Context,
         module: &'m Module<'c>,
@@ -1094,7 +1096,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The object `name` is bound to, handed over as it stands: the reference counts are left
     /// untouched, so the caller owns whatever reference the binding already carried.
-    // PROOF: P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
         self.get_scoped_value(name).accessor.get(self)
     }
@@ -1104,7 +1106,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
     /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
     /// copy. Every other read is plain.
-    // PROOF: P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var_name);
         let obj = val.accessor.get(self);
@@ -1119,7 +1121,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The value of field `field_idx` of the object `var` is bound to, read the way
     /// `get_scoped_obj` reads it.
-    // PROOF: P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj_field(
         self: &mut Self,
         var: &FullName,
@@ -2924,7 +2926,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// * `cap_tys` — the types of all the captured values, which give the capture object its struct
     ///   layout.
     /// * `result_ty` — the type of the projected value.
-    // PROOF: P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_capture_project(
         &mut self,
         cap_name: &FullName,

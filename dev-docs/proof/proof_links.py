@@ -249,11 +249,19 @@ def item_at(lines, index):
 SOURCES = {}
 
 
+# What a build leaves inside the tree. **A scan must answer the same thing on a tree that has been
+# built and on one that has not** -- the Fix build cache writes copies of `std.fix` under
+# `src/tests/**/.fixlang/tmp/`, and a scan that reads them answers differently depending on which
+# tests have run. Measured, one literal picked up 30 copies of the standard library.
+BUILT = {".fixlang", "target", ".git"}
+
+
 def sources_under(root):
     """The source files under `root`, read once: a scan re-reads the tree for every literal."""
     if root not in SOURCES:
         read = []
-        for directory, _, files in os.walk(root):
+        for directory, children, files in os.walk(root):
+            children[:] = [name for name in children if name not in BUILT]
             for file_name in sorted(files):
                 if file_name.endswith((".rs", ".fix", ".pest")):
                     path = os.path.join(directory, file_name)

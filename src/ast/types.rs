@@ -229,17 +229,17 @@ const C_SCALAR_NAMES: &[&str] = &[
 
 /// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
 /// it. A type constructor is determined by its name.
-// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
     /// The name the type is declared under.
     pub name: FullName,
 }
 
-// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyCon {
     /// The type constructor named `fullname`.
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(fullname: FullName) -> TyCon {
         TyCon { name: fullname }
     }

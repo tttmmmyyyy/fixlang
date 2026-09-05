@@ -374,7 +374,7 @@ pub fn make_funptr_tycon(arity: u32) -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))
 }
 
-// PROOF: P5, P6, P7, P7a, P7d, P7e, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P5, P6, P7, P7a, P7d, P7e, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_array_tycon() -> TyCon {
     TyCon::new(make_array_name())
 }
@@ -4742,7 +4742,7 @@ pub struct InlineLLVMCaptureProjectBody {
     pub(crate) assume_local: bool,
 }
 
-// PROOF: D/A, P3, P4, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMCaptureProjectBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {

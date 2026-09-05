@@ -244,7 +244,7 @@ impl NameSpace {
 
 /// An entity's name together with the path it is written under: `Std::Iterator::empty` is the name
 /// `empty` under the namespace `Std::Iterator`.
-// PROOF: P2a, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FullName {
     /// The path the entity is written under.
@@ -253,7 +253,7 @@ pub struct FullName {
     pub name: String,
 }
 
-// PROOF: P2a, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for FullName {
     /// Hashes the names of the namespace and the entity's name; `is_absolute` takes no part.
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -262,7 +262,7 @@ impl Hash for FullName {
     }
 }
 
-// PROOF: P2a, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Debug for FullName {
     /// Writes the full name as it is written in source, with the leading `::` of an absolute name.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -275,7 +275,7 @@ impl Debug for FullName {
     }
 }
 
-// PROOF: P2a, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialOrd for FullName {
     /// Orders by the rendered full name, such as `Std::Iterator::empty`; `is_absolute` takes no
     /// part.
@@ -284,7 +284,7 @@ impl PartialOrd for FullName {
     }
 }
 
-// PROOF: P2a, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Ord for FullName {
     /// Orders by the rendered full name, such as `Std::Iterator::empty`; `is_absolute` takes no
     /// part.
@@ -293,9 +293,10 @@ impl Ord for FullName {
     }
 }
 
-// PROOF: P2a, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl FullName {
     /// The name `name` under the namespace `ns`.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(ns: &NameSpace, name: &str) -> Self {
         Self {
             namespace: ns.clone(),
@@ -304,7 +305,7 @@ impl FullName {
     }
 
     /// The name `name` under the namespace `ns` spells out, the outermost name first.
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn from_strs(ns: &[&str], name: &str) -> Self {
         Self::new(&NameSpace::from_strs(ns), name)
     }
@@ -448,6 +449,7 @@ impl FullName {
     }
 
     /// Marks the name as one written with a leading `::`.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_absolute(&mut self) {
         self.namespace.is_absolute = true;
     }
