@@ -2203,7 +2203,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Run a `Std::FFI::Destructor` object's destructor function on the resource it holds, leaving
     /// what the run returns in the value field for the release that follows.
-    // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_run_destructor(&mut self, obj: &Object<'c>) {
         let fields = &obj.ty.toplevel_tycon_info(self.type_env()).fields;
         assert_eq!(

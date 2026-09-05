@@ -36,6 +36,7 @@ pub struct RcVar {
 
 /// A reference to a top-level RC IR function: a lifted lambda body, a global function, or an
 /// uncurried function-pointer version.
+// PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct FuncRef {
     /// The name the function is defined under. It is the whole of the reference: a function is
@@ -109,7 +110,7 @@ pub struct RcFunc {
 
 /// A variable together with a path into its value. Where the path is truncated to a reference-
 /// counting unit, the pair names one unit of that variable — the form the ownership tables hold.
-// PROOF: P1, P2, P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type VarPath = (FullName, FieldPath);
 
 /// An RC IR expression together with its source span. An expression's value type is that of the
@@ -166,7 +167,7 @@ pub enum RcExpr {
 /// the whole value. A `Retain`/`Release` path stops at the root of an unboxed-union subtree (a
 /// physical refcount operation must be tag-safe), whereas an analysis path may descend past a known
 /// tag.
-// PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type FieldPath = Vec<usize>;
 
 /// The boxed leaf whose runtime uniqueness an inline-LLVM op branches on: which operand carries the
@@ -200,7 +201,7 @@ pub enum RcTarget {
 /// catch-all arm, whose payload is the whole scrutinee.
 /// Code generation treats the last arm as the default case (mirroring the tag switch), so a
 /// catch-all is always the final arm.
-// PROOF: D/A, P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize)]
 pub struct MatchArm {
     /// The variant number this arm matches, or `None` for a catch-all arm.
@@ -214,7 +215,7 @@ pub struct MatchArm {
     pub body: RcExprNode,
 }
 
-// PROOF: D/A, P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl MatchArm {
     /// This arm with `body` in place of its own: it matches the same variant and binds the same
     /// payload, and evaluates to what `body` gives.

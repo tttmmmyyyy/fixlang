@@ -21,7 +21,7 @@ src/ast/inline_llvm.rs	LLVMGen::generate_tail	P27,P29,P30	2a615b2fb097
 src/ast/inline_llvm.rs	LLVMGen::observes_uniqueness	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26	b3c76bd06dac
 src/ast/inline_llvm.rs	LLVMGen::result_prov	D/A,P1,P2,P3,P4,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18c,P19,P20,P21,P22,P23,P24,P26,P27,P28,P29,P30,P31,A19	84846b9c9d85
 src/ast/inline_llvm.rs	LLVMGen::unique_check_operand	D/A	8b4dc048a673
-src/ast/name.rs	FullName	P1,P2,P2a,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,T	839e104531c8
+src/ast/name.rs	FullName	P1,P2,P2a,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,T	839e104531c8
 src/ast/name.rs	FullName::from_strs	P3,P4,P5,P6,P7	49c1c45e87ed
 src/ast/name.rs	FullName::is_local	P7c,P7f,P18a,P18b,P27,P29,P30,P31,A19	42fc496e725b
 src/ast/name.rs	FullName::local	P31,A19	47c06982e039
@@ -31,7 +31,7 @@ src/ast/name.rs	FullName::set_absolute	P3,P4	f47966be063d
 src/ast/name.rs	FullName::to_namespace	P27,P29,P30	bb19891f8d40
 src/ast/name.rs	FullName::to_string	P27,P29,P30	cf55213855f5
 src/ast/name.rs	Name	P2a,P15,P16,P17,P18	893e63cc0a6e
-src/ast/name.rs	NameSpace	P1,P2,P2a,P5,P6,P7,P15,P16,P17,P18,T	318448ada45f
+src/ast/name.rs	NameSpace	P1,P2,P2a,P5,P6,P7,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,T	318448ada45f
 src/ast/name.rs	NameSpace::from_strs	P5,P6,P7	6e45c9839cc7
 src/ast/name.rs	NameSpace::is_local	P7c,P7f,P18a,P18b	0e7ef63c88ab
 src/ast/name.rs	NameSpace::new	P5,P6,P7	8e4abd8e7834
@@ -124,8 +124,8 @@ src/ast/types.rs	TypeNode::set_tycon_tc	P1,P2	902476fa599e
 src/ast/types.rs	TypeNode::set_tyvar	P1,P2	fffec7e26a23
 src/ast/types.rs	TypeNode::set_tyvar_kind	P1,P2	f433b04ead6f
 src/ast/types.rs	TypeNode::toplevel_tycon	P1,P2,P2a,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18	9c1d47a34349
-src/ast/types.rs	TypeNode::toplevel_tycon_info	D/A,P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P26	ae62bc398a0a
-src/ast/types.rs	TypeNode::toplevel_tycon_satisfies	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P31,A19	704a2f7f7d60
+src/ast/types.rs	TypeNode::toplevel_tycon_info	D/A,P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P26	ae62bc398a0a
+src/ast/types.rs	TypeNode::toplevel_tycon_satisfies	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P31,A19	704a2f7f7d60
 src/ast/types.rs	TypeNode::traverser_name	P27,P29,P30	02ff04f0c8cd
 src/ast/types.rs	TypeNode::type_hash	D/A,P1,P2,P2a,P3,P4,P15,P16,P17,P18,T	19915b74d10a
 src/ast/types.rs	TypeNode::unpunched_field_types	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b	ecae1220e285
@@ -317,20 +317,20 @@ src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMMakeUnionBody	P3,P4	5ba9e8112ba
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMStringBuf	P5,P6,P7	f40ea3f1cbb7
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMStructSetBody	P3,P4	fec40e725f56
 src/fixstd/builtin.rs	impl LLVMGen for InlineLLVMUndefinedInternalBody	P3,P4	c63285c1709c
-src/fixstd/builtin.rs	is_array_tycon	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18	b0eefd8bc04d
-src/fixstd/builtin.rs	is_funptr_tycon	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18,P26,P31,A19	d27235989faf
+src/fixstd/builtin.rs	is_array_tycon	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24	b0eefd8bc04d
+src/fixstd/builtin.rs	is_funptr_tycon	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,P26,P31,A19	d27235989faf
 src/fixstd/builtin.rs	is_punched_array_tycon	P1,P2,P2a,P7a,P7d,P7e,P15,P16,P17,P18	86bb2a262fc0
 src/fixstd/builtin.rs	is_unique_function	D/A,P26	46c96d982dfb
 src/fixstd/builtin.rs	make_array_name	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e	11ce81f652a5
 src/fixstd/builtin.rs	make_array_ty	P5,P6,P7	c2397973f0df
-src/fixstd/builtin.rs	make_array_tycon	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e,P31,A19	911fb67cd90e
+src/fixstd/builtin.rs	make_array_tycon	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e,P18c,P19,P20,P21,P22,P23,P24,P31,A19	911fb67cd90e
 src/fixstd/builtin.rs	make_array_unique_with_hole	P26,P27,P29,P30	112d914f574b
 src/fixstd/builtin.rs	make_arrow_name_abs	P1,P2,P2a,P3,P4,P5,P6,P7,P15,P16,P17,P18,P26	c751172b9601
 src/fixstd/builtin.rs	make_arrow_tycon	P1,P2,P26	b1d03c9ddab2
 src/fixstd/builtin.rs	make_boxed_trait	P26	06b8f2c701f9
 src/fixstd/builtin.rs	make_dynamic_object_ty	P27,P29,P30	2a58de9d63f1
 src/fixstd/builtin.rs	make_funptr_name	P1,P2,P5,P6,P7,P7a,P7d,P7e,P26	34284cce7fb0
-src/fixstd/builtin.rs	make_funptr_tycon	P1,P2,P5,P6,P7,P7a,P7d,P7e,P26	c0fafed01fb9
+src/fixstd/builtin.rs	make_funptr_tycon	P1,P2,P5,P6,P7,P7a,P7d,P7e,P18c,P19,P20,P21,P22,P23,P24,P26	c0fafed01fb9
 src/fixstd/builtin.rs	make_punched_array_tycon	P1,P2,P7a,P7d,P7e	13766cb4a4ef
 src/fixstd/builtin.rs	make_string_lit	P5,P6,P7,P26	09f6b13cd2cf
 src/fixstd/builtin.rs	make_struct_union_unique	D/A,P26,P27,P28,P29,P30	d88c213c8b1a
@@ -343,9 +343,9 @@ src/fixstd/builtin.rs	punched_array_plug	P26	6413109c2c14
 src/fixstd/builtin.rs	realloc_array	P26	cce0d609efe9
 src/fixstd/builtin.rs	release_replaced_array	P27,P29,P30	8e0920a57380
 src/fixstd/builtin.rs	replaced_field_prov	D/A,P1,P2,P3,P4,P18c,P19,P20,P21,P22,P23,P24,P26,P31,A19	9cbd41e96b65
-src/fixstd/builtin.rs	run_io	P26	025574675c27
-src/fixstd/builtin.rs	run_io_or_ios_runner	D/A,P26	facee6a5f8e4
-src/fixstd/builtin.rs	run_ios_runner	D/A,P26,P28	6dbd7e735631
+src/fixstd/builtin.rs	run_io	P18c,P19,P20,P21,P22,P23,P24,P26	025574675c27
+src/fixstd/builtin.rs	run_io_or_ios_runner	D/A,P18c,P19,P20,P21,P22,P23,P24,P26	facee6a5f8e4
+src/fixstd/builtin.rs	run_ios_runner	D/A,P18c,P19,P20,P21,P22,P23,P24,P26,P28	6dbd7e735631
 src/fixstd/builtin.rs	set_array_common	P26	d0c3c3f96291
 src/fixstd/builtin.rs	swap_array_common	P26	b82aa1db5fcb
 src/fixstd/builtin.rs	tuple_defn	P1,P2,P5,P6,P7	87c0549cd2d4
@@ -375,7 +375,7 @@ src/generator.rs	Generator::build_mark_boxed_with	P26	29d28cfe7d71
 src/generator.rs	Generator::build_release_boxed_with	D/A,P28	7ba0984c5e0f
 src/generator.rs	Generator::build_retain	P26,P27,P28,P29,P30	a909bacfd43a
 src/generator.rs	Generator::build_return_object	P7a,P7d,P7e	e463028d9adb
-src/generator.rs	Generator::build_run_destructor	D/A,P26,P27,P28,P29,P30	add7538c029f
+src/generator.rs	Generator::build_run_destructor	D/A,P18c,P19,P20,P21,P22,P23,P24,P26,P27,P28,P29,P30	add7538c029f
 src/generator.rs	Generator::build_tail	P7a,P7d,P7e	70764459e093
 src/generator.rs	Generator::build_traverser_work	D/A,P26	7f44d98475e9
 src/generator.rs	Generator::build_traverser_work_nonnull_boxed	P26	9f9fe7c16357
@@ -413,7 +413,7 @@ src/generator.rs	get_scoped_value	P8,P9,P10,P11,P12,P13,P14,P14a,P14b	c6a7bbca6b
 src/generator.rs	global_accessor_name	P27,P29,P30	5fa06dc51788
 src/generator.rs	object_file_symbol_name	P27,P29,P30	227cdfd72912
 src/main.rs	GLOBAL	P2a,P15,P16,P17,P18	4382bb5a6e12
-src/misc.rs	Map	P1,P2,P2a,P3,P4,P5,P6,P7,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,T	acc6b79589ac
+src/misc.rs	Map	P1,P2,P2a,P3,P4,P5,P6,P7,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,T	acc6b79589ac
 src/misc.rs	Set	P1,P2,P2a,P5,P6,P7,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P31,A19	9c1db0b33e81
 src/misc.rs	grow_stack	D/A,P1,P2,P2a,P5,P6,P7,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b	9e286a06aa6b
 src/object.rs	FIELDS_BY_NAME	P2a,P15,P16,P17,P18	cbd73d77d530
@@ -486,8 +486,9 @@ src/parse/grammer.pest	type_name	P26	0103733f9915
 src/parse/parser.rs	parse_ffi_c_fun_ty	A21	55b0765b6306
 src/parse/sourcefile.rs	SourceFile	D/A,P2a,P3,P4,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,T	ff931fd7890d
 src/parse/sourcefile.rs	Span	P2a,P15,P16,P17,P18,T	d7328e762d53
-src/rc_ir/ast.rs	FieldPath	P1,P2,P2a,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18	dd85d967b3d7
-src/rc_ir/ast.rs	MatchArm	D/A,P1,P2,P2a,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,T	76b0aa2eadf8
+src/rc_ir/ast.rs	FieldPath	P1,P2,P2a,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24	dd85d967b3d7
+src/rc_ir/ast.rs	FuncRef	P18c,P19,P20,P21,P22,P23,P24	ab15c21d8a88
+src/rc_ir/ast.rs	MatchArm	D/A,P1,P2,P2a,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,T	76b0aa2eadf8
 src/rc_ir/ast.rs	MatchArm::with_body	P2a,P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,P31,A19	5b7fed80948d
 src/rc_ir/ast.rs	RcExpr	D/A,P1,P2,P2a,P5,P6,P7,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	d1fa97d4a7df
 src/rc_ir/ast.rs	RcExprNode	P2a,P15,P16,P17,P18,P18c,P19,P20,P21,P22,P23,P24,P31,A19,T	815e164e90eb
@@ -500,7 +501,7 @@ src/rc_ir/ast.rs	RcState::dispatches	P26	c49de7886ee2
 src/rc_ir/ast.rs	RcState::name_suffix	P27,P29,P30	50eb71da7943
 src/rc_ir/ast.rs	RcVar	P1,P2,P2a,P7c,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,T	f263e9675e35
 src/rc_ir/ast.rs	UniqueCheckOperand	D/A	630f3ad830a8
-src/rc_ir/ast.rs	VarPath	P1,P2,P2a,P5,P6,P7,P7c,P7f,P15,P16,P17,P18,P18a,P18b	5642ca105edf
+src/rc_ir/ast.rs	VarPath	P1,P2,P2a,P5,P6,P7,P7c,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	5642ca105edf
 src/rc_ir/ast.rs	for_each_node	P7a,P7d,P7e,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26	a392dcd27b5d
 src/rc_ir/ast.rs	for_each_node_inner	P7a,P7c,P7d,P7e,P7f,P18a,P18b	6aac404ab29a
 src/rc_ir/ast.rs	for_each_var	P7a,P7d,P7e	f43262a7cb31
@@ -593,7 +594,7 @@ src/rc_ir/dead_code_elim.rs	eliminate_unreachable	P27,P29,P30,T	7c5805fda609
 src/rc_ir/leaf_map.rs	LeafMap	P1,P2,P2a,P15,P16,P17,P18	f4c4713895fa
 src/rc_ir/leaf_map.rs	LeafMap::build_shape	P1,P2,P3,P4,P5,P6,P7,P7c,P7f,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P31,A19	cf8bc406897e
 src/rc_ir/leaf_map.rs	LeafMap::get	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	77cdac496950
-src/rc_ir/leaf_map.rs	LeafMap::leaves	P5,P6,P7,P7c,P7f,P18a,P18b	7e6e2791c99a
+src/rc_ir/leaf_map.rs	LeafMap::leaves	P5,P6,P7,P7c,P7f,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	7e6e2791c99a
 src/rc_ir/leaf_map.rs	LeafMap::leaves_under	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	c261b1b68e02
 src/rc_ir/leaf_map.rs	LeafMap::map_leaves_under	P1,P2,P18c,P19,P20,P21,P22,P23,P24	1c2a6da25c4b
 src/rc_ir/leaf_map.rs	LeafMap::uniform	P1,P2,P5,P6,P7,P18c,P19,P20,P21,P22,P23,P24,P31,A19	1f351bcd0c72
@@ -663,7 +664,7 @@ src/rc_ir/provenance.rs	Provenance::build_shape	P1,P2,P3,P4,P7c,P7f,P18a,P18b,P1
 src/rc_ir/provenance.rs	Provenance::fresh_under	P1,P2,P3,P4,P18c,P19,P20,P21,P22,P23,P24,P26	2efd8093d082
 src/rc_ir/provenance.rs	Provenance::leaf_origins_at	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P31,A19	0f5932407146
 src/rc_ir/provenance.rs	Provenance::leaf_origins_under	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P31,A19	06bbc45ec504
-src/rc_ir/provenance.rs	Provenance::leaves	P5,P6,P7,P7c,P7f,P18a,P18b	2b9d265dedae
+src/rc_ir/provenance.rs	Provenance::leaves	P5,P6,P7,P7c,P7f,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	2b9d265dedae
 src/rc_ir/provenance.rs	Provenance::set_leaves_under	P1,P2,P18c,P19,P20,P21,P22,P23,P24	6d2380350498
 src/rc_ir/provenance.rs	Provenance::uniform	P1,P2,P3,P4,P5,P6,P7,P18c,P19,P20,P21,P22,P23,P24,P31,A19	b868bec59aed
 src/rc_ir/provenance.rs	Provenance::uniform_bottom	P1,P2,P3,P4,P18c,P19,P20,P21,P22,P23,P24	e195f0090e0f

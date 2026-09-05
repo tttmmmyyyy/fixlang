@@ -1412,7 +1412,7 @@ impl TypeNode {
 
     /// Whether the top-level type constructor of this type satisfies `pred`. A type variable and an
     /// associated type application have no such constructor, and satisfy nothing.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P15, P16, P17, P18, P18a, P18b, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn toplevel_tycon_satisfies(&self, pred: impl FnOnce(&TyCon) -> bool) -> bool {
         match self.toplevel_tycon() {
             Some(tc) => pred(tc.as_ref()),
@@ -1511,7 +1511,7 @@ impl TypeNode {
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
     /// parameters and fields. Panics for a closure type, a type variable, or a type constructor
     /// absent from `type_env`.
-    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P15, P16, P17, P18, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
         assert!(!self.is_closure());
         let tycon = self.toplevel_tycon().unwrap();

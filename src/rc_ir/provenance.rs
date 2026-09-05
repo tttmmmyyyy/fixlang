@@ -141,7 +141,7 @@ impl Provenance {
     }
 
     /// The source of every boxed leaf, in no particular order (the paths are not reported).
-    // PROOF: P5, P6, P7, P7c, P7f, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P5, P6, P7, P7c, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn leaves(&self) -> impl Iterator<Item = &LeafOrigins> {
         self.0.leaves()
     }

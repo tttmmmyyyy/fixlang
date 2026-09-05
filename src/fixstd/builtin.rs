@@ -369,12 +369,12 @@ pub fn make_funptr_name(arity: u32) -> Name {
     format!("{}{}", FUNPTR_NAME, arity)
 }
 
-// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_funptr_tycon(arity: u32) -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))
 }
 
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_array_tycon() -> TyCon {
     TyCon::new(make_array_name())
 }
@@ -385,7 +385,7 @@ pub fn make_array_name() -> FullName {
 }
 
 // If given tycon is function pointer, returns its arity
-// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
     if tc.name.namespace != NameSpace::new(vec![STD_NAME.to_string()]) {
         return None;
@@ -412,7 +412,7 @@ pub fn is_destructor_object_tycon(tc: &TyCon) -> bool {
 }
 
 // Returns whether given tycon is array
-// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_array_tycon(tc: &TyCon) -> bool {
     *tc == make_array_tycon()
 }
@@ -9115,7 +9115,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Run either an IO or an IOState runner based on the type of the given value.
-// PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
         run_io(gc, io)
@@ -9125,7 +9125,7 @@ pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<
 }
 
 /// Runs the action held by a value of type `IO a` and returns its result.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     let res_ty = io.ty.collect_type_arguments().into_iter().next().unwrap();
     let runner = io.extract_field(gc, 0);
@@ -9139,7 +9139,7 @@ pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object
 
 /// Given a value of type `IOState -> (IOState, a)`, runs it on `ios`, or on a fresh `IOState` when
 /// `ios` is `None`, and returns the resulting `IOState` and `a`.
-// PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_ios_runner<'b, 'm, 'c>(
     gc: &mut Generator<'c, 'm>,
     runner: &Object<'c>,
