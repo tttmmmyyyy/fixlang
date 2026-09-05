@@ -218,6 +218,13 @@ SCAN src/ `of_candidates(`
   = src/rc_ir/ownership.rs: origin_from_leaves_under -- 末尾で `here` を identity に渡す
   = src/rc_ir/ownership.rs: origin_inner -- `Binding::Join` の腕で `(var, path)` を identity に渡す
 
+**前提 `origin_from_leaves_under` を呼ぶ在りか** --- 名前 `origin_from_leaves_under` が現れる項目は
+次で尽きる。
+
+SCAN src/ `origin_from_leaves_under`
+  = src/rc_ir/ownership.rs: origin_from_leaves_under -- 定義
+  = src/rc_ir/ownership.rs: origin_inner -- `Binding::Llvm` の腕の呼び出しと、その直前の注釈
+
 **前提 `VarTable::closure_targets` の在りか** --- 名前 `closure_targets` が現れる項目は次で尽きる。
 `src/rc_ir/provenance.rs` の項目が持つのは `Interpreter` の同名の欄であって `VarTable` のそれではない。
 
@@ -553,9 +560,9 @@ leaf であり、`decl.leaf_origins_at(σ).and_then(as_arg_projection)` が `Non
 `identity()` を先頭にそれと異なる `candidates()` の元を続けた列なので、`cand(y, ρ')` の各元についても同じ
 ことが言える。
 
-**主語は名前であって実行路の上のスロットではない。** `origin_inner` の `Binding::Join` の腕は**すべての
-アーム**の結果へ再帰するので、`act(y, ρ')` は 1 つの実行路が選ばなかったアームの結果も含む。
-この命題は `origin` の再帰そのものの上に立つので、その全部に当たる。
+**主語は任意の名前である。** `origin_inner` の `Binding::Join` の腕は**すべてのアーム**の結果へ再帰する
+ので、`act(y, ρ')` は 1 つの実行路が選ばなかったアームの結果も含む。この命題は `origin` の再帰そのものの
+上に立つので、その全部に当たる。
 
 <1>1. `origin(vars, type_env, y, ρ')` は panic せずに答えを返し、停止する。
   `vars.bindings` が `y` を鍵に持つとき、その鍵は `VarTable::of` が入れるパラメータ・capture の名前か、
@@ -2147,19 +2154,21 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
     P2 より `origin` の再帰は有限なので、その再帰の上の帰納で示す。`Origin::Join` の値を作るのは
     `Origin::of_candidates` の `candidates.len() ≥ 2` の腕だけであり、その `identity` は引数として
     渡された `VarPath` である。前提 `Origin::of_candidates` を呼ぶ在りか より、その定義のほかに
-    `of_candidates` を呼ぶ式が在る項目は 2 つである。1 つは `origin_inner` の
+    `of_candidates` を呼ぶ式が在るのは `origin_inner` と `origin_from_leaves_under` である。前者は
     `Binding::Join(arm_results)` の腕で、渡すのは `(var, path)` であり、その `var` は `bindings` が
-    `Binding::Join` を持つ変数である。もう 1 つは `origin_from_leaves_under` の末尾で、渡すのは引数
-    `here` であり、その唯一の呼び出し元は `origin_inner` の `Binding::Llvm` の腕で
+    `Binding::Join` を持つ変数である。後者は末尾で、渡すのは引数
+    `here` である。前提 `origin_from_leaves_under` を呼ぶ在りか より、その定義のほかに
+    `origin_from_leaves_under` の名前が現れるのは `origin_inner` だけであり、その `Binding::Llvm` の腕が
     `here_identity = (var, path)` を渡すので、その `var` は `bindings` が `Binding::Llvm` を持つ変数で
     ある。`origin_inner` の残る腕は、`Origin` を新しく作らずに再帰の返り値をそのまま返すか
     (`Binding::Move`、catch-all の `Payload`、unbox の `Field` と `Payload`、単一の `Arg` を宣言する
     `Llvm`)、`Origin::Exactly` を返すかである。`origin_from_leaves_under` の「`reached` の全元が
     等しい」腕も再帰の返り値をそのまま返し、`reached` に自分で積むのは `Origin::Exactly(here)` だけで
-    ある。`origin` の memo は答えをそのまま記録して返す。よって返る `Join` は上の 2 か所のどちらかが
-    作ったものか、再帰の返り値をそのまま運んだものであり、後者については帰納法の仮定がその返り値に
+    ある。`origin` の memo は答えをそのまま記録して返す。よって返る `Join` は上の 2 つの呼び出しの
+    どちらかが作ったものか、再帰の返り値をそのまま運んだものであり、後者については帰納法の仮定がその返り値に
     ついて言明を与えるので、どちらの場合も `identity` は上の 2 種のどちらかである。
     BY <ref id=0edb0ba/>, 帰納法の仮定, 前提 `Origin::of_candidates` を呼ぶ在りか,
+       前提 `origin_from_leaves_under` を呼ぶ在りか,
        CODE src/rc_ir/ownership.rs: origin, origin_inner, origin_from_leaves_under,
        Origin::of_candidates, Origin::identity
   <2>3. QED
@@ -2497,12 +2506,11 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
     BY CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_symbol,
        CODE src/ast/types.rs: TypeNode::is_funptr
   <2>2. `Lowerer::lower_lam` は `fresh_closure_ref()` が作る名前を鍵に入れる。`src/rc_ir/lower.rs` で
-        `funcs` に鍵を入れるのはこの 2 か所だけである。この鍵の関数を作るのは `lower_lambda_as_function`
-        であり、その `fn_ty` は `Expr::Lam` の節点が持つ型 `lam.type_` -- 以下 `lam_ty` -- である。その
-        `capture` は `lam_ty.is_closure()` が真のときだけ `Some` である (偽のときは `captures` が空で
-        あることを表明して `None` を入れる)。
-    前提 関数の表へ鍵を入れる在りか が挙げる項目のうち `src/rc_ir/lower.rs` のものは、`lower_program` と
-    `Lowerer::lower_lam` である。
+        `funcs` に鍵を入れるのは `lower_program` と `Lowerer::lower_lam` である。`Lowerer::lower_lam` の
+        鍵の関数を作るのは `lower_lambda_as_function` であり、その `fn_ty` は `Expr::Lam` の節点が持つ型
+        `lam.type_` -- 以下 `lam_ty` -- である。その `capture` は `lam_ty.is_closure()` が真のときだけ
+        `Some` である (偽のときは `captures` が空であることを表明して `None` を入れる)。
+    前提 関数の表へ鍵を入れる在りか が挙げる項目のうち `src/rc_ir/lower.rs` のものは、この 2 つである。
     BY 前提 関数の表へ鍵を入れる在りか, CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_lam,
        Lowerer::fresh_closure_ref, Lowerer::lower_lambda_as_function,
        CODE src/ast/types.rs: TypeNode::is_closure
@@ -2513,7 +2521,7 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
     `lower_program` の出力から `borrow_ify` の入力までに走るパスはこの 3 つである。`simplify` は
     `prog.funcs.values_mut()` の本体を書き換え、`insert_rc` は同じ鍵で `Map` を組み直し、
     `split_rc_units` は `prog.funcs.values_mut()` の本体を書き換える。前提 関数の表へ鍵を入れる在りか が
-    挙げる残る 4 項目は、この区間の外にある -- `borrow_ify` はこのパス自身であり、
+    挙げる残る項目は、この区間の外にある -- `borrow_ify` はこのパス自身であり、
     `unique_check_elim::specialize` と `locality::specialize` は `optimize_rc_program` の中で
     `borrow_ify` より後に走り、`divide_among_units` は `build_object_files` の中で
     `optimize_rc_program` より後に走る。
