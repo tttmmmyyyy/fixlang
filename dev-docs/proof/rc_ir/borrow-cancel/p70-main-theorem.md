@@ -4,10 +4,10 @@
 名指すコミット)
 
 このファイルは主定理 T を証明する。T は合成であり、引用する命題の**言明**だけを使う (証明は
-読まない)。このファイルが引くのは次のものである。**P2a・A6・A11 と、2 つの `EXT` (非公開の欄に
-触れられる範囲、条件としてしか読まれない引数) を除き、どれも第 2 節の `BY` の行が引く。その残りを
-引くのは第 4 節の開発ビルドでだけ走る検査を述べる項であり、そこだけである。`EXT 計算は読んだ値で
-決まる` と、第 4 節が置く `前提 内部可変性の在りか` は、その項と `<1>1` の `<2>2a` の両方が引く。**
+読まない)。このファイルが引くのは次のものである。**P2a・A6・A11 と、3 つの `EXT` (非公開の欄に
+触れられる範囲、計算は読んだ値で決まる、条件としてしか読まれない引数) と、第 4 節が置く
+`前提 内部可変性の在りか` を除き、どれも第 2 節の `BY` の行が引く。その残りを引くのは第 4 節の
+開発ビルドでだけ走る検査を述べる項であり、そこだけである。**
 
 - **命題**: P2a・P9・P12・P14・P14a・P14b・P22・P23・P24・P26・P27。同じ項が P9 も引く -- P2a がその
   `vars` に置く制限を、借用版の本体について満たすためである。
@@ -35,18 +35,22 @@ T の言明はこのほかに、D7・D21・D25・D26・D31 を名前で引く。
 
 ## 1. T の言明
 
-以下、`p0` を `borrow_ify` の入力とし、
+以下、`optimize_rc_program` の 1 回の呼び出しに現れる 3 つの値に名前を付ける。
 
-    p1 == borrow_ify(p0, type_env, develop_mode)
-    p2 == cancel(p1, type_env)
+    p0 == その呼び出しが `borrow_ify` に渡した `RcProgram`
+    p1 == その呼び出しで `borrow_ify` が返した `RcProgram`
+    p2 == その呼び出しで `cancel` が返した `RcProgram`
 
-と書く。この 3 つの名前はこのファイルの中でだけ使う。
+**3 つとも実行の中の値であって、パスを数学の関数として当てたものではない。** `<1>1` が、この 3 つが
+`p1 = borrow_ify(p0, type_env, develop_mode)` と `p2 = cancel(p1, type_env)` を満たすことを、
+2 つの呼び出しの位置とそこを流れる `prog` の値から読む。この 3 つの名前はこのファイルの中でだけ使う。
 
 **T** (パイプラインが保存するもの)
 
-    ASSUME NEW p0 : RcProgram, NEW type_env : TypeEnv, NEW develop_mode : bool,
-      H0. `p0` は、`optimize_rc_program` の 1 回の呼び出しにおいて `split_rc_units` を呼んだ後の
-          `prog` の値であり、`type_env` はその呼び出しの引数 `type_env`、`develop_mode` は
+    ASSUME NEW p0 : RcProgram, NEW p1 : RcProgram, NEW p2 : RcProgram,
+      NEW type_env : TypeEnv, NEW develop_mode : bool,
+      H0. `p0`・`p1`・`p2` は、`optimize_rc_program` の 1 回の呼び出しについて上の 3 行が名前を
+          付けた値であり、`type_env` はその呼び出しの引数 `type_env`、`develop_mode` は
           その呼び出しの `config.develop_mode` である。
       H1. `p0` について A1 が成り立つ。すなわち `p0` は D12 の意味で RC 規律を満たし、
           `p0` のすべての関数の `borrowed_units` は空である。
@@ -200,7 +204,7 @@ Rust 標準ライブラリの反復子について、次の 5 つの契約を使
 
 ## 2. 証明
 
-### <1>1. `optimize_rc_program` が `borrow_ify` に渡すプログラムは `p0`、`cancel` に渡すプログラムは `p1` であり、`cancel` の返り値は `p2` である
+### <1>1. `p1` は `borrow_ify` が `p0` を入力として返した値であり、`p2` は `cancel` が `p1` を入力として返した値である -- すなわち `p1 = borrow_ify(p0, type_env, develop_mode)`、`p2 = cancel(p1, type_env)`
 
   **<2>1.** `optimize_rc_program` の本体には、次の 6 行がこの順で連続して現れる。
 
@@ -271,25 +275,27 @@ Rust 標準ライブラリの反復子について、次の 5 つの契約を使
 
   **<2>3. QED**
 
-  H0 が固定するのは `optimize_rc_program` の 1 回の呼び出しである。その呼び出しにおいて、
-  `split_rc_units(&mut prog, type_env)` の直後の束縛 `prog` の値が `p0` であり、その呼び出しの
-  引数 `type_env` が T の `type_env`、その呼び出しの `config.develop_mode` が T の `develop_mode`
-  である。次の文 `validate(&prog, "after split_rc_units")` は `prog` を変えない (`<2>2`)。`if` の
-  条件式も `prog` を読まない (`<2>1`)。よって `if` の本体の 1 行目に着く時点の `prog` は `p0` で
+  H0 が固定するのは `optimize_rc_program` の 1 回の呼び出しである。`<2>1` より、その本体で
+  `borrow_ify` を呼ぶのは引用した 4 行目だけ、`cancel` を呼ぶのは 6 行目だけである。よって第 1 節が
+  名前を付けた 3 つの値は、この 2 行が渡し、返した値である -- `p0` は 4 行目の第 1 引数、`p1` は
+  4 行目の返り値、`p2` は 6 行目の返り値である。
+
+  4 行目 `prog = borrow_ify(&prog, type_env, config.develop_mode)` は、第 2 引数にその呼び出しの
+  `type_env` を、第 3 引数にその呼び出しの `config.develop_mode` を渡す。H0 よりこの 2 つは T の
+  `type_env` と T の `develop_mode` であるから、`p1 = borrow_ify(p0, type_env, develop_mode)` で
   ある。
 
-  その 1 行目 `prog = borrow_ify(&prog, type_env, config.develop_mode)` は、第 1 引数に `p0` を、
-  第 2 引数にその呼び出しの `type_env` を、第 3 引数にその呼び出しの `config.develop_mode` を
-  渡す。H0 よりこの 3 つは順に `p0`・T の `type_env`・T の `develop_mode` であるから、この行の後の
-  `prog` は第 1 節の `p1` である。
+  4 行目の後、束縛 `prog` の値は `p1` である。5 行目 `validate(&prog, "after borrow_ify")` は
+  この束縛にも D1 の 3 成分にも書かない (`<2>2`)。`<2>1` よりこの 2 行の間に `prog` に書く文は
+  ほかに無いので、6 行目 `prog = cancel(&prog, type_env)` が第 1 引数に受け取るのは `p1` である。
+  その第 2 引数は 4 行目と同じ `type_env`、すなわち T の `type_env` であるから、
+  `p2 = cancel(p1, type_env)` である。
 
-  2 行目 `validate(&prog, "after borrow_ify")` は `prog` を変えない (`<2>2`)。よって 3 行目
-  `prog = cancel(&prog, type_env)` が受け取るのは `p1` であり、その第 2 引数は `p1` を作った行と
-  同じ `type_env`、すなわち T の `type_env` なので、その返り値は第 1 節の `p2` である。`<2>1` より、
-  この 6 行の間に `prog` に書く文はほかに無く、`borrow_ify` と `cancel` を呼ぶ位置もそれぞれ
-  この 1 つである。
+  **`p0` は `split_rc_units` の直後の `prog` と D1 の 3 成分について等しい。** 3 行目の `if` の
+  条件式は `prog` を読まず (`<2>1`)、その手前の `validate(&prog, "after split_rc_units")` は束縛にも
+  3 成分にも書かない (`<2>2`)。
 
-    BY <2>1, <2>2, H0
+    BY <2>1, <2>2, H0, <ref id=1c00537/>
 
 ### <1>2. `p0` は D12 の意味で RC 規律を満たす
 
@@ -302,7 +308,8 @@ Rust 標準ライブラリの反復子について、次の 5 つの契約を使
 P14 の言明の前提は 3 つである -- 入力が D12 の意味で RC 規律を満たすこと、入力が A1 を満たすこと、
 入力が A2 を満たすこと。この 3 つを `p0` について与えるのが `<1>2`、H1、H2 である。P14 の結論は
 `borrow_ify` の出力が D12 の意味で RC 規律を満たすことであり、その出力は `p1` である
-(第 1 節の `p1` の定義)。
+(第 1 節の `p0` と `p1` の定義 -- `p0` はその呼び出しが `borrow_ify` に渡した値、`p1` は
+`borrow_ify` が返した値である)。
 
     BY <1>2, H1, H2, <ref id=6d644e6/>
 
@@ -997,9 +1004,9 @@ RC 規律を壊さない」であって、「コード生成に届くプログ�
 この 3 つのパスについて P14・P23 に当たる命題が要る。
 
 `borrow_ify` と `cancel` が走るのは `config.enable_borrow_optimization()` が真のときである
-(`<1>1` の `<2>1`)。**T の言明はこの述語を前提に置かない。**T の主語 `p2` は第 1 節の 2 つの等式が
-定める値であり、`<1>1` が読むのはこの 2 つを呼ぶ位置とそこを流れる `prog` の値である。走るかどうかを
-決めるのがこの述語であり、走らないビルドでは `p2` を計算する段がそもそも無い。
+(`<1>1` の `<2>1`)。**T の言明はこの述語を前提に置かない。**T の主語 `p2` は第 1 節が名前を付けた
+実行の中の値であり、`<1>1` が読むのは 2 つのパスを呼ぶ位置とそこを流れる `prog` の値である。走るか
+どうかを決めるのがこの述語であり、走らないビルドでは `p0`・`p1`・`p2` を作る呼び出しがそもそも無い。
 この述語は「`-O max` 以上」と同値であり、それは 3 つの関数を辿って出る。
 `enable_borrow_optimization` は `self.runs_from(FixOptimizationLevel::Max)` を返す
 (`CODE src/configuration.rs: Configuration::enable_borrow_optimization`)。`runs_from(level)` は
