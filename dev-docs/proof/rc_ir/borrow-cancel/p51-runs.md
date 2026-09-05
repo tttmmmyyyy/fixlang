@@ -66,7 +66,7 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
 
 ### L0d (名前で得た LLVM 関数が実装する `RcFunc`) <!--#3eee4d8-->
 
-**L0d.** ASSUME  NEW `Q`: RcProgram -- コード生成が単位へ分割するプログラム (D24)、 <!--#25f7f06-->
+**L0d.** ASSUME  NEW `Q`: RcProgram -- コード生成が単位へ分割するプログラム (D24)、
                  **(N3)** `Q` の `funcs` の各鍵の名前は局所名 (`FullName::is_local` が真) ではなく、
                  コード生成が読む `global_types` はその名前を持たないか、funptr 型で持つ、
                  A22
@@ -412,7 +412,7 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
 (`CODE src/rc_ir/ownership.rs: VarTable`, `VarTable::of`, `VarTable::body_only`)。以下で
 `vars.closure_targets` と `vars.bindings` と言うのはこの表の欄である。
 
-**L0b.** ASSUME  NEW `Q`: RcProgram、 <!--#890138b-->
+**L0b.** ASSUME  NEW `Q`: RcProgram、
                  **(N1)** `Q` のすべての束縛変数の名前は相異なり、`Q` の `funcs` のどの鍵の名前とも
                  異なる、
                  **(N2)** `Q` の変数の使用は、その位置でスコープに入っている束縛に解決する、
@@ -1920,7 +1920,7 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
 
 ### L4 (`H` の分解) <!--#61b8f53-->
 
-**L4.** ASSUME  NEW `P`: RcProgram、 <!--#7ea4752-->
+**L4.** ASSUME  NEW `P`: RcProgram、
                 **(G0)** `P` は `insert_rc` の入力から `cancel` の出力までのどこかに現れる、
                 **(G1)** `P` は D12 の意味で RC 規律を満たす、
                 NEW `ρ`: `P` の実行 (D24)、
