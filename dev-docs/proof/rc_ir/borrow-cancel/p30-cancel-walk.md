@@ -1519,10 +1519,7 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
         `owns_object` だけであり、`owns_object` が呼ぶ `borrow.rs` の関数は無い。
     BY <2>1, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
        CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
-  <2>3. `units_under` の 1 回の呼び出しの中で走る関数の本文は、`src/rc_ir/ownership.rs`・
-        `src/ast/types.rs`・`src/ast/program.rs`・`src/elaboration/typecheck.rs`・
-        `src/fixstd/builtin.rs` と標準ライブラリに住む。**`src/rc_ir/borrow.rs` はこの一覧に無いので、
-        この呼び出しの中で `borrow.rs` の関数は 1 つも走らない。**
+  <2>3. `units_under` の 1 回の呼び出しの中で `borrow.rs` の関数は 1 つも走らない。
 
         走る `ownership.rs` の関数は `units_under`・`subtree_type`・`rc_units`・`rc_units_go`・
         `unit_step`・`held_field_type` の 6 つで尽きる。`units_under` の本文が呼ぶ `ownership.rs` の
@@ -1530,38 +1527,33 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
         `held_field_type`、`rc_units` が呼ぶのは `rc_units_go`、`rc_units_go` が呼ぶのは `unit_step` と
         自身であり、`unit_step` と `held_field_type` が呼ぶ `ownership.rs` の関数は無い。
 
-        この 6 つが呼ぶ `ownership.rs` の外の項目は次のとおりである。`unit_step` は `TypeNode` の
+        この 6 つが `ownership.rs` の外へ出る先は次のとおりである。`unit_step` は `TypeNode` の
         `is_fully_unboxed`・`is_closure`・`is_box`・`is_union`・`is_array`・`is_punched_array`・
         `toplevel_tycon_info`・`unpunched_field_types` を呼び、`src/constants.rs` の定数
-        `CLOSURE_CAPTURE_IDX`・`CLOSURE_FIELD_COUNT` を読む。残る 5 つが呼ぶのは標準ライブラリの
-        関数だけである。
+        `CLOSURE_CAPTURE_IDX`・`CLOSURE_FIELD_COUNT` を読む。残る 5 つが呼ぶのは `Map`・`Set`・`Vec` と
+        スライスの操作だけである。この 8 つのメソッドから届く `src/ast/types.rs` の外の項目は、
+        `src/fixstd/builtin.rs` の `make_arrow_name_abs`・`is_array_tycon`・`is_funptr_tycon`・
+        `is_punched_array_tycon`・`make_unit_ty`、`src/ast/program.rs` の `TypeEnv::tycons` と
+        `TypeEnv::unwrapped_newtype_info`、`src/elaboration/typecheck.rs` の `Substitution` の
+        メソッド、`src/ast/name.rs` の `FullName` と `NameSpace` の実装、そして
+        `src/parse/sourcefile.rs` の `Span` と `SourceFile` の実装である。すなわち、この呼び出しの中で
+        走る関数の本文は `src/rc_ir/ownership.rs`・`src/ast/types.rs`・`src/ast/program.rs`・
+        `src/ast/name.rs`・`src/parse/sourcefile.rs`・`src/elaboration/typecheck.rs`・
+        `src/fixstd/builtin.rs` と、`Map`・`Set`・`Vec`・スライスの操作に住む。
 
-        `TypeNode` のこの 8 つのメソッドから届く `src/ast/types.rs` の外の項目は、3 つのファイルに
-        住む。`is_closure`・`is_array`・`is_funptr`・`is_punched_array` は `toplevel_tycon_satisfies`
-        に述語を渡し、その述語が `src/fixstd/builtin.rs` の `make_arrow_name_abs`・`is_array_tycon`・
-        `is_funptr_tycon`・`is_punched_array_tycon` を呼ぶ。`toplevel_tycon_info` は
-        `src/ast/program.rs` の `TypeEnv::tycons` を呼び、`unwrap_newtypes_node` は同ファイルの
-        `TypeEnv::unwrapped_newtype_info` と `src/fixstd/builtin.rs` の `make_unit_ty` を呼ぶ。
-        `declared_field_types` は `src/elaboration/typecheck.rs` の `Substitution::default`・
-        `Substitution::single`・`Substitution::merge`・`Substitution::substitute_type` を呼ぶ。
-
-        `src/ast/types.rs` の中の呼び出しはこう閉じる。`is_box` は `is_unbox` を、`is_unbox` は
-        `is_closure` と `toplevel_tycon_info` を、`is_union` は `toplevel_tycon_info` を、
-        `toplevel_tycon_info` は `is_closure` と `toplevel_tycon` を、`toplevel_tycon_satisfies` は
-        `toplevel_tycon` を、`toplevel_tycon` は自身を、`is_fully_unboxed` は `is_box`・`is_closure`・
-        `is_array`・`is_funptr`・`unpunched_field_types` と自身を、`unpunched_field_types` は
-        `toplevel_tycon_info` と `instance_field_types` を、`instance_field_types` は
-        `declared_field_types` と `unwrap_newtypes_memoized` を、`declared_field_types` は
-        `collect_type_arguments` を、`unwrap_newtypes_memoized` は `unwrap_newtypes_node` と
-        `impl Hash for TypeNode` を、`unwrap_newtypes_node` は `toplevel_tycon`・
-        `collect_type_arguments`・`declared_field_types`・`set_tyapp_fun`・`set_tyapp_arg` と
-        `unwrap_newtypes_memoized` を、`collect_type_arguments` は自身を、`substitute_type` は
-        `set_source_if_none`・`get_source`・`set_tyapp_fun`・`set_tyapp_arg`・`set_assocty_args` と
-        自身を、`set_source_if_none` は `set_source` と `get_source` を、`impl Hash for TypeNode` は
-        `type_hash` を呼ぶ。`type_hash`・`set_source`・`set_tyapp_fun`・`set_tyapp_arg`・
-        `set_assocty_args`・`get_source`・`Substitution` の 4 つが呼ぶのは標準ライブラリの関数だけで
-        ある。
-    BY CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
+        **`borrow.rs` の項目を名指す式が書かれているファイルを、`src/` の全体で数え上げる。**
+        `borrow.rs` は `mod` 宣言を 1 つも持たない (<1>0) ので、その非公開の項目を名指せるのは
+        `borrow.rs` の中だけであり、`pub(crate)` の項目を外から名指すには `rc_ir::borrow` の道を書く
+        ことが要る (EXT 可視性と私有性)。`borrow.rs` は trait の実装を 1 つも持たず、`impl` は
+        `OwnedLeaves`・`RewriteCtx`・`CancelAnalysis` という同ファイルの非公開の型の inherent な
+        3 つだけなので、道を書かずに届く経路も無い。`src/` の全体で `borrow::` を数え上げると、
+        `borrow.rs` 自身を除いて `src/build/build_object_files.rs` の `use` の 1 行だけが挙がる。
+        よって `borrow.rs` の関数の呼び出しが書かれているのは、`borrow.rs` と
+        `src/build/build_object_files.rs` の本文だけである。**同じく `src/` の全体で
+        `build_object_files::` を数え上げると、`src/build/build.rs` と `src/tests/` の 2 本だけが
+        挙がる。** 上の段が挙げた 7 つのファイルはこのどれでもないので、この呼び出しの中で
+        `borrow.rs` の関数は走らない。
+    BY <1>0, CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
        CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
        CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: held_field_type,
        CODE src/constants.rs: CLOSURE_CAPTURE_IDX, CLOSURE_FIELD_COUNT,
@@ -1576,23 +1568,15 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
        CODE src/ast/types.rs: TypeNode::unpunched_field_types,
        CODE src/ast/types.rs: TypeNode::instance_field_types,
        CODE src/ast/types.rs: TypeNode::declared_field_types,
-       CODE src/ast/types.rs: TypeNode::collect_type_arguments,
        CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
        CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
-       CODE src/ast/types.rs: TypeNode::type_hash,
-       CODE src/ast/types.rs: TypeNode::set_source_if_none,
-       CODE src/ast/types.rs: TypeNode::set_source, CODE src/ast/types.rs: TypeNode::get_source,
-       CODE src/ast/types.rs: TypeNode::set_tyapp_fun, CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
-       CODE src/ast/types.rs: TypeNode::set_assocty_args, CODE src/ast/types.rs: TypeNode,
        CODE src/ast/program.rs: TypeEnv::tycons,
        CODE src/ast/program.rs: TypeEnv::unwrapped_newtype_info,
-       CODE src/elaboration/typecheck.rs: Substitution,
-       CODE src/elaboration/typecheck.rs: Substitution::single,
-       CODE src/elaboration/typecheck.rs: Substitution::merge,
        CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
        CODE src/fixstd/builtin.rs: make_arrow_name_abs, is_array_tycon, is_funptr_tycon,
        CODE src/fixstd/builtin.rs: is_punched_array_tycon, CODE src/fixstd/builtin.rs: make_unit_ty,
-       DEF 本文
+       CODE src/build/build_object_files.rs: optimize_rc_program,
+       DEF 本文, DEF このクレート, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
   <2>4. QED
     <1>0 が挙げる本文 --- `expr_node` を呼ぶ 4 つと `RewriteCtx::rewrite` を呼ぶ 3 つ、重複する
     `rewrite_inner` を 1 つと数えて 6 つ --- は、
