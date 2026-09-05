@@ -754,6 +754,36 @@ def ambiguous(directory):
 ASSUMPTION_ROW = re.compile(r"^\| \*{0,2}(A\d+[a-z]?)\*{0,2} \|")
 
 
+SECTION_REFERENCE = re.compile(r"(README|report)(?:\.md)?\s*の\s*「([^」]{2,60})」\s*の?\s*節")
+
+
+def headings_of(path):
+    """その文書の見出しの語。番号と同一性の印は落とす。"""
+    text = IDENTITY.sub("", open(path, encoding="utf-8").read())
+    return set(re.findall(r"^#+\s+(?:[\d.]+\s+)?(.+?)\s*$", text, re.M))
+
+
+def section_references(directory):
+    """名前で引いた節のうち、その文書がその名前の見出しを持たないもの。
+
+    **節は名前で引くので、名前が指す先は機械が確かめられる。** 実測で、`report.md` の節を
+    `README.md` の節として引いた箇所が 4 件在った -- 証明の枠が持っていない事柄を枠から引いた形で、
+    引き先を開いた読み手はそこに何も見つけない。"""
+    homes = {name: headings_of(os.path.join(directory, f"{name}.md"))
+             for name in ("README", "report")
+             if os.path.exists(os.path.join(directory, f"{name}.md"))}
+    out = []
+    for path in documents(directory):
+        for number, line in enumerate(open(path, encoding="utf-8"), 1):
+            for match in SECTION_REFERENCE.finditer(line):
+                where, name = match.group(1), match.group(2)
+                if where in homes and not any(name in head for head in homes[where]):
+                    elsewhere = next((other for other, heads in homes.items()
+                                      if other != where and any(name in h for h in heads)), None)
+                    out.append((path, number, where, name, elsewhere))
+    return out
+
+
 def enumerations(directory):
     """枠の仮定を表で数え上げている文書が、落としている仮定。
 
@@ -944,6 +974,11 @@ def main(arguments):
         print(f"{directory}: 仮定の数え上げが落としている仮定 {len(missed)} 件")
         for path, name in missed:
             print(f"  {os.path.basename(path)}: {name} が表に無い")
+        sections = section_references(directory)
+        print(f"{directory}: その文書に無い節を名前で引いている箇所 {len(sections)} 件")
+        for path, number, where, name, elsewhere in sections:
+            found = f"{elsewhere}.md に在る" if elsewhere else "どちらにも無い"
+            print(f"  {os.path.basename(path)}:{number}: {where}.md の「{name}」の節 -- {found}")
         claims = unproved_claims(directory)
         print(f"{directory}: 項目の中で印を持たない主張の行 {len(claims)} 件")
         for path, n, total in orphan:
