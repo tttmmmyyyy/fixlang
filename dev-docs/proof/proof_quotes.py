@@ -187,9 +187,24 @@ def citing_by(lines, line):
     return None
 
 
+def comparison_text(directory):
+    """引用を突き合わせる本文 -- 枠と、その隣に置かれた証明でない文書。
+
+    **証明でない文書の節を引く段が在る。** その引用をどことも突き合わせないと、字が変わっても
+    誰も気づかない -- 実測で、果たす者を名指す 2 か所がその状態だった。"""
+    parts = []
+    for name in sorted(os.listdir(directory)):
+        if not name.endswith(".md"):
+            continue
+        body = open(os.path.join(directory, name), encoding="utf-8").read()
+        if name == "README.md" or proof_syntax.NOT_A_PROOF in body[:400]:
+            parts.append(body)
+    return strip_spaces("\n\n".join(parts))
+
+
 def check(directory):
     """1 つの証明のディレクトリを見て、食い違った引用を返す。"""
-    frame = strip_spaces(open(os.path.join(directory, "README.md"), encoding="utf-8").read())
+    frame = comparison_text(directory)
     found = []
     for name in sorted(os.listdir(directory)):
         if not name.endswith(".md") or name == "README.md":
