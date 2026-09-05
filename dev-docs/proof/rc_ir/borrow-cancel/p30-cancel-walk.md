@@ -155,13 +155,18 @@ safe Rust で書かれた関数の本文が名指せる値は、自分の引数 
 safe Rust の `static` 項目の型は `Sync` でなければならない。`Sync` は auto trait であり、`RefCell<T>` は
 `Sync` を実装しないので、`RefCell` の欄を持つ構造体も `Sync` でない。
 
-**EXT `MiMalloc`・`Once`・`Lazy`・`Mutex`・`File` が保持する値**
+**EXT `MiMalloc`・`Once`・`Lazy`・`Mutex`・`OnceLock`・`File` が保持する値**
 `mimalloc::MiMalloc` は値を 1 つも保持しない unit 構造体である。`std::sync::Once` が保持するのは、
 初期化がどこまで進んだかを表す状態語と、その完了を待っているスレッドの列である。
 `once_cell::sync::Lazy<T, F>` が保持するのは、`T` の値 (まだ初期化されていなければ無い) と `F` の値で
 あり、`F` の既定は関数ポインタの型 `fn() -> T` である。`std::sync::Mutex<T>` が保持するのは `T` の値と
-OS の与える錠である。`std::fs::File` が保持するのは OS のファイル記述子である。
+OS の与える錠である。`std::sync::OnceLock<T>` が保持するのは `T` の値 (まだ書かれていなければ無い) と
+初期化の状態である。`std::fs::File` が保持するのは OS のファイル記述子である。
 どの型も型引数 `T`・`F` の外に値を保持しない。
+
+**EXT 容器は内部可変性を持たない**
+`Vec<T>`、`FxHashMap<K, V>`、`FxHashSet<K>` は、その型引数 (`T`、`K`、`V`) の外に `UnsafeCell` を
+持たない。すなわちこの 3 つの型が内部可変性を持つのは、その型引数が持つときに限る。
 
 **EXT 可視性と私有性**
 Rust Reference の "Visibility and Privacy" が次を述べる。
@@ -490,7 +495,7 @@ enum については元と同じ変位で、その変位が保持する各値を
         Vec<ObjectFieldType>>>`、`src/tests/test_util.rs` の `BUILD_FIX: Once`、`src/tool/log_file.rs` の
         `LOG_FILE: Lazy<Mutex<File>>`) であり、DEF このクレート よりこの 4 つはどちらのクレートの
         `static` 項目の集合の上位集合でもある。**この 4 つの型が保持する値を、型の宣言から辿る。**
-        EXT `MiMalloc`・`Once`・`Lazy`・`Mutex`・`File` が保持する値 より、`MiMalloc` は値を保持せず、
+        EXT `MiMalloc`・`Once`・`Lazy`・`Mutex`・`OnceLock`・`File` が保持する値 より、`MiMalloc` は値を保持せず、
         `Once` は状態語と待っているスレッドの列だけを保持し、`Lazy<Mutex<File>>` が保持するのは
         `Mutex<File>` の値と関数ポインタ `fn() -> Mutex<File>` であって、`Mutex<File>` が保持するのは
         `File` の値と OS の錠、`File` が保持するのは OS のファイル記述子である。`FIELDS_BY_NAME` の
@@ -507,7 +512,7 @@ enum については元と同じ変位で、その変位が保持する各値を
        CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: NameSpace,
        CODE src/tests/test_util.rs: BUILD_FIX,
        CODE src/tool/log_file.rs: LOG_FILE, EXT static は Sync を要る,
-       EXT `MiMalloc`・`Once`・`Lazy`・`Mutex`・`File` が保持する値,
+       EXT `MiMalloc`・`Once`・`Lazy`・`Mutex`・`OnceLock`・`File` が保持する値,
        EXT 参照は引数を通ってだけ届く, DEF このクレート
   <2>1a. `origin` の本文は `grow_stack` へ `vars` を捕捉した閉包を渡すので、`grow_stack` の本文とその中で
          走る `stacker` の本文は、`vars` に到達できる値を引数として受け取る。しかしこの 2 つのどちらにも
@@ -1247,18 +1252,19 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
      CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled
-<1>4a. `CancelAnalysis` の値は内部可変性を持たない。**在りかは型で決める** --- 7 つの欄の型は
+<1>4a. `CancelAnalysis` の値は `UnsafeCell` を持たない。**在りかは型で決める** --- 7 つの欄の型は
        `&VarTable`、`&RcProgram`、`&Set<VarPath>`、`&TypeEnv`、`Set<NodeId>`、
        `Map<NodeId, Vec<NodeId>>`、`Vec<NodeId>` であり、`RefCell`・`Cell`・`OnceCell`・`OnceLock`・
        `Mutex`・`RwLock`・`UnsafeCell`・`Atomic*` を含む欄の宣言はこの 7 つに無い。A3 が
        「**在りかは型で決める。**」と述べ、「**特定のメソッド名や特定の欄で数え上げると、別の型を経て
-       届く道が落ちる。**」と続けるのに従う。**前の 4 つの欄が指す先の内部可変性はこの値の中に無い** ---
-       `VarTable` は `origins: RefCell<Map<VarPath, Origin>>` の欄を持つが、それが在るのは
-       `CancelAnalysis` の値ではなくその欄が指す `VarTable` の値の中である。`Set<NodeId>`・
-       `Map<NodeId, Vec<NodeId>>`・`Vec<NodeId>` が保持するのは `usize` と `Vec<usize>` と
-       `FxHashMap`・`FxHashSet` の hasher だけである。
+       届く道が落ちる。**」と続けるのに従う。前の 4 つは共有参照であり、その指す先が持つ `UnsafeCell` は
+       指す先の値の中に在る --- `VarTable` の `origins: RefCell<Map<VarPath, Origin>>` がそれで、その欄は
+       `VarTable` の値の中に在る。残る 3 つの型引数は `NodeId` (`usize` の別名) と `Vec<NodeId>` であり、
+       EXT 容器は内部可変性を持たない より `Vec`・`FxHashMap`・`FxHashSet` は型引数の外に `UnsafeCell` を
+       持たない。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/ownership.rs: VarTable,
-     CODE src/misc.rs: Map, CODE src/misc.rs: Set, <ref id=e11772a/>
+     CODE src/misc.rs: Map, CODE src/misc.rs: Set, EXT 容器は内部可変性を持たない,
+     <ref id=e11772a/>
 <1>5. QED
   <1>4 の 6 つの本文と `cancel_body` の閉包の本文で `vars` と `type_env` の欄が現れるのは、どれも値を
   読んで別の関数へ渡す式であり、どちらの欄への代入も書かれていない。残る 3 つは `self` を共有参照で
