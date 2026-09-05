@@ -702,12 +702,10 @@ P5 (c) が述べる包含 `⋃_{λ ∈ L(v, π)} acted_on(v, λ) ⊆ ActRefs(v, 
 <1>1. どちらの側の本体も (1) を満たす。
   BY <ref id=1172c08/>, <ref id=f769887/>
   A9 は「`borrow_ify` の入力プログラムのすべての `Match` は 1 つ以上のアームを持つ。`borrow_ify` と
-  `cancel` は
-  アームを持たない `Match` を作らないので (P22、P24)、`cancel` の入力と出力についても同じことが言える」
-  と述べる。A16 は「すべての `Match(s, arms)` について、`arms` が catch-all アーム (`tag` が `None`) を
-  持つか、`s` の値が
-  取りうる実行時のタグがいずれかのアームの `tag` である」と述べ、「**catch-all アームは `arms` の
-  最後にある。**」と続ける。A16 は主語をどちらかのプログラムに限らない。
+  `cancel` はアームを持たない `Match` を作らないので (P22、P24)、`cancel` の入力と出力についても
+  同じことが言える」と述べる。A16 は「すべての `Match(s, arms)` について、`arms` が catch-all アーム
+  (`tag` が `None`) を持つか、`s` の値が取りうる実行時のタグがいずれかのアームの `tag` である」と述べ、
+  「**catch-all アームは `arms` の最後にある。**」と続ける。A16 は主語をどちらかのプログラムに限らない。
 
 <1>2. どちらの側の本体も (2) を満たす。
   BY <ref id=8412761/>
@@ -3707,8 +3705,9 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         `assign_fresh_names_to_binders` の本体は
         `grow_stack(|| assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter))` で
         あり、`grow_stack(f)` の本体は `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` である。
-      <4>1. `rename` の各項は `assign_fresh_name` の 1 回の呼び出しが書き込むものであり、`F` の各束縛名に
-            ついてその呼び出しはちょうど 1 回である。`pass_tag` は `"b"` である。
+      <4>1. `V` が借用版であるとき、`rename` の各項は `assign_fresh_name` の 1 回の呼び出しが
+            書き込むものであり、`F` の各束縛名についてその呼び出しはちょうど 1 回である。
+            `pass_tag` は `"b"` である。
         BY <4>0, <ref id=63eadd9/>, <ref id=b3dfa37/>, EXT 写像と集合の基本演算,
            CODE src/rc_ir/borrow.rs: clone_func,
            CODE src/rc_ir/rename.rs: fresh_rename_function,
@@ -3736,11 +3735,13 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         <4>1 より `pass_tag` は `"b"` であり、`counter` の 10 進表記は数字だけからなるので、作られた
         名前の最後の `#` より後ろの断片は `b` に続く `counter` の 10 進表記であり、その断片が `counter`
         の値を決める。値が相異なれば断片が相異なり、名前も相異なる。
-      <4>3. `rename` は `F` の本体の束縛名の上で単射である。
+      <4>3. `V` が借用版であるとき、`rename` は `F` の本体の束縛名の上で単射である。
         BY <4>1, <4>2
         相異なる 2 つの束縛名は `assign_fresh_name` の相異なる 2 つの呼び出しで写される。
       <4>4. QED
-        BY <4>2, <4>3, <ref id=63eadd9/>, <ref id=cb35ab1/>
+        BY <4>2, <4>3, <1>1c, <ref id=63eadd9/>, <ref id=cb35ab1/>
+        `V` が借用版でないときは <1>1c より `rename` は恒等写像なので `ren` も恒等写像であり、
+        単射であって型を動かさない。以下、`V` が借用版であるとする。
         P9 は「`clone_func` が作る借用版の本体は、元の本体の束縛変数を一斉に付け替えたものであり、
         それ以外の違いを持たない」と述べるので、`rename` は型を動かさず、`ren` は束縛変数でない名前を
         動かさない。<4>3 より `rename` は束縛名の上で単射である。<4>2 より `rename` の像の名前は
