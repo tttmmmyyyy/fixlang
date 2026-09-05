@@ -276,13 +276,15 @@ README の A19 は (ii-a) と (ii-b) の果たす者に `insert_rc` を挙げる
 - **L5a**、**L5b**、**L6**、**L7** (第 6 節)。走査の帳簿 `B(p, ρ)` が `outstanding` の一部と一致する
   こと (`L5a`)、名前が別名類を決めること (`L5b`)、bump の残高 `bumps = R - U - X` (`L6`)、および
   A19 (ii) が別名類ごとの台帳の不等式 `U + X ≥ D` と同値であること (`L7`)。
-- **L8** - **L11** (第 7 節)。`Retain` を作る位置が 4 つであること (`L8`)、`insert_rc` の出力の
+- **L8** - **L11** (第 7 節)。出力の節点が 7 つの構成式から来ることと `Retain` を作る位置が 4 つで
+  あること (`L8`)、`insert_rc` の出力の
   `Retain` の位置の形 (`L9`)、それが `C1` を弾くこと (`L10`)、およびその形が `cancel` の
   入力まで残ること (`L11`)。
 - **L12**、**L13** (第 9 節)。A19 を読む 2 つの形が、どちらも他方を導かないこと。
 - **L13a** - **L20** (第 10 節)。(O1)。移動の辺の両端が同じ別名類に属し `held` がスロットごとの割り当ての
   和であること (`L13a`)、`live_before` が自由変数と `live_after` の和であること (`L14`)、`Λ` と
-  出力についての 5 つの性質 (`L15`)、借用するオペランドの leaf が素通しを宣言されないこと (`L16`)、
+  出力についての 5 つの性質 (`L15`)、借用するオペランドの leaf が素通しを宣言されず、素通しの宣言が
+  結果の leaf について単射であること (`L16`)、
   終端の `Ret` を書き換える呼び出しの `live_after` が空であること (`L16a`)、遷移が割り当てを liveness の
   指示関数へ運ぶこと (`L17`)、`insert_rc` の liveness と実行時の参照の分布が一致すること
   (`L18`)、終端の `Ret` の前に `Retain` が立たないこと (`L18a`)、そこから出る別名類の粒度の RC 規律
@@ -1498,7 +1500,7 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   (`build_releases` と `build_retains` も渡された節点を継続として**包む**)。よって出力の
   `Retain` 節点の継続は、それが作られた時点の継続である。
 
-<1>3. CASE `t` が `L8` の 1 で作られた。
+<1>3. CASE `t` が `L8` (a) の 1 で作られた。
   BY <ref id=664b958/>, <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner
   `build_retains(retains_before, node)` の `node` は `Let(x, rhs, cont)` であり、`rhs` は `Match` では
@@ -1508,7 +1510,7 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   が `Ownership::Own` を与えるオペランド `v` だけである (同関数のループの `else if` の枝)。これが (a) で
   ある。
 
-<1>4. CASE `t` が `L8` の 2 で作られた。
+<1>4. CASE `t` が `L8` (a) の 2 で作られた。
   <2>1. `n_t` は `Ret(v)` である。
     BY <ref id=664b958/>, <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner の
        `RcExpr::Ret(x)` の腕
@@ -1543,19 +1545,19 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
     あり (<2>2 と <2>3 より、他の枝は根の空集合を運ぶ)、その枝の下で終端になる `Ret` はアーム本体の
     終端の `Ret` である。これが (b) である。
 
-<1>5. CASE `t` が `L8` の 3 で作られた。
+<1>5. CASE `t` が `L8` (a) の 3 で作られた。
   BY <ref id=664b958/>, <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure
   `node` は `Destructure(container, fields, RcState::Unknown, cont)` であり、`v = container` である。
   これが (c) である。
 
-<1>6. CASE `t` が `L8` の 4 で作られた。
+<1>6. CASE `t` が `L8` (a) の 4 で作られた。
   BY <ref id=664b958/>, <1>1, <1>2, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
   `node` は `Let(x, RcRhs::Match(scrut, new_arms), cont)` であり、`v = scrut` である。これが (d) で
   ある。
 
 <1>7. QED
   BY <ref id=664b958/>, <1>3, <1>4, <1>5, <1>6
-  `L8` が場合を尽くす。
+  `L8` (a) が場合を尽くす。
 
 ### 7.3 `L9` の系: `n_t` に着くと `v` の参照は手を離れる <!--#d686a93-->
 
@@ -2798,7 +2800,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 `insert_rc` の出力ではないので (e) の範囲の外であり、その `borrowed_units` は `DEF C1 の本体` と
 `DEF 関数 id` が取り決める。
 
-### 10.4 `L16` (借用するオペランドの leaf は素通しを宣言されない) <!--#e885aa0-->
+### 10.4 `L16` (素通しの宣言についての 2 つ) <!--#e885aa0-->
 
 **言明**。
 
@@ -2952,7 +2954,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 **この命題が要る理由。** D9 の消費の表の `Llvm` の行は `borrows_operand(i)` が偽のオペランドだけを
 挙げるが、移動の表の `Llvm` の行 (素通し leaf) はその条件を持たない。両方が同時に成り立つ op が在ると、
 1 つの参照が結果へ移りながら呼び出し元にも残ることになり、`insert_rc` が置く「借用オペランドの最後の
-使用の後の `Release`」がその参照を二重に処分する。`L16` はその形が無いことを言う。
+使用の後の `Release`」がその参照を二重に処分する。`L16` (a) はその形が無いことを言う。
 
 ### 10.4a `L16a` (終端の `Ret` を書き換える呼び出しの `live_after` は空である) <!--#cd1f6fa-->
 
