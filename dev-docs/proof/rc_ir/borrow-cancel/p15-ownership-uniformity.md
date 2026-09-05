@@ -103,9 +103,9 @@ Rust では、可視性の修飾子 (`pub`、`pub(crate)`、`pub(in ...)`) を�
 
 **DEF 現れる名前**
 入力の関数 `func` に**現れる名前**とは、`func` のパラメータ・capture の名前と、`func.body` に現れる
-`RcVar` の名前 (`Let` の束縛変数、`Destructure` の容器とフィールド変数、`Match` の scrutinee とアームの
-payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llvm` の各オペランド、`Retain` /
-`Release` / `Eval` / `Ret` が名指す変数) の全体である
+`RcVar` の名前 (`Let` の束縛変数、`Var` の右辺の変数、`Destructure` の容器とフィールド変数、`Match` の
+scrutinee とアームの payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llvm` の各
+オペランド、`Retain` / `Release` / `Eval` / `Ret` が名指す変数) の全体である
 (`CODE src/rc_ir/ast.rs: for_each_var`, `for_each_var_of_node`, `for_each_var_of_rhs`)。
 
 **DEF 扱う型**
