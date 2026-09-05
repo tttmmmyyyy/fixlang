@@ -422,6 +422,11 @@ mod tests {
         "module Main;\n\nmain : IO ();\nmain = println(\"x\");\n";
 
     /// A project directory holding the given files, under a fresh temporary directory.
+    ///
+    /// The path handed back is canonical, which is what makes the URI a test builds from it the
+    /// URI the client builds: a temporary directory reaches its files through a symbolic link on
+    /// some systems, and the server keeps one record per URI, so two spellings of one path leave
+    /// two records of one file and the analysis reads whichever the map hands it first.
     fn project_with(files: &[(&str, &str)]) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let project_dir = temp_dir.path().join("proj");
@@ -429,6 +434,9 @@ mod tests {
         for (name, content) in files {
             fs::write(project_dir.join(name), content).expect("Failed to write a project file");
         }
+        let project_dir = project_dir
+            .canonicalize()
+            .expect("Failed to canonicalize the project directory");
         (temp_dir, project_dir)
     }
 
