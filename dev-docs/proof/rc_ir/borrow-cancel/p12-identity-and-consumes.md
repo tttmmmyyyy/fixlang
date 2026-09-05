@@ -30,8 +30,8 @@ A16 が要るのは L1b、L1 の E3 の場合、L4、P5 (a)、P6 (b)、R1 であ
 **オブジェクトの同一性を運ぶのは参照ではなく値である。** D9 の移動の表は参照の持ち手が変わる構文を挙げる
 が、グローバル状態のオブジェクト (D26) を指す leaf は D8 の意味の参照を持たないので、「同じ参照を持つ
 2 つの leaf は同じオブジェクトを指す」の形の議論は両端が計数下であるときにしか通らない (A5)。L1 は代わりに D9 の
-**値の水準の 6 行**を使い、辺の両端が同じ値の同じ位置であることからオブジェクトの一致を出す。この道筋は
-計数下かグローバル状態かを問わない。
+**値の水準の 6 行**を使い、辺の両端の位置が同じ値を持つこと (DEF 位置の値) からオブジェクトの一致を出す。
+この道筋は計数下かグローバル状態かを問わない。
 
 P5 (a) の要は L4 である。**L4 が渡るのは、解析が `origin` を呼ぶ鍵に限る** -- 帰納が立つ整礎性
 (L0a (b)) は呼ばれた鍵の上でしか言えないからである。第 9 節にその選択の理由を書く。**位置 (D6) の path は boxed leaf で
@@ -94,8 +94,8 @@ inhabited (D16) でない元を含む。この集合を `v` の `π` の下の b
 `ActRefs(v, π)` は D15 の `acted_references(v, π)` である。`VarPath` は対 `(FullName, FieldPath)` である
 (`CODE src/rc_ir/ast.rs: VarPath`)。等号はこの対の等号である。
 
-この文書は命題を `L0`、`L0a`、`L0b`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L3a`、`L4`、`L5a`、`L5`、`L6`
-(この順に並べる)、反例を `R1` と呼ぶ。**`BY` の行で
+この文書は命題を `L0`、`L0a`、`L0b`、`L1b`、`L1`、`L1a`、`L2`、`L3`、`L3a`、`L4`、`L5a`、`L5`、`L5b`、
+`L6` (この順に並べる)、反例を `R1` と呼ぶ。**`BY` の行で
 引用してよいのは、それぞれの言明だけである。** 言明が複数の主張からなる命題は主張に (a)、(b)、… の名札を
 付け、`L5 (c)` のように引用する。同じ規則を P6 (a)、P6 (b)、P7 (a)、P7 (b) にも使う -- これらは
 この文書が P6 と P7 を分けた主張であり、引用してよいのはその言明である。
@@ -225,6 +225,14 @@ SCAN src/ `rhs_consumes`
 **この前提は枠の仮定に置くべきものである。** 枠へ移すときは `SCAN` の走査ごと移し、引く段の `BY` を
 枠の仮定の名前へ差し替える。
 
+**前提 型環境を作る在りか** --- `Program::calculate_type_env` を呼ぶ式が在るのは `elaborate` である。
+走査はその宣言と、`Program` の `type_env` の欄の doc の散文も挙げる。
+
+SCAN src/ `calculate_type_env`
+  = src/ast/program.rs: Program -- 欄 `type_env` の doc の散文
+  = src/ast/program.rs: Program::calculate_type_env -- 宣言
+  = src/elaboration/mod.rs: elaborate -- 呼び出し
+
 ### A16 の 2 つの節
 
 この文書が読む A16 の節を、引用の形で書き出す。
@@ -267,6 +275,11 @@ D6 である。以下、`ρ` の位置のうちスロットであるものを **
 
 **この 4 つの形が D6 の数える 3 つの形と同じものを数えること、`(x, λ)` が `ρ` の位置であることとの同値、
 および `obj(x, λ)` が `ρ` の上の位置に依らないことは、定義ではなく L0b が示す。**
+
+**DEF 位置の値**
+位置 `(u, α)` の**値**とは、`u` の値の path `α` に在る値である。D4 より leaf は値の根からのフィールド
+添字の列なので、この値は `u` の値と `α` から定まる。**2 つの位置の値が等しいときにその 2 つが同じ
+オブジェクトを指すことは、定義ではなく L1 の `<1>1` が示す。**
 
 ## 2. 別名の辺と、それが `ρ` の上で実行されること
 
@@ -377,8 +390,11 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
       呼び出しが `origin_inner` を評価する場合の、その評価の中だけである。
   <2>1. `origin` の本体が行う呼び出しは、鍵 `(var.clone(), path.to_vec())` を組み立てる
         `FullName::clone` と `<[usize]>::to_vec`、記録を検査する `RefCell::borrow` と `Map::get`、
-        記録の値と答えを複製する `Origin::clone`、`grow_stack(|| origin_inner(..))`、および記録を
-        書き込む `RefCell::borrow_mut` と `Map::insert` である。
+        記録の値と答えを複製する `Origin::clone`、`grow_stack(|| origin_inner(..))`、記録を
+        書き込む `RefCell::borrow_mut` と `Map::insert`、および本体が作った値が落ちるときに走る処理 --
+        記録が当たる枝で落ちる鍵 `key`、`borrow()` が返す `Ref`、`borrow_mut()` が返す `RefMut` --
+        である。**落ちる値の処理を数えるのは、それが本体の書く式に現れない呼び出しだからである。**
+        `Map::insert` が置き替えた値を落とす処理も同じ形であり、`<2>3` がそれを扱う。
     BY <1>1, CODE src/rc_ir/ownership.rs: origin
   <2>2. `grow_stack(|| origin_inner(..))` の実行の中で始まる `origin` の呼び出しは、`origin_inner` の
         評価の中で始まる。
@@ -391,21 +407,29 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
   <2>3. `<2>1` の受け手のうち `grow_stack` を除くものの実行の中で入る `src/` の項目は、`FullName` と
         `NameSpace` と `Origin` の `Clone` の実装、および `FullName` と `NameSpace` の
         `Hash`・`PartialEq`・`Eq` の実装で尽きる。
-    `<[usize]>::to_vec` と `RefCell` の `borrow`・`borrow_mut` は標準ライブラリの項目、`Map` すなわち
-    `FxHashMap` の `get`・`insert` は外部クレートの項目である。この `get` と `insert` は鍵の型
+    `<[usize]>::to_vec`、`RefCell` の `borrow`・`borrow_mut`、`borrow` が返す `Ref` と `borrow_mut` が
+    返す `RefMut` の `Drop` は標準ライブラリの項目である。`Map` すなわち `FxHashMap<K, V>` は
+    `std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>` の別名であって、`fxhash` クレートが
+    与えるのはハッシャ `FxHasher` である。よってその `get`・`insert` は標準ライブラリの項目であり、
+    `FxHasher` の `Hasher` の実装は外部クレートの項目である。同じく `Set<VarPath>` すなわち
+    `FxHashSet<VarPath>` は `std::collections::HashSet` の別名なので、その `Clone` も標準ライブラリの
+    項目である。この `get` と `insert` は鍵の型
     `VarPath = (FullName, FieldPath)` の `Hash` と `Eq` を呼び、`insert` は置き換えた値を落とす。
     対の `Hash` と `Eq`、`FieldPath` すなわち `Vec<usize>` の `Hash` と `Eq`、および `String`・
-    `Vec<String>`・`bool` の同じトレイトは標準ライブラリに在り、`Set<VarPath>` すなわち `FxHashSet` の
-    `Clone` は外部クレートに在る。`Origin` は `#[derive(Clone)]` を持ち、その欄の型は `VarPath` と
+    `Vec<String>`・`bool` の同じトレイトは標準ライブラリに在る。
+    `Origin` は `#[derive(Clone)]` を持ち、その欄の型は `VarPath` と
     `Set<VarPath>` である。`FullName` は `Clone` と `PartialEq` と `Eq` を derive し、その欄の型は
     `NameSpace` と `String` である。`NameSpace` は `Clone` を derive し、`Hash` と `PartialEq` と `Eq` は
     `impl Hash for NameSpace`・`impl PartialEq for NameSpace`・`impl Eq for NameSpace` として
     `src/ast/name.rs` に書かれ、その欄の型は `Vec<String>` と `bool` である。`FullName` の `Hash` も
     `impl Hash for FullName` として同じファイルに書かれている。EXT `derive` した `Clone` と
     EXT `derive` した `PartialEq` より、derive した実装が
-    呼ぶのは欄の同じトレイトのメソッドだけである。前提 書かれた `Drop` の在りか より `FullName`・
-    `NameSpace`・`Origin` はどれも `Drop` を実装しないので、EXT 値を落とす処理 より、その値が落ちるとき
-    走るのは欄の値を落とす処理だけである。
+    呼ぶのは欄の同じトレイトのメソッドだけである。落ちる値 -- 鍵 `key` (型 `VarPath`)、`insert` が
+    置き替えた `Origin`、`Ref`、`RefMut` -- について。前提 書かれた `Drop` の在りか より `src/` で
+    `Drop` を実装する型は `Finally`・`StopWatch`・`LspClient` の 3 つなので、`VarPath` も `FullName` も
+    `NameSpace` も `Origin` も `Drop` を実装せず、EXT 値を落とす処理 より、その値が落ちるとき走るのは
+    欄の値を落とす処理だけである。降りて着く欄の型は `String`・`Vec<String>`・`Vec<usize>`・`bool`・
+    `Set<VarPath>` であり、その `Drop` は標準ライブラリの項目である。
     BY 前提 書かれた `Drop` の在りか, EXT `derive` した `Clone`, EXT `derive` した `PartialEq`,
        EXT 値を落とす処理, CODE src/rc_ir/ownership.rs: Origin,
        CODE src/rc_ir/ast.rs: VarPath, FieldPath, CODE src/ast/name.rs: FullName, NameSpace,
@@ -798,15 +822,20 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 **言明**。次の 2 つが成り立つ。
 
 - **(a)** この文書の意味で在り (DEF 辺の存在)、かつ `ρ` の上で実行された (DEF `ρ` の上で実行された辺)
-  E1 から E6 の辺の両端の位置は、同じ値の同じ位置を名指し、したがって同じオブジェクトを指す。
+  E1 から E6 の辺の両端の位置は、等しい値を持ち (DEF 位置の値)、したがって同じオブジェクトを指す。
 - **(b)** 「この文書の意味で在り (DEF 辺の存在)、かつ `ρ` の上で実行された辺」と「D20 の意味で在る辺」は
   同じものである。
 
-<1>1. 2 つの位置 `(u, α)` と `(w, β)` について、`u` の値の位置 `α` と `w` の値の位置 `β` が同じ値の
-      同じ位置であれば、`obj(u, α) = obj(w, β)` である。
-  L0b (c) より `obj(u, α)` は `u` が得る値と `α` だけで決まる量であり、D6 の `obj` と同じものである。
-  同じ値の同じ位置は 1 つのオブジェクトを持つ。
-  BY <ref id=0594f24/>, <ref id=596a46d/>, <ref id=09fabad/>, DEF 路の位置
+<1>1. 2 つの位置 `(u, α)` と `(w, β)` について、位置 `(u, α)` の値と位置 `(w, β)` の値
+      (DEF 位置の値) が等しければ、`obj(u, α) = obj(w, β)` である。
+  D4 は boxed leaf を「型 `τ` の値が参照を持ちうる位置」と定め、leaf を値の根からのフィールド添字の列で
+  表す。D6 は位置 `(x, λ)` が指すオブジェクトを `obj(x, λ)` と書く。すなわち `obj(x, λ)` は、`x` の値の
+  path `λ` に在る値 -- DEF 位置の値 の意味のその位置の値 -- が指すオブジェクトであり、位置の値が等しい
+  2 つの位置は同じオブジェクトを指す。L0b (c) より `obj(u, α)` は `u` が得る値と `α` だけで決まり、
+  `ρ` の上の位置に依らず、参照を経由しない。よってこの読みは、2 つの位置がどの時点のものであるかにも、
+  指す先が計数下のオブジェクトかグローバル状態のオブジェクトか (D26) にも依らない。
+  BY <ref id=0594f24/>, <ref id=596a46d/>, <ref id=88a06de/>, <ref id=09fabad/> (c), DEF 位置の値,
+     DEF 路の位置
 
 <1>1a. E1 から E6 の各行の辺の leaf 対応 (DEF 辺の leaf 対応) は、D9 の値の水準の対応する行が始点の値と
        終点の値のあいだに定める位置の対応である。
@@ -822,14 +851,21 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
   一般に別の path である**」と述べる。よって E5 の leaf 対応は `σ` ↔ `λ` である。
   BY <ref id=0594f24/>, <ref id=9d74736/>, DEF 辺の leaf 対応
 
+<1>1b. 値 `v` の path `[i] ++ λ` に在る値は、`v` の第 `i` 成分 -- unbox の構造体・タプルの第 `i`
+       フィールド、unbox union の変位 `i` の payload -- の path `λ` に在る値である。
+  D4 は leaf を値の根からのフィールド添字の列で表し、その列挙の規則 5 は unbox の構造体・タプル・union に
+  ついてフィールドの下へ降り、union のときは各変位の payload へ降りると述べる。すなわち path の先頭の
+  添字 `i` は、その値の第 `i` 成分へ降りる 1 歩である。
+  BY <ref id=0594f24/>, DEF 位置の値
+
 <1>2. E1 の辺 `(y, λ)`-`(x, λ)`。
   <2>1. `x` の値は `y` の値である。
     D9 の値の水準の第 1 行 (`Let(x, Var(y), k)`) が「`x` の値は `y` の値である」と述べる。
     BY <ref id=9d74736/>
   <2>2. QED
-    `<2>1` より `x` の値の位置 `λ` と `y` の値の位置 `λ` は同じ値の同じ位置である。DEF 辺の leaf 対応 が
-    この行の leaf の対応を `λ` ↔ `λ` と読む。
-    BY DEF 辺の leaf 対応, <1>1, <1>1a, <2>1
+    `<2>1` より `x` の値と `y` の値は同じ値なので、位置 `(x, λ)` の値と位置 `(y, λ)` の値 (DEF 位置の値)
+    は等しい。DEF 辺の leaf 対応 がこの行の leaf の対応を `λ` ↔ `λ` と読む。
+    BY DEF 位置の値, DEF 辺の leaf 対応, <1>1, <1>1a, <2>1
 
 <1>3. E2 の辺 `(c, [i] ++ λ)`-`(f, λ)`。
   <2>1. `f` の値は `c` の値の第 `i` フィールドである。
@@ -837,9 +873,10 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
     容器の値のそのフィールドである」と述べる。
     BY <ref id=9d74736/>
   <2>2. QED
-    `<2>1` より `f` の値の位置 `λ` は `c` の値の位置 `[i] ++ λ` と同じ値の同じ位置である。DEF 辺の
-    leaf 対応 がこの行の leaf の対応を `[i] ++ λ` ↔ `λ` と読む。
-    BY DEF 辺の leaf 対応, <1>1, <1>1a, <2>1
+    `<2>1` より `f` の値は `c` の値の第 `i` フィールドなので、`<1>1b` より位置 `(f, λ)` の値と位置
+    `(c, [i] ++ λ)` の値 (DEF 位置の値) は等しい。DEF 辺の leaf 対応 がこの行の leaf の対応を
+    `[i] ++ λ` ↔ `λ` と読む。
+    BY DEF 位置の値, DEF 辺の leaf 対応, <1>1, <1>1a, <1>1b, <2>1
 
 <1>4. E3 の辺 `(s, [t] ++ λ)`-`(p, λ)`。
   <2>1. この辺が `ρ` の上で実行されたとき、`ρ` を辿る実行はこの `Match` で `tag = Some(t)` のアームを
@@ -850,9 +887,10 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
     値の活性変位の payload である」と述べる。`<2>1` よりこの位置での活性変位は `t` である。
     BY <ref id=9d74736/>, <2>1
   <2>3. QED
-    `<2>2` より `p` の値の位置 `λ` は `s` の値の位置 `[t] ++ λ` と同じ値の同じ位置である。DEF 辺の
-    leaf 対応 がこの行の leaf の対応を `[t] ++ λ` ↔ `λ` と読む。
-    BY DEF 辺の leaf 対応, <1>1, <1>1a, <2>2
+    `<2>2` より `p` の値は `s` の値の変位 `t` の payload なので、`<1>1b` より位置 `(p, λ)` の値と位置
+    `(s, [t] ++ λ)` の値 (DEF 位置の値) は等しい。DEF 辺の leaf 対応 がこの行の leaf の対応を
+    `[t] ++ λ` ↔ `λ` と読む。
+    BY DEF 位置の値, DEF 辺の leaf 対応, <1>1, <1>1a, <1>1b, <2>2
 
 <1>5. E4 の辺 `(s, λ)`-`(p, λ)`。
   <2>1. `p` の値は `s` の値そのものである。
@@ -863,19 +901,23 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
     アームの payload 束縛についてである (D21)。選ばれなかったアームの payload 変数はその路で値を得ない。
     BY <ref id=9d74736/>, <ref id=c232680/>, DEF `ρ` の上で実行された辺
   <2>2. QED
-    `<2>1` より `p` の値の位置 `λ` と `s` の値の位置 `λ` は同じ値の同じ位置である。DEF 辺の leaf 対応 が
-    この行の leaf の対応を `λ` ↔ `λ` と読む。
-    BY DEF 辺の leaf 対応, <1>1, <1>1a, <2>1
+    `<2>1` より `p` の値と `s` の値は同じ値なので、位置 `(p, λ)` の値と位置 `(s, λ)` の値 (DEF 位置の値)
+    は等しい。DEF 辺の leaf 対応 がこの行の leaf の対応を `λ` ↔ `λ` と読む。
+    BY DEF 位置の値, DEF 辺の leaf 対応, <1>1, <1>1a, <2>1
 
 <1>6. E5 の辺 `(args[j], σ)`-`(x, λ)`。
-  <2>1. `x` の値の位置 `λ` の値は、`args[j]` の値の位置 `σ` の値である。
+  <2>1. 位置 `(x, λ)` の値と位置 `(args[j], σ)` の値 (DEF 位置の値) は等しい。
     D9 の値の水準の第 6 行 (`Llvm` の素通し leaf) が「結果の leaf `λ` の宣言が単一の `Arg(i, σ)` である
-    とき、その leaf の値は**オペランド `i` の leaf `σ` の値**である」と述べる。第 2 節の E5 は、結果の
-    leaf `λ` の宣言が単一の `Arg(j, σ)` であるときの辺を `(args[j], σ)`-`(x, λ)` と定めるので、この行が
-    オペランドの側で名指す leaf は E5 の辺の始点そのものである (`<1>1a`)。
-    BY <ref id=9d74736/>, DEF 辺の leaf 対応, <1>1a
+    とき、その leaf の値は**オペランド `i` の leaf `σ` の値**である」と述べる。すなわちこの行が等しいと
+    するのは、結果の値の path `λ` に在る値と、オペランドの値の path `σ` に在る値である。第 2 節の E5 は、
+    結果の leaf `λ` の宣言が単一の `Arg(j, σ)` であるときの辺を `(args[j], σ)`-`(x, λ)` と定めるので、
+    この行がオペランドの側で名指す leaf は E5 の辺の始点そのものである (`<1>1a`)。**この行は 2 つの
+    位置の値を等しいとするのであって、`x` の値と `args[j]` の値を等しいとするのではない** -- 同じ行が
+    続けて「**`λ` と `σ` は一般に別の path である**」と述べる。
+    BY <ref id=9d74736/>, DEF 位置の値, DEF 辺の leaf 対応, <1>1a
   <2>2. QED
-    BY DEF 辺の leaf 対応, <1>1, <1>1a, <2>1
+    `<2>1` が両端の位置の値の等しさを直に与える。
+    BY DEF 位置の値, DEF 辺の leaf 対応, <1>1, <1>1a, <2>1
 
 <1>7. E6 の辺 `(x, λ)`-`(m, λ)`。
   <2>1. `m` の値は `x` の値である。
@@ -886,9 +928,9 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
     `Ret(x')` の `x'` はその路で値を得ない。
     BY <ref id=ca36627/>, <ref id=9d74736/>, <ref id=c232680/>, DEF `ρ` の上で実行された辺
   <2>2. QED
-    `<2>1` より `m` の値の位置 `λ` と `x` の値の位置 `λ` は同じ値の同じ位置である。DEF 辺の leaf 対応 が
-    この行の leaf の対応を `λ` ↔ `λ` と読む。
-    BY DEF 辺の leaf 対応, <1>1, <1>1a, <2>1
+    `<2>1` より `m` の値と `x` の値は同じ値なので、位置 `(m, λ)` の値と位置 `(x, λ)` の値 (DEF 位置の値)
+    は等しい。DEF 辺の leaf 対応 がこの行の leaf の対応を `λ` ↔ `λ` と読む。
+    BY DEF 位置の値, DEF 辺の leaf 対応, <1>1, <1>1a, <2>1
 
 <1>7a. (b) が成り立つ。
   D20 は、辺が在るのは「その辺を定める節点が実行路の上に在り、かつその節点と leaf `λ` が作る 2 つの対が
@@ -905,10 +947,11 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 
 <1>8. QED
   (a) について。E1 から E6 は D20 (すなわち D9 の移動の表) の 6 行に 1 対 1 で対応し、値の水準の 6 行も
-  その 6 行に 1 対 1 で対応する (D9)。`<1>2` から `<1>7` がその 6 つであり、どれも両端が同じ値の同じ
-  位置を名指すことを与える。辺が在る (DEF 辺の存在) ことは両端が `ρ` の位置であることなので、`<1>1` の
-  前提が揃い、両端は同じオブジェクトを指す。(b) は `<1>7a` である。
-  BY <ref id=9d74736/>, <ref id=9c7c27a/>, DEF 辺の存在, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>7a
+  その 6 行に 1 対 1 で対応する (D9)。`<1>2` から `<1>7` がその 6 つであり、どれも両端の位置の値
+  (DEF 位置の値) が等しいことを与える。辺が在る (DEF 辺の存在) ことは両端が `ρ` の位置であることなので、
+  `<1>1` の前提が揃い、両端は同じオブジェクトを指す。(b) は `<1>7a` である。
+  BY <ref id=9d74736/>, <ref id=9c7c27a/>, DEF 位置の値, DEF 辺の存在, <1>1, <1>2, <1>3, <1>4, <1>5,
+     <1>6, <1>7, <1>7a
 
 ## L1a (`Binding` の形は `ρ` の上の束縛節点の形である) <!--#cc9c0f1-->
 
@@ -1933,9 +1976,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       `Llvm` 節点はオペランドを 1 つも持たない。返せるオペランドのオブジェクトが無いので、`gen` は
       A3 の但し書きが述べる op ではない。
 
-      **プログラムは `std.fix` とこの関数 `f` だけからなるものを取る。** よって `Std` の名前空間に
-      型を宣言するのは `std.fix` だけであり、0 要素のタプルの型宣言を `type_defns` に積むのは
-      `Program::add_tuple_defns` だけである。
+      **プログラムは `std.fix` とこの関数 `f` だけからなるものを取り、`f` の名前は `std.fix` の
+      どのグローバルの名前とも異なるものを取る。**
 
       `f` のパラメータは `c : Bool` の 1 つ、capture は無く、`borrowed_units` は空 (A1) である。本体は
       次のとおりで、`m`・`x_0`・`x_1` は型 `T`、`p_0`・`p_1` は `()` である。
@@ -1949,7 +1991,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       A6 (`c`・`m`・`x_0`・`x_1`・`p_0`・`p_1` は相異なる名前)、A9 (アームは 2 つ)、
       A12 (アームの結果と `Match` の束縛変数の型、payload と変位の型、`Llvm` 節点の `args` の名前の列が
       `gen.free_vars()` -- 空の列 -- に等しいこと)、A16 の (網羅) (2 つのアームが `Bool` の 2 変位を
-      尽くす) と (位置) (catch-all アームが無いので空虚に真)。**A10 と A11 も満たす。** `T`・`Bool`・`()`
+      尽くす) と (位置) (catch-all アームが無いので空虚に真)。**A1 の前半 -- プログラムが D12 の意味で
+      RC 規律を満たすこと -- を示すのは `<1>6b` である。** **A10 と A11 も満たす。** `T`・`Bool`・`()`
       はどれも実在の Fix プログラムに現れる型 -- 文字列リテラルの `Array U8`、`Std::Bool`、0 要素の
       タプル -- なので、A10 がそれらについて ground・飽和・tycon が `type_env` にあること・
       `unpunched_field_types` の歩みが有限であることを与える。各変数の使用はその位置でスコープに入って
@@ -1981,6 +2024,33 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
          `fields` は型 `()` の 2 つの変位である。
        - **(iv)** `is_closure(T)`・`is_closure(())`・`is_closure(Bool)` はどれも偽である。
 
+  **まず、`type_defns` の項目と `type_env.tycons()` の項の対応を置く。** §1 より `type_env` は
+  `borrow_ify` の入力プログラムの `TypeEnv` である。A28 を果たす走査より、`tycons` の表を据えるのは
+  2 か所で、どちらも `bulitin_tycons()` から始めるか空から始め、表に足す 4 か所が入れる鍵の名前は
+  `?`・`#FixCap@`・`#CapList@` のいずれかで始まる。空から始める側の表が持つ鍵は、その 4 か所が
+  入れたものだけなので、名前がその 3 つのどれでも始まらない鍵はそこに無い。(ii) と (iii) が扱う
+  2 つの鍵の名前は `Tuple0` と `Bool` であり、どちらもその 3 つで始まらない。A10 より `()` と `Bool` の
+  最上位の tycon は `type_env.tycons()` の鍵なので、この表を据えたのは `bulitin_tycons()` から始める側
+  -- `Program::calculate_type_env` -- であり、前提 型環境を作る在りか より、その呼び出しは
+  `elaborate` の中にある。その 2 つの鍵の項も、足す 4 か所ではなく据えた側が置いたものである。`calculate_type_env` は
+  `bulitin_tycons()` から始めた写像 `tycons` と空の写像 `aliases` を置き、`type_defns` を順に見て、
+  `tycons` か `aliases` が既にその項目の `tycon()` -- `TypeDefn` の `name` を名前に持つ `TyCon` -- を
+  鍵に持つときは `Errors` を足して `continue` し、そうでないときは `type_decl.tycon()` を鍵、
+  `type_decl.tycon_info(&[])` を項とする組を `tycons` (型別名なら `aliases`) に入れる。末尾で
+  `errors.to_result()` を返し、`elaborate` はその値に `?` を当てるので、`Errors` が空でなければ
+  `elaborate` はプログラムを返さず、その本体の活性化は存在しない。**よって、活性化を持つプログラムでは
+  `continue` の枝が 1 度も通らない。** すなわち `type_defns` のどの 2 つの項目も `tycon()` が異なり、
+  どの項目の `tycon()` も `bulitin_tycons()` の鍵ではない。`TypeDefn::is_alias` は `value` が
+  `TypeDeclValue::Alias` であることなので、`value` が `TypeDeclValue::Struct` か
+  `TypeDeclValue::Union` である項目 `d` は `tycons` の側へ入る。したがってそのような `d` について、
+  `type_env.tycons()` は鍵 `d.tycon()` の下に `d.tycon_info(&[])` を持つ。**同じ腕は構造体の
+  宣言について、名前の末尾に `PUNCHED_TYPE_SYMBOL` (`#PunchedAt`) と欄の添字を足した鍵の組も入れるが**
+  (`TyCon::into_punched_type_name`)、その名前は `#PunchedAt` を含むので、それを含まない名前の鍵が
+  この入れ方で入ることは無い。**型の節点についても 1 つ置く。** `type_tycon` と `type_tyapp` は
+  `TypeNode::new_arc` に `Type::TyCon` と `Type::TyApp` を渡し、`new_arc` は `TypeNode::new` の値を
+  `Arc` に包む。`TypeNode::new` は渡された `Type` をそのまま `ty` の欄に置くので、この 2 つが返す節点の
+  `ty` は渡された `Type` である。
+
   (i) について。`<1>1` より `T` は `type_tyapp(make_array_ty(), make_u8_ty())` である。
   `make_array_ty()` は `type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))` であり、
   `TypeNode::toplevel_tycon` は `TyApp` の腕で関数側へ降りるので、`T` の最上位の tycon はその
@@ -1994,21 +2064,24 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   `apply_type_args(&tycon(make_tuple_name_abs(0)), &[])` を返す。`apply_type_args` は引数が無いとき
   `type_tycon(tycon)` を返すので、`()` の最上位の tycon は `TyCon { name: make_tuple_name_abs(0) }` で
   ある。`make_tuple_name_abs(0)` は `make_tuple_name(0)` -- `FullName::from_strs(&[STD_NAME], "Tuple0")`
-  -- を absolute にしたものである。`Program::add_tuple_defns` は使われた各大きさについて
-  `Program::add_tuple_defn` を通じて `tuple_defn(size)` を `type_defns` に積み、
-  `Program::calculate_type_env` は各型宣言について `type_decl.tycon()` -- `TypeDefn` の `name` を名前に
-  持つ `TyCon` -- を鍵に `type_decl.tycon_info(&[])` を入れる。`NameSpace` の `PartialEq` と `Hash` は
+  -- を absolute にしたものである。`NameSpace` の `PartialEq` と `Hash` は
   `is_absolute` を読まず、`FullName` の `Hash` は名前空間の `names` と `name` だけを読み、`FullName` の
-  `PartialEq` は derive されたものなので、absolute かどうかは鍵の一致に効かない。`calculate_type_env` は既に
-  写像か型別名に在る tycon の宣言を `insert` へ進めないが、`<1>1` よりこの鍵を宣言するのは
-  `Program::add_tuple_defns` が積む `tuple_defn(0)` だけである。`TypeDefn::tycon_info` は
+  `PartialEq` は derive されたものなので、absolute かどうかは鍵の一致に効かない。
+  `elaborate` は `Program::add_tuple_defns` を `Program::calculate_type_env` より前に呼ぶ。
+  `add_tuple_defns` はプログラムが使う各大きさについて `Program::add_tuple_defn` を通じて
+  `tuple_defn(size)` を `type_defns` に 1 度ずつ積み、`<1>1` よりこのプログラムは 0 要素のタプルの型を
+  使う。よって `tuple_defn(0)` は `type_defns` の項目であり、その `name` は `make_tuple_name(0)` --
+  上の鍵 -- なので、上の対応より `type_env.tycons()` のその鍵の項は `tuple_defn(0)` の
+  `tycon_info(&[])` である。`TypeDefn::tycon_info` は
   `TypeDeclValue::Struct(s)` の腕で `(TyConVariant::Struct, s.is_unbox, s.fields.clone())` を置き、
   `tuple_defn(0)` の `fields` は `(0..0)` を写した列なので空、`is_unbox` は `TUPLE_UNBOX` である。
 
   (iii) について。`<1>1` より `Bool` は `std.fix` の `type Bool = unbox union { _false : (), _true : () };`
-  が宣言する型である。`<1>1` よりこの鍵を宣言するのは `std.fix` のこの 1 行だけであり、
-  `Program::calculate_type_env` がその宣言の `tycon()` を鍵に
-  `tycon_info(&[])` を入れる。`TypeDefn::tycon_info` は `TypeDeclValue::Union(u)` の腕で
+  が宣言する型 `Std::Bool` であり、その宣言は `type_defns` の項目である。`TypeDefn::tycon` より
+  その宣言の `tycon()` の名前は名前空間が `STD_NAME` (`Std`) ただ 1 つで名前が `BOOL_NAME` (`Bool`) で
+  あり、それが `Bool` の最上位の tycon である。よって上の対応より
+  `type_env.tycons()` のその鍵の項はその宣言の `tycon_info(&[])` である。`TypeDefn::tycon_info` は
+  `TypeDeclValue::Union(u)` の腕で
   `(TyConVariant::Union, u.is_unbox, u.fields.clone())` を置く。宣言は `unbox` なので `is_unbox` は
   真であり、変位は `_false` と `_true` の 2 つでどちらも型 `()` である。
 
@@ -2017,13 +2090,16 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   したものである。`FullName` は `PartialEq` を derive するので、EXT `derive` した `PartialEq` より
   `namespace` と `name` を比べる。(i)(ii)(iii) の 3 つの名前の `name` は `ARRAY_NAME` (`Array`)・
   `Tuple0`・`BOOL_NAME` (`Bool`) であり、どれも `ARROW_NAME` (`Arrow`) と異なる。
-  BY EXT `derive` した `PartialEq`, <1>1,
+  BY 前提 型環境を作る在りか, EXT `derive` した `PartialEq`, <ref id=a3d055e/>, <ref id=8412761/>, <1>1,
      CODE src/ast/types.rs: TypeNode::toplevel_tycon, TypeNode::toplevel_tycon_satisfies,
      CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_closure,
      CODE src/ast/types.rs: type_tyapp, type_tycon, tycon, apply_type_args, TyCon, TyCon::new,
-     CODE src/ast/typedecl.rs: TypeDefn::tycon, TypeDefn::tycon_info,
+     CODE src/ast/types.rs: TypeNode::new, TypeNode::new_arc, TyCon::into_punched_type_name,
+     CODE src/ast/typedecl.rs: TypeDefn::tycon, TypeDefn::tycon_info, TypeDefn::is_alias,
+     CODE src/ast/typedecl.rs: TypeDeclValue::is_alias,
      CODE src/ast/program.rs: Program::add_tuple_defn, Program::add_tuple_defns,
      CODE src/ast/program.rs: Program::calculate_type_env,
+     CODE src/elaboration/mod.rs: elaborate,
      CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: FullName::from_strs,
      CODE src/ast/name.rs: impl Hash for FullName,
      CODE src/ast/name.rs: impl PartialEq for NameSpace, CODE src/ast/name.rs: impl Hash for NameSpace,
@@ -2031,7 +2107,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
      CODE src/fixstd/builtin.rs: make_arrow_name_abs, make_tuple_ty, make_tuple_name,
      CODE src/fixstd/builtin.rs: make_tuple_name_abs, tuple_defn,
      CODE src/fixstd/std.fix: Bool,
-     CODE src/constants.rs: STD_NAME, ARRAY_NAME, ARROW_NAME, TUPLE_NAME, BOOL_NAME, TUPLE_UNBOX
+     CODE src/constants.rs: STD_NAME, ARRAY_NAME, ARROW_NAME, TUPLE_NAME, BOOL_NAME, TUPLE_UNBOX,
+     CODE src/constants.rs: PUNCHED_TYPE_SYMBOL
 
 <1>2. `boxed_leaf_paths(T, type_env)` は `{[]}` であり、`[]` は `T` の値で inhabited である。`p_0` と
       `p_1` の型の `boxed_leaf_paths` は空であり、`boxed_leaf_paths(Bool, type_env)` も空である。
@@ -2186,6 +2263,25 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   BY <ref id=ecdd35d/> (a), <1>1, <1>2, <1>3, CODE src/rc_ir/borrow.rs: borrow_ify, infer_ownership,
      CODE src/rc_ir/ownership.rs: collect_consumes, collect_consumes_go, push_boxed_leaves
 
+<1>6b. このプログラムは A1 を満たす。
+  A1 は 2 つを述べる -- `borrow_ify` に渡されるプログラムが D12 の意味で RC 規律を満たすことと、その
+  プログラムのすべての関数の `borrowed_units` が空であることである。D12 は、プログラムのすべての関数の
+  本体とすべてのグローバル初期化子の `init` が、そのプログラムの `borrowed_units` が定める所有と借用の
+  割り当て (D14) の下で D11 を満たすことである。`f` については、本体の D11 を `<1>6` が、
+  `borrowed_units` が空であることを `<1>1` が与える。**`f` 以外の関数とグローバル初期化子は、`std.fix` を
+  前段のパス (`insert_rc` と `split_rc_units`) に通したプログラムのものを取る。** 以下このプログラムを
+  前段の出力と呼ぶ。前段の出力は `borrow_ify` に渡されるプログラムなので、A1 より D12 を満たし、その
+  すべての関数の `borrowed_units` は空である。D12 より前段の出力の各本体と各初期化子は D11 を満たす。
+  D11 が読むのはその本体の実行路 (D3) と、その上で `Obl` を動かす操作である。前段の出力の本体に現れる
+  `App` の呼び出し先 (D23) は前段の出力の関数であり、`<1>1` より `f` の名前は前段の出力のどの関数の
+  名前とも異なるので、`f` を足しても各本体の呼び出し先は変わらない。前段の出力の各関数の
+  `borrowed_units` も、それが定める所有と借用の割り当て (D14) も、`f` を足して変わらない。D3 より
+  実行路はその本体の木だけで決まるので、各本体の実行路も変わらない。よって前段の出力の各本体と
+  各初期化子はこのプログラムの下でも D11 を満たし、このプログラムのすべての本体と初期化子が
+  D11 を満たす。
+  BY <ref id=627e117/>, <ref id=3d96eb8/>, <ref id=95427eb/>, <ref id=ef8efc4/>, <ref id=ca36627/>,
+     <ref id=ff5985d/>, <1>1, <1>6
+
 <1>7. `id(x_j, []) = (x_j, [])` であり、`act(x_j, []) = {(x_j, [])}` である。
   <2>1. `x_j` の `Binding` は `Llvm(gen, [], T)` である。`collect_bindings` は
         `Let(x, Llvm(llvm_gen, args), k)` に対し `x` の `Binding` を `Llvm(llvm_gen, args, x.ty)` と
@@ -2246,14 +2342,16 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
     BY <ref id=9c7c27a/>, <ref id=4c886c1/> (b), <2>1, <2>2, <2>3, <2>4
 
 <1>10. QED
-  `<1>6` より `f` の本体は RC 規律を満たす。`<1>4` より `ρ_0` の上で `(x_0, [])` と `(m, [])` はどちらも
-  スロットであり、同じオブジェクトを指す。`<1>6a` より解析はその 2 つの鍵で `origin` を呼ぶ。
+  `<1>6b` よりこのプログラムは A1 を満たすので、`<1>1` が確かめたほかの仮定と合わせて、これは枠の
+  仮定が成り立つプログラムである。`<1>6` より `f` の本体は RC 規律を満たす。`<1>4` より `ρ_0` の上で
+  `(x_0, [])` と `(m, [])` はどちらもスロットであり、同じオブジェクトを指す。`<1>6a` より解析は
+  その 2 つの鍵で `origin` を呼ぶ。
   `<1>7` と `<1>8` より `id(x_0, []) = (x_0, [])`、
   `id(m, []) = (m, [])` であり、`<1>1` の A6 より `x_0` と `m` は相異なる名前なので、この 2 つの
   `VarPath` は異なる。`<1>9` を `j = 0` に当てると、`ρ_0` の上に D20 の意味で在る別名の辺は E6 の
   `(x_0, [])`-`(m, [])` の 1 本だけなので、`(x_0, [])` と `(m, [])` はその 1 本からなる別名の道 (D20) で
   結ばれ、この 2 つを結ぶどの道も E6 の辺だけからなる。
-  BY <ref id=9c7c27a/>, <1>1, <1>4, <1>6, <1>6a, <1>7, <1>8, <1>9
+  BY <ref id=9c7c27a/>, <1>1, <1>4, <1>6, <1>6a, <1>6b, <1>7, <1>8, <1>9
 
 **補足 (両端は計数下である)**。`<1>4` の 2 つのスロットが指すオブジェクトは計数下 (D26) である。よって
 この本体は、P5 (b) を計数下のスロットに限った形への反例にもなっている。
@@ -2534,7 +2632,8 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
 
 これに命題 L6 を添える。README の P7 の言明には無いが、報告しない箇所が参照の収支を狂わせないことを
 述べるので、ここで併せて示す。L6 は (a) と同じく DEF leaf 粒度の所有 を満たす `own` についての言明で
-ある。
+ある。**(a) と L6 の両方が、`App` の引数 leaf と呼び出し先のパラメータの対応を読む。** それを 1 つの
+命題に括り出したものが L5b である。
 
 第 1 引数を関数の本体に限るのは、`collect_consumes` の呼び出しがその形のものだけだからであり、それを
 与えるのは `L5 (b')` と `L5 (n)` である。**D9 の消費の表の最後の行は「本体 (D23) の終端の `Ret(x)`」で
@@ -2555,7 +2654,7 @@ P7 の 2 つの主張を次のように書く。README の P7 と同じく、ど
 `p` を関数のパラメータ、`λ` を `ty(p)` の boxed leaf とする。`own` が DEF leaf 粒度の所有 を満たすとは、
 `(p.name, λ) ∈ own` であることが「`p` の unit `truncate_to_unit(ty(p), λ, type_env)` が D14 の意味で
 所有される」ことと同値であることをいう。**`truncate_to_unit(ty(p), λ, type_env)` が `rc_units(ty(p))` の
-要素であること -- すなわちこの対応が定まること -- は、定義ではなく P7 (a) の `<2>2b` が示す。**
+要素であること -- すなわちこの対応が定まること -- は、定義ではなく L5b (b) が示す。**
 
 `infer_ownership` が渡す `owned_leaves` は不動点計算の途中の集合であり、それが DEF leaf 粒度の所有 に
 一致するかどうかは P8 が扱う。`cancel` の側の `CancelAnalysis::consume_rhs` は `collect_consumes` を
@@ -2746,10 +2845,11 @@ leaf に前置したものだからである。
   BY CODE src/rc_ir/ownership.rs: rhs_consumes の `RcRhs::Llvm(llvm_gen, args)` の腕
 
 <1>20. (l) が成り立つ。`passthrough_arg_leaves` は `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の
-       各 leaf の `LeafOrigins` に `as_arg_projection` をかけて `Some((j, p))` になったものを集める。
+       `leaves()` -- `Provenance::leaves` は `LeafMap::leaves` の値であり、`LeafMap` が持つ各 boxed leaf の
+       事実を返す -- の各 `LeafOrigins` に `as_arg_projection` をかけて `Some((j, p))` になったものを集める。
        すなわち「結果のある leaf の宣言が単一の `Arg(j, p)` である」ような `(j, p)` の集合である。
   BY CODE src/rc_ir/ownership.rs: passthrough_arg_leaves, as_arg_projection,
-     CODE src/rc_ir/provenance.rs: Provenance::leaves
+     CODE src/rc_ir/provenance.rs: Provenance::leaves, CODE src/rc_ir/leaf_map.rs: LeafMap::leaves
 
 <1>20a. (n) が成り立つ。
   <2>1. `collect_consumes` を呼ぶ式が在るのは `infer_ownership` であり、`infer_ownership` を呼ぶ式が
@@ -2787,6 +2887,40 @@ leaf に前置したものだからである。
   BY <1>1, <1>3, <1>7, <1>7a, <1>8, <1>9, <1>10, <1>11, <1>12, <1>14, <1>15, <1>16, <1>17, <1>18,
      <1>19, <1>20, <1>20a
 
+### L5b (積む引数 leaf は呼び出し先のパラメータの leaf である) <!--#3f20968-->
+
+**言明**。関数の本体を第 1 引数に渡した `collect_consumes` の呼び出しについて、その走査が `rhs_consumes` を
+呼ぶ `Let(x, App(callee, args), k)` の節点で `resolve_callee_params` が `Some(params)` を返すとき、
+次の 2 つが成り立つ。
+
+- **(a)** `params` は D9 の `App` の行が言う呼び出し先 (D23) のパラメータの列である。
+- **(b)** `boxed_leaf_paths(ty(args[i]), type_env)` の各元 `leaf` は `ty(params[i])` の boxed leaf でも
+  あり、`truncate_to_unit(ty(params[i]), leaf, type_env)` は `rc_units(ty(params[i]))` の要素である。
+  すなわち対 `(params[i], leaf)` について DEF leaf 粒度の所有 の対応が定まる。
+
+**この命題を P7 (a) の外に置くのは、L6 の `<1>8a` が同じ対応を読むからである。** 段が引けるのは
+先行する兄弟と祖先の先行する兄弟だけなので、P7 (a) の下位の段は L6 から引けない。
+
+<1>1. (a) が成り立つ。
+  D23 は「D9 の `App` の行と D10 の生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数で
+  ある」と定め、P29 が、`resolve_callee_params` が `Some(params)` を返すならば `params` はその段の
+  実行時の呼び出し先のパラメータの列であると述べる。P29 は `borrow_ify` の入力の `App` についての
+  言明であり、`L5 (n)` よりこの呼び出しが走るのは `borrow_ify` の入力の本体についてである。
+  BY <ref id=ff5985d/>, <ref id=c5547e4/> (n), <ref id=7a4d9dc/>
+
+<1>2. (b) が成り立つ。
+  `<1>1` より `params` は D9 の `App` の行が言う呼び出し先のパラメータの列である。A12 の
+  「`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型」の行より
+  `ty(args[i]) = ty(params[i])` なので、`leaf` は `ty(params[i])` の boxed leaf でもある。
+  `ty(params[i])` はプログラムに現れる型なので A10 を満たし、P1 より
+  `truncate_to_unit(ty(params[i]), leaf, type_env)` は `rc_units(ty(params[i]))` の要素である。
+  DEF leaf 粒度の所有 は `p` を関数のパラメータ、`λ` を `ty(p)` の boxed leaf として述べられているので、
+  この 2 つでその対応が `(params[i], leaf)` について定まる。
+  BY <ref id=8412761/>, <ref id=83d98e9/>, <ref id=3597669/>, DEF leaf 粒度の所有, <1>1
+
+<1>3. QED
+  BY <1>1, <1>2
+
 ### P7 (a) D9 の消費はすべて報告される
 
 この節は `own` が DEF leaf 粒度の所有 を満たすことを前提に置く。`own` を読む出どころは (i) だけで
@@ -2800,19 +2934,13 @@ leaf に前置したものだからである。
     BY <ref id=9d74736/>, <ref id=c5547e4/> (i)
   <2>2a. `resolve_callee_params` が `Some(params)` を返すとき、`params` は D9 の `App` の行が言う
          呼び出し先 (D23) のパラメータの列である。
-    D23 は「D9 の `App` の行と D10 の生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数で
-    ある」と定め、P29 が、`resolve_callee_params` が `Some(params)` を返すならば `params` はその段の
-    実行時の呼び出し先のパラメータの列であると述べる。P29 は `borrow_ify` の入力の `App` についての
-    言明であり、`L5 (n)` よりこの呼び出しが走るのは `borrow_ify` の入力の本体についてである。
-    BY <ref id=ff5985d/>, <ref id=c5547e4/> (n), <ref id=7a4d9dc/>
+    L5b (a) がこれを与える。`<2>1` よりこの節点で走るのは `rhs_consumes` である。
+    BY <ref id=3f20968/> (a), <2>1
   <2>2b. `L5 (i)` が回る `leaf` は `ty(params[i])` の boxed leaf でもあり、`(params[i], leaf)` について
          DEF leaf 粒度の所有 の対応が定まる。
-    `L5 (i)` が回るのは `boxed_leaf_paths(ty(args[i]), type_env)` の元である。A12 の
-    「`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型」の行より
-    `ty(args[i]) = ty(params[i])` なので、`leaf` は `ty(params[i])` の boxed leaf でもある。
-    `ty(params[i])` はプログラムに現れる型なので A10 を満たし、P1 より
-    `truncate_to_unit(ty(params[i]), leaf, type_env)` は `rc_units(ty(params[i]))` の要素である。
-    BY <ref id=8412761/>, <ref id=83d98e9/>, <ref id=c5547e4/> (i), <ref id=3597669/>, DEF leaf 粒度の所有, <2>2a
+    `L5 (i)` が回るのは `boxed_leaf_paths(ty(args[i]), type_env)` の元であり、L5b (b) がその元に
+    ついてこの 2 つを与える。
+    BY <ref id=3f20968/> (b), <ref id=c5547e4/> (i), <2>1
   <2>3. D9 の行の後半「呼び出し先がその位置の unit を所有する (D14) 引数の leaf」は、`resolve_callee_params` が
         `Some(params)` のとき `owns(&params[i], &leaf)` が積む。`<2>2a` より `params` は D9 の行が言う
         呼び出し先のパラメータであり、`<2>2b` より DEF leaf 粒度の所有 の対応が定まる。その対応より、
@@ -2992,16 +3120,16 @@ leaf に前置したものだからである。
   BY <ref id=9d74736/>, <ref id=f06144e/>, <ref id=c5547e4/> (e), <ref id=9d4ff56/>
 
 <1>8a. `rhs_consumes` の `RcRhs::App` の腕が、`resolve_callee_params` が `Some(params)` を返し
-       `owns(&params[i], &leaf)` が偽のときに積まない引数 leaf (`L5 (i)`)。D23 は D9 の `App` の行が言う
-       「呼び出し先」を実行時の関数と定め、P29 は、`resolve_callee_params` が `Some(params)` を返すならば
-       `params` はその実行時の呼び出し先のパラメータの列であると述べる。`L5 (n)` よりこの呼び出しは
-       `borrow_ify` の入力の本体について走るので、P29 をそのまま当てられる。DEF leaf 粒度の所有 より、
+       `owns(&params[i], &leaf)` が偽のときに積まない引数 leaf (`L5 (i)`)。L5b (a) より `params` は
+       D9 の `App` の行が言う呼び出し先 (D23) のパラメータの列であり、`L5 (i)` が回る `leaf` は
+       `boxed_leaf_paths(ty(args[i]), type_env)` の元なので、L5b (b) より対 `(params[i], leaf)` に
+       ついて DEF leaf 粒度の所有 の対応が定まる。その対応より、
        この述語が偽であることは、`params[i]` のその leaf の unit を呼び出し先が**借用する** (D14) ことと
        同値である。D9 の `App` の行は消費を呼び出し先が所有する位置の leaf に
        限っているので、これは消費ではない。D14 より借用する unit の参照は呼び出し元が処分し、D10 は
        `Obl` を動かす事象を `Retain`・`Release`・生成・消費・移動で尽くすので、この leaf について
        `Obl` は変わらない。
-  BY <ref id=9d74736/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=ff5985d/>, DEF leaf 粒度の所有, <ref id=c5547e4/> (i), <ref id=c5547e4/> (n), <ref id=7a4d9dc/>
+  BY <ref id=9d74736/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=ff5985d/>, DEF leaf 粒度の所有, <ref id=c5547e4/> (i), <ref id=3f20968/> (a), <ref id=3f20968/> (b)
 
 <1>9. QED
   報告しない箇所は次で全部である。`L5 (m)` より積む出どころは L5 の (c)、(d)、(h)、(i)、(k) の 5 つ
@@ -3037,10 +3165,11 @@ leaf に前置したものだからである。
 
 この文書の `DEF` が定めるのは
 語の意味だけであり、その語について示すことは段が持つ -- DEF 路の位置 の数え上げと `obj` の一意性は
-L0b、DEF 辺の leaf 対応 が D9 の値の水準の 6 行と一致することは L1 の `<1>1a`、DEF 辺の存在 と
+L0b、DEF 位置の値 の等しさからオブジェクトの一致が出ることは L1 の `<1>1`、
+DEF 辺の leaf 対応 が D9 の値の水準の 6 行と一致することは L1 の `<1>1a`、DEF 辺の存在 と
 DEF `ρ` の上で実行された辺 の連言が D20 の「辺が在る」と一致することは L1 (b)、
 DEF 名前の指すオブジェクト の `ν` が写像として定まることは P6 (b) の `<1>0`、DEF leaf 粒度の所有 の
-対応が定まることは P7 (a) の `<2>2b` である。
+対応が定まることは L5b (b) である。
 
 ### D9 の値の水準の行を leaf の粒度で読む規則
 
@@ -3049,6 +3178,11 @@ D9 の移動の表も値の水準の 6 行も、構文の粒度で書かれて�
 「始点のどの leaf が終点のどの leaf に対応するか」を要る。この文書は第 2 節の DEF 辺の leaf 対応 でそれを
 与え、L1 の `<1>1a` がそれを D9 の値の水準の 6 行と突き合わせる。E1 から E6 の 6 行はいずれも、対応する
 leaf を行の文言そのものから読める。
+
+**6 行が渡すものは 2 つの形に分かれる。** E1 から E4 と E6 の 5 行は、終点の値そのものを始点の値
+(またはその成分) と等しいとする。E5 の行だけは、2 つの**位置の値** (DEF 位置の値) を等しいとする --
+その行が渡す `x` の値と `args[j]` の値は別の値である。両者を 1 つの形に揃える語が DEF 位置の値 で
+あり、L1 の `<1>1b` が、始点の値の成分へ降りる形を位置の値の等しさへ写す。
 
 `Llvm` の行は、対にする leaf を宣言の path として名指す -- 「結果の leaf `λ` の宣言が単一の
 `Arg(i, σ)` であるとき、その leaf の値は**オペランド `i` の leaf `σ` の値**である」であり、続けて
@@ -3059,7 +3193,8 @@ leaf を行の文言そのものから読める。
 
 D26 が A5 を計数下のオブジェクトへ制限した結果、「同じ参照を持つ 2 つの leaf は同じオブジェクトを指す」の
 形の議論は両端が計数下であるときにしか通らない。**この文書の L1 は A5 を使わない。** 使うのは D9 の値の
-水準の 6 行と、`obj(x, λ)` が `x` が得る値と `λ` だけで決まる量であること (L0b (c)、D6) である。
+水準の 6 行と、`obj(x, λ)` が位置 `(x, λ)` の値 (DEF 位置の値) で決まる量であること (L1 の `<1>1` が
+D4・D6・L0b (c) から示す) である。
 したがって L1 (a) に載る P5 (a) と P6 (b) は、両端が計数下であるかどうかに依らずに成り立つ。
 P5 (b) は L1 を読まない -- その証明が命題として引くのは L2 だけである。
 
