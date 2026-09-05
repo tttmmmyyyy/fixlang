@@ -1529,9 +1529,13 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
       `origin(vars, type_env, &arm_result.name, path)` を呼ぶ。`ρ` が選んだアームを `arm_j`、
       `x' = arm_results[j]`、`λ' = λ` とする。
   <2>1. `arm_results[j]` は `arms[j].body` の終端の `Ret` が名指す変数である。
-    BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var
+    BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var,
+       CODE src/misc.rs: grow_stack, EXT stacker の maybe_grow
     `RcRhs::Match(scrut, arms)` の腕が各 `arm` について `returned_var(&arm.body)` を `arm_results` に
-    push する。`returned_var` は継続を辿って `RcExpr::Ret(v)` の `v` を返す。
+    push する。`returned_var` の本体は `grow_stack(|| match ...)` であり、`grow_stack(f)` の本体は
+    `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` なので、`EXT stacker の maybe_grow` よりその値は
+    その `match` の値である。その `match` は `RcExpr::Ret(v)` の腕で `v` を返し、継続を持つ 5 種の腕で
+    継続について自分を呼ぶ。
   <2>2. `x` の値は `arm_results[j]` の値である。
     BY <ref id=b3dfa37/>, <ref id=ca36627/>, <2>1
     D3 より `ρ` はアーム `arm_j` の本体の実行路を辿ってからその `Match` の継続へ進む。D2 の表より
@@ -3596,15 +3600,16 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
   その時点より前に束縛される。A11 よりそれらの束縛はスコープの規律に従う。
   活性化の位置が段ごとに実行路に沿って 1 つ進むことは D23 が定める。
 
-<1>1g. `Pre(V)` について `RewriteCtx::new` が作った表 `ctx.vars` と、`V` の本体 `Post(V)` (D35) に
-       ついて `cancel` が `VarTable::of` か `VarTable::body_only` で作る表は、`bindings`・
+<1>1g. `Pre(V)` について `borrow_ify` が `RewriteCtx` に置いた表 `ctx.vars` と、`V` の本体
+       `Post(V)` (D35) について `cancel` が作る表は、`bindings`・
        `closure_targets`・`param_tys`・`var_tys` の 4 つの欄が等しい。`origin_inner` が読むのは
        `bindings` だけである。
   BY <1>1d, EXT 写像と集合の基本演算, CODE src/rc_ir/borrow.rs: RewriteCtx::new,
      CODE src/rc_ir/borrow.rs: cancel,
      CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
      CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var,
-     CODE src/rc_ir/ownership.rs: origin_inner
+     CODE src/rc_ir/ownership.rs: origin_inner, CODE src/misc.rs: grow_stack,
+     EXT stacker の maybe_grow
   <1>1d より、書き換えが変えるのは `Retain`/`Release` 節点と `App` の callee の名前だけであり、ほかの
   節点は種・変数・path・並びを変えずに組み直される。`collect_bindings` は `Retain`/`Release`/`Eval` の
   腕で継続へ降りるだけで束縛を作らず、`RcRhs::App` の腕は callee を読まずに `Binding::Producer` を
