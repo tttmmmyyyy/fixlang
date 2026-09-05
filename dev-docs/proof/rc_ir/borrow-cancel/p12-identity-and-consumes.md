@@ -2,12 +2,11 @@
 
 この文書は `README.md` の P5 (a)、P5 (b)、P5 (c)、P6、P7 を証明する。主語となる語彙は D13 が定める --
 `origin` の返り値と、その 2 つの形 `Exactly(u, σ)` と `Join { identity, candidates }` である。段が `BY` で
-引くのは、`README.md` の定義 (D1、D2、D3、D4、D6、D7、D8、D9、D10、D11、D14、D15、D16、D20、D21、D23、
-D26)、仮定 (A1、A3、A6、A9、A10、A11、A12、A14、A15、A16)、および命題 P1、P2、P29 の**言明**である。
+引くのは、`README.md` の定義と仮定、および命題 P1、P2、P29 の**言明**である。
 P1 と P2 の証明は `p10-leaves-and-units.md`、P29 の証明は `p51-runs.md` にあり、この文書はその 3 つの
 言明だけを使う。
 
-本文はこのほかに D17 と A5 を引き合いに出す。D17 は第 2 節の補足が leaf の写り方を突き合わせる
+D17 と A5 は本文が引き合いに出す。D17 は第 2 節の補足が leaf の写り方を突き合わせる
 相手であり、A5 は P6 の補足 3 -- 同じ `id` を持つ 2 つの leaf がどちらも `Linhc(v, π, p)` に入るときは
 参照も 2 つある -- の根拠である。この 2 つを `BY` に挙げる段は無い。
 
@@ -56,10 +55,11 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 うえで `origin` と `acted_references` の第 1・第 2 引数を落として書く。**`bindings` が等しい相異なる
 2 つの `VarTable` の値について答えが等しいことは、この記法の主張ではない** (P2a)。
 
-**A1・A6・A9 は主語を `borrow_ify` の入力に置く仮定なので、この固定の下でそのまま当たる。** 層 1 の
+**A1・A6・A9・A11 は主語を `borrow_ify` の入力に置く仮定なので、この固定の下でそのまま当たる。** 層 1 の
 命題である P5・P6・P7 を `borrow_ify` の出力について読む者がどう読むかは `README.md` の A6 の項が
 定める --「層 1 の証明は依存の順で P9 を引けないので、A6 を読む段は入力について読み、出力について読む者は
-P9 と合わせて読む」。A9 についてはその項が「`borrow_ify` と `cancel` は
+P9 と合わせて読む」。A11 の項も同じ形を取り、「A6 と同じ形であり、出力について読む段は P9 と合わせて
+読む。」と述べる。A9 についてはその項が「`borrow_ify` と `cancel` は
 アームを持たない `Match` を作らないので (P22、P24)、`cancel` の入力と出力についても同じことが言える」と
 述べる。
 
@@ -200,53 +200,9 @@ SCAN src/ `impl Drop`
   = src/tool/stopwatch.rs: StopWatch::end -- `StopWatch` の `Drop`
   = src/tests/test_lsp/lsp_client.rs: LspClient::finish -- `LspClient` の `Drop`
 
-**前提 `tycons` の欄を名指す在りか** --- `TypeEnv` の `tycons` の欄を名指す式が在る項目は次で尽きる。
-走査は `TypeEnv` のアクセサ `tycons()` の呼び出し、`KindEnv` の同じ名前の欄、`tycons` を部分文字列に
-持つ別の識別子、および局所変数も挙げる。
+**前提 `unsafe impl` の在りか** --- `src/` に `unsafe impl` と書いた項目は無い。
 
-SCAN src/ast/ `tycons`
-  = src/ast/kind_scope.rs: KindEnv -- `KindEnv` の欄 `tycons`
-  = src/ast/pattern.rs: Pattern::resolve_union_variant -- アクセサ `tycons()` の呼び出し
-  = src/ast/program.rs: TypeEnv -- 欄の宣言と doc の散文
-  = src/ast/program.rs: TypeEnv::default -- 空の写像を置く `tycons: Arc::new(Default::default())`
-  = src/ast/program.rs: TypeEnv::new -- 引数 `tycons` を置く `tycons: Arc::new(tycons)`
-  = src/ast/program.rs: TypeEnv::unwrap_newtypes -- 読みと `self.tycons = Arc::new(rewritten)`
-  = src/ast/program.rs: TypeEnv::unwrapped_newtype_info -- 読み
-  = src/ast/program.rs: TypeEnv::is_unwrapped_newtype -- doc の散文
-  = src/ast/program.rs: TypeEnv::add_tycons -- 読みと `self.tycons = Arc::new(tycons)`、引数 `new_tycons`
-  = src/ast/program.rs: TypeEnv::tycons -- アクセサの宣言と読み
-  = src/ast/program.rs: TypeEnv::kinds -- 読み
-  = src/ast/program.rs: TypeEnv::is_struct_act -- 読み
-  = src/ast/program.rs: TypeEnv::resolve_type_aliases_in_tycons -- 読みと `self.tycons = Arc::new(tycons)`、局所変数
-  = src/ast/program.rs: Program::calculate_type_env -- 局所変数 `tycons` と `bulitin_tycons()`
-  = src/ast/program.rs: Program::tycon_names_with_aliases -- 読み
-  = src/ast/program.rs: Program::kind_env -- `KindEnv` の欄 `tycons`
-  = src/ast/program.rs: Program::resolve_namespace_not_in_expr -- 読みと `self.type_env.tycons = Arc::new(tycons)`
-  = src/ast/program.rs: Program::resolve_type_aliases_not_in_expr -- 別の識別子 `resolve_type_aliases_in_tycons`
-  = src/ast/types.rs: TyCon::get_struct_union_value_type -- アクセサ `tycons()` の呼び出し
-  = src/ast/types.rs: TypeNode::collect_tycons -- 別の識別子 `collect_tycons` と引数 `tycons`
-  = src/ast/types.rs: TypeNode::define_modules_of_tycons -- 別の識別子 `define_modules_of_tycons`
-  = src/ast/types.rs: TypeNode::fixed_vars_to_set -- doc の散文
-  = src/ast/types.rs: TypeNode::kind_mismatch_error -- `KindEnv` の欄 `tycons`
-  = src/ast/types.rs: TypeNode::toplevel_tycon_info -- アクセサ `tycons()` の呼び出し
-
-**前提 型環境に項を入れる呼び出しの在りか** --- `TypeEnv::new` を呼ぶ式、`TypeEnv::add_tycons` を呼ぶ
-式、および `register_opaque_tycon` を呼ぶ式が在る項目は次で尽きる。走査はそれぞれの宣言も挙げる。
-
-SCAN src/ `TypeEnv::new`
-  = src/ast/program.rs: Program::calculate_type_env -- `TypeEnv::new(tycons, aliases)`
-
-SCAN src/ `add_tycons`
-  = src/ast/program.rs: TypeEnv -- doc の散文
-  = src/ast/program.rs: TypeEnv::add_tycons -- 宣言
-  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 不透明型の tycon 1 つを渡す
-  = src/optimization/closure_specialization.rs: lift_all -- capture 構造体の tycon を渡す
-  = src/optimization/closure_specialization.rs: realize_all -- capture 構造体の tycon を渡す
-  = src/optimization/defunctionalize_fix.rs: run_one -- capture 構造体の tycon を渡す
-
-SCAN src/ `register_opaque_tycon`
-  = src/elaboration/desugar_opaque.rs: Program::desugar_opaque_types -- 各 `OpaqueInfo` について呼ぶ
-  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 宣言
+SCAN src/ `unsafe impl`
 
 **前提 消費の走査を呼ぶ在りか** --- `collect_consumes`・`infer_ownership`・`rhs_consumes` を呼ぶ式が
 在る項目は次で尽きる。走査はそれぞれの宣言と、`collect_consumes` を部分文字列に持つ
@@ -426,25 +382,34 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
     `Vec<String>`・`bool` の同じトレイトは標準ライブラリに在り、`Set<VarPath>` すなわち `FxHashSet` の
     `Clone` は外部クレートに在る。`Origin` は `#[derive(Clone)]` を持ち、その欄の型は `VarPath` と
     `Set<VarPath>` である。`FullName` は `Clone` と `PartialEq` と `Eq` を derive し、その欄の型は
-    `NameSpace` と `String` である。`NameSpace` は `Clone` を derive し、`Hash` と `PartialEq` と `Eq` を
-    `name.rs` に書き、その欄の型は `Vec<String>` と `bool` である。`FullName` の `Hash` も `name.rs` に
-    書かれている。EXT `derive` した `Clone` と EXT `derive` した `PartialEq` より、derive した実装が
+    `NameSpace` と `String` である。`NameSpace` は `Clone` を derive し、`Hash` と `PartialEq` と `Eq` は
+    `impl Hash for NameSpace`・`impl PartialEq for NameSpace`・`impl Eq for NameSpace` として
+    `src/ast/name.rs` に書かれ、その欄の型は `Vec<String>` と `bool` である。`FullName` の `Hash` も
+    `impl Hash for FullName` として同じファイルに書かれている。EXT `derive` した `Clone` と
+    EXT `derive` した `PartialEq` より、derive した実装が
     呼ぶのは欄の同じトレイトのメソッドだけである。前提 書かれた `Drop` の在りか より `FullName`・
     `NameSpace`・`Origin` はどれも `Drop` を実装しないので、EXT 値を落とす処理 より、その値が落ちるとき
     走るのは欄の値を落とす処理だけである。
     BY 前提 書かれた `Drop` の在りか, EXT `derive` した `Clone`, EXT `derive` した `PartialEq`,
        EXT 値を落とす処理, CODE src/rc_ir/ownership.rs: Origin,
        CODE src/rc_ir/ast.rs: VarPath, FieldPath, CODE src/ast/name.rs: FullName, NameSpace,
+       CODE src/ast/name.rs: impl Hash for FullName, CODE src/ast/name.rs: impl Hash for NameSpace,
+       CODE src/ast/name.rs: impl PartialEq for NameSpace,
+       CODE src/ast/name.rs: impl Eq for NameSpace,
        CODE src/misc.rs: Map, Set
   <2>4. `<2>3` の項目はどれも `origin` を名指す式を持たない。
     derive した実装は EXT `derive` した `Clone` と EXT `derive` した `PartialEq` より欄の同じトレイトの
-    メソッドだけを呼ぶ。書かれた実装 -- `FullName` の `Hash`、`NameSpace` の `Hash`・`PartialEq`・`Eq`
-    -- は `src/ast/name.rs` の項目であり、前提 名前の複製と照合の実装の在りか より、`src/ast/` の項目の
+    メソッドだけを呼ぶ。書かれた実装 -- `impl Hash for FullName`、`impl Hash for NameSpace`、
+    `impl PartialEq for NameSpace`、`impl Eq for NameSpace` -- は `src/ast/name.rs` の項目であり、
+    前提 名前の複製と照合の実装の在りか より、`src/ast/` の項目の
     うち字面 `origin` を含むのは `deprecation.rs` と `program.rs` の deprecation についての項目だけで
     あって、`name.rs` の項目はそこに無い。EXT 名前による数え上げ より、`origin` を名指す式はその名前を
     含む。
     BY 前提 名前の複製と照合の実装の在りか, EXT `derive` した `Clone`, EXT `derive` した `PartialEq`,
-       EXT 名前による数え上げ, CODE src/ast/name.rs: FullName, NameSpace
+       EXT 名前による数え上げ, CODE src/ast/name.rs: impl Hash for FullName,
+       CODE src/ast/name.rs: impl Hash for NameSpace,
+       CODE src/ast/name.rs: impl PartialEq for NameSpace,
+       CODE src/ast/name.rs: impl Eq for NameSpace
   <2>5. QED
     `origin` は `ownership.rs` の `pub(crate)` の関数なので、EXT 可視性 より、それを呼ぶ式はこの
     クレートのソース `src/` の中にしかない。`<2>1` が本体の行う呼び出しの全体を与え、`<2>2` が
@@ -455,18 +420,17 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 
 <1>3. `origins` の欄を変更するのは `<1>1` の記録だけである。
   <2>1. `origins` は `VarTable` の非公開の欄である (`pub` が付かない)。EXT 可視性 より、この欄を
-        名指す式は `ownership.rs` の中にしかない -- この欄を宣言するモジュールは `ownership.rs` の
-        モジュールであり、その子孫のモジュールもこのファイルの中に書かれている。
+        名指す式は、それを宣言するモジュールとその子孫、すなわちこのクレートの中にしかなく、その
+        ソースは `src/` である。
     BY EXT 可視性, CODE src/rc_ir/ownership.rs: VarTable
-  <2>2. `ownership.rs` の中でこの欄を名指す式は、`VarTable::empty` の `origins: RefCell::default()`、
+  <2>2. `src/` の中でこの欄を名指す式は、`VarTable::empty` の `origins: RefCell::default()`、
         `origin` の `vars.origins.borrow()`、`origin` の `vars.origins.borrow_mut()` である。
-        前提 `origins` の欄を名指す在りか が、この欄の名前を含む項目を挙げる。その走査が挙げる
-        `ownership.rs` の項目のうち `VarTable::empty` と `origin` の外にあるもの -- `VarTable`・
-        `Origin::identity`・`origin_inner`・`origin_from_leaves_under` -- が持つのは、欄の宣言、
-        コメントの散文、および別の識別子 `leaf_origins_at` / `leaf_origins_under` であって、
-        この欄を名指す式ではない。
-    BY 前提 `origins` の欄を名指す在りか, CODE src/rc_ir/ownership.rs: VarTable, VarTable::empty, origin,
-       CODE src/rc_ir/ownership.rs: Origin::identity, origin_inner, origin_from_leaves_under
+        前提 `origins` の欄を名指す在りか が、この欄を名指す式が在るのはその 2 つの項目であると述べ、
+        走査が `src/` の全体について字面 `origins` を含む項目を挙げてそれを果たす。EXT 名前による
+        数え上げ より、この欄を名指す式はその名前を含む。
+    BY 前提 `origins` の欄を名指す在りか, EXT 名前による数え上げ,
+       CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
+       CODE src/rc_ir/ownership.rs: origin
   <2>3. QED
     EXT `RefCell` の内部可変性 より、`RefCell<Map<..>>` が包む写像を変更するには、その `RefCell` を
     名指す式を通る必要がある。`<2>1` と `<2>2` よりその式は `<2>2` が挙げたものに限られ、`origin` の
@@ -485,7 +449,8 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
     「`vars.bindings` に記録を持つ名前はちょうどこの 2 種である」と述べる。`VarTable::body_only` が
     作る表は `collect_bindings` の記録だけを持つので、その名前もこの 2 種の一方である。記録を持たない
     名前は P2 の第 2 の節に当たる。
-    BY <ref id=0edb0ba/>, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+    BY <ref id=0edb0ba/>, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only,
+       CODE src/rc_ir/ownership.rs: collect_bindings
   <2>1b. 鍵 `(x, π)` の cold な呼び出しの全体は、その鍵の記録を書く呼び出しの全体に等しい。
     `<1>1` より、記録を書くのは自分の検査で記録を見つけなかった呼び出し、すなわち `origin_inner` を
     評価する呼び出しであり、書き込みは `origin_inner` が返った後、その呼び出しが返る直前にある。
@@ -496,12 +461,13 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
     <3>1. 1 つの `VarTable` への参照を 2 つのスレッドが同時に持つことはない。`VarTable` は
           `origins: RefCell<Map<VarPath, Origin>>` の欄を持つ。EXT `Send` と `Sync` より、auto trait の
           明示の実装を書けるのはその型を定義するクレートの中に限られ、`VarTable` を定義するのは
-          このコンパイラのクレートである。そのクレートのソース `src/` の全体について `unsafe impl` を
-          検索すると 0 件なので、`VarTable` は `Sync` の `unsafe impl` を持たない。
+          このコンパイラのクレートであって、そのソースは `src/` である。前提 `unsafe impl` の在りか
+          より `src/` に `unsafe impl` と書いた項目は無いので、`VarTable` は `Sync` の `unsafe impl` を
+          持たない。
           EXT `Send` と `Sync` より `RefCell<T>` は `Sync` を実装せず、`Sync` は auto trait なので
           その欄を持つ `VarTable` も `Sync` を実装しない。同じ結果より `&VarTable` は `Send` では
           ないので、スレッドをまたいで渡せない。
-      BY EXT `Send` と `Sync`, CODE src/rc_ir/ownership.rs: VarTable
+      BY 前提 `unsafe impl` の在りか, EXT `Send` と `Sync`, CODE src/rc_ir/ownership.rs: VarTable
     <3>2. `origin` は `vars: &VarTable` を引数に取り、その呼び出しの実行区間の間ずっとこの参照を保持
           する。
       BY CODE src/rc_ir/ownership.rs: origin
@@ -728,7 +694,8 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
   パラメータも capture も持たないので、記録しうるものがそれで尽きる。`collect_bindings` は歩いた本体の
   すべての束縛を表に入れるので、`vars.bindings` に無い名前は本体が束縛しない名前であり、逆に
   パラメータ・capture と束縛節点の変数は表に入る (A11)。
-  BY <ref id=3905b4e/>, <ref id=a502f3e/>, <ref id=596a46d/>, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+  BY <ref id=3905b4e/>, <ref id=a502f3e/>, <ref id=596a46d/>, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only,
+     CODE src/rc_ir/ownership.rs: collect_bindings
 
 <1>3a. (S4) の `x` について、`(x, λ)` は `ρ` を辿るある時点 -- `x` が現れる節点の段より後 -- で記号の
       位置である。
@@ -954,7 +921,8 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
       グローバル初期化子の `init` から作られたものであるとき (`VarTable::body_only`)、それは
       `collect_bindings` を呼ぶだけであり、`Binding::Param` を 1 つも記録しない。どちらの場合も
       `collect_bindings` は `Param` を記録しない。
-  BY CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+  BY CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only,
+     CODE src/rc_ir/ownership.rs: collect_bindings
 
 <1>2. `collect_bindings` が `x` について記録を作るのは、次の 3 つの節点でだけであり、記録される構成子は
       次のとおりである。
