@@ -1171,8 +1171,14 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
            その関数を旗 `InitFlag#<symbol>` とともに `pthread_once` へ渡す。旗の型と初期値は
            `pthread_once_init_flag_type` と `pthread_once_init_flag_value` である。旗は記号ごとに
            1 つである -- 記憶域を持たない単位はそれを `External` で宣言し、持つ単位が定義する),
-           CODE src/fixstd/runtime.rs: build_pthread_once_function (`RUNTIME_PTHREAD_ONCE` は
-           libc の `pthread_once` である)
+           CODE src/generator.rs: Generator::call_runtime (名前で `module` から関数を引き、その関数
+           への `build_call` を出す。よって `call_runtime(RUNTIME_PTHREAD_ONCE, ..)` はその名前の
+           関数の呼び出しである),
+           CODE src/fixstd/runtime.rs: RUNTIME_PTHREAD_ONCE (定数の値は `"pthread_once"` であり、
+           その doc が libc の `pthread_once` を名指す),
+           CODE src/fixstd/runtime.rs: build_pthread_once_function (その名前の関数を
+           `module.add_function` で宣言する。本体を持たないので、呼び出しに着くのは libc の側の
+           定義である)
       <4>2a. `config.threaded` が偽のビルドでは、その store が走るのは旗 `InitFlag#<symbol>` を 0 と
              読んだアクセサの実行の中だけであり、旗は一度 0 でなくなれば以後 0 に戻らない。
              **アクセサは入口の基本ブロックで真っ先に旗をロードする** -- その読みより前にアクセサは
