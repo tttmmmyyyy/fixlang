@@ -1,3 +1,5 @@
+use crate::misc::{to_absolute_path, Map};
+use crate::tests::test_util::fix_command;
 use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::fs;
@@ -5,10 +7,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
-
-use crate::misc::{to_absolute_path, Map};
-use crate::tests::test_util::fix_command;
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// Shared state between `LspClient` and the background reader thread.
 /// Each field is an `Arc<Mutex<T>>` so `SharedState` can be cheaply cloned
@@ -140,7 +140,7 @@ impl LspClient {
 
         // Start dedicated reader thread (detached - JoinHandle is not stored)
         // The thread will exit when stdout is closed (process termination) or on protocol error
-        std::thread::spawn(move || {
+        thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
             loop {
                 let read_message: Result<Value, String> = (|| {
@@ -203,7 +203,7 @@ impl LspClient {
         });
 
         // Give the server a moment to initialize
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(100));
 
         Ok(LspClient {
             process,
@@ -273,7 +273,7 @@ impl LspClient {
 
     /// Wait for server messages for the specified duration
     pub fn wait_for_server(&mut self, duration: Duration) {
-        std::thread::sleep(duration);
+        thread::sleep(duration);
     }
 
     /// Pop one message from the message queue
@@ -328,7 +328,7 @@ impl LspClient {
         target_count: usize,
         timeout: Duration,
     ) -> Result<(), String> {
-        let start = std::time::Instant::now();
+        let start = Instant::now();
         loop {
             if self.count_progress_end_messages() >= target_count {
                 return Ok(());
@@ -341,7 +341,7 @@ impl LspClient {
                     self.count_progress_end_messages()
                 ));
             }
-            std::thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(100));
         }
     }
 
@@ -554,15 +554,15 @@ impl LspClient {
         let id = self.send_request("shutdown", json!(null))?;
 
         // Wait for response with 5 second timeout
-        let timeout = Duration::from_secs(5);
-        self.wait_for_server(timeout);
+        let response_timeout = Duration::from_secs(5);
+        self.wait_for_server(response_timeout);
         let _ = self.get_response(id);
 
         self.send_notification("exit", json!(null))?;
 
         // Wait for process to exit with timeout to avoid freezing tests
         // If the process doesn't exit within the timeout, return error (Drop will kill it)
-        std::thread::sleep(exit_timeout);
+        thread::sleep(exit_timeout);
 
         match self.process.try_wait() {
             Ok(Some(_status)) => {

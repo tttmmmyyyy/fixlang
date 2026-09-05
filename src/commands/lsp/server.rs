@@ -39,12 +39,13 @@ use lsp_types::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::VecDeque;
+use std::fs;
 use std::mem;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::time::Duration;
 use std::{
-    io::{Read, Write},
+    io::{stdin, stdout, Read, Write},
     path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -173,7 +174,7 @@ impl LatestContent {
 
 // Launch the language server
 pub fn launch_language_server() {
-    let mut stdin = std::io::stdin();
+    let mut stdin = stdin();
 
     // Prepare a channel to send requests to the diagnostics thread.
     let (diag_req_send, diag_req_recv) = mpsc::channel::<DiagnosticsMessage>();
@@ -252,8 +253,8 @@ pub fn launch_language_server() {
         }
 
         // Read a line to get the content length.
-        let mut content_length = String::new();
-        let res = stdin.read_line(&mut content_length);
+        let mut header_line = String::new();
+        let res = stdin.read_line(&mut header_line);
         match res {
             // `read_line` returns `Ok(0)` when stdin has reached EOF, which
             // happens when the parent editor process dies and closes the pipe.
@@ -273,20 +274,20 @@ pub fn launch_language_server() {
                 continue;
             }
         }
-        if content_length.trim().is_empty() {
+        if header_line.trim().is_empty() {
             continue;
         }
 
         // Check if the line starts with "Content-Length:".
-        if !content_length.starts_with("Content-Length:") {
+        if !header_line.starts_with("Content-Length:") {
             let mut msg = "Expected `Content-Length:`. The line is: \n".to_string();
-            msg.push_str(&format!("{:?}", content_length));
+            msg.push_str(&format!("{:?}", header_line));
             write_log!("{}", msg);
             continue;
         }
 
         // Ignore the `Content-Length:` prefix and parse the rest as a number.
-        let content_length: Result<usize, _> = content_length
+        let content_length: Result<usize, _> = header_line
             .split_off("Content-Length:".len())
             .trim()
             .parse();
@@ -756,9 +757,7 @@ fn send_message(msg: &JSONRPCMessage) {
     let content_length = msg.len();
     write_log!("Sending message: {}", msg);
     print!("Content-Length: {}\r\n\r\n{}", content_length, msg);
-    std::io::stdout()
-        .flush()
-        .expect("Failed to flush the stdout.");
+    stdout().flush().expect("Failed to flush the stdout.");
 }
 
 // Handle "initialize" method.
@@ -1175,13 +1174,14 @@ fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>)
     // than an empty path: publishing them at `cdir.join("")` would target the
     // project directory's URI, which editors cannot attach a diagnostic to, so
     // the message would be silently dropped.
-    for (path, errs) in errs.organize_by_path(&PathBuf::from(PROJECT_FILE_PATH)) {
+    for (path, file_errs) in errs.organize_by_path(&PathBuf::from(PROJECT_FILE_PATH)) {
         err_paths.insert(path.clone());
         prev_err_paths.remove(&path);
 
         publish_diagnostics_of_file(
             &cdir.join(path),
-            errs.iter()
+            file_errs
+                .iter()
                 .map(|err| error_to_diagnostics(err, &cdir))
                 .collect(),
         );
@@ -1365,7 +1365,7 @@ pub fn run_diagnostics(
         };
         if let Some(content) = live_overrides.get(&abs) {
             user_source_contents.insert(abs, content.clone());
-        } else if let Ok(content) = std::fs::read_to_string(&abs) {
+        } else if let Ok(content) = fs::read_to_string(&abs) {
             user_source_contents.insert(abs, content);
         }
     }
