@@ -1612,8 +1612,8 @@ path は伸びる。鍵の到達集合が有限であることはどこにも述
   どこにも無い。
   BY CODE src/rc_ir/ownership.rs: origin (`vars.origins.borrow().get(&key)` が当たれば `known.clone()` を
      返し、そうでなければ `grow_stack(|| origin_inner(..))` の値を
-     `vars.origins.borrow_mut().insert(key, answer.clone())` で入れてから返す。この 2 行のほかに
-     `origins` を名指す式は無く、除去も呼ばない),
+     `vars.origins.borrow_mut().insert(key, answer.clone())` で入れてから返す。この関数が
+     `origins` を名指すのはこの 2 行であり、除去を呼ぶ式は持たない),
      前提 `VarTable` の `origins` の欄に触れる式の在りか, EXT 可視性,
      CODE src/rc_ir/ownership.rs: VarTable (`origins` は `pub` の付かない
      `RefCell<Map<VarPath, Origin>>` の欄である),
