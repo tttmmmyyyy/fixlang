@@ -1118,11 +1118,11 @@ fn run_diagnostics_pass(
             if !*last_pass_failed {
                 // Naming the files the report reaches to the pass that publishes next is what
                 // clears it.
-                let reported = publish_compiler_failure(
+                let reported_paths = publish_compiler_failure(
                     "Analysis of this program failed, so the diagnostics shown are those of the \
                      program analyzed before it. The next edit runs the analysis again.",
                 );
-                prev_err_paths.extend(reported);
+                prev_err_paths.extend(reported_paths);
                 *last_pass_failed = true;
             }
         }

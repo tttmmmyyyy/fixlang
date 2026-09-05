@@ -401,7 +401,7 @@ mod tests {
         "module Main;\n\nmain : IO ();\nmain = println(\"x\");\n";
 
     /// The paths of the files carrying the report of a pass whose analysis failed.
-    fn analysis_failure_reports(reports: &Map<PathBuf, Vec<Value>>) -> Vec<PathBuf> {
+    fn analysis_failure_report_paths(reports: &Map<PathBuf, Vec<Value>>) -> Vec<PathBuf> {
         reports
             .iter()
             .filter(|(_, diagnostics)| {
@@ -435,18 +435,18 @@ mod tests {
         // is asserted rather than assumed: a case project the compiler learns to analyze makes
         // this test say so, in place of passing while measuring nothing.
         let reports = client.get_all_diagnostics();
-        let failures = analysis_failure_reports(&reports);
+        let failure_report_paths = analysis_failure_report_paths(&reports);
         assert_eq!(
-            failures.len(),
+            failure_report_paths.len(),
             1,
             "the analysis of the case project is expected to fail once, but the reports are {:?}",
             reports
         );
         assert_eq!(
-            failures[0].file_name().and_then(|name| name.to_str()),
+            failure_report_paths[0].file_name().and_then(|name| name.to_str()),
             Some("fixproj.toml"),
             "the failure is expected to be reported on the project file, but it is on {:?}",
-            failures[0]
+            failure_report_paths[0]
         );
 
         // The repair the editor writes, which carries one ordinary error.
@@ -466,7 +466,7 @@ mod tests {
 
         let reports = client.get_all_diagnostics();
         assert!(
-            analysis_failure_reports(&reports).is_empty(),
+            analysis_failure_report_paths(&reports).is_empty(),
             "the report of the failed pass is expected to be cleared, but the reports are {:?}",
             reports
         );
@@ -572,7 +572,7 @@ mod tests {
         // is asserted rather than assumed.
         let reports = client.get_all_diagnostics();
         assert_eq!(
-            analysis_failure_reports(&reports).len(),
+            analysis_failure_report_paths(&reports).len(),
             1,
             "the analysis of the case project is expected to fail once, but the reports are {:?}",
             reports
@@ -597,7 +597,7 @@ mod tests {
         );
         let reports = client.get_all_diagnostics();
         assert!(
-            analysis_failure_reports(&reports).is_empty(),
+            analysis_failure_report_paths(&reports).is_empty(),
             "the report of the failed pass is expected to be taken back, but the reports are {:?}",
             reports
         );
