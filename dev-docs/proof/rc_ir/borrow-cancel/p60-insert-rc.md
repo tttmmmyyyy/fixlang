@@ -1764,11 +1764,12 @@ README の A19 が (O1) と (O2) と呼ぶ 2 つを、この節が言明とし�
 
 ### 8.1 (O2) の証明が本体について読むもの
 
-第 11 節が本体とそれが属するプログラムについて読む**量的な**前提は、11.1 節の (S) が挙げる 4 つ --
+第 11 節が本体とそれが属するプログラムについて読む**量的な**前提は、11.1 節の (S) が挙げる 5 つ --
 (S0) 各時点で各スロットの `μ` が非負であること、(S1) すべての unit が所有されること、
 (S2) 各 `Retain` 節点の入口でその節点が触れる各スロットの `μ` が 1 以上であること、(S3) 各計数下の
-別名類に開始値 1 を与える事象が高々 1 つであること -- だけである。`insert_rc` の出力がその 4 つを
-満たすことは `L20a` が第 10 節から出し、`split_rc_units` の出力については `L32` が同じ 4 つを
+別名類に開始値 1 を与える事象が高々 1 つであること、(S4) 各節点の入口でその節点が `μ` を下げる回数
+以上の `μ` が在ること -- だけである。`insert_rc` の出力がその 5 つを
+満たすことは `L20a` が第 10 節から出し、`split_rc_units` の出力については `L32` が同じ 5 つを
 確かめる。
 **構文と名前の規律はこの 4 つの外に在る。** 第 11 節の段は、A6 (名前の一意性)・A11 (スコープの
 規律)・D2 (本体の木とスコープの規則) を本体について読む -- `L21` `<1>5a` と `L24` の各場合が、
@@ -3691,7 +3692,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 ## 11. (O2) の証明 -- 帳簿は処分に遅れない
 
-`L7` より、(O2) は「`bumps ≥ 1` である各時点で `held ≥ 1 + bumps`」と同値である。この節はそれを示す。
+(O2) は「`bumps ≥ 1` である各時点で `held ≥ 1 + bumps`」である (第 8 節)。この節はそれを示す。
+`L7` が与えるのは、その形と `U + X ≥ D` の同値である。
 支えるのは、**1 つの別名類のスロットに付く名前の全体 `Ids(C)` が作る木**についての不等式である。
 `origin` の `identity` はスロットごとに 1 つの名前を与え、1 つの別名類の中でその名前は
 `Binding::Join` が候補を 2 つ以上持つ位置で切り替わる。切り替わりの関係 `Anc` が `Ids(C)` を木にし
@@ -3723,13 +3725,14 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 `Bmp_τ(id) := Σ_{p ∈ pending} B(p, ρ)[id]` (D27)、
 `Bsub_τ(id) := Σ_{id' ∈ Sub(id)} Bmp_τ(id')` と置く。
 
-上の 4 つの集合 -- `Anc(s)`・`Ids(C)`・`Sub(id)` と、各スロットの `id(s)` -- は `ρ` の上に
+上の 3 つの集合 `Anc(s)`・`Ids(C)`・`Sub(id)` と、スロットから名前への写像 `id` は、`ρ` の上に
 **いつか**存在するすべてのスロットを走る。**これらが時点に依らないこと、まだ値を得ていないスロットが
 `μ_τ = 0` を寄せること、`Ids(C)` の名前に bump が付くにはその名前のスロットが値を得ていることが
-要ること、そして `Ids(C)` の名前を持つスロットが `C` のスロットに限ることは、`L20b` が示す。**
-時点に依るのは `μ_τ`・`Down_τ`・`Bmp_τ`・`Bsub_τ` の 4 つだけである。
+要ること、そして `Ids(C)` の名前を持つ計数下のスロットが `C` のスロットに限ることは、`L20b` が
+示す。** 時点に依るのは `μ_τ`・`Down_τ`・`Bmp_τ`・`Bsub_τ` の 4 つだけである。
 
-**前提 (S)**。この節の命題が本体 `B` とそれが属するプログラムについて読むのは、次の 4 つだけである。
+**前提 (S)**。この節の命題が本体 `B` とそれが属するプログラムについて読む量的な前提は、次の 5 つ
+だけである。
 
 - **(S0)** `ρ` の上の各時点において、`B` の各スロットの `μ` は 0 以上である。
 - **(S1)** そのプログラムのすべての関数の `borrowed_units` が空である。D14 より、すべての
@@ -3737,10 +3740,17 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 - **(S2)** `B` の各 `Retain(v, π)` 節点の入口において、その節点が触れる各スロット -- `π` の下の
   inhabited (D16) な各 leaf `(v, λ)` -- の `μ` は 1 以上である。
 - **(S3)** `ρ` の上で、各計数下の別名類に `held_ρ(・, ・)` の開始値 1 を与える事象は高々 1 つである。
+- **(S4)** `ρ` の上の各節点 `n` と各スロット `s` について、`n` の実行が `μ(s)` を下げる回数を
+  `k_n(s)` とすると、`n` の入口で `μ(s) ≥ k_n(s)` である。
+
+**(S4) が (S0) と別に要る理由。** (S0) が縛るのは節点の訪問の入口だけであり、`L24` が帰納を回すのは
+1 つの節点が行う事象の**列**の切れ目の上である (`<1>2a`)。その切れ目は節点の入口とは限らないので、
+そこで `μ` の非負性を要る段は (S0) を引けない。(S4) は `L19` (d) の第 1 文と同じ形であり、そこから
+節点の中の各切れ目での非負性が出る。
 
 ### 11.1a `L20a` (`insert_rc` の出力は (S) を満たす) <!--#0d8ae2f-->
 
-**言明**。`insert_rc` の出力の各本体は (S0)・(S1)・(S2)・(S3) を満たす。
+**言明**。`insert_rc` の出力の各本体は (S0)・(S1)・(S2)・(S3)・(S4) を満たす。
 
 **証明**
 
@@ -3768,8 +3778,12 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   BY <ref id=371ccc9/>
   `L20` が (S3) そのものである。
 
+<1>3a. (S4)。
+  BY <ref id=f941b4f/>
+  `L19` (d) の第 1 文が (S4) そのものである。
+
 <1>4. QED
-  BY <1>0, <1>1, <1>2, <1>3
+  BY <1>0, <1>1, <1>2, <1>3, <1>3a
 
 ### 11.1b `L20b` (11.1 節の量についての 4 つ) <!--#2a415a3-->
 
@@ -4035,7 +4049,10 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
+     CODE src/rc_ir/borrow.rs: cancel,
      CODE src/rc_ir/ownership.rs: rhs_consumes,
+     CODE src/rc_ir/ownership.rs: all_owned_units,
+     CODE src/rc_ir/ownership.rs: passthrough_arg_leaves,
      CODE src/rc_ir/ownership.rs: destructure_consumes
   `walk_inner` が `consume` を呼ぶのは 2 か所である -- `Let(x, rhs, k)` の腕が `consume_rhs` を通じて
   `rhs_consumes` が `consumed` に積む各 `(var, leaf)` について呼ぶ場所と、`Destructure` の腕が
@@ -4043,9 +4060,19 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   1 回である。`RcExpr::Ret` の腕も `Retain`/`Release`/`Eval` の腕も `consume` を呼ばない。
   D9 の消費の表の 6 行のうち、`App`・`Closure`・`Llvm` の 3 行は `Let` の右辺に、`Destructure` の
   2 行は `Destructure` の節点に、残る 1 行は本体の終端の `Ret` に付く。
-  前提 (S1) よりすべてのパラメータ・capture の unit が所有される (D14) ので、`consume_rhs` が
-  `rhs_consumes` に渡す `owns` は常に真であり、D9 の `App` の行が言う所有 -- D23 よりその呼び出し先は
-  プログラムの `funcs` の関数である -- も常に真である。`L16` より借用オペランドの leaf は素通しを
+  **`App` の行の所有は両側で常に真である。** `consume_rhs` が `rhs_consumes` に渡す `owns` は
+  `self.owned_units.contains(&(p.name.clone(), truncate_to_unit(…)))` であり、`cancel` は
+  `owned_units` に `all_owned_units(prog, type_env)` を置く。D14 より `all_owned_units` が返すのは
+  各関数のパラメータ・capture の unit のうち `borrowed_units` に入らないものであり、前提 (S1) より
+  `borrowed_units` はどの関数でも空なので、その集合はパラメータ・capture の全 unit である。よって
+  `owns` は常に真であり、D9 の `App` の行が言う所有 -- D23 よりその呼び出し先は
+  プログラムの `funcs` の関数である -- も常に真である。
+  **`Llvm` の行は `passthrough_arg_leaves` が決める。** `rhs_consumes` の `Llvm` の腕は
+  `borrows_operand(i)` が真のオペランドを飛ばし、残るオペランドの leaf のうち
+  `passthrough.contains(&(i, leaf))` でないものを積む。その `passthrough` は
+  `passthrough_arg_leaves` が `decl.leaves().filter_map(as_arg_projection)` で作る集合、すなわち
+  結果のいずれかの leaf が単一の `Arg(i, σ)` として素通しを宣言している `(i, σ)` の全体である。
+  `L16` (a) より借用オペランドの leaf は素通しを
   宣言されないので、D9 の消費の表の `Llvm` の行が挙げる leaf -- `borrows_operand(i)` が偽の
   オペランドのうち素通しを宣言されていない leaf -- は `rhs_consumes` の `Llvm` の腕が積む leaf に
   一致する。よって前 5 行については、`ρ` の上の各 D9 の消費に対応する走査の `consume` の呼び出しが
@@ -4057,8 +4084,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `RcExpr::Release` の腕は 1 つの `Release` 節点の訪問につき 1 回走り、`ρ` の上の `Release(v, π)`
   節点の実行と 1 対 1 に対応する。
 
-<1>1. スロット `s` について、`Bmp(id') ≥ 1` である名前 `id'` は、ある pending の要素の `outstanding`
-      が名指す。
+<1>1. `Bmp(id') ≥ 1` である名前 `id'` は、ある pending の要素の `outstanding` が名指す。
   BY <ref id=948f840/>, <ref id=cbc4a1c/>, CODE src/rc_ir/ownership.rs: References
   P18b より各要素の `outstanding` は `B(p, ρ)` を `covers` するので、`B(p, ρ)[id'] ≥ 1` ならば
   `outstanding[id'] ≥ 1` である。D15 より `References` は `VarPath` から個数への写像であり、
@@ -4178,7 +4204,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `id(s)` より上にあり、`S` が上に閉じているので `r_i ∈ S` -- 矛盾。
 
 <1>2. `ρ` の上で `Down` と `Bsub` を動かす事象は次の 6 種で尽きる。
-  BY <ref id=c2ea78f/>, DEF 割り当て `μ`, <ref id=8093b68/>, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
+  BY <ref id=c2ea78f/>, <ref id=62d00c2/>, DEF 割り当て `μ`, DEF 処分の事象, <ref id=8093b68/>,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
   `Down` を動かすのは `μ` を動かす事象であり、`L13a` (g) よりそれは `DEF 割り当て μ` の 6 種で尽きる。`Bsub` を動かすのは
   D27 が `B(p, ρ)` を動かすと述べる事象と、要素が `pending` を離れる事象である。両者を並べると:
   **(E-生成)** D10 の初期値と生成、**(E-Retain)** `Retain` 節点の訪問、**(E-移動-同名)** `L21` (e) の
@@ -4190,20 +4217,38 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   言明の対象にならない (`L23` の `DEF 処分の事象` の最後の段落)。
 
 <1>2a. `<1>2` の 6 種の事象を、それぞれ 1 回分の適用の単位で切り出して起きた順に並べる -- **1 つの
-       事象**とは、`Retain(v, π)`・`Release(v, π)` の 1 回の訪問が `π` の下の該当 leaf の全体に
-       まとめて行う適用、`DEF 処分の事象` が言う 1 回の `consume` の呼び出しまたは 1 回の `Release`
-       の訪問、あるいは D9 の移動の 1 つの辺の 1 つのインスタンス (`(s, s')` の対 1 組) のいずれかを
-       指す。**1 つの節点の訪問がこの単位で複数の事象を行うことがある** -- `App(f, [a, b])` の
+       事象**とは、次のいずれかを指す。
+
+       - **(E-生成)**: D10 の初期値または D10 の生成の表の 1 行が、1 つの inhabited な leaf
+         `(v, λ)` に参照を 1 つ置く動作。1 つの節点が複数の leaf に置くときは、その leaf の数だけ
+         事象が並ぶ。
+       - **(E-Retain)**: `Retain(v, π)` の 1 回の訪問が `π` の下の該当 leaf の全体にまとめて行う
+         適用。
+       - **(E-移動-同名)・(E-移動-新名)**: D9 の移動の 1 つの辺の 1 つのインスタンス
+         (`(s, s')` の対 1 組)。
+       - **(E-処分)**: `DEF 処分の事象` が言う 1 回の `consume` の呼び出し、または 1 回の
+         `Release` の訪問。
+       - **(E-落とし)**: 1 つの要素が `pending` を離れる動作 -- `merge` が 1 つの要素を落とすこと、
+         または処分に伴わない `consume_objects` が 1 つの要素を落とすこと。
+
+       **1 つの節点の訪問がこの単位で複数の事象を行うことがある** -- `App(f, [a, b])` の
        2 つの引数がどちらも所有位置に立つときは `consume` の呼び出しが 2 回、すなわち事象が 2 つ
        並び、boxed 容器でない `Destructure` が名前付きフィールドを複数持つときは移動の事象がその数
-       だけ並ぶ。局所の量 `Down^+`・`Bsub^+` を、この列の各切れ目 `υ` (最初の事象の前の点と、各
-       事象の後の点) について次で定める -- `υ` が `ρ` の上の時点 (節点の訪問の入口) であるときは
-       `Down^+_υ := Down_υ`・`Bsub^+_υ := Bsub_υ` (`DEF Down、Bmp、Bsub` の `Down`・`Bsub` そのもの)、
+       だけ並ぶ。局所の量 `μ^+`・`Down^+`・`Bsub^+` を、この列の各切れ目 `υ` (最初の事象の前の点と、
+       各事象の後の点) について次で定める -- `υ` が `ρ` の上の時点 (節点の訪問の入口) であるときは
+       `μ^+_υ := μ_υ`・`Down^+_υ := Down_υ`・`Bsub^+_υ := Bsub_υ`
+       (`DEF 割り当て μ` の `μ` と `DEF Down、Bmp、Bsub` の `Down`・`Bsub` そのもの)、
        それ以外の切れ目では、直前の切れ目の値に、その間に置かれた 1 つの事象が `<1>2` の分類に
-       従って足し引きする量を足したものとする。**`Down^+`・`Bsub^+` はこの証明の中だけで使う局所の
-       量であり、`DEF 割り当て` の `μ` の定義域を広げるものではない。**
-  BY DEF 割り当て `μ`, DEF `Down、Bmp、Bsub`, <1>2, <ref id=8093b68/>, CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
+       従って足し引きする量を足したものとする。**どの切れ目でも
+       `Down^+_υ(id) = Σ_{s : id ∈ Anc(s)} μ^+_υ(s)` である** -- 各事象が `Down` を動かすのは
+       それが `μ` を動かすことによってであり、両辺は同じ増減を受ける。
+       **`μ^+`・`Down^+`・`Bsub^+` はこの証明の中だけで使う局所の
+       量であり、`DEF 割り当て μ` の `μ` の定義域を広げるものではない。**
+  BY DEF 割り当て `μ`, DEF `Down、Bmp、Bsub`, DEF 処分の事象, <1>2, <ref id=8093b68/>, <ref id=f06144e/>,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, CODE src/rc_ir/ownership.rs: rhs_consumes
   **README の D34 は `held` についてこれと同じ形の橋を架けており、この段はその技法を `Down`・`Bsub`
   について繰り返す。** D34 は「**この 3 つの箇条が置かない点では、`held` は直前の置き場所の値の
@@ -4216,11 +4261,29 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   自身の `μ` の定義域についてであり、この段の `Down^+`・`Bsub^+` は `μ` の値をそのまま運ぶ、この
   証明だけで使う橋であって `μ` 自身の定義を変えないので、この記述と衝突しない。**
 
+<1>2b. 列のどの切れ目 `υ` でも、`B` の各スロット `s` について `μ^+_υ(s) ≥ 0` である。したがって
+       `Down^+_υ(id) ≥ 0` であり、`Down^+_υ(id)` が数えるスロットの部分集合についての和も 0 以上で
+       ある。
+  BY <1>2a, 前提 (S0), 前提 (S4), DEF 割り当て `μ`
+  切れ目 `υ` を取り、それを含む節点の訪問を `n` とする -- `<1>2a` の列の切れ目は、ある節点の訪問の
+  入口か、その訪問が行う事象の 1 つの後の点である。`n` の入口は `ρ` の上の時点なので、そこでは
+  `μ^+ = μ` であり (S0) より 0 以上である。`υ` が `n` の途中の切れ目であるとき、`n` の入口から `υ`
+  までに置かれた事象が `μ(s)` を下げた回数は、`n` の実行が `μ(s)` を下げる回数 `k_n(s)` 以下である。
+  (S4) より `n` の入口で `μ(s) ≥ k_n(s)` なので、`μ^+_υ(s) ≥ μ(s) - k_n(s) ≥ 0` である。
+  `Down^+_υ(id)` は `<1>2a` より `μ^+_υ` の非負の項の和なので 0 以上であり、その項の部分集合に
+  ついての和も 0 以上である。
+
 <1>3. `Down^+`・`Bsub^+` について、事象の前の切れ目で言明が成り立つならば、その事象の後の切れ目でも
       成り立つ。以下 `Down`・`Bsub` と書くのは `Down^+`・`Bsub^+` のことである。
   <2>1. CASE (E-生成)。
-    BY <ref id=8e3aff3/>, <ref id=2a415a3/>, 前提 (S3), <ref id=b3dfa37/>, <ref id=596a46d/>, <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=3905b4e/>, <ref id=c2ea78f/>, <ref id=347156f/>
-    まず、この事象より前に `C` はスロットを持たない。D33 の ρ-歩みの各段は、いま居る位置の変数の
+    BY <1>2a, <ref id=8e3aff3/>, <ref id=2a415a3/>, 前提 (S3), <ref id=b3dfa37/>, <ref id=596a46d/>, <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=3905b4e/>, <ref id=c2ea78f/>, <ref id=347156f/>
+    **この事象が `C` のスロットを作らないときは、`Down` も `Bsub` も動かない。** `<1>2a` より
+    (E-生成) の 1 つの事象は 1 つの leaf `(v, λ)` に参照を置く動作であり、`DEF 割り当て μ` の第 1 行と
+    第 2 行はその leaf の `μ` だけを動かす。`Down(id)` の総和が走るのは `C` のスロットだけなので
+    (`DEF Down、Bmp、Bsub`)、`(v, λ)` が `C` のスロットでなければ `Down(id)` はどの `id` についても
+    変わらない。`Bsub` の側は D27 の 3 つの箇条のどれにも当たらないので動かない。よって言明は
+    前の切れ目のまま保たれる。以下、この事象が `C` のスロットを作る場合を見る。
+    このとき、この事象より前に `C` はスロットを持たない。D33 の ρ-歩みの各段は、いま居る位置の変数の
     束縛が名指す変数へ進み、A11 と D2 よりその変数はいま居る位置の変数より前に値を得ている。よって
     `C` のスロットが在る時点では `C` の ρ-終端の位置も値を得ており、`L13a` (f) よりその位置は
     パラメータ・capture の leaf か D10 の生成の位置であって、D34 の「開始の時点」の段落よりそこで
@@ -4237,8 +4300,10 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `id ∈ Ids(C)` についても `Bsub(id) = 0` であり、言明は空虚に真である。
   <2>2. CASE (E-Retain)。
     BY <ref id=8093b68/>, DEF 割り当て `μ`, 前提 (S0), 前提 (S2), <ref id=4910eaa/>, <ref id=347156f/>
-    `Retain(v, π)` の訪問は、`π` の下の inhabited かつ計数下の各 leaf `λ` について `μ(v, λ)` を
-    1 上げ (`DEF 割り当て μ`)、同時に押し込まれる要素の `B(p, ρ)[id(v, λ)]` を 1 上げる (D27)。
+`Retain(v, π)` の訪問は、`π` の下の inhabited な各 leaf `λ` について `μ(v, λ)` を
+    1 上げ (`DEF 割り当て μ` の第 3 行 -- **この行に計数下の条件は無い**)、そのうち計数下の leaf に
+    ついて、押し込まれる要素の `B(p, ρ)[id(v, λ)]` を 1 上げる (D27 -- **計数下の条件はこちらの
+    側に在る**)。
     `id` を固定し、`k := #{λ : λ は π の下の inhabited な leaf で (v, λ) は C のスロットであり
     id ∈ Anc(v, λ)}` と置くと、`Down(id)` も `Bsub(id)` もちょうど `k` 増える
     (`id(v, λ) ∈ Sub(id)` と `id ∈ Anc(v, λ)` は同値、11.2 節)。`Bsub(id)` の側にこれ以外の分が
@@ -4286,7 +4351,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
       `Down(id)` が `d` 減り `Bsub(id)` が `d` 以上減るので、`Bsub(id) ≤ Down(id) - 1` は
       `Bsub` が 1 以上である限り保たれる。
     <3>3. 残る `id` について、`L23` の (ii) が成り立つ場合も言明が保たれる。
-      BY <ref id=62d00c2/>, <ref id=2340772/>, <1>1, <ref id=347156f/>, 前提 (S0), 帰納法の仮定
+      BY <ref id=62d00c2/>, <ref id=2340772/>, <1>1, <1>2a, <1>2b, <ref id=347156f/>, 帰納法の仮定
       `S := ∪_s (Anc(s) ∩ Sub(id))` と置く。ここで `s` はこの事象が処分したスロットのうち
       `id ∈ Anc(s)` であるものを走る。`S` は `Sub(id)` の中で `Anc` について上に閉じている --
       `id' ∈ Anc(s) ∩ Sub(id)` かつ `id'' ∈ Anc(id') ∩ Sub(id)` ならば `L21` (d) より
@@ -4303,9 +4368,11 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
       `Bsub(id) ≤ Σ_{i : Bsub(r_i) ≥ 1} Bsub(r_i) ≤ Σ_{i : Bsub(r_i) ≥ 1} (Down(r_i) - 1)
        ≤ Down(id) - k' ≤ Down(id) - 1`
       である。最後から 2 つ目の不等号は、<1>1 より `Down(r_i)` が数えるスロットが互いに素で
-      すべて `Down(id)` に数えられることと、(S0) より `Down(id)` が数える残りのスロット -- どの
-      `Bsub(r_i) ≥ 1` である `Sub(r_i)` にも属さない名前を `id(s)` とするもの -- の `μ` が 0 以上で
-      あることによる。
+      すべて `Down(id)` に数えられることと、`Down(id)` が数える残りのスロット -- どの
+      `Bsub(r_i) ≥ 1` である `Sub(r_i)` にも属さない名前を `id(s)` とするもの -- の `μ^+` が 0 以上で
+      あることによる。**この切れ目は節点の入口とは限らないので、非負性を与えるのは (S0) ではなく
+      <1>2b である** -- <1>2a より `Down^+` は `μ^+` の和であり、<1>2b がその各項の非負性を列の
+      どの切れ目についても与える。
     <3>4. QED
       BY <3>1, <3>2, <3>3
   <2>6. CASE (E-落とし)。
@@ -4320,7 +4387,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <1>2
 
 <1>4. QED
-  BY <1>2, <1>2a, <1>3, CODE src/rc_ir/borrow.rs: cancel
+  BY <1>2, <1>2a, <1>2b, <1>3, CODE src/rc_ir/borrow.rs: cancel
   `<1>2a` の事象の列についての帰納。列の最初の切れ目は活性化の開始時であり、`pending` は空であり
   (`cancel` は `analysis.walk(body, PendingRetains::default(), true)` で走査を始める)、`C` は
   スロットを持たないので `Bsub^+ ≡ 0` かつ `Down^+ ≡ 0` で言明は空虚に真である。段は <1>3 であり、
@@ -4357,11 +4424,14 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `obj(C)` を指すので、その `obj(C)` が計数下 (D26) であることが「計数下の別名類」の意味である。
 
 <1>2c. `C` が `ρ` の上にスロットを持つとき、`C` は開始事象をちょうど 1 つ持つ。
-  BY <1>2a, 前提 (S3), <ref id=596a46d/>, DEF 開始事象, <ref id=c2ea78f/>
+  BY <1>2a, 前提 (S3), <ref id=596a46d/>, <ref id=30d6238/>, <ref id=9d5d254/>, DEF 開始事象, <ref id=c2ea78f/>
   (S3) が「高々 1 つ」を与えるので、1 つ以上あることを言えばよい。`L13a` (f) より、計数下の別名類
   `C` の ρ-終端はパラメータ・capture の leaf か D10 の生成の表の位置のいずれかである。`DEF 開始事象`
-  の 3 行がその 2 種を覆うので、`C` のスロットが在る時点までに開始事象が 1 つ起きている
-  (D6 -- スロットはその変数が値を得た後に在る)。
+  の 3 行がその 2 種を覆うので、その位置の変数が値を得る時点で開始事象が 1 つ起きる (D34 の
+  「開始の時点」の段落)。**その時点が `C` のスロットが在る時点以前であることは `L13a` (h) による**
+  -- `C` のスロット `s` から ρ-終端までの D33 の ρ-歩みの各段は、進む先の変数がいま居る位置の変数より
+  前に値を得る位置へ進むので、ρ-終端の変数は `s` の変数以前に値を得る。D6 よりスロット `s` は
+  その変数が値を得た後に在るので、`s` が在る時点までに開始事象が 1 つ起きている。
 
 <1>3. QED
   BY <1>1, <1>2, <1>2a, <1>2c, <ref id=86b3f11/>
