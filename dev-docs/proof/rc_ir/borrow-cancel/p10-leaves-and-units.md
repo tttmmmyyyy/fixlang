@@ -6,8 +6,11 @@
 `result_prov` が 1 つの結果 leaf に 2 つ以上の source を宣言しないことを develop mode で確かめるもの --
 だけである。README の第 1 節がこの 2 つを挙げる。
 
-この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A3、A6、A9、A10、A11、A12、A15、A28 の
-上である。証明は 1 本の構造化証明で、その QED が次の 3 つである。
+この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A2、A3、A6、A9、A10、A11、A12、A15、A28
+の上である。A2 (単位への正規化) を読むのは第 5 節であり、`<1>33` と `<1>34` の条件 -- `pi` が
+`L(ty(x))` か `U(ty(x))` の要素であること -- を `Retain`/`Release` 節点の site について満たす者が
+それである。証明の段が読むのは残る 8 つであり、`<1>31` の条件節がその 8 つを挙げる。
+証明は 1 本の構造化証明で、その QED が次の 3 つである。
 
 - **P1** (leaf と unit の対応)。README の P1 が量化する型、すなわち **A10 を満たす**任意の型に
   ついて成り立つ。`<1>1` は A10 をこの文書の記法で述べたものである。第 3 節がその対応を述べる。
@@ -93,17 +96,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 構造体のフィールドもこの既定の下にある -- 同じ節の例が `pub struct Bar { field: i32 }` を
 「a public struct with a private field」と注釈する。`<1>3b` と、`<1>29a` の `<2>1` の `<3>1` と
-`<3>2` がこれを引く。
-
-**EXT Rust のモジュールの木** -- Rust Reference の "Modules" が次を述べる。
-
-> A module is a container for zero or more items.
->
-> A _module item_ is a module, surrounded in braces, named, and prefixed with the keyword `mod`. A
-> module item introduces a new, named module into the tree of modules making up a crate.
-
-すなわち、クレートのモジュールの木の辺は `mod` の項目が作るので、あるモジュールの子は、その
-モジュールの本体に置かれた `mod` の項目に限る。`<1>3b` と `<1>29a` の `<2>1` の `<3>1` がこれを引く。
+`<3>2` がこれを引く。この 3 つが引くのは、非公開の欄と `pub(crate)` の欄をクレートの外の
+コードが名前で参照できないこと、すなわち `src/` を走る走査がその欄を名指す項目を尽くすことである。
 
 **EXT Rust の内部可変性** -- Rust Reference の "Interior Mutability" が、共有参照の指す値を書き替える
 ことについて次を述べる。
@@ -173,19 +167,21 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 この道には並行性も乱数も外部入力も無い。`<1>9a` の `<2>7` の `<3>2`・`<3>3`・`<3>4` がこれを引く。
 
 **DEF この道の関数** -- `truncate_to_unit(ty, path, E)` の実行が直接または間接に呼ぶ関数のうち、
-`src/` に本体を持ち、かつ**番地の一致・不一致を読む道を持たないもの**の全体を、**この道の関数**と
-呼ぶ。`<1>9a` の `<2>1` から `<2>5` が、この道の各関数が何を読むかを述べる。同じ数え上げが、番地を
-読む道を持つ関数を 3 群として挙げる。
+`src/` に本体を持ち、かつ**次の 3 群のどれにも属さないもの**の全体を、**この道の関数**と呼ぶ。
+`<1>9a` の `<2>1` から `<2>5a` が、この道の各関数が何を読むかを述べ、同じ数え上げがこの 3 群を挙げる。
 
 - **節点を組み立てる関数** -- `TypeNode` の 8 つの setter、`TypeNode::set_source`、
-  `TypeNode::set_source_if_none`、および `impl Clone for TypeNode`。`Arc::ptr_eq` の分岐と
-  `set_source_if_none` の分岐が、どちらの腕でこの群を呼ぶかを決める。
+  `TypeNode::set_source_if_none`、および `impl Clone for TypeNode`。
 - **`TypeNode` の等価比較** -- `impl PartialEq for TypeNode` と `impl PartialEq for Type`。
 - **`TypeNode` のハッシュ** -- `impl Hash for TypeNode` と `TypeNode::type_hash`。
 
-3 群を除くのは、番地の一致・不一致で呼び出しの並びがずれうるからである。3 群のどれも、値として
-等しい引数に対して値として等しい答えを返し、abort しない
-(`<1>9a` の `<2>1a`・`<2>6`・`<2>6a`)。
+3 群を外すのは、その内側の呼び出しの並びと、返す `Arc` の番地が、引数の値からは決まらないから
+である。外した 3 群について言えるのは、値として等しい引数に対して値として等しい答えを返し、
+abort しないことである (`<1>9a` の `<2>1a`・`<2>6`・`<2>6a`)。
+
+**番地の一致・不一致を読む式は、この道の関数の中にも在る。** 型を写す 2 つの関数 --
+`TypeNode::unwrap_newtypes_node` と `Substitution::substitute_type` -- が自分の本体に置く
+`Arc::ptr_eq` の分岐がそれであり、その分岐を `<1>9a` の `<2>1a` と `<2>7` の `<3>2a` が扱う。
 
 **DEF 下位の呼び出しの列** -- ある関数呼び出しの 1 回の実行が行う「この道の関数」の呼び出しについて、
 その**開始**の事象 (呼ぶ関数と引数の値を持つ) と**返り**の事象 (返る値を持つ) を、起きた時間順に
@@ -262,6 +258,75 @@ SCAN src/ `TyConInfo {`
   = src/fixstd/builtin.rs: bulitin_tycons -- 構造体リテラル
   = src/optimization/capture_struct.rs: CaptureStruct::new -- 構造体リテラル
 
+**前提 型環境の `tycons` の欄を名指す在りか** --- `tycons` という名前を含む項目は次で尽きる。
+`TypeEnv` の `tycons` は非公開の欄なので、`EXT Rust の可視性` よりそれを名前で参照できるのは
+このクレートの中だけであり、走査の範囲 `src/` がそれを覆う。走査は字面の上位近似なので、一覧には
+同じ綴りの局所変数・引数・関数名 (`bulitin_tycons`、`collect_tycons`、`new_tycons` など) と、
+別の型が持つ同名の欄と、散文の中の同じ綴りも入る。
+
+SCAN src/ `tycons`
+  = src/ast/kind_scope.rs: KindEnv -- 別の型 (`KindEnv`) が持つ同名の欄の宣言
+  = src/ast/pattern.rs: Pattern::resolve_union_variant -- アクセサ `tycons()` を通じた読み
+  = src/ast/program.rs: Program::calculate_type_env -- 局所の `Map` を組み、`TypeEnv::new` へ渡す
+  = src/ast/program.rs: Program::kind_env -- 別の型 (`KindEnv`) の同名の欄へ置く
+  = src/ast/program.rs: Program::resolve_namespace_not_in_expr -- 欄を読んで複製し、各 `Field` の `syn_ty` と `ty` を書き替えて置き直す
+  = src/ast/program.rs: Program::resolve_type_aliases_not_in_expr -- `TypeEnv::resolve_type_aliases_in_tycons` の呼び出し
+  = src/ast/program.rs: Program::tycon_names_with_aliases -- 欄の読み
+  = src/ast/program.rs: TypeEnv -- 欄の宣言
+  = src/ast/program.rs: TypeEnv::add_tycons -- 欄を読んで複製し、渡された各項目を入れて置き直す
+  = src/ast/program.rs: TypeEnv::default -- 空の `Map` を欄へ置く
+  = src/ast/program.rs: TypeEnv::is_struct_act -- 欄の読み
+  = src/ast/program.rs: TypeEnv::is_unwrapped_newtype -- 散文の中の `add_tycons` の綴り
+  = src/ast/program.rs: TypeEnv::kinds -- 欄の読み
+  = src/ast/program.rs: TypeEnv::new -- 引数の `Map` を欄へ置く
+  = src/ast/program.rs: TypeEnv::resolve_type_aliases_in_tycons -- 欄を読んで複製し、各 `Field` の `ty` を書き替えて置き直す
+  = src/ast/program.rs: TypeEnv::tycons -- 欄を返す公開のアクセサ
+  = src/ast/program.rs: TypeEnv::unwrap_newtypes -- 欄を読んで複製し、各 `Field` の `ty` を書き替えて置き直す
+  = src/ast/program.rs: TypeEnv::unwrapped_newtype_info -- 欄の読み
+  = src/ast/types.rs: TyCon::get_struct_union_value_type -- アクセサ `tycons()` を通じた読み
+  = src/ast/types.rs: TypeNode::collect_tycons -- 同じ綴りの局所変数・引数・関数名
+  = src/ast/types.rs: TypeNode::define_modules_of_tycons -- 同じ綴りの局所変数・引数・関数名
+  = src/ast/types.rs: TypeNode::fixed_vars_to_set -- 散文の中の同じ綴り
+  = src/ast/types.rs: TypeNode::kind_mismatch_error -- 別の型 (`KindEnv`) の同名の欄の読み
+  = src/ast/types.rs: TypeNode::toplevel_tycon_info -- アクセサ `tycons()` を通じた読み
+  = src/build/divide_program.rs: declaration_of -- アクセサ `tycons()` を通じた読み
+  = src/build/divide_program.rs: type_declarations_reached -- 同じ綴りの局所変数・引数・関数名
+  = src/commands/docs.rs: is_private_field_accessor -- アクセサ `tycons()` を通じた読み
+  = src/commands/docs.rs: tyvars_with_pre_space -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/code_action.rs: handle_unknown_name -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/document_symbol.rs: handle_document_symbol -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/references.rs: find_all_references -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/rename.rs: handle_rename -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/semantic_tokens.rs: Overlay::classify_tycon -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/util.rs: document_trait_or_alias -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/util.rs: document_tycon_or_alias -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/util.rs: find_tycon_def_src -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/workspace_symbol.rs: handle_workspace_symbol -- アクセサ `tycons()` を通じた読み
+  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 局所の `Map` を組み、`add_tycons` へ渡す
+  = src/elaboration/desugar_opaque.rs: rewrite_impl_scheme -- 散文の中の同じ綴り
+  = src/elaboration/typecheck.rs: TypeCheckContext::resolve_match_cond_tycon -- アクセサ `tycons()` を通じた読み
+  = src/elaboration/typecheck.rs: TypeCheckContext::resolve_struct_tycon -- アクセサ `tycons()` を通じた読み
+  = src/fixstd/builtin.rs: InlineLLVMFFICallBody -- 別の型が持つ `param_tycons` の欄の宣言
+  = src/fixstd/builtin.rs: InlineLLVMFFICallBody::generate -- 同じ欄の読み
+  = src/fixstd/builtin.rs: bulitin_tycons -- 関数の名前
+  = src/object.rs: ty_to_object_ty -- アクセサ `tycons()` を通じた読み
+  = src/optimization/closure_specialization.rs: LiftedLambdas -- 別の型が持つ `new_tycons` の欄の宣言
+  = src/optimization/closure_specialization.rs: LiftedLambdas::record_capture_list -- 同じ欄への挿入
+  = src/optimization/closure_specialization.rs: LiftedLambdas::take_new_tycons -- 同じ欄の取り出し
+  = src/optimization/closure_specialization.rs: lift_all -- `add_tycons` の呼び出し
+  = src/optimization/closure_specialization.rs: realize_all -- `add_tycons` の呼び出し
+  = src/optimization/collapse_constructions.rs: Collapser::is_unboxed_datatype -- アクセサ `tycons()` を通じた読み
+  = src/optimization/defunctionalize_fix.rs: run_one -- 局所の `Map` を組み、`add_tycons` へ渡す
+  = src/optimization/split_struct_args.rs: declared_field_names -- アクセサ `tycons()` を通じた読み
+  = src/optimization/split_struct_args.rs: split_one_argument -- 同じ綴りの局所変数・引数・関数名
+  = src/optimization/split_struct_args.rs: splittable_struct -- アクセサ `tycons()` を通じた読み
+  = src/optimization/unwrap_newtype.rs: is_acyclic_newtype -- 同じ綴りの局所変数・引数・関数名
+  = src/optimization/unwrap_newtype.rs: run -- アクセサ `tycons()` を通じた読みと、`unwrap_newtypes` の呼び出し
+  = src/optimization/unwrap_newtype.rs: unwrappable_tycons -- 同じ綴りの局所変数・引数・関数名
+  = src/rc_ir/lower.rs: Lowerer::lower_array_lit -- 散文の中の `param_tycons` の綴り
+  = src/rc_ir/lower.rs: Lowerer::lower_ffi_call -- 別の型が持つ `param_tycons` の欄への引数
+  = src/tests/test_opaque_type.rs: test_opaque_nested_trait_chain -- 散文の中の同じ綴り
+
 **前提 `ty` の欄への代入の在りか** --- `ty` という名前の欄への代入を書く項目は次で尽きる。
 `src/ast/types.rs` のうち `TypeNode` の `ty` の欄へ代入するのは 8 つの setter であり、どれも
 `self.clone()` が作った局所の値へ代入してから `Arc::new` で包んで返す。同じファイルの `Scheme` の
@@ -297,6 +362,97 @@ SCAN src/ `.ty = `
   = src/elaboration/typecheck.rs: TypeCheckContext::reduce_predicate_noalias -- `Predicate` の欄
   = src/optimization/unwrap_newtype.rs: run_on_symbol -- `Symbol` の欄
 
+**前提 型の 2 つの変位を組み立てる在りか** --- `Type::TyApp` と `Type::AssocTy` の名前を書く項目は
+次で尽きる。走査は組み立てとパターン照合を区別しないので、一覧の大半はパターン照合である。値を
+組み立てるのは、`Type::TyApp` については `type_tyapp` と `TypeNode::set_tyapp_fun` と
+`TypeNode::set_tyapp_arg`、`Type::AssocTy` については `type_assocty` と
+`TypeNode::set_assocty_name` と `TypeNode::set_assocty_args` である。
+
+SCAN src/ `Type::TyApp(`
+  = src/ast/export_statement.rs: ExportedFunctionType::validate -- パターン照合
+  = src/ast/types.rs: Type::eq -- パターン照合
+  = src/ast/types.rs: TypeNode::collect_tycons -- パターン照合
+  = src/ast/types.rs: TypeNode::collect_type_arguments -- パターン照合
+  = src/ast/types.rs: TypeNode::collect_tyvar_names -- パターン照合
+  = src/ast/types.rs: TypeNode::define_modules_of_tycons -- パターン照合
+  = src/ast/types.rs: TypeNode::depth -- パターン照合
+  = src/ast/types.rs: TypeNode::find_node_at -- パターン照合
+  = src/ast/types.rs: TypeNode::find_wildcard_inferred_type -- パターン照合
+  = src/ast/types.rs: TypeNode::fixed_vars_to_set -- パターン照合
+  = src/ast/types.rs: TypeNode::flatten_type_application_inner -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars_to_vec -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars_to_vec_with_span -- パターン照合
+  = src/ast/types.rs: TypeNode::get_head_string -- パターン照合
+  = src/ast/types.rs: TypeNode::global_to_absolute -- パターン照合
+  = src/ast/types.rs: TypeNode::is_assoc_ty_free -- パターン照合
+  = src/ast/types.rs: TypeNode::is_ground -- パターン照合
+  = src/ast/types.rs: TypeNode::is_head_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::kind_mismatch_error -- パターン照合
+  = src/ast/types.rs: TypeNode::predicates_from_associated_types_internal -- パターン照合
+  = src/ast/types.rs: TypeNode::resolve_namespace -- パターン照合
+  = src/ast/types.rs: TypeNode::resolve_type_aliases_internal -- パターン照合
+  = src/ast/types.rs: TypeNode::set_kinds -- パターン照合
+  = src/ast/types.rs: TypeNode::set_toplevel_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::set_tyapp_arg -- パターン照合と、複製の `ty` へ置く組み立て
+  = src/ast/types.rs: TypeNode::set_tyapp_fun -- パターン照合と、複製の `ty` へ置く組み立て
+  = src/ast/types.rs: TypeNode::should_braced_as_arg -- パターン照合
+  = src/ast/types.rs: TypeNode::toplevel_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::unwrap_newtypes_node -- パターン照合
+  = src/ast/types.rs: type_tyapp -- `TypeNode::new_arc` に渡す組み立て
+  = src/commands/lsp/references.rs: collect_typenode_assoc_type_refs -- パターン照合
+  = src/commands/lsp/references.rs: collect_typenode_type_refs -- パターン照合
+  = src/commands/lsp/semantic_tokens.rs: Overlay::collect_type -- パターン照合
+  = src/elaboration/desugar_opaque.rs: collect_opaque_applications_inner -- パターン照合
+  = src/elaboration/desugar_opaque.rs: resolve_opaque_type_in_type -- パターン照合
+  = src/elaboration/typecheck.rs: Substitution::matching_internal -- パターン照合
+  = src/elaboration/typecheck.rs: Substitution::substitute_type -- パターン照合
+  = src/elaboration/typecheck.rs: TypeCheckContext::reduce_type_by_equality_inner -- パターン照合
+  = src/elaboration/typecheck.rs: TypeCheckContext::unify -- パターン照合
+  = src/rc_ir/borrow.rs: mentions_a_destructor -- パターン照合
+
+SCAN src/ `Type::AssocTy(`
+  = src/ast/kind_scope.rs: KindScope::extend -- パターン照合
+  = src/ast/kind_scope.rs: KindScope::extend_by_assoc_ty_application -- パターン照合
+  = src/ast/types.rs: Type::eq -- パターン照合
+  = src/ast/types.rs: TypeNode::collect_tycons -- パターン照合
+  = src/ast/types.rs: TypeNode::collect_tyvar_names -- パターン照合
+  = src/ast/types.rs: TypeNode::define_modules_of_tycons -- パターン照合
+  = src/ast/types.rs: TypeNode::depth -- パターン照合
+  = src/ast/types.rs: TypeNode::find_node_at -- パターン照合
+  = src/ast/types.rs: TypeNode::find_wildcard_inferred_type -- パターン照合
+  = src/ast/types.rs: TypeNode::fixed_vars_to_set -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars_to_vec -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars_to_vec_with_span -- パターン照合
+  = src/ast/types.rs: TypeNode::get_head_string -- パターン照合
+  = src/ast/types.rs: TypeNode::global_to_absolute -- パターン照合
+  = src/ast/types.rs: TypeNode::is_assoc_ty_free -- パターン照合
+  = src/ast/types.rs: TypeNode::is_ground -- パターン照合
+  = src/ast/types.rs: TypeNode::is_head_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::kind_mismatch_error -- パターン照合
+  = src/ast/types.rs: TypeNode::predicates_from_associated_types_internal -- パターン照合
+  = src/ast/types.rs: TypeNode::resolve_namespace -- パターン照合
+  = src/ast/types.rs: TypeNode::resolve_type_aliases_internal -- パターン照合
+  = src/ast/types.rs: TypeNode::set_assocty_args -- パターン照合と、複製の `ty` へ置く組み立て
+  = src/ast/types.rs: TypeNode::set_assocty_name -- パターン照合と、複製の `ty` へ置く組み立て
+  = src/ast/types.rs: TypeNode::set_kinds -- パターン照合
+  = src/ast/types.rs: TypeNode::set_toplevel_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::should_braced_as_arg -- パターン照合
+  = src/ast/types.rs: TypeNode::toplevel_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::unwrap_newtypes_node -- パターン照合
+  = src/ast/types.rs: type_assocty -- `TypeNode::new_arc` に渡す組み立て
+  = src/commands/lsp/references.rs: collect_typenode_assoc_type_refs -- パターン照合
+  = src/commands/lsp/references.rs: collect_typenode_type_refs -- パターン照合
+  = src/commands/lsp/semantic_tokens.rs: Overlay::collect_type -- パターン照合
+  = src/elaboration/desugar_opaque.rs: collect_opaque_applications_inner -- パターン照合
+  = src/elaboration/desugar_opaque.rs: resolve_opaque_type_in_type -- パターン照合
+  = src/elaboration/typecheck.rs: Substitution::matching_internal -- パターン照合
+  = src/elaboration/typecheck.rs: Substitution::substitute_type -- パターン照合
+  = src/elaboration/typecheck.rs: TypeCheckContext::reduce_type_by_equality_inner -- パターン照合
+  = src/elaboration/typecheck.rs: TypeCheckContext::unify -- パターン照合
+  = src/rc_ir/borrow.rs: mentions_a_destructor -- パターン照合
+
 **前提 型の節点への可変参照の在りか** --- `&mut TypeNode` の字面を含む項目も、`Arc::get_mut` の字面を
 含む項目も `src/` に無い。`Arc::make_mut` を書くのは 1 つの項目だけであり、そこが可変に借りるのは
 `Arc<Map<..>>` の欄 (`assumed_preds` と `assumed_eqs`) である。すなわち `Arc<TypeNode>` から
@@ -309,19 +465,75 @@ SCAN src/ `Arc::get_mut`
 SCAN src/ `Arc::make_mut`
   = src/elaboration/typecheck.rs: TypeCheckContext::instantiate_scheme -- `Arc<Map<..>>` の欄を借りる
 
-**前提 変数の表の 2 つの欄を名指す在りか** --- `VarTable` の `bindings` の欄を名指す式が在る項目と、
-`var_tys` という名前を含む項目は次で尽きる。`bindings` の側の走査は、別の型が持つ同名の欄を名指す
-項目も挙げる。`VarTable::empty` は `bindings` を構造体リテラルで置くので `.bindings` の走査には
-挙がらない。
+**前提 変数の表の 2 つの欄を名指す在りか** --- `bindings` という名前を含む項目と、`var_tys` と
+いう名前を含む項目は次で尽きる。`VarTable` の `bindings` は非公開の欄、`var_tys` は `pub(crate)` の
+欄なので、`EXT Rust の可視性` よりどちらもこのクレートの中でしか名前で参照できず、走査の範囲 `src/`
+がそれを覆う。走査は字面の上位近似なので、一覧には同じ綴りの局所変数・引数・関数名
+(`collect_bindings` など) と、別の型が持つ同名の欄と、散文の中の同じ語も入る。
 
-SCAN src/ `.bindings`
+SCAN src/ `bindings`
+  = src/ast/pattern.rs: PatternNode::get_typed -- 散文の中の同じ語
   = src/build/build_object_files.rs: dump_rc_ir -- `ProvenanceAnalysis` の同名の欄の読み
-  = src/rc_ir/ownership.rs: VarTable::of -- `vars.bindings.insert`
-  = src/rc_ir/ownership.rs: collect_bindings -- `vars.bindings.insert`
-  = src/rc_ir/ownership.rs: origin_inner -- 読み `vars.bindings.get`
-  = src/rc_ir/provenance.rs: Interpreter::record -- `Interpreter` の同名の欄
-  = src/rc_ir/provenance.rs: Interpreter::refine_by_unique_flag -- `Interpreter` の同名の欄
-  = src/rc_ir/provenance.rs: analyze_program -- `ProvenanceAnalysis` の同名の欄
+  = src/commands/lsp/util.rs: collect_uses_of_binding -- 同じ綴りの局所変数
+  = src/commands/lsp/util.rs: find_enclosing_binder -- 同じ綴りの局所変数
+  = src/commands/lsp/util.rs: pat_name_spans -- 散文の中の同じ語
+  = src/elaboration/typecheck.rs: TypeCheckContext::compute_make_struct_field_tys -- 散文の中の同じ語
+  = src/elaboration/typecheck.rs: TypeCheckContext::make_error -- 散文の中の同じ語
+  = src/elaboration/typecheck.rs: TypeCheckContext::reduce_type_by_equality_inner -- 散文の中の同じ語
+  = src/elaboration/typecheck.rs: TypeCheckContext::unify_or_tolerated_mismatch -- 散文の中の同じ語
+  = src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner -- 散文の中の同じ語
+  = src/fixstd/builtin.rs: InlineLLVMArrayLitBody -- 散文の中の同じ語
+  = src/generator.rs: Scope -- 散文の中の同じ語
+  = src/generator.rs: Scope::pop_local -- 同じ綴りの局所変数
+  = src/optimization/collapse_constructions.rs: Collapser::start_visit_make_struct -- 同じ綴りの局所変数
+  = src/optimization/defunctionalize_fix.rs: FixDefunctionalizer -- 散文の中の同じ語
+  = src/optimization/rename.rs: Substitutor::end_visit_llvm -- 同じ綴りの局所変数
+  = src/optimization/split_struct_args.rs: twin_call -- 同じ綴りの局所変数
+  = src/optimization/split_struct_args.rs: wrapper_body -- 散文の中の同じ語
+  = src/rc_ir/borrow.rs: RewriteCtx -- 散文の中の同じ語
+  = src/rc_ir/borrow.rs: borrow_ify -- 散文の中の同じ語
+  = src/rc_ir/borrow.rs: tail_result_vars -- 散文の中の同じ語
+  = src/rc_ir/borrow.rs: trivially_returns -- 散文の中の同じ語
+  = src/rc_ir/locality.rs: Walk::shape_of -- 散文の中の同じ語
+  = src/rc_ir/locality.rs: Walk::walk_rhs -- 散文の中の同じ語
+  = src/rc_ir/lower.rs: Lowerer::checker -- 同じ綴りの局所変数
+  = src/rc_ir/lower.rs: Lowerer::destructure_pattern -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::fold_bindings -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_app -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_array_lit -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_body -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_eval -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_ffi_call -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_if -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_lam -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_let -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_llvm -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_make_struct -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_match -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_symbol -- 散文の中の同じ語
+  = src/rc_ir/lower.rs: Lowerer::lower_to_var -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_to_var_inner -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::resolve -- 散文の中の同じ語
+  = src/rc_ir/lower.rs: try_attach_debug_name -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/ownership.rs: VarTable -- 欄の宣言と、`origins` の doc の中の同じ語
+  = src/rc_ir/ownership.rs: VarTable::body_only -- `collect_bindings` の呼び出し
+  = src/rc_ir/ownership.rs: VarTable::empty -- 空の `Map` を欄へ置く構造体リテラル
+  = src/rc_ir/ownership.rs: VarTable::of -- 欄への挿入と、`collect_bindings` の呼び出し
+  = src/rc_ir/ownership.rs: collect_bindings -- 関数の名前と、欄への挿入
+  = src/rc_ir/ownership.rs: origin_inner -- 欄の読み `vars.bindings.get`
+  = src/rc_ir/print.rs: Annotations -- 散文の中の同じ語
+  = src/rc_ir/provenance.rs: Interpreter -- 別の型が持つ同名の欄
+  = src/rc_ir/provenance.rs: Interpreter::interpret_app -- 散文の中の同じ語
+  = src/rc_ir/provenance.rs: Interpreter::new -- 別の型が持つ同名の欄
+  = src/rc_ir/provenance.rs: Interpreter::record -- 別の型が持つ同名の欄
+  = src/rc_ir/provenance.rs: Interpreter::refine_by_unique_flag -- 別の型が持つ同名の欄
+  = src/rc_ir/provenance.rs: ProvenanceAnalysis -- 別の型が持つ同名の欄
+  = src/rc_ir/provenance.rs: analyze_program -- `Interpreter` と `ProvenanceAnalysis` の同名の欄
+  = src/rc_ir/validate.rs: Validator::check_expr -- 散文の中の同じ語
+  = src/tests/test_basic.rs: E -- 散文の中の同じ語
+  = src/tests/test_basic.rs: K -- 散文の中の同じ語
+  = src/tests/test_lsp/cases/goto_local/lib.fix: OneOrTwo -- 散文の中の同じ語
 
 SCAN src/ `var_tys`
   = src/rc_ir/ownership.rs: VarTable -- 欄の宣言
