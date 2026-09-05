@@ -719,7 +719,8 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
          reached_origin.acted_on())`)
     <3>3. `|candidates| ≥ 2` である。
       BY <3>1, <3>2, <ref id=0212823/> の前提 (`var` は `B` に現れる `RcVar` の名前である), <ref id=e05fb56/> (b), <ref id=e05fb56/> (c), <ref id=0376e8d/>,
-         CODE src/rc_ir/ownership.rs: origin (`origin_inner` を走らせる式は `origin` の中の 1 つで
+         前提 `origin_inner` を呼ぶ式の在りか (走らせる式は `origin` の中の 1 つである),
+         CODE src/rc_ir/ownership.rs: origin (`grow_stack(|| origin_inner(..))` がその式で
          ある) -- `o_1` と `o_2` は
          `origin_from_leaves_under` が `reached` に積んだ値であり、この `origin_inner` の実行の中で
          作られたものである。その実行を走らせるのは `origin(var, path)` の呼び出しであり、
@@ -1727,9 +1728,10 @@ L17 がこれを読む。
      CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only
 <1>3. `origin_inner(K)` を走らせる式は `origin` の中の 1 つだけであり、memo に `K` が無い状態の
       `origin(K)` の呼び出しはその返り値をそのまま返す。
-  BY CODE src/rc_ir/ownership.rs: origin (`vars.origins` に `K` が在ればその値の複製を返し、無ければ
-     `grow_stack(|| origin_inner(..))` の値を `origins` に入れてから返す。`origin_inner` を呼ぶ式は
-     `src/` 全体でこの 1 つである),
+  BY 前提 `origin_inner` を呼ぶ式の在りか (挙がった項目は定義と `origin` の 2 つであり、
+     `origin_inner` を走らせる式は `origin` の中の 1 つである),
+     CODE src/rc_ir/ownership.rs: origin (`vars.origins` に `K` が在ればその値の複製を返し、無ければ
+     `grow_stack(|| origin_inner(..))` の値を `origins` に入れてから返す),
      <ref id=3e6b0e0/> (`grow_stack` は閉包をちょうど 1 回呼び、その返り値を返す)
 <1>4. QED
   BY <1>1, <1>2, <1>3 -- <1>1 と <1>2 より鍵 `K` について返る値は 1 つであり、<1>3 より
