@@ -97,8 +97,10 @@ README の第 1 節が挙げる 2 種である -- 「**対象コミットより�
   `Vec<T>` (`T: Clone`) については EXT Vec::clone のとおりである。
   `std::collections::HashMap<K, V, S>` (`K: Clone`、`V: Clone`、`S: Clone`) の `clone` は、鍵の集合が
   原本の鍵をそれぞれ `clone` したものからなり、各鍵の値が原本の値の `clone` である写像を返す。
-  タプルの `clone` は、各成分が原本の対応する成分の `clone` であるタプルを返す。したがって、これらの型を
-  組み合わせた値を `PartialEq` が成分ごとに比べる限り、`clone` の値は原本と等しい。
+  タプルの `clone` は、各成分が原本の対応する成分の `clone` であるタプルを返す。`Option<T>`
+  (`T: Clone`) の `clone` は、`None` には `None` を、`Some(x)` には `Some(x.clone())` を返す。
+  したがって、これらの型を組み合わせた値を `PartialEq` が成分ごとに比べる限り、`clone` の値は原本と
+  等しい。
   `rustc_hash::FxHashMap<K, V>` は `HashMap<K, V, FxBuildHasher>` の別名であり、`crate::misc::Map<K, V>`
   はさらにその別名である (`CODE src/misc.rs: Map`)。
 - **EXT Iterator::map と collect** --- `Iterator::map(f)` が返す反復子は、元の反復子と同じ個数の要素を
@@ -1071,6 +1073,11 @@ SCAN src/ `fn result_prov`
 op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructure` のフィールドの列**、`Match` の
 アームの本数と並びとその `tag`・`payload`・`payload_state`、および継続の順序は変わらない。
 
+**`Llvm` の op については、この「変わらない」は複製の関係である。** `Box<dyn LLVMGen>` の複製が原本と
+同じオブジェクトであるとは限らない (EXT dyn_clone の trait object の複製) ので、この言明が op について
+言うのは、出力の op が入力の op の複製であり、したがって A3 より同じ引数に対して原本と同じ
+`Provenance`・`borrows_operand`・`applies_a_function_operand` を返すことである。
+
 **証明**
 
 <1>1. `drop_nodes(node, to_delete)` は `grow_stack(|| drop_nodes_inner(node, to_delete))` であり、A15 より
@@ -1104,23 +1111,53 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
   <2>1. CASE `node` の式が `RcExpr::Retain(v, path, state, k)` である。この腕は `drop_nodes(k, to_delete)`
         を 1 回呼び、`to_delete` が `node_id(node)` を含むときはその値をそのまま返し、含まないときは
         `RcExpr::Retain(v.clone(), path.clone(), *state, k)` の節点を `&node.source` を付けて積んで返す。
-    BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Retain(v, path, state, k)` の腕
-  <2>2. CASE `node` の式が `RcExpr::Release(v, path, state, k)` である。この腕は <2>1 と同じ形で、
-        `RcExpr::Release(v.clone(), path.clone(), *state, k)` を積む。
-    BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Release(v, path, state, k)` の腕
+        `RcVar` は `#[derive(Clone)]` を持ち、`FieldPath` は `Vec<usize>` なので、EXT derive(Clone)・
+        EXT Vec::clone・EXT 標準の型の clone は等しい値を返す より、積む節点の変数と path は元のものに
+        等しい。
+    BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Retain(v, path, state, k)` の腕,
+       CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath,
+       EXT derive(Clone), EXT Vec::clone, EXT 標準の型の clone は等しい値を返す
+  <2>2. CASE `node` の式が `RcExpr::Release(v, path, state, k)` である。この腕は
+        `drop_nodes(k, to_delete)` を 1 回呼び、`to_delete` が `node_id(node)` を含むときはその値を
+        そのまま返し、含まないときは `RcExpr::Release(v.clone(), path.clone(), *state, k)` の節点を
+        `&node.source` を付けて積んで返す。変数と path が元のものに等しいことは <2>1 と同じ 3 つの
+        名札が与える。
+    BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Release(v, path, state, k)` の腕,
+       CODE src/rc_ir/ast.rs: RcVar, CODE src/rc_ir/ast.rs: FieldPath,
+       EXT derive(Clone), EXT Vec::clone, EXT 標準の型の clone は等しい値を返す
   <2>3. CASE `node` の式が `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` である。この腕は各アームに
         ついて `drop_nodes(&arm.body, to_delete)` を 1 回、`drop_nodes(k, to_delete)` を 1 回呼び、
         `x`、`scrut`、各アームの `tag`/`payload`/`payload_state`、アームの本数と並びを変えずに、
         `&node.source` を付けて節点を積む。`to_delete` の検査はしない。
     BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Let(x, RcRhs::Match(scrut, arms), k)` の腕,
-       CODE src/rc_ir/ast.rs: MatchArm::with_body
+       CODE src/rc_ir/ast.rs: MatchArm, CODE src/rc_ir/ast.rs: MatchArm::with_body,
+       CODE src/rc_ir/ast.rs: RcVar, EXT derive(Clone), EXT Iterator::map と collect,
+       EXT 標準の型の clone は等しい値を返す
+    `x` と `scrut` は `x.clone()`・`scrut.clone()` で運ばれ、`RcVar` は `#[derive(Clone)]` を持つので
+    EXT derive(Clone) と EXT 標準の型の clone は等しい値を返す より元のものに等しい。アームは
+    `arms.iter().map(|arm| arm.with_body(..)).collect()` で作られ、`MatchArm::with_body` は
+    `MatchArm { body, ..self.clone() }` を返すので、EXT derive(Clone) より `tag`・`payload`・
+    `payload_state` は元のものの `clone` であり、EXT Iterator::map と collect より本数と並びは
+    元のものである。
   <2>4. CASE `node` の式が `RcExpr::Let(x, rhs, k)` で `rhs` が `RcRhs::Match(..)` でない。この腕は
         `drop_nodes(k, to_delete)` を 1 回呼び、`x` と `rhs` を `clone()` で運んで `&node.source` を
-        付けて節点を積む。すなわち `App` の callee と引数、`Closure` の `FuncRef` と capture、`Llvm` の
-        op とオペランド、`Var` の変数は元のものである。`to_delete` の検査はしない。`match` の腕はこの順に
+        付けて節点を積む。すなわち `App` の callee と引数、`Closure` の `FuncRef` と capture、`Var` の
+        変数は元のものである。`to_delete` の検査はしない。`match` の腕はこの順に
         並んでいるので、この腕に落ちる `rhs` は `RcRhs::Match` ではない。
+        **`Llvm` の op については、複製の関係が得られる** -- `RcRhs` は `#[derive(Clone)]` を持つので
+        EXT derive(Clone) より `rhs.clone()` は `RcRhs::Llvm` の第 1 欄に `Box<dyn LLVMGen>` の
+        `Clone::clone` の値を置き、`LLVMGen` の宣言は `pub trait LLVMGen: DynClone + Send + Sync` で
+        あって `dyn_clone` の `DynClone` を継承するので、EXT dyn_clone の trait object の複製 が
+        その `Clone` を述べる。**複製が原本と同じオブジェクトであるとは限らない**ので、言明が op に
+        ついて言うのはこの複製の関係と、A3 の「**この 2 節を合わせると「op の複製は原本と同じ宣言を
+        返す」が出る。** `rhs.clone()` や `fresh_rename_function` が作る複製の op は、原本と同じ引数を
+        渡されれば同じ `Provenance` を返す」である。オペランドは `Vec<RcVar>` なので EXT Vec::clone と
+        EXT derive(Clone) より元のものに等しい。
     BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Let(x, rhs, k)` の腕,
-       CODE src/rc_ir/borrow.rs: drop_nodes_inner, CODE src/rc_ir/ast.rs: RcRhs, EXT derive(Clone)
+       CODE src/rc_ir/borrow.rs: drop_nodes_inner, CODE src/rc_ir/ast.rs: RcRhs,
+       CODE src/rc_ir/ast.rs: RcVar, CODE src/ast/inline_llvm.rs: LLVMGen, <ref id=e11772a/>,
+       EXT derive(Clone), EXT Vec::clone, EXT 標準の型の clone は等しい値を返す,
+       EXT dyn_clone の trait object の複製
   <2>5. CASE `node` の式が `RcExpr::Destructure(container, fields, state, k)` または `RcExpr::Eval(v, k)`
         である。この 2 つの腕は `drop_nodes(k, to_delete)` を 1 回呼び、`container`・`fields`・`state`・
         `v` を `clone()` で運んで `&node.source` を付けて節点を積む。すなわち `Destructure` の
@@ -1128,15 +1165,25 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
     BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Destructure(container, fields, state, k)` の腕,
        CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Eval(v, k)` の腕,
        EXT Vec::clone, EXT derive(Clone)
-  <2>6. CASE `node` の式が `RcExpr::Ret(v)` である。この腕は `v` を変えずに `&node.source` を付けて
-        1 節点を作って返す。
-    BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Ret(v)` の腕
+  <2>6. CASE `node` の式が `RcExpr::Ret(v)` である。この腕は `RcExpr::Ret(v.clone())` の 1 節点を
+        `&node.source` を付けて作って返す。`RcVar` は `#[derive(Clone)]` を持つので、
+        EXT derive(Clone) と EXT 標準の型の clone は等しい値を返す より、その変数は元のものに等しい。
+    BY CODE src/rc_ir/borrow.rs: drop_nodes_inner の `RcExpr::Ret(v)` の腕,
+       CODE src/rc_ir/ast.rs: RcVar, EXT derive(Clone), EXT 標準の型の clone は等しい値を返す
   <2>7. QED
     `RcExpr` の 6 変位のうち `Let` を右辺で 2 つに分けた 7 つの場合を <2>1 から <2>6 が尽くす。これは
     `drop_nodes_inner` の `match` の 7 つの腕である。節点を落とすのは <2>1 と <2>2 だけであり、どちらも
-    `Retain`/`Release` である。
-    BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs,
-       CODE src/rc_ir/borrow.rs: drop_nodes_inner
+    `Retain`/`Release` である。**継続とアーム本体については帰納法の仮定を当てる** -- <2>1 から <2>6 の
+    各腕が `drop_nodes` に渡すのは `node` の子 (`DEF 子と親`) であり、それは `N(node)` より真に小さい
+    部分木なので、その返り値が言明のとおりの木であることは帰納法の仮定が与える。各腕はその返り値を
+    そのまま継続 (アームの場合はアーム本体) に据えるので、言明は `N(node)` の全体について成り立つ。
+    **残る各位置の source が変わらないのは、どの腕も `expr_node(・, &node.source)` で節点を作るから
+    である** -- `expr_node(expr, source)` は `RcExprNode { expr: Arc::new(expr), source: source.clone() }`
+    を返す。
+    BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, 帰納法の仮定, CODE src/rc_ir/ast.rs: RcExpr,
+       CODE src/rc_ir/ast.rs: RcRhs, CODE src/rc_ir/ast.rs: RcExprNode,
+       CODE src/rc_ir/borrow.rs: drop_nodes_inner, CODE src/rc_ir/borrow.rs: expr_node,
+       DEF 子と親, EXT derive(Clone), EXT 標準の型の clone は等しい値を返す
 <1>4. QED
   BY <1>1, <1>2, <1>3
 
@@ -1178,9 +1225,12 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
   <2>1. その `get` は `Some` を返す。`self.all_retains` に `retain` を積むのは `walk_inner` の
         `RcExpr::Retain(v, path, _, k)` の腕だけであり、その腕は同じ `retain` について
         `self.un_bump_releases.entry(retain).or_default()` を評価するので、その鍵の項目が在る。
-        `p30` の `L10` より走査は記録を取り除かない。
+        `p30` の `L10` より走査は記録を取り除かない。**「その腕だけ」を与えるのは
+        `前提 走査の記録の書き込みの在りか` である** -- その走査が `self.all_retains` について挙げるのは
+        `walk_inner` と `cancelled` の 2 項目であり、`cancelled` はそれを読むだけである。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-       CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled, <ref id=3b81b08/>
+       CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled, <ref id=3b81b08/>,
+       前提 走査の記録の書き込みの在りか
   <2>2. QED
     BY <2>1, CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled, DEF 削除集合
 <1>2. `self.all_retains` に値が入るのは、`walk_inner` の `RcExpr::Retain(v, path, _, k)` の腕の
@@ -1298,11 +1348,17 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
       選んだアームの本体である。`walk_inner` のこの腕は各アームについて
       `self.walk(&arm.body, pending.clone(), false)` を呼ぶ。`PendingRetains` は `Vec<PendingRetain>` で
       あり、`PendingRetain` は `#[derive(Clone)]` を持つので、EXT derive(Clone) より複製の `node` と
-      `outstanding` は原本のものの `clone` である。EXT Vec::clone より、複製の
+      `outstanding` は原本のものの `clone` である。**その 2 つの `clone` は原本と等しい値を返す** --
+      `node` の型 `NodeId` は `usize` であり、`outstanding` の型 `References` は
+      `Map<VarPath, usize>` を 1 つ持つ構造体であって `#[derive(Clone)]` を持ち、`VarPath` は
+      `(FullName, FieldPath)`、`FieldPath` は `Vec<usize>` である。この型の組み合わせについて
+      EXT 標準の型の clone は等しい値を返す がそれを与える。EXT Vec::clone より、複製の
       長さと各位置の要素は原本のものに等しいので、アーム本体の入口状態は `pending(n)` と等しい値である。
   BY <ref id=ca36627/>, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
      CODE src/rc_ir/borrow.rs: PendingRetain, CODE src/rc_ir/borrow.rs: PendingRetains,
-     EXT Vec::clone, EXT derive(Clone), <ref id=dad309f/>
+     CODE src/rc_ir/borrow.rs: NodeId, CODE src/rc_ir/ownership.rs: References,
+     CODE src/rc_ir/ast.rs: VarPath, FieldPath,
+     EXT Vec::clone, EXT derive(Clone), EXT 標準の型の clone は等しい値を返す, <ref id=dad309f/>
 <1>3. CASE `n` がアーム本体の終端の `Ret` である。D3 より、`Ret` の後に実行路が続くのは、`n` が、その
       実行路が入ったアームの本体の実行路を終える `Ret` であるときに限り、そのとき直後の節点はその `Match`
       節点 `M` の継続 `k_M` である。L33a より `n = ret(arm_i.body)` である。`walk_inner` の `M` の腕は
@@ -1341,7 +1397,10 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
     BY <2>1, <2>2
 <1>3. CASE `n` が `B` の根である。`cancel_body` は `analysis.walk(body, PendingRetains::default(), true)`
       を呼ぶので `pending(n)` は空であり、言明は空虚に成り立つ。
-  BY CODE src/rc_ir/borrow.rs: cancel
+  BY CODE src/rc_ir/borrow.rs: cancel, <ref id=dad309f/>, DEF 訪問
+  `DEF 訪問` は `pending(n)` を `n` の訪問における `walk_inner` の `pending` 引数と定め、`p30` の
+  `L1` は `walk` が受け取った引数をそのまま渡して `walk_inner` を 1 回呼び、その値を返すことを
+  述べるので、`walk` に渡した `PendingRetains::default()` がそのまま `pending(n)` である。
 <1>4. CASE `n` が根でなく、その親 `m` の式が `Retain`、`Release`、`Destructure`、`Eval`、または右辺が
       `Match` でない `Let` である。
   <2>1. `walk_inner` の `m` の腕は `pending(m)` に操作を施して `self.walk(n, pending, ・)` を呼ぶ。
@@ -1351,12 +1410,17 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
        CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects,
        CODE src/rc_ir/borrow.rs: un_bump, <ref id=19296b2/>, <ref id=13b0da2/>
-  <2>2. `pending(n)` の要素は、`pending(m)` の要素であるか、由来が `m` 自身 (`m` が `Retain` のとき) で
-        ある。
-    BY <2>1, <ref id=7af2e2e/>
+  <2>2. `pending(n)` の各要素の `node` は、`pending(m)` のある要素の `node` であるか、`m` 自身の
+        `NodeId` である (`m` が `Retain` のとき)。したがってその要素の由来 (DEF 訪問) は、
+        `pending(m)` のある要素の由来であるか、`m` 自身である。
+    BY <2>1, <ref id=7af2e2e/>, <ref id=19296b2/>, <ref id=24bf090/>, DEF 訪問
+    **`outstanding` の値については同じことを言わない** -- L34 の 1 の `un_bump` は、選んだ要素の
+    `outstanding` から引くので、要素の値は `pending(m)` のものと等しいとは限らない。由来は `node` だけで
+    決まり (DEF 訪問、P15 の前半)、`un_bump` は `node` を書き替えないので、この段が言うのは `node` に
+    ついてである。
   <2>3. QED
-    `pending(m)` の要素については <1>1 と <1>2 を合わせる。由来が `m` 自身のものについては <1>2 が直接
-    与える。
+    `pending(m)` のある要素の由来であるものについては <1>1 と <1>2 を合わせる。由来が `m` 自身のものに
+    ついては <1>2 が直接与える。
     BY <1>1, <1>2, <2>2
 <1>5. CASE `n` が根でなく、その親 `m` の式が `Let(_, RcRhs::Match(_, arms), k)` であり、`n` がその
       アームの本体である。L34 の 2 より `pending(n)` の要素の `node` の集合は `pending(m)` のそれに等しい
@@ -1510,12 +1574,25 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
 <1>3. `t` が pending である `ρ` の上の節点の全体は、<1>1 の `n0` から始まる連続する区間である。
   BY <1>1, <1>2
 <1>4. `t` は `ρ` の終端の `Ret` では pending でない。
-  <2>1. `cancel_body` は `analysis.walk(body, ・, true)` を呼び、`walk_inner` は `Match` のアーム本体に
-        だけ `false` を渡し、ほかの継続には自分が受け取った `returns_from_func` をそのまま渡す。よって
-        `returns_from_func` が真である節点の全体は、`B` の根から継続だけをたどって得られる鎖であり、
+  <2>1. `returns_from_func` が真である節点の全体は、`B` の根から継続だけをたどって得られる鎖であり、
         その鎖に入る唯一の `Ret` 節点は `ret(B の根)` である。
-    BY CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
-       DEF 訪問
+    <3>1. `B` の根の訪問が受け取る `returns_from_func` は真である。`cancel_body` は
+          `analysis.walk(body, ・, true)` を呼び、`p30` の `L1` より `walk` は受け取った引数を
+          そのまま渡して `walk_inner` を 1 回呼ぶ。
+      BY CODE src/rc_ir/borrow.rs: cancel, <ref id=dad309f/>, DEF 訪問
+    <3>2. `walk_inner` は `Match` のアーム本体には `false` を渡し、ほかの継続には自分が受け取った
+          `returns_from_func` をそのまま渡す。`p30` の `L1` より `walk` はその値をそのまま
+          `walk_inner` へ渡す。
+      BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, <ref id=dad309f/>
+    <3>3. QED
+      BY <3>1, <3>2, <ref id=24bf090/>, <ref id=b3dfa37/>, DEF 子と親, DEF 訪問
+      訪問順序についての帰納法で示す。P15 の後半より走査は各位置をちょうど 1 回訪問するので、訪問順序は
+      有限の全順序であり、この帰納法は整礎である。根については <3>1 が真を与える。根でない節点 `n` は
+      その親 `m` の訪問から訪問される (`DEF 子と親`、D2)。`n` が `Match` のアーム本体であれば <3>2 より
+      `returns_from_func` は偽であり、そうでなければ `n` は `m` の継続であって、<3>2 より `n` の
+      `returns_from_func` は `m` のものに等しい。よって `returns_from_func` が真である節点は、根から
+      継続だけをたどって得られる鎖の元に限られ、その各元では真である。D2 より継続の鎖は有限で `Ret` で
+      終わるので、その鎖に入る `Ret` 節点は `ret(B の根)` ただ 1 つである (`DEF 訪問`)。
   <2>2. L33a より、`ρ` の最後の節点は `ret(B の根)` である。
     BY <ref id=68112c9/>
   <2>3. `walk_inner` の `RcExpr::Ret(_)` の腕は、`returns_from_func` が真のとき `pending` の全要素の
@@ -1577,17 +1654,26 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
         L34 の 3 では、`n` はアーム `arm_i` の本体の終端の `Ret` であり、`merge` が
         `uniform.get(&retain.node)` の複製を新しい `outstanding` に据える。P18 よりその値はすべての
         アームの出口に現れる共通の値であり、L34 の 3 より `arm_exits[i] = pending(n)` なので、その共通の
-        値は `out(t, n)` に等しい。よって変わらない。
+        値は `out(t, n)` に等しい。よって変わらない。**`merge` が据える `outstanding.clone()` は原本と
+        等しい値である** -- `References` は `Map<VarPath, usize>` を 1 つ持つ構造体であって
+        `#[derive(Clone)]` を持ち、`VarPath` は `(FullName, FieldPath)`、`FieldPath` は `Vec<usize>` で
+        あるので、EXT derive(Clone)・EXT Vec::clone・EXT 標準の型の clone は等しい値を返す がそれを
+        与える。
     BY <1>1, <ref id=7af2e2e/>, <ref id=7855e90/>, <ref id=19296b2/>, <ref id=5116349/>, CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, DEF 節点の量,
-       <ref id=72bac67/>
+       <ref id=72bac67/>, CODE src/rc_ir/ownership.rs: References, CODE src/rc_ir/ast.rs: VarPath, FieldPath,
+       EXT derive(Clone), EXT Vec::clone, EXT 標準の型の clone は等しい値を返す
     引かれる `ActRefs(n)` と、区間の最初に置かれる `ActRefs(t)` が、走査のどの段階で読んでも同じ値で
     あることは L46 が述べる。
   <2>3. 区間の最後で、`n*(ρ)` の `subtract` の後にこの `outstanding` は空になる。
     BY <1>6
   <2>4. QED
     <2>2 より、`ActRefs(t)` から `R_ρ(t)` の各要素の `ActRefs` を順に引いた結果が <2>3 で空になる。
-    多重集合の差なので `Σ_{r ∈ R_ρ(t)} ActRefs(r) = ActRefs(t)` である。
-    BY <2>1, <2>2, <2>3
+    **各回の引き算は切り捨てを起こさない** -- `p30` の `L5` の 3 より、`un_bump` が `InBracket` を
+    返して `subtract` を呼ぶのは、選んだ要素の `outstanding` がその `References` を `covers` する
+    ときだけであり、D15 は `covers(R)` を「各オブジェクトについて自分の個数が `R` 以上か」と定める。
+    すなわち各名前について、引かれる個数はその時点の個数以下である。よって多重集合の差として順に引いた
+    結果が空になることから `Σ_{r ∈ R_ρ(t)} ActRefs(r) = ActRefs(t)` が出る。
+    BY <2>1, <2>2, <2>3, <ref id=19296b2/>, <ref id=cbc4a1c/>, CODE src/rc_ir/ownership.rs: References
 <1>9. QED
   BY <1>3, <1>5, <1>6, <1>7, <1>8
 
@@ -1634,7 +1720,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
 (`DEF 節点の実行の素動作`) を取る。`τ0` をその処分の直前の点、`c(O)` をその処分が `Obl` から取り除く
 `O` への参照の個数とする。このとき、連鎖が終わった点 `τ1` について `Obl(τ1, O) = Obl(τ0, O) - c(O)` で
 あり、`τ0` と `τ1` のあいだの各点 `τ` について `Obl(τ, O) ≥ Obl(τ0, O) - c(O)` である。すなわち**解放は
-`Obl` を正味で動かさず、その内側でも下げない。**
+`Obl` を正味で動かさず、その内側でも下げない。さらに、連鎖の中で `Obl` から参照を取り除く各素動作に
+ついて、取り除かれる参照はその直前の点の `Obl` に入っている。**
 
 **支えは D24 の網羅である。** D24 は「**段の記述は `Obl` について網羅である。** (E1)-(E9) と (F) は、
 各段について `Obl` を離れる参照の行き先と、作られる参照の持ち手と、`H` の動きを全部書いている。
@@ -1696,11 +1783,21 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
   <2>2. 1 つ目の活性化が返す参照。D24 の (E4) は「(F) が作る 1 つ目の活性化は `_dtor` の欄の関数を
         `_value` に適用したものであり、その返り値 `io_act` は 2 つ目の活性化 -- 返った `IO` の runner の
         適用 -- の入力になる」と述べ、「どちらの返りでも、参照はその解放を含む段を実行した活性化の
-        `Obl` に入る」と続ける。よってこの参照は `Obl` に入り、続く 2 つ目の適用が D9 の `App` の行に
-        より消費するので、同じ連鎖の中で `Obl` を離れて 2 つ目の活性化の `Obl` の初期値に入る。返りが
+        `Obl` に入る」と続ける。よってこの参照は `Obl` に入る。**それを離すのは 2 つ目の適用である。**
+        D24 の「活性化の林」は 2 つ目の活性化を「それが返した `IO` の動作の runner を適用するもの」と
+        定め、その生成コードとして `run_ios_runner` を名指す。`run_ios_runner` はその runner を
+        `apply_lambda` の**呼び出し先**に据え、`run_io_or_ios_runner` はその runner に `io_act` 自身か、
+        `io_act` の第 0 フィールドから取り出した値を渡す
+        (`CODE src/fixstd/builtin.rs: run_io_or_ios_runner`, `run_io`, `run_ios_runner`,
+        `CODE src/generator.rs: Generator::build_run_destructor` -- `apply_lambda` の結果 `io_act` を
+        `run_io_or_ios_runner` に渡す)。D9 の `App` の行は callee の全 boxed leaf を消費し、フィールドの
+        取り出しは D9 の `Destructure` の 2 行のどちらか -- unbox の名前付きフィールドの移動か、boxed
+        容器の消費 -- なので、いずれにせよ `Obl` に入ったこの参照は同じ連鎖の中で `Obl` を離れる。返りが
         2 つ目の適用より前にあることは、(E4) の「その返り値 `io_act` は 2 つ目の活性化 -- 返った `IO` の
         runner の適用 -- の入力になる」から出る。
-    BY <ref id=e3436e8/>, <ref id=9d74736/>
+    BY <ref id=e3436e8/>, <ref id=9d74736/>, <ref id=7e70ffa/>, <ref id=9e3e401/>,
+       CODE src/generator.rs: Generator::build_run_destructor,
+       CODE src/fixstd/builtin.rs: run_io_or_ios_runner, run_io, run_ios_runner
   <2>2a. 2 つ目の活性化が返す参照。D24 の (E4) より、これも `Obl` に入る。**`o` の `_value` の欄へ
         書き込まれるのはこの 2 つ目の返り値だけである** -- (E4) は「2 つ目の返り値は `o` の `_value` の
         欄へ書き込まれる」と述べる。**この書き戻しは (F) の解放の中の動作である** -- D24 の (F) は
@@ -1717,6 +1814,17 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
     `Obl` に参照を入れない -- `o` が持つ参照の処分は <1>2 が `Obl` を変えないと述べ、作られた 2 つの
     活性化とその子孫の素動作が動かすのはその活性化の `Obl` であり (D24 の (E2)、(E3)、(E4))、記憶域の
     返却は素動作ではない (<1>1)。
+<1>4b. 連鎖の中で `Obl` から参照を取り除く各素動作について、取り除かれる参照はその直前の点の `Obl` に
+       入っている。
+  BY <1>1, <1>2, <1>3, <1>4, <ref id=e3436e8/>, <ref id=9d74736/>, <ref id=f06144e/>
+  <1>1 の 6 つの動作のうち `Obl` から参照を取り除きうるのは、2 つの適用が D9 の `App` の行により行う
+  消費と、2 つ目の返り値を `o` の `_value` の欄へ書き戻す受け渡しである。**残る 4 つは `Obl` から
+  取り除かない** -- `o` が持つ参照の処分は `Obl` を変えず (<1>2)、`_value` の欄の参照は `Obl` を
+  通らず (<1>3)、`_dtor` の retain は `Obl` へ入れる側であり (<1>4)、`o` の記憶域の返却は素動作では
+  ない (<1>1)。2 つの活性化とその子孫が実行する段が動かすのはその活性化の `Obl` である
+  (D24 の (E2)・(E3)・(E4))。<1>4 は、この連鎖が `Obl` に入れる 3 種の参照のどれもが、それを入れた
+  素動作より**後**の素動作で `Obl` を離れることを述べるので、取り除く素動作の直前の点でその参照は
+  `Obl` に在る。
 <1>4a. 連鎖のあいだに環境の段は入らない。
   BY <ref id=c9e4cca/>, <ref id=e3436e8/>
   連鎖は 1 つの段の中で走る (D24 の (F) -- 「`o` は**その同じ段の中で解放される**」)。A17 (iii) は
@@ -1727,7 +1835,7 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
   変わらないが、連鎖の内側で `H` が動くと <1>1 の「連鎖で起きるのは D24 の (F) の解放である」が
   読めなくなる。
 <1>5. QED
-  BY <1>1, <1>2, <1>3, <1>4, <1>4a, <ref id=e3436e8/>
+  BY <1>1, <1>2, <1>3, <1>4, <1>4a, <1>4b, <ref id=e3436e8/>
   D24 の (F) より解放の連鎖は有限で終わる。その各解放について <1>2 から <1>4 が、`Obl` に入った参照が
   すべて同じ連鎖の中で `Obl` を離れ、それ以外に `Obl` を動かす素動作が無いことを述べる。よって連鎖が
   終わった点の `Obl` は、処分が取り除いた分だけ `τ0` より少ない。連鎖の内側の各点については、<1>4 の
@@ -1776,7 +1884,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
 したがって、スロット (D6) から始まる別名類の ρ-歩み (D33) の各位置 `(u, σ)`
 について、`σ` は `ty(u)` の boxed leaf である。**とくに、`origin_from_leaves_under` が
 `truncate_to_unit(ty(args[j]), σ')` を行き先の path として辿る辺 -- 行き先の path が leaf でないことが
-ありうる唯一の辺であり、D17 の第 3 行の但し書きがそれを述べる -- は、歩みの上では取られない。**
+ありうる唯一の辺であり、D17 の**辺の行き先についての第 3 項**の但し書きがそれを述べる -- は、歩みの
+上では取られない。**
 
 **D17 との対応**。D17 は `origin` が辿る各辺を、`origin` に与えた path `π` の下の leaf `λ` の写り方として
 述べる。`π` 自身が boxed leaf であるときは `λ = π` であり、そのとき辺の行き先の path は D17 が言う `λ` の
@@ -1853,7 +1962,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
   <2>2. CASE `u` の束縛が `Binding::Move(y)`、`Binding::Join(arm_results)`、または
         `Binding::Payload(scrut, None)` である。これらの腕が呼ぶのは、順に `origin(y, σ)`、各アームに
         ついての `origin(arm_result, σ)`、`origin(scrut, σ)` であり、いずれも path を変えない。D17 の
-        第 1 行は「`Binding::Move`、catch-all アームの payload、`Binding::Join`: `λ` を変えない」と述べ、
+        **各辺での `λ` の写り方の第 1 項**は「`Binding::Move`、catch-all アームの payload、
+        `Binding::Join`: `λ` を変えない」と述べ、
         D17 はその像を「着く leaf」と呼ぶので、`σ` は行き先の変数の型の boxed leaf である。
     BY CODE src/rc_ir/ownership.rs: origin_inner, <ref id=d59f90b/>, <ref id=83d98e9/>
   <2>3. CASE `u` の束縛が `Binding::Field(container, idx)` で `container.ty.is_box` が偽、または
@@ -1889,7 +1999,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
       D4 の第 5 規則は「それ以外 (unbox の構造体・タプル・union) は、`unpunched_field_types` が返す
       フィールドの下へ降りる。union のときは各変位の payload へ降りる」と述べるので、
       `boxed_leaf_paths(ty(w))` は `[i] ++ boxed_leaf_paths(ty(u))` を含む。よって `[i] ++ σ` は
-      `ty(w)` の boxed leaf である。D17 の第 2 行が同じことを「unbox 容器の `Destructure` のフィールド、
+      `ty(w)` の boxed leaf である。D17 の**各辺での `λ` の写り方の第 2 項**が同じことを「unbox 容器の
+      `Destructure` のフィールド、
       unbox union の変位アームの payload: `λ` の先頭に添字を足す」と述べる。
   <2>4. CASE `u` の束縛が `Binding::Field(container, idx)` で `container.ty.is_box` が真、または
         `Binding::Payload(scrut, Some(tag))` で `scrut.ty.is_box` が真である。この 2 つの腕は `here()` を
@@ -1899,7 +2010,8 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
         `Some((j, p))` である。この腕は `origin(args[j], p)` を呼ぶ。`as_arg_projection` が `Some((j, p))`
         を返すのは `σ` の宣言が単一の `LeafOrigin::Arg(j, p)` であるときであり、A3 の表の「単一の
         `Arg(j, σ)`」の行 (その `σ` はここでの `p` に当たる) は、それが「第 `j` オペランドの leaf `σ`」を
-        名指すと述べる。よって `p` は `boxed_leaf_paths(ty(args[j]))` の要素である。D17 の第 3 行も同じ
+        名指すと述べる。よって `p` は `boxed_leaf_paths(ty(args[j]))` の要素である。D17 の**各辺での `λ` の
+        写り方の第 3 項**も同じ
         ことを「`λ` を、`λ` 自身の宣言 `Arg(j, σ')` の `σ'` へ置き換える」と述べる。
     BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: as_arg_projection, <ref id=e11772a/>, <ref id=d59f90b/>
   <2>6. CASE `u` の束縛が `Binding::Llvm` で、同じ式が `None` である。<1>2 よりこの腕の
