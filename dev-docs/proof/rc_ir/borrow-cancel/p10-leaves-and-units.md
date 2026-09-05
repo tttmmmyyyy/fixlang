@@ -640,13 +640,22 @@ SCAN src/ `truncate_to_unit(`
        CODE src/ast/types.rs: TypeNode::set_assocty_name,
        CODE src/ast/types.rs: TypeNode::set_assocty_args,
        CODE src/ast/types.rs: impl Clone for TypeNode
-  <2>3. 値が作られる時点で、その直接の部分はどれも既に在る値である。`Type::TyApp` と
-     `Type::AssocTy` を組み立てるのは `type_tyapp`、`type_assocty`、および `<2>2` の
-     `set_tyapp_fun`・`set_tyapp_arg`・`set_assocty_name`・`set_assocty_args` であり、どれも
-     引数として渡された `Arc<TypeNode>` か、複製元の `ty` が既に持っていた `Arc<TypeNode>` を置く。
-     `TypeNode` が導出する `Deserialize` も、`ty` の欄を読み終えてから節点を組み立てるので、
-     部分は節点より先に作られる。
-    BY <2>2, CODE src/ast/types.rs: type_tyapp, CODE src/ast/types.rs: type_assocty,
+  <2>3. 値が作られる時点で、その直接の部分はどれも既に在る値である。
+     前提 型の 2 つの変位を組み立てる在りか より、`Type::TyApp` の値を組み立てるのは
+     `type_tyapp`・`TypeNode::set_tyapp_fun`・`TypeNode::set_tyapp_arg`、`Type::AssocTy` の値を
+     組み立てるのは `type_assocty`・`TypeNode::set_assocty_name`・`TypeNode::set_assocty_args`
+     である。どれも成分に置くのは、引数として渡された `Arc<TypeNode>` か、複製元の `ty` が既に
+     持っていた `Arc<TypeNode>` である。`Type` は `Clone` と `Deserialize` を導出するので、その
+     2 つもこの 2 つの変位の値を作る -- `Clone` が成分に置くのは複製元の `Arc` の複製であり、
+     `Deserialize` は成分を読み終えてから変位を組み立てる。`TypeNode` が導出する `Deserialize` も、
+     `ty` の欄を読み終えてから節点を組み立てる。よってどの道でも、部分は節点より先に作られる。
+    BY <2>2, 前提 型の 2 つの変位を組み立てる在りか,
+       CODE src/ast/types.rs: type_tyapp, CODE src/ast/types.rs: type_assocty,
+       CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
+       CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
+       CODE src/ast/types.rs: TypeNode::set_assocty_name,
+       CODE src/ast/types.rs: TypeNode::set_assocty_args,
+       CODE src/ast/types.rs: Type,
        CODE src/ast/types.rs: TypeNode (`Serialize` と `Deserialize` の導出)
   <2>4. QED
     1 回の実行で作られる `TypeNode` の値に、作られた順の番号を与える。`<2>2` と `<2>3` より、直接の
