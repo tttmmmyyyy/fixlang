@@ -3347,11 +3347,11 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
 <1>2b. `VarPath` の集合 `S` が `(z, [])` を含まないとき、`owns_object_yet(vars, type_env, z, [], S)` は
        偽である。
   `pty(z) = Some(Array I64)` なので `owns_object_yet` は `units_under(Array I64, [])` の各 unit について
-  「同じ鍵を持つ所有された leaf」を要求する。`unit_step(Array I64)` は `is_array` の行で
-  `UnitStep::Unit` を返すので、`sub(Array I64, []) = Some(Array I64)` であり L3 より
-  `units(Array I64) = [[]]`、L2 より `under(Array I64, []) = [[]]` である。鍵は
-  `trunc(Array I64, []) = []` (空の path なのでループに入らない) であり、`leaves(Array I64) = {[]}` なので
-  要求されるのは `(z, []) ∈ S` である。
+  「同じ鍵を持つ所有された leaf」を要求する。`sub(Array I64, [])` は空の path なのでループに入らず
+  `Some(Array I64)` を返す。`unit_step(Array I64)` は `is_array` の行で `UnitStep::Unit` を返すので、
+  L3 より `units(Array I64) = [[]]` であり、L2 より `under(Array I64, []) = [[]]` である。鍵は
+  `trunc(Array I64, [])` であり、これも空の path なのでループに入らず `[]` である。
+  `leaves(Array I64) = {[]}` なので要求されるのは `(z, []) ∈ S` である。
   BY <ref id=9f11796/>, <ref id=f221813/>, CODE src/rc_ir/borrow.rs: owns_object_yet,
      CODE src/rc_ir/ownership.rs: unit_step, subtree_type, units_under, truncate_to_unit,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
