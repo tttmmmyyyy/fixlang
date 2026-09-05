@@ -294,6 +294,26 @@ SCAN src/ `Arc::get_mut`
 SCAN src/ `Arc::make_mut`
   = src/elaboration/typecheck.rs: TypeCheckContext::instantiate_scheme -- `Arc<Map<..>>` の欄を借りる
 
+**前提 変数の表の 2 つの欄を名指す在りか** --- `VarTable` の `bindings` の欄を名指す式が在る項目と、
+`var_tys` という名前を含む項目は次で尽きる。`bindings` の側の走査は、別の型が持つ同名の欄を名指す
+項目も挙げる。`VarTable::empty` は `bindings` を構造体リテラルで置くので `.bindings` の走査には
+挙がらない。
+
+SCAN src/ `.bindings`
+  = src/build/build_object_files.rs: dump_rc_ir -- `ProvenanceAnalysis` の同名の欄の読み
+  = src/rc_ir/ownership.rs: VarTable::of -- `vars.bindings.insert`
+  = src/rc_ir/ownership.rs: VarTable::collect_bindings -- 自由関数 `collect_bindings` の `vars.bindings.insert`
+  = src/rc_ir/ownership.rs: origin_inner -- 読み `vars.bindings.get`
+  = src/rc_ir/provenance.rs: record -- `Interpreter` の同名の欄
+  = src/rc_ir/provenance.rs: refine_by_unique_flag -- `Interpreter` の同名の欄
+  = src/rc_ir/provenance.rs: analyze_program -- `ProvenanceAnalysis` の同名の欄
+
+SCAN src/ `var_tys`
+  = src/rc_ir/ownership.rs: VarTable -- 欄の宣言
+  = src/rc_ir/ownership.rs: VarTable::empty -- `var_tys: Map::default()`
+  = src/rc_ir/ownership.rs: VarTable::of -- 挿入
+  = src/rc_ir/ownership.rs: VarTable::collect_bindings -- 自由関数 `collect_bindings` の挿入
+
 **前提 `truncate_to_unit` を呼ぶ在りか** --- `truncate_to_unit` を呼ぶ式が在る項目は次で尽きる。
 走査はその宣言も挙げる。path を `origin` の答えから得るのは `owns_object` と `owns_object_yet` で
 あり、残りが渡すのは `boxed_leaf_paths` が挙げる leaf か、`rhs_consumes` が報告する leaf か、
@@ -2436,23 +2456,23 @@ SCAN src/ `truncate_to_unit(`
        参照できるのは、それを宣言するモジュール `crate::rc_ir::ownership` とその子孫だけである。
        そのモジュールとその子孫はすべて `src/rc_ir/ownership.rs` の中に在る --
        `EXT Rust のモジュールの木` より子孫を作るのは `mod` の項目であり、同ファイルが持つ `mod` の項目は
-       `#[cfg(test)] mod tests` だけで、それは本体を同ファイルの中に置く。同ファイルで
-       `bindings` に書くのは、
-       `VarTable::empty` の初期化と、`VarTable::of` の 1 か所と、`collect_bindings` の 3 か所で
-       ある (残る 1 か所は `#[cfg(test)] mod tests` の中の `table` である)。`VarTable::body_only` は
+       `#[cfg(test)] mod tests` だけで、それは本体を同ファイルの中に置く。前提 変数の表の 2 つの欄を
+       名指す在りか より、その欄を名指す式が在る製品の項目は `VarTable::of`・`collect_bindings`・
+       `origin_inner` であり、はじめの 2 つが書き、`origin_inner` は読むだけである。残る書き手は
+       `VarTable::empty` が構造体リテラルで置く初期値である。`VarTable::body_only` は
        `VarTable::empty` と `collect_bindings` を呼ぶだけである。どれも表を作る間にしか走らない。
-      BY EXT Rust の可視性, EXT Rust のモジュールの木,
+      BY EXT Rust の可視性, EXT Rust のモジュールの木, 前提 変数の表の 2 つの欄を名指す在りか,
          CODE src/rc_ir/ownership.rs: VarTable (`bindings` の宣言),
          CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
          CODE src/rc_ir/ownership.rs: VarTable::body_only,
          CODE src/rc_ir/ownership.rs: collect_bindings
     <3>2. `var_tys` は `pub(crate)` なので、`EXT Rust の可視性` よりそれを名前で参照できるのは
-       このクレートの中だけであり、数え上げる範囲は `src/` である。`src/` のうち
-       `src/rc_ir/ownership.rs` の外に `var_tys` の出現は 1 つも無く、同ファイルの中で `var_tys` に
-       書くのは `VarTable::empty` の初期化と、`VarTable::of` の 1 か所と、`collect_bindings` の
-       3 か所である (残る 1 か所は `#[cfg(test)] mod tests` の中の `table` である)。どれも表を作る
+       このクレートの中だけであり、数え上げる範囲は `src/` である。前提 変数の表の 2 つの欄を名指す
+       在りか より、`src/` でその名前を含む製品の項目は `VarTable` の宣言と、`VarTable::empty` の
+       初期値、`VarTable::of` の挿入、`collect_bindings` の挿入だけである。どれも表を作る
        間にしか走らない。
-      BY EXT Rust の可視性, CODE src/rc_ir/ownership.rs: VarTable (`var_tys` の宣言),
+      BY EXT Rust の可視性, 前提 変数の表の 2 つの欄を名指す在りか,
+         CODE src/rc_ir/ownership.rs: VarTable (`var_tys` の宣言),
          CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
          CODE src/rc_ir/ownership.rs: collect_bindings
     <3>3. `origin` は `&VarTable` を取るので、`EXT Rust の内部可変性` より `bindings` と `var_tys` の
@@ -3195,7 +3215,8 @@ SCAN src/ `truncate_to_unit(`
 `<1>1` (H1) は README の A10 (型の well-formedness)、`<1>2` (H2) は A11 (スコープの規律) を A6 と
 D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が合っている) と A3 (宣言されたモデルの
 忠実さ) の 1 段である。README の文面とこの文書の記法との対応は、3 つの前提のそれぞれについて次の
-とおりである。
+とおりである。**A28 (組み込みの tycon の項目は組み込みが置いたもの) は前提の形に直さず、`<1>3ba` が
+直に引く。**A28 は型ではなく型環境 `E` に掛かる条件なので、型を主語とする 3 つの前提と並ばない。
 
 - **`<1>1` の 3 つはどれも A10 である。**(i) は A10 の第 1 文のうち「プログラムに現れる型は ground で
   あり、**その tycon に kind の要求するだけの引数が与えられており**、その tycon は `type_env` にあり、
@@ -3275,7 +3296,8 @@ D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が�
 
 **P1 の定義域。** `<1>20` が示すのは `<1>1` を満たす型についての P1 であり、`<1>1` は A10 を
 この文書の記法で述べたものなので、それは README の P1 --「**A10 を満たす**任意の型 `τ` について」--
-そのものである。A10 が型に条件を置くことが空虚でないのは `<1>19a` による -- `t.is_closure()` が偽で
+である。型環境 `E` の側には A28 が掛かる (`<1>20`)。
+A10 が型に条件を置くことが空虚でないのは `<1>19a` による -- `t.is_closure()` が偽で
 `t.toplevel_tycon()` が `None` を返すか返す型構成子が `E` に無い型については、`boxed_leaf_paths` も
 `rc_units` も `toplevel_tycon_info` の `unwrap` で abort し、P1 の言明の 2 つの辺が意味を持たない。
 
