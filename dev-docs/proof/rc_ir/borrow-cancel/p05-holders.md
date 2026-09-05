@@ -333,18 +333,25 @@ SCAN src/ `applies_a_function_operand`
     ついては、持ち手の単位は leaf ではなくスロットである。** 各スロットが、その要素の型の
     `boxed_leaf_paths` が列挙する leaf を 1 組ずつ持つ。D25 の 2 つ目の持ち手はこの読みで数える。」),
     D25 (2 番目の持ち手), DEF 記憶域のスロット
-  `<2>2a.` `#ArrayStorage` のオブジェクトのカウントが 0 になった点では、その数え上げは `size` を
-    超えない。そこでトラバーサが処分するのは、その時点の添字 `0` から `size - 1` のスロットのうち
-    その記憶域が所有するものであり、その処分はカウントを 0 にした素動作に付く。
-    `<3>1.` `Array` 値のトラバーサは、`traverse_array_buf` を `hole` に `None` を渡して呼ぶので、
-      添字 `0` から `size - 1` のスロットを 1 つずつ歩く。
-      BY <ref id=4f63121/> (「**持ち手の数え上げが `size` を超える点では、その記憶域のカウントは 0 にならない**」、
-      「**処分する個数はこれとは別に数える。** `Array` 値のトラバーサは、`#ArrayStorage` のカウントが
-      0 になった段で、**その値が所有するスロット**を 1 つずつ処分する」、「**その処分は、
-      `#ArrayStorage` のカウントを 0 にした素動作に付く**」), `<2>1`, `<2>2`
+  `<2>2a.` `#ArrayStorage` のオブジェクトのカウントが 0 になった点について、次の 3 つが成り立つ。
+          **(i)** 持ち手の単位の数え上げは `size` を超えない。
+          **(ii)** そこでトラバーサが歩くスロットは、`Array` 値のトラバーサでは添字が `0` から
+          `size - 1` のもの全体であり、`Std::PunchedArray` 値のトラバーサではそこから穴の添字の
+          スロットを除いたものである。除かれるスロットの要素は配列から移し出されていて、その記憶域は
+          それを所有せず、そのスロットは書かれていない。トラバーサは歩いたスロットを 1 つずつ処分し、
+          その段でその記憶域の要素を処分するのはこの 2 つのトラバーサだけである。
+          **(iii)** その処分は、その記憶域のカウントを 0 にした素動作に付く。
+    `<3>1.` `Array` 値のトラバーサは、添字 `0` から `size - 1` のスロットを 1 つずつ歩いて処分する。
+      A5 が `Array` の値についてその範囲を述べ、`build_traverse` の `is_array()` の枝が
+      `traverse_array_buf` を `hole` に `None` を渡して呼び、その枝は `[0, size)` を 1 回歩く。
+      BY <ref id=4f63121/> (「**処分する個数はこれとは別に数える。** `Array` 値のトラバーサは、
+      `#ArrayStorage` のカウントが 0 になった段で、**その値が所有するスロット**を 1 つずつ処分する」、
+      「`Array` の値では `0` から `size - 1` までのスロットの全体であり」), `<2>1`, `<2>2`
       `CODE src/object.rs: ObjectFieldType::traverse_array_buf` (「`size` -- the array's element
       count; the elements walked are `[0, size)`」、`hole` が `None` の枝は `traverse_array_range` を
       1 回呼ぶ)
+      `CODE src/object.rs: build_traverse` (`obj.ty.is_array()` の枝が、その記憶域に対して
+      `traverse_array_buf` を `hole` に `None` を渡して呼ぶ)
     `<3>2.` `Std::PunchedArray` 値のトラバーサは、内側の配列の記憶域について同じ走査を、穴の添字の
       スロットを飛ばして行う。飛ばされるスロットの要素は配列から移し出されていて、その記憶域は
       それを所有しない。よってそのスロットは書かれておらず (第 1.1 節)、`<2>1` と `<2>2` より
@@ -365,8 +372,16 @@ SCAN src/ `applies_a_function_operand`
       `CODE src/object.rs: build_traverse` (「the storage's own destructor is free-only, so the array
       value drives element release」 -- `is_array()` の枝と `is_punched_array()` の枝がどちらも
       `build_traverser_work_nonnull_boxed_with(&storage, ...)` の中で `traverse_array_buf` を呼ぶ)
+    `<3>3a.` `#ArrayStorage` のオブジェクトのカウントが 0 になった点では、持ち手の単位の数え上げは
+      `size` を超えない。A5 は、数え上げが `size` を超える点ではその記憶域のカウントが 0 に
+      ならないと述べるので、その対偶である。
+      BY <ref id=4f63121/> (「**持ち手の数え上げが `size` を超える点では、その記憶域のカウントは 0 にならない**」),
+      `<2>2`, EXT 排中律
+    `<3>3b.` その処分は、その記憶域のカウントを 0 にした素動作に付く。
+      BY <ref id=4f63121/> (「**その処分は、`#ArrayStorage` のカウントを 0 にした素動作に付く**」), `<3>3`
     `<3>4.` QED
-      BY `<3>1`, `<3>2`, `<3>3`
+      (i) は `<3>3a`、(ii) は `<3>1`・`<3>2`・`<3>3`、(iii) は `<3>3b` である。
+      BY `<3>1`, `<3>2`, `<3>3`, `<3>3a`, `<3>3b`
   `<2>3.` 割り当てられた直後のオブジェクトの持ち手の単位は参照を 1 つも持たず、単位が参照を持つのは
     (α) か (β) がそれを書いた瞬間からである。
     BY <ref id=e3436e8/> (「**割り当てられた直後のオブジェクトの持ち手の単位は、参照を 1 つも持たない。**」、
@@ -374,7 +389,10 @@ SCAN src/ `applies_a_function_operand`
     `CODE src/object.rs: create_obj` (「A fresh object of type `ty`, with its control block
     initialized and its remaining fields left undefined for the caller to fill in」)
   `<2>4.` QED
-    (a) は `<2>1` と `<2>2`、(b) は `<2>1` と `<2>2`、(c) は `<2>3`、(d) は `<2>2a` である。
+    (a) は `<2>1` と `<2>2`、(b) は `<2>1` と `<2>2`、(c) は `<2>3` である。(d) のうち「`o` が持つ
+    参照はすべて記憶域のスロットが持つものである」は、`<2>2` (`#ArrayStorage` の持ち手の単位は
+    記憶域のスロットである) と `<2>2a` の (i) から出る。歩くスロットの範囲と除かれるスロットに
+    ついての節は `<2>2a` の (ii)、処分の付く先は `<2>2a` の (iii) である。
     BY `<2>1`, `<2>2`, `<2>2a`, `<2>3`, DEF 持ち手の単位, DEF 書かれた, DEF 記憶域のスロット
 
 `<1>0c.` 第 1.3 節の 3 つの取り決めについて次の 3 つが成り立つ。
