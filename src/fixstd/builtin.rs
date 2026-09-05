@@ -321,7 +321,7 @@ pub fn make_arrow_name_abs() -> FullName {
 }
 
 // The type constructor of function types: `a -> b` is this constructor applied to `a` and `b`.
-// PROOF: P1, P2, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_arrow_tycon() -> TyCon {
     TyCon::new(make_arrow_name_abs())
 }
@@ -330,7 +330,6 @@ pub fn make_dynamic_object_name() -> FullName {
     FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)
 }
 
-// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_dynamic_object_tycon() -> TyCon {
     TyCon::new(make_dynamic_object_name())
 }
@@ -339,7 +338,6 @@ pub fn make_array_storage_name() -> FullName {
     FullName::from_strs(&[STD_NAME], ARRAY_STORAGE_NAME)
 }
 
-// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_array_storage_tycon() -> TyCon {
     TyCon::new(make_array_storage_name())
 }
@@ -443,7 +441,6 @@ pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
     res
 }
 
-// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_iostate_name() -> FullName {
     FullName::from_strs(&[STD_NAME, IO_NAME], IOSTATE_NAME)
 }
@@ -627,7 +624,6 @@ pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
 }
 
 // Make tuple name
-// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_tuple_name(size: u32) -> FullName {
     FullName::from_strs(&[STD_NAME], &format!("{}{}", TUPLE_NAME, size))
 }
@@ -690,7 +686,7 @@ pub fn get_tuple_n(name: &FullName) -> Option<u32> {
     number_str.parse::<u32>().ok()
 }
 
-// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn tuple_defn(size: u32) -> TypeDefn {
     let tyvars = (0..size)
         .map(|i| make_tyvar(&("t".to_string() + &i.to_string()), &kind_star()))

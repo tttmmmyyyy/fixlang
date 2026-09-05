@@ -9,7 +9,7 @@ use std::hash::{Hash, Hasher};
 pub type Name = String;
 
 /// The path of names an entity is written under: the `Std::Iterator` of `Std::Iterator::empty`.
-// PROOF: P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P5, P6, P7, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NameSpace {
     /// The names of the path, the outermost first.

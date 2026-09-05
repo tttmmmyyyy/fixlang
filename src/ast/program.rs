@@ -744,7 +744,6 @@ impl Program {
 
     /// A program made of the one module `mod_info`, which declares nothing yet and imports itself
     /// and `Std`.
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn single_module(mod_info: ModuleInfo) -> Program {
         let mut fix_mod = Program {
             mod_to_import_stmts: Default::default(),
@@ -775,7 +774,6 @@ impl Program {
     }
 
     /// Declares the type `Std::Tuple{tuple_size}`.
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn add_tuple_defn(&mut self, tuple_size: u32) {
         self.type_defns.push(tuple_defn(tuple_size));
     }
@@ -922,7 +920,6 @@ impl Program {
 
     /// Adds `type_defns` to the type definitions the program declares, keeping the ones it already
     /// holds.
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_type_defns(&mut self, mut type_defns: Vec<TypeDefn>) {
         self.type_defns.append(&mut type_defns);
     }
@@ -3085,7 +3082,6 @@ impl Program {
     ///   module: its declarations join the module's, and the module goes on being the one it was
     ///   declared as. When false, a module of one name declared in two files is an error, and a
     ///   module already linked is left as it stands.
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn link(&mut self, mut other: Program, extend: bool) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 

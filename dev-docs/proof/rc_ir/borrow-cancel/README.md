@@ -2208,10 +2208,11 @@ SCAN src/ `.set_refcnt_state(`
   = src/generator.rs: build_mark_boxed_with -- `mark_global` なら `GLOBAL`、`mark_threaded` なら `THREADED`
   = src/generator.rs: build_branch_by_is_unique -- threaded の腕がカウント 1 のとき `LOCAL`
 
-**A28 (funptr の tycon は組み込みのものだけ)** -- 果たす者: 下の 3 つの `SCAN`。 <!--#3d4be43-->
-`E.tycons()` の項目のうち、鍵 `tc` の `tc.name.namespace` が `Std` の 1 段であって `tc.name.name` が
-`FUNPTR_NAME` (`"#FunPtr"`) で始まるものは、`bulitin_tycons()` が `make_funptr_tycon(n)`
-(`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下) の鍵の下に置いた項目である。
+**A28 (組み込みの tycon の項目は組み込みが置いたもの)** -- 果たす者: 下の 3 つの `SCAN`。 <!--#3d4be43-->
+`E.tycons()` の項目のうち、鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは、`bulitin_tycons()` が
+その鍵の下に置いた項目である。**とくに `make_array_tycon()` の項目と、`tc.name.namespace` が `Std` の
+1 段であって `tc.name.name` が `FUNPTR_NAME` (`"#FunPtr"`) で始まる鍵の項目
+(`make_funptr_tycon(n)`、`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下) がそうである。**
 
 **この仮定を果たすのは、`tycons` の表を据える箇所と足す箇所の走査である。** 据える 2 か所はどちらも <!--#a3d055e-->
 `bulitin_tycons()` から始めるか空から始め、足す 4 か所が入れる鍵の名前は `?`・`#FixCap@`・`#CapList@`

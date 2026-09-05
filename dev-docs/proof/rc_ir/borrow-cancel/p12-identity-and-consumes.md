@@ -71,6 +71,11 @@ P9 と合わせて読む」。A9 についてはその項が「`borrow_ify` と 
   **解析が呼ばない鍵についてこの記法は何も指さないので、この文書の言明は、その鍵で `origin` が呼ばれる
   ことを前提に置く。** README の P3・P4・P5 (a)・P5 (b) は同じ前件を持ち、P6 は「**その各 leaf について
   解析が `origin` を呼ぶ**」を本文で述べる。
+- **この文書の「解析」は、枠の P5 が置く述語より広い。** P5 は「**解析が `origin` を呼ぶ鍵とは、
+  `src/rc_ir/borrow.rs` の `origin(` の呼び出しがその実行で渡す `(変数, path)` の対の全体である**」と、
+  呼び出し元の在りかで絞る。この文書の意味の鍵はそれに加えて、`origin_inner` の再帰と
+  `ownership.rs` の `acted_references` が渡す対を含む。枠の意味の鍵はこの文書の意味の鍵でもあるので、
+  前件を満たす鍵すべてについて述べるこの文書の言明は、枠の意味の鍵にも当たる。
 - `id(x, π)` は `origin(x, π).identity()`、`cand(x, π)` は `origin(x, π).candidates()` を集合とみなした
   もの、`act(x, π)` は `origin(x, π).acted_on()` を集合とみなしたもの
   (`CODE src/rc_ir/ownership.rs: Origin::identity`, `Origin::candidates`, `Origin::acted_on`)。
@@ -119,6 +124,11 @@ inhabited (D16) でない元を含む。この集合を `v` の `π` の下の b
   指定を持たない項目を名指す式はそれを宣言するモジュールとその子孫の中にしか書けない。
 - **EXT `derive` した `Clone`**。`#[derive(Clone)]` が生成する実装は、その型の各欄について
   `Clone::clone` を呼び、その結果から同じ形の値を組み立てるだけであり、ほかの関数を呼ばない。
+- **EXT `derive` した `PartialEq`**。`#[derive(PartialEq)]` が生成する実装は、その型の各欄について
+  `PartialEq::eq` を呼び、その連言を返すだけであり、ほかの関数を呼ばない。`#[derive(Eq)]` が生成する
+  実装は本体を持たない。
+- **EXT 値を落とす処理**。`Drop` を実装しない型の値が落ちるとき走るのは、その型の各欄の値を落とす
+  処理だけである。
 - **EXT `RefCell` の内部可変性**。`RefCell<T>` が包む値を変更するには、その `RefCell` を名指して
   `borrow_mut` を呼ぶか、`get_mut`・`replace`・`take` のように可変参照を要求する操作を呼ぶ必要がある。
   共有参照からの読み (`borrow`) はその値を変更しない。
@@ -134,6 +144,130 @@ inhabited (D16) でない元を含む。この集合を `v` の `π` の下の b
   元だけを元の順序のまま残す。
 - **EXT `u32` の 10 進表記**。`u32::to_string` はその値を 10 進の数字だけからなる文字列として返し、
   `str::parse::<u32>` はその文字列を同じ値に戻す。
+
+### 在りかの前提
+
+**コードのどこに何が在るかの数え上げは、段の中で行わない。** 記号を名指す `CODE` の引用はその記号の
+本体しか与えないので、「ほかの記号はそれをしない」の側はそこから出ない。以下を名前つきの前提として
+置き、`BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
+
+**果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
+走らせて下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。走査は字面の上位近似
+なので、一覧には読みだけの項目も、別の識別子や散文の一部としてその字面を含む項目も入る。
+`#[cfg(test)]` の下の項目は走査が除く。項目の名前は走査が呼ぶ名前である -- 自由関数がその直前の
+`impl` の名前を冠して挙がる形を含む。
+
+**前提 `origins` の欄を名指す在りか** --- `VarTable` の `origins` の欄を名指す式が在るのは、
+`RefCell::default()` を置く `VarTable::empty` と、記録を読み書きする自由関数 `origin` の本体である。
+その欄の宣言は `VarTable` に在る。
+
+SCAN src/ `origins`
+  = src/rc_ir/ownership.rs: VarTable -- 欄の宣言
+  = src/rc_ir/ownership.rs: VarTable::empty -- `origins: RefCell::default()`
+  = src/rc_ir/ownership.rs: Origin::origin -- 自由関数 `origin` の記録の読みと書き
+  = src/rc_ir/ownership.rs: Origin::identity -- doc の散文
+  = src/rc_ir/ownership.rs: origin_inner -- 別の識別子 `leaf_origins_at` と doc の散文
+  = src/rc_ir/ownership.rs: origin_from_leaves_under -- 別の識別子 `leaf_origins_under` と `//` コメント
+  = src/rc_ir/provenance.rs: LeafOrigins -- doc の散文
+  = src/rc_ir/provenance.rs: sole_origin -- 局所変数 `origins`
+  = src/rc_ir/provenance.rs: Provenance::arg_passthrough -- doc の散文
+  = src/rc_ir/provenance.rs: Provenance::join -- doc の散文
+  = src/rc_ir/provenance.rs: Provenance::leaf_origins_at -- 別の識別子 `leaf_origins_at` の宣言
+  = src/rc_ir/provenance.rs: Provenance::leaf_origins_under -- 別の識別子 `leaf_origins_under` の宣言
+  = src/rc_ir/provenance.rs: Provenance::compose -- 閉包の引数 `origins` と局所変数 `operand_origins`
+  = src/rc_ir/provenance.rs: Provenance::fmt -- 局所束縛 `origins`
+  = src/rc_ir/provenance.rs: Provenance::leaf_source_to_string -- 引数 `origins`
+  = src/rc_ir/provenance.rs: Uniqueness::resolve_leaf -- 引数 `origins`
+  = src/rc_ir/provenance.rs: resolve -- 閉包の引数 `origins`
+  = src/rc_ir/provenance.rs: leaf_is_unique -- 局所変数 `origins`
+  = src/rc_ir/provenance.rs: is_unique_result -- 別の識別子 `leaf_origins_at`
+  = src/rc_ir/validate.rs: check_rhs -- ループ変数 `origins`
+
+**前提 名前の複製と照合の実装の在りか** --- `src/ast/` の項目のうち字面 `origin` を含むのは、
+deprecation の欄 `origin_namespace` を宣言する項目と、その欄を置く項目・読む項目である。
+`src/ast/name.rs` のどの項目もこの字面を含まない。
+
+SCAN src/ast/ `origin`
+  = src/ast/deprecation.rs: DeprecationStatement -- 欄 `origin_namespace` の宣言と doc の散文
+  = src/ast/program.rs: Program::add_deprecation -- `origin_namespace: NameSpace::local()`
+  = src/ast/program.rs: Program::identify_deprecation_targets -- `stmt.origin_namespace` と doc の散文
+
+**前提 書かれた `Drop` の在りか** --- `src/` の中に `Drop` の実装を書いた型は `Finally`・
+`StopWatch`・`LspClient` である。
+
+SCAN src/ `impl Drop`
+  = src/misc.rs: Finally::defer -- `Finally` の `Drop`
+  = src/tool/stopwatch.rs: StopWatch::end -- `StopWatch` の `Drop`
+  = src/tests/test_lsp/lsp_client.rs: LspClient::finish -- `LspClient` の `Drop`
+
+**前提 `tycons` の欄を名指す在りか** --- `TypeEnv` の `tycons` の欄を名指す式が在る項目は次で尽きる。
+走査は `TypeEnv` のアクセサ `tycons()` の呼び出し、`KindEnv` の同じ名前の欄、`tycons` を部分文字列に
+持つ別の識別子、および局所変数も挙げる。
+
+SCAN src/ast/ `tycons`
+  = src/ast/kind_scope.rs: KindEnv -- `KindEnv` の欄 `tycons`
+  = src/ast/pattern.rs: Pattern::resolve_union_variant -- アクセサ `tycons()` の呼び出し
+  = src/ast/program.rs: TypeEnv -- 欄の宣言と doc の散文
+  = src/ast/program.rs: TypeEnv::default -- 空の写像を置く `tycons: Arc::new(Default::default())`
+  = src/ast/program.rs: TypeEnv::new -- 引数 `tycons` を置く `tycons: Arc::new(tycons)`
+  = src/ast/program.rs: TypeEnv::unwrap_newtypes -- 読みと `self.tycons = Arc::new(rewritten)`
+  = src/ast/program.rs: TypeEnv::unwrapped_newtype_info -- 読み
+  = src/ast/program.rs: TypeEnv::is_unwrapped_newtype -- doc の散文
+  = src/ast/program.rs: TypeEnv::add_tycons -- 読みと `self.tycons = Arc::new(tycons)`、引数 `new_tycons`
+  = src/ast/program.rs: TypeEnv::tycons -- アクセサの宣言と読み
+  = src/ast/program.rs: TypeEnv::kinds -- 読み
+  = src/ast/program.rs: TypeEnv::is_struct_act -- 読み
+  = src/ast/program.rs: TypeEnv::resolve_type_aliases_in_tycons -- 読みと `self.tycons = Arc::new(tycons)`、局所変数
+  = src/ast/program.rs: Program::calculate_type_env -- 局所変数 `tycons` と `bulitin_tycons()`
+  = src/ast/program.rs: Program::tycon_names_with_aliases -- 読み
+  = src/ast/program.rs: Program::kind_env -- `KindEnv` の欄 `tycons`
+  = src/ast/program.rs: Program::resolve_namespace_not_in_expr -- 読みと `self.type_env.tycons = Arc::new(tycons)`
+  = src/ast/program.rs: Program::resolve_type_aliases_not_in_expr -- 別の識別子 `resolve_type_aliases_in_tycons`
+  = src/ast/types.rs: TyCon::get_struct_union_value_type -- アクセサ `tycons()` の呼び出し
+  = src/ast/types.rs: TypeNode::collect_tycons -- 別の識別子 `collect_tycons` と引数 `tycons`
+  = src/ast/types.rs: TypeNode::define_modules_of_tycons -- 別の識別子 `define_modules_of_tycons`
+  = src/ast/types.rs: TypeNode::fixed_vars_to_set -- doc の散文
+  = src/ast/types.rs: TypeNode::kind_mismatch_error -- `KindEnv` の欄 `tycons`
+  = src/ast/types.rs: TypeNode::toplevel_tycon_info -- アクセサ `tycons()` の呼び出し
+
+**前提 型環境に項を入れる呼び出しの在りか** --- `TypeEnv::new` を呼ぶ式、`TypeEnv::add_tycons` を呼ぶ
+式、および `register_opaque_tycon` を呼ぶ式が在る項目は次で尽きる。走査はそれぞれの宣言も挙げる。
+
+SCAN src/ `TypeEnv::new`
+  = src/ast/program.rs: Program::calculate_type_env -- `TypeEnv::new(tycons, aliases)`
+
+SCAN src/ `add_tycons`
+  = src/ast/program.rs: TypeEnv -- doc の散文
+  = src/ast/program.rs: TypeEnv::add_tycons -- 宣言
+  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 不透明型の tycon 1 つを渡す
+  = src/optimization/closure_specialization.rs: lift_all -- capture 構造体の tycon を渡す
+  = src/optimization/closure_specialization.rs: realize_all -- capture 構造体の tycon を渡す
+  = src/optimization/defunctionalize_fix.rs: run_one -- capture 構造体の tycon を渡す
+
+SCAN src/ `register_opaque_tycon`
+  = src/elaboration/desugar_opaque.rs: Program::desugar_opaque_types -- 各 `OpaqueInfo` について呼ぶ
+  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 宣言
+
+**前提 消費の走査を呼ぶ在りか** --- `collect_consumes`・`infer_ownership`・`rhs_consumes` を呼ぶ式が
+在る項目は次で尽きる。走査はそれぞれの宣言と、`collect_consumes` を部分文字列に持つ
+`collect_consumes_go` も挙げる。
+
+SCAN src/ `collect_consumes`
+  = src/rc_ir/borrow.rs: OwnedLeaves::infer_ownership -- 自由関数 `infer_ownership` の中の呼び出し
+  = src/rc_ir/ownership.rs: collect_consumes -- 宣言と `collect_consumes_go` の呼び出し
+  = src/rc_ir/ownership.rs: collect_consumes_go -- 宣言と自身への再帰
+
+SCAN src/ `infer_ownership`
+  = src/rc_ir/borrow.rs: OwnedLeaves::infer_ownership -- 宣言
+  = src/rc_ir/borrow.rs: borrow_ify -- 自分の第 1 引数を渡す呼び出し
+
+SCAN src/ `rhs_consumes`
+  = src/rc_ir/borrow.rs: consume_rhs -- `CancelAnalysis::consume_rhs` の中の呼び出し
+  = src/rc_ir/ownership.rs: collect_consumes_go -- `RcExpr::Let` の腕の呼び出し
+  = src/rc_ir/ownership.rs: rhs_consumes -- 宣言
+
+**この前提は枠の仮定に置くべきものである。** 枠へ移すときは `SCAN` の走査ごと移し、引く段の `BY` を
+枠の仮定の名前へ差し替える。
 
 ### A16 の 2 つの節
 
@@ -269,45 +403,75 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 
 <1>2a. `origin(vars, type_env, x, π)` の 1 回の呼び出しの中で `origin` の呼び出しが始まるのは、その
       呼び出しが `origin_inner` を評価する場合の、その評価の中だけである。
-  `origin` は `ownership.rs` の `pub(crate)` の関数なので、EXT 可視性 より、それを呼ぶ式はこのクレートの
-  ソース `src/` の中にしかない。`<1>1` より `origin` の本体が行う呼び出しは、`FullName::clone` と
-  `<[usize]>::to_vec` (鍵 `(var.clone(), path.to_vec())` の組み立て)、`vars.origins.borrow()` と
-  `Map::get` (記録の検査)、`Origin::clone` (記録の値と答えの複製)、
-  `grow_stack(|| origin_inner(..))`、`vars.origins.borrow_mut()` と
-  `Map::insert` (記録の書き込み) である。`grow_stack(f)` は `f` をちょうど 1 回呼びその返り値を返す (A15)
-  ので、その中で始まる `origin` の呼び出しは `origin_inner` の評価の中で始まる。残る 7 つの受け手のうち
-  `<[usize]>::to_vec` と `RefCell` の操作は標準ライブラリ、`Map` すなわち `FxHashMap` の操作は外部クレートの
-  コードなので、どれも `src/` の外に在り、EXT 可視性 より `origin` を名指す式を持たない。`FullName` と
-  `Origin` はどちらも `#[derive(Clone)]` を持ち、`Origin` の欄の型は `VarPath` -- `FullName` と
-  `Vec<usize>` の対、`FullName` も `Clone` を derive する -- と `Set<VarPath>` すなわち外部クレートの
-  `FxHashSet` である。EXT `derive` した
-  `Clone` より derive した実装が呼ぶのは
-  欄の `Clone::clone` だけなので、`FullName::clone` と `Origin::clone` の実行の中で始まる呼び出しは
-  `Clone::clone` の実装に限り、その実装はどれも derive したものか標準ライブラリ・外部クレートのもので
-  あって、`origin` を名指す式を持たない。
-  BY <ref id=3e6b0e0/>, EXT 可視性, EXT `derive` した `Clone`, CODE src/rc_ir/ownership.rs: origin, Origin,
-     CODE src/rc_ir/ast.rs: VarPath, FieldPath, CODE src/ast/name.rs: FullName,
-     CODE src/misc.rs: grow_stack, Map, Set
+  <2>1. `origin` の本体が行う呼び出しは、鍵 `(var.clone(), path.to_vec())` を組み立てる
+        `FullName::clone` と `<[usize]>::to_vec`、記録を検査する `RefCell::borrow` と `Map::get`、
+        記録の値と答えを複製する `Origin::clone`、`grow_stack(|| origin_inner(..))`、および記録を
+        書き込む `RefCell::borrow_mut` と `Map::insert` である。
+    BY <1>1, CODE src/rc_ir/ownership.rs: origin
+  <2>2. `grow_stack(|| origin_inner(..))` の実行の中で始まる `origin` の呼び出しは、`origin_inner` の
+        評価の中で始まる。
+    `grow_stack` の本体が行う呼び出しは `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` 1 つであり、
+    `stacker` は外部クレートなので `src/` の外に在り、EXT 可視性 より `pub(crate)` の `origin` を名指す
+    式を持たない。A15 より `grow_stack(f)` は `f` をちょうど 1 回呼びその返り値を返し、ここでの `f` は
+    閉包 `|| origin_inner(vars, type_env, var, path)` であって、その本体は `origin_inner` の呼び出し
+    1 つである。
+    BY <ref id=3e6b0e0/>, EXT 可視性, CODE src/misc.rs: grow_stack, CODE src/rc_ir/ownership.rs: origin
+  <2>3. `<2>1` の受け手のうち `grow_stack` を除くものの実行の中で入る `src/` の項目は、`FullName` と
+        `NameSpace` と `Origin` の `Clone` の実装、および `FullName` と `NameSpace` の
+        `Hash`・`PartialEq`・`Eq` の実装で尽きる。
+    `<[usize]>::to_vec` と `RefCell` の `borrow`・`borrow_mut` は標準ライブラリの項目、`Map` すなわち
+    `FxHashMap` の `get`・`insert` は外部クレートの項目である。この `get` と `insert` は鍵の型
+    `VarPath = (FullName, FieldPath)` の `Hash` と `Eq` を呼び、`insert` は置き換えた値を落とす。
+    対の `Hash` と `Eq`、`FieldPath` すなわち `Vec<usize>` の `Hash` と `Eq`、および `String`・
+    `Vec<String>`・`bool` の同じトレイトは標準ライブラリに在り、`Set<VarPath>` すなわち `FxHashSet` の
+    `Clone` は外部クレートに在る。`Origin` は `#[derive(Clone)]` を持ち、その欄の型は `VarPath` と
+    `Set<VarPath>` である。`FullName` は `Clone` と `PartialEq` と `Eq` を derive し、その欄の型は
+    `NameSpace` と `String` である。`NameSpace` は `Clone` を derive し、`Hash` と `PartialEq` と `Eq` を
+    `name.rs` に書き、その欄の型は `Vec<String>` と `bool` である。`FullName` の `Hash` も `name.rs` に
+    書かれている。EXT `derive` した `Clone` と EXT `derive` した `PartialEq` より、derive した実装が
+    呼ぶのは欄の同じトレイトのメソッドだけである。前提 書かれた `Drop` の在りか より `FullName`・
+    `NameSpace`・`Origin` はどれも `Drop` を実装しないので、EXT 値を落とす処理 より、その値が落ちるとき
+    走るのは欄の値を落とす処理だけである。
+    BY 前提 書かれた `Drop` の在りか, EXT `derive` した `Clone`, EXT `derive` した `PartialEq`,
+       EXT 値を落とす処理, CODE src/rc_ir/ownership.rs: Origin,
+       CODE src/rc_ir/ast.rs: VarPath, FieldPath, CODE src/ast/name.rs: FullName, NameSpace,
+       CODE src/misc.rs: Map, Set
+  <2>4. `<2>3` の項目はどれも `origin` を名指す式を持たない。
+    derive した実装は EXT `derive` した `Clone` と EXT `derive` した `PartialEq` より欄の同じトレイトの
+    メソッドだけを呼ぶ。書かれた実装 -- `FullName` の `Hash`、`NameSpace` の `Hash`・`PartialEq`・`Eq`
+    -- は `src/ast/name.rs` の項目であり、前提 名前の複製と照合の実装の在りか より、`src/ast/` の項目の
+    うち字面 `origin` を含むのは `deprecation.rs` と `program.rs` の deprecation についての項目だけで
+    あって、`name.rs` の項目はそこに無い。EXT 名前による数え上げ より、`origin` を名指す式はその名前を
+    含む。
+    BY 前提 名前の複製と照合の実装の在りか, EXT `derive` した `Clone`, EXT `derive` した `PartialEq`,
+       EXT 名前による数え上げ, CODE src/ast/name.rs: FullName, NameSpace
+  <2>5. QED
+    `origin` は `ownership.rs` の `pub(crate)` の関数なので、EXT 可視性 より、それを呼ぶ式はこの
+    クレートのソース `src/` の中にしかない。`<2>1` が本体の行う呼び出しの全体を与え、`<2>2` が
+    `grow_stack` の側を、`<2>3` と `<2>4` が残る側を与える。`src/` の外の項目は EXT 可視性 より
+    `origin` を名指す式を持たない。よって `origin` の呼び出しが始まるのは `origin_inner` の評価の中
+    だけである。
+    BY EXT 可視性, <2>1, <2>2, <2>3, <2>4
 
 <1>3. `origins` の欄を変更するのは `<1>1` の記録だけである。
   <2>1. `origins` は `VarTable` の非公開の欄である (`pub` が付かない)。EXT 可視性 より、この欄を
         名指す式は `ownership.rs` の中にしかない -- この欄を宣言するモジュールは `ownership.rs` の
         モジュールであり、その子孫のモジュールもこのファイルの中に書かれている。
     BY EXT 可視性, CODE src/rc_ir/ownership.rs: VarTable
-  <2>2. `ownership.rs` の中でこの欄を名指す式は 3 つである。`VarTable::empty` の
-        `origins: RefCell::default()`、`origin` の `vars.origins.borrow()`、`origin` の
-        `vars.origins.borrow_mut()` である。EXT 名前による数え上げ より、この列挙は `ownership.rs` の
-        全体について識別子 `origins` を検索して得られる (このファイルはこの欄に `use` の別名を
-        導入しない)。得られるのは、`VarTable` の欄の宣言 `origins: RefCell<Map<VarPath, Origin>>`、
-        この 3 つの式、doc コメントの中の散文 3 か所、および `origin_from_leaves_under` の中の
-        `//` コメント 1 行である。宣言もコメントも式ではない。
-        `leaf_origins_at` / `leaf_origins_under` は別の識別子である。
-    BY EXT 名前による数え上げ, CODE src/rc_ir/ownership.rs: VarTable, VarTable::empty, origin
+  <2>2. `ownership.rs` の中でこの欄を名指す式は、`VarTable::empty` の `origins: RefCell::default()`、
+        `origin` の `vars.origins.borrow()`、`origin` の `vars.origins.borrow_mut()` である。
+        前提 `origins` の欄を名指す在りか が、この欄の名前を含む項目を挙げる。その走査が挙げる
+        `ownership.rs` の項目のうち `VarTable::empty` と `origin` の外にあるもの -- `VarTable`・
+        `Origin::identity`・`origin_inner`・`origin_from_leaves_under` -- が持つのは、欄の宣言、
+        コメントの散文、および別の識別子 `leaf_origins_at` / `leaf_origins_under` であって、
+        この欄を名指す式ではない。
+    BY 前提 `origins` の欄を名指す在りか, CODE src/rc_ir/ownership.rs: VarTable, VarTable::empty, origin,
+       CODE src/rc_ir/ownership.rs: Origin::identity, origin_inner, origin_from_leaves_under
   <2>3. QED
     EXT `RefCell` の内部可変性 より、`RefCell<Map<..>>` が包む写像を変更するには、その `RefCell` を
-    名指す式を通る必要がある。`<2>1` と `<2>2` よりその式は 3 つであり、`origin` の `vars.origins.borrow()`
-    は読みなので変更しない。残るのは `VarTable::empty` の初期化 (空の写像) と `origin` の
-    `vars.origins.borrow_mut()` に続く `insert` だけであり、後者が `<1>1` の記録である。
+    名指す式を通る必要がある。`<2>1` と `<2>2` よりその式は `<2>2` が挙げたものに限られ、`origin` の
+    `vars.origins.borrow()` は読みなので変更しない。残るのは `VarTable::empty` の初期化 (空の写像) と
+    `origin` の `vars.origins.borrow_mut()` に続く `insert` だけであり、後者が `<1>1` の記録である。
     BY EXT `RefCell` の内部可変性, <2>1, <2>2
 
 <1>3a. 鍵 `(x, π)` について、cold な呼び出しは高々 1 つであり、`<1>1` の記録も高々 1 度しか書かれない。
@@ -1008,7 +1172,8 @@ D10 の生成の表の `Llvm` の行に当たる。残る `Binding::Join` の腕
 ## L3 (boxed leaf は互いに前置にならない) <!--#742afee-->
 
 **言明**。**A10 を満たす**型 `τ` について、`boxed_leaf_paths(τ, type_env)` の相異なる 2 元の一方が他方の
-前置になることはない。とくに `π` が leaf であるとき `L(v, π)` は `{π}` である。
+前置になることはない。とくに、変数 `v` の型 `ty(v)` が A10 を満たし、`π` が
+`boxed_leaf_paths(ty(v), type_env)` の元であるとき、`L(v, π)` は `{π}` である。
 
 A10 を満たすことを言明が要求するのは、証明が `go` の再帰の整礎性を A10 から取るからである。README の P1 が
 同じ限定を置くのも同じ理由による。
@@ -1071,7 +1236,9 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 <1>4. QED
   `<1>3` と `<1>3a` より `boxed_leaf_paths(τ, type_env)` の成分は互いに相異なり、どの 2 つも一方が他方の
-  前置ではない。よって `π` が leaf であるとき、`π` を前置に持つ leaf は `π` 自身だけであり、DEF `L` より
+  前置ではない。`τ = ty(v)` と置くと、`π` が `boxed_leaf_paths(ty(v), type_env)` の元であるとき、その中で
+  `π` を前置に持つのは `π` 自身だけである。DEF `L` は `L(v, π)` を
+  `boxed_leaf_paths(ty(v), type_env)` の元のうち `π` を前置に持つものの集合と定めるので、
   `L(v, π) = {π}` である。
   BY DEF `L`, <1>3, <1>3a
 
@@ -1116,31 +1283,27 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   BY CODE src/fixstd/builtin.rs: bulitin_tycons, make_funptr_tycon, make_funptr_name, is_funptr_tycon,
      CODE src/constants.rs: FUNPTR_ARGS_MAX, FUNPTR_NAME
 
-<1>3. `TypeEnv` の `tycons` の欄に書く式は 6 つである。`TypeEnv::default`、`TypeEnv::new`、
+<1>3. `TypeEnv` の `tycons` の欄に書く式が在るのは、`TypeEnv::default`、`TypeEnv::new`、
       `TypeEnv::unwrap_newtypes`、`TypeEnv::add_tycons`、`TypeEnv::resolve_type_aliases_in_tycons`、
       および `Program::resolve_namespace_not_in_expr` である。
   `tycons` は `TypeEnv` の非公開の欄である (`pub` が付かない) ので、EXT 可視性 より、この欄を名指す式は
   `program.rs` の中にしかない -- この欄を宣言するモジュールは `program.rs` のモジュールであり、その子孫の
-  モジュールもこのファイルの中に書かれている。EXT 名前による数え上げ より、この列挙は `program.rs` の
-  全体について識別子 `tycons` を検索して得られる (このファイルはこの欄に `use` の別名を導入しない)。
+  モジュールもこのファイルの中に書かれている。EXT 名前による数え上げ より、この欄を名指す式はその名前を
+  含むので、前提 `tycons` の欄を名指す在りか がその式を持ちうる項目を挙げる。
 
-  検索は 38 行を返し、次の 8 つの類がそれを尽くす (4 行は 2 つの類に入る)。**この欄の宣言** (1 行)。
-  **この 6 つの書く式** (6 行、上の列挙)。**この欄を、書き換えずに読む式** -- `self.tycons` か
-  `self.type_env.tycons` を読む式である (10 行、`unwrap_newtypes`・`unwrapped_newtype_info`・
-  `add_tycons`・`tycons` アクセサ・`kinds`・`is_struct_act`・`resolve_type_aliases_in_tycons`・
-  `Program::tycon_names_with_aliases`・`resolve_namespace_not_in_expr` に散る)。
-  **`TypeEnv` 自身のアクセサ `tycons(&self)` の宣言** -- 名前は欄と同じだが、メソッドの名前であって
-  欄ではない (1 行)。**`KindEnv` の欄 `tycons`** -- `Program::kind_env` が組む別の構造体の、同じ名前を
-  持つ別の欄である (1 行)。**doc コメントの散文** -- `///` の中の言及であって式ではない (3 行)。
-  **`tycons` を部分文字列に持つ別の識別子の宣言・呼び出し** -- `bulitin_tycons`・`add_tycons`・
-  `resolve_type_aliases_in_tycons`・`new_tycons` である (6 行)。**`tycons` という名前の局所変数・引数**
-  -- 欄とは別の束縛であり、`TypeEnv::new` の引数、`add_tycons`・`resolve_type_aliases_in_tycons`・
-  `Program::calculate_type_env`・`resolve_namespace_not_in_expr` がそれぞれ持つ局所変数の、宣言と
-  使用である (14 行)。読む式であると同時にこの局所変数を宣言する行が 3 つ (`add_tycons`・
-  `resolve_type_aliases_in_tycons`・`resolve_namespace_not_in_expr` の各冒頭)、局所変数を宣言すると
-  同時に部分文字列の識別子を呼ぶ行が 1 つ (`Program::calculate_type_env` の `bulitin_tycons()` の
-  呼び出し) ある。
-  BY EXT 可視性, EXT 名前による数え上げ, CODE src/ast/program.rs: TypeEnv, TypeEnv::default,
+  その走査が挙げる `program.rs` の項目のうち、この欄へ代入する式を持つのは上の 6 つである --
+  `TypeEnv::default` の `tycons: Arc::new(Default::default())`、`TypeEnv::new` の
+  `tycons: Arc::new(tycons)`、`TypeEnv::unwrap_newtypes` の `self.tycons = Arc::new(rewritten)`、
+  `TypeEnv::add_tycons` の `self.tycons = Arc::new(tycons)`、
+  `TypeEnv::resolve_type_aliases_in_tycons` の `self.tycons = Arc::new(tycons)`、および
+  `Program::resolve_namespace_not_in_expr` の `self.type_env.tycons = Arc::new(tycons)` である。
+  残りの項目が持つのは、この欄を書き換えずに読む式 (`TypeEnv::unwrapped_newtype_info`・
+  `TypeEnv::tycons`・`TypeEnv::kinds`・`TypeEnv::is_struct_act`・
+  `Program::tycon_names_with_aliases`)、アクセサ `tycons(&self)` の宣言、`Program::kind_env` が組む
+  `KindEnv` の同じ名前を持つ別の欄、`tycons` を部分文字列に持つ別の識別子、`tycons` という名前の
+  局所変数・引数、および doc コメントの散文である。上の 6 つの項目も、代入する式のほかにこれらを持つ。
+  BY 前提 `tycons` の欄を名指す在りか, EXT 可視性, EXT 名前による数え上げ,
+     CODE src/ast/program.rs: TypeEnv, TypeEnv::default,
      TypeEnv::new, TypeEnv::tycons, TypeEnv::unwrap_newtypes, TypeEnv::unwrapped_newtype_info,
      TypeEnv::add_tycons, TypeEnv::kinds, TypeEnv::is_struct_act,
      TypeEnv::resolve_type_aliases_in_tycons, Program::calculate_type_env,
@@ -1157,56 +1320,73 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
      CODE src/ast/types.rs: TyConInfo, TyConInfo::resolve_namespace, TyConInfo::resolve_type_aliases
 
 <1>5. `TypeEnv::new` が置く写像のうち、鍵 `Std::Array` の項と、`is_funptr_tycon` を満たす鍵の項は、
-      `bulitin_tycons()` が入れたものである。それ以外に `TypeEnv::new` が置く鍵の名前は、`ARRAY_NAME`
-      とも一致せず、`FUNPTR_NAME` を前置に持たない。
-  製品のコードで `TypeEnv::new` を呼ぶ式は `Program::calculate_type_env` の中の 1 つである -- EXT 名前に
-  よる数え上げ より、`src/` の全体について識別子 `TypeEnv::new` を検索すると 3 件が得られ、残る 2 件は
-  `src/rc_ir/validate.rs` と `src/rc_ir/ownership.rs` の `#[cfg(test)]` のモジュールの中の作り手で
-  ある。`Program::calculate_type_env` は写像を `bulitin_tycons()` から
+      `bulitin_tycons()` が入れたものである。それ以外に `TypeEnv::new` が置く鍵の名前は、`FUNPTR_NAME`
+      を前置に持たない。
+  前提 型環境に項を入れる呼び出しの在りか より、`TypeEnv::new` を呼ぶ式が在る項目は
+  `Program::calculate_type_env` である。`Program::calculate_type_env` は写像を `bulitin_tycons()` から
   始め、各型宣言について、その tycon がすでに写像にあるか型別名にあるときは診断を出して次の宣言へ進み、
   無いときだけ `insert` する。構造体の宣言についてはさらに、`TyCon::into_punched_type_name` が名前の
   末尾に `PUNCHED_TYPE_SYMBOL` と穴の添字を足した鍵で `insert` する。
 
+  **型宣言が置く鍵の名前は `#` を含まない。** その鍵は `type_decl.tycon()`、すなわち `TypeDefn` の
+  `name` を名前に持つ `TyCon` であり、`parse_type_defn` はその `name` を `type_defn` の `type_name` の
+  綴りから取る。文法は `type_name = { capital_name }`、
+  `capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }` と定めるので、その綴りは英大文字
+  1 字に英数字が続いたものであり、`#` を含まない。
+
   `Std::Array` の鍵は `bulitin_tycons()` に在るので、それを名指す宣言は `contains_key` の枝で弾かれ、
   `insert` へ進まない。`is_funptr_tycon` を満たす鍵については、`bulitin_tycons()` に無い `n` の分が
-  `contains_key` を外れうるが、そのような鍵の名前は `#FunPtr` で始まるので Fix のソースに書けない --
-  Fix の識別子は `#` を含まない (`CODE src/parse/grammer.pest: name_char`)。宣言の tycon の名前は
-  Fix のソースに書かれた識別子であり、`#` を含まないので `FUNPTR_NAME` を前置に持たず、`ARRAY_NAME`
-  とも一致しない (`ARRAY_NAME` は `#` を含まないが、`Array` という 1 つの綴りである)。
+  `contains_key` を外れうるが、そのような鍵の名前は `FUNPTR_NAME` すなわち `#FunPtr` で始まる。型宣言が
+  置く鍵の名前は `#` を含まないので、`FUNPTR_NAME` を前置に持たない。
 
-  穴を開けた鍵は元の名前の末尾に `PUNCHED_TYPE_SYMBOL` すなわち `#PunchedAt` と添字を足したものであり、
-  その先頭は元の名前と一致する。元の名前は Fix のソースに書かれた識別子であって `#` を含まないので、
-  穴を開けた鍵の名前も `FUNPTR_NAME` を前置に持たず、`ARRAY_NAME` とも一致しない。
-  BY EXT 名前による数え上げ, <1>2, CODE src/ast/program.rs: Program::calculate_type_env,
+  穴を開けた鍵の名前は、型宣言が置く鍵の名前の末尾に `PUNCHED_TYPE_SYMBOL` すなわち `#PunchedAt` と穴の
+  添字を足したものである。その先頭は元の名前と一致し、元の名前は `#` を含まないので、この名前も
+  `FUNPTR_NAME` を前置に持たない。またこの名前は `#` を含むのに対し `ARRAY_NAME` すなわち `Array` は
+  `#` を含まないので、穴を開けた `insert` が鍵 `Std::Array` を置くこともない。
+  BY 前提 型環境に項を入れる呼び出しの在りか, <1>2,
+     CODE src/ast/program.rs: Program::calculate_type_env,
      CODE src/ast/types.rs: TyCon::into_punched_type_name,
+     CODE src/ast/typedecl.rs: TypeDefn::tycon, CODE src/parse/parser.rs: parse_type_defn,
+     CODE src/parse/grammer.pest: type_defn, type_name, capital_name,
      CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, ARRAY_NAME, FUNPTR_NAME,
-     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon, is_funptr_tycon,
-     CODE src/parse/grammer.pest: name_char
+     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon, is_funptr_tycon
 
 <1>6. `TypeEnv::add_tycons` に渡る写像の鍵の名前は、`ARRAY_NAME` (`Array`) と一致せず、`FUNPTR_NAME`
       (`#FunPtr`) を前置に持たない。
-  `add_tycons` は `program.rs` の `pub` のメソッドなので、EXT 名前による数え上げ より、それを呼ぶ式は
-  `src/` の全体について識別子 `add_tycons` を検索して得られる -- `desugar_opaque.rs` の
-  `register_opaque_tycon` に 1 つ、`defunctionalize_fix.rs` の `run_one` に 1 つ、
-  `closure_specialization.rs` の `lift_all` と `realize_all` に 1 つずつである。
-  `register_opaque_tycon` が入れる鍵の名前は不透明型変数の名前であり、`is_opaque_tyvar` が真を返す名前、
-  すなわち `?` で始まる名前である -- `?` は `#` と異なるので `FUNPTR_NAME` を前置に持たず、`Array` とも
-  一致しない。残る 3 か所が入れる鍵は `CaptureStruct` の `tycon` であり、
-  `CaptureStruct` は非公開の欄 `fields` を持つので EXT 可視性 より `capture_struct.rs` の外では構造体
-  リテラルで作れず、その中の唯一の作り手 `CaptureStruct::new` は tycon の名前を
-  `format!("{}@{}", prefix, owner.name)` と作る。`run_one` が渡す `prefix` は `"#FixCap"`、
-  `lift_all` と `realize_all` が渡す `prefix` は `CAP_LIST_PREFIX` すなわち `"#CapList"` であり、
-  どちらも先頭の 3 文字が `FUNPTR_NAME` の先頭の 3 文字 (`#Fu`) と異なる (`#Fi`・`#Ca`)。`format!` は
-  `prefix` をそのまま名前の先頭に置くので、この鍵の名前は `FUNPTR_NAME` を前置に持たない。`Array` は
-  `?` で始まらず、先頭が `#` でもないので、この鍵の名前とも一致しない。
-  BY EXT 可視性, EXT 名前による数え上げ, CODE src/ast/program.rs: TypeEnv::add_tycons,
-     CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon,
-     CODE src/optimization/defunctionalize_fix.rs: run_one,
-     CODE src/optimization/closure_specialization.rs: lift_all, realize_all, record_capture_list,
-     CODE src/optimization/capture_struct.rs: CaptureStruct, CaptureStruct::new,
-     CODE src/ast/types.rs: is_opaque_tyvar,
-     CODE src/fixstd/builtin.rs: is_funptr_tycon,
-     CODE src/constants.rs: ARRAY_NAME, FUNPTR_NAME, CAP_LIST_PREFIX
+  <2>1. `add_tycons` を呼ぶ式が在る項目は、`register_opaque_tycon`、`run_one`、`lift_all`、
+        `realize_all` である。
+    `add_tycons` は `program.rs` の `pub` のメソッドなので、EXT 名前による数え上げ より、それを呼ぶ式は
+    その名前を含む。前提 型環境に項を入れる呼び出しの在りか の走査が挙げる残りの項目が持つのは、
+    `TypeEnv` の doc の散文と `add_tycons` 自身の宣言である。
+    BY 前提 型環境に項を入れる呼び出しの在りか, EXT 名前による数え上げ,
+       CODE src/ast/program.rs: TypeEnv, TypeEnv::add_tycons
+  <2>2. `register_opaque_tycon` が入れる鍵の名前は `?` で始まる。
+    `register_opaque_tycon` が入れる鍵は引数 `info` の `tycon` である。前提 型環境に項を入れる
+    呼び出しの在りか より、`register_opaque_tycon` を呼ぶ式が在る項目は `desugar_opaque_types` であり、
+    そこが渡すのは各グローバル値 `gv` についての `collect_opaque_infos(&gv.scm, gv_name)` の元である。
+    `collect_opaque_infos` は各元の `tycon` を `FullName::new(&gv_name.to_namespace(), &opq_var.name)`
+    から作り、`opq_var` は `is_opaque_tyvar(&tv.name)` が真である型変数だけを集めた列の元である。
+    `is_opaque_tyvar` が真であるのは、名前が `?` で始まるときである。
+    BY 前提 型環境に項を入れる呼び出しの在りか,
+       CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon, desugar_opaque_types,
+       collect_opaque_infos, CODE src/ast/types.rs: is_opaque_tyvar
+  <2>3. `run_one`・`lift_all`・`realize_all` が入れる鍵の名前は、`#FixCap@` か `#CapList@` で始まる。
+    この 3 つが入れる鍵は `CaptureStruct` の `tycon` である。`CaptureStruct` は非公開の欄 `fields` を
+    持つので EXT 可視性 より `capture_struct.rs` の外では構造体リテラルで作れず、その中の唯一の作り手
+    `CaptureStruct::new` は tycon の名前を `format!("{}@{}", prefix, owner.name)` と作る。`run_one` が
+    渡す `prefix` は `"#FixCap"`、`lift_all` と `realize_all` が渡す `prefix` は `CAP_LIST_PREFIX`
+    すなわち `"#CapList"` である。`format!` は `prefix` をそのまま名前の先頭に置く。
+    BY EXT 可視性, CODE src/optimization/defunctionalize_fix.rs: run_one,
+       CODE src/optimization/closure_specialization.rs: lift_all, realize_all, record_capture_list,
+       CODE src/optimization/capture_struct.rs: CaptureStruct, CaptureStruct::new,
+       CODE src/constants.rs: CAP_LIST_PREFIX
+  <2>4. QED
+    `?` は `#` と異なり、`#Fi` と `#Ca` は `FUNPTR_NAME` の先頭の 3 文字 `#Fu` と異なるので、`<2>2` と
+    `<2>3` の名前はどれも `FUNPTR_NAME` を前置に持たない。`ARRAY_NAME` すなわち `Array` は `?` でも `#`
+    でも始まらないので、その名前のどれとも一致しない。`<2>1` より、`add_tycons` を呼ぶ式が在る項目は
+    `<2>2` と `<2>3` が扱ったものだけである。
+    BY <2>1, <2>2, <2>3, CODE src/fixstd/builtin.rs: is_funptr_tycon,
+       CODE src/constants.rs: ARRAY_NAME, FUNPTR_NAME, CAP_LIST_PREFIX
 
 <1>6a. `type_env.tycons()` のどの鍵の名前も、`FUNPTR_NAME` を前置に持ちながら残りが `u32` として
        読めない、という形を取らない。
@@ -2573,18 +2753,17 @@ leaf に前置したものだからである。
      CODE src/rc_ir/provenance.rs: Provenance::leaves
 
 <1>20a. (n) が成り立つ。
-  <2>1. `collect_consumes` を呼ぶ式は `infer_ownership` の中の 1 つ、`infer_ownership` を
-        呼ぶ式は `borrow_ify` の中の 1 つであり、`borrow_ify` はそれに自分の第 1 引数 `prog` を渡す。
-        `infer_ownership` の `prog` の型は `&RcProgram` である。`rhs_consumes` を呼ぶ式は
-        `collect_consumes_go` の中の 1 つと `CancelAnalysis::consume_rhs` の中の 1 つである。
-        `collect_consumes` と `rhs_consumes` は `pub(crate)`、`infer_ownership` は `borrow.rs` の
-        非公開の関数なので、EXT 可視性 より、それらを呼ぶ式はこのクレートのソース `src/` の中にしか
-        ない。EXT 名前による数え上げ より、この列挙は `src/` の全体について識別子 `collect_consumes`、
-        `infer_ownership`、`rhs_consumes` を検索して得られる。`borrow.rs` の `use` はこの 3 つのうち
-        2 つを別名なしで導入し、ほかに別名を導入するファイルは無い。検索が返す残りは各関数の宣言と、
-        `collect_consumes_go` -- `collect_consumes` とは別の識別子 -- の宣言と呼び出しである。
-    BY EXT 可視性, EXT 名前による数え上げ, CODE src/rc_ir/ownership.rs: collect_consumes,
-       collect_consumes_go, rhs_consumes,
+  <2>1. `collect_consumes` を呼ぶ式が在るのは `infer_ownership` であり、`infer_ownership` を呼ぶ式が
+        在るのは `borrow_ify` であって、`borrow_ify` はそれに自分の第 1 引数 `prog` を渡す。
+        `infer_ownership` の `prog` の型は `&RcProgram` である。`rhs_consumes` を呼ぶ式が在るのは
+        `collect_consumes_go` と `CancelAnalysis::consume_rhs` である。
+    `collect_consumes` と `rhs_consumes` は `pub(crate)`、`infer_ownership` は `borrow.rs` の
+    非公開の関数なので、EXT 可視性 より、それらを呼ぶ式はこのクレートのソース `src/` の中にしかない。
+    EXT 名前による数え上げ より、それらを呼ぶ式はその名前を含む。前提 消費の走査を呼ぶ在りか の走査が
+    挙げる残りの項目が持つのは、各関数の宣言と、`collect_consumes_go` -- `collect_consumes` とは別の
+    識別子 -- の宣言および自身への再帰である。
+    BY 前提 消費の走査を呼ぶ在りか, EXT 可視性, EXT 名前による数え上げ,
+       CODE src/rc_ir/ownership.rs: collect_consumes, collect_consumes_go, rhs_consumes,
        CODE src/rc_ir/borrow.rs: infer_ownership, borrow_ify, CancelAnalysis::consume_rhs
   <2>2. `collect_consumes` とその走査が読む `prog` は、`borrow_ify` の入力プログラムに等しい。
     `<2>1` より、`borrow_ify` は自分の第 1 引数を `infer_ownership` へ渡し、`infer_ownership` はそれを
@@ -2619,7 +2798,7 @@ leaf に前置したものだからである。
         `rhs_consumes` が呼ばれる。
     BY <ref id=b3dfa37/>, <ref id=c5547e4/> (f)
   <2>2. D9 の行の前半「callee の全 boxed leaf」は、`L5 (i)` の前半が積む。
-    BY <ref id=c5547e4/> (i)
+    BY <ref id=9d74736/>, <ref id=c5547e4/> (i)
   <2>2a. `resolve_callee_params` が `Some(params)` を返すとき、`params` は D9 の `App` の行が言う
          呼び出し先 (D23) のパラメータの列である。
     D23 は「D9 の `App` の行と D10 の生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数で
@@ -2639,7 +2818,7 @@ leaf に前置したものだからである。
         `Some(params)` のとき `owns(&params[i], &leaf)` が積む。`<2>2a` より `params` は D9 の行が言う
         呼び出し先のパラメータであり、`<2>2b` より DEF leaf 粒度の所有 の対応が定まる。その対応より、
         この述語は「`params[i]` の leaf `leaf` の unit が D14 の意味で所有される」ことと同値である。
-    BY <ref id=ef8efc4/>, DEF leaf 粒度の所有, <ref id=c5547e4/> (i), <2>2a, <2>2b
+    BY <ref id=9d74736/>, <ref id=ef8efc4/>, DEF leaf 粒度の所有, <ref id=c5547e4/> (i), <2>2a, <2>2b
   <2>4. `resolve_callee_params` が `None` のとき、`L5 (i)` は各引数の**全** boxed leaf を積む。D9 の行の
         後半が指すのは引数の boxed leaf の一部なので、積まれるものはそれを尽くす。
     BY <ref id=9d74736/>, <ref id=c5547e4/> (i)
@@ -2896,7 +3075,7 @@ P5 (b) は L1 を読まない -- その証明が命題として引くのは L2 �
 P5 (b) の証明は前提のうち別名の道の条件と、解析が 2 つの鍵で `origin` を呼ぶことだけを使う。E1 から E5 の
 別名の道で結ばれた 2 つのスロットは、オブジェクトが同じかどうかを問わず `identity` が等しい。
 
-### D20 の「別名の辺の両端」と L1 <!--#c6ceff3-->
+### 別名の辺の両端をスロットではなく位置で述べること
 
 D20 は「別名の辺の両端のスロットは、同じオブジェクトを指す」を述べる。L1 (a) はその文を 1 点で強めた形を
 示す。主語が `ρ` のスロットではなく `ρ` の位置 (D6) であることがそれで、別名の辺は記号の位置へ着きうる
@@ -2920,13 +3099,13 @@ DEF `ρ` の上で実行された辺 に置く。L4 の各段が 2 つを別に�
 変数が `ρ` の上で値を得ていること (`<1>3`) である。**辺の端が位置であることは D20 が本文で述べ**、
 その根拠に D6 -- 別名の道が記号の位置で終わること -- を挙げる。
 
-### P3/P4 の「条件を外した形」と L4 <!--#c9d7e06-->
+### 「条件を外した形」の 2 つの節と `identity` の側
 
-P3 は条件を外した形で「**条件を外した形では、2 つの位置 (D6) は同じオブジェクトを指す**」を述べ、
-P4 は「**条件を外した形では、その位置 (D6) と対応する位置のいずれかは同じオブジェクトを指す**」を述べる
--- P4 の側は選言である。**P5 (a) が要るのは `identity` の側であり、そこに P3 は届かない** -- `README.md`
-の P3 は「**この節は P5 (a) を支えない。**」を持ち、その理由に「P5 (a) が要るのは `identity` の側に
-ついてのオブジェクトの一致であり、この節が名指すのは対応する位置である」を挙げる。P3 の主語は
+P3 は条件を外した形で「**条件を外した形では、2 つの位置 (D6) は同じオブジェクトを指す。**」を述べ、
+P4 は「**条件を外した形では、その位置 (D6) と対応する位置のいずれかは同じオブジェクトを指す。**」を
+述べる -- P4 の側は選言である。**P5 (a) が要るのは `identity` の側であり、そこに P3 は届かない** --
+`README.md` の P3 は「**この節は P5 (a) を支えない。**」を持ち、その理由に「P5 (a) が要るのは
+`identity` の側についてのオブジェクトの一致であり、この節が名指すのは対応する位置である」を挙げる。P3 の主語は
 `Exactly(u, σ)` の `(u, σ)` であって、対応する位置の path は `σ` の下の leaf であって `σ` そのものとは
 限らない。P4 の主語は `candidates` の側であり、`Join` の `identity` は `candidates` に
 入るとは限らない (`Origin::of_candidates` は `identity` に `here` を据える)。L4 の (ii) は `identity` に
@@ -2954,7 +3133,7 @@ L4 の `<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` -- は、その実
 **funptr の側を範囲 (`1` から `FUNPTR_ARGS_MAX`) でなく述語で書くのは、`is_funptr` がその述語で決まり、
 範囲の外の `#FunPtr{n}` にも真を返すからである。**
 
-### L4 の前件 -- 解析が呼ぶ鍵に限ること <!--#a874a0e-->
+### 前件を、解析が `origin` を呼ぶ鍵に限ること
 
 `README.md` の P3・P4・P5 (a)・P5 (b) が持つ、解析がその鍵で `origin` を呼ぶという前件を、この文書は L4 の
 言明にも置いた。**言明を絞る道を取ったのは、L4 の帰納が `⇝` の整礎性 (L0a (b)) の上に立ち、その整礎性が呼び出しの

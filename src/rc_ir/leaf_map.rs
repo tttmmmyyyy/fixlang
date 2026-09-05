@@ -88,7 +88,7 @@ impl<T: Clone> LeafMap<T> {
 
     /// The fact of each boxed leaf of a value of type `ty`. `leaf` is called once per boxed leaf,
     /// with that path, so no leaf of the type can be left out.
-    // PROOF: P1, P2, P3, P4, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P7c, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_shape(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,

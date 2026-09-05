@@ -76,6 +76,7 @@ impl TypeDefn {
         Ok(())
     }
 
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycon(&self) -> TyCon {
         TyCon::new(self.name.clone())
     }
