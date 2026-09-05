@@ -341,8 +341,10 @@ pub const TRY_FIX_DEPS_UPDATE_TEST: &str =
 /// The work a traverser function performs on the boxed objects an object owns. The wrapped value is
 /// one of the `TRAVERSER_WORK_*` codes, and is what the generated traverser receives as its work
 /// argument when the work is chosen at run time.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct TraverserWorkType(pub u32);
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TraverserWorkType {
     /// Drop one reference to each object reached, freeing an object whose count falls to zero.
     pub fn release() -> Self {
@@ -361,6 +363,7 @@ impl TraverserWorkType {
 }
 pub const TRAVERSER_WORK_RELEASE: u32 = 0;
 pub const TRAVERSER_WORK_MARK_GLOBAL: u32 = 1;
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const TRAVERSER_WORK_MARK_THREADED: u32 = 2;
 
 #[allow(unused)]

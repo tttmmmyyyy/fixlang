@@ -2269,7 +2269,7 @@ pub fn get_traverser_ptr<'c, 'm>(
 ///
 /// # Returns
 /// `None` where the traverser would have no work to do, which lets a caller emit no call at all.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn create_traverser<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>,

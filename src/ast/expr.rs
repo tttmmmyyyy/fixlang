@@ -46,6 +46,7 @@ pub struct ExprNode {
 
 impl ExprNode {
     // Clone all fields except the set of free variables.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_except_fvs(&self) -> ExprNode {
         ExprNode {
             expr: self.expr.clone(),
@@ -59,6 +60,7 @@ impl ExprNode {
     }
 
     // Clone all fields.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_all(&self) -> Self {
         ExprNode {
             expr: self.expr.clone(),
@@ -101,6 +103,7 @@ impl ExprNode {
     }
 
     // Set inferred type.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_type(&self, ty: Arc<TypeNode>) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.type_ = Some(ty);
@@ -1415,6 +1418,7 @@ impl Expr {
         self.into_expr_node_with_aux_src(src, None)
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn into_expr_node_with_aux_src(
         self: &Arc<Self>,
         src: Option<Span>,
