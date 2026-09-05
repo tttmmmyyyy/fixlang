@@ -446,9 +446,12 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 
 ### L1c (`param_tys` の鍵はパラメータ・capture である) <!--#fa1a6ce-->
 
-**言明**。関数 `g` と `vars = VarTable::of(g)` について、`vars.param_tys.get(r)` が `Some(τ)` である
-ことと、`r` が `g` のパラメータか capture であることは同値であり、そのとき `τ = ty(r)` である。本体だけ
-から作る `VarTable::body_only(b)` では `param_tys` は空である。
+**言明**。`g` を、`borrow_ify` の入力の関数か、`borrow_ify` が作る出力版のうち関数の版 (`f_own` の版と
+借用版) の `RcFunc` とし、`vars = VarTable::of(g)` とする。このとき `vars.param_tys.get(r)` が
+`Some(τ)` であることと、`r` が `g` のパラメータか capture であることは同値であり、そのとき
+`τ = ty(r)` である
+(`ty(・)` は `g` の本体とパラメータ・capture について読む)。本体だけから作る `VarTable::body_only(b)`
+では `param_tys` は空である。
 
 <1>1. `VarTable::of(g)` は `VarTable::empty()` から始め、`g.params` と `g.capture` の各 `p` について
       `param_tys` に `(p.name, p.ty)` を入れ、`var_tys` にも同じ `p.ty` を入れる。続けて呼ぶ
@@ -460,10 +463,10 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 <1>2. QED
   `<1>1` より `param_tys` の鍵は `g` のパラメータ・capture の名前ちょうどであり、その値は `g` がその
   名前に宣言した型 `p.ty` である。`g` のパラメータ・capture の `RcVar` はその型 `p.ty` を持つ。`g` が
-  `borrow_ify` の入力の関数であれば A12 が直接この一致を与え、`g` が固定した出力版の本体であれば L0 が
-  同じ性質を渡す (`f_own` の版とグローバル初期化子の版は入力の本体そのものであり、借用版は L0 の `<1>5`
-  が与える)。よってどちらの場合も `ty(r) = p.ty = τ` である。`VarTable::body_only` は `param_tys` に
-  何も入れないので空である。
+  `borrow_ify` の入力の関数であれば A12 が直接この一致を与える。`g` が出力版の `RcFunc` であれば、
+  第 1 節の固定をその版に取って L0 が同じ性質を渡す (`f_own` の版は入力の本体そのものであり、借用版は
+  L0 の `<1>5` が与える)。よってどちらの場合も `ty(r) = p.ty = τ` である。`VarTable::body_only` は
+  `param_tys` に何も入れないので空である。
   BY <1>1, <ref id=83d98e9/>, <ref id=9cef509/>
 
 ### L1d (`type_env` は組み込みの宣言をそのまま持つ) <!--#33ee52f-->
