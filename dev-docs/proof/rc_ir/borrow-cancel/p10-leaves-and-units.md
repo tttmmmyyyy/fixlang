@@ -809,8 +809,9 @@ SCAN src/ `truncate_to_unit(`
    `CaptureStruct::new` は上の表が名前を挙げている。`TypeDefn::tycon_info` の行は `self.tyvars` を
    そのまま置き、`TypeDefn::validate_tyvars` がその名前が重複しないことを検査する。
    `TypeDefn::tycon_info` が作る `TyConInfo` が `E` に入るのは `Program::calculate_type_env` を通って
-   であり、それは `self.type_defns` の各要素について `type_decl.tycon_info(&[])` と、構造体なら
-   フィールドごとの穴つきの形 `type_decl.tycon_info(&[i])` を入れる。**`E` に入る `Struct` の
+   であり、それは `self.type_defns` の要素のうち型別名でなく既出の名前でもないものについて
+   `type_decl.tycon_info(&[])` と、構造体ならフィールドごとの穴つきの形
+   `type_decl.tycon_info(&[i])` を入れる。**`E` に入る `Struct` の
    `TyConInfo` がこの関数から出るとは限らない** -- `CaptureStruct::new` が作る行は
    `closure_specialization` の `lift_all` と `realize_all`、および `defunctionalize_fix::run_one` が
    `add_tycons` で入れる。その行は `tyvars: vec![]` なので、上の表が別に片付けている。`Program::validate_type_defns` は同じ
@@ -820,16 +821,16 @@ SCAN src/ `truncate_to_unit(`
    **`E` に登録されている各 `TyConInfo` の `variant`、`tyvars`、`is_unbox`、`fields` の長さ、
    および各 `fields[i].is_punched` は、上の 4 つのいずれかがそれを作ったときの値である。**この 5 つが、
    この証明が `TyConInfo` から値として読むものである。**`fields[i].ty` は `F(t)` の第 2 成分として
-   現れるが、この証明はその値を主張せず、それが `<1>1` を満たすことだけを使う。`TypeEnv` の `tycons`
-   は非公開のフィールドなので、`EXT Rust の可視性` よりそれを名前で参照できるのは、それを宣言する
-   モジュール `crate::ast::program` とその子孫だけである。`EXT Rust のモジュールの木` より子孫は
-   `mod` の項目が作るところに限られ、`src/ast/program.rs` は `mod` の項目を持たないので、そのモジュール
-   はこの 1 ファイルで閉じている。同ファイルで `tycons` に書くのは次のとおりである。
+   現れるが、この証明はその値を主張せず、それが `<1>1` を満たすことだけを使う。
+   前提 型環境の `tycons` の欄を名指す在りか が `src/` の全項目を挙げ、そのうち `TypeEnv` の
+   `tycons` の欄へ値を置くのは次の 6 つである。残る項目が名指すのは、その欄の読みか、同じ綴りの
+   局所変数・引数・関数名か、別の型が持つ同名の欄か、散文の中の同じ綴りである。
 
    - `TypeEnv::default`。空の `Map` を置く。
-   - `TypeEnv::new`。`Program::calculate_type_env` が、`bulitin_tycons()` に各型宣言の
-     `type_decl.tycon_info(&[])` と、構造体についてはフィールドごとの穴つきの形
-     `type_decl.tycon_info(&[i])` を足した `Map` を渡す。
+   - `TypeEnv::new`。`Program::calculate_type_env` が、`bulitin_tycons()` に、型別名でなく既出の
+     名前でもない各型宣言の `type_decl.tycon_info(&[])` と、構造体の宣言についてはフィールドごとの
+     穴つきの形 `type_decl.tycon_info(&[i])` を足した `Map` を渡す。型別名の宣言は `aliases` の側へ
+     入り、既出の名前の宣言は診断を出して飛ばされる。
    - `TypeEnv::add_tycons`。渡された各 `TyConInfo` の `fields` を走って `field.ty` を
      `unwrap_newtypes` の像に置き替えてから、`tycons.insert(tycon, tycon_info)` で丸ごと入れる。
      鍵が新しければ項目が増え、同名の項目が既に在ればそれが置き替わる。
@@ -846,8 +847,8 @@ SCAN src/ `truncate_to_unit(`
    `TypeEnv::add_tycons` である。**`TypeEnv::default` が置く `Map` は空なので `TyConInfo` を
    1 つも含まず、残る 3 つは既に在る `TyConInfo` の欄を書き替えるだけである (次の段落)。
    `TypeEnv::new` が置くのは
-   `Program::calculate_type_env` が渡す `Map`、すなわち `bulitin_tycons()` の各行と、各型宣言に
-   ついての `TypeDefn::tycon_info` の返り値である。`TypeEnv::add_tycons` が置くのは、A28 の走査
+   `Program::calculate_type_env` が渡す `Map`、すなわち `bulitin_tycons()` の各行と、上に述べた
+   型宣言についての `TypeDefn::tycon_info` の返り値である。`TypeEnv::add_tycons` が置くのは、A28 の走査
    `SCAN src/ .add_tycons(` が挙げる 4 か所が渡す `TyConInfo`、すなわち `CaptureStruct::new` が
    作った `tycon_info`
    (`closure_specialization` の `lift_all` と `realize_all` が `record_capture_list` と
@@ -864,8 +865,9 @@ SCAN src/ `truncate_to_unit(`
    `Deserialize` も導出しないので、キャッシュから読まれる `TyConInfo` も無い。前提 型の節点への
    可変参照の在りか より `Arc::get_mut` は `src/` に無く、`Arc::make_mut` を書く 1 項目が借りるのは
    `Arc<Map<..>>` の欄なので、`tycons` が包む `Map` の項目をその場で書き替える道も無い。
-  BY EXT Rust の可視性, EXT Rust のモジュールの木, EXT derive した Clone, <ref id=3d4be43/>,
-     前提 `TyConInfo` の値を作る在りか, 前提 型の節点への可変参照の在りか,
+  BY EXT Rust の可視性, EXT derive した Clone, <ref id=3d4be43/>,
+     前提 `TyConInfo` の値を作る在りか, 前提 型環境の `tycons` の欄を名指す在りか,
+     前提 型の節点への可変参照の在りか,
      CODE src/ast/types.rs: TyConInfo, CODE src/fixstd/builtin.rs: bulitin_tycons,
      CODE src/constants.rs: FUNPTR_ARGS_MAX, CODE src/ast/typedecl.rs: TypeDefn::tycon_info,
      CODE src/ast/typedecl.rs: TypeDefn::validate_tyvars,
@@ -2700,15 +2702,14 @@ SCAN src/ `truncate_to_unit(`
      足りない」と述べる。op が持ちうる内部可変性の欄を数え上げる代わりに、(c) は op が答えるものの
      側を A3 の決定性の節で閉じる。
     <3>1. `bindings` は `VarTable` の非公開フィールドなので、`EXT Rust の可視性` よりそれを名前で
-       参照できるのは、それを宣言するモジュール `crate::rc_ir::ownership` とその子孫だけである。
-       そのモジュールとその子孫はすべて `src/rc_ir/ownership.rs` の中に在る --
-       `EXT Rust のモジュールの木` より子孫を作るのは `mod` の項目であり、同ファイルが持つ `mod` の項目は
-       `#[cfg(test)] mod tests` だけで、それは本体を同ファイルの中に置く。前提 変数の表の 2 つの欄を
-       名指す在りか より、その欄を名指す式が在る製品の項目は `VarTable::of`・`collect_bindings`・
-       `origin_inner` であり、はじめの 2 つが書き、`origin_inner` は読むだけである。残る書き手は
-       `VarTable::empty` が構造体リテラルで置く初期値である。`VarTable::body_only` は
-       `VarTable::empty` と `collect_bindings` を呼ぶだけである。どれも表を作る間にしか走らない。
-      BY EXT Rust の可視性, EXT Rust のモジュールの木, 前提 変数の表の 2 つの欄を名指す在りか,
+       参照できるのはこのクレートの中だけであり、数え上げる範囲は `src/` である。
+       前提 変数の表の 2 つの欄を名指す在りか より、`src/` でその名前を含む製品の項目のうち
+       `VarTable` の `bindings` の欄を名指すのは、欄の宣言と、`VarTable::empty` が構造体リテラルで
+       置く初期値と、`VarTable::of` と `collect_bindings` の挿入と、`origin_inner` の読みだけで
+       ある。残る項目が名指すのは、同じ綴りの局所変数・引数・関数名か、別の型が持つ同名の欄か、
+       散文の中の同じ語である。`VarTable::body_only` は `VarTable::empty` と `collect_bindings` を
+       呼ぶだけである。書き手はどれも表を作る間にしか走らない。
+      BY EXT Rust の可視性, 前提 変数の表の 2 つの欄を名指す在りか,
          CODE src/rc_ir/ownership.rs: VarTable (`bindings` の宣言),
          CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
          CODE src/rc_ir/ownership.rs: VarTable::body_only,
