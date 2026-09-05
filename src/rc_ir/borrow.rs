@@ -835,7 +835,7 @@ struct RewriteCtx<'a> {
 impl<'a> RewriteCtx<'a> {
     /// The rewrite state of one output version of `func`. `is_borrow_version` marks the borrow
     /// clone, the version whose reference counting on its borrowed parameter leaves is dropped.
-    // PROOF: P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, T (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, T (dev-docs/proof/rc_ir/borrow-cancel)
     fn new(
         func: &RcFunc,
         is_borrow_version: bool,
@@ -858,7 +858,7 @@ impl<'a> RewriteCtx<'a> {
     /// Rewrite a body for this version: route each direct call to a callee version, bracket a call
     /// with the reference counting the routed callee no longer does, and drop the counting this
     /// version's borrowed parameters no longer need.
-    // PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
     fn rewrite(&self, node: &RcExprNode) -> RcExprNode {
         grow_stack(|| self.rewrite_inner(node))
     }
@@ -1112,7 +1112,7 @@ impl<'a> RewriteCtx<'a> {
 }
 
 /// An expression node with the given source span.
-// PROOF: P2a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P7a, P7d, P7e, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn expr_node(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
     RcExprNode {
         expr: Arc::new(expr),
@@ -1121,7 +1121,7 @@ fn expr_node(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
 }
 
 /// A `Release` (when `is_release`) or `Retain` of `var` at `path` wrapping continuation `k`.
-// PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rc_node(
     is_release: bool,
     var: RcVar,
@@ -1139,7 +1139,7 @@ fn rc_node(
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
-// PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn prepend_rc(units: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
     units.into_iter().rev().fold(k, |cont, (var, path)| {
         rc_node(is_release, var, path, RcState::Unknown, cont, &None)

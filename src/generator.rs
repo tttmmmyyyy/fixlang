@@ -2598,6 +2598,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// # Returns
     /// The object, and `None` in tail position, where it has been returned already.
+    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_tail(&mut self, obj: Object<'c>, tail: bool) -> Option<Object<'c>> {
         if tail {
             self.build_return_object(obj);
@@ -2611,6 +2612,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// `lambda_function_type`): its parts are packed into the flat return value — `void` for none, the
     /// bare part for one, a flat struct built with one `insertvalue` per part for several. Parts too
     /// wide for the return registers are stored through the function's out-pointer instead.
+    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_return_object(&mut self, obj: Object<'c>) {
         let parts: Vec<BasicValueEnum<'c>> = obj.parts().to_vec();
         let part_tys: Vec<BasicTypeEnum<'c>> = parts.iter().map(|p| p.get_type()).collect();

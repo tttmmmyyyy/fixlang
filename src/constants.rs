@@ -123,7 +123,6 @@ pub const STRUCT_PUNCH_SYMBOL: &str = "#punch_";
 pub const STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL: &str = "#punch_fu_";
 pub const STRUCT_PLUG_IN_SYMBOL: &str = "#plug_in_";
 pub const STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL: &str = "#plug_in_fu_";
-// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 /// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
 /// it is the one local name that the free variables of an expression leave out.
@@ -141,7 +140,6 @@ pub const CLOSURE_SPEC_SUFFIX: &str = "#closure_spec";
 pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
 /// The prefix of the type constructor naming a capture list that closure specialization builds. A
 /// parameter of this type is a function whose identity the receiving body knows.
-// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub const CAP_LIST_PREFIX: &str = "#CapList";
 /// The prefix of the name `collapse_constructions` binds a field value to, so that a reader of the
 /// struct is given a name rather than the expression that produced the value.

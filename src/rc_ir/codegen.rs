@@ -406,6 +406,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// matching the current back end, which materializes every source `let` binding as a scoped
     /// value. Genuine tail calls and tail recursion go through unnamed temporaries, so they still
     /// fuse in every build.
+    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn binding_fuses_into_return(&self, x: &RcVar, k: &RcExprNode, tail: bool) -> bool {
         tail && carries_var_to_return(k, &x.name) && !(self.has_di() && x.debug_name.is_some())
     }
@@ -845,6 +846,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
 /// Whether the continuation `k` carries `x` to the terminator only by move-renames — i.e. the
 /// binding of `x` is in tail position.
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 fn carries_var_to_return(k: &RcExprNode, x: &FullName) -> bool {
     match k.expr.as_ref() {
         RcExpr::Ret(r) => r.name == *x,

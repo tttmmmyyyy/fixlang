@@ -433,14 +433,14 @@ impl Field {
         self.ty.find_node_at(pos)
     }
 
-    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.syn_ty = self.syn_ty.resolve_namespace(ctx)?;
         self.ty = self.ty.resolve_namespace(ctx)?;
         Ok(())
     }
 
-    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.ty = self.ty.resolve_type_aliases(type_env)?;
         Ok(())
