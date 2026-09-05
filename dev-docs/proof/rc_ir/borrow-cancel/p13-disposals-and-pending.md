@@ -3344,6 +3344,15 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
 
 **証明**
 
+<1>0. `RewriteCtx::rewrite(node)` の 1 回の呼び出しは、`RewriteCtx::rewrite_inner(node)` をちょうど
+      1 回呼んでその値を返す。
+  <2>1. `rewrite` の本体は `grow_stack(|| self.rewrite_inner(node))` である。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite
+  <2>2. `grow_stack(f)` の本体は `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` である。
+    BY CODE src/misc.rs: grow_stack
+  <2>3. QED
+    BY <2>1, <2>2, EXT stacker の maybe_grow
+
 <1>1. `V` が借用版でないとき、`rewrite_rc` は節点をそのまま返す。
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
   `if !self.is_borrow_version { return rc_node(...); }` である。
@@ -3396,7 +3405,7 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
        `App` 節点の位置と `args` を共有する。また `levelled_sites` を呼ぶ 2 か所はどちらも書き換え前の
        本体を渡す。以下、`ctx.vars` と `type_env` で計算した `origin` を `origin_V`、`F` の本体の
        `VarTable` と `type_env` で計算した `origin` を `origin_F` と書く。
-  BY <1>1c, <ref id=a985128/>, <ref id=eaf9b51/>, <ref id=843e506/>, <ref id=3e6b0e0/>, CODE src/rc_ir/borrow.rs: borrow_ify,
+  BY <1>0, <1>1c, <ref id=a985128/>, <ref id=eaf9b51/>, <ref id=843e506/>, CODE src/rc_ir/borrow.rs: borrow_ify,
      CODE src/rc_ir/borrow.rs: RewriteCtx::new, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
      CODE src/rc_ir/borrow.rs: infer_ownership,
      CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled
@@ -3405,8 +3414,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
   `RewriteCtx::new(&clone, true, ...)` を作って `clone.body = ctx.rewrite(&clone.body)` とし、
   グローバル初期化子について `VarTable::body_only(&g.init)` を `vars` に置いた `RewriteCtx` で
   `ctx.rewrite(&g.init)` とする。どの場合も `ctx` が読む本体は書き換え前の本体、すなわち `Pre(V)` で
-  あり、`RewriteCtx::new` は `vars` に `VarTable::of(func)` を置く。A15 より `rewrite` は
-  `rewrite_inner` を本体としてちょうど 1 回呼ぶ。`rewrite_inner` の 8 つの腕 -- `RcExpr` の 6 種のうち
+  あり、`RewriteCtx::new` は `vars` に `VarTable::of(func)` を置く。<1>0 より `rewrite` は
+  `rewrite_inner` をちょうど 1 回呼んでその値を返す。`rewrite_inner` の 8 つの腕 -- `RcExpr` の 6 種のうち
   `Let` が右辺の `App`、`Match`、それ以外の 3 つに分かれる -- を読む。`RcExpr::Retain` と
   `RcExpr::Release` の腕は `rewrite_rc` へ行く。`RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕は
   `callee` を `route` の結果に差し替え、`call_rc` が返す `before` と `after` の節点を前後に置き、
@@ -3425,7 +3434,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
        そこで `V` の本体が消費する `VarPath` の第 1 成分は、出力の `funcs` の鍵であり、`rename` の像に
        無い。
   BY <1>1c, <1>1d, <ref id=63eadd9/>, <ref id=843e506/>, <ref id=e11772a/>, <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=596a46d/>, <ref id=9d74736/>,
-     CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/borrow.rs: RewriteCtx::route
+     DEF 処分 leaf, CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/borrow.rs: RewriteCtx::route,
+     CODE src/rc_ir/ownership.rs: destructure_consumes
   D9 の消費の表は 6 行を持ち、その `App` の行が callee の leaf と所有位置の引数の leaf の 2 つの位置を
   挙げるので、消費の位置は 7 種である。
 
@@ -3448,10 +3458,17 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
   借用版の鍵も局所名ではない。`rename` が写すのは `Pre(V)` の束縛名であり、D6 より束縛を持つ名前は
   局所名なので、差し替わった名前は `rename` の像に無い。これが言明の但し書きである。
 
-  `Pre(V)` と `F` の本体の間は `rename` である。6 種のうち 5 種 -- `App` の callee、`Closure` の
-  capture、boxed 容器と unbox 容器の `Destructure`、終端の `Ret` -- は、名指す変数の boxed leaf を
-  その変数の型だけで決める。P9 より `rename` は束縛変数の名前だけを替えるので変数の型を変えず、A12 より
-  同じ名前の `RcVar` が持つ型は一致するので、この 5 種は写して一致する。
+  `Pre(V)` と `F` の本体の間は `rename` である。6 種のうち 4 種 -- `App` の callee、`Closure` の
+  capture、boxed 容器の `Destructure`、終端の `Ret` -- は、消費される leaf を名指す変数の型だけで
+  決める。P9 より `rename` は束縛変数の名前だけを替えるので変数の型を変えず、A12 より
+  同じ名前の `RcVar` が持つ型は一致するので、この 4 種は写して一致する。
+
+  **unbox 容器の `Destructure` は名指す変数の型だけでは決まらない。** DEF 処分 leaf のその行は
+  「`λ` の先頭の添字が `fs` の名前付きフィールドの添字でないもの」を挙げ、`destructure_consumes` も
+  `fields` の名前付きフィールドの添字を読む。P9 の「元の本体の束縛変数を一斉に付け替えたものであり、
+  それ以外の違いを持たない」より、両側の対応する `Destructure` 節点は同じ `fields` の添字の列を持つ --
+  替わるのは各フィールドが束縛する変数の名前だけである。容器の型は上と同じく等しいので、除く添字の
+  集合も leaf の集合も両側で等しく、この行も写して一致する。
   残る `Llvm` の位置は `borrows_operand` と `result_prov` の宣言を読み、`rename_rhs` の `Llvm` の腕は
   `llvm_gen` を clone して `free_vars_mut()` が挙げる名前を書き替える。A3 は「**`result_prov`、`borrows_operand`、
   `applies_a_function_operand` は自分の `FullName` の欄を読まない。**」と述べ、`result_prov` を override する
