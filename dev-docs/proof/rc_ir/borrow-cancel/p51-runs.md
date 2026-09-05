@@ -81,10 +81,11 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
 分割して生成した単位を結合したものの実行である」と述べ、`divide_among_units` が `P.funcs` の各項目を
 その名前が決めるちょうど 1 つの単位へ入れること、コード生成が単位ごとに `implement_rc_program` をその
 単位の切片について 1 回走らせることを定める。(a) は 1 つのモジュールの中の勘定であり、(b) は名前が
-実行時に何を指すかという単位を跨ぐ言明である。(N3) の `global_types` は
-`global_types_including_synthesized` が `Q` から 1 度だけ作って全単位が共有する表なので
-(`CODE src/build/build_object_files.rs: build_object_files`)、単位ごとに別ではなく、(N3) は分割前の
-`Q` について読める。
+実行時に何を指すかという単位を跨ぐ言明である。(N3) の `global_types` は `divide_among_units` が
+`global_types_including_synthesized(Q, ・)` を 1 度だけ呼んで作り
+(`CODE src/build/divide_program.rs: divide_among_units`)、`build_object_files` がその 1 つを全単位の
+`Generator::new` へ渡す表なので (`CODE src/build/build_object_files.rs: build_object_files`)、単位ごとに
+別ではなく、(N3) は分割前の `Q` について読める。同じことを `L0c` の `<1>3` の `<2>1` が段として示す。
 
 <1>0. 各単位の切片 `U` について、`U.funcs` の鍵は `Q.funcs` の鍵の部分集合であり、各鍵 `fref` の値は
       `Q.funcs[fref]` である。
@@ -253,10 +254,11 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
     <3>1. 第 1 ループが鍵 `FuncRef{n}` の項目に着くまでに走った `module.add_function` の呼び出しの
           うち、`object_file_symbol_name(n)` を名前とするものは無い。
       `<1>3b` より、その名前を作りうるのは `declare_lambda_function` の 1 か所である。
-      **第 1 ループの前に走るのは 4 つである** -- `build_object_files` は単位ごとのスレッドの中で、
-      `Generator::create_module`、`Generator::new`、`config.debug_info` が真のときの
-      `gc.create_debug_info()`、`build_runtime` の `Declare` の呼び出しを、この順に
-      `gc.implement_rc_program(&unit_program)` の前に置く。**この 4 つは
+      **第 1 ループの前に走るのは 6 つである** -- `build_object_files` は単位ごとのスレッドの中で、
+      `Context::create`、`get_target_machine`、`Generator::create_module`、`Generator::new`、
+      `config.debug_info` が真のときの `gc.create_debug_info()`、`build_runtime` の `Declare` の
+      呼び出しを、この順に `gc.implement_rc_program(&unit_program)` の前に置く。
+      `implement_rc_program` は第 1 ループの前に文を持たない。**この 6 つは
       `declare_lambda_function` へ届かない。**`src/` で `declare_lambda_function` を呼ぶのは
       `declare_program_global` と `implement_rc_program` の 2 か所、`declare_program_global` を呼ぶのは
       `get_or_declare_global`・`implement_rc_program`・`implement_rc_global` の 3 か所、
@@ -266,15 +268,18 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
       `get_scoped_value` を通る要があるが、`<1>2` よりそこへ入る 143 か所は、`RcExpr` の節点の生成と
       `Llvm` 節点のオペランドの読み -- どちらも `implement_rc_program` の第 2 ループが呼ぶ
       `implement_rc_function` の中で走る -- と、`build_object_files` が `implement_rc_program` の**後**に
-      置く `ExportStatement::implement` と `build_main_function` である。`create_module` はモジュールを
-      作り、`Generator::new` は欄を埋め、`create_debug_info` は `add_basic_value_flag` と
+      置く `ExportStatement::implement` と `build_main_function` である。**先頭の 2 つはモジュールが
+      在る前に走る** -- `Context::create` は LLVM の文脈を作り、`get_target_machine` は triple と
+      target から `TargetMachine` を作るだけで、どちらもモジュールを引数に取らない。`create_module` は
+      モジュールを作り、`Generator::new` は欄を埋め、`create_debug_info` は `add_basic_value_flag` と
       `create_debug_info_builder` を呼び、`build_runtime` の `Declare` は走時関数の宣言を出す。
       第 1 ループの
       3 枝が呼ぶのは `module.get_function`、`declare_program_global`、`declare_lambda_function` だけで
       あり、`<1>3` より (N3) の下で `declare_program_global` はアクセサを登録する行に着かないので、
       より前の項目が `declare_lambda_function` に渡す名前はその項目の鍵の名前 `n'` である。鍵は
       相異なるので `n' ≠ n` であり、`<1>3a` よりその記号名は `object_file_symbol_name(n)` と異なる。
-      BY (N3), <1>2, <1>3, <1>3a, <1>3b, CODE src/build/build_object_files.rs: build_object_files,
+      BY (N3), <1>2, <1>3, <1>3a, <1>3b,
+         CODE src/build/build_object_files.rs: build_object_files, get_target_machine,
          CODE src/rc_ir/codegen.rs: Generator::implement_rc_program, Generator::implement_rc_function,
          Generator::implement_rc_global,
          CODE src/generator.rs: Generator::declare_program_global, Generator::create_module,
