@@ -1998,7 +1998,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   `Program::add_tuple_defn` を通じて `tuple_defn(size)` を `type_defns` に積み、
   `Program::calculate_type_env` は各型宣言について `type_decl.tycon()` -- `TypeDefn` の `name` を名前に
   持つ `TyCon` -- を鍵に `type_decl.tycon_info(&[])` を入れる。`NameSpace` の `PartialEq` と `Hash` は
-  `is_absolute` を読まないので、absolute かどうかは鍵の一致に効かない。`calculate_type_env` は既に
+  `is_absolute` を読まず、`FullName` の `Hash` は名前空間の `names` と `name` だけを読み、`FullName` の
+  `PartialEq` は derive されたものなので、absolute かどうかは鍵の一致に効かない。`calculate_type_env` は既に
   写像か型別名に在る tycon の宣言を `insert` へ進めないが、`<1>1` よりこの鍵を宣言するのは
   `Program::add_tuple_defns` が積む `tuple_defn(0)` だけである。`TypeDefn::tycon_info` は
   `TypeDeclValue::Struct(s)` の腕で `(TyConVariant::Struct, s.is_unbox, s.fields.clone())` を置き、
@@ -2024,6 +2025,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
      CODE src/ast/program.rs: Program::add_tuple_defn, Program::add_tuple_defns,
      CODE src/ast/program.rs: Program::calculate_type_env,
      CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: FullName::from_strs,
+     CODE src/ast/name.rs: impl Hash for FullName,
      CODE src/ast/name.rs: impl PartialEq for NameSpace, CODE src/ast/name.rs: impl Hash for NameSpace,
      CODE src/fixstd/builtin.rs: make_array_ty, make_array_tycon, make_array_name, is_array_tycon,
      CODE src/fixstd/builtin.rs: make_arrow_name_abs, make_tuple_ty, make_tuple_name,
