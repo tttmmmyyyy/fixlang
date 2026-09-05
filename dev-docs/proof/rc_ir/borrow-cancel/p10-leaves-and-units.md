@@ -931,8 +931,12 @@ SCAN src/ `truncate_to_unit(`
      あり、その鍵に対する (a) の `parse::<u32>()` は成功する。
   <2>1. (a) が成り立つ。`is_funptr_tycon` は、`tc.name.namespace` が `Std` の 1 段でなければ `None`、
      `tc.name.name` が `FUNPTR_NAME` で始まらなければ `None` を返し、そのどちらでもないときにだけ
-     残りの文字を `parse::<u32>()` に掛ける。ほかに abort する場所を持たない。
-    BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME
+     残りの文字を `parse::<u32>()` に掛ける。第 1 の検査が比べる相手は
+     `NameSpace::new(vec![STD_NAME.to_string()])` であり、`STD_NAME` は `"Std"`、
+     `impl PartialEq for NameSpace` は `names` だけを比べるので、これは名前の列が `Std` の 1 段で
+     あるかを問う。
+    BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME,
+       CODE src/constants.rs: STD_NAME, CODE src/ast/name.rs: NameSpace
   <2>2. (b) の第 1 文が成り立つ。`<2>1` より (a) の形とは、`tc.name.namespace` が `Std` の 1 段で
      ありかつ `tc.name.name` が `FUNPTR_NAME` で始まることである。A28 は、`E.tycons()` の項目の
      うち鍵がその形を持つものは `bulitin_tycons()` が `make_funptr_tycon(n)` (`n` は 1 以上
@@ -947,9 +951,13 @@ SCAN src/ `truncate_to_unit(`
     BY <1>3b, <2>2, CODE src/fixstd/builtin.rs: bulitin_tycons
   <2>4. (b) の第 3 文が成り立つ。`make_funptr_tycon(n)` の名前は `make_funptr_name(n)`、すなわち
      `#FunPtr` に `n` の 10 進表記を継いだものなので、`FUNPTR_NAME` の分を落とした残りは `n` の
-     10 進表記であり、`parse::<u32>()` は成功する。
+     10 進表記であり、`parse::<u32>()` は成功する。`make_funptr_tycon` の本体は
+     `TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))` であり、`TyCon::new`
+     は渡された `FullName` をそのまま `name` の欄に置き、`FullName::from_strs(ns, name)` は
+     第 2 引数を `name` の欄に置く。
     BY <2>1, <2>2, CODE src/fixstd/builtin.rs: make_funptr_name,
-       CODE src/fixstd/builtin.rs: make_funptr_tycon
+       CODE src/fixstd/builtin.rs: make_funptr_tycon,
+       CODE src/ast/types.rs: TyCon, CODE src/ast/name.rs: FullName
   <2>5. QED
     BY <2>1, <2>2, <2>3, <2>4
 
@@ -1048,7 +1056,7 @@ SCAN src/ `truncate_to_unit(`
        型構成子の名前が `make_arrow_name_abs()` に等しいかを問う述語で、`make_arrow_tycon()` は
        まさにその名前の `TyCon` である。よってそのとき `t.is_closure()` は真になり、この場合の仮定に
        反する。
-      BY <1>3b, CODE src/ast/types.rs: TypeNode::is_closure,
+      BY <1>3b, CODE src/ast/types.rs: TypeNode::is_closure, CODE src/ast/types.rs: TyCon,
          CODE src/fixstd/builtin.rs: bulitin_tycons,
          CODE src/fixstd/builtin.rs: make_arrow_tycon,
          CODE src/fixstd/builtin.rs: make_arrow_name_abs
