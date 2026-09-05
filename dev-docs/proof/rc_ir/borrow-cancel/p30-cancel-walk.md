@@ -2651,7 +2651,9 @@ PROVE   `cancel(prog, type_env)` の中の `cancel_body` の 1 回の実行の�
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕,
        <1>1, <ref id=dad309f/>, DEF 訪問, DEF 基本操作
   <2>2. `pending_in` は `merged` より前に作られた状態なので、<1>1 より `INV(pending_in)` が成り立つ。
-    BY <1>1
+        DEF 基本操作 より「併合」の入力は `pending_in` と各 `arm_exits[j]` であり、<1>0b よりその入力は
+        どれも生成順序で `merged` より前にある。
+    BY <1>0b, <1>1, DEF 基本操作
   <2>3. (i) が成り立つ。L7 の 6 より、`merged` の各要素の `node` は `pending_in` のある要素の `node` で
         ある。<2>2 の (i) より、それは `pending_in` の時点までに訪問された `Retain` 節点の `node_id` で
         あり、`merged` の時点はそれより後である。<1>0d より由来はちょうど 1 つ定まり、それは
