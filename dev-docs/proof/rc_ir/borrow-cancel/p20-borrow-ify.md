@@ -308,6 +308,87 @@ SCAN src/ `origins:`
   `<1>2` の 2 つの形が場合を尽くしており、`<1>4` と `<1>5` がそれぞれを与える。
   BY <1>2, <1>4, <1>5
 
+### L1b (`rc_units_go` が積む列) <!--#dcb9940-->
+
+**言明**。A10 を満たす型 `σ` と任意の path `p` について、`rc_units_go(σ, type_env, p, out)` の呼び出しが
+`out` の末尾に付け足す列は、`units(σ)` の各元 `w` をその順に並べた `p ++ w` の列である。
+
+<1>1. `rc_units(σ, type_env)` は `out` を空の列から始め、`rc_units_go(σ, type_env, [], out)` を 1 度呼び、
+      その `out` を返す。
+  BY CODE src/rc_ir/ownership.rs: rc_units
+
+<1>2. `rc_units_go` は今の型の `unit_step` で 4 つに分ける。`UnitStep::NoUnit` の腕は `out` に何も積まず
+      自分を呼ばない。`UnitStep::Unit` の腕は今の `path` を 1 つ積んで自分を呼ばない。
+      `UnitStep::Capture { capture_idx: c, .. }` の腕は `path` に `c` を足したものを 1 つ積んで自分を
+      呼ばない。`UnitStep::Fields { held_fields, .. }` の腕は `out` に何も積まず、`held_fields` の各元
+      `(i, fty)` について、`path` に `i` を足して `rc_units_go(fty, type_env, path ++ [i], out)` を順に
+      呼び、戻ると `i` を外す。
+  BY CODE src/rc_ir/ownership.rs: rc_units_go
+
+<1>3. QED
+  A10 は「`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が
+  `type_env` にある -- がすべて成り立ち、その歩みは有限である」と述べる。`<1>2` の `Fields` の腕が降りる
+  先は `unpunched_field_types` の返す型なので (`unit_step` の `Fields` の腕はそれを `held_fields` に
+  据える)、`rc_units_go` の再帰は有限の深さで止まる。その深さについての帰納で、任意の `p` について
+  言明を示す。
+  `NoUnit` の腕では、`<1>1` より `rc_units(σ)` も同じ腕を通って空の列であり、付け足す列も空である。
+  `Unit` の腕では `rc_units(σ) = [[]]` であり、付け足すのは `p` の 1 元、すなわち `p ++ []` である。
+  `Capture` の腕では `rc_units(σ) = [[c]]` であり、付け足すのは `p ++ [c]` の 1 元である。
+  `Fields` の腕では、`<1>1` より `rc_units(σ)` は `held_fields` の各元 `(i, fty)` について
+  `rc_units_go(fty, type_env, [i], out)` が付け足す列を順に並べたものであり、帰納法の仮定よりそれは
+  `units(fty)` の各元 `w'` について `[i] ++ w'` を並べた列である。同じ帰納法の仮定より、
+  `rc_units_go(σ, type_env, p, out)` が付け足すのは各 `(i, fty)` について `units(fty)` の各元 `w'` の
+  `p ++ [i] ++ w'` を順に並べた列であり、これは `units(σ)` の各元 `w` について `p ++ w` を並べた列で
+  ある。
+  BY <ref id=8412761/>, 帰納法の仮定, <1>1, <1>2,
+     CODE src/rc_ir/ownership.rs: rc_units, rc_units_go, unit_step
+
+### L1c (`units` は反鎖であり、`sub` の下の unit は上の unit である) <!--#2e1dccd-->
+
+**言明**。A10 を満たす型 `τ` について次の 2 つが成り立つ。
+
+- **(a)** `units(τ)` の相異なる 2 元は、一方が他方の接頭辞にならない。
+- **(b)** `sub(τ, p) = Some(σ)` であるとき、`units(σ)` の各元 `w` について `p ++ w ∈ units(τ)` である。
+
+<1>1. `unit_step` の `UnitStep::Fields` の腕が据える `held_fields` の元の添字は、互いに相異なる。
+  `unit_step` はそれを `ty.unpunched_field_types(type_env)` に取る。`unpunched_field_types` は
+  `instance_field_types` が返す列に `Iterator::enumerate` を掛け、その第 1 成分で絞って集めるので、
+  返る列の第 1 成分は 0 から数えた相異なる添字である。
+  BY EXT 反復子の並び, CODE src/rc_ir/ownership.rs: unit_step,
+     CODE src/ast/types.rs: TypeNode::unpunched_field_types
+
+<1>2. (a) が成り立つ。
+  A10 は「`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、
+  tycon が `type_env` にある -- がすべて成り立ち、その歩みは有限である」と述べ、`<1>1` より
+  `UnitStep::Fields` の腕が降りる先はその歩みの先なので、`rc_units_go` の再帰は有限の深さで止まる。
+  その深さについての帰納で示す。L1b より `units(τ)` は `rc_units_go(τ, type_env, [], out)` が積む列で
+  ある。
+  `unit_step(τ)` が `NoUnit` のとき `units(τ)` は空であり、`Unit` と `Capture` のとき 1 元なので、
+  どれも言明は空虚に真である。`Fields { held_fields, .. }` のとき、L1b より `units(τ)` は
+  `held_fields` の各元 `(i, fty)` について `units(fty)` の各元 `w'` の `[i] ++ w'` を並べた列である。
+  同じ `i` から来る相異なる 2 元は、帰納法の仮定より `units(fty)` の側で一方が他方の接頭辞にならないので、
+  `[i]` を足しても接頭辞にならない。相異なる添字 `i` と `j` から来る 2 元は、`<1>1` より `i ≠ j` なので
+  先頭の添字が異なり、一方が他方の接頭辞にならない。
+  BY <ref id=8412761/>, <ref id=dcb9940/>, 帰納法の仮定, <1>1,
+     CODE src/rc_ir/ownership.rs: rc_units_go, unit_step
+
+<1>3. (b) が成り立つ。
+  `|p|` についての帰納で示す。`p = []` のとき `subtree_type` のループは 1 度も回らず `Some(τ)` を返すので
+  `σ = τ` であり、`p ++ w = w ∈ units(τ)` である。`p = [i] ++ p'` のとき、`subtree_type` は最初の添字で
+  `unit_step(τ)` の `UnitStep::Fields { held_fields, .. }` の腕を通り (残る 3 つの腕は `None` を返す)、
+  `cur` を `held_field_type(held_fields, i, "subtree_type")` に進める。その値を `τ_i` とすると、残りの
+  ループは `subtree_type(τ_i, p', type_env)` のものと同じであり、それが `Some(σ)` を返す。
+  `held_field_type` は `held_fields` の中で第 1 成分が `i` である元の第 2 成分を返し、そのような元が
+  無ければ panic するので、`(i, τ_i)` は `held_fields` の元である。帰納法の仮定より
+  `p' ++ w ∈ units(τ_i)` であり、L1b より `rc_units_go(τ, type_env, [], out)` の `Fields` の腕は
+  `(i, τ_i)` について `rc_units_go(τ_i, type_env, [i], out)` を呼んで `units(τ_i)` の各元 `w''` の
+  `[i] ++ w''` を積むので、`[i] ++ p' ++ w = p ++ w ∈ units(τ)` である。
+  BY <ref id=dcb9940/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: subtree_type, unit_step,
+     held_field_type, rc_units_go
+
+<1>4. QED
+  BY <1>2, <1>3
+
 ### L1a (unit の下の leaf は、その unit へ切り詰まる leaf である) <!--#5b6162f-->
 
 **言明**。A10 を満たす型 `τ`、`u ∈ units(τ)`、`λ ∈ leaves(τ)` について、`u ⊑ λ` であることと
@@ -321,14 +402,8 @@ SCAN src/ `origins:`
   BY CODE src/rc_ir/ownership.rs: truncate_to_unit
 
 <1>2. `units(τ)` の相異なる 2 元は、一方が他方の接頭辞にならない。
-  `rc_units_go` は現在の型の `unit_step` で場合を分ける。`UnitStep::NoUnit` の腕は何も積まず降りず、
-  `UnitStep::Unit` の腕は今の path を 1 つ積んで降りず、`UnitStep::Capture` の腕は今の path に
-  `capture_idx` を足したものを 1 つ積んで降りず、`UnitStep::Fields` の腕は何も積まずに各
-  `held_fields` の添字を足して再帰する。よって積まれる path `π` について、`π` の真の接頭辞の位置では
-  `unit_step` が `UnitStep::Fields` を返しており、その位置では何も積まれない。`unit_step` はその位置の型
-  だけで決まるので (`unit_step` は型を引数に取る関数である)、1 つの位置が `Fields` と `Unit`/`Capture` の
-  両方を返すことはない。したがって積まれた 2 つの path の一方が他方の真の接頭辞になることはない。
-  BY CODE src/rc_ir/ownership.rs: rc_units, rc_units_go, unit_step
+  L1c (a) である。
+  BY <ref id=2e1dccd/>
 
 <1>3. QED
   P1 は **A10 を満たす**型についての言明なので `τ` に当たり、P1 より `trunc(τ, λ) ∈ units(τ)` である。
