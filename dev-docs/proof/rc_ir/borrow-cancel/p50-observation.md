@@ -1269,9 +1269,10 @@ shared = false` になる。対象コミットの二値ではこのプログラ�
 ## L0a (生成コードが作った参照を書き込む先) <!--#def436e-->
 
 **言明**。生成コードが `Generator::retain` か `Generator::build_retain` の呼び出しで作った参照を、その
-呼び出しを出す項目自身がオブジェクトの記憶域へ書き込むのは、`ObjectFieldType` の 4 つ --
-`clone_array_range`、`clone_struct`、`clone_union`、`append_value_into_array_buf` -- だけである。
-`Let(x, Llvm(gen, args), k)` の節点の実行がその 4 つのいずれかを走らせるとき、**書き込む先のオブジェクトは、
+呼び出しを出す項目自身がオブジェクトの記憶域へ書き込むのは、`ObjectFieldType::clone_array_range`、
+`ObjectFieldType::clone_struct`、`ObjectFieldType::clone_union`、
+`ObjectFieldType::append_value_into_array_buf` だけである。
+`Let(x, Llvm(gen, args), k)` の節点の実行がそのいずれかを走らせるとき、**書き込む先のオブジェクトは、
 その節点の実行が割り当てたオブジェクトか、`args` のいずれかの inhabited (D16) な boxed leaf が指す
 オブジェクトである。**
 
@@ -1280,21 +1281,24 @@ D24 は、段の記述が `Obl` について網羅であることの脇で、生
 オブジェクトの持ち手の単位である**」と書き、「**書き込む先が新しいか既存かをこの節は問わない。**」と
 続ける。この命題はその書き込む先を数え上げる。
 
-<1>1. 前提 参照を作る生成コードの在りか の 2 つの走査が挙げる項目のうち、`ExprNode::calc_free_vars`、
-      `Scheme::generalize`、`to_markdown_link`、`TrustStore::record`、`rename_free_names`、
-      `CancelAnalysis::consume_objects`、`eliminate_unreachable`、`free_locals` の 8 つは Rust の
-      `Set`・`Vec`・`Map`・`String` の `retain` を呼ぶ項目であり、LLVM の命令を組まないので生成コード
-      ではない。`Generator::retain` と `Generator::build_retain` は定義であって互いに委譲する。
+<1>1. 前提 参照を作る生成コードの在りか の `.retain(` と `.build_retain(` の走査が挙げる項目のうち、
+      `ExprNode::calc_free_vars`、`Scheme::generalize`、`to_markdown_link`、`TrustStore::record`、
+      `rename_free_names`、`CancelAnalysis::consume_objects`、`eliminate_unreachable`、`free_locals` は
+      Rust の `Set`・`Vec`・`Map`・`String` の `retain` を呼ぶ項目であり、LLVM の命令を組まないので
+      生成コードではない。`Generator::retain` と `Generator::build_retain` は定義であって互いに委譲する --
+      前者は `emit_rc_helper_call` に閉包を渡し、`emit_rc_helper_call` はその閉包が本体を組んだ補助関数を
+      `build_call` で呼ぶ。
       `ObjectFieldType::retain_release_mark_union` は `retain_union` の本体であり、同じ前提より
       `retain_union` を呼ぶのは `Generator::build_retain` と `ObjectFieldType::clone_union` である。
       `ObjectFieldType::initialize_array_buf_by_value` は記憶域のスロットへ書くが、同じ前提より
       それを呼ぶ式は在らないので、どの節点の実行にも現れない。
   BY 前提 参照を作る生成コードの在りか, CODE src/generator.rs: Generator::retain, Generator::build_retain,
+     Generator::emit_rc_helper_call,
      CODE src/object.rs: ObjectFieldType::retain_union, ObjectFieldType::retain_release_mark_union,
      ObjectFieldType::initialize_array_buf_by_value
 
-<1>2. `<1>1` が除いた項目を除く残りのうち、作った参照をオブジェクトの記憶域へ書き込むのは言明の 4 つ
-      だけである。残る各項目の本体は次のとおりである。
+<1>2. `<1>1` が除いた項目を除く残りのうち、作った参照をオブジェクトの記憶域へ書き込むのは言明が挙げる
+      ものだけである。残る各項目の本体は次のとおりである。
       `InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::generate` は、環境へ番地を渡す内部関数の
       本体として `gc.retain(obj, RcState::Unknown)` を置き、そのまま `build_return` する。
       `InlineLLVMWithRetainedFunctionBody::generate` は `gc.retain(x, ..)` の後に `apply_lambda` を呼び、
@@ -1330,25 +1334,28 @@ D24 は、段の記述が `Obl` について網羅であることの脇で、生
       `clone_array_range` を呼ぶ式が在るのは `clone_array_buf` だけ、`clone_array_buf` を呼ぶ式が在るのは
       `make_array_unique_with_hole`・`InlineLLVMArraySetCapacityBoundsUnchecked::generate`・
       `InlineLLVMArrayAppendCapacityUnchecked::generate`・
-      `InlineLLVMArrayCopyCapacityBoundsUnchecked::generate` の 4 つ、
+      `InlineLLVMArrayCopyCapacityBoundsUnchecked::generate`、
       `append_value_into_array_buf` を呼ぶ式が在るのは
-      `InlineLLVMArrayAppendValueCapacityUnchecked::generate` だけである。行き先は順に、
-      `alloc_array_storage` が割り当てた `new_storage` のバッファ (前の 2 つ)、
-      `array_tail_destination` が返す `dst_write` (次の 2 つ)、
-      `force_unique_or_assert(gc, array, ..)` が返す配列の記憶域のバッファ (最後の 1 つ) である。
+      `InlineLLVMArrayAppendValueCapacityUnchecked::generate` だけである。行き先は、
+      前の 2 つでは `alloc_array_storage` が割り当てた `new_storage` のバッファ、
+      次の 2 つでは `array_tail_destination` が返す `dst_write`、
+      最後の 1 つでは `force_unique_or_assert(gc, array, ..)` が返す配列の記憶域のバッファである。
   BY 前提 参照を作る生成コードの在りか,
      CODE src/object.rs: ObjectFieldType::clone_array_range, ObjectFieldType::clone_array_buf,
      ObjectFieldType::append_value_into_array_buf, alloc_array_storage, get_array_storage_buf,
+     get_array_storage, build_gep_array_elem,
      CODE src/fixstd/builtin.rs: make_array_unique_with_hole, array_tail_destination,
      InlineLLVMArraySetCapacityBoundsUnchecked::generate,
      InlineLLVMArrayAppendCapacityUnchecked::generate,
      InlineLLVMArrayCopyCapacityBoundsUnchecked::generate,
      InlineLLVMArrayAppendValueCapacityUnchecked::generate
 
-<1>5. `<1>4` の 3 つの行き先は、その節点の実行が割り当てたオブジェクトか、オペランドの boxed leaf が指す
-      オブジェクトである。`alloc_array_storage` はその腕でオブジェクトを割り当てる。
+<1>5. `<1>4` の行き先は、その節点の実行が割り当てたオブジェクトか、オペランドの boxed leaf が指す
+      オブジェクトである。`alloc_array_storage` は `create_obj` を呼んでオブジェクトを割り当てる。
       `array_tail_destination` は `force_unique_or_assert(gc, dst, force_unique, state)` の結果から
-      `get_array_storage_buf` でバッファを取り、`force_unique_or_assert` は
+      `get_array_storage_buf` でバッファを取り (それは `get_array_storage` が返す記憶域の
+      `STORAGE_BUF_IDX` の欄であり、`build_gep_array_elem` はその中の位置を指す)、
+      `force_unique_or_assert` は
       `force_unique_or_assert_with_hole` へ委譲して、配列については `force_unique` が真なら
       `make_array_unique_with_hole` を、偽なら `val` をそのまま返す。`make_array_unique_with_hole` は
       一意の腕で渡された配列の値をそのまま返し、共有の腕では `alloc_array_storage` が割り当てた
@@ -1361,7 +1368,8 @@ D24 は、段の記述が `Obl` について網羅であることの脇で、生
       L0 の `<1>3a` より、配列の値の boxed leaf `[]` が指すオブジェクトはその記憶域である。
       その leaf は unbox union の節を 1 つも通らないので inhabited である (D16、D4 の規則 4)。
   BY <ref id=83d98e9/>, <ref id=0594f24/>, <ref id=66c9670/>, <ref id=6bf2817/>, <1>4,
-     CODE src/object.rs: alloc_array_storage, get_array_storage_buf,
+     CODE src/object.rs: alloc_array_storage, create_obj, get_array_storage_buf, get_array_storage,
+     build_gep_array_elem,
      CODE src/fixstd/builtin.rs: array_tail_destination, force_unique_or_assert,
      force_unique_or_assert_with_hole, make_array_unique_with_hole,
      InlineLLVMArrayAppendCapacityUnchecked::generate,
@@ -1369,8 +1377,9 @@ D24 は、段の記述が `Obl` について網羅であることの脇で、生
      InlineLLVMArrayAppendValueCapacityUnchecked::generate
 
 <1>6. QED
-  `<1>1` と `<1>2` が、作った参照を記憶域へ書き込む項目を言明の 4 つに絞る。`<1>3` がそのうち 2 つの
-  行き先を、`<1>4` と `<1>5` が残る 2 つの行き先を、その節点の実行が割り当てたオブジェクトか、
+  `<1>1` と `<1>2` が、作った参照を記憶域へ書き込む項目を言明の挙げるものに絞る。`<1>3` が
+  `clone_struct` と `clone_union` の行き先を、`<1>4` と `<1>5` が `clone_array_range` と
+  `append_value_into_array_buf` の行き先を、その節点の実行が割り当てたオブジェクトか、
   オペランドの inhabited な boxed leaf が指すオブジェクトかに分ける。
   BY <1>1, <1>2, <1>3, <1>4, <1>5
 
