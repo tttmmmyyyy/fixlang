@@ -2829,12 +2829,21 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
     BY <2>1, <2>2, <ref id=596a46d/>, <ref id=57d5753/>
   <2>4. QED
     D2 より `Let(x, Match(..), k)` は `Match` の値を `x` に束縛し、アーム本体の `Ret(v)` の値は `v` で
-    ある。コード生成もそうなっている -- `eval_rc_expr_inner` の `RcExpr::Ret(x)` の腕は
-    `get_scoped_obj(&x.name)` を返し、`eval_rc_match` は各アームについて `eval_rc_expr(&arm.body, ..)`
-    の値を `incomings` に積んで phi で合流させ、`bind_and_continue` がその値を `x` の名前で
-    `scope_push` する。選ばれたアームを通る実行では phi の値はそのアームの `incomings` の値である。
-    BY <2>1, <2>2, <2>3, <ref id=b3dfa37/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match,
-       Generator::eval_rc_expr_inner, Generator::bind_and_continue
+    ある。コード生成もそうなっている。`eval_rc_expr_inner` の `Let(x, Match(scrut, arms), k)` の腕は
+    `match_tail = binding_fuses_into_return(x, k, tail)` を作って `eval_rc_match` に渡し、
+    `eval_rc_match` は各アームの本体をその `match_tail` で評価する。`RcExpr::Ret(a*)` の腕は
+    `get_scoped_obj(&a*.name)` を `build_tail` に渡し、`build_tail` は `tail` が偽のとき `Some(obj)` を
+    返し、真のとき `build_return_object` で返して `None` を返す。
+    `match_tail` が偽のときは、各アームの `Ret(a*)` が `a*` の値を返し、`eval_rc_match` がそれを
+    `incomings` に積んで phi で合流させ、`bind_and_continue` がその値を `x` の名前で `scope_push` する。
+    選ばれたアームを通る実行では phi の値はそのアームの `incomings` の値である。
+    `match_tail` が真のときは、各アームの `Ret(a*)` が `a*` の値を直に返し、`binding_fuses_into_return`
+    が真を返す条件より継続 `k` は `x` を move-bind の鎖で `Ret` へ運ぶだけである。どちらの場合も、
+    `x` の値はこの活性化が選んだアームの `a*` の値である。
+    BY <2>1, <2>2, <2>3, <ref id=b3dfa37/>, CODE src/rc_ir/codegen.rs: carries_var_to_return,
+       Generator::eval_rc_match, Generator::eval_rc_expr_inner, Generator::bind_and_continue,
+       Generator::binding_fuses_into_return,
+       CODE src/generator.rs: Generator::build_tail, Generator::build_return_object
 
 <1>6. (m4) が成り立つ。
   D2 より `Destructure(c, fs, s, k)` は容器 `c` をフィールドに分解し、各 `(i, x)` の `x` に第 `i`
