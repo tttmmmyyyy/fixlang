@@ -2387,21 +2387,22 @@ SCAN src/ `truncate_to_unit(`
    返す。
   BY <1>3c
 
+<1>27d. `origin_inner` の `Llvm` の腕が `result_prov` に渡す `result_ty` と `arg_tys` は、
+   その腕が読む `Binding::Llvm` を置いた節点 `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の `ty(x)` と
+   `args` の各要素の型である。`<1>21` と `<1>22` が `vars.bindings` への挿入をすべて挙げており、
+   そのうち `Binding::Llvm` を置くのは `collect_bindings` の
+   `RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕だけであって、そこが `result_ty` に置くのは
+   `x.ty` である。腕の中で `arg_tys` を作るのは `args.iter().map(|a| a.ty.clone())` の 1 行である。
+  BY <1>21, <1>22, CODE src/rc_ir/ownership.rs: collect_bindings,
+     CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding
+
 <1>28. `origin_inner` の `Llvm` の腕が呼ぶ `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` は
-   abort せずに `Provenance` を返す。ここで `result_ty` と `arg_tys` は、その `Llvm` 節点の `ty(x)`
-   と `args` の各要素の型であり、どれも RC IR に現れる型なので `<1>1` を満たす。以下の各腕で
+   abort せずに `Provenance` を返す。`<1>27d` より `result_ty` と `arg_tys` は、その `Llvm` 節点の
+   `ty(x)` と `args` の各要素の型であり、どれも RC IR に現れる型なので `<1>1` を満たす。以下の各腕で
    `<1>27b` と `<1>27c` を適用するのはこの型についてである。
   <2>1. `impl LLVMGen for` は 78 個あり、`result_prov` を override するのは 29 個である。残る 49 個は
      既定の実装を取る。
     BY <ref id=e11772a/>, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
-  <2>1a. `origin_inner` の `Llvm` の腕が `result_prov` に渡す `result_ty` と `arg_tys` は、
-     `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の `ty(x)` と `args` の各要素の型である。
-     `<1>21` と `<1>22` が `vars.bindings` への挿入をすべて挙げており、そのうち `Binding::Llvm` を
-     置くのは `collect_bindings` の `RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕だけで
-     あって、そこが `result_ty` に置くのは `x.ty` である。腕の中で `arg_tys` を作るのは
-     `args.iter().map(|a| a.ty.clone())` の 1 行である。
-    BY <1>21, <1>22, CODE src/rc_ir/ownership.rs: collect_bindings,
-       CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding
   <2>2. 既定の実装は `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` の 1 文であり、
      `<1>27b` より abort しない。
     BY <1>1, <1>27b, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
@@ -2602,7 +2603,7 @@ SCAN src/ `truncate_to_unit(`
     ついてだけ述べて足りるのは、この数え上げによる** -- `<2>2` から `<2>2g` はどれも本体を 1 つずつ
     読んでおり、そこで `Provenance` を作るのに使われるのは `build_shape`、`uniform`、
     `uniform_bottom`、`fresh_under` の 4 つだけである。
-    BY <1>27b, <2>1, <2>1a, <2>2, <2>2a, <2>2b, <2>2c, <2>2d, <2>2e, <2>2f, <2>2g
+    BY <1>27b, <1>27d, <2>1, <2>2, <2>2a, <2>2b, <2>2c, <2>2d, <2>2e, <2>2f, <2>2g
 
 <1>28a. `origin_inner` の `Llvm` の腕が得る `decl` は、各 leaf に要素数 0 か 1 の `LeafOrigins` を
    置く。したがって `decl.leaf_origins_at(path)` が返す集合と `decl.leaf_origins_under(path)` が
@@ -2622,9 +2623,12 @@ SCAN src/ `truncate_to_unit(`
   <2>3. QED
     `<2>1` と `<2>2` より、どの op の `decl` も leaf ごとに要素数 0 か 1 の集合を置く。要素数が 1 で
     その元が `Arg(j, leaf)` である leaf は、A3 の表の「単一の `Arg(j, σ)`」の行が扱うものである。
+    `<1>3a` (viii) が言明するのは節点 `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の `result_prov` に
+    ついてであり、`<1>27d` より `origin_inner` の `Llvm` の腕が得る `decl` はまさにその節点の
+    `llvm_gen` を、その節点の `ty(x)` と `args` の型の列に当てた結果である。よって
     その `j` が `args` の添字であり (すなわち `args.len()` 未満であり)、`leaf` が
-    `L(ty(args[j]))` の要素であることは `<1>3a` (viii) が述べる。
-    BY <ref id=e11772a/>, <1>3a, <2>1, <2>2
+    `L(ty(args[j]))` の要素であることを `<1>3a` (viii) が与える。
+    BY <ref id=e11772a/>, <1>3a, <1>27d, <2>1, <2>2
 
 <1>29. `<1>21` と同じ本体と表 `vars` を取る。`origin(vars, E, x, pi)` の**呼び出しの木** -- 根を
    その呼び出しとし、各節点の子をその実行が行う `origin` の呼び出しとする木 -- は有限である。
