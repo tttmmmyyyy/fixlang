@@ -1994,9 +1994,11 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
     である」がその節の 1 つである。同じ節が `is_array` と `is_funptr` も偽にする。`is_array()` が真に
     なるのは最上位の tycon が `Std::Array` であるときに限り、`is_funptr()` が真になるのは最上位の
     tycon がいずれかの `Std::#FunPtr{n}` であるときに限る。型の `TyConInfo` はその最上位の tycon で
-    `type_env` を引いた 1 つであり、この節より `ty(c)` のそれの `variant` は `Struct`、`Std::Array` の
-    それは `Array`、`Std::#FunPtr{n}` のそれは `Primitive` なので、`ty(c)` の最上位の tycon は
-    `Std::Array` でもいずれかの `Std::#FunPtr{n}` でもない。
+    `type_env.tycons()` を引いた 1 つであり、`Std::Array` と `Std::#FunPtr{n}` はどちらも
+    `bulitin_tycons()` が置く鍵なので、A28 よりその鍵の下の項目は `bulitin_tycons()` が置いた項目で
+    ある -- 前者の `variant` は `Array`、後者のそれは `Primitive` である。ところが A12 のこの節より
+    `ty(c)` の `variant` は `Struct` なので、`ty(c)` の最上位の tycon は `Std::Array` でも
+    いずれかの `Std::#FunPtr{n}` でもない。
     残る `is_fully_unboxed` は、この 4 つが偽なので unpunched な各フィールドの型が
     すべて fully unboxed であることに帰着するが、フィールド `i` の型 `ty(x)` は boxed leaf `λ` を
     持つので fully unboxed ではない -- fully unboxed な型に `boxed_leaf_paths` は leaf を返さない。
@@ -2011,8 +2013,13 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
        CODE src/ast/types.rs: TypeNode::is_fully_unboxed (`is_box`・`is_closure`・`is_array` に偽を
        返した後、`is_funptr` なら真、そうでなければ unpunched な各フィールドの型についての `all`),
        CODE src/ast/types.rs: TypeNode::is_struct (`toplevel_tycon_info` の `variant` が `Struct` か),
-       CODE src/fixstd/builtin.rs: bulitin_tycons (`Std::Array` の `variant` は
-       `TyConVariant::Array`、`Std::#FunPtr{n}` のそれは `TyConVariant::Primitive` である),
+       <ref id=3d4be43/> (`E.tycons()` の項目のうち鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは、
+       `bulitin_tycons()` がその鍵の下に置いた項目である。とくに `make_array_tycon()` の項目と、
+       `tc.name.namespace` が `Std` の 1 段であって `tc.name.name` が `FUNPTR_NAME` で始まる鍵の
+       項目がそうである),
+       CODE src/fixstd/builtin.rs: bulitin_tycons (`make_array_tycon()` の項目の `variant` は
+       `TyConVariant::Array`、`make_funptr_tycon(arity)` の項目のそれは `TyConVariant::Primitive`
+       である),
        CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr,
        TypeNode::toplevel_tycon_satisfies (`is_array` は最上位の tycon が `is_array_tycon` を満たすか
        どうか、`is_funptr` は `is_funptr_tycon` がその tycon に `Some` を返すかどうかであり、
@@ -2072,9 +2079,11 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
     union である」がその節の 1 つである。同じ節が `is_array` と `is_funptr` も偽にする。`is_array()` が
     真になるのは最上位の tycon が `Std::Array` であるときに限り、`is_funptr()` が真になるのは最上位の
     tycon がいずれかの `Std::#FunPtr{n}` であるときに限る。型の `TyConInfo` はその最上位の tycon で
-    `type_env` を引いた 1 つであり、この節より `ty(s)` のそれの `variant` は `Union`、`Std::Array` の
-    それは `Array`、`Std::#FunPtr{n}` のそれは `Primitive` なので、`ty(s)` の最上位の tycon は
-    `Std::Array` でもいずれかの `Std::#FunPtr{n}` でもない。
+    `type_env.tycons()` を引いた 1 つであり、`Std::Array` と `Std::#FunPtr{n}` はどちらも
+    `bulitin_tycons()` が置く鍵なので、A28 よりその鍵の下の項目は `bulitin_tycons()` が置いた項目で
+    ある -- 前者の `variant` は `Array`、後者のそれは `Primitive` である。ところが A12 のこの節より
+    `ty(s)` の `variant` は `Union` なので、`ty(s)` の最上位の tycon は `Std::Array` でも
+    いずれかの `Std::#FunPtr{n}` でもない。
     残る `is_fully_unboxed` は、この 4 つが偽なので unpunched な
     各変位の payload の型がすべて fully unboxed であることに帰着するが、変位 `t` の payload の型
     `ty(x)` は boxed leaf `λ` を持つので fully unboxed ではない。
@@ -2087,8 +2096,13 @@ L14 (a) が与える。**`π` に「`origin(x, π)` が呼ばれる」を課す�
        `unpunched_field_types` のループへ降りる,
        CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
        CODE src/ast/types.rs: TypeNode::is_union (`toplevel_tycon_info` の `variant` が `Union` か),
-       CODE src/fixstd/builtin.rs: bulitin_tycons (`Std::Array` の `variant` は
-       `TyConVariant::Array`、`Std::#FunPtr{n}` のそれは `TyConVariant::Primitive` である),
+       <ref id=3d4be43/> (`E.tycons()` の項目のうち鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは、
+       `bulitin_tycons()` がその鍵の下に置いた項目である。とくに `make_array_tycon()` の項目と、
+       `tc.name.namespace` が `Std` の 1 段であって `tc.name.name` が `FUNPTR_NAME` で始まる鍵の
+       項目がそうである),
+       CODE src/fixstd/builtin.rs: bulitin_tycons (`make_array_tycon()` の項目の `variant` は
+       `TyConVariant::Array`、`make_funptr_tycon(arity)` の項目のそれは `TyConVariant::Primitive`
+       である),
        CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr,
        TypeNode::toplevel_tycon_satisfies (`is_array` は最上位の tycon が `is_array_tycon` を満たすか
        どうか、`is_funptr` は `is_funptr_tycon` がその tycon に `Some` を返すかどうかであり、
