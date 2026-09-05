@@ -3357,6 +3357,31 @@ pub fn test_u8_literal_of_a_non_ascii_character_is_rejected() {
     assert_grammar_rejects(&source);
 }
 
+/// Verifies that the grammar rejects a single quote and a newline written bare between the
+/// quotes of a `U8` literal, which leaves `'\''` and `'\n'` as the way to write those two bytes.
+#[test]
+pub fn test_u8_literal_of_a_bare_quote_or_newline_is_rejected() {
+    let bare_quote = r#"
+            module Main;
+            main : IO ();
+            main = (
+                let c = ''';
+                pure()
+            );
+        "#;
+    assert_grammar_rejects(&bare_quote);
+    let bare_newline = "
+            module Main;
+            main : IO ();
+            main = (
+                let c = '
+';
+                pure()
+            );
+        ";
+    assert_grammar_rejects(&bare_newline);
+}
+
 #[test]
 pub fn test97() {
     // Test arithmetic operation of U8, I32

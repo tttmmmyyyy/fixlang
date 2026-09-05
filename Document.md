@@ -936,6 +936,7 @@ For example, `4e2` represents 400.
 
 Characters enclosed in single quotes are interpreted as `U8` type number literals.
 For example, `'A'` represents 65.
+The character between the quotes is an ASCII character other than a single quote, a backslash, or a newline; those three are written `'\''`, `'\\'` and `'\n'`.
 
 Additionally, `\n`, `\r`, `\t`, `\0`, `\\`, `\'`, `\"` are interpreted as `U8` type number literals representing the character codes of newline, carriage return, tab, null character, backslash, single quote, and double quote, respectively.
 `\xHH`, where `HH` is two hexadecimal digits, is interpreted as the `U8` type number literal `0xHH`. For example, `'\x7f'` represents 127.
