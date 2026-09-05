@@ -247,6 +247,77 @@ SCAN src/ `array_tail_destination(`
   = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::generate
   = src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::generate
 
+**前提 参照を作る生成コードの在りか** --- `Generator::retain` と `Generator::build_retain` を呼ぶ式が
+在る項目、および `ObjectFieldType` の複写の補助関数 -- `clone_array_buf`、`clone_array_range`、
+`clone_struct`、`clone_union`、`append_value_into_array_buf`、`initialize_array_buf_by_value` -- と
+`ObjectFieldType::retain_union` の名前が在る項目は次で尽きる。D24 は参照を作る生成コードについて
+「**在りかは述語で決める**」と書き、「**述語は名前の綴りでなく、呼ばれる項目で書く。**」と続ける。
+走査は字面の上位近似なので、一覧には Rust の `Set`・`Vec`・`Map`・`String` の `retain` を呼ぶ項目も、
+doc の散文だけを持つ項目も、定義そのものも入る。挙がった各項目が何であるかは `--` の後に書く。
+
+SCAN src/ `.retain(`
+  = src/ast/expr.rs: ExprNode::calc_free_vars -- Rust の `Set::retain`
+  = src/ast/types.rs: Scheme::generalize -- Rust の `Vec::retain`
+  = src/commands/docs.rs: to_markdown_link -- Rust の `String::retain`
+  = src/fixstd/builtin.rs: InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::generate -- 環境へ番地を渡す内部関数の本体。retain してから返る
+  = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate -- オペランドを retain し、適用の後に release する
+  = src/generator.rs: Generator::build_retain -- 定義。unbox の集約の成分へ降りる
+  = src/metafiles/trust_store.rs: TrustStore::record -- Rust の `Vec::retain`
+  = src/object.rs: ObjectFieldType::clone_array_range -- 写した各要素を retain し、行き先の記憶域のスロットへ書く
+  = src/object.rs: ObjectFieldType::clone_struct -- 写した各フィールドを retain し、`dst` の欄へ書く
+  = src/object.rs: ObjectFieldType::get_struct_fields -- boxed 容器から取り出した各フィールドを retain して返す
+  = src/object.rs: ObjectFieldType::get_union_value -- boxed union から取り出した payload を retain して返す
+  = src/object.rs: ObjectFieldType::initialize_array_buf_by_value -- 定義
+  = src/object.rs: ObjectFieldType::read_from_array_buf -- 読み出した要素を retain して返す
+  = src/object.rs: ObjectFieldType::retain_release_mark_union -- `retain_union` の本体。unbox union の活性変位の payload へ降りる
+  = src/optimization/rename.rs: rename_free_names -- Rust の `Map::retain`
+  = src/rc_ir/borrow.rs: CancelAnalysis::consume_objects -- Rust の `Vec::retain`
+  = src/rc_ir/dead_code_elim.rs: eliminate_unreachable -- Rust の `Map::retain` と `Vec::retain`
+  = src/rc_ir/rc_insert.rs: free_locals -- Rust の `Set::retain`
+
+SCAN src/ `.build_retain(`
+  = src/generator.rs: Generator::build_capture_project -- capture の欄から読み出した値を retain して返す
+  = src/generator.rs: Generator::build_retain -- 定義。自分自身へ降りる
+  = src/generator.rs: Generator::build_run_destructor -- `_dtor` の欄の関数に適用の分を与える
+  = src/generator.rs: Generator::get_scoped_obj -- `retain_on_read` が真の読み。retain した値を返す
+  = src/generator.rs: Generator::retain -- `build_retain` への委譲
+  = src/object.rs: ObjectFieldType::append_value_into_array_buf -- 書き込む値を count 回 retain し、記憶域のスロットへ書く
+  = src/object.rs: ObjectFieldType::retain_release_mark_union -- 上と同じ項目
+  = src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner -- `RcExpr::Retain` 節点の実装
+  = src/rc_ir/codegen.rs: Generator::eval_rc_match -- boxed union の変位アームの payload 束縛
+
+SCAN src/ `retain_union`
+  = src/generator.rs: Generator::build_retain -- unbox の集約の union の成分について
+  = src/object.rs: ObjectFieldType::clone_union -- 複写した payload について
+  = src/object.rs: ObjectFieldType::retain_union -- 定義。`retain_release_mark_union` へ委譲する
+
+SCAN src/ `clone_array_buf`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::generate -- `src` の共有の腕。行き先は `array_tail_destination` が返す `dst_write`
+  = src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::generate -- 行き先は `array_tail_destination` が返す `dst_write`
+  = src/fixstd/builtin.rs: InlineLLVMArraySetCapacityBoundsUnchecked::generate -- 共有の腕。行き先は `alloc_array_storage` が割り当てた `new_storage`
+  = src/fixstd/builtin.rs: make_array_unique_with_hole -- 共有の腕。行き先は `alloc_array_storage` が割り当てた `new_storage`
+  = src/object.rs: ObjectFieldType::clone_array_buf -- 定義。`clone_array_range` へ委譲する
+
+SCAN src/ `clone_array_range`
+  = src/object.rs: ObjectFieldType::clone_array_buf -- 委譲
+  = src/object.rs: ObjectFieldType::clone_array_range -- 定義
+
+SCAN src/ `clone_struct`
+  = src/fixstd/builtin.rs: make_struct_union_unique -- 共有の腕。行き先は `create_obj` が割り当てた `cloned_obj`
+  = src/object.rs: ObjectFieldType::clone_struct -- 定義
+
+SCAN src/ `clone_union`
+  = src/fixstd/builtin.rs: make_struct_union_unique -- 共有の腕。行き先は `create_obj` が割り当てた `cloned_obj`
+  = src/object.rs: ObjectFieldType::clone_union -- 定義。`retain_union` を `dst` に対して呼ぶ
+
+SCAN src/ `append_value_into_array_buf`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendValueCapacityUnchecked::generate -- 行き先は `force_unique_or_assert` が返す配列の記憶域
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendValueCapacityUnchecked::internal_rc_targets -- doc の散文
+  = src/object.rs: ObjectFieldType::append_value_into_array_buf -- 定義
+
+SCAN src/ `initialize_array_buf_by_value`
+  = src/object.rs: ObjectFieldType::initialize_array_buf_by_value -- 定義。呼ぶ式は在らない
+
 **前提 LLVM の関数を呼ぶ命令を組む在りか** --- `inkwell` の `build_call` と `build_indirect_call` を
 呼ぶ式が在る項目と、`Generator::apply_lambda`、`run_ios_runner`、`apply_io_act_to_data_ptr`、
 `run_io_or_ios_runner`、`run_io` を呼ぶ式が在る項目は次で尽きる。
