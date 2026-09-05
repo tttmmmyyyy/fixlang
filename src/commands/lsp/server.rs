@@ -850,9 +850,8 @@ fn send_to_diagnostics_thread(send: &Sender<DiagnosticsMessage>, msg: Diagnostic
     }
 }
 
-/// The message the client is shown once the diagnostics thread itself is gone, which leaves the
-/// project unanalyzed until the server is started again.
-const DIAGNOSTICS_STOPPED_MESSAGE: &str = "Diagnostics stopped. This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this at https://github.com/tttmmmyyyy/fixlang";
+/// The end of a message about a failure of the compiler itself: what the reader can do with it.
+const BUG_REPORT_REQUEST: &str = "This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this at https://github.com/tttmmmyyyy/fixlang";
 
 /// Handle the LSP `initialized` notification: spawn the diagnostics
 /// thread and prime it with an initial diagnostics run.
@@ -873,7 +872,7 @@ fn handle_initialized(
         });
         if let Err(payload) = res {
             send_diagnostics_notification(
-                Errors::from_msg(DIAGNOSTICS_STOPPED_MESSAGE.to_string()),
+                Errors::from_msg(format!("Diagnostics stopped. {}", BUG_REPORT_REQUEST)),
                 Set::default(),
             );
             write_log!(
@@ -1073,9 +1072,6 @@ fn diagnostics_thread(
     }
 }
 
-/// The message the client is shown for a pass that ended in a panic.
-const ANALYSIS_FAILED_MESSAGE: &str = "Analysis of this program failed, so the diagnostics shown are those of the program analyzed before it. The next edit runs the analysis again. This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this at https://github.com/tttmmmyyyy/fixlang";
-
 /// Report the progress of one diagnostics pass to the client, run it, and keep a panic inside it
 /// from reaching the thread.
 ///
@@ -1116,7 +1112,11 @@ fn run_diagnostics_pass(
                 // Naming the files the report reaches to the pass that publishes next is what
                 // clears it.
                 let reported = send_diagnostics_notification(
-                    Errors::from_msg(ANALYSIS_FAILED_MESSAGE.to_string()),
+                    Errors::from_msg(format!(
+                        "Analysis of this program failed, so the diagnostics shown are those of \
+                         the program analyzed before it. The next edit runs the analysis again. {}",
+                        BUG_REPORT_REQUEST
+                    )),
                     Set::default(),
                 );
                 prev_err_paths.extend(reported);
