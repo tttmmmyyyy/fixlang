@@ -124,9 +124,12 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 いる間 panic する。それ以外の場合はどちらも panic しない。`<1>30` の `<2>1` の `<3>4` がこれを引く。
 
 **EXT derive した PartialEq と Eq** -- `#[derive(PartialEq)]` が enum に作る `eq` は、2 つの値の
-変位が等しく、かつ対応する各成分が `==` で等しいときにだけ真を返す。`Eq` を実装する型の `==` は
-同値関係であり、反射的・対称的・推移的である (`Eq` の doc がその契約を述べる)。`<1>29a` の `<2>1a` の
-`<3>3` がこれを引き、その `<3>6` が推移律を使う。
+変位が等しく、かつ対応する各成分が `==` で等しいときにだけ真を返す。struct に作る `eq` は、対応する
+各欄が `==` で等しいときにだけ真を返す。どちらも欄または成分の `==` のほかに何も行わない。
+`Eq` を実装する型の `==` は
+同値関係であり、反射的・対称的・推移的である (`Eq` の doc がその契約を述べる)。`<1>3c` の `<2>1` の
+`<3>2`、および `<1>29a` の `<2>1a` の
+`<3>3` がこれを引き、後者の `<3>6` が推移律を使う。
 
 **EXT 1 要素の集合の反復** -- 要素をちょうど 1 つ持つ `HashSet<T, S>` について、
 `into_iter().next()` と `iter().next()` はどちらも `Some` を返し、その中身はその 1 つの要素で
@@ -947,18 +950,42 @@ SCAN src/ `truncate_to_unit(`
          CODE src/ast/types.rs: TypeNode::is_punched_array,
          CODE src/fixstd/builtin.rs: is_array_tycon,
          CODE src/fixstd/builtin.rs: is_punched_array_tycon
-    <3>2. `is_closure` の述語は `TyCon` の名前と `make_arrow_name_abs()` の等値比較、
-       `is_array_tycon` と `is_punched_array_tycon` は `TyCon` の等値比較だけを行い、abort する
-       場所を持たない。
-      BY CODE src/fixstd/builtin.rs: is_array_tycon,
+    <3>1a. `make_array_tycon()`、`make_punched_array_tycon()`、`make_arrow_name_abs()` は abort せず
+       停止し、引数を取らずに同じ値を返す。`make_array_tycon` の本体は
+       `TyCon::new(make_array_name())`、`make_array_name` の本体は
+       `FullName::from_strs(&[STD_NAME], ARRAY_NAME)` である。`make_punched_array_tycon` の本体は
+       `TyCon::new(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME))` である。
+       `make_arrow_name_abs` は `FullName::from_strs(&[STD_NAME], ARROW_NAME)` の結果に
+       `FullName::set_absolute` を当てて返す。`TyCon::new` は `TyCon { name: fullname }` の
+       構造体リテラル、`FullName::from_strs` は `FullName::new(&NameSpace::from_strs(ns), name)`、
+       `NameSpace::from_strs` は渡された各文字列を `to_string` で写した `Vec` から
+       `NameSpace::new` を作る 1 行、`FullName::new` と `NameSpace::new` は構造体リテラル、
+       `FullName::set_absolute` は `self.namespace.is_absolute = true;` の 1 つの代入である。
+       この 8 つの本体はどれも、構造体リテラル・文字列と `Vec` の構成・欄への代入だけであり、
+       `panic!`、`assert`、`unwrap`、`expect`、添字付けのどれも持たない。
+      BY CODE src/fixstd/builtin.rs: make_array_tycon, make_array_name,
+         make_punched_array_tycon, make_arrow_name_abs,
+         CODE src/ast/types.rs: TyCon, CODE src/ast/name.rs: FullName, NameSpace
+    <3>2. `is_closure` が `toplevel_tycon_satisfies` に渡す述語の本体は
+       `tc.name == make_arrow_name_abs()`、`is_array_tycon` の本体は `*tc == make_array_tycon()`、
+       `is_punched_array_tycon` の本体は `*tc == make_punched_array_tycon()` である。この 3 つが
+       行うのは、`<3>1a` の 3 つの関数の呼び出しと、1 つの等値比較だけである。等値比較の側も
+       abort しない -- `TyCon` は `FullName` 1 つを欄に持ち `PartialEq` を導出する構造体、
+       `FullName` は `NameSpace` と `String` を欄に持ち `PartialEq` を導出する構造体なので、
+       `EXT derive した PartialEq と Eq` よりその `eq` は欄の `==` だけを行い、`NameSpace` の `eq` は
+       `self.names == other.names` の 1 行である。
+      BY <3>1a, EXT derive した PartialEq と Eq,
+         CODE src/fixstd/builtin.rs: is_array_tycon,
          CODE src/fixstd/builtin.rs: is_punched_array_tycon,
-         CODE src/ast/types.rs: TypeNode::is_closure
+         CODE src/ast/types.rs: TypeNode::is_closure, CODE src/ast/types.rs: TyCon,
+         CODE src/ast/name.rs: FullName, NameSpace
     <3>5. QED
       `<1>1` (i) より `t.toplevel_tycon()` が返す型構成子は `E.tycons()` の鍵である。`<1>3ba` (a) より
       `is_funptr_tycon` が abort しうるのはその名前が `#FunPtr` で始まる `Std` の 1 段の名前のときだけで
       あり、`<1>3ba` (b) より `E.tycons()` の鍵でその形を持つのは `make_funptr_tycon(n)` に限られて、
-      そこでは `parse::<u32>()` が成功する。`<3>1` と `<3>2` と合わせて 4 つとも abort しない。
-      BY <1>1, <1>3ba, <3>1, <3>2
+      そこでは `parse::<u32>()` が成功する。`<3>1`、`<3>1a`、`<3>2` と合わせて 4 つとも
+      abort しない。
+      BY <1>1, <1>3ba, <3>1, <3>1a, <3>2
   <2>2. (c) が成り立つ。`toplevel_tycon_info` は `assert!(!self.is_closure())` を置き、
      `self.toplevel_tycon().unwrap()` と `type_env.tycons().get(&tycon).unwrap()` を行う。この場合の
      仮定より `assert!` は通り、`<1>1` (i) より 2 つの `unwrap` は成功する。`is_union` は
