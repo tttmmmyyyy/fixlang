@@ -82,6 +82,12 @@ FILE_PROVES = re.compile(r"\b(T|[AP]\d+[a-z]*)\b")
 CLAUSE = None
 
 THEOREM = re.compile(r"^#+\s+(T)\b")
+# **証明ファイルは、自分が示す枠の命題の名前で節を立てる。** その節の名乗り方は 7 通りあり
+# (`## 4. P27 の証明`、`## P5 (a) -- 対の健全性`、`### P7 の結論`、…)、形で当てにいくと落ちる。
+# **当てにいかず、そのファイルが示すと宣言した名前だけを、見出しの題の位置で照合する。**
+# 落とすと、その節の全体が直前の局所命題のものになる -- 実測で 13 ファイル 60 節がそうなっており、
+# `P14` の証明 750 行が `L37` の一部として数えられていた。
+PROVED_SECTION = re.compile(r"^#+\s+(?:[\d.]+[a-z]?\s+)?`?(T|[DAP]\d+[a-z]*)`?\b")
 CITATION = proof_syntax.CITATION
 # 変換後の参照。**格納されるのは id だけで、題は描画のときに命題から取る。**
 REF = proof_syntax.REF
@@ -160,11 +166,17 @@ def items_in(path):
         children = [(index, None) for index in span
                     if index not in parents and IDENTITY.search(lines[index])]
     heads, owner = [], None
+    proves = set()
     if not frame:
         # 局所の命題に属さない本文は、このファイルが証明する枠の命題のものである。
-        proves = FILE_PROVES.findall(lines[0]) if lines else []
-        for name in dict.fromkeys(proves):
+        proves = dict.fromkeys(FILE_PROVES.findall(lines[0]) if lines else [])
+        for name in proves:
             heads.append((0, name))
+        # その名前で立てられた節は、その命題のものである。題の行 (添字 0) は上で数えた。
+        for index in range(1, len(lines)):
+            section = PROVED_SECTION.match(IDENTITY.sub("", lines[index]).rstrip())
+            if section and section.group(1) in proves:
+                heads.append((index, section.group(1)))
     for index in span:
         # **印を外してから形を見る。** 印は道具自身が行末に書き足すものなので、
         # 付けた瞬間に「名前で終わる見出し」が名前で終わらなくなる。
@@ -474,6 +486,36 @@ def depends(directory, path):
         kinds["定義" if name[0] == "D" else "仮定" if name[0] == "A" else "命題"].append(name)
     return {kind: sorted(names, key=lambda n: (int(re.sub(r"\D", "", n) or 0), n))
             for kind, names in kinds.items()}
+
+
+def cites(directory, path):
+    """そのファイルの項目ごとに、その証明の `BY` の行が引く項目の名前。
+
+    **「何に依拠するか」の表を手で書かない。** 表を持つ文書が「この表は `BY` の行から作る」と
+    自分で規則を書きながら、機械で集めると 3 行がずれていた -- 段を 1 つ足した者が表を直さないので、
+    表は足された引用を持たない。**規則を書いたなら、その規則を走らせて作る。**"""
+    items, parsed, by_file, frame = read_all(directory)
+    found, lines = parsed[path]
+    key = os.path.basename(path).split("-")[0]
+    out = []
+    for item in found:
+        start, stop = item["span"]
+        body, index = [], start + 1
+        while index < stop:
+            if proof_syntax.is_by(lines[index]):
+                head, tail = proof_syntax.by_block(lines, index)
+                body.extend(lines[head:tail])
+                index = tail
+                continue
+            index += 1
+        targets = cited_in("\n".join(body), key, by_file, frame)
+        targets.discard(item["identity"])
+        names = [items[t]["name"] for t in targets if t in items and items[t]["name"]]
+        order = lambda name: (name[0], int(re.sub(r"\D", "", name) or 0), name)
+        out.append((item["name"],
+                    sorted((n for n in names if n[0] in "DAP"), key=order),
+                    sorted((n for n in names if n[0] in "LT"), key=order)))
+    return out
 
 
 CITED_LABEL = re.compile(r"`?(p\d\d)[A-Za-z0-9_-]*(?:\.md)?`?\s*の\s*`?(DEF|EXT|前提)\s+([^`,、\n)]+)")
@@ -796,6 +838,11 @@ def ambiguous(directory):
                 live.add(item["identity"])
             if item["name"]:
                 names.setdefault((os.path.basename(path), item["name"]), []).append(item)
+    # **1 つの命題を何節にも分けて示すのは、名前の重複ではない。** 枠に言明を持つ命題は、その名前で
+    # 立てられた節をいくつ持ってもよく、印を持たない限りどれも枠の同一性へ解決する。印を自分で持つ
+    # 節だけが 2 つ目の同一性を作るので、それは下の `across` が挙げる。
+    names = {key: rows for key, rows in names.items()
+             if not (key[1][0] in "DAPT" and {row["identity"] for row in rows} <= {None})}
     for path in documents(directory):
         text = open(path, encoding="utf-8").read()
         for match in REF.finditer(text):
@@ -1037,6 +1084,12 @@ def main(arguments):
         open(path, "w", encoding="utf-8").write(out)
         print(f"{path}: {done} 件を id にした" + (f"、解決しなかった {len(left)} 件" if left else ""))
         return 0
+    if "--cites" in arguments:
+        path = arguments[arguments.index("--cites") + 1]
+        directory = os.path.dirname(path) or "."
+        for name, outer, local in cites(directory, path):
+            print(f"{name}\t" + "、".join(outer) + "\t" + "、".join(local))
+        return 0
     if "--depends" in arguments:
         path = arguments[arguments.index("--depends") + 1]
         for kind, names in depends(os.path.dirname(path) or ".", path).items():
@@ -1056,7 +1109,8 @@ def main(arguments):
         directory = roots[0] if len(roots) > 1 else default_directory()
         return show(directory, arguments[at + 1])
     # 値を取る旗の直後の引数は、見に行くディレクトリではない。
-    takes_value = {"--file", "--item", "--show", "--bundle", "--render", "--convert", "--depends"}
+    takes_value = {"--file", "--item", "--show", "--bundle", "--render", "--convert",
+                   "--depends", "--cites"}
     roots = [a for i, a in enumerate(arguments)
              if not a.startswith("--") and (i == 0 or arguments[i - 1] not in takes_value)]
     roots = roots or [default_directory()]
