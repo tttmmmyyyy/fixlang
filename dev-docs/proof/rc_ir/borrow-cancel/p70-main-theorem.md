@@ -651,8 +651,8 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     `f_own.body` だけを `ctx.rewrite(&f_own.body)` に差し替えて `funcs.insert(f_own.name.clone(),
     f_own)` を行う。第 2 のループは、借用版を持つ `func` について `clone_func` が作った `clone` の
     `body` を差し替えて `funcs.insert(borrow_version, clone)` を行う。`clone_func` は
-    `name: new_ref` を置き、その `new_ref` は `borrow_version` そのものなので、`clone.name` は
-    鍵 `borrow_version` に等しい。**第 3 のループは `funcs.values_mut()` を走り、各エントリの
+    `name: new_ref` を置き、その `new_ref` も鍵に使う `borrow_version` も `borrow_versions` が持つ
+    同じ値の複製なので、`clone.name` は鍵 `borrow_version` に等しい。**第 3 のループは `funcs.values_mut()` を走り、各エントリの
     `borrowed_units` の欄だけを書き替える。**
 
     ```rust
