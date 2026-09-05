@@ -83,6 +83,9 @@ P26 の言明は 2 文からなる。第 1 文は共通接頭の上の各観測�
 は、それぞれ `EXT` の名札を持つ。** 名札の言明は各証明ファイルの第 1 節に据える」と述べ、この段落がその
 言明である。`BY` からはこの名前で引く。
 
+**EXT derive した `PartialEq` の等号**。`#[derive(PartialEq)]` を持つ struct の 2 つの値が等しいのは、
+その各欄の値が等しいときに限る。文書の外の結果の名札である。`BY` からはこの名前で引く。
+
 ### 在りかの前提
 
 **コードのどこに何が在るかの数え上げは、段の中で行わない。** 段が自分で在りかを数え上げると、その
@@ -169,6 +172,31 @@ SCAN src/ `mark_threaded_function(`
 
 SCAN src/ `build_object_files(`
   = src/build/build.rs: build
+
+**前提 走査の仕事の値を組む在りか** --- `TraverserWorkType` は `u32` の欄を 1 つ持つ tuple struct であり、
+その値を組む式は、tuple struct の構成子を `TraverserWorkType(...)` と書くか、`impl TraverserWorkType` の
+中で `Self(...)` と書くかである。`TraverserWorkType(` の字面が在る項目、`Self(TRAVERSER_WORK` の字面が
+在る項目、`TraverserWorkType::mark_threaded(` の字面が在る項目、`TRAVERSER_WORK_MARK_THREADED` の字面が
+在る項目は次で尽きる。
+
+SCAN src/ `TraverserWorkType(`
+  = src/constants.rs: TraverserWorkType -- 宣言
+  = src/object.rs: create_traverser -- switch の腕ごとに `TraverserWorkType(*work)` を組む
+
+SCAN src/ `Self(TRAVERSER_WORK`
+  = src/constants.rs: TraverserWorkType::mark_global
+  = src/constants.rs: TraverserWorkType::mark_threaded
+  = src/constants.rs: TraverserWorkType::release
+
+SCAN src/ `TraverserWorkType::mark_threaded(`
+  = src/generator.rs: Generator::build_mark_boxed_with -- 表明の中の比較
+  = src/generator.rs: Generator::mark_threaded
+
+SCAN src/ `TRAVERSER_WORK_MARK_THREADED`
+  = src/ast/types.rs: TypeNode::traverser_name -- 走査関数の記号の名前を組む
+  = src/constants.rs: TRAVERSER_WORK_MARK_THREADED -- 定義
+  = src/constants.rs: TraverserWorkType::mark_threaded -- 定義
+  = src/object.rs: create_traverser -- `config.threaded` のときだけ switch の腕を足す
 
 **前提 一意性の分岐を組む在りか** --- `Generator::build_is_refcnt_one`、
 `Generator::build_branch_by_is_unique`、`force_unique_or_assert`、`force_unique_or_assert_with_hole`、
@@ -274,6 +302,20 @@ SCAN src/ `run_io_or_ios_runner(`
 SCAN src/ `run_io(`
   = src/ast/export_statement.rs: ExportStatement::implement -- `IOType::IO` の腕
   = src/fixstd/builtin.rs: run_io_or_ios_runner
+
+**前提 `applies_a_function_operand` の宣言の在りか** --- `fn applies_a_function_operand` の字面が
+在る項目は次で尽きる。
+
+SCAN src/ `fn applies_a_function_operand`
+  = src/ast/inline_llvm.rs: applies_a_function_operand -- `LLVMGen` の既定
+  = src/fixstd/builtin.rs: InlineLLVMArrayBorrowElementsBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMUnionModBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand
+  = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::applies_a_function_operand
 
 **前提 funptr の tycon を型に組む在りか** --- `type_funptr` を呼ぶ式が在る項目と、
 `make_funptr_tycon` を呼ぶ式が在る項目は次で尽きる。
@@ -975,8 +1017,30 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
      CODE src/object.rs: create_obj
 
 <1>5c. `config.threaded` が偽のビルドでは、状態の欄が `THREADED` を持つオブジェクトは実行のどの時点にも
-      無い。`<1>5a` より `THREADED` を書くのは `build_mark_boxed_with` の `mark_threaded` の側だけで
-      あり、そこへ届くのは `Generator::mark_threaded` である。前提 `Std::mark_threaded` の op の在りか
+      無い。`<1>5a` より `THREADED` を書くのは `build_mark_boxed_with` が `marks_global` を偽と判定する
+      側だけである。`build_mark_boxed_with` の先頭の
+      `assert!(work == TraverserWorkType::mark_global() || work == TraverserWorkType::mark_threaded())`
+      は `develop_mode` の門を持たないので、`work` がその 2 つのどちらでもない呼び出しを組むプログラムは
+      コード生成で止まり、二値にならない。README の「「果たす者」と「検査」の読み方」は
+      「**コード生成が `expect` や `unreachable!` で止まる形も、`develop_mode` の門を持たない限りこの段に
+      入る** -- そのプログラムは走らないので、その本体の活性化は存在しない」と述べ、その 3 段の 2 段目が
+      これである。よって二値になるプログラムでは、`marks_global` が偽である活性化の `work` は
+      `TraverserWorkType::mark_threaded()` に等しい。
+
+      **その値を組む式は 4 つで尽きる。** 前提 走査の仕事の値を組む在りか より、`TraverserWorkType` の値を
+      組む式が在るのは `TraverserWorkType::release`・`TraverserWorkType::mark_global`・
+      `TraverserWorkType::mark_threaded` の 3 つの構成子と、`create_traverser` の
+      `TraverserWorkType(*work)` である。`TraverserWorkType` は `u32` の欄を 1 つ持ち `PartialEq` を
+      derive するので、`TraverserWorkType::mark_threaded()` に等しい値はその欄に
+      `TRAVERSER_WORK_MARK_THREADED` を持つ (`EXT derive した `PartialEq` の等号`)。
+      `TRAVERSER_WORK_RELEASE`・`TRAVERSER_WORK_MARK_GLOBAL`・`TRAVERSER_WORK_MARK_THREADED` は
+      `0`・`1`・`2` であって相異なるので、3 つの構成子のうちその値を置くのは
+      `TraverserWorkType::mark_threaded` だけであり、`create_traverser` が `TraverserWorkType(*work)` に
+      渡す `*work` の候補に `TRAVERSER_WORK_MARK_THREADED` が入るのは `gc.config.threaded` が真のときだけ
+      である。同じ前提より `TraverserWorkType::mark_threaded()` を呼ぶ式が在るのは
+      `Generator::mark_threaded` と、上の表明の中の比較だけであって、後者は値を渡さない。
+
+      前提 `Std::mark_threaded` の op の在りか
       より、`Generator::mark_threaded` を呼ぶ式が在るのは `InlineLLVMMarkThreadedFunctionBody::generate`
       であり、この op の字面を持つ項目のうち op の値を組むのは `mark_threaded_function` であって、
       `make_std_mod` はそれを `Std::mark_threaded` の本体として登録する。
@@ -987,8 +1051,12 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
       `Std::mark_threaded` を持つプログラムは
       二値にならず実行が存在せず、二値になるプログラムはこの op を持たないので `THREADED` を書く
       コードを 1 命令も生成しない。
-  BY 前提 `Std::mark_threaded` の op の在りか, <1>5a,
+  BY 前提 `Std::mark_threaded` の op の在りか, 前提 走査の仕事の値を組む在りか, <1>5a,
+     EXT derive した `PartialEq` の等号,
+     README の「「果たす者」と「検査」の読み方」,
      CODE src/generator.rs: Generator::mark_threaded, Generator::build_mark_boxed_with,
+     CODE src/constants.rs: TraverserWorkType, TRAVERSER_WORK_MARK_THREADED,
+     CODE src/object.rs: create_traverser,
      CODE src/fixstd/builtin.rs: mark_threaded_function, InlineLLVMMarkThreadedFunctionBody::generate,
      CODE src/fixstd/stdlib.rs: make_std_mod,
      CODE src/ast/program.rs: Program::check_multi_threading_requirement,
@@ -1843,12 +1911,28 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       変えるのは、`Retain`/`Release` の節点と、`App` の callee の名前だけである。** 節点の種類・その順序・
       `Let` の束縛変数・`Match` のアームの構成・`Llvm` の op とオペランド・`Destructure` のフィールドは、
       いずれも元の本体のものに等しい (複製の名前替えを P9 で戻したうえで)」と述べる。**その 2 つは別の
-      オブジェクトである** -- `rename_rhs` の `Llvm` の腕は `llvm_gen.clone()` を作り、
-      `RewriteCtx::rewrite_inner` の `Let` の腕は `rhs.clone()` を返す。A3 の「**この 2 節を合わせると
-      「op の複製は原本と同じ宣言を返す」が出る。**」がその 2 つを結ぶので、`result_prov`・`borrows_operand`・
-      `applies_a_function_operand` の答えは原本のものである。
-  BY <ref id=e11772a/>, <ref id=63eadd9/>, <ref id=746e87a/>, CODE src/rc_ir/rename.rs: rename_rhs,
-     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner
+      オブジェクトである** -- A3 は `rename_rhs` の `Llvm` の腕の `llvm_gen.clone()` と
+      `RewriteCtx::rewrite_inner` の `Let` の腕の `rhs.clone()` について「**複製・書き換えの両側で op は
+      別のオブジェクトである**」と書く。すなわち 2 つは同じ op の別のオブジェクトである。
+      `result_prov` と `borrows_operand` については、A3 の「**この 2 節を合わせると
+      「op の複製は原本と同じ宣言を返す」が出る。**」がその 2 つのオブジェクトの答えを結ぶ。
+      `applies_a_function_operand` については、その宣言を書く本体がどれも `self` を読まない --
+      前提 `applies_a_function_operand` の宣言の在りか より、この宣言を書く項目は `LLVMGen` の既定と
+      8 つの override であり、9 つの本体はいずれも `self` の欄を 1 つも読まずに `false` / `true` の
+      リテラルを返す。よってこの宣言の答えは op だけで決まり、2 つのオブジェクトで等しい。
+  BY <ref id=e11772a/>, <ref id=63eadd9/>, <ref id=746e87a/>,
+     前提 `applies_a_function_operand` の宣言の在りか,
+     CODE src/rc_ir/rename.rs: rename_rhs,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
+     CODE src/ast/inline_llvm.rs: LLVMGen::applies_a_function_operand,
+     CODE src/fixstd/builtin.rs: InlineLLVMFixBody::applies_a_function_operand,
+     InlineLLVMUnionModBody::applies_a_function_operand,
+     InlineLLVMWithRetainedFunctionBody::applies_a_function_operand,
+     InlineLLVMArrayBorrowElementsBody::applies_a_function_operand,
+     InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand,
+     InlineLLVMUnsafeMutateBoxedIOSInternalBody::applies_a_function_operand,
+     InlineLLVMArrayMutateElementsInternalBody::applies_a_function_operand,
+     InlineLLVMArrayMutateElementsIosInternalBody::applies_a_function_operand
 
 <1>4. `rewrite_rc` が節点を落とすのは `is_borrow_version` が真のときだけである。偽のときは
       `rc_node(is_release, v.clone(), path.clone(), state, k, source)` をそのまま返す。
