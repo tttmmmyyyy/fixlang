@@ -1537,16 +1537,19 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
         `TypeEnv::unwrapped_newtype_info`、`src/elaboration/typecheck.rs` の `Substitution` の
         メソッド、`src/ast/name.rs` の `FullName` と `NameSpace` の実装、そして
         `src/parse/sourcefile.rs` の `Span` と `SourceFile` の実装である。すなわち、この呼び出しの中で
-        走る関数の本文は `src/rc_ir/ownership.rs`・`src/ast/types.rs`・`src/ast/program.rs`・
+        走る関数の本文が住むのは、`src/rc_ir/ownership.rs`・`src/ast/types.rs`・`src/ast/program.rs`・
         `src/ast/name.rs`・`src/parse/sourcefile.rs`・`src/elaboration/typecheck.rs`・
-        `src/fixstd/builtin.rs` と、`Map`・`Set`・`Vec`・スライスの操作に住む。
+        `src/fixstd/builtin.rs` の 7 つのファイルか、`Map`・`Set`・`Vec`・スライスの操作を与える
+        `src/` の外である。
 
         **`borrow.rs` の項目を名指す式が書かれているファイルを、`src/` の全体で数え上げる。**
         `borrow.rs` は `mod` 宣言を 1 つも持たない (<1>0) ので、その非公開の項目を名指せるのは
         `borrow.rs` の中だけであり、`pub(crate)` の項目を外から名指すには `rc_ir::borrow` の道を書く
-        ことが要る (EXT 可視性と私有性)。`borrow.rs` は trait の実装を 1 つも持たず、`impl` は
-        `OwnedLeaves`・`RewriteCtx`・`CancelAnalysis` という同ファイルの非公開の型の inherent な
-        3 つだけなので、道を書かずに届く経路も無い。`src/` の全体で `borrow::` を数え上げると、
+        ことが要る (EXT 可視性と私有性)。`borrow.rs` が持つ `impl` は、同ファイルの
+        非公開の型 `OwnedLeaves`・`RewriteCtx`・`CancelAnalysis` の inherent な 3 つと、同ファイルの
+        非公開の型 `PendingRetain` が derive した `Clone` だけである。どれも非公開の型についての
+        ものであり、EXT 可視性と私有性 よりその型を名指せるのは `borrow.rs` の中だけなので、
+        道を書かずに届く経路も無い。`src/` の全体で `borrow::` を数え上げると、
         `borrow.rs` 自身を除いて `src/build/build_object_files.rs` の `use` の 1 行だけが挙がる。
         よって `borrow.rs` の関数の呼び出しが書かれているのは、`borrow.rs` と
         `src/build/build_object_files.rs` の本文だけである。**同じく `src/` の全体で
