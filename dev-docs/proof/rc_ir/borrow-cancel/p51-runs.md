@@ -1495,11 +1495,12 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       BY <ref id=e11772a/>
     <3>1a. **在りかを数え上げる。**実行時に参照カウントで分岐する op はどれも
            `Generator::build_branch_by_is_unique` を呼ぶ生成コードを持つ。`src/` にその呼び出しは
-           8 か所ある。2 か所は `make_struct_union_unique` と `make_array_unique_with_hole` 自身の
+           6 か所ある。2 か所は `make_struct_union_unique` と `make_array_unique_with_hole` 自身の
            定義であり、A3 の名指す 2 つの補助関数はこの 2 か所を経由する道である。2 か所
            (`InlineLLVMIsUniqueFunctionBody`、`InlineLLVMArrayIsStorageUniqueBody`) は一意性の観測点
-           (D18) であって `Bool` を返すので `Fresh` を宣言しない。残る 4 か所のうち、
-           `InlineLLVMArrayAppendCapacityUnchecked` の呼び出しは `src` の消費について分岐するもの
+           (D18) であって `Bool` を返すので `Fresh` を宣言しない。**残る 2 か所は
+           `InlineLLVMArrayAppendCapacityUnchecked` と `InlineLLVMArraySetCapacityBoundsUnchecked` の
+           呼び出しである。**前者は `src` の消費について分岐するもの
            (D30 の (X2) が名指す形) であり、その `Fresh` 宣言の結果 (`dst`) は
            `array_tail_destination` を経て `force_unique_or_assert` が `make_array_unique_with_hole` へ
            渡す経路の上に在る。**`InlineLLVMArraySetCapacityBoundsUnchecked` の呼び出しだけが、この
@@ -1524,9 +1525,10 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       **そのオペランドの leaf を D9 の `Llvm` の行は消費とする。**宣言が単一の `Arg` でないので素通しでは
       なく、`borrows_operand(i)` も偽である -- `<3>1a` の 2 か所の補助関数を経由する道では、共有の腕が
       `gc.release(obj, state)` でそのオペランドの参照を処分する (`make_struct_union_unique`。配列に
-      ついては `make_array_unique_with_hole` が `release_replaced_array` を呼ぶ)、`<3>1a` の残る 1 か所
-      (`InlineLLVMArraySetCapacityBoundsUnchecked`) では共有の腕が `release_replaced_array` で古い
-      記憶域を処分する。**一意の腕はそのオペランドの参照を手放さない** -- 補助関数を経由する道では
+      ついては `make_array_unique_with_hole` が `release_replaced_array` を呼ぶ)、`<3>1a` の残る 2 か所の
+      うち `InlineLLVMArraySetCapacityBoundsUnchecked` では共有の腕が `release_replaced_array` で古い
+      記憶域を処分し、`InlineLLVMArrayAppendCapacityUnchecked` の `Fresh` の結果は `<3>1a` より
+      `make_array_unique_with_hole` を経由する道の上に在る。**一意の腕はそのオペランドの参照を手放さない** -- 補助関数を経由する道では
       `make_struct_union_unique` が `create_obj` と `clone_struct`/`clone_union` と `gc.release` を
       出すのは共有の腕だけであり、`InlineLLVMArraySetCapacityBoundsUnchecked` の一意腕は `realloc_array`
       を呼ぶだけで `gc.release` を出さない。いずれの道でも 2 つの腕は排他である。A3 は
