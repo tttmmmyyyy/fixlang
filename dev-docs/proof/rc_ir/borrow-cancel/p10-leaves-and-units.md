@@ -247,15 +247,15 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 **果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
 走らせて下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。走査は字面の上位近似
 なので、一覧には宣言だけの項目も、署名や散文としてその字面を含む項目も入る。`#[cfg(test)]` の下の
-項目は走査が除く。項目の名前は走査が呼ぶ名前である -- 自由関数がその直前の `impl` の名前を冠して
-挙がる形を含む。
+項目は走査が除く。項目の名前は走査が呼ぶ名前である -- `impl` の中の項目はその `impl` の型を冠して
+挙がる。
 
 **前提 `TyConInfo` の値を作る在りか** --- `TyConInfo` の構造体リテラルを書く項目は次で尽きる。走査は
 その型の宣言と、返り値の型としてその名前を書く署名も挙げる。
 
 SCAN src/ `TyConInfo {`
   = src/ast/typedecl.rs: TypeDefn::tycon_info -- 構造体リテラルと、返り値の型としての署名
-  = src/ast/types.rs: TyCon::TyConInfo -- 型の宣言と `impl TyConInfo` の見出し
+  = src/ast/types.rs: TyConInfo -- 型の宣言と `impl TyConInfo` の見出し
   = src/ast/types.rs: TypeNode::toplevel_tycon_info -- 返り値の型としての署名
   = src/build/divide_program.rs: declaration_of -- 返り値の型としての署名
   = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 構造体リテラル
@@ -317,17 +317,17 @@ SCAN src/ `Arc::make_mut`
 SCAN src/ `.bindings`
   = src/build/build_object_files.rs: dump_rc_ir -- `ProvenanceAnalysis` の同名の欄の読み
   = src/rc_ir/ownership.rs: VarTable::of -- `vars.bindings.insert`
-  = src/rc_ir/ownership.rs: VarTable::collect_bindings -- 自由関数 `collect_bindings` の `vars.bindings.insert`
+  = src/rc_ir/ownership.rs: collect_bindings -- `vars.bindings.insert`
   = src/rc_ir/ownership.rs: origin_inner -- 読み `vars.bindings.get`
-  = src/rc_ir/provenance.rs: record -- `Interpreter` の同名の欄
-  = src/rc_ir/provenance.rs: refine_by_unique_flag -- `Interpreter` の同名の欄
+  = src/rc_ir/provenance.rs: Interpreter::record -- `Interpreter` の同名の欄
+  = src/rc_ir/provenance.rs: Interpreter::refine_by_unique_flag -- `Interpreter` の同名の欄
   = src/rc_ir/provenance.rs: analyze_program -- `ProvenanceAnalysis` の同名の欄
 
 SCAN src/ `var_tys`
   = src/rc_ir/ownership.rs: VarTable -- 欄の宣言
   = src/rc_ir/ownership.rs: VarTable::empty -- `var_tys: Map::default()`
   = src/rc_ir/ownership.rs: VarTable::of -- 挿入
-  = src/rc_ir/ownership.rs: VarTable::collect_bindings -- 自由関数 `collect_bindings` の挿入
+  = src/rc_ir/ownership.rs: collect_bindings -- 挿入
 
 **前提 `truncate_to_unit` を呼ぶ在りか** --- `truncate_to_unit` を呼ぶ式が在る項目は次で尽きる。
 走査はその宣言も挙げる。path を `origin` の答えから得るのは `owns_object` と `owns_object_yet` で
@@ -336,8 +336,8 @@ SCAN src/ `var_tys`
 
 SCAN src/ `truncate_to_unit(`
   = src/rc_ir/borrow.rs: borrow_ify -- 借用版の `owned_units` を組む `boxed_leaf_paths` の leaf
-  = src/rc_ir/borrow.rs: consume_rhs -- `rhs_consumes` が報告する leaf
-  = src/rc_ir/borrow.rs: owns_object -- `origin` の答えの path を `units_under` が割った unit
+  = src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs -- `rhs_consumes` が報告する leaf
+  = src/rc_ir/borrow.rs: RewriteCtx::owns_object -- `origin` の答えの path を `units_under` が割った unit
   = src/rc_ir/borrow.rs: owns_object_yet -- 鍵の側は `origin` の答えの unit、突き合わせる側は `boxed_leaf_paths` の leaf
   = src/rc_ir/ownership.rs: origin_from_leaves_under -- `result_prov` の宣言が名指す leaf
   = src/rc_ir/ownership.rs: truncate_to_unit -- 宣言
