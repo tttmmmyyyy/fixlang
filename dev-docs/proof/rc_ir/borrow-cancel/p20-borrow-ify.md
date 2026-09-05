@@ -331,7 +331,8 @@ SCAN src/ `origins:`
   A10 は「`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が
   `type_env` にある -- がすべて成り立ち、その歩みは有限である」と述べる。`<1>2` の `Fields` の腕が降りる
   先は `unpunched_field_types` の返す型なので (`unit_step` の `Fields` の腕はそれを `held_fields` に
-  据える)、`rc_units_go` の再帰は有限の深さで止まる。その深さについての帰納で、任意の `p` について
+  据える)、`rc_units_go` の再帰は有限の深さで止まる。同じ節が、その歩みで到達する各型も A10 を満たすことを
+  与えるので、帰納法の仮定は降りた先の型に当たる。その深さについての帰納で、任意の `p` について
   言明を示す。
   `NoUnit` の腕では、`<1>1` より `rc_units(σ)` も同じ腕を通って空の列であり、付け足す列も空である。
   `Unit` の腕では `rc_units(σ) = [[]]` であり、付け足すのは `p` の 1 元、すなわち `p ++ []` である。
@@ -365,6 +366,7 @@ SCAN src/ `origins:`
   A10 は「`unpunched_field_types` を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、
   tycon が `type_env` にある -- がすべて成り立ち、その歩みは有限である」と述べ、`<1>1` より
   `UnitStep::Fields` の腕が降りる先はその歩みの先なので、`rc_units_go` の再帰は有限の深さで止まる。
+  同じ節が、その歩みで到達する各型も A10 を満たすことを与えるので、帰納法の仮定は降りた先の型に当たる。
   その深さについての帰納で示す。L1b より `units(τ)` は `rc_units_go(τ, type_env, [], out)` が積む列で
   ある。
   `unit_step(τ)` が `NoUnit` のとき `units(τ)` は空であり、`Unit` と `Capture` のとき 1 元なので、
@@ -383,12 +385,15 @@ SCAN src/ `origins:`
   `cur` を `held_field_type(held_fields, i, "subtree_type")` に進める。その値を `τ_i` とすると、残りの
   ループは `subtree_type(τ_i, p', type_env)` のものと同じであり、それが `Some(σ)` を返す。
   `held_field_type` は `held_fields` の中で第 1 成分が `i` である元の第 2 成分を返し、そのような元が
-  無ければ panic するので、`(i, τ_i)` は `held_fields` の元である。帰納法の仮定より
+  無ければ panic するので、`(i, τ_i)` は `held_fields` の元である。A10 は「`unpunched_field_types` を
+  繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が `type_env` にある -- がすべて
+  成り立ち、その歩みは有限である」と述べ、`unit_step` の `Fields` の腕は `held_fields` を
+  `unpunched_field_types` に取るので、`τ_i` も A10 を満たす。帰納法の仮定より
   `p' ++ w ∈ units(τ_i)` であり、L1b より `rc_units_go(τ, type_env, [], out)` の `Fields` の腕は
   `(i, τ_i)` について `rc_units_go(τ_i, type_env, [i], out)` を呼んで `units(τ_i)` の各元 `w''` の
   `[i] ++ w''` を積むので、`[i] ++ p' ++ w = p ++ w ∈ units(τ)` である。
-  BY <ref id=dcb9940/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: subtree_type, unit_step,
-     held_field_type, rc_units_go
+  BY <ref id=8412761/>, <ref id=dcb9940/>, 帰納法の仮定, CODE src/rc_ir/ownership.rs: subtree_type,
+     unit_step, held_field_type, rc_units_go
 
 <1>4. QED
   BY <1>2, <1>3
