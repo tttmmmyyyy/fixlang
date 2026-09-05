@@ -81,7 +81,8 @@ CODE_ENDS = re.compile(
     r"|本命題の仮定|本場合の仮定|背理法の仮定)")
 SECOND_LABEL = re.compile(r"\s(?:CODE\s|[DAP]\d+[a-z]*(?:\s|$)|[LR]\d+[a-z]*(?:\s|$))")
 TRAILING_LABEL = re.compile(r"\b(DEF|EXT)\s+(.+)$")
-HEDGE = ["明らかに", "自明", "同様にして", "容易に", "であろう", "と思われる", "おそらく", "はずである"]
+HEDGE = ["明らかに", "自明", "同様にして", "同様に", "同じ議論", "容易に", "であろう",
+         "と思われる", "おそらく", "はずである"]
 
 
 normalize_label = proof_syntax.normalize_label
