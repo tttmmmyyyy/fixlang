@@ -1212,166 +1212,84 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 ## L3a (`Std::Array` と `Std::#FunPtr{n}` の `TyConInfo`) <!--#f68ae1c-->
 
-**言明**。プログラムの `TypeEnv` の `tycons` について、次の 3 つが成り立つ。
+**言明**。`type_env` をプログラムの `TypeEnv` とする。次の 3 つが成り立つ。
 
-- 鍵 `Std::Array` の項が在るならば、その `variant` は `TyConVariant::Array` である。
-- 鍵が `is_funptr_tycon` を満たす -- 名前空間が `Std` ただ 1 つで、名前が `FUNPTR_NAME` すなわち
-  `#FunPtr` で始まり、残りが `u32` として読める -- 項が在るならば、その `variant` は
-  `TyConVariant::Primitive` である。
-- どの鍵の名前も、`FUNPTR_NAME` を前置に持ちながら残りが `u32` として読めない、という形を取らない --
-  `is_funptr_tycon` はどの鍵に対しても panic しない。
+- **(a)** 型 `τ` の最上位の tycon が `type_env.tycons()` の鍵であるとき、`is_funptr(τ)` は panic せずに
+  真か偽を返す。
+- **(b)** `is_array(τ)` が真であり `toplevel_tycon_info(τ, type_env)` が値を返すならば、その値の
+  `variant` は `TyConVariant::Array` である。
+- **(c)** `is_funptr(τ)` が真であり `toplevel_tycon_info(τ, type_env)` が値を返すならば、その値の
+  `variant` は `TyConVariant::Primitive` である。
 
-**funptr の側を範囲でなく述語で書くのは、`TypeNode::is_funptr` がその述語で決まるからである** --
-`bulitin_tycons` が入れるのは `1` から `FUNPTR_ARGS_MAX` までだが、`is_funptr` はその範囲の外の
-`#FunPtr{n}` にも真を返す。範囲で書くと、読む 3 段が要る「`is_funptr(τ)` が真ならば `variant` は
-`Primitive`」が範囲の外で覆われない。
+**主語を鍵ではなく型に取るのは、読む 3 段が持っているのが型だからである。** その 3 段は
+`is_struct` か `is_union` から `toplevel_tycon_info` の値を得ており、`is_array` と `is_funptr` の
+真偽をその `variant` と突き合わせる。**この命題が要るのは、`is_array` と `is_funptr` が tycon の
+名前で決まるのに対し、`is_struct` と `is_union` が `type_env` の項の `variant` で決まるからである。**
+2 つを突き合わせる段は L4 の `<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` である。
 
-**この命題が要るのは、`is_array` と `is_funptr` が tycon の名前で決まるのに対し、`is_struct` と
-`is_union` が `type_env` の項の `variant` で決まるからである。** 2 つを突き合わせる段は L4 の
-`<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` である。
+**funptr の側を `bulitin_tycons` が入れる範囲でなく `is_funptr` の真偽で書くのは、`is_funptr` が
+その範囲の外の `#FunPtr{n}` にも真を返すからである。** 範囲で書くと、読む 3 段が要る
+「`is_funptr(τ)` が真ならば `variant` は `Primitive`」が範囲の外で覆われない。
 
-<1>1. `TypeNode::is_array` は最上位の tycon が `is_array_tycon` を満たす -- `make_array_tycon()`
-      すなわち `Std::Array` である -- ことである。`is_funptr_tycon` は、最上位の tycon の名前空間が
-      `Std` ただ 1 つでないか、名前が `FUNPTR_NAME` で始まらないときは `None` を返し、始まるときは
-      名前の残りを `u32` として parse し、成功すればその値を包んで返す。**残りが `u32` として読めなければ
-      `unwrap` が panic する** -- `is_funptr_tycon` は全域関数ではない。`TypeNode::is_funptr` はこの
-      呼び出しの `is_some()` であり、panic する tycon については `is_funptr` も panic する。
+<1>1. `TypeNode::is_array` は、最上位の tycon が在ってそれが `is_array_tycon` を満たすこと --
+      すなわちその tycon が `make_array_tycon()`、名前空間が `STD_NAME` (`Std`) ただ 1 つで名前が
+      `ARRAY_NAME` (`Array`) である `TyCon` に等しいこと -- であり、最上位の tycon が無ければ偽である。
+      `is_funptr_tycon` は、渡された tycon の名前空間が `STD_NAME` ただ 1 つでないか、名前が
+      `FUNPTR_NAME` (`#FunPtr`) で始まらないときは `None` を返し、始まるときは名前の残りを `u32` として
+      parse し、成功すればその値を包んで返す。**残りが `u32` として読めなければ `unwrap` が panic する**
+      -- `is_funptr_tycon` は全域関数ではない。`TypeNode::is_funptr` は、最上位の tycon が在れば
+      その tycon についてのこの呼び出しの `is_some()` であり、無ければ偽である。
       `TypeNode::toplevel_tycon_info(type_env)` が返すのは `type_env.tycons()` のその tycon の項であり、
       その鍵が無ければ (または最上位の tycon がクロージャならば) panic する。
-  BY CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr, TypeNode::toplevel_tycon_info,
-     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon, is_array_tycon, is_funptr_tycon,
-     CODE src/constants.rs: FUNPTR_NAME
+  BY CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon, TypeNode::toplevel_tycon_info,
+     CODE src/fixstd/builtin.rs: make_array_tycon, make_array_name, is_array_tycon, is_funptr_tycon,
+     CODE src/constants.rs: STD_NAME, ARRAY_NAME, FUNPTR_NAME
 
 <1>2. `bulitin_tycons()` が返す写像は、鍵 `make_array_tycon()` に `variant` が `TyConVariant::Array` の
       `TyConInfo` を、`1` から `FUNPTR_ARGS_MAX` までの各 `n` について鍵 `make_funptr_tycon(n)` に
-      `variant` が `TyConVariant::Primitive` の `TyConInfo` を持つ。この写像の鍵のうち
-      `is_funptr_tycon` を満たすものはその `FUNPTR_ARGS_MAX` 個で尽きる -- 残りの鍵は名前が
-      `#FunPtr` で始まらないか、名前空間が `Std` でない。この `FUNPTR_ARGS_MAX` 個の鍵の名前は、
-      いずれも `FUNPTR_NAME` の後ろに `n` の 10 進表記 (`u32::to_string` の値) を続けたものである。
-  BY CODE src/fixstd/builtin.rs: bulitin_tycons, make_funptr_tycon, make_funptr_name, is_funptr_tycon,
-     CODE src/constants.rs: FUNPTR_ARGS_MAX, FUNPTR_NAME
+      `variant` が `TyConVariant::Primitive` の `TyConInfo` を持つ。`make_funptr_tycon(n)` の名前空間は
+      `STD_NAME` ただ 1 つであり、その名前は `FUNPTR_NAME` の後ろに `n` の 10 進表記
+      (`u32::to_string` の値) を続けたものである。
+  BY CODE src/fixstd/builtin.rs: bulitin_tycons, make_array_tycon, make_funptr_tycon, make_funptr_name,
+     CODE src/constants.rs: STD_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME
 
-<1>3. `TypeEnv` の `tycons` の欄に書く式が在るのは、`TypeEnv::default`、`TypeEnv::new`、
-      `TypeEnv::unwrap_newtypes`、`TypeEnv::add_tycons`、`TypeEnv::resolve_type_aliases_in_tycons`、
-      および `Program::resolve_namespace_not_in_expr` である。
-  `tycons` は `TypeEnv` の非公開の欄である (`pub` が付かない) ので、EXT 可視性 より、この欄を名指す式は
-  `program.rs` の中にしかない -- この欄を宣言するモジュールは `program.rs` のモジュールであり、その子孫の
-  モジュールもこのファイルの中に書かれている。EXT 名前による数え上げ より、この欄を名指す式はその名前を
-  含むので、前提 `tycons` の欄を名指す在りか がその式を持ちうる項目を挙げる。
+<1>3. `type_env.tycons()` の項のうち、鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは、
+      `bulitin_tycons()` がその鍵の下に置いた項である。とくに鍵 `make_array_tycon()` の項がそうであり、
+      名前空間が `STD_NAME` ただ 1 つで名前が `FUNPTR_NAME` で始まる鍵は `make_funptr_tycon(n)`
+      (`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下) であって、その項もそうである。
+  BY <ref id=3d4be43/>
 
-  その走査が挙げる `program.rs` の項目のうち、この欄へ代入する式を持つのは上の 6 つである --
-  `TypeEnv::default` の `tycons: Arc::new(Default::default())`、`TypeEnv::new` の
-  `tycons: Arc::new(tycons)`、`TypeEnv::unwrap_newtypes` の `self.tycons = Arc::new(rewritten)`、
-  `TypeEnv::add_tycons` の `self.tycons = Arc::new(tycons)`、
-  `TypeEnv::resolve_type_aliases_in_tycons` の `self.tycons = Arc::new(tycons)`、および
-  `Program::resolve_namespace_not_in_expr` の `self.type_env.tycons = Arc::new(tycons)` である。
-  残りの項目が持つのは、この欄を書き換えずに読む式 (`TypeEnv::unwrapped_newtype_info`・
-  `TypeEnv::tycons`・`TypeEnv::kinds`・`TypeEnv::is_struct_act`・
-  `Program::tycon_names_with_aliases`)、アクセサ `tycons(&self)` の宣言、`Program::kind_env` が組む
-  `KindEnv` の同じ名前を持つ別の欄、`tycons` を部分文字列に持つ別の識別子、`tycons` という名前の
-  局所変数・引数、および doc コメントの散文である。上の 6 つの項目も、代入する式のほかにこれらを持つ。
-  BY 前提 `tycons` の欄を名指す在りか, EXT 可視性, EXT 名前による数え上げ,
-     CODE src/ast/program.rs: TypeEnv, TypeEnv::default,
-     TypeEnv::new, TypeEnv::tycons, TypeEnv::unwrap_newtypes, TypeEnv::unwrapped_newtype_info,
-     TypeEnv::add_tycons, TypeEnv::kinds, TypeEnv::is_struct_act,
-     TypeEnv::resolve_type_aliases_in_tycons, Program::calculate_type_env,
-     Program::tycon_names_with_aliases, Program::resolve_namespace_not_in_expr, Program::kind_env,
-     CODE src/ast/kind_scope.rs: KindEnv
+<1>4. (a) が成り立つ。
+  `τ` の最上位の tycon を `tc` とし、`tc` が `type_env.tycons()` の鍵であるとする。`<1>1` より
+  `is_funptr(τ)` は `is_funptr_tycon(tc)` の `is_some()` であり、`is_funptr_tycon` が panic しうるのは
+  `tc` の名前空間が `STD_NAME` ただ 1 つであって名前が `FUNPTR_NAME` で始まる場合だけである。その場合、
+  `<1>3` より `tc` は `1` 以上 `FUNPTR_ARGS_MAX` 以下のある `n` についての `make_funptr_tycon(n)` で
+  あり、`<1>2` よりその名前は `FUNPTR_NAME` の後ろに `n` の 10 進表記を続けたものなので、
+  EXT `u32` の 10 進表記 より `FUNPTR_NAME` の後ろの残りは `u32` として読める。よって parse は成功し、
+  `unwrap` は panic しない。
+  BY EXT `u32` の 10 進表記, <1>1, <1>2, <1>3
 
-<1>4. `<1>3` の 6 つのうち 4 つは、どの鍵の項の `variant` も変えない。`TypeEnv::default` は空の写像を
-      置き、`TypeEnv::unwrap_newtypes`、`TypeEnv::resolve_type_aliases_in_tycons`、
-      `Program::resolve_namespace_not_in_expr` は写像の鍵を変えずに各項へ `TyConInfo` の書き替えを掛け、
-      その 3 つの書き替え -- `Field::ty` の newtype の展開、`TyConInfo::resolve_type_aliases`、
-      `TyConInfo::resolve_namespace` -- はいずれも `fields` だけに触れる。
-  BY CODE src/ast/program.rs: TypeEnv, TypeEnv::unwrap_newtypes,
-     TypeEnv::resolve_type_aliases_in_tycons, Program::resolve_namespace_not_in_expr,
-     CODE src/ast/types.rs: TyConInfo, TyConInfo::resolve_namespace, TyConInfo::resolve_type_aliases
+<1>5. (b) が成り立つ。
+  `is_array(τ)` が真であるとする。`<1>1` より `τ` の最上位の tycon は `make_array_tycon()` である。
+  `toplevel_tycon_info(τ, type_env)` が値を返すならば、`<1>1` よりその値は `type_env.tycons()` の
+  鍵 `make_array_tycon()` の項であり、その鍵が写像に在る。`<1>3` よりその項は `bulitin_tycons()` が
+  その鍵の下に置いた項であり、`<1>2` よりその `variant` は `TyConVariant::Array` である。
+  BY <1>1, <1>2, <1>3
 
-<1>5. `TypeEnv::new` が置く写像のうち、鍵 `Std::Array` の項と、`is_funptr_tycon` を満たす鍵の項は、
-      `bulitin_tycons()` が入れたものである。それ以外に `TypeEnv::new` が置く鍵の名前は、`FUNPTR_NAME`
-      を前置に持たない。
-  前提 型環境に項を入れる呼び出しの在りか より、`TypeEnv::new` を呼ぶ式が在る項目は
-  `Program::calculate_type_env` である。`Program::calculate_type_env` は写像を `bulitin_tycons()` から
-  始め、各型宣言について、その tycon がすでに写像にあるか型別名にあるときは診断を出して次の宣言へ進み、
-  無いときだけ `insert` する。構造体の宣言についてはさらに、`TyCon::into_punched_type_name` が名前の
-  末尾に `PUNCHED_TYPE_SYMBOL` と穴の添字を足した鍵で `insert` する。
-
-  **型宣言が置く鍵の名前は `#` を含まない。** その鍵は `type_decl.tycon()`、すなわち `TypeDefn` の
-  `name` を名前に持つ `TyCon` であり、`parse_type_defn` はその `name` を `type_defn` の `type_name` の
-  綴りから取る。文法は `type_name = { capital_name }`、
-  `capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }` と定めるので、その綴りは英大文字
-  1 字に英数字が続いたものであり、`#` を含まない。
-
-  `Std::Array` の鍵は `bulitin_tycons()` に在るので、それを名指す宣言は `contains_key` の枝で弾かれ、
-  `insert` へ進まない。`is_funptr_tycon` を満たす鍵については、`bulitin_tycons()` に無い `n` の分が
-  `contains_key` を外れうるが、そのような鍵の名前は `FUNPTR_NAME` すなわち `#FunPtr` で始まる。型宣言が
-  置く鍵の名前は `#` を含まないので、`FUNPTR_NAME` を前置に持たない。
-
-  穴を開けた鍵の名前は、型宣言が置く鍵の名前の末尾に `PUNCHED_TYPE_SYMBOL` すなわち `#PunchedAt` と穴の
-  添字を足したものである。その先頭は元の名前と一致し、元の名前は `#` を含まないので、この名前も
-  `FUNPTR_NAME` を前置に持たない。またこの名前は `#` を含むのに対し `ARRAY_NAME` すなわち `Array` は
-  `#` を含まないので、穴を開けた `insert` が鍵 `Std::Array` を置くこともない。
-  BY 前提 型環境に項を入れる呼び出しの在りか, <1>2,
-     CODE src/ast/program.rs: Program::calculate_type_env,
-     CODE src/ast/types.rs: TyCon::into_punched_type_name,
-     CODE src/ast/typedecl.rs: TypeDefn::tycon, CODE src/parse/parser.rs: parse_type_defn,
-     CODE src/parse/grammer.pest: type_defn, type_name, capital_name,
-     CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, ARRAY_NAME, FUNPTR_NAME,
-     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon, is_funptr_tycon
-
-<1>6. `TypeEnv::add_tycons` に渡る写像の鍵の名前は、`ARRAY_NAME` (`Array`) と一致せず、`FUNPTR_NAME`
-      (`#FunPtr`) を前置に持たない。
-  <2>1. `add_tycons` を呼ぶ式が在る項目は、`register_opaque_tycon`、`run_one`、`lift_all`、
-        `realize_all` である。
-    `add_tycons` は `program.rs` の `pub` のメソッドなので、EXT 名前による数え上げ より、それを呼ぶ式は
-    その名前を含む。前提 型環境に項を入れる呼び出しの在りか の走査が挙げる残りの項目が持つのは、
-    `TypeEnv` の doc の散文と `add_tycons` 自身の宣言である。
-    BY 前提 型環境に項を入れる呼び出しの在りか, EXT 名前による数え上げ,
-       CODE src/ast/program.rs: TypeEnv, TypeEnv::add_tycons
-  <2>2. `register_opaque_tycon` が入れる鍵の名前は `?` で始まる。
-    `register_opaque_tycon` が入れる鍵は引数 `info` の `tycon` である。前提 型環境に項を入れる
-    呼び出しの在りか より、`register_opaque_tycon` を呼ぶ式が在る項目は `desugar_opaque_types` であり、
-    そこが渡すのは各グローバル値 `gv` についての `collect_opaque_infos(&gv.scm, gv_name)` の元である。
-    `collect_opaque_infos` は各元の `tycon` を `FullName::new(&gv_name.to_namespace(), &opq_var.name)`
-    から作り、`opq_var` は `is_opaque_tyvar(&tv.name)` が真である型変数だけを集めた列の元である。
-    `is_opaque_tyvar` が真であるのは、名前が `?` で始まるときである。
-    BY 前提 型環境に項を入れる呼び出しの在りか,
-       CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon, desugar_opaque_types,
-       collect_opaque_infos, CODE src/ast/types.rs: is_opaque_tyvar
-  <2>3. `run_one`・`lift_all`・`realize_all` が入れる鍵の名前は、`#FixCap@` か `#CapList@` で始まる。
-    この 3 つが入れる鍵は `CaptureStruct` の `tycon` である。`CaptureStruct` は非公開の欄 `fields` を
-    持つので EXT 可視性 より `capture_struct.rs` の外では構造体リテラルで作れず、その中の唯一の作り手
-    `CaptureStruct::new` は tycon の名前を `format!("{}@{}", prefix, owner.name)` と作る。`run_one` が
-    渡す `prefix` は `"#FixCap"`、`lift_all` と `realize_all` が渡す `prefix` は `CAP_LIST_PREFIX`
-    すなわち `"#CapList"` である。`format!` は `prefix` をそのまま名前の先頭に置く。
-    BY EXT 可視性, CODE src/optimization/defunctionalize_fix.rs: run_one,
-       CODE src/optimization/closure_specialization.rs: lift_all, realize_all, record_capture_list,
-       CODE src/optimization/capture_struct.rs: CaptureStruct, CaptureStruct::new,
-       CODE src/constants.rs: CAP_LIST_PREFIX
-  <2>4. QED
-    `?` は `#` と異なり、`#Fi` と `#Ca` は `FUNPTR_NAME` の先頭の 3 文字 `#Fu` と異なるので、`<2>2` と
-    `<2>3` の名前はどれも `FUNPTR_NAME` を前置に持たない。`ARRAY_NAME` すなわち `Array` は `?` でも `#`
-    でも始まらないので、その名前のどれとも一致しない。`<2>1` より、`add_tycons` を呼ぶ式が在る項目は
-    `<2>2` と `<2>3` が扱ったものだけである。
-    BY <2>1, <2>2, <2>3, CODE src/fixstd/builtin.rs: is_funptr_tycon,
-       CODE src/constants.rs: ARRAY_NAME, FUNPTR_NAME, CAP_LIST_PREFIX
-
-<1>6a. `type_env.tycons()` のどの鍵の名前も、`FUNPTR_NAME` を前置に持ちながら残りが `u32` として
-       読めない、という形を取らない。
-  `<1>3` の 6 つの書き込みのうち `<1>4` の 4 つは鍵を変えない。`<1>5` より、`TypeEnv::new` が置く鍵の
-  うち `FUNPTR_NAME` を前置に持つものは `bulitin_tycons()` の `1` から `FUNPTR_ARGS_MAX` までの各 `n`
-  についての `make_funptr_tycon(n)` に限られ、`<1>2` よりその名前は `FUNPTR_NAME` の後ろに `n` の
-  10 進表記を続けたものなので、EXT `u32` の 10 進表記 より残りは `u32` として読める。`<1>6` より
-  `add_tycons` が足す鍵も `FUNPTR_NAME` を前置に持たない。よってどの鍵の名前も、`FUNPTR_NAME` を前置に
-  持ちながら残りが `u32` として読めない形を取らない。
-  BY EXT `u32` の 10 進表記, <1>2, <1>3, <1>4, <1>5, <1>6
+<1>6. (c) が成り立つ。
+  `is_funptr(τ)` が真であるとする。`<1>1` より `τ` の最上位の tycon `tc` が在って `is_funptr_tycon(tc)`
+  は `Some` を返すので、`tc` の名前空間は `STD_NAME` ただ 1 つであり、その名前は `FUNPTR_NAME` で
+  始まる。`toplevel_tycon_info(τ, type_env)` が値を返すならば、`<1>1` よりその値は
+  `type_env.tycons()` の鍵 `tc` の項であり、その鍵が写像に在る。`<1>3` より `tc` は `1` 以上
+  `FUNPTR_ARGS_MAX` 以下のある `n` についての `make_funptr_tycon(n)` であって、その項は
+  `bulitin_tycons()` がその鍵の下に置いた項であり、`<1>2` よりその `variant` は
+  `TyConVariant::Primitive` である。
+  BY <1>1, <1>2, <1>3
 
 <1>7. QED
-  `<1>3` の 6 つの書き込みのうち、`<1>4` の 4 つはどの項の `variant` も変えず、`<1>5` の `TypeEnv::new` は
-  この 2 種の鍵に `<1>2` の項を置き、`<1>6` の `add_tycons` はこの 2 種の鍵に触れない。よって
-  `type_env.tycons()` に、鍵 `Std::Array` の項か `is_funptr_tycon` を満たす鍵の項が在るならば、それは
-  `<1>2` が述べる `TyConInfo` である。`<1>6a` が第 3 の主張を与える。
-  BY <1>2, <1>3, <1>4, <1>5, <1>6, <1>6a
+  BY <1>4, <1>5, <1>6
 
 ## L4 (identity の位置) <!--#8253e68-->
 
@@ -1558,19 +1476,14 @@ L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
     <3>2. `is_array(ty(c))` と `is_funptr(ty(c))` は panic せずに計算でき、どちらも偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
       `ArrayStorage`・`Opaque` のいずれか 1 つである。`<3>1` は `is_struct(ty(c))` が真であることを
-      `toplevel_tycon_info` 経由で示すので、`toplevel_tycon_info` は panic せず、`ty(c)` の最上位の
-      tycon は `type_env.tycons()` の鍵である。L3a の第 3 の主張より、`type_env.tycons()` のどの鍵の
-      名前も `FUNPTR_NAME` を前置に持ちながら残りが `u32` として読めない形を取らないので、
-      `is_funptr_tycon` はこの tycon に対して panic せず、`is_funptr(ty(c))` は panic せずに真か偽の
-      いずれかの値を返す。
-      `is_array(ty(c))` が真ならば `ty(c)` の最上位の
-      tycon は `Std::Array` であり、L3a より `toplevel_tycon_info(ty(c), type_env)` の `variant` は
-      `Array` である。`is_funptr(ty(c))` が真ならば `ty(c)` の最上位の tycon は `is_funptr_tycon` を
-      満たし、L3a より同じくその `variant` は `Primitive` である。
+      `toplevel_tycon_info` 経由で示すので、`toplevel_tycon_info` は値を返し、`ty(c)` の最上位の
+      tycon は `type_env.tycons()` の鍵である。よって L3a (a) より `is_funptr(ty(c))` は panic せずに
+      真か偽のいずれかの値を返す。L3a (b) より `is_array(ty(c))` が真ならばその項の `variant` は
+      `Array` であり、L3a (c) より `is_funptr(ty(c))` が真ならばその `variant` は `Primitive` である。
       `<3>1` より `ty(c)` の `variant` は `Struct` なので、どちらも真ではあり得ず、
       `is_array(ty(c))` と `is_funptr(ty(c))` はどちらも偽である。
-      BY <ref id=f68ae1c/>, <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
-         TypeNode::toplevel_tycon_info
+      BY <ref id=f68ae1c/> (a), <ref id=f68ae1c/> (b), <ref id=f68ae1c/> (c), <3>1,
+         CODE src/ast/types.rs: TyConVariant, TypeNode::toplevel_tycon_info
     <3>3. `is_fully_unboxed(ty(c))` は偽である。
       この CASE の前提より `is_box(ty(c))` は偽であり、`<3>1` と `<3>2` より `is_closure`・`is_array`・
       `is_funptr` も偽なので、`is_fully_unboxed(ty(c))` は `unpunched_field_types(ty(c))` の各
@@ -1667,19 +1580,14 @@ L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
     <3>2. `is_array(ty(s))` と `is_funptr(ty(s))` は panic せずに計算でき、どちらも偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
       `ArrayStorage`・`Opaque` のいずれか 1 つである。`<3>1` は `is_union(ty(s))` が真であることを
-      `toplevel_tycon_info` 経由で示すので、`toplevel_tycon_info` は panic せず、`ty(s)` の最上位の
-      tycon は `type_env.tycons()` の鍵である。L3a の第 3 の主張より、`type_env.tycons()` のどの鍵の
-      名前も `FUNPTR_NAME` を前置に持ちながら残りが `u32` として読めない形を取らないので、
-      `is_funptr_tycon` はこの tycon に対して panic せず、`is_funptr(ty(s))` は panic せずに真か偽の
-      いずれかの値を返す。
-      `is_array(ty(s))` が真ならば `ty(s)` の最上位の
-      tycon は `Std::Array` であり、L3a より `toplevel_tycon_info(ty(s), type_env)` の `variant` は
-      `Array` である。`is_funptr(ty(s))` が真ならば `ty(s)` の最上位の tycon は `is_funptr_tycon` を
-      満たし、L3a より同じくその `variant` は `Primitive` である。
+      `toplevel_tycon_info` 経由で示すので、`toplevel_tycon_info` は値を返し、`ty(s)` の最上位の
+      tycon は `type_env.tycons()` の鍵である。よって L3a (a) より `is_funptr(ty(s))` は panic せずに
+      真か偽のいずれかの値を返す。L3a (b) より `is_array(ty(s))` が真ならばその項の `variant` は
+      `Array` であり、L3a (c) より `is_funptr(ty(s))` が真ならばその `variant` は `Primitive` である。
       `<3>1` より `ty(s)` の `variant` は `Union` なので、どちらも真ではあり得ず、
       `is_array(ty(s))` と `is_funptr(ty(s))` はどちらも偽である。
-      BY <ref id=f68ae1c/>, <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
-         TypeNode::toplevel_tycon_info
+      BY <ref id=f68ae1c/> (a), <ref id=f68ae1c/> (b), <ref id=f68ae1c/> (c), <3>1,
+         CODE src/ast/types.rs: TyConVariant, TypeNode::toplevel_tycon_info
     <3>3. `is_fully_unboxed(ty(s))` は偽である。
       この CASE の前提より `is_box(ty(s))` は偽であり、`<3>1` と `<3>2` より `is_closure`・`is_array`・
       `is_funptr` も偽なので、`is_fully_unboxed(ty(s))` は `unpunched_field_types(ty(s))` の各
@@ -2551,11 +2459,11 @@ leaf に前置したものだからである。
   `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、型の
   `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が構造体で
   あることをその節の 1 つに挙げる。
-  `is_array(ty(c))` が真ならば `ty(c)` の最上位の tycon は `Std::Array` であり、L3a より
-  `toplevel_tycon_info(ty(c), type_env)` の `variant` は `Array` である。`variant` が `Struct` である
-  `ty(c)` には当たらない。
-  BY <ref id=83d98e9/>, <ref id=f68ae1c/>, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
-     TypeNode::is_array, TyConVariant
+  `is_struct` が `toplevel_tycon_info` 経由で真であることから `toplevel_tycon_info(ty(c), type_env)` は
+  値を返すので、L3a (b) より `is_array(ty(c))` が真ならばその `variant` は `Array` である。`variant` が
+  `Struct` である `ty(c)` には当たらない。
+  BY <ref id=83d98e9/>, <ref id=f68ae1c/> (b), CODE src/ast/types.rs: TypeNode::is_struct,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon_info, TyConVariant
 
 <1>2. CASE `is_fully_unboxed(ty(c))` が真。
   D4 の規則 1 より `boxed_leaf_paths(ty(c), type_env)` は空なので、(a) は空虚に成り立ち、(b) の 2 つの
