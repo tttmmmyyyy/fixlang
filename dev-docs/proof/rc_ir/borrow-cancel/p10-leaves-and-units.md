@@ -6,8 +6,11 @@
 `result_prov` が 1 つの結果 leaf に 2 つ以上の source を宣言しないことを develop mode で確かめるもの --
 だけである。README の第 1 節がこの 2 つを挙げる。
 
-この文書が立つのは README の定義 D1、D2、D4、D5、D6 と仮定 A3、A6、A9、A10、A11、A12、A15、A28 の
-上である。証明は 1 本の構造化証明で、その QED が次の 3 つである。
+この文書が立つ README の定義・仮定・命題は、`--render` が冒頭に生成する一覧が挙げる。そのうち
+A2 (単位への正規化) を読むのは第 5 節であり、`<1>33` と `<1>34` の条件 -- `pi` が `L(ty(x))` か
+`U(ty(x))` の要素であること -- を `Retain`/`Release` 節点の site について満たす者がそれである。
+証明の段が読む仮定は `<1>31` の条件節が挙げる。
+証明は 1 本の構造化証明で、その QED が次の 3 つである。
 
 - **P1** (leaf と unit の対応)。README の P1 が量化する型、すなわち **A10 を満たす**任意の型に
   ついて成り立つ。`<1>1` は A10 をこの文書の記法で述べたものである。第 3 節がその対応を述べる。
@@ -26,7 +29,7 @@ P1 と P2 は共通の命題 (型の上の walk が停止すること、`unit_st
 `<2>1` の `<3>5` が読む。その証明は命題を 1 つも引かない。仮定は A3 -- `result_prov` の決定性と、
 共有参照で受け取る計算が値の等しさを変えないことの 2 節 -- のほか、`<1>25` と `<1>21` を経て A6 と
 A11 を引き、定義 D1、D2、D6 を引く。外部の結果は `EXT Rust の可視性`、
-`EXT Rust のモジュールの木`、`EXT Rust の内部可変性`、`EXT derive した PartialEq と Eq`、
+`EXT Rust の内部可変性`、`EXT derive した PartialEq と Eq`、
 `EXT HashSet の等価性`、`EXT 1 要素の集合の反復` である。
 
 P1 は 2 つの静的な列挙 (`boxed_leaf_paths` と `rc_units`) の対応についての主張なので、D16 の
@@ -93,17 +96,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 構造体のフィールドもこの既定の下にある -- 同じ節の例が `pub struct Bar { field: i32 }` を
 「a public struct with a private field」と注釈する。`<1>3b` と、`<1>29a` の `<2>1` の `<3>1` と
-`<3>2` がこれを引く。
-
-**EXT Rust のモジュールの木** -- Rust Reference の "Modules" が次を述べる。
-
-> A module is a container for zero or more items.
->
-> A _module item_ is a module, surrounded in braces, named, and prefixed with the keyword `mod`. A
-> module item introduces a new, named module into the tree of modules making up a crate.
-
-すなわち、クレートのモジュールの木の辺は `mod` の項目が作るので、あるモジュールの子は、その
-モジュールの本体に置かれた `mod` の項目に限る。`<1>3b` と `<1>29a` の `<2>1` の `<3>1` がこれを引く。
+`<3>2` がこれを引く。この 3 つが引くのは、非公開の欄と `pub(crate)` の欄をクレートの外の
+コードが名前で参照できないこと、すなわち `src/` を走る走査がその欄を名指す項目を尽くすことである。
 
 **EXT Rust の内部可変性** -- Rust Reference の "Interior Mutability" が、共有参照の指す値を書き替える
 ことについて次を述べる。
@@ -119,7 +113,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 **EXT HashSet の等価性** -- 標準ライブラリの `HashSet<T, S>` の `PartialEq` は、両者の
 要素数が等しく、かつ一方のすべての要素が他方に含まれるときにだけ真を返す。すなわち `==` は集合と
-しての等価性であり、反復の順序に依らない。`<1>29a` の `<2>1a` の `<3>3` と `<1>29a` の `<2>1b` が
+しての等価性であり、反復の順序に依らない。`<1>29a` の `<2>1a` の `<3>3` と
+`<1>29a` の `<2>1b` の `<3>2` が
 これを引く。`crate::misc` の
 `Set<T>` は `FxHashSet<T>`、すなわちハッシャだけを差し替えた `HashSet<T, S>` である
 (`CODE src/misc.rs: Set`)。
@@ -130,15 +125,19 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 いる間 panic する。それ以外の場合はどちらも panic しない。`<1>30` の `<2>1` の `<3>4` がこれを引く。
 
 **EXT derive した PartialEq と Eq** -- `#[derive(PartialEq)]` が enum に作る `eq` は、2 つの値の
-変位が等しく、かつ対応する各成分が `==` で等しいときにだけ真を返す。`Eq` を実装する型の `==` は
-同値関係であり、反射的・対称的・推移的である (`Eq` の doc がその契約を述べる)。`<1>29a` の `<2>1a` の
-`<3>3` がこれを引き、その `<3>6` が推移律を使う。
+変位が等しく、かつ対応する各成分が `==` で等しいときにだけ真を返す。struct に作る `eq` は、対応する
+各欄が `==` で等しいときにだけ真を返す。どちらも欄または成分の `==` のほかに何も行わない。
+`Eq` を実装する型の `==` は
+同値関係であり、反射的・対称的・推移的である (`Eq` の doc がその契約を述べる)。`<1>3c` の `<2>1` の
+`<3>2`、および `<1>29a` の `<2>1a` の
+`<3>3` がこれを引き、後者の `<3>6` が推移律を使う。
 
 **EXT 1 要素の集合の反復** -- 要素をちょうど 1 つ持つ `HashSet<T, S>` について、
 `into_iter().next()` と `iter().next()` はどちらも `Some` を返し、その中身はその 1 つの要素で
 ある (`into_iter` は要素そのもの、`iter` はそれへの共有参照)。`<1>29a` の `<2>1a` の `<3>6`、
-`<1>29a` の `<2>1b`、
-`<1>30` の `<2>6` と `<2>7` の `<3>1`・`<3>6`、`<1>34` の `<2>1` の `<3>3` がこれを引く。
+`<1>29a` の `<2>1b` の `<3>2`、
+`<1>30` の `<2>6` の `<3>3`、`<1>30` の `<2>7` の `<3>1`・`<3>6`、`<1>34` の `<2>1` の `<3>3` が
+これを引く。
 
 **EXT Iterator の enumerate と filter** -- 標準ライブラリの `Iterator` について、`enumerate` は
 もとの列の第 `i` 要素を対 `(i, 要素)` に写した列を返す。すなわち第 1 成分は 0 から始まる連続した
@@ -153,10 +152,22 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 `Clone::clone` を呼び、その結果から同じ形の値を組み立てるだけであり、ほかの関数を呼ばない。
 `<1>3b` がこれを引く。
 
-**EXT Iterator の map と zip** -- 標準ライブラリの `Iterator` について、`map(f)` はもとの列の各要素に
+**EXT derive した Default** -- `#[derive(Default)]` が生成する実装は、その型の各欄について
+`Default::default()` を呼び、その結果から同じ形の値を組み立てるだけであり、ほかの関数を呼ばない。
+`Option<T>` の `Default::default()` は `None` である。`<1>3bb` がこれを引く。
+
+**EXT Iterator の map と zip と all** -- 標準ライブラリの `Iterator` について、`map(f)` はもとの列の
+各要素に
 `f` を当てた列を返し、列の長さを変えない。`a.zip(b)` は `a` と `b` の同じ位置の要素の対を、短い方の
 長さだけ並べた列を返す。したがって長さの等しい 2 つの列を `zip` すると、両者の各位置の対がちょうど
-1 度ずつ渡される。`<1>9a` の `<2>1a` がこれを引く。
+1 度ずつ渡される。`all(pred)` は、`pred` が列のすべての要素について真を返すときにだけ真を返す。
+`<1>9a` の `<2>1a` と、`<1>29a` の `<2>1a` の `<3>5` と `<3>6` がこれを引く。
+
+**EXT 文字列の接頭辞と u32 の 10 進表記** -- 標準ライブラリの `str::starts_with(prefix)` は、その
+文字列が `prefix` で始まるときにだけ真を返す。`prefix` が ASCII の文字だけからなるとき
+`prefix.len()` はその文字数に等しいので、`chars()` から先頭 `prefix.len()` 個を捨てた残りは、
+`prefix` を落とした部分文字列である。`u32` の `Display` は値の 10 進表記を書き、
+`str::parse::<u32>()` はその表記を `Ok` で読み戻す。`<1>3ba` の `<2>1` と `<2>4` がこれを引く。
 
 **EXT Vec の等価性** -- 標準ライブラリの `Vec<T>` の `PartialEq` は、両者の長さが等しく、かつ同じ
 位置の要素どうしが `==` で等しいときにだけ真を返す。`<1>9a` の `<2>1a` がこれを引く。
@@ -167,25 +178,34 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 - (i) 引数の値。
 - (ii) その実行が記憶域から読む値。
 - (iii) その実行が呼ぶ関数の返り値。
-- (iv) その実行が比べる 2 つの番地が一致するかどうか (`Arc::ptr_eq` と、`impl PartialEq for Type` が
-  節点の対について置く同じ形の比較がこれである)。
+- (iv) その実行が比べる 2 つの番地が一致するかどうか。`Arc::ptr_eq` がこれであり、
+  `impl PartialEq for Type` が節点の対について呼ぶ `type_node_eq` は、その呼び出しを選言の第 1 項に
+  置く。
 
-この道には並行性も乱数も外部入力も無い。`<1>9a` の `<2>7` の `<3>2`・`<3>3`・`<3>4` がこれを引く。
+この道には並行性も乱数も外部入力も無い。`<1>9a` の `<2>7` の `<3>3` と `<3>4` がこれを引く。
 
 **DEF この道の関数** -- `truncate_to_unit(ty, path, E)` の実行が直接または間接に呼ぶ関数のうち、
-`src/` に本体を持ち、かつ**番地の一致・不一致を読む道を持たないもの**の全体を、**この道の関数**と
-呼ぶ。`<1>9a` の `<2>1` から `<2>5` が、この道の各関数が何を読むかを述べる。同じ数え上げが、番地を
-読む道を持つ関数を 3 群として挙げる。
+`src/` に本体を持ち、かつ**次の 3 群のどれにも属さないもの**の全体を、**この道の関数**と呼ぶ。
+`<1>9a` の `<2>1` から `<2>5a` が、この道の各関数が何を読むかを述べ、同じ数え上げがこの 3 群を挙げる。
 
-- **節点を組み立てる関数** -- `TypeNode` の 8 つの setter、`TypeNode::set_source`、
-  `TypeNode::set_source_if_none`、および `impl Clone for TypeNode`。`Arc::ptr_eq` の分岐と
-  `set_source_if_none` の分岐が、どちらの腕でこの群を呼ぶかを決める。
-- **`TypeNode` の等価比較** -- `impl PartialEq for TypeNode` と `impl PartialEq for Type`。
+- **節点を組み立てる関数と、その素材である `info` を読む関数** -- `TypeNode` の 8 つの setter、
+  `TypeNode::set_source`、`TypeNode::set_source_if_none`、`TypeNode::get_source`、および
+  `impl Clone for TypeNode`。
+- **`TypeNode` の等価比較** -- `impl PartialEq for TypeNode`、`impl PartialEq for Type`、および
+  後者が節点の対について呼ぶ `type_node_eq`。
 - **`TypeNode` のハッシュ** -- `impl Hash for TypeNode` と `TypeNode::type_hash`。
 
-3 群を除くのは、番地の一致・不一致で呼び出しの並びがずれうるからである。3 群のどれも、値として
-等しい引数に対して値として等しい答えを返し、abort しない
-(`<1>9a` の `<2>1a`・`<2>6`・`<2>6a`)。
+3 群を外すのは、その内側の呼び出しの並びと、返す `Arc` の番地と、`TypeNode` の `info` の欄が、
+引数の値からは決まらないからである。外した 3 群はどれも abort しない。第 2 群と第 3 群は、値として
+等しい引数に対して値として等しい答えを返す (`<1>9a` の `<2>6`・`<2>6a`)。第 1 群のうち
+`TypeNode::get_source` が返すのは `info.source` であり、`info` は `impl PartialEq for TypeNode` が
+読まない欄なので、その答えは値として等しい引数の間で違いうる。残る第 1 群の関数が返す節点の `ty` は
+引数の値で決まる (`<1>9a` の `<2>1a`)。
+
+**番地の一致・不一致を読む式は、この道の関数の中にも在る。** 型を写す 2 つの関数 --
+`TypeNode::unwrap_newtypes_node` と `Substitution::substitute_type` -- が自分の本体に置く
+`Arc::ptr_eq` の分岐がそれであり、その分岐を `<1>9a` の `<2>1a` と `<2>7` の `<3>2a` が扱う。
+`get_source` の答えと `set_source_if_none` の枝も、同じ 2 つの段が扱う。
 
 **DEF 下位の呼び出しの列** -- ある関数呼び出しの 1 回の実行が行う「この道の関数」の呼び出しについて、
 その**開始**の事象 (呼ぶ関数と引数の値を持つ) と**返り**の事象 (返る値を持つ) を、起きた時間順に
@@ -262,6 +282,75 @@ SCAN src/ `TyConInfo {`
   = src/fixstd/builtin.rs: bulitin_tycons -- 構造体リテラル
   = src/optimization/capture_struct.rs: CaptureStruct::new -- 構造体リテラル
 
+**前提 型環境の `tycons` の欄を名指す在りか** --- `tycons` という名前を含む項目は次で尽きる。
+`TypeEnv` の `tycons` は非公開の欄なので、`EXT Rust の可視性` よりそれを名前で参照できるのは
+このクレートの中だけであり、走査の範囲 `src/` がそれを覆う。走査は字面の上位近似なので、一覧には
+同じ綴りの局所変数・引数・関数名 (`bulitin_tycons`、`collect_tycons`、`new_tycons` など) と、
+別の型が持つ同名の欄と、散文の中の同じ綴りも入る。
+
+SCAN src/ `tycons`
+  = src/ast/kind_scope.rs: KindEnv -- 別の型 (`KindEnv`) が持つ同名の欄の宣言
+  = src/ast/pattern.rs: Pattern::resolve_union_variant -- アクセサ `tycons()` を通じた読み
+  = src/ast/program.rs: Program::calculate_type_env -- 局所の `Map` を組み、`TypeEnv::new` へ渡す
+  = src/ast/program.rs: Program::kind_env -- 別の型 (`KindEnv`) の同名の欄へ置く
+  = src/ast/program.rs: Program::resolve_namespace_not_in_expr -- 欄を読んで複製し、各 `Field` の `syn_ty` と `ty` を書き替えて置き直す
+  = src/ast/program.rs: Program::resolve_type_aliases_not_in_expr -- `TypeEnv::resolve_type_aliases_in_tycons` の呼び出し
+  = src/ast/program.rs: Program::tycon_names_with_aliases -- 欄の読み
+  = src/ast/program.rs: TypeEnv -- 欄の宣言
+  = src/ast/program.rs: TypeEnv::add_tycons -- 欄を読んで複製し、渡された各項目を入れて置き直す
+  = src/ast/program.rs: TypeEnv::default -- 空の `Map` を欄へ置く
+  = src/ast/program.rs: TypeEnv::is_struct_act -- 欄の読み
+  = src/ast/program.rs: TypeEnv::is_unwrapped_newtype -- 散文の中の `add_tycons` の綴り
+  = src/ast/program.rs: TypeEnv::kinds -- 欄の読み
+  = src/ast/program.rs: TypeEnv::new -- 引数の `Map` を欄へ置く
+  = src/ast/program.rs: TypeEnv::resolve_type_aliases_in_tycons -- 欄を読んで複製し、各 `Field` の `ty` を書き替えて置き直す
+  = src/ast/program.rs: TypeEnv::tycons -- 欄を返す公開のアクセサ
+  = src/ast/program.rs: TypeEnv::unwrap_newtypes -- 欄を読んで複製し、各 `Field` の `ty` を書き替えて置き直す
+  = src/ast/program.rs: TypeEnv::unwrapped_newtype_info -- 欄の読み
+  = src/ast/types.rs: TyCon::get_struct_union_value_type -- アクセサ `tycons()` を通じた読み
+  = src/ast/types.rs: TypeNode::collect_tycons -- 同じ綴りの局所変数・引数・関数名
+  = src/ast/types.rs: TypeNode::define_modules_of_tycons -- 同じ綴りの局所変数・引数・関数名
+  = src/ast/types.rs: TypeNode::fixed_vars_to_set -- 散文の中の同じ綴り
+  = src/ast/types.rs: TypeNode::kind_mismatch_error -- 別の型 (`KindEnv`) の同名の欄の読み
+  = src/ast/types.rs: TypeNode::toplevel_tycon_info -- アクセサ `tycons()` を通じた読み
+  = src/build/divide_program.rs: declaration_of -- アクセサ `tycons()` を通じた読み
+  = src/build/divide_program.rs: type_declarations_reached -- 同じ綴りの局所変数・引数・関数名
+  = src/commands/docs.rs: is_private_field_accessor -- アクセサ `tycons()` を通じた読み
+  = src/commands/docs.rs: tyvars_with_pre_space -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/code_action.rs: handle_unknown_name -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/document_symbol.rs: handle_document_symbol -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/references.rs: find_all_references -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/rename.rs: handle_rename -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/semantic_tokens.rs: Overlay::classify_tycon -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/util.rs: document_trait_or_alias -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/util.rs: document_tycon_or_alias -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/util.rs: find_tycon_def_src -- アクセサ `tycons()` を通じた読み
+  = src/commands/lsp/workspace_symbol.rs: handle_workspace_symbol -- アクセサ `tycons()` を通じた読み
+  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 局所の `Map` を組み、`add_tycons` へ渡す
+  = src/elaboration/desugar_opaque.rs: rewrite_impl_scheme -- 散文の中の同じ綴り
+  = src/elaboration/typecheck.rs: TypeCheckContext::resolve_match_cond_tycon -- アクセサ `tycons()` を通じた読み
+  = src/elaboration/typecheck.rs: TypeCheckContext::resolve_struct_tycon -- アクセサ `tycons()` を通じた読み
+  = src/fixstd/builtin.rs: InlineLLVMFFICallBody -- 別の型が持つ `param_tycons` の欄の宣言
+  = src/fixstd/builtin.rs: InlineLLVMFFICallBody::generate -- 同じ欄の読み
+  = src/fixstd/builtin.rs: bulitin_tycons -- 関数の名前
+  = src/object.rs: ty_to_object_ty -- アクセサ `tycons()` を通じた読み
+  = src/optimization/closure_specialization.rs: LiftedLambdas -- 別の型が持つ `new_tycons` の欄の宣言
+  = src/optimization/closure_specialization.rs: LiftedLambdas::record_capture_list -- 同じ欄への挿入
+  = src/optimization/closure_specialization.rs: LiftedLambdas::take_new_tycons -- 同じ欄の取り出し
+  = src/optimization/closure_specialization.rs: lift_all -- `add_tycons` の呼び出し
+  = src/optimization/closure_specialization.rs: realize_all -- `add_tycons` の呼び出し
+  = src/optimization/collapse_constructions.rs: Collapser::is_unboxed_datatype -- アクセサ `tycons()` を通じた読み
+  = src/optimization/defunctionalize_fix.rs: run_one -- 局所の `Map` を組み、`add_tycons` へ渡す
+  = src/optimization/split_struct_args.rs: declared_field_names -- アクセサ `tycons()` を通じた読み
+  = src/optimization/split_struct_args.rs: split_one_argument -- 同じ綴りの局所変数・引数・関数名
+  = src/optimization/split_struct_args.rs: splittable_struct -- アクセサ `tycons()` を通じた読み
+  = src/optimization/unwrap_newtype.rs: is_acyclic_newtype -- 同じ綴りの局所変数・引数・関数名
+  = src/optimization/unwrap_newtype.rs: run -- アクセサ `tycons()` を通じた読みと、`unwrap_newtypes` の呼び出し
+  = src/optimization/unwrap_newtype.rs: unwrappable_tycons -- 同じ綴りの局所変数・引数・関数名
+  = src/rc_ir/lower.rs: Lowerer::lower_array_lit -- 散文の中の `param_tycons` の綴り
+  = src/rc_ir/lower.rs: Lowerer::lower_ffi_call -- 別の型が持つ `param_tycons` の欄への引数
+  = src/tests/test_opaque_type.rs: test_opaque_nested_trait_chain -- 散文の中の同じ綴り
+
 **前提 `ty` の欄への代入の在りか** --- `ty` という名前の欄への代入を書く項目は次で尽きる。
 `src/ast/types.rs` のうち `TypeNode` の `ty` の欄へ代入するのは 8 つの setter であり、どれも
 `self.clone()` が作った局所の値へ代入してから `Arc::new` で包んで返す。同じファイルの `Scheme` の
@@ -297,6 +386,97 @@ SCAN src/ `.ty = `
   = src/elaboration/typecheck.rs: TypeCheckContext::reduce_predicate_noalias -- `Predicate` の欄
   = src/optimization/unwrap_newtype.rs: run_on_symbol -- `Symbol` の欄
 
+**前提 型の 2 つの変位を組み立てる在りか** --- `Type::TyApp` と `Type::AssocTy` の名前を書く項目は
+次で尽きる。走査は組み立てとパターン照合を区別しないので、一覧の大半はパターン照合である。値を
+組み立てるのは、`Type::TyApp` については `type_tyapp` と `TypeNode::set_tyapp_fun` と
+`TypeNode::set_tyapp_arg`、`Type::AssocTy` については `type_assocty` と
+`TypeNode::set_assocty_name` と `TypeNode::set_assocty_args` である。
+
+SCAN src/ `Type::TyApp(`
+  = src/ast/export_statement.rs: ExportedFunctionType::validate -- パターン照合
+  = src/ast/types.rs: Type::eq -- パターン照合
+  = src/ast/types.rs: TypeNode::collect_tycons -- パターン照合
+  = src/ast/types.rs: TypeNode::collect_type_arguments -- パターン照合
+  = src/ast/types.rs: TypeNode::collect_tyvar_names -- パターン照合
+  = src/ast/types.rs: TypeNode::define_modules_of_tycons -- パターン照合
+  = src/ast/types.rs: TypeNode::depth -- パターン照合
+  = src/ast/types.rs: TypeNode::find_node_at -- パターン照合
+  = src/ast/types.rs: TypeNode::find_wildcard_inferred_type -- パターン照合
+  = src/ast/types.rs: TypeNode::fixed_vars_to_set -- パターン照合
+  = src/ast/types.rs: TypeNode::flatten_type_application_inner -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars_to_vec -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars_to_vec_with_span -- パターン照合
+  = src/ast/types.rs: TypeNode::get_head_string -- パターン照合
+  = src/ast/types.rs: TypeNode::global_to_absolute -- パターン照合
+  = src/ast/types.rs: TypeNode::is_assoc_ty_free -- パターン照合
+  = src/ast/types.rs: TypeNode::is_ground -- パターン照合
+  = src/ast/types.rs: TypeNode::is_head_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::kind_mismatch_error -- パターン照合
+  = src/ast/types.rs: TypeNode::predicates_from_associated_types_internal -- パターン照合
+  = src/ast/types.rs: TypeNode::resolve_namespace -- パターン照合
+  = src/ast/types.rs: TypeNode::resolve_type_aliases_internal -- パターン照合
+  = src/ast/types.rs: TypeNode::set_kinds -- パターン照合
+  = src/ast/types.rs: TypeNode::set_toplevel_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::set_tyapp_arg -- パターン照合と、複製の `ty` へ置く組み立て
+  = src/ast/types.rs: TypeNode::set_tyapp_fun -- パターン照合と、複製の `ty` へ置く組み立て
+  = src/ast/types.rs: TypeNode::should_braced_as_arg -- パターン照合
+  = src/ast/types.rs: TypeNode::toplevel_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::unwrap_newtypes_node -- パターン照合
+  = src/ast/types.rs: type_tyapp -- `TypeNode::new_arc` に渡す組み立て
+  = src/commands/lsp/references.rs: collect_typenode_assoc_type_refs -- パターン照合
+  = src/commands/lsp/references.rs: collect_typenode_type_refs -- パターン照合
+  = src/commands/lsp/semantic_tokens.rs: Overlay::collect_type -- パターン照合
+  = src/elaboration/desugar_opaque.rs: collect_opaque_applications_inner -- パターン照合
+  = src/elaboration/desugar_opaque.rs: resolve_opaque_type_in_type -- パターン照合
+  = src/elaboration/typecheck.rs: Substitution::matching_internal -- パターン照合
+  = src/elaboration/typecheck.rs: Substitution::substitute_type -- パターン照合
+  = src/elaboration/typecheck.rs: TypeCheckContext::reduce_type_by_equality_inner -- パターン照合
+  = src/elaboration/typecheck.rs: TypeCheckContext::unify -- パターン照合
+  = src/rc_ir/borrow.rs: mentions_a_destructor -- パターン照合
+
+SCAN src/ `Type::AssocTy(`
+  = src/ast/kind_scope.rs: KindScope::extend -- パターン照合
+  = src/ast/kind_scope.rs: KindScope::extend_by_assoc_ty_application -- パターン照合
+  = src/ast/types.rs: Type::eq -- パターン照合
+  = src/ast/types.rs: TypeNode::collect_tycons -- パターン照合
+  = src/ast/types.rs: TypeNode::collect_tyvar_names -- パターン照合
+  = src/ast/types.rs: TypeNode::define_modules_of_tycons -- パターン照合
+  = src/ast/types.rs: TypeNode::depth -- パターン照合
+  = src/ast/types.rs: TypeNode::find_node_at -- パターン照合
+  = src/ast/types.rs: TypeNode::find_wildcard_inferred_type -- パターン照合
+  = src/ast/types.rs: TypeNode::fixed_vars_to_set -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars_to_vec -- パターン照合
+  = src/ast/types.rs: TypeNode::free_vars_to_vec_with_span -- パターン照合
+  = src/ast/types.rs: TypeNode::get_head_string -- パターン照合
+  = src/ast/types.rs: TypeNode::global_to_absolute -- パターン照合
+  = src/ast/types.rs: TypeNode::is_assoc_ty_free -- パターン照合
+  = src/ast/types.rs: TypeNode::is_ground -- パターン照合
+  = src/ast/types.rs: TypeNode::is_head_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::kind_mismatch_error -- パターン照合
+  = src/ast/types.rs: TypeNode::predicates_from_associated_types_internal -- パターン照合
+  = src/ast/types.rs: TypeNode::resolve_namespace -- パターン照合
+  = src/ast/types.rs: TypeNode::resolve_type_aliases_internal -- パターン照合
+  = src/ast/types.rs: TypeNode::set_assocty_args -- パターン照合と、複製の `ty` へ置く組み立て
+  = src/ast/types.rs: TypeNode::set_assocty_name -- パターン照合と、複製の `ty` へ置く組み立て
+  = src/ast/types.rs: TypeNode::set_kinds -- パターン照合
+  = src/ast/types.rs: TypeNode::set_toplevel_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::should_braced_as_arg -- パターン照合
+  = src/ast/types.rs: TypeNode::toplevel_tycon -- パターン照合
+  = src/ast/types.rs: TypeNode::unwrap_newtypes_node -- パターン照合
+  = src/ast/types.rs: type_assocty -- `TypeNode::new_arc` に渡す組み立て
+  = src/commands/lsp/references.rs: collect_typenode_assoc_type_refs -- パターン照合
+  = src/commands/lsp/references.rs: collect_typenode_type_refs -- パターン照合
+  = src/commands/lsp/semantic_tokens.rs: Overlay::collect_type -- パターン照合
+  = src/elaboration/desugar_opaque.rs: collect_opaque_applications_inner -- パターン照合
+  = src/elaboration/desugar_opaque.rs: resolve_opaque_type_in_type -- パターン照合
+  = src/elaboration/typecheck.rs: Substitution::matching_internal -- パターン照合
+  = src/elaboration/typecheck.rs: Substitution::substitute_type -- パターン照合
+  = src/elaboration/typecheck.rs: TypeCheckContext::reduce_type_by_equality_inner -- パターン照合
+  = src/elaboration/typecheck.rs: TypeCheckContext::unify -- パターン照合
+  = src/rc_ir/borrow.rs: mentions_a_destructor -- パターン照合
+
 **前提 型の節点への可変参照の在りか** --- `&mut TypeNode` の字面を含む項目も、`Arc::get_mut` の字面を
 含む項目も `src/` に無い。`Arc::make_mut` を書くのは 1 つの項目だけであり、そこが可変に借りるのは
 `Arc<Map<..>>` の欄 (`assumed_preds` と `assumed_eqs`) である。すなわち `Arc<TypeNode>` から
@@ -309,25 +489,96 @@ SCAN src/ `Arc::get_mut`
 SCAN src/ `Arc::make_mut`
   = src/elaboration/typecheck.rs: TypeCheckContext::instantiate_scheme -- `Arc<Map<..>>` の欄を借りる
 
-**前提 変数の表の 2 つの欄を名指す在りか** --- `VarTable` の `bindings` の欄を名指す式が在る項目と、
-`var_tys` という名前を含む項目は次で尽きる。`bindings` の側の走査は、別の型が持つ同名の欄を名指す
-項目も挙げる。`VarTable::empty` は `bindings` を構造体リテラルで置くので `.bindings` の走査には
-挙がらない。
+**前提 変数の表の 2 つの欄を名指す在りか** --- `bindings` という名前を含む項目と、`var_tys` と
+いう名前を含む項目は次で尽きる。`VarTable` の `bindings` は非公開の欄、`var_tys` は `pub(crate)` の
+欄なので、`EXT Rust の可視性` よりどちらもこのクレートの中でしか名前で参照できず、走査の範囲 `src/`
+がそれを覆う。走査は字面の上位近似なので、一覧には同じ綴りの局所変数・引数・関数名
+(`collect_bindings` など) と、別の型が持つ同名の欄と、散文の中の同じ語も入る。
 
-SCAN src/ `.bindings`
+SCAN src/ `bindings`
+  = src/ast/pattern.rs: PatternNode::get_typed -- 散文の中の同じ語
   = src/build/build_object_files.rs: dump_rc_ir -- `ProvenanceAnalysis` の同名の欄の読み
-  = src/rc_ir/ownership.rs: VarTable::of -- `vars.bindings.insert`
-  = src/rc_ir/ownership.rs: collect_bindings -- `vars.bindings.insert`
-  = src/rc_ir/ownership.rs: origin_inner -- 読み `vars.bindings.get`
-  = src/rc_ir/provenance.rs: Interpreter::record -- `Interpreter` の同名の欄
-  = src/rc_ir/provenance.rs: Interpreter::refine_by_unique_flag -- `Interpreter` の同名の欄
-  = src/rc_ir/provenance.rs: analyze_program -- `ProvenanceAnalysis` の同名の欄
+  = src/commands/lsp/util.rs: collect_uses_of_binding -- 同じ綴りの局所変数
+  = src/commands/lsp/util.rs: find_enclosing_binder -- 同じ綴りの局所変数
+  = src/commands/lsp/util.rs: pat_name_spans -- 散文の中の同じ語
+  = src/elaboration/typecheck.rs: TypeCheckContext::compute_make_struct_field_tys -- 散文の中の同じ語
+  = src/elaboration/typecheck.rs: TypeCheckContext::make_error -- 散文の中の同じ語
+  = src/elaboration/typecheck.rs: TypeCheckContext::reduce_type_by_equality_inner -- 散文の中の同じ語
+  = src/elaboration/typecheck.rs: TypeCheckContext::unify_or_tolerated_mismatch -- 散文の中の同じ語
+  = src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner -- 散文の中の同じ語
+  = src/fixstd/builtin.rs: InlineLLVMArrayLitBody -- 散文の中の同じ語
+  = src/generator.rs: Scope -- 散文の中の同じ語
+  = src/generator.rs: Scope::pop_local -- 同じ綴りの局所変数
+  = src/optimization/collapse_constructions.rs: Collapser::start_visit_make_struct -- 同じ綴りの局所変数
+  = src/optimization/defunctionalize_fix.rs: FixDefunctionalizer -- 散文の中の同じ語
+  = src/optimization/rename.rs: Substitutor::end_visit_llvm -- 同じ綴りの局所変数
+  = src/optimization/split_struct_args.rs: twin_call -- 同じ綴りの局所変数
+  = src/optimization/split_struct_args.rs: wrapper_body -- 散文の中の同じ語
+  = src/rc_ir/borrow.rs: RewriteCtx -- 散文の中の同じ語
+  = src/rc_ir/borrow.rs: borrow_ify -- 散文の中の同じ語
+  = src/rc_ir/borrow.rs: tail_result_vars -- 散文の中の同じ語
+  = src/rc_ir/borrow.rs: trivially_returns -- 散文の中の同じ語
+  = src/rc_ir/locality.rs: Walk::shape_of -- 散文の中の同じ語
+  = src/rc_ir/locality.rs: Walk::walk_rhs -- 散文の中の同じ語
+  = src/rc_ir/lower.rs: Lowerer::checker -- 同じ綴りの局所変数
+  = src/rc_ir/lower.rs: Lowerer::destructure_pattern -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::fold_bindings -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_app -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_array_lit -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_body -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_eval -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_ffi_call -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_if -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_lam -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_let -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_llvm -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_make_struct -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_match -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_symbol -- 散文の中の同じ語
+  = src/rc_ir/lower.rs: Lowerer::lower_to_var -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::lower_to_var_inner -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/lower.rs: Lowerer::resolve -- 散文の中の同じ語
+  = src/rc_ir/lower.rs: try_attach_debug_name -- `Vec<PendingBinding>` の同名の引数・局所変数
+  = src/rc_ir/ownership.rs: VarTable -- 欄の宣言と、`origins` の doc の中の同じ語
+  = src/rc_ir/ownership.rs: VarTable::body_only -- `collect_bindings` の呼び出し
+  = src/rc_ir/ownership.rs: VarTable::empty -- 空の `Map` を欄へ置く構造体リテラル
+  = src/rc_ir/ownership.rs: VarTable::of -- 欄への挿入と、`collect_bindings` の呼び出し
+  = src/rc_ir/ownership.rs: collect_bindings -- 関数の名前と、欄への挿入
+  = src/rc_ir/ownership.rs: origin_inner -- 欄の読み `vars.bindings.get`
+  = src/rc_ir/print.rs: Annotations -- 散文の中の同じ語
+  = src/rc_ir/provenance.rs: Interpreter -- 別の型が持つ同名の欄
+  = src/rc_ir/provenance.rs: Interpreter::interpret_app -- 散文の中の同じ語
+  = src/rc_ir/provenance.rs: Interpreter::new -- 別の型が持つ同名の欄
+  = src/rc_ir/provenance.rs: Interpreter::record -- 別の型が持つ同名の欄
+  = src/rc_ir/provenance.rs: Interpreter::refine_by_unique_flag -- 別の型が持つ同名の欄
+  = src/rc_ir/provenance.rs: ProvenanceAnalysis -- 別の型が持つ同名の欄
+  = src/rc_ir/provenance.rs: analyze_program -- `Interpreter` と `ProvenanceAnalysis` の同名の欄
+  = src/rc_ir/validate.rs: Validator::check_expr -- 散文の中の同じ語
+  = src/tests/test_basic.rs: E -- 散文の中の同じ語
+  = src/tests/test_basic.rs: K -- 散文の中の同じ語
+  = src/tests/test_lsp/cases/goto_local/lib.fix: OneOrTwo -- 散文の中の同じ語
 
 SCAN src/ `var_tys`
   = src/rc_ir/ownership.rs: VarTable -- 欄の宣言
   = src/rc_ir/ownership.rs: VarTable::empty -- `var_tys: Map::default()`
   = src/rc_ir/ownership.rs: VarTable::of -- 挿入
   = src/rc_ir/ownership.rs: collect_bindings -- 挿入
+
+**前提 番地の一致を読む在りか** --- `ptr_eq` という綴りを含む項目は次で尽きる。`Arc::ptr_eq` は
+2 つの `Arc` が同じ番地を指すかを返す標準ライブラリの関数であり、これが
+`EXT Rust の評価の決定性` の (iv) が言う番地の比較である。走査は字面の上位近似なので、一覧には
+Fix のプリミティブの名前としての同じ綴りも入る。`<1>9a` の `<2>7` の `<3>2a` がこれを引く。
+
+SCAN src/ `ptr_eq`
+  = src/ast/types.rs: TypeNode::unwrap_newtypes_node -- `Type::TyApp` の腕に置く分岐
+  = src/ast/types.rs: type_node_eq -- `impl PartialEq for Type` が節点の対について置く比較
+  = src/elaboration/desugar_opaque.rs: resolve_opaque_type_in_type -- 別の型を写す関数が置く分岐
+  = src/elaboration/typecheck.rs: Substitution::substitute_type -- `Type::TyApp` と `Type::AssocTy` の腕に置く 2 つの分岐
+  = src/elaboration/typecheck.rs: TypeCheckContext::unify -- 単一化の入口の速い道と、それを説明する散文
+  = src/fixstd/builtin.rs: InlineLLVMPtrEqBody::name -- Fix のプリミティブの名前としての綴り
+  = src/tests/test_type_node_identity.rs: test_a_shared_child_is_the_same_type_as_two_separate_ones -- 節点の同一性を測るテスト
+  = src/tests/test_type_node_identity.rs: test_types_built_from_separate_nodes_are_one_key -- 節点の同一性を測るテスト
 
 **前提 `truncate_to_unit` を呼ぶ在りか** --- `truncate_to_unit` を呼ぶ式が在る項目は次で尽きる。
 走査はその宣言も挙げる。path を `origin` の答えから得るのは `owns_object` と `owns_object_yet` で
@@ -428,13 +679,22 @@ SCAN src/ `truncate_to_unit(`
        CODE src/ast/types.rs: TypeNode::set_assocty_name,
        CODE src/ast/types.rs: TypeNode::set_assocty_args,
        CODE src/ast/types.rs: impl Clone for TypeNode
-  <2>3. 値が作られる時点で、その直接の部分はどれも既に在る値である。`Type::TyApp` と
-     `Type::AssocTy` を組み立てるのは `type_tyapp`、`type_assocty`、および `<2>2` の
-     `set_tyapp_fun`・`set_tyapp_arg`・`set_assocty_name`・`set_assocty_args` であり、どれも
-     引数として渡された `Arc<TypeNode>` か、複製元の `ty` が既に持っていた `Arc<TypeNode>` を置く。
-     `TypeNode` が導出する `Deserialize` も、`ty` の欄を読み終えてから節点を組み立てるので、
-     部分は節点より先に作られる。
-    BY <2>2, CODE src/ast/types.rs: type_tyapp, CODE src/ast/types.rs: type_assocty,
+  <2>3. 値が作られる時点で、その直接の部分はどれも既に在る値である。
+     前提 型の 2 つの変位を組み立てる在りか より、`Type::TyApp` の値を組み立てるのは
+     `type_tyapp`・`TypeNode::set_tyapp_fun`・`TypeNode::set_tyapp_arg`、`Type::AssocTy` の値を
+     組み立てるのは `type_assocty`・`TypeNode::set_assocty_name`・`TypeNode::set_assocty_args`
+     である。どれも成分に置くのは、引数として渡された `Arc<TypeNode>` か、複製元の `ty` が既に
+     持っていた `Arc<TypeNode>` である。`Type` は `Clone` と `Deserialize` を導出するので、その
+     2 つもこの 2 つの変位の値を作る -- `Clone` が成分に置くのは複製元の `Arc` の複製であり、
+     `Deserialize` は成分を読み終えてから変位を組み立てる。`TypeNode` が導出する `Deserialize` も、
+     `ty` の欄を読み終えてから節点を組み立てる。よってどの道でも、部分は節点より先に作られる。
+    BY <2>2, 前提 型の 2 つの変位を組み立てる在りか,
+       CODE src/ast/types.rs: type_tyapp, CODE src/ast/types.rs: type_assocty,
+       CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
+       CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
+       CODE src/ast/types.rs: TypeNode::set_assocty_name,
+       CODE src/ast/types.rs: TypeNode::set_assocty_args,
+       CODE src/ast/types.rs: Type,
        CODE src/ast/types.rs: TypeNode (`Serialize` と `Deserialize` の導出)
   <2>4. QED
     1 回の実行で作られる `TypeNode` の値に、作られた順の番号を与える。`<2>2` と `<2>3` より、直接の
@@ -588,8 +848,9 @@ SCAN src/ `truncate_to_unit(`
    `CaptureStruct::new` は上の表が名前を挙げている。`TypeDefn::tycon_info` の行は `self.tyvars` を
    そのまま置き、`TypeDefn::validate_tyvars` がその名前が重複しないことを検査する。
    `TypeDefn::tycon_info` が作る `TyConInfo` が `E` に入るのは `Program::calculate_type_env` を通って
-   であり、それは `self.type_defns` の各要素について `type_decl.tycon_info(&[])` と、構造体なら
-   フィールドごとの穴つきの形 `type_decl.tycon_info(&[i])` を入れる。**`E` に入る `Struct` の
+   であり、それは `self.type_defns` の要素のうち型別名でなく既出の名前でもないものについて
+   `type_decl.tycon_info(&[])` と、構造体ならフィールドごとの穴つきの形
+   `type_decl.tycon_info(&[i])` を入れる。**`E` に入る `Struct` の
    `TyConInfo` がこの関数から出るとは限らない** -- `CaptureStruct::new` が作る行は
    `closure_specialization` の `lift_all` と `realize_all`、および `defunctionalize_fix::run_one` が
    `add_tycons` で入れる。その行は `tyvars: vec![]` なので、上の表が別に片付けている。`Program::validate_type_defns` は同じ
@@ -599,16 +860,16 @@ SCAN src/ `truncate_to_unit(`
    **`E` に登録されている各 `TyConInfo` の `variant`、`tyvars`、`is_unbox`、`fields` の長さ、
    および各 `fields[i].is_punched` は、上の 4 つのいずれかがそれを作ったときの値である。**この 5 つが、
    この証明が `TyConInfo` から値として読むものである。**`fields[i].ty` は `F(t)` の第 2 成分として
-   現れるが、この証明はその値を主張せず、それが `<1>1` を満たすことだけを使う。`TypeEnv` の `tycons`
-   は非公開のフィールドなので、`EXT Rust の可視性` よりそれを名前で参照できるのは、それを宣言する
-   モジュール `crate::ast::program` とその子孫だけである。`EXT Rust のモジュールの木` より子孫は
-   `mod` の項目が作るところに限られ、`src/ast/program.rs` は `mod` の項目を持たないので、そのモジュール
-   はこの 1 ファイルで閉じている。同ファイルで `tycons` に書くのは次のとおりである。
+   現れるが、この証明はその値を主張せず、それが `<1>1` を満たすことだけを使う。
+   前提 型環境の `tycons` の欄を名指す在りか が `src/` の全項目を挙げ、そのうち `TypeEnv` の
+   `tycons` の欄へ値を置くのは次の 6 つである。残る項目が名指すのは、その欄の読みか、同じ綴りの
+   局所変数・引数・関数名か、別の型が持つ同名の欄か、散文の中の同じ綴りである。
 
    - `TypeEnv::default`。空の `Map` を置く。
-   - `TypeEnv::new`。`Program::calculate_type_env` が、`bulitin_tycons()` に各型宣言の
-     `type_decl.tycon_info(&[])` と、構造体についてはフィールドごとの穴つきの形
-     `type_decl.tycon_info(&[i])` を足した `Map` を渡す。
+   - `TypeEnv::new`。`Program::calculate_type_env` が、`bulitin_tycons()` に、型別名でなく既出の
+     名前でもない各型宣言の `type_decl.tycon_info(&[])` と、構造体の宣言についてはフィールドごとの
+     穴つきの形 `type_decl.tycon_info(&[i])` を足した `Map` を渡す。型別名の宣言は `aliases` の側へ
+     入り、既出の名前の宣言は診断を出して飛ばされる。
    - `TypeEnv::add_tycons`。渡された各 `TyConInfo` の `fields` を走って `field.ty` を
      `unwrap_newtypes` の像に置き替えてから、`tycons.insert(tycon, tycon_info)` で丸ごと入れる。
      鍵が新しければ項目が増え、同名の項目が既に在ればそれが置き替わる。
@@ -625,8 +886,8 @@ SCAN src/ `truncate_to_unit(`
    `TypeEnv::add_tycons` である。**`TypeEnv::default` が置く `Map` は空なので `TyConInfo` を
    1 つも含まず、残る 3 つは既に在る `TyConInfo` の欄を書き替えるだけである (次の段落)。
    `TypeEnv::new` が置くのは
-   `Program::calculate_type_env` が渡す `Map`、すなわち `bulitin_tycons()` の各行と、各型宣言に
-   ついての `TypeDefn::tycon_info` の返り値である。`TypeEnv::add_tycons` が置くのは、A28 の走査
+   `Program::calculate_type_env` が渡す `Map`、すなわち `bulitin_tycons()` の各行と、上に述べた
+   型宣言についての `TypeDefn::tycon_info` の返り値である。`TypeEnv::add_tycons` が置くのは、A28 の走査
    `SCAN src/ .add_tycons(` が挙げる 4 か所が渡す `TyConInfo`、すなわち `CaptureStruct::new` が
    作った `tycon_info`
    (`closure_specialization` の `lift_all` と `realize_all` が `record_capture_list` と
@@ -643,8 +904,9 @@ SCAN src/ `truncate_to_unit(`
    `Deserialize` も導出しないので、キャッシュから読まれる `TyConInfo` も無い。前提 型の節点への
    可変参照の在りか より `Arc::get_mut` は `src/` に無く、`Arc::make_mut` を書く 1 項目が借りるのは
    `Arc<Map<..>>` の欄なので、`tycons` が包む `Map` の項目をその場で書き替える道も無い。
-  BY EXT Rust の可視性, EXT Rust のモジュールの木, EXT derive した Clone, <ref id=3d4be43/>,
-     前提 `TyConInfo` の値を作る在りか, 前提 型の節点への可変参照の在りか,
+  BY EXT Rust の可視性, EXT derive した Clone, <ref id=3d4be43/>,
+     前提 `TyConInfo` の値を作る在りか, 前提 型環境の `tycons` の欄を名指す在りか,
+     前提 型の節点への可変参照の在りか,
      CODE src/ast/types.rs: TyConInfo, CODE src/fixstd/builtin.rs: bulitin_tycons,
      CODE src/constants.rs: FUNPTR_ARGS_MAX, CODE src/ast/typedecl.rs: TypeDefn::tycon_info,
      CODE src/ast/typedecl.rs: TypeDefn::validate_tyvars,
@@ -678,8 +940,13 @@ SCAN src/ `truncate_to_unit(`
      あり、その鍵に対する (a) の `parse::<u32>()` は成功する。
   <2>1. (a) が成り立つ。`is_funptr_tycon` は、`tc.name.namespace` が `Std` の 1 段でなければ `None`、
      `tc.name.name` が `FUNPTR_NAME` で始まらなければ `None` を返し、そのどちらでもないときにだけ
-     残りの文字を `parse::<u32>()` に掛ける。ほかに abort する場所を持たない。
-    BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME
+     残りの文字を `parse::<u32>()` に掛ける。第 1 の検査が比べる相手は
+     `NameSpace::new(vec![STD_NAME.to_string()])` であり、`STD_NAME` は `"Std"`、
+     `impl PartialEq for NameSpace` は `names` だけを比べるので、これは名前の列が `Std` の 1 段で
+     あるかを問う。
+    BY EXT 文字列の接頭辞と u32 の 10 進表記,
+       CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME,
+       CODE src/constants.rs: STD_NAME, CODE src/ast/name.rs: NameSpace
   <2>2. (b) の第 1 文が成り立つ。`<2>1` より (a) の形とは、`tc.name.namespace` が `Std` の 1 段で
      ありかつ `tc.name.name` が `FUNPTR_NAME` で始まることである。A28 は、`E.tycons()` の項目の
      うち鍵がその形を持つものは `bulitin_tycons()` が `make_funptr_tycon(n)` (`n` は 1 以上
@@ -694,11 +961,50 @@ SCAN src/ `truncate_to_unit(`
     BY <1>3b, <2>2, CODE src/fixstd/builtin.rs: bulitin_tycons
   <2>4. (b) の第 3 文が成り立つ。`make_funptr_tycon(n)` の名前は `make_funptr_name(n)`、すなわち
      `#FunPtr` に `n` の 10 進表記を継いだものなので、`FUNPTR_NAME` の分を落とした残りは `n` の
-     10 進表記であり、`parse::<u32>()` は成功する。
-    BY <2>1, <2>2, CODE src/fixstd/builtin.rs: make_funptr_name,
-       CODE src/fixstd/builtin.rs: make_funptr_tycon
+     10 進表記であり、`parse::<u32>()` は成功する。`make_funptr_tycon` の本体は
+     `TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))` であり、`TyCon::new`
+     は渡された `FullName` をそのまま `name` の欄に置き、`FullName::from_strs(ns, name)` は
+     第 2 引数を `name` の欄に置く。
+    BY <2>1, <2>2, EXT 文字列の接頭辞と u32 の 10 進表記,
+       CODE src/fixstd/builtin.rs: make_funptr_name,
+       CODE src/fixstd/builtin.rs: make_funptr_tycon,
+       CODE src/ast/types.rs: TyCon, CODE src/ast/name.rs: FullName
   <2>5. QED
     BY <2>1, <2>2, <2>3, <2>4
+
+<1>3bb. 次の 4 つの関数 -- `make_array_tycon`、`make_punched_array_tycon`、`make_arrow_name_abs`、
+   `make_unit_ty` -- は引数を取らず、abort せず停止して、どの実行でも同じ値を返す。この 4 つと、
+   その下で呼ばれる関数が読むのは、渡された引数の値と、それぞれの本体に書かれた定数だけであり、
+   記憶域から読む値も番地の比較も持たない。
+
+   `make_array_tycon` の本体は `TyCon::new(make_array_name())`、`make_array_name` の本体は
+   `FullName::from_strs(&[STD_NAME], ARRAY_NAME)` である。`make_punched_array_tycon` の本体は
+   `TyCon::new(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME))` である。`make_arrow_name_abs`
+   は `FullName::from_strs(&[STD_NAME], ARROW_NAME)` の結果に `FullName::set_absolute` を当てて
+   返す。`make_unit_ty` の本体は `make_tuple_ty(vec![])` であり、`make_tuple_ty(tys)` は
+   `apply_type_args(&tycon(make_tuple_name_abs(tys.len() as u32)), &tys)` である。
+   `make_tuple_name_abs` は `make_tuple_name` の結果に `FullName::set_absolute` を当てて返し、
+   `make_tuple_name` は `FullName::from_strs(&[STD_NAME], &format!("{}{}", TUPLE_NAME, size))` で
+   ある。`apply_type_args` は `type_tycon(tycon)` から始めて `args` の各要素について `type_tyapp` を
+   当てるが、`make_unit_ty` が渡す `tys` は `vec![]` なので、そのループは 1 度も回らない。
+
+   下で呼ばれる関数はこれで尽きる。`TyCon::new` は `TyCon { name: fullname }`、`tycon` は
+   `Arc::new(TyCon { name })`、`FullName::new` と `NameSpace::new` は構造体リテラル、
+   `FullName::from_strs` は `FullName::new(&NameSpace::from_strs(ns), name)`、`NameSpace::from_strs`
+   は渡された各文字列を `to_string` で写した `Vec` から `NameSpace::new` を作る 1 行、
+   `FullName::set_absolute` は `self.namespace.is_absolute = true;` の 1 つの代入、`type_tycon` は
+   `TypeNode::new_arc(Type::TyCon(tycon.clone()))`、`TypeNode::new_arc` は `Arc::new(Self::new(ty))`、
+   `TypeNode::new` は `ty`、`TypeInfo::default()`、3 つの `OnceLock::new()` からなる構造体リテラル
+   である。`TypeInfo` は `Option<Span>` 1 つを欄に持ち `Default` を導出する構造体なので、
+   `EXT derive した Default` より `TypeInfo::default()` はその欄に `None` を置く。どれも構造体
+   リテラル・文字列と `Vec` の構成・欄への代入だけであり、`panic!`、`assert`、`unwrap`、`expect`、
+   添字付けのどれも持たない。
+  BY EXT derive した Default,
+     CODE src/fixstd/builtin.rs: make_array_tycon, make_array_name, make_punched_array_tycon,
+     make_arrow_name_abs, make_unit_ty, make_tuple_ty, make_tuple_name, make_tuple_name_abs,
+     CODE src/ast/types.rs: TyCon, tycon, apply_type_args, type_tycon, TypeNode::new_arc,
+     TypeNode::new, TypeInfo,
+     CODE src/ast/name.rs: FullName, NameSpace
 
 <1>3c. `<1>1` を満たす型 `t` について、次の 4 つが成り立つ。
    - (a) `t.is_closure()`、`t.is_array()`、`t.is_funptr()`、`t.is_punched_array()` は abort せず
@@ -724,12 +1030,19 @@ SCAN src/ `truncate_to_unit(`
          CODE src/ast/types.rs: TypeNode::is_punched_array,
          CODE src/fixstd/builtin.rs: is_array_tycon,
          CODE src/fixstd/builtin.rs: is_punched_array_tycon
-    <3>2. `is_closure` の述語は `TyCon` の名前と `make_arrow_name_abs()` の等値比較、
-       `is_array_tycon` と `is_punched_array_tycon` は `TyCon` の等値比較だけを行い、abort する
-       場所を持たない。
-      BY CODE src/fixstd/builtin.rs: is_array_tycon,
+    <3>2. `is_closure` が `toplevel_tycon_satisfies` に渡す述語の本体は
+       `tc.name == make_arrow_name_abs()`、`is_array_tycon` の本体は `*tc == make_array_tycon()`、
+       `is_punched_array_tycon` の本体は `*tc == make_punched_array_tycon()` である。この 3 つが
+       行うのは、`<1>3bb` の関数の呼び出しと、1 つの等値比較だけである。等値比較の側も
+       abort しない -- `TyCon` は `FullName` 1 つを欄に持ち `PartialEq` を導出する構造体、
+       `FullName` は `NameSpace` と `String` を欄に持ち `PartialEq` を導出する構造体なので、
+       `EXT derive した PartialEq と Eq` よりその `eq` は欄の `==` だけを行い、`NameSpace` の `eq` は
+       `self.names == other.names` の 1 行である。
+      BY <1>3bb, EXT derive した PartialEq と Eq,
+         CODE src/fixstd/builtin.rs: is_array_tycon,
          CODE src/fixstd/builtin.rs: is_punched_array_tycon,
-         CODE src/ast/types.rs: TypeNode::is_closure
+         CODE src/ast/types.rs: TypeNode::is_closure, CODE src/ast/types.rs: TyCon,
+         CODE src/ast/name.rs: FullName, NameSpace
     <3>5. QED
       `<1>1` (i) より `t.toplevel_tycon()` が返す型構成子は `E.tycons()` の鍵である。`<1>3ba` (a) より
       `is_funptr_tycon` が abort しうるのはその名前が `#FunPtr` で始まる `Std` の 1 段の名前のときだけで
@@ -754,7 +1067,7 @@ SCAN src/ `truncate_to_unit(`
        型構成子の名前が `make_arrow_name_abs()` に等しいかを問う述語で、`make_arrow_tycon()` は
        まさにその名前の `TyCon` である。よってそのとき `t.is_closure()` は真になり、この場合の仮定に
        反する。
-      BY <1>3b, CODE src/ast/types.rs: TypeNode::is_closure,
+      BY <1>3b, CODE src/ast/types.rs: TypeNode::is_closure, CODE src/ast/types.rs: TyCon,
          CODE src/fixstd/builtin.rs: bulitin_tycons,
          CODE src/fixstd/builtin.rs: make_arrow_tycon,
          CODE src/fixstd/builtin.rs: make_arrow_name_abs
@@ -1027,7 +1340,8 @@ SCAN src/ `truncate_to_unit(`
      `args` の各要素に `substitute_type` を当てた `new_args` を作り、
      `new_args.iter().zip(args).all(|(new_arg, arg)| Arc::ptr_eq(new_arg, arg))` が真のときは節点を
      そのまま複製して返し、偽のときは `set_assocty_args(new_args)` を返す。分岐の条件が列の上の
-     全称であるところが `Type::TyApp` の腕と異なる。`EXT Iterator の map と zip` より `map` は列の
+     全称であるところが `Type::TyApp` の腕と異なる。`EXT Iterator の map と zip と all` より
+     `map` は列の
      長さを保つので `new_args` と `args` の
      長さは等しく、`zip` は各位置の対を渡す。よって真の腕に入るとき `new_args` の各要素は `args` の
      同じ位置の要素と同じ `Arc` であり、`EXT Vec の等価性` より `Vec` の等価性は長さと同じ位置の
@@ -1046,7 +1360,7 @@ SCAN src/ `truncate_to_unit(`
      `impl PartialEq for TypeNode` が読むのは `ty` だけなので値として等しい。どちらの枝も場合分けと
      複製だけなので abort しない。**すなわちこの 3 か所の分岐は、どちらの腕を取っても値として
      等しい節点を返し、abort しない。**
-    BY <2>1, EXT Iterator の map と zip, EXT Vec の等価性,
+    BY <2>1, EXT Iterator の map と zip と all, EXT Vec の等価性,
        CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
        CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
        CODE src/ast/types.rs: TypeNode::set_assocty_args,
@@ -1073,7 +1387,9 @@ SCAN src/ `truncate_to_unit(`
      各 `ty` と、`Substitution::single` / `merge` / `substitute_type` の返り値だけである。
      `Substitution` は `Map<String, Arc<TypeNode>>` を 1 つ包む値であり、`single` はその 1 要素の
      写像を作り、`merge` は鍵ごとに値を `==` で突き合わせ、`substitute_type` は型の節点を降りて
-     `data` を型変数の名前で引く。
+     `data` を型変数の名前で引く。`substitute_type` の `Type::TyVar` の腕が
+     `ty.get_source()` を呼び、その答えを `set_source_if_none` に渡す。この 2 つは
+     `DEF この道の関数` が外した第 1 群であり、その扱いは `<2>3a` に置く。
      `toplevel_tycon_info` が読むのは `self.is_closure()`、`self.toplevel_tycon()`、`E.tycons()` の
      1 回の探索だけである。
     BY CODE src/ast/types.rs: TypeNode::unpunched_field_types,
@@ -1084,6 +1400,19 @@ SCAN src/ `truncate_to_unit(`
        CODE src/elaboration/typecheck.rs: Substitution::single,
        CODE src/elaboration/typecheck.rs: Substitution::merge,
        CODE src/elaboration/typecheck.rs: Substitution::substitute_type
+  <2>3a. `get_source` の答えは値として等しい引数の間で違いうるが、この道でそれが使われるのは
+     `substitute_type` の `Type::TyVar` の腕が呼ぶ `set_source_if_none` の第 2 引数としてだけで
+     ある。`get_source` の本体は `&self.info.source` を返す 1 行であり、`info` は
+     `impl PartialEq for TypeNode` が読まない欄なので、値として等しい 2 つの節点でその値が違いうる。
+     `set_source_if_none` は `self.info.source` が `None` かどうかで枝を選び、`None` の枝だけが
+     その第 2 引数を新しい節点の `info.source` に置く。`<2>1a` よりどちらの枝が返す節点も `ty` は
+     `self.ty` であり、`impl PartialEq for TypeNode` が読むのは `ty` だけなので、返る値は枝に
+     依らない。`get_source` も `set_source_if_none` も abort しない。
+    BY <2>1a, CODE src/ast/types.rs: TypeNode::get_source,
+       CODE src/ast/types.rs: TypeNode::set_source_if_none,
+       CODE src/ast/types.rs: TypeNode (`hash_cache` / `ground_cache` / `depth_cache` の宣言と `PartialEq` の実装),
+       CODE src/elaboration/typecheck.rs: Substitution::substitute_type
+
   <2>4. `unit_step(ty, E)` が読むのは、`is_fully_unboxed`、`is_closure`、`is_box`、`is_union`、
      `is_array`、`is_punched_array` の返り値、`toplevel_tycon_info(E).fields` の長さ、そして
      `unpunched_field_types(E)` の返り値だけであり、返す `UnitStep` はそれと定数
@@ -1114,6 +1443,17 @@ SCAN src/ `truncate_to_unit(`
      `held_fields` を `idx` で線形に探すだけである。
     BY CODE src/rc_ir/ownership.rs: truncate_to_unit,
        CODE src/rc_ir/ownership.rs: held_field_type
+  <2>5a. この道が呼ぶ関数のうち、名前や型の節点を定数から組み立てるものは、`<1>3bb` の 4 つ --
+     `make_array_tycon`、`make_punched_array_tycon`、`make_arrow_name_abs`、`make_unit_ty` -- と、
+     その下で呼ばれる関数、および `is_funptr_tycon` が `NameSpace::new(vec![STD_NAME.to_string()])`
+     として呼ぶ `NameSpace::new` である。`<2>4` が挙げる述語のうち `is_array`、`is_punched_array`、
+     `is_closure` が前の 3 つを呼び、`<2>1` の `unwrap_newtypes_node` が `make_unit_ty` を返り値と
+     して返し、`<2>4` の `is_funptr` が `is_funptr_tycon` を呼ぶ。`<1>3bb` より、この 4 つと、
+     その下で呼ばれる `NameSpace::new` を含む関数が読むのは、渡された引数の値と、本体に書かれた
+     定数だけである。
+    BY <1>3bb, <2>1, <2>4, CODE src/fixstd/builtin.rs: is_funptr_tycon,
+       CODE src/ast/name.rs: NameSpace
+
   <2>6. この道で `TypeNode` の内部可変性の欄が書かれるのは 1 か所である -- `<2>2` の `Map` の探索と
      挿入が `Arc<TypeNode>` の鍵をハッシュし、`impl Hash for TypeNode` が `type_hash` を経て
      `hash_cache.get_or_init` を実行する。A3 の「**`RcProgram` から到達できる値の等しさは、それを
@@ -1129,27 +1469,62 @@ SCAN src/ `truncate_to_unit(`
   <2>6a. `TypeNode` の等価比較は、比べる 2 つの値だけで決まる真偽値を返し、abort しない。
      `impl PartialEq for TypeNode` が読むのは `ty` だけであり、`impl PartialEq for Type` の doc は
      「Compares the parts of the type expression, taking two occurrences of one node as equal on
-     sight」と述べる。すなわち同じ節点の 2 つの出現を等しいと答える道を持つが、返す真偽値は型の式の
+     sight (`type_node_eq`)」と述べる。その `type_node_eq` の本体は
+     `Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty` であり、番地が一致すれば真、しなければ 2 つの
+     `ty` の比較の値を返す。すなわち同じ節点の 2 つの出現を等しいと答える道を持つが、返す真偽値は
+     型の式の
      比較のものである。その再帰が辿るのは `<1>1a` の直接の部分の辺なので停止する。この道がこの比較を
      行うのは、`<2>2` の `Map` が `Arc<TypeNode>` の鍵を突き合わせるところと、`<2>3` の
      `Substitution::merge` が同じ鍵の値を `==` で突き合わせるところである。
     BY <1>1a, <2>2, <2>3, CODE src/ast/types.rs: impl PartialEq for Type,
-       CODE src/ast/types.rs: impl PartialEq for TypeNode
+       CODE src/ast/types.rs: impl PartialEq for TypeNode,
+       CODE src/ast/types.rs: type_node_eq
   <2>7. QED
     値として等しい引数を渡した 2 つの呼び出しを `C` と `C'` とし、`DEF 下位の呼び出しの列` が
     それぞれに与える列を先頭から 1 対 1 に並べる。
-    <3>1. `<2>1` から `<2>5` は、この道の各関数が読むものを尽くしている。挙がるのはどれも、引数の
-       値、`E` の値、`TyConInfo` の欄の値、その呼び出しがその場で作る局所の値、下位の呼び出しの
+    <3>1. `<2>1` から `<2>5a` は、この道の各関数が読むものを尽くしている。挙がるのはどれも、引数の
+       値、`E` の値、`TyConInfo` の欄の値、その呼び出しがその場で作る局所の値、本体に書かれた定数、
+       下位の呼び出しの
        返り値、そして `DEF この道の関数` が除いた 3 群の答えである。
-      BY <2>1, <2>2, <2>3, <2>4, <2>5, DEF この道の関数
-    <3>2. `EXT Rust の評価の決定性` の (iv) が許す番地の比較が答えに漏れうるのは、`DEF この道の関数`
-       が除いた 3 群だけである。節点を組み立てる関数については、型を写す 2 つの関数が置く
-       `Arc::ptr_eq` の分岐と `set_source_if_none` の分岐がそれであり、どちらの腕も値として等しい
-       節点を返して abort しない (`<2>1a`)。`Map` の鍵をハッシュするときに書かれる memo は型の値を
-       動かさない (`<2>6`)。`TypeNode` の等価比較は、比べる 2 つの値だけで決まる真偽値を返して
-       abort しない (`<2>6a`)。よって、この 3 群が返す答えは 2 つの実行で等しい。
-      BY <2>1a, <2>6, <2>6a, EXT Rust の評価の決定性, DEF この道の関数,
+      BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>5a, DEF この道の関数
+    <3>2. `DEF この道の関数` が除いた 3 群のうち、この道が呼ぶものについて、次の 3 つが成り立つ。
+
+       - (a) どれも abort しない。
+       - (b) `TypeNode::get_source` を除いて、値として等しい引数に対して 2 つの実行で値として等しい
+         答えを返す。
+       - (c) `get_source` の答えを受け取るのは `substitute_type` の `Type::TyVar` の腕が呼ぶ
+         `set_source_if_none` だけであり、その 2 つの枝はどちらも `ty` が同じ節点を返す。
+
+       この道が第 1 群のうち呼ぶのは、`<2>1` と `<2>3` が挙げる `set_tyapp_fun`、`set_tyapp_arg`、
+       `set_assocty_args`、`set_source_if_none`、`set_source`、`get_source` である。`<2>1a` が
+       前の 5 つについて、型を写す 2 つの関数の `Arc::ptr_eq` の分岐と `set_source_if_none` の分岐の
+       どちらの腕も値として等しい節点を返して abort しないことを述べ、`<2>3a` が `get_source` に
+       ついて (b) の例外と (c) を述べる。`Map` の鍵をハッシュするときに書かれる memo
+       は型の値を動かさない (`<2>6`)。`TypeNode` の等価比較は、比べる 2 つの値だけで決まる真偽値を
+       返して abort しない (`<2>6a`)。
+      BY <2>1, <2>1a, <2>3, <2>3a, <2>6, <2>6a, DEF この道の関数
+    <3>2a. この道の関数の中で番地の一致を読むのは、`unwrap_newtypes_node` の `Type::TyApp` の腕に
+       置かれた `Arc::ptr_eq` の分岐と、`Substitution::substitute_type` の `Type::TyApp` と
+       `Type::AssocTy` の腕に置かれた 2 つの分岐だけである。この 3 か所はどちらの腕を取っても、
+       その関数の返り値を与えて直ちに返る。腕の中で呼ぶのは、`DEF この道の関数` が除いた第 1 群
+       (節点を組み立てる関数) の `set_tyapp_fun`、`set_tyapp_arg`、`set_assocty_args` と、`Arc` の
+       複製だけである。`Arc` の複製は `src/` に本体を持たないので、この道の関数ではない。よって
+       この 3 か所の分岐は `DEF 下位の呼び出しの列` の項を 1 つも作らず、`<2>1a` よりどちらの腕も
+       値として等しい節点を返して abort しない。`substitute_type` の `Type::TyVar` の腕が呼ぶ
+       `set_source_if_none` の分岐も同じ形であり、そちらは第 1 群に属するので、その 2 つの枝が呼ぶ
+       のは `set_source` と `Arc` の複製である。
+
+       この 3 か所で尽きているのは、前提 番地の一致を読む在りか が `ptr_eq` を書く項目を挙げて
+       いるからである。`<2>1` から `<2>5a` が挙げるこの道の関数のうちその一覧に在るのは
+       `unwrap_newtypes_node` と `substitute_type` だけである。一覧の残りは、除いた第 2 群に属する
+       `type_node_eq` (`<2>6a` が扱う)、この道が呼ばない 2 つの関数
+       (`resolve_opaque_type_in_type` と `TypeCheckContext::unify`)、Fix のプリミティブの名前、
+       そしてテストである。
+      BY <2>1, <2>1a, <2>2, <2>3, <2>4, <2>5, <2>5a, <2>6a, 前提 番地の一致を読む在りか,
+         DEF この道の関数, DEF 下位の呼び出しの列,
          CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
+         CODE src/ast/types.rs: TypeNode::set_source_if_none,
+         CODE src/ast/types.rs: type_node_eq,
          CODE src/elaboration/typecheck.rs: Substitution::substitute_type
     <3>3. `n` についての帰納で、`C` と `C'` の列の先頭 `n` 項が `DEF 下位の呼び出しの列` の意味で
        対応することを示す。`n = 0` では主張は空虚である。先頭 `n` 項が対応するとして、第 `n + 1` 項を
@@ -1159,18 +1534,27 @@ SCAN src/ `truncate_to_unit(`
        記憶域から読む値、(iii) `K` がそこまでに受け取った下位の呼び出しの返り値、(iv) `K` が比べる
        番地の一致だけで決まる。`K` の開始の事象と `K` が受け取った返りの事象はどれも先頭 `n` 項に
        在るので、(i) と (iii) は帰納法の仮定より `C` と `C'` で等しい。(ii) は `<3>1` より `E` の値、
-       `TyConInfo` の欄の値、および除いた 3 群の答えであり、前の 2 つは `C` と `C'` で同じ値、
-       3 群の答えは `<3>2` より等しい。(iv) は `<3>2` より、その 3 群の中にしか現れない。
-       よって第 `n + 1` 項も対応し、一方に在れば他方にも在る。
-      BY <3>1, <3>2, EXT Rust の評価の決定性, DEF 下位の呼び出しの列
+       `TyConInfo` の欄の値、本体に書かれた定数、および除いた 3 群の答えであり、前の 3 つは `C` と
+       `C'` で同じ値である。除いた 3 群の答えのうち、`<3>2` (b) より 2 つの実行で違いうるのは
+       `get_source` のものだけであり、`<3>2` (c) よりそれを受け取る `set_source_if_none` は
+       どちらの枝でも `ty` が同じ節点を返す。その 2 つはどちらも第 1 群なので、
+       `DEF 下位の呼び出しの列` の項を作らない。(iv) が `C` と `C'` で違いうるのは、`<3>2a` の
+       3 か所の分岐と、除いた 3 群の中だけである。前者について `<3>2a` は、どちらの腕も下位の
+       呼び出しの列の項を作らずに値として等しい節点を返して `K` が返ることを述べるので、次の事象は
+       どちらの腕でも同じ `K` の返りであり、返る値も等しい。後者、すなわち除いた 3 群の内側の番地の
+       比較については、`get_source` が番地を比べないので、`<3>2` (b) がその群の答えを 2 つの実行で
+       等しいものとして与える。よって第 `n + 1` 項も対応し、一方に在れば他方にも在る。
+      BY <3>1, <3>2, <3>2a, EXT Rust の評価の決定性, DEF この道の関数,
+         DEF 下位の呼び出しの列
     <3>4. QED
       `<3>3` より `C` と `C'` の列は全体として対応する。根の呼び出しについても
       `EXT Rust の評価の決定性` の 4 つは -- (i) は言明の仮定、(ii) は `<3>1` と `<3>2`、(iii) は
-      `<3>3`、(iv) は `<3>2` -- どちらの実行でも同じなので、`C` と `C'` はともに停止して等しい値を
+      `<3>3`、(iv) は `<3>2` と `<3>2a` -- どちらの実行でも同じ振る舞いを与えるので、`C` と `C'` は
+      ともに停止して等しい値を
       返すか、ともに同じ `panic!` / `assert` / 添字付けに達するか、ともに停止しない。`<2>4` と
       `<2>5` はこの結論を `unit_step`・`is_box`・`unpunched_field_types`・`truncate_to_unit` の
       どれについても同じ形で与える。
-      BY <2>4, <2>5, <3>1, <3>2, <3>3, EXT Rust の評価の決定性, DEF 下位の呼び出しの列
+      BY <2>4, <2>5, <3>1, <3>2, <3>2a, <3>3, EXT Rust の評価の決定性, DEF 下位の呼び出しの列
 
 <1>10. `<1>1` を満たす型 `t` について、`unit_step(t, E)` の返す `UnitStep` は `cls(t)` で決まり、
    次の表の通りである。
@@ -2164,21 +2548,22 @@ SCAN src/ `truncate_to_unit(`
    返す。
   BY <1>3c
 
+<1>27d. `origin_inner` の `Llvm` の腕が `result_prov` に渡す `result_ty` と `arg_tys` は、
+   その腕が読む `Binding::Llvm` を置いた節点 `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の `ty(x)` と
+   `args` の各要素の型である。`<1>21` と `<1>22` が `vars.bindings` への挿入をすべて挙げており、
+   そのうち `Binding::Llvm` を置くのは `collect_bindings` の
+   `RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕だけであって、そこが `result_ty` に置くのは
+   `x.ty` である。腕の中で `arg_tys` を作るのは `args.iter().map(|a| a.ty.clone())` の 1 行である。
+  BY <1>21, <1>22, CODE src/rc_ir/ownership.rs: collect_bindings,
+     CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding
+
 <1>28. `origin_inner` の `Llvm` の腕が呼ぶ `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` は
-   abort せずに `Provenance` を返す。ここで `result_ty` と `arg_tys` は、その `Llvm` 節点の `ty(x)`
-   と `args` の各要素の型であり、どれも RC IR に現れる型なので `<1>1` を満たす。以下の各腕で
+   abort せずに `Provenance` を返す。`<1>27d` より `result_ty` と `arg_tys` は、その `Llvm` 節点の
+   `ty(x)` と `args` の各要素の型であり、どれも RC IR に現れる型なので `<1>1` を満たす。以下の各腕で
    `<1>27b` と `<1>27c` を適用するのはこの型についてである。
   <2>1. `impl LLVMGen for` は 78 個あり、`result_prov` を override するのは 29 個である。残る 49 個は
      既定の実装を取る。
     BY <ref id=e11772a/>, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
-  <2>1a. `origin_inner` の `Llvm` の腕が `result_prov` に渡す `result_ty` と `arg_tys` は、
-     `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の `ty(x)` と `args` の各要素の型である。
-     `<1>21` と `<1>22` が `vars.bindings` への挿入をすべて挙げており、そのうち `Binding::Llvm` を
-     置くのは `collect_bindings` の `RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕だけで
-     あって、そこが `result_ty` に置くのは `x.ty` である。腕の中で `arg_tys` を作るのは
-     `args.iter().map(|a| a.ty.clone())` の 1 行である。
-    BY <1>21, <1>22, CODE src/rc_ir/ownership.rs: collect_bindings,
-       CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding
   <2>2. 既定の実装は `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` の 1 文であり、
      `<1>27b` より abort しない。
     BY <1>1, <1>27b, CODE src/ast/inline_llvm.rs: LLVMGen::result_prov
@@ -2268,19 +2653,25 @@ SCAN src/ `truncate_to_unit(`
        その `expect` は発火しない。
       BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, EXT スライスの split_first,
          CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
-    <3>3a. `cls(result_ty)` は `UN` か `ST` である。`<1>3a` (vii) より `result_ty.is_box(E)`、
-       `result_ty.is_array()`、`result_ty.is_closure()` はいずれも偽なので、`DEF cls` の `CL`、`BX`、
-       `AR` の 3 行はどれも当たらない。`cls(result_ty) = NB` の場合は、
+    <3>3a. 次の 2 つの少なくとも一方が成り立つ。
+
+       - (a) `L(result_ty)` は空であり、`build_shape` の閉包は 1 度も呼ばれない。
+       - (b) `cls(result_ty)` は `UN` か `ST` である。
+
+       `<1>3a` (vii) より `result_ty.is_box(E)`、`result_ty.is_array()`、`result_ty.is_closure()` は
+       いずれも偽なので、`DEF cls` の `CL`、`BX`、`AR` の 3 行はどれも当たらない。`<1>4` より
+       `cls(result_ty)` は残る `NB`、`UN`、`ST` のどれかである。`cls(result_ty) = NB` のときは、
        `DEF UNST-道` の条件を `j = 0` に読むと `result_ty` の UNST-道は `[]` だけであり、
        `cls(end(result_ty, [])) = NB` は `<1>14` の 2 つの集合のどちらの条件にも当たらないので
-       `L(result_ty)` は空であり、`<1>27b` より `build_shape` の閉包は 1 度も呼ばれない。よって
-       以下は `cls(result_ty)` が `NB` でない場合を見ればよい。残るのは `UN` と `ST` である。
-      BY <1>1, <1>3a, <1>14, <1>27b, DEF cls, DEF UNST-道
-    <3>3b. `L(result_ty)` の要素のうち `PUNCHED_STRUCT_FIELD` で始まるものは、
-       `(PUNCHED_STRUCT_FIELD, s)` が `F(result_ty)` の要素であるとき
+       `L(result_ty)` は空であって、`<1>27b` より閉包は 1 度も呼ばれない。これが (a) である。
+       残る `UN` と `ST` が (b) である。
+      BY <1>1, <1>3a, <1>4, <1>14, <1>27b, DEF cls, DEF UNST-道
+    <3>3b. `<3>3a` の (b) が成り立つとき、`L(result_ty)` の要素のうち `PUNCHED_STRUCT_FIELD` で
+       始まるものは、`(PUNCHED_STRUCT_FIELD, s)` が `F(result_ty)` の要素であるとき
        `{ [PUNCHED_STRUCT_FIELD] ++ r : r は L(s) の要素 }` であり、`F(result_ty)` が
        `PUNCHED_STRUCT_FIELD` を第 1 成分に持つ要素を持たないときは 1 つも無い。
-       `<3>3a` と `<1>11` より `go(result_ty, [], out)` が積むのは `F(result_ty)` の各 `(i, f)` に
+       (b) より `cls(result_ty)` は `UN` か `ST` なので、`<1>11` より `go(result_ty, [], out)` が
+       積むのは `F(result_ty)` の各 `(i, f)` に
        ついての `go(f, [i], out)` が積むものの合併であり、`<1>1` (ii) より `f` は `<1>1` を満たすので
        `<1>14a` よりそれは `{ [i] ++ r : r は L(f) の要素 }` である。`<1>12` より `F(result_ty)` の
        添字は相異なるので、`PUNCHED_STRUCT_FIELD` で始まる要素はその添字を持つ 1 つの `(i, f)` から
@@ -2324,15 +2715,24 @@ SCAN src/ `truncate_to_unit(`
         残る `NB`、`BX`、`AR`、`UN`、`ST` を尽くしている。
         BY <1>4, <4>2, <4>4, <4>5, <4>6
     <3>4a. `arg_leaf_path` の `assert_ne!` は発火しない。`assert_ne!` が発火するのは、`path` が
-       `[PUNCHED_STRUCT_FIELD, self.field_idx] ++ ・` の形のときだけである。`<3>3b` より、そのような
-       `path` が `L(result_ty)` に在るのは `(PUNCHED_STRUCT_FIELD, s')` が `F(result_ty)` の要素で
-       あって `L(s')` が `self.field_idx` で始まる要素を持つときに限る。`<1>3a` (vii) より
-       `result_ty.is_closure()` も `result_ty.is_box(E)` も偽なので、
-       `<1>3c` (d) を `result_ty` に当てられる。それよりその `s'` は
-       `result_ty.field_types(E)[PUNCHED_STRUCT_FIELD]`、すなわち `<3>4` の `s` である。`<3>4` より
-       そのような要素は無い。
-      BY <1>3a, <1>3c, <3>1, <3>3b, <3>4,
-         CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
+       `[PUNCHED_STRUCT_FIELD, self.field_idx] ++ ・` の形のときだけである。
+      <4>1. CASE `<3>3a` の (a)。`build_shape` の閉包は 1 度も呼ばれず、`arg_leaf_path` を呼ぶのは
+         その閉包だけなので、`assert_ne!` は評価されない。
+        BY <3>3a, CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::result_prov,
+           CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
+      <4>2. CASE `<3>3a` の (b)。`<1>27b` より閉包が受け取る `path` は `L(result_ty)` の要素である。
+         `<3>3b` より、上の形の `path` が `L(result_ty)` に在るのは
+         `(PUNCHED_STRUCT_FIELD, s')` が `F(result_ty)` の要素で
+         あって `L(s')` が `self.field_idx` で始まる要素を持つときに限る。`<1>3a` (vii) より
+         `result_ty.is_closure()` も `result_ty.is_box(E)` も偽なので、
+         `<1>3c` (d) を `result_ty` に当てられる。それよりその `s'` は
+         `result_ty.field_types(E)[PUNCHED_STRUCT_FIELD]`、すなわち `<3>4` の `s` である。`<3>4` より
+         そのような要素は無い。
+        BY <1>3a, <1>3c, <1>27b, <3>1, <3>3a, <3>3b, <3>4,
+           CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path
+      <4>3. QED
+        `<3>3a` の (a) と (b) を `<4>1` と `<4>2` が尽くしている。
+        BY <3>3a, <4>1, <4>2
     <3>5. QED
       閉包の残りは `Vec` の連結と `sole_origin` だけである。
       BY <1>1, <1>27b, <3>1, <3>2, <3>3, <3>3a, <3>3b, <3>4, <3>4a,
@@ -2364,7 +2764,7 @@ SCAN src/ `truncate_to_unit(`
     ついてだけ述べて足りるのは、この数え上げによる** -- `<2>2` から `<2>2g` はどれも本体を 1 つずつ
     読んでおり、そこで `Provenance` を作るのに使われるのは `build_shape`、`uniform`、
     `uniform_bottom`、`fresh_under` の 4 つだけである。
-    BY <1>27b, <2>1, <2>1a, <2>2, <2>2a, <2>2b, <2>2c, <2>2d, <2>2e, <2>2f, <2>2g
+    BY <1>27b, <1>27d, <2>1, <2>2, <2>2a, <2>2b, <2>2c, <2>2d, <2>2e, <2>2f, <2>2g
 
 <1>28a. `origin_inner` の `Llvm` の腕が得る `decl` は、各 leaf に要素数 0 か 1 の `LeafOrigins` を
    置く。したがって `decl.leaf_origins_at(path)` が返す集合と `decl.leaf_origins_under(path)` が
@@ -2384,9 +2784,12 @@ SCAN src/ `truncate_to_unit(`
   <2>3. QED
     `<2>1` と `<2>2` より、どの op の `decl` も leaf ごとに要素数 0 か 1 の集合を置く。要素数が 1 で
     その元が `Arg(j, leaf)` である leaf は、A3 の表の「単一の `Arg(j, σ)`」の行が扱うものである。
+    `<1>3a` (viii) が言明するのは節点 `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の `result_prov` に
+    ついてであり、`<1>27d` より `origin_inner` の `Llvm` の腕が得る `decl` はまさにその節点の
+    `llvm_gen` を、その節点の `ty(x)` と `args` の型の列に当てた結果である。よって
     その `j` が `args` の添字であり (すなわち `args.len()` 未満であり)、`leaf` が
-    `L(ty(args[j]))` の要素であることは `<1>3a` (viii) が述べる。
-    BY <ref id=e11772a/>, <1>3a, <2>1, <2>2
+    `L(ty(args[j]))` の要素であることを `<1>3a` (viii) が与える。
+    BY <ref id=e11772a/>, <1>3a, <1>27d, <2>1, <2>2
 
 <1>29. `<1>21` と同じ本体と表 `vars` を取る。`origin(vars, E, x, pi)` の**呼び出しの木** -- 根を
    その呼び出しとし、各節点の子をその実行が行う `origin` の呼び出しとする木 -- は有限である。
@@ -2479,15 +2882,14 @@ SCAN src/ `truncate_to_unit(`
      足りない」と述べる。op が持ちうる内部可変性の欄を数え上げる代わりに、(c) は op が答えるものの
      側を A3 の決定性の節で閉じる。
     <3>1. `bindings` は `VarTable` の非公開フィールドなので、`EXT Rust の可視性` よりそれを名前で
-       参照できるのは、それを宣言するモジュール `crate::rc_ir::ownership` とその子孫だけである。
-       そのモジュールとその子孫はすべて `src/rc_ir/ownership.rs` の中に在る --
-       `EXT Rust のモジュールの木` より子孫を作るのは `mod` の項目であり、同ファイルが持つ `mod` の項目は
-       `#[cfg(test)] mod tests` だけで、それは本体を同ファイルの中に置く。前提 変数の表の 2 つの欄を
-       名指す在りか より、その欄を名指す式が在る製品の項目は `VarTable::of`・`collect_bindings`・
-       `origin_inner` であり、はじめの 2 つが書き、`origin_inner` は読むだけである。残る書き手は
-       `VarTable::empty` が構造体リテラルで置く初期値である。`VarTable::body_only` は
-       `VarTable::empty` と `collect_bindings` を呼ぶだけである。どれも表を作る間にしか走らない。
-      BY EXT Rust の可視性, EXT Rust のモジュールの木, 前提 変数の表の 2 つの欄を名指す在りか,
+       参照できるのはこのクレートの中だけであり、数え上げる範囲は `src/` である。
+       前提 変数の表の 2 つの欄を名指す在りか より、`src/` でその名前を含む製品の項目のうち
+       `VarTable` の `bindings` の欄を名指すのは、欄の宣言と、`VarTable::empty` が構造体リテラルで
+       置く初期値と、`VarTable::of` と `collect_bindings` の挿入と、`origin_inner` の読みだけで
+       ある。残る項目が名指すのは、同じ綴りの局所変数・引数・関数名か、別の型が持つ同名の欄か、
+       散文の中の同じ語である。`VarTable::body_only` は `VarTable::empty` と `collect_bindings` を
+       呼ぶだけである。書き手はどれも表を作る間にしか走らない。
+      BY EXT Rust の可視性, 前提 変数の表の 2 つの欄を名指す在りか,
          CODE src/rc_ir/ownership.rs: VarTable (`bindings` の宣言),
          CODE src/rc_ir/ownership.rs: VarTable::empty, CODE src/rc_ir/ownership.rs: VarTable::of,
          CODE src/rc_ir/ownership.rs: VarTable::body_only,
@@ -2579,10 +2981,13 @@ SCAN src/ `truncate_to_unit(`
        `origin_from_leaves_under` は `None` を返す。空であるかどうかは並び順に依らない。
       BY <3>2, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     <3>5. CASE `reached` が空でなく、その要素がすべて互いに等しい。どの並び順でも `first` はその
-       共通の値であり、`reached.iter().all(|o| o == first)` は真になるので、返り値は
+       共通の値であり、`EXT Iterator の map と zip と all` より
+       `reached.iter().all(|o| o == first)` は真になるので、返り値は
        `Some(その共通の値)` である。
-      BY <3>2, <3>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+      BY <3>2, <3>3, EXT Iterator の map と zip と all,
+         CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     <3>6. CASE `reached` が空でなく、互いに等しくない 2 つの要素 `a`、`b` を持つ。どの並び順でも
+       `EXT Iterator の map と zip と all` より
        `reached.iter().all(|o| o == first)` は偽である -- 真だとすると `a == first` かつ
        `b == first` であり、`<3>3` の同値関係から `a == b` になって仮定に反する。よって返り値は
        `Some(Origin::of_candidates(candidates, here))` である。`candidates` は `reached` の各要素の
@@ -2594,7 +2999,7 @@ SCAN src/ `truncate_to_unit(`
        依らず等しいので、`<3>3` の `Origin` の等価性のもとで返り値はどちらの場合も並び順に依らない。
        要素数 1 の場合に `into_iter().next()` がその 1 つの要素を返すことは
        `EXT 1 要素の集合の反復` が言う。
-      BY <3>2, <3>3, EXT 1 要素の集合の反復,
+      BY <3>2, <3>3, EXT 1 要素の集合の反復, EXT Iterator の map と zip と all,
          CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
          CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::acted_on
     <3>7. QED
@@ -2874,7 +3279,7 @@ SCAN src/ `truncate_to_unit(`
     BY <1>2, <1>21, <1>29, <1>30
   <2>3. QED
     P2 が量化する 2 つの場合はどちらも `<2>2a` の範囲に入り、`pi` についての一般性は `<2>1` と
-    `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 7 つの仮定は `<1>29` と
+    `<2>2` が、表の 2 つの作り方についての一般性は `<2>2b` が与える。条件節の 8 つの仮定は `<1>29` と
     `<1>30` が読むものである。
     BY <ref id=e11772a/>, <ref id=33c54dc/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=3e6b0e0/>, <ref id=3d4be43/>, <1>29, <1>30, <2>1, <2>2, <2>2a, <2>2b,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel,
