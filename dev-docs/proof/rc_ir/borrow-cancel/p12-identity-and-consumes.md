@@ -2053,7 +2053,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
     `is_box`・`is_closure`・`is_array`・`is_funptr` を順に見てどれも当たらなければ
     `unpunched_field_types` の各型の `is_fully_unboxed` の連言を返すので、`is_fully_unboxed(())` は
     空の連言として真である。D4 の規則 1 より `()` は leaf を持たない。
-    BY <ref id=0594f24/>, <ref id=f68ae1c/> (a), <ref id=f68ae1c/> (b), <ref id=f68ae1c/> (c), <1>1b,
+    BY <ref id=0594f24/>, <ref id=f68ae1c/> (a), <ref id=f68ae1c/> (b), <ref id=f68ae1c/> (c),
+       EXT `Iterator::enumerate` と `Iterator::filter`, <1>1b,
        CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
        CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
        CODE src/ast/types.rs: TypeNode::unpunched_field_types, TypeNode::instance_field_types,
@@ -3021,7 +3022,7 @@ leaf に前置したものだからである。
 
 ### 定義が定めるのは語の意味だけである
 
-`README.md` の第 3 節は「定義の中に、支えの要る主張を置かない」と定める。この文書の `DEF` が定めるのは
+この文書の `DEF` が定めるのは
 語の意味だけであり、その語について示すことは段が持つ -- DEF 路の位置 の数え上げと `obj` の一意性は
 L0b、DEF 辺の leaf 対応 が D9 の値の水準の 6 行と一致することは L1 の `<1>1a`、DEF 辺の存在 と
 DEF `ρ` の上で実行された辺 の連言が D20 の「辺が在る」と一致することは L1 (b)、
@@ -3113,9 +3114,9 @@ develop mode の検査である。`README.md` の「仮定」の節は、その�
 `TypeNode::is_array` と `TypeNode::is_funptr` は最上位の tycon の**名前**で決まるのに対し、`is_struct` と
 `is_union` は `toplevel_tycon_info(type_env)` が返す項の `variant` で決まる。2 つを突き合わせる段 --
 L4 の `<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` -- は、その実行の `TypeEnv` の `Std::Array` の
-項と `is_funptr_tycon` を満たす鍵の項が `bulitin_tycons` が入れたものであることを要る。L3a がそれを、
-`Program::calculate_type_env` の種と、`TypeEnv` の `tycons` の欄に書く 6 つの式の数え上げから示す。
-**funptr の側を範囲 (`1` から `FUNPTR_ARGS_MAX`) でなく述語で書くのは、`is_funptr` がその述語で決まり、
+項と `is_funptr_tycon` を満たす鍵の項が `bulitin_tycons` が入れたものであることを要る。L3a がそれを
+A28 -- 組み込みの鍵の項は組み込みが置いたもの -- から示す。
+**funptr の側を範囲 (`1` から `FUNPTR_ARGS_MAX`) でなく `is_funptr` の真偽で書くのは、`is_funptr` が
 範囲の外の `#FunPtr{n}` にも真を返すからである。**
 
 ### 前件を、解析が `origin` を呼ぶ鍵に限ること
