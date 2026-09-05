@@ -659,9 +659,35 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
        `prog.funcs.values()` を走る。EXT 反復子の `iter`・`values`・`map`・`collect` より
        `values` は写像の各値をちょうど 1 つずつ渡すので、`p0.funcs` のどの関数についても `func.name` を鍵とする挿入が
        1 回行われる。その後の挿入も `values_mut` も鍵を取り除かない。
-  - **`globals`**: `prog.globals.iter().map(|g| RcGlobalInit { symbol: g.symbol.clone(),
-    ty: g.ty.clone(), init: ctx.rewrite(&g.init), owns_initializer: true, owns_storage: true })`
-    を `collect` した列である。EXT 反復子の `iter`・`values`・`map`・`collect` より、`iter` は
+  - **`globals`**: 次の 1 つの式が作る列である。
+
+    ```rust
+    prog
+        .globals
+        .iter()
+        .map(|g| {
+            let vars = VarTable::body_only(&g.init);
+            let ctx = RewriteCtx {
+                type_env,
+                is_borrow_version: false,
+                owned_units: &owned_units,
+                borrow_versions: &borrow_versions,
+                callee_params: &callee_params,
+                tail: tail_result_vars(&g.init),
+                vars,
+            };
+            RcGlobalInit {
+                symbol: g.symbol.clone(),
+                ty: g.ty.clone(),
+                init: ctx.rewrite(&g.init),
+                owns_initializer: true,
+                owns_storage: true,
+            }
+        })
+        .collect()
+    ```
+
+    EXT 反復子の `iter`・`values`・`map`・`collect` より、`iter` は
     `p0.globals` の各要素を添字の順に渡し、`map` は個数と順序を保ち、`Vec` への `collect` は
     反復の順序をそのまま添字に写す。よって `p1.globals` は `p0.globals` と同じ長さであり、その第 `i`
     要素は `p0.globals` の第 `i` 要素から作られたものである。閉包が組み立てる `RcGlobalInit` は
@@ -742,10 +768,27 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     BY <2>1, EXT 反復子の `iter`・`values`・`map`・`collect`, `CODE src/rc_ir/borrow.rs: cancel`,
        `CODE src/rc_ir/ast.rs: RcProgram`
 
-  **<2>3a.** `cancel` が返す `globals` と `roots` を、コードの上で読む。`cancel` は
-  `prog.globals.iter().map(|g| RcGlobalInit { symbol: g.symbol.clone(), ty: g.ty.clone(),
-  init: cancel_body(&vars, &g.init), owns_initializer: true, owns_storage: true })` を `collect`
-  した列を返す。EXT 反復子の `iter`・`values`・`map`・`collect` より、`iter` は `p1.globals` の
+  **<2>3a.** `cancel` が返す `globals` と `roots` を、コードの上で読む。`cancel` が返す `globals` は
+  次の 1 つの式が作る列である。
+
+  ```rust
+  prog
+      .globals
+      .iter()
+      .map(|g| {
+          let vars = VarTable::body_only(&g.init);
+          RcGlobalInit {
+              symbol: g.symbol.clone(),
+              ty: g.ty.clone(),
+              init: cancel_body(&vars, &g.init),
+              owns_initializer: true,
+              owns_storage: true,
+          }
+      })
+      .collect()
+  ```
+
+  EXT 反復子の `iter`・`values`・`map`・`collect` より、`iter` は `p1.globals` の
   各要素を添字の順に渡し、`map` は個数と順序を保ち、`Vec` への `collect` は反復の順序をそのまま添字に写す。
   よって `p2.globals` は `p1.globals` と同じ長さであり、その第 `i` 要素は `p1.globals` の第 `i`
   要素から作られたものである。閉包が組み立てる `RcGlobalInit` は `symbol` と `ty` にその要素のものの
@@ -1154,8 +1197,8 @@ A3 (元数) と A9 と A12 は `check_rhs`、A11 は `check_expr_inner` と `che
 であり、`RewriteCtx` は `vars: VarTable` を欄に持ち、`VarTable` は
 `origins: RefCell<Map<VarPath, Origin>>` を持つ (`CODE src/rc_ir/borrow.rs: RewriteCtx`,
 `CODE src/rc_ir/ownership.rs: VarTable`)。本体は `levelled_sites` が挙げる各 site について
-`origin(&self.vars, self.type_env, ..)` を呼び、`origin` は答えを
-`vars.origins.borrow_mut().insert(..)` で記録する (`CODE src/rc_ir/borrow.rs:
+`origin(&self.vars, self.type_env, &v.name, &unit)` を呼び、`origin` は答えを
+`vars.origins.borrow_mut().insert(key, answer.clone())` で記録する (`CODE src/rc_ir/borrow.rs:
 RewriteCtx::check_ownership_is_levelled`, `CODE src/rc_ir/ownership.rs: origin`)。すなわちこの検査は
 共有参照から memo を書く。
 
@@ -1288,8 +1331,8 @@ SCAN src/ `Rc::into_inner(`
 
 `SourceFile` へ届く道も 1 つではない。`RcVar` の `source: Option<Span>` は同じ理由でどこに現れても
 この道であり、加えて `RcFunc` の `source` と、`body` の各節点 (`RcExprNode` の `source`) がこの道を
-持つ。上で数え上げた `TypeNode` へ届くどの道の先でも、その `TypeNode` の `info.source: Option<Span>`
-が同じ `SourceFile` へ届く (`CODE src/rc_ir/ast.rs: RcVar`, `RcExprNode`, `CODE src/ast/types.rs:
+持つ。上で数え上げた `TypeNode` へ届くどの道の先でも、その `TypeNode` の `info` が持つ
+`source: Option<Span>` が同じ `SourceFile` へ届く (`CODE src/rc_ir/ast.rs: RcVar`, `RcExprNode`, `CODE src/ast/types.rs:
 TypeInfo`)。
 
 残る欄は、この 3 つのいずれの宣言も含まない。`RcFunc` の `name` (`FuncRef` = `FullName` =
