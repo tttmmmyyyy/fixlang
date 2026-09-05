@@ -317,6 +317,23 @@ SCAN src/ `fn applies_a_function_operand`
   = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::applies_a_function_operand
   = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::applies_a_function_operand
 
+**前提 式の型の欄を書く在りか** --- `ExprNode` は式の型を `type_` の欄に持ち、その式の自由変数の memo を
+非公開の `free_vars` の欄に持つ。`ExprNode` の struct リテラルはその非公開の欄を名指すので、`free_vars:`
+の字面が在る項目が `ExprNode` を組む式の在りかであり、`type_` の欄へ代入する式の在りかは `.type_ = ` の
+字面が在る項目である。次で尽きる。
+
+SCAN src/ `free_vars:`
+  = src/ast/expr.rs: Expr::into_expr_node_with_aux_src -- `type_: None` を置く
+  = src/ast/expr.rs: ExprNode -- 宣言
+  = src/ast/expr.rs: ExprNode::clone_all -- `type_: self.type_.clone()`
+  = src/ast/expr.rs: ExprNode::clone_except_fvs -- `type_: self.type_.clone()`
+  = src/ast/types.rs: TypeNode::free_vars -- `TypeNode` の側の局所束縛
+
+SCAN src/ `.type_ = `
+  = src/ast/expr.rs: ExprNode::set_type -- `ret.type_ = Some(ty)`
+  = src/ast/pattern.rs: PatternNode::set_type -- `PatternInfo` の同名の欄
+  = src/elaboration/desugar_opaque.rs: resolve_opaque_tycon_in_pattern -- `PatternInfo` の同名の欄
+
 **前提 funptr の tycon を型に組む在りか** --- `type_funptr` を呼ぶ式が在る項目と、
 `make_funptr_tycon` を呼ぶ式が在る項目は次で尽きる。
 
@@ -2365,8 +2382,12 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
     BY 前提 funptr の tycon を型に組む在りか,
        CODE src/optimization/uncurry.rs: funptr_lambda, replace_closure_call_to_funptr_call,
        replace_closure_call_to_funptr_call_subexprs
-  <2>2a. 式が funptr 型を持つのは、`type_funptr` が作った型を `set_type` で与えられたときか、funptr 型を
-        持つ式の型を `set_type` で写されたときである。**型検査が推論した型を式に記録する経路もこの 2 つで
+  <2>2a. 式が funptr 型を持つのは、`type_funptr` が作った型を `ExprNode::set_type` で与えられたときか、
+        funptr 型を持つ式の `type_` の欄を写されたときである。前提 式の型の欄を書く在りか より、
+        `ExprNode` を組むのは `Expr::into_expr_node_with_aux_src` (`type_` に `None` を置く)、
+        `ExprNode::clone_all` と `ExprNode::clone_except_fvs` (`type_: self.type_.clone()` で自分の欄を
+        写す) であり、`type_` の欄へ代入するのは `ExprNode::set_type` (`ret.type_ = Some(ty)`) である。
+        **型検査が推論した型を式に記録する経路もこの 2 つで
         尽きる** -- `TypeCheckContext::unify_type_of_expr` は各式に推論した型を付けて返すが、その型は
         制約系へ入った型の代入像であり、**単一化は与えられた型から新しい tycon を作らない** --
         `TypeCheckContext::unify` の各腕は、2 つの型を突き合わせて等しい tycon を受け入れるか、
@@ -2402,7 +2423,9 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         `replace_closure_call_to_funptr_call_subexprs` は部分式を辿って
         `replace_closure_call_to_funptr_call` を当て、その答えの部分式を組み直すだけで、式の型を別の式へ
         写さない。
-    BY <2>1, <2>2, README の「「果たす者」と「検査」の読み方」,
+    BY <2>1, <2>2, 前提 式の型の欄を書く在りか, README の「「果たす者」と「検査」の読み方」,
+       CODE src/ast/expr.rs: ExprNode::set_type, ExprNode::clone_all, ExprNode::clone_except_fvs,
+       Expr::into_expr_node_with_aux_src,
        CODE src/optimization/uncurry.rs: run, funptr_lambda,
        replace_closure_call_to_funptr_call, replace_closure_call_to_funptr_call_subexprs,
        CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr,
