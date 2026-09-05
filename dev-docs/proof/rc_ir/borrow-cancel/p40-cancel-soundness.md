@@ -1334,8 +1334,9 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
 <1>2. `p30` の `L5` の 3 より、`un_bump` が `InBracket(t)` を返すのは、その第 1 引数の `pending` に、
       `un_bumped` と**位置を共有する**要素があり、そのうち最も後ろの要素の `node` が `t` の `NodeId`
       であるときである。すなわちその要素は由来が `t` の要素である。`p30` の `L5` は「要素 `e` が
-      `References` の値 `R` と**位置を共有する**とは、`e.outstanding.shares_an_object(R)` が真である
-      ことをいう」と定め、その鍵が `VarPath` -- この文書の名前 (`DEF 名前とオブジェクト`) -- であることを述べる。
+      `References` の値 `R` と**位置 (D6) を共有する**とは、`e.outstanding.shares_an_object(R)` が真で
+      あることをいう」と定め、その鍵が `VarPath` -- この文書の名前 (`DEF 名前とオブジェクト`) -- で
+      あることを述べる。
   BY <ref id=19296b2/>, <1>1, DEF 名前とオブジェクト
 <1>3. <1>2 の第 1 引数は、`r` の訪問が `un_bump` を呼ぶところの `pending` であり、それは `pending(r)` に、
       この腕がそれより前に行う `others(r)` についての `consume_objects` を施したものである。L36 より
@@ -1695,20 +1696,18 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
          CODE src/rc_ir/provenance.rs: Provenance::set_leaves_under,
          CODE src/rc_ir/leaf_map.rs: LeafMap::map_leaves_under
     <3>2. `result_prov` の値は、`result_ty` を渡した `<3>1` の 4 つの構成子のいずれかが作る。
-          `LLVMGen::result_prov` の既定の実装は `Provenance::uniform(result_ty, type_env,
-          LeafOrigin::Unknown)` を返す。これを override するのは `src/fixstd/builtin.rs` の 29 個であり
-          (A3 がその個数を述べる)、そのどれもが `Provenance::uniform(result_ty, ・, ・)`、
-          `Provenance::uniform_bottom(result_ty, ・)`、`Provenance::fresh_under(result_ty, ・, ・)`、
-          `Provenance::build_shape(result_ty, ・, ・)`、または同じ 2 つを `result_ty` に掛ける
-          `replaced_field_prov` を返す。**`Provenance::empty()` と `Provenance` の `Default` は
-          `result_prov` の実装に現れない** -- 上の 29 個と既定の実装のどれもそれを呼ばない。この
-          2 つは鍵を 1 つも持たない値を作るので、この数え上げが要る。**数え上げの範囲を閉じるのは
+          前提 `result_prov` の本体の在りか の走査が挙げる各項目は、`Provenance::uniform`・
+          `Provenance::uniform_bottom`・`Provenance::fresh_under`・`Provenance::build_shape`・
+          `replaced_field_prov` のいずれかを第 1 引数 `result_ty` に掛けた値を返す。`replaced_field_prov`
+          はその中で `Provenance::uniform(result_ty, ・, ・)` か
+          `Provenance::build_shape(result_ty, ・, ・)` を返す
+          (`CODE src/fixstd/builtin.rs: replaced_field_prov`)。**数え上げの範囲を閉じるのは
           EXT trait の実装は既定と再定義で尽きる である** -- ある op の `result_prov` が実行する本体は、
           その型の `impl LLVMGen for` がそれを再定義していればその定義、していなければ trait 側の既定の
-          本体であり、ほかに本体は無い。
+          本体であり、ほかに本体は無い。走査の literal `fn result_prov` はその両方を挙げるので、
+          `result_prov` が実行しうる本体はこの一覧で尽きる。
       BY CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, CODE src/fixstd/builtin.rs: replaced_field_prov,
-         CODE src/rc_ir/provenance.rs: Provenance::empty, CODE src/rc_ir/provenance.rs: Provenance, <ref id=e11772a/>,
-         EXT trait の実装は既定と再定義で尽きる
+         前提 `result_prov` の本体の在りか, EXT trait の実装は既定と再定義で尽きる
     <3>3. QED
       BY <3>1, <3>2, <2>1
       `<2>1` より `result_ty = ty(u)` である。
@@ -2157,23 +2156,29 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
 ### L41 (余りの下界) <!--#217aebd-->
 
 **言明** --- 実行路 `ρ` と、`ρ` を辿る 1 回の活性化を固定する。`ρ` の上の節点 `q` と計数下のオブジェクト
-`O` について、`N(q, O) ≥ 1` ならば、`q` の入口の点での参照カウントは `H(q, O) ≥ N(q, O) + 1` である。
+`O` について、次の 2 つが成り立つ。
+
+1. `DEF N` の `N(q, O)` は、README の P18a の「走査中の位置」を `q` の訪問の入口に取ったときの `n(O)`
+   であり、`p13` の `DEF N` の `N_ρ(q, O)` である。
+2. `N(q, O) ≥ 1` ならば、`q` の入口の点での参照カウントは `H(q, O) ≥ N(q, O) + 1` である。
 
 **主語は D21 の意味の活性化である。** D21 は各時点で A19 (i) の不等式を満たすものだけを活性化とするので、
-この命題を `α` について読む段は、`α` がその制限を満たすことに立つ (`L44` の (f))。
+この命題の 2 を `α` について読む段は、`α` がその制限を満たすことに立つ (`L44` の (f))。
 
 **証明**
 
-<1>1. P18a の「走査中の位置」を節点 `q` の訪問の入口に取ると、その `n(O)` は `N(q, O)` であり、
-      `p13` の `DEF N` の `N_ρ(q, O)` である。
+<1>1. 1 が成り立つ。すなわち P18a の「走査中の位置」を節点 `q` の訪問の入口に取ると、その `n(O)` は
+      `N(q, O)` であり、`p13` の `DEF N` の `N_ρ(q, O)` である。
   BY <ref id=97bdd4e/>, <ref id=8093b68/>, DEF N, <ref id=b154692/>, <ref id=c4ea962/>, p13 の DEF N
   D27 は `B(p, ρ)` を節点の訪問の入口で定め、P18a はその `B(p, ρ)` を使って
   `n(O) = Σ_p Σ_{o : obj(o) = O} B(p, ρ)[o]` と置く。`L45` より P18a の `obj(o)` は `obj_ρ(o)` であり、
   内側の和を活性な名前に制限してよいのは、`p13` の `L11` (ii) より活性でない名前の `B_ρ` が 0 だから
   である。DEF N がその和である。
-<1>2. QED
+<1>2. 2 が成り立つ。
   BY <ref id=97bdd4e/>, <1>1
   P18a は `n(O) ≥ 1` のとき `H(O) ≥ n(O) + 1` を述べる。
+<1>3. QED
+  BY <1>1, <1>2
 
 ### L41a (類の義務は非負であり、節点の入口では bump 以上である) <!--#89569b4-->
 
@@ -2362,9 +2367,9 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
   L41a の 2 を、節点を `q`、その入口の点を `q` の入口の点として読む。本命題が量化するのは終端の `Ret` の
   消費より前の節点なので、その範囲に入る。
 <1>3. QED
-  BY <1>1, <1>2, <ref id=5c1f4e7/>, <ref id=2ea7903/>, DEF 類ごとの義務, DEF N
+  BY <1>1, <1>2, <ref id=5c1f4e7/>, <ref id=2ea7903/>, <ref id=217aebd/>, DEF 類ごとの義務, DEF N
   <1>1 と <1>2 より `Obl(q, O) ≥ Σ_{C ∈ S(q, O)} obl_ρ(q, C) ≥ Σ_{C ∈ S(q, O)} bumps_ρ(q, C) = b(q, O)`
-  である。`p13` の `L17` より `N_ρ(q, O) = Σ_{C ∈ S(q, O)} bumps_ρ(q, C)` であり、DEF N より
+  である。`p13` の `L17` より `N_ρ(q, O) = Σ_{C ∈ S(q, O)} bumps_ρ(q, C)` であり、`L41` の 1 より
   `N(q, O) = N_ρ(q, O)` である。L40a の 1 が、`obj(C) = O` である類を渡る和と `S(q, O)` を渡る和が
   等しいことを与える。
 
@@ -2983,8 +2988,8 @@ op の生成コードが出す retain が作った参照が `Obl(α)` に在る�
   本命題の仮定の (a) が与え、`H(p, O) = H'(p, O) + d(p, O)` は本命題の仮定の (b) が与える。
 <1>2. 2 が成り立つ。
   <2>1. CASE `p` が `ρ` の上の節点 `q` の入口の点である。`d(q, O) ≥ 1` とする。L43 より
-        `N(q, O) ≥ d(q, O) ≥ 1` である。L41 より `H(q, O) ≥ N(q, O) + 1 ≥ d(q, O) + 1` である。
-        L41 を `α` について読むのに要る D21 の制限は <1>1 が与える。
+        `N(q, O) ≥ d(q, O) ≥ 1` である。L41 の 2 より `H(q, O) ≥ N(q, O) + 1 ≥ d(q, O) + 1` である。
+        L41 の 2 を `α` について読むのに要る D21 の制限は <1>1 が与える。
     BY <ref id=217aebd/>, <ref id=4ff3e8d/>, <1>1
   <2>2. CASE `p` が `q_end` である。L43 の最後の文より `d(q_end, O) = 0` なので、言明は空虚に成り立つ。
     BY <ref id=4ff3e8d/>
