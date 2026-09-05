@@ -1943,8 +1943,8 @@ D34 は類の開始の点より前で `held_ρ` を定めないので、
 (i) はこの段に何も要求しない -- 仮定ではなく D21 が活性化に課す制限になったからである。
 **(ii-b) は保存では通らない** -- 粗い `Retain` が積む要素の `outstanding` は鎖の各要素の和なので、 <!--#4afb069-->
 `consume_objects` が粗い側の 1 要素を丸ごと落とす場面で細かい側は一部しか落ちず、割った後の `bumps` が
-割る前より大きい時点がありうる。そこで「(O2) の証明」を本体について読む 4 つの前提に括り出し、割った後の出力が
-その 4 つを満たすことを示す形にした。
+割る前より大きい時点がありうる。そこで「(O2) の証明」を本体について読む 5 つの前提 ((S0) から (S4)) に括り出し、割った後の出力が
+その 5 つを満たすことを示す形にした。
 
 **(i) も閉じた** (P28 (b))。`Σ d(C)` の側は `Σ_{s∈C} μ(s) = Obl_a(O)` と P28 (a) から、 <!--#1e9a01d-->
 角括弧の側は A5 (その leaf が参照を 1 つ持つ)、**A20** (呼び出しの間それが処分されない)、D14 と D10 の
@@ -2270,7 +2270,7 @@ SCAN src/ `.set_refcnt_state(`
 `p12-identity-and-consumes.md` の `L3a`、`p13-disposals-and-pending.md` の `<4>3` の 2 か所、
 `p51-runs.md` の `L1` `<1>3` `<2>3`、
 `p40-cancel-soundness.md` の `L40` の組み込みの `variant` を読む段、
-`p60-insert-rc.md` の `L13a` `<1>3`。
+`p60-insert-rc.md` の `L13a` `<1>2a`。
 
 SCAN src/ `TypeEnv::new(`
   = src/ast/program.rs: Program::calculate_type_env -- `bulitin_tycons()` から始める

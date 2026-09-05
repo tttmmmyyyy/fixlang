@@ -313,7 +313,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret
 }
 
-// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_arrow_name_abs() -> FullName {
     let mut name = FullName::from_strs(&[STD_NAME], ARROW_NAME);
     name.set_absolute();
@@ -381,7 +381,7 @@ pub fn make_array_tycon() -> TyCon {
     TyCon::new(make_array_name())
 }
 
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_array_name() -> FullName {
     FullName::from_strs(&[STD_NAME], ARRAY_NAME)
 }
@@ -414,7 +414,7 @@ pub fn is_destructor_object_tycon(tc: &TyCon) -> bool {
 }
 
 // Returns whether given tycon is array
-// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_array_tycon(tc: &TyCon) -> bool {
     *tc == make_array_tycon()
 }
@@ -5145,7 +5145,9 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
 }
 
 /// The operand positions of a struct `plug_in`: the punched struct, then the field value.
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 const PLUG_IN_PUNCHED_ARG: usize = 0;
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 const PLUG_IN_FIELD_ARG: usize = 1;
 
 /// The provenance of a struct rebuilt with the field at `field_idx` replaced, given the operand
@@ -6162,7 +6164,9 @@ impl LLVMGen for InlineLLVMStructSetBody {
 }
 
 /// The operand positions of a struct `set`: the new field value, then the struct.
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 const STRUCT_SET_VALUE_ARG: usize = 0;
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 const STRUCT_SET_STRUCT_ARG: usize = 1;
 
 // `set` built-in function for a given struct.

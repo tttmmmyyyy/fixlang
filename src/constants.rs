@@ -5,7 +5,7 @@ use std::env;
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
 
-// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const STD_NAME: &str = "Std";
 pub const FFI_NAME: &str = "FFI";
 pub const IO_NAME: &str = "IO";
@@ -25,7 +25,7 @@ pub const I64_NAME: &str = "I64";
 pub const U64_NAME: &str = "U64";
 pub const F32_NAME: &str = "F32";
 pub const F64_NAME: &str = "F64";
-// PROOF: P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P5, P6, P7, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const ARROW_NAME: &str = "Arrow";
 
 pub const C_CHAR_NAME: &str = "CChar";
@@ -45,7 +45,7 @@ pub const C_DOUBLE_NAME: &str = "CDouble";
 pub const IOSTATE_NAME: &str = "IOState";
 // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const BOOL_NAME: &str = "Bool";
-// PROOF: P3, P4, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P5, P6, P7, P7a, P7d, P7e, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const ARRAY_NAME: &str = "Array";
 // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub const PUNCHED_ARRAY_NAME: &str = "PunchedArray";
@@ -114,7 +114,7 @@ pub const UNION_IS_SYMBOL: &str = "is_";
 pub const UNION_MOD_SYMBOL: &str = "mod_";
 
 // Names used by compiler.
-// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const FUNPTR_NAME: &str = "#FunPtr";
 // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";

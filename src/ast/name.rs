@@ -58,6 +58,7 @@ impl Ord for NameSpace {
 // PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl NameSpace {
     /// The empty path, which a name written with no qualification carries.
+    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn local() -> Self {
         Self {
             names: vec![],
@@ -86,7 +87,7 @@ impl NameSpace {
     }
 
     /// Whether the path holds no name, as the path of a name written with no qualification does.
-    // PROOF: P7c, P7f, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P18a, P18b, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         self.names.len() == 0
     }
@@ -297,7 +298,7 @@ impl Ord for FullName {
 // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl FullName {
     /// The name `name` under the namespace `ns`.
-    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(ns: &NameSpace, name: &str) -> Self {
         Self {
             namespace: ns.clone(),
@@ -306,7 +307,7 @@ impl FullName {
     }
 
     /// The name `name` under the namespace `ns` spells out, the outermost name first.
-    // PROOF: P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P5, P6, P7, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn from_strs(ns: &[&str], name: &str) -> Self {
         Self::new(&NameSpace::from_strs(ns), name)
     }
