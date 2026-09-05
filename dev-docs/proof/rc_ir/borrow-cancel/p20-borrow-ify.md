@@ -154,12 +154,13 @@ site を 1 つも挙げない。P7a と P7d はその点を避けて site を本
   (`ρ_f` は `VarPath` に対しその変数だけを写す)。
 - **`p15` の `L16`** -- `OL` を `infer_ownership` の不動点の `owned_leaves`、`ctx` を `clone` の
   `RewriteCtx` とすると、`func` に現れる任意の名前 `r` と任意の path `p` について
-  `ctx.owns_object(ρ_f(r), p) = owns_object_yet(vars_f, type_env, r, p, OL)` である。
-- **`p15` の `L17`** -- ある出力版の `RewriteCtx` が `owns_unit(v, u)` を呼ぶとき、その版が関数の版で
-  あれば `(v, u)` は**その版の本体**について `levelled_sites` が挙げる site である。グローバル初期化子の
-  版では `owns_unit(v, u)` は真を返す。
-- **`p13-disposals-and-pending.md` の `L7`** -- `leaves(τ)` の相異なる 2 元は、一方が他方の接頭辞に
-  ならない。
+  `ctx.owns_object(ρ_f(r), p) = owns_object_yet(vars_f, type_env, r, p, OL)` である
+  (両辺は同時に中断する)。
+- **`p15` の `L17`** -- ある出力版の `RewriteCtx` が `owns_unit(v, u)` を呼ぶとき、`(v, u)` は**その版の
+  site (DEF site)** である。その版がグローバル初期化子のものであれば、さらに `owns_unit(v, u)` は真を
+  返す。
+- **`p13-disposals-and-pending.md` の `L7`** -- **A10 を満たす任意の型 `τ` について**、`leaves(τ)` の
+  相異なる 2 元は、一方が他方の前置になることが無い。
 
 **外部の結果**。この文書が引く、文書の外の名前つき結果を `EXT <名前>` の名札で据える。`BY` はこの名前で
 引く。
@@ -433,9 +434,10 @@ leaf であり、`decl.leaf_origins_at(σ).and_then(as_arg_projection)` が `Non
 
 <1>1. `decl.leaf_origins_under(σ)` が挙げるのは、`σ` の記録 1 つだけである。
   `leaf_origins_under(π)` は `π` の下の boxed leaf の記録を挙げ、`π` 自身が leaf のときはその leaf を
-  挙げる。`p13-disposals-and-pending.md` の `L7` より `leaves(ty(u))` の相異なる 2 元は一方が他方の
-  接頭辞にならないので、`σ` の真下に leaf は無い。
-  BY <ref id=efe0c77/>,
+  挙げる。第 1 節に写した `p13-disposals-and-pending.md` の `L7` は **A10 を満たす**型についての言明で
+  あり、A10 はプログラムに現れる型の全体についてそれを与えるので `ty(u)` に当たる。その `L7` より
+  `leaves(ty(u))` の相異なる 2 元は一方が他方の前置にならないので、`σ` の真下に leaf は無い。
+  BY <ref id=8412761/>, <ref id=efe0c77/>,
      CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under, Provenance::leaf_origins_at
 
 <1>2. `σ` の記録は、空集合か `{Fresh}` か `{Unknown}` のいずれかである。
@@ -1036,10 +1038,11 @@ D9 の `App` の引数の行は「呼び出し先がその位置の unit を所�
     BY <ref id=0ad40c6/>, <ref id=0edb0ba/>, <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, CODE src/rc_ir/ownership.rs: Binding, origin_inner
 
 <1>4. `covered_leaves(τ, p) = {p}` である。
-  `<1>3` より `p ∈ leaves(τ)` である。`p13-disposals-and-pending.md` の `L7` より `leaves(τ)` の相異なる
-  2 元は一方が他方の接頭辞にならないので、`λ' ⊑ p` または `p ⊑ λ'` を満たす `λ' ∈ leaves(τ)` は `p` だけ
-  である。
-  BY <1>3, <ref id=efe0c77/>, CODE src/rc_ir/borrow.rs: covered_leaves
+  `<1>3` より `p ∈ leaves(τ)` である。第 1 節に写した `p13-disposals-and-pending.md` の `L7` は
+  **A10 を満たす**型についての言明であり、A10 はプログラムに現れる型の全体についてそれを与えるので `τ` に
+  当たる。その `L7` より `leaves(τ)` の相異なる 2 元は一方が他方の前置にならないので、`λ' ⊑ p` または
+  `p ⊑ λ'` を満たす `λ' ∈ leaves(τ)` は `p` だけである。
+  BY <ref id=8412761/>, <1>3, <ref id=efe0c77/>, CODE src/rc_ir/borrow.rs: covered_leaves
 
 <1>5. `owns_object_yet(vars_f, type_env, r, p, OL)` は真である。
   第 1 節に写した `p15` の `L11` は、「`r` を `vars.param_tys` が型 `τ` で持つ名前、`p` を path、`OL` を
@@ -2123,10 +2126,9 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
   写したものである。この文書が固定しているのは第 9.1 節の `V` であり、その `RewriteCtx` が `ctx`、
   その本体が `B_V` である。`V = f_borrow` の ときその本体は `clone_func` が返した `B_V` であり、`ctx` は `RewriteCtx::new(&clone, true, ..)` が
   作ったものである。`owns_unit` を呼ぶ位置がその版の site を出ないことは 第 1 節に写した `p15` の
-  `L17` が述べる -- 関数の版については「`(v, u)` は**その版の本体**について `levelled_sites` が挙げる
-  site である」として、グローバル初期化子の版については「`owns_unit(v, u)` は真を返す」として述べる。
-  P7a はその 2 つの版を 1 つの site の定義で覆い、「関数の版ではこれは `levelled_sites` が挙げる集合と
-  一致する」と述べる。
+  `L17` が述べる -- どの版についても、`ctx` が `owns_unit(v, u)` を呼ぶとき `(v, u)` は**その版の
+  site (DEF site)** である。P7a はその 2 つの版を 1 つの site の定義で覆い、「関数の版ではこれは
+  `levelled_sites` が挙げる集合と一致する」と述べる。
   BY DEF site, <ref id=d499f99/>, <ref id=9f8089c/>, CODE src/rc_ir/borrow.rs: borrow_ify, RewriteCtx::new
 
 <1>1. `ctx.owns_unit(v, u)` が真ならば、`cand(v, λ)` のすべての元について `owns_object` は真である。
