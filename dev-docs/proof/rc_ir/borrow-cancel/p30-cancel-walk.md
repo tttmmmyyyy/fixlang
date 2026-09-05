@@ -3,14 +3,16 @@
 この文書は README の層 1 の命題 P2a と、層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の
 「定義」の節が置く定義と「仮定」の節が置く仮定の上に立つ。P2a を除く層 1 の命題と、層 2 の命題は引用しない。
 
-この文書が読んだコードのコミットは `e5f2b9c79460be3ae60b46e3900267c36ac98692` である。README が証明の
+この文書が読んだコードのコミットは `7e9651a2eac6574b36b8b06e87d0b57f98d98953` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書の `CODE` 引用が
-名指すファイルは 20 個ある。そのうち 19 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
+名指すファイルは 22 個ある。そのうち 21 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
 `src/rc_ir/ast.rs`、`src/rc_ir/provenance.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/rename.rs`、
 `src/ast/types.rs`、`src/ast/typedecl.rs`、`src/ast/name.rs`、`src/ast/program.rs`、
 `src/elaboration/typecheck.rs`、`src/elaboration/desugar_opaque.rs`、`src/parse/sourcefile.rs`、
-`src/misc.rs`、`src/build/build_object_files.rs`、`src/main.rs`、`src/object.rs`、
-`src/tool/log_file.rs`、`src/tests/test_util.rs` --- に変わったのは `// PROOF:` コメントだけである。
+`src/misc.rs`、`src/constants.rs`、`src/fixstd/builtin.rs`、`src/build/build_object_files.rs`、
+`src/main.rs`、`src/object.rs`、`src/tool/log_file.rs`、`src/tests/test_util.rs` --- に変わったのは
+`// PROOF:` コメントだけである。この一覧は、この文書の `CODE` の行から `src/` で始まるファイル名を
+抜き出して重複を落とす走査で作る。
 
 残る 1 個 `src/rc_ir/validate.rs` には、コメント以外の変更がある。`Validator::check_rhs` の署名が
 `(&mut self, x: &RcVar, rhs: &RcRhs)` になり、その `Llvm` の腕が `llvm_gen.result_prov(&x.ty, &arg_tys,
