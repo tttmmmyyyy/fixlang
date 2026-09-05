@@ -297,6 +297,32 @@ impl LspClient {
             .collect()
     }
 
+    /// The number of `textDocument/publishDiagnostics` notifications received that carry a
+    /// message containing `text`.
+    ///
+    /// The diagnostics of one file are kept by their path, so a message published twice is seen
+    /// once there; counting the notifications is what tells how often the server said it.
+    pub fn count_diagnostics_notifications_containing(&self, text: &str) -> usize {
+        self.shared
+            .message_queue
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|message| {
+                message.get("method").and_then(|m| m.as_str())
+                    == Some("textDocument/publishDiagnostics")
+                    && message
+                        .pointer("/params/diagnostics")
+                        .and_then(|d| d.as_array())
+                        .map_or(false, |diagnostics| {
+                            diagnostics.iter().any(|diag| {
+                                diag["message"].as_str().map_or(false, |m| m.contains(text))
+                            })
+                        })
+            })
+            .count()
+    }
+
     /// Return the number of `$/progress` end notifications received so far.
     pub fn count_progress_end_messages(&self) -> usize {
         *self.shared.progress_end_count.lock().unwrap()

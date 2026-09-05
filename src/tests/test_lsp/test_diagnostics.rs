@@ -363,12 +363,26 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// The opening of the message a pass publishes when its analysis fails.
+    const ANALYSIS_FAILURE_REPORT: &str = "Analysis of this program failed";
+
+    /// A program carrying one ordinary error, which the analysis finishes and reports.
+    const PROGRAM_WITH_AN_UNKNOWN_NAME: &str =
+        "module Main;\n\nmain : IO ();\nmain = println(nonexistent_name);\n";
+
+    /// The error the analysis reports on `PROGRAM_WITH_AN_UNKNOWN_NAME`.
+    const UNKNOWN_NAME_REPORT: &str = "Unknown name `nonexistent_name`";
+
+    /// A program the analysis finishes with nothing to report.
+    const PROGRAM_WITHOUT_AN_ERROR: &str =
+        "module Main;\n\nmain : IO ();\nmain = println(\"x\");\n";
+
     /// The paths of the files carrying the report of a pass whose analysis failed.
     fn analysis_failure_reports(reports: &Map<PathBuf, Vec<Value>>) -> Vec<PathBuf> {
         reports
             .iter()
             .filter(|(_, diagnostics)| {
-                !diagnostics_containing(diagnostics, "Analysis of this program failed").is_empty()
+                !diagnostics_containing(diagnostics, ANALYSIS_FAILURE_REPORT).is_empty()
             })
             .map(|(path, _)| path.clone())
             .collect()
@@ -421,11 +435,8 @@ mod tests {
         );
 
         // The repair the editor writes, which carries one ordinary error.
-        fs::write(
-            project_dir.join(main_fix),
-            "module Main;\n\nmain : IO ();\nmain = println(nonexistent_name);\n",
-        )
-        .expect("Failed to write the repaired program");
+        fs::write(project_dir.join(main_fix), PROGRAM_WITH_AN_UNKNOWN_NAME)
+            .expect("Failed to write the repaired program");
         let passes_before_the_repair = client.count_progress_end_messages();
         client
             .change_document(main_fix)
@@ -438,12 +449,165 @@ mod tests {
             .expect("the pass over the repaired program is expected to end");
 
         let diagnostics = client.get_diagnostics(main_fix);
-        sole_diagnostic_containing(&diagnostics, "Unknown name `nonexistent_name`");
+        sole_diagnostic_containing(&diagnostics, UNKNOWN_NAME_REPORT);
 
         let reports = client.get_all_diagnostics();
         assert!(
             analysis_failure_reports(&reports).is_empty(),
             "the report of the failed pass is expected to be cleared, but the reports are {:?}",
+            reports
+        );
+    }
+
+    /// A program the analysis keeps failing on is reported once, and reported afresh once a pass
+    /// that finished has taken the report back.
+    ///
+    /// The editor asks for an analysis on every keystroke, so a program the analysis fails on is
+    /// analyzed again for each character the programmer types while repairing it. A report per pass
+    /// would say the same thing over and over while the work is going on, and a flag that stayed
+    /// set would leave the next program that fails unreported.
+    #[test]
+    fn test_a_program_the_analysis_keeps_failing_on_is_reported_once_per_streak() {
+        let (_temp_dir, project_dir) = setup_test_env("diagnostics_after_panic");
+        let main_fix = Path::new("main.fix");
+        let program_the_analysis_fails_on = fs::read_to_string(project_dir.join(main_fix))
+            .expect("Failed to read the case project's program");
+
+        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+        client
+            .initialize(&project_dir, Duration::from_secs(10))
+            .expect("Failed to initialize LSP");
+        client
+            .open_document(main_fix)
+            .expect("Failed to open document");
+
+        // The pass the server starts with, over the program the analysis fails on.
+        client
+            .wait_for_progress_end_count(1, Duration::from_secs(180))
+            .expect("the first pass over the program the analysis fails on is expected to end");
+        assert_eq!(
+            client.count_diagnostics_notifications_containing(ANALYSIS_FAILURE_REPORT),
+            1,
+            "the first pass whose analysis fails is expected to report the failure"
+        );
+
+        // A second pass over the same program, which fails the same way.
+        let passes_before_the_second = client.count_progress_end_messages();
+        client
+            .save_document(main_fix)
+            .expect("Failed to save document");
+        client
+            .wait_for_progress_end_count(passes_before_the_second + 1, Duration::from_secs(180))
+            .expect("the second pass over the program the analysis fails on is expected to end");
+        assert_eq!(
+            client.count_diagnostics_notifications_containing(ANALYSIS_FAILURE_REPORT),
+            1,
+            "a failure that goes on is expected to be reported no further time"
+        );
+
+        // The repair, which the analysis finishes.
+        fs::write(project_dir.join(main_fix), PROGRAM_WITH_AN_UNKNOWN_NAME)
+            .expect("Failed to write the repaired program");
+        let passes_before_the_repair = client.count_progress_end_messages();
+        client
+            .save_document(main_fix)
+            .expect("Failed to save document");
+        client
+            .wait_for_progress_end_count(passes_before_the_repair + 1, Duration::from_secs(180))
+            .expect("the pass over the repaired program is expected to end");
+        sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
+
+        // The program the analysis fails on, written a second time.
+        fs::write(project_dir.join(main_fix), &program_the_analysis_fails_on)
+            .expect("Failed to write the program the analysis fails on");
+        let passes_before_the_relapse = client.count_progress_end_messages();
+        client
+            .save_document(main_fix)
+            .expect("Failed to save document");
+        client
+            .wait_for_progress_end_count(passes_before_the_relapse + 1, Duration::from_secs(180))
+            .expect("the pass over the program the analysis fails on again is expected to end");
+        assert_eq!(
+            client.count_diagnostics_notifications_containing(ANALYSIS_FAILURE_REPORT),
+            2,
+            "a failure that follows a pass which finished is expected to be reported afresh"
+        );
+    }
+
+    /// The reports of the pass before a failing one stay on the files they name, and the pass that
+    /// finishes next takes them back.
+    ///
+    /// A pass whose analysis fails produces no reports of its own, so what the editor shows is what
+    /// the pass before it published. Those files have to stay named for as long as that: a pass
+    /// which forgot them would leave their squiggles on screen for the rest of the session, on a
+    /// program that no longer carries the error.
+    #[test]
+    fn test_the_reports_of_the_pass_before_a_failing_one_are_taken_back_by_the_next_one() {
+        let (_temp_dir, project_dir) = setup_test_env("diagnostics_after_panic");
+        let main_fix = Path::new("main.fix");
+        let program_the_analysis_fails_on = fs::read_to_string(project_dir.join(main_fix))
+            .expect("Failed to read the case project's program");
+
+        // The program the session starts from, which carries one ordinary error.
+        fs::write(project_dir.join(main_fix), PROGRAM_WITH_AN_UNKNOWN_NAME)
+            .expect("Failed to write the program the session starts from");
+
+        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+        client
+            .initialize(&project_dir, Duration::from_secs(10))
+            .expect("Failed to initialize LSP");
+        client
+            .open_document(main_fix)
+            .expect("Failed to open document");
+        client
+            .wait_for_progress_end_count(1, Duration::from_secs(180))
+            .expect("the pass over the program carrying an ordinary error is expected to end");
+        sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
+
+        // The program written next, which the analysis fails on.
+        fs::write(project_dir.join(main_fix), &program_the_analysis_fails_on)
+            .expect("Failed to write the program the analysis fails on");
+        let passes_before_the_failure = client.count_progress_end_messages();
+        client
+            .save_document(main_fix)
+            .expect("Failed to save document");
+        client
+            .wait_for_progress_end_count(passes_before_the_failure + 1, Duration::from_secs(180))
+            .expect("the pass over the program the analysis fails on is expected to end");
+
+        // What the rest of this test measures exists only after a pass has failed, so the failure
+        // is asserted rather than assumed.
+        let reports = client.get_all_diagnostics();
+        assert_eq!(
+            analysis_failure_reports(&reports).len(),
+            1,
+            "the analysis of the case project is expected to fail once, but the reports are {:?}",
+            reports
+        );
+        sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
+
+        // The program written last, which the analysis finishes with nothing to report.
+        fs::write(project_dir.join(main_fix), PROGRAM_WITHOUT_AN_ERROR)
+            .expect("Failed to write the program carrying no error");
+        let passes_before_the_clean_one = client.count_progress_end_messages();
+        client
+            .save_document(main_fix)
+            .expect("Failed to save document");
+        client
+            .wait_for_progress_end_count(passes_before_the_clean_one + 1, Duration::from_secs(180))
+            .expect("the pass over the program carrying no error is expected to end");
+
+        let diagnostics = client.get_diagnostics(main_fix);
+        assert!(
+            diagnostics.is_empty(),
+            "the error of the pass before the failing one is expected to be taken back, but \
+             `main.fix` carries {:?}",
+            diagnostics
+        );
+        let reports = client.get_all_diagnostics();
+        assert!(
+            analysis_failure_reports(&reports).is_empty(),
+            "the report of the failed pass is expected to be taken back, but the reports are {:?}",
             reports
         );
     }
