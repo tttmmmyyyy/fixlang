@@ -491,8 +491,11 @@ Ret(w)))))
   `is_fully_unboxed` が真なので `needs_rc` は偽である。
 
 <1>2. `p`、`u`、`w`、`z`、`b` の名前は `is_local` が真であり、`f` の名前は偽である。
-  BY <ref id=8e3aff3/>, <ref id=cb35ab1/>, DEF 例の名前の取り方, CODE src/ast/name.rs: FullName::is_local
-  `is_local` は名前空間が空かを答える。`DEF 例の名前の取り方` より `p`、`u`、`w`、`z`、`b` の名前は
+  BY <ref id=8e3aff3/>, <ref id=cb35ab1/>, DEF 例の名前の取り方, CODE src/ast/name.rs: FullName::is_local,
+     CODE src/ast/name.rs: NameSpace::is_local
+  `FullName::is_local` の本体は `self.namespace.is_local()` であり、`NameSpace::is_local` の本体は
+  `self.names.len() == 0` なので、`is_local` は名前空間が空かを答える。`DEF 例の名前の取り方` より
+  `p`、`u`、`w`、`z`、`b` の名前は
   名前空間を持たない。`f` は `prog.funcs` の鍵であり、A13 は「最上位の記号の名前は局所名
   ではない」-- `FullName::is_local` が偽であり、`prog.funcs` の鍵はそのような名前である -- と述べる。
   A13 は `borrow_ify` の入力について語るが、A13 自身が「**`insert_rc` の入力と出力について読む段は
@@ -1893,13 +1896,15 @@ boxed leaf の参照を D9 の意味で消費するか移動させる。
      CODE src/rc_ir/rename.rs: assign_fresh_name,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
      CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
-     CODE src/ast/name.rs: FullName::is_local
+     CODE src/ast/name.rs: FullName::is_local, CODE src/ast/name.rs: NameSpace::is_local
   P12 より `route` が返す呼び出し先は、元の呼び出し先と同じ関数の版 (元の版そのものか、その
   `borrow_versions` の像) であるか、局所変数を経由する間接呼び出しでは呼び出し先そのものである。
   後者では名前が変わらない。前者で名前が変わるとき、元の名前は `borrow_ify` の入力の `funcs` の鍵で
   あり、A13 の「最上位の記号の名前は局所名ではない」の節よりそれは局所名ではない。返る名前は
   `borrow_funcref` が元の名前の最後の断片に `#borrow` を足したものであり、名前空間の欄を書き替えない。
-  `FullName::is_local` は名前空間が空かを答えるので、返る名前も局所名ではない。一方 `L8` (a) より
+  `FullName::is_local` の本体は `self.namespace.is_local()`、`NameSpace::is_local` の本体は
+  `self.names.len() == 0` なので、`is_local` は名前空間が空かを答える。よって返る名前も局所名では
+  ない。一方 `L8` (a) より
   `insert_rc` が `Retain` を置くのは `insert_into_operation_let` の `if v.name.is_local()` の門の中と、
   `retain_if_live` の `var.name.is_local()` を要求する枝の 2 種で尽きるので、`Retain(v, π)` の `v` は
   局所名である。**借用版の側でもそうである** -- `clone_func` が作る複製の束縛名は
@@ -2561,25 +2566,34 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
      CODE src/ast/types.rs: TypeNode::is_unbox, CODE src/ast/types.rs: TypeNode::is_closure,
      CODE src/ast/types.rs: TypeNode::is_array, CODE src/ast/types.rs: TypeNode::is_funptr,
      CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon,
      CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+     CODE src/ast/name.rs: FullName::from_strs, CODE src/ast/name.rs: FullName::new,
+     CODE src/constants.rs: ARRAY_NAME, CODE src/constants.rs: ARROW_NAME,
+     CODE src/constants.rs: FUNPTR_NAME, CODE src/constants.rs: STD_NAME,
      CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/fixstd/builtin.rs: is_array_tycon,
      CODE src/fixstd/builtin.rs: make_array_tycon, CODE src/fixstd/builtin.rs: make_array_name,
      CODE src/fixstd/builtin.rs: make_arrow_name_abs, CODE src/fixstd/builtin.rs: bulitin_tycons
   `is_fully_unboxed` は `if self.is_funptr() { return true; }` に着いて真を返す。**先の 3 つの早期
   return が発火しないことは次のとおりである。** `is_funptr` は `toplevel_tycon_satisfies` に
   `is_funptr_tycon` を渡したものであり、`is_funptr_tycon` は tycon の名前の名前空間が `Std` の
-  1 段であって名前が `FUNPTR_NAME` (`"#FunPtr"`) で始まることを問う。よってその tycon の鍵は
-  その形である。A28 より `E.tycons()` のその鍵の項目は `bulitin_tycons()` が置いたものであり、
+  1 段であって名前が `FUNPTR_NAME` (`"#FunPtr"`) で始まることを問う。**`toplevel_tycon_satisfies` が
+  述語に渡すのは `toplevel_tycon()` が返す tycon である**ので、その tycon の鍵はその形である。
+  A28 より `E.tycons()` のその鍵の項目は `bulitin_tycons()` が置いたものであり、
   その `is_unbox` は真、`variant` は `Primitive` である。`is_unbox` は
   `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` であり、`toplevel_tycon_info` は
-  `E.tycons()` をその鍵で引くのでその項目を返すから、第 2 項で真になる。`is_box` はその否定なので
+  同じ `toplevel_tycon()` の値で `E.tycons()` を引くのでその項目を返すから、第 2 項で真になる。`is_box` はその否定なので
   偽であり、第 1 の early return は発火しない。`is_closure` は `toplevel_tycon_satisfies` に
-  「tycon の名前が `make_arrow_name_abs()` に等しい」を渡したものであり、`make_arrow_name_abs()` の
-  名前は `ARROW_NAME` (`"Arrow"`) なので `#FunPtr` で始まらず、偽である。よって第 2 の early return も
+  「tycon の名前が `make_arrow_name_abs()` に等しい」を渡したものであり、`make_arrow_name_abs()` は
+  `FullName::from_strs(&[STD_NAME], ARROW_NAME)` を作って `set_absolute` を呼ぶものであり、
+  `FullName::from_strs(ns, name)` は `FullName::new(&NameSpace::from_strs(ns), name)` なので
+  その `name` 欄は `ARROW_NAME` (`"Arrow"`) である。`"Arrow"` は `#FunPtr` で始まらないので偽である。
+  よって第 2 の early return も
   発火しない。`is_array` は `toplevel_tycon_satisfies` に `is_array_tycon` を渡したものであり、
-  `is_array_tycon(tc)` は `*tc == make_array_tycon()`、`make_array_tycon()` の名前は
-  `make_array_name()` すなわち `Std::Array` (`ARRAY_NAME` は `"Array"`) なので、`#FunPtr` で始まる
-  名前の tycon とは異なる。よって第 3 の early return も発火しない。
+  `is_array_tycon(tc)` は `*tc == make_array_tycon()`、`make_array_tycon()` は
+  `TyCon::new(make_array_name())`、`make_array_name()` は
+  `FullName::from_strs(&[STD_NAME], ARRAY_NAME)` なのでその `name` 欄は `ARRAY_NAME` (`"Array"`) で
+  あり、`#FunPtr` で始まる名前の tycon とは異なる。よって第 3 の early return も発火しない。
   よって D4 の第 1 規則よりその型は boxed leaf を持たない。D6 の記号の位置は `ty(g)` の inhabited な
   boxed leaf についてしか在らないので、funptr 型の名前は記号の位置を作らない。D6 より記号の位置が
   指すのは funptr かグローバル状態のオブジェクトなので、記号の位置が在るときそれはグローバル状態の
@@ -3009,7 +3023,8 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
      CODE src/rc_ir/ownership.rs: VarTable::body_only,
      CODE src/rc_ir/lower.rs: Lowerer::fresh_var, CODE src/rc_ir/lower.rs:
      Lowerer::lower_lambda_as_function, CODE src/ast/name.rs: FullName::is_local,
-     CODE src/ast/name.rs: FullName::local,
+     CODE src/ast/name.rs: NameSpace::is_local, CODE src/ast/name.rs: FullName::local,
+     CODE src/ast/name.rs: NameSpace::local, CODE src/ast/name.rs: FullName::new,
      CODE src/build/build_object_files.rs: lower_and_insert_rc,
      CODE src/rc_ir/simplify.rs: simplify, CODE src/rc_ir/simplify.rs: case_of_known_union,
      CODE src/rc_ir/simplify.rs: destructure_of_struct, CODE src/rc_ir/simplify.rs: case_of_case,
@@ -3026,8 +3041,10 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   「**逆に、`vars.bindings` に束縛を持つ名前は局所名である。**」と述べ、その道を
   「`VarTable::of` と `VarTable::body_only` がその表に入れる鍵は、パラメータ・capture の名前と節点が
   束縛する変数の名前だけで、どれも `Lowerer::fresh_var` が `FullName::local` で作ったものである」と
-  書く。`FullName::local` が作る名前の名前空間は空であり、`is_local` は名前空間が空かを答えるので、
-  束縛を持つ名前は局所名である。対偶より局所でない名前は `vars.bindings` に束縛を持たない。
+  書く。`FullName::local(name)` は `FullName::new(&NameSpace::local(), name)` であり、
+  `NameSpace::local()` は `names` に空の列を置くので、その名前の名前空間は空である。
+  `FullName::is_local` の本体は `self.namespace.is_local()`、`NameSpace::is_local` の本体は
+  `self.names.len() == 0` なので、束縛を持つ名前は局所名である。対偶より局所でない名前は `vars.bindings` に束縛を持たない。
   **この本体は lowering の出力そのものではない。** `lower_and_insert_rc` は `lower_program` の後に
   `simplify` を掛けてから `insert_rc` を呼ぶので、束縛の位置に名前を書く式は lowering の外にもある。
   D6 はその 2 人を「その 2 人は `Lowerer::fresh_var` と `clone_fresh` であり、後者は `simplify` が
@@ -3187,14 +3204,19 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   BY <ref id=83d98e9/>, CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::borrows_operand,
      CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::borrows_container,
      CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_operand,
-     CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_union
+     CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_union,
+     CODE src/ast/types.rs: TypeNode::field_types
   `InlineLLVMStructGetBody::borrows_operand` は
   `i == 0 && Self::borrows_container(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)` で
   あり、`InlineLLVMStructGetBody::borrows_container` の本体は
   `field_ty.is_fully_unboxed(type_env)` である。A12 の
   `Llvm` 節点の型についての節は「`InlineLLVMStructGetBody` の `ty(x)` は `ty(args[0])` の第
   `field_idx` フィールドの型であり、`InlineLLVMUnionAsBody` の `ty(x)` は `ty(args[0])` の第
-  `field_idx` 変位の payload の型である」と述べるので、この `field_ty` はこの op の結果の型である。
+  `field_idx` 変位の payload の型である」と述べる。**`arg_tys[0].field_types(type_env)[self.field_idx]`
+  がその型であることは `field_types` の本体による** -- それは
+  `self.instance_field_types(self.toplevel_tycon_info(type_env), type_env)`、すなわちその型が持つ
+  フィールド (union では変位の payload) の型の列であり、その第 `field_idx` 元がその型である。
+  よってこの `field_ty` はこの op の結果の型である。
   `InlineLLVMUnionAsBody::borrows_operand` は
   `i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)` で
   あり、`InlineLLVMUnionAsBody::borrows_union` の本体は `payload_ty.is_fully_unboxed(type_env)` で
@@ -4959,6 +4981,8 @@ Ret(x)))
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_unbox,
      CODE src/ast/types.rs: TypeNode::is_box, CODE src/ast/types.rs: TypeNode::is_array,
      CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon,
+     CODE src/rc_ir/leaf_map.rs: LeafMap::get,
      CODE src/fixstd/builtin.rs: is_array_tycon, CODE src/fixstd/builtin.rs: make_array_tycon,
      <ref id=30d6238/>
   `Match` が無いので実行路は 1 本である。`is_fully_unboxed` は
@@ -4968,6 +4992,7 @@ Ret(x)))
   `is_box` が真の `Arr` では `is_closure` が偽である。`Pair` は `DEF Pair と make_pair` より
   unbox 構造体であってクロージャではない。**`Pair` について第 4 規則 (`is_array`) も外れる** --
   `is_array` は `toplevel_tycon_satisfies` に `is_array_tycon` を渡したものであり、
+  `toplevel_tycon_satisfies` が述語に渡すのは `toplevel_tycon()` が返す tycon である。
   `is_array_tycon(tc)` は `*tc == make_array_tycon()` を問うが、`DEF Pair と make_pair` より
   `Pair` の最上位の tycon はそれとは異なる。
   よって D4 の判定は `Arr` については第 1 規則と第 2 規則を抜けて第 3 規則に着き、`Pair` については
@@ -4976,8 +5001,9 @@ Ret(x)))
   ある。`collect_bindings` は `x` に
   `Binding::Llvm(make_pair, [m, m], Pair)` を入れる。`DEF Pair と make_pair` より `make_pair` の
   `result_prov` は結果の leaf `[i] ++ σ` を単一の `Arg(i, σ)` と宣言するので、
-  `leaf_origins_at([0])` は単一の `Arg(0, [])`、`leaf_origins_at([1])` は単一の `Arg(1, [])` で
-  あり、`as_arg_projection` はそれぞれ `Some((0, []))`・`Some((1, []))` を返す。
+  `leaf_origins_at(π)` の本体は `self.0.get(π)`、`LeafMap::get` の本体は `self.0.get(path)` -- その
+  path の leaf に置かれた項 -- なので、`leaf_origins_at([0])` は単一の `Arg(0, [])`、
+  `leaf_origins_at([1])` は単一の `Arg(1, [])` であり、`as_arg_projection` はそれぞれ `Some((0, []))`・`Some((1, []))` を返す。
   よって `origin_inner` の `Binding::Llvm` の腕は `origin(args[0], [])`・`origin(args[1], [])` を
   返し、`args` は `[m, m]` なのでどちらも `origin(m, [])` である。
   **D20 の別名の辺と D17 の行き先はここに立つ** -- D20 の移動の表の `Llvm` の素通し leaf の行が
