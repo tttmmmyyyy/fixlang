@@ -265,6 +265,13 @@ SCAN src/ `get_scoped_value(`
   = src/generator.rs: get_scoped_obj -- 呼び出し
   = src/generator.rs: get_scoped_obj_noretain -- 呼び出し
 
+**前提 `build_capture_project` を呼ぶ式の在りか** --- `build_capture_project` の字面が在る項目は
+次で尽きる。
+
+SCAN src/ `build_capture_project(`
+  = src/generator.rs: build_capture_project -- 定義
+  = src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody::generate -- 呼び出し
+
 **前提 `VarTable` の `origins` の欄に触れる式の在りか** --- その欄は `pub` を持たないので、それを
 名指せるのは `src/rc_ir/ownership.rs` とその子孫のモジュールだけである (`EXT 可視性`)。欄アクセスの
 字面が在る項目は次で尽き、その欄を持つ `VarTable` の値を組み立てるのは `VarTable::empty` である。
@@ -958,7 +965,8 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
         `add_global_object` が登録するグローバルのアクセサが返す値である。
     **数え上げるのは名前から値を引く関数であって、それを呼ぶファイルではない。** 名前から
     `ScopedValue` を引くのは `get_scoped_value` だけであり、それを呼ぶのは `get_scoped_obj` と
-    `get_scoped_obj_noretain` の 2 つだけである (`get_scoped_obj_field` は前者を呼ぶ)。**`Llvm` 節点の
+    `get_scoped_obj_noretain` の 2 つだけである -- 第 1 節の前提がその走査である
+    (`get_scoped_obj_field` は前者を呼ぶ)。**`Llvm` 節点の
     オペランドはこの 3 つを `builtin.rs` の側から通る** -- `codegen.rs` の `RcRhs::Llvm` の腕は
     `llvm_gen.generate_tail(..)` を呼ぶだけで、オペランドを読むのは op の生成コードだからである。
     D6 より (v-3) の名前は `Llvm` のオペランドとしても現れうるので、この道も数える。どちらの側でも
@@ -971,6 +979,8 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
     BY <2>1, README の第 4 節 (「**コード生成が `expect` や `unreachable!` で止まる形も、
        `develop_mode` の門を持たない限りこの段に入る** -- そのプログラムは走らないので、その本体の
        活性化は存在しない。」),
+       前提 `get_scoped_value` を呼ぶ式の在りか,
+       前提 `build_capture_project` を呼ぶ式の在りか,
        CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
        Generator::get_scoped_obj_field (`get_scoped_obj_field` は `get_scoped_obj` を呼ぶ。この 3 つに
        名前を渡す呼び出しを `src/` 全体で数えると、`src/rc_ir/codegen.rs` に 12 か所、`Llvm` 節点の
@@ -983,8 +993,8 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
        `src/ast/export_statement.rs` と `src/build/build_object_files.rs` -- は環境 (<ref id=243ae2c/>) の側で
        あって、本体の節点ではない),
        CODE src/generator.rs: Generator::build_capture_project,
-       CODE src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody (`gc.build_capture_project(..)` を
-       呼ぶ唯一の場所である),
+       CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMCaptureProjectBody (`generate` が
+       `gc.build_capture_project(..)` を呼ぶ),
        CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_rhs,
        Generator::eval_rc_match (`RcExpr::Let` の `RcRhs::Llvm` の腕は `llvm_gen.generate_tail` を
        呼び、オペランドを自分では読まない),
@@ -998,7 +1008,11 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
        CODE src/generator.rs: Generator::declare_program_global (`global_types` に無い名前には
        `None` を返す。在るとき、`ty.is_funptr()` なら
        `declare_lambda_function` を返し、そうでなければアクセサ関数を作って `add_global_object` に
-       登録する), CODE src/generator.rs: Generator::add_global_object,
+       登録する),
+       CODE src/generator.rs: Generator::declare_lambda_function (`fn_ty.is_funptr()` のとき、
+       作った関数を `self.add_global_object(name.clone(), func, fn_ty.clone())` で登録してから返す。
+       これが funptr の枝で `declared_globals` の欄を書く者である),
+       CODE src/generator.rs: Generator::add_global_object,
        CODE src/generator.rs: ValueAccessor::get (`is_funptr` の枝は `fun.as_global_value()` を、
        そうでない枝はアクセサの呼び出しの結果を、その名前の値とする)
   <2>3. QED
@@ -1096,6 +1110,9 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
          `ScopedValue` を返し、無ければ `declare_program_global` で用意してからその欄を返す),
          CODE src/generator.rs: Generator::declare_program_global (`ty.is_funptr()` の枝が用意するのは
          その名前の 1 つの関数である),
+         CODE src/generator.rs: Generator::declare_lambda_function (`fn_ty.is_funptr()` のとき、
+         作った関数を `add_global_object` で `declared_globals` へ登録してから返す。
+         `declare_program_global` の funptr の枝はこの関数を呼んで戻るので、欄を書くのはここである),
          CODE src/generator.rs: Generator::add_global_object (`declared_globals` へ入れるのはここだけで
          あり、同じ名前を 2 度入れようとすると `panic_with_msg` で止まる。その `panic_with_msg` は
          `develop_mode` の門を持たないので、README の第 4 節が「**検査して診断を出す。**」と呼ぶ段に
