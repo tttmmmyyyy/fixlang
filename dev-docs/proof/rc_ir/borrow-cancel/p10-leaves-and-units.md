@@ -113,7 +113,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 **EXT HashSet の等価性** -- 標準ライブラリの `HashSet<T, S>` の `PartialEq` は、両者の
 要素数が等しく、かつ一方のすべての要素が他方に含まれるときにだけ真を返す。すなわち `==` は集合と
-しての等価性であり、反復の順序に依らない。`<1>29a` の `<2>1a` の `<3>3` と `<1>29a` の `<2>1b` が
+しての等価性であり、反復の順序に依らない。`<1>29a` の `<2>1a` の `<3>3` と
+`<1>29a` の `<2>1b` の `<3>2` が
 これを引く。`crate::misc` の
 `Set<T>` は `FxHashSet<T>`、すなわちハッシャだけを差し替えた `HashSet<T, S>` である
 (`CODE src/misc.rs: Set`)。
@@ -134,8 +135,9 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 **EXT 1 要素の集合の反復** -- 要素をちょうど 1 つ持つ `HashSet<T, S>` について、
 `into_iter().next()` と `iter().next()` はどちらも `Some` を返し、その中身はその 1 つの要素で
 ある (`into_iter` は要素そのもの、`iter` はそれへの共有参照)。`<1>29a` の `<2>1a` の `<3>6`、
-`<1>29a` の `<2>1b`、
-`<1>30` の `<2>6` と `<2>7` の `<3>1`・`<3>6`、`<1>34` の `<2>1` の `<3>3` がこれを引く。
+`<1>29a` の `<2>1b` の `<3>2`、
+`<1>30` の `<2>6` の `<3>3`、`<1>30` の `<2>7` の `<3>1`・`<3>6`、`<1>34` の `<2>1` の `<3>3` が
+これを引く。
 
 **EXT Iterator の enumerate と filter** -- 標準ライブラリの `Iterator` について、`enumerate` は
 もとの列の第 `i` 要素を対 `(i, 要素)` に写した列を返す。すなわち第 1 成分は 0 から始まる連続した
@@ -168,10 +170,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 - (i) 引数の値。
 - (ii) その実行が記憶域から読む値。
 - (iii) その実行が呼ぶ関数の返り値。
-- (iv) その実行が比べる 2 つの番地が一致するかどうか (`Arc::ptr_eq` と、`impl PartialEq for Type` が
-  節点の対について置く同じ形の比較がこれである)。
+- (iv) その実行が比べる 2 つの番地が一致するかどうか。`Arc::ptr_eq` がこれであり、
+  `impl PartialEq for Type` が節点の対について呼ぶ `type_node_eq` もその 1 つの呼び出しで始まる。
 
-この道には並行性も乱数も外部入力も無い。`<1>9a` の `<2>7` の `<3>2`・`<3>3`・`<3>4` がこれを引く。
+この道には並行性も乱数も外部入力も無い。`<1>9a` の `<2>7` の `<3>3` と `<3>4` がこれを引く。
 
 **DEF この道の関数** -- `truncate_to_unit(ty, path, E)` の実行が直接または間接に呼ぶ関数のうち、
 `src/` に本体を持ち、かつ**次の 3 群のどれにも属さないもの**の全体を、**この道の関数**と呼ぶ。
@@ -179,7 +181,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 
 - **節点を組み立てる関数** -- `TypeNode` の 8 つの setter、`TypeNode::set_source`、
   `TypeNode::set_source_if_none`、および `impl Clone for TypeNode`。
-- **`TypeNode` の等価比較** -- `impl PartialEq for TypeNode` と `impl PartialEq for Type`。
+- **`TypeNode` の等価比較** -- `impl PartialEq for TypeNode`、`impl PartialEq for Type`、および
+  後者が節点の対について呼ぶ `type_node_eq`。
 - **`TypeNode` のハッシュ** -- `impl Hash for TypeNode` と `TypeNode::type_hash`。
 
 3 群を外すのは、その内側の呼び出しの並びと、返す `Arc` の番地が、引数の値からは決まらないから
@@ -1400,6 +1403,13 @@ SCAN src/ `truncate_to_unit(`
      `held_fields` を `idx` で線形に探すだけである。
     BY CODE src/rc_ir/ownership.rs: truncate_to_unit,
        CODE src/rc_ir/ownership.rs: held_field_type
+  <2>5a. この道が呼ぶ関数のうち、引数を取らずに名前や型の節点を組み立てるものは、`<1>3bb` の 4 つ --
+     `make_array_tycon`、`make_punched_array_tycon`、`make_arrow_name_abs`、`make_unit_ty` -- で
+     ある。`<2>4` が挙げる述語のうち `is_array`、`is_punched_array`、`is_closure` が前の 3 つを呼び、
+     `<2>1` の `unwrap_newtypes_node` が第 4 を返り値として返す。`<1>3bb` より、この 4 つと、その下で
+     呼ばれる関数が読むのは、それぞれの本体に書かれた定数だけである。
+    BY <1>3bb, <2>1, <2>4
+
   <2>6. この道で `TypeNode` の内部可変性の欄が書かれるのは 1 か所である -- `<2>2` の `Map` の探索と
      挿入が `Arc<TypeNode>` の鍵をハッシュし、`impl Hash for TypeNode` が `type_hash` を経て
      `hash_cache.get_or_init` を実行する。A3 の「**`RcProgram` から到達できる値の等しさは、それを
@@ -1415,27 +1425,55 @@ SCAN src/ `truncate_to_unit(`
   <2>6a. `TypeNode` の等価比較は、比べる 2 つの値だけで決まる真偽値を返し、abort しない。
      `impl PartialEq for TypeNode` が読むのは `ty` だけであり、`impl PartialEq for Type` の doc は
      「Compares the parts of the type expression, taking two occurrences of one node as equal on
-     sight」と述べる。すなわち同じ節点の 2 つの出現を等しいと答える道を持つが、返す真偽値は型の式の
+     sight (`type_node_eq`)」と述べる。その `type_node_eq` の本体は
+     `Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty` であり、番地が一致すれば真、しなければ 2 つの
+     `ty` の比較の値を返す。すなわち同じ節点の 2 つの出現を等しいと答える道を持つが、返す真偽値は
+     型の式の
      比較のものである。その再帰が辿るのは `<1>1a` の直接の部分の辺なので停止する。この道がこの比較を
      行うのは、`<2>2` の `Map` が `Arc<TypeNode>` の鍵を突き合わせるところと、`<2>3` の
      `Substitution::merge` が同じ鍵の値を `==` で突き合わせるところである。
     BY <1>1a, <2>2, <2>3, CODE src/ast/types.rs: impl PartialEq for Type,
-       CODE src/ast/types.rs: impl PartialEq for TypeNode
+       CODE src/ast/types.rs: impl PartialEq for TypeNode,
+       CODE src/ast/types.rs: type_node_eq
   <2>7. QED
     値として等しい引数を渡した 2 つの呼び出しを `C` と `C'` とし、`DEF 下位の呼び出しの列` が
     それぞれに与える列を先頭から 1 対 1 に並べる。
-    <3>1. `<2>1` から `<2>5` は、この道の各関数が読むものを尽くしている。挙がるのはどれも、引数の
-       値、`E` の値、`TyConInfo` の欄の値、その呼び出しがその場で作る局所の値、下位の呼び出しの
+    <3>1. `<2>1` から `<2>5a` は、この道の各関数が読むものを尽くしている。挙がるのはどれも、引数の
+       値、`E` の値、`TyConInfo` の欄の値、その呼び出しがその場で作る局所の値、本体に書かれた定数、
+       下位の呼び出しの
        返り値、そして `DEF この道の関数` が除いた 3 群の答えである。
-      BY <2>1, <2>2, <2>3, <2>4, <2>5, DEF この道の関数
-    <3>2. `EXT Rust の評価の決定性` の (iv) が許す番地の比較が答えに漏れうるのは、`DEF この道の関数`
-       が除いた 3 群だけである。節点を組み立てる関数については、型を写す 2 つの関数が置く
-       `Arc::ptr_eq` の分岐と `set_source_if_none` の分岐がそれであり、どちらの腕も値として等しい
-       節点を返して abort しない (`<2>1a`)。`Map` の鍵をハッシュするときに書かれる memo は型の値を
-       動かさない (`<2>6`)。`TypeNode` の等価比較は、比べる 2 つの値だけで決まる真偽値を返して
-       abort しない (`<2>6a`)。よって、この 3 群が返す答えは 2 つの実行で等しい。
-      BY <2>1a, <2>6, <2>6a, EXT Rust の評価の決定性, DEF この道の関数,
+      BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>5a, DEF この道の関数
+    <3>2. `DEF この道の関数` が除いた 3 群のうち、この道が呼ぶものが返す答えは、値として等しい
+       引数に対して 2 つの実行で等しく、その計算は abort しない。この道が第 1 群 (節点を組み立てる
+       関数) のうち呼ぶのは、`<2>1` と `<2>3` が挙げる `set_tyapp_fun`、`set_tyapp_arg`、
+       `set_assocty_args`、`set_source_if_none`、`set_source` であり、`<2>1a` がその 5 つについて、
+       型を写す 2 つの関数の `Arc::ptr_eq` の分岐と `set_source_if_none` の分岐のどちらの腕も値と
+       して等しい節点を返して abort しないことを述べる。`Map` の鍵をハッシュするときに書かれる memo
+       は型の値を動かさない (`<2>6`)。`TypeNode` の等価比較は、比べる 2 つの値だけで決まる真偽値を
+       返して abort しない (`<2>6a`)。
+      BY <2>1, <2>1a, <2>3, <2>6, <2>6a, DEF この道の関数
+    <3>2a. この道の関数の中で番地の一致を読むのは、`unwrap_newtypes_node` の `Type::TyApp` の腕に
+       置かれた `Arc::ptr_eq` の分岐と、`Substitution::substitute_type` の `Type::TyApp` と
+       `Type::AssocTy` の腕に置かれた 2 つの分岐だけである。この 3 か所はどちらの腕を取っても、
+       その関数の返り値を与えて直ちに返る。腕の中で呼ぶのは、`DEF この道の関数` が除いた第 1 群
+       (節点を組み立てる関数) の `set_tyapp_fun`、`set_tyapp_arg`、`set_assocty_args` と、`Arc` の
+       複製だけである。`Arc` の複製は `src/` に本体を持たないので、この道の関数ではない。よって
+       この 3 か所の分岐は `DEF 下位の呼び出しの列` の項を 1 つも作らず、`<2>1a` よりどちらの腕も
+       値として等しい節点を返して abort しない。`substitute_type` の `Type::TyVar` の腕が呼ぶ
+       `set_source_if_none` の分岐も同じ形であり、そちらは第 1 群に属するので、その 2 つの枝が呼ぶ
+       のは `set_source` と `Arc` の複製である。
+
+       この 3 か所で尽きているのは、前提 番地の一致を読む在りか が `ptr_eq` を書く項目を挙げて
+       いるからである。`<2>1` から `<2>5a` が挙げるこの道の関数のうちその一覧に在るのは
+       `unwrap_newtypes_node` と `substitute_type` だけである。一覧の残りは、除いた第 2 群に属する
+       `type_node_eq` (`<2>6a` が扱う)、この道が呼ばない 2 つの関数
+       (`resolve_opaque_type_in_type` と `TypeCheckContext::unify`)、Fix のプリミティブの名前、
+       そしてテストである。
+      BY <2>1, <2>1a, <2>2, <2>3, <2>4, <2>5, <2>5a, <2>6a, 前提 番地の一致を読む在りか,
+         DEF この道の関数, DEF 下位の呼び出しの列,
          CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
+         CODE src/ast/types.rs: TypeNode::set_source_if_none,
+         CODE src/ast/types.rs: type_node_eq,
          CODE src/elaboration/typecheck.rs: Substitution::substitute_type
     <3>3. `n` についての帰納で、`C` と `C'` の列の先頭 `n` 項が `DEF 下位の呼び出しの列` の意味で
        対応することを示す。`n = 0` では主張は空虚である。先頭 `n` 項が対応するとして、第 `n + 1` 項を
@@ -1445,18 +1483,22 @@ SCAN src/ `truncate_to_unit(`
        記憶域から読む値、(iii) `K` がそこまでに受け取った下位の呼び出しの返り値、(iv) `K` が比べる
        番地の一致だけで決まる。`K` の開始の事象と `K` が受け取った返りの事象はどれも先頭 `n` 項に
        在るので、(i) と (iii) は帰納法の仮定より `C` と `C'` で等しい。(ii) は `<3>1` より `E` の値、
-       `TyConInfo` の欄の値、および除いた 3 群の答えであり、前の 2 つは `C` と `C'` で同じ値、
-       3 群の答えは `<3>2` より等しい。(iv) は `<3>2` より、その 3 群の中にしか現れない。
-       よって第 `n + 1` 項も対応し、一方に在れば他方にも在る。
-      BY <3>1, <3>2, EXT Rust の評価の決定性, DEF 下位の呼び出しの列
+       `TyConInfo` の欄の値、本体に書かれた定数、および除いた 3 群の答えであり、前の 3 つは `C` と
+       `C'` で同じ値、3 群の答えは `<3>2` より等しい。(iv) が `C` と `C'` で違いうるのは、`<3>2a` の
+       3 か所の分岐と、除いた 3 群の中だけである。前者について `<3>2a` は、どちらの腕も下位の
+       呼び出しの列の項を作らずに値として等しい節点を返して `K` が返ることを述べるので、次の事象は
+       どちらの腕でも同じ `K` の返りであり、返る値も等しい。後者について `<3>2` は、その答えが
+       2 つの実行で等しいことを述べる。よって第 `n + 1` 項も対応し、一方に在れば他方にも在る。
+      BY <3>1, <3>2, <3>2a, EXT Rust の評価の決定性, DEF 下位の呼び出しの列
     <3>4. QED
       `<3>3` より `C` と `C'` の列は全体として対応する。根の呼び出しについても
       `EXT Rust の評価の決定性` の 4 つは -- (i) は言明の仮定、(ii) は `<3>1` と `<3>2`、(iii) は
-      `<3>3`、(iv) は `<3>2` -- どちらの実行でも同じなので、`C` と `C'` はともに停止して等しい値を
+      `<3>3`、(iv) は `<3>2` と `<3>2a` -- どちらの実行でも同じ振る舞いを与えるので、`C` と `C'` は
+      ともに停止して等しい値を
       返すか、ともに同じ `panic!` / `assert` / 添字付けに達するか、ともに停止しない。`<2>4` と
       `<2>5` はこの結論を `unit_step`・`is_box`・`unpunched_field_types`・`truncate_to_unit` の
       どれについても同じ形で与える。
-      BY <2>4, <2>5, <3>1, <3>2, <3>3, EXT Rust の評価の決定性, DEF 下位の呼び出しの列
+      BY <2>4, <2>5, <3>1, <3>2, <3>2a, <3>3, EXT Rust の評価の決定性, DEF 下位の呼び出しの列
 
 <1>10. `<1>1` を満たす型 `t` について、`unit_step(t, E)` の返す `UnitStep` は `cls(t)` で決まり、
    次の表の通りである。
