@@ -991,6 +991,8 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 | A28 | 組み込みの tycon の項目は組み込みが置いたもの | 下の 3 つの `SCAN` | 組み込みの型について `is_array` / `is_funptr` / `is_fully_unboxed` を読む段 -- `p10-leaves-and-units.md` の `<1>3ba`、`p12-identity-and-consumes.md` の `L3a`、`p60-insert-rc.md` の `L13a` `<1>3` |
 | A29 | オペランドを適用する op の在りか | 下の `SCAN` | `p05-holders.md` -- 適用した関数の中で作られた参照がどの op から出るかを絞る段 |
 | A30 | 段の中で相殺する retain と release の順序 | コード生成 (**検査: 無し**) | `p05-holders.md` -- 素動作の粒度で `Obl` を勘定する段 |
+| A31 | `symbols` の鍵は記号の名前 | `Program` を組み立てるコード (**検査: 無し**) | `p51-runs.md` の `L0c` -- 持ち上げた lambda の名前が `global_types` の鍵でないことを出す |
+| A32 | 関数の名前とグローバルの記号は衝突しない | `divide_into_units` の `panic!` | `p51-runs.md` の `L0b` と `L0c` |
 
 **`report.md` の第 7 節が「誰も果たさない仮定」に挙げるのは A3・A4・A12・A18・A24・A26a の 6 つである。**
 **上の表で仮定の番号が太字なのはこの 6 行であり、太字はこの 6 つの印である。**この

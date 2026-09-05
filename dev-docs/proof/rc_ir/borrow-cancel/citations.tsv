@@ -145,7 +145,7 @@ src/build/build_object_files.rs	optimize_rc_program	D/A,P2a,P7c,P7f,P8,P9,P10,P1
 src/build/divide_program.rs	DividedProgram	P27,P29,P30	2598f1705d68
 src/build/divide_program.rs	copyable_funcs	P27,P29,P30	bd1275c86a01
 src/build/divide_program.rs	divide_among_units	D/A,P27,P29,P30	e44292292560
-src/build/divide_program.rs	divide_into_units	P27,P29,P30	4f1fd4199f3c
+src/build/divide_program.rs	divide_into_units	D/A,P27,P29,P30	4f1fd4199f3c
 src/build/divide_program.rs	global_types_including_synthesized	P27,P29,P30	0a2100db70d3
 src/build/divide_program.rs	import_what_each_unit_reaches	D/A,P27,P29,P30	27b713e28a5d
 src/build/divide_program.rs	publish_and_prune	P27,P29,P30	00bb3f5995d4

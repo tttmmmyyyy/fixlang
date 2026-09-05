@@ -2305,6 +2305,18 @@ SCAN src/ `applies_a_function_operand`
 順序を、`Generator::retain`・`Generator::build_retain`・`Generator::release` の呼び出しを出す
 生成コードの全体について言う。
 
+**A31 (`symbols` の鍵は記号の名前)** -- 果たす者: `Program` を組み立てるコード。検査: 無し。 <!--#f745696-->
+`Program::symbols` の各項目について、その鍵はその項目の `Symbol` の `name` に等しい。
+**A22 (`funcs` の鍵は関数の名前) の姉妹である。** 読む者は `p51-runs.md` の `L0c` -- 持ち上げた lambda の <!--#1bc2da1-->
+名前が `Program::global_types` の鍵でないことを、この不変条件から出す。
+
+**A32 (関数の名前とグローバルの記号は衝突しない)** -- 果たす者: `divide_into_units` の `panic!`。 <!--#555b49f-->
+RC IR のプログラム `P` について、`P.funcs` のどの鍵の名前も、`P.globals` のどの要素の `symbol` とも
+異なる。**果たし方は 2 段目の形である** (第 4 節の「「果たす者」と「検査」の読み方」) -- `divide_into_units`
+は `funcs` の鍵の名前と `globals` の `symbol` を 1 つの列に集め、同じ名前が 2 度現れれば止める
+(`CODE src/build/divide_program.rs: divide_into_units`)。破れたプログラムはコードを生成しないので、
+その実行も、その本体の活性化も存在しない。読む者は `p51-runs.md` の `L0b` と `L0c` である。
+
 **A25 (骨格は `Retain`/`Release` を持たない)** -- 果たす者: lowering と `simplify`。検査: <!--#d80dde9-->
 `RcInserter::insert_into_expr_inner` の `panic!` (`CODE src/rc_ir/rc_insert.rs:
 RcInserter::insert_into_expr_inner`)。
