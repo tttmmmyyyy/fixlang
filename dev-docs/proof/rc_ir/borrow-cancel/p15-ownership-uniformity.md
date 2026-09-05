@@ -116,7 +116,8 @@ A6 と A11 の範囲を `borrow_ify` の**入力**に限ると書く。A12 に�
 `RcVar` の名前 (`Let` の束縛変数、`Var` の右辺の変数、`Destructure` の容器とフィールド変数、`Match` の
 scrutinee とアームの payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llvm` の各
 オペランド、`Retain` / `Release` / `Eval` / `Ret` が名指す変数) の全体である
-(`CODE src/rc_ir/ast.rs: for_each_var`, `for_each_var_of_node`, `for_each_var_of_rhs`)。
+(`CODE src/rc_ir/ast.rs: for_each_var`, `for_each_var_of_node`, `for_each_var_of_rhs`,
+`for_each_node`, `for_each_node_inner`)。
 
 **DEF 扱う型**
 次の 3 種を**根の型**と呼ぶ。**関数のパラメータ・capture が宣言する型** (`RcFunc::params` と
@@ -2032,13 +2033,17 @@ P7a の意味の site の全部が覆われる。
        (第 1 節の DEF 現れる名前) であり、`cand(vars_f, v, u)` の各元 `(r, p)` の `r` も `func` に
        現れる名前である。
   `levelled_sites` は `for_each_node` で本体を歩き、`Retain`/`Release` の名指す変数と `RcRhs::App` の各
-  引数を積む。`for_each_var` は同じ `for_each_node` の歩きの各節点について `for_each_var_of_node` と
+  引数を積む。`for_each_node` の本体は `grow_stack(|| for_each_node_inner(node, visit))` であり、A15 より
+  `grow_stack` は閉包をちょうど 1 回呼ぶので、この歩きは `for_each_node_inner` の歩きである。
+  `for_each_var` は同じ `for_each_node` の歩きの各節点について `for_each_var_of_node` と
   `for_each_var_of_rhs` を呼び、この 2 つは `Retain`/`Release` の名指す変数と `App` の各引数を訪れるので、
   `v.name` は `func` に現れる名前である。DEF 再帰で訪れる対 より L12 と L14a を `vars_f` について読んで
   よい。L12 より `cand(vars_f, v, u) ⊆ Reach(vars_f, v.name, u)` であり、L14a より
   `Reach(vars_f, v.name, u)` の各要素の変数は `func` に現れる名前である。
-  BY DEF 再帰で訪れる対, <ref id=44a9669/>, <ref id=2d18d2a/>, CODE src/rc_ir/borrow.rs: levelled_sites,
-     CODE src/rc_ir/ast.rs: for_each_node, for_each_var, for_each_var_of_node, for_each_var_of_rhs
+  BY DEF 再帰で訪れる対, <ref id=44a9669/>, <ref id=2d18d2a/>, <ref id=3e6b0e0/>,
+     CODE src/rc_ir/borrow.rs: levelled_sites,
+     CODE src/rc_ir/ast.rs: for_each_node, for_each_node_inner, for_each_var, for_each_var_of_node,
+     for_each_var_of_rhs
 
 <1>2. グローバル初期化子の `RewriteCtx` では、`owns_object` は任意の `(r, p)` について真を返す。
   その `RewriteCtx` の `vars` は `VarTable::body_only` で作られ、L1c よりその `param_tys` は空である。
@@ -2088,11 +2093,13 @@ P7a の意味の site の全部が覆われる。
       `{ (ρ(v), u) : (v, u) ∈ levelled_sites(func) }` であり、
       `cand(vars_c, ρ(v), u) = ρ(cand(vars_f, v, u))` である。
   `levelled_sites` は本体の節点を `for_each_node` で歩き、`Retain`/`Release` の変数と path、`App` の引数と
-  その型の `rc_units` を積む。P9 より `clone` の本体は `func` の本体の束縛変数を `ρ` で
+  その型の `rc_units` を積む。`<1>1a` よりその歩きは `for_each_node_inner` の歩きであり、それは節点の
+  種類だけで降り方を決める。P9 より `clone` の本体は `func` の本体の束縛変数を `ρ` で
   付け替えたものであり、変数の型は変わらないので、積まれる対は `ρ` で写ったものちょうどである。候補の
   対応は L15 の第 2 の項による。その項は「`func` に現れる各名前 `x`」についての言明であり、site の
   `v.name` がそれを満たすことは `<1>1a` が与える。
-  BY <1>1a, <ref id=63eadd9/>, <ref id=c3b2aa3/>, CODE src/rc_ir/borrow.rs: levelled_sites, CODE src/rc_ir/ast.rs: for_each_node
+  BY <1>1a, <ref id=63eadd9/>, <ref id=c3b2aa3/>, CODE src/rc_ir/borrow.rs: levelled_sites,
+     CODE src/rc_ir/ast.rs: for_each_node, for_each_node_inner
 
 <1>5. 不動点において、各関数の各 site について `level_ownership(vars_f, type_env, (v, u), OL)` は `false` を
       返す。
@@ -2163,7 +2170,7 @@ P7a の意味の site の全部が覆われる。
 
 **DEF site**
 版 `V` の **site** とは、`Pre(V)` (第 1 節) を `for_each_node` で歩いて集めた次の対である
-(`CODE src/rc_ir/ast.rs: for_each_node`)。
+(`CODE src/rc_ir/ast.rs: for_each_node`, `for_each_node_inner`)。
 
 - `Retain(v, path, ..)` / `Release(v, path, ..)` の節点について、対 `(v, path)`。
 - `Let(_, App(_, args), _)` の節点について、各引数 `arg` と各 `unit ∈ units(ty(arg))` の対 `(arg, unit)`。
@@ -2246,13 +2253,17 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 <1>4. `<1>2` と `<1>3` の `(v, u)` は、`V` の site (DEF site) である。
   `rewrite_inner` は `Pre(V)` の木を継続とアーム本体へ降りて歩くので、`<1>2` と `<1>3` の呼び出しが
-  起きる節点は `Pre(V)` の節点である。DEF site の歩き `for_each_node` も継続とアーム本体の両方へ降りる
-  ので、その節点を訪れる。`<1>2` の `(arg, unit)` は `Let(_, App(_, args), _)` の節点の引数と
+  起きる節点は `Pre(V)` の節点である。DEF site の歩き `for_each_node` の本体は
+  `grow_stack(|| for_each_node_inner(node, visit))` であり、A15 より `grow_stack` は閉包をちょうど 1 回
+  呼ぶ。`for_each_node_inner` は各節点で `visit` を呼んだ後、`Match` の各アーム本体と継続の両方へ降りる
+  ので、この歩きは `Pre(V)` のすべての節点を訪れる。`<1>2` の `(arg, unit)` は
+  `Let(_, App(_, args), _)` の節点の引数と
   `rc_units(arg.ty, type_env) = units(ty(arg))` の元の対、`<1>3` の `(v, path)` は
   `Retain(v, path, ..)` / `Release(v, path, ..)` 節点の変数と path であり、DEF site はその節点について
   ちょうどこの対を挙げる。関数の版ではこの集合は `levelled_sites` が挙げるものである。
-  BY <1>2, <1>3, DEF site, CODE src/rc_ir/borrow.rs: levelled_sites, RewriteCtx::rewrite_inner,
-     CODE src/rc_ir/ast.rs: for_each_node
+  BY <1>2, <1>3, DEF site, <ref id=3e6b0e0/>,
+     CODE src/rc_ir/borrow.rs: levelled_sites, RewriteCtx::rewrite_inner,
+     CODE src/rc_ir/ast.rs: for_each_node, for_each_node_inner
 
 <1>5. グローバル初期化子の版では `owns_unit(v, u)` は真を返す。
   その `RewriteCtx` は `is_borrow_version: false` で作られるので `<1>3` の呼び出しは起きない。`<1>2` の
