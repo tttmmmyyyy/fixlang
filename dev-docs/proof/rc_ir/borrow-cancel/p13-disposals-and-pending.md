@@ -66,8 +66,7 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
 この文書は命題を `L0` から `L6` と呼ぶ。`BY` の行ではそれらを名前で引用する。命題の証明の内部の
 ステップは引用しない。
 
-外部の結果を 10 個使う。名札は README の「証明の記法」が定める `EXT <名前>` である。Rust の言語規則の
-3 つは Rust Reference の原文を引く。
+外部の結果を使う。名札は README の「証明の記法」が定める `EXT <名前>` である。
 
 - **`EXT stacker の maybe_grow`**: `stacker::maybe_grow(red_zone, stack_size, callback)`
   は `callback` をちょうど 1 回呼び、その値を返す (`CODE stacker-0.1.23/src/lib.rs: maybe_grow`)。
@@ -88,6 +87,14 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
   1 つも無ければ偽を返す。すなわち真は「述語が真である要素が在る」と同値である。
 - **`EXT Iterator::all`** (Rust 標準ライブラリ): `it.all(f)` は、`f` がすべての要素について真を返す
   ときに真を、偽を返す要素が在るときに偽を返す。要素が 1 つも無いときは真である。
+- **`EXT Vec::first`** (Rust 標準ライブラリ): `v.first()` は、`v` が空のとき `None` を、そうでないとき
+  先頭の要素への参照の `Some` を返す。
+- **`EXT Option の取り出し`** (Rust 標準ライブラリと言語規則): `Option` を返す関数の中の `e?` は、`e` が
+  `None` のときその関数を `None` で返し、`Some(v)` のとき `v` を値とする。`o.unwrap_or_else(f)` は、
+  `o` が `Some(v)` のとき `v` を、`None` のとき `f()` を返す。`o.is_some_and(f)` は、`o` が `Some(v)` で
+  あって `f(v)` が真のときに真を、`None` のときと `f(v)` が偽のときに偽を返す。
+- **`EXT 整数の 10 進表記`** (Rust 標準ライブラリ): `format!` の `{}` は `u64` の値を 10 進表記で書き、
+  その表記は 10 進数字だけからなる。相異なる 2 つの値の表記は相異なる。
 - **`EXT 可視性と私有性`**: Rust Reference の "Visibility and Privacy" が次を述べる。
 
   > By default, everything is _private_, with two exceptions: Associated items in a `pub` Trait are
@@ -1113,7 +1120,8 @@ D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)
     BY <2>1, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     `origin_from_leaves_under` が `origin` を呼ぶのは `operand_units` の各元についてだけである。
   <2>3. QED
-    BY <2>1, <2>2, EXT Iterator::all, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+    BY <2>1, <2>2, EXT Iterator::all, EXT Vec::first, EXT Option の取り出し,
+       CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
        CODE src/rc_ir/ownership.rs: origin_inner
     <2>1 より `reached` は、`produced_here` が偽なら空、真なら `[Origin::Exactly(here_identity)]` で
     ある。ここで `here_identity = (x.name, λ)` である。空のとき `let first = reached.first()?;` が
@@ -2174,7 +2182,8 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
   活性なら等しく、活性でなければ右辺が 0 で左辺は 0 以上である。
 
 <1>4. `p.outstanding` は `B_ρ(n, p)` を `covers` する。
-  BY <1>3, <ref id=cbc4a1c/>, EXT Iterator::all, CODE src/rc_ir/ownership.rs: References::covers
+  BY <1>3, <ref id=cbc4a1c/>, EXT Iterator::all, EXT Option の取り出し,
+     CODE src/rc_ir/ownership.rs: References::covers
   D15 より `covers(R)` は各オブジェクトについて自分の個数が `R` 以上かを答える。`covers` の本体は
   `other.0.iter().all(|(object, count)| self.0.get(object).is_some_and(|held_count| held_count >=
   count))` であり、`References` の `Map` に鍵が無いことは個数 0 と同じ意味なので、これは <1>3 の
@@ -3399,7 +3408,8 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
         `assign_fresh_names_to_binders` は各束縛について `assign_fresh_name` を 1 回呼ぶ。
         `renaming` へ書き込むのは `assign_fresh_name` のこの 1 か所だけである。
       <4>2. `assign_fresh_name` の相異なる 2 つの呼び出しが作る名前は相異なる。
-        BY <4>1, EXT 可変参照は排他である, CODE src/rc_ir/rename.rs: assign_fresh_name,
+        BY <4>1, EXT 可変参照は排他である, EXT 整数の 10 進表記,
+           CODE src/rc_ir/rename.rs: assign_fresh_name,
            CODE src/rc_ir/rename.rs: fresh_rename_function,
            CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders
         `assign_fresh_name` の本体は `*counter += 1;` で始まり、続いて
