@@ -1479,25 +1479,36 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   BY <ref id=e3436e8/> (F), <ref id=0b850c9/>, DEF 段の素動作と段内の点
 
 <1>1e. 参照を作る素動作の直前の点を `p` とし、`p` まで閉じているとする。その動作を行う節点 `n` が
-       `Let(y, Llvm(gen, args), k)` であり、その動作が作る参照が指すオブジェクト `o` を `n` の第 `i`
-       オペランドの inhabited な boxed leaf `λ` が指し、D9 の `Llvm` の行がその leaf を消費とし、かつ
-       `n` の生成コードが `p` より前にその leaf の参照を手放す素動作を出さないならば、`o` は `p` で
-       解放されていない。
+       `Let(y, Llvm(gen, args), k)` であり、その動作が作る参照が指すオブジェクトを `o` とする。D9 の
+       `Llvm` の行が消費とする `n` のオペランドの inhabited な boxed leaf のうち `o` を指すものの
+       個数を `n_o` とし、`n` の生成コードが `n` の位置から `p` までのあいだに `Obl(a')` から取り除く
+       `o` への参照の個数を `d` とする (`a'` は `n` を実行する活性化)。**`n_o > d` ならば、`o` は `p` で
+       解放されていない。**
   `o` がグローバル状態 (D26) ならば A8 より解放されない。計数下ならば次のとおりである。
-  `n` を実行する活性化を `a'` とすると、`<1>1` より `a'` は `S` を持つ活性化か、`S` の中で (F) の解放が
+  `<1>1` より `a'` は `S` を持つ活性化か、`S` の中で (F) の解放が
   始めた活性化の木の元であり、(H2) よりその本体は D11 を満たす。`a'` が辿った節点の列はその本体の
   実行路 (D3) である (D21, D23)。**その活性化に D11 を当ててよいことは
   D21 が言う** -- 「**実行 (D24) が作る活性化がこの制限を満たすことは P28 (b) が示す**」、そして
   「**D11 と D12 は、この意味のすべての活性化について条件を課す。**」
-  D10 の消費の行より、D9 の消費は `Obl(a')` から参照を 1 つ取り除く。D11 の (S-a) は「`Obl` から参照を
-  取り除くすべての操作について、取り除かれる参照はその時点の `Obl` に入っている」と述べるので、その
-  取り除きの時点で `obj(args[i], λ)` への参照は `Obl(a')` に在る。**その取り除きは `p` より後である** --
-  この段の仮定より、`n` の生成コードは `p` より前にその leaf の参照を手放さない。**`p` からその
-  取り除きまでのあいだにその参照が `Obl(a')` を離れることも無い** -- 同じ仮定がそれを言う。よって `p` で
-  その参照は `Obl(a')` に在る。D25 が挙げるのは未処分の参照の持ち手なので、その参照は未処分であり、
+  **`n` の位置において `Obl(a')` は `o` への参照を `n_o` 個持つ。**D10 の消費の行より、`n` の消費は
+  その `n_o` 個の leaf のそれぞれにつき `Obl(a')` から参照を 1 つ取り除く。D10 は義務集合を実行路上の
+  各位置について定めるので、この取り除きは節点 `n` の位置における操作である。D11 の (S-a) は「`Obl` から
+  参照を取り除くすべての操作について、取り除かれる参照はその時点の `Obl` に入っている」と述べるので、
+  その `n_o` 個はその位置の `Obl(a')` に在る。
+  **`n` の位置から `p` までのあいだに `Obl(a')` から離れる `o` への参照は `d` 個だけである。**D24 は
+  「**段の記述は `Obl` について網羅である。**」の下で各段について `Obl` を離れる参照の行き先を
+  書き切っており、「**すなわち、ここに挙がっていない動きは起きない。**」と述べる。`n` の段が作った
+  子の活性化が走っているあいだ `a'` は中断中であって段を持たない ((E3)、(E2)) ので、この区間で
+  `Obl(a')` を動かすのは `n` の生成コードが出す素動作だけであり、その取り除きの個数が `d` である。
+  加える素動作は個数を下げない。よって `p` で `Obl(a')` は `o` への参照を `n_o - d ≥ 1` 個持つ。
+  D25 が挙げるのは未処分の参照の持ち手なので、その参照は未処分であり、
   D8 より `H(o) ≥ 1` である。`p` は解放について閉じている (この段の仮定) ので、`o` は `p` で解放されて
   いない。
-  BY (H2), <ref id=b6673ca/>, <ref id=ca36627/>, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=95427eb/> (S-a), <ref id=859cf84/>, <ref id=c232680/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>, <1>1
+  **`n` の位置ではなく `p` で (S-a) を読む形は偽である。**D8 は同じオブジェクトへの参照を区別しないので
+  `Obl` は個数であり、取り除きの時点で 1 以上であっても、その 1 つが `p` より後に入ったものでありうる --
+  `<1>7a` の `InlineLLVMWithRetainedFunctionBody` がまさにその形で、`p` の直後の retain が `Obl(a')` へ
+  1 つ足し、適用がそれを呼び出し先へ渡す (D24 の「段の中で相殺するもの」)。
+  BY (H2), <ref id=b6673ca/>, <ref id=ca36627/>, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=95427eb/> (S-a), <ref id=859cf84/>, <ref id=c232680/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=e3436e8/> (E2), <ref id=e3436e8/> (E3), <ref id=0b850c9/>, <ref id=88a06de/>, <1>1
 
 <1>1d. DEFINE `p` == 参照を作る素動作の直前の段内の点。以下の各場合は、`p` まで閉じていることを
        仮定して、その素動作が作る参照が指すオブジェクトが `p` で解放されていないことを示す。
@@ -1577,11 +1588,18 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
       `clone_struct`/`clone_union` と `gc.release` を出すのは共有の腕だけであり、`InlineLLVMArraySetCapacityBoundsUnchecked` の一意腕は `realloc_array`
       を呼ぶだけで `gc.release` を出さない。いずれの道でも 2 つの腕は排他である。A3 は
       「`borrows_operand(i)` が真のとき、生成コードは第 `i` オペランドの参照を処分しない」と述べるので、
-      いずれの道でも `borrows_operand(i)` が偽であることがこの消費を支える。
-      よって `<1>1e` が当たる。
+      いずれの道でも `borrows_operand(i)` が偽であることがこの消費を支える。よって `n_o ≥ 1` である。
+      **`d = 0` である。**この場合の `p` は一意の腕の中の点であり、そこに至るまでにこの op の生成コードが
+      出すのは、オペランドをスコープから読む式と、記憶域や欄を読む式と、`build_branch_by_is_unique` の
+      分岐だけである -- 上に見たとおり `gc.release` を出すのはどれも共有の腕であり、2 つの腕は排他だから
+      である。`InlineLLVMArrayAppendCapacityUnchecked` の道でも、`array_tail_destination` が
+      `force_unique_or_assert` を `generate` の先頭で呼ぶので、その一意の腕より前に `release` は無い。
+      よって `<1>1e` が `n_o > d` で当たる。
       BY <ref id=e11772a/>, <ref id=9d74736/>, <ref id=e3436e8/> (E2), <1>1c, <1>1e, <3>1, <3>1a,
          CODE src/fixstd/builtin.rs: make_struct_union_unique, force_unique_or_assert_with_hole,
          make_array_unique_with_hole, release_replaced_array, InlineLLVMArraySetCapacityBoundsUnchecked,
+         InlineLLVMArrayAppendCapacityUnchecked, array_tail_destination, force_unique_or_assert,
+         CODE src/generator.rs: Generator::build_branch_by_is_unique,
          CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand
   <2>2. CASE 宣言が単一の `Unknown`。
     <3>0. CASE op が `InlineLLVMBoxedFromRetainedPtrIOS` である。
@@ -1760,11 +1778,15 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   出す。この retain が作る参照が指すのは `x` の値の inhabited な各 boxed leaf のオブジェクトである。
   この op は `borrows_operand` も `result_prov` も override しないので、`borrows_operand(i)` は既定の偽で
   あり、宣言は既定の単一の `Unknown` である。よって D9 の `Llvm` の行はこの op の各オペランドの boxed
-  leaf を消費とする。
-  **生成コードがこの retain より前に `x` の leaf の参照を手放す素動作を出さないことは、上の順序が
-  与える** -- `apply_lambda` も `release` も retain の後に立つ。よって `<1>1e` が当たり、対象は `p` で
+  leaf を消費とする。**この retain が指すオブジェクトを `o` とすると、`n_o ≥ 1` である** -- `x` の
+  leaf のうち `o` を指すものがその消費に入るからである。
+  **`d = 0` である。**`p` はこの retain の直前の点であり、`generate` がその前に出すのは
+  `get_scoped_obj(&self.f_name)` と `get_scoped_obj(&self.x_name)` の 2 つだけである。`<1>1` の第 3 群の
+  とおり `get_scoped_obj` が出しうる素動作は `retain_on_read` の retain であり、それは参照を作る側で
+  あって `Obl` から参照を取り除かない。よって `<1>1e` が `n_o > d` で当たり、対象は `p` で
   解放されていない。
   BY <ref id=e11772a/>, <ref id=9d74736/>, <1>1, <1>1e,
+     CODE src/generator.rs: Generator::get_scoped_obj,
      CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody,
      CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand, LLVMGen::result_prov
 
@@ -1785,15 +1807,26 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   オペランドである。この op は `borrows_operand` を override しないので既定の偽である。
   **`InlineLLVMArrayAppendValueCapacityUnchecked::result_prov` は `Provenance::uniform(.., Fresh)` を
   返すので、素通し (単一の `Arg`) を宣言する結果 leaf は 1 つも無い** -- よって D9 の `Llvm` の行は
-  `value` の leaf を消費とする。**生成コードがこの retain より前に `value` の leaf の参照を手放す素動作を
-  出さないことは、上の順序が与える。**よって `<1>1e` が当たる。
-  BY <ref id=9d74736/>, <ref id=0b850c9/>, <1>1, <1>1a, <1>1e,
+  `value` と `array` の全 boxed leaf を消費とする。この retain が指すオブジェクトを `o` とすると、
+  `value` の leaf のうち `o` を指すものがその消費に入るので、`n_o` は `value` の leaf の分と `array` の
+  leaf の分の和であり、`value` の分だけで 1 以上である。
+  **`p` より前にこの op の生成コードが出す取り除きは、`array` の leaf の分だけである。**`generate` は
+  `array` と `value` と `count` をスコープから読み、`force_unique_or_assert(gc, array, ..)` を経て
+  `size` と `buf` を取り出してから `append_value_into_array_buf` を呼ぶ。`force_unique_or_assert` は
+  配列について `make_array_unique_with_hole` を呼び、その共有の腕が `release_replaced_array` で `array`
+  の参照を 1 つ処分する (一意の腕は何も処分しない)。ほかにこの区間で `release` を出す式は無い。
+  `array` の型 `Array a` の boxed leaf は 1 つなので (D4 の規則 4)、その処分が `o` への参照を取り除く
+  のは `array` の leaf が `o` を指すときに限り、そのとき `n_o` はその分と `value` の分の和で 2 以上、
+  `d` は 1 である。指さないときは `d = 0` である。いずれの場合も `n_o > d` であり、`<1>1e` が当たる。
+  BY <ref id=9d74736/>, <ref id=0594f24/>, <ref id=0b850c9/>, <1>1, <1>1a, <1>1e,
      CODE src/object.rs: ObjectFieldType::clone_struct, ObjectFieldType::clone_union,
      ObjectFieldType::clone_array_buf, ObjectFieldType::clone_array_range,
      ObjectFieldType::append_value_into_array_buf, ObjectFieldType::move_out_struct_field,
      CODE src/fixstd/builtin.rs: make_struct_union_unique,
      InlineLLVMArrayAppendValueCapacityUnchecked,
      InlineLLVMArrayAppendValueCapacityUnchecked::result_prov,
+     force_unique_or_assert, force_unique_or_assert_with_hole, make_array_unique_with_hole,
+     release_replaced_array,
      CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand
 
 <1>7c. CASE (E9) の retain (`<1>1` の (K-iii))。
