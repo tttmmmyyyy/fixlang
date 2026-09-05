@@ -1065,6 +1065,13 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
   `InBracket` の subtract の後に置く `if innermost.outstanding.is_empty() { pending.remove(index); }`
   である (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`, `CODE src/rc_ir/borrow.rs:
   CancelAnalysis::merge`, `CODE src/rc_ir/borrow.rs: un_bump`)。
+  **在りかは可視性で決める。** `PendingRetains` は `Vec<PendingRetain>` であり
+  (`CODE src/rc_ir/borrow.rs: PendingRetains`)、その要素の型 `PendingRetain` は
+  `src/rc_ir/borrow.rs` の非公開の項目なので、`EXT 非公開の項目の可視範囲` よりこの列を持つ値を
+  名指す式はそのモジュールとその子孫の中にしかなく、`EXT クレートの項目` よりそのモジュールの項目は
+  このファイルに書かれたものだけである。`EXT ビルドの対象` より走査の範囲は `src/` の全ファイルであり、
+  その全文を読むと、この列から要素を取り除く式は上の 3 つで尽きる -- 残る書き換えは
+  `walk_inner` の `RcExpr::Retain` の腕の `pending.push` だけである。
 
   **`merge` の分は `ρ` が選んだアームの出口の側で読む。** `merge` は返り値の要素を `pending_in` から
   組み立てるが、その `outstanding` は `uniform` の値、すなわちアームの出口の側の値である
@@ -1085,7 +1092,10 @@ P5 は「**`identity` は解析が呼んだ鍵についてしか定まらない�
 呼ばれていない鍵の答えを引く形になる。**」と述べるので、呼ばれていない鍵について `id(s)` を読むことは
 できない。
 
-**言明**。走査中の各時点と `pending` の各要素 `p` について次が成り立つ。
+**言明**。`ρ` が至る走査中の各位置と、その位置での `pending` の各要素 `p` について次が成り立つ。
+**位置を `ρ` が至るものに限るのは、D27 の `B(p, ρ)` が `ρ` の上の leaf を数えるからである** --
+`ρ` が選ばなかったアームの中の走査位置では、そこで数える leaf が `ρ` の上に無い。README の P18b が
+同じ量化を「走査中の各位置と、**その位置に至る各実行路 `ρ`**について」と書くのと同じ限定である。
 
 - **(a)** `id` が帳簿の名前であるとき `B(p, ρ)[id] = p.outstanding[id]` であり、そうでないとき
   `B(p, ρ)[id] = 0` である。
@@ -1119,9 +1129,13 @@ P5 は「**`identity` は解析が呼んだ鍵についてしか定まらない�
 
 <1>2. `Retain(v, π)` の訪問が `pending` に押し込む要素について、押し込んだ直後に (a) が成り立つ。
   BY <1>1, <ref id=cbc4a1c/>, <ref id=8093b68/>, <ref id=66c9670/>, <ref id=88a06de/>, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
      CODE src/rc_ir/ownership.rs: acted_references
-  `walk_inner` の `RcExpr::Retain` の腕は `outstanding` に `acted_references(v, path)` を置く。D15 より
-  それは `π` の下の**すべての** boxed leaf を `origin` の `identity` で数えた多重集合である。D27 より
+  `walk_inner` の `RcExpr::Retain` の腕は `outstanding` に `self.acted_references(v, path)` を置く。
+  **その呼び先は `CancelAnalysis` のメソッドであり、それは自分の `vars` と `type_env` を添えて
+  `ownership::acted_references` を呼び、その返り値をそのまま返す** -- 間に挟まるのは
+  `!references.is_empty()` の表明だけである。D15 より
+  その値は `π` の下の**すべての** boxed leaf を `origin` の `identity` で数えた多重集合である。D27 より
   `B(p, ρ)` は `π` の下の inhabited かつ計数下の各 leaf を同じ鍵で数えたものである。
   **<1>1 の主語の制限はここで満たされる** -- `acted_references(v, π)` はその各 leaf を鍵として
   `origin` を呼ぶ呼び出しそのものである (D15)。<1>1 より、`id` が
@@ -1133,10 +1147,24 @@ P5 は「**`identity` は解析が呼んだ鍵についてしか定まらない�
       `R := acted_references(v, π)` を引き、`B(p, ρ)` から名前の多重集合 `A` -- その `Release` が `ρ` で
       実際に処分する参照を、それを持つ leaf の `origin` の `identity` で名付けて数えたもの -- を引く。
       `R` も `A` も `VarPath` を鍵とする多重集合である。
-  BY <ref id=8093b68/>, CODE src/rc_ir/borrow.rs: un_bump, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
-     CODE src/rc_ir/borrow.rs: CancelAnalysis::merge
-  `outstanding` を書き換える式は `un_bump` の `innermost.outstanding.subtract(un_bumped)` の 1 つだけで
-  あり、`un_bumped` は `Release` の腕が渡す `acted_references(v, path)` である。D27 の 2 行目が
+  BY <ref id=8093b68/>, EXT クレートの項目, EXT ビルドの対象, EXT 非公開の項目の可視範囲,
+     CODE src/rc_ir/borrow.rs: un_bump, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, CODE src/rc_ir/borrow.rs: PendingRetains,
+     CODE src/rc_ir/ownership.rs: References
+  **在りかは可視性で決める。** `PendingRetain` は `src/rc_ir/borrow.rs` の非公開の項目であり、その
+  `outstanding` の欄も非公開なので、`EXT 非公開の項目の可視範囲` よりその欄を名指す式はそのモジュールと
+  その子孫の中にしかなく、`EXT クレートの項目` よりそのモジュールの項目はこのファイルに書かれたものだけ
+  である。`EXT ビルドの対象` より走査の範囲は `src/` の全ファイルであり、その全文を読むと、この欄を
+  名指す式のうち既に `pending` に在る要素の欄を**書き換える**ものは
+  `un_bump` の `innermost.outstanding.subtract(un_bumped)` の 1 つだけである -- 残りは
+  `PendingRetain` の宣言、`shares_an_object`・`covers`・`is_empty`・`names` の読み、`merge` が
+  `uniform` を作るときの読みと、`walk_inner` の `Retain` の腕・`merge` の返り値が新しい要素を
+  組み立てるときの初期値である。**`References` の値を変えるメソッドは `subtract` だけである** --
+  `Map<VarPath, usize>` の欄は非公開なので、`EXT 非公開の項目の可視範囲` よりそれを書き換える式は
+  `References` を定めるモジュールの中にしかない。
+  `un_bumped` は `Release` の腕が渡す `self.acted_references(v, path)` -- <1>2 より
+  `ownership::acted_references` の返り値そのもの -- である。D27 の 2 行目が
   `B(p, ρ)` の側を定める。残る 2 つの行では両者が揃って運ばれる -- アームへの複製は `pending` を
   `clone` するので `outstanding` をそのまま写し、D27 より `B(p, ρ)` も運ばれる。`merge` が返り値に
   据える要素の `outstanding` は `uniform` の値であり、`uniform` に入るのはすべてのアームの出口に
@@ -1166,9 +1194,11 @@ P5 は「**`identity` は解析が呼んだ鍵についてしか定まらない�
   0 -- であれば、(a) より `B(p, ρ)` のどの名前の個数も 0 である。
 
 <1>7. (d)。
-  BY <1>4, <1>5, CODE src/rc_ir/borrow.rs: un_bump
+  BY <1>4, <1>5, <ref id=cbc4a1c/>, CODE src/rc_ir/borrow.rs: un_bump,
+     CODE src/rc_ir/ownership.rs: References
   `un_bump` が `InBracket` を返すのは `innermost.outstanding.covers(un_bumped)` が真のときであり、
-  そのとき各名前で `p.outstanding[id] ≥ R[id]` である。帳簿の名前では <1>5 より
+  D15 より `covers(R)` は各オブジェクトについて自分の個数が `R` 以上かを答えるので、そのとき
+  各名前で `p.outstanding[id] ≥ R[id]` である。帳簿の名前では <1>5 より
   `B(p, ρ)[id] = p.outstanding[id] ≥ R[id] = A[id]` (<1>4) であり、そうでない名前では
   `A[id] = 0 = B(p, ρ)[id]` である。
 
