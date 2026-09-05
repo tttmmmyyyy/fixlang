@@ -1,11 +1,12 @@
 # P3 / P4 -- `origin` の健全性
 
-この文書が読んだコードのコミットは `1510d91674b9ad34971db2b7d3f9f6d5a8192f83` である。README が証明の
+この文書が読んだコードのコミットは `9f5599bb19325ccce1226a1aae5986823c526fa4` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書が `CODE` で引く
 ファイル (`src/rc_ir/ownership.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/provenance.rs`、
 `src/rc_ir/borrow.rs`、`src/rc_ir/codegen.rs`、`src/generator.rs`、`src/ast/types.rs`、
 `src/ast/inline_llvm.rs`、`src/fixstd/builtin.rs`、`src/fixstd/runtime.rs`、
-`src/parse/sourcefile.rs`、`src/misc.rs`) に変わったのは `// PROOF:` コメントだけである。
+`src/parse/sourcefile.rs`、`src/misc.rs`、`src/constants.rs`、`src/error.rs`) に変わったのは
+`// PROOF:` コメントだけである。
 **この一覧は本文の `CODE` の行を数え上げて作る** -- 手で並べた一覧は、証明が新しいファイルを引くたびに
 落ちる。
 定義・仮定・命題の番号は同ディレクトリの `README.md` による。
@@ -48,9 +49,9 @@ path に別の答えを与え、leaf の側の `identity` が unit の側の答�
 本体 (D23) -- ある関数 `f` の `body` か、あるグローバル初期化子 `g` の `init` -- とする。`type_env` を
 そのプログラムの `TypeEnv`、`vars` を `B` について作られた `VarTable` -- `B` が `f.body` なら
 `VarTable::of(f)`、`B` が `g.init` なら `VarTable::body_only(&g.init)` -- とする。
-**この 2 つが `VarTable` を作る形の全体である** (`CODE src/rc_ir/ownership.rs: VarTable::of`,
-`VarTable::body_only`, `VarTable::empty` -- `empty` を呼ぶのは `of` と `body_only` の 2 つだけであり、
-残る 1 か所は `#[cfg(test)]` のモジュールの中にある)。
+**この 2 つが `VarTable` を作る形の全体である** -- `VarTable` の値を組み立てる式の在りかと
+`VarTable::empty` を呼ぶ式の在りかは、この節の前提が走査で挙げる
+(`CODE src/rc_ir/ownership.rs: VarTable::of`, `VarTable::body_only`, `VarTable::empty`)。
 
 **`borrow_ify` の入力に固定するのは、この文書が引く仮定と命題の範囲がそこだからである。** A6 と A13 は
 `borrow_ify` の入力の名前についての仮定であり、A11 のスコープの規律も同じ入力にかかる。P2a の `vars` は
@@ -153,7 +154,7 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 候補集合に入る。
 
 **外部の結果。** README の第 2 節は、文書の外の名前つき結果を `EXT <名前>` の名札で第 1 節に据え、
-`BY` からその名前で引くことを求める。この文書が引くのは次の 10 である。
+`BY` からその名前で引くことを求める。この文書が引くのは次の 11 である。
 
 **EXT auto trait と共有** (Rust の言語規則)。
 
@@ -197,6 +198,10 @@ L13 が、(v-3) の値の leaf は D8 の意味の参照を持たないことを
 **EXT 可視性** (Rust の言語規則)。`pub` の付かない項目 (関数・欄) を名指せるのは、それを定義する
 モジュールとその子孫のモジュールだけである。よってそのような項目の呼び出しと欄への書き込みは、その
 モジュールの中を数え上げれば尽きる。
+
+**EXT panic** (Rust の言語規則)。`panic!` は panic を起こす。`Option::expect` は値が `None` のとき、
+`unreachable!` は制御がそこへ届いたとき、いずれも同じく panic を起こす。panic を起こした式は値を
+返さず、その先の動作を行わない。
 
 ### 在りかの前提
 
@@ -249,7 +254,6 @@ SCAN src/ `fn result_prov`
   = src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody::result_prov -- `Provenance::uniform`
 
 **前提 `Origin::Exactly` を作る式の在りか** --- `Origin::Exactly` の字面が在る項目は次で尽きる。
-`Origin::Join` を作る式の在りかは L1 が述べる。
 
 SCAN src/ `Origin::Exactly(`
   = src/rc_ir/ownership.rs: Origin::identity -- `match` のパターンであって構成ではない
@@ -257,6 +261,126 @@ SCAN src/ `Origin::Exactly(`
   = src/rc_ir/ownership.rs: Origin::of_candidates -- `1 =>` の腕が構成する
   = src/rc_ir/ownership.rs: origin_inner -- 閉包 `here` が構成する
   = src/rc_ir/ownership.rs: origin_from_leaves_under -- `reached.push(Origin::Exactly(here.clone()))`
+
+**前提 `Origin` の `Join` 変位を作る式の在りか** --- `Origin` の `Join` 変位を値として作る式は、
+どの綴りで書いてもその字面に変位の名前 `Join` を含む。**変位の名前で走査するのは、型の名前を
+別名にした import や、変位を直に取り込んだ import が、型の名前で走査すると落ちるからである。**
+`Join` の字面が在る項目は次で尽きる。
+
+SCAN src/ `Join`
+  = src/ast/program.rs: Program::linked_mods -- doc の英語 (「Joins `other` into this program」)
+  = src/elaboration/name_resolution.rs: NameResolutionContext::create_ambiguous_message -- コメントの英語
+  = src/fixstd/std.fix: Iterator::Item -- Fix のソースのコメントの英語
+  = src/misc.rs: spawn_compiler_thread -- `std::thread::JoinHandle`
+  = src/misc.rs: join_compiler_threads -- `std::thread::JoinHandle`
+  = src/printer.rs: Text::add_indent -- コメントの英語
+  = src/rc_ir/locality.rs: Locality -- doc の英語
+  = src/rc_ir/locality.rs: ExtCond::atom -- doc の英語
+  = src/rc_ir/ownership.rs: Binding -- `Binding` の `Join` 変位の宣言
+  = src/rc_ir/ownership.rs: collect_bindings -- `Binding::Join` の構成
+  = src/rc_ir/ownership.rs: Origin -- `Origin` の `Join` 変位の宣言
+  = src/rc_ir/ownership.rs: Origin::identity -- `Origin::Join` は `match` のパターンであって構成ではない
+  = src/rc_ir/ownership.rs: Origin::candidates -- `Origin::Join` は `match` のパターンであって構成ではない
+  = src/rc_ir/ownership.rs: Origin::of_candidates -- `_ =>` の腕が `Origin::Join { .. }` を構成する
+  = src/rc_ir/ownership.rs: Origin::acted_on -- 自由関数 `origin` の doc の英語
+  = src/rc_ir/ownership.rs: origin_inner -- `Binding::Join` のパターンと、自由関数 `origin_from_leaves_under` の doc の英語
+  = src/tests/test_lsp/lsp_client.rs: LspClient::new -- コメントの英語
+
+**前提 `of_candidates` を呼ぶ式の在りか** --- `of_candidates` の字面が在る項目は次で尽きる。
+
+SCAN src/ `of_candidates(`
+  = src/rc_ir/ownership.rs: Origin::of_candidates -- 定義
+  = src/rc_ir/ownership.rs: origin_inner -- `Some(Binding::Join(..))` の腕の呼び出し
+  = src/rc_ir/ownership.rs: origin_from_leaves_under -- 末尾の呼び出し
+
+**前提 `origin_inner` を呼ぶ式の在りか** --- `origin_inner` の字面が在る項目は次で尽きる。
+
+SCAN src/ `origin_inner(`
+  = src/rc_ir/ownership.rs: origin -- `grow_stack(|| origin_inner(..))` の呼び出し
+  = src/rc_ir/ownership.rs: origin_inner -- 定義
+
+**前提 `VarTable` を組み立てる式の在りか** --- `VarTable` の値を組み立てる式はその字面に
+`VarTable {` を含む。その字面が在る項目は次で尽きる。
+
+SCAN src/ `VarTable {`
+  = src/rc_ir/ownership.rs: VarTable -- 型の宣言
+  = src/rc_ir/ownership.rs: VarTable::of -- 返り値の型の綴り
+  = src/rc_ir/ownership.rs: VarTable::body_only -- 返り値の型の綴り
+  = src/rc_ir/ownership.rs: VarTable::empty -- 5 欄をすべて空で置く構成
+
+**前提 `VarTable::empty` を呼ぶ式の在りか** --- `VarTable::empty` の字面が在る項目は次で尽きる
+(走査は `#[cfg(test)]` の下の項目を除く)。
+
+SCAN src/ `VarTable::empty(`
+  = src/rc_ir/ownership.rs: VarTable::of -- 呼び出し
+  = src/rc_ir/ownership.rs: VarTable::body_only -- 呼び出し
+
+**前提 `VarTable` の `bindings` の欄に触れる式の在りか** --- その欄は `pub` を持たないので、それを
+名指せるのは `src/rc_ir/ownership.rs` とその子孫のモジュールだけである (`EXT 可視性`)。欄アクセスの
+字面が在る項目は次で尽き、その欄を持つ `VarTable` の値を組み立てるのは `VarTable::empty` である
+(前提 `VarTable` を組み立てる式の在りか)。走査は字面の上位近似なので、一覧には
+`src/rc_ir/provenance.rs` の `Interpreter` が持つ同じ名前の別の欄も入る。
+
+SCAN src/ `.bindings`
+  = src/build/build_object_files.rs: dump_rc_ir -- `analyze_program(..).bindings`、`Provenance` の解析の欄
+  = src/rc_ir/ownership.rs: VarTable::of -- パラメータと capture に `Binding::Param` を入れる
+  = src/rc_ir/ownership.rs: collect_bindings -- 節点が束縛する変数に `Binding` を入れる
+  = src/rc_ir/ownership.rs: origin_inner -- `vars.bindings.get(var)` の読み
+  = src/rc_ir/provenance.rs: Interpreter::record -- `Interpreter` の欄
+  = src/rc_ir/provenance.rs: Interpreter::refine_by_unique_flag -- `Interpreter` の欄
+  = src/rc_ir/provenance.rs: analyze_program -- `Interpreter` の欄
+
+**前提 `declared_globals` の欄に触れる式の在りか** --- その欄は `pub` を持たないので、それを
+名指せるのは `src/generator.rs` とその子孫のモジュールだけである (`EXT 可視性`)。その字面が在る
+項目は次で尽きる。
+
+SCAN src/ `declared_globals`
+  = src/generator.rs: Generator -- 欄の宣言
+  = src/generator.rs: Generator::new -- 空の表を置く
+  = src/generator.rs: Generator::add_global_object -- 表へ項目を入れる
+  = src/generator.rs: Generator::get_or_declare_global -- 表を名前で引く
+  = src/generator.rs: Object::ptr_to_field_as -- 直後の項目の doc が `Generator::declared_globals` を名指す
+
+**前提 `add_global_object` を呼ぶ式の在りか** --- `add_global_object` の字面が在る項目は次で尽きる。
+
+SCAN src/ `add_global_object(`
+  = src/generator.rs: Generator::add_global_object -- 定義
+  = src/generator.rs: Generator::declare_program_global -- アクセサの枝の呼び出し
+  = src/generator.rs: Generator::declare_lambda_function -- funptr の枝の呼び出し
+
+**前提 記号の記憶域の番地が現れる式の在りか** --- 記号の記憶域 `GlobalVar#<symbol>` の番地を持つ
+局所変数は `global_var_ptr` であり、その字面が在る項目は次で尽きる。
+
+SCAN src/ `global_var_ptr`
+  = src/rc_ir/codegen.rs: Generator::implement_rc_global -- 番地を作り、`store_init_value` と末尾の `build_load` に渡す
+  = src/rc_ir/codegen.rs: Generator::store_init_value -- 受け取った番地へ `build_store` する
+  = src/rc_ir/codegen.rs: Generator::ACCESSES_PER_INITIALIZATION -- 直後の項目の doc が名指す
+
+**前提 初期化済みの旗の番地が現れる式の在りか** --- 旗 `InitFlag#<symbol>` の番地を持つ局所変数は
+`init_flag_ptr` であり、その字面が在る項目は次で尽きる。
+
+SCAN src/ `init_flag_ptr`
+  = src/rc_ir/codegen.rs: Generator::implement_rc_global -- 旗のロード、旗への store、`pthread_once` へ渡す引数
+
+**前提 `origin` を呼ぶ式の在りか** --- `origin` の呼び出しの字面が在る項目は次で尽きる。
+`borrow_ify` と `cancel` が住む `src/rc_ir/borrow.rs` の側を読むのは第 7 節である。
+
+SCAN src/rc_ir/ `origin(`
+  = src/rc_ir/borrow.rs: infer_ownership -- 呼び出し
+  = src/rc_ir/borrow.rs: level_ownership -- 呼び出し
+  = src/rc_ir/borrow.rs: RewriteCtx::owns_unit -- 呼び出し
+  = src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled -- 呼び出し
+  = src/rc_ir/borrow.rs: RewriteCtx::comes_from_a_value_used_later -- 呼び出し
+  = src/rc_ir/borrow.rs: CancelAnalysis::consume -- 呼び出し
+  = src/rc_ir/borrow.rs: CancelAnalysis::other_objects -- 呼び出し
+  = src/rc_ir/ownership.rs: origin -- 定義
+  = src/rc_ir/ownership.rs: origin_inner -- 再帰呼び出し
+  = src/rc_ir/ownership.rs: origin_from_leaves_under -- 再帰呼び出し
+  = src/rc_ir/ownership.rs: acted_references -- 呼び出し
+  = src/rc_ir/provenance.rs: Provenance::uniform -- `sole_origin(` の字面
+  = src/rc_ir/provenance.rs: Provenance::set_leaves_under -- `sole_origin(` の字面
+  = src/rc_ir/provenance.rs: Provenance::arg_passthrough -- `sole_origin(` の字面
+  = src/rc_ir/provenance.rs: sole_origin -- `sole_origin(` の字面 (定義)
 
 **前提 `get_scoped_value` を呼ぶ式の在りか** --- `get_scoped_value` の字面が在る項目は次で尽きる。
 
