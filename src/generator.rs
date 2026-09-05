@@ -425,6 +425,7 @@ impl<'c> Object<'c> {
     /// source object's parts are spliced straight into the field's range with no aggregate formed on
     /// either side. For a boxed object the field is stored to the heap, where the value must be
     /// materialized. The counterpart of `extract_field_object`.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn insert_field_object<'m>(
         mut self,
         gc: &mut Generator<'c, 'm>,
@@ -1106,7 +1107,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
     /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
     /// copy. Every other read is plain.
-    // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var_name);
         let obj = val.accessor.get(self);
@@ -1968,7 +1969,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Retain `obj`: increment the reference count of every boxed object it owns, once.
-    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn retain(&mut self, obj: Object<'c>, state: RcState) {
         let one = self.context.i64_type().const_int(1, false);
         let prefix = format!("retain{}", state.name_suffix());
@@ -2012,7 +2013,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Retain an object `amount` times: every boxed leaf reached has its reference count increased
     /// by `amount`, an i64 count.
-    // PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_retain(&mut self, obj: Object<'c>, amount: IntValue<'c>, state: RcState) {
         if obj.is_box(self.type_env()) {
             self.build_if_nonnull(&obj, "retain", |gc| {
@@ -2926,7 +2927,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// * `cap_tys` — the types of all the captured values, which give the capture object its struct
     ///   layout.
     /// * `result_ty` — the type of the projected value.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_capture_project(
         &mut self,
         cap_name: &FullName,

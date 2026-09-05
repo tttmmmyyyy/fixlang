@@ -7807,6 +7807,7 @@ pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 // PROOF: D/A, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument
         let arg = gc.get_scoped_obj_noretain(&self.var_name);

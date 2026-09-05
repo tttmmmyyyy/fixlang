@@ -493,7 +493,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// yields the match value. The scrutinee's per-arm container release and dead-branch releases are
     /// already explicit `Release` nodes in the arm bodies; here only the payload retain-getter is
     /// baked in (mirroring `get_union_value`).
-    // PROOF: D/A, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_match(
         &mut self,
         result: &RcVar,
