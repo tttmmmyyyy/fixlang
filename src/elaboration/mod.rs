@@ -17,7 +17,7 @@ use std::{fs::create_dir_all, path::PathBuf};
 
 /// Perform validations and type checking on the program, and return the updated program.
 /// Changes made to the program include instantiation of symbols and setting of entry points.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Errors> {
     let _sw = StopWatch::new("check_program", config.show_build_times);
 

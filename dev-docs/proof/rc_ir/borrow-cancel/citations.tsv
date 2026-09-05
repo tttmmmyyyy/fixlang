@@ -69,7 +69,9 @@ src/ast/typedecl.rs	Field	P1,P2,P2a,P15,P16,P17,P18	dcda081e8430
 src/ast/typedecl.rs	Field::resolve_namespace	P1,P2	4db94f4be1c6
 src/ast/typedecl.rs	Field::resolve_type_aliases	P1,P2	f4ee12ffb5a7
 src/ast/typedecl.rs	Struct::is_boxed	P26	52822fa547d5
+src/ast/typedecl.rs	TypeDeclValue::is_alias	P5,P6,P7	2cf514cab063
 src/ast/typedecl.rs	TypeDefn::applied_type	P26	5f801d4d3b7c
+src/ast/typedecl.rs	TypeDefn::is_alias	P5,P6,P7	d0e471db9829
 src/ast/typedecl.rs	TypeDefn::kind	D/A	31efd5d2f087
 src/ast/typedecl.rs	TypeDefn::tycon	P5,P6,P7	fe839bfbc2f6
 src/ast/typedecl.rs	TypeDefn::tycon_info	P1,P2,P5,P6,P7,P26	f04fd919ce0d
@@ -81,6 +83,7 @@ src/ast/types.rs	Scheme::check_kinds	D/A	8a88faed2aa7
 src/ast/types.rs	Scheme::generalize	P26	7c0ad1260a57
 src/ast/types.rs	TyAliasInfo	P2a,P15,P16,P17,P18	2e352ea3d888
 src/ast/types.rs	TyCon	P1,P2,P2a,P3,P4,P5,P6,P7,P15,P16,P17,P18	32fb465582ea
+src/ast/types.rs	TyCon::into_punched_type_name	P5,P6,P7	be6ceb6b9928
 src/ast/types.rs	TyCon::new	P3,P4,P5,P6,P7	c56ed76475cd
 src/ast/types.rs	TyConInfo	P1,P2,P2a,P15,P16,P17,P18	d92a25b02f47
 src/ast/types.rs	TyConInfo::resolve_namespace	P1,P2	6a0535783f94
@@ -108,8 +111,8 @@ src/ast/types.rs	TypeNode::is_struct	D/A,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a
 src/ast/types.rs	TypeNode::is_unbox	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7d,P7e,P15,P16,P17,P18,P26,P31,A19	9260dc476785
 src/ast/types.rs	TypeNode::is_union	D/A,P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	eaa9230b88af
 src/ast/types.rs	TypeNode::kind	D/A	a08211f10d71
-src/ast/types.rs	TypeNode::new	P1,P2	407c8d3d0a39
-src/ast/types.rs	TypeNode::new_arc	P1,P2	19e3000c12c2
+src/ast/types.rs	TypeNode::new	P1,P2,P5,P6,P7	407c8d3d0a39
+src/ast/types.rs	TypeNode::new_arc	P1,P2,P5,P6,P7	19e3000c12c2
 src/ast/types.rs	TypeNode::set_assocty_args	P1,P2,P2a,P15,P16,P17,P18	24abf982807a
 src/ast/types.rs	TypeNode::set_assocty_name	P1,P2	4cf5badd7071
 src/ast/types.rs	TypeNode::set_source	P1,P2,P2a,P15,P16,P17,P18	0ef112a184f4
@@ -164,6 +167,7 @@ src/constants.rs	CLOSURE_CAPTURE_IDX	P1,P2,P2a,P15,P16,P17,P18	8ac4c663fef1
 src/constants.rs	CLOSURE_FIELD_COUNT	P1,P2,P2a,P15,P16,P17,P18	3e3f60cca61a
 src/constants.rs	FUNPTR_ARGS_MAX	P1,P2,P5,P6,P7,P7a,P7d,P7e	5054470d6f01
 src/constants.rs	FUNPTR_NAME	P1,P2,P3,P4,P5,P6,P7,P7a,P7d,P7e,P26	5f81220a51a7
+src/constants.rs	PUNCHED_TYPE_SYMBOL	P5,P6,P7	866c661bcaee
 src/constants.rs	RefcntState	P26	ab45f83edf4d
 src/constants.rs	STD_NAME	P1,P2,P5,P6,P7	2ce290984024
 src/constants.rs	SYMBOL_VERSION_SEPARATOR	P27,P29,P30	66bb7067040b
@@ -175,7 +179,7 @@ src/elaboration/desugar_opaque.rs	Program::desugar_opaque_types	P27,P29,P30	c561
 src/elaboration/desugar_opaque.rs	collect_opaque_infos	P27,P29,P30	a060a45a2d95
 src/elaboration/desugar_opaque.rs	register_opaque_tycon	P1,P2	fc5202f8b47e
 src/elaboration/desugar_opaque.rs	resolve_opaque_type_in_type	P2a,P15,P16,P17,P18	fb927ee1a67c
-src/elaboration/mod.rs	elaborate	P1,P2	cd448f6a71aa
+src/elaboration/mod.rs	elaborate	P1,P2,P5,P6,P7	cd448f6a71aa
 src/elaboration/typecheck.rs	Substitution	P2a,P15,P16,P17,P18	573fb707258d
 src/elaboration/typecheck.rs	Substitution::merge	P1,P2,P2a,P15,P16,P17,P18	d19740bbbe67
 src/elaboration/typecheck.rs	Substitution::single	P1,P2,P2a,P15,P16,P17,P18	40a589023dbf
@@ -585,6 +589,7 @@ src/rc_ir/dead_code_elim.rs	eliminate_unreachable	P27,P29,P30,T	7c5805fda609
 src/rc_ir/leaf_map.rs	LeafMap	P1,P2,P2a,P15,P16,P17,P18	f4c4713895fa
 src/rc_ir/leaf_map.rs	LeafMap::build_shape	P1,P2,P3,P4,P5,P6,P7,P7c,P7f,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24,P31,A19	cf8bc406897e
 src/rc_ir/leaf_map.rs	LeafMap::get	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	77cdac496950
+src/rc_ir/leaf_map.rs	LeafMap::leaves	P5,P6,P7	7e6e2791c99a
 src/rc_ir/leaf_map.rs	LeafMap::leaves_under	P1,P2,P2a,P3,P4,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P15,P16,P17,P18,P18a,P18b,P18c,P19,P20,P21,P22,P23,P24	c261b1b68e02
 src/rc_ir/leaf_map.rs	LeafMap::map_leaves_under	P1,P2,P18c,P19,P20,P21,P22,P23,P24	1c2a6da25c4b
 src/rc_ir/leaf_map.rs	LeafMap::uniform	P1,P2,P5,P6,P7,P18c,P19,P20,P21,P22,P23,P24,P31,A19	1f351bcd0c72

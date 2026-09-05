@@ -237,6 +237,7 @@ impl TypeDefn {
         Ok(())
     }
 
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_alias(&self) -> bool {
         self.value.is_alias()
     }
@@ -276,6 +277,7 @@ impl TypeDeclValue {
         }
     }
 
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_alias(&self) -> bool {
         match self {
             TypeDeclValue::Alias(_) => true,

@@ -367,6 +367,7 @@ impl TyCon {
     /// # Arguments
     /// * `punched_at` — the position of the field made the hole, counted from 0 in the order the
     ///   fields are declared.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn into_punched_type_name(&mut self, punched_at: usize) {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
@@ -1560,7 +1561,7 @@ impl TypeNode {
     }
 
     /// A node holding `ty`, written nowhere.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn new(ty: Type) -> Self {
         Self {
             ty,
@@ -1572,7 +1573,7 @@ impl TypeNode {
     }
 
     /// A shared node holding `ty`, written nowhere.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn new_arc(ty: Type) -> Arc<Self> {
         Arc::new(Self::new(ty))
     }
