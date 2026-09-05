@@ -2034,8 +2034,10 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   `errors.to_result()` を返し、`elaborate` はその値に `?` を当てるので、`Errors` が空でなければ
   `elaborate` はプログラムを返さず、その本体の活性化は存在しない。**よって、活性化を持つプログラムでは
   `continue` の枝が 1 度も通らない。** すなわち `type_defns` のどの 2 つの項目も `tycon()` が異なり、
-  どの項目の `tycon()` も `bulitin_tycons()` の鍵ではない。したがって `type_defns` の項目 `d` に
-  ついて、`type_env.tycons()` は鍵 `d.tycon()` の下に `d.tycon_info(&[])` を持つ。**同じ腕は構造体の
+  どの項目の `tycon()` も `bulitin_tycons()` の鍵ではない。`TypeDefn::is_alias` は `value` が
+  `TypeDeclValue::Alias` であることなので、`value` が `TypeDeclValue::Struct` か
+  `TypeDeclValue::Union` である項目 `d` は `tycons` の側へ入る。したがってそのような `d` について、
+  `type_env.tycons()` は鍵 `d.tycon()` の下に `d.tycon_info(&[])` を持つ。**同じ腕は構造体の
   宣言について、名前の末尾に `PUNCHED_TYPE_SYMBOL` (`#PunchedAt`) と欄の添字を足した鍵の組も入れるが**
   (`TyCon::into_punched_type_name`)、その名前は `#PunchedAt` を含むので、それを含まない名前の鍵が
   この入れ方で入ることは無い。**型の節点についても 1 つ置く。** `type_tycon` と `type_tyapp` は
@@ -2087,7 +2089,8 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
      CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_closure,
      CODE src/ast/types.rs: type_tyapp, type_tycon, tycon, apply_type_args, TyCon, TyCon::new,
      CODE src/ast/types.rs: TypeNode::new, TypeNode::new_arc, TyCon::into_punched_type_name,
-     CODE src/ast/typedecl.rs: TypeDefn::tycon, TypeDefn::tycon_info,
+     CODE src/ast/typedecl.rs: TypeDefn::tycon, TypeDefn::tycon_info, TypeDefn::is_alias,
+     CODE src/ast/typedecl.rs: TypeDeclValue::is_alias,
      CODE src/ast/program.rs: Program::add_tuple_defn, Program::add_tuple_defns,
      CODE src/ast/program.rs: Program::calculate_type_env,
      CODE src/elaboration/mod.rs: elaborate,
@@ -2260,15 +2263,17 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   本体とすべてのグローバル初期化子の `init` が、そのプログラムの `borrowed_units` が定める所有と借用の
   割り当て (D14) の下で D11 を満たすことである。`f` については、本体の D11 を `<1>6` が、
   `borrowed_units` が空であることを `<1>1` が与える。**`f` 以外の関数とグローバル初期化子は、`std.fix` を
-  前段のパス (`insert_rc` と `split_rc_units`) に通したプログラム `P0` のものを取り、`P0` のどの本体も
-  `f` を呼ばないものを取る。** `P0` は `borrow_ify` に渡されるプログラムなので、A1 より D12 を満たし、
-  そのすべての関数の `borrowed_units` は空である。D12 より `P0` の各本体と各初期化子は D11 を満たす。
-  D11 が読むのはその本体の実行路と、その上の `Obl` を動かす操作である。`<1>1` より `f` の名前は
-  `P0` のどの関数の名前とも異なるので `P0` の関数はどれも残り、その `borrowed_units` も、呼び出し先の
-  所有と借用の割り当ても、`f` を足しても変わらない。`P0` のどの本体も `f` を呼ばないので、`P0` の本体の
-  実行路も変わらない。よって `P0` の各本体と各初期化子はこのプログラムの下でも D11 を満たし、
-  このプログラムのすべての本体と初期化子が D11 を満たす。
-  BY <ref id=627e117/>, <ref id=3d96eb8/>, <ref id=95427eb/>, <ref id=ef8efc4/>, <1>1, <1>6
+  前段のパス (`insert_rc` と `split_rc_units`) に通したプログラム `P0` のものを取る。** `P0` は
+  `borrow_ify` に渡されるプログラムなので、A1 より D12 を満たし、そのすべての関数の `borrowed_units` は
+  空である。D12 より `P0` の各本体と各初期化子は D11 を満たす。D11 が読むのはその本体の実行路 (D3) と、
+  その上で `Obl` を動かす操作である。`P0` の本体に現れる `App` の呼び出し先 (D23) は `P0` の関数で
+  あり、`<1>1` より `f` の名前は `P0` のどの関数の名前とも異なるので、`f` を足しても `P0` の各本体の
+  呼び出し先は変わらない。`P0` の各関数の `borrowed_units` も、それが定める所有と借用の割り当て (D14)
+  も、`f` を足して変わらない。D3 より実行路はその本体の木だけで決まるので、`P0` の各本体の実行路も
+  変わらない。よって `P0` の各本体と各初期化子はこのプログラムの下でも D11 を満たし、このプログラムの
+  すべての本体と初期化子が D11 を満たす。
+  BY <ref id=627e117/>, <ref id=3d96eb8/>, <ref id=95427eb/>, <ref id=ef8efc4/>, <ref id=ca36627/>,
+     <ref id=ff5985d/>, <1>1, <1>6
 
 <1>7. `id(x_j, []) = (x_j, [])` であり、`act(x_j, []) = {(x_j, [])}` である。
   <2>1. `x_j` の `Binding` は `Llvm(gen, [], T)` である。`collect_bindings` は
