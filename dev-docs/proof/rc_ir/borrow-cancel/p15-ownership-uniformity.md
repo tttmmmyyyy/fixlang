@@ -2055,15 +2055,17 @@ P7a の意味の site の全部が覆われる。
     `<1>2` と同じ腕である。
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
   <2>3. `pty(r) = Some(τ)` のとき、`owns_object(r, p)` は中断しない。
-    `<2>1` よりこの `RewriteCtx` の `vars` は `VarTable::of(f_own)` であり、`f_own` は `func` の複製な
-    ので A6・A11・A12 を満たす。DEF 再帰で訪れる対 よりこの表について L12 と L14 を読んでよい。
+    `<2>1` よりこの `RewriteCtx` の `vars` は `VarTable::of(f_own)` である。この `RewriteCtx` を作る
+    時点の `f_own.body` は `f_own` の版の `Pre(V)` であり、L0 よりそれについて A6・A11・A12 が述べる
+    性質が成り立つ。よって DEF 再帰で訪れる対 が固定する本体と表の条件が満たされ、この本体と
+    `VarTable::of(f_own)` について L12 と L14 を読んでよい。
     `<1>1` より `u ∈ units(ty(v))` であり、L12 より `(r, p) ∈ Reach(v, u)`、L14 より
     `covered(ty(r), p) ≠ ∅` である。L1c より `τ = ty(r)` であり、`covered(τ, p) ≠ ∅` である。
     L10 より `under(τ, p)` もその各要素に
     ついての `trunc(τ, ・)` も中断しない。`owns_object` が呼ぶのはこの 2 つと `owned_units.contains` だけ
     である。
-    BY <1>1, <2>1, DEF 再帰で訪れる対, <ref id=fa1a6ce/>, <ref id=ef258a5/>, <ref id=44a9669/>, <ref id=c7d11e5/>,
-       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+    BY <1>1, <2>1, DEF 再帰で訪れる対, <ref id=9cef509/>, <ref id=fa1a6ce/>, <ref id=ef258a5/>, <ref id=44a9669/>, <ref id=c7d11e5/>,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, RewriteCtx::new, borrow_ify
   <2>4. `pty(r) = Some(τ)` のとき、`owns_object(r, p)` は真である。
     `owns_object` は `under(τ, p)` の各要素 `unit` について `(r, trunc(τ, unit)) ∈ owned_units` を
     要求する。L9 より `trunc(τ, unit) ∈ units(τ)` である。`borrow_ify` は入力の各関数について
