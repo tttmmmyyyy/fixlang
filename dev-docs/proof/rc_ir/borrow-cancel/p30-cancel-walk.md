@@ -1342,9 +1342,15 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
 **証明**
 
 <1>1. `ownership::acted_references(vars, type_env, v, path)` が返す `References` の各鍵の値は 1 以上で
-      ある。鍵の値が増えるのは `*references.entry(object).or_default() += 1` の 1 か所だけであり、鍵は
-      その場で作られるので、値が 0 の鍵は残らない。
-  BY CODE src/rc_ir/ownership.rs: acted_references
+      ある。この関数の本文で `references` を作るのは `Map::default()` であり、それに触れるのは
+      `*references.entry(object).or_default() += 1` の 1 か所だけである。EXT Map と Set より
+      `Map::default()` は項目を 1 つも持たず、`entry(k).or_default()` は鍵が無ければ
+      `(k, <usize as Default>::default())` を加えてその値への可変参照を返し、ほかの鍵とその値を変えない。
+      EXT usize の値 より `<usize as Default>::default()` は 0 なので、この式が触れた鍵の値は
+      その `+= 1` で 1 以上になり、`usize` は 0 以上なので以後の `+= 1` でも 1 以上のままである。
+      よって値が 0 の鍵は残らない。
+  BY CODE src/rc_ir/ownership.rs: acted_references, EXT Map と Set, EXT usize の値,
+     EXT 文は書かれた順に実行される
 <1>2. `CancelAnalysis::acted_references(v, path)` は `ownership::acted_references` の値を返す。ただし
       その値が空のときは `assert!(!references.is_empty(), ...)` が発火してコンパイラが停止する。よって
       この関数が値を返すとき、その値は空でなく、各鍵の値は 1 以上である。
@@ -1370,9 +1376,10 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
       また `covers` が真のとき、<1>3 より引き算は panic せず結果は `self - other` である。`R1 - R2` の各
       位置の個数は `R1` のそれ以下なので `R1 - R2 ⊆ R1` である。よって 4 が成り立つ。
   BY CODE src/rc_ir/ownership.rs: References::covers, <1>3, EXT Map と Set, EXT Iterator::all と any
-<1>5. `References::is_empty()` は内側の `Map` が空であることを言う。各鍵の値が 1 以上の `References` に
+<1>5. `References::is_empty()` の本文は `self.0.is_empty()` であり、EXT Map と Set よりこれは内側の
+      `Map` が項目を 1 つも持たないことと同値である。各鍵の値が 1 以上の `References` に
       ついて、これは参照を 1 つも持たないことと同値である。よって 1 が成り立つ。
-  BY CODE src/rc_ir/ownership.rs: References::is_empty, <1>1, <1>3
+  BY CODE src/rc_ir/ownership.rs: References::is_empty, <1>1, <1>3, EXT Map と Set
 <1>6. `References::shares_an_object(other)` の本文は `other.0.keys().any(|object| self.0.contains_key(object))`
       であり、`other` の鍵のいずれかが自分の鍵であることを言う。`References::names(object)` の本文は
       `self.0.contains_key(object)` であり、`object` が自分の鍵であることを言う。`References::objects()` の
@@ -1385,14 +1392,19 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
      <1>1, <1>3, EXT Map と Set, EXT Iterator::all と any, EXT Iterator::map と collect
 <1>7. 走査が扱う `References` の値は、`CancelAnalysis::acted_references` が返したもの、それを `subtract`
       で減らしたもの、およびそれらの複製だけである。`References` のフィールドは非公開なので、
-      EXT 可視性と私有性 より `References` の値を構築できるのは `ownership.rs` の中だけであり、
-      `ownership.rs` は `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たない。
-  BY CODE src/rc_ir/ownership.rs: References (フィールドは非公開なので `ownership` の外では作れない),
-     CODE src/rc_ir/ownership.rs: acted_references (`References(references)` がこのモジュールでの唯一の
-     構築点), CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕
-     (`outstanding` は `self.acted_references` の値), CODE src/rc_ir/borrow.rs: un_bump
-     (`innermost.outstanding.subtract(un_bumped)`), CODE src/rc_ir/borrow.rs: CancelAnalysis::merge
-     (`outstanding.clone()`), EXT 可視性と私有性, EXT モジュールは `mod` が導入する
+      EXT 可視性と私有性 より `References` の値を構築する式が書けるのは `ownership.rs` の中だけであり、
+      `ownership.rs` は `mod` 宣言を `#[cfg(test)] mod tests` の 1 つしか持たないので、子孫のモジュールも
+      そのモジュールだけである (EXT モジュールは `mod` が導入する)。そこで `References` を構築するのは
+      `acted_references` の末尾式 `References(references)` である。走査がその値を受け取るのは
+      `walk_inner` の `RcExpr::Retain(v, path, _, k)` の腕と `RcExpr::Release(v, path, _, k)` の腕が
+      呼ぶ `self.acted_references(v, path)` であり、その値を書き換えるのは `un_bump` の
+      `innermost.outstanding.subtract(un_bumped)`、複製を作るのは `merge` の `outstanding.clone()` と
+      `Match` の腕の `pending.clone()` が要素ごとに呼ぶ `PendingRetain` の `clone` である
+      (EXT Clone)。
+  BY CODE src/rc_ir/ownership.rs: References, CODE src/rc_ir/ownership.rs: acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, CODE src/rc_ir/borrow.rs: un_bump,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, CODE src/rc_ir/borrow.rs: PendingRetain,
+     EXT Clone, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
 <1>7a. 走査が `References::subtract` を呼ぶのは `un_bump` の中の
        `innermost.outstanding.subtract(un_bumped)` の 1 か所だけであり、その文に到達するのは直前の
        `if !innermost.outstanding.covers(un_bumped) { return UnBump::OutsideBracket; }` を通り抜けたとき、
