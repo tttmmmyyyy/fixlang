@@ -20,7 +20,7 @@ use std::{
 /// The map the compiler holds its data in. `fxhash` is fast on the short string keys the compiler
 /// looks values up by, and hashes from a fixed seed, at the cost of the resistance to chosen-key
 /// collisions a random seed gives.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub type Map<K, V> = FxHashMap<K, V>;
 
 /// A map holding the given key-value pairs. When a key is given more than once, the value that
@@ -34,7 +34,7 @@ pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K
 }
 
 /// The set the compiler holds its data in, hashed by `fxhash` as `Map` is.
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub type Set<T> = FxHashSet<T>;
 
 /// A set holding the given elements, with an element that appears several times held once.
@@ -49,7 +49,7 @@ pub fn make_set<T: Eq + Hash>(iter: impl IntoIterator<Item = T>) -> Set<T> {
 /// Run `f` on a stack grown on demand, so a deeply recursive traversal — the RC IR passes over a
 /// continuation chain, type checking over a nested expression — does not overflow the stack on a
 /// deeply nested input.
-// PROOF: D/A, P1, P2, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn grow_stack<R>(f: impl FnOnce() -> R) -> R {
     // Allocate another 1 MiB of stack whenever less than 64 KiB of it remains.
     stacker::maybe_grow(64 * 1024, 1024 * 1024, f)

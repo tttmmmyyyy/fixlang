@@ -108,7 +108,7 @@ impl<'c> ValueAccessor<'c> {
     /// The object this accessor names: a local's object as it stands, or the value a global's
     /// getter returns. A global of funptr type is the function itself, so its address is taken
     /// without a call.
-    // PROOF: D/A, P3, P4, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P27, P29, P30, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get<'m>(&self, gc: &mut Generator<'c, 'm>) -> Object<'c> {
         match self {
             ValueAccessor::Local(ptr) => ptr.clone(),
@@ -425,6 +425,7 @@ impl<'c> Object<'c> {
     /// source object's parts are spliced straight into the field's range with no aggregate formed on
     /// either side. For a boxed object the field is stored to the heap, where the value must be
     /// materialized. The counterpart of `extract_field_object`.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn insert_field_object<'m>(
         mut self,
         gc: &mut Generator<'c, 'm>,
@@ -519,7 +520,7 @@ pub struct Scope<'c> {
 
 impl<'c> Scope<'c> {
     /// Bind `var` to `obj`, shadowing whatever the name is bound to until the binding is popped.
-    // PROOF: D/A, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn push_local(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         // TODO: add assertion that var is local (or change var to Name).
         self.data.entry(var.clone()).or_default().push(ScopedValue {
@@ -547,6 +548,7 @@ impl<'c> Scope<'c> {
 
 /// The state of code generation for one LLVM module: the module being written, where in it the next
 /// instruction goes, what is in scope there, and the caches shared across the whole module.
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub struct Generator<'c, 'm> {
     /// The LLVM context every type and value built here belongs to.
     pub context: &'c Context,
@@ -698,6 +700,7 @@ impl<'c> OutPointer<'c> {
     }
 }
 
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 impl<'c, 'm> Generator<'c, 'm> {
     /// The module-level constant holding `s` as a null-terminated string. One constant is created
     /// per distinct string, and every later call for that string returns it again.
@@ -898,6 +901,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// An empty LLVM module called `name`, carrying the triple and data layout of `target_machine`
     /// so that the types built in it get that target's sizes, alignments and offsets.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn create_module(
         name: &str,
         ctx: &'c Context,
@@ -920,6 +924,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// * `imported` — the names whose home is another unit and which this module holds a copy of
     ///   for its own calls.
     /// * `shared_globals` — the globals a unit other than the one owning them reads.
+    // PROOF: P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(
         ctx: &'c Context,
         module: &'m Module<'c>,
@@ -964,6 +969,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Opens the debug information of this module: the builder every debug entity is emitted
     /// through, and the compilation unit they all belong to, whose directory is the one the build
     /// runs in.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn create_debug_info(&mut self) {
         let debug_metadata_version = self.context.i32_type().const_int(3, false);
         self.module.add_basic_value_flag(
@@ -1016,7 +1022,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// the lambda itself for a funptr global, and the accessor function for any other. A name
     /// registered twice aborts the compiler, since the second registration would decide which of
     /// two definitions every later read reaches.
-    // PROOF: D/A, P3, P4, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P3, P4, P7c, P7f, P18a, P18b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_global_object(
         &mut self,
         name: FullName,
@@ -1067,7 +1073,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The value `var` names: its innermost local binding, or the global of that name, which the
     /// module declares here if it has not reached it yet.
-    // PROOF: D/A, P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_value(&mut self, var: &FullName) -> ScopedValue<'c> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
@@ -1079,7 +1085,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// The value the global `var` is reached through, declared here on the module's first use of it.
     /// Declaring on use is what keeps a module's declarations to the globals its code reaches: the
     /// program's globals number in the hundreds and a module calls a handful of them.
-    // PROOF: P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7c, P7f, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn get_or_declare_global(&mut self, var: &FullName) -> ScopedValue<'c> {
         if let Some(value) = self.declared_globals.get(var).cloned() {
             return value;
@@ -1091,6 +1097,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The object `name` is bound to, handed over as it stands: the reference counts are left
     /// untouched, so the caller owns whatever reference the binding already carried.
+    // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
         self.get_scoped_value(name).accessor.get(self)
     }
@@ -1100,7 +1107,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
     /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
     /// copy. Every other read is plain.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var_name);
         let obj = val.accessor.get(self);
@@ -1115,6 +1122,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The value of field `field_idx` of the object `var` is bound to, read the way
     /// `get_scoped_obj` reads it.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj_field(
         self: &mut Self,
         var: &FullName,
@@ -1201,7 +1209,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// A global object is never unique, so the count is read only after the state says the object
     /// is local. Where `state` says so already, the state is not read and the global case does not
     /// exist — the check becomes the comparison against one alone.
-    // PROOF: P5, P6, P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_branch_by_is_unique(
         self: &mut Generator<'c, 'm>,
         obj_ptr: PointerValue<'c>,
@@ -1921,7 +1929,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// object is passed as its parts rather than as one aggregate (see `lambda_function_type`), so
     /// no aggregate is materialized across the call; `build_body` emits the retain / release / mark
     /// work on the object reassembled from those parts inside the helper.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn emit_rc_helper_call(
         &mut self,
         obj: Object<'c>,
@@ -1961,6 +1969,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Retain `obj`: increment the reference count of every boxed object it owns, once.
+    // PROOF: P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn retain(&mut self, obj: Object<'c>, state: RcState) {
         let one = self.context.i64_type().const_int(1, false);
         let prefix = format!("retain{}", state.name_suffix());
@@ -2004,6 +2013,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Retain an object `amount` times: every boxed leaf reached has its reference count increased
     /// by `amount`, an i64 count.
+    // PROOF: P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_retain(&mut self, obj: Object<'c>, amount: IntValue<'c>, state: RcState) {
         if obj.is_box(self.type_env()) {
             self.build_if_nonnull(&obj, "retain", |gc| {
@@ -2058,6 +2068,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Increment by `amount` the reference count of a boxed object, in the way its refcount state
     /// calls for. The caller guarantees the object is a non-null boxed pointer (e.g. a non-empty
     /// capture object).
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn retain_nonnull_boxed(
         &mut self,
         obj: &Object<'c>,
@@ -2192,7 +2203,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Run a `Std::FFI::Destructor` object's destructor function on the resource it holds, leaving
     /// what the run returns in the value field for the release that follows.
-    // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_run_destructor(&mut self, obj: &Object<'c>) {
         let fields = &obj.ty.toplevel_tycon_info(self.type_env()).fields;
         assert_eq!(
@@ -2484,6 +2495,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Release `obj`: decrement the reference count of every boxed object it owns, destroying the
     /// ones whose count reaches zero.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn release(&mut self, obj: Object<'c>, state: RcState) {
         let prefix = format!("release{}", state.name_suffix());
         self.emit_rc_helper_call(obj, &prefix, "call_release", move |gc, obj| {
@@ -2499,7 +2511,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Put every boxed object `obj` owns into the global refcount state, in which an object is
     /// neither retained, released nor freed, so that it lives for the rest of the program.
-    // PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn mark_global(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_global", "call_mark_global", |gc, obj| {
             gc.build_traverser_work(obj, TraverserWorkType::mark_global(), RcState::Unknown);
@@ -2572,7 +2584,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Emit a call to the runtime function named `func_name`, which the module must already
     /// declare.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn call_runtime(
         &self,
         func_name: &str,
@@ -2592,6 +2604,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// # Returns
     /// The object, and `None` in tail position, where it has been returned already.
+    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_tail(&mut self, obj: Object<'c>, tail: bool) -> Option<Object<'c>> {
         if tail {
             self.build_return_object(obj);
@@ -2605,6 +2618,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// `lambda_function_type`): its parts are packed into the flat return value — `void` for none, the
     /// bare part for one, a flat struct built with one `insertvalue` per part for several. Parts too
     /// wide for the return registers are stored through the function's out-pointer instead.
+    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_return_object(&mut self, obj: Object<'c>) {
         let parts: Vec<BasicValueEnum<'c>> = obj.parts().to_vec();
         let part_tys: Vec<BasicTypeEnum<'c>> = parts.iter().map(|p| p.get_type()).collect();
@@ -2695,7 +2709,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// another unit may call has to be one dead-code elimination keeps. `divide_among_units` takes a
     /// unit's roots from `DividedProgram::published_here`, which is what `published_to_the_linker`
     /// reads here, so narrowing the condition below narrows the root set with it.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7c, P7f, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn declare_lambda_function(
         &mut self,
         fn_ty: &Arc<TypeNode>,
@@ -2728,7 +2742,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// bearing and unchecked — an accessor is reached by a direct call, so a module that declared it
     /// to return a value while the defining module returns none reads an undefined value, and neither
     /// the LLVM verifier nor the linker looks at it.
-    // PROOF: P3, P4, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P3, P4, P7c, P7f, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn declare_program_global(&mut self, name: &FullName) -> Option<FunctionValue<'c>> {
         let ty = self.global_types.get(name).cloned()?;
         if ty.is_funptr() {
@@ -2913,6 +2927,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// * `cap_tys` — the types of all the captured values, which give the capture object its struct
     ///   layout.
     /// * `result_ty` — the type of the projected value.
+    // PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_capture_project(
         &mut self,
         cap_name: &FullName,
@@ -3182,6 +3197,7 @@ pub(crate) fn is_const_one(v: IntValue) -> bool {
 ///
 /// The getter of the field `x` of `Main::Point` is the Fix name `Main::Point::@x`, and enters a
 /// symbol table as `Main::Point::$x`.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
     let name = name.to_string();
     assert!(
@@ -3200,6 +3216,7 @@ pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
 /// The name of the LLVM function through which the global `name`, of a type other than funptr, is
 /// obtained. It is the name every module — the one defining the global and the ones calling into
 /// it — declares and looks the accessor up under.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn global_accessor_name(name: &FullName) -> String {
     format!("Get#{}", object_file_symbol_name(name))
 }

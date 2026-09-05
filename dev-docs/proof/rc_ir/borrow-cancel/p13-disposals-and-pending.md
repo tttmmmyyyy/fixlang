@@ -1,17 +1,17 @@
-# P7c: 処分はすべて走査に届く
+# P7c, P7f, P18a, P18b -- 処分はすべて走査に届く
 
-**対象コミット**: `409378f6a8132088c432e2d1b3b76476e2a8fe88`
+**対象コミット**: `b6c51fb892746e493e155d9d59ea05d02d7357db`
 
-この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義 D1-D34 と仮定 A1-A25、および命題
-P1、P2、P2a、P5、P6、P7、P7a、P7e、P8、P9、P10、P11、P12、P13、P14a、P16、P17、P18、P30 の**言明**の
-上に立つ。それらの証明は `p10-leaves-and-units.md`、`p12-identity-and-consumes.md`、
-`p15-ownership-uniformity.md`、`p20-borrow-ify.md`、`p30-cancel-walk.md`、`p51-runs.md` にあり、
-この文書はその言明だけを使う。
+この文書は README の P7c、P7f、P18b、P18a を扱う。README の定義と仮定のうち `BY` の行が引くものと、
+README が言明を置く他の命題の**言明**の上に立つ。それらの命題の証明は別の文書に在り、この文書はその
+言明だけを使う。**引く項目の一覧はここに手で持たない** --
+`python3 dev-docs/proof/proof_index.py --render <このファイル>` が生成するヘッダが、引用のグラフから
+同じ一覧を作る。
 
-**別名類は D33 が、`held` は D34 が定める。この 2 つがこの文書に残す 4 つを、第 7.5 節が果たす。**
-歩みの各段が D20 の別名の辺であること (`L11b`)、`obj(C)` が
-定まること (`L12a`)、D34 の 3 つの開始行が計数下の類を作りうる終端を尽くすことと、束縛を持たない
-名前を終端とする類が計数下でないこと (`L15`) の 4 つである。
+**別名類は D33 が、`held` は D34 が定める。この 2 つがこの文書に残す 5 つを、第 7.5 節が果たす。**
+`ρ` 歩みの 1 歩が D20 の別名の辺であること (`L11b`)、D33 の `ρ` 歩みがこの文書の `ρ` 歩みと同じ列で
+あること (`L12b`)、`obj(C)` が定まること (`L12a`)、D34 の 3 つの開始行が計数下の類を作りうる終端を
+尽くすことと、束縛を持たない名前を終端とする類が計数下でないこと (`L15`) の 5 つである。
 
 **結論を先に書く。P7c、P7f、P18b、P18a はいずれも証明できた。** P18a が立つのは README の
 A19 (i)・(ii-a)・(ii-b) と P14a の上である。A19 (i) は D21 が活性化に課す制限であり、各活性化の
@@ -19,8 +19,8 @@ A19 (i)・(ii-a)・(ii-b) と P14a の上である。A19 (i) は D21 が活性�
 `d(C) = held(C) - [C の ρ-終端が借用する (D14) leaf ならば 1]` の総和と、借用終端の類が在るときの `+1` の
 形で `H(O)` を下から抑える。第 7.5.4 節がその形から P18a を出す。
 
-第 3 節が P7c の言明を README から引き、第 5 節がそれを証明する。第 4 節の `L6` が P7f を与える。
-第 7 節が P18b (第 7.4 節) と P18a (第 7.5 節) を扱う。
+第 3 節が P7c の言明を README から引き、第 5 節がそれを証明する。第 6 節が P7f を、第 4 節の `L6` の
+上で示す。第 7 節が P18b (第 7.4 節) と P18a (第 7.5 節) を扱う。
 
 ## 1. 記法
 
@@ -35,18 +35,26 @@ A19 (i)・(ii-a)・(ii-b) と P14a の上である。A19 (i) は D21 が活性�
 - `acted_on(x, π)` は `origin(x, π).acted_on()` を集合とみなしたもの
   (`CODE src/rc_ir/ownership.rs: Origin::acted_on`)。D15 より
   `acted_on(x, π) = {origin(x, π).identity()} ∪ origin(x, π).candidates()` である。
-- `L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の要素のうち `π` を前置に持つものの集合。D4 より、これが
-  「`v` の `π` の下の boxed leaf」の全体である。inhabited (D16) でないものを含む。`L(v) = L(v, [])` と書く。
-- `ActRefs(v, π)` は `acted_references(vars, type_env, v, π)` (D15)。
-- `Others(v, π)` は `CancelAnalysis::other_objects(v, π)` の返す列を集合とみなしたもの
+- **DEF L** `L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の要素のうち `π` を前置に持つものの集合。
+  D4 より、これが「`v` の `π` の下の boxed leaf」の全体である。inhabited (D16) でないものを含む。
+  `L(v) = L(v, [])` と書く。
+- **DEF ActRefs** `ActRefs(v, π)` は `acted_references(vars, type_env, v, π)` (D15)。
+- **DEF Others** `Others(v, π)` は `CancelAnalysis::other_objects(v, π)` の返す列を集合とみなしたもの
   (`CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects`)。
 
-**`origin(x, π)` は `(x, π)` で決まる 1 つの値である。** `origin` は答えを `vars.origins` に記録し、
-次の呼び出しはそれを先に読んで返すので (`CODE src/rc_ir/ownership.rs: origin`)、その返り値は走査が
-`vars` を共有したまま進む間に memo の状態が変わっても同じである -- P2a が「答えは
-`vars.bindings`・`type_env`・`(x, π)` だけで決まり、`vars.origins` が保持する memo の状態に依らない」と
-述べる。よってこの文書は `origin(x, π)`、したがって `acted_on(x, π)` と `ActRefs(v, π)` を、走査のどの
-位置でも、活性化のどの時点でも同じ値として書く。
+**`origin(x, π)` は `(x, π)` で決まる 1 つの値である。** よってこの文書は `origin(x, π)`、したがって
+`acted_on(x, π)` と `ActRefs(v, π)` を、走査のどの位置でも、活性化のどの時点でも同じ値として書く。
+**これを与えるのは `L0` である** -- P2a はその言明の中で `vars` の作られ方を限るので、`B` の `vars` が
+その制限を満たすことを示す段が要る。
+
+**`B` と `vars` の組は解析にかかる (第 2 節の DEF 解析にかかる本体)。** これを与えるのは `L6a` である。
+`L7a`・`L8`・`L8a` はこの条件の下で本体を量化するので、この 3 つを `B` について読む段はこの事実の上に
+立つ。`B` 以外の本体についてそれらを読む段は、その本体が解析にかかることを自分で示す (`L16` が
+`Pre(V)` についてそれを行う)。
+
+**表を跨ぐ形は P2a の主張ではない。** P2a は「`bindings` が等しい相異なる 2 つの `VarTable` について
+答えが等しいことは別の主張であり、それを要る段は自分で示す」と述べる。この文書でその形を要るのは
+`L16` であり、その証明が `origin` の展開の上の帰納で独自に示す。
 
 `VarPath` は対 `(FullName, FieldPath)` である (`CODE src/rc_ir/ast.rs: VarPath`)。変数 `v` (`RcVar`) と
 leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す。**`VarPath` はオブジェクトの名前で
@@ -57,21 +65,97 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
 
 第 7 節からは実行時のオブジェクト (D7) を相手にするので、2 つを**名前**と**オブジェクト**に書き分ける。
 名前が指すオブジェクトは `obj(x, λ)` (D6) と `obj_ρ(o)` (第 7.2 節の DEF 名前の活性) が与える。1 つの
-オブジェクトを 2 つの名前が指す本体は在る (第 7.5.8 節の `C2`) ので、この区別は表記だけのものではない。
+オブジェクトを 2 つの名前が指す本体は在る (第 7.5.7 節の `C1` の `(m, [])` と `(p, [])`) ので、この
+区別は表記だけのものではない。
 
-この文書は補題を `L1` から `L6` と呼ぶ。`BY` の行ではそれらを名前で引用する。補題の証明の内部の
-ステップは引用しない。
+この文書は第 4 節の命題を `L0` から `L6a` と呼ぶ。`BY` の行ではそれらを名前で引用する。命題の証明の
+内部のステップは引用しない。
 
-外部の結果を 2 つ使う。
+外部の結果を使う。名札は README の「証明の記法」が定める `EXT <名前>` である。
 
-- **stacker の `maybe_grow`**: `stacker::maybe_grow(red_zone, stack_size, callback)`
+- **`EXT stacker の maybe_grow`**: `stacker::maybe_grow(red_zone, stack_size, callback)`
   は `callback` をちょうど 1 回呼び、その値を返す (`CODE stacker-0.1.23/src/lib.rs: maybe_grow`)。
   `remaining_stack()` の値で分かれる 2 つの枝がどちらも `callback` を 1 回だけ評価し、`callback` の型が
   `FnOnce` なので 2 回は評価できない。
-- **Rust 標準ライブラリの `Vec::retain`**: `v.retain(f)` は、`v` の各要素に `f` を前から順に
+- **`EXT Vec::retain`** (Rust 標準ライブラリ): `v.retain(f)` は、`v` の各要素に `f` を前から順に
   ちょうど 1 回ずつ適用し、`f` が偽を返した要素を `v` から取り除く。残る要素は値も相対順序も変わらない。
   この文書は `PendingRetains` の `retain` としてこれを使う -- `PendingRetains` は
   `Vec<PendingRetain>` の別名である (`CODE src/rc_ir/borrow.rs: PendingRetains`)。
+- **`EXT Vec::clone`** (Rust 標準ライブラリ): 要素の型が `Clone` であるとき、`v.clone()` は `v` と
+  同じ長さの `Vec` を返し、その第 `i` 要素は `v` の第 `i` 要素の `clone()` である。すなわち複製は
+  要素をその並びのまま持つ。`#[derive(Clone)]` が作る `clone()` は、各フィールドの `clone()` を
+  呼んで同じ変位の値を組み立てる。この文書は `PendingRetains` の `clone` としてこれを使う。
+- **`EXT Iterator::rposition`** (Rust 標準ライブラリ): `it.rposition(f)` は、`f` が真を返す最後の
+  要素の添字を `Some` で返し、`f` がどの要素についても偽であるときにかぎり `None` を返す。すなわち
+  `None` は「述語がどの要素についても偽である」と同値である。
+- **`EXT Iterator::any`** (Rust 標準ライブラリ): `it.any(f)` は、`f` が真を返す要素が在れば真を、
+  1 つも無ければ偽を返す。すなわち真は「述語が真である要素が在る」と同値である。
+- **`EXT Iterator::all`** (Rust 標準ライブラリ): `it.all(f)` は、`f` がすべての要素について真を返す
+  ときに真を、偽を返す要素が在るときに偽を返す。要素が 1 つも無いときは真である。
+- **`EXT Vec::first`** (Rust 標準ライブラリ): `v.first()` は、`v` が空のとき `None` を、そうでないとき
+  先頭の要素への参照の `Some` を返す。
+- **`EXT Iterator::enumerate`** (Rust 標準ライブラリ): `it.enumerate()` は `it` の第 `k` 要素に添字 `k`
+  を組にして渡す。よって渡る添字は 0 から順の相異なる整数である。
+- **`EXT Iterator::chain`** (Rust 標準ライブラリ): `a.chain(b)` は `a` の要素をその並びのまま渡してから
+  `b` の要素をその並びのまま渡す。渡るのはその 2 つの要素で尽きる。
+- **`EXT 写像と集合の基本演算`** (Rust 標準ライブラリ): この文書が扱う写像はどれも `crate::misc` の
+  `Map`、集合はどれも `Set` であり、その 2 つは `std::collections` の `HashMap` と `HashSet` の
+  ハッシャを差し替えた別名である (`CODE src/misc.rs: Map`, `Set`)。`m.get(k)` は `k` が鍵として在る
+  ときその値への参照の `Some` を、無いとき `None` を返す。`m.contains_key(k)` は `m.get(k)` が
+  `Some` であることと同値である。`m.keys()` は鍵の全体を、`m.values()` はその鍵の下の値の全体を、
+  `m.iter()` はその対の全体を、どれもちょうど 1 つずつ渡す。`m.insert(k, v)` は
+  `k` を鍵として `v` を置き、直前の値を `Option` で返す。`s.insert(x)` は `x` を集合に入れ、
+  `s.contains(x)` は `x` が集合に在ることと同値である。**鍵と要素は `Eq` の意味で区別される。**
+- **`EXT Option の取り出し`** (Rust 標準ライブラリと言語規則): `Option` を返す関数の中の `e?` は、`e` が
+  `None` のときその関数を `None` で返し、`Some(v)` のとき `v` を値とする。`o.unwrap_or_else(f)` は、
+  `o` が `Some(v)` のとき `v` を、`None` のとき `f()` を返す。`o.is_some_and(f)` は、`o` が `Some(v)` で
+  あって `f(v)` が真のときに真を、`None` のときと `f(v)` が偽のときに偽を返す。
+- **`EXT 整数の 10 進表記`** (Rust 標準ライブラリ): `format!` の `{}` は `u64` の値を 10 進表記で書き、
+  その表記は 10 進数字だけからなる。相異なる 2 つの値の表記は相異なる。
+- **`EXT 可視性と私有性`**: Rust Reference の "Visibility and Privacy" が次を述べる。
+
+  > By default, everything is _private_, with two exceptions: Associated items in a `pub` Trait are
+  > public by default; Enum variants in a `pub` enum are also public by default.
+
+  > With the notion of an item being either public or private, Rust allows item accesses in two cases:
+  >
+  > 1. If an item is public, then it can be accessed externally from some module `m` if you can access
+  >    all the item's ancestor modules from `m`. You can also potentially be able to name the item
+  >    through re-exports.
+  > 2. If an item is private, it may be accessed by the current module and its descendants.
+
+  同じ節が `pub(crate)` について次を述べる。
+
+  > `pub(crate)` makes an item visible within the current crate.
+
+  すなわち、`pub(crate)` の付いた項目を名指せるのは、そのクレートの中だけである。
+- **`EXT このリポジトリのターゲット`**: `Cargo.toml` は 3 つのターゲットを宣言する --
+  `[lib] name = "fixlang", path = "src/lib.rs"`、`[[bin]] name = "fix", path = "src/main.rs"`、
+  `[[bench]] name = "typecheck", harness = false` (既定のパス `benches/typecheck.rs`) である。
+  `src/lib.rs` と `src/main.rs` は同じ 26 個のモジュールを `mod` で導入し、`src/main.rs` はさらに
+  `#[cfg(test)] mod tests` を導入する。すなわち `src/` の 1 つのファイルは lib と bin の 2 つの
+  クレートに属し、どちらのクレートの項目も `src/` のファイルが宣言する。ベンチのターゲットは第 3 の
+  クレートであり、`fixlang` を外部クレートとして読む。**`pub(crate)` の項目の呼び出し元を数える段は、
+  この 2 つのクレートの全体、すなわち `src/` の `.rs` の全体を走査する。**
+- **`EXT 可変参照は排他である`**: Rust Reference の "Pointer types" が可変参照について次を述べる。
+
+  > Mutable references point to memory which is owned by some other value. A mutable reference type
+  > is written `&mut type` or `&'a mut type`.
+
+  > A mutable reference (that hasn't been borrowed) is the only way to access the value it points
+  > to, so is not `Copy`.
+
+  すなわち、借用されていない `&mut T` が生きている間、それが指す値へ届く道はその参照だけである。
+- **`EXT match は最初に一致した腕を取る`**: Rust Reference の "Match expressions" が次を述べる。
+
+  > the resulting value is sequentially compared to the patterns in the arms until a match is found.
+
+  > The first arm with a matching pattern is chosen as the branch target of the `match`, any
+  > variables bound by the pattern are assigned to local variables in the arm's block, and control
+  > enters the block.
+
+  すなわち、腕は書かれた順に試され、最初に一致した腕だけが走る。前の腕の型が一致するときは、後ろの
+  腕は走らない。
 
 ## 2. 局所の定義
 
@@ -91,6 +175,13 @@ leaf `λ` について、`(v, λ)` は `VarPath` の対 `(v.name, λ)` を表す
 - `un_bump(pending, un_bumped)` が**名指すオブジェクト**とは、`un_bumped.objects()` の元の全体、すなわち
   `un_bumped` が個数を持つオブジェクトの全体である (`CODE src/rc_ir/borrow.rs: un_bump`,
   `CODE src/rc_ir/ownership.rs: References::objects`)。
+
+### DEF 要素が名指すオブジェクト
+
+`pending` の要素 `r` がオブジェクト `o` を**名指す**とは、`r.outstanding.names(o)` が真であることを
+いう。`PendingRetain` は `node` と `outstanding` の 2 つの欄を持ち、`References::names` の本体は
+`self.0.contains_key` である (`CODE src/rc_ir/borrow.rs: PendingRetain`,
+`CODE src/rc_ir/ownership.rs: References::names`)。
 
 ### DEF 処分 leaf
 
@@ -113,8 +204,13 @@ leaf だけを取り除く。`Disp` は inhabited でない leaf も入れる。
 持たないので、`Disp` は実行時に処分される参照が属する leaf の上位集合である。上位集合を取るのは、以下の
 主張を強くする向きである。
 
-**D9 の `App` の行が unit を取る型。** D9 の消費の表の `App` の行は「unit は**呼び出し先のパラメータの
-型**で取る」と明記しており (`CODE src/rc_ir/ownership.rs: rhs_consumes`)、`ty(a_i) = ty(p_i)` は A12 の
+**D9 の `App` の行が unit を取る型。** D9 の消費の表の `App` の行は「所有の問いは**呼び出し先のパラメータ**
+について立て (`CODE src/rc_ir/ownership.rs: rhs_consumes`)、unit への丸めは `CancelAnalysis::consume_rhs`
+が渡す `owns` が行う (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`)」と述べる。その `owns` は
+`|p, leaf| self.owned_units.contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))`
+であり、`p` は `rhs_consumes` が渡す呼び出し先のパラメータなので、丸めは呼び出し先のパラメータの型で
+起きる (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs`,
+`CODE src/rc_ir/ownership.rs: rhs_consumes`)。`ty(a_i) = ty(p_i)` は A12 の
 「`App(callee, args)` の各引数と呼び出し先の対応するパラメータの型」が与える。上の表の `App` の行は
 その 2 つをそのまま読んだものである。
 
@@ -125,7 +221,87 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 ### DEF 触れうるオブジェクト
 
 `B` の節点 `n` について、`Obj(n) = ⋃_{(w, λ) ∈ Disp(n)} acted_on(w, λ)` と定める。P7c の言明の
-「その構文が触れうるオブジェクト (`acted_on`)」がこれである。
+「その構文が触れうるオブジェクト (D15 の `acted_on`)」がこれである。
+
+### DEF 解析にかかる本体
+
+本体 `B'` と、`B'` について `VarTable::of` か `VarTable::body_only` が作った表 `vars'` の組が
+**解析にかかる**とは、次の 4 つが成り立つことをいう。
+
+- **(1)** `B'` のどの `Match` も 1 つ以上のアームを持つ (A9 の形)。`B'` のどの `Match(s, arms)` に
+  ついても、`arms` が catch-all アームを持つか `s` の値が取りうる実行時のタグがいずれかのアームの
+  `tag` であり、catch-all アームは `arms` の最後にある (A16 の形)。
+- **(2)** `B'` に現れる型と、そこから `unpunched_field_types` を繰り返し取って到達する型は、どれも
+  A10 を満たす。
+- **(3)** `B'` の束縛変数の名前は相異なり、どの関数の名前とも異なる (A6 の形)。`B'` の変数の使用は
+  その位置でスコープに入っている束縛に解決する (A11 の形)。`B'` の束縛の形と型は A12 が挙げる
+  とおりに整合する。
+- **(4)** 任意の名前 `x` と任意の `FieldPath` `π` について、`origin(vars', type_env, x, π)` は
+  panic せずに答えを返し、停止する (P2 の結論)。
+
+**`L7a`・`L8` の (i) と (B)・`L8a` は、この条件の下で本体を量化する。** その 3 つが本体について読むのは
+この 4 つだけである。**量化をこの形に置くのは、`Pre(V)` (D35) -- `borrow_ify` の出力の版 `V` が
+書き換える前の本体 -- を主語に持つ段が在るからである。** `V` が借用版であるとき `Pre(V)` は
+`clone_func` が名前替えして作った中間の本体であり、`borrow_ify` の入力プログラムの本体でも出力
+プログラムの本体でもないので、入力や出力を主語とする仮定はそのままでは当たらない。
+`borrow_ify` の入力の各本体と `cancel` の入力の各本体がこの 4 つを満たすことは `L6a` が、
+`Pre(V)` が満たすことは `L16` の `<1>4` の中の `<2>1a` が示す。
+
+**(4) を条件に置くのは、P2 の言明が範囲を「プログラムの束縛変数であるか、`vars.bindings` に束縛を
+持たない名前」と書くからである。** `Pre(V)` の束縛名はその範囲に入ることを別に示す要がある。
+
+### 在りかの前提
+
+**コードのどこに何が在るかの数え上げは、段の中で行わない。** 記号を名指す `CODE` の引用はその記号の
+本体しか与えないので、「ほかの記号はそれをしない」の側はそこから出ない。以下の 3 つを名前つきの前提と
+して置き、`BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
+
+**果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
+`src/` の全体に走らせて、下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。走査は
+字面の上位近似なので、一覧には読みだけの項目も、別の識別子や散文の一部としてその字面を含む項目も入る。
+`#[cfg(test)]` の下の項目は走査が除く。
+
+**前提 `borrow_ify` と `cancel` の呼び出しの在りか** --- 自由関数 `borrow_ify` と `cancel` を呼ぶ式が
+在る項目は、それぞれの宣言のほかには `optimize_rc_program` だけである。
+
+SCAN src/ `borrow_ify(`
+  = src/build/build_object_files.rs: optimize_rc_program -- `prog = borrow_ify(&prog, type_env, config.develop_mode)`
+  = src/rc_ir/borrow.rs: borrow_ify -- 宣言
+
+SCAN src/ `cancel(`
+  = src/build/build_object_files.rs: optimize_rc_program -- `prog = cancel(&prog, type_env)`
+  = src/rc_ir/borrow.rs: cancel -- 宣言
+
+**前提 `walk_inner` の呼び出しの在りか** --- `CancelAnalysis::walk_inner` を呼ぶ式が在る項目は
+`CancelAnalysis::walk` だけである。走査は同じ字面を名前に含む `src/rc_ir/locality.rs` の
+別の型 `Walk` のメソッドも挙げる。
+
+SCAN src/ `walk_inner`
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk -- `grow_stack` へ渡す閉包の中の呼び出し
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk_inner -- 宣言
+  = src/rc_ir/locality.rs: Walk::walk -- 別の型 `Walk` の同名のメソッドの呼び出し
+  = src/rc_ir/locality.rs: Walk::walk_inner -- 別の型 `Walk` の同名のメソッドの宣言
+  = src/rc_ir/locality.rs: Walk::walk_rhs -- 別の型 `Walk` の同名のメソッドの呼び出し
+
+**前提 `declared_globals` の項目の在りか** --- `Generator` の `declared_globals` の欄を名指す式が在るのは、
+欄の宣言、空の写像を置く `Generator::new`、項目を入れる `Generator::add_global_object`、項目を読む
+`Generator::get_or_declare_global` である。**この表に項目を入れる式は `add_global_object` の `insert`
+だけである。**
+
+**前提 `levelled_sites` の呼び出しの在りか** --- 自由関数 `levelled_sites` を呼ぶ式が在る項目は、
+その宣言のほかには `infer_ownership` と `RewriteCtx::check_ownership_is_levelled` である。
+
+SCAN src/ `levelled_sites`
+  = src/rc_ir/borrow.rs: infer_ownership -- `prog.funcs` の各関数についての呼び出し
+  = src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled -- 借用版の書き換え前の本体についての呼び出し
+  = src/rc_ir/borrow.rs: levelled_sites -- 宣言
+
+SCAN src/ `declared_globals`
+  = src/generator.rs: Object::ptr_to_field_as -- `Scope` の doc の散文 (走査は直前の項目に付ける)
+  = src/generator.rs: Generator -- 欄の宣言と doc の散文
+  = src/generator.rs: Generator::new -- 空の写像を置く `Default::default()`
+  = src/generator.rs: Generator::add_global_object -- 既存の鍵の検査と `insert`
+  = src/generator.rs: Generator::get_or_declare_global -- 項目の読み
 
 ## 3. 証明する形
 
@@ -133,7 +309,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 
 > - **(a)** 終端の `Ret` 以外では、その節点の訪問が行う `consume_objects` と `un_bump` の呼び出しが名指す
 >   オブジェクトの**和**が、その構文が触れうるオブジェクト (D15 の `acted_on`) をすべて含む。とくに触れうる
->   オブジェクトが在れば、訪問はこの 2 つのどちらかを少なくとも 1 回呼ぶ。
+>   オブジェクトが在れば、訪問はこの 2 つのどちらかを少なくとも 1 回呼ぶ。 …
 > - **(b)** 終端の `Ret` では、その時点の `pending` のすべての要素を `needed_retains` に入れる。
 
 この文書の記法で書くと次のとおりである。第 5 節が示すのはこの形である。
@@ -169,9 +345,98 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   引数も `Obj(n)` を含まない。両者の**和**が含むことを述べるのが P5 (c) であり、`Release` の腕は
   その分担の上に立っている。
 
-## 4. 予備の補題
+## 4. 予備の命題
 
-### L1 (`walk` は `walk_inner` を 1 回呼ぶ)
+### L0 (`B` は `borrow_ify` の出力の本体であり、`origin` の答えは位置にも時点にもよらない) <!--#a500a92-->
+
+**言明**。次の 2 つが成り立つ。
+
+- **(i)** `cancel` の入力プログラム `p` は `borrow_ify` の出力である。したがって第 1 節が固定した本体 `B`
+  は `borrow_ify` の出力の本体である。
+- **(ii)** `B` の `vars`・`type_env` について、`origin(vars, type_env, x, π)` の返り値は、走査のどの
+  位置でも、活性化のどの時点でも同じ値である。
+
+**証明**
+
+<1>1. (i) が成り立ち、`vars` は `B` について `VarTable::of` か `VarTable::body_only` が作った表である。
+  BY EXT 可視性と私有性, EXT このリポジトリのターゲット, 前提 `borrow_ify` と `cancel` の呼び出しの在りか,
+     CODE src/build/build_object_files.rs: optimize_rc_program,
+     CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: cancel,
+     CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
+  `borrow_ify` と `cancel` はどちらも `pub(crate)` なので、`EXT 可視性と私有性` よりそれを名指せるのは
+  このクレートの中だけであり、`EXT このリポジトリのターゲット` よりそのクレートの項目は `src/` の
+  ファイルが宣言する。前提 `borrow_ify` と `cancel` の呼び出しの在りか より、その 2 つを呼ぶ式は
+  `optimize_rc_program` の `prog = borrow_ify(&prog, type_env, config.develop_mode);` と
+  `prog = cancel(&prog, type_env);` の 2 つで尽きる。その 2 つのあいだに在るのは
+  `validate(&prog, "after borrow_ify")` の 1 つだけであり、`prog` の束縛はそのまま `cancel` に渡る。
+  よって `cancel` の入力は `borrow_ify` の出力であり、第 1 節より `B` はその入力の本体である。
+  `cancel` は各関数について `VarTable::of(f)`、各グローバル初期化子について
+  `VarTable::body_only(&g.init)` を作り、第 1 節の `vars` はその 2 つのどちらかである。
+
+<1>2. `B` は A6 と A11 を満たす。
+  BY <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=63eadd9/>, <1>1
+  A6 と A11 は `borrow_ify` の入力について語る。A6 の脇は「出力について読む者は P9 と合わせて読む」と、
+  A11 の脇は「**この仮定が語るのは `borrow_ify` の入力である。** 出力についての同じ性質は、この仮定と
+  P9 から出る -- 複製の本体は原本の束縛変数を一斉に付け替えたものでそれ以外の違いを持たないので、
+  束縛と使用の対応がそのまま写る。」と定める。<1>1 より `B` は `borrow_ify` の出力の本体である。
+
+<1>3. (ii) が成り立つ。
+  BY <ref id=b1f6e13/>, <1>1, <1>2, CODE src/rc_ir/ownership.rs: origin
+  P2a は「**1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の値を固定する。** その 2 つを
+  第 1・第 2 引数とし、鍵 `(x, π)` が等しい 2 つの `origin` の呼び出しがどちらも値を返すならば、その
+  2 つの返り値は等しい。すなわち答えは `vars.origins` が保持する memo の状態に依らない」と述べ、
+  その制限を「**`vars` は、A6 と A11 を満たすプログラムの本体について `VarTable::of` か
+  `VarTable::body_only` が作った表である。**」と置いて、「**この制限は言明の一部であって、読む段が
+  自分で補うものではない。**」と続ける。<1>1 と <1>2 がその制限を満たす。第 1 節は `B` について
+  `vars` と `type_env` を 1 つずつ固定するので、走査の位置と活性化の時点で変わりうるのは
+  `vars.origins` の memo の状態だけであり (`origin` は答えをそこに記録して次の呼び出しに返す)、
+  P2a がその依存を否定する。
+
+<1>4. QED
+  BY <1>1, <1>3
+
+### L0a (P5 (c) が述べるのは `B` だけで定まる量の包含である) <!--#540b4ca-->
+
+**言明**。`B` の変数 `v` と `FieldPath` `π` について、P5 (c) の言明が名指す 3 つの量 --
+`ActRefs(v, π).objects()`、`Others(v, π)`、`π` の下の各 boxed leaf `λ` についての
+`acted_on(v, λ)` -- は、どれも `B`・`vars`・`type_env` と対 `(v, π)` だけで定まる。したがって
+P5 (c) が述べる包含 `⋃_{λ ∈ L(v, π)} acted_on(v, λ) ⊆ ActRefs(v, π).objects() ∪ Others(v, π)` は、
+`B` の活性化の選び方によらない 1 つの言明である。
+
+**この命題が要る場所。** P5 の言明は 1 つの本体 (D23) とその 1 回の活性化を固定して 3 つを述べる。
+(a) と (b) は実行路の位置とスロットを主語に持つが、(c) の主語は上の 3 つの量だけである。第 4 節の `L6`
+と第 5 節の `<1>12` は活性化を固定せずに P5 (c) を引くので、量化を外してよいことを述べるこの段が要る。
+
+**証明**
+
+<1>1. `ActRefs(v, π)` は `acted_references(vars, type_env, v, π)` であり、`Others(v, π)` は
+      `CancelAnalysis::other_objects(v, π)` の返す列を集合とみなしたものである。前者の値は
+      `vars`・`type_env`・`v`・`π` で決まり、後者は `boxed_leaf_paths(ty(v), type_env)` の各元 `λ` の
+      うち `π` を前置に持つものについて `origin(vars, type_env, v, λ)` を呼び、その `candidates()` から
+      `identity()` を除いた元を集める。
+  BY DEF ActRefs, DEF Others, EXT 写像と集合の基本演算,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects,
+     CODE src/rc_ir/ownership.rs: References::objects, CODE src/rc_ir/borrow.rs: cancel
+  `CancelAnalysis::acted_references(v, π)` は `acted_references(self.vars, self.type_env, v, π)` の値を
+  返し、`self.vars` と `self.type_env` は `B` について `cancel_body` が作ったものである。
+  `References::objects` は `self.0.keys().cloned().collect()` である。
+
+<1>2. `origin(vars, type_env, v, λ)` の返り値は、走査のどの位置でも、活性化のどの時点でも同じ値である。
+      よって <1>1 の 3 つの量はどれも `B`・`vars`・`type_env` と対 `(v, π)` だけで定まる。
+  BY <ref id=a500a92/>, <1>1, DEF L
+  L0 (ii) がこの一意性を与える。`L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の元のうち `π` を
+  前置に持つものの集合であり、`ty(v)` と `type_env` で決まる。`acted_on(v, λ)` は
+  `origin(v, λ).acted_on()` である。
+
+<1>3. QED
+  BY <ref id=0b3e0e1/>, <1>1, <1>2
+  P5 (c) は「`Release(v, π)` の走査が `un_bump` と `consume_objects` に渡すオブジェクトの和 --
+  すなわち `ActRefs(v, π).objects()` と `other_objects(v, π)` の和 -- は、`π` の下の各 boxed leaf `λ` に
+  ついて `origin(v, λ).acted_on()` をすべて含む」と述べる。
+  <1>2 よりその 3 つの量は活性化を読まないので、この包含は活性化の選び方によらない 1 つの言明である。
+
+### L1 (`walk` は `walk_inner` を 1 回呼ぶ) <!--#084b52a-->
 
 **言明**。`CancelAnalysis::walk(node, pending, returns_from_func)` の 1 回の呼び出しは、
 `CancelAnalysis::walk_inner(node, pending, returns_from_func)` をちょうど 1 回呼んでその値を返す。
@@ -183,9 +448,9 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 <1>2. `grow_stack(f)` の本体は `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` である。
   BY CODE src/misc.rs: grow_stack
 <1>3. QED
-  BY <1>1, <1>2, 外部の結果 stacker の `maybe_grow`
+  BY <1>1, <1>2, EXT stacker の maybe_grow
 
-### L2 (走査の再帰)
+### L2 (走査の再帰) <!--#82ee7e6-->
 
 **言明**。次の 2 つが成り立つ。
 
@@ -201,7 +466,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 <1>1. `B` の木の辺は次のものである。`Let(x, rhs, k)` から `k` へ、`rhs` が `Match(v, arms)` のときは
       さらに各 `arm.body` へ。`Retain(v, π, s, k)` / `Release(v, π, s, k)` / `Eval(v, k)` /
       `Destructure(c, fs, s, k)` から `k` へ。`Ret(v)` からはどこへも行かない。
-  BY D2, CODE src/rc_ir/ast.rs: for_each_node_inner
+  BY <ref id=b3dfa37/>, CODE src/rc_ir/ast.rs: for_each_node_inner
   D2 は本体を、継続の辺と `Match` のアーム本体の辺だけを持つ木と定める。`for_each_node_inner` の `match`
   の 3 つの腕が辿る辺の集合がこれと一致する。
 
@@ -230,22 +495,22 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
     (`CODE src/rc_ir/ast.rs: RcExpr`)。
 
 <1>3. (i) が成り立つ。
-  BY <1>2, L1
+  BY <1>2, <ref id=084b52a/>
   L1 より `walk(m, ·, ·)` の呼び出しは `m` の訪問 1 回に対応する。
 
 <1>4. `B` の訪問が 1 回起こり、それは辺を 0 本辿ったものである。
-  BY CODE src/rc_ir/borrow.rs: cancel, L1
+  BY CODE src/rc_ir/borrow.rs: cancel, <ref id=084b52a/>
   `cancel_body` が `analysis.walk(body, PendingRetains::default(), true)` を 1 回呼ぶ。
 
 <1>4a. 走査で起こる訪問 -- DEF 訪問の意味の `walk_inner` の呼び出し -- と `walk` の呼び出しは、
        1 対 1 に対応する。`walk(m, P, r)` の呼び出しに対応する訪問は `m` の訪問 `walk_inner(m, P, r)`
        である。
-  BY L1, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk,
+  BY <ref id=084b52a/>, 前提 `walk_inner` の呼び出しの在りか,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, DEF 訪問
   L1 より `walk` の 1 回の呼び出しは `walk_inner` をちょうど 1 回、同じ引数で呼ぶ。逆向きは、
-  `walk_inner` を呼ぶ位置が `walk` の本体の
-  `grow_stack(|| self.walk_inner(node, pending, returns_from_func))` ただ 1 か所だからである
-  (`src/rc_ir/borrow.rs` に `walk_inner` の呼び出しはこの 1 か所しかない)。
+  前提 `walk_inner` の呼び出しの在りか より、`walk_inner` を呼ぶ式が在るのが `walk` の本体の
+  `grow_stack(|| self.walk_inner(node, pending, returns_from_func))` だけだからである。
 
 <1>5. QED
   <1>1 と <1>3 と <1>4a より、`n` の訪問が起これば `n` から出る各辺の先の節点の訪問がちょうど 1 回ずつ
@@ -253,9 +518,9 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   読み替える。よって根からの辺の列と訪問が 1 対 1 に対応する。D2 より `B` は木なので、
   各節点への辺の列はちょうど 1 本であり、各節点の訪問はちょうど 1 回である。D2 より `B` は有限なので、
   この対応は辺の列の長さについての帰納で尽きる。基底は <1>4 と <1>4a である。
-  BY <1>1, <1>3, <1>4, <1>4a, L1, D2
+  BY <1>1, <1>3, <1>4, <1>4a, <ref id=084b52a/>, <ref id=b3dfa37/>
 
-### L3 (`returns_from_func` が真になる節点)
+### L3 (`returns_from_func` が真になる節点) <!--#744d6f1-->
 
 **言明**。`B` の節点 `n` の訪問 `walk_inner(n, P, r)` について、`r` が真であることと、`n` が `B` の根から
 継続の辺だけで到達できること (アーム本体の辺を 1 度も使わないこと) は同値である。とくに、`B` の終端の
@@ -264,11 +529,11 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 **証明**
 
 <1>1. 根 `B` の訪問では `r` は真である。根へは辺を 0 本辿って到達する。
-  BY CODE src/rc_ir/borrow.rs: cancel, L1
+  BY CODE src/rc_ir/borrow.rs: cancel, <ref id=084b52a/>
 
 <1>2. 継続の辺で進む `walk` の呼び出しは `returns_from_func` に呼び出し元の `r` をそのまま渡し、アーム
       本体の辺で進む `walk` の呼び出しは `false` を渡す。
-  BY L2
+  BY <ref id=82ee7e6/>
 
 <1>3. `B` の根から `n` への辺の列の長さについての帰納法により、`r` が真であることと、その列が継続の辺
       だけからなることは同値である。
@@ -280,7 +545,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
         列はアーム本体の辺を含む。
     BY <1>2
   <2>3. QED
-    BY <2>1, <2>2, L2
+    BY <2>1, <2>2, <ref id=82ee7e6/>
     L2 (ii) より、各節点の訪問はちょうど 1 回であり、その訪問へ至る呼び出しの入れ子は根からの辺の列に
     一致するので、`r` はその列だけで決まる。
 
@@ -288,9 +553,9 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   D3 より、`B` の実行路の最後の節点である終端の `Ret` は、`B` の根から継続の辺だけで到達する節点である
   (D3 の第 1 の規則が継続へ進み、第 2 の規則がアーム本体を辿った後に `Match` の継続 `k` へ戻る)。
   アーム本体の中の `Ret` へは、そのアーム本体の辺を少なくとも 1 度使う。
-  BY <1>3, D3
+  BY <1>3, <ref id=ca36627/>
 
-### L4 (`consume` は leaf の `acted_on` を渡す)
+### L4 (`consume` は leaf の `acted_on` を渡す) <!--#c6d6ecd-->
 
 **言明**。`CancelAnalysis::consume(pending, var, path)` は `consume_objects` を 1 回呼び、その呼び出しが
 名指すオブジェクトは `acted_on(var, path)` である。
@@ -309,7 +574,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   名指すオブジェクトより、`consume_objects` の呼び出しが名指すオブジェクトは `objects` の元の全体である。
   BY <1>1, <1>2, DEF 呼び出しが名指すオブジェクト
 
-### L5 (`Release` の訪問が行う呼び出し)
+### L5 (`Release` の訪問が行う呼び出し) <!--#6ced3f0-->
 
 **言明**。`n = Release(v, π, s, k)` の訪問は、次の順で呼び出しを行う。
 
@@ -331,41 +596,47 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Release` の腕
 
 <1>2. `other_objects(v, π)` の返り値の元の全体は `Others(v, π)` である。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, 第 1 節の記法
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects, DEF Others
 
 <1>3. `CancelAnalysis::acted_references(v, π)` は `acted_references(self.vars, self.type_env, v, π)` の
       値をそのまま返す (空でないことを表明した後で)。`self.vars` と `self.type_env` は `B` のものである。
   BY CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references, CODE src/rc_ir/borrow.rs: cancel
 
 <1>4. QED
-  BY <1>1, <1>2, <1>3, 第 1 節の記法
+  BY <1>1, <1>2, <1>3, DEF ActRefs
+  <1>3 の `self.acted_references(v, π)` は `self.vars`・`self.type_env` が `B` のものなので
+  `acted_references(vars, type_env, v, π)` であり、DEF ActRefs よりそれは `ActRefs(v, π)` である。
 
-### L6 (`Release` の訪問の後に `pending` に残るもの)
+### L6 (`Release` の訪問の後に `pending` に残るもの) <!--#f710a7d-->
 
 **言明**。`n = Release(v, π, s, k)` の訪問において、`un_bump` の呼び出しが `UnBump::NoBracket` または
 `UnBump::OutsideBracket` を返すならば、訪問がその後 `self.walk(k, pending, ·)` に渡す `pending` の
 どの要素も、`Obj(n)` のどのオブジェクトも名指さない。
 
-この補題は P7c の言明には無い。P18a が要る形として置く。
+この命題は P7c の言明には無い。P7f が要る形として置く -- 第 6 節がこれから P7f を出す。
 
 **証明**
 
 <1>1. `consume_objects(pending, objects)` の呼び出しの後、`pending` のどの要素も `objects` のどの
       オブジェクトも名指さない。またこの呼び出しは `pending` の要素を落とすだけで、残る要素の
       `outstanding` を変えない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, 外部の結果 `Vec::retain`
-  本体は `pending.retain(...)` であり、述語は `objects` のいずれかを `outstanding.names` が真とする要素に
-  ついて `false` を返す。`retain` は `false` を返した要素を落とし、他の要素はそのまま残す。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain,
+     EXT Iterator::any, DEF 要素が名指すオブジェクト
+  本体は `pending.retain(...)` であり、その述語は `objects.iter().any(|object|
+  retain.outstanding.names(object))` が真の要素について `false` を返す。`retain` は `false` を返した
+  要素を落とし、他の要素はそのまま残す。
+  DEF 要素が名指すオブジェクト より、その述語が真であることは要素がそのオブジェクトを名指すことである。
 
 <1>2. `Obj(n) ⊆ ActRefs(v, π).objects() ∪ Others(v, π)` である。
-  BY P5, DEF 処分 leaf, DEF 触れうるオブジェクト
+  BY <ref id=0b3e0e1/>, <ref id=540b4ca/>, DEF 処分 leaf, DEF 触れうるオブジェクト
   DEF 処分 leaf の `Release` の行と DEF 触れうるオブジェクトより
   `Obj(n) = ⋃_{λ ∈ L(v, π)} acted_on(v, λ)` である。P5 (c) が、`ActRefs(v, π).objects()` と
   `other_objects(v, π)` の和が `π` の下の各 boxed leaf `λ` について `origin(v, λ).acted_on()` をすべて
-  含むと述べる。`π` の下の boxed leaf の全体は `L(v, π)` である (第 1 節の記法)。
+  含むと述べる。`π` の下の boxed leaf の全体は `L(v, π)` である (第 1 節の記法)。この命題は活性化を
+  固定しないが、`L0a` より P5 (c) の包含は活性化の選び方によらない 1 つの言明である。
 
 <1>3. `un_bumped.objects()` の元の全体は `ActRefs(v, π).objects()` の元の全体である。
-  BY L5
+  BY <ref id=6ced3f0/>
 
 <1>4. CASE `un_bump` が `UnBump::NoBracket` を返す。
   <2>1. `un_bump` は `pending` を変えずに返る。
@@ -373,23 +644,25 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
     `NoBracket` を返すのは `pending.iter().rposition(...)` が `None` を返した枝であり、そこまでに
     `pending` への書き込みは無い。
   <2>2. `pending` のどの要素 `r` についても `r.outstanding.shares_an_object(un_bumped)` は偽である。
-    BY CODE src/rc_ir/borrow.rs: un_bump
-    `Iterator::rposition` が `None` を返すのは、述語がどの要素についても偽のときである。
+    BY CODE src/rc_ir/borrow.rs: un_bump, EXT Iterator::rposition
+    この場合の仮定より `pending.iter().rposition(|retain| retain.outstanding
+    .shares_an_object(un_bumped))` は `None` を返す。
   <2>3. `r.outstanding.shares_an_object(un_bumped)` が偽であることは、`un_bumped.objects()` のどの
         オブジェクト `o` についても `r.outstanding.names(o)` が偽であることと同値である。
-    BY CODE src/rc_ir/ownership.rs: References::shares_an_object, References::objects, References::names
+    BY CODE src/rc_ir/ownership.rs: References::shares_an_object, References::objects,
+       References::names, EXT Iterator::any, EXT 写像と集合の基本演算
     `shares_an_object` は `other.0.keys().any(|object| self.0.contains_key(object))`、`objects` は
     `self.0.keys()` の複製、`names` は `self.0.contains_key` である。
   <2>4. 訪問が `walk(k, pending, ·)` に渡す `pending` は、L5 の 1 の呼び出しの後で、かつ <2>1 により
         変わらなかったものである。
-    BY L5, <2>1
+    BY <ref id=6ced3f0/>, <2>1
     L5 の 3 はこの場合には呼び出しを行わない。
   <2>5. QED
     その `pending` のどの要素も、<2>2 と <2>3 より `un_bumped.objects()` のどのオブジェクトも名指さず、
     <1>1 より `Others(v, π)` のどのオブジェクトも名指さない (L5 の 1 の `others` の元の全体が
     `Others(v, π)` である)。<1>3 より前者は `ActRefs(v, π).objects()` であり、<1>2 より
     `Obj(n)` はこの 2 つの和に含まれる。
-    BY <1>1, <1>2, <1>3, <2>2, <2>3, <2>4, L5
+    BY <1>1, <1>2, <1>3, <2>2, <2>3, <2>4, <ref id=6ced3f0/>
 
 <1>5. CASE `un_bump` が `UnBump::OutsideBracket` を返す。
   <2>1. `un_bump` は `pending` を変えずに返る。
@@ -398,13 +671,13 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
     `pending` への書き込みは無い (`&mut pending[index]` を取るだけである)。
   <2>2. 訪問は続けて `self.consume_objects(&mut pending, &un_bumped.objects())` を呼び、その後
         `walk(k, pending, ·)` を呼ぶ。
-    BY L5
+    BY <ref id=6ced3f0/>
   <2>3. <2>2 の `consume_objects` の後、`pending` のどの要素も `un_bumped.objects()` のどのオブジェクトも
         名指さない。
     BY <1>1, <2>2
   <2>4. <2>2 の `consume_objects` の後も、`pending` のどの要素も `Others(v, π)` のどのオブジェクトも
         名指さない。
-    BY <1>1, <2>1, <2>2, L5
+    BY <1>1, <2>1, <2>2, <ref id=6ced3f0/>
     L5 の 1 の呼び出しの後にこの性質が成り立ち (<1>1、`others` の元の全体は `Others(v, π)`)、その後に
     `pending` に起きたのは <2>1 の「変えない」と <2>2 の `consume_objects` による要素の除去だけである。
     要素を落とす操作は「どの要素も名指さない」を壊さない (<1>1 の後半より、残る要素の `outstanding` は
@@ -419,36 +692,63 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   BY <1>4, <1>5
   言明が `un_bump` の返り値を `NoBracket` か `OutsideBracket` かに限っており、この 2 つが場合を尽くす。
 
-### P7f (L6 から)
+### L6a (`borrow_ify` と `cancel` の入力の本体は解析にかかる) <!--#98f3fa1-->
 
-**言明** (README 第 5 節)。「`Release` の訪問について、`un_bump` が `NoBracket` か `OutsideBracket` を
-返したとき、その訪問の後の `pending` のどの要素の `outstanding` も、その `Release` が触れうるオブジェクトの
-どれも名指さない。」
+**言明**。`borrow_ify` の入力プログラムの各本体 (D23) と `cancel` の入力プログラムの各本体は、それに
+ついて `VarTable::of` か `VarTable::body_only` が作った表とともに、DEF 解析にかかる本体 の意味で
+解析にかかる。とくに第 1 節が固定した `B` と `vars` の組は解析にかかる。
 
 **証明**
 
-<1>1. QED
-  BY L6, L5, DEF 触れうるオブジェクト, DEF 処分 leaf, P7c
-  L6 の言明は「`n = Release(v, π, s, k)` の訪問において、`un_bump` の呼び出しが `UnBump::NoBracket` または
-  `UnBump::OutsideBracket` を返すならば、訪問がその後 `self.walk(k, pending, ·)` に渡す `pending` の
-  どの要素も、`Obj(n)` のどのオブジェクトも名指さない」である。「訪問の後の `pending`」とは `walk(k, ·, ·)`
-  に渡すものである (L5 の 4)。「その `Release` が触れうるオブジェクト」とは、DEF 触れうるオブジェクトと
-  DEF 処分 leaf の `Release` の行より `Obj(n) = ⋃_{λ ∈ L(v, π)} acted_on(v, λ)` である。これは P7c の
-  言明が「その構文が触れうるオブジェクト」と呼ぶものと同じ量である。「要素が名指す」とは
-  `outstanding.names` が真であることである (L6 の <1>1)。よって 2 つの言明は同じことを述べている。
+<1>1. どちらの側の本体も (1) を満たす。
+  BY <ref id=1172c08/>, <ref id=f769887/>
+  A9 は「`borrow_ify` の入力プログラムのすべての `Match` は 1 つ以上のアームを持つ。`borrow_ify` と
+  `cancel` はアームを持たない `Match` を作らないので (P22、P24)、`cancel` の入力と出力についても
+  同じことが言える」と述べる。A16 は「すべての `Match(s, arms)` について、`arms` が catch-all アーム
+  (`tag` が `None`) を持つか、`s` の値が取りうる実行時のタグがいずれかのアームの `tag` である」と述べ、
+  「**catch-all アームは `arms` の最後にある。**」と続ける。A16 は主語をどちらかのプログラムに限らない。
+
+<1>2. どちらの側の本体も (2) を満たす。
+  BY <ref id=8412761/>
+  A10 は「プログラムに現れる型は ground であり、**その tycon に kind の要求するだけの引数が
+  与えられており**、その tycon は `type_env` にあり、`no_size_in_place` の in-place の降下は有限で
+  ある」と述べ、「**その降下で到達する型も ground であり、tycon が `type_env` にある。**」と続ける。
+  本体に現れる型はそのプログラムに現れる型である。
+
+<1>3. どちらの側の本体も (3) を満たす。
+  BY <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=63eadd9/>, <ref id=a500a92/>
+  A6 と A11 は `borrow_ify` の入力について語るので、入力の側はそのまま満たす。`L0` (i) より
+  `cancel` の入力は `borrow_ify` の出力であり、A6 の脇は「出力について読む者は P9 と合わせて読む」と、
+  A11 の脇は「**この仮定が語るのは `borrow_ify` の入力である。** 出力についての同じ性質は、この仮定と
+  P9 から出る -- 複製の本体は原本の束縛変数を一斉に付け替えたものでそれ以外の違いを持たないので、
+  束縛と使用の対応がそのまま写る。」と述べて、その 2 つを出力へ渡す。A12 は主語をどちらかの
+  プログラムに限らない。
+
+<1>4. どちらの側の本体も (4) を満たす。
+  BY <ref id=0edb0ba/>
+  P2 は「`origin(x, π)` は、`x` がプログラムの束縛変数であるか、`vars.bindings` に束縛を持たない名前
+  (D6 の第 3 の形) であるようなすべての `(x, π)` について、`π` を問わず panic せずに答えを返し、
+  停止する」と述べ、「**この 2 つの場合で名前は尽きる。第 2 の場合は、`vars.bindings` に束縛を持たない
+  任意の名前である。**」と続ける。どちらの側の本体もそのプログラムの本体なので、その表の下で
+  すべての名前がこの範囲に入る。
+
+<1>5. QED
+  BY <1>1, <1>2, <1>3, <1>4, <ref id=a500a92/>, DEF 解析にかかる本体
+  `L0` (i) と第 1 節より `B` は `cancel` の入力プログラムの本体であり、`vars` はそれについて
+  `VarTable::of` か `VarTable::body_only` が作った表である。
 
 ## 5. P7c の証明
 
 <1>1. `B` の各節点 `n` の訪問はちょうど 1 回起こる。
-  BY L2
+  BY <ref id=82ee7e6/>
 
 <1>2. CASE `n` の式が `RcExpr::Retain(v, path, _, k)` である。
   <2>1. `Disp(n)` は空であり、よって `Obj(n)` も空である。
-    BY DEF 処分 leaf, DEF 触れうるオブジェクト, D9, D10
+    BY DEF 処分 leaf, DEF 触れうるオブジェクト, <ref id=9d74736/>, <ref id=f06144e/>
     DEF 処分 leaf の表に `Retain` の行は無い。D9 の消費の表にも移動の表にも `Retain` の行は無く、D9 の
     最後の段落が `Retain` は D10 が直接扱うと述べる。D10 の `Retain` の行は参照を**加える**。
   <2>2. `n` は `B` の終端の `Ret` ではない。
-    BY D2
+    BY <ref id=b3dfa37/>
     D2 より `Retain` と `Ret` は `RcExpr` の相異なる種である。
   <2>3. QED
     空集合はどんな和にも含まれる。よって P7c (a) が成り立つ。
@@ -456,32 +756,32 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 
 <1>3. CASE `n` の式が `RcExpr::Eval(v, k)` である。
   <2>1. `Disp(n)` は空であり、よって `Obj(n)` も空である。
-    BY DEF 処分 leaf, DEF 触れうるオブジェクト, D9
+    BY DEF 処分 leaf, DEF 触れうるオブジェクト, <ref id=9d74736/>
     DEF 処分 leaf の表に `Eval` の行は無い。D9 の最後の段落が「`Eval(v, k)` … は、参照を作らず、移さず、
     手放さない」と述べる。
   <2>2. `n` は `B` の終端の `Ret` ではない。
-    BY D2
+    BY <ref id=b3dfa37/>
   <2>3. QED
     BY <2>1, <2>2
 
 <1>4. CASE `n` の式が `RcExpr::Let(x, RcRhs::Var(y), k)` である。
   <2>1. `Disp(n)` は空であり、よって `Obj(n)` も空である。
-    BY DEF 処分 leaf, DEF 触れうるオブジェクト, D9
+    BY DEF 処分 leaf, DEF 触れうるオブジェクト, <ref id=9d74736/>
     DEF 処分 leaf の表に `Var` の行は無い。D9 の移動の表の第 1 行が `Let(x, Var(y), k)` を移動とし、
     消費の表に `Var` の行は無い。移動は義務集合を変えない。
   <2>2. `n` は `B` の終端の `Ret` ではない。
-    BY D2
+    BY <ref id=b3dfa37/>
   <2>3. QED
     BY <2>1, <2>2
 
 <1>5. CASE `n` の式が `RcExpr::Let(x, RcRhs::Match(v, arms), k)` である。
   <2>1. `Disp(n)` は空であり、よって `Obj(n)` も空である。
-    BY DEF 処分 leaf, DEF 触れうるオブジェクト, D9
+    BY DEF 処分 leaf, DEF 触れうるオブジェクト, <ref id=9d74736/>, <ref id=f06144e/>
     DEF 処分 leaf の表に `Match` の行は無い。D9 の最後の段落が「`Let(x, Match(v, arms), k)` の `Match`
     節点自身は、参照を作らず、移さず、手放さない」と述べる。アームの payload 束縛とアーム本体の `Ret` は
     この節点ではなくアームの側の構文であり、それぞれ D10 の生成の表と D9 の移動の表が扱う。
   <2>2. `n` は `B` の終端の `Ret` ではない。
-    BY D2
+    BY <ref id=b3dfa37/>
   <2>3. QED
     BY <2>1, <2>2
 
@@ -489,11 +789,11 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   <2>1. `B` の継続の鎖 -- `B` の根から始まる鎖と、各 `Match` の各アーム本体の根から始まる鎖 -- は、
         どれもちょうど 1 つの `Ret` で終わり、その鎖の他の節点は `Ret` ではない。`B` の各 `Ret` 節点は、
         ちょうど 1 つの鎖の最後の節点である。
-    BY D2
+    BY <ref id=b3dfa37/>
     D2 より `Ret` は継続を持たない唯一の種であり、他の 5 種はちょうど 1 つの継続を持つ。D2 より `B` は
     有限なので、各鎖は有限であり、`Ret` で終わる。
   <2>2. `B` の根から始まる鎖の最後の `Ret` が `B` の終端の `Ret` である。
-    BY D3, <2>1
+    BY <ref id=ca36627/>, <2>1
     D3 の第 1 の規則が継続へ進み、第 2 の規則がアーム本体を辿った後に `Match` の継続へ戻るので、実行路の
     最後の節点は `B` の根から始まる鎖の最後の節点である。
   <2>3. `n` はあるアーム本体の根から始まる鎖の最後の `Ret` である。
@@ -502,7 +802,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
     <2>1 よりその鎖の他の位置にも `Ret` は無い。<2>1 より `n` はどれか 1 つの鎖の最後の節点なので、
     その鎖はアーム本体の根から始まる鎖である。
   <2>4. `Disp(n)` は空であり、よって `Obj(n)` も空である。
-    BY DEF 処分 leaf, DEF 触れうるオブジェクト, D9, <2>3
+    BY DEF 処分 leaf, DEF 触れうるオブジェクト, <ref id=9d74736/>, <2>3
     DEF 処分 leaf の `Ret` の行は `B` の終端の `Ret` だけを挙げる。D9 の移動の表の第 2 行が、アーム本体の
     `Ret(x)` を移動とする。
   <2>5. QED
@@ -510,7 +810,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 
 <1>7. CASE `n` の式が `RcExpr::Ret(v)` であり、`n` が `B` の終端の `Ret` である。
   <2>1. `n` の訪問 `walk_inner(n, P, r)` では `r` が真である。
-    BY L3
+    BY <ref id=744d6f1/>
   <2>2. `RcExpr::Ret(_)` の腕は、`returns_from_func` が真のとき `pending` の各要素 `retain` について
         `self.needed_retains.insert(retain.node)` を行う。
     BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
@@ -521,9 +821,10 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
 
 <1>8. CASE `n` の式が `RcExpr::Let(x, RcRhs::App(callee, args), k)` である。
   <2>1. `n` の訪問は `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼ぶ。
-    BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
-    `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕が先に置かれているので、右辺が `Match` でない `Let` は
-    次の `RcExpr::Let(x, rhs, k)` の腕に来る。
+    BY EXT match は最初に一致した腕を取る, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner
+    `walk_inner` の `match` は `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕を
+    `RcExpr::Let(x, rhs, k)` の腕より前に置く。`EXT match は最初に一致した腕を取る` より腕は書かれた順に
+    試されるので、右辺が `Match` でない `Let` は後ろの `RcExpr::Let(x, rhs, k)` の腕に来る。
   <2>2. `consume_rhs(pending, rhs, result_ty)` は、空の `consumed` を作り、`rhs_consumes(rhs, result_ty,
         self.vars, self.prog, self.type_env, &owns, &mut consumed)` を呼び、`consumed` の各元
         `(var, leaf)` について `self.consume(pending, &var, &leaf)` を呼ぶ。`consumed` は `rhs_consumes`
@@ -538,7 +839,7 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
         `is_owning_position` が真ならば `(a_i.name, λ)` を `out` に入れる。`is_owning_position` は、
         `resolve_callee_params(callee, vars, prog)` が `Some(params)` を返すときは `owns(&params[i], &λ)`、
         `None` を返すときは真である。
-    BY CODE src/rc_ir/ownership.rs: rhs_consumes, CODE src/rc_ir/ownership.rs: push_boxed_leaves, A14
+    BY CODE src/rc_ir/ownership.rs: rhs_consumes, CODE src/rc_ir/ownership.rs: push_boxed_leaves, <ref id=f8ae607/>
     `push_boxed_leaves(var, ty, type_env, out)` は `boxed_leaf_paths(ty, type_env)` の各元 `p` について
     `(var.clone(), p)` を `out` に入れる。A14 より `args.len() <= params.len()` なので `params[i]` は
     範囲内である。
@@ -560,10 +861,12 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
         BY CODE src/rc_ir/ownership.rs: resolve_callee_params
       <4>1a. `n` の段の**実行時の**呼び出し先 (D23) を `g` と書くと、`g` は `prog` の `funcs` の関数で
              あり、そのパラメータの列は `params` である。
-        BY P30, <2>4, <4>1, D23
-        第 1 節より `B` は `cancel` の入力、すなわち `borrow_ify` の出力の本体であり、`prog` はその
-        プログラムである。<2>4 と <4>1 より `params` は `resolve_callee_params(callee, vars, prog)` の
-        返り値である。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
+        BY <ref id=561540d/>, <2>4, <4>1, <ref id=ff5985d/>, <ref id=a500a92/>
+        第 1 節より `B` は `cancel` の入力の本体であり、`prog` はそのプログラムである。`L0` (i) は
+        「`cancel` の入力プログラム `p` は `borrow_ify` の出力である」と述べるので、`prog` は
+        `borrow_ify` の出力である。
+        <2>4 と <4>1 より
+        `params` は `resolve_callee_params(callee, vars, prog)` の返り値である。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
         `resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の呼び出し先
         (D23) と同じ `RcFunc` である。`cancel` の中で `CancelAnalysis::consume_rhs` が `rhs_consumes` を
         呼ぶ位置がこれを読む」と述べる。`n` はまさにその位置である。`g` が `prog` の
@@ -573,16 +876,16 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
       <4>2. `Disp(n)` の引数の側の元 `(a_i, λ)` とは、`λ ∈ L(a_i)` であって、`g` が `g` の第 `i`
             パラメータ `p_i = params[i]` の unit `u = truncate_to_unit(ty(p_i), λ, type_env)` を所有する
             ものである。また A12 より `ty(a_i) = ty(p_i)` であり、`λ` は `ty(p_i)` の boxed leaf である。
-        BY DEF 処分 leaf, A12, <4>1a
+        BY DEF 処分 leaf, <ref id=83d98e9/>, <ref id=9d74736/>, <ref id=ff5985d/>, <4>1a
         DEF 処分 leaf の `App` の行は D9 の `App` の行を読んだものであり、そこで言う「呼び出し先」は
         実行時のもの `g` である (D23)。<4>1a より `g` のパラメータの列は `params` なので、その第 `i`
         パラメータは `params[i]` である。A12 は「`App(callee, args)` の各引数と呼び出し先の対応する
         パラメータの型」の一致を挙げる。
       <4>3. D14 より、`g` が `u` を所有するとは、`u` が `rc_units(ty(p_i))` の元であって
             `(p_i.name, u)` が `g` の `borrowed_units` に入らないことである。
-        BY D14
+        BY <ref id=ef8efc4/>
       <4>4. `u = truncate_to_unit(ty(p_i), λ, type_env)` は `rc_units(ty(p_i))` の元である。
-        BY P1, A10, <4>2
+        BY <ref id=3597669/>, <ref id=8412761/>, <4>2
         P1 は、**A10 を満たす**任意の型 `τ` の各 boxed leaf の `truncate_to_unit(τ, ・)` が
         `rc_units(τ)` の元であると述べる。`ty(p_i)` は `prog` の関数のパラメータの型、すなわち
         プログラムに現れる型なので A10 を満たす -- A10 は「プログラムに現れる型は ground であり、**その
@@ -610,15 +913,15 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
       <3>3 が扱う。
   <2>6. 訪問が行う `consume_objects` の呼び出しが名指すオブジェクトの和は、<2>4 が `out` に入れる各
         `(w, λ)` についての `acted_on(w, λ)` の和を含む。
-    BY <2>1, <2>2, <2>4, L4
+    BY <2>1, <2>2, <2>4, <ref id=c6d6ecd/>
     <2>2 より `consumed` の各元について `consume` が呼ばれ、L4 よりその各呼び出しは `acted_on(w, λ)` を
     名指す `consume_objects` を 1 回行う。
   <2>7. `n` は `B` の終端の `Ret` ではない。
-    BY D2
+    BY <ref id=b3dfa37/>
   <2>8. QED
     <2>5 より `Disp(n)` は <2>4 の集合に含まれるので、`Obj(n) = ⋃_{(w, λ) ∈ Disp(n)} acted_on(w, λ)` は
     <2>6 の和に含まれる。これが P7c (a) である。
-    BY <2>5, <2>6, <2>7, DEF 触れうるオブジェクト
+    BY <2>4, <2>5, <2>6, <2>7, DEF 触れうるオブジェクト
 
 <1>9. CASE `n` の式が `RcExpr::Let(x, RcRhs::Closure(f, caps), k)` である。
   <2>1. `n` の訪問は `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼び、`consume_rhs` は空の
@@ -635,9 +938,9 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
     `L(c) = boxed_leaf_paths(ty(c), type_env)` である。
   <2>4. 訪問が行う `consume_objects` の呼び出しが名指すオブジェクトの和は、<2>2 が `out` に入れる各
         `(w, λ)` についての `acted_on(w, λ)` の和を含む。
-    BY <2>1, <2>2, L4
+    BY <2>1, <2>2, <ref id=c6d6ecd/>
   <2>5. `n` は `B` の終端の `Ret` ではない。
-    BY D2
+    BY <ref id=b3dfa37/>
   <2>6. QED
     BY <2>3, <2>4, <2>5, DEF 触れうるオブジェクト
 
@@ -656,21 +959,26 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   <2>3. `passthrough_arg_leaves(llvm_gen, result_ty, args, type_env)` が返す集合は、
         `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の結果 leaf のうち、その `LeafOrigins` が
         ちょうど 1 元であってその元が `LeafOrigin::Arg(j, σ)` であるものについての `(j, σ)` の全体である。
-    BY CODE src/rc_ir/ownership.rs: passthrough_arg_leaves,
+    BY <ref id=e11772a/>, EXT 写像と集合の基本演算, CODE src/rc_ir/ownership.rs: passthrough_arg_leaves,
        CODE src/rc_ir/ownership.rs: as_arg_projection,
-       CODE src/rc_ir/provenance.rs: Provenance::leaves
-    `leaves()` は各 boxed leaf の `LeafOrigins` を渡し、`as_arg_projection` は元の個数が 1 でない集合と、
-    唯一の元が `Fresh` か `Unknown` である集合に `None` を返す。
+       CODE src/rc_ir/provenance.rs: Provenance::leaves,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::leaves,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape
+    `Provenance::leaves` の本体は `self.0.leaves()` であり、`LeafMap::leaves` の本体は `self.0.values()`
+    である。A3 より `result_prov` が返す `Provenance` はその型の各 boxed leaf に `LeafOrigins` を置いた
+    ものであり、`LeafMap::build_shape` はその鍵を `boxed_leaf_paths(ty, type_env)` に取るので、
+    `leaves()` が渡すのは各 boxed leaf の `LeafOrigins` である。`as_arg_projection` は元の個数が
+    1 でない集合と、唯一の元が `Fresh` か `Unknown` である集合に `None` を返す。
   <2>4. `Disp(n)` は <2>2 が `out` に入れる集合に等しい。
     BY <2>2, <2>3, DEF 処分 leaf
     DEF 処分 leaf の `Llvm` の行の条件「`borrows_operand(i)` が偽であり、かつ `result_prov` のどの結果
-    leaf も 1 元集合 `{Arg(i, λ)}` としては宣言していない」は、<2>3 により <2>2 の条件
-    「`borrows_operand(i)` が偽であり、かつ `passthrough` が `(i, λ)` を含まない」に一致する。
+    leaf も 1 元集合 `{Arg(i, λ)}` としては宣言していない」は、<2>3 により <2>2 が `out` に入れる条件 --
+    `borrows_operand(i)` が偽であり、かつ `passthrough` が `(i, λ)` を含まないこと -- に一致する。
   <2>5. 訪問が行う `consume_objects` の呼び出しが名指すオブジェクトの和は、<2>2 が `out` に入れる各
         `(w, λ)` についての `acted_on(w, λ)` の和を含む。
-    BY <2>1, <2>2, L4
+    BY <2>1, <2>2, <ref id=c6d6ecd/>
   <2>6. `n` は `B` の終端の `Ret` ではない。
-    BY D2
+    BY <ref id=b3dfa37/>
   <2>7. QED
     BY <2>4, <2>5, <2>6, DEF 触れうるオブジェクト
 
@@ -688,9 +996,9 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
     DEF 処分 leaf の `Destructure` の 2 行が、boxed と unbox のそれぞれについて <2>2 と同じ集合を挙げる。
   <2>4. 訪問が行う `consume_objects` の呼び出しが名指すオブジェクトの和は、
         `⋃_{leaf ∈ destructure_consumes(...)} acted_on(container.name, leaf)` を含む。
-    BY <2>1, L4
+    BY <2>1, <ref id=c6d6ecd/>
   <2>5. `n` は `B` の終端の `Ret` ではない。
-    BY D2
+    BY <ref id=b3dfa37/>
   <2>6. QED
     BY <2>3, <2>4, <2>5, DEF 触れうるオブジェクト
 
@@ -698,24 +1006,25 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
   <2>1. `n` の訪問は `self.consume_objects(&mut pending, &others)` を呼び、その後
         `un_bump(&mut pending, &un_bumped)` を呼ぶ。`others` の元の全体は `Others(v, path)` であり、
         `un_bumped` は `ActRefs(v, path)` である。
-    BY L5
+    BY <ref id=6ced3f0/>
   <2>2. この 2 つの呼び出しが名指すオブジェクトの和は `Others(v, path) ∪ ActRefs(v, path).objects()` に
         等しい。
     BY <2>1, DEF 呼び出しが名指すオブジェクト
   <2>3. `Obj(n) = ⋃_{λ ∈ L(v, path)} acted_on(v, λ)` である。
     BY DEF 処分 leaf, DEF 触れうるオブジェクト
   <2>4. `Obj(n) ⊆ ActRefs(v, path).objects() ∪ Others(v, path)` である。
-    BY P5, <2>3
+    BY <ref id=0b3e0e1/>, <ref id=540b4ca/>, <2>3
     P5 (c) が、`ActRefs(v, π).objects()` と `other_objects(v, π)` の和が `π` の下の各 boxed leaf `λ` に
     ついて `origin(v, λ).acted_on()` をすべて含むと述べる。`π` の下の boxed leaf の全体は `L(v, path)` で
-    ある (第 1 節の記法)。
+    ある (第 1 節の記法)。この節は活性化を固定しないが、`L0a` より P5 (c) の包含は活性化の選び方に
+    よらない 1 つの言明である。
   <2>5. `n` は `B` の終端の `Ret` ではない。
-    BY D2
+    BY <ref id=b3dfa37/>
   <2>6. QED
     <2>1 の 2 つの呼び出しは、訪問が行う `consume_objects` と `un_bump` の呼び出しのうちの 2 つである
     (L5 によれば 3 つ目がありうる)。よって訪問が行う呼び出しが名指すオブジェクトの和は <2>2 の集合を
     含み、<2>4 よりその集合は `Obj(n)` を含む。これが P7c (a) である。
-    BY <2>1, <2>2, <2>4, <2>5, L5
+    BY <2>1, <2>2, <2>4, <2>5, <ref id=6ced3f0/>
 
 <1>13. QED
   <2>1. `RcExpr` はちょうど 6 種を持つ。`Let`、`Retain`、`Release`、`Destructure`、`Eval`、`Ret`。
@@ -736,17 +1045,38 @@ D23 の意味の本体 -- ある関数の `body` か、あるグローバル初�
     P7c (a) を示している。
     BY <1>1, <2>1, <2>2, <2>3, <2>4, <2>5
 
+## 6. P7f
+
+**言明** (README 第 5 節)。「`Release` の訪問について、`un_bump` が `NoBracket` か `OutsideBracket` を
+返したとき、その訪問の後の `pending` のどの要素の `outstanding` も、その `Release` が触れうるオブジェクトの
+どれも名指さない。」
+
+**証明**
+
+<1>1. QED
+  BY <ref id=f710a7d/>, <ref id=6ced3f0/>, DEF 触れうるオブジェクト, DEF 処分 leaf, DEF 要素が名指すオブジェクト, <ref id=76503e0/>
+  L6 の言明は「`n = Release(v, π, s, k)` の訪問において、`un_bump` の呼び出しが `UnBump::NoBracket` または
+  `UnBump::OutsideBracket` を返すならば、訪問がその後 `self.walk(k, pending, ·)` に渡す `pending` の
+  どの要素も、`Obj(n)` のどのオブジェクトも名指さない」である。「訪問の後の `pending`」とは `walk(k, ·, ·)`
+  に渡すものである (L5 の 4)。「その `Release` が触れうるオブジェクト」とは、DEF 触れうるオブジェクトと
+  DEF 処分 leaf の `Release` の行より `Obj(n) = ⋃_{λ ∈ L(v, π)} acted_on(v, λ)` である。これは P7c の
+  言明が「その構文が触れうるオブジェクト (D15 の `acted_on`)」と呼ぶものと同じ量である。要素が
+  オブジェクトを名指すことが `outstanding.names` が真であることであるのは
+  DEF 要素が名指すオブジェクト による。よって 2 つの言明は同じことを述べている。
+
 ## 7. P18b と P18a
 
-**結論を先に書く。P18b は A1・A2・D12 から証明できた。P18a は A19 と P14a の上で証明できた。**
+**結論を先に書く。P18b は A19 を読まずに証明できた。P18a は A19 と P14a の上で証明できた。**
 
-P18b は第 7.4 節が証明する。証明の要は補題 `L9` -- `origin` の `identity` が等しい 2 つの leaf は、
+P18b は第 7.4 節が証明する。証明の要は命題 `L9` -- `origin` の `identity` が等しい 2 つの leaf は、
 実行時に同時に inhabited (D16) であるか同時にそうでないか、のどちらかである -- であり、これが
-「`outstanding` は静的な数え上げを引き、実行時は inhabited な分だけが上下する」というずれを消す。
+`outstanding` の側と実行時の側のずれを消す。README の P18b の脇はそのずれを「`outstanding` は静的な
+数え上げ (`ActRefs`、D15) から始まり、`un_bump` が静的な数え上げを引く。実行時に bump され un-bump
+されるのは inhabited な leaf の分だけである (P6)。」と述べる。
 
 P18a は A1・A2・D12 だけからは出ない。第 7.5 節が README の A19 を引く。A19 (ii-b) が要ることは D12 を
-満たす 2 つの反例 `C1` と `C2` が示す (7.5.7 と 7.5.8)。どちらでも `cancel` が対を消して解放後の読みを
-作るので、この 2 つは P21 と P23 の反例でもある。どちらも `insert_rc` の出力ではない (README の A19 が引く
+満たす反例 `C1` が示す (7.5.7)。`cancel` はそこで対を消して解放後の読みを作るので、`C1` は P21 と P23 の
+反例でもある。`C1` は `insert_rc` の出力ではない (README の A19 が引く
 `p60-insert-rc.md` の `L10`)。(ii-a) と (ii-b) を果たす者のうち `borrow_ify` の側は `L16` が示す。
 
 **A19 (i) が `H(O)` の側を与える。** (i) は D21 が活性化に課す制限であり、各類について
@@ -757,8 +1087,8 @@ P18a は A1・A2・D12 だけからは出ない。第 7.5 節が README の A19 
 
 ### 7.1 局所の定義
 
-この節から先で使う補題を `L7` から `L17` と番号を付ける (`L14a` の番号は使わない)。後から挟んだものには
-`L8a` のように枝番を振る。`p60-insert-rc.md` の補題の名前は、README の A19 の文面を引用する箇所にだけ現れ、そこでは
+この節から先で使う命題を `L7` から `L17` と番号を付ける (`L14a` の番号は使わない)。後から挟んだものには
+`L8a` のように枝番を振る。`p60-insert-rc.md` の命題の名前は、README の A19 の文面を引用する箇所にだけ現れ、そこでは
 `p60` の `L9` のように書く。この文書の `BY` の行はそれらを引かない。
 
 #### 固定するもの
@@ -770,8 +1100,9 @@ inhabited (D16)、参照カウント `H` (D7)、義務集合 `Obl` (D10) はい�
 「`ρ` の上で」と書いたものは、`ρ` を辿るすべての活性化についての主張として読む (D21)。D21 より、
 `Let(x, Match(v, arms), k)` で活性化が選ぶアームは、`tag` が `v` の値の実行時のタグに等しいアームである。
 
-**D21 は活性化を、その各時点で A19 (i) の不等式を満たすものに限る。** 固定した活性化もその制限を
-満たす。第 7.5.4 節の `<1>5` がそれを読む。
+**D21 は活性化を、その各時点と各段内の点 (D24) で A19 (i) の不等式を満たすものに限る。** 固定した
+活性化もその制限を満たす。**この文書が読むのは時点の側だけである** -- 第 7.5.4 節の `<1>5` が
+`DEF 節点の時点` の `τ(n)` について読む。
 
 **inhabited の読み。** この文書が leaf について「inhabited」と書くとき、D16 の条件に加えて、A5 の例外 --
 capture が空のクロージャの capture の leaf は null であり、A5 はそれを inhabited でない leaf と同じに
@@ -781,7 +1112,7 @@ capture が空のクロージャの capture の leaf は null であり、A5 は
 
 D26 の最後の段落がこれを述べる。「**1 つの活性化の間、そこに現れるオブジェクトが計数下であるかどうかは
 変わらない。** `mark_global` の呼び出しはコード生成に 1 か所しかなく、グローバル初期化子の本体を評価した
-結果に対してだけ走る … 命題が『各時点の計数下オブジェクト』を量化するとき、その集合は活性化の間ずっと
+結果に対してだけ走る … 命題が「各時点の計数下オブジェクト」を量化するとき、その集合は活性化の間ずっと
 同じである。」よってこの文書は「計数下」と書くときに時点を添えない。
 
 #### DEF 実行時の作用
@@ -796,21 +1127,17 @@ D26 の最後の段落がこれを述べる。「**1 つの活性化の間、そ
 - `ActRefs^inh_ρ(n)` を、`Inh_ρ(v, π, n)` の各 `λ` を `origin(v, λ).identity()` で名付けて数えた多重集合
   とする。
 
-D15 より `ActRefs(v, π)` は `L(v, π)` の**すべての** leaf を同じ名付けで数えたものなので、
-`ActRefs^inh_ρ(n)` は `ActRefs(v, π)` の部分多重集合である。
+**`ActRefs^inh_ρ(n)` が `ActRefs(v, π)` の部分多重集合であることは `L10a` の `<1>1` が示す** --
+2 つは同じ名付けで数えたものであり、`Inh_ρ(v, π, n)` は `L(v, π)` の部分集合である。
 
 **`ActRefs^inh_ρ(n)` は名前 (`VarPath`) ごとの多重集合であり、参照の多重集合ではない。** D8 より参照の
 多重集合はオブジェクトごとであるのに対し、この数え上げは `VarPath` ごとである。P6 が等式を述べるのは
-**各名前をそれが指すオブジェクトへ写した後**である -- 「この数え上げを inhabited (D16) かつ計数下 (D26) の
+**各名前をそれが指すオブジェクトへ写した後**である -- 「この数え上げを **inhabited (D16) かつ計数下 (D26)** の
 leaf に制限し、**各名前をそれが指すオブジェクトへ写して**得られる多重集合は、実行時に `Retain(v, π)` が
 作る参照の多重集合に等しく、`Release(v, π)` が処分する参照の多重集合にも等しい」。1 つのオブジェクトを
-2 つの名前が指す本体は在る (第 7.5.8 節の `C2` の `(o, [])` と `(y, [])`) ので、この写しは省けない。
-
-以下では、名前の多重集合 `M` の各名前 `(u, σ)` を `obj(u, σ)` (D6) へ写して得られる多重集合を `M^obj` と
-書く。`ActRefs^inh_ρ(n)` が個数を付ける名前は inhabited かつ計数下の leaf の `identity` なので、`L14` の
-後半よりどれも `ρ` の上のスロットであり、したがって `obj` が定まる。P6 より、`n` が `Retain` のとき
-`(ActRefs^inh_ρ(n))^obj` は `n` が `ρ` で実際に作る参照の多重集合であり、`n` が `Release` のとき
-`(ActRefs^inh_ρ(n))^obj` は `n` が `ρ` で実際に処分する参照の多重集合である。
+2 つの名前が指す本体は在る (第 7.5.7 節の `C1` の `(m, [])` と `(p, [])`) ので、この写しは省けない。
+その写し `(・)^obj` は第 7.2 節の `DEF 名前をオブジェクトへ写す` が定め、`L10c` がそれが定まることと
+写した先が実行時の作用であることを示す -- どちらも `L9` に立つので、`L9` の後ろに置く。
 
 #### DEF bump の帰属
 
@@ -835,18 +1162,28 @@ src/rc_ir/borrow.rs: cancel`)、定めるものが無い。`ρ` の上で `n` �
 | `arm_j` の本体の `Ret` (`n'` はその `Match` の継続 `k_M`) | `merged` の各要素 `p` について、`arm_exits[j]` の中で `node` が `p.node` に等しい要素 `p^{(j)}` の `B_ρ(n, p^{(j)})` |
 
 `consume_objects` が取り除いた要素については定めるものが無い。この表が場合を尽くすことと、最後の 2 行の
-`p^{(j)}` が存在することは、`L11` の証明の中で示す。
+`node` が等しい要素 -- 第 6 行の `p^{(j)}` -- が存在してただ 1 つであることは、`L11` の証明の中で示す。
+**ただ 1 つであることが要る** -- 2 つ在れば第 5 行と第 6 行の右辺が定まらない。
 
 `B_ρ(n, p)` を、P18b と P18a の言明の `B(p, ρ)` として読む。この帰属は README の D27 と同じものである --
-D27 は「`Retain(v, π)` の訪問で `pending` に入るとき … `π` の下の inhabited (D16) かつ計数下 (D26) の各
-leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が `InBracket` で `p` を選ぶ `Release` の
-訪問で、その `Release` が `ρ` で実際に処分する参照の多重集合を引く」「アームへの複製と `merge` は
-`B(p, ρ)` をそのまま運ぶ」「`consume_objects` が `p` を取り除いたときは定めるものが無い」と述べており、
-上の表の 6 行はその 4 つを `ρ` の上の節点ごとに並べたものである。
+D27 は「… `Retain(v, π)` の訪問で `pending` に入るとき、`B(p, ρ)` は、`π` の下の inhabited (D16) かつ
+計数下 (D26) の各 leaf を `origin` の identity で名付けて数えたものである」「`un_bump` が `InBracket` で
+`p` を選ぶ `Release(v, π)` の訪問で、その `Release` が `ρ` で実際に処分する参照を、それを持つ leaf の
+`origin` の identity で名付けて数えた多重集合を引く。すなわち、`π` の下の inhabited かつ計数下の各 leaf を
+`origin` の identity で名付けて数えたものである」「アームへの複製と、`merge` が `p` を返り値に据えるときは、
+`B(p, ρ)` をそのまま運ぶ」「`consume_objects` が `p` を取り除いたときと、`merge` が `p` を `uniform` に
+入れずに落としたときは、定めるものが無い」と述べており、上の表の 6 行はその 4 つを `ρ` の上の節点ごとに
+並べたものである。
 
-### 7.2 leaf と inhabited の補題
+**D27 の 2 つの項はどちらも名前 (`VarPath`) の多重集合である。** 上の表の第 1 行が `ActRefs^inh_ρ(n)` を
+置き、第 2 行がそれを引くのはこの水準であり、D27 も「**引くのも名前の多重集合である** -- 第 1 項が
+名前で数えているので、参照の多重集合を引くと水準が合わない」と述べる。**名前ごとの差が切り捨てを
+起こさないことを示すのは `L11a` である** -- D27 がそれをこの文書に名指す。オブジェクトの多重集合へ
+写すのは第 7.4 節の `<1>1` であり、そこが `L11a` を読む。
 
-#### L7 (boxed leaf の路は反鎖をなす)
+### 7.2 leaf と inhabited の命題
+
+#### L7 (boxed leaf の路は反鎖をなす) <!--#efe0c77-->
 
 **言明**。A10 を満たす任意の型 `τ` について、`boxed_leaf_paths(τ, type_env)` の相異なる 2 元は、
 一方が他方の前置になることが無い。
@@ -865,7 +1202,7 @@ leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が
 
 <1>3. `go` の各呼び出しの入口の `path` は、その祖先の呼び出しが足した添字の列である。相異なる 2 つの
       呼び出しの入口の `path` は相異なる。
-  BY A10, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+  BY <ref id=8412761/>, <1>2, EXT Iterator::enumerate, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::unpunched_field_types
   A10 が `go` の再帰の停止性を与える -- 「`unpunched_field_types` を繰り返し取って到達する型についても、
   上の 3 つ -- ground、飽和、tycon が `type_env` にある -- がすべて成り立ち、その歩みは有限である」
@@ -880,19 +1217,222 @@ leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が
   BY <1>1, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
 
 <1>5. QED
-  BY <1>1, <1>3, <1>4
-  `out` の 2 元 `λ1 ≠ λ2` を取り、`λ1` が `λ2` の真の前置であるとする。<1>4 より `λ2` を push した
-  呼び出し `I2` の入口の `path` は `λ2` か `λ2` の最後の添字を落としたものであり、どちらも `λ1` を前置に
-  持つ。<1>3 より入口の `path` が `λ1` である呼び出し `I` がただ 1 つ在り、`I2` は `I` 自身か `I` の
-  子孫である。一方 <1>4 より `λ1` を push した呼び出しの入口の `path` は `λ1` か `λ1` の最後の添字を
-  落としたものである。前者ならその呼び出しは `I` であり、<1>1 より `I` は push の直後に `return` する
-  ので子孫を持たず、`I2 = I` となるが `I` が push したのは `λ1` であって `λ2` ではない。後者なら
-  その呼び出しは `I` の親であり、<1>1 よりそれも push の直後に `return` するので `I` は存在しない。
-  どちらも矛盾である。よって `λ1` は `λ2` の真の前置ではない。`λ1` と `λ2` を入れ替えても同じである。
+  BY <1>1, <1>2, <1>3, <1>4
+  `out` の相異なる 2 元の順序対 `(λ1, λ2)` を任意に取り、`λ1` が `λ2` の真の前置であるとする。
+  相異なる 2 元の対はどちらの順にも取れるので、この形で言明の両向きが尽きる。`λ1` を push した呼び出しを
+  `J`、その入口の `path` を `P` と書く。<1>4 より `P` は `λ1` そのものか `λ1` の最後の添字を落とした
+  ものであり、どちらも `λ1` の前置である。<1>4 より `λ2` を push した呼び出し `I2` の入口の `path` は
+  `λ2` か `λ2` の最後の添字を落としたものであり、`λ1` が `λ2` の真の前置なのでどちらも `λ1` を、
+  したがって `P` を前置に持つ。<1>2 と <1>3 より、子の呼び出しの入口の `path` は親の入口の `path` に
+  添字を 1 つ足したものであり、最初の呼び出しの入口の `path` は空なので、`I2` の祖先の入口の `path` は
+  `I2` の入口の `path` の前置を短い方から順に並べたものである。<1>3 より入口の `path` は呼び出しを
+  一意に決めるので、`P` を入口に持つ呼び出しは `I2` 自身か `I2` の祖先のちょうど 1 つであり、それが
+  `J` である。`I2 = J` のとき、<1>1 より呼び出しは push の直後に `return` するので 1 つの呼び出しが
+  push する路は高々 1 つであり、`λ1 = λ2` となって仮定に反する。`I2` が `J` の真の子孫のとき、
+  <1>1 より `J` は push の直後に `return` するので子を持たず、これも仮定に反する。よって `λ1` は
+  `λ2` の真の前置ではない。
 
-#### L8 (`origin` の 1 段は inhabited を保つ)
+#### L7a (`origin_inner` の腕は `origin` を何回呼ぶか) <!--#f8fa0e9-->
 
-**言明**。`x` を `B` の変数、`λ ∈ boxed_leaf_paths(ty(x))` とする。次の 2 つが成り立つ。
+**言明**。`(B', vars')` を解析にかかる本体とその表 (DEF 解析にかかる本体)、`x` を `B'` に現れる変数、
+`λ ∈ boxed_leaf_paths(ty(x))` とする。`origin_inner(vars', type_env, x.name, λ)` は、
+`vars'.bindings.get(x.name)` に応じて次の 3 群のちょうど 1 つに入る。
+
+- **(a) `origin` を 1 回も呼ばない腕。** `None`、`Binding::Param`、`Binding::Producer`、`container` が
+  boxed である `Binding::Field(container, idx)`、`variant` が `Some` であって `scrut` が boxed である
+  `Binding::Payload(scrut, variant)`、そして `Binding::Llvm(llvm_gen, args, result_ty)` であって
+  `decl.leaf_origins_at(λ).and_then(as_arg_projection)` が `None` を返す枝。このいずれでも
+  `origin_inner` の値は `Origin::Exactly((x.name, λ))` である。
+- **(b) `origin` をちょうど 1 回呼び、その値をそのまま返す腕。** `Binding::Move(y)` は `(y, λ)` を、
+  `Binding::Llvm` であって `as_arg_projection` が `Some((j, p))` を返す枝は `(args[j], p)` を、
+  `container` が unbox である `Binding::Field(container, idx)` は `(container, [idx] ++ λ)` を、
+  `Binding::Payload(scrut, None)` は `(scrut, λ)` を、`variant` が `Some(tag)` であって `scrut` が
+  unbox である `Binding::Payload` は `(scrut, [tag] ++ λ)` を相手に呼ぶ。
+- **(c) `Binding::Join(arm_results)` の腕。** `arm_results` の各元 `arm_result` について
+  `origin(arm_result, λ)` を 1 回ずつ呼ぶ。`arm_results` は空でない。
+
+**この命題は `ρ` も活性化も読まない。** 第 7.1 節が固定した `B` と `ρ` の外でも読める。
+`L16` が `Pre(V)` (D35) についてこれを読む。**本体について読むのは DEF 解析にかかる本体 の条件だけで
+ある** -- 以下の段が A9 と A10 を名前で引くのは、その (1) と (2) がこの 2 つの仮定をそのまま置いて
+いるからである。
+
+**(a) の `Llvm` の枝が `origin` を呼ばないことは A3 に立つ。** その枝が呼ぶ `origin_from_leaves_under`
+は `operand_units` の各元について `origin` を呼ぶので、A3 の「複数の元を宣言する op は存在しない」が
+無ければ `operand_units` は空とは限らない。
+
+**証明**
+
+<1>1. (a) の 6 つのうち `Llvm` の枝を除く 5 つ -- `None`、`Binding::Param`、`Binding::Producer`、
+      boxed 容器の `Binding::Field`、`variant` が `Some` であって boxed scrutinee の
+      `Binding::Payload` -- は `here()` を返し、`origin` を呼ばない。`here()` は
+      `Origin::Exactly((x.name, λ))` である。
+  BY CODE src/rc_ir/ownership.rs: origin_inner
+  `here` は `|| Origin::Exactly((var.clone(), path.to_vec()))` である。
+
+<1>2. `Binding::Llvm(llvm_gen, args, result_ty)` の腕について、`decl` は
+      `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` であり、`result_ty` は `ty(x)` である。
+      `decl` は `boxed_leaf_paths(ty(x), type_env)` の各元を鍵に持つ `LeafMap` を包み、
+      `decl.leaf_origins_at(λ)` は `Some(sources)` である。`sources` は元数 0 か 1 の集合である。
+  <2>1. `decl` の鍵の集合は `boxed_leaf_paths(ty(x), type_env)` である。
+    BY <ref id=e11772a/>, CODE src/rc_ir/ownership.rs: origin_inner,
+       CODE src/rc_ir/ownership.rs: collect_bindings,
+       CODE src/rc_ir/provenance.rs: Provenance::build_shape,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape
+    `collect_bindings` は `RcRhs::Llvm(llvm_gen, args)` について `Binding::Llvm(llvm_gen.clone(),
+    args.clone(), x.ty.clone())` を作るので、`origin_inner` が `result_prov` に渡す `result_ty` は
+    `ty(x)` である。A3 より `result_prov` は結果の leaf ごとに `LeafOrigins` を宣言する。
+    `LeafMap::build_shape` は `boxed_leaf_paths(ty, type_env)` の各元を鍵にして値を置く。
+  <2>2. `leaf_origins_at(λ)` は `self.0.get(λ)` であり、`λ ∈ boxed_leaf_paths(ty(x))` なので
+        `Some` を返す。
+    BY <2>1, EXT 写像と集合の基本演算, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::get
+  <2>3. QED
+    BY <2>1, <2>2, <ref id=e11772a/>
+    A3 は「その 29 個が leaf に置く集合はすべて要素数 0 か 1 である」と述べ、複数の元を宣言する op が
+    このコミットのプログラムに存在しないことを仮定する。
+
+<1>3. `decl.leaf_origins_under(λ)` が渡す集合は、`<1>2` の `sources` ただ 1 つである。
+  BY <1>2, <ref id=efe0c77/>, <ref id=8412761/>, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+     CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under
+  `leaves_under(λ)` は鍵が `λ` を前置に持つ元だけを渡す。<1>2 より鍵は `boxed_leaf_paths(ty(x))` で
+  ある。`ty(x)` は本体に現れる変数の型、すなわちプログラムに現れる型なので A10 を満たし、L7 はその型に
+  ついて「`boxed_leaf_paths(τ, type_env)` の相異なる 2 元は、一方が他方の前置になることが無い」と
+  述べる。よってその中で `λ` を前置に持つのは `λ` 自身だけである。
+
+<1>4. `as_arg_projection` が `None` を返す枝では、`origin_from_leaves_under` の中の `operand_units` は
+      空であり、この枝は `origin` を 1 回も呼ばず、`origin_inner` の値は
+      `Origin::Exactly((x.name, λ))` である。
+  <2>1. `operand_units` は空である。
+    BY <1>2, <1>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       CODE src/rc_ir/ownership.rs: as_arg_projection
+    `operand_units` に元が入るのは `LeafOrigin::Arg(j, leaf)` の場合だけである。<1>2 より `sources` は
+    元数 0 か 1 であり、元数 1 でその元が `Arg` ならば `as_arg_projection` は `Some` を返すので、この
+    枝には来ない。よって `sources` は空集合か、`Fresh` か `Unknown` ただ 1 つである。
+  <2>2. この枝は `origin` を呼ばない。
+    BY <2>1, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+    `origin_from_leaves_under` が `origin` を呼ぶのは `operand_units` の各元についてだけである。
+  <2>3. QED
+    BY <2>1, <2>2, EXT Iterator::all, EXT Vec::first, EXT Option の取り出し,
+       CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+       CODE src/rc_ir/ownership.rs: origin_inner
+    <2>1 より `reached` は、`produced_here` が偽なら空、真なら `[Origin::Exactly(here_identity)]` で
+    ある。ここで `here_identity = (x.name, λ)` である。空のとき `let first = reached.first()?;` が
+    `None` を返し、`origin_inner` の `unwrap_or_else(here)` が `here()` すなわち
+    `Origin::Exactly((x.name, λ))` を返す。1 元のときは
+    `reached.iter().all(|reached_origin| reached_origin == first)` が真なので `Some(first.clone())` を
+    返し、その値は `Origin::Exactly(here_identity)` である。
+
+<1>5. (b) の 5 つの腕は、それぞれ言明が挙げる相手について `origin` をちょうど 1 回呼び、その値を
+      そのまま腕の値とする。
+  BY CODE src/rc_ir/ownership.rs: origin_inner
+  `Binding::Move(y)` の腕は `origin(vars, type_env, &y.name, path)`、`Binding::Llvm` の `Some((j, p))`
+  の枝は `origin(vars, type_env, &args[j].name, &p)`、`container.ty.is_box` が偽である
+  `Binding::Field` の枝は `origin(vars, type_env, &container.name, &container_path)`
+  (`container_path = [idx] ++ path`)、`Binding::Payload` の `None` の枝は
+  `origin(vars, type_env, &scrut.name, path)`、`Some(tag)` かつ `scrut.ty.is_box` が偽の枝は
+  `origin(vars, type_env, &scrut.name, &scrut_path)` (`scrut_path = [tag] ++ path`) を、それぞれ腕の
+  値として返す。どの腕も `origin` の呼び出しをこの 1 か所しか持たない。
+
+<1>6. `Binding::Join(arm_results)` の腕は `arm_results` の各元について `origin` を 1 回ずつ呼ぶ。
+      `arm_results` は空でない。
+  BY <ref id=1172c08/>, CODE src/rc_ir/ownership.rs: origin_inner,
+     CODE src/rc_ir/ownership.rs: collect_bindings,
+     CODE src/rc_ir/ownership.rs: returned_var
+  この腕は `for arm_result in arm_results` の中で
+  `origin(vars, type_env, &arm_result.name, path).acted_on()` を呼ぶ。`collect_bindings` は
+  `RcRhs::Match(scrut, arms)` の各 `arm` について `returned_var(&arm.body)` を `arm_results` に
+  push し、A9 よりすべての `Match` は 1 つ以上のアームを持つので `arm_results` は空でない。
+
+<1>7. QED
+  BY <1>1, <1>4, <1>5, <1>6, CODE src/rc_ir/ownership.rs: Binding,
+     CODE src/rc_ir/ownership.rs: origin_inner
+  `Binding` は 7 変位を持ち (`Param`、`Move`、`Llvm`、`Producer`、`Field`、`Payload`、`Join`)、これに
+  `None` を加えた 8 つの場合を `origin_inner` の `match` は 6 つの腕に持つ -- `None`・
+  `Some(Binding::Param)`・`Some(Binding::Producer)` は 1 つの腕にまとめている。`Llvm` の場合は
+  `as_arg_projection` の返り値で 2 つに、`Field` の場合は `container.ty.is_box` で 2 つに、`Payload` の
+  場合は `variant` が `None` か `Some` か、`Some` のときは `scrut.ty.is_box` かで 3 つに分かれる。
+  この 12 の枝を (a) が 6 つ、(b) が 5 つ、(c) が 1 つに分けるので、3 群は場合を尽くす。
+
+#### L7b (束縛を持たない名前は、それを名指す節点の段で値を持つ) <!--#fc8907e-->
+
+**言明**。`w` を `vars.bindings` に束縛を持たない名前とし、`n` を `w` を名指す節点とする。`n` を実行
+する段において `w` は値を持つ。
+
+**この命題は `ρ` も活性化も読まない。** 主語は 1 つの節点とその段である。**`Ret(w)` もこの命題の
+主語である** -- `Ret` は D7 の読む構文ではないが、その節点も `w` の記憶域を読む。
+
+**証明**
+
+<1>1. `w` は最上位の記号の名前であり、`(w, ・)` は D6 の記号の位置である。
+  BY <ref id=596a46d/>
+  D6 は「**束縛を持たない名前は、必ず最上位の記号の名前である。**」と述べ、その名前と `ty(w)` の
+  inhabited な boxed leaf の対を記号の位置と呼ぶ。
+
+<1>2. CASE `n` が D7 の読む構文である。このとき `n` は `w` の値を読む。
+  BY <ref id=56c2068/>
+  D7 の表は読む構文ごとに「読まれる値」の欄を持つ -- `Llvm` は各オペランド (`borrows_operand` の
+  真偽によらない)、`App` は callee と各引数、`Closure` は各 capture、`Match` は scrutinee `v`、
+  `Destructure` は容器 `c`、`Eval` は `v` である。`n` は `w` を名指すので、`w` はその欄が挙げる値の
+  1 つである。
+
+<1>2a. CASE `n` が D7 の読む構文でない 4 種 -- `Let(x, RcRhs::Var(w), k)`、`Retain(w, π, s, k)`、
+       `Release(w, π, s, k)`、`Ret(w)` -- のいずれかである。このときも `n` の段は
+       `Generator::get_scoped_value` を `w` について呼ぶ。
+  BY <ref id=56c2068/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
+     CODE src/rc_ir/codegen.rs: Generator::eval_rc_rhs,
+     CODE src/generator.rs: Generator::get_scoped_obj,
+     CODE src/generator.rs: Generator::get_scoped_obj_noretain,
+     CODE src/generator.rs: Generator::get_scoped_value
+  D7 は「残る 4 種 (`Let(x, Var(y), k)`、`Retain`、`Release`、`Ret`) は読む構文ではない」と述べ、
+  この 4 種を挙げる。`eval_rc_expr_inner` の `RcExpr::Ret(x)` の腕は `self.get_scoped_obj(&x.name)`、
+  `RcExpr::Retain` と `RcExpr::Release` の腕は `self.get_scoped_obj_noretain(&x.name)` を呼ぶ。
+  `Let(x, RcRhs::Var(w), k)` は `RcExpr::Let(x, rhs, k)` の腕から `eval_rc_rhs` へ入り、その
+  `RcRhs::Var(v)` の腕が `self.get_scoped_obj(&v.name)` を呼ぶ。`get_scoped_obj` と
+  `get_scoped_obj_noretain` はどちらも `get_scoped_value` を呼ぶ。
+
+<1>2b. `get_or_declare_global(var)` が値を返すとき、その `ScopedValue` の `accessor` は
+       `ValueAccessor::Global(fun, ty)` の形である。
+  BY 前提 `declared_globals` の項目の在りか,
+     CODE src/generator.rs: Generator::get_or_declare_global,
+     CODE src/generator.rs: Generator::add_global_object,
+     CODE src/generator.rs: Generator::declare_program_global,
+     CODE src/generator.rs: Generator::declare_lambda_function
+  `get_or_declare_global` は、`self.declared_globals` に `var` の項目が在ればそれを返し、無ければ
+  `self.declare_program_global(var)` を呼んでから `self.declared_globals[var]` の写しを返す。
+  どちらの道でも返るのは `declared_globals` の項目であり、前提 `declared_globals` の項目の在りか より
+  この表に項目を入れる式は `add_global_object` の `insert` だけである。`add_global_object` が入れる
+  `ScopedValue` の `accessor` は `ValueAccessor::Global(function, ty)` である。
+  項目がまだ無い側で `declared_globals[var]` が項目を持つのは `declare_program_global` による --
+  `ty.is_funptr()` が真なら `declare_lambda_function` が `add_global_object(name, func, fn_ty)` を、
+  偽ならアクセサ関数を作って `add_global_object(name, acc_fn, ty)` を呼ぶ。
+
+<1>3. `n` の段はその記号のアクセサを通って `w` の値を得る。
+  BY <1>1, <1>2, <1>2a, <1>2b, <ref id=596a46d/>, CODE src/generator.rs: Generator::get_scoped_value,
+     CODE src/generator.rs: ValueAccessor::get
+  <1>1 と D6 より `w` は最上位の記号の名前であり、D6 の「**最上位の記号の名前は局所名ではない。**」より
+  局所名ではない。`get_scoped_value` は `var.is_local()` が偽の名前を `get_or_declare_global` へ回すので、
+  <1>2b よりその `accessor` は `ValueAccessor::Global(fun, ty)` である。`ValueAccessor::get` は、
+  funptr の型ならその関数の番地を取り、そうでなければその記号のアクセサ関数を呼ぶ。<1>2 の場合は
+  `n` が `w` を読むこと自体がこの読みであり、<1>2a の場合は `get_scoped_value` の呼び出しがそれである。
+
+<1>4. QED
+  BY <1>1, <1>2, <1>2a, <1>3, <ref id=596a46d/>, <ref id=56c2068/>, <ref id=243ae2c/>, <ref id=e3436e8/>
+  D22 のアクセサの行は「**グローバルのアクセサ**。初期化済みの旗を見て、まだならグローバル初期化子の
+  本体を持つ関数 `InitValue#<symbol>` を呼び、返った値を記憶域へ格納する。」と述べ、D24 の (E7) が
+  その呼び出しを段として置く -- 「まだ初期化されていないグローバル `g` を読む者が居るとき、`g` の
+  アクセサが `g` の初期化子の `init` の活性化 `b` を作る」であり、`b` が終わって (E5) が走った後に
+  読む者が再開する。D6 はこれを「**記号の位置が値を持つのは、その記号のグローバル化の段 (E5) より後の
+  時点である。**」「**それでも `g` を読む節点は必ず値を読む** -- まだ初期化されていなければ、その節点の
+  段が先に (E7) と (E5) を走らせるからである」と述べる。<1>3 より `n` の段はその読む者である。
+  関数の名前については記号の位置は funptr を指し、初期化の段を持たない (D6) ので、その値は初めから
+  在る。<1>2 と <1>2a は場合を尽くす -- D7 は読む構文を 6 つ挙げ、「残る 4 種 (`Let(x, Var(y), k)`、
+  `Retain`、`Release`、`Ret`) は読む構文ではない」と述べるので、この 2 つで節点の形は尽きる。
+
+#### L8 (`origin` の 1 段は inhabited を保つ) <!--#b99155f-->
+
+**言明**。`(B', vars)` を解析にかかる本体とその表 (DEF 解析にかかる本体) とする (第 1 節の `B` と
+`vars` は `L6a` よりその 1 つである)。`x` を `B'` に現れる変数、
+`λ ∈ boxed_leaf_paths(ty(x))` とする。次の 2 つが成り立つ。
 
 - **(A)** `origin_inner(vars, type_env, x.name, λ)` の本体が `origin(vars, type_env, x'.name, λ')` を
   呼ぶとき、次の 4 つが成り立つ。
@@ -903,31 +1443,48 @@ leaf を `origin` の identity で名付けて数えたもの」「`un_bump` が
     inhabited な leaf であることは同値である。
   - **(iv)** その leaf が inhabited であるとき、`obj(x, λ) = obj(x', λ')` である。
 
-  **(ii)、(iii)、(iv) は、実行路 `ρ` の上で `x` が値を得ているときに主張する。`Binding::Join` の腕に
-  ついては、`ρ` が選んだアームの結果変数 `x' = arm_results[j]` についてだけ主張する。(i) と (B) は
-  `ρ` を読まない。**
+  **(ii)、(iii)、(iv) は、`B' = B` であり、第 7.1 節が固定した実行路 `ρ` の上で `x` が値を得ている
+  ときに主張する。`Binding::Join` の腕については、`ρ` が選んだアームの結果変数 `x' = arm_results[j]`
+  についてだけ主張する。(i) と (B) は解析にかかるどの本体についても成り立ち、`ρ` を読まない。**
+  `L16` が `Pre(V)` (D35) について (i) と (B) を読む。**本体について読むのは DEF 解析にかかる本体 の
+  条件だけである** -- 以下の段が A16 を名前で引くのはその (1) が、A6・A11・A12 を名前で引くのは
+  その (3) が、その仮定をそのまま置いているからである。
 
   **(ii) の「値を得ている」は D6 の 3 つの形を渡る。** 節点が束縛する変数と、パラメータ・capture と、
-  `vars.bindings` に束縛を持たない名前である。3 つ目の値はその記号の値なので、`ρ` の上のどの時点でも
-  値を持つ (D6)。
+  `vars.bindings` に束縛を持たない名前である。3 つ目についてその値が在るのは、その名前を名指す節点の
+  段である (`L7b`)。**その節点は `x` を束縛する節点とは限らない** -- `Binding::Join` の腕では
+  `arm_results[j]` を名指すのはアーム本体の終端の `Ret` である。
 - **(B)** `origin_inner(vars, type_env, x.name, λ)` の本体が `origin` を 1 回も呼ばないとき、その値は
   `Origin::Exactly((x.name, λ))` である。
 
-(iii) の「inhabited」は第 7.1 節の読みのものである。以下の各腕は、leaf の位置に**同じ値**を置くことを
-示す。D9 の値の水準の 6 行が、移動の 6 行のそれぞれについてその等式を述べており、`Llvm` の単一の
-`Arg(j, σ)` の腕についてはその最後の行 --「`Llvm` の素通し leaf: 結果のその leaf の値はオペランド `i` の
-その leaf の値である」-- が述べる。(iii) と (iv) はどちらもそこから出る -- 同じ値の同じ leaf は同じ
-union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。null についての A5 の例外も同じ理由で
-保たれる。
+(iii) の「inhabited」は第 7.1 節の読みのものである。以下の各腕は、`(x, λ)` の位置と `(x', λ')` の位置に
+**同じ値**が在ることを示す。D9 の値の水準の 6 行が、移動の 6 行のそれぞれについてその等式を述べており、
+`Llvm` の単一の `Arg(j, σ)` の腕についてはその最後の行 --「`Llvm` の素通し leaf: 結果の leaf `λ` の
+宣言が単一の `Arg(i, σ)` であるとき、その leaf の値は**オペランド `i` の leaf `σ` の値**である。
+**`λ` と `σ` は一般に別の path である**」-- が述べる。(iii) と (iv) はどちらもそこから出る -- 2 つの
+位置に在る値が同じであれば、その値が通る unbox union のタグも (D16)、そこに在るポインタも
+(D6 の `obj`) 同じである。null についての A5 の例外も同じ理由で保たれる。
 
 **証明** `vars.bindings.get(x.name)` の 7 つの場合で分ける (`CODE src/rc_ir/ownership.rs: Binding`)。
+(ii)・(iii)・(iv) を示す段は `B' = B` の場合、すなわち第 7.1 節が固定した本体と実行路 `ρ` に
+ついてのものである。(i) と (B) を示す段は `B'` を問わない。
 
-<1>0. `x'` を、いずれかの腕が `origin` を呼ぶ相手の変数とする。`x'` が `vars.bindings` に束縛を
-      持たない名前であるとき、`ρ` の上で `x'` は値を得ている。
-  BY D6
-  D6 は値を得る形を 3 つ挙げ、3 つ目を「**`vars.bindings` に束縛を持たない名前**」として、その値は
-  その記号の値であると述べる。記号の値は `ρ` の上のどの時点でも在るので、その名前は `ρ` の上の
-  どの時点でも値を得ている。
+<1>0. `x'` を、いずれかの腕が `origin` を呼ぶ相手の変数とし、`x'` が `vars.bindings` に束縛を持たない
+      名前であるとする。このとき `x'` を名指す節点が `ρ` の上に在り、その節点の段で `x'` は値を持つ。
+      よって `ρ` の上で `x'` は値を得ている。
+  BY <ref id=fc8907e/>, <ref id=ca36627/>, <ref id=596a46d/>, CODE src/rc_ir/ownership.rs: collect_bindings
+  `collect_bindings` より、`origin` を呼ぶ 6 つの腕が渡す `x'` を名指す節点は次のとおりである。
+  `Binding::Move(y)` では `x` を束縛する `Let(x, RcRhs::Var(y), k)`、`Binding::Llvm` では `x` を
+  束縛する `Let(x, RcRhs::Llvm(gen, args), k)` (`x'` はそのオペランド `args[j]`)、`Binding::Field` では
+  `x` を束縛する `Destructure(x', fs, s, k)`、`Binding::Payload` では `x` を payload として束縛する
+  アームを持つ `Let(m, RcRhs::Match(x', arms), k)` である。**`Binding::Join(arm_results)` の腕だけは
+  `x` を束縛する節点ではない** -- `x` を束縛する `Let(x, RcRhs::Match(scrut, arms), k)` が名指すのは
+  `scrut` であり、`x' = arm_results[j]` を名指すのは `ρ` が選んだアーム `arm_j` の本体の終端の `Ret` である
+  (`collect_bindings` はそれを `returned_var(&arm.body)` として `arm_results` に積む)。
+  L8 の仮定より `ρ` の上で `x` は値を得ているので、前の 4 つの形ではその束縛の節点が `ρ` の上に在り、
+  `Binding::Join` では D3 より `ρ` はそのアーム本体の実行路を辿ってから `Match` の継続へ進むので、
+  その `Ret` も `ρ` の上に在る。D6 より、束縛を持たない名前は最上位の記号の名前であり、`L7b` が
+  その節点の段で `x'` が値を持つことを与える。
 
 <1>1. CASE `None`、`Some(Binding::Param)`、`Some(Binding::Producer)`。
   <2>1. この 3 つの腕は `here()` すなわち `Origin::Exactly((var.clone(), path.to_vec()))` を返し、
@@ -941,22 +1498,26 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
 <1>2. CASE `Some(Binding::Move(y))`。この腕は `origin(vars, type_env, &y.name, path)` を呼ぶ。
       すなわち `x' = y`、`λ' = λ` である。
   <2>1. `x` の値は `y` の値である。
-    BY D2, D9
+    BY <ref id=b3dfa37/>, <ref id=9d74736/>
     D2 の表より `Let(x, rhs, k)` は `rhs` の値を `x` に束縛し、`RcRhs::Var(y)` の値は `y` の値である。
-    D9 の移動の表の第 1 行がこの束縛を移動とする。
+    D9 の移動の表の第 1 行 --「`Let(x, Var(y), k)` | `y` の参照が `x` へ」-- がこの束縛を移動とする。
   <2>2. `ty(x) = ty(y)` である。
-    BY A12
+    BY <ref id=83d98e9/>
     A12 の第 1 項が move-bind の両辺の型の一致を述べる。
   <2>3. (i) が成り立つ。
     BY <2>2
     `λ ∈ boxed_leaf_paths(ty(x)) = boxed_leaf_paths(ty(y))`。
   <2>4. (ii) が成り立つ。
-    BY <1>0, A11, CODE src/rc_ir/ownership.rs: collect_bindings
+    BY <1>0, <ref id=3905b4e/>, <ref id=b3dfa37/>, <ref id=ca36627/>, CODE src/rc_ir/ownership.rs: collect_bindings
     `Binding::Move(y)` は `Let(x, RcRhs::Var(y), k)` からだけ作られる。`y` が `vars.bindings` に束縛を
     持つときは、A11 より `y` の使用はその位置でスコープに入っている束縛に解決するので、`x` が値を
     得た `ρ` の上で `y` は先に値を得ている。持たないときは <1>0 が与える。
+    **A11 が与えるのは解決先だけである。** その束縛の節点が `ρ` の上で先に在ることは D2 と D3 に
+    よる -- D2 は束縛のスコープをその節点の継続 (`Match` のアームの payload についてはその
+    アームの `body`) の部分木と定め、D3 の実行路は本体の根から継続とアーム本体を辿って得られる
+    節点の列なので、その部分木の中の節点に着くまでにその束縛の節点を通る。
   <2>5. (iii) と (iv) が成り立つ。
-    BY <2>1, <2>2, D16, D6
+    BY <2>1, <2>2, <ref id=66c9670/>, <ref id=596a46d/>
     D16 の inhabited は値とその型だけで決まり、D6 の `obj(x, λ)` はその leaf が指すオブジェクトである。
     <2>1 と <2>2 より `x` と `y` は同じ値と同じ型を持つので、同じ leaf について同じ答えになる。
   <2>6. QED
@@ -967,26 +1528,30 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
       `origin(vars, type_env, &arm_result.name, path)` を呼ぶ。`ρ` が選んだアームを `arm_j`、
       `x' = arm_results[j]`、`λ' = λ` とする。
   <2>1. `arm_results[j]` は `arms[j].body` の終端の `Ret` が名指す変数である。
-    BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var
+    BY CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var,
+       CODE src/misc.rs: grow_stack, EXT stacker の maybe_grow
     `RcRhs::Match(scrut, arms)` の腕が各 `arm` について `returned_var(&arm.body)` を `arm_results` に
-    push する。`returned_var` は継続を辿って `RcExpr::Ret(v)` の `v` を返す。
+    push する。`returned_var` の本体は `grow_stack(|| match ...)` であり、`grow_stack(f)` の本体は
+    `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` なので、`EXT stacker の maybe_grow` よりその値は
+    その `match` の値である。その `match` は `RcExpr::Ret(v)` の腕で `v` を返し、継続を持つ 5 種の腕で
+    継続について自分を呼ぶ。
   <2>2. `x` の値は `arm_results[j]` の値である。
-    BY D2, D3, <2>1
+    BY <ref id=b3dfa37/>, <ref id=ca36627/>, <2>1
     D3 より `ρ` はアーム `arm_j` の本体の実行路を辿ってからその `Match` の継続へ進む。D2 の表より
     `Ret(v)` の値は `v` の値であり、`Let(x, Match(v, arms), k)` は `Match` の値を `x` に束縛する。
   <2>3. どの `j'` についても `ty(x) = ty(arm_results[j'])` である。
-    BY A12
+    BY <ref id=83d98e9/>
     A12 の第 2 項が「アームの結果と `Match` の束縛変数の型」の一致を述べる。この項はどのアームに
     ついても言う。
   <2>4. (i) と (ii) が成り立つ。(i) はどのアームの結果変数についても成り立つ。
-    BY <1>0, <2>1, <2>2, <2>3, A11
+    BY <1>0, <2>1, <2>2, <2>3, <ref id=3905b4e/>
     (i) は <2>3 から -- `λ' = λ` であり、<2>3 よりどの `j'` についても
     `boxed_leaf_paths(ty(arm_results[j'])) = boxed_leaf_paths(ty(x))` である。(ii) は、`arm_results[j]` が
     `vars.bindings` に束縛を持つときは、`ρ` が `arm_j` の本体を通り、その終端の `Ret` が
     `arm_results[j]` を名指す (<2>1) ので、その変数は `ρ` の上で値を得ている。持たないときは
     <1>0 が与える。
   <2>5. (iii) と (iv) が成り立つ。
-    BY <2>2, <2>3, D16, D6
+    BY <2>2, <2>3, <ref id=66c9670/>, <ref id=596a46d/>
     <2>2 より `x` と `arm_results[j]` は同じ値を持ち、<2>3 より同じ型を持つ。D16 の inhabited と D6 の
     `obj` はどちらも値とその型だけで決まる。
   <2>6. QED
@@ -1008,77 +1573,39 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
   <2>3. `p` は `boxed_leaf_paths(ty(args[j]), type_env)` の元であり、`ρ` の上で `λ` が `x` の値の
         inhabited な leaf であることと、`p` が `args[j]` の値の inhabited な leaf であることは同値で
         ある。さらに inhabited であるとき `obj(x, λ) = obj(args[j], p)` である。
-    BY A3, A12, D6, D9, <2>1, <2>2
+    BY <ref id=e11772a/>, <ref id=83d98e9/>, <ref id=596a46d/>, <ref id=9d74736/>, <2>1, <2>2
     A3 は「**単一の `Arg(j, σ)` の宣言は well-formed である。** `j` は `args` の添字であり、`σ` はその型の
     boxed leaf である」と述べるので、`p ∈ boxed_leaf_paths(ty(args[j]), type_env)` である。A12 の
-    `Llvm` 節点の型についての 3 つは、`result_prov` の呼び出しが abort せず `Provenance` を返すことの
+    `Llvm` 節点の型についての 4 つは、`result_prov` の呼び出しが abort せず `Provenance` を返すことの
     前提を与える (A3)。A3 の表の
     「単一の `Arg(j, σ)`」の行が「結果のその leaf が inhabited であることと、第 `j` オペランドの leaf
     `σ` が inhabited であることは同値である」と述べる。`obj` の一致は D9 の値の水準の最後の行が与える --
-    「`Llvm` の素通し leaf: 結果のその leaf の値はオペランド `i` のその leaf の値である」であり、D6 の
-    `obj` は値のその位置に在るポインタで決まる。**値の水準の行を引くのは、この腕が両端の計数下を
+    「`Llvm` の素通し leaf: 結果の leaf `λ` の宣言が単一の `Arg(i, σ)` であるとき、その leaf の値は
+    **オペランド `i` の leaf `σ` の値**である。**`λ` と `σ` は一般に別の path である**」であり、
+    <2>2 よりこの腕では `i = j`、`σ = p` である。D6 の `obj` は値のその位置に在るポインタで決まるので、
+    `x` の値の `λ` に在るポインタと `args[j]` の値の `p` に在るポインタが同じであることから
+    `obj(x, λ) = obj(args[j], p)` が出る。**値の水準の行を引くのは、この腕が両端の計数下を
     問わないからである** -- A5 の本文は「同じ参照を持つ 2 つの leaf は同じオブジェクトを指す」の形の
     議論を両端が計数下である場合に限っている (D26 よりグローバル状態を指す leaf は D8 の意味の参照を
     持たない)。`origin` を呼ぶ他の 5 つの腕も、同じ理由で D9 の値の水準の行を引く。
   <2>4. (ii) が成り立つ。
-    BY <1>0, A11, CODE src/rc_ir/ownership.rs: collect_bindings
+    BY <1>0, <ref id=3905b4e/>, <ref id=b3dfa37/>, <ref id=ca36627/>, CODE src/rc_ir/ownership.rs: collect_bindings
     `Binding::Llvm` は `Let(x, RcRhs::Llvm(gen, args), k)` からだけ作られ、`args[j]` が
     `vars.bindings` に束縛を持つときは、A11 よりその位置でスコープに入っている束縛に解決する。
     持たないときは <1>0 が与える。
+    **A11 が与えるのは解決先だけである。** その束縛の節点が `ρ` の上で先に在ることは D2 と D3 に
+    よる -- D2 は束縛のスコープをその節点の継続 (`Match` のアームの payload についてはその
+    アームの `body`) の部分木と定め、D3 の実行路は本体の根から継続とアーム本体を辿って得られる
+    節点の列なので、その部分木の中の節点に着くまでにその束縛の節点を通る。
   <2>5. QED
     BY <2>3, <2>4
     (i) と (iii) と (iv) は <2>3 である。この腕は `origin` を呼ぶので (B) は空虚に成り立つ。
 
 <1>5. CASE `Some(Binding::Llvm(llvm_gen, args, result_ty))` であって
-      `decl.leaf_origins_at(path).and_then(as_arg_projection)` が `None` を返す。この腕は
-      `origin_from_leaves_under(vars, type_env, &decl, args, path, &here_identity)
-      .unwrap_or_else(here)` を返す。ここで `here_identity = (x.name, λ)` である。
-  <2>1. `decl` は `boxed_leaf_paths(ty(x), type_env)` の各元を鍵に持つ `LeafMap` を包み、
-        `decl.leaf_origins_at(path)` は `Some(sources)` である。`sources` は元数 0 か 1 の集合である。
-    <3>1. `decl` の鍵の集合は `boxed_leaf_paths(ty(x), type_env)` である。
-      BY A3, CODE src/rc_ir/ownership.rs: collect_bindings,
-         CODE src/rc_ir/provenance.rs: Provenance::build_shape,
-         CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape
-      `collect_bindings` は `Binding::Llvm` の第 3 成分に `x.ty` を置くので、`origin_inner` が
-      `result_prov` に渡す `result_ty` は `ty(x)` である。A3 より `result_prov` は結果の leaf ごとに
-      `LeafOrigins` を宣言する。`LeafMap::build_shape` は `boxed_leaf_paths(ty, type_env)` の各元を鍵に
-      して値を置く。
-    <3>2. `leaf_origins_at(path)` は `self.0.get(path)` であり、`path ∈ boxed_leaf_paths(ty(x))` なので
-          `Some` を返す。
-      BY <3>1, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
-         CODE src/rc_ir/leaf_map.rs: LeafMap::get
-    <3>3. QED
-      BY <3>1, <3>2, A3
-      A3 は「その 29 個が leaf に置く集合はすべて要素数 0 か 1 である」と述べ、複数の元を宣言する op が
-      このコミットのプログラムに存在しないことを仮定する。
-  <2>2. `decl.leaf_origins_under(path)` が渡す集合は、<2>1 の `sources` ただ 1 つである。
-    BY <2>1, L7, A10, CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
-       CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under
-    `leaves_under(path)` は鍵が `path` を前置に持つ元だけを渡す。<2>1 より鍵は
-    `boxed_leaf_paths(ty(x))` である。`ty(x)` は本体に現れる変数の型、すなわちプログラムに現れる型
-    なので A10 を満たし、L7 はその型について「`boxed_leaf_paths(τ, type_env)` の相異なる 2 元は、
-    一方が他方の前置になることが無い」と述べる。よってその中で `path` を前置に持つのは `path` 自身
-    だけである。
-  <2>3. `origin_from_leaves_under` の中の `operand_units` は空である。
-    BY <2>1, <2>2, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       CODE src/rc_ir/ownership.rs: as_arg_projection
-    `operand_units` に元が入るのは `LeafOrigin::Arg(j, leaf)` の場合だけである。<2>1 より `sources` は
-    元数 0 か 1 であり、元数 1 でその元が `Arg` ならば `as_arg_projection` は `Some` を返すので、この
-    場合には来ない。よって `sources` は空集合か、`Fresh` か `Unknown` ただ 1 つである。
-  <2>4. この腕は `origin` を呼ばない。
-    BY <2>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
-    `origin_from_leaves_under` が `origin` を呼ぶのは `operand_units` の各元についてだけである。
-  <2>5. この腕の値は `Origin::Exactly((x.name, λ))` である。
-    BY <2>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
-       CODE src/rc_ir/ownership.rs: origin_inner
-    <2>3 より `reached` は、`produced_here` が偽なら空、真なら `[Origin::Exactly(here_identity)]` で
-    ある。空のとき `let first = reached.first()?;` が `None` を返し、`origin_inner` の
-    `unwrap_or_else(here)` が `here()` すなわち `Origin::Exactly((x.name, λ))` を返す。1 元のときは
-    `reached.iter().all(|reached_origin| reached_origin == first)` が真なので `Some(first.clone())` を
-    返し、その値は `Origin::Exactly(here_identity) = Origin::Exactly((x.name, λ))` である。
-  <2>6. QED
-    BY <2>4, <2>5
-    (A) は空虚に成り立ち、(B) は <2>5 である。
+      `decl.leaf_origins_at(path).and_then(as_arg_projection)` が `None` を返す。
+  BY <ref id=f8fa0e9/>
+  L7a (a) より、この枝は `origin` を 1 回も呼ばず、その値は `Origin::Exactly((x.name, λ))` である。
+  よって (A) は空虚に成り立ち、(B) が成り立つ。
 
 <1>6. CASE `Some(Binding::Field(container, idx))`。
   <2>1. CASE `container.ty.is_box(type_env)` が真。この腕は `here()` すなわち
@@ -1089,11 +1616,11 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
         `origin(vars, type_env, &container.name, &container_path)` を呼ぶ。ここで
         `container_path = [idx] ++ path` である。すなわち `x' = container`、`λ' = [idx] ++ λ` である。
     <3>1. `container` の型は unbox の構造体であり、`ty(x)` はその第 `idx` フィールドの型である。
-      BY A12
+      BY <ref id=83d98e9/>
       A12 の第 8 項が「`Destructure` の容器が構造体であること」、第 5 項が「`Destructure` のフィールド
       変数とフィールドの型」の一致を述べる。この場合は `is_box` が偽なので unbox である。
     <3>2. 第 `idx` フィールドは `container.ty` の穴でない。
-      BY A12
+      BY <ref id=83d98e9/>
       A12 が「`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が実際に持つ
       (punched でない) ものであること」を述べる。
     <3>2a. `(idx, ty(x))` は `unpunched_field_types(container.ty, type_env)` の元であり、
@@ -1104,41 +1631,57 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
         <3>1 より `ty(x)` は `container.ty` の第 `idx` フィールドの型であり、<3>2 よりそのフィールドは
         穴でない。`unpunched_field_types` は穴でないフィールドを添字とともに返す。
       <4>2. `is_fully_unboxed(ty(x), type_env)` は偽である。
-        BY D4
+        BY <ref id=0594f24/>
         L8 の仮定より `λ ∈ boxed_leaf_paths(ty(x))` であり、D4 の第 1 規則は `is_fully_unboxed` が
         真の型が leaf を持たないと述べる。
       <4>3. `container.ty` について `is_closure`、`is_funptr`、`is_array` はいずれも偽である。
-        BY <3>1, CODE src/ast/types.rs: TypeNode::is_closure,
+        BY <3>1, <ref id=83d98e9/>, <ref id=3d4be43/>, CODE src/ast/types.rs: TypeNode::is_closure,
            CODE src/ast/types.rs: TypeNode::is_funptr, CODE src/ast/types.rs: TypeNode::is_array,
+           CODE src/ast/types.rs: TypeNode::is_struct,
+           CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+           CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
            CODE src/ast/types.rs: TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
-        この 3 つの判定は、最上位 tycon がそれぞれ `Std::->`、`Std::FunPtr_*` のいずれか、
-        `Std::Array` であることを問う。`bulitin_tycons` はこの 3 種にそれぞれ `TyConVariant::Arrow`、
-        `TyConVariant::Primitive`、`TyConVariant::Array` を与える。<3>1 より `container.ty` の最上位
-        tycon は構造体として宣言されたもの、すなわち `TyConVariant::Struct` である。1 つの tycon の
-        変位は 1 つなので、`container.ty` の最上位 tycon はこの 3 種のどれとも異なる。
+        この 3 つの判定の本体はどれも `self.toplevel_tycon_satisfies(<述語>)` であり、
+        `toplevel_tycon_satisfies` は最上位 tycon が在ればそれに述語を当て、無ければ偽を返す。よって
+        3 つが問うのは、最上位 tycon がそれぞれ `Std::->`、`Std::FunPtr_*` のいずれか、`Std::Array`
+        であることである。`bulitin_tycons` はこの 3 種にそれぞれ `TyConVariant::Arrow`、
+        `TyConVariant::Primitive`、`TyConVariant::Array` を与え、A28 より、`type_env.tycons()` が
+        その 3 つの鍵の下に持つ項目は `bulitin_tycons` が置いたその項目である。**A12 の「構造体である」から
+        `TyConVariant::Struct` へ渡るのは `is_struct` である** -- その本体は
+        `self.toplevel_tycon_info(type_env)` の `variant` を読み、`TyConVariant::Struct` のときにだけ
+        真を返す。<3>1 より `container.ty` は構造体なので、その最上位 tycon の `variant` は
+        `TyConVariant::Struct` である。1 つの tycon の変位は 1 つなので、`container.ty` の最上位 tycon は
+        この 3 種のどれとも異なる。**A12 が型の `variant` を述べる各節では、その型の `is_closure()` は
+        偽である** -- A12 はこの文をその各節の一部として置く。
       <4>4. QED
-        BY <2>2, <4>1, <4>2, <4>3, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+        BY <4>1, <4>2, <4>3, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
         `is_fully_unboxed` は、`is_box` が真なら偽、`is_closure` が真なら偽、`is_array` が真なら偽、
         `is_funptr` が真なら真を返し、そのいずれでもないとき `unpunched_field_types` の各フィールドの
-        型がすべて `is_fully_unboxed` であるかを答える。`is_box` はこの CASE の仮定 (<2>2) より偽、
-        残る 3 つは <4>3 より偽なので、判定は最後の行に来る。<4>1 と <4>2 よりその全称は偽なので
-        `is_fully_unboxed(container.ty, type_env)` は偽である。
+        型がすべて `is_fully_unboxed` であるかを答える。`is_box` はこの CASE の仮定 (`container.ty.is_box(type_env)`
+        が偽) より偽、残る 3 つは <4>3 より偽なので、判定は最後の行に来る。<4>1 と <4>2 よりその全称は
+        偽なので `is_fully_unboxed(container.ty, type_env)` は偽である。
     <3>3. `[idx] ++ λ ∈ boxed_leaf_paths(ty(container))` である。これが (i) である。
-      BY D4, <3>2a
+      BY <ref id=0594f24/>, <3>2a
       D4 の第 5 規則より、この規則に来る型の leaf は `unpunched_field_types` が返す各フィールド `i` に
       ついて `[i] ++ (そのフィールドの型の leaf)` である。<3>2a より `(idx, ty(x))` はそのフィールドの
       1 つであり、L8 の仮定より `λ ∈ boxed_leaf_paths(ty(x))` である。
     <3>4. `container` の値の第 `idx` フィールドは `x` の値である。
-      BY D2, D9
+      BY <ref id=b3dfa37/>, <ref id=9d74736/>
       D2 の表が `Destructure(c, fs, s, k)` を「容器 `c` をフィールドに分解し、各 `(i, x)` の `x` に
-      第 `i` フィールドを束縛する」と述べる。D9 の移動の表の第 3 行がこの束縛を移動とする。
+      第 `i` フィールドを束縛する」と述べる。D9 の移動の表の第 3 行 --「`Destructure(c, fs)` (`c` が
+      unbox) の名前付きフィールド | `c` のそのフィールドの参照がフィールド変数へ」-- がこの束縛を
+      移動とする。
     <3>5. (ii) が成り立つ。
-      BY <1>0, A11, CODE src/rc_ir/ownership.rs: collect_bindings
+      BY <1>0, <ref id=3905b4e/>, <ref id=b3dfa37/>, <ref id=ca36627/>, CODE src/rc_ir/ownership.rs: collect_bindings
+      **A11 が与えるのは解決先だけである。** その束縛の節点が `ρ` の上で先に在ることは D2 と D3 に
+      よる -- D2 は束縛のスコープをその節点の継続 (`Match` のアームの payload についてはその
+      アームの `body`) の部分木と定め、D3 の実行路は本体の根から継続とアーム本体を辿って得られる
+      節点の列なので、その部分木の中の節点に着くまでにその束縛の節点を通る。
       `Binding::Field(container, idx)` は `Destructure(container, fields, _, k)` からだけ作られ、
       `container` が `vars.bindings` に束縛を持つときは、A11 よりその位置でスコープに入っている束縛に
       解決する。持たないときは <1>0 が与える。
     <3>6. QED
-      BY D16, D6, <3>1, <3>3, <3>4
+      BY <ref id=66c9670/>, <ref id=596a46d/>, <3>1, <3>3, <3>4
       D16 より `[idx] ++ λ` が `container` の値の inhabited な leaf であることは、その路が通る unbox
       union の各節で選ぶ変位番号がその節のタグに等しいことである。<3>1 より `container.ty` は構造体なので
       根の節は union ではなく、先頭の添字 `idx` は union の節を通らない。残りの節は `λ` が `x` の値の中で
@@ -1153,56 +1696,70 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
   <2>1. CASE `variant` が `None` (catch-all)。この腕は `origin(vars, type_env, &scrut.name, path)` を
         呼ぶ。すなわち `x' = scrut`、`λ' = λ` である。
     <3>1. `ty(x) = ty(scrut)` であり、`x` の値は `scrut` の値である。
-      BY A12, D9
+      BY <ref id=83d98e9/>, <ref id=9d74736/>
       A12 の第 4 項が「catch-all アームの payload と scrutinee の型」の一致を述べる。D9 の移動の表の
       第 5 行が「catch-all アームの scrutinee から payload 変数へ」を移動とする。
     <3>2. (ii) が成り立つ。
-      BY <1>0, A11, CODE src/rc_ir/ownership.rs: collect_bindings
+      BY <1>0, <ref id=3905b4e/>, <ref id=b3dfa37/>, <ref id=ca36627/>, CODE src/rc_ir/ownership.rs: collect_bindings
       `Binding::Payload(scrut, arm.tag)` は `RcRhs::Match(scrut, arms)` からだけ作られ、`scrut` が
       `vars.bindings` に束縛を持つときは、A11 よりその位置でスコープに入っている束縛に解決する。
       持たないときは <1>0 が与える。
+      **A11 が与えるのは解決先だけである。** その束縛の節点が `ρ` の上で先に在ることは D2 と D3 に
+      よる -- D2 は束縛のスコープをその節点の継続 (`Match` のアームの payload についてはその
+      アームの `body`) の部分木と定め、D3 の実行路は本体の根から継続とアーム本体を辿って得られる
+      節点の列なので、その部分木の中の節点に着くまでにその束縛の節点を通る。
     <3>3. QED
-      BY <3>1, <3>2, D16, D6
+      BY <3>1, <3>2, <ref id=66c9670/>, <ref id=596a46d/>
       同じ値と同じ型は同じ leaf について同じ答えを与えるので (i) と (iii) と (iv) が成り立つ。この腕は
       `origin` を呼ぶので (B) は空虚に成り立つ。
   <2>2. CASE `variant` が `Some(tag)` であって `scrut.ty.is_box(type_env)` が偽。この腕は
         `origin(vars, type_env, &scrut.name, &scrut_path)` を呼ぶ。ここで
         `scrut_path = [tag] ++ path` である。すなわち `x' = scrut`、`λ' = [tag] ++ λ` である。
     <3>1. `scrut.ty` は unbox union であり、`ty(x)` はその第 `tag` 変位の payload の型である。
-      BY A12
+      BY <ref id=83d98e9/>
       A12 の第 7 項が「`Match` の scrutinee が union であること」、第 3 項が「payload と変位の型」の
       一致を述べる。この場合は `is_box` が偽なので unbox である。
     <3>1a. `(tag, ty(x))` は `unpunched_field_types(scrut.ty, type_env)` の元であり、`scrut.ty` は
            D4 の第 5 規則に来る -- `is_fully_unboxed`、`is_closure`、`is_box`、`is_array` がいずれも
            偽である。
       <4>1. `(tag, ty(x))` は `unpunched_field_types(scrut.ty, type_env)` の元である。
-        BY <3>1, A12, CODE src/ast/types.rs: TypeNode::unpunched_field_types
+        BY <3>1, <ref id=83d98e9/>, CODE src/ast/types.rs: TypeNode::unpunched_field_types
         A12 が「`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が実際に持つ
         (punched でない) ものであること」を述べるので、第 `tag` 変位は `scrut.ty` の穴ではない。
         <3>1 より `ty(x)` はその変位の payload の型である。`unpunched_field_types` は穴でない
         フィールドを添字とともに返し、union のフィールドは各変位の payload である。
       <4>2. `is_fully_unboxed(ty(x), type_env)` は偽である。
-        BY D4
+        BY <ref id=0594f24/>
         L8 の仮定より `λ ∈ boxed_leaf_paths(ty(x))` であり、D4 の第 1 規則は `is_fully_unboxed` が
         真の型が leaf を持たないと述べる。
       <4>3. `scrut.ty` について `is_closure`、`is_funptr`、`is_array` はいずれも偽である。
-        BY <3>1, CODE src/ast/types.rs: TypeNode::is_closure,
+        BY <3>1, <ref id=83d98e9/>, <ref id=3d4be43/>, CODE src/ast/types.rs: TypeNode::is_closure,
            CODE src/ast/types.rs: TypeNode::is_funptr, CODE src/ast/types.rs: TypeNode::is_array,
+           CODE src/ast/types.rs: TypeNode::is_union,
+           CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+           CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
            CODE src/ast/types.rs: TyConVariant, CODE src/fixstd/builtin.rs: bulitin_tycons
-        この 3 つの判定は、最上位 tycon がそれぞれ `Std::->`、`Std::FunPtr_*` のいずれか、
-        `Std::Array` であることを問う。`bulitin_tycons` はこの 3 種にそれぞれ `TyConVariant::Arrow`、
-        `TyConVariant::Primitive`、`TyConVariant::Array` を与える。<3>1 より `scrut.ty` の最上位
-        tycon は union として宣言されたもの、すなわち `TyConVariant::Union` である。1 つの tycon の
-        変位は 1 つなので、`scrut.ty` の最上位 tycon はこの 3 種のどれとも異なる。
+        この 3 つの判定の本体はどれも `self.toplevel_tycon_satisfies(<述語>)` であり、
+        `toplevel_tycon_satisfies` は最上位 tycon が在ればそれに述語を当て、無ければ偽を返す。よって
+        3 つが問うのは、最上位 tycon がそれぞれ `Std::->`、`Std::FunPtr_*` のいずれか、`Std::Array`
+        であることである。`bulitin_tycons` はこの 3 種にそれぞれ `TyConVariant::Arrow`、
+        `TyConVariant::Primitive`、`TyConVariant::Array` を与え、A28 より、`type_env.tycons()` が
+        その 3 つの鍵の下に持つ項目は `bulitin_tycons` が置いたその項目である。**A12 の「union である」から
+        `TyConVariant::Union` へ渡るのは `is_union` である** -- その本体は
+        `self.toplevel_tycon_info(type_env)` の `variant` を読み、`TyConVariant::Union` のときにだけ
+        真を返す。<3>1 より `scrut.ty` は union なので、その最上位 tycon の `variant` は
+        `TyConVariant::Union` である。1 つの tycon の変位は 1 つなので、`scrut.ty` の最上位 tycon は
+        この 3 種のどれとも異なる。**A12 が型の `variant` を述べる各節では、その型の `is_closure()` は
+        偽である** -- A12 はこの文をその各節の一部として置く。
       <4>4. QED
-        BY <2>2, <4>1, <4>2, <4>3, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+        BY <4>1, <4>2, <4>3, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
         `is_fully_unboxed` は、`is_box` が真なら偽、`is_closure` が真なら偽、`is_array` が真なら偽、
         `is_funptr` が真なら真を返し、そのいずれでもないとき `unpunched_field_types` の各フィールドの
-        型がすべて `is_fully_unboxed` であるかを答える。`is_box` はこの CASE の仮定 (<2>2) より偽、
-        残る 3 つは <4>3 より偽なので、判定は最後の行に来る。<4>1 と <4>2 よりその全称は偽なので
-        `is_fully_unboxed(scrut.ty, type_env)` は偽である。
+        型がすべて `is_fully_unboxed` であるかを答える。`is_box` はこの CASE の仮定 (`scrut.ty.is_box(type_env)`
+        が偽) より偽、残る 3 つは <4>3 より偽なので、判定は最後の行に来る。<4>1 と <4>2 よりその全称は
+        偽なので `is_fully_unboxed(scrut.ty, type_env)` は偽である。
     <3>2. `[tag] ++ λ ∈ boxed_leaf_paths(ty(scrut))` である。これが (i) である。
-      BY D4, <3>1, <3>1a
+      BY <ref id=0594f24/>, <3>1, <3>1a
       D4 の第 5 規則より、この規則に来る型の leaf は `unpunched_field_types` が返す各フィールド `i`
       について `[i] ++ (そのフィールドの型の leaf)` であり、union のときそのフィールドは各変位の
       payload である。<3>1a より `scrut.ty` はこの規則に来て、`(tag, ty(x))` はそのフィールドの
@@ -1211,28 +1768,28 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
       <4>1. 固定した活性化は、この `Binding::Payload(scrut, Some(tag))` を作った `Match` 節点
             `Let(x, Match(scrut, arms), k)` で、`payload` が `x` であるアーム `arm_t` を選んでいる。
             `arm_t.tag` は `Some(tag)` である。
-        BY A6, A11, D3, CODE src/rc_ir/ownership.rs: collect_bindings
+        BY <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=ca36627/>, CODE src/rc_ir/ownership.rs: collect_bindings
         `collect_bindings` は `RcRhs::Match(scrut, arms)` の各 `arm` について、`arm.payload` の名前を
         鍵に `Binding::Payload(scrut, arm.tag)` を作る。A6 より名前は束縛を一意に決めるので、
         `x` に値を与える構文はこのアームの payload 束縛だけである。L8 の仮定より `ρ` の上で `x` は
         値を得ているので、D3 より `ρ` はこのアームの本体を通る。
       <4>2. `scrut` の値の実行時のタグを `t_run` と書く。CASE `arms` のあるアームの `tag` が
             `Some(t_run)` である。このとき `tag = t_run` である。
-        BY D21, <4>1
+        BY <ref id=c232680/>, <4>1
         D21 より、そのようなアームが在るとき活性化が選ぶアームは `tag` が `t_run` に等しいアームで
         ある。<4>1 よりそれは `arm_t` なので、`arm_t.tag = Some(tag)` は `Some(t_run)` に等しい。
       <4>3. CASE `arms` のどのアームの `tag` も `Some(t_run)` でない。この場合は起こらない。
         <5>1. `arms` は catch-all アーム (`tag` が `None`) を持つ。
-          BY A16
-          A16 は「`arms` が catch-all アームを持つか、`s` の値が取りうる実行時のタグがいずれかの
-          アームの `tag` である」と述べる。この CASE の仮定より後者ではない。
+          BY <ref id=f769887/>
+          A16 は「`arms` が catch-all アーム (`tag` が `None`) を持つか、`s` の値が取りうる実行時の
+          タグがいずれかのアームの `tag` である」と述べる。この CASE の仮定より後者ではない。
         <5>2. `arms` の最後のアームが catch-all アームである。
           BY <5>1, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
           `eval_rc_match` は最後のアーム以外の各アームについて
           `arm.tag.expect("a non-final match arm must be a variant arm")` を読むので、catch-all
           アームが最後でない本体はコード生成が停止し、活性化を持たない。
         <5>3. 実行はこの `Match` で最後のアームに入る。
-          BY D21, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
+          BY <ref id=c232680/>, CODE src/rc_ir/codegen.rs: Generator::eval_rc_match
           この CASE の仮定より `t_run` に等しい `tag` を持つアームが無いので、D21 はコード生成の
           振る舞いに従う。`eval_rc_match` は最後のアーム以外の `tag` を case、最後のアームのブロックを
           default とする switch を出すので、どの case にも一致しない `t_run` は default すなわち
@@ -1246,16 +1803,20 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
         BY <4>2, <4>3
         排中律による。<4>3 の場合は起こらないので、<4>2 の結論が成り立つ。
     <3>4. `x` の値は `scrut` の値の第 `tag` 変位の payload である。
-      BY D9, <3>3
+      BY <ref id=9d74736/>, <3>3
       D9 の移動の表の第 4 行が「scrutinee の活性変位の参照が payload 変数へ」を移動とする。<3>3 より
       活性変位は `tag` である。
     <3>5. (ii) が成り立つ。
-      BY <1>0, A11, CODE src/rc_ir/ownership.rs: collect_bindings
+      BY <1>0, <ref id=3905b4e/>, <ref id=b3dfa37/>, <ref id=ca36627/>, CODE src/rc_ir/ownership.rs: collect_bindings
       `Binding::Payload(scrut, arm.tag)` は `RcRhs::Match(scrut, arms)` からだけ作られ、`scrut` が
       `vars.bindings` に束縛を持つときは、A11 よりその位置でスコープに入っている束縛に解決する。
       持たないときは <1>0 が与える。
+      **A11 が与えるのは解決先だけである。** その束縛の節点が `ρ` の上で先に在ることは D2 と D3 に
+      よる -- D2 は束縛のスコープをその節点の継続 (`Match` のアームの payload についてはその
+      アームの `body`) の部分木と定め、D3 の実行路は本体の根から継続とアーム本体を辿って得られる
+      節点の列なので、その部分木の中の節点に着くまでにその束縛の節点を通る。
     <3>6. QED
-      BY D16, D6, <3>2, <3>3, <3>4
+      BY <ref id=66c9670/>, <ref id=596a46d/>, <3>2, <3>3, <3>4
       D16 より `[tag] ++ λ` が `scrut` の値の inhabited な leaf であることは、その路が通る unbox union の
       各節で選ぶ変位番号がその節のタグに等しいことである。根の節は `scrut` 自身であり、そこで選ぶ変位は
       `tag`、タグも `tag` (<3>3) なので一致する。残りの節は `λ` が `x` の値の中で通る節そのものである
@@ -1276,10 +1837,10 @@ union のタグを通り (D16)、同じポインタを持つ (D6 の `obj`)。nu
   `origin_inner` の `match` はそれに `None` を加えた腕を持つ。<1>1 が `None`/`Param`/`Producer`、
   <1>2 が `Move`、<1>3 が `Join`、<1>4 と <1>5 が `Llvm`、<1>6 が `Field`、<1>7 が `Payload` を扱う。
 
-#### L8a (`origin` の memo を使わない展開は有限である)
+#### L8a (`origin` の memo を使わない展開は有限である) <!--#df74e59-->
 
-**言明**。`vars` をある本体の `VarTable`、`x` をその本体の変数、`λ` を `FieldPath` とする。次の 2 つが
-成り立つ。
+**言明**。`(B', vars)` を解析にかかる本体とその表 (DEF 解析にかかる本体)、`x` を `B'` に現れる変数、
+`λ` を `FieldPath` とする。次の 2 つが成り立つ。
 
 - **(i)** `origin(vars, type_env, x.name, λ)` が返す値は、`origin_inner` の再帰呼び出しを memo を
   使わずにそのまま展開して得られる木 -- 下の**展開とその値**が `E(x.name, λ)` と書くもの -- の値に
@@ -1300,11 +1861,12 @@ memo が当たった位置で止まる。`origin_inner` が呼ぶ相手を辿る
 **証明**
 
 <1>1. `origin` のどの呼び出しも停止し、したがってその実際の呼び出しの木は有限である。
-  BY P2, A11, CODE src/rc_ir/ownership.rs: origin_inner
-  P2 は「`origin(x, π)` は、`x` がプログラムの束縛変数であるか、`vars.bindings` に束縛を持たない名前
-  (D6 の第 3 の形) であるようなすべての `(x, π)` について、`π` を問わず panic せずに答えを返し、
-  停止する」と述べる。停止する呼び出しが直接行う `origin` の呼び出しは有限個であり、その入れ子も
-  有限である。A11 (スコープの規律) が P2 の立つ仮定である。
+  BY DEF 解析にかかる本体, CODE src/rc_ir/ownership.rs: origin_inner
+  DEF 解析にかかる本体 の (4) は、任意の名前 `x` と任意の `FieldPath` `π` について
+  `origin(vars, type_env, x, π)` が panic せずに答えを返して停止することをいう。`origin_inner` の
+  各腕が直接行う `origin` の呼び出しは有限個である -- `Binding::Join(arm_results)` の腕は
+  `arm_results` の各元について 1 回ずつ呼び、それ以外の腕は高々 1 回呼ぶ。よって停止する呼び出しの
+  入れ子も有限である。
 
 <1>2. `origin` は `vars.origins` に記録された答えが在ればそれを返し、無ければ `origin_inner` を呼んで
       その答えを記録してから返す。記録するのは `origin_inner` が計算した答えそのものであり、記録は
@@ -1314,7 +1876,7 @@ memo が当たった位置で止まる。`origin_inner` が呼ぶ相手を辿る
 <1>3. `vars.origins` に記録が書かれる順に `r_1, r_2, …` と番号を付け、`r_k` を書いた `origin` の
       呼び出しの引数を `a_k` と書く。各 `k` について、`E(a_k)` は有限であり、その値は `r_k` に
       記録された値に等しい。
-  BY <1>1, <1>2, A15, CODE src/rc_ir/ownership.rs: origin,
+  BY <1>1, <1>2, <ref id=e11772a/>, <ref id=3e6b0e0/>, CODE src/rc_ir/ownership.rs: origin,
      CODE src/rc_ir/ownership.rs: origin_inner
   `k` についての強い帰納法による。<1>2 より記録は `origin_inner` から戻った後に書かれるので、
   `origin_inner(a_k)` の本体が行う `origin(b)` の呼び出しは、`r_k` より前に書かれた記録に当たって
@@ -1324,7 +1886,11 @@ memo が当たった位置で止まる。`origin_inner` が呼ぶ相手を辿る
   それが呼ぶ `origin` の返り値の関数なので、`E(a_k)` の値は `origin_inner(a_k)` が実際に返した値、
   すなわち `r_k` の値に等しい。`E(a_k)` の部分木はこれらの `E(b)` であり、<1>1 よりその個数は有限で、
   帰納法の仮定よりどれも有限なので、`E(a_k)` は有限である。`grow_stack` が本体をちょうど 1 回呼ぶ
-  ことは A15 による。
+  ことは A15 による。`E(a_k)` の値が 1 つに定まることは A3 による -- `origin_inner` の
+  `Binding::Llvm` の腕は `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` を呼び、A3 は
+  「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」と
+  述べる。これが無いと `origin_inner` を同じ対に当てた 2 つの評価が違う値を返しうるので、`E(a_k)` の
+  値も、それが `r_k` に等しいことも定まらない。
 
 <1>4. QED
   BY <1>1, <1>2, <1>3
@@ -1334,7 +1900,7 @@ memo が当たった位置で止まる。`origin_inner` が呼ぶ相手を辿る
   与える。これが (i) と (ii) である。有限の木の枝は有限であり、その最後の対では `origin_inner` が
   `origin` を呼ばない。
 
-#### L9 (`identity` は inhabited を決める)
+#### L9 (`identity` は inhabited を決める) <!--#eabf11d-->
 
 **言明**。`x` を `B` の変数、`λ ∈ boxed_leaf_paths(ty(x))` とし、実行路 `ρ` の上で `x` が値を得ていると
 する。`(u, σ) = origin(x, λ).identity()` と置く。このとき `ρ` の上で `u` は値を得ており、
@@ -1347,10 +1913,10 @@ inhabited な leaf であることは同値である。
 
 <1>1. CASE `origin_inner(vars, type_env, x.name, λ)` が `origin` を 1 回も呼ばない。
   <2>1. `origin(x, λ) = Origin::Exactly((x.name, λ))` である。
-    BY L8, CODE src/rc_ir/ownership.rs: origin
+    BY <ref id=b99155f/>, CODE src/rc_ir/ownership.rs: origin
     L8 の (B) がこの場合の `origin_inner` の値を与える。
   <2>2. QED
-    BY <2>1, D15
+    BY <2>1, <ref id=cbc4a1c/>
     D15 より `Origin::Exactly(p).identity()` は `p` である。よって `(u, σ) = (x.name, λ)` であり、
     3 つの主張はいずれも仮定そのものである。
 
@@ -1365,7 +1931,7 @@ inhabited な leaf であることは同値である。
     `origin(vars, type_env, &scrut.name, &scrut_path)` を、それぞれ腕の値として返す。
   <2>2. `λ' ∈ boxed_leaf_paths(ty(x'))` であり、`ρ` の上で `x'` は値を得ており、`λ` が `x` の値の
         inhabited な leaf であることと `λ'` が `x'` の値の inhabited な leaf であることは同値である。
-    BY L8
+    BY <ref id=b99155f/>
     L8 の (A) の (i)(ii)(iii) である。
   <2>3. QED
     BY <2>1, <2>2, 帰納法の仮定
@@ -1378,7 +1944,7 @@ inhabited な leaf であることは同値である。
       `Origin::of_candidates(candidates, &(x.name, λ))` が `Origin::Exactly` を返す。
   <2>1. このとき `candidates` は 1 元集合であり、返り値はその唯一の元 `c` についての
         `Origin::Exactly(c)` である。よって `(u, σ) = c` である。
-    BY CODE src/rc_ir/ownership.rs: Origin::of_candidates, CODE src/rc_ir/ownership.rs: origin_inner, D15
+    BY CODE src/rc_ir/ownership.rs: Origin::of_candidates, CODE src/rc_ir/ownership.rs: origin_inner, <ref id=cbc4a1c/>
     `of_candidates` は `candidates.len()` が 1 のとき `Origin::Exactly(その元)` を返す。
   <2>2. `ρ` が選んだアームの結果変数を `x' = arm_results[j]` とすると、`origin(x', λ).acted_on()` の元は
         すべて `c` である。
@@ -1387,11 +1953,11 @@ inhabited な leaf であることは同値である。
     各元を `candidates` に入れる。<2>1 より `candidates = {c}` なので、どの `arm_result` の `acted_on`
     の元も `c` である。
   <2>3. `origin(x', λ).identity() = c` である。
-    BY <2>2, D15
+    BY <2>2, <ref id=cbc4a1c/>
     D15 より `acted_on()` は `identity()` を先頭に持つ列であり、空でない。
   <2>4. `λ ∈ boxed_leaf_paths(ty(x'))` であり、`ρ` の上で `x'` は値を得ており、`λ` が `x` の値の
         inhabited な leaf であることと `λ` が `x'` の値の inhabited な leaf であることは同値である。
-    BY L8
+    BY <ref id=b99155f/>
     L8 の (A) の `Binding::Join` の腕についての主張は `ρ` が選んだアームの結果変数についてのもので
     ある。
   <2>5. QED
@@ -1402,24 +1968,26 @@ inhabited な leaf であることは同値である。
       `Origin::Join` を返す。
   <2>1. このとき返り値は `Origin::Join { identity: (x.name, λ), candidates }` であり、
         `(u, σ) = (x.name, λ)` である。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Origin::of_candidates, D15
+    BY CODE src/rc_ir/ownership.rs: origin_inner, Origin::of_candidates, Origin::identity
     この腕は `Origin::of_candidates(candidates, &(var.clone(), path.to_vec()))` を返し、
-    `of_candidates` は元数が 1 でないとき `Origin::Join { identity, candidates }` を返す。D15 より
-    `Origin::Join` の `identity()` はその `identity` フィールドである。
+    `of_candidates` は元数が 1 でないとき `Origin::Join { identity, candidates }` を返す。
+    `Origin::identity` の本体は
+    `match self { Origin::Exactly(p) => p, Origin::Join { identity, .. } => identity }` なので、
+    `Origin::Join` の `identity()` はその `identity` の欄である。
   <2>2. QED
     BY <2>1
     `(u, σ) = (x.name, λ)` なので、3 つの主張はいずれも仮定そのものである。
 
 <1>5. QED
-  BY <1>1, <1>2, <1>3, <1>4, CODE src/rc_ir/ownership.rs: origin_inner,
-     CODE src/rc_ir/ownership.rs: Binding, CODE src/rc_ir/ownership.rs: Origin
-  `origin_inner` の `match` の腕は `None`/`Param`/`Producer`、`Move`、`Join`、`Llvm`、`Field`、
-  `Payload` である。`origin` を呼ばない腕 -- `None`/`Param`/`Producer`、`Llvm` の
-  `origin_from_leaves_under` の枝、boxed 容器の `Field` の枝、boxed scrutinee の `Payload` の枝 -- は
-  <1>1 が扱う。`origin` を 1 回呼んでその値を返す腕は <1>2 が扱う。`Binding::Join` の腕は
-  `of_candidates` の返り値が `Origin` の 2 変位のどちらかなので <1>3 と <1>4 で尽きる。
+  BY <1>1, <1>2, <1>3, <1>4, <ref id=f8fa0e9/>, CODE src/rc_ir/ownership.rs: Origin
+  L7a は `origin_inner` の枝を 3 群に分け、その 3 つが場合を尽くすと述べる。(a) の 6 つ --
+  `None`/`Param`/`Producer`、boxed 容器の `Field` の枝、`variant` が `Some` であって boxed scrutinee の
+  `Payload` の枝、`Llvm` であって `as_arg_projection` が `None` を返す枝 -- は `origin` を 1 回も
+  呼ばないので <1>1 が扱う。(b) の 5 つは `origin` をちょうど 1 回呼んでその値をそのまま返すので
+  <1>2 が扱う。(c) の `Binding::Join` の腕は `of_candidates` の返り値が `Origin` の 2 変位のどちらかな
+  ので <1>3 と <1>4 で尽きる。
 
-#### L10 (名前の活性)
+#### L10 (名前の活性) <!--#0af32ee-->
 
 **言明**。実行路 `ρ` を固定する。`(x, λ)` と `(w, μ)` を、`λ ∈ boxed_leaf_paths(ty(x))`、
 `μ ∈ boxed_leaf_paths(ty(w))` であって `ρ` の上で `x` と `w` がともに値を得ている 2 つの対とし、
@@ -1430,11 +1998,11 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
 
 <1>1. `(u, σ) = origin(x, λ).identity() = origin(w, μ).identity()` と置く。`λ` が `x` の値の inhabited な
       leaf であることと `σ` が `u` の値の inhabited な leaf であることは同値である。
-  BY L9
+  BY <ref id=eabf11d/>
 
 <1>2. `μ` が `w` の値の inhabited な leaf であることと `σ` が `u` の値の inhabited な leaf であることは
       同値である。
-  BY L9
+  BY <ref id=eabf11d/>
 
 <1>3. QED
   BY <1>1, <1>2
@@ -1445,19 +2013,88 @@ leaf であることと、`μ` が `w` の値の inhabited な leaf であるこ
 実行路 `ρ` を固定する。名前 `o ∈ VarPath` が `ρ` で**活性**であるとは、
 `origin(x, λ).identity() = o` を満たす対 `(x, λ)` で、`λ ∈ boxed_leaf_paths(ty(x))` であり `ρ` の上で
 `x` が値を得ているものが在って、`λ` が `x` の値の inhabited な leaf であり、かつ `obj(x, λ)` が D26 の
-意味で計数下であることをいう。活性な名前 `o` が指すオブジェクトを `obj_ρ(o)` と書く。
+意味で計数下であることをいう。この条件を満たす対を `o` の**証人**と呼ぶ。活性な名前 `o` が指す
+オブジェクトを `obj_ρ(o)` と書く。この記法が定まること -- 証人が 2 つあってもそれが指すオブジェクトは
+1 つであること -- と、活性であることが `ρ` の上の時点によらないことは、`L10b` が示す。
 
-**この述語は対の選び方によらず、`ρ` の上の時点にもよらない。** 対の選び方によらないのは、inhabited に
-ついては L10 が、`obj(x, λ)` については P5 (a) が与えるからである (identity が等しい 2 つの leaf の
-スロットは同じオブジェクトを指す)。時点によらないのは、2 つの条件がどちらも時点によらないからである。
-inhabited が時点によらないのは、値が束縛の後に変わらないことによる -- D2 より本体は木であり、D3 の
-実行路は根から各節点を高々 1 度通るので、1 つの束縛は 1 つの実行路の上で高々 1 回実行される。計数下が
-時点によらないのは D26 の最後の段落による。
+#### L10b (証人はスロットであり、活性も `obj_ρ` も証人と時点によらない) <!--#87aea92-->
 
-値は束縛の後に変わらない -- D2 より本体は木であり、D3 の実行路は根から各節点を高々 1 度通るので、
-1 つの束縛は 1 つの実行路の上で高々 1 回実行される。よって活性かどうかは `ρ` の上の時点によらない。
+**言明**。実行路 `ρ` を固定する。名前 `o` が `ρ` で活性であるとき、次の 3 つが成り立つ。
 
-#### L10a (静的な数え上げと実行時の作用が活性な名前で一致する)
+- **(i)** `o` の各証人 `(x, λ)` は `ρ` の上のスロット (D6) である。
+- **(ii)** `o` の 2 つの証人は同じオブジェクトを指す。よって `obj_ρ(o)` は 1 つに定まる。
+- **(iii)** `o` が活性であることも `obj_ρ(o)` も、`ρ` の上の時点によらない。
+
+**証明**
+
+<1>1. (i) が成り立つ。
+  BY <ref id=596a46d/>, <ref id=0594f24/>, <ref id=b6673ca/>, <ref id=88a06de/>, DEF 名前の活性, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+  `x` が `vars.bindings` に束縛を持たない名前であるとする。D6 より `(x, λ)` は記号の位置であり、
+  指すのは funptr かグローバル状態のオブジェクトである。`is_funptr` の型は `is_fully_unboxed` が真で
+  boxed leaf を持たない (D4 の第 1 規則) ので、`λ` が指すのはグローバル状態のオブジェクトであり、
+  A8 と D26 よりそれは計数下ではない。DEF 名前の活性は証人に `obj(x, λ)` が計数下であることを要求
+  するので、この場合は起こらない。よって `x` は束縛を持ち、`λ` は `x` の値の inhabited な boxed leaf
+  なので、D6 より `(x, λ)` は `ρ` の上のスロットである。
+
+<1>2. (ii) が成り立つ。
+  BY <1>1, <ref id=2171d13/>, DEF 名前の活性
+  `(x, λ)` と `(x', λ')` を `o` の 2 つの証人とする。<1>1 よりどちらも `ρ` の上のスロットである。
+  DEF 名前の活性 より `origin(x, λ).identity() = o = origin(x', λ').identity()` である。`L14` を
+  `(x, λ)` に当てると、`o` は `ρ` の上の位置であって `obj(o) = obj(x, λ)` である。`L14` を `(x', λ')`
+  に当てると、同じ `o` について `obj(o) = obj(x', λ')` である。よって `obj(x, λ) = obj(x', λ')` である。
+  **`L14` はこの命題を引かない** -- `L14` が引くのは `L8`・`L9`・`L12`・`L12a`・`L12b` だけであり、
+  そのどれも `L10b` に立たないので、この参照で循環は生じない。
+
+<1>3. (iii) が成り立つ。
+  BY <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=596a46d/>, <ref id=88a06de/>, <1>2
+  活性が証人に課す 2 つの条件 -- `λ` が inhabited であること、`obj(x, λ)` が計数下であること -- は
+  どちらも時点によらない。inhabited が時点によらないのは、D6 の「**変数の値は、それを束縛する節点の
+  後は変わらない。**」による -- D2 より本体は木であり、D3 の実行路は根から各節点を高々 1 度通るので、
+  1 つの束縛は 1 つの実行路の上で高々 1 回実行される。計数下が時点によらないのは D26 の最後の段落に
+  よる。よって `o` が活性であることは時点によらず、<1>2 より `obj_ρ(o)` も時点によらない。
+
+<1>4. QED
+  BY <1>1, <1>2, <1>3
+
+#### DEF 名前をオブジェクトへ写す
+
+名前の多重集合 `M` の各名前 `(u, σ)` を `obj(u, σ)` (D6) へ写して得られる多重集合を `M^obj` と書く。
+**この写しに要るのは位置までであって、スロットであることは要らない** -- D6 はスロットと記号の位置の
+どちらにも `obj` を与える。`ActRefs^inh_ρ(n)` (DEF 実行時の作用) についてこの写しが定まることと、
+写した先が実行時の作用であることは、`L10c` が示す。
+
+#### L10c (`ActRefs^inh_ρ(n)` の名前は位置であり、写した先が実行時の作用である) <!--#126135d-->
+
+**言明**。実行路 `ρ` と、`ρ` の上の節点 `n` を固定する。`n` の式が `RcExpr::Retain(v, π, s, k)` または
+`RcExpr::Release(v, π, s, k)` であるとき、次の 2 つが成り立つ。
+
+- **(i)** `ActRefs^inh_ρ(n)` が個数を付ける各名前は `ρ` の上の位置 (D6) であり、したがって
+  `(ActRefs^inh_ρ(n))^obj` は定まる。
+- **(ii)** `n` が `Retain` のとき `(ActRefs^inh_ρ(n))^obj` は `n` が `ρ` で実際に作る参照の多重集合で
+  あり、`n` が `Release` のとき `n` が `ρ` で実際に処分する参照の多重集合である。
+
+**証明**
+
+<1>1. (i) が成り立つ。
+  BY <ref id=eabf11d/>, <ref id=596a46d/>, DEF 実行時の作用, DEF 名前をオブジェクトへ写す
+  DEF 実行時の作用より、`ActRefs^inh_ρ(n)` が個数を付ける名前は `Inh_ρ(v, π, n)` の各 leaf `λ` の
+  `origin(v, λ).identity()` である。`L9` は、`(u, σ) = origin(x, λ).identity()` について `ρ` の上で
+  `u` は値を得ており、`σ ∈ boxed_leaf_paths(ty(u))` であり、`λ` が inhabited であることと `σ` が
+  inhabited であることは同値である、と述べる。`λ` は inhabited なので `σ` も inhabited であり、
+  D6 よりその対は `ρ` の上の位置 -- スロットか記号の位置 -- である。D6 はそのどちらにも `obj` を
+  与えるので、DEF 名前をオブジェクトへ写す の写しは定まる。
+
+<1>2. (ii) が成り立つ。
+  BY <ref id=4f4714c/>, <1>1, DEF 実行時の作用
+  P6 は「この数え上げを **inhabited (D16) かつ計数下 (D26)** の leaf に制限し、**各名前をそれが指す
+  オブジェクトへ写して**得られる多重集合は、実行時に `Retain(v, π)` が作る参照の多重集合に等しく、
+  `Release(v, π)` が処分する参照の多重集合にも等しい」と述べる。DEF 実行時の作用より
+  `ActRefs^inh_ρ(n)` はまさにその制限を掛けた数え上げであり、<1>1 の写しが P6 の言う写しである。
+
+<1>3. QED
+  BY <1>1, <1>2
+
+#### L10a (静的な数え上げと実行時の作用が活性な名前で一致する) <!--#77a3def-->
 
 **言明**。実行路 `ρ` と、`ρ` の上の節点 `n` を固定する。`n` の式が `RcExpr::Retain(v, π, s, k)` または
 `RcExpr::Release(v, π, s, k)` であるとき、各名前 `o` について次が成り立つ。
@@ -1470,29 +2107,39 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
 <1>1. `ActRefs(v, π)` は `L(v, π)` の各 leaf `λ` を `origin(v, λ).identity()` で名付けて数えた多重集合で
       あり、`ActRefs^inh_ρ(n)` は `Inh_ρ(v, π, n)` の各 leaf を同じ名付けで数えた多重集合である。
       `Inh_ρ(v, π, n) ⊆ L(v, π)` である。
-  BY D15, DEF 実行時の作用, 第 1 節の記法
+  BY <ref id=cbc4a1c/>, DEF 実行時の作用, DEF L
   D15 より `acted_references(v, π)` は `π` の下のすべての boxed leaf の `origin(v, ・).identity()` を
-  数えた多重集合であり、第 1 節の記法より `π` の下の boxed leaf の全体は `L(v, π)` である。
+  数えた多重集合であり、DEF L より `π` の下の boxed leaf の全体は `L(v, π)` である。
 
 <1>2. `L(v, π)` の各元 `λ` は `boxed_leaf_paths(ty(v), type_env)` の元であり、`ρ` の上で `v` は値を
       得ている。
-  BY 第 1 節の記法, D3, A11, D6
-  第 1 節の記法より `L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の部分集合である。`n` は `ρ` の上の
+  BY DEF L, <ref id=ca36627/>, <ref id=3905b4e/>, <ref id=fc8907e/>
+  DEF L より `L(v, π)` は `boxed_leaf_paths(ty(v), type_env)` の部分集合である。`n` は `ρ` の上の
   節点であり、`v` を名指す。`v` が `vars.bindings` に束縛を持つときは、A11 より `v` はその位置で
-  スコープに入っている束縛に解決するので、`ρ` の上で `v` は先に値を得ている。持たないときは、D6 の
-  第 3 の形よりその値はその記号の値であり、`ρ` の上のどの時点でも値を持つ。
+  スコープに入っている束縛に解決するので、`ρ` の上で `v` は先に値を得ている。持たないときは、`L7b` より
+  `v` を名指す `n` の段で `v` は値を持つ。
 
 <1>3. CASE `o` が `ρ` で活性である。
   <2>1. `L(v, π)` の元 `λ` で `origin(v, λ).identity() = o` となるものは、すべて `v` の値の inhabited な
         leaf である。
-    BY DEF 名前の活性, L10, <1>2
+    BY DEF 名前の活性, <ref id=0af32ee/>, <1>2
     `o` が活性なので、`origin(x, λ0).identity() = o` を満たす対 `(x, λ0)` で `λ0` が inhabited なものが
     在る。<1>2 より `(v, λ)` も L10 の仮定を満たす対なので、L10 より `λ` は inhabited である。
-  <2>1a. <2>1 の各 `λ` について `obj(v, λ)` は計数下である。
-    BY DEF 名前の活性, P5, <2>1
-    `o` が活性なので、`origin(x, λ0).identity() = o` を満たす対 `(x, λ0)` で `obj(x, λ0)` が計数下である
-    ものが在る。<2>1 より `(v, λ)` のスロットは在り、P5 (a) より identity が等しい 2 つの leaf のスロットは
-    同じオブジェクトを指すので `obj(v, λ) = obj(x, λ0)` である。
+  <2>1a. <2>1 の各 `λ` について `(v, λ)` は `ρ` の上のスロットであり、`obj(v, λ)` は計数下である。
+    BY DEF 名前の活性, <ref id=87aea92/>, <ref id=2171d13/>, <ref id=596a46d/>, <1>2, <2>1
+    `o` が活性なので、その証人 `(x, λ0)` -- `λ0` が inhabited であり `obj(x, λ0)` が計数下であって
+    `origin(x, λ0).identity() = o` である対 -- が在る。`L10b` (i) より `(x, λ0)` は `ρ` の上の
+    スロットである。`L14` を `(x, λ0)` に当てると、`obj(x, λ0)` が計数下なので `o` は `ρ` の上の
+    **スロット**である。よって `o` の第 1 成分は `vars.bindings` に束縛を持つ名前である (D6)。
+    いま `o = origin(v, λ).identity()` であり、`v` が束縛を持たない名前であれば `origin_inner` は
+    `None` の腕に入って `Origin::Exactly((v, λ))` を返すので `o = (v, λ)` となり、D6 よりそれは
+    記号の位置である -- `o` がスロットであることと食い違う。よって `v` は束縛を持ち、`<2>1` より
+    `λ` は inhabited なので、D6 より `(v, λ)` は `ρ` の上のスロットである。
+    `L14` を `(v, λ)` に当てると、`obj(o) = obj(v, λ)` である。`L14` を `(x, λ0)` に当てると、
+    `obj(o) = obj(x, λ0)` である -- どちらも `o` を D6 の `obj` に当てた同じ値なので、2 つの適用は
+    同じ `obj(o)` を与える。よって `obj(v, λ) = obj(x, λ0)` であり、これは計数下である。
+    **`L14` はこの命題を引かない** -- `L14` が引くのは `L8`・`L9`・`L12`・`L12a`・`L12b` だけであり、
+    そのどれも `L10a` に立たないので、この参照で循環は生じない。
   <2>2. QED
     BY <2>1, <2>1a, <1>1, DEF 実行時の作用
     `Inh_ρ(v, π, n)` は `L(v, π)` の元のうち inhabited かつ計数下のものの全体なので (DEF 実行時の作用)、
@@ -1514,7 +2161,7 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
 
 ### 7.3 `outstanding` と `B` の関係
 
-#### L11 (活性な名前では一致し、非活性な名前では `B` は空)
+#### L11 (活性な名前では一致し、非活性な名前では `B` は空) <!--#c4ea962-->
 
 **言明**。実行路 `ρ` と、`ρ` の上の節点 `n` を固定する。`pending(n)` の各要素 `p` と各名前 `o`
 について、次が成り立つ。
@@ -1522,7 +2169,8 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
 - **(i)** `o` が `ρ` で活性ならば `p.outstanding[o] = B_ρ(n, p)[o]` である。
 - **(ii)** `o` が `ρ` で活性でないならば `B_ρ(n, p)[o] = 0` である。
 
-また、DEF bump の帰属の表は `ρ` の上の場合を尽くし、その最後の 2 行の `p^{(j)}` は存在する。
+また、DEF bump の帰属の表は `ρ` の上の場合を尽くし、その最後の 2 行が名指す `node` の等しい要素 --
+第 6 行の `p^{(j)}` -- は存在してただ 1 つである。
 
 **証明** `ρ` の上の節点の並びについての帰納法で示す。D3 より実行路は有限の列である。
 
@@ -1535,9 +2183,21 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
 <1>1a. `consume_objects(pending, objects)` は、`objects` のいずれかについて `outstanding.names(object)`
        が真である要素を取り除いてその `node` を `self.needed_retains` に入れ、残る要素の `node`・
        `outstanding`・並びを変えない。
-  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, 外部の結果 `Vec::retain`
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects, EXT Vec::retain, EXT Iterator::any,
+     EXT 写像と集合の基本演算
   本体は `pending.retain(|retain| { if objects.iter().any(|object| retain.outstanding.names(object))
   { self.needed_retains.insert(retain.node); return false; } true })` である。
+
+<1>1b. 走査中のどの位置についても、そこでの `pending` の 2 つの要素の `node` が等しいならば、その 2 つは
+       `pending` の同じ要素である。すなわち `node` の値ごとに要素は高々 1 つである。
+  BY <ref id=a423f41/>, <ref id=24bf090/>, <ref id=a500a92/>, DEF 訪問, DEF bump の帰属
+  DEF 訪問と DEF bump の帰属より、`ρ` の上の節点 `n` の訪問に渡された `pending(n)` は走査中の 1 つの
+  位置における `pending` である。
+  P16 (a) は「各要素の `node` は、その位置までに訪れた `Retain` 節点である」と、P16 (c) は
+  「1 つの `Retain` 節点は `pending` に高々 1 回現れる」と述べる。`L0` (i) より `B` は `borrow_ify` の
+  出力の本体であり、P15 は「`cancel` の入力すなわち `borrow_ify` の出力の各本体について、相異なる位置は
+  相異なる `NodeId` を持つ」と述べるので、`node` の値は `B` の位置を 1 つに決める。よって `node` の
+  等しい 2 つの要素は同じ `Retain` 節点のものであり、P16 (c) よりそれは `pending` に高々 1 回現れる。
 
 <1>2. 帰納段。`ρ` の上の節点 `n` について (i) と (ii) が成り立つとし、`ρ` の上の `n` の直後の節点 `n'` に
       ついて示す。`n` の式で場合を分ける。
@@ -1546,7 +2206,7 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
     <3>1. `pending(k)` は `pending(n)` の末尾に `PendingRetain { node: node_id(n), outstanding:
           ActRefs(v, path) }` を足したものである。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Retain(v, path, _, k)` の腕,
-         CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references, L2, 第 1 節の記法
+         CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references, <ref id=82ee7e6/>, DEF ActRefs
       この腕は `pending.push(PendingRetain { node: retain, outstanding })` を行い、`outstanding` は
       `self.acted_references(v, path)` である。`PendingRetain` はこの 2 つのフィールドだけを持つ
       (`CODE src/rc_ir/borrow.rs: PendingRetain`)。L2 (i) よりこの腕は `walk(k, pending, ·)` を 1 回呼ぶ。
@@ -1557,7 +2217,7 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
           `B_ρ(k, p_new) = ActRefs^inh_ρ(n)` である。
       BY <3>1, DEF bump の帰属
     <3>4. QED
-      BY <3>2, <3>3, L10a
+      BY <3>2, <3>3, <ref id=77a3def/>
       L10a より、活性な `o` について `ActRefs(v, path)[o] = ActRefs^inh_ρ(n)[o]` なので `p_new` に
       ついて (i) が成り立ち、活性でない `o` について `ActRefs^inh_ρ(n)[o] = 0` なので (ii) が成り立つ。
       <3>2 が他の要素を扱う。
@@ -1565,10 +2225,10 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
   <2>2. CASE `n` の式が `RcExpr::Release(v, path, _, k)` である。`n'` は `k` である。
     <3>1. `n` の訪問は、`consume_objects` を 1 回か 2 回、`un_bump` を 1 回行い、その後
           `walk(k, pending, ·)` を呼ぶ。
-      BY L5
+      BY <ref id=6ced3f0/>
     <3>2. CASE `un_bump` が `NoBracket` か `OutsideBracket` を返す。
       <4>1. `un_bump` は `pending` を変えない。
-        BY P17
+        BY <ref id=34e5738/>
         P17 は、`NoBracket` と `OutsideBracket` のどちらの場合も `pending` は変わらないと述べる。
       <4>2. `pending(k)` の各要素は `pending(n)` の要素であり、`node` と `outstanding` は変わらない。
         BY <3>1, <4>1, <1>1a
@@ -1579,21 +2239,21 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
       <4>1. `un_bump` が選んだ要素 `p_i` の `outstanding` は `p_i.outstanding - ActRefs(v, path)` に
             なり、それが空ならば `p_i` は取り除かれる。他の要素の `node` と `outstanding` は変わらない。
             この場合 `consume_objects` は `others` について 1 回だけ呼ばれる。
-        BY P17, L5
+        BY <ref id=34e5738/>, <ref id=6ced3f0/>
         P17 は `InBracket(t)` の場合の作用を述べる。L5 は、`OutsideBracket` のときにだけ 2 回目の
         `consume_objects` が呼ばれることを述べる。
       <4>2. `p_i.outstanding` は `ActRefs(v, path)` を `covers` する。すなわち各 `o` について
             `p_i.outstanding[o] ≥ ActRefs(v, path)[o]` である。
-        BY P17, D15
+        BY <ref id=34e5738/>, <ref id=cbc4a1c/>
         P17 は `covers` するときにだけ `InBracket` を返すと述べる。D15 より `covers(R)` は各オブジェクトに
         ついて自分の個数が `R` 以上かを答える。
       <4>3. 活性な `o` について、`p_i.outstanding[o] - ActRefs(v, path)[o] = B_ρ(n, p_i)[o] -
             ActRefs^inh_ρ(n)[o]` であり、この値は 0 以上である。
-        BY 帰納法の仮定, <4>2, L10a
+        BY 帰納法の仮定, <4>2, <ref id=77a3def/>
         帰納法の仮定 (i) より `p_i.outstanding[o] = B_ρ(n, p_i)[o]`、L10a より引く量が等しい。
         <4>2 より差は 0 以上である。
       <4>4. 活性でない `o` について、`B_ρ(n, p_i)[o] - ActRefs^inh_ρ(n)[o] = 0` である。
-        BY 帰納法の仮定, L10a
+        BY 帰納法の仮定, <ref id=77a3def/>
         帰納法の仮定 (ii) より `B_ρ(n, p_i)[o] = 0`、L10a より `ActRefs^inh_ρ(n)[o] = 0`。
       <4>5. QED
         BY <4>1, <4>3, <4>4, 帰納法の仮定, DEF bump の帰属, <1>1a
@@ -1601,7 +2261,7 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
         `p_i` について (i) と (ii) を与える。他の要素は <4>1 と <1>1a より `outstanding` が変わらず、
         表より `B_ρ` も変わらないので帰納法の仮定がそのまま使える。
     <3>4. QED
-      BY <3>2, <3>3, P17
+      BY <3>2, <3>3, <ref id=34e5738/>
       P17 は `un_bump` の返り値が `NoBracket`、`OutsideBracket`、`InBracket` のいずれかであると述べる。
 
   <2>3. CASE `n` の式が `RcExpr::Let(x, rhs, k)` で `rhs` が `RcRhs::Match` でない、または
@@ -1609,7 +2269,7 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
         `n'` は `k` である。
     <3>1. これらの腕が `pending` に行うのは `consume_objects` の呼び出しだけである。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
-         CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs, L4
+         CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs, <ref id=c6d6ecd/>
       `RcExpr::Let(x, rhs, k)` の腕は `self.consume_rhs(&mut pending, rhs, &x.ty)` を呼び、`consume_rhs`
       は `rhs_consumes` が集めた各元について `self.consume` を呼び、L4 より `consume` は
       `consume_objects` を 1 回呼ぶ。`RcExpr::Destructure` の腕は `self.consume` を 0 回以上呼ぶ。
@@ -1625,17 +2285,21 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
     <3>1. `pending(arm_j.body)` は `pending(n).clone()` であり、要素の `node`・`outstanding`・並びは
           `pending(n)` と等しい。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の
-         `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, CODE src/rc_ir/borrow.rs: PendingRetain, L2
+         `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, CODE src/rc_ir/borrow.rs: PendingRetain, <ref id=82ee7e6/>,
+         EXT Vec::clone
       この腕は各 `arm` について `self.walk(&arm.body, pending.clone(), false)` を呼ぶ。
-      `PendingRetain` は `Clone` を derive し、`Vec::clone` は要素をその並びのまま複製する。
+      `PendingRetain` は `Clone` を derive し、`node` と `outstanding` の 2 つの欄だけを持つので、
+      EXT Vec::clone より複製は要素をその並びのまま持ち、各要素の 2 つの欄は原本のものと等しい。
     <3>2. QED
-      BY <3>1, 帰納法の仮定, DEF bump の帰属
-      表の第 5 行より、複製された要素の `B_ρ` は元の要素のものである。
+      BY <3>1, <1>1b, 帰納法の仮定, DEF bump の帰属
+      表の第 5 行より、複製された要素の `B_ρ` は `node` が等しい元の要素のものであり、<1>1b より
+      `pending(n)` にその `node` を持つ要素は高々 1 つなので、この右辺は 1 つに定まる。<3>1 より
+      複製は元の要素と同じ `node` を持つので、その 1 つは複製元の要素である。
 
   <2>5. CASE `n` の式が `RcExpr::Ret(_)` であり、`n` は `B` の終端の `Ret` ではない。
     <3>1. `n` はある `Match` 節点 `M` のあるアーム `arm_j` の本体の実行路を終える `Ret` であり、
           `ρ` の上の `n` の直後の節点 `n'` は `M` の継続 `k_M` である。
-      BY D3
+      BY <ref id=ca36627/>
       D3 の第 2 の規則が `Let(x, Match(v, arms), k)` について「アームを 1 つ選び、そのアーム本体の
       実行路を辿り、その後 `k` へ進む」と述べ、続く段落が「アーム本体の `Ret` はそのアーム本体の
       実行路を終えるだけであり、関数本体の実行路は続く」と述べる。仮定より `n` は関数本体の実行路の
@@ -1644,16 +2308,23 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
           `arm_exits` に集め、`merged = self.merge(&pending, &arm_exits)` を作り、
           `walk(k_M, merged, ·)` を呼ぶ。すなわち `pending(k_M) = merged` である。
       BY CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の
-         `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, L2
+         `RcExpr::Let(_, RcRhs::Match(_, arms), k)` の腕, <ref id=82ee7e6/>
     <3>3. `arm_exits[j] = pending(n)` である。
-      BY L2, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner の `RcExpr::Ret(_)` の腕, <3>1, <3>2
-      `RcExpr::Ret(_)` の腕は `pending` を変えずに `pending` を返す。L2 (i) より、`arm_j.body` の訪問
-      から `n` の訪問までは継続の辺だけを辿る `walk` の呼び出しの入れ子であり、L2 (i) が挙げる腕は
-      いずれも継続の訪問の返り値をそのまま自分の返り値とする。
+      BY <ref id=084b52a/>, <ref id=82ee7e6/>, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner, <3>1, <3>2
+      L2 (i) より、`arm_j.body` の訪問から `n` の訪問までは継続の辺だけを辿る `walk` の呼び出しの
+      入れ子である。`walk_inner` の 7 つの腕のうち `RcExpr::Ret(_)` を除く 6 つ -- `RcExpr::Retain`、
+      `RcExpr::Release`、`RcExpr::Let(_, RcRhs::Match(_, arms), k)`、`RcExpr::Let(x, rhs, k)`、
+      `RcExpr::Destructure`、`RcExpr::Eval` -- は、いずれも本体の最後の式が
+      `self.walk(k, ・, returns_from_func)` であり、その値を腕の値とする。L1 より `walk` は
+      `walk_inner` の値をそのまま返すので、この入れ子の各段は継続の訪問の返り値をそのまま返す。
+      `RcExpr::Ret(_)` の腕は渡された `pending` を変えずに返す。
     <3>4. `merged` の各要素 `p` について、`p.node` は `pending(M)` のある要素の `node` であり、
           `p.outstanding` は各 `arm_exits[j']` の中の `node` が `p.node` に等しい要素の `outstanding`
-          と等しい。とくに `arm_exits[j]` にそのような要素 `p^{(j)}` が在る。
-      BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, P18
+          と等しい。とくに `arm_exits[j]` にそのような要素 `p^{(j)}` がちょうど 1 つ在る。
+      BY CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, <ref id=5116349/>, <1>1b, <3>3,
+         EXT Iterator::all, EXT 写像と集合の基本演算
+      <3>3 より `arm_exits[j] = pending(n)` は走査中のある位置の `pending` なので、<1>1b より
+      `p.node` を `node` に持つ要素はその中に高々 1 つである。
       `merge` の返り値は `pending_in.iter().filter_map(|retain| uniform.get(&retain.node).map(
       |outstanding| PendingRetain { node: retain.node, outstanding: outstanding.clone() }))` であり、
       `uniform` に `retain` が入るのは `is_uniform` すなわち
@@ -1667,7 +2338,7 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
       `(n, p^{(j)})` について (i) と (ii) を与えるので、`(k_M, p)` についても成り立つ。
 
   <2>6. CASE `n` の式が `RcExpr::Ret(_)` であり、`n` は `B` の終端の `Ret` である。
-    BY D3
+    BY <ref id=ca36627/>
     D3 より終端の `Ret` は実行路の最後の節点なので、`ρ` の上に `n'` は無い。示すものが無い。
 
   <2>7. QED
@@ -1679,13 +2350,13 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
 <1>3. QED
   BY <1>1, <1>1a, <1>2
 
-#### L11a (`InBracket` の引き算は切り捨てを起こさない)
+#### L11a (`InBracket` の引き算は切り捨てを起こさない) <!--#d9d155f-->
 
 **言明**。`ρ` の上の節点 `n` の式が `RcExpr::Release(v, π, s, k)` であり、その訪問の `un_bump` が
 `UnBump::InBracket` を返して `pending(n)` の要素 `p_i` を選ぶとき、各名前 `o` について
 `B_ρ(n, p_i)[o] ≥ ActRefs^inh_ρ(n)[o]` である。
 
-**この補題が要る場所。** DEF bump の帰属の第 2 行は
+**この命題が要る場所。** DEF bump の帰属の第 2 行は
 `B_ρ(k, p_i) = B_ρ(n, p_i) - ActRefs^inh_ρ(n)` と多重集合の差を取る。多重集合の差は切り捨てを起こすと
 名前をオブジェクトへ写す操作と可換にならないので、第 7.4 節の `<1>1` がその可換性を使うにはこの
 各名前の不等式が要る。
@@ -1694,18 +2365,18 @@ inhabited が時点によらないのは、値が束縛の後に変わらない�
 
 <1>1. `p_i.outstanding` は `ActRefs(v, π)` を `covers` する。すなわち各名前 `o` について
       `p_i.outstanding[o] ≥ ActRefs(v, π)[o]` である。
-  BY P17, L5, D15
+  BY <ref id=34e5738/>, <ref id=6ced3f0/>, <ref id=cbc4a1c/>
   L5 より `un_bump` に渡る `un_bumped` は `ActRefs(v, π)` である。P17 は、`un_bump` が `InBracket` を
   返すのは最内の要素の `outstanding` が `R` を `covers` するときに限ると述べ、D15 より `covers(R)` は
   各オブジェクトについて自分の個数が `R` 以上かを答える。
 
 <1>2. CASE `o` が `ρ` で活性である。
-  BY <1>1, L10a, L11
+  BY <1>1, <ref id=77a3def/>, <ref id=c4ea962/>
   L11 (i) より `B_ρ(n, p_i)[o] = p_i.outstanding[o]` であり、L10a より
   `ActRefs^inh_ρ(n)[o] = ActRefs(v, π)[o]` である。<1>1 がこの 2 つの間の不等式を与える。
 
 <1>3. CASE `o` が `ρ` で活性でない。
-  BY L10a, L11
+  BY <ref id=77a3def/>, <ref id=c4ea962/>
   L10a より `ActRefs^inh_ρ(n)[o] = 0` であり、L11 (ii) より `B_ρ(n, p_i)[o] = 0` である。
 
 <1>4. QED
@@ -1729,7 +2400,7 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
 <1>1. `B_ρ(n, p)` を各名前が指すオブジェクトへ写した多重集合 `(B_ρ(n, p))^obj` は、`p.node` の `Retain` が
       `ρ` で実際に作った参照の多重集合から、`ρ` の上でその `Retain` より後にあって `un_bump` がその要素と
       対にした `Release` が実際に処分した参照の多重集合を引いたものである。
-  BY DEF bump の帰属, DEF 実行時の作用, P6, D26, A8, L11, L11a
+  BY DEF bump の帰属, DEF 実行時の作用, DEF 名前をオブジェクトへ写す, <ref id=126135d/>, <ref id=88a06de/>, <ref id=b6673ca/>, <ref id=c4ea962/>, <ref id=d9d155f/>
   L11 より DEF bump の帰属の表は `ρ` の上の場合を尽くすので、`pending(n)` の各要素 `p` の `B_ρ(n, p)` は
   表の第 1 行が置いた初期値から表を辿って得られる。第 1 行が `ActRefs^inh_ρ` を初期値に置き、第 2 行が
   それを引く唯一の行であり、第 3 行から第 6 行は値を引き継ぐだけである。第 2 行が引くのは、`un_bump` が
@@ -1738,24 +2409,21 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
   `B_ρ(n, p_i)[o] ≥ ActRefs^inh_ρ(n)[o]` を与えるので、その差は切り捨てを起こさず、写した後の差と
   一致する。
 
-  `(ActRefs^inh_ρ(n))^obj` が実際に作る / 処分する参照の多重集合であることは、P6 と D26 の両方が要る。
-  P6 は「この数え上げを inhabited (D16) かつ計数下 (D26) の leaf に制限し、**各名前をそれが指す
-  オブジェクトへ写して**得られる多重集合は、実行時に `Retain(v, π)` が作る参照の多重集合に等しく、
-  `Release(v, π)` が処分する参照の多重集合にも等しい」と述べる。`ActRefs^inh_ρ(n)` は DEF 実行時の作用より
-  その制限を掛けた数え上げそのものであり、`(・)^obj` が P6 の言う写しである。グローバル状態のオブジェクトを
-  指す leaf を落としてよいのは、それが D8 の参照を持たず (D26)、`Retain`/`Release` が `H` を変えない (A8)
-  からである。
+  `(ActRefs^inh_ρ(n))^obj` が実際に作る / 処分する参照の多重集合であることは `L10c` (ii) が与える。
+  グローバル状態のオブジェクトを指す leaf を落としてよいのは、それが D8 の参照を持たず (D26)、
+  `Retain`/`Release` が `H` を変えない (A8) からである。
 
 <1>2. 各名前 `o` について、`o` が `ρ` で活性ならば `p.outstanding[o] = B_ρ(n, p)[o]` であり、
       活性でなければ `B_ρ(n, p)[o] = 0` である。
-  BY L11
+  BY <ref id=c4ea962/>
 
 <1>3. 各名前 `o` について `p.outstanding[o] ≥ B_ρ(n, p)[o]` である。
   BY <1>2
   活性なら等しく、活性でなければ右辺が 0 で左辺は 0 以上である。
 
 <1>4. `p.outstanding` は `B_ρ(n, p)` を `covers` する。
-  BY <1>3, D15, CODE src/rc_ir/ownership.rs: References::covers
+  BY <1>3, <ref id=cbc4a1c/>, EXT Iterator::all, EXT Option の取り出し, EXT 写像と集合の基本演算,
+     CODE src/rc_ir/ownership.rs: References::covers
   D15 より `covers(R)` は各オブジェクトについて自分の個数が `R` 以上かを答える。`covers` の本体は
   `other.0.iter().all(|(object, count)| self.0.get(object).is_some_and(|held_count| held_count >=
   count))` であり、`References` の `Map` に鍵が無いことは個数 0 と同じ意味なので、これは <1>3 の
@@ -1767,7 +2435,7 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
   ない `o` についても `B_ρ(n, p)[o] = 0` である。
 
 <1>6. QED
-  BY <1>1, <1>4, <1>5, DEF bump の帰属
+  BY <1>1, <1>4, <1>5, <ref id=8093b68/>, DEF bump の帰属
   `<1>4` が `covers` を、`<1>5` が「空ならば空」を、どちらも名前ごとの多重集合 `B_ρ(n, p)` について与える。
   これが D27 の帰属で読んだ P18b である。`<1>1` は、その `B_ρ(n, p)` をオブジェクトへ写したものが P18b の
   文面「`p.node` の `Retain` が `ρ` で実際に作った参照のうち、`ρ` 上でまだ処分されていないもの」に一致する
@@ -1785,11 +2453,11 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
 
 **結論を先に書く。**
 
-- P18a は A1・A2・D12 だけからは**出ない**。反例が 2 つある。7.5.7 の `C1` (`Join` が 1 つのオブジェクトに
-  2 つ目の名前を与える形) と 7.5.8 の `C2` (呼び出しに渡した参照が返り値として別の名前で戻る形) である。
-  どちらも D12 を満たし、どちらでも `cancel` が対を消して解放後の読みを作る。
-- 足りないのは README の **A19** である。7.5.3 がその 3 つの節を引く -- (ii-a) と (ii-b) は仮定であり、
-  (i) は D21 が活性化に課す制限である。示す形は**オブジェクトごとの形** --
+- P18a は A1・A2・D12 だけからは**出ない**。反例は 7.5.7 の `C1` である -- `Join` が 1 つのオブジェクトに
+  2 つ目の名前を与える形であり、D12 を満たしながら `cancel` が対を消して解放後の読みを作る。
+- 足りないのは README の **A19** である。7.5.3 がその 4 つの項のうち (i)・(ii-a)・(ii-b) の 3 つを引く --
+  (ii-a) と (ii-b) は仮定であり、(i) は D21 が活性化に課す制限である。(ii-c) は段内の点についての項で
+  あり、この文書は時点の側だけを読むので引かない。示す形は**オブジェクトごとの形** --
   計数下オブジェクト `O` について `n(O) = Σ_p Σ_{o : obj(o) = O} B(p, ρ)[o]` として `H(O) ≥ n(O) + 1` --
   であり、README の P18a の言明そのものである。名前ごとの弱い形を経由しない (7.5.1 と 7.5.4 の <1>3)。
 - 7.5.4 が引くのは A19 の (i)、(ii-a)、(ii-b) と P14a である。(ii-b) は条件付きの形
@@ -1799,8 +2467,14 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
 - **`+1` は 1 回だけ立つ。** A19 (i) の右辺は、各類の `d(C)` の総和と、借用終端の類が在るときの `+1` で
   ある。`bumps` が正である類 `C0` が借用終端でなければ (ii-b) の `+1` が、借用終端であれば (i) の
   角括弧の `+1` が立つ。7.5.4 の `<1>6` と `<1>7` がその 2 つの場合である。
-- `A19` の (ii-a) と (ii-b) を果たす者は `insert_rc` と `borrow_ify` である。**この文書が示すのは
-  `borrow_ify` の側だけである。** 7.5.5 の `L16` がそれを示す -- `rewrite_rc` が借用版で落とす `Retain` は、
+- `A19` の (ii-a) と (ii-b) を果たす者について、README の A19 は「**果たす者を 3 人挙げるうち、この形を
+  指すのは `insert_rc` と `borrow_ify` の 2 人である** -- `insert_rc` の出力で成り立ち、`borrow_ify` が
+  それを保つ。`split_rc_units` は `Retain`/`Release` を unit の鎖へ割る段で (ii-a) を保つ側であり、
+  この形とは別に数える。」と述べ、`split_rc_units` の側については「**(ii-b) は保存では通らない** --
+  粗い `Retain` が積む要素の `outstanding` は鎖の各要素の和なので、`consume_objects` が粗い側の 1 要素を
+  丸ごと落とす場面で細かい側は一部しか落ちず、割った後の `bumps` が割る前より大きい時点がありうる。」と
+  述べて、保存でない道を取る。**この文書が示すのは `borrow_ify` の側だけである。**
+  7.5.5 の `L16` がそれを示す -- `rewrite_rc` が借用版で落とす `Retain` は、
   その leaf を消費する構文が残っている限り落ちない (P8 と P7a)。落ちる場合には `call_rc` が消費の直前に
   同じ `Retain` を置く。`insert_rc` の側は `p60-insert-rc.md` が示す (README の A19)。
 
@@ -1808,47 +2482,78 @@ inhabited (D16) かつ計数下 (D26) の各 leaf を `origin` の identity で�
 
 **DEF `N`**。`ρ` の上の節点 `n` と計数下 (D26) のオブジェクト `O` について、
 `N_ρ(n, O) = Σ_{p ∈ pending(n)} Σ_{o} B_ρ(n, p)[o]` と定める。内側の和は、`ρ` で活性 (DEF 名前の活性) で
-あって `obj_ρ(o) = O` である名前 `o` を渡る。L11 (ii) より活性でない名前の `B_ρ` は 0 なので、この制限は
-和を変えない。
+あって `obj_ρ(o) = O` である名前 `o` を渡る。`obj_ρ(o)` が定まるのは `L10b` (ii) による。
+**この制限が和を変えないこと -- 活性でない名前の `B_ρ` が 0 であること -- は L11 (ii) であり、
+7.5.4 の `<1>1` がそれを引く。**
 
-**INV(n)**。`ρ` の上の節点 `n` の訪問の入口において、計数下の各オブジェクト `O` について、
+**DEF INV**。`ρ` の上の節点 `n` について、`INV(n)` を次の言明とする。`n` の訪問の入口において、
+計数下の各オブジェクト `O` について、
 `N_ρ(n, O) ≥ 1` ならば `H(O) ≥ N_ρ(n, O) + 1` である。ここで `H(O)` は固定した活性化の `τ(n)` の時点の
 参照カウント (D7) であり、走査における `n` の訪問の入口とその時点とを同じものとして扱うことは、
 第 7.5.3 節の `DEF 節点の時点` が定める。
 
-**INV は P18a である。** P18a の
+**`INV(n)` は P18a である。** P18a の
 `n(O) = Σ_p Σ_{o : obj(o) = O} B(p, ρ)[o]` は、走査中の位置を節点の訪問の入口に取り、`B(p, ρ)` を
 D27 の帰属 (第 7.1 節の DEF bump の帰属) で読むと `N_ρ(n, O)` である。内側の和を活性な名前に制限して
 よいのは、L11 (ii) より活性でない名前の `B_ρ` が 0 だからであり、`obj_ρ(o)` が定まるのは
-DEF 名前の活性による。よって 7.5.4 が INV を示せば P18a が出る。
+DEF 名前の活性による。**P18a の添字は D6 の `obj(o)` で、DEF `N` の添字は `obj_ρ(o)` である。**
+活性な名前についてこの 2 つが等しいことは 7.5.4 の `<1>0` が示す。よって 7.5.4 が `INV(n)` を示せば
+P18a が出る。
 
 **オブジェクトごとに和を取るところは落とせない。** 名前ごとの `H(o) ≥ n(o) + 1` を足し合わせても
 `H(O) ≥ Σ_o n(o) + 1` は出ない -- `+1` が名前の個数だけ立つからである。7.5.4 の `<1>3` は余りを
 別名類ごとに 1 つ数え、`<1>6` と `<1>7` が `bumps` の正である類 1 つについて `+1` を立てるので、
 オブジェクトごとの形をそのまま与える。
 
-#### 7.5.2 別名の歩みと別名類
+#### 7.5.2 `ρ` 歩みと別名類
 
-##### DEF ρ-歩みと ρ-終端
+##### DEF `ρ` 歩みと `ρ` 終端
 
-`ρ` の上で値を得ている変数 `x` と `λ ∈ boxed_leaf_paths(ty(x))` をとる。L8 (A) が挙げる対 `(x', λ')` --
-`origin_inner(vars, type_env, x.name, λ)` が `origin` を呼ぶ相手、`Binding::Join` の腕については `ρ` が
-選んだアームの結果変数のもの -- を `(x, λ)` の **ρ-歩み**と呼ぶ。`origin_inner` が `origin` を呼ばない
-とき、`(x, λ)` を **ρ-終端**と呼ぶ。
+`ρ` の上の位置 (D6) `(x, λ)` をとる。すなわち `x` は `ρ` の上で値を得ている変数か束縛を持たない名前で
+あり、`λ` は `x` の値の inhabited (D16) な boxed leaf である。
 
-##### L11b (ρ-歩みの各段は別名の辺である)
+`origin_inner(vars, type_env, x.name, λ)` が `origin` を呼ぶとき、L8 (A) が挙げる対 `(x', λ')` --
+`origin` を呼ぶ相手、`Binding::Join` の腕については `ρ` が選んだアームの結果変数のもの -- へ進むことを、
+`(x, λ)` から進む **`ρ` 歩みの 1 歩**と呼び、`(x', λ')` をその**行き先**と呼ぶ。`origin_inner` が
+`origin` を呼ばないとき、`(x, λ)` を **`ρ` 終端**と呼ぶ。`(x, λ)` から 1 歩ずつ進んで得られる位置の列を
+`(x, λ)` の **`ρ` 歩み**と呼ぶ。
 
-**言明**。`(x, λ)` の ρ-歩みが `(x', λ')` であるとき、`(x, λ)` と `(x', λ')` を結ぶ辺は D20 の
-別名の辺である。**これが D33 がこの文書に残す 1 つ目である。**
+**この 3 つの語は D33 の 3 つの語である。** D33 は同じ 3 つを D20 の別名の辺の側から定めており、
+2 つの読みが同じ列と同じ停止位置を与えることは `L12b` が示す。**README の A19 (i) と P14a が
+「ρ-終端」と書くのは、この `ρ` 終端である。** D34 はその語を書かず「`C` の終端」「`T_ρ(C)`」と書き、
+「**ここでいう終端は D33 の `ρ` 終端である。** A19 (i) と P14a が「ρ-終端」と書くのはこの語であり、
+この定義は「`C` の終端」「`T_ρ(C)`」と書く。**同じものである。**」と、3 つを同一視する。
 
-**向きについて。** D20 の辺は移動の向き -- 参照の行き先が `(x, λ)` の側 -- に張られ、ρ-歩みは
+**主語を位置に取る理由。** D20 は「**辺が在るのは、その辺を定める節点が実行路の上に在り、かつその
+節点と leaf `λ` が作る 2 つの対がどちらもその路の位置であるときであり、そのときに限る。**」と定める
+ので、D20 の辺は位置の間にしか張られない。inhabited を落とした形の `ρ` 歩みは、辺の無い 2 つの対を結ぶ
+1 歩を持ちうる -- `x` が unbox union `Result e a` の値を持ち、`ρ` の上でタグが `ok` 側であって `λ` が
+`err` 側の変位の下の boxed leaf であるとき、`(x, λ)` は `ρ` の位置ではない。`L11b` の側に条件を
+付ける道も取れるが、この文書で `ρ` 歩みを辿る命題 (`L12a`、`L12b`、`L14`、`L15`、`L17`) と D33 の別名類は
+どれも位置から始めるので、定義の側に置く方が読む場所が 1 つで済む。L8 (A) の (iii) より、位置から
+始めた `ρ` 歩みの各対は位置である (`L12` (i))。
+
+##### L11b (`ρ` 歩みの 1 歩は別名の辺である) <!--#7bb9768-->
+
+**言明**。`(x, λ)` から進む `ρ` 歩みの 1 歩の行き先が `(x', λ')` であるとき、`(x, λ)` と `(x', λ')` を
+結ぶ辺は D20 の別名の辺である。**これが D33 がこの文書に残す 1 つ目である。**
+
+**向きについて。** D20 の辺は移動の向き -- 参照の行き先が `(x, λ)` の側 -- に張られ、`ρ` 歩みの 1 歩は
 `origin` が辿る向き -- 行き先が `(x', λ')` の側 -- に進む。D20 の別名の道は「この辺を向きを無視して
 辿る道」なので、どちらの向きで辿っても同じ辺である。
 
-**証明**
+**証明** D20 は辺が在る条件を 3 つ置く -- その辺を定める節点が実行路の上に在ること、その節点と `λ` が
+作る 2 つの対がどちらもその路の位置であること、そしてアームの中の行については路がそのアームを選ぶこと
+である。`<1>1` が 1 歩を D20 の 6 行のどれかに当て、`<1>2` が第 1 と第 3 の条件を、`<1>3` が
+第 2 の条件を与える。
 
-<1>1. QED
-  BY L8, D20, D9, D6, CODE src/rc_ir/ownership.rs: origin_inner,
+<1>1. `ρ` 歩みの 1 歩 `(x, λ) → (x', λ')` は、D20 が挙げる 6 行のちょうど 1 つが結ぶ 2 つの対である。
+      その行を定める節点は次のとおりである -- `Binding::Move` では `x` を束縛する
+      `Let(x, RcRhs::Var(y), k)`、`Binding::Join` では `Let(x, RcRhs::Match(scrut, arms), k)` が
+      選んだアーム本体の終端の `Ret`、`Binding::Field` では `x` を束縛する `Destructure`、
+      `Binding::Payload` では `x` を payload として束縛する `Match` のアーム、`Binding::Llvm` では
+      `x` を束縛する `Let(x, RcRhs::Llvm(gen, args), k)`。
+  BY <ref id=b99155f/>, <ref id=9c7c27a/>, <ref id=9d74736/>, CODE src/rc_ir/ownership.rs: origin_inner,
      CODE src/rc_ir/ownership.rs: collect_bindings
   D20 は D9 の移動の表の 6 行を別名の辺と呼び、その 6 つを挙げる -- `Let(x, Var(y), k)` の `y` から
   `x` へ、アーム本体の `Ret(x)` の `x` から `Match` の束縛変数へ、unbox 容器の `Destructure` の
@@ -1862,73 +2567,170 @@ DEF 名前の活性による。よって 7.5.4 が INV を示せば P18a が出�
   `(x', λ')` -- `Binding::Move(y)` の `(y, λ)`、`Binding::Join` の `(arm_results[j], λ)`、
   `Binding::Field(container, idx)` の `(container, [idx] ++ λ)`、`Binding::Payload(scrut, Some(tag))` の
   `(scrut, [tag] ++ λ)`、`Binding::Payload(scrut, None)` の `(scrut, λ)`、`Binding::Llvm` の
-  `(args[j], σ)` -- は、順に上の 6 行が結ぶ 2 つの位置の他方である。D20 の辺はスロットの間に張られるが、
-  D6 は「D9 の移動の表の辺は記号の位置へ着きうるので、そこで止まる歩みが在る」と述べ、別名の道と
-  別名類の歩みが記号の位置で終わることを認める。
+  `(args[j], σ)` -- は、順に上の 6 行が結ぶ 2 つの対の他方である。
 
-##### L12 (ρ-歩みは終端で終わる)
+<1>2. `<1>1` の節点は `ρ` の上に在り、アームの中の 3 行 -- 変位アームの payload 束縛、catch-all
+      アームの payload 束縛、アーム本体の `Ret` -- については `ρ` はそのアームを選ぶ。
+  BY <1>1, <ref id=33c54dc/>, <ref id=ca36627/>, <ref id=596a46d/>, DEF `ρ` 歩みと `ρ` 終端,
+     CODE src/rc_ir/ownership.rs: collect_bindings
+  DEF `ρ` 歩みと `ρ` 終端 より `(x, λ)` は `ρ` の上の位置なので、`x` は `ρ` の上で値を得ている。
+  `<1>1` の 6 つの腕はいずれも `vars.bindings` に束縛を持つ名前についてのものなので、D6 より `x` は
+  節点が束縛する変数であり、A6 より `x` に値を与える構文はその 1 つの束縛だけである。よって `ρ` は
+  その束縛を実行し、それを行う節点は `ρ` の上に在る。`Binding::Payload` の 2 つの腕では、その束縛は
+  `Match` のそのアームの payload 束縛なので、D3 より `ρ` はそのアームを選ぶ。`Binding::Join` の
+  腕では、辺を定めるのは `ρ` が選んだアーム `arm_j` の本体の終端の `Ret` であり、D3 より `ρ` は
+  そのアーム本体の実行路を辿ってから `Match` の継続へ進むので、その `Ret` は `ρ` の上に在る。
 
-**言明**。`ρ` の上で値を得ている `x` と `λ ∈ boxed_leaf_paths(ty(x))` について、次の 2 つが成り立つ。
+<1>3. `(x, λ)` と `(x', λ')` はどちらも `ρ` の上の位置 (D6) である。
+  BY <ref id=b99155f/>, <ref id=596a46d/>, DEF `ρ` 歩みと `ρ` 終端
+  `(x, λ)` は DEF `ρ` 歩みと `ρ` 終端 の仮定である。`(x', λ')` については、L8 (A) の (i) より
+  `λ' ∈ boxed_leaf_paths(ty(x'))`、(ii) より `ρ` の上で `x'` は値を得ており、(iii) より `λ` が
+  inhabited であることと `λ'` が inhabited であることは同値なので、`λ` が inhabited である以上
+  `λ'` も inhabited である。D6 より、`x'` が `vars.bindings` に束縛を持つときこの対はスロット、
+  持たないとき記号の位置であり、どちらも `ρ` の上の位置である。**D20 の辺の端が記号の位置でありうる
+  ことは D6 が述べる** --「D9 の移動の表の辺は記号の位置へ着きうるので、そこで止まる歩みが在る」。
 
-- **(i)** `(x, λ)` から ρ-歩みを辿る列は有限で、ρ-終端で終わる。その終端を `T_ρ(x, λ)` と書く。列の各対は
-  L8 (A) の (i)-(iv) を満たす。
-- **(ii)** 列の各対の変数は、1 つ前の対の変数が `ρ` の上で値を得る段より前に値を得ている。とくに
-  `T_ρ(x, λ)` の変数は、`x` が値を得る段以前に値を得ている (`(x, λ)` 自身が終端であるときは同じ段で
-  ある)。
+<1>4. QED
+  BY <1>1, <1>2, <1>3, <ref id=9c7c27a/>
+  D20 の 3 つの条件が `<1>2` と `<1>3` で満たされるので、`<1>1` が当てた行の辺は在る。
+
+##### L12 (`ρ` 歩みは `ρ` 終端で終わる) <!--#567236b-->
+
+**言明**。`ρ` の上の位置 (D6) `(x, λ)` について、次の 2 つが成り立つ。
+
+- **(i)** `(x, λ)` の `ρ` 歩みは 1 つに定まり、有限で、`ρ` 終端で終わる。その `ρ` 終端を
+  `T_ρ(x, λ)` と書く。列の各対は `ρ` の上の位置 (D6) であり、各 1 歩は L8 (A) の (i)-(iv) を満たす。
+- **(ii)** 列の各対の変数は、1 つ前の対の変数が `ρ` の上で値を得る段以前に値を得ている。とくに
+  `T_ρ(x, λ)` の変数は、`x` が値を得る段以前に値を得ている (`(x, λ)` 自身が終端であるときと、
+  その変数が束縛を持たない名前であるときが、同じ段になる場合である)。
 
 **証明**
 
-<1>0. ρ-歩みの各段 `(x, λ) → (x', λ')` について、`ρ` の上で `x'` は `x` より前に値を得ている。
-  BY A11, D3, D6, CODE src/rc_ir/ownership.rs: origin_inner,
-     CODE src/rc_ir/ownership.rs: collect_bindings
-  L8 (A) が挙げる `origin` を呼ぶ 6 つの腕が渡す `x'` は、`Binding::Move(y)` の `y`、`Binding::Llvm` の
-  `args[j]`、`Binding::Field(container, _)` の `container`、`Binding::Payload(scrut, _)` の `scrut`、
-  そして `Binding::Join(arm_results)` の `ρ` が選んだアームの結果変数である。`x'` が `vars.bindings` に
-  束縛を持たない名前であるときは、D6 の第 3 の形よりその値はその記号の値であり、`ρ` の上のどの時点でも
-  値を持つので、`x` が値を得る段より前にも値を持つ。以下は `x'` が束縛を持つ場合である。
-  `collect_bindings` より、
-  前の 4 つでは `x'` は `x` を束縛する節点 (`Let`、`Destructure`、`Match`) がその右辺・容器・scrutinee
-  として名指す変数であり、A11 よりその使用はその位置でスコープに入っている束縛に解決するので、`ρ` の
-  上でその節点より前に値を得ている。`Binding::Join` では、`collect_bindings` が `arm_results` に置くのは
-  各アーム本体の `returned_var`、すなわちそのアーム本体の終端の `Ret` が名指す変数であり、D3 より `ρ` は
+<1>0. `ρ` 歩みの 1 歩 `(x, λ) → (x', λ')` について、`ρ` の上で `x'` は `x` が値を得る段以前に値を
+      得ている。
+  BY <ref id=fc8907e/>, <ref id=3905b4e/>, <ref id=ca36627/>, <ref id=596a46d/>, CODE src/rc_ir/ownership.rs: origin_inner,
+     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var
+  `collect_bindings` より、`origin` を呼ぶ 6 つの腕が渡す `x'` は、`Binding::Move(y)` の `y`、
+  `Binding::Llvm` の `args[j]`、`Binding::Field(container, _)` の `container`、
+  `Binding::Payload(scrut, _)` の `scrut`、そして `Binding::Join(arm_results)` の `ρ` が選んだアームの
+  結果変数である。前の 4 つを名指すのは `x` を束縛する節点 (`Let`、`Destructure`、`Match`) であり、
+  **`Binding::Join` の結果変数を名指すのはその節点ではない** -- `Let(x, Match(scrut, arms), k)` が
+  名指すのは `scrut` であり、`arm_results[j]` を名指すのは `ρ` が選んだアーム本体の終端の `Ret` である
+  (`collect_bindings` はそれを `returned_var(&arm.body)` として積む)。
+  `x'` が `vars.bindings` に束縛を持たない名前であるときは、`L7b` より `x'` を名指す節点の段で `x'` は
+  値を持つ。前の 4 つではその節点は `x` を束縛する節点なので、その段は `x` が値を得る段そのもので
+  ある。`Binding::Join` では、D3 より `ρ` はそのアーム本体を辿ってから `Match` の継続へ進むので、
+  その `Ret` の段は `x` が値を得る段より前である。以下は `x'` が束縛を持つ場合である。
+  前の 4 つでは A11 よりその使用はその位置でスコープに入っている束縛に解決するので、`ρ` の
+  上でその節点より前に値を得ている。`Binding::Join` では、D3 より `ρ` は
   そのアーム本体を辿ってから `Match` の継続へ進むので、その変数が値を得るのは `x` が値を得る前である
   (アーム本体の中で束縛されるか、A11 よりアームの外の、スコープに入っている束縛である)。
 
+<1>0a. `(x, λ)` が `ρ` の上の位置 (D6) であるとき、その 1 歩の行き先 `(x', λ')` も `ρ` の上の位置で
+       ある。よって位置から始めた `ρ` 歩みは各 1 歩で定義されている。
+  BY <ref id=b99155f/>, <ref id=596a46d/>, DEF `ρ` 歩みと `ρ` 終端
+  L8 (A) の (i) より `λ' ∈ boxed_leaf_paths(ty(x'))`、(ii) より `ρ` の上で `x'` は値を得ており、
+  (iii) より `λ` が inhabited であることと `λ'` が inhabited であることは同値なので、`λ` が
+  inhabited である以上 `λ'` も inhabited である。D6 より、`x'` が `vars.bindings` に束縛を持つとき
+  この対はスロット、持たないとき記号の位置であり、どちらも `ρ` の上の位置である。
+
 <1>1. `origin` のどの呼び出しも停止し、したがってその実際の呼び出しの木は有限である。
-  BY P2, A11
+  BY <ref id=0edb0ba/>, <ref id=3905b4e/>
   P2 は「`origin(x, π)` は … `π` を問わず panic せずに答えを返し、停止する」と述べる。停止する呼び出しが
   直接行う `origin` の呼び出しは有限個であり、その入れ子も有限である。A11 (スコープの規律) が P2 の立つ
   仮定である。
 
 <1>1a. `origin(x, λ)` の計算を、memo を使わずに `origin_inner` の再帰呼び出しをそのまま展開して得られる
        木も有限である。
-  BY L8a
-  L8a (ii) がこれである。ρ-歩み (DEF ρ-歩みと ρ-終端) は `origin_inner` が呼ぶ相手を辿るので、memo が
+  BY <ref id=df74e59/>
+  L8a (ii) がこれである。`ρ` 歩み (DEF `ρ` 歩みと `ρ` 終端) は `origin_inner` が呼ぶ相手を辿るので、memo が
   当たった位置でも止まらない。この展開の有限性が要るのはそのためである。
 
-<1>2. ρ-歩みの列は <1>1a の木の 1 本の枝である。
-  BY DEF ρ-歩みと ρ-終端, CODE src/rc_ir/ownership.rs: origin_inner
-  `origin_inner` が呼ぶ `origin` の相手のうち 1 つを選んで進むので、列は木の根から下る 1 本の枝である。
+<1>2. `ρ` 歩みの 1 歩は 1 つに定まる。すなわち `ρ` の上の位置 `(x, λ)` が `ρ` 終端でないとき、その
+      1 歩の行き先 `(x', λ')` はちょうど 1 つである。よって `(x, λ)` の `ρ` 歩みは 1 つに定まり、
+      <1>1a の木の 1 本の枝である。
+  BY <ref id=f8fa0e9/>, <ref id=e11772a/>, <ref id=ca36627/>, <1>1a, DEF `ρ` 歩みと `ρ` 終端
+  `origin_inner` が `(x, λ)` についてどの群に入るかは、`Binding::Llvm` の腕では
+  `decl.leaf_origins_at(λ).and_then(as_arg_projection)`、すなわち
+  `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の返り値で決まるので、A3 の「**`result_prov`、`borrows_operand`、
+  `applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」が要る。これが無いと、群も、
+  (b) の枝が渡す相手 `(args[j], p)` も `(x, λ)` の関数にならない。
+  L7a は `origin_inner` の枝を 3 群に分け、その 3 つが場合を尽くすと述べる。(a) の 6 つの枝は
+  `origin` を 1 回も呼ばないので、その対は `ρ` 終端であり、この段の仮定から外れる。(b) の 5 つの腕は
+  `origin` をちょうど 1 回呼ぶので、DEF `ρ` 歩みと `ρ` 終端 が挙げる相手はその 1 つである。(c) の
+  `Binding::Join` の腕は `arm_results` の各元について 1 回ずつ呼ぶが、DEF `ρ` 歩みと `ρ` 終端 が挙げるのは
+  `ρ` が選んだアームの結果変数のものだけであり、D3 より 1 つの実行路は 1 つの `Match` 節点で 1 つの
+  アームを選ぶ。よってどの群でも相手はちょうど 1 つであり、各 1 歩の行き先は 1 つに定まる。列は木の
+  根から下る 1 本の枝である。
 
 <1>3. QED
-  BY <1>0, <1>1a, <1>2, L8
-  有限の木の枝は有限で、その最後の対では `origin_inner` が `origin` を呼ばない。各段が L8 (A) の
+  BY <1>0, <1>0a, <1>1a, <1>2, <ref id=b99155f/>
+  有限の木の枝は有限で、その最後の対では `origin_inner` が `origin` を呼ばない。列の各対が `ρ` の上の
+  位置であることは <1>0a を列の長さについての帰納法で当てて得られる。各 1 歩が L8 (A) の
   (i)-(iv) を満たすことは、L8 の言明が `Binding::Join` の腕について `ρ` が選んだアームを主語に
-  することによる。これが (i) である。(ii) は <1>0 を列の各段に当て、列の長さについての帰納法で得られる。
+  することによる。これが (i) である。(ii) は <1>0 を列の各 1 歩に当て、列の長さについての帰納法で
+  得られる。
 
 ##### 別名類 (D33)
 
 **別名類は D33 が定める** -- 「1 つの実行路 `ρ` の上のスロット (D6) を、`ρ` 終端が等しいという関係で
 分けた同値類を**別名類**と呼ぶ。スロット `(x, λ)` が属する別名類を `C_ρ(x, λ)` と書き、その
-終端を `T_ρ(C)` と書く。」D33 の「`ρ` 終端」は DEF ρ-歩みと ρ-終端 の ρ-終端であり、
-スロット `(x, λ)` についてそれが 1 つに定まることは `L12` (i) が与える。
+終端を `T_ρ(C)` と書く。」D33 の `ρ` 終端が DEF `ρ` 歩みと `ρ` 終端 の `ρ` 終端であることは `L12b` が
+与え、スロット `(x, λ)` についてそれが 1 つに定まることは `L12` (i) が与える -- 各 1 歩の行き先が 1 つに
+定まるので、列も、その `ρ` 終端も 1 つである。
 
-**D33 がこの文書に残す 2 つ目は `obj(C)` が定まることである。** `L12a` がそれを与える。
+##### L12b (D33 の `ρ` 歩みとこの文書の `ρ` 歩みは同じ列である) <!--#0da3e54-->
 
-##### L12a (別名類はオブジェクトを決める)
+**言明**。`ρ` の上の位置 (D6) `s` について、D33 が `s` から辿る `ρ` 歩みと、DEF `ρ` 歩みと `ρ` 終端 が
+定める `s` の `ρ` 歩みは同じ列であり、D33 が止まる位置は DEF `ρ` 歩みと `ρ` 終端 の `ρ` 終端である。
+よって 2 つの読みは同じ `T_ρ(s)` (`L12` (i)) を与える。
+
+**なぜ要るか。** `L11b` が与えるのは片方向 -- DEF `ρ` 歩みと `ρ` 終端 の 1 歩が D20 の辺であること --
+だけで、D33 が進む所でこの文書の `ρ` 歩みも進むことと、2 つの停止条件が一致することは述べない。
+`obj(C)`・`T_ρ(C)`・A19 (i)・D34 はどれも D33 の類の上の量なので、この同一視の上に立つ。
+
+**証明**
+
+<1>1. D33 の 1 歩の行き先は、`origin_inner` が `origin` を呼ぶ相手である。すなわち D33 の 1 歩は
+      DEF `ρ` 歩みと `ρ` 終端 の 1 歩である。
+  BY <ref id=30d6238/>, <ref id=d59f90b/>, <ref id=9c7c27a/>, <ref id=f8fa0e9/>, <ref id=7bb9768/>, DEF `ρ` 歩みと `ρ` 終端
+  D33 は「`x` の束縛が `λ` について D20 の別名の辺を持つ間は、その辺の行き先 -- D17 が定める、`λ` に
+  対応する位置 -- へ進む」と定める。D17 は各辺での `λ` の写り方を `origin_inner` と
+  `origin_from_leaves_under` の腕で定め、`Binding::Join` の辺については「その活性化が選んだアームの
+  結果へ辿る」と定める。L7a の (b) と (c) が挙げる相手 -- `Binding::Move` の `(y, λ)`、
+  `Binding::Llvm` の単一 `Arg` の `(args[j], σ')`、unbox 容器の `Binding::Field` の
+  `(container, [idx] ++ λ)`、`Binding::Payload` の 2 つの枝の `(scrut, λ)` と `(scrut, [tag] ++ λ)`、
+  `Binding::Join` の `ρ` が選んだアームの `(arm_results[j], λ)` -- が、D17 のその写り方そのものであり、
+  DEF `ρ` 歩みと `ρ` 終端 が 1 歩の行き先として挙げる相手である。L11b より、その各 1 歩は D20 の辺でも
+  ある。
+
+<1>2. D33 が止まる 3 つの位置と、L7a (a) の 6 つの枝 -- `origin_inner` が `origin` を呼ばない枝 --
+      は、`ρ` の上の位置については一致する。
+  BY <ref id=f8fa0e9/>, <ref id=30d6238/>, <ref id=e11772a/>, <ref id=0594f24/>, <ref id=596a46d/>, <ref id=b99155f/>, <1>1,
+     DEF `ρ` 歩みと `ρ` 終端
+  D33 が止まるのは、(1) 辺を持たない束縛、すなわち `Binding::Param`、`Binding::Producer`、および
+  束縛を持たない名前、(2) `Binding::Llvm` であって `λ` の宣言が単一の `Fresh` または単一の `Unknown`
+  である位置、(3) boxed 容器の `Destructure` の名前付きフィールドと boxed union の変位アームの
+  payload である。L7a (a) の 6 つは、`None`、`Binding::Param`、`Binding::Producer`、boxed 容器の
+  `Binding::Field`、変位アームであって boxed scrutinee の `Binding::Payload`、`Binding::Llvm` で
+  あって `as_arg_projection` が `None` を返す枝である。前の 5 つは D33 の (1) と (3) にそのまま
+  対応する。最後の枝は、A3 より宣言の元数が 0 か 1 なので、単一の `Fresh`、単一の `Unknown`、
+  空集合 (⊥) の 3 つに分かれ、前の 2 つが D33 の (2) である。**⊥ の leaf はこの一致から外れるが、
+  `ρ` の上の位置にならない** -- A3 は「空集合と宣言された leaf は inhabited にならない」と述べ、
+  D6 の位置は inhabited な leaf を要求するからである。`<1>1` の 1 歩の行き先も位置なので (L8 (A) の
+  (iii))、⊥ の leaf は `ρ` 歩みの始点にも途中にもならない。
+
+<1>3. QED
+  BY <1>1, <1>2, <ref id=567236b/>
+  `<1>1` より 2 つの `ρ` 歩みは同じ位置から同じ相手へ進み、`<1>2` より同じ位置で止まる。L12 (i) より
+  DEF `ρ` 歩みと `ρ` 終端 の `ρ` 歩みは 1 つに定まって有限であり、その `ρ` 終端が `T_ρ(s)` である。
+
+**D33 がこの文書に残す 3 つ目は `obj(C)` が定まることである。** `L12a` がそれを与える。
+
+##### L12a (別名類はオブジェクトを決める) <!--#80d7700-->
 
 **言明**。1 つの別名類 `C` に属する 2 つのスロットは同じオブジェクトを指す。そのオブジェクトを `obj(C)`
-と書く。`C` の ρ-終端 `T_ρ(C)` は `ρ` の上の位置 (D6) であり、`obj(C) = obj(T_ρ(C))` である。
+と書く。`C` の `ρ` 終端 `T_ρ(C)` は `ρ` の上の位置 (D6) であり、`obj(C) = obj(T_ρ(C))` である。
 
 **`T_ρ(C)` はスロットとは限らない。** D6 は、束縛を持たない名前 `g` と `ty(g)` の inhabited な boxed
 leaf の対を**記号の位置**と呼び、スロットと記号の位置を合わせて**位置**と呼ぶ。記号の位置も値と
@@ -1937,63 +2739,24 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
 
 **証明**
 
-<1>1. `(x, λ)` が `ρ` の上のスロット (D6) であるとき、その ρ-歩み `(x', λ')` も `ρ` の上の位置 (D6) --
-      スロットか記号の位置 -- であり、`obj(x, λ) = obj(x', λ')` である。
-  BY L8, L12, D6
-  D6 よりスロットとは、`ρ` の上で値を得た変数と、その値の inhabited な boxed leaf の対であり、記号の
-  位置とは、束縛を持たない名前とその値の inhabited な boxed leaf の対である。L12 より ρ-歩みの各段は
-  L8 (A) の (i)-(iv) を満たす。(i) と (ii) より `λ' ∈ boxed_leaf_paths(ty(x'))` であり `x'` は `ρ` の
-  上で値を得ている。(iii) より `λ` が inhabited であることと `λ'` が inhabited であることは同値で
-  あり、`(x, λ)` がスロットなので `λ` は inhabited、よって `λ'` も inhabited である。`x'` が
-  `vars.bindings` に束縛を持たない名前であるときこの対は記号の位置であり、そうでないときスロットで
-  ある。(iv) は leaf が inhabited であるときに `obj(x, λ) = obj(x', λ')` を与える条件付きの主張で
-  あり、その条件はいま満たされている。
+<1>1. `(x, λ)` が `ρ` の上のスロット (D6) であるとき、その 1 歩の行き先 `(x', λ')` も `ρ` の上の
+      位置 (D6) -- スロットか記号の位置 -- であり、`obj(x, λ) = obj(x', λ')` である。
+  BY <ref id=b99155f/>, <ref id=567236b/>, <ref id=596a46d/>
+  D6 よりスロットは `ρ` の上の位置なので、L12 (i) より `ρ` 歩みの各対は `ρ` の上の位置であり、
+  各 1 歩は L8 (A) の (i)-(iv) を満たす。`(x, λ)` がスロットなので `λ` は inhabited であり、(iii) より
+  `λ'` も inhabited である。(iv) は leaf が inhabited であるときに `obj(x, λ) = obj(x', λ')` を
+  与える条件付きの主張であり、その条件はいま満たされている。
 
 <1>2. QED
-  BY <1>1, L12, D33, D6
-  L12 より `(x, λ)` から `T_ρ(x, λ)` への ρ-歩みの列は有限である。列の長さについての帰納法で、
-  <1>1 がその各段について「次の対も位置であり、指すオブジェクトが等しい」を与えるので、列の
+  BY <1>1, <ref id=567236b/>, <ref id=0da3e54/>, <ref id=30d6238/>, <ref id=596a46d/>
+  L12 より `(x, λ)` から `T_ρ(x, λ)` への `ρ` 歩みは有限であり、L12b より D33 が類を分ける `ρ` 終端は
+  その列の `T_ρ` である。列の長さについての帰納法で、
+  <1>1 がその各 1 歩について、行き先も位置でありその指すオブジェクトが等しいことを与えるので、列の
   各対は位置であり、`obj(x, λ) = obj(T_ρ(x, λ))` である。とくに `T_ρ(x, λ)` は位置なので D6 の
   `obj(T_ρ(x, λ))` は定まる。D33 より 1 つの別名類の 2 つのスロットは同じ `T_ρ` を持つので、どちらも
   同じオブジェクトを指す。
 
-##### L13 (`acted_on` は ρ-歩みで縮まない)
-
-**言明**。`(x, λ)` の ρ-歩みが `(x', λ')` であるとき、`acted_on(x, λ) ⊇ acted_on(x', λ')` である。
-
-**この補題を読むのは README の A19 である** -- (O2) が立つ前提 (N)「名前は別名類を決める」の形を、
-`L9`・`L12`・`L13` と P5 (a) が与えると述べる。
-
-**証明** L8 の場合分けのうち `origin` を呼ぶ腕で分ける。
-
-<1>1. CASE `Binding::Move`、`Binding::Llvm` の単一 `Arg` の腕、unbox 容器の `Binding::Field`、
-      `Binding::Payload` の catch-all か unbox 変位の腕。これらの腕は `origin(x', λ')` の値をそのまま
-      返すので `origin(x, λ) = origin(x', λ')` であり、両辺の `acted_on` は等しい。
-  BY CODE src/rc_ir/ownership.rs: origin_inner
-
-<1>2. CASE `Binding::Join(arm_results)` の腕。この腕は
-      `C = ⋃_{arm_result} acted_on(arm_result, λ)` を作り、`Origin::of_candidates(C, &(x.name, λ))` を
-      返す。`x' = arm_results[j]`、`λ' = λ` である。
-  <2>1. `acted_on(x', λ') ⊆ C` である。
-    BY CODE src/rc_ir/ownership.rs: origin_inner
-    この腕は各 `arm_result` について `origin(vars, type_env, &arm_result.name, path).acted_on()` の各元を
-    `candidates` に入れる。`x'` はその `arm_result` の 1 つである。
-  <2>2. CASE `C` の元数が 1 である。返り値は `Origin::Exactly(c)` (`c` は `C` の唯一の元) なので
-        `acted_on(x, λ) = {c} = C` である。D15 より `acted_on(x', λ')` は空でないので、<2>1 と
-        合わせて `acted_on(x', λ') = {c}` であり、包含は等号として成り立つ。
-    BY CODE src/rc_ir/ownership.rs: Origin::of_candidates, D15, <2>1
-  <2>3. CASE `C` の元数が 2 以上である。返り値は `Origin::Join { identity: (x.name, λ), candidates: C }`
-        なので、D15 より `acted_on(x, λ) = {(x.name, λ)} ∪ C ⊇ C ⊇ acted_on(x', λ')` である。
-    BY CODE src/rc_ir/ownership.rs: Origin::of_candidates, D15, <2>1
-  <2>4. QED
-    BY <2>2, <2>3
-    `of_candidates` は `candidates.len()` が 1 かそれ以外かで分かれる。
-
-<1>3. QED
-  BY <1>1, <1>2, L8
-  L8 の (A) が挙げる `origin` を呼ぶ腕はこの 2 つの場合で尽きる。
-
-##### L14 (`identity` は自分の別名類の位置である)
+##### L14 (`identity` は自分の別名類の位置である) <!--#2171d13-->
 
 **言明**。`ρ` の上のスロット `(x, λ)` について、`o = origin(x, λ).identity()` は `ρ` の上の位置 (D6) --
 スロットか記号の位置 -- であり、D6 の `obj` について `obj(o) = obj(C_ρ(x, λ)) = obj(x, λ)` である。
@@ -2009,9 +2772,9 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
 
 **証明**
 
-<1>1. `o` は `ρ` の上の位置 (D6) である。`o` が記号の位置であるときは `o` は ρ-終端であり、`o` が
+<1>1. `o` は `ρ` の上の位置 (D6) である。`o` が記号の位置であるときは `o` は `ρ` 終端であり、`o` が
       指すオブジェクトはグローバル状態である。
-  BY L9, D6, D4, A8, D26, DEF ρ-歩みと ρ-終端, CODE src/rc_ir/ownership.rs: origin_inner,
+  BY <ref id=eabf11d/>, <ref id=596a46d/>, <ref id=0594f24/>, <ref id=b6673ca/>, <ref id=88a06de/>, DEF `ρ` 歩みと `ρ` 終端, CODE src/rc_ir/ownership.rs: origin_inner,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed
   L9 より `o = (u, σ)` について `u` は `ρ` の上で値を得ており、`σ ∈ boxed_leaf_paths(ty(u))` であり、
   `λ` が inhabited であることと `σ` が inhabited であることは同値である。`(x, λ)` はスロットなので
@@ -2020,33 +2783,39 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
   指すのは funptr かグローバル状態のオブジェクトであり (D6)、`is_funptr` の型は `is_fully_unboxed` が
   真で boxed leaf を持たない (D4 の第 1 規則) ので `σ` はグローバル状態のオブジェクトを指す。`u` が
   束縛を持たないとき `origin_inner` は `None` の腕に入って `origin` を呼ばないので、
-  DEF ρ-歩みと ρ-終端 より `(u, σ)` は ρ-終端である。
+  DEF `ρ` 歩みと `ρ` 終端 より `(u, σ)` は `ρ` 終端である。
 
-<1>2. `o` は `(x, λ)` から ρ-歩みを辿る列の上の対である。
+<1>2. `o` は `(x, λ)` の `ρ` 歩みの上の対である。
   <2>1. `origin_inner` が `origin` を呼ばない対では、その値は `Origin::Exactly` であり、その
         `identity()` はその対自身である。
-    BY L8, D15
+    BY <ref id=b99155f/>, <ref id=cbc4a1c/>
     L8 (B) が値を、D15 が `Origin::Exactly(p).identity() = p` を与える。
   <2>2. `origin_inner` が `Binding::Join` 以外の腕で `origin(x', λ')` を呼ぶとき、腕の値は
         `origin(x', λ')` の値そのものなので、`identity()` は `(x', λ')` のそれと等しい。
     BY CODE src/rc_ir/ownership.rs: origin_inner
   <2>3. `Binding::Join` の腕では、`of_candidates` が返す値の `identity()` は、候補が 2 元以上のときは
         `(x.name, λ)` 自身であり、1 元のときは `ρ` が選んだアームの結果対の `identity()` と等しい。
-    BY CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Origin::of_candidates, D15
+    BY CODE src/rc_ir/ownership.rs: origin_inner, Origin::of_candidates, Origin::identity, <ref id=cbc4a1c/>
     候補が 1 元 `{c}` のとき返り値は `Origin::Exactly(c)` である。この腕は各 `arm_result` の
     `acted_on()` の元を候補に入れるので、`ρ` が選んだアームの結果対の `acted_on()` は `{c}` に含まれ、
     D15 より `acted_on()` は `identity()` を先頭に持つ空でない列なので、その `identity()` は `c` である。
+    候補が 2 元以上のとき返り値は `Origin::Join { identity: (x.name, λ), candidates }` であり、
+    `Origin::identity` の本体は
+    `match self { Origin::Exactly(p) => p, Origin::Join { identity, .. } => identity }` なので、
+    その `identity()` は `(x.name, λ)` である。
   <2>4. QED
-    BY <2>1, <2>2, <2>3, L12
-    `(x, λ)` から ρ-歩みを辿ると、<2>2 と <2>3 の 1 元の場合では `identity()` が次の対のそれに等しく、
+    BY <2>1, <2>2, <2>3, <ref id=567236b/>
+    `(x, λ)` の `ρ` 歩みを辿ると、<2>2 と <2>3 の 1 元の場合では `identity()` が次の対のそれに等しく、
     <2>1 と <2>3 の 2 元以上の場合ではその対自身になる。L12 より列は有限なので、`o` はこの列の上の
     どれかの対である。
 
 <1>3. `obj(o) = obj(C_ρ(x, λ)) = obj(x, λ)` である。さらに `obj(x, λ)` が D26 の意味で計数下であるとき、
       `o` は `ρ` の上のスロットであり `C_ρ(o) = C_ρ(x, λ)` である。
-  BY <1>1, <1>2, L12, D33, L12a, D6
-  <1>2 より `o` は `(x, λ)` から ρ-歩みを辿る列の上にある。`o` が記号の位置であるときは、<1>1 より
-  `o` は ρ-終端であり、L12 (i) よりその列が終端で終わるのは 1 度だけなので `o = T_ρ(x, λ)` である。
+  BY <1>1, <1>2, <ref id=567236b/>, <ref id=0da3e54/>, <ref id=30d6238/>, <ref id=80d7700/>, <ref id=596a46d/>
+  <1>2 より `o` は `(x, λ)` の `ρ` 歩みの上にある。L12b より D33 が類を分ける `ρ` 終端は
+  この列の `T_ρ` である。`o` が記号の位置であるときは、<1>1 より
+  `o` は `ρ` 終端であり、L12 (i) よりその列が `ρ` 終端で終わるのは 1 度だけなので
+  `o = T_ρ(x, λ)` である。
   L12a の `obj(C_ρ(x, λ)) = obj(T_ρ(C_ρ(x, λ)))` がそのまま
   `obj(o) = obj(x, λ)` を与える。`o` がスロットであるときは、L12 より `T_ρ(o) = T_ρ(x, λ)` なので
   D33 より `o` と `(x, λ)` は同じ別名類に属し、L12a より 1 つの別名類の 2 つのスロットは同じ
@@ -2056,10 +2825,12 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
 
 <1>4. QED
   BY <1>1, <1>3, DEF 名前の活性
-  前半は <1>3 である。後半は次のとおりである。`obj(x, λ)` が計数下であるとする。DEF 名前の活性は、名前 `o`
-  が活性であることを「`origin(x', λ').identity() = o` を満たす対 `(x', λ')` で、`λ'` が `x'` の値の
-  inhabited な leaf であり、かつ `obj(x', λ')` が計数下であるものが在ること」と定める。`(x, λ)` が
-  その対である -- L14 の仮定より `(x, λ)` は `ρ` の上のスロットなので `λ` は inhabited であり、
+  前半は <1>3 である。後半は次のとおりである。`obj(x, λ)` が計数下であるとする。DEF 名前の活性は
+  「名前 `o ∈ VarPath` が `ρ` で**活性**であるとは、`origin(x, λ).identity() = o` を満たす対 `(x, λ)` で、
+  `λ ∈ boxed_leaf_paths(ty(x))` であり `ρ` の上で `x` が値を得ているものが在って、`λ` が `x` の値の
+  inhabited な leaf であり、かつ `obj(x, λ)` が D26 の意味で計数下であることをいう。」と定める。
+  L14 の `(x, λ)` がその対である -- L14 の仮定より `(x, λ)` は `ρ` の上のスロットなので `λ` は
+  inhabited であり、
   `origin(x, λ).identity() = o` であり、いま `obj(x, λ)` は計数下である。よって `o` は活性であり、
   DEF 名前の活性の `obj_ρ(o)` は `o` の指すオブジェクト、すなわち <1>3 の `obj(o) = obj(x, λ)` である。
 
@@ -2068,35 +2839,61 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
 ##### DEF 節点の時点
 
 `ρ` の上の節点 `n` について、`τ(n)` を、`ρ` を辿る活性化の**位置** (D23) が `n` に着いた直後の時点 --
-すなわち、その活性化が `n` を実行する段の直前の時点 -- とする。D23 より活性化の位置は段ごとに実行路に
-沿って 1 つ進み、D2 より `B` は木で D3 の実行路は根から各節点を高々 1 度通るので、位置が `n` に着く段は
-`ρ` の上にちょうど 1 つあり、`τ(n)` は 1 つに定まる。走査の側では、`L2` (ii) より `n` の訪問はちょうど
-1 回起こり、その入口の `pending` -- 第 7.1 節の `pending(n)` -- も 1 つに定まる。
-
-**「位置が `n` にある時点」は 1 つとは限らない。** `n` が `App` の節点であるとき、(E3) より活性化は
-呼び出し先の活性化が終わるまで中断中であり、その間ずっと位置は `n` にある。オペランドを適用する `Llvm` の
-節点も同じである ((E2))。D21 はこの 2 つを、活性化が子の活性化を作る段として挙げ、その間の参照カウントの
-増減を活性化の側の与件とする。A19 の「各時点」はその中断中の時点を含む -- README は「**「各時点」は、その
-活性化が生きている (D23) 間のすべての時点であり、入れ子の呼び出しで中断中の時点を含む。**」と書く。
-`τ(n)` はその区間の**最初の**時点であり、**この文書が A19 を当てるのはこの点だけである。**
+すなわち、その活性化が `n` を実行する段の直前の時点 -- とする。
 
 **以下では、その活性化の時点 `τ(n)` と、走査における `n` の訪問の入口とを、`n` の 1 つの時点として
 扱う。** D27 が走査中の位置を「節点の訪問の入口」と定めるので、この対応が 2 つの水準の量を同じ添字で
 書けるようにする。時点を引数に取る量については `held_ρ(n, C) = held_ρ(τ(n), C)` と略記する。
+**`τ(n)` と `pending(n)` がそれぞれ 1 つに定まることは `L13` が示す。**
+
+**「位置が `n` にある時点」は 1 つとは限らない。** `n` が `App` の節点であるとき、(E3) より活性化は
+呼び出し先の活性化が終わるまで中断中であり、その間ずっと位置は `n` にある。オペランドを適用する `Llvm` の
+節点も同じである ((E2))。D21 はこの 2 つを、活性化が子の活性化を作る段として挙げ、その間の参照カウントの
+増減を活性化の側の与件とする。A19 の「各時点」はそのうち節点の訪問の入口である時点である -- README は
+「**「各時点」は、その活性化が生きている (D23) 間の、その活性化の節点の訪問の入口である時点である。**」
+と書き、**(ii-b) が段内の点では読めないことを述べる段落**で
+「**入れ子の呼び出しで中断中の時点も、その活性化の節点の入口であるものは含む。**」と述べる
+(2 つの文のあいだには (ii-c) の箇条が挟まる)。
+`τ(n)` はその区間の**最初の**時点、すなわち `n` の訪問の入口であり、**この文書が A19 を当てるのは
+この点だけである。**
+
+##### L13 (`τ(n)` と `pending(n)` はそれぞれ 1 つに定まる) <!--#0b94532-->
+
+**言明**。`ρ` の上の節点 `n` について、`ρ` を辿る活性化の位置が `n` に着く段は `ρ` の上にちょうど
+1 つあり、したがって `τ(n)` は 1 つに定まる。また `n` の訪問はちょうど 1 回起こり、その入口の
+`pending` -- 第 7.1 節の `pending(n)` -- も 1 つに定まる。
+
+**証明**
+
+<1>1. `ρ` を辿る活性化の位置が `n` に着く段は `ρ` の上にちょうど 1 つある。
+  BY <ref id=ff5985d/>, <ref id=b3dfa37/>, <ref id=ca36627/>
+  D23 は活性化の位置を「`B(a)` の 1 つの実行路 (D3) の上の位置。活性化が始まった時点では `B(a)` の
+  根であり、節点を 1 つ実行するごとにその路に沿って 1 つ進む」と定める。D2 より `B` は有限の木であり、
+  D3 の実行路は根から辿って得られる節点の列で、各節点を高々 1 度通る。よって `n` に着く段はちょうど
+  1 つである。
+
+<1>2. `n` の訪問はちょうど 1 回起こる。
+  BY <ref id=82ee7e6/>
+  `L2` (ii) がこれである。
+
+<1>3. QED
+  BY <1>1, <1>2
+  <1>1 より `τ(n)` は 1 つに定まり、<1>2 よりその入口の `pending` も 1 つに定まる。
 
 ##### 類ごとの参照 (D34)
 
 **`held_ρ` は D34 が定める。** D34 は**計数下の**別名類 `C` -- `obj(C)` が D26 の意味で計数下である
 類 -- について、`ρ` を辿る活性化の各時点 `τ` における `held_ρ(τ, C)` を 6 行の表で定め、グローバル状態の
-類には定めない。D34 の「**A19 の `held` はこの表である。**」より、A19 (i)・(ii-a)・(ii-b) の `held` は
-この `held_ρ` である。D8 は同じオブジェクトへの参照を区別しないので、どの参照をどの類のものと数えるかは
-取り決めを定めて初めて定まる -- `bumps` について D27 が走査自身の帰属を採ったのと同じ事情であり、D34 の
+類には定めない。D34 の「**A19 の `held` はこの表である。3 つの開始行は、計数下の類の終端を尽くす。**」
+より、A19 (i)・(ii-a)・(ii-b) の `held` はこの `held_ρ` である。D8 は同じオブジェクトへの参照を
+区別しないので、どの参照をどの類のものと数えるかは取り決めを定めて初めて定まる -- `bumps` について D27 が走査自身の帰属を採ったのと同じ事情であり、D34 の
 表がその取り決めである。取り決めが実行時のカウントと整合することを A19 (i) が要求する。
 
 **開始の時点。** D34 は「最初の 3 行が置く開始値は、`T_ρ(C) = (u, σ)` の変数 `u` が値を得る時点で
 置かれる … `held_ρ(τ, C)` はその時点以後の `τ` についてだけ定まり、**`C` を渡る総和はどれもその条件を
-付ける**」と定める。**`ρ` の上の類でも、`n` の時点でまだ終端が値を得ていないものは在る** -- 第 7.5.8 節の
-`C2` の類 `C_y` は `Let(y, App(id, [o]), ・)` の段の後に始まるので、それより前の節点では値を持たない。
+付ける**」と定める。**`ρ` の上の類でも、`n` の時点でまだ終端が値を得ていないものは在る** -- 第 7.5.7 節の
+`C1` の類 `C_q` は `Let(q, Llvm(alloc, []), ・)` の段の後に始まるので、その前の節点
+`Let(p, Llvm(alloc, []), ・)` では値を持たない。
 この文書が `held_ρ(n, C)` を足す総和 -- `L14b` の言明、`L17` の `S(q, O)`、第 7.5.4 節の
 `Σ_{C ∈ S(n, O)} d(C)` -- はどれもその条件を付ける。時点の側は DEF 節点の時点により
 `held_ρ(n, C) = held_ρ(τ(n), C)` と読む。
@@ -2115,9 +2912,9 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
 ある。**第 7.5.4 節がこの下限を読む** -- A19 (i) の `d` は借用終端の類から 1 を引くので、その類の
 `d` が非負であることに `held_ρ(n, C) ≥ 1` が要る。
 
-##### L15 (D34 の 3 つの開始行は計数下の類の ρ-終端を尽くす)
+##### L15 (D34 の 3 つの開始行は計数下の類の `ρ` 終端を尽くす) <!--#daeaef2-->
 
-**言明**。計数下 (D26) の別名類 `C` の ρ-終端 `T_ρ(C) = (u, σ)` は、次のどれかである。
+**言明**。計数下 (D26) の別名類 `C` の `ρ` 終端 `T_ρ(C) = (u, σ)` は、次のどれかである。
 
 - **(a)** D10 の生成の表が参照を作る位置の leaf。
 - **(b)** 所有する (D14) パラメータ・capture の leaf。
@@ -2130,24 +2927,20 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
 **証明**
 
 <1>1. `T_ρ(C) = (u, σ)` は、`origin_inner(vars, type_env, u, σ)` が `origin` を呼ばない対である。
-  BY DEF ρ-歩みと ρ-終端
+  BY DEF `ρ` 歩みと `ρ` 終端
 
 <1>2. `origin_inner` が `origin` を呼ばないのは、`vars.bindings.get(u)` が次の 6 つのいずれかである
       ときに限る。束縛を持たない名前 (`None`)、`Binding::Param`、`Binding::Producer`、`Binding::Llvm`
-      であって `decl.leaf_origins_at(σ).and_then(as_arg_projection)` が `None` を返す場合、boxed 容器の
-      `Binding::Field`、boxed scrutinee の `Binding::Payload`。
-  BY A9, CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: Binding,
-     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var
-  `Binding` は 7 変位を持ち、`origin_inner` の `match` はそれに `None` を加えた腕を持つ。残る腕は
-  いずれも `origin` を少なくとも 1 回呼ぶ -- `Binding::Move(y)` の腕、`Binding::Llvm` の `Some((j, p))`
-  の枝、unbox 容器の `Binding::Field` の枝、`Binding::Payload` の catch-all の枝と unbox 変位の枝は
-  それぞれ 1 回呼び、`Binding::Join(arm_results)` の腕は `arm_results` の各元について 1 回ずつ呼ぶ。
-  `arm_results` が空でないことは `collect_bindings` と A9 が与える -- `collect_bindings` は
-  `RcRhs::Match(scrut, arms)` の各 `arm` について `returned_var(&arm.body)` を `arm_results` に push し、
-  A9 よりすべての `Match` は 1 つ以上のアームを持つ。
+      であって `decl.leaf_origins_at(σ).and_then(as_arg_projection)` が `None` を返す枝、boxed 容器の
+      `Binding::Field`、**変位アーム** (`variant` が `Some`) であって boxed scrutinee の
+      `Binding::Payload`。
+  BY <ref id=f8fa0e9/>
+  L7a の (a) がこの 6 つであり、(b) の 5 つと (c) の `Binding::Join` の腕はいずれも `origin` を
+  少なくとも 1 回呼ぶ。**catch-all アーム (`variant` が `None`) の `Binding::Payload` は、
+  scrutinee が boxed であっても `origin(scrut, σ)` を呼ぶ** -- L7a はそれを (b) に置く。
 
 <1>3. `Binding::Param` の腕は (b) か (c) である。
-  BY D14, P1, A10, D6, L12a, CODE src/rc_ir/ownership.rs: VarTable::of
+  BY <ref id=ef8efc4/>, <ref id=3597669/>, <ref id=8412761/>, <ref id=596a46d/>, <ref id=80d7700/>, CODE src/rc_ir/ownership.rs: VarTable::of
   `VarTable::of` は `func.params` と `func.capture` の名前にだけ `Binding::Param` を置くので、この腕の
   `u` はパラメータか capture である。L12a より `T_ρ(C)` は `ρ` の上の位置であり、D6 よりその第 2 成分は
   第 1 成分の型の boxed leaf なので `σ ∈ boxed_leaf_paths(ty(u))` であり、
@@ -2155,9 +2948,9 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
   `rc_units(ty(u))` の元、すなわち `σ` が属する unit である。D14 より、パラメータ・capture の各 unit は
   その関数が所有するか借用するかのどちらかであり、(b) と (c) がその 2 つである。
 
-<1>4. 束縛を持たない名前 (`None` の腕) を ρ-終端とする別名類は計数下ではない。よって計数下の `C` の
-      ρ-終端はこの腕に来ない。
-  BY A13, A8, D26, D6, D4, L12a
+<1>4. 束縛を持たない名前 (`None` の腕) を `ρ` 終端とする別名類は計数下ではない。よって計数下の `C` の
+      `ρ` 終端はこの腕に来ない。
+  BY <ref id=cb35ab1/>, <ref id=b6673ca/>, <ref id=88a06de/>, <ref id=596a46d/>, <ref id=0594f24/>, <ref id=80d7700/>
   `vars.bindings` に束縛を持たない `RcVar` の名前は最上位の記号の名前である -- A13 が「**束縛名に
   限らない** -- 直接呼び出しが名指す関数の名前と、グローバル値を読む `RcVar` の名前 (`origin_inner` の
   束縛を持たない腕が扱う) も含む」と、この腕が扱う名前をその 2 種として挙げる。D6 より、その名前と
@@ -2165,26 +2958,29 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
   オブジェクトである。`is_funptr` の型は `is_fully_unboxed` が真で boxed leaf を持たない
   (D4 の第 1 規則、`CODE src/ast/types.rs: TypeNode::is_fully_unboxed`) ので `σ` が指すのは
   グローバル状態のオブジェクトであり、A8 と D26 よりそれは計数下ではない。L12a より
-  `obj(C) = obj(T_ρ(C))` なので、この腕を ρ-終端とする類の `obj(C)` は計数下ではない。README の A19 が
+  `obj(C) = obj(T_ρ(C))` なので、この腕を `ρ` 終端とする類の `obj(C)` は計数下ではない。README の A19 が
   「計数下の類に限るのは、グローバル値を終端とする類に `held` の開始値を与える行が無いからである
   (D26)」と述べるのがこの点である。
 
 <1>5. 残る 4 つの腕 -- `Binding::Producer`、`Binding::Llvm` の `as_arg_projection` が `None` を返す枝、
-      boxed 容器の `Binding::Field`、boxed scrutinee の `Binding::Payload` -- は (a) である。
-  BY D10, D4, CODE src/rc_ir/ownership.rs: collect_bindings,
+      boxed 容器の `Binding::Field`、**変位アーム**であって boxed scrutinee の `Binding::Payload` --
+      は (a) である。
+  BY <ref id=f06144e/>, <ref id=0594f24/>, CODE src/rc_ir/ownership.rs: collect_bindings,
      CODE src/rc_ir/ownership.rs: as_arg_projection
   `collect_bindings` は `RcRhs::App(..)` と `RcRhs::Closure(..)` にだけ `Binding::Producer` を置くので、
   この 4 つの腕が名指す位置は 5 つあり、D10 の生成の表はそのそれぞれに 1 行を持つ --
   「`App(callee, args)` の結果の各 boxed leaf」「`Closure(f, caps)` の結果 (capture object)」
   「`Llvm(gen, args)` の結果の leaf のうち、`result_prov` の宣言が単一の `Arg(j, σ)` **でない**もの」
   「boxed 容器の `Destructure` の各名前付きフィールドの各 leaf」「boxed union の変位アームの payload の
-  各 leaf」である。クロージャの boxed leaf が capture の位置 1 つであることは D4 の第 2 規則が与える。
-  `Llvm` の行がこの腕に対応するのは、`as_arg_projection` が `Some((j, p))` を返すのが「`sources` が
-  ちょうど 1 元であってその元が `LeafOrigin::Arg(j, p)` であるとき」に限るからである -- すなわち
+  各 leaf」である。**最後の行が変位アームだけを挙げることが、この段が `Binding::Payload` を変位アームに
+  限る理由である** -- catch-all アームの payload 束縛は D10 の生成の表に行を持たず、D9 の移動の表が
+  それを扱う。クロージャの boxed leaf が capture の位置 1 つであることは D4 の第 2 規則が与える。
+  `Llvm` の行がこの腕に対応するのは、`as_arg_projection` が `Some((j, p))` を返すのが、`sources` が
+  ちょうど 1 元の集合であってその元が `LeafOrigin::Arg(j, p)` であるときに限るからである -- すなわち
   `None` を返すことと、宣言が単一の `Arg(j, σ)` でないことは同値である。
 
 <1>6. QED
-  BY <1>1, <1>2, <1>3, <1>4, <1>5, D34
+  BY <1>1, <1>2, <1>3, <1>4, <1>5, <ref id=9d5d254/>
   <1>2 の 6 つの腕のうち、<1>4 が計数下の類について `None` の腕を除き、<1>3 が `Binding::Param` の腕を
   (b) か (c) に、<1>5 が残る 4 つを (a) に振り分ける。D34 の第 1 行が (a)、第 2 行が (b)、第 3 行が
   (c) に開始値を与え、`T_ρ(C)` はこの 3 つのうちちょうど 1 つである。
@@ -2193,52 +2989,67 @@ leaf の対を**記号の位置**と呼び、スロットと記号の位置を�
 
 計数下の別名類 `C` と `ρ` の上の節点 `n` について、
 `bumps_ρ(n, C) = Σ_{p ∈ pending(n)} Σ_{o : C_ρ(o) = C} B_ρ(n, p)[o]` と定める。内側の和は、`ρ` の上の
-スロットである名前 `o` のうち `C_ρ(o) = C` であるものを渡る。`B_ρ(n, p)` が個数を付けているのは
-`ActRefs^inh_ρ` が名付ける名前、すなわち inhabited かつ計数下の leaf の `identity` であり
-(DEF bump の帰属、DEF 実行時の作用)、L14 の後半よりそれはどれも `ρ` の上のスロットで、D33 より
-ちょうど 1 つの別名類に属する。
+スロットである名前 `o` のうち `C_ρ(o) = C` であるものを渡る。**`B_ρ(n, p)` が個数を付ける名前が
+どれも `ρ` の上のスロットであって、D33 よりちょうど 1 つの別名類に属することは、`L14c` (a) と `L14` が
+与える** (`L17` の `<1>3` がその形で引く)。すなわちこの和は、どの類にも属さない項を落としていない。
 
-これが A19 (ii-b) の言う「走査がその類について `pending` に数えている bump の個数」である。走査の
-`pending` は節点の訪問の入口ごとに定まるので、この量の添字は節点であり、DEF 節点の時点により
+走査の `pending` は節点の訪問の入口ごとに定まるので、この量の添字は節点であり、DEF 節点の時点により
 `bumps_ρ(τ(n), C) = bumps_ρ(n, C)` と読む。
+
+**この量が A19 (ii-b) の `bumps` であることは `L14c` が示す。** A19 (ii-b) は内側の和の添字集合を
+「`C` のスロットの `origin` の identity」で書き、上の定義は「`ρ` の上のスロットである名前 `o` のうち
+`C_ρ(o) = C` であるもの」で書くので、2 つが同じ集合であることを言う段が要る。
 
 ##### A19 (README 第 4 節)
 
-**この文書は README の A19 の 3 つの節を引く。(ii-a) と (ii-b) は仮定であり、(i) は D21 が活性化に
-課す制限である。** 文面は次のとおりである (README 第 4 節)。
+**A19 は 4 つの項 (i)・(ii-a)・(ii-b)・(ii-c) を持つ。この文書が引くのはそのうち (i)・(ii-a)・(ii-b) の
+3 つである。(ii-a) と (ii-b) は仮定であり、(i) は D21 が活性化に課す制限である。**
+**(ii-c) は段内の点についての項であり、この文書は時点の側だけを読む (DEF 節点の時点) ので引かない。**
+文面は次のとおりである (README 第 4 節)。README の並びでは、次の (ii-c) の文が (i)・(ii-a)・(ii-b) の
+箇条書きより前に在る。
+> **(ii-c) (段内の点の非負性)。節点の実行の途中の各点 (D24 の段内の点) と、その点で `held_ρ` が定まる
+> 各計数下の別名類について、`held ≥ 0` である。**
 
 > - **(i)** **これは仮定ではなく、D21 が活性化に課す制限である。** 活性化 `a` の各時点、各計数下
 >   オブジェクト `O` について、次が成り立つ。`a` の計数下の別名類のうち `obj(C) = O` であり開始の時点が
 >   その時点以前であるものの全体を `S` とし、各類について
 >   `d(C) = held(C) - [C の ρ-終端が借用する (D14) leaf ならば 1]` と置くと、
 >
->   > `H(O) ≥ Σ_{C ∈ S} d(C) + [S に借用終端の類が在るならば 1]`
-> - **(ii-a) 由来の形** -- 読む者: P14、P18c。各時点と各計数下の別名類について、その類が持つ参照の個数は
+>   > `H(O) ≥ Σ_{C ∈ S} d(C) + [S に借用終端の類が在るならば 1]` …
+> - **(ii-a) 由来の形** -- 読む者: P14、P18a、P18c。各時点と各計数下の別名類について、その類が持つ参照の個数は
 >   非負であり、読む構文と `Retain`/`Release` がその類を名指す時点では 1 以上である。**非負であることは、
->   終端の `Ret` の消費を行った直後の時点についても言う。**
+>   終端の `Ret` の消費を行った直後の時点についても言う。** …
 > - **(ii-b) 帳簿の形** -- 読む者: P18a、P18c、P19、P21。各時点と各計数下の別名類について、走査がその類に
 >   ついて `pending` に数えている bump の個数を `bumps`、その類が持つ参照の個数を `held` とすると、
 >   **`bumps ≥ 1` である時点では `held ≥ 1 + bumps` である。**
 
 (ii-a) と (ii-b) の範囲は README が「**`borrow_ify` の入力の各本体と、`borrow_ify` がそれを写した各本体
-(すなわち `cancel` の入力) の両方**について、(ii-a) と (ii-b) を仮定する」と定めるので、`cancel` の入力に
-ついて使える。(i) は D21 の意味のどの活性化についても成り立つ -- D21 が「**活性化は、その各時点で
-A19 (i) の不等式を満たすものに限る。**」と定めるからであり、第 7.1 節が固定した活性化も D21 の意味の
-活性化である。この文書の記法では、(ii-b) は「`bumps_ρ(n, C) ≥ 1` である節点 `n` では
+(すなわち `cancel` の入力) の両方**について、**(ii-a)・(ii-b)・(ii-c) を仮定する。**」と定めるので (この
+文書が読むのは (ii-a) と (ii-b) だけである)、`cancel` の入力について使える。(i) は D21 の意味のどの
+活性化についても成り立つ -- D21 が「**活性化は、その各時点と
+各段内の点 (D24) で A19 (i) の不等式を満たすものに限る。**」と定めるからであり、第 7.1 節が固定した
+活性化も D21 の意味の活性化である。**この文書が当てるのは時点の側だけである** -- README はその粒度に
+ついて「**粒度が段内の点までなのは、`held` (D34) がその粒度で定まり、P28 (b) がその粒度でこの制限を
+示すからである**」と述べ、段内の点はこの文書が読まない分の下限を足す。
+この文書の記法では、(ii-b) は「`bumps_ρ(n, C) ≥ 1` である節点 `n` では
 `held_ρ(n, C) ≥ 1 + bumps_ρ(n, C)`」である。
 
+**この文書が (ii-a) を読むのは `L14b` である。** README も「**P18a と P18c は `cancel` の入力に
+ついて (ii-a) も読む** -- 類が持つ参照の個数が非負であることを、`p13-disposals-and-pending.md` の
+`L14b` が使う」と、その位置を名指す。
+
 **(i) の `d` と角括弧が第 7.5.4 節に効く。** (i) の総和が渡るのは、固定した活性化の計数下の別名類の
-うち `obj(C) = O` であり開始の時点がその時点以前であるものの全体であり、これは第 7.5.4 節の `S(n, O)`
-すなわち `L17` の範囲と同じものである。各項が `held` そのものではなく
+うち `obj(C) = O` であり開始の時点がその時点以前であるものの全体であり、これは第 7.5.4 節の
+`S(n, O)` すなわち `L17` の範囲と同じものである。各項が `held` そのものではなく
 `d(C) = held(C) - [借用終端ならば 1]` であることと、`S` に借用終端の類が在るときに右辺へ `+1` が立つ
 ことが、第 7.5.4 節の 2 つの場合を分ける。
 
 条件を落とした形が使えないことも README が述べる。無条件の `held ≥ 1 + bumps` は `bumps = 0` の時点で
 `0 ≥ 1` を要求するので偽であり (第 7.5.7 節の `f` の `Release(b, [])` の直後がその時点である)、
-`held ≥ bumps` は真だが弱すぎて P18a が要る形を出さない (第 7.5.8 節の `C2` の類 `C_o` が
-`held = bumps = 1` の時点を持つ)。
+`held ≥ bumps` は真だが弱すぎて P18a が要る形を出さない (第 7.5.7 節の `C1` の類 `C` が
+`Let(w, App(f, [q]), ・)` の入口で `held = bumps = 1` を持つ)。
 
-**(i) が足すのは `held` そのものではない。** ρ-終端が借用するパラメータ・capture の leaf である類に
+**(i) が足すのは `held` そのものではない。** `ρ` 終端が借用するパラメータ・capture の leaf である類に
 ついて 1 を引いた `d(C)` である。
 README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の類が `held ≥ 1` を持つ読みを要求する --
 借用位置へ渡した参照を呼び出し先が読んでよいことがそこに載っているからである。(i) はその参照を
@@ -2246,7 +3057,84 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
 形ではない** -- README は「**借用終端の類を丸ごと落とす形は弱すぎる。** … `d` が引くのは開始の 1 だけで
 ある」と続ける。この文書はその差を第 7.5.4 節で扱う。
 
-##### L14b (`held` は `bumps` 以上である)
+##### L14c (`bumps_ρ` は A19 (ii-b) の `bumps` である) <!--#e683ca8-->
+
+**言明**。`ρ` の上の節点 `n` について、次の 2 つが成り立つ。
+
+- **(a)** `pending(n)` のある要素 `p` について `B_ρ(n, p)[o] ≥ 1` である名前 `o` について、`ρ` の上で
+  `n` より前にある `Retain(v, π)` 節点と leaf `λ ∈ L(v, π)` が在って、`(v, λ)` は `ρ` の上のスロット
+  (D6)、`obj(v, λ)` は計数下 (D26)、`o = origin(v, λ).identity()` である。
+- **(b)** 計数下の別名類 `C` について、`I(C) = {origin(w, ν).identity() : (w, ν) ∈ C}` と置くと
+  `Σ_{p ∈ pending(n)} Σ_{o ∈ I(C)} B_ρ(n, p)[o] = bumps_ρ(n, C)` である。
+
+**(b) が A19 (ii-b) の `bumps` との一致である。** README の A19 (ii-b) は「**`bumps` の帰属。**
+`bumps_ρ(τ, C)` とは、時点 `τ` の `pending` の各要素 `p` について D27 が定める `B(p, ρ)` のうち、
+`C` のスロットの `origin` の identity に付く分の総和である。」と定める。その「`C` のスロットの
+`origin` の identity」の全体が `I(C)` であり、左辺がその総和である。DEF bumps は同じ量を
+「`ρ` の上のスロットである名前 `o` のうち `C_ρ(o) = C` であるもの」を渡る和として書くので、(b) は
+2 つの添字集合が同じ和を与えることを述べる。
+
+**証明**
+
+<1>1. (a) が成り立つ。
+  <2>1. `o` は、`ρ` の上で `n` より前にある `Retain(v, π)` の `π` の下の inhabited かつ計数下の
+        leaf `λ` の `origin(v, λ).identity()` である。
+    BY DEF bump の帰属, DEF 実行時の作用, <ref id=a423f41/>, <ref id=c4ea962/>
+    DEF bump の帰属より `B_ρ(·, p)` の初期値は `ActRefs^inh_ρ` であり、その後の操作は名前を増やさない。
+    DEF 実行時の作用より `ActRefs^inh_ρ` が名前を付けるのは `Inh_ρ(v, π, ·)` の leaf、すなわち
+    inhabited かつ計数下の leaf であり、その名付けは `origin(v, λ).identity()` である。その初期値を
+    置くのは `p` を `pending` に入れた `Retain` の訪問であり、P16 (a) より `p.node` は「その位置までに
+    訪れた `Retain` 節点」である。L11 より帰属の表は `ρ` の上の場合を尽くすので、その訪問は `ρ` の上で
+    `n` より前にある。
+  <2>2. `(v, λ)` は `ρ` の上のスロットである。
+    BY <2>1, <ref id=596a46d/>, <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=0594f24/>, <ref id=b6673ca/>, <ref id=3905b4e/>, <ref id=fc8907e/>, <ref id=88a06de/>,
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+    `Retain(v, π)` 節点は `ρ` の上に在り `v` を名指す。`v` が `vars.bindings` に束縛を持つときは、
+    A11 より `v` はその位置でスコープに入っている束縛に解決するので、`ρ` の上で先に値を得ている
+    (**A11 が与えるのは解決先だけである。** その束縛の節点が `ρ` の上で先に在ることは D2 と D3 に
+    よる -- D2 は束縛のスコープをその節点の継続 (`Match` のアームの payload についてはそのアームの
+    `body`) の部分木と定め、D3 の実行路は本体の根から継続とアーム本体を辿って得られる節点の列なので、
+    その部分木の中の節点に着くまでにその束縛の節点を通る)。
+    持たないときは、`L7b` より `v` を名指す節点の段で
+    `v` は値を持つ。後者の場合 D6 より `(v, λ)` は記号の位置であり、指すのは funptr かグローバル状態の
+    オブジェクトである。`is_funptr` の型は `is_fully_unboxed` が真で boxed leaf を持たない
+    (D4 の第 1 規則) ので `obj(v, λ)` はグローバル状態であり、A8 と D26 よりそれは計数下ではない。
+    <2>1 より `obj(v, λ)` は計数下なので、この場合は起こらない。よって `v` は束縛を持ち、`λ` は
+    <2>1 よりその値の inhabited な boxed leaf なので、D6 より `(v, λ)` は `ρ` の上のスロットである。
+  <2>3. QED
+    BY <2>1, <2>2
+
+<1>2. `C` が計数下の別名類であるとき、`I(C)` の各元 `o` は `ρ` の上のスロットであって
+      `C_ρ(o) = C` である。
+  BY <ref id=80d7700/>, <ref id=2171d13/>, <ref id=30d6238/>
+  `I(C)` の元は `C` のスロット `(w, ν)` についての `origin(w, ν).identity()` である。L12a より
+  `obj(w, ν) = obj(C)` であり、`C` は計数下なのでこれは計数下である。L14 の後半は「さらに
+  `obj(x, λ)` が D26 の意味で計数下であるとき、`o` は `ρ` の上のスロットであって
+  `C_ρ(o) = C_ρ(x, λ)` であり、`o` は `ρ` で活性 (DEF 名前の活性) であって `obj_ρ(o) = obj(x, λ)` で
+  ある。」と述べる。これを `(x, λ) = (w, ν)` に当てると、`o` は `ρ` の上のスロットであり、D33 より
+  `C_ρ(o) = C_ρ(w, ν) = C` である。
+
+<1>3. `pending(n)` のある要素 `p` について `B_ρ(n, p)[o] ≥ 1` である名前 `o` が `ρ` の上のスロットで
+      あって `C_ρ(o) = C` であるならば、`o ∈ I(C)` である。
+  BY <1>1, <ref id=2171d13/>, <ref id=30d6238/>
+  <1>1 より `o = origin(v, λ).identity()` であり、`(v, λ)` は `ρ` の上のスロットで `obj(v, λ)` は
+  計数下である。L14 の後半を `(x, λ) = (v, λ)` に当てると `C_ρ(o) = C_ρ(v, λ)` なので `C_ρ(v, λ) = C`
+  であり、D33 より `(v, λ) ∈ C` である。よって `o` は `C` のスロットの `origin` の identity、すなわち
+  `I(C)` の元である。
+
+<1>4. (b) が成り立つ。
+  BY <1>2, <1>3, DEF bumps, <ref id=c4ea962/>, <ref id=cbc4a1c/>
+  DEF bumps より右辺の内側の和は「`ρ` の上のスロットである名前 `o` のうち `C_ρ(o) = C` であるもの」を
+  渡る。各項 `B_ρ(n, p)[o]` は非負の整数である -- L11 より、活性な `o` では `p.outstanding[o]` に
+  等しく、`References` は `VarPath` から個数への写像なのでこれは非負であり (D15)、活性でない `o` では
+  0 である。よってどちらの和も `B_ρ(n, p)[o] ≥ 1` である `(p, o)` の項だけからなる。そうした `o` に
+  ついて、<1>2 が `I(C)` から右辺の範囲への含みを、<1>3 が逆向きの含みを与えるので、2 つの和は同じ項
+  からなる。
+
+<1>5. QED
+  BY <1>1, <1>4
+
+##### L14b (`held` は `bumps` 以上である) <!--#bf561fb-->
 
 **言明**。`ρ` の上の節点 `n` と、開始の時点 (D34) が `τ(n)` 以前である計数下の別名類 `C` に
 ついて、`bumps_ρ(n, C) ≥ 0` であり、`held_ρ(n, C) ≥ bumps_ρ(n, C)` である。**開始の条件が要る** --
@@ -2255,26 +3143,27 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
 **証明**
 
 <1>1. CASE `bumps_ρ(n, C) = 0`。A19 (ii-a) より `held_ρ(n, C) ≥ 0` である。
-  BY A19, D34, DEF 節点の時点
-  A19 (ii-a) は「各時点と各計数下の別名類について、その類が持つ参照の個数は非負である」と述べる。
-  D34 の「**A19 の `held` はこの表である。**」より、その個数はこの文書の `held_ρ` であり、
-  DEF 節点の時点より `n` の時点は A19 の言う時点の 1 つである。
+  BY <ref id=9f1cf6c/>, <ref id=9d5d254/>, DEF 節点の時点
+  A19 (ii-a) は「各時点と各計数下の別名類について、その類が持つ参照の個数は非負で
+  あり、読む構文と `Retain`/`Release` がその類を名指す時点では 1 以上である。」と述べる。
+  D34 の「**A19 の `held` はこの表である。3 つの開始行は、計数下の類の終端を尽くす。**」より、
+  その個数はこの文書の `held_ρ` であり、DEF 節点の時点より `n` の時点は A19 の言う時点の 1 つである。
 
 <1>2. CASE `bumps_ρ(n, C) ≥ 1`。A19 (ii-b) より `held_ρ(n, C) ≥ 1 + bumps_ρ(n, C) ≥ bumps_ρ(n, C)` で
       ある。
-  BY A19, D34, DEF bumps, DEF 節点の時点
-  A19 (ii-b) は「`bumps ≥ 1` である時点では `held ≥ 1 + bumps`」と述べる。DEF bumps より、走査が
-  `pending` に数えている bump の個数はこの文書の `bumps_ρ(n, C)` である。
+  BY <ref id=9f1cf6c/>, <ref id=9d5d254/>, <ref id=e683ca8/>, DEF 節点の時点
+  A19 (ii-b) は「`bumps ≥ 1` である時点では `held ≥ 1 + bumps`」と述べる。L14c (b) より、A19 (ii-b) の
+  帰属が `C` に数える bump の個数はこの文書の `bumps_ρ(n, C)` である。
 
 <1>3. QED
-  BY <1>1, <1>2, L11, D15, DEF bumps
+  BY <1>1, <1>2, <ref id=c4ea962/>, <ref id=cbc4a1c/>, DEF bumps
   `bumps_ρ(n, C)` は `B_ρ(n, p)[o]` の有限和であり (DEF bumps)、L11 より各項は非負である -- 活性な
   `o` では `p.outstanding[o]` に等しく (L11 (i))、`References` は `VarPath` から個数への写像なので
   これは非負であり (D15)、活性でない `o` では 0 である (L11 (ii))。よって `bumps_ρ(n, C)` は非負整数で
   あり、これが言明の前半である。後半は、`bumps_ρ(n, C)` が 0 か 1 以上かで場合が尽きるので、
   <1>1 と <1>2 が与える。
 
-##### L17 (`N` は別名類ごとの `bumps` の和である)
+##### L17 (`N` は別名類ごとの `bumps` の和である) <!--#5c1f4e7-->
 
 **言明**。`ρ` の上の節点 `q` と**計数下** (D26) のオブジェクト `O` について、
 
@@ -2285,15 +3174,16 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
 第 7.5.4 節が同じ範囲で `held_ρ` を足せるのはこの形による。
 
 **`O` の「計数下」に時点は要らない。** D26 の最後の段落が「1 つの活性化の間、そこに現れるオブジェクトが
-計数下であるかどうかは変わらない … 命題が『各時点の計数下オブジェクト』を量化するとき、その集合は
+計数下であるかどうかは変わらない … 命題が「各時点の計数下オブジェクト」を量化するとき、その集合は
 活性化の間ずっと同じである」と述べるからである。`obj(C)` が各別名類について定まることは `L12a` が与える。
 
 **証明**
 
 <1>1. `obj(C)` は各別名類 `C` について定まる。
-  BY L12a
+  BY <ref id=80d7700/>
   L12a は「1 つの別名類 `C` に属する 2 つのスロットは同じオブジェクトを指す。そのオブジェクトを
-  `obj(C)` と書き、`obj(C) = obj(T_ρ(C))` である」と述べる。
+  `obj(C)` と書く。`C` の `ρ` 終端 `T_ρ(C)` は `ρ` の上の位置 (D6) であり、`obj(C) = obj(T_ρ(C))` で
+  ある。」と述べる。
 
 <1>2. 両辺はどちらも、`pending(q)` の各要素 `p` と名前 `o` にわたる `B_ρ(q, p)[o]` の和であり、`o` の
       動く範囲だけが違う。左辺は「活性 (DEF 名前の活性) であって `obj_ρ(o) = O` である `o`」、右辺は
@@ -2307,37 +3197,36 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
 <1>3. `pending(q)` のある要素 `p` について `B_ρ(q, p)[o] ≥ 1` である名前 `o` は、次の 4 つを満たす。
       `o` は `ρ` の上のスロットである。`o` は `ρ` で活性である。`C_ρ(o)` は計数下の別名類であって
       `obj_ρ(o) = obj(C_ρ(o))` である。`C_ρ(o)` の開始の時点 (D34) は `τ(q)` 以前である。
-  <2>1. `o` は、`ρ` の上で `q` より前にある `Retain(v, π)` の `π` の下の inhabited かつ計数下の leaf `λ`
-        の `origin(v, λ).identity()` である。
-    BY DEF bump の帰属, DEF 実行時の作用, P16, L11
-    DEF bump の帰属より `B_ρ(·, p)` の初期値は `ActRefs^inh_ρ` であり、その後の操作は名前を増やさない。
-    DEF 実行時の作用より `ActRefs^inh_ρ` が名前を付けるのは `Inh_ρ(v, π, ·)` の leaf、すなわち
-    inhabited かつ計数下の leaf である。その初期値を置くのは `p` を `pending` に入れた `Retain` の訪問で
-    あり、P16 (a) より `p.node` は「その位置までに訪れた `Retain` 節点」である。L11 より帰属の表は `ρ` の
-    上の場合を尽くすので、その訪問は `ρ` の上で `q` より前にある。
-  <2>2. `(v, λ)` は `ρ` の上のスロットであり、`o` も `ρ` の上のスロットであって
-        `C_ρ(o) = C_ρ(v, λ)` である。
-    BY L14, <2>1, D33, D6
-    D6 よりスロットとは、`ρ` の上で値を得た変数とその値の inhabited な boxed leaf の対である。<2>1 より
-    `λ` は `v` の値の inhabited な leaf なので `(v, λ)` はスロットであり、`obj(v, λ)` は計数下である。
-    L14 の後半は「`obj(x, λ)` が D26 の意味で計数下であるとき、`o` は `ρ` の上のスロットであって
-    `C_ρ(o) = C_ρ(x, λ)` である」と述べ、これが `(x, λ) = (v, λ)` に当たる。
+  <2>1. `ρ` の上で `q` より前にある `Retain(v, π)` 節点と leaf `λ ∈ L(v, π)` が在って、`(v, λ)` は
+        `ρ` の上のスロット、`obj(v, λ)` は計数下、`o = origin(v, λ).identity()` である。
+    BY <ref id=e683ca8/>
+    L14c (a) がこれである。
+  <2>2. `o` は `ρ` の上のスロットであって `C_ρ(o) = C_ρ(v, λ)` である。
+    BY <ref id=2171d13/>, <2>1, <ref id=30d6238/>
+    L14 の後半は「さらに `obj(x, λ)` が D26 の意味で計数下であるとき、`o` は `ρ` の上のスロットであって
+    `C_ρ(o) = C_ρ(x, λ)` であり、`o` は `ρ` で活性 (DEF 名前の活性) であって `obj_ρ(o) = obj(x, λ)` で
+    ある。」と述べ、<2>1 よりこれが `(x, λ) = (v, λ)` に当たる。D33 が `C_ρ(・)` を定める。
   <2>3. `obj(C_ρ(o)) = obj(v, λ)` であり、これは計数下である。よって `C_ρ(o)` は計数下の別名類である。
-    BY L12a, <2>1, <2>2
+    BY <ref id=80d7700/>, <2>1, <2>2
     L12a は「1 つの別名類 `C` に属する 2 つのスロットは同じオブジェクトを指す。そのオブジェクトを
     `obj(C)` と書く」と述べる。<2>2 より `(v, λ) ∈ C_ρ(o)` なので `obj(C_ρ(o)) = obj(v, λ)` である。
     <2>1 より `obj(v, λ)` は計数下である。
   <2>4. `o` は活性であり、`obj_ρ(o) = obj(v, λ) = obj(C_ρ(o))` である。
-    BY L14, <2>1, <2>2, <2>3
-    L14 の後半は「`obj(x, λ)` が D26 の意味で計数下であるとき、`o` は `ρ` で活性であり
-    `obj_ρ(o) = obj(x, λ)` である」と述べる。<2>2 より `(v, λ)` はスロットであり、<2>3 より
-    `obj(v, λ)` は計数下なので、これが `(x, λ) = (v, λ)` に当たる。
+    BY <ref id=2171d13/>, <2>1, <2>2, <2>3
+    L14 の後半は「さらに `obj(x, λ)` が D26 の意味で計数下であるとき、`o` は `ρ` の上のスロットであって
+    `C_ρ(o) = C_ρ(x, λ)` であり、`o` は `ρ` で活性 (DEF 名前の活性) であって `obj_ρ(o) = obj(x, λ)` で
+    ある。」と述べる。<2>1 より `(v, λ)` はスロットであり `obj(v, λ)` は計数下なので、これが
+    `(x, λ) = (v, λ)` に当たる。
   <2>4a. `C_ρ(o)` の開始の時点は `τ(q)` 以前である。
-    BY L12, A11, D34, DEF 節点の時点, <2>1, <2>2
+    BY <ref id=567236b/>, <ref id=3905b4e/>, <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=9d5d254/>, DEF 節点の時点, <2>1, <2>2
     D34 より `C_ρ(o)` の開始の時点は `T_ρ(C_ρ(o))` の変数が値を得る時点である。<2>2 より
     `C_ρ(o) = C_ρ(v, λ)` なのでその終端は `T_ρ(v, λ)` であり、L12 (ii) よりその変数は `v` が値を得る段
     以前に値を得ている。<2>1 の `Retain(v, π)` は `ρ` の上で `q` より前にあり、A11 より `v` はその節点で
     スコープに入っている束縛に解決するので、`v` が値を得るのは `τ(q)` より前である。
+    **A11 が与えるのは解決先だけである。** その束縛の節点が `ρ` の上で先に在ることは D2 と D3 に
+    よる -- D2 は束縛のスコープをその節点の継続 (`Match` のアームの payload についてはそのアームの
+    `body`) の部分木と定め、D3 の実行路は本体の根から継続とアーム本体を辿って得られる節点の列なので、
+    その部分木の中の節点に着くまでにその束縛の節点を通る。
   <2>5. QED
     BY <2>2, <2>3, <2>4, <2>4a
 
@@ -2354,7 +3243,7 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
   `obj(C_ρ(o)) = O` と同値である。
 
 <1>4. QED
-  BY <1>2, <1>3a, L11, D15
+  BY <1>2, <1>3a, <ref id=c4ea962/>, <ref id=cbc4a1c/>
   <1>2 より、左辺は `o` が左範囲を動く `Σ_{p ∈ pending(q)} Σ_o B_ρ(q, p)[o]`、右辺は `o` が右範囲を
   動く同じ和である。各項 `B_ρ(q, p)[o]` は非負の整数である -- L11 より、活性な `o` では
   `p.outstanding[o]` に等しく、`References` は `VarPath` から個数への写像なのでこれは非負であり (D15)、
@@ -2366,98 +3255,126 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
 
 **証明**
 
+<1>0. `ρ` で活性 (DEF 名前の活性) な各名前 `o` は `ρ` の上の位置 (D6) であり、D6 の `obj` について
+      `obj(o) = obj_ρ(o)` である。
+  BY <ref id=87aea92/>, <ref id=2171d13/>, <ref id=596a46d/>, DEF 名前の活性
+  DEF 名前の活性 より、活性な `o` には証人 `(x, λ)` が在る -- `λ ∈ boxed_leaf_paths(ty(x))` であり、
+  `ρ` の上で `x` が値を得ており、`origin(x, λ).identity() = o` であり、`λ` は `x` の値の inhabited な
+  leaf であり、`obj(x, λ)` は計数下である。`obj_ρ(o)` はその証人が指すオブジェクト、すなわち
+  `obj(x, λ)` であり、`L10b` (ii) より証人の取り方によらない。`L10b` (i) より証人は `ρ` の上のスロット
+  なので、`L14` を `(x, λ)` に当てると、`o` は `ρ` の上の位置であって `obj(o) = obj(x, λ)` である。
+  D6 はスロットにも記号の位置にも `obj` を与える。よって `obj(o) = obj(x, λ) = obj_ρ(o)` である。
+
 <1>1. SUFFICES ASSUME NEW `ρ` の上の節点 `n`、NEW 計数下 (D26) オブジェクト `O`、`N_ρ(n, O) ≥ 1`
       PROVE `H(O) ≥ N_ρ(n, O) + 1`
-  BY DEF `N`, DEF INV, DEF bump の帰属, DEF 名前の活性, D27, L11
-  7.5.1 が述べるとおり、この形が INV(n) であり、INV は P18a そのものである。P18a の
+  BY <1>0, DEF `N`, DEF INV, DEF bump の帰属, DEF 名前の活性, <ref id=8093b68/>, <ref id=c4ea962/>
+  7.5.1 が述べるとおり、この形が DEF INV の `INV(n)` であり、それは P18a そのものである。P18a の
   `n(O) = Σ_p Σ_{o : obj(o) = O} B(p, ρ)[o]` は、走査中の位置を節点の訪問の入口に取り (D27)、
-  `B(p, ρ)` を DEF bump の帰属で読むと `N_ρ(n, O)` である。内側の和を活性な名前に制限してよいのは
-  L11 (ii) が活性でない名前の `B_ρ` を 0 とするからであり、`obj_ρ(o)` が定まるのは DEF 名前の活性に
-  よる。**以下のステップは、この ASSUME が導入した `n`、`O` と仮定 `N_ρ(n, O) ≥ 1` の下で書く。**
+  `B(p, ρ)` を DEF bump の帰属で読むと `N_ρ(n, O)` である。**2 つの和の添字集合は同じである** --
+  L11 (ii) より活性でない名前の `B_ρ` は 0 なので、内側の和は活性な名前に制限してよく、活性な名前に
+  ついて <1>0 が `obj(o) = obj_ρ(o)` を与えるので、P18a の添字条件 `obj(o) = O` と DEF `N` の
+  添字条件 `obj_ρ(o) = O` は同じ名前を選ぶ。`obj_ρ(o)` が定まるのは DEF 名前の活性による。
+  **以下のステップは、この ASSUME が導入した `n`、`O` と仮定 `N_ρ(n, O) ≥ 1` の下で書く。**
 
 <1>2. `N_ρ(n, O) = Σ_{C ∈ S(n, O)} bumps_ρ(n, C)` である。`S(n, O)` は L17 の範囲、すなわち固定した
       活性化の計数下の別名類のうち `obj(C) = O` であり開始の時点が `τ(n)` 以前であるものの全体である。
-  BY L17, <1>1
+  BY <ref id=5c1f4e7/>, <1>1
   <1>1 の `O` は計数下である。
 
-<1>2a. DEFINE `d(C) == held_ρ(n, C) - [C の ρ-終端が借用する (D14) パラメータ・capture の leaf
+<1>2a. DEFINE `d(C) == held_ρ(n, C) - [C の ρ 終端が借用する (D14) パラメータ・capture の leaf
        ならば 1]`
-       以下の各ステップはこの記法を `S(n, O)` の類についてだけ使う。そこで `held_ρ(n, C)` が定まる
-       ことは <1>3 が述べる。
+       以下の各ステップはこの記法を `S(n, O)` の類についてだけ使う。
 
+<1>2b. `S(n, O)` は有限集合である。よって `Σ_{C ∈ S(n, O)}` は有限和であり、項ごとの不等式を足せる。
+  BY <ref id=a502f3e/>, <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=0594f24/>, <ref id=596a46d/>, <ref id=30d6238/>, <ref id=8412761/>, <ref id=5c1f4e7/>
+  L17 より `S(n, O)` の元は固定した活性化の別名類であり、D33 より別名類は `ρ` の上のスロット (D6) を
+  `ρ` 終端が等しいという関係で分けた同値類なので、`ρ` の上のスロットが有限個であればよい。D6 より
+  スロットは対 `(x, λ)` であって、`x` は `ρ` の上でその時点までに値を得た**束縛を持つ**変数、`λ` は
+  `ty(x)` の inhabited な boxed leaf である。D2 より `B` は有限の木であり、D3 より `ρ` は `B` の節点の
+  有限列なので、節点が束縛する変数は有限個である。パラメータと capture も有限個である -- D1 より
+  `RcFunc` は `params` を列として、`capture` を高々 1 つ持つ。各 `x` について `λ` の動く範囲は
+  `boxed_leaf_paths(ty(x))` であり、D4 の列挙は `unpunched_field_types` の降下の上の再帰なので、
+  A10 の「その歩みは有限である」よりこの集合は有限である。有限個の変数と、変数ごとに有限個の leaf の
+  積は有限である。
 <1>3. ASSUME NEW `C ∈ S(n, O)`
       PROVE  `held_ρ(n, C)` は定まり、`d(C) ≥ bumps_ρ(n, C)` である。
   <2>1. `held_ρ(n, C)` は定まる。
-    BY L17, L15, D34
+    BY <ref id=5c1f4e7/>, <ref id=daeaef2/>, <ref id=9d5d254/>
     L17 より `S(n, O)` の各類は計数下であり、その開始の時点は `τ(n)` 以前である。D34 は計数下の類に
-    ついて、開始の時点以後の各時点で `held_ρ` を定め、L15 より `C` の ρ-終端には D34 の 3 つの開始行の
+    ついて、開始の時点以後の各時点で `held_ρ` を定め、L15 より `C` の `ρ` 終端には D34 の 3 つの開始行の
     ちょうど 1 行が当たる。
-  <2>2. CASE `C` の ρ-終端が借用する (D14) パラメータ・capture の leaf でない。
-    BY <2>1, L14b, L17
+  <2>2. CASE `C` の `ρ` 終端が借用する (D14) パラメータ・capture の leaf でない。
+    BY <2>1, <ref id=bf561fb/>, <ref id=5c1f4e7/>
     このとき `d(C) = held_ρ(n, C)` である。L17 より `C` は計数下で開始の時点が `τ(n)` 以前なので
     L14b の仮定を満たし、L14b が `held_ρ(n, C) ≥ bumps_ρ(n, C)` を与える。
-  <2>3. CASE `C` の ρ-終端が借用する (D14) パラメータ・capture の leaf であり、`bumps_ρ(n, C) ≥ 1` で
+  <2>3. CASE `C` の `ρ` 終端が借用する (D14) パラメータ・capture の leaf であり、`bumps_ρ(n, C) ≥ 1` で
         ある。
-    BY A19, D34, DEF bumps, DEF 節点の時点, <2>1
+    BY <ref id=9f1cf6c/>, <ref id=9d5d254/>, <ref id=e683ca8/>, DEF 節点の時点, <2>1
     A19 (ii-b) は「`bumps ≥ 1` である時点では `held ≥ 1 + bumps`」と述べる。D34 より A19 の `held` は
-    この文書の `held_ρ` であり、DEF bumps より A19 の `bumps` は `bumps_ρ` であり、DEF 節点の時点より
+    この文書の `held_ρ` であり、L14c (b) より A19 の `bumps` は `bumps_ρ` であり、DEF 節点の時点より
     `τ(n)` は A19 の言う時点の 1 つである。よって
     `d(C) = held_ρ(n, C) - 1 ≥ bumps_ρ(n, C)` である。
-  <2>4. CASE `C` の ρ-終端が借用する (D14) パラメータ・capture の leaf であり、`bumps_ρ(n, C) = 0` で
+  <2>4. CASE `C` の `ρ` 終端が借用する (D14) パラメータ・capture の leaf であり、`bumps_ρ(n, C) = 0` で
         ある。
-    BY P14a, D34, DEF 節点の時点, <2>1, L17
+    BY <ref id=1e8ca86/>, <ref id=9d5d254/>, DEF 節点の時点, <2>1, <ref id=a500a92/>, <ref id=5c1f4e7/>
     P14a は「`borrow_ify` の出力の各本体、各実行路、各活性化について、ρ-終端が借用する (D14)
     パラメータ・capture の leaf である**計数下**の別名類 (D26) は、活性化の間ずっと参照を少なくとも
-    1 つ持つ」と述べる。第 1 節より `B` は `cancel` の入力、すなわち `borrow_ify` の出力の本体であり、
+    1 つ持つ」と述べる。`L0` (i) は「`cancel` の入力プログラム `p` は `borrow_ify` の出力である。
+    したがって第 1 節が固定した本体 `B` は `borrow_ify` の出力の本体である」と述べる。
     L17 より `C` は計数下である。D34 がその「参照の個数」の帰属を定め、DEF 節点の時点より
     `τ(n)` はこの活性化が生きている間の時点である。よって `held_ρ(n, C) ≥ 1` であり、
     `d(C) = held_ρ(n, C) - 1 ≥ 0 = bumps_ρ(n, C)` である。
   <2>5. QED
-    BY <2>1, <2>2, <2>3, <2>4, L14b, L17
-    3 つの CASE は、`C` の ρ-終端が借用するパラメータ・capture の leaf であるかどうか (排中律) と、
+    BY <2>1, <2>2, <2>3, <2>4, <ref id=bf561fb/>, <ref id=5c1f4e7/>
+    3 つの CASE は、`C` の `ρ` 終端が借用するパラメータ・capture の leaf であるかどうか (排中律) と、
     そうであるときの `bumps_ρ(n, C)` が 0 か 1 以上か (L17 より `C` は L14b の仮定を満たし、L14b より
     `bumps_ρ(n, C)` は非負整数なのでこの 2 つで尽きる) で尽きる。<2>1 より `held_ρ(n, C)`、したがって
     `d(C)` は定まる。
 
 <1>4. `bumps_ρ(n, C0) ≥ 1` である類 `C0 ∈ S(n, O)` が少なくとも 1 つ在る。
-  BY <1>1, <1>2, L14b, L17
+  BY <1>1, <1>2, <ref id=bf561fb/>, <ref id=5c1f4e7/>
   L17 より `S(n, O)` の各類は L14b の仮定を満たすので、L14b より `bumps_ρ(n, ・)` は非負整数である。
   <1>1 と <1>2 より和が 1 以上なので、ある項が 1 以上である。
 
-<1>5. `H(O) ≥ Σ_{C ∈ S(n, O)} d(C) + [S(n, O) に ρ-終端が借用するパラメータ・capture の leaf である類が
+<1>5. `H(O) ≥ Σ_{C ∈ S(n, O)} d(C) + [S(n, O) に ρ 終端が借用するパラメータ・capture の leaf である類が
       在るならば 1]` である。
-  BY A19, D21, D23, D34, DEF 節点の時点, L12a, L17,
+  BY <ref id=9f1cf6c/>, <ref id=c232680/>, <ref id=ff5985d/>, <ref id=9d5d254/>, DEF 節点の時点, <ref id=80d7700/>, <ref id=5c1f4e7/>,
      <1>1, <1>2, <1>2a
-  D21 は「**活性化は、その各時点で A19 (i) の不等式を満たすものに限る。**」と定める。第 7.1 節が
+  D21 は「**活性化は、その各時点と各段内の点 (D24) で A19 (i) の不等式を満たすものに限る。**」と定める。
+  第 7.1 節が
   固定したのは D21 の意味の 1 回の活性化であり、DEF 節点の時点より `τ(n)` はその活性化の時点の 1 つで
-  ある -- 活性化の位置 (D23) が `n` に着いた直後の時点である。A19 (i) は活性化の各時点と各計数下
-  オブジェクトについての言明なので、この活性化のこの時点に当てられる。(i) の `S` は「その活性化の
-  計数下の別名類のうち `obj(C) = O` であり開始の時点がその時点以前であるものの全体」であり、L17 の
-  `S(n, O)` がこれである。(i) の `d(C)` は `held(C) - [C の ρ-終端が借用する (D14) leaf ならば 1]` で
-  あり、D34 より A19 の `held` はこの文書の `held_ρ` なので、<1>2a の `d` と同じものである。`obj(C)` が
+  ある -- 活性化の位置 (D23) が `n` に着いた直後の時点である。この段が当てるのは時点の側だけであり、
+  段内の点の側は要らない。A19 (i) は活性化の各時点と各計数下
+  オブジェクトについての言明なので、この活性化のこの時点に当てられる。(i) の `S` は「`a` の計数下の
+  別名類のうち `obj(C) = O` であり開始の時点がその時点以前であるものの全体」であり、`a` を第 7.1 節が
+  固定した活性化に取ると L17 の `S(n, O)` がこれである。(i) の `d(C)` は
+  `held(C) - [C の ρ-終端が借用する (D14) leaf ならば 1]` であり、D34 より A19 の `held` はこの文書の `held_ρ` なので、<1>2a の `d` と同じものである。`obj(C)` が
   各別名類について定まることは L12a が与える。
 
-<1>6. CASE <1>4 の `C0` の ρ-終端が借用する (D14) パラメータ・capture の leaf でない。
+<1>6. CASE <1>4 の `C0` の `ρ` 終端が借用する (D14) パラメータ・capture の leaf でない。
   <2>1. `d(C0) ≥ 1 + bumps_ρ(n, C0)` である。
-    BY A19, D34, DEF bumps, DEF 節点の時点, <1>3, <1>4
-    この CASE の仮定より `d(C0) = held_ρ(n, C0)` である。<1>4 より `bumps_ρ(n, C0) ≥ 1` なので、
-    A19 (ii-b) が `held_ρ(n, C0) ≥ 1 + bumps_ρ(n, C0)` を与える。
+    BY <ref id=9f1cf6c/>, <ref id=9d5d254/>, <ref id=e683ca8/>, DEF 節点の時点, <1>2a, <1>3, <1>4
+    <1>2a の記法とこの CASE の仮定より `d(C0) = held_ρ(n, C0)` である。<1>4 より
+    `bumps_ρ(n, C0) ≥ 1` であり、D34 より A19 の `held` はこの文書の `held_ρ`、L14c (b) より A19 の
+    `bumps` は `bumps_ρ`、DEF 節点の時点より `τ(n)` は A19 の言う時点の 1 つなので、A19 (ii-b) が
+    `held_ρ(n, C0) ≥ 1 + bumps_ρ(n, C0)` を与える。
   <2>2. `Σ_{C ∈ S(n, O)} d(C) ≥ N_ρ(n, O) + 1` である。
-    BY <1>2, <1>3, <1>4, <2>1
-    `C0` の項に <2>1 を、`S(n, O)` の他の各項に <1>3 を当てて足すと、下界は
+    BY <1>2, <1>2b, <1>3, <1>4, <2>1
+    <1>2b より和は有限和である。`C0` の項に <2>1 を、`S(n, O)` の他の各項に <1>3 を当てて足すと、下界は
     `Σ_{C ∈ S(n, O)} bumps_ρ(n, C) + 1` であり、<1>2 よりこれは `N_ρ(n, O) + 1` である。
   <2>3. QED
     BY <1>5, <2>2
     <1>5 の角括弧は 0 以上なので `H(O) ≥ Σ_{C ∈ S(n, O)} d(C) ≥ N_ρ(n, O) + 1` である。
 
-<1>7. CASE <1>4 の `C0` の ρ-終端が借用する (D14) パラメータ・capture の leaf である。
+<1>7. CASE <1>4 の `C0` の `ρ` 終端が借用する (D14) パラメータ・capture の leaf である。
   <2>1. `Σ_{C ∈ S(n, O)} d(C) ≥ N_ρ(n, O)` である。
-    BY <1>2, <1>3
-    `S(n, O)` の各項に <1>3 を当てて足すと、下界は `Σ_{C ∈ S(n, O)} bumps_ρ(n, C)` であり、
+    BY <1>2, <1>2b, <1>3
+    <1>2b より和は有限和である。`S(n, O)` の各項に <1>3 を当てて足すと、下界は
+    `Σ_{C ∈ S(n, O)} bumps_ρ(n, C)` であり、
     <1>2 よりこれは `N_ρ(n, O)` である。
   <2>2. <1>5 の角括弧は 1 である。
-    BY <1>4
-    <1>4 より `C0 ∈ S(n, O)` であり、この CASE の仮定よりその ρ-終端は借用するパラメータ・capture の
+    BY <1>4, <1>5
+    <1>4 より `C0 ∈ S(n, O)` であり、この CASE の仮定よりその `ρ` 終端は借用するパラメータ・capture の
     leaf である。
   <2>3. QED
     BY <1>5, <2>1, <2>2
@@ -2465,7 +3382,7 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
 
 <1>8. QED
   BY <1>1, <1>4, <1>6, <1>7
-  <1>4 が取った `C0` の ρ-終端が借用するパラメータ・capture の leaf であるかどうかで、<1>6 と <1>7 は
+  <1>4 が取った `C0` の `ρ` 終端が借用するパラメータ・capture の leaf であるかどうかで、<1>6 と <1>7 は
   場合を尽くす (排中律)。どちらも <1>1 の PROVE を与える。
 
 **`<1>7` の場合は空虚ではない。** 借用版 `V` がパラメータ `b` の unit `u` を借用し、その本体が
@@ -2478,8 +3395,9 @@ README はその理由を「(ii-a)・(ii-b) と P14a は、借用する終端の
 #### 7.5.5 A19 (ii-b) の `borrow_ify` の側
 
 A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減らないときである。`held_ρ(·, C)` を減らす
-事象は 2 つ -- `C` のスロットを名指す `Release` と、`C` のスロットの消費である。`Release` の側は L6 と
-P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**消費の側が、依頼された問いの場所である。**
+事象は 2 つ -- `C` のスロットを名指す `Release` と、`C` のスロットの消費である。`Release` の側は
+第 4 節の `L6` と、`Release` 節点について `un_bump` の 3 つの返り値を場合に持つ `L11` が扱う。
+**消費の側が、依頼された問いの場所である。**
 
 問いは次の形になる。`cancel` の入力 -- `borrow_ify(split_rc_units(insert_rc の出力))` -- において、
 `(w, μ) ∈ C` の消費が起きるとき、その消費で減る分を埋める参照が `C` に在るか。`insert_rc` はそれを
@@ -2487,7 +3405,7 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
 `rewrite_rc` である。借用版では、その版が所有しない unit の `Retain`/`Release` を丸ごと落とすからである
 (P10)。
 
-##### L16 (消費が残る leaf の `Retain` は落ちないか、`call_rc` が補う)
+##### L16 (消費が残る leaf の `Retain` は落ちないか、`call_rc` が補う) <!--#4804480-->
 
 **言明**。`V` を `borrow_ify` の出力の 1 つの版とし、`Pre(V)` を `RewriteCtx::rewrite` が `V` の本体を
 作るときに読む本体とする (`<1>1c` と `<1>1d` がこの 2 つを定める)。`V` の本体の 1 つの実行路 `ρ_V`
@@ -2503,7 +3421,7 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
   `Retain(p, u)` を置く。
 - **(C)** `ρ_P` の上に `Retain(p, u)` 節点が無い。
 
-**(A) と (C) が 1 つの実行路の上で数えるのは、この補題の読み手 A19 (ii-b) が実行路ごとの言明だから
+**(A) と (C) が 1 つの実行路の上で数えるのは、この命題の読み手 A19 (ii-b) が実行路ごとの言明だから
 である。** D34 の `held_ρ(·, C)` を動かすのは `ρ` の上の節点だけなので、`ρ_P` が通らないアームの中の
 `Retain` 節点は、`ρ_V` の上の消費が減らす分を埋めない。**(B) と (C) は両立しうる** -- `ρ_P` に
 `Retain(p, u)` 節点が無く、`call_rc` がそれを置く消費がそれである。3 つは選言であって場合分けでは
@@ -2511,23 +3429,31 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
 
 **活性化を固定するのは、inhabited が述語になるためである。** D16 の inhabited は実行のある時点の値に
 ついての述語であり、活性化と時点を固定しないと決まらない。第 7.1 節が固定するのは `B` -- `cancel` が
-いま写している 1 つの本体 -- についてであり、この補題の `V` は `borrow_ify` の出力の任意の版なので、
+いま写している 1 つの本体 -- についてであり、この命題の `V` は `borrow_ify` の出力の任意の版なので、
 その固定は当たらない。`<1>4` の `<2>4` が P7a の節 2 を満たす段でこの語を使う。値は束縛の後に変わら
 ないので (D6)、`μ` が inhabited であることは `ρ_V` の上の時点によらない。
 
 **2 つの本体を書き分ける。** 消費の仮定と (B) は `V` の本体 -- `cancel` の入力 -- についてのもので
 あり、(A) と (C) の `Retain` 節点、および `owns_unit` と `levelled_sites` が読むものは `Pre(V)` に
-ついてのものである。`rewrite_rc` が落とす節点は `Pre(V)` の節点であり、`levelled_sites` を呼ぶ 2 か所
-(`infer_ownership` と `check_ownership_is_levelled`) が渡すのもどちらも書き換え前の本体である
-(`<1>1d`)。書き換えは `Retain`/`Release` 節点を足し引きするので、この 2 つの本体で `levelled_sites` の
-値は違いうる。
+ついてのものである。`rewrite_rc` が落とす節点は `Pre(V)` の節点であり、`levelled_sites` を呼ぶ各所が
+渡すのも書き換え前の本体である (`<1>1d`)。書き換えは `Retain`/`Release` 節点を足し引きするので、
+この 2 つの本体で `levelled_sites` の値は違いうる。
 
 (C) は `insert_rc` の側の義務に属する -- その消費が処分する参照を用意した `Retain` が同じ実行路の上に
 在ることは、`insert_rc` の使用回数の勘定が与えるものであり、`borrow_ify` はそれを写すだけである
-(README の A19 がその側を `p60-insert-rc.md` に帰す)。この補題が述べるのは、(A) と (B) の場合に
+(README の A19 がその側を `p60-insert-rc.md` に帰す)。この命題が述べるのは、(A) と (B) の場合に
 `borrow_ify` が余りを壊さないことである。
 
 **証明**
+
+<1>0. `RewriteCtx::rewrite(node)` の 1 回の呼び出しは、`RewriteCtx::rewrite_inner(node)` をちょうど
+      1 回呼んでその値を返す。
+  <2>1. `rewrite` の本体は `grow_stack(|| self.rewrite_inner(node))` である。
+    BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite
+  <2>2. `grow_stack(f)` の本体は `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` である。
+    BY CODE src/misc.rs: grow_stack
+  <2>3. QED
+    BY <2>1, <2>2, EXT stacker の maybe_grow
 
 <1>1. `V` が借用版でないとき、`rewrite_rc` は節点をそのまま返す。
   BY CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
@@ -2540,7 +3466,7 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
        - **(β)** `t` の最後の添字より前の各位置で `unit_step` が `UnitStep::Fields` を返し、最後の添字の
          位置の型について `unit_step` が `UnitStep::Capture { capture_idx, .. }` を返して `t` の最後の
          添字が `capture_idx` である。
-  BY A10, CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
+  BY <ref id=8412761/>, CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
      CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/ownership.rs: unit_step
   A10 は `rc_units` と `truncate_to_unit` が辿る型の歩みが有限であることを与える -- 「`unpunched_field_types`
   を繰り返し取って到達する型についても、上の 3 つ -- ground、飽和、tycon が `type_env` にある -- が
@@ -2555,7 +3481,7 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
 
 <1>1b. A10 を満たす任意の型 `τ` と `t ∈ rc_units(τ, type_env)` について
        `units_under(τ, t, type_env) = [t]` である。
-  BY <1>1a, A10, CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
+  BY <1>1a, <ref id=8412761/>, CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
      CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go
   `units_under(τ, t)` は、`subtree_type(τ, t)` が `Some(sty)` のとき `rc_units(sty)` の各元を `t` の後ろに
   繋いだ列、`None` のとき `[t]` である。`subtree_type` は path の添字を順に見て `UnitStep::Fields` の
@@ -2565,10 +3491,10 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
   `UnitStep::Capture` に来るので `subtree_type` は `None` を返し、`units_under(τ, t) = [t]` である。
 
 <1>1c. `V` は入力のちょうど 1 つの版から作られる。その入力の版を `F` と書き、`rename` を `V` の本体が
-       `F` の本体から受けた名前替え (P9) とする。`V` が借用版でないときは `rename` は恒等写像であり
-       (`borrow_ify` が `clone_func` を呼ぶのは借用版についてだけである)、`F = V` である。`F` の本体を
+       `F` の本体から受けた名前替え (P9) とする。`V` が借用版でないときは `rename` は恒等写像である
+       (`borrow_ify` が `clone_func` を呼ぶのは借用版についてだけである)。`F` の本体を
        `rename` で写した本体を **`Pre(V)`** と書く。
-  BY P9, CODE src/rc_ir/borrow.rs: borrow_ify
+  BY <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: borrow_ify
   `borrow_ify` が出力の版を作るのは 3 か所だけである -- `prog.funcs` の各 `func` について原本の版を
   `func.clone()` から作り、`borrow_versions` がその名前を持つときその借用版を `clone_func(func, ...)`
   から作り、`prog.globals` の各 `g` について `g.init` をそのまま使う。どの版も入力のちょうど 1 つの
@@ -2578,10 +3504,11 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
 <1>1d. `V` の本体は `ctx.rewrite(Pre(V))` であり、`ctx = RewriteCtx` の `vars` は `Pre(V)` から作られる。
        書き換えが変えるのは `Retain`/`Release` 節点 (P10、P11) と `App` の callee の名前 (P12) だけで
        あり、ほかの節点は種・変数・path・並びを変えずに組み直される。とくに `Pre(V)` と `V` の本体は
-       `App` 節点の位置と `args` を共有する。また `levelled_sites` を呼ぶ 2 か所はどちらも書き換え前の
+       `App` 節点の位置と `args` を共有する。また `levelled_sites` を呼ぶ各所は書き換え前の
        本体を渡す。以下、`ctx.vars` と `type_env` で計算した `origin` を `origin_V`、`F` の本体の
        `VarTable` と `type_env` で計算した `origin` を `origin_F` と書く。
-  BY <1>1c, P10, P11, P12, A15, CODE src/rc_ir/borrow.rs: borrow_ify,
+  BY <1>0, <1>1c, <ref id=a985128/>, <ref id=eaf9b51/>, <ref id=843e506/>,
+     前提 `levelled_sites` の呼び出しの在りか, CODE src/rc_ir/borrow.rs: borrow_ify,
      CODE src/rc_ir/borrow.rs: RewriteCtx::new, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner,
      CODE src/rc_ir/borrow.rs: infer_ownership,
      CODE src/rc_ir/borrow.rs: RewriteCtx::check_ownership_is_levelled
@@ -2590,42 +3517,75 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
   `RewriteCtx::new(&clone, true, ...)` を作って `clone.body = ctx.rewrite(&clone.body)` とし、
   グローバル初期化子について `VarTable::body_only(&g.init)` を `vars` に置いた `RewriteCtx` で
   `ctx.rewrite(&g.init)` とする。どの場合も `ctx` が読む本体は書き換え前の本体、すなわち `Pre(V)` で
-  あり、`RewriteCtx::new` は `vars` に `VarTable::of(func)` を置く。A15 より `rewrite` は
-  `rewrite_inner` を本体としてちょうど 1 回呼ぶ。`rewrite_inner` の 7 つの腕を読む。`RcExpr::Retain` と
+  あり、`RewriteCtx::new` は `vars` に `VarTable::of(func)` を置く。<1>0 より `rewrite` は
+  `rewrite_inner` をちょうど 1 回呼んでその値を返す。`rewrite_inner` の 8 つの腕 -- `RcExpr` の 6 種のうち
+  `Let` が右辺の `App`、`Match`、それ以外の 3 つに分かれる -- を読む。`RcExpr::Retain` と
   `RcExpr::Release` の腕は `rewrite_rc` へ行く。`RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕は
   `callee` を `route` の結果に差し替え、`call_rc` が返す `before` と `after` の節点を前後に置き、
-  `x` と `args` はそのまま複製する。残る腕 -- `Let` の `Match` とそれ以外、`Destructure`、`Eval`、
-  `Ret` -- は、束縛変数・右辺・容器・フィールド・scrutinee・返す変数をそのまま複製し、継続とアーム本体を
-  書き換えた木で組み直す。`levelled_sites` の呼び出しは 2 か所である -- `infer_ownership` が
-  `prog.funcs` の各関数について呼ぶもの (入力の本体) と、`check_ownership_is_levelled` が `clone` に
-  ついて呼ぶもの (借用版の書き換え前の本体) である。
+  `x` と `args` はそのまま複製する。残る 5 つの腕 -- `Let` の `Match` とそれ以外、`Destructure`、
+  `Eval`、`Ret` -- は、束縛変数・右辺・容器・フィールド・scrutinee・返す変数をそのまま複製し、継続と
+  アーム本体を書き換えた木で組み直す。前提 `levelled_sites` の呼び出しの在りか より、`levelled_sites` を
+  呼ぶ式が在るのは `infer_ownership` と `check_ownership_is_levelled` である -- 前者は `prog.funcs` の
+  各関数について呼び (入力の本体)、後者は `clone` について呼ぶ (借用版の書き換え前の本体)。
 
 <1>1e. D9 の消費の表が挙げる消費の位置は 7 種である -- `App` の callee、`App` の所有位置の引数、
        `Closure` の capture、`Llvm` のオペランド、boxed 容器の `Destructure`、unbox 容器の
        `Destructure`、本体 (D23) の終端の `Ret`。このうち `App` の所有位置の引数**以外**の 6 種に
-       ついて、消費される leaf の集合は、`V` の本体と `Pre(V)` の対応する節点では等しく、`Pre(V)` と
-       `F` の本体の対応する節点では `rename` で写して一致する。
-  BY <1>1c, <1>1d, P9, A3, A12, D9, CODE src/rc_ir/rename.rs: rename_rhs
+       ついて、消費される `VarPath` の集合 -- 対 `(名指す変数, leaf)` の集合 -- は、`V` の本体と
+       `Pre(V)` の対応する節点では等しく、`Pre(V)` と `F` の本体の対応する節点では `rename` で写して
+       一致する。**`route` が callee の名前を差し替えた `App` 節点の callee の位置だけは別である** --
+       そこで `V` の本体が消費する `VarPath` の第 1 成分は、出力の `funcs` の鍵であり、`rename` の像に
+       無い。
+  BY <1>1c, <1>1d, <ref id=63eadd9/>, <ref id=843e506/>, <ref id=e11772a/>, <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=596a46d/>, <ref id=9d74736/>,
+     DEF 処分 leaf, CODE src/rc_ir/rename.rs: rename_rhs, CODE src/rc_ir/borrow.rs: RewriteCtx::route,
+     CODE src/rc_ir/ownership.rs: destructure_consumes
   D9 の消費の表は 6 行を持ち、その `App` の行が callee の leaf と所有位置の引数の leaf の 2 つの位置を
-  挙げるので、消費の位置は 7 種である。`V` の本体と `Pre(V)` の間は <1>1d による -- 書き換えが変えるのは
-  `Retain`/`Release` 節点と `App` の callee の**名前**だけであり、`App` の callee の leaf の集合は
-  `ty(callee)` だけで決まる。この 6 種が読む残りのもの (`Closure` の capture、`Llvm` の op と
-  オペランド、`Destructure` の容器とフィールド、終端の `Ret` の変数) は書き換えが触れない。
-  `Pre(V)` と `F` の本体の間は `rename` である。6 種のうち 5 種 -- `App` の callee、`Closure` の
-  capture、boxed 容器と unbox 容器の `Destructure`、終端の `Ret` -- は、名指す変数の boxed leaf を
-  その変数の型だけで決める。P9 より `rename` は束縛変数の名前だけを替えるので変数の型を変えず、A12 より
-  同じ名前の `RcVar` が持つ型は一致するので、この 5 種は写して一致する。
+  挙げるので、消費の位置は 7 種である。
+
+  `V` の本体と `Pre(V)` の間は <1>1d による -- 書き換えが変えるのは `Retain`/`Release` 節点と
+  `App` の callee の**名前**だけである。この 6 種のうち 5 種が読むもの (`Closure` の capture、`Llvm` の
+  op とオペランド、`Destructure` の容器とフィールド、終端の `Ret` の変数) は書き換えが触れないので、
+  変数も leaf も両側で同じである。**残る `App` の callee の位置では名前が動きうるので、`VarPath` の
+  集合が等しいことは leaf の集合が等しいことから出ない。** `route` は、名前を差し替えないときは
+  `callee.clone()` をそのまま返し、差し替えるときは `callee.clone()` の `name` の欄だけを
+  `borrow_version.name` に置く。前者では `callee` は両側で同じ `RcVar` なので `VarPath` の集合は
+  等しい。後者では、P12 の「呼び出し先が入力の関数を名指すとき、返る名前は出力の `funcs` の鍵である」
+  より差し替わった名前は出力の `funcs` の鍵である。**出力の鍵は入力の鍵と借用版の鍵の 2 種であり、
+  どちらも局所名ではない。** 入力の鍵については A13 の「**最上位の記号の名前は局所名ではない。**
+  `FullName::is_local` が偽であり、`prog.funcs` の鍵と `global_types` の鍵はどちらもそのような名前で
+  ある」がそれを与える。借用版の鍵は `borrow_funcref` が作るものであり、その本体は入力の名前の
+  `name` の欄に `"#borrow"` を継ぎ足すだけで `namespace` の欄を写す
+  (`CODE src/rc_ir/borrow.rs: borrow_funcref`)。`FullName::is_local` は `self.namespace.is_local()`
+  であり、`NameSpace::is_local` は `self.names.len() == 0` なので (`CODE src/ast/name.rs:
+  FullName::is_local`, `CODE src/ast/name.rs: NameSpace::is_local`)、判定は `namespace` だけで決まり、
+  借用版の鍵も局所名ではない。`rename` が写すのは `Pre(V)` の束縛名であり、D6 より束縛を持つ名前は
+  局所名なので、差し替わった名前は `rename` の像に無い。これが言明の但し書きである。
+
+  `Pre(V)` と `F` の本体の間は `rename` である。6 種のうち 4 種 -- `App` の callee、`Closure` の
+  capture、boxed 容器の `Destructure`、終端の `Ret` -- は、消費される leaf を名指す変数の型だけで
+  決める。P9 より `rename` は束縛変数の名前だけを替えるので変数の型を変えず、A12 より
+  同じ名前の `RcVar` が持つ型は一致するので、この 4 種は写して一致する。
+
+  **unbox 容器の `Destructure` は名指す変数の型だけでは決まらない。** DEF 処分 leaf のその行は
+  「`λ` の先頭の添字が `fs` の名前付きフィールドの添字でないもの」を挙げ、`destructure_consumes` も
+  `fields` の名前付きフィールドの添字を読む。P9 の「元の本体の束縛変数を一斉に付け替えたものであり、
+  それ以外の違いを持たない」より、両側の対応する `Destructure` 節点は同じ `fields` の添字の列を持つ --
+  替わるのは各フィールドが束縛する変数の名前だけである。容器の型は上と同じく等しいので、除く添字の
+  集合も leaf の集合も両側で等しく、この行も写して一致する。
   残る `Llvm` の位置は `borrows_operand` と `result_prov` の宣言を読み、`rename_rhs` の `Llvm` の腕は
-  `llvm_gen` を clone して `free_vars_mut()` が挙げる名前を書き替える。A3 は「**`result_prov` と
-  `borrows_operand` は自分の `FullName` の欄を読まない。**」と述べ、`result_prov` を override する
-  29 個と `borrows_operand` を override する 13 個が読む欄を数え上げているので、この 2 つの宣言は
-  名前を書き替えても変わらない。
+  `llvm_gen` を clone して `free_vars_mut()` が挙げる名前を書き替える。A3 は「**`result_prov`、`borrows_operand`、
+  `applies_a_function_operand` は自分の `FullName` の欄を読まない。**」と述べ、`result_prov` を override する
+  29 個と `borrows_operand` を override する 13 個が読む欄を数え上げている。さらに A3 は
+  「**`result_prov`、`borrows_operand`、`applies_a_function_operand` は決定的である** -- 同じ引数に対して常に同じ値を返す」と
+  述べる。**この 2 節の両方が要る** -- `rename_rhs` も `rewrite_inner` も op を clone するので、
+  両側の op は別のオブジェクトであり、決定性が答えを引数の関数にし、`FullName` の欄を読まないことが
+  名前替えを答えから外す。よってこの 2 つの宣言は両側で等しい。
 
 <1>1f. `Pre(V)` の実行路と `V` の本体の実行路は、対応する `Match` 節点で同じアームを選ぶことによって
        1 対 1 に対応する。`ρ_V` に対応する `Pre(V)` の実行路を `ρ_P` と書く。`ρ_P` の各節点 `m` に
        ついて、固定した活性化が `ρ_V` を辿る間に `m` の位置を通る時点が在る。その時点で、`ρ_P` の上で
        `m` より前に束縛される各変数は値を持つ。
-  BY <1>1c, <1>1d, P24, D2, D3, D7, D21, A11, CODE src/rc_ir/ownership.rs: collect_bindings
+  BY <1>1c, <1>1d, <ref id=746e87a/>, <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=ff5985d/>, <ref id=3905b4e/>, CODE src/rc_ir/ownership.rs: collect_bindings
   <1>1d と P24 より、書き換えが変えるのは `Retain`/`Release` 節点と `App` の callee の名前だけで
   あり、節点の種類・その順序・`Let` の束縛変数・`Match` のアームの構成は元の本体のものに等しい。
   よって 2 つの木の `Match` 節点とそのアームは 1 対 1 に対応する。D3 の実行路は各 `Match` でアームを
@@ -2637,13 +3597,32 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
   在る)。どちらの時点も `ρ_V` の上の時点であり、変数を束縛するのは `Retain`/`Release` 以外の節点だけ
   なので (D2 の表、`collect_bindings`)、`ρ_P` の上で `m` より前に束縛される変数は、`ρ_V` の上でも
   その時点より前に束縛される。A11 よりそれらの束縛はスコープの規律に従う。
-  D21 より活性化が選ぶアームは scrutinee の値の実行時のタグで決まり、`Retain`/`Release` 節点は変数を
-  束縛せず参照カウントと状態バイトだけに触れる (D7) ので、それを足し引きしても値もアームの選び方も
-  変わらない。
+  活性化の位置が段ごとに実行路に沿って 1 つ進むことは D23 が定める。
+
+<1>1g. `Pre(V)` について `borrow_ify` が `RewriteCtx` に置いた表 `ctx.vars` と、`V` の本体
+       `Post(V)` (D35) について `cancel` が作る表は、`bindings`・
+       `closure_targets`・`param_tys`・`var_tys` の 4 つの欄が等しい。`origin_inner` が読むのは
+       `bindings` だけである。
+  BY <1>1d, EXT 写像と集合の基本演算, CODE src/rc_ir/borrow.rs: RewriteCtx::new,
+     CODE src/rc_ir/borrow.rs: cancel,
+     CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only,
+     CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: returned_var,
+     CODE src/rc_ir/ownership.rs: origin_inner, CODE src/misc.rs: grow_stack,
+     EXT stacker の maybe_grow
+  <1>1d より、書き換えが変えるのは `Retain`/`Release` 節点と `App` の callee の名前だけであり、ほかの
+  節点は種・変数・path・並びを変えずに組み直される。`collect_bindings` は `Retain`/`Release`/`Eval` の
+  腕で継続へ降りるだけで束縛を作らず、`RcRhs::App` の腕は callee を読まずに `Binding::Producer` を
+  置く。残る腕が読むもの -- `Let` の束縛変数とその型、`RcRhs::Var` の相手、`RcRhs::Llvm` の
+  `llvm_gen`・`args`・結果の型、`RcRhs::Closure` の `fref`、`Match` のアームの payload と
+  `returned_var(&arm.body)`、`Destructure` のフィールド変数とその型 -- は書き換えが触れない
+  (`returned_var` は継続を辿って終端の `Ret` が名指す変数を返し、`Ret` の腕はその変数をそのまま
+  複製する)。`VarTable::of` がさらに置く `Binding::Param` と `param_tys` はその版のパラメータ・
+  capture のものであり、書き換えは `params` と `capture` を触れない。よって 4 つの欄は等しい。
+  `origin_inner` の本体は `vars.bindings.get(var)` の `match` であり、`VarTable` のほかの欄を読まない。
 
 <1>2. `V` が借用版であるとき、`rewrite_rc` が `Pre(V)` の `Retain(p, u)` 節点を落とすのは
       `owns_unit(p, u)` が偽のときに限る。落とさないときは `V` の本体に `Retain(p, u)` 節点が在る。
-  BY <1>1b, <1>1c, <1>1d, A2, P1, P9, A10, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
+  BY <1>1b, <1>1c, <1>1d, <ref id=8e3aff3/>, <ref id=3597669/>, <ref id=63eadd9/>, <ref id=8412761/>, CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_rc
   `rewrite_rc` は `units_under(&v.ty, path, type_env)` を `self.owns_unit(v, unit)` で絞り、残った各 unit に
   ついて節点を積む。`ty(p)` は本体に現れる変数の型、すなわちプログラムに現れる型なので A10 を満たし、
   P1 が `u = truncate_to_unit(ty(p), μ, type_env) ∈ rc_units(ty(p))` を与える。A2 は `borrow_ify` の
@@ -2657,9 +3636,10 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
       意味の `V` の site である。また
       消費が `App(callee, args)` の引数 `p` の位置であるとき、`(p, u)` は `u` が `rc_units(ty(p))` の
       元であるかぎり `V` の site である。
-  BY <1>1c, <1>1d, P7a, CODE src/rc_ir/borrow.rs: levelled_sites, A2, P1, P9, A10
-  P7a は site を「その版が書き換える本体を `for_each_node` で歩いて挙げた、`Retain`/`Release` 節点の
-  `(v, path)` と、`App` の各引数 `arg` と各 `unit ∈ rc_units(ty(arg))` の対」と定め、関数の版では
+  BY <1>1c, <1>1d, <1>2, <ref id=d499f99/>, CODE src/rc_ir/borrow.rs: levelled_sites, <ref id=8e3aff3/>, <ref id=3597669/>, <ref id=63eadd9/>, <ref id=8412761/>
+  P7a は site を「**site とは、その版が書き換える本体 -- 関数の `body` かグローバル初期化子の `init`
+  -- を `for_each_node` で歩いて挙げた、`Retain`/`Release` 節点の `(v, path)` と、`App` の各引数 `arg`
+  と各 `unit ∈ rc_units(ty(arg))` の対である。**」と定め、関数の版では
   それが `levelled_sites` の挙げる集合に一致すると述べる。<1>1d よりその本体は `Pre(V)` である。
   `ty(p)` はプログラムに現れる型なので A10 を満たし、`u = truncate_to_unit(ty(p), μ)` は P1 より
   `rc_units(ty(p))` の元である。`Pre(V)` の `Retain(p, u)` 節点の `path` が `u` であることは A2 と
@@ -2676,48 +3656,202 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
     BY <1>1d
   <2>1. この CASE の 6 種の位置で消費が起きるかどうかは、所有の割り当てによらない。また
         `collect_consumes` はそれらを、渡された `own` によらず報告する。
-    BY <1>1e, P7, D9, CODE src/rc_ir/ownership.rs: collect_consumes_go,
-       CODE src/rc_ir/ownership.rs: rhs_consumes
+    BY <1>1e, <ref id=9d74736/>, CODE src/rc_ir/ownership.rs: collect_consumes, collect_consumes_go,
+       rhs_consumes, destructure_consumes, push_boxed_leaves
     <1>1e より消費の位置は 7 種であり、D9 の消費の表で所有を読むのは `App` の行の引数の側だけなので、
-    残る 6 種は所有の割り当てを読まない。P7 より D9 の意味で消費する構文はすべて `collect_consumes` が
-    報告する。この 6 種について `collect_consumes_go` と `rhs_consumes` の判定は `own` を読まない --
+    残る 6 種は所有の割り当てを読まない。`collect_consumes` は `own` を `owns` の閉包に包んで
+    `collect_consumes_go` に渡すだけであり、この 6 種について `collect_consumes_go` と `rhs_consumes` の
+    判定は `own` を読まない --
     `rhs_consumes` の `RcRhs::App` の腕は `callee` の leaf を無条件に `out` に入れ、`RcRhs::Closure` の
     腕は各 capture の leaf を無条件に入れ、`RcRhs::Llvm` の腕は `borrows_operand` と
-    `passthrough_arg_leaves` だけを見る。
+    `passthrough_arg_leaves` だけを見る。`collect_consumes_go` の `RcExpr::Destructure` の腕は
+    `destructure_consumes` の各 leaf を、`RcExpr::Ret` の腕は `push_boxed_leaves` の各 leaf を、どちらも
+    `owns` を読まずに `out` に入れる。
 
-  <2>1a. 次の 2 つが成り立つ。
+  <2>1a. `ren` を、`F` の本体の束縛変数には `rename` を当て、それ以外の名前 -- 直接呼び出しが名指す
+         関数の名前とグローバル値を読む `RcVar` の名前 (A13) -- を動かさない、`FullName` の上の写像と
+         する。`VarPath` へは `ren[(w, ν)] = (ren[w], ν)` で、`Origin` へは `Exactly` と `Join` の
+         名前の成分に当てて広げる。次の 3 つが成り立つ。
+         - `Pre(V)` と `ctx.vars` の組は解析にかかる (DEF 解析にかかる本体)。したがって `L7a`、
+           `L8` の (i) と (B)、`L8a` を `Pre(V)` について読める。
          - `p` が `rename` の像に無いとき、`Pre(V)` で `p` は束縛を持たず、`origin_V(p, μ)` は
            `Origin::Exactly((p, μ))` であり、`p` は `ctx.vars.param_tys` の鍵ではない。
          - `p = rename[p0]` であるとき、`F` の本体でも `(p0, μ)` が D9 の意味で消費され、
-           `origin_V(p, μ)` の候補の全体は `origin_F(p0, μ)` の候補を `rename` で写したものである。
-           `V` のパラメータ `r = rename[r0]` を根に持つ候補 `(r, q)` には、`F` のパラメータ `r0` を
-           根に持つ候補 `(r0, q)` が対応し、`ty(r) = ty(r0)` である。
-    BY <1>1e, <2>0a, <2>0b, <2>1, P9, A3, A6, A13,
-       CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin_inner,
-       CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/rename.rs: rename_rhs
-    `collect_bindings` は `Retain`/`Release` の腕で束縛を作らず、`RcRhs::App(..)` にはその callee に
-    よらず `Binding::Producer` を置くので、<2>0b の 2 つの違いは束縛表を動かさない。よって `V` の束縛表は
-    `F` の束縛表を `rename` で写したものである (`VarTable::of` はこれにパラメータ・capture の
-    `Binding::Param` を足す)。`origin_inner` が変数を引くのは名前によってだけであり、`Binding::Llvm` の腕が
-    呼ぶ `result_prov` も答えを変えない -- `rename_rhs` の `Llvm` の腕は `llvm_gen` を clone して
-    `free_vars_mut()` が挙げる名前を書き替えるが、A3 が「**`result_prov` と `borrows_operand` は自分の
-    `FullName` の欄を読まない。**」と述べる。よって `origin` の答えも同じ写像で写る。A6 と A13 より
-    複製の名前は原本のどの名前とも衝突しないので、この写しは単射である。`rename` の像に無い名前は
-    `Pre(V)` で束縛を持たないので、`origin_inner` の `None` の腕が `here()` すなわち
-    `Exactly((p, μ))` を返す。`V` のパラメータ名と capture 名 -- `ctx.vars.param_tys` の鍵 -- はどれも
-    `rename` の像なので、像に無い名前はその鍵ではない。この CASE の 6 種の消費が `V` の本体と `F` の
-    本体で写して一致することは <1>1e であり、<2>1 よりその 6 種はどの所有の割り当てでも同じ答えを返す。
+           `origin_V(p, μ) = ren[origin_F(p0, μ)]` である。とくに `origin_V(p, μ)` の候補の全体は
+           `origin_F(p0, μ)` の候補を `ren` で写したものであり、`V` のパラメータ
+           `r = rename[r0]` を根に持つ候補 `(r, q)` には、`F` のパラメータ `r0` を根に持つ候補
+           `(r0, q)` が対応し、`ty(r) = ty(r0)` である。
+
+         **表を跨ぐ形は P2a の主張ではない。** README の P2a は「**表を跨ぐ形はこの命題の主張では
+         ない。** `bindings` が等しい相異なる 2 つの `VarTable` について答えが等しいことは別の主張で
+         あり、それを要る段は自分で示す。」と述べ、続けて「**その形を要る段の見分け方はこうである**
+         -- 相異なる 2 つの `VarTable` の値について `origin` の答えを比べる段が、それである。
+         `borrow_ify` は原本と複製に別々の表を作り、`split_rc_units` は入力と出力に別々の表を作るので、
+         その 2 つの書き換えを跨ぐ議論はどれもこの形を持つ。」と、その形の見分け方を置く。この段は
+         `Pre(V)` の表と `F` の本体の表という相異なる 2 つの表について `origin` の答えを比べるので、
+         その形であり、`origin` の展開の上の帰納をこの段の証明の中で持つ。
+    <3>1. `ren` は単射であり、`F` の本体に現れる各名前 `y` について `ty(ren[y]) = ty(y)` である。
+      <4>0. `assign_fresh_names_to_binders(node, pass_tag, renaming, counter)` の 1 回の呼び出しは、
+            `assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter)` をちょうど 1 回
+            呼ぶ。`_inner` は `node` の式で 5 つの腕に分かれる。`Let(x, rhs, k)` の腕は `x.name` に
+            ついて `assign_fresh_name` を 1 回呼び、`rhs` が `Match(_, arms)` のときは各 `arm` の
+            `arm.payload.name` について 1 回ずつ呼んでその `arm.body` へ降り、その後 `k` へ降りる。
+            `Destructure(_, fields, _, k)` の腕は `fields` の各フィールド変数について 1 回ずつ呼んで
+            `k` へ降りる。`Retain`/`Release`/`Eval` の腕は `k` へ降りるだけであり、`Ret` の腕は
+            何も行わない。降りるときに渡すのは `renaming` と `counter` の再借用であり、`_inner` は
+            この 2 つへ `assign_fresh_name` の呼び出し以外の書き込みを行わない。
+        BY CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders,
+           CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders_inner,
+           CODE src/misc.rs: grow_stack, EXT stacker の maybe_grow
+        `assign_fresh_names_to_binders` の本体は
+        `grow_stack(|| assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter))` で
+        あり、`grow_stack(f)` の本体は `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` である。
+      <4>1. `V` が借用版であるとき、`rename` の各項は `assign_fresh_name` の 1 回の呼び出しが
+            書き込むものであり、`F` の各束縛名についてその呼び出しはちょうど 1 回である。
+            `pass_tag` は `"b"` である。
+        BY <4>0, <ref id=63eadd9/>, <ref id=b3dfa37/>, EXT 写像と集合の基本演算,
+           CODE src/rc_ir/borrow.rs: clone_func,
+           CODE src/rc_ir/rename.rs: fresh_rename_function,
+           CODE src/rc_ir/rename.rs: assign_fresh_name
+        `clone_func` は `fresh_rename_function(&func.params, &func.capture, &func.body, "b",
+        rename_counter)` を呼び、`fresh_rename_function` は各パラメータ・capture について
+        `assign_fresh_name` を呼んでから `assign_fresh_names_to_binders` に本体を渡す。
+        D2 の表より本体が変数を束縛するのは `Let` の束縛変数、`Match` のアームの payload、
+        `Destructure` のフィールドの 3 つであり、<4>0 よりその 3 つのそれぞれについて
+        `assign_fresh_name` がちょうど 1 回呼ばれる。`renaming` は `fresh_rename_function` の局所の
+        写像であり、<4>0 より下へ渡るのはその再借用だけなので、そこへ書き込むのは
+        `assign_fresh_name` の `renaming.insert(name.clone(), fresh)` だけである。
+      <4>2. `assign_fresh_name` の相異なる 2 つの呼び出しが作る名前は相異なる。
+        BY <4>0, <4>1, EXT 可変参照は排他である, EXT 整数の 10 進表記,
+           CODE src/rc_ir/rename.rs: assign_fresh_name,
+           CODE src/rc_ir/rename.rs: fresh_rename_function
+        `assign_fresh_name` の本体は `*counter += 1;` で始まり、続いて
+        `fresh.name = format!("{}#{}{}", fresh.name, pass_tag, counter);` を置く。`counter` の型は
+        `&mut u64` であり、`fresh_rename_function` はそれを再借用して `assign_fresh_name` と
+        `assign_fresh_names_to_binders` へ渡し、<4>0 より `assign_fresh_names_to_binders` と `_inner` も
+        再借用して下へ渡すだけである。`EXT 可変参照は排他である` より、その参照が生きている間、それが
+        指す `u64` へ届く道はその参照だけなので、この `u64` に書き込むのは `assign_fresh_name` の
+        `*counter += 1;` に限る。よって値は呼び出しごとに 1 ずつ単調に増え、2 つの呼び出しが読む値は
+        相異なる。
+        <4>1 より `pass_tag` は `"b"` であり、`counter` の 10 進表記は数字だけからなるので、作られた
+        名前の最後の `#` より後ろの断片は `b` に続く `counter` の 10 進表記であり、その断片が `counter`
+        の値を決める。値が相異なれば断片が相異なり、名前も相異なる。
+      <4>3. `V` が借用版であるとき、`rename` は `F` の本体の束縛名の上で単射である。
+        BY <4>1, <4>2
+        相異なる 2 つの束縛名は `assign_fresh_name` の相異なる 2 つの呼び出しで写される。
+      <4>4. QED
+        BY <4>2, <4>3, <1>1c, <ref id=63eadd9/>, <ref id=cb35ab1/>
+        `V` が借用版でないときは <1>1c より `rename` は恒等写像なので `ren` も恒等写像であり、
+        単射であって型を動かさない。以下、`V` が借用版であるとする。
+        P9 は「`clone_func` が作る借用版の本体は、元の本体の束縛変数を一斉に付け替えたものであり、
+        それ以外の違いを持たない」と述べるので、`rename` は型を動かさず、`ren` は束縛変数でない名前を
+        動かさない。<4>3 より `rename` は束縛名の上で単射である。<4>2 より `rename` の像の名前は
+        `#b` に 10 進数字が続く形で終わり、A13 より入力に現れるすべての名前 -- 束縛名、直接呼び出しが
+        名指す関数の名前、グローバル値を読む `RcVar` の名前を含む -- はその形ではないので、`rename` の
+        像と、`ren` が動かさない名前の全体は交わらない。よって `ren` は単射である。
+    <3>1a. `Pre(V)` と `ctx.vars` の組は解析にかかる (DEF 解析にかかる本体)。
+      BY <1>1c, <1>1g, <3>1, <ref id=98f3fa1/>, <ref id=63eadd9/>, <ref id=596a46d/>, <ref id=cb35ab1/>,
+         <ref id=0edb0ba/>, <ref id=a500a92/>, DEF 解析にかかる本体,
+         CODE src/rc_ir/rename.rs: assign_fresh_name, CODE src/rc_ir/ownership.rs: origin
+      `L6a` より `F` の本体とその表は解析にかかる。<1>1c より `Pre(V)` は `F` の本体を `rename` で
+      写した本体であり、P9 は「`clone_func` が作る借用版の本体は、元の本体の束縛変数を一斉に付け替えた
+      ものであり、それ以外の違いを持たない」と述べる。4 つの条件を順に写す。
+      **(1)**: 一斉の名前替えは `Match` のアームの個数も `tag` も scrutinee の値も変えないので、
+      `F` の本体の (1) がそのまま `Pre(V)` について成り立つ。
+      **(2)**: <3>1 より `ren` は名前に現れる型を動かさないので、`Pre(V)` に現れる型は `F` の本体に
+      現れる型と同じであり、`F` の本体の (2) がそのまま成り立つ。
+      **(3)**: `F` の本体の束縛名は相異なり、<3>1 より `ren` は単射なので、`Pre(V)` の束縛名も相異なる。
+      `assign_fresh_name` は `fresh = name.clone()` の `name` の欄だけを書き替えて `namespace` の欄を
+      写すので、`rename` の像は元の名前と同じ `namespace` を持ち、D6 より束縛を持つ名前は局所名なので
+      像も局所名である。A13 より関数の名前は局所名ではないから、`Pre(V)` の束縛名はどの関数の名前とも
+      異なる。名前替えは束縛と使用の対応をそのまま写すので A11 の形が写り、束縛の形と型を変えないので
+      A12 の形が写る。
+      **(4)**: `Post(V)` は `borrow_ify` の出力の本体であり、`L0` (i) より `cancel` の入力プログラムの
+      本体である。P2 はその本体について `cancel` が作る表の下で、任意の名前と任意の `FieldPath` に
+      ついて `origin` が panic せずに答えを返して停止することを与える。<1>1g より `ctx.vars` は
+      その表と `bindings` が等しく、`origin_inner` が読むのはその欄だけである。`origin` は
+      `vars.origins` に記録が在ればそれを返して即座に戻り、無ければ `origin_inner` を呼んでから
+      記録するので、記録の状態は再帰の木を短くする方向にしか働かない。よって `ctx.vars` の下でも
+      `origin` は停止する。
+    <3>2. `Pre(V)` の `VarTable` は `F` の本体の `VarTable` を `ren` で写したものである。すなわち
+          `F` の本体に現れる名前 `y` について、`vars_P.bindings.get(ren[y])` は
+          `vars_F.bindings.get(y)` の各変数名を `ren` で写したものであり、`ren` が動かさない
+          名前 -- とくに `rename` の像に無い名前 -- は `vars_P.bindings` の鍵ではない。
+          `param_tys` の鍵についても同じことが成り立つ。
+      BY <1>1c, <3>1, <ref id=63eadd9/>, <ref id=596a46d/>, <ref id=cb35ab1/>,
+         CODE src/rc_ir/ownership.rs: collect_bindings,
+         CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/rename.rs: rename_rhs
+      <1>1c より `Pre(V)` は `F` の本体を `rename` で写した本体である。`collect_bindings` は節点の種と
+      それが名指す変数だけを読んで束縛を作り、`VarTable::of` はそれにパラメータ・capture の
+      `Binding::Param` と `param_tys` を足す。P9 より 2 つの本体は節点の種・並び・名指す変数の対応を
+      共有し、名前だけが `rename` で写る。`rename_rhs` の `Llvm` の腕は `llvm_gen` を clone して
+      `free_vars_mut()` が挙げる名前を書き替えるので、`Binding::Llvm` の `args` も `ren` で写り、
+      第 3 成分の `result_ty` は型なので <3>1 より動かない。束縛を持つ名前は局所名であり (D6)、
+      `ren` が動かさない名前は局所名ではない (A13) ので、後者は鍵にならない。
+    <3>3. `F` の本体に現れる名前 `y` と `FieldPath` `ν` について
+          `origin_V(ren[y], ν) = ren[origin_F(y, ν)]` である。
+      `origin_F(y, ν)` の計算の、memo を使わない展開 (L8a (ii)) についての帰納法で示す。L8a (ii) より
+      その展開は有限なので、この帰納法は整礎であり、L8a (i) より `origin_F(y, ν)` が返す値はその展開の
+      値に等しい。L8a は解析にかかる本体とその表を量化するので、`L6a` より `F` の本体について、
+      `<3>1a` より `Pre(V)` について読める。
+      <4>1. `origin_inner` が `(ren[y], ν)` について `vars_P` の下で取る枝は、`(y, ν)` について
+            `vars_F` の下で取る枝と同じであり、`origin` を呼ぶ相手は `ren` で対応する。
+        BY <3>1, <3>1a, <3>2, <ref id=f8fa0e9/>, <ref id=e11772a/>, <ref id=98f3fa1/>,
+           CODE src/rc_ir/ownership.rs: origin_inner,
+           CODE src/rc_ir/ownership.rs: as_arg_projection
+        L7a は解析にかかる本体とその表を量化するので、`L6a` より `F` の本体について、<3>1a より
+        `Pre(V)` について読める。
+        <3>2 より 2 つの表は `ren` で対応する束縛を持つので、`match` が取る `Binding` の変位は等しい。
+        `Binding::Field` と `Binding::Payload` の枝分かれは `container.ty` / `scrut.ty` の `is_box` を
+        読み、<3>1 よりその型は等しい。`Binding::Llvm` の枝分かれは
+        `decl.leaf_origins_at(ν).and_then(as_arg_projection)` を読み、`decl` は
+        `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` である。2 つの `llvm_gen` は
+        `free_vars_mut()` が挙げる `FullName` の欄だけが違い、A3 は「**`result_prov`、`borrows_operand`、
+        `applies_a_function_operand` は自分の `FullName` の欄を読まない。**」「**`result_prov`、`borrows_operand`、
+        `applies_a_function_operand` は決定的である**」と述べ、<3>1 より `result_ty` と `arg_tys` は等しいので、
+        `decl` は 2 つの側で等しい。L7a の (b) と (c) が挙げる相手 -- `(y', ν)`、`(args[j], p)`、
+        `(container, [idx] ++ ν)`、`(scrut, ν)`、`(scrut, [tag] ++ ν)`、`(arm_results[j'], ν)` --
+        は、変数の側が <3>2 の対応で `ren` の像へ写り、`FieldPath` の側は `decl` と `idx` と `tag` から
+        決まるので等しい。
+      <4>2. QED
+        BY <4>1, <3>1, <3>1a, <ref id=f8fa0e9/>, <ref id=cbc4a1c/>, <ref id=98f3fa1/>,
+           CODE src/rc_ir/ownership.rs: origin_inner,
+           CODE src/rc_ir/ownership.rs: Origin::of_candidates
+        L7a は `origin_inner` の枝を 3 群に分け、その 3 つが場合を尽くすと述べる。(a) の枝では両側の
+        値は `Origin::Exactly((y, ν))` と `Origin::Exactly((ren[y], ν))` であり、後者は前者の `ren`
+        像である。(b) の枝では両側の値は呼んだ `origin` の値そのものであり、<4>1 の相手に帰納法の
+        仮定を当てると後者は前者の `ren` 像である。(c) の枝では、両側の `candidates` は各アームの
+        結果対の `acted_on()` の合併であり、D15 より `acted_on() = {identity()} ∪ candidates()` なので、
+        帰納法の仮定と <4>1 より後者は前者の `ren` 像である。<3>1 より `ren` は単射なので 2 つの集合の
+        元数は等しく、`of_candidates` はどちらの側でも同じ分岐を取る -- 元数 1 のとき
+        `Origin::Exactly` を、そうでないとき `identity` を `(y, ν)` / `(ren[y], ν)` に据えた
+        `Origin::Join` を返す。どちらも `ren` 像の関係を保つ。
+    <3>4. QED
+      BY <1>1e, <2>1, <3>1, <3>1a, <3>2, <3>3, <ref id=cbc4a1c/>, <ref id=596a46d/>, <ref id=cb35ab1/>,
+         CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: VarTable::of
+      第 1 の項は <3>1a である。
+      `p` が `rename` の像に無いときは、<3>2 より `Pre(V)` で `p` は束縛を持たないので、
+      `origin_inner` の `None` の腕が `here()` すなわち `Exactly((p, μ))` を返す。`V` のパラメータ名と
+      capture 名 -- `ctx.vars.param_tys` の鍵 -- はどれも `rename` の像なので (<3>2)、像に無い名前は
+      その鍵ではない。`p = rename[p0]` のときは、<1>1e の但し書きが除く位置 -- `route` が名前を
+      差し替えた `App` の callee -- はこの場合に当たらない。その位置で消費される `VarPath` の第 1 成分は
+      `rename` の像に無いからである。よって <1>1e よりこの CASE の 6 種の消費は `V` の本体と
+      `F` の本体で `rename` で写して一致し、<2>1 よりその 6 種は所有の割り当てを読まないので、`F` の
+      本体でも `(p0, μ)` は D9 の意味で消費される。`origin_V(p, μ) = ren[origin_F(p0, μ)]` は
+      <3>3 である。D15 より候補は `Origin` の名前の成分なので、候補の全体も `ren` で写り、
+      <3>1 より `ty(r) = ty(r0)` である。
   <2>2. `p = rename[p0]` であるとき、`origin_F(p0, μ)` の候補であるパラメータ leaf はすべて
         `owned_leaves` に入っている。ここで `owned_leaves = infer_ownership(prog, type_env)` であり、
         その鍵は原本の名前である (`CODE src/rc_ir/borrow.rs: borrow_ify`)。
-    BY P8, <2>1, <2>1a
+    BY <ref id=1d914dc/>, <2>1, <2>1a
     <2>1a より `F` の本体で `(p0, μ)` は D9 の意味で消費される。P8 は、ある関数のある leaf の参照が
     その関数のある実行路で D9 の意味で消費されるならば、その leaf の `origin` の候補であるパラメータ
     leaf はすべて `owned_leaves` に入っていると述べる。
-  <2>3. `origin(p, μ)` の各候補 `(r, q)` について `owns_object(r, q)` は真である。
+  <2>3. `origin_V(p, μ)` の各候補 `(r, q)` について `owns_object(r, q)` は真である。
     <3>1. `owns_object(r, q)` は、`r` が `V` の `vars.param_tys` の鍵でないとき -- すなわち `V` の
           パラメータでも capture でもないとき -- 真である。
-      BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
+      BY EXT 写像と集合の基本演算, EXT Iterator::chain,
+         CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object,
          CODE src/rc_ir/ownership.rs: VarTable::of
       `self.vars.param_tys.get(root)` が `None` の腕が `true` を返す。`VarTable::of` は
       `func.params` と `func.capture` の名前だけを `param_tys` の鍵にする。
@@ -2729,7 +3863,7 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
           `rename[&p0.name]` である。`owned_units` が `V` の名前について持つのは、原本のパラメータ
           `p0` と `owned_leaves.owns(&p0.name, &leaf)` が真である `leaf` についての
           `(rename[&p0.name], truncate_to_unit(&p0.ty, &leaf, type_env))` がすべてである。
-      BY CODE src/rc_ir/borrow.rs: borrow_ify, P9
+      BY CODE src/rc_ir/borrow.rs: borrow_ify, <ref id=63eadd9/>
       `borrow_ify` が借用版を作るのは `func.capture.is_none()` の関数についてだけである。その版に
       ついて `borrow_ify` は
       `for p in &func.params { for leaf in boxed_leaf_paths(&p.ty, type_env) {
@@ -2738,47 +3872,57 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
       書き込むのはこの繰り返しだけである。**鍵は複製後の名前で、`owned_leaves` は原本の名前で
       引かれる。**この改名が P8 と `V` を繋ぐ橋である。P9 より `ty(rename[&p0.name]) = ty(p0)` である。
     <3>3a. `origin_V(p, μ)` の各候補 `(r, q)` について `q ∈ boxed_leaf_paths(ty(r), type_env)` である。
-      <4>1. `λ ∈ boxed_leaf_paths(ty(x))` であるすべての対 `(x, λ)` について、`origin(x, λ).acted_on()`
-            の各元 `(w, ν)` は `ν ∈ boxed_leaf_paths(ty(w))` を満たす。
-        `origin(x, λ)` の計算の、memo を使わない展開 (L8a (ii)) についての帰納法で示す。L8a (ii) より
-        その展開は有限なので、この帰納法は整礎であり、L8a (i) より `origin(x, λ)` が返す値はその展開の
-        値に等しい。L8 (A) の (i) と (B) はどちらも `ρ` を読まないので、`ρ` の上で値を得ていない
-        変数 -- `ρ` が選ばなかったアームの結果変数と、その先 -- についても使える。
+      <4>0. L7a、L8 の (i) と (B)、および L8a は、`Pre(V)` と `ctx.vars` について読める。
+        BY <ref id=f8fa0e9/>, <ref id=b99155f/>, <ref id=df74e59/>, <2>1a, DEF 解析にかかる本体
+        L7a と L8a は解析にかかる本体とその表を量化する。L8 も同じ形で量化し、「(i) と (B) は
+        解析にかかるどの本体についても成り立ち、`ρ` を読まない」と述べる。<2>1a の第 1 の項が
+        `Pre(V)` と `ctx.vars` の組が解析にかかることを与える。**L8 の (ii)・(iii)・(iv) は `B` と
+        `ρ` についての主張なのでここでは読まない。**
+      <4>1. `Pre(V)` に現れる変数 `x` と `λ ∈ boxed_leaf_paths(ty(x))` であるすべての対について、
+            `origin_V(x, λ).acted_on()` の各元 `(w, ν)` は `ν ∈ boxed_leaf_paths(ty(w))` を満たす。
+        `origin_V(x, λ)` の計算の、memo を使わない展開 (L8a (ii)) についての帰納法で示す。L8a (ii) より
+        その展開は有限なので、この帰納法は整礎であり、L8a (i) より `origin_V(x, λ)` が返す値はその展開の
+        値に等しい。L8 (A) の (i) と (B) はどちらも `ρ` を読まないので、`ρ_P` の上で値を得ていない
+        変数 -- `ρ_P` が選ばなかったアームの結果変数と、その先 -- についても使える。
         <5>1. CASE `origin_inner` が `origin` を呼ばない。このとき `acted_on()` の元は `(x.name, λ)`
               だけであり、仮定より `λ ∈ boxed_leaf_paths(ty(x))` である。
-          BY L8, D15
+          BY <4>0, <ref id=b99155f/>, <ref id=cbc4a1c/>
           L8 (B) より値は `Origin::Exactly((x.name, λ))` であり、D15 より `Origin::Exactly` の
           `acted_on()` はその 1 元だけからなる列である。
-        <5>2. CASE `origin_inner` が `Binding::Join` 以外の腕で `origin(x', λ')` を呼ぶ。このとき
-              腕の値は `origin(x', λ')` そのものであり、L8 (A) の (i) より
+        <5>2. CASE `origin_inner` が `Binding::Join` 以外の腕で `origin_V(x', λ')` を呼ぶ。このとき
+              腕の値は `origin_V(x', λ')` そのものであり、L8 (A) の (i) より
               `λ' ∈ boxed_leaf_paths(ty(x'))` である。
-          BY L8, CODE src/rc_ir/ownership.rs: origin_inner
-          `Binding::Move`、`Binding::Llvm` の単一 `Arg` の枝、unbox 容器の `Binding::Field`、
-          `Binding::Payload` の 2 つの枝は、いずれも `origin` を 1 回呼んでその値を腕の値とする。
+          BY <4>0, <ref id=f8fa0e9/>, <ref id=b99155f/>
+          L7a (b) より、`Binding::Move`、`Binding::Llvm` の単一 `Arg` の枝、unbox 容器の
+          `Binding::Field`、`Binding::Payload` の 2 つの枝は、いずれも `origin` を 1 回呼んでその値を
+          腕の値とする。
         <5>3. CASE `origin_inner` が `Binding::Join(arm_results)` の腕を取る。このとき `acted_on()` は
-              `{(x.name, λ)} ∪ ⋃_{j'} origin(arm_results[j'], λ).acted_on()` に含まれ、各 `j'` に
+              `{(x.name, λ)} ∪ ⋃_{j'} origin_V(arm_results[j'], λ).acted_on()` に含まれ、各 `j'` に
               ついて `λ ∈ boxed_leaf_paths(ty(arm_results[j']))` である。
-          BY L8, D15, CODE src/rc_ir/ownership.rs: origin_inner,
+          BY <4>0, <ref id=f8fa0e9/>, <ref id=b99155f/>, <ref id=cbc4a1c/>, CODE src/rc_ir/ownership.rs: origin_inner,
              CODE src/rc_ir/ownership.rs: Origin::of_candidates
-          この腕は各 `arm_result` について `origin(vars, type_env, &arm_result.name, path).acted_on()`
-          の各元を `candidates` に入れ、`Origin::of_candidates(candidates, &(x.name, λ))` を返す。
+          L7a (c) より、この腕は各 `arm_result` について
+          `origin(vars, type_env, &arm_result.name, path).acted_on()` の各元を `candidates` に入れ、
+          `Origin::of_candidates(candidates, &(x.name, λ))` を返す。
           `of_candidates` は候補が 1 元のときその元の `Origin::Exactly`、そうでないとき
           `Origin::Join { identity: (x.name, λ), candidates }` を返し、D15 より
           `acted_on() = {identity()} ∪ candidates()` である。leaf の側は L8 (A) の (i) が、この腕に
           ついてどのアームの結果変数についても成り立つ形で与える。
         <5>4. QED
-          BY <5>1, <5>2, <5>3, L8
-          L8 (A) と (B) より `origin_inner` の腕はこの 3 つの場合に分かれる。<5>1 では `acted_on()` の
-          元は仮定を満たす対 1 つである。<5>2 と <5>3 では、`acted_on()` の元は `(x.name, λ)` か、
-          行き先の型の boxed leaf を第 2 成分に持つ再帰の相手の `acted_on()` の元であり、後者には
-          帰納法の仮定が適用できる。
+          BY <5>1, <5>2, <5>3, <4>0, <ref id=f8fa0e9/>
+          L7a より `origin_inner` の枝は 3 群に分かれ、その 3 つが場合を尽くす。(a) は <5>1、(b) は
+          <5>2、(c) は <5>3 である。<5>1 では `acted_on()` の元は仮定を満たす対 1 つである。
+          <5>2 と <5>3 では、`acted_on()` の元は `(x.name, λ)` か、行き先の型の boxed leaf を
+          第 2 成分に持つ再帰の相手の `acted_on()` の元であり、後者には帰納法の仮定が適用できる。
       <4>2. QED
-        BY <4>1, D15, D9
+        BY <4>1, <ref id=cbc4a1c/>, <ref id=9d74736/>
         L16 の仮定より `(p, μ)` は D9 の意味で消費される leaf であり、D9 の消費の表が挙げるのは
         boxed leaf なので `μ ∈ boxed_leaf_paths(ty(p))` である。D15 より候補は `acted_on()` の元で
         あるから、<4>1 が結論を与える。
     <3>4. QED
-      BY <1>1a, <1>1b, <2>1a, <2>2, <3>1, <3>2, <3>3, <3>3a, P1, A10, P7e, P9
+      BY <1>1a, <1>1b, <2>1a, <2>2, <3>1, <3>2, <3>3, <3>3a, <ref id=3597669/>, <ref id=8412761/>, <ref id=63981a3/>, <ref id=63eadd9/>,
+         EXT Iterator::chain,
+         CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: param_capture_units
       `origin_V(p, μ)` の候補 `(r, q)` を取る。`r` が `V` の `vars.param_tys` の鍵でないときは
       <3>1 が結論を与える。以下 `r` がその鍵であるとし、`t = truncate_to_unit(ty(r), q, type_env)` と
       置く。`r` は `V` のパラメータか capture なので `ty(r)` はプログラムに現れる型であり、A10 を
@@ -2801,15 +3945,23 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
     `UnitStep::Unit` で打ち切る。積む添字は `μ` の添字を順に取ったものなので、返る `u` は `μ` の前置で
     ある。
   <2>4. QED
-    BY <2>3, <2>3a, <1>1f, <1>3, P7a, D6, A11, <1>1, <1>2
+    BY <2>3, <2>3a, <1>1f, <1>3, <ref id=d499f99/>, <ref id=596a46d/>, <ref id=3905b4e/>,
+       <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=66c9670/>, <1>1, <1>2
     この CASE の仮定より `ρ_P` の上に `Retain(p, u)` 節点 `n_R` が在るので、<1>3 より `(p, u)` は
     P7a の意味の `V` の site である。P7a は `owns_unit` と `owns_object` を `V` の `RewriteCtx` の
-    ものに取り、節 2 と節 3 を、1 つの活性化と、その活性化がその site の節点を訪れる位置に相対的な
-    ものとして述べる。その活性化として L16 が固定したものを、その位置として <1>1f が与える `n_R` の
-    位置の時点を取る。**その位置が要るのは inhabited を定める時点を固定するためであり** (P7a は
-    「inhabited は D16 の意味で、時点を固定しないと定まらない」と括弧書きする)、<1>1f の時点が
-    その役を果たす。`n_R` は `p` を名指すので、A11 より `p` はその位置でスコープに入っている束縛に
-    解決し、<1>1f よりその時点で `p` は値を持つ。`μ` は固定した活性化において inhabited であり、値は
+    ものに取り、「**節 2 と節 3 は、1 つの活性化 (D21) と、その活性化の上で `v` が値を得ている任意の
+    位置に相対的である**」と述べる。**その位置は site の節点を訪れる位置に限らない** -- P7a は
+    「**site の節点を訪れる位置に限れない** -- その節点は `Pre(V)` の側に在り、借用版の `rewrite_rc` は
+    それを落としうる (P10)」と続ける。この段が取るのは、その任意の位置のうち、L16 が固定した活性化と
+    <1>1f が与える `n_R` の位置の時点である。**位置を 1 つ取るのは inhabited を定める時点を固定する
+    ためであり** (P7a は「inhabited は D16 の意味で、時点を固定しないと定まらない」と括弧書きする)、
+    <1>1f の時点がその役を果たす。`n_R` は `p` を名指すので、A11 より `p` はその位置でスコープに入っている束縛に
+    解決する。**A11 が与えるのは解決先だけである。** その束縛の節点が `ρ_P` の上で `n_R` より前に在る
+    ことは D2 と D3 による -- D2 は束縛のスコープをその節点の継続 (`Match` のアームの payload に
+    ついてはそのアームの `body`) の部分木と定め、D3 の実行路は本体の根から継続とアーム本体を辿って
+    得られる節点の列なので、その部分木の中の節点に着くまでにその束縛の節点を通る。L16 の仮定より
+    `(p, μ)` はスロットなので、D6 より `p` は束縛を持つ名前である。よって <1>1f よりその時点で
+    `p` は値を持つ。`μ` は固定した活性化において inhabited であり、値は
     束縛の後に変わらないので (D6) その時点でも inhabited である。<2>3a より `μ` は `u` の下の leaf、
     すなわち `Λ(u)` の元である。よって <2>3 はこの活性化とこの位置における P7a の節 2 である。
     P7a より `owns_unit(p, u)` は真であり、
@@ -2822,26 +3974,43 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
         の段の実行時の呼び出し先 (D23) を `g`、`g` の第 `i` パラメータを `p_i` と書く。`g` は
         `borrow_ify` の出力の `funcs` の関数である。また `call_rc` が引く `params` が `Some` であるとき、
         `params[i]` は `p_i` の名前と型である。
-    BY D23, P30, A6, A13, P9, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
-       CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/ownership.rs: resolve_callee_params
+    BY <ref id=ff5985d/>, <ref id=561540d/>, <ref id=33c54dc/>, <ref id=cb35ab1/>, <ref id=f8ae607/>,
+       <ref id=63eadd9/>, <ref id=596a46d/>, EXT 写像と集合の基本演算,
+       EXT Iterator::chain, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+       CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: param_names_and_types,
+       CODE src/rc_ir/borrow.rs: borrow_funcref,
+       CODE src/ast/name.rs: FullName::is_local, CODE src/ast/name.rs: NameSpace::is_local,
+       CODE src/rc_ir/ownership.rs: resolve_callee_params,
+       CODE src/rc_ir/ownership.rs: collect_bindings
     D23 は `App` の呼び出し先を実行時に `callee` の値が指す関数と定め、「**D9 の `App` の行と D10 の
     生成の `App` の行が「呼び出し先」と言うのは、この実行時の関数である。**」と述べたうえで、「D9 の
     `App` の行が読む所有は D14 が `RcFunc::borrowed_units` から定めるものなので、**その呼び出し先は
     プログラムの `funcs` の関数である**」と続ける。`call_rc` は
     `self.callee_params.get(&FuncRef { name: callee.name })` を引き、`borrow_ify` は出力の各版 `func` に
     ついて `callee_params.insert(func.name, param_names_and_types(func))` を行うので、`Some` が返るのは
-    `callee.name` が出力の `funcs` の鍵であるときであり、返るのはその関数のパラメータの名前と型の列で
-    ある。そのとき A6 と A13 と P9 より `callee.name` は `V` の本体の束縛名ではないので
+    `callee.name` が出力の `funcs` の鍵であるときである。**`param_names_and_types` が返すのは
+    `func.params.iter().chain(func.capture.iter())` の名前と型の列であり、パラメータの列の後ろに
+    capture が続く。** A14 より `args.len()` はその関数のパラメータの個数に等しいので、`i < args.len()`
+    である添字はパラメータの側に落ち、`params[i]` は `g` の第 `i` パラメータの名前と型である。
+    そのとき A6 と A13 と P9 より `callee.name` は `V` の本体の束縛名ではなく、`collect_bindings` が
+    `vars.closure_targets` に入れる鍵は `Let(x, RcRhs::Closure(fref, _), k)` の束縛変数 `x` の名前だけ
+    なので (D6 より束縛を持つ名前は局所名であり、出力の `funcs` の鍵は局所名ではない -- 入力の鍵に
+    ついては A13 が、借用版の鍵については `borrow_funcref` が `namespace` の欄を写すことがそれを
+    与える)、
     `resolve_callee_params` の `closure_targets` の枝は当たらず、`resolve_callee_params` も同じ関数の
     `params` を返す。P30 は「`borrow_ify` の出力の `Let(x, App(callee, args), k)` について、
     `resolve_callee_params` が解決する関数が `Some` であるならば、それはその段の実行時の呼び出し先
     (D23) と同じ `RcFunc` である」と述べる。`V` の本体は `borrow_ify` の出力の本体なので、その `params` は
-    実行時の呼び出し先 `g` のパラメータの列である。
+    実行時の呼び出し先 `g` のものである。`params[i]` が範囲内であることは A14 が与える --
+    「`App(callee, args)` の `args` の個数は、呼び出し先のパラメータの個数に**等しい**」であり、
+    「**「呼び出し先」は D23 の実行時の関数と、`resolve_callee_params` が静的に引く関数の両方に
+    ついて読む。**」と続く。`p` は第 `i` 引数なので `i < args.len()` であり、それは `g` の
+    パラメータの個数である。
   <2>0a. `u ∈ rc_units(ty(p), type_env)` であり、`ty(p) = ty(p_i)` なので
          `u ∈ rc_units(ty(p_i), type_env)` でもある。**`call_rc` が `(p, u)` を見るのはこの所属に
          よる** -- その繰り返しは `for unit in rc_units(&arg.ty, self.type_env)` であり、`callee_owns`
          と `arg_owned` はその `unit` ごとに決まるので、`u` がこの列に在ることが要る。
-    BY P1, A10, A12, D6, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
+    BY <ref id=3597669/>, <ref id=8412761/>, <ref id=83d98e9/>, <ref id=596a46d/>, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc
     L16 の仮定より `(p, μ)` は固定した活性化のスロットなので、D6 より
     `μ ∈ boxed_leaf_paths(ty(p), type_env)` である。`ty(p)` は本体に現れる変数の型、すなわち
     プログラムに現れる型なので A10 を満たし、P1 より `u = truncate_to_unit(ty(p), μ, type_env)` は
@@ -2851,7 +4020,7 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
         `all_owned_units(borrow_ify の出力, type_env)` に入る。
     <3>1. D9 の `App` の行より、引数 `p` の leaf `μ` が消費されるのは、`g` がその位置の unit を D14 の
           意味で所有するときであり、unit は**呼び出し先のパラメータの型**で取る。
-      BY D9, D23, <2>0
+      BY <ref id=9d74736/>, <ref id=ff5985d/>, <2>0
     <3>2. その unit は `u` であり、`u ∈ rc_units(ty(p_i), type_env)` である。
       BY <2>0a, <3>1
       <2>0a より `ty(p) = ty(p_i)` なので
@@ -2859,16 +4028,16 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
       `u ∈ rc_units(ty(p_i), type_env)` を与える。
     <3>3. `g` が `u` を所有することと `(p_i.name, u) ∈ all_owned_units(borrow_ify の出力, type_env)` は
           同値である。
-      BY D14, <2>0, <3>2, CODE src/rc_ir/ownership.rs: all_owned_units
+      BY <ref id=ef8efc4/>, <2>0, <3>2, CODE src/rc_ir/ownership.rs: all_owned_units
       D14 より、`g` が `u` を所有するとは `(p_i.name, u)` が `g` の `borrowed_units` に入らないことで
       ある。`all_owned_units` は、各関数の各パラメータ・capture `p'` と各 `unit ∈ rc_units(ty(p'))` に
       ついて、`(p'.name, unit)` が `borrowed_units` に入らないときにそれを集合に入れる。<2>0 より `g` は
       出力の `funcs` の関数であり、<3>2 より `u` はその `unit` の 1 つである。
-    <3>5. QED
+    <3>4. QED
       BY <3>1, <3>2, <3>3
   <2>2. この位置で `(p, μ)` の消費が起きるならば、`call_rc` の繰り返しは `unit = u` の回を持ち、
         その回の `callee_owns` は真である。
-    BY <2>0, <2>0a, <2>1, P13, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
+    BY <2>0, <2>0a, <2>1, <ref id=7ca41a2/>, CODE src/rc_ir/borrow.rs: RewriteCtx::call_rc,
        CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/ownership.rs: all_owned_units
     <2>0a より `u` は `call_rc` が `p` について渡る `rc_units(ty(p), type_env)` の元である。
     `call_rc` は `params` が `None` のとき `callee_owns` を真とし、`Some(params)` のとき
@@ -2888,18 +4057,18 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
     <2>2 よりその回の `callee_owns` は真であり、この CASE の仮定より `arg_owned = owns_unit(p, u)` は
     偽である。
   <2>5. QED
-    BY <2>3, <2>4, P11
+    BY <2>3, <2>4, <ref id=eaf9b51/>
     <2>4 の場合、`call_rc` が `before` に入れた `(p, u)` について、P11 よりこの呼び出しの前に
     `Retain(p, u)` が置かれる。これが (B) である。<2>3 と <2>4 は `owns_unit(p, u)` の真偽で場合を
     尽くす。
 
 <1>5a. CASE 消費が `App` の所有位置の引数以外であり、`ρ_P` の上に `Retain(p, u)` 節点が無い。
-  BY この CASE の仮定
-  この CASE の第 2 の仮定が、言明の (C) --「`ρ_P` の上に `Retain(p, u)` 節点が無い」-- そのもので
-  ある。
+  BY <1>1c, <1>1f
+  この CASE の第 2 の仮定は、`<1>1c` が定める `Pre(V)` と `<1>1f` が定める `ρ_P` についての言明で
+  あり、L16 の言明の (C) --「`ρ_P` の上に `Retain(p, u)` 節点が無い」-- そのものである。
 
 <1>6. QED
-  BY <1>1, <1>2, <1>4, <1>5, <1>5a, D9
+  BY <1>1, <1>2, <1>4, <1>5, <1>5a, <ref id=9d74736/>
   D9 の消費の表は 6 行を持つ -- `App(callee, args)`、`Closure(f, caps)`、`Llvm(gen, args)`、
   boxed 容器の `Destructure`、unbox 容器の `Destructure`、本体 (D23) の終端の `Ret(x)`。`App` の行は
   callee の leaf と所有位置の引数の leaf の 2 つの位置を挙げるので、消費の位置は 7 種である。
@@ -2908,17 +4077,20 @@ P17 が扱う (7.5.4 の前の第 4 節と、L11 の <2>2 の場合分け)。**�
   `Ret` -- は、`ρ_P` の上に `Retain(p, u)` 節点が在るときは <1>4 が (A) を、無いときは <1>5a が (C) を
   与える。**この 2 つの分け方で場合は尽きる。
 
-**この補題が答えるもの。** 疑い -- 「`rewrite_rc` がアームの `Retain(p)` を落としながら `p` の消費が
+**この命題が答えるもの。** 疑い -- 「`rewrite_rc` がアームの `Retain(p)` を落としながら `p` の消費が
 残ることがあるか」-- は、当たらない。消費の実行路の上に `Retain(p, u)` 節点が在る場合、それが落ちるのは
 `owns_unit(p, u)` が偽のときだけであり、それが起きるのは `App` の所有位置の引数に限られる (`<1>4` が
 他の 6 種の位置を `owns_unit` 真にするので)。そこでは `call_rc` が消費の直前に同じ `Retain(p, u)` を
 置くので (L16 の (B))、`Retain` の直後に消費が来て `held_ρ(·, C)` はこの節点をまたいで変わらない。
 
-**この補題は A19 (ii-b) を果たさない。** 果たすのは「`borrow_ify` が `insert_rc` の出した `Retain` を
+**この命題は A19 (ii-b) を果たさない。** 果たすのは「`borrow_ify` は `insert_rc` の出した `Retain` を
 消費から引き離さない」ことだけである。(C) の場合 -- 消費の実行路の上に `Retain` 節点が無い場合 -- は
-`insert_rc` の側の義務であり、README の A19 がそれを `p60-insert-rc.md` に帰す。A19 は果たす者を 2 人
-挙げ、「`borrow_ify` の側は示されている (`p13-disposals-and-pending.md` の `L16`)」「**`insert_rc` の
-側も示されている** (`p60-insert-rc.md`)」と、2 人を別に数えている。
+`insert_rc` の側の義務であり、README の A19 がそれを `p60-insert-rc.md` に帰す。A19 は
+「**`borrow_ify` の側について示されているのは、「`borrow_ify` は `insert_rc` の出した `Retain` を消費から
+引き離さない」ことである** (`p13-disposals-and-pending.md` の `L16`)」と、この命題が示す形へ狭めたうえ
+で、「**消費の実行路の上に `Retain` 節点が無い場合は `borrow_ify` の側の問題ではなく、`insert_rc` の側の
+義務である** -- `L16` は自分がその場合を扱わないことを自分の末尾に書いている」と続け、
+「**`insert_rc` の側も示されている** (`p60-insert-rc.md`)」と 2 人を別に数えている。
 
 #### 7.5.7 反例 `C1` (A19 (ii-b) が A1・A2・D12 から出ないことを示す)
 
@@ -2946,39 +4118,144 @@ Release(m, [], s,
 Ret(u))))))))))
 ```
 
-変位 0 を選ぶ実行路で `m` の値は `p` の値である。`p` のオブジェクトを `O_p`、`q` のを `O_q` と書く。
-`main` の各節点を実行した直後の `Obl` と参照カウントは次のとおりである。
+`p` のオブジェクトを `O_p`、`q` のオブジェクトを `O_q` と書く。
 
-| 実行した節点 | `Obl` | `H(O_p)` | `H(O_q)` |
+**この本体が D12 を満たすことを、2 本の実行路と、それを辿るすべての D21 の活性化について示す。**
+D12 はプログラムのすべての関数の本体について D11 を要求し、D11 は本体のすべての実行路について
+(S-a)(S-b)(S-c) を要求する。関数は `f` と `main` の 2 つであり、グローバル初期化子は無い。
+`alloc`・`mkbl`・`zero` は `Llvm` の演算であって本体ではない。**D11 が量化するのは D21 の意味の
+すべての活性化である** -- 子の活性化が返す値と `H` に与える変化は与件であり、活性化は
+「その各時点と各段内の点 (D24) で A19 (i) の不等式を満たすもの」に限られる (D21)。
+
+**`f` は D11 を満たす。** `f` の本体は実行路を 1 本しか持たない (`Match` が無い)。パラメータの値は
+活性化の側の与件なので (D21)、`b` にグローバル値が束縛された活性化も D11 の範囲に入る。`obj(b, [])` が
+計数下 (D26) であるかグローバル状態であるかで分ける。
+
+**`obj(b, [])` が計数下である活性化。** `b` は所有するパラメータなので D10 の初期値は `obj(b, [])` への
+参照 1 つであり、`Release(b, [])` がそれを取り除く。よって (S-a) が成り立つ。終端の `Ret(z)` の消費は `ty(z) = I` に boxed leaf が無いので何も取り除かず、
+その時点で `Obl` は空なので (S-b) が成り立つ。読む構文は `Let(z, Llvm(zero, []), ・)` だけで、`zero` は
+オペランドを持たない。触れる構文は `Release(b, [])` であり、その直前の点で `b` の類 `C_b` の
+`held_ρ(・, C_b)` は 1 -- D34 の第 2 行が所有するパラメータの leaf に開始値 1 を置き、それを動かす事象は
+その `Release` より前に無い -- なので、A19 (i) が `H(obj(b, [])) ≥ 1` を強制する。D11a より、その点まで
+解放について閉じている活性化では `H ≥ 1` の計数下オブジェクトは解放されていないので、(S-c) が成り立つ。
+
+**`obj(b, [])` がグローバル状態である活性化。** D26 の「D8 の参照、D10 の義務集合、D11 の (S-a) と
+(S-b) は、どれも計数下のオブジェクトへの参照だけを対象とする」「グローバル状態のオブジェクトを指す
+leaf は、D8 の意味の参照を持たない」より、`b` の leaf は D8 の意味の参照を持たない。よって D10 の
+初期値は空であり、`Release(b, [])` も終端の `Ret(z)` も `Obl` から参照を取り除かないので、(S-a) は
+取り除く操作が無いことで、(S-b) は `Obl` が空のまま終わることで成り立つ。(S-c) は A8 が与える --
+グローバル状態のオブジェクトが解放されることは無いので、`Release(b, [])` が触れる先はその触れる動作の
+直前の点で解放されていない。読む構文の側は計数下の場合と同じである。この場合、`b` の類に `held_ρ` は
+定まらず (D34)、A19 (i) はこのオブジェクトを量化しない。
+
+**`main` の実行路は 2 本である。** D3 より `Match` のアームを 1 つ選ぶところだけが分岐であり、
+`Bl` は 2 つの変位を持つ。変位 0 を選ぶ路を `ρ0`、変位 1 を選ぶ路を `ρ1` と書く。`ρ0` では
+アーム本体の `Ret(p)` が `m` へ値を移すので `m` の値は `p` の値であり、`ρ1` では `m` の値は `q` の値で
+ある (D9 の移動の表の第 2 行)。
+
+**`Obl` は路だけで決まる。** `main` はパラメータも capture も持たないので D10 の初期値は空である。
+`Arr` は boxed なので `boxed_leaf_paths(Arr)` は `[]` 1 つであり、unbox union を通らないので常に
+inhabited である (D16)。D10 の生成・消費・移動の各行はどれもこの本体では構文が決める -- `App` の
+消費が読む所有 (D14) は実行時の呼び出し先のものだが (D23)、2 つの `App` の callee はどちらも記号 `f`
+であってその値は `f` の funptr なので (D6、A21)、実行時の呼び出し先は `f` である。`App` の結果の leaf が
+参照を生じる行も、`ty(u) = ty(w) = I` に boxed leaf が無いので何も入れない。よって 2 本の路の
+それぞれについて `Obl` は次のとおりである。
+
+| 実行した節点 | `ρ0` の `Obl` | `ρ1` の `Obl` |
+|---|---|---|
+| `Let(p, Llvm(alloc, []), ・)` | `{O_p}` | `{O_p}` |
+| `Let(q, Llvm(alloc, []), ・)` | `{O_p, O_q}` | `{O_p, O_q}` |
+| `Let(c, Llvm(mkbl, []), ・)` | `{O_p, O_q}` | `{O_p, O_q}` |
+| `Let(m, Match(c, ...), ・)` (移動) | `{O_p, O_q}` | `{O_p, O_q}` |
+| `Retain(m, [], s, ・)` | `{O_p, O_p, O_q}` | `{O_p, O_q, O_q}` |
+| `Let(u, App(f, [p]), ・)` | `{O_p, O_q}` | `{O_q, O_q}` |
+| `Let(w, App(f, [q]), ・)` | `{O_p}` | `{O_q}` |
+| `Eval(m, ・)` | `{O_p}` | `{O_q}` |
+| `Release(m, [], s, ・)` | `{}` | `{}` |
+
+`App` の 2 行では、D9 の `App` の行が引数の leaf を消費して `Obl` から取り除く (`f` は `b` を所有する)。
+`Ret(u)` の消費は `ty(u) = I` に boxed leaf が無いので何も取り除かない。`App` の `callee` は funptr の
+型を持ち、`is_funptr` の型は `is_fully_unboxed` が真なので boxed leaf を持たない (D4 の第 1 規則、
+`CODE src/ast/types.rs: TypeNode::is_fully_unboxed`)。よって `callee` には D9 が消費する leaf も
+D6 のスロットも無い。
+
+**(S-a) と (S-b) はこの表から出る。** `Obl` から参照を取り除く操作は 2 つの `App` の消費と
+`Release(m, [])` と終端の `Ret(u)` の消費であり、どの路でも取り除かれる参照は直前の `Obl` に入って
+いる (`ρ0` では `App(f, [p])` が `{O_p, O_p, O_q}` から `O_p` を、`App(f, [q])` が `{O_p, O_q}` から
+`O_q` を、`Release(m, [])` が `{O_p}` から `O_p` を取り除く。`ρ1` では `App(f, [p])` が
+`{O_p, O_q, O_q}` から `O_p` を、`App(f, [q])` が `{O_q, O_q}` から `O_q` を、`Release(m, [])` が
+`{O_q}` から `O_q` を取り除く)。終端の `Ret(u)` の消費の後、どちらの路でも `Obl` は空である。
+
+**別名類と `held`。** `p` と `q` は `Binding::Llvm` に束縛され、`alloc` は結果の leaf を単一の `Fresh` と
+宣言するので `as_arg_projection` は `None` を返し、`(p, [])` と `(q, [])` はそれぞれ `ρ` 終端である
+(DEF `ρ` 歩みと `ρ` 終端)。`m` は `Binding::Join([p, q])` に束縛され、`ρ` 歩みの 1 歩はその路が選んだ
+アームの結果へ進むので、`ρ0` では `T_ρ0(m, []) = (p, [])`、`ρ1` では `T_ρ1(m, []) = (q, [])` である。
+`c` の型 `Bl` と `u`・`w` の型 `I` は boxed leaf を持たず、`Bl` の 2 つの変位はどちらも payload を
+持たないので `y0` と `y1` も boxed leaf を持たない。`alloc` は結果の leaf を単一の `Fresh` と宣言する
+ので、A3 の表よりその結果は新しく割り当てられたオブジェクトへの参照であり、D26 より割り当てられた
+オブジェクトは計数下である。すなわち `O_p` と `O_q` はどちらも計数下である。よって計数下の別名類は
+路ごとに 2 つである。
+
+| 路 | 類 | 終端 | `obj` | `held` の推移 |
+|---|---|---|---|---|
+| `ρ0` | `C = {(p, []), (m, [])}` | `(p, [])` | `O_p` | 割り当てで 1、`Retain(m, [])` で 2、`App(f, [p])` の消費で 1、`Release(m, [])` で 0 |
+| `ρ0` | `C_q = {(q, [])}` | `(q, [])` | `O_q` | 割り当てで 1、`App(f, [q])` の消費で 0 |
+| `ρ1` | `C' = {(q, []), (m, [])}` | `(q, [])` | `O_q` | 割り当てで 1、`Retain(m, [])` で 2、`App(f, [q])` の消費で 1、`Release(m, [])` で 0 |
+| `ρ1` | `C'_p = {(p, [])}` | `(p, [])` | `O_p` | 割り当てで 1、`App(f, [p])` の消費で 0 |
+
+開始値はどの類も D34 の第 1 行 (D10 の生成の表が参照を作る位置) が置く 1 である。どの終端も借用する
+パラメータ・capture の leaf ではない (`main` はパラメータを持たない) ので、A19 (i) の `d(C)` は
+`held_ρ(・, C)` そのものであり、角括弧は 0 である。1 つのオブジェクトを指す類は各路に 1 つずつなので、
+A19 (i) は各時点と各段内の点で `H(O_p) ≥ held_ρ(・, C_ρ(p, []))`、`H(O_q) ≥ held_ρ(・, C_ρ(q, []))` を
+強制する。
+
+**(S-c) が成り立つ。** 読む構文と触れる構文が名指すオブジェクトを、その読み・その触れる動作の直前の
+点で見る。D24 の「**読みの直前の点では、勘定は直前の段内の点のものである。**」より、その点の勘定は
+直前の段内の点のものである。
+
+| 節点 | 名指すオブジェクト | その点の `held` (`ρ0`) | その点の `held` (`ρ1`) |
 |---|---|---|---|
-| `Let(p, Llvm(alloc, []), ・)` | `{O_p}` | 1 | -- |
-| `Let(q, Llvm(alloc, []), ・)` | `{O_p, O_q}` | 1 | 1 |
-| `Let(c, Llvm(mkbl, []), ・)` | `{O_p, O_q}` | 1 | 1 |
-| `Let(m, Match(c, ...), ・)` (移動) | `{O_p, O_q}` | 1 | 1 |
-| `Retain(m, [], s, ・)` | `{O_p, O_p, O_q}` | 2 | 1 |
-| `Let(u, App(f, [p]), ・)` | `{O_p, O_q}` | 1 | 1 |
-| `Let(w, App(f, [q]), ・)` | `{O_p}` | 1 | 0 |
-| `Eval(m, ・)` | `{O_p}` | 1 | 0 |
-| `Release(m, [], s, ・)` | `{}` | 0 | 0 |
+| `Let(m, Match(c, ...), ・)` | 無し (`Bl` に boxed leaf が無い) | -- | -- |
+| `Retain(m, [], s, ・)` | `obj(m, [])` | `C` が 1 | `C'` が 1 |
+| `Let(u, App(f, [p]), ・)` | `O_p` | `C` が 2 | `C'_p` が 1 |
+| `Let(w, App(f, [q]), ・)` | `O_q` | `C_q` が 1 | `C'` が 2 |
+| `Eval(m, ・)` | `obj(m, [])` | `C` が 1 | `C'` が 1 |
+| `Release(m, [], s, ・)` | `obj(m, [])` | `C` が 1 | `C'` が 1 |
 
-`App` の 2 行では、D9 の `App` の行が引数の leaf を消費して `Obl` から取り除き (`f` は `b` を所有する)、
-`H` は呼び出しの段では動かず、`f` の本体の `Release(b, [])` が 1 下げる。`Ret(u)` の消費は
-`ty(u) = I` に boxed leaf が無いので何も取り除かない。
+どの行でも `held ≥ 1` なので、A19 (i) がその点で `H ≥ 1` を強制する。D11a より、その点まで解放に
+ついて閉じている活性化では `H ≥ 1` の計数下オブジェクトは解放されていない。よって (S-c) が成り立つ。
+`Let(p, ・)`・`Let(q, ・)`・`Let(c, ・)` の `Llvm` はオペランドを持たず、`Ret(u)` は D7 の読む構文でも
+`Retain`/`Release` でもない。
 
-(S-a) は各除去が `Obl` に入っているので、(S-b) は終端で `Obl` が
-空で `ty(u) = I` に boxed leaf が無いので、(S-c) は読む構文 (`App(f, [p])` で `H(O_p) = 2`、
-`App(f, [q])` で `H(O_q) = 1`、`Eval(m)` で `H(O_p) = 1`) と触れる構文 (`Retain(m, [])` と
-`Release(m, [])` でどちらも `H(O_p) = 1`) がいずれも解放されていないオブジェクトを相手にするので、
-成り立つ。`App` の `callee` は funptr の型を持ち、`is_funptr` の型は `is_fully_unboxed` が真なので
-boxed leaf を持たない (D4 の第 1 規則、`CODE src/ast/types.rs: TypeNode::is_fully_unboxed`)。よって
-`callee` には D9 が消費する leaf も D6 のスロットも無い。よって `C1` は D12 を満たし、A2 も満たす。
+**README の D21 が反例から外す形に、`C1` は当たらない。** README の D21 は「**消費の後にその値を
+もう一度名指す本体は、D12 を満たさない。** その節点が消費した leaf のオブジェクトについて、`held` は
+その消費で 0 になる。A19 (i) が縛るのは `held` を通してだけなので、`held = 0` の類のオブジェクトには
+`H ≥ 0` しか要求しない。**したがって、その参照を処分して `H` を 0 にする子の活性化が D21 の与件として
+通り**、後の節点がそのオブジェクトを名指せば (S-c) が破れる。」と述べる。**この形が要求するのは、消費の後にその leaf の
+オブジェクトの類の `held` が 0 になることである。** `ρ0` では `App(f, [p])` が
+`(p, []) ∈ C` を消費した後も `held_ρ0(・, C) = 1` である -- `Retain(m, [])` が積んだ 1 が残るからで
+あり、その 1 のぶん A19 (i) は `Eval(m)` と `Release(m, [])` の点でも `H(O_p) ≥ 1` を強制する。すなわち
+`O_p` を解放する子の活性化は D21 の与件として通らない。`ρ1` では `App(f, [p])` の消費で
+`held_ρ1(・, C'_p) = 0` になるので `H(O_p) = 0` とする与件は通るが、`ρ1` の後の節点は `p` も `O_p` を
+指す名前も名指さない -- `m` の値は `q` の値だからである。**この 2 つが、`C1` を D12 の反例から外す。**
 
-**A19 (ii-b) が破れる。** `m` と `p` は 1 つの別名類 `C` に属し (`L11b` より、L8 (A) の
-`Binding::Join` の腕が渡す段はアーム本体の `Ret` の別名の辺である)、`held_ρ(·, C)` は `p` の割り当てで
-1、`Retain(m, [])` で 2、`App(f, [p])` の消費で 1 になる。`Retain(m, [])` の要素はそのとき `pending` に
-在り `bumps_ρ(·, C) = 1` なので、(ii-b) が要求する `held ≥ 1 + bumps = 2` を `held_ρ(·, C) = 1` は
-破る。P18a も同じ位置で破れる -- `N_ρ(·, O_p) = 1` に対して `H(O_p) = 1` で
-ある。
+よって `C1` は D12 を満たし、A2 も満たす -- `Retain`/`Release` の path はどれも `[]` であり、
+`Arr` は boxed なので `rc_units(Arr) = [[]]` である。`borrowed_units` はどちらの関数でも空なので、
+A1 が要求する「すべてのパラメータ・capture の unit が所有される」も満たす。
+
+**次の 2 つは、`ρ0` を辿り、2 つの `App` の与件を `f` の実際の実行と一致させた 1 つの活性化に
+ついての主張である。** D12 がすべての活性化について条件を課すのに対し、A19 (ii-b) と P18a を破るには
+活性化が 1 つあればよい。その活性化では `H(O_p)` は `Let(p, ・)` で 1、`Retain(m, [])` で 2、
+`App(f, [p])` の中の `f` の `Release(b, [])` で 1、`Release(m, [])` で 0 になる。
+
+**A19 (ii-b) が破れる。** 破れる節点は `Let(w, App(f, [q]), ・)` の入口である。`m` と `p` は 1 つの
+別名類 `C` に属し (`L11b` より、L8 (A) の `Binding::Join` の腕が渡す段はアーム本体の `Ret` の別名の辺
+である)、上の表より `held_ρ0(・, C)` はその点で 1 である。`Retain(m, [])` が積んだ要素はそのとき
+`pending` に在り、その `B_ρ0` は `(m, [])` を 1 つ数えるので `bumps_ρ0(・, C) = 1` である。よって
+(ii-b) が要求する `held ≥ 1 + bumps = 2` を `held_ρ0(・, C) = 1` は破る。**この点は
+`held = bumps = 1` なので、README が A19 で「`held ≥ bumps` は真だが弱すぎて、P18a が要る形を
+出さない」と述べるときに引く形でもある** -- `held ≥ bumps` はこの点を許すが (ii-b) は許さない。
+P18a も同じ点で破れる -- `N_ρ0(・, O_p) = 1` に対して `H(O_p) = 1` である。
 
 **`cancel` は対を消す。** `origin(m, [])` は `Binding::Join([p, q])` の腕を取り、候補 `{(p, []), (q, [])}`
 が 2 元なので `Join { identity: (m, []), candidates }` である。よって `ActRefs(m, []) = {(m, []): 1}` で
@@ -2991,56 +4268,8 @@ CancelAnalysis::walk_inner` の `RcExpr::Retain(v, path, _, k)` の腕)。`App(f
 `InBracket` を返し、`cancelled()` が `Retain(m, [])` とその `Release` を返す。消した後は `App(f, [p])` が
 `O_p` を解放し、`Eval(m)` が解放済みの `O_p` を読む -- (S-c) 違反である。
 
-**この形は `insert_rc` の出力ではない。** README の A19 が「`C1` と `C2` はどちらも `insert_rc` の出力では
-ない (`p60` の `L10`)。`Retain` の直後の節点がその変数を名指さないので、節点 1 つを見るだけで弾ける」と
-述べる。`C1` の `Retain(m, [])` の直後の節点は `Let(u, App(f, [p]), ...)` であり、`m` を名指さない。
-
-#### 7.5.8 反例 `C2` (A19 (ii-b) の破れ方は `Join` に限らない)
-
-`C1` は `Join` が 1 つのオブジェクトに 2 つ目の名前を与える形である。A19 (ii-b) の破れ方はそれだけでは
-ない。次の `C2` には `Match` が無く、`origin` はどの leaf についても `Origin::Exactly` を返す。
-
-関数 `id` (パラメータ `a : Arr`、`borrowed_units` は空、返り値の型 `Arr`): `Ret(a)`。
-関数 `f` は 7.5.7 のもの。
-
-関数 `main` (パラメータ無し、返り値の型 `I`):
-
-```
-Let(o, Llvm(alloc, []),
-Let(y, App(id, [o]),
-Retain(o, [], s,
-Let(u, App(f, [y]),
-Eval(o,
-Release(o, [], s,
-Ret(u)))))))
-```
-
-`o` のオブジェクトを `O` と書く。`Obl` と `H(O)` は `{O}, 1` → `{O}, 1` → `{O, O}, 2` → `{O}, 1` →
-`{O}, 1` → `{}, 0` と動く。第 2 行は D9 の `App` の行 (`id` は `a` を所有するので `o` の leaf を消費し、
-`H` は動かない) と D10 の生成の表 (`App` の結果の leaf が参照を生じ、`H` はここでは動かない) による。
-`main` の 3 つの節はどれも成り立つので `C2` は D12 を満たす。
-
-**A19 (ii-b) が破れる。** `o` と `y` は別の別名類である -- `y` は `RcRhs::App(..)` に束縛されるので
-`Binding::Producer` であり、`origin(y, []) = Origin::Exactly((y, []))` で ρ-歩みを持たない
-(`CODE src/rc_ir/ownership.rs: collect_bindings`, `CODE src/rc_ir/ownership.rs: origin_inner`)。
-`o` の類を `C_o`、`y` の類を `C_y` と書くと、`held_ρ(·, C_o)` は割り当てで 1、`App(id, [o])` の消費で 0、
-`Retain(o, [])` で 1 になる。`Retain(o, [])` の要素が `pending` に在る間 `bumps_ρ(·, C_o) = 1` なので、
-(ii-b) が要求する `held ≥ 1 + bumps = 2` を `held_ρ(·, C_o) = 1` は破る。**この類は
-`held = bumps = 1` の時点を持つので、README が A19 で「`held ≥ bumps` は真だが弱すぎて、P18a が要る形を
-出さない」と述べるときに引く例でもある** -- `held ≥ bumps` はこの時点を許すが (ii-b) は許さない。
-
-**`cancel` は対を消す。** `App(f, [y])` の消費が渡す `acted_on(y, []) = {(y, [])}` は
-`t.outstanding = {(o, []): 1}` の鍵ではない。よって要素は残り、`Release(o, [])` が `un_bump` で `InBracket` を返し、対が消える。消した後は
-`App(f, [y])` の中で `f` の `Release(b, [])` が `O` を解放し、`Eval(o)` が解放済みの `O` を読む。
-
-**`C2` が示すこと。** ずれを作っているのは `Join` ではなく `App` である。`o` の参照は `id` の活性化を
-通って `y` に戻り、`origin` は `y` を `Producer` として `Exactly((y, []))` と答えるので、同じ参照が
-呼び出しの前と後で別の別名類に属する。`Join` の候補を `pending` の要素に持たせても、この形には
-触れない -- `Others(o, [])` は空だからである。
-
-**この形も `insert_rc` の出力ではない。** README の A19 が引く `p60` の `L9` -- 「`insert_rc` が出す
-`Retain` は、間に `Retain` 以外の節点を挟まず、同じ変数を名指す構文の直前に立つ」-- と `L10` が
-これを与える。`C2` の `Retain(o, [])` の直後の節点は `Let(u, App(f, [y]), ...)` であり、`o` を
-名指さない。**「消費された変数はその後 live でない」という理由づけはこの本体では偽である** -- `o` は
-`Eval(o)` で使われるので `App(id, [o])` の時点で live であり、`insert_rc` の liveness はこの形を
-弾かない。弾くのは `L9` の「直前に立つ」の側である。
+**この形は `insert_rc` の出力ではない。** README の A19 が「したがって **`C1` は `insert_rc` の
+出力ではない** (`L10`)。`Retain` の直後の節点がその変数を名指さないので、節点 1 つを見るだけで
+弾ける。」と述べる。**この文書が置く反例は `C1` だけである。** その `L10` は
+`p60-insert-rc.md` の命題である。`C1` の `Retain(m, [])` の直後の節点は
+`Let(u, App(f, [p]), ...)` であり、`m` を名指さない。

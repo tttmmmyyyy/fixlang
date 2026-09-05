@@ -6,9 +6,11 @@ use std::hash::{Hash, Hasher};
 
 /// The name of a module, a namespace, a type, a trait, a value or a field, as it is written in
 /// source.
+// PROOF: P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub type Name = String;
 
 /// The path of names an entity is written under: the `Std::Iterator` of `Std::Iterator::empty`.
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NameSpace {
     /// The names of the path, the outermost first.
@@ -18,6 +20,7 @@ pub struct NameSpace {
     pub is_absolute: bool,
 }
 
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for NameSpace {
     /// Hashes the names of the path; `is_absolute` takes no part, as it takes none in equality.
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -25,6 +28,7 @@ impl Hash for NameSpace {
     }
 }
 
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for NameSpace {
     /// Whether the two paths hold the same names; `is_absolute` takes no part.
     fn eq(&self, other: &Self) -> bool {
@@ -32,8 +36,10 @@ impl PartialEq for NameSpace {
     }
 }
 
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Eq for NameSpace {}
 
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialOrd for NameSpace {
     /// Orders by the rendered path, such as `Std::Iterator`.
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -41,6 +47,7 @@ impl PartialOrd for NameSpace {
     }
 }
 
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Ord for NameSpace {
     /// Orders by the rendered path, such as `Std::Iterator`.
     fn cmp(&self, other: &Self) -> Ordering {
@@ -48,8 +55,10 @@ impl Ord for NameSpace {
     }
 }
 
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl NameSpace {
     /// The empty path, which a name written with no qualification carries.
+    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn local() -> Self {
         Self {
             names: vec![],
@@ -58,6 +67,7 @@ impl NameSpace {
     }
 
     /// A path of `names`, the outermost first, written with no leading `::`.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(names: Vec<String>) -> Self {
         Self {
             names,
@@ -71,11 +81,13 @@ impl NameSpace {
     }
 
     /// A path of `names`, the outermost first, written with no leading `::`.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn from_strs(names: &[&str]) -> Self {
         Self::new(names.iter().map(|s| s.to_string()).collect())
     }
 
     /// Whether the path holds no name, as the path of a name written with no qualification does.
+    // PROOF: P7c, P7f, P18a, P18b, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         self.names.len() == 0
     }
@@ -99,6 +111,7 @@ impl NameSpace {
     ///
     /// # Examples
     /// `NameSpace::from_strs(&["Std", "Iterator"]).to_string()` is `"Std::Iterator"`.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn to_string(&self) -> String {
         self.names.join(NAMESPACE_SEPARATOR)
     }
@@ -168,6 +181,7 @@ impl NameSpace {
 
     /// The module the path lies in, which is the first of its names. The path must hold at least
     /// one name.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn module(&self) -> Name {
         self.names[0].clone()
     }
@@ -232,7 +246,7 @@ impl NameSpace {
 
 /// An entity's name together with the path it is written under: `Std::Iterator::empty` is the name
 /// `empty` under the namespace `Std::Iterator`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FullName {
     /// The path the entity is written under.
@@ -241,6 +255,7 @@ pub struct FullName {
     pub name: String,
 }
 
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for FullName {
     /// Hashes the names of the namespace and the entity's name; `is_absolute` takes no part.
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -249,6 +264,7 @@ impl Hash for FullName {
     }
 }
 
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Debug for FullName {
     /// Writes the full name as it is written in source, with the leading `::` of an absolute name.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -261,6 +277,7 @@ impl Debug for FullName {
     }
 }
 
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialOrd for FullName {
     /// Orders by the rendered full name, such as `Std::Iterator::empty`; `is_absolute` takes no
     /// part.
@@ -269,6 +286,7 @@ impl PartialOrd for FullName {
     }
 }
 
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Ord for FullName {
     /// Orders by the rendered full name, such as `Std::Iterator::empty`; `is_absolute` takes no
     /// part.
@@ -277,8 +295,10 @@ impl Ord for FullName {
     }
 }
 
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl FullName {
     /// The name `name` under the namespace `ns`.
+    // PROOF: P3, P4, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(ns: &NameSpace, name: &str) -> Self {
         Self {
             namespace: ns.clone(),
@@ -287,18 +307,19 @@ impl FullName {
     }
 
     /// The name `name` under the namespace `ns` spells out, the outermost name first.
+    // PROOF: P3, P4, P5, P6, P7, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn from_strs(ns: &[&str], name: &str) -> Self {
         Self::new(&NameSpace::from_strs(ns), name)
     }
 
     /// The name `name` written with no namespace.
-    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn local(name: &str) -> Self {
         Self::new(&NameSpace::local(), name)
     }
 
     /// Whether the name is written with no namespace, as a local variable's is.
-    // PROOF: (P-insert) (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7c, P7f, P18a, P18b, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_local(&self) -> bool {
         return self.namespace.is_local();
     }
@@ -347,6 +368,7 @@ impl FullName {
     /// # Examples
     /// `FullName::from_strs(&["Std", "Iterator"], "empty").to_string()` is
     /// `"Std::Iterator::empty"`.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn to_string(&self) -> String {
         let ns = self.namespace.to_string();
         if ns.is_empty() {
@@ -363,6 +385,7 @@ impl FullName {
     }
 
     /// The whole name read as a path, with the entity's name as its last name.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn to_namespace(&self) -> NameSpace {
         let mut names = self.namespace.names.clone();
         names.push(self.name.clone());
@@ -373,6 +396,7 @@ impl FullName {
     }
 
     /// The module the name lies in, which is the first name of its namespace.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn module(&self) -> Name {
         self.namespace.module()
     }
@@ -427,6 +451,7 @@ impl FullName {
     }
 
     /// Marks the name as one written with a leading `::`.
+    // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_absolute(&mut self) {
         self.namespace.is_absolute = true;
     }

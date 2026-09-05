@@ -40,7 +40,7 @@ use std::sync::Arc;
 type SpecializationKey = Vec<Uniqueness>;
 
 /// Specialize `prog` and eliminate the unique checks each specialization makes provable.
-// PROOF: P26, T (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let analysis = analyze_program(prog, type_env);
     let mut spec = Specializer {
@@ -141,6 +141,7 @@ impl<'a> Specializer<'a> {
 
     /// Materialize one clone: rewrite the original body under the clone's inputs, flipping the checks
     /// its key makes provable and routing its direct calls.
+    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn materialize_clone(&mut self, fref: &FuncRef, key: &SpecializationKey) -> RcFunc {
         let func = self.prog.funcs[fref].clone();
         let inputs = self.input_uniqueness(&func, key);

@@ -1,9 +1,11 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
 use std::env;
 
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
 
+// PROOF: P1, P2, P5, P6, P7, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const STD_NAME: &str = "Std";
 pub const FFI_NAME: &str = "FFI";
 pub const IO_NAME: &str = "IO";
@@ -23,6 +25,7 @@ pub const I64_NAME: &str = "I64";
 pub const U64_NAME: &str = "U64";
 pub const F32_NAME: &str = "F32";
 pub const F64_NAME: &str = "F64";
+// PROOF: P3, P4, P5, P6, P7, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const ARROW_NAME: &str = "Arrow";
 
 pub const C_CHAR_NAME: &str = "CChar";
@@ -40,11 +43,15 @@ pub const C_FLOAT_NAME: &str = "CFloat";
 pub const C_DOUBLE_NAME: &str = "CDouble";
 
 pub const IOSTATE_NAME: &str = "IOState";
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const BOOL_NAME: &str = "Bool";
+// PROOF: P3, P4, P5, P6, P7, P7a, P7d, P7e, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const ARRAY_NAME: &str = "Array";
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub const PUNCHED_ARRAY_NAME: &str = "PunchedArray";
 pub const LAZY_NAME: &str = "Lazy";
 pub const FUNCTOR_NAME: &str = "Functor";
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const TUPLE_NAME: &str = "Tuple";
 pub const DESTRUCTOR_NAME: &str = "Destructor";
 pub const DESTRUCTOR_OBJECT_VALUE_FIELD_IDX: u32 = 0;
@@ -94,6 +101,7 @@ pub const STRUCT_ACT_SYMBOL: &str = "act_";
 /// separator of `symbol@version`, so GNU ld refuses a symbol carrying one while it builds the
 /// dynamic symbol table of a shared library. A Fix name carries one wherever it names a field
 /// getter (`STRUCT_GETTER_SYMBOL`).
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const SYMBOL_VERSION_SEPARATOR: &str = "@";
 
 /// What `SYMBOL_VERSION_SEPARATOR` is written as in a symbol table. `$` is legal there, and no Fix
@@ -106,8 +114,9 @@ pub const UNION_IS_SYMBOL: &str = "is_";
 pub const UNION_MOD_SYMBOL: &str = "mod_";
 
 // Names used by compiler.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P3, P4, P5, P6, P7, P7a, P7d, P7e, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const FUNPTR_NAME: &str = "#FunPtr";
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
 // The internal boxed type holding an array's refcount and raw element buffer. Like `#DynamicObject`,
 // its `#` prefix makes it un-nameable in source, so it cannot leak out of `Array`'s interface.
@@ -118,7 +127,7 @@ pub const STRUCT_PUNCH_SYMBOL: &str = "#punch_";
 pub const STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL: &str = "#punch_fu_";
 pub const STRUCT_PLUG_IN_SYMBOL: &str = "#plug_in_";
 pub const STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL: &str = "#plug_in_fu_";
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 /// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
 /// it is the one local name that the free variables of an expression leave out.
@@ -136,7 +145,6 @@ pub const CLOSURE_SPEC_SUFFIX: &str = "#closure_spec";
 pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
 /// The prefix of the type constructor naming a capture list that closure specialization builds. A
 /// parameter of this type is a function whose identity the receiving body knows.
-// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub const CAP_LIST_PREFIX: &str = "#CapList";
 /// The prefix of the name `collapse_constructions` binds a field value to, so that a reader of the
 /// struct is given a name rather than the expression that produced the value.
@@ -170,9 +178,10 @@ pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 /// The index, among a closure's fields, of the pointer to the captured values the function is
 /// called with.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 /// How many fields a closure has: the function pointer and the capture.
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const CLOSURE_FIELD_COUNT: usize = 2;
 // Field layout of the unbox `Array` value: a `SubObject` pointer to the `#ArrayStorage`, then the
 // register-resident size and capacity.
@@ -256,6 +265,7 @@ pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct RefcntState(u8);
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 impl RefcntState {
     /// Reachable from one thread: the count is updated without atomics, and the object is freed
     /// when it reaches zero.
@@ -336,8 +346,10 @@ pub const TRY_FIX_DEPS_UPDATE_TEST: &str =
 /// The work a traverser function performs on the boxed objects an object owns. The wrapped value is
 /// one of the `TRAVERSER_WORK_*` codes, and is what the generated traverser receives as its work
 /// argument when the work is chosen at run time.
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct TraverserWorkType(pub u32);
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TraverserWorkType {
     /// Drop one reference to each object reached, freeing an object whose count falls to zero.
     pub fn release() -> Self {
@@ -356,6 +368,7 @@ impl TraverserWorkType {
 }
 pub const TRAVERSER_WORK_RELEASE: u32 = 0;
 pub const TRAVERSER_WORK_MARK_GLOBAL: u32 = 1;
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const TRAVERSER_WORK_MARK_THREADED: u32 = 2;
 
 #[allow(unused)]
@@ -374,13 +387,13 @@ pub const DW_ATE_UNSIGNED: u32 = 7;
 pub const DW_ATE_UNSINGED_CHAR: u32 = 8;
 
 // Max number of arguments of function pointer lambda.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub const FUNPTR_ARGS_MAX: u32 = 100;
 // The max size of tuples which are defined in any program.
 // Any bigger tuples are defined on demand.
 pub const TUPLE_SIZE_BASE: u32 = 3;
 // Is tuple unboxed?
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const TUPLE_UNBOX: bool = true;
 
 // The type in LLVM corresponding to `pthread_once_t` of this system.

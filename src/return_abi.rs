@@ -168,6 +168,7 @@ fn demand_of(ty: BasicTypeEnum) -> RegisterDemand {
 /// This must depend on the part types and the target alone. Under separated compilation the units
 /// that define a function and that call it are generated apart, so a decision reading anything else
 /// could differ between the two and break the ABI between them.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn returns_through_out_pointer(part_tys: &[BasicTypeEnum], budget: ReturnRegisters) -> bool {
     let demand = part_tys
         .iter()

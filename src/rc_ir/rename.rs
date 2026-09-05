@@ -14,7 +14,7 @@ use std::sync::Arc;
 /// rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
 /// callers use to remap side tables and to route recursive references. `pass_tag` distinguishes this
 /// cloning pass's fresh names from the others'.
-// PROOF: D/A, P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn fresh_rename_function(
     params: &[RcVar],
     cap: &Option<RcVar>,
@@ -39,7 +39,7 @@ pub(crate) fn fresh_rename_function(
 }
 
 /// Assign `name` a fresh globally-unique name, suffixed with `pass_tag` and a counter.
-// PROOF: D/A, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_name(
     name: &FullName,
     pass_tag: &str,
@@ -60,7 +60,7 @@ fn assign_fresh_name(
 }
 
 /// Record a fresh name for every variable bound in a function body.
-// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_names_to_binders(
     node: &RcExprNode,
     pass_tag: &str,
@@ -71,7 +71,7 @@ fn assign_fresh_names_to_binders(
 }
 
 /// Record the fresh name of every binder of one node, then descend into its continuation and arms.
-// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn assign_fresh_names_to_binders_inner(
     node: &RcExprNode,
     pass_tag: &str,
@@ -109,7 +109,7 @@ fn assign_fresh_names_to_binders_inner(
 
 /// A variable with its name rewritten through `renaming`. A name `renaming` leaves out, such as a
 /// global's, stays as it is.
-// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
     let mut v = var.clone();
     if let Some(n) = renaming.get(&var.name) {
@@ -120,13 +120,13 @@ fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
 
 /// A deep clone of an expression with every variable occurrence rewritten through `renaming`. The
 /// operand names embedded in an `Llvm` generator are rewritten too, since they name the same locals.
-// PROOF: P2a, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P7a, P7d, P7e, P15, P16, P17, P18, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_expr(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     grow_stack(|| rename_expr_inner(node, renaming))
 }
 
 /// Rebuild one node with its variable occurrences rewritten, over its rewritten continuation.
-// PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     let expr = match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => RcExpr::Let(
@@ -166,7 +166,7 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
 
 /// A right-hand side with every variable occurrence (including `Llvm` operand names) rewritten
 /// through `renaming`.
-// PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
     match rhs {
         RcRhs::Var(v) => RcRhs::Var(rename_var(v, renaming)),
@@ -207,6 +207,7 @@ fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
 /// Substitute variable occurrences through `subst` in a deep clone of `node`, leaving binders and
 /// structure otherwise intact. A name `subst` maps must not be re-bound within `node`, so a map
 /// covering only some of the variables suffices.
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn substitute_expr(node: &RcExprNode, subst: &Map<FullName, FullName>) -> RcExprNode {
     rename_expr(node, subst)
 }
@@ -214,6 +215,7 @@ pub(crate) fn substitute_expr(node: &RcExprNode, subst: &Map<FullName, FullName>
 /// A deep clone of an arbitrary expression with every bound variable given a fresh globally-unique
 /// name. Free variables — those bound outside `node` — are left unchanged. `pass_tag` distinguishes
 /// this clone's fresh names from the ones other passes mint.
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn clone_fresh(node: &RcExprNode, pass_tag: &str, counter: &mut u64) -> RcExprNode {
     let mut rename: Map<FullName, FullName> = Map::default();
     assign_fresh_names_to_binders(node, pass_tag, &mut rename, counter);
