@@ -2436,16 +2436,24 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   <2>1. 骨格節点を書き換える `insert_into_expr` の呼び出しは、本体の根についてのものか、ある骨格節点
         `m_0` の継続についてのものか、ある `Let(x, Match(scrut, arms), cont)` のアーム本体についての
         ものかの 3 通りである。
-    BY <ref id=b3dfa37/>, CODE src/rc_ir/rc_insert.rs: insert_rc,
+    BY <ref id=b3dfa37/>, EXT クレートの項目, EXT ビルドの対象, EXT 非公開の項目の可視範囲,
+       CODE src/rc_ir/rc_insert.rs: insert_rc,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
-    `insert_into_expr` を呼ぶのは `insert_rc` と `insert_into_func` (根) と、`insert_into_operation_let`・
-    `insert_into_destructure`・`insert_into_eval`・`insert_into_match` の継続についての呼び出しと、
-    `insert_into_match` のアーム本体についての呼び出しである。
+    **呼び出し元の集合は可視性で閉じる。** `insert_into_expr` は `RcInserter` の非公開のメソッドで
+    あり、`RcInserter` 自身も `src/rc_ir/rc_insert.rs` の非公開の項目なので、
+    `EXT 非公開の項目の可視範囲` よりそれを呼ぶ式はそのモジュールとその子孫の中にしかない。
+    `EXT クレートの項目` よりそのモジュールの項目はこのファイルに書かれたものだけであり、
+    `EXT ビルドの対象` より走査の範囲は `src/` の全ファイルである。よってファイルの全文を読んで得た
+    呼び出し元の一覧は完全であり、`insert_into_expr` を呼ぶのは `insert_rc` と `insert_into_func`
+    (根) と、`insert_into_operation_let`・`insert_into_destructure`・`insert_into_eval`・
+    `insert_into_match` の継続についての呼び出しと、`insert_into_match` のアーム本体についての
+    呼び出しである。
   <2>2. `insert_into_expr(n, L)` が返す集合の各名前は、`n` の部分木の中で使われる名前か `L` の元で
         ある。
     BY <ref id=3e6b0e0/>, <ref id=d80dde9/>, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
@@ -2556,7 +2564,15 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
     束縛する `x` のスコープは `cont` の部分木であってアーム本体を含まず、A6 より `x` という名前を
     束縛するものはプログラム全体で 1 つだけなので、アーム本体は `x` を参照しない。よって `Λ(m)` は
     `(∪_j (free_locals(arm_j.body) \ {payload_j})) ∪ (free_locals(cont) \ {x}) ∪ {scrut} ∪ A(m)` で
-    あり (`x ∉ A(m)` は <1>3)、<1>1 よりこれは `free_locals(m) ∪ A(m)` である。
+    ある (`x ∉ A(m)` は <1>3)。
+    **`scrut` が `m` の部分木の束縛する名前でないことが要る** -- <1>1 の `free_locals(m)` は `refs`
+    から `m` の部分木が束縛する名前 `bound` を落とすので、`scrut` が `bound` に入ればこの項が消える。
+    A11 より `scrut` の使用はその位置でスコープに入っている束縛に解決し、A6 よりその名前を束縛する
+    ものはプログラム全体で 1 つだけである。D2 のスコープの規則より、`m` の部分木の束縛 -- `x`、各
+    アームの payload、およびそれより深い節点の束縛 -- のスコープはどれも `cont` の部分木かアーム
+    本体の部分木に収まり、scrutinee の位置を含まない。よって `scrut ∉ bound` である
+    (兄弟の <2>2 と <2>3 が `ops`・`container` について置くのと同じ節である)。
+    <1>1 よりこれは `free_locals(m) ∪ A(m)` である。
   <2>6. CASE `m` が `Retain` または `Release` である。
     BY <ref id=d80dde9/>
     A25 より骨格はこの 2 種を含まないので、この場合は起きない。
@@ -2588,11 +2604,47 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
 **証明**
 
 <1>1. (a)。
-  BY <ref id=8e3aff3/>, <ref id=66e786e/>, <ref id=3905b4e/>
-  `L14` (a) より `Λ(m) = free_locals(m) ∪ A(m)`。`free_locals(m)` の各名前は `m` の部分木が参照して束縛
-  しない名前なので、A11 よりその束縛は `m` を囲むスコープに在り、`m` の検査点までに値を得ている。
-  `L14` (b) より `A(m)` の各名前は `m` の部分木の外にある位置で使われる名前であり、同じ理由でその束縛は
-  `m` を囲むスコープに在る。
+  <2>1. `free_locals(m)` の各名前を束縛するのは、`m` の真の祖先の骨格節点か、その本体のパラメータ・
+        capture である。
+    BY <ref id=8e3aff3/>, <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=b3dfa37/>,
+       CODE src/rc_ir/rc_insert.rs: free_locals,
+       CODE src/rc_ir/rc_insert.rs: collect_referenced_and_bound
+    `free_locals(m)` は `m` の部分木が参照する局所名から、その部分木が束縛する局所名を落としたもので
+    ある。その各名前 `n` は `m` の部分木の中のある位置で使われる。A11 よりその使用はその位置で
+    スコープに入っている束縛に解決し、A6 よりその名前を束縛するものはプログラム全体で 1 つだけである。
+    D2 のスコープの規則より、その束縛は `Let`/`Destructure` の束縛 (スコープは継続の部分木)、`Match` の
+    アームの payload (スコープはそのアーム本体の部分木)、パラメータ・capture (スコープは本体の全体) の
+    いずれかである。前 2 者のスコープが `m` の部分木の中の位置を含むのは、その束縛の節点が `m` の
+    祖先であるか `m` の部分木の中に在るときに限る。`n` は `m` の部分木が束縛する名前ではないので、
+    残るのは `m` の真の祖先か、パラメータ・capture である。A6 と A11 を `insert_rc` の入力と出力に
+    ついて読めるのは A2 による。
+  <2>2. `A(m)` の各名前を束縛するのは、`m` の真の祖先の骨格節点か、その本体のパラメータ・capture で
+        ある。
+    BY <2>1, <ref id=66e786e/>, <ref id=b3dfa37/>, EXT 呼び出しの入れ子,
+       CODE src/rc_ir/rc_insert.rs: insert_rc,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval,
+       CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_match
+    骨格節点を書き換える `insert_into_expr` の呼び出しの入れ子の深さについての帰納
+    (`EXT 呼び出しの入れ子` より入れ子は木をなし、D2 より骨格は有限の木なので深さは有限である)。
+    本体の根では `A(根) = ∅` なので量化する名前が無い。`m` が骨格節点 `m_0` の継続であるとき、
+    4 つの関数はいずれも `self.insert_into_expr(cont, live_after)` を呼ぶので `A(m) = A(m_0)` であり、
+    `m_0` の真の祖先は `m` の真の祖先である。`m` が `m_0 = Let(x, Match(scrut, arms), cont)` の
+    アーム本体であるとき、`insert_into_match` は `A(m) = live_cont \ {x}` の下でアーム本体を書き換え、
+    `L14` (a) より `live_cont = free_locals(cont) ∪ A(m_0)` である。<2>1 を `cont` に当てると
+    `free_locals(cont)` の各名前を束縛するのは `cont` の真の祖先 -- `m_0` かその祖先 -- か
+    パラメータ・capture であり、`m_0` が束縛するのは `x` だけなのでそれを除くと `m_0` の真の祖先か
+    パラメータ・capture が残る。`A(m_0)` の側は帰納法の仮定である。`m_0` の真の祖先も `m_0` 自身も
+    `m` の真の祖先である。
+  <2>3. QED
+    BY <2>1, <2>2, <ref id=8e3aff3/>, <ref id=66e786e/>, <ref id=ca36627/>, <ref id=596a46d/>, <ref id=b3dfa37/>
+    `L14` (a) より `Λ(m) = free_locals(m) ∪ A(m)` なので、<2>1 と <2>2 よりその各名前を束縛するのは
+    `m` の真の祖先の骨格節点かパラメータ・capture である。D3 より `ρ` は本体の根から `m` まで祖先を
+    順に辿るので、`m` の真の祖先の節点は `m` の検査点より前に実行される。D6 より節点が束縛する変数は
+    その節点を実行する段で値を得、パラメータ・capture は活性化が始まる時点で値を得る。よって
+    `Λ(m)` の各名前は `m` の検査点に至るまでに値を得ている。
 
 <1>2. (b)。
   BY <ref id=8e3aff3/>, <ref id=66e786e/>, <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=b3dfa37/>, CODE src/rc_ir/rc_insert.rs: free_locals,
@@ -2612,7 +2664,10 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   真の型は boxed leaf を持たない。D6 よりスロットは boxed leaf についてのみ在る。
 
 <1>4. (d)。
-  BY <ref id=8e3aff3/>, <ref id=cb35ab1/>, <ref id=b3dfa37/>, <ref id=596a46d/>, EXT クレートの項目,
+  BY <ref id=8e3aff3/>, <ref id=cb35ab1/>, <ref id=b3dfa37/>, <ref id=596a46d/>, <ref id=3e6b0e0/>,
+     EXT クレートの項目, EXT ビルドの対象, EXT 条件つきコンパイル,
+     CODE src/rc_ir/rename.rs: rename_expr_inner,
+     CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders_inner,
      CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: VarTable::of,
      CODE src/rc_ir/ownership.rs: VarTable::body_only,
      CODE src/rc_ir/lower.rs: Lowerer::fresh_var, CODE src/rc_ir/lower.rs:
@@ -2626,9 +2681,13 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
      CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders,
      CODE src/rc_ir/rename.rs: substitute_expr,
      CODE src/rc_ir/rename.rs: rename_expr, CODE src/rc_ir/rename.rs: rename_var
-  `vars.bindings` に鍵が入るのは 2 か所である -- `VarTable::of` が入れる関数のパラメータと capture の
-  名前と、`collect_bindings` が入れる `Let`・`Destructure`・`Match` の束縛変数の名前である
-  (グローバル初期化子については `VarTable::body_only` が後者だけを入れる)。D6 は
+  `vars.bindings` に鍵を入れる式は、`EXT ビルドの対象` と `EXT クレートの項目` より `src/` の
+  全ファイルの全文を読んで数えると 4 つあり、`fix` の実行可能ファイルを作るビルドに入るのは 3 つで
+  ある -- `VarTable::of` が入れる関数のパラメータと capture の名前と、`collect_bindings` が入れる
+  2 つの式 (`Let`・`Destructure` の束縛変数と、`Match` のアームの payload の名前) である
+  (グローバル初期化子については `VarTable::body_only` が後者だけを入れる)。4 つ目は
+  `src/rc_ir/ownership.rs` の `#[cfg(test)] mod tests` のヘルパ `table` の中に在り、
+  `EXT 条件つきコンパイル` よりそのビルドには入らない。D6 は
   「**逆に、`vars.bindings` に束縛を持つ名前は局所名である。**」と述べ、その道を
   「`VarTable::of` と `VarTable::body_only` がその表に入れる鍵は、パラメータ・capture の名前と節点が
   束縛する変数の名前だけで、どれも `Lowerer::fresh_var` が `FullName::local` で作ったものである」と
@@ -2640,12 +2699,18 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   束縛の位置に名前を書く道である。」と名指し、A13 の果たす者もこの 2 人である。
   `Lowerer::fresh_var` (パラメータと capture は `lower_lambda_as_function` が、残りは各 `lower_*` が
   呼ぶ) は `FullName::local` で名前を作るので名前空間は空である。`clone_fresh` は
-  `assign_fresh_names_to_binders` を通じて各束縛変数に `assign_fresh_name` を当て、
-  `assign_fresh_name` は `name.clone()` の `name` 欄だけを `format!("{}#{}{}", ...)` で書き替えるので、
-  名前空間の欄は元の名前のものである。よってどちらの作る名前も、元が局所名なら局所名である。
+  `assign_fresh_names_to_binders` を通じて各束縛変数に `assign_fresh_name` を当てる --
+  A15 より `assign_fresh_names_to_binders` は `grow_stack` の閉包
+  `assign_fresh_names_to_binders_inner` をちょうど 1 回呼び、その本体が `Let` の束縛変数・
+  `Destructure` の各フィールド変数・`Match` の各アームの payload に `assign_fresh_name` を当てて
+  継続とアーム本体へ降りる。`assign_fresh_name` は `name.clone()` の `name` 欄だけを
+  `format!("{}#{}{}", ...)` で書き替えるので、名前空間の欄は元の名前のものである。よってどちらの
+  作る名前も、元が局所名なら局所名である。
   **`simplify` のもう 1 つの書き換え `substitute_expr` は、束縛の位置の名前を替えない。**
-  `rename_expr` は `Let` の `x`、`Destructure` のフィールド変数、`Match` の payload にも `rename_var`
-  を当てるが、`rename_var` が名前を替えるのは写像の鍵であるときだけである。`EXT クレートの項目` より
+  `substitute_expr` は `rename_expr` を呼び、A15 より `rename_expr` は `grow_stack` の閉包
+  `rename_expr_inner` をちょうど 1 回呼ぶ。`rename_expr_inner` は `Let` の `x`、`Destructure` の
+  フィールド変数、`Match` の payload にも `rename_var` を当てるが、`rename_var` が名前を替えるのは
+  その名前が写像の鍵であるときだけである。`EXT クレートの項目` より
   `src/rc_ir/simplify.rs` の項目はそのファイルに書かれたものだけなので、その呼び出しの一覧は完全で
   あり、4 つある。**そのうち 3 つは `single_subst` を通るので定義域は 1 つの名前である** --
   `case_of_known_union` のアームの payload と `Match` の束縛変数、case-of-case の外側のアームの
@@ -2674,8 +2739,10 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
      CODE src/build/build_object_files.rs: lower_and_insert_rc,
      CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/borrow.rs: clone_func,
      CODE src/rc_ir/specialization.rs: CloneRegistry::finish_clone,
+     CODE src/rc_ir/unique_check_elim.rs: Specializer::materialize_clone,
+     CODE src/rc_ir/locality.rs: specialize,
      CODE src/build/build_object_files.rs: optimize_rc_program
-  `RcFunc` の `borrowed_units` の欄に値を書く式は 7 つである。**在りかは述語で決める** -- `RcFunc` の
+  `RcFunc` の `borrowed_units` の欄に値を書く式は 8 つである。**在りかは述語で決める** -- `RcFunc` の
   リテラルでこの欄に値を置く式、`..` の構造体更新でこの欄を運ぶ式、そしてこの欄への代入である。
   **`EXT ビルドの対象` と `EXT クレートの項目` より、`src/` の全ファイルの全文を読んで得たこの一覧は
   完全である。**
@@ -2687,11 +2754,18 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
      -- この欄には `func` の値がそのまま入る。
   5. 同じ関数の残る枝が、複製の鍵を改名して組む式。
   6. `#[cfg(test)]` の下の `src/rc_ir/validate.rs` のテスト用の `RcFunc` が置く `Set::default()`。
-  7. `#[cfg(test)]` の下の `src/rc_ir/dead_code_elim.rs` のテスト用の `RcFunc` が置く `Set::default()`。
+  7. `#[cfg(test)]` の下の `src/rc_ir/dead_code_elim.rs` のテスト用の `RcFunc` が置く
+     `Set::default()`。
+  8. `#[cfg(test)]` の下の `src/rc_ir/dead_code_elim.rs` のテスト用の
+     `RcFunc { body, ..func(main.clone(), &[]) }` -- `..` の構造体更新でこの欄を運ぶ式である。
 
-  6 と 7 は `EXT 条件つきコンパイル` より `fix` の実行可能ファイルを作るビルドに入らない。2・3・4・5 は
-  いずれも `borrow_ify` の中か、`optimize_rc_program` が `borrow_ify` より後に呼ぶパス
-  (`unique_check_elim` と `locality`) の中に在るので、`insert_rc` の出力には掛からない。
+  6・7・8 は `EXT 条件つきコンパイル` より `fix` の実行可能ファイルを作るビルドに入らない。
+  2 と 3 は `borrow_ify` の中に在る。4 と 5 は `CloneRegistry::finish_clone` の中に在り、
+  **`finish_clone` を呼ぶ式は 2 つである** -- `unique_check_elim::specialize` の
+  `materialize_clone` と `locality::specialize` の中の 1 つであり、`EXT ビルドの対象` と
+  `EXT クレートの項目` より `src/` の全ファイルの全文を読んで得たこの一覧は完全である。
+  `optimize_rc_program` はこの 2 つのパスを `borrow_ify` より後に呼ぶので、2・3・4・5 はどれも
+  `insert_rc` の出力には掛からない。
   `lower_and_insert_rc` は `lower_program` の後に `simplify` と `insert_rc` を掛けるだけであり、
   そのどちらもこの欄を書かない (`insert_into_func` が代入するのは `func.body` である)。よって
   `insert_rc` の出力の各関数の `borrowed_units` は 1 が置いた空集合のままで
