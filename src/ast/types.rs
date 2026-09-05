@@ -2053,6 +2053,7 @@ impl TypeNode {
     ///
     /// # Arguments
     /// * `capture` — the types a dynamic object's destructor traverses, empty for every other type.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn traverser_name(
         self: &Arc<TypeNode>,
         capture: &Vec<Arc<TypeNode>>,
@@ -2082,6 +2083,7 @@ impl TypeNode {
     /// # Arguments
     /// * `capture` — the captured types of a dynamic object, which distinguish two dynamic objects
     ///   of the same type. Empty for every other type.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn hash_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
         // If the type is not dynamic, then the capturing types should be empty.
         assert!(self.is_dynamic() || capture.len() == 0);

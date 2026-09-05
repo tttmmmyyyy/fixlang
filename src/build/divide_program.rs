@@ -194,6 +194,7 @@ pub fn divide_among_units(
 /// call the program makes. The band a boundary falls in is one `cu_size` wide, so a size that large
 /// would leave one unit for all but two of the hashes a name can take; this answers for every name
 /// instead.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn divide_into_units(program: &RcProgram, config: &Configuration) -> Vec<CompileUnit> {
     let mut entries: Vec<FullName> = program
         .funcs

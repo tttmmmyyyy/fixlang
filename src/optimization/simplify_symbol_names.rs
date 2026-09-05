@@ -19,7 +19,7 @@ use crate::{
     misc::{insert_to_map_vec, Map},
 };
 
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run(prg: &mut Program) {
     // Get all names and unique them.
     let mut all_names = vec![];

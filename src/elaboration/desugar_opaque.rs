@@ -454,6 +454,7 @@ fn opaque_tycon_arity(resolutions: &[OpaqueTyConResolution]) -> usize {
 ///
 /// Example: `Std::repeat` with scheme `[?it : Iterator, Item ?it = a] a -> I64 -> ?it`
 /// yields one OpaqueInfo with tycon `Std::repeat::?it`, tycon_vars `[a]`, tycon_kind `* -> *`.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo> {
     // Find all opaque type variables in the scheme.
     let all_vars = collect_free_vars(&scm.predicates, &scm.equalities, &scm.ty);
@@ -693,7 +694,6 @@ fn build_wrap_scheme(
 /// The wrapper App inherits the inner expression's source span so that type
 /// errors raised while type-checking the body are attributed to the
 /// user-written expression rather than appearing without a location.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn wrap_with_opaque(wrap_name: &FullName, inner: Arc<ExprNode>) -> Arc<ExprNode> {
     let src = inner.source.clone();
     expr_app(expr_var(wrap_name.clone(), None), vec![inner], src)
@@ -815,7 +815,6 @@ pub fn resolve_opaque_type_in_type(
 
 /// Remove the #wrap_opaque application from the top level of an expression.
 /// Transforms `#wrap_opaque(expr)` to `expr`. Only checks the outermost application.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn remove_opaque_wrapper_func(expr: Arc<ExprNode>) -> Arc<ExprNode> {
     if let Expr::App(func, args) = expr.expr.as_ref() {
         if args.len() == 1 {

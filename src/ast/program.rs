@@ -233,6 +233,7 @@ impl TypeEnv {
 
 /// A Fix value at one concrete type, under a name of its own. A generic definition becomes one
 /// symbol per type it is used at, and the program that reaches code generation is made of these.
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct Symbol {
     /// The name this symbol is known by, unique across the program. Instantiation builds it from
@@ -1641,7 +1642,6 @@ impl Program {
     ///
     /// Assumes that `resolve_namespace_and_check_type_in_modules` has already
     /// run over all global values.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn instantiate_symbol(
         &mut self,
         sym: &mut Symbol,
@@ -1825,7 +1825,6 @@ impl Program {
     /// value is instantiated at for the type the reference has, queueing each such instantiation.
     /// An expression whose type still holds a type variable is reported as one whose type cannot be
     /// inferred.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn instantiate_expr(&mut self, expr: &Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
         let ret = match &*expr.expr {
             Expr::Var(v) => {
@@ -1923,7 +1922,6 @@ impl Program {
     /// Ask that the generic value `name` be instantiated at type `ty`, and return the name that
     /// instantiation is known by. Asking twice for the same name and type yields that one name and
     /// queues one symbol, whose expression is filled in when the queue is drained.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn require_instantiation(
         &mut self,
         name: &FullName,

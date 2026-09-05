@@ -99,6 +99,7 @@ pub const STRUCT_ACT_SYMBOL: &str = "act_";
 /// separator of `symbol@version`, so GNU ld refuses a symbol carrying one while it builds the
 /// dynamic symbol table of a shared library. A Fix name carries one wherever it names a field
 /// getter (`STRUCT_GETTER_SYMBOL`).
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const SYMBOL_VERSION_SEPARATOR: &str = "@";
 
 /// What `SYMBOL_VERSION_SEPARATOR` is written as in a symbol table. `$` is legal there, and no Fix

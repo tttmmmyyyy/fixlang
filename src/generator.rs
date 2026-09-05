@@ -898,6 +898,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// An empty LLVM module called `name`, carrying the triple and data layout of `target_machine`
     /// so that the types built in it get that target's sizes, alignments and offsets.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn create_module(
         name: &str,
         ctx: &'c Context,
@@ -965,6 +966,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Opens the debug information of this module: the builder every debug entity is emitted
     /// through, and the compilation unit they all belong to, whose directory is the one the build
     /// runs in.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn create_debug_info(&mut self) {
         let debug_metadata_version = self.context.i32_type().const_int(3, false);
         self.module.add_basic_value_flag(
@@ -2490,6 +2492,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Release `obj`: decrement the reference count of every boxed object it owns, destroying the
     /// ones whose count reaches zero.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn release(&mut self, obj: Object<'c>, state: RcState) {
         let prefix = format!("release{}", state.name_suffix());
         self.emit_rc_helper_call(obj, &prefix, "call_release", move |gc, obj| {
@@ -2505,7 +2508,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Put every boxed object `obj` owns into the global refcount state, in which an object is
     /// neither retained, released nor freed, so that it lives for the rest of the program.
-    // PROOF: D/A, P26, P28 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn mark_global(&mut self, obj: Object<'c>) {
         self.emit_rc_helper_call(obj, "mark_global", "call_mark_global", |gc, obj| {
             gc.build_traverser_work(obj, TraverserWorkType::mark_global(), RcState::Unknown);

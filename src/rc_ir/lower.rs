@@ -54,7 +54,7 @@ enum LoweredSymbol {
 /// `symbols` holds it (`Program::global_types`). `roots` names what code generation reaches the
 /// lowered program from outside it; it becomes `RcProgram::roots`, and the build driver takes it
 /// from `Program::root_value_names`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lower_program(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -541,7 +541,7 @@ impl<'a> Lowerer<'a> {
     /// Lower a lambda written in place to a closure value: its body becomes a top-level function
     /// under a fresh name, and the binding appended builds the closure from that function and the
     /// values it captures, in the order the closure stores them.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lam(
         &mut self,
         expr: &ExprNode,

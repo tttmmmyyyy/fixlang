@@ -285,6 +285,7 @@ impl RcState {
     /// The suffix a reference-counting helper generated under this state carries in its name. The
     /// helpers and traversers are memoized by name, so this is what keys one per (type, state) and
     /// gives the states that generate the same code a single definition.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn name_suffix(self) -> &'static str {
         if self.dispatches() {
             ""
