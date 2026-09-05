@@ -120,7 +120,7 @@ README の A19 は「**「各時点」は、その活性化が生きている (D
 (`p20-borrow-ify.md` の第 13 節) である。」と 2 人挙げ、この文書が果たすのは前者である。
 第 10.7 節の `L19` (d) がその段であり、その言明も同じ範囲で量化する。
 
-**外部の結果。** README が `EXT` の名札を与える群の項目を、この文書は次の 11 個据える。
+**外部の結果。** README が `EXT` の名札を与える群の項目を、この文書は次のとおり据える。
 
 **EXT 呼び出しの入れ子**。1 つのスレッドの
 計算において、関数の呼び出しは開始と終了について入れ子をなす。すなわち、呼び出し `c` の実行中に
@@ -145,6 +145,20 @@ README の A19 は「**「各時点」は、その活性化が生きている (D
 
 **EXT `Vec::extend`**。`v.extend(it)` は、`it` が生む元を順に `v` の末尾へ足す
 (`alloc::vec::Vec` の `Extend` の実装)。
+
+**EXT `Iterator::filter_map`**。`it.filter_map(f)` は、`it` が生む各元 `a` について `f(a)` が
+`Some(b)` のとき `b` を生み、`None` のとき何も生まない反復子である
+(`core::iter::Iterator::filter_map`)。
+
+**EXT 空の列の第 1 元**。`v.first()` は、`v` が空のとき `None` を返し、そうでないとき第 1 元への
+参照を包んだ `Some` を返す (`core::slice::first`)。`Option` を返す関数の本体に書かれた `e?` は、
+`e` が `None` のときその関数から `None` を返す (Rust Reference の "The question mark operator")。
+
+**EXT 空を作る `Default`**。`Vec`・`Map`・`Set` の `Default::default()` はそれぞれ空の列・空の写像・
+空の集合を返し、`RefCell<T>::default()` は `T::default()` を包んだ `RefCell` を返す
+(`alloc::vec::Vec`・`std::collections::HashMap`・`std::collections::HashSet`・`core::cell::RefCell` の
+`Default` の実装)。`#[derive(Default)]` が作る実装は、各欄にその型の `default()` を置く
+(`core::default::Default` の derive マクロ)。
 
 **EXT 導出した `PartialEq`**。`#[derive(PartialEq)]` が作る等号は、2 つの値が同じ構成子であって、
 同じ位置の各欄がその欄の型の `PartialEq` で等しいとき、またそのときに限り真である。`HashSet` の
@@ -491,7 +505,7 @@ Ret(w)))))
   `after` に入らない。`live_before` は `{p} \ {p} = ∅` である。
 
 <1>8. `main` について `insert_into_func` はこの節点をそのまま `func.body` にする。
-  BY <1>7, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func
+  BY <1>7, EXT 空を作る `Default`, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func
   `live` は空なので `for name in &live` の表明は走らず、`main` はパラメータも capture も持たないので
   `unused` は空であり、`build_releases(∅, body)` は `body` を返す。
 
@@ -1602,10 +1616,11 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
     `retain_if_live(&x, live_after, ret)` に渡る `ret` はこの腕が作った `Ret(x)` であり、`v = x` で
     ある。
   <2>2. 本体の根を書き換える呼び出しの `live_after` は空集合である。
-    BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func, CODE src/rc_ir/rc_insert.rs: insert_rc
+    BY EXT 空を作る `Default`, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+       CODE src/rc_ir/rc_insert.rs: insert_rc
     関数については `insert_into_func` が `self.insert_into_expr(func.body, &Set::default())` を呼び、
     グローバル初期化子については `insert_rc` が `inserter.insert_into_expr(glob.init, &Set::default())` を
-    呼ぶ。
+    呼ぶ。`EXT 空を作る Default` より `Set::default()` は空の集合である。
   <2>3. `Let`(`Match` でない右辺)、`Destructure`、`Eval`、`Let(x, Match(..), k)` のいずれについても、
         継続を書き換える呼び出しの `live_after` は、その節点を書き換える呼び出しの `live_after` に
         等しい。
@@ -2227,7 +2242,8 @@ Ret(u)))))
     BY <2>2, <2>3, <ref id=95427eb/>
 
 <1>4. `B_1` はどの活性化でも A19 (ii) を満たす。
-  BY DEF ii-a と ii-b の読み, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+  BY DEF ii-a と ii-b の読み, EXT 空を作る `Default`,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
      CODE src/rc_ir/borrow.rs: cancel
   `DEF ii-a と ii-b の読み` の最後の文より、この文書が単に「A19 (ii)」と書くときそれが指すのは
   (ii-b) --「`bumps_ρ(τ, C) ≥ 1` である時点では `held_ρ(τ, C) ≥ 1 + bumps_ρ(τ, C)` である」-- で
@@ -2514,6 +2530,7 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
      CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: origin_inner,
      CODE src/rc_ir/ownership.rs: as_arg_projection,
      CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
+     EXT 空の列の第 1 元,
      CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
      CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
@@ -2524,8 +2541,9 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   `Llvm` の結果のうち `result_prov` の宣言が単一の `Arg` でない leaf は `Binding::Llvm` の腕の
   `as_arg_projection` が `None` を返す枝に入る。A3 よりこのコミットの宣言は単一の `Fresh`・単一の
   `Unknown`・空集合のいずれかである。前 2 者では D17 の第 2 項より鎖がそこで止まる。空集合のときは
-  `origin_from_leaves_under` が `reached` に元を 1 つも積まず、`reached.first()?` で `None` を返すので、
-  `origin_inner` は `unwrap_or_else(here)` で自分自身を答える。**`reached` が空であることは
+  `origin_from_leaves_under` が `reached` に元を 1 つも積まず、`EXT 空の列の第 1 元` より
+  `reached.first()?` が `None` を返すので、`origin_inner` は `unwrap_or_else(here)` で自分自身を
+  答える。**`reached` が空であることは
   `leaf_origins_under` が渡す宣言がその leaf 自身の 1 つだけであることによる** --
   `leaf_origins_under(path)` は `LeafMap::leaves_under(path)`、すなわち path が `path` で始まる leaf の
   宣言の列であり、D4 の判定は leaf を置く位置でその位置の下へ降りないので boxed leaf の path は互いに
@@ -2535,7 +2553,7 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   ある。
 
 <1>4c. (f)。
-  BY <1>4b, <ref id=596a46d/>, <ref id=f06144e/>, <ref id=d59f90b/>, <ref id=e11772a/>, <ref id=30d6238/>, CODE src/rc_ir/ownership.rs: origin_inner,
+  BY <1>4b, EXT 空の列の第 1 元, <ref id=596a46d/>, <ref id=f06144e/>, <ref id=d59f90b/>, <ref id=e11772a/>, <ref id=30d6238/>, CODE src/rc_ir/ownership.rs: origin_inner,
      CODE src/rc_ir/ownership.rs: collect_bindings, CODE src/rc_ir/ownership.rs: as_arg_projection,
      CODE src/rc_ir/ownership.rs: origin_from_leaves_under
   ρ-歩みが止まるのは `origin_inner` が `origin` を呼ばずに `here()` を答える腕であり、それは
@@ -2543,8 +2561,9 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   `Binding::Payload` の `Some(_)` かつ scrutinee が boxed の枝、`Binding::Llvm` の
   `as_arg_projection` が `None` を返す枝 (A3 よりこのコミットの宣言は単一の `Fresh`・単一の
   `Unknown`・空集合のいずれかである。前 2 者では D17 の第 2 項よりそこで止まり、空集合のときは
-  <1>4b のとおり `origin_from_leaves_under` が `reached` に元を 1 つも積まずに `None` を返すので、
-  `origin_inner` が `unwrap_or_else(here)` で自分自身を答える) の 6 つである。束縛の無い腕が
+  <1>4b のとおり `origin_from_leaves_under` が `reached` に元を 1 つも積まずに `None` を返すので
+  (`EXT 空の列の第 1 元`)、`origin_inner` が `unwrap_or_else(here)` で自分自身を答える) の 6 つで
+  ある。束縛の無い腕が
   答える位置は D6 の記号の位置であってスロットではなく、D6 よりそれを終端とする類は計数下の類の
   範囲の外である。残る 5 つのうち `Binding::Param` はパラメータ・capture の leaf であり、
   `Producer` は `App` と `Closure` の結果、`Field` の boxed の枝は boxed 容器の `Destructure` の
@@ -2644,9 +2663,11 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   アーム本体へ降りる。局所名の判定は `insert_if_local` が行う。
 
 <1>2. `m` が本体の根であるとき `A(m) = ∅` である。
-  BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func, CODE src/rc_ir/rc_insert.rs: insert_rc
+  BY EXT 空を作る `Default`, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+     CODE src/rc_ir/rc_insert.rs: insert_rc
   関数は `insert_into_expr(func.body, &Set::default())`、グローバル初期化子は
-  `inserter.insert_into_expr(glob.init, &Set::default())` で呼ばれる。
+  `inserter.insert_into_expr(glob.init, &Set::default())` で呼ばれる。`EXT 空を作る Default` より
+  `Set::default()` は空の集合である。
 
 <1>3. `A(m)` の各名前は、`m` の部分木の外にある位置で使われる名前である。したがって `m` の部分木の中で
       束縛される名前は `A(m)` に入らない。
@@ -2767,8 +2788,8 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
     `live_after_match` に入らないので、`live_before_arms` は
     `(∪_j (free_locals(arm_j.body) \ {payload_j})) ∪ live_after_match` である。
     **`live_after_match` の分が入るのは、アームが 1 つ以上あるからである** -- `live_before_arms` は
-    `Set::default()` から始まり、各アームが返した `body_live` からしか名前を受け取らないので、アームが
-    0 個ならこの和は空になる。A9 は「`borrow_ify` の入力プログラムのすべての `Match` は 1 つ以上の
+    `Set::default()` -- `EXT 空を作る Default` より空の集合 -- から始まり、各アームが返した
+    `body_live` からしか名前を受け取らないので、アームが 0 個ならこの和は空になる。A9 は「`borrow_ify` の入力プログラムのすべての `Match` は 1 つ以上の
     アームを持つ」と述べ、A9 自身が「**`insert_rc` の入力と出力について読む段は A2 を引く。**」と
     書き、A2 が「**したがって、`borrow_ify` の入力について語る仮定は、`insert_rc` の入力と出力に
     ついても読める。**」を与えるので、`insert_rc` の入力の骨格の各 `Match` はアームを 1 つ以上持つ。
@@ -3183,10 +3204,11 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 **証明**
 
 <1>1. 本体の根を書き換える呼び出しの `live_after` は空集合である。
-  BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func, CODE src/rc_ir/rc_insert.rs: insert_rc
+  BY EXT 空を作る `Default`, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+     CODE src/rc_ir/rc_insert.rs: insert_rc
   関数については `insert_into_func` が `self.insert_into_expr(func.body, &Set::default())` を呼び、
   グローバル初期化子については `insert_rc` が `inserter.insert_into_expr(glob.init, &Set::default())` を
-  呼ぶ。
+  呼ぶ。`EXT 空を作る Default` より `Set::default()` は空の集合である。
 
 <1>2. 骨格節点 `m` が `Ret` でないとき、`m` の継続を書き換える呼び出しの `live_after` は、`m` を
       書き換える呼び出しの `live_after` に等しい。
@@ -3353,8 +3375,9 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     BY <ref id=e885aa0/>, <ref id=e11772a/>, <ref id=9d74736/>
     `L16` (b) より、結果の相異なる 2 つの boxed leaf が同じ `Arg(i, σ)` を宣言することはない。
     D9 の移動の表の `Llvm` の行は、単一の `Arg(i, σ)` を宣言する結果の leaf 1 つにつき、
-    オペランド `i` の leaf `σ` からその結果 leaf への辺を 1 本挙げる (A3 の表の同じ行が
-    「第 `i` オペランドの leaf `σ` と同じ参照」と書く)。よって辺の集合は結果 leaf から
+    オペランド `i` の leaf `σ` からその結果 leaf への辺を 1 本挙げる (A3 の表の
+    「単一の `Arg(j, σ)`」の行が「第 `j` オペランドの leaf `σ` と**同じ参照**」と書く)。よって辺の
+    集合は結果 leaf から
     オペランド leaf への単射のグラフであり、1 つのオペランドの leaf を始点とする辺は高々 1 本である。
   <2>4. 核節点は、`ops` の各 `Own` の出現ごとに、そのオペランドの inhabited な各 boxed leaf について
         `μ` を 1 下げる。`Borrow` の出現は `μ` を変えない。`ops` に入らないオペランド -- 局所名でない
@@ -3513,7 +3536,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     `live_at_arm_head` は `live_after_match.clone()` から始めて各アームの `arm_free_locals` の名前を
     足したものなので、`H = M ∪ (∪_i U_i)` である。
     **アームが 1 つ以上あることが要る。** `insert_into_match` が返す `live_before` は
-    `Set::default()` から始まる `live_before_arms` を土台にするので、アームが 0 個ならそれは空になり、
+    `Set::default()` -- `EXT 空を作る Default` より空の集合 -- から始まる `live_before_arms` を
+    土台にするので、アームが 0 個ならそれは空になり、
     `Λ(m) = {scrut}` となって下の等式が破れる。A9 は「`borrow_ify` の入力プログラムのすべての `Match`
     は 1 つ以上のアームを持つ」と述べ、A9 自身が「**`insert_rc` の入力と出力について読む段は A2 を
     引く。**」と書き、A2 が「**したがって、`borrow_ify` の入力について語る仮定は、`insert_rc` の
@@ -3687,7 +3711,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     BY <ref id=8e3aff3/>, <ref id=3905b4e/>, <ref id=66e786e/>, <ref id=f06144e/>, <ref id=a502f3e/>, CODE src/rc_ir/rc_insert.rs: insert_rc
     D1 より `init` はパラメータも capture も持たないので D10 の初期値は空であり、活性化の開始時の
     `μ` はすべて 0 である。`insert_rc` は `inserter.insert_into_expr(glob.init, &Set::default())` を
-    呼ぶので `A(根) = ∅` であり、`L14` (a) より `Λ(根) = free_locals(init)` である。A11 は
+    呼び、`EXT 空を作る Default` より `Set::default()` は空の集合なので `A(根) = ∅` であり、
+    `L14` (a) より `Λ(根) = free_locals(init)` である。A11 は
     「グローバル初期化子の `init` は自由な局所名を持たない」と述べるので `Λ(根) = ∅` である。
     `insert_rc` はこの本体に `build_releases` を掛けないので、根の前に節点は無い。
   <2>2. CASE 本体が関数の `body` である。
@@ -3695,7 +3720,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
        CODE src/rc_ir/rc_insert.rs: build_releases
     `L15` (e) より、すべてのパラメータ・capture の unit は所有される。D10 の初期値は、所有する
     各パラメータ・capture の inhabited な各 leaf の `μ` を 1 にする。`insert_into_func` は
-    `insert_into_expr(func.body, &Set::default())` を呼ぶので `A(根) = ∅` であり、`L14` (a) より
+    `insert_into_expr(func.body, &Set::default())` を呼び、`EXT 空を作る Default` より
+    `Set::default()` は空の集合なので `A(根) = ∅` であり、`L14` (a) より
     `Λ(根) = free_locals(func.body)` である。A11 は「関数の本体の自由な局所名は、その関数のパラメータと
     capture に限る」と述べるので、`Λ(根)` はパラメータと capture の名前だけからなる。
     `insert_into_func` は `func.body = build_releases(unused, body)` を作り、`unused` は
@@ -4147,14 +4173,15 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
      CODE src/rc_ir/ownership.rs: Origin, CODE src/rc_ir/ownership.rs: Origin::acted_on,
      CODE src/rc_ir/ownership.rs: as_arg_projection,
      CODE src/rc_ir/ownership.rs: origin_from_leaves_under, <ref id=3f68b95/>, <ref id=cbc4a1c/>, <ref id=d59f90b/>, <ref id=e11772a/>,
-     EXT クレートの項目
+     EXT クレートの項目, EXT 空の列の第 1 元
   止まる腕: `None`、`Binding::Param`、`Binding::Producer`、`Binding::Field` の容器が boxed の枝、
   `Binding::Payload` の `Some(_)` かつ scrutinee が boxed の枝、`Binding::Llvm` の
   `as_arg_projection` が `None` を返す枝 (スロットの path は boxed leaf なので `leaf_origins_at` は
   その leaf 自身の宣言を返し、A3 よりこのコミットの宣言は単一の `Fresh`・単一の `Unknown`・空集合の
   いずれかである。前 2 者では D17 の第 2 項より鎖がそこで止まり、空集合のときは
-  `origin_from_leaves_under` が `reached` に元を 1 つも積まずに `None` を返すので、`origin_inner` が
-  `unwrap_or_else(here)` で自分自身を答える。いずれでも `origin` を呼ばない)。
+  `origin_from_leaves_under` が `reached` に元を 1 つも積まずに `None` を返すので
+  (`EXT 空の列の第 1 元`)、`origin_inner` が `unwrap_or_else(here)` で自分自身を答える。いずれでも
+  `origin` を呼ばない)。
   辿る腕: `Binding::Move`、`Binding::Field` の容器が unbox の枝、`Binding::Payload` の `None` の枝と
   `Some(tag)` かつ scrutinee が unbox の枝、`Binding::Llvm` の単一 `Arg` の枝。いずれも
   `origin(次のスロット)` をそのまま返す。
@@ -4332,6 +4359,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
      CODE src/rc_ir/borrow.rs: cancel,
      CODE src/rc_ir/ownership.rs: rhs_consumes,
+     EXT `Iterator::filter_map`,
      CODE src/rc_ir/ownership.rs: all_owned_units,
      CODE src/rc_ir/ownership.rs: passthrough_arg_leaves,
      CODE src/rc_ir/ownership.rs: destructure_consumes
@@ -4351,8 +4379,10 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   **`Llvm` の行は `passthrough_arg_leaves` が決める。** `rhs_consumes` の `Llvm` の腕は
   `borrows_operand(i)` が真のオペランドを飛ばし、残るオペランドの leaf のうち
   `passthrough.contains(&(i, leaf))` でないものを積む。その `passthrough` は
-  `passthrough_arg_leaves` が `decl.leaves().filter_map(as_arg_projection)` で作る集合、すなわち
-  結果のいずれかの leaf が単一の `Arg(i, σ)` として素通しを宣言している `(i, σ)` の全体である。
+  `passthrough_arg_leaves` が `decl.leaves().filter_map(as_arg_projection)` で作る集合であり、
+  `EXT Iterator::filter_map` よりそれは `as_arg_projection` が `Some` を返す leaf の分だけを集めた
+  もの、すなわち結果のいずれかの leaf が単一の `Arg(i, σ)` として素通しを宣言している `(i, σ)` の
+  全体である。
   `L16` (a) より借用オペランドの leaf は素通しを
   宣言されないので、D9 の消費の表の `Llvm` の行が挙げる leaf -- `borrows_operand(i)` が偽の
   オペランドのうち素通しを宣言されていない leaf -- は `rhs_consumes` の `Llvm` の腕が積む leaf に
@@ -4697,7 +4727,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6, <1>2
 
 <1>4. QED
-  BY <1>2, <1>2a, <1>2b, <1>2c, <1>3, DEF 割り当て `μ`, CODE src/rc_ir/borrow.rs: cancel
+  BY <1>2, <1>2a, <1>2b, <1>2c, <1>3, DEF 割り当て `μ`, EXT 空を作る `Default`,
+     CODE src/rc_ir/borrow.rs: cancel, CODE src/rc_ir/borrow.rs: PendingRetains
   `<1>2a` の事象の列についての帰納。列の最初の切れ目は活性化の開始時である。そこで `pending` は
   空であり (`cancel` は `analysis.walk(body, PendingRetains::default(), true)` で走査を始める) ので
   `Bmp^+ ≡ 0`、したがって `Bsub^+ ≡ 0` である。よって前件 `Bsub^+(id) ≥ 1` を満たす `id` が無く、
@@ -4890,6 +4921,7 @@ Ret(x)))
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
      CODE src/rc_ir/borrow.rs: cancel,
+     EXT `Iterator::filter_map`,
      CODE src/rc_ir/ownership.rs: acted_references, CODE src/rc_ir/ownership.rs: rhs_consumes,
      CODE src/rc_ir/ownership.rs: passthrough_arg_leaves,
      CODE src/rc_ir/ownership.rs: as_arg_projection,
@@ -4917,7 +4949,7 @@ Ret(x)))
   かつ計数下 (D26) なので、D27 より `B` も `{(m, []): 1}` である。
   `Let(x, Llvm(make_pair, [m, m]), ・)` の訪問は `consume_rhs` を呼ぶが、`rhs_consumes` の `Llvm` の腕は
   素通しの leaf を消費として報告しない。**`passthrough_arg_leaves` がその集合を作る** --
-  それは `decl.leaves().filter_map(as_arg_projection)` であり、`decl` は
+  それは `decl.leaves().filter_map(as_arg_projection)` であり (`EXT Iterator::filter_map`)、`decl` は
   `make_pair` の `result_prov` の返り値である。`DEF Pair と make_pair` よりその宣言は結果の leaf
   `[0]` に単一の `Arg(0, [])`、leaf `[1]` に単一の `Arg(1, [])` を置き、<1>2 より `Pair` の boxed
   leaf はその 2 つで尽きるので、`Provenance::leaves()` が渡すのはその 2 つであり、
@@ -5423,6 +5455,7 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
         ただしその中の各 `origin` の呼び出しは、その鍵の `Org_B` を返すものとして読む。`vars_{B'}` に
         ついて同じものを `Org_{B'}` と書く。
     BY <ref id=0edb0ba/>, <ref id=b1f6e13/>, <ref id=8e3aff3/>, <ref id=33c54dc/>, <ref id=3905b4e/>, <ref id=1ab62dc/>, CODE src/rc_ir/ownership.rs: origin,
+       EXT 空を作る `Default`,
        CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
        CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
     **P2a の制限がここで満たされる。** P2a は「**1 つの `VarTable` の値 `vars` と 1 つの `TypeEnv` の
@@ -5440,8 +5473,9 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
     等しいので、値は `vars.origins` が保持する memo の状態に依らず 1 つに決まる。`origin` は memo に
     鍵が無いとき `origin_inner` を走らせてその値を返す。**空の memo からその鍵について呼ぶ計算が
     在ることは、表の作られ方による** -- `VarTable::of` と `VarTable::body_only` はどちらも
-    `VarTable::empty()` から始め、`empty` は `origins` に `RefCell::default()` すなわち空の写像を
-    置くので、その表を作った直後にはどの鍵の項も無い。よってその鍵についての最初の呼び出しが
+    `VarTable::empty()` から始め、`empty` は `origins` に `RefCell::default()` を置く。
+    `EXT 空を作る Default` よりそれは `Map::default()` -- 空の写像 -- を包んだ `RefCell` なので、
+    その表を作った直後にはどの鍵の項も無い。よってその鍵についての最初の呼び出しが
     `origin_inner` を走らせ、その値が等式を与える。その中の各 `origin` の呼び出しが返す値は、
     P2a よりその鍵の `Org_B` である。
   <2>4. 1 つの計算の中で memo に当たった `origin` の呼び出しが読む項は、**同じ鍵についてそれより先に
