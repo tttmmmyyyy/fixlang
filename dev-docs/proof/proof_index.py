@@ -803,8 +803,27 @@ def main(arguments):
         moved = [(citing, cited) for citing, cited in sorted(e for e in edges if all(e))
                  if was.get((citing, cited), items[cited]["digest"]) != items[cited]["digest"]]
         if "--accept" in arguments:
-            write_ledger(directory, items, edges, {})
-            print(f"{directory}: 読み直した印を {len(moved)} 件進めた")
+            # **読み直した印を進めてよいのは、読み直した者だけである。** 道具の都合で指紋の取り方が
+            # 変わったときの再基準化と、枠が動いたときの読み直しは、同じ操作に見えて別物である --
+            # 実測で、再基準化のつもりで全体へ掛けて、`A5` が動いて挙がっていた 56 項目の印を、
+            # 誰も読み直さないまま進めた。**全体へ掛けるには `--all` を明示する。**
+            only = arguments[arguments.index("--file") + 1] if "--file" in arguments else None
+            if not only and "--all" not in arguments:
+                sys.exit("--accept は読み直した範囲を要求する -- `--file <名前>`、"
+                         "または指紋の取り方が変わったときだけ `--all`")
+            if only:
+                kept = {(citing, cited): was.get((citing, cited), items[cited]["digest"])
+                        for citing, cited in edges if all((citing, cited))}
+                for citing, cited in moved:
+                    if os.path.basename(items[citing]["file"]) == os.path.basename(only):
+                        kept[(citing, cited)] = items[cited]["digest"]
+                write_ledger(directory, items, edges, kept)
+                done = sum(1 for c, _ in moved
+                           if os.path.basename(items[c]["file"]) == os.path.basename(only))
+                print(f"{directory}: {only} の読み直した印を {done} 件進めた")
+            else:
+                write_ledger(directory, items, edges, {})
+                print(f"{directory}: 読み直した印を {len(moved)} 件進めた (--all)")
             continue
         if not os.path.exists(ledger_path(directory)) or "--write" in arguments:
             write_ledger(directory, items, edges, was)
