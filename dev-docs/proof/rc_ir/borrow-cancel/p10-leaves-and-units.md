@@ -179,19 +179,24 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 `src/` に本体を持ち、かつ**次の 3 群のどれにも属さないもの**の全体を、**この道の関数**と呼ぶ。
 `<1>9a` の `<2>1` から `<2>5a` が、この道の各関数が何を読むかを述べ、同じ数え上げがこの 3 群を挙げる。
 
-- **節点を組み立てる関数** -- `TypeNode` の 8 つの setter、`TypeNode::set_source`、
-  `TypeNode::set_source_if_none`、および `impl Clone for TypeNode`。
+- **節点を組み立てる関数と、その素材である `info` を読む関数** -- `TypeNode` の 8 つの setter、
+  `TypeNode::set_source`、`TypeNode::set_source_if_none`、`TypeNode::get_source`、および
+  `impl Clone for TypeNode`。
 - **`TypeNode` の等価比較** -- `impl PartialEq for TypeNode`、`impl PartialEq for Type`、および
   後者が節点の対について呼ぶ `type_node_eq`。
 - **`TypeNode` のハッシュ** -- `impl Hash for TypeNode` と `TypeNode::type_hash`。
 
-3 群を外すのは、その内側の呼び出しの並びと、返す `Arc` の番地が、引数の値からは決まらないから
-である。外した 3 群について言えるのは、値として等しい引数に対して値として等しい答えを返し、
-abort しないことである (`<1>9a` の `<2>1a`・`<2>6`・`<2>6a`)。
+3 群を外すのは、その内側の呼び出しの並びと、返す `Arc` の番地と、`TypeNode` の `info` の欄が、
+引数の値からは決まらないからである。外した 3 群はどれも abort しない。第 2 群と第 3 群は、値として
+等しい引数に対して値として等しい答えを返す (`<1>9a` の `<2>6`・`<2>6a`)。第 1 群のうち
+`TypeNode::get_source` が返すのは `info.source` であり、`info` は `impl PartialEq for TypeNode` が
+読まない欄なので、その答えは値として等しい引数の間で違いうる。残る第 1 群の関数が返す節点の `ty` は
+引数の値で決まる (`<1>9a` の `<2>1a`)。
 
 **番地の一致・不一致を読む式は、この道の関数の中にも在る。** 型を写す 2 つの関数 --
 `TypeNode::unwrap_newtypes_node` と `Substitution::substitute_type` -- が自分の本体に置く
 `Arc::ptr_eq` の分岐がそれであり、その分岐を `<1>9a` の `<2>1a` と `<2>7` の `<3>2a` が扱う。
+`get_source` の答えと `set_source_if_none` の枝も、同じ 2 つの段が扱う。
 
 **DEF 下位の呼び出しの列** -- ある関数呼び出しの 1 回の実行が行う「この道の関数」の呼び出しについて、
 その**開始**の事象 (呼ぶ関数と引数の値を持つ) と**返り**の事象 (返る値を持つ) を、起きた時間順に
@@ -1362,7 +1367,9 @@ SCAN src/ `truncate_to_unit(`
      各 `ty` と、`Substitution::single` / `merge` / `substitute_type` の返り値だけである。
      `Substitution` は `Map<String, Arc<TypeNode>>` を 1 つ包む値であり、`single` はその 1 要素の
      写像を作り、`merge` は鍵ごとに値を `==` で突き合わせ、`substitute_type` は型の節点を降りて
-     `data` を型変数の名前で引く。
+     `data` を型変数の名前で引く。`substitute_type` の `Type::TyVar` の腕が
+     `ty.get_source()` を呼び、その答えを `set_source_if_none` に渡す。この 2 つは
+     `DEF この道の関数` が外した第 1 群であり、その扱いは `<2>3a` に置く。
      `toplevel_tycon_info` が読むのは `self.is_closure()`、`self.toplevel_tycon()`、`E.tycons()` の
      1 回の探索だけである。
     BY CODE src/ast/types.rs: TypeNode::unpunched_field_types,
@@ -1373,6 +1380,19 @@ SCAN src/ `truncate_to_unit(`
        CODE src/elaboration/typecheck.rs: Substitution::single,
        CODE src/elaboration/typecheck.rs: Substitution::merge,
        CODE src/elaboration/typecheck.rs: Substitution::substitute_type
+  <2>3a. `get_source` の答えは値として等しい引数の間で違いうるが、この道でそれが使われるのは
+     `substitute_type` の `Type::TyVar` の腕が呼ぶ `set_source_if_none` の第 2 引数としてだけで
+     ある。`get_source` の本体は `&self.info.source` を返す 1 行であり、`info` は
+     `impl PartialEq for TypeNode` が読まない欄なので、値として等しい 2 つの節点でその値が違いうる。
+     `set_source_if_none` は `self.info.source` が `None` かどうかで枝を選び、`None` の枝だけが
+     その第 2 引数を新しい節点の `info.source` に置く。`<2>1a` よりどちらの枝が返す節点も `ty` は
+     `self.ty` であり、`impl PartialEq for TypeNode` が読むのは `ty` だけなので、返る値は枝に
+     依らない。`get_source` も `set_source_if_none` も abort しない。
+    BY <2>1a, CODE src/ast/types.rs: TypeNode::get_source,
+       CODE src/ast/types.rs: TypeNode::set_source_if_none,
+       CODE src/ast/types.rs: TypeNode (`hash_cache` / `ground_cache` / `depth_cache` の宣言と `PartialEq` の実装),
+       CODE src/elaboration/typecheck.rs: Substitution::substitute_type
+
   <2>4. `unit_step(ty, E)` が読むのは、`is_fully_unboxed`、`is_closure`、`is_box`、`is_union`、
      `is_array`、`is_punched_array` の返り値、`toplevel_tycon_info(E).fields` の長さ、そして
      `unpunched_field_types(E)` の返り値だけであり、返す `UnitStep` はそれと定数
@@ -1403,12 +1423,16 @@ SCAN src/ `truncate_to_unit(`
      `held_fields` を `idx` で線形に探すだけである。
     BY CODE src/rc_ir/ownership.rs: truncate_to_unit,
        CODE src/rc_ir/ownership.rs: held_field_type
-  <2>5a. この道が呼ぶ関数のうち、引数を取らずに名前や型の節点を組み立てるものは、`<1>3bb` の 4 つ --
-     `make_array_tycon`、`make_punched_array_tycon`、`make_arrow_name_abs`、`make_unit_ty` -- で
-     ある。`<2>4` が挙げる述語のうち `is_array`、`is_punched_array`、`is_closure` が前の 3 つを呼び、
-     `<2>1` の `unwrap_newtypes_node` が第 4 を返り値として返す。`<1>3bb` より、この 4 つと、その下で
-     呼ばれる関数が読むのは、それぞれの本体に書かれた定数だけである。
-    BY <1>3bb, <2>1, <2>4
+  <2>5a. この道が呼ぶ関数のうち、名前や型の節点を定数から組み立てるものは、`<1>3bb` の 4 つ --
+     `make_array_tycon`、`make_punched_array_tycon`、`make_arrow_name_abs`、`make_unit_ty` -- と、
+     その下で呼ばれる関数、および `is_funptr_tycon` が `NameSpace::new(vec![STD_NAME.to_string()])`
+     として呼ぶ `NameSpace::new` である。`<2>4` が挙げる述語のうち `is_array`、`is_punched_array`、
+     `is_closure` が前の 3 つを呼び、`<2>1` の `unwrap_newtypes_node` が `make_unit_ty` を返り値と
+     して返し、`<2>4` の `is_funptr` が `is_funptr_tycon` を呼ぶ。`<1>3bb` より、この 4 つと、
+     その下で呼ばれる `NameSpace::new` を含む関数が読むのは、それぞれの本体に書かれた定数だけで
+     ある。
+    BY <1>3bb, <2>1, <2>4, CODE src/fixstd/builtin.rs: is_funptr_tycon,
+       CODE src/ast/name.rs: NameSpace
 
   <2>6. この道で `TypeNode` の内部可変性の欄が書かれるのは 1 か所である -- `<2>2` の `Map` の探索と
      挿入が `Arc<TypeNode>` の鍵をハッシュし、`impl Hash for TypeNode` が `type_hash` を経て
@@ -1443,15 +1467,22 @@ SCAN src/ `truncate_to_unit(`
        下位の呼び出しの
        返り値、そして `DEF この道の関数` が除いた 3 群の答えである。
       BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>5a, DEF この道の関数
-    <3>2. `DEF この道の関数` が除いた 3 群のうち、この道が呼ぶものが返す答えは、値として等しい
-       引数に対して 2 つの実行で等しく、その計算は abort しない。この道が第 1 群 (節点を組み立てる
-       関数) のうち呼ぶのは、`<2>1` と `<2>3` が挙げる `set_tyapp_fun`、`set_tyapp_arg`、
-       `set_assocty_args`、`set_source_if_none`、`set_source` であり、`<2>1a` がその 5 つについて、
-       型を写す 2 つの関数の `Arc::ptr_eq` の分岐と `set_source_if_none` の分岐のどちらの腕も値と
-       して等しい節点を返して abort しないことを述べる。`Map` の鍵をハッシュするときに書かれる memo
+    <3>2. `DEF この道の関数` が除いた 3 群のうち、この道が呼ぶものについて、次の 3 つが成り立つ。
+
+       - (a) どれも abort しない。
+       - (b) `TypeNode::get_source` を除いて、値として等しい引数に対して 2 つの実行で値として等しい
+         答えを返す。
+       - (c) `get_source` の答えを受け取るのは `substitute_type` の `Type::TyVar` の腕が呼ぶ
+         `set_source_if_none` だけであり、その 2 つの枝はどちらも `ty` が同じ節点を返す。
+
+       この道が第 1 群のうち呼ぶのは、`<2>1` と `<2>3` が挙げる `set_tyapp_fun`、`set_tyapp_arg`、
+       `set_assocty_args`、`set_source_if_none`、`set_source`、`get_source` である。`<2>1a` が
+       前の 5 つについて、型を写す 2 つの関数の `Arc::ptr_eq` の分岐と `set_source_if_none` の分岐の
+       どちらの腕も値として等しい節点を返して abort しないことを述べ、`<2>3a` が `get_source` に
+       ついて (b) の例外と (c) を述べる。`Map` の鍵をハッシュするときに書かれる memo
        は型の値を動かさない (`<2>6`)。`TypeNode` の等価比較は、比べる 2 つの値だけで決まる真偽値を
        返して abort しない (`<2>6a`)。
-      BY <2>1, <2>1a, <2>3, <2>6, <2>6a, DEF この道の関数
+      BY <2>1, <2>1a, <2>3, <2>3a, <2>6, <2>6a, DEF この道の関数
     <3>2a. この道の関数の中で番地の一致を読むのは、`unwrap_newtypes_node` の `Type::TyApp` の腕に
        置かれた `Arc::ptr_eq` の分岐と、`Substitution::substitute_type` の `Type::TyApp` と
        `Type::AssocTy` の腕に置かれた 2 つの分岐だけである。この 3 か所はどちらの腕を取っても、
@@ -1484,12 +1515,17 @@ SCAN src/ `truncate_to_unit(`
        番地の一致だけで決まる。`K` の開始の事象と `K` が受け取った返りの事象はどれも先頭 `n` 項に
        在るので、(i) と (iii) は帰納法の仮定より `C` と `C'` で等しい。(ii) は `<3>1` より `E` の値、
        `TyConInfo` の欄の値、本体に書かれた定数、および除いた 3 群の答えであり、前の 3 つは `C` と
-       `C'` で同じ値、3 群の答えは `<3>2` より等しい。(iv) が `C` と `C'` で違いうるのは、`<3>2a` の
+       `C'` で同じ値である。除いた 3 群の答えのうち、`<3>2` (b) より 2 つの実行で違いうるのは
+       `get_source` のものだけであり、`<3>2` (c) よりそれを受け取る `set_source_if_none` は
+       どちらの枝でも `ty` が同じ節点を返す。その 2 つはどちらも第 1 群なので、
+       `DEF 下位の呼び出しの列` の項を作らない。(iv) が `C` と `C'` で違いうるのは、`<3>2a` の
        3 か所の分岐と、除いた 3 群の中だけである。前者について `<3>2a` は、どちらの腕も下位の
        呼び出しの列の項を作らずに値として等しい節点を返して `K` が返ることを述べるので、次の事象は
-       どちらの腕でも同じ `K` の返りであり、返る値も等しい。後者について `<3>2` は、その答えが
-       2 つの実行で等しいことを述べる。よって第 `n + 1` 項も対応し、一方に在れば他方にも在る。
-      BY <3>1, <3>2, <3>2a, EXT Rust の評価の決定性, DEF 下位の呼び出しの列
+       どちらの腕でも同じ `K` の返りであり、返る値も等しい。後者、すなわち除いた 3 群の内側の番地の
+       比較については、`get_source` が番地を比べないので、`<3>2` (b) がその群の答えを 2 つの実行で
+       等しいものとして与える。よって第 `n + 1` 項も対応し、一方に在れば他方にも在る。
+      BY <3>1, <3>2, <3>2a, EXT Rust の評価の決定性, DEF この道の関数,
+         DEF 下位の呼び出しの列
     <3>4. QED
       `<3>3` より `C` と `C'` の列は全体として対応する。根の呼び出しについても
       `EXT Rust の評価の決定性` の 4 つは -- (i) は言明の仮定、(ii) は `<3>1` と `<3>2`、(iii) は
