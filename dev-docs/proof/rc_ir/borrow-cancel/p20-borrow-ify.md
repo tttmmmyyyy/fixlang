@@ -3003,9 +3003,16 @@ leaf ごとに複数の事象を行うとき、その事象と事象のあいだ
   等しいか、同時に中断するかのどちらかであることをいう。**」と定める。`L36` は
   `trunc(ty(p), σ) ∈ units(ty(p))` の下で右辺 `ctx.owns_object(p, trunc(ty(p), σ))` が**値を返す**ことを
   与えるので、P7e (a) より左辺 `ctx.owns_object(p, σ)` も値を返し、2 つは等しい。`L36` はさらに右辺の値が
-  `V` が unit `trunc(ty(p), σ)` を D14 の意味で所有することと同値であると述べるので、両辺は同じ leaf を
-  数える。
-  BY <ref id=8412761/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=3597669/>, <ref id=63981a3/>, <ref id=bec0969/>, CODE src/rc_ir/ownership.rs: origin_inner
+  `V` が unit `trunc(ty(p), σ)` を D14 の意味で所有することと同値であると述べる。
+  **2 つの数え上げが同じ leaf を数えることには L1a が要る。** D10 の初期値が数えるのは「所有する
+  (D14) パラメータ・capture の unit の下の inhabited な各 leaf」、すなわち所有する unit `u` について
+  `u ⊑ σ` である leaf `σ` であり、`ι_V` が数えるのは `ctx.owns_object(p, σ)` が真である leaf `σ` --
+  上の同値より `trunc(ty(p), σ)` が所有される leaf -- である。`T = (p, σ)` は `ρ`-由来であって `ρ` の
+  上のスロットなので、D6 より `σ` は `ty(p)` の inhabited な boxed leaf である。L1a は **A10 を満たす**
+  型 `τ`、`u ∈ units(τ)`、`λ ∈ leaves(τ)` について「`u ⊑ λ` であることと `trunc(τ, λ) = u` であることとは
+  同値である」と述べるので、`σ` の上に在る `units(ty(p))` の元は `trunc(ty(p), σ)` ただ 1 つである。
+  よって 2 つの集合は一致し、両辺は同じ leaf を数える。
+  BY <ref id=8412761/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=596a46d/>, <ref id=3597669/>, <ref id=5b6162f/>, <ref id=63981a3/>, <ref id=bec0969/>, CODE src/rc_ir/ownership.rs: origin_inner
 
 <1>2. 生成が合う。
   D10 の生成の表の 5 行 -- `Llvm` の結果の leaf で宣言が単一の `Arg` でないもの、`App` の結果の各 boxed
