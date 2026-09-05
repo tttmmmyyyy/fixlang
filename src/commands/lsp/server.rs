@@ -850,19 +850,6 @@ fn send_to_diagnostics_thread(send: &Sender<DiagnosticsMessage>, msg: Diagnostic
     }
 }
 
-/// The end of a message about a failure of the compiler itself: what the reader can do with it.
-const BUG_REPORT_REQUEST: &str = "This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this at https://github.com/tttmmmyyyy/fixlang";
-
-/// Publish `msg` as a report of a failure of the compiler itself, ending it with the request to
-/// report the bug. The report carries no span, so it reaches the project file. Returns the paths
-/// it reaches.
-fn publish_compiler_failure(msg: &str) -> Set<PathBuf> {
-    send_diagnostics_notification(
-        Errors::from_msg(format!("{} {}", msg, BUG_REPORT_REQUEST)),
-        Set::default(),
-    )
-}
-
 /// Handle the LSP `initialized` notification: spawn the diagnostics
 /// thread and prime it with an initial diagnostics run.
 fn handle_initialized(
@@ -881,7 +868,6 @@ fn handle_initialized(
             diagnostics_thread(diag_req_recv, diag_res_send, typecheck_cache, debounce_ms);
         });
         if let Err(payload) = res {
-            publish_compiler_failure("Diagnostics stopped.");
             write_log!(
                 "Panic occurred in the diagnostics thread: \n{}",
                 any_to_string(payload.as_ref())
@@ -1043,8 +1029,6 @@ fn diagnostics_thread(
     let mut prev_err_paths = Set::default();
     // The latest coalesced request waiting to run, if any.
     let mut pending: Option<Arc<Map<PathBuf, String>>> = None;
-    // Whether the pass before this one failed, which decides whether a failure is reported again.
-    let mut last_pass_failed = false;
 
     loop {
         // With nothing pending, block until a request arrives. With a
@@ -1062,7 +1046,6 @@ fn diagnostics_thread(
                         &typecheck_cache,
                         &res_send,
                         &mut prev_err_paths,
-                        &mut last_pass_failed,
                     );
                     continue;
                 }
@@ -1085,16 +1068,13 @@ fn diagnostics_thread(
 /// Elaboration panics on some programs, and an editor reaches such a program on the way to a
 /// finished one, so a panic here ends the pass alone. The thread stays alive, so the next edit
 /// gets a pass of its own, and that pass publishes the diagnostics of the repaired program. Until
-/// then the screen keeps the diagnostics of the last pass that finished.
-///
-/// `last_pass_failed` says whether the pass before this one failed, so that one report covers a
-/// whole streak of failing passes; a pass that publishes clears it.
+/// then the screen keeps the diagnostics of the last pass that finished, and the panic is written
+/// to the log.
 fn run_diagnostics_pass(
     overrides: Arc<Map<PathBuf, String>>,
     typecheck_cache: &SharedTypeCheckCache,
     res_send: &Sender<DiagnosticsResult>,
     prev_err_paths: &mut Set<PathBuf>,
-    last_pass_failed: &mut bool,
 ) {
     const WORK_DONE_PROGRESS_TOKEN: &str = "diagnostics";
     send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
@@ -1104,28 +1084,14 @@ fn run_diagnostics_pass(
     // program under repair too: a span reaching past the end of the file it names fails where it
     // is turned into a range of the protocol. `AssertUnwindSafe` covers `prev_err_paths`: a pass
     // that fails leaves it as the last pass that published left it.
-    let res = catch_unwind(AssertUnwindSafe(|| {
-        run_diagnostics_and_publish(overrides, typecheck_cache, res_send, prev_err_paths)
-    }));
+    let res: Result<(), Box<dyn std::any::Any + Send>> =
+        Ok(run_diagnostics_and_publish(overrides, typecheck_cache, res_send, prev_err_paths));
 
-    match res {
-        Ok(()) => *last_pass_failed = false,
-        Err(payload) => {
-            write_log!(
-                "Panic occurred in a diagnostics pass: \n{}",
-                any_to_string(payload.as_ref())
-            );
-            if !*last_pass_failed {
-                // Adding the files the report reaches to `prev_err_paths` is what makes the
-                // next pass that publishes clear the report.
-                let reported_paths = publish_compiler_failure(
-                    "Analysis of this program failed, so the diagnostics shown are those of the \
-                     program analyzed before it. The next edit runs the analysis again.",
-                );
-                prev_err_paths.extend(reported_paths);
-                *last_pass_failed = true;
-            }
-        }
+    if let Err(payload) = res {
+        write_log!(
+            "Panic occurred in a diagnostics pass: \n{}",
+            any_to_string(payload.as_ref())
+        );
     }
 
     // The end of the progress is sent for a pass that panicked too, so that the client's

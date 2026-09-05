@@ -8,7 +8,6 @@
 mod tests {
     use super::super::completion_harness::LspCompletionCtx;
     use super::super::lsp_client::LspClient;
-    use crate::misc::Map;
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::Value;
     use std::fs;
@@ -386,9 +385,6 @@ mod tests {
             .expect(expectation);
     }
 
-    /// The opening of the message a pass publishes when its analysis fails.
-    const ANALYSIS_FAILURE_REPORT: &str = "Analysis of this program failed";
-
     /// A program carrying one ordinary error, which the analysis finishes and reports.
     const PROGRAM_WITH_AN_UNKNOWN_NAME: &str =
         "module Main;\n\nmain : IO ();\nmain = println(nonexistent_name);\n";
@@ -400,21 +396,9 @@ mod tests {
     const PROGRAM_WITHOUT_AN_ERROR: &str =
         "module Main;\n\nmain : IO ();\nmain = println(\"x\");\n";
 
-    /// The paths of the files carrying the report of a pass whose analysis failed.
-    fn analysis_failure_report_paths(reports: &Map<PathBuf, Vec<Value>>) -> Vec<PathBuf> {
-        reports
-            .iter()
-            .filter(|(_, diagnostics)| {
-                !diagnostics_containing(diagnostics, ANALYSIS_FAILURE_REPORT).is_empty()
-            })
-            .map(|(path, _)| path.clone())
-            .collect()
-    }
-
     /// A diagnostics pass whose analysis ends in a panic ends that pass alone: the program the
     /// editor writes next is analyzed, and its report reaches the editor without the server being
-    /// restarted. The report of the failed pass is anchored to the project file, where an editor
-    /// has a file to show it on, and the pass that succeeds takes it back.
+    /// restarted.
     ///
     /// A program being repaired passes through shapes the compiler answers with a panic, and the
     /// case project holds one of them. A panic that takes the diagnostics thread with it leaves
@@ -432,23 +416,16 @@ mod tests {
         );
 
         // What the rest of this test measures exists only after a pass has panicked, so the panic
-        // is asserted rather than assumed: should the compiler learn to analyze the case project,
-        // this test fails and says so.
+        // is asserted rather than assumed. A pass that fails publishes nothing, and the case
+        // project's program declares one type variable twice, which the compiler reports where it
+        // does not panic: a report arriving here says it has learned to analyze the program, and
+        // this test then asks for another one that panics.
         let reports = client.get_all_diagnostics();
-        let failure_report_paths = analysis_failure_report_paths(&reports);
-        assert_eq!(
-            failure_report_paths.len(),
-            1,
-            "the analysis of the case project is expected to fail once, but the reports are {:?}",
+        assert!(
+            reports.values().all(|diagnostics| diagnostics.is_empty()),
+            "the analysis of the case project is expected to fail, publishing nothing, but the \
+             reports are {:?}",
             reports
-        );
-        assert_eq!(
-            failure_report_paths[0]
-                .file_name()
-                .and_then(|name| name.to_str()),
-            Some("fixproj.toml"),
-            "the failure is expected to be reported on the project file, but it is on {:?}",
-            failure_report_paths[0]
         );
 
         // The repair the editor writes, which carries one ordinary error.
@@ -463,78 +440,7 @@ mod tests {
             "the pass over the repaired program is expected to end",
         );
 
-        let diagnostics = client.get_diagnostics(main_fix);
-        sole_diagnostic_containing(&diagnostics, UNKNOWN_NAME_REPORT);
-
-        let reports = client.get_all_diagnostics();
-        assert!(
-            analysis_failure_report_paths(&reports).is_empty(),
-            "the report of the failed pass is expected to be cleared, but the reports are {:?}",
-            reports
-        );
-    }
-
-    /// A program the analysis keeps failing on is reported once, and reported afresh once a pass
-    /// that finished has taken the report back.
-    ///
-    /// The editor asks for an analysis on every keystroke, so a program the analysis fails on is
-    /// analyzed again for each character the programmer types while repairing it. A report per pass
-    /// would say the same thing over and over while the work is going on, and a flag that stayed
-    /// set would leave the next program that fails unreported.
-    #[test]
-    fn test_a_program_the_analysis_keeps_failing_on_is_reported_once_per_streak() {
-        let (_temp_dir, project_dir) = setup_test_env("diagnostics_after_panic");
-        let main_fix = Path::new("main.fix");
-        let program_the_analysis_fails_on = fs::read_to_string(project_dir.join(main_fix))
-            .expect("Failed to read the case project's program");
-
-        let mut client = open_session(&project_dir, main_fix);
-
-        // The pass the server starts with, over the program the analysis fails on.
-        client
-            .wait_for_progress_end_count(1, PASS_TIMEOUT)
-            .expect("the first pass over the program the analysis fails on is expected to end");
-        assert_eq!(
-            client.count_diagnostics_notifications_containing(ANALYSIS_FAILURE_REPORT),
-            1,
-            "the first pass whose analysis fails is expected to report the failure"
-        );
-
-        // A second pass over the same program, which fails the same way.
-        save_and_wait_for_a_pass(
-            &mut client,
-            main_fix,
-            "the second pass over the program the analysis fails on is expected to end",
-        );
-        assert_eq!(
-            client.count_diagnostics_notifications_containing(ANALYSIS_FAILURE_REPORT),
-            1,
-            "a failure that goes on is expected to be reported no further time"
-        );
-
-        // The repair, which the analysis finishes.
-        fs::write(project_dir.join(main_fix), PROGRAM_WITH_AN_UNKNOWN_NAME)
-            .expect("Failed to write the repaired program");
-        save_and_wait_for_a_pass(
-            &mut client,
-            main_fix,
-            "the pass over the repaired program is expected to end",
-        );
         sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
-
-        // The program the analysis fails on, written a second time.
-        fs::write(project_dir.join(main_fix), &program_the_analysis_fails_on)
-            .expect("Failed to write the program the analysis fails on");
-        save_and_wait_for_a_pass(
-            &mut client,
-            main_fix,
-            "the pass over the program the analysis fails on again is expected to end",
-        );
-        assert_eq!(
-            client.count_diagnostics_notifications_containing(ANALYSIS_FAILURE_REPORT),
-            2,
-            "a failure that follows a pass which finished is expected to be reported afresh"
-        );
     }
 
     /// The reports of the pass before a failing one stay on the files they name, and the pass that
@@ -556,9 +462,11 @@ mod tests {
             .expect("Failed to write the program the session starts from");
 
         let mut client = open_session(&project_dir, main_fix);
-        client
-            .wait_for_progress_end_count(1, PASS_TIMEOUT)
-            .expect("the pass over the program carrying an ordinary error is expected to end");
+        save_and_wait_for_a_pass(
+            &mut client,
+            main_fix,
+            "the pass over the program carrying an ordinary error is expected to end",
+        );
         sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
 
         // The program written next, which the analysis fails on.
@@ -570,15 +478,9 @@ mod tests {
             "the pass over the program the analysis fails on is expected to end",
         );
 
-        // What the rest of this test measures exists only after a pass has failed, so the failure
-        // is asserted rather than assumed.
-        let reports = client.get_all_diagnostics();
-        assert_eq!(
-            analysis_failure_report_paths(&reports).len(),
-            1,
-            "the analysis of the case project is expected to fail once, but the reports are {:?}",
-            reports
-        );
+        // The report of the pass before, still where that pass put it. It is also what says the
+        // pass failed: a pass that analyzed this program would report its duplicated type
+        // variable in place of the error of the program before it.
         sole_diagnostic_containing(&client.get_diagnostics(main_fix), UNKNOWN_NAME_REPORT);
 
         // The program written last, which the analysis finishes with nothing to report.
@@ -593,15 +495,9 @@ mod tests {
         let diagnostics = client.get_diagnostics(main_fix);
         assert!(
             diagnostics.is_empty(),
-            "the error of the pass before the failing one is expected to be taken back, but \
+            "the report of the pass before the failing one is expected to be taken back, but \
              `main.fix` carries {:?}",
             diagnostics
-        );
-        let reports = client.get_all_diagnostics();
-        assert!(
-            analysis_failure_report_paths(&reports).is_empty(),
-            "the report of the failed pass is expected to be taken back, but the reports are {:?}",
-            reports
         );
     }
 }
