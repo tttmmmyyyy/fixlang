@@ -149,6 +149,10 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 対して `Some((先頭の要素, 残り))` を返し、空のスライスに対して `None` を返す。`<1>28` の `<2>2f` の
 `<3>3` と `<2>2g` の `<3>2` がこれを引く。
 
+**EXT derive した Clone** -- `#[derive(Clone)]` が生成する実装は、その型の各欄について
+`Clone::clone` を呼び、その結果から同じ形の値を組み立てるだけであり、ほかの関数を呼ばない。
+`<1>3b` がこれを引く。
+
 **EXT Iterator の map と zip** -- 標準ライブラリの `Iterator` について、`map(f)` はもとの列の各要素に
 `f` を当てた列を返し、列の長さを変えない。`a.zip(b)` は `a` と `b` の同じ位置の要素の対を、短い方の
 長さだけ並べた列を返す。したがって長さの等しい 2 つの列を `zip` すると、両者の各位置の対がちょうど
@@ -562,8 +566,9 @@ SCAN src/ `truncate_to_unit(`
 
 <1>3b. 製品のコードが `TyConInfo` の値を作る場所は、次の 4 つの関数だけである。
    前提 `TyConInfo` の値を作る在りか が `src/` のすべての構造体リテラルを挙げ、残る 3 項目は
-   型の宣言と 2 つの署名である。各関数が置く `variant` と、この証明が読むフィールドは
-   次のとおりである。
+   型の宣言と 2 つの署名である。`TyConInfo` は `Clone` だけを導出するので、構造体リテラルのほかに
+   値を作るのは複製であり、`EXT derive した Clone` よりその欄はどれも複製元の欄である。各関数が置く
+   `variant` と、この証明が読むフィールドは次のとおりである。
 
    | 作る関数 | `variant` | 個数と、この証明が読むフィールド |
    |---|---|---|
@@ -638,7 +643,7 @@ SCAN src/ `truncate_to_unit(`
    `Deserialize` も導出しないので、キャッシュから読まれる `TyConInfo` も無い。前提 型の節点への
    可変参照の在りか より `Arc::get_mut` は `src/` に無く、`Arc::make_mut` を書く 1 項目が借りるのは
    `Arc<Map<..>>` の欄なので、`tycons` が包む `Map` の項目をその場で書き替える道も無い。
-  BY EXT Rust の可視性, EXT Rust のモジュールの木, <ref id=3d4be43/>,
+  BY EXT Rust の可視性, EXT Rust のモジュールの木, EXT derive した Clone, <ref id=3d4be43/>,
      前提 `TyConInfo` の値を作る在りか, 前提 型の節点への可変参照の在りか,
      CODE src/ast/types.rs: TyConInfo, CODE src/fixstd/builtin.rs: bulitin_tycons,
      CODE src/constants.rs: FUNPTR_ARGS_MAX, CODE src/ast/typedecl.rs: TypeDefn::tycon_info,
