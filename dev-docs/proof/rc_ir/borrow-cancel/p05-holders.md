@@ -557,7 +557,7 @@ SCAN src/ `applies_a_function_operand`
     BY `<2>1`, `<2>2`, 前提 相殺する形の順序,
     <ref id=e3436e8/> の (E2) (「**この段は活性化を 1 つ作るごとに区切られる。** `a` はその活性化が終わるまで
     中断中であり、(E4) の後、同じ位置で次の段を実行する」)
-    `CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody` (`generate` は
+    `CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate` (
     `gc.retain(x.clone(), RcState::Unknown)` を置き、`gc.apply_lambda(f, vec![x.clone()], false)` を
     呼び、その後に `gc.release(x, RcState::Unknown)` を置く)
   `<2>3.` 第 2 の形は相殺せず、その参照の持ち手は D25 の 2 番目、すなわちその生成コードが書き込む
@@ -1404,9 +1404,9 @@ SCAN src/ `applies_a_function_operand`
       D21 (「分岐する op と `LLVMGen::unique_check_operand` を宣言する op は一致しない (D30 の (X2))」),
       D30 の (X2) (「**数え上げるのは生成コードの分岐であって、`LLVMGen::unique_check_operand` の
       宣言ではない。**」), `<1>4c` (D11 の (S-a))
-      `CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody` (`force_unique_or_assert` の結果に
+      `CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody::generate` (`force_unique_or_assert` の結果に
       `ObjectFieldType::move_into_struct_field` で `value` オペランドの参照を書き込む)
-      `CODE src/fixstd/builtin.rs: InlineLLVMUnionModBody` (タグが合う腕は `apply_lambda(modifier, ...)`
+      `CODE src/fixstd/builtin.rs: InlineLLVMUnionModBody::generate` (タグが合う腕は `apply_lambda(modifier, ...)`
       で modifier の参照を作られた活性化へ渡し、合わない腕は `gc.release(modifier, RcState::Unknown)` で
       処分する)
     `<3>2.` `<3>1` の各参照について、行き先が処分であるものは (δ) 1 つであり、`H` が 0 になれば
@@ -1425,7 +1425,7 @@ SCAN src/ `applies_a_function_operand`
       オブジェクト (D25 の 2 つ目) であり、この段が離す `Obl` の参照でも、結果の leaf に作られる参照
       でもない。**既に在るオブジェクトの leaf へ書き込む段は、この処分を伴う。**」), A8, D26, `<1>6`
       DEF 処分 (δ)
-      `CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody` (`move_out_struct_field` で古い値を取り出し
+      `CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody::generate` (`move_out_struct_field` で古い値を取り出し
       `gc.release(old_value, ...)` を置いてから `move_into_struct_field` を呼ぶ)
     `<3>2b.` この実行の生成コードは、`<3>1`・`<3>2`・`<3>2a` が挙げるもののほかにも段の中で素動作を
       出す。それは `<1>0e` の 2 つの形で尽き、どちらも (β) か (δ) である。**在りかを一覧でなく
@@ -1451,10 +1451,10 @@ SCAN src/ `applies_a_function_operand`
       書くと op が 1 つ増えるたびに古くなる。」、「**述語は名前の綴りでなく、呼ばれる項目で書く。**」),
       D25 (2 番目の持ち手), D16, D26, A5, A8,
       DEF 生成 (β), DEF 処分 (δ), DEF 記憶域のスロット
-      `CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody` (`generate` は
+      `CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate` (
       `gc.retain(x.clone(), RcState::Unknown)` を置き、`gc.apply_lambda(f, vec![x.clone()], false)` を
       呼び、その後に `gc.release(x, RcState::Unknown)` を置く)
-      `CODE src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked` (`generate` は
+      `CODE src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::generate` (
       `build_branch_by_is_unique(src_ptr, ...)` で分岐し、共有の腕で
       `ObjectFieldType::clone_array_buf(gc, src_len, src_buf, dst_write, elem_ty, None, ...)` を呼ぶ)
       `CODE src/object.rs: ObjectFieldType::clone_array_buf` (`clone_array_range` が、要素を
@@ -1492,9 +1492,9 @@ SCAN src/ `applies_a_function_operand`
       A17 (i-b) (環境はその参照を `boxed_from_retained_ptr` で Fix の側へ返すまで
       持つ), D9 (移動の表の「`Llvm` の素通し leaf」の行), D10 (移動は `Obl` を変えない), D6, D8,
       D25, A8, D26, `<3>1`, DEF 受け渡し (α), DEF 生成 (β), DEF 割り当て (γ)
-      `CODE src/fixstd/builtin.rs: InlineLLVMBoxedFromRetainedPtrIOS` (`generate` は `Ptr` の
-      オペランドから番地を取り出して結果の欄へ入れるだけで、retain を 1 つも出さない。`result_prov` を
-      override しない)
+      `CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS`
+      (`generate` は `Ptr` のオペランドから番地を取り出して結果の欄へ入れるだけで、retain を 1 つも
+      出さない。この `impl` は `result_prov` を override しない)
       `CODE src/ast/inline_llvm.rs: LLVMGen::result_prov` (既定は
       `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)`)
     `<3>4.` この実行が作る活性化から受け取る結果の leaf については、`<3>3` の表を読まない。その参照は
@@ -1532,12 +1532,13 @@ SCAN src/ `applies_a_function_operand`
         `<4>2` と `<4>3` より、渡す値が closure 型のときはその capture の leaf の参照が 1 つ渡り、
         funptr 型のときは渡る参照が無い。渡る場合の行き先は `<4>1` と `<4>3` より `Obl(b)` である。
         BY `<4>1`, `<4>2`, `<4>3`, `<3>4`, DEF 受け渡し (α)
-        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
+        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail` (
         `let f_fixf = gc.apply_lambda(f, vec![fixf], false).unwrap();` の結果を
         `gc.apply_lambda(f_fixf, vec![x], tail)` の callee に据える)
-        `CODE src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody`,
-        `InlineLLVMUnsafeMutateBoxedIOSInternalBody`, `InlineLLVMArrayMutateElementsInternalBody`,
-        `InlineLLVMArrayMutateElementsIosInternalBody` (どれも `generate` が
+        `CODE src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::generate`,
+        `InlineLLVMUnsafeMutateBoxedIOSInternalBody::generate`,
+        `InlineLLVMArrayMutateElementsInternalBody::generate`,
+        `InlineLLVMArrayMutateElementsIosInternalBody::generate` (どれも
         `apply_io_act_to_data_ptr` の結果を `run_ios_runner` へ渡す)
         `CODE src/fixstd/builtin.rs: apply_io_act_to_data_ptr` (`gc.apply_lambda(io_act,
         vec![data_ptr_obj], false)` を返す)
@@ -1569,7 +1570,7 @@ SCAN src/ `applies_a_function_operand`
           BY <ref id=e3436e8/> の (E2) (「オペランドを適用する」の段落 -- 「この op は `fix(f)` のクロージャを
           その場で組み立てて `f` に渡し、返った関数に改めてオペランド `x` を渡すので、`apply_lambda` を
           2 回呼び、1 回目に渡す値はどのオペランドでもない」)
-          `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
+          `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail` (
           `let fixf_ty = f.ty.get_lambda_dst();` を取り、その型の `create_obj` の結果へ
           `insert_field(CLOSURE_CAPTURE_IDX, cap_obj_ptr)` を行う)
         `<5>2.` closure 型に `ty_to_object_ty` が与える object type は `is_unbox` が真である。
@@ -1596,9 +1597,10 @@ SCAN src/ `applies_a_function_operand`
         A24 (`fix` の op は capture を持つ本体にだけ在るので、`cap_name` の束縛が在る。A24 が語るのは
         `borrow_ify` の入力であり、`P` がその範囲に在ることは P28 の ASSUME の (H3) が与える),
         P28 の ASSUME の (H3), `<3>1`, `<3>4a`, DEF 受け渡し (α)
-        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody` (`generate_tail` は
-        `insert_field(CLOSURE_CAPTURE_IDX, cap_obj_ptr)` に `get_scoped_obj(cap_name)` の値を入れる。
-        `free_vars_mut` は `[x_name, f_name, cap_name]` を返すので `cap` はこの節点のオペランドである)
+        `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail` (
+        `insert_field(CLOSURE_CAPTURE_IDX, cap_obj_ptr)` に `get_scoped_obj(cap_name)` の値を入れる),
+        `InlineLLVMFixBody::free_vars_mut` (`[x_name, f_name, cap_name]` を返すので `cap` はこの
+        節点のオペランドである)
         `CODE src/generator.rs: Scope::push_local` (局所の束縛は `retain_on_read: false` で積まれる)
         `CODE src/generator.rs: Generator::get_scoped_obj` (`retain_on_read` が偽のとき retain を
         出さない)
