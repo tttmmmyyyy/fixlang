@@ -1907,12 +1907,17 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 
       - `gen`: `InlineLLVMStringBuf`。**この op はこのコンパイラの `impl LLVMGen for` の 1 つである**
         (A3 がその全体を 78 個と数え上げている)。`free_vars_mut` は空の列を返す。`result_prov` は
-        `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返すので、結果の型の各 boxed leaf
-        に**単一の `Fresh`** を宣言する。
+        `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返す。`Provenance::uniform` は
+        `LeafMap::uniform(ty, type_env, sole_origin(src))`、`LeafMap::uniform` は
+        `LeafMap::build_shape(ty, type_env, &|_| fact.clone())` であり、`build_shape` は
+        `boxed_leaf_paths(ty, type_env)` の各 path について `leaf` を 1 度呼んでその値を対にする。
+        `sole_origin(src)` は `src` 1 つだけを持つ集合である。よって `gen` は結果の型の各 boxed leaf に
+        **単一の `Fresh`** を宣言する。
       - `T`: `Array U8`。`make_string_lit` が、この op を持つ `Llvm` 節点に
         `type_tyapp(make_array_ty(), make_u8_ty())` を結果の型として与える。
-      - `Bool`: `Std::Bool`。`unbox union { _false : (), _true : () }` であり、2 つの変位の payload の
-        型はどちらも `()` である。
+      - `()`: 0 要素のタプルの型 `make_unit_ty()`、すなわち `make_tuple_ty(vec![])` である。
+      - `Bool`: `Std::Bool`。`std.fix` の宣言 `type Bool = unbox union { _false : (), _true : () };` が
+        その型であり、2 つの変位の payload の型はどちらも `()` である。
 
       A3 の表の「単一の `Fresh`」の行より、`gen` が結果のその leaf に置くのは、新しく割り当てた
       オブジェクトへの新しい参照である。**A3 が同じ節に置く但し書き -- 実行時に参照カウントで分岐する
@@ -1948,17 +1953,82 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       のアームを選ぶ実行路を表す。
   BY <ref id=627e117/>, <ref id=e11772a/>, <ref id=33c54dc/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=f769887/>, <ref id=b3dfa37/>,
      CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStringBuf, make_string_lit,
+     CODE src/fixstd/builtin.rs: make_array_ty, make_unit_ty, make_tuple_ty,
+     CODE src/rc_ir/provenance.rs: Provenance::uniform, sole_origin,
+     CODE src/rc_ir/leaf_map.rs: LeafMap::uniform, LeafMap::build_shape,
      CODE src/ast/inline_llvm.rs: LLVMGen::free_vars,
      CODE src/fixstd/std.fix: Bool
+
+<1>1b. `T`・`()`・`Bool` の最上位の tycon とその項について次が成り立つ。
+
+       - **(i)** `T` の最上位の tycon は `make_array_tycon()` であり、`is_array(T)` は真である。
+       - **(ii)** `()` の最上位の tycon の名前は `make_tuple_name_abs(0)` -- 名前空間が `STD_NAME`
+         (`Std`) ただ 1 つで、名前が `TUPLE_NAME` に `0` を続けた `Tuple0` -- である。
+         `type_env.tycons()` のその鍵の項は `tuple_defn(0)` の `tycon_info(&[])` であり、その
+         `variant` は `TyConVariant::Struct`、`is_unbox` は `TUPLE_UNBOX` すなわち真、`fields` は
+         空である。
+       - **(iii)** `Bool` の最上位の tycon の名前は、名前空間が `STD_NAME` ただ 1 つで名前が
+         `BOOL_NAME` (`Bool`) である。`type_env.tycons()` のその鍵の項は `std.fix` の宣言の
+         `tycon_info(&[])` であり、その `variant` は `TyConVariant::Union`、`is_unbox` は真、
+         `fields` は型 `()` の 2 つの変位である。
+       - **(iv)** `is_closure(T)`・`is_closure(())`・`is_closure(Bool)` はどれも偽である。
+
+  (i) について。`<1>1` より `T` は `type_tyapp(make_array_ty(), make_u8_ty())` である。
+  `make_array_ty()` は `type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))` であり、
+  `TypeNode::toplevel_tycon` は `TyApp` の腕で関数側へ降りるので、`T` の最上位の tycon はその
+  `TyCon` である。`make_array_tycon()` は `TyCon::new(make_array_name())` であって
+  `make_array_name()` は同じ `FullName::from_strs(&[STD_NAME], ARRAY_NAME)` なので、`TyCon` が
+  derive する `PartialEq` (EXT `derive` した `PartialEq`) の下で 2 つは等しい。`is_array_tycon(tc)` は
+  `*tc == make_array_tycon()` であり、`TypeNode::is_array` は
+  `toplevel_tycon_satisfies(is_array_tycon)` なので、`is_array(T)` は真である。
+
+  (ii) について。`<1>1` より `()` は `make_tuple_ty(vec![])` であり、`make_tuple_ty` は
+  `apply_type_args(&tycon(make_tuple_name_abs(0)), &[])` を返す。`apply_type_args` は引数が無いとき
+  `type_tycon(tycon)` を返すので、`()` の最上位の tycon は `TyCon { name: make_tuple_name_abs(0) }` で
+  ある。`make_tuple_name_abs(0)` は `make_tuple_name(0)` -- `FullName::from_strs(&[STD_NAME], "Tuple0")`
+  -- を absolute にしたものである。`Program::add_tuple_defns` は使われた各大きさについて
+  `Program::add_tuple_defn` を通じて `tuple_defn(size)` を `type_defns` に積み、
+  `Program::calculate_type_env` は各型宣言について `type_decl.tycon()` -- `TypeDefn` の `name` を名前に
+  持つ `TyCon` -- を鍵に `type_decl.tycon_info(&[])` を入れる。`NameSpace` の `PartialEq` と `Hash` は
+  `is_absolute` を読まないので、absolute かどうかは鍵の一致に効かない。`TypeDefn::tycon_info` は
+  `TypeDeclValue::Struct(s)` の腕で `(TyConVariant::Struct, s.is_unbox, s.fields.clone())` を置き、
+  `tuple_defn(0)` の `fields` は `(0..0)` を写した列なので空、`is_unbox` は `TUPLE_UNBOX` である。
+
+  (iii) について。`<1>1` より `Bool` は `std.fix` の `type Bool = unbox union { _false : (), _true : () };`
+  が宣言する型である。(ii) と同じく `Program::calculate_type_env` がその宣言の `tycon()` を鍵に
+  `tycon_info(&[])` を入れ、`TypeDefn::tycon_info` は `TypeDeclValue::Union(u)` の腕で
+  `(TyConVariant::Union, u.is_unbox, u.fields.clone())` を置く。宣言は `unbox` なので `is_unbox` は
+  真であり、変位は `_false` と `_true` の 2 つでどちらも型 `()` である。
+
+  (iv) について。`TypeNode::is_closure` は最上位の tycon の名前が `make_arrow_name_abs()` に等しいこと
+  であり、`make_arrow_name_abs()` は `FullName::from_strs(&[STD_NAME], ARROW_NAME)` を absolute に
+  したものである。`FullName` は `PartialEq` を derive するので、EXT `derive` した `PartialEq` より
+  `namespace` と `name` を比べる。(i)(ii)(iii) の 3 つの名前の `name` は `ARRAY_NAME` (`Array`)・
+  `Tuple0`・`BOOL_NAME` (`Bool`) であり、どれも `ARROW_NAME` (`Arrow`) と異なる。
+  BY EXT `derive` した `PartialEq`, <1>1,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon, TypeNode::toplevel_tycon_satisfies,
+     CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_closure,
+     CODE src/ast/types.rs: type_tyapp, type_tycon, tycon, apply_type_args, TyCon, TyCon::new,
+     CODE src/ast/typedecl.rs: TypeDefn::tycon, TypeDefn::tycon_info,
+     CODE src/ast/program.rs: Program::add_tuple_defn, Program::add_tuple_defns,
+     CODE src/ast/program.rs: Program::calculate_type_env,
+     CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: FullName::from_strs,
+     CODE src/ast/name.rs: impl PartialEq for NameSpace, CODE src/ast/name.rs: impl Hash for NameSpace,
+     CODE src/fixstd/builtin.rs: make_array_ty, make_array_tycon, make_array_name, is_array_tycon,
+     CODE src/fixstd/builtin.rs: make_arrow_name_abs, make_tuple_ty, make_tuple_name,
+     CODE src/fixstd/builtin.rs: make_tuple_name_abs, tuple_defn,
+     CODE src/fixstd/std.fix: Bool,
+     CODE src/constants.rs: STD_NAME, ARRAY_NAME, ARROW_NAME, TUPLE_NAME, BOOL_NAME, TUPLE_UNBOX
 
 <1>2. `boxed_leaf_paths(T, type_env)` は `{[]}` であり、`[]` は `T` の値で inhabited である。`p_0` と
       `p_1` の型の `boxed_leaf_paths` は空であり、`boxed_leaf_paths(Bool, type_env)` も空である。
   <2>1. `is_array(T)` は真、`is_closure(T)` は偽、`is_fully_unboxed(T)` は偽である。
-    `<1>1` より `T = Array U8` であり、その tycon は `Std::Array` である。`is_array` は tycon が
-    `Std::Array` であること、`is_closure` は tycon が関数型のものであることなので、前者は真、後者は
-    偽である。`is_fully_unboxed` は `is_array` が真の型に対して偽を返す。
-    BY <1>1, CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_closure,
-       TypeNode::is_fully_unboxed
+    前 2 つは `<1>1b` の (i) と (iv) である。`is_fully_unboxed` は `is_box`・`is_closure`・`is_array`
+    の順に見て、`is_array` が真の型に対して偽を返す。第 1 の `is_box` が呼ぶ `is_unbox` は
+    `is_closure()` が偽のとき `toplevel_tycon_info` を評価するが、`<1>1` の A10 より `T` の tycon は
+    `type_env` にあり (iv) より `is_closure(T)` は偽なので、それは panic せず値を返す。
+    BY <ref id=8412761/>, <1>1, <1>1b, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/ast/types.rs: TypeNode::is_box, TypeNode::is_unbox, TypeNode::toplevel_tycon_info
   <2>2. `boxed_leaf_paths(T, type_env) = {[]}` である。D4 の規則 1 は `<2>1` より、規則 2 も `<2>1`
         (`is_closure(T)` が偽) より当たらない。残る規則 3 (`is_box`) と規則 4 (`is_array`) は、どちらも
         自分自身の位置 1 つを leaf とする。`<2>1` より `is_array(T)` は真なので、規則 3 が当たっても
@@ -1966,19 +2036,44 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
     BY <ref id=0594f24/>, <2>1
   <2>3. `[]` は `T` の値で inhabited である。`[]` は unbox union の節を 1 つも通らない。
     BY <ref id=66c9670/>, <2>2
-  <2>4. `p_0` と `p_1` の型 `()` は leaf を持たない。`()` は `tuple_defn(0)` が定める型、すなわち
-        フィールドを 1 つも持たない構造体であり、その `is_unbox` は `TUPLE_UNBOX` すなわち真である。
-        よって `is_box`・`is_closure`・`is_array`・`is_funptr` がいずれも偽であり、
-        `unpunched_field_types` は空の列を返す。よって `is_fully_unboxed` は空の連言として真であり、
-        D4 の規則 1 より leaf を持たない。
-    BY <ref id=0594f24/>, <1>1, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
-       CODE src/fixstd/builtin.rs: tuple_defn, CODE src/constants.rs: TUPLE_UNBOX
-  <2>5. `boxed_leaf_paths(Bool, type_env)` は空である。`<1>1` より `Bool` は unbox union なので
-        `is_box` が偽であり、`is_closure`・`is_array`・`is_funptr` も偽なので、`is_fully_unboxed(Bool)` は
-        `unpunched_field_types(Bool)` が返す各型の `is_fully_unboxed` の連言である。`<1>1` よりそれは
-        2 つの payload の型 `()` についての連言であり、`<2>4` よりどちらも真である。よって
-        `is_fully_unboxed(Bool)` は真であり、D4 の規則 1 より `Bool` は leaf を持たない。
-    BY <ref id=0594f24/>, <1>1, <2>4, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+  <2>4. `p_0` と `p_1` の型 `()` について `is_box(())`・`is_closure(())`・`is_array(())`・
+        `is_funptr(())` はどれも偽、`unpunched_field_types(())` は空、`is_fully_unboxed(())` は真で
+        あり、`()` は leaf を持たない。
+    `<1>1b` の (ii) より `()` の最上位の tycon は `type_env.tycons()` の鍵であり、(iv) より
+    `is_closure(())` は偽なので、`TypeNode::toplevel_tycon_info` は panic せずその鍵の項を返す。
+    `TypeNode::is_unbox` は `is_closure()` とその項の `is_unbox` の選言であり、(ii) より項の
+    `is_unbox` は真なので `is_unbox(())` は真、`TypeNode::is_box` はその否定なので偽である。
+    (ii) より `()` の最上位の tycon が鍵なので L3a (a) より `is_funptr(())` は panic せずに値を返す。
+    L3a (b) より `is_array(())` が真ならばその項の `variant` は `Array`、L3a (c) より `is_funptr(())`
+    が真ならば `Primitive` であるが、(ii) よりその `variant` は `Struct` である。`TyConVariant` の
+    値は 1 つなので、どちらも偽である。
+    `unpunched_field_types` は `instance_field_types` を `enumerate` して穴でないものを残したもので
+    あり、`instance_field_types` が返すのは `declared_field_types` -- 項の `fields` を 1 つずつ写した
+    列 -- を元にした列なので、(ii) の空の `fields` に対して空である。`is_fully_unboxed` は
+    `is_box`・`is_closure`・`is_array`・`is_funptr` を順に見てどれも当たらなければ
+    `unpunched_field_types` の各型の `is_fully_unboxed` の連言を返すので、`is_fully_unboxed(())` は
+    空の連言として真である。D4 の規則 1 より `()` は leaf を持たない。
+    BY <ref id=0594f24/>, <ref id=f68ae1c/> (a), <ref id=f68ae1c/> (b), <ref id=f68ae1c/> (c), <1>1b,
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types, TypeNode::instance_field_types,
+       CODE src/ast/types.rs: TypeNode::declared_field_types, TyConVariant
+  <2>5. `boxed_leaf_paths(Bool, type_env)` は空である。
+    `<1>1b` の (iii) より `Bool` の最上位の tycon は `type_env.tycons()` の鍵であり、(iv) より
+    `is_closure(Bool)` は偽なので、`TypeNode::toplevel_tycon_info` は panic せずその鍵の項を返す。
+    (iii) より項の `is_unbox` は真なので `TypeNode::is_unbox` は真、`TypeNode::is_box` はその否定
+    なので偽である。(iii) より最上位の tycon が鍵なので L3a (a) より `is_funptr(Bool)` は panic せず
+    値を返し、L3a (b) と L3a (c) より `is_array(Bool)` か `is_funptr(Bool)` が真ならばその項の
+    `variant` は `Array` か `Primitive` であるが、(iii) よりそれは `Union` である。`TyConVariant` の
+    値は 1 つなので、どちらも偽である。
+    よって `is_fully_unboxed(Bool)` は `unpunched_field_types(Bool)` が返す各型の `is_fully_unboxed`
+    の連言であり、(iii) よりそれは 2 つの payload の型 `()` についての連言で、`<2>4` よりどちらも
+    真である。よって `is_fully_unboxed(Bool)` は真であり、D4 の規則 1 より `Bool` は leaf を持たない。
+    BY <ref id=0594f24/>, <ref id=f68ae1c/> (a), <ref id=f68ae1c/> (b), <ref id=f68ae1c/> (c),
+       <1>1b, <2>4,
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types, TyConVariant
   <2>6. QED
     BY <2>2, <2>3, <2>4, <2>5
 
