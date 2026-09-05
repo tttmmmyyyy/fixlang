@@ -2894,10 +2894,12 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `boxed_leaf_paths(ty, type_env)` の各元に項を置くので、leaf を持たない型では
   空である。
 
-<1>5a. `LeafOrigin::Arg` を含む `Provenance` を返す `result_prov` の実装は 6 個であり、そのどれでも
-      結果の leaf からそれが宣言する `(i, σ)` への対応は単射である。
+<1>5a. `LeafOrigin::Arg` を含む `Provenance` を返す `result_prov` の実装は下に挙げるもので尽き、
+      そのどれでも結果の leaf からそれが宣言する `(i, σ)` への対応は単射である。
   BY <ref id=e11772a/>, <ref id=83d98e9/>, <ref id=0594f24/>, EXT クレートの項目, EXT ビルドの対象,
+     EXT 条件つきコンパイル,
      CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, CODE src/rc_ir/provenance.rs: LeafOrigin,
+     CODE src/rc_ir/provenance.rs: Provenance::arg_passthrough,
      CODE src/rc_ir/provenance.rs: Provenance, CODE src/rc_ir/provenance.rs: sole_origin,
      CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape, CODE src/rc_ir/leaf_map.rs: LeafMap::uniform,
      CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov,
@@ -2912,10 +2914,11 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   **在りかは述語で決める** -- `LeafOrigin::Arg` を構成する式を含む `result_prov` の実装である。
   `EXT ビルドの対象` より走査の範囲は `src/` の全ファイルであり、`EXT クレートの項目` よりその全文を
   読めばクレートの内容をすべて読んだことになる。A3 の数え上げより `result_prov` を override するのは
-  78 個の `impl LLVMGen for` のうち 29 個であり、そのうち `LeafOrigin::Arg` を置くのは次の 6 個である
-  (`Provenance::arg_passthrough` も `Arg` を置くが、それを呼ぶのは `Provenance` の解析の
-  `seed_param` であって `result_prov` の実装ではない)。既定の `result_prov` は `Unknown` を置く
-  (<1>2) ので `Arg` を含まない。
+  78 個の `impl LLVMGen for` のうち 29 個であり、そのうち `LeafOrigin::Arg` を置くのは次のもので
+  尽きる (`Provenance::arg_passthrough` も `Arg` を置くが、それを呼ぶのは `Provenance` の解析の
+  `seed_param` であって `result_prov` の実装ではない。`#[cfg(test)]` の下の `Arg` を作る 2 つの式は
+  `EXT 条件つきコンパイル` より `fix` の実行可能ファイルを作るビルドに入らない)。既定の `result_prov`
+  は `Unknown` を置く (<1>2) ので `Arg` を含まない。
   - `InlineLLVMStructGetBody::result_prov` の unbox の枝は、結果の leaf `π` に
     `Arg(0, [field_idx] ++ π)` を置く。`π ↦ [field_idx] ++ π` は単射である。
   - `impl LLVMGen for InlineLLVMMakeStructBody` の `result_prov` は、結果の leaf `[i] ++ rest` に
@@ -2927,8 +2930,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     枝をまたいで一致するのは `rest = [field_idx] ++ rest'` のときだが、A12 より punched struct の
     第 `field_idx` フィールドは穴であり、D4 の第 5 規則は `unpunched_field_types` が返さない穴の
     下へ降りないので、そのような結果 leaf は存在しない。
-  - `replaced_field_prov` (`InlineLLVMStructPlugInBody` と `InlineLLVMStructSetBody` の
-    `result_prov` が呼ぶ) の unbox の枝は、結果の leaf `[field_idx] ++ rest` に
+  - `InlineLLVMStructPlugInBody::result_prov` と `InlineLLVMStructSetBody::result_prov` は
+    どちらも `replaced_field_prov` を呼ぶ。その unbox の枝は、結果の leaf `[field_idx] ++ rest` に
     `Arg(value_arg, rest)` を、残る leaf `[f] ++ rest` (`f ≠ field_idx`) に
     `Arg(struct_arg, [f] ++ rest)` を置く。各枝の中では単射であり、2 つの枝は相異なるオペランドの
     添字を置く -- `struct_plug_in` は `(PLUG_IN_PUNCHED_ARG, PLUG_IN_FIELD_ARG) = (0, 1)`、
@@ -2938,8 +2941,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   - `InlineLLVMUnionAsBody::result_prov` の unbox の枝は、結果の leaf `π` に
     `Arg(0, [variant_idx] ++ π)` を置く。`π ↦ [variant_idx] ++ π` は単射である。
 
-  boxed の枝を持つ 4 つ (`InlineLLVMStructGetBody`・`InlineLLVMStructPunchBody`・
-  `replaced_field_prov`・`InlineLLVMUnionAsBody`・`InlineLLVMMakeUnionBody` の boxed の場合) は
+  上の各項目の boxed の枝 -- `InlineLLVMStructGetBody`・`InlineLLVMStructPunchBody`・
+  `replaced_field_prov`・`InlineLLVMUnionAsBody`・`InlineLLVMMakeUnionBody` のもの -- は
   `Unknown` か `Fresh` を置くので `Arg` を含まない。
 
 <1>6. QED
