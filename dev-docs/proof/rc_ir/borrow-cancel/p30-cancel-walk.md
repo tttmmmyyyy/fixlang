@@ -1775,6 +1775,19 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       `f_own.body`、その複製 `clone.body`、または入力プログラムのグローバル初期化子 `g.init` である。
       `f_own` は `func.clone()` であり、`clone` は `clone_func` の値である。
   BY 本命題の仮定, CODE src/rc_ir/borrow.rs: borrow_ify
+<1>2a. `f_own.body` の木の `Match` は、`func.body` の木の `Match` と 1 対 1 に対応し、対応する 2 つの
+       `Match` のアームの個数は等しい。`f_own` は `func.clone()` であり、`RcFunc` は `Clone` を derive
+       するので、EXT Clone より `f_own.body` は `func.body` の `<RcExprNode as Clone>::clone` である。
+       `RcExprNode` も `Clone` を derive し、その欄は `expr: Arc<RcExpr>` と `source: Option<Span>` で
+       ある。EXT Arc の契約 より `<Arc<RcExpr> as Clone>::clone` は同じ割り当てのハンドルをもう 1 つ
+       作るので、`f_own.body.expr` と `func.body.expr` は同じ割り当てを指し、そのブロックの中に在る
+       `RcExpr` の値は 1 つである。すなわち 2 つの根の式は同じ値である。DEF 部分木 の子の表より、
+       根の各子はその `RcExpr` の値が保持する `RcExprNode` の値そのものなので、根から下の部分木は
+       `func.body` のそれと同じ節点からなる。よって 2 つの木の節点は 1 対 1 に対応し、対応する節点の
+       式は同じ値であり、`Match` のアームの個数は等しい。
+  BY <1>2, CODE src/rc_ir/ast.rs: RcFunc, CODE src/rc_ir/ast.rs: RcExprNode,
+     CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs, CODE src/rc_ir/ast.rs: MatchArm,
+     DEF 部分木, EXT Clone, EXT Arc の契約
 <1>3. `clone_func` が作る本体の `Match` は、入力の本体の `Match` と 1 対 1 に対応し、対応する 2 つの
       `Match` のアームの個数は等しい。
   <2>1. `clone_func` が作る本体は `fresh_rename_function` が返す第 3 の値であり、それは
@@ -1809,9 +1822,12 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
   BY <ref id=1172c08/>, 本命題の仮定
 <1>5. QED
   本命題の仮定は L3 の仮定であり、L3 より `cancel(prog, type_env)` が走査する本体は `rewrite` の出力で
-  ある。<1>2 よりその入力は `borrow_ify` の入力プログラムの本体か、その複製である。<1>3 より複製はアームの
-  個数を保ち、<1>1 より `rewrite` も保つ。<1>4 より元の個数は 1 以上である。
-  BY <ref id=d766c00/>, <1>1, <1>2, <1>3, <1>4, 本命題の仮定
+  ある。<1>2 よりその入力は、`borrow_ify` の入力プログラムの関数の本体の複製 `f_own.body`、
+  `clone_func` が作る複製 `clone.body`、または入力プログラムのグローバル初期化子 `g.init` そのものの
+  3 つのいずれかである。<1>2a より 1 つ目は `func.body` とアームの個数を共有し、<1>3 より 2 つ目も
+  アームの個数を保ち、3 つ目は入力の本体そのものである。<1>1 より `rewrite` もアームの個数を保つ。
+  <1>4 より元の個数は 1 以上である。
+  BY <ref id=d766c00/>, <1>1, <1>2, <1>2a, <1>3, <1>4, 本命題の仮定
 
 ## 3. P15 (節点と `NodeId`)
 
