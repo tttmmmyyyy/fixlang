@@ -4491,30 +4491,46 @@ Ret(x)))
 **証明**
 
 <1>1. `insert_rc` は `S_g` を `B_2` に書き換える。
-  BY <ref id=3e6b0e0/>, DEF 例の名前の取り方,
+  BY <ref id=3e6b0e0/>, DEF 例の名前の取り方, DEF `Pair` と `make_pair`,
+     EXT `Iterator::fold`, EXT `Iterator::rev`,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_expr_inner,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
+     CODE src/rc_ir/rc_insert.rs: RcInserter::retain_if_live,
+     CODE src/rc_ir/rc_insert.rs: insert_if_local,
      CODE src/rc_ir/rc_insert.rs: rhs_operands, CODE src/rc_ir/rc_insert.rs: RcInserter::needs_rc,
+     CODE src/ast/name.rs: FullName::is_local,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
      CODE src/rc_ir/rc_insert.rs: build_retains, CODE src/rc_ir/rc_insert.rs: build_releases
-  `Ret(x)` の腕は `live_after = ∅` の下で `live = {x}` を返し、`retain_if_live` は
+  A15 より `insert_into_expr` は `insert_into_expr_inner` をちょうど 1 回呼ぶ。
+  `Ret(x)` の腕は `live_after = ∅` に `insert_if_local` で `x` を足した `live = {x}` を返し
+  (`DEF 例の名前の取り方` より `x` の名前は名前空間を持たないので `is_local` は真である)、
+  `retain_if_live` は
   `live_after` が空なので発火しない。`insert_into_operation_let` は `live_cont = {x}` の下で
   `rhs_operands(Llvm(make_pair, [m, m])) = [(m, Own), (m, Own)]` を逆順に走る -- 第 2 の `m` は
   `used_later` が偽 (`live_after_operand` はまだ `live_cont = {x}` の写しであって `m` を含まない) なので
   何も置かず、第 1 の `m` は第 2 の `m` が `live_after_operand` に入った後なので `used_later` が真で
   `retains_before` に入る (`needs_rc(m)` は真である -- `is_fully_unboxed` は
   `if self.is_box(type_env) { return false; }` で始まるので boxed な `ty(m) = Arr` では偽である)。`x` は `live_cont` に在る
-  ので `after` は空である。`live_before` は `({x} \ {x}) ∪ {m} = {m}` であり、`insert_into_func` の
-  `unused` は `live` が `m` を含むので空である。`build_retains([m], ・)` が `Retain(m, [])` を被せる。
+  ので `after` は空である。`live_before` は `({x} \ {x}) ∪ {m} = {m}` であり (`m` も
+  `DEF 例の名前の取り方` より局所名なので `insert_if_local` の門を通る)、`insert_into_func` の
+  `unused` は `live` が `m` を含むので空である。`build_retains([m], ・)` は
+  `EXT Iterator::rev` と `EXT Iterator::fold` より 1 元の `vars` について
+  `RcExpr::Retain(m, vec![], RcState::Unknown, node)` を 1 つ作り、`Retain(m, [])` を被せる。
+  `build_releases` に渡る列はどれも空なので、`EXT Iterator::fold` より初期値がそのまま返る。
 
 <1>2. `B_2` の実行路は 1 本であり、その上のスロットは `(m, [])`・`(x, [0])`・`(x, [1])` の 3 つで、
       `C := {(m, []), (x, [0]), (x, [1])}` はその 3 つからなる 1 つの別名類であり、`id` はどの
       スロットについても `(m, [])` である。`obj(C)` は `m` が受け取ったオブジェクトであり、それが
       計数下 (D26) であるかどうかは活性化ごとに決まる。
-  BY <ref id=ca36627/>, <ref id=0594f24/>, <ref id=88a06de/>, <ref id=e11772a/>, CODE src/rc_ir/ownership.rs: collect_bindings,
+  BY <ref id=ca36627/>, <ref id=0594f24/>, <ref id=88a06de/>, <ref id=e11772a/>, <ref id=d59f90b/>, <ref id=9c7c27a/>, <ref id=596a46d/>,
+     DEF `Pair` と `make_pair`, DEF `id(s)`,
+     CODE src/rc_ir/ownership.rs: collect_bindings,
      CODE src/rc_ir/ownership.rs: VarTable::of,
      CODE src/rc_ir/ownership.rs: origin_inner, CODE src/rc_ir/ownership.rs: as_arg_projection,
+     CODE src/rc_ir/ownership.rs: Origin::identity,
+     CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_unbox,
      <ref id=30d6238/>
   `Match` が無いので実行路は 1 本である。`is_fully_unboxed` は
@@ -4525,22 +4541,37 @@ Ret(x)))
   unbox 構造体であってクロージャではない。よって D4 の判定はどちらの型でも第 1 規則と第 2 規則を抜け、
   `boxed_leaf_paths(Arr) = {[]}` (第 3 規則)、`boxed_leaf_paths(Pair) = {[0], [1]}` (第 5 規則) で
   ある。`collect_bindings` は `x` に
-  `Binding::Llvm(make_pair, [m, m], Pair)` を入れ、`DEF Pair と make_pair` の宣言と
-  `as_arg_projection` より
-  `origin(x, [0])` は `origin(m, [])`、`origin(x, [1])` も `origin(m, [])` である。`m` はパラメータ
+  `Binding::Llvm(make_pair, [m, m], Pair)` を入れる。`DEF Pair と make_pair` より `make_pair` の
+  `result_prov` は結果の leaf `[i] ++ σ` を単一の `Arg(i, σ)` と宣言するので、
+  `leaf_origins_at([0])` は単一の `Arg(0, [])`、`leaf_origins_at([1])` は単一の `Arg(1, [])` で
+  あり、`as_arg_projection` はそれぞれ `Some((0, []))`・`Some((1, []))` を返す。
+  よって `origin_inner` の `Binding::Llvm` の腕は `origin(args[0], [])`・`origin(args[1], [])` を
+  返し、`args` は `[m, m]` なのでどちらも `origin(m, [])` である。
+  **D20 の別名の辺と D17 の行き先はここに立つ** -- D20 の移動の表の `Llvm` の素通し leaf の行が
+  `(m, [])` から `(x, [0])` へ、および `(m, [])` から `(x, [1])` への辺を挙げ、D17 の
+  `Binding::Llvm` の行より、`λ` に対応する位置はその宣言 `Arg(j, σ')` の `(args[j], σ')`、すなわち
+  どちらも `(m, [])` である。よって `(x, [0])` と `(x, [1])` の ρ-歩みはどちらも 1 歩で `(m, [])` へ
+  進む。`m` はパラメータ
   なので `VarTable::of` が `Binding::Param` を入れ、D33 が ρ-歩みを止める第 1 種
   「辺を持たない束縛、すなわち `Binding::Param`、`Binding::Producer`、および束縛を持たない名前
   (記号の位置)」に当たるので、`(m, [])` が 3 つのスロットの ρ-終端である。
-  3 つのスロットは ρ-終端が等しいので 1 つの別名類をなす。D33 より 1 つの別名類のすべてのスロットは
+  3 つのスロットは ρ-終端が等しいので 1 つの別名類をなす。`Origin::identity` は
+  `Origin::Exactly(p)` に `p` を返し、`origin_inner` の `Binding::Param` の腕は
+  `Exactly((m, []))` を返すので、`DEF id(s)` より 3 つのスロットの `id` はどれも `(m, [])` である。
+  D33 より 1 つの別名類のすべてのスロットは
   同じオブジェクトを指すので、`obj(C)` は `m` が受け取ったオブジェクトである。D26 より
   オブジェクトは計数下かグローバル状態かのどちらかであり、`m` に何が渡るかは活性化が決める。
 
 <1>3. `m` が計数下のオブジェクト `O_m` を受け取る活性化について、`μ`、`held`、`bumps` は次のように
       動く。
-  BY <1>1, <1>2, <ref id=c2ea78f/>, <ref id=dca1c02/>, DEF 割り当て `μ`, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=8093b68/>, <ref id=e11772a/>,
+  BY <1>1, <1>2, <ref id=c2ea78f/>, <ref id=dca1c02/>, DEF 割り当て `μ`, DEF `Pair` と `make_pair`, DEF `id(s)`,
+     <ref id=9d74736/>, <ref id=f06144e/>, <ref id=cbc4a1c/>, <ref id=8093b68/>, <ref id=e11772a/>, <ref id=66c9670/>, <ref id=88a06de/>,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
+     CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
      CODE src/rc_ir/ownership.rs: acted_references, CODE src/rc_ir/ownership.rs: rhs_consumes,
-     CODE src/rc_ir/ownership.rs: passthrough_arg_leaves
+     CODE src/rc_ir/ownership.rs: passthrough_arg_leaves,
+     CODE src/rc_ir/ownership.rs: as_arg_projection,
+     CODE src/rc_ir/provenance.rs: Provenance, CODE src/rc_ir/provenance.rs: LeafOrigin
 
   | 時点 | `μ(m, [])` | `μ(x, [0])` | `μ(x, [1])` | `held` | `bumps` |
   |---|---|---|---|---|---|
@@ -4556,11 +4587,23 @@ Ret(x)))
   2 下がり `μ(x, [0])` と `μ(x, [1])` が 1 ずつ上がる。終端の `Ret(x)` の消費は `x` の全 boxed leaf の
   参照を消費する。`L15` (e) と `L13a` (c) より `β(C) = 0` なので、`held` は `L13a` (b) より 3 つの
   `μ` の和である。
-  `bumps` について、`Retain(m, [])` の訪問が積む要素の `outstanding` は
-  `acted_references(m, []) = {(m, []): 1}` であり、D27 より `B` も `{(m, []): 1}` である。
+  `bumps` について、`Retain(m, [])` の訪問が `outstanding` に置くのは
+  `self.acted_references(m, [])` -- `CancelAnalysis` のメソッドであり、`ownership::acted_references` の
+  返り値をそのまま返す -- である。D15 よりそれは `[]` の下の各 boxed leaf の `origin` の `identity` を
+  数えたもので、<1>2 より `ty(m) = Arr` の boxed leaf は `[]` の 1 つ、その `id` は `(m, [])` なので
+  `{(m, []): 1}` である。`m` が計数下のオブジェクトを受け取る活性化ではこの leaf は inhabited (D16)
+  かつ計数下 (D26) なので、D27 より `B` も `{(m, []): 1}` である。
   `Let(x, Llvm(make_pair, [m, m]), ・)` の訪問は `consume_rhs` を呼ぶが、`rhs_consumes` の `Llvm` の腕は
-  素通しの leaf を消費として報告しない -- `passthrough_arg_leaves` が `(0, [])` と `(1, [])` を返し、
-  `m` の boxed leaf は `[]` だけだからである。よってこの要素は落ちない。終端の `Ret` の腕は
+  素通しの leaf を消費として報告しない。**`passthrough_arg_leaves` がその集合を作る** --
+  それは `decl.leaves().filter_map(as_arg_projection)` であり、`decl` は
+  `make_pair` の `result_prov` の返り値である。`DEF Pair と make_pair` よりその宣言は結果の leaf
+  `[0]` に単一の `Arg(0, [])`、leaf `[1]` に単一の `Arg(1, [])` を置き、<1>2 より `Pair` の boxed
+  leaf はその 2 つで尽きるので、`Provenance::leaves()` が渡すのはその 2 つであり、
+  `as_arg_projection` は `LeafOrigin::Arg(j, p)` に `Some((j, p))` を返すので、
+  `passthrough_arg_leaves` は `{(0, []), (1, [])}` を返す。
+  `rhs_consumes` の `Llvm` の腕は `if !passthrough.contains(&(i, leaf))` の門で leaf を積むので、
+  `m` の唯一の boxed leaf `[]` はオペランド 0 についても 1 についてもこの集合に入り、積まれない。
+  よってこの要素は落ちない。終端の `Ret` の腕は
   `returns_from_func` が真なので要素を `needed_retains` に入れるが、`pending` からは取り除かない。
 
 <1>4. `B_2` は D11 を満たす。
