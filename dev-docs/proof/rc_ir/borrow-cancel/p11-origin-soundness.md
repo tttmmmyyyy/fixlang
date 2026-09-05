@@ -1664,29 +1664,35 @@ D25 が定めるのがオブジェクトからオブジェクトへの到達だ�
        CODE src/ast/types.rs: TypeNode::toplevel_tycon_info (型の `TyConInfo` は、その最上位の
        tycon で `type_env.tycons()` を引いた 1 つである),
        CODE src/ast/types.rs: TypeNode::is_box (`!self.is_unbox(type_env)`)
+  <2>2a. `make_array_tycon()` の `name` の `name` の欄は `ARRAY_NAME` であり、
+         `make_arrow_name_abs()` の `name` の欄は `ARROW_NAME` である。
+    BY CODE src/fixstd/builtin.rs: make_array_tycon (`TyCon::new(make_array_name())` である),
+       CODE src/ast/types.rs: TyCon::new (`name` の欄に引数の `FullName` を置く),
+       CODE src/fixstd/builtin.rs: make_array_name (`FullName::from_strs(&[STD_NAME], ARRAY_NAME)` で
+       ある),
+       CODE src/fixstd/builtin.rs: make_arrow_name_abs (`FullName::from_strs(&[STD_NAME], ARROW_NAME)`
+       に `set_absolute` を掛けたものである),
+       CODE src/ast/name.rs: FullName::from_strs (`FullName::new(&NameSpace::from_strs(ns), name)` で
+       あり、第 2 引数をそのまま `FullName::new` へ渡す),
+       CODE src/ast/name.rs: FullName::new (`name` の欄に第 2 引数の文字列を置く),
+       CODE src/ast/name.rs: FullName::set_absolute (`self.namespace.is_absolute` に `true` を置く)
+  <2>2b. 2 つの `FullName` が等しいならばその `name` の欄も等しく、2 つの `TyCon` が等しいならば
+         その `name` の `name` の欄も等しい。
+    BY EXT 導出した PartialEq (導出した `eq` は欄を対応するものどうしで比べ、すべての欄が等しいときに
+       限り真を返す),
+       CODE src/ast/types.rs: TyCon (`name` の 1 欄を持ち `PartialEq` を導出する),
+       CODE src/ast/name.rs: FullName (`namespace` と `name` の 2 欄を持ち `PartialEq` を導出する)
   <2>3. `is_closure(ty(v))` と `is_array(ty(v))` はどちらも偽である。
-    BY <2>1, CODE src/ast/types.rs: TypeNode::is_closure (最上位の tycon の名前が
+    BY <2>1, <2>2a, <2>2b,
+       CODE src/ast/types.rs: TypeNode::is_closure (最上位の tycon の名前が
        `make_arrow_name_abs()` に等しいかどうか),
        CODE src/ast/types.rs: TypeNode::is_array, TypeNode::toplevel_tycon_satisfies (`is_array` は
        最上位の tycon が `is_array_tycon` を満たすかどうかである),
        CODE src/fixstd/builtin.rs: is_array_tycon (tycon が `make_array_tycon()` に等しいことである),
-       CODE src/fixstd/builtin.rs: make_array_tycon (`TyCon::new(make_array_name())` である),
-       CODE src/fixstd/builtin.rs: make_array_name (`FullName::from_strs(&[STD_NAME], ARRAY_NAME)` で
-       ある),
-       EXT 導出した PartialEq (導出した `eq` は欄を対応するものどうしで比べる),
-       CODE src/ast/types.rs: TyCon (`name` の 1 欄を持ち `PartialEq` を導出するので、2 つの `TyCon` が
-       等しいのはその `FullName` が等しいときである),
-       CODE src/ast/types.rs: TyCon::new (`name` の欄に引数の `FullName` を置く),
-       CODE src/ast/name.rs: FullName (`namespace` と `name` の 2 欄を持ち `PartialEq` を導出する),
-       CODE src/ast/name.rs: FullName::from_strs (`FullName::new(&NameSpace::from_strs(ns), name)` で
-       ある), CODE src/ast/name.rs: FullName::new (`name` の欄に第 2 引数の文字列を置く),
-       CODE src/fixstd/builtin.rs: make_arrow_name_abs (`FullName::from_strs(&[STD_NAME], ARROW_NAME)`
-       に `set_absolute` を掛けたものであり、`set_absolute` は `namespace` の欄だけを書き替える),
-       CODE src/ast/name.rs: FullName::set_absolute (`self.namespace.is_absolute` に `true` を置く),
        CODE src/constants.rs: ARRAY_NAME, ARROW_NAME, FUNPTR_NAME -- `"Array"` も `"Arrow"` も
-       `"#FunPtr"` で始まらないので、<2>1 の `tc` の名前の `name` の欄はそのどちらとも異なり、
-       <2>1 の `tc` は `make_array_tycon()` と等しくなく、その名前は `make_arrow_name_abs()` と
-       等しくない
+       `"#FunPtr"` で始まらないので、<2>1 の `tc` の `name` の `name` の欄は、<2>2a が挙げる 2 つの
+       どちらとも異なる。よって <2>2b より `tc` は `make_array_tycon()` と等しくなく、`tc.name` は
+       `make_arrow_name_abs()` と等しくない
   <2>4. QED
     BY <2>2, <2>3, <ref id=83d98e9/> (束縛を持たない `RcVar` の型は、その名前の記号の型である), <ref id=0594f24/> の第 1 の規則
        (`is_fully_unboxed` が真の型は leaf を持たない),
