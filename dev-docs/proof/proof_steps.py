@@ -47,7 +47,9 @@ import sys
 STEP = re.compile(r"^(\s*)(?:#+\s*)?(?:\*\*)?`?<(\d+)>(\d+[a-z]*)`?\.")
 BY = re.compile(r"^\s*BY\s+(.*)$")
 REFERENCE = re.compile(r"<(\d+)>(\d+[a-z]*)")
-LABEL = re.compile(r"^(DEF|EXT)\s+(.+)$")
+# 名札は 3 種である -- `DEF` はこの文書が定めた語、`EXT` は文書の外の結果、
+# `前提` はコードの在りかについての事実で、走査 (`SCAN`) が果たす。
+LABEL = re.compile(r"^(DEF|EXT|前提)\s+(.+)$")
 CODE = re.compile(r"^CODE\s+[A-Za-z0-9_/.]+\.(rs|fix|pest)\s*:")
 # **命題・定義・仮定を引く形は 1 つだけである。** 名前で引く形を認めていた間は、名乗り方ごとに
 # 選択肢が要り、実測で 6 行あった -- そのどれにも当たらない正当な引用が「未分類」に落ち、
@@ -61,7 +63,7 @@ FACT = re.compile(
                                 # **文字を数え上げない** -- H のほかに J・K・N が使われている。
     r"|ASSUME|PROVE|NEW|CASE|IH"
     r"|本命題の仮定|本場合の仮定|背理法の仮定"   # 言明・CASE・背理法が置く仮定
-    r"|前提|言明|仮定|帰納法の仮定|帰納の仮定|系\d*"
+    r"|言明|仮定|帰納法の仮定|帰納の仮定|系\d*"
     r")"
 )
 SECOND_LABEL = re.compile(r"\s(?:CODE\s|[DAP]\d+[a-z]*(?:\s|$)|[LR]\d+[a-z]*(?:\s|$))")
@@ -89,10 +91,10 @@ def declared_labels(text):
     (`EXT derive(Clone)` を `derive` として照合する)、宣言の側も同じ形を持たないと、その名札を引く
     段が全部「名札の不在」に出る。"""
     names = set()
-    for match in re.finditer(r"\*\*(DEF|EXT)\s+([^*]+?)\*\*", text):
+    for match in re.finditer(r"\*\*(DEF|EXT|前提)\s+([^*]+?)\*\*", text):
         names.add((match.group(1), normalize_label(match.group(2))))
         names.add((match.group(1), normalize_label(match.group(2).split("(")[0])))
-    for match in re.finditer(r"^#+\s*(DEF|EXT)\s+(.+?)\s*$", text, re.M):
+    for match in re.finditer(r"^#+\s*(DEF|EXT|前提)\s+(.+?)\s*$", text, re.M):
         names.add((match.group(1), normalize_label(match.group(2))))
         names.add((match.group(1), normalize_label(match.group(2).split("(")[0])))
     for match in re.finditer(r"\*\*`([^`]+)`\*\*", text):
