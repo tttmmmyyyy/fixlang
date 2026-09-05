@@ -546,6 +546,28 @@ enum については元と同じ変位で、その変位が保持する各値を
        CODE src/rc_ir/ownership.rs: as_arg_projection,
        CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
        CODE src/rc_ir/ownership.rs: Origin::identity, CODE src/rc_ir/ownership.rs: Origin::candidates
+  <2>3a. `Provenance::leaf_origins_at` と `Provenance::leaf_origins_under` は内部可変性を持つ値に
+         触れず、前者の返り値と後者が渡す要素の集合は、引数の `Provenance` の値と引数の path で決まる。
+         `Provenance` の欄は `LeafMap<LeafOrigins>` 1 つ、`LeafMap<T>` の欄は `Map<FieldPath, T>`
+         1 つであり、`FieldPath` は `Vec<usize>`、`LeafOrigins` は `Set<LeafOrigin>`、`LeafOrigin` の
+         3 変位が保持するのは `usize` と `FieldPath` だけである。この数え上げに `RefCell`・`Cell`・
+         `OnceCell`・`OnceLock`・`Mutex`・`RwLock`・`UnsafeCell`・`Atomic*` を含む欄は現れない。
+         `Provenance::leaf_origins_at(path)` の本文は `self.0.get(path)`、`LeafMap::get(path)` の
+         本文は `self.0.get(path)` なので、EXT Map と Set よりその返り値は表と `path` で決まる。
+         `Provenance::leaf_origins_under(path)` の本文は `self.0.leaves_under(path)`、
+         `LeafMap::leaves_under(path)` の本文は
+         `self.0.iter().filter(move |(leaf_path, _)| leaf_path.starts_with(path)).map(|(_, fact)| fact)`
+         なので、EXT Map と Set・EXT Iterator::filter・EXT Iterator::map と collect・
+         EXT スライスの接頭と先頭 より、渡す要素の集合は表と `path` で決まる。`Map` の反復の順序は
+         定めないので、この 2 つ目について決まるのは並びではなく元の集合である。
+    BY CODE src/rc_ir/provenance.rs: Provenance,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+       CODE src/rc_ir/provenance.rs: LeafOrigin, CODE src/rc_ir/provenance.rs: LeafOrigins,
+       CODE src/rc_ir/leaf_map.rs: LeafMap, CODE src/rc_ir/leaf_map.rs: LeafMap::get,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under, CODE src/rc_ir/ast.rs: FieldPath,
+       EXT Map と Set, EXT Iterator::filter, EXT Iterator::map と collect,
+       EXT スライスの接頭と先頭, DEF 引数で決まる関数
   <2>4. <2>3 の 8 つのうち 6 つ --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
         `Provenance::leaf_origins_under`、`as_arg_projection`、`Origin::identity`、
         `Origin::candidates` --- は内部可変性を持つ値に触れない。その本文は引数から到達できる値だけを
@@ -557,16 +579,27 @@ enum については元と同じ変位で、その変位が保持する各値を
         4 つの腕であり、`Type::TyCon(tc)` の腕が `tc.clone()` を、`Type::TyApp(fun, _)` の腕が `fun` の
         `toplevel_tycon` を返し、`Type::TyVar` と `Type::AssocTy` の腕が `None` を返す。
         `make_arrow_name_abs` は引数を取らず、定数の名前から `FullName` を組み立てる。
-        `toplevel_tycon_info` の本文は `type_env.tycons().get(&tycon).unwrap()` であり、その鍵の型
-        `TyCon` は `FullName` の欄を 1 つ持つだけであり、`FullName` と `NameSpace` の手書きの `Hash` が
-        読むのは `Vec<String>` と `String` だけなので、内部可変性を持たない。残る 5 つは引数の
-        `Provenance`・`Set<LeafOrigin>`・`Origin` を読むだけである。よってこの 6 つの返り値は引数の値で
-        決まる。**そのうち 2 つは、並びではなく元の集合が決まる。**
+        `toplevel_tycon_info` の本文は 3 つの文である --- `assert!(!self.is_closure());`、
+        `let tycon = self.toplevel_tycon().unwrap();`、そして末尾式
+        `type_env.tycons().get(&tycon).unwrap()` である。この 3 つはどれも欄への書き込みを行わない。
+        表の鍵の型 `TyCon` は `FullName` の欄を 1 つ持つだけであり、`FullName` と `NameSpace` の
+        手書きの `Hash` が読むのは `Vec<String>` と `String` だけなので、内部可変性を持たない。
+        `Provenance` の 2 つについては <2>3a が与える。残る 3 つ --- `as_arg_projection`、
+        `Origin::identity`、`Origin::candidates` --- が読むのは引数の `Set<LeafOrigin>` と `Origin` だけで
+        ある。`as_arg_projection(sources)` の本文は、`sources.len() != 1` のとき `None` を返し、
+        そうでないときその唯一の元が `LeafOrigin::Arg(j, p)` なら `Some((*j, p.clone()))`、
+        `LeafOrigin::Fresh` か `LeafOrigin::Unknown` なら `None` を返すものである。`Origin::identity` の
+        本文は `Origin::Exactly(p)` の腕が `p` を、`Origin::Join { identity, .. }` の腕が `identity` を
+        返す match、`Origin::candidates` の本文は `Origin::Exactly(p)` の腕が `vec![p]` を、
+        `Origin::Join { candidates, .. }` の腕が `candidates.iter().collect()` を返す match である。
+        `LeafOrigin` の 3 変位が保持するのは `usize` と `FieldPath`、`Origin` の 2 変位が保持するのは
+        `VarPath` と `Set<VarPath>` であり、どちらの型も内部可変性を持つ欄を持たない。よってこの 6 つの
+        返り値は引数の値で決まる。**そのうち 2 つは、並びではなく元の集合が決まる。**
         `Provenance::leaf_origins_under` の doc は、渡す要素を `in no particular order`
         と述べるので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は `Join` の変位に
         ついて `Set` の反復から `Vec` を作り、EXT Map と Set は `Set` の反復の順序を定めないので、
         引数で決まるのはその元の集合である。
-    BY <2>3, EXT Map と Set, CODE src/ast/types.rs: TypeNode::is_box,
+    BY <2>3, <2>3a, EXT Map と Set, CODE src/ast/types.rs: TypeNode::is_box,
        CODE src/ast/types.rs: TypeNode::is_unbox, CODE src/ast/types.rs: TypeNode::is_closure,
        CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
        CODE src/ast/types.rs: TypeNode::toplevel_tycon, CODE src/ast/types.rs: Type,
@@ -575,6 +608,8 @@ enum については元と同じ変位で、その変位が保持する各値を
        CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: NameSpace,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+       CODE src/rc_ir/provenance.rs: LeafOrigin, CODE src/rc_ir/ownership.rs: Origin,
+       CODE src/rc_ir/ast.rs: VarPath, CODE src/rc_ir/ast.rs: FieldPath,
        CODE src/rc_ir/ownership.rs: as_arg_projection, CODE src/rc_ir/ownership.rs: Origin::identity,
        CODE src/rc_ir/ownership.rs: Origin::candidates, DEF 引数で決まる関数
   <2>5. 残る 2 つ --- `boxed_leaf_paths` と `truncate_to_unit` --- は触れる。**この 2 つが引数として
