@@ -183,6 +183,7 @@ site を 1 つも挙げない。P7a と P7d はその点を避けて site を本
   `Iterator::enumerate()` は、元の反復子が返す第 `k` 元 (`k` は 0 から数える) を対 `(k, 元)` に替えて
   順に返す。`Iterator::all(f)` は、反復子が返す元を順に `f` に渡し、`f` が偽を返した元でそこで止まって
   `false` を返す。すべての元について `f` が真を返せば `true` を返し、元が 1 つも無ければ `true` を返す。
+  `Iterator::collect` が `Vec` を作るとき、その列は反復子が返す元をその順に並べたものである。
 - **EXT 導出した相等** -- `#[derive(PartialEq)]` を付けた構造体の 2 つの値が等しいのは、対応する各
   フィールドが等しいときであり、そのときに限る。
 - **EXT 10 進表記** -- `format!("{}", n)` が `usize` の値 `n` について書き出す文字列は、10 進数字だけから
@@ -353,8 +354,10 @@ SCAN src/ `origins:`
 
 <1>1. `unit_step` の `UnitStep::Fields` の腕が据える `held_fields` の元の添字は、互いに相異なる。
   `unit_step` はそれを `ty.unpunched_field_types(type_env)` に取る。`unpunched_field_types` は
-  `instance_field_types` が返す列に `Iterator::enumerate` を掛け、その第 1 成分で絞って集めるので、
-  返る列の第 1 成分は 0 から数えた相異なる添字である。
+  `instance_field_types` が返す列に `Iterator::enumerate` を掛け、その第 1 成分で `Iterator::filter` を
+  掛け、`Iterator::collect` で `Vec` に集める。`EXT 反復子の並び` より `enumerate` の第 1 成分は 0 から
+  1 ずつ増える添字であり、`filter` も `collect` も元の順序と値を変えないので、返る列の第 1 成分は互いに
+  相異なる。
   BY EXT 反復子の並び, CODE src/rc_ir/ownership.rs: unit_step,
      CODE src/ast/types.rs: TypeNode::unpunched_field_types
 
