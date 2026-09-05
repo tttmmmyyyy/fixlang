@@ -179,10 +179,13 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
   `object_file_symbol_name` はその文字列の `SYMBOL_VERSION_SEPARATOR` を
   `SYMBOL_VERSION_SEPARATOR_SUBSTITUTE` に置き替えるだけであり、置き替える前の文字列が substitute を
   含まないことをその関数の表明が検査する -- 含むプログラムはコンパイルされず、この場合の段は存在しない --
-  ので、置換も相異なる文字列を相異なる文字列へ移す。(N3) より鍵の名前は局所名ではなく、`is_local` は
-  名前空間が空であることなので、鍵の名前空間は空でなく、その記号名は `::` を含む。
-  BY (N3), <ref id=cb35ab1/>, CODE src/ast/name.rs: FullName::to_string, FullName::is_local, NameSpace::to_string,
-     FullName::to_namespace,
+  ので、置換も相異なる文字列を相異なる文字列へ移す。(N3) より鍵の名前は局所名ではなく、
+  `FullName::is_local` は `NameSpace::is_local` を呼び、それは `self.names.len() == 0` なので、鍵の
+  名前空間は空でなく、その記号名は `::` を含む -- `NameSpace::to_string` が継ぎ目に使う
+  `NAMESPACE_SEPARATOR` の値が `"::"` である。
+  BY (N3), <ref id=cb35ab1/>, CODE src/ast/name.rs: FullName::to_string, FullName::is_local, NameSpace::is_local,
+     NameSpace::to_string, FullName::to_namespace,
+     CODE src/constants.rs: NAMESPACE_SEPARATOR,
      CODE src/generator.rs: object_file_symbol_name,
      CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
      CODE src/parse/grammer.pest: name_char, namespace_item, capital_name, module_defn,
@@ -193,8 +196,8 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
   `src/` の `module.add_function(` は 17 か所であり、`object_file_symbol_name` の値をそのまま名前に
   するのは `declare_lambda_function` の 1 か所である。残る 16 か所を、渡す名前の形で分ける。
   **鍵の名前の記号名は、その名前が住む module の名前で始まる。**記号名は最も外側の名前空間の成分から
-  始まり、その成分はその module の名前である (`CODE src/ast/name.rs: FullName::module` の doc --
-  「The module the name lies in, which is the first name of its namespace.」)。module 宣言が与える
+  始まり、その成分はその module の名前である -- `FullName::module` は `NameSpace::module` を呼び、
+  それは `self.names[0]` を返す。module 宣言が与える
   `namespace_item` は `capital_name` を `.` で継いだもの、`capital_name` は `ASCII_ALPHA_UPPER` で
   始まる語なので、**記号名の先頭の成分は英大文字で始まり `#` を持たない**。`<1>3a` の 3 族はどれも
   `FullName::to_namespace` が名前を名前空間の**末尾**へ移す形なので、最も外側の成分を替えない。
@@ -228,7 +231,7 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
      Generator::mark_threaded,
      CODE src/ast/types.rs: TypeNode::hash_with_capture, TypeNode::traverser_name,
      CODE src/rc_ir/ast.rs: RcState::name_suffix,
-     CODE src/ast/name.rs: FullName::module,
+     CODE src/ast/name.rs: FullName::module, NameSpace::module,
      CODE src/parse/grammer.pest: capital_name,
      CODE src/constants.rs: SYMBOL_VERSION_SEPARATOR,
      CODE src/rc_ir/codegen.rs: Generator::implement_rc_global,
@@ -1046,11 +1049,15 @@ capture の leaf から独立に定める。L3 が (E3) の段について読む
   `g.params` の各 `param` について `param.ty` の parts の個数だけ LLVM パラメータを順に取り、
   `g.capture` が `Some` のとき次の 1 つを取る。どちらの `returns_through_out_pointer` も
   `lambda_return_part_types` を掛けた結果を読み、A12 より `ty(callee)` は `g.fn_ty` に等しいので
-  真偽は一致する。A12 より `g.params` の型の列は `g.fn_ty` の lambda src の列、すなわち `ty(callee)` の
+  真偽は一致する -- `Generator::returns_through_out_pointer` の本体は
+  `returns_through_out_pointer(part_tys, self.return_registers)` の 1 行であり、`self` は 1 つの単位の
+  1 つの `Generator` なので、2 つの呼び出しは同じ `return_registers` を渡す。A12 より `g.params` の型の
+  列は `g.fn_ty` の lambda src の列、すなわち `ty(callee)` の
   lambda src の列に等しいので、parts の列も一致する。CAP の有無は `<1>2b` より一致する。
   BY <ref id=83d98e9/>, <1>2a, <1>2b, CODE src/generator.rs: Generator::apply_lambda,
      Generator::returns_through_out_pointer, CODE src/object.rs: lambda_function_type,
-     lambda_return_part_types, CODE src/rc_ir/codegen.rs: Generator::implement_rc_function
+     lambda_return_part_types, CODE src/return_abi.rs: returns_through_out_pointer,
+     CODE src/rc_ir/codegen.rs: Generator::implement_rc_function
 
 <1>3. `callee` の inhabited な boxed leaf は、`b` の capture パラメータの inhabited な boxed leaf と
       1 対 1 に対応し、その unit は所有される。
@@ -1068,8 +1075,9 @@ capture の leaf から独立に定める。L3 が (E3) の段について読む
     `make_dynamic_object_tycon()` が返す tycon である** -- `make_dynamic_object_ty` が作るのは
     `tycon(FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME))` であり、`make_dynamic_object_tycon` が
     返すのは `TyCon::new(make_dynamic_object_name())`、`make_dynamic_object_name` が返すのは
-    `FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)` であって、2 つは同じ `FullName` の `TyCon` で
-    ある。`bulitin_tycons()` はその鍵の下に `is_unbox: false` を持つ `TyConInfo` を置き、A28 より、
+    `FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)` である。`tycon` は `TyCon { name }` を、
+    `TyCon::new` は `TyCon { name: fullname }` を組み、`TyCon` は `name` の 1 欄だけを持つので、2 つは
+    同じ `TyCon` である。`bulitin_tycons()` はその鍵の下に `is_unbox: false` を持つ `TyConInfo` を置き、A28 より、
     `bulitin_tycons()` の置く鍵の項目は `bulitin_tycons()` が置いたものである。よって型環境が
     この tycon に返す `TyConInfo` は `is_unbox: false` を持ち、この型は boxed である。したがって D4 の
     規則 3 と D5 の `unit_step` の `is_box` の腕がどちらも自分自身 1 つを返す。
@@ -1077,6 +1085,7 @@ capture の leaf から独立に定める。L3 が (E3) の段について読む
        CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function,
        CODE src/fixstd/builtin.rs: make_dynamic_object_ty, make_dynamic_object_tycon,
        make_dynamic_object_name, bulitin_tycons,
+       CODE src/ast/types.rs: tycon, TyCon, TyCon::new,
        CODE src/constants.rs: DYNAMIC_OBJECT_NAME
   <2>4. capture の unit は所有される。
     D14 が「capture の unit は必ず所有される」を与える。
@@ -1559,7 +1568,8 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
            `InlineLLVMArrayAppendCapacityUnchecked` と `InlineLLVMArraySetCapacityBoundsUnchecked` の
            呼び出しである。**前者は `src` の消費について分岐するもの
            (D30 の (X2) が名指す形) であり、その `Fresh` 宣言の結果 (`dst`) は
-           `array_tail_destination` を経て `force_unique_or_assert` が `make_array_unique_with_hole` へ
+           `array_tail_destination` を経て `force_unique_or_assert` が
+           `force_unique_or_assert_with_hole` を通して `make_array_unique_with_hole` へ
            渡す経路の上に在る。**`InlineLLVMArraySetCapacityBoundsUnchecked` の呼び出しだけが、この
            2 つの補助関数を経ない自分自身の一意腕を持つ。**その一意腕は `realloc_array` を呼ぶだけで
            `gc.release` を出さず、共有の腕は `release_replaced_array` で古い記憶域を処分する。
@@ -1567,7 +1577,7 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
          CODE src/fixstd/builtin.rs: InlineLLVMArraySetCapacityBoundsUnchecked,
          InlineLLVMArrayAppendCapacityUnchecked, InlineLLVMIsUniqueFunctionBody,
          InlineLLVMArrayIsStorageUniqueBody, make_struct_union_unique, make_array_unique_with_hole,
-         array_tail_destination, force_unique_or_assert
+         array_tail_destination, force_unique_or_assert, force_unique_or_assert_with_hole
     <3>2. QED
       `<3>1` の 2 つの場合を分ける。
       **新しく割り当てたオブジェクトの場合**は `<1>1c` が扱う。
@@ -1801,7 +1811,9 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   `gc.retain(x, ..)` を出し、`gc.apply_lambda(f, vec![x], false)` を出し、その後に `gc.release(x, ..)` を
   出す。この retain が作る参照が指すのは `x` の値の inhabited な各 boxed leaf のオブジェクトである。
   この op は `borrows_operand` も `result_prov` も override しないので、`borrows_operand(i)` は既定の偽で
-  あり、宣言は既定の単一の `Unknown` である。よって D9 の `Llvm` の行はこの op の各オペランドの boxed
+  あり、宣言は既定の単一の `Unknown` である -- 既定の `result_prov` の本体は
+  `Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)` であり、`Provenance::uniform` は
+  `sole_origin(src)` を各 boxed leaf に置く。よって D9 の `Llvm` の行はこの op の各オペランドの boxed
   leaf を消費とする。**この retain が指すオブジェクトを `o` とすると、`n_o ≥ 1` である** -- `x` の
   leaf のうち `o` を指すものがその消費に入るからである。
   **`d = 0` である。**`p` はこの retain の直前の点であり、`generate` がその前に出すのは
@@ -1812,7 +1824,8 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   BY <ref id=e11772a/>, <ref id=9d74736/>, <1>1, <1>1e,
      CODE src/generator.rs: Generator::get_scoped_obj,
      CODE src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody,
-     CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand, LLVMGen::result_prov
+     CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand, LLVMGen::result_prov,
+     CODE src/rc_ir/provenance.rs: Provenance::uniform, sole_origin
 
 <1>7b. CASE 相殺しない retain (`<1>1` の (K-ii) のうち、複製・割り当てたオブジェクトの欄へ書く形)。
   4 か所を 2 つに分ける。
@@ -1830,7 +1843,9 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   する。それを呼ぶのは `InlineLLVMArrayAppendValueCapacityUnchecked` であり、その `value` はこの op の
   オペランドである。この op は `borrows_operand` を override しないので既定の偽である。
   **`InlineLLVMArrayAppendValueCapacityUnchecked::result_prov` は `Provenance::uniform(.., Fresh)` を
-  返すので、素通し (単一の `Arg`) を宣言する結果 leaf は 1 つも無い** -- よって D9 の `Llvm` の行は
+  返すので、素通し (単一の `Arg`) を宣言する結果 leaf は 1 つも無い** -- `Provenance::uniform` は
+  `sole_origin(src)` を各 boxed leaf に置くので、置かれる集合は `Fresh` 1 元である。よって D9 の
+  `Llvm` の行は
   `value` と `array` の全 boxed leaf を消費とする。この retain が指すオブジェクトを `o` とすると、
   `value` の leaf のうち `o` を指すものがその消費に入るので、`n_o` は `value` の leaf の分と `array` の
   leaf の分の和であり、`value` の分だけで 1 以上である。
@@ -1851,6 +1866,7 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
      InlineLLVMArrayAppendValueCapacityUnchecked::result_prov,
      force_unique_or_assert, force_unique_or_assert_with_hole, make_array_unique_with_hole,
      release_replaced_array,
+     CODE src/rc_ir/provenance.rs: Provenance::uniform, sole_origin,
      CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand
 
 <1>7c. CASE (E9) の retain (`<1>1` の (K-iii))。
