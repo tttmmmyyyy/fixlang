@@ -1,8 +1,7 @@
 # P7e、P7d、P7a -- 所有の unit 粒度と一様性
 
 この文書は `README.md` の P7e と P7d を証明し、P7a の 2 つの向き -- **節 1 から節 3** と
-**節 2 から節 1** -- を証明する。立つのは `README.md` の定義と仮定、および命題 P1-P7 と P9 の**言明**で
-ある。
+**節 2 から節 1** -- を証明する。`README.md` の命題については、**言明**だけを読む。
 
 P7a の残る向き (節 3 から節 2、節 3 から節 1) は偽である。`Λ(u)` に inhabited (D16) な leaf が 1 つも
 無い site では節 3 が空虚に真になるからで、第 6 節の R2 がその本体を挙げる。`Inh(v, u) ≠ ∅` を仮定に
@@ -117,7 +116,8 @@ A6 と A11 の範囲を `borrow_ify` の**入力**に限ると書く。A12 に�
 `RcVar` の名前 (`Let` の束縛変数、`Var` の右辺の変数、`Destructure` の容器とフィールド変数、`Match` の
 scrutinee とアームの payload 変数、`App` の callee と各引数、`Closure` の各 capture、`Llvm` の各
 オペランド、`Retain` / `Release` / `Eval` / `Ret` が名指す変数) の全体である
-(`CODE src/rc_ir/ast.rs: for_each_var`, `for_each_var_of_node`, `for_each_var_of_rhs`)。
+(`CODE src/rc_ir/ast.rs: for_each_var`, `for_each_var_of_node`, `for_each_var_of_rhs`,
+`for_each_node`, `for_each_node_inner`)。
 
 **DEF 扱う型**
 次の 3 種を**根の型**と呼ぶ。**関数のパラメータ・capture が宣言する型** (`RcFunc::params` と
@@ -199,24 +199,47 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   BY <ref id=cb35ab1/>, <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: clone_func, borrow_funcref,
      CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
 
+<1>2a. `rename_expr(node, renaming)` が返す木は、`node` の木から次の 2 つだけを替えたものである。
+       各 `RcVar` の名前を `renaming` で引いた像に替えること、および `Llvm` の op を複製して
+       `free_vars_mut()` が返す名前を同じく替えることである。節点の種類とその並び、
+       `Retain`/`Release` の path と state、`Destructure` が名指すフィールドの添字とその state、
+       `Let` の右辺の構成子、`Llvm` の `args` の長さ、`Closure` の `FuncRef`、`Match` の各アームの
+       `tag` と `payload_state`、そして各 `RcVar` の型の欄は、`node` のものである。
+  `rename_expr` の本体は `grow_stack(|| rename_expr_inner(node, renaming))` であり、A15 より
+  `grow_stack` は閉包をちょうど 1 回呼んでその返り値を返すので、`rename_expr` が返すのは
+  `rename_expr_inner(node, renaming)` である。`rename_expr_inner` は D2 の 6 種の節点それぞれについて
+  同じ構成子を組み直し、`Let` の束縛変数・`Retain`/`Release` が名指す変数・`Eval` と `Ret` が名指す
+  変数に `rename_var` を掛け、`path` と `state` をそのまま写し、継続に `rename_expr` を掛ける。
+  `Destructure` の腕は容器に `rename_var` を掛け、各対 `(i, v)` の添字 `i` をそのまま写して `v` に
+  `rename_var` を掛ける。`Let` の右辺には `rename_rhs` を掛ける。`rename_rhs` は `RcRhs` の 5 種の
+  構成子を保ち、`Var` の変数・`App` の callee と各引数・`Closure` の各 capture・`Llvm` の各オペランド
+  に `rename_var` を掛け、`Closure` の `FuncRef` をそのまま写し、`Llvm` の op は `clone()` して
+  `free_vars_mut()` が返す名前だけを差し替え、`Match` は scrutinee に `rename_var` を掛けて各アームの
+  `tag` と `payload_state` をそのまま写し、`payload` に `rename_var` を、`body` に `rename_expr` を
+  掛ける。`rename_var` は名前を `renaming` で引いて差し替えるだけで、型の欄を残す。
+  BY <ref id=3e6b0e0/>, <ref id=b3dfa37/>, CODE src/rc_ir/rename.rs: rename_expr, rename_expr_inner,
+     rename_rhs, rename_var
+
 <1>3. 借用版の `Pre(V)` について A6 の性質が成り立つ。
   A6 より入力の関数の束縛名は互いに異なる。`<1>2` より `rename` の像の名前は互いに異なるので、その
   像も互いに異なる。`<1>2` より像はどちらのプログラムのどの関数の名前とも異なる。
   BY <ref id=33c54dc/>, <1>2
 
 <1>4. 借用版の `Pre(V)` について A11 の性質が成り立つ。
-  `fresh_rename_function` は束縛の位置に `assign_fresh_name` を掛け、`rename_expr` は本体の各 `RcVar`
-  を同じ `renaming` で引く。`<1>2` より像の名前は入力に現れるどの名前とも異なり、像の中では互いに
-  異なるので、鍵でない名前を恒等に写す延長は入力に現れる名前の上で単射である。`<1>2` より木の形は
-  変わらないので、D2 のスコープの規則が定める入れ子も同じである。よって借用版のある位置の使用が
+  `fresh_rename_function` は束縛の位置に `assign_fresh_name` を掛けて `renaming` を組み、本体に
+  `rename_expr` を掛ける。`<1>2a` より `rename_expr` は本体の各 `RcVar` の名前を同じ `renaming` で
+  引く。`<1>2` より像の名前は入力に現れるどの名前とも異なり、像の中では互いに
+  異なるので、鍵でない名前を恒等に写す延長は入力に現れる名前の上で単射である。`<1>2` と `<1>2a` より
+  木の形は変わらないので、D2 のスコープの規則が定める入れ子も同じである。よって借用版のある位置の使用が
   スコープに見る束縛は、入力の対応する位置の使用が見る束縛の像ちょうどである。入力が A11 を満たすので、
   借用版でも使用は自分の位置でスコープに入っている束縛に解決し、自由な局所名はパラメータと capture の
   像に限る。
-  BY <ref id=3905b4e/>, <1>2, <ref id=b3dfa37/>, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name, rename_expr
+  BY <ref id=3905b4e/>, <1>2, <1>2a, <ref id=b3dfa37/>, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
 
 <1>5. 借用版の `Pre(V)` について A12 の性質が成り立つ。
-  `rename_var` は `RcVar` の名前だけを差し替えて型を残し、`rename_rhs` は右辺の構成子も `Llvm` の op も
-  `Destructure` が名指すフィールドも `Match` が名指す変位も変えない。A12 が対にする各組 -- move-bind の
+  `<1>2a` より、名前替えは `RcVar` の名前だけを差し替えて型を残し、右辺の構成子も `Llvm` の `args` の
+  長さも `Destructure` が名指すフィールドの添字も `Match` のアームの `tag` も変えない。
+  A12 が対にする各組 -- move-bind の
   両辺、アームの結果と `Match` の束縛変数、payload と変位、catch-all の payload と scrutinee、
   `Destructure` のフィールド変数とフィールド、`App` の各引数と呼び出し先のパラメータ、`App` の結果、
   同じ名前の `RcVar`、束縛を持たない `RcVar`、そして `Llvm` 節点の型についての 4 つ -- は、どちらの側も
@@ -224,17 +247,17 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   ある。直接呼び出しの callee と、束縛を持たない `RcVar` の名前は最上位の記号の名前であり、
   A13 と D6 より局所名でないので `renaming` の鍵ではなく、名前も型も動かない -- 名指す関数も
   その `params` も入力のものである。局所変数を経由する間接呼び出しでは callee は鍵でありうるが、
-  `rename_var` が型を残すので `ty(callee)` は動かない。`RcRhs::Closure` の `FuncRef` も
-  `rename_rhs` がそのまま写す。`RcFunc` の欄どうしの整合は、`clone_func` が `params` と `capture` に
+  `<1>2a` より型を残すので `ty(callee)` は動かない。`RcRhs::Closure` の `FuncRef` も
+  `<1>2a` よりそのまま写る。`RcFunc` の欄どうしの整合は、`clone_func` が `params` と `capture` に
   `rename_var` を掛け `fn_ty` と `ret_ty` を写すことによる。
   A12 の残る 3 つの節 -- `Match` の scrutinee が union であること、`Destructure` の容器が構造体で
   あること、`Destructure` が名指すフィールドと `Match` が名指す変位がその型が実際に持つ (punched でない)
-  ものであること -- も同じ理由で移る。`rename_expr` は `Match` の scrutinee と `Destructure` の容器に
-  `rename_var` を掛けるだけなので `ty(scrut)` と `ty(container)` は入力のものであり、`rename_rhs` は
-  名指すフィールドの添字も変位の番号も写すだけだからである。A12 がこの 3 つの節に伴わせる
+  ものであること -- も同じ理由で移る。`<1>2a` より `Match` の scrutinee と `Destructure` の容器には
+  `rename_var` が掛かるだけなので `ty(scrut)` と `ty(container)` は入力のものであり、
+  名指すフィールドの添字もアームの `tag` もそのまま写るからである。A12 がこの 3 つの節に伴わせる
   「その型の `is_closure()` は偽である」も、型が動かないので同じく移る。
-  BY <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=596a46d/>, <1>2, CODE src/rc_ir/borrow.rs: clone_func,
-     CODE src/rc_ir/rename.rs: rename_expr, rename_rhs, rename_var
+  BY <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=596a46d/>, <1>2, <1>2a,
+     CODE src/rc_ir/borrow.rs: clone_func, CODE src/rc_ir/rename.rs: rename_var
 
 <1>6. QED
   `<1>1` の 2 種については、A6・A11・A12 が入力の本体に直接当たる。借用版については `<1>3`・`<1>4`・
@@ -267,18 +290,24 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 節 2・節 3 は `Post(V)` の活性化について読む。
 
 <1>1. (書1)・(書2)・(書3) の形が成り立つ。
-  `rewrite` は `rewrite_inner` を呼び、`rewrite_inner` は節点の種類で分岐する。
+  `rewrite` の本体は `grow_stack(|| self.rewrite_inner(node))` であり、A15 より `grow_stack` は閉包を
+  ちょうど 1 回呼んでその返り値を返すので、`rewrite` が返すのは `rewrite_inner(node)` である。
+  `rewrite_inner` は節点の種類で分岐する。
   `Let(x, App(callee, args), k)` の腕は `route` の返り値を callee に据え、`call_rc` が返す 2 つの列を
   `prepend_rc` で、第 1 の列はこの節点の直前に、第 2 の列は書き換えた継続の先頭に置く。`prepend_rc` が
   `rc_node` で作るのは `Retain`/`Release` の節点であり、`call_rc` が返す対の第 1 成分は `args` の要素で
   ある。`route` は `callee.clone()` を返すか、その `name` だけを借用版の名前に替えたものを返す。
   `Retain`/`Release` の腕は `rewrite_rc` を呼び、それは継続を書き換えたうえで、`is_borrow_version` が
   偽なら同じ `(v, path, state)` の節点を 1 つ、真なら `units_under(ty(v), path)` のうち `owns_unit` が
-  真である unit ごとに `v` を名指す節点を並べた列を返す。`Let(x, Match(scrut, arms), k)` の腕は各アームの
-  本体と継続を書き換えて同じ `x` と同じ `scrut` で組み直し、`Let(x, rhs, k)` の残りの腕は `rhs.clone()`
-  を据え、`Destructure`・`Eval`・`Ret` の腕も同じ内容で組み直す。
-  BY CODE src/rc_ir/borrow.rs: prepend_rc, rc_node, expr_node, RewriteCtx::rewrite,
-     RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc, RewriteCtx::call_rc, RewriteCtx::route
+  真である unit ごとに `v` を名指す節点を並べた列を返す。`Let(x, Match(scrut, arms), k)` の腕は各アームを
+  `arm.with_body(self.rewrite(&arm.body))` に、継続を `self.rewrite(k)` に替えて、同じ `x` と同じ
+  `scrut` で組み直す。`MatchArm::with_body` は `body` の欄だけを差し替えて残りの欄を `self.clone()` から
+  取るので、アームの `tag`・`payload`・`payload_state` は `Pre(V)` のものである。
+  `Let(x, rhs, k)` の残りの腕は `rhs.clone()` を据え、`Destructure`・`Eval`・`Ret` の腕も同じ内容で
+  組み直す。
+  BY <ref id=3e6b0e0/>, CODE src/rc_ir/borrow.rs: prepend_rc, rc_node, expr_node, RewriteCtx::rewrite,
+     RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc, RewriteCtx::call_rc, RewriteCtx::route,
+     CODE src/rc_ir/ast.rs: MatchArm::with_body
 
 <1>2. (a) が成り立つ。
   `VarTable::of` は `params` と `capture` の各 `p` について `param_tys` に `(p.name, p.ty)` を入れ、
@@ -465,8 +494,12 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
 **leaf と unit がずれるのはここである。**`is_fully_unboxed(σ)` と `is_closure(σ)` が偽で、
 `is_union(σ)` または `is_punched_array(σ)` が真であり、`is_box(σ)` も `is_array(σ)` も偽のとき、
 `step(σ) = Unit` なので `rc_units_go` は `path` を積んで止まるのに、`go` は
-`unpunched_field_types(σ)` の下へ降りる。`Std::PunchedArray a` は `unbox struct { _arr : Array a, _idx : I64 }`
-であり (`CODE src/fixstd/std.fix: PunchedArray`)、`is_punched_array` が真なのでこの形になる。
+`unpunched_field_types(σ)` の下へ降りる。`Std::PunchedArray a` がその形の型である。宣言は
+`unbox struct { _arr : Array a, _idx : I64 }` であり (`CODE src/fixstd/std.fix: PunchedArray`)、
+その最上位 tycon は `Std::PunchedArray` なので `is_punched_array` は真である
+(`CODE src/ast/types.rs: TypeNode::is_punched_array`, `TypeNode::toplevel_tycon_satisfies`,
+`CODE src/fixstd/builtin.rs: is_punched_array_tycon`, `make_punched_array_tycon`,
+`CODE src/constants.rs: PUNCHED_ARRAY_NAME`)。
 
 <1>1. `unit_step` は上から順に、`is_fully_unboxed(σ)` で `NoUnit` を、`is_closure(σ)` で
       `Capture { capture_idx: CLOSURE_CAPTURE_IDX, field_count: CLOSURE_FIELD_COUNT }` を、
@@ -1180,8 +1213,12 @@ namespace が `Std` で名前が `#FunPtr` で始まるとき、残りを `parse
   `τ` は扱う型なので L1b より A10 を満たす。`leaves(τ)` を計算する `go` が呼ぶのは
   `is_fully_unboxed`・`is_closure`・`is_box`・`is_array` と `unpunched_field_types` であり、
   `unpunched_field_types` と `is_fully_unboxed` は最上位 tycon の宣言を `type_env` から引く。A10 より、
-  `τ` から `unpunched_field_types` を繰り返し取る歩みは有限であり、その各段の型は ground で飽和していて
-  tycon が `type_env` にあるので、この降下は中断せずに終わる。この降下が通る `toplevel_tycon_info` の
+  `τ` から `unpunched_field_types` を繰り返し取る歩みは有限である。A10 よりその各段の型は ground で
+  飽和していて tycon が `type_env` にあるので、`declared_field_types` の
+  `assert_eq!(args.len(), tycon_info.tyvars.len())` と `toplevel_tycon_info` の
+  `tycons().get(&tycon).unwrap()` は通る。`instance_field_types` が行う newtype の展開が abort せず
+  停止することは、A10 の最後の節が別に与える -- A10 は、その面が ground・飽和・`type_env` の 3 つからは
+  出ないと述べる。よってこの降下は中断せずに終わる。この降下が通る `toplevel_tycon_info` の
   `assert!(!self.is_closure())` も通る -- `unpunched_field_types` はその関数を呼び、`is_fully_unboxed` は
   `is_box` を経て `is_unbox` を呼び、`is_unbox` は `is_closure()` を先に見て短絡するので、closure 型では
   `toplevel_tycon_info` に届かない。closure でない型では表明の条件がそのまま成り立つ。`go` は
@@ -1200,7 +1237,8 @@ namespace が `Std` で名前が `#FunPtr` で始まるとき、残りを `parse
   BY <ref id=8412761/>, <ref id=fd9b709/>, <ref id=fb62043/>, <ref id=33ee52f/>, <ref id=24f7933/>, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
      TypeNode::is_closure, TypeNode::is_funptr, TypeNode::toplevel_tycon_info,
-     TypeNode::unpunched_field_types, CODE src/fixstd/builtin.rs: is_funptr_tycon
+     TypeNode::unpunched_field_types, TypeNode::instance_field_types, TypeNode::declared_field_types,
+     CODE src/fixstd/builtin.rs: is_funptr_tycon
 
 <1>1. `owns_object_yet(V, type_env, r, p, OL)` は、まず `leaves(τ)` を計算し、続けて `under(τ, p)` の
       各要素 `unit` について「`trunc(τ, unit)` を鍵 `key` とし、`leaves(τ)` のうち `trunc(τ, ・) = key` を
@@ -1676,11 +1714,14 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
   `Binding::Field(container, _)` の `container` (`RcExpr::Destructure` の容器)、
   `Binding::Payload(scrut, _)` の `scrut` (`RcRhs::Match` の scrutinee)、`Binding::Join(arm_results)` の
   各元 (`returned_var` が返す、各アーム本体の終端の `Ret` が名指す変数) である。`for_each_var` は
-  `for_each_node` で本体の全節点 -- アーム本体の節点も含む -- を歩き、各節点について
-  `for_each_var_of_node` と `for_each_var_of_rhs` を呼ぶ。この 2 つは `RcRhs::Var` のオペランド、
+  `for_each_node` で本体を歩き、各節点について `for_each_var_of_node` と `for_each_var_of_rhs` を呼ぶ。
+  `for_each_node` の本体は `grow_stack(|| for_each_node_inner(node, visit))` であり、A15 より
+  `grow_stack` は閉包をちょうど 1 回呼ぶ。`for_each_node_inner` は各節点で `visit` を呼んだ後、`Match` の
+  各アーム本体と継続の両方へ降りるので、この歩きは本体の全節点 -- アーム本体の節点も含む -- を訪れる。
+  `for_each_var_of_node` と `for_each_var_of_rhs` は `RcRhs::Var` のオペランド、
   `RcRhs::Llvm` の各オペランド、`Destructure` の容器、`RcRhs::Match` の scrutinee、`Ret` が名指す変数の
   いずれも訪れる。
-  BY CODE src/rc_ir/ownership.rs: collect_bindings, returned_var,
+  BY <ref id=3e6b0e0/>, CODE src/rc_ir/ownership.rs: collect_bindings, returned_var,
      CODE src/rc_ir/ast.rs: for_each_node, for_each_node_inner, for_each_var, for_each_var_of_node,
      for_each_var_of_rhs
 
@@ -1716,10 +1757,13 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
       `rename` の像に入らない。
   <2>1. `rename` の鍵は言明の第 1 の節が挙げる名前ちょうどであり、いずれも `func` に現れる名前である。
     `fresh_rename_function` は `params` と `cap` の各名前について `assign_fresh_name` を呼び、続けて
-    `assign_fresh_names_to_binders` が本体を歩いて `Let` の束縛変数、`Match` のアームの payload 変数、
-    `Destructure` のフィールド変数について同じことをする。`renaming` に鍵が入るのはこの 2 か所だけで
-    ある。
-    BY CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name,
+    `assign_fresh_names_to_binders` を本体に掛ける。その本体は
+    `grow_stack(|| assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter))` であり、
+    A15 より `grow_stack` は閉包をちょうど 1 回呼ぶので、この歩きは
+    `assign_fresh_names_to_binders_inner` の歩きである。それは `Let` の束縛変数、`Match` のアームの
+    payload 変数、`Destructure` のフィールド変数について `assign_fresh_name` を呼ぶ。`renaming` に鍵が
+    入るのはこの 2 か所だけである。
+    BY <ref id=3e6b0e0/>, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name,
        assign_fresh_names_to_binders, assign_fresh_names_to_binders_inner
   <2>2. `rename` の像の名前は互いに異なる。
     `assign_fresh_name` は `*counter += 1` を行ってから `name#b<counter>` を作る (`clone_func` が渡す
@@ -1757,9 +1801,11 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
   payload 変数について `bindings` を入れる。これは `<1>2` が挙げる `rename` の鍵ちょうどである。
   `collect_bindings` が `Binding` に記録するのは、右辺に現れる変数 (`Move` の `y`、`Field` の
   容器、`Payload` の scrutinee、`Join` のアーム結果、`Llvm` のオペランド) である。`<1>1` より `clone` の
-  パラメータ・capture と本体はこれらをすべて `ρ` で写したものであり、型は変わらない。
-  BY <1>1, <1>2, CODE src/rc_ir/ownership.rs: VarTable::of, collect_bindings,
-     CODE src/rc_ir/rename.rs: rename_expr, rename_var
+  パラメータ・capture と本体はこれらをすべて `ρ` で写したものであり、型は変わらない -- `rename_expr` の
+  本体は `grow_stack(|| rename_expr_inner(node, renaming))` であり (A15)、`rename_expr_inner` と
+  `rename_rhs` は各 `RcVar` に `rename_var` を掛け、`rename_var` は名前だけを差し替えて型を残す。
+  BY <1>1, <1>2, <ref id=3e6b0e0/>, CODE src/rc_ir/ownership.rs: VarTable::of, collect_bindings,
+     CODE src/rc_ir/rename.rs: rename_expr, rename_expr_inner, rename_rhs, rename_var
 
 <1>5. `func` に現れる名前 `x` について `vars_f.bindings.get(x)` が
       `Some(Binding::Llvm(gen, args, rty))` であるとき、`vars_c.bindings.get(ρ(x))` は
@@ -1771,9 +1817,11 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
     `rename_rhs` の `RcRhs::Llvm` の腕は `llvm_gen.clone()` を作り、`llvm_gen.free_vars_mut()` が
     返す各 slot について `renaming` が持つ名前へ差し替え、`args` の各要素に `rename_var` を掛ける。
     `rename_var` は名前だけを差し替えて型を残す。`collect_bindings` は `Binding::Llvm` の第 3 成分に
-    `Let` の束縛変数の型 `x.ty` を入れ、`rename_expr` はその束縛変数にも `rename_var` を掛けるので、
-    第 3 成分の型も変わらない。
-    BY <1>1, CODE src/rc_ir/rename.rs: rename_rhs, rename_var, rename_expr,
+    `Let` の束縛変数の型 `x.ty` を入れる。`rename_expr` の本体は
+    `grow_stack(|| rename_expr_inner(node, renaming))` であり (A15)、`rename_expr_inner` の `Let` の腕は
+    その束縛変数にも `rename_var` を掛けるので、第 3 成分の型も変わらない。
+    BY <1>1, <ref id=3e6b0e0/>, CODE src/rc_ir/rename.rs: rename_rhs, rename_var, rename_expr,
+       rename_expr_inner,
        CODE src/ast/inline_llvm.rs: LLVMGen::free_vars_mut,
        CODE src/rc_ir/ownership.rs: collect_bindings
   <2>2. `result_prov` は `self` の `FullName` の欄を読まない。
@@ -1930,8 +1978,12 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
   L1b より A10 を満たす。`leaves(τ)` を計算する `go` が呼ぶのは `is_fully_unboxed`・`is_closure`・
   `is_box`・`is_array` と `unpunched_field_types` であり、`unpunched_field_types` と `is_fully_unboxed` は
   最上位 tycon の宣言を `type_env` から引く。A10 より、`τ` から `unpunched_field_types` を繰り返し取る
-  歩みは有限であり、その各段の型は ground で飽和していて tycon が `type_env` にあるので、この降下は
-  中断せずに終わる。この降下が通る `toplevel_tycon_info` の `assert!(!self.is_closure())` も通る --
+  歩みは有限である。A10 よりその各段の型は ground で飽和していて tycon が `type_env` にあるので、
+  `declared_field_types` の `assert_eq!(args.len(), tycon_info.tyvars.len())` と
+  `toplevel_tycon_info` の `tycons().get(&tycon).unwrap()` は通る。`instance_field_types` が行う
+  newtype の展開が abort せず停止することは、A10 の最後の節が別に与える -- A10 は、その面が
+  ground・飽和・`type_env` の 3 つからは出ないと述べる。よってこの降下は中断せずに終わる。
+  この降下が通る `toplevel_tycon_info` の `assert!(!self.is_closure())` も通る --
   `unpunched_field_types` はその関数を呼び、`is_fully_unboxed` は `is_box` を経て `is_unbox` を呼び、
   `is_unbox` は `is_closure()` を先に見て短絡するので、closure 型では `toplevel_tycon_info` に届かない。
   closure でない型では表明の条件がそのまま成り立つ。`go` は `unpunched_field_types` を呼ぶ前に
@@ -1949,7 +2001,8 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
   BY <1>2, <ref id=8412761/>, <ref id=fd9b709/>, <ref id=fb62043/>, <ref id=33ee52f/>, <ref id=24f7933/>, DEF 扱う型, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
      CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
      TypeNode::is_closure, TypeNode::is_funptr, TypeNode::toplevel_tycon_info,
-     TypeNode::unpunched_field_types, CODE src/fixstd/builtin.rs: is_funptr_tycon
+     TypeNode::unpunched_field_types, TypeNode::instance_field_types, TypeNode::declared_field_types,
+     CODE src/fixstd/builtin.rs: is_funptr_tycon
 
 <1>4. QED
   `pty_f(r)` は `Option` なので `None` か `Some(τ)` のどちらかである。`None` の場合は `<1>1` が両辺とも
@@ -1991,13 +2044,17 @@ P7a の意味の site の全部が覆われる。
        (第 1 節の DEF 現れる名前) であり、`cand(vars_f, v, u)` の各元 `(r, p)` の `r` も `func` に
        現れる名前である。
   `levelled_sites` は `for_each_node` で本体を歩き、`Retain`/`Release` の名指す変数と `RcRhs::App` の各
-  引数を積む。`for_each_var` は同じ `for_each_node` の歩きの各節点について `for_each_var_of_node` と
+  引数を積む。`for_each_node` の本体は `grow_stack(|| for_each_node_inner(node, visit))` であり、A15 より
+  `grow_stack` は閉包をちょうど 1 回呼ぶので、この歩きは `for_each_node_inner` の歩きである。
+  `for_each_var` は同じ `for_each_node` の歩きの各節点について `for_each_var_of_node` と
   `for_each_var_of_rhs` を呼び、この 2 つは `Retain`/`Release` の名指す変数と `App` の各引数を訪れるので、
   `v.name` は `func` に現れる名前である。DEF 再帰で訪れる対 より L12 と L14a を `vars_f` について読んで
   よい。L12 より `cand(vars_f, v, u) ⊆ Reach(vars_f, v.name, u)` であり、L14a より
   `Reach(vars_f, v.name, u)` の各要素の変数は `func` に現れる名前である。
-  BY DEF 再帰で訪れる対, <ref id=44a9669/>, <ref id=2d18d2a/>, CODE src/rc_ir/borrow.rs: levelled_sites,
-     CODE src/rc_ir/ast.rs: for_each_node, for_each_var, for_each_var_of_node, for_each_var_of_rhs
+  BY DEF 再帰で訪れる対, <ref id=44a9669/>, <ref id=2d18d2a/>, <ref id=3e6b0e0/>,
+     CODE src/rc_ir/borrow.rs: levelled_sites,
+     CODE src/rc_ir/ast.rs: for_each_node, for_each_node_inner, for_each_var, for_each_var_of_node,
+     for_each_var_of_rhs
 
 <1>2. グローバル初期化子の `RewriteCtx` では、`owns_object` は任意の `(r, p)` について真を返す。
   その `RewriteCtx` の `vars` は `VarTable::body_only` で作られ、L1c よりその `param_tys` は空である。
@@ -2014,15 +2071,17 @@ P7a の意味の site の全部が覆われる。
     `<1>2` と同じ腕である。
     BY CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
   <2>3. `pty(r) = Some(τ)` のとき、`owns_object(r, p)` は中断しない。
-    `<2>1` よりこの `RewriteCtx` の `vars` は `VarTable::of(f_own)` であり、`f_own` は `func` の複製な
-    ので A6・A11・A12 を満たす。DEF 再帰で訪れる対 よりこの表について L12 と L14 を読んでよい。
+    `<2>1` よりこの `RewriteCtx` の `vars` は `VarTable::of(f_own)` である。この `RewriteCtx` を作る
+    時点の `f_own.body` は `f_own` の版の `Pre(V)` であり、L0 よりそれについて A6・A11・A12 が述べる
+    性質が成り立つ。よって DEF 再帰で訪れる対 が固定する本体と表の条件が満たされ、この本体と
+    `VarTable::of(f_own)` について L12 と L14 を読んでよい。
     `<1>1` より `u ∈ units(ty(v))` であり、L12 より `(r, p) ∈ Reach(v, u)`、L14 より
     `covered(ty(r), p) ≠ ∅` である。L1c より `τ = ty(r)` であり、`covered(τ, p) ≠ ∅` である。
     L10 より `under(τ, p)` もその各要素に
     ついての `trunc(τ, ・)` も中断しない。`owns_object` が呼ぶのはこの 2 つと `owned_units.contains` だけ
     である。
-    BY <1>1, <2>1, DEF 再帰で訪れる対, <ref id=fa1a6ce/>, <ref id=ef258a5/>, <ref id=44a9669/>, <ref id=c7d11e5/>,
-       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
+    BY <1>1, <2>1, DEF 再帰で訪れる対, <ref id=9cef509/>, <ref id=fa1a6ce/>, <ref id=ef258a5/>, <ref id=44a9669/>, <ref id=c7d11e5/>,
+       CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object, RewriteCtx::new, borrow_ify
   <2>4. `pty(r) = Some(τ)` のとき、`owns_object(r, p)` は真である。
     `owns_object` は `under(τ, p)` の各要素 `unit` について `(r, trunc(τ, unit)) ∈ owned_units` を
     要求する。L9 より `trunc(τ, unit) ∈ units(τ)` である。`borrow_ify` は入力の各関数について
@@ -2045,11 +2104,13 @@ P7a の意味の site の全部が覆われる。
       `{ (ρ(v), u) : (v, u) ∈ levelled_sites(func) }` であり、
       `cand(vars_c, ρ(v), u) = ρ(cand(vars_f, v, u))` である。
   `levelled_sites` は本体の節点を `for_each_node` で歩き、`Retain`/`Release` の変数と path、`App` の引数と
-  その型の `rc_units` を積む。P9 より `clone` の本体は `func` の本体の束縛変数を `ρ` で
+  その型の `rc_units` を積む。`<1>1a` よりその歩きは `for_each_node_inner` の歩きであり、それは節点の
+  種類だけで降り方を決める。P9 より `clone` の本体は `func` の本体の束縛変数を `ρ` で
   付け替えたものであり、変数の型は変わらないので、積まれる対は `ρ` で写ったものちょうどである。候補の
   対応は L15 の第 2 の項による。その項は「`func` に現れる各名前 `x`」についての言明であり、site の
   `v.name` がそれを満たすことは `<1>1a` が与える。
-  BY <1>1a, <ref id=63eadd9/>, <ref id=c3b2aa3/>, CODE src/rc_ir/borrow.rs: levelled_sites, CODE src/rc_ir/ast.rs: for_each_node
+  BY <1>1a, <ref id=63eadd9/>, <ref id=c3b2aa3/>, CODE src/rc_ir/borrow.rs: levelled_sites,
+     CODE src/rc_ir/ast.rs: for_each_node, for_each_node_inner
 
 <1>5. 不動点において、各関数の各 site について `level_ownership(vars_f, type_env, (v, u), OL)` は `false` を
       返す。
@@ -2120,7 +2181,7 @@ P7a の意味の site の全部が覆われる。
 
 **DEF site**
 版 `V` の **site** とは、`Pre(V)` (第 1 節) を `for_each_node` で歩いて集めた次の対である
-(`CODE src/rc_ir/ast.rs: for_each_node`)。
+(`CODE src/rc_ir/ast.rs: for_each_node`, `for_each_node_inner`)。
 
 - `Retain(v, path, ..)` / `Release(v, path, ..)` の節点について、対 `(v, path)`。
 - `Let(_, App(_, args), _)` の節点について、各引数 `arg` と各 `unit ∈ units(ty(arg))` の対 `(arg, unit)`。
@@ -2164,15 +2225,17 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 <1>1. `owns_unit` を呼ぶのは `any_owned_unit`、`routing_saves_retain`、`call_rc`、`rewrite_rc` の 4 か所で
       ある。
-  `owns_unit` は `src/rc_ir/borrow.rs` の `impl RewriteCtx` の中で `fn` として宣言されている --
-  `pub` も `pub(crate)` も付かない -- ので、そのファイルは `mod` 宣言を持たず、
-  EXT Rust の可視性 よりその呼び出しはこのファイルの中に
+  `owns_unit` は `src/rc_ir/borrow.rs` の `impl RewriteCtx` の中で `fn` として宣言されており、
+  `pub` も `pub(crate)` も付かない。またこのファイルは `mod` 宣言を 1 つも持たないので、下位モジュールを
+  持たない。この 2 つと EXT Rust の可視性 より、その呼び出しはこのファイルの中に
   しかない。このファイルの中で識別子 `owns_unit` が現れるのは、この宣言と、`any_owned_unit` の
   `rc_units(&arg.ty, ..).iter().any(|unit| self.owns_unit(arg, unit))`、`routing_saves_retain` の
   `!(self.owns_unit(arg, unit) && ..)`、`call_rc` の `let arg_owned = self.owns_unit(arg, &unit);`、
   `rewrite_rc` の `.filter(|unit| self.owns_unit(v, unit))`、および 2 つの doc コメントである。
   BY EXT Rust の可視性,
-     CODE src/rc_ir/borrow.rs: 識別子 owns_unit の全出現, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
+     CODE src/rc_ir/borrow.rs: 識別子 owns_unit の全出現,
+     CODE src/rc_ir/borrow.rs: 下位モジュールの宣言の全出現,
+     CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
      RewriteCtx::any_owned_unit, RewriteCtx::routing_saves_retain,
      RewriteCtx::call_rc, RewriteCtx::rewrite_rc
 
@@ -2201,13 +2264,17 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
 
 <1>4. `<1>2` と `<1>3` の `(v, u)` は、`V` の site (DEF site) である。
   `rewrite_inner` は `Pre(V)` の木を継続とアーム本体へ降りて歩くので、`<1>2` と `<1>3` の呼び出しが
-  起きる節点は `Pre(V)` の節点である。DEF site の歩き `for_each_node` も継続とアーム本体の両方へ降りる
-  ので、その節点を訪れる。`<1>2` の `(arg, unit)` は `Let(_, App(_, args), _)` の節点の引数と
+  起きる節点は `Pre(V)` の節点である。DEF site の歩き `for_each_node` の本体は
+  `grow_stack(|| for_each_node_inner(node, visit))` であり、A15 より `grow_stack` は閉包をちょうど 1 回
+  呼ぶ。`for_each_node_inner` は各節点で `visit` を呼んだ後、`Match` の各アーム本体と継続の両方へ降りる
+  ので、この歩きは `Pre(V)` のすべての節点を訪れる。`<1>2` の `(arg, unit)` は
+  `Let(_, App(_, args), _)` の節点の引数と
   `rc_units(arg.ty, type_env) = units(ty(arg))` の元の対、`<1>3` の `(v, path)` は
   `Retain(v, path, ..)` / `Release(v, path, ..)` 節点の変数と path であり、DEF site はその節点について
   ちょうどこの対を挙げる。関数の版ではこの集合は `levelled_sites` が挙げるものである。
-  BY <1>2, <1>3, DEF site, CODE src/rc_ir/borrow.rs: levelled_sites, RewriteCtx::rewrite_inner,
-     CODE src/rc_ir/ast.rs: for_each_node
+  BY <1>2, <1>3, DEF site, <ref id=3e6b0e0/>,
+     CODE src/rc_ir/borrow.rs: levelled_sites, RewriteCtx::rewrite_inner,
+     CODE src/rc_ir/ast.rs: for_each_node, for_each_node_inner
 
 <1>5. グローバル初期化子の版では `owns_unit(v, u)` は真を返す。
   その `RewriteCtx` は `is_borrow_version: false` で作られるので `<1>3` の呼び出しは起きない。`<1>2` の
@@ -2270,12 +2337,15 @@ R1 は、節 2 と節 3 の inhabited の限定が要ることを示す記録で
   `unpunched_field_types` の全対についての全称である。`ty(c)` はこの 4 つの述語をどれも満たさないので
   全称の腕に入り、`ty(x)` がその 1 つなので `is_fully_unboxed(ty(c))` も偽である。`unit_step` は上から順に
   `is_fully_unboxed`、`is_closure`、`is_box || is_union || is_array || is_punched_array` を見るので、
-  残る分かれ目は `is_punched_array(ty(c))` だけである。**`Std::PunchedArray a` は
-  `unbox struct { _arr : Array a, _idx : I64 }` なので、この場合は実際に起こりうる**
-  (`CODE src/fixstd/std.fix: PunchedArray`)。
+  残る分かれ目は `is_punched_array(ty(c))` だけである。**この場合は実際に起こりうる** --
+  `Std::PunchedArray a` は `unbox struct { _arr : Array a, _idx : I64 }` と宣言されており、
+  その最上位 tycon は `Std::PunchedArray` なので `is_punched_array` が真である。
   BY <ref id=83d98e9/>, <ref id=9cef509/>, <ref id=33ee52f/>, <ref id=1d99428/>, CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_struct,
      TypeNode::is_union, TypeNode::is_punched_array, TypeNode::toplevel_tycon_info,
-     CODE src/rc_ir/ownership.rs: unit_step
+     TypeNode::toplevel_tycon_satisfies,
+     CODE src/rc_ir/ownership.rs: unit_step, CODE src/fixstd/std.fix: PunchedArray,
+     CODE src/fixstd/builtin.rs: is_punched_array_tycon, make_punched_array_tycon,
+     CODE src/constants.rs: PUNCHED_ARRAY_NAME
 
 <1>3a. unbox 容器の `Field(c, idx)` について、`leaves(ty(c))` のうち `[idx]` を前置に持つものは
        `{ [idx] ++ μ : μ ∈ leaves(ty(x)) }` であり、したがって
@@ -3284,11 +3354,11 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
 <1>2b. `VarPath` の集合 `S` が `(z, [])` を含まないとき、`owns_object_yet(vars, type_env, z, [], S)` は
        偽である。
   `pty(z) = Some(Array I64)` なので `owns_object_yet` は `units_under(Array I64, [])` の各 unit について
-  「同じ鍵を持つ所有された leaf」を要求する。`unit_step(Array I64)` は `is_array` の行で
-  `UnitStep::Unit` を返すので、`sub(Array I64, []) = Some(Array I64)` であり L3 より
-  `units(Array I64) = [[]]`、L2 より `under(Array I64, []) = [[]]` である。鍵は
-  `trunc(Array I64, []) = []` (空の path なのでループに入らない) であり、`leaves(Array I64) = {[]}` なので
-  要求されるのは `(z, []) ∈ S` である。
+  「同じ鍵を持つ所有された leaf」を要求する。`sub(Array I64, [])` は空の path なのでループに入らず
+  `Some(Array I64)` を返す。`unit_step(Array I64)` は `is_array` の行で `UnitStep::Unit` を返すので、
+  L3 より `units(Array I64) = [[]]` であり、L2 より `under(Array I64, []) = [[]]` である。鍵は
+  `trunc(Array I64, [])` であり、これも空の path なのでループに入らず `[]` である。
+  `leaves(Array I64) = {[]}` なので要求されるのは `(z, []) ∈ S` である。
   BY <ref id=9f11796/>, <ref id=f221813/>, CODE src/rc_ir/borrow.rs: owns_object_yet,
      CODE src/rc_ir/ownership.rs: unit_step, subtree_type, units_under, truncate_to_unit,
      CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths
@@ -3342,27 +3412,27 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   印を付ける (E5) の段だけであり (D26)、(E5) が走るのはグローバル初期化子の活性化が終端の `Ret` に着くときなので (D24)、
   初期化子を 1 つも持たないこのプログラムの実行に (E5) の段は無い。よってグローバル状態のオブジェクトは
   1 つも無い。
-  (a) について。このプログラムのどの実行でも、生きている (D25) オブジェクトはどの点でも 1 つも無い。
-  素動作の列についての帰納で見る。最初の時点について -- 環境が持ち込む boxed な値は A17 の (i-d) より
-  「このプログラムが作って環境へ番地を渡したもの」に限るが、番地を渡す op
-  (`boxed_to_retained_ptr` の `InlineLLVMBoxedToRetainedPtrIOS`) はこの本体に無いので 1 つも無く、
-  D25 よりその時点に生きているオブジェクトは無い。ある点まで生きているオブジェクトが 1 つも無いとする。
-  `create_obj` を呼ぶのは `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕 (`llvm_gen.generate` を経て) と
-  `Closure` 節点を作る段だけであり、`Ret`・`Retain`・`Release` の腕は呼ばない
-  (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`)。この本体に `Closure` 節点は無く、`Llvm`
-  の `Let` は `union_make_1` と `int_lit_0` の 2 つである。`InlineLLVMMakeUnionBody::generate` は結果の型
-  `Outer` について、`InlineLLVMIntLit::generate` は結果の型 `I64` について `create_obj` を呼ぶ
-  (`CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::generate, InlineLLVMIntLit::generate`)。`Outer`
-  は unbox union と宣言されているので `ty_to_object_ty` の `Union` の枝が `object_type.is_unbox` に
-  `TyConInfo` の `is_unbox` (真) をそのまま写し、`I64` はプリミティブなので同じ関数の `Primitive` の枝が
-  `is_unbox` の真を課す (`CODE src/object.rs: ty_to_object_ty`)。よってどちらの呼び出しも
-  `object_type.is_unbox` が真の枝を取り、`create_obj` は割り当てを行わず undef の集約を返す
-  (`CODE src/object.rs: create_obj`)。したがってこの本体のどの素動作もオブジェクトを割り当てない。
-  子の活性化を作る段も無い -- `globals` が空なので (E5) と (E7) の段は無く、この本体に `App` が無いので
-  (E3) の段も無く、`union_make_1` と `int_lit_0` は `applies_a_function_operand` を宣言しないので (A3)
-  オペランドを適用する `Llvm` の段も無く、(F) の解放が活性化を作るのは `Destructor` のオブジェクトに
-  ついてだが、その点まで生きているオブジェクトが無い。環境の書き込みの段 (E8) はどの leaf がどの
-  オブジェクトを指すかを変えない (A17 の (ii-b))。よって次の素動作もオブジェクトを作らない。
+  (a) について。このプログラムのどの実行でも、生きている (D25) オブジェクトも生きている活性化 (D23) も
+  どの点でも 1 つも無い。段の列についての帰納で見る。
+  最初の時点について。D24 よりその時点に在る参照は環境が持ってきたものだけであり、A17 の (i-d) より
+  環境が持ち込む boxed な値は「このプログラムが作って環境へ番地を渡したもの」に限る。段が 1 つも
+  実行されていない時点でこのプログラムが作ったものは無いので、環境は boxed な値を 1 つも持ち込まず、
+  D25 よりその時点に生きているオブジェクトは無い。A17 の (i-c) よりその時点に在る参照も無い。活性化を
+  作るのは段なので (D24)、生きている活性化も無い。
+  ある時点まで生きているオブジェクトも生きている活性化も無いとして、次の段を見る。生きている活性化を
+  主語にする段 -- (E2)・(E3)・(E4)・(E5)・(E6) -- は、生きている活性化がその位置にあることを要るので
+  起きない。(E7) が作るのはグローバル初期化子の活性化だが、`<1>2` よりこのプログラムの `globals` は
+  空なので初期化子が無い。(E1) が活性化を作るのは C のエントリ点と `FFI_EXPORT` のエントリ点であり
+  (D22)、前者はグローバル `main` を読むが `globals` が空なのでその記号は無く、後者はこのプログラムが
+  `FFI_EXPORT` の宣言を持たないので無い。(F) の解放は、参照を処分してオブジェクトのカウントが 0 に
+  なった段の中で起きるが、オブジェクトが 1 つも無い。残るのは環境の段 (E8) と (E9) である。(E8) は
+  「参照を作らず、渡さず、処分しない」段であり、どの leaf がどのオブジェクトを指すかも変えない
+  (A17 の (ii-b))。(E9) は環境が「その番地が指すオブジェクトへの参照を自分が持っている点でだけ」呼ぶ
+  段であり (A17 の (ii-c))、環境は参照を 1 つも持たない。D24 の「活性化を作る段はこの 5 種で尽きる」より
+  この 2 種の段は活性化を作らない。オブジェクトも作らない -- D24 の段の記述は `Obl` について網羅であり、
+  割り当てはそのオブジェクトへの参照を 1 つ作る動きとして (E2) の `H` の表に載るからである。(E8) は
+  参照を作らず、(E9) が作るのは既に在るオブジェクトへの参照である。
+  よって次の時点でも生きているオブジェクトも生きている活性化も無い。
   したがって生きているオブジェクトのグラフはどの点でも空であり、非巡回である。
   この 2 つは `<1>2` と食い違わない。A18 が主語にするのは実行 (D24) のヒープであるのに対し、`<1>2` は
   D11 の 3 つの節を D21 の意味のすべての活性化について確かめており、その活性化は実行に実現するとは
@@ -3386,13 +3456,9 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   唯一の `Release(x, [])` を落としたものである。落とした本体では `held` は 1 のまま終端に着き、`bumps` は
   0 のままなので、(ii-a)・(ii-b)・(ii-c) はやはり成り立つ (段内の点は 1 のまま動かない)。
   BY <1>1, <1>2, <1>2a, <ref id=627e117/>, <ref id=3f1bb47/>, <ref id=4f63121/>, <ref id=33c54dc/>, <ref id=4517a7a/>, <ref id=b6673ca/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=f8ae607/>, <ref id=3e6b0e0/>, <ref id=f769887/>, <ref id=680aaa9/>, <ref id=ebec376/>,
-     <ref id=8d3e4af/>, <ref id=675b350/>, <ref id=d80dde9/>, <ref id=fd95f12/>, <ref id=0ab1ef4/>, <ref id=3d4be43/>, <ref id=8e3aff3/>, <ref id=e11772a/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=9f1cf6c/>, <ref id=3647480/>, <ref id=29a890a/>, <ref id=a502f3e/>, <ref id=0594f24/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=9c7c27a/>, <ref id=c232680/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>,
+     <ref id=8d3e4af/>, <ref id=675b350/>, <ref id=d80dde9/>, <ref id=fd95f12/>, <ref id=0ab1ef4/>, <ref id=3d4be43/>, <ref id=c3c0aad/>, <ref id=8ee6ff0/>, <ref id=f745696/>, <ref id=555b49f/>, <ref id=8e3aff3/>, <ref id=e11772a/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=9f1cf6c/>, <ref id=3647480/>, <ref id=29a890a/>, <ref id=a502f3e/>, <ref id=0594f24/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=9c7c27a/>, <ref id=c232680/>, <ref id=243ae2c/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>,
      <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=e74af85/>, <ref id=63eadd9/>,
-     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
-     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
-     CODE src/fixstd/builtin.rs: boxed_to_retained_ptr_ios, InlineLLVMMakeUnionBody::generate,
-     InlineLLVMIntLit::generate, InlineLLVMBoxedToRetainedPtrIOS,
-     CODE src/object.rs: create_obj, ty_to_object_ty
+     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空である。
   <2>1. `collect_consumes` はこの本体について何も報告しない。
@@ -3591,25 +3657,27 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   印を付ける (E5) の段だけであり (D26)、(E5) が走るのはグローバル初期化子の活性化が終端の `Ret` に着くときなので (D24)、
   初期化子を 1 つも持たないこのプログラムの実行に (E5) の段は無い。よってグローバル状態のオブジェクトは
   1 つも無い。
-  (a) について。このプログラムのどの実行でも、生きている (D25) オブジェクトはどの点でも 1 つも無い。
-  素動作の列についての帰納で見る。最初の時点について -- 環境が持ち込む boxed な値は A17 の (i-d) より
-  「このプログラムが作って環境へ番地を渡したもの」に限るが、番地を渡す op
-  (`boxed_to_retained_ptr` の `InlineLLVMBoxedToRetainedPtrIOS`) はこの本体に無いので 1 つも無く、
-  D25 よりその時点に生きているオブジェクトは無い。ある点まで生きているオブジェクトが 1 つも無いとする。
-  `create_obj` を呼ぶのは `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕 (`llvm_gen.generate` を経て) と
-  `Closure` 節点を作る段だけであり、`Ret`・`Retain`・`Release` の腕は呼ばない
-  (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`)。この本体に `Closure` 節点は無く、`Llvm`
-  の `Let` は `int_lit_0` の 1 つである。`InlineLLVMIntLit::generate` は結果の型 `I64` について
-  `create_obj` を呼ぶ (`CODE src/fixstd/builtin.rs: InlineLLVMIntLit::generate`)。`I64` はプリミティブ
-  なので `ty_to_object_ty` の `Primitive` の枝が `object_type.is_unbox` の真を課す
-  (`CODE src/object.rs: ty_to_object_ty`)。よってこの呼び出しは `object_type.is_unbox` が真の枝を取り、
-  `create_obj` は割り当てを行わず undef の集約を返す (`CODE src/object.rs: create_obj`)。したがって
-  この本体のどの素動作もオブジェクトを割り当てない。
-  子の活性化を作る段も無い -- `globals` が空なので (E5) と (E7) の段は無く、この本体に `App` が無いので
-  (E3) の段も無く、`int_lit_0` は `applies_a_function_operand` を宣言しないので (A3) オペランドを
-  適用する `Llvm` の段も無く、(F) の解放が活性化を作るのは `Destructor` のオブジェクトについてだが、
-  その点まで生きているオブジェクトが無い。環境の書き込みの段 (E8) はどの leaf がどのオブジェクトを
-  指すかを変えない (A17 の (ii-b))。よって次の素動作もオブジェクトを作らない。
+  (a) について。このプログラムのどの実行でも、生きている (D25) オブジェクトも生きている活性化 (D23) も
+  どの点でも 1 つも無い。段の列についての帰納で見る。
+  最初の時点について。D24 よりその時点に在る参照は環境が持ってきたものだけであり、A17 の (i-d) より
+  環境が持ち込む boxed な値は「このプログラムが作って環境へ番地を渡したもの」に限る。段が 1 つも
+  実行されていない時点でこのプログラムが作ったものは無いので、環境は boxed な値を 1 つも持ち込まず、
+  D25 よりその時点に生きているオブジェクトは無い。A17 の (i-c) よりその時点に在る参照も無い。活性化を
+  作るのは段なので (D24)、生きている活性化も無い。
+  ある時点まで生きているオブジェクトも生きている活性化も無いとして、次の段を見る。生きている活性化を
+  主語にする段 -- (E2)・(E3)・(E4)・(E5)・(E6) -- は、生きている活性化がその位置にあることを要るので
+  起きない。(E7) が作るのはグローバル初期化子の活性化だが、`<1>2` よりこのプログラムの `globals` は
+  空なので初期化子が無い。(E1) が活性化を作るのは C のエントリ点と `FFI_EXPORT` のエントリ点であり
+  (D22)、前者はグローバル `main` を読むが `globals` が空なのでその記号は無く、後者はこのプログラムが
+  `FFI_EXPORT` の宣言を持たないので無い。(F) の解放は、参照を処分してオブジェクトのカウントが 0 に
+  なった段の中で起きるが、オブジェクトが 1 つも無い。残るのは環境の段 (E8) と (E9) である。(E8) は
+  「参照を作らず、渡さず、処分しない」段であり、どの leaf がどのオブジェクトを指すかも変えない
+  (A17 の (ii-b))。(E9) は環境が「その番地が指すオブジェクトへの参照を自分が持っている点でだけ」呼ぶ
+  段であり (A17 の (ii-c))、環境は参照を 1 つも持たない。D24 の「活性化を作る段はこの 5 種で尽きる」より
+  この 2 種の段は活性化を作らない。オブジェクトも作らない -- D24 の段の記述は `Obl` について網羅であり、
+  割り当てはそのオブジェクトへの参照を 1 つ作る動きとして (E2) の `H` の表に載るからである。(E8) は
+  参照を作らず、(E9) が作るのは既に在るオブジェクトへの参照である。
+  よって次の時点でも生きているオブジェクトも生きている活性化も無い。
   したがって生きているオブジェクトのグラフはどの点でも空であり、非巡回である。
   この 2 つは `<1>2` と食い違わない。A18 が主語にするのは実行 (D24) のヒープであるのに対し、`<1>2` は
   D11 の 3 つの節を D21 の意味のすべての活性化について確かめており、その活性化は実行に実現するとは
@@ -3633,13 +3701,9 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `Release(x, [])` を落としたものである。落とした本体では `held` は 1 のまま終端に着き、`bumps` は
   0 のままなので、(ii-a)・(ii-b)・(ii-c) はやはり成り立つ (段内の点は 1 のまま動かない)。
   BY <1>1, <1>2, <ref id=627e117/>, <ref id=3f1bb47/>, <ref id=4f63121/>, <ref id=33c54dc/>, <ref id=4517a7a/>, <ref id=b6673ca/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=f8ae607/>, <ref id=3e6b0e0/>, <ref id=f769887/>, <ref id=680aaa9/>, <ref id=ebec376/>,
-     <ref id=8d3e4af/>, <ref id=675b350/>, <ref id=d80dde9/>, <ref id=fd95f12/>, <ref id=0ab1ef4/>, <ref id=3d4be43/>, <ref id=8e3aff3/>, <ref id=e11772a/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=9f1cf6c/>, <ref id=3647480/>, <ref id=29a890a/>, <ref id=a502f3e/>, <ref id=0594f24/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=66c9670/>, <ref id=9c7c27a/>, <ref id=c232680/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>,
+     <ref id=8d3e4af/>, <ref id=675b350/>, <ref id=d80dde9/>, <ref id=fd95f12/>, <ref id=0ab1ef4/>, <ref id=3d4be43/>, <ref id=c3c0aad/>, <ref id=8ee6ff0/>, <ref id=f745696/>, <ref id=555b49f/>, <ref id=8e3aff3/>, <ref id=e11772a/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=9f1cf6c/>, <ref id=3647480/>, <ref id=29a890a/>, <ref id=a502f3e/>, <ref id=0594f24/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=66c9670/>, <ref id=9c7c27a/>, <ref id=c232680/>, <ref id=243ae2c/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>,
      <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=e74af85/>, <ref id=63eadd9/>,
-     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
-     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
-     CODE src/fixstd/builtin.rs: boxed_to_retained_ptr_ios, InlineLLVMIntLit::generate,
-     InlineLLVMBoxedToRetainedPtrIOS,
-     CODE src/object.rs: create_obj, ty_to_object_ty
+     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空であり、`f` は借用版を持ち、そこで
       `owns_object(ρ(x), [])` は偽である。

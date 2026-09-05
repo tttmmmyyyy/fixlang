@@ -417,13 +417,16 @@ pub fn is_array_tycon(tc: &TyCon) -> bool {
     *tc == make_array_tycon()
 }
 
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+<<<<<<< HEAD
+=======
+>>>>>>> repair-p15-r10
+// PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_punched_array_tycon() -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME))
 }
 
 // Returns whether given tycon is a punched array (`Std::PunchedArray`).
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_punched_array_tycon(tc: &TyCon) -> bool {
     *tc == make_punched_array_tycon()
 }
@@ -725,7 +728,6 @@ pub struct InlineLLVMIntLit {
 // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIntLit {
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let obj = create_obj(
             ty.clone(),
@@ -6235,7 +6237,6 @@ impl InlineLLVMMakeUnionBody {
 // PROOF: P3, P4, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMakeUnionBody {
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the payload the constructed variant carries.
         let payload = gc.get_scoped_obj(&self.field_name);
@@ -7496,14 +7497,12 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBoxedToRetainedPtrIOS {
     val_name: FullName,
     ios_name: FullName,
 }
 
-// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -7566,7 +7565,7 @@ impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
     }
 }
 
-// PROOF: D/A, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAL_NAME: &str = "val";

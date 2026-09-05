@@ -46,6 +46,7 @@ pub const IOSTATE_NAME: &str = "IOState";
 pub const BOOL_NAME: &str = "Bool";
 // PROOF: P3, P4, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub const ARRAY_NAME: &str = "Array";
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub const PUNCHED_ARRAY_NAME: &str = "PunchedArray";
 pub const LAZY_NAME: &str = "Lazy";
 pub const FUNCTOR_NAME: &str = "Functor";

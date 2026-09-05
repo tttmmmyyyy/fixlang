@@ -218,7 +218,7 @@ pub struct MatchArm {
 impl MatchArm {
     /// This arm with `body` in place of its own: it matches the same variant and binds the same
     /// payload, and evaluates to what `body` gives.
-    // PROOF: P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn with_body(&self, body: RcExprNode) -> MatchArm {
         MatchArm {
             body,

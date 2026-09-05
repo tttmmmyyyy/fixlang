@@ -1146,7 +1146,7 @@ impl TypeNode {
     /// applied to arguments and substituting for one leaves every application spine as it stands;
     /// the field types a declaration is stored with are unwrapped once, by the pass that unwraps
     /// newtypes.
-    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn instance_field_types(
         &self,
         tycon_info: &TyConInfo,
@@ -1167,7 +1167,7 @@ impl TypeNode {
     /// substituted for the declaration's type variables. The types are as the declaration writes
     /// them, so one can name a newtype the program has unwrapped; `instance_field_types` answers
     /// with the types values are built at.
-    // PROOF: D/A, P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn declared_field_types(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_arguments();
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
