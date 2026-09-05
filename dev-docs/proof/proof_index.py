@@ -409,6 +409,30 @@ def cited_code(path, repo):
     return out
 
 
+def depends(directory, path):
+    """そのファイルが引く枠の項目を、種類ごとに並べる。
+
+    **依拠の一覧は手で書かない。** 手で書くと、仮定が 1 つ増えたときに黙って古くなる --
+    実測で、枠に立てた仮定をステップは引いているのに、冒頭の一覧と 4 つの命題の条件節が
+    その名前を持っていなかった。**グラフはそのファイルが引く先を正確に持っている。**"""
+    items, edges = build(directory)
+    frame_names = {item["name"]: item["identity"]
+                   for item in items_in(os.path.join(directory, "README.md"))[0] if item["name"]}
+    mine = set()
+    for item in items_in(path)[0]:
+        identity = item["identity"] or frame_names.get(item["name"])
+        if identity:
+            mine.add(identity)
+    cited = {items[t]["name"] for c, t in edges
+             if c in mine and t in items and items[t]["file"].endswith("README.md")
+             and items[t]["name"]}
+    kinds = {"定義": [], "仮定": [], "命題": []}
+    for name in cited:
+        kinds["定義" if name[0] == "D" else "仮定" if name[0] == "A" else "命題"].append(name)
+    return {kind: sorted(names, key=lambda n: (int(re.sub(r"\D", "", n) or 0), n))
+            for kind, names in kinds.items()}
+
+
 def bundle(directory, path, only=None):
     """1 つのファイル (または 1 つの項目) が引く項目の本文を、読む順に組み立てる。
 
@@ -774,6 +798,12 @@ def main(arguments):
     if "--render" in arguments:
         path = arguments[arguments.index("--render") + 1]
         directory = os.path.dirname(path) or "."
+        # **読む版の先頭に、そのファイルが引く枠の項目を生成して置く。** 手で書いた一覧は
+        # 枠が動いたときに黙って古くなる。
+        print(f"<!-- {os.path.basename(path)} が引く枠の項目 (生成) -->")
+        for kind, names in depends(directory, path).items():
+            print(f"<!-- {kind}: " + "、".join(names) + " -->")
+        print()
         print(render(directory, open(path, encoding="utf-8").read()), end="")
         return 0
     if "--convert" in arguments:
@@ -782,6 +812,11 @@ def main(arguments):
         out, done, left = convert(directory, path)
         open(path, "w", encoding="utf-8").write(out)
         print(f"{path}: {done} 件を id にした" + (f"、解決しなかった {len(left)} 件" if left else ""))
+        return 0
+    if "--depends" in arguments:
+        path = arguments[arguments.index("--depends") + 1]
+        for kind, names in depends(os.path.dirname(path) or ".", path).items():
+            print(f"{kind}: " + "、".join(names))
         return 0
     if "--bundle" in arguments:
         at = arguments.index("--bundle")
@@ -797,7 +832,7 @@ def main(arguments):
         directory = roots[0] if len(roots) > 1 else default_directory()
         return show(directory, arguments[at + 1])
     # 値を取る旗の直後の引数は、見に行くディレクトリではない。
-    takes_value = {"--file", "--item", "--show", "--bundle", "--render", "--convert"}
+    takes_value = {"--file", "--item", "--show", "--bundle", "--render", "--convert", "--depends"}
     roots = [a for i, a in enumerate(arguments)
              if not a.startswith("--") and (i == 0 or arguments[i - 1] not in takes_value)]
     roots = roots or [default_directory()]
