@@ -2787,8 +2787,20 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 ### 10.4 `L16` (借用するオペランドの leaf は素通しを宣言されない) <!--#e885aa0-->
 
-**言明**。`Llvm(gen, args)` について、`gen.borrows_operand(i, ・, ・)` が真であるとき、結果のどの leaf も
-単一の `Arg(i, σ)` を宣言しない。
+**言明**。
+
+- **(a)** `Llvm(gen, args)` について、`gen.borrows_operand(i, ・, ・)` が真であるとき、結果のどの leaf も
+  単一の `Arg(i, σ)` を宣言しない。
+- **(b)** `Llvm(gen, args)` の結果の相異なる 2 つの boxed leaf が、同じ `Arg(i, σ)` を宣言することは
+  ない。すなわち、結果の leaf からそれが宣言する `(i, σ)` への対応は単射である。
+
+**(b) が要る理由。** D9 の移動の表の `Llvm` の行は素通し leaf ごとに 1 本の辺を挙げ、
+`DEF 割り当て μ` はその辺 1 本につき移動元の `μ` を 1 下げる。2 つの結果 leaf が同じ `Arg(i, σ)` を
+宣言すると、1 つのオペランドの leaf の `μ` が 1 つの節点で 2 下がる。**この形を A5 だけで排除する
+ことはできない** -- A5 は「A5 を『同じ参照を持つ 2 つの leaf は同じオブジェクトを指す』の形で使う
+議論は、両端が計数下であるときにだけ通る」と書くので、オペランドの leaf がグローバル状態の
+オブジェクトを指す場合が残る。D6 のスロットは計数下に限らないので `μ` の勘定はその場合も走る。
+そこで (b) は宣言の側の数え上げで示す。
 
 **証明**
 
@@ -2843,15 +2855,21 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 <1>4. 残る 2 個 -- `InlineLLVMStructGetBody` と `InlineLLVMUnionAsBody` -- は、`borrows_operand(i)` が
       真であるとき結果の型が `is_fully_unboxed` である。
   BY <ref id=83d98e9/>, CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::borrows_operand,
-     CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_operand
-  前者の `borrows_operand` は
+     CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::borrows_container,
+     CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_operand,
+     CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_union
+  `InlineLLVMStructGetBody::borrows_operand` は
   `i == 0 && Self::borrows_container(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)` で
-  あり、`borrows_container(field_ty, ・)` は `field_ty.is_fully_unboxed(type_env)` である。A12 の
+  あり、`InlineLLVMStructGetBody::borrows_container` の本体は
+  `field_ty.is_fully_unboxed(type_env)` である。A12 の
   `Llvm` 節点の型についての節は「`InlineLLVMStructGetBody` の `ty(x)` は `ty(args[0])` の第
   `field_idx` フィールドの型であり、`InlineLLVMUnionAsBody` の `ty(x)` は `ty(args[0])` の第
   `field_idx` 変位の payload の型である」と述べるので、この `field_ty` はこの op の結果の型である。
-  後者も同じ形で、`borrows_union` は payload の型 -- A12 よりこの op の結果の型 -- について
-  `is_fully_unboxed` を問う。どちらも `i == 0` 以外の `i` には偽を返す。
+  `InlineLLVMUnionAsBody::borrows_operand` は
+  `i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)` で
+  あり、`InlineLLVMUnionAsBody::borrows_union` の本体は `payload_ty.is_fully_unboxed(type_env)` で
+  ある。A12 の同じ節よりこの `payload_ty` はこの op の結果の型である。
+  どちらの `borrows_operand` も `i == 0` を要求するので、`i == 0` 以外の `i` には偽を返す。
 
 <1>5. 結果の型が `is_fully_unboxed` であるとき、宣言はどの leaf にも何も置かない。
   BY <ref id=0594f24/>, CODE src/rc_ir/provenance.rs: Provenance,
@@ -2861,13 +2879,62 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `boxed_leaf_paths(ty, type_env)` の各元に項を置くので、leaf を持たない型では
   空である。
 
+<1>5a. `LeafOrigin::Arg` を含む `Provenance` を返す `result_prov` の実装は 6 個であり、そのどれでも
+      結果の leaf からそれが宣言する `(i, σ)` への対応は単射である。
+  BY <ref id=e11772a/>, <ref id=83d98e9/>, <ref id=0594f24/>, EXT クレートの項目, EXT ビルドの対象,
+     CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, CODE src/rc_ir/provenance.rs: LeafOrigin,
+     CODE src/rc_ir/provenance.rs: Provenance, CODE src/rc_ir/provenance.rs: sole_origin,
+     CODE src/rc_ir/leaf_map.rs: LeafMap::build_shape, CODE src/rc_ir/leaf_map.rs: LeafMap::uniform,
+     CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov,
+     CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMMakeStructBody,
+     CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::result_prov,
+     CODE src/fixstd/builtin.rs: InlineLLVMStructPunchBody::arg_leaf_path,
+     CODE src/fixstd/builtin.rs: replaced_field_prov,
+     CODE src/fixstd/builtin.rs: InlineLLVMStructPlugInBody::result_prov,
+     CODE src/fixstd/builtin.rs: InlineLLVMStructSetBody::result_prov,
+     CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::result_prov,
+     CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov
+  **在りかは述語で決める** -- `LeafOrigin::Arg` を構成する式を含む `result_prov` の実装である。
+  `EXT ビルドの対象` より走査の範囲は `src/` の全ファイルであり、`EXT クレートの項目` よりその全文を
+  読めばクレートの内容をすべて読んだことになる。A3 の数え上げより `result_prov` を override するのは
+  78 個の `impl LLVMGen for` のうち 29 個であり、そのうち `LeafOrigin::Arg` を置くのは次の 6 個である
+  (`Provenance::arg_passthrough` も `Arg` を置くが、それを呼ぶのは `Provenance` の解析の
+  `seed_param` であって `result_prov` の実装ではない)。既定の `result_prov` は `Unknown` を置く
+  (<1>2) ので `Arg` を含まない。
+  - `InlineLLVMStructGetBody::result_prov` の unbox の枝は、結果の leaf `π` に
+    `Arg(0, [field_idx] ++ π)` を置く。`π ↦ [field_idx] ++ π` は単射である。
+  - `impl LLVMGen for InlineLLVMMakeStructBody` の `result_prov` は、結果の leaf `[i] ++ rest` に
+    `Arg(i, rest)` を置く。`[i] ++ rest ↦ (i, rest)` は単射である。
+  - `InlineLLVMStructPunchBody::result_prov` の unbox の枝は、結果の leaf `π` に
+    `Arg(0, arg_leaf_path(π))` を置く。結果の型は `(field, punched struct)` の 2 成分の tuple で
+    あり (A12)、`arg_leaf_path` は `π = [PUNCHED_STRUCT_FIELD] ++ rest` を `rest` へ、
+    残る成分の `π = [head] ++ rest` を `[field_idx] ++ rest` へ写す。各枝の中では単射である。
+    枝をまたいで一致するのは `rest = [field_idx] ++ rest'` のときだが、A12 より punched struct の
+    第 `field_idx` フィールドは穴であり、D4 の第 5 規則は `unpunched_field_types` が返さない穴の
+    下へ降りないので、そのような結果 leaf は存在しない。
+  - `replaced_field_prov` (`InlineLLVMStructPlugInBody` と `InlineLLVMStructSetBody` の
+    `result_prov` が呼ぶ) の unbox の枝は、結果の leaf `[field_idx] ++ rest` に
+    `Arg(value_arg, rest)` を、残る leaf `[f] ++ rest` (`f ≠ field_idx`) に
+    `Arg(struct_arg, [f] ++ rest)` を置く。各枝の中では単射であり、2 つの枝は相異なるオペランドの
+    添字を置く -- `struct_plug_in` は `(PLUG_IN_PUNCHED_ARG, PLUG_IN_FIELD_ARG) = (0, 1)`、
+    `struct_set` は `(STRUCT_SET_STRUCT_ARG, STRUCT_SET_VALUE_ARG) = (1, 0)` である。
+  - `InlineLLVMMakeUnionBody::result_prov` の unbox の枝は、結果の leaf `[variant_idx] ++ rest` に
+    `Arg(0, rest)` を置き、他の変位の leaf には空集合を置く。`Arg` を置く leaf の上で単射である。
+  - `InlineLLVMUnionAsBody::result_prov` の unbox の枝は、結果の leaf `π` に
+    `Arg(0, [variant_idx] ++ π)` を置く。`π ↦ [variant_idx] ++ π` は単射である。
+
+  boxed の枝を持つ 4 つ (`InlineLLVMStructGetBody`・`InlineLLVMStructPunchBody`・
+  `replaced_field_prov`・`InlineLLVMUnionAsBody`・`InlineLLVMMakeUnionBody` の boxed の場合) は
+  `Unknown` か `Fresh` を置くので `Arg` を含まない。
+
 <1>6. QED
-  BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5
-  `borrows_operand(i)` が真になるのは <1>1 の 13 個のいずれかであり、そのうち 10 個は既定の
-  `result_prov` を持ち `Arg` を宣言しない (<1>2、<1>3)。`InlineLLVMArrayCopyCapacityBoundsUnchecked`
+  BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>5a
+  (a) について、`borrows_operand(i)` が真になるのは <1>1 の 13 個のいずれかであり、そのうち 10 個は
+  既定の `result_prov` を持ち `Arg` を宣言しない (<1>2、<1>3)。
+  `InlineLLVMArrayCopyCapacityBoundsUnchecked`
   は結果の各 leaf に単一の `Fresh` を置くので `Arg` を宣言しない (<1>3a)。残る 2 個は、
   `borrows_operand(i)` が真であるとき結果に leaf が無い (<1>4、<1>5) ので、やはり `Arg(i, σ)` を
-  宣言する leaf を持たない。
+  宣言する leaf を持たない。(b) は <1>5a である。
 
 **この命題が要る理由。** D9 の消費の表の `Llvm` の行は `borrows_operand(i)` が偽のオペランドだけを
 挙げるが、移動の表の `Llvm` の行 (素通し leaf) はその条件を持たない。両方が同時に成り立つ op が在ると、
@@ -2940,11 +3007,14 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   <2>1. **(T1)** `m` が `Let(x, rhs, cont)` (`rhs` は `Match` でない)、`Destructure(c, fs, _, cont)`、
         `Eval(x, cont)` のいずれかであるとき。遷移は `m` の前置 `Retain` 鎖、核節点、後置 `Release` 鎖
         であり、`m'` は `cont` である。
-    BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
+    BY <ref id=ca36627/>, CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_destructure,
        CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_eval
     3 つとも、`insert_into_expr(cont, ・)` が返した節点の外へ後置 `Release` 鎖を積み、その外に核節点を
-    作り、その外に前置 `Retain` 鎖を積む。
+    作り、その外に前置 `Retain` 鎖を積む。**`ρ` の上の順序はこの入れ子から出る** -- D3 より
+    `Ret` を除く 5 種の節点では実行路はその継続へ進むので、外側の節点ほど先に訪れられる。よって
+    `ρ` はこの塊を、前置 `Retain` 鎖・核節点・後置 `Release` 鎖の順に訪れ、その後 `cont` の写しの
+    根 -- `m'` の検査点 -- へ進む。
   <2>2. **(T2)** `m` が `Let(x, Match(scrut, arms), cont)` であるとき。`ρ` が選ぶアームを `j` とすると、
         遷移は `m` の前置 `Retain` 鎖 (`retain_if_live(&scrut, &live_at_arm_head, ・)` が置く高々 1 つの
         `Retain`)、核節点 `Let(x, Match(scrut, arms'), ・)`、アーム `j` の頭の `Release` 鎖であり、
@@ -3025,31 +3095,39 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
     BY CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_operation_let, <ref id=dca1c02/>
     `after` は `releases_after` に、`!live_cont.contains(&x.name) && self.needs_rc(&x)` のとき `x` を
     足したものである。
+  <2>3a. `rhs = Llvm(gen, args)` のとき、素通しを宣言する結果の boxed leaf とそれが名指すオペランドの
+         leaf は 1 対 1 に対応する。したがって 1 つのオペランドの leaf を名指す素通しの辺は高々 1 本で
+         ある。
+    BY <ref id=e885aa0/>, <ref id=e11772a/>, <ref id=9d74736/>
+    `L16` (b) より、結果の相異なる 2 つの boxed leaf が同じ `Arg(i, σ)` を宣言することはない。
+    D9 の移動の表の `Llvm` の行は、単一の `Arg(i, σ)` を宣言する結果の leaf 1 つにつき、
+    オペランド `i` の leaf `σ` からその結果 leaf への辺を 1 本挙げる (A3 の表の同じ行が
+    「第 `i` オペランドの leaf `σ` と同じ参照」と書く)。よって辺の集合は結果 leaf から
+    オペランド leaf への単射のグラフであり、1 つのオペランドの leaf を始点とする辺は高々 1 本である。
   <2>4. 核節点は、`ops` の各 `Own` の出現ごとに、そのオペランドの inhabited な各 boxed leaf について
         `μ` を 1 下げる。`Borrow` の出現は `μ` を変えない。`ops` に入らないオペランド -- 局所名でない
         もの -- については、<1>0 より動くスロットが無い。
-    BY <1>0, <ref id=9d74736/>, <ref id=dca1c02/>, <ref id=e885aa0/>
+    BY <1>0, <2>3a, <ref id=9d74736/>, <ref id=dca1c02/>, <ref id=e885aa0/>
     `rhs = Var(y)`: D9 の移動の表の `Let(x, Var(y), k)` の行が `y` の全 leaf を移す。
     `rhs = App(callee, args)`: D9 の消費の表の `App` の行が callee の全 boxed leaf と、呼び出し先が
     所有する位置の引数の leaf を消費する。`L15` (e) よりすべての位置が所有される。
     `rhs = Closure(f, caps)`: 消費の表の `Closure` の行が全 capture の全 leaf を消費する。
     `rhs = Llvm(gen, args)`: `borrows_operand(i)` が偽のオペランドの各 leaf は、素通しを宣言されて
     いれば移動の表の `Llvm` の行で結果へ移り、されていなければ消費の表の `Llvm` の行で消費される。
-    どちらでも `μ` は 1 下がる。`borrows_operand(i)` が真のオペランドは、消費の表の行に入らず、`L16`
+    どちらでも `μ` は 1 下がる。**2 下がらないことは <2>3a による** -- 1 つのオペランドの leaf を
+    始点とする素通しの辺は高々 1 本であり、素通しを宣言された leaf は消費の表の行に入らない。
+    `borrows_operand(i)` が真のオペランドは、消費の表の行に入らず、`L16` (a)
     より移動の表の行にも入らない。
   <2>5. 核節点は、結果の inhabited な各 boxed leaf `(x, μ')` について `μ` を 1 上げる。
-    BY <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=e11772a/>, <ref id=4f63121/>
+    BY <2>3a, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=e11772a/>, <ref id=0594f24/>
     `rhs = Var(y)`: 移動の表の行が `x` の各 leaf に移す。
-    `rhs = App` / `Closure`: D10 の生成の表の対応する行が結果の各 leaf に参照を作る。
+    `rhs = App` / `Closure`: D10 の生成の表の対応する行が結果の各 leaf に参照を作る。`Closure` の
+    結果は capture object 1 つであり、D4 の第 2 規則よりクロージャの boxed leaf は capture の位置の
+    1 つだけなので、この行は結果の唯一の leaf に 1 つ置く。
     `rhs = Llvm`: 素通しの leaf は移動の表の行で結果へ入り、素通しでない leaf は D10 の生成の表の
-    `Llvm` の行で参照を得る。A3 と A5 より、素通しを宣言する結果の leaf とそれが名指すオペランドの
-    leaf は 1 対 1 に対応する -- 2 つの結果 leaf が同じ `Arg(i, σ)` を宣言してどちらも inhabited で
-    あるとすると、A3 の表の単一の `Arg(j, σ)` の行はその 2 つに「第 `j` オペランドの leaf `σ` と
-    **同じ参照**」を置くのに対し、A5 は「値が保持する参照は、その型の `boxed_leaf_paths` が列挙する
-    leaf のうち、inhabited (D16) であって計数下のオブジェクト (D26) を指すものにちょうど 1 つずつある」
-    と述べる。D8 は参照を 1 つのオブジェクトに対する**処分義務の 1 単位**と定めるので、1 つの参照が
-    2 つの leaf の分を同時に果たすことはなく、この 2 つは両立しない。よって
-    結果の各 inhabited な leaf は、素通しか生成かのちょうど一方で `μ` を 1 得る。
+    `Llvm` の行で参照を得る。A3 の表より結果の各 leaf の宣言は単一の `Arg` かそれ以外かのいずれかで
+    あり、この 2 つは排他なので、結果の各 inhabited な leaf は素通しか生成かのちょうど一方で `μ` を
+    1 得る。<2>3a より、素通しの辺が同じ結果 leaf に 2 本着くこともない。
   <2>6. 遷移の後、`ops` の各名前 `v` について `μ(v, λ) = [v ∈ Λ(m')]`、`x` について
         `μ(x, μ') = [x ∈ Λ(m')]` であり、他の名前の `μ` は変わらない。
     BY <1>0, <2>2, <2>3, <2>4, <2>5
