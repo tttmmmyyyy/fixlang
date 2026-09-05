@@ -1077,9 +1077,11 @@ namespace が `Std` で名前が `#FunPtr` で始まるとき、残りを `parse
   `toplevel_tycon_info` に届かない。closure でない型では表明の条件がそのまま成り立つ。`go` は
   `unpunched_field_types` を呼ぶ前に `is_closure` を見るので、`go` がその関数を呼ぶ型も closure ではない。
   `is_fully_unboxed` はさらに `is_funptr` を呼び、`is_funptr` は `is_funptr_tycon` の
-  `parse::<u32>().unwrap()` で中断しうる。この降下が読む型は `τ` と、そこから `go` が繰り返し降りて着く
-  型である。L1b は扱う型から `go` が 1 段降りて着く型も扱う型であると述べるので、その全部が扱う型で
-  あり、L1d よりどれについても `is_funptr` は値を返す。
+  `parse::<u32>().unwrap()` で中断しうる。`is_funptr` が問われるのは、`τ` と、`τ` から
+  `unpunched_field_types` の対の第 2 成分を繰り返し取って到達する型である -- `go` はその操作で降り、
+  `is_fully_unboxed` も自分の再帰で同じ操作で降りるので、`go` が止まる型の下も範囲に入る。
+  DEF 扱う型 はその操作について閉じており `τ` は扱う型なので、その全部が扱う型であり、L1d より
+  どれについても `is_funptr` は値を返す。
   `leaf ∈ leaves(τ)` については、L9a より `τ` の `leaf` に沿う
   歩みは (A) `Unit` で終わるか、(B) `Capture` で終わり、そこで `leaf` が選ぶ添字が `capture_idx` に
   等しいかのどちらかである。(A) で歩みの長さが `|leaf|` ならば L1 の場合 (a)、それより短ければ場合 (b) の
@@ -1824,9 +1826,11 @@ P2 より `origin(x, π)` は停止するので `Reach(x, π)` は有限であ�
   closure でない型では表明の条件がそのまま成り立つ。`go` は `unpunched_field_types` を呼ぶ前に
   `is_closure` を見るので、`go` がその関数を呼ぶ型も closure ではない。
   `is_fully_unboxed` はさらに `is_funptr` を呼び、`is_funptr` は `is_funptr_tycon` の
-  `parse::<u32>().unwrap()` で中断しうる。この降下が読む型は `τ` と、そこから `go` が繰り返し降りて着く
-  型である。L1b は扱う型から `go` が 1 段降りて着く型も扱う型であると述べるので、その全部が扱う型で
-  あり、L1d よりどれについても `is_funptr` は値を返す。
+  `parse::<u32>().unwrap()` で中断しうる。`is_funptr` が問われるのは、`τ` と、`τ` から
+  `unpunched_field_types` の対の第 2 成分を繰り返し取って到達する型である -- `go` はその操作で降り、
+  `is_fully_unboxed` も自分の再帰で同じ操作で降りるので、`go` が止まる型の下も範囲に入る。
+  DEF 扱う型 はその操作について閉じており `τ` は扱う型なので、その全部が扱う型であり、L1d より
+  どれについても `is_funptr` は値を返す。
   `leaf ∈ leaves(τ)` については、L9a より `τ` の `leaf` に沿う歩みは (A) `Unit` で終わるか、(B) `Capture`
   で終わって `leaf[m] = capture_idx` であるかのどちらかである。(A) で歩みの長さが `|leaf|` ならば L1 の
   場合 (a)、それより短ければ場合 (b) の `Unit` の行、(B) ならば場合 (b) の `Capture`
