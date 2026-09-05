@@ -246,6 +246,9 @@ def item_at(lines, index):
     return f"{owner}::{name}" if owner else name
 
 
+# どの項目にも属さない行 (`use`、`mod`、ファイルの属性) の当たりに付ける名前。
+FILE_HEAD = "(項目の外)"
+
 SOURCES = {}
 
 
@@ -283,9 +286,11 @@ def scan_hits(root, literal):
         for index, line in enumerate(lines):
             if literal not in line:
                 continue
-            name = item_at(lines, index)
-            if name:
-                found.append((path, name, any(start <= index < stop for start, stop in tests)))
+            # **項目の外の当たりも挙げる。** ファイルの頭の `use` や `mod` はどの項目にも属さないので、
+            # 項目の中だけを見ると走査が黙って空の一覧を返す -- 実測で、`use` 行しか当たらない 2 つの
+            # 走査がどちらも 0 件を答え、その 0 件が数え上げの結論そのものを運んでいた。
+            name = item_at(lines, index) or FILE_HEAD
+            found.append((path, name, any(start <= index < stop for start, stop in tests)))
     return found
 
 
