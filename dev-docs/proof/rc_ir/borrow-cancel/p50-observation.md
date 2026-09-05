@@ -1233,6 +1233,118 @@ shared = false` になる。対象コミットの二値ではこのプログラ�
 であり、P26 の第 1 文の含意はそのまま成り立つ
 (`CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate`)。
 
+## L0a (生成コードが作った参照を書き込む先) <!--#def436e-->
+
+**言明**。生成コードが `Generator::retain` か `Generator::build_retain` の呼び出しで作った参照を、その
+呼び出しを出す項目自身がオブジェクトの記憶域へ書き込むのは、`ObjectFieldType` の 4 つ --
+`clone_array_range`、`clone_struct`、`clone_union`、`append_value_into_array_buf` -- だけである。
+`Let(x, Llvm(gen, args), k)` の節点の実行がその 4 つのいずれかを走らせるとき、**書き込む先のオブジェクトは、
+その節点の実行が割り当てたオブジェクトか、`args` のいずれかの inhabited (D16) な boxed leaf が指す
+オブジェクトである。**
+
+D24 は、段の記述が `Obl` について網羅であることの脇で、生成コードが 2 つの表の外で出す retain と release を
+2 つの形に分ける。「相殺しないもの」について D24 は「**その参照の持ち手は、その生成コードが書き込む
+オブジェクトの持ち手の単位である**」と書き、「**書き込む先が新しいか既存かをこの節は問わない。**」と
+続ける。この命題はその書き込む先を数え上げる。
+
+<1>1. 前提 参照を作る生成コードの在りか の 2 つの走査が挙げる項目のうち、`ExprNode::calc_free_vars`、
+      `Scheme::generalize`、`to_markdown_link`、`TrustStore::record`、`rename_free_names`、
+      `CancelAnalysis::consume_objects`、`eliminate_unreachable`、`free_locals` の 8 つは Rust の
+      `Set`・`Vec`・`Map`・`String` の `retain` を呼ぶ項目であり、LLVM の命令を組まないので生成コード
+      ではない。`Generator::retain` と `Generator::build_retain` は定義であって互いに委譲する。
+      `ObjectFieldType::retain_release_mark_union` は `retain_union` の本体であり、同じ前提より
+      `retain_union` を呼ぶのは `Generator::build_retain` と `ObjectFieldType::clone_union` である。
+      `ObjectFieldType::initialize_array_buf_by_value` は記憶域のスロットへ書くが、同じ前提より
+      それを呼ぶ式は在らないので、どの節点の実行にも現れない。
+  BY 前提 参照を作る生成コードの在りか, CODE src/generator.rs: Generator::retain, Generator::build_retain,
+     CODE src/object.rs: ObjectFieldType::retain_union, ObjectFieldType::retain_release_mark_union,
+     ObjectFieldType::initialize_array_buf_by_value
+
+<1>2. `<1>1` が除いた項目を除く残りのうち、作った参照をオブジェクトの記憶域へ書き込むのは言明の 4 つ
+      だけである。残る各項目の本体は次のとおりである。
+      `InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::generate` は、環境へ番地を渡す内部関数の
+      本体として `gc.retain(obj, RcState::Unknown)` を置き、そのまま `build_return` する。
+      `InlineLLVMWithRetainedFunctionBody::generate` は `gc.retain(x, ..)` の後に `apply_lambda` を呼び、
+      `gc.release(x, ..)` する。`ObjectFieldType::get_struct_fields`・`get_union_value`・
+      `read_from_array_buf` と `Generator::build_capture_project` は、読み出した値を retain して返す。
+      `Generator::get_scoped_obj` は `retain_on_read` が真のとき読んだ値を retain して返す。
+      `Generator::build_run_destructor` は `_dtor` の欄の値を retain して `apply_lambda` へ渡す --
+      同じ項目が `move_into_struct_field` で `_value` の欄へ書き戻すのは、その retain が作った参照では
+      なく、走らせた `IO` の動作が返した値である (D24 の (F))。`Generator::eval_rc_expr_inner` の
+      `RcExpr::Retain` の腕と `Generator::eval_rc_match` の変位アームの腕は、作った参照をその節点の
+      束縛と結果へ渡す。**どれも、自分が作った参照をオブジェクトの記憶域へ書き込まない。**
+  BY <ref id=e3436e8/>, <1>1,
+     CODE src/generator.rs: Generator::build_capture_project, Generator::get_scoped_obj,
+     Generator::build_run_destructor,
+     CODE src/object.rs: ObjectFieldType::get_struct_fields, ObjectFieldType::get_union_value,
+     ObjectFieldType::read_from_array_buf, ObjectFieldType::move_into_struct_field,
+     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_match,
+     CODE src/fixstd/builtin.rs: InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::generate,
+     InlineLLVMWithRetainedFunctionBody::generate
+
+<1>3. `clone_struct` と `clone_union` が書き込む先は、その節点の実行が割り当てたオブジェクトである。
+      `clone_struct` は写した各フィールドを retain して `dst` の欄へ `move_into_struct_field` で書き、
+      `clone_union` は複写した payload について `retain_union` を `dst` に対して呼ぶ。前提 参照を作る
+      生成コードの在りか より、この 2 つを呼ぶ式が在るのは `make_struct_union_unique` だけであり、
+      そこが渡す `dst` は同じ腕の `create_obj(obj.ty.clone(), ..)` が割り当てた `cloned_obj` である。
+  BY 前提 参照を作る生成コードの在りか,
+     CODE src/object.rs: ObjectFieldType::clone_struct, ObjectFieldType::clone_union,
+     ObjectFieldType::move_into_struct_field, create_obj,
+     CODE src/fixstd/builtin.rs: make_struct_union_unique
+
+<1>4. `clone_array_range` が書き込む先は `dst_buffer` の各スロットであり、`append_value_into_array_buf` が
+      書き込む先は `buffer` の各スロットである。前提 参照を作る生成コードの在りか より、
+      `clone_array_range` を呼ぶ式が在るのは `clone_array_buf` だけ、`clone_array_buf` を呼ぶ式が在るのは
+      `make_array_unique_with_hole`・`InlineLLVMArraySetCapacityBoundsUnchecked::generate`・
+      `InlineLLVMArrayAppendCapacityUnchecked::generate`・
+      `InlineLLVMArrayCopyCapacityBoundsUnchecked::generate` の 4 つ、
+      `append_value_into_array_buf` を呼ぶ式が在るのは
+      `InlineLLVMArrayAppendValueCapacityUnchecked::generate` だけである。行き先は順に、
+      `alloc_array_storage` が割り当てた `new_storage` のバッファ (前の 2 つ)、
+      `array_tail_destination` が返す `dst_write` (次の 2 つ)、
+      `force_unique_or_assert(gc, array, ..)` が返す配列の記憶域のバッファ (最後の 1 つ) である。
+  BY 前提 参照を作る生成コードの在りか,
+     CODE src/object.rs: ObjectFieldType::clone_array_range, ObjectFieldType::clone_array_buf,
+     ObjectFieldType::append_value_into_array_buf, alloc_array_storage, get_array_storage_buf,
+     CODE src/fixstd/builtin.rs: make_array_unique_with_hole, array_tail_destination,
+     InlineLLVMArraySetCapacityBoundsUnchecked::generate,
+     InlineLLVMArrayAppendCapacityUnchecked::generate,
+     InlineLLVMArrayCopyCapacityBoundsUnchecked::generate,
+     InlineLLVMArrayAppendValueCapacityUnchecked::generate
+
+<1>5. `<1>4` の 3 つの行き先は、その節点の実行が割り当てたオブジェクトか、オペランドの boxed leaf が指す
+      オブジェクトである。`alloc_array_storage` はその腕でオブジェクトを割り当てる。
+      `array_tail_destination` は `force_unique_or_assert(gc, dst, force_unique, state)` の結果から
+      `get_array_storage_buf` でバッファを取り、`force_unique_or_assert` は
+      `force_unique_or_assert_with_hole` へ委譲して、配列については `force_unique` が真なら
+      `make_array_unique_with_hole` を、偽なら `val` をそのまま返す。`make_array_unique_with_hole` は
+      一意の腕で渡された配列の値をそのまま返し、共有の腕では `alloc_array_storage` が割り当てた
+      `new_storage` を `ARRAY_STORAGE_IDX` に据えた値を返す。渡される値は、
+      `InlineLLVMArrayAppendCapacityUnchecked::generate` と
+      `InlineLLVMArrayCopyCapacityBoundsUnchecked::generate` では
+      `gc.get_scoped_obj(&self.dst_name)`、`InlineLLVMArrayAppendValueCapacityUnchecked::generate` では
+      `gc.get_scoped_obj(&self.arr_name)` である。A12 の第 1 の箇条より `Let(x, Llvm(gen, args), k)` の
+      `args` の名前の列は `gen.free_vars()` に等しいので、その名前は `args` のいずれかである。
+      L0 の `<1>3a` より、配列の値の boxed leaf `[]` が指すオブジェクトはその記憶域である。
+      その leaf は unbox union の節を 1 つも通らないので inhabited である (D16、D4 の規則 4)。
+  BY <ref id=83d98e9/>, <ref id=0594f24/>, <ref id=66c9670/>, <ref id=6bf2817/>, <1>4,
+     CODE src/object.rs: alloc_array_storage, get_array_storage_buf,
+     CODE src/fixstd/builtin.rs: array_tail_destination, force_unique_or_assert,
+     force_unique_or_assert_with_hole, make_array_unique_with_hole,
+     InlineLLVMArrayAppendCapacityUnchecked::generate,
+     InlineLLVMArrayCopyCapacityBoundsUnchecked::generate,
+     InlineLLVMArrayAppendValueCapacityUnchecked::generate
+
+<1>6. QED
+  `<1>1` と `<1>2` が、作った参照を記憶域へ書き込む項目を言明の 4 つに絞る。`<1>3` がそのうち 2 つの
+  行き先を、`<1>4` と `<1>5` が残る 2 つの行き先を、その節点の実行が割り当てたオブジェクトか、
+  オペランドの inhabited な boxed leaf が指すオブジェクトかに分ける。
+  BY <1>1, <1>2, <1>3, <1>4, <1>5
+
+**この命題は L5・L5a・L9a・L11 を引かない**ので、その 4 つがこの命題を引くことで循環は生じない。
+引くのは README の定義・仮定と L0、および `src/generator.rs`・`src/object.rs`・`src/rc_ir/codegen.rs`・
+`src/fixstd/builtin.rs` のコードだけである。
+
 ## 4. `cancel` の半分
 
 ## L6 (`cancel` は参照カウントを上げない) <!--#a748958-->
