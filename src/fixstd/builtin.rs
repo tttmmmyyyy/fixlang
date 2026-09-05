@@ -313,7 +313,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret
 }
 
-// PROOF: P1, P2, P2a, P3, P4, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_arrow_name_abs() -> FullName {
     let mut name = FullName::from_strs(&[STD_NAME], ARROW_NAME);
     name.set_absolute();
@@ -379,7 +379,7 @@ pub fn make_array_tycon() -> TyCon {
     TyCon::new(make_array_name())
 }
 
-// PROOF: P3, P4, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_array_name() -> FullName {
     FullName::from_strs(&[STD_NAME], ARRAY_NAME)
 }
@@ -511,6 +511,7 @@ pub fn make_bool_ty() -> Arc<TypeNode> {
 }
 
 // Get Array type.
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_array_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
@@ -619,16 +620,19 @@ pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
 }
 
 // Get tuple type.
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
     apply_type_args(&tycon(make_tuple_name_abs(tys.len() as u32)), &tys)
 }
 
 // Make tuple name
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_tuple_name(size: u32) -> FullName {
     FullName::from_strs(&[STD_NAME], &format!("{}{}", TUPLE_NAME, size))
 }
 
 // Make absolute tuple name, e.g., `::Std::Tuple3`
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_tuple_name_abs(size: u32) -> FullName {
     let mut name = make_tuple_name(size);
     name.set_absolute();
@@ -636,7 +640,7 @@ pub fn make_tuple_name_abs(size: u32) -> FullName {
 }
 
 // Get Unit type.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_unit_ty() -> Arc<TypeNode> {
     make_tuple_ty(vec![])
 }

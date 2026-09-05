@@ -65,6 +65,7 @@ impl NameSpace {
     }
 
     /// A path of `names`, the outermost first, written with no leading `::`.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(names: Vec<String>) -> Self {
         Self {
             names,
@@ -78,6 +79,7 @@ impl NameSpace {
     }
 
     /// A path of `names`, the outermost first, written with no leading `::`.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn from_strs(names: &[&str]) -> Self {
         Self::new(names.iter().map(|s| s.to_string()).collect())
     }
@@ -301,6 +303,7 @@ impl FullName {
     }
 
     /// The name `name` under the namespace `ns` spells out, the outermost name first.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn from_strs(ns: &[&str], name: &str) -> Self {
         Self::new(&NameSpace::from_strs(ns), name)
     }

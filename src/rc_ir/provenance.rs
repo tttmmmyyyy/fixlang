@@ -62,7 +62,7 @@ pub enum LeafOrigin {
 pub type LeafOrigins = Set<LeafOrigin>;
 
 /// The origins of a leaf that has just the one.
-// PROOF: P1, P2, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn sole_origin(src: LeafOrigin) -> LeafOrigins {
     let mut origins = Set::default();
     origins.insert(src);
@@ -94,7 +94,7 @@ impl Provenance {
     }
 
     /// The provenance whose every boxed leaf is `src`.
-    // PROOF: P1, P2, P3, P4, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P3, P4, P5, P6, P7, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: LeafOrigin) -> Provenance {
         Provenance(LeafMap::uniform(ty, type_env, sole_origin(src)))
     }

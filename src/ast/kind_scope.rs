@@ -8,7 +8,6 @@ use crate::ast::types::{AssocType, Kind, TyCon, Type, TypeNode};
 use crate::misc::Map;
 
 // Kind environment.
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Default, Clone)]
 pub struct KindEnv {
     pub tycons: Map<TyCon, Arc<Kind>>,

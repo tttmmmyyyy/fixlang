@@ -1398,7 +1398,6 @@ fn parse_module_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> ModuleInfo {
     }
 }
 
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn, Errors> {
     assert_eq!(pair.as_rule(), Rule::type_defn);
     let span = Span::from_pair(&ctx.source, &pair);

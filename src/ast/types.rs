@@ -224,16 +224,17 @@ const C_SCALAR_NAMES: &[&str] = &[
 
 /// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
 /// it. A type constructor is determined by its name.
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
     /// The name the type is declared under.
     pub name: FullName,
 }
 
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyCon {
     /// The type constructor named `fullname`.
+    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(fullname: FullName) -> TyCon {
         TyCon { name: fullname }
     }
@@ -361,7 +362,7 @@ impl TyCon {
     /// # Arguments
     /// * `punched_at` — the position of the field made the hole, counted from 0 in the order the
     ///   fields are declared.
-    // PROOF: P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn into_punched_type_name(&mut self, punched_at: usize) {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
@@ -381,7 +382,7 @@ impl TyCon {
 
 /// The declaration a type constructor comes from: the kind of declaration it is, the parameters it
 /// takes, and what its values hold. A type alias is declared by `TyAliasInfo`.
-// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TyConInfo {
     /// The kind of the type constructor, which follows from the parameters it takes.
@@ -411,11 +412,11 @@ pub struct TyConInfo {
     pub punched_from: Option<TyCon>,
 }
 
-// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyConInfo {
     /// Gives every type name standing in the declared field types its full name, read in the
     /// context `ctx` carries.
-    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -425,7 +426,7 @@ impl TyConInfo {
     }
 
     /// Expands every type alias standing in the declared field types.
-    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -1140,7 +1141,7 @@ impl TypeNode {
     /// applied to arguments and substituting for one leaves every application spine as it stands;
     /// the field types a declaration is stored with are unwrapped once, by the pass that unwraps
     /// newtypes.
-    // PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn instance_field_types(
         &self,
         tycon_info: &TyConInfo,
@@ -1161,7 +1162,7 @@ impl TypeNode {
     /// substituted for the declaration's type variables. The types are as the declaration writes
     /// them, so one can name a newtype the program has unwrapped; `instance_field_types` answers
     /// with the types values are built at.
-    // PROOF: D/A, P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn declared_field_types(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_arguments();
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
@@ -1378,7 +1379,7 @@ impl TypeNode {
 
     /// The type constructor at the head of this type, as `Array` heads `Array I64`. A type
     /// variable and an associated type application have none.
-    // PROOF: P1, P2, P2a, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn toplevel_tycon(&self) -> Option<Arc<TyCon>> {
         match &self.ty {
             Type::TyVar(_) => None,
@@ -1406,7 +1407,7 @@ impl TypeNode {
 
     /// Whether the top-level type constructor of this type satisfies `pred`. A type variable and an
     /// associated type application have no such constructor, and satisfy nothing.
-    // PROOF: P1, P2, P2a, P3, P4, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn toplevel_tycon_satisfies(&self, pred: impl FnOnce(&TyCon) -> bool) -> bool {
         match self.toplevel_tycon() {
             Some(tc) => pred(tc.as_ref()),
@@ -1514,14 +1515,14 @@ impl TypeNode {
 
     /// Whether a value of this type is held in place, with its fields laid out where the value
     /// sits. A closure is unboxed: it is a function pointer beside the object its captures live in.
-    // PROOF: P1, P2, P2a, P3, P4, P7a, P7d, P7e, P15, P16, P17, P18, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox
     }
 
     /// Whether a value of this type is a pointer to a heap block that holds its fields, so that the
     /// value costs one pointer wherever it is stored and its lifetime is reference-counted.
-    // PROOF: P1, P2, P2a, P3, P4, P7a, P7d, P7e, P15, P16, P17, P18, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {
         !self.is_unbox(type_env)
     }
@@ -2210,7 +2211,7 @@ pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode
 }
 
 /// The type `tyfun` applied to `param`.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_tyapp(tyfun: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyApp(tyfun, param))
 }
@@ -2223,11 +2224,13 @@ pub fn type_assocty(assoc_ty: AssocType, args: Vec<Arc<TypeNode>>) -> Arc<TypeNo
 }
 
 /// The type that is the type constructor `tycon`, with no argument applied.
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyCon(tycon.clone()))
 }
 
 /// The type constructor named `name`.
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn tycon(name: FullName) -> Arc<TyCon> {
     Arc::new(TyCon { name })
 }
@@ -2236,6 +2239,7 @@ pub fn tycon(name: FullName) -> Arc<TyCon> {
 ///
 /// # Examples
 /// `apply_type_args(Array, [I64])` is `Array I64`, and `apply_type_args(Array, [])` is `Array`.
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
     let mut applied = type_tycon(tycon);
     for arg in args {
@@ -3017,7 +3021,7 @@ pub fn unfixed_type_variable_error(
 
 /// Whether a type variable name represents an opaque type variable, which a source line writes
 /// with a leading `?`.
-// PROOF: P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn is_opaque_tyvar(name: &str) -> bool {
     name.starts_with('?')
 }

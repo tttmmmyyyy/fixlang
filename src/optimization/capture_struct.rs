@@ -21,7 +21,6 @@ use std::sync::Arc;
 // is named after it, so that a value of it says which function consumes it. Two lambdas capturing
 // the same names at the same types are distinct here, which is what lets a reader of the type answer
 // "what do I call this with".
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct CaptureStruct {
     // The type constructor a value of this struct is built and destructured with.
@@ -34,7 +33,6 @@ pub struct CaptureStruct {
     fields: Vec<(FullName, Arc<TypeNode>)>,
 }
 
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 impl CaptureStruct {
     // Build the capture struct carrying `fields`. It only describes the type; the caller registers
     // `tycon_info` into the program's type environment.
@@ -45,7 +43,7 @@ impl CaptureStruct {
     // * `owner` - the function this capture struct is built for. It is a global name of its own, so
     //   it alone tells one capture struct from another.
     // * `fields` - the captured names paired with their types, in the order the struct holds them.
-    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(prefix: &str, owner: &FullName, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
         let tycon = Arc::new(TyCon {
             name: FullName::new(&owner.namespace, &format!("{}@{}", prefix, owner.name)),
