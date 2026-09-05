@@ -1589,12 +1589,15 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
         `is_fully_unboxed`・`is_closure`・`is_box`・`is_union`・`is_array`・`is_punched_array`・
         `toplevel_tycon_info`・`unpunched_field_types` を呼び、`src/constants.rs` の定数
         `CLOSURE_CAPTURE_IDX`・`CLOSURE_FIELD_COUNT` を読む。残る 5 つが呼ぶのは `Map`・`Set`・`Vec` と
-        スライスの操作だけである。この 8 つのメソッドから届く `src/ast/types.rs` の外の項目は、
-        `src/fixstd/builtin.rs` の `make_arrow_name_abs`・`is_array_tycon`・`is_funptr_tycon`・
-        `is_punched_array_tycon`・`make_unit_ty`、`src/ast/program.rs` の `TypeEnv::tycons` と
-        `TypeEnv::unwrapped_newtype_info`、`src/elaboration/typecheck.rs` の `Substitution` の
-        メソッド、`src/ast/name.rs` の `FullName` と `NameSpace` の実装、そして
-        `src/parse/sourcefile.rs` の `Span` と `SourceFile` の実装である。すなわち、この呼び出しの中で
+        スライスの操作だけである。この 8 つのメソッドから届く `src/ast/types.rs` の外の項目が住む
+        ファイルは、`src/fixstd/builtin.rs` (`make_arrow_name_abs`・`is_array_tycon`・
+        `is_funptr_tycon`・`is_punched_array_tycon`・`make_unit_ty` と、その 5 つが同じファイルの中で
+        呼ぶ名前と tycon の組み立て関数)、`src/ast/program.rs` (`TypeEnv::tycons` と
+        `TypeEnv::unwrapped_newtype_info`)、`src/elaboration/typecheck.rs` (`Substitution` の
+        メソッド)、`src/ast/name.rs` (`FullName` と `NameSpace` の実装)、そして
+        `src/parse/sourcefile.rs` (`Span` と `SourceFile` の実装) である。**この数え上げが挙げるのは
+        ファイルであり、続く段が読むのも、走る本文がどのファイルに住むかである。**
+        すなわち、この呼び出しの中で
         走る関数の本文が住むのは、`src/rc_ir/ownership.rs`・`src/ast/types.rs`・`src/ast/program.rs`・
         `src/ast/name.rs`・`src/parse/sourcefile.rs`・`src/elaboration/typecheck.rs`・
         `src/fixstd/builtin.rs` の 7 つのファイルか、`Map`・`Set`・`Vec`・スライスの操作を与える
