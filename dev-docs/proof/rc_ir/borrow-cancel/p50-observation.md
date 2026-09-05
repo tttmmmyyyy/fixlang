@@ -1081,17 +1081,15 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
       である。同じ前提より `TraverserWorkType::mark_threaded()` を呼ぶ式が在るのは
       `Generator::mark_threaded` と、上の表明の中の比較だけであって、後者は値を渡さない。
 
-      前提 `Std::mark_threaded` の op の在りか
-      より、`Generator::mark_threaded` を呼ぶ式が在るのは `InlineLLVMMarkThreadedFunctionBody::generate`
-      であり、この op の字面を持つ項目のうち op の値を組むのは `mark_threaded_function` であって、
+      前提 `Std::mark_threaded` の op の在りか より、`Generator::mark_threaded` を呼ぶ式が在るのは
+      `InlineLLVMMarkThreadedFunctionBody::generate` であり、この op の字面を持つ項目のうち op の値を組むのは `mark_threaded_function` であって、
       `make_std_mod` はそれを `Std::mark_threaded` の本体として登録する。
       `Program::check_multi_threading_requirement` は、`config.threaded` が偽のとき
       `Std::mark_threaded` の実体化がプログラムに 1 つでも在れば診断を出して `Err` を返し、`build` は
       それを `build_object_files` の呼び出しより前に `?` で伝播する。同じ前提より
       `build_object_files` を呼ぶ式が在るのは `build` である。よって、単一スレッドのビルドでは、
-      `Std::mark_threaded` を持つプログラムは
-      二値にならず実行が存在せず、二値になるプログラムはこの op を持たないので `THREADED` を書く
-      コードを 1 命令も生成しない。
+      `Std::mark_threaded` を持つプログラムは二値にならず実行が存在せず、二値になるプログラムはこの op を
+      持たないので `THREADED` を書くコードを 1 命令も生成しない。
   BY 前提 `Std::mark_threaded` の op の在りか, 前提 走査の仕事の値を組む在りか, <1>5a,
      EXT derive した `PartialEq` の等号,
      README の「「果たす者」と「検査」の読み方」,
