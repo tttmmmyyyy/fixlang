@@ -926,14 +926,26 @@ fn handle_textdocument_did_open(
     params: &DidOpenTextDocumentParams,
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
 ) {
-    // Store the content of the file into the maps.
-    let Some(path) = uri_to_path(&params.text_document.uri) else {
+    record_latest_content(
+        uri_to_latest_content,
+        &params.text_document.uri,
+        &params.text_document.text,
+    );
+}
+
+/// Record `text` as the latest content of the buffer the client names by `uri`.
+///
+/// A URI naming no path is left unrecorded, which is what leaves the features that read the record
+/// with a path for every buffer they find in it.
+fn record_latest_content(
+    uri_to_latest_content: &mut Map<Uri, LatestContent>,
+    uri: &Uri,
+    text: &str,
+) {
+    let Some(path) = uri_to_path(uri) else {
         return;
     };
-    uri_to_latest_content.insert(
-        params.text_document.uri.clone(),
-        LatestContent::new(path, params.text_document.text.clone()),
-    );
+    uri_to_latest_content.insert(uri.clone(), LatestContent::new(path, text.to_string()));
 }
 
 /// Snapshot every open buffer (absolute path -> content) and send a
@@ -966,12 +978,11 @@ fn handle_textdocument_did_change(
     // happen even when on-type analysis is off, so other features
     // (completion, hover) still see the live buffer.
     if let Some(last_change) = params.content_changes.last() {
-        if let Some(path) = uri_to_path(&params.text_document.uri) {
-            uri_to_latest_content.insert(
-                params.text_document.uri.clone(),
-                LatestContent::new(path, last_change.text.clone()),
-            );
-        }
+        record_latest_content(
+            uri_to_latest_content,
+            &params.text_document.uri,
+            &last_change.text,
+        );
     }
 
     // Trigger on-type analysis over the live buffers, unless disabled.
@@ -991,12 +1002,7 @@ fn handle_textdocument_did_save(
 ) {
     // Store the content of the file into maps.
     if let Some(text) = &params.text {
-        if let Some(path) = uri_to_path(&params.text_document.uri) {
-            uri_to_latest_content.insert(
-                params.text_document.uri.clone(),
-                LatestContent::new(path, text.clone()),
-            );
-        }
+        record_latest_content(uri_to_latest_content, &params.text_document.uri, text);
     } else {
         let msg = "No text data in \"textDocument/didSave\" notification.".to_string();
         write_log!("{}", msg);
