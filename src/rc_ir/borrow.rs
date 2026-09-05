@@ -864,7 +864,7 @@ impl<'a> RewriteCtx<'a> {
     }
 
     /// One node of the rewrite, rebuilt over its rewritten continuation.
-    // PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, P30, P31, A19, T (dev-docs/proof/rc_ir/borrow-cancel)
     fn rewrite_inner(&self, node: &RcExprNode) -> RcExprNode {
         match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
@@ -990,7 +990,7 @@ impl<'a> RewriteCtx<'a> {
     /// or from a producer (a fresh value, a call result, a boxed-container read), is owned; a leaf
     /// that comes from a borrowed parameter is not. A leaf that may be one of several objects is
     /// owned only when it is owned whichever it is.
-    // PROOF: D/A, P1, P2, P2a, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P26, T (dev-docs/proof/rc_ir/borrow-cancel)
     fn owns_unit(&self, arg: &RcVar, unit: &FieldPath) -> bool {
         origin(&self.vars, self.type_env, &arg.name, unit)
             .candidates()
@@ -1087,7 +1087,7 @@ impl<'a> RewriteCtx<'a> {
 
     /// Rewrite a `Retain`/`Release`: in the borrow clone, drop the units that root at a borrowed
     /// parameter (the callee no longer counts them); otherwise keep the node unchanged.
-    // PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P2a, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P31, A19, T (dev-docs/proof/rc_ir/borrow-cancel)
     fn rewrite_rc(
         &self,
         v: &RcVar,
