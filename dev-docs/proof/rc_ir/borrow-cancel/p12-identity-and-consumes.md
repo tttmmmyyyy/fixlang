@@ -2038,7 +2038,10 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   ついて、`type_env.tycons()` は鍵 `d.tycon()` の下に `d.tycon_info(&[])` を持つ。**同じ腕は構造体の
   宣言について、名前の末尾に `PUNCHED_TYPE_SYMBOL` (`#PunchedAt`) と欄の添字を足した鍵の組も入れるが**
   (`TyCon::into_punched_type_name`)、その名前は `#PunchedAt` を含むので、それを含まない名前の鍵が
-  この入れ方で入ることは無い。
+  この入れ方で入ることは無い。**型の節点についても 1 つ置く。** `type_tycon` と `type_tyapp` は
+  `TypeNode::new_arc` に `Type::TyCon` と `Type::TyApp` を渡し、`new_arc` は `TypeNode::new` の値を
+  `Arc` に包む。`TypeNode::new` は渡された `Type` をそのまま `ty` の欄に置くので、この 2 つが返す節点の
+  `ty` は渡された `Type` である。
 
   (i) について。`<1>1` より `T` は `type_tyapp(make_array_ty(), make_u8_ty())` である。
   `make_array_ty()` は `type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))` であり、
@@ -2083,7 +2086,7 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
      CODE src/ast/types.rs: TypeNode::toplevel_tycon, TypeNode::toplevel_tycon_satisfies,
      CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_closure,
      CODE src/ast/types.rs: type_tyapp, type_tycon, tycon, apply_type_args, TyCon, TyCon::new,
-     CODE src/ast/types.rs: TyCon::into_punched_type_name,
+     CODE src/ast/types.rs: TypeNode::new, TypeNode::new_arc, TyCon::into_punched_type_name,
      CODE src/ast/typedecl.rs: TypeDefn::tycon, TypeDefn::tycon_info,
      CODE src/ast/program.rs: Program::add_tuple_defn, Program::add_tuple_defns,
      CODE src/ast/program.rs: Program::calculate_type_env,
@@ -2830,10 +2833,11 @@ leaf に前置したものだからである。
   BY CODE src/rc_ir/ownership.rs: rhs_consumes の `RcRhs::Llvm(llvm_gen, args)` の腕
 
 <1>20. (l) が成り立つ。`passthrough_arg_leaves` は `llvm_gen.result_prov(result_ty, &arg_tys, type_env)` の
-       各 leaf の `LeafOrigins` に `as_arg_projection` をかけて `Some((j, p))` になったものを集める。
+       `leaves()` -- `Provenance::leaves` は `LeafMap::leaves` の値であり、`LeafMap` が持つ各 boxed leaf の
+       事実を返す -- の各 `LeafOrigins` に `as_arg_projection` をかけて `Some((j, p))` になったものを集める。
        すなわち「結果のある leaf の宣言が単一の `Arg(j, p)` である」ような `(j, p)` の集合である。
   BY CODE src/rc_ir/ownership.rs: passthrough_arg_leaves, as_arg_projection,
-     CODE src/rc_ir/provenance.rs: Provenance::leaves
+     CODE src/rc_ir/provenance.rs: Provenance::leaves, CODE src/rc_ir/leaf_map.rs: LeafMap::leaves
 
 <1>20a. (n) が成り立つ。
   <2>1. `collect_consumes` を呼ぶ式が在るのは `infer_ownership` であり、`infer_ownership` を呼ぶ式が
