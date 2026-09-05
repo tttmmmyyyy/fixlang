@@ -164,21 +164,21 @@ fn refine_namespaces(content: &str, tokens: &mut [LexToken]) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{lex_tokens, LexTokenKind};
+    use LexTokenKind::{
+        Boolean, Comment, Keyword, Namespace, Number, Operator, Property, String, Type, Variable,
+    };
 
     /// Render the token stream as (kind, matched-text) pairs.
     ///
-    /// `String` is fully qualified here because `use LexTokenKind::*` below
-    /// brings the `String` *variant* into scope (which is what we want in the
-    /// assertions, but not for this return type).
+    /// The `String` *variant* of `LexTokenKind` is imported above for the assertions, and
+    /// it occupies the short name, so the string type is spelled out in full here.
     fn lex(content: &str) -> Vec<(LexTokenKind, std::string::String)> {
         lex_tokens(content)
             .into_iter()
             .map(|t| (t.kind, content[t.start..t.end].to_string()))
             .collect()
     }
-
-    use LexTokenKind::*;
 
     /// Verifies that keywords are recognized only as whole words, so an
     /// identifier that merely starts with a keyword stays a variable.
