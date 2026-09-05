@@ -485,8 +485,14 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
 
 ### L0c (入力の関数の名前が (N3) を満たす) <!--#b2d588b-->
 
-**言明**。A13 を満たす `borrow_ify` の入力プログラム `P` について、`P.funcs` の各鍵の名前は局所名では
-なく、コード生成が読む `global_types` はその名前を持たないか、funptr 型で持つ。
+**言明**。A13 を満たす `borrow_ify` の入力プログラム `P` を取る。`P.funcs` の各鍵の名前は局所名では
+ない。さらに **(N0)** `P.funcs` のどの鍵の名前も `P.globals` のどの要素の `symbol` とも異ならば、
+コード生成が読む `global_types` は `P.funcs` のどの鍵の名前も持たないか、funptr 型で持つ。
+
+**(N0) を果たすのは `divide_into_units` である。**その関数は `funcs` の鍵の名前と `globals` の `symbol`
+を 1 つの列に集め、同じ名前が 2 度現れれば `panic!` で止まる (`<2>3` の `<3>2`)。破れたプログラムは
+コードを生成しないので、その実行の段も存在しない -- L0b の結論は「`Q` から生成したコードの実行のその
+節点の段について」の形なので、段が在る場合には (N0) が満たされる。
 
 <1>1. `P.funcs` の鍵と `P.globals` の `symbol` の集合は、lowering の出力のものである。
   `borrow_ify` の入力は、lowering の出力に `simplify`、`insert_rc`、`split_rc_units` をこの順で掛けた
@@ -518,56 +524,39 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
         各要素をその `symbol` と `ty` で上書き挿入したものである。
     BY CODE src/build/divide_program.rs: global_types_including_synthesized,
        CODE src/ast/program.rs: Program::global_types
-  <2>3. 持ち上げた lambda に `fresh_closure_ref` が付ける名前は、最上位の記号の名前ではない。
-    <3>1. 名前空間の成分は、module 宣言と namespace 宣言が与える `namespace_item` か、
-          `FullName::to_namespace` が名前を名前空間の末尾へ移したものである。後者の在りかは
-          `to_namespace()` の全出現 (`src/` に 48 か所) であり、末尾へ移る名前は 3 族に分かれる --
-          **トレイト名** (`CODE src/ast/program.rs: Program::trait_member_symbols`)、**型名**
-          (`CODE src/ast/program.rs: Program::add_methods` のゲッタ・セッタ)、**値の名前**
-          (`fresh_closure_ref` が持ち上げる lambda と、`CODE src/elaboration/desugar_opaque.rs:
-          Program::desugar_opaque_types` が作る `#wrap_opaque`) である。
-      **一覧で書くと族が 1 つ増えるたびに古くなるので、在りかを述語で決める。**`namespace_item` は
-      `capital_name` を `.` で継いだもの、`capital_name` は `ASCII_ALPHA_UPPER` で始まる語である。
-      トレイト名も型名も宣言の頭に書かれる `capital_name` である。値の名前は `name_head` が定めるとおり
-      小文字か `_` か `@` で始まる。
-      BY CODE src/ast/name.rs: FullName::to_namespace,
-         CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
-         CODE src/ast/program.rs: Program::trait_member_symbols, Program::add_methods,
-         CODE src/elaboration/desugar_opaque.rs: Program::desugar_opaque_types,
-         CODE src/parse/grammer.pest: name, name_head, capital_name, namespace_item, module_defn,
-         global_defns_in_namespace
-    <3>1a. `#wrap_opaque` の名前は `Program::symbols` の鍵ではない。
-      `Program::symbols` に項目を入れるのは `instantiate_symbols` であり、それが移すのは
-      `deferred_instantiation` に積まれた記号だけである。そこへ積むのは `require_instantiation` で
-      あり、それを呼ぶのは `instantiate_expr` の `Expr::Var` の腕である。`#wrap_opaque` の適用を作るのは
-      `Program::desugar_opaque_types` の `wrap_with_opaque` であり、それはグローバル値の式全体の**外側**に
-      置く。`instantiate_symbol` は `remove_opaque_wrapper_func` を `instantiate_expr` の**前**に置き、
-      `remove_opaque_wrapper_func` はその外側の適用を外して被適用項を返す (doc -- 「Remove the
-      #wrap_opaque application from the top level of an expression. Transforms `#wrap_opaque(expr)` to
-      `expr`. Only checks the outermost application.」)。よって `#wrap_opaque` を名指す `Expr::Var` は
-      `instantiate_expr` に届かず、その名前は待ち行列にも `symbols` にも入らない。
-      BY CODE src/ast/program.rs: Program::instantiate_symbols, Program::instantiate_symbol,
-         Program::instantiate_expr, Program::require_instantiation,
-         CODE src/elaboration/desugar_opaque.rs: Program::desugar_opaque_types,
-         remove_opaque_wrapper_func, wrap_with_opaque
-    <3>2. 最上位の記号の名前 -- `Program::global_types` の鍵、すなわち `Program::symbols` の鍵 --
-          の名前空間の成分はどれも大文字で始まる。
-      `Program::global_types` は `self.symbols` の各鍵をそのまま鍵とする。`<3>1` の 3 族のうち値の名前が
-      末尾に来るのは 2 つであり、`fresh_closure_ref` が作るのは `FuncRef` であって `Program::symbols` の
-      鍵ではなく、`#wrap_opaque` は `<3>1a` より `Program::symbols` の鍵ではない。残る成分は
-      `namespace_item`・トレイト名・型名であり、`<3>1` よりどれも大文字で始まる。最適化のパスが
-      `symbols` に入れる版は元の記号の `name` に `#<タグ><10 進数字>` の形の接尾辞を足したものであり
-      (A13)、名前空間を替えない。
-      BY <ref id=cb35ab1/>, <3>1, <3>1a, CODE src/ast/program.rs: Program::global_types
+  <2>3. 持ち上げた lambda に `fresh_closure_ref` が付ける名前は、最上位の記号 -- `Program::symbols` の
+        鍵、すなわち `Program::global_types` の鍵 -- の名前ではない。
+    <3>0. `lower_program` に渡る記号の名前の集合は `Program::global_types` の鍵の集合であり、
+          `lower_symbol` は funptr の記号を鍵がその記号の名前である `funcs` の項目に、funptr でない
+          記号を `symbol` がその記号の名前である `globals` の要素にする。持ち上げた lambda を `funcs` に
+          入れるのは `Lowerer::lower_lam` である。
+      `build_object_files` は `program.global_types()` の返り値と `program.symbols.values()` を並べて
+      取り、後者を `lower_and_insert_rc` を経て `lower_program` の `symbols` に渡す。
+      `Program::global_types` は `self.symbols` の各鍵をそのまま鍵とする。
+      BY CODE src/build/build_object_files.rs: build_object_files, lower_and_insert_rc,
+         CODE src/ast/program.rs: Program::global_types,
+         CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_symbol, Lowerer::lower_lam
+    <3>1. 持ち上げた lambda の名前は、funptr の最上位の記号の名前と等しくない。
+      `<3>0` より、等しければその名前で `Lowerer` の `funcs` へ 2 度挿入が起き、2 度目の
+      `assert!(previous.is_none(), "two RC IR functions are named ...")` が発火する。この表明は
+      `develop_mode` の門を持たないので、そのプログラムはコンパイルされず、lowering の出力から作られる
+      `borrow_ify` の入力 `P` も存在しない。
+      BY <3>0, CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_lam
+    <3>2. 持ち上げた lambda の名前は、funptr でない最上位の記号の名前とも等しくない。
+      `<3>0` より、等しければその名前は `P.funcs` の鍵であり、かつ `P.globals` のある要素の `symbol` で
+      ある。(N0) がそれを禁じる。**(N0) を果たすのは `divide_into_units` である** -- その関数は
+      `funcs` の鍵の名前と `globals` の `symbol` を 1 つの列に集めて整列し、隣り合う 2 つが等しければ
+      `panic!("the program defines `{}` twice, ...")` で止まる。この panic は `develop_mode` の門を
+      持たず、`build_object_files` は `divide_into_units` を `divide_among_units` の前に呼ぶので、
+      (N0) が破れたプログラムはコードを生成せず、その実行も段も存在しない。**D24 が「プログラム `P` の
+      実行は、`P` を分割して生成した単位を結合したものの実行である」と定めるので、`P` から生成した
+      コードについて語るとき `divide_into_units` は `P` に掛かる。**
+      BY (N0), <3>0, <ref id=e3436e8/>, CODE src/build/divide_program.rs: divide_into_units,
+         CODE src/build/build_object_files.rs: build_object_files
     <3>3. QED
-      `fresh_closure_ref` が付ける名前の名前空間は `current_symbol` の名前を末尾の成分とする --
-      `FullName::to_namespace` が `name` を名前空間の末尾へ移す。最上位の記号の `name` は Fix のソースに
-      書かれた値の名前にコンパイラが `#<タグ><10 進数字>` の形の接尾辞を足したものであり (A13)、値の
-      名前は小文字か `_` か `@` で始まる (`<3>1`)。よって持ち上げた lambda の名前の名前空間の末尾の
-      成分は大文字で始まらず、`<3>2` より最上位の記号の名前の名前空間の成分はどれも大文字で始まるので、
-      両者は異なる名前である。
-      BY <ref id=cb35ab1/>, <3>1, <3>2, CODE src/rc_ir/lower.rs: Lowerer::fresh_closure_ref,
-         CODE src/ast/name.rs: FullName::to_namespace
+      `<3>0` より `lower_symbol` は最上位の記号を funptr かそうでないかで振り分けるので、`<3>1` と
+      `<3>2` が 2 つの場合を尽くす。
+      BY <3>0, <3>1, <3>2
   <2>4. `P.globals` の `symbol` は、最上位の記号のうち型が funptr でないものの名前であり、`P.funcs` の
         どの鍵の名前とも異なる。
     `<1>1` より `symbol` と鍵は lowering の出力のものであり、`lower_symbol` は最上位の記号を、その型が
@@ -609,7 +598,9 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
   BY <ref id=3905b4e/>
 
 <1>3. `P` は L0b の (N3) を満たす。
-  L0c がまさにこれを述べる。
+  L0c がまさにこれを述べる。**L0c の後半は (N0) の下での言明である。**この命題の結論は `P` から生成した
+  コードの実行の段についてのものであり、L0c が述べるとおり (N0) が破れたプログラムは
+  `divide_into_units` の `panic!` で止まってコードを生成しないので、段が在る場合には (N0) が満たされる。
   BY <ref id=cb35ab1/>, <ref id=b2d588b/>
 
 <1>4. QED
@@ -724,7 +715,12 @@ P24 の**言明**を引く。P27 の証明が引く命題は P28 の**言明**�
     `borrow` ではないので、`P.funcs` の鍵は `<元の名前>#borrow` の形の名前と異なる。よって `<2>1a` の
     余分な項目はこの鍵に当たらず、`P'` について読む `global_types` はこの名前について
     `global_types_including_synthesized(P, ・)` と同じ答えを返す。L0c がその答えについて (N3) を与える。
-    BY <ref id=cb35ab1/>, <ref id=b2d588b/>, <2>1a, CODE src/rc_ir/borrow.rs: borrow_funcref
+    **L0c の (N0) はこの場合に満たされる** -- `<2>1` より `P'.funcs` の鍵は `P.funcs` の鍵と
+    `<元の名前>#borrow` で尽き、`P'.globals` の `symbol` の集合は `P.globals` のものに等しいので、
+    `P` で (N0) が破れれば `P'` でも同じ 2 つの名前が並ぶ。L0c が述べるとおりそのとき
+    `divide_into_units` の `panic!` が `P'` について止まってコードを生成せず、この命題の結論が語る
+    実行の段も存在しない。
+    BY <ref id=cb35ab1/>, <ref id=b2d588b/>, <2>1, <2>1a, CODE src/rc_ir/borrow.rs: borrow_funcref
   <2>3. `<元の名前>#borrow` について (N3) が成り立つ。
     `borrow_funcref` は元の名前の `name` の欄に `#borrow` を足すだけなので名前空間は変わらず、A13 より
     局所名ではない。借用版の `fn_ty` は原本の `fn_ty` と等しい (`clone_func`) ので、funptr の借用版の
@@ -2204,7 +2200,7 @@ README の (R3) は従う。
 |---|---|---|
 | L0d | A13、A22、A26a、D22、D24、`EXT LLVM モジュールの記号名` | -- |
 | L0b | A22、D23 | L0d。(N1)-(N3) は仮定として持つ |
-| L0c | A13 | -- |
+| L0c | A13、D24。(N0) は仮定として持つ | -- |
 | P29 | A6、A11、A13、A22 (L0b の (N1)-(N3) を果たす) | L0b、L0c |
 | L0 | A6、A10、A11、A13、A21、A22、A24、D2、D14、D23 と、P1・P9・P12・P24 の言明 | L0b、L0c、L0d |
 | P30 | -- | L0 が引くもののすべて |
