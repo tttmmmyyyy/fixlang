@@ -3405,27 +3405,24 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   印を付ける (E5) の段だけであり (D26)、(E5) が走るのはグローバル初期化子の活性化が終端の `Ret` に着くときなので (D24)、
   初期化子を 1 つも持たないこのプログラムの実行に (E5) の段は無い。よってグローバル状態のオブジェクトは
   1 つも無い。
-  (a) について。このプログラムのどの実行でも、生きている (D25) オブジェクトはどの点でも 1 つも無い。
-  素動作の列についての帰納で見る。最初の時点について -- 環境が持ち込む boxed な値は A17 の (i-d) より
-  「このプログラムが作って環境へ番地を渡したもの」に限るが、番地を渡す op
-  (`boxed_to_retained_ptr` の `InlineLLVMBoxedToRetainedPtrIOS`) はこの本体に無いので 1 つも無く、
-  D25 よりその時点に生きているオブジェクトは無い。ある点まで生きているオブジェクトが 1 つも無いとする。
-  `create_obj` を呼ぶのは `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕 (`llvm_gen.generate` を経て) と
-  `Closure` 節点を作る段だけであり、`Ret`・`Retain`・`Release` の腕は呼ばない
-  (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`)。この本体に `Closure` 節点は無く、`Llvm`
-  の `Let` は `union_make_1` と `int_lit_0` の 2 つである。`InlineLLVMMakeUnionBody::generate` は結果の型
-  `Outer` について、`InlineLLVMIntLit::generate` は結果の型 `I64` について `create_obj` を呼ぶ
-  (`CODE src/fixstd/builtin.rs: InlineLLVMMakeUnionBody::generate, InlineLLVMIntLit::generate`)。`Outer`
-  は unbox union と宣言されているので `ty_to_object_ty` の `Union` の枝が `object_type.is_unbox` に
-  `TyConInfo` の `is_unbox` (真) をそのまま写し、`I64` はプリミティブなので同じ関数の `Primitive` の枝が
-  `is_unbox` の真を課す (`CODE src/object.rs: ty_to_object_ty`)。よってどちらの呼び出しも
-  `object_type.is_unbox` が真の枝を取り、`create_obj` は割り当てを行わず undef の集約を返す
-  (`CODE src/object.rs: create_obj`)。したがってこの本体のどの素動作もオブジェクトを割り当てない。
-  子の活性化を作る段も無い -- `globals` が空なので (E5) と (E7) の段は無く、この本体に `App` が無いので
-  (E3) の段も無く、`union_make_1` と `int_lit_0` は `applies_a_function_operand` を宣言しないので (A3)
-  オペランドを適用する `Llvm` の段も無く、(F) の解放が活性化を作るのは `Destructor` のオブジェクトに
-  ついてだが、その点まで生きているオブジェクトが無い。環境の書き込みの段 (E8) はどの leaf がどの
-  オブジェクトを指すかを変えない (A17 の (ii-b))。よって次の素動作もオブジェクトを作らない。
+  (a) について。このプログラムのどの実行でも、生きている (D25) オブジェクトも生きている活性化 (D23) も
+  どの点でも 1 つも無い。段の列についての帰納で見る。
+  最初の時点について。D24 よりその時点に在る参照は環境が持ってきたものだけであり、A17 の (i-d) より
+  環境が持ち込む boxed な値は「このプログラムが作って環境へ番地を渡したもの」に限る。段が 1 つも
+  実行されていない時点でこのプログラムが作ったものは無いので、環境は boxed な値を 1 つも持ち込まず、
+  D25 よりその時点に生きているオブジェクトは無い。A17 の (i-c) よりその時点に在る参照も無い。活性化を
+  作るのは段なので (D24)、生きている活性化も無い。
+  ある時点まで生きているオブジェクトも生きている活性化も無いとして、次の段を見る。生きている活性化を
+  主語にする段 -- (E2)・(E3)・(E4)・(E5)・(E6) -- は、生きている活性化がその位置にあることを要るので
+  起きない。(E7) が作るのはグローバル初期化子の活性化だが、`<1>2` よりこのプログラムの `globals` は
+  空なので初期化子が無い。(E1) が活性化を作るのは C のエントリ点と `FFI_EXPORT` のエントリ点であり
+  (D22)、前者はグローバル `main` を読むが `globals` が空なのでその記号は無く、後者はこのプログラムが
+  `FFI_EXPORT` の宣言を持たないので無い。(F) の解放は、参照を処分してオブジェクトのカウントが 0 に
+  なった段の中で起きるが、オブジェクトが 1 つも無い。残るのは環境の段 (E8) と (E9) である。(E8) は
+  「参照を作らず、渡さず、処分しない」段であり、どの leaf がどのオブジェクトを指すかも変えない
+  (A17 の (ii-b))。(E9) は環境が「その番地が指すオブジェクトへの参照を自分が持っている点でだけ」呼ぶ
+  段であり (A17 の (ii-c))、環境は参照を 1 つも持たない。D24 よりこの 2 種の段は活性化を作らず、
+  オブジェクトも作らない。よって次の時点でも生きているオブジェクトも生きている活性化も無い。
   したがって生きているオブジェクトのグラフはどの点でも空であり、非巡回である。
   この 2 つは `<1>2` と食い違わない。A18 が主語にするのは実行 (D24) のヒープであるのに対し、`<1>2` は
   D11 の 3 つの節を D21 の意味のすべての活性化について確かめており、その活性化は実行に実現するとは
@@ -3449,13 +3446,9 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   唯一の `Release(x, [])` を落としたものである。落とした本体では `held` は 1 のまま終端に着き、`bumps` は
   0 のままなので、(ii-a)・(ii-b)・(ii-c) はやはり成り立つ (段内の点は 1 のまま動かない)。
   BY <1>1, <1>2, <1>2a, <ref id=627e117/>, <ref id=3f1bb47/>, <ref id=4f63121/>, <ref id=33c54dc/>, <ref id=4517a7a/>, <ref id=b6673ca/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=f8ae607/>, <ref id=3e6b0e0/>, <ref id=f769887/>, <ref id=680aaa9/>, <ref id=ebec376/>,
-     <ref id=8d3e4af/>, <ref id=675b350/>, <ref id=d80dde9/>, <ref id=fd95f12/>, <ref id=0ab1ef4/>, <ref id=3d4be43/>, <ref id=8e3aff3/>, <ref id=e11772a/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=9f1cf6c/>, <ref id=3647480/>, <ref id=29a890a/>, <ref id=a502f3e/>, <ref id=0594f24/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=9c7c27a/>, <ref id=c232680/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>,
+     <ref id=8d3e4af/>, <ref id=675b350/>, <ref id=d80dde9/>, <ref id=fd95f12/>, <ref id=0ab1ef4/>, <ref id=3d4be43/>, <ref id=c3c0aad/>, <ref id=8ee6ff0/>, <ref id=f745696/>, <ref id=555b49f/>, <ref id=8e3aff3/>, <ref id=e11772a/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=9f1cf6c/>, <ref id=3647480/>, <ref id=29a890a/>, <ref id=a502f3e/>, <ref id=0594f24/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=9c7c27a/>, <ref id=c232680/>, <ref id=243ae2c/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>,
      <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=e74af85/>, <ref id=63eadd9/>,
-     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
-     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
-     CODE src/fixstd/builtin.rs: boxed_to_retained_ptr_ios, InlineLLVMMakeUnionBody::generate,
-     InlineLLVMIntLit::generate, InlineLLVMBoxedToRetainedPtrIOS,
-     CODE src/object.rs: create_obj, ty_to_object_ty
+     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空である。
   <2>1. `collect_consumes` はこの本体について何も報告しない。
@@ -3654,25 +3647,24 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   印を付ける (E5) の段だけであり (D26)、(E5) が走るのはグローバル初期化子の活性化が終端の `Ret` に着くときなので (D24)、
   初期化子を 1 つも持たないこのプログラムの実行に (E5) の段は無い。よってグローバル状態のオブジェクトは
   1 つも無い。
-  (a) について。このプログラムのどの実行でも、生きている (D25) オブジェクトはどの点でも 1 つも無い。
-  素動作の列についての帰納で見る。最初の時点について -- 環境が持ち込む boxed な値は A17 の (i-d) より
-  「このプログラムが作って環境へ番地を渡したもの」に限るが、番地を渡す op
-  (`boxed_to_retained_ptr` の `InlineLLVMBoxedToRetainedPtrIOS`) はこの本体に無いので 1 つも無く、
-  D25 よりその時点に生きているオブジェクトは無い。ある点まで生きているオブジェクトが 1 つも無いとする。
-  `create_obj` を呼ぶのは `Let(x, RcRhs::Llvm(llvm_gen, args), k)` の腕 (`llvm_gen.generate` を経て) と
-  `Closure` 節点を作る段だけであり、`Ret`・`Retain`・`Release` の腕は呼ばない
-  (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`)。この本体に `Closure` 節点は無く、`Llvm`
-  の `Let` は `int_lit_0` の 1 つである。`InlineLLVMIntLit::generate` は結果の型 `I64` について
-  `create_obj` を呼ぶ (`CODE src/fixstd/builtin.rs: InlineLLVMIntLit::generate`)。`I64` はプリミティブ
-  なので `ty_to_object_ty` の `Primitive` の枝が `object_type.is_unbox` の真を課す
-  (`CODE src/object.rs: ty_to_object_ty`)。よってこの呼び出しは `object_type.is_unbox` が真の枝を取り、
-  `create_obj` は割り当てを行わず undef の集約を返す (`CODE src/object.rs: create_obj`)。したがって
-  この本体のどの素動作もオブジェクトを割り当てない。
-  子の活性化を作る段も無い -- `globals` が空なので (E5) と (E7) の段は無く、この本体に `App` が無いので
-  (E3) の段も無く、`int_lit_0` は `applies_a_function_operand` を宣言しないので (A3) オペランドを
-  適用する `Llvm` の段も無く、(F) の解放が活性化を作るのは `Destructor` のオブジェクトについてだが、
-  その点まで生きているオブジェクトが無い。環境の書き込みの段 (E8) はどの leaf がどのオブジェクトを
-  指すかを変えない (A17 の (ii-b))。よって次の素動作もオブジェクトを作らない。
+  (a) について。このプログラムのどの実行でも、生きている (D25) オブジェクトも生きている活性化 (D23) も
+  どの点でも 1 つも無い。段の列についての帰納で見る。
+  最初の時点について。D24 よりその時点に在る参照は環境が持ってきたものだけであり、A17 の (i-d) より
+  環境が持ち込む boxed な値は「このプログラムが作って環境へ番地を渡したもの」に限る。段が 1 つも
+  実行されていない時点でこのプログラムが作ったものは無いので、環境は boxed な値を 1 つも持ち込まず、
+  D25 よりその時点に生きているオブジェクトは無い。A17 の (i-c) よりその時点に在る参照も無い。活性化を
+  作るのは段なので (D24)、生きている活性化も無い。
+  ある時点まで生きているオブジェクトも生きている活性化も無いとして、次の段を見る。生きている活性化を
+  主語にする段 -- (E2)・(E3)・(E4)・(E5)・(E6) -- は、生きている活性化がその位置にあることを要るので
+  起きない。(E7) が作るのはグローバル初期化子の活性化だが、`<1>2` よりこのプログラムの `globals` は
+  空なので初期化子が無い。(E1) が活性化を作るのは C のエントリ点と `FFI_EXPORT` のエントリ点であり
+  (D22)、前者はグローバル `main` を読むが `globals` が空なのでその記号は無く、後者はこのプログラムが
+  `FFI_EXPORT` の宣言を持たないので無い。(F) の解放は、参照を処分してオブジェクトのカウントが 0 に
+  なった段の中で起きるが、オブジェクトが 1 つも無い。残るのは環境の段 (E8) と (E9) である。(E8) は
+  「参照を作らず、渡さず、処分しない」段であり、どの leaf がどのオブジェクトを指すかも変えない
+  (A17 の (ii-b))。(E9) は環境が「その番地が指すオブジェクトへの参照を自分が持っている点でだけ」呼ぶ
+  段であり (A17 の (ii-c))、環境は参照を 1 つも持たない。D24 よりこの 2 種の段は活性化を作らず、
+  オブジェクトも作らない。よって次の時点でも生きているオブジェクトも生きている活性化も無い。
   したがって生きているオブジェクトのグラフはどの点でも空であり、非巡回である。
   この 2 つは `<1>2` と食い違わない。A18 が主語にするのは実行 (D24) のヒープであるのに対し、`<1>2` は
   D11 の 3 つの節を D21 の意味のすべての活性化について確かめており、その活性化は実行に実現するとは
@@ -3696,13 +3688,9 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
   `Release(x, [])` を落としたものである。落とした本体では `held` は 1 のまま終端に着き、`bumps` は
   0 のままなので、(ii-a)・(ii-b)・(ii-c) はやはり成り立つ (段内の点は 1 のまま動かない)。
   BY <1>1, <1>2, <ref id=627e117/>, <ref id=3f1bb47/>, <ref id=4f63121/>, <ref id=33c54dc/>, <ref id=4517a7a/>, <ref id=b6673ca/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=cb35ab1/>, <ref id=f8ae607/>, <ref id=3e6b0e0/>, <ref id=f769887/>, <ref id=680aaa9/>, <ref id=ebec376/>,
-     <ref id=8d3e4af/>, <ref id=675b350/>, <ref id=d80dde9/>, <ref id=fd95f12/>, <ref id=0ab1ef4/>, <ref id=3d4be43/>, <ref id=8e3aff3/>, <ref id=e11772a/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=9f1cf6c/>, <ref id=3647480/>, <ref id=29a890a/>, <ref id=a502f3e/>, <ref id=0594f24/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=66c9670/>, <ref id=9c7c27a/>, <ref id=c232680/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>,
+     <ref id=8d3e4af/>, <ref id=675b350/>, <ref id=d80dde9/>, <ref id=fd95f12/>, <ref id=0ab1ef4/>, <ref id=3d4be43/>, <ref id=c3c0aad/>, <ref id=8ee6ff0/>, <ref id=f745696/>, <ref id=555b49f/>, <ref id=8e3aff3/>, <ref id=e11772a/>, <ref id=c9e4cca/>, <ref id=5f74a79/>, <ref id=9f1cf6c/>, <ref id=3647480/>, <ref id=29a890a/>, <ref id=a502f3e/>, <ref id=0594f24/>, <ref id=f06144e/>, <ref id=ef8efc4/>, <ref id=66c9670/>, <ref id=9c7c27a/>, <ref id=c232680/>, <ref id=243ae2c/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=0b850c9/>, <ref id=88a06de/>,
      <ref id=30d6238/>, <ref id=9d5d254/>, <ref id=e74af85/>, <ref id=63eadd9/>,
-     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc,
-     CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner,
-     CODE src/fixstd/builtin.rs: boxed_to_retained_ptr_ios, InlineLLVMIntLit::generate,
-     InlineLLVMBoxedToRetainedPtrIOS,
-     CODE src/object.rs: create_obj, ty_to_object_ty
+     CODE src/rc_ir/borrow.rs: RewriteCtx::rewrite_inner, RewriteCtx::rewrite_rc
 
 <1>3. `infer_ownership` の不動点で `owned_leaves` は空であり、`f` は借用版を持ち、そこで
       `owns_object(ρ(x), [])` は偽である。
