@@ -179,7 +179,8 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 - (ii) その実行が記憶域から読む値。
 - (iii) その実行が呼ぶ関数の返り値。
 - (iv) その実行が比べる 2 つの番地が一致するかどうか。`Arc::ptr_eq` がこれであり、
-  `impl PartialEq for Type` が節点の対について呼ぶ `type_node_eq` もその 1 つの呼び出しで始まる。
+  `impl PartialEq for Type` が節点の対について呼ぶ `type_node_eq` は、その呼び出しを選言の第 1 項に
+  置く。
 
 この道には並行性も乱数も外部入力も無い。`<1>9a` の `<2>7` の `<3>3` と `<3>4` がこれを引く。
 
@@ -973,8 +974,8 @@ SCAN src/ `truncate_to_unit(`
 
 <1>3bb. 次の 4 つの関数 -- `make_array_tycon`、`make_punched_array_tycon`、`make_arrow_name_abs`、
    `make_unit_ty` -- は引数を取らず、abort せず停止して、どの実行でも同じ値を返す。この 4 つと、
-   その下で呼ばれる関数が読むのは、それぞれの本体に書かれた定数だけであり、記憶域から読む値も
-   番地の比較も持たない。
+   その下で呼ばれる関数が読むのは、渡された引数の値と、それぞれの本体に書かれた定数だけであり、
+   記憶域から読む値も番地の比較も持たない。
 
    `make_array_tycon` の本体は `TyCon::new(make_array_name())`、`make_array_name` の本体は
    `FullName::from_strs(&[STD_NAME], ARRAY_NAME)` である。`make_punched_array_tycon` の本体は
@@ -1448,8 +1449,8 @@ SCAN src/ `truncate_to_unit(`
      として呼ぶ `NameSpace::new` である。`<2>4` が挙げる述語のうち `is_array`、`is_punched_array`、
      `is_closure` が前の 3 つを呼び、`<2>1` の `unwrap_newtypes_node` が `make_unit_ty` を返り値と
      して返し、`<2>4` の `is_funptr` が `is_funptr_tycon` を呼ぶ。`<1>3bb` より、この 4 つと、
-     その下で呼ばれる `NameSpace::new` を含む関数が読むのは、それぞれの本体に書かれた定数だけで
-     ある。
+     その下で呼ばれる `NameSpace::new` を含む関数が読むのは、渡された引数の値と、本体に書かれた
+     定数だけである。
     BY <1>3bb, <2>1, <2>4, CODE src/fixstd/builtin.rs: is_funptr_tycon,
        CODE src/ast/name.rs: NameSpace
 
