@@ -711,10 +711,9 @@ D19 を `cancel` (入力 `p1`、出力 `p2`) に当てると、`p2` の各観測
     「`NameSpace` の実装は `names` だけを読み `is_absolute` を読まない」と述べる。`names` は
     `Vec<String>` なのでその複製は元と等しく、したがって `NameSpace` の複製も `FullName` の複製も
     元と等しい。H3 が A3 を与える。
-  - **`FuncRef` は `Clone`・`PartialEq`・`Hash` を derive した構造体で、その唯一のフィールドは
+  - **`FuncRef` は `Clone` と `PartialEq` を derive した構造体で、その唯一のフィールドは
     `name: FullName` である。**よって `FuncRef` の複製は `FullName` の複製を欄に持ち、`FullName` に
-    ついて示したことから元と等しく、等しい 2 つの `FuncRef` は等しくハッシュされる (下の
-    `FullName` の `Hash` についての節)。`RcProgram` の `funcs` は `Map<FuncRef, RcFunc>` であり、
+    ついて示したことから元と等しい。`RcProgram` の `funcs` は `Map<FuncRef, RcFunc>` であり、
     `RcFunc` の `name` は `FuncRef` である。
   - `Arc<TypeNode>` の複製は元と同じ `TypeNode` を指すので、`TypeNode` の等しさを読む要はない。
   - `Set<FullName>` の複製は元の各要素の複製を要素とするので、`FullName` について示したことから
@@ -968,7 +967,7 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 写さない** -- 「P18a は A1・A2・D12 だけからは出ない」のように、その仮定だけでは足りないと述べる文が
 それである。
 
-| 仮定 | 内容 | 果たす者 (README の第 4 節) | README が挙げる読み手 |
+| 仮定 | 内容 | 果たす者 (README の第 4 節) | 読み手 |
 |---|---|---|---|
 | A1 | 入力が RC 規律を満たす | 前段のパス (`insert_rc`) | P14 と T の言明の前提。A19 (i) の量化範囲に D12 を与える (P28 の項と、A19 の「(i) も閉じた」の節) |
 | A2 | 単位への正規化 | `insert_rc` と `split_rc_units` | P14 と T の言明の前提。P9 の項。P28 の言明 (その範囲の上流を A2 が渡す)。A6・A9・A13 の各項が「`insert_rc` の入力と出力について読む段は A2 を引く」と書き、A2 自身の項が「A6・A9・A13 を上流について読む段は、この節を引く」と書く |
