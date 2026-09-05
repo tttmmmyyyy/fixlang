@@ -1247,13 +1247,25 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
      CODE src/rc_ir/borrow.rs: CancelAnalysis::other_objects,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::merge,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::cancelled
+<1>4a. `CancelAnalysis` の値は内部可変性を持たない。**在りかは型で決める** --- 7 つの欄の型は
+       `&VarTable`、`&RcProgram`、`&Set<VarPath>`、`&TypeEnv`、`Set<NodeId>`、
+       `Map<NodeId, Vec<NodeId>>`、`Vec<NodeId>` であり、`RefCell`・`Cell`・`OnceCell`・`OnceLock`・
+       `Mutex`・`RwLock`・`UnsafeCell`・`Atomic*` を含む欄の宣言はこの 7 つに無い。A3 が
+       「**在りかは型で決める。**」と述べ、「**特定のメソッド名や特定の欄で数え上げると、別の型を経て
+       届く道が落ちる。**」と続けるのに従う。**前の 4 つの欄が指す先の内部可変性はこの値の中に無い** ---
+       `VarTable` は `origins: RefCell<Map<VarPath, Origin>>` の欄を持つが、それが在るのは
+       `CancelAnalysis` の値ではなくその欄が指す `VarTable` の値の中である。`Set<NodeId>`・
+       `Map<NodeId, Vec<NodeId>>`・`Vec<NodeId>` が保持するのは `usize` と `Vec<usize>` と
+       `FxHashMap`・`FxHashSet` の hasher だけである。
+  BY CODE src/rc_ir/borrow.rs: CancelAnalysis, CODE src/rc_ir/ownership.rs: VarTable,
+     CODE src/misc.rs: Map, CODE src/misc.rs: Set, <ref id=e11772a/>
 <1>5. QED
   <1>4 の 6 つの本文と `cancel_body` の閉包の本文で `vars` と `type_env` の欄が現れるのは、どれも値を
   読んで別の関数へ渡す式であり、どちらの欄への代入も書かれていない。残る 3 つは `self` を共有参照で
-  受け取るので、EXT 共有参照は代入を許さない よりこの値のどの欄へも代入できない。その例外の内部可変性が
-  与えるのは、欄が指す先を書き換える道だけであり、欄そのもの --- どの `VarTable` と `TypeEnv` を指すか
-  --- を差し替える道ではない。<1>2 と <1>3 より、これ以外に欄を動かしうる本文は無い。
-  BY <1>1, <1>2, <1>3, <1>4, CODE src/rc_ir/borrow.rs: cancel,
+  受け取るので、EXT 共有参照は代入を許さない よりこの値のどの欄へも代入できない。その節が置く例外は、
+  代入される値が `UnsafeCell` を通じて持つ内部可変性であり、<1>4a よりこの値はそれを持たない。
+  <1>2 と <1>3 より、これ以外に欄を動かしうる本文は無い。
+  BY <1>1, <1>2, <1>3, <1>4, <1>4a, CODE src/rc_ir/borrow.rs: cancel,
      CODE src/rc_ir/borrow.rs: CancelAnalysis, EXT 共有参照は代入を許さない
 
 ### L0c (`ActRefs` は節点で決まる) <!--#7a6e645-->
