@@ -589,16 +589,24 @@ A3 の 5 行との突き合わせは次のとおりである。空集合と宣�
          呼ばれる鍵から到達する鍵の上でしか言えず、L16 は鍵の第 1 成分が `B` に現れる `RcVar` の
          名前であることを前提に置く。`<1>0` より、その鍵から到達する鍵の第 1 成分も `B` に現れる
          `RcVar` の名前である。
-    <3>1. `Origin` の値を作る式は 3 つある -- `origin_inner` の `here()`、`origin_from_leaves_under` の
-          `Origin::Exactly(here.clone())`、そして `Origin::of_candidates` である。
-      BY <ref id=d6c2508/> (`Origin::Join { .. }` を作る式は `of_candidates` の中の 1 か所だけであり、どの `Origin` の
+    <3>1. `#[cfg(test)]` のモジュールを除くと、`Origin` の値を作る式は 3 つである --
+          `origin_inner` の `here()`、`origin_from_leaves_under` の `Origin::Exactly(here.clone())`、
+          そして `Origin::of_candidates` である。**除くのは、そのモジュールの項目が製品のコードの
+          実行路に無いからである** -- 第 1 節が `VarTable::empty` の呼び出し元について同じ形で
+          除いている。
+      BY 前提 `Origin::Exactly` を作る式の在りか (走査は `#[cfg(test)]` の下の項目を除く。
+         挙がる 5 項目のうち `Origin::identity` と `Origin::candidates` の 2 つはパターンであって
+         構成ではない),
+         <ref id=d6c2508/> (`Origin::Join { .. }` を作る式は `of_candidates` の中の 1 か所だけであり、どの `Origin` の
          値も `Exactly` か `of_candidates` が作った `Join` かその複製である),
          CODE src/rc_ir/ownership.rs: origin_inner (`here` は
          `Origin::Exactly((var.clone(), path.to_vec()))` を返す閉包である),
          CODE src/rc_ir/ownership.rs: origin_from_leaves_under
          (`reached.push(Origin::Exactly(here.clone()))`),
          CODE src/rc_ir/ownership.rs: Origin::of_candidates (`1 =>` の腕が `Origin::Exactly` を、
-         `_ =>` の腕が `Origin::Join` を作る)
+         `_ =>` の腕が `Origin::Join` を作る),
+         CODE src/rc_ir/ownership.rs: Origin::identity, Origin::candidates (`Origin::Exactly` を
+         `match` のパターンとして持つ)
     <3>1a. 前の 2 つが作る `Exactly` の `VarPath` は、その呼び出し自身の `(var, path)` である。
       BY CODE src/rc_ir/ownership.rs: origin_inner (`here` の本体、および
          `origin_from_leaves_under` に渡す `here_identity` が `(var.clone(), path.to_vec())` であること),
