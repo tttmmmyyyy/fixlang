@@ -906,6 +906,58 @@ def enumerations(directory):
     return out
 
 
+def orphan_identities(directory):
+    """項目として登録されない同一性の印。
+
+    **印の付いた行が項目でないなら、その印は誰も見張っていない。** 引いても解決せず、指紋も取られない
+    -- 実測で、節の見出しに印を付けた 6 か所と、項目の中の 1 行に印を二重に付けた 3 か所があり、
+    そのうち 1 つは「その節を引く読み手が 1 人も居ない」という指摘として検証者が手で見つけた。"""
+    items, _ = build(directory)
+    out = []
+    for path in documents(directory):
+        for number, line in enumerate(open(path, encoding="utf-8"), 1):
+            for found in IDENTITY.findall(line):
+                if found not in items:
+                    out.append((path, number, found, line.strip()))
+    return out
+
+
+# 項目の名前の範囲。`A1-A26`、`D1 - D34`、`P1 から P30` のように書かれる。
+LABEL_RANGE = re.compile(r"\b([DAP])(\d+)[a-z]*\s*(?:-{1,2}|—|–|~|から)\s*`?([DAP])?(\d+)[a-z]*\b")
+
+
+def stale_ranges(directory):
+    """1 番から始まる範囲で数え上げていて、その字の最後の項目に届いていないもの。
+
+    **範囲は数え上げであって引用ではないので、指紋のグラフでは見張れない。** 項目を 1 つ足しても
+    `A1-A26` と書いた行は動かず、読み手はその 1 つを落としたまま進む -- 実測で、`A1-A26` が 4 か所、
+    `D1-D34` が 2 か所、いずれも枠が A32・D35 を持つようになった後まで残っていた。
+
+    **引用符の中の範囲は挙げない。** 引いた文はその範囲について語っているのであって、
+    その範囲を主張しているのではない。"""
+    last = {}
+    for item in items_in(os.path.join(directory, "README.md"))[0]:
+        name = item["name"] or ""
+        head = re.fullmatch(r"([DAP])(\d+)[a-z]*", name)
+        if head:
+            letter, number = head.group(1), int(head.group(2))
+            last[letter] = max(last.get(letter, 0), number)
+    out = []
+    for path in documents(directory):
+        for number, line in enumerate(open(path, encoding="utf-8"), 1):
+            quoted = [(m.start(), m.end()) for m in re.finditer(r"「[^」]*」", line)]
+            for match in LABEL_RANGE.finditer(line):
+                letter, first, other, end = match.groups()
+                if (other and other != letter) or int(first) != 1:
+                    continue
+                if any(start <= match.start() < stop for start, stop in quoted):
+                    continue
+                if int(end) < last.get(letter, 0):
+                    out.append((path, number, f"{letter}{first}-{letter}{end}",
+                                f"{letter}{last[letter]}"))
+    return out
+
+
 def ledger_path(directory):
     return os.path.join(directory, "items.tsv")
 
@@ -1080,6 +1132,14 @@ def main(arguments):
         print(f"{directory}: その文書に無い節を番号で引いている箇所 {len(numbered)} 件")
         for path, number, home, section in numbered:
             print(f"  {os.path.basename(path)}:{number}: {home} の第 {section} 節は無い")
+        stamps = orphan_identities(directory)
+        print(f"{directory}: 項目として登録されない同一性の印 {len(stamps)} 件")
+        for path, number, found, line in stamps:
+            print(f"  {os.path.basename(path)}:{number}: {found} -- {line[:70]}")
+        ranges = stale_ranges(directory)
+        print(f"{directory}: 最後の項目に届かない範囲の数え上げ {len(ranges)} 件")
+        for path, number, written, newest in ranges:
+            print(f"  {os.path.basename(path)}:{number}: {written} と書いているが {newest} まで在る")
         claims = unproved_claims(directory)
         print(f"{directory}: 項目の中で印を持たない主張の行 {len(claims)} 件")
         for path, n, total in orphan:
