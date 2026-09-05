@@ -186,6 +186,29 @@ site を 1 つも挙げない。P7a と P7d はその点を避けて site を本
 `origin(x, π).candidates()` である (`p15` の第 1 節)。この文書が `p15` の命題と P7a を引くのは、`V` の
 `RewriteCtx` と `B_V` についてである (第 9.4 節の L13 の `<1>0`)。
 
+### 在りかの前提
+
+**コードのどこに何が在るかの数え上げは、段の中で行わない。** 段が自分で在りかを数え上げると、その
+数え上げには果たす者が居らず、検査するものも無い。**記号を名指す `CODE` の引用はその記号の本体しか
+与えないので、「ほかの記号はそれをしない」の側はそこから出ない。** 在りかは名前つきの前提として置き、
+`BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
+
+**果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
+`src/` の全体に走らせて、下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。走査は
+字面の上位近似なので、一覧には `RcProgram` の `funcs` でない `Map` へ入れる項目も入る。`#[cfg(test)]` の
+下の項目は走査が除く。
+
+**前提 関数の表へ鍵を入れる在りか** --- `funcs` という名前の `Map` へ鍵を入れる式が在る項目は次で尽きる。
+
+SCAN src/ `funcs.insert(`
+  = src/build/divide_program.rs: divide_among_units -- 分割が単位ごとの `funcs` へ配る
+  = src/rc_ir/borrow.rs: borrow_ify -- `f_own` と借用版を出力の `funcs` へ入れる
+  = src/rc_ir/locality.rs: specialize -- 局所性の特殊化が複製を `output_funcs` へ入れる
+  = src/rc_ir/lower.rs: Lowerer::lower_lam -- 持ち上げた lambda を `fresh_closure_ref` の名前で入れる
+  = src/rc_ir/lower.rs: lower_program -- funptr の記号を `sym.name` で入れる
+  = src/rc_ir/rc_insert.rs: insert_rc -- 同じ鍵で `Map` を組み直す
+  = src/rc_ir/unique_check_elim.rs: specialize -- 一意性検査の除去が複製を `output_funcs` へ入れる
+
 **`develop_mode` について。** `borrow_ify` は `develop_mode` が真のとき `check_clone_names_are_fresh` と
 `RewriteCtx::check_ownership_is_levelled` を呼ぶ。どちらも `assert!` を行うだけで出力を作らない
 (`CODE src/rc_ir/borrow.rs: borrow_ify`, `check_clone_names_are_fresh`,
@@ -1846,7 +1869,8 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
 
 #### L9 (1 歩は同じ参照を運ぶ) <!--#10752aa-->
 
-**言明**。`(x, λ)` を `ρ` の上のスロットとし、その 1 歩の先を `(x', λ')` とする。このとき `(x', λ')` も
+**言明**。**DEF 由来の 1 歩 の表の 6 行は、D20 の別名の辺の 6 つと 1 対 1 に対応する。** さらに、
+`(x, λ)` を `ρ` の上のスロットとし、その 1 歩の先を `(x', λ')` とすると、`(x', λ')` も
 `ρ` の上のスロットであり、`obj(x', λ') = obj(x, λ)` である。そのオブジェクトが計数下 (D26) であるときは、
 両者が持つ参照は同一である。また `T_ρ(x, λ)` は有限歩で定まる。
 
@@ -1954,7 +1978,7 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
     BY <ref id=596a46d/>, DEF 由来の 1 歩, <ref id=087a6d3/>, <ref id=0edb0ba/>, <1>2, <2>1, <2>2, CODE src/rc_ir/ownership.rs: origin_inner
 
 <1>5. QED
-  BY <1>2, <1>3, <1>4
+  BY <1>1, <1>2, <1>3, <1>4
 
 #### L9a (DEF 由来 は D33 の別名類を与える) <!--#12bce76-->
 
@@ -1964,7 +1988,8 @@ P14 は、出力の 3 種の版 -- 全所有版 `f_own`、借用版 `f_borrow`�
 `{ (y, μ) : (y, μ) は `ρ` の上のスロットであり `T_ρ(y, μ) = T` }` であり、`T_ρ(C_ρ(x, λ)) = T` である。
 
 <1>1. DEF 由来の 1 歩 の表の 6 行は D20 の別名の辺の 6 つと 1 対 1 に対応する。
-  BY <ref id=9c7c27a/>, DEF 由来の 1 歩, <ref id=10752aa/>
+  L9 の言明の第 1 文である。
+  BY <ref id=10752aa/>
 
 <1>2. QED
   D33 は「1 つの実行路 `ρ` の上のスロット (D6) を、`ρ` 終端が等しいという関係で分けた同値類を
@@ -2350,17 +2375,21 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
 
 <1>1. CASE `callee'.name` が `ctx.callee_params` の鍵である。
   <2>1. `W` は出力の `funcs` が `callee'.name` を鍵として持つ関数である。
-    <3>1. `resolve_callee_params(callee', VarTable::of(V), 出力プログラム)` は
+    <3>1. `B'_V` について `VarTable::of` か `VarTable::body_only` が作った表を `vars'` とすると、
+          `resolve_callee_params(callee', vars', 出力プログラム)` は
           `Some(出力の funcs[callee'.name].params)` を返す。
+      表の構成子は版によって別である -- `VarTable::of` の署名は `of(func: &RcFunc)` なので、`V` が
+      関数の版のときはそちらが、グローバル初期化子の版のときは `VarTable::body_only` が当たる。どちらも
+      `closure_targets` を `collect_bindings` に埋めさせる。
       `resolve_callee_params` は `vars.closure_targets` を `callee'.name` で引き、外れたときは
       `FuncRef { name: callee'.name }` が `prog.funcs` の鍵かを見る。`closure_targets` に元を入れるのは
       `collect_bindings` の `RcRhs::Closure` の腕だけで、鍵はその本体の `Let` の束縛変数の名前 --
-      すなわち出力の束縛名 (DEF 出力の束縛名) -- である。L6 より `callee_params` の鍵は出力の `funcs` の
-      鍵ちょうどであり、4.4 の系 より出力の束縛名は出力の `funcs` の鍵ではないので、`callee'.name` は
-      `closure_targets` の鍵ではない。よって第 2 の枝が当たり、`callee'.name` は出力の `funcs` の鍵なので
-      `Some` が返る。
+      `B'_V` は出力プログラムの本体なので、すなわち出力の束縛名 (DEF 出力の束縛名) -- である。L6 より
+      `callee_params` の鍵は出力の `funcs` の鍵ちょうどであり、4.4 の系 より出力の束縛名は出力の
+      `funcs` の鍵ではないので、`callee'.name` は `closure_targets` の鍵ではない。よって第 2 の枝が
+      当たり、`callee'.name` は出力の `funcs` の鍵なので `Some` が返る。
       BY <ref id=33e3457/>, <ref id=33d5f52/>, DEF 出力の束縛名, CODE src/rc_ir/ownership.rs: resolve_callee_params,
-         VarTable::of, collect_bindings
+         VarTable::of, VarTable::body_only, collect_bindings
     <3>2. QED
       P30 より、`borrow_ify` の出力の `App` について `resolve_callee_params` が解決する関数が
       `Some` であるならば、それはその段の実行時の呼び出し先 (D23) と同じ `RcFunc` である。`<3>1` より
@@ -2438,20 +2467,29 @@ P11 の `callee_owns(i, u)` が真であることとは同値である。
         なって `globals` へ行く。
     BY CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_symbol,
        CODE src/ast/types.rs: TypeNode::is_funptr
-  <2>2. `Lowerer::lower_lam` は `fresh_closure_ref()` が作る名前を鍵に入れる。`Lowerer` が `funcs` に
-        鍵を入れるのはこの 2 か所だけである。この鍵の関数を作るのは `lower_lambda_as_function` であり、
-        その `fn_ty` は `Expr::Lam` の節点が持つ型 `lam.type_` -- 以下 `lam_ty` -- である。その `capture`
-        は `lam_ty.is_closure()` が真のときだけ `Some` である (偽のときは `captures` が空であることを
-        表明して `None` を入れる)。
-    BY CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_lam,
+  <2>2. `Lowerer::lower_lam` は `fresh_closure_ref()` が作る名前を鍵に入れる。`src/rc_ir/lower.rs` で
+        `funcs` に鍵を入れるのはこの 2 か所だけである。この鍵の関数を作るのは `lower_lambda_as_function`
+        であり、その `fn_ty` は `Expr::Lam` の節点が持つ型 `lam.type_` -- 以下 `lam_ty` -- である。その
+        `capture` は `lam_ty.is_closure()` が真のときだけ `Some` である (偽のときは `captures` が空で
+        あることを表明して `None` を入れる)。
+    前提 関数の表へ鍵を入れる在りか が挙げる項目のうち `src/rc_ir/lower.rs` のものは、`lower_program` と
+    `Lowerer::lower_lam` である。
+    BY 前提 関数の表へ鍵を入れる在りか, CODE src/rc_ir/lower.rs: lower_program, Lowerer::lower_lam,
        Lowerer::fresh_closure_ref, Lowerer::lower_lambda_as_function,
        CODE src/ast/types.rs: TypeNode::is_closure
   <2>3. `lower_program` の出力から `borrow_ify` の入力までの間に、`funcs` に鍵を足すパスは無い。
-        `simplify` は `prog.funcs.values_mut()` の本体を書き換え、`insert_rc` は同じ鍵で `Map` を
-        組み直し、`split_rc_units` は `prog.funcs.values_mut()` の本体を書き換える。関数を複製する
-        2 つのパス (`unique_check_elim::specialize` と `locality::specialize`) は
-        `optimize_rc_program` の中で `borrow_ify` より後に走る。
-    BY CODE src/build/build_object_files.rs: lower_and_insert_rc, optimize_rc_program,
+    `build_object_files` は `lower_and_insert_rc` の返り値を `optimize_rc_program` に渡し、その返り値を
+    `divide_among_units` に渡す。`lower_and_insert_rc` は `lower_program` の後に `simplify` と
+    `insert_rc` を走らせ、`optimize_rc_program` は `split_rc_units` の後に `borrow_ify` を走らせるので、
+    `lower_program` の出力から `borrow_ify` の入力までに走るパスはこの 3 つである。`simplify` は
+    `prog.funcs.values_mut()` の本体を書き換え、`insert_rc` は同じ鍵で `Map` を組み直し、
+    `split_rc_units` は `prog.funcs.values_mut()` の本体を書き換える。前提 関数の表へ鍵を入れる在りか が
+    挙げる残る 4 項目は、この区間の外にある -- `borrow_ify` はこのパス自身であり、
+    `unique_check_elim::specialize` と `locality::specialize` は `optimize_rc_program` の中で
+    `borrow_ify` より後に走り、`divide_among_units` は `build_object_files` の中で
+    `optimize_rc_program` より後に走る。
+    BY 前提 関数の表へ鍵を入れる在りか,
+       CODE src/build/build_object_files.rs: build_object_files, lower_and_insert_rc, optimize_rc_program,
        CODE src/rc_ir/simplify.rs: simplify, CODE src/rc_ir/rc_insert.rs: insert_rc,
        CODE src/rc_ir/borrow.rs: split_rc_units
   <2>4. QED
