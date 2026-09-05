@@ -3565,26 +3565,44 @@ A19 (ii-b) が破れるのは、ある類の参照が減って bump の数が減
          `Pre(V)` の表と `F` の本体の表という相異なる 2 つの表について `origin` の答えを比べるので、
          その形であり、`origin` の展開の上の帰納をこの段の証明の中で持つ。
     <3>1. `ren` は単射であり、`F` の本体に現れる各名前 `y` について `ty(ren[y]) = ty(y)` である。
+      <4>0. `assign_fresh_names_to_binders(node, pass_tag, renaming, counter)` の 1 回の呼び出しは、
+            `assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter)` をちょうど 1 回
+            呼ぶ。`_inner` は `node` の式で 5 つの腕に分かれる。`Let(x, rhs, k)` の腕は `x.name` に
+            ついて `assign_fresh_name` を 1 回呼び、`rhs` が `Match(_, arms)` のときは各 `arm` の
+            `arm.payload.name` について 1 回ずつ呼んでその `arm.body` へ降り、その後 `k` へ降りる。
+            `Destructure(_, fields, _, k)` の腕は `fields` の各フィールド変数について 1 回ずつ呼んで
+            `k` へ降りる。`Retain`/`Release`/`Eval` の腕は `k` へ降りるだけであり、`Ret` の腕は
+            何も行わない。降りるときに渡すのは `renaming` と `counter` の再借用であり、`_inner` は
+            この 2 つへ `assign_fresh_name` の呼び出し以外の書き込みを行わない。
+        BY CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders,
+           CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders_inner,
+           CODE src/misc.rs: grow_stack, EXT stacker の maybe_grow
+        `assign_fresh_names_to_binders` の本体は
+        `grow_stack(|| assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter))` で
+        あり、`grow_stack(f)` の本体は `stacker::maybe_grow(64 * 1024, 1024 * 1024, f)` である。
       <4>1. `rename` の各項は `assign_fresh_name` の 1 回の呼び出しが書き込むものであり、`F` の各束縛名に
             ついてその呼び出しはちょうど 1 回である。`pass_tag` は `"b"` である。
-        BY <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: clone_func,
-           CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_names_to_binders,
-           assign_fresh_name
+        BY <4>0, <ref id=63eadd9/>, <ref id=b3dfa37/>, CODE src/rc_ir/borrow.rs: clone_func,
+           CODE src/rc_ir/rename.rs: fresh_rename_function,
+           CODE src/rc_ir/rename.rs: assign_fresh_name
         `clone_func` は `fresh_rename_function(&func.params, &func.capture, &func.body, "b",
         rename_counter)` を呼び、`fresh_rename_function` は各パラメータ・capture について
         `assign_fresh_name` を呼んでから `assign_fresh_names_to_binders` に本体を渡す。
-        `assign_fresh_names_to_binders` は各束縛について `assign_fresh_name` を 1 回呼ぶ。
-        `renaming` へ書き込むのは `assign_fresh_name` のこの 1 か所だけである。
+        D2 の表より本体が変数を束縛するのは `Let` の束縛変数、`Match` のアームの payload、
+        `Destructure` のフィールドの 3 つであり、<4>0 よりその 3 つのそれぞれについて
+        `assign_fresh_name` がちょうど 1 回呼ばれる。`renaming` は `fresh_rename_function` の局所の
+        写像であり、<4>0 より下へ渡るのはその再借用だけなので、そこへ書き込むのは
+        `assign_fresh_name` の `renaming.insert(name.clone(), fresh)` だけである。
       <4>2. `assign_fresh_name` の相異なる 2 つの呼び出しが作る名前は相異なる。
-        BY <4>1, EXT 可変参照は排他である, EXT 整数の 10 進表記,
+        BY <4>0, <4>1, EXT 可変参照は排他である, EXT 整数の 10 進表記,
            CODE src/rc_ir/rename.rs: assign_fresh_name,
-           CODE src/rc_ir/rename.rs: fresh_rename_function,
-           CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders
+           CODE src/rc_ir/rename.rs: fresh_rename_function
         `assign_fresh_name` の本体は `*counter += 1;` で始まり、続いて
         `fresh.name = format!("{}#{}{}", fresh.name, pass_tag, counter);` を置く。`counter` の型は
-        `&mut u64` であり、`fresh_rename_function` と `assign_fresh_names_to_binders` はそれを再借用して
-        下へ渡すだけである。`EXT 可変参照は排他である` より、その参照が生きている間、それが指す `u64` へ
-        届く道はその参照だけなので、この `u64` に書き込むのは `assign_fresh_name` の
+        `&mut u64` であり、`fresh_rename_function` はそれを再借用して `assign_fresh_name` と
+        `assign_fresh_names_to_binders` へ渡し、<4>0 より `assign_fresh_names_to_binders` と `_inner` も
+        再借用して下へ渡すだけである。`EXT 可変参照は排他である` より、その参照が生きている間、それが
+        指す `u64` へ届く道はその参照だけなので、この `u64` に書き込むのは `assign_fresh_name` の
         `*counter += 1;` に限る。よって値は呼び出しごとに 1 ずつ単調に増え、2 つの呼び出しが読む値は
         相異なる。
         <4>1 より `pass_tag` は `"b"` であり、`counter` の 10 進表記は数字だけからなるので、作られた
