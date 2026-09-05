@@ -3165,9 +3165,11 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
         同一性については字義どおりでない -- はここに当たらない。`result_prov` の既定は `Unknown` であり、A3 より
         override するのは 29 個である。以下の (α) から (δ) はその 29 個を尽くし、`Fresh` を宣言するのは
         (α) から (γ) である。
-        (α) `InlineLLVMMakeStructBody`、`InlineLLVMMakeUnionBody`、`replaced_field_prov`
-        (`InlineLLVMStructSetBody` と `InlineLLVMStructPlugInBody` の 2 つが使う) は、
-        結果が boxed のときにだけ根の path に `Fresh` を置き、そうでないときは各 leaf に `Arg` を置く。
+        (α) `InlineLLVMMakeStructBody` と `replaced_field_prov` (`InlineLLVMStructSetBody` と
+        `InlineLLVMStructPlugInBody` の 2 つが使う) は、結果が boxed のときにだけ根の path に `Fresh` を
+        置き、そうでないときは各 leaf に `Arg` を置く。`InlineLLVMMakeUnionBody` も結果が boxed のときにだけ
+        根の path に `Fresh` を置き、そうでないときは、構成する変位の下の leaf に `Arg` を、他の変位の下の
+        leaf に空集合 (`Set::default()`) を置く。
         (β) `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、
         `InlineLLVMUnsafeMutateBoxedIOSInternalBody`、`InlineLLVMArrayMutateElementsInternalBody`、
         `InlineLLVMArrayMutateElementsIosInternalBody`、`InlineLLVMArrayPunchBody` は
