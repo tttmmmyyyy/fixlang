@@ -156,10 +156,18 @@ FieldPath`) であり、`p`、`q`、`u`、`lam` などで表す。`p[i]` は第 
 `Default::default()` を呼び、その結果から同じ形の値を組み立てるだけであり、ほかの関数を呼ばない。
 `Option<T>` の `Default::default()` は `None` である。`<1>3bb` がこれを引く。
 
-**EXT Iterator の map と zip** -- 標準ライブラリの `Iterator` について、`map(f)` はもとの列の各要素に
+**EXT Iterator の map と zip と all** -- 標準ライブラリの `Iterator` について、`map(f)` はもとの列の
+各要素に
 `f` を当てた列を返し、列の長さを変えない。`a.zip(b)` は `a` と `b` の同じ位置の要素の対を、短い方の
 長さだけ並べた列を返す。したがって長さの等しい 2 つの列を `zip` すると、両者の各位置の対がちょうど
-1 度ずつ渡される。`<1>9a` の `<2>1a` がこれを引く。
+1 度ずつ渡される。`all(pred)` は、`pred` が列のすべての要素について真を返すときにだけ真を返す。
+`<1>9a` の `<2>1a` と、`<1>29a` の `<2>1a` の `<3>5` と `<3>6` がこれを引く。
+
+**EXT 文字列の接頭辞と u32 の 10 進表記** -- 標準ライブラリの `str::starts_with(prefix)` は、その
+文字列が `prefix` で始まるときにだけ真を返す。`prefix` が ASCII の文字だけからなるとき
+`prefix.len()` はその文字数に等しいので、`chars()` から先頭 `prefix.len()` 個を捨てた残りは、
+`prefix` を落とした部分文字列である。`u32` の `Display` は値の 10 進表記を書き、
+`str::parse::<u32>()` はその表記を `Ok` で読み戻す。`<1>3ba` の `<2>1` と `<2>4` がこれを引く。
 
 **EXT Vec の等価性** -- 標準ライブラリの `Vec<T>` の `PartialEq` は、両者の長さが等しく、かつ同じ
 位置の要素どうしが `==` で等しいときにだけ真を返す。`<1>9a` の `<2>1a` がこれを引く。
@@ -935,7 +943,8 @@ SCAN src/ `truncate_to_unit(`
      `NameSpace::new(vec![STD_NAME.to_string()])` であり、`STD_NAME` は `"Std"`、
      `impl PartialEq for NameSpace` は `names` だけを比べるので、これは名前の列が `Std` の 1 段で
      あるかを問う。
-    BY CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME,
+    BY EXT 文字列の接頭辞と u32 の 10 進表記,
+       CODE src/fixstd/builtin.rs: is_funptr_tycon, CODE src/constants.rs: FUNPTR_NAME,
        CODE src/constants.rs: STD_NAME, CODE src/ast/name.rs: NameSpace
   <2>2. (b) の第 1 文が成り立つ。`<2>1` より (a) の形とは、`tc.name.namespace` が `Std` の 1 段で
      ありかつ `tc.name.name` が `FUNPTR_NAME` で始まることである。A28 は、`E.tycons()` の項目の
@@ -955,7 +964,8 @@ SCAN src/ `truncate_to_unit(`
      `TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))` であり、`TyCon::new`
      は渡された `FullName` をそのまま `name` の欄に置き、`FullName::from_strs(ns, name)` は
      第 2 引数を `name` の欄に置く。
-    BY <2>1, <2>2, CODE src/fixstd/builtin.rs: make_funptr_name,
+    BY <2>1, <2>2, EXT 文字列の接頭辞と u32 の 10 進表記,
+       CODE src/fixstd/builtin.rs: make_funptr_name,
        CODE src/fixstd/builtin.rs: make_funptr_tycon,
        CODE src/ast/types.rs: TyCon, CODE src/ast/name.rs: FullName
   <2>5. QED
@@ -1329,7 +1339,8 @@ SCAN src/ `truncate_to_unit(`
      `args` の各要素に `substitute_type` を当てた `new_args` を作り、
      `new_args.iter().zip(args).all(|(new_arg, arg)| Arc::ptr_eq(new_arg, arg))` が真のときは節点を
      そのまま複製して返し、偽のときは `set_assocty_args(new_args)` を返す。分岐の条件が列の上の
-     全称であるところが `Type::TyApp` の腕と異なる。`EXT Iterator の map と zip` より `map` は列の
+     全称であるところが `Type::TyApp` の腕と異なる。`EXT Iterator の map と zip と all` より
+     `map` は列の
      長さを保つので `new_args` と `args` の
      長さは等しく、`zip` は各位置の対を渡す。よって真の腕に入るとき `new_args` の各要素は `args` の
      同じ位置の要素と同じ `Arc` であり、`EXT Vec の等価性` より `Vec` の等価性は長さと同じ位置の
@@ -1348,7 +1359,7 @@ SCAN src/ `truncate_to_unit(`
      `impl PartialEq for TypeNode` が読むのは `ty` だけなので値として等しい。どちらの枝も場合分けと
      複製だけなので abort しない。**すなわちこの 3 か所の分岐は、どちらの腕を取っても値として
      等しい節点を返し、abort しない。**
-    BY <2>1, EXT Iterator の map と zip, EXT Vec の等価性,
+    BY <2>1, EXT Iterator の map と zip と all, EXT Vec の等価性,
        CODE src/ast/types.rs: TypeNode::set_tyapp_fun,
        CODE src/ast/types.rs: TypeNode::set_tyapp_arg,
        CODE src/ast/types.rs: TypeNode::set_assocty_args,
@@ -2969,10 +2980,13 @@ SCAN src/ `truncate_to_unit(`
        `origin_from_leaves_under` は `None` を返す。空であるかどうかは並び順に依らない。
       BY <3>2, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     <3>5. CASE `reached` が空でなく、その要素がすべて互いに等しい。どの並び順でも `first` はその
-       共通の値であり、`reached.iter().all(|o| o == first)` は真になるので、返り値は
+       共通の値であり、`EXT Iterator の map と zip と all` より
+       `reached.iter().all(|o| o == first)` は真になるので、返り値は
        `Some(その共通の値)` である。
-      BY <3>2, <3>3, CODE src/rc_ir/ownership.rs: origin_from_leaves_under
+      BY <3>2, <3>3, EXT Iterator の map と zip と all,
+         CODE src/rc_ir/ownership.rs: origin_from_leaves_under
     <3>6. CASE `reached` が空でなく、互いに等しくない 2 つの要素 `a`、`b` を持つ。どの並び順でも
+       `EXT Iterator の map と zip と all` より
        `reached.iter().all(|o| o == first)` は偽である -- 真だとすると `a == first` かつ
        `b == first` であり、`<3>3` の同値関係から `a == b` になって仮定に反する。よって返り値は
        `Some(Origin::of_candidates(candidates, here))` である。`candidates` は `reached` の各要素の
@@ -2984,7 +2998,7 @@ SCAN src/ `truncate_to_unit(`
        依らず等しいので、`<3>3` の `Origin` の等価性のもとで返り値はどちらの場合も並び順に依らない。
        要素数 1 の場合に `into_iter().next()` がその 1 つの要素を返すことは
        `EXT 1 要素の集合の反復` が言う。
-      BY <3>2, <3>3, EXT 1 要素の集合の反復,
+      BY <3>2, <3>3, EXT 1 要素の集合の反復, EXT Iterator の map と zip と all,
          CODE src/rc_ir/ownership.rs: origin_from_leaves_under,
          CODE src/rc_ir/ownership.rs: Origin::of_candidates, Origin::acted_on
     <3>7. QED
