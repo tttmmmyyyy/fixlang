@@ -18,8 +18,8 @@ D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて 
     スロットか記号の位置 -- であり、`obj(o) = obj(C_ρ(x, λ)) = obj(x, λ)` である。
   - **`obj(x, λ)` が D26 の意味で計数下であるとき、`o` は `ρ` の上のスロットであって
     `C_ρ(o) = C_ρ(x, λ)` であり、`o` は `ρ` で活性 (p13 の `DEF 名前の活性`) であって
-    `obj_ρ(o) = obj(x, λ)` である。** 第 6.1b 節の `L5b` が読むのは、この後半のうち
-    「`o` は `ρ` の上のスロットであって `C_ρ(o) = C_ρ(x, λ)`」の部分である。
+    `obj_ρ(o) = obj(x, λ)` である。** 第 6.1b 節の `L5b` が読むのは、この後半のうち `o` が `ρ` の上の
+    スロットであって `C_ρ(o) = C_ρ(x, λ)` であるという部分である。
 - 反例 `C1` -- その実行路の上の別名類 (`m` と `p` が 1 つの類に属すること)、callee の leaf が指す
   オブジェクトがグローバル状態であること、`C1` が D12 を満たすこと、そして A19 (ii) を破る時点と、
   その時点での `held` と `bumps` の値。**本体はこの文書が書き写す** -- `DEF C1 の本体` として。
@@ -93,8 +93,14 @@ D1-D34、仮定 A1-A26、命題 P1-P30 の**言明**の上に立つ。加えて 
 - `needs_rc(v)` は `RcInserter::needs_rc(v)`、すなわち `!v.ty.is_fully_unboxed(type_env)`
   (`CODE src/rc_ir/rc_insert.rs: RcInserter::needs_rc`)。
 
+**DEF `id(s)`**。`ρ` の上のスロット `s = (v, λ)` (D6) について `id(s) := origin(v, λ).identity()` と
+置く (`CODE src/rc_ir/ownership.rs: origin`, `CODE src/rc_ir/ownership.rs: Origin`,
+`CODE src/rc_ir/ownership.rs: Origin::identity`)。**この記法をここに置くのは、第 6.1a 節がこれを
+第 11 節より前に読むからである。**
+
 **DEF 時点**。この文書では**時点**とは節点の訪問の入口を指す。`held_ρ(n, C)`、`bumps_ρ(n, C)` は、
-`ρ` の上の節点 `n` の入口における値である。**この粒度は A19 (ii) が量化する点集合と同じである** --
+`ρ` の上の節点 `n` の入口における値である。**この粒度は A19 (ii-a)・(ii-b) の「各時点」が指す点集合と
+同じである** --
 README の A19 は「**「各時点」は、その活性化が生きている (D23) 間の、その活性化の節点の訪問の入口で
 ある時点である。**」と書き、その理由を「`bumps` を定める D27 が `B(p, ρ)` を走査中の位置 --
 節点の訪問の入口 -- でしか定めないので、この 2 つを読める点はそこに限る」と述べる。
@@ -107,7 +113,7 @@ README の A19 は「**「各時点」は、その活性化が生きている (D
 (`p20-borrow-ify.md` の第 13 節) である。」と 2 人挙げ、この文書が果たすのは前者である。
 第 10.7 節の `L19` (d) がその段であり、その言明も同じ範囲で量化する。
 
-**外部の結果。** README が `EXT` の名札を与える群の項目を、この文書は次の 10 個据える。
+**外部の結果。** README が `EXT` の名札を与える群の項目を、この文書は次の 11 個据える。
 
 **EXT 呼び出しの入れ子**。1 つのスレッドの
 計算において、関数の呼び出しは開始と終了について入れ子をなす。すなわち、呼び出し `c` の実行中に
@@ -481,7 +487,7 @@ Ret(w)))))
   BY <ref id=0594f24/>, <ref id=596a46d/>, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
      CODE src/ast/types.rs: TypeNode::is_unbox
   `is_fully_unboxed` は `if self.is_box(type_env) { return false; }` で始まるので、boxed な `Arr` では
-  偽である。`is_unbox` は `self.is_closure() || toplevel_tycon_info(type_env).is_unbox` であり
+  偽である。`is_unbox` は `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` であり
   `is_box` はその否定なので、`is_box` が真の `Arr` では `is_closure` が偽である。よって D4 の判定は
   第 1 規則 (`is_fully_unboxed`) と第 2 規則 (クロージャ) を抜けて第 3 規則 (`is_box`) に着き、
   `boxed_leaf_paths(Arr) = {[]}` である。
@@ -804,7 +810,7 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
   `main` が名指す変数は `p`、`q`、`c`、`m`、`u`、`w` と、アームの payload `y0`・`y1` と、`App` の
   callee `f` である。`ty(p) = ty(q) = ty(m) = Arr` は boxed なので `is_fully_unboxed` は偽であり
   (`if self.is_box(type_env) { return false; }` で始まる)、`is_unbox` は
-  `self.is_closure() || toplevel_tycon_info(type_env).is_unbox` で `is_box` はその否定なので
+  `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` で `is_box` はその否定なので
   `is_closure` も偽である。よって D4 の判定は第 1 規則と第 2 規則を抜けて第 3 規則に着き、
   `boxed_leaf_paths(Arr) = {[]}` である。`ty(c) = Bl` は 2 つの変位がどちらも payload を持たない
   unbox union なので boxed leaf を持たず、payload `y0`・`y1` も同じである。`ty(u) = ty(w) = I` は
@@ -1136,12 +1142,12 @@ P5 は「**`identity` は解析が呼んだ鍵についてしか定まらない�
   あることだけで定まる。<1>1 と <1>2 よりその 1 つの類は `C` にも `C_ρ(v, λ)` にも等しいので
   `C_ρ(v, λ) = C` であり、`(v, λ)` は `C` のスロットである。
 
-**この命題は循環しない。** README は「名前は別名類を決める」という性質を
-`p13-disposals-and-pending.md` の `L14` の後半に帰したうえで、その性質を「前提として置く者は居ない」と
-述べる。すなわち p13 の `L14` は A19 を前提に取らない。
-第 1 節が輸入した p13 の `L14` の言明は `ρ` の上のスロットについて述べるだけで、その本体が
-`borrow_ify` の出力であることを求めない。よってこの命題は `insert_rc` の出力と `split_rc_units` の
-出力にも当たる。
+**この命題が読むのは p13 の `L14` の言明だけである。** 第 1 節が輸入したその言明は `ρ` の上のスロットに
+ついて述べるだけで、その本体が `borrow_ify` の出力であることも、その本体について A19 が成り立つことも
+求めない。よってこの命題は `insert_rc` の出力と `split_rc_units` の出力にも当たり、A19 を示す段が
+これを引いても循環しない。
+「名前は別名類を決める」という性質を `p13-disposals-and-pending.md` の `L14` の後半に帰したうえで、
+その性質について「**前提として置く者は居ない。**」と述べるのは `report.md` の第 7 節である。
 
 ### 6.2 `L6` (bump の残高) <!--#dfb8eac-->
 
@@ -1661,7 +1667,7 @@ P21。」で始まる。P18a と P18c はどちらの項にも挙がっており
   `DEF C1 の本体` の `main` が名指す変数は `p`、`q`、`c`、`m`、`u`、`w` と、アームの payload
   `y0`・`y1` と、`App` の callee `f` である。`ty(p) = ty(q) = ty(m) = Arr` は boxed なので
   `is_fully_unboxed` は偽であり (`if self.is_box(type_env) { return false; }` で始まる)、`is_unbox` は
-  `self.is_closure() || toplevel_tycon_info(type_env).is_unbox` で `is_box` はその否定なので
+  `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` で `is_box` はその否定なので
   `is_closure` も偽である。よって D4 の判定は第 1 規則と第 2 規則を抜けて第 3 規則に着き、
   `boxed_leaf_paths(Arr) = {[]}` である。`ty(c) = Bl` は 2 つの変位がどちらも payload を持たない
   unbox union なので boxed leaf を持たず、payload `y0`・`y1` も同じである。`ty(u) = ty(w) = I` は
@@ -1762,7 +1768,7 @@ Ret(u)))))
   `(o, [])` に当たるので、どちらも ρ-終端であり、別々の類である。
   `ty(o) = ty(y) = Arr` の leaf が `[]` の 1 つであることは D4 の判定から出る -- `is_fully_unboxed` は
   `if self.is_box(type_env) { return false; }` で始まるので boxed な `Arr` では偽であり、`is_unbox` は
-  `self.is_closure() || toplevel_tycon_info(type_env).is_unbox` で `is_box` はその否定なので `Arr` では
+  `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` で `is_box` はその否定なので `Arr` では
   `is_closure` が偽である。よって判定は第 1 規則と第 2 規則を抜けて第 3 規則に着き、
   `boxed_leaf_paths(Arr) = {[]}` である。`ty(u) = I` は `DEF 例の型と op` より `is_fully_unboxed` が真なので
   D4 の第 1 規則より leaf を持たない。
@@ -3234,8 +3240,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 本体 `B` と、その 1 つの活性化と実行路 `ρ` と計数下の別名類 `C` を固定する。以下、`C` のスロットを単に
 **スロット**と書く。
 
-**DEF `id(s)`**。スロット `s = (v, λ)` について `id(s) := origin(v, λ).identity()` と置く
-(`CODE src/rc_ir/ownership.rs: origin`, `CODE src/rc_ir/ownership.rs: Origin`)。
+`id(s)` は第 1 節の `DEF id(s)` である。
 
 **DEF `Anc(s)`**。D33 の ρ-歩みは、`s` から
 ρ-終端まで辿るスロットの列 `s = s_0, s_1, …, s_n` である。`Anc(s) := {id(s_0), id(s_1), …, id(s_n)}`
@@ -3968,7 +3973,7 @@ Ret(x)))
   `Match` が無いので実行路は 1 本である。`is_fully_unboxed` は
   `if self.is_box(type_env) { return false; }` で始まるので boxed な `Arr` では偽であり、`Pair` は
   boxed なフィールドを持つのでその再帰でも偽である。`is_unbox` は
-  `self.is_closure() || toplevel_tycon_info(type_env).is_unbox` であり `is_box` はその否定なので、
+  `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` であり `is_box` はその否定なので、
   `is_box` が真の `Arr` では `is_closure` が偽である。`Pair` は `DEF Pair と make_pair` より
   unbox 構造体であってクロージャではない。よって D4 の判定はどちらの型でも第 1 規則と第 2 規則を抜け、
   `boxed_leaf_paths(Arr) = {[]}` (第 3 規則)、`boxed_leaf_paths(Pair) = {[0], [1]}` (第 5 規則) で
@@ -4043,7 +4048,7 @@ Ret(x)))
     <1>3 より
     `Retain(m, [])` の入口で `held = 1`、`Let(x, …)` の入口で `held = 2` なので、<2>1 より
     `obj(m, [])` はどちらの点でも解放されていない。**(S-c) の接頭条件 (D11a) はここで満たされる** --
-    <2>1 が結論を「その活性化がその時点まで解放について閉じている (D11a) ならば」の形で与え、
+    <2>1 が結論を、その活性化がその時点まで解放について閉じている (D11a) ことを前件とする形で与え、
     (S-c) が課す条件がまさにそれだからである。終端の `Ret` は D7 の読む構文ではない。
   <2>4. `m` がグローバル状態のオブジェクトを受け取る活性化について、D11 の 3 つの節が成り立つ。
     BY <1>2, <ref id=56c2068/>, <ref id=ec8d1a0/>, <ref id=9d74736/>, <ref id=f06144e/>, <ref id=95427eb/>, <ref id=88a06de/>, <ref id=30d6238/>, <ref id=b6673ca/>
