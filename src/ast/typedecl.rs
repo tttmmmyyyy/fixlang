@@ -329,6 +329,7 @@ impl Struct {
         }
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_boxed(&self) -> bool {
         !self.is_unbox
     }
@@ -371,6 +372,7 @@ impl Union {
         }
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_boxed(&self) -> bool {
         !self.is_unbox
     }

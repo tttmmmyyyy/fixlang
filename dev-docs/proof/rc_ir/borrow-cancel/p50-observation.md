@@ -6,8 +6,8 @@ P30 の**言明**である。実行の水準の定義 -- 環境 D22、活性化 
 ある。対応する活性化 D29 は、1 つの本体についての構成なので README の「中間表現」の節にある。
 
 **段の素動作と段内の点は README の D24 が定める。** D24 の「**段内の点は、この 6 種の列の切れ目である。**」
-の段落と、それに続く「**切れ目を除くのは、上の 2 つの節だけである。**」「**割り当てられた直後の
-オブジェクトの持ち手の単位は、参照を 1 つも持たない。**」の 2 つの段落がその全体である。D24 は
+の段落、「**切れ目を除くのは、上の 2 つの節だけである。**」の段落、および「**割り当てられた直後の
+オブジェクトの持ち手の単位は、参照を 1 つも持たない。**」の段落がその全体である。D24 は
 「**この定義は 1 か所にしかない** -- P28・D11・D30 がこの粒度で量化するので、証明ファイルが自分の
 第 1 節で同じものを定義し直すと、そのファイルは別の点集合の上で命題を示すことになる」と書くので、この
 文書はこの粒度で量化するとき `D24` を引く。D24 の時点は段の最初の段内の点であり、直前の段の最後の点で
@@ -79,8 +79,214 @@ P26 の言明は 2 文からなる。第 1 文は共通接頭の上の各観測�
 
 **EXT LLVM の関数への制御の移り**。LLVM の関数の本体の命令が実行されるのは、その関数を呼ぶ命令 (`call` /
 `invoke`) が実行されたときに限る。すなわち、ある関数の本体へ制御が入る位置を数え上げるには、その関数を
-呼ぶ命令を組む位置を数え上げれば足りる。README の「証明の記法」の節が定める外部の結果の名札であり、
-`BY` からはこの名前で引く。
+呼ぶ命令を組む位置を数え上げれば足りる。文書の外の結果の名札である。README の A3 は「**その規則を負う段
+は、それぞれ `EXT` の名札を持つ。** 名札の言明は各証明ファイルの第 1 節に据える」と述べ、この段落がその
+言明である。`BY` からはこの名前で引く。
+
+### 在りかの前提
+
+**コードのどこに何が在るかの数え上げは、段の中で行わない。** 段が自分で在りかを数え上げると、その
+数え上げには果たす者が居らず、検査するものも無い。**記号を名指す `CODE` の引用はその記号の本体しか
+与えないので、「ほかの記号はそれをしない」の側はそこから出ない。** 在りかは名前つきの前提として置き、
+`BY` の行ではその名前で引く。**個数は書かない** -- 一覧が在れば個数は一覧の長さである。
+
+**果たすのは走査である。** 在りかを走らせられる字面で書き、`dev-docs/proof/proof_links.py` がその字面を
+`src/` の全体に走らせて、下の一覧と突き合わせる。挙がった各項目が何であるかは `--` の後に書く。走査は
+字面の上位近似なので、一覧には doc の散文だけを持つ項目も、定義そのものも入る。項目の名前は走査が
+呼ぶ名前である -- 自由関数がその直前の `impl` の名前を冠して挙がる形と、関数の中の局所 `const` が
+名前を取る形を含む。`#[cfg(test)]` の下の項目は走査が除く。
+
+**前提 一意性と局所性の仮定を置く在りか** --- `LLVMGen` の `assume_unique` / `assume_local` の欄へ
+`true` を置く式が在る項目は `LLVMGen::assuming_unique` / `LLVMGen::assuming_local` の実装であり、
+その 2 つのメソッドを呼ぶ式が在る項目は `src/rc_ir/unique_check_elim.rs` と `src/rc_ir/locality.rs` の
+中にある。その 2 つのモジュールの項目を名指す式が在る項目は `optimize_rc_program` だけである。
+
+SCAN src/ `assume_unique = true`
+  = src/fixstd/builtin.rs: InlineLLVMArrayIsStorageUniqueBody::assuming_unique
+  = src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::assuming_unique
+
+SCAN src/ `assume_local = true`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendValueCapacityUnchecked::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArrayGrowSizeBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArrayIsStorageUniqueBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArrayPunchBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArraySetBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArraySetCapacityBoundsUnchecked::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArraySwapBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArrayTruncateBoundsUnchecked::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMArrayUnsafeGetBoundsUnchecked::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMPunchedArrayPlugBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMStructGetBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMStructPlugInBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMStructPunchBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMStructSetBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMUnionAsBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::assuming_local
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::assuming_local
+
+SCAN src/ `.assuming_unique(`
+  = src/rc_ir/unique_check_elim.rs: elide_unique_check_if_provable
+
+SCAN src/ `.assuming_local(`
+  = src/rc_ir/locality.rs: annotate_op
+
+SCAN src/ `unique_check_elim::`
+  = src/build/build_object_files.rs: optimize_rc_program
+
+SCAN src/ `locality::`
+  = src/build/build_object_files.rs: optimize_rc_program
+
+**前提 `Std::Boxed` の実装を作る在りか** --- `Std::Boxed` の `TraitImpl` を組む `boxed_trait_instance`
+を呼ぶ式が在る項目は次で尽きる。
+
+SCAN src/ `boxed_trait_instance(`
+  = src/ast/program.rs: Program::add_boxed_impls -- 宣言された boxed な struct・union について
+  = src/fixstd/builtin.rs: boxed_trait_instance -- 定義
+  = src/fixstd/stdlib.rs: make_std_mod -- `Std::#DynamicObject` について
+
+**前提 `Std::mark_threaded` の op の在りか** --- `Generator::mark_threaded` を呼ぶ式、
+`InlineLLVMMarkThreadedFunctionBody` の字面、`mark_threaded_function` を呼ぶ式、`build_object_files` を
+呼ぶ式が在る項目は次で尽きる。
+
+SCAN src/ `.mark_threaded(`
+  = src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody::generate
+
+SCAN src/ `InlineLLVMMarkThreadedFunctionBody`
+  = src/ast/inline_llvm.rs: assuming_unique -- doc の散文
+  = src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody -- 宣言と `impl LLVMGen`
+  = src/fixstd/builtin.rs: VAR_NAME -- `mark_threaded_function` の中の局所 `const` が名前を取る
+  = src/generator.rs: build_release_boxed_with -- doc の散文
+
+SCAN src/ `mark_threaded_function(`
+  = src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody::mark_threaded_function -- 定義
+  = src/fixstd/stdlib.rs: make_std_mod -- `Std::mark_threaded` に登録する
+
+SCAN src/ `build_object_files(`
+  = src/build/build.rs: build
+
+**前提 一意性の分岐を組む在りか** --- `Generator::build_is_refcnt_one`、
+`Generator::build_branch_by_is_unique`、`force_unique_or_assert`、`force_unique_or_assert_with_hole`、
+`make_array_unique_with_hole`、`make_struct_union_unique`、`array_tail_destination` を呼ぶ式が在る
+項目は次で尽きる。
+
+SCAN src/ `build_is_refcnt_one(`
+  = src/generator.rs: build_assert_unique -- develop モードの表明
+  = src/generator.rs: build_branch_by_is_unique -- 複製の要否を決める分岐
+  = src/generator.rs: build_is_refcnt_one -- 定義
+
+SCAN src/ `build_branch_by_is_unique(`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::generate -- `src` について
+  = src/fixstd/builtin.rs: InlineLLVMArrayIsStorageUniqueBody::generate -- D18 の観測点
+  = src/fixstd/builtin.rs: InlineLLVMArraySetCapacityBoundsUnchecked::generate -- `force_unique` の枝
+  = src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate -- D18 の観測点
+  = src/fixstd/builtin.rs: make_array_unique_with_hole
+  = src/fixstd/builtin.rs: make_struct_union_unique
+  = src/generator.rs: build_branch_by_is_unique -- 定義
+
+SCAN src/ `force_unique_or_assert(`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendValueCapacityUnchecked::generate
+  = src/fixstd/builtin.rs: InlineLLVMArrayGrowSizeBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMArrayPunchBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMArraySetBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMArraySwapBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMArrayTruncateBoundsUnchecked::generate
+  = src/fixstd/builtin.rs: InlineLLVMStructPlugInBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMStructPunchBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMStructSetBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::generate
+  = src/fixstd/builtin.rs: array_tail_destination -- 定義と、そこから呼ぶ式
+
+SCAN src/ `force_unique_or_assert_with_hole(`
+  = src/fixstd/builtin.rs: InlineLLVMPunchedArrayPlugBody::generate
+  = src/fixstd/builtin.rs: force_unique_or_assert -- 委譲
+
+SCAN src/ `make_array_unique_with_hole(`
+  = src/fixstd/builtin.rs: force_unique_or_assert_with_hole
+
+SCAN src/ `make_struct_union_unique(`
+  = src/fixstd/builtin.rs: force_unique_or_assert_with_hole
+
+SCAN src/ `array_tail_destination(`
+  = src/fixstd/builtin.rs: InlineLLVMArrayAppendCapacityUnchecked::generate
+  = src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::generate
+
+**前提 LLVM の関数を呼ぶ命令を組む在りか** --- `inkwell` の `build_call` と `build_indirect_call` を
+呼ぶ式が在る項目と、`Generator::apply_lambda`、`run_ios_runner`、`apply_io_act_to_data_ptr`、
+`run_io_or_ios_runner`、`run_io` を呼ぶ式が在る項目は次で尽きる。
+
+SCAN src/ `.build_call(`
+  = src/fixstd/builtin.rs: realloc_array -- runtime の関数
+  = src/generator.rs: build_ffi_call_core -- `FFI_CALL` が呼ぶ C の関数
+  = src/generator.rs: build_lifetime_marker -- LLVM の intrinsic
+  = src/generator.rs: build_traverser_work -- 型ごとの走査関数
+  = src/generator.rs: call_runtime -- runtime の関数
+  = src/generator.rs: emit_rc_helper_call -- 生成された RC の補助関数
+  = src/generator.rs: get -- `ValueAccessor::get` のグローバルのアクセサ
+  = src/generator.rs: restore_stack -- runtime の関数
+  = src/generator.rs: save_stack -- runtime の関数
+  = src/generator.rs: traverse_boxed_refs -- 型ごとの走査関数
+  = src/object.rs: build_malloc -- runtime の関数
+  = src/rc_ir/codegen.rs: store_init_value -- `InitValue#<symbol>`
+
+SCAN src/ `.build_indirect_call(`
+  = src/generator.rs: apply_lambda -- クロージャ・funptr の適用
+  = src/generator.rs: traverse_boxed_refs -- 型ごとの走査関数
+
+SCAN src/ `apply_lambda(`
+  = src/ast/export_statement.rs: ExportStatement::implement
+  = src/fixstd/builtin.rs: InlineLLVMArrayBorrowElementsBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail
+  = src/fixstd/builtin.rs: InlineLLVMGetBoxedDataPtrFunctionBody::apply_io_act_to_data_ptr -- 自由関数 `apply_io_act_to_data_ptr`
+  = src/fixstd/builtin.rs: InlineLLVMUnionModBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate
+  = src/fixstd/builtin.rs: run_ios_runner
+  = src/generator.rs: apply_lambda -- 定義
+  = src/generator.rs: build_run_destructor
+  = src/rc_ir/codegen.rs: eval_rc_expr_inner -- `RcRhs::App` の腕
+
+SCAN src/ `run_ios_runner(`
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::generate
+  = src/fixstd/builtin.rs: run_io
+  = src/fixstd/builtin.rs: run_io_or_ios_runner
+
+SCAN src/ `apply_io_act_to_data_ptr(`
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsInternalBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMArrayMutateElementsIosInternalBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedIOSInternalBody::generate
+  = src/fixstd/builtin.rs: InlineLLVMUnsafeMutateBoxedInternalFunctionBody::generate
+
+SCAN src/ `run_io_or_ios_runner(`
+  = src/build/build_object_files.rs: build_main_function
+  = src/generator.rs: build_run_destructor
+
+SCAN src/ `run_io(`
+  = src/ast/export_statement.rs: ExportStatement::implement -- `IOType::IO` の腕
+  = src/fixstd/builtin.rs: run_io_or_ios_runner
+
+**前提 funptr の tycon を型に組む在りか** --- `type_funptr` を呼ぶ式が在る項目と、
+`make_funptr_tycon` を呼ぶ式が在る項目は次で尽きる。
+
+SCAN src/ `type_funptr(`
+  = src/ast/types.rs: type_funptr -- 定義
+  = src/optimization/uncurry.rs: funptr_lambda
+  = src/optimization/uncurry.rs: replace_closure_call_to_funptr_call
+
+SCAN src/ `make_funptr_tycon(`
+  = src/ast/types.rs: type_funptr -- 型に組む唯一の項目
+  = src/fixstd/builtin.rs: bulitin_tycons -- `TyConInfo` の表の鍵として
+  = src/fixstd/builtin.rs: make_funptr_tycon -- 定義
 
 ## 2. 何と何を比べるか
 
@@ -189,7 +395,7 @@ L5a である。
 L8 はこの命題を引かないので、この命題の言明と `<1>4`・`<1>4a`・`<2>2`・`<2>3` がそれを引くことで循環は
 生じない。L8 の言明は
 2 つの実行を読まない、節点についての静的な言明であり、その証明が引くのは README の定義・仮定・命題と、
-L8a・L8b と、`borrow_ify` のコードだけである。
+L8a と、`src/rc_ir/borrow.rs`・`src/rc_ir/rename.rs`・`src/rc_ir/ownership.rs` のコードだけである。
 
 対応する段の対の列についての帰納で示す。
 
@@ -327,11 +533,36 @@ L8a・L8b と、`borrow_ify` のコードだけである。
   <2>6. QED
     BY <2>1, <2>2, <2>3, <2>4, <2>5
 
-<1>6. 対応する 2 つの段は、対応する活性化を終わらせる。`<1>3` より活性化が終わるのはその本体の終端の `Ret`
-      の段であり、D30 より対応する 2 つの段は同じ位置の節点を実行する。帰納法の仮定より、その段を実行して
-      いる 2 つの活性化は対応する。よって一方の段がその活性化を終わらせるとき、他方の段は対応する活性化を
-      終わらせる。
-  BY <ref id=ff5985d/>, <ref id=081e39f/>, <1>3, 帰納法の仮定
+<1>6. 対応する 2 つの段は、対応する活性化を終わらせる。`<1>3` より活性化が終わる段は (E4) と (E7) と、
+      (F) の解放が作る活性化についてはそれを起こした解放を含む段の 3 種である。この 3 種で場合を分ける。
+  <2>1. (E4) の返りの段。この段は本体の終端の `Ret` を実行するので、D30 は「**節点を実行する段は節点の
+        対応 (D19 と P22) で並べ、節点を実行しない段 -- (E1)・(E5)・(E7)・(E8)・(E9) -- は列の中の位置で
+        並べる。**」の前者で並べ、対になった 2 つの段は同じ位置の節点を実行する。
+        帰納法の仮定より、その段を実行している 2 つの活性化は対応する。よって一方の段がその活性化を
+        終わらせるとき、他方の段は対応する活性化を終わらせる。
+    BY <ref id=ff5985d/>, <ref id=081e39f/>, <1>3, 帰納法の仮定
+  <2>2. (E7) の段。この段は節点を実行しないので、D30 は「**節点を実行する段は節点の対応 (D19 と P22) で
+        並べ、節点を実行しない段 -- (E1)・(E5)・(E7)・(E8)・(E9) -- は列の中の位置で並べる。**」の
+        後者で並べ、伸長の条件「並んだ 2 つの
+        段が同じ位置の節点を実行するか同じ種の節点を持たない段であり」より対になった 2 つの段はどちらも
+        (E7) である。D24 の (E7) より、(E7) の段は初期化子の活性化 `b` を作るか、`b` を終わらせて読む者を
+        再開させるかのどちらかである。**その 2 つの区別も対になった段で一致する** -- `<1>5` の `<2>3` より、
+        片方の段だけが活性化を作れば対応はその手前で終わる。**終わらせる段が終わらせるのは、その制御の
+        流れの中でまだ終わっていない初期化子の活性化のうち最後に作られたものである** -- 読む者は `b` が
+        終わるまで中断中であり (D24 の (E7))、親は子が終わってから再開する (D24 の「活性化の林」) ので、
+        初期化子の活性化は入れ子になる。D30 は 2 つの実行を、複数の制御の流れがある場合は段の並び方も
+        同じにして取るので、各流れの段の列は 2 つの実行で対応する。帰納法の仮定と `<1>5` の `<2>3` より、
+        対になった (E7) の作る段が作った 2 つの活性化は対応するので、最後に作られたまだ終わっていない
+        ものどうしも対応する。よって 2 つの段は対応する活性化を終わらせる。
+    BY <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=081e39f/>, <1>3, <1>5, 帰納法の仮定
+  <2>3. (F) の解放が作る活性化を終わらせる段。`<1>5` の `<2>5` より、共通接頭の上では対応する 2 つの段が
+        同じオブジェクトを解放し、`Std::FFI::Destructor` であるかどうかも一致するので、その活性化を作る
+        段は対応する。`<1>3` よりその活性化はそれを起こした解放を含む段の中で終わるので、終わらせる段は
+        作った段と同じであり、対応する。**この 2 つは D24 のどの時点でも生きていない** (`<1>5` の `<2>5`)
+        ので、言明の全単射の範囲の外にある。
+    BY <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=081e39f/>, <1>3, <1>5
+  <2>4. QED
+    BY <2>1, <2>2, <2>3
 
 <1>7. QED
   `<1>1` が基底を、`<1>5` と `<1>6` が帰納段を与え、`<1>4` が、対を持たない段がこの帰納を動かさないことを
@@ -367,7 +598,10 @@ README の P26 は出口の向きを主張しない。
 - **(b)** その点で生きている計数下オブジェクト (D26) は 1 対 1 に対応し、対応する 2 つは対応する値を
   保持する。**対応する 2 つの活性化の対応する位置において、対応する変数 (`borrow_ify` については L8 の
   (2) の (d) の名前替えの下で対応する) の値は対応し、その inhabited (D16) な各 boxed leaf が指す
-  オブジェクトは対応する。**
+  オブジェクトは対応する。** **対応する 2 つの値のスカラの成分 -- unbox union のタグ、整数、
+  浮動小数 -- は等しく、funptr の番地については、対応する 2 つの番地が対応する版を名指す。** この節を
+  持つのは、inhabited (D16) を決めるのが unbox union の実行時のタグだからである -- `<1>3` の `<2>1` が
+  同じ leaf について同じ向きの動作が起きることをここから出す。
 - **(c)** 1 つの制御の流れからなる実行では、その点で生きている活性化は根から下への 1 本の道をなす。
 - **(d)** 段の中で作られた活性化は、その段の中で終わる。すなわち (F) の解放が作る活性化とその子孫の
   節点の実行は、その解放を含む段の中の動作である。
@@ -421,7 +655,13 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
       が、`borrow_ify` については L8c が与える。**変数の束縛の値が対応することは `<1>1a` が与える** --
       D30 が与えるのは 1 つの段が作る値の一致であって、接頭の各段が作った値を段の列について積み上げる
       議論はそこには無い。inhabited (D16) な各 boxed leaf が指すオブジェクトが対応することは、値が
-      対応することとオブジェクトの 1 対 1 から出る。(c) は D24 の「活性化の林」の段落である。
+      対応することとオブジェクトの 1 対 1 から出る。**スカラの成分の等号と funptr の番地の読みも、
+      同じ 2 つが与える** -- `cancel` については D29 の「**スカラの成分については、対応は等号である。**
+      boxed leaf でない成分 -- unbox union のタグ、整数、浮動小数 -- は、対応する 2 つの値で等しい」と
+      「**funptr の番地は等号では読めない** … **その成分については、対応する 2 つの番地が対応する版を
+      名指す**」が、`borrow_ify` については L8c の言明の同じ形の節が述べる。変数の束縛の値については、
+      D30 が対応の伸びる条件に「その段が作る値が等しく」を含めるので `<1>1a` が同じ等号を運ぶ。
+      (c) は D24 の「活性化の林」の段落である。
   BY <ref id=66c9670/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=7218f92/>, <ref id=081e39f/>, <ref id=841b298/>, <ref id=2ab8ecd/>, <1>1a
 
 <1>2a. 対を持たない動作 -- `π` が消した節点と入れた節点の動作 -- は、言明が量化する範囲では活性化を作らず、
@@ -446,11 +686,9 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
         が、`cancel` については P22 と P24 が与える。** 帰納法の仮定 (a) より対応する 2 つの活性化は対応
         する位置にあり、(b) より対応する値を持つ。**そこから inhabited な leaf の一致を出すのは、値の
         対応がスカラの成分の等号を含むことである** -- D16 の inhabited を決めるのは、`λ` が通る unbox
-        union の各節の実行時のタグと、その leaf が null ポインタであるかである。前者は、`cancel` では
-        D29 の「**スカラの成分については、対応は等号である。** boxed leaf でない成分 -- unbox union の
-        タグ、整数、浮動小数 -- は、対応する 2 つの値で等しい」が与え、`borrow_ify` では D30 が対応の
-        伸びる条件に「その段が作る値が等しく」を含めるので変数の束縛の値のスカラの成分は等しく
-        (`<1>1a`)、オブジェクトの保持する値については L8c の同じ形の節が等号を述べる。後者は capture が
+        union の各節の実行時のタグと、その leaf が null ポインタであるかである。前者は、(b) の言明が
+        「**対応する 2 つの値のスカラの成分 -- unbox union のタグ、整数、浮動小数 -- は等しく**」と
+        述べるので帰納法の仮定 (b) が与える。後者は capture が
         空のクロージャの capture の leaf であること (D16、A5) であり、値が対応するので 2 つの活性化で
         一致する。よって同じ leaf について同じ向きの動作が起きる。持ち手 (D25) も対応する。
 
@@ -475,8 +713,10 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
         「**節点を実行する段は節点の対応 (D19 と P22) で並べ、節点を実行しない段 --
         (E1)・(E5)・(E7)・(E8)・(E9) -- は列の中の位置で並べる。**」の後者で並べ、伸長の条件「並んだ 2 つの
         段が同じ位置の節点を実行するか同じ種の節点を持たない段であり」より対になった 2 つの段はどちらも
-        (E9) である。番地を環境へ渡したのは `boxed_to_retained_ptr` の節点である
-        (D22 の第 3 の箇条、A17 (i-b))。その節点は 2 つの実行の対応する位置に同じ op として在って対応する
+        (E9) である。番地を環境へ渡したのは `boxed_to_retained_ptr` の節点である -- 環境が Fix の boxed な
+        値の番地を得る道は `boxed_to_retained_ptr` と `boxed_from_retained_ptr` の対しかなく
+        (A17 (i-d))、その番地について環境が参照を持つことは A17 (i-b) が、その節点が番地を渡すことは
+        D22 の第 3 の箇条が言う。その節点は 2 つの実行の対応する位置に同じ op として在って対応する
         値を与えられるので、2 つの段は対応するオブジェクトへ同じ向きの 1 つを作る / 処分し、その持ち手は
         どちらも環境である (D25 の 3 番目)。**その番地が指すオブジェクトがその点で生きていることは
         A17 (ii-c) が与える** -- 「**環境がその番地を呼ぶのは、その番地が指すオブジェクトへの参照を自分が
@@ -505,7 +745,13 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
         オペランドの値と D21 の 4 種の結果だけで決まる。節点と値は帰納法の仮定 (a)(b) が、**D21 の 4 種の
         結果は D30 が**対応させる -- D30 は対応が次の段へ伸びる条件に「その段が作る値が等しく、その段が
         名指すオブジェクトが同じであり」を含める。よってその 3 つは対応し、
-        書き込む内容は対応する。節点の実行以外に保持する値を書く動作は 2 つ -- (F) の解放が `_value` の欄へ
+        書き込む内容は対応する。**これは boxed leaf の指す先についても、boxed leaf でないスカラの成分に
+        ついても言う** -- 3 つが対応すれば書き込む内容は同じであり、スカラの成分については「対応する」は
+        等号である ((b) の言明)。**funptr の番地を書く動作については、対応する 2 つの番地が対応する版を
+        名指すことを、`cancel` については D29 の「**funptr の番地は等号では読めない** …
+        **その成分については、対応する 2 つの番地が対応する版を名指す**」が、`borrow_ify` については
+        L8c の `<1>3` の A21 の 3 か所についての場合分けが与える。**
+        節点の実行以外に保持する値を書く動作は 2 つ -- (F) の解放が `_value` の欄へ
         書き戻す
         分と、環境の読み書きの段 (E8) -- であり、`borrow_ify` については L8c の `<1>2a` がそれを尽くす。
         `cancel` については D29 の最後の行 (対応するオブジェクトが保持する値は対応する) がこの節を含む。
@@ -536,8 +782,16 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
         走る (D24 の (E5))。印を付けるのはその活性化が返した値が到達するグラフであり、帰納法の仮定 (b)
         より 2 つの実行で対応する。
     BY <ref id=e3436e8/>, 帰納法の仮定
-  <2>5. **活性化の生成と終了。** 段の中で活性化を作る動作は、`<2>3` の解放と、`<1>1` よりその活性化と
-        その子孫の節点が行うものである。後者は 3 つに分かれる。
+  <2>5. **活性化の生成と終了。** 段の中で活性化を作る動作は、環境が林の根を作る動作 ((E1))、`<2>3` の
+        解放、および `<1>1` よりその活性化とその子孫の節点が行うものである。最後の 3 つ目は 3 つに
+        分かれるので、以下は 4 つの形を見る。
+
+        **環境が林の根を作る動作 ((E1))。** この動作を持つ段は (E1) の段そのものであり、その段の素動作の
+        列には活性化の生成と、その活性化の初期 `Obl` への受け渡しが並ぶ。**その 2 つの動作が対応し、
+        作られる 2 つの活性化の本体が対応することは L5 の `<1>5` の `<2>1` が与える** -- D30 は 2 つの
+        実行を、環境が与える入力を同じにし、複数の制御の流れがある場合は段の並び方も同じにして取るので、
+        この種の段は 2 つの実行で 1 対 1 に並び、対応する 2 つは同じ個数の活性化を同じ順に作り、渡す値も
+        対応する。受け渡しの動作そのものは `<2>1` の場合である。
 
         **呼び出しの動作。** 呼び出し先は callee の値が指す関数であり、callee の値がクロージャなら
         その funptr の指す関数、funptr ならそれ自身である (D23)。`cancel` は `App` の callee の名前も
@@ -576,7 +830,7 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
 
         活性化が終わるのは本体の終端の `Ret` の消費であり (D23)、帰納法の仮定 (a) より
         対応する 2 つは対応する位置にあるので同時に終わる。よって (a) が保たれる。
-    BY <ref id=3f1bb47/>, <ref id=cb35ab1/>, <ref id=c232680/>, <ref id=243ae2c/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=081e39f/>, <ref id=74e7403/>, <ref id=843e506/>, <ref id=0b1cac5/>, <ref id=746e87a/>,
+    BY <ref id=3f1bb47/>, <ref id=cb35ab1/>, <ref id=c232680/>, <ref id=243ae2c/>, <ref id=ff5985d/>, <ref id=e3436e8/>, <ref id=081e39f/>, <ref id=74e7403/>, <ref id=843e506/>, <ref id=0b1cac5/>, <ref id=746e87a/>, <ref id=841b298/>,
        DEF 共通接頭の段の中の対応, DEF 対応する本体, <1>1, <2>1, 帰納法の仮定
   <2>6. **1 本の道 (c)。** `<1>1` より段の中で作られる活性化はその段の中で終わり、それを作った活性化は
         そのあいだ節点を進めない。よって段内の点でも、生きている活性化は根から下への 1 本の道をなす。
@@ -621,12 +875,13 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
 
 <1>2. `borrow_ify` の入力・出力・`cancel` の出力のいずれかの本体にある `Llvm` の演算は、`assume_unique`
       の欄を持つならばその欄が偽であり、`assume_local` の欄を持つならばその欄が偽である。とくに `q` の
-      演算 (`<1>1`) がそうである。`assume_unique` を真にするのは
-      `LLVMGen::assuming_unique` を呼ぶ `unique_check_elim::specialize` だけであり、`assume_local` を
-      真にするのは `LLVMGen::assuming_local` を呼ぶ `locality::specialize` だけである。
-      `optimize_rc_program` はこの 2 つを `borrow_ify` と `cancel` の後に走らせる。
-  BY <1>1, CODE src/build/build_object_files.rs: optimize_rc_program,
-     CODE src/rc_ir/unique_check_elim.rs: specialize, CODE src/rc_ir/locality.rs: specialize,
+      演算 (`<1>1`) がそうである。前提 一意性と局所性の仮定を置く在りか より、この 2 つの欄へ `true` を
+      置くのは `LLVMGen::assuming_unique` / `LLVMGen::assuming_local` の実装であり、その 2 つのメソッドを
+      呼ぶ式が在るのは `src/rc_ir/unique_check_elim.rs` と `src/rc_ir/locality.rs` の中だけで、その 2 つの
+      モジュールの項目を名指すのは `optimize_rc_program` だけである。`optimize_rc_program` は
+      `unique_check_elim::specialize` と `locality::specialize` を `borrow_ify` と `cancel` の後に
+      走らせるので、この 3 つの本体が作られる時点までにその 2 つのメソッドは 1 度も呼ばれていない。
+  BY <1>1, 前提 一意性と局所性の仮定を置く在りか, CODE src/build/build_object_files.rs: optimize_rc_program,
      CODE src/ast/inline_llvm.rs: LLVMGen::assuming_unique, LLVMGen::assuming_local
 
 <1>3. `assume_unique` が偽のとき、`InlineLLVMIsUniqueFunctionBody::generate` が返す組の第 0 成分は、
@@ -642,16 +897,24 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
 <1>3a. どちらの op についても、`build_branch_by_is_unique` に渡る `obj_ptr` は、第 0 オペランドの boxed
       leaf `[]` が指すオブジェクト `o` の番地である。`is_unique_function` が `Std::unsafe_is_unique` に
       与える scheme は `Scheme::generalize` に `Predicate::make(make_boxed_trait(), a)` を渡すので、
-      その引数の型には `[a : Boxed]` の制約が掛かる。`Std::Boxed` の実装は、`is_boxed()` が真の struct と
-      union について `Program::add_boxed_impls` が、`Std::#DynamicObject` について `make_std_mod` が
-      入れるものに限り、利用者が書いた実装は `TraitEnv::validate_trait_impl` が拒否する。
-      `TypeDefn::tycon_info` は宣言の `is_unbox` の欄をそのまま `TyConInfo` へ写す。`TypeNode::is_unbox`
-      は `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` であり、欄だけを読むのでは
-      ない。**`Boxed` の実装の頭はどれもクロージャ型ではない** -- `add_boxed_impls` が置く頭は宣言された
+      その引数の型には `[a : Boxed]` の制約が掛かる。前提 `Std::Boxed` の実装を作る在りか より、
+      `Std::Boxed` の `TraitImpl` を組むのは `boxed_trait_instance` であり、それを呼ぶのは
+      `Program::add_boxed_impls` と `make_std_mod` である。前者は `is_boxed()` が真の struct と union に
+      ついて、後者は `Std::#DynamicObject` について呼び、利用者が書いた実装は
+      `TraitEnv::validate_trait_impl` が拒否する。
+      **この 3 種の頭の型はいずれも `TypeNode::is_box` が真である。**
+      `TypeNode::is_unbox` は `self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox` であり、
+      `toplevel_tycon_info` は `type_env.tycons()` からその型の toplevel の tycon の項目を引く。
+      宣言された struct・union については、`Struct::is_boxed` と `Union::is_boxed` が
+      `!self.is_unbox` なので宣言の `is_unbox` の欄は偽であり、`TypeDefn::tycon_info` はその欄をそのまま
+      `TyConInfo` へ写し、`Program::calculate_type_env` はその `TyConInfo` を宣言の tycon の項目として
+      `type_env.tycons()` に置く。`Std::#DynamicObject` については、その tycon の項目を置くのは
+      `bulitin_tycons` であり (A28)、その `is_unbox` は偽である。
+      **`Boxed` の実装の頭はどれもクロージャ型ではない** -- `add_boxed_impls` が置く頭は宣言された
       struct・union の `defn.applied_type()`、すなわちその宣言の tycon に型変数を適用した型であり、
       `make_std_mod` が置く頭は `Std::#DynamicObject` である。`TypeNode::is_closure` が真になるのは
       toplevel の tycon の名前が `make_arrow_name_abs()` のものであるときだけで、どちらもそうではない。
-      よって `is_unbox` はその欄の値であり、この 3 種はいずれも `TypeNode::is_box` が真である。よって
+      よって `is_unbox` はその欄の値であって偽であり、`TypeNode::is_box` が真である。よって
       D4 の規則 3 よりその引数の leaf は `[]` だけであり、渡るのはその値そのものである。
       `array_is_storage_unique_function` が `Std::Array::_unsafe_is_storage_unique` に与える scheme の
       引数の型は `type_tyapp(make_array_ty(), a)` すなわち `Array a` であり (D4 の規則 4 よりその leaf も
@@ -664,14 +927,15 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
       leaf `[]` について上げ下げされる参照カウントはその記憶域のものであり、D7 より `H(o)` はその
       参照カウントである。A5 も、配列の要素の参照を持つのは `#ArrayStorage a` のオブジェクトの側だと
       述べる。
-  BY <ref id=3f1bb47/>, <ref id=4f63121/>, <ref id=0594f24/>, <ref id=56c2068/>, <1>3, CODE src/object.rs: get_array_storage, build_traverse,
-     CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate, is_unique_function,
-     array_is_storage_unique_function, make_boxed_trait, make_arrow_name_abs,
-     CODE src/fixstd/stdlib.rs: make_std_mod, CODE src/ast/types.rs: Scheme::generalize,
-     TypeNode::is_box, TypeNode::is_unbox, TypeNode::is_closure,
-     CODE src/ast/program.rs: Program::add_boxed_impls,
+  BY 前提 `Std::Boxed` の実装を作る在りか, <ref id=3f1bb47/>, <ref id=4f63121/>, <ref id=0594f24/>, <ref id=56c2068/>, <ref id=3d4be43/>, <1>3,
+     CODE src/object.rs: get_array_storage, build_traverse,
+     CODE src/fixstd/builtin.rs: is_unique_function, array_is_storage_unique_function, make_boxed_trait, make_arrow_name_abs, boxed_trait_instance, bulitin_tycons,
+     InlineLLVMIsUniqueFunctionBody::generate,
+     CODE src/fixstd/stdlib.rs: make_std_mod,
+     CODE src/ast/types.rs: Scheme::generalize, TypeNode::is_box, TypeNode::is_unbox, TypeNode::is_closure, TypeNode::toplevel_tycon_info,
+     CODE src/ast/program.rs: Program::add_boxed_impls, Program::calculate_type_env,
      CODE src/ast/traits.rs: TraitEnv::validate_trait_impl,
-     CODE src/ast/typedecl.rs: TypeDefn::tycon_info, TypeDefn::applied_type
+     CODE src/ast/typedecl.rs: TypeDefn::tycon_info, TypeDefn::applied_type, Struct::is_boxed, Union::is_boxed
 
 <1>4. `assumed_state(false)` は `RcState::Unknown` であり、`RcState::Unknown.dispatches()` は真である。
   BY <1>2, CODE src/fixstd/builtin.rs: assumed_state, CODE src/rc_ir/ast.rs: RcState::dispatches
@@ -684,19 +948,20 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
   BY <1>4, CODE src/generator.rs: Generator::build_branch_by_refcnt_state
 
 <1>5a. 状態の欄が持つ値は `LOCAL`、`THREADED`、`GLOBAL` の 3 つで尽きる。`RefcntState` は `u8` を包む
-      struct であり、欄が持つ値の範囲を決めるのは書き込む側である。状態の欄へ書き込むのは
-      `Generator::set_refcnt_state` だけであり、それを呼ぶのは 3 か所である -- `create_obj` が新しい
-      オブジェクトの制御ブロックに `LOCAL` を書き、`build_mark_boxed_with` が `mark_global` のとき
-      `GLOBAL` を・`Std::mark_threaded` のとき `THREADED` を書き、`build_branch_by_is_unique` の
-      threaded の腕がカウントが 1 のとき `LOCAL` を書く。書かれる値はこの 3 つである。
-      **環境もこの欄を書かない** -- A17 (ii-b) は「**環境は制御ブロック -- 参照カウントの欄と状態バイト --
-      も書かない。**」と述べる。**環境が Fix の側の番地を呼ぶ段 (D24 の (E9)) が走らせるのは、
+      struct であり、欄が持つ値の範囲を決めるのは書き込む側である。A27 より、状態の欄へ書き込む生成
+      コードは `create_obj` が新しいオブジェクトの制御ブロックに `LOCAL` を書く箇所、
+      `build_mark_boxed_with` が印を付ける箇所、`build_branch_by_is_unique` の threaded の腕が
+      カウントが 1 のとき `LOCAL` を書く箇所である。`build_mark_boxed_with` が置くのは `mark_global`
+      のとき `GLOBAL`、`Std::mark_threaded` のとき `THREADED` であり、書かれる値はこの 3 つである。
+      **環境もこの欄を書かない** -- A27 が引く A17 (ii-b) は「**環境は制御ブロック -- 参照カウントの欄と
+      状態バイト -- も書かない。**」と述べる。**環境が Fix の側の番地を呼ぶ段 (D24 の (E9)) が走らせるのは、
       `InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody` と
       `InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody` が作る内部関数の本体、すなわち生成コードで
-      ある** (D24 の (E9) がその 2 つを名指す) ので、その段が置く値もこの数え上げの中にある。
+      ある** (D24 の (E9) がその 2 つを名指す) ので、その段が置く値も A27 の数え上げの中にある。
       よって欄に値を置くのは生成コードのこの 3 か所で尽きる。
-  BY <ref id=c9e4cca/>, <ref id=e3436e8/>, CODE src/constants.rs: RefcntState, CODE src/generator.rs: Generator::set_refcnt_state,
-     Generator::build_mark_boxed_with, Generator::build_branch_by_is_unique,
+  BY <ref id=0ab1ef4/>, <ref id=c9e4cca/>, <ref id=e3436e8/>,
+     CODE src/constants.rs: RefcntState,
+     CODE src/generator.rs: Generator::set_refcnt_state, Generator::build_mark_boxed_with, Generator::build_branch_by_is_unique,
      CODE src/object.rs: create_obj
 
 <1>5b. `GLOBAL` を書くのは `<1>5a` の 3 か所のうち `build_mark_boxed_with` の `mark_global` の側だけで
@@ -711,17 +976,21 @@ L8c はこの命題を引かないので、`<1>2`・`<1>2a`・`<2>1`・`<2>2a`�
 
 <1>5c. `config.threaded` が偽のビルドでは、状態の欄が `THREADED` を持つオブジェクトは実行のどの時点にも
       無い。`<1>5a` より `THREADED` を書くのは `build_mark_boxed_with` の `mark_threaded` の側だけで
-      あり、そこへ届くのは `Generator::mark_threaded` であり、それを呼ぶのは
-      `InlineLLVMMarkThreadedFunctionBody::generate` だけである。この op を持つ式を組むのは
-      `mark_threaded_function` だけで、それは `Std::mark_threaded` の本体である。
+      あり、そこへ届くのは `Generator::mark_threaded` である。前提 `Std::mark_threaded` の op の在りか
+      より、`Generator::mark_threaded` を呼ぶ式が在るのは `InlineLLVMMarkThreadedFunctionBody::generate`
+      であり、この op の字面を持つ項目のうち op の値を組むのは `mark_threaded_function` であって、
+      `make_std_mod` はそれを `Std::mark_threaded` の本体として登録する。
       `Program::check_multi_threading_requirement` は、`config.threaded` が偽のとき
       `Std::mark_threaded` の実体化がプログラムに 1 つでも在れば診断を出して `Err` を返し、`build` は
-      それを `build_object_files` の呼び出しより前に `?` で伝播する。`build_object_files` を呼ぶのは
-      `build` だけである。よって、単一スレッドのビルドでは、`Std::mark_threaded` を持つプログラムは
+      それを `build_object_files` の呼び出しより前に `?` で伝播する。同じ前提より
+      `build_object_files` を呼ぶ式が在るのは `build` である。よって、単一スレッドのビルドでは、
+      `Std::mark_threaded` を持つプログラムは
       二値にならず実行が存在せず、二値になるプログラムはこの op を持たないので `THREADED` を書く
       コードを 1 命令も生成しない。
-  BY <1>5a, CODE src/generator.rs: Generator::mark_threaded, Generator::build_mark_boxed_with,
-     CODE src/fixstd/builtin.rs: InlineLLVMMarkThreadedFunctionBody, mark_threaded_function,
+  BY 前提 `Std::mark_threaded` の op の在りか, <1>5a,
+     CODE src/generator.rs: Generator::mark_threaded, Generator::build_mark_boxed_with,
+     CODE src/fixstd/builtin.rs: mark_threaded_function, InlineLLVMMarkThreadedFunctionBody::generate,
+     CODE src/fixstd/stdlib.rs: make_std_mod,
      CODE src/ast/program.rs: Program::check_multi_threading_requirement,
      CODE src/build/build.rs: build
 
@@ -779,11 +1048,12 @@ shared = false` になる。対象コミットの二値ではこのプログラ�
 `-O max` の出力に `observe#borrow` は現れない。観測点を `y.@(0)` に置き換えた同じ形のプログラムでは
 `observe#borrow` が 3 か所に現れる。すなわち門はこの op も断っている。
 
-**`assume_unique` が真の op について P26 は自明である。** `<1>2` の `unique_check_elim::specialize` は
-`borrow_ify` と `cancel` の後に走るので、L0 が範囲に取る 3 つの本体 -- `borrow_ify` の入力・出力と
-`cancel` の出力 -- にその op は無い。仮に在れば、
-`InlineLLVMIsUniqueFunctionBody::generate` は分岐を作らず定数 `1` を返すので、観測値は入力でも出力でも真で
-ある (`CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate`)。
+**`assume_unique` が真の op は、L0 が範囲に取る 3 つの本体に無い。** `<1>2` の
+`unique_check_elim::specialize` は `borrow_ify` と `cancel` の後に走るので、その 3 つ -- `borrow_ify` の
+入力・出力と `cancel` の出力 -- にその op は現れない。その op が在る本体では
+`InlineLLVMIsUniqueFunctionBody::generate` は分岐を作らず定数 `1` を返すので、観測値は入力でも出力でも真
+であり、P26 の第 1 文の含意はそのまま成り立つ
+(`CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::generate`)。
 
 ## 4. `cancel` の半分
 
@@ -900,7 +1170,9 @@ optimize_rc_program`)。
         位置で並べる。**」の後者で並べ、伸長の条件「並んだ 2 つの段が同じ位置の節点を実行するか同じ種の
         節点を持たない段であり」より対になった 2 つの段はどちらも (E9) である。番地を環境へ渡したのは
         `boxed_to_retained_ptr` の節点で
-        ある (D22 の第 3 の箇条、A17 (i-b))。その節点は `<1>1` より 2 つの実行の対応する位置に同じ op と
+        ある -- 環境が Fix の boxed な値の番地を得る道はその対しかなく (A17 (i-d))、その番地について環境が
+        参照を持つことは A17 (i-b) が、その節点が番地を渡すことは D22 の第 3 の箇条が言う。
+        その節点は `<1>1` より 2 つの実行の対応する位置に同じ op と
         して在り、`<1>2a` より対応する値を与えられるので、2 つの段は対応するオブジェクトへ同じ向きの
         1 つを作る / 処分する。
         環境の読み書きの段 (E8) は `H` を動かさない (`<1>4`)。よってこれらの動作は `H` を同じだけ動かす。
@@ -1152,19 +1424,21 @@ D30 の共通接頭が終わるとき、その出口は (X1) か (X2)
 <1>2. (X2) について。分岐が違う段内の点を `p`、その op が参照カウントを読むオブジェクトを `O` とする。
       `p` は段と段のあいだの時点であるか、共通接頭の段の中の点である。
   <2>0. `p` の分岐は `Generator::build_branch_by_is_unique` が作る 4 つの分岐のいずれかである。D30 の (X2)
-        が数え上げるのは生成コードの分岐であって `LLVMGen::unique_check_operand` の宣言ではない。参照
-        カウントの欄を 1 と比べるのは `build_is_refcnt_one` であり、それを呼ぶのは
-        `build_branch_by_is_unique` と、develop モードでだけ検査を出す `build_assert_unique` の 2 つで
-        ある。複製を作るかどうかを決める分岐を作るのは前者であり、生成
-        コードでこれを呼ぶのは 6 か所である。そのうち 2 つは D18 の観測点の op
-        (`InlineLLVMIsUniqueFunctionBody`、`InlineLLVMArrayIsStorageUniqueBody`) であって、そちらは
-        (X1) が扱う。残る 4 か所は、`make_array_unique_with_hole`、`make_struct_union_unique`、
+        が数え上げるのは生成コードの分岐であって `LLVMGen::unique_check_operand` の宣言ではない。
+        前提 一意性の分岐を組む在りか より、参照カウントの欄を 1 と比べる `build_is_refcnt_one` を呼ぶ式が
+        在るのは `build_branch_by_is_unique` と、develop モードでだけ検査を出す `build_assert_unique` で
+        ある。複製を作るかどうかを決める分岐を作るのは前者であり、同じ前提より、生成コードでこれを呼ぶ式が
+        在るのは `InlineLLVMIsUniqueFunctionBody::generate`、`InlineLLVMArrayIsStorageUniqueBody::generate`、
+        `InlineLLVMArraySetCapacityBoundsUnchecked::generate`、
+        `InlineLLVMArrayAppendCapacityUnchecked::generate`、`make_array_unique_with_hole`、
+        `make_struct_union_unique` である。そのうち初めの 2 つは D18 の観測点の op であって、そちらは
+        (X1) が扱う。残るのは、`make_array_unique_with_hole`、`make_struct_union_unique`、
         `InlineLLVMArraySetCapacityBoundsUnchecked` の `force_unique` の枝、および
         `InlineLLVMArrayAppendCapacityUnchecked` が `src` について立てる分岐である。最後の op の
         `force_unique` の欄が門とするのは `dst` の側だけで、`src` はどちらでも読まれる
         (`InlineLLVMArrayAppendCapacityUnchecked` の欄の doc)。
-    BY <ref id=c422d87/>, <ref id=081e39f/>, CODE src/generator.rs: Generator::build_branch_by_is_unique,
-       Generator::build_is_refcnt_one, Generator::build_assert_unique,
+    BY 前提 一意性の分岐を組む在りか, <ref id=c422d87/>, <ref id=081e39f/>,
+       CODE src/generator.rs: Generator::build_branch_by_is_unique, Generator::build_is_refcnt_one, Generator::build_assert_unique,
        CODE src/fixstd/builtin.rs: make_array_unique_with_hole, make_struct_union_unique,
        InlineLLVMArraySetCapacityBoundsUnchecked::generate,
        InlineLLVMArrayAppendCapacityUnchecked, InlineLLVMArrayAppendCapacityUnchecked::generate,
@@ -1172,21 +1446,23 @@ D30 の共通接頭が終わるとき、その出口は (X1) か (X2)
   <2>0a. `<2>0` の 4 か所が参照カウントを読むオブジェクトは、その分岐を含む op のオペランドの inhabited な
         boxed leaf が指すオブジェクトである。`make_array_unique_with_hole` は渡された配列の
         `get_array_storage` を、`make_struct_union_unique` は渡された値そのものを
-        `build_branch_by_is_unique` へ渡す。この 2 つを呼ぶのは `force_unique_or_assert_with_hole` だけで
-        あり (`force_unique_or_assert` はそこへ委譲する)、その呼び出し元は op の生成コードの 14 か所と、
-        `InlineLLVMArrayAppendCapacityUnchecked` と `InlineLLVMArrayCopyCapacityBoundsUnchecked` が呼ぶ
-        `array_tail_destination` の 1 か所である。14 か所は
+        `build_branch_by_is_unique` へ渡す。前提 一意性の分岐を組む在りか より、この 2 つを呼ぶ式が在るのは
+        `force_unique_or_assert_with_hole` だけであり、それを呼ぶ式が在るのは
+        `InlineLLVMPunchedArrayPlugBody::generate` と `force_unique_or_assert` (委譲) であり、
+        `force_unique_or_assert` を呼ぶ式が在るのは次の op の `generate` と、
+        `InlineLLVMArrayAppendCapacityUnchecked::generate` と
+        `InlineLLVMArrayCopyCapacityBoundsUnchecked::generate` が呼ぶ `array_tail_destination` である --
         `InlineLLVMArrayTruncateBoundsUnchecked`、`InlineLLVMArrayAppendValueCapacityUnchecked`、
         `InlineLLVMArrayGrowSizeBody`、`InlineLLVMArraySetBody`、`InlineLLVMArraySwapBody`、
-        `InlineLLVMArrayPunchBody`、`InlineLLVMPunchedArrayPlugBody`、`InlineLLVMStructPunchBody`、
+        `InlineLLVMArrayPunchBody`、`InlineLLVMStructPunchBody`、
         `InlineLLVMStructPlugInBody`、`InlineLLVMStructSetBody`、
         `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、`InlineLLVMUnsafeMutateBoxedIOSInternalBody`、
-        `InlineLLVMArrayMutateElementsInternalBody`、`InlineLLVMArrayMutateElementsIosInternalBody` の
-        生成コードにある。**`InlineLLVMPunchedArrayPlugBody` を除く 13 か所は、渡す値を
-        `gc.get_scoped_obj(&self.<欄>)` で取る。`array_tail_destination` に渡る `dst` も、それを呼ぶ 2 つの
+        `InlineLLVMArrayMutateElementsInternalBody`、`InlineLLVMArrayMutateElementsIosInternalBody`。
+        **この op の `generate` はいずれも、渡す値を `gc.get_scoped_obj(&self.<欄>)` で取る。
+        `array_tail_destination` に渡る `dst` も、それを呼ぶ 2 つの
         op が `gc.get_scoped_obj(&self.dst_name)` で取ったものである。** A12 より `Llvm` 節点の `args` の
         名前の列は `gen.free_vars()` に等しいので、それはこの op のオペランドである。
-        `InlineLLVMPunchedArrayPlugBody`
+        `InlineLLVMPunchedArrayPlugBody::generate`
         が渡すのは、オペランド `punched` から `move_out_struct_field` で取り出した `_arr` の欄であり、
         `PunchedArray a = unbox struct { _arr : Array a, _idx : I64 }` の boxed leaf はその `_arr` の位置
         1 つなので (D4 の規則 5 と規則 4)、これもオペランドの leaf である。残る 2 か所 --
@@ -1194,26 +1470,28 @@ D30 の共通接頭が終わるとき、その出口は (X1) か (X2)
         `InlineLLVMArrayAppendCapacityUnchecked` が `src` について立てる分岐 -- は、どちらも
         `gc.get_scoped_obj` で取ったオペランドの `get_array_storage` を `build_branch_by_is_unique` へ
         渡す。L0 の `<1>3a` より配列の値の leaf `[]` が指すオブジェクトはその記憶域である。
-    BY <ref id=83d98e9/>, <ref id=0594f24/>, <ref id=6bf2817/>, <2>0, CODE src/object.rs: get_array_storage,
-       CODE src/object.rs: ObjectFieldType::move_out_struct_field,
-       CODE src/fixstd/builtin.rs: force_unique_or_assert, force_unique_or_assert_with_hole,
-       array_tail_destination, make_array_unique_with_hole, make_struct_union_unique,
-       InlineLLVMArrayTruncateBoundsUnchecked, InlineLLVMArrayAppendValueCapacityUnchecked,
-       InlineLLVMArrayGrowSizeBody, InlineLLVMArraySetBody, InlineLLVMArraySwapBody,
-       InlineLLVMArrayPunchBody, InlineLLVMPunchedArrayPlugBody, InlineLLVMStructPunchBody,
-       InlineLLVMStructPlugInBody, InlineLLVMStructSetBody,
-       InlineLLVMUnsafeMutateBoxedInternalFunctionBody, InlineLLVMUnsafeMutateBoxedIOSInternalBody,
-       InlineLLVMArrayMutateElementsInternalBody, InlineLLVMArrayMutateElementsIosInternalBody,
-       InlineLLVMArraySetCapacityBoundsUnchecked, InlineLLVMArrayAppendCapacityUnchecked,
-       InlineLLVMArrayCopyCapacityBoundsUnchecked
+    BY 前提 一意性の分岐を組む在りか, <ref id=83d98e9/>, <ref id=0594f24/>, <ref id=6bf2817/>, <2>0,
+       CODE src/object.rs: get_array_storage, ObjectFieldType::move_out_struct_field,
+       CODE src/fixstd/builtin.rs: force_unique_or_assert, force_unique_or_assert_with_hole, array_tail_destination, make_array_unique_with_hole, make_struct_union_unique,
+       InlineLLVMArrayTruncateBoundsUnchecked::generate, InlineLLVMArrayAppendValueCapacityUnchecked::generate,
+       InlineLLVMArrayGrowSizeBody::generate, InlineLLVMArraySetBody::generate, InlineLLVMArraySwapBody::generate,
+       InlineLLVMArrayPunchBody::generate, InlineLLVMPunchedArrayPlugBody::generate, InlineLLVMStructPunchBody::generate,
+       InlineLLVMStructPlugInBody::generate, InlineLLVMStructSetBody::generate,
+       InlineLLVMUnsafeMutateBoxedInternalFunctionBody::generate, InlineLLVMUnsafeMutateBoxedIOSInternalBody::generate,
+       InlineLLVMArrayMutateElementsInternalBody::generate, InlineLLVMArrayMutateElementsIosInternalBody::generate,
+       InlineLLVMArraySetCapacityBoundsUnchecked::generate, InlineLLVMArrayAppendCapacityUnchecked::generate,
+       InlineLLVMArrayCopyCapacityBoundsUnchecked::generate
 
   <2>1. `O` は計数下 (D26) である。`<2>0` の 4 か所はいずれも `build_branch_by_is_unique` を通り、その
         `global_bb` の腕は無条件に `shared_bb` へ跳ぶ。**`global_bb` が在ることには根拠が要る** --
         `build_branch_by_refcnt_state` が `global_bb` を `Some` で返すのは `state.dispatches()` が真の
-        ときだけである (L0 の `<1>5`)。4 か所のうち `make_array_unique_with_hole`・
-        `make_struct_union_unique`・`InlineLLVMArraySetCapacityBoundsUnchecked` の `force_unique` の枝は、
-        `force_unique_or_assert` と `force_unique_or_assert_with_hole` (`array_tail_destination` を
-        経る 2 つの op も同じ) を通って `assumed_state(self.assume_local)` を渡す。L0 より、`borrow_ify`
+        ときだけである (L0 の `<1>5`)。4 か所のうち `make_array_unique_with_hole` と
+        `make_struct_union_unique` は、`force_unique_or_assert_with_hole` から `state` を受け取り、
+        それをそのまま `build_branch_by_is_unique` へ渡す。`<2>0a` の op の `generate` はその `state` に
+        `assumed_state(self.assume_local)` を渡す。`InlineLLVMArraySetCapacityBoundsUnchecked` の
+        `force_unique` の枝は、`force_unique_or_assert` を通らずに
+        `gc.build_branch_by_is_unique(storage_ptr, assumed_state(self.assume_local))` を直に呼ぶ。
+        L0 より、`borrow_ify`
         の入力・出力と `cancel` の出力のいずれかの本体にある `Llvm` の演算の `assume_local` は偽で
         あり、この命題が範囲に取る 2 つの本体はその中に在る。よって `assumed_state(false)` すなわち
         `RcState::Unknown` が渡り、その `dispatches()` は真である (L0 の `<1>4`)。残る 1 か所 --
@@ -1223,10 +1501,10 @@ D30 の共通接頭が終わるとき、その出口は (X1) か (X2)
         でも共有の腕を取り、分岐は違わない。**片方の実行でだけグローバル状態である場合は無い** -- D29 の
         最後の行より、対応する 2 つのオブジェクトは計数下かグローバル状態か (D26) の区別も一致する。
         D26 よりオブジェクトは計数下かグローバル状態かのどちらかである。
-    BY <ref id=88a06de/>, <ref id=7218f92/>, <ref id=6bf2817/>, <2>0, CODE src/generator.rs: Generator::build_branch_by_is_unique,
-       Generator::build_branch_by_refcnt_state,
-       CODE src/fixstd/builtin.rs: assumed_state, force_unique_or_assert,
-       force_unique_or_assert_with_hole, InlineLLVMArraySetCapacityBoundsUnchecked::generate,
+    BY <ref id=88a06de/>, <ref id=7218f92/>, <ref id=6bf2817/>, <2>0, <2>0a,
+       CODE src/generator.rs: Generator::build_branch_by_is_unique, Generator::build_branch_by_refcnt_state,
+       CODE src/fixstd/builtin.rs: assumed_state, force_unique_or_assert, force_unique_or_assert_with_hole, make_array_unique_with_hole, make_struct_union_unique,
+       InlineLLVMArraySetCapacityBoundsUnchecked::generate,
        InlineLLVMArrayAppendCapacityUnchecked::generate
   <2>2. `<2>0` の 4 か所はいずれも、分岐が `build_branch_by_is_unique` の読んだカウントが 1 であるかで
         決まり、1 の腕では複製を作らない。`make_array_unique_with_hole` と `make_struct_union_unique` は
@@ -1341,7 +1619,9 @@ D30 の共通接頭が終わるとき、その出口は (X1) か (X2)
       「**release の段は環境の持ち分から参照を 1 つ処分する**」かのどちらかで、`H` を 1 上げるか 1 下げる。
       D30 の伸長の条件「並んだ 2 つの段が同じ位置の節点を実行するか同じ種の節点を持たない段であり」より、
       対になった 2 つの段はどちらも (E9) である。番地を環境へ渡したのは `boxed_to_retained_ptr` の節点で
-      あり (D22 の第 3 の箇条、A17 (i-b))、その節点は `<2>2` より 2 つの実行の対応する位置に同じ op として
+      ある -- 環境が Fix の boxed な値の番地を得る道はその対しかなく (A17 (i-d))、その番地について環境が
+      参照を持つことは A17 (i-b) が、その節点が番地を渡すことは D22 の第 3 の箇条が言う。
+      その節点は `<2>2` より 2 つの実行の対応する位置に同じ op として
       在って、L5a の (b) より対応する値を与えられる。よって 2 つの段は対応するオブジェクトへ同じ向きの
       1 つを作る / 処分し、`H' − H` を動かさないので `<3>1` の (i) はこの段を跨いで運ばれる。その処分が
       `X` の側で解放を起こすとき、`H(・, O) = 0` から `<3>3` と同じ向きで `k(O) = 0` と `H'(・, O) = 0` が
@@ -1426,12 +1706,17 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   BY <ref id=63981a3/>, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
 
 <1>3. グローバル初期化子の `RewriteCtx` の `vars` は `VarTable::body_only(&g.init)` であり、`param_tys` は
-      空である。よって `<1>2` の腕がつねに取られる。
-  BY CODE src/rc_ir/borrow.rs: borrow_ify, CODE src/rc_ir/ownership.rs: VarTable::body_only
+      空である。`VarTable::body_only` は `VarTable::empty` が置く空の `param_tys` に `collect_bindings` を
+      掛けるだけであり、`collect_bindings` が書くのは `bindings`・`var_tys`・`closure_targets` であって
+      `param_tys` ではない。よって `<1>2` の腕がつねに取られる。
+  BY CODE src/rc_ir/borrow.rs: borrow_ify,
+     CODE src/rc_ir/ownership.rs: collect_bindings, VarTable::body_only, VarTable::empty
 
 <1>4. `f_own` の `RewriteCtx` の `vars` は `VarTable::of(&f_own)` であり、`param_tys` は `f_own` の
-      パラメータと capture だけを持つ。
-  BY CODE src/rc_ir/borrow.rs: RewriteCtx::new, CODE src/rc_ir/ownership.rs: VarTable::of
+      パラメータと capture だけを持つ。`VarTable::of` は各パラメータ・capture について `param_tys` へ
+      その型を入れてから `collect_bindings` を掛け、`collect_bindings` は `param_tys` を書かない (`<1>3`)。
+  BY <1>3, CODE src/rc_ir/borrow.rs: RewriteCtx::new,
+     CODE src/rc_ir/ownership.rs: collect_bindings, VarTable::of
 
 <1>5. (a) が成り立つ。`borrow_ify` は入力の各関数について `owned_units.extend(param_capture_units(func,
       type_env))` を行い、`param_capture_units` は各パラメータ・capture `p` の各 `u ∈ rc_units(p.ty)` に
@@ -1735,13 +2020,16 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
   名前は `App` の callee だけである (P24) -- callee であれば `route` の返り値であって元の呼び出し先と
   同じ入力関数の版であり (P12)、そうでなければ入力の名前のままで、やはり L8 の (1) より出力でその名前を
   持つ関数は `g_own` である。第 3 のものが入れるのは `gc.current_function()` の番地、すなわちその節点を
-  持つ本体の LLVM 関数の番地であり、D30 より対応する 2 つの段は同じ位置の節点を実行し、L8 の (1) と (2)
+  持つ本体の LLVM 関数の番地であり (`InlineLLVMFixBody::generate_tail` が
+  `gc.current_function().as_global_value()` をクロージャの funptr 欄へ書く)、
+  D30 より対応する 2 つの段は同じ位置の節点を実行し、L8 の (1) と (2)
   よりその 2 つの本体は入力の同じ関数の版である。どの場合でも、対応する 2 つの番地は対応する版を名指す。
   計数下かグローバル状態かの区別が一致することは、その遷移を起こすのが (E5) の段だけであり (D26)、対応する
   2 つの (E5) の段が印を付けるのが、対応する初期化子の活性化が返した値の到達するグラフだからである --
   返す値は D30 より対応し、そこから到達するグラフが対応することは帰納法の仮定が与える。
   BY <ref id=3f1bb47/>, <ref id=cb35ab1/>, <ref id=ebec376/>, <ref id=c232680/>, <ref id=88a06de/>, <ref id=081e39f/>, <ref id=74e7403/>, <ref id=843e506/>, <ref id=746e87a/>, <1>0, <1>1, <1>2, <1>2a, <1>2b, 帰納法の仮定,
-     CODE src/generator.rs: ValueAccessor::get
+     CODE src/generator.rs: ValueAccessor::get,
+     CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail
 
 ## L9a (活性化を作る段は 6 種である) <!--#11c4639-->
 
@@ -1802,15 +2090,15 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       **この 2 つで尽きることは、LLVM の呼び出しを組む位置の数え上げによる。** D23 の本体は LLVM の関数と
       して実装される -- `prog.funcs` の各関数は `implement_rc_program` が `func_vals` に集めた関数値に、
       各グローバル初期化子の `init` は `InitValue#<symbol>` にである。そこへ制御が入るのは、その関数を
-      呼ぶ命令を実行するときである (`EXT LLVM の関数への制御の移り`)。`src/` の中で LLVM の呼び出し命令を
-      組むのは 14 か所であり (`build_call` が 12、`build_indirect_call` が 2)、そのうち 12 か所は D23 の
-      本体を呼ばない --
+      呼ぶ命令を実行するときである (`EXT LLVM の関数への制御の移り`)。前提 LLVM の関数を呼ぶ命令を組む在りか
+      が `build_call` と `build_indirect_call` を呼ぶ式が在る項目を挙げる。そのうち D23 の本体を
+      呼ばないのは次である --
       runtime の関数 (`build_malloc`、`realloc_array`、`Generator::save_stack`、
       `Generator::restore_stack`、`Generator::call_runtime`)、LLVM の intrinsic
       (`Generator::build_lifetime_marker`)、生成された RC の補助関数 (`Generator::emit_rc_helper_call`)
-      と走査関数 (`Generator::build_traverser_work` の 1 か所と `Generator::traverse_boxed_refs` の
-      2 か所)、グローバルのアクセサ (`ValueAccessor::get` のグローバルの枝)、そして `FFI_CALL` が呼ぶ C の
-      関数 (`Generator::build_ffi_call_core`) である。残る 2 か所が `Generator::apply_lambda` の
+      と走査関数 (`Generator::build_traverser_work` と `Generator::traverse_boxed_refs`)、
+      グローバルのアクセサ (`ValueAccessor::get` のグローバルの枝)、そして `FFI_CALL` が呼ぶ C の
+      関数 (`Generator::build_ffi_call_core`) である。残るのが `Generator::apply_lambda` の
       `build_indirect_call` と、アクセサが `InitValue#<symbol>` を呼ぶ `Generator::store_init_value` の
       `build_call` である。
 
@@ -1821,40 +2109,42 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       (E1) の段で環境が呼ぶエントリ点も D23 の本体ではなく、そこから活性化へ入るのは上の 2 か所を通って
       である。
 
-      `src/` の中で `Generator::apply_lambda` を呼ぶ位置は 10 か所あり、それを囲む記号は 9 つである。
+      同じ前提より、`Generator::apply_lambda` を呼ぶ式が在る項目は、その定義のほかに次である。
 
       - `CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner` の
-        `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕 (1 か所)。
-      - `CODE src/ast/export_statement.rs: ExportStatement::implement` (1 か所)。
-      - `CODE src/generator.rs: Generator::build_run_destructor` (1 か所)。
-      - `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail` (2 か所)、
-        `InlineLLVMUnionModBody::generate` (1 か所)、
-        `InlineLLVMWithRetainedFunctionBody::generate` (1 か所)、
-        `InlineLLVMArrayBorrowElementsBody::generate` (1 か所)、
-        `apply_io_act_to_data_ptr` (1 か所)、`run_ios_runner` (1 か所)。
+        `RcExpr::Let(x, RcRhs::App(callee, args), k)` の腕。
+      - `CODE src/ast/export_statement.rs: ExportStatement::implement`。
+      - `CODE src/generator.rs: Generator::build_run_destructor`。
+      - `CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail`、
+        `InlineLLVMUnionModBody::generate`、
+        `InlineLLVMWithRetainedFunctionBody::generate`、
+        `InlineLLVMArrayBorrowElementsBody::generate`、
+        `apply_io_act_to_data_ptr`、`run_ios_runner`。
 
-      最後の 2 つは op ではないので、どの op がそれらへ届くかを数える。`apply_io_act_to_data_ptr` を呼ぶのは
+      最後の 2 つは op ではないので、どの op がそれらへ届くかを数える。同じ前提より、
+      `apply_io_act_to_data_ptr` を呼ぶ式が在るのは
       `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`、`InlineLLVMUnsafeMutateBoxedIOSInternalBody`、
-      `InlineLLVMArrayMutateElementsInternalBody`、`InlineLLVMArrayMutateElementsIosInternalBody` の 4 つで
-      ある。`run_ios_runner` を呼ぶのはその同じ 4 つと、`run_io_or_ios_runner` と `run_io` である。
-      `run_io` を呼ぶのは `run_io_or_ios_runner` と、`IOType::IO` の腕でそれを呼ぶ
-      `CODE src/ast/export_statement.rs: ExportStatement::implement` の 2 つである。
-      `run_io_or_ios_runner` を呼ぶのは
+      `InlineLLVMArrayMutateElementsInternalBody`、`InlineLLVMArrayMutateElementsIosInternalBody` の
+      `generate` である。`run_ios_runner` を呼ぶ式が在るのはその同じ 4 つと、`run_io_or_ios_runner` と
+      `run_io` である。
+      `run_io` を呼ぶ式が在るのは `run_io_or_ios_runner` と、`IOType::IO` の腕でそれを呼ぶ
+      `CODE src/ast/export_statement.rs: ExportStatement::implement` である。
+      `run_io_or_ios_runner` を呼ぶ式が在るのは
       `CODE src/build/build_object_files.rs: build_main_function` と
       `CODE src/generator.rs: Generator::build_run_destructor` である。
-  BY <ref id=ff5985d/>, <ref id=e3436e8/>, EXT LLVM の関数への制御の移り,
+  BY 前提 LLVM の関数を呼ぶ命令を組む在りか, <ref id=ff5985d/>, <ref id=e3436e8/>, EXT LLVM の関数への制御の移り,
      CODE src/generator.rs: Generator::apply_lambda, Generator::build_run_destructor,
      Generator::save_stack, Generator::restore_stack, Generator::call_runtime,
      Generator::build_lifetime_marker, Generator::emit_rc_helper_call,
      Generator::build_traverser_work, Generator::traverse_boxed_refs,
      Generator::build_ffi_call_core, ValueAccessor::get,
-     CODE src/object.rs: build_malloc, CODE src/fixstd/builtin.rs: realloc_array,
+     CODE src/object.rs: build_malloc,
+     CODE src/fixstd/builtin.rs: realloc_array, apply_io_act_to_data_ptr, run_ios_runner, run_io_or_ios_runner, run_io,
+     InlineLLVMFixBody::generate_tail, InlineLLVMUnionModBody::generate,
+     InlineLLVMWithRetainedFunctionBody::generate, InlineLLVMArrayBorrowElementsBody::generate,
      CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::implement_rc_global,
      Generator::implement_rc_program, Generator::store_init_value,
      CODE src/ast/export_statement.rs: ExportStatement::implement,
-     CODE src/fixstd/builtin.rs: InlineLLVMFixBody::generate_tail, InlineLLVMUnionModBody::generate,
-     InlineLLVMWithRetainedFunctionBody::generate, InlineLLVMArrayBorrowElementsBody::generate,
-     apply_io_act_to_data_ptr, run_ios_runner, run_io_or_ios_runner, run_io,
      CODE src/build/build_object_files.rs: build_main_function
 
 <1>4. (E2) のうちオペランドを適用する `Llvm` の段が (iii) であり、その op は 8 つで尽きる --
@@ -1864,8 +2154,8 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       `InlineLLVMArrayMutateElementsIosInternalBody` である。
   <2>1. `Llvm` の段が活性化を作るのは、その op の生成コードが `apply_lambda` を呼ぶときである。`<1>3a` の
         数え上げより、op の生成コードから `apply_lambda` へ届くのはこの 8 つだけである。`apply_lambda` を
-        呼ぶ 10 か所のうち、`eval_rc_expr_inner` の `App` の腕と `ExportStatement::implement` は op の
-        生成コードではなく、`build_run_destructor` は解放の側である。`run_ios_runner` の中の 1 か所へ
+        呼ぶ項目のうち、`eval_rc_expr_inner` の `App` の腕と `ExportStatement::implement` は op の
+        生成コードではなく、`build_run_destructor` は解放の側である。`run_ios_runner` の中の呼び出しへ
         届く経路は、`apply_io_act_to_data_ptr` を呼ぶ 4 つの op と、`run_io_or_ios_runner` と `run_io` で
         ある。`run_io_or_ios_runner` を呼ぶのは `build_main_function` と `build_run_destructor`、`run_io`
         を呼ぶのは `run_io_or_ios_runner` と `ExportStatement::implement` であって、op の生成コードは
@@ -1947,26 +2237,39 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
 <1>2. funptr 型の値は、関数の本体の中では `App` の callee の位置にしか現れず、その名前は `prog.funcs` の
       鍵である。
   <2>1. 型が funptr であるとは `TypeNode::is_funptr` が真であること、すなわちその型の toplevel tycon が
-        `make_funptr_tycon` の作る `Std::#FunPtr{n}` であることである。その tycon を型に組むのは
-        `type_funptr` だけであり、Fix のソースに書かれた型がこの tycon を持つことはない -- ソースに
+        `make_funptr_tycon` の作る `Std::#FunPtr{n}` であることである。`FUNPTR_NAME` の値は `"#FunPtr"`
+        であり (`CODE src/constants.rs: FUNPTR_NAME`)、`make_funptr_name` はその後ろに引数の個数を足した
+        名前を `Std` の下に置く。前提 funptr の tycon を型に組む在りか より、`make_funptr_tycon` を呼ぶ式が
+        在るのは `type_funptr` と、`TyConInfo` の表の鍵としてそれを置く `bulitin_tycons` であり、
+        この tycon を型に組むのは `type_funptr` である。Fix のソースに
+        書かれた型がこの tycon を持つことはない -- ソースに
         書かれた型構成子を作るのは `capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }`
         であり (`type_name = { capital_name }`)、その文字集合は `#` を含めないからである。
-    BY CODE src/ast/types.rs: TypeNode::is_funptr, type_funptr,
-       CODE src/fixstd/builtin.rs: make_funptr_tycon, is_funptr_tycon,
+    BY 前提 funptr の tycon を型に組む在りか,
+       CODE src/ast/types.rs: TypeNode::is_funptr, type_funptr,
+       CODE src/constants.rs: FUNPTR_NAME,
+       CODE src/fixstd/builtin.rs: make_funptr_tycon, make_funptr_name, is_funptr_tycon, bulitin_tycons,
        CODE src/parse/grammer.pest: capital_name, type_name
-  <2>2. 生産コードで `type_funptr` を呼ぶのは 2 か所である。`funptr_lambda` は
+  <2>2. 前提 funptr の tycon を型に組む在りか より、`type_funptr` を呼ぶ式が在るのは、その定義のほかに
+        `funptr_lambda` と `replace_closure_call_to_funptr_call` である
+        (`#[cfg(test)]` の下の呼び出しは走査が除く -- そのコードは二値になるプログラムのコンパイルで
+        走らない)。`funptr_lambda` は
         `expr_abs(args, body, None).set_type(funptr_ty)` を作り、これは記号そのものの式 (`Lam`) である。
         `replace_closure_call_to_funptr_call` は `expr_var(f_funptr.name, None).set_type(funptr_ty)` を
         作り、それを `expr_app(f_funptr, args, None)` の関数の位置に置く。`args` が空のときこの関数は元の
-        式をそのまま返すので、`args` は空でない。残る `type_funptr` の呼び出しは `src/rc_ir/validate.rs`
-        と `src/rc_ir/dead_code_elim.rs` の `#[cfg(test)]` のモジュールにある。
-    BY CODE src/optimization/uncurry.rs: funptr_lambda, replace_closure_call_to_funptr_call,
+        式をそのまま返すので、`args` は空でない。
+    BY 前提 funptr の tycon を型に組む在りか,
+       CODE src/optimization/uncurry.rs: funptr_lambda, replace_closure_call_to_funptr_call,
        replace_closure_call_to_funptr_call_subexprs
   <2>2a. 式が funptr 型を持つのは、`type_funptr` が作った型を `set_type` で与えられたときか、funptr 型を
         持つ式の型を `set_type` で写されたときである。**型検査が推論した型を式に記録する経路もこの 2 つで
         尽きる** -- `TypeCheckContext::unify_type_of_expr` は各式に推論した型を付けて返すが、その型は
-        制約系へ入った型の代入像であり、単一化は与えられた型から新しい tycon を作らない。`uncurry` より前に
-        funptr 型が制約系へ入る経路は無い。`type_funptr` を呼ぶ生産コードは `uncurry` の 2 か所だけであり
+        制約系へ入った型の代入像であり、**単一化は与えられた型から新しい tycon を作らない** --
+        `TypeCheckContext::unify` の各腕は、2 つの型を突き合わせて等しい tycon を受け入れるか、
+        `TyApp` の関数と引数へ降りるか、`unify_tyvar` で型変数に相手の型そのものを束縛するか、
+        associated type の使用を等式に積むか、`UnificationErr::Disjoint` を返すかであって、
+        tycon を作る式を 1 つも持たない。`uncurry` より前に
+        funptr 型が制約系へ入る経路は無い。`type_funptr` を呼ぶ生産コードは `uncurry` の中だけであり
         (`<2>2`)、Fix のソースに書かれた型はこの tycon を持たない (`<2>1`)。よって単一化が式に funptr 型を
         与えることもなく、`uncurry` より前の式に funptr 型は現れない。
         **`Expr::Lam` の節点についてはこれが独立に出る。** `unify_type_of_expr_inner` は冒頭の
@@ -2000,6 +2303,7 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
        replace_closure_call_to_funptr_call, replace_closure_call_to_funptr_call_subexprs,
        CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr,
        TypeCheckContext::unify_type_of_expr_inner, TypeCheckContext::unify_or_tolerated_mismatch,
+       TypeCheckContext::unify, TypeCheckContext::unify_tyvar,
        CODE src/ast/program.rs: Program::create_typechecker,
        CODE src/ast/types.rs: type_fun, type_funptr,
        CODE src/fixstd/builtin.rs: make_arrow_tycon, make_funptr_tycon,
@@ -2013,12 +2317,21 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         書き換える** -- `SimplifyName::end_visit_var` が `Var` の名前を替え、`SimplifyName::end_visit_llvm`
         が `Llvm` の op の `free_vars_mut()` が挙げる名前を替え、`simplify_symbol_names::run` がその結果を
         `sym.expr` に戻す。**替えるのは名前だけである** -- その 2 つの腕は名前を差し替えた式を返すだけで
-        式の型に触れず、残る `end_visit_*` の腕はすべて `EndVisitResult::unchanged` を返すので、部分式が
+        式の型に触れない。**`ExprVisitor` は `end_visit_*` を既定の実装なしで宣言するので、走査が呼ぶ腕は
+        `impl ExprVisitor for SimplifyName` が書く腕で尽きる。** 残る腕 --
+        `end_visit_app`、`end_visit_lam`、`end_visit_let`、`end_visit_if`、`end_visit_match`、
+        `end_visit_tyanno`、`end_visit_make_struct`、`end_visit_array_lit`、`end_visit_ffi_call`、
+        `end_visit_eval` -- はいずれも `EndVisitResult::unchanged(expr)` だけを返すので、部分式が
         別の位置へ移ることもない。
     BY CODE src/optimization/optimization.rs: run,
        CODE src/optimization/dead_symbol_elimination.rs: run,
-       CODE src/optimization/simplify_symbol_names.rs: run, SimplifyName::end_visit_var,
-       SimplifyName::end_visit_llvm
+       CODE src/ast/traverse.rs: ExprVisitor,
+       CODE src/optimization/simplify_symbol_names.rs: run,
+       SimplifyName::end_visit_var, SimplifyName::end_visit_llvm, SimplifyName::end_visit_app,
+       SimplifyName::end_visit_lam, SimplifyName::end_visit_let, SimplifyName::end_visit_if,
+       SimplifyName::end_visit_match, SimplifyName::end_visit_tyanno,
+       SimplifyName::end_visit_make_struct, SimplifyName::end_visit_array_lit,
+       SimplifyName::end_visit_ffi_call, SimplifyName::end_visit_eval
   <2>5. `Lowerer::lower_symbol` は `sym.ty.is_funptr()` の記号を `LoweredSymbol::Func` に、すなわち
         `prog.funcs` のエントリにする。`Lowerer::lower_app` は callee を `lower_to_var` に掛け、
         `lower_var` はグローバルの名前をそのまま `RcVar` にする。よって `App(callee, args)` の
@@ -2026,8 +2339,8 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         ある。A23 より `lower_to_var` に着く `Expr::Lam` の節点が**持つ**型は closure 型なので、
         `funptr_lambda` が作った funptr 型の `Lam` は `lower_to_var` に着かず、`lower_symbol` の funptr の
         枝が直に受け取る。
-    BY <ref id=3647480/>, <2>1, <2>2, CODE src/rc_ir/lower.rs: Lowerer::lower_symbol, Lowerer::lower_app, lower_var,
-       Lowerer::lower_to_var
+    BY <ref id=3647480/>, <2>1, <2>2,
+       CODE src/rc_ir/lower.rs: lower_var, Lowerer::lower_symbol, Lowerer::lower_app, Lowerer::lower_to_var
   <2>6. QED
     `<2>2a` より funptr 型が式に付く位置は 3 つであり、`<2>3` よりそのうち 1 つは関数の本体ではなく
     環境が読むものである。`<2>4` より `uncurry` の後にその位置を動かすパスは無い。残る 2 つのうち、
@@ -2264,7 +2577,9 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         (E1)・(E5)・(E7)・(E8)・(E9) -- は列の中の位置で並べる。**」の後者で並べ、伸長の条件「並んだ 2 つの
         段が同じ位置の節点を実行するか同じ種の節点を持たない段であり」より対になった 2 つの段はどちらも
         (E9) である。番地を環境へ渡したのは `boxed_to_retained_ptr` の節点で
-        あり (D22 の第 3 の箇条、A17 (i-b))、その節点は L8 の (2) より 2 つの実行の対応する位置に同じ op と
+        ある -- 環境が Fix の boxed な値の番地を得る道はその対しかなく (A17 (i-d))、その番地について環境が
+        参照を持つことは A17 (i-b) が、その節点が番地を渡すことは D22 の第 3 の箇条が言う。
+        その節点は L8 の (2) より 2 つの実行の対応する位置に同じ op と
         して在って、L5a の (b) より対応する値を与えられる。よって 2 つの段は対応するオブジェクトへ同じ
         向きの 1 つを環境の持ち分に足す / 環境の持ち分から処分するので、環境が持つ分は一致したままである。
         A17 (ii-c) は「**環境がその番地を呼ぶのは、その番地が指すオブジェクトへの参照を自分が持っている
@@ -2430,10 +2745,10 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
       `Std::unsafe_is_unique` に `is_unique_function()` を、`Std::Array::_unsafe_is_storage_unique` に
       `array_is_storage_unique_function()` を登録し、その 2 つがそれぞれこの op を 1 つ持つ `Llvm` 式を
       返す。よって規則 (a) の種は「本体に D18 の観測点を持つ関数」である。
-  BY <ref id=c422d87/>, CODE src/ast/inline_llvm.rs: LLVMGen::observes_uniqueness,
-     CODE src/fixstd/builtin.rs: InlineLLVMIsUniqueFunctionBody::observes_uniqueness,
-     InlineLLVMArrayIsStorageUniqueBody::observes_uniqueness, is_unique_function,
-     array_is_storage_unique_function, CODE src/fixstd/stdlib.rs: make_std_mod
+  BY <ref id=c422d87/>,
+     CODE src/ast/inline_llvm.rs: LLVMGen::observes_uniqueness,
+     CODE src/fixstd/builtin.rs: is_unique_function, array_is_storage_unique_function, InlineLLVMIsUniqueFunctionBody::observes_uniqueness, InlineLLVMArrayIsStorageUniqueBody::observes_uniqueness,
+     CODE src/fixstd/stdlib.rs: make_std_mod
 
 <1>2. `borrow_ify` は `observing` の元に借用版を作らない。`for func in prog.funcs.values()` の先頭で
       `if observing.contains(&func.name) { continue; }` が回る。
@@ -2495,7 +2810,8 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
   <2>3. `mentions_a_destructor(&x.ty)` は真である。この段が読むのは宣言される leaf の**型**だけであり、
         A3 が実行時に参照カウントで分岐する op の `Fresh` の行に置く但し書き -- その行はオブジェクトの
         同一性については字義どおりでない -- はここに当たらない。`result_prov` の既定は `Unknown` であり、A3 より
-        override するのは 29 個である。そのうち `Fresh` を宣言するのは次の形に尽きる。
+        override するのは 29 個である。以下の (α) から (δ) はその 29 個を尽くし、`Fresh` を宣言するのは
+        (α) から (γ) である。
         (α) `InlineLLVMMakeStructBody`、`InlineLLVMMakeUnionBody`、`replaced_field_prov`
         (`InlineLLVMStructSetBody` と `InlineLLVMStructPlugInBody` の 2 つが使う) は、
         結果が boxed のときにだけ根の path に `Fresh` を置き、そうでないときは各 leaf に `Arg` を置く。
@@ -2522,15 +2838,35 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
         D4 の規則 3 よりその leaf は成分の位置 1 つであり、その型は `x.ty` の型式が成分として持つ型である。
         (β') `InlineLLVMDestructorMake` は `Provenance::uniform(result_ty, .., Fresh)` を返し、結果の
         **全** boxed leaf を `Fresh` と宣言する。その結果の型は `(IOState, Destructor a)` であり、
-        `Destructor a` を成分として含む。(γ) 残る `InlineLLVMStringBuf`、
+        `Destructor a` を成分として含む。(γ) `InlineLLVMStringBuf`、
         `InlineLLVMArrayUnsafeEmpty`、
         `InlineLLVMArrayTruncateBoundsUnchecked`、`InlineLLVMArrayAppendValueCapacityUnchecked`、
         `InlineLLVMArraySetCapacityBoundsUnchecked`、`InlineLLVMArrayAppendCapacityUnchecked`、
         `InlineLLVMArrayCopyCapacityBoundsUnchecked`、`InlineLLVMArrayGrowSizeBody`、
         `InlineLLVMArraySetBody`、`InlineLLVMArraySwapBody`、`InlineLLVMArrayLitBody`、
-        `InlineLLVMPunchedArrayPlugBody` は、結果が `Std::String` か `Array a` か `PunchedArray a` で
-        あり、その `Fresh` の leaf の型は配列かその記憶域であって `Destructor` ではない。
-        (α) では `x.ty` 自身が `Destructor a` である。(β) の 5 つのうち 3 つと (γ) は `Destructor` の
+        `InlineLLVMPunchedArrayPlugBody` は、いずれも
+        `Provenance::uniform(result_ty, .., Fresh)` を返す。**この 12 個の結果の型は `Array τ` である** --
+        `InlineLLVMArrayLitBody` の値を組むのは `Lowerer::lower_array_lit` であり、その `ty` は
+        `Expr::ArrayLit` の型、すなわち型検査の `Expr::ArrayLit` の腕が
+        `type_tyapp(make_array_ty(), elem_ty)` と単一化した型である。残る 11 個の値を組むのは、
+        `InlineLLVMStringBuf` については `make_string_lit` (その `Llvm` 式に与える型は
+        `type_tyapp(make_array_ty(), make_u8_ty())`)、ほかは `array_unsafe_empty`・
+        `array_truncate_bounds_unchecked`・`array_append_value_capacity_unchecked`・
+        `array_set_capacity_bounds_unchecked`・`array_append_capacity_unchecked`・
+        `array_copy_capacity_bounds_unchecked`・`grow_size_array`・`set_array_common`・
+        `swap_array_common`・`punched_array_plug` であり、その `Scheme::generalize` に渡る型の結果は
+        いずれも `array_ty` すなわち `Array a` である。D4 の規則 4 より `Array τ` の boxed leaf は自分自身の
+        位置 1 つなので、`Fresh` の leaf の型は `Array τ` であって `Destructor` ではない。L0 の `<1>3a` より
+        その leaf が指すのは記憶域のオブジェクトなので、**この 12 個が割り当てるのは `#ArrayStorage` の
+        オブジェクトである。**
+        (δ) `result_prov` を override する残り -- `InlineLLVMIsUniqueFunctionBody`、
+        `InlineLLVMArrayIsStorageUniqueBody`、`InlineLLVMMarkThreadedFunctionBody`、
+        `InlineLLVMUnionAsBody`、`InlineLLVMStructGetBody`、`InlineLLVMUndefinedInternalBody` -- は
+        `Fresh` を 1 つも宣言しない。前の 3 つは `Provenance::uniform(result_ty, .., LeafOrigin::Unknown)`
+        を、`InlineLLVMUndefinedInternalBody` は `Provenance::uniform_bottom(result_ty, ..)` を返す。
+        `InlineLLVMUnionAsBody` と `InlineLLVMStructGetBody` は、容器が boxed なら
+        `LeafOrigin::Unknown`、unbox なら `sole_origin(LeafOrigin::Arg(0, ..))` を置く。
+        (α) では `x.ty` 自身が `Destructor a` である。(β) の 5 つのうち 3 つと (γ) と (δ) は `Destructor` の
         オブジェクトを割り当てないので、この場合に入らない。残る (β) の 2 つと (β2) と (β') では、
         `Fresh` の leaf の型は `x.ty` の型式が成分として持つ型なので、それが `Destructor a` であれば
         `x.ty` の型式が `Destructor a` を成分として含む。`mentions_a_destructor` は型式を `TyApp` に
@@ -2538,8 +2874,8 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
     BY <ref id=e11772a/>, <ref id=0594f24/>, CODE src/rc_ir/provenance.rs: Provenance::fresh_under,
        CODE src/rc_ir/borrow.rs: mentions_a_destructor,
        CODE src/ast/inline_llvm.rs: LLVMGen::result_prov,
-       CODE src/fixstd/builtin.rs: InlineLLVMMakeStructBody::result_prov,
-       InlineLLVMMakeUnionBody::result_prov, replaced_field_prov,
+       CODE src/fixstd/builtin.rs: replaced_field_prov, InlineLLVMMakeStructBody::result_prov,
+       InlineLLVMMakeUnionBody::result_prov,
        InlineLLVMDestructorMake::result_prov, InlineLLVMStructPunchBody::result_prov,
        InlineLLVMArrayPunchBody::result_prov,
        InlineLLVMUnsafeMutateBoxedInternalFunctionBody::result_prov,
@@ -2554,7 +2890,13 @@ L9a の (v) の段を含まない列で到達される活性化の本体に、�
        InlineLLVMArrayCopyCapacityBoundsUnchecked::result_prov,
        InlineLLVMArrayGrowSizeBody::result_prov, InlineLLVMArraySetBody::result_prov,
        InlineLLVMArraySwapBody::result_prov, InlineLLVMArrayLitBody::result_prov,
-       InlineLLVMPunchedArrayPlugBody::result_prov
+       InlineLLVMPunchedArrayPlugBody::result_prov,
+       InlineLLVMIsUniqueFunctionBody::result_prov, InlineLLVMArrayIsStorageUniqueBody::result_prov,
+       InlineLLVMMarkThreadedFunctionBody::result_prov, InlineLLVMUnionAsBody::result_prov,
+       InlineLLVMStructGetBody::result_prov, InlineLLVMUndefinedInternalBody::result_prov,
+       CODE src/fixstd/builtin.rs: make_string_lit, array_unsafe_empty, array_truncate_bounds_unchecked, array_append_value_capacity_unchecked, array_set_capacity_bounds_unchecked, array_append_capacity_unchecked, array_copy_capacity_bounds_unchecked, grow_size_array, set_array_common, swap_array_common, punched_array_plug,
+       CODE src/rc_ir/lower.rs: Lowerer::lower_array_lit,
+       CODE src/elaboration/typecheck.rs: TypeCheckContext::unify_type_of_expr_inner
   <2>3a. 入力の本体のある `Let(x, _, _)` について `mentions_a_destructor(&x.ty)` が真であるならば、
         `builds_a_destructor(prog)` は真である。`builds_a_destructor` は `prog.funcs` の各本体と
         `prog.globals` の各初期化子の全節点に `binds_a_destructor` を当て (`for_each_node`)、
@@ -2665,8 +3007,11 @@ A3 自身が「**この節が与えるのは「この段は割り当てない」
         適用された関数の活性化も広がりの中にあるので、その活性化が返す参照が指すオブジェクトは帰納の仮定
         (I1) による。もう 1 種の `InlineLLVMBoxedFromRetainedPtrIOS` は、この命題の仮定により広がりの中に
         現れない。単一の `Arg(j, σ)` はオペランドの leaf そのものなので (I1) による。空集合と宣言された
-        leaf は inhabited にならない。
-    BY <ref id=e11772a/>, <ref id=5f74a79/>, <ref id=f06144e/>, <ref id=0b850c9/>, <ref id=88a06de/>, <ref id=11c4639/>
+        leaf は inhabited にならない。**A3 の表の残る行 -- 複数の元 -- に当たる leaf は無い** -- A3 は
+        「**複数の元を宣言する op は存在しない。**」と述べ、`validate` の `check_rhs` の develop mode の
+        検査がそれを果たす。よって A3 の宣言の表の 5 行はこの場合分けで尽きる。
+    BY <ref id=e11772a/>, <ref id=5f74a79/>, <ref id=f06144e/>, <ref id=0b850c9/>, <ref id=88a06de/>, <ref id=11c4639/>,
+       CODE src/rc_ir/validate.rs: Validator::check_rhs
   <2>2. `Closure(f, caps)` の結果の capture object は、この段が新しく割り当てる。
     BY <ref id=f06144e/>, <ref id=e3436e8/>
   <2>3. boxed 容器の `Destructure` の名前付きフィールドの leaf と、boxed union の変位アームの payload の
@@ -3866,7 +4211,7 @@ README の P26 が主張せず、この文書も示さない。その 2 つが `
    `get_funptr_release` が渡した番地を環境が呼ぶ段を段の 1 種として定め、A17 (ii-c) は「**その段は D24 の
    (E9) である。**」と書く。段の種の上で場合分けする段はそこを読む -- L6 の `<1>4` が `H` を動かす行として、
    L9 の `<1>1` の `<2>2` が環境が持つ分を動かす経路として、L5a の `<1>3` の `<2>1` と L7a の `<1>2a` の
-   `<2>3` が素動作の場合として、L9 の `<1>3` の `<2>7` と L11 の `<1>3` が `Obl` もオブジェクトの欄も
+   `<2>3` の `<3>4` が素動作の場合として、L9 の `<1>3` の `<2>7` と L11 の `<1>3` が `Obl` もオブジェクトの欄も
    動かさない段として、L5 の `<1>4a` が活性化の位置を動かさない段として、L9a の `<1>1` と `<1>3` が
    活性化を作らない段として、L8c の `<1>2a` と L9b の `<1>4` の `<2>4a` がオブジェクトの保持する値を
    書き換えない段として挙げる。**その段が走らせるのは生成コードである** -- D24 の (E9) が

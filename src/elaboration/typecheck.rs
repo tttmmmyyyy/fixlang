@@ -2145,7 +2145,7 @@ impl TypeCheckContext {
     /// an associated type on either side becomes a pending equality, to be settled once enough is
     /// known about its arguments. Two types no substitution can make equal give
     /// `UnificationErr::Disjoint`.
-    // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P2a, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unify(
         &mut self,
         ty1: &Arc<TypeNode>,
@@ -2269,6 +2269,7 @@ impl TypeCheckContext {
 
     /// Binds the type variable `tyvar1` to `ty2` by extending the substitution,
     /// rejecting a binding that would be circular or kind-mismatched.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unify_tyvar(
         &mut self,
         tyvar1: Arc<TyVar>,

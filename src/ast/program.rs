@@ -928,7 +928,7 @@ impl Program {
     /// giving each type variable written on the right-hand side of a definition its kind. A name
     /// two definitions declare is reported as an error, and the second definition is left out of
     /// the environment.
-    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn calculate_type_env(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let mut tycons = bulitin_tycons();

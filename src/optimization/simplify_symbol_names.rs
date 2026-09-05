@@ -195,6 +195,7 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
@@ -207,6 +208,7 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
@@ -219,6 +221,7 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
@@ -231,6 +234,7 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
@@ -243,6 +247,7 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
@@ -255,6 +260,7 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_tyanno(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -271,6 +277,7 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -287,6 +294,7 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_array_lit(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -303,6 +311,7 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_ffi_call(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -319,6 +328,7 @@ impl ExprVisitor for SimplifyName {
         StartVisitResult::VisitChildren
     }
 
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }

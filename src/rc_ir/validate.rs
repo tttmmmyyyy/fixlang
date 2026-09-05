@@ -309,7 +309,7 @@ impl<'a> Validator<'a> {
     /// Check a right-hand side: the variables it uses, and the invariants its own form carries — a
     /// closure's target function and stored capture layout, an `Llvm` operation's operand names, and
     /// a match's arms.
-    // PROOF: D/A, P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P1, P2, P2a, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_rhs(&mut self, x: &RcVar, rhs: &RcRhs) {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),

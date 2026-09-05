@@ -775,6 +775,7 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an array literal: the elements are lowered left to right, and the appended binding
     /// builds an array holding them in that order.
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_array_lit(
         &mut self,
         elems: &[Arc<ExprNode>],

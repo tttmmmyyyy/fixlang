@@ -107,7 +107,7 @@ pub const UNION_IS_SYMBOL: &str = "is_";
 pub const UNION_MOD_SYMBOL: &str = "mod_";
 
 // Names used by compiler.
-// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const FUNPTR_NAME: &str = "#FunPtr";
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
 // The internal boxed type holding an array's refcount and raw element buffer. Like `#DynamicObject`,

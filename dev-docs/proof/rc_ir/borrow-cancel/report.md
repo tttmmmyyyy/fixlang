@@ -114,7 +114,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 
 | ファイル | 直近の検証 | FALSE | INCOMPLETE | NOT-OBVIOUS ほか | 次にすること |
 |---|---|---|---|---|---|
-| `p05-holders.md` | 第 8 周 (276 段) | **0** | 2 | BAD-CITATION 6、NOT-OBVIOUS 4、HEDGE 1 | **修理待ち** |
+| `p05-holders.md` | 第 8 周 (276 ステップ) | **0** | 2 | BAD-CITATION 6、NOT-OBVIOUS 4、HEDGE 1 | **修理済み** (13 件すべて)。`BY` の未分類 17・名札の不在 20 も 0 に。**第 9 周の検証** |
 | `p10-leaves-and-units.md` | 第 8 周 (509 ステップ) | 1 | 3 | NOT-OBVIOUS 5、BAD-CITATION 2 | **修理済み** (11 件すべて)。**第 9 周の検証** |
 | `p11-origin-soundness.md` | 第 8 周 (306 段) | **0** | 1 | NOT-OBVIOUS 4 | **修理待ち** |
 | `p12-identity-and-consumes.md` | 第 8 周 (401 ステップ) | 1 | 1 | BAD-CITATION 10 (id の付け替えで解決)、NOT-OBVIOUS 3 | **修理済み** (全件)。**第 9 周の検証** |
@@ -123,7 +123,7 @@ Let(x, Var(y), Release(y, [], Retain(x, [], Release(x, [], Ret(u)))))
 | `p20-borrow-ify.md` | 第 8 周 (576 段) | **0** | **0** | BAD-CITATION 1、NOT-OBVIOUS 4、`BY` の節番号 52 | **修理中** |
 | `p30-cancel-walk.md` | 第 8 周 (386 段) | **0** | **0** | BAD-CITATION 2、NOT-OBVIOUS 3 | **修理待ち** |
 | `p40-cancel-soundness.md` | 第 8 周 (448 ステップ) | 4 | 5 | BAD-CITATION 4、UNDEFINED 1、NOT-OBVIOUS 53 | **一部修理** (FALSE・INCOMPLETE・BAD-CITATION・UNDEFINED は全件、NOT-OBVIOUS は 10 件)。`L44` を 7 命題に割った。**第 9 周の検証** |
-| `p50-observation.md` | 第 7 周 (254 段) | **0** (散文 2) | 3 | NOT-OBVIOUS 11 | 修理済み。**第 8 周の検証** |
+| `p50-observation.md` | 第 8 周 (259 ステップ) | **0** | 4 | NOT-OBVIOUS 13、BAD-CITATION 2 | **修理済み** (19 件すべて)。数え上げ 9 件は「前提」+ `SCAN` へ。**第 9 周の検証** |
 | `p51-runs.md` | 第 8 周 (219 段) | 2 | 8 | BAD-CITATION 2、NOT-OBVIOUS 3 | 修理済み。**第 9 周の検証** |
 | `p60-insert-rc.md` | 第 8 周 (382 段) | 2 | 2 | BAD-CITATION 2、NOT-OBVIOUS 5 | 修理済み。**第 9 周の検証** |
 | `p70-main-theorem.md` | 第 8 周 (31 ステップ) | **0** | 1 | NOT-OBVIOUS 2、散文 8 (うち枠の仮定の数え上げの落ち 1) | **修理済み**。数え上げの落ちは検査になった |

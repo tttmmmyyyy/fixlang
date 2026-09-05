@@ -1600,8 +1600,12 @@ TypeNode`, `TypeNode::is_ground`, `TypeNode::type_hash`, `TypeNode::depth`)。
 スロットへ参照を入れるのは受け渡しである。
 
 **処分する個数はこれとは別に数える。** `Array` 値のトラバーサは、`#ArrayStorage` のカウントが 0 に <!--#2ef7d37-->
-なった段で、**その時点の `size` 個**の要素を 1 つずつ処分する
-(`CODE src/object.rs: ObjectFieldType::traverse_array_buf`)。**持ち手の数え上げが `size` を超える点では、
+なった段で、**その値が所有するスロット**を 1 つずつ処分する
+(`CODE src/object.rs: ObjectFieldType::traverse_array_buf`)。`Array` の値では
+`0` から `size - 1` までのスロットの全体であり、**`Std::PunchedArray` の値では穴の添字を除いた分である**
+-- `build_traverse` が `is_punched_array()` の枝でその添字を渡し、`traverse_array_buf` の `Some(hole)` の
+腕がそのスロットを飛ばす (`CODE src/object.rs: build_traverse`)。
+**「その時点の `size` 個」と書くと、穴を持つ値でこの節が偽になる。****持ち手の数え上げが `size` を超える点では、 <!--#67aad37-->
 その記憶域のカウントは 0 にならない** -- 書いた素動作から `size` を伸ばす素動作までの間に走るのは
 その段の生成コードが出す素動作だけであり、その段はその記憶域を解放しない。
 
