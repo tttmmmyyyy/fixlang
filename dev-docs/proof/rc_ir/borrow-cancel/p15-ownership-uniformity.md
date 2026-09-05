@@ -1794,9 +1794,11 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
   payload 変数について `bindings` を入れる。これは `<1>2` が挙げる `rename` の鍵ちょうどである。
   `collect_bindings` が `Binding` に記録するのは、右辺に現れる変数 (`Move` の `y`、`Field` の
   容器、`Payload` の scrutinee、`Join` のアーム結果、`Llvm` のオペランド) である。`<1>1` より `clone` の
-  パラメータ・capture と本体はこれらをすべて `ρ` で写したものであり、型は変わらない。
-  BY <1>1, <1>2, CODE src/rc_ir/ownership.rs: VarTable::of, collect_bindings,
-     CODE src/rc_ir/rename.rs: rename_expr, rename_var
+  パラメータ・capture と本体はこれらをすべて `ρ` で写したものであり、型は変わらない -- `rename_expr` の
+  本体は `grow_stack(|| rename_expr_inner(node, renaming))` であり (A15)、`rename_expr_inner` と
+  `rename_rhs` は各 `RcVar` に `rename_var` を掛け、`rename_var` は名前だけを差し替えて型を残す。
+  BY <1>1, <1>2, <ref id=3e6b0e0/>, CODE src/rc_ir/ownership.rs: VarTable::of, collect_bindings,
+     CODE src/rc_ir/rename.rs: rename_expr, rename_expr_inner, rename_rhs, rename_var
 
 <1>5. `func` に現れる名前 `x` について `vars_f.bindings.get(x)` が
       `Some(Binding::Llvm(gen, args, rty))` であるとき、`vars_c.bindings.get(ρ(x))` は
@@ -1808,9 +1810,11 @@ A6・A11・A12 が述べる性質が成り立つことは L0 が与える。固�
     `rename_rhs` の `RcRhs::Llvm` の腕は `llvm_gen.clone()` を作り、`llvm_gen.free_vars_mut()` が
     返す各 slot について `renaming` が持つ名前へ差し替え、`args` の各要素に `rename_var` を掛ける。
     `rename_var` は名前だけを差し替えて型を残す。`collect_bindings` は `Binding::Llvm` の第 3 成分に
-    `Let` の束縛変数の型 `x.ty` を入れ、`rename_expr` はその束縛変数にも `rename_var` を掛けるので、
-    第 3 成分の型も変わらない。
-    BY <1>1, CODE src/rc_ir/rename.rs: rename_rhs, rename_var, rename_expr,
+    `Let` の束縛変数の型 `x.ty` を入れる。`rename_expr` の本体は
+    `grow_stack(|| rename_expr_inner(node, renaming))` であり (A15)、`rename_expr_inner` の `Let` の腕は
+    その束縛変数にも `rename_var` を掛けるので、第 3 成分の型も変わらない。
+    BY <1>1, <ref id=3e6b0e0/>, CODE src/rc_ir/rename.rs: rename_rhs, rename_var, rename_expr,
+       rename_expr_inner,
        CODE src/ast/inline_llvm.rs: LLVMGen::free_vars_mut,
        CODE src/rc_ir/ownership.rs: collect_bindings
   <2>2. `result_prov` は `self` の `FullName` の欄を読まない。
