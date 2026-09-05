@@ -327,18 +327,33 @@ def build(directory):
     return items, edges
 
 
-TITLE = re.compile(r"^\*\*(?:T|[DAP]\d+[a-z]*)\s*\((.*?)\)\*\*"
-                   r"|^- \*\*(?:T|[DAP]\d+[a-z]*)\*\*\s*\((.*?)\)"
-                   r"|^#+\s+(?:[\d.]+[a-z]?\s+)?`?L\d+[a-z]*`?\s*\((.*?)\)")
+NAME_AT_HEAD = re.compile(
+    r"^[-#*\s]*(?:[\d.]+[a-z]?\s+)?\*{0,2}`?(?:T|[DAP]\d+[a-z]*|L\d+[a-z]*)`?\*{0,2}\s*")
 
 
 def title_of(line):
     """項目の見出しが持つ題。定義なら定義される語、仮定と主張なら言明の要約である。
 
     **これは表示であって同一性ではない。** 項目から取ってくるので、項目の題が変われば表示も変わり、
-    引く側は 1 か所も古くならない。**引く側に書いてよいのは id だけである。**"""
-    match = TITLE.match(line.strip())
-    return next((g for g in match.groups() if g), None) if match else None
+    引く側は 1 か所も古くならない。**引く側に書いてよいのは id だけである。**
+
+    括弧は数えて閉じる。最初の `)` で切ると、題そのものが括弧を持つ項目 -- `` `τ(n)` `` --
+    の題が途中で切れる。"""
+    text = IDENTITY.sub("", line).strip()
+    head = NAME_AT_HEAD.match(text)
+    if not head:
+        return None
+    rest = text[head.end():].lstrip()
+    if rest.startswith("("):
+        depth = 0
+        for at, letter in enumerate(rest):
+            depth += (letter == "(") - (letter == ")")
+            if depth == 0:
+                return rest[1:at].strip() or None
+        return None
+    if rest.startswith("--"):
+        return rest[2:].strip().rstrip("*").strip() or None
+    return None
 
 
 def with_annotations(lines, start):
