@@ -1,9 +1,9 @@
 # P18c, P19, P20, P21, P22, P23, P24 -- `cancel` が RC 規律を保存すること
 
-この文書は README の 7 命題 P18c, P19, P20, P21, P22, P23, P24 を証明する。README の定義 D1 - D34
-(D11a と D11 の (S-c) の接頭条件を含む)、仮定 A1 - A26、層 2 の命題 P30、および
-命題 P1 - P18b と P14a の**言明**の上に立つ。主定理 T は `p70-main-theorem.md` の担当であり、この文書は
-扱わない。
+この文書は README の 7 命題 P18c, P19, P20, P21, P22, P23, P24 を証明する。README の命題については
+その**言明**だけを使う。**この文書が立つ README の定義・仮定・命題の一覧はここに書かない** --
+`python3 dev-docs/proof/proof_index.py --depends dev-docs/proof/rc_ir/borrow-cancel/p40-cancel-soundness.md`
+が引用のグラフからそれを出す。主定理 T は `p70-main-theorem.md` の担当であり、この文書は扱わない。
 
 この文書が読んだコードのコミットは `d9b200c8cf12fdf02790d19b5f6c8c4ed9562617` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で `src/` に入った変更は、
@@ -26,7 +26,7 @@ README の第 1 節が挙げる 2 種である -- 「**対象コミットより�
 (`N` は別名類ごとの `bumps` の和である)。
 これらは `p30 の L10`、`p13 の L17` のようにファイル名を添えて引用する。
 
-**外部の結果**は `EXT <名前>` の名札で引く。この文書が引くのは Rust の言語規則と標準ライブラリ、および
+**外部の結果**は `EXT <名前>` の名札で引く。この文書が据えるのは Rust の言語規則と標準ライブラリ、および
 `dyn_clone` crate の 10 個で、その完全な言明は次のとおりである。Rust の言語規則の 4 つは Rust Reference の
 原文を引く。
 
@@ -103,7 +103,8 @@ README の第 1 節が挙げる 2 種である -- 「**対象コミットより�
   等しい。
   `rustc_hash::FxHashMap<K, V>` は `HashMap<K, V, FxBuildHasher>` の別名であり、`crate::misc::Map<K, V>`
   はさらにその別名である (`CODE src/misc.rs: Map`)。
-- **EXT Iterator::map と collect** --- `Iterator::map(f)` が返す反復子は、元の反復子と同じ個数の要素を
+- **EXT Iterator::map と collect** --- `Vec<T>` の `iter()` が返す反復子は、その要素を先頭から順に
+  1 つずつ渡す。`Iterator::map(f)` が返す反復子は、元の反復子と同じ個数の要素を
   同じ順に渡し、その第 `i` 要素は元の第 `i` 要素に `f` を当てた値である。その反復子を
   `collect::<Vec<_>>()` で集めると、長さがその個数に等しく、第 `i` 要素がその第 `i` 要素である `Vec` が
   得られる。
@@ -193,7 +194,7 @@ identity で名付けた多重集合」と定める。**`outstanding` に
 `cancel` の入力は `borrow_ify` の出力である。`optimize_rc_program` が `borrow_ify` の返り値を `cancel` に
 渡し (`CODE src/build/build_object_files.rs: optimize_rc_program`)、`cancel` と `borrow_ify` はどちらも
 `pub(crate)` なのでクレートの外から呼べない (`CODE src/rc_ir/borrow.rs: cancel`,
-`CODE src/rc_ir/borrow.rs: borrow_ify`、P15)。よって本体 `B` について、A19 の
+`CODE src/rc_ir/borrow.rs: borrow_ify`、EXT 可視性と私有性、P15)。よって本体 `B` について、A19 の
 「`borrow_ify` がそれを写した各本体」の側と P14a が使える。
 
 ## 2. 局所の定義
@@ -1981,19 +1982,34 @@ op とオペランド、`Var` の変数、`Match` の scrutinee)、**`Destructur
         変数の型) である。
     <3>1. `ty(w)` について、D4 の第 5 規則が当たる。すなわち `ty(w)` は `is_fully_unboxed` でも
           `is_closure` でも `is_box` でも `is_array` でもない。
-      BY <ref id=83d98e9/>, <ref id=8412761/>, <ref id=0594f24/>, 本場合の仮定, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
+      BY <ref id=83d98e9/>, <ref id=8412761/>, <ref id=3d4be43/>, <ref id=0594f24/>, 本場合の仮定, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
          CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_struct,
          CODE src/ast/types.rs: TypeNode::is_union, CODE src/ast/types.rs: TypeNode::is_array,
-         CODE src/ast/types.rs: TypeNode::is_funptr, CODE src/fixstd/builtin.rs: bulitin_tycons
+         CODE src/ast/types.rs: TypeNode::is_funptr,
+         CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+         CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+         CODE src/fixstd/builtin.rs: is_array_tycon, is_funptr_tycon, make_array_tycon, make_funptr_tycon,
+         CODE src/fixstd/builtin.rs: bulitin_tycons
       `ty(w).is_box` が偽であることは本場合の仮定である。A12 は「`Match` の scrutinee が union であること、
       `Destructure` の容器が構造体であること」を述べ、README の A12 は「**この仮定が型の `variant` を
       述べる各節では、その型の `is_closure()` は偽である。**」と続けるので `ty(w).is_closure` は偽で
       ある。
-      `is_struct` と `is_union` はその型の `TyConInfo` の `variant` が `Struct` か `Union` であることで
-      あり、`Std::Array` の `variant` は `Array`、`Std::#FunPtr{n}` の `variant` は `Primitive` なので、
-      `ty(w)` については `is_array` も `is_funptr` も偽である
-      (`CODE src/fixstd/builtin.rs: bulitin_tycons` -- `make_array_tycon` と `make_funptr_tycon` に
-      与える `TyConInfo`)。`is_fully_unboxed` は、`is_box`・`is_closure`・`is_array` のいずれでもなく
+      `is_struct` と `is_union` の本体は `toplevel_tycon_info(type_env).variant` を `Struct` か `Union` と
+      照合するので、A12 より `ty(w)` の最上位の tycon の項目の `variant` は `Struct` か `Union` である。
+      **`is_array` と `is_funptr` の本体は tycon そのものを見る** -- `is_array` の本体は
+      `self.toplevel_tycon_satisfies(is_array_tycon)`、`is_funptr` の本体は
+      `self.toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())` であり、
+      `toplevel_tycon_satisfies` は最上位の tycon にその述語を当て、`is_array_tycon(tc)` は
+      `*tc == make_array_tycon()`、`is_funptr_tycon(tc)` は `tc.name.namespace` が `Std` の 1 段で
+      `tc.name.name` が `FUNPTR_NAME` で始まり残りが数として読めることである。**その 2 つが真ならば
+      `variant` は `Struct` でも `Union` でもない** -- A28 は「`E.tycons()` の項目のうち、鍵が
+      `bulitin_tycons()` の置く鍵のいずれかであるものは、`bulitin_tycons()` がその鍵の下に置いた項目で
+      ある。**とくに `make_array_tycon()` の項目と、`tc.name.namespace` が `Std` の 1 段であって
+      `tc.name.name` が `FUNPTR_NAME` (`"#FunPtr"`) で始まる鍵の項目 (`make_funptr_tycon(n)`、`n` は
+      1 以上 `FUNPTR_ARGS_MAX` 以下) がそうである。**」と述べ、`bulitin_tycons()` が
+      `make_array_tycon()` に与える `TyConInfo` の `variant` は `Array`、`make_funptr_tycon(arity)` に
+      与えるものは `Primitive` である。よって `ty(w)` については
+      `is_array` も `is_funptr` も偽である。`is_fully_unboxed` は、`is_box`・`is_closure`・`is_array` のいずれでもなく
       `is_funptr` でもない型について、`unpunched_field_types` の各フィールドの型が `is_fully_unboxed` で
       あることと同値である。A10 より、`ty(w)` の `unpunched_field_types` の歩みは abort せず有限である。
       A12 より `Destructure` が名指すフィールドと `Match` が名指す変位は punched でなく、その型は `ty(u)` に
