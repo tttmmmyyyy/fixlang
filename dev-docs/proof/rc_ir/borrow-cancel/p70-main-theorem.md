@@ -949,8 +949,9 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 
 右の欄は、README がその仮定を**読む者**として名指すものを挙げる。読む者として定義も命題も
 ほかの仮定も名指されていない仮定については、README がその仮定を名指す節、またはその仮定自身の項が
-挙げる読み手を書く。**README がどこにも読み手を名指さない仮定 -- A27・A28・A29・A30 -- については、
-その番号を証明ファイルの全体に走らせて拾った読み手を書き、拾えなければそのことを書く。**
+挙げる読み手を書く。**この 2 つのどちらからも読み手が出ない仮定は A7 と A15 である** -- その 2 つに
+ついては、その番号を証明ファイルと `report.md` の全体に走らせて拾った読み手を書く。
+**A27・A28・A29・A30 はこの 2 つ目の側である** -- 4 つとも自分の項が読み手を名指す。
 
 **2 つの欄は README を機械的に走査して埋める。** 行の集合は、README の第 4 節の中で
 `**A<番号> (` で始まる行を切り出して決める。果たす者の欄はその仮定の項の「果たす者」と「検査」を
@@ -962,7 +963,8 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 **拾った出現のうち読み手として写すのは、その仮定を支えとして読む者 -- 定義、仮定、命題、証明ファイルの
 段 -- である。** `report.md` の第 7 節の表の行が「(… の下で)」の形でその仮定を挙げるときは、その行の命題が
 読み手であり、その命題自身の項が同じことを述べていなければここへ写す。`report.md` の「発見」の節から
-後は証明の外の記録なので、そこにしか読み手が無い仮定 (A7) を除いて写さない。**その仮定が引かれていない出現も
+後は証明の外の記録なので、そこからは写さない。A7 の欄がその第 8 節を挙げるのは、上の第 3 の規則で
+走らせた先にそれが在るからである。**その仮定が引かれていない出現も
 写さない** -- 「P18a は A1・A2・D12 だけからは出ない」のように、その仮定だけでは足りないと述べる文が
 それである。
 
@@ -974,7 +976,7 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 | **A4** | コード生成の忠実さ | **誰も** | D29、D30。「活性化の側も要る」の節は `p50-observation.md` の `L5` と `L6` が読む |
 | A5 | 型が leaf の上位近似。`#ArrayStorage` のオブジェクトについては、持ち手の単位は leaf ではなくスロットである | `leaf_map.rs` の設計 | D16 (null ポインタの leaf を数えない節)、D21 (開始の時点で A19 (i) の不等式が出ること)、D24 の「相殺しないもの」の節 (`InlineLLVMArrayAppendCapacityUnchecked` の共有の腕が持ち手を書き込む先)、D25、D29 (対応するオブジェクトが保持する値の節)、P7a、A19 (i) |
 | A6 | 名前の一意性 | lowering | D6、P9、A11、P2a の言明 (その `vars` を作る本体が A6 と A11 を満たすこと)、層 1 の命題 P1-P7 (`borrow_ify` の出力については P9 と合わせて読む)。A2 の項が「A6・A9・A13 を上流について読む段は、この節を引く」と書く |
-| A7 | 呼び出し先の解決 | `resolve_callee_params` の設計 | `report.md` の第 8 節 (#551 の 1 件目の直しが健全な近似である根拠) |
+| A7 | 呼び出し先の解決 | `resolve_callee_params` の設計 | README は読み手を名指さない。番号で走らせると `p51-runs.md` (`resolve_callee_params` が `None` を返す位置を所有として扱う節)、`p40-cancel-soundness.md` (D9 の行が名指す集合との包含)、`p15-ownership-uniformity.md` の `R1` と `R2` の表、`report.md` の第 8 節 (#551 の 1 件目の直しが健全な近似である根拠) |
 | A8 | グローバルは線形規律の外 | `mark_global` | D6 (記号の位置が指す先)、D26、D24 の (E7)、P27 の系 |
 | A9 | `Match` はアームを持つ | lowering (検査は develop mode の `validate` の `check_rhs`) | P16。A2 の項が「A6・A9・A13 を上流について読む段は、この節を引く」と書く |
 | A10 | 型の well-formedness | 大きさの部分は `validate_layouts` (elaboration で必ず走る。最適化が作る型の再検査は develop build だけ)。**飽和を果たすのは kind の体系である** -- 宣言された型の kind は `Scheme::check_kinds` が検査して診断を出し、式の型は kind `*` を持つ。README の第 4 節の冒頭はこれを「構成上そうなる」の段に置く。**`validate_layouts` は飽和を検査しない** -- その走査自身が `no_size_reason` から `held_types` を経て `declared_field_types` に入るので、飽和していない型に出会えば診断を出さずに同じ `assert` で止まる。`declared_field_types` の `assert!(merge_ok)` を通すのは `TypeDefn::validate_tyvars` であり、`Program::validate_type_defns` がすべての型宣言に掛ける | P1 の言明、A12。A10 自身の項が `boxed_leaf_paths` と `rc_units` の停止性を挙げる |
@@ -982,7 +984,7 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 | **A12** | 束縛の形と型が合っている | **誰も** (項の見出し)。ただし `RcFunc` の欄の整合については `Lowerer::lower_lambda_as_function` が果たし、箇条ごとにも果たす者が居る -- `Llvm` 節点の `args` の名前の列は演算を作る側 (検査: develop mode の `validate` の `check_rhs`)、`Llvm` 節点の型についての残る 3 つは `struct_punch`・`struct_set` と `struct_plug_in`・`struct_get` と `union_as` が結果の型に取る形。punched でないことを検査するコードは無い | D6 (束縛を持たない `RcVar` の型)、A3。union の側の節の読み手として `p12-identity-and-consumes.md` の `L4` を挙げる。A12 自身の項が P2 と `held_field_type`、`rhs_consumes` の停止性を挙げる |
 | A13 | 名前の形 | `Lowerer::fresh_var` と `clone_fresh` (検査は develop mode の `check_clone_names_are_fresh`) | D6 (束縛を持たない名前の 2 種)、P3・P4 (`borrow_ify` の入力について示されている理由)、P9 の後半、P14b、P14 と P14a (`report.md` の第 7 節)。A2 の項が「A6・A9・A13 を上流について読む段は、この節を引く」と書く。このファイルの `<1>10` の `<2>1a` |
 | A14 | 適用は飽和している (`App` の `args` の個数は呼び出し先のパラメータの個数に**等しい**) | 型検査と lowering (検査は `Generator::apply_lambda` の `assert_eq!`) | A14 自身の項が両向きの読み手を挙げる -- 以下は `call_rc` と `rhs_consumes` の `params[arg_idx]`、以上は D10 の初期値 |
-| A15 | `grow_stack` は閉包をちょうど 1 回呼ぶ | `stacker` crate | A15 自身の項が「`src/` の `grow_stack(` の呼び出し元を数え上げて決める」と述べる |
+| A15 | `grow_stack` は閉包をちょうど 1 回呼ぶ | `stacker` crate | README は読み手を名指さない。番号で走らせると、本体を `grow_stack` で包む再帰関数が包まない場合と同じ回数だけ各位置を訪れることを読む段が拾える -- このファイルでは `<1>10` の `<2>3b` (`drop_nodes` が `drop_nodes_inner` をちょうど 1 回呼ぶこと) |
 | A16 | `Match` のアームは scrutinee のタグを尽くす | 型検査の網羅性検査 (`Pattern::validate_match_cases_exhaustiveness`)、Bool の 2 つのタグを直に出す lowering (`Lowerer::lower_if`)、およびアームの列を保つ後段のパス。catch-all の位置についてはコード生成が果たす。(**検査: 無し**) | **P3・P4 は直に引く。** **P5 (a) と P6 は `p12-identity-and-consumes.md` の `L1b` を経由する** |
 | A17 | 環境の契約 | 環境のコード -- `build_main_function`、`ExportStatement::implement`、`implement_rc_global` (**検査: 無し**)。(ii-b) と (ii-c) はそれぞれ別の果たす者を持つ -- (ii-b) は「果たす者: `FFI_CALL` が呼ぶコードを書く側。検査: 無し」、(ii-c) は「果たす者: その外部のコードを書く側。検査: 無し」 | D21 (`H` の外から来る増減)、D24 の「実行の最初の時点」・(E2) の段の不可分性・(E8)・(E9)、D25 (環境が持ち込むオブジェクトを割り当てた素動作がこの実行に無いこと)、D30 (環境が持ち込む値の関数の欄)、A3 (`InlineLLVMBoxedFromRetainedPtrIOS` の節が (i-b) と (i-d) を読む)、P27 の言明。(i-c) の「環境が持ち込むオブジェクトは有限個である」は `p51-runs.md` の `L5` (d)。(i-d) の「読む者は `p05-holders.md` の第 1.4 節 (生きているオブジェクトの集合の推移) と `p51-runs.md` の `L2` である」。(i-d) の 3 か所を挙げる節は `p50-observation.md` の `L9b`・`L10`。(ii-b) の「読む者は `p11-origin-soundness.md` の `L10` である」と、「読む者は `p50-observation.md` の `L0` である」。A27 が (ii-b) を読む -- 「環境がこの欄を書かないことは A17 (ii-b) が言う」。(ii-c) の retain の側を読むのは、`p51-runs.md` の `L2b` (b) を読む段である (**閉じるのに使うのは `L2` (a-1) である** -- README は「`L2` と `L2b` は 1 字違いでどちらも節 (b) を持つので、名前だけで引くと別の言明に着く」と書く) |
 | **A18** | 残るものについての 2 つの仮定 -- 生きているオブジェクトのグラフの非巡回性と、グローバル状態のオブジェクトが計数下の参照を持たないこと | **誰も** | P27 の言明の前提。使うのは (R3) だけ (A18 自身の項) |
@@ -995,7 +997,7 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 | A25 | 骨格は `Retain`/`Release` を持たない | lowering と `simplify` (検査は `RcInserter::insert_into_expr_inner` の `panic!`) | `p60-insert-rc.md` のうち、`RcExpr::Retain` / `RcExpr::Release` を作る式を数え上げる段。README は述語で書き、一覧でも数でも書かない -- 「**一覧でなく述語で書くのは、段が増えるたびに一覧が古くなるからである。** **数も書かない** -- 数は一覧と同じだけ古くなる。」 |
 | A26 | 節点は、読んでから手放す | コード生成 (**検査: 無し**) | `p20-borrow-ify.md` の P14 の (S-c) の節。「読んだオブジェクトはその参照が作られるまで生き延びる」は `p51-runs.md` の `L2b` -- (S-c) が与えるのは読みの直前の点であり、`L2b` が要るのは参照を作る動作の直前の点である |
 | **A26a** | `FFI_CALL` の C 関数名は記号名と衝突しない | **誰も** (**検査: 無し**) | `p51-runs.md` の `L0d` -- 単位が定義しない記号の宣言が、その単位で別のものへ解決されないことをこの仮定が与える |
-| A27 | 状態の欄を書くのは 3 つの生成コードだけ | 下の `SCAN` -- 「在りかを述語で書き、その述語を機械が走らせて要素を挙げる」 | README は読み手を名指さない。番号で走らせると `p50-observation.md` -- 状態の欄がどう動くかを追う段が読む |
+| A27 | 状態の欄を書くのは 3 つの生成コードだけ | 下の `SCAN` -- 「在りかを述語で書き、その述語を機械が走らせて要素を挙げる」 | A27 自身の項が挙げる -- `p50-observation.md` の `L0` (状態の欄がどう動くかを追う段) |
 | A28 | 組み込みの tycon の項目は組み込みが置いたもの | 下の 3 つの `SCAN` | 組み込みの型について `is_array` / `is_funptr` / `is_fully_unboxed` を読む段 -- `p10-leaves-and-units.md` の `<1>3ba`、`p12-identity-and-consumes.md` の `L3a`、`p60-insert-rc.md` の `L13a` `<1>3` |
 | A29 | オペランドを適用する op の在りか | 下の `SCAN` | `p05-holders.md` -- 適用した関数の中で作られた参照がどの op から出るかを絞る段 |
 | A30 | 段の中で相殺する retain と release の順序 | コード生成 (**検査: 無し**) | `p05-holders.md` -- 素動作の粒度で `Obl` を勘定する段 |
@@ -1018,7 +1020,7 @@ valgrind の下で走るテストを、A24 については `Lowerer::lower_llvm`
 検査が無い。
 
 **README が「検査: 無し」と書き、かつ果たす者が居るのは A13 (`clone_fresh` が作る名前の節)・A16・A17・
-A19・A20・A21・A22・A23・A26・A30 の 10 個である。** **この一覧は、上の表の全行に「果たす者の欄が
+A19・A20・A21・A22・A23・A26・A30・A31 の 11 個である。** **この一覧は、上の表の全行に「果たす者の欄が
 『誰も』でなく、かつ検査の欄に『無し』が現れる」を当てて決まる。** A13 の主項目自体は develop mode の
 `check_clone_names_are_fresh` を検査に持つが、その項の中の `clone_fresh` の counter についての節
 だけは別に「検査: 無し」を書く。A18 (b) と A26a にも「検査: 無し」と書いてあるが、その 2 つは
@@ -1059,8 +1061,17 @@ README の第 4 節が、果たす作業の状態として次の 4 つを述べ�
 - 「**(i) も閉じた**」。README はその括弧に P28 (b) を置く。
 
 **よって A19 の 3 節はどれも支えを持つ。** (ii-a) を果たすのは `insert_rc`・`split_rc_units`・
-`borrow_ify` の 3 人であり、(ii-b) は無条件に閉じており、(ii-c) を果たすのは `insert_rc` と
-`borrow_ify` の 2 人である。T の前提 H3 が A19 を束ねる先は、この形の A19 である。
+`borrow_ify` の 3 人であり、(ii-b) は無条件に閉じている。
+
+**(ii-c) について README と `report.md` は数え方が違う。** README の (ii-c) の項が果たす者に挙げるのは
+`insert_rc` (`p60-insert-rc.md` の `L19` (d)) と `borrow_ify` (`p20-borrow-ify.md` の第 13 節) の
+2 人であり、上の 2 つの引用はそこへ `split_rc_units` の段 (同じ `p60-insert-rc.md` の `L31a`) を
+足して 3 人と数える。`insert_rc` の側について README が挙げるのは `L19` (d)、`report.md` が挙げるのは
+`L30` (b) であり、どちらも `p60-insert-rc.md` の中である。**この節の表は README の第 4 節の言葉を
+写すので、A19 の行には 2 人を書く。** README が (ii-a) と (ii-b) の形について、`split_rc_units` を
+(ii-a) を保つ側として別に数えるのと同じ形である。**どちらの数え方でも (ii-c) に
+支えが在ることは変わらない。** T の前提 H3 が取るのは A19 が成り立つことであって果たす者の人数では
+ないので、H3 が A19 を束ねる先はどちらの数え方でも同じである。
 
 ## 4. T が届かないところ
 
