@@ -1258,6 +1258,9 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
   BY CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr,
      CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
      CODE src/ast/types.rs: TypeNode::toplevel_tycon, TypeNode::toplevel_tycon_info,
+     CODE src/ast/types.rs: TyCon, TyCon::new,
+     CODE src/ast/name.rs: FullName::from_strs, CODE src/ast/name.rs: NameSpace::from_strs,
+     CODE src/ast/name.rs: NameSpace::new,
      CODE src/fixstd/builtin.rs: make_array_tycon, make_array_name, is_array_tycon, is_funptr_tycon,
      CODE src/constants.rs: STD_NAME, ARRAY_NAME, FUNPTR_NAME
 
@@ -1267,13 +1270,14 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
       `STD_NAME` ただ 1 つであり、その名前は `FUNPTR_NAME` の後ろに `n` の 10 進表記
       (`u32::to_string` の値) を続けたものである。
   BY CODE src/fixstd/builtin.rs: bulitin_tycons, make_array_tycon, make_funptr_tycon, make_funptr_name,
+     CODE src/ast/name.rs: FullName::from_strs, CODE src/ast/name.rs: NameSpace::from_strs,
      CODE src/constants.rs: STD_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME
 
 <1>3. `type_env.tycons()` の項のうち、鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは、
       `bulitin_tycons()` がその鍵の下に置いた項である。とくに鍵 `make_array_tycon()` の項がそうであり、
       名前空間が `STD_NAME` ただ 1 つで名前が `FUNPTR_NAME` で始まる鍵は `make_funptr_tycon(n)`
       (`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下) であって、その項もそうである。
-  BY <ref id=3d4be43/>
+  BY <ref id=3d4be43/>, CODE src/constants.rs: STD_NAME
 
 <1>4. (a) が成り立つ。
   `τ` の最上位の tycon を `tc` とし、`tc` が `type_env.tycons()` の鍵であるとする。`<1>1` より
@@ -1929,6 +1933,10 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       `Llvm` 節点はオペランドを 1 つも持たない。返せるオペランドのオブジェクトが無いので、`gen` は
       A3 の但し書きが述べる op ではない。
 
+      **プログラムは `std.fix` とこの関数 `f` だけからなるものを取る。** よって `Std` の名前空間に
+      型を宣言するのは `std.fix` だけであり、0 要素のタプルの型宣言を `type_defns` に積むのは
+      `Program::add_tuple_defns` だけである。
+
       `f` のパラメータは `c : Bool` の 1 つ、capture は無く、`borrowed_units` は空 (A1) である。本体は
       次のとおりで、`m`・`x_0`・`x_1` は型 `T`、`p_0`・`p_1` は `()` である。
 
@@ -1990,13 +1998,16 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
   `Program::add_tuple_defn` を通じて `tuple_defn(size)` を `type_defns` に積み、
   `Program::calculate_type_env` は各型宣言について `type_decl.tycon()` -- `TypeDefn` の `name` を名前に
   持つ `TyCon` -- を鍵に `type_decl.tycon_info(&[])` を入れる。`NameSpace` の `PartialEq` と `Hash` は
-  `is_absolute` を読まないので、absolute かどうかは鍵の一致に効かない。`TypeDefn::tycon_info` は
+  `is_absolute` を読まないので、absolute かどうかは鍵の一致に効かない。`calculate_type_env` は既に
+  写像か型別名に在る tycon の宣言を `insert` へ進めないが、`<1>1` よりこの鍵を宣言するのは
+  `Program::add_tuple_defns` が積む `tuple_defn(0)` だけである。`TypeDefn::tycon_info` は
   `TypeDeclValue::Struct(s)` の腕で `(TyConVariant::Struct, s.is_unbox, s.fields.clone())` を置き、
   `tuple_defn(0)` の `fields` は `(0..0)` を写した列なので空、`is_unbox` は `TUPLE_UNBOX` である。
 
   (iii) について。`<1>1` より `Bool` は `std.fix` の `type Bool = unbox union { _false : (), _true : () };`
-  が宣言する型である。(ii) と同じく `Program::calculate_type_env` がその宣言の `tycon()` を鍵に
-  `tycon_info(&[])` を入れ、`TypeDefn::tycon_info` は `TypeDeclValue::Union(u)` の腕で
+  が宣言する型である。`<1>1` よりこの鍵を宣言するのは `std.fix` のこの 1 行だけであり、
+  `Program::calculate_type_env` がその宣言の `tycon()` を鍵に
+  `tycon_info(&[])` を入れる。`TypeDefn::tycon_info` は `TypeDeclValue::Union(u)` の腕で
   `(TyConVariant::Union, u.is_unbox, u.fields.clone())` を置く。宣言は `unbox` なので `is_unbox` は
   真であり、変位は `_false` と `_true` の 2 つでどちらも型 `()` である。
 
