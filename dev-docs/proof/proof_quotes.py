@@ -175,20 +175,8 @@ def citing_by(lines, line):
         if index > line and STEP_START.match(lines[index]):
             break
         if BY_LINE.match(lines[index]):
-            # **`BY` は 1 行とは限らない。** 続きの行は深く字下げされて並ぶので、そこも同じ
-            # `BY` として読む -- 1 行目しか見ないと、続きの行に在る引用が「挙げていない」に出る
-            # (実測で 2 件)。
-            indent = len(lines[index]) - len(lines[index].lstrip())
-            block, at = [lines[index]], index + 1
-            while at < len(lines):
-                following = lines[at]
-                if (not following.strip() or STEP_START.match(following)
-                        or BY_LINE.match(following)
-                        or len(following) - len(following.lstrip()) <= indent):
-                    break
-                block.append(following)
-                at += 1
-            return " ".join(block)
+            first, last = proof_syntax.by_block(lines, index)
+            return " ".join(lines[first:last])
     return None
 
 

@@ -2673,6 +2673,7 @@ citing	cited	read	citing_name	cited_name
 6e54a22	cbc4a1c	161e70d	p60-insert-rc.md:L30	README.md:D15
 6e54a22	dca1c02	2730a88	p60-insert-rc.md:L30	p60-insert-rc.md:L15
 6e54a22	e3436e8	b04bee5	p60-insert-rc.md:L30	README.md:D24
+6e54a22	eab5fd1	5078779	p60-insert-rc.md:L30	p60-insert-rc.md:L13
 6e54a22	ef8efc4	6cc5ae1	p60-insert-rc.md:L30	README.md:D14
 6e54a22	f06144e	ddb95b8	p60-insert-rc.md:L30	README.md:D10
 6e54a22	fd95f12	43f1db1	p60-insert-rc.md:L30	README.md:A26
@@ -3260,7 +3261,7 @@ citing	cited	read	citing_name	cited_name
 859cf84	e3436e8	b04bee5	README.md:D11a	README.md:D24
 8606f59	c7416c2	4d30613	p20-borrow-ify.md:L19	p15-ownership-uniformity.md:L13
 8606f59	d22b24a	9ecd441	p20-borrow-ify.md:L19	p20-borrow-ify.md:L4
-86b3f11	1aab97c	07abae6	p60-insert-rc.md:L7	p60-insert-rc.md:L5
+86b3f11	1aab97c	503e1c3	p60-insert-rc.md:L7	p60-insert-rc.md:L5
 86b3f11	94fad8e	65ad017	p60-insert-rc.md:L7	p60-insert-rc.md:L4
 86b3f11	9f1cf6c	63a22c7	p60-insert-rc.md:L7	README.md:A19
 86b3f11	dfb8eac	82f8694	p60-insert-rc.md:L7	p60-insert-rc.md:L6
@@ -4873,7 +4874,7 @@ dca1c02	66e786e	b0fff88	p60-insert-rc.md:L15	p60-insert-rc.md:L14
 dca1c02	8e3aff3	ff175cf	p60-insert-rc.md:L15	README.md:A2
 dca1c02	b3dfa37	0f5493f	p60-insert-rc.md:L15	README.md:D2
 dca1c02	cb35ab1	62a24cc	p60-insert-rc.md:L15	README.md:A13
-dca1c02	eab5fd1	bb97320	p60-insert-rc.md:L15	p60-insert-rc.md:L13
+dca1c02	eab5fd1	5078779	p60-insert-rc.md:L15	p60-insert-rc.md:L13
 dca1c02	eddc8aa	82f7b55	p60-insert-rc.md:L15	p60-insert-rc.md:L12
 dca1c02	ef8efc4	6cc5ae1	p60-insert-rc.md:L15	README.md:D14
 dcbb0cd	3d96eb8	e2e2c5a	README.md:None	README.md:D12

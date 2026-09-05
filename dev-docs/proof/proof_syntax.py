@@ -41,6 +41,33 @@ CROSS_FILE_PREFIX = re.compile(r"^(p\d\d)[A-Za-z0-9_-]*(?:\.md)?\s*の\s*")
 NOT_A_PROOF = "<!--not-a-proof-->"
 
 
+def by_block(lines, index):
+    """`BY` の行 `index` から始まる範囲 (半開区間)。
+
+    **続きの行は「より深く字下げされた行」で決める。書き出しの語では決めない** --
+    語の一覧で決めると、その一覧に無い書き出しの続きの行が黙って落ち、そこに在る引用が
+    トークンとしても数えられない (実測で 2 件が未分類にすら出ていなかった)。
+    """
+    indent = len(lines[index]) - len(lines[index].lstrip())
+    at = index + 1
+    while at < len(lines):
+        following = lines[at]
+        # **引用の列が続くのは、前の行が区切りで終わっているときだけである。** 区切りなしで終わった
+        # `BY` はそこで完結しており、その後ろの深い行はその段の説明の散文である。
+        if not lines[at - 1].rstrip().endswith((",", "、")):
+            break
+        if (not following.strip() or STEP.match(following) or BY.match(following)
+                or len(following) - len(following.lstrip()) <= indent):
+            break
+        at += 1
+    return index, at
+
+
+# 名札の名前。`BY` の中では読点までが 1 つの名札の名前であり、その中の `D12` のような綴りは
+# 項目への参照ではない -- 変換がそこを書き替えると、名札の名前が壊れる (実測で 1 件)。
+LABEL_NAME = re.compile(r"(?:DEF|EXT|前提)\s+[^,、\n]*")
+
+
 def is_step(line):
     """その行が段の見出しか。"""
     return bool(STEP.match(line))

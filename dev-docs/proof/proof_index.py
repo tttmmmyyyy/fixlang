@@ -501,20 +501,16 @@ STEP_LINE = proof_syntax.STEP
 def by_spans(text):
     """`BY` の行と、それに続く深く字下げされた行の、文字位置の範囲。"""
     lines = text.split("\n")
-    offset, spans, inside, indent, start = 0, [], False, 0, 0
+    starts, at = [], 0
     for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("BY "):
-            if inside:
-                spans.append((start, offset))
-            inside, indent, start = True, len(line) - len(line.lstrip()), offset
-        elif inside and (not stripped or STEP_LINE.match(line)
-                         or len(line) - len(line.lstrip()) <= indent):
-            spans.append((start, offset))
-            inside = False
-        offset += len(line) + 1
-    if inside:
-        spans.append((start, offset))
+        starts.append(at)
+        at += len(line) + 1
+    spans = []
+    for index, line in enumerate(lines):
+        if not proof_syntax.BY.match(line):
+            continue
+        first, last = proof_syntax.by_block(lines, index)
+        spans.append((starts[first], starts[last] if last < len(starts) else at))
     return spans
 
 
@@ -551,7 +547,9 @@ def convert(directory, path):
         done += 1
         return f"<ref id={identity}/>"
 
-    guarded = [m.span() for m in PROTECTED.finditer(text)]
+    # 引用・コード・再掲に加えて、**名札の名前**も守る。
+    guarded = sorted([m.span() for m in PROTECTED.finditer(text)]
+                     + [m.span() for m in proof_syntax.LABEL_NAME.finditer(text)])
     out, cursor = [], 0
     for start, stop in by_spans(text):
         out.append(text[cursor:start])

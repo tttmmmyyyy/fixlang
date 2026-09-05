@@ -174,14 +174,9 @@ def parse(text):
             by = BY.match(line)
             if not by:
                 continue
-            text_of_by = [by.group(1)]
-            for following in body[offset + 1:]:
-                if not text_of_by[-1].rstrip().endswith((",", "、")):
-                    break
-                if not re.match(r"^\s*(CODE|DEF|EXT|`?[A-Z]|`?<\d|\(H)", following):
-                    break
-                text_of_by.append(following.strip())
-            reasons.append(" ".join(text_of_by))
+            # 続きの行は字下げで決める。書き出しの語で決めると、一覧に無い書き出しの行が黙って落ちる。
+            first, last = proof_syntax.by_block(body, offset)
+            reasons.append(" ".join([by.group(1)] + [x.strip() for x in body[first + 1:last]]))
         head = "\n".join(body).strip()
         steps.append((level, number, list(path[:-1]), reasons,
                       bool(reasons) or has_substeps or defines,
