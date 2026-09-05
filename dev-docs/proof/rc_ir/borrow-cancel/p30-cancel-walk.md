@@ -3,14 +3,16 @@
 この文書は README の層 1 の命題 P2a と、層 3 の 4 命題 P15, P16, P17, P18 を証明する。README の
 「定義」の節が置く定義と「仮定」の節が置く仮定の上に立つ。P2a を除く層 1 の命題と、層 2 の命題は引用しない。
 
-この文書が読んだコードのコミットは `e5f2b9c79460be3ae60b46e3900267c36ac98692` である。README が証明の
+この文書が読んだコードのコミットは `7e9651a2eac6574b36b8b06e87d0b57f98d98953` である。README が証明の
 対象として名指すコミット `b6c51fb892746e493e155d9d59ea05d02d7357db` との間で、この文書の `CODE` 引用が
-名指すファイルは 20 個ある。そのうち 19 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
+名指すファイルは 22 個ある。そのうち 21 個 --- `src/rc_ir/borrow.rs`、`src/rc_ir/ownership.rs`、
 `src/rc_ir/ast.rs`、`src/rc_ir/provenance.rs`、`src/rc_ir/leaf_map.rs`、`src/rc_ir/rename.rs`、
 `src/ast/types.rs`、`src/ast/typedecl.rs`、`src/ast/name.rs`、`src/ast/program.rs`、
 `src/elaboration/typecheck.rs`、`src/elaboration/desugar_opaque.rs`、`src/parse/sourcefile.rs`、
-`src/misc.rs`、`src/build/build_object_files.rs`、`src/main.rs`、`src/object.rs`、
-`src/tool/log_file.rs`、`src/tests/test_util.rs` --- に変わったのは `// PROOF:` コメントだけである。
+`src/misc.rs`、`src/constants.rs`、`src/fixstd/builtin.rs`、`src/build/build_object_files.rs`、
+`src/main.rs`、`src/object.rs`、`src/tool/log_file.rs`、`src/tests/test_util.rs` --- に変わったのは
+`// PROOF:` コメントだけである。この一覧は、この文書の `CODE` の行から `src/` で始まるファイル名を
+抜き出して重複を落とす走査で作る。
 
 残る 1 個 `src/rc_ir/validate.rs` には、コメント以外の変更がある。`Validator::check_rhs` の署名が
 `(&mut self, x: &RcVar, rhs: &RcRhs)` になり、その `Llvm` の腕が `llvm_gen.result_prov(&x.ty, &arg_tys,
@@ -298,6 +300,14 @@ Rust Reference の "Pointer types" が共有参照について次を述べる。
 生じない反復子である。`f` は各要素についてちょうど 1 回、先頭から順に呼ばれ、生じる要素の順序は `it` の
 順序である。
 
+**EXT Iterator::filter**
+`it.filter(f)` は、`it` の各要素 `x` のうち `f(&x)` が真であるものだけを渡す反復子である。`f` は各要素に
+ついてちょうど 1 回、先頭から順に呼ばれ、渡される要素の順序は `it` の順序である。
+
+**EXT Iterator::zip**
+`a.zip(b)` は、`a` の第 `i` 要素と `b` の第 `i` 要素の組を `i` の小さい順に渡す反復子である。渡す組の
+個数は、`a` の要素数と `b` の要素数の小さい方である。
+
 **EXT Iterator::fold と rev**
 `it.fold(init, f)` は、累積値を `init` から始め、`it` が渡す各要素 `x` について累積値を
 `f(累積値, x)` で置き換え、最後の累積値を返す。`f` は各要素についてちょうど 1 回、`it` の順序で呼ばれる。
@@ -333,6 +343,8 @@ Rust Reference の "Pointer types" が共有参照について次を述べる。
 - `m.keys()` は `m` の各鍵への共有参照をちょうど 1 度ずつ渡す反復子であり、`m.keys().cloned()` は
   その各鍵の複製をちょうど 1 度ずつ渡す。順序は定めない。
 - `&m` の反復と `m.iter()` はどちらも `m` の各 (鍵, 値) の対をちょうど 1 度ずつ渡す。順序は定めない。
+- `m1 == m2` は、`m1` の鍵の集合が `m2` の鍵の集合に等しく、その各鍵について `m1` の値と `m2` の値が
+  等しいことと同値である。すなわち `Map` の等号は、鍵と値の対の集合の一致である。
 
 **EXT collect into Map と Set**
 `it.collect::<Map<K, V>>()` は、空の `Map` に `it` の各要素 `(k, v)` を `insert` で順に加えたものである。
@@ -534,6 +546,28 @@ enum については元と同じ変位で、その変位が保持する各値を
        CODE src/rc_ir/ownership.rs: as_arg_projection,
        CODE src/rc_ir/ownership.rs: truncate_to_unit, CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths,
        CODE src/rc_ir/ownership.rs: Origin::identity, CODE src/rc_ir/ownership.rs: Origin::candidates
+  <2>3a. `Provenance::leaf_origins_at` と `Provenance::leaf_origins_under` は内部可変性を持つ値に
+         触れず、前者の返り値と後者が渡す要素の集合は、引数の `Provenance` の値と引数の path で決まる。
+         `Provenance` の欄は `LeafMap<LeafOrigins>` 1 つ、`LeafMap<T>` の欄は `Map<FieldPath, T>`
+         1 つであり、`FieldPath` は `Vec<usize>`、`LeafOrigins` は `Set<LeafOrigin>`、`LeafOrigin` の
+         3 変位が保持するのは `usize` と `FieldPath` だけである。この数え上げに `RefCell`・`Cell`・
+         `OnceCell`・`OnceLock`・`Mutex`・`RwLock`・`UnsafeCell`・`Atomic*` を含む欄は現れない。
+         `Provenance::leaf_origins_at(path)` の本文は `self.0.get(path)`、`LeafMap::get(path)` の
+         本文は `self.0.get(path)` なので、EXT Map と Set よりその返り値は表と `path` で決まる。
+         `Provenance::leaf_origins_under(path)` の本文は `self.0.leaves_under(path)`、
+         `LeafMap::leaves_under(path)` の本文は
+         `self.0.iter().filter(move |(leaf_path, _)| leaf_path.starts_with(path)).map(|(_, fact)| fact)`
+         なので、EXT Map と Set・EXT Iterator::filter・EXT Iterator::map と collect・
+         EXT スライスの接頭と先頭 より、渡す要素の集合は表と `path` で決まる。`Map` の反復の順序は
+         定めないので、この 2 つ目について決まるのは並びではなく元の集合である。
+    BY CODE src/rc_ir/provenance.rs: Provenance,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
+       CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+       CODE src/rc_ir/provenance.rs: LeafOrigin, CODE src/rc_ir/provenance.rs: LeafOrigins,
+       CODE src/rc_ir/leaf_map.rs: LeafMap, CODE src/rc_ir/leaf_map.rs: LeafMap::get,
+       CODE src/rc_ir/leaf_map.rs: LeafMap::leaves_under, CODE src/rc_ir/ast.rs: FieldPath,
+       EXT Map と Set, EXT Iterator::filter, EXT Iterator::map と collect,
+       EXT スライスの接頭と先頭, DEF 引数で決まる関数
   <2>4. <2>3 の 8 つのうち 6 つ --- `TypeNode::is_box`、`Provenance::leaf_origins_at`、
         `Provenance::leaf_origins_under`、`as_arg_projection`、`Origin::identity`、
         `Origin::candidates` --- は内部可変性を持つ値に触れない。その本文は引数から到達できる値だけを
@@ -545,16 +579,27 @@ enum については元と同じ変位で、その変位が保持する各値を
         4 つの腕であり、`Type::TyCon(tc)` の腕が `tc.clone()` を、`Type::TyApp(fun, _)` の腕が `fun` の
         `toplevel_tycon` を返し、`Type::TyVar` と `Type::AssocTy` の腕が `None` を返す。
         `make_arrow_name_abs` は引数を取らず、定数の名前から `FullName` を組み立てる。
-        `toplevel_tycon_info` の本文は `type_env.tycons().get(&tycon).unwrap()` であり、その鍵の型
-        `TyCon` は `FullName` の欄を 1 つ持つだけであり、`FullName` と `NameSpace` の手書きの `Hash` が
-        読むのは `Vec<String>` と `String` だけなので、内部可変性を持たない。残る 5 つは引数の
-        `Provenance`・`Set<LeafOrigin>`・`Origin` を読むだけである。よってこの 6 つの返り値は引数の値で
-        決まる。**そのうち 2 つは、並びではなく元の集合が決まる。**
+        `toplevel_tycon_info` の本文は 3 つの文である --- `assert!(!self.is_closure());`、
+        `let tycon = self.toplevel_tycon().unwrap();`、そして末尾式
+        `type_env.tycons().get(&tycon).unwrap()` である。この 3 つはどれも欄への書き込みを行わない。
+        表の鍵の型 `TyCon` は `FullName` の欄を 1 つ持つだけであり、`FullName` と `NameSpace` の
+        手書きの `Hash` が読むのは `Vec<String>` と `String` だけなので、内部可変性を持たない。
+        `Provenance` の 2 つについては <2>3a が与える。残る 3 つ --- `as_arg_projection`、
+        `Origin::identity`、`Origin::candidates` --- が読むのは引数の `Set<LeafOrigin>` と `Origin` だけで
+        ある。`as_arg_projection(sources)` の本文は、`sources.len() != 1` のとき `None` を返し、
+        そうでないときその唯一の元が `LeafOrigin::Arg(j, p)` なら `Some((*j, p.clone()))`、
+        `LeafOrigin::Fresh` か `LeafOrigin::Unknown` なら `None` を返すものである。`Origin::identity` の
+        本文は `Origin::Exactly(p)` の腕が `p` を、`Origin::Join { identity, .. }` の腕が `identity` を
+        返す match、`Origin::candidates` の本文は `Origin::Exactly(p)` の腕が `vec![p]` を、
+        `Origin::Join { candidates, .. }` の腕が `candidates.iter().collect()` を返す match である。
+        `LeafOrigin` の 3 変位が保持するのは `usize` と `FieldPath`、`Origin` の 2 変位が保持するのは
+        `VarPath` と `Set<VarPath>` であり、どちらの型も内部可変性を持つ欄を持たない。よってこの 6 つの
+        返り値は引数の値で決まる。**そのうち 2 つは、並びではなく元の集合が決まる。**
         `Provenance::leaf_origins_under` の doc は、渡す要素を `in no particular order`
         と述べるので、引数で決まるのは渡す要素の集合である。`Origin::candidates` は `Join` の変位に
         ついて `Set` の反復から `Vec` を作り、EXT Map と Set は `Set` の反復の順序を定めないので、
         引数で決まるのはその元の集合である。
-    BY <2>3, EXT Map と Set, CODE src/ast/types.rs: TypeNode::is_box,
+    BY <2>3, <2>3a, EXT Map と Set, CODE src/ast/types.rs: TypeNode::is_box,
        CODE src/ast/types.rs: TypeNode::is_unbox, CODE src/ast/types.rs: TypeNode::is_closure,
        CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
        CODE src/ast/types.rs: TypeNode::toplevel_tycon, CODE src/ast/types.rs: Type,
@@ -563,6 +608,8 @@ enum については元と同じ変位で、その変位が保持する各値を
        CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: NameSpace,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_at,
        CODE src/rc_ir/provenance.rs: Provenance::leaf_origins_under,
+       CODE src/rc_ir/provenance.rs: LeafOrigin, CODE src/rc_ir/ownership.rs: Origin,
+       CODE src/rc_ir/ast.rs: VarPath, CODE src/rc_ir/ast.rs: FieldPath,
        CODE src/rc_ir/ownership.rs: as_arg_projection, CODE src/rc_ir/ownership.rs: Origin::identity,
        CODE src/rc_ir/ownership.rs: Origin::candidates, DEF 引数で決まる関数
   <2>5. 残る 2 つ --- `boxed_leaf_paths` と `truncate_to_unit` --- は触れる。**この 2 つが引数として
@@ -579,17 +626,26 @@ enum については元と同じ変位で、その変位が保持する各値を
           `Arc<Set<TyCon>>` であり、`TyConInfo` の 8 欄は `Arc<Kind>`、`TyConVariant`、`bool`、
           `Vec<Arc<TyVar>>`、`Vec<Field>`、`Option<Span>`、`Option<String>`、`Option<TyCon>`、
           `TyAliasInfo` の 4 欄は `Arc<Kind>`、`Arc<TypeNode>`、`Vec<Arc<TyVar>>`、`Option<Span>`、
-          `Field` の 6 欄は `Name`、`Arc<TypeNode>` 2 つ、`bool`、`Option<Span>` 2 つである。
-          `TypeNode` の 5 欄は `Type`、`TypeInfo`、および 3 つの `OnceLock` であり、`TypeInfo` の
+          `Field` の 6 欄は `Name` (`String`)、`Arc<TypeNode>` 2 つ、`bool`、`Option<Span>` 2 つで
+          ある。`TypeNode` の 5 欄は `Type`、`TypeInfo`、および 3 つの `OnceLock` である。
+          **`Type` の 4 変位が保持するのは、`Arc<TyVar>`、`Arc<TyCon>`、`Arc<TypeNode>` 2 つ、そして
+          `AssocType` と `Vec<Arc<TypeNode>>` である。** `TyVar` の 2 欄は `Name` と `Arc<Kind>`、
+          `Kind` の 2 変位が保持するのは `Arc<Kind>` 2 つ (`Star` は何も保持しない)、`TyCon` の 1 欄と
+          `AssocType` の第 1 欄は `FullName`、`AssocType` の第 2 欄は `Option<Span>` である。
+          `FullName` の 2 欄は `NameSpace` と `String`、`NameSpace` の 2 欄は `Vec<String>` と `bool`、
+          `TyConVariant` の 8 変位はどれも値を保持しない。`TypeInfo` の
           1 欄は `Option<Span>`、`Span` の 3 欄は `SourceFile`、`usize` 2 つ、`SourceFile` の 3 欄は
-          `PathBuf` と `Arc<Mutex<Option<String>>>` 2 つである。この閉包の中で上の数え上げに当たるのは、
-          `TypeNode` の 3 つの `OnceLock` と `SourceFile` の 2 つの `Mutex` だけである。
+          `PathBuf` と `Arc<Mutex<Option<String>>>` 2 つである。挙げた型の欄のうち上の数え上げに
+          当たるのは、`TypeNode` の 3 つの `OnceLock` と `SourceFile` の 2 つの `Mutex` だけである。
       BY CODE src/rc_ir/leaf_map.rs: boxed_leaf_paths, CODE src/rc_ir/ownership.rs: truncate_to_unit,
          CODE src/rc_ir/ownership.rs: unit_step, CODE src/ast/program.rs: TypeEnv,
          CODE src/ast/types.rs: TyConInfo, CODE src/ast/types.rs: TyAliasInfo,
          CODE src/ast/types.rs: Kind, CODE src/ast/types.rs: TyConVariant,
          CODE src/ast/types.rs: TyVar, CODE src/ast/typedecl.rs: Field,
          CODE src/ast/types.rs: TypeNode, CODE src/ast/types.rs: TypeInfo,
+         CODE src/ast/types.rs: Type, CODE src/ast/types.rs: TyCon,
+         CODE src/ast/types.rs: AssocType, CODE src/ast/name.rs: Name,
+         CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: NameSpace,
          CODE src/parse/sourcefile.rs: Span, CODE src/parse/sourcefile.rs: SourceFile,
          CODE src/rc_ir/ast.rs: FieldPath, DEF このクレート
     <3>2. `SourceFile` の 2 つの memo は、`TypeNode` の値の等しさを動かさない。
@@ -613,9 +669,19 @@ enum については元と同じ変位で、その変位が保持する各値を
       BY <3>1, CODE src/ast/types.rs: TypeNode::set_source_if_none,
          CODE src/ast/types.rs: TypeNode::set_source,
          CODE src/ast/types.rs: TypeNode::get_source, CODE src/ast/types.rs: TypeNode
-    <3>5. `toplevel_tycon_info` は `type_env` の表を読むだけで、何も書かない。その本文は
-          `type_env.tycons().get(&tycon).unwrap()` であり、`TypeEnv::tycons` は表への共有参照を返す。
-      BY CODE src/ast/types.rs: TypeNode::toplevel_tycon_info, CODE src/ast/program.rs: TypeEnv::tycons
+    <3>5. `toplevel_tycon_info` は `type_env` の表を読むだけで、何も書かない。その本文は 3 つの文で
+          ある --- `assert!(!self.is_closure());`、`let tycon = self.toplevel_tycon().unwrap();`、
+          そして末尾式 `type_env.tycons().get(&tycon).unwrap()` である。第 1 の文が呼ぶ `is_closure` の
+          本文は `self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())`、
+          `toplevel_tycon_satisfies` の本文は `self.toplevel_tycon()` の値についての match、
+          第 2 の文が呼ぶ `toplevel_tycon` の本文は `self.ty` についての 4 つの腕であり、どれも
+          `self` の欄を読むだけである。末尾式の `TypeEnv::tycons` は表への共有参照を返す。
+      BY CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+         CODE src/ast/types.rs: TypeNode::is_closure,
+         CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+         CODE src/ast/types.rs: TypeNode::toplevel_tycon,
+         CODE src/fixstd/builtin.rs: make_arrow_name_abs,
+         CODE src/ast/program.rs: TypeEnv::tycons
     <3>6. QED
       <3>1 が、この道で共有参照から書かれうる欄を 5 つに尽くす。<3>2 と <3>4 が `SourceFile` の 2 つと
       `TypeInfo` の欄を片付け、残るのは A3 が名指す `TypeNode` の 3 つの `OnceLock` である。<3>3 と
@@ -691,12 +757,30 @@ enum については元と同じ変位で、その変位が保持する各値を
           `ty` は `Type::TyApp(new_fun, new_arg)` である。`impl PartialEq for Type` の `TyApp` の腕は
           2 つの成分に `type_node_eq` を掛け、`type_node_eq(lhs, rhs)` の本文は
           `Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty` なので、この 2 つは等しい。
-          `impl PartialEq for TypeNode` は `ty` だけを読む (<2>6)。`Type::AssocTy` の腕も同じ形で
-          あり、`impl PartialEq for Type` の `AssocTy` の腕は名前の一致と各引数の `type_node_eq` である。
+          `impl PartialEq for TypeNode` は `ty` だけを読む (<2>6)。
       BY <3>2, <2>6, CODE src/ast/types.rs: Type, CODE src/ast/types.rs: type_node_eq,
          CODE src/ast/types.rs: TypeNode, EXT Arc の契約
+    <3>3a. `Type::AssocTy` の腕の 2 つの枝も、条件が真のとき等しい値を返す。条件は
+           `new_args.iter().zip(args).all(|(new_arg, arg)| Arc::ptr_eq(new_arg, arg))` であり、
+           EXT Iterator::zip と EXT Iterator::all と any より、これは `new_args` と `args` が同じ長さで
+           あって対応する各対に `Arc::ptr_eq` が真であることをいう --- `new_args` は
+           `args.iter().map(...).collect::<Vec<_>>()` なので EXT Iterator::map と collect より
+           `args` と同じ長さである。EXT Arc の契約 より、`Arc::ptr_eq` が真な対の 2 つの値は等しい。
+           真の枝が返す `ty.clone()` の `ty` は `Type::AssocTy(assoc_ty, args)` であり、偽の枝が返す
+           `ty.set_assocty_args(new_args)` の `ty` は `Type::AssocTy(assoc_ty, new_args)` である ---
+           `set_assocty_args` は `self.clone()` の `ty` の引数列だけを差し替えて `Arc::new` で包み、
+           名前 `assoc_ty` をそのまま運ぶ。`impl PartialEq for Type` の `AssocTy` の腕は、名前の等しさと
+           引数列の長さの一致と、対応する各対の `type_node_eq` を要求する。名前は同じ値、長さは等しく、
+           各対は同じ値なので `type_node_eq` はどれも真である。`impl PartialEq for TypeNode` は `ty`
+           だけを読む (<2>6)。
+      BY <3>2, <2>6, CODE src/ast/types.rs: Type, CODE src/ast/types.rs: type_node_eq,
+         CODE src/ast/types.rs: TypeNode, CODE src/ast/types.rs: AssocType,
+         CODE src/ast/types.rs: TypeNode::set_assocty_args,
+         CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
+         EXT Arc の契約, EXT Iterator::zip, EXT Iterator::all と any,
+         EXT Iterator::map と collect
     <3>4. QED
-      <3>3 より、`Arc::ptr_eq` の 2 つの読みはどちらも、返る値を選び替えるだけで値を変えない。残る腕が
+      <3>3 と <3>3a より、`Arc::ptr_eq` の 2 つの読みはどちらも、返る値を選び替えるだけで値を変えない。残る腕が
       読むのは `data` の引き (鍵は `Name` すなわち `String`)、`get_source`、`set_source_if_none` である。
       `get_source` は `self.info.source` への共有参照を返し、`set_source_if_none` は `set_source` を
       経て `self.clone()` の `info.source` を書いた新しいノードを返すか `self.clone()` を返すかであり、
@@ -704,7 +788,7 @@ enum については元と同じ変位で、その変位が保持する各値を
       `self.clone()` の `ty` の成分を差し替えて `Arc::new` で包む。よって `substitute_type` の返り値の
       `ty` は、その再帰の上の帰納で引数の値から決まり、<2>6 より `TypeNode` の値の等しさは `ty` で
       決まる。<3>1 より、`declared_field_types` が組み立てる `Substitution` も引数の値で決まる。
-      BY <3>1, <3>2, <3>3, <2>6, DEF 引数で決まる関数, EXT Map と Set,
+      BY <3>1, <3>2, <3>3, <3>3a, <2>6, DEF 引数で決まる関数, EXT Map と Set,
          CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
          CODE src/ast/types.rs: TypeNode::set_source_if_none, CODE src/ast/types.rs: TypeNode::set_source,
          CODE src/ast/types.rs: TypeNode::get_source, CODE src/ast/types.rs: TypeNode
@@ -1270,9 +1354,10 @@ DEF 部分木 の節点・子・部分木・節点の道について、次の 4 
        行うすべての `subtract` の呼び出しで満たされる。
   BY CODE src/rc_ir/borrow.rs: un_bump, <1>7
 <1>7b. 6 が成り立つ。`References` は `PartialEq` を derive し、そのフィールドは `Map` (`FxHashMap`)
-       1 つなので、2 つの値が等しいことは 2 つの `Map` が等しいこと、すなわち鍵と値の対の集合が一致する
-       ことである。各鍵の値が 1 以上のとき、鍵と値の対の集合の一致は各位置 (D6) についての個数の一致と同値で
-       ある --- 一方が持たない位置の個数は 0 だからである。
+       1 つなので、EXT Clone より 2 つの値が等しいことは 2 つの `Map` が等しいことである。EXT Map と Set の
+       等号の行より、2 つの `Map` が等しいことは鍵の集合が一致し各鍵の値が等しいことである。各鍵の値が
+       1 以上のとき、これは各位置 (D6) についての個数の一致と同値である --- 一方が持たない位置の個数は
+       0 だからである。
   BY CODE src/rc_ir/ownership.rs: References, CODE src/misc.rs: Map, DEF 参照の多重集合, EXT Map と Set,
      EXT Clone
 <1>8. QED
@@ -1434,13 +1519,67 @@ PROVE   `cancel(prog, type_env)` が `cancel_body` に渡す本体 --- `prog.fun
         `owns_object` だけであり、`owns_object` が呼ぶ `borrow.rs` の関数は無い。
     BY <2>1, CODE src/rc_ir/borrow.rs: RewriteCtx::owns_unit,
        CODE src/rc_ir/borrow.rs: RewriteCtx::owns_object
-  <2>3. `units_under` の 1 回の呼び出しの中で走る `borrow.rs` の関数は 1 つも無い。`units_under` の中で
-        走る `ownership.rs` の関数は `subtree_type`、`rc_units`、`rc_units_go`、`unit_step`、
-        `held_field_type` で尽き、残りは `src/ast/types.rs` の型についての関数と標準ライブラリの関数で
-        ある。この 5 つの本文にも `units_under` の本文にも `borrow.rs` の項目への参照は無い。
-    BY CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
+  <2>3. `units_under` の 1 回の呼び出しの中で `borrow.rs` の関数は 1 つも走らない。
+
+        走る `ownership.rs` の関数は `units_under`・`subtree_type`・`rc_units`・`rc_units_go`・
+        `unit_step`・`held_field_type` の 6 つで尽きる。`units_under` の本文が呼ぶ `ownership.rs` の
+        関数は `subtree_type` と `rc_units`、`subtree_type` が呼ぶのは `unit_step` と
+        `held_field_type`、`rc_units` が呼ぶのは `rc_units_go`、`rc_units_go` が呼ぶのは `unit_step` と
+        自身であり、`unit_step` と `held_field_type` が呼ぶ `ownership.rs` の関数は無い。
+
+        この 6 つが `ownership.rs` の外へ出る先は次のとおりである。`unit_step` は `TypeNode` の
+        `is_fully_unboxed`・`is_closure`・`is_box`・`is_union`・`is_array`・`is_punched_array`・
+        `toplevel_tycon_info`・`unpunched_field_types` を呼び、`src/constants.rs` の定数
+        `CLOSURE_CAPTURE_IDX`・`CLOSURE_FIELD_COUNT` を読む。残る 5 つが呼ぶのは `Map`・`Set`・`Vec` と
+        スライスの操作だけである。この 8 つのメソッドから届く `src/ast/types.rs` の外の項目は、
+        `src/fixstd/builtin.rs` の `make_arrow_name_abs`・`is_array_tycon`・`is_funptr_tycon`・
+        `is_punched_array_tycon`・`make_unit_ty`、`src/ast/program.rs` の `TypeEnv::tycons` と
+        `TypeEnv::unwrapped_newtype_info`、`src/elaboration/typecheck.rs` の `Substitution` の
+        メソッド、`src/ast/name.rs` の `FullName` と `NameSpace` の実装、そして
+        `src/parse/sourcefile.rs` の `Span` と `SourceFile` の実装である。すなわち、この呼び出しの中で
+        走る関数の本文が住むのは、`src/rc_ir/ownership.rs`・`src/ast/types.rs`・`src/ast/program.rs`・
+        `src/ast/name.rs`・`src/parse/sourcefile.rs`・`src/elaboration/typecheck.rs`・
+        `src/fixstd/builtin.rs` の 7 つのファイルか、`Map`・`Set`・`Vec`・スライスの操作を与える
+        `src/` の外である。
+
+        **`borrow.rs` の項目を名指す式が書かれているファイルを、`src/` の全体で数え上げる。**
+        `borrow.rs` は `mod` 宣言を 1 つも持たない (<1>0) ので、その非公開の項目を名指せるのは
+        `borrow.rs` の中だけであり、`pub(crate)` の項目を外から名指すには `rc_ir::borrow` の道を書く
+        ことが要る (EXT 可視性と私有性)。`borrow.rs` が持つ `impl` は、同ファイルの
+        非公開の型 `OwnedLeaves`・`RewriteCtx`・`CancelAnalysis` の inherent な 3 つと、同ファイルの
+        非公開の型 `PendingRetain` が derive した `Clone` だけである。どれも非公開の型についての
+        ものであり、EXT 可視性と私有性 よりその型を名指せるのは `borrow.rs` の中だけなので、
+        道を書かずに届く経路も無い。`src/` の全体で `borrow::` を数え上げると、
+        `borrow.rs` 自身を除いて `src/build/build_object_files.rs` の `use` の 1 行だけが挙がる。
+        よって `borrow.rs` の関数の呼び出しが書かれているのは、`borrow.rs` と
+        `src/build/build_object_files.rs` の本文だけである。**同じく `src/` の全体で
+        `build_object_files::` を数え上げると、`src/build/build.rs` の 1 行と `src/tests/` の
+        2 行だけが挙がる。** 上の段が挙げた 7 つのファイルはこのどれでもないので、この呼び出しの中で
+        `borrow.rs` の関数は走らない。
+    BY <1>0, CODE src/rc_ir/ownership.rs: units_under, CODE src/rc_ir/ownership.rs: subtree_type,
        CODE src/rc_ir/ownership.rs: rc_units, CODE src/rc_ir/ownership.rs: rc_units_go,
-       CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: held_field_type, DEF 本文
+       CODE src/rc_ir/ownership.rs: unit_step, CODE src/rc_ir/ownership.rs: held_field_type,
+       CODE src/constants.rs: CLOSURE_CAPTURE_IDX, CLOSURE_FIELD_COUNT,
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed, CODE src/ast/types.rs: TypeNode::is_closure,
+       CODE src/ast/types.rs: TypeNode::is_box, CODE src/ast/types.rs: TypeNode::is_unbox,
+       CODE src/ast/types.rs: TypeNode::is_union, CODE src/ast/types.rs: TypeNode::is_array,
+       CODE src/ast/types.rs: TypeNode::is_funptr,
+       CODE src/ast/types.rs: TypeNode::is_punched_array,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types,
+       CODE src/ast/types.rs: TypeNode::instance_field_types,
+       CODE src/ast/types.rs: TypeNode::declared_field_types,
+       CODE src/ast/types.rs: TypeNode::unwrap_newtypes_memoized,
+       CODE src/ast/types.rs: TypeNode::unwrap_newtypes_node,
+       CODE src/ast/program.rs: TypeEnv::tycons,
+       CODE src/ast/program.rs: TypeEnv::unwrapped_newtype_info,
+       CODE src/elaboration/typecheck.rs: Substitution::substitute_type,
+       CODE src/fixstd/builtin.rs: make_arrow_name_abs, is_array_tycon, is_funptr_tycon,
+       CODE src/fixstd/builtin.rs: is_punched_array_tycon, CODE src/fixstd/builtin.rs: make_unit_ty,
+       CODE src/build/build_object_files.rs: optimize_rc_program,
+       DEF 本文, DEF このクレート, EXT 可視性と私有性, EXT モジュールは `mod` が導入する
   <2>4. QED
     <1>0 が挙げる本文 --- `expr_node` を呼ぶ 4 つと `RewriteCtx::rewrite` を呼ぶ 3 つ、重複する
     `rewrite_inner` を 1 つと数えて 6 つ --- は、
@@ -1623,6 +1762,19 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
       `f_own.body`、その複製 `clone.body`、または入力プログラムのグローバル初期化子 `g.init` である。
       `f_own` は `func.clone()` であり、`clone` は `clone_func` の値である。
   BY 本命題の仮定, CODE src/rc_ir/borrow.rs: borrow_ify
+<1>2a. `f_own.body` の木の `Match` は、`func.body` の木の `Match` と 1 対 1 に対応し、対応する 2 つの
+       `Match` のアームの個数は等しい。`f_own` は `func.clone()` であり、`RcFunc` は `Clone` を derive
+       するので、EXT Clone より `f_own.body` は `func.body` の `<RcExprNode as Clone>::clone` である。
+       `RcExprNode` も `Clone` を derive し、その欄は `expr: Arc<RcExpr>` と `source: Option<Span>` で
+       ある。EXT Arc の契約 より `<Arc<RcExpr> as Clone>::clone` は同じ割り当てのハンドルをもう 1 つ
+       作るので、`f_own.body.expr` と `func.body.expr` は同じ割り当てを指し、そのブロックの中に在る
+       `RcExpr` の値は 1 つである。すなわち 2 つの根の式は同じ値である。DEF 部分木 の子の表より、
+       根の各子はその `RcExpr` の値が保持する `RcExprNode` の値そのものなので、根から下の部分木は
+       `func.body` のそれと同じ節点からなる。よって 2 つの木の節点は 1 対 1 に対応し、対応する節点の
+       式は同じ値であり、`Match` のアームの個数は等しい。
+  BY <1>2, CODE src/rc_ir/ast.rs: RcFunc, CODE src/rc_ir/ast.rs: RcExprNode,
+     CODE src/rc_ir/ast.rs: RcExpr, CODE src/rc_ir/ast.rs: RcRhs, CODE src/rc_ir/ast.rs: MatchArm,
+     DEF 部分木, EXT Clone, EXT Arc の契約
 <1>3. `clone_func` が作る本体の `Match` は、入力の本体の `Match` と 1 対 1 に対応し、対応する 2 つの
       `Match` のアームの個数は等しい。
   <2>1. `clone_func` が作る本体は `fresh_rename_function` が返す第 3 の値であり、それは
@@ -1657,9 +1809,12 @@ PROVE   `cancel(prog, type_env)` が走査する本体のすべての `Match` �
   BY <ref id=1172c08/>, 本命題の仮定
 <1>5. QED
   本命題の仮定は L3 の仮定であり、L3 より `cancel(prog, type_env)` が走査する本体は `rewrite` の出力で
-  ある。<1>2 よりその入力は `borrow_ify` の入力プログラムの本体か、その複製である。<1>3 より複製はアームの
-  個数を保ち、<1>1 より `rewrite` も保つ。<1>4 より元の個数は 1 以上である。
-  BY <ref id=d766c00/>, <1>1, <1>2, <1>3, <1>4, 本命題の仮定
+  ある。<1>2 よりその入力は、`borrow_ify` の入力プログラムの関数の本体の複製 `f_own.body`、
+  `clone_func` が作る複製 `clone.body`、または入力プログラムのグローバル初期化子 `g.init` そのものの
+  3 つのいずれかである。<1>2a より 1 つ目は `func.body` とアームの個数を共有し、<1>3 より 2 つ目も
+  アームの個数を保ち、3 つ目は入力の本体そのものである。<1>1 より `rewrite` もアームの個数を保つ。
+  <1>4 より元の個数は 1 以上である。
+  BY <ref id=d766c00/>, <1>1, <1>2, <1>2a, <1>3, <1>4, 本命題の仮定
 
 ## 3. P15 (節点と `NodeId`)
 
