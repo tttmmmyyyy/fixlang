@@ -2,12 +2,11 @@
 
 この文書は `README.md` の P5 (a)、P5 (b)、P5 (c)、P6、P7 を証明する。主語となる語彙は D13 が定める --
 `origin` の返り値と、その 2 つの形 `Exactly(u, σ)` と `Join { identity, candidates }` である。段が `BY` で
-引くのは、`README.md` の定義 (D1、D2、D3、D4、D6、D7、D8、D9、D10、D11、D14、D15、D16、D20、D21、D23、
-D26)、仮定 (A1、A3、A6、A9、A10、A11、A12、A14、A15、A16)、および命題 P1、P2、P29 の**言明**である。
+引くのは、`README.md` の定義と仮定、および命題 P1、P2、P29 の**言明**である。
 P1 と P2 の証明は `p10-leaves-and-units.md`、P29 の証明は `p51-runs.md` にあり、この文書はその 3 つの
 言明だけを使う。
 
-本文はこのほかに D17 と A5 を引き合いに出す。D17 は第 2 節の補足が leaf の写り方を突き合わせる
+D17 と A5 は本文が引き合いに出す。D17 は第 2 節の補足が leaf の写り方を突き合わせる
 相手であり、A5 は P6 の補足 3 -- 同じ `id` を持つ 2 つの leaf がどちらも `Linhc(v, π, p)` に入るときは
 参照も 2 つある -- の根拠である。この 2 つを `BY` に挙げる段は無い。
 
@@ -56,10 +55,11 @@ P6 (b) の要は、`identity` が付ける名前とオブジェクトの間の�
 うえで `origin` と `acted_references` の第 1・第 2 引数を落として書く。**`bindings` が等しい相異なる
 2 つの `VarTable` の値について答えが等しいことは、この記法の主張ではない** (P2a)。
 
-**A1・A6・A9 は主語を `borrow_ify` の入力に置く仮定なので、この固定の下でそのまま当たる。** 層 1 の
+**A1・A6・A9・A11 は主語を `borrow_ify` の入力に置く仮定なので、この固定の下でそのまま当たる。** 層 1 の
 命題である P5・P6・P7 を `borrow_ify` の出力について読む者がどう読むかは `README.md` の A6 の項が
 定める --「層 1 の証明は依存の順で P9 を引けないので、A6 を読む段は入力について読み、出力について読む者は
-P9 と合わせて読む」。A9 についてはその項が「`borrow_ify` と `cancel` は
+P9 と合わせて読む」。A11 の項も同じ形を取り、「A6 と同じ形であり、出力について読む段は P9 と合わせて
+読む。」と述べる。A9 についてはその項が「`borrow_ify` と `cancel` は
 アームを持たない `Match` を作らないので (P22、P24)、`cancel` の入力と出力についても同じことが言える」と
 述べる。
 
@@ -200,53 +200,9 @@ SCAN src/ `impl Drop`
   = src/tool/stopwatch.rs: StopWatch::end -- `StopWatch` の `Drop`
   = src/tests/test_lsp/lsp_client.rs: LspClient::finish -- `LspClient` の `Drop`
 
-**前提 `tycons` の欄を名指す在りか** --- `TypeEnv` の `tycons` の欄を名指す式が在る項目は次で尽きる。
-走査は `TypeEnv` のアクセサ `tycons()` の呼び出し、`KindEnv` の同じ名前の欄、`tycons` を部分文字列に
-持つ別の識別子、および局所変数も挙げる。
+**前提 `unsafe impl` の在りか** --- `src/` に `unsafe impl` と書いた項目は無い。
 
-SCAN src/ast/ `tycons`
-  = src/ast/kind_scope.rs: KindEnv -- `KindEnv` の欄 `tycons`
-  = src/ast/pattern.rs: Pattern::resolve_union_variant -- アクセサ `tycons()` の呼び出し
-  = src/ast/program.rs: TypeEnv -- 欄の宣言と doc の散文
-  = src/ast/program.rs: TypeEnv::default -- 空の写像を置く `tycons: Arc::new(Default::default())`
-  = src/ast/program.rs: TypeEnv::new -- 引数 `tycons` を置く `tycons: Arc::new(tycons)`
-  = src/ast/program.rs: TypeEnv::unwrap_newtypes -- 読みと `self.tycons = Arc::new(rewritten)`
-  = src/ast/program.rs: TypeEnv::unwrapped_newtype_info -- 読み
-  = src/ast/program.rs: TypeEnv::is_unwrapped_newtype -- doc の散文
-  = src/ast/program.rs: TypeEnv::add_tycons -- 読みと `self.tycons = Arc::new(tycons)`、引数 `new_tycons`
-  = src/ast/program.rs: TypeEnv::tycons -- アクセサの宣言と読み
-  = src/ast/program.rs: TypeEnv::kinds -- 読み
-  = src/ast/program.rs: TypeEnv::is_struct_act -- 読み
-  = src/ast/program.rs: TypeEnv::resolve_type_aliases_in_tycons -- 読みと `self.tycons = Arc::new(tycons)`、局所変数
-  = src/ast/program.rs: Program::calculate_type_env -- 局所変数 `tycons` と `bulitin_tycons()`
-  = src/ast/program.rs: Program::tycon_names_with_aliases -- 読み
-  = src/ast/program.rs: Program::kind_env -- `KindEnv` の欄 `tycons`
-  = src/ast/program.rs: Program::resolve_namespace_not_in_expr -- 読みと `self.type_env.tycons = Arc::new(tycons)`
-  = src/ast/program.rs: Program::resolve_type_aliases_not_in_expr -- 別の識別子 `resolve_type_aliases_in_tycons`
-  = src/ast/types.rs: TyCon::get_struct_union_value_type -- アクセサ `tycons()` の呼び出し
-  = src/ast/types.rs: TypeNode::collect_tycons -- 別の識別子 `collect_tycons` と引数 `tycons`
-  = src/ast/types.rs: TypeNode::define_modules_of_tycons -- 別の識別子 `define_modules_of_tycons`
-  = src/ast/types.rs: TypeNode::fixed_vars_to_set -- doc の散文
-  = src/ast/types.rs: TypeNode::kind_mismatch_error -- `KindEnv` の欄 `tycons`
-  = src/ast/types.rs: TypeNode::toplevel_tycon_info -- アクセサ `tycons()` の呼び出し
-
-**前提 型環境に項を入れる呼び出しの在りか** --- `TypeEnv::new` を呼ぶ式、`TypeEnv::add_tycons` を呼ぶ
-式、および `register_opaque_tycon` を呼ぶ式が在る項目は次で尽きる。走査はそれぞれの宣言も挙げる。
-
-SCAN src/ `TypeEnv::new`
-  = src/ast/program.rs: Program::calculate_type_env -- `TypeEnv::new(tycons, aliases)`
-
-SCAN src/ `add_tycons`
-  = src/ast/program.rs: TypeEnv -- doc の散文
-  = src/ast/program.rs: TypeEnv::add_tycons -- 宣言
-  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 不透明型の tycon 1 つを渡す
-  = src/optimization/closure_specialization.rs: lift_all -- capture 構造体の tycon を渡す
-  = src/optimization/closure_specialization.rs: realize_all -- capture 構造体の tycon を渡す
-  = src/optimization/defunctionalize_fix.rs: run_one -- capture 構造体の tycon を渡す
-
-SCAN src/ `register_opaque_tycon`
-  = src/elaboration/desugar_opaque.rs: Program::desugar_opaque_types -- 各 `OpaqueInfo` について呼ぶ
-  = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 宣言
+SCAN src/ `unsafe impl`
 
 **前提 消費の走査を呼ぶ在りか** --- `collect_consumes`・`infer_ownership`・`rhs_consumes` を呼ぶ式が
 在る項目は次で尽きる。走査はそれぞれの宣言と、`collect_consumes` を部分文字列に持つ
@@ -375,7 +331,7 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 
 ## L0 (`origin` は `origin_inner` の値を返す) <!--#ecdd35d-->
 
-**言明**。`vars` と `type_env` を固定すると、次の 2 つが成り立つ。**鍵**とは `origin` の第 3・第 4 引数の
+**言明**。`vars` と `type_env` を固定すると、次の 3 つが成り立つ。**鍵**とは `origin` の第 3・第 4 引数の
 対 `(x, π)` であり、鍵 `(x, π)` の **cold な呼び出し**とは、`origin(vars, type_env, x, π)` の呼び出しの
 うち `origin_inner` を評価するものである。
 
@@ -384,6 +340,10 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
   `origin(x, π)` はこの共通の値を指す。
 - **(b)** 鍵 `(x, π)` について `origin` の呼び出しが 1 つでも在るならば、その鍵の cold な呼び出しは
   ちょうど 1 つ在る。
+- **(c)** この `vars` と `type_env` を第 1・第 2 引数に取る `origin` の呼び出しはどれも停止する。
+
+**(c) は P2 の言明をこの文書が固定した `vars` に当てたものである。** (b) の証明がそれを使い、L0a も
+使う -- 呼び出しの入れ子から「先に返る」を出す段は、その呼び出しが返ることを要る。
 
 **(a) は `README.md` の P2a より強い。** P2a は、A6 と A11 を満たすプログラムの本体について
 `VarTable::of` か `VarTable::body_only` が作った 1 つの `VarTable` の値と 1 つの `TypeEnv` の値を
@@ -397,6 +357,18 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 <1>1. `origin` は、`vars.origins` に鍵 `(x, π)` の記録があればその値を返し、無ければ
       `grow_stack(|| origin_inner(vars, type_env, x, π))` の値を鍵 `(x, π)` で記録して返す。
   BY CODE src/rc_ir/ownership.rs: origin
+
+<1>1a. (c) が成り立つ。すなわち P2 は、この `vars` と `type_env` を引数に取る `origin` のどの
+      呼び出しについても停止を与える。
+  P2 は、`x` がプログラムの束縛変数であるか `vars.bindings` に束縛を持たない名前であるような
+  すべての `(x, π)` について、`π` を問わず `origin(vars, type_env, x, π)` が停止すると述べる。
+  「プログラムの束縛変数」が何を指すかは P2 の項が定める -- 節点が束縛する変数と、その本体の
+  パラメータ・capture の両方である。同じ項が、`VarTable::of` の作る表について
+  「`vars.bindings` に記録を持つ名前はちょうどこの 2 種である」と述べる。`VarTable::body_only` が
+  作る表は `collect_bindings` の記録だけを持つので、その名前もこの 2 種の一方である。記録を持たない
+  名前は P2 の第 2 の節に当たる。
+  BY <ref id=0edb0ba/>, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only,
+     CODE src/rc_ir/ownership.rs: collect_bindings
 
 <1>2. `grow_stack(f)` の値は `f()` の値である。
   BY <ref id=3e6b0e0/>
@@ -426,25 +398,34 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
     `Vec<String>`・`bool` の同じトレイトは標準ライブラリに在り、`Set<VarPath>` すなわち `FxHashSet` の
     `Clone` は外部クレートに在る。`Origin` は `#[derive(Clone)]` を持ち、その欄の型は `VarPath` と
     `Set<VarPath>` である。`FullName` は `Clone` と `PartialEq` と `Eq` を derive し、その欄の型は
-    `NameSpace` と `String` である。`NameSpace` は `Clone` を derive し、`Hash` と `PartialEq` と `Eq` を
-    `name.rs` に書き、その欄の型は `Vec<String>` と `bool` である。`FullName` の `Hash` も `name.rs` に
-    書かれている。EXT `derive` した `Clone` と EXT `derive` した `PartialEq` より、derive した実装が
+    `NameSpace` と `String` である。`NameSpace` は `Clone` を derive し、`Hash` と `PartialEq` と `Eq` は
+    `impl Hash for NameSpace`・`impl PartialEq for NameSpace`・`impl Eq for NameSpace` として
+    `src/ast/name.rs` に書かれ、その欄の型は `Vec<String>` と `bool` である。`FullName` の `Hash` も
+    `impl Hash for FullName` として同じファイルに書かれている。EXT `derive` した `Clone` と
+    EXT `derive` した `PartialEq` より、derive した実装が
     呼ぶのは欄の同じトレイトのメソッドだけである。前提 書かれた `Drop` の在りか より `FullName`・
     `NameSpace`・`Origin` はどれも `Drop` を実装しないので、EXT 値を落とす処理 より、その値が落ちるとき
     走るのは欄の値を落とす処理だけである。
     BY 前提 書かれた `Drop` の在りか, EXT `derive` した `Clone`, EXT `derive` した `PartialEq`,
        EXT 値を落とす処理, CODE src/rc_ir/ownership.rs: Origin,
        CODE src/rc_ir/ast.rs: VarPath, FieldPath, CODE src/ast/name.rs: FullName, NameSpace,
+       CODE src/ast/name.rs: impl Hash for FullName, CODE src/ast/name.rs: impl Hash for NameSpace,
+       CODE src/ast/name.rs: impl PartialEq for NameSpace,
+       CODE src/ast/name.rs: impl Eq for NameSpace,
        CODE src/misc.rs: Map, Set
   <2>4. `<2>3` の項目はどれも `origin` を名指す式を持たない。
     derive した実装は EXT `derive` した `Clone` と EXT `derive` した `PartialEq` より欄の同じトレイトの
-    メソッドだけを呼ぶ。書かれた実装 -- `FullName` の `Hash`、`NameSpace` の `Hash`・`PartialEq`・`Eq`
-    -- は `src/ast/name.rs` の項目であり、前提 名前の複製と照合の実装の在りか より、`src/ast/` の項目の
+    メソッドだけを呼ぶ。書かれた実装 -- `impl Hash for FullName`、`impl Hash for NameSpace`、
+    `impl PartialEq for NameSpace`、`impl Eq for NameSpace` -- は `src/ast/name.rs` の項目であり、
+    前提 名前の複製と照合の実装の在りか より、`src/ast/` の項目の
     うち字面 `origin` を含むのは `deprecation.rs` と `program.rs` の deprecation についての項目だけで
     あって、`name.rs` の項目はそこに無い。EXT 名前による数え上げ より、`origin` を名指す式はその名前を
     含む。
     BY 前提 名前の複製と照合の実装の在りか, EXT `derive` した `Clone`, EXT `derive` した `PartialEq`,
-       EXT 名前による数え上げ, CODE src/ast/name.rs: FullName, NameSpace
+       EXT 名前による数え上げ, CODE src/ast/name.rs: impl Hash for FullName,
+       CODE src/ast/name.rs: impl Hash for NameSpace,
+       CODE src/ast/name.rs: impl PartialEq for NameSpace,
+       CODE src/ast/name.rs: impl Eq for NameSpace
   <2>5. QED
     `origin` は `ownership.rs` の `pub(crate)` の関数なので、EXT 可視性 より、それを呼ぶ式はこの
     クレートのソース `src/` の中にしかない。`<2>1` が本体の行う呼び出しの全体を与え、`<2>2` が
@@ -455,18 +436,17 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 
 <1>3. `origins` の欄を変更するのは `<1>1` の記録だけである。
   <2>1. `origins` は `VarTable` の非公開の欄である (`pub` が付かない)。EXT 可視性 より、この欄を
-        名指す式は `ownership.rs` の中にしかない -- この欄を宣言するモジュールは `ownership.rs` の
-        モジュールであり、その子孫のモジュールもこのファイルの中に書かれている。
+        名指す式は、それを宣言するモジュールとその子孫、すなわちこのクレートの中にしかなく、その
+        ソースは `src/` である。
     BY EXT 可視性, CODE src/rc_ir/ownership.rs: VarTable
-  <2>2. `ownership.rs` の中でこの欄を名指す式は、`VarTable::empty` の `origins: RefCell::default()`、
+  <2>2. `src/` の中でこの欄を名指す式は、`VarTable::empty` の `origins: RefCell::default()`、
         `origin` の `vars.origins.borrow()`、`origin` の `vars.origins.borrow_mut()` である。
-        前提 `origins` の欄を名指す在りか が、この欄の名前を含む項目を挙げる。その走査が挙げる
-        `ownership.rs` の項目のうち `VarTable::empty` と `origin` の外にあるもの -- `VarTable`・
-        `Origin::identity`・`origin_inner`・`origin_from_leaves_under` -- が持つのは、欄の宣言、
-        コメントの散文、および別の識別子 `leaf_origins_at` / `leaf_origins_under` であって、
-        この欄を名指す式ではない。
-    BY 前提 `origins` の欄を名指す在りか, CODE src/rc_ir/ownership.rs: VarTable, VarTable::empty, origin,
-       CODE src/rc_ir/ownership.rs: Origin::identity, origin_inner, origin_from_leaves_under
+        前提 `origins` の欄を名指す在りか が、この欄を名指す式が在るのはその 2 つの項目であると述べ、
+        走査が `src/` の全体について字面 `origins` を含む項目を挙げてそれを果たす。EXT 名前による
+        数え上げ より、この欄を名指す式はその名前を含む。
+    BY 前提 `origins` の欄を名指す在りか, EXT 名前による数え上げ,
+       CODE src/rc_ir/ownership.rs: VarTable, CODE src/rc_ir/ownership.rs: VarTable::empty,
+       CODE src/rc_ir/ownership.rs: origin
   <2>3. QED
     EXT `RefCell` の内部可変性 より、`RefCell<Map<..>>` が包む写像を変更するには、その `RefCell` を
     名指す式を通る必要がある。`<2>1` と `<2>2` よりその式は `<2>2` が挙げたものに限られ、`origin` の
@@ -477,31 +457,23 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 <1>3a. 鍵 `(x, π)` について、cold な呼び出しは高々 1 つであり、`<1>1` の記録も高々 1 度しか書かれない。
   <2>1. 記録は取り除かれない。`<1>3` より `origins` を変更するのは `<1>1` の `insert` だけである。
     BY <1>3
-  <2>1a. P2 は、この `vars` を引数に取る `origin` のどの呼び出しについても停止を与える。
-    P2 は、`x` がプログラムの束縛変数であるか `vars.bindings` に束縛を持たない名前であるような
-    すべての `(x, π)` について、`π` を問わず `origin(vars, type_env, x, π)` が停止すると述べる。
-    「プログラムの束縛変数」が何を指すかは P2 の項が定める -- 節点が束縛する変数と、その本体の
-    パラメータ・capture の両方である。同じ項が、`VarTable::of` の作る表について
-    「`vars.bindings` に記録を持つ名前はちょうどこの 2 種である」と述べる。`VarTable::body_only` が
-    作る表は `collect_bindings` の記録だけを持つので、その名前もこの 2 種の一方である。記録を持たない
-    名前は P2 の第 2 の節に当たる。
-    BY <ref id=0edb0ba/>, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
   <2>1b. 鍵 `(x, π)` の cold な呼び出しの全体は、その鍵の記録を書く呼び出しの全体に等しい。
     `<1>1` より、記録を書くのは自分の検査で記録を見つけなかった呼び出し、すなわち `origin_inner` を
     評価する呼び出しであり、書き込みは `origin_inner` が返った後、その呼び出しが返る直前にある。
-    `<2>1a` より cold な呼び出しは返るので、その書き込みに着く。
-    BY <1>1, <2>1a
+    `<1>1a` より cold な呼び出しは返るので、その書き込みに着く。
+    BY <1>1, <1>1a
   <2>2. 1 つの `vars` を引数に取る 2 つの `origin` の呼び出しが別々のスレッドの上にあるならば、その
         2 つの実行区間は互いに素である。
     <3>1. 1 つの `VarTable` への参照を 2 つのスレッドが同時に持つことはない。`VarTable` は
           `origins: RefCell<Map<VarPath, Origin>>` の欄を持つ。EXT `Send` と `Sync` より、auto trait の
           明示の実装を書けるのはその型を定義するクレートの中に限られ、`VarTable` を定義するのは
-          このコンパイラのクレートである。そのクレートのソース `src/` の全体について `unsafe impl` を
-          検索すると 0 件なので、`VarTable` は `Sync` の `unsafe impl` を持たない。
+          このコンパイラのクレートであって、そのソースは `src/` である。前提 `unsafe impl` の在りか
+          より `src/` に `unsafe impl` と書いた項目は無いので、`VarTable` は `Sync` の `unsafe impl` を
+          持たない。
           EXT `Send` と `Sync` より `RefCell<T>` は `Sync` を実装せず、`Sync` は auto trait なので
           その欄を持つ `VarTable` も `Sync` を実装しない。同じ結果より `&VarTable` は `Send` では
           ないので、スレッドをまたいで渡せない。
-      BY EXT `Send` と `Sync`, CODE src/rc_ir/ownership.rs: VarTable
+      BY 前提 `unsafe impl` の在りか, EXT `Send` と `Sync`, CODE src/rc_ir/ownership.rs: VarTable
     <3>2. `origin` は `vars: &VarTable` を引数に取り、その呼び出しの実行区間の間ずっとこの参照を保持
           する。
       BY CODE src/rc_ir/ownership.rs: origin
@@ -603,9 +575,9 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
     鍵 `(x, π)` の cold な呼び出しが 2 つあるとすると、`<2>1b` よりどちらも記録を書くので、`<2>4` より
     一方 `C` が他方 `C'` の `origin_inner` の評価の中で始まり、どちらも記録を見つけない同じ鍵の
     呼び出しである。すなわち `(C', C)` は `<2>4a` の意味の対であり、`<2>4b` より `C'` は返らない。
-    これは `<2>1a` に反する。ゆえに cold な呼び出しは高々 1 つであり、`<2>1b` より記録を書く呼び出しも
+    これは `<1>1a` に反する。ゆえに cold な呼び出しは高々 1 つであり、`<2>1b` より記録を書く呼び出しも
     高々 1 つである。
-    BY <2>1a, <2>1b, <2>4, <2>4a, <2>4b
+    BY <1>1a, <2>1b, <2>4, <2>4a, <2>4b
 
 <1>3b. 鍵 `(x, π)` について `origin` の呼び出しが 1 つでも在るならば、その鍵の cold な呼び出しは
        少なくとも 1 つ在る。
@@ -625,7 +597,8 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
   同じ呼び出しの値である。`<1>3a` より鍵 `(x, π)` について記録は高々 1 度しか書かれないので、同じ
   `(x, π)` についてどの呼び出しも同じ値を返す。`<1>3b` よりその鍵の cold な呼び出しが在り、その値が
   この共通の値である。(b) について。`<1>3a` が高々 1 つを、`<1>3b` が少なくとも 1 つを与える。
-  BY <1>1, <1>2, <1>3, <1>3a, <1>3b
+  (c) は `<1>1a` である。
+  BY <1>1, <1>1a, <1>2, <1>3, <1>3a, <1>3b
 
 ## L0a (呼び出しは辺に沿って伝わり、鍵の関係は整礎である) <!--#cabeb3c-->
 
@@ -658,22 +631,24 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 <1>2. `k ⇝ k'` であり `k` の cold な呼び出し `C(k)` が在るならば、`k'` の cold な呼び出し `C(k')` が
       ちょうど 1 つ在り、`C(k')` は `C(k)` より前に返る。
   <2>1. `C(k)` は `origin_inner` を評価し、DEF 鍵の関係 よりその評価は `origin(k')` の呼び出し `B` を
-        直接行う。`B` は `C(k)` の実行区間の中で始まって終わるので、EXT 呼び出しの入れ子 より `B` の
-        実行区間は `C(k)` の実行区間に含まれる。
-    BY DEF 鍵の関係, EXT 呼び出しの入れ子, <ref id=ecdd35d/> (b)
+        直接行う。`B` はこの `vars` と `type_env` を引数に取る `origin` の呼び出しなので L0 (c) より
+        停止し、`C(k)` も同じ理由で停止する。`B` は `C(k)` の実行区間の中で始まって終わるので、
+        EXT 呼び出しの入れ子 より `B` の実行区間は `C(k)` の実行区間に含まれ、`B` は `C(k)` より前に
+        返る。
+    BY DEF 鍵の関係, EXT 呼び出しの入れ子, <ref id=ecdd35d/> (b), <ref id=ecdd35d/> (c)
   <2>2. `k'` の cold な呼び出し `C(k')` がちょうど 1 つ在る。`<2>1` より `origin(k')` の呼び出しが
         在るので L0 (b) が当たる。
     BY <ref id=ecdd35d/> (b), <2>1
   <2>3. CASE `B` が記録を見つけない。
     `<1>1` より `B` は `origin_inner` を評価するので `B` は `k'` の cold な呼び出しであり、`<2>2` の
-    一意性より `B = C(k')` である。`<2>1` より `B` は `C(k)` の実行区間に含まれるので、`C(k)` より前に
-    返る。
+    一意性より `B = C(k')` である。`<2>1` より `B` は `C(k)` より前に返る。
     BY <ref id=ecdd35d/> (b), <1>1, <2>1, <2>2
   <2>4. CASE `B` が記録を見つける。
     `B` の検査の時点に鍵 `k'` の記録が在るので、それを書いた呼び出しが在る。`<1>1` よりそれは `k'` の
     cold な呼び出しであり、`<2>2` の一意性よりそれは `C(k')` である。`<1>1` より書き込みは `C(k')` が
     返る直前にあるので、`C(k')` は `B` の検査より前に返る。`<2>1` より `B` は `C(k)` の実行区間に
-    含まれるので、`B` の検査は `C(k)` が返るより前にある。よって `C(k')` は `C(k)` より前に返る。
+    含まれ、`C(k)` は返るので、`B` の検査は `C(k)` が返るより前にある。よって `C(k')` は
+    `C(k)` より前に返る。
     BY <ref id=ecdd35d/> (b), <1>1, <2>1, <2>2
   <2>5. QED
     `<2>3` と `<2>4` は `B` が記録を見つけるか否かの 2 つの場合で尽きている。
@@ -688,11 +663,12 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
 <1>3. QED
   (a) は `<1>2a` である。(b) について。無限列 `k_0 ⇝ k_1 ⇝ k_2 ⇝ …` が在るとする。前提より `k_0` に
   ついて `origin` の呼び出しが在るので、
-  L0 (b) より `k_0` の cold な呼び出し `C(k_0)` が在る。`<1>2` を繰り返すと、各 `k_i` の cold な
+  L0 (b) より `k_0` の cold な呼び出し `C(k_0)` が在り、L0 (c) より `C(k_0)` は返る。`<1>2` を
+  繰り返すと、各 `k_i` の cold な
   呼び出し `C(k_i)` の無限列であって、`C(k_{i+1})` が `C(k_i)` より前に返るものが得られる。返る時点は
   狭義に早くなっていくので、この列の呼び出しは互いに相異なる。ところが EXT 有限の時間に有限の呼び出し
   より、`C(k_0)` が返る時点までに返った呼び出しは有限個である。矛盾。
-  BY EXT 有限の時間に有限の呼び出し, <ref id=ecdd35d/> (b), <1>2, <1>2a
+  BY EXT 有限の時間に有限の呼び出し, <ref id=ecdd35d/> (b), <ref id=ecdd35d/> (c), <1>2, <1>2a
 
 ## L0b (`ρ` の位置の数え上げ) <!--#09fabad-->
 
@@ -728,7 +704,8 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
   パラメータも capture も持たないので、記録しうるものがそれで尽きる。`collect_bindings` は歩いた本体の
   すべての束縛を表に入れるので、`vars.bindings` に無い名前は本体が束縛しない名前であり、逆に
   パラメータ・capture と束縛節点の変数は表に入る (A11)。
-  BY <ref id=3905b4e/>, <ref id=a502f3e/>, <ref id=596a46d/>, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+  BY <ref id=3905b4e/>, <ref id=a502f3e/>, <ref id=596a46d/>, CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only,
+     CODE src/rc_ir/ownership.rs: collect_bindings
 
 <1>3a. (S4) の `x` について、`(x, λ)` は `ρ` を辿るある時点 -- `x` が現れる節点の段より後 -- で記号の
       位置である。
@@ -756,9 +733,13 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
   逆向きについて。D6 より `ρ` の位置の第 2 成分はその変数の値の inhabited な boxed leaf である。
   `ρ` のスロットの第 1 成分は、D6 より束縛を持つ名前 -- 節点が束縛する変数か、パラメータ・capture --
   であって、`ρ` を辿るある時点までに値を得たものである。前者は D2 の 3 種の束縛節点のいずれかが束縛し、
-  その節点は `ρ` の上にあり (値を得た時点までに実行されている)、`Match` のアームの payload の場合は
-  `ρ` がそのアームを選んでいる -- すなわち (S2) か (S3) である。後者は (S1) である。
-  BY <ref id=b3dfa37/>, <ref id=596a46d/>, <ref id=66c9670/>, <1>1, <1>2, <1>3, <1>3a, <1>4
+  その節点は `ρ` の上にある (値を得た時点までに実行されている)。`Match` のアームの payload の場合は
+  D2 よりその名前のスコープはそのアームの `body` の部分木なので、その名前が値を得るのは `ρ` がその
+  アーム本体を辿るときである。D3 の第 2 の規則より `ρ` がアーム本体を辿るのは `ρ` がその `Match` で
+  そのアームを選ぶときなので、`ρ` はそのアームを選んでいる -- すなわち (S2) か (S3) である。後者は
+  (S1) である。
+  BY <ref id=b3dfa37/>, <ref id=ca36627/>, <ref id=596a46d/>, <ref id=66c9670/>, <1>1, <1>2, <1>3,
+     <1>3a, <1>4
 
 <1>6. (c) が成り立つ。
   A6 より束縛名は相異なるので、`x` を束縛する節点は高々 1 つである。D2 は「節点が自分自身を含むことは
@@ -954,7 +935,8 @@ E1 から E6 の各行は、辺を定める節点の形と leaf `λ` の選び�
       グローバル初期化子の `init` から作られたものであるとき (`VarTable::body_only`)、それは
       `collect_bindings` を呼ぶだけであり、`Binding::Param` を 1 つも記録しない。どちらの場合も
       `collect_bindings` は `Param` を記録しない。
-  BY CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only, collect_bindings
+  BY CODE src/rc_ir/ownership.rs: VarTable::of, VarTable::body_only,
+     CODE src/rc_ir/ownership.rs: collect_bindings
 
 <1>2. `collect_bindings` が `x` について記録を作るのは、次の 3 つの節点でだけであり、記録される構成子は
       次のとおりである。
@@ -1244,166 +1226,88 @@ A10 を満たすことを言明が要求するのは、証明が `go` の再帰�
 
 ## L3a (`Std::Array` と `Std::#FunPtr{n}` の `TyConInfo`) <!--#f68ae1c-->
 
-**言明**。プログラムの `TypeEnv` の `tycons` について、次の 3 つが成り立つ。
+**言明**。`type_env` をプログラムの `TypeEnv` とする。次の 3 つが成り立つ。
 
-- 鍵 `Std::Array` の項が在るならば、その `variant` は `TyConVariant::Array` である。
-- 鍵が `is_funptr_tycon` を満たす -- 名前空間が `Std` ただ 1 つで、名前が `FUNPTR_NAME` すなわち
-  `#FunPtr` で始まり、残りが `u32` として読める -- 項が在るならば、その `variant` は
-  `TyConVariant::Primitive` である。
-- どの鍵の名前も、`FUNPTR_NAME` を前置に持ちながら残りが `u32` として読めない、という形を取らない --
-  `is_funptr_tycon` はどの鍵に対しても panic しない。
+- **(a)** 型 `τ` の最上位の tycon が `type_env.tycons()` の鍵であるとき、`is_funptr(τ)` は panic せずに
+  真か偽を返す。
+- **(b)** `is_array(τ)` が真であり `toplevel_tycon_info(τ, type_env)` が値を返すならば、その値の
+  `variant` は `TyConVariant::Array` である。
+- **(c)** `is_funptr(τ)` が真であり `toplevel_tycon_info(τ, type_env)` が値を返すならば、その値の
+  `variant` は `TyConVariant::Primitive` である。
 
-**funptr の側を範囲でなく述語で書くのは、`TypeNode::is_funptr` がその述語で決まるからである** --
-`bulitin_tycons` が入れるのは `1` から `FUNPTR_ARGS_MAX` までだが、`is_funptr` はその範囲の外の
-`#FunPtr{n}` にも真を返す。範囲で書くと、読む 3 段が要る「`is_funptr(τ)` が真ならば `variant` は
-`Primitive`」が範囲の外で覆われない。
+**主語を鍵ではなく型に取るのは、読む 3 段が持っているのが型だからである。** その 3 段は
+`is_struct` か `is_union` から `toplevel_tycon_info` の値を得ており、`is_array` と `is_funptr` の
+真偽をその `variant` と突き合わせる。**この命題が要るのは、`is_array` と `is_funptr` が tycon の
+名前で決まるのに対し、`is_struct` と `is_union` が `type_env` の項の `variant` で決まるからである。**
+2 つを突き合わせる段は L4 の `<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` である。
 
-**この命題が要るのは、`is_array` と `is_funptr` が tycon の名前で決まるのに対し、`is_struct` と
-`is_union` が `type_env` の項の `variant` で決まるからである。** 2 つを突き合わせる段は L4 の
-`<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` である。
+**funptr の側を `bulitin_tycons` が入れる範囲でなく `is_funptr` の真偽で書くのは、`is_funptr` が
+その範囲の外の `#FunPtr{n}` にも真を返すからである。** 範囲で書くと、読む 3 段が要る
+「`is_funptr(τ)` が真ならば `variant` は `Primitive`」が範囲の外で覆われない。
 
-<1>1. `TypeNode::is_array` は最上位の tycon が `is_array_tycon` を満たす -- `make_array_tycon()`
-      すなわち `Std::Array` である -- ことである。`is_funptr_tycon` は、最上位の tycon の名前空間が
-      `Std` ただ 1 つでないか、名前が `FUNPTR_NAME` で始まらないときは `None` を返し、始まるときは
-      名前の残りを `u32` として parse し、成功すればその値を包んで返す。**残りが `u32` として読めなければ
-      `unwrap` が panic する** -- `is_funptr_tycon` は全域関数ではない。`TypeNode::is_funptr` はこの
-      呼び出しの `is_some()` であり、panic する tycon については `is_funptr` も panic する。
+<1>1. `TypeNode::is_array` は、最上位の tycon が在ってそれが `is_array_tycon` を満たすこと --
+      すなわちその tycon が `make_array_tycon()`、名前空間が `STD_NAME` (`Std`) ただ 1 つで名前が
+      `ARRAY_NAME` (`Array`) である `TyCon` に等しいこと -- であり、最上位の tycon が無ければ偽である。
+      `is_funptr_tycon` は、渡された tycon の名前空間が `STD_NAME` ただ 1 つでないか、名前が
+      `FUNPTR_NAME` (`#FunPtr`) で始まらないときは `None` を返し、始まるときは名前の残りを `u32` として
+      parse し、成功すればその値を包んで返す。**残りが `u32` として読めなければ `unwrap` が panic する**
+      -- `is_funptr_tycon` は全域関数ではない。`TypeNode::is_funptr` は、最上位の tycon が在れば
+      その tycon についてのこの呼び出しの `is_some()` であり、無ければ偽である。
       `TypeNode::toplevel_tycon_info(type_env)` が返すのは `type_env.tycons()` のその tycon の項であり、
       その鍵が無ければ (または最上位の tycon がクロージャならば) panic する。
-  BY CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr, TypeNode::toplevel_tycon_info,
-     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon, is_array_tycon, is_funptr_tycon,
-     CODE src/constants.rs: FUNPTR_NAME
+  BY CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_funptr,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon_satisfies,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon, TypeNode::toplevel_tycon_info,
+     CODE src/ast/types.rs: TyCon, TyCon::new,
+     CODE src/ast/name.rs: FullName::from_strs, CODE src/ast/name.rs: NameSpace::from_strs,
+     CODE src/ast/name.rs: NameSpace::new,
+     CODE src/fixstd/builtin.rs: make_array_tycon, make_array_name, is_array_tycon, is_funptr_tycon,
+     CODE src/constants.rs: STD_NAME, ARRAY_NAME, FUNPTR_NAME
 
 <1>2. `bulitin_tycons()` が返す写像は、鍵 `make_array_tycon()` に `variant` が `TyConVariant::Array` の
       `TyConInfo` を、`1` から `FUNPTR_ARGS_MAX` までの各 `n` について鍵 `make_funptr_tycon(n)` に
-      `variant` が `TyConVariant::Primitive` の `TyConInfo` を持つ。この写像の鍵のうち
-      `is_funptr_tycon` を満たすものはその `FUNPTR_ARGS_MAX` 個で尽きる -- 残りの鍵は名前が
-      `#FunPtr` で始まらないか、名前空間が `Std` でない。この `FUNPTR_ARGS_MAX` 個の鍵の名前は、
-      いずれも `FUNPTR_NAME` の後ろに `n` の 10 進表記 (`u32::to_string` の値) を続けたものである。
-  BY CODE src/fixstd/builtin.rs: bulitin_tycons, make_funptr_tycon, make_funptr_name, is_funptr_tycon,
-     CODE src/constants.rs: FUNPTR_ARGS_MAX, FUNPTR_NAME
+      `variant` が `TyConVariant::Primitive` の `TyConInfo` を持つ。`make_funptr_tycon(n)` の名前空間は
+      `STD_NAME` ただ 1 つであり、その名前は `FUNPTR_NAME` の後ろに `n` の 10 進表記
+      (`u32::to_string` の値) を続けたものである。
+  BY CODE src/fixstd/builtin.rs: bulitin_tycons, make_array_tycon, make_funptr_tycon, make_funptr_name,
+     CODE src/ast/name.rs: FullName::from_strs, CODE src/ast/name.rs: NameSpace::from_strs,
+     CODE src/constants.rs: STD_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME
 
-<1>3. `TypeEnv` の `tycons` の欄に書く式が在るのは、`TypeEnv::default`、`TypeEnv::new`、
-      `TypeEnv::unwrap_newtypes`、`TypeEnv::add_tycons`、`TypeEnv::resolve_type_aliases_in_tycons`、
-      および `Program::resolve_namespace_not_in_expr` である。
-  `tycons` は `TypeEnv` の非公開の欄である (`pub` が付かない) ので、EXT 可視性 より、この欄を名指す式は
-  `program.rs` の中にしかない -- この欄を宣言するモジュールは `program.rs` のモジュールであり、その子孫の
-  モジュールもこのファイルの中に書かれている。EXT 名前による数え上げ より、この欄を名指す式はその名前を
-  含むので、前提 `tycons` の欄を名指す在りか がその式を持ちうる項目を挙げる。
+<1>3. `type_env.tycons()` の項のうち、鍵が `bulitin_tycons()` の置く鍵のいずれかであるものは、
+      `bulitin_tycons()` がその鍵の下に置いた項である。とくに鍵 `make_array_tycon()` の項がそうであり、
+      名前空間が `STD_NAME` ただ 1 つで名前が `FUNPTR_NAME` で始まる鍵は `make_funptr_tycon(n)`
+      (`n` は 1 以上 `FUNPTR_ARGS_MAX` 以下) であって、その項もそうである。
+  BY <ref id=3d4be43/>, CODE src/constants.rs: STD_NAME
 
-  その走査が挙げる `program.rs` の項目のうち、この欄へ代入する式を持つのは上の 6 つである --
-  `TypeEnv::default` の `tycons: Arc::new(Default::default())`、`TypeEnv::new` の
-  `tycons: Arc::new(tycons)`、`TypeEnv::unwrap_newtypes` の `self.tycons = Arc::new(rewritten)`、
-  `TypeEnv::add_tycons` の `self.tycons = Arc::new(tycons)`、
-  `TypeEnv::resolve_type_aliases_in_tycons` の `self.tycons = Arc::new(tycons)`、および
-  `Program::resolve_namespace_not_in_expr` の `self.type_env.tycons = Arc::new(tycons)` である。
-  残りの項目が持つのは、この欄を書き換えずに読む式 (`TypeEnv::unwrapped_newtype_info`・
-  `TypeEnv::tycons`・`TypeEnv::kinds`・`TypeEnv::is_struct_act`・
-  `Program::tycon_names_with_aliases`)、アクセサ `tycons(&self)` の宣言、`Program::kind_env` が組む
-  `KindEnv` の同じ名前を持つ別の欄、`tycons` を部分文字列に持つ別の識別子、`tycons` という名前の
-  局所変数・引数、および doc コメントの散文である。上の 6 つの項目も、代入する式のほかにこれらを持つ。
-  BY 前提 `tycons` の欄を名指す在りか, EXT 可視性, EXT 名前による数え上げ,
-     CODE src/ast/program.rs: TypeEnv, TypeEnv::default,
-     TypeEnv::new, TypeEnv::tycons, TypeEnv::unwrap_newtypes, TypeEnv::unwrapped_newtype_info,
-     TypeEnv::add_tycons, TypeEnv::kinds, TypeEnv::is_struct_act,
-     TypeEnv::resolve_type_aliases_in_tycons, Program::calculate_type_env,
-     Program::tycon_names_with_aliases, Program::resolve_namespace_not_in_expr, Program::kind_env,
-     CODE src/ast/kind_scope.rs: KindEnv
+<1>4. (a) が成り立つ。
+  `τ` の最上位の tycon を `tc` とし、`tc` が `type_env.tycons()` の鍵であるとする。`<1>1` より
+  `is_funptr(τ)` は `is_funptr_tycon(tc)` の `is_some()` であり、`is_funptr_tycon` が panic しうるのは
+  `tc` の名前空間が `STD_NAME` ただ 1 つであって名前が `FUNPTR_NAME` で始まる場合だけである。その場合、
+  `<1>3` より `tc` は `1` 以上 `FUNPTR_ARGS_MAX` 以下のある `n` についての `make_funptr_tycon(n)` で
+  あり、`<1>2` よりその名前は `FUNPTR_NAME` の後ろに `n` の 10 進表記を続けたものなので、
+  EXT `u32` の 10 進表記 より `FUNPTR_NAME` の後ろの残りは `u32` として読める。よって parse は成功し、
+  `unwrap` は panic しない。
+  BY EXT `u32` の 10 進表記, <1>1, <1>2, <1>3
 
-<1>4. `<1>3` の 6 つのうち 4 つは、どの鍵の項の `variant` も変えない。`TypeEnv::default` は空の写像を
-      置き、`TypeEnv::unwrap_newtypes`、`TypeEnv::resolve_type_aliases_in_tycons`、
-      `Program::resolve_namespace_not_in_expr` は写像の鍵を変えずに各項へ `TyConInfo` の書き替えを掛け、
-      その 3 つの書き替え -- `Field::ty` の newtype の展開、`TyConInfo::resolve_type_aliases`、
-      `TyConInfo::resolve_namespace` -- はいずれも `fields` だけに触れる。
-  BY CODE src/ast/program.rs: TypeEnv, TypeEnv::unwrap_newtypes,
-     TypeEnv::resolve_type_aliases_in_tycons, Program::resolve_namespace_not_in_expr,
-     CODE src/ast/types.rs: TyConInfo, TyConInfo::resolve_namespace, TyConInfo::resolve_type_aliases
+<1>5. (b) が成り立つ。
+  `is_array(τ)` が真であるとする。`<1>1` より `τ` の最上位の tycon は `make_array_tycon()` である。
+  `toplevel_tycon_info(τ, type_env)` が値を返すならば、`<1>1` よりその値は `type_env.tycons()` の
+  鍵 `make_array_tycon()` の項であり、その鍵が写像に在る。`<1>3` よりその項は `bulitin_tycons()` が
+  その鍵の下に置いた項であり、`<1>2` よりその `variant` は `TyConVariant::Array` である。
+  BY <1>1, <1>2, <1>3
 
-<1>5. `TypeEnv::new` が置く写像のうち、鍵 `Std::Array` の項と、`is_funptr_tycon` を満たす鍵の項は、
-      `bulitin_tycons()` が入れたものである。それ以外に `TypeEnv::new` が置く鍵の名前は、`FUNPTR_NAME`
-      を前置に持たない。
-  前提 型環境に項を入れる呼び出しの在りか より、`TypeEnv::new` を呼ぶ式が在る項目は
-  `Program::calculate_type_env` である。`Program::calculate_type_env` は写像を `bulitin_tycons()` から
-  始め、各型宣言について、その tycon がすでに写像にあるか型別名にあるときは診断を出して次の宣言へ進み、
-  無いときだけ `insert` する。構造体の宣言についてはさらに、`TyCon::into_punched_type_name` が名前の
-  末尾に `PUNCHED_TYPE_SYMBOL` と穴の添字を足した鍵で `insert` する。
-
-  **型宣言が置く鍵の名前は `#` を含まない。** その鍵は `type_decl.tycon()`、すなわち `TypeDefn` の
-  `name` を名前に持つ `TyCon` であり、`parse_type_defn` はその `name` を `type_defn` の `type_name` の
-  綴りから取る。文法は `type_name = { capital_name }`、
-  `capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }` と定めるので、その綴りは英大文字
-  1 字に英数字が続いたものであり、`#` を含まない。
-
-  `Std::Array` の鍵は `bulitin_tycons()` に在るので、それを名指す宣言は `contains_key` の枝で弾かれ、
-  `insert` へ進まない。`is_funptr_tycon` を満たす鍵については、`bulitin_tycons()` に無い `n` の分が
-  `contains_key` を外れうるが、そのような鍵の名前は `FUNPTR_NAME` すなわち `#FunPtr` で始まる。型宣言が
-  置く鍵の名前は `#` を含まないので、`FUNPTR_NAME` を前置に持たない。
-
-  穴を開けた鍵の名前は、型宣言が置く鍵の名前の末尾に `PUNCHED_TYPE_SYMBOL` すなわち `#PunchedAt` と穴の
-  添字を足したものである。その先頭は元の名前と一致し、元の名前は `#` を含まないので、この名前も
-  `FUNPTR_NAME` を前置に持たない。またこの名前は `#` を含むのに対し `ARRAY_NAME` すなわち `Array` は
-  `#` を含まないので、穴を開けた `insert` が鍵 `Std::Array` を置くこともない。
-  BY 前提 型環境に項を入れる呼び出しの在りか, <1>2,
-     CODE src/ast/program.rs: Program::calculate_type_env,
-     CODE src/ast/types.rs: TyCon::into_punched_type_name,
-     CODE src/ast/typedecl.rs: TypeDefn::tycon, CODE src/parse/parser.rs: parse_type_defn,
-     CODE src/parse/grammer.pest: type_defn, type_name, capital_name,
-     CODE src/constants.rs: PUNCHED_TYPE_SYMBOL, ARRAY_NAME, FUNPTR_NAME,
-     CODE src/fixstd/builtin.rs: make_array_tycon, make_funptr_tycon, is_funptr_tycon
-
-<1>6. `TypeEnv::add_tycons` に渡る写像の鍵の名前は、`ARRAY_NAME` (`Array`) と一致せず、`FUNPTR_NAME`
-      (`#FunPtr`) を前置に持たない。
-  <2>1. `add_tycons` を呼ぶ式が在る項目は、`register_opaque_tycon`、`run_one`、`lift_all`、
-        `realize_all` である。
-    `add_tycons` は `program.rs` の `pub` のメソッドなので、EXT 名前による数え上げ より、それを呼ぶ式は
-    その名前を含む。前提 型環境に項を入れる呼び出しの在りか の走査が挙げる残りの項目が持つのは、
-    `TypeEnv` の doc の散文と `add_tycons` 自身の宣言である。
-    BY 前提 型環境に項を入れる呼び出しの在りか, EXT 名前による数え上げ,
-       CODE src/ast/program.rs: TypeEnv, TypeEnv::add_tycons
-  <2>2. `register_opaque_tycon` が入れる鍵の名前は `?` で始まる。
-    `register_opaque_tycon` が入れる鍵は引数 `info` の `tycon` である。前提 型環境に項を入れる
-    呼び出しの在りか より、`register_opaque_tycon` を呼ぶ式が在る項目は `desugar_opaque_types` であり、
-    そこが渡すのは各グローバル値 `gv` についての `collect_opaque_infos(&gv.scm, gv_name)` の元である。
-    `collect_opaque_infos` は各元の `tycon` を `FullName::new(&gv_name.to_namespace(), &opq_var.name)`
-    から作り、`opq_var` は `is_opaque_tyvar(&tv.name)` が真である型変数だけを集めた列の元である。
-    `is_opaque_tyvar` が真であるのは、名前が `?` で始まるときである。
-    BY 前提 型環境に項を入れる呼び出しの在りか,
-       CODE src/elaboration/desugar_opaque.rs: register_opaque_tycon, desugar_opaque_types,
-       collect_opaque_infos, CODE src/ast/types.rs: is_opaque_tyvar
-  <2>3. `run_one`・`lift_all`・`realize_all` が入れる鍵の名前は、`#FixCap@` か `#CapList@` で始まる。
-    この 3 つが入れる鍵は `CaptureStruct` の `tycon` である。`CaptureStruct` は非公開の欄 `fields` を
-    持つので EXT 可視性 より `capture_struct.rs` の外では構造体リテラルで作れず、その中の唯一の作り手
-    `CaptureStruct::new` は tycon の名前を `format!("{}@{}", prefix, owner.name)` と作る。`run_one` が
-    渡す `prefix` は `"#FixCap"`、`lift_all` と `realize_all` が渡す `prefix` は `CAP_LIST_PREFIX`
-    すなわち `"#CapList"` である。`format!` は `prefix` をそのまま名前の先頭に置く。
-    BY EXT 可視性, CODE src/optimization/defunctionalize_fix.rs: run_one,
-       CODE src/optimization/closure_specialization.rs: lift_all, realize_all, record_capture_list,
-       CODE src/optimization/capture_struct.rs: CaptureStruct, CaptureStruct::new,
-       CODE src/constants.rs: CAP_LIST_PREFIX
-  <2>4. QED
-    `?` は `#` と異なり、`#Fi` と `#Ca` は `FUNPTR_NAME` の先頭の 3 文字 `#Fu` と異なるので、`<2>2` と
-    `<2>3` の名前はどれも `FUNPTR_NAME` を前置に持たない。`ARRAY_NAME` すなわち `Array` は `?` でも `#`
-    でも始まらないので、その名前のどれとも一致しない。`<2>1` より、`add_tycons` を呼ぶ式が在る項目は
-    `<2>2` と `<2>3` が扱ったものだけである。
-    BY <2>1, <2>2, <2>3, CODE src/fixstd/builtin.rs: is_funptr_tycon,
-       CODE src/constants.rs: ARRAY_NAME, FUNPTR_NAME, CAP_LIST_PREFIX
-
-<1>6a. `type_env.tycons()` のどの鍵の名前も、`FUNPTR_NAME` を前置に持ちながら残りが `u32` として
-       読めない、という形を取らない。
-  `<1>3` の 6 つの書き込みのうち `<1>4` の 4 つは鍵を変えない。`<1>5` より、`TypeEnv::new` が置く鍵の
-  うち `FUNPTR_NAME` を前置に持つものは `bulitin_tycons()` の `1` から `FUNPTR_ARGS_MAX` までの各 `n`
-  についての `make_funptr_tycon(n)` に限られ、`<1>2` よりその名前は `FUNPTR_NAME` の後ろに `n` の
-  10 進表記を続けたものなので、EXT `u32` の 10 進表記 より残りは `u32` として読める。`<1>6` より
-  `add_tycons` が足す鍵も `FUNPTR_NAME` を前置に持たない。よってどの鍵の名前も、`FUNPTR_NAME` を前置に
-  持ちながら残りが `u32` として読めない形を取らない。
-  BY EXT `u32` の 10 進表記, <1>2, <1>3, <1>4, <1>5, <1>6
+<1>6. (c) が成り立つ。
+  `is_funptr(τ)` が真であるとする。`<1>1` より `τ` の最上位の tycon `tc` が在って `is_funptr_tycon(tc)`
+  は `Some` を返すので、`tc` の名前空間は `STD_NAME` ただ 1 つであり、その名前は `FUNPTR_NAME` で
+  始まる。`toplevel_tycon_info(τ, type_env)` が値を返すならば、`<1>1` よりその値は
+  `type_env.tycons()` の鍵 `tc` の項であり、その鍵が写像に在る。`<1>3` より `tc` は `1` 以上
+  `FUNPTR_ARGS_MAX` 以下のある `n` についての `make_funptr_tycon(n)` であって、その項は
+  `bulitin_tycons()` がその鍵の下に置いた項であり、`<1>2` よりその `variant` は
+  `TyConVariant::Primitive` である。
+  BY <1>1, <1>2, <1>3
 
 <1>7. QED
-  `<1>3` の 6 つの書き込みのうち、`<1>4` の 4 つはどの項の `variant` も変えず、`<1>5` の `TypeEnv::new` は
-  この 2 種の鍵に `<1>2` の項を置き、`<1>6` の `add_tycons` はこの 2 種の鍵に触れない。よって
-  `type_env.tycons()` に、鍵 `Std::Array` の項か `is_funptr_tycon` を満たす鍵の項が在るならば、それは
-  `<1>2` が述べる `TyConInfo` である。`<1>6a` が第 3 の主張を与える。
-  BY <1>2, <1>3, <1>4, <1>5, <1>6, <1>6a
+  BY <1>4, <1>5, <1>6
 
 ## L4 (identity の位置) <!--#8253e68-->
 
@@ -1590,19 +1494,14 @@ L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
     <3>2. `is_array(ty(c))` と `is_funptr(ty(c))` は panic せずに計算でき、どちらも偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
       `ArrayStorage`・`Opaque` のいずれか 1 つである。`<3>1` は `is_struct(ty(c))` が真であることを
-      `toplevel_tycon_info` 経由で示すので、`toplevel_tycon_info` は panic せず、`ty(c)` の最上位の
-      tycon は `type_env.tycons()` の鍵である。L3a の第 3 の主張より、`type_env.tycons()` のどの鍵の
-      名前も `FUNPTR_NAME` を前置に持ちながら残りが `u32` として読めない形を取らないので、
-      `is_funptr_tycon` はこの tycon に対して panic せず、`is_funptr(ty(c))` は panic せずに真か偽の
-      いずれかの値を返す。
-      `is_array(ty(c))` が真ならば `ty(c)` の最上位の
-      tycon は `Std::Array` であり、L3a より `toplevel_tycon_info(ty(c), type_env)` の `variant` は
-      `Array` である。`is_funptr(ty(c))` が真ならば `ty(c)` の最上位の tycon は `is_funptr_tycon` を
-      満たし、L3a より同じくその `variant` は `Primitive` である。
+      `toplevel_tycon_info` 経由で示すので、`toplevel_tycon_info` は値を返し、`ty(c)` の最上位の
+      tycon は `type_env.tycons()` の鍵である。よって L3a (a) より `is_funptr(ty(c))` は panic せずに
+      真か偽のいずれかの値を返す。L3a (b) より `is_array(ty(c))` が真ならばその項の `variant` は
+      `Array` であり、L3a (c) より `is_funptr(ty(c))` が真ならばその `variant` は `Primitive` である。
       `<3>1` より `ty(c)` の `variant` は `Struct` なので、どちらも真ではあり得ず、
       `is_array(ty(c))` と `is_funptr(ty(c))` はどちらも偽である。
-      BY <ref id=f68ae1c/>, <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
-         TypeNode::toplevel_tycon_info
+      BY <ref id=f68ae1c/> (a), <ref id=f68ae1c/> (b), <ref id=f68ae1c/> (c), <3>1,
+         CODE src/ast/types.rs: TyConVariant, TypeNode::toplevel_tycon_info
     <3>3. `is_fully_unboxed(ty(c))` は偽である。
       この CASE の前提より `is_box(ty(c))` は偽であり、`<3>1` と `<3>2` より `is_closure`・`is_array`・
       `is_funptr` も偽なので、`is_fully_unboxed(ty(c))` は `unpunched_field_types(ty(c))` の各
@@ -1699,19 +1598,14 @@ L0a (b) より、この鍵から始まる `⇝` の無限列は無い。
     <3>2. `is_array(ty(s))` と `is_funptr(ty(s))` は panic せずに計算でき、どちらも偽である。
       `TyConVariant` は `Primitive`・`Arrow`・`Array`・`Struct`・`Union`・`DynamicObject`・
       `ArrayStorage`・`Opaque` のいずれか 1 つである。`<3>1` は `is_union(ty(s))` が真であることを
-      `toplevel_tycon_info` 経由で示すので、`toplevel_tycon_info` は panic せず、`ty(s)` の最上位の
-      tycon は `type_env.tycons()` の鍵である。L3a の第 3 の主張より、`type_env.tycons()` のどの鍵の
-      名前も `FUNPTR_NAME` を前置に持ちながら残りが `u32` として読めない形を取らないので、
-      `is_funptr_tycon` はこの tycon に対して panic せず、`is_funptr(ty(s))` は panic せずに真か偽の
-      いずれかの値を返す。
-      `is_array(ty(s))` が真ならば `ty(s)` の最上位の
-      tycon は `Std::Array` であり、L3a より `toplevel_tycon_info(ty(s), type_env)` の `variant` は
-      `Array` である。`is_funptr(ty(s))` が真ならば `ty(s)` の最上位の tycon は `is_funptr_tycon` を
-      満たし、L3a より同じくその `variant` は `Primitive` である。
+      `toplevel_tycon_info` 経由で示すので、`toplevel_tycon_info` は値を返し、`ty(s)` の最上位の
+      tycon は `type_env.tycons()` の鍵である。よって L3a (a) より `is_funptr(ty(s))` は panic せずに
+      真か偽のいずれかの値を返す。L3a (b) より `is_array(ty(s))` が真ならばその項の `variant` は
+      `Array` であり、L3a (c) より `is_funptr(ty(s))` が真ならばその `variant` は `Primitive` である。
       `<3>1` より `ty(s)` の `variant` は `Union` なので、どちらも真ではあり得ず、
       `is_array(ty(s))` と `is_funptr(ty(s))` はどちらも偽である。
-      BY <ref id=f68ae1c/>, <3>1, CODE src/ast/types.rs: TyConVariant, TypeNode::is_array, TypeNode::is_funptr,
-         TypeNode::toplevel_tycon_info
+      BY <ref id=f68ae1c/> (a), <ref id=f68ae1c/> (b), <ref id=f68ae1c/> (c), <3>1,
+         CODE src/ast/types.rs: TyConVariant, TypeNode::toplevel_tycon_info
     <3>3. `is_fully_unboxed(ty(s))` は偽である。
       この CASE の前提より `is_box(ty(s))` は偽であり、`<3>1` と `<3>2` より `is_closure`・`is_array`・
       `is_funptr` も偽なので、`is_fully_unboxed(ty(s))` は `unpunched_field_types(ty(s))` の各
@@ -2017,12 +1911,17 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
 
       - `gen`: `InlineLLVMStringBuf`。**この op はこのコンパイラの `impl LLVMGen for` の 1 つである**
         (A3 がその全体を 78 個と数え上げている)。`free_vars_mut` は空の列を返す。`result_prov` は
-        `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返すので、結果の型の各 boxed leaf
-        に**単一の `Fresh`** を宣言する。
+        `Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)` を返す。`Provenance::uniform` は
+        `LeafMap::uniform(ty, type_env, sole_origin(src))`、`LeafMap::uniform` は
+        `LeafMap::build_shape(ty, type_env, &|_| fact.clone())` であり、`build_shape` は
+        `boxed_leaf_paths(ty, type_env)` の各 path について `leaf` を 1 度呼んでその値を対にする。
+        `sole_origin(src)` は `src` 1 つだけを持つ集合である。よって `gen` は結果の型の各 boxed leaf に
+        **単一の `Fresh`** を宣言する。
       - `T`: `Array U8`。`make_string_lit` が、この op を持つ `Llvm` 節点に
         `type_tyapp(make_array_ty(), make_u8_ty())` を結果の型として与える。
-      - `Bool`: `Std::Bool`。`unbox union { _false : (), _true : () }` であり、2 つの変位の payload の
-        型はどちらも `()` である。
+      - `()`: 0 要素のタプルの型 `make_unit_ty()`、すなわち `make_tuple_ty(vec![])` である。
+      - `Bool`: `Std::Bool`。`std.fix` の宣言 `type Bool = unbox union { _false : (), _true : () };` が
+        その型であり、2 つの変位の payload の型はどちらも `()` である。
 
       A3 の表の「単一の `Fresh`」の行より、`gen` が結果のその leaf に置くのは、新しく割り当てた
       オブジェクトへの新しい参照である。**A3 が同じ節に置く但し書き -- 実行時に参照カウントで分岐する
@@ -2033,6 +1932,10 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       `Let(x, Llvm(gen, args), k)` の `args` の名前の列は `gen.free_vars()` に等しいので、`gen` を持つ
       `Llvm` 節点はオペランドを 1 つも持たない。返せるオペランドのオブジェクトが無いので、`gen` は
       A3 の但し書きが述べる op ではない。
+
+      **プログラムは `std.fix` とこの関数 `f` だけからなるものを取る。** よって `Std` の名前空間に
+      型を宣言するのは `std.fix` だけであり、0 要素のタプルの型宣言を `type_defns` に積むのは
+      `Program::add_tuple_defns` だけである。
 
       `f` のパラメータは `c : Bool` の 1 つ、capture は無く、`borrowed_units` は空 (A1) である。本体は
       次のとおりで、`m`・`x_0`・`x_1` は型 `T`、`p_0`・`p_1` は `()` である。
@@ -2058,17 +1961,87 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
       のアームを選ぶ実行路を表す。
   BY <ref id=627e117/>, <ref id=e11772a/>, <ref id=33c54dc/>, <ref id=1172c08/>, <ref id=8412761/>, <ref id=3905b4e/>, <ref id=83d98e9/>, <ref id=f769887/>, <ref id=b3dfa37/>,
      CODE src/fixstd/builtin.rs: impl LLVMGen for InlineLLVMStringBuf, make_string_lit,
+     CODE src/fixstd/builtin.rs: make_array_ty, make_unit_ty, make_tuple_ty,
+     CODE src/rc_ir/provenance.rs: Provenance::uniform, sole_origin,
+     CODE src/rc_ir/leaf_map.rs: LeafMap::uniform, LeafMap::build_shape,
      CODE src/ast/inline_llvm.rs: LLVMGen::free_vars,
      CODE src/fixstd/std.fix: Bool
+
+<1>1b. `T`・`()`・`Bool` の最上位の tycon とその項について次が成り立つ。
+
+       - **(i)** `T` の最上位の tycon は `make_array_tycon()` であり、`is_array(T)` は真である。
+       - **(ii)** `()` の最上位の tycon の名前は `make_tuple_name_abs(0)` -- 名前空間が `STD_NAME`
+         (`Std`) ただ 1 つで、名前が `TUPLE_NAME` に `0` を続けた `Tuple0` -- である。
+         `type_env.tycons()` のその鍵の項は `tuple_defn(0)` の `tycon_info(&[])` であり、その
+         `variant` は `TyConVariant::Struct`、`is_unbox` は `TUPLE_UNBOX` すなわち真、`fields` は
+         空である。
+       - **(iii)** `Bool` の最上位の tycon の名前は、名前空間が `STD_NAME` ただ 1 つで名前が
+         `BOOL_NAME` (`Bool`) である。`type_env.tycons()` のその鍵の項は `std.fix` の宣言の
+         `tycon_info(&[])` であり、その `variant` は `TyConVariant::Union`、`is_unbox` は真、
+         `fields` は型 `()` の 2 つの変位である。
+       - **(iv)** `is_closure(T)`・`is_closure(())`・`is_closure(Bool)` はどれも偽である。
+
+  (i) について。`<1>1` より `T` は `type_tyapp(make_array_ty(), make_u8_ty())` である。
+  `make_array_ty()` は `type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))` であり、
+  `TypeNode::toplevel_tycon` は `TyApp` の腕で関数側へ降りるので、`T` の最上位の tycon はその
+  `TyCon` である。`make_array_tycon()` は `TyCon::new(make_array_name())` であって
+  `make_array_name()` は同じ `FullName::from_strs(&[STD_NAME], ARRAY_NAME)` なので、`TyCon` が
+  derive する `PartialEq` (EXT `derive` した `PartialEq`) の下で 2 つは等しい。`is_array_tycon(tc)` は
+  `*tc == make_array_tycon()` であり、`TypeNode::is_array` は
+  `toplevel_tycon_satisfies(is_array_tycon)` なので、`is_array(T)` は真である。
+
+  (ii) について。`<1>1` より `()` は `make_tuple_ty(vec![])` であり、`make_tuple_ty` は
+  `apply_type_args(&tycon(make_tuple_name_abs(0)), &[])` を返す。`apply_type_args` は引数が無いとき
+  `type_tycon(tycon)` を返すので、`()` の最上位の tycon は `TyCon { name: make_tuple_name_abs(0) }` で
+  ある。`make_tuple_name_abs(0)` は `make_tuple_name(0)` -- `FullName::from_strs(&[STD_NAME], "Tuple0")`
+  -- を absolute にしたものである。`Program::add_tuple_defns` は使われた各大きさについて
+  `Program::add_tuple_defn` を通じて `tuple_defn(size)` を `type_defns` に積み、
+  `Program::calculate_type_env` は各型宣言について `type_decl.tycon()` -- `TypeDefn` の `name` を名前に
+  持つ `TyCon` -- を鍵に `type_decl.tycon_info(&[])` を入れる。`NameSpace` の `PartialEq` と `Hash` は
+  `is_absolute` を読まず、`FullName` の `Hash` は名前空間の `names` と `name` だけを読み、`FullName` の
+  `PartialEq` は derive されたものなので、absolute かどうかは鍵の一致に効かない。`calculate_type_env` は既に
+  写像か型別名に在る tycon の宣言を `insert` へ進めないが、`<1>1` よりこの鍵を宣言するのは
+  `Program::add_tuple_defns` が積む `tuple_defn(0)` だけである。`TypeDefn::tycon_info` は
+  `TypeDeclValue::Struct(s)` の腕で `(TyConVariant::Struct, s.is_unbox, s.fields.clone())` を置き、
+  `tuple_defn(0)` の `fields` は `(0..0)` を写した列なので空、`is_unbox` は `TUPLE_UNBOX` である。
+
+  (iii) について。`<1>1` より `Bool` は `std.fix` の `type Bool = unbox union { _false : (), _true : () };`
+  が宣言する型である。`<1>1` よりこの鍵を宣言するのは `std.fix` のこの 1 行だけであり、
+  `Program::calculate_type_env` がその宣言の `tycon()` を鍵に
+  `tycon_info(&[])` を入れる。`TypeDefn::tycon_info` は `TypeDeclValue::Union(u)` の腕で
+  `(TyConVariant::Union, u.is_unbox, u.fields.clone())` を置く。宣言は `unbox` なので `is_unbox` は
+  真であり、変位は `_false` と `_true` の 2 つでどちらも型 `()` である。
+
+  (iv) について。`TypeNode::is_closure` は最上位の tycon の名前が `make_arrow_name_abs()` に等しいこと
+  であり、`make_arrow_name_abs()` は `FullName::from_strs(&[STD_NAME], ARROW_NAME)` を absolute に
+  したものである。`FullName` は `PartialEq` を derive するので、EXT `derive` した `PartialEq` より
+  `namespace` と `name` を比べる。(i)(ii)(iii) の 3 つの名前の `name` は `ARRAY_NAME` (`Array`)・
+  `Tuple0`・`BOOL_NAME` (`Bool`) であり、どれも `ARROW_NAME` (`Arrow`) と異なる。
+  BY EXT `derive` した `PartialEq`, <1>1,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon, TypeNode::toplevel_tycon_satisfies,
+     CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_closure,
+     CODE src/ast/types.rs: type_tyapp, type_tycon, tycon, apply_type_args, TyCon, TyCon::new,
+     CODE src/ast/typedecl.rs: TypeDefn::tycon, TypeDefn::tycon_info,
+     CODE src/ast/program.rs: Program::add_tuple_defn, Program::add_tuple_defns,
+     CODE src/ast/program.rs: Program::calculate_type_env,
+     CODE src/ast/name.rs: FullName, CODE src/ast/name.rs: FullName::from_strs,
+     CODE src/ast/name.rs: impl Hash for FullName,
+     CODE src/ast/name.rs: impl PartialEq for NameSpace, CODE src/ast/name.rs: impl Hash for NameSpace,
+     CODE src/fixstd/builtin.rs: make_array_ty, make_array_tycon, make_array_name, is_array_tycon,
+     CODE src/fixstd/builtin.rs: make_arrow_name_abs, make_tuple_ty, make_tuple_name,
+     CODE src/fixstd/builtin.rs: make_tuple_name_abs, tuple_defn,
+     CODE src/fixstd/std.fix: Bool,
+     CODE src/constants.rs: STD_NAME, ARRAY_NAME, ARROW_NAME, TUPLE_NAME, BOOL_NAME, TUPLE_UNBOX
 
 <1>2. `boxed_leaf_paths(T, type_env)` は `{[]}` であり、`[]` は `T` の値で inhabited である。`p_0` と
       `p_1` の型の `boxed_leaf_paths` は空であり、`boxed_leaf_paths(Bool, type_env)` も空である。
   <2>1. `is_array(T)` は真、`is_closure(T)` は偽、`is_fully_unboxed(T)` は偽である。
-    `<1>1` より `T = Array U8` であり、その tycon は `Std::Array` である。`is_array` は tycon が
-    `Std::Array` であること、`is_closure` は tycon が関数型のものであることなので、前者は真、後者は
-    偽である。`is_fully_unboxed` は `is_array` が真の型に対して偽を返す。
-    BY <1>1, CODE src/ast/types.rs: TypeNode::is_array, TypeNode::is_closure,
-       TypeNode::is_fully_unboxed
+    前 2 つは `<1>1b` の (i) と (iv) である。`is_fully_unboxed` は `is_box`・`is_closure`・`is_array`
+    の順に見て、`is_array` が真の型に対して偽を返す。第 1 の `is_box` が呼ぶ `is_unbox` は
+    `is_closure()` が偽のとき `toplevel_tycon_info` を評価するが、`<1>1` の A10 より `T` の tycon は
+    `type_env` にあり (iv) より `is_closure(T)` は偽なので、それは panic せず値を返す。
+    BY <ref id=8412761/>, <1>1, <1>1b, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
+       CODE src/ast/types.rs: TypeNode::is_box, TypeNode::is_unbox, TypeNode::toplevel_tycon_info
   <2>2. `boxed_leaf_paths(T, type_env) = {[]}` である。D4 の規則 1 は `<2>1` より、規則 2 も `<2>1`
         (`is_closure(T)` が偽) より当たらない。残る規則 3 (`is_box`) と規則 4 (`is_array`) は、どちらも
         自分自身の位置 1 つを leaf とする。`<2>1` より `is_array(T)` は真なので、規則 3 が当たっても
@@ -2076,19 +2049,45 @@ boxed leaf のうち `λ` を前置に持つものは `λ` 自身だけなので
     BY <ref id=0594f24/>, <2>1
   <2>3. `[]` は `T` の値で inhabited である。`[]` は unbox union の節を 1 つも通らない。
     BY <ref id=66c9670/>, <2>2
-  <2>4. `p_0` と `p_1` の型 `()` は leaf を持たない。`()` は `tuple_defn(0)` が定める型、すなわち
-        フィールドを 1 つも持たない構造体であり、その `is_unbox` は `TUPLE_UNBOX` すなわち真である。
-        よって `is_box`・`is_closure`・`is_array`・`is_funptr` がいずれも偽であり、
-        `unpunched_field_types` は空の列を返す。よって `is_fully_unboxed` は空の連言として真であり、
-        D4 の規則 1 より leaf を持たない。
-    BY <ref id=0594f24/>, <1>1, CODE src/ast/types.rs: TypeNode::is_fully_unboxed,
-       CODE src/fixstd/builtin.rs: tuple_defn, CODE src/constants.rs: TUPLE_UNBOX
-  <2>5. `boxed_leaf_paths(Bool, type_env)` は空である。`<1>1` より `Bool` は unbox union なので
-        `is_box` が偽であり、`is_closure`・`is_array`・`is_funptr` も偽なので、`is_fully_unboxed(Bool)` は
-        `unpunched_field_types(Bool)` が返す各型の `is_fully_unboxed` の連言である。`<1>1` よりそれは
-        2 つの payload の型 `()` についての連言であり、`<2>4` よりどちらも真である。よって
-        `is_fully_unboxed(Bool)` は真であり、D4 の規則 1 より `Bool` は leaf を持たない。
-    BY <ref id=0594f24/>, <1>1, <2>4, CODE src/ast/types.rs: TypeNode::is_fully_unboxed
+  <2>4. `p_0` と `p_1` の型 `()` について `is_box(())`・`is_closure(())`・`is_array(())`・
+        `is_funptr(())` はどれも偽、`unpunched_field_types(())` は空、`is_fully_unboxed(())` は真で
+        あり、`()` は leaf を持たない。
+    `<1>1b` の (ii) より `()` の最上位の tycon は `type_env.tycons()` の鍵であり、(iv) より
+    `is_closure(())` は偽なので、`TypeNode::toplevel_tycon_info` は panic せずその鍵の項を返す。
+    `TypeNode::is_unbox` は `is_closure()` とその項の `is_unbox` の選言であり、(ii) より項の
+    `is_unbox` は真なので `is_unbox(())` は真、`TypeNode::is_box` はその否定なので偽である。
+    (ii) より `()` の最上位の tycon が鍵なので L3a (a) より `is_funptr(())` は panic せずに値を返す。
+    L3a (b) より `is_array(())` が真ならばその項の `variant` は `Array`、L3a (c) より `is_funptr(())`
+    が真ならば `Primitive` であるが、(ii) よりその `variant` は `Struct` である。`TyConVariant` の
+    値は 1 つなので、どちらも偽である。
+    `unpunched_field_types` は `instance_field_types` を `enumerate` して穴でないものを残したもので
+    あり、`instance_field_types` が返すのは `declared_field_types` -- 項の `fields` を 1 つずつ写した
+    列 -- を元にした列なので、(ii) の空の `fields` に対して空である。`is_fully_unboxed` は
+    `is_box`・`is_closure`・`is_array`・`is_funptr` を順に見てどれも当たらなければ
+    `unpunched_field_types` の各型の `is_fully_unboxed` の連言を返すので、`is_fully_unboxed(())` は
+    空の連言として真である。D4 の規則 1 より `()` は leaf を持たない。
+    BY <ref id=0594f24/>, <ref id=f68ae1c/> (a), <ref id=f68ae1c/> (b), <ref id=f68ae1c/> (c),
+       EXT `Iterator::enumerate` と `Iterator::filter`, <1>1b,
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types, TypeNode::instance_field_types,
+       CODE src/ast/types.rs: TypeNode::declared_field_types, TyConVariant
+  <2>5. `boxed_leaf_paths(Bool, type_env)` は空である。
+    `<1>1b` の (iii) より `Bool` の最上位の tycon は `type_env.tycons()` の鍵であり、(iv) より
+    `is_closure(Bool)` は偽なので、`TypeNode::toplevel_tycon_info` は panic せずその鍵の項を返す。
+    (iii) より項の `is_unbox` は真なので `TypeNode::is_unbox` は真、`TypeNode::is_box` はその否定
+    なので偽である。(iii) より最上位の tycon が鍵なので L3a (a) より `is_funptr(Bool)` は panic せず
+    値を返し、L3a (b) と L3a (c) より `is_array(Bool)` か `is_funptr(Bool)` が真ならばその項の
+    `variant` は `Array` か `Primitive` であるが、(iii) よりそれは `Union` である。`TyConVariant` の
+    値は 1 つなので、どちらも偽である。
+    よって `is_fully_unboxed(Bool)` は `unpunched_field_types(Bool)` が返す各型の `is_fully_unboxed`
+    の連言であり、(iii) よりそれは 2 つの payload の型 `()` についての連言で、`<2>4` よりどちらも
+    真である。よって `is_fully_unboxed(Bool)` は真であり、D4 の規則 1 より `Bool` は leaf を持たない。
+    BY <ref id=0594f24/>, <ref id=f68ae1c/> (a), <ref id=f68ae1c/> (b), <ref id=f68ae1c/> (c),
+       <1>1b, <2>4,
+       CODE src/ast/types.rs: TypeNode::is_fully_unboxed, TypeNode::is_box, TypeNode::is_unbox,
+       CODE src/ast/types.rs: TypeNode::toplevel_tycon_info,
+       CODE src/ast/types.rs: TypeNode::unpunched_field_types, TyConVariant
   <2>6. QED
     BY <2>2, <2>3, <2>4, <2>5
 
@@ -2583,11 +2582,11 @@ leaf に前置したものだからである。
   `toplevel_tycon_info` が返す `TyConInfo` の `variant` が `Struct` であることである。A12 は、型の
   `variant` を述べる各節ではその型の `is_closure()` が偽であると述べ、`Destructure` の容器が構造体で
   あることをその節の 1 つに挙げる。
-  `is_array(ty(c))` が真ならば `ty(c)` の最上位の tycon は `Std::Array` であり、L3a より
-  `toplevel_tycon_info(ty(c), type_env)` の `variant` は `Array` である。`variant` が `Struct` である
-  `ty(c)` には当たらない。
-  BY <ref id=83d98e9/>, <ref id=f68ae1c/>, CODE src/ast/types.rs: TypeNode::is_struct, TypeNode::toplevel_tycon_info,
-     TypeNode::is_array, TyConVariant
+  `is_struct` が `toplevel_tycon_info` 経由で真であることから `toplevel_tycon_info(ty(c), type_env)` は
+  値を返すので、L3a (b) より `is_array(ty(c))` が真ならばその `variant` は `Array` である。`variant` が
+  `Struct` である `ty(c)` には当たらない。
+  BY <ref id=83d98e9/>, <ref id=f68ae1c/> (b), CODE src/ast/types.rs: TypeNode::is_struct,
+     CODE src/ast/types.rs: TypeNode::toplevel_tycon_info, TyConVariant
 
 <1>2. CASE `is_fully_unboxed(ty(c))` が真。
   D4 の規則 1 より `boxed_leaf_paths(ty(c), type_env)` は空なので、(a) は空虚に成り立ち、(b) の 2 つの
@@ -3036,7 +3035,7 @@ leaf に前置したものだからである。
 
 ### 定義が定めるのは語の意味だけである
 
-`README.md` の第 3 節は「定義の中に、支えの要る主張を置かない」と定める。この文書の `DEF` が定めるのは
+この文書の `DEF` が定めるのは
 語の意味だけであり、その語について示すことは段が持つ -- DEF 路の位置 の数え上げと `obj` の一意性は
 L0b、DEF 辺の leaf 対応 が D9 の値の水準の 6 行と一致することは L1 の `<1>1a`、DEF 辺の存在 と
 DEF `ρ` の上で実行された辺 の連言が D20 の「辺が在る」と一致することは L1 (b)、
@@ -3128,9 +3127,9 @@ develop mode の検査である。`README.md` の「仮定」の節は、その�
 `TypeNode::is_array` と `TypeNode::is_funptr` は最上位の tycon の**名前**で決まるのに対し、`is_struct` と
 `is_union` は `toplevel_tycon_info(type_env)` が返す項の `variant` で決まる。2 つを突き合わせる段 --
 L4 の `<1>9` `<3>2`、L4 の `<1>12` `<3>2`、L5a の `<1>1` -- は、その実行の `TypeEnv` の `Std::Array` の
-項と `is_funptr_tycon` を満たす鍵の項が `bulitin_tycons` が入れたものであることを要る。L3a がそれを、
-`Program::calculate_type_env` の種と、`TypeEnv` の `tycons` の欄に書く 6 つの式の数え上げから示す。
-**funptr の側を範囲 (`1` から `FUNPTR_ARGS_MAX`) でなく述語で書くのは、`is_funptr` がその述語で決まり、
+項と `is_funptr_tycon` を満たす鍵の項が `bulitin_tycons` が入れたものであることを要る。L3a がそれを
+A28 -- 組み込みの鍵の項は組み込みが置いたもの -- から示す。
+**funptr の側を範囲 (`1` から `FUNPTR_ARGS_MAX`) でなく `is_funptr` の真偽で書くのは、`is_funptr` が
 範囲の外の `#FunPtr{n}` にも真を返すからである。**
 
 ### 前件を、解析が `origin` を呼ぶ鍵に限ること
