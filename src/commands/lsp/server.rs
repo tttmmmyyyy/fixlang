@@ -40,7 +40,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::mem;
-use std::panic::AssertUnwindSafe;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::time::Duration;
 use std::{
@@ -877,7 +877,7 @@ fn handle_initialized(
     // expression tree of unbounded depth, so it gets the same deep-recursion stack as the batch
     // compiler's threads.
     spawn_compiler_thread(move || {
-        let res = std::panic::catch_unwind(move || {
+        let res = catch_unwind(move || {
             diagnostics_thread(diag_req_recv, diag_res_send, typecheck_cache, debounce_ms);
         });
         if let Err(payload) = res {
@@ -1104,7 +1104,7 @@ fn run_diagnostics_pass(
     // under repair too: a span reaching past the end of the file it names fails where it is turned
     // into a range of the protocol. `AssertUnwindSafe` covers `prev_err_paths`, which a pass that
     // fails leaves as the pass that published last left it.
-    let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
+    let res = catch_unwind(AssertUnwindSafe(|| {
         run_diagnostics_and_publish(overrides, typecheck_cache, res_send, prev_err_paths)
     }));
 

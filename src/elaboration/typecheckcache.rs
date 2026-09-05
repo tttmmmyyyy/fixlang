@@ -272,7 +272,7 @@ mod tests {
         ast::types::{type_tyvar_star, Scheme},
         fixstd::builtin::{make_bool_ty, make_i64_ty},
     };
-    use std::panic::AssertUnwindSafe;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     /// A field accessor and a value the user writes are two entities whose names differ only in a
     /// character a file name cannot carry. Their cache files must stay apart: a shared file hands
@@ -346,7 +346,7 @@ mod tests {
         let expr = TypedExpr::from_expr(expr_var(name.clone(), None));
         cache.save_cache(&expr, &name, &scheme, "0");
 
-        let held = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let held = catch_unwind(AssertUnwindSafe(|| {
             let _entries = cache.lock_data();
             panic!("a thread that panics while it holds the entries");
         }));
