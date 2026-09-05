@@ -227,6 +227,96 @@ SCAN src/ `LeafOrigin::Arg`
   = src/rc_ir/provenance.rs: leaf_source_to_string -- パターン (表示)
   = src/rc_ir/provenance.rs: resolve_leaf -- パターン (宣言を読む側)
 
+**前提 節点の書き換えの不在** --- `RcExprNode` の値を可変に借りる式も、`Arc` の中身を可変に借りる式も、
+下の走査が挙げるもので尽きる。
+
+SCAN src/ `&mut RcExprNode`
+
+SCAN src/ `Arc::get_mut`
+
+SCAN src/ `Arc::make_mut`
+  = src/elaboration/typecheck.rs: TypeCheckContext::instantiate_scheme -- 借りるのは `Arc<Vec<Predicate>>` と `Arc<Map<..>>` であって `Arc<RcExpr>` ではない
+
+**前提 `VarTable::bindings` へ鍵を入れる式の在りか** --- `bindings` という名前の欄へ鍵を入れる式は次で
+尽きる。そのうち `VarTable` の欄を書くものは `--` の後にそう書く。
+
+SCAN src/ `bindings.insert(`
+  = src/rc_ir/ownership.rs: VarTable::of -- `VarTable` の欄。パラメータと capture の名前
+  = src/rc_ir/ownership.rs: collect_bindings -- `VarTable` の欄。`Let`・`Destructure` の束縛変数と、`Match` のアームの payload の名前の 2 つの式
+  = src/rc_ir/provenance.rs: Interpreter::record -- `Interpreter` の同名の欄であって `VarTable` の欄ではない
+
+**前提 `RcFunc::borrowed_units` の在りか** --- `borrowed_units` の字面を持つ項目は次で尽きる。この欄に
+値を書くものは `--` の後にそう書く。
+
+SCAN src/ `borrowed_units`
+  = src/build/build_object_files.rs: lower_and_insert_rc -- doc コメントの中の言及
+  = src/rc_ir/ast.rs: RcFunc -- 欄の宣言
+  = src/rc_ir/borrow.rs: borrow_ify -- 書き込み。`param_capture_units` から `owned_units` を除いた集合
+  = src/rc_ir/borrow.rs: clone_func -- 書き込み。`Set::default()`
+  = src/rc_ir/borrow.rs: covered_leaves -- 読み
+  = src/rc_ir/borrow.rs: node_id -- doc コメントの中の言及
+  = src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function -- 書き込み。`Set::default()`
+  = src/rc_ir/ownership.rs: acted_references -- doc コメントの中の言及
+  = src/rc_ir/ownership.rs: all_owned_units -- 読み
+  = src/rc_ir/specialization.rs: CloneRegistry::finish_clone -- 書き込み。複製の鍵を改名して組む式
+
+**前提 `finish_clone` の呼び出し元** --- `finish_clone` の字面を持つ項目は次で尽きる。
+
+SCAN src/ `finish_clone(`
+  = src/rc_ir/locality.rs: specialize -- 呼び出し
+  = src/rc_ir/specialization.rs: CloneRegistry::finish_clone -- 宣言
+  = src/rc_ir/unique_check_elim.rs: Specializer::materialize_clone -- 呼び出し
+
+**前提 `borrows_operand` の本体の在りか** --- `LLVMGen::borrows_operand` の本体が在る項目は次で尽きる。
+既定の本体を除く 13 個が override である。
+
+SCAN src/ `fn borrows_operand`
+  = src/ast/inline_llvm.rs: borrows_operand -- trait の既定の本体
+  = src/fixstd/builtin.rs: InlineLLVMArrayBorrowElementsBody::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMArrayCopyCapacityBoundsUnchecked::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMArrayGetCapacityBody::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMArrayGetPtrBody::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMArrayGetSizeBody::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMArrayUnsafeGetBoundsUnchecked::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMCaptureProjectBody::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMGetBoxedDataPtrFunctionBody::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMStructGetBody::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_operand -- override
+  = src/fixstd/builtin.rs: InlineLLVMUnionIsBody::borrows_operand -- override
+
+**前提 `Origin::Join` の在りか** --- `Origin::Join` の字面を持つ項目は次で尽きる。構成する式を持つのは
+1 つだけであり、残る 2 つはパターンである。
+
+SCAN src/ `Origin::Join`
+  = src/rc_ir/ownership.rs: Origin::candidates -- パターン
+  = src/rc_ir/ownership.rs: Origin::identity -- パターン
+  = src/rc_ir/ownership.rs: Origin::of_candidates -- 構成。`candidates.len()` が 2 以上のときだけ作る
+
+**前提 走査が `consume` を呼ぶ位置** --- `CancelAnalysis::consume` を呼ぶ式を持つ項目は次で尽きる。
+
+SCAN src/ `self.consume(`
+  = src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs -- `rhs_consumes` が `consumed` に積む各 `(var, leaf)` について 1 回
+  = src/rc_ir/borrow.rs: CancelAnalysis::walk_inner -- `Destructure` の腕が `destructure_consumes` の挙げる各 leaf について 1 回
+
+**前提 `origins` の memo を書く式** --- `VarTable::origins` を可変に借りる式を持つ項目は次で尽きる。
+
+SCAN src/ `origins.borrow_mut()`
+  = src/rc_ir/ownership.rs: origin -- `origin_inner` の答えを同じ鍵で入れる 1 つの式
+
+**前提 `pending` と `outstanding` を変える式** --- `PendingRetains` の列から要素を取り除く式と、
+`References` の個数を引く式を持つ項目は次で尽きる。
+
+SCAN src/ `pending.remove(`
+  = src/rc_ir/borrow.rs: un_bump -- `InBracket` の subtract の後、`outstanding` が空になった要素を外す
+
+SCAN src/ `pending.retain(`
+  = src/rc_ir/borrow.rs: CancelAnalysis::consume_objects -- 名指されたオブジェクトを含む要素を落とす
+
+SCAN src/ `.subtract(`
+  = src/rc_ir/borrow.rs: un_bump -- `innermost.outstanding` から `un_bumped` を引く
+
 **DEF ii-a と ii-b の読み**。README の形で A19 (ii) を読む。**(ii-a)** は、各時点と各**計数下の**別名類 `C` に
 ついて `held_ρ(τ, C) ≥ 0` であり、読む構文と `Retain`/`Release` がその類を名指す時点では
 `held_ρ(τ, C) ≥ 1` であることである。**非負であることは、終端の `Ret` の消費を行った直後の時点に
@@ -1176,12 +1266,14 @@ D34 の表で `held_ρ(・, C)` に開始値 1 を与える 3 行 -- `C` の終�
   `InBracket` の subtract の後に置く `if innermost.outstanding.is_empty() { pending.remove(index); }`
   である (`CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_objects`, `CODE src/rc_ir/borrow.rs:
   CancelAnalysis::merge`, `CODE src/rc_ir/borrow.rs: un_bump`)。
-  **在りかは可視性で決める。** `PendingRetains` は `Vec<PendingRetain>` であり
+  **在りかは `前提 pending と outstanding を変える式` が与える。** `pending.remove(` の走査は
+  `un_bump` を、`pending.retain(` の走査は `consume_objects` を挙げ、`merge` は返り値を
+  `pending_in` から組み立てる (`CODE src/rc_ir/borrow.rs: CancelAnalysis::merge`)。
+  `PendingRetains` は `Vec<PendingRetain>` であり
   (`CODE src/rc_ir/borrow.rs: PendingRetains`)、その要素の型 `PendingRetain` は
   `src/rc_ir/borrow.rs` の非公開の項目なので、`EXT 非公開の項目の可視範囲` よりこの列を持つ値を
   名指す式はそのモジュールとその子孫の中にしかなく、`EXT クレートの項目` よりそのモジュールの項目は
-  このファイルに書かれたものだけである。`EXT ビルドの対象` より走査の範囲は `src/` の全ファイルであり、
-  その全文を読むと、この列から要素を取り除く式は上の 3 つで尽きる -- 残る書き換えは
+  このファイルに書かれたものだけである。その全文を読むと、この列に要素を足す式は
   `walk_inner` の `RcExpr::Retain` の腕の `pending.push` だけである。
 
   **`merge` の分は `ρ` が選んだアームの出口の側で読む。** `merge` は返り値の要素を `pending_in` から
@@ -1258,7 +1350,8 @@ P5 は「**`identity` は解析が呼んだ鍵についてしか定まらない�
       `R := acted_references(v, π)` を引き、`B(p, ρ)` から名前の多重集合 `A` -- その `Release` が `ρ` で
       実際に処分する参照を、それを持つ leaf の `origin` の `identity` で名付けて数えたもの -- を引く。
       `R` も `A` も `VarPath` を鍵とする多重集合である。
-  BY <ref id=8093b68/>, EXT クレートの項目, EXT ビルドの対象, EXT 非公開の項目の可視範囲,
+  BY <ref id=8093b68/>, 前提 `pending` と `outstanding` を変える式,
+     EXT クレートの項目, EXT ビルドの対象, EXT 非公開の項目の可視範囲,
      CODE src/rc_ir/borrow.rs: un_bump, CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::acted_references,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::merge, CODE src/rc_ir/borrow.rs: PendingRetains,
@@ -1273,7 +1366,8 @@ P5 は「**`identity` は解析が呼んだ鍵についてしか定まらない�
   `uniform` を作るときの読みと、`walk_inner` の `Retain` の腕・`merge` の返り値が新しい要素を
   組み立てるときの初期値である。**`References` の値を変えるメソッドは `subtract` だけである** --
   `Map<VarPath, usize>` の欄は非公開なので、`EXT 非公開の項目の可視範囲` よりそれを書き換える式は
-  `References` を定めるモジュールの中にしかない。
+  `References` を定めるモジュールの中にしかなく、`前提 pending と outstanding を変える式` の
+  `.subtract(` の走査が挙げる項目は `un_bump` だけである。
   `un_bumped` は `Release` の腕が渡す `self.acted_references(v, path)` -- <1>2 より
   `ownership::acted_references` の返り値そのもの -- である。D27 の 2 行目が
   `B(p, ρ)` の側を定める。残る 2 つの行では両者が揃って運ばれる -- アームへの複製は `pending` を
@@ -1579,20 +1673,15 @@ RcState::Unknown, k)` の形であり、`k` から継続を辿って最初に現
   `vec![]`、`RcState` は `Unknown` である。
 
 <1>2. `insert_rc` は、一度作った節点の継続を書き換えない。
-  BY EXT クレートの項目, EXT ビルドの対象, CODE src/rc_ir/ast.rs: RcExprNode,
+  BY 前提 節点の書き換えの不在, CODE src/rc_ir/ast.rs: RcExprNode,
      CODE src/rc_ir/rc_insert.rs: insert_rc,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
      CODE src/rc_ir/rc_insert.rs: build_retains,
      CODE src/rc_ir/rc_insert.rs: build_releases
-  **在りかは述語で決める。** `insert_rc` が走らせる関数を一覧にすると、関数が 1 つ増えるたびに
-  古くなる。節点の継続は `RcExprNode` の `expr` 欄 (`Arc<RcExpr>`) が持つので、一度作った節点の
-  継続を書き換える式は、その節点への可変参照を持ち、`expr` 欄へ代入するか `Arc` の中身を可変に
-  借りるものである。**その 3 つを述語としてクレートの全ファイルに掛ける** -- `&mut RcExprNode` を
-  取る関数の宣言、`RcExprNode` 型の値の `expr` 欄への代入、`Arc::get_mut` と `Arc::make_mut` の
-  呼び出しである。第 1 と第 2 は 1 つも無く、第 3 は `src/elaboration/typecheck.rs` の 2 つだけで
-  どちらも `Arc<RcExpr>` を借りない。**走査の範囲は `src/` の全ファイルである** --
-  `EXT ビルドの対象` がそれを与え、`EXT クレートの項目` よりその全文を読めばクレートの内容を
-  すべて読んだことになる。
+  節点の継続は `RcExprNode` の `expr` 欄 (`Arc<RcExpr>`) が持つので、一度作った節点の
+  継続を書き換える式は、その節点を可変に借りるか、`Arc` の中身を可変に借りるものである。
+  `前提 節点の書き換えの不在` の 3 つの走査より、`&mut RcExprNode` を取る式も `Arc::get_mut` の
+  呼び出しも無く、`Arc::make_mut` の呼び出しは `Arc<RcExpr>` を借りない 1 つだけである。
   よって `RcExprNode` の値は作られた後に変わらず、`insert_rc` が走らせるどの式も、返された節点を
   別の構成子の継続 (`cont` または `node`) として渡すか、本体の位置 -- `insert_into_func` の
   `func.body`、`insert_rc` の `glob.init` -- へ書き換えの結果の木そのものを置くだけである
@@ -2912,6 +3001,7 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
 
 <1>4. (d)。
   BY <ref id=8e3aff3/>, <ref id=cb35ab1/>, <ref id=b3dfa37/>, <ref id=596a46d/>, <ref id=3e6b0e0/>,
+     前提 `VarTable::bindings` へ鍵を入れる式の在りか,
      EXT クレートの項目, EXT ビルドの対象, EXT 条件つきコンパイル,
      CODE src/rc_ir/rename.rs: rename_expr_inner,
      CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders_inner,
@@ -2928,13 +3018,11 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
      CODE src/rc_ir/rename.rs: assign_fresh_names_to_binders,
      CODE src/rc_ir/rename.rs: substitute_expr,
      CODE src/rc_ir/rename.rs: rename_expr, CODE src/rc_ir/rename.rs: rename_var
-  `vars.bindings` に鍵を入れる式は、`EXT ビルドの対象` と `EXT クレートの項目` より `src/` の
-  全ファイルの全文を読んで数えると 4 つあり、`fix` の実行可能ファイルを作るビルドに入るのは 3 つで
-  ある -- `VarTable::of` が入れる関数のパラメータと capture の名前と、`collect_bindings` が入れる
+  `vars.bindings` に鍵を入れる式の在りかは `前提 VarTable::bindings へ鍵を入れる式の在りか` が
+  与える -- `VarTable::of` が入れる関数のパラメータと capture の名前と、`collect_bindings` が入れる
   2 つの式 (`Let`・`Destructure` の束縛変数と、`Match` のアームの payload の名前) である
-  (グローバル初期化子については `VarTable::body_only` が後者だけを入れる)。4 つ目は
-  `src/rc_ir/ownership.rs` の `#[cfg(test)] mod tests` のヘルパ `table` の中に在り、
-  `EXT 条件つきコンパイル` よりそのビルドには入らない。D6 は
+  (グローバル初期化子については `VarTable::body_only` が後者だけを入れる)。走査が挙げる残る 1 つは
+  `Interpreter` の同名の欄であって `VarTable` の欄ではない。D6 は
   「**逆に、`vars.bindings` に束縛を持つ名前は局所名である。**」と述べ、その道を
   「`VarTable::of` と `VarTable::body_only` がその表に入れる鍵は、パラメータ・capture の名前と節点が
   束縛する変数の名前だけで、どれも `Lowerer::fresh_var` が `FullName::local` で作ったものである」と
@@ -2979,7 +3067,8 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
   この名前であり、D6 よりその対は記号の位置であってスロットではない。
 
 <1>5. (e)。
-  BY <ref id=ef8efc4/>, EXT クレートの項目, EXT ビルドの対象, EXT 条件つきコンパイル,
+  BY <ref id=ef8efc4/>, 前提 `RcFunc::borrowed_units` の在りか, 前提 `finish_clone` の呼び出し元,
+     EXT クレートの項目, EXT ビルドの対象, EXT 条件つきコンパイル,
      CODE src/rc_ir/lower.rs: Lowerer::lower_lambda_as_function,
      CODE src/rc_ir/simplify.rs: simplify, CODE src/rc_ir/rc_insert.rs: insert_rc,
      CODE src/rc_ir/rc_insert.rs: RcInserter::insert_into_func,
@@ -2989,10 +3078,11 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
      CODE src/rc_ir/unique_check_elim.rs: Specializer::materialize_clone,
      CODE src/rc_ir/locality.rs: specialize,
      CODE src/build/build_object_files.rs: optimize_rc_program
-  `RcFunc` の `borrowed_units` の欄に値を書く式は 8 つである。**在りかは述語で決める** -- `RcFunc` の
-  リテラルでこの欄に値を置く式、`..` の構造体更新でこの欄を運ぶ式、そしてこの欄への代入である。
-  **`EXT ビルドの対象` と `EXT クレートの項目` より、`src/` の全ファイルの全文を読んで得たこの一覧は
-  完全である。**
+  `RcFunc` の `borrowed_units` の欄に値を書く式は次の 8 つである。**在りかは 2 つで決める** --
+  この欄の字面を持つ項目は `前提 RcFunc::borrowed_units の在りか` が挙げ、そのうち書き込みは
+  `--` の後に書いてある。字面を持たずにこの欄を運ぶのは `..` の構造体更新の式であり、その式は
+  `RcFunc` のリテラルの中にしかないので、`EXT ビルドの対象` と `EXT クレートの項目` より
+  `src/` の全ファイルの全文を読んで得た下の一覧は完全である。
 
   1. `Lowerer::lower_lambda_as_function` が `RcFunc` を組むときに置く `Set::default()`。
   2. `borrow_ify` の末尾の `func.borrowed_units = param_capture_units(func, type_env)…`。
@@ -3008,9 +3098,9 @@ P18a・P18c・P19・P21 が読む形は P14 には強すぎる。
 
   6・7・8 は `EXT 条件つきコンパイル` より `fix` の実行可能ファイルを作るビルドに入らない。
   2 と 3 は `borrow_ify` の中に在る。4 と 5 は `CloneRegistry::finish_clone` の中に在り、
-  **`finish_clone` を呼ぶ式は 2 つである** -- `unique_check_elim::specialize` の
-  `materialize_clone` と `locality::specialize` の中の 1 つであり、`EXT ビルドの対象` と
-  `EXT クレートの項目` より `src/` の全ファイルの全文を読んで得たこの一覧は完全である。
+  **`finish_clone` を呼ぶ式は 2 つである** (`前提 finish_clone の呼び出し元` -- 走査が挙げる 3 つの
+  うち 1 つはその関数自身の宣言であり、残る 2 つが `unique_check_elim::Specializer::materialize_clone`
+  と `locality::specialize` の呼び出しである)。
   `optimize_rc_program` はこの 2 つのパスを `borrow_ify` より後に呼ぶので、2・3・4・5 はどれも
   `insert_rc` の出力には掛からない。
   `lower_and_insert_rc` は `lower_program` の後に `simplify` と `insert_rc` を掛けるだけであり、
@@ -3051,19 +3141,12 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 **証明**
 
-<1>1. `borrows_operand` を override する `impl LLVMGen for` は 13 個であり、既定は偽を返す。
-  BY <ref id=e11772a/>, EXT クレートの項目, CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand
-  **`impl LLVMGen for` の集合が閉じていることが要る。** A3 は「`impl LLVMGen for` は 78 個あり」と
-  数え上げ、`EXT クレートの項目` よりクレートの項目 -- トレイト実装を含む -- はクレート根から
-  `mod` 宣言をたどって得られる各モジュールのソースに書かれたものだけなので、クレートの全ファイルを
-  読んで得たこの 78 個の一覧は完全である。その 78 個のうち `borrows_operand` を override するものを
-  数えると 13 個である。既定の実装は `false` を返す。override するのは `src/fixstd/builtin.rs` の
-  `InlineLLVMArrayUnsafeGetBoundsUnchecked`、`InlineLLVMArrayCopyCapacityBoundsUnchecked`、
-  `InlineLLVMArrayGetPtrBody`、`InlineLLVMArrayGetSizeBody`、`InlineLLVMArrayGetCapacityBody`、
-  `InlineLLVMStructGetBody`、`InlineLLVMCaptureProjectBody`、`InlineLLVMUnionAsBody`、
-  `InlineLLVMUnionIsBody`、`InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody`、
-  `InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody`、`InlineLLVMGetBoxedDataPtrFunctionBody`、
-  `InlineLLVMArrayBorrowElementsBody` の 13 個である。
+<1>1. `borrows_operand` を override する `impl LLVMGen for` は、`前提 borrows_operand の本体の在りか`
+      が挙げるもので尽きる。既定は偽を返す。
+  BY <ref id=e11772a/>, 前提 `borrows_operand` の本体の在りか,
+     CODE src/ast/inline_llvm.rs: LLVMGen::borrows_operand
+  その走査が挙げる項目のうち `src/ast/inline_llvm.rs` の 1 つは trait の既定の本体であり、その本体は
+  `false` を返す。残るのが override である。
 
 <1>2. `result_prov` の既定の実装は、結果のどの leaf にも `Unknown` だけを置く。
   BY CODE src/ast/inline_llvm.rs: LLVMGen::result_prov, CODE src/rc_ir/provenance.rs: Provenance,
@@ -3076,7 +3159,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `boxed_leaf_paths(ty, type_env)` の各元に項を置くので、各 boxed leaf に `sole_origin(Unknown)` が
   入る。`as_arg_projection` は `LeafOrigin::Unknown` に `None` を返す。
 
-<1>3. <1>1 の 13 個のうち `result_prov` を override するのは
+<1>3. <1>1 の override のうち `result_prov` を override するのは
       `InlineLLVMArrayCopyCapacityBoundsUnchecked`、`InlineLLVMStructGetBody`、
       `InlineLLVMUnionAsBody` の 3 個である。
   BY <1>1, EXT クレートの項目,
@@ -3084,7 +3167,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
      CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::result_prov,
      CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::result_prov
   残る 10 個は `result_locality` を override するが `result_prov` は override しない。
-  `EXT クレートの項目` より、<1>1 の 13 個の `impl` ブロックはそれぞれ 1 か所にしかなく、その本体を
+  `EXT クレートの項目` より、<1>1 の各 `impl` ブロックはそれぞれ 1 か所にしかなく、その本体を
   読んで得たメソッドの一覧は完全である。
 
 <1>3a. `InlineLLVMArrayCopyCapacityBoundsUnchecked` の `result_prov` は、結果の各 boxed leaf に
@@ -3184,7 +3267,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
 
 <1>6. QED
   BY <1>1, <1>2, <1>3, <1>3a, <1>4, <1>5, <1>5a
-  (a) について、`borrows_operand(i)` が真になるのは <1>1 の 13 個のいずれかであり、そのうち 10 個は
+  (a) について、`borrows_operand(i)` が真になるのは <1>1 の override のいずれかであり、そのうち 10 個は
   既定の `result_prov` を持ち `Arg` を宣言しない (<1>2、<1>3)。
   `InlineLLVMArrayCopyCapacityBoundsUnchecked`
   は結果の各 leaf に単一の `Fresh` を置くので `Arg` を宣言しない (<1>3a)。残る 2 個は、
@@ -4173,7 +4256,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
      CODE src/rc_ir/ownership.rs: Origin, CODE src/rc_ir/ownership.rs: Origin::acted_on,
      CODE src/rc_ir/ownership.rs: as_arg_projection,
      CODE src/rc_ir/ownership.rs: origin_from_leaves_under, <ref id=3f68b95/>, <ref id=cbc4a1c/>, <ref id=d59f90b/>, <ref id=e11772a/>,
-     EXT クレートの項目, EXT 空の列の第 1 元
+     前提 `Origin::Join` の在りか, EXT 空の列の第 1 元
   止まる腕: `None`、`Binding::Param`、`Binding::Producer`、`Binding::Field` の容器が boxed の枝、
   `Binding::Payload` の `Some(_)` かつ scrutinee が boxed の枝、`Binding::Llvm` の
   `as_arg_projection` が `None` を返す枝 (スロットの path は boxed leaf なので `leaf_origins_at` は
@@ -4192,10 +4275,9 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   そのもの**である -- `origin` が返す `Origin::Join` の値は `of_candidates` が `candidates.len()` が
   2 以上のときにだけ作るものであり (`Origin::Join` を構成する式はその 1 つだけである)、
   `Origin::acted_on` は `identity()` を先頭に、それと異なる `candidates()` の元を続けた列なので、
-  そのとき `acted_on()` は 2 元以上を持つ。**`Origin::Join` を構成する式が 1 つだけであることは、
-  `EXT クレートの項目` が支える** -- クレートの項目はクレート根から `mod` 宣言をたどって得られる
-  各モジュールのソースに書かれたものだけなので、クレートの全ファイルを読んで得たその一覧は完全で
-  ある。ところが `candidates` は全アームの `acted_on()` の和であって
+  そのとき `acted_on()` は 2 元以上を持つ。**`Origin::Join` を構成する式が 1 つだけであることは
+  `前提 Origin::Join の在りか` が与える** -- 走査が挙げる 3 つの項目のうち構成の式を持つのは
+  `Origin::of_candidates` だけであり、残る 2 つはパターンである。ところが `candidates` は全アームの `acted_on()` の和であって
   1 元なので、選ばれたアームの結果の `origin` の `acted_on()` も 1 元であり、その値は `Join` では
   ありえず `Exactly` である。`Exactly(p)` の `acted_on()` は `[p]` なのでその `p` が唯一の候補であり、
   返り値と一致する。よってこの場合は辿る腕と同じ形になる。
@@ -4353,7 +4435,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `InBracket` は 1 つの要素の `B` から引くだけである。
 
 <1>0a. (0)。
-  BY 前提 (S1), <ref id=9d74736/>, <ref id=ef8efc4/>, <ref id=ff5985d/>, <ref id=e885aa0/>,
+  BY 前提 (S1), 前提 走査が `consume` を呼ぶ位置, <ref id=9d74736/>, <ref id=ef8efc4/>, <ref id=ff5985d/>, <ref id=e885aa0/>,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::walk_inner,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume_rhs,
      CODE src/rc_ir/borrow.rs: CancelAnalysis::consume,
@@ -4363,10 +4445,11 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
      CODE src/rc_ir/ownership.rs: all_owned_units,
      CODE src/rc_ir/ownership.rs: passthrough_arg_leaves,
      CODE src/rc_ir/ownership.rs: destructure_consumes
-  `walk_inner` が `consume` を呼ぶのは 2 か所である -- `Let(x, rhs, k)` の腕が `consume_rhs` を通じて
-  `rhs_consumes` が `consumed` に積む各 `(var, leaf)` について呼ぶ場所と、`Destructure` の腕が
-  `destructure_consumes` が挙げる各 leaf について呼ぶ場所であり、どちらも 1 つの leaf につき
-  1 回である。`RcExpr::Ret` の腕も `Retain`/`Release`/`Eval` の腕も `consume` を呼ばない。
+  `CancelAnalysis::consume` を呼ぶ式の在りかは `前提 走査が consume を呼ぶ位置` が与える -- 走査が
+  挙げるのは `consume_rhs` と `walk_inner` の 2 項目であり、前者は `rhs_consumes` が `consumed` に
+  積む各 `(var, leaf)` について、後者は `Destructure` の腕が `destructure_consumes` の挙げる各 leaf に
+  ついて、どちらも 1 つの leaf につき 1 回呼ぶ。`RcExpr::Ret` の腕も `Retain`/`Release`/`Eval` の腕も
+  `consume` を呼ばない。
   D9 の消費の表の 6 行のうち、`App`・`Closure`・`Llvm` の 3 行は `Let` の右辺に、`Destructure` の
   2 行は `Destructure` の節点に、残る 1 行は本体の終端の `Ret` に付く。
   **`App` の行の所有は両側で常に真である。** `consume_rhs` が `rhs_consumes` に渡す `owns` は
@@ -5480,17 +5563,17 @@ A19 (ii) の範囲の第 1 の半分 -- `borrow_ify` の入力の各本体 -- �
     P2a よりその鍵の `Org_B` である。
   <2>4. 1 つの計算の中で memo に当たった `origin` の呼び出しが読む項は、**同じ鍵についてそれより先に
         戻った呼び出し**が入れたものである。
-    BY <ref id=3e6b0e0/>, EXT クレートの項目, EXT 非公開の項目の可視範囲, CODE src/rc_ir/ownership.rs: origin,
-       CODE src/rc_ir/ownership.rs: VarTable,
+    BY <ref id=3e6b0e0/>, 前提 `origins` の memo を書く式, EXT 非公開の項目の可視範囲,
+       CODE src/rc_ir/ownership.rs: origin, CODE src/rc_ir/ownership.rs: VarTable,
        CODE src/rc_ir/ownership.rs: VarTable::of, CODE src/rc_ir/ownership.rs: VarTable::body_only
     `origin` は `vars.origins` を鍵で引き、項が在ればその値を返し、無ければ `origin_inner` を走らせて
     (A15 より `grow_stack` はその閉包をちょうど 1 回呼ぶ) その答えを同じ鍵で表に入れ、続けて返る。
     **`origins` が非公開の欄であることは `VarTable` の宣言による** -- その欄は
     `origins: RefCell<Map<VarPath, Origin>>` と書かれていて `pub` を持たない (同じ宣言の
     `param_tys` と `var_tys` は `pub(crate)` を持つ)。`EXT 非公開の項目の可視範囲` よりそれに項を
-    入れる式は `VarTable` を定めるモジュールの中にしかなく、`EXT クレートの項目` よりそのモジュールの
-    項目はそのファイルに書かれたものだけである。クレートの全ファイルを読むと、表に項を入れる式は
-    `origin` の中のこの 1 つだけである。よって読まれた項を入れたのは同じ鍵についての呼び出しである。
+    入れる式は `VarTable` を定めるモジュールの中にしかない。`前提 origins の memo を書く式` より、
+    その欄を可変に借りる式を持つ項目は `origin` だけであり、そこに在るのは `origin_inner` の答えを
+    同じ鍵で入れる 1 つの式である。よって読まれた項を入れたのは同じ鍵についての呼び出しである。
     その呼び出しは `insert` の直後に返るので、項が読まれる時点で既に戻っている。
   <2>5. P2 が範囲に入れる各鍵 `(x, π)` について `Org_B(x, π) = Org_{B'}(x, π)` である。
     BY <2>1, <2>2, <2>3, <2>4, <ref id=0edb0ba/>, <ref id=b1f6e13/>, <ref id=3e6b0e0/>, EXT 呼び出しの入れ子,
