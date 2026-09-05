@@ -199,11 +199,12 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   BY <ref id=cb35ab1/>, <ref id=63eadd9/>, CODE src/rc_ir/borrow.rs: clone_func, borrow_funcref,
      CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
 
-<1>2a. `rename_expr(node, renaming)` が返す木は、`node` の木と次の点で一致する。節点の種類とその並び、
+<1>2a. `rename_expr(node, renaming)` が返す木は、`node` の木から次の 2 つだけを替えたものである。
+       各 `RcVar` の名前を `renaming` で引いた像に替えること、および `Llvm` の op を複製して
+       `free_vars_mut()` が返す名前を同じく替えることである。節点の種類とその並び、
        `Retain`/`Release` の path と state、`Destructure` が名指すフィールドの添字とその state、
-       `Eval` と `Ret` の位置、`Let` の右辺の構成子、`Llvm` の op の値と `args` の長さ、`Closure` の
-       `FuncRef`、`Match` の各アームの `tag` と `payload_state`。相違は、各 `RcVar` の名前が
-       `renaming` の像に差し替わっていることだけであり、`RcVar` の型の欄は残る。
+       `Let` の右辺の構成子、`Llvm` の `args` の長さ、`Closure` の `FuncRef`、`Match` の各アームの
+       `tag` と `payload_state`、そして各 `RcVar` の型の欄は、`node` のものである。
   `rename_expr` の本体は `grow_stack(|| rename_expr_inner(node, renaming))` であり、A15 より
   `grow_stack` は閉包をちょうど 1 回呼んでその返り値を返すので、`rename_expr` が返すのは
   `rename_expr_inner(node, renaming)` である。`rename_expr_inner` は D2 の 6 種の節点それぞれについて
@@ -236,9 +237,9 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   BY <ref id=3905b4e/>, <1>2, <1>2a, <ref id=b3dfa37/>, CODE src/rc_ir/rename.rs: fresh_rename_function, assign_fresh_name
 
 <1>5. 借用版の `Pre(V)` について A12 の性質が成り立つ。
-  `<1>2a` より、名前替えは `RcVar` の名前だけを差し替えて型を残し、右辺の構成子も `Llvm` の op も
-  `Destructure` が名指すフィールドの添字も `Match` のアームの `tag` も変えない。A12 が対にする各組 --
-  move-bind の
+  `<1>2a` より、名前替えは `RcVar` の名前だけを差し替えて型を残し、右辺の構成子も `Llvm` の `args` の
+  長さも `Destructure` が名指すフィールドの添字も `Match` のアームの `tag` も変えない。
+  A12 が対にする各組 -- move-bind の
   両辺、アームの結果と `Match` の束縛変数、payload と変位、catch-all の payload と scrutinee、
   `Destructure` のフィールド変数とフィールド、`App` の各引数と呼び出し先のパラメータ、`App` の結果、
   同じ名前の `RcVar`、束縛を持たない `RcVar`、そして `Llvm` 節点の型についての 4 つ -- は、どちらの側も
