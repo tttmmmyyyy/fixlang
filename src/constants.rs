@@ -258,6 +258,7 @@ pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct RefcntState(u8);
 
+// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 impl RefcntState {
     /// Reachable from one thread: the count is updated without atomics, and the object is freed
     /// when it reaches zero.

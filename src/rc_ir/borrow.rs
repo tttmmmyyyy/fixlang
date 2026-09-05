@@ -64,6 +64,7 @@ use std::sync::Arc;
 // PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
 struct OwnedLeaves(Set<VarPath>);
 
+// PROOF: P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P14a, P14b (dev-docs/proof/rc_ir/borrow-cancel)
 impl OwnedLeaves {
     /// Whether the leaf `path` of the parameter `var` is owned.
     // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
@@ -830,6 +831,7 @@ struct RewriteCtx<'a> {
     vars: VarTable,
 }
 
+// PROOF: P7a, P7d, P7e, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl<'a> RewriteCtx<'a> {
     /// The rewrite state of one output version of `func`. `is_borrow_version` marks the borrow
     /// clone, the version whose reference counting on its borrowed parameter leaves is dropped.
@@ -1421,6 +1423,7 @@ struct CancelAnalysis<'a> {
     all_retains: Vec<NodeId>,
 }
 
+// PROOF: P2a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
 impl<'a> CancelAnalysis<'a> {
     /// The references a reference-count node of this function acts on, which decide whether a
     /// release un-bumps a retain (`ownership::acted_references`).

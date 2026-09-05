@@ -717,6 +717,7 @@ pub struct InlineLLVMIntLit {
     val: u64,
 }
 
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIntLit {
     // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
@@ -924,7 +925,7 @@ pub struct InlineLLVMStringBuf {
     string: String,
 }
 
-// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStringBuf {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
@@ -1010,6 +1011,7 @@ pub struct InlineLLVMFixBody {
     cap_name: FullName,
 }
 
+// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMFixBody {
     /// This op applies an operand: `f` is applied to build the fixed point, and the result of that is applied to `x`.
@@ -2185,6 +2187,7 @@ pub struct InlineLLVMArrayAppendValueCapacityUnchecked {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -2504,6 +2507,7 @@ pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -2693,6 +2697,7 @@ pub struct InlineLLVMArrayAppendCapacityUnchecked {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -3697,6 +3702,7 @@ pub struct InlineLLVMArrayPunchBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayPunchBody {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -4349,6 +4355,7 @@ pub struct InlineLLVMStructGetBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 impl InlineLLVMStructGetBody {
     /// The index of the field this operation reads.
     // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -4367,6 +4374,7 @@ impl InlineLLVMStructGetBody {
     }
 }
 
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructGetBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -4731,6 +4739,7 @@ pub struct InlineLLVMCaptureProjectBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: D/A, P3, P4, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMCaptureProjectBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -4813,6 +4822,7 @@ pub struct InlineLLVMStructPunchBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 impl InlineLLVMStructPunchBody {
     /// The path of the argument's boxed leaf that the result's boxed leaf at `path` carries, where
     /// the struct is unboxed. A leaf of the punched-struct component sits at the path it had in the
@@ -4839,6 +4849,7 @@ impl InlineLLVMStructPunchBody {
     }
 }
 
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructPunchBody {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -6027,6 +6038,7 @@ pub struct InlineLLVMStructSetBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: D/A, P3, P4, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructSetBody {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -6202,6 +6214,7 @@ pub struct InlineLLVMMakeUnionBody {
     field_idx: usize,
 }
 
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 impl InlineLLVMMakeUnionBody {
     /// The index of the variant this operation constructs.
     // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -6215,7 +6228,7 @@ impl InlineLLVMMakeUnionBody {
     }
 }
 
-// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P3, P4, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMakeUnionBody {
     // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
@@ -6388,6 +6401,7 @@ pub struct InlineLLVMUnionAsBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 impl InlineLLVMUnionAsBody {
     /// The index of the variant whose payload this operation reads.
     // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -6406,6 +6420,7 @@ impl InlineLLVMUnionAsBody {
     }
 }
 
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnionAsBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
@@ -6651,6 +6666,7 @@ pub struct InlineLLVMUnionModBody {
     field_idx: usize,
 }
 
+// PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnionModBody {
     /// This op applies an operand: the modifier is applied to the payload the variant holds.
@@ -6807,6 +6823,7 @@ pub struct InlineLLVMUndefinedInternalBody {
     msg_name: FullName,
 }
 
+// PROOF: D/A, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUndefinedInternalBody {
     // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
@@ -6979,6 +6996,7 @@ pub struct InlineLLVMWithRetainedFunctionBody {
     x_name: FullName,
 }
 
+// PROOF: P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
     /// This op applies an operand: `f` is applied to `x` while `x` is held retained.
@@ -7105,6 +7123,7 @@ fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> E
     })
 }
 
+// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -7308,6 +7327,7 @@ pub struct InlineLLVMArrayIsStorageUniqueBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -7478,6 +7498,7 @@ pub struct InlineLLVMBoxedToRetainedPtrIOS {
     ios_name: FullName,
 }
 
+// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -7578,6 +7599,7 @@ pub struct InlineLLVMBoxedFromRetainedPtrIOS {
     ios_name: FullName,
 }
 
+// PROOF: D/A, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -7668,6 +7690,7 @@ pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
 }
 
+// PROOF: D/A, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -7780,6 +7803,7 @@ pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
 }
 
+// PROOF: D/A, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -8010,6 +8034,7 @@ pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
@@ -8334,6 +8359,7 @@ pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
@@ -8621,6 +8647,7 @@ pub struct InlineLLVMArrayMutateElementsInternalBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
@@ -8771,6 +8798,7 @@ pub struct InlineLLVMArrayMutateElementsIosInternalBody {
     pub(crate) assume_local: bool,
 }
 
+// PROOF: P28 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
     /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
@@ -9145,6 +9173,7 @@ pub struct InlineLLVMMarkThreadedFunctionBody {
     var_name: FullName,
 }
 
+// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)

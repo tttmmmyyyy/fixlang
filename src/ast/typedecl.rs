@@ -415,6 +415,7 @@ pub struct Field {
     pub name_src: Option<Span>,
 }
 
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Field {
     pub fn make(name: Name, syn_ty: Arc<TypeNode>, source: Option<Span>) -> Self {
         Field {

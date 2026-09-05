@@ -214,6 +214,7 @@ pub struct MatchArm {
     pub body: RcExprNode,
 }
 
+// PROOF: D/A, P1, P2, P2a, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl MatchArm {
     /// This arm with `body` in place of its own: it matches the same variant and binds the same
     /// payload, and evaluates to what `body` gives.
@@ -266,6 +267,7 @@ pub enum RcState {
     Global,
 }
 
+// PROOF: D/A, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl RcState {
     /// Whether code generation must read the object's state byte to decide how to count it.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)

@@ -158,6 +158,7 @@ pub struct Substitution {
     pub data: Map<Name, Arc<TypeNode>>,
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Default for Substitution {
     /// A substitution that replaces no type variable.
     fn default() -> Self {
@@ -167,6 +168,7 @@ impl Default for Substitution {
     }
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Substitution {
     /// Whether this substitution replaces no type variable, so that applying it changes nothing.
     pub fn is_empty(&self) -> bool {

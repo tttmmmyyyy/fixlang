@@ -27,6 +27,7 @@ pub struct SourceFile {
     hash: Arc<Mutex<Option<String>>>,
 }
 
+// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for SourceFile {
     /// Two source files are equal when their paths are equal. The content and the hash are what
     /// the path names, so they follow from it.
@@ -35,8 +36,10 @@ impl PartialEq for SourceFile {
     }
 }
 
+// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Eq for SourceFile {}
 
+// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialOrd for SourceFile {
     /// Source files are ordered by their paths, which orders every pair of them, so this always
     /// answers with an ordering.
@@ -45,6 +48,7 @@ impl PartialOrd for SourceFile {
     }
 }
 
+// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Ord for SourceFile {
     /// Orders source files by their paths.
     fn cmp(&self, other: &Self) -> Ordering {
@@ -52,6 +56,7 @@ impl Ord for SourceFile {
     }
 }
 
+// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl SourceFile {
     /// The content of the file. It is read from disk on the first request and kept for the later
     /// ones.
@@ -163,6 +168,7 @@ pub struct Span {
     pub end: usize,
 }
 
+// PROOF: P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Span {
     /// A span over `src` that covers nothing: it begins past every position of the file and ends
     /// before every one, so uniting it with a span answers with that span itself.

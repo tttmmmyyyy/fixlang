@@ -67,6 +67,7 @@ pub struct LeafMap<T>(Map<FieldPath, T>);
 
 /// The empty map — a value with no boxed leaf. Available for every fact type `T`, whatever defaults
 /// `T` itself has.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 impl<T> Default for LeafMap<T> {
     fn default() -> LeafMap<T> {
         LeafMap(Map::default())
@@ -74,12 +75,14 @@ impl<T> Default for LeafMap<T> {
 }
 
 /// Collect the given leaves, where the caller knows the shape by other means than a type.
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 impl<T> FromIterator<(FieldPath, T)> for LeafMap<T> {
     fn from_iter<I: IntoIterator<Item = (FieldPath, T)>>(leaves: I) -> LeafMap<T> {
         LeafMap(leaves.into_iter().collect())
     }
 }
 
+// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 impl<T: Clone> LeafMap<T> {
     /// A value with no boxed leaf (a scalar or a fieldless aggregate).
     pub fn empty() -> LeafMap<T> {

@@ -34,6 +34,7 @@ pub struct CaptureStruct {
     fields: Vec<(FullName, Arc<TypeNode>)>,
 }
 
+// PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 impl CaptureStruct {
     // Build the capture struct carrying `fields`. It only describes the type; the caller registers
     // `tycon_info` into the program's type environment.

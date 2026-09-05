@@ -79,6 +79,7 @@ pub struct TypeEnv {
     unwrapped_newtypes: Arc<Set<TyCon>>,
 }
 
+// PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Default for TypeEnv {
     /// An environment in which no type constructor and no type alias is declared.
     // PROOF: P1, P2, P5, P6, P7, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
@@ -91,6 +92,7 @@ impl Default for TypeEnv {
     }
 }
 
+// PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TypeEnv {
     /// An environment holding `tycons` and `aliases` as declared, with every newtype among them
     /// still a type values are built at.

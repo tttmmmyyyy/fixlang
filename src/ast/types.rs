@@ -44,6 +44,7 @@ pub struct TyVar {
     pub kind: Arc<Kind>,
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for TyVar {
     /// Compares the name alone, which is what decides which variable this is; see the note on
     /// `Hash`.
@@ -56,8 +57,10 @@ impl PartialEq for TyVar {
     }
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Eq for TyVar {}
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for TyVar {
     /// Hashes the name alone, agreeing with the equality of `PartialEq`: the name is what decides
     /// which variable this is, and the kind is an attribute the variable carries.
@@ -66,6 +69,7 @@ impl Hash for TyVar {
     }
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyVar {
     /// A copy of this type variable carrying `kind`, leaving this one as it is.
     pub fn set_kind(&self, kind: Arc<Kind>) -> Arc<TyVar> {
@@ -156,6 +160,7 @@ pub enum Kind {
     Arrow(Arc<Kind>, Arc<Kind>),
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Kind {
     /// Whether this is `*`, the kind of a type that has values of its own.
     pub fn is_star(&self) -> bool {
@@ -226,6 +231,7 @@ pub struct TyCon {
     pub name: FullName,
 }
 
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyCon {
     /// The type constructor named `fullname`.
     pub fn new(fullname: FullName) -> TyCon {
@@ -405,6 +411,7 @@ pub struct TyConInfo {
     pub punched_from: Option<TyCon>,
 }
 
+// PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyConInfo {
     /// Gives every type name standing in the declared field types its full name, read in the
     /// context `ctx` carries.
@@ -468,6 +475,7 @@ pub struct TyAliasInfo {
     pub source: Option<Span>,
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyAliasInfo {
     /// The documentation comment written above this declaration.
     pub fn get_document(&self) -> Option<String> {
@@ -529,7 +537,7 @@ pub struct TypeNode {
     depth_cache: OnceLock<usize>,
 }
 
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for TypeNode {
     /// Compares the type expressions; the source information a node carries stays out of the
     /// comparison.
@@ -538,8 +546,10 @@ impl PartialEq for TypeNode {
     }
 }
 
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Eq for TypeNode {}
 
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl TypeNode {
     /// The hash of the type expression, which is what `PartialEq` compares; the source information
     /// the node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing
@@ -555,7 +565,7 @@ impl TypeNode {
     }
 }
 
-// PROOF: P1, P2, P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for TypeNode {
     /// Writes `type_hash`, so that two nodes `PartialEq` calls equal hash alike.
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -563,6 +573,7 @@ impl Hash for TypeNode {
     }
 }
 
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Debug for TypeNode {
     /// Writes the type in source syntax, with its free type variables renamed `a`, `b`, ... in
     /// order of appearance, so that two types differing only in variable names print alike.
@@ -571,6 +582,7 @@ impl Debug for TypeNode {
     }
 }
 
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl TypeNode {
     /// The smallest node of this type covering `pos`, for a type read from a source file.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
@@ -1831,7 +1843,7 @@ pub struct AssocTypeDefnHead {
     pub impl_type_as_written: Arc<TypeNode>,
 }
 
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Clone for TypeNode {
     /// Copies the type expression and where it was written, leaving the values kept on the node —
     /// its hash, whether it is ground, how deeply it nests — to be computed again.
@@ -1869,7 +1881,7 @@ fn type_node_eq(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
     Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty
 }
 
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for Type {
     /// Compares the parts of the type expression, taking two occurrences of one node as equal on
     /// sight (`type_node_eq`). The derived `Hash` agrees with this, reading the expression a node
@@ -1894,6 +1906,7 @@ impl PartialEq for Type {
     }
 }
 
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl TypeNode {
     /// This type written in source syntax, with its type variables renamed `a`, `b`, ... in order
     /// of appearance, so that two types differing only in the names of their variables are written
@@ -2240,6 +2253,7 @@ pub struct TypeInfo {
     source: Option<Span>,
 }
 
+// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl TypeNode {
     /// Whether no type variable occurs in this type.
     ///

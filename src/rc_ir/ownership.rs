@@ -79,6 +79,7 @@ pub(crate) struct VarTable {
     /// them once is what keeps the walk proportional to the function.
     origins: RefCell<Map<VarPath, Origin>>,
 }
+// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P27, P29, P30, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl VarTable {
     /// The variable table of a function: its parameters and capture as `Param` bindings, plus the `Binding` and
     /// type of every variable bound in its body.
@@ -196,6 +197,7 @@ pub(crate) enum Origin {
     },
 }
 
+// PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Origin {
     /// The one name for the value, for a reader that pairs two operations on it — a retain with the
     /// release that un-bumps it — which only a single name can decide. Two leaves with the same
@@ -840,6 +842,7 @@ pub(crate) fn truncate_to_unit(
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct References(Map<VarPath, usize>);
 
+// PROOF: D/A, P2a, P5, P6, P7, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 impl References {
     /// Whether every reference of `other` is among these, counting multiplicity.
     ///

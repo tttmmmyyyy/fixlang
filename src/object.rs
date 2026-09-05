@@ -115,6 +115,7 @@ fn union_buf_type<'c, 'm>(
     max_align_int.array_type(num_of_ints as u32).into()
 }
 
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl ObjectFieldType {
     /// The LLVM type this field occupies in the struct its object is laid out as.
     pub fn to_basic_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> BasicTypeEnum<'c> {
