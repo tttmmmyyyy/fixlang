@@ -6037,6 +6037,49 @@ pub fn test_negative_radix_literal_out_of_range_is_reported() {
     }
 }
 
+/// Verifies the interval a hexadecimal or binary literal of a signed type may name: it runs from
+/// the minimum of that type to the largest value the type's width holds, so the values just outside
+/// it are reported, and a report about a literal too wide names the type the literal is written
+/// with.
+#[test]
+pub fn test_radix_literal_interval_ends_at_the_types_minimum_and_at_its_width() {
+    let program = |literal: &str| {
+        format!(
+            r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", {}_I8, 0_I8);;
+        pure()
+    );
+    "#,
+            literal
+        )
+    };
+
+    // One below `-0x80_I8`, which `test_hex_oct_bin_lit` compiles as -128.
+    test_source_fail(
+        &program("-0x81"),
+        Configuration::develop_mode(),
+        "`-0x81` is out of range of `I8`",
+    );
+
+    // One above `0xFF_I8`, which `test_hex_oct_bin_lit` compiles as -1.
+    let report = run_source_assert_failed(&program("0x100"), Configuration::develop_mode());
+    assert!(
+        report.contains("`0x100`") && report.contains("`I8`"),
+        "the literal too wide for `I8` is reported naming the type it is written with, but the \
+         report is:\n{}",
+        report
+    );
+    assert!(
+        !report.contains("`U8`"),
+        "the report of a literal too wide does not name the unsigned type of that width, but the \
+         report is:\n{}",
+        report
+    );
+}
+
 #[test]
 pub fn test_integer_string_literal_error0() {
     let source = r##"
@@ -6113,6 +6156,30 @@ pub fn test_integer_string_literal_error4() {
     );
     "##;
     test_source_fail(&source, Configuration::develop_mode(), "out of range");
+}
+
+/// Verifies that a decimal literal below the minimum of its type is reported, as one above its
+/// maximum is: no `U8` holds `-1`, and no `I8` holds `-129`.
+#[test]
+pub fn test_decimal_literal_below_the_minimum_of_its_type_is_reported() {
+    for (literal, ty_name) in [("-1", "U8"), ("-129", "I8")] {
+        let source = format!(
+            r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", {}_{}, 0_{});;
+        pure()
+    );
+    "#,
+            literal, ty_name, ty_name
+        );
+        test_source_fail(
+            &source,
+            Configuration::develop_mode(),
+            &format!("`{}` is out of range of `{}`", literal, ty_name),
+        );
+    }
 }
 
 #[test]

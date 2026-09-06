@@ -358,6 +358,87 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// The report on a string literal holding a null character.
+    const NUL_REPORT: &str = "cannot hold a null character";
+
+    /// The report on a `\uXXXX` escape that names no character.
+    const SURROGATE_REPORT: &str = "Invalid unicode character";
+
+    /// The two reports the decoder of a string literal makes are anchored in the editor on the part
+    /// of the literal they refuse: the null character, and the `\uXXXX` escape naming a surrogate.
+    ///
+    /// The escape is the text the programmer has to fix, so a report anchored on the whole literal
+    /// would put the squiggle on the characters that are right as well. The decoder walks the
+    /// literal by byte offset while the editor counts UTF-16 code units, so the characters ahead of
+    /// the refused one are written wider than one byte here.
+    #[test]
+    fn test_a_string_literal_is_reported_on_the_part_the_decoder_refuses() {
+        let (_temp_dir, project_dir) = project_with(&[
+            (
+                "fixproj.toml",
+                "[general]\nname = \"string-literal-part\"\nversion = \"0.1.0\"\n\n\
+                 [build]\nfiles = [\"nul.fix\", \"surrogate.fix\", \"main.fix\"]\n",
+            ),
+            // A parse error ends the file it is found in, so the two literals are written in files
+            // of their own for both reports to be made.
+            (
+                "nul.fix",
+                "module Nul;\n\nnul : String;\nnul = \"\u{3042}\u{3044}\\u0000def\";\n",
+            ),
+            (
+                "surrogate.fix",
+                "module Surrogate;\n\nsurrogate : String;\n\
+                 surrogate = \"\u{3042}\u{3044}\\uD800def\";\n",
+            ),
+            (
+                "main.fix",
+                "module Main;\n\nimport Nul;\nimport Surrogate;\n\nmain : IO ();\n\
+                 main = println(Nul::nul + Surrogate::surrogate);\n",
+            ),
+        ]);
+
+        let main_fix = Path::new("main.fix");
+        let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
+        save_and_wait_for_a_pass(&mut client, main_fix, "the first pass is expected to end");
+
+        // Both files write the literal on the 4th line, and each escape is 6 characters wide. The
+        // escape begins at the 10th character of `nul.fix` and at the 16th of `surrogate.fix`; the
+        // two characters ahead of it are three bytes each. The protocol counts lines and characters
+        // from zero.
+        let nul_diagnostics = wait_until_diagnostics(&mut client, Path::new("nul.fix"), |d| {
+            carries_report(d, NUL_REPORT)
+        });
+        let nul_report = sole_diagnostic_containing(&nul_diagnostics, NUL_REPORT);
+        assert_eq!(nul_report["range"]["start"]["line"], 3);
+        assert_eq!(
+            nul_report["range"]["start"]["character"], 9,
+            "at the escape naming the null character, but the report is {:?}",
+            nul_report
+        );
+        assert_eq!(
+            nul_report["range"]["end"]["character"], 15,
+            "covering that escape and nothing after it, but the report is {:?}",
+            nul_report
+        );
+
+        let surrogate_diagnostics =
+            wait_until_diagnostics(&mut client, Path::new("surrogate.fix"), |d| {
+                carries_report(d, SURROGATE_REPORT)
+            });
+        let surrogate_report = sole_diagnostic_containing(&surrogate_diagnostics, SURROGATE_REPORT);
+        assert_eq!(surrogate_report["range"]["start"]["line"], 3);
+        assert_eq!(
+            surrogate_report["range"]["start"]["character"], 15,
+            "at the escape naming the surrogate, but the report is {:?}",
+            surrogate_report
+        );
+        assert_eq!(
+            surrogate_report["range"]["end"]["character"], 21,
+            "covering that escape and nothing after it, but the report is {:?}",
+            surrogate_report
+        );
+    }
+
     /// The time one diagnostics pass is given to end.
     const PASS_TIMEOUT: Duration = Duration::from_secs(180);
 
