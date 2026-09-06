@@ -2725,37 +2725,33 @@ fn parse_expr_number_lit(
         let (val, radix) = opt_val_radix.unwrap();
 
         // Check size.
-        if radix == 10 || radix == 8 {
-            // Decimal or octal
-            let (ty_min, ty_max) = integral_ty_range(ty_name);
-            if !(ty_min <= val && val <= ty_max) {
+        // A non-negative hexadecimal or binary literal writes a bit pattern, so it may fill the
+        // width of its type: `0b11111111_I8` is `-1`. Every other literal names a number, which
+        // the type has to hold.
+        let writes_a_bit_pattern = (radix == 16 || radix == 2) && val >= BigInt::from(0);
+        if writes_a_bit_pattern {
+            let unsigned_ty_name = if ty_name.starts_with('I') {
+                ty_name.replacen('I', "U", 1)
+            } else {
+                ty_name.to_string()
+            };
+            let (_, width_max) = integral_ty_range(&unsigned_ty_name);
+            if val > width_max {
                 return Err(Errors::from_msg_srcs(
                     format!(
-                        "The value of an integer literal `{}` is out of range of `{}`.",
+                        "The value of an integer literal `{}` does not fit in the width of `{}`.",
                         raw, ty_name
                     ),
                     &[&Some(span)],
                 ));
             }
         } else {
-            // Binary or hexadecimal
-            // In this case, 0b1111111_I8 should be successfully parsed to -1, so check the range as the unsigned value.
-            let val_abs = if val < BigInt::parse_bytes(b"0", 10).unwrap() {
-                -val.clone()
-            } else {
-                val.clone()
-            };
-            let ty_name_unsigned = if ty_name.starts_with('I') {
-                ty_name.replacen('I', "U", 1)
-            } else {
-                ty_name.to_string()
-            };
-            let (ty_min_unsigned, ty_max_unsigned) = integral_ty_range(&ty_name_unsigned);
-            if !(ty_min_unsigned <= val_abs && val_abs <= ty_max_unsigned) {
+            let (ty_min, ty_max) = integral_ty_range(ty_name);
+            if !(ty_min <= val && val <= ty_max) {
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "The value of an integer literal `{}` is out of range of `{}`.",
-                        raw, ty_name_unsigned
+                        raw, ty_name
                     ),
                     &[&Some(span)],
                 ));
@@ -2905,6 +2901,7 @@ fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, E
         } else {
             match chars.next().unwrap().1 {
                 '"' => '"',
+                '\'' => '\'',
                 '\\' => '\\',
                 'n' => '\n',
                 'r' => '\r',

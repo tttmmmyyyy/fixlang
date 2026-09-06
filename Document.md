@@ -929,6 +929,8 @@ To write a number literal of a type other than `I64` and `F64`, write an undersc
 For example, `42_I32` is an `I32` type number literal, and `3.14_F32` is an `F32` type number literal.
 
 Integer literals are represented in decimal by default, and can be represented in hexadecimal with a `0x` prefix, in octal with a `0o` prefix, and in binary with a `0b` prefix.
+A decimal or octal literal, and a negative literal of any base, names a number, which the type it is written with has to hold: `256_I8` and `-0xFF_I8` are reported.
+A non-negative hexadecimal or binary literal writes a bit pattern, so it may fill the width of that type: `0xFF_I8` and `0b11111111_I8` are `-1`.
 For example, `0x2A` represents 42, and `0o52` also represents 42.
 
 In integer literals in decimal, you can use "e" to represent the power of 10.
@@ -951,7 +953,7 @@ For example, `1.` and `.1` are not valid floating point literals (while they are
 A string literal is a string enclosed in double quotes.
 For example, `"Hello, world!"` is a string literal of type `String`.
 
-In a string literal, `\n`, `\r`, `\t`, `\\`, `\"` are interpreted as newline, carriage return, tab, backslash, and double quote, respectively.
+In a string literal, `\n`, `\r`, `\t`, `\\`, `\"`, `\'` are interpreted as newline, carriage return, tab, backslash, double quote, and single quote, respectively.
 `\uXXXX`, where `XXXX` is four hexadecimal digits, is interpreted as the Unicode character of the code point `0xXXXX`. For example, `"\u2764"` is `"❤"`.
 A `String` ends at its null terminator, so a null character written into a string literal is reported; where a null byte is needed, build an `Array U8`.
 
