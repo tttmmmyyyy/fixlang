@@ -2148,6 +2148,32 @@ pub fn test_string_literal() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a null character written into a string literal is reported, whether it is written
+/// as `\u0000` or directly, since a `String` ends at its null terminator.
+#[test]
+pub fn test_string_literal_holding_a_null_character_is_reported() {
+    let escaped = r#"
+    module Main;
+    main : IO ();
+    main = println("abc\u0000def");
+    "#;
+    test_source_fail(
+        escaped,
+        Configuration::develop_mode(),
+        "cannot hold a null character",
+    );
+    let direct = "
+    module Main;
+    main : IO ();
+    main = println(\"abc\u{0}def\");
+    ";
+    test_source_fail(
+        direct,
+        Configuration::develop_mode(),
+        "cannot hold a null character",
+    );
+}
+
 #[test]
 pub fn test65() {
     // Test tuple pattern matching.

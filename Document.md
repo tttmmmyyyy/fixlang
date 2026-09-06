@@ -950,6 +950,7 @@ A string literal is a string enclosed in double quotes.
 For example, `"Hello, world!"` is a string literal of type `String`.
 
 In a string literal, `\n`, `\r`, `\t`, `\\`, `\"` are interpreted as newline, carriage return, tab, backslash, and double quote, respectively.
+A `String` ends at its null terminator, so a null character written into a string literal is reported; where a null byte is needed, build an `Array U8`.
 
 ## Arrays and literals
 
