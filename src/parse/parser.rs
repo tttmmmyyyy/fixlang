@@ -2889,44 +2889,50 @@ fn take_hex_number(chars: &mut impl Iterator<Item = char>, digits: u32) -> u32 {
 /// Decode escape sequences inside a `string_lit_inner` body (the characters
 /// between the surrounding double quotes).
 fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, Errors> {
-    let mut chars = raw.chars();
+    // The span of `raw[start..end]`. The literal's own span begins one quote ahead of `raw`.
+    let part_span = |start: usize, end: usize| -> Option<Span> {
+        span.as_ref().map(|span| Span {
+            input: span.input.clone(),
+            start: span.start + 1 + start,
+            end: span.start + 1 + end,
+        })
+    };
+    let mut chars = raw.char_indices();
     let mut out: Vec<char> = vec![];
-    loop {
-        match chars.next() {
-            None => break,
-            Some(c) => {
-                if c != '\\' {
-                    out.push(c);
-                    continue;
-                }
-                let c = chars.next().unwrap();
-                if c == '\"' {
-                    out.push('"');
-                } else if c == '\\' {
-                    out.push('\\');
-                } else if c == 'n' {
-                    out.push('\n');
-                } else if c == 'r' {
-                    out.push('\r');
-                } else if c == 't' {
-                    out.push('\t');
-                } else if c == 'u' {
-                    let code = take_hex_number(&mut chars, 4);
-                    let c = match char::from_u32(code) {
+    while let Some((start, c)) = chars.next() {
+        let decoded = if c != '\\' {
+            c
+        } else {
+            match chars.next().unwrap().1 {
+                '"' => '"',
+                '\\' => '\\',
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                'u' => {
+                    let code = take_hex_number(&mut chars.by_ref().map(|(_, c)| c), 4);
+                    match char::from_u32(code) {
                         None => {
+                            let end = chars.clone().next().map_or(raw.len(), |(i, _)| i);
                             return Err(Errors::from_msg_srcs(
                                 format!("Invalid unicode character: u{:X}", code),
-                                &[span],
+                                &[&part_span(start, end)],
                             ));
                         }
                         Some(c) => c,
-                    };
-                    out.push(c);
-                } else {
-                    unreachable!("`string_char` admits no escape sequence `\\{}`.", c);
+                    }
                 }
+                c => unreachable!("`string_char` admits no escape sequence `\\{}`.", c),
             }
+        };
+        if decoded == '\0' {
+            let end = chars.clone().next().map_or(raw.len(), |(i, _)| i);
+            return Err(Errors::from_msg_srcs(
+                "A string literal cannot hold a null character, since a `String` ends at its null terminator. Where a null byte is needed, build an `Array U8`.".to_string(),
+                &[&part_span(start, end)],
+            ));
         }
+        out.push(decoded);
     }
     Ok(String::from_iter(out.iter()))
 }

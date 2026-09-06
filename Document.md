@@ -953,6 +953,7 @@ For example, `"Hello, world!"` is a string literal of type `String`.
 
 In a string literal, `\n`, `\r`, `\t`, `\\`, `\"` are interpreted as newline, carriage return, tab, backslash, and double quote, respectively.
 `\uXXXX`, where `XXXX` is four hexadecimal digits, is interpreted as the Unicode character of the code point `0xXXXX`. For example, `"\u2764"` is `"❤"`.
+A `String` ends at its null terminator, so a null character written into a string literal is reported; where a null byte is needed, build an `Array U8`.
 
 ## Arrays and literals
 
