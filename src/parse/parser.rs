@@ -38,14 +38,14 @@ use crate::constants::{
 };
 use crate::error::Errors;
 use crate::fixstd::builtin::{
-    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, integral_ty_bit_pattern_range,
-    integral_ty_range, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty, make_string_lit,
-    make_tuple_name_abs, make_u8_ty, ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME,
-    DIVIDE_TRAIT_NAME, EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_NAME,
-    LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME, LESS_THAN_TRAIT_NAME,
-    MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME, NEGATE_TRAIT_NEGATE_NAME,
-    NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME,
-    SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME,
+    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, integral_ty_range,
+    integral_ty_range_with_bit_patterns, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
+    make_string_lit, make_tuple_name_abs, make_u8_ty, ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME,
+    DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME, EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME,
+    LESS_THAN_OR_EQUAL_TO_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME,
+    LESS_THAN_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME,
+    NEGATE_TRAIT_NEGATE_NAME, NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME,
+    REMAINDER_TRAIT_REMAINDER_NAME, SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME,
 };
 use crate::misc::{make_map, save_temporary_source, to_absolute_path, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
@@ -2729,7 +2729,7 @@ fn parse_expr_number_lit(
         // width of its type holds; every literal names a value that type holds at the low end.
         let writes_a_bit_pattern = radix == 16 || radix == 2;
         let (min, max) = if writes_a_bit_pattern {
-            integral_ty_bit_pattern_range(ty_name)
+            integral_ty_range_with_bit_patterns(ty_name)
         } else {
             integral_ty_range(ty_name)
         };
@@ -2874,10 +2874,10 @@ fn take_hex_number(chars: &mut impl Iterator<Item = char>, digits: u32) -> u32 {
 
 /// Decode escape sequences inside a `string_lit_inner` body (the characters
 /// between the surrounding double quotes).
-fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, Errors> {
-    // The span of `raw[start..end]`, where `span` is the span of the whole of `raw`.
+fn unescape_string_lit_inner(raw: &str, raw_span: &Option<Span>) -> Result<String, Errors> {
+    // The span of `raw[start..end]`.
     let part_span = |start: usize, end: usize| -> Option<Span> {
-        span.as_ref().map(|span| span.part(start, end))
+        raw_span.as_ref().map(|span| span.part(start, end))
     };
     let mut chars = raw.char_indices();
     let mut out: Vec<char> = vec![];

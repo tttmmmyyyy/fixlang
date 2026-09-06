@@ -359,7 +359,7 @@ mod tests {
     }
 
     /// The report on a string literal holding a null character.
-    const NUL_REPORT: &str = "cannot hold a null character";
+    const NULL_CHARACTER_REPORT: &str = "cannot hold a null character";
 
     /// The report on a `\uXXXX` escape that names no character.
     const SURROGATE_REPORT: &str = "Invalid unicode character";
@@ -377,13 +377,13 @@ mod tests {
             (
                 "fixproj.toml",
                 "[general]\nname = \"string-literal-part\"\nversion = \"0.1.0\"\n\n\
-                 [build]\nfiles = [\"nul.fix\", \"surrogate.fix\", \"main.fix\"]\n",
+                 [build]\nfiles = [\"null_character.fix\", \"surrogate.fix\", \"main.fix\"]\n",
             ),
             // A parse error ends the file it is found in, so the two literals are written in files
             // of their own for both reports to be made.
             (
-                "nul.fix",
-                "module Nul;\n\nnul : String;\nnul = \"\u{3042}\u{3044}\\u0000def\";\n",
+                "null_character.fix",
+                "module NullCharacter;\n\nnull_character : String;\nnull_character = \"\u{3042}\u{3044}\\u0000def\";\n",
             ),
             (
                 "surrogate.fix",
@@ -392,8 +392,8 @@ mod tests {
             ),
             (
                 "main.fix",
-                "module Main;\n\nimport Nul;\nimport Surrogate;\n\nmain : IO ();\n\
-                 main = println(Nul::nul + Surrogate::surrogate);\n",
+                "module Main;\n\nimport NullCharacter;\nimport Surrogate;\n\nmain : IO ();\n\
+                 main = println(NullCharacter::null_character + Surrogate::surrogate);\n",
             ),
         ]);
 
@@ -401,10 +401,17 @@ mod tests {
         let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
         save_and_wait_for_a_pass(&mut client, main_fix, "the first pass is expected to end");
 
-        // Both files write the literal on the 4th line, and each escape is 6 characters wide. The
-        // escape begins at the 10th character of `nul.fix` and at the 16th of `surrogate.fix`; the
-        // two characters ahead of it are three bytes each.
-        assert_sole_report_covers(&mut client, Path::new("nul.fix"), NUL_REPORT, 3, 9, 15);
+        // Both files write the literal on the 4th line, and each escape is 6 characters wide. It
+        // begins at the 21st character of `null_character.fix` and at the 16th of `surrogate.fix`,
+        // where the two characters ahead of it are three bytes each.
+        assert_sole_report_covers(
+            &mut client,
+            Path::new("null_character.fix"),
+            NULL_CHARACTER_REPORT,
+            3,
+            20,
+            26,
+        );
         assert_sole_report_covers(
             &mut client,
             Path::new("surrogate.fix"),
@@ -415,19 +422,19 @@ mod tests {
         );
     }
 
-    /// Waits for the reports of `file` to carry the one containing `report`, and asserts that it is
+    /// Waits for the reports of `file` to carry the one containing `text`, and asserts that it is
     /// the only such one and that it covers the characters `start_character` up to `end_character`
     /// of `line`. The protocol counts lines and characters from zero.
     fn assert_sole_report_covers(
         client: &mut LspClient,
         file: &Path,
-        report: &str,
+        text: &str,
         line: u64,
         start_character: u64,
         end_character: u64,
     ) {
-        let diagnostics = wait_until_diagnostics(client, file, |d| carries_report(d, report));
-        let diag = sole_diagnostic_containing(&diagnostics, report);
+        let diagnostics = wait_until_diagnostics(client, file, |d| carries_report(d, text));
+        let diag = sole_diagnostic_containing(&diagnostics, text);
         assert_eq!(
             diag["range"]["start"]["line"], line,
             "on the line the literal is written on, but the report is {:?}",

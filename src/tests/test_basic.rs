@@ -6032,7 +6032,7 @@ fn program_naming_an_integer_literal(literal: &str, ty_name: &str) -> String {
 /// with cannot hold it, and that the report names that type. A non-negative literal of those radices
 /// writes a bit pattern and may fill the type's width, which is what makes the sign decide.
 #[test]
-pub fn test_negative_radix_literal_out_of_range_is_reported() {
+pub fn test_negative_bit_pattern_literal_out_of_range_is_reported() {
     for (literal, ty_name) in [("-0xFF", "I8"), ("-0x1", "U8"), ("-0b1", "U8")] {
         test_source_fail(
             &program_naming_an_integer_literal(literal, ty_name),
@@ -6047,18 +6047,18 @@ pub fn test_negative_radix_literal_out_of_range_is_reported() {
 /// it are reported, and a report about a literal too wide names the type the literal is written
 /// with.
 #[test]
-pub fn test_radix_literal_interval_ends_at_the_types_minimum_and_at_its_width() {
-    let program = |literal: &str| program_naming_an_integer_literal(literal, "I8");
+pub fn test_bit_pattern_literal_below_the_types_minimum_or_past_its_width_is_reported() {
+    let i8_program = |literal: &str| program_naming_an_integer_literal(literal, "I8");
 
     // One below `-0x80_I8`, which `test_hex_oct_bin_lit` compiles as -128.
     test_source_fail(
-        &program("-0x81"),
+        &i8_program("-0x81"),
         Configuration::develop_mode(),
         "`-0x81` is out of range of `I8`",
     );
 
     // One above `0xFF_I8`, which `test_hex_oct_bin_lit` compiles as -1.
-    let report = run_source_assert_failed(&program("0x100"), Configuration::develop_mode());
+    let report = run_source_assert_failed(&i8_program("0x100"), Configuration::develop_mode());
     assert!(
         report.contains("`0x100`") && report.contains("`I8`"),
         "the literal too wide for `I8` is reported naming the type it is written with, but the \
