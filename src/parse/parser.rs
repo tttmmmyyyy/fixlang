@@ -3289,6 +3289,7 @@ fn rule_to_string(r: &Rule) -> String {
     match r {
         Rule::EOI => "end-of-input".to_string(),
         Rule::expr_number_lit => "number literal".to_string(),
+        Rule::u8_lit_char => "an ASCII character or an escape sequence such as `\\'`".to_string(),
         Rule::expr_bool_lit => "boolean".to_string(),
         Rule::expr_nlr => "expression".to_string(),
         Rule::expr_unary => "expression".to_string(),
