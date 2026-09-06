@@ -2878,11 +2878,7 @@ fn take_hex_number(chars: &mut impl Iterator<Item = char>, digits: u32) -> u32 {
 fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, Errors> {
     // The span of `raw[start..end]`, where `span` is the span of the whole of `raw`.
     let part_span = |start: usize, end: usize| -> Option<Span> {
-        span.as_ref().map(|span| Span {
-            input: span.input.clone(),
-            start: span.start + start,
-            end: span.start + end,
-        })
+        span.as_ref().map(|span| span.part(start, end))
     };
     let mut chars = raw.char_indices();
     let mut out: Vec<char> = vec![];
@@ -3290,6 +3286,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::EOI => "end-of-input".to_string(),
         Rule::expr_number_lit => "number literal".to_string(),
         Rule::u8_lit_char => "an ASCII character or an escape sequence such as `\\'`".to_string(),
+        Rule::string_char => "a character or an escape sequence such as `\\n`".to_string(),
         Rule::expr_bool_lit => "boolean".to_string(),
         Rule::expr_nlr => "expression".to_string(),
         Rule::expr_unary => "expression".to_string(),
