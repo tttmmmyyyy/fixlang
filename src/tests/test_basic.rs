@@ -8,9 +8,9 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname},
     tests::test_util::{
-        assert_grammar_accepts, emitted_llvm_ir, fix_command, run_source_assert_failed,
-        run_source_capture, test_files_in_directory, test_source, test_source_fail,
-        test_source_fail_excludes, test_source_with_c, EmittedIr,
+        assert_grammar_accepts, assert_grammar_rejects, emitted_llvm_ir, fix_command,
+        run_source_assert_failed, run_source_capture, test_files_in_directory, test_source,
+        test_source_fail, test_source_fail_excludes, test_source_with_c, EmittedIr,
     },
 };
 use rand::{thread_rng, Rng};
@@ -2131,14 +2131,18 @@ pub fn test63() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a string literal resolves its escape sequences: `\uXXXX` names a character by
+/// its code point, `\"` and `\\` stand for a double quote and a backslash, and `\t` and `\n`
+/// equal the tab and the newline written directly in the source.
 #[test]
 pub fn test_string_literal() {
-    // Test escape sequence.
     let source = r#"
     module Main; 
     main : IO ();
     main = (
         assert_eq(|_|"heart", "\u2764", "❤");;
+        assert_eq(|_|"double quote", "\"", "\u0022");;
+        assert_eq(|_|"backslash", "\\", "\u005C");;
         assert_eq(|_|"tab", "あ\tいうえお", "あ	いうえお");;
         assert_eq(|_|"tab", "あ\nいうえお", "あ
 いうえお");;
@@ -2146,6 +2150,81 @@ pub fn test_string_literal() {
     );
     "#;
     test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies that a `\uXXXX` escape naming a surrogate code point is reported, since a surrogate
+/// is not a character and so has no UTF-8 encoding.
+#[test]
+pub fn test_string_literal_surrogate_escape_is_reported() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = println("\uD800");
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Invalid unicode character",
+    );
+}
+
+/// Verifies that the escape sequences a string literal does not have are rejected: `\x` and `\0`
+/// belong to `U8` literals alone, `\u` needs all four of its digits, and `\q` names nothing.
+#[test]
+pub fn test_string_literal_rejects_escapes_it_does_not_have() {
+    for escape in ["\\q", "\\0", "\\x41", "\\u12"] {
+        let source = format!(
+            r#"
+    module Main;
+    main : IO ();
+    main = println("{}");
+    "#,
+            escape
+        );
+        assert_grammar_rejects(&source);
+    }
+}
+
+/// Verifies the `e` form of a decimal literal: it multiplies by that power of ten, it accepts an
+/// explicit `+`, and it carries the literal's sign.
+#[test]
+pub fn test_number_literal_exponent() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 4e2, 400);;
+        assert_eq(|_|"", 1e+5, 100000);;
+        assert_eq(|_|"", 0e0, 0);;
+        assert_eq(|_|"", -1e3, -1000);;
+        assert_eq(|_|"", 1e3_I64, 1000);;
+        assert_eq(|_|"", 1e2_U8, 100_U8);;
+        assert_eq(|_|"", 1.5e2, 150.0);;
+        assert_eq(|_|"", 1.5e-2, 0.015);;
+        assert_eq(|_|"", 1.5e+2_F32, 150.0_F32);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies that a decimal literal with a negative exponent and no decimal point is reported:
+/// it is an integer literal, and the value it names is not an integer.
+#[test]
+pub fn test_integer_literal_with_a_negative_exponent_is_reported() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 1e-5, 0);;
+        pure()
+    );
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "cannot be parsed as an integer",
+    );
 }
 
 #[test]
@@ -3237,9 +3316,11 @@ pub fn test_is_unique_true_branch_invalidated_by_sharing() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies the byte a character literal stands for: an ASCII character, the escape sequences
+/// `\0`, `\t`, `\r`, `\n`, `\\`, `\'` and `\"`, a double quote written on its own, and `\xHH`
+/// with either case of hexadecimal digit, up to `\xff` at the top of the `U8` range.
 #[test]
 pub fn test_u8_literal() {
-    // Test U8 literal
     let source = r#"
             module Main;             
             main : IO ();
@@ -3252,16 +3333,64 @@ pub fn test_u8_literal() {
                 assert_eq(|_|"", '\n', 10_U8);;
                 assert_eq(|_|"", '\\', 92_U8);;
                 assert_eq(|_|"", '\'', 39_U8);;
+                assert_eq(|_|"", '"', 34_U8);;
+                assert_eq(|_|"", '\"', 34_U8);;
                 assert_eq(|_|"", '\x7f', 127_U8);;
+                assert_eq(|_|"", '\xff', 255_U8);;
+                assert_eq(|_|"", '\xFF', 255_U8);;
                 pure()
             );
         "#;
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that the grammar rejects a non-ASCII character between single quotes.
+/// A `U8` literal holds one byte, and `parse_expr_u8_lit` asserts that the character it is
+/// handed is ASCII, so a grammar that accepted `'あ'` would panic the compiler in place
+/// of a diagnostic.
+#[test]
+pub fn test_u8_literal_of_a_non_ascii_character_is_rejected() {
+    let source = r#"
+            module Main;
+            main : IO ();
+            main = (
+                let c = 'あ';
+                pure()
+            );
+        "#;
+    assert_grammar_rejects(&source);
+}
+
+/// Verifies that the grammar rejects a single quote and a newline written bare between the
+/// quotes of a `U8` literal, which leaves `'\''` and `'\n'` as the way to write those two bytes.
+#[test]
+pub fn test_u8_literal_of_a_bare_quote_or_newline_is_rejected() {
+    let bare_quote = r#"
+            module Main;
+            main : IO ();
+            main = (
+                let c = ''';
+                pure()
+            );
+        "#;
+    assert_grammar_rejects(&bare_quote);
+    let bare_newline = "
+            module Main;
+            main : IO ();
+            main = (
+                let c = '
+';
+                pure()
+            );
+        ";
+    assert_grammar_rejects(&bare_newline);
+}
+
+/// Verifies that `U8` and `I32` arithmetic wraps around at the ends of the type's range, that
+/// division truncates toward zero while the remainder carries the dividend's sign, and that a
+/// comparison reads `U8` as unsigned and `I32` as signed.
 #[test]
 pub fn test97() {
-    // Test arithmetic operation of U8, I32
     let source = r#"
         module Main; 
         main : IO ();
