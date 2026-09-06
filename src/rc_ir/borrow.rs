@@ -1337,6 +1337,74 @@ fn un_bump(pending: &mut PendingRetains, un_bumped: &References) -> UnBump {
     UnBump::InBracket(retain)
 }
 
+/// What `un_bump` did to `pending`, read back from its answer (P17).
+///
+/// The answer is what the walk acts on -- `InBracket` records the release as one that closes its
+/// retain, and the other two mark retains needed -- so an answer that does not describe what the
+/// call did to `pending` would pair a release with a retain it does not close.
+// PROOF: P17 (dev-docs/proof/rc_ir/borrow-cancel)
+fn check_un_bump(
+    before: &PendingRetains,
+    after: &PendingRetains,
+    un_bumped: &References,
+    answer: &UnBump,
+) {
+    let unchanged = |expected: &PendingRetains| {
+        expected.len() == after.len()
+            && expected
+                .iter()
+                .zip(after)
+                .all(|(a, b)| a.node == b.node && a.outstanding == b.outstanding)
+    };
+    let innermost = before
+        .iter()
+        .rposition(|retain| retain.outstanding.shares_an_object(un_bumped));
+    match answer {
+        UnBump::NoBracket => {
+            assert!(
+                innermost.is_none(),
+                "un_bump answered NoBracket where a pending retain shares an object with the release"
+            );
+            assert!(
+                unchanged(before),
+                "un_bump answered NoBracket and changed the pending retains"
+            );
+        }
+        UnBump::OutsideBracket => {
+            let at = innermost
+                .expect("un_bump answered OutsideBracket with no bracket to be outside of");
+            assert!(
+                !before[at].outstanding.covers(un_bumped),
+                "un_bump answered OutsideBracket where the innermost bracket covers the release"
+            );
+            assert!(
+                unchanged(before),
+                "un_bump answered OutsideBracket and changed the pending retains"
+            );
+        }
+        UnBump::InBracket(retain) => {
+            let at = innermost.expect("un_bump answered InBracket with no pending retain to close");
+            assert_eq!(
+                before[at].node, *retain,
+                "un_bump answered InBracket naming a retain that is not the innermost bracket"
+            );
+            assert!(
+                before[at].outstanding.covers(un_bumped),
+                "un_bump answered InBracket where the innermost bracket does not cover the release"
+            );
+            let mut expected = before.clone();
+            expected[at].outstanding.subtract(un_bumped);
+            if expected[at].outstanding.is_empty() {
+                expected.remove(at);
+            }
+            assert!(
+                unchanged(&expected),
+                "un_bump answered InBracket and left the pending retains in another state"
+            );
+        }
+    }
+}
+
 /// A node's identity within one tree: the address of its expression, stable while the tree is
 /// borrowed. Nodes to drop are recorded under this identity and recognized by it again in a later
 /// walk over the same borrowed tree.
@@ -1355,7 +1423,7 @@ fn node_id(node: &RcExprNode) -> NodeId {
 /// the uniqueness analysis. Each call's consume sites are decided by the parameter/capture units the
 /// functions own — the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
 // PROOF: D/A, P1, P2, P2a, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P29, P30, P31, A19, T (dev-docs/proof/rc_ir/borrow-cancel)
-pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
+pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
     let cancel_body = |vars: &VarTable, body: &RcExprNode| {
         let mut analysis = CancelAnalysis {
@@ -1366,6 +1434,7 @@ pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             needed_retains: Set::default(),
             un_bump_releases: Map::default(),
             all_retains: vec![],
+            develop_mode,
         };
         analysis.walk(body, PendingRetains::default(), true);
         drop_nodes(body, &analysis.cancelled())
@@ -1421,6 +1490,8 @@ struct CancelAnalysis<'a> {
     un_bump_releases: Map<NodeId, Vec<NodeId>>,
     /// Every retain the walk saw, so the cancellable retains are those never marked needed.
     all_retains: Vec<NodeId>,
+    /// Whether to check the walk's own invariants as it goes.
+    develop_mode: bool,
 }
 
 // PROOF: P2a, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -1467,6 +1538,7 @@ impl<'a> CancelAnalysis<'a> {
         mut pending: PendingRetains,
         returns_from_func: bool,
     ) -> PendingRetains {
+        self.check_pending(&pending);
         match node.expr.as_ref() {
             RcExpr::Retain(v, path, _, k) => {
                 let retain = node_id(node);
@@ -1487,7 +1559,12 @@ impl<'a> CancelAnalysis<'a> {
                 let others = self.other_objects(v, path);
                 self.consume_objects(&mut pending, &others);
                 let un_bumped = self.acted_references(v, path);
-                match un_bump(&mut pending, &un_bumped) {
+                let before = self.develop_mode.then(|| pending.clone());
+                let answer = un_bump(&mut pending, &un_bumped);
+                if let Some(before) = before {
+                    check_un_bump(&before, &pending, &un_bumped, &answer);
+                }
+                match answer {
                     UnBump::InBracket(retain) => self
                         .un_bump_releases
                         .entry(retain)
@@ -1655,7 +1732,7 @@ impl<'a> CancelAnalysis<'a> {
         }
         // Keep the retains the arms agree on, in the pre-match order so release pairing stays
         // innermost-first.
-        pending_in
+        let merged: PendingRetains = pending_in
             .iter()
             .filter_map(|retain| {
                 uniform.get(&retain.node).map(|outstanding| PendingRetain {
@@ -1663,7 +1740,80 @@ impl<'a> CancelAnalysis<'a> {
                     outstanding: outstanding.clone(),
                 })
             })
-            .collect()
+            .collect();
+        self.check_merge(pending_in, arm_exits, &merged);
+        merged
+    }
+
+    /// The walk's state at a node's entry: no pending retain is fully un-bumped, and no retain is
+    /// pending twice.
+    ///
+    /// A retain left with nothing outstanding would be cancelled by the next release that reaches
+    /// any object it acts on, whatever that release disposes; a retain pending twice would be
+    /// un-bumped once and left pending, so the release that closed it would be deleted with a retain
+    /// that is still bumped.
+    // PROOF: P16 (dev-docs/proof/rc_ir/borrow-cancel)
+    fn check_pending(&self, pending: &PendingRetains) {
+        if !self.develop_mode {
+            return;
+        }
+        let mut seen = Set::default();
+        for retain in pending {
+            assert!(
+                !retain.outstanding.is_empty(),
+                "a pending retain has nothing outstanding"
+            );
+            assert!(seen.insert(retain.node), "one retain is pending twice");
+        }
+    }
+
+    /// What `merge` returns: a subsequence of what entered the match, holding the retains every arm
+    /// exits with at the same outstanding, and every other retain an arm exits with is needed.
+    ///
+    /// A retain kept that an arm left differently bumped would be cancelled against the releases of
+    /// one path while another path leaves it bearing a reference; a retain dropped from both the
+    /// result and `needed_retains` would be cancellable while no release closed it.
+    // PROOF: P18 (dev-docs/proof/rc_ir/borrow-cancel)
+    fn check_merge(
+        &self,
+        pending_in: &PendingRetains,
+        arm_exits: &[PendingRetains],
+        merged: &PendingRetains,
+    ) {
+        if !self.develop_mode {
+            return;
+        }
+        let mut previous: Option<usize> = None;
+        for retain in merged {
+            let at = pending_in
+                .iter()
+                .position(|entered| entered.node == retain.node)
+                .expect("merge kept a retain that did not enter the match");
+            assert!(
+                previous.is_none_or(|before| before < at),
+                "merge reordered the pending retains"
+            );
+            previous = Some(at);
+            for exit in arm_exits {
+                let at_exit = exit
+                    .iter()
+                    .find(|left| left.node == retain.node)
+                    .expect("merge kept a retain an arm fully un-bumped");
+                assert!(
+                    at_exit.outstanding == retain.outstanding,
+                    "merge kept a retain the arms leave differently bumped"
+                );
+            }
+        }
+        let kept: Set<NodeId> = merged.iter().map(|retain| retain.node).collect();
+        for exit in arm_exits {
+            for retain in exit {
+                assert!(
+                    kept.contains(&retain.node) || self.needed_retains.contains(&retain.node),
+                    "merge dropped a retain an arm exits with without marking it needed"
+                );
+            }
+        }
     }
 
     /// The nodes to delete: every cancellable retain (one never marked needed and un-bumped by at

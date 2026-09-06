@@ -936,8 +936,10 @@ For example, `4e2` represents 400.
 
 Characters enclosed in single quotes are interpreted as `U8` type number literals.
 For example, `'A'` represents 65.
+The character between the quotes is an ASCII character other than a single quote, a backslash, or a line break; those three are written `'\''`, `'\\'` and `'\n'`.
 
-Additionally, `\n`, `\r`, `\t`, `\0`, `\\`, `\'` are interpreted as `U8` type number literals representing the character codes of newline, carriage return, tab, null character, backslash, and single quote, respectively.
+Additionally, `\n`, `\r`, `\t`, `\0`, `\\`, `\'`, `\"` are interpreted as `U8` type number literals representing the character codes of newline, carriage return, tab, null character, backslash, single quote, and double quote, respectively.
+`\xHH`, where `HH` is two hexadecimal digits, is interpreted as the `U8` type number literal `0xHH`. For example, `'\x7f'` represents 127.
 
 Note that floating point literals must have at least one digit before and after the decimal point.
 For example, `1.` and `.1` are not valid floating point literals (while they are valid in C).
@@ -950,6 +952,7 @@ A string literal is a string enclosed in double quotes.
 For example, `"Hello, world!"` is a string literal of type `String`.
 
 In a string literal, `\n`, `\r`, `\t`, `\\`, `\"` are interpreted as newline, carriage return, tab, backslash, and double quote, respectively.
+`\uXXXX`, where `XXXX` is four hexadecimal digits, is interpreted as the Unicode character of the code point `0xXXXX`. For example, `"\u2764"` is `"❤"`.
 A `String` ends at its null terminator, so a null character written into a string literal is reported; where a null byte is needed, build an `Array U8`.
 
 ## Arrays and literals

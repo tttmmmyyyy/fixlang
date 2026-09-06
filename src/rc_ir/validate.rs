@@ -256,12 +256,44 @@ impl<'a> Validator<'a> {
     /// A variable use must resolve to a binding in scope or to a global (a function or global value).
     // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn use_var(&self, name: &FullName) {
+        self.use_callee(name);
+        self.borrows_nothing(name, "is used as a value");
+    }
+
+    /// A use of a name as the callee of a direct call, where naming a borrowing function is what
+    /// borrow-ification's routing does.
+    // PROOF: D/A, P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
+    fn use_callee(&self, name: &FullName) {
         if !self.scope.contains(name) && !self.globals.contains(name) {
             panic!(
                 "[RC IR validate] {}: use of unbound variable `{}` in `{}`",
                 self.stage,
                 name.to_string(),
                 self.location
+            );
+        }
+    }
+
+    /// A function whose address becomes a value is reached by an indirect call, which resolves to no
+    /// `RcFunc`, so the cancellation analysis reads every argument position of it as owning
+    /// (`resolve_callee_params` answers `None` and `rhs_consumes` takes the position as consuming).
+    /// A borrowing version does not dispose the argument at a borrowed position, so a release of the
+    /// caller's would be cancelled against a consume that never happens and the reference would leak.
+    /// Borrow-ification reaches its versions by routing direct calls, and by nothing else.
+    // PROOF: D/A, P30, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    fn borrows_nothing(&self, name: &FullName, how: &str) {
+        let target = self.prog.funcs.get(&FuncRef { name: name.clone() });
+        let Some(target) = target else {
+            return;
+        };
+        if !target.borrowed_units.is_empty() {
+            panic!(
+                "[RC IR validate] {}: `{}` borrows {} unit(s) and {} in `{}`",
+                self.stage,
+                name.to_string(),
+                target.borrowed_units.len(),
+                how,
+                self.location,
             );
         }
     }
@@ -314,7 +346,7 @@ impl<'a> Validator<'a> {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),
             RcRhs::App(callee, args) => {
-                self.use_var(&callee.name);
+                self.use_callee(&callee.name);
                 for a in args {
                     self.use_var(&a.name);
                 }
@@ -331,6 +363,14 @@ impl<'a> Validator<'a> {
                         self.location
                     );
                 }
+                // A closure is reached by an indirect call, which resolves to no `RcFunc`, so the
+                // cancellation analysis reads every argument position of it as owning
+                // (`resolve_callee_params` answers `None` and `rhs_consumes` takes the position as
+                // consuming). A target that borrows a unit does not dispose the argument there, so
+                // the caller's release would be cancelled against a consume that never happens, and
+                // the reference would leak. The borrowing versions are reached by the direct calls
+                // borrow-ification routes to them, and by nothing else.
+                self.borrows_nothing(&fref.name, "is the target of a closure");
                 // The closure stores its captures in this order, and the target reads them out by
                 // slot index against its own copy of the layout. The two are redundant stores of one
                 // layout, so a rewrite that reordered, retyped, added, or dropped the captures at one
@@ -748,6 +788,40 @@ mod tests {
             closure_building_func(var_of("v", make_ptr_ty())),
             projecting_func(&capture, 0, vec![make_ptr_ty()]),
         ]);
+    }
+
+    /// A closure targeting a function that borrows is caught. An indirect call resolves to no
+    /// `RcFunc`, so the cancellation analysis reads its argument positions as owning; a borrowing
+    /// target would leave the caller's release cancelled against a consume that never happens.
+    #[test]
+    #[should_panic(expected = "is the target of a closure")]
+    fn rejects_a_closure_targeting_a_borrowing_version() {
+        let capture = var_of("cap", make_dynamic_object_ty());
+        let mut target = projecting_func(&capture, 0, vec![make_ptr_ty()]);
+        target.borrowed_units.insert((FullName::local("p"), vec![]));
+        validate_prog(vec![
+            closure_building_func(var_of("v", make_ptr_ty())),
+            target,
+        ]);
+    }
+
+    /// A borrowing function named in a value position is caught. Its address reaches an indirect
+    /// call, which the cancellation analysis reads as owning every argument position.
+    #[test]
+    #[should_panic(expected = "is used as a value")]
+    fn rejects_a_borrowing_function_named_as_a_value() {
+        // `g` returns `f` itself rather than calling it.
+        let body = node(RcExpr::Ret(var_of("f", type_funptr(vec![], make_i64_ty()))));
+        let mut target = func(
+            "f",
+            type_funptr(vec![], make_i64_ty()),
+            vec![],
+            None,
+            body.clone(),
+        );
+        target.borrowed_units.insert((FullName::local("p"), vec![]));
+        let caller = func("g", type_funptr(vec![], make_i64_ty()), vec![], None, body);
+        validate_prog(vec![caller, target]);
     }
 
     /// A capture stored at a type the target does not project is caught, so a rewrite that changes
