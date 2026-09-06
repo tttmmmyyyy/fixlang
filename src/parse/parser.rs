@@ -38,10 +38,10 @@ use crate::constants::{
 };
 use crate::error::Errors;
 use crate::fixstd::builtin::{
-    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, integral_ty_range, make_f64_ty,
-    make_i64_ty, make_io_tycon, make_numeric_ty, make_string_lit, make_tuple_name_abs, make_u8_ty,
-    ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME,
-    EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_NAME,
+    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, integral_ty_bit_pattern_range,
+    integral_ty_range, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty, make_string_lit,
+    make_tuple_name_abs, make_u8_ty, ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME,
+    DIVIDE_TRAIT_NAME, EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_NAME,
     LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME, LESS_THAN_TRAIT_NAME,
     MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME, NEGATE_TRAIT_NEGATE_NAME,
     NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME,
@@ -2725,37 +2725,27 @@ fn parse_expr_number_lit(
         let (val, radix) = opt_val_radix.unwrap();
 
         // Check size.
-        // A non-negative hexadecimal or binary literal writes a bit pattern, so it may fill the
-        // width of its type: `0b11111111_I8` is `-1`. Every other literal names a number, which
-        // the type has to hold.
-        let writes_a_bit_pattern = (radix == 16 || radix == 2) && val >= BigInt::from(0);
-        if writes_a_bit_pattern {
-            let unsigned_ty_name = if ty_name.starts_with('I') {
-                ty_name.replacen('I', "U", 1)
-            } else {
-                ty_name.to_string()
-            };
-            let (_, width_max) = integral_ty_range(&unsigned_ty_name);
-            if val > width_max {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "The value of an integer literal `{}` does not fit in the width of `{}`.",
-                        raw, ty_name
-                    ),
-                    &[&Some(span)],
-                ));
-            }
+        // A hexadecimal or binary literal writes a bit pattern, so it reaches the largest value the
+        // width of its type holds; every literal names a value that type holds at the low end.
+        let writes_a_bit_pattern = radix == 16 || radix == 2;
+        let (min, max) = if writes_a_bit_pattern {
+            integral_ty_bit_pattern_range(ty_name)
         } else {
-            let (ty_min, ty_max) = integral_ty_range(ty_name);
-            if !(ty_min <= val && val <= ty_max) {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "The value of an integer literal `{}` is out of range of `{}`.",
-                        raw, ty_name
-                    ),
-                    &[&Some(span)],
-                ));
-            }
+            integral_ty_range(ty_name)
+        };
+        if !(min <= val && val <= max) {
+            let reason = if writes_a_bit_pattern && val > max {
+                "does not fit in the width of"
+            } else {
+                "is out of range of"
+            };
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "The value of an integer literal `{}` {} `{}`.",
+                    raw, reason, ty_name
+                ),
+                &[&Some(span)],
+            ));
         }
         // Now stringify val and parse it again as i128.
         let val = val.to_str_radix(10).parse::<i128>().unwrap();
@@ -2850,8 +2840,9 @@ fn parse_string_lit_content(
 ) -> Result<(String, Span), Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_string_lit);
     let span = Span::from_pair(&ctx.source, &pair);
-    let raw = pair.into_inner().next().unwrap().as_str();
-    let string = unescape_string_lit_inner(raw, &Some(span.clone()))?;
+    let inner_pair = pair.into_inner().next().unwrap();
+    let inner_span = Span::from_pair(&ctx.source, &inner_pair);
+    let string = unescape_string_lit_inner(inner_pair.as_str(), &Some(inner_span))?;
     Ok((string, span))
 }
 
@@ -2885,12 +2876,12 @@ fn take_hex_number(chars: &mut impl Iterator<Item = char>, digits: u32) -> u32 {
 /// Decode escape sequences inside a `string_lit_inner` body (the characters
 /// between the surrounding double quotes).
 fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, Errors> {
-    // The span of `raw[start..end]`. The literal's own span begins one quote ahead of `raw`.
+    // The span of `raw[start..end]`, where `span` is the span of the whole of `raw`.
     let part_span = |start: usize, end: usize| -> Option<Span> {
         span.as_ref().map(|span| Span {
             input: span.input.clone(),
-            start: span.start + 1 + start,
-            end: span.start + 1 + end,
+            start: span.start + start,
+            end: span.start + end,
         })
     };
     let mut chars = raw.char_indices();
