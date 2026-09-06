@@ -104,6 +104,8 @@ The result goes in a fenced `diff` block, under the prose for that item.
 
 **An added item carries no diff**, only its link: every line of it is new, so the diff would repeat the file the link already opens.
 
+**An example written here belongs in the code as well.** The `devdoc` skill's *An example of input and output* applies to these entries, so an entry often carries one input and the output it produces. That pair was judged worth a reader's attention — and the reader of the pull request meets it once, where the reader of the code meets the item on every reading. So put it in the item's doc comment too, under `# Examples`, in the shape the `code-review` skill's `comment-style` aspect gives. Writing the example is the moment to check that the code has one; nothing later looks back at the item.
+
 ## Where the coverage goes
 
 A pull request body is capped at 65,536 characters, and the per-item coverage — prose, links and diffs, one entry per item — is what grows fastest as a change touches more code. Growing it inside the body also costs the reader the argument: the case for the change stops being readable in one pass once the entries outweigh it.
