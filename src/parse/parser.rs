@@ -2875,6 +2875,10 @@ fn parse_expr_string_lit(
 /// the first digit being the most significant one.
 /// The grammar admits a `\x` or `\u` escape sequence only when all of its hexadecimal
 /// digits follow it, so every character read here is present and is a hexadecimal digit.
+///
+/// # Examples
+/// `take_hex_number(&mut "7f".chars(), 2)` is 127, and `take_hex_number(&mut "2764".chars(), 4)`
+/// is 10084.
 fn take_hex_number(chars: &mut impl Iterator<Item = char>, digits: u32) -> u32 {
     let mut code: u32 = 0;
     for _ in 0..digits {
