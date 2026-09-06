@@ -6029,8 +6029,9 @@ fn program_naming_an_integer_literal(literal: &str, ty_name: &str) -> String {
 }
 
 /// Verifies that a negative hexadecimal or binary literal is reported when the type it is written
-/// with cannot hold it, and that the report names that type. A non-negative literal of those radices
-/// writes a bit pattern and may fill the type's width, which is what makes the sign decide.
+/// with cannot hold it, and that the report names that type. A non-negative literal of those
+/// radices writes a bit pattern and may fill the type's width, so the sign decides how far the
+/// literal may reach.
 #[test]
 pub fn test_negative_bit_pattern_literal_out_of_range_is_reported() {
     for (literal, ty_name) in [("-0xFF", "I8"), ("-0x1", "U8"), ("-0b1", "U8")] {
@@ -6043,9 +6044,9 @@ pub fn test_negative_bit_pattern_literal_out_of_range_is_reported() {
 }
 
 /// Verifies the interval a hexadecimal or binary literal of a signed type may name: it runs from
-/// the minimum of that type to the largest value the type's width holds, so the values just outside
-/// it are reported, and a report about a literal too wide names the type the literal is written
-/// with.
+/// the minimum of that type to the largest value the type's width holds, so the values just
+/// outside it are reported. A report about a literal too wide for its type names the type the
+/// literal is written with.
 #[test]
 pub fn test_bit_pattern_literal_below_the_types_minimum_or_past_its_width_is_reported() {
     let i8_program = |literal: &str| program_naming_an_integer_literal(literal, "I8");

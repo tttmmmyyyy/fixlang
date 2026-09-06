@@ -204,11 +204,12 @@ impl Span {
     /// The span of `self[start..end]`, where both are byte offsets from the beginning of this span.
     ///
     /// # Examples
-    /// The part `(4, 10)` of the span of `"abc\u0000def"` is the span of its `\u0000`.
+    /// The part `(3, 9)` of the span of `abc\u0000def` is the span of its `\u0000`.
     pub fn part(&self, start: usize, end: usize) -> Self {
         assert!(
             start <= end && self.start + end <= self.end,
-            "a part lies within its span, but `{}..{}` is asked of the span `{}..{}`",
+            "a part lies within its span, but the bytes `{}..{}` from its beginning are asked of \
+             the span at `{}..{}`",
             start,
             end,
             self.start,

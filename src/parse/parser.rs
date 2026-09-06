@@ -2726,7 +2726,7 @@ fn parse_expr_number_lit(
 
         // Check size.
         // A hexadecimal or binary literal writes a bit pattern, so it reaches the largest value the
-        // width of its type holds; every literal names a value that type holds at the low end.
+        // width of its type holds. At the low end every literal stops at the minimum of its type.
         let writes_a_bit_pattern = radix == 16 || radix == 2;
         let (min, max) = if writes_a_bit_pattern {
             integral_ty_range_with_bit_patterns(ty_name)
@@ -2873,7 +2873,11 @@ fn take_hex_number(chars: &mut impl Iterator<Item = char>, digits: u32) -> u32 {
 }
 
 /// Decode escape sequences inside a `string_lit_inner` body (the characters
-/// between the surrounding double quotes).
+/// between the surrounding double quotes). `raw_span` is where `raw` lies in the source, and each
+/// report points at the part of `raw` it is about.
+///
+/// A null character, written `\u0000` or directly, is refused: a `String` ends at its null
+/// terminator.
 fn unescape_string_lit_inner(raw: &str, raw_span: &Option<Span>) -> Result<String, Errors> {
     // The span of `raw[start..end]`.
     let part_span = |start: usize, end: usize| -> Option<Span> {

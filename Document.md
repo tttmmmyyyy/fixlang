@@ -930,7 +930,7 @@ For example, `42_I32` is an `I32` type number literal, and `3.14_F32` is an `F32
 
 Integer literals are represented in decimal by default, and can be represented in hexadecimal with a `0x` prefix, in octal with a `0o` prefix, and in binary with a `0b` prefix.
 An integer literal has to be in the range of the type it is written with, so `256_I8` and `-0xFF_I8` are reported.
-A hexadecimal or binary literal writes a bit pattern, so it reaches in addition the largest value the width of that type holds: `0xFF_I8` and `0b11111111_I8` are `-1`.
+A hexadecimal or binary literal writes a bit pattern, so it may also fill the width of that type: `0xFF_I8` and `0b11111111_I8` are `-1`.
 For example, `0x2A` represents 42, and `0o52` also represents 42.
 
 In integer literals in decimal, you can use "e" to represent the power of 10.
