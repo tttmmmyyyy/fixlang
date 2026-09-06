@@ -403,39 +403,45 @@ mod tests {
 
         // Both files write the literal on the 4th line, and each escape is 6 characters wide. The
         // escape begins at the 10th character of `nul.fix` and at the 16th of `surrogate.fix`; the
-        // two characters ahead of it are three bytes each. The protocol counts lines and characters
-        // from zero.
-        let nul_diagnostics = wait_until_diagnostics(&mut client, Path::new("nul.fix"), |d| {
-            carries_report(d, NUL_REPORT)
-        });
-        let nul_report = sole_diagnostic_containing(&nul_diagnostics, NUL_REPORT);
-        assert_eq!(nul_report["range"]["start"]["line"], 3);
-        assert_eq!(
-            nul_report["range"]["start"]["character"], 9,
-            "at the escape naming the null character, but the report is {:?}",
-            nul_report
+        // two characters ahead of it are three bytes each.
+        assert_sole_report_covers(&mut client, Path::new("nul.fix"), NUL_REPORT, 3, 9, 15);
+        assert_sole_report_covers(
+            &mut client,
+            Path::new("surrogate.fix"),
+            SURROGATE_REPORT,
+            3,
+            15,
+            21,
         );
-        assert_eq!(
-            nul_report["range"]["end"]["character"], 15,
-            "covering that escape and nothing after it, but the report is {:?}",
-            nul_report
-        );
+    }
 
-        let surrogate_diagnostics =
-            wait_until_diagnostics(&mut client, Path::new("surrogate.fix"), |d| {
-                carries_report(d, SURROGATE_REPORT)
-            });
-        let surrogate_report = sole_diagnostic_containing(&surrogate_diagnostics, SURROGATE_REPORT);
-        assert_eq!(surrogate_report["range"]["start"]["line"], 3);
+    /// Waits for the reports of `file` to carry the one containing `report`, and asserts that it is
+    /// the only such one and that it covers the characters `start_character` up to `end_character`
+    /// of `line`. The protocol counts lines and characters from zero.
+    fn assert_sole_report_covers(
+        client: &mut LspClient,
+        file: &Path,
+        report: &str,
+        line: u64,
+        start_character: u64,
+        end_character: u64,
+    ) {
+        let diagnostics = wait_until_diagnostics(client, file, |d| carries_report(d, report));
+        let diag = sole_diagnostic_containing(&diagnostics, report);
         assert_eq!(
-            surrogate_report["range"]["start"]["character"], 15,
-            "at the escape naming the surrogate, but the report is {:?}",
-            surrogate_report
+            diag["range"]["start"]["line"], line,
+            "on the line the literal is written on, but the report is {:?}",
+            diag
         );
         assert_eq!(
-            surrogate_report["range"]["end"]["character"], 21,
-            "covering that escape and nothing after it, but the report is {:?}",
-            surrogate_report
+            diag["range"]["start"]["character"], start_character,
+            "at the part the decoder refuses, but the report is {:?}",
+            diag
+        );
+        assert_eq!(
+            diag["range"]["end"]["character"], end_character,
+            "covering that part and nothing after it, but the report is {:?}",
+            diag
         );
     }
 

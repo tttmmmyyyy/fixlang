@@ -598,13 +598,14 @@ pub fn integral_ty_range(name: &str) -> (BigInt, BigInt) {
 /// # Examples
 /// `integral_ty_bit_pattern_range("I8")` is `(-128, 255)`, and for `"U8"` it is `(0, 255)`.
 pub fn integral_ty_bit_pattern_range(name: &str) -> (BigInt, BigInt) {
-    let (ty_min, _) = integral_ty_range(name);
-    let unsigned_name = if name.starts_with('I') {
-        name.replacen('I', "U", 1)
+    let (ty_min, ty_max) = integral_ty_range(name);
+    // A signed type holds the values up to `2^(w-1) - 1`, so its width holds twice that and one
+    // more; an unsigned type already reaches the largest value of its width.
+    let width_max = if ty_min < BigInt::from(0) {
+        2 * ty_max + 1
     } else {
-        name.to_string()
+        ty_max
     };
-    let (_, width_max) = integral_ty_range(&unsigned_name);
     (ty_min, width_max)
 }
 

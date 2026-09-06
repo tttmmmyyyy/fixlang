@@ -6012,14 +6012,11 @@ pub fn test_hex_oct_bin_lit() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Verifies that a negative hexadecimal or binary literal is reported when the type it is written
-/// with cannot hold it, and that the report names that type. A non-negative literal of those radices
-/// writes a bit pattern and may fill the type's width, which is what makes the sign decide.
-#[test]
-pub fn test_negative_radix_literal_out_of_range_is_reported() {
-    for (literal, ty_name) in [("-0xFF", "I8"), ("-0x1", "U8"), ("-0b1", "U8")] {
-        let source = format!(
-            r#"
+/// A program whose `main` names the integer literal `literal` written with the type `ty_name`,
+/// such as `-0xFF_I8`.
+fn program_naming_an_integer_literal(literal: &str, ty_name: &str) -> String {
+    format!(
+        r#"
     module Main;
     main : IO ();
     main = (
@@ -6027,10 +6024,18 @@ pub fn test_negative_radix_literal_out_of_range_is_reported() {
         pure()
     );
     "#,
-            literal, ty_name, ty_name
-        );
+        literal, ty_name, ty_name
+    )
+}
+
+/// Verifies that a negative hexadecimal or binary literal is reported when the type it is written
+/// with cannot hold it, and that the report names that type. A non-negative literal of those radices
+/// writes a bit pattern and may fill the type's width, which is what makes the sign decide.
+#[test]
+pub fn test_negative_radix_literal_out_of_range_is_reported() {
+    for (literal, ty_name) in [("-0xFF", "I8"), ("-0x1", "U8"), ("-0b1", "U8")] {
         test_source_fail(
-            &source,
+            &program_naming_an_integer_literal(literal, ty_name),
             Configuration::develop_mode(),
             &format!("out of range of `{}`", ty_name),
         );
@@ -6043,19 +6048,7 @@ pub fn test_negative_radix_literal_out_of_range_is_reported() {
 /// with.
 #[test]
 pub fn test_radix_literal_interval_ends_at_the_types_minimum_and_at_its_width() {
-    let program = |literal: &str| {
-        format!(
-            r#"
-    module Main;
-    main : IO ();
-    main = (
-        assert_eq(|_|"", {}_I8, 0_I8);;
-        pure()
-    );
-    "#,
-            literal
-        )
-    };
+    let program = |literal: &str| program_naming_an_integer_literal(literal, "I8");
 
     // One below `-0x80_I8`, which `test_hex_oct_bin_lit` compiles as -128.
     test_source_fail(
@@ -6163,19 +6156,8 @@ pub fn test_integer_string_literal_error4() {
 #[test]
 pub fn test_decimal_literal_below_the_minimum_of_its_type_is_reported() {
     for (literal, ty_name) in [("-1", "U8"), ("-129", "I8")] {
-        let source = format!(
-            r#"
-    module Main;
-    main : IO ();
-    main = (
-        assert_eq(|_|"", {}_{}, 0_{});;
-        pure()
-    );
-    "#,
-            literal, ty_name, ty_name
-        );
         test_source_fail(
-            &source,
+            &program_naming_an_integer_literal(literal, ty_name),
             Configuration::develop_mode(),
             &format!("`{}` is out of range of `{}`", literal, ty_name),
         );

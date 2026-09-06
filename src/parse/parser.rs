@@ -2747,8 +2747,7 @@ fn parse_expr_number_lit(
                 &[&Some(span)],
             ));
         }
-        // Now stringify val and parse it again as i128.
-        let val = val.to_str_radix(10).parse::<i128>().unwrap();
+        let val = i128::try_from(&val).unwrap();
         Ok(expr_int_lit(val as u64, ty, Some(span)))
     }
 }
@@ -2897,10 +2896,9 @@ fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, E
                     let code = take_hex_number(&mut chars.by_ref().map(|(_, c)| c), 4);
                     match char::from_u32(code) {
                         None => {
-                            let end = chars.clone().next().map_or(raw.len(), |(i, _)| i);
                             return Err(Errors::from_msg_srcs(
                                 format!("Invalid unicode character: u{:X}", code),
-                                &[&part_span(start, end)],
+                                &[&part_span(start, chars.offset())],
                             ));
                         }
                         Some(c) => c,
@@ -2910,10 +2908,9 @@ fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, E
             }
         };
         if decoded == '\0' {
-            let end = chars.clone().next().map_or(raw.len(), |(i, _)| i);
             return Err(Errors::from_msg_srcs(
                 "A string literal cannot hold a null character, since a `String` ends at its null terminator. Where a null byte is needed, build an `Array U8`.".to_string(),
-                &[&part_span(start, end)],
+                &[&part_span(start, chars.offset())],
             ));
         }
         out.push(decoded);
