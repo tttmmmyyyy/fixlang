@@ -770,29 +770,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().build_call(func, &[ptr.into()], "").unwrap();
     }
 
-    /// The address of the current top of the stack, which `restore_stack` takes back to.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    #[allow(dead_code)]
-    pub fn save_stack(&mut self) -> PointerValue<'c> {
-        let func = self.intrinsic_function("llvm.stacksave", &[]);
-        self.builder()
-            .build_call(func, &[], "save_stack")
-            .unwrap()
-            .try_as_basic_value()
-            .unwrap_basic()
-            .into_pointer_value()
-    }
-
-    /// Take the top of the stack back to `pos`, an address `save_stack` gave.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    #[allow(dead_code)]
-    pub fn restore_stack(&mut self, pos: PointerValue<'c>) {
-        let func = self.intrinsic_function("llvm.stackrestore", &[]);
-        self.builder()
-            .build_call(func, &[pos.into()], "restore_stack")
-            .unwrap();
-    }
-
     /// The declaration of the LLVM intrinsic `name` in this module, instantiated at `overload_tys`.
     ///
     /// An overloaded intrinsic names one function per instantiation, so the types it is overloaded

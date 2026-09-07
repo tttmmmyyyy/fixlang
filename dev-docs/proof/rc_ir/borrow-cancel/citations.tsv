@@ -369,7 +369,7 @@ src/fixstd/std.fix	boxed_from_retained_ptr	D/A	-
 src/fixstd/std.fix	boxed_to_retained_ptr	D/A	-
 src/fixstd/std.fix	mutate_unique_io	D/A,P26	-
 src/fixstd/stdlib.rs	make_std_mod	D/A,P26,A21	6da374621d89
-src/generator.rs	Generator	P3,P4	fa352e2094d9
+src/generator.rs	Generator	P3,P4	13bfb14a1568
 src/generator.rs	Generator::add_global_object	D/A,P3,P4,P7c,P7f,P18a,P18b,P27,P28,P29,P30	c05ffb02bb44
 src/generator.rs	Generator::apply_lambda	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P28,P29,P30	b4e67be38c4e
 src/generator.rs	Generator::build_assert_unique	P26	0ebdad575d3d
@@ -406,11 +406,9 @@ src/generator.rs	Generator::mark_global	D/A,P26,P27,P28,P29,P30	a286105176a5
 src/generator.rs	Generator::mark_threaded	D/A,P26,P27,P29,P30	0a998e05aae3
 src/generator.rs	Generator::new	P3,P4,P27,P29,P30	af5d82b5074f
 src/generator.rs	Generator::release	P27,P29,P30	266fa63b0bb8
-src/generator.rs	Generator::restore_stack	P26	be5150f899f2
 src/generator.rs	Generator::retain	P26,P27,P28,P29,P30	7b5aac52138a
 src/generator.rs	Generator::retain_nonnull_boxed	P27,P29,P30	c35579eee050
 src/generator.rs	Generator::returns_through_out_pointer	P27,P29,P30	a80f7498eeb6
-src/generator.rs	Generator::save_stack	P26	24e95cb8f1dd
 src/generator.rs	Generator::scope_push	P27,P29,P30	4441bcaf1b56
 src/generator.rs	Generator::set_refcnt_state	P26	940b5ba1b600
 src/generator.rs	Generator::traverse_boxed_refs	P26	3272a267c4e1

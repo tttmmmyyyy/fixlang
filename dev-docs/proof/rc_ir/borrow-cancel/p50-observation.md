@@ -331,8 +331,6 @@ SCAN src/ `.build_call(`
   = src/generator.rs: Generator::call_runtime -- runtime の関数
   = src/generator.rs: Generator::emit_rc_helper_call -- 生成された RC の補助関数
   = src/generator.rs: ValueAccessor::get -- `ValueAccessor::get` のグローバルのアクセサ
-  = src/generator.rs: Generator::restore_stack -- runtime の関数
-  = src/generator.rs: Generator::save_stack -- runtime の関数
   = src/generator.rs: Generator::traverse_boxed_refs -- 型ごとの走査関数
   = src/object.rs: build_malloc -- runtime の関数
   = src/rc_ir/codegen.rs: Generator::store_init_value -- `InitValue#<symbol>`
@@ -2460,8 +2458,7 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       呼ぶ命令を実行するときである (`EXT LLVM の関数への制御の移り`)。前提 LLVM の関数を呼ぶ命令を組む在りか
       が `build_call` と `build_indirect_call` を呼ぶ式が在る項目を挙げる。そのうち D23 の本体を
       呼ばないのは次である --
-      runtime の関数 (`build_malloc`、`realloc_array`、`Generator::save_stack`、
-      `Generator::restore_stack`、`Generator::call_runtime`)、LLVM の intrinsic
+      runtime の関数 (`build_malloc`、`realloc_array`、`Generator::call_runtime`)、LLVM の intrinsic
       (`Generator::build_lifetime_marker`)、生成された RC の補助関数 (`Generator::emit_rc_helper_call`)
       と走査関数 (`Generator::build_traverser_work` と `Generator::traverse_boxed_refs`)、
       グローバルのアクセサ (`ValueAccessor::get` のグローバルの枝)、そして `FFI_CALL` が呼ぶ C の
@@ -2501,7 +2498,7 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
       `CODE src/generator.rs: Generator::build_run_destructor` である。
   BY 前提 LLVM の関数を呼ぶ命令を組む在りか, <ref id=ff5985d/>, <ref id=e3436e8/>, EXT LLVM の関数への制御の移り,
      CODE src/generator.rs: Generator::apply_lambda, Generator::build_run_destructor,
-     Generator::save_stack, Generator::restore_stack, Generator::call_runtime,
+     Generator::call_runtime,
      Generator::build_lifetime_marker, Generator::emit_rc_helper_call,
      Generator::build_traverser_work, Generator::traverse_boxed_refs,
      Generator::build_ffi_call_core, ValueAccessor::get,
