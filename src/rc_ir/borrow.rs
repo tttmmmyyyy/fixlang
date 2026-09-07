@@ -1371,8 +1371,7 @@ fn check_un_bump(
             );
         }
         UnBump::OutsideBracket => {
-            let at = innermost
-                .expect("un_bump answered OutsideBracket with no bracket to be outside of");
+            let at = innermost.expect("un_bump answered OutsideBracket with no bracket to be outside of");
             assert!(
                 !before[at].outstanding.covers(un_bumped),
                 "un_bump answered OutsideBracket where the innermost bracket covers the release"

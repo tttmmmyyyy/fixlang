@@ -798,7 +798,9 @@ mod tests {
     fn rejects_a_closure_targeting_a_borrowing_version() {
         let capture = var_of("cap", make_dynamic_object_ty());
         let mut target = projecting_func(&capture, 0, vec![make_ptr_ty()]);
-        target.borrowed_units.insert((FullName::local("p"), vec![]));
+        target
+            .borrowed_units
+            .insert((FullName::local("p"), vec![]));
         validate_prog(vec![
             closure_building_func(var_of("v", make_ptr_ty())),
             target,
@@ -812,13 +814,7 @@ mod tests {
     fn rejects_a_borrowing_function_named_as_a_value() {
         // `g` returns `f` itself rather than calling it.
         let body = node(RcExpr::Ret(var_of("f", type_funptr(vec![], make_i64_ty()))));
-        let mut target = func(
-            "f",
-            type_funptr(vec![], make_i64_ty()),
-            vec![],
-            None,
-            body.clone(),
-        );
+        let mut target = func("f", type_funptr(vec![], make_i64_ty()), vec![], None, body.clone());
         target.borrowed_units.insert((FullName::local("p"), vec![]));
         let caller = func("g", type_funptr(vec![], make_i64_ty()), vec![], None, body);
         validate_prog(vec![caller, target]);
