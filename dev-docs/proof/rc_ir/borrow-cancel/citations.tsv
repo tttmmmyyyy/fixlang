@@ -369,7 +369,7 @@ src/fixstd/std.fix	boxed_from_retained_ptr	D/A	-
 src/fixstd/std.fix	boxed_to_retained_ptr	D/A	-
 src/fixstd/std.fix	mutate_unique_io	D/A,P26	-
 src/fixstd/stdlib.rs	make_std_mod	D/A,P26,A21	6da374621d89
-src/generator.rs	Generator	P3,P4	6673a2b15d6d
+src/generator.rs	Generator	P3,P4	fa352e2094d9
 src/generator.rs	Generator::add_global_object	D/A,P3,P4,P7c,P7f,P18a,P18b,P27,P28,P29,P30	c05ffb02bb44
 src/generator.rs	Generator::apply_lambda	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P28,P29,P30	b4e67be38c4e
 src/generator.rs	Generator::build_assert_unique	P26	0ebdad575d3d
@@ -379,7 +379,7 @@ src/generator.rs	Generator::build_capture_project	P26,P27,P29,P30	d36efba9fc72
 src/generator.rs	Generator::build_ffi_call_core	P26	96a972df33c9
 src/generator.rs	Generator::build_if_nonnull	P26	38a3eb268753
 src/generator.rs	Generator::build_is_refcnt_one	P26	826396fb13e6
-src/generator.rs	Generator::build_lifetime_marker	P26	40e74cb87c04
+src/generator.rs	Generator::build_lifetime_marker	P26	4ce551282031
 src/generator.rs	Generator::build_mark_boxed_with	P26	29d28cfe7d71
 src/generator.rs	Generator::build_release_boxed_with	D/A,P28	7ba0984c5e0f
 src/generator.rs	Generator::build_retain	P26,P27,P28,P29,P30	a909bacfd43a

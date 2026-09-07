@@ -58,6 +58,7 @@ use inkwell::values::BasicValue;
 use inkwell::values::BasicValueEnum;
 use inkwell::values::FunctionValue;
 use inkwell::values::GlobalValue;
+use inkwell::values::InstructionOpcode;
 use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
 use inkwell::values::ValueKind;
@@ -757,6 +758,13 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// naming `ptr` reserved.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_lifetime_marker(&self, intrinsic_name: &str, ptr: PointerValue<'c>) {
+        assert!(
+            ptr.as_instruction()
+                .is_some_and(|inst| inst.get_opcode() == InstructionOpcode::Alloca),
+            "`{}` bounds an allocation, and `{:?}` is not one",
+            intrinsic_name,
+            ptr
+        );
         let ptr_ty = self.context.ptr_type(AddressSpace::from(0));
         let func = self.intrinsic_function(intrinsic_name, &[ptr_ty.into()]);
         self.builder().build_call(func, &[ptr.into()], "").unwrap();
