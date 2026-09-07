@@ -127,7 +127,7 @@ Alternatively, you can download a binary directly from [Releases](https://github
 
 #### Build from source
 
-Fix compiler is written in Rust and requires LLVM 17.0.x. The `fix` command will be installed to `~/.cargo/bin`.
+Fix compiler is written in Rust and requires LLVM 22.1.x. The `fix` command will be installed to `~/.cargo/bin`.
 
 ##### Linux (Ubuntu)
 
@@ -136,11 +136,11 @@ Fix compiler is written in Rust and requires LLVM 17.0.x. The `fix` command will
 **Install**:
 
 ```sh
-LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-Linux-X64.tar.xz"
 mkdir -p llvm
 wget -q "$LLVM_URL" -O llvm.tar.xz
 tar -xf llvm.tar.xz -C llvm --strip-components=1
-export LLVM_SYS_170_PREFIX="$PWD/llvm"
+export LLVM_SYS_221_PREFIX="$PWD/llvm"
 git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang
 cargo install --locked --path .
 ```
@@ -155,8 +155,8 @@ cargo install --locked --path .
 **Install**:
 
 ```sh
-brew install llvm@17 openssl
-export LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)
+brew install llvm@22 openssl
+export LLVM_SYS_221_PREFIX=$(brew --prefix llvm@22)
 export OPENSSL_DIR=$(brew --prefix openssl)
 git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang
 cargo install --locked --path .

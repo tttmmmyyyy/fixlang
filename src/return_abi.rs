@@ -155,7 +155,7 @@ fn demand_of(ty: BasicTypeEnum) -> RegisterDemand {
             float: 1,
             ..Default::default()
         },
-        BasicTypeEnum::VectorType(_) => RegisterDemand {
+        BasicTypeEnum::VectorType(_) | BasicTypeEnum::ScalableVectorType(_) => RegisterDemand {
             unmodeled: 1,
             ..Default::default()
         },

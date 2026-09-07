@@ -34,12 +34,12 @@ fn c_compiler_command(config: &Configuration) -> Result<Command, Errors> {
 /// release.
 fn clang_path() -> Result<PathBuf, Errors> {
     // `llvm-sys` names this after the LLVM release it links, which `Cargo.toml` pins through
-    // inkwell's `llvm17-0` feature. Raising one without the other leaves this looking for a prefix
+    // inkwell's `llvm22-1` feature. Raising one without the other leaves this looking for a prefix
     // nothing sets, so say so rather than reach for whatever clang the path happens to hold.
-    let Some(prefix) = option_env!("LLVM_SYS_170_PREFIX") else {
+    let Some(prefix) = option_env!("LLVM_SYS_221_PREFIX") else {
         return Err(Errors::from_msg(
             "This compiler was built without recording where its LLVM lives, so the clang a \
-             sanitized build needs cannot be found. Build it with `LLVM_SYS_170_PREFIX` set."
+             sanitized build needs cannot be found. Build it with `LLVM_SYS_221_PREFIX` set."
                 .to_string(),
         ));
     };

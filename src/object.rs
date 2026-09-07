@@ -35,6 +35,7 @@ use inkwell::{
     types::{BasicMetadataTypeEnum, BasicType},
 };
 use inkwell::{AddressSpace, IntPredicate};
+use std::num::NonZeroU32;
 use std::sync::{Arc, OnceLock};
 
 /// One field of the LLVM struct a Fix object is laid out as: either runtime machinery (the control
@@ -1407,9 +1408,21 @@ pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut Generator<'c, 'm>) -> DIType<'c>
         .as_type()
 }
 
+/// The integer type of the given width in bits.
+///
+/// # Parameters
+/// * `context` - The context the type belongs to.
+/// * `bits` - The width, which is positive and at most LLVM's limit of 2^23 bits.
+pub fn int_type_of_bits<'c>(context: &'c Context, bits: u32) -> IntType<'c> {
+    let bits = NonZeroU32::new(bits).expect("an integer type has a positive width");
+    context
+        .custom_width_int_type(bits)
+        .expect("an integer type the compiler builds is within LLVM's width limit")
+}
+
 /// The type of a union's tag, an index into the union's variants.
 fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
-    context.custom_width_int_type(UNION_TAG_BITS)
+    int_type_of_bits(context, UNION_TAG_BITS)
 }
 
 /// The tag of the variant a union declares at index `variant_idx`.
@@ -1743,8 +1756,7 @@ fn build_malloc<'c, 'm>(
         .build_call(malloc_fn, &[sizeof.into()], name)
         .unwrap()
         .try_as_basic_value()
-        .left()
-        .unwrap()
+        .unwrap_basic()
         .into_pointer_value()
 }
 

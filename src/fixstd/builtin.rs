@@ -2423,8 +2423,7 @@ fn realloc_array<'c, 'm>(
         )
         .unwrap()
         .try_as_basic_value()
-        .left()
-        .unwrap()
+        .unwrap_basic()
         .into_pointer_value();
     let new_alloc_offset = {
         let aligned_alloc_offset = build_array_storage_shift(gc, struct_type, new_base);

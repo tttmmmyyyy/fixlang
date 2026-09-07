@@ -46,7 +46,7 @@ jobs:
               image: ubuntu-22.04, 
               target: x86_64-unknown-linux-gnu, 
               use-cross: false, 
-              llvm-url: "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz", 
+              llvm-url: "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-Linux-X64.tar.xz", 
               extension: "" }
           - { os: macos,  
               image: macos-14, 
@@ -75,10 +75,10 @@ jobs:
               wget -q "$LLVM_URL" -O llvm.tar.xz
               tar -xf llvm.tar.xz -C llvm --strip-components=1
               LLVM_PATH="${GITHUB_WORKSPACE}/llvm"
-              echo "LLVM_SYS_170_PREFIX=$LLVM_PATH" >> $GITHUB_ENV
+              echo "LLVM_SYS_221_PREFIX=$LLVM_PATH" >> $GITHUB_ENV
             elif [[ "${{ matrix.job.os }}" == "macos" ]]; then
-              brew install llvm@17
-              echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)" >> $GITHUB_ENV
+              brew install llvm@22
+              echo "LLVM_SYS_221_PREFIX=$(brew --prefix llvm@22)" >> $GITHUB_ENV
               brew install openssl
               echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
             else

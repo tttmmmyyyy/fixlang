@@ -99,8 +99,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .build_call(init_value_fn, &[], "call_init_value")
             .unwrap()
             .try_as_basic_value()
-            .left()
-            .expect("`InitValue#...` returns the value of the global");
+            .expect_basic("`InitValue#...` returns the value of the global");
         self.builder()
             .build_store(global_var_ptr, computed)
             .unwrap();

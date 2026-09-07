@@ -48,9 +48,6 @@ use crate::return_abi::{
     lambda_calling_convention_of_target, return_registers_of_target, returns_through_out_pointer,
     ReturnRegisters,
 };
-use either::Either;
-use either::Either::Left;
-use either::Either::Right;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::llvm_sys::debuginfo::LLVMMetadataReplaceAllUsesWith;
@@ -63,6 +60,7 @@ use inkwell::values::FunctionValue;
 use inkwell::values::GlobalValue;
 use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
+use inkwell::values::ValueKind;
 use inkwell::AddressSpace;
 use inkwell::AtomicOrdering;
 use inkwell::AtomicRMWBinOp;
@@ -122,8 +120,8 @@ impl<'c> ValueAccessor<'c> {
                         .unwrap()
                         .try_as_basic_value();
                     match call {
-                        Left(val) => val,
-                        Right(_) => {
+                        ValueKind::Basic(val) => val,
+                        ValueKind::Instruction(_) => {
                             let ty = ty.get_embedded_type(gc);
                             Generator::get_undef(&ty)
                         }
@@ -736,44 +734,32 @@ impl<'c, 'm> Generator<'c, 'm> {
         ptr
     }
 
-    /// State that the allocation `ptr` names begins to hold a value of type `ty` here.
+    /// State that the allocation `ptr` names begins to hold a value here.
     ///
     /// An allocation LLVM is told nothing about holds a value for the whole of the function that
     /// makes it. What it holds then has to survive everything that follows, so a function that
     /// fills it again on every turn of a loop carries its contents from one turn into the next.
-    fn build_lifetime_start<T: BasicType<'c>>(&self, ptr: PointerValue<'c>, ty: T) {
-        self.build_lifetime_marker("llvm.lifetime.start", ptr, ty);
+    fn build_lifetime_start(&self, ptr: PointerValue<'c>) {
+        self.build_lifetime_marker("llvm.lifetime.start", ptr);
     }
 
-    /// State that the allocation `ptr` names stops holding the value of type `ty` it held.
+    /// State that the allocation `ptr` names stops holding the value it held.
     ///
     /// This closes what `build_lifetime_start` opened: the memory holds a value between the two,
     /// and holds nothing outside them.
-    fn build_lifetime_end<T: BasicType<'c>>(&self, ptr: PointerValue<'c>, ty: T) {
-        self.build_lifetime_marker("llvm.lifetime.end", ptr, ty);
+    fn build_lifetime_end(&self, ptr: PointerValue<'c>) {
+        self.build_lifetime_marker("llvm.lifetime.end", ptr);
     }
 
-    /// Emit the lifetime intrinsic `intrinsic_name` over the bytes a value of type `ty` occupies at
-    /// `ptr`.
+    /// Emit the lifetime intrinsic `intrinsic_name` over the allocation at `ptr`.
     ///
-    /// The marker covers what a store of the value writes, which is its store size. For a type
-    /// whose bits do not fill whole bytes, that store size exceeds the size `sizeof` reports.
+    /// The marker covers the whole of that allocation, which is what the allocation instruction
+    /// naming `ptr` reserved.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn build_lifetime_marker<T: BasicType<'c>>(
-        &self,
-        intrinsic_name: &str,
-        ptr: PointerValue<'c>,
-        ty: T,
-    ) {
+    fn build_lifetime_marker(&self, intrinsic_name: &str, ptr: PointerValue<'c>) {
         let ptr_ty = self.context.ptr_type(AddressSpace::from(0));
         let func = self.intrinsic_function(intrinsic_name, &[ptr_ty.into()]);
-        let size = self.context.i64_type().const_int(
-            self.target_data.get_store_size(&ty.as_basic_type_enum()),
-            false,
-        );
-        self.builder()
-            .build_call(func, &[size.into(), ptr.into()], "")
-            .unwrap();
+        self.builder().build_call(func, &[ptr.into()], "").unwrap();
     }
 
     /// The address of the current top of the stack, which `restore_stack` takes back to.
@@ -785,8 +771,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .build_call(func, &[], "save_stack")
             .unwrap()
             .try_as_basic_value()
-            .left()
-            .unwrap()
+            .unwrap_basic()
             .into_pointer_value()
     }
 
@@ -1544,11 +1529,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         let out_ptr = self
             .returns_through_out_pointer(&ret_part_tys)
             .then(|| self.build_out_pointer_argument(&ret_ty, &ret_part_tys, tail));
-        if let Some(OutPointer::Own { ptr, buf_ty }) = out_ptr {
+        if let Some(OutPointer::Own { ptr, .. }) = out_ptr {
             // The buffer holds the result from the call that writes it to the read that takes it
             // back out, and no longer. Saying so is what keeps a caller that reaches this call on
             // every turn of a loop from carrying the buffer's contents into the next turn.
-            self.build_lifetime_start(ptr, buf_ty);
+            self.build_lifetime_start(ptr);
         }
         let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
         if let Some(out_ptr) = out_ptr {
@@ -1572,7 +1557,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // buffer allocated here does.
         let passes_own_buffer = matches!(out_ptr, Some(OutPointer::Own { .. }));
         call_site.set_tail_call(!passes_own_buffer);
-        let call_result = call_site.try_as_basic_value().left();
+        let call_result = call_site.try_as_basic_value().basic();
         if tail {
             // The callee's flat return value already has this function's return type (a tail call
             // returns what its caller returns), so forward it verbatim without unpacking and repacking.
@@ -1586,7 +1571,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
         if let Some(OutPointer::Own { ptr, buf_ty }) = out_ptr {
             let ret_obj = self.load_out_pointer_buffer(ptr, buf_ty, &ret_part_tys, ret_ty);
-            self.build_lifetime_end(ptr, buf_ty);
+            self.build_lifetime_end(ptr);
             return Some(ret_obj);
         }
         Some(self.unpack_return(call_result, ret_ty))
@@ -1686,6 +1671,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             BasicTypeEnum::VectorType(ty) => ty.get_undef().as_basic_value_enum(),
             BasicTypeEnum::StructType(ty) => ty.get_undef().as_basic_value_enum(),
             BasicTypeEnum::ArrayType(ty) => ty.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::ScalableVectorType(ty) => ty.get_undef().as_basic_value_enum(),
         }
     }
 
@@ -2901,7 +2887,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .build_call(c_fun, &args_vals, &format!("FFI_CALL({})", fun_name))
             .unwrap();
         match call_site.try_as_basic_value() {
-            Either::Left(ret_c_val) => {
+            ValueKind::Basic(ret_c_val) => {
                 if is_io {
                     let ret_struct_ty = type_tycon(ret_tycon).get_struct_type(self);
                     let ret_struct_val = ret_struct_ty.get_undef();
@@ -2914,7 +2900,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     obj = obj.insert_field(self, 0, ret_c_val);
                 }
             }
-            Either::Right(_) => {}
+            ValueKind::Instruction(_) => {}
         }
 
         obj
