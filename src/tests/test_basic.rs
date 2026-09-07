@@ -6074,82 +6074,34 @@ pub fn test_bit_pattern_literal_below_the_types_minimum_or_past_its_width_is_rep
     );
 }
 
+/// Verifies that an integer literal naming a value its type cannot hold is reported, at each of the
+/// two ends the rules have: a decimal or octal literal stops at the maximum of its type, and a
+/// hexadecimal or binary one at the largest value the type's width holds.
 #[test]
-pub fn test_integer_string_literal_error0() {
-    let source = r##"
+pub fn test_integer_literal_past_what_its_type_holds_is_reported() {
+    // The literal, the type it is written with, and the report it draws. A literal written without
+    // a suffix is an `I64`.
+    let cases = [
+        ("0xffffffffffffffffff", "", "does not fit in the width"),
+        ("0xffffffffffffffffff", "_U64", "does not fit in the width"),
+        ("256", "_I8", "out of range"),
+        ("256", "_U8", "out of range"),
+        ("0o377", "_I8", "out of range"),
+    ];
+    for (literal, ty_suffix, report) in cases {
+        let source = format!(
+            r#"
     module Main;
-        
     main : IO ();
     main = (
-        assert_eq(|_|"", 0xffffffffffffffffff, -1);; // out of range of `I64`
+        assert_eq(|_|"", {}{}, 0{});;
         pure()
     );
-    "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "does not fit in the width",
-    );
-}
-
-#[test]
-pub fn test_integer_string_literal_error1() {
-    let source = r##"
-    module Main;
-        
-    main : IO ();
-    main = (
-        assert_eq(|_|"", 0xffffffffffffffffff_U64, -1);; // out of range of `U64`
-        pure()
-    );
-    "##;
-    test_source_fail(
-        &source,
-        Configuration::develop_mode(),
-        "does not fit in the width",
-    );
-}
-
-#[test]
-pub fn test_integer_string_literal_error2() {
-    let source = r##"
-    module Main;
-        
-    main : IO ();
-    main = (
-        assert_eq(|_|"", 256_I8, -1);; // out of range of `I8`
-        pure()
-    );
-    "##;
-    test_source_fail(&source, Configuration::develop_mode(), "out of range");
-}
-
-#[test]
-pub fn test_integer_string_literal_error3() {
-    let source = r##"
-    module Main;
-        
-    main : IO ();
-    main = (
-        assert_eq(|_|"", 256_U8, -1);; // out of range of `I8`
-        pure()
-    );
-    "##;
-    test_source_fail(&source, Configuration::develop_mode(), "out of range");
-}
-
-#[test]
-pub fn test_integer_string_literal_error4() {
-    let source = r##"
-    module Main;
-        
-    main : IO ();
-    main = (
-        assert_eq(|_|"", 0o377_I8, -1);; // out of range of `I8`
-        pure()
-    );
-    "##;
-    test_source_fail(&source, Configuration::develop_mode(), "out of range");
+    "#,
+            literal, ty_suffix, ty_suffix
+        );
+        test_source_fail(&source, Configuration::develop_mode(), report);
+    }
 }
 
 /// Verifies that a decimal literal below the minimum of its type is reported, as one above its

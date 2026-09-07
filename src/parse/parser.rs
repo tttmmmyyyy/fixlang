@@ -2752,7 +2752,13 @@ fn parse_expr_number_lit(
     }
 }
 
-// Parse integer literal string such as "-5", "-0xff" or "123e4", and return its value and radix.
+/// Read an integer literal, written in any of the four bases with an optional sign, and return
+/// its value and the base it is written in. The `e` of a decimal literal multiplies it by that
+/// power of ten, and a negative exponent leaves no integer, so it gives `None`.
+///
+/// # Examples
+/// `parse_integer_literal_string("-0xff")` is `Some((-255, 16))`, and `"123e4"` is
+/// `Some((1230000, 10))`.
 fn parse_integer_literal_string(s: &str) -> Option<(BigInt, usize)> {
     if s.len() == 0 {
         return None;
@@ -3275,6 +3281,11 @@ fn parse_import_statements(
     Ok(import_stmts)
 }
 
+/// The prose a parse error uses for a grammar rule it expected. A rule the table leaves out is
+/// written as its own name, which the reader of a Fix program has no way to look up.
+///
+/// The words of the rules expected at one position are joined with ` or `, so each reads as
+/// one alternative of `Expected ...`.
 fn rule_to_string(r: &Rule) -> String {
     fn join_by_or(tokens: &[&str]) -> String {
         tokens
