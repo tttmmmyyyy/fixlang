@@ -540,12 +540,13 @@ pub fn floating_types() -> Vec<Arc<TypeNode>> {
     vec![make_f32_ty(), make_f64_ty()]
 }
 
-// Get the TyCon of String type.
+/// The `TyCon` of `Std::String`.
 pub fn make_string_tycon() -> Arc<TyCon> {
     tycon(FullName::from_strs(&[STD_NAME], STRING_NAME))
 }
 
-// Get integral types from its name.
+/// The integral type of that name, and `None` where the name is not one of the eight integral
+/// types (`I8` to `I64`, `U8` to `U64`).
 pub fn make_integral_ty(name: &str) -> Option<Arc<TypeNode>> {
     if name == I8_NAME {
         Some(make_i8_ty())
@@ -568,6 +569,12 @@ pub fn make_integral_ty(name: &str) -> Option<Arc<TypeNode>> {
     }
 }
 
+/// The smallest and the largest value the integral type of that name holds.
+///
+/// Panics where the name is not one of the eight integral types.
+///
+/// # Examples
+/// `integral_ty_range("I8")` is `(-128, 127)`, and `integral_ty_range("U8")` is `(0, 255)`.
 pub fn integral_ty_range(name: &str) -> (BigInt, BigInt) {
     if name == I8_NAME {
         (BigInt::from(i8::MIN), BigInt::from(i8::MAX))
@@ -609,7 +616,7 @@ pub fn integral_ty_range_with_bit_patterns(name: &str) -> (BigInt, BigInt) {
     (ty_min, width_max)
 }
 
-// Get floating types from its name.
+/// The floating point type of that name, and `None` where the name is neither `F32` nor `F64`.
 pub fn make_floating_ty(name: &str) -> Option<Arc<TypeNode>> {
     if name == F32_NAME {
         Some(make_f32_ty())
@@ -620,8 +627,12 @@ pub fn make_floating_ty(name: &str) -> Option<Arc<TypeNode>> {
     }
 }
 
-// Get numeric types from its name.
-// Returns (type, is_float)
+/// The numeric type of that name, and whether it is a floating point type.
+///
+/// # Returns
+/// The type is `None` where the name is not a numeric type; the flag then says whether the name
+/// would have been a floating point one, so a caller comparing it against the form of a literal
+/// reads `false`.
 pub fn make_numeric_ty(name: &str) -> (Option<Arc<TypeNode>>, bool) {
     let int_opt = make_integral_ty(name);
     if int_opt.is_some() {
