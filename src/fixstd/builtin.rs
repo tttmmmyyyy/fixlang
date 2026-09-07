@@ -590,6 +590,25 @@ pub fn integral_ty_range(name: &str) -> (BigInt, BigInt) {
     }
 }
 
+/// The values a hexadecimal or binary literal of this integral type may name.
+///
+/// Such a literal writes a bit pattern, so it reaches the largest value the type's width holds:
+/// `0xFF_I8` is `-1`, where a decimal `255_I8` is out of range. The low end is the type's own.
+///
+/// # Examples
+/// `integral_ty_range_with_bit_patterns("I8")` is `(-128, 255)`, and for `"U8"` it is `(0, 255)`.
+pub fn integral_ty_range_with_bit_patterns(name: &str) -> (BigInt, BigInt) {
+    let (ty_min, ty_max) = integral_ty_range(name);
+    // A signed type holds the values up to `2^(w-1) - 1`, so its width holds twice that and one
+    // more; an unsigned type already reaches the largest value of its width.
+    let width_max = if ty_min < BigInt::from(0) {
+        2 * ty_max + 1
+    } else {
+        ty_max
+    };
+    (ty_min, width_max)
+}
+
 // Get floating types from its name.
 pub fn make_floating_ty(name: &str) -> Option<Arc<TypeNode>> {
     if name == F32_NAME {

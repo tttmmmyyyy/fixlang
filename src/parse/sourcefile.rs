@@ -201,6 +201,27 @@ impl Span {
         }
     }
 
+    /// The span of `self[start..end]`, where both are byte offsets from the beginning of this span.
+    ///
+    /// # Examples
+    /// The part `(3, 9)` of the span of `abc\u0000def` is the span of its `\u0000`.
+    pub fn part(&self, start: usize, end: usize) -> Self {
+        assert!(
+            start <= end && self.start + end <= self.end,
+            "a part lies within its span, but the bytes `{}..{}` from its beginning are asked of \
+             the span at `{}..{}`",
+            start,
+            end,
+            self.start,
+            self.end
+        );
+        Self {
+            input: self.input.clone(),
+            start: self.start + start,
+            end: self.start + end,
+        }
+    }
+
     /// The span of the single byte this span begins at.
     pub fn to_head_character(&self) -> Self {
         Self {

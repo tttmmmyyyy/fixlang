@@ -2142,6 +2142,7 @@ pub fn test_string_literal() {
     main = (
         assert_eq(|_|"heart", "\u2764", "❤");;
         assert_eq(|_|"double quote", "\"", "\u0022");;
+        assert_eq(|_|"single quote", "\'", "\u0027");;
         assert_eq(|_|"backslash", "\\", "\u005C");;
         assert_eq(|_|"tab", "あ\tいうえお", "あ	いうえお");;
         assert_eq(|_|"tab", "あ\nいうえお", "あ
@@ -5999,6 +6000,8 @@ pub fn test_hex_oct_bin_lit() {
         assert_eq(|_|"", -0x80000000_I32, -2147483648_I32);;
         assert_eq(|_|"", 0xFFFFFFFF_U32, 4294967295_U32);;
         assert_eq(|_|"", 0xffffffffffffffff, -1);;
+        assert_eq(|_|"", 0xFF_I8, -1_I8);;
+        assert_eq(|_|"", -0x80_I8, -128_I8);;
         assert_eq(|_|"", 0b11111111_I8, -1_I8);;
         assert_eq(|_|"", 0x000ffffffffffffffff, -1);;
         assert_eq(|_|"", 0b00011111111_I8, -1_I8);;
@@ -6007,6 +6010,68 @@ pub fn test_hex_oct_bin_lit() {
     );
     "##;
     test_source(&source, Configuration::develop_mode());
+}
+
+/// A program whose `main` names the integer literal `literal` written with the type `ty_name`,
+/// such as `-0xFF_I8`.
+fn program_naming_an_integer_literal(literal: &str, ty_name: &str) -> String {
+    format!(
+        r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", {}_{}, 0_{});;
+        pure()
+    );
+    "#,
+        literal, ty_name, ty_name
+    )
+}
+
+/// Verifies that a negative hexadecimal or binary literal is reported when the type it is written
+/// with cannot hold it, and that the report names that type. A non-negative literal of those
+/// radices writes a bit pattern and may fill the type's width, so the sign decides how far the
+/// literal may reach.
+#[test]
+pub fn test_negative_bit_pattern_literal_out_of_range_is_reported() {
+    for (literal, ty_name) in [("-0xFF", "I8"), ("-0x1", "U8"), ("-0b1", "U8")] {
+        test_source_fail(
+            &program_naming_an_integer_literal(literal, ty_name),
+            Configuration::develop_mode(),
+            &format!("out of range of `{}`", ty_name),
+        );
+    }
+}
+
+/// Verifies the interval a hexadecimal or binary literal of a signed type may name: it runs from
+/// the minimum of that type to the largest value the type's width holds, so the values just
+/// outside it are reported. A report about a literal too wide for its type names the type the
+/// literal is written with.
+#[test]
+pub fn test_bit_pattern_literal_below_the_types_minimum_or_past_its_width_is_reported() {
+    let i8_program = |literal: &str| program_naming_an_integer_literal(literal, "I8");
+
+    // One below `-0x80_I8`, which `test_hex_oct_bin_lit` compiles as -128.
+    test_source_fail(
+        &i8_program("-0x81"),
+        Configuration::develop_mode(),
+        "`-0x81` is out of range of `I8`",
+    );
+
+    // One above `0xFF_I8`, which `test_hex_oct_bin_lit` compiles as -1.
+    let report = run_source_assert_failed(&i8_program("0x100"), Configuration::develop_mode());
+    assert!(
+        report.contains("`0x100`") && report.contains("`I8`"),
+        "the literal too wide for `I8` is reported naming the type it is written with, but the \
+         report is:\n{}",
+        report
+    );
+    assert!(
+        !report.contains("`U8`"),
+        "the report of a literal too wide does not name the unsigned type of that width, but the \
+         report is:\n{}",
+        report
+    );
 }
 
 #[test]
@@ -6020,7 +6085,11 @@ pub fn test_integer_string_literal_error0() {
         pure()
     );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "out of range");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "does not fit in the width",
+    );
 }
 
 #[test]
@@ -6034,7 +6103,11 @@ pub fn test_integer_string_literal_error1() {
         pure()
     );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "out of range");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "does not fit in the width",
+    );
 }
 
 #[test]
@@ -6077,6 +6150,19 @@ pub fn test_integer_string_literal_error4() {
     );
     "##;
     test_source_fail(&source, Configuration::develop_mode(), "out of range");
+}
+
+/// Verifies that a decimal literal below the minimum of its type is reported, as one above its
+/// maximum is: no `U8` holds `-1`, and no `I8` holds `-129`.
+#[test]
+pub fn test_decimal_literal_below_the_minimum_of_its_type_is_reported() {
+    for (literal, ty_name) in [("-1", "U8"), ("-129", "I8")] {
+        test_source_fail(
+            &program_naming_an_integer_literal(literal, ty_name),
+            Configuration::develop_mode(),
+            &format!("`{}` is out of range of `{}`", literal, ty_name),
+        );
+    }
 }
 
 #[test]

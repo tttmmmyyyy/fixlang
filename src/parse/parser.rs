@@ -38,14 +38,14 @@ use crate::constants::{
 };
 use crate::error::Errors;
 use crate::fixstd::builtin::{
-    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, integral_ty_range, make_f64_ty,
-    make_i64_ty, make_io_tycon, make_numeric_ty, make_string_lit, make_tuple_name_abs, make_u8_ty,
-    ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME,
-    EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_NAME,
-    LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME, LESS_THAN_TRAIT_NAME,
-    MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME, NEGATE_TRAIT_NEGATE_NAME,
-    NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME,
-    SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME,
+    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, integral_ty_range,
+    integral_ty_range_with_bit_patterns, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
+    make_string_lit, make_tuple_name_abs, make_u8_ty, ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME,
+    DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME, EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME,
+    LESS_THAN_OR_EQUAL_TO_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME,
+    LESS_THAN_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME,
+    NEGATE_TRAIT_NEGATE_NAME, NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME,
+    REMAINDER_TRAIT_REMAINDER_NAME, SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME,
 };
 use crate::misc::{make_map, save_temporary_source, to_absolute_path, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
@@ -2725,44 +2725,29 @@ fn parse_expr_number_lit(
         let (val, radix) = opt_val_radix.unwrap();
 
         // Check size.
-        if radix == 10 || radix == 8 {
-            // Decimal or octal
-            let (ty_min, ty_max) = integral_ty_range(ty_name);
-            if !(ty_min <= val && val <= ty_max) {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "The value of an integer literal `{}` is out of range of `{}`.",
-                        raw, ty_name
-                    ),
-                    &[&Some(span)],
-                ));
-            }
+        // A hexadecimal or binary literal writes a bit pattern, so it reaches the largest value the
+        // width of its type holds. At the low end every literal stops at the minimum of its type.
+        let writes_a_bit_pattern = radix == 16 || radix == 2;
+        let (min, max) = if writes_a_bit_pattern {
+            integral_ty_range_with_bit_patterns(ty_name)
         } else {
-            // Binary or hexadecimal
-            // In this case, 0b1111111_I8 should be successfully parsed to -1, so check the range as the unsigned value.
-            let val_abs = if val < BigInt::parse_bytes(b"0", 10).unwrap() {
-                -val.clone()
+            integral_ty_range(ty_name)
+        };
+        if !(min <= val && val <= max) {
+            let reason = if writes_a_bit_pattern && val > max {
+                "does not fit in the width of"
             } else {
-                val.clone()
+                "is out of range of"
             };
-            let ty_name_unsigned = if ty_name.starts_with('I') {
-                ty_name.replacen('I', "U", 1)
-            } else {
-                ty_name.to_string()
-            };
-            let (ty_min_unsigned, ty_max_unsigned) = integral_ty_range(&ty_name_unsigned);
-            if !(ty_min_unsigned <= val_abs && val_abs <= ty_max_unsigned) {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "The value of an integer literal `{}` is out of range of `{}`.",
-                        raw, ty_name_unsigned
-                    ),
-                    &[&Some(span)],
-                ));
-            }
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "The value of an integer literal `{}` {} `{}`.",
+                    raw, reason, ty_name
+                ),
+                &[&Some(span)],
+            ));
         }
-        // Now stringify val and parse it again as i128.
-        let val = val.to_str_radix(10).parse::<i128>().unwrap();
+        let val = i128::try_from(&val).unwrap();
         Ok(expr_int_lit(val as u64, ty, Some(span)))
     }
 }
@@ -2854,8 +2839,9 @@ fn parse_string_lit_content(
 ) -> Result<(String, Span), Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_string_lit);
     let span = Span::from_pair(&ctx.source, &pair);
-    let raw = pair.into_inner().next().unwrap().as_str();
-    let string = unescape_string_lit_inner(raw, &Some(span.clone()))?;
+    let inner_pair = pair.into_inner().next().unwrap();
+    let inner_span = Span::from_pair(&ctx.source, &inner_pair);
+    let string = unescape_string_lit_inner(inner_pair.as_str(), &Some(inner_span))?;
     Ok((string, span))
 }
 
@@ -2887,15 +2873,15 @@ fn take_hex_number(chars: &mut impl Iterator<Item = char>, digits: u32) -> u32 {
 }
 
 /// Decode escape sequences inside a `string_lit_inner` body (the characters
-/// between the surrounding double quotes).
-fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, Errors> {
-    // The span of `raw[start..end]`. The literal's own span begins one quote ahead of `raw`.
+/// between the surrounding double quotes). `raw_span` is where `raw` lies in the source, and each
+/// report points at the part of `raw` it is about.
+///
+/// A null character, written `\u0000` or directly, is refused: a `String` ends at its null
+/// terminator.
+fn unescape_string_lit_inner(raw: &str, raw_span: &Option<Span>) -> Result<String, Errors> {
+    // The span of `raw[start..end]`.
     let part_span = |start: usize, end: usize| -> Option<Span> {
-        span.as_ref().map(|span| Span {
-            input: span.input.clone(),
-            start: span.start + 1 + start,
-            end: span.start + 1 + end,
-        })
+        raw_span.as_ref().map(|span| span.part(start, end))
     };
     let mut chars = raw.char_indices();
     let mut out: Vec<char> = vec![];
@@ -2905,6 +2891,7 @@ fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, E
         } else {
             match chars.next().unwrap().1 {
                 '"' => '"',
+                '\'' => '\'',
                 '\\' => '\\',
                 'n' => '\n',
                 'r' => '\r',
@@ -2913,10 +2900,9 @@ fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, E
                     let code = take_hex_number(&mut chars.by_ref().map(|(_, c)| c), 4);
                     match char::from_u32(code) {
                         None => {
-                            let end = chars.clone().next().map_or(raw.len(), |(i, _)| i);
                             return Err(Errors::from_msg_srcs(
                                 format!("Invalid unicode character: u{:X}", code),
-                                &[&part_span(start, end)],
+                                &[&part_span(start, chars.offset())],
                             ));
                         }
                         Some(c) => c,
@@ -2926,10 +2912,9 @@ fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, E
             }
         };
         if decoded == '\0' {
-            let end = chars.clone().next().map_or(raw.len(), |(i, _)| i);
             return Err(Errors::from_msg_srcs(
                 "A string literal cannot hold a null character, since a `String` ends at its null terminator. Where a null byte is needed, build an `Array U8`.".to_string(),
-                &[&part_span(start, end)],
+                &[&part_span(start, chars.offset())],
             ));
         }
         out.push(decoded);
@@ -3302,6 +3287,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::EOI => "end-of-input".to_string(),
         Rule::expr_number_lit => "number literal".to_string(),
         Rule::u8_lit_char => "an ASCII character or an escape sequence such as `\\'`".to_string(),
+        Rule::string_char => "a character or an escape sequence such as `\\n`".to_string(),
         Rule::expr_bool_lit => "boolean".to_string(),
         Rule::expr_nlr => "expression".to_string(),
         Rule::expr_unary => "expression".to_string(),
