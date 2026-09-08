@@ -97,7 +97,7 @@ fn union_buf_type<'c, 'm>(
         // preferred alignment of a small or empty aggregate is 8, which would over-pad the union.
         max_align = max_align.max(gc.abi_alignment(&embedded_ty));
     }
-    let max_align_int = match max_align {
+    let max_align_int_ty = match max_align {
         1 => gc.context.i8_type(),
         2 => gc.context.i16_type(),
         4 => gc.context.i32_type(),
@@ -113,7 +113,7 @@ fn union_buf_type<'c, 'm>(
         num_of_ints,
         max_align,
     );
-    max_align_int.array_type(num_of_ints as u32).into()
+    max_align_int_ty.array_type(num_of_ints as u32).into()
 }
 
 // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -940,7 +940,7 @@ impl ObjectFieldType {
     /// The index, among the fields of a union's struct type, of the tag telling which variant the
     /// value holds.
     fn get_union_tag_idx<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> u32 {
-        struct_field_idx(union.is_unbox(gc.type_env())) + UNION_TAG_IDX
+        first_field_idx(union.is_unbox(gc.type_env())) + UNION_TAG_IDX
     }
 
     /// The tag of a union value: the index, among the union's variants, of the variant it holds.
@@ -963,7 +963,7 @@ impl ObjectFieldType {
     /// The index, among the fields of a union's struct type, of the buffer holding the value of the
     /// variant it carries.
     pub fn get_union_buf_idx<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> u32 {
-        struct_field_idx(union.is_unbox(gc.type_env())) + UNION_DATA_IDX
+        first_field_idx(union.is_unbox(gc.type_env())) + UNION_DATA_IDX
     }
 
     /// The contents of a union's payload buffer, still typed as the buffer, which is wide enough for
@@ -1081,7 +1081,7 @@ impl ObjectFieldType {
         struct_obj: &Object<'c>,
         field_idx: u32,
     ) -> Object<'c> {
-        let field_offset = struct_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
+        let field_offset = first_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
         let field_ty = struct_obj.ty.field_types(gc.type_env())[field_idx as usize].clone();
         struct_obj.extract_field_object(gc, field_idx + field_offset, field_ty)
     }
@@ -1095,7 +1095,7 @@ impl ObjectFieldType {
         field_idx: u32,
         field: &Object<'c>,
     ) -> Object<'c> {
-        let field_offset = struct_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
+        let field_offset = first_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
         struct_obj.insert_field_object(gc, field_offset + field_idx, field)
     }
 
@@ -1503,7 +1503,7 @@ pub fn lambda_function_type<'c, 'm>(
 /// The index at which a value's own fields begin in its layout: those of a struct, and the tag and
 /// the payload buffer of a union. A boxed value leads with its control block, which pushes them
 /// along by one.
-pub fn struct_field_idx(is_unbox: bool) -> u32 {
+pub fn first_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0
     } else {
@@ -1619,7 +1619,7 @@ pub fn ty_to_object_ty(
                 }
                 assert_eq!(
                     object_ty.field_types.len(),
-                    struct_field_idx(is_unbox) as usize
+                    first_field_idx(is_unbox) as usize
                 );
                 let field_types = ty.field_types(type_env);
                 for (field_idx, field_ty) in field_types.into_iter().enumerate() {
@@ -1785,7 +1785,7 @@ pub fn build_elems_bytes<'c, 'm>(
 /// Where an `#ArrayStorage` object is placed in a block starting at `base`, as a distance from that
 /// base, so that its element buffer starts on `ARRAY_BUF_ALIGNMENT`. The distance is below
 /// `ARRAY_BUF_ALIGNMENT`, which is the slack a block needs to hold an object placed this way.
-pub fn build_array_storage_shift<'c, 'm>(
+pub fn build_array_storage_alloc_offset<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     struct_type: StructType<'c>,
     base: PointerValue<'c>,
@@ -2018,7 +2018,7 @@ fn build_alloc_array_storage<'c, 'm>(
     let alloc_offset = gc
         .builder()
         .build_and(
-            build_array_storage_shift(gc, struct_type, base),
+            build_array_storage_alloc_offset(gc, struct_type, base),
             aligned_mask,
             "alloc_offset@alloc_array_storage",
         )

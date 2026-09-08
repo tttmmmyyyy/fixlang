@@ -166,7 +166,7 @@ pub const CONTROL_BLOCK_IDX: u32 = 0;
 /// The index at which a boxed object's own fields begin, after its control block.
 pub const BOXED_TYPE_DATA_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 /// The index of a union's tag among the union's own fields. The fields of a boxed union begin at
-/// `BOXED_TYPE_DATA_IDX`, which `struct_field_idx` adds.
+/// `BOXED_TYPE_DATA_IDX`, which `first_field_idx` adds.
 pub const UNION_TAG_IDX: u32 = 0;
 /// The index of a union's payload buffer among the union's own fields, after the tag.
 pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;

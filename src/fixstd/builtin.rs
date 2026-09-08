@@ -34,7 +34,7 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_array_storage_shift, build_capacity_check, build_elems_bytes,
+    alloc_array_storage, build_array_storage_alloc_offset, build_capacity_check, build_elems_bytes,
     build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned, create_obj,
     get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
     write_alloc_offset, CapacityCheck, ObjectFieldType,
@@ -2426,7 +2426,7 @@ fn realloc_array<'c, 'm>(
         .unwrap_basic()
         .into_pointer_value();
     let new_alloc_offset = {
-        let aligned_alloc_offset = build_array_storage_shift(gc, struct_type, new_base);
+        let aligned_alloc_offset = build_array_storage_alloc_offset(gc, struct_type, new_base);
         gc.builder()
             .build_select(
                 is_aligned,

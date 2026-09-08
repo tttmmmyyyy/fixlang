@@ -110,7 +110,7 @@ impl<'c> ValueAccessor<'c> {
     // PROOF: P3, P4, P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P27, P29, P30, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get<'m>(&self, gc: &mut Generator<'c, 'm>) -> Object<'c> {
         match self {
-            ValueAccessor::Local(ptr) => ptr.clone(),
+            ValueAccessor::Local(obj) => obj.clone(),
             ValueAccessor::Global(fun, ty) => {
                 let val = if ty.is_funptr() {
                     fun.as_global_value().as_basic_value_enum()
@@ -145,7 +145,7 @@ pub struct Object<'c> {
     /// hiding inside an aggregate phi. A struct too wide to split is one part holding the whole
     /// aggregate. The aggregate is reassembled on demand by `value`, only at memory and ABI
     /// boundaries.
-    data: Vec<BasicValueEnum<'c>>,
+    parts: Vec<BasicValueEnum<'c>>,
     /// The Fix type of the value, which decides how it is laid out and what retaining, releasing
     /// and marking it reach.
     pub ty: Arc<TypeNode>,
@@ -165,15 +165,15 @@ impl<'c> Object<'c> {
             let embed_ty = ty.get_embedded_type(gc);
             assert_eq!(embed_ty, value.get_type());
         }
-        let data = gc.value_parts(value);
-        Object { data, ty }
+        let parts = gc.value_parts(value);
+        Object { parts, ty }
     }
 
     /// Construct an object directly from its parts, in `type_parts` order. This is the fast path at
     /// ABI and phi boundaries, where the parts are already in hand and reforming the aggregate only
     /// to split it again in `new` would be wasted work.
     pub fn from_parts<'m>(
-        data: Vec<BasicValueEnum<'c>>,
+        parts: Vec<BasicValueEnum<'c>>,
         ty: Arc<TypeNode>,
         gc: &mut Generator<'c, 'm>,
     ) -> Self {
@@ -182,25 +182,25 @@ impl<'c> Object<'c> {
             let embed_ty = ty.get_embedded_type(gc);
             let part_tys = gc.type_parts(embed_ty);
             assert_eq!(
-                data.len(),
+                parts.len(),
                 part_tys.len(),
                 "Object::from_parts part count disagrees with type_parts"
             );
-            for (part, part_ty) in data.iter().zip(part_tys.iter()) {
+            for (part, part_ty) in parts.iter().zip(part_tys.iter()) {
                 assert_eq!(part.get_type(), *part_ty);
             }
         }
-        Object { data, ty }
+        Object { parts, ty }
     }
 
     /// The parts of this object, in `type_parts` order.
     pub fn parts(&self) -> &[BasicValueEnum<'c>] {
-        &self.data
+        &self.parts
     }
 
     /// The object's parts as call arguments, for a callee that takes the object split into them.
     pub fn part_call_args(&self) -> Vec<BasicMetadataValueEnum<'c>> {
-        self.data.iter().map(|v| (*v).into()).collect()
+        self.parts.iter().map(|v| (*v).into()).collect()
     }
 
     /// Reassemble the object's value from its parts. Free for a boxed object, a funcptr, an unboxed
@@ -209,10 +209,10 @@ impl<'c> Object<'c> {
     /// aggregate is not truly needed.
     pub fn value<'m>(&self, gc: &mut Generator<'c, 'm>) -> BasicValueEnum<'c> {
         if self.ty.is_box(gc.type_env()) || self.ty.is_funptr() {
-            return self.data[0];
+            return self.parts[0];
         }
         let embedded = self.ty.get_embedded_type(gc);
-        let mut parts = self.data.iter().copied();
+        let mut parts = self.parts.iter().copied();
         gc.assemble_from_parts(embedded, &mut parts)
     }
 
@@ -308,7 +308,7 @@ impl<'c> Object<'c> {
             if self.is_carried_whole(gc) {
                 return gc
                     .builder()
-                    .build_extract_value(self.data[0].into_struct_value(), field_idx, "field")
+                    .build_extract_value(self.parts[0].into_struct_value(), field_idx, "field")
                     .unwrap();
             }
             // The object's parts already hold the field, spread across a contiguous range; slice
@@ -317,7 +317,7 @@ impl<'c> Object<'c> {
             let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
             let field_ty = struct_ty.get_field_type_at_index(field_idx).unwrap();
-            let mut parts = self.data[off..off + cnt].iter().copied();
+            let mut parts = self.parts[off..off + cnt].iter().copied();
             gc.assemble_from_parts(field_ty, &mut parts)
         } else {
             // When the object is boxed,
@@ -365,7 +365,7 @@ impl<'c> Object<'c> {
             }
             let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
-            Object::from_parts(self.data[off..off + cnt].to_vec(), field_ty, gc)
+            Object::from_parts(self.parts[off..off + cnt].to_vec(), field_ty, gc)
         } else {
             let struct_ty = self.struct_ty(gc);
             let field_val = self.extract_field_as(gc, struct_ty, field_idx);
@@ -392,10 +392,10 @@ impl<'c> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
             if self.is_carried_whole(gc) {
-                self.data[0] = gc
+                self.parts[0] = gc
                     .builder()
                     .build_insert_value(
-                        self.data[0].into_struct_value(),
+                        self.parts[0].into_struct_value(),
                         val,
                         field_idx,
                         "set_field",
@@ -411,7 +411,7 @@ impl<'c> Object<'c> {
             let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
             let new_parts = gc.value_parts(val.as_basic_value_enum());
             assert_eq!(new_parts.len(), cnt);
-            self.data.splice(off..off + cnt, new_parts);
+            self.parts.splice(off..off + cnt, new_parts);
         } else {
             // When the object is boxed,
             let struct_ty = self.struct_ty(gc);
@@ -440,7 +440,7 @@ impl<'c> Object<'c> {
             let struct_ty = self.ty.get_embedded_type(gc).into_struct_type();
             let (off, cnt) = gc.field_part_range(struct_ty, field_idx);
             assert_eq!(field.parts().len(), cnt);
-            self.data
+            self.parts
                 .splice(off..off + cnt, field.parts().iter().copied());
         } else {
             let val = field.value(gc);
@@ -1117,12 +1117,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
-    /// The pointer to the reference count in the control block of the boxed object at `obj`.
-    pub fn get_refcnt_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
+    /// The pointer to the reference count in the control block of the boxed object at `obj_ptr`.
+    pub fn get_refcnt_ptr(&self, obj_ptr: PointerValue<'c>) -> PointerValue<'c> {
         self.builder()
             .build_struct_gep(
                 control_block_type(self),
-                obj,
+                obj_ptr,
                 CTRL_BLK_REFCNT_IDX,
                 "ptr_to_refcnt",
             )
@@ -1421,12 +1421,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(unique_bb);
     }
 
-    /// The pointer to the reference-count state in the control block of the boxed object at `obj`.
-    pub fn get_refcnt_state_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
+    /// The pointer to the reference-count state in the control block of the boxed object at
+    /// `obj_ptr`.
+    pub fn get_refcnt_state_ptr(&self, obj_ptr: PointerValue<'c>) -> PointerValue<'c> {
         self.builder()
             .build_struct_gep(
                 control_block_type(self),
-                obj,
+                obj_ptr,
                 CTRL_BLK_REFCNT_STATE_IDX,
                 "ptr_to_refcnt_state",
             )
@@ -1954,10 +1955,15 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// boxed object is never null, so the body is emitted where the caller stands.
     ///
     /// # Arguments
-    /// * `tag` — suffix distinguishing the two basic blocks the null check adds from those of
-    ///   another null check in the same function.
+    /// * `name_suffix` — suffix distinguishing the two basic blocks the null check adds from those
+    ///   of another null check in the same function.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn build_if_nonnull(&mut self, obj: &Object<'c>, tag: &str, body: impl FnOnce(&mut Self)) {
+    fn build_if_nonnull(
+        &mut self,
+        obj: &Object<'c>,
+        name_suffix: &str,
+        body: impl FnOnce(&mut Self),
+    ) {
         if !obj.is_dynamic_object() {
             body(self);
             return;
@@ -1965,10 +1971,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         let current_func = self.current_function();
         let nonnull_bb = self
             .context
-            .append_basic_block(current_func, &format!("nonnull_bb@{}", tag));
+            .append_basic_block(current_func, &format!("nonnull_bb@{}", name_suffix));
         let cont_bb = self
             .context
-            .append_basic_block(current_func, &format!("cont_bb@{}", tag));
+            .append_basic_block(current_func, &format!("cont_bb@{}", name_suffix));
 
         // Branch to `nonnull_bb` if the object is not null.
         let is_null = obj.is_null(self);
@@ -2543,7 +2549,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Emit code writing `string` to stderr, followed by a newline.
-    fn eprint(&mut self, string: &str) {
+    fn eprintln(&mut self, string: &str) {
         let string_ptr = self.add_global_string(string);
         let string_ptr = string_ptr.as_pointer_value();
         self.call_runtime(RUNTIME_EPRINTLN, &[string_ptr.into()]);
@@ -2551,7 +2557,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Emit code writing `string` to stderr and aborting the program.
     pub fn panic(&mut self, string: &str) {
-        self.eprint(string);
+        self.eprintln(string);
         self.call_runtime(RUNTIME_ABORT, &[]);
     }
 
@@ -2836,7 +2842,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn build_ffi_call_core(
         &mut self,
-        mut obj: Object<'c>,
+        mut ret_obj: Object<'c>,
         fun_name: &Name,
         ret_tycon: &Arc<TyCon>,
         param_tys: &Vec<Arc<TyCon>>,
@@ -2882,15 +2888,15 @@ impl<'c, 'm> Generator<'c, 'm> {
                         .builder()
                         .build_insert_value(ret_struct_val, ret_c_val, 0, "")
                         .unwrap();
-                    obj = obj.insert_field(self, 1, ret_struct_val);
+                    ret_obj = ret_obj.insert_field(self, 1, ret_struct_val);
                 } else {
-                    obj = obj.insert_field(self, 0, ret_c_val);
+                    ret_obj = ret_obj.insert_field(self, 0, ret_c_val);
                 }
             }
             ValueKind::Instruction(_) => {}
         }
 
-        obj
+        ret_obj
     }
 
     /// Project the captured value at `cap_idx` out of a closure's capture object `cap_name`,
