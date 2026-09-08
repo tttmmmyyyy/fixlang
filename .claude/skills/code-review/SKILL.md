@@ -165,13 +165,16 @@ So a finding is not the end of the road. Read every one the review produced — 
 - a fallback over a case the code cannot produce, turned into a hard failure;
 - an assertion the build compiles away, or one the code leans on and never states;
 - a function split at a seam, or an item moved to the module whose role it matches;
+- a file split into new modules at the seam an aspect named — choosing the seam is the review's
+  own work, the move that follows is mechanical, and a path or visibility mistake in it is what
+  the suite is best at catching;
 - an item renamed, where every use of the name is in this repository.
 
 **Leave it as a finding**, where the suite cannot answer, or where the answer is not about safety:
 
 - a contract outside this repository — a Fix standard-library signature, an LSP protocol answer, the wording of a diagnostic nothing pins;
 - a property the suite does not measure — performance, memory, concurrency, a platform this machine is not;
-- a redesign, where what the author settles is the direction rather than the risk: a new module, a rewritten pipeline, a rule imposed on the language.
+- a redesign, where what the author settles is the direction rather than the risk: a rewritten pipeline, a different data structure carrying the same information, a rule imposed on the language.
 
 For each finding you fix, run the **whole** suite. A filtered run answers a smaller question, and it answers it wrongly here more often than anywhere else: a finding sits by definition outside what the change's own tests exercise, so the tests that would catch a mistake in it are the ones you would not think to filter for.
 
@@ -754,7 +757,7 @@ This convention is distinct from `shorten-qualifiers`, which fixes how an item i
 
 #### Split an overgrown file at a natural seam
 
-When the diff has grown a file to the point that it now spans several distinct concerns — different groups of types, or unrelated passes / utilities that merely share a file — and it has become large enough to be hard to navigate, flag it for splitting. **Report only**: moving code into new modules changes module paths, imports, and visibility across call sites, so it is a redesign the author should choose, not a hunk-local edit.
+When the diff has grown a file to the point that it now spans several distinct concerns — different groups of types, or unrelated passes / utilities that merely share a file — and it has become large enough to be hard to navigate, flag it for splitting. **Report only**: moving code into new modules changes module paths, imports, and visibility across call sites, which is more than a hunk-local edit. Name the file and the seam; the orchestrator makes the move afterwards, against the whole suite.
 
 Split at a **natural seam**, never at an arbitrary line count: a cohesive group of related types and their methods, a self-contained submodule (a parser, a formatter, one compiler pass), or a cluster that shares a concern. Aim for files that each carry one responsibility — not two halves of one responsibility sawn apart at the midpoint.
 
@@ -797,7 +800,7 @@ The litmus test: *would this still be correct if the thing it silently assumes c
 
 - **Let the mode set the reach.** In `in-diff` mode, edit inside the diff hunks and collect what the rest of each touched file needs as ring-2 candidates; in `neighborhood` mode, work those candidates under the radius rules. One convention stands apart: *Don't let a fallback silently handle a case the author calls impossible* covers the whole of each touched file in `in-diff` mode already, per its own scope note — a swallowed case is a bug rather than opportunistic cleanup.
 - **The conventions that travel to ring 2** are the ones whose edit preserves behavior by construction: *DRY* and *Extract a function on the second copy* within a single file, and *Remove dead and half-finished code* for commented-out code. The rest become findings in ring 2, for the orchestrator to settle against the whole suite — splitting a function, narrowing mutable state, rewriting a quadratic pattern, dropping a defensive branch, adding an assertion to code the change never touched, relocating an item, and also *Use the project's canonical types*, because `Set` / `Map` are `fxhash` maps whose iteration order differs from the standard library's and a compiler can let that order reach its output.
-- **Do not redesign.** If the right fix is "extract a new module" or "rewrite this pipeline," report it; don't do it.
+- **Do not redesign.** If the right fix is "extract a new module" or "rewrite this pipeline," report it; don't do it. The orchestrator settles what the suite can judge, the module split among it.
 - **One convention at a time per hunk.** If a hunk hits multiple conventions, apply the smallest fix that satisfies one, then re-check before moving on.
 
 ---
