@@ -6012,10 +6012,12 @@ pub fn test_hex_oct_bin_lit() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A program whose `main` names the number literal `literal` written with the type `ty_name`, such
-/// as `-0xFF_I8`, and where `ty_name` is `None` the literal alone, which takes the type its form
-/// implies. The literal is compared against the zero of its own kind, which a floating point
-/// literal spells with a decimal point.
+/// A program whose `main` compares the number literal `literal` against the zero of its type, so
+/// that the literal is compiled.
+///
+/// # Arguments
+/// * `ty_name` — the type the literal is written with, as in `-0xFF_I8`; `None` writes the literal
+///   alone, so it takes the type its form implies.
 fn program_naming_a_number_literal(literal: &str, ty_name: Option<&str>) -> String {
     let ty_suffix = ty_name.map_or(String::new(), |ty_name| format!("_{}", ty_name));
     let zero = if literal.contains('.') { "0.0" } else { "0" };
@@ -6139,7 +6141,8 @@ pub fn test_floating_point_literal_range_ends_at_the_largest_finite_value_of_its
     }
 
     // A literal naming the largest finite value of each type, differing in its last digit from the
-    // literal reported above. A finite value less itself is zero, which an infinity does not give.
+    // literals the loop reports. A finite value less itself is zero, where an infinity less itself
+    // is a NaN.
     let source = r#"
     module Main;
     main : IO ();
@@ -6152,8 +6155,8 @@ pub fn test_floating_point_literal_range_ends_at_the_largest_finite_value_of_its
     test_source(source, Configuration::develop_mode());
 }
 
-/// Verifies that a floating point literal whose type tells it from zero by no bit takes zero: zero
-/// is the value of that type nearest what is written, so such a literal is accepted.
+/// Verifies that a floating point literal its type rounds to zero is accepted and takes zero,
+/// which is then the value of that type nearest what is written.
 #[test]
 pub fn test_floating_point_literal_too_small_for_its_type_takes_zero() {
     let source = r#"
@@ -6185,7 +6188,7 @@ pub fn test_f32_literal_takes_the_f32_nearest_what_is_written() {
 }
 
 /// Verifies that a floating point literal written with no type suffix is checked against the range
-/// of `F64`, the type such a literal takes, however far past that range it is written.
+/// of `F64`, the type such a literal takes, whatever the size of the exponent written.
 #[test]
 pub fn test_floating_point_literal_without_a_suffix_is_checked_against_the_range_of_f64() {
     for literal in ["1.0e400", "-1.0e400", "1.0e999999999999999999999999"] {

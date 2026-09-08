@@ -2705,8 +2705,8 @@ fn parse_expr_number_lit(
         // `number_lit_body_dec` admits digits, one decimal point and an optional exponent, which
         // read as a floating point number at either width.
         let val = floating_literal_value(ty_name, raw);
-        // A literal larger than the widest finite value of its type rounds to an infinity, which is
-        // not a number the source names.
+        // A literal larger than the widest finite value of its type rounds to an infinity. Every
+        // value a literal spells is finite, so such a literal is out of range.
         if !val.is_finite() {
             return Err(Errors::from_msg_srcs(
                 format!(

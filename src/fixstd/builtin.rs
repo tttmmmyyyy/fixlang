@@ -627,17 +627,17 @@ pub fn make_floating_ty(name: &str) -> Option<Arc<TypeNode>> {
     }
 }
 
-/// The value a floating point literal of the type of that name names, read at the width of that
-/// type and widened to `f64`.
+/// The value the floating point literal `raw` takes when it is written with the type of that
+/// name, read at the width of that type and widened to `f64`.
 ///
-/// A decimal rounded to `F64` and then to `F32` can land one ulp from the same decimal rounded to
-/// `F32`, so an `F32` literal is read as an `f32`. Widening it back to `f64` is exact, so the
-/// value carries the `F32` literal without loss.
+/// A decimal rounded to `F64` and then to `F32` can land one step away from the same decimal
+/// rounded to `F32`, so an `F32` literal is read as an `f32`. Widening it back to `f64` is exact,
+/// so the value carries the `F32` literal without loss.
 ///
 /// A literal larger than the widest finite value of its type reads as an infinity.
 ///
-/// Panics where the name is not one of the two floating point types, or where the string does not
-/// read as a floating point number.
+/// Panics where `name` is neither `F32` nor `F64`, or where `raw` does not read as a floating
+/// point number.
 ///
 /// # Examples
 /// `floating_literal_value(F32_NAME, "0.1")` is `0.10000000149011612`, and
