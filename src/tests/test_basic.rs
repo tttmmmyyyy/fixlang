@@ -6086,27 +6086,24 @@ pub fn test_bit_pattern_literal_below_the_types_minimum_or_past_its_width_is_rep
 #[test]
 pub fn test_integer_literal_past_what_its_type_holds_is_reported() {
     // The literal, the type it is written with, and the report it draws. A literal written without
-    // a suffix is an `I64`.
+    // a type is an `I64`.
     let cases = [
-        ("0xffffffffffffffffff", "", "does not fit in the width"),
-        ("0xffffffffffffffffff", "_U64", "does not fit in the width"),
-        ("256", "_I8", "out of range"),
-        ("256", "_U8", "out of range"),
-        ("0o377", "_I8", "out of range"),
+        ("0xffffffffffffffffff", None, "does not fit in the width"),
+        (
+            "0xffffffffffffffffff",
+            Some("U64"),
+            "does not fit in the width",
+        ),
+        ("256", Some("I8"), "out of range"),
+        ("256", Some("U8"), "out of range"),
+        ("0o377", Some("I8"), "out of range"),
     ];
-    for (literal, ty_suffix, report) in cases {
-        let source = format!(
-            r#"
-    module Main;
-    main : IO ();
-    main = (
-        assert_eq(|_|"", {}{}, 0{});;
-        pure()
-    );
-    "#,
-            literal, ty_suffix, ty_suffix
+    for (literal, ty_name, report) in cases {
+        test_source_fail(
+            &program_naming_a_number_literal(literal, ty_name),
+            Configuration::develop_mode(),
+            report,
         );
-        test_source_fail(&source, Configuration::develop_mode(), report);
     }
 }
 

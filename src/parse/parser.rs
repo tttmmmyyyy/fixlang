@@ -763,14 +763,9 @@ fn parse_trait_defn(
         let pair = pairs.next().unwrap();
         let (preds, eqs, kinds) = parse_constraints(pair, ctx)?;
         if !preds.is_empty() || !eqs.is_empty() {
-            let one_src = if !preds.is_empty() {
-                &preds.first().unwrap().src
-            } else {
-                &eqs.first().unwrap().src
-            };
             return Err(Errors::from_msg_srcs(
                 "In the constraint of trait definition, only kind signature is allowed. Fix does not support \"super-traits\".".to_string(),
-                &[one_src],
+                &[one_constraint_src(&preds, &eqs)],
             ));
         }
         kinds
@@ -895,15 +890,10 @@ fn parse_trait_member_type_defn(
     let kind_signs = if pairs.peek().unwrap().as_rule() == Rule::constraints {
         let (preds, eqs, kind_signs) = parse_constraints(pairs.next().unwrap(), ctx)?;
         if !preds.is_empty() || !eqs.is_empty() {
-            let one_src = if !preds.is_empty() {
-                &preds.first().unwrap().src
-            } else {
-                &eqs.first().unwrap().src
-            };
             return Err(Errors::from_msg_srcs(
                 "In the constraint of associated type definition, only kind signature is allowed."
                     .to_string(),
-                &[one_src],
+                &[one_constraint_src(&preds, &eqs)],
             ));
         }
         kind_signs
@@ -1286,6 +1276,18 @@ fn parse_constraints(
     Ok((preds, eqs, kind_signs))
 }
 
+/// The source of one of the constraints written among `preds` and `eqs`, at which a report of a
+/// constraint the context does not admit points.
+///
+/// Panics where both `preds` and `eqs` are empty.
+fn one_constraint_src<'a>(preds: &'a [Predicate], eqs: &'a [Equality]) -> &'a Option<Span> {
+    if !preds.is_empty() {
+        &preds.first().unwrap().src
+    } else {
+        &eqs.first().unwrap().src
+    }
+}
+
 fn parse_kind_signature(pair: Pair<Rule>, ctx: &mut ParseContext) -> KindSignature {
     assert_eq!(pair.as_rule(), Rule::kind_signature);
     let span = Span::from_pair(&ctx.source, &pair);
@@ -1407,14 +1409,9 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn,
         let pair = pairs.next().unwrap();
         let (preds, eqs, kind_signs) = parse_constraints(pair, ctx)?;
         if preds.len() > 0 || eqs.len() > 0 {
-            let one_src = if !preds.is_empty() {
-                &preds.first().unwrap().src
-            } else {
-                &eqs.first().unwrap().src
-            };
             return Err(Errors::from_msg_srcs(
                 "In the constraint of type definition, only kind signature is allowed.".to_string(),
-                &[one_src],
+                &[one_constraint_src(&preds, &eqs)],
             ));
         }
         for kind_sign in kind_signs {
@@ -1642,6 +1639,14 @@ fn parse_combinator_sequence(
         .collect()
 }
 
+/// The absolute name of the method `method_name` of the trait `trait_name` of `Std`, such as
+/// `::Std::Add::add`.
+fn std_trait_method_fullname(trait_name: &str, method_name: &str) -> FullName {
+    let mut fullname = FullName::from_strs(&[STD_NAME, trait_name], method_name);
+    fullname.global_to_absolute();
+    fullname
+}
+
 #[derive(Default, Clone)]
 struct BinaryOpInfo {
     trait_name: Name,
@@ -1661,9 +1666,7 @@ impl BinaryOpInfo {
     }
 
     fn method_fullname(&self) -> FullName {
-        let mut fullname = FullName::from_strs(&[STD_NAME, &self.trait_name], &self.method_name);
-        fullname.global_to_absolute();
-        fullname
+        std_trait_method_fullname(&self.trait_name, &self.method_name)
     }
 
     fn add_post_unary(mut self, unary_op: UnaryOpInfo) -> BinaryOpInfo {
@@ -1878,9 +1881,7 @@ impl UnaryOpInfo {
     }
 
     fn method_fullname(&self) -> FullName {
-        let mut fullname = FullName::from_strs(&[STD_NAME, &self.trait_name], &self.method_name);
-        fullname.global_to_absolute();
-        fullname
+        std_trait_method_fullname(&self.trait_name, &self.method_name)
     }
 }
 
@@ -2767,23 +2768,11 @@ fn parse_integer_literal_string(s: &str) -> Option<(BigInt, usize)> {
     if s.len() == 0 {
         return None;
     }
-    if s.starts_with("0x") {
-        return BigInt::parse_bytes(s.trim_start_matches("0x").as_bytes(), 16).map(|x| (x, 16));
-    }
-    if s.starts_with("-0x") {
-        return BigInt::parse_bytes(s.trim_start_matches("-0x").as_bytes(), 16).map(|x| (-x, 16));
-    }
-    if s.starts_with("0o") {
-        return BigInt::parse_bytes(s.trim_start_matches("0o").as_bytes(), 8).map(|x| (x, 8));
-    }
-    if s.starts_with("-0o") {
-        return BigInt::parse_bytes(s.trim_start_matches("-0o").as_bytes(), 8).map(|x| (-x, 8));
-    }
-    if s.starts_with("0b") {
-        return BigInt::parse_bytes(s.trim_start_matches("0b").as_bytes(), 2).map(|x| (x, 2));
-    }
-    if s.starts_with("-0b") {
-        return BigInt::parse_bytes(s.trim_start_matches("-0b").as_bytes(), 2).map(|x| (-x, 2));
+    for (prefix, radix) in [("0x", 16), ("0o", 8), ("0b", 2)] {
+        if let Some((digits, is_negative)) = strip_radix_prefix(s, prefix) {
+            let val = BigInt::parse_bytes(digits.as_bytes(), radix as u32)?;
+            return Some((if is_negative { -val } else { val }, radix));
+        }
     }
     let split = s.split('e').collect::<Vec<_>>();
     if split.len() > 2 {
@@ -2816,6 +2805,21 @@ fn parse_integer_literal_string(s: &str) -> Option<(BigInt, usize)> {
         i += 1;
     }
     Some((ret, 10))
+}
+
+/// The digits `s` writes behind `prefix`, which a minus sign may precede, and whether that sign is
+/// there. Gives `None` where `s` carries another prefix.
+///
+/// # Examples
+/// `strip_radix_prefix("-0xff", "0x")` is `Some(("ff", true))`, and `strip_radix_prefix("12", "0x")`
+/// is `None`.
+fn strip_radix_prefix<'a>(s: &'a str, prefix: &str) -> Option<(&'a str, bool)> {
+    if let Some(digits) = s.strip_prefix(prefix) {
+        return Some((digits, false));
+    }
+    s.strip_prefix('-')
+        .and_then(|s| s.strip_prefix(prefix))
+        .map(|digits| (digits, true))
 }
 
 fn parse_expr_nullptr_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
