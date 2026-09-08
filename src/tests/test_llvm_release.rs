@@ -16,20 +16,20 @@ mod tests {
     /// where the place spells one out.
     type Release = (u32, Option<u32>);
 
-    /// The path of `name` in the repository.
+    /// The path of the file at `relative_path` in the repository.
     ///
     /// # Parameters
-    /// * `name` - The path of the file, relative to the root of the repository.
-    fn repository_path(name: &str) -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join(name)
+    /// * `relative_path` - The path of the file, relative to the root of the repository.
+    fn repository_path(relative_path: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path)
     }
 
-    /// The text of the file at `name` in the repository.
+    /// The text of the file at `relative_path` in the repository.
     ///
     /// # Parameters
-    /// * `name` - The path of the file, relative to the root of the repository.
-    fn text_of(name: &str) -> String {
-        let path = repository_path(name);
+    /// * `relative_path` - The path of the file, relative to the root of the repository.
+    fn text_of(relative_path: &str) -> String {
+        let path = repository_path(relative_path);
         fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("Failed to read {}: {}", path.display(), e))
     }
@@ -60,10 +60,10 @@ mod tests {
         ];
         let mut releases = vec![];
         for shape in shapes {
-            let pattern = Regex::new(shape).expect("the shapes are written here");
-            for found in pattern.captures_iter(text) {
-                let major = found["major"].parse().expect("the shape matches digits");
-                let minor = found
+            let regex = Regex::new(shape).expect("the shapes are written here");
+            for captures in regex.captures_iter(text) {
+                let major = captures["major"].parse().expect("the shape matches digits");
+                let minor = captures
                     .name("minor")
                     .map(|m| m.as_str().parse().expect("the shape matches digits"));
                 releases.push((major, minor));
@@ -74,15 +74,15 @@ mod tests {
 
     /// The release the project file pins, which is the one the compiler links.
     fn pinned_release() -> Release {
-        let project_file = text_of("Cargo.toml");
-        let pattern =
+        let project_file_text = text_of("Cargo.toml");
+        let regex =
             Regex::new(r#"inkwell = \{[^}]*"llvm(\d+)-(\d+)""#).expect("the shape is written here");
-        let found = pattern
-            .captures(&project_file)
+        let captures = regex
+            .captures(&project_file_text)
             .expect("`Cargo.toml` should pin inkwell at an LLVM feature");
         (
-            found[1].parse().expect("the shape matches digits"),
-            Some(found[2].parse().expect("the shape matches digits")),
+            captures[1].parse().expect("the shape matches digits"),
+            Some(captures[2].parse().expect("the shape matches digits")),
         )
     }
 
@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn test_every_place_naming_llvm_names_the_release_the_project_file_pins() {
         let (major, minor) = pinned_release();
-        for name in [
+        for relative_path in [
             "Cargo.toml",
             "src/build/build.rs",
             ".github/workflows/test.yml",
@@ -100,25 +100,25 @@ mod tests {
             "Document.md",
             "Document-ja.md",
         ] {
-            let named = releases_named_in(&text_of(name));
+            let named_releases = releases_named_in(&text_of(relative_path));
             // A shape that stops matching would leave a file silently unchecked.
             assert!(
-                !named.is_empty(),
+                !named_releases.is_empty(),
                 "{} names no LLVM release, so nothing here reads it",
-                name
+                relative_path
             );
-            for release in named {
+            for release in named_releases {
                 assert_eq!(
                     release.0, major,
                     "{} names LLVM {}, where `Cargo.toml` pins LLVM {}",
-                    name, release.0, major
+                    relative_path, release.0, major
                 );
                 if let Some(named_minor) = release.1 {
                     assert_eq!(
                         Some(named_minor),
                         minor,
                         "{} names LLVM {}.{}, where `Cargo.toml` pins LLVM {}.{}",
-                        name,
+                        relative_path,
                         release.0,
                         named_minor,
                         major,
