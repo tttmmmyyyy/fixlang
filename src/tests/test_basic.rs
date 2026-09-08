@@ -5921,9 +5921,11 @@ pub fn test_run_examples() {
     test_files_in_directory(Path::new("./examples"));
 }
 
+/// Verifies that a block comment is skipped wherever it is written: at the head and the tail of a
+/// file, spanning lines, holding what would otherwise be code, and between the tokens of an
+/// expression, where it separates them.
 #[test]
 pub fn test_comment_0() {
-    // block comment
     let source = r"/* head */ module Main;
         main : IO ();
         main = (
@@ -5945,9 +5947,11 @@ pub fn test_comment_0() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a line comment is skipped wherever it is written: after a statement, on a line
+/// of its own at any indentation, against the end of a token with no space before it, and between
+/// the statements of a parenthesized expression.
 #[test]
 pub fn test_comment_1() {
-    // ilne comment
     let source = r"
         module Main; //// /* */
         main : IO ();
@@ -5963,6 +5967,9 @@ pub fn test_comment_1() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies the values a hexadecimal, octal or binary literal takes: the digits of each radix in
+/// either case, a leading minus sign, leading zeros, and the ends of the width of each type,
+/// where such a literal fills the width and `0xFF_I8` is `-1`.
 #[test]
 pub fn test_hex_oct_bin_lit() {
     let source = r##"

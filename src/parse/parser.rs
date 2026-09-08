@@ -1253,6 +1253,10 @@ fn parse_type_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Qual
     Ok(qt)
 }
 
+/// Parses the constraints written in brackets before a type, such as
+/// `[iter : Iterator, Item iter = a]`, and sorts what they hold into the trait predicates, the
+/// equalities between types, and the kind signatures. The three come back in the order they are
+/// written within each kind.
 fn parse_constraints(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -1288,6 +1292,8 @@ fn one_constraint_src<'a>(preds: &'a [Predicate], eqs: &'a [Equality]) -> &'a Op
     }
 }
 
+/// Parses one kind signature of a constraint, such as `f : * -> *`, which gives the kind of a
+/// type variable.
 fn parse_kind_signature(pair: Pair<Rule>, ctx: &mut ParseContext) -> KindSignature {
     assert_eq!(pair.as_rule(), Rule::kind_signature);
     let span = Span::from_pair(&ctx.source, &pair);
@@ -1301,6 +1307,8 @@ fn parse_kind_signature(pair: Pair<Rule>, ctx: &mut ParseContext) -> KindSignatu
     }
 }
 
+/// Parses one equality of a constraint, such as `Item iter = a`, which asks that an associated
+/// type be a given type.
 fn parse_equality(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Equality, Errors> {
     assert_eq!(pair.as_rule(), Rule::equality);
     let span = Span::from_pair(&ctx.source, &pair);
@@ -1647,15 +1655,24 @@ fn std_trait_method_fullname(trait_name: &str, method_name: &str) -> FullName {
     fullname
 }
 
+/// What a binary operator compiles to: the method of a `Std` trait, and the shape of the
+/// application built around it.
 #[derive(Default, Clone)]
 struct BinaryOpInfo {
+    /// The `Std` trait the method belongs to, such as `Add`.
     trait_name: Name,
+    /// The method the operator applies, such as `add`.
     method_name: Name,
+    /// Whether the method takes the operand written on the right as its first argument, which lets
+    /// `>` apply the method of `Std::LessThan`.
     reverse: bool,
+    /// A unary operator applied to the result, which lets `!=` apply the method of `Std::Eq`.
     post_unary: Option<UnaryOpInfo>,
 }
 
 impl BinaryOpInfo {
+    /// An operator applying that method of that `Std` trait, taking its operands in the order they
+    /// are written and leaving the result as the method gives it.
     fn new(trait_name: &str, method_name: &str) -> BinaryOpInfo {
         BinaryOpInfo {
             trait_name: trait_name.to_string(),
@@ -1665,22 +1682,33 @@ impl BinaryOpInfo {
         }
     }
 
+    /// The absolute name of the trait method the operator applies, such as `::Std::Add::add`.
     fn method_fullname(&self) -> FullName {
         std_trait_method_fullname(&self.trait_name, &self.method_name)
     }
 
+    /// The same operator, with `unary_op` applied to the result of the method.
     fn add_post_unary(mut self, unary_op: UnaryOpInfo) -> BinaryOpInfo {
         self.post_unary = Some(unary_op);
         self
     }
 
+    /// The same operator, handing the method the operand written on the right as its first
+    /// argument.
     fn reverse(mut self) -> BinaryOpInfo {
         self.reverse = !self.reverse;
         return self;
     }
 }
 
-// Binary operator
+/// Parses a sequence of operands joined by the binary operators of one precedence level, left
+/// associative, into the applications of trait methods the operators stand for.
+///
+/// # Arguments
+/// * `ops` — the operator each spelling at this level stands for, keyed by the spelling, such as
+///   `"+"`.
+/// * `operator_rule` — the grammar rule the operators of this level match.
+/// * `inner_parser` — parses one operand, an expression of the level that binds tighter.
 fn parse_binary_operator_sequence(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -1736,7 +1764,8 @@ fn parse_binary_operator_sequence(
     Ok(expr)
 }
 
-// comparison operators (left-associative)
+/// Parses a sequence of operands joined by `==`, `!=`, `<`, `>`, `<=` and `>=`, left associative.
+/// Each of the six applies a method of `Std::Eq`, `Std::LessThan` or `Std::LessThanOrEq`.
 fn parse_expr_cmp(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_cmp);
     parse_binary_operator_sequence(
@@ -1866,13 +1895,17 @@ fn parse_expr_mul(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     )
 }
 
+/// What a unary operator compiles to: the method of a `Std` trait, applied to the one operand.
 #[derive(Default, Clone)]
 struct UnaryOpInfo {
+    /// The `Std` trait the method belongs to, such as `Neg`.
     trait_name: Name,
+    /// The method the operator applies, such as `neg`.
     method_name: Name,
 }
 
 impl UnaryOpInfo {
+    /// An operator applying that method of that `Std` trait.
     fn new(trait_name: &str, method_name: &str) -> UnaryOpInfo {
         UnaryOpInfo {
             trait_name: trait_name.to_string(),
@@ -1880,12 +1913,14 @@ impl UnaryOpInfo {
         }
     }
 
+    /// The absolute name of the trait method the operator applies, such as `::Std::Neg::neg`.
     fn method_fullname(&self) -> FullName {
         std_trait_method_fullname(&self.trait_name, &self.method_name)
     }
 }
 
-// Unary opeartors
+/// Parses an operand preceded by any number of the unary operators `-` and `!`, applying them
+/// from the one written nearest the operand outwards.
 fn parse_expr_unary(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     let pairs = pair.into_inner();
     let mut ops: Vec<UnaryOpInfo> = vec![];
@@ -2666,7 +2701,9 @@ fn parse_ffi_param_tys(
 /// Parses a number literal. A `_`-suffix such as `_U8` gives the literal's type; without one, a
 /// literal containing a decimal point is `F64` and a literal without one is `I64`. A decimal or
 /// octal integer literal must lie in the range of that type; a hexadecimal or binary one may fill
-/// its bit width, so `0b11111111_I8` is `-1`.
+/// its bit width, so `0b11111111_I8` is `-1`. A floating point literal must lie in the range of
+/// its type as well, and takes the value of that type nearest to what is written, so
+/// `1.0e-50_F32` is `0.0_F32`.
 fn parse_expr_number_lit(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,

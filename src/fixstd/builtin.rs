@@ -668,7 +668,7 @@ pub fn make_numeric_ty(name: &str) -> (Option<Arc<TypeNode>>, bool) {
     (floating_ty, true)
 }
 
-// Get dynamic object type.
+/// The type `Std::#DynamicObject`, the boxed object a closure holds its captured values in.
 // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(
@@ -677,19 +677,20 @@ pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
     )))
 }
 
-// Get tuple type.
+/// The tuple type whose fields are `tys` in that order, such as `Std::Tuple2 I64 Bool`. An empty
+/// `tys` gives the unit type.
 // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
     apply_type_args(&tycon(make_tuple_name_abs(tys.len() as u32)), &tys)
 }
 
-// Make tuple name
+/// The name of the tuple type of `size` fields: `Std::Tuple3` for `3`.
 // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_tuple_name(size: u32) -> FullName {
     FullName::from_strs(&[STD_NAME], &format!("{}{}", TUPLE_NAME, size))
 }
 
-// Make absolute tuple name, e.g., `::Std::Tuple3`
+/// The name of the tuple type of `size` fields, made absolute: `::Std::Tuple3` for `3`.
 // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_tuple_name_abs(size: u32) -> FullName {
     let mut name = make_tuple_name(size);
@@ -697,24 +698,26 @@ pub fn make_tuple_name_abs(size: u32) -> FullName {
     name
 }
 
-// Get Unit type.
+/// The unit type `()`, which is the tuple type of no fields.
 // PROOF: P1, P2, P2a, P5, P6, P7, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_unit_ty() -> Arc<TypeNode> {
     make_tuple_ty(vec![])
 }
 
-// Get Lazy.
+/// The type `Std::Lazy`, of kind `* -> *`. `Lazy a` is an alias of `() -> a`, a computation that
+/// gives an `a` when it is called.
 pub fn make_lazy_ty() -> Arc<TypeNode> {
     let name = FullName::from_strs(&[STD_NAME], LAZY_NAME);
     type_tycon(&tycon(name))
 }
 
-// Make type `IO`
+/// The type `Std::IO`, before it is applied to the type of the value the action gives.
 pub fn make_io_ty() -> Arc<TypeNode> {
     type_tycon(&make_io_tycon())
 }
 
-// Make type `IOState -> (IOState, a)`
+/// The type of the function an `IO` action wraps: `Std::IOState -> (Std::IOState, res_ty)`. The
+/// `IOState` threaded through it stands for the state of the computer.
 pub fn make_io_runner_ty(res_ty: Arc<TypeNode>) -> Arc<TypeNode> {
     type_fun(
         make_iostate_ty(),
@@ -722,17 +725,23 @@ pub fn make_io_runner_ty(res_ty: Arc<TypeNode>) -> Arc<TypeNode> {
     )
 }
 
-// Make tycon `IO`
+/// The type constructor `Std::IO`. An `IO a` is an action that gives an `a` while it acts on the
+/// state of the computer.
 pub fn make_io_tycon() -> Arc<TyCon> {
     tycon(FullName::from_strs(&[STD_NAME], IO_NAME))
 }
 
-// Make type `IO ()`
+/// The type `Std::IO ()`, an action that acts and gives nothing. `Main::main` is written with
+/// this type.
 pub fn make_io_unit_ty() -> Arc<TypeNode> {
     type_tyapp(make_io_ty(), make_unit_ty())
 }
 
-// Check if given name has form `TupleN` and returns N.
+/// The number of fields of the tuple type `name` names, and `None` where `name` is not
+/// `Std::TupleN` for a number `N`.
+///
+/// # Examples
+/// `get_tuple_n` of `Std::Tuple3` is `Some(3)`, and of `Std::Array` it is `None`.
 pub fn get_tuple_n(name: &FullName) -> Option<u32> {
     if name.namespace != NameSpace::from_strs(&[STD_NAME]) {
         return None;
@@ -748,6 +757,8 @@ pub fn get_tuple_n(name: &FullName) -> Option<u32> {
     number_str.parse::<u32>().ok()
 }
 
+/// The declaration of the tuple type of `size` fields: an unboxed struct whose fields are named
+/// `0` through `size - 1`, each carrying a type variable of its own.
 // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn tuple_defn(size: u32) -> TypeDefn {
     let tyvars = (0..size)
