@@ -754,8 +754,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Emit the lifetime intrinsic `intrinsic_name` over the allocation at `ptr`.
     ///
-    /// The marker covers the whole of that allocation, which is what the allocation instruction
-    /// naming `ptr` reserved.
+    /// The marker covers the whole of that allocation, which is what the `alloca` naming `ptr`
+    /// reserved.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_lifetime_marker(&self, intrinsic_name: &str, ptr: PointerValue<'c>) {
         assert!(

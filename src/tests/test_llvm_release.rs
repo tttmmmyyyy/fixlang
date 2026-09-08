@@ -1,8 +1,8 @@
 //! The LLVM release the compiler links, and the places that tell someone how to obtain it.
 //!
-//! The project file pins the release through inkwell's feature. Six other places name it — the
-//! environment variable the build reads, the two workflows that install it, and the installation
-//! instructions of both manuals — and each of them is followed by someone who then builds the
+//! The project file pins the release through inkwell's feature. The other places that name it —
+//! the environment variable the build reads, the two workflows that install it, and the
+//! installation instructions of both manuals — are each followed by someone who then builds the
 //! compiler. A release named in one of them and not in the project file sends that person after an
 //! LLVM this compiler cannot link.
 
@@ -16,18 +16,12 @@ mod tests {
     /// where the place spells one out.
     type Release = (u32, Option<u32>);
 
-    /// The path of the file at `relative_path` in the repository.
-    ///
-    /// # Parameters
-    /// * `relative_path` - The path of the file, relative to the root of the repository.
+    /// The path of the file at `relative_path`, a path relative to the root of the repository.
     fn repository_path(relative_path: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path)
     }
 
-    /// The text of the file at `relative_path` in the repository.
-    ///
-    /// # Parameters
-    /// * `relative_path` - The path of the file, relative to the root of the repository.
+    /// The text of the file at `relative_path`, a path relative to the root of the repository.
     fn text_of(relative_path: &str) -> String {
         let path = repository_path(relative_path);
         fs::read_to_string(&path)
@@ -35,9 +29,6 @@ mod tests {
     }
 
     /// Every LLVM release `text` names, in the six ways this repository writes one.
-    ///
-    /// # Parameters
-    /// * `text` - The text to read.
     ///
     /// # Examples
     /// The feature `llvm22-1`, the tag `llvmorg-22.1.8` and the prose `LLVM 22.1.x` each yield
