@@ -205,9 +205,6 @@ fn held_types(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
             // A lambda field is a pointer to compiled code, and the types that function takes and
             // returns are laid out where it is compiled.
             ObjectFieldType::LambdaFunction(_) => {}
-            ObjectFieldType::Array(_) => {
-                unreachable!("an object holds its elements as an `ArrayStorageBuf` field")
-            }
             // The rest carry no Fix type. Listing them keeps this match exhaustive, so a field kind
             // added later is answered here as well.
             ObjectFieldType::ControlBlock

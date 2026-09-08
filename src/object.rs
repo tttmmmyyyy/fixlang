@@ -7,7 +7,7 @@ use crate::constants::{
     BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
     DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
     DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, MAX_UNION_VARIANTS,
-    PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, STD_NAME, STORAGE_BUF_IDX,
+    PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, REFCNT_BITS, STD_NAME, STORAGE_BUF_IDX,
     TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
     UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
 };
@@ -72,11 +72,8 @@ pub enum ObjectFieldType {
     UnionBuf(Vec<Arc<TypeNode>>),
     /// The integer saying which variant a union carries.
     UnionTag,
-    /// The tail of an `Array` object: a capacity slot followed by a flexible buffer of elements of
-    /// the given type.
-    Array(Arc<TypeNode>),
     /// The raw element buffer of an `#ArrayStorage` object: a flexible array member of the element
-    /// type, like `Array` but with no length. It is reference-count-inert — the owning `Array`
+    /// type, carrying no length of its own. It is reference-count-inert — the owning `Array`
     /// value's traverser drives element lifetime — so it is a no-op in retain / traverse and only
     /// contributes its element sizing to the object layout.
     ArrayStorageBuf(Arc<TypeNode>),
@@ -138,7 +135,6 @@ impl ObjectFieldType {
             ObjectFieldType::U64 => gc.context.i64_type().into(),
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
-            ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
             ObjectFieldType::ArrayStorageBuf(ty) => gc.embedded_type_of(ty),
             ObjectFieldType::UnionTag => union_tag_type(gc.context).into(),
             ObjectFieldType::UnionBuf(field_tys) => union_buf_type(gc, field_tys),
@@ -262,9 +258,6 @@ impl ObjectFieldType {
                 .create_basic_type("<union tag>", UNION_TAG_BITS as u64, DW_ATE_UNSIGNED, 0)
                 .unwrap()
                 .as_type(),
-            // An array lays its elements out as an `ArrayStorageBuf`, which is the only array
-            // field an object carries.
-            ObjectFieldType::Array(_) => unreachable!(),
             ObjectFieldType::ArrayStorageBuf(elem_ty) => {
                 // The storage buffer's debug type is an array of `DEBUG_ARRAY_ASSUMED_LEN`
                 // elements. `#ArrayStorage`'s own declared size is stretched to cover them in
@@ -1170,33 +1163,17 @@ impl ObjectType {
     /// such a type before code generation begins.
     pub fn to_struct_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> StructType<'c> {
         let mut fields: Vec<BasicTypeEnum<'c>> = vec![];
-        for (i, field_type) in self.field_types.iter().enumerate() {
+        for field_type in self.field_types.iter() {
             fields.push(field_type.to_basic_type(gc));
-            match field_type {
-                ObjectFieldType::Array(ty) => {
-                    assert_eq!(i, self.field_types.len() - 1); // ArraySize must be the last field.
-                    assert!(!self.is_unbox); // Array has to be boxed.
-
-                    // Add space for one element.
-                    // This is for:
-                    // - to get the pointer to the first element by gep of this struct type.
-                    // - used in implementation of size_of method.
-                    // - in to_debug_type function.
-                    fields.push(gc.embedded_type_of(ty));
-                }
-                _ => {}
-            }
         }
         gc.context.struct_type(&fields, false)
     }
 
     /// The bytes laid out ahead of the element buffer, and the bytes one element takes in it, for an
-    /// object type that ends in such a buffer (`Array`, `#ArrayStorage`).
+    /// object type that ends in such a buffer (`#ArrayStorage`).
     fn element_buffer_layout<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> ElementBufferLayout {
-        // The element buffer is the last field, of `Array` (with a preceding capacity slot) or of
-        // `#ArrayStorage` (right after the control block).
+        // The element buffer is the last field of `#ArrayStorage`, right after the control block.
         let elem_ty = match self.field_types.last().unwrap() {
-            ObjectFieldType::Array(ty) => ty.clone(),
             ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
             _ => panic!(
                 "`{}` was given an array capacity, but its layout ends in no element buffer",
@@ -1222,8 +1199,8 @@ impl ObjectType {
     ///
     /// # Arguments
     /// * `array_capacity` - the number of elements the trailing element buffer is to hold, for an
-    ///   object type that ends in one (`Array`, `#ArrayStorage`). For every other object type it is
-    ///   `None` and the size is that of the struct alone.
+    ///   object type that ends in one (`#ArrayStorage`). For every other object type it is `None`
+    ///   and the size is that of the struct alone.
     pub fn size_of<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -1271,18 +1248,16 @@ impl ObjectType {
     }
 }
 
-/// The integer type of the control block field holding an object's reference count. Its width is
-/// what bounds the number of references to one object a program can hold, and `refcnt_di_type`
-/// states that width a second time.
+/// The integer type of the control block field holding an object's reference count.
 pub fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
-    context.i32_type()
+    int_type_of_bits(context, REFCNT_BITS)
 }
 
 /// The debug info type of an object's reference count, which presents it to a debugger session as an
-/// unsigned integer. Its width is the width of `refcnt_type`, stated a second time.
+/// unsigned integer.
 pub fn refcnt_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
     builder
-        .create_basic_type("<refcnt>", 32, DW_ATE_UNSIGNED, 0)
+        .create_basic_type("<refcnt>", REFCNT_BITS as u64, DW_ATE_UNSIGNED, 0)
         .unwrap()
         .as_type()
 }
@@ -2198,14 +2173,6 @@ pub fn create_obj<'c, 'm>(
             ObjectFieldType::F64 => {}
             ObjectFieldType::SubObject(_, _) => {}
             ObjectFieldType::LambdaFunction(_) => {}
-            ObjectFieldType::Array(_) => {
-                // Initialize the capacity of the array.
-                assert_eq!(i, ARRAY_CAP_IDX as usize);
-                let ptr_to_cap = obj.gep_boxed(gc, i as u32);
-                gc.builder()
-                    .build_store(ptr_to_cap, array_capacity.unwrap())
-                    .unwrap();
-            }
             // The storage buffer is left uninitialized; there is no capacity field to set.
             ObjectFieldType::ArrayStorageBuf(_) => {}
             ObjectFieldType::TraverseFunction => {
@@ -2495,10 +2462,6 @@ fn build_traverse<'c, 'm>(
             ObjectFieldType::U64 => {}
             ObjectFieldType::F32 => {}
             ObjectFieldType::F64 => {}
-            // The `is_array` branch of this function walks an array's elements through its
-            // `#ArrayStorage`, whose buffer is an `ArrayStorageBuf`: that is the only array field
-            // an object holds.
-            ObjectFieldType::Array(_) => unreachable!(),
             // Reference-count-inert: the storage buffer has no length, and the owning `Array` value's
             // traverser drives element lifetime. Traversing the storage itself touches no element.
             ObjectFieldType::ArrayStorageBuf(_) => {}
@@ -2636,7 +2599,6 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
                 ObjectFieldType::F64 => "<F64 member>".to_string(),
                 ObjectFieldType::UnionBuf(_) => "<union value>".to_string(),
                 ObjectFieldType::UnionTag => "<union tag>".to_string(),
-                ObjectFieldType::Array(_) => "<array>".to_string(),
                 ObjectFieldType::ArrayStorageBuf(_) => "<array elements>".to_string(),
             };
             if ty.is_array() {

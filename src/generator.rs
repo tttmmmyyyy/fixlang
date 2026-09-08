@@ -485,13 +485,6 @@ impl<'c> Object<'c> {
         gc.builder().build_is_null(ptr, "is_null").unwrap()
     }
 
-    /// The address of field `field_idx` within the heap block of this boxed object.
-    pub fn ptr_to_field<'m>(&self, gc: &mut Generator<'c, 'm>, field_idx: u32) -> PointerValue<'c> {
-        assert!(self.is_box(&gc.type_env));
-        let ty = self.struct_ty(gc);
-        self.ptr_to_field_as(gc, ty, field_idx)
-    }
-
     /// The address of field `field_idx` within the heap block of this boxed object, under the
     /// struct layout `ty` rather than the one the object's own type gives.
     pub fn ptr_to_field_as<'m>(
@@ -2030,13 +2023,12 @@ impl<'c, 'm> Generator<'c, 'm> {
                     }
                     // The storage buffer appears only inside the boxed `#ArrayStorage`, whose retain
                     // bumps its control block rather than descending into fields, so it is never
-                    // reached here (like `Array`).
+                    // reached here.
                     ObjectFieldType::ArrayStorageBuf(_) => unreachable!(),
                     ObjectFieldType::UnionBuf(_) => {
                         ObjectFieldType::retain_union(self, obj.clone(), amount, state);
                     }
                     ObjectFieldType::UnionTag => {}
-                    ObjectFieldType::Array(_) => unreachable!(),
                 }
             }
         }

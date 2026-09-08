@@ -298,6 +298,9 @@ pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
 // elements; freeing or reallocating the object steps back by it to recover the block. It occupies
 // a byte of the control block's tail padding, so the control block keeps its size.
 pub const CTRL_BLK_ALLOC_OFFSET_IDX: u32 = 2;
+/// The width of the reference count, which bounds the number of references to one object a program
+/// can hold.
+pub const REFCNT_BITS: u32 = 32;
 
 /// The name of the LLVM module a compilation unit's code is generated into, before the unit's hash.
 /// `--emit-llvm` names the file it writes after the module.

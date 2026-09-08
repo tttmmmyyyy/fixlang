@@ -916,7 +916,6 @@ pub fn make_byte_array_copy<'c, 'm>(
         .unwrap();
     gc.builder()
         .build_memcpy(dst, 1, buf, 1, len_ptr_int)
-        .ok()
         .unwrap();
 
     array
@@ -2481,7 +2480,6 @@ fn realloc_array<'c, 'm>(
         .unwrap();
     gc.builder()
         .build_memmove(new_ptr, 1, old_ptr, 1, live_bytes)
-        .ok()
         .unwrap();
     gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -2735,7 +2733,6 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         let n_bytes = build_elems_bytes(gc, &elem_ty, src_len, "append_n_bytes");
         gc.builder()
             .build_memcpy(dst_write, 1, src_buf, 1, n_bytes)
-            .ok()
             .unwrap();
         let zero = gc.context.i64_type().const_zero();
         let src_emptied = src.clone().insert_field(gc, ARRAY_SIZE_IDX, zero);
@@ -6203,8 +6200,6 @@ pub fn struct_set(
         None,
     );
     let ty = type_fun(field.ty.clone(), type_fun(str_ty.clone(), str_ty.clone()));
-    let mut tvs = vec![];
-    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -6362,8 +6357,6 @@ pub fn union_new(
     let union_ty = union.applied_type();
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(field_ty, union_ty);
-    let mut tvs = vec![];
-    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -6388,8 +6381,6 @@ pub fn union_as(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
     let union_ty = union.applied_type();
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(union_ty, field_ty);
-    let mut tvs = vec![];
-    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -6568,8 +6559,6 @@ pub fn union_is(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
     );
     let union_ty = union.applied_type();
     let ty = type_fun(union_ty, make_bool_ty());
-    let mut tvs = vec![];
-    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -6815,8 +6804,6 @@ pub fn union_mod_function(
         type_fun(field_ty.clone(), field_ty),
         type_fun(union_ty.clone(), union_ty),
     );
-    let mut tvs = vec![];
-    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
