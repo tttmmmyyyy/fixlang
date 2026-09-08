@@ -627,6 +627,31 @@ pub fn make_floating_ty(name: &str) -> Option<Arc<TypeNode>> {
     }
 }
 
+/// The value the floating point literal `raw` takes when it is written with the type of that
+/// name, read at the width of that type and widened to `f64`.
+///
+/// A decimal rounded to `F64` and then to `F32` can land one step away from the same decimal
+/// rounded to `F32`, so an `F32` literal is read as an `f32`. Widening it back to `f64` is exact,
+/// so the value carries the `F32` literal without loss.
+///
+/// A literal larger than the widest finite value of its type reads as an infinity.
+///
+/// Panics where `name` is neither `F32` nor `F64`, or where `raw` does not read as a floating
+/// point number.
+///
+/// # Examples
+/// `floating_literal_value(F32_NAME, "0.1")` is `0.10000000149011612`, and
+/// `floating_literal_value(F64_NAME, "0.1")` is `0.1`.
+pub fn floating_literal_value(name: &str, raw: &str) -> f64 {
+    if name == F32_NAME {
+        raw.parse::<f32>().unwrap() as f64
+    } else if name == F64_NAME {
+        raw.parse::<f64>().unwrap()
+    } else {
+        panic!("Not a floating point type: {}", name);
+    }
+}
+
 /// The numeric type of that name, and whether it is a floating point type.
 ///
 /// # Returns

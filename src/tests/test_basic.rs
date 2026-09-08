@@ -6012,19 +6012,25 @@ pub fn test_hex_oct_bin_lit() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A program whose `main` names the integer literal `literal` written with the type `ty_name`,
-/// such as `-0xFF_I8`.
-fn program_naming_an_integer_literal(literal: &str, ty_name: &str) -> String {
+/// A program whose `main` compares the number literal `literal` against the zero of its type, so
+/// that the literal is compiled.
+///
+/// # Arguments
+/// * `ty_name` — the type the literal is written with, as in `-0xFF_I8`; `None` writes the literal
+///   alone, so it takes the type its form implies.
+fn program_naming_a_number_literal(literal: &str, ty_name: Option<&str>) -> String {
+    let ty_suffix = ty_name.map_or(String::new(), |ty_name| format!("_{}", ty_name));
+    let zero = if literal.contains('.') { "0.0" } else { "0" };
     format!(
         r#"
     module Main;
     main : IO ();
     main = (
-        assert_eq(|_|"", {}_{}, 0_{});;
+        assert_eq(|_|"", {}{}, {}{});;
         pure()
     );
     "#,
-        literal, ty_name, ty_name
+        literal, ty_suffix, zero, ty_suffix
     )
 }
 
@@ -6036,7 +6042,7 @@ fn program_naming_an_integer_literal(literal: &str, ty_name: &str) -> String {
 pub fn test_negative_bit_pattern_literal_out_of_range_is_reported() {
     for (literal, ty_name) in [("-0xFF", "I8"), ("-0x1", "U8"), ("-0b1", "U8")] {
         test_source_fail(
-            &program_naming_an_integer_literal(literal, ty_name),
+            &program_naming_a_number_literal(literal, Some(ty_name)),
             Configuration::develop_mode(),
             &format!("out of range of `{}`", ty_name),
         );
@@ -6049,7 +6055,7 @@ pub fn test_negative_bit_pattern_literal_out_of_range_is_reported() {
 /// literal is written with.
 #[test]
 pub fn test_bit_pattern_literal_below_the_types_minimum_or_past_its_width_is_reported() {
-    let i8_program = |literal: &str| program_naming_an_integer_literal(literal, "I8");
+    let i8_program = |literal: &str| program_naming_a_number_literal(literal, Some("I8"));
 
     // One below `-0x80_I8`, which `test_hex_oct_bin_lit` compiles as -128.
     test_source_fail(
@@ -6110,11 +6116,126 @@ pub fn test_integer_literal_past_what_its_type_holds_is_reported() {
 pub fn test_decimal_literal_below_the_minimum_of_its_type_is_reported() {
     for (literal, ty_name) in [("-1", "U8"), ("-129", "I8")] {
         test_source_fail(
-            &program_naming_an_integer_literal(literal, ty_name),
+            &program_naming_a_number_literal(literal, Some(ty_name)),
             Configuration::develop_mode(),
             &format!("`{}` is out of range of `{}`", literal, ty_name),
         );
     }
+}
+
+/// Verifies the two ends of the range a floating point literal may name: the largest finite value
+/// of its type is accepted, and the value where rounding first reaches an infinity is reported.
+#[test]
+pub fn test_floating_point_literal_range_ends_at_the_largest_finite_value_of_its_type() {
+    for (literal, ty_name) in [
+        ("3.4028236e38", "F32"),
+        ("-3.4028236e38", "F32"),
+        ("1.7976931348623159e308", "F64"),
+        ("-1.7976931348623159e308", "F64"),
+    ] {
+        test_source_fail(
+            &program_naming_a_number_literal(literal, Some(ty_name)),
+            Configuration::develop_mode(),
+            &format!("`{}` is out of range of `{}`", literal, ty_name),
+        );
+    }
+
+    // A literal naming the largest finite value of each type, differing in its last digit from the
+    // literals the loop reports. A finite value less itself is zero, where an infinity less itself
+    // is a NaN.
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 3.4028235e38_F32 - 3.4028235e38_F32, 0.0_F32);;
+        assert_eq(|_|"", 1.7976931348623158e308_F64 - 1.7976931348623158e308_F64, 0.0_F64);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies that a floating point literal its type rounds to zero is accepted and takes zero,
+/// which is then the value of that type nearest what is written.
+#[test]
+pub fn test_floating_point_literal_too_small_for_its_type_takes_zero() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 1.0e-50_F32, 0.0_F32);;
+        assert_eq(|_|"", 1.0e-400_F64, 0.0_F64);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies that an `F32` literal takes the `F32` value nearest the decimal written. This decimal
+/// sits just below the midpoint of two `F32` values, so it rounds down to the lower one; reading it
+/// as an `F64` first lands on that midpoint, which rounds up to the higher one.
+#[test]
+pub fn test_f32_literal_takes_the_f32_nearest_what_is_written() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 1.000000178813934326171874999999_F32, 1.00000011920928955078125_F32);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies that a floating point literal written with no type suffix is checked against the range
+/// of `F64`, the type such a literal takes, whatever the size of the exponent written.
+#[test]
+pub fn test_floating_point_literal_without_a_suffix_is_checked_against_the_range_of_f64() {
+    for literal in ["1.0e400", "-1.0e400", "1.0e999999999999999999999999"] {
+        test_source_fail(
+            &program_naming_a_number_literal(literal, None),
+            Configuration::develop_mode(),
+            &format!("`{}` is out of range of `F64`", literal),
+        );
+    }
+}
+
+/// Verifies that the range of an `F32` literal is decided by the `F32` value nearest what is
+/// written: this decimal sits one below the midpoint of the largest finite `F32` and the power of
+/// two above it, so it takes that largest finite value, where rounding through `F64` reaches the
+/// midpoint and carries it up to an infinity.
+#[test]
+pub fn test_f32_literal_just_below_the_overflow_midpoint_takes_the_largest_finite_value() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 3.40282356779733661637539395458142568447e38_F32, 3.4028235e38_F32);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Verifies that a floating point literal lying exactly between two values of its type takes the
+/// one whose last significand bit is zero. Each literal here is the midpoint of a neighbouring
+/// pair, and each value it is compared against is written as the finite decimal it equals, which
+/// every width reads as itself.
+#[test]
+pub fn test_floating_point_literal_at_a_midpoint_takes_the_even_significand() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 1.000000059604644775390625_F32, 1.0_F32);;
+        assert_eq(|_|"", 1.000000178813934326171875_F32, 1.0000002384185791015625_F32);;
+        assert_eq(|_|"", 1.000000298023223876953125_F32, 1.0000002384185791015625_F32);;
+        assert_eq(|_|"", 1.00000000000000011102230246251565404236316680908203125_F64, 1.0_F64);;
+        assert_eq(|_|"", 1.00000000000000033306690738754696212708950042724609375_F64, 1.000000000000000444089209850062616169452667236328125_F64);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
 }
 
 #[test]

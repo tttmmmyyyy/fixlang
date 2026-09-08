@@ -38,14 +38,15 @@ use crate::constants::{
 };
 use crate::error::Errors;
 use crate::fixstd::builtin::{
-    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, integral_ty_range,
-    integral_ty_range_with_bit_patterns, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
-    make_string_lit, make_tuple_name_abs, make_u8_ty, ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME,
-    DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME, EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME,
-    LESS_THAN_OR_EQUAL_TO_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME,
-    LESS_THAN_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME,
-    NEGATE_TRAIT_NEGATE_NAME, NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME,
-    REMAINDER_TRAIT_REMAINDER_NAME, SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME,
+    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,
+    integral_ty_range, integral_ty_range_with_bit_patterns, make_f64_ty, make_i64_ty,
+    make_io_tycon, make_numeric_ty, make_string_lit, make_tuple_name_abs, make_u8_ty,
+    ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME,
+    EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_NAME,
+    LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME, LESS_THAN_TRAIT_NAME,
+    MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME, NEGATE_TRAIT_NEGATE_NAME,
+    NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME,
+    SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME,
 };
 use crate::misc::{make_map, save_temporary_source, to_absolute_path, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
@@ -2701,17 +2702,20 @@ fn parse_expr_number_lit(
     };
     let ty = ty.set_source(Some(span.clone()));
     if is_float {
-        let val = raw.parse::<f64>();
-        if val.is_err() {
+        // `number_lit_body_dec` admits digits, one decimal point and an optional exponent, which
+        // read as a floating point number at either width.
+        let val = floating_literal_value(ty_name, raw);
+        // A literal larger than the widest finite value of its type rounds to an infinity. Every
+        // value a literal spells is finite, so such a literal is out of range.
+        if !val.is_finite() {
             return Err(Errors::from_msg_srcs(
                 format!(
-                    "A literal string `{}` cannot be parsed as a floating number.",
-                    raw
+                    "The value of a floating point literal `{}` is out of range of `{}`.",
+                    raw, ty_name
                 ),
                 &[&Some(span)],
             ));
         }
-        let val = val.unwrap();
         Ok(expr_float_lit(val, ty, Some(span)))
     } else {
         // Integral literal
