@@ -6221,6 +6221,27 @@ pub fn test_f32_literal_just_below_the_overflow_midpoint_takes_the_largest_finit
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a floating point literal lying exactly between two values of its type takes the
+/// one whose last significand bit is zero. Each literal here is the midpoint of a neighbouring
+/// pair, and each value it is compared against is written as the finite decimal it equals, which
+/// every width reads as itself.
+#[test]
+pub fn test_floating_point_literal_at_a_midpoint_takes_the_even_significand() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 1.000000059604644775390625_F32, 1.0_F32);;
+        assert_eq(|_|"", 1.000000178813934326171875_F32, 1.0000002384185791015625_F32);;
+        assert_eq(|_|"", 1.000000298023223876953125_F32, 1.0000002384185791015625_F32);;
+        assert_eq(|_|"", 1.00000000000000011102230246251565404236316680908203125_F64, 1.0_F64);;
+        assert_eq(|_|"", 1.00000000000000033306690738754696212708950042724609375_F64, 1.000000000000000444089209850062616169452667236328125_F64);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_array_to_string() {
     let source = r##"
