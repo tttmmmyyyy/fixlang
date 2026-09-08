@@ -32,14 +32,15 @@ use crate::ast::{
 };
 use crate::configuration::{Configuration, DiagnosticsConfig, SubCommand};
 use crate::constants::{
-    COMPOSE_FUNCTION_NAME, F32_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME,
-    INDEXABLE_TRAIT_NAME, IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
+    COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME, INDEXABLE_TRAIT_NAME,
+    IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
 use crate::error::Errors;
 use crate::fixstd::builtin::{
-    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, integral_ty_range,
-    integral_ty_range_with_bit_patterns, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
+    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,
+    integral_ty_range, integral_ty_range_with_bit_patterns, make_f64_ty, make_i64_ty, make_io_tycon,
+    make_numeric_ty,
     make_string_lit, make_tuple_name_abs, make_u8_ty, ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME,
     DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME, EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME,
     LESS_THAN_OR_EQUAL_TO_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME,
@@ -2701,16 +2702,9 @@ fn parse_expr_number_lit(
     };
     let ty = ty.set_source(Some(span.clone()));
     if is_float {
-        // Read the literal at the type it is written for: a decimal rounded to `F64` and then to
-        // `F32` can land one ulp from the same decimal rounded to `F32`. Widening the `f32` back is
-        // exact, so the code generator writes the value read here.
         // `number_lit_body_dec` admits digits, one decimal point and an optional exponent, which
-        // parse at either width.
-        let val = if ty_name == F32_NAME {
-            raw.parse::<f32>().unwrap() as f64
-        } else {
-            raw.parse::<f64>().unwrap()
-        };
+        // read as a floating point number at either width.
+        let val = floating_literal_value(ty_name, raw);
         // A literal larger than the widest finite value of its type rounds to an infinity, which is
         // not a number the source names.
         if !val.is_finite() {

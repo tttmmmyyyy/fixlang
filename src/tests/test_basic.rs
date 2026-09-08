@@ -6013,20 +6013,22 @@ pub fn test_hex_oct_bin_lit() {
 }
 
 /// A program whose `main` names the number literal `literal` written with the type `ty_name`, such
-/// as `-0xFF_I8`. The literal is compared against the zero of its own kind, which a floating point
+/// as `-0xFF_I8`, and where `ty_name` is `None` the literal alone, which takes the type its form
+/// implies. The literal is compared against the zero of its own kind, which a floating point
 /// literal spells with a decimal point.
-fn program_naming_a_number_literal(literal: &str, ty_name: &str) -> String {
+fn program_naming_a_number_literal(literal: &str, ty_name: Option<&str>) -> String {
+    let suffix = ty_name.map_or(String::new(), |ty_name| format!("_{}", ty_name));
     let zero = if literal.contains('.') { "0.0" } else { "0" };
     format!(
         r#"
     module Main;
     main : IO ();
     main = (
-        assert_eq(|_|"", {}_{}, {}_{});;
+        assert_eq(|_|"", {}{}, {}{});;
         pure()
     );
     "#,
-        literal, ty_name, zero, ty_name
+        literal, suffix, zero, suffix
     )
 }
 
@@ -6038,7 +6040,7 @@ fn program_naming_a_number_literal(literal: &str, ty_name: &str) -> String {
 pub fn test_negative_bit_pattern_literal_out_of_range_is_reported() {
     for (literal, ty_name) in [("-0xFF", "I8"), ("-0x1", "U8"), ("-0b1", "U8")] {
         test_source_fail(
-            &program_naming_a_number_literal(literal, ty_name),
+            &program_naming_a_number_literal(literal, Some(ty_name)),
             Configuration::develop_mode(),
             &format!("out of range of `{}`", ty_name),
         );
@@ -6051,7 +6053,7 @@ pub fn test_negative_bit_pattern_literal_out_of_range_is_reported() {
 /// literal is written with.
 #[test]
 pub fn test_bit_pattern_literal_below_the_types_minimum_or_past_its_width_is_reported() {
-    let i8_program = |literal: &str| program_naming_a_number_literal(literal, "I8");
+    let i8_program = |literal: &str| program_naming_a_number_literal(literal, Some("I8"));
 
     // One below `-0x80_I8`, which `test_hex_oct_bin_lit` compiles as -128.
     test_source_fail(
@@ -6112,7 +6114,7 @@ pub fn test_integer_literal_past_what_its_type_holds_is_reported() {
 pub fn test_decimal_literal_below_the_minimum_of_its_type_is_reported() {
     for (literal, ty_name) in [("-1", "U8"), ("-129", "I8")] {
         test_source_fail(
-            &program_naming_a_number_literal(literal, ty_name),
+            &program_naming_a_number_literal(literal, Some(ty_name)),
             Configuration::develop_mode(),
             &format!("`{}` is out of range of `{}`", literal, ty_name),
         );
@@ -6130,7 +6132,7 @@ pub fn test_floating_point_literal_out_of_range_is_reported() {
         ("-1.7976931348623159e308", "F64"),
     ] {
         test_source_fail(
-            &program_naming_a_number_literal(literal, ty_name),
+            &program_naming_a_number_literal(literal, Some(ty_name)),
             Configuration::develop_mode(),
             &format!("`{}` is out of range of `{}`", literal, ty_name),
         );
@@ -6187,19 +6189,8 @@ pub fn test_f32_literal_takes_the_f32_nearest_what_is_written() {
 #[test]
 pub fn test_floating_point_literal_without_a_suffix_is_ranged_against_f64() {
     for literal in ["1.0e400", "-1.0e400", "1.0e999999999999999999999999"] {
-        let source = format!(
-            r#"
-    module Main;
-    main : IO ();
-    main = (
-        assert_eq(|_|"", {}, 0.0);;
-        pure()
-    );
-    "#,
-            literal
-        );
         test_source_fail(
-            &source,
+            &program_naming_a_number_literal(literal, None),
             Configuration::develop_mode(),
             &format!("`{}` is out of range of `F64`", literal),
         );
