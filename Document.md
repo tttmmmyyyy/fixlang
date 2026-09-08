@@ -933,8 +933,8 @@ An integer literal has to be in the range of the type it is written with, so `25
 A hexadecimal or binary literal writes a bit pattern, so it may also fill the width of that type: `0xFF_I8` and `0b11111111_I8` are `-1`.
 For example, `0x2A` represents 42, and `0o52` also represents 42.
 
-In integer literals in decimal, you can use "e" to represent the power of 10.
-For example, `4e2` represents 400.
+In decimal literals, you can use "e" to represent the power of 10.
+For example, `4e2` represents 400, and `1.5e2` represents 150.0.
 
 Characters enclosed in single quotes are interpreted as `U8` type number literals.
 For example, `'A'` represents 65.
@@ -945,6 +945,9 @@ Additionally, `\n`, `\r`, `\t`, `\0`, `\\`, `\'`, `\"` are interpreted as `U8` t
 
 Note that floating point literals must have at least one digit before and after the decimal point.
 For example, `1.` and `.1` are not valid floating point literals (while they are valid in C).
+
+A floating point literal has to be in the range of the type it is written with, so `3.5e38_F32` and `1.0e400` are reported.
+Inside that range, the literal takes the value of its type nearest to what is written, so `1.0e-50_F32` is `0.0_F32`.
 
 ## Strings and literals
 

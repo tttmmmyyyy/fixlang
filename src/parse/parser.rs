@@ -32,8 +32,8 @@ use crate::ast::{
 };
 use crate::configuration::{Configuration, DiagnosticsConfig, SubCommand};
 use crate::constants::{
-    COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME, INDEXABLE_TRAIT_NAME,
-    IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
+    COMPOSE_FUNCTION_NAME, F32_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME,
+    INDEXABLE_TRAIT_NAME, IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
 use crate::error::Errors;
@@ -2701,17 +2701,27 @@ fn parse_expr_number_lit(
     };
     let ty = ty.set_source(Some(span.clone()));
     if is_float {
-        let val = raw.parse::<f64>();
-        if val.is_err() {
+        // Read the literal at the type it is written for: a decimal rounded to `F64` and then to
+        // `F32` can land one ulp from the same decimal rounded to `F32`. Widening the `f32` back is
+        // exact, so the code generator writes the value read here.
+        // `number_lit_body_dec` admits digits, one decimal point and an optional exponent, which
+        // parse at either width.
+        let val = if ty_name == F32_NAME {
+            raw.parse::<f32>().unwrap() as f64
+        } else {
+            raw.parse::<f64>().unwrap()
+        };
+        // A literal larger than the widest finite value of its type rounds to an infinity, which is
+        // not a number the source names.
+        if !val.is_finite() {
             return Err(Errors::from_msg_srcs(
                 format!(
-                    "A literal string `{}` cannot be parsed as a floating number.",
-                    raw
+                    "The value of a floating point literal `{}` is out of range of `{}`.",
+                    raw, ty_name
                 ),
                 &[&Some(span)],
             ));
         }
-        let val = val.unwrap();
         Ok(expr_float_lit(val, ty, Some(span)))
     } else {
         // Integral literal
