@@ -6182,6 +6182,47 @@ pub fn test_f32_literal_takes_the_f32_nearest_what_is_written() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a floating point literal written with no type suffix is ranged against `F64`, the
+/// type such a literal takes, however far past that range it is written.
+#[test]
+pub fn test_floating_point_literal_without_a_suffix_is_ranged_against_f64() {
+    for literal in ["1.0e400", "-1.0e400", "1.0e999999999999999999999999"] {
+        let source = format!(
+            r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", {}, 0.0);;
+        pure()
+    );
+    "#,
+            literal
+        );
+        test_source_fail(
+            &source,
+            Configuration::develop_mode(),
+            &format!("`{}` is out of range of `F64`", literal),
+        );
+    }
+}
+
+/// Verifies that the range of an `F32` literal is decided by the `F32` value nearest what is
+/// written: this decimal sits one below the midpoint of the largest finite `F32` and the power of
+/// two above it, so it takes that largest finite value, where rounding through `F64` reaches the
+/// midpoint and carries it up to an infinity.
+#[test]
+pub fn test_f32_literal_just_below_the_overflow_midpoint_takes_the_largest_finite_value() {
+    let source = r#"
+    module Main;
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 3.40282356779733661637539395458142568447e38_F32, 3.4028235e38_F32);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_array_to_string() {
     let source = r##"
