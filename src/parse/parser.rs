@@ -2682,15 +2682,15 @@ fn parse_expr_number_lit(
         Some(pair) => {
             // Type of literal is explicitly specified.
             assert_eq!(pair.as_rule(), Rule::number_lit_type);
-            let type_name = pair.as_str();
-            let (ty, is_float_type) = make_numeric_ty(type_name);
+            let ty_name = pair.as_str();
+            let (ty, is_float_type) = make_numeric_ty(ty_name);
             if is_float != is_float_type {
                 return Err(Errors::from_msg_srcs(
                     "Mismatch between literal format and specified type. Note that floating point literals must contain a decimal point.".to_string(),
                     &[&Some(span)],
                 ));
             }
-            (ty.unwrap(), type_name)
+            (ty.unwrap(), ty_name)
         }
         None => {
             // Type of literal is implicit.
@@ -2764,31 +2764,31 @@ fn parse_expr_number_lit(
 /// # Examples
 /// `parse_integer_literal_string("-0xff")` is `Some((-255, 16))`, and `"123e4"` is
 /// `Some((1230000, 10))`.
-fn parse_integer_literal_string(s: &str) -> Option<(BigInt, usize)> {
-    if s.len() == 0 {
+fn parse_integer_literal_string(raw: &str) -> Option<(BigInt, usize)> {
+    if raw.len() == 0 {
         return None;
     }
     for (prefix, radix) in [("0x", 16), ("0o", 8), ("0b", 2)] {
-        if let Some((digits, is_negative)) = strip_radix_prefix(s, prefix) {
+        if let Some((digits, is_negative)) = strip_sign_and_radix_prefix(raw, prefix) {
             let val = BigInt::parse_bytes(digits.as_bytes(), radix as u32)?;
             return Some((if is_negative { -val } else { val }, radix));
         }
     }
-    let split = s.split('e').collect::<Vec<_>>();
-    if split.len() > 2 {
+    let num_and_exp = raw.split('e').collect::<Vec<_>>();
+    if num_and_exp.len() > 2 {
         return None;
     }
-    if split.len() == 1 {
+    if num_and_exp.len() == 1 {
         // 'e' is not contained.
-        return BigInt::parse_bytes(s.as_bytes(), 10).map(|x| (x, 10));
+        return BigInt::parse_bytes(raw.as_bytes(), 10).map(|x| (x, 10));
     }
-    assert_eq!(split.len(), 2);
-    let num = BigInt::parse_bytes(split[0].as_bytes(), 10);
+    assert_eq!(num_and_exp.len(), 2);
+    let num = BigInt::parse_bytes(num_and_exp[0].as_bytes(), 10);
     if num.is_none() {
         return None;
     }
     let num = num.unwrap();
-    let exp = BigInt::parse_bytes(split[1].as_bytes(), 10);
+    let exp = BigInt::parse_bytes(num_and_exp[1].as_bytes(), 10);
     if exp.is_none() {
         return None;
     }
@@ -2798,27 +2798,27 @@ fn parse_integer_literal_string(s: &str) -> Option<(BigInt, usize)> {
         return None;
     }
     // Return num * 10^exp.
-    let mut ret = num;
+    let mut val = num;
     let mut i = BigInt::from(0);
     while i < exp {
-        ret *= 10;
+        val *= 10;
         i += 1;
     }
-    Some((ret, 10))
+    Some((val, 10))
 }
 
-/// The digits `s` writes behind `prefix`, which a minus sign may precede, and whether that sign is
-/// there. Gives `None` where `s` carries another prefix.
+/// The digits `raw` writes behind `prefix`, which a minus sign may precede, and whether that sign
+/// is there. Gives `None` where `raw` carries another prefix.
 ///
 /// # Examples
-/// `strip_radix_prefix("-0xff", "0x")` is `Some(("ff", true))`, and `strip_radix_prefix("12", "0x")`
+/// `strip_sign_and_radix_prefix("-0xff", "0x")` is `Some(("ff", true))`, and `strip_sign_and_radix_prefix("12", "0x")`
 /// is `None`.
-fn strip_radix_prefix<'a>(s: &'a str, prefix: &str) -> Option<(&'a str, bool)> {
-    if let Some(digits) = s.strip_prefix(prefix) {
+fn strip_sign_and_radix_prefix<'a>(raw: &'a str, prefix: &str) -> Option<(&'a str, bool)> {
+    if let Some(digits) = raw.strip_prefix(prefix) {
         return Some((digits, false));
     }
-    s.strip_prefix('-')
-        .and_then(|s| s.strip_prefix(prefix))
+    raw.strip_prefix('-')
+        .and_then(|after_sign| after_sign.strip_prefix(prefix))
         .map(|digits| (digits, true))
 }
 

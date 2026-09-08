@@ -659,13 +659,13 @@ pub fn floating_literal_value(name: &str, raw: &str) -> f64 {
 /// would have been a floating point one, so a caller comparing it against the form of a literal
 /// reads `false`.
 pub fn make_numeric_ty(name: &str) -> (Option<Arc<TypeNode>>, bool) {
-    let int_opt = make_integral_ty(name);
-    if int_opt.is_some() {
-        return (int_opt, false);
+    let integral_ty = make_integral_ty(name);
+    if integral_ty.is_some() {
+        return (integral_ty, false);
     }
-    let float_opt = make_floating_ty(name);
-    assert!(float_opt.is_some(), "Not a numeric type: {}", name);
-    (float_opt, true)
+    let floating_ty = make_floating_ty(name);
+    assert!(floating_ty.is_some(), "Not a numeric type: {}", name);
+    (floating_ty, true)
 }
 
 // Get dynamic object type.
