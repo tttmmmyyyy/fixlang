@@ -2239,6 +2239,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                         .build_call(trav, &args, "call_traverser_of_unboxed")
                         .unwrap();
                 }
+                // A fully unboxed type holds no reference anywhere in it, so `create_traverser`
+                // declines it and there is nothing here to traverse.
                 None => {}
             }
         }

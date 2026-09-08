@@ -2615,6 +2615,8 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
                     if !subelement_names.is_empty() {
                         subelement_names.remove(0)
                     } else {
+                        // A closure's captured values are declared nowhere and so carry no names,
+                        // which leaves each of them presented to a debugger by its type.
                         format!("<subelement of type {}>", ty.to_string())
                     }
                 }
