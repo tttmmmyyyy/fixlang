@@ -14,6 +14,7 @@ use crate::constants::{
     U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::generator::Generator;
+use crate::object::int_type_of_bits;
 use inkwell::attributes::AttributeLoc;
 use inkwell::context::Context;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
@@ -167,9 +168,7 @@ impl TyCon {
     /// `()` is C's `void`, which carries no value, so it maps to `None`.
     pub fn get_c_type<'c>(self: &TyCon, ctx: &'c Context) -> Option<BasicTypeEnum<'c>> {
         Some(match self.c_type_shape()? {
-            CTypeShape::Integer { bits, .. } => {
-                ctx.custom_width_int_type(bits).as_basic_type_enum()
-            }
+            CTypeShape::Integer { bits, .. } => int_type_of_bits(ctx, bits).as_basic_type_enum(),
             CTypeShape::Float32 => ctx.f32_type().as_basic_type_enum(),
             CTypeShape::Float64 => ctx.f64_type().as_basic_type_enum(),
             CTypeShape::Pointer => ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum(),
@@ -402,7 +401,7 @@ pub fn promote_through_ellipsis<'c, 'm>(
             extension: Some(extension),
             ..
         } => {
-            let unit_ty = gc.context.custom_width_int_type(C_INTEGER_UNIT_BITS);
+            let unit_ty = int_type_of_bits(gc.context, C_INTEGER_UNIT_BITS);
             let val = val.into_int_value();
             let builder = gc.builder();
             match extension {

@@ -519,17 +519,13 @@ fn allocation_names_of(body: &str) -> Vec<&str> {
         .collect()
 }
 
-/// The pointer a `llvm.lifetime` marker bounds: the last argument of the call it is written as.
+/// The pointer a `llvm.lifetime` marker bounds, which is the only argument of the call it is
+/// written as.
 fn lifetime_marker_pointer(line: &str) -> &str {
-    let arguments = line
-        .rsplit_once('(')
+    line.rsplit_once('(')
         .expect("a call writes its arguments in parentheses")
         .1
-        .trim_end_matches(')');
-    arguments
-        .rsplit_once(", ")
-        .expect("a lifetime marker takes a size and a pointer")
-        .1
+        .trim_end_matches(')')
         .strip_prefix("ptr ")
         .expect("a lifetime marker takes a pointer")
 }

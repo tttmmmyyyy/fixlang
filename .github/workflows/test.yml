@@ -24,15 +24,15 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+            LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-Linux-X64.tar.xz"
             mkdir -p llvm
             wget -q "$LLVM_URL" -O llvm.tar.xz
             tar -xf llvm.tar.xz -C llvm --strip-components=1
             LLVM_PATH="${GITHUB_WORKSPACE}/llvm"
-            echo "LLVM_SYS_170_PREFIX=$LLVM_PATH" >> $GITHUB_ENV
+            echo "LLVM_SYS_221_PREFIX=$LLVM_PATH" >> $GITHUB_ENV
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            brew install llvm@17
-            echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)" >> $GITHUB_ENV
+            brew install llvm@22
+            echo "LLVM_SYS_221_PREFIX=$(brew --prefix llvm@22)" >> $GITHUB_ENV
           fi
 
       - name: Install dependencies
@@ -79,11 +79,11 @@ jobs:
       - name: Install LLVM
         shell: bash
         run: |
-          LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+          LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-Linux-X64.tar.xz"
           mkdir -p llvm
           wget -q "$LLVM_URL" -O llvm.tar.xz
           tar -xf llvm.tar.xz -C llvm --strip-components=1
-          echo "LLVM_SYS_170_PREFIX=${GITHUB_WORKSPACE}/llvm" >> $GITHUB_ENV
+          echo "LLVM_SYS_221_PREFIX=${GITHUB_WORKSPACE}/llvm" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
