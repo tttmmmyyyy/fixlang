@@ -39,19 +39,17 @@ use crate::constants::{
 use crate::error::Errors;
 use crate::fixstd::builtin::{
     expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,
-    integral_ty_range, integral_ty_range_with_bit_patterns, make_f64_ty, make_i64_ty,
-    make_io_tycon, make_numeric_ty, make_string_lit, make_tuple_name_abs, make_u8_ty,
-    ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME,
-    EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_NAME,
-    LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME, LESS_THAN_TRAIT_NAME,
-    MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME, NEGATE_TRAIT_NEGATE_NAME,
-    NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME,
-    SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME,
+    integral_literal_value, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
+    make_string_lit, make_tuple_name_abs, make_u8_ty, ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME,
+    DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME, EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME,
+    LESS_THAN_OR_EQUAL_TO_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME,
+    LESS_THAN_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME,
+    NEGATE_TRAIT_NEGATE_NAME, NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME,
+    REMAINDER_TRAIT_REMAINDER_NAME, SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME,
 };
 use crate::misc::{make_map, save_temporary_source, to_absolute_path, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use either::Either;
-use num_bigint::BigInt;
 use pest::error::{Error, ErrorVariant, InputLocation};
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
@@ -1123,7 +1121,7 @@ fn parse_export_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ExportSta
     let fix_value_name = relative_path.join_under(&ctx.namespace);
     let c_function_name = pairs.next().unwrap().as_str().to_string();
     let mut stmt = ExportStatement::new(fix_value_name, c_function_name, Some(span));
-    stmt.value_name_src = name_span;
+    stmt.value_name_src = Some(name_span);
     stmt
 }
 
@@ -1146,7 +1144,7 @@ fn parse_deprecated_statement(
     let (message, _) = parse_string_lit_content(pairs.next().unwrap(), ctx)?;
     Ok(DeprecationStatement {
         target_path,
-        target_name_src: name_span,
+        target_name_src: Some(name_span),
         origin_namespace: ctx.namespace.clone(),
         message,
         src: Some(span),
@@ -2281,18 +2279,12 @@ fn parse_expr_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
 /// Parses a `fullname` rule into the full name it writes, together with the span of its trailing
 /// `name` token alone, which covers the bare name and leaves the namespace prefix outside it. That
 /// span is what a rename or a find-references over such a name works with.
-fn parse_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) -> (FullName, Option<Span>) {
+fn parse_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) -> (FullName, Span) {
     assert_eq!(pair.as_rule(), Rule::fullname);
-    let name_span = pair
-        .clone()
-        .into_inner()
-        .last()
-        .and_then(|last| match last.as_rule() {
-            Rule::name | Rule::capital_name | Rule::number_name => {
-                Some(Span::from_pair(&ctx.source, &last))
-            }
-            _ => None,
-        });
+    // The rule `fullname` ends with its `name`, so the last inner pair is that name.
+    let name_pair = pair.clone().into_inner().last().unwrap();
+    assert_eq!(name_pair.as_rule(), Rule::name);
+    let name_span = Span::from_pair(&ctx.source, &name_pair);
     (parse_fullname_or_capital_fullname(pair, ctx), name_span)
 }
 
@@ -2346,7 +2338,11 @@ fn parse_fullname_or_capital_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) 
         }
     }
     if fullname.is_absolute() && !fullname.namespace.names.is_empty() {
-        debug_assert_eq!(path_spans.len(), fullname.namespace.names.len() + 1);
+        assert_eq!(
+            path_spans.len(),
+            fullname.namespace.names.len() + 1,
+            "an absolute name carries one span per namespace it names and one for the name itself"
+        );
         ctx.abs_path_uses.push((fullname.clone(), path_spans));
     }
     fullname
@@ -2699,11 +2695,9 @@ fn parse_ffi_param_tys(
 }
 
 /// Parses a number literal. A `_`-suffix such as `_U8` gives the literal's type; without one, a
-/// literal containing a decimal point is `F64` and a literal without one is `I64`. A decimal or
-/// octal integer literal must lie in the range of that type; a hexadecimal or binary one may fill
-/// its bit width, so `0b11111111_I8` is `-1`. A floating point literal must lie in the range of
-/// its type as well, and takes the value of that type nearest to what is written, so
-/// `1.0e-50_F32` is `0.0_F32`.
+/// literal containing a decimal point is `F64` and a literal without one is `I64`. The value the
+/// literal takes at that type, and the report where the type does not hold it, come from
+/// `integral_literal_value` and `floating_literal_value`.
 fn parse_expr_number_lit(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2727,7 +2721,7 @@ fn parse_expr_number_lit(
                     &[&Some(span)],
                 ));
             }
-            (ty.unwrap(), ty_name)
+            (ty, ty_name)
         }
         None => {
             // Type of literal is implicit.
@@ -2739,124 +2733,12 @@ fn parse_expr_number_lit(
         }
     };
     let ty = ty.set_source(Some(span.clone()));
-    if is_float {
-        // `number_lit_body_dec` admits digits, one decimal point and an optional exponent, which
-        // read as a floating point number at either width.
-        let val = floating_literal_value(ty_name, raw);
-        // A literal larger than the widest finite value of its type rounds to an infinity. Every
-        // value a literal spells is finite, so such a literal is out of range.
-        if !val.is_finite() {
-            return Err(Errors::from_msg_srcs(
-                format!(
-                    "The value of a floating point literal `{}` is out of range of `{}`.",
-                    raw, ty_name
-                ),
-                &[&Some(span)],
-            ));
-        }
-        Ok(expr_float_lit(val, ty, Some(span)))
+    let expr = if is_float {
+        floating_literal_value(ty_name, raw).map(|val| expr_float_lit(val, ty, Some(span.clone())))
     } else {
-        // Integral literal
-        let opt_val_radix = parse_integer_literal_string(raw);
-        if opt_val_radix.is_none() {
-            return Err(Errors::from_msg_srcs(
-                format!("A literal string `{}` cannot be parsed as an integer.", raw),
-                &[&Some(span)],
-            ));
-        }
-        let (val, radix) = opt_val_radix.unwrap();
-
-        // Check size.
-        // A hexadecimal or binary literal writes a bit pattern, so it reaches the largest value the
-        // width of its type holds. At the low end every literal stops at the minimum of its type.
-        let writes_a_bit_pattern = radix == 16 || radix == 2;
-        let (min, max) = if writes_a_bit_pattern {
-            integral_ty_range_with_bit_patterns(ty_name)
-        } else {
-            integral_ty_range(ty_name)
-        };
-        if !(min <= val && val <= max) {
-            let reason = if writes_a_bit_pattern && val > max {
-                "does not fit in the width of"
-            } else {
-                "is out of range of"
-            };
-            return Err(Errors::from_msg_srcs(
-                format!(
-                    "The value of an integer literal `{}` {} `{}`.",
-                    raw, reason, ty_name
-                ),
-                &[&Some(span)],
-            ));
-        }
-        let val = i128::try_from(&val).unwrap();
-        Ok(expr_int_lit(val as u64, ty, Some(span)))
-    }
-}
-
-/// Read an integer literal, written in any of the four bases with an optional sign, and return
-/// its value and the base it is written in. The `e` of a decimal literal multiplies it by that
-/// power of ten, and a negative exponent leaves no integer, so it gives `None`.
-///
-/// # Examples
-/// `parse_integer_literal_string("-0xff")` is `Some((-255, 16))`, and `"123e4"` is
-/// `Some((1230000, 10))`.
-fn parse_integer_literal_string(raw: &str) -> Option<(BigInt, usize)> {
-    if raw.len() == 0 {
-        return None;
-    }
-    for (prefix, radix) in [("0x", 16), ("0o", 8), ("0b", 2)] {
-        if let Some((digits, is_negative)) = strip_sign_and_radix_prefix(raw, prefix) {
-            let val = BigInt::parse_bytes(digits.as_bytes(), radix as u32)?;
-            return Some((if is_negative { -val } else { val }, radix));
-        }
-    }
-    let num_and_exp = raw.split('e').collect::<Vec<_>>();
-    if num_and_exp.len() > 2 {
-        return None;
-    }
-    if num_and_exp.len() == 1 {
-        // 'e' is not contained.
-        return BigInt::parse_bytes(raw.as_bytes(), 10).map(|x| (x, 10));
-    }
-    assert_eq!(num_and_exp.len(), 2);
-    let num = BigInt::parse_bytes(num_and_exp[0].as_bytes(), 10);
-    if num.is_none() {
-        return None;
-    }
-    let num = num.unwrap();
-    let exp = BigInt::parse_bytes(num_and_exp[1].as_bytes(), 10);
-    if exp.is_none() {
-        return None;
-    }
-    let exp = exp.unwrap();
-    if exp < BigInt::from(0 as i32) {
-        // Negative exponent is not allowed in integral literal.
-        return None;
-    }
-    // Return num * 10^exp.
-    let mut val = num;
-    let mut i = BigInt::from(0);
-    while i < exp {
-        val *= 10;
-        i += 1;
-    }
-    Some((val, 10))
-}
-
-/// The digits `raw` writes behind `prefix`, which a minus sign may precede, and whether that sign
-/// is there. Gives `None` where `raw` carries another prefix.
-///
-/// # Examples
-/// `strip_sign_and_radix_prefix("-0xff", "0x")` is `Some(("ff", true))`, and `strip_sign_and_radix_prefix("12", "0x")`
-/// is `None`.
-fn strip_sign_and_radix_prefix<'a>(raw: &'a str, prefix: &str) -> Option<(&'a str, bool)> {
-    if let Some(digits) = raw.strip_prefix(prefix) {
-        return Some((digits, false));
-    }
-    raw.strip_prefix('-')
-        .and_then(|after_sign| after_sign.strip_prefix(prefix))
-        .map(|digits| (digits, true))
+        integral_literal_value(ty_name, raw).map(|val| expr_int_lit(val, ty, Some(span.clone())))
+    };
+    expr.map_err(|msg| Errors::from_msg_srcs(msg, &[&Some(span)]))
 }
 
 fn parse_expr_nullptr_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {

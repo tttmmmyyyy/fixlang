@@ -628,44 +628,146 @@ pub fn make_floating_ty(name: &str) -> Option<Arc<TypeNode>> {
 }
 
 /// The value the floating point literal `raw` takes when it is written with the type of that
-/// name, read at the width of that type and widened to `f64`.
+/// name, read at the width of that type and widened to `f64`. Gives the report to make where the
+/// type holds no finite value that large.
 ///
 /// A decimal rounded to `F64` and then to `F32` can land one step away from the same decimal
 /// rounded to `F32`, so an `F32` literal is read as an `f32`. Widening it back to `f64` is exact,
 /// so the value carries the `F32` literal without loss.
 ///
-/// A literal larger than the widest finite value of its type reads as an infinity.
-///
-/// Panics where `name` is neither `F32` nor `F64`, or where `raw` does not read as a floating
-/// point number.
+/// Panics where `name` is neither `F32` nor `F64`.
 ///
 /// # Examples
-/// `floating_literal_value(F32_NAME, "0.1")` is `0.10000000149011612`, and
-/// `floating_literal_value(F64_NAME, "0.1")` is `0.1`.
-pub fn floating_literal_value(name: &str, raw: &str) -> f64 {
-    if name == F32_NAME {
+/// `floating_literal_value(F32_NAME, "0.1")` is `Ok(0.10000000149011612)`, and
+/// `floating_literal_value(F32_NAME, "3.5e38")` is an `Err`.
+pub fn floating_literal_value(name: &str, raw: &str) -> Result<f64, String> {
+    // `number_lit_body_dec` admits digits, one decimal point and an optional exponent, which read
+    // as a floating point number at either width.
+    let val = if name == F32_NAME {
         raw.parse::<f32>().unwrap() as f64
     } else if name == F64_NAME {
         raw.parse::<f64>().unwrap()
     } else {
         panic!("Not a floating point type: {}", name);
+    };
+    // A literal larger than the widest finite value of its type rounds to an infinity. Every value
+    // a literal spells is finite, so such a literal is out of range.
+    if !val.is_finite() {
+        return Err(format!(
+            "The value of a floating point literal `{}` is out of range of `{}`.",
+            raw, name
+        ));
     }
+    Ok(val)
+}
+
+/// The value the integer literal `raw` takes when it is written with the integral type of that
+/// name, as the bits of that type widened to a `u64`. Gives the report to make where `raw` names
+/// no integer, or names one the type does not hold.
+///
+/// Panics where `name` is not an integral type.
+///
+/// # Examples
+/// `integral_literal_value(I8_NAME, "12")` is `Ok(12)`, and `integral_literal_value(I8_NAME,
+/// "256")` is an `Err`.
+pub fn integral_literal_value(name: &str, raw: &str) -> Result<u64, String> {
+    let Some((val, radix)) = parse_integer_literal_string(raw) else {
+        return Err(format!(
+            "A literal string `{}` cannot be parsed as an integer.",
+            raw
+        ));
+    };
+    // A hexadecimal or binary literal writes a bit pattern, so it reaches the largest value the
+    // width of its type holds. At the low end every literal stops at the minimum of its type.
+    let writes_a_bit_pattern = radix == 16 || radix == 2;
+    let (min, max) = if writes_a_bit_pattern {
+        integral_ty_range_with_bit_patterns(name)
+    } else {
+        integral_ty_range(name)
+    };
+    if !(min <= val && val <= max) {
+        let reason = if writes_a_bit_pattern && val > max {
+            "does not fit in the width of"
+        } else {
+            "is out of range of"
+        };
+        return Err(format!(
+            "The value of an integer literal `{}` {} `{}`.",
+            raw, reason, name
+        ));
+    }
+    Ok(i128::try_from(&val).unwrap() as u64)
+}
+
+/// Read an integer literal, written in any of the four bases with an optional sign, and return
+/// its value and the base it is written in. The `e` of a decimal literal multiplies it by that
+/// power of ten, and a negative exponent leaves no integer, so it gives `None`.
+///
+/// # Examples
+/// `parse_integer_literal_string("-0xff")` is `Some((-255, 16))`, and `"123e4"` is
+/// `Some((1230000, 10))`.
+fn parse_integer_literal_string(raw: &str) -> Option<(BigInt, usize)> {
+    if raw.len() == 0 {
+        return None;
+    }
+    for (prefix, radix) in [("0x", 16), ("0o", 8), ("0b", 2)] {
+        if let Some((digits, is_negative)) = strip_sign_and_radix_prefix(raw, prefix) {
+            let val = BigInt::parse_bytes(digits.as_bytes(), radix as u32)?;
+            return Some((if is_negative { -val } else { val }, radix));
+        }
+    }
+    let num_and_exp = raw.split('e').collect::<Vec<_>>();
+    if num_and_exp.len() > 2 {
+        return None;
+    }
+    if num_and_exp.len() == 1 {
+        // 'e' is not contained.
+        return BigInt::parse_bytes(raw.as_bytes(), 10).map(|x| (x, 10));
+    }
+    assert_eq!(num_and_exp.len(), 2);
+    let num = BigInt::parse_bytes(num_and_exp[0].as_bytes(), 10)?;
+    let exp = BigInt::parse_bytes(num_and_exp[1].as_bytes(), 10)?;
+    if exp < BigInt::from(0 as i32) {
+        // Negative exponent is not allowed in integral literal.
+        return None;
+    }
+    // Return num * 10^exp.
+    let mut val = num;
+    let mut i = BigInt::from(0);
+    while i < exp {
+        val *= 10;
+        i += 1;
+    }
+    Some((val, 10))
+}
+
+/// The digits `raw` writes behind `prefix`, which a minus sign may precede, and whether that sign
+/// is there. Gives `None` where `raw` carries another prefix.
+///
+/// # Examples
+/// `strip_sign_and_radix_prefix("-0xff", "0x")` is `Some(("ff", true))`, and
+/// `strip_sign_and_radix_prefix("12", "0x")` is `None`.
+fn strip_sign_and_radix_prefix<'a>(raw: &'a str, prefix: &str) -> Option<(&'a str, bool)> {
+    if let Some(digits) = raw.strip_prefix(prefix) {
+        return Some((digits, false));
+    }
+    raw.strip_prefix('-')
+        .and_then(|after_sign| after_sign.strip_prefix(prefix))
+        .map(|digits| (digits, true))
 }
 
 /// The numeric type of that name, and whether it is a floating point type.
 ///
-/// # Returns
-/// The type is `None` where the name is not a numeric type; the flag then says whether the name
-/// would have been a floating point one, so a caller comparing it against the form of a literal
-/// reads `false`.
-pub fn make_numeric_ty(name: &str) -> (Option<Arc<TypeNode>>, bool) {
-    let integral_ty = make_integral_ty(name);
-    if integral_ty.is_some() {
+/// Panics where the name is not one of the eight integral types or the two floating point ones.
+pub fn make_numeric_ty(name: &str) -> (Arc<TypeNode>, bool) {
+    if let Some(integral_ty) = make_integral_ty(name) {
         return (integral_ty, false);
     }
     let floating_ty = make_floating_ty(name);
-    assert!(floating_ty.is_some(), "Not a numeric type: {}", name);
-    (floating_ty, true)
+    match floating_ty {
+        Some(floating_ty) => (floating_ty, true),
+        None => panic!("Not a numeric type: {}", name),
+    }
 }
 
 /// The type `Std::#DynamicObject`, the boxed object a closure holds its captured values in.
