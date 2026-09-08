@@ -34,7 +34,7 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_array_storage_shift, build_capacity_check, build_elems_bytes,
+    alloc_array_storage, build_array_storage_alloc_offset, build_capacity_check, build_elems_bytes,
     build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned, create_obj,
     get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
     write_alloc_offset, CapacityCheck, ObjectFieldType,
@@ -1084,7 +1084,6 @@ pub fn make_byte_array_copy<'c, 'm>(
         .unwrap();
     gc.builder()
         .build_memcpy(dst, 1, buf, 1, len_ptr_int)
-        .ok()
         .unwrap();
 
     array
@@ -2044,7 +2043,9 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
     }
 }
 
-// Make an empty array.
+/// An array of size 0 whose storage holds room for `cap` elements, left uninitialized. The caller
+/// must ensure `cap >= 0`.
+/// Type: I64 -> Array a
 // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
     const CAPACITY_NAME: &str = "cap";
@@ -2068,6 +2069,8 @@ pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::_unsafe_get_bounds_unchecked`, which reads the element at an
+/// index out of an array and retains it, leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeGetBoundsUnchecked {
     arr_name: FullName,
@@ -2152,7 +2155,9 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
     }
 }
 
-// Gets a value from an array, without bounds checking
+/// The element at `idx` of an array, retained for the caller, with no bounds check. The array is
+/// borrowed. The caller must ensure `0 <= idx < size`.
+/// Type: I64 -> Array a -> a
 pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
@@ -2188,6 +2193,8 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::_unsafe_truncate_bounds_unchecked`, which lowers an array's
+/// length, releasing the elements it drops.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayTruncateBoundsUnchecked {
     arr_name: FullName,
@@ -2304,10 +2311,9 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
     }
 }
 
-// Truncates an array to `new_len` elements, releasing the dropped tail, with an internal
-// clone-if-shared and no size check.
-// The caller must ensure `0 <= new_len <= the array's size`.
-// Type: I64 -> Array a -> Array a
+/// Truncates an array to `new_len` elements, releasing the dropped tail, with an internal
+/// clone-if-shared and no size check. The caller must ensure `0 <= new_len <= the array's size`.
+/// Type: I64 -> Array a -> Array a
 // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     const LEN_NAME: &str = "new_len";
@@ -2594,7 +2600,7 @@ fn realloc_array<'c, 'm>(
         .unwrap_basic()
         .into_pointer_value();
     let new_alloc_offset = {
-        let aligned_alloc_offset = build_array_storage_shift(gc, struct_type, new_base);
+        let aligned_alloc_offset = build_array_storage_alloc_offset(gc, struct_type, new_base);
         gc.builder()
             .build_select(
                 is_aligned,
@@ -2649,7 +2655,6 @@ fn realloc_array<'c, 'm>(
         .unwrap();
     gc.builder()
         .build_memmove(new_ptr, 1, old_ptr, 1, live_bytes)
-        .ok()
         .unwrap();
     gc.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -2903,7 +2908,6 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         let n_bytes = build_elems_bytes(gc, &elem_ty, src_len, "append_n_bytes");
         gc.builder()
             .build_memcpy(dst_write, 1, src_buf, 1, n_bytes)
-            .ok()
             .unwrap();
         let zero = gc.context.i64_type().const_zero();
         let src_emptied = src.clone().insert_field(gc, ARRAY_SIZE_IDX, zero);
@@ -3337,10 +3341,11 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
     }
 }
 
-// Grow the length of an array over uninitialized slots, with an internal clone-if-shared and no
-// validation of the given length. The caller must ensure `new_len >= size` and `new_len <=
-// capacity`, and fills the new slots before they are read; the element type must contain no boxed
-// value.
+/// Grows the length of an array over uninitialized slots, with an internal clone-if-shared and no
+/// validation of the given length. The caller must ensure `new_len >= size` and `new_len <=
+/// capacity`, and fills the new slots before they are read; the element type must contain no boxed
+/// value.
+/// Type: I64 -> Array a -> Array a
 // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "array";
@@ -3508,16 +3513,19 @@ fn make_array_unique_with_hole<'c, 'm>(
     )
 }
 
+/// The code generator for `Array::set` and `Array::unsafe_set_bounds_unchecked`, which store a
+/// value into one slot of an array, releasing the element that slot held.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArraySetBody {
     array_name: FullName,
     idx_name: FullName,
     value_name: FullName,
-    // When true, clone the array first if it is shared, so the write lands in a uniquely owned
-    // array. Set false only where the array is statically known to be unique.
+    /// When true, clone the array first if it is shared, so the write lands in a uniquely owned
+    /// array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
-    // When true, panic if `idx` is out of range (unless `--no-runtime-check`). `set` sets this;
-    // `unsafe_set_bounds_unchecked` clears it. Fixed at registration, not folded.
+    /// When true, panic where `idx` is out of range, unless the build disables runtime checks. It is
+    /// fixed where the primitive is registered: `Array::set` sets it and
+    /// `Array::unsafe_set_bounds_unchecked` clears it.
     bounds_checked: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -3682,25 +3690,35 @@ fn set_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// `Array::set` built-in function.
+/// Stores `value` at `idx` of an array, cloning the array first where it is shared, and releasing
+/// the element the slot held. Panics where `idx` is outside `[0, size)`, unless the build disables
+/// runtime checks.
+/// Type: I64 -> a -> Array a -> Array a
 pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     set_array_common(true)
 }
 
-// `Array::unsafe_set_bounds_unchecked` built-in function.
+/// Stores `value` at `idx` of an array, cloning the array first where it is shared, and releasing
+/// the element the slot held, with no bounds check. The caller must ensure `0 <= idx < size`.
+/// Type: I64 -> a -> Array a -> Array a
 pub fn unsafe_set_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     set_array_common(false)
 }
 
+/// The code generator for `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which exchange
+/// the elements at two slots of an array. The elements only change places, so their reference
+/// counts are unchanged.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArraySwapBody {
     array_name: FullName,
     i_name: FullName,
     j_name: FullName,
-    // When true, clone the array first if it is shared, so the swap writes into a uniquely
-    // owned array. Set false only where the array is statically known to be unique.
+    /// When true, clone the array first if it is shared, so the swap writes into a uniquely
+    /// owned array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
-    // When true, panic if `i` or `j` is out of range.
+    /// When true, panic where `i` or `j` is out of range, unless the build disables runtime checks.
+    /// It is fixed where the primitive is registered: `Array::swap` sets it and
+    /// `Array::unsafe_swap_bounds_unchecked` clears it.
     bounds_checked: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -3815,6 +3833,8 @@ impl LLVMGen for InlineLLVMArraySwapBody {
     }
 }
 
+/// The body and type scheme of `Array::swap`, shared by the bounds-checked and the unchecked
+/// version. `bounds_checked` selects which of the two is built.
 // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let body = expr_llvm(
@@ -3851,12 +3871,17 @@ fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-// `Array::swap` built-in function.
+/// Exchanges the elements at `i` and `j` of an array, cloning the array first where it is shared.
+/// The two elements only change places, so their reference counts are unchanged. Panics where
+/// either index is outside `[0, size)`, unless the build disables runtime checks.
+/// Type: I64 -> I64 -> Array a -> Array a
 pub fn swap_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     swap_array_common(true)
 }
 
-// `Array::unsafe_swap_bounds_unchecked` built-in function.
+/// Exchanges the elements at `i` and `j` of an array, cloning the array first where it is shared,
+/// with no bounds check. The caller must ensure both indices are in `[0, size)`.
+/// Type: I64 -> I64 -> Array a -> Array a
 pub fn swap_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     swap_array_common(false)
 }
@@ -3866,8 +3891,12 @@ pub fn swap_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// punched array.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayPunchBody {
+    /// When true, clone the array first if it is shared, so the element is moved out of a uniquely
+    /// owned array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
+    /// The local binding holding the index of the element to move out.
     idx_name: FullName,
+    /// The local binding holding the array to punch.
     arr_name: FullName,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -4021,9 +4050,14 @@ fn punched_out_locality(
     })
 }
 
-// Moves the element at `idx` out of an array (without bounds checking), leaving a hole, and
-// returns the punched array together with the moved-out element.
-// Type: I64 -> Array a -> (PunchedArray a, a)
+/// Moves the element at `idx` out of an array, leaving that slot as the hole, and returns the
+/// punched array together with the moved-out element, with no bounds check. The caller must ensure
+/// `0 <= idx < size`.
+/// Type: I64 -> Array a -> (PunchedArray a, a)
+///
+/// # Arguments
+/// * `force_unique` - when true, clone the array first where it is shared; when false, take the
+///   array to be unique already.
 pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
@@ -4056,10 +4090,17 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The body of the array plug: the element bound to `elem_name` is written into the hole of the
+/// punched array bound to `punched_name`, giving back the completed array.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMPunchedArrayPlugBody {
+    /// When true, clone the punched array first if it is shared, skipping the hole, so the write
+    /// lands in a uniquely owned array. Set false only where the array is statically known to be
+    /// unique.
     pub(crate) force_unique: bool,
+    /// The local binding holding the element to write into the hole.
     elem_name: FullName,
+    /// The local binding holding the punched array.
     punched_name: FullName,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -4157,8 +4198,12 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
     }
 }
 
-// Writes an element back into a punched array's hole, returning the completed array.
-// Type: a -> PunchedArray a -> Array a
+/// Writes an element back into a punched array's hole, returning the completed array.
+/// Type: a -> PunchedArray a -> Array a
+///
+/// # Arguments
+/// * `force_unique` - when true, clone the punched array first where it is shared, skipping the
+///   hole; when false, take the array to be unique already.
 // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const ELEM_NAME: &str = "elem";
@@ -4191,6 +4236,8 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::_check_range`, which passes an index through after panicking
+/// where it falls outside `[0, size)`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayCheckRange {
     idx_name: FullName,
@@ -4234,7 +4281,9 @@ impl LLVMGen for InlineLLVMArrayCheckRange {
     }
 }
 
-// _check_range : I64 -> I64 -> I64
+/// Evaluates to `idx`, panicking first where it falls outside `[0, size)`. The check is emitted
+/// only where the build enables runtime checks.
+/// Type: I64 -> I64 -> I64
 pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const SIZE_NAME: &str = "size";
@@ -4259,6 +4308,8 @@ pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::_check_size`, which passes a size through after panicking where
+/// it is negative.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayCheckSize {
     size_name: FullName,
@@ -4296,7 +4347,9 @@ impl LLVMGen for InlineLLVMArrayCheckSize {
     }
 }
 
-// _check_size : I64 -> I64
+/// Evaluates to `size`, panicking first where it is negative. The check is emitted only where the
+/// build enables runtime checks.
+/// Type: I64 -> I64
 pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     const SIZE_NAME: &str = "size";
 
@@ -4314,6 +4367,8 @@ pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::_get_ptr`, which yields a pointer to the first element of an
+/// array's buffer, leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayGetPtrBody {
     arr_name: FullName,
@@ -4365,7 +4420,9 @@ impl LLVMGen for InlineLLVMArrayGetPtrBody {
     }
 }
 
-// `get_ptr` function for Array.
+/// A pointer to the first element of an array's buffer. The array is borrowed, so the pointer is
+/// valid only while the array is alive.
+/// Type: Array a -> Ptr
 pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
     const ELEM_TYPE: &str = "a";
@@ -4393,6 +4450,8 @@ pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::@size`, which reads an array's length out of the array value,
+/// leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayGetSizeBody {
     arr_name: FullName,
@@ -4435,7 +4494,8 @@ impl LLVMGen for InlineLLVMArrayGetSizeBody {
     }
 }
 
-// `get_size` built-in function for Array.
+/// The number of elements an array holds, which never exceeds its capacity.
+/// Type: Array a -> I64
 pub fn array_get_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
@@ -4455,6 +4515,8 @@ pub fn array_get_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The code generator for `Array::@capacity`, which reads an array's capacity out of the array
+/// value, leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayGetCapacityBody {
     arr_name: FullName,
@@ -4497,7 +4559,8 @@ impl LLVMGen for InlineLLVMArrayGetCapacityBody {
     }
 }
 
-// `Array::get_capacity : Array a -> I64` built-in function.
+/// The number of elements an array's storage has room for.
+/// Type: Array a -> I64
 pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
@@ -6371,8 +6434,6 @@ pub fn struct_set(
         None,
     );
     let ty = type_fun(field.ty.clone(), type_fun(str_ty.clone(), str_ty.clone()));
-    let mut tvs = vec![];
-    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -6530,8 +6591,6 @@ pub fn union_new(
     let union_ty = union.applied_type();
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(field_ty, union_ty);
-    let mut tvs = vec![];
-    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -6556,8 +6615,6 @@ pub fn union_as(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
     let union_ty = union.applied_type();
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(union_ty, field_ty);
-    let mut tvs = vec![];
-    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -6736,8 +6793,6 @@ pub fn union_is(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
     );
     let union_ty = union.applied_type();
     let ty = type_fun(union_ty, make_bool_ty());
-    let mut tvs = vec![];
-    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -6983,8 +7038,6 @@ pub fn union_mod_function(
         type_fun(field_ty.clone(), field_ty),
         type_fun(union_ty.clone(), union_ty),
     );
-    let mut tvs = vec![];
-    ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }

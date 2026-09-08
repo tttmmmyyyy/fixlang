@@ -7,7 +7,7 @@ use crate::constants::{
     BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
     DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
     DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, MAX_UNION_VARIANTS,
-    PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, STD_NAME, STORAGE_BUF_IDX,
+    PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, REFCNT_BITS, STD_NAME, STORAGE_BUF_IDX,
     TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
     UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
 };
@@ -72,11 +72,8 @@ pub enum ObjectFieldType {
     UnionBuf(Vec<Arc<TypeNode>>),
     /// The integer saying which variant a union carries.
     UnionTag,
-    /// The tail of an `Array` object: a capacity slot followed by a flexible buffer of elements of
-    /// the given type.
-    Array(Arc<TypeNode>),
     /// The raw element buffer of an `#ArrayStorage` object: a flexible array member of the element
-    /// type, like `Array` but with no length. It is reference-count-inert — the owning `Array`
+    /// type, carrying no length of its own. It is reference-count-inert — the owning `Array`
     /// value's traverser drives element lifetime — so it is a no-op in retain / traverse and only
     /// contributes its element sizing to the object layout.
     ArrayStorageBuf(Arc<TypeNode>),
@@ -97,7 +94,7 @@ fn union_buf_type<'c, 'm>(
         // preferred alignment of a small or empty aggregate is 8, which would over-pad the union.
         max_align = max_align.max(gc.abi_alignment(&embedded_ty));
     }
-    let max_align_int = match max_align {
+    let max_align_int_ty = match max_align {
         1 => gc.context.i8_type(),
         2 => gc.context.i16_type(),
         4 => gc.context.i32_type(),
@@ -113,7 +110,7 @@ fn union_buf_type<'c, 'm>(
         num_of_ints,
         max_align,
     );
-    max_align_int.array_type(num_of_ints as u32).into()
+    max_align_int_ty.array_type(num_of_ints as u32).into()
 }
 
 // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -138,7 +135,6 @@ impl ObjectFieldType {
             ObjectFieldType::U64 => gc.context.i64_type().into(),
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
-            ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
             ObjectFieldType::ArrayStorageBuf(ty) => gc.embedded_type_of(ty),
             ObjectFieldType::UnionTag => union_tag_type(gc.context).into(),
             ObjectFieldType::UnionBuf(field_tys) => union_buf_type(gc, field_tys),
@@ -262,9 +258,6 @@ impl ObjectFieldType {
                 .create_basic_type("<union tag>", UNION_TAG_BITS as u64, DW_ATE_UNSIGNED, 0)
                 .unwrap()
                 .as_type(),
-            // An array lays its elements out as an `ArrayStorageBuf`, which is the only array
-            // field an object carries.
-            ObjectFieldType::Array(_) => unreachable!(),
             ObjectFieldType::ArrayStorageBuf(elem_ty) => {
                 // The storage buffer's debug type is an array of `DEBUG_ARRAY_ASSUMED_LEN`
                 // elements. `#ArrayStorage`'s own declared size is stretched to cover them in
@@ -940,7 +933,7 @@ impl ObjectFieldType {
     /// The index, among the fields of a union's struct type, of the tag telling which variant the
     /// value holds.
     fn get_union_tag_idx<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> u32 {
-        struct_field_idx(union.is_unbox(gc.type_env())) + UNION_TAG_IDX
+        first_field_idx(union.is_unbox(gc.type_env())) + UNION_TAG_IDX
     }
 
     /// The tag of a union value: the index, among the union's variants, of the variant it holds.
@@ -963,7 +956,7 @@ impl ObjectFieldType {
     /// The index, among the fields of a union's struct type, of the buffer holding the value of the
     /// variant it carries.
     pub fn get_union_buf_idx<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> u32 {
-        struct_field_idx(union.is_unbox(gc.type_env())) + UNION_DATA_IDX
+        first_field_idx(union.is_unbox(gc.type_env())) + UNION_DATA_IDX
     }
 
     /// The contents of a union's payload buffer, still typed as the buffer, which is wide enough for
@@ -1081,7 +1074,7 @@ impl ObjectFieldType {
         struct_obj: &Object<'c>,
         field_idx: u32,
     ) -> Object<'c> {
-        let field_offset = struct_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
+        let field_offset = first_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
         let field_ty = struct_obj.ty.field_types(gc.type_env())[field_idx as usize].clone();
         struct_obj.extract_field_object(gc, field_idx + field_offset, field_ty)
     }
@@ -1095,7 +1088,7 @@ impl ObjectFieldType {
         field_idx: u32,
         field: &Object<'c>,
     ) -> Object<'c> {
-        let field_offset = struct_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
+        let field_offset = first_field_idx(struct_obj.ty.is_unbox(gc.type_env()));
         struct_obj.insert_field_object(gc, field_offset + field_idx, field)
     }
 
@@ -1170,33 +1163,17 @@ impl ObjectType {
     /// such a type before code generation begins.
     pub fn to_struct_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> StructType<'c> {
         let mut fields: Vec<BasicTypeEnum<'c>> = vec![];
-        for (i, field_type) in self.field_types.iter().enumerate() {
+        for field_type in self.field_types.iter() {
             fields.push(field_type.to_basic_type(gc));
-            match field_type {
-                ObjectFieldType::Array(ty) => {
-                    assert_eq!(i, self.field_types.len() - 1); // ArraySize must be the last field.
-                    assert!(!self.is_unbox); // Array has to be boxed.
-
-                    // Add space for one element.
-                    // This is for:
-                    // - to get the pointer to the first element by gep of this struct type.
-                    // - used in implementation of size_of method.
-                    // - in to_debug_type function.
-                    fields.push(gc.embedded_type_of(ty));
-                }
-                _ => {}
-            }
         }
         gc.context.struct_type(&fields, false)
     }
 
     /// The bytes laid out ahead of the element buffer, and the bytes one element takes in it, for an
-    /// object type that ends in such a buffer (`Array`, `#ArrayStorage`).
+    /// object type that ends in such a buffer (`#ArrayStorage`).
     fn element_buffer_layout<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> ElementBufferLayout {
-        // The element buffer is the last field, of `Array` (with a preceding capacity slot) or of
-        // `#ArrayStorage` (right after the control block).
+        // The element buffer is the last field of `#ArrayStorage`, right after the control block.
         let elem_ty = match self.field_types.last().unwrap() {
-            ObjectFieldType::Array(ty) => ty.clone(),
             ObjectFieldType::ArrayStorageBuf(ty) => ty.clone(),
             _ => panic!(
                 "`{}` was given an array capacity, but its layout ends in no element buffer",
@@ -1222,8 +1199,8 @@ impl ObjectType {
     ///
     /// # Arguments
     /// * `array_capacity` - the number of elements the trailing element buffer is to hold, for an
-    ///   object type that ends in one (`Array`, `#ArrayStorage`). For every other object type it is
-    ///   `None` and the size is that of the struct alone.
+    ///   object type that ends in one (`#ArrayStorage`). For every other object type it is `None`
+    ///   and the size is that of the struct alone.
     pub fn size_of<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -1271,18 +1248,16 @@ impl ObjectType {
     }
 }
 
-/// The integer type of the control block field holding an object's reference count. Its width is
-/// what bounds the number of references to one object a program can hold, and `refcnt_di_type`
-/// states that width a second time.
+/// The integer type of the control block field holding an object's reference count.
 pub fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
-    context.i32_type()
+    int_type_of_bits(context, REFCNT_BITS)
 }
 
 /// The debug info type of an object's reference count, which presents it to a debugger session as an
-/// unsigned integer. Its width is the width of `refcnt_type`, stated a second time.
+/// unsigned integer.
 pub fn refcnt_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
     builder
-        .create_basic_type("<refcnt>", 32, DW_ATE_UNSIGNED, 0)
+        .create_basic_type("<refcnt>", REFCNT_BITS as u64, DW_ATE_UNSIGNED, 0)
         .unwrap()
         .as_type()
 }
@@ -1503,7 +1478,7 @@ pub fn lambda_function_type<'c, 'm>(
 /// The index at which a value's own fields begin in its layout: those of a struct, and the tag and
 /// the payload buffer of a union. A boxed value leads with its control block, which pushes them
 /// along by one.
-pub fn struct_field_idx(is_unbox: bool) -> u32 {
+pub fn first_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0
     } else {
@@ -1619,7 +1594,7 @@ pub fn ty_to_object_ty(
                 }
                 assert_eq!(
                     object_ty.field_types.len(),
-                    struct_field_idx(is_unbox) as usize
+                    first_field_idx(is_unbox) as usize
                 );
                 let field_types = ty.field_types(type_env);
                 for (field_idx, field_ty) in field_types.into_iter().enumerate() {
@@ -1785,7 +1760,7 @@ pub fn build_elems_bytes<'c, 'm>(
 /// Where an `#ArrayStorage` object is placed in a block starting at `base`, as a distance from that
 /// base, so that its element buffer starts on `ARRAY_BUF_ALIGNMENT`. The distance is below
 /// `ARRAY_BUF_ALIGNMENT`, which is the slack a block needs to hold an object placed this way.
-pub fn build_array_storage_shift<'c, 'm>(
+pub fn build_array_storage_alloc_offset<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     struct_type: StructType<'c>,
     base: PointerValue<'c>,
@@ -2018,7 +1993,7 @@ fn build_alloc_array_storage<'c, 'm>(
     let alloc_offset = gc
         .builder()
         .build_and(
-            build_array_storage_shift(gc, struct_type, base),
+            build_array_storage_alloc_offset(gc, struct_type, base),
             aligned_mask,
             "alloc_offset@alloc_array_storage",
         )
@@ -2198,14 +2173,6 @@ pub fn create_obj<'c, 'm>(
             ObjectFieldType::F64 => {}
             ObjectFieldType::SubObject(_, _) => {}
             ObjectFieldType::LambdaFunction(_) => {}
-            ObjectFieldType::Array(_) => {
-                // Initialize the capacity of the array.
-                assert_eq!(i, ARRAY_CAP_IDX as usize);
-                let ptr_to_cap = obj.gep_boxed(gc, i as u32);
-                gc.builder()
-                    .build_store(ptr_to_cap, array_capacity.unwrap())
-                    .unwrap();
-            }
             // The storage buffer is left uninitialized; there is no capacity field to set.
             ObjectFieldType::ArrayStorageBuf(_) => {}
             ObjectFieldType::TraverseFunction => {
@@ -2495,10 +2462,6 @@ fn build_traverse<'c, 'm>(
             ObjectFieldType::U64 => {}
             ObjectFieldType::F32 => {}
             ObjectFieldType::F64 => {}
-            // The `is_array` branch of this function walks an array's elements through its
-            // `#ArrayStorage`, whose buffer is an `ArrayStorageBuf`: that is the only array field
-            // an object holds.
-            ObjectFieldType::Array(_) => unreachable!(),
             // Reference-count-inert: the storage buffer has no length, and the owning `Array` value's
             // traverser drives element lifetime. Traversing the storage itself touches no element.
             ObjectFieldType::ArrayStorageBuf(_) => {}
@@ -2615,6 +2578,8 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
                     if !subelement_names.is_empty() {
                         subelement_names.remove(0)
                     } else {
+                        // A closure's captured values are declared nowhere and so carry no names,
+                        // which leaves each of them presented to a debugger by its type.
                         format!("<subelement of type {}>", ty.to_string())
                     }
                 }
@@ -2634,7 +2599,6 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
                 ObjectFieldType::F64 => "<F64 member>".to_string(),
                 ObjectFieldType::UnionBuf(_) => "<union value>".to_string(),
                 ObjectFieldType::UnionTag => "<union tag>".to_string(),
-                ObjectFieldType::Array(_) => "<array>".to_string(),
                 ObjectFieldType::ArrayStorageBuf(_) => "<array elements>".to_string(),
             };
             if ty.is_array() {

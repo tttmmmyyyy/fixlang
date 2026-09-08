@@ -74,6 +74,8 @@ fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
         eprintln!("{}", String::from_utf8_lossy(&output.stderr));
     }
     if !output.status.success() {
+        // A process a signal ends carries no exit code, and `-1` stands for that case: the C
+        // compiler crashed, or the system killed it under memory pressure.
         return Err(Errors::from_msg(format!(
             "Failed to {}: {} exited with code {}.",
             step,

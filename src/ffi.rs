@@ -125,7 +125,7 @@ impl TyCon {
     pub fn c_integer_extension(self: &TyCon) -> Option<CIntegerExtension> {
         match self.c_type_shape()? {
             CTypeShape::Integer { extension, .. } => extension,
-            _ => None,
+            CTypeShape::Float32 | CTypeShape::Float64 | CTypeShape::Pointer => None,
         }
     }
 

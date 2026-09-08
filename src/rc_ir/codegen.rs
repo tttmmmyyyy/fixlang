@@ -795,7 +795,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.builder().position_at_end(store_bb);
             self.store_init_value(init_value_fn, global_var_ptr);
             self.builder()
-                .build_store(init_flag_ptr, self.context.i8_type().const_int(1, false))
+                .build_store(init_flag_ptr, flag_ty.const_int(1, false))
                 .unwrap();
             self.builder().build_unconditional_branch(end_bb).unwrap();
             end_bb

@@ -166,7 +166,7 @@ pub const CONTROL_BLOCK_IDX: u32 = 0;
 /// The index at which a boxed object's own fields begin, after its control block.
 pub const BOXED_TYPE_DATA_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 /// The index of a union's tag among the union's own fields. The fields of a boxed union begin at
-/// `BOXED_TYPE_DATA_IDX`, which `struct_field_idx` adds.
+/// `BOXED_TYPE_DATA_IDX`, which `first_field_idx` adds.
 pub const UNION_TAG_IDX: u32 = 0;
 /// The index of a union's payload buffer among the union's own fields, after the tag.
 pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;
@@ -298,6 +298,9 @@ pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
 // elements; freeing or reallocating the object steps back by it to recover the block. It occupies
 // a byte of the control block's tail padding, so the control block keeps its size.
 pub const CTRL_BLK_ALLOC_OFFSET_IDX: u32 = 2;
+/// The width of the reference count, which bounds the number of references to one object a program
+/// can hold.
+pub const REFCNT_BITS: u32 = 32;
 
 /// The name of the LLVM module a compilation unit's code is generated into, before the unit's hash.
 /// `--emit-llvm` names the file it writes after the module.

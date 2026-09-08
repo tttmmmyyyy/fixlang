@@ -386,8 +386,8 @@ fn test_wide_return_shapes_compute_correctly() {
     boxed : I64 -> Boxy;
     boxed = |n| Boxy { p : n, q : n + 1, r : n + 2, s : n + 3 };
 
-    chk : I64 -> I64;
-    chk = |n| (
+    checksum : I64 -> I64;
+    checksum = |n| (
         let t3 = narrow(n);
         let t4 = wide(n);
         let m = mixed(n);
@@ -423,7 +423,7 @@ fn test_wide_return_shapes_compute_correctly() {
 
     main : IO ();
     main = (
-        let acc = Iterator::range(0, 20).fold(0, |n, acc| acc * 3 + chk(n) + indirect(n) * 97);
+        let acc = Iterator::range(0, 20).fold(0, |n, acc| acc * 3 + checksum(n) + indirect(n) * 97);
         assert_eq(|_|"unexpected result", acc, 710000889699219);;
         pure()
     );
