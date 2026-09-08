@@ -6017,7 +6017,7 @@ pub fn test_hex_oct_bin_lit() {
 /// implies. The literal is compared against the zero of its own kind, which a floating point
 /// literal spells with a decimal point.
 fn program_naming_a_number_literal(literal: &str, ty_name: Option<&str>) -> String {
-    let suffix = ty_name.map_or(String::new(), |ty_name| format!("_{}", ty_name));
+    let ty_suffix = ty_name.map_or(String::new(), |ty_name| format!("_{}", ty_name));
     let zero = if literal.contains('.') { "0.0" } else { "0" };
     format!(
         r#"
@@ -6028,7 +6028,7 @@ fn program_naming_a_number_literal(literal: &str, ty_name: Option<&str>) -> Stri
         pure()
     );
     "#,
-        literal, suffix, zero, suffix
+        literal, ty_suffix, zero, ty_suffix
     )
 }
 
@@ -6124,7 +6124,7 @@ pub fn test_decimal_literal_below_the_minimum_of_its_type_is_reported() {
 /// Verifies the two ends of the range a floating point literal may name: the largest finite value
 /// of its type is accepted, and the value where rounding first reaches an infinity is reported.
 #[test]
-pub fn test_floating_point_literal_out_of_range_is_reported() {
+pub fn test_floating_point_literal_range_ends_at_the_largest_finite_value_of_its_type() {
     for (literal, ty_name) in [
         ("3.4028236e38", "F32"),
         ("-3.4028236e38", "F32"),
@@ -6184,10 +6184,10 @@ pub fn test_f32_literal_takes_the_f32_nearest_what_is_written() {
     test_source(source, Configuration::develop_mode());
 }
 
-/// Verifies that a floating point literal written with no type suffix is ranged against `F64`, the
-/// type such a literal takes, however far past that range it is written.
+/// Verifies that a floating point literal written with no type suffix is checked against the range
+/// of `F64`, the type such a literal takes, however far past that range it is written.
 #[test]
-pub fn test_floating_point_literal_without_a_suffix_is_ranged_against_f64() {
+pub fn test_floating_point_literal_without_a_suffix_is_checked_against_the_range_of_f64() {
     for literal in ["1.0e400", "-1.0e400", "1.0e999999999999999999999999"] {
         test_source_fail(
             &program_naming_a_number_literal(literal, None),
