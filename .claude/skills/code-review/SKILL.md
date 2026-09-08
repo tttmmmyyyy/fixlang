@@ -53,7 +53,7 @@ Only edits that **preserve behavior by construction**, so that untouched code st
 - Deletion of commented-out code.
 - Extraction of a block duplicated within the file into one function, with both call sites moved onto it.
 
-Everything else stays a finding in ring 2: item renames, moves, signature changes, splitting a function, narrowing mutable state, rewriting an algorithm, dropping a defensive branch. Each changes an interface or a behavior, and the change under review carries no test that would catch a mistake there.
+Everything else stays a finding in ring 2: item renames, moves, signature changes, splitting a function, narrowing mutable state, rewriting an algorithm, dropping a defensive branch. Each changes an interface or a behavior, which an aspect applying one convention cannot weigh on its own. The orchestrator settles them afterwards, against the whole suite — see *Act on the findings the suite settles*.
 
 An unused private item outside the hunks is a finding as well, even though deleting it would compile: CLAUDE.md keeps such an item — and the `dead_code` warning it carries — as the reminder that a staged rollout still has a step to go, so the author decides whether it has served its purpose.
 
@@ -140,17 +140,49 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 
    An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several into one commit.**
 6. **Apply `cargo fmt` to the branch under review as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
-7. **Run the neighborhood pass on its own branch.** Skip this step when no aspect reported a ring-2 candidate, or when the branch under review is `main` — in the latter case run the neighborhood passes here, committing each aspect on `main` as `code-review: <what this aspect did> — cleanup near the change`, and go on to the checkpoint step.
+7. **Run the neighborhood pass on its own branch.** Skip this step when no aspect reported a ring-2 candidate and no finding falls to be fixed under *Act on the findings the suite settles* below, or when the branch under review is `main` — in the latter case run the neighborhood passes here, committing each aspect on `main` as `code-review: <what this aspect did> — cleanup near the change`, act on the findings the suite settles in a commit of its own, and go on to the checkpoint step.
 
    Otherwise:
    - Cut the cleanup branch from the branch under review at its current tip: `git switch -c cleanup/<branch-under-review>`. No new worktree is needed; the tree is the one already checked out.
    - For each aspect that reported candidates, in the same order, run it in **`neighborhood` mode**, handing it that list as its starting point.
    - Commit each aspect's edits on their own — `code-review: <what this aspect did> — cleanup near the change` — then `cargo fmt` as a standalone commit, and run the build (and the test suite where the edits could reach behavior).
+   - **Act on the findings the suite settles** — see the section of that name below — and commit those on the cleanup branch too.
    - Push the branch and open a pull request **into the branch under review**, whose body follows the `devdoc` skill: what the cleanups are, which convention each comes from, and why they are behavior-preserving. A pull request whose base is a working branch rather than `main` carries the number of that branch's own pull request in its title (e.g. `レビュー清掃 (#228): ...`), so the pull-request list shows which change it belongs to.
    - `git switch -` back to the branch under review, so the working tree is where the summary describes it.
 8. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. Record the cleanup pull request's number on the same line. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
-9. **Summarize.** For each editing aspect, give a one-line description of what it changed in the diff and what it changed in the neighborhood (or note it changed nothing); say what each test you committed pins, and name each proposal you dropped with the reason; surface every flagged finding, both from the flag-only reviews (`design-fit`, `refactor-scope`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); list every commit created, with its short hash and which branch it is on; and state the base ref the review covered, the cleanup pull request opened, and the checkpoint now recorded.
+9. **Summarize.** For each editing aspect, give a one-line description of what it changed in the diff and what it changed in the neighborhood (or note it changed nothing); say what each test you committed pins, and name each proposal you dropped with the reason; say which findings you fixed on the cleanup branch and what each now does; surface the findings you left, each with the reason it needs the author rather than the suite; list every commit created, with its short hash and which branch it is on; and state the base ref the review covered, the cleanup pull request opened, and the checkpoint now recorded.
 10. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
+
+## Act on the findings the suite settles
+
+An aspect reports rather than edits outside its ring because a subagent applying one convention cannot weigh a change to an interface or a behavior. The orchestrator can: it holds every aspect's findings at once, and it has the project's whole test suite — which is what actually protects code the change under review never touched.
+
+So a finding is not the end of the road. Read every one the review produced — from the flag-only aspects and from the editing aspects' report-only items, in both modes — and sort each into one of two piles.
+
+**Fix it, on the cleanup branch**, where a full-suite run tells you whether the fix is right. The whole question in these is "did I break something", and the suite answers it:
+
+- a signature every caller reaches from inside this repository;
+- a fallback over a case the code cannot produce, turned into a hard failure;
+- an assertion the build compiles away, or one the code leans on and never states;
+- a function split at a seam, or an item moved to the module whose role it matches;
+- a file split into new modules at the seam an aspect named — choosing the seam is the review's
+  own work, the move that follows is mechanical, and a path or visibility mistake in it is what
+  the suite is best at catching;
+- an item renamed, where every use of the name is in this repository.
+
+**Leave it as a finding**, where the suite cannot answer, or where the answer is not about safety:
+
+- a contract outside this repository — a Fix standard-library signature, an LSP protocol answer, the wording of a diagnostic nothing pins;
+- a property the suite does not measure — performance, memory, concurrency, a platform this machine is not;
+- a redesign, where what the author settles is the direction rather than the risk: a rewritten pipeline, a different data structure carrying the same information, a rule imposed on the language.
+
+For each finding you fix, run the **whole** suite. A filtered run answers a smaller question, and it answers it wrongly here more often than anywhere else: a finding sits by definition outside what the change's own tests exercise, so the tests that would catch a mistake in it are the ones you would not think to filter for.
+
+**Add a test where the fix wants one**, and judge it the way *Add the tests worth keeping* judges a proposal: break what it pins, run the whole suite, and keep it only when nothing else goes red. Most fixes here want none — a moved item is covered by whatever already reached it, and a signature change is covered by its callers.
+
+**An assertion the review turns on is not done until it has been shown to fire.** Break the invariant it states and confirm it aborts on an input that reaches it; then run the suite to see which tests reach it. An assertion no test reaches has been moved, not enabled, and the summary says so — that is a coverage gap the review found, and it may be what a test is for.
+
+Commit these separately from the aspects' own commits, with a message naming what the review found and what the code now does.
 
 ## Subagent Prompt Template
 
@@ -211,7 +243,8 @@ findings, proposed tests, and candidates are added on top of it.
 
 - Don't run aspects in parallel.
 - Don't let subagents decide their own scope — always pass the resolved base and the mode.
-- Don't let a `neighborhood` pass edit past the radius rules: an interface change or a behavior change outside the hunks is a finding, whatever the mode.
+- Don't let an aspect edit past the radius rules: for an aspect, an interface change or a behavior change outside the hunks is a finding, whatever the mode. Acting on those findings is the orchestrator's own step, and it runs the whole suite for each one.
+- Don't hand the author a finding the suite could have settled. A finding whose only question is "does this break something" is work the review is holding rather than work the author asked for.
 - Don't commit neighborhood edits on the branch under review — they belong to the cleanup branch and its own pull request, so that the change stays readable as a diff.
 - Don't merge the cleanup pull request yourself. Merging it before the change has been read puts the cleanup back into the diff the split exists to keep clear, and either way the merge is the author's.
 - Don't commit a proposed test that pins behavior the project has never decided on. The test would make the current output the required one, which is the author's decision about the language and its API — raise it as a question instead.
@@ -724,7 +757,7 @@ This convention is distinct from `shorten-qualifiers`, which fixes how an item i
 
 #### Split an overgrown file at a natural seam
 
-When the diff has grown a file to the point that it now spans several distinct concerns — different groups of types, or unrelated passes / utilities that merely share a file — and it has become large enough to be hard to navigate, flag it for splitting. **Report only**: moving code into new modules changes module paths, imports, and visibility across call sites, so it is a redesign the author should choose, not a hunk-local edit.
+When the diff has grown a file to the point that it now spans several distinct concerns — different groups of types, or unrelated passes / utilities that merely share a file — and it has become large enough to be hard to navigate, flag it for splitting. **Report only**: moving code into new modules changes module paths, imports, and visibility across call sites, which is more than a hunk-local edit. Name the file and the seam; the orchestrator makes the move afterwards, against the whole suite.
 
 Split at a **natural seam**, never at an arbitrary line count: a cohesive group of related types and their methods, a self-contained submodule (a parser, a formatter, one compiler pass), or a cluster that shares a concern. Aim for files that each carry one responsibility — not two halves of one responsibility sawn apart at the midpoint.
 
@@ -766,8 +799,8 @@ The litmus test: *would this still be correct if the thing it silently assumes c
 ### Scope Discipline
 
 - **Let the mode set the reach.** In `in-diff` mode, edit inside the diff hunks and collect what the rest of each touched file needs as ring-2 candidates; in `neighborhood` mode, work those candidates under the radius rules. One convention stands apart: *Don't let a fallback silently handle a case the author calls impossible* covers the whole of each touched file in `in-diff` mode already, per its own scope note — a swallowed case is a bug rather than opportunistic cleanup.
-- **The conventions that travel to ring 2** are the ones whose edit preserves behavior by construction: *DRY* and *Extract a function on the second copy* within a single file, and *Remove dead and half-finished code* for commented-out code. The rest become findings in ring 2, since nothing in this change's tests would catch a mistake there — splitting a function, narrowing mutable state, rewriting a quadratic pattern, dropping a defensive branch, adding an assertion to code the change never touched, relocating an item, and also *Use the project's canonical types*, because `Set` / `Map` are `fxhash` maps whose iteration order differs from the standard library's and a compiler can let that order reach its output.
-- **Do not redesign.** If the right fix is "extract a new module" or "rewrite this pipeline," report it; don't do it.
+- **The conventions that travel to ring 2** are the ones whose edit preserves behavior by construction: *DRY* and *Extract a function on the second copy* within a single file, and *Remove dead and half-finished code* for commented-out code. The rest become findings in ring 2, for the orchestrator to settle against the whole suite — splitting a function, narrowing mutable state, rewriting a quadratic pattern, dropping a defensive branch, adding an assertion to code the change never touched, relocating an item, and also *Use the project's canonical types*, because `Set` / `Map` are `fxhash` maps whose iteration order differs from the standard library's and a compiler can let that order reach its output.
+- **Do not redesign.** If the right fix is "extract a new module" or "rewrite this pipeline," report it; don't do it. The orchestrator settles what the suite can judge, the module split among it.
 - **One convention at a time per hunk.** If a hunk hits multiple conventions, apply the smallest fix that satisfies one, then re-check before moving on.
 
 ---
