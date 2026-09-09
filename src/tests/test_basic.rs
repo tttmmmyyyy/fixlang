@@ -5555,6 +5555,28 @@ pub fn test_float_to_string_precision() {
             assert_eq(|_|"case to_string_precision F64 0", x.to_string_precision(0_U8), "-3");;
             assert_eq(|_|"case to_string_precision F64 255", x.to_string_precision(255_U8), "-3.140000000000000124344978758017532527446746826171875000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");;
 
+            // The widest text this writes for a `F32`: the least one, whose whole part takes
+            // 39 digits, with a sign before it and 255 places behind the point.
+            let widest = -3.4028235e38_F32;
+            let text = widest.to_string_precision(255_U8);
+            assert_eq(|_|"the widest F32 text is a sign, 39 digits, a point and 255 places",
+                      text.@size, 1 + 39 + 1 + 255);;
+            assert_eq(|_|"the widest F32 text opens with the digits of the least F32",
+                      text.get_sub(0, 20), "-3402823466385288598");;
+            assert_eq(|_|"the widest F32 text ends in the places behind its point",
+                      text.get_sub(text.@size - 6, text.@size), "000000");;
+
+            // The widest text this writes for a `F64`: the least one, whose whole part takes
+            // 309 digits, with a sign before it and 255 places behind the point.
+            let widest = -1.7976931348623157e308;
+            let text = widest.to_string_precision(255_U8);
+            assert_eq(|_|"the widest F64 text is a sign, 309 digits, a point and 255 places",
+                      text.@size, 1 + 309 + 1 + 255);;
+            assert_eq(|_|"the widest F64 text opens with the digits of the least F64",
+                      text.get_sub(0, 20), "-1797693134862315708");;
+            assert_eq(|_|"the widest F64 text ends in the places behind its point",
+                      text.get_sub(text.@size - 6, text.@size), "000000");;
+
             pure()
         );
     "#;
@@ -5592,7 +5614,29 @@ pub fn test_float_to_string_exp_precision() {
             let x = -123.45_F64;
             assert_eq(|_|"", x.to_string_exp_precision(0_U8), "-1e+02");;
             assert_eq(|_|"", x.to_string_exp_precision(255_U8), "-1.234500000000000028421709430404007434844970703125000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e+02");;
-        
+
+            // The widest text this writes for a `F32`: the least one, with a sign before it,
+            // 255 places behind the point and a two-digit exponent.
+            let widest = -3.4028235e38_F32;
+            let text = widest.to_string_exp_precision(255_U8);
+            assert_eq(|_|"the widest F32 text is a sign, a digit, a point, 255 places and `e+38`",
+                      text.@size, 1 + 1 + 1 + 255 + 4);;
+            assert_eq(|_|"the widest F32 text opens with the digits of the least F32",
+                      text.get_sub(0, 20), "-3.40282346638528859");;
+            assert_eq(|_|"the widest F32 text ends in its exponent",
+                      text.get_sub(text.@size - 6, text.@size), "00e+38");;
+
+            // The widest text this writes for a `F64`: the least one, with a sign before it,
+            // 255 places behind the point and a three-digit exponent.
+            let widest = -1.7976931348623157e308;
+            let text = widest.to_string_exp_precision(255_U8);
+            assert_eq(|_|"the widest F64 text is a sign, a digit, a point, 255 places and `e+308`",
+                      text.@size, 1 + 1 + 1 + 255 + 5);;
+            assert_eq(|_|"the widest F64 text opens with the digits of the least F64",
+                      text.get_sub(0, 20), "-1.79769313486231570");;
+            assert_eq(|_|"the widest F64 text ends in its exponent",
+                      text.get_sub(text.@size - 6, text.@size), "8e+308");;
+
             pure()
         );
     "#;
