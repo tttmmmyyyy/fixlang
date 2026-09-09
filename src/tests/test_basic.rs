@@ -5510,6 +5510,8 @@ pub fn test_consumed_time_fast() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `abs` carries a negative value to its magnitude and leaves a positive one
+/// alone, at each of the signed integer types.
 #[test]
 pub fn test_signed_integral_abs() {
     let source = r#"
@@ -5566,6 +5568,8 @@ pub fn test_float_to_string() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Pins the text `to_string_precision` writes at precision 0, at 255, and for the widest `F32`
+/// and `F64`, whose whole part is the widest either type reaches.
 #[test]
 pub fn test_float_to_string_precision() {
     let source = r#"
@@ -5608,6 +5612,8 @@ pub fn test_float_to_string_precision() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Pins the exponential text `to_string_exp` writes: the six places the format gives by default,
+/// and the widest exponent each type reaches -- two digits for `F32` and three for `F64`.
 #[test]
 pub fn test_float_to_string_exp() {
     let source = r#"
@@ -5638,6 +5644,8 @@ pub fn test_float_to_string_exp() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Pins the exponential text `to_string_exp_precision` writes at precision 0, at 255, and for the
+/// widest `F32` and `F64`, whose exponent is the widest either type reaches.
 #[test]
 pub fn test_float_to_string_exp_precision() {
     let source = r#"
@@ -5880,6 +5888,8 @@ pub fn test_tarai_fast() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Pins the text `to_string` writes for the infinities and the quiet NaN of each float type, and
+/// the bytes each type's quiet NaN carries.
 #[test]
 pub fn test_float_inf_nan() {
     let source = r##"
@@ -10972,8 +10982,9 @@ namespace Pipe {
     write = undefined("program running!");
 }
 
+// The regression needs this implementation to name its type variables `a` and `b`, the names
+// `Pipe`'s definition gives its parameters.
 impl Pipe a b: Monad {
-//impl Pipe x y: Monad {        // Ok if this line is used instead of the above line.
     pure = undefined("program running!");
     bind = undefined("program running!");
 }
