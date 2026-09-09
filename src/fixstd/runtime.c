@@ -125,11 +125,13 @@ void fixruntime_f32_to_str_exp(char *buf, float v)
     sprintf(buf, "%e", v);
 }
 
+// `F32::to_string_exp_precision` in src/fixstd/std.fix sizes `buf` from the widest text this format writes.
 void fixruntime_f32_to_str_exp_precision(char *buf, float v, uint8_t precision)
 {
     sprintf(buf, "%.*e", (int)precision, v);
 }
 
+// `F32::to_string_precision` in src/fixstd/std.fix sizes `buf` from the widest text this format writes.
 void fixruntime_f32_to_str_precision(char *buf, float v, uint8_t precision)
 {
     sprintf(buf, "%.*f", (int)precision, v);
@@ -145,11 +147,13 @@ void fixruntime_f64_to_str_exp(char *buf, double v)
     sprintf(buf, "%le", v);
 }
 
+// `F64::to_string_exp_precision` in src/fixstd/std.fix sizes `buf` from the widest text this format writes.
 void fixruntime_f64_to_str_exp_precision(char *buf, double v, uint8_t precision)
 {
     sprintf(buf, "%.*le", (int)precision, v);
 }
 
+// `F64::to_string_precision` in src/fixstd/std.fix sizes `buf` from the widest text this format writes.
 void fixruntime_f64_to_str_precision(char *buf, double v, uint8_t precision)
 {
     sprintf(buf, "%.*lf", (int)precision, v);
