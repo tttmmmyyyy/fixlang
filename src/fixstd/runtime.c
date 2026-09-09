@@ -115,48 +115,53 @@ void fixruntime_i64_to_str(char *buf, int64_t v)
     sprintf(buf, "%" PRId64, v);
 }
 
-void fixruntime_f32_to_str(char *buf, float v)
+// Stops the program when a number's text did not fit the buffer it was written into.
+//
+// The caller in `src/fixstd/std.fix` derives that buffer's size from the widest text the format
+// can write, so a text that does not fit means the derivation is wrong. Stopping here names the
+// two sizes, where letting the write run on would leave the heap damaged and the program going.
+//
+// # Arguments
+// * `needed` - The bytes the whole text and its null take.
+// * `size` - The bytes the buffer holds.
+__attribute__((noreturn)) static void fixruntime_float_text_too_wide(int64_t needed, int64_t size)
 {
-    sprintf(buf, "%f", v);
+    fprintf(stderr, "A number's text takes %" PRId64 " bytes and its buffer holds %" PRId64 "\n",
+            needed, size);
+    fixruntime_abort();
 }
 
-void fixruntime_f32_to_str_exp(char *buf, float v)
+// Stops the program unless the text `snprintf` reported fits `size`.
+//
+// # Arguments
+// * `written` - What `snprintf` answered: the length of the text, without its null.
+// * `size` - The bytes the buffer holds.
+static void fixruntime_check_float_text(int written, int64_t size)
 {
-    sprintf(buf, "%e", v);
+    if (written < 0 || (int64_t)written + 1 > size)
+    {
+        fixruntime_float_text_too_wide((int64_t)written + 1, size);
+    }
 }
 
-// `F32::to_string_exp_precision` in src/fixstd/std.fix sizes `buf` from the widest text this format writes.
-void fixruntime_f32_to_str_exp_precision(char *buf, float v, uint8_t precision)
+void fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    sprintf(buf, "%.*e", (int)precision, v);
+    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*e", (int)precision, v), size);
 }
 
-// `F32::to_string_precision` in src/fixstd/std.fix sizes `buf` from the widest text this format writes.
-void fixruntime_f32_to_str_precision(char *buf, float v, uint8_t precision)
+void fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    sprintf(buf, "%.*f", (int)precision, v);
+    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*f", (int)precision, v), size);
 }
 
-void fixruntime_f64_to_str(char *buf, double v)
+void fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    sprintf(buf, "%lf", v);
+    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*le", (int)precision, v), size);
 }
 
-void fixruntime_f64_to_str_exp(char *buf, double v)
+void fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    sprintf(buf, "%le", v);
-}
-
-// `F64::to_string_exp_precision` in src/fixstd/std.fix sizes `buf` from the widest text this format writes.
-void fixruntime_f64_to_str_exp_precision(char *buf, double v, uint8_t precision)
-{
-    sprintf(buf, "%.*le", (int)precision, v);
-}
-
-// `F64::to_string_precision` in src/fixstd/std.fix sizes `buf` from the widest text this format writes.
-void fixruntime_f64_to_str_precision(char *buf, double v, uint8_t precision)
-{
-    sprintf(buf, "%.*lf", (int)precision, v);
+    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*lf", (int)precision, v), size);
 }
 
 int64_t fixruntime_strtoll_10(const char *str)
