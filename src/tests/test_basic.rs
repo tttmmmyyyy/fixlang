@@ -4996,13 +4996,6 @@ pub fn test_trait_alias() {
             ))
         );
 
-        // Error (cannot implement trait alias directly)
-        // impl [a : Additive] Vector2 a : Additive {}
-
-        // Error (circular aliasing)
-        // trait MyTraitA = MyTraitB + ToString;
-        // trait MyTraitB = MyTraitA + Eq;
-
         main : IO ();
         main = (
             let sum_vec = [Vector2{x : 1, y : 2}, Vector2{x : 3, y : 4}].to_iter.sum;
@@ -7792,8 +7785,6 @@ pub fn test_range_step_1() {
     main : IO ();
     main = (
         assert_eq(|_|"A-2", Iterator::range_step(0, 10, -1).get_size, 0);;
-        // assert_eq(|_|"A-1", Iterator::range_step(0, 10, 0).take(100).get_size, 100);;
-        // assert_eq(|_|"A0", Iterator::range_step(0, 10, 0).take(100).get_size, 100);;
         assert_eq(|_|"A1", Iterator::range_step(0, 10, 1).to_array, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);;
         assert_eq(|_|"A2", Iterator::range_step(0, 10, 2).to_array, [0, 2, 4, 6, 8]);;
         assert_eq(|_|"A3", Iterator::range_step(0, 10, 3).to_array, [0, 3, 6, 9]);;
@@ -7821,8 +7812,6 @@ pub fn test_range_step_2() {
     main = (
 
         assert_eq(|_|"B2", Iterator::range_step(10, 0, 2).get_size, 0);;
-        // assert_eq(|_|"B1", Iterator::range_step(10, 0, 1).take(100).get_size, 100);;
-        // assert_eq(|_|"B0", Iterator::range_step(10, 0, 0).take(100).get_size, 100);;
         assert_eq(|_|"B-1", Iterator::range_step(10, 0, -1).to_array, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);;
         assert_eq(|_|"B-2", Iterator::range_step(10, 0, -2).to_array, [10, 8, 6, 4, 2]);;
         assert_eq(|_|"B-3", Iterator::range_step(10, 0, -3).to_array, [10, 7, 4, 1]);;
@@ -7836,7 +7825,6 @@ pub fn test_range_step_2() {
         assert_eq(|_|"B-11", Iterator::range_step(10, 0, -11).to_array, [10]);;
 
         assert_eq(|_|"C1", Iterator::range_step(0, 0, 1).get_size, 0);;
-        // assert_eq(|_|"C0", Iterator::range_step(0, 0, 0).get_size, 0);;
         assert_eq(|_|"C-1", Iterator::range_step(0, 0, -1).get_size, 0);;
 
         pure()
@@ -11023,7 +11011,7 @@ namespace Main {
 
 main: IO ();
 main = (
-    // assert_eq(|_|"", Main::x, 0);; // ambiguous
+    // `Main::x` names both of these values, so each is written out to say which one it is.
     assert_eq(|_|"", ::Main::x, 0);; // top-level `x`
     assert_eq(|_|"", Main::Main::x, 1);; // `Main::x` in `Main` namespace
     assert_eq(|_|"", ::Main::Main::x, 1);; // `Main::x` in `Main` namespace
@@ -11077,7 +11065,7 @@ namespace Main {
 
 main: IO ();
 main = (
-    // assert_eq(|_|"", 0 : X, 0);; // ambiguous
+    // `Main::X` names both of these types, so each is written out to say which one it is.
     assert_eq(|_|"", 0 : ::Main::X, 0);; // top-level `X`
     assert_eq(|_|"", 0 : Main::Main::X, 0);; // `Main::X` in `Main` namespace
     assert_eq(|_|"", 0 : ::Main::Main::X, 0);; // `Main::X` in `Main` namespace
@@ -11132,7 +11120,7 @@ namespace Main {
     }
 }
 
-// impl I64 : Foo { ... } // ambiguous
+// `Main::Foo` names both of these traits, so each implementation writes out which one it is.
 impl I64 : ::Main::Foo { // top-level `Foo`
     foo = |n| n + 1;
 }
@@ -11207,6 +11195,7 @@ namespace Main {
     trait Foo = Std::ToString;
 }
 
+// `Main::Foo` names the trait and the alias both, so each use writes out which one it is.
 impl I64 : ::Main::Foo { // top-level `Foo`
     foo = |n| n + 1;
 }
@@ -12257,7 +12246,6 @@ main = (
     let cma: ContT String IOFail String = do {
         let jmpbuf = *setjmp(0);
         let i = jmpbuf.@arg;
-        //eval *eprintln("i=" + i.to_string).lift.lift_t;
         if i < 5 { jmpbuf.longjmp(i + 1) };
         pure(i.to_string)
     };
