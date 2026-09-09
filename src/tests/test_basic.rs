@@ -5542,6 +5542,35 @@ pub fn test_signed_integral_abs() {
 }
 
 #[test]
+pub fn test_float_to_string() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            // The widest text this writes for a `F32`: the least one, whose whole part takes
+            // 39 digits, with a sign before it and the 6 places `%f` writes by default.
+            let widest = -3.4028235e38_F32;
+            assert_eq(|_|"the widest F32 text is a sign, 39 digits, a point and 6 places",
+                      widest.to_string, "-340282346638528859811704183484516925440.000000");;
+
+            // The widest text this writes for a `F64`: the least one, whose whole part takes
+            // 309 digits, with a sign before it and the 6 places `%f` writes by default.
+            let widest = -1.7976931348623157e308;
+            let text = widest.to_string;
+            assert_eq(|_|"the widest F64 text is a sign, 309 digits, a point and 6 places",
+                      text.@size, 1 + 309 + 1 + 6);;
+            assert_eq(|_|"the widest F64 text opens with the digits of the least F64",
+                      text.get_sub(0, 20), "-1797693134862315708");;
+            assert_eq(|_|"the widest F64 text ends in the places behind its point",
+                      text.get_sub(text.@size - 10, text.@size), "368.000000");;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_float_to_string_precision() {
     let source = r#"
         module Main; 
@@ -5594,7 +5623,19 @@ pub fn test_float_to_string_exp() {
 
             let x = -123.45_F64;
             assert_eq(|_|"case to_string_exp F64", x.to_string_exp, "-1.234500e+02");;
-        
+
+            // The widest text this writes for a `F32`: the least one, with a sign before it,
+            // the 6 places `%e` writes by default and a two-digit exponent.
+            let widest = -3.4028235e38_F32;
+            assert_eq(|_|"the widest F32 text is a sign, a digit, a point, 6 places and `e+38`",
+                      widest.to_string_exp, "-3.402823e+38");;
+
+            // The widest text this writes for a `F64`: the least one, with a sign before it,
+            // the 6 places `%e` writes by default and a three-digit exponent.
+            let widest = -1.7976931348623157e308;
+            assert_eq(|_|"the widest F64 text is a sign, a digit, a point, 6 places and `e+308`",
+                      widest.to_string_exp, "-1.797693e+308");;
+
             pure()
         );
     "#;
