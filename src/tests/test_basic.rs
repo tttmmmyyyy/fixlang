@@ -5541,6 +5541,9 @@ pub fn test_signed_integral_abs() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Pins the text `to_string` writes for the widest `F32` and `F64`: the digits of the whole part
+/// and the places the format gives by default, which together are the width the buffer is sized
+/// for.
 #[test]
 pub fn test_float_to_string() {
     let source = r#"

@@ -10,7 +10,12 @@
 // of room to slide the object onto the buffer alignment, and a write a byte past such a buffer
 // lands in that room. `F64::to_string` and `F64::to_string_precision` always allocate more than the
 // threshold, so an error of a byte in their bounds passes here and one of `ARRAY_BUF_ALIGNMENT`
-// bytes or more is caught; for the other six, a byte is enough.
+// bytes or more is caught. `F32::to_string`, `F32::to_string_exp` and `F64::to_string_exp` always
+// allocate less than the threshold, so a byte is enough for them. The remaining three,
+// `F32::to_string_precision`, `F32::to_string_exp_precision` and `F64::to_string_exp_precision`,
+// cross the threshold at the higher precisions, where a byte again lands in the slack; a byte in
+// their bounds is caught at the lower precisions, where the same size constant is exercised with
+// the storage under the threshold.
 
 #[cfg(test)]
 mod float_text_buffer_tests {
@@ -20,6 +25,9 @@ mod float_text_buffer_tests {
         tests::test_util::test_source,
     };
 
+    /// Writes the widest text each of the eight functions can produce -- the least value of each
+    /// type, at every precision they accept -- under Valgrind, so that a buffer sized short of
+    /// that text shows up as a write past its allocation.
     #[test]
     pub fn test_widest_text_fits_its_buffer() {
         if !platform_valgrind_supported() {
