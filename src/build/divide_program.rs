@@ -300,18 +300,27 @@ fn defines(unit_program: &RcProgram, name: &FullName) -> bool {
     names_defined_here(unit_program).any(|defined| defined == name)
 }
 
-/// The names the bodies of `unit_program` mention without defining them.
+/// The bodies `unit_program` generates code from: its functions, and the initializers of the
+/// globals it computes. The initializer of a global another unit computes is carried here to say
+/// what the value is, and this unit generates none of it.
+fn bodies_generated_here(unit_program: &RcProgram) -> impl Iterator<Item = &RcExprNode> + '_ {
+    unit_program.funcs.values().map(|func| &func.body).chain(
+        unit_program
+            .globals
+            .iter()
+            .filter(|global| global.owns_initializer)
+            .map(|global| &global.init),
+    )
+}
+
+/// The names the bodies `unit_program` generates mention without defining them, which are the names
+/// its code declares.
 ///
 /// The names it defines are collected once and looked up by hash, since the walk asks after every
 /// mention of every body and the copying below repeats the walk until it finds nothing new.
 fn names_reached_elsewhere(unit_program: &RcProgram, mut visit: impl FnMut(&FullName)) {
     let defined: Set<&FullName> = names_defined_here(unit_program).collect();
-    let bodies = unit_program
-        .funcs
-        .values()
-        .map(|func| &func.body)
-        .chain(unit_program.globals.iter().map(|global| &global.init));
-    for body in bodies {
+    for body in bodies_generated_here(unit_program) {
         collect_mentions(body, &mut |mentioned| {
             if !defined.contains(mentioned) {
                 visit(mentioned);
@@ -596,19 +605,6 @@ fn initializer_fits(
         }
     }
     nodes <= MOVED_INITIALIZER_NODE_LIMIT
-}
-
-/// The bodies `unit_program` generates code from: its functions, and the initializers of the
-/// globals it computes. The initializer of a global another unit computes is carried here to say
-/// what the value is, and this unit generates none of it.
-fn bodies_generated_here(unit_program: &RcProgram) -> impl Iterator<Item = &RcExprNode> + '_ {
-    unit_program.funcs.values().map(|func| &func.body).chain(
-        unit_program
-            .globals
-            .iter()
-            .filter(|global| global.owns_initializer)
-            .map(|global| &global.init),
-    )
 }
 
 /// Which units read each of `globals`, by name.
