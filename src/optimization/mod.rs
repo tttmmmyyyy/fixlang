@@ -1,4 +1,4 @@
-pub(crate) mod application_inlining;
+mod application_inlining;
 mod capture_struct;
 mod closure_specialization;
 mod collapse_constructions;
