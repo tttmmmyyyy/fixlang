@@ -17,9 +17,10 @@ use crate::hash::HashSource;
 use crate::misc::{split_at_name_boundaries, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    for_each_node, for_each_var, FuncRef, RcExprNode, RcFunc, RcGlobalInit, RcProgram,
+    collect_mentions, for_each_node, for_each_var, FuncRef, RcExprNode, RcFunc, RcGlobalInit,
+    RcProgram,
 };
-use crate::rc_ir::dead_code_elim::{collect_mentions, eliminate_unreachable};
+use crate::rc_ir::dead_code_elim::eliminate_unreachable;
 use crate::rc_ir::simplify::node_count;
 use serde::Serialize;
 use std::collections::hash_map::DefaultHasher;
@@ -127,50 +128,50 @@ pub fn divide_among_units(
 
     // A unit reads a global through the code it generates, so which units read one is answered
     // once the bodies no unit reaches are gone.
-    let (mut published, mut published_here) = publish_and_prune(
+    publish_and_prune(
         &mut unit_programs,
         &unit_of,
         &imported,
         &shared_globals,
         &root_value_names,
     );
-    if move_each_initializer_to_the_unit_that_alone_reads_it(
+
+    move_each_initializer_to_the_unit_that_alone_reads_it(
         &mut unit_programs,
         &shared_globals,
         &root_value_names,
         &copyable_funcs,
-    ) {
-        // The unit an initializer moved to generates a body it used to declare, and the
-        // `publish_and_prune` above dropped what that body reaches: a unit carrying the accessor
-        // alone generates no initializer, so nothing there reached those bodies. The unit it moved
-        // out of is left holding whatever only that initializer reached, which the
-        // `publish_and_prune` below drops, so that the reads each unit performs are the ones its
-        // own code performs.
-        import_what_each_unit_reaches(
-            &mut unit_programs,
-            &mut imported,
-            &mut shared_globals,
-            &copyable_funcs,
-            &all_globals,
-        );
-        (published, published_here) = publish_and_prune(
-            &mut unit_programs,
-            &unit_of,
-            &imported,
-            &shared_globals,
-            &root_value_names,
-        );
-    }
-    if keep_each_global_where_it_is_read(&mut unit_programs, &mut shared_globals, &root_value_names)
-    {
-        (published, published_here) = publish_and_prune(
-            &mut unit_programs,
-            &unit_of,
-            &imported,
-            &shared_globals,
-            &root_value_names,
-        );
-    }
+    );
+    // The unit an initializer moved to generates a body it used to declare, and the
+    // `publish_and_prune` above dropped what that body reaches: a unit carrying the accessor alone
+    // generates no initializer, so nothing there reached those bodies. The unit it moved out of is
+    // left holding whatever only that initializer reached, which the `publish_and_prune` below
+    // drops, so that the reads each unit performs are the ones its own code performs.
+    import_what_each_unit_reaches(
+        &mut unit_programs,
+        &mut imported,
+        &mut shared_globals,
+        &copyable_funcs,
+        &all_globals,
+    );
+    publish_and_prune(
+        &mut unit_programs,
+        &unit_of,
+        &imported,
+        &shared_globals,
+        &root_value_names,
+    );
+
+    keep_each_global_where_it_is_read(&mut unit_programs, &mut shared_globals, &root_value_names);
+    // Each pass above reads the state the one before it left, so the last of them is what says
+    // which names the units publish and what each of them still holds.
+    let (published, published_here) = publish_and_prune(
+        &mut unit_programs,
+        &unit_of,
+        &imported,
+        &shared_globals,
+        &root_value_names,
+    );
     assert_each_unit_serves_the_globals_it_reads(&unit_programs, &shared_globals, &all_globals);
 
     DividedProgram {
@@ -378,7 +379,7 @@ fn import_what_each_unit_reaches(
 }
 
 /// Move the initializer of each global one unit alone reads into that unit, where what the move
-/// brings along fits there, and report whether any moved.
+/// brings along fits there.
 ///
 /// A unit generating the initializer of the value it reads optimizes the reads by what the
 /// initializer settles — the length of an array, the shape of a structure — which is what takes the
@@ -398,7 +399,7 @@ fn move_each_initializer_to_the_unit_that_alone_reads_it(
     shared_globals: &Set<FullName>,
     root_value_names: &Set<FullName>,
     copyable_funcs: &Map<FullName, RcFunc>,
-) -> bool {
+) {
     let readers = units_reading_each_global(unit_programs, shared_globals);
     // The unit each initializer that moves is moving to.
     let mut destinations: Map<FullName, usize> = Map::default();
@@ -423,7 +424,6 @@ fn move_each_initializer_to_the_unit_that_alone_reads_it(
             }
         }
     }
-    !destinations.is_empty()
 }
 
 /// The unit holding the part of the global `name` that `holds` picks out — the value's initializer,
@@ -441,7 +441,7 @@ fn unit_holding(
     })
 }
 
-/// Keep each global in the units that read it, and report whether any of them changed hands.
+/// Keep each global in the units that read it.
 ///
 /// The unit alone reading a global keeps the value, where nothing about it is published: a unit
 /// reading a global another unit keeps reads storage the linker publishes, and LLVM has to assume
@@ -463,7 +463,7 @@ fn keep_each_global_where_it_is_read(
     unit_programs: &mut [RcProgram],
     shared_globals: &mut Set<FullName>,
     root_value_names: &Set<FullName>,
-) -> bool {
+) {
     let non_root_globals: Set<FullName> = unit_programs
         .iter()
         .flat_map(|unit_program| unit_program.globals.iter().map(|global| &global.symbol))
@@ -473,44 +473,42 @@ fn keep_each_global_where_it_is_read(
     let readers = units_reading_each_global(unit_programs, &non_root_globals);
     let keepers: Map<&FullName, Option<usize>> = readers
         .iter()
-        .map(|(name, readers)| (name, keeper_of(unit_programs, name, readers)))
+        .map(|(name, readers)| (name, unit_keeping(unit_programs, name, readers)))
         .collect();
 
-    let mut changed = false;
     for (index, unit_program) in unit_programs.iter_mut().enumerate() {
         unit_program.globals.retain_mut(|global| {
             let Some(readers) = readers.get(&global.symbol) else {
                 return true;
             };
             let keeps = keepers[&global.symbol] == Some(index);
-            changed |= global.owns_storage != keeps;
             global.owns_storage = keeps;
             // A value nothing reads is computed by nobody.
             if keepers[&global.symbol].is_none() {
-                changed |= global.owns_initializer;
                 global.owns_initializer = false;
             }
             // A unit that neither keeps the value nor computes it nor reads it holds no part of the
             // global.
-            let held = keeps || global.owns_initializer || readers.contains(&index);
-            changed |= !held;
-            held
+            keeps || global.owns_initializer || readers.contains(&index)
         });
     }
     for (name, readers) in &readers {
-        changed |= if readers.len() > 1 {
-            shared_globals.insert(name.clone())
+        if readers.len() > 1 {
+            shared_globals.insert(name.clone());
         } else {
-            shared_globals.remove(name)
-        };
+            shared_globals.remove(name);
+        }
     }
-    changed
 }
 
 /// The unit that keeps the value of the global `name`, given the units reading it: the one unit
 /// reading it, or, where more than one does, the unit already keeping it. A value nothing reads is
 /// kept by nobody.
-fn keeper_of(unit_programs: &[RcProgram], name: &FullName, readers: &Set<usize>) -> Option<usize> {
+fn unit_keeping(
+    unit_programs: &[RcProgram],
+    name: &FullName,
+    readers: &Set<usize>,
+) -> Option<usize> {
     match readers.len() {
         0 => None,
         1 => readers.iter().copied().next(),
@@ -537,23 +535,21 @@ fn assert_each_unit_serves_the_globals_it_reads(
     shared_globals: &Set<FullName>,
     all_globals: &Map<FullName, RcGlobalInit>,
 ) {
-    for (index, unit_program) in unit_programs.iter().enumerate() {
-        let served: Set<&FullName> = unit_program
-            .globals
-            .iter()
-            .filter(|global| global.owns_storage || shared_globals.contains(&global.symbol))
-            .map(|global| &global.symbol)
-            .collect();
-        for body in bodies_generated_here(unit_program) {
-            collect_mentions(body, &mut |mentioned| {
-                assert!(
-                    !all_globals.contains_key(mentioned) || served.contains(mentioned),
-                    "unit {} generates a body reading `{}`, and neither keeps that value nor \
-                     reads the storage of a unit that does",
-                    index,
-                    mentioned.to_string()
-                );
-            });
+    let every_global: Set<FullName> = all_globals.keys().cloned().collect();
+    for (name, readers) in units_reading_each_global(unit_programs, &every_global) {
+        let shared = shared_globals.contains(&name);
+        for reader in readers {
+            let served = unit_programs[reader]
+                .globals
+                .iter()
+                .any(|global| global.symbol == name && global.serves_reads(shared));
+            assert!(
+                served,
+                "unit {} generates a body reading `{}`, and neither keeps that value nor reads \
+                 the storage of a unit that does",
+                reader,
+                name.to_string()
+            );
         }
     }
 }
@@ -808,19 +804,33 @@ pub fn generated_code_hash(
     type_env: &TypeEnv,
     config: &Configuration,
 ) -> String {
-    let unit_program = &division.unit_programs[unit_index];
+    // Binding every field of the division is what makes one added to `DividedProgram` a compile
+    // error here until this digest says what it does to a unit's code. A field left out is an
+    // object file reused for code the compiler no longer generates.
+    let DividedProgram {
+        unit_programs,
+        // What the whole program publishes decides the linkage of a name through
+        // `published_here`, which is the per-unit set read below.
+        published: _,
+        global_types,
+        // What a unit imported decides which of its names `published_here` holds.
+        imported: _,
+        published_here,
+        shared_globals: shared_everywhere,
+    } = division;
+    let unit_program = &unit_programs[unit_index];
     let by_name = |a: &&FullName, b: &&FullName| a.cmp(b);
     let mut funcs: Vec<&RcFunc> = unit_program.funcs.values().collect();
     funcs.sort_by(|a, b| a.name.name.cmp(&b.name.name));
     let mut globals: Vec<&RcGlobalInit> = unit_program.globals.iter().collect();
     globals.sort_by(|a, b| a.symbol.cmp(&b.symbol));
-    let mut published: Vec<&FullName> = division.published_here[unit_index].iter().collect();
+    let mut published: Vec<&FullName> = published_here[unit_index].iter().collect();
     published.sort_by(by_name);
     let mut shared_globals: Vec<&FullName> = unit_program
         .globals
         .iter()
         .map(|global| &global.symbol)
-        .filter(|symbol| division.shared_globals.contains(*symbol))
+        .filter(|symbol| shared_everywhere.contains(*symbol))
         .collect();
     shared_globals.sort_by(by_name);
 
@@ -828,7 +838,7 @@ pub fn generated_code_hash(
     names_reached_elsewhere(unit_program, |mentioned| {
         // The mentions naming a global of the program are the ones the unit declares; the rest are
         // its local variables and the runtime functions, declared from the runtime's own signature.
-        if let Some(ty) = division.global_types.get(mentioned) {
+        if let Some(ty) = global_types.get(mentioned) {
             declared_types.push((mentioned.clone(), ty.clone()));
         }
     });
@@ -1025,8 +1035,7 @@ mod tests {
     use crate::ast::types::TypeNode;
     use crate::build::compile_unit::CompileUnit;
     use crate::misc::Map;
-    use crate::rc_ir::ast::{RcGlobalInit, RcProgram};
-    use crate::rc_ir::dead_code_elim::collect_mentions;
+    use crate::rc_ir::ast::{collect_mentions, RcGlobalInit, RcProgram};
     use crate::rc_ir::test_program::{func, global, global_name, prog};
     use std::sync::Arc;
 

@@ -636,7 +636,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let shared = self.shared_globals.contains(&global_init.symbol);
         // A unit keeping the value it alone reads reads it through an accessor of its own, and one
         // computing a value another unit keeps has no read to serve.
-        let reads_the_value = global_init.owns_storage || shared;
+        let reads_the_value = global_init.serves_reads(shared);
 
         // The value is computed by a function of its own.
         //

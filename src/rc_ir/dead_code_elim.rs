@@ -8,8 +8,8 @@
 //! runs, which is after that IR has been built, verified and read.
 
 use crate::ast::name::FullName;
-use crate::misc::{grow_stack, Map, Set};
-use crate::rc_ir::ast::{FuncRef, RcExpr, RcExprNode, RcProgram, RcRhs};
+use crate::misc::{Map, Set};
+use crate::rc_ir::ast::{collect_mentions, FuncRef, RcExprNode, RcProgram};
 
 /// Drop the functions and globals `prog.roots` does not reach.
 ///
@@ -62,56 +62,6 @@ pub fn eliminate_unreachable(prog: &mut RcProgram) {
 
     prog.funcs.retain(|fref, _| reached.contains(&fref.name));
     prog.globals.retain(|g| reached.contains(&g.symbol));
-}
-
-/// Call `mention` on every name `node` mentions.
-///
-/// A name is mentioned as the reference of a closure value, or as a variable — the callee of a call,
-/// an operand, the value returned. Local variables are mentioned along with the rest; the caller
-/// decides which of the mentions can name a definition.
-pub(crate) fn collect_mentions(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
-    grow_stack(|| collect_mentions_inner(node, mention))
-}
-
-/// Call `mention` on the names one node holds, then descend into its continuation and arms.
-fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
-    match node.expr.as_ref() {
-        RcExpr::Let(_, rhs, k) => {
-            match rhs {
-                RcRhs::Var(v) => mention(&v.name),
-                RcRhs::App(callee, args) => {
-                    mention(&callee.name);
-                    args.iter().for_each(|a| mention(&a.name));
-                }
-                RcRhs::Closure(fref, caps) => {
-                    mention(&fref.name);
-                    caps.iter().for_each(|c| mention(&c.name));
-                }
-                // The names the generator embeds are the operand list again, in the same order —
-                // `validate` checks it — so reading the operands reads every name the operation
-                // holds, without cloning the generator to ask it for them.
-                RcRhs::Llvm(_, args) => {
-                    args.iter().for_each(|a| mention(&a.name));
-                }
-                RcRhs::Match(scrut, arms) => {
-                    mention(&scrut.name);
-                    for arm in arms {
-                        collect_mentions(&arm.body, mention);
-                    }
-                }
-            }
-            collect_mentions(k, mention);
-        }
-        RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) | RcExpr::Eval(v, k) => {
-            mention(&v.name);
-            collect_mentions(k, mention);
-        }
-        RcExpr::Destructure(container, _, _, k) => {
-            mention(&container.name);
-            collect_mentions(k, mention);
-        }
-        RcExpr::Ret(v) => mention(&v.name),
-    }
 }
 
 #[cfg(test)]
