@@ -116,9 +116,10 @@ fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::eliminate_unreachable;
+    use crate::ast::name::FullName;
     use crate::fixstd::builtin::InlineLLVMMakeStructBody;
-    use crate::rc_ir::ast::{MatchArm, RcFunc, RcState};
+    use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState};
     use crate::rc_ir::test_program::{func, global, global_name, prog, var};
     use std::sync::Arc;
 

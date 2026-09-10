@@ -1020,8 +1020,17 @@ fn main_unit_entry(program: &Program) -> MainUnitEntry {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        bodies_generated_here, divide_among_units, DividedProgram, MOVED_INITIALIZER_NODE_LIMIT,
+    };
+    use crate::ast::name::FullName;
+    use crate::ast::types::TypeNode;
+    use crate::build::compile_unit::CompileUnit;
+    use crate::misc::Map;
+    use crate::rc_ir::ast::{RcGlobalInit, RcProgram};
+    use crate::rc_ir::dead_code_elim::collect_mentions;
     use crate::rc_ir::test_program::{func, global, global_name, prog};
+    use std::sync::Arc;
 
     /// A global whose initializer holds more nodes than one travelling to its reader may bring
     /// along, so that the division leaves it in the unit it was dealt to.
