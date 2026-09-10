@@ -142,15 +142,12 @@ impl ExprVisitor for AppInliner {
     /// moves inward is rewritten in turn.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Get the argument of the application. An application carries one argument until uncurrying
-        // rewrites call sites onto function pointers, which happens after every pass that runs this
-        // one.
+        // rewrites the call onto a function pointer, and a call it has rewritten names the function
+        // outright, so there is nothing to move an argument into.
         let args = expr.get_app_args();
-        assert_eq!(
-            args.len(),
-            1,
-            "an application of {} arguments reached application inlining",
-            args.len()
-        );
+        if args.len() != 1 {
+            return EndVisitResult::unchanged(expr);
+        }
         let arg = args[0].clone();
 
         // Get the function applied to the argument.
@@ -158,13 +155,12 @@ impl ExprVisitor for AppInliner {
         match &*func.expr {
             Expr::Lam(params, body) => {
                 // The expression is of the form `(|x| {expr})({a})`.
-                // Replace it with `let x = {a} in {expr}`.
-                assert_eq!(
-                    params.len(),
-                    1,
-                    "a lambda of {} parameters reached application inlining",
-                    params.len()
-                );
+                // Replace it with `let x = {a} in {expr}`. A lambda uncurrying has rewritten takes
+                // its parameters together, and the call to it takes them together as well, so it
+                // does not reach here with one argument.
+                if params.len() != 1 {
+                    return EndVisitResult::unchanged(expr);
+                }
                 let param = &params[0];
                 let pat = PatternNode::make_var(param.clone(), None)
                     .set_type(arg.type_.as_ref().unwrap().clone());

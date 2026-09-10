@@ -1,7 +1,7 @@
 use super::{
-    closure_specialization, collapse_constructions, dead_symbol_elimination, defunctionalize_fix,
-    inline, inline_local, optimize_act, remove_tyanno, simplify_symbol_names, skip_eval,
-    split_struct_args, uncurry, unwrap_newtype,
+    application_inlining, closure_specialization, collapse_constructions, dead_symbol_elimination,
+    defunctionalize_fix, inline, inline_local, optimize_act, remove_tyanno, simplify_symbol_names,
+    skip_eval, split_struct_args, uncurry, unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
@@ -135,6 +135,23 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_uncurry_optimization(),
         "uncurry",
         uncurry::run,
+    );
+
+    // Push an application into the branches of what produces the function. Specializing a closure
+    // puts the body of the function a caller passed into the caller, so a body answering with a
+    // lambda leaves an application whose function is an `if`, and the lambda of the branch taken is
+    // built at run time. The pass that flattens that shape runs inside inlining, which is above
+    // specialization, so it has to be run again here.
+    run_pass(
+        prg,
+        config,
+        config.enable_closure_specialization(),
+        "application_inlining",
+        |prg| {
+            for sym in prg.symbols.values_mut() {
+                application_inlining::run_on_symbol(sym);
+            }
+        },
     );
 
     run_pass(
