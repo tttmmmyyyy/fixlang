@@ -19,5 +19,7 @@ pub mod rc_insert;
 pub mod rename;
 pub mod simplify;
 pub mod specialization;
+#[cfg(test)]
+pub mod test_program;
 pub mod unique_check_elim;
 pub mod validate;

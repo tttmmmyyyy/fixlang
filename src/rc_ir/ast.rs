@@ -343,10 +343,73 @@ pub struct RcGlobalInit {
     ///
     /// The two are apart where a unit keeps a value another computes, which is what a global one
     /// unit reads becomes: that unit keeps the value, and nothing about the storage is published,
-    /// so LLVM optimizes the reads knowing every write. The initializer follows the storage only
-    /// where moving it adds little code to that unit
-    /// (`divide_program::MOVED_INITIALIZER_NODE_LIMIT`).
+    /// so LLVM optimizes the reads knowing every write. The initializer of such a global moves to
+    /// the unit reading it where what the move brings along fits there
+    /// (`divide_program::MOVED_INITIALIZER_NODE_LIMIT`), and the storage follows the reads
+    /// afterwards (`divide_program::keep_each_global_where_it_is_read`).
     pub owns_storage: bool,
+}
+
+impl RcGlobalInit {
+    /// Whether the program holding this part of the global can serve a read of the value: it keeps
+    /// the value itself, or it reads the storage the unit keeping it publishes.
+    ///
+    /// # Arguments
+    /// * `shared` — whether more than one compilation unit reaches the storage, which is what makes
+    ///   the unit keeping it publish the storage for the others to read.
+    pub fn serves_reads(&self, shared: bool) -> bool {
+        self.owns_storage || shared
+    }
+}
+
+/// Call `mention` on every name `node` mentions.
+///
+/// A name is mentioned as the reference of a closure value, or as a variable — the callee of a call,
+/// an operand, the value returned. Local variables are mentioned along with the rest; the caller
+/// decides which of the mentions can name a definition.
+pub(crate) fn collect_mentions(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
+    grow_stack(|| collect_mentions_inner(node, mention))
+}
+
+/// Call `mention` on the names one node holds, then descend into its continuation and arms.
+fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)) {
+    match node.expr.as_ref() {
+        RcExpr::Let(_, rhs, k) => {
+            match rhs {
+                RcRhs::Var(v) => mention(&v.name),
+                RcRhs::App(callee, args) => {
+                    mention(&callee.name);
+                    args.iter().for_each(|a| mention(&a.name));
+                }
+                RcRhs::Closure(fref, caps) => {
+                    mention(&fref.name);
+                    caps.iter().for_each(|c| mention(&c.name));
+                }
+                // The names the generator embeds are the operand list again, in the same order —
+                // `validate` checks it — so reading the operands reads every name the operation
+                // holds, without cloning the generator to ask it for them.
+                RcRhs::Llvm(_, args) => {
+                    args.iter().for_each(|a| mention(&a.name));
+                }
+                RcRhs::Match(scrut, arms) => {
+                    mention(&scrut.name);
+                    for arm in arms {
+                        collect_mentions(&arm.body, mention);
+                    }
+                }
+            }
+            collect_mentions(k, mention);
+        }
+        RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) | RcExpr::Eval(v, k) => {
+            mention(&v.name);
+            collect_mentions(k, mention);
+        }
+        RcExpr::Destructure(container, _, _, k) => {
+            mention(&container.name);
+            collect_mentions(k, mention);
+        }
+        RcExpr::Ret(v) => mention(&v.name),
+    }
 }
 
 /// Visit every node of `node`: the continuation chain it heads, and the body of every arm of every
