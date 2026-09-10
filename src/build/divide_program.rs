@@ -410,9 +410,11 @@ fn move_each_initializer_to_the_unit_that_alone_reads_it(
             continue;
         }
         let reader = *readers.iter().next().unwrap();
-        let computing = unit_holding(unit_programs, name, |global| global.owns_initializer)
+        let computing_unit = unit_holding(unit_programs, name, |global| global.owns_initializer)
             .unwrap_or_else(|| panic!("no unit computes the value of `{}`", name.to_string()));
-        if computing == reader || !initializer_fits(unit_programs, name, reader, copyable_funcs) {
+        if computing_unit == reader
+            || !initializer_fits(unit_programs, name, reader, copyable_funcs)
+        {
             continue;
         }
         destinations.insert(name.clone(), reader);
@@ -465,13 +467,13 @@ fn keep_each_global_where_it_is_read(
     shared_globals: &mut Set<FullName>,
     root_value_names: &Set<FullName>,
 ) -> bool {
-    let placed: Set<FullName> = unit_programs
+    let non_root_globals: Set<FullName> = unit_programs
         .iter()
         .flat_map(|unit_program| unit_program.globals.iter().map(|global| &global.symbol))
         .filter(|name| !root_value_names.contains(*name))
         .cloned()
         .collect();
-    let readers = units_reading_each_global(unit_programs, &placed);
+    let readers = units_reading_each_global(unit_programs, &non_root_globals);
     let keepers: Map<&FullName, Option<usize>> = readers
         .iter()
         .map(|(name, readers)| (name, keeper_of(unit_programs, name, readers)))
@@ -1090,11 +1092,11 @@ mod tests {
     /// verifier rejects.
     #[test]
     fn test_the_storage_of_a_global_follows_the_reads_an_initializer_takes_with_it() {
-        let (table, holder, entry, source) = (
+        let (table, holder, entry, filler) = (
             global_name("table"),
             global_name("holder"),
             global_name("entry"),
-            global_name("source"),
+            global_name("filler"),
         );
         // `holder` is read by `entry` alone, so its initializer travels to the unit holding
         // `entry`; that initializer reads `table`, whose initializer is too large to travel and
@@ -1102,17 +1104,17 @@ mod tests {
         let program = prog(
             vec![
                 func(entry.clone(), &[holder.clone()]),
-                func(source.clone(), &[]),
+                func(filler.clone(), &[]),
             ],
             vec![
                 global(holder.clone(), &[table.clone()]),
-                global_too_large_to_move(table.clone(), &[source.clone()]),
+                global_too_large_to_move(table.clone(), &[filler.clone()]),
             ],
             &[],
         );
         let units = vec![
             CompileUnit::new(vec![holder.clone()]),
-            CompileUnit::new(vec![entry.clone(), source.clone(), table.clone()]),
+            CompileUnit::new(vec![entry.clone(), filler.clone(), table.clone()]),
             CompileUnit::new(vec![]),
         ];
         let global_types = global_types(&program);
