@@ -7,7 +7,9 @@
 #[cfg(test)]
 mod tests {
     use crate::configuration::Configuration;
-    use crate::tests::test_util::{build_within_and_run, test_source, test_source_fail};
+    use crate::tests::test_util::{
+        build_run_and_read_rc_ir, build_within_and_run, test_source, test_source_fail,
+    };
     use std::time::Duration;
 
     /// The argument `x` of `(let x = ..; ..)(x)` denotes the outer `x` after the application is
@@ -673,6 +675,93 @@ mod tests {
             source,
             Configuration::develop_mode(),
             "Array storage is not unique",
+        );
+    }
+
+    /// A state monad whose `bind` threads a counter, looped over with `Std::loop_m`.
+    ///
+    /// `loop_m` answers with an action of the monad it loops in, so each round of it hands `bind`
+    /// the action the body produced. Specializing the closure the body is puts that body into
+    /// `loop_m`, where it answers with a lambda under each arm of an `if`, and the application of
+    /// that lambda to the state is what has to reach the arms.
+    const MONADIC_LOOP: &str = r#"
+        module Main;
+
+        type St a = unbox struct { _run : I64 -> (a, I64) };
+
+        namespace St {
+            run : I64 -> St a -> (a, I64);
+            run = |s, m| (m.@_run)(s);
+        }
+
+        impl St : Functor {
+            map = |f, m| St { _run : |s| let (v, s) = m.run(s); (f(v), s) };
+        }
+
+        impl St : Monad {
+            pure = |v| St { _run : |s| (v, s) };
+            bind = |f, m| St { _run : |s| let (v, s) = m.run(s); f(v).run(s) };
+        }
+
+        _tick : St I64;
+        _tick = St { _run : |s| (s, s + 1) };
+
+        main : IO () = (
+            let counting = loop_m((0, 0), |(i, total)|
+                if i == 100 { break_m $ total };
+                let v = *_tick;
+                continue_m $ (i + 1, total + v)
+            );
+            let (total, _) = counting.St::run(0);
+            println(total.to_string)
+        );
+    "#;
+
+    /// What `MONADIC_LOOP` prints: the sum of `0..99`.
+    const MONADIC_LOOP_OUTPUT: &str = "4950";
+
+    /// The body of the function in `dump` whose name carries `name_part`, from its signature to
+    /// the line before the next function's.
+    fn function_body<'a>(dump: &'a str, name_part: &str) -> &'a str {
+        let start = dump
+            .match_indices(
+                "
+fn ",
+            )
+            .find(|(at, _)| dump[at + 1..].lines().next().unwrap().contains(name_part))
+            .map(|(at, _)| at + 1)
+            .unwrap_or_else(|| panic!("the dump names no function carrying `{}`", name_part));
+        let rest = &dump[start..];
+        let end = rest[1..]
+            .find(
+                "
+fn ",
+            )
+            .map(|at| at + 1)
+            .unwrap_or(rest.len());
+        &rest[..end]
+    }
+
+    /// A loop through a monad builds no closure: `loop_m` hands the state to the action its body
+    /// answered with, and that application reaches the arms of the `if` the body ends in, so the
+    /// lambda of the arm taken is never built. Left unreached, it is one heap allocation per round
+    /// of the loop.
+    ///
+    /// The dump is what this asserts against because the program cannot observe it: the loop
+    /// answers the same either way.
+    #[test]
+    fn test_a_loop_through_a_monad_builds_no_closure() {
+        let dump = build_run_and_read_rc_ir(
+            MONADIC_LOOP,
+            "max",
+            MONADIC_LOOP_OUTPUT,
+            "a state monad looped over with `loop_m`",
+        );
+        let body = function_body(&dump, "Std::loop_m");
+        assert!(
+            !body.contains("= closure "),
+            "the loop should build no closure, but its body is:\n{}",
+            body
         );
     }
 }

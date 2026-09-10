@@ -177,6 +177,52 @@ fn build_program(
 /// # Arguments
 /// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what
 ///   a failure names, e.g. "a chain of 2400 `let`s".
+/// Builds `source` at `opt_level` with the RC IR dumped, runs the program, and returns the RC IR of
+/// every module.
+///
+/// Running the program is what keeps the dump honest: what a test asserts on then comes off a build
+/// that is known to answer correctly.
+///
+/// # Arguments
+/// * `opt_level` - the level to build at, which decides which optimizations the dump shows.
+/// * `expected_output` - what the program prints on stdout, with the trailing newline dropped.
+/// * `description` - what is being compiled, as a phrase that reads after "compiling".
+pub fn build_run_and_read_rc_ir(
+    source: &str,
+    opt_level: &str,
+    expected_output: &str,
+    description: &str,
+) -> String {
+    let (temp_dir, program_path) = build_program(
+        source,
+        opt_level,
+        &["--emit-rc-ir", "all"],
+        Some(Duration::from_secs(600)),
+        description,
+    );
+
+    let output = Command::new(&program_path)
+        .output()
+        .expect("Failed to run the compiled program");
+    assert!(
+        output.status.success(),
+        "the program compiled from {} exited with {}",
+        description,
+        output.status
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        expected_output,
+        "the program compiled from {} should answer the same at -O {}",
+        description,
+        opt_level
+    );
+
+    let dump_path = temp_dir.path().join(".fixlang/rc_ir.post.txt");
+    fs::read_to_string(&dump_path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
+}
+
 pub fn build_within_and_run(
     source: &str,
     opt_level: &str,
