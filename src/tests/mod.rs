@@ -33,6 +33,7 @@ mod test_explicit_import;
 mod test_external_projects;
 mod test_ffi;
 mod test_file_io;
+mod test_float_text_buffer;
 mod test_get_args;
 mod test_git_ref;
 mod test_global_accessor;

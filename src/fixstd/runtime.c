@@ -115,52 +115,49 @@ void fixruntime_i64_to_str(char *buf, int64_t v)
     sprintf(buf, "%" PRId64, v);
 }
 
-void fixruntime_f32_to_str(char *buf, float v)
+// Stops the program unless the text `snprintf` reported fits `size`.
+//
+// The caller in `src/fixstd/std.fix` derives that buffer's size from the widest text the format
+// can write, so a text that does not fit means the derivation is wrong. Stopping here names the
+// two sizes, where letting the write run on would leave the heap damaged and the program going.
+//
+// # Arguments
+// * `written` - What `snprintf` answered: the length of the text, without its null, or a negative
+//   number where it could not write the text at all.
+// * `size` - The bytes the buffer holds.
+static void fixruntime_check_float_text(int written, int64_t size)
 {
-    sprintf(buf, "%f", v);
+    if (written < 0)
+    {
+        fprintf(stderr, "Writing a number as text failed\n");
+        fixruntime_abort();
+    }
+    if ((int64_t)written + 1 > size)
+    {
+        fprintf(stderr, "A number's text takes %" PRId64 " bytes and its buffer holds %" PRId64 "\n",
+                (int64_t)written + 1, size);
+        fixruntime_abort();
+    }
 }
 
-void fixruntime_f32_to_str_exp(char *buf, float v)
+void fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    sprintf(buf, "%e", v);
+    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*e", (int)precision, v), size);
 }
 
-void fixruntime_f32_to_str_exp_precision(char *buf, float v, uint8_t precision)
+void fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    char specifier[7]; // len(%.255e) + 1
-    sprintf(specifier, "%%.%" PRIu8 "e", precision);
-    sprintf(buf, specifier, v);
+    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*f", (int)precision, v), size);
 }
 
-void fixruntime_f32_to_str_precision(char *buf, float v, uint8_t precision)
+void fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    char specifier[7]; // len(%.255f) + 1
-    sprintf(specifier, "%%.%" PRIu8 "f", precision);
-    sprintf(buf, specifier, v);
+    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*le", (int)precision, v), size);
 }
 
-void fixruntime_f64_to_str(char *buf, double v)
+void fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    sprintf(buf, "%lf", v);
-}
-
-void fixruntime_f64_to_str_exp(char *buf, double v)
-{
-    sprintf(buf, "%le", v);
-}
-
-void fixruntime_f64_to_str_exp_precision(char *buf, double v, uint8_t precision)
-{
-    char specifier[8]; // len(%.255le) + 1
-    sprintf(specifier, "%%.%" PRIu8 "le", precision);
-    sprintf(buf, specifier, v);
-}
-
-void fixruntime_f64_to_str_precision(char *buf, double v, uint8_t precision)
-{
-    char specifier[8]; // len(%.255lf) + 1
-    sprintf(specifier, "%%.%" PRIu8 "lf", precision);
-    sprintf(buf, specifier, v);
+    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*lf", (int)precision, v), size);
 }
 
 int64_t fixruntime_strtoll_10(const char *str)
@@ -325,12 +322,6 @@ __attribute__((noreturn)) void fixruntime_array_size_overflow(int64_t size)
     fprintf(stderr, "Array size or capacity exceeds the address space: %" PRId64 "\n", size);
     fixruntime_abort();
 }
-
-// void fixruntime_union_variant_mismatch(uint8_t expected, uint8_t actual)
-// {
-//     fprintf(stderr, "Union variant mismatch: expected=%" PRIu8 ", actual=%" PRIu8 "\n", expected, actual);
-//     fixruntime_abort();
-// }
 
 #if defined(BACKTRACE)
 #if defined(__linux__)
