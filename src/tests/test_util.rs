@@ -177,6 +177,27 @@ fn build_program(
 /// # Arguments
 /// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what
 ///   a failure names, e.g. "a chain of 2400 `let`s".
+pub fn build_within_and_run(
+    source: &str,
+    opt_level: &str,
+    timeout: Duration,
+    description: &str,
+) -> String {
+    let (_temp_dir, program_path) =
+        build_program(source, opt_level, &[], Some(timeout), description);
+
+    let output = Command::new(&program_path)
+        .output()
+        .expect("Failed to run the compiled program");
+    assert!(
+        output.status.success(),
+        "the program compiled from {} exited with {}",
+        description,
+        output.status
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
 /// Builds `source` at `opt_level` with the RC IR dumped, runs the program, and returns the RC IR of
 /// every module.
 ///
@@ -185,7 +206,7 @@ fn build_program(
 ///
 /// # Arguments
 /// * `opt_level` - the level to build at, which decides which optimizations the dump shows.
-/// * `expected_output` - what the program prints on stdout, with the trailing newline dropped.
+/// * `expected_output` - what the program prints on stdout, with the surrounding whitespace removed.
 /// * `description` - what is being compiled, as a phrase that reads after "compiling".
 pub fn build_run_and_read_rc_ir(
     source: &str,
@@ -218,30 +239,39 @@ pub fn build_run_and_read_rc_ir(
         opt_level
     );
 
-    let dump_path = temp_dir.path().join(".fixlang/rc_ir.post.txt");
+    read_rc_ir_dump(temp_dir.path())
+}
+
+/// The RC IR of every module, read out of the dump a build with `--emit-rc-ir all` left in `dir`.
+pub fn read_rc_ir_dump(dir: &Path) -> String {
+    let dump_path = dir.join(".fixlang/rc_ir.post.txt");
     fs::read_to_string(&dump_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
 }
 
-pub fn build_within_and_run(
-    source: &str,
-    opt_level: &str,
-    timeout: Duration,
-    description: &str,
-) -> String {
-    let (_temp_dir, program_path) =
-        build_program(source, opt_level, &[], Some(timeout), description);
-
-    let output = Command::new(&program_path)
-        .output()
-        .expect("Failed to run the compiled program");
-    assert!(
-        output.status.success(),
-        "the program compiled from {} exited with {}",
-        description,
-        output.status
-    );
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
+/// Every function of an RC IR dump whose signature line names `name_part`: that line and the lines
+/// under it, up to the line that opens the next function or global.
+///
+/// A dump names a function with `fn ` and a global with `global `, and the last function of a dump
+/// is followed by the globals, so both open a new item and both end the one before.
+pub fn rc_ir_function_bodies(dump: &str, name_part: &str) -> Vec<String> {
+    let mut bodies = vec![];
+    let mut current_body: Option<Vec<&str>> = None;
+    for line in dump.lines() {
+        if line.starts_with("fn ") || line.starts_with("global ") {
+            if let Some(body) = current_body.take() {
+                bodies.push(body.join("\n"));
+            }
+            current_body = (line.starts_with("fn ") && line.contains(name_part)).then(Vec::new);
+        }
+        if let Some(body) = current_body.as_mut() {
+            body.push(line);
+        }
+    }
+    if let Some(body) = current_body {
+        bodies.push(body.join("\n"));
+    }
+    bodies
 }
 
 /// Builds `source` at `opt_level` with `build_args` on the build command, runs the program it

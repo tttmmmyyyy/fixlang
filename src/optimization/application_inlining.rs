@@ -51,10 +51,17 @@ use crate::ast::{
         AppSourceCodeOrderType, Expr, ExprNode,
     },
     pattern::PatternNode,
-    program::Symbol,
+    program::{Program, Symbol},
     traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
 };
 use std::sync::Arc;
+
+/// Optimizes every symbol of `prg` in place.
+pub fn run(prg: &mut Program) {
+    for (_name, sym) in &mut prg.symbols {
+        run_on_symbol(sym);
+    }
+}
 
 /// Optimizes the expression of a symbol in place. The symbol has to be one that already has an
 /// expression.
@@ -155,12 +162,16 @@ impl ExprVisitor for AppInliner {
         match &*func.expr {
             Expr::Lam(params, body) => {
                 // The expression is of the form `(|x| {expr})({a})`.
-                // Replace it with `let x = {a} in {expr}`. A lambda uncurrying has rewritten takes
-                // its parameters together, and the call to it takes them together as well, so it
-                // does not reach here with one argument.
-                if params.len() != 1 {
-                    return EndVisitResult::unchanged(expr);
-                }
+                // Replace it with `let x = {a} in {expr}`. A lambda of many parameters is built by
+                // uncurrying alone, as the body of a `#funptr` symbol, and every call uncurrying
+                // rewrites onto one names it outright, so it does not reach an application of one
+                // argument.
+                assert_eq!(
+                    params.len(),
+                    1,
+                    "a lambda of {} parameters reached application inlining",
+                    params.len()
+                );
                 let param = &params[0];
                 let pat = PatternNode::make_var(param.clone(), None)
                     .set_type(arg.type_.as_ref().unwrap().clone());
