@@ -410,9 +410,9 @@ fn move_each_initializer_to_the_unit_that_alone_reads_it(
             continue;
         }
         let reader = *readers.iter().next().unwrap();
-        if unit_computing(unit_programs, name) == reader
-            || !initializer_fits(unit_programs, name, reader, copyable_funcs)
-        {
+        let computing = unit_holding(unit_programs, name, |global| global.owns_initializer)
+            .unwrap_or_else(|| panic!("no unit computes the value of `{}`", name.to_string()));
+        if computing == reader || !initializer_fits(unit_programs, name, reader, copyable_funcs) {
             continue;
         }
         destinations.insert(name.clone(), reader);
@@ -427,17 +427,19 @@ fn move_each_initializer_to_the_unit_that_alone_reads_it(
     !destinations.is_empty()
 }
 
-/// The unit that computes the value of the global `name`.
-fn unit_computing(unit_programs: &[RcProgram], name: &FullName) -> usize {
-    unit_programs
-        .iter()
-        .position(|unit_program| {
-            unit_program
-                .globals
-                .iter()
-                .any(|global| global.symbol == *name && global.owns_initializer)
-        })
-        .unwrap_or_else(|| panic!("no unit computes the value of `{}`", name.to_string()))
+/// The unit holding the part of the global `name` that `holds` picks out — the value's initializer,
+/// or its storage — of which the division leaves one.
+fn unit_holding(
+    unit_programs: &[RcProgram],
+    name: &FullName,
+    holds: impl Fn(&RcGlobalInit) -> bool,
+) -> Option<usize> {
+    unit_programs.iter().position(|unit_program| {
+        unit_program
+            .globals
+            .iter()
+            .any(|global| global.symbol == *name && holds(global))
+    })
 }
 
 /// Keep each global in the units that read it, and report whether any of them changed hands.
@@ -510,21 +512,17 @@ fn keep_each_global_where_it_is_read(
 /// reading it, or, where more than one does, the unit already keeping it. A value nothing reads is
 /// kept by nobody.
 fn keeper_of(unit_programs: &[RcProgram], name: &FullName, readers: &Set<usize>) -> Option<usize> {
-    let mut readers: Vec<usize> = readers.iter().copied().collect();
-    readers.sort();
-    match readers.as_slice() {
-        [] => None,
-        [reader] => Some(*reader),
-        [first, ..] => Some(
-            unit_programs
-                .iter()
-                .position(|unit_program| {
-                    unit_program
-                        .globals
-                        .iter()
-                        .any(|global| global.symbol == *name && global.owns_storage)
-                })
-                .unwrap_or(*first),
+    match readers.len() {
+        0 => None,
+        1 => readers.iter().copied().next(),
+        _ => Some(
+            unit_holding(unit_programs, name, |global| global.owns_storage).unwrap_or_else(|| {
+                panic!(
+                    "no unit keeps the value of `{}`, which {} units read",
+                    name.to_string(),
+                    readers.len()
+                )
+            }),
         ),
     }
 }

@@ -31,7 +31,7 @@ pub fn var(name: FullName) -> RcVar {
 
 /// A body that mentions each of `mentions` — as the reference of a closure value — and returns the
 /// last value it bound. A body mentioning nothing returns its own parameter.
-pub fn body_mentioning(mentions: &[FullName]) -> RcExprNode {
+fn body_mentioning(mentions: &[FullName]) -> RcExprNode {
     let last = FullName::local(&format!("v{}", mentions.len()));
     let mut body = RcExprNode {
         expr: Arc::new(RcExpr::Ret(var(last))),
