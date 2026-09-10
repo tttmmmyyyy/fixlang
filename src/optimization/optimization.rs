@@ -137,6 +137,14 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         uncurry::run,
     );
 
+    run_pass(
+        prg,
+        config,
+        config.enable_dead_symbol_elimination(),
+        "dead_symbol_elimination",
+        dead_symbol_elimination::run,
+    );
+
     // Push an application into the branches of what produces the function. Specializing a closure
     // puts the body of the function a caller passed into the caller, so a body answering with a
     // lambda leaves an application whose function is an `if`, and the lambda of the branch taken is
@@ -152,14 +160,6 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_closure_specialization() && config.enable_uncurry_optimization(),
         "application_inlining",
         application_inlining::run,
-    );
-
-    run_pass(
-        prg,
-        config,
-        config.enable_dead_symbol_elimination(),
-        "dead_symbol_elimination",
-        dead_symbol_elimination::run,
     );
 
     if config.emit_symbols {
