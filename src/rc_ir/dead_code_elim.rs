@@ -117,87 +117,10 @@ fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::types::type_funptr;
-    use crate::fixstd::builtin::{make_i64_ty, InlineLLVMMakeStructBody};
-    use crate::rc_ir::ast::{MatchArm, RcFunc, RcGlobalInit, RcState, RcVar};
+    use crate::fixstd::builtin::InlineLLVMMakeStructBody;
+    use crate::rc_ir::ast::{MatchArm, RcFunc, RcState};
+    use crate::rc_ir::test_program::{func, global, global_name, prog, var};
     use std::sync::Arc;
-
-    /// The name lowering gives a symbol of the program under test.
-    fn global_name(name: &str) -> FullName {
-        FullName::from_strs(&["Main"], name)
-    }
-
-    /// A variable of type `I64` under `name`, carrying no source location or debug name.
-    fn var(name: FullName) -> RcVar {
-        RcVar {
-            name,
-            ty: make_i64_ty(),
-            source: None,
-            debug_name: None,
-            skip_null_check: false,
-        }
-    }
-
-    /// A body that mentions each of `mentions` — as the reference of a closure value — and returns
-    /// the last value it bound. A body mentioning nothing returns its own parameter.
-    fn body_mentioning(mentions: &[FullName]) -> RcExprNode {
-        let last = FullName::local(&format!("v{}", mentions.len()));
-        let mut body = RcExprNode {
-            expr: Arc::new(RcExpr::Ret(var(last))),
-            source: None,
-        };
-        for (i, mentioned) in mentions.iter().enumerate().rev() {
-            body = RcExprNode {
-                expr: Arc::new(RcExpr::Let(
-                    var(FullName::local(&format!("v{}", i + 1))),
-                    RcRhs::Closure(
-                        FuncRef {
-                            name: mentioned.clone(),
-                        },
-                        vec![],
-                    ),
-                    body,
-                )),
-                source: None,
-            };
-        }
-        body
-    }
-
-    /// A function of one `I64` parameter whose body mentions each of `mentions`.
-    fn func(name: FullName, mentions: &[FullName]) -> RcFunc {
-        RcFunc {
-            name: FuncRef { name },
-            fn_ty: type_funptr(vec![make_i64_ty()], make_i64_ty()),
-            params: vec![var(FullName::local("v0"))],
-            capture: None,
-            ret_ty: make_i64_ty(),
-            body: body_mentioning(mentions),
-            source: None,
-            borrowed_units: Set::default(),
-            inline_into_callers: false,
-        }
-    }
-
-    /// A global value whose initializer mentions each of `mentions`.
-    fn global(symbol: FullName, mentions: &[FullName]) -> RcGlobalInit {
-        RcGlobalInit {
-            symbol,
-            ty: make_i64_ty(),
-            init: body_mentioning(mentions),
-            owns_initializer: true,
-            owns_storage: true,
-        }
-    }
-
-    /// A program of `funcs` and `globals` reached through `roots`.
-    fn prog(funcs: Vec<RcFunc>, globals: Vec<RcGlobalInit>, roots: &[FullName]) -> RcProgram {
-        RcProgram {
-            funcs: funcs.into_iter().map(|f| (f.name.clone(), f)).collect(),
-            globals,
-            roots: roots.iter().cloned().collect(),
-        }
-    }
 
     /// The names of `prog`'s functions, sorted, so that a comparison does not read the order the
     /// function table happens to hold them in.

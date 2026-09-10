@@ -139,16 +139,17 @@ pub fn divide_among_units(
         &shared_globals,
         &root_value_names,
     );
-    let moved = give_a_global_one_unit_reads_to_that_unit(
+    if move_each_initializer_to_the_unit_that_alone_reads_it(
         &mut unit_programs,
-        &mut shared_globals,
+        &shared_globals,
         &root_value_names,
         &copyable_funcs,
-    );
-    if moved.initializer {
+    ) {
         // The unit an initializer moved to generates a body it used to declare, and the pruning
         // above dropped what that body reaches: a unit carrying the accessor alone generates no
-        // initializer, so nothing there reached those bodies.
+        // initializer, so nothing there reached those bodies. The unit it moved out of is left
+        // holding whatever only that initializer reached, which the pruning then drops, so that
+        // the reads each unit performs are the ones its own code performs.
         import_what_each_unit_reaches(
             &mut unit_programs,
             &mut imported,
@@ -156,8 +157,6 @@ pub fn divide_among_units(
             &copyable_funcs,
             &all_globals,
         );
-    }
-    if moved.storage {
         (published, published_here) = publish_and_prune(
             &mut unit_programs,
             &unit_of,
@@ -166,6 +165,17 @@ pub fn divide_among_units(
             &root_value_names,
         );
     }
+    if keep_each_global_where_it_is_read(&mut unit_programs, &mut shared_globals, &root_value_names)
+    {
+        (published, published_here) = publish_and_prune(
+            &mut unit_programs,
+            &unit_of,
+            &imported,
+            &shared_globals,
+            &root_value_names,
+        );
+    }
+    assert_each_unit_serves_the_globals_it_reads(&unit_programs, &shared_globals, &all_globals);
 
     DividedProgram {
         unit_programs,
@@ -361,82 +371,186 @@ fn import_what_each_unit_reaches(
     }
 }
 
-/// Give each global at most one unit reads to that unit, and report what moved.
+/// Move the initializer of each global one unit alone reads into that unit, where what the move
+/// brings along fits there, and report whether any moved.
 ///
-/// A unit reading a global another unit keeps reads storage the linker publishes, and LLVM has to
-/// assume that a store anywhere in the unit writes it: the test of the initialization flag and the
-/// load of the storage stay inside every loop that reads the global, and so do the bounds checks
-/// that the lifted load would have taken out. A value one unit reads is kept by that unit, where
-/// nothing about it is published.
+/// A unit generating the initializer of the value it reads optimizes the reads by what the
+/// initializer settles — the length of an array, the shape of a structure — which is what takes the
+/// bounds checks out of a loop reading the global. One that would bring a graph of bodies along
+/// stays where it is, since that graph would land in the unit a program's own edits regenerate;
+/// `MOVED_INITIALIZER_NODE_LIMIT` says how much is little.
 ///
-/// The initializer travels with the storage where moving it adds little code to that unit, so that
-/// the unit also optimizes its reads by what the initializer settles. One that would bring a graph
-/// of bodies along stays where it is, since that graph would land in the unit a program's own edits
-/// regenerate; `MOVED_INITIALIZER_NODE_LIMIT` says how much is little.
+/// The storage follows afterwards, in `keep_each_global_where_it_is_read`: an initializer that
+/// moves takes the reads it performs to the unit it moves to, so which units read which global is
+/// settled once the initializers are where they belong.
 ///
-/// A global no unit reads computes a value nothing observes. Un-sharing it leaves it out of every
-/// unit's roots, and the pruning that follows drops it.
-fn give_a_global_one_unit_reads_to_that_unit(
+/// A root value is read by the entry point and by the exported C functions, which the main unit
+/// builds after the division out of no body this walk can read, so its initializer stays where the
+/// division put it.
+fn move_each_initializer_to_the_unit_that_alone_reads_it(
+    unit_programs: &mut [RcProgram],
+    shared_globals: &Set<FullName>,
+    root_value_names: &Set<FullName>,
+    copyable_funcs: &Map<FullName, RcFunc>,
+) -> bool {
+    let readers = units_reading_each_global(unit_programs, shared_globals);
+    // The unit each initializer that moves is moving to.
+    let mut destinations: Map<FullName, usize> = Map::default();
+    for (name, readers) in &readers {
+        if root_value_names.contains(name) || readers.len() != 1 {
+            continue;
+        }
+        let reader = *readers.iter().next().unwrap();
+        if unit_computing(unit_programs, name) == reader
+            || !initializer_fits(unit_programs, name, reader, copyable_funcs)
+        {
+            continue;
+        }
+        destinations.insert(name.clone(), reader);
+    }
+    for (index, unit_program) in unit_programs.iter_mut().enumerate() {
+        for global in &mut unit_program.globals {
+            if let Some(destination) = destinations.get(&global.symbol) {
+                global.owns_initializer = *destination == index;
+            }
+        }
+    }
+    !destinations.is_empty()
+}
+
+/// The unit that computes the value of the global `name`.
+fn unit_computing(unit_programs: &[RcProgram], name: &FullName) -> usize {
+    unit_programs
+        .iter()
+        .position(|unit_program| {
+            unit_program
+                .globals
+                .iter()
+                .any(|global| global.symbol == *name && global.owns_initializer)
+        })
+        .unwrap_or_else(|| panic!("no unit computes the value of `{}`", name.to_string()))
+}
+
+/// Keep each global in the units that read it, and report whether any of them changed hands.
+///
+/// The unit alone reading a global keeps the value, where nothing about it is published: a unit
+/// reading a global another unit keeps reads storage the linker publishes, and LLVM has to assume
+/// that a store anywhere in the unit writes it — the test of the initialization flag and the load
+/// of the storage stay inside every loop that reads the global, and so do the bounds checks that
+/// the lifted load would have taken out. A value more than one unit reads stays where it is and is
+/// published from there, so that one storage serves every reader.
+///
+/// Which units read a global is read off the bodies each unit generates, which is why this comes
+/// after the initializers have moved and the copying and the pruning have caught up with them:
+/// moving an initializer moves the reads it performs, and a unit generating a body that reads a
+/// global has to be one that can serve the read.
+///
+/// A global no unit reads computes a value nothing observes, and no unit is left holding a part of
+/// it. A root value is read by the entry point and by the exported C functions, which the main unit
+/// builds after the division out of no body this walk can read, so it is left as the division put
+/// it: kept and published by the unit defining it, and read through the copy the main unit carries.
+fn keep_each_global_where_it_is_read(
     unit_programs: &mut [RcProgram],
     shared_globals: &mut Set<FullName>,
     root_value_names: &Set<FullName>,
-    copyable_funcs: &Map<FullName, RcFunc>,
-) -> Moved {
-    let readers = units_reading_each_global(unit_programs, shared_globals);
-    // What each global that moves becomes: the unit that keeps it, and whether the initializer
-    // travels there with the storage.
-    let mut moves: Map<FullName, (Set<usize>, bool)> = Map::default();
-    let mut moved = Moved {
-        storage: false,
-        initializer: false,
-    };
-    for name in shared_globals.iter().cloned().collect::<Vec<FullName>>() {
-        // A root value is read by the entry point and by the exported C functions, which the main
-        // unit builds after the division out of no body this walk can read.
-        if root_value_names.contains(&name) {
-            continue;
-        }
-        let readers = &readers[&name];
-        if readers.len() > 1 {
-            continue;
-        }
-        let initializer_travels = readers
-            .iter()
-            .next()
-            .is_some_and(|reader| initializer_fits(unit_programs, &name, *reader, copyable_funcs));
-        moves.insert(name.clone(), (readers.clone(), initializer_travels));
-        shared_globals.remove(&name);
-        moved.storage = true;
-        moved.initializer |= initializer_travels;
-    }
+) -> bool {
+    let placed: Set<FullName> = unit_programs
+        .iter()
+        .flat_map(|unit_program| unit_program.globals.iter().map(|global| &global.symbol))
+        .filter(|name| !root_value_names.contains(*name))
+        .cloned()
+        .collect();
+    let readers = units_reading_each_global(unit_programs, &placed);
+    let keepers: Map<&FullName, Option<usize>> = readers
+        .iter()
+        .map(|(name, readers)| (name, keeper_of(unit_programs, name, readers)))
+        .collect();
+
+    let mut changed = false;
     for (index, unit_program) in unit_programs.iter_mut().enumerate() {
         unit_program.globals.retain_mut(|global| {
-            let Some((readers, initializer_travels)) = moves.get(&global.symbol) else {
+            let Some(readers) = readers.get(&global.symbol) else {
                 return true;
             };
-            let reads = readers.contains(&index);
-            global.owns_storage = reads;
-            // The initializer follows the storage where it travels, and where no unit reads the
-            // value there is nowhere for either of them to stay.
-            if *initializer_travels || readers.is_empty() {
-                global.owns_initializer = reads;
+            let keeps = keepers[&global.symbol] == Some(index);
+            changed |= global.owns_storage != keeps;
+            global.owns_storage = keeps;
+            // A value nothing reads is computed by nobody.
+            if keepers[&global.symbol].is_none() {
+                changed |= global.owns_initializer;
+                global.owns_initializer = false;
             }
-            // A unit that neither keeps the value nor computes it holds no part of the global. A
-            // body copied here later that reads it takes the accessor again, and the global is
-            // shared once more.
-            reads || global.owns_initializer
+            // A unit that neither keeps the value nor computes it nor reads it holds no part of the
+            // global.
+            let held = keeps || global.owns_initializer || readers.contains(&index);
+            changed |= !held;
+            held
         });
     }
-    moved
+    for (name, readers) in &readers {
+        changed |= if readers.len() > 1 {
+            shared_globals.insert(name.clone())
+        } else {
+            shared_globals.remove(name)
+        };
+    }
+    changed
 }
 
-/// What `give_a_global_one_unit_reads_to_that_unit` moved.
-struct Moved {
-    /// Whether the storage of any global moved, which changes what the units publish.
-    storage: bool,
-    /// Whether the initializer of any global moved, which leaves the unit it moved to generating a
-    /// body whose callees it holds no copy of.
-    initializer: bool,
+/// The unit that keeps the value of the global `name`, given the units reading it: the one unit
+/// reading it, or, where more than one does, the unit already keeping it. A value nothing reads is
+/// kept by nobody.
+fn keeper_of(unit_programs: &[RcProgram], name: &FullName, readers: &Set<usize>) -> Option<usize> {
+    let mut readers: Vec<usize> = readers.iter().copied().collect();
+    readers.sort();
+    match readers.as_slice() {
+        [] => None,
+        [reader] => Some(*reader),
+        [first, ..] => Some(
+            unit_programs
+                .iter()
+                .position(|unit_program| {
+                    unit_program
+                        .globals
+                        .iter()
+                        .any(|global| global.symbol == *name && global.owns_storage)
+                })
+                .unwrap_or(*first),
+        ),
+    }
+}
+
+/// Check that every unit can serve each read of a global its own code performs, and that one unit
+/// computes each global's value and one keeps it.
+///
+/// A unit reads a global through an accessor of its own, which tests the initialization flag and
+/// loads the storage: the unit keeps the value, or it reads storage the unit keeping it publishes.
+/// A unit that does neither declares an accessor with internal linkage and no body, which the LLVM
+/// verifier rejects at the end of a build that has already done all of its work.
+fn assert_each_unit_serves_the_globals_it_reads(
+    unit_programs: &[RcProgram],
+    shared_globals: &Set<FullName>,
+    all_globals: &Map<FullName, RcGlobalInit>,
+) {
+    for (index, unit_program) in unit_programs.iter().enumerate() {
+        let served: Set<&FullName> = unit_program
+            .globals
+            .iter()
+            .filter(|global| global.owns_storage || shared_globals.contains(&global.symbol))
+            .map(|global| &global.symbol)
+            .collect();
+        for body in bodies_generated_here(unit_program) {
+            collect_mentions(body, &mut |mentioned| {
+                assert!(
+                    !all_globals.contains_key(mentioned) || served.contains(mentioned),
+                    "unit {} generates a body reading `{}`, and neither keeps that value nor \
+                     reads the storage of a unit that does",
+                    index,
+                    mentioned.to_string()
+                );
+            });
+        }
+    }
 }
 
 /// Whether moving the initializer of the global `name` into unit `reader` adds no more than
@@ -484,11 +598,23 @@ fn initializer_fits(
     nodes <= MOVED_INITIALIZER_NODE_LIMIT
 }
 
+/// The bodies `unit_program` generates code from: its functions, and the initializers of the
+/// globals it computes. The initializer of a global another unit computes is carried here to say
+/// what the value is, and this unit generates none of it.
+fn bodies_generated_here(unit_program: &RcProgram) -> impl Iterator<Item = &RcExprNode> + '_ {
+    unit_program.funcs.values().map(|func| &func.body).chain(
+        unit_program
+            .globals
+            .iter()
+            .filter(|global| global.owns_initializer)
+            .map(|global| &global.init),
+    )
+}
+
 /// Which units read each of `globals`, by name.
 ///
 /// A unit reads a global when a body it generates mentions it: one of its functions, or the
-/// initializer of a global it computes. The initializer of a global another unit computes is
-/// carried here to say what the value is, and this unit generates none of it.
+/// initializer of a global it computes.
 fn units_reading_each_global(
     unit_programs: &[RcProgram],
     globals: &Set<FullName>,
@@ -498,14 +624,7 @@ fn units_reading_each_global(
         .map(|name| (name.clone(), Set::default()))
         .collect();
     for (index, unit_program) in unit_programs.iter().enumerate() {
-        let bodies = unit_program.funcs.values().map(|func| &func.body).chain(
-            unit_program
-                .globals
-                .iter()
-                .filter(|global| global.owns_initializer)
-                .map(|global| &global.init),
-        );
-        for body in bodies {
+        for body in bodies_generated_here(unit_program) {
             collect_mentions(body, &mut |mentioned| {
                 if let Some(units) = readers.get_mut(mentioned) {
                     units.insert(index);
@@ -900,5 +1019,140 @@ fn main_unit_entry(program: &Program) -> MainUnitEntry {
             .as_ref()
             .map(|expr| expr.expr.stringify().to_string()),
         exports,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rc_ir::test_program::{func, global, global_name, prog};
+
+    /// A global whose initializer holds more nodes than one travelling to its reader may bring
+    /// along, so that the division leaves it in the unit it was dealt to.
+    fn global_too_large_to_move(symbol: FullName, mentions: &[FullName]) -> RcGlobalInit {
+        let repeated: Vec<FullName> = mentions
+            .iter()
+            .cycle()
+            .take(MOVED_INITIALIZER_NODE_LIMIT as usize + 1)
+            .cloned()
+            .collect();
+        global(symbol, &repeated)
+    }
+
+    /// The type of every symbol of `program`, which a unit declares another unit's name from.
+    fn global_types(program: &RcProgram) -> Map<FullName, Arc<TypeNode>> {
+        program
+            .globals
+            .iter()
+            .map(|global| (global.symbol.clone(), global.ty.clone()))
+            .chain(
+                program
+                    .funcs
+                    .values()
+                    .map(|func| (func.name.name.clone(), func.fn_ty.clone())),
+            )
+            .collect()
+    }
+
+    /// The units keeping the value of the global `name`.
+    fn units_keeping(division: &DividedProgram, name: &FullName) -> Vec<usize> {
+        division
+            .unit_programs
+            .iter()
+            .enumerate()
+            .filter(|(_, unit_program)| {
+                unit_program
+                    .globals
+                    .iter()
+                    .any(|global| global.symbol == *name && global.owns_storage)
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    /// The units generating a body that reads the global `name`.
+    fn units_reading(division: &DividedProgram, name: &FullName) -> Vec<usize> {
+        division
+            .unit_programs
+            .iter()
+            .enumerate()
+            .filter(|(_, unit_program)| {
+                let mut reads = false;
+                for body in bodies_generated_here(unit_program) {
+                    collect_mentions(body, &mut |mentioned| reads |= mentioned == name);
+                }
+                reads
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    /// The storage of a global goes to the unit that reads it once the initializers have moved.
+    ///
+    /// An initializer travelling to the unit that alone reads the value takes the reads it performs
+    /// with it, so the unit it moves into reads whatever that initializer reads. The value it reads
+    /// has to be one that unit keeps or one whose storage a keeper publishes; a unit computing a
+    /// value it cannot read declares an accessor with internal linkage and no body, which the LLVM
+    /// verifier rejects.
+    #[test]
+    fn test_the_storage_of_a_global_follows_the_reads_an_initializer_takes_with_it() {
+        let (table, holder, entry, source) = (
+            global_name("table"),
+            global_name("holder"),
+            global_name("entry"),
+            global_name("source"),
+        );
+        // `holder` is read by `entry` alone, so its initializer travels to the unit holding
+        // `entry`; that initializer reads `table`, whose initializer is too large to travel and
+        // stays in that same unit.
+        let program = prog(
+            vec![
+                func(entry.clone(), &[holder.clone()]),
+                func(source.clone(), &[]),
+            ],
+            vec![
+                global(holder.clone(), &[table.clone()]),
+                global_too_large_to_move(table.clone(), &[source.clone()]),
+            ],
+            &[],
+        );
+        let units = vec![
+            CompileUnit::new(vec![holder.clone()]),
+            CompileUnit::new(vec![entry.clone(), source.clone(), table.clone()]),
+            CompileUnit::new(vec![]),
+        ];
+        let global_types = global_types(&program);
+
+        let division = divide_among_units(
+            program,
+            &units,
+            &global_types,
+            [entry.clone()].into_iter().collect(),
+        );
+
+        let readers = units_reading(&division, &table);
+        let keepers = units_keeping(&division, &table);
+        assert_eq!(
+            keepers.len(),
+            1,
+            "one unit should keep the value of `table`, and {:?} do",
+            keepers
+        );
+        assert!(
+            !readers.is_empty(),
+            "the program should read `table`, and no unit generates a body that does"
+        );
+        for reader in &readers {
+            assert!(
+                keepers.contains(reader) || division.shared_globals.contains(&table),
+                "unit {} generates a body reading `table`, and neither keeps that value nor \
+                 reads the storage of the unit that does",
+                reader
+            );
+        }
+        assert!(
+            !division.shared_globals.contains(&table),
+            "one unit reads `table`, so nothing about it is published"
+        );
     }
 }

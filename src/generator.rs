@@ -2727,7 +2727,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             embedded_ty.fn_type(&[], false)
         };
         // The accessor is internal wherever it is: a unit reading a global carries one of its own,
-        // so no unit reaches another's.
+        // so no unit reaches another's. `assert_each_unit_serves_the_globals_it_reads` checks that
+        // as the program is divided.
         let acc_fn = self
             .module
             .add_function(&acc_fn_name, acc_fn_ty, Some(Linkage::Internal));
