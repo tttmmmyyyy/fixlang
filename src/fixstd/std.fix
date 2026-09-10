@@ -3829,7 +3829,7 @@ namespace Ptr {
 
 impl Ptr : ToString {
     to_string = |v| (
-        let data = Array::empty(17);
+        let data = Array::empty(17); // len(ffffffffffffffff) + 1
         let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_ptr_to_str(Ptr, Ptr), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
@@ -3903,7 +3903,7 @@ impl U32 : FromBytes {
 }
 impl U32 : ToString {
     to_string = |v| (
-        let data = Array::empty(11);
+        let data = Array::empty(11); // len(4294967295) + 1
         let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u32_to_str(Ptr, U32), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
@@ -3929,7 +3929,7 @@ impl U64 : FromBytes {
 }
 impl U64 : ToString {
     to_string = |v| (
-        let data = Array::empty(21);
+        let data = Array::empty(21); // len(18446744073709551615) + 1
         let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u64_to_str(Ptr, U64), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
@@ -4016,7 +4016,7 @@ impl I32 : FromBytes {
 }
 impl I32 : ToString {
     to_string = |v| (
-        let data = Array::empty(12);
+        let data = Array::empty(12); // len(-2147483648) + 1
         let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_i32_to_str(Ptr, I32), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
@@ -4042,7 +4042,7 @@ impl I64 : FromBytes {
 }
 impl I64 : ToString {
     to_string = |v| (
-        let data = Array::empty(21);
+        let data = Array::empty(21); // len(-9223372036854775808) + 1
         let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_i64_to_str(Ptr, I64), ptr, v]);
         String::_unsafe_from_c_str(data)
     );
@@ -4076,11 +4076,7 @@ impl F32 : FromBytes {
     );
 }
 impl F32 : ToString {
-    to_string = |v| (
-        let data = Array::empty(50);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str(Ptr, F32), ptr, v]);
-        String::_unsafe_from_c_str(data)
-    );
+    to_string = |v| v.to_string_precision(6_U8);
 }
 namespace F32 {
     // Converts a floating number to a string of exponential form.
@@ -4088,11 +4084,7 @@ namespace F32 {
     // # Parameters
     // * `v` - The floating number to be converted to a string.
     to_string_exp : F32 -> String;
-    to_string_exp = |v| (
-        let data = Array::empty(50);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_exp(Ptr, F32), ptr, v]);
-        String::_unsafe_from_c_str(data)
-    );
+    to_string_exp = |v| v.to_string_exp_precision(6_U8);
 
     // Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
     // 
@@ -4101,8 +4093,11 @@ namespace F32 {
     // * `v` - The floating number to be converted to a string.
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
-        let data = Array::empty(50 + prec.i64);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_exp_precision(Ptr, F32, U8), ptr, v, prec]);
+        // A sign, a digit, a point, `prec` digits, `e`, the exponent's sign, the 2 digits a
+        // `F32` exponent reaches and a null.
+        let size = 8 + prec.i64;
+        let data = Array::empty(size);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_exp_precision(Ptr, I64, F32, U8), ptr, size, v, prec]);
         String::_unsafe_from_c_str(data)
     );
 
@@ -4113,8 +4108,11 @@ namespace F32 {
     // * `v` - The floating number to be converted to a string.
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
-        let data = Array::empty(50 + prec.i64);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_precision(Ptr, F32, U8), ptr, v, prec]);
+        // A sign, the 39 digits the greatest `F32` takes in its whole part, a point, `prec`
+        // digits and a null.
+        let size = 42 + prec.i64;
+        let data = Array::empty(size);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_precision(Ptr, I64, F32, U8), ptr, size, v, prec]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -4147,11 +4145,7 @@ impl F64 : FromBytes {
     );
 }
 impl F64 : ToString {
-    to_string = |v| (
-        let data = Array::empty(500);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str(Ptr, F64), ptr, v]);
-        String::_unsafe_from_c_str(data)
-    );
+    to_string = |v| v.to_string_precision(6_U8);
 }
 namespace F64 {
     // Converts a floating number to a string of exponential form.
@@ -4159,11 +4153,7 @@ namespace F64 {
     // # Parameters
     // * `v` - The floating number to be converted to a string.
     to_string_exp : F64 -> String;
-    to_string_exp = |v| (
-        let data = Array::empty(500);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_exp(Ptr, F64), ptr, v]);
-        String::_unsafe_from_c_str(data)
-    );
+    to_string_exp = |v| v.to_string_exp_precision(6_U8);
 
     // Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
     //
@@ -4172,8 +4162,11 @@ namespace F64 {
     // * `v` - The floating number to be converted to a string.
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
-        let data = Array::empty(500 + prec.i64);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_exp_precision(Ptr, F64, U8), ptr, v, prec]);
+        // A sign, a digit, a point, `prec` digits, `e`, the exponent's sign, the 3 digits a
+        // `F64` exponent reaches and a null.
+        let size = 9 + prec.i64;
+        let data = Array::empty(size);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_exp_precision(Ptr, I64, F64, U8), ptr, size, v, prec]);
         String::_unsafe_from_c_str(data)
     );
 
@@ -4184,8 +4177,11 @@ namespace F64 {
     // * `v` - The floating number to be converted to a string.
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
-        let data = Array::empty(500 + prec.i64);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_precision(Ptr, F64, U8), ptr, v, prec]);
+        // A sign, the 309 digits the greatest `F64` takes in its whole part, a point, `prec`
+        // digits and a null.
+        let size = 312 + prec.i64;
+        let data = Array::empty(size);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_precision(Ptr, I64, F64, U8), ptr, size, v, prec]);
         String::_unsafe_from_c_str(data)
     );
 }
