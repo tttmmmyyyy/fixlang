@@ -574,11 +574,13 @@ fn initializer_fits(
     reader: usize,
     copyable_funcs: &Map<FullName, RcFunc>,
 ) -> bool {
-    let global = unit_programs
-        .iter()
-        .flat_map(|unit_program| unit_program.globals.iter())
-        .find(|global| global.symbol == *name && global.owns_initializer)
+    let computing_unit = unit_holding(unit_programs, name, |global| global.owns_initializer)
         .unwrap_or_else(|| panic!("no unit computes the value of `{}`", name.to_string()));
+    let global = unit_programs[computing_unit]
+        .globals
+        .iter()
+        .find(|global| global.symbol == *name && global.owns_initializer)
+        .expect("the unit computing a value holds that value's initializer");
     let held: Set<&FullName> = names_defined_here(&unit_programs[reader]).collect();
     let mut nodes = node_count(&global.init);
     let mut walked: Set<FullName> = Set::default();
