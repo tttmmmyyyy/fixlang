@@ -1127,28 +1127,75 @@ mod tests {
         );
 
         let readers = units_reading(&division, &table);
-        let keepers = units_keeping(&division, &table);
         assert_eq!(
-            keepers.len(),
+            readers,
+            units_keeping(&division, &table),
+            "the unit that ends up reading `table` is the unit that keeps it"
+        );
+        assert_eq!(
+            readers.len(),
             1,
-            "one unit should keep the value of `table`, and {:?} do",
-            keepers
+            "one unit should read `table` and keep it, and {:?} read it",
+            readers
         );
-        assert!(
-            !readers.is_empty(),
-            "the program should read `table`, and no unit generates a body that does"
-        );
-        for reader in &readers {
-            assert!(
-                keepers.contains(reader) || division.shared_globals.contains(&table),
-                "unit {} generates a body reading `table`, and neither keeps that value nor \
-                 reads the storage of the unit that does",
-                reader
-            );
-        }
         assert!(
             !division.shared_globals.contains(&table),
             "one unit reads `table`, so nothing about it is published"
+        );
+    }
+
+    /// A unit declares nothing through the initializer of a global another unit computes.
+    ///
+    /// The copy of that initializer says what the value is, and the unit generates none of it, so
+    /// no code the unit generates names what the initializer reads. Reading those names off the
+    /// copy would publish them to the linker for a unit that never calls them, and a name the
+    /// linker is given is one LLVM has to assume anything may reach.
+    #[test]
+    fn test_a_unit_declares_nothing_through_an_initializer_it_only_carries() {
+        let (shown, hidden, reader_a, reader_b) = (
+            global_name("shown"),
+            global_name("hidden"),
+            global_name("reader_a"),
+            global_name("reader_b"),
+        );
+        // Two units read `shown`, so it stays where it is and each of them carries its accessor.
+        // The initializer of `shown` is the one body naming `hidden`.
+        let program = prog(
+            vec![
+                func(reader_a.clone(), &[shown.clone()]),
+                func(reader_b.clone(), &[shown.clone()]),
+            ],
+            vec![
+                global(shown.clone(), &[hidden.clone()]),
+                global(hidden.clone(), &[]),
+            ],
+            &[],
+        );
+        let units = vec![
+            CompileUnit::new(vec![shown.clone(), hidden.clone()]),
+            CompileUnit::new(vec![reader_a.clone()]),
+            CompileUnit::new(vec![reader_b.clone()]),
+            CompileUnit::new(vec![]),
+        ];
+        let global_types = global_types(&program);
+
+        let division = divide_among_units(
+            program,
+            &units,
+            &global_types,
+            [reader_a.clone(), reader_b.clone()].into_iter().collect(),
+        );
+
+        assert_eq!(
+            units_reading(&division, &hidden),
+            vec![0],
+            "the initializer of `shown` is the one body naming `hidden`, so the unit generating \
+             that initializer is the one unit reading it"
+        );
+        assert!(
+            !division.published.contains(&hidden),
+            "the units carrying the initializer of `shown` generate none of it, so `hidden` is \
+             named by one unit alone and stays inside it"
         );
     }
 }
