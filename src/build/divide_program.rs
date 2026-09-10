@@ -32,12 +32,7 @@ use std::sync::Arc;
 const IMPORTED_FUNCTION_NODE_LIMIT: u64 = 200;
 
 /// The most RC IR nodes a global's initializer may add to the unit that alone reads the value for
-/// the initializer to travel there with the storage. A unit generating the initializer of the value
-/// it reads optimizes the reads by what the initializer settles — the length of an array, the shape
-/// of a structure — which is what takes the bounds checks out of a loop reading the global. What it
-/// costs is the initializer and the bodies it reaches that the unit does not already hold, in the
-/// unit a program's own edits regenerate, so an initializer that would bring a graph of them along
-/// stays where it is.
+/// the initializer to move there.
 const MOVED_INITIALIZER_NODE_LIMIT: u64 = 200;
 
 /// The program's RC IR divided among the compilation units, and what a unit needs to know about the
@@ -318,7 +313,8 @@ fn bodies_generated_here(unit_program: &RcProgram) -> impl Iterator<Item = &RcEx
 /// its code declares.
 ///
 /// The names it defines are collected once and looked up by hash, since the walk asks after every
-/// mention of every body and the copying below repeats the walk until it finds nothing new.
+/// mention of every body and `import_what_each_unit_reaches` repeats the walk until it finds
+/// nothing new.
 fn names_reached_elsewhere(unit_program: &RcProgram, mut visit: impl FnMut(&FullName)) {
     let defined: Set<&FullName> = names_defined_here(unit_program).collect();
     for body in bodies_generated_here(unit_program) {
@@ -565,7 +561,7 @@ fn assert_each_unit_serves_the_globals_it_reads(
 /// Whether moving the initializer of the global `name` into unit `reader` adds no more than
 /// `MOVED_INITIALIZER_NODE_LIMIT` nodes to that unit.
 ///
-/// What it adds is the initializer and the bodies it reaches that the unit does not already hold,
+/// What it adds is the initializer and the bodies it reaches that the unit does not already define,
 /// which is what the copying would give it once the unit generates the initializer. The walk stops
 /// as soon as the total is past the limit, so a large graph costs a small walk.
 fn initializer_fits(
@@ -581,7 +577,7 @@ fn initializer_fits(
         .iter()
         .find(|global| global.symbol == *name && global.owns_initializer)
         .expect("the unit computing a value holds that value's initializer");
-    let held: Set<&FullName> = names_defined_here(&unit_programs[reader]).collect();
+    let defined: Set<&FullName> = names_defined_here(&unit_programs[reader]).collect();
     let mut nodes = node_count(&global.init);
     let mut walked: Set<FullName> = Set::default();
     let mut pending: Vec<&RcExprNode> = vec![&global.init];
@@ -591,7 +587,7 @@ fn initializer_fits(
         }
         let mut reached: Vec<FullName> = vec![];
         collect_mentions(body, &mut |mentioned| {
-            if !held.contains(mentioned) && !walked.contains(mentioned) {
+            if !defined.contains(mentioned) && !walked.contains(mentioned) {
                 reached.push(mentioned.clone());
             }
         });

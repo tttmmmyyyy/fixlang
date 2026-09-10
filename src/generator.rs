@@ -2703,9 +2703,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Declare the function the program's global `name` is obtained through, register it as that
-    /// global's value, and return it — or `None` where the program has no global of that name. A
-    /// global of funptr type is the lambda's own function; any other global is reached through an
-    /// accessor function taking no argument and returning its value.
+    /// global's value, and return it. A global of funptr type is the lambda's own function; any
+    /// other global is reached through an accessor function taking no argument and returning its
+    /// value.
     ///
     /// The signature is built from the program's global types, which is what makes this the only way
     /// to declare a global: the module that defines one and every module that calls into it read the
