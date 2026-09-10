@@ -1,8 +1,8 @@
 //! Building a small RC IR program in a test, out of the names its bodies mention.
 //!
-//! A pass that reads which name reaches which — dead-code elimination, the division into
-//! compilation units — is checked by handing it a program whose content is those mentions and
-//! nothing else, so a function or a global here is built from the list of names its body mentions.
+//! A pass that reads which name reaches which is checked by handing it a program whose content is
+//! those mentions and nothing else. A function or a global here is built from the list of names
+//! its body mentions.
 
 use crate::ast::name::FullName;
 use crate::ast::types::type_funptr;

@@ -145,11 +145,12 @@ pub fn divide_among_units(
         &root_value_names,
         &copyable_funcs,
     ) {
-        // The unit an initializer moved to generates a body it used to declare, and the pruning
-        // above dropped what that body reaches: a unit carrying the accessor alone generates no
-        // initializer, so nothing there reached those bodies. The unit it moved out of is left
-        // holding whatever only that initializer reached, which the pruning then drops, so that
-        // the reads each unit performs are the ones its own code performs.
+        // The unit an initializer moved to generates a body it used to declare, and the
+        // `publish_and_prune` above dropped what that body reaches: a unit carrying the accessor
+        // alone generates no initializer, so nothing there reached those bodies. The unit it moved
+        // out of is left holding whatever only that initializer reached, which the
+        // `publish_and_prune` below drops, so that the reads each unit performs are the ones its
+        // own code performs.
         import_what_each_unit_reaches(
             &mut unit_programs,
             &mut imported,
@@ -385,9 +386,9 @@ fn import_what_each_unit_reaches(
 ///
 /// A unit generating the initializer of the value it reads optimizes the reads by what the
 /// initializer settles — the length of an array, the shape of a structure — which is what takes the
-/// bounds checks out of a loop reading the global. One that would bring a graph of bodies along
-/// stays where it is, since that graph would land in the unit a program's own edits regenerate;
-/// `MOVED_INITIALIZER_NODE_LIMIT` says how much is little.
+/// bounds checks out of a loop reading the global. An initializer that would bring a graph of
+/// bodies along stays where it is, since that graph would land in the unit a program's own edits
+/// regenerate; `MOVED_INITIALIZER_NODE_LIMIT` bounds what a move may bring along.
 ///
 /// The storage follows afterwards, in `keep_each_global_where_it_is_read`: an initializer that
 /// moves takes the reads it performs to the unit it moves to, so which units read which global is
@@ -430,7 +431,7 @@ fn move_each_initializer_to_the_unit_that_alone_reads_it(
 }
 
 /// The unit holding the part of the global `name` that `holds` picks out — the value's initializer,
-/// or its storage — of which the division leaves one.
+/// or its storage. The division leaves one unit holding each part.
 fn unit_holding(
     unit_programs: &[RcProgram],
     name: &FullName,
@@ -454,9 +455,9 @@ fn unit_holding(
 /// published from there, so that one storage serves every reader.
 ///
 /// Which units read a global is read off the bodies each unit generates, which is why this comes
-/// after the initializers have moved and the copying and the pruning have caught up with them:
-/// moving an initializer moves the reads it performs, and a unit generating a body that reads a
-/// global has to be one that can serve the read.
+/// after the initializers have moved and `import_what_each_unit_reaches` and `publish_and_prune`
+/// have caught up with them: moving an initializer moves the reads it performs, and a unit
+/// generating a body that reads a global has to be one that can serve the read.
 ///
 /// A global no unit reads computes a value nothing observes, and no unit is left holding a part of
 /// it. A root value is read by the entry point and by the exported C functions, which the main unit
@@ -529,8 +530,7 @@ fn keeper_of(unit_programs: &[RcProgram], name: &FullName, readers: &Set<usize>)
     }
 }
 
-/// Check that every unit can serve each read of a global its own code performs, and that one unit
-/// computes each global's value and one keeps it.
+/// Check that every unit can serve each read of a global its own code performs.
 ///
 /// A unit reads a global through an accessor of its own, which tests the initialization flag and
 /// loads the storage: the unit keeps the value, or it reads storage the unit keeping it publishes.
