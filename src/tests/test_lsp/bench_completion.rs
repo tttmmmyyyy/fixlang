@@ -20,6 +20,8 @@ mod bench {
     use super::super::completion_harness::{completion_items, setup_test_env};
     use super::super::lsp_client::{poll_every, LspClient};
     use serde_json::json;
+    use std::env;
+    use std::fs;
     use std::path::Path;
     use std::time::{Duration, Instant};
 
@@ -119,7 +121,7 @@ mod bench {
     /// receivers); opt-in via `FIX_LSP_BENCH`, otherwise a no-op.
     #[test]
     fn bench_completion_warm() {
-        if std::env::var("FIX_LSP_BENCH").is_err() {
+        if env::var("FIX_LSP_BENCH").is_err() {
             eprintln!(
                 "[bench] skipped (set FIX_LSP_BENCH=1 to run the completion latency benchmark)"
             );
@@ -128,7 +130,7 @@ mod bench {
 
         let (_temp_dir, project_dir) = setup_test_env("completion-bench");
         let main_rel = Path::new("main.fix");
-        let text = std::fs::read_to_string(project_dir.join(main_rel)).expect("read main.fix");
+        let text = fs::read_to_string(project_dir.join(main_rel)).expect("read main.fix");
 
         let mut client = LspClient::new(&project_dir).expect("start LSP");
         client

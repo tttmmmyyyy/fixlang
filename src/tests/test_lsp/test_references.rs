@@ -11,6 +11,7 @@ mod tests {
     use crate::misc::Set;
     use serde_json::{json, Value};
     use std::{
+        fs,
         path::{Path, PathBuf},
         time::Duration,
     };
@@ -199,8 +200,8 @@ mod tests {
 
     /// Read the text at an LSP range from a source file.
     fn read_text_at_range(file_path: &Path, range: &Value) -> String {
-        let content = std::fs::read_to_string(file_path)
-            .expect(&format!("Failed to read file: {:?}", file_path));
+        let content =
+            fs::read_to_string(file_path).expect(&format!("Failed to read file: {:?}", file_path));
         let lines: Vec<&str> = content.lines().collect();
         let start_line = range["start"]["line"].as_u64().unwrap() as usize;
         let start_char = range["start"]["character"].as_u64().unwrap() as usize;
@@ -876,7 +877,7 @@ mod tests {
         let mut found_caret_x = false;
         for loc in &locs {
             let uri = loc["uri"].as_str().unwrap();
-            let file_path = std::path::PathBuf::from(uri.strip_prefix("file://").unwrap());
+            let file_path = PathBuf::from(uri.strip_prefix("file://").unwrap());
             let text = read_text_at_range(&file_path, loc.get("range").unwrap());
             if text == "^x" {
                 found_caret_x = true;

@@ -13,6 +13,7 @@ mod tests {
     use super::super::lsp_client::{poll_every, LspClient};
     use serde_json::json;
     use std::{
+        fs,
         path::{Path, PathBuf},
         time::Duration,
     };
@@ -279,8 +280,7 @@ mod tests {
 
         // Edit a single body line; the type/trait/struct definitions on other
         // lines are untouched.
-        let original =
-            std::fs::read_to_string(ctx.project_dir.join("main.fix")).expect("read main.fix");
+        let original = fs::read_to_string(ctx.project_dir.join("main.fix")).expect("read main.fix");
         let edited = original.replace("let n = p.size;", "let n = p.size; // tweak");
         assert_ne!(original, edited, "the edit should change the buffer");
         ctx.change_text("main.fix", &edited);
