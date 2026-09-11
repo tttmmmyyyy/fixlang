@@ -35,8 +35,8 @@ pub(super) fn poll_every<T>(
     }
 }
 
-/// Call `look` every `POLL_INTERVAL` until it answers `Some`, for a wait each look of which
-/// reads what has already arrived.
+/// Call `look` every `POLL_INTERVAL` until it answers `Some`. The interval suits a look that
+/// reads what the reader thread has already taken in.
 pub(super) fn poll<T>(timeout: Duration, look: impl FnMut() -> Option<T>) -> Option<T> {
     poll_every(POLL_INTERVAL, timeout, look)
 }
