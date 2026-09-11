@@ -1,48 +1,29 @@
 // LSP integration tests for "Find All References" and "Call Hierarchy" features.
 //
-// Each test case corresponds to a case in agents/test-refs.20260301/test_plan.md.
-// Each symbol-type group has its own Fix project under cases/ to keep tests simple
-// and resilient to line-number changes.
+// Each symbol kind has its own Fix project under cases/, which keeps the tests simple and
+// resilient to line-number changes. The tests of one kind carry that kind's label (`GV`, `Ty`,
+// `Tr`, `TrA`, `AT`, `IMP`, `FV`, `Loc`) and a number within it.
 
 #[cfg(test)]
 mod tests {
+    use super::super::case_project::setup_test_env;
     use super::super::lsp_client::LspClient;
-    use crate::tests::test_util::copy_dir_recursive;
+    use crate::misc::Set;
     use serde_json::{json, Value};
     use std::{
+        fs,
         path::{Path, PathBuf},
         time::Duration,
     };
     use tempfile::TempDir;
 
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
-
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_case_src = get_test_cases_dir().join(project_name);
-        let test_case_dst = temp_dir.path().join(project_name);
-        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
-        // Canonicalize to resolve symlinks (e.g., /tmp -> /private/tmp on macOS).
-        // This ensures the path matches the canonicalized rootUri sent to the LSP server.
-        let test_case_dst = test_case_dst
-            .canonicalize()
-            .expect("Failed to canonicalize test case path");
-        (temp_dir, test_case_dst)
-    }
-
     /// A convenience wrapper around `LspClient` that provides high-level
     /// helpers for common test patterns (find-refs, call hierarchy, etc.).
     struct LspTestCtx {
+        /// The connection to the running server.
         client: LspClient,
-        project_dir: PathBuf,
+        /// Holds the temporary directory containing the project copy alive; dropping it
+        /// deletes the copy.
         _temp_dir: TempDir,
     }
 
@@ -58,19 +39,20 @@ mod tests {
             for f in files {
                 client
                     .open_document(Path::new(f))
-                    .expect(&format!("Failed to open {}", f));
+                    .unwrap_or_else(|_| panic!("Failed to open {}", f));
             }
             let trigger_file = files.last().unwrap();
-            client.trigger_and_wait_for_diagnostics(Path::new(trigger_file));
+            client.save_and_wait_for_the_program(Path::new(trigger_file));
             Self {
                 client,
-                project_dir,
                 _temp_dir: temp_dir,
             }
         }
 
+        /// The `file://` URI the server knows `file` by, `file` being a path relative to the
+        /// project root.
         fn file_uri(&self, file: &str) -> String {
-            format!("file://{}", self.project_dir.join(file).display())
+            self.client.file_uri(Path::new(file))
         }
 
         /// Send textDocument/references and return the result array.
@@ -87,11 +69,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send references request");
-            self.client.wait_for_server(Duration::from_secs(5));
-            let response = self
-                .client
-                .get_response(id)
-                .expect("Should receive a references response");
+            let response = self.client.expect_response(id);
             let result = response
                 .get("result")
                 .expect("Response should have a result field");
@@ -119,11 +97,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send prepareCallHierarchy request");
-            self.client.wait_for_server(Duration::from_secs(5));
-            let response = self
-                .client
-                .get_response(id)
-                .expect("Should receive prepareCallHierarchy response");
+            let response = self.client.expect_response(id);
             let result = response
                 .get("result")
                 .expect("Response should have a result field");
@@ -137,11 +111,7 @@ mod tests {
                 .client
                 .send_request("callHierarchy/incomingCalls", json!({ "item": item }))
                 .expect("Failed to send incomingCalls request");
-            self.client.wait_for_server(Duration::from_secs(5));
-            let response = self
-                .client
-                .get_response(id)
-                .expect("Should receive incomingCalls response");
+            let response = self.client.expect_response(id);
             let result = response
                 .get("result")
                 .expect("Response should have a result field");
@@ -156,11 +126,7 @@ mod tests {
                 .client
                 .send_request("callHierarchy/outgoingCalls", json!({ "item": item }))
                 .expect("Failed to send outgoingCalls request");
-            self.client.wait_for_server(Duration::from_secs(5));
-            let response = self
-                .client
-                .get_response(id)
-                .expect("Should receive outgoingCalls response");
+            let response = self.client.expect_response(id);
             let result = response
                 .get("result")
                 .expect("Response should have a result field");
@@ -168,12 +134,11 @@ mod tests {
             result.as_array().unwrap().clone()
         }
 
+        /// Shut the server down, and fail the test if its reader thread met a protocol error.
         fn shutdown(mut self) {
+            self.client.shutdown().expect("Failed to shutdown LSP");
             self.client
-                .shutdown(Duration::from_millis(500))
-                .expect("Failed to shutdown LSP");
-            self.client
-                .finish()
+                .verify_no_protocol_error()
                 .expect("Reader thread should not have errors");
         }
 
@@ -225,7 +190,7 @@ mod tests {
                 Some(format!("{}:{}:{}", uri, line, ch))
             })
             .collect();
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = Set::default();
         for key in &keys {
             assert!(
                 seen.insert(key),
@@ -239,8 +204,8 @@ mod tests {
 
     /// Read the text at an LSP range from a source file.
     fn read_text_at_range(file_path: &Path, range: &Value) -> String {
-        let content = std::fs::read_to_string(file_path)
-            .expect(&format!("Failed to read file: {:?}", file_path));
+        let content = fs::read_to_string(file_path)
+            .unwrap_or_else(|_| panic!("Failed to read file: {:?}", file_path));
         let lines: Vec<&str> = content.lines().collect();
         let start_line = range["start"]["line"].as_u64().unwrap() as usize;
         let start_char = range["start"]["character"].as_u64().unwrap() as usize;
@@ -268,6 +233,7 @@ mod tests {
         text == full_name || full_name.ends_with(&format!("::{}", text))
     }
 
+    /// Assert that at least one of `locations` names a file whose URI contains `file_name`.
     fn assert_has_ref_in_file(locations: &[Value], file_name: &str) {
         assert!(
             locations.iter().any(|loc| loc
@@ -280,6 +246,8 @@ mod tests {
         );
     }
 
+    /// The name of the item at each call's `direction` end, `direction` being `"from"` for an
+    /// incoming call and `"to"` for an outgoing one.
     fn call_names(calls: &[Value], direction: &str) -> Vec<String> {
         calls
             .iter()
@@ -292,6 +260,8 @@ mod tests {
             .collect()
     }
 
+    /// Assert that one of the incoming `calls` comes from an item whose name contains
+    /// `name_fragment`.
     fn assert_has_caller(calls: &[Value], name_fragment: &str) {
         let names = call_names(calls, "from");
         assert!(
@@ -302,6 +272,8 @@ mod tests {
         );
     }
 
+    /// Assert that one of the outgoing `calls` goes to an item whose name contains
+    /// `name_fragment`.
     #[allow(dead_code)]
     fn assert_has_callee(calls: &[Value], name_fragment: &str) {
         let names = call_names(calls, "to");
@@ -916,7 +888,7 @@ mod tests {
         let mut found_caret_x = false;
         for loc in &locs {
             let uri = loc["uri"].as_str().unwrap();
-            let file_path = std::path::PathBuf::from(uri.strip_prefix("file://").unwrap());
+            let file_path = PathBuf::from(uri.strip_prefix("file://").unwrap());
             let text = read_text_at_range(&file_path, loc.get("range").unwrap());
             if text == "^x" {
                 found_caret_x = true;

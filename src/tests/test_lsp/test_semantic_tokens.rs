@@ -9,10 +9,11 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::lsp_client::LspClient;
-    use crate::tests::test_util::copy_dir_recursive;
+    use super::super::case_project::setup_test_env;
+    use super::super::lsp_client::{poll_every, LspClient};
     use serde_json::json;
     use std::{
+        fs,
         path::{Path, PathBuf},
         time::Duration,
     };
@@ -33,29 +34,8 @@ mod tests {
     const T_ENUM: u64 = 13;
     const T_INTERFACE: u64 = 14;
 
-    /// The directory holding the LSP test-case projects.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    /// Copy the named test-case project into a fresh temp directory so tests can
-    /// run in parallel. Returns the temp dir (kept alive for cleanup) and the
-    /// canonical path to the copied project.
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_case_src = get_test_cases_dir().join(project_name);
-        let test_case_dst = temp_dir.path().join(project_name);
-        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
-        let test_case_dst = test_case_dst
-            .canonicalize()
-            .expect("Failed to canonicalize test case path");
-        (temp_dir, test_case_dst)
-    }
-
     /// A running language server connected to a copied test project.
-    struct Ctx {
+    struct LspSemanticTokensCtx {
         /// The client driving the `fix language-server` subprocess.
         client: LspClient,
         /// The copied project's root directory.
@@ -64,7 +44,14 @@ mod tests {
         _temp_dir: TempDir,
     }
 
-    impl Ctx {
+    /// How long the overlay a finished analysis adds to the tokens is waited for.
+    const OVERLAY_TIMEOUT: Duration = Duration::from_secs(10);
+
+    /// How long the wait for the overlay sits between two `semanticTokens` requests. Each round
+    /// of that wait asks the server for the tokens again, so the gap is sized for a round trip.
+    const OVERLAY_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+    impl LspSemanticTokensCtx {
         /// Start a server on a fresh copy of the `semantic_tokens` project, open
         /// `main.fix`, and wait for an initial elaboration.
         fn setup() -> Self {
@@ -78,7 +65,7 @@ mod tests {
                 .expect("Failed to open main.fix");
             // Elaborate the project so the AST overlay has a program whose
             // snapshot matches the (unmodified) buffer.
-            client.trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+            client.save_and_wait_for_the_program(Path::new("main.fix"));
             Self {
                 client,
                 project_dir,
@@ -88,12 +75,11 @@ mod tests {
 
         /// The `file://` URI for a project-relative file path.
         fn file_uri(&self, file: &str) -> String {
-            format!("file://{}", self.project_dir.join(file).display())
+            self.client.file_uri(Path::new(file))
         }
 
         /// Request semantic tokens and return the flat list of per-token type
         /// indices (the 4th element of each 5-tuple in the delta-encoded data).
-        /// Polls for the response rather than sleeping a fixed time.
         fn token_types(&mut self, file: &str) -> Vec<u64> {
             self.token_data(file)
                 .chunks_exact(5)
@@ -111,15 +97,7 @@ mod tests {
                     json!({ "textDocument": { "uri": uri } }),
                 )
                 .expect("Failed to send semanticTokens request");
-            let mut response = None;
-            for _ in 0..50 {
-                if let Some(r) = self.client.get_response(id) {
-                    response = Some(r);
-                    break;
-                }
-                self.client.wait_for_server(Duration::from_millis(100));
-            }
-            let response = response.expect("Should receive a semanticTokens response");
+            let response = self.client.expect_response(id);
             let data = response
                 .get("result")
                 .and_then(|r| r.get("data"))
@@ -158,14 +136,11 @@ mod tests {
         /// after the progress-end notification, so retry until a typechecked
         /// token (a local variable, which only the overlay emits) appears.
         fn token_types_with_overlay(&mut self, file: &str) -> Vec<u64> {
-            for _ in 0..40 {
+            let types_with_overlay = poll_every(OVERLAY_POLL_INTERVAL, OVERLAY_TIMEOUT, || {
                 let types = self.token_types(file);
-                if types.contains(&T_VARIABLE) {
-                    return types;
-                }
-                self.client.wait_for_server(Duration::from_millis(250));
-            }
-            self.token_types(file)
+                types.contains(&T_VARIABLE).then_some(types)
+            });
+            types_with_overlay.unwrap_or_else(|| self.token_types(file))
         }
 
         /// Replace the whole content of `file` via a `didChange` notification.
@@ -180,16 +155,13 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send didChange");
-            self.client.wait_for_server(Duration::from_millis(300));
         }
 
-        /// Shut the server down cleanly and join its reader thread.
+        /// Shut the server down, and fail the test if its reader thread met a protocol error.
         fn shutdown(mut self) {
+            self.client.shutdown().expect("Failed to shutdown LSP");
             self.client
-                .shutdown(Duration::from_millis(500))
-                .expect("Failed to shutdown LSP");
-            self.client
-                .finish()
+                .verify_no_protocol_error()
                 .expect("Reader thread should not error");
         }
     }
@@ -200,8 +172,8 @@ mod tests {
     /// colors the namespace and the type separately, so an overlay token spanning the path lands on
     /// top of the base layer's.
     #[test]
-    fn semantic_tokens_do_not_overlap() {
-        let mut ctx = Ctx::setup();
+    fn test_semantic_tokens_do_not_overlap() {
+        let mut ctx = LspSemanticTokensCtx::setup();
         // Wait for the overlay, which is the layer that can produce a token spanning a whole path.
         ctx.token_types_with_overlay("main.fix");
         let positions = ctx.token_positions("main.fix");
@@ -227,8 +199,8 @@ mod tests {
     /// union variants and field accessors — while the base layer keeps coloring
     /// comments, strings, keywords and built-in types.
     #[test]
-    fn semantic_tokens_overlay_precise_classification() {
-        let mut ctx = Ctx::setup();
+    fn test_semantic_tokens_overlay_precise_classification() {
+        let mut ctx = LspSemanticTokensCtx::setup();
         let types = ctx.token_types_with_overlay("main.fix");
 
         let want = [
@@ -259,11 +231,11 @@ mod tests {
     }
 
     /// Verifies that on a broken / drifted buffer the server still responds with
-    /// the base lexical layer, and does NOT emit the AST overlay (which would be
-    /// misaligned), so no variable/function tokens appear.
+    /// the base lexical layer, and withholds the AST overlay, which would be
+    /// misaligned there: the answer carries base-layer token types alone.
     #[test]
-    fn semantic_tokens_base_layer_survives_broken_buffer() {
-        let mut ctx = Ctx::setup();
+    fn test_semantic_tokens_base_layer_survives_broken_buffer() {
+        let mut ctx = LspSemanticTokensCtx::setup();
 
         // Drift the buffer away from the elaborated snapshot, with broken
         // syntax (unbalanced paren, unterminated string).
@@ -298,15 +270,14 @@ mod tests {
     /// from the elaborated snapshot, even though the buffer no longer matches it
     /// exactly.
     #[test]
-    fn semantic_tokens_overlay_survives_single_line_edit() {
-        let mut ctx = Ctx::setup();
+    fn test_semantic_tokens_overlay_survives_single_line_edit() {
+        let mut ctx = LspSemanticTokensCtx::setup();
         // Apply the overlay first.
         let _ = ctx.token_types_with_overlay("main.fix");
 
         // Edit a single body line; the type/trait/struct definitions on other
         // lines are untouched.
-        let original =
-            std::fs::read_to_string(ctx.project_dir.join("main.fix")).expect("read main.fix");
+        let original = fs::read_to_string(ctx.project_dir.join("main.fix")).expect("read main.fix");
         let edited = original.replace("let n = p.size;", "let n = p.size; // tweak");
         assert_ne!(original, edited, "the edit should change the buffer");
         ctx.change_text("main.fix", &edited);
@@ -336,8 +307,8 @@ mod tests {
     /// otherwise the client keeps the base-layer-only result it fetched before
     /// elaboration completed and the overlay never appears.
     #[test]
-    fn semantic_tokens_refresh_sent_after_diagnostics() {
-        let mut ctx = Ctx::setup();
+    fn test_semantic_tokens_refresh_sent_after_diagnostics() {
+        let ctx = LspSemanticTokensCtx::setup();
 
         let mut saw_refresh = false;
         while let Some(msg) = ctx.client.pop_message() {

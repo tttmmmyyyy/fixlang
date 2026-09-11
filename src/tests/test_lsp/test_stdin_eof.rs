@@ -7,27 +7,9 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command, wait_within};
-    use std::{path::PathBuf, process::Stdio, thread::sleep, time::Duration};
-    use tempfile::TempDir;
-
-    /// Absolute path to the LSP `cases/` directory.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    /// Copy the named test project into a fresh temp directory and
-    /// return both the temp dir handle (to keep it alive) and the path
-    /// of the copied project.
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_case_src = get_test_cases_dir().join(project_name);
-        let test_case_dst = temp_dir.path().join(project_name);
-        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
-        (temp_dir, test_case_dst)
-    }
+    use super::super::case_project::setup_test_env;
+    use crate::tests::test_util::{fix_command, wait_within};
+    use std::{process::Stdio, thread::sleep, time::Duration};
 
     /// Verifies that the language server terminates promptly once its
     /// stdin reaches EOF (parent editor closed the pipe).

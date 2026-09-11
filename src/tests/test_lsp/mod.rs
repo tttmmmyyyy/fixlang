@@ -1,5 +1,6 @@
 // LSP integration tests module
 pub mod bench_completion;
+pub mod case_project;
 pub mod completion_harness;
 pub mod lsp_client;
 pub mod test_code_action;
@@ -8,6 +9,7 @@ pub mod test_diagnostics;
 pub mod test_goto_definition;
 pub mod test_hover;
 pub mod test_import_completion;
+pub mod test_polling;
 pub mod test_references;
 pub mod test_rename;
 pub mod test_request_handling;
@@ -15,39 +17,16 @@ pub mod test_semantic_tokens;
 pub mod test_stdin_eof;
 pub mod test_workspace_symbol;
 
-// LSP Integration Tests
-// Tests for automatic lock file management in language server mode
+// The lock file the language server writes for the project it is serving, and the report the
+// editor is shown when that project's dependencies cannot be resolved.
 
 #[cfg(test)]
 mod tests {
+    use super::case_project::setup_test_env;
     use super::lsp_client::LspClient;
     use crate::constants::LOCK_FILE_LSP_PATH;
-    use crate::tests::test_util::{copy_dir_recursive, fix_command};
-    use std::{
-        fs,
-        path::{Path, PathBuf},
-        time::Duration,
-    };
-    use tempfile::TempDir;
-
-    /// Path to the directory holding the LSP test-case projects.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    /// Create a temporary test environment with copied project files.
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_case_src = get_test_cases_dir().join(project_name);
-        let test_case_dst = temp_dir.path().join(project_name);
-
-        // Copy test case directory
-        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
-
-        (temp_dir, test_case_dst)
-    }
+    use crate::tests::test_util::fix_command;
+    use std::{fs, path::Path, time::Duration};
 
     /// The LSP server automatically generates a lock file containing the
     /// project's dependencies, and diagnostics clear once a missing
@@ -76,12 +55,7 @@ mod tests {
             .expect("Failed to open main.fix");
 
         // Send didSave to trigger diagnostics
-        client
-            .save_document(Path::new("main.fix"))
-            .expect("Failed to save main.fix");
-
-        // Wait for initial diagnostics
-        client.wait_for_server(Duration::from_secs(5));
+        client.save_and_wait_for_a_pass(Path::new("main.fix"));
 
         // Verify that main.fix has the specific error message
         let main_diagnostics = client.get_diagnostics(Path::new("main.fix"));
@@ -115,12 +89,7 @@ mod tests {
         );
 
         // Send didSave to trigger diagnostics and LSP lock file generation
-        client
-            .save_document(Path::new("main.fix"))
-            .expect("Failed to save main.fix");
-
-        // Wait for LSP to process and generate lock file
-        client.wait_for_server(Duration::from_secs(10));
+        client.save_and_wait_for_a_pass(Path::new("main.fix"));
 
         // Check if LSP lock file was generated
         let lsp_lock_file = project_dir.join(LOCK_FILE_LSP_PATH);
@@ -139,17 +108,15 @@ mod tests {
 
         // Verify that all diagnostic errors have been resolved
         client
-            .verify_no_diagnostic_errors()
+            .verify_no_diagnostics()
             .expect("All diagnostic errors should be resolved after adding dependencies");
 
         // Shutdown
-        client
-            .shutdown(Duration::from_millis(500))
-            .expect("Failed to shutdown LSP");
+        client.shutdown().expect("Failed to shutdown LSP");
 
         // Check for reader thread errors
         client
-            .finish()
+            .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
 
@@ -180,12 +147,7 @@ mod tests {
             .expect("Failed to open test.fix");
 
         // Send didSave to trigger diagnostics
-        client
-            .save_document(Path::new("test.fix"))
-            .expect("Failed to save test.fix");
-
-        // Wait for initial diagnostics
-        client.wait_for_server(Duration::from_secs(5));
+        client.save_and_wait_for_a_pass(Path::new("test.fix"));
 
         // Verify that test.fix has the specific error message about missing Character module
         let test_diagnostics = client.get_diagnostics(Path::new("test.fix"));
@@ -220,12 +182,7 @@ mod tests {
         );
 
         // Send didSave to trigger diagnostics and LSP lock file generation
-        client
-            .save_document(Path::new("test.fix"))
-            .expect("Failed to save test.fix");
-
-        // Wait for LSP to process and generate lock file
-        client.wait_for_server(Duration::from_secs(10));
+        client.save_and_wait_for_a_pass(Path::new("test.fix"));
 
         // Check if LSP lock file was generated
         let lsp_lock_file = project_dir.join(LOCK_FILE_LSP_PATH);
@@ -244,17 +201,15 @@ mod tests {
 
         // Verify that all diagnostic errors have been resolved
         client
-            .verify_no_diagnostic_errors()
+            .verify_no_diagnostics()
             .expect("All diagnostic errors should be resolved after adding test dependencies");
 
         // Shutdown
-        client
-            .shutdown(Duration::from_millis(500))
-            .expect("Failed to shutdown LSP");
+        client.shutdown().expect("Failed to shutdown LSP");
 
         // Check for reader thread errors
         client
-            .finish()
+            .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
 
@@ -284,12 +239,7 @@ mod tests {
             .expect("Failed to open main.fix");
 
         // Send didSave to trigger diagnostics and dependency resolution
-        client
-            .save_document(Path::new("main.fix"))
-            .expect("Failed to save main.fix");
-
-        // Wait for LSP to process
-        client.wait_for_server(Duration::from_secs(10));
+        client.save_and_wait_for_a_pass(Path::new("main.fix"));
 
         // Get all diagnostics (dependency resolution errors may not be tied to main.fix)
         let all_diagnostics = client.get_all_diagnostics();
@@ -360,13 +310,11 @@ mod tests {
         );
 
         // Shutdown
-        client
-            .shutdown(Duration::from_millis(500))
-            .expect("Failed to shutdown LSP");
+        client.shutdown().expect("Failed to shutdown LSP");
 
         // Check for reader thread errors
         client
-            .finish()
+            .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
 }
