@@ -90,10 +90,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send hover request");
-            let response = self
-                .client
-                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-                .expect("Should receive a hover response");
+            let response = self.client.response_of(id);
             response
                 .get("result")
                 .cloned()
@@ -231,10 +228,7 @@ mod tests {
                 }),
             )
             .expect("Failed to send definition request");
-        let response = ctx
-            .client
-            .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-            .expect("Should receive a definition response");
+        let response = ctx.client.response_of(id);
         let result = response
             .get("result")
             .cloned()

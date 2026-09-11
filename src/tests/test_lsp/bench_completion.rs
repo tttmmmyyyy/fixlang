@@ -17,7 +17,7 @@
 
 #[cfg(test)]
 mod bench {
-    use super::super::lsp_client::LspClient;
+    use super::super::lsp_client::{poll_every, LspClient};
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::json;
     use std::path::{Path, PathBuf};
@@ -30,6 +30,9 @@ mod bench {
     const WARMUP: usize = 2;
     /// Per-request deadline before the benchmark gives up and panics.
     const TIMEOUT: Duration = Duration::from_secs(60);
+    /// How long the wait for one response sits between two looks. It bounds how coarse the
+    /// latency this benchmark reports can be.
+    const LOOK_INTERVAL: Duration = Duration::from_millis(1);
 
     /// Absolute path to the directory holding the LSP test-case projects.
     fn get_test_cases_dir() -> PathBuf {
@@ -67,26 +70,20 @@ mod bench {
                 }),
             )
             .expect("send completion");
-        loop {
-            if let Some(resp) = client.get_response(id) {
-                let elapsed = start.elapsed();
-                let result = resp.get("result").expect("response has result");
-                let n = if result.is_array() {
-                    result.as_array().unwrap().len()
-                } else {
-                    result
-                        .get("items")
-                        .and_then(|v| v.as_array())
-                        .map(|a| a.len())
-                        .unwrap_or(0)
-                };
-                return (elapsed, n);
-            }
-            if start.elapsed() > TIMEOUT {
-                panic!("completion did not respond within {:?}", TIMEOUT);
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
+        let resp = poll_every(LOOK_INTERVAL, TIMEOUT, || client.get_response(id))
+            .unwrap_or_else(|| panic!("completion did not respond within {:?}", TIMEOUT));
+        let elapsed = start.elapsed();
+        let result = resp.get("result").expect("response has result");
+        let n = if result.is_array() {
+            result.as_array().unwrap().len()
+        } else {
+            result
+                .get("items")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0)
+        };
+        (elapsed, n)
     }
 
     /// Convert a `Duration` to fractional milliseconds.

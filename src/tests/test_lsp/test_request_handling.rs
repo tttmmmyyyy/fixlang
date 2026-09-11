@@ -8,17 +8,10 @@
 mod tests {
     use super::super::completion_harness::setup_test_env;
     use super::super::lsp_client::LspClient;
-    use serde_json::{json, Value};
+    use serde_json::json;
     use std::path::{Path, PathBuf};
     use std::time::Duration;
     use tempfile::TempDir;
-
-    /// The response to the request `id`, waited for until it arrives.
-    fn wait_for_response(client: &mut LspClient, id: u32) -> Value {
-        client
-            .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-            .unwrap_or_else(|| panic!("the request {} is expected to be answered", id))
-    }
 
     /// The delta-encoded semantic tokens the server answers for the buffer `uri` names.
     fn semantic_token_data(client: &mut LspClient, uri: &str) -> Vec<u64> {
@@ -28,7 +21,7 @@ mod tests {
                 json!({ "textDocument": { "uri": uri } }),
             )
             .expect("Failed to send semanticTokens");
-        wait_for_response(client, id)["result"]["data"]
+        client.response_of(id)["result"]["data"]
             .as_array()
             .expect("a semanticTokens response carries its data")
             .iter()
@@ -44,7 +37,7 @@ mod tests {
                 json!({ "textDocument": { "uri": uri } }),
             )
             .expect("Failed to send documentSymbol");
-        wait_for_response(client, id)["result"]
+        client.response_of(id)["result"]
             .as_array()
             .expect("a documentSymbol response carries an array of symbols")
             .iter()

@@ -450,9 +450,6 @@ mod tests {
         );
     }
 
-    /// The time one diagnostics pass is given to end.
-    const PASS_TIMEOUT: Duration = Duration::from_secs(180);
-
     /// A session over the project, with `file` opened. `initialize_timeout` is how long the
     /// response to `initialize` is waited for.
     fn open_session(project_dir: &Path, file: &Path, initialize_timeout: Duration) -> LspClient {
@@ -478,7 +475,7 @@ mod tests {
         settled: impl Fn(&[Value]) -> bool,
     ) -> Vec<Value> {
         let mut last_seen = Vec::new();
-        poll_until(PASS_TIMEOUT, || {
+        poll_until(LspClient::PASS_TIMEOUT, || {
             last_seen = client.get_diagnostics(file);
             settled(&last_seen).then(|| last_seen.clone())
         })
@@ -490,7 +487,6 @@ mod tests {
         !diagnostics_containing(diagnostics, text).is_empty()
     }
 
-    /// Saves `file` and waits until the pass the save asks for has ended. `expectation` names
     /// A program carrying one ordinary error, which the analysis finishes and reports.
     const PROGRAM_WITH_AN_UNKNOWN_NAME: &str =
         "module Main;\n\nmain : IO ();\nmain = println(nonexistent_name);\n";
@@ -637,20 +633,18 @@ mod tests {
         sole_diagnostic_containing(&diagnostics, UNKNOWN_NAME_REPORT);
 
         // The repair, which stays in the editor: the file on disk keeps the error.
-        let uri = format!("file://{}", project_dir.join(main_fix).display());
-        let passes_before = client.count_progress_end_messages();
-        client
-            .send_notification(
-                "textDocument/didChange",
-                json!({
-                    "textDocument": { "uri": uri, "version": 2 },
-                    "contentChanges": [ { "text": PROGRAM_WITHOUT_AN_ERROR } ]
-                }),
-            )
-            .expect("Failed to send didChange");
-        client
-            .wait_for_progress_end_count(passes_before + 1, PASS_TIMEOUT)
-            .expect("the pass over the repaired buffer is expected to end");
+        let uri = client.file_uri(main_fix);
+        client.wait_for_one_more_pass(|client| {
+            client
+                .send_notification(
+                    "textDocument/didChange",
+                    json!({
+                        "textDocument": { "uri": uri, "version": 2 },
+                        "contentChanges": [ { "text": PROGRAM_WITHOUT_AN_ERROR } ]
+                    }),
+                )
+                .expect("Failed to send didChange");
+        });
 
         let diagnostics = wait_until_diagnostics(&mut client, main_fix, |d| d.is_empty());
         assert!(

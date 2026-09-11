@@ -119,10 +119,7 @@ mod tests {
                     json!({ "textDocument": { "uri": uri } }),
                 )
                 .expect("Failed to send semanticTokens request");
-            let response = self
-                .client
-                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-                .expect("Should receive a semanticTokens response");
+            let response = self.client.response_of(id);
             let data = response
                 .get("result")
                 .and_then(|r| r.get("data"))

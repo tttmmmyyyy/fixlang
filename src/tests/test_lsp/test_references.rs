@@ -87,10 +87,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send references request");
-            let response = self
-                .client
-                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-                .expect("Should receive a references response");
+            let response = self.client.response_of(id);
             let result = response
                 .get("result")
                 .expect("Response should have a result field");
@@ -118,10 +115,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send prepareCallHierarchy request");
-            let response = self
-                .client
-                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-                .expect("Should receive prepareCallHierarchy response");
+            let response = self.client.response_of(id);
             let result = response
                 .get("result")
                 .expect("Response should have a result field");
@@ -135,10 +129,7 @@ mod tests {
                 .client
                 .send_request("callHierarchy/incomingCalls", json!({ "item": item }))
                 .expect("Failed to send incomingCalls request");
-            let response = self
-                .client
-                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-                .expect("Should receive incomingCalls response");
+            let response = self.client.response_of(id);
             let result = response
                 .get("result")
                 .expect("Response should have a result field");
@@ -153,10 +144,7 @@ mod tests {
                 .client
                 .send_request("callHierarchy/outgoingCalls", json!({ "item": item }))
                 .expect("Failed to send outgoingCalls request");
-            let response = self
-                .client
-                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-                .expect("Should receive outgoingCalls response");
+            let response = self.client.response_of(id);
             let result = response
                 .get("result")
                 .expect("Response should have a result field");

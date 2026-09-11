@@ -78,9 +78,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send rename request");
-            self.client
-                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-                .expect("Should receive a rename response")
+            self.client.response_of(id)
         }
 
         // Send `textDocument/rename` and unwrap the `result` (asserting it
@@ -111,9 +109,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send prepareRename request");
-            self.client
-                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-                .expect("Should receive a prepareRename response")
+            self.client.response_of(id)
         }
 
         // Send `textDocument/prepareRename` and return the `result`

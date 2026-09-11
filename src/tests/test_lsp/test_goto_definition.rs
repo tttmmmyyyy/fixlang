@@ -75,10 +75,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send definition request");
-            let response = self
-                .client
-                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
-                .expect("Should receive a definition response");
+            let response = self.client.response_of(id);
             response
                 .get("result")
                 .cloned()
