@@ -13,6 +13,7 @@ pub mod test_rename;
 pub mod test_request_handling;
 pub mod test_semantic_tokens;
 pub mod test_stdin_eof;
+pub mod test_waits;
 pub mod test_workspace_symbol;
 
 // LSP Integration Tests

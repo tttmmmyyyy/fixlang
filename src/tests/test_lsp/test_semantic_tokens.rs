@@ -9,13 +9,12 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::lsp_client::LspClient;
+    use super::super::lsp_client::{poll_every, LspClient};
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::json;
     use std::{
         path::{Path, PathBuf},
-        thread,
-        time::{Duration, Instant},
+        time::Duration,
     };
     use tempfile::TempDir;
 
@@ -158,14 +157,12 @@ mod tests {
         /// after the progress-end notification, so retry until a typechecked
         /// token (a local variable, which only the overlay emits) appears.
         fn token_types_with_overlay(&mut self, file: &str) -> Vec<u64> {
-            let deadline = Instant::now() + OVERLAY_TIMEOUT;
-            loop {
-                let types = self.token_types(file);
-                if types.contains(&T_VARIABLE) || Instant::now() >= deadline {
-                    return types;
-                }
-                thread::sleep(OVERLAY_RETRY_INTERVAL);
-            }
+            let mut last_seen = Vec::new();
+            poll_every(OVERLAY_RETRY_INTERVAL, OVERLAY_TIMEOUT, || {
+                last_seen = self.token_types(file);
+                last_seen.contains(&T_VARIABLE).then(|| last_seen.clone())
+            })
+            .unwrap_or(last_seen)
         }
 
         /// Replace the whole content of `file` via a `didChange` notification.

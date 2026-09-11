@@ -98,6 +98,10 @@ mod tests {
         _temp_dir: TempDir,
     }
 
+    /// How long a `codeAction` request is given to be answered. A quick fix is built out of the
+    /// whole program, so it is given longer than an ordinary request.
+    const CODE_ACTION_TIMEOUT: Duration = Duration::from_secs(10);
+
     impl LspQuickFixCtx {
         /// Starts a server on a copy of the named case project, opens each of `files`, and waits
         /// for the diagnostics of the last of them, which the tests read.
@@ -157,11 +161,10 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send codeAction request");
-            let response = self.client.wait_for_response(id, Duration::from_secs(10));
-            if response.is_none() {
-                return vec![];
-            }
-            let response = response.unwrap();
+            let response = self
+                .client
+                .wait_for_response(id, CODE_ACTION_TIMEOUT)
+                .expect("the codeAction request is expected to be answered");
             let result = response
                 .get("result")
                 .expect("Response should have a result field");
