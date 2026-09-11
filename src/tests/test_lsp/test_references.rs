@@ -133,7 +133,7 @@ mod tests {
                 .shutdown(Duration::from_millis(500))
                 .expect("Failed to shutdown LSP");
             self.client
-                .finish()
+                .verify_no_protocol_error()
                 .expect("Reader thread should not have errors");
         }
 

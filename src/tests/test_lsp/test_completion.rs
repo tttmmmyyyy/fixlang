@@ -436,7 +436,7 @@ mod tests {
         );
 
         let _ = client.shutdown(Duration::from_millis(500));
-        let _ = client.finish();
+        let _ = client.verify_no_protocol_error();
         drop(temp_dir);
 
         // Assertion: myfunc2 should out-rank myfunc1 even when the

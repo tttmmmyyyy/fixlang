@@ -51,20 +51,20 @@ mod bench {
                 }),
             )
             .expect("send completion");
-        let resp = poll_every(POLL_INTERVAL, TIMEOUT, || client.get_response(id))
+        let resp = poll_every(POLL_INTERVAL, TIMEOUT, || client.take_response(id))
             .unwrap_or_else(|| panic!("completion did not respond within {:?}", TIMEOUT));
         let elapsed = start.elapsed();
         (elapsed, completion_items(&resp).len())
     }
 
     /// Convert a `Duration` to fractional milliseconds.
-    fn millis(d: Duration) -> f64 {
-        d.as_secs_f64() * 1000.0
+    fn millis(duration: Duration) -> f64 {
+        duration.as_secs_f64() * 1000.0
     }
 
     /// Run `ITERS` measured completions at `(line, col)` after `WARMUP`
     /// discarded warm-up calls, and print min / median / mean / max.
-    fn bench_one(client: &mut LspClient, uri: &str, line: u32, col: u32, label: &str) {
+    fn bench_position(client: &mut LspClient, uri: &str, line: u32, col: u32, label: &str) {
         let (cold, n_items) = timed_completion(client, uri, line, col);
         for _ in 1..WARMUP {
             timed_completion(client, uri, line, col);
@@ -145,19 +145,21 @@ mod bench {
 
         // Non-dot, full candidate list (empty namespace filter).
         let (l, c) = pos_after(&text, "let _ = sz");
-        bench_one(&mut client, &uri, l, c, "non-dot/full");
+        bench_position(&mut client, &uri, l, c, "non-dot/full");
 
         // Dot on an `Array I64` receiver.
         let (l, c) = pos_after_dot(&text, "arr.get_size");
-        bench_one(&mut client, &uri, l, c, "dot/array");
+        bench_position(&mut client, &uri, l, c, "dot/array");
 
         // Dot on an `I64` receiver.
         let (l, c) = pos_after_dot(&text, "42.compute");
-        bench_one(&mut client, &uri, l, c, "dot/i64");
+        bench_position(&mut client, &uri, l, c, "dot/i64");
 
         client
             .shutdown(Duration::from_millis(500))
             .expect("shutdown LSP");
-        client.finish().expect("reader thread clean");
+        client
+            .verify_no_protocol_error()
+            .expect("reader thread clean");
     }
 }

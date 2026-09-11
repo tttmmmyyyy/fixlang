@@ -34,7 +34,7 @@ mod tests {
     const T_INTERFACE: u64 = 14;
 
     /// A running language server connected to a copied test project.
-    struct Ctx {
+    struct LspSemanticTokensCtx {
         /// The client driving the `fix language-server` subprocess.
         client: LspClient,
         /// The copied project's root directory.
@@ -50,7 +50,7 @@ mod tests {
     /// of that wait asks the server for the tokens again, so the gap is sized for a round trip.
     const OVERLAY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-    impl Ctx {
+    impl LspSemanticTokensCtx {
         /// Start a server on a fresh copy of the `semantic_tokens` project, open
         /// `main.fix`, and wait for an initial elaboration.
         fn setup() -> Self {
@@ -163,7 +163,7 @@ mod tests {
                 .shutdown(Duration::from_millis(500))
                 .expect("Failed to shutdown LSP");
             self.client
-                .finish()
+                .verify_no_protocol_error()
                 .expect("Reader thread should not error");
         }
     }
@@ -174,8 +174,8 @@ mod tests {
     /// colors the namespace and the type separately, so an overlay token spanning the path lands on
     /// top of the base layer's.
     #[test]
-    fn semantic_tokens_do_not_overlap() {
-        let mut ctx = Ctx::setup();
+    fn test_semantic_tokens_do_not_overlap() {
+        let mut ctx = LspSemanticTokensCtx::setup();
         // Wait for the overlay, which is the layer that can produce a token spanning a whole path.
         ctx.token_types_with_overlay("main.fix");
         let positions = ctx.token_positions("main.fix");
@@ -201,8 +201,8 @@ mod tests {
     /// union variants and field accessors — while the base layer keeps coloring
     /// comments, strings, keywords and built-in types.
     #[test]
-    fn semantic_tokens_overlay_precise_classification() {
-        let mut ctx = Ctx::setup();
+    fn test_semantic_tokens_overlay_precise_classification() {
+        let mut ctx = LspSemanticTokensCtx::setup();
         let types = ctx.token_types_with_overlay("main.fix");
 
         let want = [
@@ -236,8 +236,8 @@ mod tests {
     /// the base lexical layer, and does NOT emit the AST overlay (which would be
     /// misaligned), so no variable/function tokens appear.
     #[test]
-    fn semantic_tokens_base_layer_survives_broken_buffer() {
-        let mut ctx = Ctx::setup();
+    fn test_semantic_tokens_base_layer_survives_broken_buffer() {
+        let mut ctx = LspSemanticTokensCtx::setup();
 
         // Drift the buffer away from the elaborated snapshot, with broken
         // syntax (unbalanced paren, unterminated string).
@@ -272,8 +272,8 @@ mod tests {
     /// from the elaborated snapshot, even though the buffer no longer matches it
     /// exactly.
     #[test]
-    fn semantic_tokens_overlay_survives_single_line_edit() {
-        let mut ctx = Ctx::setup();
+    fn test_semantic_tokens_overlay_survives_single_line_edit() {
+        let mut ctx = LspSemanticTokensCtx::setup();
         // Apply the overlay first.
         let _ = ctx.token_types_with_overlay("main.fix");
 
@@ -310,8 +310,8 @@ mod tests {
     /// otherwise the client keeps the base-layer-only result it fetched before
     /// elaboration completed and the overlay never appears.
     #[test]
-    fn semantic_tokens_refresh_sent_after_diagnostics() {
-        let mut ctx = Ctx::setup();
+    fn test_semantic_tokens_refresh_sent_after_diagnostics() {
+        let mut ctx = LspSemanticTokensCtx::setup();
 
         let mut saw_refresh = false;
         while let Some(msg) = ctx.client.pop_message() {

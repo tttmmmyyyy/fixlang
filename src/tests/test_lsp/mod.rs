@@ -130,7 +130,7 @@ mod tests {
 
         // Verify that all diagnostic errors have been resolved
         client
-            .verify_no_diagnostic_errors()
+            .verify_no_diagnostics()
             .expect("All diagnostic errors should be resolved after adding dependencies");
 
         // Shutdown
@@ -140,7 +140,7 @@ mod tests {
 
         // Check for reader thread errors
         client
-            .finish()
+            .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
 
@@ -225,7 +225,7 @@ mod tests {
 
         // Verify that all diagnostic errors have been resolved
         client
-            .verify_no_diagnostic_errors()
+            .verify_no_diagnostics()
             .expect("All diagnostic errors should be resolved after adding test dependencies");
 
         // Shutdown
@@ -235,7 +235,7 @@ mod tests {
 
         // Check for reader thread errors
         client
-            .finish()
+            .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
 
@@ -342,7 +342,7 @@ mod tests {
 
         // Check for reader thread errors
         client
-            .finish()
+            .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
 }

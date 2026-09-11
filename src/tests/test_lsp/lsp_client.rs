@@ -57,9 +57,11 @@ struct SharedState {
     responses: Arc<Mutex<Map<u32, Value>>>,
     /// The diagnostics last published for each file, under the file's absolute path.
     diagnostics: Arc<Mutex<Map<PathBuf, Value>>>,
-    /// Number of `$/progress` end notifications received so far.
-    progress_end_count: Arc<Mutex<usize>>,
-    /// The protocol error the reader thread stopped on, which `finish` hands to the test.
+    /// How many diagnostics passes have ended, counted by the `$/progress` end notifications
+    /// that mark them.
+    ended_pass_count: Arc<Mutex<usize>>,
+    /// The protocol error the reader thread stopped on, which `verify_no_protocol_error` hands
+    /// to the test.
     reader_thread_error: Arc<Mutex<Option<String>>>,
 }
 
@@ -70,7 +72,7 @@ impl SharedState {
             message_queue: Arc::new(Mutex::new(VecDeque::new())),
             responses: Arc::new(Mutex::new(Map::default())),
             diagnostics: Arc::new(Mutex::new(Map::default())),
-            progress_end_count: Arc::new(Mutex::new(0)),
+            ended_pass_count: Arc::new(Mutex::new(0)),
             reader_thread_error: Arc::new(Mutex::new(None)),
         }
     }
@@ -153,7 +155,7 @@ fn process_message(message: Value, shared: &SharedState) {
             .and_then(|k| k.as_str())
             == Some("end")
     {
-        *shared.progress_end_count.lock().unwrap() += 1;
+        *shared.ended_pass_count.lock().unwrap() += 1;
     }
 
     // Check if it's a publishDiagnostics notification
@@ -316,7 +318,7 @@ impl LspClient {
     /// The response to the request `id`, waited for until it arrives or `timeout` runs out.
     /// `None` says the wait ran out.
     pub fn wait_for_response(&mut self, id: u32, timeout: Duration) -> Option<Value> {
-        poll(timeout, || self.get_response(id))
+        poll(timeout, || self.take_response(id))
     }
 
     /// The response to the request `id`, which is expected to arrive within `RESPONSE_TIMEOUT`.
@@ -327,34 +329,32 @@ impl LspClient {
 
     /// The response to the request `id`, taken out of the responses so that it is handed over
     /// once. `None` says the response is yet to arrive.
-    pub fn get_response(&mut self, id: u32) -> Option<Value> {
+    pub fn take_response(&mut self, id: u32) -> Option<Value> {
         self.shared.responses.lock().unwrap().remove(&id)
     }
 
-    /// Return the number of `$/progress` end notifications received so far.
-    pub fn count_progress_end_messages(&self) -> usize {
-        *self.shared.progress_end_count.lock().unwrap()
+    /// How many diagnostics passes have ended so far.
+    pub fn ended_pass_count(&self) -> usize {
+        *self.shared.ended_pass_count.lock().unwrap()
     }
 
-    /// Wait until the total number of `$/progress` end notifications
-    /// reaches at least `target_count`.
-    ///
-    /// This is used to detect when diagnostics have completed, since the
-    /// server sends `$/progress` with `kind: "end"` after each diagnostics run.
-    pub fn wait_for_progress_end_count(
+    /// Wait until at least `target_count` diagnostics passes have ended. The server marks the
+    /// end of each pass with a `$/progress` notification carrying `kind: "end"`, which is what
+    /// the count is taken from.
+    pub fn wait_for_ended_passes(
         &self,
         target_count: usize,
         timeout: Duration,
     ) -> Result<(), String> {
         poll(timeout, || {
-            (self.count_progress_end_messages() >= target_count).then_some(())
+            (self.ended_pass_count() >= target_count).then_some(())
         })
         .ok_or_else(|| {
             format!(
-                "Timeout ({:?}) waiting for progress end count to reach {}. Current: {}",
+                "Timeout ({:?}) waiting for {} passes to end. Ended: {}",
                 timeout,
                 target_count,
-                self.count_progress_end_messages()
+                self.ended_pass_count()
             )
         })
     }
@@ -369,9 +369,9 @@ impl LspClient {
     /// has ended than had ended before it ran, so that the reports that pass publishes have
     /// arrived.
     pub fn wait_for_one_more_pass(&mut self, trigger: impl FnOnce(&mut Self)) {
-        let passes_before = self.count_progress_end_messages();
+        let passes_before = self.ended_pass_count();
         trigger(self);
-        self.wait_for_progress_end_count(passes_before + 1, Self::PASS_TIMEOUT)
+        self.wait_for_ended_passes(passes_before + 1, Self::PASS_TIMEOUT)
             .expect("the pass the buffer asks for is expected to end");
     }
 
@@ -441,15 +441,15 @@ impl LspClient {
         diagnostics_by_path
     }
 
-    /// Checks that the diagnostics of every file are empty, answering with an error that names a
-    /// file carrying any and shows what it carries.
-    pub fn verify_no_diagnostic_errors(&self) -> Result<(), String> {
+    /// Checks that no file carries a diagnostic of any severity, answering with an error that
+    /// names a file carrying one and shows what it carries.
+    pub fn verify_no_diagnostics(&self) -> Result<(), String> {
         let diagnostics = self.shared.diagnostics.lock().unwrap();
         for (file_path, diagnostics_value) in diagnostics.iter() {
             if let Some(diag_array) = diagnostics_value.as_array() {
                 if !diag_array.is_empty() {
                     return Err(format!(
-                        "Expected no diagnostic errors but found errors in {:?}: {:?}",
+                        "Expected no diagnostics but found some in {:?}: {:?}",
                         file_path, diag_array
                     ));
                 }
@@ -609,9 +609,10 @@ impl LspClient {
         }
     }
 
-    /// The protocol error the reader thread met, as an `Err`. Called at the end of a test, so
-    /// that an error met on a thread of its own reaches the test's result.
-    pub fn finish(&self) -> Result<(), String> {
+    /// Checks that the reader thread met no protocol error, answering with the error it met.
+    /// Called at the end of a test, so that an error met on a thread of its own reaches the
+    /// test's result.
+    pub fn verify_no_protocol_error(&self) -> Result<(), String> {
         let error = self.shared.reader_thread_error.lock().unwrap();
         if let Some(err_msg) = error.as_ref() {
             return Err(format!("LSP protocol error occurred: {}", err_msg));
