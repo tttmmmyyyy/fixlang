@@ -24,7 +24,10 @@ fn get_test_cases_dir() -> PathBuf {
 ///
 /// # Returns
 /// The guard whose drop deletes the copy, and the canonicalized path of
-/// the copied project.
+/// the copied project. Canonicalizing resolves the symlinks a temporary
+/// directory sits behind (`/tmp` -> `/private/tmp` on macOS), so the path
+/// matches the root URI the server is initialized with and the URIs it
+/// publishes under.
 pub fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let test_case_src = get_test_cases_dir().join(project_name);
@@ -114,7 +117,7 @@ impl LspCompletionCtx {
     /// The `file://` URI the server knows `file` by, `file` being a path
     /// relative to the project root.
     pub fn file_uri(&self, file: &str) -> String {
-        format!("file://{}", self.project_dir.join(file).display())
+        self.client.file_uri(Path::new(file))
     }
 
     /// Send textDocument/completion and return the result items,

@@ -263,46 +263,11 @@ impl LspClient {
         })
     }
 
-    /// Send LSP request
-    pub fn send_request(&mut self, method: &str, params: Value) -> Result<u32, String> {
-        let id = self.next_id;
-        self.next_id += 1;
-
-        let message = json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "method": method,
-            "params": params,
-        });
-
-        let content = serde_json::to_string(&message)
-            .map_err(|e| format!("Failed to serialize request: {:?}", e))?;
-
-        let header = format!("Content-Length: {}\r\n\r\n", content.len());
-
-        self.stdin
-            .write_all(header.as_bytes())
-            .map_err(|e| format!("Failed to write header: {:?}", e))?;
-        self.stdin
-            .write_all(content.as_bytes())
-            .map_err(|e| format!("Failed to write content: {:?}", e))?;
-        self.stdin
-            .flush()
-            .map_err(|e| format!("Failed to flush: {:?}", e))?;
-
-        Ok(id)
-    }
-
-    /// Send LSP notification
-    pub fn send_notification(&mut self, method: &str, params: Value) -> Result<(), String> {
-        let message = json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-        });
-
-        let content = serde_json::to_string(&message)
-            .map_err(|e| format!("Failed to serialize notification: {:?}", e))?;
+    /// Write `message` to the server, headed by the `Content-Length` the protocol frames a
+    /// message with.
+    fn send_message(&mut self, message: &Value) -> Result<(), String> {
+        let content = serde_json::to_string(message)
+            .map_err(|e| format!("Failed to serialize message: {:?}", e))?;
 
         let header = format!("Content-Length: {}\r\n\r\n", content.len());
 
@@ -317,6 +282,30 @@ impl LspClient {
             .map_err(|e| format!("Failed to flush: {:?}", e))?;
 
         Ok(())
+    }
+
+    /// Send LSP request
+    pub fn send_request(&mut self, method: &str, params: Value) -> Result<u32, String> {
+        let id = self.next_id;
+        self.next_id += 1;
+
+        self.send_message(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params,
+        }))?;
+
+        Ok(id)
+    }
+
+    /// Send LSP notification
+    pub fn send_notification(&mut self, method: &str, params: Value) -> Result<(), String> {
+        self.send_message(&json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+        }))
     }
 
     /// Pop one message from the message queue
@@ -479,7 +468,7 @@ impl LspClient {
         // Convert to absolute path
         let absolute_root = to_absolute_path(root_path)
             .map_err(|e| format!("Failed to convert root_path to absolute path: {}", e))?;
-        let root_uri = format!("file://{}", absolute_root.display());
+        let root_uri = uri_of(&absolute_root);
 
         let params = json!({
             "processId": null,

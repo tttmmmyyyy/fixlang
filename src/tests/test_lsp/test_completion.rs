@@ -347,7 +347,7 @@ mod tests {
         let dot_added = fs::read_to_string(&abs_path)
             .expect("read main.fix")
             .replace("    42\n", "    42.\n");
-        let uri = format!("file://{}", abs_path.display());
+        let uri = client.file_uri(Path::new("main.fix"));
         client
             .send_notification(
                 "textDocument/didChange",
@@ -1308,7 +1308,7 @@ mod tests {
                 "    let _ = arr.",
                 "    let _ = /* \u{65e5}\u{672c}\u{8a9e} */ arr.",
             );
-        let uri = format!("file://{}", abs_path.display());
+        let uri = client.file_uri(Path::new("main.fix"));
         client
             .send_notification(
                 "textDocument/didChange",

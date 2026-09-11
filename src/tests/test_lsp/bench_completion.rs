@@ -17,13 +17,11 @@
 
 #[cfg(test)]
 mod bench {
-    use super::super::completion_harness::completion_items;
+    use super::super::completion_harness::{completion_items, setup_test_env};
     use super::super::lsp_client::{poll_every, LspClient};
-    use crate::tests::test_util::copy_dir_recursive;
     use serde_json::json;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
     use std::time::{Duration, Instant};
-    use tempfile::TempDir;
 
     /// Number of measured completion requests per benchmark point.
     const ITERS: usize = 15;
@@ -34,24 +32,6 @@ mod bench {
     /// How long the wait for one response sits between two looks. It bounds how coarse the
     /// latency this benchmark reports can be.
     const POLL_INTERVAL: Duration = Duration::from_millis(1);
-
-    /// Absolute path to the directory holding the LSP test-case projects.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    /// Copy a test-case project into a fresh temp directory and return the
-    /// temp dir (kept alive for cleanup) and the canonicalized project path.
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let src = get_test_cases_dir().join(project_name);
-        let dst = temp_dir.path().join(project_name);
-        copy_dir_recursive(&src, &dst).expect("Failed to copy test case");
-        let dst = dst.canonicalize().expect("canonicalize");
-        (temp_dir, dst)
-    }
 
     /// Send one completion request and finely poll for the response,
     /// returning the round-trip duration and the number of items.
@@ -161,7 +141,7 @@ mod bench {
         // cost acceptable; we measure what happens *after* this.
         client.save_and_wait_for_the_program(main_rel);
 
-        let uri = format!("file://{}", project_dir.join(main_rel).display());
+        let uri = client.file_uri(main_rel);
 
         // Non-dot, full candidate list (empty namespace filter).
         let (l, c) = pos_after(&text, "let _ = sz");

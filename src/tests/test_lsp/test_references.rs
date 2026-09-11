@@ -6,8 +6,9 @@
 
 #[cfg(test)]
 mod tests {
+    use super::super::completion_harness::setup_test_env;
     use super::super::lsp_client::LspClient;
-    use crate::tests::test_util::copy_dir_recursive;
+    use crate::misc::Set;
     use serde_json::{json, Value};
     use std::{
         path::{Path, PathBuf},
@@ -15,34 +16,10 @@ mod tests {
     };
     use tempfile::TempDir;
 
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
-
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_case_src = get_test_cases_dir().join(project_name);
-        let test_case_dst = temp_dir.path().join(project_name);
-        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
-        // Canonicalize to resolve symlinks (e.g., /tmp -> /private/tmp on macOS).
-        // This ensures the path matches the canonicalized rootUri sent to the LSP server.
-        let test_case_dst = test_case_dst
-            .canonicalize()
-            .expect("Failed to canonicalize test case path");
-        (temp_dir, test_case_dst)
-    }
-
     /// A convenience wrapper around `LspClient` that provides high-level
     /// helpers for common test patterns (find-refs, call hierarchy, etc.).
     struct LspTestCtx {
         client: LspClient,
-        project_dir: PathBuf,
         _temp_dir: TempDir,
     }
 
@@ -64,13 +41,12 @@ mod tests {
             client.save_and_wait_for_the_program(Path::new(trigger_file));
             Self {
                 client,
-                project_dir,
                 _temp_dir: temp_dir,
             }
         }
 
         fn file_uri(&self, file: &str) -> String {
-            format!("file://{}", self.project_dir.join(file).display())
+            self.client.file_uri(Path::new(file))
         }
 
         /// Send textDocument/references and return the result array.
@@ -209,7 +185,7 @@ mod tests {
                 Some(format!("{}:{}:{}", uri, line, ch))
             })
             .collect();
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = Set::default();
         for key in &keys {
             assert!(
                 seen.insert(key),
