@@ -51,10 +51,17 @@ use crate::ast::{
         AppSourceCodeOrderType, Expr, ExprNode,
     },
     pattern::PatternNode,
-    program::Symbol,
+    program::{Program, Symbol},
     traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
 };
 use std::sync::Arc;
+
+/// Optimizes every symbol of `prg` in place.
+pub fn run(prg: &mut Program) {
+    for (_name, sym) in &mut prg.symbols {
+        run_on_symbol(sym);
+    }
+}
 
 /// Optimizes the expression of a symbol in place. The symbol has to be one that already has an
 /// expression.
@@ -142,15 +149,12 @@ impl ExprVisitor for AppInliner {
     /// moves inward is rewritten in turn.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Get the argument of the application. An application carries one argument until uncurrying
-        // rewrites call sites onto function pointers, which happens after every pass that runs this
-        // one.
+        // rewrites the call onto a function pointer, and a call it has rewritten names the function
+        // outright, so there is nothing to move an argument into.
         let args = expr.get_app_args();
-        assert_eq!(
-            args.len(),
-            1,
-            "an application of {} arguments reached application inlining",
-            args.len()
-        );
+        if args.len() != 1 {
+            return EndVisitResult::unchanged(expr);
+        }
         let arg = args[0].clone();
 
         // Get the function applied to the argument.
@@ -158,7 +162,10 @@ impl ExprVisitor for AppInliner {
         match &*func.expr {
             Expr::Lam(params, body) => {
                 // The expression is of the form `(|x| {expr})({a})`.
-                // Replace it with `let x = {a} in {expr}`.
+                // Replace it with `let x = {a} in {expr}`. A lambda of many parameters is built by
+                // uncurrying alone, as the body of a `#funptr` symbol, and every call uncurrying
+                // rewrites onto one names it outright, so it does not reach an application of one
+                // argument.
                 assert_eq!(
                     params.len(),
                     1,

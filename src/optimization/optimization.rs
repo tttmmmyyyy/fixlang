@@ -1,7 +1,7 @@
 use super::{
-    closure_specialization, collapse_constructions, dead_symbol_elimination, defunctionalize_fix,
-    inline, inline_local, optimize_act, remove_tyanno, simplify_symbol_names, skip_eval,
-    split_struct_args, uncurry, unwrap_newtype,
+    application_inlining, closure_specialization, collapse_constructions, dead_symbol_elimination,
+    defunctionalize_fix, inline, inline_local, optimize_act, remove_tyanno, simplify_symbol_names,
+    skip_eval, split_struct_args, uncurry, unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
@@ -143,6 +143,23 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_dead_symbol_elimination(),
         "dead_symbol_elimination",
         dead_symbol_elimination::run,
+    );
+
+    // Push an application into the branches of what produces the function. Specializing a closure
+    // puts the body of the function a caller passed into the caller, so a body answering with a
+    // lambda leaves an application whose function is an `if`, and the lambda of the branch taken is
+    // built at run time.
+    //
+    // It runs below uncurrying because that is what brings the application and the `if` into one
+    // scope: above it, the application sits inside a lambda the `if` is outside of, and the pass
+    // finds nothing to move. Uncurrying's eta expansion is what closes that gap, by binding the
+    // action to a name and folding the name into its one use.
+    run_pass(
+        prg,
+        config,
+        config.enable_closure_specialization() && config.enable_uncurry_optimization(),
+        "application_inlining",
+        application_inlining::run,
     );
 
     if config.emit_symbols {

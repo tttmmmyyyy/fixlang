@@ -7,7 +7,10 @@
 #[cfg(test)]
 mod tests {
     use crate::configuration::Configuration;
-    use crate::tests::test_util::{build_within_and_run, test_source, test_source_fail};
+    use crate::tests::test_util::{
+        build_run_and_read_rc_ir, build_within_and_run, rc_ir_function_bodies, test_source,
+        test_source_fail,
+    };
     use std::time::Duration;
 
     /// The argument `x` of `(let x = ..; ..)(x)` denotes the outer `x` after the application is
@@ -674,5 +677,150 @@ mod tests {
             Configuration::develop_mode(),
             "Array storage is not unique",
         );
+    }
+
+    /// A state monad whose `bind` threads a counter, looped over with `Std::loop_m`.
+    ///
+    /// `loop_m` answers with an action of the monad it loops in, so each round of it hands `bind`
+    /// the action the body produced. Specializing the closure the body is puts that body into
+    /// `loop_m`, where it answers with a lambda under each arm of an `if`, and the application of
+    /// that lambda to the state is what has to reach the arms.
+    const MONADIC_LOOP: &str = r#"
+        module Main;
+
+        type St a = unbox struct { _run : I64 -> (a, I64) };
+
+        namespace St {
+            run : I64 -> St a -> (a, I64);
+            run = |s, m| (m.@_run)(s);
+        }
+
+        impl St : Functor {
+            map = |f, m| St { _run : |s| let (v, s) = m.run(s); (f(v), s) };
+        }
+
+        impl St : Monad {
+            pure = |v| St { _run : |s| (v, s) };
+            bind = |f, m| St { _run : |s| let (v, s) = m.run(s); f(v).run(s) };
+        }
+
+        _tick : St I64;
+        _tick = St { _run : |s| (s, s + 1) };
+
+        main : IO () = (
+            let counting = loop_m((0, 0), |(i, total)|
+                if i == 100 { break_m $ total };
+                let v = *_tick;
+                continue_m $ (i + 1, total + v)
+            );
+            let (total, _) = counting.St::run(0);
+            println(total.to_string)
+        );
+    "#;
+
+    /// What `MONADIC_LOOP` prints: the sum of `0..99`.
+    const MONADIC_LOOP_OUTPUT: &str = "4950";
+
+    /// Asserts that `dump` holds the loop of `Std::loop_m`, and that no copy of it builds a
+    /// closure.
+    ///
+    /// The call the loop makes to itself is asserted alongside the closure's absence, so that a
+    /// build where the loop no longer lives in `Std::loop_m` fails here rather than reading a
+    /// function that has nothing left to build.
+    fn assert_loop_m_builds_no_closure(dump: &str) {
+        let bodies = rc_ir_function_bodies(dump, "Std::loop_m");
+        assert!(
+            !bodies.is_empty(),
+            "the dump names no `Std::loop_m`:\n{}",
+            dump
+        );
+        assert!(
+            bodies.iter().any(|body| body
+                .lines()
+                .skip(1)
+                .any(|line| line.contains("Std::loop_m"))),
+            "no `Std::loop_m` calls itself, so the loop this pins is not in the dump:\n{}",
+            bodies.join("\n")
+        );
+        for body in &bodies {
+            assert!(
+                !body.contains("= closure "),
+                "the loop should build no closure, but its body is:\n{}",
+                body
+            );
+        }
+    }
+
+    /// A loop through a monad builds no closure: `loop_m` hands the state to the action its body
+    /// answered with, and that application reaches the arms of the `if` the body ends in, so the
+    /// lambda of the arm taken is never built. Left unreached, it is one heap allocation per round
+    /// of the loop.
+    ///
+    /// The dump is what this asserts against because the program cannot observe it: the loop
+    /// answers the same either way.
+    #[test]
+    fn test_a_loop_through_a_monad_builds_no_closure() {
+        let dump = build_run_and_read_rc_ir(
+            MONADIC_LOOP,
+            "max",
+            MONADIC_LOOP_OUTPUT,
+            "a state monad looped over with `loop_m`",
+        );
+        assert_loop_m_builds_no_closure(&dump);
+    }
+
+    /// A loop in `IO`, performing an action each round, written the way `Std::loop_m` documents
+    /// itself.
+    ///
+    /// `IO` reaches the shape by a route of its own: `IO a` is a one-field unboxed struct over
+    /// `IOState -> (IOState, a)`, which unwrapping opens into that function type, and the loop
+    /// threads the `IOState` through each round.
+    const IO_LOOP: &str = r#"
+        module Main;
+
+        main : IO () = (
+            let total = *loop_m((0, 0), |(i, total)|
+                if i == 3 { break_m $ total };
+                println("round " + i.to_string);;
+                continue_m $ (i + 1, total + i)
+            );
+            println(total.to_string)
+        );
+    "#;
+
+    /// What `IO_LOOP` prints: a line per round, then the sum of `0..2`.
+    const IO_LOOP_OUTPUT: &str = "round 0\nround 1\nround 2\n3";
+
+    /// A loop in `IO` builds no closure either, which is what `Std` itself pays: `read_string` and
+    /// `get_args` both loop this way.
+    #[test]
+    fn test_a_loop_in_io_builds_no_closure() {
+        let dump = build_run_and_read_rc_ir(
+            IO_LOOP,
+            "max",
+            IO_LOOP_OUTPUT,
+            "an `IO` action looped over with `loop_m`",
+        );
+        assert_loop_m_builds_no_closure(&dump);
+    }
+
+    /// The answer of a loop through a monad does not depend on the optimization level. The pass
+    /// that flattens the application into the arms runs at `-O max` alone, so the levels below it
+    /// are what says the flattening leaves the answer where it was.
+    #[test]
+    fn test_a_loop_through_a_monad_answers_the_same_at_every_level() {
+        for opt_level in ["none", "basic", "max"] {
+            assert_eq!(
+                build_within_and_run(
+                    MONADIC_LOOP,
+                    opt_level,
+                    Duration::from_secs(600),
+                    "a state monad looped over with `loop_m`",
+                ),
+                MONADIC_LOOP_OUTPUT,
+                "the loop should answer the same at -O {}",
+                opt_level
+            );
+        }
     }
 }
