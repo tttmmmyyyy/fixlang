@@ -7,7 +7,7 @@ use crate::tests::test_util::copy_dir_recursive;
 use serde_json::{json, Value};
 use std::{
     path::{Path, PathBuf},
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tempfile::TempDir;
 
@@ -57,26 +57,18 @@ pub fn collect_completion_items(
     request_id: u32,
     timeout: Duration,
 ) -> Option<Vec<Value>> {
-    let start = Instant::now();
-    loop {
-        client.wait_for_server(Duration::from_millis(500));
-        if let Some(response) = client.get_response(request_id) {
-            let result = response.get("result").expect("response has result");
-            let items = if result.is_array() {
-                result.as_array().unwrap().clone()
-            } else {
-                result
-                    .get("items")
-                    .and_then(|v| v.as_array())
-                    .cloned()
-                    .unwrap_or_default()
-            };
-            return Some(items);
-        }
-        if start.elapsed() > timeout {
-            return None;
-        }
-    }
+    let response = client.wait_for_response(request_id, timeout)?;
+    let result = response.get("result").expect("response has result");
+    let items = if result.is_array() {
+        result.as_array().unwrap().clone()
+    } else {
+        result
+            .get("items")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+    };
+    Some(items)
 }
 
 /// A language server running over a private copy of one test project,
@@ -160,10 +152,9 @@ impl LspCompletionCtx {
             .client
             .send_request("completionItem/resolve", item)
             .expect("Failed to send resolve request");
-        self.client.wait_for_server(Duration::from_secs(5));
         let response = self
             .client
-            .get_response(id)
+            .wait_for_response(id, Duration::from_secs(5))
             .expect("Should receive a resolve response");
         response
             .get("result")

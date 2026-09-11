@@ -13,15 +13,14 @@ mod tests {
     use std::time::Duration;
     use tempfile::TempDir;
 
+    /// How long a request is given to be answered.
+    const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
+
     /// The response to the request `id`, waited for until it arrives.
     fn wait_for_response(client: &mut LspClient, id: u32) -> Value {
-        for _ in 0..50 {
-            if let Some(response) = client.get_response(id) {
-                return response;
-            }
-            client.wait_for_server(Duration::from_millis(100));
-        }
-        panic!("the request {} is expected to be answered", id);
+        client
+            .wait_for_response(id, RESPONSE_TIMEOUT)
+            .unwrap_or_else(|| panic!("the request {} is expected to be answered", id))
     }
 
     /// The delta-encoded semantic tokens the server answers for the buffer `uri` names.

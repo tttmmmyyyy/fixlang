@@ -76,12 +76,7 @@ mod tests {
             .expect("Failed to open main.fix");
 
         // Send didSave to trigger diagnostics
-        client
-            .save_document(Path::new("main.fix"))
-            .expect("Failed to save main.fix");
-
-        // Wait for initial diagnostics
-        client.wait_for_server(Duration::from_secs(5));
+        client.trigger_and_wait_for_diagnostics(Path::new("main.fix"));
 
         // Verify that main.fix has the specific error message
         let main_diagnostics = client.get_diagnostics(Path::new("main.fix"));
@@ -115,12 +110,7 @@ mod tests {
         );
 
         // Send didSave to trigger diagnostics and LSP lock file generation
-        client
-            .save_document(Path::new("main.fix"))
-            .expect("Failed to save main.fix");
-
-        // Wait for LSP to process and generate lock file
-        client.wait_for_server(Duration::from_secs(10));
+        client.trigger_and_wait_for_diagnostics(Path::new("main.fix"));
 
         // Check if LSP lock file was generated
         let lsp_lock_file = project_dir.join(LOCK_FILE_LSP_PATH);
@@ -180,12 +170,7 @@ mod tests {
             .expect("Failed to open test.fix");
 
         // Send didSave to trigger diagnostics
-        client
-            .save_document(Path::new("test.fix"))
-            .expect("Failed to save test.fix");
-
-        // Wait for initial diagnostics
-        client.wait_for_server(Duration::from_secs(5));
+        client.trigger_and_wait_for_diagnostics(Path::new("test.fix"));
 
         // Verify that test.fix has the specific error message about missing Character module
         let test_diagnostics = client.get_diagnostics(Path::new("test.fix"));
@@ -220,12 +205,7 @@ mod tests {
         );
 
         // Send didSave to trigger diagnostics and LSP lock file generation
-        client
-            .save_document(Path::new("test.fix"))
-            .expect("Failed to save test.fix");
-
-        // Wait for LSP to process and generate lock file
-        client.wait_for_server(Duration::from_secs(10));
+        client.trigger_and_wait_for_diagnostics(Path::new("test.fix"));
 
         // Check if LSP lock file was generated
         let lsp_lock_file = project_dir.join(LOCK_FILE_LSP_PATH);
@@ -284,12 +264,7 @@ mod tests {
             .expect("Failed to open main.fix");
 
         // Send didSave to trigger diagnostics and dependency resolution
-        client
-            .save_document(Path::new("main.fix"))
-            .expect("Failed to save main.fix");
-
-        // Wait for LSP to process
-        client.wait_for_server(Duration::from_secs(10));
+        client.trigger_and_wait_for_diagnostics(Path::new("main.fix"));
 
         // Get all diagnostics (dependency resolution errors may not be tied to main.fix)
         let all_diagnostics = client.get_all_diagnostics();

@@ -9,12 +9,13 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::lsp_client::LspClient;
+    use super::super::lsp_client::{LspClient, POLL_INTERVAL};
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::json;
     use std::{
         path::{Path, PathBuf},
-        time::Duration,
+        thread,
+        time::{Duration, Instant},
     };
     use tempfile::TempDir;
 
@@ -64,6 +65,12 @@ mod tests {
         _temp_dir: TempDir,
     }
 
+    /// How long a `semanticTokens` request is given to be answered.
+    const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
+
+    /// How long the overlay a finished analysis adds to the tokens is waited for.
+    const OVERLAY_TIMEOUT: Duration = Duration::from_secs(10);
+
     impl Ctx {
         /// Start a server on a fresh copy of the `semantic_tokens` project, open
         /// `main.fix`, and wait for an initial elaboration.
@@ -111,15 +118,10 @@ mod tests {
                     json!({ "textDocument": { "uri": uri } }),
                 )
                 .expect("Failed to send semanticTokens request");
-            let mut response = None;
-            for _ in 0..50 {
-                if let Some(r) = self.client.get_response(id) {
-                    response = Some(r);
-                    break;
-                }
-                self.client.wait_for_server(Duration::from_millis(100));
-            }
-            let response = response.expect("Should receive a semanticTokens response");
+            let response = self
+                .client
+                .wait_for_response(id, RESPONSE_TIMEOUT)
+                .expect("Should receive a semanticTokens response");
             let data = response
                 .get("result")
                 .and_then(|r| r.get("data"))
@@ -158,14 +160,14 @@ mod tests {
         /// after the progress-end notification, so retry until a typechecked
         /// token (a local variable, which only the overlay emits) appears.
         fn token_types_with_overlay(&mut self, file: &str) -> Vec<u64> {
-            for _ in 0..40 {
+            let deadline = Instant::now() + OVERLAY_TIMEOUT;
+            loop {
                 let types = self.token_types(file);
-                if types.contains(&T_VARIABLE) {
+                if types.contains(&T_VARIABLE) || Instant::now() >= deadline {
                     return types;
                 }
-                self.client.wait_for_server(Duration::from_millis(250));
+                thread::sleep(POLL_INTERVAL);
             }
-            self.token_types(file)
         }
 
         /// Replace the whole content of `file` via a `didChange` notification.
@@ -180,7 +182,6 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send didChange");
-            self.client.wait_for_server(Duration::from_millis(300));
         }
 
         /// Shut the server down cleanly and join its reader thread.

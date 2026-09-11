@@ -78,9 +78,8 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send rename request");
-            self.client.wait_for_server(Duration::from_secs(5));
             self.client
-                .get_response(id)
+                .wait_for_response(id, Duration::from_secs(5))
                 .expect("Should receive a rename response")
         }
 
@@ -112,9 +111,8 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send prepareRename request");
-            self.client.wait_for_server(Duration::from_secs(5));
             self.client
-                .get_response(id)
+                .wait_for_response(id, Duration::from_secs(5))
                 .expect("Should receive a prepareRename response")
         }
 
@@ -716,9 +714,6 @@ mod tests {
                 }),
             )
             .expect("Failed to send didChange");
-        // Give the server a moment to process the notification (no
-        // diagnostic re-run is triggered, so the AST stays stale).
-        ctx.client.wait_for_server(Duration::from_millis(300));
 
         let resp = ctx.rename_raw("lib.fix", 3, 5, "Counter");
         let msg = resp
@@ -751,7 +746,6 @@ mod tests {
                 }),
             )
             .expect("Failed to send didChange");
-        ctx.client.wait_for_server(Duration::from_millis(300));
 
         let resp = ctx.prepare_rename_raw("lib.fix", 3, 5);
         let msg = resp

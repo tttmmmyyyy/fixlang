@@ -87,10 +87,9 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send references request");
-            self.client.wait_for_server(Duration::from_secs(5));
             let response = self
                 .client
-                .get_response(id)
+                .wait_for_response(id, Duration::from_secs(5))
                 .expect("Should receive a references response");
             let result = response
                 .get("result")
@@ -119,10 +118,9 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send prepareCallHierarchy request");
-            self.client.wait_for_server(Duration::from_secs(5));
             let response = self
                 .client
-                .get_response(id)
+                .wait_for_response(id, Duration::from_secs(5))
                 .expect("Should receive prepareCallHierarchy response");
             let result = response
                 .get("result")
@@ -137,10 +135,9 @@ mod tests {
                 .client
                 .send_request("callHierarchy/incomingCalls", json!({ "item": item }))
                 .expect("Failed to send incomingCalls request");
-            self.client.wait_for_server(Duration::from_secs(5));
             let response = self
                 .client
-                .get_response(id)
+                .wait_for_response(id, Duration::from_secs(5))
                 .expect("Should receive incomingCalls response");
             let result = response
                 .get("result")
@@ -156,10 +153,9 @@ mod tests {
                 .client
                 .send_request("callHierarchy/outgoingCalls", json!({ "item": item }))
                 .expect("Failed to send outgoingCalls request");
-            self.client.wait_for_server(Duration::from_secs(5));
             let response = self
                 .client
-                .get_response(id)
+                .wait_for_response(id, Duration::from_secs(5))
                 .expect("Should receive outgoingCalls response");
             let result = response
                 .get("result")

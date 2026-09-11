@@ -75,10 +75,9 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send definition request");
-            self.client.wait_for_server(Duration::from_secs(5));
             let response = self
                 .client
-                .get_response(id)
+                .wait_for_response(id, Duration::from_secs(5))
                 .expect("Should receive a definition response");
             response
                 .get("result")

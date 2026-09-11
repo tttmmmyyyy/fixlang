@@ -12,7 +12,7 @@ mod tests {
     use serde_json::{json, Value};
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
     use tempfile::TempDir;
 
     /// Copies the named case project into a temporary directory and returns it with the project's
@@ -29,8 +29,11 @@ mod tests {
     /// The diagnostics the server publishes for `file` of the project, after opening and saving it.
     fn diagnostics_of(project_dir: &Path, file: &Path) -> Vec<Value> {
         let mut client = open_session(project_dir, file, Duration::from_secs(5));
-        client.save_document(file).expect("Failed to save document");
-        client.wait_for_server(Duration::from_secs(10));
+        save_and_wait_for_a_pass(
+            &mut client,
+            file,
+            "the pass over the saved buffer is expected to end",
+        );
         client.get_diagnostics(file)
     }
 
@@ -479,14 +482,12 @@ mod tests {
         file: &Path,
         settled: impl Fn(&[Value]) -> bool,
     ) -> Vec<Value> {
-        let deadline = Instant::now() + PASS_TIMEOUT;
-        loop {
-            let diagnostics = client.get_diagnostics(file);
-            if settled(&diagnostics) || Instant::now() >= deadline {
-                return diagnostics;
-            }
-            client.wait_for_server(Duration::from_millis(100));
-        }
+        client
+            .poll_until(PASS_TIMEOUT, |client| {
+                let diagnostics = client.get_diagnostics(file);
+                settled(&diagnostics).then_some(diagnostics)
+            })
+            .unwrap_or_else(|| client.get_diagnostics(file))
     }
 
     /// Whether the reports carry the one whose message contains `text`.

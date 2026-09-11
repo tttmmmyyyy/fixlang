@@ -157,8 +157,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send codeAction request");
-            self.client.wait_for_server(Duration::from_secs(10));
-            let response = self.client.get_response(id);
+            let response = self.client.wait_for_response(id, Duration::from_secs(10));
             if response.is_none() {
                 return vec![];
             }

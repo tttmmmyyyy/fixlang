@@ -80,10 +80,9 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send workspace/symbol request");
-            self.client.wait_for_server(Duration::from_secs(5));
             let response = self
                 .client
-                .get_response(id)
+                .wait_for_response(id, Duration::from_secs(5))
                 .expect("Should receive a workspace/symbol response");
             let result = response
                 .get("result")

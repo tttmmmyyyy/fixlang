@@ -10,6 +10,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// How long a wait for something the server sends sits between two looks at what has arrived.
+pub(super) const POLL_INTERVAL: Duration = Duration::from_millis(2);
+
 /// Shared state between `LspClient` and the background reader thread.
 /// Each field is an `Arc<Mutex<T>>` so `SharedState` can be cheaply cloned
 /// to share the same data across threads.
@@ -217,9 +220,6 @@ impl LspClient {
             }
         });
 
-        // Give the server a moment to initialize
-        thread::sleep(Duration::from_millis(100));
-
         Ok(LspClient {
             process,
             stdin,
@@ -286,15 +286,34 @@ impl LspClient {
         Ok(())
     }
 
-    /// Sleep for `duration`, giving the reader thread that long to take in whatever the server
-    /// sends meanwhile.
-    pub fn wait_for_server(&mut self, duration: Duration) {
-        thread::sleep(duration);
+    /// Look at what the server has sent every `POLL_INTERVAL` until `ready` answers `Some`, and
+    /// hand that answer back. `None` says `timeout` ran out with `ready` still answering `None`.
+    pub fn poll_until<T>(
+        &mut self,
+        timeout: Duration,
+        mut ready: impl FnMut(&mut Self) -> Option<T>,
+    ) -> Option<T> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(answer) = ready(self) {
+                return Some(answer);
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            thread::sleep(POLL_INTERVAL);
+        }
     }
 
     /// Pop one message from the message queue
     pub fn pop_message(&mut self) -> Option<Value> {
         self.shared.message_queue.lock().unwrap().pop_front()
+    }
+
+    /// The response to the request `id`, waited for until it arrives or `timeout` runs out.
+    /// `None` says the wait ran out.
+    pub fn wait_for_response(&mut self, id: u32, timeout: Duration) -> Option<Value> {
+        self.poll_until(timeout, |client| client.get_response(id))
     }
 
     /// The response to the request `id`, taken out of the responses so that it is handed over
@@ -314,36 +333,28 @@ impl LspClient {
     /// This is used to detect when diagnostics have completed, since the
     /// server sends `$/progress` with `kind: "end"` after each diagnostics run.
     pub fn wait_for_progress_end_count(
-        &self,
+        &mut self,
         target_count: usize,
         timeout: Duration,
     ) -> Result<(), String> {
-        let start = Instant::now();
-        loop {
-            if self.count_progress_end_messages() >= target_count {
-                return Ok(());
-            }
-            if start.elapsed() > timeout {
-                return Err(format!(
-                    "Timeout ({:?}) waiting for progress end count to reach {}. Current: {}",
-                    timeout,
-                    target_count,
-                    self.count_progress_end_messages()
-                ));
-            }
-            thread::sleep(Duration::from_millis(100));
-        }
+        self.poll_until(timeout, |client| {
+            (client.count_progress_end_messages() >= target_count).then_some(())
+        })
+        .ok_or_else(|| {
+            format!(
+                "Timeout ({:?}) waiting for progress end count to reach {}. Current: {}",
+                timeout,
+                target_count,
+                self.count_progress_end_messages()
+            )
+        })
     }
 
-    /// Trigger diagnostics for `file` and wait until the server has processed the results.
+    /// Trigger diagnostics for `file` and return once the server's main loop holds the result
+    /// of the pass, so that a request answered out of it sees the program this pass elaborated.
     ///
-    /// The server sends a `$/progress` notification with `kind: "end"` when diagnostics
-    /// complete, and the wait ends on that notification.
-    ///
-    /// After diagnostics complete, the result is on the internal channel
-    /// but the server's main loop must call `try_recv` to pick it up.
-    /// Sending a `$/ping` notification (unknown to the server, safely ignored)
-    /// forces the main loop to iterate, executing `try_recv`.
+    /// The server sends a `$/progress` notification with `kind: "end"` when a pass ends, and
+    /// the pass's result travels to the main loop on a channel of its own.
     pub fn trigger_and_wait_for_diagnostics(&mut self, file: &Path) {
         let count_before = self.count_progress_end_messages();
 
@@ -354,11 +365,21 @@ impl LspClient {
         self.wait_for_progress_end_count(count_before + 1, Duration::from_secs(60))
             .expect("Diagnostics did not complete in time");
 
-        // Force the server's main loop to iterate, ensuring it picks up
-        // the diagnostics result via try_recv.
-        self.send_notification("$/ping", json!(null))
-            .expect("Failed to send flush notification");
-        self.wait_for_server(Duration::from_secs(1));
+        // The main loop takes the result of a pass in at the top of an iteration, before it
+        // blocks reading the next message, so the result of the pass that just ended reaches it
+        // only once it has handled one more message. Two answered requests put it past that
+        // point: the first is what wakes the loop, the second is answered after the result is in.
+        let uri = format!("file://{}", self.working_dir.join(file).display());
+        for _ in 0..2 {
+            let id = self
+                .send_request(
+                    "textDocument/semanticTokens/full",
+                    json!({ "textDocument": { "uri": uri } }),
+                )
+                .expect("Failed to send the request that waits out the main loop");
+            self.wait_for_response(id, Duration::from_secs(10))
+                .expect("the request that waits out the main loop is expected to be answered");
+        }
     }
 
     /// The diagnostics the server last published for `file_path`, which is taken as relative to
@@ -423,9 +444,7 @@ impl LspClient {
 
         let id = self.send_request("initialize", params)?;
 
-        // Wait for response
-        self.wait_for_server(timeout);
-        if let Some(response) = self.get_response(id) {
+        if let Some(response) = self.wait_for_response(id, timeout) {
             if response.get("error").is_some() {
                 return Err(format!("Initialize failed: {:?}", response));
             }
@@ -542,33 +561,19 @@ impl LspClient {
     /// * `exit_timeout` - Maximum time to wait for the process to exit after sending exit notification
     pub fn shutdown(&mut self, exit_timeout: Duration) -> Result<(), String> {
         let id = self.send_request("shutdown", json!(null))?;
-
-        // Wait for response with 5 second timeout
-        let response_timeout = Duration::from_secs(5);
-        self.wait_for_server(response_timeout);
-        let _ = self.get_response(id);
+        let _ = self.wait_for_response(id, Duration::from_secs(5));
 
         self.send_notification("exit", json!(null))?;
 
-        // Wait for process to exit with timeout to avoid freezing tests
-        // If the process doesn't exit within the timeout, return error (Drop will kill it)
-        thread::sleep(exit_timeout);
-
-        match self.process.try_wait() {
-            Ok(Some(_status)) => {
-                // Process has already exited
-            }
-            Ok(None) => {
-                // Process is still running - return error
-                // Drop will kill the process when LspClient is dropped
-                return Err("LSP server did not exit gracefully within timeout".to_string());
-            }
-            Err(e) => {
-                return Err(format!("Failed to check process status: {:?}", e));
-            }
+        // A process still running when `exit_timeout` runs out is an error; `Drop` kills it.
+        match self.poll_until(exit_timeout, |client| match client.process.try_wait() {
+            Ok(Some(_status)) => Some(Ok(())),
+            Ok(None) => None,
+            Err(e) => Some(Err(format!("Failed to check process status: {:?}", e))),
+        }) {
+            Some(result) => result,
+            None => Err("LSP server did not exit gracefully within timeout".to_string()),
         }
-
-        Ok(())
     }
 
     /// The protocol error the reader thread met, as an `Err`. Called at the end of a test, so
