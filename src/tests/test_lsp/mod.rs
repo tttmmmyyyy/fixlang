@@ -8,12 +8,12 @@ pub mod test_diagnostics;
 pub mod test_goto_definition;
 pub mod test_hover;
 pub mod test_import_completion;
+pub mod test_polling;
 pub mod test_references;
 pub mod test_rename;
 pub mod test_request_handling;
 pub mod test_semantic_tokens;
 pub mod test_stdin_eof;
-pub mod test_waits;
 pub mod test_workspace_symbol;
 
 // LSP Integration Tests

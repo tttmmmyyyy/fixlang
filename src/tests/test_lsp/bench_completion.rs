@@ -33,7 +33,7 @@ mod bench {
     const TIMEOUT: Duration = Duration::from_secs(60);
     /// How long the wait for one response sits between two looks. It bounds how coarse the
     /// latency this benchmark reports can be.
-    const LOOK_INTERVAL: Duration = Duration::from_millis(1);
+    const POLL_INTERVAL: Duration = Duration::from_millis(1);
 
     /// Absolute path to the directory holding the LSP test-case projects.
     fn get_test_cases_dir() -> PathBuf {
@@ -71,7 +71,7 @@ mod bench {
                 }),
             )
             .expect("send completion");
-        let resp = poll_every(LOOK_INTERVAL, TIMEOUT, || client.get_response(id))
+        let resp = poll_every(POLL_INTERVAL, TIMEOUT, || client.get_response(id))
             .unwrap_or_else(|| panic!("completion did not respond within {:?}", TIMEOUT));
         let elapsed = start.elapsed();
         (elapsed, completion_items(&resp).len())

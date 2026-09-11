@@ -65,7 +65,7 @@ pub fn completion_items(response: &Value) -> Vec<Value> {
 /// server replies or `timeout` elapses. Returns the completion items;
 /// returns `None` when the timeout expires so the caller can format
 /// its own diagnostic.
-pub fn collect_completion_items(
+pub fn wait_for_completion_items(
     client: &mut LspClient,
     request_id: u32,
     timeout: Duration,
@@ -145,7 +145,7 @@ impl LspCompletionCtx {
                 }),
             )
             .expect("Failed to send completion request");
-        collect_completion_items(&mut self.client, id, timeout)
+        wait_for_completion_items(&mut self.client, id, timeout)
             .unwrap_or_else(|| panic!("completion did not respond within {:?}", timeout))
     }
 
@@ -155,7 +155,7 @@ impl LspCompletionCtx {
             .client
             .send_request("completionItem/resolve", item)
             .expect("Failed to send resolve request");
-        let response = self.client.response_of(id);
+        let response = self.client.expect_response(id);
         response
             .get("result")
             .cloned()

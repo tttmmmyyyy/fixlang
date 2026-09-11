@@ -90,7 +90,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send hover request");
-            let response = self.client.response_of(id);
+            let response = self.client.expect_response(id);
             response
                 .get("result")
                 .cloned()
@@ -228,7 +228,7 @@ mod tests {
                 }),
             )
             .expect("Failed to send definition request");
-        let response = ctx.client.response_of(id);
+        let response = ctx.client.expect_response(id);
         let result = response
             .get("result")
             .cloned()

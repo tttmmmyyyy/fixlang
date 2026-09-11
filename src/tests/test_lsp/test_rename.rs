@@ -78,7 +78,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send rename request");
-            self.client.response_of(id)
+            self.client.expect_response(id)
         }
 
         // Send `textDocument/rename` and unwrap the `result` (asserting it
@@ -109,7 +109,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send prepareRename request");
-            self.client.response_of(id)
+            self.client.expect_response(id)
         }
 
         // Send `textDocument/prepareRename` and return the `result`

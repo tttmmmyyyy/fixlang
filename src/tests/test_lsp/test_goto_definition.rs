@@ -75,7 +75,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send definition request");
-            let response = self.client.response_of(id);
+            let response = self.client.expect_response(id);
             response
                 .get("result")
                 .cloned()

@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::completion_harness::{
-        collect_completion_items, find_sort_text, setup_test_env, LspCompletionCtx,
+        find_sort_text, setup_test_env, wait_for_completion_items, LspCompletionCtx,
     };
     use super::super::lsp_client::LspClient;
     use serde_json::{json, Value};
@@ -381,7 +381,7 @@ mod tests {
             )
             .expect("send completion");
 
-        let items = collect_completion_items(&mut client, id, Duration::from_secs(60))
+        let items = wait_for_completion_items(&mut client, id, Duration::from_secs(60))
             .unwrap_or_else(|| {
                 let log_path = project_dir.join(".fixlang/fix.log");
                 let log_content =
@@ -1340,7 +1340,7 @@ mod tests {
                 }),
             )
             .expect("send completion");
-        let items = collect_completion_items(&mut client, id, Duration::from_secs(60))
+        let items = wait_for_completion_items(&mut client, id, Duration::from_secs(60))
             .expect("completion did not respond within 60s");
 
         let sort_push_back = find_sort_text(&items, "Std::Array::push_back")

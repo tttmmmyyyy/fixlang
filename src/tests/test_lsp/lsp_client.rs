@@ -13,19 +13,19 @@ use std::time::{Duration, Instant};
 /// How long a wait sits between two looks at what has arrived.
 const POLL_INTERVAL: Duration = Duration::from_millis(2);
 
-/// Look every `interval` until `ready` answers `Some`, and hand that answer back. `None` says
-/// `timeout` ran out with `ready` still answering `None`.
+/// Call `look` every `interval` until it answers `Some`, and hand that answer back. `None` says
+/// `timeout` ran out with `look` still answering `None`.
 ///
 /// `interval` is what one look costs: `POLL_INTERVAL` where a look reads what the reader thread
 /// has already taken in, and a round trip's worth where each look asks the server again.
 pub(super) fn poll_every<T>(
     interval: Duration,
     timeout: Duration,
-    mut ready: impl FnMut() -> Option<T>,
+    mut look: impl FnMut() -> Option<T>,
 ) -> Option<T> {
     let deadline = Instant::now() + timeout;
     loop {
-        if let Some(answer) = ready() {
+        if let Some(answer) = look() {
             return Some(answer);
         }
         if Instant::now() >= deadline {
@@ -35,10 +35,10 @@ pub(super) fn poll_every<T>(
     }
 }
 
-/// Look every `POLL_INTERVAL` until `ready` answers `Some`, for a wait each look of which reads
-/// what has already arrived.
-pub(super) fn poll_until<T>(timeout: Duration, ready: impl FnMut() -> Option<T>) -> Option<T> {
-    poll_every(POLL_INTERVAL, timeout, ready)
+/// Call `look` every `POLL_INTERVAL` until it answers `Some`, for a wait each look of which
+/// reads what has already arrived.
+pub(super) fn poll<T>(timeout: Duration, look: impl FnMut() -> Option<T>) -> Option<T> {
+    poll_every(POLL_INTERVAL, timeout, look)
 }
 
 /// The `file://` URI naming `absolute_path`.
@@ -327,11 +327,11 @@ impl LspClient {
     /// The response to the request `id`, waited for until it arrives or `timeout` runs out.
     /// `None` says the wait ran out.
     pub fn wait_for_response(&mut self, id: u32, timeout: Duration) -> Option<Value> {
-        poll_until(timeout, || self.get_response(id))
+        poll(timeout, || self.get_response(id))
     }
 
     /// The response to the request `id`, which is expected to arrive within `RESPONSE_TIMEOUT`.
-    pub fn response_of(&mut self, id: u32) -> Value {
+    pub fn expect_response(&mut self, id: u32) -> Value {
         self.wait_for_response(id, Self::RESPONSE_TIMEOUT)
             .unwrap_or_else(|| panic!("the request {} is expected to be answered", id))
     }
@@ -357,7 +357,7 @@ impl LspClient {
         target_count: usize,
         timeout: Duration,
     ) -> Result<(), String> {
-        poll_until(timeout, || {
+        poll(timeout, || {
             (self.count_progress_end_messages() >= target_count).then_some(())
         })
         .ok_or_else(|| {
@@ -417,7 +417,7 @@ impl LspClient {
                 json!({ "textDocument": { "uri": self.file_uri(file) } }),
             )
             .expect("Failed to send the request that waits the main loop out");
-        self.wait_for_response(id, Self::PASS_TIMEOUT)
+        self.wait_for_response(id, Self::RESPONSE_TIMEOUT)
             .expect("the request that waits the main loop out is expected to be answered");
     }
 
@@ -610,7 +610,7 @@ impl LspClient {
         self.send_notification("exit", json!(null))?;
 
         // A process still running when `exit_timeout` runs out is an error; `Drop` kills it.
-        match poll_until(exit_timeout, || match self.process.try_wait() {
+        match poll(exit_timeout, || match self.process.try_wait() {
             Ok(Some(_status)) => Some(Ok(())),
             Ok(None) => None,
             Err(e) => Some(Err(format!("Failed to check process status: {:?}", e))),

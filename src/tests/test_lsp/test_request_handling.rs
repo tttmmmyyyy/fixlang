@@ -21,7 +21,7 @@ mod tests {
                 json!({ "textDocument": { "uri": uri } }),
             )
             .expect("Failed to send semanticTokens");
-        client.response_of(id)["result"]["data"]
+        client.expect_response(id)["result"]["data"]
             .as_array()
             .expect("a semanticTokens response carries its data")
             .iter()
@@ -37,7 +37,7 @@ mod tests {
                 json!({ "textDocument": { "uri": uri } }),
             )
             .expect("Failed to send documentSymbol");
-        client.response_of(id)["result"]
+        client.expect_response(id)["result"]
             .as_array()
             .expect("a documentSymbol response carries an array of symbols")
             .iter()

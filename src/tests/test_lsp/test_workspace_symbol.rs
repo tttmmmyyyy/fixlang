@@ -80,7 +80,7 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send workspace/symbol request");
-            let response = self.client.response_of(id);
+            let response = self.client.expect_response(id);
             let result = response
                 .get("result")
                 .expect("Response should have a result field");

@@ -69,7 +69,7 @@ mod tests {
 
     /// How long the wait for the overlay sits between two `semanticTokens` requests. Each round
     /// of that wait asks the server for the tokens again, so the gap is sized for a round trip.
-    const OVERLAY_RETRY_INTERVAL: Duration = Duration::from_millis(100);
+    const OVERLAY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
     impl Ctx {
         /// Start a server on a fresh copy of the `semantic_tokens` project, open
@@ -118,7 +118,7 @@ mod tests {
                     json!({ "textDocument": { "uri": uri } }),
                 )
                 .expect("Failed to send semanticTokens request");
-            let response = self.client.response_of(id);
+            let response = self.client.expect_response(id);
             let data = response
                 .get("result")
                 .and_then(|r| r.get("data"))
@@ -157,11 +157,11 @@ mod tests {
         /// after the progress-end notification, so retry until a typechecked
         /// token (a local variable, which only the overlay emits) appears.
         fn token_types_with_overlay(&mut self, file: &str) -> Vec<u64> {
-            let with_overlay = poll_every(OVERLAY_RETRY_INTERVAL, OVERLAY_TIMEOUT, || {
+            let types_with_overlay = poll_every(OVERLAY_POLL_INTERVAL, OVERLAY_TIMEOUT, || {
                 let types = self.token_types(file);
                 types.contains(&T_VARIABLE).then_some(types)
             });
-            with_overlay.unwrap_or_else(|| self.token_types(file))
+            types_with_overlay.unwrap_or_else(|| self.token_types(file))
         }
 
         /// Replace the whole content of `file` via a `didChange` notification.

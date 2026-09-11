@@ -7,7 +7,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::completion_harness::LspCompletionCtx;
-    use super::super::lsp_client::{poll_until, LspClient};
+    use super::super::lsp_client::{poll, LspClient};
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
     use std::fs;
@@ -474,7 +474,7 @@ mod tests {
         file: &Path,
         settled: impl Fn(&[Value]) -> bool,
     ) -> Vec<Value> {
-        poll_until(LspClient::PASS_TIMEOUT, || {
+        poll(LspClient::PASS_TIMEOUT, || {
             let diagnostics = client.get_diagnostics(file);
             settled(&diagnostics).then_some(diagnostics)
         })

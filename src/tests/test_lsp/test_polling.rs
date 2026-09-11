@@ -50,9 +50,9 @@ mod tests {
     /// wait that gives up without taking the second one answers nothing at all.
     #[test]
     fn test_a_wait_looks_once_more_when_its_time_runs_out() {
-        let span = Duration::from_millis(100);
+        let interval = Duration::from_millis(100);
         let mut looks = 0;
-        let answer = poll_every(span, span, || {
+        let answer = poll_every(interval, interval, || {
             looks += 1;
             (looks > 1).then_some(looks)
         });
