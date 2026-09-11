@@ -51,7 +51,7 @@ mod tests {
                     .expect(&format!("Failed to open {}", f));
             }
             let trigger_file = files.last().unwrap();
-            client.trigger_and_wait_for_diagnostics(Path::new(trigger_file));
+            client.save_and_wait_for_the_program(Path::new(trigger_file));
             Self {
                 client,
                 project_dir,
@@ -79,7 +79,7 @@ mod tests {
                 )
                 .expect("Failed to send rename request");
             self.client
-                .wait_for_response(id, Duration::from_secs(5))
+                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
                 .expect("Should receive a rename response")
         }
 
@@ -112,7 +112,7 @@ mod tests {
                 )
                 .expect("Failed to send prepareRename request");
             self.client
-                .wait_for_response(id, Duration::from_secs(5))
+                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
                 .expect("Should receive a prepareRename response")
         }
 

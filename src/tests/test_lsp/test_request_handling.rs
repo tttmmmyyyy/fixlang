@@ -13,13 +13,10 @@ mod tests {
     use std::time::Duration;
     use tempfile::TempDir;
 
-    /// How long a request is given to be answered.
-    const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
-
     /// The response to the request `id`, waited for until it arrives.
     fn wait_for_response(client: &mut LspClient, id: u32) -> Value {
         client
-            .wait_for_response(id, RESPONSE_TIMEOUT)
+            .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
             .unwrap_or_else(|| panic!("the request {} is expected to be answered", id))
     }
 
@@ -68,7 +65,7 @@ mod tests {
             .initialize(&project_dir, Duration::from_secs(10))
             .expect("Failed to initialize LSP");
         client.open_document(file).expect("Failed to open document");
-        client.trigger_and_wait_for_diagnostics(file);
+        client.save_and_wait_for_the_program(file);
         (temp_dir, project_dir, client)
     }
 
@@ -105,7 +102,7 @@ mod tests {
 
         // The pass this asks for is what says the server is still running: a server that ended on
         // the message above sends no progress, and the wait times out.
-        client.trigger_and_wait_for_diagnostics(lib_fix);
+        client.save_and_wait_for_the_program(lib_fix);
 
         client
             .shutdown(Duration::from_millis(500))

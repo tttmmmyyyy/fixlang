@@ -9,7 +9,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::lsp_client::{LspClient, POLL_INTERVAL};
+    use super::super::lsp_client::LspClient;
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::json;
     use std::{
@@ -65,11 +65,12 @@ mod tests {
         _temp_dir: TempDir,
     }
 
-    /// How long a `semanticTokens` request is given to be answered.
-    const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
-
     /// How long the overlay a finished analysis adds to the tokens is waited for.
     const OVERLAY_TIMEOUT: Duration = Duration::from_secs(10);
+
+    /// How long the wait for the overlay sits between two `semanticTokens` requests. Each round
+    /// of that wait asks the server for the tokens again, so the gap is sized for a round trip.
+    const OVERLAY_RETRY_INTERVAL: Duration = Duration::from_millis(100);
 
     impl Ctx {
         /// Start a server on a fresh copy of the `semantic_tokens` project, open
@@ -85,7 +86,7 @@ mod tests {
                 .expect("Failed to open main.fix");
             // Elaborate the project so the AST overlay has a program whose
             // snapshot matches the (unmodified) buffer.
-            client.trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+            client.save_and_wait_for_the_program(Path::new("main.fix"));
             Self {
                 client,
                 project_dir,
@@ -120,7 +121,7 @@ mod tests {
                 .expect("Failed to send semanticTokens request");
             let response = self
                 .client
-                .wait_for_response(id, RESPONSE_TIMEOUT)
+                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
                 .expect("Should receive a semanticTokens response");
             let data = response
                 .get("result")
@@ -166,7 +167,7 @@ mod tests {
                 if types.contains(&T_VARIABLE) || Instant::now() >= deadline {
                     return types;
                 }
-                thread::sleep(POLL_INTERVAL);
+                thread::sleep(OVERLAY_RETRY_INTERVAL);
             }
         }
 

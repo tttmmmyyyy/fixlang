@@ -338,7 +338,7 @@ mod tests {
         client
             .open_document(Path::new("main.fix"))
             .expect("open main.fix");
-        client.trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+        client.save_and_wait_for_the_program(Path::new("main.fix"));
 
         // Replay: the user types `.` after `42`, turning the line
         // into `    42.`. didChange notifications carry the full text
@@ -1299,7 +1299,7 @@ mod tests {
         client
             .open_document(Path::new("main.fix"))
             .expect("open main.fix");
-        client.trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+        client.save_and_wait_for_the_program(Path::new("main.fix"));
 
         let abs_path = project_dir.join("main.fix");
         let with_multibyte = fs::read_to_string(&abs_path)

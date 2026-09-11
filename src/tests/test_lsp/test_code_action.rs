@@ -117,7 +117,7 @@ mod tests {
                     .expect(&format!("Failed to open {}", f));
             }
             let trigger_file = files.last().unwrap();
-            client.trigger_and_wait_for_diagnostics(Path::new(trigger_file));
+            client.save_and_wait_for_the_program(Path::new(trigger_file));
             Self {
                 client,
                 project_dir,
@@ -421,7 +421,7 @@ mod tests {
             .change_document(Path::new("main.fix"))
             .expect("Failed to send didChange");
         ctx.client
-            .trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+            .save_and_wait_for_the_program(Path::new("main.fix"));
 
         let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
         assert!(

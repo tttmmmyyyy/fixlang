@@ -60,7 +60,7 @@ mod tests {
                     .expect(&format!("Failed to open {}", f));
             }
             let trigger_file = files.last().unwrap();
-            client.trigger_and_wait_for_diagnostics(Path::new(trigger_file));
+            client.save_and_wait_for_the_program(Path::new(trigger_file));
             Self {
                 client,
                 _project_dir: project_dir,
@@ -82,7 +82,7 @@ mod tests {
                 .expect("Failed to send workspace/symbol request");
             let response = self
                 .client
-                .wait_for_response(id, Duration::from_secs(5))
+                .wait_for_response(id, LspClient::RESPONSE_TIMEOUT)
                 .expect("Should receive a workspace/symbol response");
             let result = response
                 .get("result")

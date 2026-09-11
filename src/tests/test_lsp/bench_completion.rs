@@ -171,7 +171,7 @@ mod bench {
         // Warm the typecheck cache / snapshot by running diagnostics once
         // and waiting for it to settle. The user considers this initial
         // cost acceptable; we measure what happens *after* this.
-        client.trigger_and_wait_for_diagnostics(main_rel);
+        client.save_and_wait_for_the_program(main_rel);
 
         let uri = format!("file://{}", project_dir.join(main_rel).display());
 

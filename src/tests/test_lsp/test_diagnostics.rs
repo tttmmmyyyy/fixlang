@@ -7,7 +7,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::completion_harness::LspCompletionCtx;
-    use super::super::lsp_client::LspClient;
+    use super::super::lsp_client::{poll_until, LspClient};
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
     use std::fs;
@@ -29,11 +29,7 @@ mod tests {
     /// The diagnostics the server publishes for `file` of the project, after opening and saving it.
     fn diagnostics_of(project_dir: &Path, file: &Path) -> Vec<Value> {
         let mut client = open_session(project_dir, file, Duration::from_secs(5));
-        save_and_wait_for_a_pass(
-            &mut client,
-            file,
-            "the pass over the saved buffer is expected to end",
-        );
+        client.save_and_wait_for_a_pass(file);
         client.get_diagnostics(file)
     }
 
@@ -349,8 +345,7 @@ mod tests {
             items.len()
         );
 
-        ctx.client
-            .trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+        ctx.client.save_and_wait_for_a_pass(Path::new("main.fix"));
         let diagnostics_after = ctx.client.get_diagnostics(lib_file);
         assert_eq!(
             diagnostics_after, diagnostics_before,
@@ -402,7 +397,7 @@ mod tests {
 
         let main_fix = Path::new("main.fix");
         let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
-        save_and_wait_for_a_pass(&mut client, main_fix, "the first pass is expected to end");
+        client.save_and_wait_for_a_pass(main_fix);
 
         // Both files write the literal on the 4th line, and each escape is 6 characters wide. It
         // begins at the 21st character of `null_character.fix` and at the 16th of `surrogate.fix`,
@@ -482,12 +477,12 @@ mod tests {
         file: &Path,
         settled: impl Fn(&[Value]) -> bool,
     ) -> Vec<Value> {
-        client
-            .poll_until(PASS_TIMEOUT, |client| {
-                let diagnostics = client.get_diagnostics(file);
-                settled(&diagnostics).then_some(diagnostics)
-            })
-            .unwrap_or_else(|| client.get_diagnostics(file))
+        let mut last_seen = Vec::new();
+        poll_until(PASS_TIMEOUT, || {
+            last_seen = client.get_diagnostics(file);
+            settled(&last_seen).then(|| last_seen.clone())
+        })
+        .unwrap_or(last_seen)
     }
 
     /// Whether the reports carry the one whose message contains `text`.
@@ -496,15 +491,6 @@ mod tests {
     }
 
     /// Saves `file` and waits until the pass the save asks for has ended. `expectation` names
-    /// what the wait is for, and is shown when the wait times out.
-    fn save_and_wait_for_a_pass(client: &mut LspClient, file: &Path, expectation: &str) {
-        let passes_before = client.count_progress_end_messages();
-        client.save_document(file).expect("Failed to save document");
-        client
-            .wait_for_progress_end_count(passes_before + 1, PASS_TIMEOUT)
-            .expect(expectation);
-    }
-
     /// A program carrying one ordinary error, which the analysis finishes and reports.
     const PROGRAM_WITH_AN_UNKNOWN_NAME: &str =
         "module Main;\n\nmain : IO ();\nmain = println(nonexistent_name);\n";
@@ -548,11 +534,7 @@ mod tests {
         let main_fix = Path::new("main.fix");
 
         let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
-        save_and_wait_for_a_pass(
-            &mut client,
-            main_fix,
-            "the pass over the program that panics is expected to end",
-        );
+        client.save_and_wait_for_a_pass(main_fix);
 
         // What the rest of this test measures exists only after a pass has panicked, so the panic
         // is asserted rather than assumed. A pass that fails publishes nothing, and the case
@@ -573,11 +555,7 @@ mod tests {
         client
             .change_document(main_fix)
             .expect("Failed to change document");
-        save_and_wait_for_a_pass(
-            &mut client,
-            main_fix,
-            "the pass over the repaired program is expected to end",
-        );
+        client.save_and_wait_for_a_pass(main_fix);
 
         let diagnostics = wait_until_diagnostics(&mut client, main_fix, |d| {
             carries_report(d, UNKNOWN_NAME_REPORT)
@@ -604,11 +582,7 @@ mod tests {
             .expect("Failed to write the program the session starts from");
 
         let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
-        save_and_wait_for_a_pass(
-            &mut client,
-            main_fix,
-            "the pass over the program carrying an ordinary error is expected to end",
-        );
+        client.save_and_wait_for_a_pass(main_fix);
         let diagnostics = wait_until_diagnostics(&mut client, main_fix, |d| {
             carries_report(d, UNKNOWN_NAME_REPORT)
         });
@@ -617,11 +591,7 @@ mod tests {
         // The program written next, which the analysis fails on.
         fs::write(project_dir.join(main_fix), &program_the_analysis_fails_on)
             .expect("Failed to write the program the analysis fails on");
-        save_and_wait_for_a_pass(
-            &mut client,
-            main_fix,
-            "the pass over the program the analysis fails on is expected to end",
-        );
+        client.save_and_wait_for_a_pass(main_fix);
 
         // The report of the pass before, still where that pass put it. It is also what says the
         // pass failed: a pass that analyzed this program would report its duplicated type
@@ -631,11 +601,7 @@ mod tests {
         // The program written last, which the analysis finishes with nothing to report.
         fs::write(project_dir.join(main_fix), PROGRAM_WITHOUT_AN_ERROR)
             .expect("Failed to write the program carrying no error");
-        save_and_wait_for_a_pass(
-            &mut client,
-            main_fix,
-            "the pass over the program carrying no error is expected to end",
-        );
+        client.save_and_wait_for_a_pass(main_fix);
 
         let diagnostics = wait_until_diagnostics(&mut client, main_fix, |d| d.is_empty());
         assert!(
@@ -664,7 +630,7 @@ mod tests {
         let main_fix = Path::new("main.fix");
 
         let mut client = open_session(&project_dir, main_fix, Duration::from_secs(10));
-        save_and_wait_for_a_pass(&mut client, main_fix, "the first pass is expected to end");
+        client.save_and_wait_for_a_pass(main_fix);
         let diagnostics = wait_until_diagnostics(&mut client, main_fix, |d| {
             carries_report(d, UNKNOWN_NAME_REPORT)
         });
