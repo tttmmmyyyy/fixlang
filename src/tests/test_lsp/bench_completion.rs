@@ -1,19 +1,19 @@
 // Opt-in benchmark for warm-state `textDocument/completion` latency.
 //
-// This is NOT a correctness test: it measures the round-trip latency the
-// editor experiences for a completion request *after* the initial
-// diagnostics run has settled (the cache is warm). It is gated behind the
-// `FIX_LSP_BENCH` environment variable so it returns immediately during
-// normal `cargo test` runs and only does work when explicitly requested:
+// It measures, and asserts nothing about, the round-trip latency the editor
+// experiences for a completion request once the initial diagnostics run has
+// settled (the cache is warm). It is gated behind the `FIX_LSP_BENCH`
+// environment variable, so it returns immediately during a normal
+// `cargo test` run and does its work when asked for:
 //
 //   FIX_LSP_BENCH=1 cargo test --release \
 //     --  tests::test_lsp::bench_completion --nocapture
 //
 // The reported numbers are end-to-end (send request -> receive response),
-// so they include the client-side JSON parse of the response in this test
-// harness. For the non-dot case that returns the full candidate list,
-// that parse is non-trivial; treat the absolute numbers as an upper bound
-// and use the before/after delta as the signal when optimizing.
+// so they include this harness's own JSON parse of the response. That parse
+// costs something for the non-dot case, which returns the full candidate
+// list; read the absolute numbers as an upper bound and the before/after
+// delta as the signal when optimizing.
 
 #[cfg(test)]
 mod bench {
@@ -104,9 +104,7 @@ mod bench {
     }
 
     /// Locate the cursor `(line, col)` at the end of the first occurrence
-    /// of `needle` (used for a non-dot context where `needle` is a
-    /// lowercase identifier, yielding an empty namespace filter -> the
-    /// full candidate list).
+    /// of `needle`.
     fn pos_after(text: &str, needle: &str) -> (u32, u32) {
         for (i, line) in text.lines().enumerate() {
             if let Some(start) = line.find(needle) {
@@ -138,9 +136,8 @@ mod bench {
             .expect("initialize LSP");
         client.open_document(main_rel).expect("open main.fix");
 
-        // Warm the typecheck cache / snapshot by running diagnostics once
-        // and waiting for it to settle. The user considers this initial
-        // cost acceptable; we measure what happens *after* this.
+        // Warm the typecheck cache / snapshot by running diagnostics once and
+        // waiting for it to settle, so that what follows is measured warm.
         client.save_and_wait_for_the_program(main_rel);
 
         let uri = client.file_uri(main_rel);

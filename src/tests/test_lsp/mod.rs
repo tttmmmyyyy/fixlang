@@ -16,8 +16,8 @@ pub mod test_semantic_tokens;
 pub mod test_stdin_eof;
 pub mod test_workspace_symbol;
 
-// LSP Integration Tests
-// Tests for automatic lock file management in language server mode
+// The lock file the language server writes for the project it is serving, and the report the
+// editor is shown when that project's dependencies cannot be resolved.
 
 #[cfg(test)]
 mod tests {

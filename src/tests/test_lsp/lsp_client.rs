@@ -102,7 +102,9 @@ fn is_publish_diagnostics(message: &Value) -> bool {
     message.get("method").and_then(|m| m.as_str()) == Some("textDocument/publishDiagnostics")
 }
 
-/// Process a received message and update internal state
+/// Take `message` into `shared`: the response to a request under the request's id, the end of a
+/// diagnostics pass into the count of the passes that have ended, the diagnostics of a file under
+/// the file's path, and the message itself into the queue.
 fn process_message(message: Value, shared: &SharedState) {
     /// Handle a `textDocument/publishDiagnostics` notification.
     fn process_publish_diagnostics(message: &Value, shared: &SharedState) {
@@ -166,10 +168,9 @@ fn process_message(message: Value, shared: &SharedState) {
 }
 
 impl LspClient {
-    /// Start fix command in language server mode
-    ///
-    /// The working_dir can be either a relative or absolute path.
-    /// It will be converted to an absolute path internally.
+    /// Run `fix language-server` in `working_dir`, which is the project root the paths a test
+    /// passes are taken as relative to, and read what it sends on a thread of its own.
+    /// `working_dir` itself may be relative to the directory the test runs in.
     pub fn new(working_dir: &Path) -> Result<Self, String> {
         // Convert to absolute path
         let absolute_working_dir = to_absolute_path(working_dir)
@@ -191,8 +192,8 @@ impl LspClient {
         let shared = SharedState::new();
         let shared_clone = shared.clone();
 
-        // Start dedicated reader thread (detached - JoinHandle is not stored)
-        // The thread will exit when stdout is closed (process termination) or on protocol error
+        // The reader thread runs on its own, and ends when the process closes its stdout or when
+        // it meets a protocol error.
         thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
             loop {
@@ -286,7 +287,8 @@ impl LspClient {
         Ok(())
     }
 
-    /// Send LSP request
+    /// Send the request `method` with `params`, and hand back the id it was sent under, which the
+    /// response to it carries.
     pub fn send_request(&mut self, method: &str, params: Value) -> Result<u32, String> {
         let id = self.next_id;
         self.next_id += 1;
@@ -301,7 +303,7 @@ impl LspClient {
         Ok(id)
     }
 
-    /// Send LSP notification
+    /// Send the notification `method` with `params`, which the server answers nothing to.
     pub fn send_notification(&mut self, method: &str, params: Value) -> Result<(), String> {
         self.send_message(&json!({
             "jsonrpc": "2.0",
@@ -310,7 +312,7 @@ impl LspClient {
         }))
     }
 
-    /// Pop one message from the message queue
+    /// The oldest message the server sent that the queue still holds, taken out of it.
     pub fn pop_message(&mut self) -> Option<Value> {
         self.shared.message_queue.lock().unwrap().pop_front()
     }
@@ -458,12 +460,10 @@ impl LspClient {
         Ok(())
     }
 
-    /// Run the initialization handshake: send the `initialize` request, wait for its response,
-    /// then send the `initialized` notification the server starts its diagnostics on.
-    ///
-    /// # Arguments
-    /// * `root_path` - Project root directory path (can be relative or absolute)
-    /// * `timeout` - Maximum time to wait for initialize response
+    /// Run the initialization handshake: send the `initialize` request naming `root_path` as the
+    /// project root, wait up to `timeout` for its response, then send the `initialized`
+    /// notification the server starts its diagnostics on. `root_path` may itself be relative to
+    /// the directory the test runs in.
     pub fn initialize(&mut self, root_path: &Path, timeout: Duration) -> Result<(), String> {
         // Convert to absolute path
         let absolute_root = to_absolute_path(root_path)
@@ -499,13 +499,9 @@ impl LspClient {
         Ok((text, uri_of(absolute_path)))
     }
 
-    /// Send didOpen notification for a document
-    ///
-    /// Takes a file path relative to the project root, reads the file content,
-    /// and sends a didOpen notification to the language server.
-    /// Initializes the document version to 1.
-    ///
-    /// Returns an error if the document is already opened.
+    /// Tell the server that the client now holds `file_path`, whose content it reads from disk and
+    /// sends along. `file_path` is taken as relative to the project root, and the version the
+    /// client counts its changes from starts here.
     pub fn open_document(&mut self, file_path: &Path) -> Result<(), String> {
         /// The version the protocol counts an opened document from.
         const INITIAL_VERSION_NUMBER: i32 = 1;
@@ -536,11 +532,9 @@ impl LspClient {
         )
     }
 
-    /// Send didChange notification for a document
-    ///
-    /// Takes a file path relative to the project root, reads the file content,
-    /// increments the document version, and sends a didChange notification to the language server.
-    /// The document must have been opened with open_document first.
+    /// Tell the server that what the client holds for `file_path` is now the content on disk,
+    /// under the next version. `file_path` is taken as relative to the project root, and is
+    /// expected to have been opened by `open_document`.
     pub fn change_document(&mut self, file_path: &Path) -> Result<(), String> {
         let absolute_path = self.working_dir.join(file_path);
         let (text, uri) = Self::read_document(&absolute_path)?;
@@ -569,10 +563,8 @@ impl LspClient {
         )
     }
 
-    /// Send didSave notification for a document
-    ///
-    /// Takes a file path relative to the project root, reads the file content,
-    /// and sends a didSave notification to the language server.
+    /// Tell the server that `file_path` has been saved, along with the content on disk, which is
+    /// what asks it for a diagnostics pass. `file_path` is taken as relative to the project root.
     pub fn save_document(&mut self, file_path: &Path) -> Result<(), String> {
         let absolute_path = self.working_dir.join(file_path);
         let (text, uri) = Self::read_document(&absolute_path)?;
@@ -588,10 +580,8 @@ impl LspClient {
         )
     }
 
-    /// Ask the server to shut down and exit, and wait for its process to end.
-    ///
-    /// # Arguments
-    /// * `exit_timeout` - Maximum time to wait for the process to exit after sending exit notification
+    /// Ask the server to shut down and exit, and wait up to `exit_timeout` for its process to end
+    /// once the `exit` notification has been sent.
     pub fn shutdown(&mut self, exit_timeout: Duration) -> Result<(), String> {
         let id = self.send_request("shutdown", json!(null))?;
         let _ = self.wait_for_response(id, Self::RESPONSE_TIMEOUT);

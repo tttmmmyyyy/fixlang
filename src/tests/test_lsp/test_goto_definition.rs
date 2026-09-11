@@ -14,12 +14,20 @@ mod tests {
     };
     use tempfile::TempDir;
 
+    /// A running language server over a private copy of one fixture project, with that
+    /// project's files open.
     struct LspTestCtx {
+        /// The connection to the running server.
         client: LspClient,
+        /// Holds the temporary directory containing the copy alive; dropping it deletes
+        /// the copy.
         _temp_dir: TempDir,
     }
 
     impl LspTestCtx {
+        /// Start a server over a fresh copy of `project_name` and open each of `files`, paths
+        /// relative to the project root, in the given order. Returns once the last of them has
+        /// been elaborated, so the program the jumps are answered from is in place.
         fn setup(project_name: &str, files: &[&str]) -> Self {
             let (temp_dir, project_dir) = setup_test_env(project_name);
             let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
@@ -39,6 +47,8 @@ mod tests {
             }
         }
 
+        /// The `file://` URI the server knows `file` by, `file` being a path relative to the
+        /// project root.
         fn file_uri(&self, file: &str) -> String {
             self.client.file_uri(Path::new(file))
         }
@@ -64,6 +74,7 @@ mod tests {
                 .expect("Response should have a result field")
         }
 
+        /// Shut the server down, and fail the test if its reader thread met a protocol error.
         fn shutdown(mut self) {
             self.client
                 .shutdown(Duration::from_millis(500))
@@ -202,21 +213,17 @@ mod tests {
         let mut ctx = LspTestCtx::setup("goto_local", &["lib.fix"]);
         // Use at line 52, col 4.
         let result = ctx.goto_definition("lib.fix", 52, 4);
-        // Inner binder at line 51, col 8 (NOT the outer at line 50).
+        // The inner binder at line 51, col 8, which shadows the one at line 50.
         assert_location(&result, &ctx, "lib.fix", 51, 8, "s");
         ctx.shutdown();
     }
 
-    // --- Repro: source span missing on `&&`-desugared `if` ---
+    // --- The `if` that `&&` desugars to ---
     //
-    // `parse_expr_and` (parser.rs:1342) builds the synthesized
-    // `expr_if(lhs, rhs, expr_bool_lit(false, None), None)` with
-    // `source: None`. `ExprNode::find_node_at` short-circuits on a
-    // None source, so anything underneath the synthesized If is
-    // unreachable — including the LHS and RHS sub-expressions of
-    // `&&`. Hover, goto-definition, and find-references all break
-    // there. The outer `if`'s THEN/ELSE branches are not affected
-    // because they sit on the outer (user-written) `if`.
+    // `parse_expr_and` builds a synthesized `expr_if` for each `&&`, and gives it the span
+    // uniting its two operands. `ExprNode::find_node_at` walks into a node only through its
+    // span, so that span is what keeps the operands of `&&` reachable — to
+    // goto-definition here, and to hover and find-references alike.
 
     /// Cursor on `b` of `b >= 0` (LHS of `&&`).
     #[test]
@@ -239,7 +246,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Sanity: cursor on `b` inside `{ b }` (outer If's THEN branch) — works.
+    /// Cursor on `b` inside `{ b }`, the THEN branch of the user-written `if`.
     #[test]
     fn test_goto_local_and_then_branch() {
         let mut ctx = LspTestCtx::setup("goto_local", &["lib.fix"]);

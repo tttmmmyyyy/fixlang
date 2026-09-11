@@ -64,10 +64,8 @@ pub fn completion_items(response: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-/// Poll an in-flight `textDocument/completion` request until the
-/// server replies or `timeout` elapses. Returns the completion items;
-/// returns `None` when the timeout expires so the caller can format
-/// its own diagnostic.
+/// The completion items the answer to the request `request_id` carries, waited for until it
+/// arrives or `timeout` runs out. `None` says the wait ran out.
 pub fn wait_for_completion_items(
     client: &mut LspClient,
     request_id: u32,
@@ -126,10 +124,10 @@ impl LspCompletionCtx {
         self.complete_with_timeout(file, line, col, Duration::from_secs(5))
     }
 
-    /// Send textDocument/completion and poll for the response with
-    /// the given timeout. Use this in dot-completion tests where
-    /// the server's first-time re-elaborate can take longer than
-    /// `complete`'s 5-second wait on a cold cache.
+    /// Send `textDocument/completion` and return the result items, waiting up
+    /// to `timeout` for the response. A request the server answers only after
+    /// re-elaborating the project takes longer than `complete` waits on a cold
+    /// cache, and `timeout` is what such a request is given.
     pub fn complete_with_timeout(
         &mut self,
         file: &str,

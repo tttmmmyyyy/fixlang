@@ -21,8 +21,12 @@ mod tests {
     /// temp directory holding the copied project, and the project
     /// path itself.
     struct LspTestCtx {
+        /// The connection to the running server.
         client: LspClient,
+        /// The copy of the fixture project the server was started on.
         project_dir: PathBuf,
+        /// Holds the temporary directory containing `project_dir` alive; dropping
+        /// it deletes the copy.
         _temp_dir: TempDir,
     }
 
@@ -76,8 +80,8 @@ mod tests {
                 .expect("Response should have a result field")
         }
 
-        /// Cleanly shut down the LSP server and join its reader
-        /// thread; panics if either step fails.
+        /// Shut the server down; panics if it fails to exit or if its reader
+        /// thread met a protocol error.
         fn shutdown(mut self) {
             self.client
                 .shutdown(Duration::from_millis(500))

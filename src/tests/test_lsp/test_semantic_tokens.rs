@@ -80,7 +80,6 @@ mod tests {
 
         /// Request semantic tokens and return the flat list of per-token type
         /// indices (the 4th element of each 5-tuple in the delta-encoded data).
-        /// Polls for the response rather than sleeping a fixed time.
         fn token_types(&mut self, file: &str) -> Vec<u64> {
             self.token_data(file)
                 .chunks_exact(5)
@@ -158,7 +157,7 @@ mod tests {
                 .expect("Failed to send didChange");
         }
 
-        /// Shut the server down cleanly and join its reader thread.
+        /// Shut the server down, and fail the test if its reader thread met a protocol error.
         fn shutdown(mut self) {
             self.client
                 .shutdown(Duration::from_millis(500))
@@ -234,8 +233,8 @@ mod tests {
     }
 
     /// Verifies that on a broken / drifted buffer the server still responds with
-    /// the base lexical layer, and does NOT emit the AST overlay (which would be
-    /// misaligned), so no variable/function tokens appear.
+    /// the base lexical layer, and withholds the AST overlay, which would be
+    /// misaligned there: the answer carries base-layer token types alone.
     #[test]
     fn test_semantic_tokens_base_layer_survives_broken_buffer() {
         let mut ctx = LspSemanticTokensCtx::setup();

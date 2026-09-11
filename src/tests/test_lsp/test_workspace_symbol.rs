@@ -19,8 +19,12 @@ mod tests {
     /// Test fixture that owns an initialized `LspClient` together with
     /// the temporary project directory it operates on.
     struct LspWorkspaceSymbolCtx {
+        /// The connection to the running server.
         client: LspClient,
+        /// The copy of the fixture project the server was started on.
         _project_dir: PathBuf,
+        /// Holds the temporary directory containing `_project_dir` alive; dropping it
+        /// deletes the copy.
         _temp_dir: TempDir,
     }
 
@@ -67,7 +71,8 @@ mod tests {
             result.as_array().cloned().unwrap_or_default()
         }
 
-        /// Performs a clean LSP shutdown and joins the reader thread.
+        /// Shuts the server down, and fails the test if its reader thread met a protocol
+        /// error.
         fn shutdown(mut self) {
             self.client
                 .shutdown(Duration::from_millis(500))
@@ -188,8 +193,9 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Each returned symbol's `location.uri` should point into the
-    /// project directory (not into std lib or dependency caches).
+    /// Each returned symbol's `location.uri` points into the project
+    /// directory, which leaves out the std library and the dependency
+    /// caches.
     #[test]
     fn test_workspace_symbol_locations_are_in_project() {
         let mut ctx = LspWorkspaceSymbolCtx::setup("completion", &["lib.fix", "main.fix"]);

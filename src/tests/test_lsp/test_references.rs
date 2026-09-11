@@ -1,8 +1,8 @@
 // LSP integration tests for "Find All References" and "Call Hierarchy" features.
 //
-// Each test case corresponds to a case in agents/test-refs.20260301/test_plan.md.
-// Each symbol-type group has its own Fix project under cases/ to keep tests simple
-// and resilient to line-number changes.
+// Each symbol kind has its own Fix project under cases/, which keeps the tests simple and
+// resilient to line-number changes. The tests of one kind carry that kind's label (`GV`, `Ty`,
+// `Tr`, `TrA`, `AT`, `IMP`, `FV`, `Loc`) and a number within it.
 
 #[cfg(test)]
 mod tests {
@@ -20,7 +20,10 @@ mod tests {
     /// A convenience wrapper around `LspClient` that provides high-level
     /// helpers for common test patterns (find-refs, call hierarchy, etc.).
     struct LspTestCtx {
+        /// The connection to the running server.
         client: LspClient,
+        /// Holds the temporary directory containing the project copy alive; dropping it
+        /// deletes the copy.
         _temp_dir: TempDir,
     }
 
@@ -46,6 +49,8 @@ mod tests {
             }
         }
 
+        /// The `file://` URI the server knows `file` by, `file` being a path relative to the
+        /// project root.
         fn file_uri(&self, file: &str) -> String {
             self.client.file_uri(Path::new(file))
         }
@@ -129,6 +134,7 @@ mod tests {
             result.as_array().unwrap().clone()
         }
 
+        /// Shut the server down, and fail the test if its reader thread met a protocol error.
         fn shutdown(mut self) {
             self.client
                 .shutdown(Duration::from_millis(500))
@@ -229,6 +235,7 @@ mod tests {
         text == full_name || full_name.ends_with(&format!("::{}", text))
     }
 
+    /// Assert that at least one of `locations` names a file whose URI contains `file_name`.
     fn assert_has_ref_in_file(locations: &[Value], file_name: &str) {
         assert!(
             locations.iter().any(|loc| loc
@@ -241,6 +248,8 @@ mod tests {
         );
     }
 
+    /// The name of the item at each call's `direction` end, `direction` being `"from"` for an
+    /// incoming call and `"to"` for an outgoing one.
     fn call_names(calls: &[Value], direction: &str) -> Vec<String> {
         calls
             .iter()
@@ -253,6 +262,8 @@ mod tests {
             .collect()
     }
 
+    /// Assert that one of the incoming `calls` comes from an item whose name contains
+    /// `name_fragment`.
     fn assert_has_caller(calls: &[Value], name_fragment: &str) {
         let names = call_names(calls, "from");
         assert!(
@@ -263,6 +274,8 @@ mod tests {
         );
     }
 
+    /// Assert that one of the outgoing `calls` goes to an item whose name contains
+    /// `name_fragment`.
     #[allow(dead_code)]
     fn assert_has_callee(calls: &[Value], name_fragment: &str) {
         let names = call_names(calls, "to");
