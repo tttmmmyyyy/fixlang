@@ -9,7 +9,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::completion_harness::setup_test_env;
+    use super::super::case_project::setup_test_env;
     use super::super::lsp_client::{poll_every, LspClient};
     use serde_json::json;
     use std::{
@@ -159,9 +159,7 @@ mod tests {
 
         /// Shut the server down, and fail the test if its reader thread met a protocol error.
         fn shutdown(mut self) {
-            self.client
-                .shutdown(Duration::from_millis(500))
-                .expect("Failed to shutdown LSP");
+            self.client.shutdown().expect("Failed to shutdown LSP");
             self.client
                 .verify_no_protocol_error()
                 .expect("Reader thread should not error");
@@ -310,7 +308,7 @@ mod tests {
     /// elaboration completed and the overlay never appears.
     #[test]
     fn test_semantic_tokens_refresh_sent_after_diagnostics() {
-        let mut ctx = LspSemanticTokensCtx::setup();
+        let ctx = LspSemanticTokensCtx::setup();
 
         let mut saw_refresh = false;
         while let Some(msg) = ctx.client.pop_message() {

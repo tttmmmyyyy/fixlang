@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::completion_harness::setup_test_env;
+    use super::super::case_project::setup_test_env;
     use super::super::lsp_client::LspClient;
     use crate::edit::edit_util::apply_text_edits;
     use lsp_types::TextEdit;
@@ -97,7 +97,7 @@ mod tests {
             for f in files {
                 client
                     .open_document(Path::new(f))
-                    .expect(&format!("Failed to open {}", f));
+                    .unwrap_or_else(|_| panic!("Failed to open {}", f));
             }
             let trigger_file = files.last().unwrap();
             client.save_and_wait_for_the_program(Path::new(trigger_file));
@@ -156,9 +156,7 @@ mod tests {
 
         /// Ends the session and fails the test if the server's reader thread met an error.
         fn shutdown(mut self) {
-            self.client
-                .shutdown(Duration::from_millis(500))
-                .expect("Failed to shutdown LSP");
+            self.client.shutdown().expect("Failed to shutdown LSP");
             self.client
                 .verify_no_protocol_error()
                 .expect("Reader thread should not have errors");

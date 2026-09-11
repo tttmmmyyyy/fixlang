@@ -3,8 +3,9 @@
 
 #[cfg(test)]
 mod tests {
+    use super::super::case_project::setup_test_env;
     use super::super::completion_harness::{
-        find_sort_text, setup_test_env, wait_for_completion_items, LspCompletionCtx,
+        find_sort_text, wait_for_completion_items, LspCompletionCtx,
     };
     use super::super::lsp_client::LspClient;
     use serde_json::{json, Value};
@@ -433,7 +434,7 @@ mod tests {
             item_summary.join("\n")
         );
 
-        let _ = client.shutdown(Duration::from_millis(500));
+        let _ = client.shutdown();
         let _ = client.verify_no_protocol_error();
         drop(temp_dir);
 
@@ -1346,6 +1347,6 @@ mod tests {
             sort_push_back
         );
 
-        let _ = client.shutdown(Duration::from_millis(500));
+        let _ = client.shutdown();
     }
 }

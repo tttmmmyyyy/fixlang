@@ -168,6 +168,15 @@ fn process_message(message: Value, shared: &SharedState) {
 }
 
 impl LspClient {
+    /// How long a request is given to be answered.
+    pub const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
+
+    /// How long a diagnostics pass is given to end.
+    pub const PASS_TIMEOUT: Duration = Duration::from_secs(180);
+
+    /// How long the server is given to exit once it has been told to.
+    pub const EXIT_TIMEOUT: Duration = Duration::from_millis(500);
+
     /// Run `fix language-server` in `working_dir`, which is the project root the paths a test
     /// passes are taken as relative to, and read what it sends on a thread of its own.
     /// `working_dir` itself may be relative to the directory the test runs in.
@@ -313,25 +322,25 @@ impl LspClient {
     }
 
     /// The oldest message the server sent that the queue still holds, taken out of it.
-    pub fn pop_message(&mut self) -> Option<Value> {
+    pub fn pop_message(&self) -> Option<Value> {
         self.shared.message_queue.lock().unwrap().pop_front()
     }
 
     /// The response to the request `id`, waited for until it arrives or `timeout` runs out.
     /// `None` says the wait ran out.
-    pub fn wait_for_response(&mut self, id: u32, timeout: Duration) -> Option<Value> {
+    pub fn wait_for_response(&self, id: u32, timeout: Duration) -> Option<Value> {
         poll(timeout, || self.take_response(id))
     }
 
     /// The response to the request `id`, which is expected to arrive within `RESPONSE_TIMEOUT`.
-    pub fn expect_response(&mut self, id: u32) -> Value {
+    pub fn expect_response(&self, id: u32) -> Value {
         self.wait_for_response(id, Self::RESPONSE_TIMEOUT)
             .unwrap_or_else(|| panic!("the request {} is expected to be answered", id))
     }
 
     /// The response to the request `id`, taken out of the responses so that it is handed over
     /// once. `None` says the response is yet to arrive.
-    pub fn take_response(&mut self, id: u32) -> Option<Value> {
+    pub fn take_response(&self, id: u32) -> Option<Value> {
         self.shared.responses.lock().unwrap().remove(&id)
     }
 
@@ -360,12 +369,6 @@ impl LspClient {
             )
         })
     }
-
-    /// How long a request is given to be answered.
-    pub const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
-
-    /// How long a diagnostics pass is given to end.
-    pub const PASS_TIMEOUT: Duration = Duration::from_secs(180);
 
     /// Run `trigger`, which asks the server for a diagnostics pass, and return once one more pass
     /// has ended than had ended before it ran, so that the reports that pass publishes have
@@ -580,16 +583,16 @@ impl LspClient {
         )
     }
 
-    /// Ask the server to shut down and exit, and wait up to `exit_timeout` for its process to end
+    /// Ask the server to shut down and exit, and wait up to `EXIT_TIMEOUT` for its process to end
     /// once the `exit` notification has been sent.
-    pub fn shutdown(&mut self, exit_timeout: Duration) -> Result<(), String> {
+    pub fn shutdown(&mut self) -> Result<(), String> {
         let id = self.send_request("shutdown", json!(null))?;
         let _ = self.wait_for_response(id, Self::RESPONSE_TIMEOUT);
 
         self.send_notification("exit", json!(null))?;
 
         // A process still running when `exit_timeout` runs out is an error; `Drop` kills it.
-        match poll(exit_timeout, || match self.process.try_wait() {
+        match poll(Self::EXIT_TIMEOUT, || match self.process.try_wait() {
             Ok(Some(_status)) => Some(Ok(())),
             Ok(None) => None,
             Err(e) => Some(Err(format!("Failed to check process status: {:?}", e))),

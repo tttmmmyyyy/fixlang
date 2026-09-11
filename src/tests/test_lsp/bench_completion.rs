@@ -17,7 +17,8 @@
 
 #[cfg(test)]
 mod bench {
-    use super::super::completion_harness::{completion_items, setup_test_env};
+    use super::super::case_project::setup_test_env;
+    use super::super::completion_harness::completion_items;
     use super::super::lsp_client::{poll_every, LspClient};
     use serde_json::json;
     use std::env;
@@ -154,9 +155,7 @@ mod bench {
         let (l, c) = pos_after_dot(&text, "42.compute");
         bench_position(&mut client, &uri, l, c, "dot/i64");
 
-        client
-            .shutdown(Duration::from_millis(500))
-            .expect("shutdown LSP");
+        client.shutdown().expect("shutdown LSP");
         client
             .verify_no_protocol_error()
             .expect("reader thread clean");

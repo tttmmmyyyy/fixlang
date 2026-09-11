@@ -1,5 +1,6 @@
 // LSP integration tests module
 pub mod bench_completion;
+pub mod case_project;
 pub mod completion_harness;
 pub mod lsp_client;
 pub mod test_code_action;
@@ -21,34 +22,11 @@ pub mod test_workspace_symbol;
 
 #[cfg(test)]
 mod tests {
+    use super::case_project::setup_test_env;
     use super::lsp_client::LspClient;
     use crate::constants::LOCK_FILE_LSP_PATH;
-    use crate::tests::test_util::{copy_dir_recursive, fix_command};
-    use std::{
-        fs,
-        path::{Path, PathBuf},
-        time::Duration,
-    };
-    use tempfile::TempDir;
-
-    /// Path to the directory holding the LSP test-case projects.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    /// Create a temporary test environment with copied project files.
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_case_src = get_test_cases_dir().join(project_name);
-        let test_case_dst = temp_dir.path().join(project_name);
-
-        // Copy test case directory
-        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
-
-        (temp_dir, test_case_dst)
-    }
+    use crate::tests::test_util::fix_command;
+    use std::{fs, path::Path, time::Duration};
 
     /// The LSP server automatically generates a lock file containing the
     /// project's dependencies, and diagnostics clear once a missing
@@ -134,9 +112,7 @@ mod tests {
             .expect("All diagnostic errors should be resolved after adding dependencies");
 
         // Shutdown
-        client
-            .shutdown(Duration::from_millis(500))
-            .expect("Failed to shutdown LSP");
+        client.shutdown().expect("Failed to shutdown LSP");
 
         // Check for reader thread errors
         client
@@ -229,9 +205,7 @@ mod tests {
             .expect("All diagnostic errors should be resolved after adding test dependencies");
 
         // Shutdown
-        client
-            .shutdown(Duration::from_millis(500))
-            .expect("Failed to shutdown LSP");
+        client.shutdown().expect("Failed to shutdown LSP");
 
         // Check for reader thread errors
         client
@@ -336,9 +310,7 @@ mod tests {
         );
 
         // Shutdown
-        client
-            .shutdown(Duration::from_millis(500))
-            .expect("Failed to shutdown LSP");
+        client.shutdown().expect("Failed to shutdown LSP");
 
         // Check for reader thread errors
         client

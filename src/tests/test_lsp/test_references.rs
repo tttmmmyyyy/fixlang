@@ -6,7 +6,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::completion_harness::setup_test_env;
+    use super::super::case_project::setup_test_env;
     use super::super::lsp_client::LspClient;
     use crate::misc::Set;
     use serde_json::{json, Value};
@@ -39,7 +39,7 @@ mod tests {
             for f in files {
                 client
                     .open_document(Path::new(f))
-                    .expect(&format!("Failed to open {}", f));
+                    .unwrap_or_else(|_| panic!("Failed to open {}", f));
             }
             let trigger_file = files.last().unwrap();
             client.save_and_wait_for_the_program(Path::new(trigger_file));
@@ -136,9 +136,7 @@ mod tests {
 
         /// Shut the server down, and fail the test if its reader thread met a protocol error.
         fn shutdown(mut self) {
-            self.client
-                .shutdown(Duration::from_millis(500))
-                .expect("Failed to shutdown LSP");
+            self.client.shutdown().expect("Failed to shutdown LSP");
             self.client
                 .verify_no_protocol_error()
                 .expect("Reader thread should not have errors");
@@ -206,8 +204,8 @@ mod tests {
 
     /// Read the text at an LSP range from a source file.
     fn read_text_at_range(file_path: &Path, range: &Value) -> String {
-        let content =
-            fs::read_to_string(file_path).expect(&format!("Failed to read file: {:?}", file_path));
+        let content = fs::read_to_string(file_path)
+            .unwrap_or_else(|_| panic!("Failed to read file: {:?}", file_path));
         let lines: Vec<&str> = content.lines().collect();
         let start_line = range["start"]["line"].as_u64().unwrap() as usize;
         let start_char = range["start"]["character"].as_u64().unwrap() as usize;
