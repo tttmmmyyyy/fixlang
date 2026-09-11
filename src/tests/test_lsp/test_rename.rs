@@ -2,43 +2,26 @@
 
 #[cfg(test)]
 mod tests {
+    use super::super::case_project::setup_test_env;
     use super::super::lsp_client::LspClient;
-    use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
-    use std::{
-        path::{Path, PathBuf},
-        time::Duration,
-    };
+    use std::{path::Path, time::Duration};
     use tempfile::TempDir;
 
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
-
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_case_src = get_test_cases_dir().join(project_name);
-        let test_case_dst = temp_dir.path().join(project_name);
-        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
-        let test_case_dst = test_case_dst
-            .canonicalize()
-            .expect("Failed to canonicalize test case path");
-        (temp_dir, test_case_dst)
-    }
-
+    /// A running language server over a private copy of one fixture project, with that
+    /// project's files open.
     struct LspTestCtx {
+        /// The connection to the running server.
         client: LspClient,
-        project_dir: PathBuf,
+        /// Holds the temporary directory containing the copy alive; dropping it deletes
+        /// the copy.
         _temp_dir: TempDir,
     }
 
     impl LspTestCtx {
+        /// Start a server over a fresh copy of `project_name` and open each of `files`, paths
+        /// relative to the project root, in the given order. Returns once the last of them has
+        /// been elaborated, so the program the renames are worked out from is in place.
         fn setup(project_name: &str, files: &[&str]) -> Self {
             let (temp_dir, project_dir) = setup_test_env(project_name);
             let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
@@ -48,23 +31,24 @@ mod tests {
             for f in files {
                 client
                     .open_document(Path::new(f))
-                    .expect(&format!("Failed to open {}", f));
+                    .unwrap_or_else(|_| panic!("Failed to open {}", f));
             }
             let trigger_file = files.last().unwrap();
             client.save_and_wait_for_the_program(Path::new(trigger_file));
             Self {
                 client,
-                project_dir,
                 _temp_dir: temp_dir,
             }
         }
 
+        /// The `file://` URI the server knows `file` by, `file` being a path relative to the
+        /// project root.
         fn file_uri(&self, file: &str) -> String {
-            format!("file://{}", self.project_dir.join(file).display())
+            self.client.file_uri(Path::new(file))
         }
 
-        // Send `textDocument/rename` and return the response value (full
-        // JSON-RPC response object, including any error).
+        /// Send `textDocument/rename` and return the whole JSON-RPC response, an error
+        /// among its fields included.
         fn rename_raw(&mut self, file: &str, line: u32, col: u32, new_name: &str) -> Value {
             let uri = self.file_uri(file);
             let id = self
@@ -81,8 +65,8 @@ mod tests {
             self.client.expect_response(id)
         }
 
-        // Send `textDocument/rename` and unwrap the `result` (asserting it
-        // is a `WorkspaceEdit` rather than an error).
+        /// Send `textDocument/rename` and return the `WorkspaceEdit` of its `result`,
+        /// asserting that the server answered with one.
         fn rename(&mut self, file: &str, line: u32, col: u32, new_name: &str) -> Value {
             let resp = self.rename_raw(file, line, col, new_name);
             assert!(
@@ -95,8 +79,8 @@ mod tests {
                 .clone()
         }
 
-        // Send `textDocument/prepareRename` and return the full response
-        // value (so tests can inspect `result` and `error` independently).
+        /// Send `textDocument/prepareRename` and return the whole JSON-RPC response, so
+        /// that a test can read its `result` and its `error` each on its own.
         fn prepare_rename_raw(&mut self, file: &str, line: u32, col: u32) -> Value {
             let uri = self.file_uri(file);
             let id = self
@@ -112,8 +96,8 @@ mod tests {
             self.client.expect_response(id)
         }
 
-        // Send `textDocument/prepareRename` and return the `result`
-        // value; panics if the server returned a `ResponseError`.
+        /// Send `textDocument/prepareRename` and return the `result` value; panics if the
+        /// server answered with a `ResponseError`.
         fn prepare_rename(&mut self, file: &str, line: u32, col: u32) -> Value {
             let resp = self.prepare_rename_raw(file, line, col);
             assert!(
@@ -126,18 +110,16 @@ mod tests {
                 .clone()
         }
 
+        /// Shut the server down, and fail the test if its reader thread met a protocol error.
         fn shutdown(mut self) {
+            self.client.shutdown().expect("Failed to shutdown LSP");
             self.client
-                .shutdown(Duration::from_millis(500))
-                .expect("Failed to shutdown LSP");
-            self.client
-                .finish()
+                .verify_no_protocol_error()
                 .expect("Reader thread should not have errors");
         }
     }
 
-    // Count the total number of TextEdits across every URI in a
-    // WorkspaceEdit `result` value.
+    /// The number of `TextEdit`s a `WorkspaceEdit` carries, over all the URIs it changes.
     fn count_edits(workspace_edit: &Value) -> usize {
         workspace_edit
             .get("changes")
@@ -150,7 +132,8 @@ mod tests {
             .unwrap_or(0)
     }
 
-    // Collect (uri suffix, count) pairs for the changes in a WorkspaceEdit.
+    /// The file name of each URI a `WorkspaceEdit` changes, paired with how many
+    /// `TextEdit`s it carries for that URI, sorted by file name.
     fn changes_per_file(workspace_edit: &Value) -> Vec<(String, usize)> {
         workspace_edit
             .get("changes")
@@ -170,6 +153,7 @@ mod tests {
             .unwrap_or_default()
     }
 
+    /// Assert that every `TextEdit` of `workspace_edit` writes `new_name` and nothing else.
     fn assert_all_edits_have_new_text(workspace_edit: &Value, new_name: &str) {
         let changes = workspace_edit
             .get("changes")
@@ -205,7 +189,7 @@ mod tests {
     //  11: );
     // =======================================================================
 
-    /// RB-1: rename a global value across files. Cursor on the declaration
+    /// Rename a global value across files. Cursor on the declaration
     /// LHS in lib.fix.
     #[test]
     fn test_rename_global_decl() {
@@ -228,7 +212,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-2: rename a global value, starting from a use site in lib.fix.
+    /// Rename a global value, starting from a use site in lib.fix.
     #[test]
     fn test_rename_global_from_use_same_file() {
         let mut ctx = LspTestCtx::setup("rename_basic", &["lib.fix", "main.fix"]);
@@ -238,7 +222,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-3: rename a global value, starting from a use site in main.fix.
+    /// Rename a global value, starting from a use site in main.fix.
     #[test]
     fn test_rename_global_from_use_other_file() {
         let mut ctx = LspTestCtx::setup("rename_basic", &["lib.fix", "main.fix"]);
@@ -248,7 +232,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-4: rename a global value, starting from the import statement.
+    /// Rename a global value, starting from the import statement.
     #[test]
     fn test_rename_global_from_import() {
         let mut ctx = LspTestCtx::setup("rename_basic", &["lib.fix", "main.fix"]);
@@ -286,7 +270,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-5: rename a local let-bound variable.
+    /// Rename a local let-bound variable.
     #[test]
     fn test_rename_local_let() {
         let mut ctx = LspTestCtx::setup("rename_basic", &["lib.fix", "main.fix"]);
@@ -300,7 +284,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-6: rename rejected on an invalid identifier (keyword).
+    /// Rename rejected on an invalid identifier (keyword).
     #[test]
     fn test_rename_reject_keyword() {
         let mut ctx = LspTestCtx::setup("rename_basic", &["lib.fix", "main.fix"]);
@@ -313,7 +297,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-7: rename rejected on an invalid identifier (uppercase start).
+    /// Rename rejected on an invalid identifier (uppercase start).
     #[test]
     fn test_rename_reject_uppercase() {
         let mut ctx = LspTestCtx::setup("rename_basic", &["lib.fix", "main.fix"]);
@@ -326,7 +310,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-8: prepareRename returns defaultBehavior for a global value.
+    /// `prepareRename` returns defaultBehavior for a global value.
     #[test]
     fn test_prepare_rename_global_value() {
         let mut ctx = LspTestCtx::setup("rename_basic", &["lib.fix", "main.fix"]);
@@ -343,7 +327,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-9: prepareRename returns defaultBehavior for a local variable.
+    /// `prepareRename` returns defaultBehavior for a local variable.
     #[test]
     fn test_prepare_rename_local() {
         let mut ctx = LspTestCtx::setup("rename_basic", &["lib.fix", "main.fix"]);
@@ -359,7 +343,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-10: prepareRename returns defaultBehavior on a struct type.
+    /// `prepareRename` returns defaultBehavior on a struct type.
     #[test]
     fn test_prepare_rename_struct_type() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -398,7 +382,7 @@ mod tests {
     //   4: bump : MyInt -> MyInt;           (cols 7, 16)
     // =======================================================================
 
-    /// RT-1: rename a type alias from its declaration.
+    /// Rename a type alias from its declaration.
     #[test]
     fn test_rename_type_alias_decl() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -414,7 +398,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-2: rename a trait.
+    /// Rename a trait.
     #[test]
     fn test_rename_trait() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -426,7 +410,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-3: rename a struct field. Auto-method occurrences (`@x`,
+    /// Rename a struct field. Auto-method occurrences (`@x`,
     /// `[^x]`) must switch to `@new_name` / `^new_name`, and the bare
     /// field-name (decl + MakeStruct) edits must use just `new_name`.
     #[test]
@@ -467,7 +451,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-4: rename a union variant. Pattern::Union and bare-name
+    /// Rename a union variant. Pattern::Union and bare-name
     /// occurrences both update.
     #[test]
     fn test_rename_union_variant() {
@@ -480,7 +464,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-5: rename a type alias from a use site in another file.
+    /// Rename a type alias from a use site in another file.
     #[test]
     fn test_rename_type_alias_from_other_file() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -490,7 +474,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-6: renaming a struct type renames every bare-name occurrence
+    /// Renaming a struct type renames every bare-name occurrence
     /// (declaration, MakeStruct, type sigs, impl blocks).
     #[test]
     fn test_rename_struct_type() {
@@ -505,7 +489,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-7: renaming a union type renames every bare-name occurrence.
+    /// Renaming a union type renames every bare-name occurrence.
     #[test]
     fn test_rename_union_type() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -517,7 +501,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-8: renaming a struct field to `@y` is rejected by the
+    /// Renaming a struct field to `@y` is rejected by the
     /// `type_field_name` rule (no leading `@`).
     #[test]
     fn test_rename_field_reject_at_prefix() {
@@ -531,7 +515,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-9: renaming a type alias to a lowercase name is rejected by the
+    /// Renaming a type alias to a lowercase name is rejected by the
     /// `capital_name` rule.
     #[test]
     fn test_rename_type_alias_reject_lowercase() {
@@ -545,7 +529,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-10: prepareRename returns defaultBehavior for a type alias.
+    /// `prepareRename` returns defaultBehavior for a type alias.
     #[test]
     fn test_prepare_rename_type_alias() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -561,7 +545,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-11: prepareRename returns defaultBehavior for a trait.
+    /// `prepareRename` returns defaultBehavior for a trait.
     #[test]
     fn test_prepare_rename_trait() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -577,7 +561,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-12: prepareRename returns defaultBehavior for a struct field.
+    /// `prepareRename` returns defaultBehavior for a struct field.
     #[test]
     fn test_prepare_rename_field() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -598,7 +582,7 @@ mod tests {
     // stale-buffer rejection.
     // =======================================================================
 
-    /// RG-1: rename rejected on `@x` (auto-generated getter).
+    /// Rename rejected on `@x` (auto-generated getter).
     #[test]
     fn test_rename_reject_at_accessor() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -617,7 +601,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RG-2: rename rejected on `[^x]` index syntax (the Var the parser
+    /// Rename rejected on `[^x]` index syntax (the Var the parser
     /// generates is `Point::act_x`, also auto-generated).
     #[test]
     fn test_rename_reject_index_syntax() {
@@ -632,7 +616,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RG-3: prepareRename returns a ResponseError with an explanatory
+    /// `prepareRename` returns a ResponseError with an explanatory
     /// message on an auto-generated accessor (so the editor can surface
     /// a useful message instead of the generic "can't be renamed").
     #[test]
@@ -652,7 +636,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RG-4: rename rejected on a Std symbol (defined outside the project).
+    /// Rename rejected on a Std symbol (defined outside the project).
     /// The cursor on `I64` in `type MyInt = I64;` resolves to `Std::I64`,
     /// which is not in the diagnostics result's `user_source_contents`.
     #[test]
@@ -673,7 +657,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RG-5: prepareRename returns a ResponseError on an external symbol.
+    /// `prepareRename` returns a ResponseError on an external symbol.
     #[test]
     fn test_prepare_rename_reject_external() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -691,7 +675,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RG-6: rename rejected after the buffer drifts from the AST.
+    /// Rename rejected after the buffer drifts from the AST.
     /// We send a didChange with modified text but don't trigger a rebuild,
     /// so the recorded `user_source_contents[lib.fix]` is now out of sync.
     #[test]
@@ -725,7 +709,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RG-7: prepareRename returns a ResponseError when the buffer is
+    /// `prepareRename` returns a ResponseError when the buffer is
     /// stale, so the editor can show the actionable message ("save and
     /// wait for diagnostics").
     #[test]
@@ -780,7 +764,7 @@ mod tests {
     //  13: qualified_idx = |p| p[^Point::x].iset(0);  (col 23 = inline `Point`)
     // =======================================================================
 
-    /// RD-1: rename a struct type and observe that all bare uses, the
+    /// Rename a struct type and observe that all bare uses, the
     /// auto-namespace component in the all-auto import, and the inline
     /// qualified Var references are all rewritten.
     #[test]
@@ -819,9 +803,9 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RD-2: the user-defined namespace block in lib.fix
-    /// (`namespace Point { ... }`) must NOT be touched, because its
-    /// `Point` is a user-written namespace name, independent of the type.
+    /// The user-defined namespace block in lib.fix (`namespace Point { ... }`) is left as
+    /// it stands when the type is renamed, because its `Point` is a user-written namespace
+    /// name, independent of the type.
     #[test]
     fn test_rename_struct_type_skips_user_namespace_block() {
         let mut ctx = LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
@@ -844,9 +828,8 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RD-3: the inline qualified reference `Point::@x` in main.fix has
-    /// just its `Point` sub-span rewritten to `Pixel`, leaving `::@x`.
-    /// We verify by reading the post-edit text at the reported range.
+    /// The inline qualified reference `Point::@x` in main.fix has just its `Point` sub-span
+    /// rewritten to `Pixel`, leaving `::@x` as it stands.
     #[test]
     fn test_rename_struct_type_inline_qualified_var() {
         let mut ctx = LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
@@ -884,7 +867,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RD-4: the qualified index syntax `[^Point::x]` has its `Point`
+    /// The qualified index syntax `[^Point::x]` has its `Point`
     /// sub-span rewritten too — Var.source covers `^Point::x`, so the
     /// `^` is skipped during sub-span extraction.
     #[test]
@@ -922,7 +905,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RD-5: prepareRename returns defaultBehavior on a struct type.
+    /// `prepareRename` returns defaultBehavior on a struct type.
     #[test]
     fn test_prepare_rename_struct_type_phase_d() {
         let mut ctx = LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
@@ -938,11 +921,9 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RD-6 regression: a qualified call to a user-defined helper
-    /// (`MinCostFlowGraph::create(...)`) sitting in the type's
-    /// namespace must NOT have its `MinCostFlowGraph::` prefix rewritten
-    /// when the type is renamed. Only auto-generated accessors travel
-    /// with the type.
+    /// A qualified call to a user-defined helper (`MinCostFlowGraph::create(...)`) sitting
+    /// in the type's namespace keeps its `MinCostFlowGraph::` prefix when the type is
+    /// renamed. Only auto-generated accessors travel with the type.
     #[test]
     fn test_rename_struct_type_skips_user_helper_qualified_call() {
         let mut ctx = LspTestCtx::setup("rename_user_helper_qualified", &["lib.fix", "main.fix"]);
@@ -983,7 +964,7 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RD-7: a mixed import (`Lib::{Point::{act_x, user_helper}}`) is
+    /// A mixed import (`Lib::{Point::{act_x, user_helper}}`) is
     /// rebuilt as a single TextEdit covering the entire import statement.
     /// The new text must contain both `Pixel::` (for the auto-method
     /// half) and `Point::` (for the user-defined half).

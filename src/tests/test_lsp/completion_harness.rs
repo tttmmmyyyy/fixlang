@@ -2,39 +2,14 @@
 // over a private copy of a test project and sends completion /
 // resolve requests against it.
 
+use super::case_project::setup_test_env;
 use super::lsp_client::LspClient;
-use crate::tests::test_util::copy_dir_recursive;
 use serde_json::{json, Value};
 use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
 use tempfile::TempDir;
-
-/// The directory holding the LSP test projects, one subdirectory per
-/// project, named as the tests name it.
-fn get_test_cases_dir() -> PathBuf {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("src/tests/test_lsp/cases");
-    path
-}
-
-/// Copy the test project `project_name` into a temporary directory of its
-/// own, so tests that build and edit it can run in parallel.
-///
-/// # Returns
-/// The guard whose drop deletes the copy, and the canonicalized path of
-/// the copied project.
-pub fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let test_case_src = get_test_cases_dir().join(project_name);
-    let test_case_dst = temp_dir.path().join(project_name);
-    copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
-    let test_case_dst = test_case_dst
-        .canonicalize()
-        .expect("Failed to canonicalize test case path");
-    (temp_dir, test_case_dst)
-}
 
 /// Look up the `sortText` of the completion item whose `label` is `label`.
 pub fn find_sort_text(items: &[Value], label: &str) -> Option<String> {
@@ -61,10 +36,8 @@ pub fn completion_items(response: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-/// Poll an in-flight `textDocument/completion` request until the
-/// server replies or `timeout` elapses. Returns the completion items;
-/// returns `None` when the timeout expires so the caller can format
-/// its own diagnostic.
+/// The completion items the answer to the request `request_id` carries, waited for until it
+/// arrives or `timeout` runs out. `None` says the wait ran out.
 pub fn wait_for_completion_items(
     client: &mut LspClient,
     request_id: u32,
@@ -100,7 +73,7 @@ impl LspCompletionCtx {
         for f in files {
             client
                 .open_document(Path::new(f))
-                .expect(&format!("Failed to open {}", f));
+                .unwrap_or_else(|_| panic!("Failed to open {}", f));
         }
         let trigger_file = files.last().unwrap();
         client.save_and_wait_for_the_program(Path::new(trigger_file));
@@ -114,7 +87,7 @@ impl LspCompletionCtx {
     /// The `file://` URI the server knows `file` by, `file` being a path
     /// relative to the project root.
     pub fn file_uri(&self, file: &str) -> String {
-        format!("file://{}", self.project_dir.join(file).display())
+        self.client.file_uri(Path::new(file))
     }
 
     /// Send textDocument/completion and return the result items,
@@ -123,10 +96,10 @@ impl LspCompletionCtx {
         self.complete_with_timeout(file, line, col, Duration::from_secs(5))
     }
 
-    /// Send textDocument/completion and poll for the response with
-    /// the given timeout. Use this in dot-completion tests where
-    /// the server's first-time re-elaborate can take longer than
-    /// `complete`'s 5-second wait on a cold cache.
+    /// Send `textDocument/completion` and return the result items, waiting up
+    /// to `timeout` for the response. A request the server answers only after
+    /// re-elaborating the project takes longer than `complete` waits on a cold
+    /// cache, and `timeout` is what such a request is given.
     pub fn complete_with_timeout(
         &mut self,
         file: &str,
@@ -164,11 +137,9 @@ impl LspCompletionCtx {
 
     /// Shut the server down and assert its reader thread saw no errors.
     pub fn shutdown(mut self) {
+        self.client.shutdown().expect("Failed to shutdown LSP");
         self.client
-            .shutdown(Duration::from_millis(500))
-            .expect("Failed to shutdown LSP");
-        self.client
-            .finish()
+            .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
 }

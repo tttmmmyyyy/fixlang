@@ -7,8 +7,8 @@
 
 #[cfg(test)]
 mod tests {
+    use super::super::case_project::setup_test_env;
     use super::super::lsp_client::LspClient;
-    use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
     use std::{
         path::{Path, PathBuf},
@@ -16,31 +16,15 @@ mod tests {
     };
     use tempfile::TempDir;
 
-    /// Absolute path to the directory containing LSP test fixture projects.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    /// Copies the named fixture project into a fresh temporary directory
-    /// and returns the temp dir handle plus the canonicalized project path.
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let test_case_src = get_test_cases_dir().join(project_name);
-        let test_case_dst = temp_dir.path().join(project_name);
-        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
-        let test_case_dst = test_case_dst
-            .canonicalize()
-            .expect("Failed to canonicalize test case path");
-        (temp_dir, test_case_dst)
-    }
-
     /// Test fixture that owns an initialized `LspClient` together with
     /// the temporary project directory it operates on.
     struct LspWorkspaceSymbolCtx {
+        /// The connection to the running server.
         client: LspClient,
+        /// The copy of the fixture project the server was started on.
         _project_dir: PathBuf,
+        /// Holds the temporary directory containing `_project_dir` alive; dropping it
+        /// deletes the copy.
         _temp_dir: TempDir,
     }
 
@@ -57,7 +41,7 @@ mod tests {
             for f in files {
                 client
                     .open_document(Path::new(f))
-                    .expect(&format!("Failed to open {}", f));
+                    .unwrap_or_else(|_| panic!("Failed to open {}", f));
             }
             let trigger_file = files.last().unwrap();
             client.save_and_wait_for_the_program(Path::new(trigger_file));
@@ -87,13 +71,12 @@ mod tests {
             result.as_array().cloned().unwrap_or_default()
         }
 
-        /// Performs a clean LSP shutdown and joins the reader thread.
+        /// Shuts the server down, and fails the test if its reader thread met a protocol
+        /// error.
         fn shutdown(mut self) {
+            self.client.shutdown().expect("Failed to shutdown LSP");
             self.client
-                .shutdown(Duration::from_millis(500))
-                .expect("Failed to shutdown LSP");
-            self.client
-                .finish()
+                .verify_no_protocol_error()
                 .expect("Reader thread should not have errors");
         }
     }
@@ -208,8 +191,9 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Each returned symbol's `location.uri` should point into the
-    /// project directory (not into std lib or dependency caches).
+    /// Each returned symbol's `location.uri` points into the project
+    /// directory, which leaves out the std library and the dependency
+    /// caches.
     #[test]
     fn test_workspace_symbol_locations_are_in_project() {
         let mut ctx = LspWorkspaceSymbolCtx::setup("completion", &["lib.fix", "main.fix"]);

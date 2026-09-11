@@ -1,11 +1,11 @@
-// LSP integration tests for "textDocument/completion" feature.
-//
-// Verifies that associated types appear in completion candidates.
+// LSP integration tests for the "textDocument/completion" feature: which candidates the server
+// offers, what a resolved candidate inserts, and the order the candidates are ranked in.
 
 #[cfg(test)]
 mod tests {
+    use super::super::case_project::setup_test_env;
     use super::super::completion_harness::{
-        find_sort_text, setup_test_env, wait_for_completion_items, LspCompletionCtx,
+        find_sort_text, wait_for_completion_items, LspCompletionCtx,
     };
     use super::super::lsp_client::LspClient;
     use serde_json::{json, Value};
@@ -85,9 +85,8 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Snapshot of the completion *insertion* behavior. Pins down what
-    /// the server sends back for `completionItem/resolve` for the four
-    /// shapes that have so far been verified manually:
+    /// Snapshot of the completion *insertion* behavior. Pins down what the
+    /// server sends back for `completionItem/resolve` for four shapes:
     ///
     ///   typing            expected insert_text         notes
     ///   ----              --------------------         -----
@@ -237,9 +236,9 @@ mod tests {
             tags
         );
 
-        // Sanity: a non-deprecated symbol from the same fixture must NOT
-        // carry the deprecation markers, otherwise the test above would
-        // pass even if we accidentally tagged everything.
+        // A live symbol of the same fixture carries neither marker, which is
+        // what tells a server that marks the deprecated symbol from one that
+        // marks every symbol.
         let live_item = items
             .iter()
             .find(|it| it.get("label").and_then(|l| l.as_str()) == Some("Main::Hoge::new_func"))
@@ -306,9 +305,9 @@ mod tests {
         let mut ctx = LspCompletionCtx::setup("completion-dot-sort", &["main.fix"]);
 
         // Cursor right after the dot in `    42.` on line 13 (0-indexed),
-        // column 7 (= byte right after `.`).
-        // Use a polling wait — the dot-completion full re-elaborate can take
-        // longer than `complete`'s hard-coded 5s sleep on a cold cache.
+        // column 7 (= byte right after `.`). The dot-completion full
+        // re-elaborate can take longer than the five seconds `complete` waits
+        // on a cold cache, so the wait here is given longer.
         let items = ctx.complete_with_timeout("main.fix", 13, 7, Duration::from_secs(60));
 
         assert_myfunc2_outranks_myfunc1(&items);
@@ -347,7 +346,7 @@ mod tests {
         let dot_added = fs::read_to_string(&abs_path)
             .expect("read main.fix")
             .replace("    42\n", "    42.\n");
-        let uri = format!("file://{}", abs_path.display());
+        let uri = client.file_uri(Path::new("main.fix"));
         client
             .send_notification(
                 "textDocument/didChange",
@@ -435,8 +434,8 @@ mod tests {
             item_summary.join("\n")
         );
 
-        let _ = client.shutdown(Duration::from_millis(500));
-        let _ = client.finish();
+        let _ = client.shutdown();
+        let _ = client.verify_no_protocol_error();
         drop(temp_dir);
 
         // Assertion: myfunc2 should out-rank myfunc1 even when the
@@ -921,12 +920,11 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Regression: `(a, a).<cursor>` inside a non-exhaustive `match`
-    /// arm. The scenario can crash the elaborator if the Match's
-    /// failed exhaustiveness check leaves the child subtree untyped
-    /// and `fix_types` then unwrap-panics on the missing `type_`; a
-    /// panic in the LSP process leaves the editor hung on the
-    /// completion request.
+    /// `(a, a).<cursor>` inside a non-exhaustive `match` arm. The scenario
+    /// can crash the elaborator if the Match's failed exhaustiveness check
+    /// leaves the child subtree untyped and `fix_types` then unwrap-panics on
+    /// the missing `type_`; a panic in the LSP process leaves the editor hung
+    /// on the completion request.
     ///
     /// This test asserts only "the server stays up and replies".
     /// `test_completion_dot_after_tuple_infers_tuple_receiver` checks
@@ -949,18 +947,18 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Stronger version of the regression above: when dot completion
-    /// fires at `(a, a).<cursor>` inside a structurally broken Match
-    /// arm, every sub-node still carries an inferred type, so the
-    /// dot-completion pipeline can read off `(I64, I64)` as the
-    /// receiver. Tuple field accessors should land in Tier 0;
-    /// unrelated methods on different TyCons (e.g. `Iterator::fold`)
-    /// should not.
+    /// Where `test_completion_dot_after_tuple_no_crash` asks only that the
+    /// server reply, this asks what the reply says: when dot completion fires
+    /// at `(a, a).<cursor>` inside a structurally broken Match arm, every
+    /// sub-node still carries an inferred type, so the dot-completion pipeline
+    /// can read off `(I64, I64)` as the receiver. Tuple field accessors should
+    /// land in Tier 0; unrelated methods on different TyCons (e.g.
+    /// `Iterator::fold`) should not.
     ///
-    /// A regression here signals that the tolerant elaborator is
-    /// discarding typed sub-trees (or `fix_types` is truncating the
-    /// substituted types) — a fresh tyvar at the receiver would put
-    /// every method into the catch-all Tier 2/3, not Tier 0.
+    /// A failure here signals that the tolerant elaborator is discarding
+    /// typed sub-trees (or `fix_types` is truncating the substituted types) —
+    /// a fresh tyvar at the receiver would put every method into the
+    /// catch-all Tier 2/3, not Tier 0.
     #[test]
     fn test_completion_dot_after_tuple_infers_tuple_receiver() {
         let mut ctx = LspCompletionCtx::setup("completion-dot-after-tuple", &["main.fix"]);
@@ -976,11 +974,10 @@ mod tests {
         );
 
         // `Std::Iterator::fold` is a typical receiver-of-different-TyCon
-        // method that, if the receiver were merely a fresh tyvar (the
-        // pre-refactor fallback shape), would still bucket-match and
-        // could be wrongly promoted. After the refactor, the receiver
-        // is `(I64, I64)`, which doesn't unify with `Iterator i`, so
-        // `fold` must stay out of Tier 0.
+        // method: were the receiver merely a fresh tyvar, it would
+        // bucket-match and could be wrongly promoted. The receiver here is
+        // `(I64, I64)`, which doesn't unify with `Iterator i`, so `fold` must
+        // stay out of Tier 0.
         let sort_fold = find_sort_text(&items, "Std::Iterator::fold")
             .expect("Std::Iterator::fold should appear in the completion list");
         assert!(
@@ -1133,10 +1130,9 @@ mod tests {
         //  11:     pure()
         //  12: );
         //
-        // Column 7 = byte just after `.` on `    42.`.
-        // Use a polling wait because the dot-context elaborate can
-        // take longer than `complete`'s hard-coded 5s sleep on a cold
-        // cache.
+        // Column 7 = byte just after `.` on `    42.`. The dot-context
+        // elaborate can take longer than the five seconds `complete` waits on
+        // a cold cache, so the wait here is given longer.
         let items = ctx.complete_with_timeout("main.fix", 10, 7, Duration::from_secs(60));
 
         let sort_live = find_sort_text(&items, "Main::live_func")
@@ -1308,7 +1304,7 @@ mod tests {
                 "    let _ = arr.",
                 "    let _ = /* \u{65e5}\u{672c}\u{8a9e} */ arr.",
             );
-        let uri = format!("file://{}", abs_path.display());
+        let uri = client.file_uri(Path::new("main.fix"));
         client
             .send_notification(
                 "textDocument/didChange",
@@ -1351,6 +1347,6 @@ mod tests {
             sort_push_back
         );
 
-        let _ = client.shutdown(Duration::from_millis(500));
+        let _ = client.shutdown();
     }
 }

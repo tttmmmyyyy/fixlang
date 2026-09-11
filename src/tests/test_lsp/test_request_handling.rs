@@ -6,7 +6,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::completion_harness::setup_test_env;
+    use super::super::case_project::setup_test_env;
     use super::super::lsp_client::LspClient;
     use serde_json::json;
     use std::path::{Path, PathBuf};
@@ -97,11 +97,9 @@ mod tests {
         // the message above sends no progress, and the wait times out.
         client.save_and_wait_for_the_program(lib_fix);
 
+        client.shutdown().expect("Failed to shutdown LSP");
         client
-            .shutdown(Duration::from_millis(500))
-            .expect("Failed to shutdown LSP");
-        client
-            .finish()
+            .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
 
@@ -187,11 +185,9 @@ mod tests {
             decodable
         );
 
+        client.shutdown().expect("Failed to shutdown LSP");
         client
-            .shutdown(Duration::from_millis(500))
-            .expect("Failed to shutdown LSP");
-        client
-            .finish()
+            .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
 
@@ -220,11 +216,9 @@ mod tests {
             "a uri naming no file on disk is expected to be answered with no symbols"
         );
 
+        client.shutdown().expect("Failed to shutdown LSP");
         client
-            .shutdown(Duration::from_millis(500))
-            .expect("Failed to shutdown LSP");
-        client
-            .finish()
+            .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
 }

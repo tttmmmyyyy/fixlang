@@ -1,29 +1,30 @@
 // Opt-in benchmark for warm-state `textDocument/completion` latency.
 //
-// This is NOT a correctness test: it measures the round-trip latency the
-// editor experiences for a completion request *after* the initial
-// diagnostics run has settled (the cache is warm). It is gated behind the
-// `FIX_LSP_BENCH` environment variable so it returns immediately during
-// normal `cargo test` runs and only does work when explicitly requested:
+// It measures, and asserts nothing about, the round-trip latency the editor
+// experiences for a completion request once the initial diagnostics run has
+// settled (the cache is warm). It is gated behind the `FIX_LSP_BENCH`
+// environment variable, so it returns immediately during a normal
+// `cargo test` run and does its work when asked for:
 //
 //   FIX_LSP_BENCH=1 cargo test --release \
 //     --  tests::test_lsp::bench_completion --nocapture
 //
 // The reported numbers are end-to-end (send request -> receive response),
-// so they include the client-side JSON parse of the response in this test
-// harness. For the non-dot case that returns the full candidate list,
-// that parse is non-trivial; treat the absolute numbers as an upper bound
-// and use the before/after delta as the signal when optimizing.
+// so they include this harness's own JSON parse of the response. That parse
+// costs something for the non-dot case, which returns the full candidate
+// list; read the absolute numbers as an upper bound and the before/after
+// delta as the signal when optimizing.
 
 #[cfg(test)]
 mod bench {
+    use super::super::case_project::setup_test_env;
     use super::super::completion_harness::completion_items;
     use super::super::lsp_client::{poll_every, LspClient};
-    use crate::tests::test_util::copy_dir_recursive;
     use serde_json::json;
-    use std::path::{Path, PathBuf};
+    use std::env;
+    use std::fs;
+    use std::path::Path;
     use std::time::{Duration, Instant};
-    use tempfile::TempDir;
 
     /// Number of measured completion requests per benchmark point.
     const ITERS: usize = 15;
@@ -34,24 +35,6 @@ mod bench {
     /// How long the wait for one response sits between two looks. It bounds how coarse the
     /// latency this benchmark reports can be.
     const POLL_INTERVAL: Duration = Duration::from_millis(1);
-
-    /// Absolute path to the directory holding the LSP test-case projects.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_lsp/cases");
-        path
-    }
-
-    /// Copy a test-case project into a fresh temp directory and return the
-    /// temp dir (kept alive for cleanup) and the canonicalized project path.
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let src = get_test_cases_dir().join(project_name);
-        let dst = temp_dir.path().join(project_name);
-        copy_dir_recursive(&src, &dst).expect("Failed to copy test case");
-        let dst = dst.canonicalize().expect("canonicalize");
-        (temp_dir, dst)
-    }
 
     /// Send one completion request and finely poll for the response,
     /// returning the round-trip duration and the number of items.
@@ -71,20 +54,20 @@ mod bench {
                 }),
             )
             .expect("send completion");
-        let resp = poll_every(POLL_INTERVAL, TIMEOUT, || client.get_response(id))
+        let resp = poll_every(POLL_INTERVAL, TIMEOUT, || client.take_response(id))
             .unwrap_or_else(|| panic!("completion did not respond within {:?}", TIMEOUT));
         let elapsed = start.elapsed();
         (elapsed, completion_items(&resp).len())
     }
 
     /// Convert a `Duration` to fractional milliseconds.
-    fn millis(d: Duration) -> f64 {
-        d.as_secs_f64() * 1000.0
+    fn millis(duration: Duration) -> f64 {
+        duration.as_secs_f64() * 1000.0
     }
 
     /// Run `ITERS` measured completions at `(line, col)` after `WARMUP`
     /// discarded warm-up calls, and print min / median / mean / max.
-    fn bench_one(client: &mut LspClient, uri: &str, line: u32, col: u32, label: &str) {
+    fn bench_position(client: &mut LspClient, uri: &str, line: u32, col: u32, label: &str) {
         let (cold, n_items) = timed_completion(client, uri, line, col);
         for _ in 1..WARMUP {
             timed_completion(client, uri, line, col);
@@ -122,9 +105,7 @@ mod bench {
     }
 
     /// Locate the cursor `(line, col)` at the end of the first occurrence
-    /// of `needle` (used for a non-dot context where `needle` is a
-    /// lowercase identifier, yielding an empty namespace filter -> the
-    /// full candidate list).
+    /// of `needle`.
     fn pos_after(text: &str, needle: &str) -> (u32, u32) {
         for (i, line) in text.lines().enumerate() {
             if let Some(start) = line.find(needle) {
@@ -139,7 +120,7 @@ mod bench {
     /// receivers); opt-in via `FIX_LSP_BENCH`, otherwise a no-op.
     #[test]
     fn bench_completion_warm() {
-        if std::env::var("FIX_LSP_BENCH").is_err() {
+        if env::var("FIX_LSP_BENCH").is_err() {
             eprintln!(
                 "[bench] skipped (set FIX_LSP_BENCH=1 to run the completion latency benchmark)"
             );
@@ -148,7 +129,7 @@ mod bench {
 
         let (_temp_dir, project_dir) = setup_test_env("completion-bench");
         let main_rel = Path::new("main.fix");
-        let text = std::fs::read_to_string(project_dir.join(main_rel)).expect("read main.fix");
+        let text = fs::read_to_string(project_dir.join(main_rel)).expect("read main.fix");
 
         let mut client = LspClient::new(&project_dir).expect("start LSP");
         client
@@ -156,28 +137,27 @@ mod bench {
             .expect("initialize LSP");
         client.open_document(main_rel).expect("open main.fix");
 
-        // Warm the typecheck cache / snapshot by running diagnostics once
-        // and waiting for it to settle. The user considers this initial
-        // cost acceptable; we measure what happens *after* this.
+        // Warm the typecheck cache / snapshot by running diagnostics once and
+        // waiting for it to settle, so that what follows is measured warm.
         client.save_and_wait_for_the_program(main_rel);
 
-        let uri = format!("file://{}", project_dir.join(main_rel).display());
+        let uri = client.file_uri(main_rel);
 
         // Non-dot, full candidate list (empty namespace filter).
         let (l, c) = pos_after(&text, "let _ = sz");
-        bench_one(&mut client, &uri, l, c, "non-dot/full");
+        bench_position(&mut client, &uri, l, c, "non-dot/full");
 
         // Dot on an `Array I64` receiver.
         let (l, c) = pos_after_dot(&text, "arr.get_size");
-        bench_one(&mut client, &uri, l, c, "dot/array");
+        bench_position(&mut client, &uri, l, c, "dot/array");
 
         // Dot on an `I64` receiver.
         let (l, c) = pos_after_dot(&text, "42.compute");
-        bench_one(&mut client, &uri, l, c, "dot/i64");
+        bench_position(&mut client, &uri, l, c, "dot/i64");
 
+        client.shutdown().expect("shutdown LSP");
         client
-            .shutdown(Duration::from_millis(500))
-            .expect("shutdown LSP");
-        client.finish().expect("reader thread clean");
+            .verify_no_protocol_error()
+            .expect("reader thread clean");
     }
 }

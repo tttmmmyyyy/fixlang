@@ -6,25 +6,14 @@
 
 #[cfg(test)]
 mod tests {
+    use super::super::case_project::setup_test_env;
     use super::super::completion_harness::LspCompletionCtx;
     use super::super::lsp_client::{poll, LspClient};
-    use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::Duration;
     use tempfile::TempDir;
-
-    /// Copies the named case project into a temporary directory and returns it with the project's
-    /// path inside it.
-    fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let cases_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/tests/test_lsp/cases");
-        let project_dir = temp_dir.path().join(project_name);
-        copy_dir_recursive(&cases_dir.join(project_name), &project_dir)
-            .expect("Failed to copy test case");
-        (temp_dir, project_dir)
-    }
 
     /// The diagnostics the server publishes for `file` of the project, after opening and saving it.
     fn diagnostics_of(project_dir: &Path, file: &Path) -> Vec<Value> {

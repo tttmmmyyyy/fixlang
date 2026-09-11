@@ -57,9 +57,11 @@ struct SharedState {
     responses: Arc<Mutex<Map<u32, Value>>>,
     /// The diagnostics last published for each file, under the file's absolute path.
     diagnostics: Arc<Mutex<Map<PathBuf, Value>>>,
-    /// Number of `$/progress` end notifications received so far.
-    progress_end_count: Arc<Mutex<usize>>,
-    /// The protocol error the reader thread stopped on, which `finish` hands to the test.
+    /// How many diagnostics passes have ended, counted by the `$/progress` end notifications
+    /// that mark them.
+    ended_pass_count: Arc<Mutex<usize>>,
+    /// The protocol error the reader thread stopped on, which `verify_no_protocol_error` hands
+    /// to the test.
     reader_thread_error: Arc<Mutex<Option<String>>>,
 }
 
@@ -70,7 +72,7 @@ impl SharedState {
             message_queue: Arc::new(Mutex::new(VecDeque::new())),
             responses: Arc::new(Mutex::new(Map::default())),
             diagnostics: Arc::new(Mutex::new(Map::default())),
-            progress_end_count: Arc::new(Mutex::new(0)),
+            ended_pass_count: Arc::new(Mutex::new(0)),
             reader_thread_error: Arc::new(Mutex::new(None)),
         }
     }
@@ -100,7 +102,9 @@ fn is_publish_diagnostics(message: &Value) -> bool {
     message.get("method").and_then(|m| m.as_str()) == Some("textDocument/publishDiagnostics")
 }
 
-/// Process a received message and update internal state
+/// Take `message` into `shared`: the response to a request under the request's id, the end of a
+/// diagnostics pass into the count of the passes that have ended, the diagnostics of a file under
+/// the file's path, and the message itself into the queue.
 fn process_message(message: Value, shared: &SharedState) {
     /// Handle a `textDocument/publishDiagnostics` notification.
     fn process_publish_diagnostics(message: &Value, shared: &SharedState) {
@@ -153,7 +157,7 @@ fn process_message(message: Value, shared: &SharedState) {
             .and_then(|k| k.as_str())
             == Some("end")
     {
-        *shared.progress_end_count.lock().unwrap() += 1;
+        *shared.ended_pass_count.lock().unwrap() += 1;
     }
 
     // Check if it's a publishDiagnostics notification
@@ -164,10 +168,18 @@ fn process_message(message: Value, shared: &SharedState) {
 }
 
 impl LspClient {
-    /// Start fix command in language server mode
-    ///
-    /// The working_dir can be either a relative or absolute path.
-    /// It will be converted to an absolute path internally.
+    /// How long a request is given to be answered.
+    pub const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
+
+    /// How long a diagnostics pass is given to end.
+    pub const PASS_TIMEOUT: Duration = Duration::from_secs(180);
+
+    /// How long the server is given to exit once it has been told to.
+    pub const EXIT_TIMEOUT: Duration = Duration::from_millis(500);
+
+    /// Run `fix language-server` in `working_dir`, which is the project root the paths a test
+    /// passes are taken as relative to, and read what it sends on a thread of its own.
+    /// `working_dir` itself may be relative to the directory the test runs in.
     pub fn new(working_dir: &Path) -> Result<Self, String> {
         // Convert to absolute path
         let absolute_working_dir = to_absolute_path(working_dir)
@@ -189,8 +201,8 @@ impl LspClient {
         let shared = SharedState::new();
         let shared_clone = shared.clone();
 
-        // Start dedicated reader thread (detached - JoinHandle is not stored)
-        // The thread will exit when stdout is closed (process termination) or on protocol error
+        // The reader thread runs on its own, and ends when the process closes its stdout or when
+        // it meets a protocol error.
         thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
             loop {
@@ -263,46 +275,11 @@ impl LspClient {
         })
     }
 
-    /// Send LSP request
-    pub fn send_request(&mut self, method: &str, params: Value) -> Result<u32, String> {
-        let id = self.next_id;
-        self.next_id += 1;
-
-        let message = json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "method": method,
-            "params": params,
-        });
-
-        let content = serde_json::to_string(&message)
-            .map_err(|e| format!("Failed to serialize request: {:?}", e))?;
-
-        let header = format!("Content-Length: {}\r\n\r\n", content.len());
-
-        self.stdin
-            .write_all(header.as_bytes())
-            .map_err(|e| format!("Failed to write header: {:?}", e))?;
-        self.stdin
-            .write_all(content.as_bytes())
-            .map_err(|e| format!("Failed to write content: {:?}", e))?;
-        self.stdin
-            .flush()
-            .map_err(|e| format!("Failed to flush: {:?}", e))?;
-
-        Ok(id)
-    }
-
-    /// Send LSP notification
-    pub fn send_notification(&mut self, method: &str, params: Value) -> Result<(), String> {
-        let message = json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-        });
-
-        let content = serde_json::to_string(&message)
-            .map_err(|e| format!("Failed to serialize notification: {:?}", e))?;
+    /// Write `message` to the server, headed by the `Content-Length` the protocol frames a
+    /// message with.
+    fn send_message(&mut self, message: &Value) -> Result<(), String> {
+        let content = serde_json::to_string(message)
+            .map_err(|e| format!("Failed to serialize message: {:?}", e))?;
 
         let header = format!("Content-Length: {}\r\n\r\n", content.len());
 
@@ -319,70 +296,87 @@ impl LspClient {
         Ok(())
     }
 
-    /// Pop one message from the message queue
-    pub fn pop_message(&mut self) -> Option<Value> {
+    /// Send the request `method` with `params`, and hand back the id it was sent under, which the
+    /// response to it carries.
+    pub fn send_request(&mut self, method: &str, params: Value) -> Result<u32, String> {
+        let id = self.next_id;
+        self.next_id += 1;
+
+        self.send_message(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params,
+        }))?;
+
+        Ok(id)
+    }
+
+    /// Send the notification `method` with `params`, which the server answers nothing to.
+    pub fn send_notification(&mut self, method: &str, params: Value) -> Result<(), String> {
+        self.send_message(&json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+        }))
+    }
+
+    /// The oldest message the server sent that the queue still holds, taken out of it.
+    pub fn pop_message(&self) -> Option<Value> {
         self.shared.message_queue.lock().unwrap().pop_front()
     }
 
     /// The response to the request `id`, waited for until it arrives or `timeout` runs out.
     /// `None` says the wait ran out.
-    pub fn wait_for_response(&mut self, id: u32, timeout: Duration) -> Option<Value> {
-        poll(timeout, || self.get_response(id))
+    pub fn wait_for_response(&self, id: u32, timeout: Duration) -> Option<Value> {
+        poll(timeout, || self.take_response(id))
     }
 
     /// The response to the request `id`, which is expected to arrive within `RESPONSE_TIMEOUT`.
-    pub fn expect_response(&mut self, id: u32) -> Value {
+    pub fn expect_response(&self, id: u32) -> Value {
         self.wait_for_response(id, Self::RESPONSE_TIMEOUT)
             .unwrap_or_else(|| panic!("the request {} is expected to be answered", id))
     }
 
     /// The response to the request `id`, taken out of the responses so that it is handed over
     /// once. `None` says the response is yet to arrive.
-    pub fn get_response(&mut self, id: u32) -> Option<Value> {
+    pub fn take_response(&self, id: u32) -> Option<Value> {
         self.shared.responses.lock().unwrap().remove(&id)
     }
 
-    /// Return the number of `$/progress` end notifications received so far.
-    pub fn count_progress_end_messages(&self) -> usize {
-        *self.shared.progress_end_count.lock().unwrap()
+    /// How many diagnostics passes have ended so far.
+    pub fn ended_pass_count(&self) -> usize {
+        *self.shared.ended_pass_count.lock().unwrap()
     }
 
-    /// Wait until the total number of `$/progress` end notifications
-    /// reaches at least `target_count`.
-    ///
-    /// This is used to detect when diagnostics have completed, since the
-    /// server sends `$/progress` with `kind: "end"` after each diagnostics run.
-    pub fn wait_for_progress_end_count(
+    /// Wait until at least `target_count` diagnostics passes have ended. The server marks the
+    /// end of each pass with a `$/progress` notification carrying `kind: "end"`, which is what
+    /// the count is taken from.
+    pub fn wait_for_ended_passes(
         &self,
         target_count: usize,
         timeout: Duration,
     ) -> Result<(), String> {
         poll(timeout, || {
-            (self.count_progress_end_messages() >= target_count).then_some(())
+            (self.ended_pass_count() >= target_count).then_some(())
         })
         .ok_or_else(|| {
             format!(
-                "Timeout ({:?}) waiting for progress end count to reach {}. Current: {}",
+                "Timeout ({:?}) waiting for {} passes to end. Ended: {}",
                 timeout,
                 target_count,
-                self.count_progress_end_messages()
+                self.ended_pass_count()
             )
         })
     }
-
-    /// How long a request is given to be answered.
-    pub const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
-
-    /// How long a diagnostics pass is given to end.
-    pub const PASS_TIMEOUT: Duration = Duration::from_secs(180);
 
     /// Run `trigger`, which asks the server for a diagnostics pass, and return once one more pass
     /// has ended than had ended before it ran, so that the reports that pass publishes have
     /// arrived.
     pub fn wait_for_one_more_pass(&mut self, trigger: impl FnOnce(&mut Self)) {
-        let passes_before = self.count_progress_end_messages();
+        let passes_before = self.ended_pass_count();
         trigger(self);
-        self.wait_for_progress_end_count(passes_before + 1, Self::PASS_TIMEOUT)
+        self.wait_for_ended_passes(passes_before + 1, Self::PASS_TIMEOUT)
             .expect("the pass the buffer asks for is expected to end");
     }
 
@@ -452,15 +446,15 @@ impl LspClient {
         diagnostics_by_path
     }
 
-    /// Checks that the diagnostics of every file are empty, answering with an error that names a
-    /// file carrying any and shows what it carries.
-    pub fn verify_no_diagnostic_errors(&self) -> Result<(), String> {
+    /// Checks that no file carries a diagnostic of any severity, answering with an error that
+    /// names a file carrying one and shows what it carries.
+    pub fn verify_no_diagnostics(&self) -> Result<(), String> {
         let diagnostics = self.shared.diagnostics.lock().unwrap();
         for (file_path, diagnostics_value) in diagnostics.iter() {
             if let Some(diag_array) = diagnostics_value.as_array() {
                 if !diag_array.is_empty() {
                     return Err(format!(
-                        "Expected no diagnostic errors but found errors in {:?}: {:?}",
+                        "Expected no diagnostics but found some in {:?}: {:?}",
                         file_path, diag_array
                     ));
                 }
@@ -469,17 +463,15 @@ impl LspClient {
         Ok(())
     }
 
-    /// Run the initialization handshake: send the `initialize` request, wait for its response,
-    /// then send the `initialized` notification the server starts its diagnostics on.
-    ///
-    /// # Arguments
-    /// * `root_path` - Project root directory path (can be relative or absolute)
-    /// * `timeout` - Maximum time to wait for initialize response
+    /// Run the initialization handshake: send the `initialize` request naming `root_path` as the
+    /// project root, wait up to `timeout` for its response, then send the `initialized`
+    /// notification the server starts its diagnostics on. `root_path` may itself be relative to
+    /// the directory the test runs in.
     pub fn initialize(&mut self, root_path: &Path, timeout: Duration) -> Result<(), String> {
         // Convert to absolute path
         let absolute_root = to_absolute_path(root_path)
             .map_err(|e| format!("Failed to convert root_path to absolute path: {}", e))?;
-        let root_uri = format!("file://{}", absolute_root.display());
+        let root_uri = uri_of(&absolute_root);
 
         let params = json!({
             "processId": null,
@@ -510,13 +502,9 @@ impl LspClient {
         Ok((text, uri_of(absolute_path)))
     }
 
-    /// Send didOpen notification for a document
-    ///
-    /// Takes a file path relative to the project root, reads the file content,
-    /// and sends a didOpen notification to the language server.
-    /// Initializes the document version to 1.
-    ///
-    /// Returns an error if the document is already opened.
+    /// Tell the server that the client now holds `file_path`, whose content it reads from disk and
+    /// sends along. `file_path` is taken as relative to the project root, and the version the
+    /// client counts its changes from starts here.
     pub fn open_document(&mut self, file_path: &Path) -> Result<(), String> {
         /// The version the protocol counts an opened document from.
         const INITIAL_VERSION_NUMBER: i32 = 1;
@@ -547,11 +535,9 @@ impl LspClient {
         )
     }
 
-    /// Send didChange notification for a document
-    ///
-    /// Takes a file path relative to the project root, reads the file content,
-    /// increments the document version, and sends a didChange notification to the language server.
-    /// The document must have been opened with open_document first.
+    /// Tell the server that what the client holds for `file_path` is now the content on disk,
+    /// under the next version. `file_path` is taken as relative to the project root, and is
+    /// expected to have been opened by `open_document`.
     pub fn change_document(&mut self, file_path: &Path) -> Result<(), String> {
         let absolute_path = self.working_dir.join(file_path);
         let (text, uri) = Self::read_document(&absolute_path)?;
@@ -580,10 +566,8 @@ impl LspClient {
         )
     }
 
-    /// Send didSave notification for a document
-    ///
-    /// Takes a file path relative to the project root, reads the file content,
-    /// and sends a didSave notification to the language server.
+    /// Tell the server that `file_path` has been saved, along with the content on disk, which is
+    /// what asks it for a diagnostics pass. `file_path` is taken as relative to the project root.
     pub fn save_document(&mut self, file_path: &Path) -> Result<(), String> {
         let absolute_path = self.working_dir.join(file_path);
         let (text, uri) = Self::read_document(&absolute_path)?;
@@ -599,18 +583,16 @@ impl LspClient {
         )
     }
 
-    /// Ask the server to shut down and exit, and wait for its process to end.
-    ///
-    /// # Arguments
-    /// * `exit_timeout` - Maximum time to wait for the process to exit after sending exit notification
-    pub fn shutdown(&mut self, exit_timeout: Duration) -> Result<(), String> {
+    /// Ask the server to shut down and exit, and wait up to `EXIT_TIMEOUT` for its process to end
+    /// once the `exit` notification has been sent.
+    pub fn shutdown(&mut self) -> Result<(), String> {
         let id = self.send_request("shutdown", json!(null))?;
         let _ = self.wait_for_response(id, Self::RESPONSE_TIMEOUT);
 
         self.send_notification("exit", json!(null))?;
 
         // A process still running when `exit_timeout` runs out is an error; `Drop` kills it.
-        match poll(exit_timeout, || match self.process.try_wait() {
+        match poll(Self::EXIT_TIMEOUT, || match self.process.try_wait() {
             Ok(Some(_status)) => Some(Ok(())),
             Ok(None) => None,
             Err(e) => Some(Err(format!("Failed to check process status: {:?}", e))),
@@ -620,9 +602,10 @@ impl LspClient {
         }
     }
 
-    /// The protocol error the reader thread met, as an `Err`. Called at the end of a test, so
-    /// that an error met on a thread of its own reaches the test's result.
-    pub fn finish(&self) -> Result<(), String> {
+    /// Checks that the reader thread met no protocol error, answering with the error it met.
+    /// Called at the end of a test, so that an error met on a thread of its own reaches the
+    /// test's result.
+    pub fn verify_no_protocol_error(&self) -> Result<(), String> {
         let error = self.shared.reader_thread_error.lock().unwrap();
         if let Some(err_msg) = error.as_ref() {
             return Err(format!("LSP protocol error occurred: {}", err_msg));
