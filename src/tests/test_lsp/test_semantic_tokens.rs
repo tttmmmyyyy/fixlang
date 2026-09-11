@@ -157,12 +157,11 @@ mod tests {
         /// after the progress-end notification, so retry until a typechecked
         /// token (a local variable, which only the overlay emits) appears.
         fn token_types_with_overlay(&mut self, file: &str) -> Vec<u64> {
-            let mut last_seen = Vec::new();
-            poll_every(OVERLAY_RETRY_INTERVAL, OVERLAY_TIMEOUT, || {
-                last_seen = self.token_types(file);
-                last_seen.contains(&T_VARIABLE).then(|| last_seen.clone())
-            })
-            .unwrap_or(last_seen)
+            let with_overlay = poll_every(OVERLAY_RETRY_INTERVAL, OVERLAY_TIMEOUT, || {
+                let types = self.token_types(file);
+                types.contains(&T_VARIABLE).then_some(types)
+            });
+            with_overlay.unwrap_or_else(|| self.token_types(file))
         }
 
         /// Replace the whole content of `file` via a `didChange` notification.

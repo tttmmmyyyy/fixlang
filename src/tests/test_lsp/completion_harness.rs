@@ -46,29 +46,32 @@ pub fn find_sort_text(items: &[Value], label: &str) -> Option<String> {
         .map(String::from)
 }
 
+/// The completion items a `textDocument/completion` response carries. Its `result` is either
+/// the array of items or a `CompletionList` holding them, and a server offering nothing answers
+/// `null`, which carries no item.
+pub fn completion_items(response: &Value) -> Vec<Value> {
+    let result = response.get("result").expect("response has result");
+    if let Some(items) = result.as_array() {
+        return items.clone();
+    }
+    result
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
 /// Poll an in-flight `textDocument/completion` request until the
-/// server replies or `timeout` elapses. Returns the completion items
-/// (the response's `result` may be either an array or a
-/// `CompletionList` — both shapes are unwrapped); returns `None`
-/// when the timeout expires so the caller can format its own
-/// diagnostic.
+/// server replies or `timeout` elapses. Returns the completion items;
+/// returns `None` when the timeout expires so the caller can format
+/// its own diagnostic.
 pub fn collect_completion_items(
     client: &mut LspClient,
     request_id: u32,
     timeout: Duration,
 ) -> Option<Vec<Value>> {
     let response = client.wait_for_response(request_id, timeout)?;
-    let result = response.get("result").expect("response has result");
-    let items = if result.is_array() {
-        result.as_array().unwrap().clone()
-    } else {
-        result
-            .get("items")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default()
-    };
-    Some(items)
+    Some(completion_items(&response))
 }
 
 /// A language server running over a private copy of one test project,

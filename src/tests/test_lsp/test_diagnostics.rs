@@ -474,12 +474,11 @@ mod tests {
         file: &Path,
         settled: impl Fn(&[Value]) -> bool,
     ) -> Vec<Value> {
-        let mut last_seen = Vec::new();
         poll_until(LspClient::PASS_TIMEOUT, || {
-            last_seen = client.get_diagnostics(file);
-            settled(&last_seen).then(|| last_seen.clone())
+            let diagnostics = client.get_diagnostics(file);
+            settled(&diagnostics).then_some(diagnostics)
         })
-        .unwrap_or(last_seen)
+        .unwrap_or_else(|| client.get_diagnostics(file))
     }
 
     /// Whether the reports carry the one whose message contains `text`.

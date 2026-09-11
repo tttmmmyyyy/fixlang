@@ -17,6 +17,7 @@
 
 #[cfg(test)]
 mod bench {
+    use super::super::completion_harness::completion_items;
     use super::super::lsp_client::{poll_every, LspClient};
     use crate::tests::test_util::copy_dir_recursive;
     use serde_json::json;
@@ -73,17 +74,7 @@ mod bench {
         let resp = poll_every(LOOK_INTERVAL, TIMEOUT, || client.get_response(id))
             .unwrap_or_else(|| panic!("completion did not respond within {:?}", TIMEOUT));
         let elapsed = start.elapsed();
-        let result = resp.get("result").expect("response has result");
-        let n = if result.is_array() {
-            result.as_array().unwrap().len()
-        } else {
-            result
-                .get("items")
-                .and_then(|v| v.as_array())
-                .map(|a| a.len())
-                .unwrap_or(0)
-        };
-        (elapsed, n)
+        (elapsed, completion_items(&resp).len())
     }
 
     /// Convert a `Duration` to fractional milliseconds.
