@@ -307,24 +307,41 @@ main = (
 
     ez_cd(config, "..");;
 
-    let log = log.set("contention", log.@size - 1, max_contention.to_string_precision(2_U8));
-
-    // Say which cases the run came away without a cycle count for. The field is left empty
-    // where other work could have moved the count, and the row that results reads like every
-    // other one until someone opens the file.
+    // A case whose counters could not be read leaves every column of its own empty, and says
+    // nothing about how busy the machine was. Where that is every case, the run measured nothing,
+    // and a contention of `0.00` would read as the quietest machine there is.
     let header = log.@(0);
     let latest = log.@(log.@size - 1);
-    let uncounted = dirs.filter(|dir|
-        let column = header.find_by(|name| name == dir + "-cycles");
-        column.is_none || latest.@(column.as_some) == ""
+    let cell = |suffix, dir| (
+        let column = header.find_by(|name| name == dir + suffix);
+        if column.is_none { "" };
+        latest.@(column.as_some)
+    );
+    let unread = dirs.filter(|dir| cell("-inst", dir) == "").to_array;
+    let log = if unread.@size == dirs.get_size { log } else {
+        log.set("contention", log.@size - 1, max_contention.to_string_precision(2_U8))
+    };
+
+    // Say which cases the run came away without a cycle count for, and which of the two reasons
+    // each is: the counters were out of reach, or other work could have moved the count. The row
+    // that results reads like every other one until someone opens the file.
+    let withheld = dirs.filter(|dir|
+        cell("-inst", dir) != "" && cell("-cycles", dir) == ""
     ).to_array;
-    when(!uncounted.is_empty,
-        eprintln("warning: " + uncounted.@size.to_string + " of " + dirs.get_size.to_string
+    when(!unread.is_empty,
+        eprintln("warning: " + unread.@size.to_string + " of " + dirs.get_size.to_string
+            + " cases came away with no counters at all, so every column of theirs is empty."
+            + " `perf_counters.py` reports that where the machine has no hardware PMU, where"
+            + " `kernel.perf_event_paranoid` is above 2, or where the PMU had to time-slice the"
+            + " events: " + unread.to_iter.join(", "))
+    );;
+    when(!withheld.is_empty,
+        eprintln("warning: " + withheld.@size.to_string + " of " + dirs.get_size.to_string
             + " cases came away without a cycle count, with other work taking "
             + max_contention.to_string_precision(2_U8) + " cores while they ran. A count is kept"
             + " from a window the thread beside the measurement stayed out of, and from a case"
             + " that reaches main memory seldom enough for the shared cache not to cost it: "
-            + uncounted.to_iter.join(", "))
+            + withheld.to_iter.join(", "))
     );;
 
     // Save the log to the log file.
@@ -336,7 +353,6 @@ main = (
     // can be read against the one before it without opening the log. The reference languages are
     // left out: their columns carry the language last, and a reference does not move with a Fix
     // commit.
-    let header = log.@(0);
     let latest = log.@(log.@size - 1);
     let costs = Iterator::range(0, header.@size).filter(|i|
         i == 0 || header.@(i).ends_with("-inst")

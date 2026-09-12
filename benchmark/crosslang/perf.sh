@@ -25,8 +25,11 @@ for name in $(comparable_cases); do
     for lang in fix c rust; do
         binary="bin/${name}_${lang}"
         [ -x "$binary" ] || { echo "no $binary -- run build.sh first" >&2; exit 1; }
-        if ! out=$(python3 "$COUNTERS" "$binary"); then
-            status=$?
+        # The status has to be taken from the assignment itself: read after `if ! ...`, `$?`
+        # is the status the `!` produced, which is 0 however the command ended.
+        status=0
+        out=$(python3 "$COUNTERS" "$binary") || status=$?
+        if [ "$status" -ne 0 ]; then
             if [ "$status" -eq "$PROGRAM_FAILED" ]; then
                 echo "  $name $lang: failed its own check" >&2
                 exit 1
