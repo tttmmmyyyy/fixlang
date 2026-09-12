@@ -33,14 +33,22 @@ const TWO_GLOBALS_SOURCE: &str = r#"
     );
 "#;
 
-/// The names the compiler gives the parts of `table`, as the emitted LLVM IR quotes them.
+/// The accessor of `table`, as the emitted LLVM IR quotes its name.
 const TABLE_ACCESSOR: &str = "@\"Get#Main::table#";
+
+/// The function computing the value of `table`, as the emitted LLVM IR quotes its name.
 const TABLE_INITIALIZER: &str = "@\"InitValue#Main::table#";
+
+/// The storage holding the value of `table`, as the emitted LLVM IR quotes its name.
 const TABLE_STORAGE: &str = "@\"GlobalVar#Main::table#";
+
+/// The flag saying whether `table` has been initialized, as the emitted LLVM IR quotes its name.
 const TABLE_FLAG: &str = "@\"InitFlag#Main::table#";
 
-/// The same, for `read_once`.
+/// The accessor of `read_once`, as the emitted LLVM IR quotes its name.
 const READ_ONCE_ACCESSOR: &str = "@\"Get#Main::read_once#";
+
+/// The function computing the value of `read_once`, as the emitted LLVM IR quotes its name.
 const READ_ONCE_INITIALIZER: &str = "@\"InitValue#Main::read_once#";
 
 /// A program whose global is read by the C function an `FFI_EXPORT` statement builds.
@@ -113,7 +121,7 @@ fn sole_body(ir: &str, name: &str) -> String {
 }
 
 /// Whether the function whose name starts with `name` carries the `noinline` attribute.
-fn stays_out_of_its_callers(ir: &str, name: &str) -> bool {
+fn is_kept_out_of_its_callers(ir: &str, name: &str) -> bool {
     let signature = sole_body(ir, name)
         .lines()
         .next()
@@ -136,11 +144,30 @@ fn stays_out_of_its_callers(ir: &str, name: &str) -> bool {
     attributes.contains("noinline")
 }
 
-/// How many times `ir` calls the function whose name starts with `name`.
-fn count_calls_to(ir: &str, name: &str) -> usize {
+/// The lines of `ir` that call the function whose name starts with `name`.
+fn calls_to<'a>(ir: &'a str, name: &str) -> Vec<&'a str> {
     ir.lines()
         .filter(|line| line.contains("call") && line.contains(name))
-        .count()
+        .collect()
+}
+
+/// How many times `ir` calls the function whose name starts with `name`.
+fn count_calls_to(ir: &str, name: &str) -> usize {
+    calls_to(ir, name).len()
+}
+
+/// Assert that the optimized IR of the build in `dir` holds no call to `accessor`, the accessor of
+/// the global named `global`.
+fn assert_reading_costs_no_call(dir: &Path, accessor: &str, global: &str) {
+    let optimized_ir = emitted_llvm_ir(dir, EmittedIr::AfterOptimization);
+    let remaining_calls = calls_to(&optimized_ir, accessor);
+    assert!(
+        remaining_calls.is_empty(),
+        "reading `{}` should cost no call, and the optimized IR holds {}:\n{}",
+        global,
+        remaining_calls.len(),
+        remaining_calls.join("\n")
+    );
 }
 
 /// The initializer of a global read from many places is a function of its own, which is left there.
@@ -171,7 +198,7 @@ pub fn test_the_initializer_of_a_shared_global_sits_outside_the_accessor() {
         accessor
     );
     assert!(
-        stays_out_of_its_callers(&ir, TABLE_INITIALIZER),
+        is_kept_out_of_its_callers(&ir, TABLE_INITIALIZER),
         "the initializer of `table` should stay out of the accessor"
     );
 }
@@ -194,7 +221,7 @@ pub fn test_the_initializer_of_a_global_read_once_stays_where_its_reader_sees_it
     );
 
     assert!(
-        !stays_out_of_its_callers(&ir, READ_ONCE_INITIALIZER),
+        !is_kept_out_of_its_callers(&ir, READ_ONCE_INITIALIZER),
         "the initializer of `read_once` should be free to join the accessor"
     );
 }
@@ -212,20 +239,24 @@ pub fn test_a_reader_of_a_global_sees_every_write_to_it() {
     let accessor = sole_body(&ir, TABLE_ACCESSOR);
 
     for variable in [TABLE_STORAGE, TABLE_FLAG] {
-        let writes = |text: &str| {
+        let count_writes_in = |text: &str| {
             text.lines()
                 .filter(|line| line.trim_start().starts_with("store") && line.contains(variable))
                 .count()
         };
-        let in_module = writes(&ir);
-        assert!(in_module > 0, "the program should write `{}`", variable);
+        let writes_in_module = count_writes_in(&ir);
+        assert!(
+            writes_in_module > 0,
+            "the program should write `{}`",
+            variable
+        );
         assert_eq!(
-            writes(&accessor),
-            in_module,
+            count_writes_in(&accessor),
+            writes_in_module,
             "every write to `{}` should be in the accessor, and {} of the {} are:\n{}",
             variable,
-            writes(&accessor),
-            in_module,
+            count_writes_in(&accessor),
+            writes_in_module,
             accessor
         );
     }
@@ -237,9 +268,8 @@ pub fn test_a_reader_of_a_global_sees_every_write_to_it() {
 /// length and the element read reads the pointer. The property is read off the emitted LLVM IR: it
 /// is about the code the build emits, and a program cannot observe a call it does not make.
 ///
-/// This is the requirement. `test_the_initializer_of_a_shared_global_sits_outside_the_accessor` and
-/// `test_a_reader_of_a_global_sees_every_write_to_it` pin the two properties this compiler reaches
-/// it by, and another mechanism would keep this test green and turn those red.
+/// This is the requirement itself, stated apart from the mechanism that meets it: a compiler
+/// reaching `table` some other way would keep this test green.
 #[test]
 pub fn test_reading_a_global_in_a_loop_costs_no_call() {
     let temp_dir = build_emitting_llvm_ir(TWO_GLOBALS_SOURCE);
@@ -253,17 +283,7 @@ pub fn test_reading_a_global_in_a_loop_costs_no_call() {
         "the program should read `table` through its accessor"
     );
 
-    let optimized_ir = emitted_llvm_ir(dir, EmittedIr::AfterOptimization);
-    let remaining_calls: Vec<_> = optimized_ir
-        .lines()
-        .filter(|line| line.contains("call") && line.contains(TABLE_ACCESSOR))
-        .collect();
-    assert!(
-        remaining_calls.is_empty(),
-        "reading `table` should cost no call, and the optimized IR holds {}:\n{}",
-        remaining_calls.len(),
-        remaining_calls.join("\n")
-    );
+    assert_reading_costs_no_call(dir, TABLE_ACCESSOR, "table");
 }
 
 /// A global read from a compilation unit that does not own it is read without a call.
@@ -291,24 +311,14 @@ pub fn test_a_global_read_from_another_unit_costs_no_call() {
          exported C function"
     );
 
-    let optimized_ir = emitted_llvm_ir(dir, EmittedIr::AfterOptimization);
-    let remaining_calls: Vec<_> = optimized_ir
-        .lines()
-        .filter(|line| line.contains("call") && line.contains(COUNTER_ACCESSOR))
-        .collect();
-    assert!(
-        remaining_calls.is_empty(),
-        "reading `counter` should cost no call, and the optimized IR holds {}:\n{}",
-        remaining_calls.len(),
-        remaining_calls.join("\n")
-    );
+    assert_reading_costs_no_call(dir, COUNTER_ACCESSOR, "counter");
 }
 
 /// Assert that the RC IR dump opens no global of its own under `name`.
 ///
 /// A body put at each of the names that read it leaves the program nothing left to keep, so the
 /// dump declares no global there.
-fn assert_no_global_stands_for(dump: &str, name: &str) {
+fn assert_no_global_is_kept_for(dump: &str, name: &str) {
     let standing_globals: Vec<_> = dump
         .lines()
         .filter(|line| line.starts_with("global ") && line.contains(name))
@@ -449,7 +459,7 @@ fn test_a_global_scalar_literal_is_put_at_every_name() {
             dump
         );
 
-        assert_no_global_stands_for(&dump, global);
+        assert_no_global_is_kept_for(&dump, global);
     }
 }
 
@@ -492,5 +502,5 @@ fn test_an_iostate_is_made_where_it_is_used() {
         dump
     );
 
-    assert_no_global_stands_for(&dump, IOSTATE_GLOBAL);
+    assert_no_global_is_kept_for(&dump, IOSTATE_GLOBAL);
 }
