@@ -3,10 +3,9 @@
 #
 # `../speedtest` counts the same programs' instructions on every commit, which is deterministic:
 # the same program and input give the same number however busy the machine is. This directory
-# answers the other question --
-# how long they actually take -- and for that every language has to be allowed the
-# instruction set the machine has: Fix enables every host feature by default, so a plain
-# `gcc -O3` would be losing vectorized loops for reasons that have nothing to do with the
+# answers the other question -- how long they actually take -- and for that every language has to
+# be allowed the instruction set the machine has: Fix enables every host feature by default, so a
+# plain `gcc -O3` would be losing vectorized loops for reasons that have nothing to do with the
 # language.
 #
 #   FIX=<path to the fix binary>   default: the release build in this repository

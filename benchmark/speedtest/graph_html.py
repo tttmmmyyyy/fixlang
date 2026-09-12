@@ -41,12 +41,11 @@ METRICS = [
      "survives a machine with other work on it.", "ratio"),
     ("cycles", "perf cycles",
      "Core cycles the program spent in user mode, from the hardware counters, as the lowest of "
-     "several windows of runs. Other work "
-     "reaches it two ways: over the core the run shares with the thread beside it, which the "
-     "harness pins for and watches, and over the cache every core shares, which costs a program in "
-     "proportion to how much of its data comes from main memory. Where either of them could have "
-     "moved a reading, the cell is left empty, so the series has gaps; the contention figure beside "
-     "each commit says how much of the machine the run had.",
+     "several windows of runs. Other work reaches it two ways: over the core the run shares with "
+     "the thread beside it, which the harness pins for and watches, and over the cache every core "
+     "shares, which costs a program in proportion to how much of its data comes from main memory. "
+     "Where either of them could have moved a reading, the cell is left empty, so the series has "
+     "gaps; the contention figure beside each commit says how much of the machine the run had.",
      "ratio"),
     ("splits", "perf splits",
      "Loads and stores that crossed a cache-line boundary, from the hardware counters. An "
@@ -187,8 +186,8 @@ def self_check():
     assert series["ram"] == {"a": [3, 5]}, series["ram"]
     # A cycle count other work could have moved leaves its cell empty, so the series has gaps.
     assert series["cycles"] == {"a": [7, None]}, series["cycles"]
-    # The rows a cachegrind run left behind carry `-mem` columns, and the column ended with that
-    # run: it draws no chart of its own, and no other metric takes its cells.
+    # Older rows carry `-mem` columns, and no metric reads them: the column draws no chart of
+    # its own, and no other metric takes its cells.
     assert "mem" not in data["metrics"], sorted(data["metrics"])
     assert data["metrics"]["splits"]["kind"] == "absolute"
     assert data["metrics"]["inst"]["refs"] == {"a": {"c": 90, "rust": 120}}, data["metrics"]["inst"]["refs"]

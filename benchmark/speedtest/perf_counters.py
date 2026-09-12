@@ -6,7 +6,7 @@ stores that crossed a cache-line boundary, user-space core cycles, and the CPU t
 than this measurement took while it ran, in cores.
 
 The instruction and split counts are decided by the program and its input, which is what makes
-them the columns a change to the compiler is read on: the runs below take a fixed environment with
+them the columns a change to the compiler is read on. The runs here take a fixed environment with
 address-space randomization off, and under those eight runs of `nbody` read one split count and six
 of `iter_flatten` read one. A line-crossing access costs real time and an instruction count has no
 notion of one -- an array whose elements start 8 bytes into a 16-byte-aligned allocation splits
@@ -27,8 +27,8 @@ field comes back empty, since a figure logged there would say more about that co
 about the program.
 
 Exits 2 when the measured program itself exits non-zero. A case checks its own answer, so that
-is a case whose answer moved, and a caller that treated it as a missing measurement would log the
-silence of a broken program as the silence of a machine with nothing to read.
+is a case whose answer moved, and a caller that treated it as a missing measurement would leave
+the same empty columns behind as it does for a machine with no counters to read.
 
 Exits 1 when the counters are unavailable (no hardware PMU, or `kernel.perf_event_paranoid` above
 2) or when the PMU had to time-slice them, so a caller can leave the columns empty instead of
@@ -67,10 +67,10 @@ ALL_EVENTS = SPLIT_EVENTS + [CYCLE_EVENT, INSTRUCTION_EVENT, RAM_EVENT]
 QUIET_CONTENTION = 0.5
 
 # How often a program's data comes from main memory, per instruction, before another process can
-# change its cycle count by taking the cache from it. Read on an 11th Gen Intel Core i5-11400 (6
-# cores, 12 MiB of last level cache) with four processes each walking twice that cache on other
-# cores, the disturbed and undisturbed readings of a case alternating inside one round and a round
-# the sibling thread was busy through thrown away: every case of the suite below this rate came
+# change its cycle count by taking the cache from it. The rate was read on an 11th Gen Intel Core
+# i5-11400 (6 cores, 12 MiB of last level cache), with four processes each walking twice that cache
+# on other cores. A case was read disturbed and undisturbed in turn inside one round, and a round
+# the sibling thread was busy through was thrown away. Every case of the suite below this rate came
 # within 3.5% of its undisturbed cycles, and every case above 0.000045 took between 1.08 and 7.8
 # times them. The limit sits at the low end of the gap between the two, because a case dropped
 # costs a row one figure where a case kept wrongly puts a figure in the log that reads like every
@@ -99,8 +99,8 @@ MINIMUM_WINDOW_SECONDS = 0.2
 MEASUREMENT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
 
 # What this program exits with when the program it measures exits non-zero, which a caller reads
-# apart from the 1 that says the counters could not be read. `reference.py` and `main.fix` spell
-# this number again, since importing this module would set the affinity of the importing process.
+# apart from the 1 that says the counters could not be read. Every caller spells this number
+# again, since importing this module would set the affinity of the importing process.
 PROGRAM_FAILED = 2
 
 CLOCK_TICK = os.sysconf("SC_CLK_TCK")
@@ -222,10 +222,10 @@ def read_counters(argv):
             except ValueError:
                 pass
         found[name] = int(fields[0])
-    # Which of the two went wrong is read from the counts rather than from the status, because
-    # perf gives its own failure a status of its own only sometimes: it exits with the measured
-    # program's status where that program ran, and an event this processor does not carry --
-    # `SPLIT_EVENTS` names two that only Intel does -- leaves it exiting 129 with no count at all.
+    # Which of the two went wrong is read from the counts rather than from the status: perf exits
+    # with the measured program's status where that program ran, and an event this processor does
+    # not carry -- `SPLIT_EVENTS` names two that only Intel does -- leaves it exiting 129 with no
+    # count at all.
     missing = [event_name(e) for e in ALL_EVENTS if event_name(e) not in found]
     if missing:
         sys.exit(f"perf reported none of {', '.join(missing)}. perf said:\n"
@@ -322,9 +322,9 @@ def cycles_are_comparable(cycles, contention, ram_accesses, instructions):
 
     # Arguments
     * `cycles` - what `measure` returned, `None` where no window was the measurement's own.
-    * `ram_accesses`, `instructions` - the counts `measure` returned beside it. Both are the
-      lowest readings of the run, so the rate they give is the program's own rather than a
-      reading of what the machine was doing to it.
+    * `ram_accesses`, `instructions` - the counts `measure` returned beside it, each the lowest
+      reading of its windows. Other work raises either count and lowers neither, so the rate they
+      give is the closest to the program's own that a busy machine offers.
     """
     if cycles is None:
         return False
@@ -425,8 +425,8 @@ def self_check():
     # Only the windows the sibling stayed out of reach the cycle count, and where none did there is
     # no count to report. A window the sibling was busy for exactly the limit is one it stayed out
     # of. The window left out below carries the lowest count of the three, so `measure` letting it
-    # through would show up here as that count. The other three counts are
-    # the lowest of every window, including the ones the sibling was busy through.
+    # through would show up here as that count. The other three counts are the lowest of every
+    # window, including the ones the sibling was busy through.
     canned = []
     real, read_window = read_window, lambda argv: canned.pop(0)
     try:

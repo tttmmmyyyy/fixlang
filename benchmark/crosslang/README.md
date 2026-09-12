@@ -32,8 +32,9 @@ or a reference that computes something else becomes a number on the chart instea
 failure.
 
 Only add counterparts to a case whose work dwarfs process startup. Startup is around 0.3 ms
-and is included in the wall-clock figure, and the instruction figure counts it as well; the cases carrying counterparts today all run for hundreds of millions of
-instructions, where that is under a percent.
+and is included in the wall-clock figure, and the instruction figure counts it as well; the
+cases carrying counterparts today all run for hundreds of millions of instructions, where that
+is under a percent.
 
 ## Counting allocations
 

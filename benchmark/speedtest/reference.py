@@ -27,9 +27,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PERF_COUNTERS = HERE / "perf_counters.py"
 
-# What `perf_counters.py` exits with when the program it measures exits non-zero. Its own module
-# sets the affinity of whatever process imports it, so the number is spelled again here rather
-# than taken from there.
+# What `perf_counters.py` exits with when the program it measures exits non-zero. Importing that
+# module would set this process's affinity, so the number is spelled again here.
 PROGRAM_FAILED = 2
 
 # What this program exits with when the case carries no counterpart in the language asked for.

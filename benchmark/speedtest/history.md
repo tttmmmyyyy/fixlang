@@ -10,9 +10,9 @@ columns that already were. Cachegrind charges a program for instructions it neve
 its always-taken branch jumps over -- a block gdb finds unreachable, and whose removal leaves the
 hardware count where it was -- drops the cachegrind figure by exactly three per iteration. Twelve
 of the fifty-six cases sat more than 1% from what the hardware counted, `push_back` by 30% and two
-cases by several times, and one compiler change read under both metrics moved in opposite
-directions. The `-mem` column held cachegrind's weighted estimate of what the memory traffic cost,
-which the cycle column answers directly.
+cases by several times, and one compiler change moved the two counts in opposite directions. The
+`-mem` column held cachegrind's weighted estimate of what the memory traffic cost, which the cycle
+column answers directly.
 
 **Fewer cycle counts survive a busy machine.** A count read while other work took more than half a
 core is kept only for a program that reaches main memory seldom enough for the shared cache not to
@@ -23,12 +23,12 @@ among them cases the old rate let through.
 
 **The cases are built with every feature this host has, avx512 included.** The suite left avx512
 out because cachegrind could not simulate it, and nothing simulates the programs any more, so what
-the harness measures is now the code a Fix user on this machine gets. That code is not the faster
-code: `sort_stable` takes 14.1% more cycles with avx512 than without, and `iter_filter` 16.6% more,
-while `iter_map` takes 4.1% fewer and the rest of the suite moves by under 2%. The instruction
-counts move further than the cycles in both directions -- `sort_stable` +67.4%, `iter_filter`
-+47.4%, `iter_map` -22.5% -- so rows from before this change are comparable with rows after it on
-no column at all.
+the harness measures is now the code a Fix user on this machine gets. That code is slower on two
+of the cases: `sort_stable` takes 14.1% more cycles with avx512 than without and `iter_filter`
+16.6% more, while `iter_map` takes 4.1% fewer and the rest of the suite moves by under 2%. The
+instruction counts move further than the cycles in both directions -- `sort_stable` +67.4%,
+`iter_filter` +47.4%, `iter_map` -22.5% -- so rows from before this change are comparable with rows
+after it on no column at all.
 
 **Rows measured before `cachegrind.py` fixed the environment are not comparable with rows after
 it.** Cachegrind counts the dynamic loader and libc start-up along with the program, and both walk

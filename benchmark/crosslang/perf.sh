@@ -2,9 +2,9 @@
 # Split accesses and cycles for the binaries `build.sh` produced.
 #
 # A load or store that crosses a 64-byte cache line costs the load/store unit twice, and an
-# instruction count has no notion of it: the count is the same either way. The
-# split count is deterministic, so this runs on a busy machine; the cycle count beside it
-# is not, and is only worth reading when the machine is idle.
+# instruction count has no notion of it: the count is the same either way. The split count is
+# deterministic, so this runs on a busy machine; the cycle count beside it is not, and is only
+# worth reading when the machine is idle.
 #
 # Naming cases measures only those.
 set -euo pipefail
@@ -15,8 +15,8 @@ select_cases "$@"
 
 COUNTERS=../speedtest/perf_counters.py
 
-# What `perf_counters.py` exits with when the program it measured failed the check it makes of its
-# own answer, apart from the 1 it exits with when the counters could not be read.
+# What `perf_counters.py` exits with when the program it measured failed its own check, apart
+# from the 1 it exits with when the counters could not be read.
 PROGRAM_FAILED=2
 
 printf "  %-14s %-5s %14s %14s\n" "case" "lang" "splits" "cycles"

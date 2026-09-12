@@ -21,8 +21,7 @@ _REFERENCE_LANGUAGES : Array String;
 _REFERENCE_LANGUAGES = ["c", "rust"];
 
 // What `perf_counters.py` exits with when the program it measured exited non-zero, apart from
-// the 1 it exits with when the counters could not be read. `reference.py` carries the same
-// number under `PROGRAM_FAILED`.
+// the 1 it exits with when the counters could not be read. There it is `PROGRAM_FAILED`.
 _PROGRAM_FAILED : U8;
 _PROGRAM_FAILED = 2_U8;
 
@@ -249,8 +248,9 @@ main = (
         // On a machine without the counters every column stays empty and the run carries on.
         let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "--windows", _WINDOWS,
             "./a.out"].ez_run_oec(config);
-        // A case checks its own answer, so a case that exits non-zero is one whose answer moved,
-        // and the run stops here instead of logging the silence as a machine's.
+        // A case checks its own answer, so a case that exits non-zero is one whose answer moved.
+        // The run stops here, since its empty columns would read as a machine that had nothing to
+        // count.
         if perf_code == _PROGRAM_FAILED {
             eprintln("error: " + dir + " failed its own check");;
             exit(1)
