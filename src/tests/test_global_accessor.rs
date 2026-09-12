@@ -349,10 +349,10 @@ const STRING_GLOBAL_SOURCE: &str = r#"
 const GREETING_BUF: &str = "string_buf(\"hello\")";
 
 /// The global the program names, as the RC IR dump spells it, before the suffix the compiler adds.
-const GREETING: &str = "Main::greeting";
+const GREETING_GLOBAL: &str = "Main::greeting";
 
 #[test]
-fn test_a_global_string_is_built_once_however_many_names_it() {
+fn test_a_global_string_is_built_once_however_many_places_name_it() {
     let dump = build_run_and_read_rc_ir(
         STRING_GLOBAL_SOURCE,
         "max",
@@ -367,7 +367,7 @@ fn test_a_global_string_is_built_once_however_many_names_it() {
     // reader stopped reading.
     let places = dump
         .lines()
-        .filter(|line| line.contains(GREETING) && !line.starts_with("global "))
+        .filter(|line| line.contains(GREETING_GLOBAL) && !line.starts_with("global "))
         .count()
         + constructions;
     assert!(
@@ -389,7 +389,7 @@ fn test_a_global_string_is_built_once_however_many_names_it() {
 ///
 /// An integer and a floating-point literal evaluate to a value held in a register, so a copy of the
 /// literal where the global is named costs what naming it costs.
-const SCALAR_GLOBAL_SOURCE: &str = r#"
+const SCALAR_GLOBALS_SOURCE: &str = r#"
     module Main;
 
     answer : I64;
@@ -414,7 +414,7 @@ const SCALAR_GLOBAL_SOURCE: &str = r#"
     main = println((doubled + raised + (scaled + halved).to_I64).to_string);
 "#;
 
-/// The globals of `SCALAR_GLOBAL_SOURCE` whose bodies are literals, each beside the construction of
+/// The globals of `SCALAR_GLOBALS_SOURCE` whose bodies are literals, each beside the construction of
 /// its literal as the RC IR dump names it.
 const SCALAR_GLOBALS: [(&str, &str); 2] = [("Main::answer", "int(42)"), ("Main::ratio", "float(1.5)")];
 
@@ -426,7 +426,7 @@ const SCALAR_GLOBALS: [(&str, &str); 2] = [("Main::answer", "int(42)"), ("Main::
 #[test]
 fn test_a_global_scalar_literal_is_put_at_every_name() {
     let dump = build_run_and_read_rc_ir(
-        SCALAR_GLOBAL_SOURCE,
+        SCALAR_GLOBALS_SOURCE,
         "max",
         "130",
         "two global scalar literals named from two places each",
