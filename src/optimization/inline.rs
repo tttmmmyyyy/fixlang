@@ -125,15 +125,18 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
         costs.add_cost_calculation_result(cost_calculator);
 
         let expr = sym.expr.as_ref().unwrap();
-        // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`.
-        let (_params, body) = expr.destructure_lam_sequence();
-        let is_llvm_lam = body.is_llvm();
+        // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`. An
+        // expression that takes no parameter is the operation itself rather than a lambda over it,
+        // and a copy of it costs what the operation costs, which `is_free_to_duplicate` answers.
+        let (params, body) = expr.destructure_lam_sequence();
+        let is_llvm_lam = !params.is_empty() && body.is_llvm();
         costs.costs.get_mut(name).unwrap().is_llvm_lam = is_llvm_lam;
 
-        // If the expression is a primitive literal, set as `is_primitive_literal`.
+        // If a copy of the expression costs no more than the expression, set as
+        // `is_free_to_duplicate`.
         if expr.is_llvm() {
-            let is_primitive_literal = expr.get_llvm().generator.is_primitve_literal();
-            costs.costs.get_mut(name).unwrap().is_primitive_literal = is_primitive_literal;
+            let is_free_to_duplicate = expr.get_llvm().generator.is_free_to_duplicate();
+            costs.costs.get_mut(name).unwrap().is_free_to_duplicate = is_free_to_duplicate;
         }
 
         // If the expression is instantiated by `Std::fix`, set as `is_std_fix`.
@@ -162,8 +165,8 @@ struct InlineCost {
     is_lambda: bool,
     // Is the expression of the form `|x, y, ...| {llvm}`?
     is_llvm_lam: bool,
-    // Is the expression primitive literal?
-    is_primitive_literal: bool,
+    // Does a copy of the expression cost no more than the expression itself?
+    is_free_to_duplicate: bool,
     // Is this expression an alias to another value?
     //
     // Example:
@@ -183,7 +186,7 @@ impl InlineCost {
             is_self_recursive: false,
             is_lambda: false,
             is_llvm_lam: false,
-            is_primitive_literal: false,
+            is_free_to_duplicate: false,
             is_std_fix: false,
             is_alias: false,
         }
@@ -192,13 +195,14 @@ impl InlineCost {
     /// Whether the symbol's expression may be substituted wherever the symbol is named, and not
     /// only where it is called.
     ///
-    /// What qualifies is what costs nothing to hold in several places: a literal, a body that is
-    /// one inline-LLVM operation, and a name that stands for another name.
+    /// What qualifies is what costs nothing to hold in several places: an operation a copy of
+    /// which costs no more than itself, a lambda whose body is one inline-LLVM operation, and a
+    /// name that stands for another name.
     fn inline_at_non_call_site(&self) -> bool {
         if self.is_std_fix {
             return false;
         }
-        if self.is_primitive_literal {
+        if self.is_free_to_duplicate {
             // TODO: Allow (not only literals but) constant primitives to be inlined too.
             return true;
         }
@@ -215,7 +219,6 @@ impl InlineCost {
         // NOTE
         // * Even values with simple types should not be inlined if the computation is complex.
         // * Values created using FFI_CALL are heavy.
-        // * Boxed types and Strings also increase memory allocation when inlined, such as string literals.
     }
 
     /// Whether the symbol's expression may be substituted where the symbol is called.

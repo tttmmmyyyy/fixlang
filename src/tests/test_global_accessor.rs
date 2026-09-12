@@ -303,3 +303,46 @@ pub fn test_a_global_read_from_another_unit_costs_no_call() {
         remaining_calls.join("\n")
     );
 }
+
+/// A program that names one global string from three places.
+///
+/// Building the literal allocates a buffer and copies the bytes into it, so a global whose body is
+/// a literal costs one allocation where it is named once and three where it is named three times.
+const STRING_GLOBAL_SOURCE: &str = r#"
+    module Main;
+
+    greeting : String;
+    greeting = "hello";
+
+    first : I64;
+    first = greeting.get_bytes.get_size;
+
+    second : I64;
+    second = greeting.get_bytes.@(0).to_I64;
+
+    third : I64;
+    third = greeting.get_bytes.@(1).to_I64;
+
+    main : IO ();
+    main = println((first + second + third).to_string);
+"#;
+
+/// The literal's construction, as the RC IR dump names it.
+const GREETING_BUF: &str = "string_buf(\"hello\")";
+
+#[test]
+fn test_a_global_string_is_built_once_however_many_names_it() {
+    let dump = crate::tests::test_util::build_run_and_read_rc_ir(
+        STRING_GLOBAL_SOURCE,
+        "max",
+        "211",
+        "a global string named from three places",
+    );
+    let built = dump.matches(GREETING_BUF).count();
+    assert_eq!(
+        built, 1,
+        "the literal of a global is built {} times, once for the global and once more wherever \
+         its body was put; the dump is:\n{}",
+        built, dump
+    );
+}

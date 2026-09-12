@@ -920,7 +920,7 @@ impl LLVMGen for InlineLLVMIntLit {
         vec![]
     }
 
-    fn is_primitve_literal(&self) -> bool {
+    fn is_free_to_duplicate(&self) -> bool {
         true
     }
 
@@ -974,7 +974,7 @@ impl LLVMGen for InlineLLVMFloatLit {
         vec![]
     }
 
-    fn is_primitve_literal(&self) -> bool {
+    fn is_free_to_duplicate(&self) -> bool {
         true
     }
 
@@ -1016,7 +1016,7 @@ impl LLVMGen for InlineLLVMNullPtrLit {
         vec![]
     }
 
-    fn is_primitve_literal(&self) -> bool {
+    fn is_free_to_duplicate(&self) -> bool {
         true
     }
 
@@ -1115,10 +1115,6 @@ impl LLVMGen for InlineLLVMStringBuf {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![]
-    }
-
-    fn is_primitve_literal(&self) -> bool {
-        true
     }
 
     // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -9189,6 +9185,11 @@ impl LLVMGen for InlineLLVMIOStateUnsafeCreate {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![]
+    }
+
+    // An `IOState` is an unboxed value with no field, so making one allocates nothing.
+    fn is_free_to_duplicate(&self) -> bool {
+        true
     }
 
     fn result_locality(

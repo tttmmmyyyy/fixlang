@@ -58,8 +58,12 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// its literal there instead.
     fn name(&self) -> String;
 
-    /// Whether this op is a primitive literal.
-    fn is_primitve_literal(&self) -> bool {
+    /// Whether holding this op's result in several places costs no more than holding it in one,
+    /// so that the optimizer may put a copy of the op wherever the value is named.
+    ///
+    /// A literal that evaluates to a scalar qualifies. One that allocates does not: a copy of it at
+    /// each name is an allocation at each name.
+    fn is_free_to_duplicate(&self) -> bool {
         false
     }
 
