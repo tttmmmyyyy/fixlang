@@ -9187,7 +9187,7 @@ impl LLVMGen for InlineLLVMIOStateUnsafeCreate {
         vec![]
     }
 
-    // An `IOState` is an unboxed value with no field, so making one allocates nothing.
+    /// An `IOState` is an unboxed value with no field, so making one allocates nothing.
     fn is_free_to_duplicate(&self) -> bool {
         true
     }

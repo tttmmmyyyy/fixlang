@@ -40,9 +40,10 @@ const MAX_ROUNDS: usize = 10;
 /// program stops changing or `MAX_ROUNDS` rounds have passed. A global that nothing names, and that
 /// is neither the entry point nor exported, is dropped along the way.
 ///
-/// A primitive literal, and a global that is one name standing for another, go wherever the name
-/// occurs; a lambda small enough (`INLINE_COST_THRESHOLD`) and one wrapping an inline-LLVM operation
-/// go into the calls of it. A body that calls itself stays where it is.
+/// A global whose body is an operation a copy of which costs no more than the operation itself
+/// (`is_free_to_duplicate`), and a global that is one name standing for another, go wherever the
+/// name occurs; a lambda small enough (`INLINE_COST_THRESHOLD`) and one wrapping an inline-LLVM
+/// operation go into the calls of it. A body that calls itself stays where it is.
 pub fn run(prg: &mut Program) {
     let mut skip_symbols = Set::default();
     for _ in 0..MAX_ROUNDS {
@@ -126,8 +127,8 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
 
         let expr = sym.expr.as_ref().unwrap();
         // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`. An
-        // expression that takes no parameter is the operation itself rather than a lambda over it,
-        // and a copy of it costs what the operation costs, which `is_free_to_duplicate` answers.
+        // expression that takes no parameter is the operation itself, and a copy of it costs what
+        // the operation costs, which `is_free_to_duplicate` answers.
         let (params, body) = expr.destructure_lam_sequence();
         let is_llvm_lam = !params.is_empty() && body.is_llvm();
         costs.costs.get_mut(name).unwrap().is_llvm_lam = is_llvm_lam;
@@ -165,7 +166,7 @@ struct InlineCost {
     is_lambda: bool,
     // Is the expression of the form `|x, y, ...| {llvm}`?
     is_llvm_lam: bool,
-    // Does a copy of the expression cost no more than the expression itself?
+    /// Does a copy of the expression cost no more than the expression itself?
     is_free_to_duplicate: bool,
     // Is this expression an alias to another value?
     //
@@ -203,7 +204,7 @@ impl InlineCost {
             return false;
         }
         if self.is_free_to_duplicate {
-            // TODO: Allow (not only literals but) constant primitives to be inlined too.
+            // TODO: Let an expression of primitive type whose value is constant qualify here too.
             return true;
         }
         if self.is_self_recursive {

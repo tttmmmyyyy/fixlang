@@ -351,6 +351,11 @@ const GREETING_BUF: &str = "string_buf(\"hello\")";
 /// The global the program names, as the RC IR dump spells it, before the suffix the compiler adds.
 const GREETING_GLOBAL: &str = "Main::greeting";
 
+/// A global whose body allocates stays in the global, and every name reads it from there.
+///
+/// Building a string literal allocates a buffer and copies the bytes into it, so a copy of the body
+/// at each name is an allocation at each name. The program names `greeting` from three places, and
+/// the RC IR dump holds one construction of the literal.
 #[test]
 fn test_a_global_string_is_built_once_however_many_places_name_it() {
     let dump = build_run_and_read_rc_ir(
@@ -459,8 +464,10 @@ const IO_ACTIONS_SOURCE: &str = r#"
     );
 "#;
 
-/// The making of an `IOState`, and the `Std` global that makes one, as the RC IR dump names them.
+/// The making of an `IOState`, as the RC IR dump names it.
 const IOSTATE_CREATE: &str = "iostate_create";
+
+/// The `Std` global that makes an `IOState`, as the RC IR dump spells it.
 const IOSTATE_GLOBAL: &str = "Std::IO::IOState::_unsafe_create";
 
 /// An `IOState` is made where it is used.
