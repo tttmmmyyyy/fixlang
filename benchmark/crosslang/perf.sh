@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Split accesses and cycles for the binaries `build.sh` produced.
 #
-# A load or store that crosses a 64-byte cache line costs the load/store unit twice, and
-# cachegrind's model cannot express it: the instruction count is the same either way. The
+# A load or store that crosses a 64-byte cache line costs the load/store unit twice, and an
+# instruction count has no notion of it: the count is the same either way. The
 # split count is deterministic, so this runs on a busy machine; the cycle count beside it
 # is not, and is only worth reading when the machine is idle.
 #

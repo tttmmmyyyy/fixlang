@@ -163,9 +163,8 @@ main = (
     let log = log.add_row;
     let log = log.set(_COMMIT_HASH, log.@size - 1, commit_hash);
 
-    // The processor the row was measured on. The cachegrind columns do not depend on it,
-    // but the counters read from the hardware do, so a row from another machine cannot be
-    // compared with its neighbours on those.
+    // The processor the row was measured on. Every column of a case is read from its counters,
+    // so a row from another machine cannot be compared with its neighbours.
     let (cpu, _, cpu_code) = *["python3", "perf_counters.py", "--cpu"].ez_run_oec(config);
     let log = if cpu_code != 0_U8 { log } else {
         log.set("cpu", log.@size - 1, cpu.strip_spaces)
@@ -207,57 +206,39 @@ main = (
     // columns mean nothing without it.
     let (log, max_contention) = *dirs.fold_m((log, 0.0), |dir, (log, max_contention)|
         ez_cd(config, dir);;
-        let bench = *["python3", "../../cachegrind-benchmarking/cachegrind.py", "./a.out"].ez_run_o(config);
-        // Get the last line
-        let bench = bench.strip_spaces.split("\n").to_array.get_last;
-        if bench.is_none {
-            eprintln("error: No benchmark result found in " + dir);;
-            exit(1)
-        };
-        let bench = bench.as_some;
-        // Split by comma to get "inst", "mem" and "ram".
-        let cachegrind_counts = bench.split(",").to_array;
-        if cachegrind_counts.@size != 3 {
-            eprintln("error: cachegrind reported \"" + bench + "\" for " + dir);;
-            exit(1)
-        };
         let case_name = dir;
-        let inst = case_name + "-inst";
-        let mem = case_name + "-mem";
-        let ram = case_name + "-ram";
-        // Add to the log. `-ram` counts the accesses that reached main memory: it separates a
-        // case whose cycle count another program can move from a case where it cannot, and the
-        // program decides it, so it reads the same however busy the machine is.
-        let log = log.set(inst, log.@size - 1, cachegrind_counts.@(0));
-        let log = log.set(mem, log.@size - 1, cachegrind_counts.@(1));
-        let log = log.set(ram, log.@size - 1, cachegrind_counts.@(2));
-        // Two things the instruction count cannot express. `-splits` counts loads and stores
-        // that crossed a cache-line boundary, which cost real time and which cachegrind's
-        // cache model has no notion of. `-cycles` counts what the machine actually took, so
-        // that a change to code layout or branch density -- where the instruction count and
-        // the time diverge -- shows up somewhere in this log.
+        // Every column of a case comes from one reading of the hardware counters. `-inst` counts
+        // the instructions the program retired, which is the program's own figure and reaches the
+        // log whatever the machine was doing. `-ram` counts the accesses that reached main memory:
+        // it separates a case whose cycle count another program can move from a case where it
+        // cannot. `-splits` counts loads and stores that crossed a cache-line boundary, which cost
+        // real time and which an instruction count has no notion of. `-cycles` counts what the
+        // machine actually took, so that a change to code layout or branch density -- where the
+        // instruction count and the time diverge -- shows up somewhere in this log.
         //
-        // Both are read on every run. The cycle count survives a machine with other work on it
-        // when that work reached neither the core nor the cache: `perf_counters.py` runs on one
-        // thread of a core and keeps the windows the other thread stayed out of, and it reads
-        // the case's own `-ram` count to say whether the shared cache could have cost it. It
-        // leaves the field empty where either condition fails. The `contention` column says how
-        // much of the machine the run that produced this row had.
-        // On a machine without the counters both columns stay empty and the run carries on.
+        // The cycle count is the one column the rest of the machine can move, and it survives a
+        // machine with other work on it when that work reached neither the core nor the cache:
+        // `perf_counters.py` runs on one thread of a core and keeps the windows the other thread
+        // stayed out of, and it drops the count of a program that reaches main memory often enough
+        // for the shared cache to cost it. It leaves that field empty where either condition
+        // fails. The `contention` column says how much of the machine the run had.
+        //
+        // On a machine without the counters every column stays empty and the run carries on.
         let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "--windows", _WINDOWS,
-            "--ram-accesses", cachegrind_counts.@(2), "--instructions", cachegrind_counts.@(0),
             "./a.out"].ez_run_oec(config);
         let (log, case_contention) = if perf_code != 0_U8 { (log, 0.0) } else {
             let perf = perf.strip_spaces.split(",").to_array;
-            if perf.@size != 3 {
+            if perf.@size != 5 {
                 undefined("error: perf_counters.py reported \"" + perf.to_iter.join(",")
                     + "\" for " + dir)
             };
-            let log = log.set(case_name + "-splits", log.@size - 1, perf.@(0));
-            let log = log.set(case_name + "-cycles", log.@size - 1, perf.@(1));
+            let log = log.set(case_name + "-inst", log.@size - 1, perf.@(0));
+            let log = log.set(case_name + "-ram", log.@size - 1, perf.@(1));
+            let log = log.set(case_name + "-splits", log.@size - 1, perf.@(2));
+            let log = log.set(case_name + "-cycles", log.@size - 1, perf.@(3));
             // A figure the harness cannot make out leaves the row's `contention` at whatever
             // the other cases reported, which is the honest reading: this case said nothing.
-            (log, perf.@(2).read_number)
+            (log, perf.@(4).read_number)
         };
         let max_contention = max(max_contention, case_contention);
         // A case may carry `ref.c` and `ref.rs`: the same program on the same input, read
@@ -269,14 +250,15 @@ main = (
             let (ref_out, _, ref_code) = *["python3", "../../reference.py", "measure", lang, "--windows", _WINDOWS].ez_run_oec(config);
             if ref_code != 0_U8 { (log, max_contention).pure };
             let ref_out = ref_out.strip_spaces.split(",").to_array;
-            if ref_out.@size < 6 { (log, max_contention).pure };
+            if ref_out.@size < 5 { (log, max_contention).pure };
+            // A machine without the counters leaves every field empty, and a column of empty
+            // cells is one the log is better off without.
+            if ref_out.@(0) == "" { (log, max_contention).pure };
             let log = log.set(case_name + "-inst-" + lang, log.@size - 1, ref_out.@(0));
-            let log = log.set(case_name + "-mem-" + lang, log.@size - 1, ref_out.@(1));
-            let log = log.set(case_name + "-ram-" + lang, log.@size - 1, ref_out.@(2));
-            if ref_out.@(3) == "" { (log, max_contention).pure };
-            let log = log.set(case_name + "-splits-" + lang, log.@size - 1, ref_out.@(3));
-            let log = log.set(case_name + "-cycles-" + lang, log.@size - 1, ref_out.@(4));
-            (log, max(max_contention, ref_out.@(5).read_number)).pure
+            let log = log.set(case_name + "-ram-" + lang, log.@size - 1, ref_out.@(1));
+            let log = log.set(case_name + "-splits-" + lang, log.@size - 1, ref_out.@(2));
+            let log = log.set(case_name + "-cycles-" + lang, log.@size - 1, ref_out.@(3));
+            (log, max(max_contention, ref_out.@(4).read_number)).pure
         );
         // Change back to the parent directory.
         ez_cd(config, "..");;
@@ -310,14 +292,14 @@ main = (
         write_file_string(_LOG_FILE_PATH, log.serialize).try(exit_with_msg(1))
     );;
 
-    // Print the commit hash and this run's cachegrind costs, and those alone: `run_benchmark`
-    // in `passes_optimizer.py` reads this line back and takes every field after the hash as a
-    // number to compare one LLVM pass sequence against another, so every field here must be
-    // a number that a pass sequence moves.
+    // Print the commit hash and this run's instruction counts, and those alone, so that a run
+    // can be read against the one before it without opening the log. The reference languages are
+    // left out: their columns carry the language last, and a reference does not move with a Fix
+    // commit.
     let header = log.@(0);
     let latest = log.@(log.@size - 1);
     let costs = Iterator::range(0, header.@size).filter(|i|
-        i == 0 || header.@(i).ends_with("-inst") || header.@(i).ends_with("-mem")
+        i == 0 || header.@(i).ends_with("-inst")
     ).map(|i| latest.@(i));
     costs.join(",").println;;
     

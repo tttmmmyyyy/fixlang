@@ -32,8 +32,7 @@ or a reference that computes something else becomes a number on the chart instea
 failure.
 
 Only add counterparts to a case whose work dwarfs process startup. Startup is around 0.3 ms
-and is included in the wall-clock figure, and cachegrind counts it in the instruction figure
-as well; the cases carrying counterparts today all run for hundreds of millions of
+and is included in the wall-clock figure, and the instruction figure counts it as well; the cases carrying counterparts today all run for hundreds of millions of
 instructions, where that is under a percent.
 
 ## Counting allocations
@@ -51,7 +50,7 @@ LD_PRELOAD=$PWD/allocations.so ./bin/fannkuch_fix
 
 **Instruction counts** (from `../speedtest`) are deterministic: the same program and input
 give the same number whatever else the machine is doing. Fix is built without avx512 there,
-because cachegrind cannot simulate it, and the counterparts are built the same way.
+and the counterparts are built the same way.
 
 **Wall time** is what the public sites report, and the instruction count does not predict it.
 `fannkuch` executes 2.20x C's instructions and takes 1.08x its time. Both numbers are worth

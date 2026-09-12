@@ -16,8 +16,8 @@ Cycles are not deterministic, so the measurement is built to survive that:
 - A candidate has to beat the incumbent by more than `IMPROVEMENT`, which sits above the noise the
   `--noise` mode measures, so that noise alone cannot promote a pipeline.
 
-Perf costs about as much as running the program, where cachegrind costs fifty times that, so the
-search covers far more candidates per hour than the instruction-count version did.
+A measurement costs about as much as running the program once, so a search covers a wide field of
+candidates in an hour.
 
     python3 passes_optimizer.py                 # search until a line is typed on stdin
     python3 passes_optimizer.py --noise         # measure the noise floor and exit

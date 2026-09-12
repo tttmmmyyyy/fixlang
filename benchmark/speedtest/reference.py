@@ -1,9 +1,9 @@
 """Build and measure a case's C or Rust counterpart the way the case itself is measured.
 
 A case may carry `ref.c` and `ref.rs`: the same program on the same input, checking the
-same answer. Measured under the same cachegrind and the same hardware counters, they give
-the Fix line a reference to be read against -- how far the language is from C on that
-program, tracked over time rather than sampled once.
+same answer. Read with the same hardware counters, they give the Fix line a reference to be
+read against -- how far the language is from C on that program, tracked over time rather
+than sampled once.
 
 Building and measuring are separate commands so that the harness can get every build out
 of the way before it reads a counter: a cycle count other work could have moved is dropped,
@@ -15,9 +15,9 @@ language asked for.
     python3 reference.py build <c|rust>
     python3 reference.py measure <c|rust> [--windows N]
 
-`measure` prints `<inst>,<mem>,<ram>,<splits>,<cycles>,<contention>`. The last three come back
-empty, empty and `0.00` where the hardware counters are out of reach, as they do for the case
-itself.
+`measure` prints `<inst>,<ram>,<splits>,<cycles>,<contention>`. Every field but the last comes
+back empty where the hardware counters are out of reach, and the last `0.00`, as they do for the
+case itself.
 """
 
 import subprocess
@@ -25,12 +25,11 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-CACHEGRIND = HERE / "cachegrind-benchmarking" / "cachegrind.py"
 PERF_COUNTERS = HERE / "perf_counters.py"
 
-# The Fix case is built for this host with avx512 left out, since cachegrind cannot
-# simulate it. The counterparts get the same deal, so the comparison is between the
-# languages rather than between the instruction sets they were allowed to use.
+# The Fix case is built for this host with avx512 left out. The counterparts get the same deal,
+# so the comparison is between the languages rather than between the instruction sets they were
+# allowed to use.
 BUILD = {
     "c": (["gcc", "-O3", "-march=native", "-mno-avx512f", "ref.c", "-o", "ref_c", "-lm"], "ref.c", "ref_c"),
     "rust": (["rustc", "-O", "-C", "target-cpu=native", "-C", "target-feature=-avx512f",
@@ -58,7 +57,7 @@ def build(language):
 
 def measure(language, windows):
     """The counters for the counterpart of `language`, as one
-    `<inst>,<mem>,<ram>,<splits>,<cycles>,<contention>` line.
+    `<inst>,<ram>,<splits>,<cycles>,<contention>` line.
 
     # Arguments
     * `windows` - how many windows of runs the hardware counters are read over; the cycle
@@ -66,27 +65,17 @@ def measure(language, windows):
     """
     _source, binary = source_and_binary(language)
     # The counterpart checks its own answer, so a reference that drifted away from the case
-    # fails here instead of quietly becoming a number on the chart.
-    simulated = subprocess.run(["python3", str(CACHEGRIND), f"./{binary}"],
-                               capture_output=True, text=True)
-    if simulated.returncode != 0:
-        sys.exit(f"measuring {binary} failed:\n{simulated.stderr.strip()}")
-    cachegrind = simulated.stdout.strip().splitlines()[-1]
-    simulated_counts = cachegrind.split(",")
-    if len(simulated_counts) != 3:
-        sys.exit(f"measuring {binary} produced \"{cachegrind}\"")
-    instructions, _memory_accesses, ram_accesses = simulated_counts
-    # A machine without the counters leaves these three fields the way the case's own
-    # measurement leaves them, so a row is short of the same columns on both lines.
+    # fails here instead of quietly becoming a number on the chart. Reading the answer before
+    # the counters keeps this apart from a machine that has no counters to read.
+    answered = subprocess.run([f"./{binary}"], capture_output=True, text=True)
+    if answered.returncode != 0:
+        sys.exit(f"{binary} exited with {answered.returncode}:\n{answered.stderr.strip()}")
+    # A machine without the counters leaves every field the way the case's own measurement
+    # leaves it, so a row is short of the same columns on both lines.
     counted = subprocess.run(
-        ["python3", str(PERF_COUNTERS), "--windows", str(windows),
-         # What the counterpart asks of main memory decides whether its cycle count survives
-         # a busy machine, the same way it does for the case.
-         "--ram-accesses", ram_accesses, "--instructions", instructions,
-         f"./{binary}"],
+        ["python3", str(PERF_COUNTERS), "--windows", str(windows), f"./{binary}"],
         capture_output=True, text=True)
-    hardware = counted.stdout.strip() if counted.returncode == 0 else ",,0.00"
-    return f"{cachegrind},{hardware}"
+    return counted.stdout.strip() if counted.returncode == 0 else ",,,,0.00"
 
 
 def main():

@@ -2,6 +2,25 @@
 
 Newer is above.
 
+**Rows measured before the hardware counters replaced cachegrind are not comparable with rows
+after it, and the `-mem` column ends there.** The instruction and main-memory columns were read
+from cachegrind's simulation and are now read from the counters, beside the cycle and split
+columns that already were. Cachegrind charges a program for instructions it never executes:
+`push_back`'s loop is nine instructions per iteration, and blanking the three-instruction block
+its always-taken branch jumps over -- a block gdb finds unreachable, and whose removal leaves the
+hardware count where it was -- drops the cachegrind figure by exactly three per iteration. Twelve
+of the fifty-six cases sat more than 1% from what the hardware counted, `push_back` by 30% and two
+cases by several times, and one compiler change read under both metrics moved in opposite
+directions. The `-mem` column held cachegrind's weighted estimate of what the memory traffic cost,
+which the cycle column answers directly.
+
+**Fewer cycle counts survive a busy machine.** A count read while other work took more than half a
+core is kept only for a program that reaches main memory seldom enough for the shared cache not to
+cost it, and the rate that decides it is now the hardware's rather than cachegrind's. Read against
+four processes each walking twice the last level cache, every case below the new rate came within
+3.5% of its undisturbed cycles and every case above it took between 1.08 and 7.8 times them --
+among them cases the old rate let through.
+
 **Rows measured before `cachegrind.py` fixed the environment are not comparable with rows after
 it.** Cachegrind counts the dynamic loader and libc start-up along with the program, and both walk
 the environment, so a row carried about 600 instructions per variable the shell that ran the

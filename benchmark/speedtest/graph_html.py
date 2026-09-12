@@ -31,16 +31,13 @@ except ImportError:
 REFERENCE_LANGUAGES = ["c", "rust"]
 
 METRICS = [
-    ("inst", "Cachegrind instructions",
-     "Instructions executed (Ir), from cachegrind's simulation. The same program and input give the "
-     "same number on any machine, whatever else it is doing.", "ratio", "cachegrind"),
-    ("mem", "Cachegrind memory",
-     "Weighted memory-access estimate from cachegrind's cache model (l1 + 5*l3 + 35*ram).",
-     "ratio", "cachegrind"),
-    ("ram", "Cachegrind main-memory accesses",
-     "Accesses that reached main memory, from cachegrind's cache model. The same program and input "
-     "give the same number on any machine, and it is what decides whether that program's cycle "
-     "count survives a machine with other work on it.", "ratio", "cachegrind"),
+    ("inst", "perf instructions",
+     "Instructions the program retired in user mode, from the hardware counters. The same program "
+     "and input give the same number however busy the machine is.", "ratio"),
+    ("ram", "perf main-memory accesses",
+     "Accesses that missed the last level cache and so came from main memory, from the hardware "
+     "counters, as the lowest of several runs. It is what decides whether that program's cycle "
+     "count survives a machine with other work on it.", "ratio"),
     ("cycles", "perf cycles",
      "Core cycles the program spent in user mode, from the hardware counters, as the lowest of "
      "several windows of runs. This is the only column here that is not deterministic. Other work "
@@ -49,11 +46,11 @@ METRICS = [
      "proportion to how much of its data comes from main memory. Where either of them could have "
      "moved a reading, the cell is left empty, so the series has gaps; the contention figure beside "
      "each commit says how much of the machine the run had.",
-     "ratio", "perf"),
+     "ratio"),
     ("splits", "perf splits",
-     "Loads and stores that crossed a cache-line boundary, from the hardware counters. Cachegrind's "
-     "model has no notion of these, and they cost real time; the count is deterministic and reaches "
-     "zero once the data is aligned, so it is plotted as an absolute count.", "absolute", "perf"),
+     "Loads and stores that crossed a cache-line boundary, from the hardware counters. An "
+     "instruction count has no notion of these, and they cost real time; the count reaches zero "
+     "once the data is aligned, so it is plotted as an absolute count.", "absolute"),
 ]
 
 
@@ -134,7 +131,7 @@ def build_data(log_path, history_path, latest_n):
     # reference beside it. A reference does not move with a Fix commit, so the last value
     # measured is the one to draw.
     metrics = {}
-    for suffix, label, note, kind, source in METRICS:
+    for suffix, label, note, kind in METRICS:
         series, refs = {}, {}
         for name, i in index.items():
             column = [row[i].strip() if i < len(row) else "" for row in body]
@@ -151,7 +148,7 @@ def build_data(log_path, history_path, latest_n):
                         refs.setdefault(name[: -len(tail)], {})[language] = last
         if series:
             metrics[suffix] = {"label": label, "note": note, "kind": kind,
-                               "source": source, "series": series, "refs": refs}
+                               "series": series, "refs": refs}
 
     return {"commits": commits, "metrics": metrics}
 
@@ -167,10 +164,10 @@ def self_check():
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / "log.csv"
         log.write_text(
-            "commit,cpu,contention,a-inst,a-mem,a-ram,a-splits,a-cycles,b-inst,a-inst-c,"
+            "commit,cpu,contention,a-inst,a-ram,a-splits,a-cycles,b-inst,a-inst-c,"
             "a-inst-rust\n"
-            "1111111111111111111111111111111111111111,Zen,0.10,100,200,3,4,7,50,90,\n"
-            "2222222222222222222222222222222222222222(dirty),Zen,,150,,5,0,,,90,120\n",
+            "1111111111111111111111111111111111111111,Zen,0.10,100,3,4,7,50,90,\n"
+            "2222222222222222222222222222222222222222(dirty),Zen,,150,5,0,,,90,120\n",
             encoding="utf-8",
         )
         history = Path(tmp) / "history.md"
@@ -184,14 +181,13 @@ def self_check():
     assert first["history"] is None, first
     series = {k: v["series"] for k, v in data["metrics"].items()}
     assert series["inst"] == {"a": [100, 150], "b": [50, None]}, series["inst"]
-    assert series["mem"] == {"a": [200, None]}, series["mem"]
     assert series["splits"] == {"a": [4, 0]}, series["splits"]
     assert series["ram"] == {"a": [3, 5]}, series["ram"]
     # A cycle count other work could have moved leaves its cell empty, so the series has gaps.
     assert series["cycles"] == {"a": [7, None]}, series["cycles"]
     assert data["metrics"]["splits"]["kind"] == "absolute"
     assert data["metrics"]["inst"]["refs"] == {"a": {"c": 90, "rust": 120}}, data["metrics"]["inst"]["refs"]
-    assert data["metrics"]["mem"]["refs"] == {}, data["metrics"]["mem"]["refs"]
+    assert data["metrics"]["ram"]["refs"] == {}, data["metrics"]["ram"]["refs"]
 
 
 def main():
@@ -437,13 +433,11 @@ function render() {
                stroke: "var(--border)" }, svg);
   const note = document.getElementById("note");
   note.textContent = metric.note;
-  // A count read from the hardware belongs to the processor that read it.
-  if (metric.source === "perf") {
-    const cpus = [...new Set(DATA.commits.map((c) => c.cpu).filter(Boolean))];
-    if (cpus.length > 1) {
-      note.textContent += ` Measured on more than one processor (${cpus.join("; ")}); `
-        + "counts from different ones do not belong on the same axis.";
-    }
+  // Every count here is read from the hardware, so it belongs to the processor that read it.
+  const cpus = [...new Set(DATA.commits.map((c) => c.cpu).filter(Boolean))];
+  if (cpus.length > 1) {
+    note.textContent += ` Measured on more than one processor (${cpus.join("; ")}); `
+      + "counts from different ones do not belong on the same axis.";
   }
   renderLegend(series);
 }
