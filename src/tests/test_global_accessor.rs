@@ -136,11 +136,30 @@ fn stays_out_of_its_callers(ir: &str, name: &str) -> bool {
     attributes.contains("noinline")
 }
 
-/// How many times `ir` calls the function whose name starts with `name`.
-fn count_calls_to(ir: &str, name: &str) -> usize {
+/// The lines of `ir` that call the function whose name starts with `name`.
+fn calls_to<'a>(ir: &'a str, name: &str) -> Vec<&'a str> {
     ir.lines()
         .filter(|line| line.contains("call") && line.contains(name))
-        .count()
+        .collect()
+}
+
+/// How many times `ir` calls the function whose name starts with `name`.
+fn count_calls_to(ir: &str, name: &str) -> usize {
+    calls_to(ir, name).len()
+}
+
+/// Assert that the optimized IR of the build in `dir` holds no call to `accessor`, the accessor of
+/// the global named `global`.
+fn assert_reading_costs_no_call(dir: &Path, accessor: &str, global: &str) {
+    let optimized_ir = emitted_llvm_ir(dir, EmittedIr::AfterOptimization);
+    let remaining_calls = calls_to(&optimized_ir, accessor);
+    assert!(
+        remaining_calls.is_empty(),
+        "reading `{}` should cost no call, and the optimized IR holds {}:\n{}",
+        global,
+        remaining_calls.len(),
+        remaining_calls.join("\n")
+    );
 }
 
 /// The initializer of a global read from many places is a function of its own, which is left there.
@@ -253,17 +272,7 @@ pub fn test_reading_a_global_in_a_loop_costs_no_call() {
         "the program should read `table` through its accessor"
     );
 
-    let optimized_ir = emitted_llvm_ir(dir, EmittedIr::AfterOptimization);
-    let remaining_calls: Vec<_> = optimized_ir
-        .lines()
-        .filter(|line| line.contains("call") && line.contains(TABLE_ACCESSOR))
-        .collect();
-    assert!(
-        remaining_calls.is_empty(),
-        "reading `table` should cost no call, and the optimized IR holds {}:\n{}",
-        remaining_calls.len(),
-        remaining_calls.join("\n")
-    );
+    assert_reading_costs_no_call(dir, TABLE_ACCESSOR, "table");
 }
 
 /// A global read from a compilation unit that does not own it is read without a call.
@@ -291,17 +300,7 @@ pub fn test_a_global_read_from_another_unit_costs_no_call() {
          exported C function"
     );
 
-    let optimized_ir = emitted_llvm_ir(dir, EmittedIr::AfterOptimization);
-    let remaining_calls: Vec<_> = optimized_ir
-        .lines()
-        .filter(|line| line.contains("call") && line.contains(COUNTER_ACCESSOR))
-        .collect();
-    assert!(
-        remaining_calls.is_empty(),
-        "reading `counter` should cost no call, and the optimized IR holds {}:\n{}",
-        remaining_calls.len(),
-        remaining_calls.join("\n")
-    );
+    assert_reading_costs_no_call(dir, COUNTER_ACCESSOR, "counter");
 }
 
 /// Assert that the RC IR dump opens no global of its own under `name`.

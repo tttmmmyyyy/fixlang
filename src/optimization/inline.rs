@@ -121,33 +121,33 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
 fn calculate_inline_costs(prg: &Program) -> InlineCosts {
     let mut costs = InlineCosts::new();
     for (name, sym) in &prg.symbols {
+        let expr = sym.expr.as_ref().unwrap();
+
         let mut cost_calculator = InlineCostCalculator::new(name.clone());
-        cost_calculator.traverse(&sym.expr.as_ref().unwrap());
+        cost_calculator.traverse(expr);
         costs.add_cost_calculation_result(cost_calculator);
 
-        let expr = sym.expr.as_ref().unwrap();
+        let cost = costs.get_mut(name);
+
         // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`. An
         // expression that takes no parameter is the operation itself, and a copy of it costs what
         // the operation costs, which `is_free_to_duplicate` answers.
         let (params, body) = expr.destructure_lam_sequence();
-        let is_llvm_lam = !params.is_empty() && body.is_llvm();
-        costs.costs.get_mut(name).unwrap().is_llvm_lam = is_llvm_lam;
+        cost.is_llvm_lam = !params.is_empty() && body.is_llvm();
 
         // If a copy of the expression costs no more than the expression, set as
         // `is_free_to_duplicate`.
         if expr.is_llvm() {
-            let is_free_to_duplicate = expr.get_llvm().generator.is_free_to_duplicate();
-            costs.costs.get_mut(name).unwrap().is_free_to_duplicate = is_free_to_duplicate;
+            cost.is_free_to_duplicate = expr.get_llvm().generator.is_free_to_duplicate();
         }
 
         // If the expression is instantiated by `Std::fix`, set as `is_std_fix`.
-        costs.costs.get_mut(name).unwrap().is_std_fix = is_std_fix(name);
+        cost.is_std_fix = is_std_fix(name);
 
         // If the expression is an alias to another global value, set as `is_alias`.
         if expr.is_var() {
-            let var_name = &expr.get_var().name;
-            assert!(var_name.is_global());
-            costs.costs.get_mut(name).unwrap().is_alias = true;
+            assert!(expr.get_var().name.is_global());
+            cost.is_alias = true;
         }
     }
     costs
@@ -257,20 +257,32 @@ impl InlineCosts {
         }
     }
 
-    /// Give `name` an entry of its own if it has none yet, with nothing counted and every flag
-    /// false, for the walks to fill in as they meet the name.
-    fn insert_cost_if_absent(&mut self, name: &FullName) {
-        if !self.costs.contains_key(name) {
-            self.costs.insert(name.clone(), InlineCost::new());
-        }
-    }
-
     /// The cost recorded for the symbol named `name`. `calculate_inline_costs` records one for
     /// every symbol of the program it walks, so every name of that program has one.
     fn get(&self, name: &FullName) -> &InlineCost {
         self.costs
             .get(name)
-            .unwrap_or_else(|| panic!("no inline cost is recorded for `{}`", name.to_string()))
+            .unwrap_or_else(|| Self::no_cost_recorded(name))
+    }
+
+    /// The cost recorded for the symbol named `name`, to write to. Every name the program defines
+    /// has one, as `get` says.
+    fn get_mut(&mut self, name: &FullName) -> &mut InlineCost {
+        self.costs
+            .get_mut(name)
+            .unwrap_or_else(|| Self::no_cost_recorded(name))
+    }
+
+    /// Fail, naming the symbol whose cost was asked for and not found.
+    fn no_cost_recorded(name: &FullName) -> ! {
+        panic!("no inline cost is recorded for `{}`", name.to_string())
+    }
+
+    /// The cost recorded for the symbol named `name`, given an entry of its own with nothing
+    /// counted and every flag false if it has none yet, for the walks to fill in as they meet the
+    /// name.
+    fn get_or_insert(&mut self, name: FullName) -> &mut InlineCost {
+        self.costs.entry(name).or_insert_with(InlineCost::new)
     }
 
     /// How many times the program names the symbol, counted over every expression the walk covered.
@@ -284,13 +296,11 @@ impl InlineCosts {
     fn add_cost_calculation_result(&mut self, cost: InlineCostCalculator) {
         // For each global symbol called from the symbol where `InlineCostCalculator` has been executed, add the call count.
         for (sym, count) in cost.call_count {
-            self.insert_cost_if_absent(&sym);
-            self.costs.get_mut(&sym).unwrap().call_count += count;
+            self.get_or_insert(sym).call_count += count;
         }
 
         // Set other fields for the symbol itself that `InlineCostCalculator` has traversed.
-        self.insert_cost_if_absent(&cost.name);
-        let inline_cost = self.costs.get_mut(&cost.name).unwrap();
+        let inline_cost = self.get_or_insert(cost.name);
         inline_cost.complexity = cost.complexity;
         inline_cost.is_self_recursive = cost.is_refer_self;
         inline_cost.is_lambda = cost.is_lambda;
@@ -324,11 +334,7 @@ impl InlineCostCalculator {
     fn on_find_usage_of_global_name(&mut self, used_name: &FullName) {
         // If calling a global symbol, increase the call count.
         assert!(used_name.is_global());
-        if let Some(count) = self.call_count.get_mut(used_name) {
-            *count += 1;
-        } else {
-            self.call_count.insert(used_name.clone(), 1);
-        }
+        *self.call_count.entry(used_name.clone()).or_insert(0) += 1;
 
         // If it calls itself, set `is_call_self`.
         if used_name == &self.name {
@@ -574,8 +580,7 @@ impl<'c> ExprVisitor for Inliner<'c> {
             return EndVisitResult::unchanged(expr);
         }
 
-        let cost = self.costs.costs.get(var_name).unwrap();
-        if !cost.inline_at_non_call_site() {
+        if !self.costs.get(var_name).inline_at_non_call_site() {
             return EndVisitResult::unchanged(expr);
         }
 
@@ -614,13 +619,7 @@ impl<'c> ExprVisitor for Inliner<'c> {
         if func_name.is_local() {
             return EndVisitResult::unchanged(expr);
         }
-        if !self
-            .costs
-            .costs
-            .get(func_name)
-            .unwrap()
-            .inline_at_call_site()
-        {
+        if !self.costs.get(func_name).inline_at_call_site() {
             return EndVisitResult::unchanged(expr);
         }
         let func_expr = self.symbols.get(func_name).unwrap().expr.as_ref().unwrap();
