@@ -309,15 +309,15 @@ pub fn test_a_global_read_from_another_unit_costs_no_call() {
 /// A body put at each of the names that read it leaves the program nothing left to keep, so the
 /// dump declares no global there.
 fn assert_no_global_stands_for(dump: &str, name: &str) {
-    let standing: Vec<_> = dump
+    let standing_globals: Vec<_> = dump
         .lines()
         .filter(|line| line.starts_with("global ") && line.contains(name))
         .collect();
     assert!(
-        standing.is_empty(),
+        standing_globals.is_empty(),
         "`{}` should cost no global of its own, and the dump opens {}:\n{}",
         name,
-        standing.join("\n"),
+        standing_globals.join("\n"),
         dump
     );
 }
@@ -360,7 +360,7 @@ fn test_a_global_string_is_built_once_however_many_names_it() {
         "a global string named from three places",
     );
 
-    let built = dump.matches(GREETING_BUF).count();
+    let constructions = dump.matches(GREETING_BUF).count();
 
     // The places the property is about: the value reaches a reader as a name of the global or as a
     // copy of the construction, so this counts the readers either way, and falls only where a
@@ -369,7 +369,7 @@ fn test_a_global_string_is_built_once_however_many_names_it() {
         .lines()
         .filter(|line| line.contains(GREETING) && !line.starts_with("global "))
         .count()
-        + built;
+        + constructions;
     assert!(
         places > 1,
         "the program should hold `greeting` in more than one place, and it holds it in {}:\n{}",
@@ -378,10 +378,10 @@ fn test_a_global_string_is_built_once_however_many_names_it() {
     );
 
     assert_eq!(
-        built, 1,
+        constructions, 1,
         "the literal of a global is built {} times, once for the global and once more wherever \
          its body was put; the dump is:\n{}",
-        built, dump
+        constructions, dump
     );
 }
 
@@ -433,13 +433,13 @@ fn test_a_global_scalar_literal_is_put_at_every_name() {
     );
 
     for (global, literal) in SCALAR_GLOBALS {
-        let built = dump.matches(literal).count();
+        let constructions = dump.matches(literal).count();
         assert!(
-            built > 1,
+            constructions > 1,
             "`{}` should be at each of the two names of `{}`, and the dump holds {}:\n{}",
             literal,
             global,
-            built,
+            constructions,
             dump
         );
 
