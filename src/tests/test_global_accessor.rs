@@ -121,7 +121,7 @@ fn sole_body(ir: &str, name: &str) -> String {
 }
 
 /// Whether the function whose name starts with `name` carries the `noinline` attribute.
-fn stays_out_of_its_callers(ir: &str, name: &str) -> bool {
+fn is_kept_out_of_its_callers(ir: &str, name: &str) -> bool {
     let signature = sole_body(ir, name)
         .lines()
         .next()
@@ -198,7 +198,7 @@ pub fn test_the_initializer_of_a_shared_global_sits_outside_the_accessor() {
         accessor
     );
     assert!(
-        stays_out_of_its_callers(&ir, TABLE_INITIALIZER),
+        is_kept_out_of_its_callers(&ir, TABLE_INITIALIZER),
         "the initializer of `table` should stay out of the accessor"
     );
 }
@@ -221,7 +221,7 @@ pub fn test_the_initializer_of_a_global_read_once_stays_where_its_reader_sees_it
     );
 
     assert!(
-        !stays_out_of_its_callers(&ir, READ_ONCE_INITIALIZER),
+        !is_kept_out_of_its_callers(&ir, READ_ONCE_INITIALIZER),
         "the initializer of `read_once` should be free to join the accessor"
     );
 }
@@ -318,7 +318,7 @@ pub fn test_a_global_read_from_another_unit_costs_no_call() {
 ///
 /// A body put at each of the names that read it leaves the program nothing left to keep, so the
 /// dump declares no global there.
-fn assert_no_global_stands_for(dump: &str, name: &str) {
+fn assert_no_global_is_kept_for(dump: &str, name: &str) {
     let standing_globals: Vec<_> = dump
         .lines()
         .filter(|line| line.starts_with("global ") && line.contains(name))
@@ -459,7 +459,7 @@ fn test_a_global_scalar_literal_is_put_at_every_name() {
             dump
         );
 
-        assert_no_global_stands_for(&dump, global);
+        assert_no_global_is_kept_for(&dump, global);
     }
 }
 
@@ -502,5 +502,5 @@ fn test_an_iostate_is_made_where_it_is_used() {
         dump
     );
 
-    assert_no_global_stands_for(&dump, IOSTATE_GLOBAL);
+    assert_no_global_is_kept_for(&dump, IOSTATE_GLOBAL);
 }

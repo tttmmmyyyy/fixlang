@@ -14058,8 +14058,7 @@ main = (
 /// array to every reader and a write to it clones. The test reads both bytes, so a wrong answer
 /// fails it as loudly as a write that never landed.
 ///
-/// The behavior it holds is shared with its neighbours: a global whose every reader got a buffer of
-/// its own would answer the same. What it refuses is a write through one reader reaching another.
+/// What it refuses is a write through one reader of a global reaching another reader of it.
 #[test]
 pub fn test_a_write_to_the_bytes_of_a_global_string_leaves_the_global_alone() {
     let source = r#"

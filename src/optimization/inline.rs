@@ -123,6 +123,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
 /// names it, and the shapes of that expression which decide where it may be inlined.
 fn calculate_inline_costs(prg: &Program) -> InlineCosts {
     let mut costs = InlineCosts::new();
+    let type_env = prg.type_env();
     for (name, sym) in &prg.symbols {
         let expr = sym.expr.as_ref().unwrap();
 
@@ -141,7 +142,19 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
         // If a copy of the expression costs no more than the expression, set as
         // `is_free_to_duplicate`.
         if expr.is_llvm() {
-            cost.is_free_to_duplicate = expr.get_llvm().generator.is_free_to_duplicate();
+            let generator = &expr.get_llvm().generator;
+            let is_free_to_duplicate = generator.is_free_to_duplicate();
+            // An operation whose result holds a boxed part allocates that part, so a copy of it
+            // allocates once more. The declaration and the operation agree only where the type of
+            // what it answers with is unboxed throughout.
+            assert!(
+                !is_free_to_duplicate || sym.ty.is_fully_unboxed(&type_env),
+                "the inline-LLVM operation `{}` declares a copy of itself free while it answers \
+                 with `{}`, which holds a boxed part",
+                generator.name(),
+                sym.ty.to_string()
+            );
+            cost.is_free_to_duplicate = is_free_to_duplicate;
         }
 
         // If the expression is instantiated by `Std::fix`, set as `is_std_fix`.
@@ -200,7 +213,7 @@ impl InlineCost {
     /// What qualifies is what costs nothing to hold in several places: an operation a copy of
     /// which costs no more than itself, a lambda whose body is one inline-LLVM operation, and a
     /// name that stands for another name.
-    fn inline_at_non_call_site(&self) -> bool {
+    fn may_be_inlined_at_non_call_site(&self) -> bool {
         if self.is_std_fix {
             return false;
         }
@@ -214,7 +227,7 @@ impl InlineCost {
         if self.is_llvm_lam {
             return true;
         }
-        if !self.is_self_recursive && self.is_alias {
+        if self.is_alias {
             return true;
         }
         return false;
@@ -228,7 +241,7 @@ impl InlineCost {
     /// A body that calls itself is left alone, since substituting it leaves the call it makes to
     /// itself; so is `Std::fix`, whose defunctionalization matches the shape it is written in. What
     /// is left is judged by size, against `INLINE_COST_THRESHOLD`.
-    fn inline_at_call_site(&self) -> bool {
+    fn may_be_inlined_at_call_site(&self) -> bool {
         if self.is_std_fix {
             return false;
         }
@@ -264,7 +277,7 @@ impl InlineCosts {
     fn get(&self, name: &FullName) -> &InlineCost {
         self.costs
             .get(name)
-            .unwrap_or_else(|| Self::no_cost_recorded(name))
+            .unwrap_or_else(|| Self::panic_no_cost_recorded(name))
     }
 
     /// The cost recorded for the symbol named `name`, to write to. Every name the program defines
@@ -272,11 +285,11 @@ impl InlineCosts {
     fn get_mut(&mut self, name: &FullName) -> &mut InlineCost {
         self.costs
             .get_mut(name)
-            .unwrap_or_else(|| Self::no_cost_recorded(name))
+            .unwrap_or_else(|| Self::panic_no_cost_recorded(name))
     }
 
     /// Fail, naming the symbol whose cost was asked for and not found.
-    fn no_cost_recorded(name: &FullName) -> ! {
+    fn panic_no_cost_recorded(name: &FullName) -> ! {
         panic!("no inline cost is recorded for `{}`", name.to_string())
     }
 
@@ -592,7 +605,7 @@ impl<'c> ExprVisitor for Inliner<'c> {
             return EndVisitResult::unchanged(expr);
         }
 
-        if !self.costs.get(var_name).inline_at_non_call_site() {
+        if !self.costs.get(var_name).may_be_inlined_at_non_call_site() {
             return EndVisitResult::unchanged(expr);
         }
 
@@ -631,7 +644,7 @@ impl<'c> ExprVisitor for Inliner<'c> {
         if func_name.is_local() {
             return EndVisitResult::unchanged(expr);
         }
-        if !self.costs.get(func_name).inline_at_call_site() {
+        if !self.costs.get(func_name).may_be_inlined_at_call_site() {
             return EndVisitResult::unchanged(expr);
         }
         let func_expr = self.symbols.get(func_name).unwrap().expr.as_ref().unwrap();
