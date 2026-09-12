@@ -36,7 +36,8 @@ NO_COUNTERPART = 2
 
 # The Fix case is built for this host with every feature it has. The counterparts get the same
 # deal, so the comparison is between the languages rather than between the instruction sets they
-# were allowed to use.
+# were allowed to use. `../crosslang/build.sh` builds the same three programs for its own
+# question, and spells the same two recipes.
 BUILD = {
     "c": (["gcc", "-O3", "-march=native", "ref.c", "-o", "ref_c", "-lm"], "ref.c", "ref_c"),
     "rust": (["rustc", "-O", "-C", "target-cpu=native", "ref.rs", "-o", "ref_rust"],

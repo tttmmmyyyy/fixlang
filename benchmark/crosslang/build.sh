@@ -29,6 +29,7 @@ echo "== building with $FIX"
 
 for name in $(comparable_cases); do
     is_wanted "$name" || continue
+    # `../speedtest/reference.py` spells the same two counterpart recipes for its own question.
     (cd "$CASES/$name" \
         && "$FIX" build -f main.fix -O experimental -o "$BIN/${name}_fix" >/dev/null \
         && gcc -O3 -march=native ref.c -o "$BIN/${name}_c" -lm \

@@ -285,7 +285,7 @@ implementation that #227 and #229 replaced it read 64,037,014 -> 35,921,169, a s
 here it reads 49,703,021 -> 18,895,019, a saving of 30,808,002. The five other sort cases entered the
 corpus with those two changes, so this is the first row that reads them with the chain followed.
 
-## 4052838995f52c3d8a2ba2ac82fc0e6cb3c02b8a
+## 4052838928fd76e7ddab3d0fc15d2e7fa18d1db6
 
 `Array::sort` spends its recursion budget only on a split that leaves under an eighth of the range
 on one side, instead of on every split, and a split that found nothing less than the pivot gathers
