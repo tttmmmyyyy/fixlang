@@ -32,6 +32,9 @@ PERF_COUNTERS = HERE / "perf_counters.py"
 # than taken from there.
 PROGRAM_FAILED = 2
 
+# What this program exits with when the case carries no counterpart in the language asked for.
+NO_COUNTERPART = 2
+
 # The Fix case is built for this host with every feature it has. The counterparts get the same
 # deal, so the comparison is between the languages rather than between the instruction sets they
 # were allowed to use.
@@ -47,7 +50,7 @@ def source_and_binary(language):
     case carries no counterpart in it."""
     _command, source, binary = BUILD[language]
     if not Path(source).exists():
-        sys.exit(2)
+        sys.exit(NO_COUNTERPART)
     return source, binary
 
 

@@ -54,8 +54,8 @@ INSTRUCTION_EVENT = "instructions:u"
 # Accesses that missed the last level cache, so their data came from main memory. This counts what
 # a prefetcher fetched as well as what a load waited for, which together are what the program takes
 # of the cache and the memory bus that every core shares.
-MEMORY_EVENT = "cache-misses:u"
-ALL_EVENTS = SPLIT_EVENTS + [CYCLE_EVENT, INSTRUCTION_EVENT, MEMORY_EVENT]
+RAM_EVENT = "cache-misses:u"
+ALL_EVENTS = SPLIT_EVENTS + [CYCLE_EVENT, INSTRUCTION_EVENT, RAM_EVENT]
 # The CPU that work other than this measurement may take while it runs, in cores. Above this
 # the cycle count says as much about that work as about the program, so the field comes back
 # empty and every count that reaches the log is one worth comparing.
@@ -186,7 +186,7 @@ def event_name(event):
     return event.removesuffix(":u")
 
 
-def lower(best, reading):
+def lower_of(best, reading):
     """The lower of the two, taking `reading` where there is no `best` yet."""
     return reading if best is None or reading < best else best
 
@@ -253,10 +253,10 @@ def read_window(argv):
     cycles = splits = instructions = ram_accesses = None
     while True:
         found = read_counters(argv)
-        cycles = lower(cycles, found[event_name(CYCLE_EVENT)])
-        splits = lower(splits, sum(found[e] for e in SPLIT_EVENTS))
-        instructions = lower(instructions, found[event_name(INSTRUCTION_EVENT)])
-        ram_accesses = lower(ram_accesses, found[event_name(MEMORY_EVENT)])
+        cycles = lower_of(cycles, found[event_name(CYCLE_EVENT)])
+        splits = lower_of(splits, sum(found[e] for e in SPLIT_EVENTS))
+        instructions = lower_of(instructions, found[event_name(INSTRUCTION_EVENT)])
+        ram_accesses = lower_of(ram_accesses, found[event_name(RAM_EVENT)])
         elapsed = time.monotonic() - started
         if elapsed >= MINIMUM_WINDOW_SECONDS:
             break
@@ -282,11 +282,11 @@ def measure(argv, windows):
     for _ in range(windows):
         window_cycles, sibling_busy, window_splits, window_instructions, window_ram_accesses = \
             read_window(argv)
-        splits = lower(splits, window_splits)
-        instructions = lower(instructions, window_instructions)
-        ram_accesses = lower(ram_accesses, window_ram_accesses)
+        splits = lower_of(splits, window_splits)
+        instructions = lower_of(instructions, window_instructions)
+        ram_accesses = lower_of(ram_accesses, window_ram_accesses)
         if sibling_busy <= SIBLING_BUSY_LIMIT:
-            cycles = lower(cycles, window_cycles)
+            cycles = lower_of(cycles, window_cycles)
     elapsed = time.monotonic() - started
     others = (cpu_seconds("cpu") - machine_before) - (own_cpu_seconds() - own_before)
     # `/proc/stat` counts in whole ticks and the rusage clocks round, so a short measurement
@@ -365,8 +365,8 @@ def self_check():
     assert event_name("mem_inst_retired.split_loads") == "mem_inst_retired.split_loads"
     assert len({event_name(e) for e in ALL_EVENTS}) == len(ALL_EVENTS), ALL_EVENTS
 
-    assert lower(None, 3) == 3
-    assert lower(5, 3) == 3 and lower(3, 5) == 3
+    assert lower_of(None, 3) == 3
+    assert lower_of(5, 3) == 3 and lower_of(3, 5) == 3
 
     # A quiet machine's count is kept whatever the program asks of main memory. Above the rate
     # another process reaches the count through the cache; below the rate it cannot.
@@ -405,7 +405,7 @@ def self_check():
         counts = dict(zip((event_name(e) for e in SPLIT_EVENTS), (split_loads, split_stores)))
         counts[event_name(CYCLE_EVENT)] = cycles
         counts[event_name(INSTRUCTION_EVENT)] = instructions
-        counts[event_name(MEMORY_EVENT)] = ram_accesses
+        counts[event_name(RAM_EVENT)] = ram_accesses
         return counts
 
     canned_runs = []

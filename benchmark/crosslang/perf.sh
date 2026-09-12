@@ -15,6 +15,10 @@ select_cases "$@"
 
 COUNTERS=../speedtest/perf_counters.py
 
+# What `perf_counters.py` exits with when the program it measured failed the check it makes of its
+# own answer, apart from the 1 it exits with when the counters could not be read.
+PROGRAM_FAILED=2
+
 printf "  %-14s %-5s %14s %14s\n" "case" "lang" "splits" "cycles"
 for name in $(comparable_cases); do
     is_wanted "$name" || continue
@@ -23,9 +27,7 @@ for name in $(comparable_cases); do
         [ -x "$binary" ] || { echo "no $binary -- run build.sh first" >&2; exit 1; }
         if ! out=$(python3 "$COUNTERS" "$binary"); then
             status=$?
-            # 2 is the counters answering and the program failing the check it makes of its own
-            # answer; anything else is the counters themselves being out of reach.
-            if [ "$status" -eq 2 ]; then
+            if [ "$status" -eq "$PROGRAM_FAILED" ]; then
                 echo "  $name $lang: failed its own check" >&2
                 exit 1
             fi
