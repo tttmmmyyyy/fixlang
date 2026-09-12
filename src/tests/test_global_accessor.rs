@@ -1,7 +1,7 @@
 use crate::env_vars::MAX_OPT_LEVEL_VAR;
 use crate::tests::test_util::{
-    emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command, llvm_function_bodies,
-    EmittedIr,
+    build_run_and_read_rc_ir, emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command,
+    llvm_function_bodies, EmittedIr,
 };
 use std::path::Path;
 use tempfile::TempDir;
@@ -330,19 +330,159 @@ const STRING_GLOBAL_SOURCE: &str = r#"
 /// The literal's construction, as the RC IR dump names it.
 const GREETING_BUF: &str = "string_buf(\"hello\")";
 
+/// The global the program names, as the RC IR dump spells it, before the suffix the compiler adds.
+const GREETING: &str = "Main::greeting";
+
 #[test]
 fn test_a_global_string_is_built_once_however_many_names_it() {
-    let dump = crate::tests::test_util::build_run_and_read_rc_ir(
+    let dump = build_run_and_read_rc_ir(
         STRING_GLOBAL_SOURCE,
         "max",
         "211",
         "a global string named from three places",
     );
+
+    // The places the property is about: the value reaches a reader as a name of the global or as a
+    // copy of the construction, so this counts the readers either way, and falls only where a
+    // reader stopped reading.
+    let places = dump
+        .lines()
+        .filter(|line| line.contains(GREETING) && !line.starts_with("global "))
+        .count()
+        + dump.matches(GREETING_BUF).count();
+    assert!(
+        places > 1,
+        "the program should hold `greeting` in more than one place, and it holds it in {}:\n{}",
+        places,
+        dump
+    );
+
     let built = dump.matches(GREETING_BUF).count();
     assert_eq!(
         built, 1,
         "the literal of a global is built {} times, once for the global and once more wherever \
          its body was put; the dump is:\n{}",
         built, dump
+    );
+}
+
+/// A program that names two globals whose bodies are literals from two places each.
+///
+/// An integer and a floating-point literal evaluate to a value held in a register, so a copy of the
+/// literal where the global is named costs what naming it costs.
+const SCALAR_GLOBAL_SOURCE: &str = r#"
+    module Main;
+
+    answer : I64;
+    answer = 42;
+
+    ratio : F64;
+    ratio = 1.5;
+
+    doubled : I64;
+    doubled = answer * 2;
+
+    raised : I64;
+    raised = answer + 1;
+
+    scaled : F64;
+    scaled = ratio * 2.0;
+
+    halved : F64;
+    halved = ratio / 2.0;
+
+    main : IO ();
+    main = println((doubled + raised + (scaled + halved).to_I64).to_string);
+"#;
+
+/// The globals of `SCALAR_GLOBAL_SOURCE` whose bodies are literals, each beside the construction of
+/// its literal as the RC IR dump names it.
+const SCALAR_GLOBALS: [(&str, &str); 2] = [("Main::answer", "int(42)"), ("Main::ratio", "float(1.5)")];
+
+/// A global whose body is a scalar literal is put at every name.
+///
+/// Its value is held in a register, so a copy of the literal at each name costs what the name
+/// costs, and the global it would otherwise stand in puts an initialization flag and a load in
+/// front of every read.
+#[test]
+fn test_a_global_scalar_literal_is_put_at_every_name() {
+    let dump = build_run_and_read_rc_ir(
+        SCALAR_GLOBAL_SOURCE,
+        "max",
+        "130",
+        "two global scalar literals named from two places each",
+    );
+
+    for (global, literal) in SCALAR_GLOBALS {
+        let built = dump.matches(literal).count();
+        assert!(
+            built > 1,
+            "`{}` should be at each of the two names of `{}`, and the dump holds {}:\n{}",
+            literal,
+            global,
+            built,
+            dump
+        );
+
+        let standing: Vec<_> = dump
+            .lines()
+            .filter(|line| line.starts_with("global ") && line.contains(global))
+            .collect();
+        assert!(
+            standing.is_empty(),
+            "`{}` should cost no global of its own, and the dump opens {}:\n{}",
+            global,
+            standing.join("\n"),
+            dump
+        );
+    }
+}
+
+/// A program whose `main` performs three IO actions.
+const IO_ACTIONS_SOURCE: &str = r#"
+    module Main;
+
+    main : IO ();
+    main = (
+        println("one");;
+        println("two");;
+        println("three")
+    );
+"#;
+
+/// The making of an `IOState`, and the `Std` global that makes one, as the RC IR dump names them.
+const IOSTATE_CREATE: &str = "iostate_create";
+const IOSTATE_GLOBAL: &str = "Std::IO::IOState::_unsafe_create";
+
+/// An `IOState` is made where it is used.
+///
+/// It is an unboxed value with no field, so making one allocates nothing and a copy of the making
+/// at each name costs nothing. A global standing for it would put an initialization flag and a load
+/// in front of the IO actions the program performs.
+#[test]
+fn test_an_iostate_is_made_where_it_is_used() {
+    let dump = build_run_and_read_rc_ir(
+        IO_ACTIONS_SOURCE,
+        "max",
+        "one\ntwo\nthree",
+        "a program performing three IO actions",
+    );
+
+    // The making the property is about: a program that makes no `IOState` keeps none in a global.
+    assert!(
+        dump.contains(IOSTATE_CREATE),
+        "the program should make an `IOState`, and the dump is:\n{}",
+        dump
+    );
+
+    let standing: Vec<_> = dump
+        .lines()
+        .filter(|line| line.starts_with("global ") && line.contains(IOSTATE_GLOBAL))
+        .collect();
+    assert!(
+        standing.is_empty(),
+        "an `IOState` should cost no global of its own, and the dump opens {}:\n{}",
+        standing.join("\n"),
+        dump
     );
 }

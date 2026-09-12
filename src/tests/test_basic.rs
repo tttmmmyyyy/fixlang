@@ -14051,3 +14051,31 @@ main = (
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+/// A write to the bytes of a global string leaves the global's own bytes alone.
+///
+/// The body of `greeting` is built once and the global holds it, so `get_bytes` hands the same
+/// array to every reader and a write to it clones. Both bytes are read, so the test fails on the
+/// wrong answer rather than on the write not happening.
+///
+/// It holds a neighbouring behavior still rather than pinning one of its own: a reader of a global
+/// that were given a buffer of its own would answer the same, and what this refuses is a write
+/// through one reader reaching another.
+#[test]
+pub fn test_a_write_to_the_bytes_of_a_global_string_leaves_the_global_alone() {
+    let source = r#"
+            module Main;
+
+            greeting : String;
+            greeting = "hello";
+
+            main : IO ();
+            main = (
+                let edited = greeting.get_bytes.set(0, 'H');
+                assert_eq(|_|"fail: the write did not land", edited.@(0), 'H');;
+                assert_eq(|_|"fail: the global's own bytes were overwritten", greeting.get_bytes.@(0), 'h');;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
