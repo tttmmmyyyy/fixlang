@@ -21,7 +21,17 @@ for name in $(comparable_cases); do
     for lang in fix c rust; do
         binary="bin/${name}_${lang}"
         [ -x "$binary" ] || { echo "no $binary -- run build.sh first" >&2; exit 1; }
-        out=$(python3 "$COUNTERS" "$binary") || { echo "  $name $lang: unavailable"; continue; }
+        if ! out=$(python3 "$COUNTERS" "$binary"); then
+            status=$?
+            # 2 is the counters answering and the program failing the check it makes of its own
+            # answer; anything else is the counters themselves being out of reach.
+            if [ "$status" -eq 2 ]; then
+                echo "  $name $lang: failed its own check" >&2
+                exit 1
+            fi
+            echo "  $name $lang: unavailable"
+            continue
+        fi
         IFS=, read -r _instructions _memory splits cycles _contention <<<"$out"
         printf "  %-14s %-5s %14s %14s\n" "$name" "$lang" "$splits" "$cycles"
     done

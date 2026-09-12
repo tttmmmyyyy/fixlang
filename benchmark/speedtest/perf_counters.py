@@ -192,7 +192,11 @@ def lower(best, reading):
 
 
 def read_counters(argv):
-    """Event name -> count, for the events perf managed to read."""
+    """Event name -> count for every event of `ALL_EVENTS`.
+
+    Exits 1 where perf could not read one of them, and `PROGRAM_FAILED` where it read them all
+    and the measured program still exited non-zero.
+    """
     proc = subprocess.run(
         # ASLR off: the split count depends on where the allocator puts the data, so a moving
         # heap would move the number.
@@ -201,12 +205,6 @@ def read_counters(argv):
         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
         env=MEASUREMENT_ENV,
     )
-    # perf exits with the program's status, and it reports whatever the program managed to
-    # execute before it died. Counting a partial run as a measurement would put a plausible
-    # number in the log.
-    if proc.returncode != 0:
-        print(f"{argv[0]} exited with {proc.returncode}", file=sys.stderr)
-        sys.exit(PROGRAM_FAILED)
     found = {}
     for line in proc.stderr.splitlines():
         fields = line.split(",")
@@ -224,7 +222,20 @@ def read_counters(argv):
             except ValueError:
                 pass
         found[name] = int(fields[0])
-    return found, proc.stderr
+    # Which of the two went wrong is read from the counts rather than from the status, because
+    # perf gives its own failure a status of its own only sometimes: it exits with the measured
+    # program's status where that program ran, and an event this processor does not carry --
+    # `SPLIT_EVENTS` names two that only Intel does -- leaves it exiting 129 with no count at all.
+    missing = [event_name(e) for e in ALL_EVENTS if event_name(e) not in found]
+    if missing:
+        sys.exit(f"perf reported none of {', '.join(missing)}. perf said:\n"
+                 + proc.stderr.strip())
+    # perf reports whatever the program managed to execute before it died, and counting a partial
+    # run as a measurement would put a plausible number in the log.
+    if proc.returncode != 0:
+        print(f"{argv[0]} exited with {proc.returncode}", file=sys.stderr)
+        sys.exit(PROGRAM_FAILED)
+    return found
 
 
 def read_window(argv):
@@ -241,13 +252,7 @@ def read_window(argv):
     started = time.monotonic()
     cycles = splits = instructions = memory = None
     while True:
-        found, report = read_counters(argv)
-        missing = [event_name(e) for e in ALL_EVENTS if event_name(e) not in found]
-        if missing:
-            # Say which of the two it was: the program never ran, or the counters are out
-            # of reach.
-            sys.exit(f"perf reported none of {', '.join(missing)}. perf said:\n"
-                     + report.strip())
+        found = read_counters(argv)
         cycles = lower(cycles, found[event_name(CYCLE_EVENT)])
         splits = lower(splits, sum(found[e] for e in SPLIT_EVENTS))
         instructions = lower(instructions, found[event_name(INSTRUCTION_EVENT)])
@@ -404,7 +409,7 @@ def self_check():
         return counts
 
     runs = []
-    real_counters, read_counters = read_counters, lambda argv: (runs.pop(0), "")
+    real_counters, read_counters = read_counters, lambda argv: runs.pop(0)
     # A window runs until `MINIMUM_WINDOW_SECONDS` has passed, so the clock is what says how many
     # runs it holds, and the last reading is what the sibling figure is divided by.
     ticks = iter([0.0, MINIMUM_WINDOW_SECONDS / 2, MINIMUM_WINDOW_SECONDS])
