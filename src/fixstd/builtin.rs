@@ -10161,6 +10161,13 @@ pub fn add_trait_id() -> TraitId {
     }
 }
 
+/// Whether Fix promises that arithmetic on `ty` does not wrap, which lets the generated
+/// instruction carry `nsw`. A signed integer operation whose mathematical result leaves the range
+/// of its type is undefined; an unsigned one wraps around.
+fn arithmetic_never_wraps(ty: &Arc<TypeNode>) -> bool {
+    ty.toplevel_tycon().unwrap().is_signed_integer()
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntAddBody {
     lhs_name: FullName,
@@ -10174,10 +10181,15 @@ impl LLVMGen for InlineLLVMIntAddBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = gc
-            .builder()
-            .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
-            .unwrap();
+        let value = if arithmetic_never_wraps(&lhs.ty) {
+            gc.builder()
+                .build_int_nsw_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
+                .unwrap()
+        } else {
+            gc.builder()
+                .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
+                .unwrap()
+        };
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10315,10 +10327,15 @@ impl LLVMGen for InlineLLVMIntSubBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = gc
-            .builder()
-            .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
-            .unwrap();
+        let value = if arithmetic_never_wraps(&lhs.ty) {
+            gc.builder()
+                .build_int_nsw_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
+                .unwrap()
+        } else {
+            gc.builder()
+                .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
+                .unwrap()
+        };
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10456,10 +10473,15 @@ impl LLVMGen for InlineLLVMIntMulBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = gc
-            .builder()
-            .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
-            .unwrap();
+        let value = if arithmetic_never_wraps(&lhs.ty) {
+            gc.builder()
+                .build_int_nsw_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
+                .unwrap()
+        } else {
+            gc.builder()
+                .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
+                .unwrap()
+        };
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10826,10 +10848,15 @@ impl LLVMGen for InlineLLVMIntNegBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = gc
-            .builder()
-            .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)
-            .unwrap();
+        let value = if arithmetic_never_wraps(&rhs.ty) {
+            gc.builder()
+                .build_int_nsw_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)
+                .unwrap()
+        } else {
+            gc.builder()
+                .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)
+                .unwrap()
+        };
         let obj = create_obj(
             rhs.ty.clone(),
             &vec![],
