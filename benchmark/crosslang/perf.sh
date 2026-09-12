@@ -32,7 +32,7 @@ for name in $(comparable_cases); do
             echo "  $name $lang: unavailable"
             continue
         fi
-        IFS=, read -r _instructions _memory splits cycles _contention <<<"$out"
+        IFS=, read -r _instructions _ram splits cycles _contention <<<"$out"
         printf "  %-14s %-5s %14s %14s\n" "$name" "$lang" "$splits" "$cycles"
     done
 done

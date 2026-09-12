@@ -112,14 +112,14 @@ namespace CSV {
 }
 
 // Put the counts of a `perf_counters.py` line into the log's last row, under the columns of
-// `case_name`. `suffix` names the language a counterpart was measured in, and is empty for the
-// case's own measurement. `fields` holds the whole line: the counts, and the contention after
-// them.
+// `case_name`. `language_suffix` names the language a counterpart was measured in, and is empty
+// for the case's own measurement. `fields` holds the whole line: the counts, and the contention
+// after them.
 set_counts : String -> String -> Array String -> CSV -> CSV;
-set_counts = |case_name, suffix, fields, log| (
+set_counts = |case_name, language_suffix, fields, log| (
     let row = log.@size - 1;
     Iterator::range(0, _COUNTER_COLUMNS.@size).fold(log, |i, log|
-        log.set(case_name + _COUNTER_COLUMNS.@(i) + suffix, row, fields.@(i))
+        log.set(case_name + _COUNTER_COLUMNS.@(i) + language_suffix, row, fields.@(i))
     )
 );
 

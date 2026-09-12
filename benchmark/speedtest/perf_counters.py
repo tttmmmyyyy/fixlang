@@ -1,6 +1,6 @@
 """Run a program under `perf stat` and print what the hardware counters say about it.
 
-Prints one line, `<instructions>,<memory>,<splits>,<cycles>,<contention>`: instructions retired in
+Prints one line, `<instructions>,<ram>,<splits>,<cycles>,<contention>`: instructions retired in
 user space, accesses that missed the last level cache and so went to main memory, loads and
 stores that crossed a cache-line boundary, user-space core cycles, and the CPU that work other
 than this measurement took while it ran, in cores.
@@ -10,7 +10,7 @@ them the columns a change to the compiler is read on: the runs below take a fixe
 address-space randomization off, and under those eight runs of `nbody` read one split count and six
 of `iter_flatten` read one. A line-crossing access costs real time and an instruction count has no
 notion of one -- an array whose elements start 8 bytes into a 16-byte-aligned allocation splits
-half of its 32-byte accesses. The memory count moves with what else was in the cache. The cycle
+half of its 32-byte accesses. The RAM count moves with what else was in the cache. The cycle
 count is the one figure here that says how fast the machine gets through the work, which is where
 a change to code layout or branch density shows up.
 
@@ -21,7 +21,7 @@ The cycle count is reported only where nothing else could have moved it, and the
 whatever the machine was doing. Other work reaches a cycle count two ways. It runs on the other
 thread of the same core: the measurement is pinned to one CPU, and how busy that thread was is
 read for every window. And it takes the cache every core shares, which costs the program that
-goes to main memory often enough for the loss to add up -- the memory count above is what says
+goes to main memory often enough for the loss to add up -- the RAM count above is what says
 whether this program is one of those. Where either of them could have moved a run, the cycle
 field comes back empty, since a figure logged there would say more about that competition than
 about the program.
@@ -239,8 +239,8 @@ def read_counters(argv):
 
 
 def read_window(argv):
-    """The lowest cycle, split, instruction and memory counts over a window of runs, and how busy
-    the sibling thread was through it.
+    """The lowest cycle, split, instruction and RAM-access counts over a window of runs, and how
+    busy the sibling thread was through it.
 
     A window holds as many runs as `MINIMUM_WINDOW_SECONDS` needs, so that the sibling reading covers
     enough ticks of `/proc/stat` to mean something.
@@ -250,18 +250,18 @@ def read_window(argv):
     """
     sibling_before = sibling_cpu_seconds()
     started = time.monotonic()
-    cycles = splits = instructions = memory = None
+    cycles = splits = instructions = ram_accesses = None
     while True:
         found = read_counters(argv)
         cycles = lower(cycles, found[event_name(CYCLE_EVENT)])
         splits = lower(splits, sum(found[e] for e in SPLIT_EVENTS))
         instructions = lower(instructions, found[event_name(INSTRUCTION_EVENT)])
-        memory = lower(memory, found[event_name(MEMORY_EVENT)])
+        ram_accesses = lower(ram_accesses, found[event_name(MEMORY_EVENT)])
         elapsed = time.monotonic() - started
         if elapsed >= MINIMUM_WINDOW_SECONDS:
             break
     sibling_busy = (sibling_cpu_seconds() - sibling_before) / elapsed
-    return cycles, sibling_busy, splits, instructions, memory
+    return cycles, sibling_busy, splits, instructions, ram_accesses
 
 
 def measure(argv, windows):
@@ -278,13 +278,13 @@ def measure(argv, windows):
     machine_before = cpu_seconds("cpu")
     own_before = own_cpu_seconds()
     started = time.monotonic()
-    cycles = splits = instructions = memory = None
+    cycles = splits = instructions = ram_accesses = None
     for _ in range(windows):
-        window_cycles, sibling_busy, window_splits, window_instructions, window_memory = \
+        window_cycles, sibling_busy, window_splits, window_instructions, window_ram_accesses = \
             read_window(argv)
         splits = lower(splits, window_splits)
         instructions = lower(instructions, window_instructions)
-        memory = lower(memory, window_memory)
+        ram_accesses = lower(ram_accesses, window_ram_accesses)
         if sibling_busy <= SIBLING_BUSY_LIMIT:
             cycles = lower(cycles, window_cycles)
     elapsed = time.monotonic() - started
@@ -292,7 +292,7 @@ def measure(argv, windows):
     # `/proc/stat` counts in whole ticks and the rusage clocks round, so a short measurement
     # can put the difference slightly below zero.
     contention = max(0.0, others) / elapsed if elapsed > 0 else 0.0
-    return instructions, memory, splits, cycles, contention
+    return instructions, ram_accesses, splits, cycles, contention
 
 
 def cpu_model():
@@ -307,7 +307,7 @@ def cpu_model():
     return "unknown"
 
 
-def cycles_are_comparable(cycles, contention, memory_accesses, instructions):
+def cycles_are_comparable(cycles, contention, ram_accesses, instructions):
     """Whether a cycle count read under this much competition says more about the program than
     about the competition.
 
@@ -322,7 +322,7 @@ def cycles_are_comparable(cycles, contention, memory_accesses, instructions):
 
     # Arguments
     * `cycles` - what `measure` returned, `None` where no window was the measurement's own.
-    * `memory_accesses`, `instructions` - the counts `measure` returned beside it. Both are the
+    * `ram_accesses`, `instructions` - the counts `measure` returned beside it. Both are the
       lowest readings of the run, so the rate they give is the program's own rather than a
       reading of what the machine was doing to it.
     """
@@ -331,7 +331,7 @@ def cycles_are_comparable(cycles, contention, memory_accesses, instructions):
     if contention <= QUIET_CONTENTION:
         return True
     assert instructions > 0, instructions
-    return memory_accesses / instructions <= RAM_RATE_LIMIT
+    return ram_accesses / instructions <= RAM_RATE_LIMIT
 
 
 def take_options(argv):
@@ -401,24 +401,24 @@ def self_check():
     # instead would show up here as that run's figure. The counts are keyed the way
     # `read_counters` keys them, so one looked up under a name perf does not print would show up
     # as an event the run never reported.
-    def canned_run(cycles, split_loads, split_stores, instructions, memory):
+    def canned_run(cycles, split_loads, split_stores, instructions, ram_accesses):
         counts = dict(zip((event_name(e) for e in SPLIT_EVENTS), (split_loads, split_stores)))
         counts[event_name(CYCLE_EVENT)] = cycles
         counts[event_name(INSTRUCTION_EVENT)] = instructions
-        counts[event_name(MEMORY_EVENT)] = memory
+        counts[event_name(MEMORY_EVENT)] = ram_accesses
         return counts
 
-    runs = []
-    real_counters, read_counters = read_counters, lambda argv: runs.pop(0)
+    canned_runs = []
+    real_counters, read_counters = read_counters, lambda argv: canned_runs.pop(0)
     # A window runs until `MINIMUM_WINDOW_SECONDS` has passed, so the clock is what says how many
     # runs it holds, and the last reading is what the sibling figure is divided by.
-    ticks = iter([0.0, MINIMUM_WINDOW_SECONDS / 2, MINIMUM_WINDOW_SECONDS])
-    real_monotonic, time.monotonic = time.monotonic, lambda: next(ticks)
+    clock_readings = iter([0.0, MINIMUM_WINDOW_SECONDS / 2, MINIMUM_WINDOW_SECONDS])
+    real_monotonic, time.monotonic = time.monotonic, lambda: next(clock_readings)
     try:
-        runs[:] = [canned_run(70, 4, 5, 11, 8), canned_run(90, 3, 4, 10, 5)]
-        cycles, _sibling_busy, splits, instructions, memory = read_window(None)
-        assert (cycles, splits, instructions, memory) == (70, 7, 10, 5), \
-            (cycles, splits, instructions, memory)
+        canned_runs[:] = [canned_run(70, 4, 5, 11, 8), canned_run(90, 3, 4, 10, 5)]
+        cycles, _sibling_busy, splits, instructions, ram_accesses = read_window(None)
+        assert (cycles, splits, instructions, ram_accesses) == (70, 7, 10, 5), \
+            (cycles, splits, instructions, ram_accesses)
     finally:
         read_counters, time.monotonic = real_counters, real_monotonic
 
@@ -432,13 +432,13 @@ def self_check():
     try:
         canned[:] = [(90, 0.0, 9, 11, 5), (70, 1.0, 7, 10, 3),
                      (80, SIBLING_BUSY_LIMIT, 4, 12, 6)]
-        instructions, memory, splits, cycles, _contention = measure(None, 3)
-        assert (instructions, memory, splits, cycles) == (10, 3, 4, 80), \
-            (instructions, memory, splits, cycles)
+        instructions, ram_accesses, splits, cycles, _contention = measure(None, 3)
+        assert (instructions, ram_accesses, splits, cycles) == (10, 3, 4, 80), \
+            (instructions, ram_accesses, splits, cycles)
         canned[:] = [(90, 1.0, 9, 11, 5), (70, 1.0, 7, 10, 3)]
-        instructions, memory, splits, cycles, _contention = measure(None, 2)
-        assert (instructions, memory, splits, cycles) == (10, 3, 7, None), \
-            (instructions, memory, splits, cycles)
+        instructions, ram_accesses, splits, cycles, _contention = measure(None, 2)
+        assert (instructions, ram_accesses, splits, cycles) == (10, 3, 7, None), \
+            (instructions, ram_accesses, splits, cycles)
     finally:
         read_window = real
 
@@ -453,11 +453,11 @@ def main():
     if not argv:
         sys.exit("usage: perf_counters.py [--windows N] <program> [args...]\n"
                  "       perf_counters.py --cpu")
-    instructions, memory, splits, cycles, contention = measure(argv, windows)
+    instructions, ram_accesses, splits, cycles, contention = measure(argv, windows)
     # Only the cycle count is the machine's to move; the rest are reported whatever it was doing.
-    comparable = cycles_are_comparable(cycles, contention, memory, instructions)
+    comparable = cycles_are_comparable(cycles, contention, ram_accesses, instructions)
     reported_cycles = str(cycles) if comparable else ""
-    print(f"{instructions},{memory},{splits},{reported_cycles},{contention:.2f}")
+    print(f"{instructions},{ram_accesses},{splits},{reported_cycles},{contention:.2f}")
 
 
 main()
