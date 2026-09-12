@@ -421,7 +421,8 @@ const SCALAR_GLOBALS_SOURCE: &str = r#"
 
 /// The globals of `SCALAR_GLOBALS_SOURCE` whose bodies are literals, each beside the construction of
 /// its literal as the RC IR dump names it.
-const SCALAR_GLOBALS: [(&str, &str); 2] = [("Main::answer", "int(42)"), ("Main::ratio", "float(1.5)")];
+const SCALAR_GLOBALS: [(&str, &str); 2] =
+    [("Main::answer", "int(42)"), ("Main::ratio", "float(1.5)")];
 
 /// A global whose body is a scalar literal is put at every name.
 ///
