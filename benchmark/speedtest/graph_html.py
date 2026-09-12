@@ -52,7 +52,9 @@ METRICS = [
      "Loads and stores that crossed a cache-line boundary, from the hardware counters. An "
      "instruction count has no notion of these, and they cost real time; the count is "
      "deterministic and reaches zero once the data is aligned, so it is plotted as an absolute "
-     "count.", "absolute"),
+     "count. A handful of it belongs to where the path of the program put its stack rather than "
+     "to the program, so two languages whose counts differ by a few are not two programs that "
+     "differ.", "absolute"),
 ]
 
 
@@ -392,6 +394,12 @@ function scaleY(series, kind) {
   for (const s of series) {
     if (!isVisible(s)) continue;
     for (const v of s.values) if (v !== null && v > 0) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    // The counterpart lines are drawn on this axis as well, so a counterpart outside the range
+    // the case itself covers would be clamped to the floor and read as a value it is not.
+    for (const value of Object.values(s.refs)) {
+      const v = kind === "ratio" ? value / s.base : value;
+      if (v > 0) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    }
   }
   if (!isFinite(lo)) { lo = 1; hi = 1; }
   if (kind === "ratio") { lo = Math.min(lo, 0.8); hi = Math.max(hi, 1.25); }

@@ -8,7 +8,10 @@ than this measurement took while it ran, in cores.
 The instruction and split counts are decided by the program and its input, which is what makes
 them the columns a change to the compiler is read on. The runs here take a fixed environment with
 address-space randomization off, and under those eight runs of `nbody` read one split count and six
-of `iter_flatten` read one. A line-crossing access costs real time and an instruction count has no
+of `iter_flatten` read one. A handful of the split count belongs to where the path of the program
+put its stack rather than to the program: the same binary measured as `./ref_r`, `./ref_rust` and
+`./ref_rustxxxxx` read 461,525, 461,527 and 461,523, each of those three times over. Two languages
+whose split counts differ by a few are not two programs that differ. A line-crossing access costs real time and an instruction count has no
 notion of one -- an array whose elements start 8 bytes into a 16-byte-aligned allocation splits
 half of its 32-byte accesses. The RAM count moves with what else was in the cache. The cycle
 count is the one figure here that says how fast the machine gets through the work, which is where

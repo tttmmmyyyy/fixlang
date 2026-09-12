@@ -49,6 +49,11 @@ CASES_DIR = REPO / "benchmark/speedtest/cases"
 FIX = REPO / "target/release/fix"
 LOG_FILE = REPO / "passes_optimizer.log"
 
+# How long one run of a case may take before the search gives up on the pipeline that built it.
+# The cases return in under two seconds, and a candidate that miscompiles one into a loop that
+# never ends would otherwise hold the search there.
+RUN_TIMEOUT_SECONDS = 120
+
 # Where the best sequence found so far is recorded.
 LLVM_PASSES_BEST_FILE = REPO / "llvm_passes_best.txt"
 
@@ -249,11 +254,26 @@ def build(passes, cases, out_dir):
 
 
 def cycles(binary):
-    """User-mode core cycles for one run of `binary`, with ASLR off."""
+    """User-mode core cycles for one run of `binary`, with ASLR off, or `None` where the run
+    itself failed.
+
+    A candidate pipeline can build a program that dies when it runs or never returns -- the
+    `PASSES` list above holds three such passes, found that way -- and a search that carried the
+    failure out of here would end on that candidate instead of dropping it. `perf` exits with the
+    program's status, so a non-zero one is the program's.
+    """
     arch = subprocess.check_output(["uname", "-m"]).decode().strip()
-    result = subprocess.run(
-        ["setarch", arch, "-R", "perf", "stat", "-x,", "-e", "cycles:u", "--", str(binary)],
-        env=MEASUREMENT_ENV, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
+    try:
+        result = subprocess.run(
+            ["setarch", arch, "-R", "perf", "stat", "-x,", "-e", "cycles:u", "--", str(binary)],
+            env=MEASUREMENT_ENV, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            timeout=RUN_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        print(f"    {binary} did not return within {RUN_TIMEOUT_SECONDS}s", flush=True)
+        return None
+    if result.returncode != 0:
+        print(f"    {binary} exited with {result.returncode}", flush=True)
+        return None
     for line in result.stderr.decode().splitlines():
         field = line.split(",")[0]
         if re.fullmatch(r"\d+", field):
@@ -262,7 +282,8 @@ def cycles(binary):
 
 
 def compare(candidate, incumbent, rounds=ROUNDS):
-    """Cycles of `candidate` against `incumbent`, per case and as a geometric mean.
+    """Cycles of `candidate` against `incumbent`, per case and as a geometric mean, or `None`
+    where a program failed to run.
 
     The two are run alternately within each round, so a change in what else the machine is doing
     reaches both; each case's figure is its minimum over the rounds.
@@ -272,7 +293,10 @@ def compare(candidate, incumbent, rounds=ROUNDS):
     for _ in range(rounds):
         for case in cases:
             for label, binaries in (("candidate", candidate), ("incumbent", incumbent)):
-                best[case][label] = min(best[case][label], cycles(binaries[case]))
+                run = cycles(binaries[case])
+                if run is None:
+                    return None
+                best[case][label] = min(best[case][label], run)
     ratios = {case: best[case]["candidate"] / best[case]["incumbent"] for case in cases}
     geomean = math.exp(sum(math.log(r) for r in ratios.values()) / len(ratios))
     return geomean, ratios
@@ -296,7 +320,10 @@ def measure_noise(work_dir):
     second = build(INITIAL_PASSES, SEARCH_CASES, work_dir / "noise_b")
     if first is None or second is None:
         sys.exit("the shipped pipeline failed to build")
-    geomean, ratios = compare(first, second)
+    measured = compare(first, second)
+    if measured is None:
+        sys.exit("the shipped pipeline built a program that would not run")
+    geomean, ratios = measured
     print(f"  noise floor over {ROUNDS} rounds (two builds of one pipeline):")
     report(geomean, ratios, threshold=0.0)
     print(f"  IMPROVEMENT is {IMPROVEMENT}, i.e. {(IMPROVEMENT - 1) * 100:+.2f}%")
@@ -347,13 +374,23 @@ def optimize(work_dir, start):
             shutil.rmtree(candidate_dir, ignore_errors=True)
             continue
 
-        geomean, ratios = compare(candidate_binaries, optimum_binaries)
+        measured = compare(candidate_binaries, optimum_binaries)
+        if measured is None:
+            print("  the candidate built a program that would not run", flush=True)
+            shutil.rmtree(candidate_dir, ignore_errors=True)
+            continue
+        geomean, ratios = measured
         report(geomean, ratios)
         # A dropped pass is kept out on a tie: a shorter pipeline that measures the same is the
         # better one, and it gives the next add phase room.
         accepted = geomean < IMPROVEMENT if phase % 2 == 1 else geomean <= 1.0
         if accepted and phase % 2 == 1:
-            confirm_geomean, confirm_ratios = compare(candidate_binaries, optimum_binaries)
+            confirmed = compare(candidate_binaries, optimum_binaries)
+            if confirmed is None:
+                print("  the candidate built a program that would not run", flush=True)
+                shutil.rmtree(candidate_dir, ignore_errors=True)
+                continue
+            confirm_geomean, confirm_ratios = confirmed
             print("  confirming:")
             report(confirm_geomean, confirm_ratios)
             accepted = confirm_geomean < IMPROVEMENT
@@ -365,9 +402,13 @@ def optimize(work_dir, start):
         holdout = build(candidate, HOLDOUT_CASES, candidate_dir / "holdout")
         holdout_incumbent = build(optimum, HOLDOUT_CASES, optimum_dir / "holdout")
         if holdout is not None and holdout_incumbent is not None:
-            holdout_geomean, holdout_ratios = compare(holdout, holdout_incumbent)
-            print("  held-out cases (not used to choose):")
-            report(holdout_geomean, holdout_ratios)
+            held = compare(holdout, holdout_incumbent)
+            if held is None:
+                print("  a held-out case would not run", flush=True)
+            else:
+                holdout_geomean, holdout_ratios = held
+                print("  held-out cases (not used to choose):")
+                report(holdout_geomean, holdout_ratios)
 
         shutil.rmtree(optimum_dir, ignore_errors=True)
         optimum, optimum_dir, optimum_binaries = candidate, candidate_dir, candidate_binaries
