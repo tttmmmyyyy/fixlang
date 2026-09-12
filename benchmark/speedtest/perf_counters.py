@@ -49,7 +49,7 @@ from typing import NamedTuple
 # Keeping the list short matters -- asking for more events than the PMU has counters makes perf
 # time-slice them and report scaled estimates, which `read_counters` refuses. Cycles and
 # instructions sit on fixed counters, so three of these five compete for the general-purpose ones.
-SPLIT_EVENTS = ["mem_inst_retired.split_loads", "mem_inst_retired.split_stores"]
+SPLIT_EVENTS = ["mem_inst_retired.split_loads:u", "mem_inst_retired.split_stores:u"]
 CYCLE_EVENT = "cycles:u"
 INSTRUCTION_EVENT = "instructions:u"
 # Accesses that missed the last level cache, so their data came from main memory. This counts what
@@ -275,7 +275,7 @@ def read_window(argv):
         found = read_counters(argv)
         run = Counts(instructions=found[event_name(INSTRUCTION_EVENT)],
                      ram_accesses=found[event_name(RAM_EVENT)],
-                     splits=sum(found[e] for e in SPLIT_EVENTS),
+                     splits=sum(found[event_name(e)] for e in SPLIT_EVENTS),
                      cycles=found[event_name(CYCLE_EVENT)])
         lowest = run if lowest is None else lowest.lowest_with(run)
         elapsed = time.monotonic() - started
@@ -394,6 +394,10 @@ def self_check():
     assert event_name(CYCLE_EVENT) == "cycles", event_name(CYCLE_EVENT)
     assert event_name("mem_inst_retired.split_loads") == "mem_inst_retired.split_loads"
     assert len({event_name(e) for e in ALL_EVENTS}) == len(ALL_EVENTS), ALL_EVENTS
+    # Every event asks for user space alone. A machine whose `kernel.perf_event_paranoid` lets a
+    # program read the kernel's counts would otherwise answer one of them with a count of both,
+    # and nothing in the row would say which machine it came from.
+    assert all(e.endswith(":u") for e in ALL_EVENTS), ALL_EVENTS
 
     assert lower_of(None, 3) == 3
     assert lower_of(5, 3) == 3 and lower_of(3, 5) == 3

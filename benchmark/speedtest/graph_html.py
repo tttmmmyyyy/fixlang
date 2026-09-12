@@ -13,6 +13,7 @@ import csv
 import html
 import json
 import re
+import sys
 import tempfile
 from pathlib import Path
 
@@ -56,19 +57,24 @@ METRICS = [
 
 
 def parse_history(path):
-    """Map each commit hash in `history.md` to the HTML of its entry.
+    """The HTML of what stands before the first entry, and each commit hash mapped to the HTML
+    of its own entry.
 
-    An entry runs from a `## <hash>` heading to the next one.
+    An entry runs from a `## <hash>` heading to the next one. What stands before the first
+    heading says which rows are comparable with which, which belongs to no one commit and so is
+    returned beside them.
     """
     if not path.exists():
-        return {}
+        return "", {}
     entries = {}
     current_hash, buf = None, []
+    preamble = []
 
     def flush():
-        if current_hash is None:
-            return
         text = "\n".join(buf).strip()
+        if current_hash is None:
+            preamble.append(text)
+            return
         entries[current_hash] = render_markdown(text) if text else ""
 
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -76,10 +82,10 @@ def parse_history(path):
         if m:
             flush()
             current_hash, buf = m.group(1), []
-        elif current_hash is not None:
+        else:
             buf.append(line)
     flush()
-    return entries
+    return render_markdown(preamble[0]) if preamble and preamble[0] else "", entries
 
 
 def render_markdown(text):
@@ -104,14 +110,20 @@ def read_log(path):
 def build_data(log_path, history_path, latest_n):
     header, body = read_log(log_path)
     body = body[-latest_n:]
-    history = parse_history(history_path)
+    preamble, history = parse_history(history_path)
 
     index = {name.strip(): i for i, name in enumerate(header)}
     cpu_col = index.get("cpu")
-    # Rows taken before the counters were judged by contention carry a `load` column instead.
-    contention_col = index.get("contention", index.get("load"))
+    contention_col = index.get("contention")
+    # Rows taken before the counters were judged by contention carry a `load` column instead,
+    # and the two are read row by row: the column exists from the row it was introduced on, so a
+    # log holding both has an empty `contention` cell exactly where a `load` one is filled.
+    load_col = index.get("load")
 
     commits = []
+    # A note whose heading names no row of the log reaches nobody, and the heading of one that
+    # does is the only thing that carries it there.
+    matched = set()
     for row in body:
         recorded = row[0].strip()
         dirty = recorded.endswith("(dirty)")
@@ -122,13 +134,20 @@ def build_data(log_path, history_path, latest_n):
             # two entries sharing a prefix resolve to the more specific one.
             matches = [k for k in history
                        if commit_hash.startswith(k) or k.startswith(commit_hash)]
-            entry = history[max(matches, key=len)] if matches else None
+            if matches:
+                key = max(matches, key=len)
+                entry, _ = history[key], matched.add(key)
+            else:
+                entry = None
+        else:
+            matched.add(commit_hash)
         cpu = row[cpu_col].strip() if cpu_col is not None and cpu_col < len(row) else ""
-        contention = (row[contention_col].strip()
-                      if contention_col is not None and contention_col < len(row) else "")
+        def cell(column):
+            return row[column].strip() if column is not None and column < len(row) else ""
+
         commits.append({"hash": commit_hash, "short": commit_hash[:8], "dirty": dirty,
-                        "history": entry,
-                        "cpu": cpu, "contention": contention})
+                        "history": entry, "cpu": cpu, "contention": cell(contention_col),
+                        "load": cell(load_col)})
 
     # Split each "<case>-<metric>" column apart, and each "<case>-<metric>-<language>"
     # reference beside it. A reference does not move with a Fix commit, so the last value
@@ -156,7 +175,8 @@ def build_data(log_path, history_path, latest_n):
             metrics[suffix] = {"label": label, "note": note, "kind": kind,
                                "series": series, "refs": refs}
 
-    return {"commits": commits, "metrics": metrics}
+    return {"commits": commits, "metrics": metrics, "preamble": preamble,
+            "orphan_notes": sorted(set(history) - matched)}
 
 
 def self_check():
@@ -170,18 +190,24 @@ def self_check():
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / "log.csv"
         log.write_text(
-            "commit,cpu,contention,a-inst,a-mem,a-ram,a-splits,a-cycles,b-inst,a-inst-c,"
-            "a-inst-rust,a-mem-c\n"
-            "1111111111111111111111111111111111111111,Zen,0.10,100,200,3,4,7,50,90,,210\n"
-            "2222222222222222222222222222222222222222(dirty),Zen,,150,,5,0,,,90,120,\n",
+            "commit,cpu,load,contention,a-inst,a-mem,a-ram,a-splits,a-cycles,b-inst,a-inst-c,"
+            "a-inst-rust,a-mem-c,a-ram-c,a-splits-rust,a-cycles-c\n"
+            "1111111111111111111111111111111111111111,Zen,,0.10,100,200,3,4,7,50,90,,210,6,,11\n"
+            "2222222222222222222222222222222222222222(dirty),Zen,1.25,,150,,5,0,,,90,120,,,8,\n",
             encoding="utf-8",
         )
         history = Path(tmp) / "history.md"
-        history.write_text("# Benchmark History\n\n## 2222222\n\nsecond commit\n", encoding="utf-8")
+        history.write_text("# Benchmark History\n\nRows above `2222222` are not comparable"
+                           " with rows below it.\n\n## 2222222\n\nsecond commit\n"
+                           "\n## 3333333\n\na commit the log has no row for\n",
+                           encoding="utf-8")
         data = build_data(log, history, 40)
 
     first, second = data["commits"]
     assert first["cpu"] == "Zen" and first["contention"] == "0.10" and not first["dirty"], first
+    # A row taken before the counters were judged by contention carries a load average instead,
+    # and each is read from its own column rather than from whichever column the log has.
+    assert (first["load"], second["load"]) == ("", "1.25"), (first["load"], second["load"])
     assert second["contention"] == "", second
     assert second["dirty"] and "second commit" in second["history"], second
     assert first["history"] is None, first
@@ -196,7 +222,15 @@ def self_check():
     assert "mem" not in data["metrics"], sorted(data["metrics"])
     assert data["metrics"]["splits"]["kind"] == "absolute"
     assert data["metrics"]["inst"]["refs"] == {"a": {"c": 90, "rust": 120}}, data["metrics"]["inst"]["refs"]
-    assert data["metrics"]["ram"]["refs"] == {}, data["metrics"]["ram"]["refs"]
+    # Every metric reads its own reference columns, and each takes the last value measured.
+    assert data["metrics"]["ram"]["refs"] == {"a": {"c": 6}}, data["metrics"]["ram"]["refs"]
+    assert data["metrics"]["splits"]["refs"] == {"a": {"rust": 8}}, data["metrics"]["splits"]["refs"]
+    assert data["metrics"]["cycles"]["refs"] == {"a": {"c": 11}}, data["metrics"]["cycles"]["refs"]
+    # What `history.md` says before its first entry belongs to no one commit, and says which rows
+    # are comparable with which, so it reaches the page on its own.
+    assert "not comparable" in data["preamble"], data["preamble"]
+    # A note whose heading names no row reaches nobody, and nothing else says so.
+    assert data["orphan_notes"] == ["3333333"], data["orphan_notes"]
 
 
 def main():
@@ -208,6 +242,13 @@ def main():
     ap.add_argument("--out", default=here / "graph.html", type=Path)
     ap.add_argument("--latest-n", default=40, type=int)
     args = ap.parse_args()
+
+    # Every row of the log is read for this, not just the ones the page draws, so a note is
+    # called orphaned only where the log has no row for it at all.
+    every_row = build_data(args.log, args.history, len(read_log(args.log)[1]))
+    for orphan in every_row["orphan_notes"]:
+        print(f"{args.history}: the note headed {orphan} names no row of {args.log.name}",
+              file=sys.stderr)
 
     data = build_data(args.log, args.history, args.latest_n)
     page = TEMPLATE.replace("__DATA__", json.dumps(data, ensure_ascii=False))
@@ -295,6 +336,9 @@ aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
     <div class="legend" id="legend"></div>
   </div>
   <aside>
+    <details id="comparability"><summary>What is comparable with what</summary>
+      <div id="preamble"></div>
+    </details>
     <h2>Commit notes</h2>
     <div id="history"><p class="placeholder">Click a commit on the axis.</p></div>
   </aside>
@@ -495,7 +539,8 @@ function showHistory(i) {
   const c = DATA.commits[i];
   document.getElementById("history").innerHTML =
     `<p class="commit">${c.hash}${c.dirty ? " (dirty)" : ""}${c.cpu ? "<br>" + c.cpu : ""}`
-    + `${c.contention ? ` with ${c.contention} cores of other work` : ""}</p>`
+    + `${c.contention ? ` with ${c.contention} cores of other work` : ""}`
+    + `${!c.contention && c.load ? ` at a load average of ${c.load}` : ""}</p>`
     + (c.history || `<p class="placeholder">No note recorded for this commit.</p>`);
 }
 
@@ -529,6 +574,15 @@ function renderTabs() {
     b.addEventListener("click", () => { metricKey = key; renderTabs(); render(); });
     box.appendChild(b);
   }
+}
+
+// What `history.md` says before its first entry: which rows are comparable with which. It
+// belongs to no one commit, so it sits beside the notes rather than among them.
+const comparability = document.getElementById("comparability");
+if (DATA.preamble) {
+  document.getElementById("preamble").innerHTML = DATA.preamble;
+} else {
+  comparability.hidden = true;
 }
 
 renderTabs();
