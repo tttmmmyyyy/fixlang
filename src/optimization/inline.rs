@@ -23,6 +23,26 @@ use std::{mem, sync::Arc};
 /// exceed it, as reference counting and the bounds checks still to be inserted feed them too.
 const INLINE_COST_THRESHOLD: i32 = 30;
 
+/// The nodes a symbol's expression may reach by being substituted into.
+///
+/// This bounds a different quantity from `INLINE_COST_THRESHOLD`, and the two are not comparable.
+/// That one weighs what a copy of a body costs the program that runs: a `let` binding one name to
+/// another generates nothing, so it counts nothing. This one weighs what a copy costs the compiler
+/// that holds it, where every node is a node however little it generates.
+///
+/// Globals that name each other in a cycle are what needs the second quantity. None of them calls
+/// itself, so `is_self_recursive` never stops the substitution, and each round puts the cycle into
+/// each member again. What accumulates is the renaming a substitution leaves behind -- `let x = p;
+/// let p = x;` per turn -- which the first quantity values at nothing, so no ceiling expressed in it
+/// can ever be reached. A ring of three globals doubles each of them per round -- 6, 10, 18, 34, 66
+/// nodes and on -- while the first quantity reads 3 throughout, and a ring whose members carry two
+/// thousand renamings apiece exhausts the compiler's stack and aborts the build.
+///
+/// It is set where no symbol a corpus program reaches comes near it: across LangArena's fifty
+/// programs and the standard library the largest holds 4,130 nodes and the 99th percentile 1,164,
+/// so a program that stops on its own is left as it was.
+const MAX_INLINED_SYMBOL_NODES: usize = 10000;
+
 /// How many times `run` rewrites the program before it stops asking for more.
 ///
 /// Inlining reaches its result by rewriting until nothing changes, and a program whose global
@@ -67,6 +87,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     let mut inliner = Inliner {
         costs: &costs,
         symbols: symbols.clone(),
+        budget: 0,
     };
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let root_value_names = prg.root_value_names();
@@ -91,7 +112,9 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             continue;
         }
 
-        // Traverse the expression and inline the symbol.
+        // Traverse the expression and inline the symbol. What it may gain this round is what it
+        // has left before `MAX_INLINED_SYMBOL_NODES`.
+        inliner.budget = MAX_INLINED_SYMBOL_NODES as i64 - costs.get(&name).nodes as i64;
         let res = inliner.traverse(&sym.expr.as_ref().unwrap());
 
         if res.changed {
@@ -125,6 +148,11 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
         costs.add_cost_calculation_result(cost_calculator);
 
         let expr = sym.expr.as_ref().unwrap();
+        // Count what a copy of the expression costs the compiler, which is every node of it.
+        let mut nodes = 0;
+        expr.walk_nodes(&mut |_| nodes += 1);
+        costs.costs.get_mut(name).unwrap().nodes = nodes;
+
         // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`.
         let (_params, body) = expr.destructure_lam_sequence();
         let is_llvm_lam = body.is_llvm();
@@ -156,6 +184,10 @@ struct InlineCost {
     call_count: usize,
     // The complexity of the expression.
     complexity: usize,
+    /// The nodes the expression holds, which is what a copy of it costs the compiler. `complexity`
+    /// answers what it costs the program instead, and values at nothing the nodes that generate
+    /// nothing.
+    nodes: usize,
     // Is the function calling itself?
     is_self_recursive: bool,
     // Is the top-level construct a lambda expression?
@@ -180,6 +212,7 @@ impl InlineCost {
         InlineCost {
             call_count: 0,
             complexity: 0,
+            nodes: 0,
             is_self_recursive: false,
             is_lambda: false,
             is_llvm_lam: false,
@@ -552,6 +585,26 @@ struct Inliner<'c> {
     costs: &'c InlineCosts,
     // All symbols.
     symbols: Map<FullName, Symbol>,
+    /// How many nodes the symbol being traversed may still gain, against
+    /// `MAX_INLINED_SYMBOL_NODES`. `run_one` sets it before each symbol, and every substitution
+    /// spends the nodes of the body it copies.
+    budget: i64,
+}
+
+impl<'c> Inliner<'c> {
+    /// Whether a copy of `name`'s expression fits in what the symbol being traversed may still
+    /// gain, and spends it where it does.
+    ///
+    /// # Parameters
+    /// * `name` - The symbol whose expression would be copied.
+    fn take_budget_for(&mut self, name: &FullName) -> bool {
+        let nodes = self.costs.get(name).nodes as i64;
+        if nodes > self.budget {
+            return false;
+        }
+        self.budget -= nodes;
+        true
+    }
 }
 
 impl<'c> ExprVisitor for Inliner<'c> {
@@ -572,6 +625,9 @@ impl<'c> ExprVisitor for Inliner<'c> {
 
         let cost = self.costs.costs.get(var_name).unwrap();
         if !cost.inline_at_non_call_site() {
+            return EndVisitResult::unchanged(expr);
+        }
+        if !self.take_budget_for(var_name) {
             return EndVisitResult::unchanged(expr);
         }
 
@@ -617,6 +673,9 @@ impl<'c> ExprVisitor for Inliner<'c> {
             .unwrap()
             .inline_at_call_site()
         {
+            return EndVisitResult::unchanged(expr);
+        }
+        if !self.take_budget_for(func_name) {
             return EndVisitResult::unchanged(expr);
         }
         let func_expr = self.symbols.get(func_name).unwrap().expr.as_ref().unwrap();
