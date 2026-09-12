@@ -27,6 +27,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PERF_COUNTERS = HERE / "perf_counters.py"
 
+# What `perf_counters.py` exits with when the program it measures exits non-zero. Its own module
+# sets the affinity of whatever process imports it, so the number is spelled again here rather
+# than taken from there.
+PROGRAM_FAILED = 2
+
 # The Fix case is built for this host with every feature it has. The counterparts get the same
 # deal, so the comparison is between the languages rather than between the instruction sets they
 # were allowed to use.
@@ -64,17 +69,16 @@ def measure(language, windows):
       count reported is the lowest of them.
     """
     _source, binary = source_and_binary(language)
-    # The counterpart checks its own answer, so a reference that drifted away from the case
-    # fails here instead of quietly becoming a number on the chart. Reading the answer before
-    # the counters keeps this apart from a machine that has no counters to read.
-    answered = subprocess.run([f"./{binary}"], capture_output=True, text=True)
-    if answered.returncode != 0:
-        sys.exit(f"{binary} exited with {answered.returncode}:\n{answered.stderr.strip()}")
-    # A machine without the counters leaves every field the way the case's own measurement
-    # leaves it, so a row is short of the same columns on both lines.
     counted = subprocess.run(
         ["python3", str(PERF_COUNTERS), "--windows", str(windows), f"./{binary}"],
         capture_output=True, text=True)
+    # The counterpart checks its own answer, so a reference that drifted away from the case
+    # fails here instead of quietly becoming a number on the chart. `perf_counters.py` reports
+    # that as 2, apart from the 1 it reports for counters it could not read.
+    if counted.returncode == PROGRAM_FAILED:
+        sys.exit(f"{binary} failed its own check:\n{counted.stderr.strip()}")
+    # A machine without the counters leaves every field the way the case's own measurement
+    # leaves it, so a row is short of the same columns on both lines.
     return counted.stdout.strip() if counted.returncode == 0 else ",,,,0.00"
 
 

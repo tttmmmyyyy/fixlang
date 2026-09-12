@@ -5,18 +5,17 @@ user space, accesses that missed the last level cache and so went to main memory
 stores that crossed a cache-line boundary, user-space core cycles, and the CPU that work other
 than this measurement took while it ran, in cores.
 
-The instruction count is decided by the program and its input alone, so it is the column a change
-to the compiler is read on. The memory and split counts are decided by those together with where
-the program's data landed and what else was in the cache, and the lowest reading over the runs is
-taken as the program's own: a line-crossing access costs real time and an instruction count has no
+The instruction and split counts are decided by the program and its input, which is what makes
+them the columns a change to the compiler is read on: the runs below take a fixed environment with
+address-space randomization off, and under those eight runs of `nbody` read one split count and six
+of `iter_flatten` read one. A line-crossing access costs real time and an instruction count has no
 notion of one -- an array whose elements start 8 bytes into a 16-byte-aligned allocation splits
-half of its 32-byte accesses. The cycle count is the one figure here that says how fast the
-machine gets through the work, which is where a change to code layout or branch density shows up.
+half of its 32-byte accesses. The memory count moves with what else was in the cache. The cycle
+count is the one figure here that says how fast the machine gets through the work, which is where
+a change to code layout or branch density shows up.
 
 Every figure is the lowest reading over `--windows` windows of runs, since other work only ever
-raises one. The split count is read off the run the cycle count came from, so that the pair
-describes one execution: where a program's data sits decides which of its accesses straddle a
-line, and address-space randomization moves that from one run to the next.
+raises one.
 
 The cycle count is reported only where nothing else could have moved it, and the other columns
 whatever the machine was doing. Other work reaches a cycle count two ways. It runs on the other
@@ -27,9 +26,13 @@ whether this program is one of those. Where either of them could have moved a ru
 field comes back empty, since a figure logged there would say more about that competition than
 about the program.
 
-Exits non-zero when the counters are unavailable (no hardware PMU, or
-`kernel.perf_event_paranoid` above 2) or when the PMU had to time-slice them, so a caller
-can leave the columns empty instead of logging an estimate.
+Exits 2 when the measured program itself exits non-zero. A case checks its own answer, so that
+is a case whose answer moved, and a caller that treated it as a missing measurement would log the
+silence of a broken program as the silence of a machine with nothing to read.
+
+Exits 1 when the counters are unavailable (no hardware PMU, or `kernel.perf_event_paranoid` above
+2) or when the PMU had to time-slice them, so a caller can leave the columns empty instead of
+logging an estimate.
 
     python3 perf_counters.py [--windows N] ./a.out [args...]
     python3 perf_counters.py --cpu
@@ -64,13 +67,15 @@ ALL_EVENTS = SPLIT_EVENTS + [CYCLE_EVENT, INSTRUCTION_EVENT, MEMORY_EVENT]
 QUIET_CONTENTION = 0.5
 
 # How often a program's data comes from main memory, per instruction, before another process can
-# change its cycle count by taking the cache from it. Read with four processes each walking twice
-# the last level cache on other cores, the disturbed and undisturbed readings of a case alternating
-# inside one round and a round the sibling thread was busy through thrown away: every case of the
-# suite below this rate came within 3.5% of its undisturbed cycles, and every case above 0.000045
-# took between 1.08 and 7.8 times them. The limit sits at the low end of the gap between the two,
-# because a case dropped costs a row one figure where a case kept wrongly puts a figure in the log
-# that reads like every other one.
+# change its cycle count by taking the cache from it. Read on an 11th Gen Intel Core i5-11400 (6
+# cores, 12 MiB of last level cache) with four processes each walking twice that cache on other
+# cores, the disturbed and undisturbed readings of a case alternating inside one round and a round
+# the sibling thread was busy through thrown away: every case of the suite below this rate came
+# within 3.5% of its undisturbed cycles, and every case above 0.000045 took between 1.08 and 7.8
+# times them. The limit sits at the low end of the gap between the two, because a case dropped
+# costs a row one figure where a case kept wrongly puts a figure in the log that reads like every
+# other one. What `cache-misses` counts belongs to the processor that counted it, so a machine
+# with a cache of another size is applying a number measured elsewhere.
 RAM_RATE_LIMIT = 0.00002
 
 # How much of a run the other thread of the measurement's core may be busy for. The two threads
@@ -92,6 +97,10 @@ MINIMUM_WINDOW_SECONDS = 0.2
 # to the caller's environment, one unchanged binary reported 70,765 splits from one shell and
 # 170,766 from another.
 MEASUREMENT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
+
+# What this program exits with when the program it measures exits non-zero, which a caller reads
+# apart from the 1 that says the counters could not be read.
+PROGRAM_FAILED = 2
 
 CLOCK_TICK = os.sysconf("SC_CLK_TCK")
 
@@ -168,8 +177,17 @@ def own_cpu_seconds():
 
 
 def event_name(event):
-    """The name perf prints for `event`, which drops the `:u` that asks it to count user space."""
+    """`event` without the `:u` that asks perf to count user space alone.
+
+    perf prints an event under the name it was asked for, `:u` included, so the counts and the
+    names they are looked up under are both put through this.
+    """
     return event.removesuffix(":u")
+
+
+def lower(best, reading):
+    """The lower of the two, taking `reading` where there is no `best` yet."""
+    return reading if best is None or reading < best else best
 
 
 def read_counters(argv):
@@ -186,7 +204,8 @@ def read_counters(argv):
     # execute before it died. Counting a partial run as a measurement would put a plausible
     # number in the log.
     if proc.returncode != 0:
-        sys.exit(f"{argv[0]} exited with {proc.returncode}")
+        print(f"{argv[0]} exited with {proc.returncode}", file=sys.stderr)
+        sys.exit(PROGRAM_FAILED)
     found = {}
     for line in proc.stderr.splitlines():
         fields = line.split(",")
@@ -208,23 +227,14 @@ def read_counters(argv):
 
 
 def read_window(argv):
-    """The lowest cycle count over a window of runs, how busy the sibling thread was through it,
-    the split count of the run that cycle count came from, and the lowest instruction and memory
-    counts of the window.
+    """The lowest cycle, split, instruction and memory counts over a window of runs, and how busy
+    the sibling thread was through it.
 
     A window holds as many runs as `MINIMUM_WINDOW_SECONDS` needs, so that the sibling reading covers
     enough ticks of `/proc/stat` to mean something.
 
-    The split count comes from the run the cycle count came from rather than from the window as a
-    whole, so that the pair describes the same execution. Which accesses straddle a line is decided
-    by where the program's data sits, and address-space randomization moves that from one run to
-    the next: two runs of one program under one environment differ by a few accesses, and sometimes
-    by many, when a buffer lands on the other side of a line. Reading the split count off the run
-    whose cycles are reported keeps the row consistent without asking the runs to agree on a figure
-    the machine is free to vary.
-
-    The instruction and memory counts are the window's lowest: the instruction count is the same
-    in every run, and the memory count is only ever raised by what else was in the cache.
+    Each count is the window's lowest on its own: whatever the rest of the machine does to a run
+    raises the counts of that run and lowers none of them.
     """
     sibling_before = sibling_cpu_seconds()
     started = time.monotonic()
@@ -237,16 +247,10 @@ def read_window(argv):
             # of reach.
             sys.exit(f"perf reported none of {', '.join(missing)}. perf said:\n"
                      + report.strip())
-        run_cycles = found[event_name(CYCLE_EVENT)]
-        if cycles is None or run_cycles < cycles:
-            cycles = run_cycles
-            splits = sum(found[e] for e in SPLIT_EVENTS)
-        run_instructions = found[event_name(INSTRUCTION_EVENT)]
-        if instructions is None or run_instructions < instructions:
-            instructions = run_instructions
-        run_memory = found[event_name(MEMORY_EVENT)]
-        if memory is None or run_memory < memory:
-            memory = run_memory
+        cycles = lower(cycles, found[event_name(CYCLE_EVENT)])
+        splits = lower(splits, sum(found[e] for e in SPLIT_EVENTS))
+        instructions = lower(instructions, found[event_name(INSTRUCTION_EVENT)])
+        memory = lower(memory, found[event_name(MEMORY_EVENT)])
         elapsed = time.monotonic() - started
         if elapsed >= MINIMUM_WINDOW_SECONDS:
             break
@@ -268,22 +272,15 @@ def measure(argv, windows):
     machine_before = cpu_seconds("cpu")
     own_before = own_cpu_seconds()
     started = time.monotonic()
-    splits = None
-    cycles = None
-    instructions = None
-    memory = None
+    cycles = splits = instructions = memory = None
     for _ in range(windows):
         window_cycles, sibling_busy, window_splits, window_instructions, window_memory = \
             read_window(argv)
-        if instructions is None or window_instructions < instructions:
-            instructions = window_instructions
-        if memory is None or window_memory < memory:
-            memory = window_memory
-        if splits is None:
-            # A figure to report even where no window is the program's own to read.
-            splits = window_splits
-        if sibling_busy <= SIBLING_BUSY_LIMIT and (cycles is None or window_cycles < cycles):
-            cycles, splits = window_cycles, window_splits
+        splits = lower(splits, window_splits)
+        instructions = lower(instructions, window_instructions)
+        memory = lower(memory, window_memory)
+        if sibling_busy <= SIBLING_BUSY_LIMIT:
+            cycles = lower(cycles, window_cycles)
     elapsed = time.monotonic() - started
     others = (cpu_seconds("cpu") - machine_before) - (own_cpu_seconds() - own_before)
     # `/proc/stat` counts in whole ticks and the rusage clocks round, so a short measurement
@@ -355,6 +352,16 @@ def self_check():
     assert cpu_list("2-5\n") == [2, 3, 4, 5], cpu_list("2-5\n")
     assert cpu_list("2-5,8\n") == [2, 3, 4, 5, 8], cpu_list("2-5,8\n")
 
+    # A count is looked up under the name its event asks for with `:u` taken off, and no other
+    # part of a name moves. Two events left sharing a name would have `read_counters` report one
+    # of them twice.
+    assert event_name(CYCLE_EVENT) == "cycles", event_name(CYCLE_EVENT)
+    assert event_name("mem_inst_retired.split_loads") == "mem_inst_retired.split_loads"
+    assert len({event_name(e) for e in ALL_EVENTS}) == len(ALL_EVENTS), ALL_EVENTS
+
+    assert lower(None, 3) == 3
+    assert lower(5, 3) == 3 and lower(3, 5) == 3
+
     # A quiet machine's count is kept whatever the program asks of main memory. Above the rate
     # another process reaches the count through the cache; below the rate it cannot.
     busy = QUIET_CONTENTION * 2
@@ -363,6 +370,9 @@ def self_check():
     assert cycles_are_comparable(1, QUIET_CONTENTION / 2, above, 10 ** 9)
     assert cycles_are_comparable(1, busy, below, 10 ** 9)
     assert not cycles_are_comparable(1, busy, above, 10 ** 9)
+    # Each limit is the most a reading may carry and still be kept.
+    assert cycles_are_comparable(1, QUIET_CONTENTION, above, 10 ** 9)
+    assert cycles_are_comparable(1, busy, int(RAM_RATE_LIMIT * 10 ** 9), 10 ** 9)
     # A count no window gave is no count, however little the program asks of main memory.
     assert not cycles_are_comparable(None, QUIET_CONTENTION / 2, below, 10 ** 9)
 
@@ -378,24 +388,50 @@ def self_check():
     else:
         raise AssertionError("--windows without a value was taken as an option")
 
+    global read_counters, read_window
+
+    # Every count a window reports is the lowest of its runs, taken on its own. The run below with
+    # the lowest cycles has the highest of every other count, so a count taken from that run
+    # instead would show up here as that run's figure. The counts are keyed the way
+    # `read_counters` keys them, so one looked up under a name perf does not print would show up
+    # as an event the run never reported.
+    def canned_run(cycles, split_loads, split_stores, instructions, memory):
+        counts = dict(zip((event_name(e) for e in SPLIT_EVENTS), (split_loads, split_stores)))
+        counts[event_name(CYCLE_EVENT)] = cycles
+        counts[event_name(INSTRUCTION_EVENT)] = instructions
+        counts[event_name(MEMORY_EVENT)] = memory
+        return counts
+
+    runs = []
+    real_counters, read_counters = read_counters, lambda argv: (runs.pop(0), "")
+    # A window runs until `MINIMUM_WINDOW_SECONDS` has passed, so the clock is what says how many
+    # runs it holds, and the last reading is what the sibling figure is divided by.
+    ticks = iter([0.0, MINIMUM_WINDOW_SECONDS / 2, MINIMUM_WINDOW_SECONDS])
+    real_monotonic, time.monotonic = time.monotonic, lambda: next(ticks)
+    try:
+        runs[:] = [canned_run(70, 4, 5, 11, 8), canned_run(90, 3, 4, 10, 5)]
+        cycles, _sibling_busy, splits, instructions, memory = read_window(None)
+        assert (cycles, splits, instructions, memory) == (70, 7, 10, 5), \
+            (cycles, splits, instructions, memory)
+    finally:
+        read_counters, time.monotonic = real_counters, real_monotonic
+
     # Only the windows the sibling stayed out of reach the cycle count, and where none did there is
-    # no count to report. The window left out below carries the lowest count of the three, so
-    # `measure` letting it through would show up here as that count. The split count travels with
-    # the cycle count it was read beside, and where no window is the program's own it is the first
-    # window's. The instruction and memory counts are the lowest of every window, including the
-    # ones the sibling was busy through.
-    global read_window
+    # no count to report. A window the sibling was busy for exactly the limit is one it stayed out
+    # of. The window left out below carries the lowest count of the three, so `measure` letting it
+    # through would show up here as that count. The other three counts are
+    # the lowest of every window, including the ones the sibling was busy through.
     canned = []
     real, read_window = read_window, lambda argv: canned.pop(0)
     try:
         canned[:] = [(90, 0.0, 9, 11, 5), (70, 1.0, 7, 10, 3),
-                     (80, SIBLING_BUSY_LIMIT / 2, 4, 12, 6)]
+                     (80, SIBLING_BUSY_LIMIT, 4, 12, 6)]
         instructions, memory, splits, cycles, _contention = measure(None, 3)
         assert (instructions, memory, splits, cycles) == (10, 3, 4, 80), \
             (instructions, memory, splits, cycles)
         canned[:] = [(90, 1.0, 9, 11, 5), (70, 1.0, 7, 10, 3)]
         instructions, memory, splits, cycles, _contention = measure(None, 2)
-        assert (instructions, memory, splits, cycles) == (10, 3, 9, None), \
+        assert (instructions, memory, splits, cycles) == (10, 3, 7, None), \
             (instructions, memory, splits, cycles)
     finally:
         read_window = real

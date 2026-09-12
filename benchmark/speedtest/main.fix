@@ -226,6 +226,13 @@ main = (
         // On a machine without the counters every column stays empty and the run carries on.
         let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "--windows", _WINDOWS,
             "./a.out"].ez_run_oec(config);
+        // A case checks its own answer, so a case that exits non-zero is one whose answer moved.
+        // `perf_counters.py` reports that as 2, apart from the 1 it reports for counters it
+        // could not read, so the run stops here instead of logging the silence as a machine's.
+        if perf_code == 2_U8 {
+            eprintln("error: " + dir + " failed its own check");;
+            exit(1)
+        };
         let (log, case_contention) = if perf_code != 0_U8 { (log, 0.0) } else {
             let perf = perf.strip_spaces.split(",").to_array;
             if perf.@size != 5 {

@@ -36,11 +36,12 @@ METRICS = [
      "and input give the same number however busy the machine is.", "ratio"),
     ("ram", "perf main-memory accesses",
      "Accesses that missed the last level cache and so came from main memory, from the hardware "
-     "counters, as the lowest of several runs. It is what decides whether that program's cycle "
-     "count survives a machine with other work on it.", "ratio"),
+     "counters. What else was in the cache moves this count, so the lowest reading of several "
+     "runs is taken as the program's own. It is what decides whether that program's cycle count "
+     "survives a machine with other work on it.", "ratio"),
     ("cycles", "perf cycles",
      "Core cycles the program spent in user mode, from the hardware counters, as the lowest of "
-     "several windows of runs. This is the only column here that is not deterministic. Other work "
+     "several windows of runs. Other work "
      "reaches it two ways: over the core the run shares with the thread beside it, which the "
      "harness pins for and watches, and over the cache every core shares, which costs a program in "
      "proportion to how much of its data comes from main memory. Where either of them could have "
@@ -49,8 +50,9 @@ METRICS = [
      "ratio"),
     ("splits", "perf splits",
      "Loads and stores that crossed a cache-line boundary, from the hardware counters. An "
-     "instruction count has no notion of these, and they cost real time; the count reaches zero "
-     "once the data is aligned, so it is plotted as an absolute count.", "absolute"),
+     "instruction count has no notion of these, and they cost real time; the count is "
+     "deterministic and reaches zero once the data is aligned, so it is plotted as an absolute "
+     "count.", "absolute"),
 ]
 
 
@@ -164,10 +166,10 @@ def self_check():
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / "log.csv"
         log.write_text(
-            "commit,cpu,contention,a-inst,a-ram,a-splits,a-cycles,b-inst,a-inst-c,"
-            "a-inst-rust\n"
-            "1111111111111111111111111111111111111111,Zen,0.10,100,3,4,7,50,90,\n"
-            "2222222222222222222222222222222222222222(dirty),Zen,,150,5,0,,,90,120\n",
+            "commit,cpu,contention,a-inst,a-mem,a-ram,a-splits,a-cycles,b-inst,a-inst-c,"
+            "a-inst-rust,a-mem-c\n"
+            "1111111111111111111111111111111111111111,Zen,0.10,100,200,3,4,7,50,90,,210\n"
+            "2222222222222222222222222222222222222222(dirty),Zen,,150,,5,0,,,90,120,\n",
             encoding="utf-8",
         )
         history = Path(tmp) / "history.md"
@@ -185,6 +187,9 @@ def self_check():
     assert series["ram"] == {"a": [3, 5]}, series["ram"]
     # A cycle count other work could have moved leaves its cell empty, so the series has gaps.
     assert series["cycles"] == {"a": [7, None]}, series["cycles"]
+    # The rows a cachegrind run left behind carry `-mem` columns, and the column ended with that
+    # run: it draws no chart of its own, and no other metric takes its cells.
+    assert "mem" not in data["metrics"], sorted(data["metrics"])
     assert data["metrics"]["splits"]["kind"] == "absolute"
     assert data["metrics"]["inst"]["refs"] == {"a": {"c": 90, "rust": 120}}, data["metrics"]["inst"]["refs"]
     assert data["metrics"]["ram"]["refs"] == {}, data["metrics"]["ram"]["refs"]
