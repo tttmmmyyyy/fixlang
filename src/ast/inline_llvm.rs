@@ -250,18 +250,23 @@ pub fn clone_path_rc_targets(check: Option<UniqueCheckOperand>) -> Vec<RcTarget>
     }
 }
 
+/// An inline-LLVM builtin operation as it stands in an expression: the operation to emit, and the
+/// type the expression was declared at.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVM {
+    /// The operation this expression emits.
     pub generator: Box<dyn LLVMGen>,
-    // The type of this LLVM expression.
-    //
-    // For example, in `@ : I64 -> Array a -> a = |i, arr| LLVM<Array::@(i, arr)>;`, the `generic_ty` of the InlineLLVM `LLVM<arr.Array::@(i, arr)>` is `a`.
-    // Note that `generic_ty` may contain type variables, and it is not changed in type instantiation.
+    /// The type of this LLVM expression.
+    ///
+    /// For example, in `@ : I64 -> Array a -> a = |i, arr| LLVM<Array::@(i, arr)>;`, the
+    /// `generic_ty` of the InlineLLVM `LLVM<arr.Array::@(i, arr)>` is `a`.
+    ///
+    /// `generic_ty` may contain type variables, and type instantiation leaves it as it is.
     pub generic_ty: Arc<TypeNode>,
 }
 
 impl InlineLLVM {
-    // Convert all global FullNames to absolute paths.
+    /// This expression with every global `FullName` in its type made absolute.
     pub fn global_to_absolute(&self) -> Arc<InlineLLVM> {
         Arc::new(InlineLLVM {
             generator: self.generator.clone(),

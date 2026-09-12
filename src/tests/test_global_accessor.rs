@@ -33,14 +33,22 @@ const TWO_GLOBALS_SOURCE: &str = r#"
     );
 "#;
 
-/// The names the compiler gives the parts of `table`, as the emitted LLVM IR quotes them.
+/// The accessor of `table`, as the emitted LLVM IR quotes its name.
 const TABLE_ACCESSOR: &str = "@\"Get#Main::table#";
+
+/// The function computing the value of `table`, as the emitted LLVM IR quotes its name.
 const TABLE_INITIALIZER: &str = "@\"InitValue#Main::table#";
+
+/// The storage holding the value of `table`, as the emitted LLVM IR quotes its name.
 const TABLE_STORAGE: &str = "@\"GlobalVar#Main::table#";
+
+/// The flag saying whether `table` has been initialized, as the emitted LLVM IR quotes its name.
 const TABLE_FLAG: &str = "@\"InitFlag#Main::table#";
 
-/// The same, for `read_once`.
+/// The accessor of `read_once`, as the emitted LLVM IR quotes its name.
 const READ_ONCE_ACCESSOR: &str = "@\"Get#Main::read_once#";
+
+/// The function computing the value of `read_once`, as the emitted LLVM IR quotes its name.
 const READ_ONCE_INITIALIZER: &str = "@\"InitValue#Main::read_once#";
 
 /// A program whose global is read by the C function an `FFI_EXPORT` statement builds.
@@ -260,9 +268,8 @@ pub fn test_a_reader_of_a_global_sees_every_write_to_it() {
 /// length and the element read reads the pointer. The property is read off the emitted LLVM IR: it
 /// is about the code the build emits, and a program cannot observe a call it does not make.
 ///
-/// This is the requirement. `test_the_initializer_of_a_shared_global_sits_outside_the_accessor` and
-/// `test_a_reader_of_a_global_sees_every_write_to_it` pin the two properties this compiler reaches
-/// it by, and another mechanism would keep this test green and turn those red.
+/// This is the requirement itself, stated apart from the mechanism that meets it: a compiler
+/// reaching `table` some other way would keep this test green.
 #[test]
 pub fn test_reading_a_global_in_a_loop_costs_no_call() {
     let temp_dir = build_emitting_llvm_ir(TWO_GLOBALS_SOURCE);

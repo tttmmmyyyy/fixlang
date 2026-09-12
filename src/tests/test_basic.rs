@@ -14023,8 +14023,8 @@ main = (
     test_source(source, Configuration::develop_mode());
 }
 
-/// Verifies the other direction: a trait implemented for a type written as a type alias, whose
-/// associated type line names the type the alias stands for.
+/// Verifies that a trait may be implemented for a type written as a type alias, with the
+/// associated type line naming the type the alias stands for.
 #[test]
 pub fn test_trait_impl_head_written_as_type_alias() {
     let source = r#"

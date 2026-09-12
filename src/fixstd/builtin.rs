@@ -920,6 +920,8 @@ impl LLVMGen for InlineLLVMIntLit {
         vec![]
     }
 
+    /// An integer literal evaluates to a value held in a register, so a copy of it where the value
+    /// is named costs what naming it costs.
     fn is_free_to_duplicate(&self) -> bool {
         true
     }
@@ -974,6 +976,8 @@ impl LLVMGen for InlineLLVMFloatLit {
         vec![]
     }
 
+    /// A floating-point literal evaluates to a value held in a register, so a copy of it where the
+    /// value is named costs what naming it costs.
     fn is_free_to_duplicate(&self) -> bool {
         true
     }
@@ -1016,6 +1020,8 @@ impl LLVMGen for InlineLLVMNullPtrLit {
         vec![]
     }
 
+    /// A null pointer evaluates to a value held in a register, so a copy of it where the value is
+    /// named costs what naming it costs.
     fn is_free_to_duplicate(&self) -> bool {
         true
     }

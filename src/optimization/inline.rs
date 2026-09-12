@@ -86,7 +86,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             continue;
         }
 
-        // If the new symbol has no free variables, it cannot be inlined furthermore.
+        // If the new symbol has no free variables, it cannot be inlined further.
         if sym.expr.as_ref().unwrap().free_vars().is_empty() {
             stable_symbols.insert(name.clone());
             new_symbols.insert(name.clone(), sym);
@@ -102,11 +102,11 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             sym.expr = Some(res.expr);
             application_inlining::run_on_symbol(&mut sym);
         } else {
-            // If inlining was not done, it cannot be inlined furthermore.
+            // If inlining was not done, it cannot be inlined further.
             stable_symbols.insert(name.clone());
         }
 
-        // If the new symbol has no free variables, it cannot be inlined furthermore.
+        // If the new symbol has no free variables, it cannot be inlined further.
         if sym.expr.as_ref().unwrap().free_vars().is_empty() {
             stable_symbols.insert(name.clone());
         }
@@ -119,6 +119,8 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     changed
 }
 
+/// Measure every symbol of the program: how large its expression is, how many times the program
+/// names it, and the shapes of that expression which decide where it may be inlined.
 fn calculate_inline_costs(prg: &Program) -> InlineCosts {
     let mut costs = InlineCosts::new();
     for (name, sym) in &prg.symbols {
@@ -157,30 +159,28 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
 /// What one symbol costs to inline, and the shapes of its expression that decide where it may
 /// be inlined at all.
 struct InlineCost {
-    // The number of times the program names the symbol.
+    /// The number of times the program names the symbol.
     use_count: usize,
-    // The complexity of the expression.
+    /// The size of the symbol's expression: one for each node that generates code. A local
+    /// variable, a type annotation, an `eval`, and a `let` or a `match` that only renames a local
+    /// count nothing.
     complexity: usize,
-    // Does the symbol's expression name the symbol itself?
+    /// Does the symbol's expression name the symbol itself?
     is_self_recursive: bool,
-    // Is the top-level construct a lambda expression?
+    /// Is the top-level construct a lambda expression?
     is_lambda: bool,
-    // Is the expression of the form `|x, y, ...| {llvm}`?
+    /// Is the expression of the form `|x, y, ...| {llvm}`?
     is_llvm_lam: bool,
     /// Does a copy of the expression cost no more than the expression itself?
     is_free_to_duplicate: bool,
-    // Is this expression an alias to another value?
-    //
-    // Example:
-    // ```
-    // x = y;
-    // ```
+    /// Is this expression an alias to another value, as in `x = y;`?
     is_alias: bool,
-    // Is the expression instantiated by Std::fix?
+    /// Is the expression instantiated by `Std::fix`?
     is_std_fix: bool,
 }
 
 impl InlineCost {
+    /// A cost with nothing counted and every flag false, for the walks to fill in.
     fn new() -> Self {
         InlineCost {
             use_count: 0,
@@ -252,6 +252,7 @@ struct InlineCosts {
 }
 
 impl InlineCosts {
+    /// A table holding no cost yet.
     fn new() -> Self {
         InlineCosts {
             costs: Map::default(),
@@ -308,20 +309,26 @@ impl InlineCosts {
     }
 }
 
+/// Walks the expression of one symbol and measures it: how large it is, which global names it
+/// uses and how often, whether it names the symbol itself, and whether its top-level construct is
+/// a lambda.
 struct InlineCostCalculator {
-    // The name of the symbol.
+    /// The name of the symbol whose expression is walked.
     name: FullName,
-    // For each global name, how many times the symbol names it.
+    /// For each global name, how many times the symbol names it.
     use_count: Map<FullName, usize>,
-    // The cost of the symbol.
+    /// The size of the part of the expression walked so far: one for each node that generates
+    /// code.
     complexity: usize,
-    // Does the symbol name itself?
+    /// Does the symbol name itself?
     is_self_recursive: bool,
-    // Is the top-level construct a lambda expression?
+    /// Is the construct visited last a lambda expression? The walk ends at the top-level
+    /// construct, so this answers for that one.
     is_lambda: bool,
 }
 
 impl InlineCostCalculator {
+    /// A calculator that has measured nothing, for the symbol named `name`.
     fn new(name: FullName) -> Self {
         InlineCostCalculator {
             name,
@@ -332,6 +339,8 @@ impl InlineCostCalculator {
         }
     }
 
+    /// Record one use of the global name `used_name` by the symbol being walked, and note a
+    /// symbol that names itself.
     fn on_find_usage_of_global_name(&mut self, used_name: &FullName) {
         // Count one use of the global symbol.
         assert!(used_name.is_global());
@@ -420,7 +429,7 @@ impl ExprVisitor for InlineCostCalculator {
     }
 
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        // If the let binding is of the form `let {local_var0} = {local_var1} in (...)`, does not increase the complexity.
+        // A `let` of the form `let {local_var0} = {local_var1} in (...)` counts nothing.
         self.complexity += 1;
         let pat = expr.get_let_pat();
         if pat.is_var() && pat.get_var().name.is_local() {
@@ -455,7 +464,7 @@ impl ExprVisitor for InlineCostCalculator {
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.is_lambda = false;
 
-        // If the match is of the form `match {local_var0} { {local_var1} -> (...) }`, does not increase the complexity.
+        // A `match` of the form `match {local_var0} { {local_var1} -> (...) }` counts nothing.
         self.complexity += 1;
         let match_cond = expr.get_match_cond();
         if match_cond.is_var() && match_cond.get_var().name.is_local() {
@@ -486,7 +495,7 @@ impl ExprVisitor for InlineCostCalculator {
     ) -> EndVisitResult {
         self.is_lambda = false;
 
-        // Does not increase the complexity.
+        // A type annotation counts nothing.
         EndVisitResult::unchanged(expr)
     }
 
@@ -558,10 +567,12 @@ impl ExprVisitor for InlineCostCalculator {
     }
 }
 
+/// Walks an expression and puts the body of a global at each place the expression names it, where
+/// the cost of that global allows.
 struct Inliner<'c> {
-    // The cost of inlining.
+    /// What each global of the program costs to inline, and where it may be inlined.
     costs: &'c InlineCosts,
-    // All symbols.
+    /// The symbols of the program, holding the bodies to put at the names.
     symbols: Map<FullName, Symbol>,
 }
 
