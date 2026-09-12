@@ -334,9 +334,11 @@ impl ObjectFieldType {
             .build_load(counter_type, counter_ptr, "counter_val")
             .unwrap()
             .into_int_value();
+        // A count the caller computed as a difference can come out negative, and `SGE` ends the
+        // loop at once there; `EQ` would step past it and walk the heap without bound.
         let is_end = gc
             .builder()
-            .build_int_compare(IntPredicate::EQ, counter_val, size, "is_end")
+            .build_int_compare(IntPredicate::SGE, counter_val, size, "is_end")
             .unwrap();
         gc.builder()
             .build_conditional_branch(is_end, after_loop_bb, loop_body_bb)
