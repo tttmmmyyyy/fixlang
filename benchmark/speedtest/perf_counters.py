@@ -99,7 +99,8 @@ MINIMUM_WINDOW_SECONDS = 0.2
 MEASUREMENT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
 
 # What this program exits with when the program it measures exits non-zero, which a caller reads
-# apart from the 1 that says the counters could not be read.
+# apart from the 1 that says the counters could not be read. `reference.py` and `main.fix` spell
+# this number again, since importing this module would set the affinity of the importing process.
 PROGRAM_FAILED = 2
 
 CLOCK_TICK = os.sysconf("SC_CLK_TCK")

@@ -20,6 +20,17 @@ _WINDOWS = "5";
 _REFERENCE_LANGUAGES : Array String;
 _REFERENCE_LANGUAGES = ["c", "rust"];
 
+// What `perf_counters.py` exits with when the program it measured exited non-zero, apart from
+// the 1 it exits with when the counters could not be read. `reference.py` carries the same
+// number under `PROGRAM_FAILED`.
+_PROGRAM_FAILED : U8;
+_PROGRAM_FAILED = 2_U8;
+
+// The columns a `perf_counters.py` line fills, in the order it prints them. The contention it
+// prints after them belongs to the row rather than to any one case.
+_COUNTER_COLUMNS : Array String;
+_COUNTER_COLUMNS = ["-inst", "-ram", "-splits", "-cycles"];
+
 // The number a field of a counter script's output holds, or zero where the field is empty or
 // is not a number.
 read_number : String -> F64;
@@ -99,6 +110,18 @@ namespace CSV {
         csv.push_back(Array::fill(header_size, ""))
     );
 }
+
+// Put the counts of a `perf_counters.py` line into the log's last row, under the columns of
+// `case_name`. `suffix` names the language a counterpart was measured in, and is empty for the
+// case's own measurement. `fields` holds the whole line: the counts, and the contention after
+// them.
+set_counts : String -> String -> Array String -> CSV -> CSV;
+set_counts = |case_name, suffix, fields, log| (
+    let row = log.@size - 1;
+    Iterator::range(0, _COUNTER_COLUMNS.@size).fold(log, |i, log|
+        log.set(case_name + _COUNTER_COLUMNS.@(i) + suffix, row, fields.@(i))
+    )
+);
 
 type Args = struct {
     no_save : Bool,
@@ -226,26 +249,22 @@ main = (
         // On a machine without the counters every column stays empty and the run carries on.
         let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "--windows", _WINDOWS,
             "./a.out"].ez_run_oec(config);
-        // A case checks its own answer, so a case that exits non-zero is one whose answer moved.
-        // `perf_counters.py` reports that as 2, apart from the 1 it reports for counters it
-        // could not read, so the run stops here instead of logging the silence as a machine's.
-        if perf_code == 2_U8 {
+        // A case checks its own answer, so a case that exits non-zero is one whose answer moved,
+        // and the run stops here instead of logging the silence as a machine's.
+        if perf_code == _PROGRAM_FAILED {
             eprintln("error: " + dir + " failed its own check");;
             exit(1)
         };
         let (log, case_contention) = if perf_code != 0_U8 { (log, 0.0) } else {
             let perf = perf.strip_spaces.split(",").to_array;
-            if perf.@size != 5 {
+            if perf.@size != _COUNTER_COLUMNS.@size + 1 {
                 undefined("error: perf_counters.py reported \"" + perf.to_iter.join(",")
                     + "\" for " + dir)
             };
-            let log = log.set(case_name + "-inst", log.@size - 1, perf.@(0));
-            let log = log.set(case_name + "-ram", log.@size - 1, perf.@(1));
-            let log = log.set(case_name + "-splits", log.@size - 1, perf.@(2));
-            let log = log.set(case_name + "-cycles", log.@size - 1, perf.@(3));
+            let log = log.set_counts(case_name, "", perf);
             // A figure the harness cannot make out leaves the row's `contention` at whatever
             // the other cases reported, which is the honest reading: this case said nothing.
-            (log, perf.@(4).read_number)
+            (log, perf.@(_COUNTER_COLUMNS.@size).read_number)
         };
         let max_contention = max(max_contention, case_contention);
         // A case may carry `ref.c` and `ref.rs`: the same program on the same input, read
@@ -257,15 +276,12 @@ main = (
             let (ref_out, _, ref_code) = *["python3", "../../reference.py", "measure", lang, "--windows", _WINDOWS].ez_run_oec(config);
             if ref_code != 0_U8 { (log, max_contention).pure };
             let ref_out = ref_out.strip_spaces.split(",").to_array;
-            if ref_out.@size < 5 { (log, max_contention).pure };
+            if ref_out.@size < _COUNTER_COLUMNS.@size + 1 { (log, max_contention).pure };
             // A machine without the counters leaves every field empty, and a column of empty
             // cells is one the log is better off without.
             if ref_out.@(0) == "" { (log, max_contention).pure };
-            let log = log.set(case_name + "-inst-" + lang, log.@size - 1, ref_out.@(0));
-            let log = log.set(case_name + "-ram-" + lang, log.@size - 1, ref_out.@(1));
-            let log = log.set(case_name + "-splits-" + lang, log.@size - 1, ref_out.@(2));
-            let log = log.set(case_name + "-cycles-" + lang, log.@size - 1, ref_out.@(3));
-            (log, max(max_contention, ref_out.@(4).read_number)).pure
+            let log = log.set_counts(case_name, "-" + lang, ref_out);
+            (log, max(max_contention, ref_out.@(_COUNTER_COLUMNS.@size).read_number)).pure
         );
         // Change back to the parent directory.
         ez_cd(config, "..");;
