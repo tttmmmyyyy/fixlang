@@ -44,6 +44,7 @@ import resource
 import subprocess
 import sys
 import time
+from typing import NamedTuple
 
 # Keeping the list short matters -- asking for more events than the PMU has counters makes perf
 # time-slice them and report scaled estimates, which `read_counters` refuses. Cycles and
@@ -191,6 +192,23 @@ def lower_of(best, reading):
     return reading if best is None or reading < best else best
 
 
+class Counts(NamedTuple):
+    """What the counters read, in the order this program prints them.
+
+    One of these describes a run, a window of runs, or a whole measurement, since the four are
+    folded together the same way at every level.
+    """
+
+    instructions: int
+    ram_accesses: int
+    splits: int
+    cycles: int
+
+    def lowest_with(self, other):
+        """Each count of the two, whichever of the pair is lower."""
+        return Counts(*(lower_of(a, b) for a, b in zip(self, other)))
+
+
 def read_counters(argv):
     """Event name -> count for every event of `ALL_EVENTS`.
 
@@ -216,11 +234,14 @@ def read_counters(argv):
         # what it prints is an estimate that looks like any other measurement.
         if len(fields) >= 5 and fields[4].strip():
             try:
-                if float(fields[4]) < 100.0:
-                    sys.exit(f"perf could keep {name} on a counter for only "
-                             f"{fields[4].strip()}% of the run, so its count is an estimate")
+                on_a_counter = float(fields[4])
             except ValueError:
-                pass
+                sys.exit(f"perf reported \"{fields[4].strip()}\" for how much of the run it kept "
+                         f"{name} on a counter, which is what says whether the count is an "
+                         f"estimate")
+            if on_a_counter < 100.0:
+                sys.exit(f"perf could keep {name} on a counter for only "
+                         f"{fields[4].strip()}% of the run, so its count is an estimate")
         found[name] = int(fields[0])
     # Which of the two went wrong is read from the counts rather than from the status: perf exits
     # with the measured program's status where that program ran, and an event this processor does
@@ -239,8 +260,7 @@ def read_counters(argv):
 
 
 def read_window(argv):
-    """The lowest cycle, split, instruction and RAM-access counts over a window of runs, and how
-    busy the sibling thread was through it.
+    """The lowest `Counts` over a window of runs, and how busy the sibling thread was through it.
 
     A window holds as many runs as `MINIMUM_WINDOW_SECONDS` needs, so that the sibling reading covers
     enough ticks of `/proc/stat` to mean something.
@@ -250,49 +270,48 @@ def read_window(argv):
     """
     sibling_before = sibling_cpu_seconds()
     started = time.monotonic()
-    cycles = splits = instructions = ram_accesses = None
+    lowest = None
     while True:
         found = read_counters(argv)
-        cycles = lower_of(cycles, found[event_name(CYCLE_EVENT)])
-        splits = lower_of(splits, sum(found[e] for e in SPLIT_EVENTS))
-        instructions = lower_of(instructions, found[event_name(INSTRUCTION_EVENT)])
-        ram_accesses = lower_of(ram_accesses, found[event_name(RAM_EVENT)])
+        run = Counts(instructions=found[event_name(INSTRUCTION_EVENT)],
+                     ram_accesses=found[event_name(RAM_EVENT)],
+                     splits=sum(found[e] for e in SPLIT_EVENTS),
+                     cycles=found[event_name(CYCLE_EVENT)])
+        lowest = run if lowest is None else lowest.lowest_with(run)
         elapsed = time.monotonic() - started
         if elapsed >= MINIMUM_WINDOW_SECONDS:
             break
     sibling_busy = (sibling_cpu_seconds() - sibling_before) / elapsed
-    return cycles, sibling_busy, splits, instructions, ram_accesses
+    return lowest, sibling_busy
 
 
 def measure(argv, windows):
-    """The instruction count, the main-memory access count, the split count, the lowest cycle
-    count over the windows the sibling thread left alone, and the CPU other work took over the
-    whole of it, in cores.
+    """The `Counts` of the measurement, and the CPU other work took over the whole of it, in cores.
 
-    The cycle count comes back as `None` where the sibling was busy through every window, since
-    a core the program had only half of gives a figure about the sharing rather than about the
-    program. The other three are the lowest readings of every window, busy or not: other work
-    raises them and cannot lower them.
+    Three of the four counts are the lowest readings of every window, busy or not: other work
+    raises them and cannot lower them. The cycle count is the lowest of the windows the sibling
+    thread left alone, and `None` where it left none, since a core the program had only half of
+    gives a figure about the sharing rather than about the program.
     """
     assert windows >= 1, windows
     machine_before = cpu_seconds("cpu")
     own_before = own_cpu_seconds()
     started = time.monotonic()
-    cycles = splits = instructions = ram_accesses = None
+    lowest = None
+    cycles = None
     for _ in range(windows):
-        window_cycles, sibling_busy, window_splits, window_instructions, window_ram_accesses = \
-            read_window(argv)
-        splits = lower_of(splits, window_splits)
-        instructions = lower_of(instructions, window_instructions)
-        ram_accesses = lower_of(ram_accesses, window_ram_accesses)
+        window, sibling_busy = read_window(argv)
+        lowest = window if lowest is None else lowest.lowest_with(window)
         if sibling_busy <= SIBLING_BUSY_LIMIT:
-            cycles = lower_of(cycles, window_cycles)
+            cycles = lower_of(cycles, window.cycles)
     elapsed = time.monotonic() - started
     others = (cpu_seconds("cpu") - machine_before) - (own_cpu_seconds() - own_before)
     # `/proc/stat` counts in whole ticks and the rusage clocks round, so a short measurement
-    # can put the difference slightly below zero.
+    # can put the difference slightly below zero. The span itself is positive for a measurement
+    # of a program, whose every window runs for at least `MINIMUM_WINDOW_SECONDS`; it is `0.0`
+    # only for the canned windows of `self_check`, which return without a clock running.
     contention = max(0.0, others) / elapsed if elapsed > 0 else 0.0
-    return instructions, ram_accesses, splits, cycles, contention
+    return lowest._replace(cycles=cycles), contention
 
 
 def cpu_model():
@@ -307,7 +326,7 @@ def cpu_model():
     return "unknown"
 
 
-def cycles_are_comparable(cycles, contention, ram_accesses, instructions):
+def cycles_are_comparable(counts, contention):
     """Whether a cycle count read under this much competition says more about the program than
     about the competition.
 
@@ -321,17 +340,28 @@ def cycles_are_comparable(cycles, contention, ram_accesses, instructions):
     reaches the count at all.
 
     # Arguments
-    * `cycles` - what `measure` returned, `None` where no window was the measurement's own.
-    * `ram_accesses`, `instructions` - the counts `measure` returned beside it, each the lowest
-      reading of its windows. Other work raises either count and lowers neither, so the rate they
-      give is the closest to the program's own that a busy machine offers.
+    * `counts` - what `measure` returned, whose `cycles` is `None` where no window was the
+      measurement's own. Its other counts are each the lowest reading of the windows, and other
+      work raises them and lowers none, so the rate they give is the closest to the program's own
+      that a busy machine offers.
     """
-    if cycles is None:
+    if counts.cycles is None:
         return False
     if contention <= QUIET_CONTENTION:
         return True
-    assert instructions > 0, instructions
-    return ram_accesses / instructions <= RAM_RATE_LIMIT
+    assert counts.instructions > 0, counts
+    return counts.ram_accesses / counts.instructions <= RAM_RATE_LIMIT
+
+
+def counter_line(counts, contention):
+    """The line this program prints for a measurement.
+
+    Every count reaches it whatever the machine was doing, and the cycle count only where nothing
+    else could have moved it; the field left empty there is what says so.
+    """
+    reported_cycles = str(counts.cycles) if cycles_are_comparable(counts, contention) else ""
+    return (f"{counts.instructions},{counts.ram_accesses},{counts.splits},{reported_cycles},"
+            f"{contention:.2f}")
 
 
 def take_options(argv):
@@ -373,14 +403,22 @@ def self_check():
     busy = QUIET_CONTENTION * 2
     below = int(RAM_RATE_LIMIT * 10 ** 9 / 2)
     above = int(RAM_RATE_LIMIT * 10 ** 9 * 2)
-    assert cycles_are_comparable(1, QUIET_CONTENTION / 2, above, 10 ** 9)
-    assert cycles_are_comparable(1, busy, below, 10 ** 9)
-    assert not cycles_are_comparable(1, busy, above, 10 ** 9)
+    def counted(cycles, ram_accesses):
+        return Counts(instructions=10 ** 9, ram_accesses=ram_accesses, splits=0, cycles=cycles)
+
+    assert cycles_are_comparable(counted(1, above), QUIET_CONTENTION / 2)
+    assert cycles_are_comparable(counted(1, below), busy)
+    assert not cycles_are_comparable(counted(1, above), busy)
     # Each limit is the most a reading may carry and still be kept.
-    assert cycles_are_comparable(1, QUIET_CONTENTION, above, 10 ** 9)
-    assert cycles_are_comparable(1, busy, int(RAM_RATE_LIMIT * 10 ** 9), 10 ** 9)
+    assert cycles_are_comparable(counted(1, above), QUIET_CONTENTION)
+    assert cycles_are_comparable(counted(1, int(RAM_RATE_LIMIT * 10 ** 9)), busy)
     # A count no window gave is no count, however little the program asks of main memory.
-    assert not cycles_are_comparable(None, QUIET_CONTENTION / 2, below, 10 ** 9)
+    assert not cycles_are_comparable(counted(None, below), QUIET_CONTENTION / 2)
+
+    # The line carries every count whatever the machine was doing, and withholds the cycle count
+    # where other work could have moved it.
+    assert counter_line(counted(7, below), busy) == f"1000000000,{below},0,7,{busy:.2f}"
+    assert counter_line(counted(7, above), busy) == f"1000000000,{above},0,,{busy:.2f}"
 
     # The options are the ones standing in front of the program; what follows the program is the
     # program's own, however it is spelled.
@@ -416,9 +454,8 @@ def self_check():
     real_monotonic, time.monotonic = time.monotonic, lambda: next(clock_readings)
     try:
         canned_runs[:] = [canned_run(70, 4, 5, 11, 8), canned_run(90, 3, 4, 10, 5)]
-        cycles, _sibling_busy, splits, instructions, ram_accesses = read_window(None)
-        assert (cycles, splits, instructions, ram_accesses) == (70, 7, 10, 5), \
-            (cycles, splits, instructions, ram_accesses)
+        window, _sibling_busy = read_window(None)
+        assert window == Counts(instructions=10, ram_accesses=5, splits=7, cycles=70), window
     finally:
         read_counters, time.monotonic = real_counters, real_monotonic
 
@@ -427,20 +464,24 @@ def self_check():
     # of. The window left out below carries the lowest count of the three, so `measure` letting it
     # through would show up here as that count. The other three counts are the lowest of every
     # window, including the ones the sibling was busy through.
-    canned = []
-    real, read_window = read_window, lambda argv: canned.pop(0)
+    canned_windows = []
+    real_window, read_window = read_window, lambda argv: canned_windows.pop(0)
     try:
-        canned[:] = [(90, 0.0, 9, 11, 5), (70, 1.0, 7, 10, 3),
-                     (80, SIBLING_BUSY_LIMIT, 4, 12, 6)]
-        instructions, ram_accesses, splits, cycles, _contention = measure(None, 3)
-        assert (instructions, ram_accesses, splits, cycles) == (10, 3, 4, 80), \
-            (instructions, ram_accesses, splits, cycles)
-        canned[:] = [(90, 1.0, 9, 11, 5), (70, 1.0, 7, 10, 3)]
-        instructions, ram_accesses, splits, cycles, _contention = measure(None, 2)
-        assert (instructions, ram_accesses, splits, cycles) == (10, 3, 7, None), \
-            (instructions, ram_accesses, splits, cycles)
+        canned_windows[:] = [
+            (Counts(instructions=11, ram_accesses=5, splits=9, cycles=90), 0.0),
+            (Counts(instructions=10, ram_accesses=3, splits=7, cycles=70), 1.0),
+            (Counts(instructions=12, ram_accesses=6, splits=4, cycles=80), SIBLING_BUSY_LIMIT),
+        ]
+        counts, _contention = measure(None, 3)
+        assert counts == Counts(instructions=10, ram_accesses=3, splits=4, cycles=80), counts
+        canned_windows[:] = [
+            (Counts(instructions=11, ram_accesses=5, splits=9, cycles=90), 1.0),
+            (Counts(instructions=10, ram_accesses=3, splits=7, cycles=70), 1.0),
+        ]
+        counts, _contention = measure(None, 2)
+        assert counts == Counts(instructions=10, ram_accesses=3, splits=7, cycles=None), counts
     finally:
-        read_window = real
+        read_window = real_window
 
 
 def main():
@@ -453,11 +494,8 @@ def main():
     if not argv:
         sys.exit("usage: perf_counters.py [--windows N] <program> [args...]\n"
                  "       perf_counters.py --cpu")
-    instructions, ram_accesses, splits, cycles, contention = measure(argv, windows)
-    # Only the cycle count is the machine's to move; the rest are reported whatever it was doing.
-    comparable = cycles_are_comparable(cycles, contention, ram_accesses, instructions)
-    reported_cycles = str(cycles) if comparable else ""
-    print(f"{instructions},{ram_accesses},{splits},{reported_cycles},{contention:.2f}")
+    counts, contention = measure(argv, windows)
+    print(counter_line(counts, contention))
 
 
 main()

@@ -85,7 +85,7 @@ ADDED_PASSES_NUM = 10
 
 # The measured command gets a fixed environment, so that start-up costs the same whatever shell the
 # search was launched from.
-MEASURE_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
+MEASUREMENT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
 
 # Candidate passes, from `opt --print-passes`. See also:
 # https://gist.github.com/gingerBill/d889ae03d429653a4a9081ad6dc2a6c3
@@ -253,7 +253,7 @@ def cycles(binary):
     arch = subprocess.check_output(["uname", "-m"]).decode().strip()
     result = subprocess.run(
         ["setarch", arch, "-R", "perf", "stat", "-x,", "-e", "cycles:u", "--", str(binary)],
-        env=MEASURE_ENV, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
+        env=MEASUREMENT_ENV, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
     for line in result.stderr.decode().splitlines():
         field = line.split(",")[0]
         if re.fullmatch(r"\d+", field):

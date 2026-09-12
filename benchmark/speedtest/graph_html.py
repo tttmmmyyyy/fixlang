@@ -113,19 +113,21 @@ def build_data(log_path, history_path, latest_n):
 
     commits = []
     for row in body:
-        raw = row[0].strip()
-        dirty = raw.endswith("(dirty)")
-        h = raw[: -len("(dirty)")] if dirty else raw
-        entry = history.get(h)
+        recorded = row[0].strip()
+        dirty = recorded.endswith("(dirty)")
+        commit_hash = recorded[: -len("(dirty)")] if dirty else recorded
+        entry = history.get(commit_hash)
         if entry is None:
             # An entry may be keyed by a short hash. Take the longest key that matches, so
             # two entries sharing a prefix resolve to the more specific one.
-            matches = [k for k in history if h.startswith(k) or k.startswith(h)]
+            matches = [k for k in history
+                       if commit_hash.startswith(k) or k.startswith(commit_hash)]
             entry = history[max(matches, key=len)] if matches else None
         cpu = row[cpu_col].strip() if cpu_col is not None and cpu_col < len(row) else ""
         contention = (row[contention_col].strip()
                       if contention_col is not None and contention_col < len(row) else "")
-        commits.append({"hash": h, "short": h[:8], "dirty": dirty, "history": entry,
+        commits.append({"hash": commit_hash, "short": commit_hash[:8], "dirty": dirty,
+                        "history": entry,
                         "cpu": cpu, "contention": contention})
 
     # Split each "<case>-<metric>" column apart, and each "<case>-<metric>-<language>"
@@ -136,6 +138,9 @@ def build_data(log_path, history_path, latest_n):
         series, refs = {}, {}
         for name, i in index.items():
             column = [row[i].strip() if i < len(row) else "" for row in body]
+            # A cell a run left empty reads as no measurement, and so does a cell of a column
+            # that holds something else: the loop walks every column of the log, and `cpu` and
+            # `contention` are among them.
             numbers = [int(c) if c.isdigit() else None for c in column]
             if not any(v is not None for v in numbers):
                 continue
