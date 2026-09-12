@@ -304,6 +304,24 @@ pub fn test_a_global_read_from_another_unit_costs_no_call() {
     );
 }
 
+/// Assert that the RC IR dump opens no global of its own under `name`.
+///
+/// A body put at each of the names that read it leaves the program nothing left to keep, so the
+/// dump declares no global there.
+fn assert_no_global_stands_for(dump: &str, name: &str) {
+    let standing: Vec<_> = dump
+        .lines()
+        .filter(|line| line.starts_with("global ") && line.contains(name))
+        .collect();
+    assert!(
+        standing.is_empty(),
+        "`{}` should cost no global of its own, and the dump opens {}:\n{}",
+        name,
+        standing.join("\n"),
+        dump
+    );
+}
+
 /// A program that names one global string from three places.
 ///
 /// Building the literal allocates a buffer and copies the bytes into it, so a global whose body is
@@ -342,6 +360,8 @@ fn test_a_global_string_is_built_once_however_many_names_it() {
         "a global string named from three places",
     );
 
+    let built = dump.matches(GREETING_BUF).count();
+
     // The places the property is about: the value reaches a reader as a name of the global or as a
     // copy of the construction, so this counts the readers either way, and falls only where a
     // reader stopped reading.
@@ -349,7 +369,7 @@ fn test_a_global_string_is_built_once_however_many_names_it() {
         .lines()
         .filter(|line| line.contains(GREETING) && !line.starts_with("global "))
         .count()
-        + dump.matches(GREETING_BUF).count();
+        + built;
     assert!(
         places > 1,
         "the program should hold `greeting` in more than one place, and it holds it in {}:\n{}",
@@ -357,7 +377,6 @@ fn test_a_global_string_is_built_once_however_many_names_it() {
         dump
     );
 
-    let built = dump.matches(GREETING_BUF).count();
     assert_eq!(
         built, 1,
         "the literal of a global is built {} times, once for the global and once more wherever \
@@ -424,17 +443,7 @@ fn test_a_global_scalar_literal_is_put_at_every_name() {
             dump
         );
 
-        let standing: Vec<_> = dump
-            .lines()
-            .filter(|line| line.starts_with("global ") && line.contains(global))
-            .collect();
-        assert!(
-            standing.is_empty(),
-            "`{}` should cost no global of its own, and the dump opens {}:\n{}",
-            global,
-            standing.join("\n"),
-            dump
-        );
+        assert_no_global_stands_for(&dump, global);
     }
 }
 
@@ -475,14 +484,5 @@ fn test_an_iostate_is_made_where_it_is_used() {
         dump
     );
 
-    let standing: Vec<_> = dump
-        .lines()
-        .filter(|line| line.starts_with("global ") && line.contains(IOSTATE_GLOBAL))
-        .collect();
-    assert!(
-        standing.is_empty(),
-        "an `IOState` should cost no global of its own, and the dump opens {}:\n{}",
-        standing.join("\n"),
-        dump
-    );
+    assert_no_global_stands_for(&dump, IOSTATE_GLOBAL);
 }
