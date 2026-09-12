@@ -38,8 +38,11 @@ METRICS = [
     ("ram", "perf main-memory accesses",
      "Accesses that missed the last level cache and so came from main memory, from the hardware "
      "counters. What else was in the cache moves this count, so the lowest reading of several "
-     "runs is taken as the program's own. It is what decides whether that program's cycle count "
-     "survives a machine with other work on it.", "ratio"),
+     "runs is taken as the program's own, and even that moves: two runs of one binary read 859 "
+     "and 2,927 for `startup`. A swing of a few times between one commit and the next is the "
+     "machine rather than the program, which the instruction column does not do. It is what "
+     "decides whether that program's cycle count survives a machine with other work on it.",
+     "ratio"),
     ("cycles", "perf cycles",
      "Core cycles the program spent in user mode, from the hardware counters, as the lowest of "
      "several windows of runs. Other work reaches it two ways: over the core the run shares with "

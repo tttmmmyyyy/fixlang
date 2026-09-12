@@ -80,6 +80,15 @@ QUIET_CONTENTION = 0.5
 # costs a row one figure where a case kept wrongly puts a figure in the log that reads like every
 # other one. What `cache-misses` counts belongs to the processor that counted it, so a machine
 # with a cache of another size is applying a number measured elsewhere.
+#
+# This numerator is the least steady figure the program reads: over the suite, six runs of a case
+# moved its instruction count by at most 0.0010% and its split count not at all, while its
+# `cache-misses` moved by as much as 4.6 times. The case that sits nearest the limit, `fib`, read
+# 7.44e-06 to 1.906e-05 over eight measurements at the five windows the harness uses -- on one
+# side of the limit, with 5% to spare. Read at one window it straddles, since fewer windows raise
+# the minimum: `--windows` moves this rate as well as the cycle count it gates. Narrowing that
+# would mean reading the rate from the window whose cycles are kept, which is a different
+# numerator and wants its own calibration on a machine with nothing else running.
 RAM_RATE_LIMIT = 0.00002
 
 # How much of a run the other thread of the measurement's core may be busy for. The two threads
