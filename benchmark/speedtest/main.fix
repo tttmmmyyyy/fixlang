@@ -186,7 +186,7 @@ main = (
     // cycle columns.
     dirs.fold_m((), |dir, _|
         ez_cd(config, dir);;
-        let command = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols", "--disable-cpu-feature", "avx512.*", "--allow-preliminary-commands"];
+        let command = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols", "--allow-preliminary-commands"];
         let command = if args.@llvm_passes_file != "" {
             command.push_back("--llvm-passes-file")
                    .push_back("../../" + args.@llvm_passes_file)

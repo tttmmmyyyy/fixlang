@@ -21,6 +21,15 @@ four processes each walking twice the last level cache, every case below the new
 3.5% of its undisturbed cycles and every case above it took between 1.08 and 7.8 times them --
 among them cases the old rate let through.
 
+**The cases are built with every feature this host has, avx512 included.** The suite left avx512
+out because cachegrind could not simulate it, and nothing simulates the programs any more, so what
+the harness measures is now the code a Fix user on this machine gets. That code is not the faster
+code: `sort_stable` takes 14.1% more cycles with avx512 than without, and `iter_filter` 16.6% more,
+while `iter_map` takes 4.1% fewer and the rest of the suite moves by under 2%. The instruction
+counts move further than the cycles in both directions -- `sort_stable` +67.4%, `iter_filter`
++47.4%, `iter_map` -22.5% -- so rows from before this change are comparable with rows after it on
+no column at all.
+
 **Rows measured before `cachegrind.py` fixed the environment are not comparable with rows after
 it.** Cachegrind counts the dynamic loader and libc start-up along with the program, and both walk
 the environment, so a row carried about 600 instructions per variable the shell that ran the

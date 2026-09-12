@@ -49,8 +49,8 @@ LD_PRELOAD=$PWD/allocations.so ./bin/fannkuch_fix
 ## Two measurements, two questions
 
 **Instruction counts** (from `../speedtest`) are deterministic: the same program and input
-give the same number whatever else the machine is doing. Fix is built without avx512 there,
-and the counterparts are built the same way.
+give the same number whatever else the machine is doing. Every language is built for this host
+with the features it has, there as here.
 
 **Wall time** is what the public sites report, and the instruction count does not predict it.
 `fannkuch` executes 2.20x C's instructions and takes 1.08x its time. Both numbers are worth
