@@ -231,20 +231,24 @@ pub fn test_a_reader_of_a_global_sees_every_write_to_it() {
     let accessor = sole_body(&ir, TABLE_ACCESSOR);
 
     for variable in [TABLE_STORAGE, TABLE_FLAG] {
-        let writes = |text: &str| {
+        let count_writes_in = |text: &str| {
             text.lines()
                 .filter(|line| line.trim_start().starts_with("store") && line.contains(variable))
                 .count()
         };
-        let in_module = writes(&ir);
-        assert!(in_module > 0, "the program should write `{}`", variable);
+        let writes_in_module = count_writes_in(&ir);
+        assert!(
+            writes_in_module > 0,
+            "the program should write `{}`",
+            variable
+        );
         assert_eq!(
-            writes(&accessor),
-            in_module,
+            count_writes_in(&accessor),
+            writes_in_module,
             "every write to `{}` should be in the accessor, and {} of the {} are:\n{}",
             variable,
-            writes(&accessor),
-            in_module,
+            count_writes_in(&accessor),
+            writes_in_module,
             accessor
         );
     }

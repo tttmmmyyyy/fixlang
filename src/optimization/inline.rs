@@ -45,9 +45,9 @@ const MAX_ROUNDS: usize = 10;
 /// name occurs; a lambda small enough (`INLINE_COST_THRESHOLD`) and one wrapping an inline-LLVM
 /// operation go into the calls of it. A body that calls itself stays where it is.
 pub fn run(prg: &mut Program) {
-    let mut skip_symbols = Set::default();
+    let mut stable_symbols = Set::default();
     for _ in 0..MAX_ROUNDS {
-        if !run_one(prg, &mut skip_symbols) {
+        if !run_one(prg, &mut stable_symbols) {
             break;
         }
     }
@@ -73,8 +73,9 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     let root_value_names = prg.root_value_names();
 
     for (name, mut sym) in symbols {
-        // If call count of the symbol is 0, and it is neither of entry point nor exported value, discard it.
-        if costs.get_call_count(&name) == 0 && !root_value_names.contains(&name) {
+        // If nothing in the program names the symbol, and it is neither the entry point nor an
+        // exported value, discard it.
+        if costs.get_use_count(&name) == 0 && !root_value_names.contains(&name) {
             changed = true;
             continue;
         }
@@ -156,11 +157,11 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
 /// What one symbol costs to inline, and the shapes of its expression that decide where it may
 /// be inlined at all.
 struct InlineCost {
-    // The number of times the symbol is called.
-    call_count: usize,
+    // The number of times the program names the symbol.
+    use_count: usize,
     // The complexity of the expression.
     complexity: usize,
-    // Is the function calling itself?
+    // Does the symbol's expression name the symbol itself?
     is_self_recursive: bool,
     // Is the top-level construct a lambda expression?
     is_lambda: bool,
@@ -182,7 +183,7 @@ struct InlineCost {
 impl InlineCost {
     fn new() -> Self {
         InlineCost {
-            call_count: 0,
+            use_count: 0,
             complexity: 0,
             is_self_recursive: false,
             is_lambda: false,
@@ -286,36 +287,36 @@ impl InlineCosts {
     }
 
     /// How many times the program names the symbol, counted over every expression the walk covered.
-    fn get_call_count(&self, name: &FullName) -> usize {
-        self.get(name).call_count
+    fn get_use_count(&self, name: &FullName) -> usize {
+        self.get(name).use_count
     }
 
-    /// Take in what the walk of one symbol found: every global name that symbol uses has its call
+    /// Take in what the walk of one symbol found: every global name that symbol uses has its use
     /// count raised, and the symbol itself gets the size, the self-reference and the lambda shape the
     /// walk measured.
-    fn add_cost_calculation_result(&mut self, cost: InlineCostCalculator) {
-        // For each global symbol called from the symbol where `InlineCostCalculator` has been executed, add the call count.
-        for (sym, count) in cost.call_count {
-            self.get_or_insert(sym).call_count += count;
+    fn add_cost_calculation_result(&mut self, calculator: InlineCostCalculator) {
+        // Raise the use count of each global name the walked symbol uses.
+        for (sym, count) in calculator.use_count {
+            self.get_or_insert(sym).use_count += count;
         }
 
         // Set other fields for the symbol itself that `InlineCostCalculator` has traversed.
-        let inline_cost = self.get_or_insert(cost.name);
-        inline_cost.complexity = cost.complexity;
-        inline_cost.is_self_recursive = cost.is_refer_self;
-        inline_cost.is_lambda = cost.is_lambda;
+        let inline_cost = self.get_or_insert(calculator.name);
+        inline_cost.complexity = calculator.complexity;
+        inline_cost.is_self_recursive = calculator.is_self_recursive;
+        inline_cost.is_lambda = calculator.is_lambda;
     }
 }
 
 struct InlineCostCalculator {
     // The name of the symbol.
     name: FullName,
-    // For each global symbol, the count of calls.
-    call_count: Map<FullName, usize>,
+    // For each global name, how many times the symbol names it.
+    use_count: Map<FullName, usize>,
     // The cost of the symbol.
     complexity: usize,
-    // Is the symbol referring itself?
-    is_refer_self: bool,
+    // Does the symbol name itself?
+    is_self_recursive: bool,
     // Is the top-level construct a lambda expression?
     is_lambda: bool,
 }
@@ -324,21 +325,21 @@ impl InlineCostCalculator {
     fn new(name: FullName) -> Self {
         InlineCostCalculator {
             name,
-            call_count: Map::default(),
+            use_count: Map::default(),
             complexity: 0,
-            is_refer_self: false,
+            is_self_recursive: false,
             is_lambda: false,
         }
     }
 
     fn on_find_usage_of_global_name(&mut self, used_name: &FullName) {
-        // If calling a global symbol, increase the call count.
+        // Count one use of the global symbol.
         assert!(used_name.is_global());
-        *self.call_count.entry(used_name.clone()).or_insert(0) += 1;
+        *self.use_count.entry(used_name.clone()).or_insert(0) += 1;
 
-        // If it calls itself, set `is_call_self`.
+        // If the symbol names itself, set `is_self_recursive`.
         if used_name == &self.name {
-            self.is_refer_self = true;
+            self.is_self_recursive = true;
         }
     }
 }
