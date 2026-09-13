@@ -128,16 +128,22 @@ mod integration_tests {
         line
     }
 
-    /// Assert that the value the operation `rhs_prefix` produces carries the given provenance.
-    fn assert_prov_of(dump: &str, rhs_prefix: &str, expected_prov: &str) {
-        let line = binding_by_rhs(dump, rhs_prefix);
+    /// Assert that the binding line `line`, which holds the value `subject` names, carries the given
+    /// provenance.
+    fn assert_line_prov(line: &str, subject: &str, expected_prov: &str) {
         assert!(
             line.contains(expected_prov),
-            "the value `{}` produces should have provenance `{}`, but its line is:\n{}",
-            rhs_prefix,
+            "the value {} should have provenance `{}`, but its line is:\n{}",
+            subject,
             expected_prov,
             line
         );
+    }
+
+    /// Assert that the value the operation `rhs_prefix` produces carries the given provenance.
+    fn assert_prov_of(dump: &str, rhs_prefix: &str, expected_prov: &str) {
+        let line = binding_by_rhs(dump, rhs_prefix);
+        assert_line_prov(line, &format!("`{}` produces", rhs_prefix), expected_prov);
     }
 
     /// The variable bound to the result of the operation `rhs_prefix` names.
@@ -163,13 +169,7 @@ mod integration_tests {
                     source_name, dump
                 )
             });
-        assert!(
-            line.contains(expected_prov),
-            "binding `(as {})` should have provenance `{}`, but its line is:\n{}",
-            source_name,
-            expected_prov,
-            line
-        );
+        assert_line_prov(line, &format!("`{}` binds", marker), expected_prov);
     }
 
     /// Verifies the three provenance judgements a single function produces: an allocation is
@@ -254,6 +254,25 @@ mod integration_tests {
         block
     }
 
+    /// The body block of `main` itself. The main entry is `Main::main#<hash>#funptr1`, of three
+    /// `#`-segments; the lambdas lifted out of it carry a segment more.
+    fn main_block(dump: &str) -> Vec<&str> {
+        func_block(dump, "fn Main::main", |n| {
+            n.split('#').count() == 3 && n.ends_with("#funptr1")
+        })
+    }
+
+    /// How many of the `tally` calls in `main` route to the borrow version, and how many stay on the
+    /// owning one.
+    fn tally_call_routing(main: &[&str]) -> (usize, usize) {
+        let calls = main
+            .iter()
+            .filter(|l| l.contains("= Main::tally"))
+            .collect::<Vec<_>>();
+        let borrow = calls.iter().filter(|l| l.contains("#borrow(")).count();
+        (borrow, calls.len() - borrow)
+    }
+
     /// Verifies which functions get a borrow version and what it buys: a function that only reads
     /// its array gets a borrowing version its call site routes to, one that consumes its array stays
     /// single, and the borrowing version performs no reference counting on the borrowed parameter.
@@ -294,11 +313,7 @@ mod integration_tests {
         );
 
         // `main` routes its non-tail, owned `tally(arr, ..)` call to the borrow version.
-        // The main entry is `Main::main#<hash>#funptr1` (three `#`-segments); the lifted lambdas
-        // have an extra segment.
-        let main = func_block(&dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
-        });
+        let main = main_block(&dump);
         assert!(
             main.iter()
                 .any(|l| l.contains("= Main::tally") && l.contains("#borrow(")),
@@ -327,18 +342,8 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("benefit");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = func_block(&dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
-        });
-        let tally_calls: Vec<&&str> = main
-            .iter()
-            .filter(|l| l.contains("= Main::tally"))
-            .collect();
-        let borrow_calls = tally_calls
-            .iter()
-            .filter(|l| l.contains("#borrow("))
-            .count();
-        let own_calls = tally_calls.len() - borrow_calls;
+        let main = main_block(&dump);
+        let (borrow_calls, own_calls) = tally_call_routing(&main);
 
         // The array read again after its call is owned but not at its last use, so routing to the
         // borrow version removes a retain — that call goes to the borrow version. The array not used
@@ -369,17 +374,8 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("benefit_aggregate");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = func_block(&dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
-        });
-        let tally_calls = main
-            .iter()
-            .filter(|l| l.contains("= Main::tally"))
-            .collect::<Vec<_>>();
-        let borrow_calls = tally_calls
-            .iter()
-            .filter(|l| l.contains("#borrow("))
-            .count();
+        let main = main_block(&dump);
+        let (borrow_calls, own_calls) = tally_call_routing(&main);
         assert_eq!(
             borrow_calls,
             1,
@@ -388,7 +384,7 @@ mod integration_tests {
             main.join("\n")
         );
         assert_eq!(
-            tally_calls.len() - borrow_calls,
+            own_calls,
             1,
             "the call handed a leaf whose object ends there should stay on the own version:\n{}",
             main.join("\n")
@@ -409,9 +405,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("multiunit");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = func_block(&dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
-        });
+        let main = main_block(&dump);
         // The whole-value retain of the pair `t` is normalized to one retain per field: `.0` and `.1`.
         // The tuple binding has no source name, so match the retains by their field paths. A retain
         // may carry a trailing reference-counting state tag, which is not part of the target.
@@ -461,9 +455,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("ownership");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = func_block(&dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
-        });
+        let main = main_block(&dump);
         let call = main
             .iter()
             .find(|l| l.contains("= Main::tally") && l.contains("#borrow("))
@@ -603,25 +595,6 @@ mod integration_tests {
             "the set on an array of unknown sharing should keep its force-unique check:\n{}",
             dump
         );
-    }
-
-    /// The variable a dump line binds: the token after `let` on the line carrying `(as source_name)`.
-    fn binding_var(dump: &str, source_name: &str) -> String {
-        let marker = format!("(as {})", source_name);
-        let line = dump
-            .lines()
-            .find(|l| l.contains(&marker))
-            .unwrap_or_else(|| {
-                panic!(
-                    "no binding `(as {})` in the RC IR dump:\n{}",
-                    source_name, dump
-                )
-            });
-        line.trim_start()
-            .strip_prefix("let ")
-            .and_then(|rest| rest.split(' ').next())
-            .unwrap_or_else(|| panic!("binding line has no variable:\n{}", line))
-            .to_string()
     }
 
     /// Verifies that copying a range out of an array leaves the array provably unique. The copy

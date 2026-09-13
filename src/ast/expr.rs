@@ -283,6 +283,18 @@ impl ExprNode {
         (args, body)
     }
 
+    /// How many parameters the sequence of lambdas this expression opens with takes in total, so
+    /// `|x| |y, z| {body}` answers three and an expression that is not a lambda answers zero.
+    pub fn lam_sequence_arity(&self) -> usize {
+        let mut arity = 0;
+        let mut expr = self;
+        while let Expr::Lam(params, body) = &*expr.expr {
+            arity += params.len();
+            expr = body;
+        }
+        arity
+    }
+
     #[allow(dead_code)]
     pub fn set_lam_params(&self, params: Vec<Arc<Var>>) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();

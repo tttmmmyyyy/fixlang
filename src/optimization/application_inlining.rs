@@ -65,7 +65,7 @@ pub fn run(prg: &mut Program) {
 
 /// Optimizes the expression of a symbol in place. The symbol has to be one that already has an
 /// expression.
-pub fn run_on_symbol(sym: &mut Symbol) {
+fn run_on_symbol(sym: &mut Symbol) {
     let expr = sym.expr.as_ref().unwrap().clone();
     let expr = run_on_expr(expr);
     sym.expr = Some(expr);

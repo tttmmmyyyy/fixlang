@@ -67,9 +67,7 @@ pub fn create_global_lambda_to_arity_map(symbols: &Map<FullName, Symbol>) -> Map
     for (name, sym) in symbols {
         let expr = sym.expr.as_ref().unwrap();
         if expr.is_lam() {
-            let param_lists = expr.destructure_lam_sequence().0;
-            let arity = param_lists.iter().map(|params| params.len()).sum();
-            global_lambda_to_arity.insert(name.clone(), arity);
+            global_lambda_to_arity.insert(name.clone(), expr.lam_sequence_arity());
         }
     }
     global_lambda_to_arity
