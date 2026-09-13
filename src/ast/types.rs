@@ -1445,6 +1445,14 @@ impl TypeNode {
         self.toplevel_tycon_satisfies(is_array_storage_tycon)
     }
 
+    /// Whether this type is one of the signed integer types of `Std`.
+    ///
+    /// Panics where this type has no top-level type constructor, and where that constructor is not
+    /// one of the numeric types of `Std`: `TyCon::is_signed_integer` answers for those alone.
+    pub fn is_signed_integer(&self) -> bool {
+        self.toplevel_tycon().unwrap().is_signed_integer()
+    }
+
     /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
     // PROOF: P1, P2, P2a, P7a, P7d, P7e, P15, P16, P17, P18, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_punched_array(&self) -> bool {

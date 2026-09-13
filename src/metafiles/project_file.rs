@@ -1549,9 +1549,9 @@ mod tests {
     /// asked for others.
     #[test]
     fn test_the_dependencies_hash_follows_a_path_dependencys_own_project_file() {
-        let temp = TempDir::new().expect("Failed to create temp directory");
-        let root = temp.path().join("root");
-        let dep = temp.path().join("dep");
+        let temp_dir = TempDir::new().expect("Failed to create temp_dir directory");
+        let root = temp_dir.path().join("root");
+        let dep = temp_dir.path().join("dep");
         fs::create_dir_all(&root).expect("Failed to create the root project's directory");
         fs::create_dir_all(&dep).expect("Failed to create the dependency's directory");
         fs::write(

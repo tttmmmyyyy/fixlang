@@ -1373,8 +1373,8 @@ pub fn cast_between_integral_function(
     const FROM_NAME: &str = "from";
     let from_name = FullName::local(FROM_NAME);
 
-    let is_source_signed = from.toplevel_tycon().unwrap().is_signed_integer();
-    let is_target_signed = to.toplevel_tycon().unwrap().is_signed_integer();
+    let is_source_signed = from.is_signed_integer();
+    let is_target_signed = to.is_signed_integer();
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -1569,7 +1569,7 @@ pub fn cast_int_to_float_function(
     to: Arc<TypeNode>,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
-    let is_signed = from.toplevel_tycon().unwrap().is_signed_integer();
+    let is_signed = from.is_signed_integer();
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -1675,7 +1675,7 @@ pub fn cast_float_to_int_function(
     to: Arc<TypeNode>,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
-    let is_signed = to.toplevel_tycon().unwrap().is_signed_integer();
+    let is_signed = to.is_signed_integer();
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -1714,10 +1714,10 @@ impl LLVMGen for InlineLLVMShiftBody {
             .into_int_value();
         let n = gc.get_scoped_obj_field(&self.n_name, 0).into_int_value();
 
-        let is_signed = ty.toplevel_tycon().unwrap().is_signed_integer();
+        let is_signed = ty.is_signed_integer();
 
         // Perform shift operation.
-        let to_val = if self.is_left {
+        let shifted = if self.is_left {
             gc.builder()
                 .build_left_shift(val, n, "left_shift@shift_function")
                 .unwrap()
@@ -1729,7 +1729,7 @@ impl LLVMGen for InlineLLVMShiftBody {
 
         // Return result.
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@shift_function"));
-        obj.insert_field(gc, 0, to_val)
+        obj.insert_field(gc, 0, shifted)
     }
 
     fn name(&self) -> String {
@@ -9838,7 +9838,7 @@ impl LLVMGen for InlineLLVMIntLessThanBody {
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         let rhs_val: IntValue = rhs_obj.extract_field(gc, 0).into_int_value();
 
-        let is_signed = lhs_obj.ty.toplevel_tycon().unwrap().is_signed_integer();
+        let is_signed = lhs_obj.ty.is_signed_integer();
 
         let value = gc
             .builder()
@@ -10009,7 +10009,7 @@ impl LLVMGen for InlineLLVMIntLessThanOrEqBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
-        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
+        let is_signed = lhs.ty.is_signed_integer();
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
@@ -10174,7 +10174,7 @@ pub fn add_trait_id() -> TraitId {
 /// lets the generated instruction carry `nsw`. A signed integer operation whose mathematical result
 /// leaves that range is undefined; an unsigned one wraps around.
 fn arithmetic_result_is_assumed_to_fit(ty: &Arc<TypeNode>) -> bool {
-    ty.toplevel_tycon().unwrap().is_signed_integer()
+    ty.is_signed_integer()
 }
 
 /// The LLVM intrinsic performing an addition and reporting whether the result left the range of

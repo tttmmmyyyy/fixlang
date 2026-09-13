@@ -254,7 +254,7 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: Bui
     gc.builder().position_at_end(bb);
     let lhs = func.get_first_param().unwrap().into_pointer_value();
     let rhs = func.get_nth_param(1).unwrap().into_pointer_value();
-    let res = gc
+    let ptr_diff = gc
         .builder()
         .build_ptr_diff(
             gc.context.i8_type(),
@@ -263,7 +263,7 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: Bui
             "ptr_diff@fixruntime_subtract_ptr",
         )
         .unwrap();
-    gc.builder().build_return(Some(&res)).unwrap();
+    gc.builder().build_return(Some(&ptr_diff)).unwrap();
     return;
 }
 
@@ -473,7 +473,11 @@ fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        compiler_defined_c_function_reason, RUNTIME_ABORT, RUNTIME_GET_ARGC, RUNTIME_MALLOC,
+    };
+    use crate::configuration::OutputFileType;
+    use crate::constants::C_ENTRY_POINT_NAME;
 
     /// The compiler writes the entry point into an executable alone, so a dynamic library is free to
     /// carry a `main` of its own, while the runtime's own names are the compiler's whatever is being
