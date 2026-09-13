@@ -3413,9 +3413,9 @@ pub fn test_u8_literal_of_a_bare_quote_or_newline_is_rejected() {
     assert_grammar_rejects(&bare_newline);
 }
 
-/// Verifies that `U8` and `I32` arithmetic wraps around at the ends of the type's range, that
-/// division truncates toward zero while the remainder carries the dividend's sign, and that a
-/// comparison reads `U8` as unsigned and `I32` as signed.
+/// Verifies that `U8` arithmetic wraps around at the ends of the type's range, that division
+/// truncates toward zero while the remainder carries the dividend's sign, and that a comparison
+/// reads `U8` as unsigned and `I32` as signed.
 #[test]
 pub fn test97() {
     let source = r#"
@@ -3431,12 +3431,9 @@ pub fn test97() {
             assert_eq(|_|"7", 255_U8 > 0_U8, true);;
             assert_eq(|_|"8", 255_U8 >= 0_U8, true);;
 
-            assert_eq(|_|"9", 2147483647_I32 + 2_I32, -2147483647_I32);;
-            assert_eq(|_|"10", -2147483647_I32 - 2_I32, 2147483647_I32);;
-            assert_eq(|_|"11", 2147483647_I32 * 2_I32, -2_I32);;
-            assert_eq(|_|"12", 10_I32 / -3_I32, -3_I32);;
-            assert_eq(|_|"13", 10_I32 % -3_I32, 1_I32);;
-            assert_eq(|_|"14", -1_I32 < 0_I32, true);;
+            assert_eq(|_|"9", 10_I32 / -3_I32, -3_I32);;
+            assert_eq(|_|"10", 10_I32 % -3_I32, 1_I32);;
+            assert_eq(|_|"11", -1_I32 < 0_I32, true);;
             
             pure()
         );

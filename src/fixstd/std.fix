@@ -3776,31 +3776,49 @@ trait a : One {
 // Abs
 
 namespace I8 {
+    // The absolute value of `f`.
+    //
+    // The behavior is undefined where `f` is `I8::minimum`, whose magnitude is not a value of
+    // `I8`.
     abs : I8 -> I8;
     abs = |f| if f < 0_I8 { -f } else { f };
 }
 
 namespace I16 {
+    // The absolute value of `f`.
+    //
+    // The behavior is undefined where `f` is `I16::minimum`, whose magnitude is not a value of
+    // `I16`.
     abs : I16 -> I16;
     abs = |f| if f < 0_I16 { -f } else { f };
 }
 
 namespace I32 {
+    // The absolute value of `f`.
+    //
+    // The behavior is undefined where `f` is `I32::minimum`, whose magnitude is not a value of
+    // `I32`.
     abs : I32 -> I32;
     abs = |f| if f < 0_I32 { -f } else { f };
 }
 
 namespace I64 {
+    // The absolute value of `f`.
+    //
+    // The behavior is undefined where `f` is `I64::minimum`, whose magnitude is not a value of
+    // `I64`.
     abs : I64 -> I64;
     abs = |f| if f < 0 { -f } else { f };
 }
 
 namespace F32 {
+    // The absolute value of `f`.
     abs : F32 -> F32;
     abs = |f| if f < 0.0_F32 { -f } else { f };
 }
 
 namespace F64 {
+    // The absolute value of `f`.
     abs : F64 -> F64;
     abs = |f| if f < 0.0 { -f } else { f };
 }

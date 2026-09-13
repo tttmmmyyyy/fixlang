@@ -929,6 +929,8 @@ Checks equality of two values. An expression `x == y` is translated to `eq(x, y)
 
 Type: `Std::F32 -> Std::F32`
 
+The absolute value of `f`.
+
 #### infinity
 
 Type: `Std::F32`
@@ -1162,6 +1164,8 @@ Converts a floating number to a string with specified precision (i.e., number of
 #### abs
 
 Type: `Std::F64 -> Std::F64`
+
+The absolute value of `f`.
 
 #### infinity
 
@@ -1710,6 +1714,11 @@ Applies a function to the value inside the functor.
 
 Type: `Std::I16 -> Std::I16`
 
+The absolute value of `f`.
+
+The behavior is undefined where `f` is `I16::minimum`, whose magnitude is not a value of
+`I16`.
+
 #### bit_and
 
 Type: `Std::I16 -> Std::I16 -> Std::I16`
@@ -1972,6 +1981,11 @@ Casts a value of `I16` into a value of `U8`.
 #### abs
 
 Type: `Std::I32 -> Std::I32`
+
+The absolute value of `f`.
+
+The behavior is undefined where `f` is `I32::minimum`, whose magnitude is not a value of
+`I32`.
 
 #### bit_and
 
@@ -2236,6 +2250,11 @@ Casts a value of `I32` into a value of `U8`.
 
 Type: `Std::I64 -> Std::I64`
 
+The absolute value of `f`.
+
+The behavior is undefined where `f` is `I64::minimum`, whose magnitude is not a value of
+`I64`.
+
 #### bit_and
 
 Type: `Std::I64 -> Std::I64 -> Std::I64`
@@ -2498,6 +2517,11 @@ Casts a value of `I64` into a value of `U8`.
 #### abs
 
 Type: `Std::I8 -> Std::I8`
+
+The absolute value of `f`.
+
+The behavior is undefined where `f` is `I8::minimum`, whose magnitude is not a value of
+`I8`.
 
 #### bit_and
 
