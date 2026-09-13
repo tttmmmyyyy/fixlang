@@ -194,7 +194,7 @@ mod integration_tests {
     fn functions_named_with<'a>(dump: &'a str, name_part: &str) -> Vec<&'a str> {
         dump.lines()
             .filter_map(|line| line.strip_prefix("fn "))
-            .map(|rest| rest.split('(').next().unwrap().trim())
+            .map(func_name)
             .filter(|name| !name.contains("::closure#"))
             .filter(|name| name.contains(name_part))
             .collect()
@@ -262,18 +262,25 @@ mod integration_tests {
         names
     }
 
-    /// The copies of the function named by `func_prefix` in `dump`, each as the line naming it and
-    /// the body under it. One copy of `Std::loop` stands for one loop body of the case.
+    /// Every function `dump` names, as the line naming it and the body under it.
     ///
     /// A blank line ends a body, so what follows the last function — the initializer of every global
-    /// — stays out of it.
-    fn spec_copies<'a>(dump: &'a str, func_prefix: &str) -> Vec<(&'a str, &'a str)> {
+    /// — stays out of it. A header line closes with the return type and a colon, which is what tells
+    /// a function from the lines the dump opens with.
+    fn functions_in<'a>(dump: &'a str) -> impl Iterator<Item = (&'a str, &'a str)> + 'a {
         dump.split("\nfn ")
             .filter_map(|function| function.split_once('\n'))
+            .filter(|(header, _)| header.ends_with(':'))
+            .map(|(header, body)| (header, body.split("\n\n").next().unwrap()))
+    }
+
+    /// The copies of the function named by `func_prefix` in `dump`, each as the line naming it and
+    /// the body under it. One copy of `Std::loop` stands for one loop body of the case.
+    fn spec_copies<'a>(dump: &'a str, func_prefix: &str) -> Vec<(&'a str, &'a str)> {
+        functions_in(dump)
             .filter(|(header, _)| {
                 header.starts_with(func_prefix) && header.contains(CLOSURE_SPEC_SUFFIX)
             })
-            .map(|(header, body)| (header, body.split("\n\n").next().unwrap()))
             .collect()
     }
 
@@ -320,15 +327,9 @@ mod integration_tests {
     }
 
     /// The body of every function `dump` names, keyed by the function's name.
-    ///
-    /// A blank line ends a body, so what follows the last function — the initializer of every
-    /// global — stays out of it. A header line closes with the return type and a colon, which is
-    /// what tells a function from the lines the dump opens with.
     fn function_bodies(dump: &str) -> Map<&str, &str> {
-        dump.split("\nfn ")
-            .filter_map(|function| function.split_once('\n'))
-            .filter(|(header, _)| header.ends_with(':'))
-            .map(|(header, body)| (func_name(header), body.split("\n\n").next().unwrap()))
+        functions_in(dump)
+            .map(|(header, body)| (func_name(header), body))
             .collect()
     }
 
