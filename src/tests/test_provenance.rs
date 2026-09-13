@@ -88,7 +88,14 @@ mod integration_tests {
             .find(&format!("\nfn {}(", root))
             .unwrap_or_else(|| panic!("no function `{}` in the RC IR dump:\n{}", root, dump));
         let body = dump[at + 1..].split_once('\n').expect("a signature line").1;
-        body.split_once("\n\n").map_or(body, |(body, _)| body)
+        body.split_once("\n\n")
+            .unwrap_or_else(|| {
+                panic!(
+                    "no blank line closes the block of `{}` in the RC IR dump:\n{}",
+                    root, dump
+                )
+            })
+            .0
     }
 
     /// The line binding the result of the operation whose text begins with `rhs`.
