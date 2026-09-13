@@ -46,14 +46,18 @@ const INLINE_COST_THRESHOLD: i32 = 30;
 /// `split_struct_args` and `closure_specialization` then read. A cycle therefore grows by at most
 /// this many nodes in each of `MAX_ROUNDS` rounds.
 ///
-/// It is set where no symbol in a corpus program comes near it: across LangArena's fifty
-/// programs and the standard library the largest holds 4,130 nodes in total, and the 99th
-/// percentile 1,164, so no program whose inlining stops on its own reaches it.
+/// It is set above what a round of a corpus program asks for. Measured over LangArena's fifty
+/// programs and the standard library, with the bound lifted so that every substitution is taken,
+/// the largest round asks for 5,166 nodes and the 99th percentile for 657, over 3,516
+/// symbol-rounds. This leaves the largest of them a tenth of the bound.
 ///
-/// A symbol that names more globals than `MAX_ROUNDS` rounds of this bound can pay for keeps the
-/// rest as calls. An arithmetic operator is three nodes, so that is around thirty thousand
-/// operators written into one symbol.
-const MAX_NODES_SUBSTITUTED_PER_ROUND: usize = 10000;
+/// A program that asks for more than this in one round takes the rest in the rounds that follow,
+/// and reaches the same program where `MAX_ROUNDS` rounds are enough for it. A function of one
+/// hundred and sixty branches, each building a string the way LangArena's
+/// `Calculator::_right_hand_side` does, compiles to the same symbols as an unbounded compiler; so
+/// does one of eighty, which at a bound of ten thousand kept fifteen closures
+/// `closure_specialization` folds away here.
+const MAX_NODES_SUBSTITUTED_PER_ROUND: usize = 50000;
 
 /// How many times `run` rewrites the program before it stops asking for more.
 ///
