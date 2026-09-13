@@ -922,6 +922,10 @@ The type for booleans is `Bool`, and literals for booleans are `true` and `false
 
 Types for numbers are `I8`, `I16`, `I32`, `I64` (signed integers), `U8`, `U16`, `U32`, `U64` (unsigned integers) and `F32`, `F64` (floating point values).
 
+An operation on a signed integer type assumes that its mathematical result falls within the range of that type.
+The behavior of a program that performs one whose result falls outside that range is undefined.
+Where wrapping is what is wanted, use an unsigned integer type: an operation on `U8`, `U16`, `U32` or `U64` is taken modulo two to the width of the type.
+
 A number literal is interpreted as a floating point literal if it contains a decimal point, and as an integer literal otherwise.
 For example, `42` is an `I64` type number literal, and `3.14` is an `F64` type number literal.
 
