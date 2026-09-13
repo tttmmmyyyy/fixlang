@@ -1679,9 +1679,7 @@ pub fn hole_full_name() -> FullName {
 /// an `Expr::Var` referring to the internal builtin `Std::#hole : a`.
 ///
 /// # Arguments
-/// * `src` — the span of the empty source region. Used by the
-///   ERR_HOLE diagnostic to underline a meaningful range rather than
-///   a zero-width point.
+/// * `src` — the span of the empty source region.
 pub fn expr_hole(src: Option<Span>) -> Arc<ExprNode> {
     expr_var(hole_full_name(), src)
 }
