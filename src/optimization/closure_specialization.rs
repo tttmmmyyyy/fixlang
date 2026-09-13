@@ -858,9 +858,9 @@ fn inline_specialized_lambdas(
         }
         let sym = symbols.get_mut(copy).unwrap();
         sym.expr = Some(expr);
-        // Reduce the redex the substitution left: a lambda standing where a name stood, applied to
-        // the arguments the call supplies. Left standing, it is a closure the program builds on the
-        // heap and calls through, once for every call of the function it was handed to.
+        // Reduce what the substitution left: a lambda applied to the arguments the call supplies.
+        // Left standing, that application is a closure the program builds on the heap and calls
+        // through, once for every call of the function the lambda was handed to.
         inline_local::run_on_symbol(sym, &arity_map);
     }
 }

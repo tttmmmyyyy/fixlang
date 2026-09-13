@@ -121,8 +121,8 @@ mod integration_tests {
     /// over `|x| x * 3` at 4, which cancel.
     const SHARED_BODY_OUTPUT: &str = "72";
 
-    /// What `monadic_combinator` prints: the fold of `0..99` weighting each round by its index,
-    /// plus the hundred rounds it ran.
+    /// What `monadic_combinator` prints: the sum of `i * i` over `0..99`, each round weighting the
+    /// counter it reads by its index, plus the hundred rounds it ran.
     const MONADIC_COMBINATOR_OUTPUT: &str = "328450";
 
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
@@ -336,8 +336,8 @@ mod integration_tests {
     /// in name order.
     ///
     /// A call names the function it calls, so this walk collects the bodies a root runs. A function
-    /// reached through a closure is named by no call and stays out, while the body building that
-    /// closure is in.
+    /// reached through a closure is named by no call, so it stays out, though the body that builds
+    /// that closure is in.
     fn functions_reached_from<'a>(
         bodies: &Map<&'a str, &'a str>,
         roots: Vec<&'a str>,
@@ -769,8 +769,9 @@ mod integration_tests {
 
     /// A round of a combinator that answers in a monad builds no closure. The body of the callback
     /// goes into the copy of the combinator made for it, applied to the arguments the round
-    /// supplies, and what the copy keeps is that body: left applied, the lambda is a closure the
-    /// round builds on the heap and calls through, once per call of the callback.
+    /// supplies, and the copy reduces that application to the body itself. An application left
+    /// standing is a closure the round builds on the heap and calls through, once per call of the
+    /// callback.
     ///
     /// The dump is what this asserts against because the program cannot observe it: the fold
     /// answers the same either way.
