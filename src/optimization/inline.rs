@@ -10,7 +10,9 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
-    optimization::{inline_local, let_elimination, uncurry::is_std_fix},
+    optimization::{
+        inline_local, let_elimination::create_global_lambda_to_arity_map, uncurry::is_std_fix,
+    },
 };
 use std::{mem, sync::Arc};
 
@@ -106,7 +108,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         budget: 0,
         refused_for_budget: false,
     };
-    let global_lambda_to_arity = let_elimination::create_global_lambda_to_arity_map(&symbols);
+    let global_lambda_to_arity = create_global_lambda_to_arity_map(&symbols);
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let root_value_names = prg.root_value_names();
 

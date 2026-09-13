@@ -40,7 +40,10 @@ use crate::{
     constants::BOUND_FIELD_PREFIX,
     fixstd::builtin::InlineLLVMMakeUnionBody,
     misc::{Map, Set},
-    optimization::{inline_local, let_elimination, pull_let, unique_local_names},
+    optimization::{
+        inline_local, let_elimination::create_global_lambda_to_arity_map, pull_let,
+        unique_local_names,
+    },
 };
 use std::sync::Arc;
 
@@ -51,7 +54,7 @@ pub fn run(prg: &mut Program) {
     // it shortens a symbol's leading run of lambdas, so one map answers for every symbol: the walk
     // rewrites what a construction's reader sees, and the two reductions expose a lambda without
     // removing one.
-    let global_lambda_to_arity = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
+    let global_lambda_to_arity = create_global_lambda_to_arity_map(&prg.symbols);
     for (_name, sym) in prg.symbols.iter_mut() {
         let mut expr = with_lets_pulled_out(sym.expr.as_ref().unwrap());
         let mut bound_field_count = 0;
