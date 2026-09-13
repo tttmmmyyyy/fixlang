@@ -43,6 +43,7 @@ mod test_hole_negative;
 mod test_hole_priority;
 mod test_import;
 mod test_index_syntax;
+mod test_inline_growth;
 mod test_let_elimination;
 mod test_llvm_passes;
 mod test_llvm_release;
