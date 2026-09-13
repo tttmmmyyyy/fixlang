@@ -10170,10 +10170,10 @@ pub fn add_trait_id() -> TraitId {
     }
 }
 
-/// Whether Fix promises that arithmetic on `ty` does not wrap, which lets the generated
-/// instruction carry `nsw`. A signed integer operation whose mathematical result leaves the range
-/// of its type is undefined; an unsigned one wraps around.
-fn arithmetic_never_wraps(ty: &Arc<TypeNode>) -> bool {
+/// Whether Fix assumes that the result of arithmetic on `ty` falls within the range of `ty`, which
+/// lets the generated instruction carry `nsw`. A signed integer operation whose mathematical result
+/// leaves that range is undefined; an unsigned one wraps around.
+fn arithmetic_result_is_assumed_to_fit(ty: &Arc<TypeNode>) -> bool {
     ty.toplevel_tycon().unwrap().is_signed_integer()
 }
 
@@ -10230,7 +10230,7 @@ impl IntegerArithmetic {
     /// The LLVM intrinsic that performs this operation and reports whether the result left the
     /// range of the signed integer type.
     ///
-    /// A division carries no such intrinsic: `build_check_signed_division` compares its operands
+    /// A division carries no such intrinsic: `build_division_overflow_check` compares its operands
     /// against the one pair that overflows instead.
     fn reporting_intrinsic(self) -> &'static str {
         match self {
@@ -10268,7 +10268,7 @@ fn build_integer_arithmetic<'c, 'm>(
             lhs
         );
     }
-    if !arithmetic_never_wraps(ty) {
+    if !arithmetic_result_is_assumed_to_fit(ty) {
         let builder = gc.builder();
         return match operation {
             IntegerArithmetic::Add => builder.build_int_add(lhs, rhs, name),
@@ -10283,7 +10283,7 @@ fn build_integer_arithmetic<'c, 'm>(
     if operation.is_division() {
         // A division carries no intrinsic reporting the overflow, so the check stands in front of
         // the instruction rather than replacing it. It is emitted where the build asks for it.
-        build_check_signed_division(gc, operation, lhs, rhs, ty);
+        build_division_overflow_check(gc, operation, lhs, rhs, ty);
     } else if signed_overflow_is_checked(gc) {
         return build_checked_signed_arithmetic(gc, operation, lhs, rhs, ty, name);
     }
@@ -10317,22 +10317,23 @@ fn build_checked_signed_arithmetic<'c, 'm>(
     ty: &Arc<TypeNode>,
     name: &str,
 ) -> IntValue<'c> {
-    let function = gc.intrinsic_function(operation.reporting_intrinsic(), &[lhs.get_type().into()]);
-    let result = gc
+    let intrinsic_fn =
+        gc.intrinsic_function(operation.reporting_intrinsic(), &[lhs.get_type().into()]);
+    let result_and_overflow = gc
         .builder()
-        .build_call(function, &[lhs.into(), rhs.into()], name)
+        .build_call(intrinsic_fn, &[lhs.into(), rhs.into()], name)
         .unwrap()
         .try_as_basic_value()
         .unwrap_basic()
         .into_struct_value();
     let overflowed = gc
         .builder()
-        .build_extract_value(result, 1, "signed_overflowed")
+        .build_extract_value(result_and_overflow, 1, "signed_overflowed")
         .unwrap()
         .into_int_value();
     build_report_signed_overflow(gc, overflowed, operation, lhs, rhs, ty);
     gc.builder()
-        .build_extract_value(result, 0, name)
+        .build_extract_value(result_and_overflow, 0, name)
         .unwrap()
         .into_int_value()
 }
@@ -10341,7 +10342,7 @@ fn build_checked_signed_arithmetic<'c, 'm>(
 /// integer type `ty` by -1, which is the one pair a division and a remainder are undefined at: the
 /// quotient is one past the greatest value of the type. The check is emitted where
 /// `--check-signed-overflow` asks for it.
-fn build_check_signed_division<'c, 'm>(
+fn build_division_overflow_check<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     operation: IntegerArithmetic,
     lhs: IntValue<'c>,
@@ -10386,12 +10387,12 @@ fn build_report_signed_overflow<'c, 'm>(
         "the report takes operands of 64 bits, and this one is {} bits wide",
         lhs.get_type().get_bit_width()
     );
-    let reported = format!(
+    let reported_operation = format!(
         "{} {}",
         ty.toplevel_tycon().unwrap().name.name,
         operation.reported_as()
     );
-    let reported = gc.add_global_string(&reported).as_pointer_value();
+    let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
     let i64_ty = gc.context.i64_type();
     let lhs = gc
         .builder()
@@ -10405,7 +10406,7 @@ fn build_report_signed_overflow<'c, 'm>(
         gc,
         overflowed,
         RUNTIME_SIGNED_OVERFLOW,
-        &[reported.into(), lhs.into(), rhs.into()],
+        &[reported_operation_ptr.into(), lhs.into(), rhs.into()],
         "signed_overflow",
     );
 }

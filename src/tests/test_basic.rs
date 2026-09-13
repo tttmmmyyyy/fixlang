@@ -3417,7 +3417,7 @@ pub fn test_u8_literal_of_a_bare_quote_or_newline_is_rejected() {
 /// truncates toward zero while the remainder carries the dividend's sign, and that a comparison
 /// reads `U8` as unsigned and `I32` as signed.
 #[test]
-pub fn test97() {
+pub fn test_unsigned_arithmetic_wraps_and_signed_division_truncates_toward_zero() {
     let source = r#"
         module Main; 
         main : IO ();

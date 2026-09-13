@@ -7,8 +7,8 @@ use crate::configuration::Configuration;
 use crate::tests::test_util::{generated_llvm_ir, test_source, test_source_fail};
 
 /// The operations whose generated instruction carries the assumption, each as the name the code
-/// generator gives the result and the LLVM instruction it emits. Negation is emitted as a
-/// subtraction from zero.
+/// generator gives the result and the LLVM opcode it emits. Negation is emitted as a subtraction
+/// from zero.
 const ARITHMETIC_OPERATIONS: &[(&str, &str)] =
     &[("add", "add"), ("sub", "sub"), ("mul", "mul"), ("neg", "sub")];
 
@@ -97,7 +97,7 @@ fn assert_the_check_stops(expression: &str, report: &str) {
 }
 
 /// The instructions of `ir` that the code generator emitted for the operation whose result it names
-/// `result_name`, as `instruction` at an integer type `bits` wide, split into those that carry the
+/// `result_name`, as `opcode` at an integer type `bits` wide, split into those that carry the
 /// assumption that the result fits the type and those that carry nothing.
 ///
 /// The code generator names the result of each of these after the trait method it implements, which
@@ -106,28 +106,28 @@ fn assert_the_check_stops(expression: &str, report: &str) {
 fn arithmetic_instructions<'a>(
     ir: &'a str,
     result_name: &str,
-    instruction: &str,
+    opcode: &str,
     bits: u32,
 ) -> (Vec<&'a str>, Vec<&'a str>) {
-    let assuming = format!("{} nsw i{} ", instruction, bits);
-    let wrapping = format!("{} i{} ", instruction, bits);
+    let assuming_prefix = format!("{} nsw i{} ", opcode, bits);
+    let wrapping_prefix = format!("{} i{} ", opcode, bits);
     let mut with_assumption = vec![];
     let mut without_assumption = vec![];
     for line in ir.lines().map(str::trim) {
-        let Some((register, operation)) = line.split_once(" = ") else {
+        let Some((register, instruction)) = line.split_once(" = ") else {
             continue;
         };
         // LLVM appends digits to a name it has already given out, so the digits come off before the
         // name is read.
-        let named = register
+        let register_name = register
             .strip_prefix('%')
             .map(|name| name.trim_end_matches(|c: char| c.is_ascii_digit()));
-        if named != Some(result_name) {
+        if register_name != Some(result_name) {
             continue;
         }
-        if operation.starts_with(&assuming) {
+        if instruction.starts_with(&assuming_prefix) {
             with_assumption.push(line);
-        } else if operation.starts_with(&wrapping) {
+        } else if instruction.starts_with(&wrapping_prefix) {
             without_assumption.push(line);
         }
     }
@@ -146,10 +146,10 @@ pub fn test_signed_arithmetic_assumes_its_result_fits_the_type() {
     // The subject is what the compiler emits, so the IR is read before the LLVM pass pipeline has
     // run over it: an optimized module also holds arithmetic LLVM itself introduced.
     let ir = generated_llvm_ir(ARITHMETIC_AT_EVERY_SIGNED_TYPE, "none");
-    for (result_name, instruction) in ARITHMETIC_OPERATIONS {
+    for (result_name, opcode) in ARITHMETIC_OPERATIONS {
         for bits in INTEGER_WIDTHS {
             let (with_assumption, without_assumption) =
-                arithmetic_instructions(&ir, result_name, instruction, *bits);
+                arithmetic_instructions(&ir, result_name, opcode, *bits);
             assert!(
                 !with_assumption.is_empty(),
                 "`{}` at the signed integer type of {} bits should be emitted carrying `nsw`, but \
@@ -176,10 +176,10 @@ pub fn test_signed_arithmetic_assumes_its_result_fits_the_type() {
 #[test]
 pub fn test_unsigned_arithmetic_assumes_nothing_about_its_result() {
     let ir = generated_llvm_ir(ARITHMETIC_AT_EVERY_UNSIGNED_TYPE, "none");
-    for (result_name, instruction) in ARITHMETIC_OPERATIONS {
+    for (result_name, opcode) in ARITHMETIC_OPERATIONS {
         for bits in INTEGER_WIDTHS {
             let (with_assumption, without_assumption) =
-                arithmetic_instructions(&ir, result_name, instruction, *bits);
+                arithmetic_instructions(&ir, result_name, opcode, *bits);
             assert!(
                 !without_assumption.is_empty(),
                 "`{}` at the unsigned integer type of {} bits should be emitted, but no such \
