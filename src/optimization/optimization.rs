@@ -129,6 +129,23 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| closure_specialization::run(prg, config.show_build_times),
     );
 
+    // Reduce what specializing a closure leaves: the caller's lambda now stands inside a copy of
+    // the combinator, bound to a name and applied a few lines below it. `let_elimination` and
+    // `application_inlining` together turn `let f = |x| {e}; f(y)` into `{e}[x := y]`, and
+    // `inline_local` runs the two to a fixpoint; above specialization there was no such shape for
+    // them to meet, so the lambda stayed a closure the program builds and calls through.
+    //
+    // It runs above uncurrying because `let_elimination` reads an application through
+    // `destructure_app`, which takes one argument, and uncurrying is what builds the applications
+    // that take several.
+    run_pass(
+        prg,
+        config,
+        config.enable_inline_local_optimization(),
+        "inline_local",
+        inline_local::run,
+    );
+
     run_pass(
         prg,
         config,
