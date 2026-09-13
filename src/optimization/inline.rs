@@ -23,7 +23,7 @@ use std::{mem, sync::Arc};
 /// exceed it, as reference counting and the bounds checks still to be inserted feed them too.
 const INLINE_COST_THRESHOLD: i32 = 30;
 
-/// The nodes a symbol's expression may reach by being substituted into.
+/// The nodes one round may add to a symbol's expression by substituting into it.
 ///
 /// This bounds a different quantity from `INLINE_COST_THRESHOLD`, and the two are not comparable.
 /// That one weighs what a copy of a body costs the program that runs: a `let` binding one name to
@@ -38,10 +38,19 @@ const INLINE_COST_THRESHOLD: i32 = 30;
 /// nodes and on -- while the first quantity reads 3 throughout, and a ring whose members carry two
 /// thousand renamings apiece exhausts the compiler's stack and aborts the build.
 ///
+/// What is bounded is the growth of one round, so a symbol that has already grown large still takes
+/// the substitutions of the rounds that follow -- a one-node alias among them, which
+/// `split_struct_args` and `closure_specialization` then read. The doubling a cycle produces gives
+/// way to `MAX_ROUNDS` rounds of this.
+///
 /// It is set where no symbol a corpus program reaches comes near it: across LangArena's fifty
-/// programs and the standard library the largest holds 4,130 nodes and the 99th percentile 1,164,
-/// so a program that stops on its own is left as it was.
-const MAX_INLINED_SYMBOL_NODES: usize = 10000;
+/// programs and the standard library the largest holds 4,130 nodes in total, and the 99th
+/// percentile 1,164, so a program that stops on its own is left as it was.
+///
+/// A symbol naming more globals than `MAX_ROUNDS` rounds of this can pay for keeps the remainder as
+/// calls. An arithmetic operator is three nodes, so that bound is around thirty thousand operators
+/// written into one symbol.
+const MAX_SYMBOL_GROWTH_PER_ROUND: usize = 10000;
 
 /// How many times `run` rewrites the program before it stops asking for more.
 ///
@@ -51,9 +60,8 @@ const MAX_INLINED_SYMBOL_NODES: usize = 10000;
 /// settles in about log2(L) rounds — the standard library and every program measured alongside it
 /// settle within five, and a chain 500 long within eleven.
 ///
-/// Ten covers what a program of any ordinary depth needs. It is also the reason to keep the number
-/// small: the bodies of globals that call each other in a cycle double every round, so each round
-/// left here is a term twice as large to finish with.
+/// Ten covers what a program of any ordinary depth needs. What a cycle costs across those rounds is
+/// bounded by `MAX_SYMBOL_GROWTH_PER_ROUND` rather than by this number.
 const MAX_ROUNDS: usize = 10;
 
 /// Substitute the definitions of globals into the places that name them, round after round until the
@@ -112,9 +120,9 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             continue;
         }
 
-        // Traverse the expression and inline the symbol. What it may gain this round is what it
-        // has left before `MAX_INLINED_SYMBOL_NODES`.
-        inliner.budget = MAX_INLINED_SYMBOL_NODES as i64 - costs.get(&name).nodes as i64;
+        // Traverse the expression and inline the symbol, which may gain
+        // `MAX_SYMBOL_GROWTH_PER_ROUND` nodes doing so.
+        inliner.budget = MAX_SYMBOL_GROWTH_PER_ROUND;
         let res = inliner.traverse(&sym.expr.as_ref().unwrap());
 
         if res.changed {
@@ -123,7 +131,10 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             sym.expr = Some(res.expr);
             application_inlining::run_on_symbol(&mut sym);
         } else {
-            // If inlining was not done, it cannot be inlined furthermore.
+            // A round that substituted nothing has reached the symbol's end state, a round that
+            // refused one for want of budget included. Spending any of the budget would have made
+            // the round a change, so a round that spent none refused a body larger than the whole
+            // budget, and a body only grows from one round to the next.
             stable_symbols.insert(name.clone());
         }
 
@@ -148,7 +159,10 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
         costs.add_cost_calculation_result(cost_calculator);
 
         let expr = sym.expr.as_ref().unwrap();
-        // Count what a copy of the expression costs the compiler, which is every node of it.
+        // Count what a copy of the expression costs the compiler, which is every node of it, the
+        // kinds `INLINE_COST_THRESHOLD` values at nothing included. `walk_nodes` reaches every node
+        // by construction, so a kind of expression added later is counted without anyone
+        // remembering to.
         let mut nodes = 0;
         expr.walk_nodes(&mut |_| nodes += 1);
         costs.costs.get_mut(name).unwrap().nodes = nodes;
@@ -585,24 +599,24 @@ struct Inliner<'c> {
     costs: &'c InlineCosts,
     // All symbols.
     symbols: Map<FullName, Symbol>,
-    /// How many nodes the symbol being traversed may still gain, against
-    /// `MAX_INLINED_SYMBOL_NODES`. `run_one` sets it before each symbol, and every substitution
-    /// spends the nodes of the body it copies.
-    budget: i64,
+    /// How many nodes the symbol being traversed may still gain this round, against
+    /// `MAX_SYMBOL_GROWTH_PER_ROUND`. `run_one` sets it before each symbol, and every substitution
+    /// spends the nodes of the body it copies. The subtraction that spends it is also the test: a
+    /// body larger than what is left is refused.
+    budget: usize,
 }
 
 impl<'c> Inliner<'c> {
-    /// Whether a copy of `name`'s expression fits in what the symbol being traversed may still
-    /// gain, and spends it where it does.
+    /// Whether a copy of `name`'s expression fits in what the symbol being traversed may still gain
+    /// this round, and spends it where it does.
     ///
     /// # Parameters
     /// * `name` - The symbol whose expression would be copied.
     fn take_budget_for(&mut self, name: &FullName) -> bool {
-        let nodes = self.costs.get(name).nodes as i64;
-        if nodes > self.budget {
+        let Some(left) = self.budget.checked_sub(self.costs.get(name).nodes) else {
             return false;
-        }
-        self.budget -= nodes;
+        };
+        self.budget = left;
         true
     }
 }

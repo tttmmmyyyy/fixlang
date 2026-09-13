@@ -31,12 +31,13 @@ mod tests {
             source += &format!("    {}(a1999)\n);\n\n", next);
         }
         source += r#"
-        // The argument count keeps the call to the ring in the program while never taking it.
-        guard : I64;
-        guard = "abc".@size;
-
         main : IO ();
-        main = if guard > 100 { println $ f(0).to_string } else { println $ "reached" };
+        main = (
+            // The command line decides the branch, so the call to the ring stands in the program
+            // and the run never takes it.
+            let args = *IO::get_args;
+            if args.@size > 100 { println $ f(0).to_string } else { println $ "reached" }
+        );
         "#;
 
         let output = build_within_and_run(
@@ -63,11 +64,13 @@ mod tests {
         h : I64 -> I64;
         h = |x| f(x);
 
-        guard : I64;
-        guard = "abc".@size;
-
         main : IO ();
-        main = if guard > 100 { println $ f(0).to_string } else { println $ "reached" };
+        main = (
+            // The command line decides the branch, so the call to the ring stands in the program
+            // and the run never takes it.
+            let args = *IO::get_args;
+            if args.@size > 100 { println $ f(0).to_string } else { println $ "reached" }
+        );
         "#;
 
         let output = build_within_and_run(
