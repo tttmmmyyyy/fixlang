@@ -1,9 +1,10 @@
-// A symbol grows by what is substituted into it, and nothing in the cost of a body says how large
-// the symbol receiving it has become. Globals that name each other in a cycle are what needs it:
-// none of them calls itself, so the substitution never stops on its own, and each round puts the
-// whole cycle into each member again. What accumulates is the renaming a substitution leaves
-// behind, which generates no code and so costs nothing by the measure that decides whether to
-// inline; only a count of the nodes themselves sees it.
+// Inlining substitutes the body of a global into the places that name it, and what a body costs
+// says nothing about how large the symbol receiving it has grown. That matters for globals that
+// name each other in a cycle: none of them calls itself, so the substitution never stops on its
+// own, and each round puts the whole cycle into each member again. What accumulates is the renaming
+// a substitution leaves behind, which generates no code and so costs nothing by the measure that
+// decides whether to inline; only a count of the nodes sees it. That such a program compiles is
+// what these tests pin.
 
 #[cfg(test)]
 mod tests {
@@ -11,11 +12,11 @@ mod tests {
     use std::time::Duration;
 
     /// How many renamings each member of the ring carries. A renaming generates no code, so the
-    /// measure that decides whether to inline reads such a body as small however many it holds.
+    /// measure that decides whether to inline counts such a body as small however many it holds.
     const RENAMINGS_PER_GLOBAL: usize = 2000;
 
-    /// The entry point standing over a ring of globals named `f`, `g` and `h`. The command line
-    /// decides the branch, so the call to the ring stands in the program and the run never takes
+    /// The entry point that calls a ring of globals named `f`, `g` and `h`. The command line
+    /// decides the branch, so the call to the ring stands in the program while the run never takes
     /// it: what is under test is that the compiler arrives at a program at all.
     const MAIN_CALLING_THE_RING: &str = r#"
         main : IO ();

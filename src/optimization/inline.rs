@@ -25,34 +25,35 @@ const INLINE_COST_THRESHOLD: i32 = 30;
 
 /// The nodes one round of substitution may add to a symbol's expression.
 ///
-/// `application_inlining` runs on what a round of substitution leaves and rewrites it, so what the
-/// symbol finally holds is this bound and what that pass makes of it.
+/// `application_inlining` runs after a round of substitution and rewrites what it leaves, so the
+/// symbol ends the round at what that pass makes of the nodes this bound let in.
 ///
-/// This bounds a different quantity from `INLINE_COST_THRESHOLD`, and the two are not comparable.
-/// That one weighs what a copy of a body costs the program that runs: a `let` binding one name to
-/// another generates nothing, so it counts nothing. This one weighs what a copy costs the compiler
-/// that holds it, where every node is a node however little it generates.
+/// The bound is counted in `node_count`, where `INLINE_COST_THRESHOLD` is counted in `complexity`,
+/// and the two counts answer different questions. `complexity` weighs what a copy of a body costs
+/// the program that runs, so a `let` binding one name to another counts nothing. `node_count`
+/// weighs what a copy costs the compiler that holds it, so every node counts, however little code
+/// it generates.
 ///
-/// Globals that name each other in a cycle are what needs the second quantity. None of them calls
-/// itself, so `is_self_recursive` never stops the substitution, and each round puts the cycle into
-/// each member again. What accumulates is the renaming a substitution leaves behind -- `let x = p;
-/// let p = x;` per turn -- which the first quantity values at nothing, so no ceiling expressed in it
-/// can ever be reached. A ring of three globals doubles each of them per round -- 6, 10, 18, 34, 66
-/// nodes and on -- while the first quantity reads 3 throughout, and a ring whose members carry two
+/// Globals that name each other in a cycle are why the bound is counted in `node_count`. None of
+/// them calls itself, so `is_self_recursive` never stops the substitution, and each round puts the
+/// cycle into each member again. What accumulates is the renaming a substitution leaves behind —
+/// `let x = p; let p = x;` per turn — which `complexity` counts as nothing, so no ceiling expressed
+/// in it can ever be reached. A ring of three globals doubles each of them per round — 6, 10, 18,
+/// 34, 66 nodes and on — while `complexity` reads 3 throughout, and a ring whose members carry two
 /// thousand renamings apiece exhausts the compiler's stack and aborts the build.
 ///
-/// What is bounded is the growth of one round, so a symbol that has already grown large still takes
-/// the substitutions of the rounds that follow -- a one-node alias among them, which
-/// `split_struct_args` and `closure_specialization` then read. The doubling a cycle produces gives
-/// way to `MAX_ROUNDS` rounds of this.
+/// The bound is on the growth of one round, so a symbol that has already grown large still takes
+/// the substitutions of the rounds that follow, a one-node alias among them, which
+/// `split_struct_args` and `closure_specialization` then read. A cycle therefore grows by at most
+/// this many nodes in each of `MAX_ROUNDS` rounds.
 ///
-/// It is set where no symbol a corpus program reaches comes near it: across LangArena's fifty
+/// It is set where no symbol in a corpus program comes near it: across LangArena's fifty
 /// programs and the standard library the largest holds 4,130 nodes in total, and the 99th
-/// percentile 1,164, so a program that stops on its own is left as it was.
+/// percentile 1,164, so no program whose inlining stops on its own reaches it.
 ///
-/// A symbol naming more globals than `MAX_ROUNDS` rounds of this can pay for keeps the remainder as
-/// calls. An arithmetic operator is three nodes, so that bound is around thirty thousand operators
-/// written into one symbol.
+/// A symbol that names more globals than `MAX_ROUNDS` rounds of this bound can pay for keeps the
+/// rest as calls. An arithmetic operator is three nodes, so that is around thirty thousand
+/// operators written into one symbol.
 const MAX_NODES_SUBSTITUTED_PER_ROUND: usize = 10000;
 
 /// How many times `run` rewrites the program before it stops asking for more.
@@ -63,8 +64,8 @@ const MAX_NODES_SUBSTITUTED_PER_ROUND: usize = 10000;
 /// settles in about log2(L) rounds — the standard library and every program measured alongside it
 /// settle within five, and a chain 500 long within eleven.
 ///
-/// Ten covers what a program of any ordinary depth needs. What a cycle costs across those rounds is
-/// bounded by `MAX_NODES_SUBSTITUTED_PER_ROUND` rather than by this number.
+/// Ten covers what a program of any ordinary depth needs. `MAX_NODES_SUBSTITUTED_PER_ROUND` bounds
+/// what a cycle adds in each of those rounds.
 const MAX_ROUNDS: usize = 10;
 
 /// Substitute the definitions of globals into the places that name them, round after round until the
@@ -135,9 +136,9 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             application_inlining::run_on_symbol(&mut sym);
         } else if !inliner.refused_for_budget {
             // A round that substituted nothing and refused nothing has reached the symbol's end
-            // state. A round that refused one is asked again next round instead: the body it could
-            // not afford may come back smaller, since `application_inlining` runs on every symbol a
-            // round changes and rewrites what the substitution left.
+            // state. A symbol whose round refused a body it could not afford is asked again next
+            // round: the body may come back smaller, since `application_inlining` rewrites what the
+            // substitution left in every symbol the round changed.
             stable_symbols.insert(name.clone());
         }
 
@@ -168,8 +169,8 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
 
         let cost = costs.get_mut(name);
 
-        // Count what a copy of the expression costs the compiler, which is every node of it, the
-        // kinds `complexity` values at nothing included.
+        // Count what a copy of the expression costs the compiler, which is every node of it,
+        // including the kinds `complexity` counts as nothing.
         cost.node_count = expr.node_count();
 
         // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`. An
@@ -217,9 +218,9 @@ struct InlineCost {
     /// variable, a type annotation, an `eval`, and a `let` or a `match` that only renames a local
     /// count nothing.
     complexity: usize,
-    /// The nodes the expression holds, which is what a copy of it costs the compiler. `complexity`
-    /// answers what it costs the program instead, and values at nothing the nodes that generate
-    /// nothing.
+    /// The number of nodes the expression holds, which is what a copy of it costs the compiler.
+    /// `complexity` answers what a copy costs the program that runs, where a node that generates no
+    /// code counts as nothing.
     node_count: usize,
     /// Does the symbol's expression name the symbol itself?
     is_self_recursive: bool,
@@ -631,29 +632,25 @@ struct Inliner<'c> {
     costs: &'c InlineCosts,
     /// The symbols of the program, holding the bodies to put at the names.
     symbols: Map<FullName, Symbol>,
-    /// How many nodes the symbol being traversed may still gain this round, against
-    /// `MAX_NODES_SUBSTITUTED_PER_ROUND`. `substitute_into` sets it before each symbol, and every
-    /// substitution spends the nodes of the body it copies. The subtraction that spends it is also
-    /// the test: a body larger than what is left is refused.
+    /// How many nodes the symbol being traversed may still gain this round. `substitute_into` sets
+    /// it to `MAX_NODES_SUBSTITUTED_PER_ROUND` before each symbol, every substitution spends the
+    /// nodes of the body it copies, and a body larger than what is left is refused.
     budget: usize,
-    /// Whether the traversal of the symbol refused a substitution for want of budget.
+    /// Whether the traversal of the symbol refused a substitution that `budget` did not cover.
     refused_for_budget: bool,
 }
 
 impl<'c> Inliner<'c> {
-    /// Substitute into `expr` the body of each global it names that its cost allows, letting it
-    /// gain at most `MAX_NODES_SUBSTITUTED_PER_ROUND` nodes.
+    /// Substitute into `expr` the body of each global it names, where the cost of that global
+    /// allows, letting `expr` gain at most `MAX_NODES_SUBSTITUTED_PER_ROUND` nodes.
     fn substitute_into(&mut self, expr: &Arc<ExprNode>) -> EndVisitResult {
         self.budget = MAX_NODES_SUBSTITUTED_PER_ROUND;
         self.refused_for_budget = false;
         self.traverse(expr)
     }
 
-    /// Whether a copy of `name`'s expression fits in what the symbol being traversed may still gain
-    /// this round, and spends it where it does.
-    ///
-    /// # Arguments
-    /// * `name` - The symbol whose expression would be copied.
+    /// Whether a copy of `name`'s expression fits in the `budget` left for the symbol being
+    /// traversed this round, taking its nodes out of `budget` where it does.
     fn take_budget_for(&mut self, name: &FullName) -> bool {
         let node_count = self.costs.get(name).node_count;
         assert!(
