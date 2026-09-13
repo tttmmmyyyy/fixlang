@@ -68,10 +68,10 @@ mod integration_tests {
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
-    /// The lines of the program's entry point, without its signature line. An operation performed in
+    /// The lines of the program's root, without its signature line. An operation performed in
     /// several functions is named once inside any one of them, and the dump opens by naming its
     /// roots, of which a case compiled from one `main` has exactly one.
-    fn entry_body(dump: &str) -> &str {
+    fn root_body(dump: &str) -> &str {
         let mut lines = dump.lines();
         assert_eq!(
             lines.next(),
@@ -84,11 +84,15 @@ mod integration_tests {
             .map(str::trim)
             .filter(|root| !root.is_empty())
             .unwrap_or_else(|| panic!("no root named in the RC IR dump:\n{}", dump));
-        let at = dump
+        let before_sig = dump
             .find(&format!("\nfn {}(", root))
             .unwrap_or_else(|| panic!("no function `{}` in the RC IR dump:\n{}", root, dump));
-        let body = dump[at + 1..].split_once('\n').expect("a signature line").1;
-        body.split_once("\n\n")
+        let after_sig = dump[before_sig + 1..]
+            .split_once('\n')
+            .expect("a signature line")
+            .1;
+        after_sig
+            .split_once("\n\n")
             .unwrap_or_else(|| {
                 panic!(
                     "no blank line closes the block of `{}` in the RC IR dump:\n{}",
@@ -98,43 +102,47 @@ mod integration_tests {
             .0
     }
 
-    /// The line binding the result of the operation whose text begins with `rhs`.
+    /// The line binding the result of the operation whose text begins with `rhs_prefix`.
     ///
     /// A value carries the name of the source `let` that bound it, and an elimination that removes
     /// that `let` leaves the value on whatever binding it lands in, under that binding's name. The
     /// operation producing the value does not move, so a test pointing at one value points at its
-    /// operation. `rhs` has to name an operation the dump performs once.
-    fn binding_by_rhs<'a>(dump: &'a str, rhs: &str) -> &'a str {
-        let mut lines = dump
-            .lines()
-            .filter(|l| l.split_once(" = ").is_some_and(|(_, r)| r.starts_with(rhs)));
-        let line = lines
-            .next()
-            .unwrap_or_else(|| panic!("no binding of `{}` in the RC IR dump:\n{}", rhs, dump));
+    /// operation. `rhs_prefix` has to name an operation the dump performs once.
+    fn binding_by_rhs<'a>(dump: &'a str, rhs_prefix: &str) -> &'a str {
+        let mut bindings = dump.lines().filter(|l| {
+            l.split_once(" = ")
+                .is_some_and(|(_, rhs)| rhs.starts_with(rhs_prefix))
+        });
+        let line = bindings.next().unwrap_or_else(|| {
+            panic!(
+                "no binding of `{}` in the RC IR dump:\n{}",
+                rhs_prefix, dump
+            )
+        });
         assert!(
-            lines.next().is_none(),
+            bindings.next().is_none(),
             "`{}` is performed more than once, so it names no one value:\n{}",
-            rhs,
+            rhs_prefix,
             dump
         );
         line
     }
 
-    /// Assert that the value the operation `rhs` produces carries the given provenance.
-    fn assert_prov_of(dump: &str, rhs: &str, expected_prov: &str) {
-        let line = binding_by_rhs(dump, rhs);
+    /// Assert that the value the operation `rhs_prefix` produces carries the given provenance.
+    fn assert_prov_of(dump: &str, rhs_prefix: &str, expected_prov: &str) {
+        let line = binding_by_rhs(dump, rhs_prefix);
         assert!(
             line.contains(expected_prov),
             "the value `{}` produces should have provenance `{}`, but its line is:\n{}",
-            rhs,
+            rhs_prefix,
             expected_prov,
             line
         );
     }
 
-    /// The variable the binding of `rhs`'s result introduces.
-    fn var_produced_by(dump: &str, rhs: &str) -> String {
-        let line = binding_by_rhs(dump, rhs);
+    /// The variable the binding of the result of `rhs_prefix` introduces.
+    fn var_produced_by(dump: &str, rhs_prefix: &str) -> String {
+        let line = binding_by_rhs(dump, rhs_prefix);
         line.trim_start()
             .strip_prefix("let ")
             .and_then(|rest| rest.split_once(" : "))
@@ -193,7 +201,7 @@ mod integration_tests {
         // `echo_arr` returns its array argument unchanged, so its effect — computed to a fixed point
         // over its recursion — is that argument. Calling it on a fresh array therefore composes to a
         // fresh result: the read-only recursion carries uniqueness through.
-        assert_prov_of(entry_body(&dump), "Main::echo_arr", "[fresh]");
+        assert_prov_of(root_body(&dump), "Main::echo_arr", "[fresh]");
     }
 
     /// Whether `line` is a function signature starting with `name_prefix` (which carries the `fn`

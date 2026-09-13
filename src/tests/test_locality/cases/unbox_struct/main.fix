@@ -17,6 +17,6 @@ main = (
     // survives while `dropped` stays a field nobody names.
     let holds_global = Both { read : [1, 2], dropped : g };
     let taken = holds_global.@read;
-    let again = holds_global.@read;
-    println $ (taken.sum + again.sum).to_string
+    let taken_again = holds_global.@read;
+    println $ (taken.sum + taken_again.sum).to_string
 );
