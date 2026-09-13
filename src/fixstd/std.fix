@@ -335,7 +335,7 @@ namespace Array {
     find_by = |cond, arr| (
         let len = arr.@size;
         loop(0, |idx| (
-            if idx == len { break $ Option::none $ () };
+            if idx >= len { break $ Option::none $ () };
             if cond(arr.@(idx)) { break $ Option::some $ idx };
             continue $ idx + 1
         ))
@@ -570,7 +570,7 @@ namespace Array {
         range(start + 1, start + n).fold(arr, |i, arr| (
             let v = arr.@(i);
             loop((arr, i), |(arr, j)|
-                if j == start { 
+                if j <= start { 
                     break $ arr.set(start, v)
                 };
                 let w = arr.@(j-1);
@@ -710,8 +710,8 @@ namespace Array {
     // - `into`: The array to write the merged elements into.
     _merge_runs : ((a, a) -> Bool) -> I64 -> I64 -> I64 -> I64 -> I64 -> Array a -> Array a -> Array a;
     _merge_runs = |less_than, former_pos, former_end, latter_pos, latter_end, into_pos, from, into| (
-        if former_pos == former_end { into._unsafe_copy_range_bounds_unchecked(from, latter_pos, latter_end, into_pos) };
-        if latter_pos == latter_end { into._unsafe_copy_range_bounds_unchecked(from, former_pos, former_end, into_pos) };
+        if former_pos >= former_end { into._unsafe_copy_range_bounds_unchecked(from, latter_pos, latter_end, into_pos) };
+        if latter_pos >= latter_end { into._unsafe_copy_range_bounds_unchecked(from, former_pos, former_end, into_pos) };
         let former_elem = from.@(former_pos);
         let latter_elem = from.@(latter_pos);
         if !less_than((latter_elem, former_elem)) { // Essential for stability.
@@ -738,7 +738,7 @@ namespace Array {
     // - `dst`: The array to write the elements into.
     _unsafe_copy_range_bounds_unchecked : Array a -> I64 -> I64 -> I64 -> Array a -> Array a;
     _unsafe_copy_range_bounds_unchecked = |src, begin, end, dst_begin, dst| (
-        if begin == end { dst };
+        if begin >= end { dst };
         dst.unsafe_set_bounds_unchecked(dst_begin, src._unsafe_get_bounds_unchecked(begin))
            ._unsafe_copy_range_bounds_unchecked(src, begin + 1, end, dst_begin + 1)
     );
@@ -843,7 +843,7 @@ impl [a : Eq] Array a : Eq {
         if lhs.@size != rhs.@size { false };
         let len = lhs.@size;
         loop(0, |idx| (
-            if idx == len { break $ true };
+            if idx >= len { break $ true };
             if lhs.@(idx) != rhs.@(idx) { break $ false };
             continue $ idx + 1
         ))
@@ -856,9 +856,9 @@ impl [a : Eq] Array a : Eq {
 impl [a : Eq, a : LessThan] Array a : LessThan {
     less_than = |lhs, rhs| (
         loop(0, |i| (
-            if i == lhs.@size && i == rhs.@size { break $ false };
-            if i == lhs.@size { break $ true };
-            if i == rhs.@size { break $ false };
+            if i >= lhs.@size && i >= rhs.@size { break $ false };
+            if i >= lhs.@size { break $ true };
+            if i >= rhs.@size { break $ false };
             let l = lhs.@(i);
             let r = rhs.@(i);
             if l != r { break $ l < r };
@@ -873,9 +873,9 @@ impl [a : Eq, a : LessThan] Array a : LessThan {
 impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq {
     less_than_or_eq = |lhs, rhs| (
         loop(0, |i| (
-            if i == lhs.@size && i == rhs.@size { break $ true };
-            if i == lhs.@size { break $ true };
-            if i == rhs.@size { break $ false };
+            if i >= lhs.@size && i >= rhs.@size { break $ true };
+            if i >= lhs.@size { break $ true };
+            if i >= rhs.@size { break $ false };
             let l = lhs.@(i);
             let r = rhs.@(i);
             if l != r { break $ l <= r };
@@ -889,7 +889,7 @@ impl Array : Functor {
         let n = arr.@size;
         let res = Array::empty(n);
         loop((0, res), |(i, res)| (
-            if i == n { break $ res };
+            if i >= n { break $ res };
             let e = f $ arr.@(i);
             continue $ (i+1, res.push_back(e))
         ))
@@ -902,7 +902,7 @@ impl Array : Monad {
         let size = arr.@size;
         let arr_arr = Array::empty(size);
         let (arr_arr, count) = loop((0, arr_arr, 0), |(idx, arr_arr, count)| (
-            if idx == size { break $ (arr_arr, count) };
+            if idx >= size { break $ (arr_arr, count) };
             let inner = f $ arr.@(idx);
             let count = count + inner.@size;
             let arr_arr = arr_arr.push_back(inner);
@@ -910,10 +910,10 @@ impl Array : Monad {
         ));
         let ret = Array::empty(count);
         loop((0, ret), |(i, ret)| (
-            if i == size { break $ ret };
+            if i >= size { break $ ret };
             let inner = arr_arr.@(i);
             continue $ loop((0, ret), |(j, ret)|(
-                if j == inner.@size {
+                if j >= inner.@size {
                     break $ (i + 1, ret)
                 } else {
                     let ret = ret.push_back(inner.@(j));
@@ -1357,7 +1357,7 @@ namespace IO {
         let argc = *get_arg_count;
         let args = Array::empty(argc);
         loop_m((args, 0), |(args, idx)| (
-            if idx == argc { break_m $ args };
+            if idx >= argc { break_m $ args };
             let arg = (*get_arg(idx)).as_some;
             continue_m $ (args.push_back(arg), idx + 1)
         ))
@@ -3037,7 +3037,7 @@ namespace String {
         type Item StringBytesIterator = U8;
         advance = |it| (
             let i = it.@_i;
-            if i == it.@_s.@size { none() };
+            if i >= it.@_s.@size { none() };
             let c = it.@_s[i].iget;
             let it = it[^_i].imod(add(1));
             (it, c).some
@@ -3158,7 +3158,7 @@ namespace String {
         advance = |iter| (
             let StringSplitIterator { idx: idx, str: str, strlen: strlen, sep: sep, sep_len: sep_len } = iter;
             if sep_len == 0 {
-                if idx == strlen { none() };
+                if idx >= strlen { none() };
                 let c_str = String::from_U8 $ str.get_bytes.@(idx);
                 some $ (iter.set_idx(idx + 1), c_str)
             };
@@ -3195,7 +3195,7 @@ namespace String {
         let len = str.@size;
         let bytes = str.get_bytes;
         let n = loop(0, |i| (
-            if i == len { break $ i };
+            if i >= len { break $ i };
             if !cond(bytes.@(i)) { break $ i };
             continue $ i + 1
         ));
@@ -3274,7 +3274,7 @@ namespace String {
         let end = template.@size - 1;
         let out = [];
         let (out, vi) = loop((out, 0, 0), |(out, i, vi)|
-            if i == end { break $ (out, vi) };
+            if i >= end { break $ (out, vi) };
             let c = template.@(i);
 
             // replace "{{" to "{"
