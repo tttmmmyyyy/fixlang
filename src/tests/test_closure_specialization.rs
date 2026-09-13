@@ -13,8 +13,7 @@
 mod integration_tests {
     use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
     use crate::misc::{Map, Set};
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
-    use std::fs;
+    use crate::tests::test_util::{fix_command_at_opt_level, read_rc_ir_dump, setup_case_projects};
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use tempfile::TempDir;
@@ -128,13 +127,7 @@ mod integration_tests {
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let mut cases_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        cases_dir.push("src/tests/test_closure_specialization/cases");
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        copy_dir_recursive(&cases_dir, &temp_dir.path().to_path_buf())
-            .expect("Failed to copy test cases");
-        let project_dir = temp_dir.path().join(case);
-        (temp_dir, project_dir)
+        setup_case_projects("src/tests/test_closure_specialization/cases", case)
     }
 
     /// Builds the case at `opt_level`, runs it, and returns the RC IR of every module.
@@ -181,9 +174,7 @@ mod integration_tests {
             opt_level
         );
 
-        let dump_path = project_dir.join(".fixlang/rc_ir.post.txt");
-        fs::read_to_string(&dump_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
+        read_rc_ir_dump(project_dir)
     }
 
     /// The names of the functions in `dump` whose name contains `name_part`.
@@ -211,7 +202,7 @@ mod integration_tests {
         let mut copies = functions_named_with(dump, &format!("{}_", CLOSURE_SPEC_SUFFIX))
             .into_iter()
             .filter(|name| name.starts_with(func_prefix))
-            .filter_map(copy_name)
+            .map(|name| copy_name(name).unwrap())
             .map(|copy| (copy.to_string(), copy.contains(CLOSURE_LAM_SUFFIX)))
             .collect::<Vec<_>>();
         copies.sort();
@@ -276,10 +267,11 @@ mod integration_tests {
 
     /// The copies of the function named by `func_prefix` in `dump`, each as the line naming it and
     /// the body under it. One copy of `Std::loop` stands for one loop body of the case.
-    fn spec_copies<'a>(dump: &'a str, func_prefix: &str) -> Vec<(&'a str, &'a str)> {
+    fn spec_copy_bodies<'a>(dump: &'a str, func_prefix: &str) -> Vec<(&'a str, &'a str)> {
         functions_in(dump)
             .filter(|(header, _)| {
-                header.starts_with(func_prefix) && header.contains(CLOSURE_SPEC_SUFFIX)
+                let name = func_name(header);
+                name.starts_with(func_prefix) && name.contains(CLOSURE_SPEC_SUFFIX)
             })
             .collect()
     }
@@ -310,11 +302,10 @@ mod integration_tests {
     /// capture list, so this says how many of the closures one capture list carries are known at
     /// once. The line naming a function is left out of its own body, so a copy does not count itself.
     fn most_copies_called_from_one_body(dump: &str, callee_prefix: &str) -> usize {
-        dump.split("\nfn ")
-            .map(|function| {
-                let body = function.split_once('\n').map_or("", |(_, body)| body);
-                let mut called = body
-                    .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '#'))
+        functions_in(dump)
+            .map(|(_, body)| {
+                let mut called = names_in(body, &[])
+                    .into_iter()
                     .filter(|token| token.starts_with(callee_prefix))
                     .filter_map(copy_name)
                     .collect::<Vec<_>>();
@@ -323,7 +314,7 @@ mod integration_tests {
                 called.len()
             })
             .max()
-            .unwrap_or(0)
+            .unwrap()
     }
 
     /// The body of every function `dump` names, keyed by the function's name.
@@ -671,7 +662,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("inlined_body");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", INLINED_BODY_OUTPUT);
 
-        let copies = spec_copies(&dump, "Std::loop");
+        let copies = spec_copy_bodies(&dump, "Std::loop");
         assert!(
             !copies.is_empty(),
             "the loop body should get a copy of `Std::loop`, but the dump names none: {:?}",
@@ -693,7 +684,7 @@ mod integration_tests {
 
         let standing_lambdas = functions_named_with(&dump, CLOSURE_LAM_SUFFIX);
         for func_prefix in ["Main::sum_up#", "Main::sum_down#", "Main::twice#"] {
-            let copies = spec_copies(&dump, func_prefix);
+            let copies = spec_copy_bodies(&dump, func_prefix);
             assert!(
                 !copies.is_empty(),
                 "`{}` should be specialized on the lambda it is given, and the dump names no copy \
@@ -738,7 +729,7 @@ mod integration_tests {
         let dump = build_run_and_read_rc_ir(&project_dir, "max", BORROWED_CAPTURE_OUTPUT);
 
         let mut lending_copies = 0;
-        for (header, body) in spec_copies(&dump, "Std::loop") {
+        for (header, body) in spec_copy_bodies(&dump, "Std::loop") {
             assert_holds_the_lambdas_body(header, body);
             // Each copy receives the capture list of the lambda it is made for, which is named after
             // the function that lambda was written in.
@@ -783,12 +774,9 @@ mod integration_tests {
         let dump = build_run_and_read_rc_ir(&project_dir, "max", MONADIC_COMBINATOR_OUTPUT);
 
         let bodies = function_bodies(&dump);
-        let copies = bodies
-            .keys()
-            .copied()
-            .filter(|name| {
-                name.starts_with("Main::range_fold_m#") && name.contains(CLOSURE_SPEC_SUFFIX)
-            })
+        let copies = spec_copy_bodies(&dump, "Main::range_fold_m#")
+            .into_iter()
+            .map(|(header, _)| func_name(header))
             .collect::<Vec<_>>();
         assert!(
             !copies.is_empty(),
