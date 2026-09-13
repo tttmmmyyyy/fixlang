@@ -1,8 +1,9 @@
-// Integration tests for the RC IR provenance analysis, checked through the `--emit-rc-ir` dump.
-// The dump annotates each variable binding with the provenance the analysis computed, so a small
-// program with named `let`s lets us assert the analysis end to end: allocators produce `fresh`
-// values, reading a boxed element out of a boxed container is `unknown`, and constructing an unboxed
-// tuple carries each component's provenance through.
+//! Integration tests for the RC IR provenance analysis, checked through the `--emit-rc-ir` dump.
+//!
+//! The dump annotates each variable binding with the provenance the analysis computed, so a small
+//! program with named `let`s pins the analysis end to end: allocators produce `fresh` values,
+//! reading a boxed element out of a boxed container is `unknown`, and constructing an unboxed tuple
+//! carries each component's provenance through.
 
 #[cfg(test)]
 mod integration_tests {
@@ -68,6 +69,94 @@ mod integration_tests {
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
+    /// The lines of the program's root, without its signature line. An operation performed in
+    /// several functions is named once inside any one of them, and the dump opens by naming its
+    /// roots, of which a case compiled from one `main` has exactly one.
+    fn root_body(dump: &str) -> &str {
+        let mut lines = dump.lines();
+        assert_eq!(
+            lines.next(),
+            Some("roots (1)"),
+            "a case compiled from one `main` has one root:\n{}",
+            dump
+        );
+        let root = lines
+            .next()
+            .map(str::trim)
+            .filter(|root| !root.is_empty())
+            .unwrap_or_else(|| panic!("no root named in the RC IR dump:\n{}", dump));
+        let before_sig = dump
+            .find(&format!("\nfn {}(", root))
+            .unwrap_or_else(|| panic!("no function `{}` in the RC IR dump:\n{}", root, dump));
+        let after_sig = dump[before_sig + 1..]
+            .split_once('\n')
+            .expect("a signature line")
+            .1;
+        after_sig
+            .split_once("\n\n")
+            .unwrap_or_else(|| {
+                panic!(
+                    "no blank line closes the block of `{}` in the RC IR dump:\n{}",
+                    root, dump
+                )
+            })
+            .0
+    }
+
+    /// The line binding the result of the operation whose text begins with `rhs_prefix`.
+    ///
+    /// A value carries the name of the source `let` that bound it, and an elimination that removes
+    /// that `let` leaves the value on whatever binding it lands in, under that binding's name. The
+    /// operation producing the value does not move, so a test pointing at one value points at its
+    /// operation. `rhs_prefix` has to name an operation the dump performs once.
+    fn binding_by_rhs<'a>(dump: &'a str, rhs_prefix: &str) -> &'a str {
+        let mut bindings = dump.lines().filter(|l| {
+            l.split_once(" = ")
+                .is_some_and(|(_, rhs)| rhs.starts_with(rhs_prefix))
+        });
+        let line = bindings.next().unwrap_or_else(|| {
+            panic!(
+                "no binding of `{}` in the RC IR dump:\n{}",
+                rhs_prefix, dump
+            )
+        });
+        assert!(
+            bindings.next().is_none(),
+            "`{}` is performed more than once, so it names no one value:\n{}",
+            rhs_prefix,
+            dump
+        );
+        line
+    }
+
+    /// Assert that the binding line `line`, which holds the value `subject` names, carries the given
+    /// provenance.
+    fn assert_line_prov(line: &str, subject: &str, expected_prov: &str) {
+        assert!(
+            line.contains(expected_prov),
+            "the value {} should have provenance `{}`, but its line is:\n{}",
+            subject,
+            expected_prov,
+            line
+        );
+    }
+
+    /// Assert that the value the operation `rhs_prefix` produces carries the given provenance.
+    fn assert_prov_of(dump: &str, rhs_prefix: &str, expected_prov: &str) {
+        let line = binding_by_rhs(dump, rhs_prefix);
+        assert_line_prov(line, &format!("`{}` produces", rhs_prefix), expected_prov);
+    }
+
+    /// The variable bound to the result of the operation `rhs_prefix` names.
+    fn var_produced_by(dump: &str, rhs_prefix: &str) -> String {
+        let line = binding_by_rhs(dump, rhs_prefix);
+        line.trim_start()
+            .strip_prefix("let ")
+            .and_then(|rest| rest.split_once(" : "))
+            .map(|(var, _)| var.to_string())
+            .unwrap_or_else(|| panic!("no variable bound on:\n{}", line))
+    }
+
     /// Assert that the binding named `source_name` (its `(as ...)` annotation) is annotated with the
     /// given provenance in the dump.
     fn assert_binding_prov(dump: &str, source_name: &str, expected_prov: &str) {
@@ -81,13 +170,7 @@ mod integration_tests {
                     source_name, dump
                 )
             });
-        assert!(
-            line.contains(expected_prov),
-            "binding `(as {})` should have provenance `{}`, but its line is:\n{}",
-            source_name,
-            expected_prov,
-            line
-        );
+        assert_line_prov(line, &format!("`{}` binds", marker), expected_prov);
     }
 
     /// Verifies the three provenance judgements a single function produces: an allocation is
@@ -100,7 +183,7 @@ mod integration_tests {
 
         // `Array::fill` and an array literal produce a fresh array.
         assert_binding_prov(&dump, "arr", "[fresh]");
-        assert_binding_prov(&dump, "strs", "[fresh]");
+        assert_prov_of(&dump, "array_lit(", "[fresh]");
         // Reading a boxed element out of a boxed container yields an unknown value.
         assert_binding_prov(&dump, "s0", "[unknown]");
         // Constructing an unboxed tuple carries each component's provenance through: `arr` is fresh,
@@ -119,7 +202,7 @@ mod integration_tests {
         // `echo_arr` returns its array argument unchanged, so its effect — computed to a fixed point
         // over its recursion — is that argument. Calling it on a fresh array therefore composes to a
         // fresh result: the read-only recursion carries uniqueness through.
-        assert_binding_prov(&dump, "r", "[fresh]");
+        assert_prov_of(root_body(&dump), "Main::echo_arr", "[fresh]");
     }
 
     /// Whether `line` is a function signature starting with `name_prefix` (which carries the `fn`
@@ -172,6 +255,25 @@ mod integration_tests {
         block
     }
 
+    /// The body block of `main` itself. The main entry is `Main::main#<hash>#funptr1`, of three
+    /// `#`-segments; the lambdas lifted out of it carry a segment more.
+    fn main_block(dump: &str) -> Vec<&str> {
+        func_block(dump, "fn Main::main", |n| {
+            n.split('#').count() == 3 && n.ends_with("#funptr1")
+        })
+    }
+
+    /// How many of the `tally` calls in `main` route to the borrow version, and how many stay on the
+    /// owning one.
+    fn tally_call_routing(main: &[&str]) -> (usize, usize) {
+        let calls = main
+            .iter()
+            .filter(|l| l.contains("= Main::tally"))
+            .collect::<Vec<_>>();
+        let borrow = calls.iter().filter(|l| l.contains("#borrow(")).count();
+        (borrow, calls.len() - borrow)
+    }
+
     /// Verifies which functions get a borrow version and what it buys: a function that only reads
     /// its array gets a borrowing version its call site routes to, one that consumes its array stays
     /// single, and the borrowing version performs no reference counting on the borrowed parameter.
@@ -212,11 +314,7 @@ mod integration_tests {
         );
 
         // `main` routes its non-tail, owned `tally(arr, ..)` call to the borrow version.
-        // The main entry is `Main::main#<hash>#funptr1` (three `#`-segments); the lifted lambdas
-        // have an extra segment.
-        let main = func_block(&dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
-        });
+        let main = main_block(&dump);
         assert!(
             main.iter()
                 .any(|l| l.contains("= Main::tally") && l.contains("#borrow(")),
@@ -245,18 +343,8 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("benefit");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = func_block(&dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
-        });
-        let tally_calls: Vec<&&str> = main
-            .iter()
-            .filter(|l| l.contains("= Main::tally"))
-            .collect();
-        let borrow_calls = tally_calls
-            .iter()
-            .filter(|l| l.contains("#borrow("))
-            .count();
-        let own_calls = tally_calls.len() - borrow_calls;
+        let main = main_block(&dump);
+        let (borrow_calls, own_calls) = tally_call_routing(&main);
 
         // The array read again after its call is owned but not at its last use, so routing to the
         // borrow version removes a retain — that call goes to the borrow version. The array not used
@@ -287,17 +375,8 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("benefit_aggregate");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = func_block(&dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
-        });
-        let tally_calls = main
-            .iter()
-            .filter(|l| l.contains("= Main::tally"))
-            .collect::<Vec<_>>();
-        let borrow_calls = tally_calls
-            .iter()
-            .filter(|l| l.contains("#borrow("))
-            .count();
+        let main = main_block(&dump);
+        let (borrow_calls, own_calls) = tally_call_routing(&main);
         assert_eq!(
             borrow_calls,
             1,
@@ -306,7 +385,7 @@ mod integration_tests {
             main.join("\n")
         );
         assert_eq!(
-            tally_calls.len() - borrow_calls,
+            own_calls,
             1,
             "the call handed a leaf whose object ends there should stay on the own version:\n{}",
             main.join("\n")
@@ -327,9 +406,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("multiunit");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = func_block(&dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
-        });
+        let main = main_block(&dump);
         // The whole-value retain of the pair `t` is normalized to one retain per field: `.0` and `.1`.
         // The tuple binding has no source name, so match the retains by their field paths. A retain
         // may carry a trailing reference-counting state tag, which is not part of the target.
@@ -364,11 +441,11 @@ mod integration_tests {
 
     /// The first argument variable of a `...#borrow(a, b, ...)` call on a dump line.
     fn borrow_call_first_arg(line: &str) -> &str {
-        let after = line
+        let args = line
             .split("#borrow(")
             .nth(1)
             .unwrap_or_else(|| panic!("the line carries no `#borrow(` call:\n{}", line));
-        after.split([',', ')']).next().unwrap().trim()
+        args.split([',', ')']).next().unwrap().trim()
     }
 
     /// Verifies that the retain/release bracket borrow-ification puts around a borrow call is
@@ -379,9 +456,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("ownership");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = func_block(&dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
-        });
+        let main = main_block(&dump);
         let call = main
             .iter()
             .find(|l| l.contains("= Main::tally") && l.contains("#borrow("))
@@ -392,10 +467,11 @@ mod integration_tests {
         // because nothing between them consumes the array, cancellation removes both, leaving no
         // reference counting on the array in `main`.
         for l in &main {
-            let t = l.trim_start();
+            let trimmed = l.trim_start();
             for op in ["retain", "release"] {
                 assert!(
-                    t != format!("{} {}", op, arr) && !t.starts_with(&format!("{} {} ", op, arr)),
+                    trimmed != format!("{} {}", op, arr)
+                        && !trimmed.starts_with(&format!("{} {} ", op, arr)),
                     "the array {} bracketing the borrow call should have been cancelled:\n{}",
                     op,
                     l
@@ -523,25 +599,6 @@ mod integration_tests {
         );
     }
 
-    /// The variable a dump line binds: the token after `let` on the line carrying `(as source_name)`.
-    fn binding_var(dump: &str, source_name: &str) -> String {
-        let marker = format!("(as {})", source_name);
-        let line = dump
-            .lines()
-            .find(|l| l.contains(&marker))
-            .unwrap_or_else(|| {
-                panic!(
-                    "no binding `(as {})` in the RC IR dump:\n{}",
-                    source_name, dump
-                )
-            });
-        line.trim_start()
-            .strip_prefix("let ")
-            .and_then(|rest| rest.split(' ').next())
-            .unwrap_or_else(|| panic!("binding line has no variable:\n{}", line))
-            .to_string()
-    }
-
     /// Verifies that copying a range out of an array leaves the array provably unique. The copy
     /// borrows the array it reads, so the caller keeps the reference it already held rather than
     /// duplicating it; a duplicated reference would be a `Retain`, which is the analysis's only
@@ -581,13 +638,13 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("mark_threaded");
         let dump = emit_main_rc_ir(&project_dir);
 
-        assert_binding_prov(&dump, "published", "[unknown]");
+        assert_prov_of(&dump, "mark_threaded(", "[unknown]");
         assert!(
             dump.contains("array_set[unique]"),
             "the set on the array before it is published should drop its check:\n{}",
             dump
         );
-        let published = binding_var(&dump, "published");
+        let published = var_produced_by(&dump, "mark_threaded(");
         assert!(
             dump.lines()
                 .any(|l| l.contains("array_set(") && l.contains(&published)),
@@ -693,30 +750,32 @@ mod integration_tests {
         // different functions — is that split. Assert both: without the checked version the first
         // write would corrupt the array's other holder, and without the `[unique]` version every
         // iteration would re-check a value already proven unique.
-        let mut checked = vec![];
-        let mut elided = vec![];
+        let mut fns_with_checked_set = vec![];
+        let mut fns_with_elided_set = vec![];
         let mut current_fn = "";
         for line in dump.lines() {
             if line.starts_with("fn ") {
                 current_fn = line;
             } else if line.contains("array_set[unique]") {
-                elided.push(current_fn);
+                fns_with_elided_set.push(current_fn);
             } else if line.contains("array_set(") {
-                checked.push(current_fn);
+                fns_with_checked_set.push(current_fn);
             }
         }
         assert!(
-            !checked.is_empty(),
+            !fns_with_checked_set.is_empty(),
             "the loop version entered with the shared array should keep its check:\n{}",
             dump
         );
         assert!(
-            !elided.is_empty(),
+            !fns_with_elided_set.is_empty(),
             "the loop version reached with the freshly cloned array should drop its check:\n{}",
             dump
         );
         assert!(
-            checked.iter().all(|f| !elided.contains(f)),
+            fns_with_checked_set
+                .iter()
+                .all(|f| !fns_with_elided_set.contains(f)),
             "the checked and the elided set should live in different clones of the loop body, but \
              a function holds both:\n{}",
             dump

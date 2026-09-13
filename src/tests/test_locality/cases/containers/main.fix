@@ -60,7 +60,7 @@ main = (
     // The same write over a payload of scalars, which holds no reference for the callback to
     // overwrite and so keeps both facts.
     let scalars = [90, 100].plant_scalars;
-    let from_scalars = scalars.@(0);
+    let from_scalars = scalars.@(0) + scalars.@(1);
 
     println $ (from_local + from_global + from_planted + from_scalars).to_string
 );
