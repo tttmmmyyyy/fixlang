@@ -9,8 +9,12 @@ use crate::tests::test_util::{generated_llvm_ir, test_source, test_source_fail};
 /// The operations whose generated instruction carries the assumption, each as the name the code
 /// generator gives the result and the LLVM opcode it emits. Negation is emitted as a subtraction
 /// from zero.
-const ARITHMETIC_OPERATIONS: &[(&str, &str)] =
-    &[("add", "add"), ("sub", "sub"), ("mul", "mul"), ("neg", "sub")];
+const ARITHMETIC_OPERATIONS: &[(&str, &str)] = &[
+    ("add", "add"),
+    ("sub", "sub"),
+    ("mul", "mul"),
+    ("neg", "sub"),
+];
 
 /// The widths, in bits, of the integer types of `Std`.
 const INTEGER_WIDTHS: &[u32] = &[8, 16, 32, 64];

@@ -928,7 +928,7 @@ The behavior of a program that performs one whose result falls outside the range
 `/` and `%` assume in addition that the least value of the type is not divided by -1, whose quotient is one past the greatest.
 Build with `--check-signed-overflow` to have such an operation stop the program where it happens.
 
-Where wrapping is what is wanted, use an unsigned integer type: `+`, `-`, `*` and unary `-` on `U8`, `U16`, `U32` or `U64` are taken modulo two to the width of the type.
+Where wrapping is wanted, use an unsigned integer type: `+`, `-`, `*` and unary `-` on `U8`, `U16`, `U32` or `U64` are taken modulo two to the width of the type.
 
 A shift, a bitwise operation and a conversion between integer types are defined at every input, on a signed type as well.
 `shift_left` drops the bits carried out of the type, and a conversion to a narrower type keeps the low bits.

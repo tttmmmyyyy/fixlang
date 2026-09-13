@@ -10180,9 +10180,11 @@ fn arithmetic_result_is_assumed_to_fit(ty: &Arc<TypeNode>) -> bool {
 /// The LLVM intrinsic performing an addition and reporting whether the result left the range of
 /// the signed integer type, as `{ iN, i1 }`.
 const SIGNED_ADD_WITH_OVERFLOW: &str = "llvm.sadd.with.overflow";
-/// The subtraction counterpart of `SIGNED_ADD_WITH_OVERFLOW`.
+/// The LLVM intrinsic performing a subtraction and reporting whether the result left the range of
+/// the signed integer type, as `{ iN, i1 }`.
 const SIGNED_SUB_WITH_OVERFLOW: &str = "llvm.ssub.with.overflow";
-/// The multiplication counterpart of `SIGNED_ADD_WITH_OVERFLOW`.
+/// The LLVM intrinsic performing a multiplication and reporting whether the result left the range
+/// of the signed integer type, as `{ iN, i1 }`.
 const SIGNED_MUL_WITH_OVERFLOW: &str = "llvm.smul.with.overflow";
 
 /// Whether the program being generated stops at an arithmetic operation on a signed integer type
@@ -10200,11 +10202,17 @@ fn signed_overflow_is_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
 /// subtracted from, which is the instruction emitted for a negation.
 #[derive(Clone, Copy)]
 enum IntegerArithmetic {
+    /// `Add::add`, the infix `+`.
     Add,
+    /// `Sub::sub`, the infix `-`.
     Subtract,
+    /// `Mul::mul`, the infix `*`.
     Multiply,
+    /// `Neg::neg`, the prefix `-`.
     Negate,
+    /// `Div::div`, the infix `/`, whose quotient truncates toward zero.
     Divide,
+    /// `Rem::rem`, the infix `%`, whose result carries the sign of the dividend.
     Remainder,
 }
 
@@ -10221,8 +10229,8 @@ impl IntegerArithmetic {
         }
     }
 
-    /// Whether this operation divides, which is what tells the two the code generator has no
-    /// reporting intrinsic for from the four it has one for.
+    /// Whether this operation divides. LLVM offers no intrinsic reporting the overflow of these
+    /// two, so they are checked by comparing their operands.
     fn is_division(self) -> bool {
         matches!(self, Self::Divide | Self::Remainder)
     }
@@ -10360,7 +10368,12 @@ fn build_division_overflow_check<'c, 'm>(
         .unwrap();
     let is_minus_one = gc
         .builder()
-        .build_int_compare(IntPredicate::EQ, rhs, int_ty.const_all_ones(), "is_minus_one")
+        .build_int_compare(
+            IntPredicate::EQ,
+            rhs,
+            int_ty.const_all_ones(),
+            "is_minus_one",
+        )
         .unwrap();
     let overflowed = gc
         .builder()
@@ -10373,7 +10386,7 @@ fn build_division_overflow_check<'c, 'm>(
 /// left the range of that type and ends the program, taken where `overflowed` holds.
 ///
 /// The operands reach the report widened to 64 bits, which is the width the runtime function
-/// takes; widening a signed value keeps it.
+/// takes; the sign extension keeps the value.
 fn build_report_signed_overflow<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     overflowed: IntValue<'c>,
