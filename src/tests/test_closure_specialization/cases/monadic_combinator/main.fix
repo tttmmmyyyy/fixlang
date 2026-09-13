@@ -14,27 +14,27 @@ impl St : Monad {
 }
 
 // Answers the counter and moves it on by one.
-_tick : St I64;
-_tick = St { _run : |s| (s, s + 1) };
+tick : St I64;
+tick = St { _run : |s| (s, s + 1) };
 
-// Threads `state` through `body` once per index of the range `(from, to, step)`, in the monad
-// `body` answers in, and answers the state after the last round together with how many rounds ran.
+// Threads `acc` through `body` once per index of the range `(from, to, step)`, in the monad `body`
+// answers in, and answers the accumulator after the last round together with how many rounds ran.
 // A range that does not reach `to` runs no round.
 //
 // The combinator is larger than what the inliner substitutes at a call site, so the call to it
 // stands and the lambda `main` passes reaches closure specialization.
-range_fold_m : (I64, I64, I64) -> a -> (I64 -> a -> St a) -> St (a, I64);
-range_fold_m = |(from, to, step), state, body| (
+range_fold_m : [m : Monad] (I64, I64, I64) -> a -> (I64 -> a -> m a) -> m (a, I64);
+range_fold_m = |(from, to, step), acc, body| (
     let step = if step == 0 { 1 } else { step };
     let rounds = if step > 0 {
         if to <= from { 0 } else { (to - from + step - 1) / step }
     } else {
         if to >= from { 0 } else { (from - to - step - 1) / (0 - step) }
     };
-    loop_m((0, state), |(k, state)|
-        if k == rounds { break_m $ (state, k) };
-        let state = *body(from + k * step, state);
-        continue_m $ (k + 1, state)
+    loop_m((0, acc), |(k, acc)|
+        if k == rounds { break_m $ (acc, k) };
+        let acc = *body(from + k * step, acc);
+        continue_m $ (k + 1, acc)
     )
 );
 
@@ -43,7 +43,7 @@ main = (
     // The callback answers in the monad, so each round hands `bind` the action it built. The body
     // of that callback goes into the copy of the combinator made for it, applied to the arguments
     // the round supplies.
-    let summing = range_fold_m((0, 100, 1), 0, |i, acc| let v = *_tick; pure $ acc + v * i);
+    let summing = range_fold_m((0, 100, 1), 0, |i, acc| let v = *tick; pure $ acc + v * i);
     let ((total, rounds), _) = summing.St::run(0);
     println((total + rounds).to_string)
 );
