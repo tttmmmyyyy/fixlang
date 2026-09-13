@@ -2,7 +2,6 @@
 Inlining optimization.
 */
 
-use super::application_inlining;
 use crate::{
     ast::{
         expr::ExprNode,
@@ -11,14 +10,14 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
-    optimization::uncurry::is_std_fix,
+    optimization::{application_inlining, uncurry::is_std_fix},
 };
 use std::{mem, sync::Arc};
 
-/// The size a body may reach and still be put where it is called, counted over the Fix expression
-/// as `InlineCosts` counts it.
+/// The `complexity` a body may reach and still be put where it is called.
 ///
-/// What the count weighs is what a copy of the body costs at a call site against the call it saves.
+/// What `complexity` weighs is what a copy of the body costs at a call site against the call it
+/// saves.
 /// It measures the expression the optimizer holds; the instructions the body finally generates
 /// exceed it, as reference counting and the bounds checks still to be inserted feed them too.
 const INLINE_COST_THRESHOLD: i32 = 30;
@@ -124,7 +123,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             continue;
         }
 
-        // If the new symbol has no free variables, it cannot be inlined further.
+        // A symbol whose expression names nothing has nothing to substitute into it.
         if sym.expr.as_ref().unwrap().free_vars().is_empty() {
             stable_symbols.insert(name.clone());
             new_symbols.insert(name.clone(), sym);
@@ -134,7 +133,6 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         let res = inliner.substitute_into(&sym.expr.as_ref().unwrap());
 
         if res.changed {
-            // If inlining was done, inline application.
             changed = true;
             sym.expr = Some(res.expr);
             application_inlining::run_on_symbol(&mut sym);
@@ -146,7 +144,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             stable_symbols.insert(name.clone());
         }
 
-        // If the new symbol has no free variables, it cannot be inlined further.
+        // The round may have left an expression that names nothing, which is the same end state.
         if sym.expr.as_ref().unwrap().free_vars().is_empty() {
             stable_symbols.insert(name.clone());
         }
@@ -177,14 +175,11 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
         // including the kinds `complexity` counts as nothing.
         cost.node_count = expr.node_count();
 
-        // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`. An
-        // expression that takes no parameter is the operation itself, and a copy of it costs what
+        // An expression that takes no parameter is the operation itself, and a copy of it costs what
         // the operation costs, which `is_free_to_duplicate` answers.
         let (params, body) = expr.destructure_lam_sequence();
         cost.is_llvm_lam = !params.is_empty() && body.is_llvm();
 
-        // If a copy of the expression costs no more than the expression, set as
-        // `is_free_to_duplicate`.
         if expr.is_llvm() {
             let generator = &expr.get_llvm().generator;
             let is_free_to_duplicate = generator.is_free_to_duplicate();
@@ -201,10 +196,8 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
             cost.is_free_to_duplicate = is_free_to_duplicate;
         }
 
-        // If the expression is instantiated by `Std::fix`, set as `is_std_fix`.
         cost.is_std_fix = is_std_fix(name);
 
-        // If the expression is an alias to another global value, set as `is_alias`.
         if expr.is_var() {
             assert!(expr.get_var().name.is_global());
             cost.is_alias = true;
@@ -218,9 +211,9 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
 struct InlineCost {
     /// The number of times the program names the symbol.
     use_count: usize,
-    /// The size of the symbol's expression: one for each node that generates code. A local
-    /// variable, a type annotation, an `eval`, and a `let` or a `match` that only renames a local
-    /// count nothing.
+    /// What a copy of the symbol's expression costs the program that runs: one for each node that
+    /// generates code. A local variable, a type annotation, an `eval`, and a `let` or a `match`
+    /// that only renames a local count nothing.
     complexity: usize,
     /// The number of nodes the expression holds, which is what a copy of it costs the compiler.
     /// `complexity` answers what a copy costs the program that runs, where a node that generates no
@@ -268,6 +261,8 @@ impl InlineCost {
         }
         if self.is_free_to_duplicate {
             // TODO: Let an expression of primitive type whose value is constant qualify here too.
+            // What a type is says nothing about what the expression computing it costs: a value an
+            // `FFI_CALL` produces has a primitive type and is heavy.
             return true;
         }
         if self.is_self_recursive {
@@ -280,9 +275,6 @@ impl InlineCost {
             return true;
         }
         return false;
-        // NOTE
-        // * Even values with simple types should not be inlined if the computation is complex.
-        // * Values created using FFI_CALL are heavy.
     }
 
     /// Whether the symbol's expression may be substituted where the symbol is called.

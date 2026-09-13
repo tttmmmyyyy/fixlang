@@ -9,12 +9,8 @@ use crate::error::Errors;
 use crate::misc::{collect_results, grow_stack, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
-use core::panic;
 use serde::{Deserialize, Serialize};
-use std::{
-    sync::{Arc, Mutex},
-    vec,
-};
+use std::sync::{Arc, Mutex};
 
 // The ways of apply a function to an argument in source code.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -1683,9 +1679,7 @@ pub fn hole_full_name() -> FullName {
 /// an `Expr::Var` referring to the internal builtin `Std::#hole : a`.
 ///
 /// # Arguments
-/// * `src` — the span of the empty source region. Used by the
-///   ERR_HOLE diagnostic to underline a meaningful range rather than
-///   a zero-width point.
+/// * `src` — the span of the empty source region.
 pub fn expr_hole(src: Option<Span>) -> Arc<ExprNode> {
     expr_var(hole_full_name(), src)
 }
