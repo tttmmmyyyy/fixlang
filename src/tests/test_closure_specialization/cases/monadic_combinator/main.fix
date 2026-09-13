@@ -8,10 +8,6 @@ namespace St {
     run = |s, m| (m.@_run)(s);
 }
 
-impl St : Functor {
-    map = |f, m| St { _run : |s| let (v, s) = m.run(s); (f(v), s) };
-}
-
 impl St : Monad {
     pure = |v| St { _run : |s| (v, s) };
     bind = |f, m| St { _run : |s| let (v, s) = m.run(s); f(v).run(s) };
