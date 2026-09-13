@@ -140,7 +140,7 @@ mod integration_tests {
         );
     }
 
-    /// The variable the binding of the result of `rhs_prefix` introduces.
+    /// The variable bound to the result of the operation `rhs_prefix` names.
     fn var_produced_by(dump: &str, rhs_prefix: &str) -> String {
         let line = binding_by_rhs(dump, rhs_prefix);
         line.trim_start()

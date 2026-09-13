@@ -164,8 +164,8 @@ mod integration_tests {
     /// of its own.
     ///
     /// The IO plumbing is lifted out of `main` as well, and each of those takes its capture list
-    /// alone and answers the action it wraps, so asking for the element on both sides leaves them
-    /// out.
+    /// alone and answers the action it wraps, so asking for `Std::I64` among the parameters and as
+    /// the result leaves them out.
     fn carried_functions(dump: &str) -> Vec<&str> {
         dump.lines()
             .filter(|line| line.starts_with("fn Main::main") && line.ends_with(") -> Std::I64:"))

@@ -9,9 +9,9 @@ g = [10, 20, 30];
 gpair : (Array I64, Array I64);
 gpair = ([1, 2], [3, 4]);
 
-// Every value this case asserts on is read twice. A `let` whose name is used once is eliminated and
-// the value keeps whatever name the binding it lands in carries, and the assertions below reach a
-// value through the name its `let` gave it.
+// `test_locality.rs` reaches each value this case builds through the name its `let` gave it. A
+// `let` whose name is used once is eliminated, and the value then carries the name of whatever
+// binding it lands in, so each of those values is read twice here.
 main : IO ();
 main = (
     // A field taken out of a global unboxed struct.
