@@ -235,11 +235,9 @@ mod integration_tests {
         );
     }
 
-    /// A chain of two iterators of one type constructor answers the same at every level, so the
-    /// rewrites that flatten it — which hand the fold the value the outer one carries and the value
-    /// the inner one carries, both named after the same field — keep the two apart.
-    /// `filter` walks past the elements its predicate rejects, and that walk is a body of its own, so
-    /// the `advance` handing back an accepted element goes into the loop consuming it.
+    /// `filter` walks past the elements its predicate rejects, and that walk is a body of its own,
+    /// so the `advance` handing back an accepted element is small enough to go into the loop
+    /// consuming it, and none is left standing.
     #[test]
     pub fn test_the_filter_chain_leaves_no_advance_of_its_own() {
         assert_leaves_no_function_of_its_own(
@@ -272,6 +270,9 @@ mod integration_tests {
         );
     }
 
+    /// A chain of two iterators of one type constructor answers the same at every level, which is
+    /// what says the rewrites that flatten it keep the two apart: they hand the fold the value the
+    /// outer one carries and the value the inner one carries, both named after the same field.
     #[test]
     pub fn test_a_chain_of_two_iterators_of_one_type_answers_the_same() {
         let (_temp_dir, project_dir) = setup_test_env("nested_iterators");

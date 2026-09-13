@@ -1,8 +1,9 @@
-// Integration tests for the RC IR provenance analysis, checked through the `--emit-rc-ir` dump.
-// The dump annotates each variable binding with the provenance the analysis computed, so a small
-// program with named `let`s lets us assert the analysis end to end: allocators produce `fresh`
-// values, reading a boxed element out of a boxed container is `unknown`, and constructing an unboxed
-// tuple carries each component's provenance through.
+//! Integration tests for the RC IR provenance analysis, checked through the `--emit-rc-ir` dump.
+//!
+//! The dump annotates each variable binding with the provenance the analysis computed, so a small
+//! program with named `let`s pins the analysis end to end: allocators produce `fresh` values,
+//! reading a boxed element out of a boxed container is `unknown`, and constructing an unboxed tuple
+//! carries each component's provenance through.
 
 #[cfg(test)]
 mod integration_tests {

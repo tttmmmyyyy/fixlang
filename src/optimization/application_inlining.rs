@@ -281,6 +281,10 @@ impl ExprVisitor for AppInliner {
         }
     }
 
+    // `ExprVisitor` declares every method without a default, so the rest of the methods are listed
+    // here and passed through: the children are visited, and the expression itself is left as it
+    // is. The rewriting is done as the walk ends an application, in the method above.
+
     fn start_visit_var(
         &mut self,
         _expr: &Arc<ExprNode>,

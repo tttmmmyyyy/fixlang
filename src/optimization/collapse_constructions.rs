@@ -296,6 +296,10 @@ fn set_case_bodies(expr: &Arc<ExprNode>, bodies: Vec<Arc<ExprNode>>) -> Arc<Expr
 }
 
 impl<'a> ExprVisitor for Collapser<'a> {
+    /// A `let` binding a name to a construction, or to a name already holding one, records what
+    /// that name holds. A `let` taking apart a struct the walk has seen built is replaced by one
+    /// `let` per field the pattern reads, each bound to the name the construction put in that
+    /// field.
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -339,6 +343,9 @@ impl<'a> ExprVisitor for Collapser<'a> {
         StartVisitResult::ReplaceAndRevisit(collapsed)
     }
 
+    /// A `match` on a variant the walk has seen built is replaced by the arm that variant selects,
+    /// bound to the payload the construction holds. A `match` on a case whose every arm builds a
+    /// variant is replaced by that case, with the reading `match` moved into each of its arms.
     fn start_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -378,6 +385,8 @@ impl<'a> ExprVisitor for Collapser<'a> {
         StartVisitResult::ReplaceAndRevisit(set_case_bodies(&cond, moved))
     }
 
+    /// A struct construction holding an expression in a field is replaced by that construction
+    /// under a `let` per such field, so that every field holds a name a reader can be given.
     fn start_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -412,6 +421,10 @@ impl<'a> ExprVisitor for Collapser<'a> {
             .fold(named, |value, (pat, expr)| expr_let_typed(pat, expr, value));
         StartVisitResult::ReplaceAndRevisit(under_bindings)
     }
+
+    // `ExprVisitor` declares every method without a default, so the rest of the methods are listed
+    // here and passed through: the children are visited, and the expression itself is left as it
+    // is. The reading is done as the walk starts a node, in the three methods above.
 
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
