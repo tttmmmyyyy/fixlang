@@ -24,7 +24,7 @@ use crate::{
     graph::Graph,
     misc::{Map, Set},
     optimization::{
-        pull_let,
+        inline_local, pull_let,
         rename::{rename_free_names, substitute_free_name},
     },
     tool::stopwatch::StopWatch,
@@ -858,6 +858,10 @@ fn inline_specialized_lambdas(
         }
         let sym = symbols.get_mut(copy).unwrap();
         sym.expr = Some(expr);
+        // Reduce what the substitution left: a lambda applied to the arguments the call supplies.
+        // Left standing, that application is a closure the program builds on the heap and calls
+        // through, once for every call of the function the lambda was handed to.
+        inline_local::run_on_symbol(sym, &arity_map);
     }
 }
 
