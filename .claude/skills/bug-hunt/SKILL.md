@@ -157,6 +157,21 @@ The same information lives in two representations kept in sync by convention rat
 
 A hand-written declaration binds a separate code path with no compiler link between them — an ownership or borrow annotation a pass must match, an arity or field count, the order a match's arms must keep. Derive both the declaration and the code from the same monomorphized source and assert they agree, or inject a deliberate mismatch and see whether anything catches it before code generation. Where the two can drift, the drift is the bug.
 
+#### Read a pair by index where its two halves answer the same methods
+
+A tuple, or a list of them, whose components are different kinds that happen to share an accessor
+surface: a pattern and an expression that both answer `is_var()` and `get_var()`, a key and a value
+that both answer `name()`, a declared and an inferred type that both answer `to_string()`. `.0` and
+`.1` then both typecheck wherever either is meant, so reading the wrong half compiles, runs, and
+survives review: the reader checks that the right test is applied, and which half it lands on goes
+unread. Find the accesses written by index, read the contract the surrounding comment or doc states,
+and check the half against the tuple's own definition.
+
+A hit leaves a second question: which side is wrong, the code or the sentence describing it. Answer
+it from the siblings — the other arms of the same table, walk or match say what the quantity means,
+and they outvote one comment. Answering it backwards turns a one-character fix into a program-wide
+change in the wrong direction.
+
 #### Exploit a path no test reaches
 
 Untested code is where a latent bug survives, because a tested path carrying a bug would already have failed — so a gap in the suite is a map to where the bugs are. Enumerate the cases the target handles — the match arms, the error branches, the boundaries (empty, one element, the degenerate shape), the opt-level and config combinations — and cross off the ones a test exercises; a coverage tool (`cargo-llvm-cov`) mechanizes the same census. Craft the input that drives execution into what is left, run it, and read the result with a detector. This is the `test-sufficiency` review lens turned offensive: that aspect flags the gap for the author, a hunt shoots into it.

@@ -1,7 +1,7 @@
 use crate::env_vars::MAX_OPT_LEVEL_VAR;
 use crate::tests::test_util::{
-    emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command, llvm_function_bodies,
-    EmittedIr,
+    build_run_and_read_rc_ir, emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command,
+    llvm_function_bodies, EmittedIr,
 };
 use std::path::Path;
 use tempfile::TempDir;
@@ -33,14 +33,22 @@ const TWO_GLOBALS_SOURCE: &str = r#"
     );
 "#;
 
-/// The names the compiler gives the parts of `table`, as the emitted LLVM IR quotes them.
+/// The accessor of `table`, as the emitted LLVM IR quotes its name.
 const TABLE_ACCESSOR: &str = "@\"Get#Main::table#";
+
+/// The function computing the value of `table`, as the emitted LLVM IR quotes its name.
 const TABLE_INITIALIZER: &str = "@\"InitValue#Main::table#";
+
+/// The storage holding the value of `table`, as the emitted LLVM IR quotes its name.
 const TABLE_STORAGE: &str = "@\"GlobalVar#Main::table#";
+
+/// The flag saying whether `table` has been initialized, as the emitted LLVM IR quotes its name.
 const TABLE_FLAG: &str = "@\"InitFlag#Main::table#";
 
-/// The same, for `read_once`.
+/// The accessor of `read_once`, as the emitted LLVM IR quotes its name.
 const READ_ONCE_ACCESSOR: &str = "@\"Get#Main::read_once#";
+
+/// The function computing the value of `read_once`, as the emitted LLVM IR quotes its name.
 const READ_ONCE_INITIALIZER: &str = "@\"InitValue#Main::read_once#";
 
 /// A program whose global is read by the C function an `FFI_EXPORT` statement builds.
@@ -113,7 +121,7 @@ fn sole_body(ir: &str, name: &str) -> String {
 }
 
 /// Whether the function whose name starts with `name` carries the `noinline` attribute.
-fn stays_out_of_its_callers(ir: &str, name: &str) -> bool {
+fn is_kept_out_of_its_callers(ir: &str, name: &str) -> bool {
     let signature = sole_body(ir, name)
         .lines()
         .next()
@@ -136,11 +144,30 @@ fn stays_out_of_its_callers(ir: &str, name: &str) -> bool {
     attributes.contains("noinline")
 }
 
-/// How many times `ir` calls the function whose name starts with `name`.
-fn count_calls_to(ir: &str, name: &str) -> usize {
+/// The lines of `ir` that call the function whose name starts with `name`.
+fn calls_to<'a>(ir: &'a str, name: &str) -> Vec<&'a str> {
     ir.lines()
         .filter(|line| line.contains("call") && line.contains(name))
-        .count()
+        .collect()
+}
+
+/// How many times `ir` calls the function whose name starts with `name`.
+fn count_calls_to(ir: &str, name: &str) -> usize {
+    calls_to(ir, name).len()
+}
+
+/// Assert that the optimized IR of the build in `dir` holds no call to `accessor`, the accessor of
+/// the global named `global`.
+fn assert_reading_costs_no_call(dir: &Path, accessor: &str, global: &str) {
+    let optimized_ir = emitted_llvm_ir(dir, EmittedIr::AfterOptimization);
+    let remaining_calls = calls_to(&optimized_ir, accessor);
+    assert!(
+        remaining_calls.is_empty(),
+        "reading `{}` should cost no call, and the optimized IR holds {}:\n{}",
+        global,
+        remaining_calls.len(),
+        remaining_calls.join("\n")
+    );
 }
 
 /// The initializer of a global read from many places is a function of its own, which is left there.
@@ -171,7 +198,7 @@ pub fn test_the_initializer_of_a_shared_global_sits_outside_the_accessor() {
         accessor
     );
     assert!(
-        stays_out_of_its_callers(&ir, TABLE_INITIALIZER),
+        is_kept_out_of_its_callers(&ir, TABLE_INITIALIZER),
         "the initializer of `table` should stay out of the accessor"
     );
 }
@@ -194,7 +221,7 @@ pub fn test_the_initializer_of_a_global_read_once_stays_where_its_reader_sees_it
     );
 
     assert!(
-        !stays_out_of_its_callers(&ir, READ_ONCE_INITIALIZER),
+        !is_kept_out_of_its_callers(&ir, READ_ONCE_INITIALIZER),
         "the initializer of `read_once` should be free to join the accessor"
     );
 }
@@ -212,20 +239,24 @@ pub fn test_a_reader_of_a_global_sees_every_write_to_it() {
     let accessor = sole_body(&ir, TABLE_ACCESSOR);
 
     for variable in [TABLE_STORAGE, TABLE_FLAG] {
-        let writes = |text: &str| {
+        let count_writes_in = |text: &str| {
             text.lines()
                 .filter(|line| line.trim_start().starts_with("store") && line.contains(variable))
                 .count()
         };
-        let in_module = writes(&ir);
-        assert!(in_module > 0, "the program should write `{}`", variable);
+        let writes_in_module = count_writes_in(&ir);
+        assert!(
+            writes_in_module > 0,
+            "the program should write `{}`",
+            variable
+        );
         assert_eq!(
-            writes(&accessor),
-            in_module,
+            count_writes_in(&accessor),
+            writes_in_module,
             "every write to `{}` should be in the accessor, and {} of the {} are:\n{}",
             variable,
-            writes(&accessor),
-            in_module,
+            count_writes_in(&accessor),
+            writes_in_module,
             accessor
         );
     }
@@ -237,9 +268,8 @@ pub fn test_a_reader_of_a_global_sees_every_write_to_it() {
 /// length and the element read reads the pointer. The property is read off the emitted LLVM IR: it
 /// is about the code the build emits, and a program cannot observe a call it does not make.
 ///
-/// This is the requirement. `test_the_initializer_of_a_shared_global_sits_outside_the_accessor` and
-/// `test_a_reader_of_a_global_sees_every_write_to_it` pin the two properties this compiler reaches
-/// it by, and another mechanism would keep this test green and turn those red.
+/// This is the requirement itself, stated apart from the mechanism that meets it: a compiler
+/// reaching `table` some other way would keep this test green.
 #[test]
 pub fn test_reading_a_global_in_a_loop_costs_no_call() {
     let temp_dir = build_emitting_llvm_ir(TWO_GLOBALS_SOURCE);
@@ -253,17 +283,7 @@ pub fn test_reading_a_global_in_a_loop_costs_no_call() {
         "the program should read `table` through its accessor"
     );
 
-    let optimized_ir = emitted_llvm_ir(dir, EmittedIr::AfterOptimization);
-    let remaining_calls: Vec<_> = optimized_ir
-        .lines()
-        .filter(|line| line.contains("call") && line.contains(TABLE_ACCESSOR))
-        .collect();
-    assert!(
-        remaining_calls.is_empty(),
-        "reading `table` should cost no call, and the optimized IR holds {}:\n{}",
-        remaining_calls.len(),
-        remaining_calls.join("\n")
-    );
+    assert_reading_costs_no_call(dir, TABLE_ACCESSOR, "table");
 }
 
 /// A global read from a compilation unit that does not own it is read without a call.
@@ -291,15 +311,196 @@ pub fn test_a_global_read_from_another_unit_costs_no_call() {
          exported C function"
     );
 
-    let optimized_ir = emitted_llvm_ir(dir, EmittedIr::AfterOptimization);
-    let remaining_calls: Vec<_> = optimized_ir
+    assert_reading_costs_no_call(dir, COUNTER_ACCESSOR, "counter");
+}
+
+/// Assert that the RC IR dump opens no global of its own under `name`.
+///
+/// A body put at each of the names that read it leaves the program nothing left to keep, so the
+/// dump declares no global there.
+fn assert_no_global_is_kept_for(dump: &str, name: &str) {
+    let standing_globals: Vec<_> = dump
         .lines()
-        .filter(|line| line.contains("call") && line.contains(COUNTER_ACCESSOR))
+        .filter(|line| line.starts_with("global ") && line.contains(name))
         .collect();
     assert!(
-        remaining_calls.is_empty(),
-        "reading `counter` should cost no call, and the optimized IR holds {}:\n{}",
-        remaining_calls.len(),
-        remaining_calls.join("\n")
+        standing_globals.is_empty(),
+        "`{}` should cost no global of its own, and the dump opens {}:\n{}",
+        name,
+        standing_globals.join("\n"),
+        dump
     );
+}
+
+/// A program that names one global string from three places.
+///
+/// Building the literal allocates a buffer and copies the bytes into it, so a global whose body is
+/// a literal costs one allocation where it is named once and three where it is named three times.
+const STRING_GLOBAL_SOURCE: &str = r#"
+    module Main;
+
+    greeting : String;
+    greeting = "hello";
+
+    first : I64;
+    first = greeting.get_bytes.get_size;
+
+    second : I64;
+    second = greeting.get_bytes.@(0).to_I64;
+
+    third : I64;
+    third = greeting.get_bytes.@(1).to_I64;
+
+    main : IO ();
+    main = println((first + second + third).to_string);
+"#;
+
+/// The literal's construction, as the RC IR dump names it.
+const GREETING_BUF: &str = "string_buf(\"hello\")";
+
+/// The global the program names, as the RC IR dump spells it, before the suffix the compiler adds.
+const GREETING_GLOBAL: &str = "Main::greeting";
+
+/// A global whose body allocates stays in the global, and every name reads it from there.
+///
+/// Building a string literal allocates a buffer and copies the bytes into it, so a copy of the body
+/// at each name is an allocation at each name. The program names `greeting` from three places, and
+/// the RC IR dump holds one construction of the literal.
+#[test]
+fn test_a_global_string_is_built_once_however_many_places_name_it() {
+    let dump = build_run_and_read_rc_ir(
+        STRING_GLOBAL_SOURCE,
+        "max",
+        "211",
+        "a global string named from three places",
+    );
+
+    let constructions = dump.matches(GREETING_BUF).count();
+
+    // The places the property is about: the value reaches a reader as a name of the global or as a
+    // copy of the construction, so this counts the readers either way, and falls only where a
+    // reader stopped reading.
+    let places = dump
+        .lines()
+        .filter(|line| line.contains(GREETING_GLOBAL) && !line.starts_with("global "))
+        .count()
+        + constructions;
+    assert!(
+        places > 1,
+        "the program should hold `greeting` in more than one place, and it holds it in {}:\n{}",
+        places,
+        dump
+    );
+
+    assert_eq!(
+        constructions, 1,
+        "the literal of a global is built {} times, once for the global and once more wherever \
+         its body was put; the dump is:\n{}",
+        constructions, dump
+    );
+}
+
+/// A program that names two globals whose bodies are literals from two places each.
+///
+/// An integer and a floating-point literal evaluate to a value held in a register, so a copy of the
+/// literal where the global is named costs what naming it costs.
+const SCALAR_GLOBALS_SOURCE: &str = r#"
+    module Main;
+
+    answer : I64;
+    answer = 42;
+
+    ratio : F64;
+    ratio = 1.5;
+
+    doubled : I64;
+    doubled = answer * 2;
+
+    raised : I64;
+    raised = answer + 1;
+
+    scaled : F64;
+    scaled = ratio * 2.0;
+
+    halved : F64;
+    halved = ratio / 2.0;
+
+    main : IO ();
+    main = println((doubled + raised + (scaled + halved).to_I64).to_string);
+"#;
+
+/// The globals of `SCALAR_GLOBALS_SOURCE` whose bodies are literals, each beside the construction of
+/// its literal as the RC IR dump names it.
+const SCALAR_GLOBALS: [(&str, &str); 2] =
+    [("Main::answer", "int(42)"), ("Main::ratio", "float(1.5)")];
+
+/// A global whose body is a scalar literal is put at every name.
+///
+/// Its value is held in a register, so a copy of the literal at each name costs what the name
+/// costs, and the global it would otherwise stand in puts an initialization flag and a load in
+/// front of every read.
+#[test]
+fn test_a_global_scalar_literal_is_put_at_every_name() {
+    let dump = build_run_and_read_rc_ir(
+        SCALAR_GLOBALS_SOURCE,
+        "max",
+        "130",
+        "two global scalar literals named from two places each",
+    );
+
+    for (global, literal) in SCALAR_GLOBALS {
+        let constructions = dump.matches(literal).count();
+        assert!(
+            constructions > 1,
+            "`{}` should be at each of the two names of `{}`, and the dump holds {}:\n{}",
+            literal,
+            global,
+            constructions,
+            dump
+        );
+
+        assert_no_global_is_kept_for(&dump, global);
+    }
+}
+
+/// A program whose `main` performs three IO actions.
+const IO_ACTIONS_SOURCE: &str = r#"
+    module Main;
+
+    main : IO ();
+    main = (
+        println("one");;
+        println("two");;
+        println("three")
+    );
+"#;
+
+/// The making of an `IOState`, as the RC IR dump names it.
+const IOSTATE_CREATE: &str = "iostate_create";
+
+/// The `Std` global that makes an `IOState`, as the RC IR dump spells it.
+const IOSTATE_GLOBAL: &str = "Std::IO::IOState::_unsafe_create";
+
+/// An `IOState` is made where it is used.
+///
+/// It is an unboxed value with no field, so making one allocates nothing and a copy of the making
+/// at each name costs nothing. A global standing for it would put an initialization flag and a load
+/// in front of the IO actions the program performs.
+#[test]
+fn test_an_iostate_is_made_where_it_is_used() {
+    let dump = build_run_and_read_rc_ir(
+        IO_ACTIONS_SOURCE,
+        "max",
+        "one\ntwo\nthree",
+        "a program performing three IO actions",
+    );
+
+    // The making the property is about: a program that makes no `IOState` keeps none in a global.
+    assert!(
+        dump.contains(IOSTATE_CREATE),
+        "the program should make an `IOState`, and the dump is:\n{}",
+        dump
+    );
+
+    assert_no_global_is_kept_for(&dump, IOSTATE_GLOBAL);
 }
