@@ -68,6 +68,67 @@ mod integration_tests {
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
+    /// The lines of the program's entry point, without its signature line. An operation performed in
+    /// several functions is named once inside any one of them, and the dump opens by naming its
+    /// roots, of which a case compiled from one `main` has exactly one.
+    fn entry_body(dump: &str) -> &str {
+        let root = dump
+            .lines()
+            .nth(1)
+            .map(str::trim)
+            .filter(|root| !root.is_empty())
+            .unwrap_or_else(|| panic!("no root named in the RC IR dump:\n{}", dump));
+        let at = dump
+            .find(&format!("\nfn {}(", root))
+            .unwrap_or_else(|| panic!("no function `{}` in the RC IR dump:\n{}", root, dump));
+        let body = dump[at + 1..].split_once('\n').expect("a signature line").1;
+        body.split_once("\n\n").map_or(body, |(body, _)| body)
+    }
+
+    /// The line binding the result of the operation whose text begins with `rhs`.
+    ///
+    /// A value carries the name of the source `let` that bound it, and an elimination that removes
+    /// that `let` leaves the value on whatever binding it lands in, under that binding's name. The
+    /// operation producing the value does not move, so a test pointing at one value points at its
+    /// operation. `rhs` has to name an operation the dump performs once.
+    fn binding_by_rhs<'a>(dump: &'a str, rhs: &str) -> &'a str {
+        let mut lines = dump
+            .lines()
+            .filter(|l| l.split_once(" = ").is_some_and(|(_, r)| r.starts_with(rhs)));
+        let line = lines
+            .next()
+            .unwrap_or_else(|| panic!("no binding of `{}` in the RC IR dump:\n{}", rhs, dump));
+        assert!(
+            lines.next().is_none(),
+            "`{}` is performed more than once, so it names no one value:\n{}",
+            rhs,
+            dump
+        );
+        line
+    }
+
+    /// Assert that the value the operation `rhs` produces carries the given provenance.
+    fn assert_prov_of(dump: &str, rhs: &str, expected_prov: &str) {
+        let line = binding_by_rhs(dump, rhs);
+        assert!(
+            line.contains(expected_prov),
+            "the value `{}` produces should have provenance `{}`, but its line is:\n{}",
+            rhs,
+            expected_prov,
+            line
+        );
+    }
+
+    /// The variable the binding of `rhs`'s result introduces.
+    fn var_produced_by(dump: &str, rhs: &str) -> String {
+        let line = binding_by_rhs(dump, rhs);
+        line.trim_start()
+            .strip_prefix("let ")
+            .and_then(|rest| rest.split_once(" : "))
+            .map(|(var, _)| var.to_string())
+            .unwrap_or_else(|| panic!("no variable bound on:\n{}", line))
+    }
+
     /// Assert that the binding named `source_name` (its `(as ...)` annotation) is annotated with the
     /// given provenance in the dump.
     fn assert_binding_prov(dump: &str, source_name: &str, expected_prov: &str) {
@@ -100,7 +161,7 @@ mod integration_tests {
 
         // `Array::fill` and an array literal produce a fresh array.
         assert_binding_prov(&dump, "arr", "[fresh]");
-        assert_binding_prov(&dump, "strs", "[fresh]");
+        assert_prov_of(&dump, "array_lit(", "[fresh]");
         // Reading a boxed element out of a boxed container yields an unknown value.
         assert_binding_prov(&dump, "s0", "[unknown]");
         // Constructing an unboxed tuple carries each component's provenance through: `arr` is fresh,
@@ -119,7 +180,7 @@ mod integration_tests {
         // `echo_arr` returns its array argument unchanged, so its effect — computed to a fixed point
         // over its recursion — is that argument. Calling it on a fresh array therefore composes to a
         // fresh result: the read-only recursion carries uniqueness through.
-        assert_binding_prov(&dump, "r", "[fresh]");
+        assert_prov_of(entry_body(&dump), "Main::echo_arr", "[fresh]");
     }
 
     /// Whether `line` is a function signature starting with `name_prefix` (which carries the `fn`
@@ -581,13 +642,13 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("mark_threaded");
         let dump = emit_main_rc_ir(&project_dir);
 
-        assert_binding_prov(&dump, "published", "[unknown]");
+        assert_prov_of(&dump, "mark_threaded(", "[unknown]");
         assert!(
             dump.contains("array_set[unique]"),
             "the set on the array before it is published should drop its check:\n{}",
             dump
         );
-        let published = binding_var(&dump, "published");
+        let published = var_produced_by(&dump, "mark_threaded(");
         assert!(
             dump.lines()
                 .any(|l| l.contains("array_set(") && l.contains(&published)),

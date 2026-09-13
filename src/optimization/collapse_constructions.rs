@@ -34,14 +34,15 @@ use crate::{
     constants::BOUND_FIELD_PREFIX,
     fixstd::builtin::InlineLLVMMakeUnionBody,
     misc::{Map, Set},
-    optimization::{pull_let, unique_local_names},
+    optimization::{inline_local, let_elimination, pull_let, unique_local_names},
 };
 use std::sync::Arc;
 
 /// Read every construction the code taking it apart can see, over every global.
 pub fn run(prg: &mut Program) {
     let type_env = prg.type_env.clone();
-    for (_name, sym) in prg.symbols.iter_mut() {
+    let mut read: Vec<FullName> = vec![];
+    for (name, sym) in prg.symbols.iter_mut() {
         let mut expr = with_lets_pulled_out(sym.expr.as_ref().unwrap());
         let mut bound_field_count = 0;
         let mut read_any = false;
@@ -64,7 +65,18 @@ pub fn run(prg: &mut Program) {
         // they should meet as it was written.
         if read_any {
             sym.expr = Some(expr);
+            read.push(name.clone());
         }
+    }
+
+    // A field holding an expression is bound to a name, and a reader given that name calls it where
+    // the field's value stood. Where the field holds a lambda, that is a lambda bound to a name and
+    // applied at its one use -- a redex this pass has just written. Left standing, it is a closure
+    // the program builds on the heap and calls through.
+    let global_lambda_to_arity = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
+    for name in read {
+        let sym = prg.symbols.get_mut(&name).unwrap();
+        inline_local::run_on_symbol(sym, &global_lambda_to_arity);
     }
 }
 

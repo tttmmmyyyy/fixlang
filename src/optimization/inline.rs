@@ -10,7 +10,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
-    optimization::{application_inlining, uncurry::is_std_fix},
+    optimization::{inline_local, let_elimination, uncurry::is_std_fix},
 };
 use std::{mem, sync::Arc};
 
@@ -24,8 +24,8 @@ const INLINE_COST_THRESHOLD: i32 = 30;
 
 /// The nodes one round of substitution may add to a symbol's expression.
 ///
-/// `application_inlining` runs after a round of substitution and rewrites what it leaves, so the
-/// symbol ends the round at what that pass makes of the nodes this bound let in.
+/// `inline_local` runs after a round of substitution and reduces what it leaves, so the symbol ends
+/// the round at what that pass makes of the nodes this bound let in.
 ///
 /// The bound is counted in `node_count`, where `INLINE_COST_THRESHOLD` is counted in `complexity`,
 /// and the two counts answer different questions. `complexity` weighs what a copy of a body costs
@@ -106,6 +106,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         budget: 0,
         refused_for_budget: false,
     };
+    let global_lambda_to_arity = let_elimination::create_global_lambda_to_arity_map(&symbols);
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let root_value_names = prg.root_value_names();
 
@@ -135,11 +136,11 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         if res.changed {
             changed = true;
             sym.expr = Some(res.expr);
-            application_inlining::run_on_symbol(&mut sym);
+            inline_local::run_on_symbol(&mut sym, &global_lambda_to_arity);
         } else if !inliner.refused_for_budget {
             // A round that substituted nothing and refused nothing has reached the symbol's end
             // state. A symbol whose round refused a body it could not afford is asked again next
-            // round: the body may come back smaller, since `application_inlining` rewrites what the
+            // round: the body may come back smaller, since `inline_local` reduces what the
             // substitution left in every symbol the round changed.
             stable_symbols.insert(name.clone());
         }

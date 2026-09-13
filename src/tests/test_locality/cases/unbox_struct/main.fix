@@ -13,7 +13,10 @@ sum = |a| Iterator::range(0, a.@size).fold(0, |i, acc| acc + a.@(i));
 
 main : IO ();
 main = (
+    // The struct is read twice, and through the same field both times, so the `let` naming it
+    // survives while `dropped` stays a field nobody names.
     let holds_global = Both { read : [1, 2], dropped : g };
     let taken = holds_global.@read;
-    println $ taken.sum.to_string
+    let again = holds_global.@read;
+    println $ (taken.sum + again.sum).to_string
 );
