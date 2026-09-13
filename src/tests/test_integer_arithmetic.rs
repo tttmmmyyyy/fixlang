@@ -79,6 +79,23 @@ fn overflow_checked_config() -> Configuration {
     config
 }
 
+/// Builds a program that evaluates `expression` under a configuration that stops at a signed
+/// overflow, runs it, and asserts that it stops with a report containing `report`.
+fn assert_the_check_stops(expression: &str, report: &str) {
+    let source = format!(
+        r#"
+        module Main;
+        main : IO ();
+        main = (
+            eval {};
+            pure()
+        );
+    "#,
+        expression
+    );
+    test_source_fail(&source, overflow_checked_config(), report);
+}
+
 /// The instructions of `ir` that the code generator emitted for the operation whose result it names
 /// `result_name`, as `instruction` at an integer type `bits` wide, split into those that carry the
 /// assumption that the result fits the type and those that carry nothing.
@@ -187,17 +204,8 @@ pub fn test_unsigned_arithmetic_assumes_nothing_about_its_result() {
 /// reports the operation and both operands.
 #[test]
 pub fn test_signed_overflow_check_stops_an_addition_past_the_greatest() {
-    let source = r#"
-        module Main;
-        main : IO ();
-        main = (
-            eval I64::maximum + 1;
-            pure()
-        );
-    "#;
-    test_source_fail(
-        &source,
-        overflow_checked_config(),
+    assert_the_check_stops(
+        "I64::maximum + 1",
         "Signed integer overflow: I64 addition, with 9223372036854775807 and 1",
     );
 }
@@ -206,17 +214,8 @@ pub fn test_signed_overflow_check_stops_an_addition_past_the_greatest() {
 /// intrinsic from addition, so it is read on its own.
 #[test]
 pub fn test_signed_overflow_check_stops_a_product_past_the_greatest() {
-    let source = r#"
-        module Main;
-        main : IO ();
-        main = (
-            eval I32::maximum * 2_I32;
-            pure()
-        );
-    "#;
-    test_source_fail(
-        &source,
-        overflow_checked_config(),
+    assert_the_check_stops(
+        "I32::maximum * 2_I32",
         "Signed integer overflow: I32 multiplication, with 2147483647 and 2",
     );
 }
@@ -225,17 +224,8 @@ pub fn test_signed_overflow_check_stops_a_product_past_the_greatest() {
 /// emitted as a subtraction from zero, which is the shape the report names.
 #[test]
 pub fn test_signed_overflow_check_stops_the_negation_of_the_least() {
-    let source = r#"
-        module Main;
-        main : IO ();
-        main = (
-            eval -(I64::minimum);
-            pure()
-        );
-    "#;
-    test_source_fail(
-        &source,
-        overflow_checked_config(),
+    assert_the_check_stops(
+        "-(I64::minimum)",
         "Signed integer overflow: I64 negation, with 0 and -9223372036854775808",
     );
 }
@@ -245,17 +235,8 @@ pub fn test_signed_overflow_check_stops_the_negation_of_the_least() {
 /// against the one pair that overflows.
 #[test]
 pub fn test_signed_overflow_check_stops_dividing_the_least_by_minus_one() {
-    let source = r#"
-        module Main;
-        main : IO ();
-        main = (
-            eval I64::minimum / -1;
-            pure()
-        );
-    "#;
-    test_source_fail(
-        &source,
-        overflow_checked_config(),
+    assert_the_check_stops(
+        "I64::minimum / -1",
         "Signed integer overflow: I64 division, with -9223372036854775808 and -1",
     );
 }

@@ -10185,6 +10185,15 @@ const SIGNED_SUB_WITH_OVERFLOW: &str = "llvm.ssub.with.overflow";
 /// The multiplication counterpart of `SIGNED_ADD_WITH_OVERFLOW`.
 const SIGNED_MUL_WITH_OVERFLOW: &str = "llvm.smul.with.overflow";
 
+/// Whether the program being generated stops at an arithmetic operation on a signed integer type
+/// whose result leaves the range of that type.
+///
+/// `--check-signed-overflow` asks for the check, and `--no-runtime-check` takes out every check
+/// that ends the program, this one among them.
+fn signed_overflow_is_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
+    gc.config.check_signed_overflow && gc.config.runtime_check()
+}
+
 /// An arithmetic operation the code generator emits for an integer type.
 ///
 /// `Negate` negates its right operand, and takes as its left operand the zero that operand is
@@ -10195,17 +10204,43 @@ enum IntegerArithmetic {
     Subtract,
     Multiply,
     Negate,
+    Divide,
+    Remainder,
 }
 
 impl IntegerArithmetic {
-    /// The LLVM intrinsic that performs this operation and reports whether the result left the
-    /// range of the signed integer type, and the word a report calls the operation by.
-    fn reporting_intrinsic(self) -> (&'static str, &'static str) {
+    /// The word a report calls this operation by.
+    fn reported_as(self) -> &'static str {
         match self {
-            Self::Add => (SIGNED_ADD_WITH_OVERFLOW, "addition"),
-            Self::Subtract => (SIGNED_SUB_WITH_OVERFLOW, "subtraction"),
-            Self::Multiply => (SIGNED_MUL_WITH_OVERFLOW, "multiplication"),
-            Self::Negate => (SIGNED_SUB_WITH_OVERFLOW, "negation"),
+            Self::Add => "addition",
+            Self::Subtract => "subtraction",
+            Self::Multiply => "multiplication",
+            Self::Negate => "negation",
+            Self::Divide => "division",
+            Self::Remainder => "remainder",
+        }
+    }
+
+    /// Whether this operation divides, which is what tells the two the code generator has no
+    /// reporting intrinsic for from the four it has one for.
+    fn is_division(self) -> bool {
+        matches!(self, Self::Divide | Self::Remainder)
+    }
+
+    /// The LLVM intrinsic that performs this operation and reports whether the result left the
+    /// range of the signed integer type.
+    ///
+    /// A division carries no such intrinsic: `build_check_signed_division` compares its operands
+    /// against the one pair that overflows instead.
+    fn reporting_intrinsic(self) -> &'static str {
+        match self {
+            Self::Add => SIGNED_ADD_WITH_OVERFLOW,
+            Self::Subtract | Self::Negate => SIGNED_SUB_WITH_OVERFLOW,
+            Self::Multiply => SIGNED_MUL_WITH_OVERFLOW,
+            Self::Divide | Self::Remainder => unreachable!(
+                "`{}` is checked by comparing its operands, not by an intrinsic",
+                self.reported_as()
+            ),
         }
     }
 }
@@ -10225,6 +10260,14 @@ fn build_integer_arithmetic<'c, 'm>(
     ty: &Arc<TypeNode>,
     name: &str,
 ) -> IntValue<'c> {
+    if matches!(operation, IntegerArithmetic::Negate) {
+        assert_eq!(
+            lhs.get_zero_extended_constant(),
+            Some(0),
+            "a negation subtracts its operand from zero, and `{:?}` is not zero",
+            lhs
+        );
+    }
     if !arithmetic_never_wraps(ty) {
         let builder = gc.builder();
         return match operation {
@@ -10232,12 +10275,17 @@ fn build_integer_arithmetic<'c, 'm>(
             IntegerArithmetic::Subtract => builder.build_int_sub(lhs, rhs, name),
             IntegerArithmetic::Multiply => builder.build_int_mul(lhs, rhs, name),
             IntegerArithmetic::Negate => builder.build_int_neg(rhs, name),
+            IntegerArithmetic::Divide => builder.build_int_unsigned_div(lhs, rhs, name),
+            IntegerArithmetic::Remainder => builder.build_int_unsigned_rem(lhs, rhs, name),
         }
         .unwrap();
     }
-    if gc.config.check_signed_overflow {
-        let (intrinsic, reported_as) = operation.reporting_intrinsic();
-        return build_checked_signed_arithmetic(gc, intrinsic, reported_as, lhs, rhs, ty, name);
+    if operation.is_division() {
+        // A division carries no intrinsic reporting the overflow, so the check stands in front of
+        // the instruction rather than replacing it. It is emitted where the build asks for it.
+        build_check_signed_division(gc, operation, lhs, rhs, ty);
+    } else if signed_overflow_is_checked(gc) {
+        return build_checked_signed_arithmetic(gc, operation, lhs, rhs, ty, name);
     }
     let builder = gc.builder();
     match operation {
@@ -10245,32 +10293,31 @@ fn build_integer_arithmetic<'c, 'm>(
         IntegerArithmetic::Subtract => builder.build_int_nsw_sub(lhs, rhs, name),
         IntegerArithmetic::Multiply => builder.build_int_nsw_mul(lhs, rhs, name),
         IntegerArithmetic::Negate => builder.build_int_nsw_neg(rhs, name),
+        IntegerArithmetic::Divide => builder.build_int_signed_div(lhs, rhs, name),
+        IntegerArithmetic::Remainder => builder.build_int_signed_rem(lhs, rhs, name),
     }
     .unwrap()
 }
 
-/// Emit the operation `intrinsic` performs on `lhs` and `rhs`, ending the program where the
-/// mathematical result leaves the range of the signed integer type `ty`.
+/// Emit `operation` on `lhs` and `rhs`, ending the program where the mathematical result leaves the
+/// range of the signed integer type `ty`.
 ///
 /// # Arguments
-/// * `reported_as` - the word the report calls the operation by, such as `"addition"`. The report
-///   names the type in front of it.
 /// * `name` - the name the result carries in the generated code.
 ///
 /// # Examples
-/// `build_checked_signed_arithmetic(gc, SIGNED_ADD_WITH_OVERFLOW, "addition", x, y, i64_ty, "add")`
-/// emits the sum of `x` and `y`, and a call ending the program with `I64 addition, with <x> and
-/// <y>` where the sum leaves `I64`.
+/// `build_checked_signed_arithmetic(gc, IntegerArithmetic::Add, x, y, i64_ty, "add")` emits the sum
+/// of `x` and `y`, and a call ending the program with `I64 addition, with <x> and <y>` where the
+/// sum leaves `I64`.
 fn build_checked_signed_arithmetic<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
-    intrinsic: &str,
-    reported_as: &str,
+    operation: IntegerArithmetic,
     lhs: IntValue<'c>,
     rhs: IntValue<'c>,
     ty: &Arc<TypeNode>,
     name: &str,
 ) -> IntValue<'c> {
-    let function = gc.intrinsic_function(intrinsic, &[lhs.get_type().into()]);
+    let function = gc.intrinsic_function(operation.reporting_intrinsic(), &[lhs.get_type().into()]);
     let result = gc
         .builder()
         .build_call(function, &[lhs.into(), rhs.into()], name)
@@ -10283,26 +10330,27 @@ fn build_checked_signed_arithmetic<'c, 'm>(
         .build_extract_value(result, 1, "signed_overflowed")
         .unwrap()
         .into_int_value();
-    build_report_signed_overflow(gc, overflowed, reported_as, lhs, rhs, ty);
+    build_report_signed_overflow(gc, overflowed, operation, lhs, rhs, ty);
     gc.builder()
         .build_extract_value(result, 0, name)
         .unwrap()
         .into_int_value()
 }
 
-/// Emit the check that ends the program where dividing `lhs` by `rhs` at the signed integer type
-/// `ty` leaves the range of that type, which is at the one pair that does: the least value of the
-/// type divided by -1, whose quotient is one past the greatest.
-///
-/// # Arguments
-/// * `reported_as` - the word the report calls the operation by, such as `"division"`.
+/// Emit the check that ends the program where `operation` divides the least value of the signed
+/// integer type `ty` by -1, which is the one pair a division and a remainder are undefined at: the
+/// quotient is one past the greatest value of the type. The check is emitted where
+/// `--check-signed-overflow` asks for it.
 fn build_check_signed_division<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
-    reported_as: &str,
+    operation: IntegerArithmetic,
     lhs: IntValue<'c>,
     rhs: IntValue<'c>,
     ty: &Arc<TypeNode>,
 ) {
+    if !signed_overflow_is_checked(gc) {
+        return;
+    }
     let int_ty = lhs.get_type();
     let least = int_ty.const_int(1u64 << (int_ty.get_bit_width() - 1), false);
     let is_least = gc
@@ -10317,7 +10365,7 @@ fn build_check_signed_division<'c, 'm>(
         .builder()
         .build_and(is_least, is_minus_one, "signed_division_overflowed")
         .unwrap();
-    build_report_signed_overflow(gc, overflowed, reported_as, lhs, rhs, ty);
+    build_report_signed_overflow(gc, overflowed, operation, lhs, rhs, ty);
 }
 
 /// Emit the call that reports an arithmetic operation on the signed integer type `ty` whose result
@@ -10328,13 +10376,22 @@ fn build_check_signed_division<'c, 'm>(
 fn build_report_signed_overflow<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     overflowed: IntValue<'c>,
-    reported_as: &str,
+    operation: IntegerArithmetic,
     lhs: IntValue<'c>,
     rhs: IntValue<'c>,
     ty: &Arc<TypeNode>,
 ) {
-    let operation = format!("{} {}", ty.toplevel_tycon().unwrap().name.name, reported_as);
-    let operation = gc.add_global_string(&operation).as_pointer_value();
+    assert!(
+        lhs.get_type().get_bit_width() <= 64,
+        "the report takes operands of 64 bits, and this one is {} bits wide",
+        lhs.get_type().get_bit_width()
+    );
+    let reported = format!(
+        "{} {}",
+        ty.toplevel_tycon().unwrap().name.name,
+        operation.reported_as()
+    );
+    let reported = gc.add_global_string(&reported).as_pointer_value();
     let i64_ty = gc.context.i64_type();
     let lhs = gc
         .builder()
@@ -10348,7 +10405,7 @@ fn build_report_signed_overflow<'c, 'm>(
         gc,
         overflowed,
         RUNTIME_SIGNED_OVERFLOW,
-        &[operation.into(), lhs.into(), rhs.into()],
+        &[reported.into(), lhs.into(), rhs.into()],
         "signed_overflow",
     );
 }
@@ -10802,20 +10859,14 @@ impl LLVMGen for InlineLLVMIntDivBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
-
-        let value = if is_signed {
-            if gc.config.check_signed_overflow {
-                build_check_signed_division(gc, "division", lhs_val, rhs_val, &lhs.ty);
-            }
-            gc.builder()
-                .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
-                .unwrap()
-        } else {
-            gc.builder()
-                .build_int_unsigned_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
-                .unwrap()
-        };
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Divide,
+            lhs_val,
+            rhs_val,
+            &lhs.ty,
+            DIVIDE_TRAIT_DIVIDE_NAME,
+        );
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10954,20 +11005,14 @@ impl LLVMGen for InlineLLVMIntRemBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
-
-        let value = if is_signed {
-            if gc.config.check_signed_overflow {
-                build_check_signed_division(gc, "remainder", lhs_val, rhs_val, &lhs.ty);
-            }
-            gc.builder()
-                .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
-                .unwrap()
-        } else {
-            gc.builder()
-                .build_int_unsigned_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
-                .unwrap()
-        };
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Remainder,
+            lhs_val,
+            rhs_val,
+            &lhs.ty,
+            REMAINDER_TRAIT_REMAINDER_NAME,
+        );
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
