@@ -10185,6 +10185,70 @@ const SIGNED_SUB_WITH_OVERFLOW: &str = "llvm.ssub.with.overflow";
 /// The multiplication counterpart of `SIGNED_ADD_WITH_OVERFLOW`.
 const SIGNED_MUL_WITH_OVERFLOW: &str = "llvm.smul.with.overflow";
 
+/// An arithmetic operation the code generator emits for an integer type.
+///
+/// `Negate` negates its right operand, and takes as its left operand the zero that operand is
+/// subtracted from, which is the instruction emitted for a negation.
+#[derive(Clone, Copy)]
+enum IntegerArithmetic {
+    Add,
+    Subtract,
+    Multiply,
+    Negate,
+}
+
+impl IntegerArithmetic {
+    /// The LLVM intrinsic that performs this operation and reports whether the result left the
+    /// range of the signed integer type, and the word a report calls the operation by.
+    fn reporting_intrinsic(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Add => (SIGNED_ADD_WITH_OVERFLOW, "addition"),
+            Self::Subtract => (SIGNED_SUB_WITH_OVERFLOW, "subtraction"),
+            Self::Multiply => (SIGNED_MUL_WITH_OVERFLOW, "multiplication"),
+            Self::Negate => (SIGNED_SUB_WITH_OVERFLOW, "negation"),
+        }
+    }
+}
+
+/// Emit `operation` on `lhs` and `rhs` at the integer type `ty`, in the form that type and the
+/// configuration ask for: the instruction carrying `nsw` where Fix promises the result fits, the
+/// one that wraps where it promises wrapping, and the intrinsic that ends the program where
+/// `--check-signed-overflow` asks for the promise to be checked.
+///
+/// # Arguments
+/// * `name` - the name the result carries in the generated code.
+fn build_integer_arithmetic<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    operation: IntegerArithmetic,
+    lhs: IntValue<'c>,
+    rhs: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+    name: &str,
+) -> IntValue<'c> {
+    if !arithmetic_never_wraps(ty) {
+        let builder = gc.builder();
+        return match operation {
+            IntegerArithmetic::Add => builder.build_int_add(lhs, rhs, name),
+            IntegerArithmetic::Subtract => builder.build_int_sub(lhs, rhs, name),
+            IntegerArithmetic::Multiply => builder.build_int_mul(lhs, rhs, name),
+            IntegerArithmetic::Negate => builder.build_int_neg(rhs, name),
+        }
+        .unwrap();
+    }
+    if gc.config.check_signed_overflow {
+        let (intrinsic, reported_as) = operation.reporting_intrinsic();
+        return build_checked_signed_arithmetic(gc, intrinsic, reported_as, lhs, rhs, ty, name);
+    }
+    let builder = gc.builder();
+    match operation {
+        IntegerArithmetic::Add => builder.build_int_nsw_add(lhs, rhs, name),
+        IntegerArithmetic::Subtract => builder.build_int_nsw_sub(lhs, rhs, name),
+        IntegerArithmetic::Multiply => builder.build_int_nsw_mul(lhs, rhs, name),
+        IntegerArithmetic::Negate => builder.build_int_nsw_neg(rhs, name),
+    }
+    .unwrap()
+}
+
 /// Emit the operation `intrinsic` performs on `lhs` and `rhs`, ending the program where the
 /// mathematical result leaves the range of the signed integer type `ty`.
 ///
@@ -10302,27 +10366,14 @@ impl LLVMGen for InlineLLVMIntAddBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = if arithmetic_never_wraps(&lhs.ty) {
-            if gc.config.check_signed_overflow {
-                build_checked_signed_arithmetic(
-                    gc,
-                    SIGNED_ADD_WITH_OVERFLOW,
-                    "addition",
-                    lhs_val,
-                    rhs_val,
-                    &lhs.ty,
-                    ADD_TRAIT_ADD_NAME,
-                )
-            } else {
-                gc.builder()
-                    .build_int_nsw_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
-                    .unwrap()
-            }
-        } else {
-            gc.builder()
-                .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
-                .unwrap()
-        };
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Add,
+            lhs_val,
+            rhs_val,
+            &lhs.ty,
+            ADD_TRAIT_ADD_NAME,
+        );
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10460,27 +10511,14 @@ impl LLVMGen for InlineLLVMIntSubBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = if arithmetic_never_wraps(&lhs.ty) {
-            if gc.config.check_signed_overflow {
-                build_checked_signed_arithmetic(
-                    gc,
-                    SIGNED_SUB_WITH_OVERFLOW,
-                    "subtraction",
-                    lhs_val,
-                    rhs_val,
-                    &lhs.ty,
-                    SUBTRACT_TRAIT_SUBTRACT_NAME,
-                )
-            } else {
-                gc.builder()
-                    .build_int_nsw_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
-                    .unwrap()
-            }
-        } else {
-            gc.builder()
-                .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
-                .unwrap()
-        };
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Subtract,
+            lhs_val,
+            rhs_val,
+            &lhs.ty,
+            SUBTRACT_TRAIT_SUBTRACT_NAME,
+        );
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10618,27 +10656,14 @@ impl LLVMGen for InlineLLVMIntMulBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = if arithmetic_never_wraps(&lhs.ty) {
-            if gc.config.check_signed_overflow {
-                build_checked_signed_arithmetic(
-                    gc,
-                    SIGNED_MUL_WITH_OVERFLOW,
-                    "multiplication",
-                    lhs_val,
-                    rhs_val,
-                    &lhs.ty,
-                    MULTIPLY_TRAIT_MULTIPLY_NAME,
-                )
-            } else {
-                gc.builder()
-                    .build_int_nsw_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
-                    .unwrap()
-            }
-        } else {
-            gc.builder()
-                .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
-                .unwrap()
-        };
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Multiply,
+            lhs_val,
+            rhs_val,
+            &lhs.ty,
+            MULTIPLY_TRAIT_MULTIPLY_NAME,
+        );
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -11011,29 +11036,15 @@ impl LLVMGen for InlineLLVMIntNegBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = if arithmetic_never_wraps(&rhs.ty) {
-            if gc.config.check_signed_overflow {
-                // Negation is a subtraction from zero, which is the instruction emitted for it.
-                let zero = rhs_val.get_type().const_zero();
-                build_checked_signed_arithmetic(
-                    gc,
-                    SIGNED_SUB_WITH_OVERFLOW,
-                    "negation",
-                    zero,
-                    rhs_val,
-                    &rhs.ty,
-                    NEGATE_TRAIT_NEGATE_NAME,
-                )
-            } else {
-                gc.builder()
-                    .build_int_nsw_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)
-                    .unwrap()
-            }
-        } else {
-            gc.builder()
-                .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)
-                .unwrap()
-        };
+        let zero = rhs_val.get_type().const_zero();
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Negate,
+            zero,
+            rhs_val,
+            &rhs.ty,
+            NEGATE_TRAIT_NEGATE_NAME,
+        );
         let obj = create_obj(
             rhs.ty.clone(),
             &vec![],
