@@ -1,0 +1,53 @@
+module Main;
+
+// A state monad: a computation that reads a counter, answers a value and hands the counter on.
+type St a = unbox struct { _run : I64 -> (a, I64) };
+
+namespace St {
+    run : I64 -> St a -> (a, I64);
+    run = |s, m| (m.@_run)(s);
+}
+
+impl St : Functor {
+    map = |f, m| St { _run : |s| let (v, s) = m.run(s); (f(v), s) };
+}
+
+impl St : Monad {
+    pure = |v| St { _run : |s| (v, s) };
+    bind = |f, m| St { _run : |s| let (v, s) = m.run(s); f(v).run(s) };
+}
+
+// Answers the counter and moves it on by one.
+_tick : St I64;
+_tick = St { _run : |s| (s, s + 1) };
+
+// Threads `state` through `body` once per index of the range `(from, to, step)`, in the monad
+// `body` answers in, and answers the state after the last round together with how many rounds ran.
+// A range that does not reach `to` runs no round.
+//
+// The combinator is larger than what the inliner substitutes at a call site, so the call to it
+// stands and the lambda `main` passes reaches closure specialization.
+range_fold_m : (I64, I64, I64) -> a -> (I64 -> a -> St a) -> St (a, I64);
+range_fold_m = |(from, to, step), state, body| (
+    let step = if step == 0 { 1 } else { step };
+    let rounds = if step > 0 {
+        if to <= from { 0 } else { (to - from + step - 1) / step }
+    } else {
+        if to >= from { 0 } else { (from - to - step - 1) / (0 - step) }
+    };
+    loop_m((0, state), |(k, state)|
+        if k == rounds { break_m $ (state, k) };
+        let state = *body(from + k * step, state);
+        continue_m $ (k + 1, state)
+    )
+);
+
+main : IO ();
+main = (
+    // The callback answers in the monad, so each round hands `bind` the action it built. The body
+    // of that callback goes into the copy of the combinator made for it, applied to the arguments
+    // the round supplies.
+    let summing = range_fold_m((0, 100, 1), 0, |i, acc| let v = *_tick; pure $ acc + v * i);
+    let ((total, rounds), _) = summing.St::run(0);
+    println((total + rounds).to_string)
+);

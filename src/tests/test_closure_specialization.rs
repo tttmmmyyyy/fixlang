@@ -12,6 +12,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
+    use crate::misc::{Map, Set};
     use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -119,6 +120,10 @@ mod integration_tests {
     /// What `shared_body` prints: `twice` over `|x| x * 3 - x` at 8, and `sum_up` and `sum_down`
     /// over `|x| x * 3` at 4, which cancel.
     const SHARED_BODY_OUTPUT: &str = "72";
+
+    /// What `monadic_combinator` prints: the fold of `0..99` weighting each round by its index,
+    /// plus the hundred rounds it ran.
+    const MONADIC_COMBINATOR_OUTPUT: &str = "328450";
 
     /// Copies the case projects into a temporary directory of their own, so that parallel test runs
     /// do not share a build directory, and returns the directory of the named case.
@@ -312,6 +317,46 @@ mod integration_tests {
             })
             .max()
             .unwrap_or(0)
+    }
+
+    /// The body of every function `dump` names, keyed by the function's name.
+    ///
+    /// A blank line ends a body, so what follows the last function — the initializer of every
+    /// global — stays out of it. A header line closes with the return type and a colon, which is
+    /// what tells a function from the lines the dump opens with.
+    fn function_bodies(dump: &str) -> Map<&str, &str> {
+        dump.split("\nfn ")
+            .filter_map(|function| function.split_once('\n'))
+            .filter(|(header, _)| header.ends_with(':'))
+            .map(|(header, body)| (func_name(header), body.split("\n\n").next().unwrap()))
+            .collect()
+    }
+
+    /// The functions of `bodies` that the ones named by `roots` reach by name, `roots` included,
+    /// in name order.
+    ///
+    /// A call names the function it calls, so this walk collects the bodies a root runs. A function
+    /// reached through a closure is named by no call and stays out, while the body building that
+    /// closure is in.
+    fn functions_reached_from<'a>(
+        bodies: &Map<&'a str, &'a str>,
+        roots: Vec<&'a str>,
+    ) -> Vec<&'a str> {
+        let mut reached: Set<&'a str> = roots.iter().copied().collect();
+        let mut queue = roots;
+        while let Some(name) = queue.pop() {
+            let body = bodies[name];
+            for token in body.split(|c: char| {
+                !(c.is_alphanumeric() || c == '_' || c == ':' || c == '#' || c == '@')
+            }) {
+                if bodies.contains_key(token) && reached.insert(token) {
+                    queue.push(token);
+                }
+            }
+        }
+        let mut names = reached.into_iter().collect::<Vec<_>>();
+        names.sort();
+        names
     }
 
     /// A lambda passed to a global function is lifted to a global function of its own, and that
@@ -723,5 +768,43 @@ mod integration_tests {
              names: {:?}",
             functions_named_with(&dump, "Std::loop")
         );
+    }
+
+    /// A round of a combinator that answers in a monad builds no closure. The body of the callback
+    /// goes into the copy of the combinator made for it, applied to the arguments the round
+    /// supplies, and what the copy keeps is that body: left applied, the lambda is a closure the
+    /// round builds on the heap and calls through, once per call of the callback.
+    ///
+    /// The dump is what this asserts against because the program cannot observe it: the fold
+    /// answers the same either way.
+    #[test]
+    pub fn test_a_round_of_a_specialized_combinator_builds_no_closure() {
+        let (_temp_dir, project_dir) = setup_test_env("monadic_combinator");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", MONADIC_COMBINATOR_OUTPUT);
+
+        let bodies = function_bodies(&dump);
+        let mut copies = bodies
+            .keys()
+            .copied()
+            .filter(|name| {
+                name.starts_with("Main::range_fold_m#") && name.contains(CLOSURE_SPEC_SUFFIX)
+            })
+            .collect::<Vec<_>>();
+        copies.sort();
+        assert!(
+            !copies.is_empty(),
+            "`range_fold_m` should be too large for the inliner to substitute at its call site, so \
+             that the callback reaches this pass, and the dump names no copy of it: {:?}",
+            functions_named_with(&dump, "Main::")
+        );
+
+        for name in functions_reached_from(&bodies, copies) {
+            assert!(
+                !bodies[name].contains("= closure "),
+                "a round of `range_fold_m` should build no closure, and `{}` builds one:\n{}",
+                name,
+                bodies[name]
+            );
+        }
     }
 }
