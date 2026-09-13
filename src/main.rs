@@ -286,6 +286,12 @@ fn run_cli() {
             "Disable runtime checks that would abort the program.\n\
             This includes disabling array bounds checks, union variant checks in `as_` functions, and `Std::undefined`, etc."
         );
+    let check_signed_overflow = Arg::new("check-signed-overflow")
+        .long("check-signed-overflow")
+        .help(
+            "Stop the program at an arithmetic operation on a signed integer type whose result leaves the range of that type.\n\
+            A build without this option assumes the result fits, which is what the language promises: `+`, `-`, `*`, unary `-`, `/` and `%` on `I8`, `I16`, `I32` and `I64` have no defined behavior where the result does not."
+        );
     let skip_eval = Arg::new("skip-eval")
         .long("skip-eval")
         .takes_value(false)
@@ -336,6 +342,7 @@ fn run_cli() {
         .arg(emit_rc_ir.clone())
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
+        .arg(check_signed_overflow.clone())
         .arg(skip_eval.clone())
         .arg(allow_preliminary_commands.clone())
         .arg(allow_deprecated.clone())
@@ -366,6 +373,7 @@ fn run_cli() {
             .arg(program_args.clone())
             .arg(backtrace.clone())
             .arg(no_runtime_check.clone())
+            .arg(check_signed_overflow.clone())
             .arg(skip_eval.clone())
             .arg(allow_preliminary_commands.clone())
             .arg(allow_deprecated.clone())
@@ -754,6 +762,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `no_runtime_check`.
         if args.contains_id("no-runtime-check") {
             config.no_runtime_check = true;
+        }
+
+        // Set `check_signed_overflow`.
+        if args.contains_id("check-signed-overflow") {
+            config.check_signed_overflow = true;
         }
 
         // Set `skip_eval`.

@@ -323,6 +323,12 @@ __attribute__((noreturn)) void fixruntime_array_size_overflow(int64_t size)
     fixruntime_abort();
 }
 
+__attribute__((noreturn)) void fixruntime_signed_overflow(const char *operation, int64_t lhs, int64_t rhs)
+{
+    fprintf(stderr, "Signed integer overflow: %s, with %" PRId64 " and %" PRId64 "\n", operation, lhs, rhs);
+    fixruntime_abort();
+}
+
 #if defined(BACKTRACE)
 #if defined(__linux__)
 #include <backtrace.h>

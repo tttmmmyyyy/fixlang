@@ -30,13 +30,15 @@ use crate::constants::{
     STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
     TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
-use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
+use crate::fixstd::runtime::{
+    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC, RUNTIME_SIGNED_OVERFLOW,
+};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_array_storage_alloc_offset, build_capacity_check, build_elems_bytes,
-    build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned, create_obj,
-    get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
+    alloc_array_storage, build_abort_if, build_array_storage_alloc_offset, build_capacity_check,
+    build_elems_bytes, build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned,
+    create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
     write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
@@ -10175,6 +10177,118 @@ fn arithmetic_never_wraps(ty: &Arc<TypeNode>) -> bool {
     ty.toplevel_tycon().unwrap().is_signed_integer()
 }
 
+/// The LLVM intrinsic performing an addition and reporting whether the result left the range of
+/// the signed integer type, as `{ iN, i1 }`.
+const SIGNED_ADD_WITH_OVERFLOW: &str = "llvm.sadd.with.overflow";
+/// The subtraction counterpart of `SIGNED_ADD_WITH_OVERFLOW`.
+const SIGNED_SUB_WITH_OVERFLOW: &str = "llvm.ssub.with.overflow";
+/// The multiplication counterpart of `SIGNED_ADD_WITH_OVERFLOW`.
+const SIGNED_MUL_WITH_OVERFLOW: &str = "llvm.smul.with.overflow";
+
+/// Emit the operation `intrinsic` performs on `lhs` and `rhs`, ending the program where the
+/// mathematical result leaves the range of the signed integer type `ty`.
+///
+/// # Arguments
+/// * `reported_as` - the word the report calls the operation by, such as `"addition"`. The report
+///   names the type in front of it.
+/// * `name` - the name the result carries in the generated code.
+///
+/// # Examples
+/// `build_checked_signed_arithmetic(gc, SIGNED_ADD_WITH_OVERFLOW, "addition", x, y, i64_ty, "add")`
+/// emits the sum of `x` and `y`, and a call ending the program with `I64 addition, with <x> and
+/// <y>` where the sum leaves `I64`.
+fn build_checked_signed_arithmetic<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    intrinsic: &str,
+    reported_as: &str,
+    lhs: IntValue<'c>,
+    rhs: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+    name: &str,
+) -> IntValue<'c> {
+    let function = gc.intrinsic_function(intrinsic, &[lhs.get_type().into()]);
+    let result = gc
+        .builder()
+        .build_call(function, &[lhs.into(), rhs.into()], name)
+        .unwrap()
+        .try_as_basic_value()
+        .unwrap_basic()
+        .into_struct_value();
+    let overflowed = gc
+        .builder()
+        .build_extract_value(result, 1, "signed_overflowed")
+        .unwrap()
+        .into_int_value();
+    build_report_signed_overflow(gc, overflowed, reported_as, lhs, rhs, ty);
+    gc.builder()
+        .build_extract_value(result, 0, name)
+        .unwrap()
+        .into_int_value()
+}
+
+/// Emit the check that ends the program where dividing `lhs` by `rhs` at the signed integer type
+/// `ty` leaves the range of that type, which is at the one pair that does: the least value of the
+/// type divided by -1, whose quotient is one past the greatest.
+///
+/// # Arguments
+/// * `reported_as` - the word the report calls the operation by, such as `"division"`.
+fn build_check_signed_division<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    reported_as: &str,
+    lhs: IntValue<'c>,
+    rhs: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+) {
+    let int_ty = lhs.get_type();
+    let least = int_ty.const_int(1u64 << (int_ty.get_bit_width() - 1), false);
+    let is_least = gc
+        .builder()
+        .build_int_compare(IntPredicate::EQ, lhs, least, "is_least_of_type")
+        .unwrap();
+    let is_minus_one = gc
+        .builder()
+        .build_int_compare(IntPredicate::EQ, rhs, int_ty.const_all_ones(), "is_minus_one")
+        .unwrap();
+    let overflowed = gc
+        .builder()
+        .build_and(is_least, is_minus_one, "signed_division_overflowed")
+        .unwrap();
+    build_report_signed_overflow(gc, overflowed, reported_as, lhs, rhs, ty);
+}
+
+/// Emit the call that reports an arithmetic operation on the signed integer type `ty` whose result
+/// left the range of that type and ends the program, taken where `overflowed` holds.
+///
+/// The operands reach the report widened to 64 bits, which is the width the runtime function
+/// takes; widening a signed value keeps it.
+fn build_report_signed_overflow<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    overflowed: IntValue<'c>,
+    reported_as: &str,
+    lhs: IntValue<'c>,
+    rhs: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+) {
+    let operation = format!("{} {}", ty.toplevel_tycon().unwrap().name.name, reported_as);
+    let operation = gc.add_global_string(&operation).as_pointer_value();
+    let i64_ty = gc.context.i64_type();
+    let lhs = gc
+        .builder()
+        .build_int_s_extend_or_bit_cast(lhs, i64_ty, "signed_overflow_lhs")
+        .unwrap();
+    let rhs = gc
+        .builder()
+        .build_int_s_extend_or_bit_cast(rhs, i64_ty, "signed_overflow_rhs")
+        .unwrap();
+    build_abort_if(
+        gc,
+        overflowed,
+        RUNTIME_SIGNED_OVERFLOW,
+        &[operation.into(), lhs.into(), rhs.into()],
+        "signed_overflow",
+    );
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntAddBody {
     lhs_name: FullName,
@@ -10189,9 +10303,21 @@ impl LLVMGen for InlineLLVMIntAddBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = if arithmetic_never_wraps(&lhs.ty) {
-            gc.builder()
-                .build_int_nsw_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
-                .unwrap()
+            if gc.config.check_signed_overflow {
+                build_checked_signed_arithmetic(
+                    gc,
+                    SIGNED_ADD_WITH_OVERFLOW,
+                    "addition",
+                    lhs_val,
+                    rhs_val,
+                    &lhs.ty,
+                    ADD_TRAIT_ADD_NAME,
+                )
+            } else {
+                gc.builder()
+                    .build_int_nsw_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
+                    .unwrap()
+            }
         } else {
             gc.builder()
                 .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
@@ -10335,9 +10461,21 @@ impl LLVMGen for InlineLLVMIntSubBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = if arithmetic_never_wraps(&lhs.ty) {
-            gc.builder()
-                .build_int_nsw_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
-                .unwrap()
+            if gc.config.check_signed_overflow {
+                build_checked_signed_arithmetic(
+                    gc,
+                    SIGNED_SUB_WITH_OVERFLOW,
+                    "subtraction",
+                    lhs_val,
+                    rhs_val,
+                    &lhs.ty,
+                    SUBTRACT_TRAIT_SUBTRACT_NAME,
+                )
+            } else {
+                gc.builder()
+                    .build_int_nsw_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
+                    .unwrap()
+            }
         } else {
             gc.builder()
                 .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
@@ -10481,9 +10619,21 @@ impl LLVMGen for InlineLLVMIntMulBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = if arithmetic_never_wraps(&lhs.ty) {
-            gc.builder()
-                .build_int_nsw_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
-                .unwrap()
+            if gc.config.check_signed_overflow {
+                build_checked_signed_arithmetic(
+                    gc,
+                    SIGNED_MUL_WITH_OVERFLOW,
+                    "multiplication",
+                    lhs_val,
+                    rhs_val,
+                    &lhs.ty,
+                    MULTIPLY_TRAIT_MULTIPLY_NAME,
+                )
+            } else {
+                gc.builder()
+                    .build_int_nsw_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
+                    .unwrap()
+            }
         } else {
             gc.builder()
                 .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
@@ -10630,6 +10780,9 @@ impl LLVMGen for InlineLLVMIntDivBody {
         let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
 
         let value = if is_signed {
+            if gc.config.check_signed_overflow {
+                build_check_signed_division(gc, "division", lhs_val, rhs_val, &lhs.ty);
+            }
             gc.builder()
                 .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
                 .unwrap()
@@ -10779,6 +10932,9 @@ impl LLVMGen for InlineLLVMIntRemBody {
         let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
 
         let value = if is_signed {
+            if gc.config.check_signed_overflow {
+                build_check_signed_division(gc, "remainder", lhs_val, rhs_val, &lhs.ty);
+            }
             gc.builder()
                 .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
                 .unwrap()
@@ -10856,9 +11012,23 @@ impl LLVMGen for InlineLLVMIntNegBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = if arithmetic_never_wraps(&rhs.ty) {
-            gc.builder()
-                .build_int_nsw_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)
-                .unwrap()
+            if gc.config.check_signed_overflow {
+                // Negation is a subtraction from zero, which is the instruction emitted for it.
+                let zero = rhs_val.get_type().const_zero();
+                build_checked_signed_arithmetic(
+                    gc,
+                    SIGNED_SUB_WITH_OVERFLOW,
+                    "negation",
+                    zero,
+                    rhs_val,
+                    &rhs.ty,
+                    NEGATE_TRAIT_NEGATE_NAME,
+                )
+            } else {
+                gc.builder()
+                    .build_int_nsw_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)
+                    .unwrap()
+            }
         } else {
             gc.builder()
                 .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)

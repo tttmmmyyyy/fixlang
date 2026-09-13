@@ -922,9 +922,15 @@ The type for booleans is `Bool`, and literals for booleans are `true` and `false
 
 Types for numbers are `I8`, `I16`, `I32`, `I64` (signed integers), `U8`, `U16`, `U32`, `U64` (unsigned integers) and `F32`, `F64` (floating point values).
 
-An operation on a signed integer type assumes that its mathematical result falls within the range of that type.
-The behavior of a program that performs one whose result falls outside that range is undefined.
-Where wrapping is what is wanted, use an unsigned integer type: an operation on `U8`, `U16`, `U32` or `U64` is taken modulo two to the width of the type.
+Arithmetic on a signed integer type assumes that its mathematical result falls within the range of that type.
+The operations this covers are `+`, `-`, `*`, unary `-`, `/` and `%`.
+The behavior of a program that performs one whose result falls outside the range is undefined.
+Build with `--check-signed-overflow` to have such an operation stop the program where it happens.
+
+Where wrapping is what is wanted, use an unsigned integer type: `+`, `-`, `*` and unary `-` on `U8`, `U16`, `U32` or `U64` are taken modulo two to the width of the type.
+
+A shift, a bitwise operation and a conversion between integer types are defined at every input, on a signed type as well.
+`shift_left` drops the bits carried out of the type, and a conversion to a narrower type keeps the low bits.
 
 A number literal is interpreted as a floating point literal if it contains a decimal point, and as an integer literal otherwise.
 For example, `42` is an `I64` type number literal, and `3.14` is an `F64` type number literal.
@@ -3019,6 +3025,13 @@ The following table shows how each setting is handled.
             <td>Overwrite</td>
             <td>Does not affect</td>
             <td>Disable runtime checks. <code>fix test</code> reads it from the <code>build.test</code> section, which defaults to keeping the checks.</td>
+        </tr>
+        <tr>
+            <td>check_signed_overflow</td>
+            <td>--check-signed-overflow</td>
+            <td>Merge (OR)</td>
+            <td>Does not affect</td>
+            <td>Stop the program at an arithmetic operation on a signed integer type whose result leaves the range of that type. <code>fix test</code> adds what the <code>build.test</code> section asks for to what the <code>build</code> section gives.</td>
         </tr>
         <tr>
             <td>skip_eval</td>
