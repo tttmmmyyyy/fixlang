@@ -2,7 +2,6 @@
 Inlining optimization.
 */
 
-use super::application_inlining;
 use crate::{
     ast::{
         expr::ExprNode,
@@ -11,17 +10,54 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
-    optimization::uncurry::is_std_fix,
+    optimization::{application_inlining, uncurry::is_std_fix},
 };
 use std::{mem, sync::Arc};
 
-/// The size a body may reach and still be put where it is called, counted over the Fix expression
-/// as `InlineCosts` counts it.
+/// The `complexity` a body may reach and still be put where it is called.
 ///
-/// What the count weighs is what a copy of the body costs at a call site against the call it saves.
+/// What `complexity` weighs is what a copy of the body costs at a call site against the call it
+/// saves.
 /// It measures the expression the optimizer holds; the instructions the body finally generates
 /// exceed it, as reference counting and the bounds checks still to be inserted feed them too.
 const INLINE_COST_THRESHOLD: i32 = 30;
+
+/// The nodes one round of substitution may add to a symbol's expression.
+///
+/// `application_inlining` runs after a round of substitution and rewrites what it leaves, so the
+/// symbol ends the round at what that pass makes of the nodes this bound let in.
+///
+/// The bound is counted in `node_count`, where `INLINE_COST_THRESHOLD` is counted in `complexity`,
+/// and the two counts answer different questions. `complexity` weighs what a copy of a body costs
+/// the program that runs, so a `let` binding one name to another counts nothing. `node_count`
+/// weighs what a copy costs the compiler that holds it, so every node counts, however little code
+/// it generates.
+///
+/// Globals that name each other in a cycle are why the bound is counted in `node_count`. None of
+/// them calls itself, so `is_self_recursive` never stops the substitution, and each round puts the
+/// cycle into each member again. What accumulates is the renaming a substitution leaves behind —
+/// `let x = p; let p = x;` per turn — which `complexity` counts as nothing, so no ceiling expressed
+/// in it can ever be reached. A ring of three globals doubles each of them per round — 6, 10, 18,
+/// 34, 66 nodes and on — while `complexity` reads 3 throughout, and a ring whose members carry two
+/// thousand renamings apiece exhausts the compiler's stack and aborts the build.
+///
+/// The bound is on the growth of one round, so a symbol that has already grown large still takes
+/// the substitutions of the rounds that follow, a one-node alias among them, which
+/// `split_struct_args` and `closure_specialization` then read. A cycle therefore grows by at most
+/// this many nodes in each of `MAX_ROUNDS` rounds.
+///
+/// It is set above what a round of a corpus program asks for. Measured over LangArena's fifty
+/// programs and the standard library, with the bound lifted so that every substitution is taken,
+/// the largest round asks for 5,166 nodes and the 99th percentile for 657, over 3,516
+/// symbol-rounds. This leaves the largest of them a tenth of the bound.
+///
+/// A program that asks for more than this in one round takes the rest in the rounds that follow,
+/// and reaches the same program where `MAX_ROUNDS` rounds are enough for it. A function of one
+/// hundred and sixty branches, each building a string the way LangArena's
+/// `Calculator::_right_hand_side` does, compiles to the same symbols as an unbounded compiler; so
+/// does one of eighty, which at a bound of ten thousand kept fifteen closures
+/// `closure_specialization` folds away here.
+const MAX_NODES_SUBSTITUTED_PER_ROUND: usize = 50000;
 
 /// How many times `run` rewrites the program before it stops asking for more.
 ///
@@ -31,9 +67,8 @@ const INLINE_COST_THRESHOLD: i32 = 30;
 /// settles in about log2(L) rounds — the standard library and every program measured alongside it
 /// settle within five, and a chain 500 long within eleven.
 ///
-/// Ten covers what a program of any ordinary depth needs. It is also the reason to keep the number
-/// small: the bodies of globals that call each other in a cycle double every round, so each round
-/// left here is a term twice as large to finish with.
+/// Ten covers what a program of any ordinary depth needs. `MAX_NODES_SUBSTITUTED_PER_ROUND` bounds
+/// what a cycle adds in each of those rounds.
 const MAX_ROUNDS: usize = 10;
 
 /// Substitute the definitions of globals into the places that name them, round after round until the
@@ -68,6 +103,8 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     let mut inliner = Inliner {
         costs: &costs,
         symbols: symbols.clone(),
+        budget: 0,
+        refused_for_budget: false,
     };
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let root_value_names = prg.root_value_names();
@@ -86,27 +123,28 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             continue;
         }
 
-        // If the new symbol has no free variables, it cannot be inlined further.
+        // A symbol whose expression names nothing has nothing to substitute into it.
         if sym.expr.as_ref().unwrap().free_vars().is_empty() {
             stable_symbols.insert(name.clone());
             new_symbols.insert(name.clone(), sym);
             continue;
         }
 
-        // Traverse the expression and inline the symbol.
-        let res = inliner.traverse(&sym.expr.as_ref().unwrap());
+        let res = inliner.substitute_into(&sym.expr.as_ref().unwrap());
 
         if res.changed {
-            // If inlining was done, inline application.
             changed = true;
             sym.expr = Some(res.expr);
             application_inlining::run_on_symbol(&mut sym);
-        } else {
-            // If inlining was not done, it cannot be inlined further.
+        } else if !inliner.refused_for_budget {
+            // A round that substituted nothing and refused nothing has reached the symbol's end
+            // state. A symbol whose round refused a body it could not afford is asked again next
+            // round: the body may come back smaller, since `application_inlining` rewrites what the
+            // substitution left in every symbol the round changed.
             stable_symbols.insert(name.clone());
         }
 
-        // If the new symbol has no free variables, it cannot be inlined further.
+        // The round may have left an expression that names nothing, which is the same end state.
         if sym.expr.as_ref().unwrap().free_vars().is_empty() {
             stable_symbols.insert(name.clone());
         }
@@ -133,14 +171,15 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
 
         let cost = costs.get_mut(name);
 
-        // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`. An
-        // expression that takes no parameter is the operation itself, and a copy of it costs what
+        // Count what a copy of the expression costs the compiler, which is every node of it,
+        // including the kinds `complexity` counts as nothing.
+        cost.node_count = expr.node_count();
+
+        // An expression that takes no parameter is the operation itself, and a copy of it costs what
         // the operation costs, which `is_free_to_duplicate` answers.
         let (params, body) = expr.destructure_lam_sequence();
         cost.is_llvm_lam = !params.is_empty() && body.is_llvm();
 
-        // If a copy of the expression costs no more than the expression, set as
-        // `is_free_to_duplicate`.
         if expr.is_llvm() {
             let generator = &expr.get_llvm().generator;
             let is_free_to_duplicate = generator.is_free_to_duplicate();
@@ -157,10 +196,8 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
             cost.is_free_to_duplicate = is_free_to_duplicate;
         }
 
-        // If the expression is instantiated by `Std::fix`, set as `is_std_fix`.
         cost.is_std_fix = is_std_fix(name);
 
-        // If the expression is an alias to another global value, set as `is_alias`.
         if expr.is_var() {
             assert!(expr.get_var().name.is_global());
             cost.is_alias = true;
@@ -174,10 +211,14 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
 struct InlineCost {
     /// The number of times the program names the symbol.
     use_count: usize,
-    /// The size of the symbol's expression: one for each node that generates code. A local
-    /// variable, a type annotation, an `eval`, and a `let` or a `match` that only renames a local
-    /// count nothing.
+    /// What a copy of the symbol's expression costs the program that runs: one for each node that
+    /// generates code. A local variable, a type annotation, an `eval`, and a `let` or a `match`
+    /// that only renames a local count nothing.
     complexity: usize,
+    /// The number of nodes the expression holds, which is what a copy of it costs the compiler.
+    /// `complexity` answers what a copy costs the program that runs, where a node that generates no
+    /// code counts as nothing.
+    node_count: usize,
     /// Does the symbol's expression name the symbol itself?
     is_self_recursive: bool,
     /// Is the top-level construct a lambda expression?
@@ -198,6 +239,7 @@ impl InlineCost {
         InlineCost {
             use_count: 0,
             complexity: 0,
+            node_count: 0,
             is_self_recursive: false,
             is_lambda: false,
             is_llvm_lam: false,
@@ -219,6 +261,8 @@ impl InlineCost {
         }
         if self.is_free_to_duplicate {
             // TODO: Let an expression of primitive type whose value is constant qualify here too.
+            // What a type is says nothing about what the expression computing it costs: a value an
+            // `FFI_CALL` produces has a primitive type and is heavy.
             return true;
         }
         if self.is_self_recursive {
@@ -231,9 +275,6 @@ impl InlineCost {
             return true;
         }
         return false;
-        // NOTE
-        // * Even values with simple types should not be inlined if the computation is complex.
-        // * Values created using FFI_CALL are heavy.
     }
 
     /// Whether the symbol's expression may be substituted where the symbol is called.
@@ -587,6 +628,40 @@ struct Inliner<'c> {
     costs: &'c InlineCosts,
     /// The symbols of the program, holding the bodies to put at the names.
     symbols: Map<FullName, Symbol>,
+    /// How many nodes the symbol being traversed may still gain this round. `substitute_into` sets
+    /// it to `MAX_NODES_SUBSTITUTED_PER_ROUND` before each symbol, every substitution spends the
+    /// nodes of the body it copies, and a body larger than what is left is refused.
+    budget: usize,
+    /// Whether the traversal of the symbol refused a substitution that `budget` did not cover.
+    refused_for_budget: bool,
+}
+
+impl<'c> Inliner<'c> {
+    /// Substitute into `expr` the body of each global it names, where the cost of that global
+    /// allows, letting `expr` gain at most `MAX_NODES_SUBSTITUTED_PER_ROUND` nodes.
+    fn substitute_into(&mut self, expr: &Arc<ExprNode>) -> EndVisitResult {
+        self.budget = MAX_NODES_SUBSTITUTED_PER_ROUND;
+        self.refused_for_budget = false;
+        self.traverse(expr)
+    }
+
+    /// Whether a copy of `name`'s expression fits in the `budget` left for the symbol being
+    /// traversed this round, taking its nodes out of `budget` where it does.
+    fn take_budget_for(&mut self, name: &FullName) -> bool {
+        let node_count = self.costs.get(name).node_count;
+        assert!(
+            node_count > 0,
+            "the body of `{}` is about to be copied while its node count reads 0; \
+             `calculate_inline_costs` counts the nodes of every symbol the program defines",
+            name.to_string()
+        );
+        let Some(left) = self.budget.checked_sub(node_count) else {
+            self.refused_for_budget = true;
+            return false;
+        };
+        self.budget = left;
+        true
+    }
 }
 
 impl<'c> ExprVisitor for Inliner<'c> {
@@ -606,6 +681,9 @@ impl<'c> ExprVisitor for Inliner<'c> {
         }
 
         if !self.costs.get(var_name).may_be_inlined_at_non_call_site() {
+            return EndVisitResult::unchanged(expr);
+        }
+        if !self.take_budget_for(var_name) {
             return EndVisitResult::unchanged(expr);
         }
 
@@ -645,6 +723,9 @@ impl<'c> ExprVisitor for Inliner<'c> {
             return EndVisitResult::unchanged(expr);
         }
         if !self.costs.get(func_name).may_be_inlined_at_call_site() {
+            return EndVisitResult::unchanged(expr);
+        }
+        if !self.take_budget_for(func_name) {
             return EndVisitResult::unchanged(expr);
         }
         let func_expr = self.symbols.get(func_name).unwrap().expr.as_ref().unwrap();
