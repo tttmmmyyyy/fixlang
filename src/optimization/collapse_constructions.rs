@@ -21,6 +21,12 @@
 //!
 //! A construction left with no reader goes with it, which is what keeps the reference it holds from
 //! being counted alongside the one the reader now has.
+//!
+//! A symbol the pass rewrote is then run to the fixpoint of `let_elimination` and
+//! `application_inlining`. The names above are what carries a construction to its reader, and once
+//! the reading is done a name bound to a lambda and called at its one use is a closure the program
+//! would build on the heap; the fixpoint takes that one along with every other `let` those two
+//! reduce.
 
 use crate::{
     ast::{
@@ -41,8 +47,12 @@ use std::sync::Arc;
 /// Read every construction the code taking it apart can see, over every global.
 pub fn run(prg: &mut Program) {
     let type_env = prg.type_env.clone();
-    let mut read: Vec<FullName> = vec![];
-    for (name, sym) in prg.symbols.iter_mut() {
+    // How many parameters each global lambda takes. Neither the walk below nor the reduction after
+    // it shortens a symbol's leading run of lambdas, so one map answers for every symbol: the walk
+    // rewrites what a construction's reader sees, and the two reductions expose a lambda without
+    // removing one.
+    let global_lambda_to_arity = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
+    for (_name, sym) in prg.symbols.iter_mut() {
         let mut expr = with_lets_pulled_out(sym.expr.as_ref().unwrap());
         let mut bound_field_count = 0;
         let mut read_any = false;
@@ -65,18 +75,12 @@ pub fn run(prg: &mut Program) {
         // they should meet as it was written.
         if read_any {
             sym.expr = Some(expr);
-            read.push(name.clone());
+            // Run the rewritten symbol to the fixpoint of the two local reductions. Among what they
+            // take is the shape this pass writes: a field holding a lambda is bound to a name, and
+            // the reader handed that name calls it, so the lambda stands bound to a name and applied
+            // at its one use -- a closure the program would build on the heap and call through.
+            inline_local::run_on_symbol(sym, &global_lambda_to_arity);
         }
-    }
-
-    // A field holding an expression is bound to a name, and a reader given that name calls it where
-    // the field's value stood. Where the field holds a lambda, that is a lambda bound to a name and
-    // applied at its one use -- a redex this pass has just written. Left standing, it is a closure
-    // the program builds on the heap and calls through.
-    let global_lambda_to_arity = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
-    for name in read {
-        let sym = prg.symbols.get_mut(&name).unwrap();
-        inline_local::run_on_symbol(sym, &global_lambda_to_arity);
     }
 }
 

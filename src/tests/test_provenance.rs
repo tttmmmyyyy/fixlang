@@ -72,9 +72,15 @@ mod integration_tests {
     /// several functions is named once inside any one of them, and the dump opens by naming its
     /// roots, of which a case compiled from one `main` has exactly one.
     fn entry_body(dump: &str) -> &str {
-        let root = dump
-            .lines()
-            .nth(1)
+        let mut lines = dump.lines();
+        assert_eq!(
+            lines.next(),
+            Some("roots (1)"),
+            "a case compiled from one `main` has one root:\n{}",
+            dump
+        );
+        let root = lines
+            .next()
             .map(str::trim)
             .filter(|root| !root.is_empty())
             .unwrap_or_else(|| panic!("no root named in the RC IR dump:\n{}", dump));
