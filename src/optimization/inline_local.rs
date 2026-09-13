@@ -23,6 +23,7 @@ pub fn run(prg: &mut Program) {
 /// * `global_lambda_to_arity` - how many parameters each global lambda takes, which is what decides
 ///   whether a `let` binding one of them may be eliminated.
 pub fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, usize>) {
+    assert_recorded_arity_holds(sym, global_lambda_to_arity);
     let mut expr = sym.expr.as_ref().unwrap().clone();
     loop {
         let mut changed = false;
@@ -33,4 +34,27 @@ pub fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, us
         }
     }
     sym.expr = Some(expr);
+    assert_recorded_arity_holds(sym, global_lambda_to_arity);
+}
+
+/// Assert that what `global_lambda_to_arity` records for `sym` is still true of `sym`.
+///
+/// A caller builds the map from a snapshot of the symbols and then reads it while rewriting those
+/// same symbols, so the arity it records for one of them has to stay a lower bound on the
+/// parameters that symbol's leading lambdas take. A recorded arity above that count would read a
+/// saturated application of the symbol as a strictly partial one
+/// (`is_global_lambda_strictly_partially_applied_to_names`), and `let_elimination` would eliminate
+/// a `let` that has to stay.
+fn assert_recorded_arity_holds(sym: &Symbol, global_lambda_to_arity: &Map<FullName, usize>) {
+    let Some(recorded) = global_lambda_to_arity.get(&sym.name) else {
+        return;
+    };
+    let arity = sym.expr.as_ref().unwrap().lam_sequence_arity();
+    assert!(
+        *recorded <= arity,
+        "the arity recorded for `{}` is {}, but its leading lambdas take {}",
+        sym.name.to_string(),
+        recorded,
+        arity
+    );
 }

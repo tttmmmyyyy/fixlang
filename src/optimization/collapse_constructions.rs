@@ -182,7 +182,7 @@ impl<'a> Collapser<'a> {
         arms: &[(Arc<PatternNode>, Arc<ExprNode>)],
         bodies: &[Arc<ExprNode>],
     ) -> Option<Vec<(FullName, usize)>> {
-        let mut selected: Vec<(FullName, usize)> = Vec::with_capacity(bodies.len());
+        let mut payload_and_arm: Vec<(FullName, usize)> = Vec::with_capacity(bodies.len());
         for body in bodies {
             let built = tail(body);
             if !self.is_unboxed_datatype(built.type_.as_ref().unwrap()) {
@@ -190,12 +190,12 @@ impl<'a> Collapser<'a> {
             }
             let (variant, payload) = union_built_by(&built)?;
             let arm = self.arm_for_variant(arms, variant)?;
-            if selected.iter().any(|(_, taken)| *taken == arm) {
+            if payload_and_arm.iter().any(|(_, taken)| *taken == arm) {
                 return None;
             }
-            selected.push((payload, arm));
+            payload_and_arm.push((payload, arm));
         }
-        Some(selected)
+        Some(payload_and_arm)
     }
 
     /// `body` under the binding the arm pattern `pat` makes. A union pattern binds its sub-pattern
@@ -296,6 +296,10 @@ fn set_case_bodies(expr: &Arc<ExprNode>, bodies: Vec<Arc<ExprNode>>) -> Arc<Expr
 }
 
 impl<'a> ExprVisitor for Collapser<'a> {
+    /// A `let` binding a name to a construction, or to a name already holding one, records what
+    /// that name holds. A `let` taking apart a struct the walk has seen built is replaced by one
+    /// `let` per field the pattern reads, each bound to the name the construction put in that
+    /// field.
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -339,6 +343,9 @@ impl<'a> ExprVisitor for Collapser<'a> {
         StartVisitResult::ReplaceAndRevisit(collapsed)
     }
 
+    /// A `match` on a variant the walk has seen built is replaced by the arm that variant selects,
+    /// bound to the payload the construction holds. A `match` on a case whose every arm builds a
+    /// variant is replaced by that case, with the reading `match` moved into each of its arms.
     fn start_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -363,13 +370,13 @@ impl<'a> ExprVisitor for Collapser<'a> {
         let Some(inner_bodies) = case_bodies(&cond) else {
             return StartVisitResult::VisitChildren;
         };
-        let Some(selected) = self.payload_and_arm_for_each_body(&arms, &inner_bodies) else {
+        let Some(payload_and_arm) = self.payload_and_arm_for_each_body(&arms, &inner_bodies) else {
             return StartVisitResult::VisitChildren;
         };
 
         let moved = inner_bodies
             .iter()
-            .zip(selected.iter())
+            .zip(payload_and_arm.iter())
             .map(|(body, (payload, arm))| {
                 let (pat, arm_body) = &arms[*arm];
                 set_tail(body, Self::bound_arm(pat, &tail(body), payload, arm_body))
@@ -378,6 +385,8 @@ impl<'a> ExprVisitor for Collapser<'a> {
         StartVisitResult::ReplaceAndRevisit(set_case_bodies(&cond, moved))
     }
 
+    /// A struct construction holding an expression in a field is replaced by that construction
+    /// under a `let` per such field, so that every field holds a name a reader can be given.
     fn start_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -412,6 +421,10 @@ impl<'a> ExprVisitor for Collapser<'a> {
             .fold(named, |value, (pat, expr)| expr_let_typed(pat, expr, value));
         StartVisitResult::ReplaceAndRevisit(under_bindings)
     }
+
+    // `ExprVisitor` declares every method without a default, so the rest of the methods are listed
+    // here and passed through: the children are visited, and the expression itself is left as it
+    // is. The reading is done as the walk starts a node, in the three methods above.
 
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
