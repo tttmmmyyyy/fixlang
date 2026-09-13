@@ -53,7 +53,7 @@ const INLINE_COST_THRESHOLD: i32 = 30;
 /// A symbol naming more globals than `MAX_ROUNDS` rounds of this can pay for keeps the remainder as
 /// calls. An arithmetic operator is three nodes, so that bound is around thirty thousand operators
 /// written into one symbol.
-const MAX_SYMBOL_GROWTH_PER_ROUND: usize = 10000;
+const MAX_NODES_SUBSTITUTED_PER_ROUND: usize = 10000;
 
 /// How many times `run` rewrites the program before it stops asking for more.
 ///
@@ -64,7 +64,7 @@ const MAX_SYMBOL_GROWTH_PER_ROUND: usize = 10000;
 /// settle within five, and a chain 500 long within eleven.
 ///
 /// Ten covers what a program of any ordinary depth needs. What a cycle costs across those rounds is
-/// bounded by `MAX_SYMBOL_GROWTH_PER_ROUND` rather than by this number.
+/// bounded by `MAX_NODES_SUBSTITUTED_PER_ROUND` rather than by this number.
 const MAX_ROUNDS: usize = 10;
 
 /// Substitute the definitions of globals into the places that name them, round after round until the
@@ -126,8 +126,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             continue;
         }
 
-        // Traverse the expression and inline the symbol.
-        let res = inliner.inline_symbol(&sym.expr.as_ref().unwrap());
+        let res = inliner.substitute_into(&sym.expr.as_ref().unwrap());
 
         if res.changed {
             // If inlining was done, inline application.
@@ -171,7 +170,7 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
 
         // Count what a copy of the expression costs the compiler, which is every node of it, the
         // kinds `complexity` values at nothing included.
-        cost.nodes = expr.node_count();
+        cost.node_count = expr.node_count();
 
         // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`. An
         // expression that takes no parameter is the operation itself, and a copy of it costs what
@@ -221,7 +220,7 @@ struct InlineCost {
     /// The nodes the expression holds, which is what a copy of it costs the compiler. `complexity`
     /// answers what it costs the program instead, and values at nothing the nodes that generate
     /// nothing.
-    nodes: usize,
+    node_count: usize,
     /// Does the symbol's expression name the symbol itself?
     is_self_recursive: bool,
     /// Is the top-level construct a lambda expression?
@@ -242,7 +241,7 @@ impl InlineCost {
         InlineCost {
             use_count: 0,
             complexity: 0,
-            nodes: 0,
+            node_count: 0,
             is_self_recursive: false,
             is_lambda: false,
             is_llvm_lam: false,
@@ -633,19 +632,19 @@ struct Inliner<'c> {
     /// The symbols of the program, holding the bodies to put at the names.
     symbols: Map<FullName, Symbol>,
     /// How many nodes the symbol being traversed may still gain this round, against
-    /// `MAX_SYMBOL_GROWTH_PER_ROUND`. `inline_symbol` sets it before each symbol, and every
+    /// `MAX_NODES_SUBSTITUTED_PER_ROUND`. `substitute_into` sets it before each symbol, and every
     /// substitution spends the nodes of the body it copies. The subtraction that spends it is also
     /// the test: a body larger than what is left is refused.
     budget: usize,
-    /// Whether the round refused a substitution for want of budget.
+    /// Whether the traversal of the symbol refused a substitution for want of budget.
     refused_for_budget: bool,
 }
 
 impl<'c> Inliner<'c> {
     /// Substitute into `expr` the body of each global it names that its cost allows, letting it
-    /// gain at most `MAX_SYMBOL_GROWTH_PER_ROUND` nodes.
-    fn inline_symbol(&mut self, expr: &Arc<ExprNode>) -> EndVisitResult {
-        self.budget = MAX_SYMBOL_GROWTH_PER_ROUND;
+    /// gain at most `MAX_NODES_SUBSTITUTED_PER_ROUND` nodes.
+    fn substitute_into(&mut self, expr: &Arc<ExprNode>) -> EndVisitResult {
+        self.budget = MAX_NODES_SUBSTITUTED_PER_ROUND;
         self.refused_for_budget = false;
         self.traverse(expr)
     }
@@ -656,14 +655,14 @@ impl<'c> Inliner<'c> {
     /// # Arguments
     /// * `name` - The symbol whose expression would be copied.
     fn take_budget_for(&mut self, name: &FullName) -> bool {
-        let nodes = self.costs.get(name).nodes;
+        let node_count = self.costs.get(name).node_count;
         assert!(
-            nodes > 0,
+            node_count > 0,
             "the body of `{}` is about to be copied while its node count reads 0; \
              `calculate_inline_costs` counts the nodes of every symbol the program defines",
             name.to_string()
         );
-        let Some(left) = self.budget.checked_sub(nodes) else {
+        let Some(left) = self.budget.checked_sub(node_count) else {
             self.refused_for_budget = true;
             return false;
         };

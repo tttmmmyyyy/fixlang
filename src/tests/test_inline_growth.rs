@@ -67,7 +67,7 @@ mod tests {
     /// stops on its own: each global is small enough to be put where it is called, and none of them
     /// calls itself.
     #[test]
-    fn test_a_ring_of_one_line_globals_compiles() {
+    fn test_a_ring_of_one_expression_globals_compiles() {
         let mut source = r#"
         module Main;
 
