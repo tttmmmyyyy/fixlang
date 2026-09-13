@@ -9,12 +9,8 @@ use crate::error::Errors;
 use crate::misc::{collect_results, grow_stack, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
-use core::panic;
 use serde::{Deserialize, Serialize};
-use std::{
-    sync::{Arc, Mutex},
-    vec,
-};
+use std::sync::{Arc, Mutex};
 
 // The ways of apply a function to an argument in source code.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]

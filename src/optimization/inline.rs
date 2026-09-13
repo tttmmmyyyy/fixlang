@@ -2,7 +2,6 @@
 Inlining optimization.
 */
 
-use super::application_inlining;
 use crate::{
     ast::{
         expr::ExprNode,
@@ -11,7 +10,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
-    optimization::uncurry::is_std_fix,
+    optimization::{application_inlining, uncurry::is_std_fix},
 };
 use std::{mem, sync::Arc};
 
