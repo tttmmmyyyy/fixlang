@@ -345,10 +345,7 @@ mod integration_tests {
         let mut reached: Set<&'a str> = roots.iter().copied().collect();
         let mut queue = roots;
         while let Some(name) = queue.pop() {
-            let body = bodies[name];
-            for token in body.split(|c: char| {
-                !(c.is_alphanumeric() || c == '_' || c == ':' || c == '#' || c == '@')
-            }) {
+            for token in names_in(bodies[name], &[]) {
                 if bodies.contains_key(token) && reached.insert(token) {
                     queue.push(token);
                 }
@@ -783,14 +780,13 @@ mod integration_tests {
         let dump = build_run_and_read_rc_ir(&project_dir, "max", MONADIC_COMBINATOR_OUTPUT);
 
         let bodies = function_bodies(&dump);
-        let mut copies = bodies
+        let copies = bodies
             .keys()
             .copied()
             .filter(|name| {
                 name.starts_with("Main::range_fold_m#") && name.contains(CLOSURE_SPEC_SUFFIX)
             })
             .collect::<Vec<_>>();
-        copies.sort();
         assert!(
             !copies.is_empty(),
             "`range_fold_m` should be too large for the inliner to substitute at its call site, so \
