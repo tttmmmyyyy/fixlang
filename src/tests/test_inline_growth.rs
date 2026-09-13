@@ -10,13 +10,35 @@ mod tests {
     use crate::tests::test_util::build_within_and_run;
     use std::time::Duration;
 
-    /// Three globals calling each other in a ring, each carrying two thousand renamings, compile
-    /// and answer. Without a ceiling on the nodes a symbol may reach, the rewriting doubles each of
-    /// them every round until the compiler exhausts its stack and aborts; with one it builds in
-    /// under a second.
+    /// How many renamings each member of the ring carries. A renaming generates no code, so the
+    /// measure that decides whether to inline reads such a body as small however many it holds.
+    const RENAMINGS_PER_GLOBAL: usize = 2000;
+
+    /// The entry point standing over a ring of globals named `f`, `g` and `h`. The command line
+    /// decides the branch, so the call to the ring stands in the program and the run never takes
+    /// it: what is under test is that the compiler arrives at a program at all.
+    const MAIN_CALLING_THE_RING: &str = r#"
+        main : IO ();
+        main = (
+            let args = *IO::get_args;
+            if args.@size > 100 { println $ f(0).to_string } else { println $ "reached" }
+        );
+        "#;
+
+    /// Builds `source` at `-O max` and runs it, asserting that it reached the branch
+    /// `MAIN_CALLING_THE_RING` takes. Without a ceiling on the nodes a symbol may gain, the
+    /// rewriting doubles each member of the ring every round until the compiler exhausts its stack
+    /// and aborts; with one the build finishes in under a second.
     ///
-    /// The ring is reached only through a condition the argument count decides, so the program
-    /// never calls it; what is under test is that the compiler arrives at a program at all.
+    /// # Arguments
+    /// * `description` - what is being compiled, as a phrase that reads after "compiling".
+    fn assert_ring_compiles_and_runs(source: &str, description: &str) {
+        let output = build_within_and_run(source, "max", Duration::from_secs(60), description);
+        assert_eq!(output, "reached");
+    }
+
+    /// Three globals calling each other in a ring, each carrying `RENAMINGS_PER_GLOBAL` renamings,
+    /// compile and answer.
     #[test]
     fn test_a_ring_of_globals_carrying_renamings_compiles() {
         let mut source = "module Main;\n\n".to_string();
@@ -25,28 +47,20 @@ mod tests {
                 "{} : I64 -> I64;\n{} = |x| (\n    let a0 = x;\n",
                 name, name
             );
-            for i in 1..2000 {
+            for i in 1..RENAMINGS_PER_GLOBAL {
                 source += &format!("    let a{} = a{};\n", i, i - 1);
             }
-            source += &format!("    {}(a1999)\n);\n\n", next);
+            source += &format!("    {}(a{})\n);\n\n", next, RENAMINGS_PER_GLOBAL - 1);
         }
-        source += r#"
-        main : IO ();
-        main = (
-            // The command line decides the branch, so the call to the ring stands in the program
-            // and the run never takes it.
-            let args = *IO::get_args;
-            if args.@size > 100 { println $ f(0).to_string } else { println $ "reached" }
-        );
-        "#;
+        source += MAIN_CALLING_THE_RING;
 
-        let output = build_within_and_run(
+        assert_ring_compiles_and_runs(
             &source,
-            "max",
-            Duration::from_secs(60),
-            "a ring of three globals, each carrying two thousand renamings",
+            &format!(
+                "a ring of three globals, each carrying {} renamings",
+                RENAMINGS_PER_GLOBAL
+            ),
         );
-        assert_eq!(output.trim(), "reached");
     }
 
     /// The same ring with bodies of one expression apiece, which is the smallest shape that never
@@ -54,7 +68,7 @@ mod tests {
     /// calls itself.
     #[test]
     fn test_a_ring_of_one_line_globals_compiles() {
-        let source = r#"
+        let mut source = r#"
         module Main;
 
         f : I64 -> I64;
@@ -63,22 +77,10 @@ mod tests {
         g = |x| h(x);
         h : I64 -> I64;
         h = |x| f(x);
+        "#
+        .to_string();
+        source += MAIN_CALLING_THE_RING;
 
-        main : IO ();
-        main = (
-            // The command line decides the branch, so the call to the ring stands in the program
-            // and the run never takes it.
-            let args = *IO::get_args;
-            if args.@size > 100 { println $ f(0).to_string } else { println $ "reached" }
-        );
-        "#;
-
-        let output = build_within_and_run(
-            &source,
-            "max",
-            Duration::from_secs(60),
-            "a ring of three globals of one expression apiece",
-        );
-        assert_eq!(output.trim(), "reached");
+        assert_ring_compiles_and_runs(&source, "a ring of three globals of one expression apiece");
     }
 }

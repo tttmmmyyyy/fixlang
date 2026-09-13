@@ -1111,6 +1111,13 @@ impl ExprNode {
         })
     }
 
+    /// How many nodes this expression tree holds, this one included.
+    pub fn node_count(&self) -> usize {
+        let mut count = 0;
+        self.walk_nodes(&mut |_| count += 1);
+        count
+    }
+
     /// Visit every node of this expression tree, this one included. The tree's depth follows the
     /// user's program, so the walk runs on a stack grown on demand.
     pub fn walk_nodes<F: FnMut(&ExprNode)>(&self, f: &mut F) {

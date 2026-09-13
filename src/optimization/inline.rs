@@ -23,7 +23,10 @@ use std::{mem, sync::Arc};
 /// exceed it, as reference counting and the bounds checks still to be inserted feed them too.
 const INLINE_COST_THRESHOLD: i32 = 30;
 
-/// The nodes one round may add to a symbol's expression by substituting into it.
+/// The nodes one round of substitution may add to a symbol's expression.
+///
+/// `application_inlining` runs on what a round of substitution leaves and rewrites it, so what the
+/// symbol finally holds is this bound and what that pass makes of it.
 ///
 /// This bounds a different quantity from `INLINE_COST_THRESHOLD`, and the two are not comparable.
 /// That one weighs what a copy of a body costs the program that runs: a `let` binding one name to
@@ -97,6 +100,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         costs: &costs,
         symbols: symbols.clone(),
         budget: 0,
+        refused_for_budget: false,
     };
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let root_value_names = prg.root_value_names();
@@ -122,21 +126,19 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             continue;
         }
 
-        // Traverse the expression and inline the symbol, which may gain
-        // `MAX_SYMBOL_GROWTH_PER_ROUND` nodes doing so.
-        inliner.budget = MAX_SYMBOL_GROWTH_PER_ROUND;
-        let res = inliner.traverse(&sym.expr.as_ref().unwrap());
+        // Traverse the expression and inline the symbol.
+        let res = inliner.inline_symbol(&sym.expr.as_ref().unwrap());
 
         if res.changed {
             // If inlining was done, inline application.
             changed = true;
             sym.expr = Some(res.expr);
             application_inlining::run_on_symbol(&mut sym);
-        } else {
-            // A round that substituted nothing has reached the symbol's end state, a round that
-            // refused one for want of budget included. Spending any of the budget would have made
-            // the round a change, so a round that spent none refused a body larger than the whole
-            // budget, and a body only grows from one round to the next.
+        } else if !inliner.refused_for_budget {
+            // A round that substituted nothing and refused nothing has reached the symbol's end
+            // state. A round that refused one is asked again next round instead: the body it could
+            // not afford may come back smaller, since `application_inlining` runs on every symbol a
+            // round changes and rewrites what the substitution left.
             stable_symbols.insert(name.clone());
         }
 
@@ -168,12 +170,8 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
         let cost = costs.get_mut(name);
 
         // Count what a copy of the expression costs the compiler, which is every node of it, the
-        // kinds `complexity` values at nothing included. `walk_nodes` reaches every node by
-        // construction, so a kind of expression added later is counted without anyone remembering
-        // to.
-        let mut nodes = 0;
-        expr.walk_nodes(&mut |_| nodes += 1);
-        cost.nodes = nodes;
+        // kinds `complexity` values at nothing included.
+        cost.nodes = expr.node_count();
 
         // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`. An
         // expression that takes no parameter is the operation itself, and a copy of it costs what
@@ -635,20 +633,38 @@ struct Inliner<'c> {
     /// The symbols of the program, holding the bodies to put at the names.
     symbols: Map<FullName, Symbol>,
     /// How many nodes the symbol being traversed may still gain this round, against
-    /// `MAX_SYMBOL_GROWTH_PER_ROUND`. `run_one` sets it before each symbol, and every substitution
-    /// spends the nodes of the body it copies. The subtraction that spends it is also the test: a
-    /// body larger than what is left is refused.
+    /// `MAX_SYMBOL_GROWTH_PER_ROUND`. `inline_symbol` sets it before each symbol, and every
+    /// substitution spends the nodes of the body it copies. The subtraction that spends it is also
+    /// the test: a body larger than what is left is refused.
     budget: usize,
+    /// Whether the round refused a substitution for want of budget.
+    refused_for_budget: bool,
 }
 
 impl<'c> Inliner<'c> {
+    /// Substitute into `expr` the body of each global it names that its cost allows, letting it
+    /// gain at most `MAX_SYMBOL_GROWTH_PER_ROUND` nodes.
+    fn inline_symbol(&mut self, expr: &Arc<ExprNode>) -> EndVisitResult {
+        self.budget = MAX_SYMBOL_GROWTH_PER_ROUND;
+        self.refused_for_budget = false;
+        self.traverse(expr)
+    }
+
     /// Whether a copy of `name`'s expression fits in what the symbol being traversed may still gain
     /// this round, and spends it where it does.
     ///
-    /// # Parameters
+    /// # Arguments
     /// * `name` - The symbol whose expression would be copied.
     fn take_budget_for(&mut self, name: &FullName) -> bool {
-        let Some(left) = self.budget.checked_sub(self.costs.get(name).nodes) else {
+        let nodes = self.costs.get(name).nodes;
+        assert!(
+            nodes > 0,
+            "the body of `{}` is about to be copied while its node count reads 0; \
+             `calculate_inline_costs` counts the nodes of every symbol the program defines",
+            name.to_string()
+        );
+        let Some(left) = self.budget.checked_sub(nodes) else {
+            self.refused_for_budget = true;
             return false;
         };
         self.budget = left;
