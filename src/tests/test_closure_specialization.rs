@@ -249,11 +249,11 @@ mod integration_tests {
             .collect()
     }
 
-    /// The names in `dump` carrying all of `needles`, deduplicated. A name stands in the dump
-    /// wherever the program mentions it — a function's own line, a call, or the type of a capture
-    /// list named after the copy that receives it.
-    fn names_in<'a>(dump: &'a str, needles: &[&str]) -> Vec<&'a str> {
-        let mut names = dump
+    /// The names in `text` carrying all of `needles`, deduplicated. A name stands wherever the
+    /// program mentions it — a function's own line, a call, or the type of a capture list named
+    /// after the copy that receives it.
+    fn names_in<'a>(text: &'a str, needles: &[&str]) -> Vec<&'a str> {
+        let mut names = text
             .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '#' || c == '@'))
             .filter(|token| needles.iter().all(|needle| token.contains(needle)))
             .collect::<Vec<_>>();
@@ -531,13 +531,13 @@ mod integration_tests {
              if their identity survived both the cycle and the swap. The dump names: {:?}",
             copies_of(&dump, "Main::")
         );
-        let apply_twice = copies_of(&dump, "Main::apply_twice#");
+        let apply_twice_copies = copies_of(&dump, "Main::apply_twice#");
         assert!(
-            apply_twice.len() >= 2,
+            apply_twice_copies.len() >= 2,
             "`apply_twice` is called with each of the two closures in turn, so it should have a \
              copy per closure. The dump names {}: {:?}",
-            apply_twice.len(),
-            apply_twice
+            apply_twice_copies.len(),
+            apply_twice_copies
         );
         let copies = copies_of(&dump, "Main::");
         assert!(
