@@ -14023,8 +14023,8 @@ main = (
     test_source(source, Configuration::develop_mode());
 }
 
-/// Verifies the other direction: a trait implemented for a type written as a type alias, whose
-/// associated type line names the type the alias stands for.
+/// Verifies that a trait may be implemented for a type written as a type alias, with the
+/// associated type line naming the type the alias stands for.
 #[test]
 pub fn test_trait_impl_head_written_as_type_alias() {
     let source = r#"
@@ -14050,4 +14050,30 @@ main = (
 );
     "#;
     test_source(source, Configuration::develop_mode());
+}
+
+/// A write to the bytes of a global string leaves the global's own bytes alone.
+///
+/// The body of `greeting` is built once and the global holds it, so `get_bytes` hands the same
+/// array to every reader and a write to it clones. The test reads both bytes, so a wrong answer
+/// fails it as loudly as a write that never landed.
+///
+/// What it refuses is a write through one reader of a global reaching another reader of it.
+#[test]
+pub fn test_a_write_to_the_bytes_of_a_global_string_leaves_the_global_alone() {
+    let source = r#"
+            module Main;
+
+            greeting : String;
+            greeting = "hello";
+
+            main : IO ();
+            main = (
+                let edited = greeting.get_bytes.set(0, 'H');
+                assert_eq(|_|"fail: the write did not land", edited.@(0), 'H');;
+                assert_eq(|_|"fail: the global's own bytes were overwritten", greeting.get_bytes.@(0), 'h');;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
 }
