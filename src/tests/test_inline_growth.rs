@@ -27,9 +27,7 @@ mod tests {
         "#;
 
     /// Builds `source` at `-O max` and runs it, asserting that it reached the branch
-    /// `MAIN_CALLING_THE_RING` takes. Without a ceiling on the nodes a symbol may gain, the
-    /// rewriting doubles each member of the ring every round until the compiler exhausts its stack
-    /// and aborts; with one the build finishes in under a second.
+    /// `MAIN_CALLING_THE_RING` takes.
     ///
     /// # Arguments
     /// * `description` - what is being compiled, as a phrase that reads after "compiling".
@@ -39,7 +37,9 @@ mod tests {
     }
 
     /// Three globals calling each other in a ring, each carrying `RENAMINGS_PER_GLOBAL` renamings,
-    /// compile and answer.
+    /// compile and answer. With the bound on what a round may substitute lifted, the rewriting
+    /// doubles each member every round until the compiler exhausts its stack and aborts; with the
+    /// bound the build finishes in a second and a half.
     #[test]
     fn test_a_ring_of_globals_carrying_renamings_compiles() {
         let mut source = "module Main;\n\n".to_string();
@@ -66,7 +66,9 @@ mod tests {
 
     /// The same ring with bodies of one expression apiece, which is the smallest shape that never
     /// stops on its own: each global is small enough to be put where it is called, and none of them
-    /// calls itself.
+    /// calls itself. What holds this one still is `MAX_ROUNDS`, which the ring reaches at 4,099
+    /// nodes without ever asking for more than a round may substitute, so it compiles with the
+    /// bound lifted as well.
     #[test]
     fn test_a_ring_of_one_expression_globals_compiles() {
         let mut source = r#"
