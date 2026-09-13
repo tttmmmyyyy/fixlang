@@ -334,11 +334,9 @@ impl ObjectFieldType {
             .build_load(counter_type, counter_ptr, "counter_val")
             .unwrap()
             .into_int_value();
-        // A count the caller computed as a difference can come out negative, and `SGE` ends the
-        // loop at once there; `EQ` would step past it and walk the heap without bound.
         let is_end = gc
             .builder()
-            .build_int_compare(IntPredicate::SGE, counter_val, size, "is_end")
+            .build_int_compare(IntPredicate::EQ, counter_val, size, "is_end")
             .unwrap();
         gc.builder()
             .build_conditional_branch(is_end, after_loop_bb, loop_body_bb)
@@ -388,6 +386,28 @@ impl ObjectFieldType {
     /// # Returns
     /// The address of the first element after the hole, and how many elements follow it.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
+    /// `count` where it is positive, and zero where the subtraction that produced it came out
+    /// negative.
+    ///
+    /// A traversal ends when its counter reaches the count it was given, so a negative one is
+    /// never reached and the traversal walks past the end of the buffer without stopping. Only a
+    /// count computed as a difference can arrive negative, so it is clamped where it is
+    /// subtracted rather than where every traversal tests it.
+    fn count_at_least_zero<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        count: IntValue<'c>,
+    ) -> IntValue<'c> {
+        let zero = count.get_type().const_zero();
+        let is_positive = gc
+            .builder()
+            .build_int_compare(IntPredicate::SGT, count, zero, "count_is_positive")
+            .unwrap();
+        gc.builder()
+            .build_select(is_positive, count, zero, "count_at_least_zero")
+            .unwrap()
+            .into_int_value()
+    }
+
     fn array_buf_after_hole<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         elem_basic_ty: BasicTypeEnum<'c>,
@@ -403,6 +423,8 @@ impl ObjectFieldType {
             .builder()
             .build_int_sub(size, after_hole, "count_after_hole")
             .unwrap();
+        // A hole one past the last element leaves no tail, and the subtraction says -1.
+        let tail_count = Self::count_at_least_zero(gc, tail_count);
         (tail_buffer, tail_count)
     }
 
@@ -478,6 +500,8 @@ impl ObjectFieldType {
             .builder()
             .build_int_sub(end, begin, "array_slice_count")
             .unwrap();
+        // A range whose end sits before its begin holds no element.
+        let count = Self::count_at_least_zero(gc, count);
         Self::traverse_array_range(gc, slice_begin, count, elem_ty, work_type, state);
     }
 
