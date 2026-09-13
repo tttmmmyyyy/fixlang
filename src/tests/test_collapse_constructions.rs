@@ -159,6 +159,23 @@ mod integration_tests {
             .collect()
     }
 
+    /// The functions of `dump` lifted out of `main` that take a capture list and an `I64` and answer
+    /// an `I64`: the functions a chain of iterators over `I64` carries, each standing as a function
+    /// of its own.
+    ///
+    /// The IO plumbing is lifted out of `main` as well, and each of those takes its capture list
+    /// alone and answers the action it wraps, so asking for the element on both sides leaves them
+    /// out.
+    fn carried_functions(dump: &str) -> Vec<&str> {
+        dump.lines()
+            .filter(|line| line.starts_with("fn Main::main") && line.ends_with(") -> Std::I64:"))
+            .filter(|line| {
+                let params = parameter_list(line);
+                params.contains(CAP_LIST_PREFIX) && params.contains("Std::I64")
+            })
+            .collect()
+    }
+
     /// A chain of two `map`s hands the fold two functions, each in a field of a struct that is in a
     /// field of the next, and a third as the fold's own operation. Reading each construction where
     /// the fold takes it apart is what makes all three arguments, so the fold receives three capture
@@ -174,6 +191,28 @@ mod integration_tests {
             "the fold should receive the chain's two functions and its own operation as capture \
              lists, but the function taking the most of them takes {}",
             known_functions
+        );
+    }
+
+    /// Neither function the chain carries stands as a function of its own. Reading each construction
+    /// where the fold takes it apart binds the function a field holds to a name and hands the fold
+    /// that name, and the reduction that follows puts the body of each where its one call stood.
+    /// Left standing, each is a lambda bound to a name and applied once, which the program builds
+    /// and calls through instead of running the body where it is.
+    ///
+    /// The dump is what this asserts against because the program cannot observe it: the fold answers
+    /// the same either way.
+    #[test]
+    pub fn test_the_functions_a_chain_of_iterators_carries_leave_no_function_of_their_own() {
+        let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", NESTED_ITERATORS_OUTPUT);
+
+        let carried = carried_functions(&dump);
+        assert!(
+            carried.is_empty(),
+            "the body of each function the chain carries should stand where the fold calls it, but \
+             these are functions of their own:\n{}",
+            carried.join("\n")
         );
     }
 
