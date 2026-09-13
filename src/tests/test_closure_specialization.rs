@@ -605,8 +605,9 @@ mod integration_tests {
 
     /// A closure a function builds from the one it was given becomes a capture list, and the lambda
     /// that carries it into `fold` holds it in a capture field. Specializing the function narrows
-    /// the inner capture list, so what that field holds changes type — and a field that cannot
-    /// follow has no closure to fall back on, since it is not one.
+    /// the inner capture list, so what that field holds changes type. The field has to follow that
+    /// type: what it holds is a capture list, and the wrap back into a closure is what a field
+    /// holding a closure falls back on.
     #[test]
     pub fn test_a_capture_field_follows_the_value_it_holds() {
         let (_temp_dir, project_dir) = setup_test_env("derived_closure");
