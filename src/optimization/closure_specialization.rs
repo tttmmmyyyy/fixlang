@@ -24,7 +24,7 @@ use crate::{
     graph::Graph,
     misc::{Map, Set},
     optimization::{
-        pull_let,
+        inline_local, pull_let,
         rename::{rename_free_names, substitute_free_name},
     },
     tool::stopwatch::StopWatch,
@@ -576,6 +576,12 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 
     let specializable_slots = Rc::new(find_specializable_slots(&prg.symbols, &lifted.borrow()));
     realize_all(prg, &lifted, specializable_slots, show_build_times);
+
+    // Specializing puts a lambda where a name stood, which leaves it applied to the arguments the
+    // call supplied -- a redex this pass has just written. Reduce them, as `inline::run_one` reduces
+    // what its own substitution leaves: left standing, such a lambda is a closure the program builds
+    // on the heap and calls through, once for every call of the function it was passed to.
+    inline_local::run(prg);
 }
 
 // Lift every lambda in the program to a global function, until lifting one leaves nothing more to
