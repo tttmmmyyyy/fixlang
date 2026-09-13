@@ -65,7 +65,7 @@ pub fn run(prg: &mut Program) {
 
 /// Optimizes the expression of a symbol in place. The symbol has to be one that already has an
 /// expression.
-pub fn run_on_symbol(sym: &mut Symbol) {
+fn run_on_symbol(sym: &mut Symbol) {
     let expr = sym.expr.as_ref().unwrap().clone();
     let expr = run_on_expr(expr);
     sym.expr = Some(expr);
@@ -280,6 +280,10 @@ impl ExprVisitor for AppInliner {
             }
         }
     }
+
+    // `ExprVisitor` declares every method without a default, so the rest of the methods are listed
+    // here and passed through: the children are visited, and the expression itself is left as it
+    // is. The rewriting is done as the walk ends an application, in the method above.
 
     fn start_visit_var(
         &mut self,

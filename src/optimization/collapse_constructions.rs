@@ -21,6 +21,12 @@
 //!
 //! A construction left with no reader goes with it, which is what keeps the reference it holds from
 //! being counted alongside the one the reader now has.
+//!
+//! A symbol the pass rewrote is then run to the fixpoint of `let_elimination` and
+//! `application_inlining`. The name the pass binds a field to is what carries a construction to its
+//! reader, and once the reading is done a name bound to a lambda and called at its one use is a
+//! closure the program would build on the heap; the fixpoint takes that one along with every other
+//! `let` those two reduce.
 
 use crate::{
     ast::{
@@ -34,13 +40,21 @@ use crate::{
     constants::BOUND_FIELD_PREFIX,
     fixstd::builtin::InlineLLVMMakeUnionBody,
     misc::{Map, Set},
-    optimization::{pull_let, unique_local_names},
+    optimization::{
+        inline_local, let_elimination::create_global_lambda_to_arity_map, pull_let,
+        unique_local_names,
+    },
 };
 use std::sync::Arc;
 
 /// Read every construction the code taking it apart can see, over every global.
 pub fn run(prg: &mut Program) {
     let type_env = prg.type_env.clone();
+    // How many parameters each global lambda takes. Neither `Collapser` nor `inline_local`
+    // shortens a symbol's leading run of lambdas, so one map answers for every symbol: `Collapser`
+    // rewrites what a construction's reader sees, and `let_elimination` and `application_inlining`
+    // expose a lambda without removing one.
+    let global_lambda_to_arity = create_global_lambda_to_arity_map(&prg.symbols);
     for (_name, sym) in prg.symbols.iter_mut() {
         let mut expr = with_lets_pulled_out(sym.expr.as_ref().unwrap());
         let mut bound_field_count = 0;
@@ -64,6 +78,12 @@ pub fn run(prg: &mut Program) {
         // they should meet as it was written.
         if read_any {
             sym.expr = Some(expr);
+            // Run the rewritten symbol to the fixpoint of `let_elimination` and
+            // `application_inlining`. Among what they take is the shape this pass writes: a field
+            // holding a lambda is bound to a name, and the reader handed that name calls it, so the
+            // lambda stands bound to a name and applied at its one use — a closure the program
+            // would build on the heap and call through.
+            inline_local::run_on_symbol(sym, &global_lambda_to_arity);
         }
     }
 }
@@ -162,7 +182,7 @@ impl<'a> Collapser<'a> {
         arms: &[(Arc<PatternNode>, Arc<ExprNode>)],
         bodies: &[Arc<ExprNode>],
     ) -> Option<Vec<(FullName, usize)>> {
-        let mut selected: Vec<(FullName, usize)> = Vec::with_capacity(bodies.len());
+        let mut payload_and_arm: Vec<(FullName, usize)> = Vec::with_capacity(bodies.len());
         for body in bodies {
             let built = tail(body);
             if !self.is_unboxed_datatype(built.type_.as_ref().unwrap()) {
@@ -170,12 +190,12 @@ impl<'a> Collapser<'a> {
             }
             let (variant, payload) = union_built_by(&built)?;
             let arm = self.arm_for_variant(arms, variant)?;
-            if selected.iter().any(|(_, taken)| *taken == arm) {
+            if payload_and_arm.iter().any(|(_, taken)| *taken == arm) {
                 return None;
             }
-            selected.push((payload, arm));
+            payload_and_arm.push((payload, arm));
         }
-        Some(selected)
+        Some(payload_and_arm)
     }
 
     /// `body` under the binding the arm pattern `pat` makes. A union pattern binds its sub-pattern
@@ -276,6 +296,10 @@ fn set_case_bodies(expr: &Arc<ExprNode>, bodies: Vec<Arc<ExprNode>>) -> Arc<Expr
 }
 
 impl<'a> ExprVisitor for Collapser<'a> {
+    /// A `let` binding a name to a construction, or to a name already holding one, records what
+    /// that name holds. A `let` taking apart a struct the walk has seen built is replaced by one
+    /// `let` per field the pattern reads, each bound to the name the construction put in that
+    /// field.
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -319,6 +343,9 @@ impl<'a> ExprVisitor for Collapser<'a> {
         StartVisitResult::ReplaceAndRevisit(collapsed)
     }
 
+    /// A `match` on a variant the walk has seen built is replaced by the arm that variant selects,
+    /// bound to the payload the construction holds. A `match` on a case whose every arm builds a
+    /// variant is replaced by that case, with the reading `match` moved into each of its arms.
     fn start_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -343,13 +370,13 @@ impl<'a> ExprVisitor for Collapser<'a> {
         let Some(inner_bodies) = case_bodies(&cond) else {
             return StartVisitResult::VisitChildren;
         };
-        let Some(selected) = self.payload_and_arm_for_each_body(&arms, &inner_bodies) else {
+        let Some(payload_and_arm) = self.payload_and_arm_for_each_body(&arms, &inner_bodies) else {
             return StartVisitResult::VisitChildren;
         };
 
         let moved = inner_bodies
             .iter()
-            .zip(selected.iter())
+            .zip(payload_and_arm.iter())
             .map(|(body, (payload, arm))| {
                 let (pat, arm_body) = &arms[*arm];
                 set_tail(body, Self::bound_arm(pat, &tail(body), payload, arm_body))
@@ -358,6 +385,8 @@ impl<'a> ExprVisitor for Collapser<'a> {
         StartVisitResult::ReplaceAndRevisit(set_case_bodies(&cond, moved))
     }
 
+    /// A struct construction holding an expression in a field is replaced by that construction
+    /// under a `let` per such field, so that every field holds a name a reader can be given.
     fn start_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -392,6 +421,10 @@ impl<'a> ExprVisitor for Collapser<'a> {
             .fold(named, |value, (pat, expr)| expr_let_typed(pat, expr, value));
         StartVisitResult::ReplaceAndRevisit(under_bindings)
     }
+
+    // `ExprVisitor` declares every method without a default, so the rest of the methods are listed
+    // here and passed through: the children are visited, and the expression itself is left as it
+    // is. The reading is done as the walk starts a node, in the three methods above.
 
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)

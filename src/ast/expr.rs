@@ -12,36 +12,44 @@ use crate::printer::Text;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
-// The ways of apply a function to an argument in source code.
+/// How a function application is written in the source code, which is what says which of the
+/// function and the argument was written first.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum AppSourceCodeOrderType {
-    FX,    // `f(x)`
-    XDotF, // `x.f`
+    /// Written `f(x)`, or `f $ x`.
+    FX,
+    /// Written `x.f`.
+    XDotF,
 }
 
+/// One expression of a program, together with what the stages reading it record about this
+/// occurrence: where it was written, and the type inferred for it.
 #[derive(Serialize, Deserialize)]
 pub struct ExprNode {
+    /// The expression this node stands for.
     pub expr: Arc<Expr>,
-    // The free variables of `expr`, calculated when first asked for and kept for later requests.
-    // Building a node around a different `expr` goes through `clone_except_fvs`, which leaves the
-    // set to be calculated again.
+    /// The free variables of `expr`, calculated when first asked for and kept for later requests.
+    /// Building a node around a different `expr` goes through `clone_except_fvs`, which leaves the
+    /// set to be calculated again.
     #[serde(skip)]
     free_vars: Arc<Mutex<Option<Set<FullName>>>>,
+    /// Where the expression is written in the source.
     pub source: Option<Span>,
-    // For lambda expressions: the source of the parameter.
-    // For MakeStruct expressions: the source of the type constructor name.
+    /// For lambda expressions: the source of the parameter.
+    /// For MakeStruct expressions: the source of the type constructor name.
     pub aux_src: Option<Span>,
-    // In an application expression, indicates the order of function and argument in the source code.
-    // In the case of `f(x)` or `f $ x`, it is `FX`, and in the case of `x.f`, it is `XDotF`.
+    /// In an application expression, the order of function and argument in the source code. In the
+    /// case of `f(x)` or `f $ x`, it is `FX`, and in the case of `x.f`, it is `XDotF`.
     pub app_order: AppSourceCodeOrderType,
-    // Indicates whether this is a name generated from index syntax for `act_{field}` functions.
+    /// Whether this is a name generated from index syntax for `act_{field}` functions.
     pub struct_act_func_in_index_syntax: bool,
-    // The (inferred) type of this expression.
+    /// The type inferred for this expression.
     pub type_: Option<Arc<TypeNode>>,
 }
 
 impl ExprNode {
-    // Clone all fields except the set of free variables.
+    /// Every field of this node except the set of free variables, which the new node leaves to be
+    /// calculated again.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_except_fvs(&self) -> ExprNode {
         ExprNode {
@@ -55,7 +63,7 @@ impl ExprNode {
         }
     }
 
-    // Clone all fields.
+    /// Every field of this node, the set of free variables included.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_all(&self) -> Self {
         ExprNode {
@@ -234,7 +242,7 @@ impl ExprNode {
         }
     }
 
-    // The type constructor and fields of a struct construction.
+    /// The type constructor a struct construction names, and the fields it gives values to.
     pub fn destructure_make_struct(
         &self,
     ) -> Option<(Arc<TyCon>, &Vec<(Name, Option<Span>, Arc<ExprNode>)>)> {
@@ -244,8 +252,11 @@ impl ExprNode {
         }
     }
 
-    // `f(x, y, ..., z)` -> `(f, [x, y, ..., z])`
-    // Panics if multivariable function (currently such functions are defined only by the optimization, and not by the user) is found.
+    /// The function a chain of applications calls and the arguments it is given, so `f(x, y, z)`,
+    /// which nests as `f(x)(y)(z)`, answers `(f, [x, y, z])`.
+    ///
+    /// Panics on an expression that is not an application, and on an application carrying more than
+    /// one argument, which the optimization passes write and the source language does not.
     pub fn destructure_app(&self) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
         match &*self.expr {
             Expr::App(func, args) => {
@@ -263,7 +274,8 @@ impl ExprNode {
         }
     }
 
-    // destructure lambda expression to list of variables and body expression
+    /// The parameters a lambda binds and the body they stand in. Panics on an expression that is
+    /// not a lambda.
     pub fn destructure_lam(&self) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
         match &*self.expr {
             Expr::Lam(args, body) => (args.clone(), body.clone()),
@@ -271,16 +283,30 @@ impl ExprNode {
         }
     }
 
-    // If the expression is a sequence of lambda construction, i.e., |args0| |args1| |args0| {body}, then this function returns (vec![args0, args1, args2], {body}).
+    /// The parameters of the sequence of lambdas this expression opens with, one list per lambda,
+    /// and the body that sequence ends in, so `|x| |y, z| {body}` answers `(vec![vec![x], vec![y,
+    /// z]], {body})`. An expression that is not a lambda answers no lists and itself.
     pub fn destructure_lam_sequence(self: &Arc<ExprNode>) -> (Vec<Vec<Arc<Var>>>, Arc<ExprNode>) {
         let mut args = vec![];
         let mut body = self.clone();
         while body.is_lam() {
-            let (args_loc, body_loc) = body.destructure_lam();
-            args.push(args_loc);
-            body = body_loc;
+            let (lam_args, lam_body) = body.destructure_lam();
+            args.push(lam_args);
+            body = lam_body;
         }
         (args, body)
+    }
+
+    /// How many parameters the sequence of lambdas this expression opens with takes in total, so
+    /// `|x| |y, z| {body}` answers three and an expression that is not a lambda answers zero.
+    pub fn lam_sequence_arity(&self) -> usize {
+        let mut arity = 0;
+        let mut expr = self;
+        while let Expr::Lam(params, body) = &*expr.expr {
+            arity += params.len();
+            expr = body;
+        }
+        arity
     }
 
     #[allow(dead_code)]
@@ -807,6 +833,9 @@ impl ExprNode {
         }
     }
 
+    /// This expression with the namespace of every type, type constructor and pattern written in
+    /// it resolved against `ctx`. A name standing for a value is left as it is, and resolved in
+    /// type checking.
     pub fn resolve_namespace(
         self: &Arc<ExprNode>,
         ctx: &mut NameResolutionContext,
@@ -888,6 +917,7 @@ impl ExprNode {
         }
     }
 
+    /// This expression with every type written in it replaced by the type its aliases stand for.
     pub fn resolve_type_aliases(
         self: &Arc<ExprNode>,
         type_env: &TypeEnv,
@@ -974,6 +1004,10 @@ impl ExprNode {
     }
 
     // Find the minimum AST node which includes the specified source code position.
+    /// What the source position `pos` points at inside this expression: the name a variable
+    /// expression writes, a field name of a struct construction, or the type a type annotation or a
+    /// struct construction writes. The walk takes the innermost expression whose span covers `pos`,
+    /// so an expression written with no span answers nothing.
     pub fn find_node_at(self: &Arc<ExprNode>, pos: &SourcePos) -> Option<EndNode> {
         if self.source.is_none() {
             return None;
@@ -1278,17 +1312,17 @@ impl ExprNode {
         self.with_free_vars(|free_vars| free_vars.clone())
     }
 
-    // Does the given name occur free in this expression?
+    /// Does the given name occur free in this expression?
     pub fn has_free_var(&self, name: &FullName) -> bool {
         self.with_free_vars(|free_vars| free_vars.contains(name))
     }
 
-    // Does any local name occur free in this expression?
+    /// Does any local name occur free in this expression?
     pub fn has_free_local_var(&self) -> bool {
         self.with_free_vars(|free_vars| free_vars.iter().any(|name| name.is_local()))
     }
 
-    // Convert all global FullNames to absolute paths.
+    /// This expression with every global name it writes turned into an absolute path.
     pub fn global_to_absolute(&self) -> Arc<ExprNode> {
         let mut node = self.clone_except_fvs();
         node.expr = match &*self.expr {
@@ -1369,7 +1403,8 @@ impl ExprNode {
         Arc::new(node)
     }
 
-    // Get the names which are captured by a lambda expressions.
+    /// The names a lambda expression captures, in the order their text sorts in. Panics on an
+    /// expression that is not a lambda.
     pub fn lambda_cap_names(&self) -> Vec<FullName> {
         assert!(self.is_lam());
 
@@ -1388,23 +1423,37 @@ impl ExprNode {
     }
 }
 
+/// The kinds of expression a program is built out of.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Expr {
+    /// A name standing for a value.
     Var(Arc<Var>),
+    /// An operation written in LLVM IR, holding the names it reads.
     LLVM(Arc<InlineLLVM>),
-    // application of multiple arguments is generated by optimization.
+    /// A function applied to arguments. An application of several arguments is generated by
+    /// optimization.
     App(Arc<ExprNode>, Vec<Arc<ExprNode>>),
-    // lambda of multiple arguments is generated by optimization.
+    /// A function: the parameters it binds, and the body they stand in. A lambda of several
+    /// parameters is generated by optimization.
     Lam(Vec<Arc<Var>>, Arc<ExprNode>),
+    /// A binding: the pattern the bound value is taken apart by, the expression bound to it, and
+    /// the expression evaluated under the binding.
     Let(Arc<PatternNode>, Arc<ExprNode>, Arc<ExprNode>),
+    /// A choice by a condition: the condition, the expression taken where it holds, and the
+    /// expression taken where it does not.
     If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>),
+    /// A choice by a pattern: the expression matched, and each arm as its pattern and the
+    /// expression that arm leads to.
     Match(Arc<ExprNode>, Vec<(Arc<PatternNode>, Arc<ExprNode>)>),
+    /// An expression written with the type it is to have.
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
+    /// An array built out of the elements written in it.
     ArrayLit(Vec<Arc<ExprNode>>),
-    // Struct construction.
-    // Each entry is (field name, optional source span
-    // of just that field name, field value).
+    /// A struct construction: the type constructor, and each entry as the field name, the span of
+    /// just that field name, and the value the field is given.
     MakeStruct(Arc<TyCon>, Vec<(Name, Option<Span>, Arc<ExprNode>)>),
+    /// A call of a C function. `is_ios` says the call is written `FFI_CALL_IOS`, which takes an
+    /// `IOState` alongside the arguments.
     FFICall(
         Name,               /* function name */
         Arc<TyCon>,         /* Return type */
@@ -1413,14 +1462,18 @@ pub enum Expr {
         Vec<Arc<ExprNode>>, /* Arguments */
         bool,               /* is_ios */
     ),
+    /// An expression evaluated for its effect, and the expression the `eval` answers with.
     Eval(Arc<ExprNode>, Arc<ExprNode>),
 }
 
 impl Expr {
+    /// This expression as a node of its own, written at `src`.
     pub fn into_expr_node(self: &Arc<Self>, src: Option<Span>) -> Arc<ExprNode> {
         self.into_expr_node_with_aux_src(src, None)
     }
 
+    /// This expression as a node of its own, written at `src`, with `aux_src` for the parameter of
+    /// a lambda or for the type constructor name of a struct construction.
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn into_expr_node_with_aux_src(
         self: &Arc<Self>,
@@ -1438,8 +1491,8 @@ impl Expr {
         })
     }
 
-    // Stringify expression.
-    // Returns the lines paired with the indent level.
+    /// The expression written back out as source text, as lines paired with the indent level each
+    /// stands at.
     pub fn stringify(&self) -> Text {
         match self {
             Expr::Var(v) => Text::from_string(v.name.to_string()),
@@ -1467,20 +1520,21 @@ impl Expr {
 
                 fun.append_nobreak(args)
             }
-            Expr::Lam(xs, fx) => {
-                let args = format!(
+            Expr::Lam(params, body) => {
+                let params_text = format!(
                     "|{}{}{}| ",
-                    if xs.len() > 1 { "{{" } else { "" },
-                    xs.iter()
-                        .map(|x| x.name.to_string())
+                    if params.len() > 1 { "{{" } else { "" },
+                    params
+                        .iter()
+                        .map(|param| param.name.to_string())
                         .collect::<Vec<_>>()
                         .join(", "),
-                    if xs.len() > 1 { "}}" } else { "" }
+                    if params.len() > 1 { "}}" } else { "" }
                 );
-                fx.expr
+                body.expr
                     .stringify()
                     .brace_if_multiline()
-                    .insert_to_first_line(&args)
+                    .insert_to_first_line(&params_text)
             }
             Expr::Let(p, b, v) => Text::from_str("let ")
                 .append_to_last_line(&p.to_string())
@@ -1554,8 +1608,10 @@ impl Expr {
     }
 }
 
+/// A name a program writes where a value is to stand.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Var {
+    /// The name written, with the namespace it is resolved in.
     pub name: FullName,
 }
 
@@ -1572,7 +1628,7 @@ impl Var {
         Arc::new(ret)
     }
 
-    // Convert all global FullNames to absolute paths.
+    /// This variable with a global name written as an absolute path.
     pub fn global_to_absolute(&self) -> Arc<Self> {
         let mut ret = self.clone();
         ret.name.global_to_absolute();

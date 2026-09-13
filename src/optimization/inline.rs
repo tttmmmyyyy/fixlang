@@ -1,6 +1,17 @@
-/*
-Inlining optimization.
-*/
+//! Put the body of a global where the program names it.
+//!
+//! Putting a body where the name of its global stood takes away a call the program would make, and
+//! leaves the body among the expressions around that name, where the passes below read it.
+//!
+//! What a copy of a global costs, and where it may be put, is what `InlineCost` holds:
+//! `may_be_inlined_at_non_call_site` answers for the places a global is named, and
+//! `may_be_inlined_at_call_site` for the places it is called. A round of substitution leaves a
+//! lambda applied where it stands, so a symbol the round rewrote is run to the fixpoint of
+//! `let_elimination` and `application_inlining` (`inline_local`), which reduces that shape.
+//!
+//! Globals that name each other in a cycle never reach a program that stops changing, which is why
+//! the rewriting is bounded: `MAX_ROUNDS` bounds the rounds, and `MAX_NODES_SUBSTITUTED_PER_ROUND`
+//! bounds what one round adds to a symbol.
 
 use crate::{
     ast::{
@@ -10,7 +21,9 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
-    optimization::{application_inlining, uncurry::is_std_fix},
+    optimization::{
+        inline_local, let_elimination::create_global_lambda_to_arity_map, uncurry::is_std_fix,
+    },
 };
 use std::{mem, sync::Arc};
 
@@ -24,8 +37,8 @@ const INLINE_COST_THRESHOLD: i32 = 30;
 
 /// The nodes one round of substitution may add to a symbol's expression.
 ///
-/// `application_inlining` runs after a round of substitution and rewrites what it leaves, so the
-/// symbol ends the round at what that pass makes of the nodes this bound let in.
+/// `inline_local` runs after a round of substitution and reduces what it leaves, so the symbol ends
+/// the round at what that pass makes of the nodes this bound let in.
 ///
 /// The bound is counted in `node_count`, where `INLINE_COST_THRESHOLD` is counted in `complexity`,
 /// and the two counts answer different questions. `complexity` weighs what a copy of a body costs
@@ -106,6 +119,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         budget: 0,
         refused_for_budget: false,
     };
+    let global_lambda_to_arity = create_global_lambda_to_arity_map(&symbols);
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let root_value_names = prg.root_value_names();
 
@@ -135,11 +149,11 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         if res.changed {
             changed = true;
             sym.expr = Some(res.expr);
-            application_inlining::run_on_symbol(&mut sym);
+            inline_local::run_on_symbol(&mut sym, &global_lambda_to_arity);
         } else if !inliner.refused_for_budget {
             // A round that substituted nothing and refused nothing has reached the symbol's end
             // state. A symbol whose round refused a body it could not afford is asked again next
-            // round: the body may come back smaller, since `application_inlining` rewrites what the
+            // round: the body may come back smaller, since `inline_local` reduces what the
             // substitution left in every symbol the round changed.
             stable_symbols.insert(name.clone());
         }
@@ -212,8 +226,8 @@ struct InlineCost {
     /// The number of times the program names the symbol.
     use_count: usize,
     /// What a copy of the symbol's expression costs the program that runs: one for each node that
-    /// generates code. A local variable, a type annotation, an `eval`, and a `let` or a `match`
-    /// that only renames a local count nothing.
+    /// generates code. A local variable, a type annotation, an `eval`, a `let` whose pattern is one
+    /// local name, and a `match` that only renames a local count nothing.
     complexity: usize,
     /// The number of nodes the expression holds, which is what a copy of it costs the compiler.
     /// `complexity` answers what a copy costs the program that runs, where a node that generates no
@@ -408,6 +422,11 @@ impl InlineCostCalculator {
 }
 
 impl ExprVisitor for InlineCostCalculator {
+    // `ExprVisitor` declares every method without a default. Each `start_visit_*` here visits the
+    // children and leaves the expression as it is; the measuring is done as the walk ends a node.
+    // Each `end_visit_*` also records in `is_lambda` whether the node it ends is a lambda, which
+    // answers for the whole expression once the walk has ended its top-level node.
+
     fn start_visit_var(
         &mut self,
         _expr: &Arc<ExprNode>,
@@ -416,6 +435,8 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts a global name as one unit of `complexity` and as one use of the symbol it names. A
+    /// local name counts nothing: it generates no code, and the uses counted are uses of globals.
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let var_name = &expr.get_var().name;
         if var_name.is_global() {
@@ -435,6 +456,8 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts the inline-LLVM operation as one unit of `complexity`, and each global name free in
+    /// it as one use of the symbol it names.
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.complexity += 1;
         self.is_lambda = false;
@@ -454,6 +477,7 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts the application as one unit of `complexity`.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.complexity += 1;
         self.is_lambda = false;
@@ -468,6 +492,7 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts the lambda as one unit of `complexity`.
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.complexity += 1;
         self.is_lambda = true;
@@ -482,8 +507,10 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts the `let` as one unit of `complexity`, except where its pattern is one local name:
+    /// such a `let` binds the name to the value and generates no code of its own.
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        // A `let` of the form `let {local_var0} = {local_var1} in (...)` counts nothing.
+        // A `let` of the form `let {local_var0} = (...) in (...)` counts nothing.
         self.complexity += 1;
         let pat = expr.get_let_pat();
         if pat.is_var() && pat.get_var().name.is_local() {
@@ -501,6 +528,7 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts the `if` as one unit of `complexity`.
     fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.complexity += 1;
         self.is_lambda = false;
@@ -515,6 +543,8 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts the `match` as one unit of `complexity`, except where it only renames a local, which
+    /// generates no code of its own.
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.is_lambda = false;
 
@@ -542,6 +572,7 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// A type annotation generates no code, so it counts nothing.
     fn end_visit_tyanno(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -561,6 +592,7 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts the struct construction as one unit of `complexity`.
     fn end_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -579,6 +611,7 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts the array literal as one unit of `complexity`.
     fn end_visit_array_lit(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -597,6 +630,7 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts the FFI call as one unit of `complexity`.
     fn end_visit_ffi_call(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -615,6 +649,8 @@ impl ExprVisitor for InlineCostCalculator {
         StartVisitResult::VisitChildren
     }
 
+    /// An `eval` generates no code of its own, so it counts nothing. What it holds is counted as
+    /// the walk reaches it.
     fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.is_lambda = false;
         EndVisitResult::unchanged(expr)
@@ -665,6 +701,10 @@ impl<'c> Inliner<'c> {
 }
 
 impl<'c> ExprVisitor for Inliner<'c> {
+    // `ExprVisitor` declares every method without a default. The substituting is done in
+    // `end_visit_var` and `end_visit_app`; every other method here is passed through, visiting the
+    // children and leaving the expression as it is.
+
     fn start_visit_var(
         &mut self,
         _expr: &Arc<ExprNode>,
@@ -673,6 +713,8 @@ impl<'c> ExprVisitor for Inliner<'c> {
         StartVisitResult::VisitChildren
     }
 
+    /// Replaces a global name with the expression of the symbol it names, where that symbol may be
+    /// inlined wherever it is named and the round's budget covers a copy of it.
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // If the variable is global, then try to inline the variable.
         let var_name = &expr.get_var().name;
@@ -712,6 +754,8 @@ impl<'c> ExprVisitor for Inliner<'c> {
         StartVisitResult::VisitChildren
     }
 
+    /// Replaces the function a call names with the expression of that global, where it may be
+    /// inlined at a call site and the round's budget covers a copy of it.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Judge whether to inline the function at the call site.
         let func = expr.get_app_func();

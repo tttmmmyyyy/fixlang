@@ -120,7 +120,7 @@ mod integration_tests {
             .filter_map(|line| line.strip_prefix("fn "))
             .map(|header| parameter_list(header).matches(CAP_LIST_PREFIX).count())
             .max()
-            .unwrap_or(0)
+            .expect("the RC IR dump names no function")
     }
 
     /// The parameter list of a dumped function header, taken from the parenthesis that opens it to
@@ -129,9 +129,9 @@ mod integration_tests {
     /// A parameter's own type carries parentheses — a function type is written `(a) -> b` — so the
     /// list runs to the parenthesis that brings the nesting back to where it started.
     fn parameter_list(header: &str) -> &str {
-        let Some(open) = header.find('(') else {
-            return "";
-        };
+        let open = header
+            .find('(')
+            .unwrap_or_else(|| panic!("the function header opens no parameter list:\n{}", header));
         let mut depth = 0;
         for (offset, character) in header[open..].char_indices() {
             match character {
@@ -145,7 +145,10 @@ mod integration_tests {
                 _ => {}
             }
         }
-        ""
+        panic!(
+            "the parameter list of the function header stays open:\n{}",
+            header
+        )
     }
 
     /// The functions of `dump` whose name says they are an iterator's `advance`.
@@ -159,6 +162,43 @@ mod integration_tests {
             .collect()
     }
 
+    /// The functions of `dump` lifted out of `main` that take a capture list and an `I64` and answer
+    /// an `I64`: the functions a chain of iterators over `I64` carries, each standing as a function
+    /// of its own.
+    ///
+    /// The IO plumbing is lifted out of `main` as well, and each of those takes its capture list
+    /// alone and answers the action it wraps, so asking for `Std::I64` among the parameters and as
+    /// the result leaves them out.
+    fn carried_functions(dump: &str) -> Vec<&str> {
+        dump.lines()
+            .filter(|line| line.starts_with("fn Main::main") && line.ends_with(") -> Std::I64:"))
+            .filter(|line| {
+                let params = parameter_list(line);
+                params.contains(CAP_LIST_PREFIX) && params.contains("Std::I64")
+            })
+            .collect()
+    }
+
+    /// Builds `case`, checks that it answers `expected_output`, and asserts that `standing` finds
+    /// nothing of `subject` left as a function of its own in the RC IR dump.
+    fn assert_leaves_no_function_of_its_own(
+        case: &str,
+        expected_output: &str,
+        standing: impl Fn(&str) -> Vec<&str>,
+        subject: &str,
+    ) {
+        let (_temp_dir, project_dir) = setup_test_env(case);
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", expected_output);
+
+        let left = standing(&dump);
+        assert!(
+            left.is_empty(),
+            "no {} should stand as a function of its own, but these do:\n{}",
+            subject,
+            left.join("\n")
+        );
+    }
+
     /// A chain of two `map`s hands the fold two functions, each in a field of a struct that is in a
     /// field of the next, and a third as the fold's own operation. Reading each construction where
     /// the fold takes it apart is what makes all three arguments, so the fold receives three capture
@@ -168,61 +208,71 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", NESTED_ITERATORS_OUTPUT);
 
-        let known_functions = most_capture_lists_taken_by_one_function(&dump);
+        let known_function_count = most_capture_lists_taken_by_one_function(&dump);
         assert!(
-            known_functions >= 3,
+            known_function_count >= 3,
             "the fold should receive the chain's two functions and its own operation as capture \
              lists, but the function taking the most of them takes {}",
-            known_functions
+            known_function_count
         );
     }
 
-    /// A chain of two iterators of one type constructor answers the same at every level, so the
-    /// rewrites that flatten it — which hand the fold the value the outer one carries and the value
-    /// the inner one carries, both named after the same field — keep the two apart.
-    /// `filter` walks past the elements its predicate rejects, and that walk is a body of its own, so
-    /// the `advance` handing back an accepted element goes into the loop consuming it.
+    /// Neither function the chain carries stands as a function of its own. Reading each construction
+    /// where the fold takes it apart binds the function a field holds to a name and hands the fold
+    /// that name, and the reduction that follows puts the body of each where its one call stood.
+    /// Left standing, each is a lambda bound to a name and applied once, which the program builds
+    /// and calls through instead of running the body where it is.
+    ///
+    /// The dump is what this asserts against because the program cannot observe it: the fold answers
+    /// the same either way.
+    #[test]
+    pub fn test_the_functions_a_chain_of_iterators_carries_leave_no_function_of_their_own() {
+        assert_leaves_no_function_of_its_own(
+            "nested_iterators",
+            NESTED_ITERATORS_OUTPUT,
+            carried_functions,
+            "function the chain carries",
+        );
+    }
+
+    /// `filter` walks past the elements its predicate rejects, and that walk is a body of its own,
+    /// so the `advance` handing back an accepted element is small enough to go into the loop
+    /// consuming it, and none is left standing.
     #[test]
     pub fn test_the_filter_chain_leaves_no_advance_of_its_own() {
-        let (_temp_dir, project_dir) = setup_test_env("filter_chain");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", FILTER_CHAIN_OUTPUT);
-
-        let advances = advance_functions(&dump);
-        assert!(
-            advances.is_empty(),
-            "no advance of the chain should stand as a function of its own, but these do:\n{}",
-            advances.join("\n")
+        assert_leaves_no_function_of_its_own(
+            "filter_chain",
+            FILTER_CHAIN_OUTPUT,
+            advance_functions,
+            "advance of the chain",
         );
     }
 
     /// The same for `filter_map`, whose walk passes the elements its function declines.
     #[test]
     pub fn test_the_filter_map_chain_leaves_no_advance_of_its_own() {
-        let (_temp_dir, project_dir) = setup_test_env("filter_map_chain");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", FILTER_MAP_CHAIN_OUTPUT);
-
-        let advances = advance_functions(&dump);
-        assert!(
-            advances.is_empty(),
-            "no advance of the chain should stand as a function of its own, but these do:\n{}",
-            advances.join("\n")
+        assert_leaves_no_function_of_its_own(
+            "filter_map_chain",
+            FILTER_MAP_CHAIN_OUTPUT,
+            advance_functions,
+            "advance of the chain",
         );
     }
 
     /// The same for `flatten`, whose walk passes the inner iterators that yield nothing.
     #[test]
     pub fn test_the_flatten_chain_leaves_no_advance_of_its_own() {
-        let (_temp_dir, project_dir) = setup_test_env("flatten_chain");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", FLATTEN_CHAIN_OUTPUT);
-
-        let advances = advance_functions(&dump);
-        assert!(
-            advances.is_empty(),
-            "no advance of the chain should stand as a function of its own, but these do:\n{}",
-            advances.join("\n")
+        assert_leaves_no_function_of_its_own(
+            "flatten_chain",
+            FLATTEN_CHAIN_OUTPUT,
+            advance_functions,
+            "advance of the chain",
         );
     }
 
+    /// A chain of two iterators of one type constructor answers the same at every level, which is
+    /// what says the rewrites that flatten it keep the two apart: they hand the fold the value the
+    /// outer one carries and the value the inner one carries, both named after the same field.
     #[test]
     pub fn test_a_chain_of_two_iterators_of_one_type_answers_the_same() {
         let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
