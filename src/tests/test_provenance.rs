@@ -440,11 +440,11 @@ mod integration_tests {
 
     /// The first argument variable of a `...#borrow(a, b, ...)` call on a dump line.
     fn borrow_call_first_arg(line: &str) -> &str {
-        let after = line
+        let args = line
             .split("#borrow(")
             .nth(1)
             .unwrap_or_else(|| panic!("the line carries no `#borrow(` call:\n{}", line));
-        after.split([',', ')']).next().unwrap().trim()
+        args.split([',', ')']).next().unwrap().trim()
     }
 
     /// Verifies that the retain/release bracket borrow-ification puts around a borrow call is
@@ -466,10 +466,11 @@ mod integration_tests {
         // because nothing between them consumes the array, cancellation removes both, leaving no
         // reference counting on the array in `main`.
         for l in &main {
-            let t = l.trim_start();
+            let trimmed = l.trim_start();
             for op in ["retain", "release"] {
                 assert!(
-                    t != format!("{} {}", op, arr) && !t.starts_with(&format!("{} {} ", op, arr)),
+                    trimmed != format!("{} {}", op, arr)
+                        && !trimmed.starts_with(&format!("{} {} ", op, arr)),
                     "the array {} bracketing the borrow call should have been cancelled:\n{}",
                     op,
                     l
@@ -748,30 +749,32 @@ mod integration_tests {
         // different functions — is that split. Assert both: without the checked version the first
         // write would corrupt the array's other holder, and without the `[unique]` version every
         // iteration would re-check a value already proven unique.
-        let mut checked = vec![];
-        let mut elided = vec![];
+        let mut fns_with_checked_set = vec![];
+        let mut fns_with_elided_set = vec![];
         let mut current_fn = "";
         for line in dump.lines() {
             if line.starts_with("fn ") {
                 current_fn = line;
             } else if line.contains("array_set[unique]") {
-                elided.push(current_fn);
+                fns_with_elided_set.push(current_fn);
             } else if line.contains("array_set(") {
-                checked.push(current_fn);
+                fns_with_checked_set.push(current_fn);
             }
         }
         assert!(
-            !checked.is_empty(),
+            !fns_with_checked_set.is_empty(),
             "the loop version entered with the shared array should keep its check:\n{}",
             dump
         );
         assert!(
-            !elided.is_empty(),
+            !fns_with_elided_set.is_empty(),
             "the loop version reached with the freshly cloned array should drop its check:\n{}",
             dump
         );
         assert!(
-            checked.iter().all(|f| !elided.contains(f)),
+            fns_with_checked_set
+                .iter()
+                .all(|f| !fns_with_elided_set.contains(f)),
             "the checked and the elided set should live in different clones of the loop body, but \
              a function holds both:\n{}",
             dump

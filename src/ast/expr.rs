@@ -276,9 +276,9 @@ impl ExprNode {
         let mut args = vec![];
         let mut body = self.clone();
         while body.is_lam() {
-            let (args_loc, body_loc) = body.destructure_lam();
-            args.push(args_loc);
-            body = body_loc;
+            let (lam_args, lam_body) = body.destructure_lam();
+            args.push(lam_args);
+            body = lam_body;
         }
         (args, body)
     }
@@ -1479,20 +1479,21 @@ impl Expr {
 
                 fun.append_nobreak(args)
             }
-            Expr::Lam(xs, fx) => {
-                let args = format!(
+            Expr::Lam(params, body) => {
+                let params_text = format!(
                     "|{}{}{}| ",
-                    if xs.len() > 1 { "{{" } else { "" },
-                    xs.iter()
-                        .map(|x| x.name.to_string())
+                    if params.len() > 1 { "{{" } else { "" },
+                    params
+                        .iter()
+                        .map(|param| param.name.to_string())
                         .collect::<Vec<_>>()
                         .join(", "),
-                    if xs.len() > 1 { "}}" } else { "" }
+                    if params.len() > 1 { "}}" } else { "" }
                 );
-                fx.expr
+                body.expr
                     .stringify()
                     .brace_if_multiline()
-                    .insert_to_first_line(&args)
+                    .insert_to_first_line(&params_text)
             }
             Expr::Let(p, b, v) => Text::from_str("let ")
                 .append_to_last_line(&p.to_string())

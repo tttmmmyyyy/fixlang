@@ -182,7 +182,7 @@ impl<'a> Collapser<'a> {
         arms: &[(Arc<PatternNode>, Arc<ExprNode>)],
         bodies: &[Arc<ExprNode>],
     ) -> Option<Vec<(FullName, usize)>> {
-        let mut selected: Vec<(FullName, usize)> = Vec::with_capacity(bodies.len());
+        let mut payload_and_arm: Vec<(FullName, usize)> = Vec::with_capacity(bodies.len());
         for body in bodies {
             let built = tail(body);
             if !self.is_unboxed_datatype(built.type_.as_ref().unwrap()) {
@@ -190,12 +190,12 @@ impl<'a> Collapser<'a> {
             }
             let (variant, payload) = union_built_by(&built)?;
             let arm = self.arm_for_variant(arms, variant)?;
-            if selected.iter().any(|(_, taken)| *taken == arm) {
+            if payload_and_arm.iter().any(|(_, taken)| *taken == arm) {
                 return None;
             }
-            selected.push((payload, arm));
+            payload_and_arm.push((payload, arm));
         }
-        Some(selected)
+        Some(payload_and_arm)
     }
 
     /// `body` under the binding the arm pattern `pat` makes. A union pattern binds its sub-pattern
@@ -363,13 +363,13 @@ impl<'a> ExprVisitor for Collapser<'a> {
         let Some(inner_bodies) = case_bodies(&cond) else {
             return StartVisitResult::VisitChildren;
         };
-        let Some(selected) = self.payload_and_arm_for_each_body(&arms, &inner_bodies) else {
+        let Some(payload_and_arm) = self.payload_and_arm_for_each_body(&arms, &inner_bodies) else {
             return StartVisitResult::VisitChildren;
         };
 
         let moved = inner_bodies
             .iter()
-            .zip(selected.iter())
+            .zip(payload_and_arm.iter())
             .map(|(body, (payload, arm))| {
                 let (pat, arm_body) = &arms[*arm];
                 set_tail(body, Self::bound_arm(pat, &tail(body), payload, arm_body))
