@@ -26,7 +26,8 @@
 //   `to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it`
 //
 // Step 1: Generate TyCon `ToIter::to_iter::?it` with kind `* -> *`, type args `[c]`.
-//   (The TyCon's type args are the trait's type variables, not the method's own gen_vars.)
+//   (The TyCon's type args are the trait's type variables, where those of a global value are the
+//   other generalized variables of its scheme.)
 //
 // Step 2: Add global constraints:
 //   QualPredScheme { gen_vars: [c], pred_constraints: [], pred: ?it c : Iterator }
@@ -923,9 +924,8 @@ fn build_wrap_scheme(
 
 /// Wrap an expression in a `#wrap_opaque(...)` application.
 ///
-/// The wrapper App inherits the inner expression's source span so that type
-/// errors raised while type-checking the body are attributed to the
-/// user-written expression rather than appearing without a location.
+/// The wrapper App inherits the inner expression's source span, so that a type error raised while
+/// type-checking the body is reported at the expression the user wrote.
 fn wrap_with_opaque(wrap_name: &FullName, inner: Arc<ExprNode>) -> Arc<ExprNode> {
     let src = inner.source.clone();
     expr_app(expr_var(wrap_name.clone(), None), vec![inner], src)

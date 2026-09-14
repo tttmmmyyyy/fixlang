@@ -4,12 +4,13 @@ use crate::tests::test_util::{
 };
 
 // ============================================================
-// 1-1. Basic use case tests
+// Basic use cases
 // ============================================================
 
+/// An opaque return type stands for the iterator a chain of combinators builds, and the value is
+/// called at two element types.
 #[test]
 pub fn test_opaque_repeat() {
-    // Use case 1: Iterator combinator return type simplification
     let source = r#"
         module Main;
 
@@ -28,9 +29,10 @@ pub fn test_opaque_repeat() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Three combinators chained behind one opaque type, so the signature names none of the iterator
+/// types the chain builds.
 #[test]
 pub fn test_opaque_doubled_evens() {
-    // Use case 2: Multiple combinator chaining (type explosion avoidance)
     let source = r#"
         module Main;
 
@@ -47,9 +49,10 @@ pub fn test_opaque_doubled_evens() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A trait member returns an opaque type whose items are the trait's associated type, and the
+/// implementation for `Array a` gives it the iterator `Array::to_iter` returns.
 #[test]
 pub fn test_opaque_to_iter() {
-    // Use case 3: Trait method with opaque return type
     let source = r##"
         module Main;
 
@@ -75,9 +78,10 @@ pub fn test_opaque_to_iter() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Two implementations of one member with an opaque return type each hide an iterator type of
+/// their own, and one program reaches both.
 #[test]
 pub fn test_opaque_to_iter_multiple_impls() {
-    // Use case 3 extended: Multiple types implementing the same trait with opaque return
     let source = r##"
         module Main;
 
@@ -112,9 +116,10 @@ pub fn test_opaque_to_iter_multiple_impls() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// An opaque type of kind `* -> *` constrained by `Monad`: the body returns `Option I64`, and the
+/// use site chains the calls through `bind`.
 #[test]
 pub fn test_opaque_higher_kinded() {
-    // Use case 4: Higher-kinded opaque type (Monad)
     let source = r#"
         module Main;
 
@@ -153,9 +158,10 @@ pub fn test_opaque_higher_kinded_without_a_kind_signature() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A signature mixing an ordinary type variable constrained by `Iterator` with an opaque one: the
+/// iterator the value takes is the caller's choice and the one it returns is the body's.
 #[test]
 pub fn test_opaque_zip_with_index() {
-    // Use case 5: Opaque type with normal type variable mixed in signature
     let source = r#"
         module Main;
 
@@ -172,9 +178,10 @@ pub fn test_opaque_zip_with_index() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Two opaque types under the same constraints stand for the two iterators one value returns, and
+/// each is collected on its own.
 #[test]
 pub fn test_opaque_partition() {
-    // Use case 6: Multiple opaque types with the same constraints
     let source = r#"
         module Main;
 
@@ -193,9 +200,10 @@ pub fn test_opaque_partition() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// An opaque type carrying a trait constraint alone: the use site reaches the value behind it
+/// through `ToString`.
 #[test]
 pub fn test_opaque_predicate_only() {
-    // Use case 7: Opaque type with predicate only (no equality constraint)
     let source = r#"
         module Main;
 
@@ -211,40 +219,6 @@ pub fn test_opaque_predicate_only() {
             pure()
         );
     "#;
-    test_source(&source, Configuration::develop_mode());
-}
-
-#[test]
-pub fn test_opaque_higher_arity_associated_type() {
-    // Use case 8: Higher-arity associated type (Rebuildable pattern)
-    let source = r##"
-        module Main;
-
-        import Std::* hiding Indexable::Elem;
-
-        trait c : Rebuildable {
-            type Elem c;
-            type Rebuild c a;
-            rebuild : (Elem c -> a) -> c -> Rebuild c a;
-        }
-
-        impl Array a : Rebuildable {
-            type Elem (Array a) = a;
-            type Rebuild (Array a) b = Array b;
-            rebuild = |f, arr| arr.map(f);
-        }
-
-        from_array : [?c : Rebuildable, Elem ?c = a, Rebuild ?c b = Array b] Array a -> ?c;
-        from_array = |arr| arr;
-
-        main : IO ();
-        main = (
-            let c = Main::from_array([1, 2, 3]);
-            let result = c.rebuild(|x| x.to_string);
-            assert_eq(|_|"higher arity assoc", result, ["1", "2", "3"]);;
-            pure()
-        );
-    "##;
     test_source(&source, Configuration::develop_mode());
 }
 
@@ -434,14 +408,14 @@ pub fn test_opaque_constraint_naming_the_trait_variable_directly() {
 }
 
 // ============================================================
-// 1-2. Opaque type in impl annotation without type signature should be rejected
+// An opaque type annotating an expression of an impl method that writes no type signature
 // ============================================================
 
+/// An implementation that writes no type signature annotates an expression of its body with the
+/// opaque type the declaration writes. The names a declaration writes stand in the declaration
+/// alone, so the annotation names an unknown type variable.
 #[test]
 pub fn test_opaque_in_impl_annotation() {
-    // Using an opaque type variable in a type annotation inside an impl method
-    // without a type signature should be rejected, because the opaque type variable
-    // is a trait-definition-derived variable not visible in the impl context.
     let source = r##"
         module Main;
 
@@ -468,19 +442,13 @@ pub fn test_opaque_in_impl_annotation() {
 }
 
 // ============================================================
-// 1-2b. Opaque type annotation in impl expression WITH type signature (currently unsupported)
+// An opaque type annotating an expression of an impl method that writes a type signature
 // ============================================================
 
+/// An implementation that writes a type signature of its own annotates an expression of its body
+/// with the opaque type that signature writes. The annotation names an unknown type variable.
 #[test]
 pub fn test_opaque_in_impl_annotation_with_sig() {
-    // Using an opaque type variable in a type annotation inside an impl method body
-    // is not yet supported, even when the user provides an explicit type signature.
-    //
-    // Supporting this would require mapping the impl's opaque tyvar name (e.g., `?iter`)
-    // to the trait definition's name (e.g., `?it`) so that the type-checker can look up
-    // the corresponding #wrap_opaque instantiation. A prototype was implemented using
-    // expression-level renaming in desugar_opaque.rs, but was reverted as too ad-hoc.
-    // This may be revisited in the future with a cleaner approach.
     let source = r##"
         module Main;
 
@@ -508,14 +476,13 @@ pub fn test_opaque_in_impl_annotation_with_sig() {
 }
 
 // ============================================================
-// 1-2c. Opaque type with user type signature on impl method
+// A type signature on an impl method that agrees with the declaration
 // ============================================================
 
+/// An implementation writes the member's type under type variable names of its own, `?iter` where
+/// the declaration writes `?it`, and the program compiles and runs.
 #[test]
 pub fn test_opaque_impl_method_type_sig() {
-    // User provides a type signature on the impl method with different variable names
-    // than the trait definition. This tests that defn_to_impl substitution correctly
-    // uses the impl scheme's variable names (not scm_via_defn's).
     let source = r##"
         module Main;
 
@@ -542,12 +509,11 @@ pub fn test_opaque_impl_method_type_sig() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The member's type carries a type variable beside the trait's, and the implementation writes
+/// that variable under a name of its own in both places it stands: the function the member takes,
+/// and the equality on the items of the opaque type.
 #[test]
 pub fn test_opaque_impl_method_type_sig_renamed_vars() {
-    // The trait method `my_map` has an extra free type variable `b` beyond the trait's
-    // type variable `c`. The user impl renames `b` to `d` in the type signature.
-    // This detects whether defn_to_impl maps via impl_.scm.ty (correct: lhs uses `d`)
-    // vs impl_.scm_via_defn.ty (wrong: lhs uses `b`, mismatching rhs which uses `d`).
     let source = r##"
         module Main;
 
@@ -972,12 +938,13 @@ pub fn test_opaque_impl_method_type_sig_reduces_an_associated_type() {
 }
 
 // ============================================================
-// 1-3. Higher-kinded opaque type additional cases
+// Higher-kinded opaque types
 // ============================================================
 
+/// An opaque type of kind `* -> *` constrained by `Functor`: the use site calls `map` on what the
+/// value returns.
 #[test]
 pub fn test_opaque_higher_kinded_functor() {
-    // Higher-kinded opaque with Functor constraint
     let source = r#"
         module Main;
 
@@ -998,12 +965,13 @@ pub fn test_opaque_higher_kinded_functor() {
 }
 
 // ============================================================
-// 1-4. Associated type tests
+// Associated types behind an opaque type
 // ============================================================
 
+/// The equality `Item ?it = a` carries the element type to a use site that sums what the value
+/// returns.
 #[test]
 pub fn test_opaque_with_associated_type_basic() {
-    // Item ?it = a propagates through sum
     let source = r#"
         module Main;
 
@@ -1022,9 +990,9 @@ pub fn test_opaque_with_associated_type_basic() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A use site reduces `Item ?it` to `I64` to give the closure `fold` takes its argument types.
 #[test]
 pub fn test_opaque_associated_type_reduction() {
-    // Verify that Item ?it reduces correctly at use site via fold
     let source = r#"
         module Main;
 
@@ -1043,9 +1011,10 @@ pub fn test_opaque_associated_type_reduction() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A use site reduces an associated type of two arguments, `Rebuild ?c String`, to `Array String`
+/// through the equality the opaque type carries.
 #[test]
 pub fn test_opaque_with_higher_arity_assoc_type() {
-    // Higher-arity associated type: Rebuild ?c b = Array b
     let source = r##"
         module Main;
 
@@ -1078,11 +1047,10 @@ pub fn test_opaque_with_higher_arity_assoc_type() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// An associated type of kind `* -> *` behind an opaque type: `Repr ?fmt` is applied to `I64` and
+/// to `String`, and the equality `Repr ?fmt = Array` reduces both.
 #[test]
 pub fn test_opaque_with_higher_kinded_assoc_type() {
-    // Higher-kinded associated type (kind * -> *).
-    // The same Repr is applied to different element types (I64 and String),
-    // and both reduce to Array via the opaque equality Repr ?fmt = Array.
     let source = r##"
         module Main;
 
@@ -1115,9 +1083,10 @@ pub fn test_opaque_with_higher_kinded_assoc_type() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Two opaque types whose equalities name one element type stand for the two iterators one value
+/// returns.
 #[test]
 pub fn test_opaque_multi_opaque_with_shared_assoc_type() {
-    // Multiple opaque types sharing the same associated type constraint
     let source = r#"
         module Main;
 
@@ -1139,12 +1108,13 @@ pub fn test_opaque_multi_opaque_with_shared_assoc_type() {
 }
 
 // ============================================================
-// 1-5. Multiple calls of the same opaque function
+// Multiple calls of one value with an opaque return type
 // ============================================================
 
+/// One value with an opaque return type is called at two element types, and each call collects
+/// what it returns.
 #[test]
 pub fn test_opaque_multiple_calls_different_type_args() {
-    // Same opaque function called with different type arguments
     let source = r#"
         module Main;
 
@@ -1163,10 +1133,10 @@ pub fn test_opaque_multiple_calls_different_type_args() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Two calls of one value at the same type arguments have one type, so what they return goes into
+/// one array.
 #[test]
 pub fn test_opaque_multiple_calls_same_type_args() {
-    // Same opaque function called multiple times with the same type args.
-    // Results should have the same opaque type and can be placed in an Array.
     let source = r#"
         module Main;
 
@@ -1187,12 +1157,12 @@ pub fn test_opaque_multiple_calls_same_type_args() {
 }
 
 // ============================================================
-// 2-1. V-1: Opaque type variable usage restriction
+// Where an opaque type variable may stand
 // ============================================================
 
+/// An opaque type variable as a parameter of a type definition is rejected.
 #[test]
 pub fn test_opaque_in_type_defn() {
-    // Opaque type variable in struct definition should be rejected
     let source = r#"
         module Main;
 
@@ -1208,9 +1178,9 @@ pub fn test_opaque_in_type_defn() {
     );
 }
 
+/// An opaque type variable as the type variable of a trait definition is rejected.
 #[test]
 pub fn test_opaque_in_trait_defn() {
-    // Opaque type variable in trait definition should be rejected
     let source = r#"
         module Main;
 
@@ -1228,9 +1198,9 @@ pub fn test_opaque_in_trait_defn() {
     );
 }
 
+/// An opaque type variable as the type a trait is implemented for is rejected.
 #[test]
 pub fn test_opaque_in_impl_type_param() {
-    // Opaque type variable as the implementing type in a trait impl should be rejected
     let source = r#"
         module Main;
 
@@ -1369,12 +1339,13 @@ pub fn test_opaque_tyvar_on_right_side_of_equality_on_another_type() {
 }
 
 // ============================================================
-// 2-2. V-3: Equality constraint formal parameter checks
+// The formal parameters of an equality constraint
 // ============================================================
 
+/// The extra arguments on the left side of an equality constraint are its formal parameters, and a
+/// concrete type written in one of those places is rejected.
 #[test]
 pub fn test_opaque_equality_non_tyvar_formal_param() {
-    // Extra arguments on the left side of equality must be type variables, not concrete types
     let source = r##"
         module Main;
 
@@ -1400,9 +1371,10 @@ pub fn test_opaque_equality_non_tyvar_formal_param() {
     );
 }
 
+/// A formal parameter of an equality constraint that also stands in the type the signature writes
+/// is rejected.
 #[test]
 pub fn test_opaque_equality_formal_param_in_ty_body() {
-    // Extra argument on the left side of equality must not appear elsewhere in the type signature
     let source = r##"
         module Main;
 
@@ -1429,12 +1401,13 @@ pub fn test_opaque_equality_formal_param_in_ty_body() {
 }
 
 // ============================================================
-// 2-3. Opaque type concrete type determination failures
+// The concrete type behind an opaque type is left undetermined
 // ============================================================
 
+/// An opaque type standing nowhere in the value's type leaves the body nothing to determine it by,
+/// and is rejected.
 #[test]
 pub fn test_opaque_unused_cannot_determine() {
-    // Opaque type that doesn't affect the function's type: ?t can't be determined
     let source = r#"
         module Main;
 
@@ -1444,13 +1417,13 @@ pub fn test_opaque_unused_cannot_determine() {
         main : IO ();
         main = pure();
     "#;
-    // ?t is unconstrained in the body, leading to an ambiguous type variable
     test_source_fail(&source, Configuration::develop_mode(), "");
 }
 
+/// An opaque type named by the constraints alone, standing nowhere in the type `a -> I64` the
+/// signature writes, is rejected.
 #[test]
 pub fn test_opaque_not_in_return_type() {
-    // Opaque type is in constraints but not in the function's return type
     let source = r#"
         module Main;
 
@@ -1460,13 +1433,13 @@ pub fn test_opaque_not_in_return_type() {
         main : IO ();
         main = pure();
     "#;
-    // ?it has no effect on the type, leading to an undetermined type variable
     test_source_fail(&source, Configuration::develop_mode(), "");
 }
 
+/// A body whose branches return `RangeIterator` and `TakeIterator CountUpIterator` gives the opaque
+/// type two concrete types, and is rejected.
 #[test]
 pub fn test_opaque_branch_type_mismatch() {
-    // if-then-else branches return different concrete types
     let source = r#"
         module Main;
 
@@ -1479,7 +1452,6 @@ pub fn test_opaque_branch_type_mismatch() {
         main : IO ();
         main = pure();
     "#;
-    // RangeIterator and TakeIterator CountUpIterator don't unify
     test_source_fail(&source, Configuration::develop_mode(), "");
 }
 
@@ -1819,12 +1791,13 @@ pub fn test_opaque_member_implementation_owes_the_constraint_at_its_own_type() {
 }
 
 // ============================================================
-// 2-4. Opaque type trait constraint not satisfied at use site
+// A use site asks more of an opaque type than its constraints say
 // ============================================================
 
+/// A use site that calls `to_string` on a value of an opaque type constrained by `Iterator` alone
+/// is rejected.
 #[test]
 pub fn test_opaque_trait_not_satisfied_at_use_site() {
-    // Calling a method not available on the opaque type's constraints
     let source = r#"
         module Main;
 
@@ -1843,14 +1816,13 @@ pub fn test_opaque_trait_not_satisfied_at_use_site() {
 }
 
 // ============================================================
-// 2-5. Opaque type on equality RHS
+// An opaque type on the right side of an equality constraint
 // ============================================================
 
+/// An equality whose right side is a second opaque type, `Item ?it = ?e` with `?e : ToString`: a
+/// use site folds over what the value returns and reaches the items through `ToString`.
 #[test]
 pub fn test_opaque_in_equality_rhs() {
-    // An opaque type appears on the RHS of an equality constraint:
-    //   Item ?it = ?e, where ?e is itself opaque with ToString constraint.
-    // This tests that the desugaring correctly handles opaque-to-opaque equality.
     let source = r#"
         module Main;
 
@@ -1869,10 +1841,11 @@ pub fn test_opaque_in_equality_rhs() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `map` over a value whose items are given by an equality on a second opaque type,
+/// `Item ?it = ?e`: the element type the closure takes comes to the use site through that
+/// equality.
 #[test]
 pub fn test_opaque_in_equality_rhs_map() {
-    // Same setup but using .map() which requires the element type to be inferred
-    // through the equality chain: Item ?it -> ?e (via EqualityScheme)
     let source = r#"
         module Main;
 
@@ -1890,9 +1863,10 @@ pub fn test_opaque_in_equality_rhs_map() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Two opaque types linked by an equality both stand in the value's result, and the use site
+/// reaches each of them through `ToString`.
 #[test]
 pub fn test_opaque_in_equality_rhs_both_in_return() {
-    // Both opaque types appear in the return type, with an equality linking them.
     let source = r#"
         module Main;
 
@@ -1918,11 +1892,10 @@ pub fn test_opaque_in_equality_rhs_both_in_return() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A chain of trait members with opaque return types, `c.baz.bar.foo`, whose opaque type
+/// constructors stand inside the type arguments of one another.
 #[test]
 pub fn test_opaque_nested_trait_chain() {
-    // Regression test: chaining trait methods with opaque return types.
-    // `c.baz.bar.foo` requires resolving nested opaque tycons in type arguments
-    // before matching resolutions.
     let source = r#"
         module Main;
 
@@ -1951,10 +1924,10 @@ pub fn test_opaque_nested_trait_chain() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A trait alias written as the constraint on an opaque type, `?v : Additive`, constrains it by the
+/// traits the alias stands for, `Add` and `Zero`.
 #[test]
 pub fn test_opaque_trait_alias_in_constraint() {
-    // Regression test: using a trait alias (e.g., `Additive`) in an opaque type constraint
-    // should behave the same as writing its expansion (`Add + Zero`).
     let source = r#"
         module Main;
 
@@ -2011,10 +1984,10 @@ pub fn test_opaque_trait_alias_in_constraint() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A trait member with an opaque return type implemented for two concrete types, reached through a
+/// value whose type is constrained by the trait.
 #[test]
 pub fn test_opaque_trait_method_returning_opaque() {
-    // Regression test: compiler crashed when a trait method returns an opaque type
-    // and the trait is implemented for multiple concrete types (e.g., I64, U64).
     let source = r#"
         module Main;
 
@@ -2046,13 +2019,13 @@ pub fn test_opaque_trait_method_returning_opaque() {
 }
 
 // ============================================================
-// 3. Implementation does not satisfy declared opaque constraints
+// A body that fails the constraints the signature writes on the opaque type
 // ============================================================
 
+/// A global value declared to return an opaque type constrained by `Iterator` whose body returns
+/// `String` is reported, naming the constraint the body owes.
 #[test]
 pub fn test_opaque_impl_trait_constraint_not_satisfied_global() {
-    // The declared signature requires `?it : Iterator`, but the implementation
-    // returns `String`, which does not implement `Iterator`.
     let source = r#"
         module Main;
 
@@ -2069,10 +2042,10 @@ pub fn test_opaque_impl_trait_constraint_not_satisfied_global() {
     );
 }
 
+/// A global value declared to return an iterator of `I64` whose body returns an iterator of
+/// `String` is reported, naming the equality the body owes.
 #[test]
 pub fn test_opaque_impl_assoc_type_mismatch_global() {
-    // The declared signature requires `Item ?it = I64`, but the implementation
-    // returns an iterator whose item type is `String`.
     let source = r#"
         module Main;
 
@@ -2085,10 +2058,10 @@ pub fn test_opaque_impl_assoc_type_mismatch_global() {
     test_source_fail(&source, Configuration::develop_mode(), "String = Std::I64");
 }
 
+/// An implementation of a member declared to return an opaque type constrained by `Iterator` whose
+/// body returns `String` is reported.
 #[test]
 pub fn test_opaque_impl_trait_constraint_not_satisfied_method() {
-    // The trait declares `?it : Iterator`, but the impl for `I64` returns
-    // `String`, which does not implement `Iterator`.
     let source = r#"
         module Main;
 
@@ -2110,10 +2083,10 @@ pub fn test_opaque_impl_trait_constraint_not_satisfied_method() {
     );
 }
 
+/// An implementation of a member declared to return an iterator of `I64` whose body returns an
+/// iterator of `String` is reported.
 #[test]
 pub fn test_opaque_impl_assoc_type_mismatch_method() {
-    // The trait declares `Item ?it = I64`, but the impl for `I64` returns
-    // an iterator whose item type is `String`.
     let source = r#"
         module Main;
 
@@ -2131,11 +2104,10 @@ pub fn test_opaque_impl_assoc_type_mismatch_method() {
     test_source_fail(&source, Configuration::develop_mode(), "String = Std::I64");
 }
 
+/// An opaque return type in a module whose `import Std::{...}` names one by one what it uses: the
+/// value the desugaring writes into the body resolves although that list leaves it out.
 #[test]
 pub fn test_opaque_regression_unknown_name_undefined_internal() {
-    // Regression: with an explicit `import Std::{...}` that excludes
-    // `_undefined_internal`, the generated #wrap_opaque placeholder
-    // caused "unknown name `Std::_undefined_internal`".
     let source = r#"
         module Main;
 
@@ -2151,10 +2123,8 @@ pub fn test_opaque_regression_unknown_name_undefined_internal() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Verifies that when a global value with an opaque-return-type signature
-/// has a body that violates its scheme's constraints, the resulting
-/// "X is required ... but cannot be deduced" error cites the source span
-/// of the user-written body rather than appearing without a location.
+/// A global value whose body fails the constraints its opaque return type carries is reported at
+/// the source span of that body, in the error saying the constraint cannot be deduced.
 #[test]
 pub fn test_opaque_error_carries_source_location() {
     let source = r#"
@@ -2181,10 +2151,8 @@ pub fn test_opaque_error_carries_source_location() {
     );
 }
 
-/// Verifies that an `AssocTy` exposed by opaque-tycon resolution at
-/// instantiation is reduced before optimization, so composing two
-/// opaque-returning functions does not leave an unresolved `Item T`
-/// in the program.
+/// Two values with opaque return types compose: resolving the opaque type constructor at
+/// instantiation exposes an `AssocTy`, which is reduced before optimization runs.
 #[test]
 pub fn test_opaque_regression_assoc_ty_in_resolved_rhs() {
     let source = r#"
@@ -2205,9 +2173,8 @@ pub fn test_opaque_regression_assoc_ty_in_resolved_rhs() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Verifies that resolving one opaque type constructor whose concrete type is
-/// another opaque type constructor reaches the concrete type behind the second
-/// one, so a chain of opaque-returning functions compiles and runs.
+/// Resolving one opaque type constructor whose concrete type is another opaque type constructor
+/// reaches the concrete type behind the second one, so a chain of such values compiles and runs.
 #[test]
 pub fn test_opaque_concrete_type_is_another_opaque_type() {
     let source = r#"
