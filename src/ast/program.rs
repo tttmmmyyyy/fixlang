@@ -1687,10 +1687,20 @@ impl Program {
         let te = match &gv.expr {
             SymbolExpr::Simple(e) => e,
             SymbolExpr::Method(impls) => {
-                let method = impls
-                    .iter()
-                    .find(|method| method_type_matches(method).unwrap_or(false))
-                    .unwrap();
+                let mut matching = None;
+                for method in impls {
+                    if method_type_matches(method)? {
+                        matching = Some(method);
+                        break;
+                    }
+                }
+                let method = matching.unwrap_or_else(|| {
+                    panic!(
+                        "no implementation of `{}` has the type `{}`",
+                        sym.generic_name.to_string(),
+                        sym.ty.to_string()
+                    )
+                });
                 &method.expr
             }
         };

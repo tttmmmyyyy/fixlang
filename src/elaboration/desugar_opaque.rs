@@ -280,7 +280,12 @@ impl Program {
                 }
                 let resolved = pred
                     .resolve_trait_aliases(&self.trait_env.aliases)
-                    .unwrap_or_else(|_| vec![pred.clone()]);
+                    .unwrap_or_else(|_| {
+                        unreachable!(
+                            "the trait aliases of the constraint `{}` are resolved before this",
+                            pred.to_string()
+                        )
+                    });
                 for resolved_pred in resolved {
                     let mut new_pred = resolved_pred;
                     sub.substitute_predicate(&mut new_pred);
