@@ -5581,6 +5581,16 @@ pub fn test_float_to_string() {
             assert_eq(|_|"a point before the digits", 0.1.to_string, "0.1");;
             assert_eq(|_|"the digits a third takes", (1.0 / 3.0).to_string, "0.3333333333333333");;
             assert_eq(|_|"the smallest F64 written positionally", 1.0e-5.to_string, "0.00001");;
+            assert_eq(|_|"an F64 just under that window", 9.99e-6.to_string, "9.99e-6");;
+
+            // The widest text an `F64` reaches is written this way too: the digits fill the type
+            // and the point sits at the edge of the window below them, so the zeros between the
+            // point and the digits are written out. Drawing the window one place wider takes this
+            // text past the buffer `Std` writes into.
+            let widest = -1.0000000000000003e-5;
+            assert_eq(|_|"the widest F64 text written positionally",
+                      widest.to_string, "-0.000010000000000000003");;
+            assert_eq(|_|"the widest positional F64 text takes 24 bytes", widest.to_string.@size, 24);;
 
             // Outside that window the text carries the power of ten instead of the zeros.
             assert_eq(|_|"a power of ten just past the window", 1.0e16.to_string, "1e16");;
@@ -5602,6 +5612,15 @@ pub fn test_float_to_string() {
             assert_eq(|_|"a negative infinity", (0.0 - inf).to_string, "-inf");;
             assert_eq(|_|"a NaN", (inf - inf).to_string, "nan");;
 
+            // `inf` and `nan` are the texts `from_string` takes back, which is why they are
+            // written where Ryu writes `Infinity` and `NaN`.
+            let read_back : String -> F64 = |text| text.from_string.as_ok;
+            assert_eq(|_|"an infinity reads back as an infinity", read_back(inf.to_string), inf);;
+            assert_eq(|_|"a negative infinity reads back as a negative infinity",
+                      read_back((0.0 - inf).to_string), 0.0 - inf);;
+            let read = read_back((inf - inf).to_string);
+            assert_eq(|_|"a NaN reads back as a NaN", read != read, true);;
+
             // An `F32` carries 9 digits where an `F64` carries 17, so the window it is written
             // positionally in is drawn narrower.
             assert_eq(|_|"an F32 whole number", 1.0_F32.to_string, "1.0");;
@@ -5613,8 +5632,20 @@ pub fn test_float_to_string() {
             assert_eq(|_|"an F32 just past that window", 1.0e13_F32.to_string, "1e13");;
             assert_eq(|_|"the smallest F32 written positionally",
                       1.0e-6_F32.to_string, "0.000001");;
+            assert_eq(|_|"an F32 just under that window", 9.99e-7_F32.to_string, "9.99e-7");;
             assert_eq(|_|"the greatest F32", 3.4028235e38_F32.to_string, "3.4028235e38");;
             assert_eq(|_|"the least positive F32", 1.4e-45_F32.to_string, "1e-45");;
+
+            // The widest text an `F32` reaches, over all of them.
+            let widest = -1.0000001e-6_F32;
+            assert_eq(|_|"the widest F32 text", widest.to_string, "-0.0000010000001");;
+            assert_eq(|_|"the widest F32 text takes 16 bytes", widest.to_string.@size, 16);;
+
+            // An `F32` that is not finite goes through a translation unit of its own.
+            let inf_f32 = 1.0_F32 / 0.0_F32;
+            assert_eq(|_|"an F32 infinity", inf_f32.to_string, "inf");;
+            assert_eq(|_|"a negative F32 infinity", (0.0_F32 - inf_f32).to_string, "-inf");;
+            assert_eq(|_|"an F32 NaN", (inf_f32 - inf_f32).to_string, "nan");;
 
             // Reading any of these texts back gives the number it was written from, which is what
             // the shortest digits are chosen for. Every one of them is a normal number, since
