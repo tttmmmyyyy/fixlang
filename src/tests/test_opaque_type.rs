@@ -1,6 +1,7 @@
 use crate::configuration::Configuration;
 use crate::tests::test_util::{
     run_source_assert_failed, test_source, test_source_fail, test_source_fail_excludes,
+    test_sources,
 };
 
 // ============================================================
@@ -530,6 +531,106 @@ pub fn test_opaque_impl_method_type_sig_renamed_vars() {
         main = (
             let arr = [1, 2, 3].my_map(|x| x.to_string).to_array;
             assert_eq(|_|"renamed vars", arr, ["1", "2", "3"]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A type variable of kind `* -> *` standing beside an opaque type becomes a type argument of the
+/// opaque type constructor, which then has kind `(* -> *) -> *`.
+#[test]
+pub fn test_opaque_tycon_takes_a_higher_kinded_type_argument() {
+    let source = r#"
+        module Main;
+
+        wrap_each : [m : Monad, ?it : Iterator, Item ?it = m I64] I64 -> ?it;
+        wrap_each = |n| Iterator::range(0, n).map(|x| pure(x));
+
+        main : IO ();
+        main = (
+            let opts : Array (Option I64) = wrap_each(3).to_array;
+            assert_eq(|_|"wrapped in Option", opts, [some(0), some(1), some(2)]);;
+            let arrs : Array (Array I64) = wrap_each(2).to_array;
+            assert_eq(|_|"wrapped in Array", arrs, [[0], [1]]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A trait whose member has an opaque result, declared in one module, implemented in another and
+/// called from a third. Each implementation's concrete type is found where that implementation is
+/// written, and the call site reaches it across the module boundary.
+#[test]
+pub fn test_opaque_member_implemented_in_another_module() {
+    let lib = r#"
+        module Lib;
+
+        trait c : Coll {
+            type Ele c;
+            items : [?it : Iterator, Iterator::Item ?it = Ele c] c -> ?it;
+        }
+
+        repeat_n : [?it : Iterator, Item ?it = a] a -> I64 -> ?it;
+        repeat_n = |x, n| Iterator::range(0, n).map(|_| x);
+    "#;
+    let impls = r#"
+        module Impls;
+
+        import Lib;
+
+        type Pair a = struct { x : a, y : a };
+        type Trip a = unbox struct { a : a, b : a, c : a };
+
+        impl Pair a : Lib::Coll {
+            type Ele (Pair a) = a;
+            items = |p| [p.@x, p.@y].to_iter;
+        }
+
+        impl Trip a : Lib::Coll {
+            type Ele (Trip a) = a;
+            items = |t| [t.@a, t.@b, t.@c].to_iter;
+        }
+    "#;
+    let main = r#"
+        module Main;
+
+        import Lib;
+        import Impls;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"pair", Impls::Pair { x : 1, y : 2 }.Coll::items.to_array, [1, 2]);;
+            assert_eq(|_|"trip", Impls::Trip { a : 3, b : 4, c : 5 }.Coll::items.to_array, [3, 4, 5]);;
+            assert_eq(|_|"repeat_n", Lib::repeat_n("z", 2).to_array, ["z", "z"]);;
+            pure()
+        );
+    "#;
+    test_sources(&[lib, impls, main], Configuration::develop_mode());
+}
+
+/// Two members of one trait, each hiding a type of its own behind an opaque type. One
+/// implementation gives the two different concrete types, and a use of either reaches its own.
+#[test]
+pub fn test_opaque_two_members_of_one_trait_resolve_to_two_types() {
+    let source = r##"
+        module Main;
+
+        trait c : Two {
+            fst : [?a : ToString] c -> ?a;
+            snd : [?b : ToString] c -> ?b;
+        }
+
+        impl I64 : Two {
+            fst = |n| n;
+            snd = |n| n > 0;
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"two members", 3.fst.to_string, "3");;
+            assert_eq(|_|"two members", 3.snd.to_string, "true");;
             pure()
         );
     "##;
