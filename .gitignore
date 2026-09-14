@@ -20,3 +20,4 @@ passes_optimizer.log
 # Python bytecode caches, from the scripts under dev-docs.
 __pycache__/
 *.pyc
+benchmark/langarena/log.csv
