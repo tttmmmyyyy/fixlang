@@ -8,9 +8,13 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::build_program;
+    use crate::tests::test_util::{
+        build_program, fix_build_source_command, fix_command_at_opt_level,
+    };
     use std::fs;
+    use std::path::Path;
     use std::process::Command;
+    use tempfile::TempDir;
 
     /// An option that asks LLVM to start every basic block on a 64-byte boundary (`2^6`). It is
     /// read by the block placement every target shares, so what it does here is what it does
@@ -59,6 +63,35 @@ mod tests {
         (size, String::from_utf8_lossy(&output.stdout).to_string())
     }
 
+    /// Builds `ONE_LOOP` in `dir` with `build_args` written between the source and `-o`, and
+    /// answers the size of the program it wrote at `dir/program_name` together with what it put on
+    /// the error stream.
+    ///
+    /// The options go before `-o`, so a `--llvm-arg` among them is followed by an option of the
+    /// compiler's. Finding the program at the path after `-o` is what says that option was read as
+    /// one: an argument taking several values at once would take `-o` and the path as two more of
+    /// them and write the program elsewhere.
+    fn build_in(dir: &Path, program_name: &str, build_args: &[&str]) -> (u64, String) {
+        let program_path = dir.join(program_name);
+        let output = fix_build_source_command(dir, ONE_LOOP, "max")
+            .args(build_args)
+            .arg("-o")
+            .arg(&program_path)
+            .output()
+            .expect("Failed to execute fix build");
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        assert!(
+            output.status.success(),
+            "the build failed: {}\n{}",
+            output.status,
+            stderr
+        );
+        let size = fs::metadata(&program_path)
+            .expect("the build should write its program at the path after `-o`")
+            .len();
+        (size, stderr)
+    }
+
     /// An option `--llvm-arg` hands to LLVM reaches it: asking for a boundary at the head of every
     /// basic block produces a larger program, since each boundary is reached by padding. The
     /// program answers the same either way, which is what says the option moved the code rather
@@ -101,6 +134,132 @@ mod tests {
         assert_eq!(
             plain, with_unknown,
             "an option LLVM does not know should leave the program as it was"
+        );
+    }
+
+    /// `--llvm-arg` takes one value, so an option written after it is read as an option, and the
+    /// value may be written after `=` or after a space.
+    ///
+    /// An option of LLVM's opens with a hyphen, which is why the argument allows a hyphenated
+    /// value. An argument taking several values at once -- the shape of every other repeated option
+    /// beside it -- would read `-o` and the path after it as two more values.
+    #[test]
+    fn test_the_option_takes_one_value_so_an_option_after_it_is_still_read() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp_dir.path();
+
+        let (plain, _) = build_in(dir, "plain", &[]);
+        let (after_equals, _) = build_in(dir, "after-equals", &[ALIGN_ALL_BLOCKS_TO_64]);
+        let (after_space, _) =
+            build_in(dir, "after-space", &["--llvm-arg", "--align-all-blocks=6"]);
+
+        assert!(
+            after_equals > plain,
+            "the option should reach LLVM, but the program is {} bytes against {}",
+            after_equals,
+            plain
+        );
+        assert_eq!(
+            after_space, after_equals,
+            "a value written after a space should name the option a value written after `=` names"
+        );
+    }
+
+    /// `--llvm-arg` may be written more than once, and every occurrence reaches LLVM. The
+    /// occurrence beside the one under test carries an option LLVM does not know, which LLVM takes
+    /// without a word, so the size of the program answers for the other occurrence alone.
+    #[test]
+    fn test_every_occurrence_of_the_option_reaches_llvm() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp_dir.path();
+
+        let (plain, _) = build_in(dir, "plain", &[]);
+        let (alone, _) = build_in(dir, "alone", &[ALIGN_ALL_BLOCKS_TO_64]);
+        assert!(
+            alone > plain,
+            "the option should reach LLVM on its own, but the program is {} bytes against {}",
+            alone,
+            plain
+        );
+
+        let (second, _) = build_in(
+            dir,
+            "second",
+            &[OPTION_LLVM_DOES_NOT_HAVE, ALIGN_ALL_BLOCKS_TO_64],
+        );
+        assert_eq!(
+            second, alone,
+            "the second of two occurrences should reach LLVM"
+        );
+
+        let (first, _) = build_in(
+            dir,
+            "first",
+            &[ALIGN_ALL_BLOCKS_TO_64, OPTION_LLVM_DOES_NOT_HAVE],
+        );
+        assert_eq!(
+            first, alone,
+            "the first of two occurrences should reach LLVM"
+        );
+    }
+
+    /// An option whose value LLVM cannot read stops the setting and not the build: LLVM reports it
+    /// on the error stream, the build succeeds, and the program comes out as it would have without
+    /// the option. That is why the help of `--llvm-arg` tells a user to compare the programs.
+    ///
+    /// The report opens with `fix --llvm-arg`, the name `set_llvm_options` hands LLVM for itself,
+    /// which is what says the message is LLVM's and not the compiler's.
+    #[test]
+    fn test_an_option_whose_value_llvm_cannot_read_is_reported_and_the_build_goes_on() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp_dir.path();
+
+        let (plain, _) = build_in(dir, "plain", &[]);
+        let (with_bad_value, stderr) =
+            build_in(dir, "bad-value", &["--llvm-arg=--align-all-blocks=six"]);
+
+        assert_eq!(
+            with_bad_value, plain,
+            "a value LLVM cannot read should leave the program as it was"
+        );
+        assert!(
+            stderr.contains("fix --llvm-arg"),
+            "LLVM's report should name the option the value came from, but the build said: {}",
+            stderr
+        );
+    }
+
+    /// `--llvm-arg` is on the subcommands that build a program and then run it as well as on
+    /// `build`, so a measurement can be taken through `fix run`. The program answers the same with
+    /// the option as without it.
+    #[test]
+    fn test_the_option_is_on_the_subcommand_that_runs_the_program() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp_dir.path();
+        let source_path = dir.join("generated.fix");
+        fs::write(&source_path, ONE_LOOP).expect("Failed to write the generated source file");
+
+        let run = |build_args: &[&str]| {
+            let output = fix_command_at_opt_level("run", "max")
+                .arg("--file")
+                .arg(&source_path)
+                .args(build_args)
+                .current_dir(dir)
+                .output()
+                .expect("Failed to execute fix run");
+            assert!(
+                output.status.success(),
+                "`fix run` failed: {}\n{}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).to_string()
+        };
+
+        assert_eq!(
+            run(&[ALIGN_ALL_BLOCKS_TO_64]),
+            run(&[]),
+            "`fix run` should answer the same with the option as without it"
         );
     }
 }
