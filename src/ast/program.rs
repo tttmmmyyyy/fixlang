@@ -571,6 +571,12 @@ impl TraitMemberImpl {
         Ok(())
     }
 
+    /// Where this implementation first writes the member's name: in the type signature it writes,
+    /// and otherwise in the definition.
+    pub fn first_lhs_src(&self) -> Option<Span> {
+        self.lhs_srcs.first().cloned()
+    }
+
     /// The smallest node of this implementation covering `pos`.
     ///
     /// # Arguments
@@ -3361,7 +3367,7 @@ impl Program {
         for stmt in self
             .mod_to_import_stmts
             .get(&mod_name)
-            .unwrap_or(&vec![])
+            .map_or(&[][..], Vec::as_slice)
             .iter()
         {
             let node = stmt.find_node_at(pos);

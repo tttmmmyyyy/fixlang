@@ -164,8 +164,9 @@ impl Program {
 
         // Step 3: Rewrite type signatures and generate #wrap_opaque GlobalValues.
         for (gv_name, opaque_infos) in &targets {
-            let scm = self.global_values.get(gv_name).unwrap().scm.clone();
-            let decl_src = self.global_values.get(gv_name).unwrap().decl_src.clone();
+            let gv = self.global_values.get(gv_name).unwrap();
+            let scm = gv.scm.clone();
+            let decl_src = gv.decl_src.clone();
             let new_scm = rewrite_scheme(&scm, opaque_infos);
 
             // Generate one #wrap_opaque per function/method.
@@ -221,7 +222,7 @@ impl Program {
                         impl_.expr.opaque_types = build_opaque_resolutions(
                             opaque_infos,
                             &defn_to_impl,
-                            impl_.lhs_srcs.first().cloned(),
+                            impl_.first_lhs_src(),
                         );
                     }
                 }
@@ -398,7 +399,7 @@ fn validate_impl_signature(
     opaque_infos: &[OpaqueInfo],
     decl_src: &Option<Span>,
 ) -> Result<(), Errors> {
-    let impl_src = impl_.lhs_srcs.first().cloned();
+    let impl_src = impl_.first_lhs_src();
 
     // The signature and the declaration have to describe the same values. The opaque types of the
     // declaration stand for themselves in that comparison: what one of them hides is the
@@ -436,7 +437,7 @@ fn validate_impl_signature(
         // signature, so the signature names no counterpart for it and the desugaring leaves it as
         // it is. What the signature says about such a type is compared above, where it stands for
         // itself.
-        let Some(written) = defn_to_impl.data.get(&info.tyvar.name) else {
+        let Some(written) = defn_to_impl.replacement_of(&info.tyvar.name) else {
             continue;
         };
         let written_var = match &written.ty {

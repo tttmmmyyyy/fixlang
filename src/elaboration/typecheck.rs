@@ -155,7 +155,7 @@ where
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Substitution {
     /// The type replacing each type variable, by the variable's name.
-    pub data: Map<Name, Arc<TypeNode>>,
+    data: Map<Name, Arc<TypeNode>>,
 }
 
 // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -173,6 +173,11 @@ impl Substitution {
     /// Whether this substitution replaces no type variable, so that applying it changes nothing.
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
+    }
+
+    /// The type this substitution replaces the type variable named `var` by, where it replaces it.
+    pub fn replacement_of(&self, var: &Name) -> Option<&Arc<TypeNode>> {
+        self.data.get(var)
     }
 
     /// The substitution that replaces the type variable named `var` by `ty`, and nothing else.
