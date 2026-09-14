@@ -23,7 +23,7 @@ Their counts go into the same row of `../speedtest/log.csv` as the cases, under 
 each program (`Hash::SHA256-inst`, `Hash::SHA256-cycles`, ...), and `graph_html.py` draws them
 beside the cases.
 
-A run with `--langarena` takes about fifteen minutes, against the two a run without it takes: two
+A run with `--langarena` takes about sixteen minutes, against the four a run without it takes: two
 minutes to build the programs and ten to measure them, since each of the fifty is measured in a
 process of its own over five windows. That is why they are asked for rather than measured every
 time.
