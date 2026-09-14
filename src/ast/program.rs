@@ -1508,20 +1508,20 @@ impl Program {
                     });
                 }
                 SymbolExpr::Method(impls) => {
-                    for (i, member) in impls.iter().enumerate() {
+                    for (i, impl_) in impls.iter().enumerate() {
                         // Select method implementation.
-                        if !method_impl_filter(member)? {
+                        if !method_impl_filter(impl_)? {
                             continue;
                         }
 
                         // Create a task for method implementation.
-                        let te = member.expr.clone();
-                        let scm = member.scm.clone();
-                        let scm_via_defn = member.scm_via_defn.clone();
-                        let impl_src = member.expr.expr.source.clone();
+                        let te = impl_.expr.clone();
+                        let scm = impl_.scm.clone();
+                        let scm_via_defn = impl_.scm_via_defn.clone();
+                        let impl_src = impl_.expr.expr.source.clone();
                         let decl_src = gv.decl_src.clone();
                         let val_name_clone = val_name.clone(); // For move into closure.
-                        let def_mod = self.find_mod(&member.define_module).unwrap().clone();
+                        let def_mod = self.find_mod(&impl_.define_module).unwrap().clone();
                         let mut nrctx =
                             NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
                         let version_hash = self.module_dependency_hash(&def_mod.name, config)?;

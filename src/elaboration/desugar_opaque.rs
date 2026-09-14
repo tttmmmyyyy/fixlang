@@ -693,19 +693,19 @@ fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo
 
     opaque_vars
         .into_iter()
-        .map(|opq_var| {
+        .map(|opaque_var| {
             // TyCon kind: gen_var kinds → opaque tyvar kind.
             // E.g., for gen_vars [a : *] and opaque tyvar ?it : *, the TyCon kind is * -> *.
-            let mut tc_kind: Arc<Kind> = opq_var.kind.clone();
-            for gv in gen_vars.iter().rev() {
-                tc_kind = kind_arrow(gv.kind.clone(), tc_kind);
+            let mut tycon_kind: Arc<Kind> = opaque_var.kind.clone();
+            for gen_var in gen_vars.iter().rev() {
+                tycon_kind = kind_arrow(gen_var.kind.clone(), tycon_kind);
             }
-            let tycon_name = FullName::new(&gv_name.to_namespace(), &opq_var.name);
+            let tycon_name = FullName::new(&gv_name.to_namespace(), &opaque_var.name);
             OpaqueInfo {
-                tyvar: opq_var.clone(),
+                tyvar: opaque_var.clone(),
                 tycon: tycon(tycon_name),
                 tycon_vars: gen_vars.clone(),
-                tycon_kind: tc_kind,
+                tycon_kind,
             }
         })
         .collect()
@@ -746,10 +746,10 @@ fn build_opaque_resolutions(
     defn_to_impl: &Substitution,
     src: Option<Span>,
 ) -> Map<FullName, Vec<OpaqueTyConResolution>> {
-    let mut result: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
+    let mut resolutions_by_tycon_name: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
     for info in opaque_infos {
         let lhs = defn_to_impl.substitute_type(&info.opaque_tycon_applied());
-        result
+        resolutions_by_tycon_name
             .entry(info.tycon.name.clone())
             .or_default()
             .push(OpaqueTyConResolution {
@@ -758,7 +758,7 @@ fn build_opaque_resolutions(
                 src: src.clone(),
             });
     }
-    result
+    resolutions_by_tycon_name
 }
 
 /// Apply a substitution to a scheme's type and remove predicates/equalities on opaque TyVars.
