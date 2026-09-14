@@ -57,8 +57,9 @@ mod tests {
             .expect("Failed to run the program");
         assert!(
             output.status.success(),
-            "the program failed: {}",
-            output.status
+            "the program failed: {}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
         );
         (size, String::from_utf8_lossy(&output.stdout).to_string())
     }
