@@ -38,6 +38,25 @@ This project implements the Fix programming language compiler and related tools 
 
 - **Dead-code warnings**: Do NOT add `#[allow(dead_code)]` to silence the "never used" warning on items that will eventually be used in production code (e.g. a constant or function added in one step of a multi-step rollout that will be consumed in a later step). The warning is the reminder that the follow-up work is still pending; suppressing it loses that signal. Leave the warning in place and let the next step resolve it.
 
+## Measuring Performance
+
+- **Judge neutrality from the binary first.** Build the same program before and after in the same
+  directory and compare `objcopy -O binary --only-section=.text --only-section=.rodata`. Identical
+  output is a neutral change and needs no measurement. Delete `.fixlang` before building. Where
+  they differ, read `--emit-llvm`'s `_optimized.ll`.
+- **A change that could not be shown neutral is measured before the pull request**, with
+  `benchmark/speedtest` run as `--langarena` so that all 106 programs land in one row.
+- **The primary metric is the instruction count (`instructions:u`).** Conclusions rest on it. It
+  depends on neither the load on the machine nor where the code lands in `.text`.
+- **Wall time is the secondary metric**, reported beside the instruction count in the pull request.
+  It is a reference figure: it moves with what else the machine is doing.
+- **Cycle counts are not used.** Where a hot loop starts inside a 64-byte line decides them, and
+  what decides that is the sizes of everything the linker placed first. Measured with the code
+  held byte-identical, one benchmark spans 32.6% (#654).
+- **The report covers every case measured, the neutral ones included.** Listing only what moved
+  makes a change look larger than it is; what says how much a gain or a regression weighs is how
+  many of how many moved.
+
 ## Finishing a Change
 
 - **When the implementation is complete**, run these skills in order before the work is handed over:
