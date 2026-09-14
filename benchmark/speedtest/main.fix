@@ -16,6 +16,16 @@ _COMMIT_HASH = "commit";
 _WINDOWS : String;
 _WINDOWS = "5";
 
+// The script that puts the LangArena programs on the disk, builds them, and reads the counters
+// over each one. It writes no log: its lines fill columns of the row this program is writing.
+_LANGARENA_BENCH : String;
+_LANGARENA_BENCH = "../langarena/bench.py";
+
+// The compiler the cases were built with, which is what builds the LangArena programs too. The
+// `cargo run` that builds each case is what puts it here.
+_CARGO_BUILT_COMPILER : String;
+_CARGO_BUILT_COMPILER = "../../target/debug/fix";
+
 // The languages a case may carry a counterpart in, as a `ref.*` source beside its `main.fix`.
 _REFERENCE_LANGUAGES : Array String;
 _REFERENCE_LANGUAGES = ["c", "rust"];
@@ -130,6 +140,9 @@ set_latest_counts = |case_name, language_suffix, fields, log| (
 type Args = struct {
     no_save : Bool,
     llvm_passes_file: String,
+    // Whether to measure the LangArena programs beside the cases. They take about ten minutes
+    // against the two the cases take, which is why they are asked for rather than assumed.
+    langarena : Bool,
 };
 
 namespace Args {
@@ -137,6 +150,7 @@ namespace Args {
     default = Args {
         no_save: false,
         llvm_passes_file: "",
+        langarena: false,
     };
 }
 
@@ -149,6 +163,8 @@ main = (
         if i >= raw_args.@size { break $ args };
         if raw_args.@(i) == "--no-save" {
             continue $ (i + 1, args.set_no_save(true))
+        } else if raw_args.@(i) == "--langarena" {
+            continue $ (i + 1, args.set_langarena(true))
         } else if raw_args.@(i) == "--llvm-passes-file" {
             if i + 1 >= raw_args.@size {
                 undefined("error: --llvm-passes-file requires a file path argument")
@@ -234,6 +250,17 @@ main = (
         ez_cd(config, "..")
     );;
 
+    // The LangArena programs are built here too, for the reason the cases are: every build stands
+    // before every measurement. They come last because the compiler that built the cases is what
+    // builds them, and the `cargo run` above is what puts that compiler where `--fix` names it.
+    ez_cd(config, "..");;
+    when(args.@langarena,
+        ["python3", _LANGARENA_BENCH, "prepare"].ez_run_o(config);;
+        ["python3", _LANGARENA_BENCH, "build", "--fix", _CARGO_BUILT_COMPILER].ez_run_o(config);;
+        pure()
+    );;
+    ez_cd(config, _CASES_PATH);;
+
     // The most CPU other work took while the hardware counters were read, carried alongside
     // the log so that the row can say how much of the machine the measurement had: the cycle
     // columns mean nothing without it.
@@ -306,6 +333,34 @@ main = (
     );
 
     ez_cd(config, "..");;
+
+    // The LangArena programs, whose counts fill columns of this same row. `bench.py` prints one
+    // line per program, `<name>,<instructions>,<ram>,<splits>,<cycles>,<contention>`, which is
+    // what `perf_counters.py` prints with the program's name in front of it.
+    let (log, max_contention) = *if !args.@langarena { (log, max_contention).pure } else {
+        let (measured, _, measure_code) = *["python3", _LANGARENA_BENCH, "measure",
+            "--windows", _WINDOWS].ez_run_oec(config);
+        when(measure_code != 0_U8,
+            eprintln("error: the LangArena programs could not be measured");;
+            exit(1)
+        );;
+        measured.split("\n").filter_map(|line|
+            let line = line.strip_spaces;
+            if line == "" { none() };
+            some(line)
+        ).fold((log, max_contention), |line, (log, max_contention)|
+            let fields = line.split(",").to_array;
+            if fields.@size != _COUNTER_COLUMN_SUFFIXES.@size + 2 {
+                undefined("error: bench.py reported \"" + line + "\"")
+            };
+            // A machine with no counters to read leaves every field empty, and a column of empty
+            // cells is one the log is better off without.
+            if fields.@(1) == "" { (log, max_contention) };
+            let counts = fields.get_sub(1, fields.@size);
+            let log = log.set_latest_counts(fields.@(0), "", counts);
+            (log, max(max_contention, counts.@(_COUNTER_COLUMN_SUFFIXES.@size).read_number))
+        ).pure
+    };
 
     // A case whose counters could not be read leaves every column of its own empty, and says
     // nothing about how busy the machine was. Where that is every case, the run measured nothing,
