@@ -1799,6 +1799,12 @@ mod tests {
                 }),
             ),
             (
+                "llvm_args",
+                Box::new(|config: &mut Configuration| {
+                    config.llvm_args.push("--some-llvm-option=1".to_string())
+                }),
+            ),
+            (
                 "host_cpu.name",
                 Box::new(|config: &mut Configuration| {
                     config.host_cpu.name += "-of-another-machine"

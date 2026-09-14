@@ -265,7 +265,8 @@ fn run_cli() {
         .allow_hyphen_values(true)
         .value_name("OPTION")
         .help(
-            "An option to hand LLVM, written as LLVM writes it, such as `--x86-experimental-pref-innermost-loop-alignment=6` (intended for compiler development). LLVM ignores an option it does not know, so check that the one given did what it was given for.\n",
+            "An option to hand LLVM, written as LLVM writes it, such as `--x86-experimental-pref-innermost-loop-alignment=6` (intended for compiler development). The options are set for the whole run, so one run takes one set of them.\n\
+             LLVM takes an option it does not know without a word, and an option whose value it cannot read with a message and nothing else, so a build goes on either way without the setting. Check that the setting was made: build the same sources with the option and without it, and see that the programs differ.\n",
         );
     let emit_symbols = Arg::new("emit-symbols")
         .long("emit-symbols")

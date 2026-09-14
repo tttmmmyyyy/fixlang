@@ -56,7 +56,7 @@ use std::{
     fs::{self, create_dir_all, File},
     mem,
     path::{Path, PathBuf},
-    sync::{Arc, Once},
+    sync::{Arc, OnceLock},
 };
 
 /// What a build produced, as `build_object_files` reports it.
@@ -569,22 +569,25 @@ fn build_object_files_cache_hash_or_warn(
 /// Hand `args` to LLVM's own option parser, which is what reaches the settings its C API leaves
 /// out.
 ///
-/// The options LLVM offers are registered as the libraries holding them are initialized, so this
-/// runs after `Target::initialize_native` and before any code is generated. LLVM keeps them in
-/// globals of its own and parses them once, so a second call would be read against the first: the
-/// options a process generates code under are the ones of its first target machine.
+/// LLVM keeps what it parses in globals of its own, so what is set here is set for the process
+/// rather than for one build. It has to be set before any code is generated, which is what puts it
+/// here, and it may be set once: a second set of options would be read against the first rather
+/// than replacing it, so a process given two is stopped instead.
 ///
-/// **LLVM ignores an option it does not know, and says nothing.** An option renamed between LLVM
+/// **LLVM takes an option it does not know without a word.** An option renamed between LLVM
 /// releases therefore stops taking effect rather than stopping the build, which is what
-/// `test_llvm_arg_aligns_a_loop` is for.
+/// `test_llvm_arg_reaches_llvm` is for. An option whose value LLVM cannot read goes the same way,
+/// with a message of LLVM's on the error stream and a build that succeeds.
 fn set_llvm_options(args: &[String]) {
     if args.is_empty() {
         return;
     }
-    static PARSED: Once = Once::new();
-    PARSED.call_once(|| {
-        // LLVM reads the first argument as the name of the program, the way a `main` does.
-        let argv: Vec<CString> = std::iter::once("fix")
+    static PARSED: OnceLock<Vec<String>> = OnceLock::new();
+    let parsed = PARSED.get_or_init(|| {
+        // LLVM reads the first argument as the name of the program, the way a `main` does, and puts
+        // it in front of what it reports. Naming the option here is what says which of the
+        // compiler's own messages a message of LLVM's is not.
+        let argv: Vec<CString> = std::iter::once("fix --llvm-arg")
             .chain(args.iter().map(String::as_str))
             .map(|arg| CString::new(arg).unwrap())
             .collect();
@@ -597,7 +600,15 @@ fn set_llvm_options(args: &[String]) {
                 overview.as_ptr(),
             );
         }
+        args.to_vec()
     });
+    if parsed != args {
+        panic_with_msg(&format!(
+            "The options given to LLVM are set for the whole process, so one run takes one set of \
+             them. This one was given {:?} and then {:?}.",
+            parsed, args
+        ));
+    }
 }
 
 /// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the

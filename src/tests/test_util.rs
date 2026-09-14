@@ -125,7 +125,7 @@ pub fn fix_build_source_command(dir: &Path, source: &str, opt_level: &str) -> Co
 /// Fails the test unless the build succeeds, and — where `timeout` is given — unless it finishes
 /// within it. `description` names what is being compiled, as a phrase that reads after
 /// "compiling", e.g. "a chain of 2400 `let`s".
-fn build_program(
+pub(crate) fn build_program(
     source: &str,
     opt_level: &str,
     build_args: &[&str],
