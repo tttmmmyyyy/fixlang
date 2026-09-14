@@ -52,6 +52,16 @@ Two runs of one compiler over all fifty programs, on an idle machine, moved the 
 most 1.98% and the median by 0.31%, while the instruction count moved by less than 0.0001%. So a
 cycle difference under about 2% is this measurement rather than the compiler.
 
+**A program's cycle count moves with where its hot loop lands.** Compiling the same source with the
+same compiler and moving the code by padding what precedes it, `Brainfuck::Array` reads 4.42 billion
+cycles where its loop starts 16 bytes into a 64-byte line and 5.83 billion where it starts 32 bytes
+in — a span of 32.6%, with the instruction count identical to seven figures. The span is 7.6% for
+`Compress::HuffDecode`, 4.3% for `Binarytrees::Arena`, 2.8% for `Compress::ArithDecode` and 1.1%
+for `Sort::Merge`; `Hash::SHA256` and `Json::ParseMapping` move by under 2%. Nothing chooses that
+address: it follows from the size of every function the linker placed first, so an unrelated change
+redraws it. Read a cycle difference on those first five against the span above before reading it as
+the compiler, and see #654 for the measurement and #657 for what aligning the loop would buy.
+
 **The later of two runs comes out faster.** Of those fifty programs, 41 read fewer cycles the
 second time, by 0.35% on the average — so a comparison between two rows measured back to back is
 biased toward the second by about that much. Measure the first compiler again after the second and
