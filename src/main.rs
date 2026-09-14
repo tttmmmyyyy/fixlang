@@ -258,6 +258,15 @@ fn run_cli() {
         .help(
             "Path to a file listing LLVM passes, one pass-pipeline string per line, to run in place of the ones the optimization level implies (intended for compiler development).\n",
         );
+    let llvm_arg = Arg::new("llvm-arg")
+        .long("llvm-arg")
+        .takes_value(true)
+        .multiple_occurrences(true)
+        .allow_hyphen_values(true)
+        .value_name("OPTION")
+        .help(
+            "An option to hand LLVM, written as LLVM writes it, such as `--x86-experimental-pref-innermost-loop-alignment=6` (intended for compiler development). LLVM ignores an option it does not know, so check that the one given did what it was given for.\n",
+        );
     let emit_symbols = Arg::new("emit-symbols")
         .long("emit-symbols")
         .help("Output symbols of the Fix program (intended for compiler development).");
@@ -332,6 +341,7 @@ fn run_cli() {
         .arg(cu_size.clone())
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
+        .arg(llvm_arg.clone())
         .arg(emit_symbols.clone())
         .arg(emit_rc_ir.clone())
         .arg(backtrace.clone())
@@ -361,6 +371,7 @@ fn run_cli() {
             .arg(cu_size.clone())
             .arg(max_cu_size.clone())
             .arg(llvm_passes_file.clone())
+            .arg(llvm_arg.clone())
             .arg(emit_symbols.clone())
             .arg(emit_rc_ir.clone())
             .arg(program_args.clone())
@@ -737,6 +748,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         if let Some(passes) = read_llvm_passes_file_option(args)? {
             config.llvm_passes_override = Some(passes);
         }
+
+        // Set `llvm_args`. These reach LLVM's own option parser, and what they set there decides
+        // the code generated, so they belong to `Configuration::object_generation_hash`.
+        config.llvm_args = read_string_list_option(args, "llvm-arg");
 
         // Set `emit_symbols`.
         if args.contains_id("emit-symbols") {

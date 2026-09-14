@@ -41,6 +41,7 @@ use crate::{
 use inkwell::{
     attributes::AttributeLoc,
     context::Context,
+    llvm_sys::support::LLVMParseCommandLineOptions,
     module::Module,
     passes::PassBuilderOptions,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
@@ -50,11 +51,12 @@ use inkwell::{
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
+    ffi::{c_char, CString},
     fmt::Display,
     fs::{self, create_dir_all, File},
     mem,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Once},
 };
 
 /// What a build produced, as `build_object_files` reports it.
@@ -564,6 +566,40 @@ fn build_object_files_cache_hash_or_warn(
     )
 }
 
+/// Hand `args` to LLVM's own option parser, which is what reaches the settings its C API leaves
+/// out.
+///
+/// The options LLVM offers are registered as the libraries holding them are initialized, so this
+/// runs after `Target::initialize_native` and before any code is generated. LLVM keeps them in
+/// globals of its own and parses them once, so a second call would be read against the first: the
+/// options a process generates code under are the ones of its first target machine.
+///
+/// **LLVM ignores an option it does not know, and says nothing.** An option renamed between LLVM
+/// releases therefore stops taking effect rather than stopping the build, which is what
+/// `test_llvm_arg_aligns_a_loop` is for.
+fn set_llvm_options(args: &[String]) {
+    if args.is_empty() {
+        return;
+    }
+    static PARSED: Once = Once::new();
+    PARSED.call_once(|| {
+        // LLVM reads the first argument as the name of the program, the way a `main` does.
+        let argv: Vec<CString> = std::iter::once("fix")
+            .chain(args.iter().map(String::as_str))
+            .map(|arg| CString::new(arg).unwrap())
+            .collect();
+        let pointers: Vec<*const c_char> = argv.iter().map(|arg| arg.as_ptr()).collect();
+        let overview = CString::new("Fix").unwrap();
+        unsafe {
+            LLVMParseCommandLineOptions(
+                pointers.len() as i32,
+                pointers.as_ptr(),
+                overview.as_ptr(),
+            );
+        }
+    });
+}
+
 /// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
 /// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
 /// position-independent.
@@ -575,6 +611,7 @@ pub(crate) fn get_target_machine(
     let _native = Target::initialize_native(&InitializationConfig::default())
         .map_err(|e| panic_with_msg(&format!("failed to initialize native: {}", e)))
         .unwrap();
+    set_llvm_options(&config.llvm_args);
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple)
         .map_err(|e| {

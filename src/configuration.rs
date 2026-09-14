@@ -519,6 +519,11 @@ pub struct Configuration {
     /// Regex patterns of the CPU features the generated code leaves unused; a feature the host
     /// supports and no pattern matches is used.
     pub disable_cpu_features_regex: Vec<String>,
+    /// Options handed to LLVM's own option parser before any code is generated, written as LLVM
+    /// writes them. They reach settings the C API leaves out — among them the boundary a loop
+    /// starts on, which decides how fast the front end can feed it — and LLVM ignores an option it
+    /// does not know, so a build giving one has to check that it did what it was given for.
+    pub llvm_args: Vec<String>,
     /// The subcommand of the `fix` command this configuration was assembled for, which decides
     /// what the build produces and how the entry point is implemented.
     pub subcommand: SubCommand,
@@ -644,6 +649,7 @@ impl Configuration {
             c_type_sizes: CTypeSizes::load_or_check()?,
             host_cpu: HostCpu::of_this_machine(),
             disable_cpu_features_regex: vec![],
+            llvm_args: vec![],
             preliminary_commands: vec![],
             allow_preliminary_commands: false,
             type_check_cache: Arc::new(FileCache::new()),
@@ -1045,6 +1051,7 @@ impl Configuration {
             output_file_type,
             host_cpu,
             disable_cpu_features_regex,
+            llvm_args,
 
             // Reach the generated code through what they decide, which is pushed in their place:
             // `llvm_passes` is the pipeline `llvm_passes_override` gives where it gives one and the
@@ -1147,6 +1154,8 @@ impl Configuration {
         object_generation.push_text(&host_cpu.name);
         object_generation.push_text(&host_cpu.features);
         object_generation.push_list(disable_cpu_features_regex);
+        // What LLVM was told before it generated the code.
+        object_generation.push_list(llvm_args);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
         // implies, so the pipeline is hashed in full: were it left out, objects generated under
