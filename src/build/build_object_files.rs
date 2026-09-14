@@ -117,11 +117,11 @@ fn optimize_rc_program(
             validate::validate(prog, &symbol_names, type_env, stage);
         }
     };
-    // Drop what nothing reaches, after `stage` and before the pass below it runs. Each pass this
-    // guards sends a call to a new version of its callee, leaving the version it moved off with one
-    // caller fewer, and the last such call leaves it with none — along with every function only that
-    // version called. Pruning between the passes is what keeps the one below from cloning, analyzing
-    // and generating code for functions no execution reaches.
+    // Drop what nothing reaches, after `stage` and before the pass that follows it runs. Each pass
+    // this guards sends a call to a new version of its callee, leaving the version it moved off with
+    // one caller fewer, and the last such call leaves it with none — along with every function only
+    // that version called. Pruning between the passes is what keeps the pass that follows from
+    // cloning, analyzing and generating code for functions no execution reaches.
     //
     // The levels below these passes reroute no call, and lowering names every function it lifts from
     // the symbol it lifted it out of, so a program there holds nothing to drop.
@@ -622,16 +622,12 @@ pub(crate) fn get_target_machine(
     opt_level: OptimizationLevel,
     config: &Configuration,
 ) -> TargetMachine {
-    let _native = Target::initialize_native(&InitializationConfig::default())
-        .map_err(|e| panic_with_msg(&format!("failed to initialize native: {}", e)))
-        .unwrap();
+    Target::initialize_native(&InitializationConfig::default())
+        .unwrap_or_else(|e| panic_with_msg(&format!("failed to initialize native: {}", e)));
     set_llvm_options(&config.llvm_args);
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple)
-        .map_err(|e| {
-            panic_with_msg(&format!("failed to create target: {}", e));
-        })
-        .unwrap();
+        .unwrap_or_else(|e| panic_with_msg(&format!("failed to create target: {}", e)));
     let reloc_mode = if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
         RelocMode::PIC
     } else {

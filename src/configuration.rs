@@ -326,12 +326,11 @@ pub struct DiagnosticsConfig {
     /// The source files the diagnostics are asked about. A diagnostic anchored in another file is
     /// left out of the report.
     pub files: Vec<PathBuf>,
-    /// In-memory overrides for source-file contents used during the LSP
-    /// completion flow: when `parse_file_path` is invoked for a path
-    /// present here, the supplied string is parsed instead of reading
-    /// the file from disk. This lets `handle_completion` repair the
-    /// live buffer (see `commands::lsp::completion::repair`) and
-    /// re-elaborate via `elaborate_via_config` without touching disk.
+    /// The content to parse for a source file, in place of what the file on disk holds. Where
+    /// `parse_file_path` is given a path present here, the string beside it is parsed as that
+    /// file's content.
+    ///
+    /// It is how the LSP elaborates a buffer the editor holds and the disk has not seen.
     pub live_source_overrides: Arc<Map<PathBuf, String>>,
     /// Restrict type-checking to this specific set of global value
     /// names. `None` keeps the default (every global declared in the
