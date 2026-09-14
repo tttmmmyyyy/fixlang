@@ -572,7 +572,11 @@ fn build_object_files_cache_hash_or_warn(
 /// LLVM keeps what it parses in globals of its own, so what is set here is set for the process
 /// rather than for one build. It has to be set before any code is generated, which is what puts it
 /// here, and it may be set once: a second set of options would be read against the first rather
-/// than replacing it, so a process given two is stopped instead.
+/// than replacing it.
+///
+/// One invocation of the compiler builds one configuration and so gives one set, which is what
+/// makes a second set an error in the compiler rather than in what a user wrote. The assertion is
+/// for the code that builds several configurations in one process, which is the test suite.
 ///
 /// **LLVM takes an option it does not know without a word.** An option renamed between LLVM
 /// releases therefore stops taking effect rather than stopping the build, which is what

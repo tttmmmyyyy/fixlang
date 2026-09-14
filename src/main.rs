@@ -261,6 +261,10 @@ fn run_cli() {
     let llvm_arg = Arg::new("llvm-arg")
         .long("llvm-arg")
         .takes_value(true)
+        // One value per occurrence, where the repeated options beside this one take several. An
+        // option of LLVM's opens with a hyphen, so this one takes hyphenated values, and a value
+        // that may be hyphenated cannot be one of several: everything after it would be read as
+        // another value, the rest of the command line included.
         .multiple_occurrences(true)
         .allow_hyphen_values(true)
         .value_name("OPTION")
