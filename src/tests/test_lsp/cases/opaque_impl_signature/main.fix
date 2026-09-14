@@ -1,0 +1,15 @@
+module Main;
+
+trait c : ToIter {
+    to_iter : [?it : Iterator, Item ?it = I64] c -> ?it;
+}
+
+type Odd = box struct { n : I64 };
+
+impl Odd : ToIter {
+    to_iter : Odd -> RangeIterator;
+    to_iter = |o| Iterator::range(0, o.@n);
+}
+
+main : IO ();
+main = println(Odd { n : 3 }.to_iter.to_array.to_string);

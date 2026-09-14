@@ -1,5 +1,7 @@
 use crate::configuration::Configuration;
-use crate::tests::test_util::{run_source_assert_failed, test_source, test_source_fail};
+use crate::tests::test_util::{
+    run_source_assert_failed, test_source, test_source_fail, test_source_fail_excludes,
+};
 
 // ============================================================
 // 1-1. Basic use case tests
@@ -566,6 +568,407 @@ pub fn test_opaque_impl_method_type_sig_renamed_vars() {
         );
     "##;
     test_source(&source, Configuration::develop_mode());
+}
+
+/// The implementation writes the opaque type under the name the declaration writes it under, so
+/// that the comparison of the two signatures has one name standing in both of them.
+#[test]
+pub fn test_opaque_impl_method_type_sig_same_opaque_name() {
+    let source = r##"
+        module Main;
+
+        trait c : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        type Odd = box struct { n : I64 };
+
+        impl Odd : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] Odd -> ?it;
+            to_iter = |o| Iterator::range(0, o.@n);
+        }
+
+        main : IO ();
+        main = (
+            let arr = Odd { n : 3 }.to_iter.to_array;
+            assert_eq(|_|"same opaque name", arr, [0, 1, 2]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// The `e` of the declaration stands in its constraints and nowhere in the member's type, so the
+/// implementation writes no type for it. An implementation that writes no type signature has
+/// nothing to disagree with, so what is reported is the type the body leaves undetermined.
+#[test]
+pub fn test_opaque_member_with_a_type_variable_of_its_constraints_alone() {
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = e, e : ToString] c -> ?it;
+        }
+
+        impl Bool : Make {
+            make = |_| Iterator::range(0, 3);
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(true).to_array;
+            println(is.to_string)
+        );
+    "##;
+    test_source_fail_excludes(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation",
+    );
+}
+
+// ============================================================
+// A type signature on an impl method that disagrees with the declaration
+// ============================================================
+
+/// The implementation writes the type of the iterator it returns where the declaration writes
+/// the opaque type, which the desugaring of opaque types has no reading for.
+#[test]
+pub fn test_opaque_impl_method_type_sig_writes_a_concrete_type() {
+    let source = r##"
+        module Main;
+
+        trait c : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        type Odd = box struct { n : I64 };
+
+        impl Odd : ToIter {
+            to_iter : Odd -> RangeIterator;
+            to_iter = |o| Iterator::range(0, o.@n);
+        }
+
+        main : IO ();
+        main = println(Odd { n : 3 }.to_iter.to_array.to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation writes `Std::Iterator::RangeIterator` where the trait definition writes the opaque type `?it`.",
+    );
+}
+
+/// The implementation writes the type of the iterator it returns where the declaration writes the
+/// opaque type, in a trait whose opaque type is constrained by an associated type of its own and
+/// whose implementation is for a type constructor applied to a type variable.
+#[test]
+pub fn test_opaque_impl_method_type_sig_writes_a_concrete_type_under_an_associated_type() {
+    let source = r##"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait c : ToIter {
+            type Elem c;
+            to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it;
+        }
+
+        impl Array a : ToIter {
+            type Elem (Array a) = a;
+            to_iter : Array a -> ArrayIterator a;
+            to_iter = Array::to_iter;
+        }
+
+        main : IO ();
+        main = (
+            let arr = [1, 2, 3].ToIter::to_iter.to_array;
+            println(arr.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation writes `Std::Iterator::ArrayIterator a` where the trait definition writes the opaque type `?it`.",
+    );
+}
+
+/// The declaration hides two types behind two opaque types, and the implementation writes one
+/// opaque type for both. Each opaque type of a declaration stands for one type an
+/// implementation returns, so one for two is a statement the declaration does not make.
+#[test]
+pub fn test_opaque_impl_method_type_sig_writes_one_opaque_type_for_two() {
+    let source = r##"
+        module Main;
+
+        trait c : Two {
+            two : [?a : ToString, ?b : ToString] c -> (?a, ?b);
+        }
+
+        impl I64 : Two {
+            two : [?x : ToString] I64 -> (?x, ?x);
+            two = |n| (n.to_string, n.to_string);
+        }
+
+        main : IO ();
+        main = (
+            let (a, b) = 3.two;
+            println(a.to_string + b.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation writes one opaque type `?x` for two opaque types of the trait definition, `?a` and `?b`.",
+    );
+}
+
+/// The implementation writes a type variable where the declaration writes `I64`. The report
+/// prints the two signatures as they are written, opaque types and all.
+#[test]
+pub fn test_opaque_impl_method_type_sig_is_more_general_than_the_declaration() {
+    let source = r##"
+        module Main;
+
+        trait c : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] c -> I64 -> ?it;
+        }
+
+        type Odd = box struct { n : I64 };
+
+        impl Odd : ToIter {
+            to_iter : [?j : Iterator, Item ?j = I64] Odd -> a -> ?j;
+            to_iter = |o, _| Iterator::range(0, o.@n);
+        }
+
+        main : IO ();
+        main = println(Odd { n : 3 }.to_iter(0).to_array.to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation does not match trait definition.\nExpected: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::I64] Main::Odd -> Std::I64 -> ?it`\nFound: `[?j : Std::Iterator, Std::Iterator::Item ?j = Std::I64] Main::Odd -> a -> ?j`",
+    );
+}
+
+/// The implementation states that the iterator it returns has `Bool` elements where the
+/// declaration states `I64`, and returns an iterator of `I64`. The constraints an
+/// implementation writes on an opaque type are compared with the declaration's.
+#[test]
+pub fn test_opaque_impl_method_type_sig_constrains_item_to_another_type() {
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        impl Bool : Make {
+            make : [?jt : Iterator, Item ?jt = Bool] Bool -> ?jt;
+            make = |_| Iterator::range(0, 3);
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(true).to_array;
+            println(is.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation does not match trait definition.\nExpected: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::I64] Std::Bool -> ?it`\nFound: `[?jt : Std::Iterator, Std::Iterator::Item ?jt = Std::Bool] Std::Bool -> ?jt`",
+    );
+}
+
+/// The implementation writes an opaque type and none of the constraints the declaration puts on
+/// it, which says less about the type it returns than the declaration does.
+#[test]
+pub fn test_opaque_impl_method_type_sig_omits_the_constraints() {
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        impl Bool : Make {
+            make : Bool -> ?jt;
+            make = |_| Iterator::range(0, 3);
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(true).to_array;
+            println(is.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation does not match trait definition.\nExpected: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::I64] Std::Bool -> ?it`\nFound: `Std::Bool -> ?jt`",
+    );
+}
+
+/// The implementation writes an ordinary type variable where the declaration writes the opaque
+/// type. What the declaration hides is the implementation's own type, and an implementation that
+/// writes a variable of its own there would let a caller choose that type instead.
+#[test]
+pub fn test_opaque_impl_method_type_sig_writes_a_type_variable_of_its_own() {
+    let source = r##"
+        module Main;
+
+        trait c : Two {
+            two : [?a : ToString] c -> ?a;
+        }
+
+        impl I64 : Two {
+            two : [x : ToString] I64 -> x;
+            two = |n| n.to_string;
+        }
+
+        main : IO ();
+        main = println(3.two.to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation writes `x` where the trait definition writes the opaque type `?a`.",
+    );
+}
+
+/// The declaration says what the iterator's elements are through a second opaque type, and the
+/// implementation states `Bool` of them. An opaque type of the declaration stands for one type
+/// the implementation chooses, so a signature stating something else about it is reported, as it
+/// is where the declaration names the element type itself.
+#[test]
+pub fn test_opaque_impl_method_type_sig_constrains_item_to_another_type_through_an_opaque_type() {
+    let source = r##"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = ?jt, ?jt : ToString] c -> ?it;
+        }
+
+        impl Bool : Make {
+            make : [?p : Iterator, Item ?p = Bool] Bool -> ?p;
+            make = |_| Iterator::range(0, 3);
+        }
+
+        main : IO ();
+        main = println(Make::make(true).to_array.to_string);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation does not match trait definition.",
+    );
+}
+
+/// Two implementations of one member, each writing a signature that disagrees with the
+/// declaration in its own way. Each implementation is read on its own, and one compilation
+/// reports both.
+#[test]
+pub fn test_opaque_impl_method_type_sigs_are_all_reported_in_one_compilation() {
+    let source = r##"
+        module Main;
+
+        trait c : ToIter {
+            to_iter : [?it : Iterator, Item ?it = I64] c -> ?it;
+        }
+
+        type Odd = box struct { n : I64 };
+        type Even = box struct { n : I64 };
+
+        impl Odd : ToIter {
+            to_iter : Odd -> RangeIterator;
+            to_iter = |o| Iterator::range(0, o.@n);
+        }
+
+        impl Even : ToIter {
+            to_iter : [?j : Iterator, Item ?j = Bool] Even -> ?j;
+            to_iter = |e| Iterator::range(0, e.@n);
+        }
+
+        main : IO ();
+        main = println(Odd { n : 3 }.to_iter.to_array.to_string);
+    "##;
+    let errmsg = run_source_assert_failed(&source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("writes `Std::Iterator::RangeIterator` where the trait definition writes the opaque type `?it`"),
+        "the implementation for `Odd` is reported, but the message is:\n{}",
+        errmsg
+    );
+    assert!(
+        errmsg.contains("Main::Even -> ?j`"),
+        "the implementation for `Even` is reported, but the message is:\n{}",
+        errmsg
+    );
+}
+
+/// The declaration hides two types behind two opaque types, and the implementation writes an
+/// opaque type variable of its own for each, naming them in the other order. Which opaque type
+/// of the declaration each one stands for is read off the type the signature writes.
+#[test]
+pub fn test_opaque_impl_method_type_sig_writes_two_opaque_types_in_the_other_order() {
+    let source = r##"
+        module Main;
+
+        trait c : Two {
+            two : [?a : ToString, ?b : Iterator, Item ?b = I64] c -> (?a, ?b);
+        }
+
+        impl I64 : Two {
+            two : [?q : Iterator, Item ?q = I64, ?p : ToString] I64 -> (?p, ?q);
+            two = |n| (n.to_string, Iterator::range(0, n));
+        }
+
+        main : IO ();
+        main = (
+            let (s, it) = 3.two;
+            assert_eq(|_|"two opaque types", s.to_string, "3");;
+            assert_eq(|_|"two opaque types", it.to_array, [0, 1, 2]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// The implementation writes `I64` where the declaration writes `Elem c`, which the
+/// implementation of `Elem` gives that type. The two signatures describe the same values, and
+/// the desugaring of opaque types reads one as the other written with its type variables
+/// replaced, which this is not.
+#[test]
+pub fn test_opaque_impl_method_type_sig_reduces_an_associated_type() {
+    let source = r##"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait c : Coll {
+            type Elem c;
+            iter_with : [?it : Iterator, Item ?it = Elem c] Elem c -> c -> ?it;
+        }
+
+        type MyArr = box struct { xs : Array I64 };
+
+        impl MyArr : Coll {
+            type Elem MyArr = I64;
+            iter_with : [?jt : Iterator, Item ?jt = I64] I64 -> MyArr -> ?jt;
+            iter_with = |x, m| m.@xs.to_iter.push_front(x);
+        }
+
+        main : IO ();
+        main = (
+            let m = MyArr { xs : [1, 2] };
+            println(Coll::iter_with(0, m).to_array.to_string)
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation is not the type of the trait definition with its type variables replaced.\nExpected: `Main::Coll::Elem Main::MyArr -> Main::MyArr -> ?it`\nFound: `Std::I64 -> Main::MyArr -> ?jt`",
+    );
 }
 
 // ============================================================

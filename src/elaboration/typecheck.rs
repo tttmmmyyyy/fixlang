@@ -1802,21 +1802,25 @@ impl TypeCheckContext {
     /// the constraints it states, has the type of the other and meets what the other requires.
     ///
     /// The context has to be one in which no inference has run.
+    ///
+    /// # Arguments
+    /// * `fixed_tyvars` — the type variables that stand for themselves, which neither scheme may
+    ///   give a type. A type one of them stands for is one both schemes speak about and neither
+    ///   chooses, so what they say about it has to agree rather than fit together.
     pub fn check_scheme_equivalent(
         self: &TypeCheckContext,
         lhs: &Arc<Scheme>,
         rhs: &Arc<Scheme>,
+        fixed_tyvars: &[Arc<TyVar>],
     ) -> Result<(), UnifOrOtherErr> {
         self.assert_freshness();
-        {
+        let check_one = |lhs: &Arc<Scheme>, rhs: &Arc<Scheme>| {
             let mut tc = self.clone();
-            tc.check_scheme_equivalent_one(lhs, rhs)?;
-        }
-        {
-            let mut tc = self.clone();
-            tc.check_scheme_equivalent_one(rhs, lhs)?;
-        }
-
+            tc.fixed_tyvars.extend_from_slice(fixed_tyvars);
+            tc.check_scheme_equivalent_one(lhs, rhs)
+        };
+        check_one(lhs, rhs)?;
+        check_one(rhs, lhs)?;
         Ok(())
     }
 

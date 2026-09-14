@@ -590,6 +590,31 @@ impl TraitMemberImpl {
     }
 }
 
+/// The error reported where the type signature an implementation writes for a trait member is not
+/// equivalent to the type the trait's declaration gives that member.
+///
+/// # Arguments
+/// * `scm` — the type the implementation writes for the member.
+/// * `scm_via_defn` — the type the declaration gives the member at the type the trait is
+///   implemented for.
+/// * `impl_src` — where the implementation writes the member.
+/// * `decl_src` — where the trait declares the member.
+pub fn impl_signature_mismatch_error(
+    scm: &Arc<Scheme>,
+    scm_via_defn: &Arc<Scheme>,
+    impl_src: &Option<Span>,
+    decl_src: &Option<Span>,
+) -> Errors {
+    Errors::from_msg_srcs(
+        format!(
+            "Type signature in implementation does not match trait definition.\nExpected: `{}`\nFound: `{}`",
+            scm_via_defn.to_string(),
+            scm.to_string(),
+        ),
+        &[impl_src, decl_src],
+    )
+}
+
 /// A module of the program, and the sources it is made of.
 #[derive(Clone)]
 pub struct ModuleInfo {
@@ -1498,25 +1523,18 @@ impl Program {
                         let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                             // Check that the type signature given by implementor is equivalent to
                             // the type scheme obtained from the trait member definition.
-                            if UnifOrOtherErr::extract_others(
-                                tc.check_scheme_equivalent(&scm, &scm_via_defn),
-                            )?
+                            if UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
+                                &scm,
+                                &scm_via_defn,
+                                &[],
+                            ))?
                             .is_err()
                             {
-                                return Err(Errors::from_msg_srcs(
-                                    format!(
-                                        "Type signature in implementation does not match trait definition.\nExpected: `{}`\nFound: `{}`",
-                                        scm_via_defn.to_string(),
-                                        scm.to_string(),
-                                    ),
-                                    &[
-                                        &impl_src
-                                            .as_ref()
-                                            .map(|s| s.to_head_character()),
-                                        &decl_src
-                                            .as_ref()
-                                            .map(|s| s.to_head_character()),
-                                    ],
+                                return Err(impl_signature_mismatch_error(
+                                    &scm,
+                                    &scm_via_defn,
+                                    &impl_src.as_ref().map(|s| s.to_head_character()),
+                                    &decl_src.as_ref().map(|s| s.to_head_character()),
                                 ));
                             }
                             // Perform type-checking.
