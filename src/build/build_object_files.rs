@@ -569,17 +569,16 @@ fn build_object_files_cache_hash_or_warn(
 /// Hand `args` to LLVM's own option parser, which is what reaches the settings its C API leaves
 /// out.
 ///
-/// LLVM keeps what it parses in globals of its own, so what is set here is set for the process
-/// rather than for one build. It has to be set before any code is generated, which is what puts it
-/// here, and it may be set once: a second set of options would be read against the first rather
-/// than replacing it.
+/// LLVM keeps what it parses in globals of its own, so what is set here holds for every build the
+/// process makes. It has to be set before any code is generated, which is what puts it here, and it
+/// may be set once: LLVM reads a second set of options against the first it already holds.
 ///
-/// One invocation of the compiler builds one configuration and so gives one set, which is what
-/// makes a second set an error in the compiler rather than in what a user wrote. The assertion is
-/// for the code that builds several configurations in one process, which is the test suite.
+/// One invocation of the compiler builds one configuration and so gives one set, so a second set is
+/// a fault in the compiler. The assertion catches the code that builds several configurations in
+/// one process, which is the test suite.
 ///
-/// **LLVM takes an option it does not know without a word.** An option renamed between LLVM
-/// releases therefore stops taking effect rather than stopping the build, which is what
+/// **LLVM ignores an option it does not know.** An option renamed between LLVM releases therefore
+/// stops taking effect while the build goes on succeeding, which is what
 /// `test_llvm_arg_reaches_llvm` is for. An option whose value LLVM cannot read goes the same way,
 /// with a message of LLVM's on the error stream and a build that succeeds.
 fn set_llvm_options(args: &[String]) {
@@ -589,8 +588,8 @@ fn set_llvm_options(args: &[String]) {
     static PARSED: OnceLock<Vec<String>> = OnceLock::new();
     let parsed = PARSED.get_or_init(|| {
         // LLVM reads the first argument as the name of the program, the way a `main` does, and puts
-        // it in front of what it reports. Naming the option here is what says which of the
-        // compiler's own messages a message of LLVM's is not.
+        // it in front of what it reports. Naming the option here is what marks such a report as
+        // LLVM's.
         let argv: Vec<CString> = std::iter::once("fix --llvm-arg")
             .chain(args.iter().map(String::as_str))
             .map(|arg| CString::new(arg).expect("no argument of a command line holds a NUL byte"))

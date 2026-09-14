@@ -520,9 +520,9 @@ pub struct Configuration {
     /// supports and no pattern matches is used.
     pub disable_cpu_features_regex: Vec<String>,
     /// Options handed to LLVM's own option parser before any code is generated, written as LLVM
-    /// writes them. They reach settings the C API leaves out — among them the boundary a loop
-    /// starts on, which decides how fast the front end can feed it — and LLVM ignores an option it
-    /// does not know, so a build giving one has to check that it did what it was given for.
+    /// writes them. They reach settings the C API leaves out — among them the boundary a loop's
+    /// code starts on, which moves how fast the CPU runs it. LLVM ignores an option it does not
+    /// know, so a build that gives one has to check that the setting was made.
     pub llvm_args: Vec<String>,
     /// The subcommand of the `fix` command this configuration was assembled for, which decides
     /// what the build produces and how the entry point is implemented.

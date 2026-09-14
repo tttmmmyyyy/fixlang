@@ -1,10 +1,10 @@
 //! The options `--llvm-arg` hands to LLVM, and whether they still reach it.
 //!
-//! LLVM takes an option it does not know without a word, and an option whose value it cannot read
-//! with a message and nothing else, so a build goes on either way without the setting. An option
-//! renamed between LLVM releases would therefore stop taking effect rather than stopping the
-//! build, and a measurement taken with it would answer for a setting that was never made. These
-//! tests read the effect out of the program the build produced rather than trusting the option.
+//! LLVM ignores an option it does not know. An option whose value LLVM cannot read gets a message
+//! on the error stream and nothing more. The build succeeds either way, with the setting unmade, so
+//! an option renamed between LLVM releases would stop taking effect while the build went on
+//! succeeding, and a measurement taken with it would answer for a setting that was never made.
+//! These tests read the effect out of the program the build produced.
 
 #[cfg(test)]
 mod tests {
@@ -98,10 +98,10 @@ mod tests {
     /// program answers the same either way, which is what says the option moved the code rather
     /// than the computation.
     ///
-    /// This is what fails where the option LLVM offers is renamed. LLVM takes an unknown option
-    /// without a word, so a build asking for a setting would otherwise go on not getting it, and
-    /// every measurement taken with it would answer for a setting that was never made. The two
-    /// builds without the option are what make the difference in size the option's doing.
+    /// This is what fails where the option LLVM offers is renamed. LLVM ignores an unknown option,
+    /// so a build asking for a setting would otherwise go on without it, and every measurement
+    /// taken with it would answer for a setting that was never made. The two builds without the
+    /// option are what make the difference in size the option's doing.
     #[test]
     fn test_llvm_arg_reaches_llvm() {
         let (plain, plain_output) = build_and_run(&[]);
@@ -125,9 +125,9 @@ mod tests {
         );
     }
 
-    /// An option LLVM does not know leaves the program as it was. That is the behavior the test
-    /// above exists to catch, and it earns a test of its own because it is what a renamed option
-    /// does: LLVM says nothing about it, and the build succeeds.
+    /// An option LLVM does not know leaves the program as it was. That is the behavior
+    /// `test_llvm_arg_reaches_llvm` exists to catch, and it earns a test of its own because it is
+    /// what a renamed option does: LLVM says nothing about it, and the build succeeds.
     #[test]
     fn test_an_option_llvm_does_not_know_leaves_the_program_alone() {
         let (plain, _) = build_and_run(&[]);
@@ -167,8 +167,8 @@ mod tests {
     }
 
     /// `--llvm-arg` may be written more than once, and every occurrence reaches LLVM. The
-    /// occurrence beside the one under test carries an option LLVM does not know, which LLVM takes
-    /// without a word, so the size of the program answers for the other occurrence alone.
+    /// occurrence beside the one under test carries an option LLVM ignores, so the size of the
+    /// program answers for the other occurrence alone.
     #[test]
     fn test_every_occurrence_of_the_option_reaches_llvm() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
@@ -204,12 +204,13 @@ mod tests {
         );
     }
 
-    /// An option whose value LLVM cannot read stops the setting and not the build: LLVM reports it
-    /// on the error stream, the build succeeds, and the program comes out as it would have without
-    /// the option. That is why the help of `--llvm-arg` tells a user to compare the programs.
+    /// An option whose value LLVM cannot read leaves the setting unmade and lets the build run to
+    /// the end: LLVM reports it on the error stream, the build succeeds, and the program comes out
+    /// as it would have without the option. That is why the help of `--llvm-arg` tells a user to
+    /// compare the programs.
     ///
     /// The report opens with `fix --llvm-arg`, the name `set_llvm_options` hands LLVM for itself,
-    /// which is what says the message is LLVM's and not the compiler's.
+    /// which is what marks the message as LLVM's.
     #[test]
     fn test_an_option_whose_value_llvm_cannot_read_is_reported_and_the_build_goes_on() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
