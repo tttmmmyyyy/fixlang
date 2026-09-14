@@ -2503,9 +2503,9 @@ impl Scheme {
             // Writing `Elem c = e, e : ToString` instead is ok.
             if !pred.ty.is_tyvar() {
                 return Err(Errors::from_msg_srcs(
-                    "Trait constraint should be in the form of `{type_var} : {Trait}`. \
-                     NOTE: If you want to put a constraint on an associated type application, e.g., `Elem c : ToString`, you should write `Elem c = e, e : ToString` instead. \
-                     We will support more general constraints by implementing such conversion in a future.".to_string(),
+                    "Trait constraint should be in the form of `{type_var} : {Trait}`.\n\
+                     Hint: If you want to put a constraint on an associated type application, e.g., `Elem c : ToString`, you should write `Elem c = e, e : ToString` instead.\n\
+                     NOTE: We will support more general constraints by implementing such conversion in a future.".to_string(),
                     &[&pred.src],
                 ));
             }
@@ -2521,9 +2521,9 @@ impl Scheme {
                 // This ensures that the reduction of a type terminates in a finite number of steps.
                 if !eq.value.is_assoc_ty_free() {
                     return Err(Errors::from_msg_srcs(
-                        "Right side of an equality constraint cannot contain an associated type. \
-                         NOTE: Instead of using associated type in the right side, e.g., `Elem c1 = Elem c2`, you can write `Elem c1 = e, Elem c2 = e`. \
-                         We will support more general constraints by implementing such conversion in a future.".to_string(),
+                        "Right side of an equality constraint cannot contain an associated type.\n\
+                         Hint: Instead of using associated type in the right side, e.g., `Elem c1 = Elem c2`, you can write `Elem c1 = e, Elem c2 = e`.\n\
+                         NOTE: We will support more general constraints by implementing such conversion in a future.".to_string(),
                         &[&eq.src],
                     ));
                 }
@@ -2543,9 +2543,9 @@ impl Scheme {
                 for arg in &eq.args[1..] {
                     if !arg.is_assoc_ty_free() {
                         return Err(Errors::from_msg_srcs(
-                            "In left side of an equality constraint, arguments of an associated type cannot contain an associated type. \
-                             NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`. \
-                             We will support more general constraints by implementing such conversion in a future.".to_string(),
+                            "In left side of an equality constraint, arguments of an associated type cannot contain an associated type.\n\
+                             Hint: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`.\n\
+                             NOTE: We will support more general constraints by implementing such conversion in a future.".to_string(),
                             &[&eq.src],
                         ));
                     }
