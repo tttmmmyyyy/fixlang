@@ -53,12 +53,18 @@ main : IO () = (
               + widest_f64.to_string_precision(prec).@size
               + widest_f64.to_string_exp_precision(prec).@size
     );
-    // The four that take no precision write the 6 places their format gives by default.
+    // The two exponential ones that take no precision write the 6 places their format gives by
+    // default.
     let total = total + widest_f32.to_string.@size
                       + widest_f32.to_string_exp.@size
                       + widest_f64.to_string.@size
                       + widest_f64.to_string_exp.@size;
-    assert_eq(|_|"the texts of every precision come to their known total", total, 224899);;
+    // `to_string` writes the shortest digits, and its buffer is sized for the widest text those
+    // reach: a number whose digits fill the type and whose point sits outside the window written
+    // positionally for an `F64`, and one at the far edge of that window for an `F32`.
+    let total = total + (-2.2250738585072014e-308).to_string.@size
+                      + (-1.0e12_F32).to_string.@size;
+    assert_eq(|_|"the texts of every precision come to their known total", total, 224611);;
     pure()
 );
 "#;

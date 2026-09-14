@@ -86,6 +86,142 @@ fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
     Ok(())
 }
 
+/// The headers the runtime's sources include, each written beside the source that includes it.
+const RUNTIME_HEADERS: [(&str, &str); 8] = [
+    ("ryu/ryu.h", include_str!("../fixstd/ryu/ryu.h")),
+    ("ryu/common.h", include_str!("../fixstd/ryu/common.h")),
+    (
+        "ryu/digit_table.h",
+        include_str!("../fixstd/ryu/digit_table.h"),
+    ),
+    (
+        "ryu/d2s_intrinsics.h",
+        include_str!("../fixstd/ryu/d2s_intrinsics.h"),
+    ),
+    (
+        "ryu/d2s_full_table.h",
+        include_str!("../fixstd/ryu/d2s_full_table.h"),
+    ),
+    (
+        "ryu/d2s_small_table.h",
+        include_str!("../fixstd/ryu/d2s_small_table.h"),
+    ),
+    (
+        "ryu/f2s_intrinsics.h",
+        include_str!("../fixstd/ryu/f2s_intrinsics.h"),
+    ),
+    (
+        "ryu/f2s_full_table.h",
+        include_str!("../fixstd/ryu/f2s_full_table.h"),
+    ),
+];
+
+/// The C sources the runtime is built from: the name the object each one compiles to is cached
+/// under, the path the source is written to and compiled by, its text, and the flags that source
+/// alone is compiled with.
+///
+/// `ryu/d2s.c` and `ryu/f2s.c` each define a `to_chars` of their own, so each is a translation unit
+/// of its own. They are the part of the runtime that computes rather than calls out, and they take
+/// 214 ns to write a number unoptimized against the 88 ns they take optimized, so they are the part
+/// the C compiler is asked to optimize.
+const RUNTIME_SOURCES: [(&str, &str, &str, &[&str]); 3] = [
+    (
+        "runtime",
+        "runtime.c",
+        include_str!("../fixstd/runtime.c"),
+        &[],
+    ),
+    (
+        "ryu-d2s",
+        "ryu/d2s.c",
+        include_str!("../fixstd/ryu/d2s.c"),
+        &["-O2"],
+    ),
+    (
+        "ryu-f2s",
+        "ryu/f2s.c",
+        include_str!("../fixstd/ryu/f2s.c"),
+        &["-O2"],
+    ),
+];
+
+/// Builds the runtime into object files and answers where they are, reusing the objects a previous
+/// build compiled.
+///
+/// An object is named by the hash of the settings it is compiled under, so a setting the
+/// compilation below reads belongs in `Configuration::runtime_object_hash`.
+///
+/// The sources are written into a directory of this build's own, so that builds running side by
+/// side neither read nor overwrite each other's copies, and are compiled from inside it under the
+/// paths they carry in the compiler's tree. What a compiled object records as the file it came
+/// from is therefore `runtime.c`, the same in every build.
+fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors> {
+    let hash = config.runtime_object_hash();
+    let objects: Vec<PathBuf> = RUNTIME_SOURCES
+        .iter()
+        .map(|(name, _, _, _)| {
+            PathBuf::from(INTERMEDIATE_PATH).join(format!("fixruntime.{}.{}.o", name, hash))
+        })
+        .collect();
+    if objects.iter().all(|object| object.exists()) {
+        return Ok(objects);
+    }
+
+    let build_dir = PathBuf::from(INTERMEDIATE_PATH).join(format!(
+        "runtime.{}",
+        rand::thread_rng().gen::<u64>().to_string()
+    ));
+    let write_source = |path: &str, text: &str| {
+        let path = build_dir.join(path);
+        fs::create_dir_all(path.parent().unwrap())
+            .expect("Failed to create the directory the runtime is built in.");
+        fs::write(&path, text).expect(&format!(
+            "Failed to generate \"{}\"",
+            path.to_string_lossy().to_string()
+        ));
+    };
+    for (path, text) in RUNTIME_HEADERS {
+        write_source(path, text);
+    }
+    for (_, path, text, _) in RUNTIME_SOURCES {
+        write_source(path, text);
+    }
+
+    for ((name, source, _, flags), object) in RUNTIME_SOURCES.iter().zip(objects.iter()) {
+        let compiled = format!("{}.o", name);
+        let mut com = c_compiler_command(&config)?;
+        // A source reaches the headers beside it by the path it includes them under, which is the
+        // one it carries in the compiler's tree.
+        com.current_dir(&build_dir).arg("-I.");
+        com.args(*flags);
+        com.arg("-ffunction-sections").arg("-fdata-sections");
+        // Keep frame pointers for better backtraces on macOS when backtrace is enabled
+        if config.no_elim_frame_pointers() {
+            com.arg("-fno-omit-frame-pointer");
+        }
+        com.arg("-o").arg(&compiled).arg("-c").arg(source);
+        for m in &config.runtime_c_macro {
+            com.arg(format!("-D{}", m));
+        }
+        if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
+            com.arg("-fPIC");
+        }
+        run_c_compiler(&mut com, "compile the runtime")?;
+
+        fs::rename(build_dir.join(&compiled), object).expect(&format!(
+            "Failed to rename \"{}\" to \"{}\"",
+            build_dir.join(&compiled).to_string_lossy().to_string(),
+            object.to_string_lossy().to_string()
+        ));
+    }
+    fs::remove_dir_all(&build_dir).expect(&format!(
+        "Failed to remove \"{}\"",
+        build_dir.to_string_lossy().to_string()
+    ));
+
+    Ok(objects)
+}
+
 /// Builds the program specified in the configuration, linking the object files and the runtime into
 /// the output file.
 // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -137,53 +273,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         libs_opts.push(ld_flag.clone());
     }
 
-    // Build runtime.c to object file. The object is named by the hash of the settings it is
-    // compiled under, so a setting the compilation below reads belongs in
-    // `Configuration::runtime_object_hash`.
-    let runtime_obj_path = PathBuf::from(INTERMEDIATE_PATH)
-        .join(format!("fixruntime.{}.o", config.runtime_object_hash()));
-    if !runtime_obj_path.exists() {
-        // Random number for temporary file name.
-        // This is necessary to avoid confliction when multiple compilation processes are running in parallel.
-        let rand_num = rand::thread_rng().gen::<u64>();
-
-        // Create temporary file.
-        let runtime_tmp_path = runtime_obj_path.with_extension(rand_num.to_string() + ".tmp");
-
-        let runtime_c_path =
-            PathBuf::from(INTERMEDIATE_PATH).join(format!("fixruntime.{}.c", rand_num.to_string()));
-        fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
-        fs::write(&runtime_c_path, include_str!("../fixstd/runtime.c")).expect(&format!(
-            "Failed to generate \"{}\"",
-            runtime_c_path.to_string_lossy().to_string()
-        ));
-        // Create library object file.
-        let mut com = c_compiler_command(&config)?;
-        let mut com = com.arg("-ffunction-sections").arg("-fdata-sections");
-        // Keep frame pointers for better backtraces on macOS when backtrace is enabled
-        if config.no_elim_frame_pointers() {
-            com = com.arg("-fno-omit-frame-pointer");
-        }
-        let mut com = com
-            .arg("-o")
-            .arg(runtime_tmp_path.to_str().unwrap())
-            .arg("-c")
-            .arg(runtime_c_path.to_str().unwrap());
-        for m in &config.runtime_c_macro {
-            com = com.arg(format!("-D{}", m));
-        }
-        if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
-            com = com.arg("-fPIC");
-        }
-        run_c_compiler(com, "compile the runtime")?;
-
-        // Rename the temporary file to the final file.
-        fs::rename(&runtime_tmp_path, &runtime_obj_path).expect(&format!(
-            "Failed to rename \"{}\" to \"{}\"",
-            runtime_tmp_path.to_string_lossy().to_string(),
-            runtime_obj_path.to_string_lossy().to_string()
-        ));
-    }
+    let runtime_obj_paths = build_runtime_objects(&config)?;
 
     let mut com = c_compiler_command(&config)?;
     com.arg("-Wno-unused-command-line-argument");
@@ -204,9 +294,10 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     for obj_path in obj_paths {
         com.arg(obj_path.to_str().unwrap());
     }
-    com.arg(runtime_obj_path.to_str().unwrap())
-        .args(library_search_path_opts)
-        .args(libs_opts);
+    for runtime_obj_path in &runtime_obj_paths {
+        com.arg(runtime_obj_path.to_str().unwrap());
+    }
+    com.args(library_search_path_opts).args(libs_opts);
     run_c_compiler(&mut com, "link the output file")?;
 
     Ok(())

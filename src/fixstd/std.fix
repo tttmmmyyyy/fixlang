@@ -4076,7 +4076,19 @@ impl F32 : FromBytes {
     );
 }
 impl F32 : ToString {
-    to_string = |v| v.to_string_precision(6_U8);
+    // Writes this number as decimal text, in the fewest digits that tell it apart from the
+    // `F32` values on either side of it.
+    //
+    // The digits are written positionally where the point falls near them, as in `1.0`, `0.1`
+    // and `3.14159`, and as a power of ten otherwise, as in `1e13` and `1e-10`.
+    to_string = |v| (
+        // A sign, the 9 digits the shortest text of an `F32` takes, a point, `e`, the exponent's
+        // sign, the 2 digits an `F32` exponent reaches and a null.
+        let size = 17;
+        let data = Array::empty(size);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_shortest(Ptr, I64, F32), ptr, size, v]);
+        String::_unsafe_from_c_str(data)
+    );
 }
 namespace F32 {
     // Converts a floating number to a string of exponential form.
@@ -4145,7 +4157,19 @@ impl F64 : FromBytes {
     );
 }
 impl F64 : ToString {
-    to_string = |v| v.to_string_precision(6_U8);
+    // Writes this number as decimal text, in the fewest digits that tell it apart from the
+    // `F64` values on either side of it.
+    //
+    // The digits are written positionally where the point falls near them, as in `1.0`, `0.1`
+    // and `123456.789`, and as a power of ten otherwise, as in `1e300` and `1e-10`.
+    to_string = |v| (
+        // A sign, the 17 digits the shortest text of an `F64` takes, a point, `e`, the exponent's
+        // sign, the 3 digits an `F64` exponent reaches and a null.
+        let size = 25;
+        let data = Array::empty(size);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_shortest(Ptr, I64, F64), ptr, size, v]);
+        String::_unsafe_from_c_str(data)
+    );
 }
 namespace F64 {
     // Converts a floating number to a string of exponential form.
