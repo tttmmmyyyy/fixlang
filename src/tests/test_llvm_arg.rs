@@ -39,19 +39,41 @@ mod tests {
         );
     "#;
 
-    /// Builds `ONE_LOOP` with `build_args` on the build command, and answers the size of the
-    /// program it produced together with what the program prints.
+    /// The bytes of object code a build wrote, taken from the object files it left under
+    /// `dir`. That total is what says whether an option took effect.
     ///
-    /// The size is what says whether an option took effect. The machine code itself would say
-    /// more, but reading it takes a tool that is not on every platform the compiler builds on, and
-    /// the whole program does not compare byte for byte: the names a build mints carry a random
-    /// part. Its size carries none, so two builds of one source come out at one size.
+    /// The linked program says nothing: the compiler writes the runtime's C source under a name
+    /// carrying a number it mints per build, the name reaches the program's string table, and its
+    /// length reaches the program's size. Two builds of one source therefore come out at two sizes
+    /// often enough to measure -- four of ten at one size and six at another, for one program
+    /// measured here. The object files the Fix code compiles to carry no such name and come out at
+    /// one size over ten builds.
+    fn object_code_size(dir: &Path) -> u64 {
+        let units = dir.join(".fixlang").join("intermediate").join("units");
+        let mut total = 0;
+        for entry in fs::read_dir(&units).expect("Failed to read the directory of object files") {
+            let entry = entry.expect("Failed to read an object file");
+            if entry.path().extension().is_some_and(|ext| ext == "o") {
+                total += entry
+                    .metadata()
+                    .expect("Failed to read an object file")
+                    .len();
+            }
+        }
+        assert!(
+            total > 0,
+            "the build wrote no object file under {:?}",
+            units
+        );
+        total
+    }
+
+    /// Builds `ONE_LOOP` with `build_args` on the build command, and answers the bytes of object
+    /// code it wrote together with what the program prints.
     fn build_and_run(build_args: &[&str]) -> (u64, String) {
-        let (_temp_dir, program_path) =
+        let (temp_dir, program_path) =
             build_program(ONE_LOOP, "max", build_args, None, "a program of one loop");
-        let size = fs::metadata(&program_path)
-            .expect("Failed to read the program's size")
-            .len();
+        let size = object_code_size(temp_dir.path());
         let output = Command::new(&program_path)
             .output()
             .expect("Failed to run the program");
@@ -65,8 +87,7 @@ mod tests {
     }
 
     /// Builds `ONE_LOOP` in `dir` with `build_args` written between the source and `-o`, and
-    /// answers the size of the program it wrote at `dir/program_name` together with what it put on
-    /// the error stream.
+    /// answers the bytes of object code it wrote together with what it put on the error stream.
     ///
     /// The options go before `-o`, so a `--llvm-arg` among them is followed by an option of the
     /// compiler's. Finding the program at the path after `-o` is what says that option was read as
@@ -74,6 +95,9 @@ mod tests {
     /// them and write the program elsewhere.
     fn build_in(dir: &Path, program_name: &str, build_args: &[&str]) -> (u64, String) {
         let program_path = dir.join(program_name);
+        // Each build compiles the sources again, since what is being compared is what this set of
+        // options makes of them rather than what the build before it left.
+        let _ = fs::remove_dir_all(dir.join(".fixlang").join("intermediate"));
         let output = fix_build_source_command(dir, ONE_LOOP, "max")
             .args(build_args)
             .arg("-o")
@@ -87,14 +111,13 @@ mod tests {
             output.status,
             stderr
         );
-        let size = fs::metadata(&program_path)
-            .expect("the build should write its program at the path after `-o`")
-            .len();
-        (size, stderr)
+        fs::metadata(&program_path)
+            .expect("the build should write its program at the path after `-o`");
+        (object_code_size(dir), stderr)
     }
 
     /// An option `--llvm-arg` hands to LLVM reaches it: asking for a boundary at the head of every
-    /// basic block produces a larger program, since each boundary is reached by padding. The
+    /// basic block produces more object code, since each boundary is reached by padding. The
     /// program answers the same either way, which is what says the option moved the code rather
     /// than the computation.
     ///
@@ -108,14 +131,14 @@ mod tests {
         let (plain_again, _) = build_and_run(&[]);
         assert_eq!(
             plain, plain_again,
-            "two builds of one source should come out the same size"
+            "two builds of one source should compile to the same bytes of object code"
         );
 
         let (aligned, aligned_output) = build_and_run(&[ALIGN_ALL_BLOCKS_TO_64]);
         assert!(
             aligned > plain,
-            "asking for a 64-byte boundary at the head of every block should grow the program, \
-             but it is {} bytes against {}",
+            "asking for a 64-byte boundary at the head of every block should grow the object \
+             code, but it is {} bytes against {}",
             aligned,
             plain
         );
@@ -134,7 +157,7 @@ mod tests {
         let (with_unknown, _) = build_and_run(&[OPTION_LLVM_DOES_NOT_HAVE]);
         assert_eq!(
             plain, with_unknown,
-            "an option LLVM does not know should leave the program as it was"
+            "an option LLVM does not know should leave the object code as it was"
         );
     }
 
@@ -156,7 +179,7 @@ mod tests {
 
         assert!(
             after_equals > plain,
-            "the option should reach LLVM, but the program is {} bytes against {}",
+            "the option should reach LLVM, but the object code is {} bytes against {}",
             after_equals,
             plain
         );
@@ -178,7 +201,7 @@ mod tests {
         let (alone, _) = build_in(dir, "alone", &[ALIGN_ALL_BLOCKS_TO_64]);
         assert!(
             alone > plain,
-            "the option should reach LLVM on its own, but the program is {} bytes against {}",
+            "the option should reach LLVM on its own, but the object code is {} bytes against {}",
             alone,
             plain
         );
@@ -222,7 +245,7 @@ mod tests {
 
         assert_eq!(
             with_bad_value, plain,
-            "a value LLVM cannot read should leave the program as it was"
+            "a value LLVM cannot read should leave the object code as it was"
         );
         assert!(
             stderr.contains("fix --llvm-arg"),
@@ -231,17 +254,18 @@ mod tests {
         );
     }
 
-    /// `--llvm-arg` is on the subcommands that build a program and then run it as well as on
-    /// `build`, so a measurement can be taken through `fix run`. The program answers the same with
-    /// the option as without it.
+    /// An option `--llvm-arg` hands LLVM reaches the code a `fix run` generates, and not only the
+    /// command line it is accepted on. The option is on the subcommands that build a program and
+    /// then run it as well as on `build`, which is where a measurement through `fix run` needs it.
     #[test]
-    fn test_the_option_is_on_the_subcommand_that_runs_the_program() {
+    fn test_the_option_reaches_the_code_a_run_generates() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let dir = temp_dir.path();
         let source_path = dir.join("generated.fix");
         fs::write(&source_path, ONE_LOOP).expect("Failed to write the generated source file");
 
         let run = |build_args: &[&str]| {
+            let _ = fs::remove_dir_all(dir.join(".fixlang").join("intermediate"));
             let output = fix_command_at_opt_level("run", "max")
                 .arg("--file")
                 .arg(&source_path)
@@ -255,12 +279,23 @@ mod tests {
                 output.status,
                 String::from_utf8_lossy(&output.stderr)
             );
-            String::from_utf8_lossy(&output.stdout).to_string()
+            (
+                object_code_size(dir),
+                String::from_utf8_lossy(&output.stdout).to_string(),
+            )
         };
 
+        let (plain, plain_output) = run(&[]);
+        let (aligned, aligned_output) = run(&[ALIGN_ALL_BLOCKS_TO_64]);
+        assert!(
+            aligned > plain,
+            "asking a run for a 64-byte boundary at the head of every block should grow the object \
+             code it generates, but it is {} bytes against {}",
+            aligned,
+            plain
+        );
         assert_eq!(
-            run(&[ALIGN_ALL_BLOCKS_TO_64]),
-            run(&[]),
+            plain_output, aligned_output,
             "`fix run` should answer the same with the option as without it"
         );
     }
