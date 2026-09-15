@@ -1043,21 +1043,17 @@ impl ObjectFieldType {
         // Get tag value.
         let actual_tag = ObjectFieldType::get_union_tag(gc, &union);
 
-        // If tag mismatch, panic.
-        let is_tag_mismatch = gc
+        // If the tag is not the one asked for, panic. The question is put as `is` and `mod` put it,
+        // so that a function asking it both ways asks it once.
+        let is_tag_match = gc
             .builder()
-            .build_int_compare(
-                IntPredicate::NE,
-                expected_tag,
-                actual_tag,
-                "is_tag_mismatch",
-            )
+            .build_int_compare(IntPredicate::EQ, expected_tag, actual_tag, "is_tag_match")
             .unwrap();
         let current_func = gc.current_function();
         let mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
         let match_bb = gc.context.append_basic_block(current_func, "match_bb");
         gc.builder()
-            .build_conditional_branch(is_tag_mismatch, mismatch_bb, match_bb)
+            .build_conditional_branch(is_tag_match, match_bb, mismatch_bb)
             .unwrap();
         gc.builder().position_at_end(mismatch_bb);
         gc.panic("Union variant mismatch");
