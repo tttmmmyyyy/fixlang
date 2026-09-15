@@ -312,13 +312,13 @@ static locale_t float_text_locale(void)
     return answer;
 }
 
-// Clears the range error a value below the smallest normal number raises.
+// Takes back the range error a number too small to hold in full raises.
 //
-// `strtod` raises `ERANGE` both for a number too large to hold, which it answers with an infinity,
-// and for one too small, which it answers with the nearest number it can hold. The second is the
-// value that was asked for — a subnormal number is a number like any other — so only the first is
-// an error. A text that names a number smaller than any subnormal keeps the error, since zero is
-// not what it names.
+// `strtod` raises `ERANGE` in two cases: the text names a number too large to hold, and it answers
+// with an infinity; or it names one too small to hold in full, and it answers with the nearest
+// number it can hold. The second is the number the text names — a subnormal number is a number
+// like any other — so only the first is an error. A text naming a number too small to hold at all
+// keeps the error, since zero is not what it names.
 //
 // # Arguments
 // * `v` - What `strtod` answered.
