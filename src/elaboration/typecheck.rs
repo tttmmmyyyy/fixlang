@@ -2508,7 +2508,7 @@ impl TypeCheckContext {
             // Must stay in sync with the same message in program.rs (instantiate_expr).
             let mut err = Error::from_msg_srcs(
                 format!(
-                    "Cannot infer the type of this {0}: inferred as `{1}`, but the type variable `{2}` is unresolved.\nHint: add a type annotation to this {0}.",
+                    "Cannot infer the type of this {0}: inferred as `{1}`, but the type variable `{2}` is unresolved.\nHINT: add a type annotation to this {0}.",
                     src_type,
                     ty.to_string(),
                     fv_name,

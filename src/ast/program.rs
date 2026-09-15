@@ -1941,7 +1941,7 @@ impl Program {
             // Must stay in sync with the same message in typecheck.rs (check_is_type_fixed).
             return Err(Errors::from_msg_srcs(
                 format!(
-                    "Cannot infer the type of this expression: inferred as `{}`, but the type variable `{}` is unresolved.\nHint: add a type annotation to this expression.",
+                    "Cannot infer the type of this expression: inferred as `{}`, but the type variable `{}` is unresolved.\nHINT: add a type annotation to this expression.",
                     ret_ty.to_string(),
                     fv_name,
                 ),
