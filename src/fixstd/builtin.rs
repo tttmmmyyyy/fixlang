@@ -10170,13 +10170,6 @@ pub fn add_trait_id() -> TraitId {
     }
 }
 
-/// Whether Fix assumes that the result of arithmetic on `ty` falls within the range of `ty`, which
-/// lets the generated instruction carry `nsw`. A signed integer operation whose mathematical result
-/// leaves that range is undefined; an unsigned one wraps around.
-fn arithmetic_result_is_assumed_to_fit(ty: &Arc<TypeNode>) -> bool {
-    ty.toplevel_tycon().unwrap().is_signed_integer()
-}
-
 /// The LLVM intrinsic performing an addition and reporting whether the result left the range of
 /// the signed integer type, as `{ iN, i1 }`.
 const SIGNED_ADD_WITH_OVERFLOW: &str = "llvm.sadd.with.overflow";
@@ -10253,10 +10246,9 @@ impl IntegerArithmetic {
     }
 }
 
-/// Emit `operation` on `lhs` and `rhs` at the integer type `ty`, in the form that type and the
-/// configuration ask for: the instruction carrying `nsw` where Fix promises the result fits, the
-/// one that wraps where it promises wrapping, and the intrinsic that ends the program where
-/// `--check-signed-overflow` asks for the promise to be checked.
+/// Emit `operation` on `lhs` and `rhs` at the integer type `ty`: the instruction that performs it,
+/// or, where `--check-signed-overflow` asks for a signed result to be checked, the intrinsic that
+/// ends the program when the result leaves the range of the type.
 ///
 /// # Arguments
 /// * `name` - the name the result carries in the generated code.
@@ -10276,33 +10268,30 @@ fn build_integer_arithmetic<'c, 'm>(
             lhs
         );
     }
-    if !arithmetic_result_is_assumed_to_fit(ty) {
-        let builder = gc.builder();
-        return match operation {
-            IntegerArithmetic::Add => builder.build_int_add(lhs, rhs, name),
-            IntegerArithmetic::Subtract => builder.build_int_sub(lhs, rhs, name),
-            IntegerArithmetic::Multiply => builder.build_int_mul(lhs, rhs, name),
-            IntegerArithmetic::Negate => builder.build_int_neg(rhs, name),
-            IntegerArithmetic::Divide => builder.build_int_unsigned_div(lhs, rhs, name),
-            IntegerArithmetic::Remainder => builder.build_int_unsigned_rem(lhs, rhs, name),
+    // Only a signed type has a range an operation can leave: an unsigned one is taken modulo two
+    // to its width, so every result is a value of the type.
+    let is_signed = ty.toplevel_tycon().unwrap().is_signed_integer();
+    if is_signed && signed_overflow_is_checked(gc) {
+        if operation.is_division() {
+            // A division carries no intrinsic reporting the overflow, so the check stands in front
+            // of the instruction rather than replacing it.
+            build_division_overflow_check(gc, operation, lhs, rhs, ty);
+        } else {
+            return build_checked_signed_arithmetic(gc, operation, lhs, rhs, ty, name);
         }
-        .unwrap();
     }
-    if operation.is_division() {
-        // A division carries no intrinsic reporting the overflow, so the check stands in front of
-        // the instruction rather than replacing it. It is emitted where the build asks for it.
-        build_division_overflow_check(gc, operation, lhs, rhs, ty);
-    } else if signed_overflow_is_checked(gc) {
-        return build_checked_signed_arithmetic(gc, operation, lhs, rhs, ty, name);
-    }
+    // Addition, subtraction, multiplication and negation are one instruction for both signednesses,
+    // since a value of either is held in two's complement. A division is not.
     let builder = gc.builder();
     match operation {
-        IntegerArithmetic::Add => builder.build_int_nsw_add(lhs, rhs, name),
-        IntegerArithmetic::Subtract => builder.build_int_nsw_sub(lhs, rhs, name),
-        IntegerArithmetic::Multiply => builder.build_int_nsw_mul(lhs, rhs, name),
-        IntegerArithmetic::Negate => builder.build_int_nsw_neg(rhs, name),
-        IntegerArithmetic::Divide => builder.build_int_signed_div(lhs, rhs, name),
-        IntegerArithmetic::Remainder => builder.build_int_signed_rem(lhs, rhs, name),
+        IntegerArithmetic::Add => builder.build_int_add(lhs, rhs, name),
+        IntegerArithmetic::Subtract => builder.build_int_sub(lhs, rhs, name),
+        IntegerArithmetic::Multiply => builder.build_int_mul(lhs, rhs, name),
+        IntegerArithmetic::Negate => builder.build_int_neg(rhs, name),
+        IntegerArithmetic::Divide if is_signed => builder.build_int_signed_div(lhs, rhs, name),
+        IntegerArithmetic::Divide => builder.build_int_unsigned_div(lhs, rhs, name),
+        IntegerArithmetic::Remainder if is_signed => builder.build_int_signed_rem(lhs, rhs, name),
+        IntegerArithmetic::Remainder => builder.build_int_unsigned_rem(lhs, rhs, name),
     }
     .unwrap()
 }

@@ -552,8 +552,9 @@ pub struct Configuration {
     /// Leave the run-time checks, such as the array bounds check, out of the program.
     pub no_runtime_check: bool,
     /// Stop the program at an arithmetic operation on a signed integer type whose mathematical
-    /// result leaves the range of that type. The program otherwise assumes the result fits, which
-    /// is what the language promises.
+    /// result leaves the range of that type. The operations this covers are `+`, `-`, `*`, unary
+    /// `-`, `/` and `%`; an unsigned operation is taken modulo two to the width of its type, so
+    /// none of those is checked.
     pub check_signed_overflow: bool,
     /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
     /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.

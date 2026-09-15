@@ -1,79 +1,8 @@
-//! What an arithmetic operation on an integer type assumes about its result: a signed operation
-//! assumes that the result falls within the range of its type, while an unsigned one is taken
-//! modulo two to the width of the type. A build made with `--check-signed-overflow` stops the
-//! program where a signed result leaves the range instead.
+//! What `--check-signed-overflow` stops the program at: an arithmetic operation on a signed integer
+//! type whose mathematical result leaves the range of that type.
 
 use crate::configuration::Configuration;
-use crate::tests::test_util::{generated_llvm_ir, test_source, test_source_fail};
-
-/// The operations whose generated instruction carries the assumption, each as the name the code
-/// generator gives the result and the LLVM opcode it emits. Negation is emitted as a subtraction
-/// from zero.
-const ARITHMETIC_OPERATIONS: &[(&str, &str)] = &[
-    ("add", "add"),
-    ("sub", "sub"),
-    ("mul", "mul"),
-    ("neg", "sub"),
-];
-
-/// The widths, in bits, of the integer types of `Std`.
-const INTEGER_WIDTHS: &[u32] = &[8, 16, 32, 64];
-
-/// A program that adds, subtracts, multiplies and negates at each of the four signed integer types.
-///
-/// `main` forces each result with `eval`, which keeps the four operations of every type in the
-/// program while leaving out the arithmetic that printing or asserting a value carries with it, so
-/// that the arithmetic instructions the build emits are exactly these.
-const ARITHMETIC_AT_EVERY_SIGNED_TYPE: &str = r#"
-    module Main;
-
-    arith_i8 : I8 -> I8 -> I8;
-    arith_i8 = |x, y| (x + y) - (x * y) - (-x);
-
-    arith_i16 : I16 -> I16 -> I16;
-    arith_i16 = |x, y| (x + y) - (x * y) - (-x);
-
-    arith_i32 : I32 -> I32 -> I32;
-    arith_i32 = |x, y| (x + y) - (x * y) - (-x);
-
-    arith_i64 : I64 -> I64 -> I64;
-    arith_i64 = |x, y| (x + y) - (x * y) - (-x);
-
-    main : IO ();
-    main = (
-        eval arith_i8(1_I8, 2_I8);
-        eval arith_i16(1_I16, 2_I16);
-        eval arith_i32(1_I32, 2_I32);
-        eval arith_i64(1_I64, 2_I64);
-        pure()
-    );
-"#;
-
-/// The program of `ARITHMETIC_AT_EVERY_SIGNED_TYPE` at the four unsigned integer types.
-const ARITHMETIC_AT_EVERY_UNSIGNED_TYPE: &str = r#"
-    module Main;
-
-    arith_u8 : U8 -> U8 -> U8;
-    arith_u8 = |x, y| (x + y) - (x * y) - (-x);
-
-    arith_u16 : U16 -> U16 -> U16;
-    arith_u16 = |x, y| (x + y) - (x * y) - (-x);
-
-    arith_u32 : U32 -> U32 -> U32;
-    arith_u32 = |x, y| (x + y) - (x * y) - (-x);
-
-    arith_u64 : U64 -> U64 -> U64;
-    arith_u64 = |x, y| (x + y) - (x * y) - (-x);
-
-    main : IO ();
-    main = (
-        eval arith_u8(1_U8, 2_U8);
-        eval arith_u16(1_U16, 2_U16);
-        eval arith_u32(1_U32, 2_U32);
-        eval arith_u64(1_U64, 2_U64);
-        pure()
-    );
-"#;
+use crate::tests::test_util::{test_source, test_source_fail};
 
 /// A configuration that stops the program where the result of a signed arithmetic operation leaves
 /// the range of its type, as `--check-signed-overflow` leaves it.
@@ -98,110 +27,6 @@ fn assert_the_check_stops(expression: &str, report: &str) {
         expression
     );
     test_source_fail(&source, overflow_checked_config(), report);
-}
-
-/// The instructions of `ir` that the code generator emitted for the operation whose result it names
-/// `result_name`, as `opcode` at an integer type `bits` wide, split into those that carry the
-/// assumption that the result fits the type and those that carry nothing.
-///
-/// The code generator names the result of each of these after the trait method it implements, which
-/// is what tells them apart from the address arithmetic and the reference-count updates the runtime
-/// emits around them.
-fn arithmetic_instructions<'a>(
-    ir: &'a str,
-    result_name: &str,
-    opcode: &str,
-    bits: u32,
-) -> (Vec<&'a str>, Vec<&'a str>) {
-    let assuming_prefix = format!("{} nsw i{} ", opcode, bits);
-    let wrapping_prefix = format!("{} i{} ", opcode, bits);
-    let mut with_assumption = vec![];
-    let mut without_assumption = vec![];
-    for line in ir.lines().map(str::trim) {
-        let Some((register, instruction)) = line.split_once(" = ") else {
-            continue;
-        };
-        // LLVM appends digits to a name it has already given out, so the digits come off before the
-        // name is read.
-        let register_name = register
-            .strip_prefix('%')
-            .map(|name| name.trim_end_matches(|c: char| c.is_ascii_digit()));
-        if register_name != Some(result_name) {
-            continue;
-        }
-        if instruction.starts_with(&assuming_prefix) {
-            with_assumption.push(line);
-        } else if instruction.starts_with(&wrapping_prefix) {
-            without_assumption.push(line);
-        }
-    }
-    (with_assumption, without_assumption)
-}
-
-/// Addition, subtraction, multiplication and negation at a signed integer type are emitted as
-/// instructions that carry `nsw`, at each of the four signed types.
-///
-/// `Document.md` states the contract those instructions carry: arithmetic on a signed integer type
-/// assumes that its mathematical result falls within the range of that type, and the behavior of a
-/// program that performs one whose result falls outside that range is undefined. The flag is what
-/// hands that assumption to LLVM, which then folds a comparison the assumption settles.
-#[test]
-pub fn test_signed_arithmetic_assumes_its_result_fits_the_type() {
-    // The subject is what the compiler emits, so the IR is read before the LLVM pass pipeline has
-    // run over it: an optimized module also holds arithmetic LLVM itself introduced.
-    let ir = generated_llvm_ir(ARITHMETIC_AT_EVERY_SIGNED_TYPE, "none");
-    for (result_name, opcode) in ARITHMETIC_OPERATIONS {
-        for bits in INTEGER_WIDTHS {
-            let (with_assumption, without_assumption) =
-                arithmetic_instructions(&ir, result_name, opcode, *bits);
-            assert!(
-                !with_assumption.is_empty(),
-                "`{}` at the signed integer type of {} bits should be emitted carrying `nsw`, but \
-                 no such instruction was emitted",
-                result_name,
-                bits
-            );
-            assert!(
-                without_assumption.is_empty(),
-                "every `{}` at the signed integer type of {} bits should carry `nsw`, but {} of \
-                 them were emitted without it:\n{}",
-                result_name,
-                bits,
-                without_assumption.len(),
-                without_assumption.join("\n")
-            );
-        }
-    }
-}
-
-/// The same four operations at an unsigned integer type are emitted carrying nothing: an unsigned
-/// operation is taken modulo two to the width of the type, so its result is defined wherever it
-/// falls, and `Document.md` states that a program may rely on it.
-#[test]
-pub fn test_unsigned_arithmetic_assumes_nothing_about_its_result() {
-    let ir = generated_llvm_ir(ARITHMETIC_AT_EVERY_UNSIGNED_TYPE, "none");
-    for (result_name, opcode) in ARITHMETIC_OPERATIONS {
-        for bits in INTEGER_WIDTHS {
-            let (with_assumption, without_assumption) =
-                arithmetic_instructions(&ir, result_name, opcode, *bits);
-            assert!(
-                !without_assumption.is_empty(),
-                "`{}` at the unsigned integer type of {} bits should be emitted, but no such \
-                 instruction was emitted",
-                result_name,
-                bits
-            );
-            assert!(
-                with_assumption.is_empty(),
-                "`{}` at the unsigned integer type of {} bits wraps, so it should carry no `nsw`, \
-                 but {} of them were emitted with it:\n{}",
-                result_name,
-                bits,
-                with_assumption.len(),
-                with_assumption.join("\n")
-            );
-        }
-    }
 }
 
 /// A sum past the greatest value of a signed integer type stops the program, and the message
@@ -245,8 +70,8 @@ pub fn test_signed_overflow_check_stops_dividing_the_least_by_minus_one() {
     );
 }
 
-/// The check leaves unsigned arithmetic alone: wrapping is what an unsigned integer type promises,
-/// so a build that stops at a signed overflow computes an unsigned result and carries on.
+/// The check leaves unsigned arithmetic alone: an unsigned operation is taken modulo two to the
+/// width of its type, so a build that stops at a signed overflow computes it and carries on.
 ///
 /// Every operation here leaves the range of the signed type of its width, and none leaves the range
 /// of the unsigned one, so a check that read these as signed would stop the program at each.

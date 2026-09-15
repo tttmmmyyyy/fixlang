@@ -289,8 +289,8 @@ fn run_cli() {
     let check_signed_overflow = Arg::new("check-signed-overflow")
         .long("check-signed-overflow")
         .help(
-            "Stop the program at an arithmetic operation on a signed integer type whose result leaves the range of that type.\n\
-            A build without this option assumes the result fits, which is what the language promises: `+`, `-`, `*`, unary `-`, `/` and `%` on `I8`, `I16`, `I32` and `I64` have no defined behavior where the result does not."
+            "Stop the program at an arithmetic operation on a signed integer type whose mathematical result leaves the range of that type.\n\
+            The operations this covers are `+`, `-`, `*`, unary `-`, `/` and `%` on `I8`, `I16`, `I32` and `I64`. An unsigned operation is taken modulo two to the width of its type, so none of those is checked."
         );
     let skip_eval = Arg::new("skip-eval")
         .long("skip-eval")
