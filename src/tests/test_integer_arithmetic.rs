@@ -73,20 +73,32 @@ pub fn test_signed_overflow_check_stops_dividing_the_least_by_minus_one() {
 /// The check leaves unsigned arithmetic alone: an unsigned operation is taken modulo two to the
 /// width of its type, so a build that stops at a signed overflow computes it and carries on.
 ///
-/// Every operation here leaves the range of the signed type of its width, and none leaves the range
-/// of the unsigned one, so a check that read these as signed would stop the program at each.
+/// Every operation here leaves the range of the signed type of its width and stays inside the
+/// unsigned one, so a check reading these as signed would stop the program at each. The operands
+/// are built from the count of the program's arguments, which is one wherever the program runs and
+/// which the compiler cannot fold the arithmetic away through.
 #[test]
 pub fn test_signed_overflow_check_leaves_unsigned_arithmetic_alone() {
     let source = r#"
         module Main;
         main : IO ();
         main = (
-            assert_eq(|_|"U8 add", 127_U8 + 1_U8, 128_U8);;
-            assert_eq(|_|"U8 mul", 64_U8 * 2_U8, 128_U8);;
-            assert_eq(|_|"U8 neg", -(128_U8), 128_U8);;
-            assert_eq(|_|"U16 add", 32767_U16 + 1_U16, 32768_U16);;
-            assert_eq(|_|"U32 add", 2147483647_U32 + 1_U32, 2147483648_U32);;
-            assert_eq(|_|"U64 add", 9223372036854775807_U64 + 1_U64, 9223372036854775808_U64);;
+            let args = *IO::get_args;
+            let one = args.@size.to_U8;
+            let half8 = 127_U8 * one;
+            assert_eq(|_|"U8 add", half8 + half8, 254_U8);;
+            assert_eq(|_|"U8 mul", half8 * 2_U8, 254_U8);;
+            assert_eq(|_|"U8 neg", -(128_U8 * one), 128_U8);;
+
+            let half16 = 32767_U16 * one.to_U16;
+            assert_eq(|_|"U16 add", half16 + half16, 65534_U16);;
+
+            let half32 = 2147483647_U32 * one.to_U32;
+            assert_eq(|_|"U32 add", half32 + half32, 4294967294_U32);;
+
+            let half64 = 9223372036854775807_U64 * one.to_U64;
+            assert_eq(|_|"U64 add", half64 + half64, 18446744073709551614_U64);;
+
             pure()
         );
     "#;
