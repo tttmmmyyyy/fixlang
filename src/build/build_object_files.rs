@@ -41,6 +41,7 @@ use crate::{
 use inkwell::{
     attributes::AttributeLoc,
     context::Context,
+    llvm_sys::support::LLVMParseCommandLineOptions,
     module::Module,
     passes::PassBuilderOptions,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
@@ -50,11 +51,12 @@ use inkwell::{
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
+    ffi::{c_char, CString},
     fmt::Display,
     fs::{self, create_dir_all, File},
     mem,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 /// What a build produced, as `build_object_files` reports it.
@@ -115,11 +117,11 @@ fn optimize_rc_program(
             validate::validate(prog, &symbol_names, type_env, stage);
         }
     };
-    // Drop what nothing reaches, after `stage` and before the pass below it runs. Each pass this
-    // guards sends a call to a new version of its callee, leaving the version it moved off with one
-    // caller fewer, and the last such call leaves it with none — along with every function only that
-    // version called. Pruning between the passes is what keeps the one below from cloning, analyzing
-    // and generating code for functions no execution reaches.
+    // Drop what nothing reaches, after `stage` and before the pass that follows it runs. Each pass
+    // this guards sends a call to a new version of its callee, leaving the version it moved off with
+    // one caller fewer, and the last such call leaves it with none — along with every function only
+    // that version called. Pruning between the passes is what keeps the pass that follows from
+    // cloning, analyzing and generating code for functions no execution reaches.
     //
     // The levels below these passes reroute no call, and lowering names every function it lifts from
     // the symbol it lifted it out of, so a program there holds nothing to drop.
@@ -564,6 +566,63 @@ fn build_object_files_cache_hash_or_warn(
     )
 }
 
+/// Hand `args` to LLVM's own option parser, which is what reaches the settings its C API leaves
+/// out.
+///
+/// LLVM keeps what it parses in globals of its own, so what is set here holds for every build the
+/// process makes. It has to be set before any code is generated, which is what puts it here, and it
+/// may be set once: LLVM reads a second set of options against the first it already holds.
+///
+/// One invocation of the compiler builds one configuration and so gives one set, so a second set is
+/// a fault in the compiler. The assertion catches the code that builds several configurations in
+/// one process, which is the test suite.
+///
+/// **LLVM ignores an option it does not know.** An option renamed between LLVM releases therefore
+/// stops taking effect while the build goes on succeeding, which is what
+/// `test_llvm_arg_reaches_llvm` is for. An option whose value LLVM cannot read goes the same way,
+/// with a message of LLVM's on the error stream and a build that succeeds.
+fn set_llvm_options(args: &[String]) {
+    static PARSED: OnceLock<Vec<String>> = OnceLock::new();
+    if args.is_empty() {
+        // Nothing to set, and nothing to undo: LLVM holds what an earlier set gave it, so a build
+        // naming no option would generate its code under that set while its key says it named none.
+        if let Some(parsed) = PARSED.get() {
+            panic_with_msg(&format!(
+                "The options given to LLVM are set for the whole process, so one run takes one set \
+                 of them. This one was given {:?} and then none.",
+                parsed
+            ));
+        }
+        return;
+    }
+    let parsed = PARSED.get_or_init(|| {
+        // LLVM reads the first argument as the name of the program, the way a `main` does, and puts
+        // it in front of what it reports. Naming the option here is what marks such a report as
+        // LLVM's.
+        let argv: Vec<CString> = std::iter::once("fix --llvm-arg")
+            .chain(args.iter().map(String::as_str))
+            .map(|arg| CString::new(arg).expect("no argument of a command line holds a NUL byte"))
+            .collect();
+        let pointers: Vec<*const c_char> = argv.iter().map(|arg| arg.as_ptr()).collect();
+        let overview = c"Fix";
+        unsafe {
+            LLVMParseCommandLineOptions(
+                pointers.len() as i32,
+                pointers.as_ptr(),
+                overview.as_ptr(),
+            );
+        }
+        args.to_vec()
+    });
+    if parsed != args {
+        panic_with_msg(&format!(
+            "The options given to LLVM are set for the whole process, so one run takes one set of \
+             them. This one was given {:?} and then {:?}.",
+            parsed, args
+        ));
+    }
+}
+
 /// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
 /// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
 /// position-independent.
@@ -572,15 +631,12 @@ pub(crate) fn get_target_machine(
     opt_level: OptimizationLevel,
     config: &Configuration,
 ) -> TargetMachine {
-    let _native = Target::initialize_native(&InitializationConfig::default())
-        .map_err(|e| panic_with_msg(&format!("failed to initialize native: {}", e)))
-        .unwrap();
+    Target::initialize_native(&InitializationConfig::default())
+        .unwrap_or_else(|e| panic_with_msg(&format!("failed to initialize native: {}", e)));
+    set_llvm_options(&config.llvm_args);
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple)
-        .map_err(|e| {
-            panic_with_msg(&format!("failed to create target: {}", e));
-        })
-        .unwrap();
+        .unwrap_or_else(|e| panic_with_msg(&format!("failed to create target: {}", e)));
     let reloc_mode = if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
         RelocMode::PIC
     } else {
