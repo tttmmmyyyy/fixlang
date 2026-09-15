@@ -16,6 +16,8 @@ When running program by `fix build`, then this source file will be compiled into
 #include <unistd.h>
 #include <pthread.h>
 
+// Defined by the compiler, and declared in `float_text.c` as well; the two translation units carry
+// the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
 // Print message to stderr, and flush it.
@@ -25,7 +27,6 @@ void fixruntime_eprintln(const char *msg)
     fflush(stderr);
 }
 
-// NOTE: Maybe should we define following functions by LLVM to better optimization opportunity?
 void fixruntime_u8_to_bytes(uint8_t *buf, uint8_t v)
 {
     *buf = v;
@@ -115,51 +116,6 @@ void fixruntime_i64_to_str(char *buf, int64_t v)
     sprintf(buf, "%" PRId64, v);
 }
 
-// Stops the program unless the text `snprintf` reported fits `size`.
-//
-// The caller in `src/fixstd/std.fix` derives that buffer's size from the widest text the format
-// can write, so a text that does not fit means the derivation is wrong. Stopping here names the
-// two sizes, where letting the write run on would leave the heap damaged and the program going.
-//
-// # Arguments
-// * `written` - What `snprintf` answered: the length of the text, without its null, or a negative
-//   number where it could not write the text at all.
-// * `size` - The bytes the buffer holds.
-static void fixruntime_check_float_text(int written, int64_t size)
-{
-    if (written < 0)
-    {
-        fprintf(stderr, "Writing a number as text failed\n");
-        fixruntime_abort();
-    }
-    if ((int64_t)written + 1 > size)
-    {
-        fprintf(stderr, "A number's text takes %" PRId64 " bytes and its buffer holds %" PRId64 "\n",
-                (int64_t)written + 1, size);
-        fixruntime_abort();
-    }
-}
-
-void fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
-{
-    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*e", (int)precision, v), size);
-}
-
-void fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
-{
-    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*f", (int)precision, v), size);
-}
-
-void fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
-{
-    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*le", (int)precision, v), size);
-}
-
-void fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
-{
-    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*lf", (int)precision, v), size);
-}
-
 int64_t fixruntime_strtoll_10(const char *str)
 {
     char *endptr;
@@ -187,40 +143,6 @@ uint64_t fixruntime_strtoull_10(const char *str)
         return (int64_t)0;
     }
     uint64_t v = (uint64_t)strtoull(str, &endptr, 10);
-    if (endptr == str || *endptr != '\0')
-    {
-        errno = EINVAL;
-    }
-    return v;
-}
-
-double fixruntime_strtod(const char *str)
-{
-    char *endptr;
-    errno = 0;
-    if (isspace(*str))
-    {
-        errno = EINVAL;
-        return (int64_t)0;
-    }
-    double v = strtod(str, &endptr);
-    if (endptr == str || *endptr != '\0')
-    {
-        errno = EINVAL;
-    }
-    return v;
-}
-
-float fixruntime_strtof(const char *str)
-{
-    char *endptr;
-    errno = 0;
-    if (isspace(*str))
-    {
-        errno = EINVAL;
-        return (int64_t)0;
-    }
-    float v = strtof(str, &endptr);
     if (endptr == str || *endptr != '\0')
     {
         errno = EINVAL;

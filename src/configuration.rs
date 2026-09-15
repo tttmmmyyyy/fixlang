@@ -326,12 +326,11 @@ pub struct DiagnosticsConfig {
     /// The source files the diagnostics are asked about. A diagnostic anchored in another file is
     /// left out of the report.
     pub files: Vec<PathBuf>,
-    /// In-memory overrides for source-file contents used during the LSP
-    /// completion flow: when `parse_file_path` is invoked for a path
-    /// present here, the supplied string is parsed instead of reading
-    /// the file from disk. This lets `handle_completion` repair the
-    /// live buffer (see `commands::lsp::completion::repair`) and
-    /// re-elaborate via `elaborate_via_config` without touching disk.
+    /// The content to parse for a source file, in place of what the file on disk holds. Where
+    /// `parse_file_path` is given a path present here, the string beside it is parsed as that
+    /// file's content.
+    ///
+    /// It is how the LSP elaborates a buffer the editor holds and the disk has not seen.
     pub live_source_overrides: Arc<Map<PathBuf, String>>,
     /// Restrict type-checking to this specific set of global value
     /// names. `None` keeps the default (every global declared in the
@@ -485,7 +484,7 @@ pub struct Configuration {
     /// safe to share between them at the cost of speed. Turn it on through `set_threaded`, which
     /// also links the pthread library.
     pub threaded: bool,
-    /// The macros the runtime `runtime.c` is compiled with, each of which turns on a part of it.
+    /// The macros the runtime's C sources are compiled with, each of which turns on a part of it.
     pub runtime_c_macro: Vec<String>,
     /// Whether the build reports how long each of its steps took.
     pub show_build_times: bool,
@@ -519,6 +518,11 @@ pub struct Configuration {
     /// Regex patterns of the CPU features the generated code leaves unused; a feature the host
     /// supports and no pattern matches is used.
     pub disable_cpu_features_regex: Vec<String>,
+    /// Options handed to LLVM's own option parser before any code is generated, written as LLVM
+    /// writes them. They reach settings the C API leaves out — among them the boundary a loop's
+    /// code starts on, which moves how fast the CPU runs it. LLVM ignores an option it does not
+    /// know, so a build that gives one has to check that the setting was made.
+    pub llvm_args: Vec<String>,
     /// The subcommand of the `fix` command this configuration was assembled for, which decides
     /// what the build produces and how the entry point is implemented.
     pub subcommand: SubCommand,
@@ -649,6 +653,7 @@ impl Configuration {
             c_type_sizes: CTypeSizes::load_or_check()?,
             host_cpu: HostCpu::of_this_machine(),
             disable_cpu_features_regex: vec![],
+            llvm_args: vec![],
             preliminary_commands: vec![],
             allow_preliminary_commands: false,
             type_check_cache: Arc::new(FileCache::new()),
@@ -1052,6 +1057,7 @@ impl Configuration {
             output_file_type,
             host_cpu,
             disable_cpu_features_regex,
+            llvm_args,
 
             // Reach the generated code through what they decide, which is pushed in their place:
             // `llvm_passes` is the pipeline `llvm_passes_override` gives where it gives one and the
@@ -1076,8 +1082,8 @@ impl Configuration {
             num_worker_thread: _,
             type_check_cache: _,
 
-            // The macros the runtime is compiled with. The runtime is written in C rather than
-            // generated, so it has an object file and a key of its own.
+            // The macros the runtime is compiled with. The runtime is C the compiler carries, so
+            // it has object files and a key of its own.
             runtime_c_macro,
 
             // The link step, which runs once the object files are made, and where its result goes.
@@ -1157,6 +1163,8 @@ impl Configuration {
         object_generation.push_text(&host_cpu.name);
         object_generation.push_text(&host_cpu.features);
         object_generation.push_list(disable_cpu_features_regex);
+        // What LLVM was told before it generated the code.
+        object_generation.push_list(llvm_args);
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
         // implies, so the pipeline is hashed in full: were it left out, objects generated under
@@ -1207,8 +1215,9 @@ impl Configuration {
         self.cache_hash_sources().object_generation.finish()
     }
 
-    /// The hash of the settings the runtime's object file is compiled under, which names that file:
-    /// a build finding it on disk compiles the runtime again only where the settings differ.
+    /// The hash of the settings the runtime's object files are compiled under, which names each of
+    /// them: a build finding them on disk compiles the runtime again only where the settings
+    /// differ.
     ///
     /// `test_runtime_object_hash_separates_runtime_compilation_settings` gives each setting read
     /// here a value of its own and checks that the hash follows.
@@ -1801,6 +1810,12 @@ mod tests {
                 "disable_cpu_features_regex",
                 Box::new(|config: &mut Configuration| {
                     config.disable_cpu_features_regex.push("avx.*".to_string())
+                }),
+            ),
+            (
+                "llvm_args",
+                Box::new(|config: &mut Configuration| {
+                    config.llvm_args.push("--some-llvm-option=1".to_string())
                 }),
             ),
             (

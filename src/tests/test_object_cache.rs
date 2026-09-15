@@ -8,7 +8,9 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{assert_succeeded, fix_command_at_opt_level};
+    use crate::tests::test_util::{
+        fix_command_at_opt_level, object_digests, run_in, single_source_project_dir,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -27,41 +29,15 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
 
     /// A directory holding `SOURCE` as the whole of a project, ready to be built in.
     fn project_dir() -> TempDir {
-        let dir = TempDir::new().expect("Failed to create temp directory");
-        fs::write(dir.path().join("main.fix"), SOURCE).expect("Failed to write the source");
-        fs::write(
-            dir.path().join("fixproj.toml"),
-            "[general]\nname = \"objcache\"\nversion = \"0.1.0\"\n\n[build]\nfiles = [\"main.fix\"]\n",
-        )
-        .expect("Failed to write the project file");
-        dir
+        single_source_project_dir("objcache", SOURCE)
     }
 
-    /// Runs `command` in `dir` and returns what it wrote to its two streams, failing the test if the
-    /// command does not succeed.
-    ///
-    /// # Arguments
-    /// * `what` — the invocation as a failure message names it, as a noun phrase that completes
-    ///   "... should succeed", so that a failure says which of a test's several builds it was.
-    fn run_in(command: &mut Command, dir: &Path, what: &str) -> String {
-        let output = command
-            .current_dir(dir)
-            .output()
-            .unwrap_or_else(|e| panic!("Failed to execute {}: {}", what, e));
-        assert_succeeded(&output, &format!("{} should succeed.", what));
-        format!(
-            "stdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )
-    }
-
-    /// The files directly under `dir` whose name ends in `suffix`.
-    fn files_ending_in(dir: &Path, suffix: &str) -> Vec<PathBuf> {
+    /// The files directly under `dir` whose name ends in `extension`.
+    fn files_ending_in(dir: &Path, extension: &str) -> Vec<PathBuf> {
         let mut paths: Vec<PathBuf> = fs::read_dir(dir)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dir.display(), e))
             .map(|entry| entry.expect("failed to read a directory entry").path())
-            .filter(|path| path.to_string_lossy().ends_with(suffix))
+            .filter(|path| path.to_string_lossy().ends_with(extension))
             .collect();
         paths.sort();
         paths
@@ -70,20 +46,7 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
     /// Every compilation unit's object file, as its name paired with a digest of its content, so
     /// that what two builds generated can be compared.
     fn unit_object_digests(dir: &Path) -> Vec<(String, String)> {
-        let units_dir = dir.join(".fixlang/intermediate/units");
-        let mut digests: Vec<(String, String)> = fs::read_dir(&units_dir)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", units_dir.display(), e))
-            .map(|entry| entry.expect("failed to read a directory entry").path())
-            .filter(|path| path.extension().map_or(false, |extension| extension == "o"))
-            .map(|path| {
-                let name = path.file_name().unwrap().to_string_lossy().to_string();
-                let content = fs::read(&path)
-                    .unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e));
-                (name, format!("{:x}", md5::compute(content)))
-            })
-            .collect();
-        digests.sort();
-        digests
+        object_digests(&dir.join(".fixlang/intermediate/units"), |_| true)
     }
 
     /// A build asked for a dump generates the object files a build asked for nothing generates.
