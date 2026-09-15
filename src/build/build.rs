@@ -86,7 +86,12 @@ fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
     Ok(())
 }
 
-/// The headers the runtime's sources include, each written beside the source that includes it.
+/// The headers of `src/fixstd/ryu/`, written beside the sources that include them.
+///
+/// The set is the directory's, rather than what one configuration of Ryu reaches: `d2s.c` and
+/// `f2s_intrinsics.h` choose between a tabulated and a computed table by a macro, so which headers
+/// a build reads depends on the macros it is given. `test_vendored_ryu_headers_are_all_carried`
+/// holds this list to the directory.
 const RUNTIME_HEADERS: [(&str, &str); 8] = [
     ("ryu/ryu.h", include_str!("../fixstd/ryu/ryu.h")),
     ("ryu/common.h", include_str!("../fixstd/ryu/common.h")),
@@ -121,15 +126,24 @@ const RUNTIME_HEADERS: [(&str, &str); 8] = [
 /// alone is compiled with.
 ///
 /// `ryu/d2s.c` and `ryu/f2s.c` each define a `to_chars` of their own, so each is a translation unit
-/// of its own. They are the part of the runtime that computes rather than calls out, and they take
-/// 214 ns to write a number unoptimized against the 88 ns they take optimized, so they are the part
-/// the C compiler is asked to optimize.
-const RUNTIME_SOURCES: [(&str, &str, &str, &[&str]); 3] = [
+/// of its own.
+///
+/// The sources that write a floating point number as text are the runtime's arithmetic, where the
+/// rest of it calls into C's library, and they are the ones the C compiler is asked to optimize:
+/// Ryu takes 214 ns to write a number unoptimized against 88 ns optimized, and the placing of the
+/// digits it answers with costs more than Ryu itself until it is optimized too.
+const RUNTIME_SOURCES: [(&str, &str, &str, &[&str]); 4] = [
     (
         "runtime",
         "runtime.c",
         include_str!("../fixstd/runtime.c"),
         &[],
+    ),
+    (
+        "float-text",
+        "float_text.c",
+        include_str!("../fixstd/float_text.c"),
+        &["-O2"],
     ),
     (
         "ryu-d2s",
@@ -144,6 +158,14 @@ const RUNTIME_SOURCES: [(&str, &str, &str, &[&str]); 3] = [
         &["-O2"],
     ),
 ];
+
+/// Removes the directory a runtime build wrote its copies of the sources into.
+fn remove_build_dir(build_dir: &Path) {
+    fs::remove_dir_all(build_dir).expect(&format!(
+        "Failed to remove \"{}\"",
+        build_dir.to_string_lossy().to_string()
+    ));
+}
 
 /// Builds the runtime into object files and answers where they are, reusing the objects a previous
 /// build compiled.
@@ -206,18 +228,24 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
         if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
             com.arg("-fPIC");
         }
-        run_c_compiler(&mut com, "compile the runtime")?;
+        let compiled = match run_c_compiler(&mut com, &format!("compile the runtime's {}", source))
+        {
+            Ok(()) => build_dir.join(&compiled),
+            // The sources are this build's copies, so a failed compilation has no more use for
+            // them than a finished one does.
+            Err(errors) => {
+                remove_build_dir(&build_dir);
+                return Err(errors);
+            }
+        };
 
-        fs::rename(build_dir.join(&compiled), object).expect(&format!(
+        fs::rename(&compiled, object).expect(&format!(
             "Failed to rename \"{}\" to \"{}\"",
-            build_dir.join(&compiled).to_string_lossy().to_string(),
+            compiled.to_string_lossy().to_string(),
             object.to_string_lossy().to_string()
         ));
     }
-    fs::remove_dir_all(&build_dir).expect(&format!(
-        "Failed to remove \"{}\"",
-        build_dir.to_string_lossy().to_string()
-    ));
+    remove_build_dir(&build_dir);
 
     Ok(objects)
 }
@@ -301,4 +329,66 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     run_c_compiler(&mut com, "link the output file")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RUNTIME_HEADERS, RUNTIME_SOURCES};
+    use crate::misc::Set;
+    use std::path::Path;
+
+    /// Every header of `src/fixstd/ryu/` is carried into the directory a build compiles the runtime
+    /// in. Taking a newer Ryu is a matter of replacing that directory's files, and a header it
+    /// gained that nothing carried would leave the C compiler with nothing to include — at the
+    /// user's build rather than at ours.
+    #[test]
+    fn test_vendored_ryu_headers_are_all_carried() {
+        let vendored = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixstd/ryu");
+        let on_disk: Set<String> = std::fs::read_dir(&vendored)
+            .unwrap_or_else(|e| panic!("failed to read {}: {}", vendored.display(), e))
+            .map(|entry| {
+                entry
+                    .expect("failed to read a directory entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .filter(|name| name.ends_with(".h"))
+            .collect();
+        let carried: Set<String> = RUNTIME_HEADERS
+            .iter()
+            .map(|(path, _)| path.trim_start_matches("ryu/").to_string())
+            .collect();
+        assert_eq!(
+            on_disk, carried,
+            "the headers of src/fixstd/ryu/ and the ones RUNTIME_HEADERS carries"
+        );
+    }
+
+    /// Every source of `src/fixstd/ryu/` is compiled. The same reasoning as the headers': a source
+    /// the directory gained and nothing compiled would be missing from the link.
+    #[test]
+    fn test_vendored_ryu_sources_are_all_compiled() {
+        let vendored = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixstd/ryu");
+        let on_disk: Set<String> = std::fs::read_dir(&vendored)
+            .unwrap_or_else(|e| panic!("failed to read {}: {}", vendored.display(), e))
+            .map(|entry| {
+                entry
+                    .expect("failed to read a directory entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .filter(|name| name.ends_with(".c"))
+            .collect();
+        let compiled: Set<String> = RUNTIME_SOURCES
+            .iter()
+            .filter(|(_, path, _, _)| path.starts_with("ryu/"))
+            .map(|(_, path, _, _)| path.trim_start_matches("ryu/").to_string())
+            .collect();
+        assert_eq!(
+            on_disk, compiled,
+            "the sources of src/fixstd/ryu/ and the ones RUNTIME_SOURCES compiles"
+        );
+    }
 }

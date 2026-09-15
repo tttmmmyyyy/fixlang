@@ -1,21 +1,24 @@
-// The eight values that write a `F32` or a `F64` as text hand a buffer to the C runtime, which
-// writes into it with no length to stop at. Each buffer's size is derived from the widest text its
-// format can produce, and the derivation holds only if the widest whole part, the widest exponent
-// and the null terminator were all counted. A buffer short by even one byte writes past its
-// allocation, which the program itself cannot see: the overflowing bytes are readable afterwards,
-// so the text still comes back whole. Valgrind is what sees it.
+// The eight values that write a `F32` or a `F64` as text hand a buffer to the C runtime. Each
+// buffer's size is derived from the widest text the value can be asked for, and the derivation
+// holds only if the widest digits, the widest exponent and the null terminator were all counted.
 //
-// How far the check reaches depends on the size of the buffer. A storage of
+// The six that go through `snprintf` write into the buffer with no length to stop at, so a buffer
+// short by even one byte writes past its allocation — which the program itself cannot see, since
+// the overflowing bytes are readable afterwards and the text still comes back whole. Valgrind is
+// what sees it. The two `to_string` values build the text in the runtime's own buffer and measure
+// it before copying, so an undersized buffer stops the program instead; this file still writes
+// their widest texts, which is what proves the measurement never fires.
+//
+// How far Valgrind's check reaches depends on the size of the buffer. A storage of
 // `ARRAY_ALIGNED_ALLOC_THRESHOLD` bytes or more is allocated with `ARRAY_STORAGE_ALLOC_SLACK` bytes
 // of room to slide the object onto the buffer alignment, and a write a byte past such a buffer
-// lands in that room. `F64::to_string` and `F64::to_string_precision` always allocate more than the
-// threshold, so an error of a byte in their bounds passes here and one of `ARRAY_BUF_ALIGNMENT`
-// bytes or more is caught. `F32::to_string`, `F32::to_string_exp` and `F64::to_string_exp` always
-// allocate less than the threshold, so a byte is enough for them. The remaining three,
-// `F32::to_string_precision`, `F32::to_string_exp_precision` and `F64::to_string_exp_precision`,
-// cross the threshold at the higher precisions, where a byte again lands in the slack; a byte in
-// their bounds is caught at the lower precisions, where the same size constant is exercised with
-// the storage under the threshold.
+// lands in that room. `F64::to_string_precision` always allocates more than the threshold, so an
+// error of a byte in its bounds passes here and one of `ARRAY_BUF_ALIGNMENT` bytes or more is
+// caught. `F32::to_string_exp` and `F64::to_string_exp` always allocate less than the threshold, so
+// a byte is enough for them. The remaining three, `F32::to_string_precision`,
+// `F32::to_string_exp_precision` and `F64::to_string_exp_precision`, cross the threshold at the
+// higher precisions, where a byte again lands in the slack; a byte in their bounds is caught at the
+// lower precisions, where the same size constant is exercised with the storage under the threshold.
 
 #[cfg(test)]
 mod float_text_buffer_tests {

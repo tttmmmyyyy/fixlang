@@ -4082,8 +4082,9 @@ impl F32 : ToString {
     // The digits are written positionally where the point falls near them, as in `1.0`, `0.1`
     // and `3.14159`, and as a power of ten otherwise, as in `1e13` and `1e-10`.
     to_string = |v| (
-        // A sign, the 9 digits the shortest text of an `F32` takes, a point, `e`, the exponent's
-        // sign, the 2 digits an `F32` exponent reaches and a null.
+        // The widest text this writes: a sign, a point, the five zeros the window's lower edge
+        // allows before the digits, and the digits an `F32` takes there — 16 bytes, and a null.
+        // Widening that window in `src/fixstd/float_text.c` widens this.
         let size = 17;
         let data = Array::empty(size);
         let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_shortest(Ptr, I64, F32), ptr, size, v]);
@@ -4163,8 +4164,9 @@ impl F64 : ToString {
     // The digits are written positionally where the point falls near them, as in `1.0`, `0.1`
     // and `123456.789`, and as a power of ten otherwise, as in `1e300` and `1e-10`.
     to_string = |v| (
-        // A sign, the 17 digits the shortest text of an `F64` takes, a point, `e`, the exponent's
-        // sign, the 3 digits an `F64` exponent reaches and a null.
+        // The widest text this writes: a sign, a point, the four zeros the window's lower edge
+        // allows before the digits, and the 17 digits an `F64` takes — 24 bytes, and a null.
+        // Widening that window in `src/fixstd/float_text.c` widens this.
         let size = 25;
         let data = Array::empty(size);
         let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_shortest(Ptr, I64, F64), ptr, size, v]);
