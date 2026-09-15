@@ -582,10 +582,19 @@ fn build_object_files_cache_hash_or_warn(
 /// `test_llvm_arg_reaches_llvm` is for. An option whose value LLVM cannot read goes the same way,
 /// with a message of LLVM's on the error stream and a build that succeeds.
 fn set_llvm_options(args: &[String]) {
+    static PARSED: OnceLock<Vec<String>> = OnceLock::new();
     if args.is_empty() {
+        // Nothing to set, and nothing to undo: LLVM holds what an earlier set gave it, so a build
+        // naming no option would generate its code under that set while its key says it named none.
+        if let Some(parsed) = PARSED.get() {
+            panic_with_msg(&format!(
+                "The options given to LLVM are set for the whole process, so one run takes one set \
+                 of them. This one was given {:?} and then none.",
+                parsed
+            ));
+        }
         return;
     }
-    static PARSED: OnceLock<Vec<String>> = OnceLock::new();
     let parsed = PARSED.get_or_init(|| {
         // LLVM reads the first argument as the name of the program, the way a `main` does, and puts
         // it in front of what it reports. Naming the option here is what marks such a report as
