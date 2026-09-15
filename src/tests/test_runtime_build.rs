@@ -6,10 +6,10 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{assert_succeeded, fix_command_at_opt_level};
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
+    use crate::tests::test_util::{
+        fix_command_at_opt_level, object_digests, run_in, single_source_project_dir,
+    };
+    use std::path::Path;
     use tempfile::TempDir;
 
     /// The whole of a project, small enough that building it is the runtime's compilation and
@@ -22,44 +22,14 @@ main = println $ 1.0.to_string;
 
     /// A directory holding `SOURCE` as the whole of a project, ready to be built in.
     fn project_dir() -> TempDir {
-        let dir = TempDir::new().expect("Failed to create temp directory");
-        fs::write(dir.path().join("main.fix"), SOURCE).expect("Failed to write the source");
-        fs::write(
-            dir.path().join("fixproj.toml"),
-            "[general]\nname = \"runtimebuild\"\nversion = \"0.1.0\"\n\n[build]\nfiles = [\"main.fix\"]\n",
-        )
-        .expect("Failed to write the project file");
-        dir
+        single_source_project_dir("runtimebuild", SOURCE)
     }
 
     /// The name and content digest of every runtime object a build left in `dir`, sorted by name.
     fn runtime_object_digests(dir: &Path) -> Vec<(String, String)> {
-        let intermediate = dir.join(".fixlang/intermediate");
-        let mut digests: Vec<(String, String)> = fs::read_dir(&intermediate)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", intermediate.display(), e))
-            .map(|entry| entry.expect("failed to read a directory entry").path())
-            .filter(|path: &PathBuf| {
-                let name = path.file_name().unwrap().to_string_lossy().to_string();
-                name.starts_with("fixruntime.") && name.ends_with(".o")
-            })
-            .map(|path| {
-                let name = path.file_name().unwrap().to_string_lossy().to_string();
-                let content = fs::read(&path)
-                    .unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e));
-                (name, format!("{:x}", md5::compute(content)))
-            })
-            .collect();
-        digests.sort();
-        digests
-    }
-
-    /// Runs `command` in `dir`, failing the test unless it succeeds.
-    fn run_in(command: &mut Command, dir: &Path, what: &str) {
-        let output = command
-            .current_dir(dir)
-            .output()
-            .unwrap_or_else(|e| panic!("Failed to execute {}: {}", what, e));
-        assert_succeeded(&output, &format!("{} should succeed.", what));
+        object_digests(&dir.join(".fixlang/intermediate"), |name| {
+            name.starts_with("fixruntime.")
+        })
     }
 
     /// Two builds, each in a directory of its own, compile the runtime into the same bytes under

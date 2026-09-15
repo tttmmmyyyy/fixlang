@@ -14,7 +14,27 @@ piece of arithmetic rather than a call into C's library.
 #include <string.h>
 #include "ryu/ryu.h"
 
+// Defined by the compiler, and declared in `runtime.c` as well; the two translation units carry
+// the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
+
+// The bytes `fixruntime_float_shortest_to_str` builds a text in. A window wider than what this
+// holds would write past it, which is what the static assertions at the two entry points hold the
+// windows to.
+#define FLOAT_TEXT_SIZE 48
+
+// The bytes a window asks for at its widest: a sign, a point, the zeros either edge of the window
+// allows beside the digits, the digits themselves, a power of ten of up to four bytes, and a null.
+#define WIDEST_FLOAT_TEXT(low, high, digits) \
+    (1 + 2 + ((-(low)) > (high) ? (-(low)) : (high)) + (digits) + 4 + 1)
+
+// The window the point is written positionally in, and the digits the type takes at its widest.
+#define F32_POSITIONAL_LOW (-6)
+#define F32_POSITIONAL_HIGH 13
+#define F32_DIGITS 9
+#define F64_POSITIONAL_LOW (-5)
+#define F64_POSITIONAL_HIGH 16
+#define F64_DIGITS 17
 
 // Stops the program unless a text of `written` bytes, and the null after it, fit `size`.
 //
@@ -88,11 +108,25 @@ static void fixruntime_float_shortest_to_str(const char *sci, char *buf, int64_t
         read = 1;
     }
 
-    // Ryu writes `Infinity` and `NaN` where the number is not finite. Fix writes `inf` and `nan`,
-    // which is what `Std::FromString` takes back.
+    // Ryu writes `Infinity` and `NaN` where the number is not finite, and digits everywhere else,
+    // zero included, which it writes as `0E0`. Fix writes `inf` and `nan`, which is what
+    // `Std::FromString` takes back.
     if (sci[read] < '0' || sci[read] > '9')
     {
-        const char *special = sci[read] == 'N' ? "nan" : (negative ? "-inf" : "inf");
+        const char *special;
+        if (sci[read] == 'N')
+        {
+            special = "nan";
+        }
+        else if (sci[read] == 'I')
+        {
+            special = negative ? "-inf" : "inf";
+        }
+        else
+        {
+            fprintf(stderr, "A number was written as \"%s\", which is neither digits nor Infinity nor NaN\n", sci);
+            fixruntime_abort();
+        }
         int length = (int)strlen(special);
         fixruntime_check_float_text(length, size);
         memcpy(buf, special, (size_t)length + 1);
@@ -132,7 +166,7 @@ static void fixruntime_float_shortest_to_str(const char *sci, char *buf, int64_t
 
     // The widest text this writes is a sign, a point, the zeros the window's lower edge allows
     // before the digits, and the digits themselves, which an `F64` makes 24 bytes of.
-    char text[32];
+    char text[FLOAT_TEXT_SIZE];
     int written = 0;
     if (negative)
     {
@@ -211,14 +245,20 @@ static void fixruntime_float_shortest_to_str(const char *sci, char *buf, int64_t
 
 void fixruntime_f32_to_str_shortest(char *buf, int64_t size, float v)
 {
+    _Static_assert(WIDEST_FLOAT_TEXT(F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH, F32_DIGITS) <=
+                       FLOAT_TEXT_SIZE,
+                   "an F32's window asks for more than the text buffer holds");
     char sci[32];
     sci[f2s_buffered_n(v, sci)] = '\0';
-    fixruntime_float_shortest_to_str(sci, buf, size, -6, 13);
+    fixruntime_float_shortest_to_str(sci, buf, size, F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH);
 }
 
 void fixruntime_f64_to_str_shortest(char *buf, int64_t size, double v)
 {
+    _Static_assert(WIDEST_FLOAT_TEXT(F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH, F64_DIGITS) <=
+                       FLOAT_TEXT_SIZE,
+                   "an F64's window asks for more than the text buffer holds");
     char sci[32];
     sci[d2s_buffered_n(v, sci)] = '\0';
-    fixruntime_float_shortest_to_str(sci, buf, size, -5, 16);
+    fixruntime_float_shortest_to_str(sci, buf, size, F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH);
 }

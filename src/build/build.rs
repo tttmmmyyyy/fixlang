@@ -121,9 +121,20 @@ const RUNTIME_HEADERS: [(&str, &str); 8] = [
     ),
 ];
 
-/// The C sources the runtime is built from: the name the object each one compiles to is cached
-/// under, the path the source is written to and compiled by, its text, and the flags that source
-/// alone is compiled with.
+/// One of the C sources the runtime is built from.
+struct RuntimeSource {
+    /// The name the object this source compiles to is cached under.
+    object_name: &'static str,
+    /// The path this source is written to and compiled by, which is the one it carries in the
+    /// compiler's tree.
+    path: &'static str,
+    /// The text of the source, carried in the compiler.
+    text: &'static str,
+    /// The flags this source alone is compiled with.
+    flags: &'static [&'static str],
+}
+
+/// The C sources the runtime is built from.
 ///
 /// `ryu/d2s.c` and `ryu/f2s.c` each define a `to_chars` of their own, so each is a translation unit
 /// of its own.
@@ -132,31 +143,31 @@ const RUNTIME_HEADERS: [(&str, &str); 8] = [
 /// rest of it calls into C's library, and they are the ones the C compiler is asked to optimize:
 /// Ryu takes 214 ns to write a number unoptimized against 88 ns optimized, and the placing of the
 /// digits it answers with costs more than Ryu itself until it is optimized too.
-const RUNTIME_SOURCES: [(&str, &str, &str, &[&str]); 4] = [
-    (
-        "runtime",
-        "runtime.c",
-        include_str!("../fixstd/runtime.c"),
-        &[],
-    ),
-    (
-        "float-text",
-        "float_text.c",
-        include_str!("../fixstd/float_text.c"),
-        &["-O2"],
-    ),
-    (
-        "ryu-d2s",
-        "ryu/d2s.c",
-        include_str!("../fixstd/ryu/d2s.c"),
-        &["-O2"],
-    ),
-    (
-        "ryu-f2s",
-        "ryu/f2s.c",
-        include_str!("../fixstd/ryu/f2s.c"),
-        &["-O2"],
-    ),
+const RUNTIME_SOURCES: [RuntimeSource; 4] = [
+    RuntimeSource {
+        object_name: "runtime",
+        path: "runtime.c",
+        text: include_str!("../fixstd/runtime.c"),
+        flags: &[],
+    },
+    RuntimeSource {
+        object_name: "float-text",
+        path: "float_text.c",
+        text: include_str!("../fixstd/float_text.c"),
+        flags: &["-O2"],
+    },
+    RuntimeSource {
+        object_name: "ryu-d2s",
+        path: "ryu/d2s.c",
+        text: include_str!("../fixstd/ryu/d2s.c"),
+        flags: &["-O2"],
+    },
+    RuntimeSource {
+        object_name: "ryu-f2s",
+        path: "ryu/f2s.c",
+        text: include_str!("../fixstd/ryu/f2s.c"),
+        flags: &["-O2"],
+    },
 ];
 
 /// Removes the directory a runtime build wrote its copies of the sources into.
@@ -176,13 +187,14 @@ fn remove_build_dir(build_dir: &Path) {
 /// The sources are written into a directory of this build's own, so that builds running side by
 /// side neither read nor overwrite each other's copies, and are compiled from inside it under the
 /// paths they carry in the compiler's tree. What a compiled object records as the file it came
-/// from is therefore `runtime.c`, the same in every build.
+/// from is therefore that path, the same in every build.
 fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors> {
     let hash = config.runtime_object_hash();
     let objects: Vec<PathBuf> = RUNTIME_SOURCES
         .iter()
-        .map(|(name, _, _, _)| {
-            PathBuf::from(INTERMEDIATE_PATH).join(format!("fixruntime.{}.{}.o", name, hash))
+        .map(|source| {
+            PathBuf::from(INTERMEDIATE_PATH)
+                .join(format!("fixruntime.{}.{}.o", source.object_name, hash))
         })
         .collect();
     if objects.iter().all(|object| object.exists()) {
@@ -205,40 +217,42 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
     for (path, text) in RUNTIME_HEADERS {
         write_source(path, text);
     }
-    for (_, path, text, _) in RUNTIME_SOURCES {
-        write_source(path, text);
+    for source in &RUNTIME_SOURCES {
+        write_source(source.path, source.text);
     }
 
-    for ((name, source, _, flags), object) in RUNTIME_SOURCES.iter().zip(objects.iter()) {
-        let compiled = format!("{}.o", name);
+    for (source, object) in RUNTIME_SOURCES.iter().zip(objects.iter()) {
+        // The compiler runs inside the build directory, so it is given the name of the object it
+        // writes rather than a path reaching that directory.
+        let compiled_name = format!("{}.o", source.object_name);
         let mut com = c_compiler_command(&config)?;
         // A source reaches the headers beside it by the path it includes them under, which is the
         // one it carries in the compiler's tree.
         com.current_dir(&build_dir).arg("-I.");
-        com.args(*flags);
+        com.args(source.flags);
         com.arg("-ffunction-sections").arg("-fdata-sections");
         // Keep frame pointers for better backtraces on macOS when backtrace is enabled
         if config.no_elim_frame_pointers() {
             com.arg("-fno-omit-frame-pointer");
         }
-        com.arg("-o").arg(&compiled).arg("-c").arg(source);
+        com.arg("-o").arg(&compiled_name).arg("-c").arg(source.path);
         for m in &config.runtime_c_macro {
             com.arg(format!("-D{}", m));
         }
         if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
             com.arg("-fPIC");
         }
-        let compiled = match run_c_compiler(&mut com, &format!("compile the runtime's {}", source))
+        if let Err(errors) =
+            run_c_compiler(&mut com, &format!("compile the runtime's {}", source.path))
         {
-            Ok(()) => build_dir.join(&compiled),
             // The sources are this build's copies, so a failed compilation has no more use for
-            // them than a finished one does.
-            Err(errors) => {
-                remove_build_dir(&build_dir);
-                return Err(errors);
-            }
-        };
+            // them than a finished one does. The compilation's own failure is what the build
+            // reports, so a directory that resists removal after it is left where it is.
+            let _ = fs::remove_dir_all(&build_dir);
+            return Err(errors);
+        }
 
+        let compiled = build_dir.join(&compiled_name);
         fs::rename(&compiled, object).expect(&format!(
             "Failed to rename \"{}\" to \"{}\"",
             compiled.to_string_lossy().to_string(),
@@ -337,14 +351,10 @@ mod tests {
     use crate::misc::Set;
     use std::path::Path;
 
-    /// Every header of `src/fixstd/ryu/` is carried into the directory a build compiles the runtime
-    /// in. Taking a newer Ryu is a matter of replacing that directory's files, and a header it
-    /// gained that nothing carried would leave the C compiler with nothing to include — at the
-    /// user's build rather than at ours.
-    #[test]
-    fn test_vendored_ryu_headers_are_all_carried() {
+    /// The names of the files in `src/fixstd/ryu/` whose name ends in `extension`.
+    fn vendored_ryu_files(extension: &str) -> Set<String> {
         let vendored = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixstd/ryu");
-        let on_disk: Set<String> = std::fs::read_dir(&vendored)
+        std::fs::read_dir(&vendored)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", vendored.display(), e))
             .map(|entry| {
                 entry
@@ -353,14 +363,23 @@ mod tests {
                     .to_string_lossy()
                     .to_string()
             })
-            .filter(|name| name.ends_with(".h"))
-            .collect();
+            .filter(|name| name.ends_with(extension))
+            .collect()
+    }
+
+    /// Every header of `src/fixstd/ryu/` is carried into the directory a build compiles the runtime
+    /// in. Taking a newer Ryu is a matter of replacing that directory's files, and a header it
+    /// gained that nothing carried would leave the C compiler with nothing to include — at the
+    /// user's build rather than at ours.
+    #[test]
+    fn test_vendored_ryu_headers_are_all_carried() {
         let carried: Set<String> = RUNTIME_HEADERS
             .iter()
             .map(|(path, _)| path.trim_start_matches("ryu/").to_string())
             .collect();
         assert_eq!(
-            on_disk, carried,
+            vendored_ryu_files(".h"),
+            carried,
             "the headers of src/fixstd/ryu/ and the ones RUNTIME_HEADERS carries"
         );
     }
@@ -369,25 +388,14 @@ mod tests {
     /// the directory gained and nothing compiled would be missing from the link.
     #[test]
     fn test_vendored_ryu_sources_are_all_compiled() {
-        let vendored = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixstd/ryu");
-        let on_disk: Set<String> = std::fs::read_dir(&vendored)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", vendored.display(), e))
-            .map(|entry| {
-                entry
-                    .expect("failed to read a directory entry")
-                    .file_name()
-                    .to_string_lossy()
-                    .to_string()
-            })
-            .filter(|name| name.ends_with(".c"))
-            .collect();
         let compiled: Set<String> = RUNTIME_SOURCES
             .iter()
-            .filter(|(_, path, _, _)| path.starts_with("ryu/"))
-            .map(|(_, path, _, _)| path.trim_start_matches("ryu/").to_string())
+            .filter(|source| source.path.starts_with("ryu/"))
+            .map(|source| source.path.trim_start_matches("ryu/").to_string())
             .collect();
         assert_eq!(
-            on_disk, compiled,
+            vendored_ryu_files(".c"),
+            compiled,
             "the sources of src/fixstd/ryu/ and the ones RUNTIME_SOURCES compiles"
         );
     }

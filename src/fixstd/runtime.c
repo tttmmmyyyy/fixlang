@@ -16,6 +16,8 @@ When running program by `fix build`, then this source file will be compiled into
 #include <unistd.h>
 #include <pthread.h>
 
+// Defined by the compiler, and declared in `float_text.c` as well; the two translation units carry
+// the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
 // Print message to stderr, and flush it.
