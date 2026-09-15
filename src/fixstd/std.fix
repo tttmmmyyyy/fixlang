@@ -4076,7 +4076,21 @@ impl F32 : FromBytes {
     );
 }
 impl F32 : ToString {
-    to_string = |v| v.to_string_precision(6_U8);
+    // Writes this number in its shortest round-trip decimal form.
+    //
+    // A number of ordinary size is written with a point: `1.0`, `0.1`, `3.14159`. A very large or
+    // very small one is written with a power of ten: `1e13`, `1e-10`.
+    to_string = |v| (
+        // The widest text this writes takes 16 bytes, and the null makes 17. Two shapes reach it:
+        // a sign, a point and the five zeros the window's lower edge allows before the eight digits
+        // an `F32` needs at that scale, and the same with four zeros and nine digits. Nine digits
+        // never meet five zeros — no `F32` between `1e-6` and `1e-5` needs that many — which is why
+        // 17 holds, so widening the window in `src/fixstd/float_text.c` widens this.
+        let size = 17;
+        let data = Array::empty(size);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_shortest(Ptr, I64, F32), ptr, size, v]);
+        String::_unsafe_from_c_str(data)
+    );
 }
 namespace F32 {
     // Converts a floating number to a string of exponential form.
@@ -4145,7 +4159,20 @@ impl F64 : FromBytes {
     );
 }
 impl F64 : ToString {
-    to_string = |v| v.to_string_precision(6_U8);
+    // Writes this number in its shortest round-trip decimal form.
+    //
+    // A number of ordinary size is written with a point: `1.0`, `0.1`, `123456.789`. A very large
+    // or very small one is written with a power of ten: `1e300`, `1e-10`.
+    to_string = |v| (
+        // The widest text this writes takes 24 bytes, and the null makes 25. Two shapes reach it:
+        // a sign, a point and the four zeros the window's lower edge allows before the 17 digits an
+        // `F64` takes, and a sign, one digit, a point, sixteen digits and a four byte power of ten.
+        // Widening the window in `src/fixstd/float_text.c` widens this.
+        let size = 25;
+        let data = Array::empty(size);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_shortest(Ptr, I64, F64), ptr, size, v]);
+        String::_unsafe_from_c_str(data)
+    );
 }
 namespace F64 {
     // Converts a floating number to a string of exponential form.

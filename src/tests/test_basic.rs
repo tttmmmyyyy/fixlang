@@ -5536,31 +5536,127 @@ pub fn test_signed_integral_abs() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Pins the text `to_string` writes for the widest `F32` and `F64`: the digits of the whole part
-/// and the places the format gives by default, which together are the width the buffer is sized
-/// for.
+/// Pins the text `to_string` writes: the shortest digits that read back as the number, spelled
+/// positionally where the point falls within the window the type's digits justify and as a power
+/// of ten outside it, and the widest text an `F64` reaches, which is what its buffer holds.
 #[test]
 pub fn test_float_to_string() {
     let source = r#"
         module Main;
+
+        // Whether reading the text of `v` back gives `v`.
+        round_trips_f64 : F64 -> Bool;
+        round_trips_f64 = |v| (
+            let back : Result ErrMsg F64 = v.to_string.from_string;
+            match back { ok(w) => w == v, err(_) => false }
+        );
+
+        // Whether reading the text of `v` back gives `v`.
+        round_trips_f32 : F32 -> Bool;
+        round_trips_f32 = |v| (
+            let back : Result ErrMsg F32 = v.to_string.from_string;
+            match back { ok(w) => w == v, err(_) => false }
+        );
+
         main : IO ();
         main = (
-            // The widest text this writes for a `F32`: the least one, whose whole part takes
-            // 39 digits, with a sign before it and the 6 places `%f` writes by default.
-            let widest = -3.4028235e38_F32;
-            assert_eq(|_|"the widest F32 text is a sign, 39 digits, a point and 6 places",
-                      widest.to_string, "-340282346638528859811704183484516925440.000000");;
+            // The point falls behind the digits: the zeros between them and the point follow, and
+            // a point and a zero close the text.
+            assert_eq(|_|"a whole number carries a point and a zero", 1.0.to_string, "1.0");;
+            assert_eq(|_|"zero", 0.0.to_string, "0.0");;
+            assert_eq(|_|"zero keeps the sign it is written with", (-0.0).to_string, "-0.0");;
+            assert_eq(|_|"the widest F64 written positionally",
+                      1.0e15.to_string, "1000000000000000.0");;
 
-            // The widest text this writes for a `F64`: the least one, whose whole part takes
-            // 309 digits, with a sign before it and the 6 places `%f` writes by default.
-            let widest = -1.7976931348623157e308;
-            let text = widest.to_string;
-            assert_eq(|_|"the widest F64 text is a sign, 309 digits, a point and 6 places",
-                      text.@size, 1 + 309 + 1 + 6);;
-            assert_eq(|_|"the widest F64 text opens with the digits of the least F64",
-                      text.get_sub(0, 20), "-1797693134862315708");;
-            assert_eq(|_|"the widest F64 text ends in the places behind its point",
-                      text.get_sub(text.@size - 10, text.@size), "368.000000");;
+            // The point falls among the digits.
+            assert_eq(|_|"a point among the digits", 123456.789.to_string, "123456.789");;
+
+            // The point falls before the digits, within four places of them.
+            assert_eq(|_|"a point before the digits", 0.1.to_string, "0.1");;
+            assert_eq(|_|"the digits a third takes", (1.0 / 3.0).to_string, "0.3333333333333333");;
+            assert_eq(|_|"the smallest F64 written positionally", 1.0e-5.to_string, "0.00001");;
+            assert_eq(|_|"an F64 just under that window", 9.99e-6.to_string, "9.99e-6");;
+
+            // The widest text an `F64` reaches is written this way too: the digits fill the type
+            // and the point sits at the edge of the window below them, so the zeros between the
+            // point and the digits are written out. Drawing the window one place wider takes this
+            // text past the buffer `Std` writes into.
+            let widest = -1.0000000000000003e-5;
+            assert_eq(|_|"the widest F64 text written positionally",
+                      widest.to_string, "-0.000010000000000000003");;
+            assert_eq(|_|"the widest positional F64 text takes 24 bytes", widest.to_string.@size, 24);;
+
+            // Outside that window the text carries the power of ten instead of the zeros.
+            assert_eq(|_|"a power of ten just past the window", 1.0e16.to_string, "1e16");;
+            assert_eq(|_|"a large power of ten", 1.0e300.to_string, "1e300");;
+            assert_eq(|_|"a small power of ten", 1.0e-10.to_string, "1e-10");;
+            assert_eq(|_|"the least positive F64", 5.0e-324.to_string, "5e-324");;
+            assert_eq(|_|"the greatest F64",
+                      1.7976931348623157e308.to_string, "1.7976931348623157e308");;
+
+            // The widest text an `F64` reaches: a sign, 17 digits, a point and a power of ten of
+            // 4 bytes. The buffer `Std` writes into holds these 24 bytes and a null.
+            let widest = -2.2250738585072014e-308;
+            assert_eq(|_|"the widest F64 text", widest.to_string, "-2.2250738585072014e-308");;
+            assert_eq(|_|"the widest F64 text takes 24 bytes", widest.to_string.@size, 24);;
+
+            // A number that is not finite is written the way `from_string` takes it back.
+            let inf = 1.0 / 0.0;
+            assert_eq(|_|"an infinity", inf.to_string, "inf");;
+            assert_eq(|_|"a negative infinity", (0.0 - inf).to_string, "-inf");;
+            assert_eq(|_|"a NaN", (inf - inf).to_string, "nan");;
+
+            // `inf` and `nan` are the texts `from_string` takes back, which is why they are
+            // written where Ryu writes `Infinity` and `NaN`.
+            let read_back : String -> F64 = |text| text.from_string.as_ok;
+            assert_eq(|_|"an infinity reads back as an infinity", read_back(inf.to_string), inf);;
+            assert_eq(|_|"a negative infinity reads back as a negative infinity",
+                      read_back((0.0 - inf).to_string), 0.0 - inf);;
+            let nan = read_back((inf - inf).to_string);
+            assert_eq(|_|"a NaN reads back as a NaN", nan != nan, true);;
+
+            // An `F32` carries 9 digits where an `F64` carries 17, so the window it is written
+            // positionally in is drawn narrower.
+            assert_eq(|_|"an F32 whole number", 1.0_F32.to_string, "1.0");;
+            assert_eq(|_|"an F32 with a point among its digits", 3.14159_F32.to_string, "3.14159");;
+            assert_eq(|_|"the digits a third takes in an F32",
+                      (1.0_F32 / 3.0_F32).to_string, "0.33333334");;
+            assert_eq(|_|"the widest F32 written positionally",
+                      1.0e12_F32.to_string, "1000000000000.0");;
+            assert_eq(|_|"an F32 just past that window", 1.0e13_F32.to_string, "1e13");;
+            assert_eq(|_|"the smallest F32 written positionally",
+                      1.0e-6_F32.to_string, "0.000001");;
+            assert_eq(|_|"an F32 just under that window", 9.99e-7_F32.to_string, "9.99e-7");;
+            assert_eq(|_|"the greatest F32", 3.4028235e38_F32.to_string, "3.4028235e38");;
+            assert_eq(|_|"the least positive F32", 1.4e-45_F32.to_string, "1e-45");;
+
+            // The widest text an `F32` reaches: a sign, a point, the five zeros the window's
+            // lower edge allows and the eight digits that follow them.
+            let widest = -1.0000001e-6_F32;
+            assert_eq(|_|"the widest F32 text", widest.to_string, "-0.0000010000001");;
+            assert_eq(|_|"the widest F32 text takes 16 bytes", widest.to_string.@size, 16);;
+
+            // An `F32` that is not finite goes through a translation unit of its own.
+            let inf_f32 = 1.0_F32 / 0.0_F32;
+            assert_eq(|_|"an F32 infinity", inf_f32.to_string, "inf");;
+            assert_eq(|_|"a negative F32 infinity", (0.0_F32 - inf_f32).to_string, "-inf");;
+            assert_eq(|_|"an F32 NaN", (inf_f32 - inf_f32).to_string, "nan");;
+
+            // Reading any of these texts back gives the number it was written from, which is what
+            // the shortest digits are chosen for.
+            let values = [
+                1.0, 0.1, 1.0 / 3.0, 1.0e300, 1.0e-10, 123456.789, -0.0, 0.0, 1.0e15, 1.0e16,
+                1.0e-5, 5.0e-324, 1.7976931348623157e308, -2.2250738585072014e-308, 3.0e-7
+            ];
+            assert_eq(|_|"every F64 text reads back as the number it was written from",
+                      values.to_iter.fold(true, |v, acc| acc && v.round_trips_f64), true);;
+
+            let values : Array F32 = [
+                1.0_F32, 0.1_F32, 1.0_F32 / 3.0_F32, 3.14159_F32, 1.0e12_F32, 1.0e13_F32,
+                1.0e-6_F32, 3.4028235e38_F32, 1.4e-45_F32, -0.0_F32
+            ];
+            assert_eq(|_|"every F32 text reads back as the number it was written from",
+                      values.to_iter.fold(true, |v, acc| acc && v.round_trips_f32), true);;
 
             pure()
         );
@@ -5605,6 +5701,131 @@ pub fn test_float_to_string_precision() {
                       text.get_sub(0, 20), "-1797693134862315708");;
             assert_eq(|_|"the widest F64 text ends in the places behind its point",
                       text.get_sub(text.@size - 6, text.@size), "000000");;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Every text `to_string` writes for a normal number reads back as the number it was written from,
+/// which is what choosing the shortest digits is for. The walk crosses both edges of the window the
+/// point is written positionally in at every scale either type reaches, rather than at the few a
+/// hand-written list names.
+#[test]
+pub fn test_float_to_string_round_trips_across_every_decade() {
+    let source = r#"
+        module Main;
+
+        // `v` and a value just above and just below it.
+        //
+        // # Parameters
+        // * `v` - The number to take the neighbours of.
+        neighbours_f64 : F64 -> Array F64;
+        neighbours_f64 = |v| [v, v * (1.0 + 1.0e-15), v * (1.0 - 1.0e-15)];
+
+        // `v` and a value just above and just below it.
+        //
+        // # Parameters
+        // * `v` - The number to take the neighbours of.
+        neighbours_f32 : F32 -> Array F32;
+        neighbours_f32 = |v| [v, v * (1.0_F32 + 1.0e-6_F32), v * (1.0_F32 - 1.0e-6_F32)];
+
+        // Whether reading the text of `v` back gives `v`.
+        //
+        // # Parameters
+        // * `v` - The number to write and read back.
+        round_trips_f64 : F64 -> Bool;
+        round_trips_f64 = |v| (
+            let back : Result ErrMsg F64 = v.to_string.from_string;
+            match back { ok(w) => w == v, err(_) => false }
+        );
+
+        // Whether reading the text of `v` back gives `v`.
+        //
+        // # Parameters
+        // * `v` - The number to write and read back.
+        round_trips_f32 : F32 -> Bool;
+        round_trips_f32 = |v| (
+            let back : Result ErrMsg F32 = v.to_string.from_string;
+            match back { ok(w) => w == v, err(_) => false }
+        );
+
+        main : IO ();
+        main = (
+            // Every power of ten an `F64` reaches, the subnormal ones included.
+            let ok = Iterator::range(-323, 309).fold(true, |e, acc|
+                let p = Iterator::range(0, e.abs).fold(1.0, |_, x| if e < 0 { x / 10.0 } else { x * 10.0 });
+                [p, -p].to_iter.fold(acc, |v, acc|
+                    neighbours_f64(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f64)
+                )
+            );
+            assert_eq(|_|"every F64 decade reads back as what it was written from", ok, true);;
+
+            // Every power of ten an `F32` reaches, the subnormal ones included.
+            let ok = Iterator::range(-44, 39).fold(true, |e, acc|
+                let p = Iterator::range(0, e.abs).fold(1.0_F32, |_, x| if e < 0 { x / 10.0_F32 } else { x * 10.0_F32 });
+                [p, -p].to_iter.fold(acc, |v, acc|
+                    neighbours_f32(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f32)
+                )
+            );
+            assert_eq(|_|"every F32 decade reads back as what it was written from", ok, true);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// The text `to_string` writes and the text `from_string` reads are both spelled with a point,
+/// whatever `LC_NUMERIC` the program is running under. `to_string_precision`, which goes through
+/// `snprintf`, follows the locale, and this test uses that to prove the locale it set took effect
+/// rather than passing on a machine where the locale is absent.
+#[test]
+pub fn test_float_text_is_read_and_written_under_one_locale() {
+    let source = r#"
+        module Main;
+
+        // Asks the C library to run under `name`, for the category numbered `category`.
+        //
+        // # Parameters
+        // * `category` - `LC_NUMERIC`, which is 1 where the C library is glibc's and 4 where it is
+        //   Apple's. The other of the two names a category this test does not read.
+        // * `name` - The locale to run under.
+        set_locale : I32 -> String -> IO ();
+        set_locale = |category, name| (
+            name.borrow_c_str_io(|p| FFI_CALL_IO[Ptr setlocale(I32, Ptr), category, p]).forget
+        );
+
+        // The locales whose decimal point is a comma that a machine is likely to carry.
+        candidates : Array String;
+        candidates = [
+            "de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "fr_FR.utf8", "en_DK.UTF-8", "en_DK.utf8"
+        ];
+
+        main : IO ();
+        main = (
+            // Walk the candidates until `to_string_precision` writes a comma, which is what says
+            // the locale took: it is the one text here that follows `LC_NUMERIC`.
+            let took = *candidates.to_iter.fold_m(false, |name, took|
+                if took { true.pure };
+                set_locale(1_I32, name);;
+                set_locale(4_I32, name);;
+                (1.5.to_string_precision(1_U8) == "1,5").pure
+            );
+
+            if !took {
+                eprintln("Skipping the locale check: this machine carries no locale whose decimal point is a comma.");;
+                pure()
+            };
+
+            // Under that locale, the two texts `Std` owns are still written and read with a point.
+            assert_eq(|_|"to_string writes a point under a comma locale", 1.5.to_string, "1.5");;
+            let back : Result ErrMsg F64 = 1.5.to_string.from_string;
+            assert_eq(|_|"from_string reads a point under a comma locale", back.as_ok, 1.5);;
+            assert_eq(|_|"an F32 text is written with a point too", 1.5_F32.to_string, "1.5");;
+            let back : Result ErrMsg F32 = 1.5_F32.to_string.from_string;
+            assert_eq(|_|"an F32 text is read with a point too", back.as_ok, 1.5_F32);;
 
             pure()
         );

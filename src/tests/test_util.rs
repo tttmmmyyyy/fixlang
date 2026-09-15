@@ -817,10 +817,72 @@ pub fn assert_succeeded(output: &Output, what: &str) {
     );
 }
 
+/// A temporary directory holding `source` as the whole of a project named `name`, ready to be
+/// built in.
+///
+/// # Arguments
+/// * `name` — the project's name, which the output file is named after.
+/// * `source` — the Fix source, written as `main.fix`.
+pub fn single_source_project_dir(name: &str, source: &str) -> TempDir {
+    let dir = TempDir::new().expect("Failed to create temp directory");
+    fs::write(dir.path().join("main.fix"), source).expect("Failed to write the source");
+    fs::write(
+        dir.path().join("fixproj.toml"),
+        format!(
+            "[general]\nname = \"{}\"\nversion = \"0.1.0\"\n\n[build]\nfiles = [\"main.fix\"]\n",
+            name
+        ),
+    )
+    .expect("Failed to write the project file");
+    dir
+}
+
+/// Runs `command` in `dir` and answers what it wrote to its two streams, failing the test unless it
+/// succeeded.
+///
+/// # Arguments
+/// * `what` — the run as a failure message names it, as a noun phrase that completes "... should
+///   succeed", so that a failure says which of a test's several runs it was.
+pub fn run_in(command: &mut Command, dir: &Path, what: &str) -> String {
+    let output = command
+        .current_dir(dir)
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to execute {}: {}", what, e));
+    assert_succeeded(&output, &format!("{} should succeed.", what));
+    format!(
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
+}
+
+/// The name and content digest of every object file in `dir` that `keep` answers for, sorted by
+/// name. Two builds that produced the same objects answer alike.
+///
+/// # Arguments
+/// * `keep` — which file names to take, by the name alone.
+pub fn object_digests(dir: &Path, keep: impl Fn(&str) -> bool) -> Vec<(String, String)> {
+    let mut digests: Vec<(String, String)> = fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", dir.display(), e))
+        .map(|entry| entry.expect("failed to read a directory entry").path())
+        .map(|path| path.file_name().unwrap().to_string_lossy().to_string())
+        .filter(|name| name.ends_with(".o") && keep(name))
+        .map(|name| {
+            let path = dir.join(&name);
+            let content = fs::read(&path)
+                .unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e));
+            (name, format!("{:x}", md5::compute(content)))
+        })
+        .collect();
+    digests.sort();
+    digests
+}
+
 /// Asserts that `output` failed, quoting both streams otherwise.
 ///
 /// # Arguments
-/// * `what` — what the run was expected to do, so a failure says which expectation broke.
+/// * `what` — what the run was expected to be rejected for, so a passing run says which
+///   expectation broke.
 pub fn assert_failed(output: &Output, what: &str) {
     assert!(
         !output.status.success(),

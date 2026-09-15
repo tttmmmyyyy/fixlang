@@ -485,7 +485,7 @@ pub struct Configuration {
     /// safe to share between them at the cost of speed. Turn it on through `set_threaded`, which
     /// also links the pthread library.
     pub threaded: bool,
-    /// The macros the runtime `runtime.c` is compiled with, each of which turns on a part of it.
+    /// The macros the runtime's C sources are compiled with, each of which turns on a part of it.
     pub runtime_c_macro: Vec<String>,
     /// Whether the build reports how long each of its steps took.
     pub show_build_times: bool,
@@ -1069,8 +1069,8 @@ impl Configuration {
             num_worker_thread: _,
             type_check_cache: _,
 
-            // The macros the runtime is compiled with. The runtime is written in C rather than
-            // generated, so it has an object file and a key of its own.
+            // The macros the runtime is compiled with. The runtime is C the compiler carries, so
+            // it has object files and a key of its own.
             runtime_c_macro,
 
             // The link step, which runs once the object files are made, and where its result goes.
@@ -1197,8 +1197,9 @@ impl Configuration {
         self.cache_hash_sources().object_generation.finish()
     }
 
-    /// The hash of the settings the runtime's object file is compiled under, which names that file:
-    /// a build finding it on disk compiles the runtime again only where the settings differ.
+    /// The hash of the settings the runtime's object files are compiled under, which names each of
+    /// them: a build finding them on disk compiles the runtime again only where the settings
+    /// differ.
     ///
     /// `test_runtime_object_hash_separates_runtime_compilation_settings` gives each setting read
     /// here a value of its own and checks that the hash follows.
