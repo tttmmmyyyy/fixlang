@@ -1787,23 +1787,6 @@ Here, both the `ToIter` trait and the `Iterator` trait have an associated type n
 In this example, the type of the iterator returned by `to_iter` differs for each implementation.
 For `Array a`, it resolves to `ArrayIterator a`, while for other collection types, it resolves to different iterator types.
 
-An implementation may write a type signature for the member.
-The signature is the declared type with the trait's type variable replaced by the type the
-implementation is for.
-An associated type application stays as the declaration writes it, and each opaque type of the
-declaration gets an opaque type variable of the implementation's own:
-
-```
-impl Array a : ToIter {
-    type Item (Array a) = a;
-    to_iter : [?iter : Iterator, Iterator::Item ?iter = a] Array a -> ?iter;
-    to_iter = Array::to_iter;
-}
-```
-
-The type behind `?iter` comes from the body of this implementation, as it does where the signature is
-left out.
-
 The trait's type variable has to appear in the member's type, as `c` does in `c -> ?it` above.
 A call picks the implementation by the type it writes, and what stands behind an opaque type is the
 implementation's choice, so a member that names the trait's type variable only in a constraint
