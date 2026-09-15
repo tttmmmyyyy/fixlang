@@ -90,10 +90,10 @@ pub fn test_the_allocators_say_their_result_is_the_callers_alone() {
     // The property is about what the compiler emits, so it is read before LLVM has run.
     let ir = array_access_ir();
     for allocator in [RUNTIME_MALLOC, RUNTIME_REALLOC] {
-        let prefix = call_prefix(allocator);
+        let applied_name = name_before_arguments(allocator);
         let calls = ir
             .lines()
-            .filter(|line| call_arguments(line, &prefix).is_some())
+            .filter(|line| call_arguments(line, &applied_name).is_some())
             .count();
         assert!(
             calls > 0,
@@ -103,7 +103,7 @@ pub fn test_the_allocators_say_their_result_is_the_callers_alone() {
         );
         let declarations = ir
             .lines()
-            .filter(|line| line.starts_with("declare ") && line.contains(&prefix))
+            .filter(|line| line.starts_with("declare ") && line.contains(&applied_name))
             .collect::<Vec<_>>();
         assert!(
             !declarations.is_empty(),
@@ -113,7 +113,13 @@ pub fn test_the_allocators_say_their_result_is_the_callers_alone() {
         // A return attribute stands before the name, where a parameter attribute stands after it.
         let declarations_without_noalias = declarations
             .iter()
-            .filter(|line| !line.split(&prefix).next().unwrap().contains("noalias"))
+            .filter(|line| {
+                !line
+                    .split(&applied_name)
+                    .next()
+                    .unwrap()
+                    .contains("noalias")
+            })
             .collect::<Vec<_>>();
         assert!(
             declarations_without_noalias.is_empty(),
@@ -130,20 +136,19 @@ pub fn test_the_allocators_say_their_result_is_the_callers_alone() {
     }
 }
 
-/// The text a call to `callee` writes in front of the arguments it passes. A declaration of the
-/// same function holds the name followed by its parameter types, so reading a line against this
-/// finds the calls alone.
-fn call_prefix(callee: &str) -> String {
+/// The text LLVM writes where `callee`'s argument list follows its name — in a call and in a
+/// declaration alike.
+fn name_before_arguments(callee: &str) -> String {
     format!("@{}(", callee)
 }
 
-/// The arguments the call on `line` passes, where `line` is a call to the function whose
-/// `call_prefix` is `prefix`, and `None` where it is not such a call.
-fn call_arguments<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
+/// The arguments the call on `line` passes to the function whose `name_before_arguments` is given,
+/// and `None` where `line` is not a call of it.
+fn call_arguments<'a>(line: &'a str, name_before_arguments: &str) -> Option<&'a str> {
     if !line.contains("call ") {
         return None;
     }
-    let (_, arguments) = line.split_once(prefix)?;
+    let (_, arguments) = line.split_once(name_before_arguments)?;
     Some(arguments)
 }
 
@@ -184,12 +189,12 @@ fn names_local_value(text: &str, name: &str) -> bool {
 #[test]
 pub fn test_nothing_reads_the_block_a_reallocation_was_given() {
     let ir = array_access_ir();
-    let prefix = call_prefix(RUNTIME_REALLOC);
+    let applied_name = name_before_arguments(RUNTIME_REALLOC);
     let mut calls = 0;
     for body in llvm_function_bodies(ir, "") {
         let lines = body.lines().map(|line| line.trim()).collect::<Vec<_>>();
         for (i, line) in lines.iter().enumerate() {
-            let Some(arguments) = call_arguments(line, &prefix) else {
+            let Some(arguments) = call_arguments(line, &applied_name) else {
                 continue;
             };
             calls += 1;
