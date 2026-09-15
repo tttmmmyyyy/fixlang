@@ -269,8 +269,7 @@ fn run_cli() {
         .allow_hyphen_values(true)
         .value_name("OPTION")
         .help(
-            "An option to hand LLVM, written as LLVM writes it, such as the x86 option `--x86-experimental-pref-innermost-loop-alignment=6` (intended for compiler development). The options are set for the whole run, so one run takes one set of them.\n\
-             LLVM ignores an option it does not know. An option whose value LLVM cannot read gets a message on the error stream and nothing more. The build succeeds either way, with the setting unmade. An option may also belong to one target and do nothing on another. Check that the setting was made: build the same sources with the option and without it, and see that the object files under `.fixlang/intermediate/units` differ. The built program differs either way, since the compiler names the runtime's source after a number it mints per build and that name reaches the program.\n",
+            "An option to hand LLVM, written as LLVM writes it, such as `--unroll-count=4` (intended for compiler development). LLVM ignores an option it does not know, with no warning.\n",
         );
     let emit_symbols = Arg::new("emit-symbols")
         .long("emit-symbols")
