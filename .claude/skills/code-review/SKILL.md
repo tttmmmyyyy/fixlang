@@ -958,6 +958,8 @@ This convention covers the text the project ships. Writing addressed to the peop
 
 Write that English plainly. A reader of this project need not be a native speaker, and a long sentence, a rare word where a common one fits, or a clause folded inside another costs them more than it costs a native reader. Short sentences and ordinary words carry the same meaning for less, and they are also what a translator of the document has to work from.
 
+Check that each sentence reads as natural, plain English. Where it does not, propose a replacement.
+
 **Rewrite**: translate the comment into clear English while preserving its meaning; say a long or ornate sentence plainly.
 
 #### Every Rust item must have a doc comment — [Rust]
