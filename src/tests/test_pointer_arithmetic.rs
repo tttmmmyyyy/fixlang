@@ -1,3 +1,4 @@
+use crate::fixstd::runtime::{RUNTIME_MALLOC, RUNTIME_REALLOC};
 use crate::tests::test_util::{generated_llvm_ir, llvm_function_bodies};
 use std::sync::OnceLock;
 
@@ -88,11 +89,11 @@ pub fn test_every_pointer_into_an_object_is_computed_inside_it() {
 pub fn test_the_allocators_say_their_result_is_the_callers_alone() {
     // The property is about what the compiler emits, so it is read before LLVM has run.
     let ir = array_access_ir();
-    for allocator in ["@malloc(", "@realloc("] {
+    for allocator in [RUNTIME_MALLOC, RUNTIME_REALLOC] {
+        let prefix = call_prefix(allocator);
         let calls = ir
             .lines()
-            .map(|line| line.trim())
-            .filter(|line| line.contains("call ") && line.contains(allocator))
+            .filter(|line| call_arguments(line, &prefix).is_some())
             .count();
         assert!(
             calls > 0,
@@ -102,7 +103,7 @@ pub fn test_the_allocators_say_their_result_is_the_callers_alone() {
         );
         let declarations = ir
             .lines()
-            .filter(|line| line.starts_with("declare ") && line.contains(allocator))
+            .filter(|line| line.starts_with("declare ") && line.contains(&prefix))
             .collect::<Vec<_>>();
         assert!(
             !declarations.is_empty(),
@@ -112,7 +113,7 @@ pub fn test_the_allocators_say_their_result_is_the_callers_alone() {
         // A return attribute stands before the name, where a parameter attribute stands after it.
         let without_noalias = declarations
             .iter()
-            .filter(|line| !line.split(allocator).next().unwrap().contains("noalias"))
+            .filter(|line| !line.split(&prefix).next().unwrap().contains("noalias"))
             .collect::<Vec<_>>();
         assert!(
             without_noalias.is_empty(),
@@ -127,6 +128,23 @@ pub fn test_the_allocators_say_their_result_is_the_callers_alone() {
                 .join("\n"),
         );
     }
+}
+
+/// The text a call to `callee` writes in front of the arguments it passes. A declaration of the
+/// same function holds the name followed by its parameter types, so reading a line against this
+/// finds the calls alone.
+fn call_prefix(callee: &str) -> String {
+    format!("@{}(", callee)
+}
+
+/// The arguments the call on `line` passes, where `line` is a call to the function whose
+/// `call_prefix` is `prefix`, and `None` where it is not such a call.
+fn call_arguments<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
+    if !line.contains("call ") {
+        return None;
+    }
+    let (_, arguments) = line.split_once(prefix)?;
+    Some(arguments)
 }
 
 /// The name of the first local value `text` names, as LLVM writes one: `%name`, or `%"name"` where
@@ -166,15 +184,12 @@ fn names_local_value(text: &str, name: &str) -> bool {
 #[test]
 pub fn test_nothing_reads_the_block_a_reallocation_was_given() {
     let ir = array_access_ir();
+    let prefix = call_prefix(RUNTIME_REALLOC);
     let mut calls = 0;
     for body in llvm_function_bodies(ir, "") {
         let lines = body.lines().map(|line| line.trim()).collect::<Vec<_>>();
         for (i, line) in lines.iter().enumerate() {
-            let Some(arguments) = line
-                .contains("call ")
-                .then(|| line.split("@realloc(").nth(1))
-                .flatten()
-            else {
+            let Some(arguments) = call_arguments(line, &prefix) else {
                 continue;
             };
             calls += 1;
