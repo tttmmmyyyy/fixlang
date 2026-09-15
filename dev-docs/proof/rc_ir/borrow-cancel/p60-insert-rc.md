@@ -3210,16 +3210,23 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   集合を作る。`LeafOrigin` の構成子は `Arg`・`Fresh`・`Unknown` であり、`Fresh` は `Arg` ではない。
 
 <1>4. 残る 2 個 -- `InlineLLVMStructGetBody` と `InlineLLVMUnionAsBody` -- は、`borrows_operand(i)` が
-      真であるとき結果の型が `is_fully_unboxed` である。
+      真であるとき、結果の型が `is_fully_unboxed` であるか、オペランド 0 の型が boxed である。
   BY <ref id=83d98e9/>, CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::borrows_operand,
-     CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::borrows_container,
+     CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::field_read_of,
+     CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::field_read,
+     CODE src/fixstd/builtin.rs: FieldRead,
      CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_operand,
      CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_union,
      CODE src/ast/types.rs: TypeNode::field_types
   `InlineLLVMStructGetBody::borrows_operand` は
-  `i == 0 && Self::borrows_container(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)` で
-  あり、`InlineLLVMStructGetBody::borrows_container` の本体は
-  `field_ty.is_fully_unboxed(type_env)` である。A12 の
+  `i == 0 && !matches!(self.field_read_of(arg_tys, type_env), FieldRead::TakenWithContainer)` で
+  あり、`field_read_of` は `arg_tys[0]` を容器の型、
+  `arg_tys[0].field_types(type_env)[self.field_idx]` をフィールドの型として `field_read` を呼ぶ。
+  `field_read` は、フィールドの型が `is_fully_unboxed` のとき `FieldRead::Moved`、そうでなくて
+  容器の型が `is_box` のとき `FieldRead::Retained`、どちらでもないとき
+  `FieldRead::TakenWithContainer` を返す。`FieldRead` はこの 3 つで尽きるので、
+  `borrows_operand(0)` が真であることは「フィールドの型が `is_fully_unboxed` であるか、容器の型が
+  `is_box` である」ことと同値である。A12 の
   `Llvm` 節点の型についての節は「`InlineLLVMStructGetBody` の `ty(x)` は `ty(args[0])` の第
   `field_idx` フィールドの型であり、`InlineLLVMUnionAsBody` の `ty(x)` は `ty(args[0])` の第
   `field_idx` 変位の payload の型である」と述べる。**`arg_tys[0].field_types(type_env)[self.field_idx]`
@@ -3230,7 +3237,8 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `InlineLLVMUnionAsBody::borrows_operand` は
   `i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)` で
   あり、`InlineLLVMUnionAsBody::borrows_union` の本体は `payload_ty.is_fully_unboxed(type_env)` で
-  ある。A12 の同じ節よりこの `payload_ty` はこの op の結果の型である。
+  ある。A12 の同じ節よりこの `payload_ty` はこの op の結果の型である。よってこちらは
+  `borrows_operand(i)` が真であるとき結果の型が `is_fully_unboxed` である。
   どちらの `borrows_operand` も `i == 0` を要求するので、`i == 0` 以外の `i` には偽を返す。
 
 <1>5. 結果の型が `is_fully_unboxed` であるとき、宣言はどの leaf にも何も置かない。
@@ -3303,8 +3311,11 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   <1>3 が挙げる 3 個を除くものは既定の `result_prov` を持ち `Arg` を宣言しない (<1>2、<1>3)。
   `InlineLLVMArrayCopyCapacityBoundsUnchecked`
   は結果の各 leaf に単一の `Fresh` を置くので `Arg` を宣言しない (<1>3a)。残る 2 個は、
-  `borrows_operand(i)` が真であるとき結果に leaf が無い (<1>4、<1>5) ので、やはり `Arg(i, σ)` を
-  宣言する leaf を持たない。(b) は <1>5a である。
+  `borrows_operand(i)` が真であるとき、結果の型が `is_fully_unboxed` であるか、オペランド 0 の型が
+  boxed である (<1>4)。前者では結果に leaf が無い (<1>5)。後者は `InlineLLVMStructGetBody` に
+  だけ起こり、その `result_prov` は `arg_tys[0].is_box(type_env)` の枝で結果の各 leaf に
+  `Unknown` を置く (<1>5a の末尾) ので `Arg` を含まない。どちらでも `Arg(i, σ)` を宣言する leaf を
+  持たない。(b) は <1>5a である。
 
 **この命題が要る理由。** D9 の消費の表の `Llvm` の行は `borrows_operand(i)` が偽のオペランドだけを
 挙げるが、移動の表の `Llvm` の行 (素通し leaf) はその条件を持たない。両方が同時に成り立つ op が在ると、

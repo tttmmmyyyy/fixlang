@@ -261,6 +261,7 @@ SCAN src/ `.retain(`
   = src/ast/types.rs: Scheme::generalize -- Rust の `Vec::retain`
   = src/commands/docs.rs: to_markdown_link -- Rust の `String::retain`
   = src/fixstd/builtin.rs: InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::generate -- 環境へ番地を渡す内部関数の本体。retain してから返る
+  = src/fixstd/builtin.rs: InlineLLVMStructGetBody::generate -- 箱の容器から取り出したフィールドを retain する。容器は読むだけ
   = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate -- オペランドを retain し、適用の後に release する
   = src/generator.rs: Generator::build_retain -- 定義。unbox の集約の成分へ降りる
   = src/metafiles/trust_store.rs: TrustStore::record -- Rust の `Vec::retain`
@@ -3737,9 +3738,9 @@ fn observe(n, x, y, w) -> Bool:
     Ret(u))))
 ```
 
-`Llvm(struct_get_0, [w])` の `borrows_operand(0)` は、取り出すフィールドの型が fully unboxed のとき真で
-ある。`B.@v : I64` は fully unboxed なので真であり、この演算は `w` を消費しない
-(`CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::borrows_operand`)。
+`Llvm(struct_get_0, [w])` の `borrows_operand(0)` は、取り出すフィールドの型が fully unboxed のとき、
+および容器の型が boxed のとき真である。`B.@v : I64` は fully unboxed なので真であり、この演算は `w` を
+消費しない (`CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody::borrows_operand`)。
 
 ### 6.3 修正前のコードがこの入力に何を出力したか
 

@@ -2375,9 +2375,10 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 - `InlineLLVMStructGetBody` の `ty(x)` は `ty(args[0])` の第 `field_idx` フィールドの型であり、
   `InlineLLVMUnionAsBody` の `ty(x)` は `ty(args[0])` の第 `field_idx` 変位の payload の型である。
   果たす者: `struct_get` と `union_as` が結果の型をそのフィールド・変位の型に取ること。
-  **この 2 つの `borrows_operand` はその型の `is_fully_unboxed` を読むので、この節が無いと、その真偽が
-  結果について何を言うのかが決まらない** (`CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody`,
-  `InlineLLVMUnionAsBody`)。
+  **`InlineLLVMUnionAsBody::borrows_operand` はその型の `is_fully_unboxed` を読み、
+  `InlineLLVMStructGetBody::borrows_operand` はそれに加えて容器の型の `is_box` を読むので、この節が
+  無いと、その真偽が結果について何を言うのかが決まらない**
+  (`CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody`, `InlineLLVMUnionAsBody`)。
 
 **この仮定が型の `variant` を述べる各節では、その型の `is_closure()` は偽である。** <!--#ad36c77-->
 **この文はその各節の一部であって、別の主張ではない。** 節を再掲する段はこの文も一緒に再掲すること -- <!--#321d7f0-->

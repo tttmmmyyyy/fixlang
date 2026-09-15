@@ -399,6 +399,7 @@ SCAN src/ `get_scoped_value(`
   = src/generator.rs: Generator::get_scoped_value -- 定義
   = src/generator.rs: Generator::get_scoped_obj -- 呼び出し
   = src/generator.rs: Generator::get_scoped_obj_noretain -- 呼び出し
+  = src/generator.rs: Generator::get_scoped_type -- 呼び出し。値の型だけを読み、コードを出さない
 
 **前提 `unsafe impl` の在りか** --- `unsafe impl` の字面が在る項目は無い。よって `Send` と `Sync` を
 手で実装した型はこのクレートに無く、`EXT auto trait と共有` の 2 の但し書きに当たる型も無い。

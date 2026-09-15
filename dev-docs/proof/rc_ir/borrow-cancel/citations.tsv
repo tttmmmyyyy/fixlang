@@ -198,6 +198,7 @@ src/error.rs	panic_with_msg	P3,P4	dd531b375c3d
 src/ffi.rs	CSignature::get_or_declare_in_module	D/A,P27,P29,P30	65818f246a29
 src/ffi.rs	CSignature::of_ffi_export	P26	ed5fe25c470a
 src/ffi.rs	c_boundary_tycon	D/A,P26,P28	2c5a42247af5
+src/fixstd/builtin.rs	FieldRead	P31,A19	ad23bcd367dc
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked	D/A,P26,P27,P29,P30	07ebf8fe4cde
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::generate	P26,P28	d09c8c4924d5
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::result_prov	P1,P2,P26	1937952562a5
@@ -258,10 +259,11 @@ src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody::result_prov	P1,P2,P26	
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody::generate	P26	e9c407350555
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMStringBuf::result_prov	P1,P2,P26	1937952562a5
-src/fixstd/builtin.rs	InlineLLVMStructGetBody	D/A	4049770e475e
-src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_container	P31,A19	a99191ddd748
-src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_operand	P26,P31,A19	7374525f2b11
+src/fixstd/builtin.rs	InlineLLVMStructGetBody	D/A	823fd00367f3
+src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_operand	P26,P31,A19	a9438e99865d
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::field_index	P1,P2	2aef725958cb
+src/fixstd/builtin.rs	InlineLLVMStructGetBody::field_read	P31,A19	5dbad816a0dc
+src/fixstd/builtin.rs	InlineLLVMStructGetBody::field_read_of	P31,A19	b8c40e508c73
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::free_vars_mut	P1,P2	bf6eba8581e8
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::result_prov	P1,P2,P7a,P7d,P7e,P26,P31,A19	82a455b22cda
 src/fixstd/builtin.rs	InlineLLVMStructPlugInBody::generate	P26	a62d86ce74b0

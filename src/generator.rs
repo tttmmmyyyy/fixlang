@@ -104,6 +104,15 @@ pub enum ValueAccessor<'c> {
 }
 
 impl<'c> ValueAccessor<'c> {
+    /// The Fix type of the value this accessor names, read without generating any code for the
+    /// read.
+    pub fn ty(&self) -> Arc<TypeNode> {
+        match self {
+            ValueAccessor::Local(obj) => obj.ty.clone(),
+            ValueAccessor::Global(_, ty) => ty.clone(),
+        }
+    }
+
     /// The object this accessor names: a local's object as it stands, or the value a global's
     /// getter returns. A global of funptr type is the function itself, so its address is taken
     /// without a call.
@@ -1063,6 +1072,12 @@ impl<'c, 'm> Generator<'c, 'm> {
     // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
         self.get_scoped_value(name).accessor.get(self)
+    }
+
+    /// The Fix type of the value `var` is bound to. Reading the type generates no code, so it is
+    /// what an operation asks before it decides how to read the value itself.
+    pub fn get_scoped_type(&mut self, var: &FullName) -> Arc<TypeNode> {
+        self.get_scoped_value(var).accessor.ty()
     }
 
     /// The object `var_name` is bound to, as a reference the caller owns.
