@@ -5709,6 +5709,76 @@ pub fn test_float_to_string_precision() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Every text `to_string` writes for a normal number reads back as the number it was written from,
+/// which is what choosing the shortest digits is for. The walk crosses both edges of the window the
+/// point is written positionally in at every scale either type reaches, rather than at the few a
+/// hand-written list names.
+#[test]
+pub fn test_float_to_string_round_trips_across_every_decade() {
+    let source = r#"
+        module Main;
+
+        // `v` and a value just above and just below it.
+        //
+        // # Parameters
+        // * `v` - The number to take the neighbours of.
+        neighbours_f64 : F64 -> Array F64;
+        neighbours_f64 = |v| [v, v * (1.0 + 1.0e-15), v * (1.0 - 1.0e-15)];
+
+        // `v` and a value just above and just below it.
+        //
+        // # Parameters
+        // * `v` - The number to take the neighbours of.
+        neighbours_f32 : F32 -> Array F32;
+        neighbours_f32 = |v| [v, v * (1.0_F32 + 1.0e-6_F32), v * (1.0_F32 - 1.0e-6_F32)];
+
+        // Whether reading the text of `v` back gives `v`.
+        //
+        // # Parameters
+        // * `v` - The number to write and read back.
+        round_trips_f64 : F64 -> Bool;
+        round_trips_f64 = |v| (
+            let back : Result ErrMsg F64 = v.to_string.from_string;
+            match back { ok(w) => w == v, err(_) => false }
+        );
+
+        // Whether reading the text of `v` back gives `v`.
+        //
+        // # Parameters
+        // * `v` - The number to write and read back.
+        round_trips_f32 : F32 -> Bool;
+        round_trips_f32 = |v| (
+            let back : Result ErrMsg F32 = v.to_string.from_string;
+            match back { ok(w) => w == v, err(_) => false }
+        );
+
+        main : IO ();
+        main = (
+            // Every power of ten a normal `F64` reaches. `from_string` answers an error for a
+            // subnormal, so the walk stops above them.
+            let ok = Iterator::range(-307, 309).fold(true, |e, acc|
+                let p = Iterator::range(0, e.abs).fold(1.0, |_, x| if e < 0 { x / 10.0 } else { x * 10.0 });
+                [p, -p].to_iter.fold(acc, |v, acc|
+                    neighbours_f64(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f64)
+                )
+            );
+            assert_eq(|_|"every F64 decade reads back as what it was written from", ok, true);;
+
+            // Every power of ten a normal `F32` reaches.
+            let ok = Iterator::range(-37, 39).fold(true, |e, acc|
+                let p = Iterator::range(0, e.abs).fold(1.0_F32, |_, x| if e < 0 { x / 10.0_F32 } else { x * 10.0_F32 });
+                [p, -p].to_iter.fold(acc, |v, acc|
+                    neighbours_f32(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f32)
+                )
+            );
+            assert_eq(|_|"every F32 decade reads back as what it was written from", ok, true);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// Pins the exponential text `to_string_exp` writes: the six places the format gives by default,
 /// and the widest exponent each type reaches -- two digits for `F32` and three for `F64`.
 #[test]

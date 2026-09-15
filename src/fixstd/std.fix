@@ -4082,9 +4082,11 @@ impl F32 : ToString {
     // The digits are written positionally where the point falls near them, as in `1.0`, `0.1`
     // and `3.14159`, and as a power of ten otherwise, as in `1e13` and `1e-10`.
     to_string = |v| (
-        // The widest text this writes: a sign, a point, the five zeros the window's lower edge
-        // allows before the digits, and the digits an `F32` takes there — 16 bytes, and a null.
-        // Widening that window in `src/fixstd/float_text.c` widens this.
+        // The widest text this writes takes 16 bytes, and the null makes 17. Two shapes reach it:
+        // a sign, a point and the five zeros the window's lower edge allows before the eight digits
+        // an `F32` needs at that scale, and the same with four zeros and nine digits. Nine digits
+        // never meet five zeros — no `F32` between `1e-6` and `1e-5` needs that many — which is why
+        // 17 holds, so widening the window in `src/fixstd/float_text.c` widens this.
         let size = 17;
         let data = Array::empty(size);
         let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_shortest(Ptr, I64, F32), ptr, size, v]);
@@ -4164,9 +4166,10 @@ impl F64 : ToString {
     // The digits are written positionally where the point falls near them, as in `1.0`, `0.1`
     // and `123456.789`, and as a power of ten otherwise, as in `1e300` and `1e-10`.
     to_string = |v| (
-        // The widest text this writes: a sign, a point, the four zeros the window's lower edge
-        // allows before the digits, and the 17 digits an `F64` takes — 24 bytes, and a null.
-        // Widening that window in `src/fixstd/float_text.c` widens this.
+        // The widest text this writes takes 24 bytes, and the null makes 25. Two shapes reach it:
+        // a sign, a point and the four zeros the window's lower edge allows before the 17 digits an
+        // `F64` takes, and a sign, one digit, a point, sixteen digits and a four byte power of ten.
+        // Widening the window in `src/fixstd/float_text.c` widens this.
         let size = 25;
         let data = Array::empty(size);
         let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_shortest(Ptr, I64, F64), ptr, size, v]);
