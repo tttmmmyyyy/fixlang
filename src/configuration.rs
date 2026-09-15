@@ -1069,8 +1069,8 @@ impl Configuration {
             num_worker_thread: _,
             type_check_cache: _,
 
-            // The macros the runtime is compiled with. The runtime is written in C rather than
-            // generated, so it has an object file and a key of its own.
+            // The macros the runtime is compiled with. The runtime is C the compiler carries, so
+            // it has object files and a key of its own.
             runtime_c_macro,
 
             // The link step, which runs once the object files are made, and where its result goes.

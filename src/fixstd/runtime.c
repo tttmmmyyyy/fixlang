@@ -27,7 +27,6 @@ void fixruntime_eprintln(const char *msg)
     fflush(stderr);
 }
 
-// NOTE: Maybe should we define following functions by LLVM to better optimization opportunity?
 void fixruntime_u8_to_bytes(uint8_t *buf, uint8_t v)
 {
     *buf = v;
