@@ -106,8 +106,9 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     }
     build_get_argc_function(gc, mode);
     build_get_argv_function(gc, mode);
-    build_malloc_function(gc, mode);
-    build_realloc_function(gc, mode);
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    declare_allocator_function(gc, mode, RUNTIME_MALLOC, &[i64_ty.into()]);
+    declare_allocator_function(gc, mode, RUNTIME_REALLOC, &[ptr_ty.into(), i64_ty.into()]);
 }
 
 /// Which part of a runtime function a call in `build_runtime` emits.
@@ -414,53 +415,39 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMo
     return;
 }
 
-/// Declares `malloc` in the module with signature `ptr (i64)`, plus the
+/// Declares the C allocator `name`, which takes `param_types` and answers with a pointer, plus the
 /// LLVM attributes needed for correct codegen around allocator calls.
-fn build_malloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
+///
+/// The returned pointer does not alias any other pointer visible to the caller, so it is marked
+/// `noalias`. For `realloc` that holds because the pointer passed in is dead from the call onward,
+/// whether the block moved or was resized in place.
+///
+/// `nobuiltin` keeps LLVM from auto-inferring the full set of allocator attributes (`allockind`,
+/// `allocsize`, `memory(inaccessiblemem: readwrite)`, ...) via TargetLibraryInfo. Those attributes
+/// enable an aggressive CSE on loads around the allocator call that, in refcount-state-checking
+/// inner loops, ends up spilling a working register. Measured impact: removing this attribute
+/// regresses cp_lib_prime_list by +5.9% and cp_lib_lsegtree by +3.0% in wall clock (hyperfine, 30
+/// runs each), with no benchmark in the speedtest suite measurably benefiting from builtin
+/// recognition.
+fn declare_allocator_function<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    mode: BuildMode,
+    name: &str,
+    param_types: &[BasicMetadataTypeEnum<'c>],
+) {
     if mode != BuildMode::Declare {
         return;
     }
-    if let Some(_func) = gc.module.get_function(RUNTIME_MALLOC) {
+    if gc.module.get_function(name).is_some() {
         return;
     }
-    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
-    let i64_ty = gc.context.i64_type();
-    let fn_ty = ptr_ty.fn_type(&[i64_ty.into()], false);
-    let func = gc.module.add_function(RUNTIME_MALLOC, fn_ty, None);
-    // The returned pointer does not alias any other pointer visible to the
-    // caller, so mark it `noalias`.
-    gc.add_enum_attribute(func, "noalias", AttributeLoc::Return);
-    // Mark the function as `nobuiltin` so LLVM does NOT auto-infer the full
-    // set of allocator attributes (`allockind`, `allocsize`,
-    // `memory(inaccessiblemem: readwrite)`, ...) via TargetLibraryInfo. Those
-    // attributes enable an aggressive CSE on loads around the malloc call
-    // that, in refcount-state-checking inner loops, ends up spilling a
-    // working register. Measured impact: removing this attribute regresses
-    // cp_lib_prime_list by +5.9% and cp_lib_lsegtree by +3.0% in wall clock
-    // (hyperfine, 30 runs each), with no benchmark in the speedtest suite
-    // measurably benefiting from builtin recognition.
-    gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
-}
 
-/// Declares `realloc` in the module with signature `ptr (ptr, i64)`, plus the LLVM attribute that
-/// keeps code generation around allocator calls correct.
-fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_REALLOC) {
-        return;
-    }
-    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
-    let i64_ty = gc.context.i64_type();
-    let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
-    let func = gc.module.add_function(RUNTIME_REALLOC, fn_ty, None);
-    // The returned pointer does not alias any other pointer visible to the caller, so mark it
-    // `noalias`: the pointer passed in is dead from the call onward, whether the block moved or was
-    // resized in place.
+    let fn_ty = gc
+        .context
+        .ptr_type(AddressSpace::from(0))
+        .fn_type(param_types, false);
+    let func = gc.module.add_function(name, fn_ty, None);
     gc.add_enum_attribute(func, "noalias", AttributeLoc::Return);
-    // As for `malloc`, keep LLVM from inferring the full allocator attribute set
-    // (see `build_malloc_function`).
     gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
 }
 
