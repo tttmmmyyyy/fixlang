@@ -97,7 +97,7 @@ pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     );
     declare_noreturn_runtime_function(gc, mode, RUNTIME_NEGATIVE_ARRAY_SIZE, &[i64_ty.into()]);
     declare_noreturn_runtime_function(gc, mode, RUNTIME_ARRAY_SIZE_OVERFLOW, &[i64_ty.into()]);
-    build_eprintf_function(gc, mode);
+    build_eprintln_function(gc, mode);
     build_sprintf_function(gc, mode);
     build_subtract_ptr_function(gc, mode);
     build_ptr_add_offset_function(gc, mode);
@@ -178,7 +178,7 @@ fn declare_or_lookup_runtime_function<'c, 'm>(
 
 /// Declare `fixruntime_eprintln`, which writes a C string to stderr followed by a newline and
 /// flushes it.
-fn build_eprintf_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
+fn build_eprintln_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
     }

@@ -24,7 +24,9 @@ use crate::generator::{is_const_one, Generator, Object};
 use crate::misc::Map;
 use crate::rc_ir::ast::RcState;
 use inkwell::context::Context;
-use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
+use inkwell::types::{
+    BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, IntType, StructType,
+};
 use inkwell::values::{
     BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
 };
@@ -32,7 +34,6 @@ use inkwell::{
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
     module::Linkage,
-    types::{BasicMetadataTypeEnum, BasicType},
 };
 use inkwell::{AddressSpace, IntPredicate};
 use std::num::NonZeroU32;
