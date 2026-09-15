@@ -26,7 +26,8 @@
 //   `to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it`
 //
 // Step 1: Generate TyCon `ToIter::to_iter::?it` with kind `* -> *`, type args `[c]`.
-//   (The TyCon's type args are the trait's type variables, not the method's own gen_vars.)
+//   (The TyCon's type args are the trait's type variables, where those of a global value are the
+//   other generalized variables of its scheme.)
 //
 // Step 2: Add global constraints:
 //   QualPredScheme { gen_vars: [c], pred_constraints: [], pred: ?it c : Iterator }
@@ -164,8 +165,9 @@ impl Program {
 
         // Step 3: Rewrite type signatures and generate #wrap_opaque GlobalValues.
         for (gv_name, opaque_infos) in &targets {
-            let scm = self.global_values.get(gv_name).unwrap().scm.clone();
-            let decl_src = self.global_values.get(gv_name).unwrap().decl_src.clone();
+            let gv = self.global_values.get(gv_name).unwrap();
+            let scm = gv.scm.clone();
+            let decl_src = gv.decl_src.clone();
             let new_scm = rewrite_scheme(&scm, opaque_infos);
 
             // Generate one #wrap_opaque per function/method.
@@ -221,7 +223,7 @@ impl Program {
                         impl_.expr.opaque_types = build_opaque_resolutions(
                             opaque_infos,
                             &defn_to_impl,
-                            impl_.lhs_srcs.first().cloned(),
+                            impl_.first_lhs_src(),
                         );
                     }
                 }
@@ -279,7 +281,12 @@ impl Program {
                 }
                 let resolved = pred
                     .resolve_trait_aliases(&self.trait_env.aliases)
-                    .unwrap_or_else(|_| vec![pred.clone()]);
+                    .unwrap_or_else(|_| {
+                        unreachable!(
+                            "the trait aliases of the constraint `{}` are resolved before this",
+                            pred.to_string()
+                        )
+                    });
                 for resolved_pred in resolved {
                     let mut new_pred = resolved_pred;
                     sub.substitute_predicate(&mut new_pred);
@@ -398,7 +405,7 @@ fn validate_impl_signature(
     opaque_infos: &[OpaqueInfo],
     decl_src: &Option<Span>,
 ) -> Result<(), Errors> {
-    let impl_src = impl_.lhs_srcs.first().cloned();
+    let impl_src = impl_.first_lhs_src();
 
     // The signature and the declaration have to describe the same values. The opaque types of the
     // declaration stand for themselves in that comparison: what one of them hides is the
@@ -435,7 +442,7 @@ fn validate_impl_signature(
         // signature, so the signature names no counterpart for it and the desugaring leaves it as
         // it is. What the signature says about such a type is compared above, where it stands for
         // itself.
-        let Some(written) = defn_to_impl.data.get(&info.tyvar.name) else {
+        let Some(written) = defn_to_impl.replacement_of(&info.tyvar.name) else {
             continue;
         };
         let written_is_opaque = matches!(&written.ty, Type::TyVar(tv) if is_opaque_tyvar(&tv.name));
@@ -653,19 +660,19 @@ fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo
 
     opaque_vars
         .into_iter()
-        .map(|opq_var| {
+        .map(|opaque_var| {
             // TyCon kind: gen_var kinds → opaque tyvar kind.
             // E.g., for gen_vars [a : *] and opaque tyvar ?it : *, the TyCon kind is * -> *.
-            let mut tc_kind: Arc<Kind> = opq_var.kind.clone();
-            for gv in gen_vars.iter().rev() {
-                tc_kind = kind_arrow(gv.kind.clone(), tc_kind);
+            let mut tycon_kind: Arc<Kind> = opaque_var.kind.clone();
+            for gen_var in gen_vars.iter().rev() {
+                tycon_kind = kind_arrow(gen_var.kind.clone(), tycon_kind);
             }
-            let tycon_name = FullName::new(&gv_name.to_namespace(), &opq_var.name);
+            let tycon_name = FullName::new(&gv_name.to_namespace(), &opaque_var.name);
             OpaqueInfo {
-                tyvar: opq_var.clone(),
+                tyvar: opaque_var.clone(),
                 tycon: tycon(tycon_name),
                 tycon_vars: gen_vars.clone(),
-                tycon_kind: tc_kind,
+                tycon_kind,
             }
         })
         .collect()
@@ -706,10 +713,10 @@ fn build_opaque_resolutions(
     defn_to_impl: &Substitution,
     src: Option<Span>,
 ) -> Map<FullName, Vec<OpaqueTyConResolution>> {
-    let mut result: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
+    let mut resolutions_by_tycon_name: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
     for info in opaque_infos {
         let lhs = defn_to_impl.substitute_type(&info.opaque_tycon_applied());
-        result
+        resolutions_by_tycon_name
             .entry(info.tycon.name.clone())
             .or_default()
             .push(OpaqueTyConResolution {
@@ -718,7 +725,7 @@ fn build_opaque_resolutions(
                 src: src.clone(),
             });
     }
-    result
+    resolutions_by_tycon_name
 }
 
 /// Apply a substitution to a scheme's type and remove predicates/equalities on opaque TyVars.
@@ -884,9 +891,8 @@ fn build_wrap_scheme(
 
 /// Wrap an expression in a `#wrap_opaque(...)` application.
 ///
-/// The wrapper App inherits the inner expression's source span so that type
-/// errors raised while type-checking the body are attributed to the
-/// user-written expression rather than appearing without a location.
+/// The wrapper App inherits the inner expression's source span, so that a type error raised while
+/// type-checking the body is reported at the expression the user wrote.
 fn wrap_with_opaque(wrap_name: &FullName, inner: Arc<ExprNode>) -> Arc<ExprNode> {
     let src = inner.source.clone();
     expr_app(expr_var(wrap_name.clone(), None), vec![inner], src)
