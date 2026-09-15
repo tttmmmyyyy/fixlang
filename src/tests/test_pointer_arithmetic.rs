@@ -111,17 +111,17 @@ pub fn test_the_allocators_say_their_result_is_the_callers_alone() {
             allocator,
         );
         // A return attribute stands before the name, where a parameter attribute stands after it.
-        let without_noalias = declarations
+        let declarations_without_noalias = declarations
             .iter()
             .filter(|line| !line.split(&prefix).next().unwrap().contains("noalias"))
             .collect::<Vec<_>>();
         assert!(
-            without_noalias.is_empty(),
+            declarations_without_noalias.is_empty(),
             "every declaration of `{}` should give its result `noalias`, but {} of {} do not:\n{}",
             allocator,
-            without_noalias.len(),
+            declarations_without_noalias.len(),
             declarations.len(),
-            without_noalias
+            declarations_without_noalias
                 .iter()
                 .map(|line| line.to_string())
                 .collect::<Vec<_>>()
@@ -200,8 +200,8 @@ pub fn test_nothing_reads_the_block_a_reallocation_was_given() {
             });
             let later_uses = lines[i + 1..]
                 .iter()
-                .filter(|later| names_local_value(later, old_block))
-                .map(|later| later.to_string())
+                .filter(|later_line| names_local_value(later_line, old_block))
+                .map(|later_line| later_line.to_string())
                 .collect::<Vec<_>>();
             assert!(
                 later_uses.is_empty(),
