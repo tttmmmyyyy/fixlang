@@ -34,12 +34,11 @@ pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
 /// The runtime function giving the command line argument at an index, as a C string.
 pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
-/// libc `malloc`, declared with a 64-bit size parameter.
+/// libc `malloc`, declared here with a 64-bit size parameter.
 ///
-/// We declare it ourselves rather than using inkwell's `build_malloc` /
-/// `build_array_malloc`, because those wrap LLVM's `CallInst::CreateMalloc`
-/// which declares `malloc` with an i32 size parameter and truncates the size
-/// before the call, breaking allocations >= 4 GiB.
+/// inkwell's `build_malloc` / `build_array_malloc` wrap LLVM's `CallInst::CreateMalloc`, which
+/// declares `malloc` with an i32 size parameter and truncates the size before the call, breaking
+/// allocations of 4 GiB and more.
 pub const RUNTIME_MALLOC: &str = "malloc";
 
 /// `realloc`, declared with an i64 size parameter for the same reason as
@@ -444,9 +443,9 @@ fn declare_allocator_function<'c, 'm>(
 mod tests {
     use super::*;
 
-    /// The compiler writes the entry point into an executable alone, so a dynamic library is free to
-    /// carry a `main` of its own, while the runtime's own names are the compiler's whatever is being
-    /// built and the C library functions it merely calls are the program's either way.
+    /// The compiler writes the entry point into an executable alone, so that a dynamic library is
+    /// free to carry a `main` of its own. The runtime's own names are the compiler's whatever is
+    /// being built. The C library functions it calls belong to the program either way.
     #[test]
     fn test_which_c_names_the_compiler_writes_the_body_of() {
         assert!(

@@ -14064,8 +14064,8 @@ pub fn test_empty_union_emits_no_zero_sized_phi() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // build_scalar_phi runs during code generation, so the unoptimized module already shows (or, with
-    // the fix, omits) the zero-sized phi.
+    // build_scalar_phi runs during code generation, so a zero-sized phi would stand in the
+    // unoptimized module.
     let ir = emitted_llvm_ir(&work_dir, EmittedIr::BeforeOptimization);
     assert!(
         !ir.contains("phi [0 x"),
@@ -14148,9 +14148,9 @@ pub fn test_is_and_as_ask_the_union_tag_the_same_question() {
     );
 }
 
-// remove_tyanno runs at every optimization level (none and basic included). A program whose types
-// are pinned only by annotations must still select the same trait instances and compute the same
-// values after the annotation nodes are stripped.
+/// remove_tyanno runs at every optimization level (none and basic included). A program whose types
+/// are pinned only by annotations must still select the same trait instances and compute the same
+/// values after the annotation nodes are stripped.
 #[test]
 fn test_annotation_stripping_is_value_neutral() {
     let source = r#"

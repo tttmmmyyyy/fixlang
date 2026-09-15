@@ -40,10 +40,10 @@ fn array_access_ir() -> &'static str {
 /// Every pointer the compiler computes into an object is computed within that object's allocation,
 /// and the generated code says so.
 ///
-/// A `getelementptr` without `inbounds` is one LLVM has to assume may leave the allocation it
-/// started in. It then keeps the address arithmetic it would otherwise fold into an addressing
-/// mode, and it cannot bound an index that a loop's bounds check reads, which is what decides
-/// whether that loop has a trip count it can unroll by.
+/// LLVM has to assume that a `getelementptr` without `inbounds` leaves the allocation it started
+/// in. It then keeps address arithmetic it would otherwise fold into an addressing mode. It also
+/// cannot bound the index a loop's bounds check reads, and that bound is what gives the loop a
+/// trip count to unroll by.
 #[test]
 pub fn test_every_pointer_into_an_object_is_computed_inside_it() {
     // The property is about what the compiler emits, so it is read before LLVM has run: an
