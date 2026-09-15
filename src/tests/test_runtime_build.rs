@@ -38,28 +38,28 @@ main = println $ 1.0.to_string;
     /// its own copy of the source reaches the object.
     #[test]
     fn test_two_builds_compile_the_runtime_into_the_same_objects() {
-        let first = project_dir();
+        let first_dir = project_dir();
         run_in(
             &mut fix_command_at_opt_level("build", "none"),
-            first.path(),
+            first_dir.path(),
             "the first build",
         );
 
-        let second = project_dir();
+        let second_dir = project_dir();
         run_in(
             &mut fix_command_at_opt_level("build", "none"),
-            second.path(),
+            second_dir.path(),
             "the second build",
         );
 
-        let first = runtime_object_digests(first.path());
+        let first_objects = runtime_object_digests(first_dir.path());
         assert!(
-            !first.is_empty(),
+            !first_objects.is_empty(),
             "a build leaves the runtime's object files behind"
         );
         assert_eq!(
-            first,
-            runtime_object_digests(second.path()),
+            first_objects,
+            runtime_object_digests(second_dir.path()),
             "two builds compile the runtime into the same objects, named the same"
         );
     }

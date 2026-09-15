@@ -56,8 +56,8 @@ main : IO () = (
               + widest_f64.to_string_precision(prec).@size
               + widest_f64.to_string_exp_precision(prec).@size
     );
-    // The two exponential ones that take no precision write the 6 places their format gives by
-    // default.
+    // The four that take no precision. The exponential two write the 6 places their format gives
+    // by default; `to_string` writes the shortest digits, whose widest text comes next.
     let total = total + widest_f32.to_string.@size
                       + widest_f32.to_string_exp.@size
                       + widest_f64.to_string.@size

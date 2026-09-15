@@ -16,10 +16,10 @@ program `fix` builds links these objects.
 ## The files
 
 The files hold the content upstream gives them. To take a newer Ryu, replace them with the
-upstream files of the same names and record the revision above. The build carries this directory
-to the C compiler through `RUNTIME_HEADERS` and `RUNTIME_SOURCES` in `src/build/build.rs`, which
-`test_vendored_ryu_headers_are_all_carried` and `test_vendored_ryu_sources_are_all_compiled` hold
-to the files that are here.
+upstream files of the same names and record the revision they came from. The build carries this
+directory to the C compiler through `RUNTIME_HEADERS` and `RUNTIME_SOURCES` in
+`src/build/build.rs`, which `test_vendored_ryu_headers_are_all_carried` and
+`test_vendored_ryu_sources_are_all_compiled` hold to the files that are here.
 
 | File | Role |
 | --- | --- |

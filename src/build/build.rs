@@ -86,46 +86,61 @@ fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
     Ok(())
 }
 
+/// A header the build writes beside the sources, which include it by `path`.
+struct RuntimeHeader {
+    /// Where the header is written, relative to the directory the sources are compiled in, which
+    /// is the path it carries in the compiler's tree.
+    path: &'static str,
+    /// The header's text.
+    text: &'static str,
+}
+
 /// The headers of `src/fixstd/ryu/`, written beside the sources that include them.
 ///
-/// The set is the directory's, rather than what one configuration of Ryu reaches: `d2s.c` and
-/// `f2s_intrinsics.h` choose between a tabulated and a computed table by a macro, so which headers
-/// a build reads depends on the macros it is given. `test_vendored_ryu_headers_are_all_carried`
-/// holds this list to the directory.
-const RUNTIME_HEADERS: [(&str, &str); 8] = [
-    ("ryu/ryu.h", include_str!("../fixstd/ryu/ryu.h")),
-    ("ryu/common.h", include_str!("../fixstd/ryu/common.h")),
-    (
-        "ryu/digit_table.h",
-        include_str!("../fixstd/ryu/digit_table.h"),
-    ),
-    (
-        "ryu/d2s_intrinsics.h",
-        include_str!("../fixstd/ryu/d2s_intrinsics.h"),
-    ),
-    (
-        "ryu/d2s_full_table.h",
-        include_str!("../fixstd/ryu/d2s_full_table.h"),
-    ),
-    (
-        "ryu/d2s_small_table.h",
-        include_str!("../fixstd/ryu/d2s_small_table.h"),
-    ),
-    (
-        "ryu/f2s_intrinsics.h",
-        include_str!("../fixstd/ryu/f2s_intrinsics.h"),
-    ),
-    (
-        "ryu/f2s_full_table.h",
-        include_str!("../fixstd/ryu/f2s_full_table.h"),
-    ),
+/// Every header the directory holds is carried, whatever one configuration of Ryu reaches: `d2s.c`
+/// and `f2s_intrinsics.h` choose between a tabulated and a computed table by a macro, so which
+/// headers a build reads depends on the macros it is given.
+/// `test_vendored_ryu_headers_are_all_carried` holds this list to the directory.
+const RUNTIME_HEADERS: [RuntimeHeader; 8] = [
+    RuntimeHeader {
+        path: "ryu/ryu.h",
+        text: include_str!("../fixstd/ryu/ryu.h"),
+    },
+    RuntimeHeader {
+        path: "ryu/common.h",
+        text: include_str!("../fixstd/ryu/common.h"),
+    },
+    RuntimeHeader {
+        path: "ryu/digit_table.h",
+        text: include_str!("../fixstd/ryu/digit_table.h"),
+    },
+    RuntimeHeader {
+        path: "ryu/d2s_intrinsics.h",
+        text: include_str!("../fixstd/ryu/d2s_intrinsics.h"),
+    },
+    RuntimeHeader {
+        path: "ryu/d2s_full_table.h",
+        text: include_str!("../fixstd/ryu/d2s_full_table.h"),
+    },
+    RuntimeHeader {
+        path: "ryu/d2s_small_table.h",
+        text: include_str!("../fixstd/ryu/d2s_small_table.h"),
+    },
+    RuntimeHeader {
+        path: "ryu/f2s_intrinsics.h",
+        text: include_str!("../fixstd/ryu/f2s_intrinsics.h"),
+    },
+    RuntimeHeader {
+        path: "ryu/f2s_full_table.h",
+        text: include_str!("../fixstd/ryu/f2s_full_table.h"),
+    },
 ];
 
 /// One of the C sources the runtime is built from.
 struct RuntimeSource {
-    /// The name the object this source compiles to is cached under.
+    /// Names the object this source compiles to, both in the build directory and in the cache.
     object_name: &'static str,
-    /// The path this source is written to and compiled by, which is the one it carries in the
+    /// The path this source is written to and compiled at, which is the one it carries in the
     /// compiler's tree.
     path: &'static str,
     /// The text of the source, carried in the compiler.
@@ -139,10 +154,10 @@ struct RuntimeSource {
 /// `ryu/d2s.c` and `ryu/f2s.c` each define a `to_chars` of their own, so each is a translation unit
 /// of its own.
 ///
-/// The sources that write a floating point number as text are the runtime's arithmetic, where the
-/// rest of it calls into C's library, and they are the ones the C compiler is asked to optimize:
-/// Ryu takes 214 ns to write a number unoptimized against 88 ns optimized, and the placing of the
-/// digits it answers with costs more than Ryu itself until it is optimized too.
+/// The sources that write a floating point number as text are compiled with optimization, where
+/// the rest of the runtime is not. They are the runtime's one piece of arithmetic: Ryu takes
+/// 214 ns to write a number unoptimized against 88 ns optimized, and placing the digits it answers
+/// with costs more than Ryu itself until it is optimized too.
 const RUNTIME_SOURCES: [RuntimeSource; 4] = [
     RuntimeSource {
         object_name: "runtime",
@@ -181,8 +196,8 @@ fn remove_build_dir(build_dir: &Path) {
 /// Builds the runtime into object files and answers where they are, reusing the objects a previous
 /// build compiled.
 ///
-/// An object is named by the hash of the settings it is compiled under, so a setting the
-/// compilation below reads belongs in `Configuration::runtime_object_hash`.
+/// An object is named by the hash of the settings it is compiled under, so a setting this
+/// compilation reads belongs in `Configuration::runtime_object_hash`.
 ///
 /// The sources are written into a directory of this build's own, so that builds running side by
 /// side neither read nor overwrite each other's copies, and are compiled from inside it under the
@@ -205,7 +220,7 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
         "runtime.{}",
         rand::thread_rng().gen::<u64>().to_string()
     ));
-    let write_source = |path: &str, text: &str| {
+    let write_file = |path: &str, text: &str| {
         let path = build_dir.join(path);
         fs::create_dir_all(path.parent().unwrap())
             .expect("Failed to create the directory the runtime is built in.");
@@ -214,11 +229,11 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
             path.to_string_lossy().to_string()
         ));
     };
-    for (path, text) in RUNTIME_HEADERS {
-        write_source(path, text);
+    for header in RUNTIME_HEADERS {
+        write_file(header.path, header.text);
     }
     for source in &RUNTIME_SOURCES {
-        write_source(source.path, source.text);
+        write_file(source.path, source.text);
     }
 
     for (source, object) in RUNTIME_SOURCES.iter().zip(objects.iter()) {
@@ -245,17 +260,17 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
         if let Err(errors) =
             run_c_compiler(&mut com, &format!("compile the runtime's {}", source.path))
         {
-            // The sources are this build's copies, so a failed compilation has no more use for
-            // them than a finished one does. The compilation's own failure is what the build
-            // reports, so a directory that resists removal after it is left where it is.
+            // The sources are this build's copies, which a failed compilation is as done with as
+            // a finished one. A directory that resists removal is left where it is, since the
+            // compilation's own failure is what the build reports.
             let _ = fs::remove_dir_all(&build_dir);
             return Err(errors);
         }
 
-        let compiled = build_dir.join(&compiled_name);
-        fs::rename(&compiled, object).expect(&format!(
+        let compiled_path = build_dir.join(&compiled_name);
+        fs::rename(&compiled_path, object).expect(&format!(
             "Failed to rename \"{}\" to \"{}\"",
-            compiled.to_string_lossy().to_string(),
+            compiled_path.to_string_lossy().to_string(),
             object.to_string_lossy().to_string()
         ));
     }
@@ -349,13 +364,14 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
 mod tests {
     use super::{RUNTIME_HEADERS, RUNTIME_SOURCES};
     use crate::misc::Set;
+    use std::fs;
     use std::path::Path;
 
     /// The names of the files in `src/fixstd/ryu/` whose name ends in `extension`.
     fn vendored_ryu_files(extension: &str) -> Set<String> {
-        let vendored = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixstd/ryu");
-        std::fs::read_dir(&vendored)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", vendored.display(), e))
+        let vendored_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixstd/ryu");
+        fs::read_dir(&vendored_dir)
+            .unwrap_or_else(|e| panic!("failed to read {}: {}", vendored_dir.display(), e))
             .map(|entry| {
                 entry
                     .expect("failed to read a directory entry")
@@ -375,7 +391,7 @@ mod tests {
     fn test_vendored_ryu_headers_are_all_carried() {
         let carried: Set<String> = RUNTIME_HEADERS
             .iter()
-            .map(|(path, _)| path.trim_start_matches("ryu/").to_string())
+            .map(|header| header.path.trim_start_matches("ryu/").to_string())
             .collect();
         assert_eq!(
             vendored_ryu_files(".h"),

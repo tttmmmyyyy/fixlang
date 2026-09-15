@@ -18,14 +18,13 @@ piece of arithmetic rather than a call into C's library.
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
-// The bytes `fixruntime_float_shortest_to_str` builds a text in. A window wider than what this
-// holds would write past it, which is what the static assertions at the two entry points hold the
-// windows to.
+// The bytes `fixruntime_write_float_text` builds a text in. The static assertions at the two
+// entry points hold each window to what fits here, since a wider one would write past it.
 #define FLOAT_TEXT_SIZE 48
 
 // The bytes a window asks for at its widest: a sign, a point, the zeros either edge of the window
 // allows beside the digits, the digits themselves, a power of ten of up to four bytes, and a null.
-#define WIDEST_FLOAT_TEXT(low, high, digits) \
+#define WIDEST_FLOAT_TEXT_SIZE(low, high, digits) \
     (1 + 2 + ((-(low)) > (high) ? (-(low)) : (high)) + (digits) + 4 + 1)
 
 // The window the point is written positionally in, and the digits the type takes at its widest.
@@ -98,7 +97,7 @@ void fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t 
 //   window costs zeros, so it is drawn around the digits the type carries, and the widest text it
 //   allows is what sizes the buffer `to_string` passes in — must stay in sync with the `size` the
 //   `ToString` implementations in `src/fixstd/std.fix` derive.
-static void fixruntime_float_shortest_to_str(const char *sci, char *buf, int64_t size,
+static void fixruntime_write_float_text(const char *sci, char *buf, int64_t size,
                                              int positional_low, int positional_high)
 {
     int read = 0;
@@ -164,8 +163,7 @@ static void fixruntime_float_shortest_to_str(const char *sci, char *buf, int64_t
     // The power of ten the digits, read as one whole number, are multiplied by.
     int scale = point - digit_count;
 
-    // The widest text this writes is a sign, a point, the zeros the window's lower edge allows
-    // before the digits, and the digits themselves, which an `F64` makes 24 bytes of.
+    // The text is built here first, so that its length is known before it is copied into `buf`.
     char text[FLOAT_TEXT_SIZE];
     int written = 0;
     if (negative)
@@ -219,7 +217,7 @@ static void fixruntime_float_shortest_to_str(const char *sci, char *buf, int64_t
             written += digit_count - 1;
         }
         text[written++] = 'e';
-        int exponent = point - 1;
+        // `point - 1` is the power of ten the first digit carries, which is what `sci` held.
         if (exponent < 0)
         {
             text[written++] = '-';
@@ -245,20 +243,20 @@ static void fixruntime_float_shortest_to_str(const char *sci, char *buf, int64_t
 
 void fixruntime_f32_to_str_shortest(char *buf, int64_t size, float v)
 {
-    _Static_assert(WIDEST_FLOAT_TEXT(F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH, F32_DIGITS) <=
+    _Static_assert(WIDEST_FLOAT_TEXT_SIZE(F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH, F32_DIGITS) <=
                        FLOAT_TEXT_SIZE,
                    "an F32's window asks for more than the text buffer holds");
     char sci[32];
     sci[f2s_buffered_n(v, sci)] = '\0';
-    fixruntime_float_shortest_to_str(sci, buf, size, F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH);
+    fixruntime_write_float_text(sci, buf, size, F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH);
 }
 
 void fixruntime_f64_to_str_shortest(char *buf, int64_t size, double v)
 {
-    _Static_assert(WIDEST_FLOAT_TEXT(F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH, F64_DIGITS) <=
+    _Static_assert(WIDEST_FLOAT_TEXT_SIZE(F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH, F64_DIGITS) <=
                        FLOAT_TEXT_SIZE,
                    "an F64's window asks for more than the text buffer holds");
     char sci[32];
     sci[d2s_buffered_n(v, sci)] = '\0';
-    fixruntime_float_shortest_to_str(sci, buf, size, F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH);
+    fixruntime_write_float_text(sci, buf, size, F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH);
 }

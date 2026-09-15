@@ -841,7 +841,8 @@ pub fn single_source_project_dir(name: &str, source: &str) -> TempDir {
 /// succeeded.
 ///
 /// # Arguments
-/// * `what` — what the run was expected to do, so a failure says which expectation broke.
+/// * `what` — the run as a failure message names it, as a noun phrase that completes "... should
+///   succeed", so that a failure says which of a test's several runs it was.
 pub fn run_in(command: &mut Command, dir: &Path, what: &str) -> String {
     let output = command
         .current_dir(dir)

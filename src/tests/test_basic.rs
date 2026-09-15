@@ -5545,19 +5545,13 @@ pub fn test_float_to_string() {
         module Main;
 
         // Whether reading the text of `v` back gives `v`.
-        //
-        // # Parameters
-        // * `v` - The number to write and read back.
-        round_trips : F64 -> Bool;
-        round_trips = |v| (
+        round_trips_f64 : F64 -> Bool;
+        round_trips_f64 = |v| (
             let back : Result ErrMsg F64 = v.to_string.from_string;
             match back { ok(w) => w == v, err(_) => false }
         );
 
         // Whether reading the text of `v` back gives `v`.
-        //
-        // # Parameters
-        // * `v` - The number to write and read back.
         round_trips_f32 : F32 -> Bool;
         round_trips_f32 = |v| (
             let back : Result ErrMsg F32 = v.to_string.from_string;
@@ -5618,8 +5612,8 @@ pub fn test_float_to_string() {
             assert_eq(|_|"an infinity reads back as an infinity", read_back(inf.to_string), inf);;
             assert_eq(|_|"a negative infinity reads back as a negative infinity",
                       read_back((0.0 - inf).to_string), 0.0 - inf);;
-            let read = read_back((inf - inf).to_string);
-            assert_eq(|_|"a NaN reads back as a NaN", read != read, true);;
+            let nan = read_back((inf - inf).to_string);
+            assert_eq(|_|"a NaN reads back as a NaN", nan != nan, true);;
 
             // An `F32` carries 9 digits where an `F64` carries 17, so the window it is written
             // positionally in is drawn narrower.
@@ -5636,7 +5630,8 @@ pub fn test_float_to_string() {
             assert_eq(|_|"the greatest F32", 3.4028235e38_F32.to_string, "3.4028235e38");;
             assert_eq(|_|"the least positive F32", 1.4e-45_F32.to_string, "1e-45");;
 
-            // The widest text an `F32` reaches, over all of them.
+            // The widest text an `F32` reaches: a sign, a point, the five zeros the window's
+            // lower edge allows and the eight digits that follow them.
             let widest = -1.0000001e-6_F32;
             assert_eq(|_|"the widest F32 text", widest.to_string, "-0.0000010000001");;
             assert_eq(|_|"the widest F32 text takes 16 bytes", widest.to_string.@size, 16);;
@@ -5655,7 +5650,7 @@ pub fn test_float_to_string() {
                 1.0e-5, 1.7976931348623157e308, -2.2250738585072014e-308, 3.0e-7
             ];
             assert_eq(|_|"every F64 text reads back as the number it was written from",
-                      values.to_iter.fold(true, |v, acc| acc && v.round_trips), true);;
+                      values.to_iter.fold(true, |v, acc| acc && v.round_trips_f64), true);;
 
             let values : Array F32 = [
                 1.0_F32, 0.1_F32, 1.0_F32 / 3.0_F32, 3.14159_F32, 1.0e12_F32, 1.0e13_F32,
