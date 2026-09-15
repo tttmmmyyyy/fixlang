@@ -121,7 +121,7 @@ pub struct ProjectFileBuild {
     /// Unset keeps them.
     no_runtime_check: Option<bool>,
     /// Whether to stop the program at an arithmetic operation on a signed integer type whose
-    /// mathematical result leaves the range of that type. Unset assumes the result fits.
+    /// mathematical result leaves the range of that type. Unset leaves such an operation alone.
     check_signed_overflow: Option<bool>,
     /// Whether to compile `eval {side}; {main}` as `{main}`, leaving the effect of `{side}` out of
     /// the program. Unset evaluates `{side}`.
