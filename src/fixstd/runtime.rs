@@ -86,7 +86,7 @@ pub fn compiler_defined_c_function_reason(name: &str, output: OutputFileType) ->
 /// Emits the runtime support functions into the module: their declarations when
 /// `mode` is `Declare`, the bodies of the ones implemented here when it is `Implement`.
 // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
-pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
+pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
     declare_noreturn_runtime_function(gc, mode, RUNTIME_ABORT, &[]);
     declare_noreturn_runtime_function(
@@ -178,11 +178,11 @@ fn declare_or_lookup_runtime_function<'c, 'm>(
 
 /// Declare `fixruntime_eprintln`, which writes a C string to stderr followed by a newline and
 /// flushes it.
-fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
+fn build_eprintf_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
     }
-    if let Some(_func) = gc.module.get_function(RUNTIME_EPRINTLN) {
+    if gc.module.get_function(RUNTIME_EPRINTLN).is_some() {
         return;
     }
 
@@ -193,17 +193,15 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
 
     let fn_ty = context.void_type().fn_type(&[ptr_ty.into()], true);
     module.add_function(RUNTIME_EPRINTLN, fn_ty, None);
-
-    return;
 }
 
 /// Declare `sprintf`, which takes the output buffer and the format string and goes on to take the
 /// values the format names.
-fn build_sprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
+fn build_sprintf_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
     }
-    if let Some(_func) = gc.module.get_function(RUNTIME_SPRINTF) {
+    if gc.module.get_function(RUNTIME_SPRINTF).is_some() {
         return;
     }
 
@@ -221,13 +219,11 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
         true,
     );
     module.add_function(RUNTIME_SPRINTF, fn_ty, None);
-
-    return;
 }
 
 /// Build `fixruntime_subtract_ptr`, which returns the distance in bytes from its second pointer
 /// argument to its first.
-fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
+fn build_subtract_ptr_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let fn_ty = gc
         .context
@@ -254,13 +250,12 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: Bui
         )
         .unwrap();
     gc.builder().build_return(Some(&res)).unwrap();
-    return;
 }
 
 /// Build `fixruntime_ptr_add_offset`, which returns the address `offset` bytes past the pointer it
 /// is given. The offset is applied to the integer address, so it may be negative and may land
 /// outside the object the pointer points into.
-fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
+fn build_ptr_add_offset_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
 
@@ -289,17 +284,16 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: B
         .build_int_to_ptr(sum_int, ptr_ty, "int_to_ptr@fixruntime_ptr_add_offset")
         .unwrap();
     gc.builder().build_return(Some(&sum_ptr)).unwrap();
-    return;
 }
 
 /// Declare `pthread_once`, which takes the flag recording whether the initializer has run and the
 /// initializer itself. A multi-threaded program initializes each global through it.
 // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
-pub fn build_pthread_once_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
+pub fn build_pthread_once_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
     }
-    if let Some(_func) = gc.module.get_function(RUNTIME_PTHREAD_ONCE) {
+    if gc.module.get_function(RUNTIME_PTHREAD_ONCE).is_some() {
         return;
     }
 
@@ -310,13 +304,12 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode:
         .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
     gc.module
         .add_function(RUNTIME_PTHREAD_ONCE, pthread_once_ty, None);
-    return;
 }
 
 /// Build `fixruntime_get_argc`, which returns the number of command line arguments the program was
 /// started with, together with the module-internal global variable holding that number, which the C
 /// `main` function stores it into.
-fn build_get_argc_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
+fn build_get_argc_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let argc_gv_ty = gc.context.i32_type();
     let fn_ty = argc_gv_ty.fn_type(&[], false);
     let Some(func) = declare_or_lookup_runtime_function(gc, mode, RUNTIME_GET_ARGC, fn_ty) else {
@@ -343,14 +336,12 @@ fn build_get_argc_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMo
         .unwrap()
         .into_int_value();
     gc.builder().build_return(Some(&argc)).unwrap();
-
-    return;
 }
 
 /// Build `fixruntime_get_argv`, which returns a pointer to the command line argument string at the
 /// index it is given, together with the module-internal global variable holding the argument array,
 /// which the C `main` function stores it into.
-fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
+fn build_get_argv_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let fn_ty = ptr_ty.fn_type(&[gc.context.i64_type().into()], false);
     let Some(func) = declare_or_lookup_runtime_function(gc, mode, RUNTIME_GET_ARGV, fn_ty) else {
@@ -411,8 +402,6 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMo
         .unwrap()
         .into_pointer_value();
     gc.builder().build_return(Some(&arg_ptr)).unwrap();
-
-    return;
 }
 
 /// Declares the C allocator `name`, which takes `param_types` and answers with a pointer, plus the
