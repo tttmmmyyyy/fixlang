@@ -155,7 +155,7 @@ where
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Substitution {
     /// The type replacing each type variable, by the variable's name.
-    pub data: Map<Name, Arc<TypeNode>>,
+    data: Map<Name, Arc<TypeNode>>,
 }
 
 // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -173,6 +173,11 @@ impl Substitution {
     /// Whether this substitution replaces no type variable, so that applying it changes nothing.
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
+    }
+
+    /// The type this substitution replaces the type variable named `var` by, where it replaces it.
+    pub fn replacement_of(&self, var: &Name) -> Option<&Arc<TypeNode>> {
+        self.data.get(var)
     }
 
     /// The substitution that replaces the type variable named `var` by `ty`, and nothing else.
@@ -1802,21 +1807,25 @@ impl TypeCheckContext {
     /// the constraints it states, has the type of the other and meets what the other requires.
     ///
     /// The context has to be one in which no inference has run.
+    ///
+    /// # Arguments
+    /// * `fixed_tyvars` — the type variables that stand for themselves, which neither scheme may
+    ///   give a type. A type one of them stands for is one both schemes speak about and neither
+    ///   chooses, so what they say about it has to agree rather than fit together.
     pub fn check_scheme_equivalent(
         self: &TypeCheckContext,
         lhs: &Arc<Scheme>,
         rhs: &Arc<Scheme>,
+        fixed_tyvars: &[Arc<TyVar>],
     ) -> Result<(), UnifOrOtherErr> {
         self.assert_freshness();
-        {
+        let check_one = |lhs: &Arc<Scheme>, rhs: &Arc<Scheme>| {
             let mut tc = self.clone();
-            tc.check_scheme_equivalent_one(lhs, rhs)?;
-        }
-        {
-            let mut tc = self.clone();
-            tc.check_scheme_equivalent_one(rhs, lhs)?;
-        }
-
+            tc.fixed_tyvars.extend_from_slice(fixed_tyvars);
+            tc.check_scheme_equivalent_one(lhs, rhs)
+        };
+        check_one(lhs, rhs)?;
+        check_one(rhs, lhs)?;
         Ok(())
     }
 
@@ -2499,7 +2508,7 @@ impl TypeCheckContext {
             // Must stay in sync with the same message in program.rs (instantiate_expr).
             let mut err = Error::from_msg_srcs(
                 format!(
-                    "Cannot infer the type of this {0}: inferred as `{1}`, but the type variable `{2}` is unresolved.\nHint: add a type annotation to this {0}.",
+                    "Cannot infer the type of this {0}: inferred as `{1}`, but the type variable `{2}` is unresolved.\nHINT: add a type annotation to this {0}.",
                     src_type,
                     ty.to_string(),
                     fv_name,

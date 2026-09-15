@@ -1,7 +1,9 @@
 // Desugaring of opaque type variables in type signatures.
 //
 // Opaque types (written as `?name` in Fix) hide concrete return types behind generated TyCons.
-// This module runs before type-checking and performs three steps.
+// This module runs before type-checking. `validate_opaque_member_impl_signatures` reports an
+// implementation of a trait member whose type signature disagrees with the declaration, and
+// `desugar_opaque_types` then performs three steps.
 //
 // === Simple global value example ===
 //
@@ -24,7 +26,8 @@
 //   `to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it`
 //
 // Step 1: Generate TyCon `ToIter::to_iter::?it` with kind `* -> *`, type args `[c]`.
-//   (The TyCon's type args are the trait's type variables, not the method's own gen_vars.)
+//   (The TyCon's type args are the trait's type variables, where those of a global value are the
+//   other generalized variables of its scheme.)
 //
 // Step 2: Add global constraints:
 //   QualPredScheme { gen_vars: [c], pred_constraints: [], pred: ?it c : Iterator }
@@ -51,15 +54,18 @@ use crate::ast::expr::{expr_app, expr_array_lit, expr_var, Expr, ExprNode};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::predicate::Predicate;
-use crate::ast::program::{GlobalValue, Program, SymbolExpr, TypedExpr};
+use crate::ast::program::{
+    impl_signature_mismatch_error, GlobalValue, Program, SymbolExpr, TraitMemberImpl, TypedExpr,
+};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::types::{
     apply_type_args, collect_free_vars, is_opaque_tyvar, kind_arrow, make_tyvar, tycon,
     type_from_tyvar, type_fun, type_tyapp, type_tycon, Kind, OpaqueTyConResolution, Scheme, TyCon,
     TyConInfo, TyConVariant, TyVar, Type, TypeNode,
 };
+use crate::configuration::Configuration;
 use crate::constants::{WRAP_OPAQUE_FUNC_NAME, WRAP_OPAQUE_TYVAR_PREFIX};
-use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
+use crate::elaboration::typecheck::{Substitution, TypeCheckContext, UnifOrOtherErr};
 use crate::error::Errors;
 use crate::graph::Graph;
 use crate::misc::{insert_to_map_vec, Map, Set};
@@ -85,20 +91,67 @@ struct OpaqueInfo {
 }
 
 impl Program {
-    /// Desugar opaque type variables. See the module-level comment for an overview.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
-    pub fn desugar_opaque_types(&mut self) {
-        let gv_names: Vec<FullName> = self.global_values.keys().cloned().collect();
+    /// Report an implementation of a trait member whose declaration has an opaque type, where the
+    /// type signature the implementation writes disagrees with that declaration.
+    ///
+    /// This runs before `desugar_opaque_types`, for two reasons. The desugaring reads the
+    /// implementation's type as the declared type with its type variables given types, and a
+    /// signature that disagrees with the declaration has no such reading. And the desugaring drops
+    /// the constraints a signature puts on an opaque type variable, so `check_scheme_equivalent`,
+    /// which compares an implementation's signature with the declaration during type-checking,
+    /// reaches those two schemes with the constraints already gone.
+    pub fn validate_opaque_member_impl_signatures(
+        &self,
+        config: &Configuration,
+    ) -> Result<(), Errors> {
+        // The context is built for the first member that has an opaque type, so that a program
+        // having none pays nothing for this.
+        let mut tc: Option<TypeCheckContext> = None;
 
-        // Collect opaque infos for global values that have opaque type variables.
+        let mut errors = Errors::empty();
+        for (gv_name, opaque_infos) in self.global_values_with_opaque_types() {
+            let gv = &self.global_values[&gv_name];
+            let SymbolExpr::Method(impls) = &gv.expr else {
+                continue;
+            };
+            let tc = tc.get_or_insert_with(|| self.create_typechecker(config));
+            for impl_ in impls {
+                errors.eat_err(validate_impl_signature(
+                    tc,
+                    &gv.scm,
+                    impl_,
+                    &opaque_infos,
+                    &gv.decl_src,
+                ));
+            }
+        }
+        errors.to_result()
+    }
+
+    /// Each global value whose type has opaque type variables, with the information the desugaring
+    /// needs about each of those variables.
+    ///
+    /// The values come in the order of their names, so that what the desugaring registers and what
+    /// a pass over them reports are in one order from one run to the next.
+    fn global_values_with_opaque_types(&self) -> Vec<(FullName, Vec<OpaqueInfo>)> {
+        let mut gv_names: Vec<&FullName> = self.global_values.keys().collect();
+        gv_names.sort();
+
         let mut targets: Vec<(FullName, Vec<OpaqueInfo>)> = vec![];
-        for gv_name in &gv_names {
-            let gv = self.global_values.get(gv_name).unwrap();
+        for gv_name in gv_names {
+            let gv = &self.global_values[gv_name];
             let opaque_infos = collect_opaque_infos(&gv.scm, gv_name);
             if !opaque_infos.is_empty() {
                 targets.push((gv_name.clone(), opaque_infos));
             }
         }
+        targets
+    }
+
+    /// Desugar opaque type variables. See the module-level comment for an overview.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    pub fn desugar_opaque_types(&mut self) {
+        let targets = self.global_values_with_opaque_types();
 
         // Step 1 & 2: Register opaque TyCons and add constraints to TraitEnv.
         for (gv_name, opaque_infos) in &targets {
@@ -112,8 +165,9 @@ impl Program {
 
         // Step 3: Rewrite type signatures and generate #wrap_opaque GlobalValues.
         for (gv_name, opaque_infos) in &targets {
-            let scm = self.global_values.get(gv_name).unwrap().scm.clone();
-            let decl_src = self.global_values.get(gv_name).unwrap().decl_src.clone();
+            let gv = self.global_values.get(gv_name).unwrap();
+            let scm = gv.scm.clone();
+            let decl_src = gv.decl_src.clone();
             let new_scm = rewrite_scheme(&scm, opaque_infos);
 
             // Generate one #wrap_opaque per function/method.
@@ -145,9 +199,6 @@ impl Program {
                 }
                 SymbolExpr::Method(impls) => {
                     for impl_ in impls.iter_mut() {
-                        // Compute defn_to_impl by matching the trait defn scheme type
-                        // (e.g., `c -> ?it`) against the impl scheme type (e.g., `Array a -> ?it`).
-                        //
                         // The impl side of the match is `impl_.scm`, the scheme this implementation
                         // is type-checked against. It supplies the variable names the rhs of an
                         // OpaqueTyConResolution is filled in with, and the lhs is written in those
@@ -159,18 +210,20 @@ impl Program {
                         // name it (see `TraitEnv::validate_structure`). One resolution per
                         // implementation follows from that: each lhs is the opaque type
                         // constructor applied to the type that implementation is for.
-                        let defn_to_impl =
-                            Substitution::matching_no_kind_check(&scm.ty, &impl_.scm.ty, &[])
-                                .expect("defn scheme type should match impl scm type");
+                        let defn_to_impl = defn_to_impl_substitution(&scm, &impl_.scm);
+                        let defn_to_via_defn = defn_to_impl_substitution(&scm, &impl_.scm_via_defn);
 
-                        impl_.scm = rewrite_impl_scheme(&impl_.scm, &scm, opaque_infos);
-                        impl_.scm_via_defn =
-                            rewrite_impl_scheme(&impl_.scm_via_defn, &scm, opaque_infos);
+                        impl_.scm = rewrite_impl_scheme(&impl_.scm, &defn_to_impl, opaque_infos);
+                        impl_.scm_via_defn = rewrite_impl_scheme(
+                            &impl_.scm_via_defn,
+                            &defn_to_via_defn,
+                            opaque_infos,
+                        );
                         impl_.expr.expr = wrap_with_opaque(&wrap_name, impl_.expr.expr.clone());
                         impl_.expr.opaque_types = build_opaque_resolutions(
                             opaque_infos,
                             &defn_to_impl,
-                            impl_.lhs_srcs.first().cloned(),
+                            impl_.first_lhs_src(),
                         );
                     }
                 }
@@ -228,7 +281,12 @@ impl Program {
                 }
                 let resolved = pred
                     .resolve_trait_aliases(&self.trait_env.aliases)
-                    .unwrap_or_else(|_| vec![pred.clone()]);
+                    .unwrap_or_else(|_| {
+                        unreachable!(
+                            "the trait aliases of the constraint `{}` are resolved before this",
+                            pred.to_string()
+                        )
+                    });
                 for resolved_pred in resolved {
                     let mut new_pred = resolved_pred;
                     sub.substitute_predicate(&mut new_pred);
@@ -330,6 +388,135 @@ impl Program {
         }
         errors.to_result()
     }
+}
+
+/// Report the type signature `impl_` writes for a trait member, where it disagrees with the
+/// declaration of that member.
+///
+/// # Arguments
+/// * `defn_scm` — the type of the member as the trait declares it, in the declaration's own names:
+///   `[c : ToIter] c -> ?it`.
+/// * `opaque_infos` — the opaque type variables of the declaration.
+/// * `decl_src` — where the trait declares the member.
+fn validate_impl_signature(
+    tc: &TypeCheckContext,
+    defn_scm: &Arc<Scheme>,
+    impl_: &TraitMemberImpl,
+    opaque_infos: &[OpaqueInfo],
+    decl_src: &Option<Span>,
+) -> Result<(), Errors> {
+    let impl_src = impl_.first_lhs_src();
+
+    // The signature and the declaration have to describe the same values. The opaque types of the
+    // declaration stand for themselves in that comparison: what one of them hides is the
+    // implementation's choice, and the signature states what the declaration states about it rather
+    // than choosing it, so a constraint on one has to agree with the declaration's.
+    let opaque_tyvars: Vec<Arc<TyVar>> =
+        opaque_infos.iter().map(|info| info.tyvar.clone()).collect();
+    let signatures_agree = UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
+        &impl_.scm,
+        &impl_.scm_via_defn,
+        &opaque_tyvars,
+    ))?
+    .is_ok();
+
+    // The desugaring reads the signature as the declared type with its type variables given types.
+    // An implementation that writes no signature is given the type built that way, so a type that
+    // has no such reading comes from a signature the implementation writes.
+    let Some(defn_to_impl) = Substitution::matching_no_kind_check(&defn_scm.ty, &impl_.scm.ty, &[])
+    else {
+        // The report says which of the two this signature is: one that describes values other than
+        // the declaration's, or one that describes the same values in another shape.
+        return Err(if signatures_agree {
+            signature_shape_error(&impl_.scm, &impl_.scm_via_defn, &impl_src, decl_src)
+        } else {
+            impl_signature_mismatch_error(&impl_.scm, &impl_.scm_via_defn, &impl_src, decl_src)
+        });
+    };
+
+    // Each opaque type of the declaration is written as an opaque type variable of the signature's
+    // own: the desugaring gives each opaque type of the declaration a TyCon of its own, which
+    // stands for one type this implementation returns.
+    for info in opaque_infos {
+        // An opaque type the declaration writes in its constraints alone stands nowhere in the
+        // signature, so the signature names no counterpart for it and the desugaring leaves it as
+        // it is. What the signature says about such a type is compared above, where it stands for
+        // itself.
+        let Some(written) = defn_to_impl.replacement_of(&info.tyvar.name) else {
+            continue;
+        };
+        let written_is_opaque = matches!(&written.ty, Type::TyVar(tv) if is_opaque_tyvar(&tv.name));
+        if !written_is_opaque {
+            return Err(non_opaque_type_for_opaque_type_error(
+                &info.tyvar,
+                written,
+                &impl_src,
+                decl_src,
+            ));
+        }
+    }
+
+    if !signatures_agree {
+        return Err(impl_signature_mismatch_error(
+            &impl_.scm,
+            &impl_.scm_via_defn,
+            &impl_src,
+            decl_src,
+        ));
+    }
+
+    Ok(())
+}
+
+/// The error reported where the type a signature writes is not the type of the declaration with its
+/// type variables replaced. A member whose type has an opaque type asks that of its
+/// implementations.
+///
+/// The type `Expected` names is the declaration's at the type the trait is implemented for, so it
+/// is the type to write here, up to the names of its type variables.
+fn signature_shape_error(
+    scm: &Arc<Scheme>,
+    scm_via_defn: &Arc<Scheme>,
+    impl_src: &Option<Span>,
+    decl_src: &Option<Span>,
+) -> Errors {
+    Errors::from_msg_srcs(
+        format!(
+            "Type signature in implementation is not the type of the trait definition with its type variables replaced.\n\
+             Expected: `{}`\n\
+             Found: `{}`\n\
+             HINT: write the expected type, renaming its type variables as you like, or leave the type signature out.\n\
+             NOTE: a member whose type has an opaque type asks this of the signature an implementation writes for it, down to an associated type application written as the definition writes it.",
+            scm_via_defn.ty.to_string(),
+            scm.ty.to_string(),
+        ),
+        &[impl_src, decl_src],
+    )
+}
+
+/// The error reported where a signature writes a type of its own in the place the declaration
+/// writes an opaque type.
+fn non_opaque_type_for_opaque_type_error(
+    opaque_var: &Arc<TyVar>,
+    written: &Arc<TypeNode>,
+    impl_src: &Option<Span>,
+    decl_src: &Option<Span>,
+) -> Errors {
+    Errors::from_msg_srcs(
+        format!(
+            "Type signature in implementation writes `{}` where the trait definition writes the opaque type `{}`.\n\
+             HINT: write an opaque type variable here too, which the compiler resolves to the type this implementation's body returns.",
+            written.to_string(),
+            opaque_var.name,
+        ),
+        &[&source_of_type_or(written, impl_src), decl_src],
+    )
+}
+
+/// Where a diagnostic about `ty` points: at the type as it is written, and at `fallback` where the
+/// type carries no location.
+fn source_of_type_or(ty: &Arc<TypeNode>, fallback: &Option<Span>) -> Option<Span> {
+    ty.get_source().clone().or_else(|| fallback.clone())
 }
 
 /// The error reported for `cycle_nodes`, the resolutions of one cycle: each one's concrete type is
@@ -473,19 +660,19 @@ fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo
 
     opaque_vars
         .into_iter()
-        .map(|opq_var| {
+        .map(|opaque_var| {
             // TyCon kind: gen_var kinds → opaque tyvar kind.
             // E.g., for gen_vars [a : *] and opaque tyvar ?it : *, the TyCon kind is * -> *.
-            let mut tc_kind: Arc<Kind> = opq_var.kind.clone();
-            for gv in gen_vars.iter().rev() {
-                tc_kind = kind_arrow(gv.kind.clone(), tc_kind);
+            let mut tycon_kind: Arc<Kind> = opaque_var.kind.clone();
+            for gen_var in gen_vars.iter().rev() {
+                tycon_kind = kind_arrow(gen_var.kind.clone(), tycon_kind);
             }
-            let tycon_name = FullName::new(&gv_name.to_namespace(), &opq_var.name);
+            let tycon_name = FullName::new(&gv_name.to_namespace(), &opaque_var.name);
             OpaqueInfo {
-                tyvar: opq_var.clone(),
+                tyvar: opaque_var.clone(),
                 tycon: tycon(tycon_name),
                 tycon_vars: gen_vars.clone(),
-                tycon_kind: tc_kind,
+                tycon_kind,
             }
         })
         .collect()
@@ -526,10 +713,10 @@ fn build_opaque_resolutions(
     defn_to_impl: &Substitution,
     src: Option<Span>,
 ) -> Map<FullName, Vec<OpaqueTyConResolution>> {
-    let mut result: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
+    let mut resolutions_by_tycon_name: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
     for info in opaque_infos {
         let lhs = defn_to_impl.substitute_type(&info.opaque_tycon_applied());
-        result
+        resolutions_by_tycon_name
             .entry(info.tycon.name.clone())
             .or_default()
             .push(OpaqueTyConResolution {
@@ -538,7 +725,7 @@ fn build_opaque_resolutions(
                 src: src.clone(),
             });
     }
-    result
+    resolutions_by_tycon_name
 }
 
 /// Apply a substitution to a scheme's type and remove predicates/equalities on opaque TyVars.
@@ -581,20 +768,28 @@ fn rewrite_scheme(scm: &Arc<Scheme>, opaque_infos: &[OpaqueInfo]) -> Arc<Scheme>
     apply_opaque_substitution(scm, &sub)
 }
 
+/// The types a scheme of an implementation writes for the type variables of the member's declared
+/// type: `{c -> Array a, ?it -> ?iter}` for the declared `c -> ?it` against `Array a -> ?iter`.
+///
+/// Panics where the implementation's type is not the declared type with its type variables given
+/// types. Both schemes an implementation carries are such a type: a signature the implementation
+/// writes is reported by `validate_opaque_member_impl_signatures` before the desugaring runs, and
+/// the scheme `TraitImpl::member_scheme_by_defn` builds is the declared type with the trait's type
+/// variable replaced.
+fn defn_to_impl_substitution(defn_scm: &Arc<Scheme>, impl_scm: &Arc<Scheme>) -> Substitution {
+    Substitution::matching_no_kind_check(&defn_scm.ty, &impl_scm.ty, &[]).expect(
+        "the type of an implementation is the declared type with its type variables given types",
+    )
+}
+
 /// Rewrite a trait impl's scheme. The impl may use different names for opaque type variables
-/// than the trait definition (e.g., `?iter` vs `?it`), so we compute the name correspondence
-/// by matching the trait defn scheme type (which uses defn names like `c -> ?it`) against
-/// `impl_scm.ty` (which uses impl names like `Array a -> ?iter`).
+/// than the trait definition (e.g., `?iter` vs `?it`), so `defn_to_impl` carries the name
+/// correspondence: it sends the defn names of `c -> ?it` to the impl names of `Array a -> ?iter`.
 fn rewrite_impl_scheme(
     impl_scm: &Arc<Scheme>,
-    defn_scm: &Arc<Scheme>,
+    defn_to_impl: &Substitution,
     opaque_infos: &[OpaqueInfo],
 ) -> Arc<Scheme> {
-    // Match trait defn scheme type against impl scheme type to find the defn→impl name mapping.
-    // E.g., defn `c -> ?it` against impl `Array a -> ?iter` gives {c → Array a, ?it → ?iter}.
-    let defn_to_impl = Substitution::matching_no_kind_check(&defn_scm.ty, &impl_scm.ty, &[])
-        .expect("defn scheme type should match impl scheme type");
-
     // Build substitution: impl's opaque tyvar → TyCon applied to impl's type arguments.
     let mut sub = Substitution::default();
     for info in opaque_infos {
@@ -602,6 +797,8 @@ fn rewrite_impl_scheme(
         let impl_opaque_ty = defn_to_impl.substitute_type(&type_from_tyvar(info.tyvar.clone()));
         let impl_opaque_name = match &impl_opaque_ty.ty {
             Type::TyVar(tv) => &tv.name,
+            // `validate_opaque_member_impl_signatures` reports an implementation that writes
+            // anything but an opaque type variable here.
             _ => panic!(
                 "Expected opaque tyvar `{}` to map to a tyvar in impl scheme",
                 info.tyvar.name
@@ -615,6 +812,9 @@ fn rewrite_impl_scheme(
             ty = type_tyapp(ty, impl_gv_ty);
         }
 
+        // A signature writing one opaque type variable for two of the declaration is what this
+        // merge would refuse, and it describes other values than the declaration, so
+        // `validate_opaque_member_impl_signatures` reports it before the desugaring runs.
         assert!(sub.merge(&Substitution::single(impl_opaque_name, ty)));
     }
 
@@ -691,9 +891,8 @@ fn build_wrap_scheme(
 
 /// Wrap an expression in a `#wrap_opaque(...)` application.
 ///
-/// The wrapper App inherits the inner expression's source span so that type
-/// errors raised while type-checking the body are attributed to the
-/// user-written expression rather than appearing without a location.
+/// The wrapper App inherits the inner expression's source span, so that a type error raised while
+/// type-checking the body is reported at the expression the user wrote.
 fn wrap_with_opaque(wrap_name: &FullName, inner: Arc<ExprNode>) -> Arc<ExprNode> {
     let src = inner.source.clone();
     expr_app(expr_var(wrap_name.clone(), None), vec![inner], src)

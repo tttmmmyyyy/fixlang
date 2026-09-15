@@ -89,6 +89,10 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         return Ok(program);
     }
 
+    // Report an implementation whose type signature disagrees with the declaration of a trait
+    // member that has an opaque type. The desugaring that follows reads the two as agreeing.
+    program.validate_opaque_member_impl_signatures(config)?;
+
     // Desugar opaque type variables before type-checking.
     program.desugar_opaque_types();
 
