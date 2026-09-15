@@ -310,7 +310,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         library_search_path_opts.push(format!("-L{}", path.to_str().unwrap()));
     }
     let mut libs_opts = vec![];
-    let mut warned_on_mac = false;
+    let mut has_warned_on_mac = false;
     for (lib_name, link_type) in &config.linked_libraries {
         if env::consts::OS != "macos" {
             match link_type {
@@ -318,10 +318,10 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
                 LinkType::Dynamic => libs_opts.push("-Wl,-Bdynamic".to_string()),
             }
         } else {
-            if !warned_on_mac {
+            if !has_warned_on_mac {
                 info_msg("On MacOS, it is not possible to specify whether a library should be dynamically or statically linked. \
                 If a dynamic library and a static library with the same name exist, the unintended one may be used.");
-                warned_on_mac = true;
+                has_warned_on_mac = true;
             }
         }
         libs_opts.push(format!("-l{}", lib_name));

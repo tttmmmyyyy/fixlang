@@ -32,12 +32,12 @@ main = println $ Iterator::range(0, 10).map(|x| x * x).fold(0, Add::add).to_stri
         single_source_project_dir("objcache", SOURCE)
     }
 
-    /// The files directly under `dir` whose name ends in `suffix`.
-    fn files_ending_in(dir: &Path, suffix: &str) -> Vec<PathBuf> {
+    /// The files directly under `dir` whose name ends in `extension`.
+    fn files_ending_in(dir: &Path, extension: &str) -> Vec<PathBuf> {
         let mut paths: Vec<PathBuf> = fs::read_dir(dir)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dir.display(), e))
             .map(|entry| entry.expect("failed to read a directory entry").path())
-            .filter(|path| path.to_string_lossy().ends_with(suffix))
+            .filter(|path| path.to_string_lossy().ends_with(extension))
             .collect();
         paths.sort();
         paths

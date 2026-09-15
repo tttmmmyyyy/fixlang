@@ -881,7 +881,8 @@ pub fn object_digests(dir: &Path, keep: impl Fn(&str) -> bool) -> Vec<(String, S
 /// Asserts that `output` failed, quoting both streams otherwise.
 ///
 /// # Arguments
-/// * `what` — what the run was expected to do, so a failure says which expectation broke.
+/// * `what` — what the run was expected to be rejected for, so a passing run says which
+///   expectation broke.
 pub fn assert_failed(output: &Output, what: &str) {
     assert!(
         !output.status.success(),
