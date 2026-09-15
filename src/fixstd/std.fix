@@ -4076,8 +4076,7 @@ impl F32 : FromBytes {
     );
 }
 impl F32 : ToString {
-    // Writes this number as decimal text, in the fewest digits that tell it apart from the
-    // `F32` values on either side of it.
+    // Writes this number as its shortest round-trip decimal representation.
     //
     // The digits are written positionally where the point falls near them, as in `1.0`, `0.1`
     // and `3.14159`, and as a power of ten otherwise, as in `1e13` and `1e-10`.
@@ -4160,8 +4159,7 @@ impl F64 : FromBytes {
     );
 }
 impl F64 : ToString {
-    // Writes this number as decimal text, in the fewest digits that tell it apart from the
-    // `F64` values on either side of it.
+    // Writes this number as its shortest round-trip decimal representation.
     //
     // The digits are written positionally where the point falls near them, as in `1.0`, `0.1`
     // and `123456.789`, and as a power of ten otherwise, as in `1e300` and `1e-10`.

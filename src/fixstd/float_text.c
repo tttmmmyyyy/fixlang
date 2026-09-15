@@ -1,17 +1,32 @@
 /*
-Writing a floating point number as text, for `Std::F64` and `Std::F32`.
+Writing a floating point number as text and reading one back, for `Std::F64` and `Std::F32`.
 
 The shortest text that reads back as the number is found by Ryu, whose sources sit beside this one
-under `ryu/`. This file is compiled with optimization where the rest of the runtime is not, because
-what it does — Ryu's search, and the placing of the digits it answers with — is the runtime's one
-piece of arithmetic rather than a call into C's library.
+under `ryu/`. Reading goes through C's `strtod`, under a locale of this file's own so that the
+point is the character Ryu writes whatever locale the program runs in.
+
+This file is compiled with optimization where the rest of the runtime is not: what it does —
+Ryu's search, and the placing of the digits it answers with — is the runtime's one piece of
+arithmetic rather than a call into C's library.
 */
 
+// `strtod_l` and `newlocale` are what read a number under a locale of our own choosing. glibc
+// declares them for a source that asks for the GNU extensions, and macOS in a header of its own.
+#define _GNU_SOURCE
+
+#include <ctype.h>
+#include <errno.h>
 #include <inttypes.h>
+#include <locale.h>
+#include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __APPLE__
+#include <xlocale.h>
+#endif
 #include "ryu/ryu.h"
 
 // Defined by the compiler, and declared in `runtime.c` as well; the two translation units carry
@@ -259,4 +274,94 @@ void fixruntime_f64_to_str_shortest(char *buf, int64_t size, double v)
     char sci[32];
     sci[d2s_buffered_n(v, sci)] = '\0';
     fixruntime_write_float_text(sci, buf, size, F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH);
+}
+
+// The locale a number is read under: the one whose decimal point is the `.` Ryu writes.
+//
+// A program takes whatever locale its own code and the libraries it links set, and C's `strtod`
+// reads the decimal point from that. Reading under this one instead is what makes a text `Std`
+// wrote readable by the `Std` that wrote it.
+static locale_t numeric_c_locale = (locale_t)0;
+
+// Answers the locale numbers are read under, building it on the first call.
+//
+// Two threads reaching this together both build one, and the one that loses the exchange frees
+// what it built, so the answer is the same object for every caller.
+static locale_t float_text_locale(void)
+{
+    locale_t answer;
+    __atomic_load(&numeric_c_locale, &answer, __ATOMIC_ACQUIRE);
+    if (answer != (locale_t)0)
+    {
+        return answer;
+    }
+    answer = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+    if (answer == (locale_t)0)
+    {
+        // POSIX gives every program the `C` locale, so there is no state in which this fails.
+        fprintf(stderr, "The C locale, which numbers are read under, could not be built\n");
+        fixruntime_abort();
+    }
+    locale_t none = (locale_t)0;
+    if (!__atomic_compare_exchange_n(&numeric_c_locale, &none, answer, false, __ATOMIC_ACQ_REL,
+                                     __ATOMIC_ACQUIRE))
+    {
+        freelocale(answer);
+        answer = none;
+    }
+    return answer;
+}
+
+// Clears the range error a value below the smallest normal number raises.
+//
+// `strtod` raises `ERANGE` both for a number too large to hold, which it answers with an infinity,
+// and for one too small, which it answers with the nearest number it can hold. The second is the
+// value that was asked for — a subnormal number is a number like any other — so only the first is
+// an error. A text that names a number smaller than any subnormal keeps the error, since zero is
+// not what it names.
+//
+// # Arguments
+// * `v` - What `strtod` answered.
+static void fixruntime_keep_only_overflow(double v)
+{
+    if (errno == ERANGE && isfinite(v) && v != 0.0)
+    {
+        errno = 0;
+    }
+}
+
+double fixruntime_strtod(const char *str)
+{
+    char *endptr;
+    errno = 0;
+    if (isspace((unsigned char)*str))
+    {
+        errno = EINVAL;
+        return 0.0;
+    }
+    double v = strtod_l(str, &endptr, float_text_locale());
+    fixruntime_keep_only_overflow(v);
+    if (endptr == str || *endptr != '\0')
+    {
+        errno = EINVAL;
+    }
+    return v;
+}
+
+float fixruntime_strtof(const char *str)
+{
+    char *endptr;
+    errno = 0;
+    if (isspace((unsigned char)*str))
+    {
+        errno = EINVAL;
+        return 0.0f;
+    }
+    float v = strtof_l(str, &endptr, float_text_locale());
+    fixruntime_keep_only_overflow((double)v);
+    if (endptr == str || *endptr != '\0')
+    {
+        errno = EINVAL;
+    }
+    return v;
 }

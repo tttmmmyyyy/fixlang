@@ -5643,18 +5643,17 @@ pub fn test_float_to_string() {
             assert_eq(|_|"an F32 NaN", (inf_f32 - inf_f32).to_string, "nan");;
 
             // Reading any of these texts back gives the number it was written from, which is what
-            // the shortest digits are chosen for. Every one of them is a normal number, since
-            // `from_string` answers an error for a subnormal.
+            // the shortest digits are chosen for.
             let values = [
                 1.0, 0.1, 1.0 / 3.0, 1.0e300, 1.0e-10, 123456.789, -0.0, 0.0, 1.0e15, 1.0e16,
-                1.0e-5, 1.7976931348623157e308, -2.2250738585072014e-308, 3.0e-7
+                1.0e-5, 5.0e-324, 1.7976931348623157e308, -2.2250738585072014e-308, 3.0e-7
             ];
             assert_eq(|_|"every F64 text reads back as the number it was written from",
                       values.to_iter.fold(true, |v, acc| acc && v.round_trips_f64), true);;
 
             let values : Array F32 = [
                 1.0_F32, 0.1_F32, 1.0_F32 / 3.0_F32, 3.14159_F32, 1.0e12_F32, 1.0e13_F32,
-                1.0e-6_F32, 3.4028235e38_F32, 1.1754944e-38_F32, -0.0_F32
+                1.0e-6_F32, 3.4028235e38_F32, 1.4e-45_F32, -0.0_F32
             ];
             assert_eq(|_|"every F32 text reads back as the number it was written from",
                       values.to_iter.fold(true, |v, acc| acc && v.round_trips_f32), true);;
@@ -5754,9 +5753,8 @@ pub fn test_float_to_string_round_trips_across_every_decade() {
 
         main : IO ();
         main = (
-            // Every power of ten a normal `F64` reaches. `from_string` answers an error for a
-            // subnormal, so the walk stops above them.
-            let ok = Iterator::range(-307, 309).fold(true, |e, acc|
+            // Every power of ten an `F64` reaches, the subnormal ones included.
+            let ok = Iterator::range(-323, 309).fold(true, |e, acc|
                 let p = Iterator::range(0, e.abs).fold(1.0, |_, x| if e < 0 { x / 10.0 } else { x * 10.0 });
                 [p, -p].to_iter.fold(acc, |v, acc|
                     neighbours_f64(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f64)
@@ -5764,14 +5762,70 @@ pub fn test_float_to_string_round_trips_across_every_decade() {
             );
             assert_eq(|_|"every F64 decade reads back as what it was written from", ok, true);;
 
-            // Every power of ten a normal `F32` reaches.
-            let ok = Iterator::range(-37, 39).fold(true, |e, acc|
+            // Every power of ten an `F32` reaches, the subnormal ones included.
+            let ok = Iterator::range(-44, 39).fold(true, |e, acc|
                 let p = Iterator::range(0, e.abs).fold(1.0_F32, |_, x| if e < 0 { x / 10.0_F32 } else { x * 10.0_F32 });
                 [p, -p].to_iter.fold(acc, |v, acc|
                     neighbours_f32(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f32)
                 )
             );
             assert_eq(|_|"every F32 decade reads back as what it was written from", ok, true);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// The text `to_string` writes and the text `from_string` reads are both spelled with a point,
+/// whatever `LC_NUMERIC` the program is running under. `to_string_precision`, which goes through
+/// `snprintf`, follows the locale, and this test uses that to prove the locale it set took effect
+/// rather than passing on a machine where the locale is absent.
+#[test]
+pub fn test_float_text_is_read_and_written_under_one_locale() {
+    let source = r#"
+        module Main;
+
+        // Asks the C library to run under `name`, for the category numbered `category`.
+        //
+        // # Parameters
+        // * `category` - `LC_NUMERIC`, which is 1 where the C library is glibc's and 4 where it is
+        //   Apple's. The other of the two names a category this test does not read.
+        // * `name` - The locale to run under.
+        set_locale : I32 -> String -> IO ();
+        set_locale = |category, name| (
+            name.borrow_c_str_io(|p| FFI_CALL_IO[Ptr setlocale(I32, Ptr), category, p]).forget
+        );
+
+        // The locales whose decimal point is a comma that a machine is likely to carry.
+        candidates : Array String;
+        candidates = [
+            "de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "fr_FR.utf8", "en_DK.UTF-8", "en_DK.utf8"
+        ];
+
+        main : IO ();
+        main = (
+            // Walk the candidates until `to_string_precision` writes a comma, which is what says
+            // the locale took: it is the one text here that follows `LC_NUMERIC`.
+            let took = *candidates.to_iter.fold_m(false, |name, took|
+                if took { true.pure };
+                set_locale(1_I32, name);;
+                set_locale(4_I32, name);;
+                (1.5.to_string_precision(1_U8) == "1,5").pure
+            );
+
+            if !took {
+                eprintln("Skipping the locale check: this machine carries no locale whose decimal point is a comma.");;
+                pure()
+            };
+
+            // Under that locale, the two texts `Std` owns are still written and read with a point.
+            assert_eq(|_|"to_string writes a point under a comma locale", 1.5.to_string, "1.5");;
+            let back : Result ErrMsg F64 = 1.5.to_string.from_string;
+            assert_eq(|_|"from_string reads a point under a comma locale", back.as_ok, 1.5);;
+            assert_eq(|_|"an F32 text is written with a point too", 1.5_F32.to_string, "1.5");;
+            let back : Result ErrMsg F32 = 1.5_F32.to_string.from_string;
+            assert_eq(|_|"an F32 text is read with a point too", back.as_ok, 1.5_F32);;
 
             pure()
         );

@@ -151,40 +151,6 @@ uint64_t fixruntime_strtoull_10(const char *str)
     return v;
 }
 
-double fixruntime_strtod(const char *str)
-{
-    char *endptr;
-    errno = 0;
-    if (isspace(*str))
-    {
-        errno = EINVAL;
-        return (int64_t)0;
-    }
-    double v = strtod(str, &endptr);
-    if (endptr == str || *endptr != '\0')
-    {
-        errno = EINVAL;
-    }
-    return v;
-}
-
-float fixruntime_strtof(const char *str)
-{
-    char *endptr;
-    errno = 0;
-    if (isspace(*str))
-    {
-        errno = EINVAL;
-        return (int64_t)0;
-    }
-    float v = strtof(str, &endptr);
-    if (endptr == str || *endptr != '\0')
-    {
-        errno = EINVAL;
-    }
-    return v;
-}
-
 int64_t fixruntime_clock()
 {
     return (int64_t)clock();
