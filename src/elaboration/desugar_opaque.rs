@@ -492,7 +492,7 @@ fn signature_shape_error(
             "Type signature in implementation is not the type of the trait definition with its type variables replaced.\n\
              Expected: `{}`\n\
              Found: `{}`\n\
-             Hint: write the expected type, renaming its type variables as you like, or leave the type signature out.\n\
+             HINT: write the expected type, renaming its type variables as you like, or leave the type signature out.\n\
              NOTE: a member whose type has an opaque type asks this of the signature an implementation writes for it, down to an associated type application written as the definition writes it.",
             scm_via_defn.ty.to_string(),
             scm.ty.to_string(),
@@ -512,7 +512,7 @@ fn non_opaque_type_for_opaque_type_error(
     Errors::from_msg_srcs(
         format!(
             "Type signature in implementation writes `{}` where the trait definition writes the opaque type `{}`.\n\
-             Hint: write an opaque type variable here too, which the compiler resolves to the type this implementation's body returns.",
+             HINT: write an opaque type variable here too, which the compiler resolves to the type this implementation's body returns.",
             written.to_string(),
             opaque_var.name,
         ),
@@ -532,7 +532,7 @@ fn one_opaque_type_for_two_error(
     Errors::from_msg_srcs(
         format!(
             "Type signature in implementation writes one opaque type `{}` for two opaque types of the trait definition, `{}` and `{}`.\n\
-             Hint: write an opaque type variable of its own for each opaque type of the definition.",
+             HINT: write an opaque type variable of its own for each opaque type of the definition.",
             written.to_string(),
             first.name,
             second.name,
