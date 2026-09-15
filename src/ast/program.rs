@@ -571,6 +571,12 @@ impl TraitMemberImpl {
         Ok(())
     }
 
+    /// Where this implementation first writes the member's name: in the type signature it writes,
+    /// and otherwise in the definition.
+    pub fn first_lhs_src(&self) -> Option<Span> {
+        self.lhs_srcs.first().cloned()
+    }
+
     /// The smallest node of this implementation covering `pos`.
     ///
     /// # Arguments
@@ -588,6 +594,31 @@ impl TraitMemberImpl {
         }
         None
     }
+}
+
+/// The error reported where the type signature an implementation writes for a trait member is not
+/// equivalent to the type the trait's declaration gives that member.
+///
+/// # Arguments
+/// * `scm` — the type the implementation writes for the member.
+/// * `scm_via_defn` — the type the declaration gives the member at the type the trait is
+///   implemented for.
+/// * `impl_src` — where the implementation writes the member.
+/// * `decl_src` — where the trait declares the member.
+pub fn impl_signature_mismatch_error(
+    scm: &Arc<Scheme>,
+    scm_via_defn: &Arc<Scheme>,
+    impl_src: &Option<Span>,
+    decl_src: &Option<Span>,
+) -> Errors {
+    Errors::from_msg_srcs(
+        format!(
+            "Type signature in implementation does not match trait definition.\nExpected: `{}`\nFound: `{}`",
+            scm_via_defn.to_string(),
+            scm.to_string(),
+        ),
+        &[impl_src, decl_src],
+    )
 }
 
 /// A module of the program, and the sources it is made of.
@@ -1477,20 +1508,20 @@ impl Program {
                     });
                 }
                 SymbolExpr::Method(impls) => {
-                    for (i, member) in impls.iter().enumerate() {
+                    for (i, impl_) in impls.iter().enumerate() {
                         // Select method implementation.
-                        if !method_impl_filter(member)? {
+                        if !method_impl_filter(impl_)? {
                             continue;
                         }
 
                         // Create a task for method implementation.
-                        let te = member.expr.clone();
-                        let scm = member.scm.clone();
-                        let scm_via_defn = member.scm_via_defn.clone();
-                        let impl_src = member.expr.expr.source.clone();
+                        let te = impl_.expr.clone();
+                        let scm = impl_.scm.clone();
+                        let scm_via_defn = impl_.scm_via_defn.clone();
+                        let impl_src = impl_.expr.expr.source.clone();
                         let decl_src = gv.decl_src.clone();
                         let val_name_clone = val_name.clone(); // For move into closure.
-                        let def_mod = self.find_mod(&member.define_module).unwrap().clone();
+                        let def_mod = self.find_mod(&impl_.define_module).unwrap().clone();
                         let mut nrctx =
                             NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
                         let version_hash = self.module_dependency_hash(&def_mod.name, config)?;
@@ -1498,25 +1529,18 @@ impl Program {
                         let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                             // Check that the type signature given by implementor is equivalent to
                             // the type scheme obtained from the trait member definition.
-                            if UnifOrOtherErr::extract_others(
-                                tc.check_scheme_equivalent(&scm, &scm_via_defn),
-                            )?
+                            if UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
+                                &scm,
+                                &scm_via_defn,
+                                &[],
+                            ))?
                             .is_err()
                             {
-                                return Err(Errors::from_msg_srcs(
-                                    format!(
-                                        "Type signature in implementation does not match trait definition.\nExpected: `{}`\nFound: `{}`",
-                                        scm_via_defn.to_string(),
-                                        scm.to_string(),
-                                    ),
-                                    &[
-                                        &impl_src
-                                            .as_ref()
-                                            .map(|s| s.to_head_character()),
-                                        &decl_src
-                                            .as_ref()
-                                            .map(|s| s.to_head_character()),
-                                    ],
+                                return Err(impl_signature_mismatch_error(
+                                    &scm,
+                                    &scm_via_defn,
+                                    &impl_src.as_ref().map(|s| s.to_head_character()),
+                                    &decl_src.as_ref().map(|s| s.to_head_character()),
                                 ));
                             }
                             // Perform type-checking.
@@ -1663,10 +1687,20 @@ impl Program {
         let te = match &gv.expr {
             SymbolExpr::Simple(e) => e,
             SymbolExpr::Method(impls) => {
-                let method = impls
-                    .iter()
-                    .find(|method| method_type_matches(method).unwrap_or(false))
-                    .unwrap();
+                let mut matching = None;
+                for method in impls {
+                    if method_type_matches(method)? {
+                        matching = Some(method);
+                        break;
+                    }
+                }
+                let method = matching.unwrap_or_else(|| {
+                    panic!(
+                        "no implementation of `{}` has the type `{}`",
+                        sym.generic_name.to_string(),
+                        sym.ty.to_string()
+                    )
+                });
                 &method.expr
             }
         };
@@ -1907,7 +1941,7 @@ impl Program {
             // Must stay in sync with the same message in typecheck.rs (check_is_type_fixed).
             return Err(Errors::from_msg_srcs(
                 format!(
-                    "Cannot infer the type of this expression: inferred as `{}`, but the type variable `{}` is unresolved.\nHint: add a type annotation to this expression.",
+                    "Cannot infer the type of this expression: inferred as `{}`, but the type variable `{}` is unresolved.\nHINT: add a type annotation to this expression.",
                     ret_ty.to_string(),
                     fv_name,
                 ),
@@ -3343,7 +3377,7 @@ impl Program {
         for stmt in self
             .mod_to_import_stmts
             .get(&mod_name)
-            .unwrap_or(&vec![])
+            .map_or(&[][..], Vec::as_slice)
             .iter()
         {
             let node = stmt.find_node_at(pos);

@@ -170,6 +170,39 @@ mod tests {
         }
     }
 
+    /// An implementation that writes the type it returns where the declaration of the trait member
+    /// writes an opaque type is reported in the editor, on that type, with the declaration named as
+    /// a related location.
+    ///
+    /// Every run of the diagnostics desugars the opaque types, and the signature is compared with
+    /// the declaration before that; a program that stops the compiler there takes the editor's
+    /// reports on every other file down with it, for the rest of the session.
+    #[test]
+    fn test_a_concrete_type_written_for_an_opaque_type_is_reported_on_that_type() {
+        let (_temp_dir, project_dir) = setup_test_env("opaque_impl_signature");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+
+        let diag = sole_diagnostic_containing(
+            &diagnostics,
+            "where the trait definition writes the opaque type `?it`",
+        );
+
+        // `main.fix` writes `RangeIterator` on the 10th line, at the 22nd column, and declares the
+        // member on the 4th line; the protocol counts both from zero.
+        assert_eq!(
+            diag["range"]["start"]["line"], 9,
+            "at the type the implementation writes, but the report is {:?}",
+            diag
+        );
+        assert_eq!(diag["range"]["start"]["character"], 21);
+        assert_eq!(diag["severity"], 1, "as an error");
+        assert_eq!(
+            diag["relatedInformation"][0]["location"]["range"]["start"]["line"], 3,
+            "naming the member's declaration, but the report is {:?}",
+            diag
+        );
+    }
+
     /// A trait member whose type leaves the trait's type variable to a constraint is reported in
     /// the editor, on the member's declaration.
     ///

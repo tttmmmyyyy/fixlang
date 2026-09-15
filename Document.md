@@ -1691,7 +1691,7 @@ which defines a type alias `Lazy` of kind `* -> *`.
 
 In Fix, `Iterator` is a trait, and many types implement it. Therefore, there's no single "iterator" type; instead, each function that generates an iterator produces an iterator of a different type.
 
-For example, the type of an iterator created from `Array a` by `to_iter` is `ArrayIterator a`, while the type of an iterator created by `range` is `CountUpIterator`.
+For example, the type of an iterator created from `Array a` by `to_iter` is `ArrayIterator a`, while the type of an iterator created by `range` is `RangeIterator`.
 
 This iterator design contributes significantly to improved performance. This is because the implementation of the `advance` function (a method of the `Iterator` trait) is uniquely determined by the iterator's type, allowing the compiler to perform optimizations such as inlining the `advance` function.
 
@@ -1700,8 +1700,8 @@ On the other hand, when a function returns different kinds of iterators dependin
 ```
 // Cannot write the return type: if-branches return different iterator types
 make_iter = |flag| (
-    if flag { Iterator::range(0, 10) }       // CountUpIterator I64
-    else { Iterator::count_up(0).take(10) }  // TakeIterator (CountUpIterator I64)
+    if flag { Iterator::range(0, 10) }       // RangeIterator
+    else { Iterator::count_up(0).take(10) }  // TakeIterator CountUpIterator
 );
 ```
 
@@ -1751,7 +1751,7 @@ repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it;
 repeat = |x, n| Iterator::range(0, n).map(|_| x);
 ```
 
-In this example, instead of writing the concrete type of the iterator returned by `repeat` (a complex type like `MapIterator (CountUpIterator I64) I64 a`), the opaque type `?it` is used.
+In this example, the opaque type `?it` stands for the iterator `repeat` returns, whose concrete type is a large one such as `MapIterator RangeIterator I64 a`.
 The type constraint `[?it : Iterator, Item ?it = a]` declares that `?it` implements the `Iterator` trait and its element type is `a`.
 
 The caller works with a value of `?it` through the methods of the traits it is constrained by.
@@ -1821,8 +1821,8 @@ Therefore, you cannot return different types from different branches of a runtim
 // This causes a compile error
 choose_iter : [?it : Iterator, Item ?it = I64] Bool -> ?it;
 choose_iter = |flag| (
-    if flag { Iterator::range(0, 10) }       // CountUpIterator I64
-    else { count_up(0).take(10) }            // TakeIterator (CountUpIterator I64)
+    if flag { Iterator::range(0, 10) }       // RangeIterator
+    else { count_up(0).take(10) }            // TakeIterator CountUpIterator
 );
 ```
 
