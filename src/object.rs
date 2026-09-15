@@ -1043,8 +1043,9 @@ impl ObjectFieldType {
         // Get tag value.
         let actual_tag = ObjectFieldType::get_union_tag(gc, &union);
 
-        // If the tag is not the one asked for, panic. The question is put as `is` and `mod` put it,
-        // so that a function asking it both ways asks it once.
+        // Panic unless the tag is the expected one. The comparison uses the same predicate and
+        // operand order as `InlineLLVMUnionIsBody` and `InlineLLVMUnionModBody`, so that a function
+        // that both tests the tag and reads the payload compares it once.
         let is_tag_match = gc
             .builder()
             .build_int_compare(IntPredicate::EQ, expected_tag, actual_tag, "is_tag_match")

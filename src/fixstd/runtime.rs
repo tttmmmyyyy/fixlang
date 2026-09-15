@@ -455,8 +455,9 @@ fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
     let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
     let func = gc.module.add_function(RUNTIME_REALLOC, fn_ty, None);
-    // The block the call answers with is the caller's alone: the one it was given is over, whether
-    // the block moved or grew where it stood.
+    // The returned pointer does not alias any other pointer visible to the caller, so mark it
+    // `noalias`: the pointer passed in is dead from the call onward, whether the block moved or was
+    // resized in place.
     gc.add_enum_attribute(func, "noalias", AttributeLoc::Return);
     // As for `malloc`, keep LLVM from inferring the full allocator attribute set
     // (see `build_malloc_function`).

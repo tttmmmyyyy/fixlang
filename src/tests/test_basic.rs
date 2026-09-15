@@ -14074,14 +14074,13 @@ pub fn test_empty_union_emits_no_zero_sized_phi() {
     );
 }
 
-/// `is_{variant}` and `as_{variant}` ask the union's tag one question, and the generated code puts
-/// it the same way in both places.
+/// `is_{variant}` and `as_{variant}` compare the union's tag, and the generated code compares it
+/// the same way in both.
 ///
-/// A function that tests a variant and then takes it out — which `if u.is_left { u.as_left }` is —
-/// asks that question twice, and LLVM folds the pair only where the two comparisons carry the same
-/// predicate: a swapped operand order it sees through, a different predicate it does not. The pass
-/// that folds them runs late, so every pass before it would otherwise work on two conditions where
-/// there is one.
+/// Code like `if u.is_left { u.as_left }` compares the tag twice, and LLVM folds the two
+/// comparisons into one only when they carry the same predicate; it sees through a swapped operand
+/// order, but a different predicate leaves the pair standing. The pass that folds them runs late,
+/// so every pass before it works on two conditions instead of one.
 #[test]
 pub fn test_is_and_as_ask_the_union_tag_the_same_question() {
     let source = r#"
@@ -14099,10 +14098,9 @@ pub fn test_is_and_as_ask_the_union_tag_the_same_question() {
     // optimized module shows one of them either way.
     let ir = generated_llvm_ir(source, "none");
 
-    // The predicate of the one comparison the body of `name` makes. `name` carries the `@"` that
-    // opens an LLVM symbol, so it selects the function itself and not the accessors whose names
-    // hold it. An `icmp` may carry flags before its predicate, so the predicate is the first
-    // equality word after `icmp`.
+    // The predicate of the one comparison in the body of `name`. `name` opens with the `@"` of an
+    // LLVM symbol, so it matches the accessor's own definition. An `icmp` may carry flags before
+    // its predicate, so the predicate is the first equality word after `icmp`.
     let tag_predicate = |name: &str| -> String {
         let bodies = llvm_function_bodies(&ir, name);
         assert_eq!(
