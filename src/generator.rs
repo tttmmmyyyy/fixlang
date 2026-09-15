@@ -769,7 +769,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// on decide which of them this is; an intrinsic that takes none is asked for with an empty
     /// list. LLVM knows the intrinsics by name, so a name it does not know is a mistake in the
     /// compiler rather than in the program being compiled.
-    fn intrinsic_function(
+    pub(crate) fn intrinsic_function(
         &self,
         name: &str,
         overload_tys: &[BasicTypeEnum<'c>],

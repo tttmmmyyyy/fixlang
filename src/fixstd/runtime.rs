@@ -18,6 +18,10 @@ pub const RUNTIME_NEGATIVE_ARRAY_SIZE: &str = "fixruntime_negative_array_size";
 /// The runtime function that reports an array capacity beyond what an element buffer can hold and
 /// ends the program. It takes the capacity, and returns to no one.
 pub const RUNTIME_ARRAY_SIZE_OVERFLOW: &str = "fixruntime_array_size_overflow";
+/// The runtime function that reports an arithmetic operation on a signed integer type whose result
+/// left the range of that type, and ends the program. It takes the operation's name and its two
+/// operands widened to 64 bits, and returns to no one.
+pub const RUNTIME_SIGNED_OVERFLOW: &str = "fixruntime_signed_overflow";
 /// The runtime function that writes a C string to standard error, followed by a newline.
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 /// libc `sprintf`, which writes a formatted value into a buffer the caller provides.
@@ -97,6 +101,13 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     );
     declare_noreturn_runtime_function(gc, mode, RUNTIME_NEGATIVE_ARRAY_SIZE, &[i64_ty.into()]);
     declare_noreturn_runtime_function(gc, mode, RUNTIME_ARRAY_SIZE_OVERFLOW, &[i64_ty.into()]);
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    declare_noreturn_runtime_function(
+        gc,
+        mode,
+        RUNTIME_SIGNED_OVERFLOW,
+        &[ptr_ty.into(), i64_ty.into(), i64_ty.into()],
+    );
     build_eprintf_function(gc, mode);
     build_sprintf_function(gc, mode);
     build_subtract_ptr_function(gc, mode);
@@ -243,7 +254,7 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: Bui
     gc.builder().position_at_end(bb);
     let lhs = func.get_first_param().unwrap().into_pointer_value();
     let rhs = func.get_nth_param(1).unwrap().into_pointer_value();
-    let res = gc
+    let ptr_diff = gc
         .builder()
         .build_ptr_diff(
             gc.context.i8_type(),
@@ -252,7 +263,7 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: Bui
             "ptr_diff@fixruntime_subtract_ptr",
         )
         .unwrap();
-    gc.builder().build_return(Some(&res)).unwrap();
+    gc.builder().build_return(Some(&ptr_diff)).unwrap();
     return;
 }
 
@@ -462,7 +473,11 @@ fn build_realloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        compiler_defined_c_function_reason, RUNTIME_ABORT, RUNTIME_GET_ARGC, RUNTIME_MALLOC,
+    };
+    use crate::configuration::OutputFileType;
+    use crate::constants::C_ENTRY_POINT_NAME;
 
     /// The compiler writes the entry point into an executable alone, so a dynamic library is free to
     /// carry a `main` of its own, while the runtime's own names are the compiler's whatever is being

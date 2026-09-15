@@ -555,6 +555,11 @@ pub struct Configuration {
     pub backtrace: bool,
     /// Leave the run-time checks, such as the array bounds check, out of the program.
     pub no_runtime_check: bool,
+    /// Stop the program at an arithmetic operation on a signed integer type whose mathematical
+    /// result leaves the range of that type. The operations this covers are `+`, `-`, `*`, unary
+    /// `-`, `/` and `%`; an unsigned operation is taken modulo two to the width of its type, so
+    /// none of those is checked.
+    pub check_signed_overflow: bool,
     /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
     /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.
     pub skip_eval: bool,
@@ -660,6 +665,7 @@ impl Configuration {
             develop_mode: false,
             backtrace: false,
             no_runtime_check: false,
+            check_signed_overflow: false,
             skip_eval: false,
             deprecation_mode: DeprecationMode::default(),
         })
@@ -1043,6 +1049,7 @@ impl Configuration {
             sanitizer,
             backtrace,
             no_runtime_check,
+            check_signed_overflow,
             skip_eval,
             develop_mode,
             emit_symbols,
@@ -1129,6 +1136,9 @@ impl Configuration {
         runtime_object.push_text(&sanitizer.to_string());
         object_generation.push_text(&backtrace.to_string());
         object_generation.push_text(&no_runtime_check.to_string());
+        // The check is emitted into the arithmetic itself, and a build without it hands LLVM the
+        // assumption that the result fits, so the two produce different code for one source.
+        object_generation.push_text(&check_signed_overflow.to_string());
         object_generation.push_text(&skip_eval.to_string());
         // Development mode puts the compiler's own consistency checks into the code it generates —
         // the assertions of `Generator::build_assert_unique` and `build_assert_refcnt_state_local`,
@@ -1779,6 +1789,10 @@ mod tests {
             (
                 "no_runtime_check",
                 Box::new(|config: &mut Configuration| config.no_runtime_check = true),
+            ),
+            (
+                "check_signed_overflow",
+                Box::new(|config: &mut Configuration| config.check_signed_overflow = true),
             ),
             (
                 "skip_eval",
