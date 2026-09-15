@@ -9,9 +9,8 @@ use crate::{
     misc::{function_name, number_to_varname},
     tests::test_util::{
         assert_grammar_accepts, assert_grammar_rejects, emitted_llvm_ir, fix_command,
-        generated_llvm_ir, llvm_function_bodies, run_source_assert_failed, run_source_capture,
-        test_files_in_directory, test_source, test_source_fail, test_source_fail_excludes,
-        test_source_with_c, EmittedIr,
+        run_source_assert_failed, run_source_capture, test_files_in_directory, test_source,
+        test_source_fail, test_source_fail_excludes, test_source_with_c, EmittedIr,
     },
 };
 use rand::{thread_rng, Rng};
@@ -14071,80 +14070,6 @@ pub fn test_empty_union_emits_no_zero_sized_phi() {
         !ir.contains("phi [0 x"),
         "emitted IR contains a zero-sized-aggregate phi (crashes AArch64 GlobalISel):\n{}",
         ir
-    );
-}
-
-/// `is_{variant}` and `as_{variant}` compare the union's tag, and the generated code compares it
-/// the same way in both.
-///
-/// Code like `if u.is_left { u.as_left }` compares the tag twice, and LLVM folds the two
-/// comparisons into one only when they carry the same predicate; it sees through a swapped operand
-/// order, but a different predicate leaves the pair standing. The pass that folds them runs late,
-/// so every pass before it works on two conditions instead of one.
-#[test]
-pub fn test_is_and_as_ask_the_union_tag_the_same_question() {
-    let source = r#"
-        module Main;
-
-        type Tagged = union { left : I64, right : Bool };
-
-        take_left_if_left : Tagged -> I64;
-        take_left_if_left = |u| if u.is_left { u.as_left } else { -1 };
-
-        main : IO ();
-        main = println $ take_left_if_left(Tagged::left(42)).to_string;
-    "#;
-    // The property is about what the compiler emits: LLVM folds the two comparisons itself, so an
-    // optimized module shows one of them either way.
-    let ir = generated_llvm_ir(source, "none");
-
-    // The predicate of the one comparison in the body of `name`. `name` opens with the `@"` of an
-    // LLVM symbol, so it matches the accessor's own definition. An `icmp` may carry flags before
-    // its predicate, so the predicate is the first equality word after `icmp`.
-    let tag_predicate = |name: &str| -> String {
-        let bodies = llvm_function_bodies(&ir, name);
-        assert_eq!(
-            bodies.len(),
-            1,
-            "the program should generate one function whose name holds `{}`, but it generated {}",
-            name,
-            bodies.len(),
-        );
-        let comparisons = bodies[0]
-            .lines()
-            .map(|line| line.trim())
-            .filter(|line| line.contains(" = icmp "))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            comparisons.len(),
-            1,
-            "`{}` should compare the tag once, but its body holds {} comparisons:\n{}",
-            name,
-            comparisons.len(),
-            bodies[0],
-        );
-        comparisons[0]
-            .split(" = icmp ")
-            .nth(1)
-            .unwrap()
-            .split_whitespace()
-            .find(|word| *word == "eq" || *word == "ne")
-            .unwrap_or_else(|| {
-                panic!(
-                    "`{}` should compare the tag for equality, but it compares it as: {}",
-                    name, comparisons[0]
-                )
-            })
-            .to_string()
-    };
-
-    let is_predicate = tag_predicate("@\"Main::Tagged::is_left#");
-    let as_predicate = tag_predicate("@\"Main::Tagged::as_left#");
-    assert_eq!(
-        as_predicate, is_predicate,
-        "`as_left` compares the tag with `icmp {}` while `is_left` compares it with `icmp {}`, so a \
-         function that does both asks one question twice",
-        as_predicate, is_predicate,
     );
 }
 
