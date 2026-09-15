@@ -1,4 +1,5 @@
-use crate::tests::test_util::generated_llvm_ir;
+use crate::tests::test_util::{generated_llvm_ir, llvm_function_bodies};
+use std::sync::OnceLock;
 
 /// A program that reaches an array's elements every way the compiler computes a pointer into one:
 /// reading a slot, writing a slot in place, writing one of a shared array (which clones the
@@ -28,6 +29,13 @@ const ARRAY_ACCESS_SOURCE: &str = r#"
     );
 "#;
 
+/// The IR the compiler writes for `ARRAY_ACCESS_SOURCE`, built once however many tests read it.
+/// Building it is what a test here spends its time on, so the tests share one build.
+fn array_access_ir() -> &'static str {
+    static IR: OnceLock<String> = OnceLock::new();
+    IR.get_or_init(|| generated_llvm_ir(ARRAY_ACCESS_SOURCE, "none"))
+}
+
 /// Every pointer the compiler computes into an object is computed within that object's allocation,
 /// and the generated code says so.
 ///
@@ -39,7 +47,7 @@ const ARRAY_ACCESS_SOURCE: &str = r#"
 pub fn test_every_pointer_into_an_object_is_computed_inside_it() {
     // The property is about what the compiler emits, so it is read before LLVM has run: an
     // optimized module also holds the pointer arithmetic LLVM itself introduced.
-    let ir = generated_llvm_ir(ARRAY_ACCESS_SOURCE, "none");
+    let ir = array_access_ir();
     // A `getelementptr` instruction is one the program computes an address with. The same syntax
     // also appears as a constant expression that walks off a null pointer to name the size of a
     // type; that expression yields a number, and it lies outside every allocation.
@@ -66,5 +74,130 @@ pub fn test_every_pointer_into_an_object_is_computed_inside_it() {
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n"),
+    );
+}
+
+/// The compiler tells LLVM that the block an allocator answers with is the caller's alone.
+///
+/// `malloc` hands back a block nothing else holds, and so does `realloc`: the block it was given is
+/// over, whether the block moved or grew where it stood. Without `noalias` on the result, LLVM has
+/// to assume a fresh buffer may be one a live pointer already names, and it keeps across every
+/// allocation the loads it would otherwise forward — which is what an array's growth sits in the
+/// middle of.
+#[test]
+pub fn test_the_allocators_say_their_result_is_the_callers_alone() {
+    // The property is about what the compiler emits, so it is read before LLVM has run.
+    let ir = array_access_ir();
+    for allocator in ["@malloc(", "@realloc("] {
+        let calls = ir
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| line.contains("call ") && line.contains(allocator))
+            .count();
+        assert!(
+            calls > 0,
+            "building and growing an array should reach `{}`, so that the declaration asserted on \
+             below is one the program calls",
+            allocator,
+        );
+        let declarations = ir
+            .lines()
+            .filter(|line| line.starts_with("declare ") && line.contains(allocator))
+            .collect::<Vec<_>>();
+        assert!(
+            !declarations.is_empty(),
+            "the program calls `{}`, so a module has to declare it",
+            allocator,
+        );
+        // A return attribute stands before the name, where a parameter attribute stands after it.
+        let without_noalias = declarations
+            .iter()
+            .filter(|line| !line.split(allocator).next().unwrap().contains("noalias"))
+            .collect::<Vec<_>>();
+        assert!(
+            without_noalias.is_empty(),
+            "every declaration of `{}` should give its result `noalias`, but {} of {} do not:\n{}",
+            allocator,
+            without_noalias.len(),
+            declarations.len(),
+            without_noalias
+                .iter()
+                .map(|line| line.to_string())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+    }
+}
+
+/// The name of the first local value `text` names, as LLVM writes one: `%name`, or `%"name"` where
+/// the name holds a character an identifier cannot.
+///
+/// # Examples
+/// `first_local_value("(ptr %x, i64 3)")` is `Some("%x")`, and
+/// `first_local_value("(ptr %\"a@b\", i64 3)")` is `Some("%\"a@b\"")`.
+fn first_local_value(text: &str) -> Option<&str> {
+    let start = text.find('%')?;
+    let rest = &text[start + 1..];
+    let length = match rest.strip_prefix('"') {
+        Some(quoted) => quoted.find('"')? + 2,
+        None => rest
+            .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.'))
+            .unwrap_or(rest.len()),
+    };
+    Some(&text[start..start + 1 + length])
+}
+
+/// Whether `text` names the local value `name`, rather than one whose name begins with it.
+fn names_local_value(text: &str, name: &str) -> bool {
+    text.match_indices(name).any(|(at, _)| {
+        text[at + name.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == '.'))
+    })
+}
+
+/// Nothing reads the block a reallocation was given once the call has answered.
+///
+/// The `noalias` on `realloc`'s result says the block that comes back is the caller's alone, and
+/// that holds only while the pointer handed in is dead from the call onward: a load through it,
+/// which LLVM is then free to move across the call, would read a block the allocator has already
+/// reused.
+#[test]
+pub fn test_nothing_reads_the_block_a_reallocation_was_given() {
+    let ir = array_access_ir();
+    let mut calls = 0;
+    for body in llvm_function_bodies(ir, "") {
+        let lines = body.lines().map(|line| line.trim()).collect::<Vec<_>>();
+        for (i, line) in lines.iter().enumerate() {
+            let Some(arguments) = line
+                .contains("call ")
+                .then(|| line.split("@realloc(").nth(1))
+                .flatten()
+            else {
+                continue;
+            };
+            calls += 1;
+            // The first value the call names is the block it is given, whatever attributes stand
+            // beside it.
+            let old_block = first_local_value(arguments).unwrap_or_else(|| {
+                panic!("`realloc` takes a pointer as its first argument: {}", line)
+            });
+            let later_uses = lines[i + 1..]
+                .iter()
+                .filter(|later| names_local_value(later, old_block))
+                .map(|later| later.to_string())
+                .collect::<Vec<_>>();
+            assert!(
+                later_uses.is_empty(),
+                "`{}` is the block handed to a reallocation, and it is named after the call:\n{}",
+                old_block,
+                later_uses.join("\n"),
+            );
+        }
+    }
+    assert!(
+        calls > 0,
+        "growing an array should reach `realloc`, so that this test has a call to read",
     );
 }
