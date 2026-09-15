@@ -795,8 +795,8 @@ pub fn test_opaque_impl_method_type_sig_writes_a_concrete_type_under_an_associat
 }
 
 /// The declaration hides two types behind two opaque types, and the implementation writes one
-/// opaque type for both. Each opaque type of a declaration stands for one type an
-/// implementation returns, so one for two is a statement the declaration does not make.
+/// opaque type for both. Each opaque type of a declaration stands for one type an implementation
+/// returns, so one for two describes other values than the declaration does.
 #[test]
 pub fn test_opaque_impl_method_type_sig_writes_one_opaque_type_for_two() {
     let source = r##"
@@ -820,7 +820,7 @@ pub fn test_opaque_impl_method_type_sig_writes_one_opaque_type_for_two() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "Type signature in implementation writes one opaque type `?x` for two opaque types of the trait definition, `?a` and `?b`.",
+        "Type signature in implementation does not match trait definition.\nExpected: `[?a : Std::ToString, ?b : Std::ToString] Std::I64 -> (?a, ?b)`\nFound: `[?x : Std::ToString] Std::I64 -> (?x, ?x)`",
     );
 }
 

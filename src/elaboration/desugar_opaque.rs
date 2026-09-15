@@ -428,9 +428,8 @@ fn validate_impl_signature(
     };
 
     // Each opaque type of the declaration is written as an opaque type variable of the signature's
-    // own, and no two of them as one: the desugaring gives each opaque type of the declaration a
-    // TyCon of its own, which stands for one type this implementation returns.
-    let mut defn_tyvar_by_written_name: Map<Name, Arc<TyVar>> = Map::default();
+    // own: the desugaring gives each opaque type of the declaration a TyCon of its own, which
+    // stands for one type this implementation returns.
     for info in opaque_infos {
         // An opaque type the declaration writes in its constraints alone stands nowhere in the
         // signature, so the signature names no counterpart for it and the desugaring leaves it as
@@ -439,22 +438,9 @@ fn validate_impl_signature(
         let Some(written) = defn_to_impl.data.get(&info.tyvar.name) else {
             continue;
         };
-        let written_var = match &written.ty {
-            Type::TyVar(tv) if is_opaque_tyvar(&tv.name) => tv.clone(),
-            _ => {
-                return Err(non_opaque_type_for_opaque_type_error(
-                    &info.tyvar,
-                    written,
-                    &impl_src,
-                    decl_src,
-                ))
-            }
-        };
-        if let Some(first) =
-            defn_tyvar_by_written_name.insert(written_var.name.clone(), info.tyvar.clone())
-        {
-            return Err(one_opaque_type_for_two_error(
-                &first,
+        let written_is_opaque = matches!(&written.ty, Type::TyVar(tv) if is_opaque_tyvar(&tv.name));
+        if !written_is_opaque {
+            return Err(non_opaque_type_for_opaque_type_error(
                 &info.tyvar,
                 written,
                 &impl_src,
@@ -515,27 +501,6 @@ fn non_opaque_type_for_opaque_type_error(
              HINT: write an opaque type variable here too, which the compiler resolves to the type this implementation's body returns.",
             written.to_string(),
             opaque_var.name,
-        ),
-        &[&source_of_type_or(written, impl_src), decl_src],
-    )
-}
-
-/// The error reported where a signature writes one opaque type variable for two opaque types of the
-/// declaration.
-fn one_opaque_type_for_two_error(
-    first: &Arc<TyVar>,
-    second: &Arc<TyVar>,
-    written: &Arc<TypeNode>,
-    impl_src: &Option<Span>,
-    decl_src: &Option<Span>,
-) -> Errors {
-    Errors::from_msg_srcs(
-        format!(
-            "Type signature in implementation writes one opaque type `{}` for two opaque types of the trait definition, `{}` and `{}`.\n\
-             HINT: write an opaque type variable of its own for each opaque type of the definition.",
-            written.to_string(),
-            first.name,
-            second.name,
         ),
         &[&source_of_type_or(written, impl_src), decl_src],
     )
@@ -840,8 +805,9 @@ fn rewrite_impl_scheme(
             ty = type_tyapp(ty, impl_gv_ty);
         }
 
-        // `validate_opaque_member_impl_signatures` reports an implementation that writes one
-        // opaque type variable for two of the declaration, which is what this merge would refuse.
+        // A signature writing one opaque type variable for two of the declaration is what this
+        // merge would refuse, and it describes other values than the declaration, so
+        // `validate_opaque_member_impl_signatures` reports it before the desugaring runs.
         assert!(sub.merge(&Substitution::single(impl_opaque_name, ty)));
     }
 
