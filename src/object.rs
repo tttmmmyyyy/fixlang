@@ -878,15 +878,12 @@ impl ObjectFieldType {
                 .context
                 .append_basic_block(current_func, &format!("mismatch_tag{}", i));
             let expected_tag = union_tag_value(gc.context, i);
-            let is_match = gc
-                .builder()
-                .build_int_compare(
-                    IntPredicate::EQ,
-                    actual_tag,
-                    expected_tag,
-                    &format!("is_tag_{}", i),
-                )
-                .unwrap();
+            let is_match = ObjectFieldType::build_union_tag_matches(
+                gc,
+                expected_tag,
+                actual_tag,
+                &format!("is_tag_{}", i),
+            );
             gc.builder()
                 .build_conditional_branch(is_match, match_bb, mismatch_bb)
                 .unwrap();
@@ -940,6 +937,24 @@ impl ObjectFieldType {
     pub fn get_union_tag<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> IntValue<'c> {
         let union_tag_idx = ObjectFieldType::get_union_tag_idx(gc, union);
         union.extract_field(gc, union_tag_idx).into_int_value()
+    }
+
+    /// Whether a union's tag is the one a variant carries.
+    ///
+    /// Every place that asks this emits the comparison here, so the predicate and the order of its
+    /// operands are settled once. A function that asks it more than once — testing a variant and
+    /// then reading its payload — then hands the optimizer one condition instead of several
+    /// spellings of one, which matters because the pass that folds the spellings together runs
+    /// late.
+    pub fn build_union_tag_matches<'c, 'm>(
+        gc: &Generator<'c, 'm>,
+        expected_tag: IntValue<'c>,
+        actual_tag: IntValue<'c>,
+        name: &str,
+    ) -> IntValue<'c> {
+        gc.builder()
+            .build_int_compare(IntPredicate::EQ, expected_tag, actual_tag, name)
+            .unwrap()
     }
 
     /// The union with its tag set to `tag`, the index of the variant it is to hold. The payload
@@ -1043,13 +1058,9 @@ impl ObjectFieldType {
         // Get tag value.
         let actual_tag = ObjectFieldType::get_union_tag(gc, &union);
 
-        // Panic unless the tag is the expected one. The comparison uses the same predicate and
-        // operand order as `InlineLLVMUnionIsBody` and `InlineLLVMUnionModBody`, so that a function
-        // that both tests the tag and reads the payload compares it once.
-        let is_tag_match = gc
-            .builder()
-            .build_int_compare(IntPredicate::EQ, expected_tag, actual_tag, "is_tag_match")
-            .unwrap();
+        // Panic unless the tag is the expected one.
+        let is_tag_match =
+            ObjectFieldType::build_union_tag_matches(gc, expected_tag, actual_tag, "is_tag_match");
         let current_func = gc.current_function();
         let mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
         let match_bb = gc.context.append_basic_block(current_func, "match_bb");
