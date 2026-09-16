@@ -2359,7 +2359,7 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 呼び出し先の対応するパラメータの型**、`Match` の scrutinee が union であること、`Destructure` の容器が
 構造体であること、**`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が実際に持つ
 (punched でない) ものであること**、同じ名前の `RcVar` が持つ型が一致すること、**束縛を持たない `RcVar` の
-型が、その名前の記号の型であること**、そして次の **`Llvm` 節点の型についての 5 つ**。
+型が、その名前の記号の型であること**、そして次の **`Llvm` 節点の型についての 4 つ**。
 
 - `Let(x, Llvm(gen, args), k)` の `args` の名前の列は `gen.free_vars()` に等しい。果たす者: 演算を作る側。
   検査: `validate` の `check_rhs` が develop mode で行う。
@@ -2380,13 +2380,6 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
   `InlineLLVMStructGetBody::borrows_operand` はそれに加えて容器の型の `is_box` を読むので、この節が
   無いと、その真偽が結果について何を言うのかが決まらない**
   (`CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody`, `InlineLLVMUnionAsBody`)。
-- `Let(x, Llvm(gen, args), k)` の各 `args[i]` の名前について、コード生成が scope に積んでいる値の型は
-  `ty(args[i])` である。果たす者: 誰も。検査: `Generator::eval_rc_expr_inner` の `Llvm` の腕が
-  develop mode で局所名について行う。
-  **`borrows_operand`・`internal_rc_targets`・`result_prov` は `ty(args[i])` から答え、`generate` は
-  scope が積んでいる型から同じ判断をするので、この節が無いと、宣言した参照計数と出したコードが
-  別の演算を述べうる** (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`,
-  `CODE src/generator.rs: Generator::get_scoped_type`)。
 
 **この仮定が型の `variant` を述べる各節では、その型の `is_closure()` は偽である。** <!--#ad36c77-->
 **この文はその各節の一部であって、別の主張ではない。** 節を再掲する段はこの文も一緒に再掲すること -- <!--#321d7f0-->
@@ -2399,6 +2392,16 @@ union であること、`Destructure` の容器が構造体であること、`In
 **union の側にもこの節が要る** -- `p12-identity-and-consumes.md` の `L4` は、unbox の scrutinee の <!--#a025aed-->
 `Payload(s, Some(t))` について `[t] ++ λ` が `ty(s)` の boxed leaf であることを出すのに、`ty(s)` が
 クロージャでないことを読む。
+
+**コード生成が scope に積む型も、その名前の `RcVar` の型である。** `Let(x, Llvm(gen, args), k)` の <!--#7c1a4e2-->
+各 `args[i]` の名前について、コード生成がその名前について scope に積んでいる値の型は `ty(args[i])` で
+ある。**この節が主語にするのはコード生成であって、IR の 2 か所の型の一致ではない**ので、上の 4 つとは
+別に置く。果たす者: 誰も。検査: `Generator::eval_rc_expr_inner` の `Llvm` の腕が develop mode で
+局所名について行う。
+**`borrows_operand`・`internal_rc_targets`・`result_prov` は `ty(args[i])` から答え、`generate` は
+scope が積んでいる型から同じ判断をするので、この節が無いと、宣言した参照計数と出したコードが
+別の演算を述べうる** (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`,
+`CODE src/generator.rs: Generator::get_scoped_type`)。
 
 **`App` については引数とパラメータのほかに、結果の型も一致する。** `Let(x, App(callee, args), k)` の `ty(x)` <!--#f6bb601-->
 は呼び出し先の返り値の型である。呼び出しの結果の leaf が呼び出し先の終端の `Ret` が渡す参照を受け取ると

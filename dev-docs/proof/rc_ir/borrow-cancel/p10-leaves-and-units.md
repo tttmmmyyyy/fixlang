@@ -3699,7 +3699,8 @@ D6 と合わせて読んだもの、`<1>3a` (H4) は A12 (束縛の形と型が�
   実行時の呼び出し先の `fn_ty` であること、束縛を持たない `RcVar` の型がその名前の記号の型で
   あること、`Llvm` 節点の型についての 4 つのうち残る 1 つ (`InlineLLVMStructGetBody` と
   `InlineLLVMUnionAsBody` の `ty(x)` が `ty(args[0])` の第 `field_idx` フィールド・変位の型で
-  あること)、そして `RcFunc` の欄どうしの整合 -- は、この文書のどのステップも読まない。
+  あること)、コード生成が `args[i]` について scope に積む型が `ty(args[i])` であること、そして
+  `RcFunc` の欄どうしの整合 -- は、この文書のどのステップも読まない。
 
   **A12 の「`Match` の scrutinee が union であること」と「`Destructure` の容器が構造体であること」
   を、(iv) と (v) はその型の `TyConInfo` の `variant` として書き、A12 の「この仮定が型の `variant` を
