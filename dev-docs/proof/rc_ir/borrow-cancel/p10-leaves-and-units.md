@@ -328,7 +328,7 @@ SCAN src/ `tycons`
   = src/commands/lsp/workspace_symbol.rs: handle_workspace_symbol -- アクセサ `tycons()` を通じた読み
   = src/elaboration/desugar_opaque.rs: Program::register_opaque_tycon -- 局所の `Map` を組み、`add_tycons` へ渡す
   = src/elaboration/desugar_opaque.rs: rewrite_impl_scheme -- 散文の中の同じ綴り
-  = src/elaboration/typecheck.rs: TypeCheckContext::is_opaque_short_of_its_arguments -- アクセサ `tycons()` を通じた読み
+  = src/elaboration/typecheck.rs: TypeCheckContext::is_opaque_tycon_short_of_its_arguments -- アクセサ `tycons()` を通じた読み
   = src/elaboration/typecheck.rs: TypeCheckContext::resolve_match_cond_tycon -- アクセサ `tycons()` を通じた読み
   = src/elaboration/typecheck.rs: TypeCheckContext::resolve_struct_tycon -- アクセサ `tycons()` を通じた読み
   = src/fixstd/builtin.rs: InlineLLVMFFICallBody -- 別の型が持つ `param_tycons` の欄の宣言

@@ -278,7 +278,7 @@ impl Substitution {
                     self.substitute_predicate(predicate);
                 }
             }
-            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::Indivisible(ty1, ty2) => {
+            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::IndivisibleOpaque(ty1, ty2) => {
                 *ty1 = self.substitute_type(ty1);
                 *ty2 = self.substitute_type(ty2);
             }
@@ -2156,7 +2156,7 @@ impl TypeCheckContext {
     /// an associated type on either side becomes a pending equality, to be settled once enough is
     /// known about its arguments. Two types no substitution can make equal give
     /// `UnificationErr::Disjoint`, and two that could be made equal only by reading an opaque type
-    /// as a type constructor and an argument give `UnificationErr::Indivisible`.
+    /// as a type constructor and an argument give `UnificationErr::IndivisibleOpaque`.
     // PROOF: P2a, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unify(
         &mut self,
@@ -2173,16 +2173,18 @@ impl TypeCheckContext {
             return Ok(());
         }
 
-        // A type variable required to stand for an opaque type short of its arguments is answered
-        // by the rule that such a type is not one, ahead of the cases below, so that a variable
+        // A type variable required to stand for an opaque TyCon short of its arguments is answered
+        // by the rule that such a form is no type, ahead of the cases below, so that a variable
         // inference is free to bind and one a signature fixed are answered alike.
         for (tyvar_side, other_side) in [(&ty1, &ty2), (&ty2, &ty1)] {
             if matches!(tyvar_side.ty, Type::TyVar(_))
-                && self.is_opaque_short_of_its_arguments(other_side)
+                && self.is_opaque_tycon_short_of_its_arguments(other_side)
             {
-                return Err(
-                    UnificationErr::Indivisible(tyvar_side.clone(), other_side.clone()).into(),
-                );
+                return Err(UnificationErr::IndivisibleOpaque(
+                    tyvar_side.clone(),
+                    other_side.clone(),
+                )
+                .into());
             }
         }
 
@@ -2298,7 +2300,7 @@ impl TypeCheckContext {
     /// promises a type, and never a type constructor with an argument to read it as. The arguments
     /// its TyCon takes stand for the generic type variables of that signature, so a TyCon carrying
     /// fewer of them than it stands for is a type no signature describes, and unification answers
-    /// `UnificationErr::Indivisible` where one is required.
+    /// `UnificationErr::IndivisibleOpaque` where one is required.
     ///
     /// `desugar_opaque::resolve_opaque_type_in_type` asserts that no such type reaches it, so a
     /// path that let one through would abort the compiler rather than report anything.
@@ -2309,7 +2311,7 @@ impl TypeCheckContext {
     /// # Examples
     /// `Std::Array::to_iter::?it` stands for one argument, so `?it Std::I64` is a type and the bare
     /// `?it` is not.
-    fn is_opaque_short_of_its_arguments(&self, ty: &Arc<TypeNode>) -> bool {
+    fn is_opaque_tycon_short_of_its_arguments(&self, ty: &Arc<TypeNode>) -> bool {
         let Some(tycon) = ty.toplevel_tycon() else {
             return false;
         };
@@ -3226,7 +3228,7 @@ pub enum UnificationErr {
     Disjoint(Arc<TypeNode>, Arc<TypeNode>),
     /// Two types that are required to be equal, which unification could make equal only by reading
     /// an opaque type as a type constructor applied to an argument.
-    Indivisible(Arc<TypeNode>, Arc<TypeNode>),
+    IndivisibleOpaque(Arc<TypeNode>, Arc<TypeNode>),
 }
 
 impl UnificationErr {
@@ -3238,7 +3240,7 @@ impl UnificationErr {
             UnificationErr::Circular(way) | UnificationErr::Endless(way) => {
                 Self::reported_predicate(way).to_string()
             }
-            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::Indivisible(ty1, ty2) => {
+            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::IndivisibleOpaque(ty1, ty2) => {
                 format!("{} = {}", ty1.to_string(), ty2.to_string())
             }
         }
@@ -3258,7 +3260,7 @@ impl UnificationErr {
     fn note(&self) -> Option<String> {
         match self {
             UnificationErr::Unsatisfiable(_) | UnificationErr::Disjoint(_, _) => None,
-            UnificationErr::Indivisible(_, _) => Some(
+            UnificationErr::IndivisibleOpaque(_, _) => Some(
                 "An opaque type cannot be read as a type constructor applied to an argument."
                     .to_string(),
             ),
@@ -3292,7 +3294,7 @@ impl UnificationErr {
                     pred.free_vars_to_vec(buf);
                 }
             }
-            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::Indivisible(ty1, ty2) => {
+            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::IndivisibleOpaque(ty1, ty2) => {
                 ty1.free_vars_to_vec(buf);
                 ty2.free_vars_to_vec(buf);
             }

@@ -2358,7 +2358,8 @@ pub fn test_opaque_type_is_not_read_as_a_type_constructor_even_when_always_appli
 /// the return type of `mk_holder` is a type constructor its caller chooses, and the body gives an
 /// opaque type, so the body is reported with the same reason.
 #[test]
-pub fn test_opaque_type_is_not_read_as_a_type_constructor_fixed_by_a_signature() {
+pub fn test_opaque_type_is_not_read_as_a_type_constructor_when_the_constructor_is_fixed_by_a_signature(
+) {
     let source = r#"
         module Main;
 

@@ -2642,7 +2642,7 @@ P26 が破れる形は、次の 3 つが揃うことである。第 6 節から�
         `TypeCheckContext::unify` の各腕は、2 つの型を突き合わせて等しい tycon を受け入れるか、
         `TyApp` の関数と引数へ降りるか、`unify_tyvar` で型変数に相手の型そのものを束縛するか、
         associated type の使用を等式に積むか、`UnificationErr::Disjoint` か
-        `UnificationErr::Indivisible` を返すかであって、tycon を作る式を 1 つも持たない。`uncurry` より前に
+        `UnificationErr::IndivisibleOpaque` を返すかであって、tycon を作る式を 1 つも持たない。`uncurry` より前に
         funptr 型が制約系へ入る経路は無い。`type_funptr` を呼ぶ生産コードは `uncurry` の中だけであり
         (`<2>2`)、Fix のソースに書かれた型はこの tycon を持たない (`<2>1`)。よって単一化が式に funptr 型を
         与えることもなく、`uncurry` より前の式に funptr 型は現れない。
