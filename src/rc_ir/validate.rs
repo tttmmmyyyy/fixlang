@@ -87,7 +87,7 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
 
 /// The capture-object layout each function's capture projections read: the field types every
 /// projection of that function records, which is the layout a closure value targeting it must store.
-/// A function that projects no capture has no entry — it reads nothing, so any layout suits it.
+/// A function that projects no capture has no entry, and a closure targeting one stores nothing.
 ///
 /// Checking the projections of a function against each other, and against its capture parameter,
 /// happens here, where they are gathered.
@@ -375,17 +375,34 @@ impl<'a> Validator<'a> {
                 // slot index against its own copy of the layout. The two are redundant stores of one
                 // layout, so a rewrite that reordered, retyped, added, or dropped the captures at one
                 // end alone would leave every projection reading the wrong slot.
-                if let Some(layout) = self.capture_layouts.get(fref) {
-                    let stored: Vec<Arc<TypeNode>> = caps.iter().map(|c| c.ty.clone()).collect();
-                    if *layout != stored {
-                        panic!(
-                            "[RC IR validate] {}: closure stores captures {:?} where `{}` projects {:?}, in `{}`",
-                            self.stage,
-                            stored,
-                            fref.name.to_string(),
-                            layout,
-                            self.location,
-                        );
+                match self.capture_layouts.get(fref) {
+                    Some(layout) => {
+                        let stored: Vec<Arc<TypeNode>> =
+                            caps.iter().map(|c| c.ty.clone()).collect();
+                        if *layout != stored {
+                            panic!(
+                                "[RC IR validate] {}: closure stores captures {:?} where `{}` projects {:?}, in `{}`",
+                                self.stage,
+                                stored,
+                                fref.name.to_string(),
+                                layout,
+                                self.location,
+                            );
+                        }
+                    }
+                    // A target that projects nothing reads no slot, so a closure targeting it fills
+                    // none: the capture object it would read is the null pointer. A closure storing
+                    // captures for such a target hands them to a body that never takes them out.
+                    None => {
+                        if !caps.is_empty() {
+                            panic!(
+                                "[RC IR validate] {}: closure stores captures {:?} where `{}` projects none, in `{}`",
+                                self.stage,
+                                caps.iter().map(|c| c.ty.clone()).collect::<Vec<_>>(),
+                                fref.name.to_string(),
+                                self.location,
+                            );
+                        }
                     }
                 }
                 for c in caps {
