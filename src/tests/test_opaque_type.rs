@@ -2295,3 +2295,191 @@ pub fn test_opaque_concrete_type_is_another_opaque_type() {
     "#;
     test_source(&source, Configuration::develop_mode());
 }
+
+// ============================================================
+// An opaque type is an atom of its declared kind
+// ============================================================
+
+/// An opaque type surviving into a type argument is reported. The struct asks for a type
+/// constructor of kind `* -> *`, and `Iterator::map` promises a type, so the use of `map` is
+/// reported where it is written rather than stopping the compiler later.
+#[test]
+pub fn test_opaque_type_is_not_read_as_a_type_constructor() {
+    let source = r#"
+        module Main;
+
+        type [f : *->*] Holder f = box struct { v : f I64 };
+
+        main : IO ();
+        main = (
+            let h = Holder { v : [1, 2, 3].to_iter.map(|x| x + 1) };
+            pure()
+        );
+    "#;
+    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains(
+            "An opaque type cannot be read as a type constructor applied to an argument."
+        ),
+        "Expected the error saying an opaque type is not a type constructor, got: {}",
+        errmsg
+    );
+    assert!(
+        errmsg.contains("[1, 2, 3].to_iter.map(|x| x + 1)"),
+        "Error did not cite the expression whose type is opaque, got: {}",
+        errmsg
+    );
+}
+
+/// An opaque type is not read as a type constructor even where nothing would ever need the
+/// constructor on its own: `f` here is applied to `I64` wherever it occurs, so the type the
+/// compiler would resolve carries no half-applied constructor. What the signature of `to_iter`
+/// promises is a type, and that a type happens to be written as one constructor and one argument
+/// is not part of that promise, so the call is reported.
+#[test]
+pub fn test_opaque_type_is_not_read_as_a_type_constructor_even_when_always_applied() {
+    let source = r#"
+        module Main;
+
+        id_container : [f : *->*] f I64 -> f I64;
+        id_container = |x| x;
+
+        main : IO ();
+        main = println(id_container([1, 2, 3].to_iter).to_array.to_string);
+    "#;
+    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains(
+            "An opaque type cannot be read as a type constructor applied to an argument."
+        ),
+        "Expected the error saying an opaque type is an atom, got: {}",
+        errmsg
+    );
+}
+
+/// The rule reaches a type variable a signature fixed as well as one inference is free to bind:
+/// the return type of `mk_holder` is a type constructor its caller chooses, and the body gives an
+/// opaque type, so the body is reported with the same reason.
+#[test]
+pub fn test_opaque_type_is_not_read_as_a_type_constructor_fixed_by_a_signature() {
+    let source = r#"
+        module Main;
+
+        mk_holder : [f : *->*] () -> f I64;
+        mk_holder = |_| [1, 2, 3].to_iter.map(|x| x + 1);
+
+        main : IO ();
+        main = println("ok");
+    "#;
+    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains(
+            "An opaque type cannot be read as a type constructor applied to an argument."
+        ),
+        "Expected the error saying an opaque type is an atom, got: {}",
+        errmsg
+    );
+}
+
+/// The rule reaches an opaque type a trait member returns as well as one a global returns. The
+/// type constructor standing for `?it` takes the trait's type variable and the member's own, and
+/// the higher-kinded parameter given the call's result leaves it one argument short.
+#[test]
+pub fn test_opaque_type_of_a_trait_member_is_not_read_as_a_type_constructor() {
+    let source = r#"
+        module Main;
+
+        trait c : Rep {
+            rep : [?it : Iterator, Item ?it = a] c -> a -> ?it;
+        }
+
+        type Count = box struct { n : I64 };
+
+        impl Count : Rep {
+            rep = |c, x| Iterator::range(0, c.@n).map(|_| x);
+        }
+
+        type [f : *->*] Holder f = box struct { v : f I64 };
+
+        main : IO ();
+        main = (
+            let h = Holder { v : Count { n : 3 }.rep(7) };
+            pure()
+        );
+    "#;
+    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains(
+            "An opaque type cannot be read as a type constructor applied to an argument."
+        ),
+        "Expected the error saying an opaque type is an atom, got: {}",
+        errmsg
+    );
+}
+
+/// An opaque type declared of kind `* -> *` stands where a type constructor of that kind is
+/// wanted, and is applied there, while the type constructor standing for it carries the type
+/// variable of the signature that wrote it.
+#[test]
+pub fn test_opaque_type_constructor_of_one_argument_as_a_higher_kinded_argument() {
+    let source = r#"
+        module Main;
+
+        trait [f : *->*] f : Extract {
+            extract : f a -> a;
+        }
+
+        impl Option : Extract {
+            extract = |o| o.as_some;
+        }
+
+        mk : [?m : * -> *, ?m : Extract] a -> ?m a;
+        mk = |x| some(x);
+
+        type [f : *->*] Holder f = box struct { v : f I64 };
+
+        main : IO ();
+        main = (
+            let h = Holder { v : mk(3) };
+            assert_eq(|_|"held value", h.@v.extract, 3);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// An opaque type meeting a higher-kinded associated type is reported where the call is written.
+/// `Repr fmt` is fixed by the signature and reduces at no implementation here, so what the call
+/// demands is an equality on the opaque type, and the program is answered rather than carried into
+/// instantiation.
+#[test]
+pub fn test_opaque_type_under_a_higher_kinded_associated_type_is_reported() {
+    let source = r#"
+        module Main;
+
+        trait fmt : Format {
+            type Repr fmt : * -> *;
+            format_value : a -> fmt -> Repr fmt a;
+        }
+
+        impl () : Format {
+            type Repr () = Array;
+            format_value = |x, _| [x];
+        }
+
+        take : [fmt : Format] fmt -> Repr fmt I64 -> I64;
+        take = |_, _| 0;
+
+        use_it : [fmt : Format] fmt -> I64;
+        use_it = |f| take(f, [1, 2, 3].to_iter.map(|x| x + 1));
+
+        main : IO ();
+        main = println(use_it(()).to_string);
+    "#;
+    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("take(f, [1, 2, 3].to_iter.map(|x| x + 1))"),
+        "Error did not cite the call whose type is opaque, got: {}",
+        errmsg
+    );
+}
