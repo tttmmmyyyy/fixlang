@@ -313,6 +313,18 @@ mod integration_tests {
         })
     }
 
+    /// Assert that `block` performs no reference counting: no line of it is a `Retain` or a
+    /// `Release`. `subject` names the block in the message.
+    fn assert_counts_nothing(block: &[&str], subject: &str) {
+        assert!(
+            block.iter().all(|l| !l.trim_start().starts_with("retain ")
+                && !l.trim_start().starts_with("release ")),
+            "{} should count no reference:\n{}",
+            subject,
+            block.join("\n")
+        );
+    }
+
     /// How many of the `tally` calls in `main` route to the borrow version, and how many stay on the
     /// owning one.
     fn tally_call_routing(main: &[&str]) -> (usize, usize) {
@@ -320,8 +332,8 @@ mod integration_tests {
             .iter()
             .filter(|l| l.contains("= Main::tally"))
             .collect::<Vec<_>>();
-        let borrow = calls.iter().filter(|l| l.contains("#borrow(")).count();
-        (borrow, calls.len() - borrow)
+        let borrow_calls = calls.iter().filter(|l| l.contains("#borrow(")).count();
+        (borrow_calls, calls.len() - borrow_calls)
     }
 
     /// Verifies which functions get a borrow version and what it buys: a function that only reads
@@ -375,14 +387,7 @@ mod integration_tests {
         // The borrow clone drops the reference counting on its borrowed parameter: its body performs
         // no retain or release.
         let tally_borrow = func_block(&dump, "fn Main::tally", |n| n.contains("#borrow"));
-        assert!(
-            tally_borrow
-                .iter()
-                .all(|l| !l.trim_start().starts_with("release ")
-                    && !l.trim_start().starts_with("retain ")),
-            "the tally borrow version should perform no reference counting:\n{}",
-            tally_borrow.join("\n")
-        );
+        assert_counts_nothing(&tally_borrow, "the tally borrow version");
     }
 
     /// Verifies that routing to a borrow version is decided by benefit as well as safety: the call
@@ -560,13 +565,9 @@ mod integration_tests {
             "the via_union borrow version should build the union:\n{}",
             via_borrow.join("\n")
         );
-        assert!(
-            via_borrow
-                .iter()
-                .all(|l| !l.trim_start().starts_with("release ")
-                    && !l.trim_start().starts_with("retain ")),
-            "the via_union borrow version must not reference-count the borrowed value or its union:\n{}",
-            via_borrow.join("\n")
+        assert_counts_nothing(
+            &via_borrow,
+            "the via_union borrow version, over the borrowed value and its union,",
         );
     }
 

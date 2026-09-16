@@ -222,7 +222,13 @@ impl<'c> Object<'c> {
         }
         let embedded = self.ty.get_embedded_type(gc);
         let mut parts = self.parts.iter().copied();
-        gc.assemble_from_parts(embedded, &mut parts)
+        let value = gc.assemble_from_parts(embedded, &mut parts);
+        assert!(
+            parts.next().is_none(),
+            "a value of `{}` was assembled from fewer parts than the object holds",
+            self.ty.to_string()
+        );
+        value
     }
 
     /// An object of type `ty` whose value is `undef`, for an unreachable point that still has to
@@ -1070,8 +1076,8 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// The object `name` is bound to, handed over as it stands: the reference counts are left
     /// untouched, so the caller owns whatever reference the binding already carried.
     // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
-    pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
-        self.get_scoped_value(name).accessor.get(self)
+    pub fn get_scoped_obj_noretain(&mut self, var: &FullName) -> Object<'c> {
+        self.get_scoped_value(var).accessor.get(self)
     }
 
     /// The Fix type of the value `var` is bound to. Reading the type generates no code, so an
@@ -1081,14 +1087,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.get_scoped_value(var).accessor.ty()
     }
 
-    /// The object `var_name` is bound to, as a reference the caller owns.
+    /// The object `var` is bound to, as a reference the caller owns.
     ///
     /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
     /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
     /// copy. Every other read is plain.
     // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
-    pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
-        let val = self.get_scoped_value(var_name);
+    pub fn get_scoped_obj(&mut self, var: &FullName) -> Object<'c> {
+        let val = self.get_scoped_value(var);
         let obj = val.accessor.get(self);
         if val.retain_on_read {
             let one = self.context.i64_type().const_int(1, false);
@@ -2656,7 +2662,15 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) -> Object<'c> {
         let embedded = ret_ty.get_embedded_type(self);
         let parts: Vec<BasicValueEnum<'c>> = match call_result {
-            None => vec![],
+            None => {
+                assert_eq!(
+                    self.part_count(embedded),
+                    0,
+                    "a call answering with nothing returns `{}`, which is carried in parts",
+                    ret_ty.to_string()
+                );
+                vec![]
+            }
             Some(single_part) if self.part_count(embedded) == 1 => vec![single_part],
             Some(packed) => {
                 let packed = packed.into_struct_value();
