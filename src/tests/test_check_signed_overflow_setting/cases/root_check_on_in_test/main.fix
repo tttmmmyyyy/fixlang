@@ -1,0 +1,13 @@
+module Main;
+
+// The sum leaves the range of `I64`. Under the check the program stops there; without it the sum
+// is taken modulo two to the width of the type, so the program prints it and exits.
+//
+// The operand comes from the count of the program's arguments, which is one wherever the program
+// runs and which the compiler cannot fold the arithmetic away through.
+main : IO ();
+main = (
+    let args = *IO::get_args;
+    let one = args.@size;
+    println((I64::maximum * one + one).to_string)
+);

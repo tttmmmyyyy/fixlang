@@ -70,3 +70,31 @@ fn test_test_section_leaves_the_check_on_for_the_program() {
         "`fix run` should stop at the sum, because the test section covers the test build alone.",
     );
 }
+
+/// The `build.test` section decides the setting for a test build where the `build` section names
+/// none, so a project can run its tests under the check while its program runs on without it.
+#[test]
+fn test_test_section_turns_the_check_on_for_a_test() {
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_on_in_test");
+    assert_stopped_by_the_check(
+        &run_fix(&project_dir, &["test"]),
+        "`fix test` should stop at the sum, because the test section turns the check on.",
+    );
+}
+
+/// `--check-signed-overflow` turns the check on for a test build whose project file turns it off.
+///
+/// The two runs share a project directory, so the second one meets the object files the first one
+/// cached. The setting therefore has to be part of what identifies them.
+#[test]
+fn test_option_turns_the_check_on_for_a_test() {
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_on_in_build_off_in_test");
+    assert_succeeded(
+        &run_fix(&project_dir, &["test"]),
+        "`fix test` should succeed, because the test section turns the check off.",
+    );
+    assert_stopped_by_the_check(
+        &run_fix(&project_dir, &["test", "--check-signed-overflow"]),
+        "`--check-signed-overflow` should turn the check on, over the value the test section names.",
+    );
+}
