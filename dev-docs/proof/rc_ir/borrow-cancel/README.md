@@ -957,8 +957,8 @@ inhabited な全 boxed leaf の参照 -- が `Obl(b)` を離れ、`b` を作っ�
 **在りかは述語で決める** -- `Generator::retain`・`Generator::build_retain`・`Generator::release` の <!--#962daf9-->
 呼び出しを出す生成コードの全体であり、一覧で書くと op が 1 つ増えるたびに古くなる。
 **述語を受け手の綴りで書かないのは、`gc.retain(` と数えると `Generator` 自身のメソッドと <!--#a6060c9-->
-`src/rc_ir/codegen.rs` が書く `self.retain(` の形が落ちるからである** -- `p05-holders.md` の修理が
-両方を数えて 25 か所と 33 か所を出した。**述語は名前の綴りでなく、呼ばれる項目で書く。**
+`src/rc_ir/codegen.rs` が書く `self.retain(` の形が落ちるからである** -- 両方を数えると
+26 か所と 34 か所である。**述語は名前の綴りでなく、呼ばれる項目で書く。**
 形は 2 つに分かれる。
 
 - **段の中で相殺するもの。** `InlineLLVMWithRetainedFunctionBody` はオペランドを retain し、適用の
@@ -2375,9 +2375,11 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 - `InlineLLVMStructGetBody` の `ty(x)` は `ty(args[0])` の第 `field_idx` フィールドの型であり、
   `InlineLLVMUnionAsBody` の `ty(x)` は `ty(args[0])` の第 `field_idx` 変位の payload の型である。
   果たす者: `struct_get` と `union_as` が結果の型をそのフィールド・変位の型に取ること。
-  **この 2 つの `borrows_operand` はその型の `is_fully_unboxed` を読むので、この節が無いと、その真偽が
-  結果について何を言うのかが決まらない** (`CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody`,
-  `InlineLLVMUnionAsBody`)。
+  検査: struct の側については `InlineLLVMStructGetBody::generate` が develop mode で行う。
+  **`InlineLLVMUnionAsBody::borrows_operand` はその型の `is_fully_unboxed` を読み、
+  `InlineLLVMStructGetBody::borrows_operand` はそれに加えて容器の型の `is_box` を読むので、この節が
+  無いと、その真偽が結果について何を言うのかが決まらない**
+  (`CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody`, `InlineLLVMUnionAsBody`)。
 
 **この仮定が型の `variant` を述べる各節では、その型の `is_closure()` は偽である。** <!--#ad36c77-->
 **この文はその各節の一部であって、別の主張ではない。** 節を再掲する段はこの文も一緒に再掲すること -- <!--#321d7f0-->
@@ -2390,6 +2392,16 @@ union であること、`Destructure` の容器が構造体であること、`In
 **union の側にもこの節が要る** -- `p12-identity-and-consumes.md` の `L4` は、unbox の scrutinee の <!--#a025aed-->
 `Payload(s, Some(t))` について `[t] ++ λ` が `ty(s)` の boxed leaf であることを出すのに、`ty(s)` が
 クロージャでないことを読む。
+
+**コード生成が scope に積む型も、その名前の `RcVar` の型である。** `Let(x, Llvm(gen, args), k)` の <!--#7c1a4e2-->
+各 `args[i]` の名前について、コード生成がその名前について scope に積んでいる値の型は `ty(args[i])` で
+ある。**この節が主語にするのはコード生成であって、IR の 2 か所の型の一致ではない**ので、上の 4 つとは
+別に置く。果たす者: 誰も。検査: `Generator::eval_rc_expr_inner` の `Llvm` の腕が develop mode で
+局所名について行う。
+**`borrows_operand`・`internal_rc_targets`・`result_prov` は `ty(args[i])` から答え、`generate` は
+scope が積んでいる型から同じ判断をするので、この節が無いと、宣言した参照計数と出したコードが
+別の演算を述べうる** (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`,
+`CODE src/generator.rs: Generator::get_scoped_type`)。
 
 **`App` については引数とパラメータのほかに、結果の型も一致する。** `Let(x, App(callee, args), k)` の `ty(x)` <!--#f6bb601-->
 は呼び出し先の返り値の型である。呼び出しの結果の leaf が呼び出し先の終端の `Ret` が渡す参照を受け取ると

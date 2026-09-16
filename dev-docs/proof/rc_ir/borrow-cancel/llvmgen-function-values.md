@@ -98,8 +98,9 @@ let fixf = fixf.insert_field(gc, CLOSURE_CAPTURE_IDX, cap_obj.value(gc));
 
   **この経路は op の `generate` の中でも通る。** `Lowerer::lower_llvm` は、op の自由変数のうち束縛の解けない
   名前を、その記号の型を付けた `RcVar` としてオペランドに残す
-  (`CODE src/rc_ir/lower.rs: Lowerer::lower_llvm`)。op が `gc.get_scoped_obj` でそのオペランドを読むと、
-  この枝が関数の番地を返す。番地を作るのはその読み出しであって op ではないので、op の側は (B) のままである --
+  (`CODE src/rc_ir/lower.rs: Lowerer::lower_llvm`)。op が `gc.get_scoped_obj` か
+  `gc.get_scoped_obj_noretain` でそのオペランドを読むと、この枝が関数の番地を返す。番地を作るのは
+  その読み出しであって op ではないので、op の側は (B) のままである --
   オペランドをそのまま返す `InlineLLVMMarkThreadedFunctionBody` や、容器へ入れる
   `InlineLLVMMakeStructBody` などがその値を結果に出す。
 
@@ -128,8 +129,9 @@ let fixf = fixf.insert_field(gc, CLOSURE_CAPTURE_IDX, cap_obj.value(gc));
 ## この数え上げを検査する仕組みは無い
 
 この数え上げを支えているのは `impl LLVMGen for` 78 個の通読だけである。(C) が 1 件であることを実行時に
-確かめる表明も、ビルド時に確かめる走査も無い。**op が 1 つ足されるたびに数え直すのが、この数え上げを保つ
-唯一の道である。**
+確かめる表明も、ビルド時に確かめる走査も無い。**この数え上げを保つ唯一の道は、op が 1 つ足されるか、
+どれかの `generate` / `generate_tail` かそれが呼ぶヘルパが変わるたびに数え直すことである。**
+**数え直す引き金を op の個数に置くと、本体だけが変わったときに鳴らない。**
 
 `Generator::apply_lambda` が develop mode で検査するのは `LLVMGen::applies_a_function_operand` --
 op が関数を**適用**するか -- であり、この文書が数える「関数の値を**作る**」については何も言わない。

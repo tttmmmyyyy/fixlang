@@ -4602,35 +4602,88 @@ impl InlineLLVMStructGetBody {
         self.field_idx
     }
 
-    /// Whether reading a field of type `field_ty` only borrows the container. A fully unboxed field
-    /// holds no reference, so the value read out of it takes nothing from the container.
-    ///
-    /// A field that does hold one is read by taking ownership of the container instead: as a borrow
-    /// the result would alias the container's leaf, and reference-count insertion releases a
-    /// *variable* at its last use without following aliases, so that leaf would be released twice.
+    /// How a field getter takes its field out of its container.
     // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn borrows_container(field_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
-        field_ty.is_fully_unboxed(type_env)
+    fn field_read(
+        container_ty: &Arc<TypeNode>,
+        field_ty: &Arc<TypeNode>,
+        type_env: &TypeEnv,
+    ) -> FieldRead {
+        if field_ty.is_fully_unboxed(type_env) {
+            FieldRead::Moved
+        } else if container_ty.is_box(type_env) {
+            FieldRead::Retained
+        } else {
+            FieldRead::TakenWithContainer
+        }
     }
+
+    /// How this getter reads its field out of its container. A field getter takes exactly the
+    /// container, so `arg_tys[0]` is it.
+    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    fn field_read_of(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> FieldRead {
+        let container_ty = &arg_tys[0];
+        let field_ty = &container_ty.field_types(type_env)[self.field_idx];
+        Self::field_read(container_ty, field_ty, type_env)
+    }
+}
+
+/// How a field getter takes its field out of its container, which decides what it counts.
+///
+/// A boxed container hands out a field it goes on holding, so the read needs the container alive
+/// for as long as it takes to read it and nothing more. An unboxed container is the exception: its
+/// fields *are* its references, and a field left behind has no other owner, so the read takes the
+/// container over and drops what it did not ask for.
+// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+enum FieldRead {
+    /// The field holds no reference, so it is moved out and nothing is counted.
+    Moved,
+    /// The field is moved out of a boxed container and retained, so the reader holds a reference of
+    /// its own and the container keeps the one it holds.
+    Retained,
+    /// The field is taken together with the unboxed container, whose other fields are released.
+    TakenWithContainer,
 }
 
 // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructGetBody {
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The value of a field getter is the field, so `ty` is the field's type.
-        if Self::borrows_container(ty, gc.type_env()) {
-            let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
-            return ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
+        let container_ty = gc.get_scoped_type(&self.var_name);
+        if gc.config.develop_mode {
+            assert_eq!(
+                &container_ty.field_types(gc.type_env())[self.field_idx],
+                ty,
+                "the value of a getter of field {} of `{}` is that field",
+                self.field_idx,
+                container_ty.to_string()
+            );
         }
-        let struct_obj = gc.get_scoped_obj(&self.var_name);
-        ObjectFieldType::get_struct_fields(
-            gc,
-            &struct_obj,
-            &[self.field_idx as u32],
-            assumed_state(self.assume_local),
-        )[0]
-        .clone()
+        match Self::field_read(&container_ty, ty, gc.type_env()) {
+            FieldRead::Moved => {
+                let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
+                ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32)
+            }
+            FieldRead::Retained => {
+                let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
+                let field =
+                    ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
+                gc.retain(field.clone(), assumed_state(self.assume_local));
+                field
+            }
+            FieldRead::TakenWithContainer => {
+                let struct_obj = gc.get_scoped_obj(&self.var_name);
+                ObjectFieldType::get_struct_fields(
+                    gc,
+                    &struct_obj,
+                    &[self.field_idx as u32],
+                    assumed_state(self.assume_local),
+                )[0]
+                .clone()
+            }
+        }
     }
 
     fn name(&self) -> String {
@@ -4648,9 +4701,12 @@ impl LLVMGen for InlineLLVMStructGetBody {
 
     // PROOF: P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
-        // A field getter takes exactly the container, so `arg_tys[0]` is it.
+        // A field getter takes exactly the container, so operand 0 is it.
         i == 0
-            && Self::borrows_container(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
+            && !matches!(
+                self.field_read_of(arg_tys, type_env),
+                FieldRead::TakenWithContainer
+            )
     }
 
     // PROOF: P1, P2, P7a, P7d, P7e, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -4697,15 +4753,16 @@ impl LLVMGen for InlineLLVMStructGetBody {
     }
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
-        // A field getter takes exactly the container, so `arg_tys[0]` is it. A borrowed read moves
-        // the field out and counts nothing; otherwise `get_struct_fields` retains the field and
-        // releases the container it came out of -- or, for an unboxed container, releases the fields
-        // nobody asked for, which the whole operand covers.
-        let field_ty = &arg_tys[0].field_types(type_env)[self.field_idx];
-        if Self::borrows_container(field_ty, type_env) {
-            return vec![];
+        // A read that moves the field out counts nothing; one out of a boxed container retains the
+        // field alone; one that takes the unboxed container over releases the fields nobody asked
+        // for, which the whole operand covers.
+        match self.field_read_of(arg_tys, type_env) {
+            FieldRead::Moved => vec![],
+            FieldRead::Retained => vec![RcTarget::Result(vec![])],
+            FieldRead::TakenWithContainer => {
+                vec![RcTarget::Result(vec![]), RcTarget::Operand(0, vec![])]
+            }
         }
-        vec![RcTarget::Result(vec![]), RcTarget::Operand(0, vec![])]
     }
 
     fn as_any(&self) -> &dyn Any {

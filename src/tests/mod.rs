@@ -77,6 +77,7 @@ mod test_skip_eval;
 mod test_split_struct_args;
 mod test_string;
 mod test_struct_destructure;
+mod test_struct_get_borrow;
 mod test_struct_literal;
 mod test_struct_rmw;
 mod test_thread_safety;

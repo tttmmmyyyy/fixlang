@@ -399,6 +399,7 @@ SCAN src/ `get_scoped_value(`
   = src/generator.rs: Generator::get_scoped_value -- 定義
   = src/generator.rs: Generator::get_scoped_obj -- 呼び出し
   = src/generator.rs: Generator::get_scoped_obj_noretain -- 呼び出し
+  = src/generator.rs: Generator::get_scoped_type -- 呼び出し。値の型だけを読み、コードを出さない
 
 **前提 `unsafe impl` の在りか** --- `unsafe impl` の字面が在る項目は無い。よって `Send` と `Sync` を
 手で実装した型はこのクレートに無く、`EXT auto trait と共有` の 2 の但し書きに当たる型も無い。
@@ -1189,8 +1190,9 @@ L11 は L10 を、L13 は L10 と L12 を、L15 は L10 を、L16 は L15 を引
     `declare_program_global` と `declare_lambda_function` の 2 つである。よって表に在る
     `ScopedValue` は、その 2 つが登録した 2 つの形のいずれかである。
     表を引く `get_or_declare_global` を呼ぶのは `get_scoped_value` の局所でない枝であり、
-    `get_scoped_value` を呼ぶ式の在りかも第 1 節の前提が挙げる。どの呼び出し元も、返った
-    `ScopedValue` の `accessor` に `get` を掛けてその名前の値とする。
+    `get_scoped_value` を呼ぶ式の在りかも第 1 節の前提が挙げる。`get_scoped_obj` と
+    `get_scoped_obj_noretain` は、返った `ScopedValue` の `accessor` に `get` を掛けてその名前の値と
+    する。`get_scoped_type` は `ty` を掛けてその名前の型とし、値を読まない。
     **`declare_program_global` はこの 2 つのどちらも用意しない場合を持つ** -- `global_types` に無い
     名前には `None` を返し、そのとき `get_or_declare_global` は `panic!` で止まる。**その `panic!` は
     `develop_mode` の門を持たない**ので、`<1>0a` よりその本体の活性化は存在しない。よって走る本体では

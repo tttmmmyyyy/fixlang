@@ -117,18 +117,19 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
 <1>2. コード生成が `n` の値として返すのは、`declared_globals` に `n` で登録された `ValueAccessor` が
       答える値である。
   **コード生成が変数の名前から値を得る道は `get_scoped_value` の 1 か所である** -- `src/` でその関数を
-  呼ぶのは `get_scoped_obj` と `get_scoped_obj_noretain` の 2 つだけであり、どちらもその答えの
-  `accessor` に `get` を掛ける。`get_scoped_value` は `var.is_local()` のときだけスコープを引き、
+  呼ぶのは `get_scoped_obj`・`get_scoped_obj_noretain`・`get_scoped_type` の 3 つであり、前の 2 つは
+  その答えの `accessor` に `get` を掛けて値とし、`get_scoped_type` は `ty` を掛けて型だけを返す。
+  **値を得るのは前の 2 つである。**`get_scoped_value` は `var.is_local()` のときだけスコープを引き、
   そうでなければ `get_or_declare_global` を通る。(N3) より `n` は局所名ではないので後者である。
   `get_or_declare_global` は `declared_globals` に在ればそれを返し、無ければ
   `declare_program_global` を呼んで登録させ、それが `None` を返せば panic する。
-  **名前から値を読む場所は述語で決める** -- `get_scoped_obj(`・`get_scoped_obj_noretain(`・
-  `get_scoped_obj_field(` (3 つ目は `get_scoped_obj` を呼ぶ) の全出現であり、`src/` に定義を除いて
-  143 か所ある。**一覧で書くと op が 1 つ増えるたびに古くなる。**その 143 か所は 3 群に分かれ、
-  どれも上の道を通る。**`RcExpr` の節点について呼ぶもの、`src/rc_ir/codegen.rs` に 12 か所** --
+  **名前から `ScopedValue` を引く場所は述語で決める** -- `get_scoped_obj(`・`get_scoped_obj_noretain(`・
+  `get_scoped_obj_field(`・`get_scoped_type(` (3 つ目は `get_scoped_obj` を呼ぶ) の全出現であり、
+  `src/` に定義を除いて 145 か所ある。**一覧で書くと op が 1 つ増えるたびに古くなる。**その 145 か所は
+  3 群に分かれ、どれも上の道を通る。**`RcExpr` の節点について呼ぶもの、`src/rc_ir/codegen.rs` に 12 か所** --
   `eval_rc_expr_inner` の `Ret`/`Retain`/`Release`/`Eval`/`Destructure`/`App` の腕、`eval_rc_rhs` の
   `RcRhs::Var` の腕、`eval_rc_match` の scrutinee と payload の読み、`build_rc_closure` の capture の
-  読みである。**`Llvm` 節点のオペランドについて呼ぶもの、`src/fixstd/builtin.rs` に 127 か所と
+  読みである。**`Llvm` 節点のオペランドについて呼ぶもの、`src/fixstd/builtin.rs` に 129 か所と
   `src/generator.rs` に 2 か所** -- `Let(x, Llvm(gen, args), k)` の腕は `llvm_gen.generate_tail` を
   呼び、各 op の `generate` / `generate_tail` が自分のオペランドを名前から読む
   (`get_scoped_obj_field` と `build_capture_project` がその 2 か所である)。**環境がグローバルを読む
@@ -137,8 +138,8 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
      Generator::build_rc_closure, Generator::eval_rc_match,
      CODE src/ast/inline_llvm.rs: LLVMGen::generate, LLVMGen::generate_tail,
      CODE src/generator.rs: Generator::get_scoped_obj, Generator::get_scoped_obj_noretain,
-     Generator::get_scoped_obj_field, Generator::build_capture_project,
-     Generator::get_scoped_value, Generator::get_or_declare_global,
+     Generator::get_scoped_obj_field, Generator::get_scoped_type, Generator::build_capture_project,
+     Generator::get_scoped_value, Generator::get_or_declare_global, ValueAccessor::ty,
      CODE src/ast/export_statement.rs: ExportStatement::implement,
      CODE src/build/build_object_files.rs: build_main_function
 
@@ -269,7 +270,7 @@ P1、P9、P12、P24 の**言明**を引く。P27 の証明が引く README の�
       `get_or_declare_global` を呼ぶのは `get_scoped_value` の 1 か所であり、`implement_rc_program` を
       呼ぶのはこの `build_object_files` の 1 か所、`implement_rc_global` を呼ぶのは
       `implement_rc_program` の第 2 ループの 1 か所である。よって第 1 ループの前にこの道へ入るには
-      `get_scoped_value` を通る要があるが、`<1>2` よりそこへ入る 143 か所は、`RcExpr` の節点の生成と
+      `get_scoped_value` を通る要があるが、`<1>2` よりそこへ入る 145 か所は、`RcExpr` の節点の生成と
       `Llvm` 節点のオペランドの読み -- どちらも `implement_rc_program` の第 2 ループが呼ぶ
       `implement_rc_function` の中で走る -- と、`build_object_files` が `implement_rc_program` の**後**に
       置く `ExportStatement::implement` と `build_main_function` である。**先頭の 2 つはモジュールが
@@ -1352,16 +1353,17 @@ D11a は、時点 `τ` が**解放について閉じている**ことを
   全体であり、一覧で書くと op が 1 つ増えるたびに古くなる。」と述べ、その綴りについて「**述語は名前の
   綴りでなく、呼ばれる項目で書く。**」と述べる。**この段は段内の点で勘定するので、その述語で走査する。**
   `src/` で `Generator::retain`・`Generator::build_retain`・`Generator::retain_nonnull_boxed` を呼ぶ式は
-  21 か所ある (受け手の綴りが `gc` のものも `self` のものも数え、`Vec`・`Map` の `retain` を除く)。
+  22 か所ある (受け手の綴りが `gc` のものも `self` のものも数え、`Vec`・`Map` の `retain` を除く)。
   後ろの 1 つは D24 の挙げる 3 つに無いが、`build_retain` の boxed の枝がそれを呼ぶので、含めた方が
-  広い。次の 7 群がその 21 か所を尽くす。
+  広い。次の 7 群がその 22 か所を尽くす。
 
-  - **第 1 群 (表の 7 行を出すもの)。7 か所。**`RcExpr::Retain` の 2 か所 (`eval_rc_expr_inner` の
+  - **第 1 群 (表の 7 行を出すもの)。8 か所。**`RcExpr::Retain` の 2 か所 (`eval_rc_expr_inner` の
     `skip_null_check` の 2 枝)、boxed union の変位アームの payload の retain (`eval_rc_match`)、
     boxed 容器の `Destructure` (`get_struct_fields` の boxed の枝)、boxed union の payload の読み出し
-    (`get_union_value` の boxed の枝)、capture の射影 (`build_capture_project`)、配列の要素の読み出し
-    (`read_from_array_buf`) である。後ろの 3 つは `Llvm` の行であり、A3 の宣言が単一の `Unknown` を置く
-    読み出しがこれである。**これは (K-i) である。**
+    (`get_union_value` の boxed の枝)、boxed 容器の struct のフィールドの読み出し
+    (`InlineLLVMStructGetBody::generate` の `Retained` の枝)、capture の射影
+    (`build_capture_project`)、配列の要素の読み出し (`read_from_array_buf`) である。後ろの 4 つは
+    `Llvm` の行であり、A3 の宣言が単一の `Unknown` を置く読み出しがこれである。**これは (K-i) である。**
   - **第 2 群 (retain の素動作の実装)。6 か所。**`Generator::retain` が `build_retain` を呼び、
     `build_retain` が boxed の枝で `retain_nonnull_boxed` を、unbox の枝で各フィールドへ降りて
     `retain` / `build_retain` を呼び、unbox union については `retain_release_mark_union` が活性変位へ

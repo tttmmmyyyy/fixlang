@@ -979,7 +979,7 @@ T は、引用する命題が証明されている仮定の集合の上に立つ
 | A9 | `Match` はアームを持つ | lowering (検査は develop mode の `validate` の `check_rhs`) | P16。A2 の項が「A6・A9・A13 を上流について読む段は、この節を引く」と書く |
 | A10 | 型の well-formedness | 大きさの部分は `validate_layouts` (elaboration で必ず走る。最適化が作る型の再検査は develop build だけ)。**飽和を果たすのは kind の体系である** -- 宣言された型の kind は `Scheme::check_kinds` が検査して診断を出し、式の型は kind `*` を持つ。README の第 4 節の冒頭はこれを「構成上そうなる」の段に置く。**`validate_layouts` は飽和を検査しない** -- その走査自身が `no_size_reason` から `held_types` を経て `declared_field_types` に入るので、飽和していない型に出会えば診断を出さずに同じ `assert` で止まる。`declared_field_types` の `assert!(merge_ok)` を通すのは `TypeDefn::validate_tyvars` であり、`Program::validate_type_defns` がすべての型宣言に掛ける | P1 の言明、A12。A10 自身の項が `boxed_leaf_paths` と `rc_units` の停止性を挙げる |
 | A11 | スコープの規律 | lowering (検査は develop mode の `validate` の `check_expr_inner` と `check_rhs`) | D2、P3・P4 (`borrow_ify` の入力について示されている理由)、P9、P2a の言明 (その `vars` を作る本体が A6 と A11 を満たすこと)、P28 の言明 (その量化範囲を、A11 と A24 を引ける範囲に限る節)。A11 自身の項が `origin` の停止性を挙げる |
-| **A12** | 束縛の形と型が合っている | **誰も** (項の見出し)。ただし `RcFunc` の欄の整合については `Lowerer::lower_lambda_as_function` が果たし、箇条ごとにも果たす者が居る -- `Llvm` 節点の `args` の名前の列は演算を作る側 (検査: develop mode の `validate` の `check_rhs`)、`Llvm` 節点の型についての残る 3 つは `struct_punch`・`struct_set` と `struct_plug_in`・`struct_get` と `union_as` が結果の型に取る形。punched でないことを検査するコードは無い | D6 (束縛を持たない `RcVar` の型)、A3。union の側の節の読み手として `p12-identity-and-consumes.md` の `L4` を挙げる。A12 自身の項が P2 と `held_field_type`、`rhs_consumes` の停止性を挙げる |
+| **A12** | 束縛の形と型が合っている | **誰も** (項の見出し)。ただし `RcFunc` の欄の整合については `Lowerer::lower_lambda_as_function` が果たし、箇条ごとにも果たす者が居る -- `Llvm` 節点の `args` の名前の列は演算を作る側 (検査: develop mode の `validate` の `check_rhs`)、`Llvm` 節点の型についての残る 3 つは `struct_punch`・`struct_set` と `struct_plug_in`・`struct_get` と `union_as` が結果の型に取る形 (`struct_get` と `union_as` の節の検査は develop mode の `InlineLLVMStructGetBody::generate`)。コード生成が scope に積む型の節には果たす者が居ない (検査: develop mode の `Generator::eval_rc_expr_inner` の `Llvm` の腕)。punched でないことを検査するコードは無い | D6 (束縛を持たない `RcVar` の型)、A3。union の側の節の読み手として `p12-identity-and-consumes.md` の `L4` を挙げる。A12 自身の項が P2 と `held_field_type`、`rhs_consumes` の停止性を挙げる |
 | A13 | 名前の形 | `Lowerer::fresh_var` と `clone_fresh` (検査は develop mode の `check_clone_names_are_fresh`) | D6 (束縛を持たない名前の 2 種)、P3・P4 (`borrow_ify` の入力について示されている理由)、P9 の後半、P14b、P14 と P14a (`report.md` の第 7 節)。A2 の項が「A6・A9・A13 を上流について読む段は、この節を引く」と書く。このファイルの `<1>10` の `<2>1a` |
 | A14 | 適用は飽和している (`App` の `args` の個数は呼び出し先のパラメータの個数に**等しい**) | 型検査と lowering (検査は `Generator::apply_lambda` の `assert_eq!`) | A14 自身の項が両向きの読み手を挙げる -- 以下は `call_rc` と `rhs_consumes` の `params[arg_idx]`、以上は D10 の初期値 |
 | A15 | `grow_stack` は閉包をちょうど 1 回呼ぶ | `stacker` crate | README は読み手を名指さない。番号で走らせると、本体を `grow_stack` で包む再帰関数が包まない場合と同じ回数だけ各位置を訪れることを読む段が拾える -- このファイルでは `<1>10` の `<2>3b` (`drop_nodes` が `drop_nodes_inner` をちょうど 1 回呼ぶこと) |
@@ -1013,9 +1013,12 @@ T の結論が実際に破れるかどうかは別の問いであり、この文
 A3 については人手の照合の記録
 (`dev-docs/2026-06-28-unique-check-elim/audit-2026-07-20-op-declarations.md`) を、A18 (a) については
 valgrind の下で走るテストを、A24 については `Lowerer::lower_llvm` の panic を、それぞれ検査として
-挙げている。A12 の検査は最初の箇条 -- `Llvm` 節点の `args` の名前の列が `gen.free_vars()` に
-等しいこと -- についてだけであり、develop mode の `validate` の `check_rhs` である。A4 と A26a には
-検査が無い。
+挙げている。A12 の検査は `Llvm` 節点についての 3 つの箇条 -- `args` の名前の列が `gen.free_vars()` に
+等しいこと (develop mode の `validate` の `check_rhs`)、`InlineLLVMStructGetBody` の `ty(x)` が
+`ty(args[0])` の第 `field_idx` フィールドの型であること (develop mode の
+`InlineLLVMStructGetBody::generate`)、コード生成が `args[i]` の局所名について scope に積んでいる型が
+`ty(args[i])` であること (develop mode の `Generator::eval_rc_expr_inner` の `Llvm` の腕) -- に
+ついてだけである。A4 と A26a には検査が無い。
 
 **README が「検査: 無し」と書き、かつ果たす者が居るのは A13 (`clone_fresh` が作る名前の節)・A16・A17・
 A19・A20・A21・A22・A23・A26・A30・A31 の 11 個である。** **この一覧は、上の表の全行に「果たす者の欄が
@@ -1228,20 +1231,22 @@ P24 の対応でつなぎ、「`p0.funcs` の各関数の `name` が `p2.funcs` 
 ### 開発ビルドでだけ走る検査
 
 README の第 4 節は、`develop_mode` のときだけ走る表明を「3 段目より弱い」とし、そこに **A9・A11・
-A13** を挙げる。**A12** の最初の箇条 (`Llvm` 節点の `args` の名前の列) の検査、**A3** の 2 つの
+A13** を挙げる。**A12** の `Llvm` 節点についての 3 つの箇条の検査、**A3** の 2 つの
 検査 (`applies_a_function_operand` と `result_prov` の元数)、そして **A10** の「ただし最適化が
 作る型を再検査するのは develop build だけである」も同じである。すなわち出荷ビルドでは、この
 **6 つ**の仮定はこれらの検査を持たない。**A3 の 2 つの節については、README が果たす者に挙げるのが
 その検査そのものなので、出荷ビルドではその節を支える者が居ない。**残る A9・A11・A12・A13・A10 は、
-検査とは別の果たす者を持つ -- A9・A11・A13 は lowering、**A12 の最初の箇条は演算を作る側**、A10 の
-飽和は kind の体系である。**A10 の `validate_layouts` が果たすのは大きさの部分である** -- 第 3 節の
+検査とは別の果たす者を持つ -- A9・A11・A13 は lowering、**A12 の最初の箇条は演算を作る側、
+`InlineLLVMStructGetBody` の結果の型の箇条は `struct_get`** であり、A10 の
+飽和は kind の体系である。**scope が積む型の箇条の果たす者は居ない。****A10 の `validate_layouts` が果たすのは大きさの部分である** -- 第 3 節の
 表が、飽和を果たすのは kind の体系であり `validate_layouts` は飽和を検査しないと書く。
 
 A3 の 2 つの検査は別の場所に在る。`applies_a_function_operand` のものは
 `Generator::apply_lambda` の表明であり、`borrow_ify` と `cancel` の外 -- コード生成の側 -- に在る。
 `result_prov` の元数のものは `validate` の `check_rhs` であり、下に述べる `validate` の中に在る。
-A10 の再検査は `validate_layouts` の側にある。残る A3 (元数)・A9・A11・A12・A13 がこの 2 つのパスの
-側に在る。
+A10 の再検査は `validate_layouts` の側にある。**A12 の後ろの 2 つの箇条の検査も、コード生成の側に
+在る** -- `InlineLLVMStructGetBody::generate` と `Generator::eval_rc_expr_inner` の `Llvm` の腕である。
+残る A3 (元数)・A9・A11・A12 の最初の箇条・A13 がこの 2 つのパスの側に在る。
 
 `optimize_rc_program` の `validate`、`borrow_ify` の `check_clone_names_are_fresh` と
 `check_ownership_is_levelled` は、`config.develop_mode` / `develop_mode` が真のときだけ走る

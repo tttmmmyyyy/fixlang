@@ -243,7 +243,10 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   両辺、アームの結果と `Match` の束縛変数、payload と変位、catch-all の payload と scrutinee、
   `Destructure` のフィールド変数とフィールド、`App` の各引数と呼び出し先のパラメータ、`App` の結果、
   同じ名前の `RcVar`、束縛を持たない `RcVar`、そして `Llvm` 節点の型についての 4 つ -- は、どちらの側も
-  型が変わらないまま対応するので、入力で成り立つ一致は借用版でも成り立つ。呼び出し先については 2 通り
+  型が変わらないまま対応するので、入力で成り立つ一致は借用版でも成り立つ。
+  **コード生成が scope に積む型の節は対にする組ではないので、別に渡す。**`<1>2a` より名前替えは束縛の
+  位置と使用の位置を同じ `renaming` で引き、`RcVar` の型の欄も右辺の構成子も残すので、借用版の各名前を
+  コード生成が束縛する位置とそこに積む値は入力のものに対応し、その型は動かない。呼び出し先については 2 通り
   ある。直接呼び出しの callee と、束縛を持たない `RcVar` の名前は最上位の記号の名前であり、
   A13 と D6 より局所名でないので `renaming` の鍵ではなく、名前も型も動かない -- 名指す関数も
   その `params` も入力のものである。局所変数を経由する間接呼び出しでは callee は鍵でありうるが、
@@ -349,7 +352,9 @@ DEF 再帰で訪れる対 であり、それを主語にする L11a・L12・L14 
   あること -- は、呼び出し先を元の関数と読んでも借用版と読んでも同じく成り立つ。`borrow_ify` は借用版を
   `borrow_funcref(func.name)` の鍵で出力の `funcs` に入れるので、替えた名前の記号はその借用版であり、
   束縛を持たない `RcVar` の型がその名前の記号の型であることも移る。残る節が主語にする構文は書き換えが
-  触れないので、L0 がそのまま与える。
+  触れないので、L0 がそのまま与える。**コード生成が scope に積む型の節も移る** -- `<1>1` より書き換えが
+  足し引きするのは `Retain`/`Release` 節点であり、D2 よりそれは名前を束縛しないので、`Llvm` 節点に届く
+  までにコード生成が積む束縛とそこに置く値は `Pre(V)` のものと同じである。
   BY <1>1, <ref id=83d98e9/>, <ref id=63eadd9/>, <ref id=9cef509/>,
      CODE src/rc_ir/borrow.rs: clone_func, borrow_funcref, borrow_ify, RewriteCtx::route,
      CODE src/rc_ir/rename.rs: fresh_rename_function, rename_var
@@ -3385,7 +3390,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
 | A9 | この本体に `Match` は無い |
 | A10 | 現れる型は `Array I64`・`I64`・`Inner`・`Outer` である。どれも型変数を持たない ground な型で、その tycon に kind の要求するだけの引数が与えられ、tycon は `type_env` にある。`unpunched_field_types` の歩みは `Outer` から `Inner` と `Array I64` へ、`Inner` から `Array I64` と `I64` へ降りて終わるので有限であり、`no_size_in_place` の in-place の降下はその部分である。newtype を 1 つも宣言していないので、`instance_field_types` の newtype の展開は恒等である |
 | A11 | 本体の自由な局所名は `z` だけで、それは `f` の唯一のパラメータである。`x` の使用は直前の `Let(x, ..)` の、`w` の使用は直前の `Let(w, ..)` のスコープに入っている |
-| A12 | この本体の構文は `Llvm` の `Let` 2 つと `Release` と `Ret` だけである。`union_make_1` の `args` は `[z]` で `gen.free_vars()` に等しく、`ty(x) = Outer` はその第 1 変位の payload の型を `ty(z) = Array I64` に取る `make_union` の結果の型である。`int_lit_0` はオペランドを持たず `ty(w) = I64` である。同じ名前の `RcVar` はこの本体に 1 つずつしか現れないので型は一致し、束縛を持たない `RcVar` は無い。A12 の残りの節が名指す構文 -- move-bind、`Match`、`Destructure`、`App`、`InlineLLVMStructPunchBody` などの op -- はこの本体に無いので、それらは空に成り立つ |
+| A12 | この本体の構文は `Llvm` の `Let` 2 つと `Release` と `Ret` だけである。`union_make_1` の `args` は `[z]` で `gen.free_vars()` に等しく、`ty(x) = Outer` はその第 1 変位の payload の型を `ty(z) = Array I64` に取る `make_union` の結果の型である。`int_lit_0` はオペランドを持たず `ty(w) = I64` である。同じ名前の `RcVar` はこの本体に 1 つずつしか現れないので型は一致し、束縛を持たない `RcVar` は無い。コード生成が scope に積む型については、`union_make_1` の唯一のオペランド `z` は `f` のパラメータであり、コード生成がパラメータについて積むのはその宣言された型 `ty(z) = Array I64` である。`int_lit_0` はオペランドを持たないのでこの節は空に成り立つ。A12 の残りの節が名指す構文 -- move-bind、`Match`、`Destructure`、`App`、`InlineLLVMStructPunchBody` などの op -- はこの本体に無いので、それらは空に成り立つ |
 | A13 | `f`・`z`・`x`・`w` はどれも `#` を含まないので、`#` で区切った最後の断片は名前自身であり、`b` の後に 10 進数字が続く形でも `borrow` でもない |
 | A14 | この本体に `App` は無い |
 | A15 | 主語は `stacker` crate であり、この構成はそれを選ばない |
@@ -3630,7 +3635,7 @@ inhabited の限定を外すと、節 2 から節 1 へ渡れなくなる。
 | A9 | この本体に `Match` は無い |
 | A10 | 現れる型は `Mix`・`I64`・`Array I64` である。どれも型変数を持たない ground な型で、その tycon に kind の要求するだけの引数が与えられ、tycon は `type_env` にある。`unpunched_field_types` の歩みは `Mix` から `I64` と `Array I64` へ降りて終わるので有限であり、`no_size_in_place` の in-place の降下はその部分である。newtype を 1 つも宣言していないので、`instance_field_types` の newtype の展開は恒等である |
 | A11 | 本体の自由な局所名は `x` だけで、それは `f` の唯一のパラメータである。`w` の使用は直前の `Let(w, ..)` のスコープに入っている |
-| A12 | この本体の構文は `Release` と `Llvm` の `Let` と `Ret` だけである。`int_lit_0` はオペランドを持たないので `args` は空で `gen.free_vars()` に等しく、`ty(w) = I64` である。同じ名前の `RcVar` はこの本体に 1 つずつしか現れないので型は一致し、束縛を持たない `RcVar` は無い。A12 の残りの節が名指す構文 -- move-bind、`Match`、`Destructure`、`App`、`InlineLLVMStructPunchBody` などの op -- はこの本体に無いので、それらは空に成り立つ |
+| A12 | この本体の構文は `Release` と `Llvm` の `Let` と `Ret` だけである。`int_lit_0` はオペランドを持たないので `args` は空で `gen.free_vars()` に等しく、`ty(w) = I64` であり、コード生成が scope に積む型の節も空に成り立つ。同じ名前の `RcVar` はこの本体に 1 つずつしか現れないので型は一致し、束縛を持たない `RcVar` は無い。A12 の残りの節が名指す構文 -- move-bind、`Match`、`Destructure`、`App`、`InlineLLVMStructPunchBody` などの op -- はこの本体に無いので、それらは空に成り立つ |
 | A13 | `f`・`x`・`w` はどれも `#` を含まないので、`#` で区切った最後の断片は名前自身であり、`b` の後に 10 進数字が続く形でも `borrow` でもない |
 | A14 | この本体に `App` は無い |
 | A15 | 主語は `stacker` crate であり、この構成はそれを選ばない |
