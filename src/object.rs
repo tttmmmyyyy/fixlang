@@ -1656,6 +1656,65 @@ pub fn ty_to_object_ty(
     object_ty
 }
 
+/// Whether a value of `ty` occupies no storage, and so carries no information: an `IOState`, an
+/// unboxed struct with no field, and an unboxed value whose every field occupies none.
+///
+/// Read from the object `ty_to_object_ty` builds, so that the answer follows the layout instead of
+/// restating it. The descent stops at a boxed field, a pointer whatever it points at, which makes
+/// it the descent `Program::validate_layouts` has already bounded.
+///
+/// A value of such a type is one the program may make where it is read rather than carry there:
+/// `lower_lam` leaves a capture of one out of the closure that would have carried it, and
+/// `InlineLLVMNoStorageValueBody` makes it at the other end.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+pub fn occupies_no_storage(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
+    let object_ty = ty_to_object_ty(ty, &vec![], type_env);
+    // A boxed value is the pointer to the block its fields live in.
+    if !object_ty.is_unbox {
+        return false;
+    }
+    object_ty
+        .field_types
+        .into_iter()
+        .all(|field| field_occupies_no_storage(field, type_env))
+}
+
+/// Whether a field takes no room in the struct its object is laid out as. It answers for the fields
+/// `ObjectFieldType::to_basic_type` gives an LLVM type to, so the two are read beside each other.
+// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+fn field_occupies_no_storage(field: ObjectFieldType, type_env: &TypeEnv) -> bool {
+    match field {
+        // A field laid out in place takes what its own type takes. A punched slot holds no value and
+        // keeps the type it was declared at, so it is asked like any other.
+        ObjectFieldType::SubObject(field_ty, _is_punched) => {
+            occupies_no_storage(&field_ty, type_env)
+        }
+        // The payload buffer is as wide as the widest variant.
+        ObjectFieldType::UnionBuf(payload_tys) => payload_tys
+            .iter()
+            .all(|payload_ty| occupies_no_storage(payload_ty, type_env)),
+        // The element buffer is as wide as the capacity the program asks for as it runs.
+        ObjectFieldType::ArrayStorageBuf(_) => false,
+        // A pointer, a machine scalar, or a union's tag. Listing them keeps this match exhaustive,
+        // so a field kind added later is answered here as well.
+        ObjectFieldType::ControlBlock
+        | ObjectFieldType::TraverseFunction
+        | ObjectFieldType::LambdaFunction(_)
+        | ObjectFieldType::Ptr
+        | ObjectFieldType::I8
+        | ObjectFieldType::U8
+        | ObjectFieldType::I16
+        | ObjectFieldType::U16
+        | ObjectFieldType::I32
+        | ObjectFieldType::U32
+        | ObjectFieldType::I64
+        | ObjectFieldType::U64
+        | ObjectFieldType::F32
+        | ObjectFieldType::F64
+        | ObjectFieldType::UnionTag => false,
+    }
+}
+
 /// The `#ArrayStorage` object a flipped `Array` value points to, wrapped as an `Object` of its real
 /// type so the reference-count helpers and buffer GEPs operate on it directly.
 // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)

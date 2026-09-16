@@ -20,6 +20,7 @@ use crate::fixstd::builtin::{
 };
 use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};
+use crate::object::occupies_no_storage;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
@@ -595,7 +596,7 @@ impl<'a> Lowerer<'a> {
         let type_env = self.type_env;
         let (captures, remade): (Vec<_>, Vec<_>) = resolved
             .into_iter()
-            .partition(|(_, var)| !var.ty.occupies_no_storage(type_env));
+            .partition(|(_, var)| !occupies_no_storage(&var.ty, type_env));
         // A value occupying no storage holds no boxed value, since a pointer takes storage, so a
         // capture left out here takes no reference-counting unit out of the closure with it.
         for (name, var) in &remade {

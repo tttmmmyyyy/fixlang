@@ -5053,10 +5053,10 @@ pub struct InlineLLVMNoStorageValueBody {}
 #[typetag::serde]
 impl LLVMGen for InlineLLVMNoStorageValueBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
-        // Which captures are left out is decided by `TypeNode::occupies_no_storage`, which answers
-        // on the Fix type, while the storage a value takes is LLVM's answer. Reaching here with a
-        // type LLVM gives a size to means the two have parted, and the value made here stands for
-        // one the closure dropped and its reader still reads.
+        // Which captures are left out is decided by `occupies_no_storage`, which reads the object
+        // the generator builds, while the storage a value takes is what LLVM makes of that object.
+        // Reaching here with a type LLVM gives a size to means the value made here stands for one
+        // the closure dropped and its reader still reads.
         let llvm_ty = gc.embedded_type_of(ty);
         assert!(
             gc.is_zero_sized(llvm_ty),

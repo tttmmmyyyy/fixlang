@@ -356,6 +356,7 @@ impl TyCon {
     }
 
     /// Whether this is the type `IOState`, the token that an `IO` action threads.
+    #[allow(dead_code)]
     pub fn is_iostate(&self) -> bool {
         return self.name == make_iostate_name();
     }
@@ -1557,53 +1558,6 @@ impl TypeNode {
         self.unpunched_field_types(type_env)
             .iter()
             .all(|(_, field_ty)| field_ty.is_fully_unboxed(type_env))
-    }
-
-    /// Whether a value of this type occupies no storage, and so carries no information: an
-    /// `IOState`, an unboxed struct with no field, and an unboxed struct whose every field occupies
-    /// none.
-    ///
-    /// **This must imply `Generator::is_zero_sized` of the LLVM type a value is laid out as.** A
-    /// capture occupying no storage is left out of the closure that would carry it, and the lifted
-    /// function makes one of its own instead; a type this accepts and LLVM gives a size to would be
-    /// dropped from a capture object whose reader still reads that slot.
-    /// `InlineLLVMNoStorageValueBody` asserts the implication wherever such a value is made.
-    ///
-    /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
-    /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
-    /// runs.
-    pub fn occupies_no_storage(&self, type_env: &TypeEnv) -> bool {
-        // A closure is a function pointer beside the object its captures live in, and a function
-        // pointer is a pointer. Both are asked ahead of the variant, which neither carries.
-        if self.is_closure() || self.is_funptr() {
-            return false;
-        }
-        // A boxed value is the pointer to the block holding its fields.
-        if self.is_box(type_env) {
-            return false;
-        }
-        match self.toplevel_tycon_info(type_env).variant {
-            // `IOState` is the one primitive laid out with no field; every other is a machine
-            // scalar.
-            TyConVariant::Primitive => self.toplevel_tycon_satisfies(TyCon::is_iostate),
-            // The fields are laid out one after another. A punched slot is among them at the type it
-            // was declared with and keeps that type's storage, so this asks `field_types` rather
-            // than `unpunched_field_types`.
-            TyConVariant::Struct => self
-                .field_types(type_env)
-                .iter()
-                .all(|field_ty| field_ty.occupies_no_storage(type_env)),
-            // A union is its tag and the payload buffer under it, and the tag is an integer.
-            TyConVariant::Union => false,
-            // An array is the pointer to its storage, its size and its capacity.
-            TyConVariant::Array => false,
-            // Boxed, which `is_box` answered above.
-            TyConVariant::DynamicObject | TyConVariant::ArrayStorage => false,
-            // The arrow, which `is_closure` answered above.
-            TyConVariant::Arrow => false,
-            // Resolved away before a value of it is laid out.
-            TyConVariant::Opaque => false,
-        }
     }
 
     /// A node holding `ty`, written nowhere.
