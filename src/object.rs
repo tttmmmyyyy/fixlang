@@ -1659,9 +1659,9 @@ pub fn ty_to_object_ty(
 /// Whether a value of `ty` occupies no storage, and so carries no information: an `IOState`, an
 /// unboxed struct with no field, and an unboxed value whose every field occupies none.
 ///
-/// Read from the object `ty_to_object_ty` builds, so that the answer follows the layout instead of
-/// restating it. The descent stops at a boxed field, a pointer whatever it points at, which makes
-/// it the descent `Program::validate_layouts` has already bounded.
+/// Read from the object `ty_to_object_ty` builds, so that the answer follows the layout. The
+/// descent stops at a boxed field, a pointer whatever it points at, which makes it the descent
+/// `Program::validate_layouts` has already bounded.
 ///
 /// A value of such a type is one the program may make where it is read rather than carry there:
 /// `lower_lam` leaves a capture of one out of the closure that would have carried it, and
