@@ -45,6 +45,7 @@ mod preliminary_command;
 mod printer;
 mod rc_ir;
 mod return_abi;
+mod tbaa;
 #[cfg(test)]
 mod tests;
 mod tool;

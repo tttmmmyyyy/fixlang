@@ -36,6 +36,7 @@ use crate::{
         simplify::simplify,
         unique_check_elim, validate,
     },
+    tbaa::MemoryRegion,
     tool::stopwatch::StopWatch,
 };
 use inkwell::{
@@ -819,7 +820,7 @@ fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNo
             .unwrap()
             .as_basic_value_enum()
             .into_pointer_value();
-        gc.builder().build_store(gv_ptr, arg_val).unwrap();
+        gc.build_store(MemoryRegion::Value, gv_ptr, arg_val);
     }
 
     // Run the main IO action. `main_expr` is a reference to the instantiated `main` symbol (see

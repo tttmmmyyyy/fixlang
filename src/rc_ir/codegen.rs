@@ -24,6 +24,7 @@ use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
 use crate::rc_ir::ownership::{held_field_type, unit_step, UnitStep};
+use crate::tbaa::MemoryRegion;
 use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::{Linkage, Module};
@@ -100,9 +101,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
             .try_as_basic_value()
             .expect_basic("`InitValue#...` returns the value of the global");
-        self.builder()
-            .build_store(global_var_ptr, computed)
-            .unwrap();
+        self.build_store(MemoryRegion::Value, global_var_ptr, computed);
     }
 
     /// Implement an `RcFunc` body: bind the parameters (and the capture pointer, for a closure) onto
@@ -754,9 +753,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Compute and store the value on the first access alone.
         let end_bb = if !self.config.threaded {
             let flag = self
-                .builder()
-                .build_load(flag_ty, init_flag_ptr, "load_init_flag")
-                .unwrap()
+                .build_load(
+                    MemoryRegion::Value,
+                    flag_ty.into(),
+                    init_flag_ptr,
+                    "load_init_flag",
+                )
                 .into_int_value();
             let is_zero = self
                 .builder()
@@ -794,9 +796,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             // turn of its loop.
             self.builder().position_at_end(store_bb);
             self.store_init_value(init_value_fn, global_var_ptr);
-            self.builder()
-                .build_store(init_flag_ptr, flag_ty.const_int(1, false))
-                .unwrap();
+            self.build_store(
+                MemoryRegion::Value,
+                init_flag_ptr,
+                flag_ty.const_int(1, false),
+            );
             self.builder().build_unconditional_branch(end_bb).unwrap();
             end_bb
         } else {
@@ -831,10 +835,12 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Return the stored value.
         self.builder().position_at_end(end_bb);
-        let value = self
-            .builder()
-            .build_load(obj_embed_ty, global_var_ptr, "load_global_var")
-            .unwrap();
+        let value = self.build_load(
+            MemoryRegion::Value,
+            obj_embed_ty,
+            global_var_ptr,
+            "load_global_var",
+        );
         if self.sizeof(&value.get_type()) == 0 {
             self.builder().build_return(None).unwrap();
         } else {

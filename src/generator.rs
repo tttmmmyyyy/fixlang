@@ -10,6 +10,7 @@ use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
 use crate::constants::RefcntState;
 use crate::constants::TraverserWorkType;
+use crate::constants::BOXED_TYPE_DATA_IDX;
 use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::constants::CLOSURE_FUNPTR_IDX;
 use crate::constants::CTRL_BLK_REFCNT_IDX;
@@ -49,6 +50,7 @@ use crate::return_abi::{
     lambda_calling_convention_of_target, return_registers_of_target, returns_through_out_pointer,
     ReturnRegisters,
 };
+use crate::tbaa::{MemoryRegion, TbaaTags};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::llvm_sys::debuginfo::LLVMMetadataReplaceAllUsesWith;
@@ -60,6 +62,7 @@ use inkwell::values::BasicValueEnum;
 use inkwell::values::FunctionValue;
 use inkwell::values::GlobalValue;
 use inkwell::values::InstructionOpcode;
+use inkwell::values::InstructionValue;
 use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
 use inkwell::values::ValueKind;
@@ -340,9 +343,7 @@ impl<'c> Object<'c> {
         assert!(self.is_box(&gc.type_env));
         let ptr_to_field = self.ptr_to_field_as(gc, ty, field_idx);
         let field_ty = ty.get_field_type_at_index(field_idx).unwrap();
-        gc.builder()
-            .build_load(field_ty, ptr_to_field, "field")
-            .unwrap()
+        gc.build_load(MemoryRegion::Value, field_ty, ptr_to_field, "field")
     }
 
     /// Extract a field of an object as an `Object`, keeping its value in the part domain: for an
@@ -466,7 +467,7 @@ impl<'c> Object<'c> {
     {
         assert!(self.is_box(&gc.type_env));
         let ptr_to_field = self.ptr_to_field_as(gc, ty, field_idx);
-        gc.builder().build_store(ptr_to_field, value).unwrap();
+        gc.build_store(MemoryRegion::Value, ptr_to_field, value);
     }
 
     /// The traverser function a `#DynamicObject` carries, which is what drives the lifetimes of the
@@ -495,6 +496,11 @@ impl<'c> Object<'c> {
         field_idx: u32,
     ) -> PointerValue<'c> {
         assert!(self.is_box(&gc.type_env));
+        // A boxed object's own fields begin after its control block, which is addressed by
+        // `Generator::get_refcnt_ptr` and its neighbours instead. The control block and the fields
+        // are separate regions of memory (see `MemoryRegion`), which a field reaching into the
+        // control block would join.
+        assert!(field_idx >= BOXED_TYPE_DATA_IDX);
         let ptr = self.value(gc).into_pointer_value();
         gc.builder()
             .build_struct_gep(ty, ptr, field_idx, "gep2field")
@@ -617,6 +623,9 @@ pub struct Generator<'c, 'm> {
     /// declared that it applies one of its operands (`LLVMGen::applies_a_function_operand`). `None`
     /// outside such an op, and outside develop mode, where nothing is checked.
     pub(crate) generating_llvm_op: Option<(String, bool)>,
+    /// The `!tbaa` tag of each region of memory, which `build_load` and `build_store` put on the
+    /// accesses they emit.
+    tbaa: TbaaTags<'c>,
 }
 
 /// The lifetime of the builder `push_builder` pushed. Code generated while it is alive is written
@@ -951,6 +960,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             embedded_types: Map::default(),
             out_pointer_buffers: Map::default(),
             generating_llvm_op: None,
+            tbaa: TbaaTags::new(ctx),
         };
         gc
     }
@@ -993,6 +1003,59 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// The builder instructions are appended through, which is the innermost one pushed.
     pub fn builder(&self) -> Arc<Builder<'c>> {
         self.builders.borrow().last().unwrap().clone()
+    }
+
+    /// Emit a load of `ty` from `ptr`, an access reaching `region`, naming the loaded value `name`
+    /// in the emitted code.
+    pub fn build_load(
+        &self,
+        region: MemoryRegion,
+        ty: BasicTypeEnum<'c>,
+        ptr: PointerValue<'c>,
+        name: &str,
+    ) -> BasicValueEnum<'c> {
+        let loaded = self.builder().build_load(ty, ptr, name).unwrap();
+        self.tbaa.tag(
+            loaded
+                .as_instruction_value()
+                .expect("a load is an instruction"),
+            region,
+        );
+        loaded
+    }
+
+    /// Emit a store of `value` through `ptr`, an access reaching `region`.
+    pub fn build_store<V: BasicValue<'c>>(
+        &self,
+        region: MemoryRegion,
+        ptr: PointerValue<'c>,
+        value: V,
+    ) -> InstructionValue<'c> {
+        let stored = self.builder().build_store(ptr, value).unwrap();
+        self.tbaa.tag(stored, region);
+        stored
+    }
+
+    /// Emit an atomic read-modify-write of `value` through `ptr` under `ordering`, an access
+    /// reaching `region`, and yield the value the location held before it.
+    pub fn build_atomicrmw(
+        &self,
+        region: MemoryRegion,
+        operation: AtomicRMWBinOp,
+        ptr: PointerValue<'c>,
+        value: IntValue<'c>,
+        ordering: AtomicOrdering,
+    ) -> IntValue<'c> {
+        let old = self
+            .builder()
+            .build_atomicrmw(operation, ptr, value, ordering)
+            .unwrap();
+        self.tbaa.tag(
+            old.as_instruction_value()
+                .expect("an atomic read-modify-write is an instruction"),
+            region,
+        );
+        old
     }
 
     /// Write the code that follows through a builder of its own, so that generating a nested
@@ -1167,13 +1230,12 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) -> IntValue<'c> {
         let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
         let refcnt = self
-            .builder()
             .build_load(
-                refcnt_type(self.context),
+                MemoryRegion::Refcnt,
+                refcnt_type(self.context).into(),
                 ptr_to_refcnt,
                 &format!("refcnt{}", name_suffix),
             )
-            .unwrap()
             .into_int_value();
         if acquire {
             refcnt
@@ -1637,9 +1699,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     .builder()
                     .build_struct_gep(buf_ty, out_ptr, i as u32, "out_part_ptr")
                     .unwrap();
-                self.builder()
-                    .build_load(*part_ty, part_ptr, "load_out_part")
-                    .unwrap()
+                self.build_load(MemoryRegion::Value, *part_ty, part_ptr, "load_out_part")
             })
             .collect();
         Object::from_parts(parts, ret_ty, self)
@@ -2082,17 +2142,18 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.build_assert_refcnt_state_local(obj_ptr);
             let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
             let old_refcnt = self
-                .builder()
-                .build_load(refcnt_type(self.context), ptr_to_refcnt, "")
-                .unwrap()
+                .build_load(
+                    MemoryRegion::Refcnt,
+                    refcnt_type(self.context).into(),
+                    ptr_to_refcnt,
+                    "",
+                )
                 .into_int_value();
             let new_refcnt = self
                 .builder()
                 .build_int_nsw_add(old_refcnt, amount, "")
                 .unwrap();
-            self.builder()
-                .build_store(ptr_to_refcnt, new_refcnt)
-                .unwrap();
+            self.build_store(MemoryRegion::Refcnt, ptr_to_refcnt, new_refcnt);
             return;
         }
         let current_func = self.current_function();
@@ -2107,17 +2168,18 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(local_bb);
         let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
         let old_refcnt_local = self
-            .builder()
-            .build_load(refcnt_type(self.context), ptr_to_refcnt, "")
-            .unwrap()
+            .build_load(
+                MemoryRegion::Refcnt,
+                refcnt_type(self.context).into(),
+                ptr_to_refcnt,
+                "",
+            )
             .into_int_value();
         let new_refcnt = self
             .builder()
             .build_int_nsw_add(old_refcnt_local, amount, "")
             .unwrap();
-        self.builder()
-            .build_store(ptr_to_refcnt, new_refcnt)
-            .unwrap();
+        self.build_store(MemoryRegion::Refcnt, ptr_to_refcnt, new_refcnt);
         self.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // In `threaded_bb`, increment refcnt atomically and jump to `cont_bb`. An increment hands
@@ -2126,15 +2188,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         if let Some(threaded_bb) = threaded_bb {
             self.builder().position_at_end(threaded_bb);
             let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
-            let _old_refcnt_threaded = self
-                .builder()
-                .build_atomicrmw(
-                    AtomicRMWBinOp::Add,
-                    ptr_to_refcnt,
-                    amount,
-                    AtomicOrdering::Monotonic,
-                )
-                .unwrap();
+            let _old_refcnt_threaded = self.build_atomicrmw(
+                MemoryRegion::Refcnt,
+                AtomicRMWBinOp::Add,
+                ptr_to_refcnt,
+                amount,
+                AtomicOrdering::Monotonic,
+            );
             self.builder().build_unconditional_branch(cont_bb).unwrap();
         }
 
@@ -2335,9 +2395,12 @@ impl<'c, 'm> Generator<'c, 'm> {
 
         // Decrement refcnt.
         let old_refcnt = self
-            .builder()
-            .build_load(refcnt_type(self.context), ptr_to_refcnt, "")
-            .unwrap()
+            .build_load(
+                MemoryRegion::Refcnt,
+                refcnt_type(self.context).into(),
+                ptr_to_refcnt,
+                "",
+            )
             .into_int_value();
         let new_refcnt = self
             .builder()
@@ -2347,9 +2410,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 "",
             )
             .unwrap();
-        self.builder()
-            .build_store(ptr_to_refcnt, new_refcnt)
-            .unwrap();
+        self.build_store(MemoryRegion::Refcnt, ptr_to_refcnt, new_refcnt);
 
         // Branch to `destruction_bb` if old_refcnt is one.
         let is_refcnt_one = self
@@ -2379,15 +2440,13 @@ impl<'c, 'm> Generator<'c, 'm> {
             // destructor's reads as racing with those writes. The acquire is free on x86-64, where
             // a `lock`-prefixed read-modify-write already orders both ways; on AArch64 it costs an
             // acquire on every decrement and saves a `dmb` on the destruction path.
-            let old_refcnt = self
-                .builder()
-                .build_atomicrmw(
-                    AtomicRMWBinOp::Sub,
-                    ptr_to_refcnt,
-                    refcnt_type(self.context).const_int(1, false),
-                    AtomicOrdering::AcquireRelease,
-                )
-                .unwrap();
+            let old_refcnt = self.build_atomicrmw(
+                MemoryRegion::Refcnt,
+                AtomicRMWBinOp::Sub,
+                ptr_to_refcnt,
+                refcnt_type(self.context).const_int(1, false),
+                AtomicOrdering::AcquireRelease,
+            );
 
             // Destroy the object if old_refcnt is one. The decrement carries the ordering the
             // destruction needs, so this path branches into `destruction_bb` directly, as the
@@ -2529,10 +2588,13 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// `name` in the emitted code.
     fn build_load_refcnt_state(&mut self, obj_ptr: PointerValue<'c>, name: &str) -> IntValue<'c> {
         let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
-        self.builder()
-            .build_load(refcnt_state_type(self.context), refcnt_state_ptr, name)
-            .unwrap()
-            .into_int_value()
+        self.build_load(
+            MemoryRegion::RefcntState,
+            refcnt_state_type(self.context).into(),
+            refcnt_state_ptr,
+            name,
+        )
+        .into_int_value()
     }
 
     /// Compare a loaded reference-count state against `state` under `predicate`, naming the result
@@ -2558,12 +2620,11 @@ impl<'c, 'm> Generator<'c, 'm> {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub(crate) fn set_refcnt_state(&mut self, ptr: PointerValue<'c>, state: RefcntState) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
-        self.builder()
-            .build_store(
-                ptr_refcnt_state,
-                refcnt_state_type(self.context).const_int(state.value() as u64, false),
-            )
-            .unwrap();
+        self.build_store(
+            MemoryRegion::RefcntState,
+            ptr_refcnt_state,
+            refcnt_state_type(self.context).const_int(state.value() as u64, false),
+        );
     }
 
     /// Emit code writing `string` to stderr, followed by a newline.
@@ -2627,7 +2688,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     .builder()
                     .build_struct_gep(buf_ty, out_ptr, i as u32, "out_part_ptr")
                     .unwrap();
-                self.builder().build_store(part_ptr, *part).unwrap();
+                self.build_store(MemoryRegion::Value, part_ptr, *part);
             }
             self.builder().build_return(None).unwrap();
             return;
@@ -3072,7 +3133,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let obj_val = obj.value(self);
         let storage =
             self.build_alloca_at_entry(obj_val.get_type(), "alloca@create_debug_local_variable");
-        self.builder().build_store(storage, obj_val).unwrap();
+        self.build_store(MemoryRegion::Value, storage, obj_val);
 
         let embed_ty = obj.debug_embedded_ty(self);
         let loc_var = self.get_di_builder().create_auto_variable(
@@ -3109,8 +3170,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         let (from_size, to_size) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
         let larger_ty = if from_size > to_size { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
-        self.builder().build_store(ptr, val).unwrap();
-        self.builder().build_load(to_ty, ptr, "bit_cast").unwrap()
+        self.build_store(MemoryRegion::Value, ptr, val);
+        self.build_load(MemoryRegion::Value, to_ty, ptr, "bit_cast")
     }
 
     /// Add a named enum attribute (e.g. `noreturn`, `noalias`) to a function. Enum attributes
