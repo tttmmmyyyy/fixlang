@@ -634,8 +634,6 @@ fn collect_opaque_applications_inner(
     }
 }
 
-/// The number of type arguments an opaque TyCon takes, read from the left hand side of its
-/// resolutions, which all apply it to the same number of arguments.
 /// How many arguments the opaque TyCon these resolutions resolve takes.
 ///
 /// Read off a resolution's left hand side, which `build_opaque_resolutions` writes as the TyCon

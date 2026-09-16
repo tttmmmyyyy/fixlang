@@ -748,12 +748,9 @@ impl TypeCheckContext {
         }
     }
 
-    /// Unify the outer expected type with the constructed struct
-    /// type, then return a `name -> field type` map the caller can
-    /// look each provided field expression up in. Returns an empty
-    /// map when `tycon_info` is `None` (the tolerant-mode degrade
-    /// path), so the caller falls back to fresh tyvars for every
-    /// field.
+    /// Unify `expected_ty` with the struct type headed by `tc`, and give the type of each of that
+    /// struct's fields by field name. `tycon_info` is the struct's definition, and is `None` where
+    /// tolerant mode left the type name unresolved, which gives an empty map.
     fn compute_make_struct_field_tys(
         &mut self,
         tc: &Arc<TyCon>,
@@ -796,11 +793,12 @@ impl TypeCheckContext {
         result
     }
 
-    /// Run `Pattern::validate_match_cases_exhaustiveness` on the
-    /// arms of a typed `Match` when at least one arm was a union
-    /// variant (signalled by `cond_tc_info.is_some()`). In
-    /// `error_tolerant` mode a non-exhaustive match is swallowed
-    /// so the typed tree still surfaces to downstream LSP consumers.
+    /// Check that the arms of a typed `Match` cover every variant of the union it matches on.
+    ///
+    /// `cond_tc_info` carries the matched union's TyCon where an arm named a variant of it, and is
+    /// `None` where every arm was of another shape, which leaves nothing to check. In
+    /// `error_tolerant` mode the diagnostic is dropped, so that a match with an arm missing still
+    /// yields its typed tree.
     fn validate_match_exhaustiveness_if_needed(
         &self,
         typed: &Arc<ExprNode>,
@@ -841,11 +839,9 @@ impl TypeCheckContext {
         pat.validate_variant_name(tycon, ti)
     }
 
-    /// Resolve the matched value's TyCon for a `Match` arm with a
-    /// union pattern. Returns the `(TyCon, TyConInfo)` pair required
-    /// by `Pattern::validate_variant_name`. Fails if `cond_ty` isn't
-    /// resolvable to a concrete tycon yet, or if it resolves to a
-    /// non-union type.
+    /// The TyCon of the matched value's type, with its `TyConInfo`, for a `Match` arm whose
+    /// pattern names a union variant. The inference has to have settled `cond_ty` to a union TyCon
+    /// by this point.
     fn resolve_match_cond_tycon(
         &mut self,
         cond: &Arc<ExprNode>,
@@ -1860,16 +1856,12 @@ impl TypeCheckContext {
     /// expression annotated with inferred types on every subnode.
     ///
     /// # Returns
-    /// * `Ok((expr, errors))` — substitution finished and `expr` is
-    ///   the fully substituted typed expression. `errors` may still
-    ///   contain tolerated diagnostics (holes, cannot-infer,
-    ///   unsatisfiable predicates, disjoint equalities). Callers
-    ///   should propagate `errors` but may also use `expr` (e.g. save
-    ///   it so the LSP can hover on its sub-expressions).
-    /// * `Err(errs)` — a hard failure before substitution completed
-    ///   (type mismatch in `unify_type_of_expr`, failure of
-    ///   `substitute_and_reduce_type` inside `fix_types`, or scheme
-    ///   instantiation failure). No typed expression to return.
+    /// `Ok` carries the typed expression with the substitution applied
+    /// throughout, together with the diagnostics that were tolerated —
+    /// holes, types left undetermined, predicates and equalities that
+    /// went unmet — so an `Ok` whose `Errors` is non-empty is a program
+    /// with errors in it. `Err` carries a failure that left no typed
+    /// expression at all.
     pub fn check_type(
         &mut self,
         expr: Arc<ExprNode>,
@@ -1932,8 +1924,8 @@ impl TypeCheckContext {
         // Tolerated diagnostics are collected as a cascade — each
         // layer is reported only if every earlier layer was clean,
         // since later diagnostics are usually consequences of earlier
-        // ones and showing both is just noise. We always return the
-        // typed expression so callers can hand it to the LSP.
+        // ones and showing both is just noise. The typed expression is
+        // returned beside whichever layer is reported.
         //
         // Order (see also doc on `check_types_are_fixed`):
         //   hole > cannot-infer > predicate > equality
@@ -2570,9 +2562,8 @@ impl TypeCheckContext {
     /// associated types. Associated-type reduction can fail when the
     /// substitution / equality state is inconsistent — a normal consequence
     /// of the tolerant elaborator stitching together partially failed
-    /// sub-expressions. On a tolerated failure, keep the un-reduced type so
-    /// downstream consumers (LSP dot completion, hover) can still read
-    /// whatever type info survived.
+    /// sub-expressions. On a tolerated failure the un-reduced type is kept,
+    /// so that whatever the inference did settle stays readable.
     fn substitute_and_reduce_type_or_keep(
         &mut self,
         ty: &Arc<TypeNode>,
@@ -3003,7 +2994,8 @@ fn make_struct_fields_in_declaration_order(
     Ok(ordered)
 }
 
-/// Returns the trimmed source text covered by `span` if it fits on a single line and within a small character budget, suitable for inlining into a diagnostic message.
+/// The trimmed source text `span` covers, where that text stands on one line and stays inside a
+/// small budget of characters, so that a diagnostic can quote it inline.
 fn short_span_snippet(span: &Span) -> Option<String> {
     /// The longest snippet a message quotes. Long enough for a field name or a small expression,
     /// short enough to leave the message readable.
