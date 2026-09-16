@@ -49,6 +49,17 @@ pub fn test_signed_overflow_check_stops_a_product_past_the_greatest() {
     );
 }
 
+/// A difference past the least value stops the program. A subtraction carries a left operand of
+/// its own, where a negation subtracts from zero, and the report names the operation
+/// `subtraction`.
+#[test]
+pub fn test_signed_overflow_check_stops_a_difference_past_the_least() {
+    assert_the_check_stops(
+        "I32::minimum - 1_I32",
+        "Signed integer overflow: I32 subtraction, with -2147483648 and 1",
+    );
+}
+
 /// Negating the least value stops the program: its magnitude is one past the greatest. Negation is
 /// emitted as a subtraction from zero, which is the shape the report names.
 #[test]

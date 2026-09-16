@@ -1,0 +1,8 @@
+module Test;
+
+test : IO ();
+test = (
+    let args = *IO::get_args;
+    let one = args.@size;
+    println((I64::maximum * one + one).to_string)
+);

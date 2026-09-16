@@ -555,10 +555,9 @@ pub struct Configuration {
     pub backtrace: bool,
     /// Leave the run-time checks, such as the array bounds check, out of the program.
     pub no_runtime_check: bool,
-    /// Stop the program at an arithmetic operation on a signed integer type whose mathematical
-    /// result leaves the range of that type. The operations this covers are `+`, `-`, `*`, unary
-    /// `-`, `/` and `%`; an unsigned operation is taken modulo two to the width of its type, so
-    /// none of those is checked.
+    /// Stop the program where arithmetic on a signed integer type gives a result outside the range
+    /// of that type. This covers `+`, `-`, `*`, unary `-`, `/` and `%`. Arithmetic on an unsigned
+    /// type is taken modulo two to the width of the type, so none of it is checked.
     pub check_signed_overflow: bool,
     /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
     /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.
@@ -1136,8 +1135,8 @@ impl Configuration {
         runtime_object.push_text(&sanitizer.to_string());
         object_generation.push_text(&backtrace.to_string());
         object_generation.push_text(&no_runtime_check.to_string());
-        // The check is emitted into the arithmetic itself, and a build without it hands LLVM the
-        // assumption that the result fits, so the two produce different code for one source.
+        // The check is emitted into the arithmetic itself, so one source builds into two different
+        // programs.
         object_generation.push_text(&check_signed_overflow.to_string());
         object_generation.push_text(&skip_eval.to_string());
         // Development mode puts the compiler's own consistency checks into the code it generates —

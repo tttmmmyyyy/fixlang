@@ -1,0 +1,11 @@
+[general]
+name = "root-check-on-in-test"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+
+[build.test]
+files = ["test.fix"]
+check_signed_overflow = true
