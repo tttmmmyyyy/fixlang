@@ -374,13 +374,16 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
     emitted_llvm_ir_modules(dir, which).join("\n")
 }
 
-/// The LLVM IR the code generator wrote for `source`, compiled at `opt_level` with `build_args` on
-/// the build command, before the LLVM pass pipeline ran over it, one string per module. Fails the
-/// test unless the build succeeds.
+/// The LLVM IR the code generator wrote for `source`, compiled at `opt_level`, before the LLVM pass
+/// pipeline ran over it, one string per module. Fails the test unless the build succeeds.
 ///
 /// Use this for a property of the code the compiler emits. The optimized module also holds code
 /// LLVM itself introduced, which such a test would take for the compiler's own work. A module
 /// numbers its metadata for itself, so a test that resolves a `!N` name reads one module of this.
+///
+/// # Arguments
+/// * `build_args` — further options for the build command, such as `--threaded`, which decide what
+///   the code generator emits.
 pub fn generated_llvm_ir_modules(
     source: &str,
     opt_level: &str,

@@ -41,7 +41,7 @@ fn single_threaded_modules() -> &'static [String] {
 }
 
 /// The modules the compiler writes for `MEMORY_ACCESS_SOURCE` with multi-threading on, built once
-/// and shared the same way.
+/// and shared by every test that reads them.
 ///
 /// The reference count of a multi-threaded object is updated by an atomic read-modify-write, which
 /// is the one access the code generator emits that no other build produces.
@@ -136,7 +136,7 @@ pub fn test_each_access_reaches_the_region_of_its_pointer() {
                     )
                 });
                 assert_eq!(
-                    region_of_tag(&nodes, tag_name),
+                    region_name_of_tag(&nodes, tag_name),
                     region.name(),
                     "an access {} through `{}` should reach the `{}` region: {}",
                     build_description,
@@ -160,8 +160,8 @@ pub fn test_each_access_reaches_the_region_of_its_pointer() {
 }
 
 /// The region an access reaches, for every name the code generator gives a pointer it reaches
-/// memory through. The table is whole: an access through a pointer it does not name fails the test
-/// above, so a new one has to be classified here.
+/// memory through. The table is whole: an access through a pointer it does not name fails
+/// `test_each_access_reaches_the_region_of_its_pointer`, so a new one has to be classified here.
 ///
 /// The name in the emitted code carries a number where a function holds several values the compiler
 /// named the same, and `compiler_given_name` takes that number off.
@@ -317,7 +317,7 @@ fn metadata_nodes(module: &str) -> Map<&str, &str> {
 /// An access tag is `!{<region>, <region>, i64 <offset>}` and a region is
 /// `!{!"<name>", <parent>, i64 <offset>}`, so the name is the first operand of the tag's first
 /// operand.
-fn region_of_tag(nodes: &Map<&str, &str>, tag_name: &str) -> String {
+fn region_name_of_tag(nodes: &Map<&str, &str>, tag_name: &str) -> String {
     let region = first_operand(operands_of(nodes, tag_name));
     first_operand(operands_of(nodes, region))
         .trim_start_matches('!')

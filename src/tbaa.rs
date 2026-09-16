@@ -5,14 +5,13 @@
 //! two reads of a field therefore reaches, as far as LLVM knows, the field itself, and the second
 //! read has to happen again.
 //!
-//! A `!tbaa` tag on a load or a store names the region of memory that access reaches. LLVM takes
-//! two accesses naming different regions never to reach the same byte, which is what lets a
-//! reference count be written between two reads of a field without the field being read twice.
+//! A `!tbaa` tag on a load or a store names the region of memory that access reaches, and LLVM
+//! takes two accesses naming different regions never to reach the same byte. That is what leaves
+//! the field where the reader already has it.
 //!
-//! Every access the code generator emits reaches memory the compiler itself laid out, which is why
-//! each one names a region. An address the program computed can land on any byte, a control block
-//! included, and the compiler hands such an address to foreign code rather than reading through
-//! it.
+//! Every access the code generator emits reaches memory the compiler laid out itself, so each one
+//! names a region. An address the program computed can land on any byte, a control block included,
+//! and the compiler hands such an address to foreign code rather than reading through it.
 
 use inkwell::context::Context;
 use inkwell::values::{InstructionValue, MetadataValue};
@@ -20,12 +19,12 @@ use inkwell::values::{InstructionValue, MetadataValue};
 /// The region of memory a load or store the code generator emits reaches.
 ///
 /// The regions partition the memory the generated code touches: every byte a tagged access reaches
-/// belongs to one of them, and no byte belongs to two. That is what the tags promise LLVM, so a
-/// byte that belonged to two regions would let LLVM reorder the accesses that reach it.
+/// belongs to one of them, and no byte belongs to two. LLVM reads the tags as that promise, and
+/// reorders two accesses the moment their regions differ.
 ///
-/// A bulk transfer carries no region, and so reaches every one of them. The transfer that moves an
-/// `#ArrayStorage` into a new block covers the control block and the elements together, which lie
-/// in two regions at once.
+/// A bulk transfer carries no region, and so reaches every one of them: the transfer that moves an
+/// `#ArrayStorage` into a new block covers the control block and the elements together, and those
+/// lie in two regions at once.
 #[derive(Clone, Copy)]
 pub enum MemoryRegion {
     /// The reference count of a boxed object.
@@ -39,8 +38,8 @@ pub enum MemoryRegion {
     /// allocated, the array of arguments the C runtime hands the program.
     ///
     /// One region covers them all, so a value written under one LLVM type and read back under
-    /// another — which a union's payload buffer is, and `Generator::bit_cast` — stays a pair of
-    /// accesses that LLVM takes to reach the same byte.
+    /// another — a union's payload buffer, `Generator::bit_cast` — stays a pair of accesses that
+    /// LLVM takes to reach the same byte.
     Data,
 }
 

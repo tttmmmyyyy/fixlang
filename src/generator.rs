@@ -510,10 +510,11 @@ impl<'c> Object<'c> {
         field_idx: u32,
     ) -> PointerValue<'c> {
         assert!(self.is_box(&gc.type_env));
-        // A boxed object's own fields begin after its control block, which is addressed by
-        // `Generator::get_refcnt_ptr` and its neighbours instead. The control block and the fields
-        // are separate regions of memory (see `MemoryRegion`), which a field reaching into the
-        // control block would join.
+        // A boxed object's own fields begin after its control block, which
+        // `Generator::get_refcnt_ptr`, `Generator::get_refcnt_state_ptr` and
+        // `build_gep_alloc_offset` address instead. The control block and the fields lie in
+        // separate regions of memory, and the tag each access carries rests on that
+        // (see `MemoryRegion`).
         assert!(
             field_idx >= BOXED_TYPE_DATA_IDX,
             "field {} of a boxed object lies in its control block",
@@ -641,8 +642,8 @@ pub struct Generator<'c, 'm> {
     /// declared that it applies one of its operands (`LLVMGen::applies_a_function_operand`). `None`
     /// outside such an op, and outside develop mode, where nothing is checked.
     pub(crate) generating_llvm_op: Option<(String, bool)>,
-    /// The `!tbaa` tag of each region of memory, which `build_load` and `build_store` put on the
-    /// accesses they emit.
+    /// The `!tbaa` tag of each region of memory, put on every load, store and atomic
+    /// read-modify-write the code generator emits.
     tbaa: TbaaTags<'c>,
 }
 
@@ -1023,8 +1024,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builders.borrow().last().unwrap().clone()
     }
 
-    /// Emit a load of `ty` from `ptr`, an access reaching `region`, naming the loaded value `name`
-    /// in the emitted code.
+    /// Emit a load of `ty` from `ptr`, an access into `region`, naming the loaded value `name` in
+    /// the emitted code.
     pub fn build_load<T: BasicType<'c>>(
         &self,
         region: MemoryRegion,
@@ -1042,7 +1043,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         loaded
     }
 
-    /// Emit a store of `value` through `ptr`, an access reaching `region`.
+    /// Emit a store of `value` through `ptr`, an access into `region`.
     pub fn build_store<V: BasicValue<'c>>(
         &self,
         region: MemoryRegion,
@@ -1053,8 +1054,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.tbaa.tag_access(store, region);
     }
 
-    /// Emit an atomic read-modify-write of `value` through `ptr` under `ordering`, an access
-    /// reaching `region`, and yield the value the location held before it.
+    /// Emit an atomic read-modify-write of `value` through `ptr` under `ordering`, an access into
+    /// `region`, and yield the value the location held before it.
     pub fn build_atomicrmw(
         &self,
         region: MemoryRegion,
