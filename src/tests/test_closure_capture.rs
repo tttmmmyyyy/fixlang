@@ -5,7 +5,10 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::build_run_and_read_rc_ir;
+    use crate::tests::test_util::{
+        build_run_and_read_rc_ir, build_within_and_run, rc_ir_function_bodies,
+    };
+    use std::time::Duration;
 
     /// Asserts that every closure `dump` builds at the type `closure_ty` stores nothing.
     ///
@@ -133,16 +136,97 @@ mod tests {
     /// What `IO_AROUND_A_CLOSURE` prints: the three lines in the order they are written.
     const IO_AROUND_A_CLOSURE_OUTPUT: &str = "before\n10\nafter";
 
-    /// The actions of an `IO` keep their order when the `IOState` they thread is left out of the
-    /// closures that captured it. The token carries no information and is made where it is read, so
-    /// what orders the actions is the sequence of bindings they were lowered into.
+    /// The actions of an `IO` keep their order at every optimization level. The `IOState` an `IO`
+    /// action threads occupies no storage, so it is among the captures left out of the closures that
+    /// captured it, and it is made where it is read instead. What orders the actions is the sequence
+    /// of bindings they were lowered into.
+    ///
+    /// Every level is covered because which captures reach a closure differs by level: below
+    /// `-O max` a captured `IOState` is left out as itself, and at `-O max` it has been gathered
+    /// into a capture list first.
     #[test]
-    fn test_io_keeps_its_order_when_the_iostate_is_left_out_of_a_closure() {
-        build_run_and_read_rc_ir(
+    fn test_io_keeps_its_order_at_every_optimization_level() {
+        for opt_level in ["none", "basic", "max"] {
+            assert_eq!(
+                build_within_and_run(
+                    IO_AROUND_A_CLOSURE,
+                    opt_level,
+                    Duration::from_secs(600),
+                    "three `IO` actions around a call taking a closure",
+                ),
+                IO_AROUND_A_CLOSURE_OUTPUT,
+                "the actions should run in order at -O {}",
+                opt_level
+            );
+        }
+    }
+
+    /// A captured `IOState` is left out of the closure and made where it is read.
+    ///
+    /// The level is `none` because that is where a closure meets an `IOState` as a captured value of
+    /// its own: closure specialization, which runs from `-O max` up, gathers a lambda's captures into
+    /// one capture list, and that list occupies storage as soon as one of the values in it does.
+    #[test]
+    fn test_an_iostate_capture_is_left_out_of_the_closure() {
+        let dump = build_run_and_read_rc_ir(
             IO_AROUND_A_CLOSURE,
-            "max",
+            "none",
             IO_AROUND_A_CLOSURE_OUTPUT,
             "three `IO` actions around a call taking a closure",
+        );
+        assert!(
+            dump.lines()
+                .any(|line| line.contains(" : Std::IO::IOState ")
+                    && line.trim_end().ends_with("= no_storage_value")),
+            "an `IOState` a closure captured should be made where it is read:\n{}",
+            dump
+        );
+    }
+
+    /// A lambda capturing values of both kinds: `u` and `v` occupy no storage, `tag` and `n` occupy
+    /// storage, and the body reads all four.
+    const MIXED_CAPTURES: &str = r#"
+        module Main;
+
+        _describe : () -> String -> () -> I64 -> Array U8 -> ((), String, (), I64, I64);
+        _describe = |u, tag, v, n, bytes| bytes.borrow_elements(
+            |ptr| (u, tag, v, n, FFI_CALL[I64 strlen(Ptr), ptr])
+        );
+
+        main : IO ();
+        main = (
+            let (_, tag, _, n, length) = _describe((), "tag", (), 7, "0123456789".get_bytes);
+            println $ tag + "," + n.to_string + "," + length.to_string
+        );
+    "#;
+
+    /// What `MIXED_CAPTURES` prints: the two captured values the closure stores, then the length of
+    /// the string it measures.
+    const MIXED_CAPTURES_OUTPUT: &str = "tag,7,10";
+
+    /// A closure storing some of its captures and leaving the rest out reads every one of them as
+    /// the value it was handed: the stored ones are projected at the positions they hold in what the
+    /// closure stores, and the rest are made in the function the lambda became.
+    ///
+    /// The level is `none` for the reason the test above gives: at `-O max` a lambda's captures
+    /// arrive as one capture list, so no closure is handed a mixture.
+    #[test]
+    fn test_a_closure_storing_some_of_its_captures_reads_them_all() {
+        let dump = build_run_and_read_rc_ir(
+            MIXED_CAPTURES,
+            "none",
+            MIXED_CAPTURES_OUTPUT,
+            "a lambda capturing two values that occupy storage and two that occupy none",
+        );
+        // A build that stopped handing the closure a mixture fails here, rather than passing on a
+        // closure whose captures are all of one kind.
+        assert!(
+            rc_ir_function_bodies(&dump, "Main::_describe")
+                .iter()
+                .any(|body| body.contains("= capture_project_")
+                    && body.contains("= no_storage_value")),
+            "a closure of `Main::_describe` should both project a capture and make one:\n{}",
+            dump
         );
     }
 }

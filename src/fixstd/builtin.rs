@@ -5074,12 +5074,6 @@ impl LLVMGen for InlineLLVMNoStorageValueBody {
         vec![]
     }
 
-    /// Making a value that occupies no storage emits nothing, so a copy of this op at each name
-    /// holding its result costs no more than one copy does.
-    fn is_free_to_duplicate(&self) -> bool {
-        true
-    }
-
     fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
