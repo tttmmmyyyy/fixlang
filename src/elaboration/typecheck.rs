@@ -438,10 +438,10 @@ impl Substitution {
             },
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
-                    let mut ret = Self::default();
+                    let mut merged = Self::default();
                     match Self::matching_internal(fun1, fun2, fixed_tyvars, kind_env)? {
                         Some(s) => {
-                            if !ret.merge(&s) {
+                            if !merged.merge(&s) {
                                 return Ok(None);
                             }
                         }
@@ -449,13 +449,13 @@ impl Substitution {
                     }
                     match Self::matching_internal(arg1, arg2, fixed_tyvars, kind_env)? {
                         Some(s) => {
-                            if !ret.merge(&s) {
+                            if !merged.merge(&s) {
                                 return Ok(None);
                             }
                         }
                         None => return Ok(None),
                     }
-                    return Ok(Some(ret));
+                    return Ok(Some(merged));
                 }
                 _ => return Ok(None),
             },
@@ -464,19 +464,19 @@ impl Substitution {
                     if assoc_ty1 != assoc_ty2 {
                         return Ok(None);
                     }
-                    let mut ret = Self::default();
+                    let mut merged = Self::default();
                     for i in 0..args1.len() {
                         match Self::matching_internal(&args1[i], &args2[i], fixed_tyvars, kind_env)?
                         {
                             Some(s) => {
-                                if !ret.merge(&s) {
+                                if !merged.merge(&s) {
                                     return Ok(None);
                                 }
                             }
                             None => return Ok(None),
                         }
                     }
-                    return Ok(Some(ret));
+                    return Ok(Some(merged));
                 }
                 _ => return Ok(None),
             },
@@ -808,7 +808,7 @@ impl TypeCheckContext {
             return Ok(());
         };
         let pats = typed.get_match_pat_vals().into_iter().map(|(pat, _)| pat);
-        let res = Pattern::validate_match_cases_exhaustiveness(
+        let exhaustiveness = Pattern::validate_match_cases_exhaustiveness(
             &cond_tycon,
             &cond_ti,
             &typed.source,
@@ -817,7 +817,7 @@ impl TypeCheckContext {
         if self.error_tolerant {
             Ok(())
         } else {
-            res
+            exhaustiveness
         }
     }
 
