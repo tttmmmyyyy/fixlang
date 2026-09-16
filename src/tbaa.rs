@@ -9,9 +9,10 @@
 //! takes two accesses naming different regions never to reach the same byte. That is what leaves
 //! the field where the reader already has it.
 //!
-//! Every access the code generator emits reaches memory the compiler laid out itself, so each one
-//! names a region. An address the program computed can land on any byte, a control block included,
-//! and the compiler hands such an address to foreign code rather than reading through it.
+//! Every access the code generator emits reaches memory laid out as a Fix value, which is why each
+//! one names a region. An address the program itself computed becomes such memory through
+//! `Std::FFI::boxed_from_retained_ptr` alone, and that operation requires the address to point at a
+//! value of the type it is read back as.
 
 use inkwell::context::Context;
 use inkwell::values::{InstructionValue, MetadataValue};
