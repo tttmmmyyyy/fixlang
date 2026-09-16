@@ -596,6 +596,16 @@ impl<'a> Lowerer<'a> {
         let (captures, remade): (Vec<_>, Vec<_>) = resolved
             .into_iter()
             .partition(|(_, var)| !var.ty.occupies_no_storage(type_env));
+        // A value occupying no storage holds no boxed value, since a pointer takes storage, so a
+        // capture left out here takes no reference-counting unit out of the closure with it.
+        for (name, var) in &remade {
+            assert!(
+                var.ty.is_fully_unboxed(type_env),
+                "the capture `{}` occupies no storage and holds a boxed value, at type `{}`",
+                name.to_string(),
+                var.ty.to_string()
+            );
+        }
         let captured_vars: Vec<RcVar> = captures.iter().map(|(_, var)| var.clone()).collect();
         let remade: Vec<(FullName, Arc<TypeNode>)> = remade
             .into_iter()
