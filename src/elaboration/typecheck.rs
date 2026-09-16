@@ -16,9 +16,9 @@ use crate::{
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
         types::{
-            is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp,
-            type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo,
-            TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
+            is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar,
+            type_fun, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme,
+            TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
         },
     },
     constants::{
@@ -2307,6 +2307,11 @@ impl TypeCheckContext {
         let Some(tycon) = ty.toplevel_tycon() else {
             return false;
         };
+        // The TyCon standing for an opaque type variable carries that variable's name, so the mark
+        // `is_opaque_tyvar` reads answers most types without the lookup below.
+        if !is_opaque_tyvar(&tycon.name.name) {
+            return false;
+        }
         let Some(info) = self.type_env.tycons().get(&tycon) else {
             return false;
         };
