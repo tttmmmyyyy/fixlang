@@ -184,7 +184,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Generate the code for an RC IR expression, dispatching on the kind of node and following its
     /// continuation. The node's debug location is already in effect. Returns the produced object
     /// when `tail` is false; when `tail` is true the return has been built and `None` is returned.
-    // PROOF: P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    // PROOF: D/A, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_expr_inner(
         &mut self,
         node: &RcExprNode,
@@ -271,7 +271,24 @@ impl<'c, 'm> Generator<'c, 'm> {
                     self.bind_and_continue(x, obj.unwrap(), k, tail, func_vals)
                 }
             }
-            RcExpr::Let(x, RcRhs::Llvm(llvm_gen, _args), k) => {
+            RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k) => {
+                // What an op declares about an operand -- whether it borrows it, what it counts on
+                // it, where its result comes from -- is answered from the type the RC IR carries,
+                // while `generate` reads an operand's type out of the scope it reads the value
+                // from. A local bound at another type would leave the code emitted and the
+                // reference counting declared for it describing different operations.
+                if self.config.develop_mode {
+                    for arg in args {
+                        if arg.name.is_local() {
+                            assert_eq!(
+                                self.get_scoped_type(&arg.name),
+                                arg.ty,
+                                "the scope binds the local `{}` at a type other than the one the operand carries",
+                                arg.name.to_string()
+                            );
+                        }
+                    }
+                }
                 // An inline-LLVM op may build the tail return itself (`FixBody`), in which case it
                 // yields no value. A diverging op (`undefined`) does not: it emits `unreachable` and
                 // yields an undef value, so the continuation is generated as dead code.

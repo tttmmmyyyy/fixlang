@@ -147,9 +147,21 @@ mod integration_tests {
         assert_line_prov(line, &format!("`{}` produces", rhs_prefix), expected_prov);
     }
 
-    /// The variable bound to the result of the operation `rhs_prefix` names.
-    fn var_produced_by(dump: &str, rhs_prefix: &str) -> String {
-        let line = binding_by_rhs(dump, rhs_prefix);
+    /// The line of the binding named `source_name` (its `(as ...)` annotation).
+    fn binding_by_source_name<'a>(dump: &'a str, source_name: &str) -> &'a str {
+        let marker = format!("(as {})", source_name);
+        dump.lines()
+            .find(|l| l.contains(&marker))
+            .unwrap_or_else(|| {
+                panic!(
+                    "no binding `(as {})` in the RC IR dump:\n{}",
+                    source_name, dump
+                )
+            })
+    }
+
+    /// The variable a binding line of the dump binds: the name between `let` and the type.
+    fn var_bound_on(line: &str) -> String {
         line.trim_start()
             .strip_prefix("let ")
             .and_then(|rest| rest.split_once(" : "))
@@ -157,20 +169,58 @@ mod integration_tests {
             .unwrap_or_else(|| panic!("no variable bound on:\n{}", line))
     }
 
+    /// The variable bound to the result of the operation `rhs_prefix` names.
+    fn var_produced_by(dump: &str, rhs_prefix: &str) -> String {
+        var_bound_on(binding_by_rhs(dump, rhs_prefix))
+    }
+
+    /// The variable the binding named `source_name` (its `(as ...)` annotation) binds.
+    fn var_bound_as(dump: &str, source_name: &str) -> String {
+        var_bound_on(binding_by_source_name(dump, source_name))
+    }
+
     /// Assert that the binding named `source_name` (its `(as ...)` annotation) is annotated with the
     /// given provenance in the dump.
     fn assert_binding_prov(dump: &str, source_name: &str, expected_prov: &str) {
-        let marker = format!("(as {})", source_name);
-        let line = dump
-            .lines()
-            .find(|l| l.contains(&marker))
-            .unwrap_or_else(|| {
-                panic!(
-                    "no binding `(as {})` in the RC IR dump:\n{}",
-                    source_name, dump
-                )
-            });
-        assert_line_prov(line, &format!("`{}` binds", marker), expected_prov);
+        let line = binding_by_source_name(dump, source_name);
+        assert_line_prov(
+            line,
+            &format!("`(as {})` binds", source_name),
+            expected_prov,
+        );
+    }
+
+    /// A field read out of a boxed container is `unknown`. The borrow such a read takes rests on
+    /// this: an operation that borrows an operand declares no leaf of its result as a pass-through
+    /// of that operand, and for a boxed container that holds because every leaf is `unknown`. A
+    /// field carrying the container's leaf through would make the read's borrow unsound.
+    #[test]
+    fn test_provenance_dump_field_of_boxed_struct() {
+        let (_temp_dir, project_dir) = setup_test_env("boxed_struct_field");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        assert_binding_prov(&dump, "field", "[unknown]");
+    }
+
+    /// A field read out of a boxed container leaves the container to whoever owns it. Nothing
+    /// retains the container to pay for the read, so a container still read afterwards is retained
+    /// nowhere and released once, at its last use.
+    #[test]
+    fn test_provenance_dump_field_read_borrows_the_container() {
+        let (_temp_dir, project_dir) = setup_test_env("boxed_struct_field");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let container = var_bound_as(&dump, "h");
+        let retain_line = format!("retain {}", container);
+        assert!(
+            !dump
+                .lines()
+                .any(|l| l.trim_start().starts_with(&retain_line)),
+            "a field read out of a boxed container should not retain the container, but `{}` \
+             stands in:\n{}",
+            retain_line,
+            dump
+        );
     }
 
     /// Verifies the three provenance judgements a single function produces: an allocation is
@@ -263,6 +313,18 @@ mod integration_tests {
         })
     }
 
+    /// Assert that `block` performs no reference counting: no line of it is a `Retain` or a
+    /// `Release`. `subject` names the block in the message.
+    fn assert_counts_nothing(block: &[&str], subject: &str) {
+        assert!(
+            block.iter().all(|l| !l.trim_start().starts_with("retain ")
+                && !l.trim_start().starts_with("release ")),
+            "{} should count no reference:\n{}",
+            subject,
+            block.join("\n")
+        );
+    }
+
     /// How many of the `tally` calls in `main` route to the borrow version, and how many stay on the
     /// owning one.
     fn tally_call_routing(main: &[&str]) -> (usize, usize) {
@@ -270,8 +332,8 @@ mod integration_tests {
             .iter()
             .filter(|l| l.contains("= Main::tally"))
             .collect::<Vec<_>>();
-        let borrow = calls.iter().filter(|l| l.contains("#borrow(")).count();
-        (borrow, calls.len() - borrow)
+        let borrow_calls = calls.iter().filter(|l| l.contains("#borrow(")).count();
+        (borrow_calls, calls.len() - borrow_calls)
     }
 
     /// Verifies which functions get a borrow version and what it buys: a function that only reads
@@ -325,14 +387,7 @@ mod integration_tests {
         // The borrow clone drops the reference counting on its borrowed parameter: its body performs
         // no retain or release.
         let tally_borrow = func_block(&dump, "fn Main::tally", |n| n.contains("#borrow"));
-        assert!(
-            tally_borrow
-                .iter()
-                .all(|l| !l.trim_start().starts_with("release ")
-                    && !l.trim_start().starts_with("retain ")),
-            "the tally borrow version should perform no reference counting:\n{}",
-            tally_borrow.join("\n")
-        );
+        assert_counts_nothing(&tally_borrow, "the tally borrow version");
     }
 
     /// Verifies that routing to a borrow version is decided by benefit as well as safety: the call
@@ -510,13 +565,9 @@ mod integration_tests {
             "the via_union borrow version should build the union:\n{}",
             via_borrow.join("\n")
         );
-        assert!(
-            via_borrow
-                .iter()
-                .all(|l| !l.trim_start().starts_with("release ")
-                    && !l.trim_start().starts_with("retain ")),
-            "the via_union borrow version must not reference-count the borrowed value or its union:\n{}",
-            via_borrow.join("\n")
+        assert_counts_nothing(
+            &via_borrow,
+            "the via_union borrow version, over the borrowed value and its union,",
         );
     }
 
