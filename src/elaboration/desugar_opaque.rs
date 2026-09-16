@@ -233,6 +233,9 @@ impl Program {
 
     /// Add the TyCon that stands for an opaque type variable to the type environment, taking the
     /// scheme's other generalized variables as its type arguments.
+    ///
+    /// That same list is what a resolution's left hand side applies the TyCon to, so the arity
+    /// `opaque_tycon_arity` reads there and the one counted here are one number.
     // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn register_opaque_tycon(&mut self, info: &OpaqueInfo) {
         let ti = TyConInfo {
@@ -549,10 +552,8 @@ fn opaque_cycle_error(graph: &Graph<&OpaqueTyConResolution>, cycle_nodes: &[usiz
 struct OpaqueApplication {
     /// The name of the opaque TyCon standing at the head of this application.
     tycon_name: FullName,
-    /// The TyCon applied to those arguments, and `None` where fewer of them are applied — a shape
-    /// `resolve_opaque_type_in_type` aborts on, so the check reads it as one that any resolution
-    /// could resolve and reports a cycle rather than leaving a type the resolution cannot replace.
-    applied_type: Option<Arc<TypeNode>>,
+    /// The TyCon applied to the arguments it takes.
+    applied_type: Arc<TypeNode>,
 }
 
 impl OpaqueApplication {
@@ -570,10 +571,7 @@ impl OpaqueApplication {
         tc: &mut TypeCheckContext,
         lhs: &Arc<TypeNode>,
     ) -> Result<bool, Errors> {
-        let Some(applied_type) = &self.applied_type else {
-            return Ok(true);
-        };
-        let applied_type = tc.instantiate_type(applied_type);
+        let applied_type = tc.instantiate_type(&self.applied_type);
         tc.are_unifiable(&applied_type, lhs)
     }
 }
@@ -600,14 +598,19 @@ fn collect_opaque_applications_inner(
         if let Some(resolutions) = opaque_resolutions.get(&tycon.name) {
             let arity = opaque_tycon_arity(resolutions);
             let args = ty.collect_type_arguments();
-            let applied_type = if args.len() >= arity {
-                Some(apply_type_args(&tycon, &args[..arity]))
-            } else {
-                None
-            };
+            // `TypeCheckContext::unify` binds a type variable to an opaque TyCon only when the
+            // TyCon carries every argument it takes, so one short of its arguments never reaches
+            // here — the same invariant `resolve_opaque_type_in_type` asserts.
+            assert!(
+                args.len() >= arity,
+                "Opaque tycon `{}` expects arity {} but only {} args applied",
+                tycon.name.to_string(),
+                arity,
+                args.len()
+            );
             applications.push(OpaqueApplication {
                 tycon_name: tycon.name.clone(),
-                applied_type,
+                applied_type: apply_type_args(&tycon, &args[..arity]),
             });
             // The arguments are types of their own; the TyCon they are applied to is this
             // application and is covered by the entry just pushed.
@@ -633,6 +636,13 @@ fn collect_opaque_applications_inner(
 
 /// The number of type arguments an opaque TyCon takes, read from the left hand side of its
 /// resolutions, which all apply it to the same number of arguments.
+/// How many arguments the opaque TyCon these resolutions resolve takes.
+///
+/// Read off a resolution's left hand side, which `build_opaque_resolutions` writes as the TyCon
+/// applied to `OpaqueInfo::tycon_vars`. `Program::register_opaque_tycon` puts that same list in the
+/// type environment as `TyConInfo::tyvars`, which is what
+/// `TypeCheckContext::is_opaque_tycon_short_of_its_arguments` counts, so the two answers agree by
+/// construction.
 fn opaque_tycon_arity(resolutions: &[OpaqueTyConResolution]) -> usize {
     resolutions[0].lhs.collect_type_arguments().len()
 }
