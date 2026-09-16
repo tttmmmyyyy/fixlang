@@ -8,6 +8,11 @@
 //! A `!tbaa` tag on a load or a store names the region of memory that access reaches. LLVM takes
 //! two accesses naming different regions never to reach the same byte, which is what lets a
 //! reference count be written between two reads of a field without the field being read twice.
+//!
+//! Every access the code generator emits reaches memory the compiler itself laid out, which is why
+//! each one names a region. An address the program computed can land on any byte, a control block
+//! included, and the compiler hands such an address to foreign code rather than reading through
+//! it.
 
 use inkwell::context::Context;
 use inkwell::values::{InstructionValue, MetadataValue};
@@ -17,7 +22,11 @@ use inkwell::values::{InstructionValue, MetadataValue};
 /// The regions partition the memory the generated code touches: every byte a tagged access reaches
 /// belongs to one of them, and no byte belongs to two. That is what the tags promise LLVM, so a
 /// byte that belonged to two regions would let LLVM reorder the accesses that reach it.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+///
+/// A bulk transfer carries no region, and so reaches every one of them. The transfer that moves an
+/// `#ArrayStorage` into a new block covers the control block and the elements together, which lie
+/// in two regions at once.
+#[derive(Clone, Copy)]
 pub enum MemoryRegion {
     /// The reference count of a boxed object.
     Refcnt,
@@ -31,8 +40,7 @@ pub enum MemoryRegion {
     ///
     /// One region covers them all, so a value written under one LLVM type and read back under
     /// another — which a union's payload buffer is, and `Generator::bit_cast` — stays a pair of
-    /// accesses that LLVM takes to reach the same byte. An access through a pointer the program
-    /// itself computed belongs to no region, since such a pointer can land on a control block.
+    /// accesses that LLVM takes to reach the same byte.
     Value,
 }
 

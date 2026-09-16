@@ -62,7 +62,6 @@ use inkwell::values::BasicValueEnum;
 use inkwell::values::FunctionValue;
 use inkwell::values::GlobalValue;
 use inkwell::values::InstructionOpcode;
-use inkwell::values::InstructionValue;
 use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
 use inkwell::values::ValueKind;
@@ -1022,10 +1021,10 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Emit a load of `ty` from `ptr`, an access reaching `region`, naming the loaded value `name`
     /// in the emitted code.
-    pub fn build_load(
+    pub fn build_load<T: BasicType<'c>>(
         &self,
         region: MemoryRegion,
-        ty: BasicTypeEnum<'c>,
+        ty: T,
         ptr: PointerValue<'c>,
         name: &str,
     ) -> BasicValueEnum<'c> {
@@ -1045,10 +1044,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         region: MemoryRegion,
         ptr: PointerValue<'c>,
         value: V,
-    ) -> InstructionValue<'c> {
+    ) {
         let stored = self.builder().build_store(ptr, value).unwrap();
         self.tbaa.tag(stored, region);
-        stored
     }
 
     /// Emit an atomic read-modify-write of `value` through `ptr` under `ordering`, an access
@@ -1254,7 +1252,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let refcnt = self
             .build_load(
                 MemoryRegion::Refcnt,
-                refcnt_type(self.context).into(),
+                refcnt_type(self.context),
                 ptr_to_refcnt,
                 &format!("refcnt{}", name_suffix),
             )
@@ -2166,7 +2164,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let old_refcnt = self
                 .build_load(
                     MemoryRegion::Refcnt,
-                    refcnt_type(self.context).into(),
+                    refcnt_type(self.context),
                     ptr_to_refcnt,
                     "",
                 )
@@ -2192,7 +2190,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let old_refcnt_local = self
             .build_load(
                 MemoryRegion::Refcnt,
-                refcnt_type(self.context).into(),
+                refcnt_type(self.context),
                 ptr_to_refcnt,
                 "",
             )
@@ -2419,7 +2417,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let old_refcnt = self
             .build_load(
                 MemoryRegion::Refcnt,
-                refcnt_type(self.context).into(),
+                refcnt_type(self.context),
                 ptr_to_refcnt,
                 "",
             )
@@ -2612,7 +2610,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
         self.build_load(
             MemoryRegion::RefcntState,
-            refcnt_state_type(self.context).into(),
+            refcnt_state_type(self.context),
             refcnt_state_ptr,
             name,
         )

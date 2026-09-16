@@ -332,7 +332,7 @@ impl ObjectFieldType {
         let counter_val = gc
             .build_load(
                 MemoryRegion::Value,
-                counter_type.into(),
+                counter_type,
                 counter_ptr,
                 "counter_val",
             )
@@ -350,7 +350,7 @@ impl ObjectFieldType {
 
         // Generate code of loop body.
         let idx = gc
-            .build_load(MemoryRegion::Value, counter_type.into(), counter_ptr, "idx")
+            .build_load(MemoryRegion::Value, counter_type, counter_ptr, "idx")
             .into_int_value();
         loop_body(gc, idx, size, buffer);
 
@@ -2106,7 +2106,7 @@ pub fn read_alloc_offset<'c, 'm>(
     let alloc_offset = gc
         .build_load(
             MemoryRegion::AllocOffset,
-            alloc_offset_type(gc.context).into(),
+            alloc_offset_type(gc.context),
             ptr_to_alloc_offset,
             "alloc_offset",
         )

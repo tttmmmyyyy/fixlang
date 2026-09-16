@@ -772,7 +772,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let flag = self
                 .build_load(
                     MemoryRegion::Value,
-                    flag_ty.into(),
+                    flag_ty,
                     init_flag_ptr,
                     "load_init_flag",
                 )
