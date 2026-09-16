@@ -4646,6 +4646,7 @@ enum FieldRead {
 // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructGetBody {
+    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The value of a field getter is the field, so `ty` is the field's type.
         let container_ty = gc.get_scoped_type(&self.var_name);

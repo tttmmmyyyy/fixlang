@@ -3217,7 +3217,7 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
      CODE src/fixstd/builtin.rs: FieldRead,
      CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_operand,
      CODE src/fixstd/builtin.rs: InlineLLVMUnionAsBody::borrows_union,
-     CODE src/ast/types.rs: TypeNode::field_types
+     CODE src/ast/types.rs: TypeNode::field_types, CODE src/ast/types.rs: TypeNode::is_box
   `InlineLLVMStructGetBody::borrows_operand` は
   `i == 0 && !matches!(self.field_read_of(arg_tys, type_env), FieldRead::TakenWithContainer)` で
   あり、`field_read_of` は `arg_tys[0]` を容器の型、
@@ -3312,10 +3312,9 @@ optimize_rc_program`)、門が偽のとき `insert_rc` の出力は `borrow_ify`
   `InlineLLVMArrayCopyCapacityBoundsUnchecked`
   は結果の各 leaf に単一の `Fresh` を置くので `Arg` を宣言しない (<1>3a)。残る 2 個は、
   `borrows_operand(i)` が真であるとき、結果の型が `is_fully_unboxed` であるか、オペランド 0 の型が
-  boxed である (<1>4)。前者では結果に leaf が無い (<1>5)。後者は `InlineLLVMStructGetBody` に
-  だけ起こり、その `result_prov` は `arg_tys[0].is_box(type_env)` の枝で結果の各 leaf に
-  `Unknown` を置く (<1>5a の末尾) ので `Arg` を含まない。どちらでも `Arg(i, σ)` を宣言する leaf を
-  持たない。(b) は <1>5a である。
+  boxed である (<1>4)。第 1 選言が成り立つ場合は結果に leaf が無い (<1>5)。第 1 選言が偽である
+  場合はオペランド 0 の型が boxed であり、`<1>5a` の末尾よりその 2 個の boxed の枝の `result_prov` は
+  `Arg` を含まない。どちらでも `Arg(i, σ)` を宣言する leaf を持たない。(b) は <1>5a である。
 
 **この命題が要る理由。** D9 の消費の表の `Llvm` の行は `borrows_operand(i)` が偽のオペランドだけを
 挙げるが、移動の表の `Llvm` の行 (素通し leaf) はその条件を持たない。両方が同時に成り立つ op が在ると、

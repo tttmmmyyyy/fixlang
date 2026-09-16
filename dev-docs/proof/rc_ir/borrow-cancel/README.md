@@ -957,8 +957,8 @@ inhabited な全 boxed leaf の参照 -- が `Obl(b)` を離れ、`b` を作っ�
 **在りかは述語で決める** -- `Generator::retain`・`Generator::build_retain`・`Generator::release` の <!--#962daf9-->
 呼び出しを出す生成コードの全体であり、一覧で書くと op が 1 つ増えるたびに古くなる。
 **述語を受け手の綴りで書かないのは、`gc.retain(` と数えると `Generator` 自身のメソッドと <!--#a6060c9-->
-`src/rc_ir/codegen.rs` が書く `self.retain(` の形が落ちるからである** -- `p05-holders.md` の修理が
-両方を数えて 25 か所と 33 か所を出した。**述語は名前の綴りでなく、呼ばれる項目で書く。**
+`src/rc_ir/codegen.rs` が書く `self.retain(` の形が落ちるからである** -- 両方を数えると
+26 か所と 34 か所である。**述語は名前の綴りでなく、呼ばれる項目で書く。**
 形は 2 つに分かれる。
 
 - **段の中で相殺するもの。** `InlineLLVMWithRetainedFunctionBody` はオペランドを retain し、適用の
@@ -2359,7 +2359,7 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 呼び出し先の対応するパラメータの型**、`Match` の scrutinee が union であること、`Destructure` の容器が
 構造体であること、**`Destructure` が名指すフィールドと `Match` が名指す変位が、その型が実際に持つ
 (punched でない) ものであること**、同じ名前の `RcVar` が持つ型が一致すること、**束縛を持たない `RcVar` の
-型が、その名前の記号の型であること**、そして次の **`Llvm` 節点の型についての 4 つ**。
+型が、その名前の記号の型であること**、そして次の **`Llvm` 節点の型についての 5 つ**。
 
 - `Let(x, Llvm(gen, args), k)` の `args` の名前の列は `gen.free_vars()` に等しい。果たす者: 演算を作る側。
   検査: `validate` の `check_rhs` が develop mode で行う。
@@ -2375,10 +2375,18 @@ payload と scrutinee の型**、`Destructure` のフィールド変数とフィ
 - `InlineLLVMStructGetBody` の `ty(x)` は `ty(args[0])` の第 `field_idx` フィールドの型であり、
   `InlineLLVMUnionAsBody` の `ty(x)` は `ty(args[0])` の第 `field_idx` 変位の payload の型である。
   果たす者: `struct_get` と `union_as` が結果の型をそのフィールド・変位の型に取ること。
+  検査: struct の側については `InlineLLVMStructGetBody::generate` が develop mode で行う。
   **`InlineLLVMUnionAsBody::borrows_operand` はその型の `is_fully_unboxed` を読み、
   `InlineLLVMStructGetBody::borrows_operand` はそれに加えて容器の型の `is_box` を読むので、この節が
   無いと、その真偽が結果について何を言うのかが決まらない**
   (`CODE src/fixstd/builtin.rs: InlineLLVMStructGetBody`, `InlineLLVMUnionAsBody`)。
+- `Let(x, Llvm(gen, args), k)` の各 `args[i]` の名前について、コード生成が scope に積んでいる値の型は
+  `ty(args[i])` である。果たす者: 誰も。検査: `Generator::eval_rc_expr_inner` の `Llvm` の腕が
+  develop mode で局所名について行う。
+  **`borrows_operand`・`internal_rc_targets`・`result_prov` は `ty(args[i])` から答え、`generate` は
+  scope が積んでいる型から同じ判断をするので、この節が無いと、宣言した参照計数と出したコードが
+  別の演算を述べうる** (`CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner`,
+  `CODE src/generator.rs: Generator::get_scoped_type`)。
 
 **この仮定が型の `variant` を述べる各節では、その型の `is_closure()` は偽である。** <!--#ad36c77-->
 **この文はその各節の一部であって、別の主張ではない。** 節を再掲する段はこの文も一緒に再掲すること -- <!--#321d7f0-->

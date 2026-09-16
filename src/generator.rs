@@ -105,6 +105,7 @@ pub enum ValueAccessor<'c> {
 
 impl<'c> ValueAccessor<'c> {
     /// The Fix type of the value this accessor names. Reading the type generates no code.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn ty(&self) -> Arc<TypeNode> {
         match self {
             ValueAccessor::Local(obj) => obj.ty.clone(),
@@ -1075,6 +1076,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The Fix type of the value `var` is bound to. Reading the type generates no code, so an
     /// operation can ask it before it decides how to read the value.
+    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_scoped_type(&mut self, var: &FullName) -> Arc<TypeNode> {
         self.get_scoped_value(var).accessor.ty()
     }

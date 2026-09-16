@@ -261,7 +261,7 @@ SCAN src/ `.retain(`
   = src/ast/types.rs: Scheme::generalize -- Rust の `Vec::retain`
   = src/commands/docs.rs: to_markdown_link -- Rust の `String::retain`
   = src/fixstd/builtin.rs: InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::generate -- 環境へ番地を渡す内部関数の本体。retain してから返る
-  = src/fixstd/builtin.rs: InlineLLVMStructGetBody::generate -- 箱の容器から取り出したフィールドを retain する。容器は読むだけ
+  = src/fixstd/builtin.rs: InlineLLVMStructGetBody::generate -- boxed 容器から取り出したフィールドを retain する。容器は読むだけ
   = src/fixstd/builtin.rs: InlineLLVMWithRetainedFunctionBody::generate -- オペランドを retain し、適用の後に release する
   = src/generator.rs: Generator::build_retain -- 定義。unbox の集約の成分へ降りる
   = src/metafiles/trust_store.rs: TrustStore::record -- Rust の `Vec::retain`
@@ -1311,8 +1311,9 @@ D24 は、段の記述が `Obl` について網羅であることの脇で、生
       本体として `gc.retain(obj, RcState::Unknown)` を置き、そのまま `build_return` する。
       `InlineLLVMWithRetainedFunctionBody::generate` は `gc.retain(x, ..)` の後に `apply_lambda` を呼び、
       `gc.release(x, ..)` する。`ObjectFieldType::get_struct_fields`・`get_union_value`・
-      `read_from_array_buf` と `Generator::build_capture_project` は、読み出した値を retain して返す。
-      `Generator::get_scoped_obj` は `retain_on_read` が真のとき読んだ値を retain して返す。
+      `read_from_array_buf` と `Generator::build_capture_project`、`InlineLLVMStructGetBody::generate`
+      は、読み出した値を retain して返す。`Generator::get_scoped_obj` は `retain_on_read` が真のとき
+      読んだ値を retain して返す。
       `Generator::build_run_destructor` は `_dtor` の欄の値を retain して `apply_lambda` へ渡す --
       同じ項目が `move_into_struct_field` で `_value` の欄へ書き戻すのは、その retain が作った参照では
       なく、走らせた `IO` の動作が返した値である (D24 の (F))。`Generator::eval_rc_expr_inner` の
@@ -1325,7 +1326,7 @@ D24 は、段の記述が `Obl` について網羅であることの脇で、生
      ObjectFieldType::read_from_array_buf, ObjectFieldType::move_into_struct_field,
      CODE src/rc_ir/codegen.rs: Generator::eval_rc_expr_inner, Generator::eval_rc_match,
      CODE src/fixstd/builtin.rs: InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody::generate,
-     InlineLLVMWithRetainedFunctionBody::generate
+     InlineLLVMWithRetainedFunctionBody::generate, InlineLLVMStructGetBody::generate
 
 <1>3. `clone_struct` と `clone_union` が書き込む先は、その節点の実行が割り当てたオブジェクトである。
       `clone_struct` は写した各フィールドを retain して `dst` の欄へ `move_into_struct_field` で書く --

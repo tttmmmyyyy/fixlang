@@ -1013,9 +1013,12 @@ T の結論が実際に破れるかどうかは別の問いであり、この文
 A3 については人手の照合の記録
 (`dev-docs/2026-06-28-unique-check-elim/audit-2026-07-20-op-declarations.md`) を、A18 (a) については
 valgrind の下で走るテストを、A24 については `Lowerer::lower_llvm` の panic を、それぞれ検査として
-挙げている。A12 の検査は最初の箇条 -- `Llvm` 節点の `args` の名前の列が `gen.free_vars()` に
-等しいこと -- についてだけであり、develop mode の `validate` の `check_rhs` である。A4 と A26a には
-検査が無い。
+挙げている。A12 の検査は `Llvm` 節点についての 3 つの箇条 -- `args` の名前の列が `gen.free_vars()` に
+等しいこと (develop mode の `validate` の `check_rhs`)、`InlineLLVMStructGetBody` の `ty(x)` が
+`ty(args[0])` の第 `field_idx` フィールドの型であること (develop mode の
+`InlineLLVMStructGetBody::generate`)、コード生成が `args[i]` の局所名について scope に積んでいる型が
+`ty(args[i])` であること (develop mode の `Generator::eval_rc_expr_inner` の `Llvm` の腕) -- に
+ついてだけである。A4 と A26a には検査が無い。
 
 **README が「検査: 無し」と書き、かつ果たす者が居るのは A13 (`clone_fresh` が作る名前の節)・A16・A17・
 A19・A20・A21・A22・A23・A26・A30・A31 の 11 個である。** **この一覧は、上の表の全行に「果たす者の欄が
@@ -1228,20 +1231,22 @@ P24 の対応でつなぎ、「`p0.funcs` の各関数の `name` が `p2.funcs` 
 ### 開発ビルドでだけ走る検査
 
 README の第 4 節は、`develop_mode` のときだけ走る表明を「3 段目より弱い」とし、そこに **A9・A11・
-A13** を挙げる。**A12** の最初の箇条 (`Llvm` 節点の `args` の名前の列) の検査、**A3** の 2 つの
+A13** を挙げる。**A12** の `Llvm` 節点についての 3 つの箇条の検査、**A3** の 2 つの
 検査 (`applies_a_function_operand` と `result_prov` の元数)、そして **A10** の「ただし最適化が
 作る型を再検査するのは develop build だけである」も同じである。すなわち出荷ビルドでは、この
 **6 つ**の仮定はこれらの検査を持たない。**A3 の 2 つの節については、README が果たす者に挙げるのが
 その検査そのものなので、出荷ビルドではその節を支える者が居ない。**残る A9・A11・A12・A13・A10 は、
-検査とは別の果たす者を持つ -- A9・A11・A13 は lowering、**A12 の最初の箇条は演算を作る側**、A10 の
-飽和は kind の体系である。**A10 の `validate_layouts` が果たすのは大きさの部分である** -- 第 3 節の
+検査とは別の果たす者を持つ -- A9・A11・A13 は lowering、**A12 の最初の箇条は演算を作る側、
+`InlineLLVMStructGetBody` の結果の型の箇条は `struct_get`** であり、A10 の
+飽和は kind の体系である。**scope が積む型の箇条の果たす者は居ない。****A10 の `validate_layouts` が果たすのは大きさの部分である** -- 第 3 節の
 表が、飽和を果たすのは kind の体系であり `validate_layouts` は飽和を検査しないと書く。
 
 A3 の 2 つの検査は別の場所に在る。`applies_a_function_operand` のものは
 `Generator::apply_lambda` の表明であり、`borrow_ify` と `cancel` の外 -- コード生成の側 -- に在る。
 `result_prov` の元数のものは `validate` の `check_rhs` であり、下に述べる `validate` の中に在る。
-A10 の再検査は `validate_layouts` の側にある。残る A3 (元数)・A9・A11・A12・A13 がこの 2 つのパスの
-側に在る。
+A10 の再検査は `validate_layouts` の側にある。**A12 の後ろの 2 つの箇条の検査も、コード生成の側に
+在る** -- `InlineLLVMStructGetBody::generate` と `Generator::eval_rc_expr_inner` の `Llvm` の腕である。
+残る A3 (元数)・A9・A11・A12 の最初の箇条・A13 がこの 2 つのパスの側に在る。
 
 `optimize_rc_program` の `validate`、`borrow_ify` の `check_clone_names_are_fresh` と
 `check_ownership_is_levelled` は、`config.develop_mode` / `develop_mode` が真のときだけ走る
