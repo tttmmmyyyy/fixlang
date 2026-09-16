@@ -2303,6 +2303,9 @@ impl TypeCheckContext {
     /// `desugar_opaque::resolve_opaque_type_in_type` asserts that no such type reaches it, so a
     /// path that let one through would abort the compiler rather than report anything.
     ///
+    /// A type headed by a type variable or an associated type, and one headed by a TyCon the type
+    /// environment does not declare, are both types this asks about and answers no for.
+    ///
     /// # Examples
     /// `Std::Array::to_iter::?it` stands for one argument, so `?it Std::I64` is a type and the bare
     /// `?it` is not.

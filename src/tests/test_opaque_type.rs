@@ -2347,13 +2347,10 @@ pub fn test_opaque_type_is_not_read_as_a_type_constructor_even_when_always_appli
         main : IO ();
         main = println(id_container([1, 2, 3].to_iter).to_array.to_string);
     "#;
-    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
-    assert!(
-        errmsg.contains(
-            "An opaque type cannot be read as a type constructor applied to an argument."
-        ),
-        "Expected the error saying an opaque type is an atom, got: {}",
-        errmsg
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "An opaque type cannot be read as a type constructor applied to an argument.",
     );
 }
 
@@ -2371,13 +2368,10 @@ pub fn test_opaque_type_is_not_read_as_a_type_constructor_fixed_by_a_signature()
         main : IO ();
         main = println("ok");
     "#;
-    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
-    assert!(
-        errmsg.contains(
-            "An opaque type cannot be read as a type constructor applied to an argument."
-        ),
-        "Expected the error saying an opaque type is an atom, got: {}",
-        errmsg
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "An opaque type cannot be read as a type constructor applied to an argument.",
     );
 }
 
@@ -2407,13 +2401,10 @@ pub fn test_opaque_type_of_a_trait_member_is_not_read_as_a_type_constructor() {
             pure()
         );
     "#;
-    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
-    assert!(
-        errmsg.contains(
-            "An opaque type cannot be read as a type constructor applied to an argument."
-        ),
-        "Expected the error saying an opaque type is an atom, got: {}",
-        errmsg
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "An opaque type cannot be read as a type constructor applied to an argument.",
     );
 }
 
@@ -2474,10 +2465,9 @@ pub fn test_opaque_type_under_a_higher_kinded_associated_type_is_reported() {
         main : IO ();
         main = println(use_it(()).to_string);
     "#;
-    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
-    assert!(
-        errmsg.contains("take(f, [1, 2, 3].to_iter.map(|x| x + 1))"),
-        "Error did not cite the call whose type is opaque, got: {}",
-        errmsg
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "take(f, [1, 2, 3].to_iter.map(|x| x + 1))",
     );
 }
