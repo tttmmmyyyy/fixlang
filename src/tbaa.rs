@@ -26,6 +26,12 @@ use inkwell::values::{InstructionValue, MetadataValue};
 /// A bulk transfer carries no region, and so reaches every one of them: the transfer that moves an
 /// `#ArrayStorage` into a new block covers the control block and the elements together, and those
 /// lie in two regions at once.
+///
+/// A region can be no finer than the granularity at which the generated code reuses memory, since a
+/// byte written again as a value of another type would belong to two regions. The regions here
+/// stand under every in-place update the code makes: writing an array element or a field of a
+/// unique object leaves the control block a control block. Splitting `Data` along the types of Fix
+/// values meets this where a union's payload is concerned, whose variants share one byte range.
 #[derive(Clone, Copy)]
 pub enum MemoryRegion {
     /// The reference count of a boxed object.
