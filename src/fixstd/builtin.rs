@@ -6824,10 +6824,8 @@ impl LLVMGen for InlineLLVMUnionIsBody {
         let actual_tag = ObjectFieldType::get_union_tag(gc, &obj);
 
         // Compare tags and convert the boolean result to i8.
-        let is_tag_match = gc
-            .builder()
-            .build_int_compare(IntPredicate::EQ, expected_tag, actual_tag, "is_tag_match")
-            .unwrap();
+        let is_tag_match =
+            ObjectFieldType::build_union_tag_matches(gc, expected_tag, actual_tag, "is_tag_match");
         let match_bool = gc
             .builder()
             .build_int_z_extend(is_tag_match, gc.context.i8_type(), "match_bool")
@@ -6923,15 +6921,12 @@ impl LLVMGen for InlineLLVMUnionModBody {
         let actual_tag = ObjectFieldType::get_union_tag(gc, &obj);
 
         // Branch and store result to ret_ptr.
-        let is_tag_match = gc
-            .builder()
-            .build_int_compare(
-                IntPredicate::EQ,
-                expected_tag,
-                actual_tag,
-                "is_tag_match@union_mod_function",
-            )
-            .unwrap();
+        let is_tag_match = ObjectFieldType::build_union_tag_matches(
+            gc,
+            expected_tag,
+            actual_tag,
+            "is_tag_match@union_mod_function",
+        );
         let current_func = gc.current_function();
         let mut match_bb = gc.context.append_basic_block(current_func, "match_bb");
         let mut mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
