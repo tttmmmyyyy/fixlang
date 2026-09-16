@@ -120,8 +120,8 @@ pub struct ProjectFileBuild {
     /// Whether to leave the run-time checks, such as the array bounds check, out of the program.
     /// Unset keeps them.
     no_runtime_check: Option<bool>,
-    /// Whether to stop the program at an arithmetic operation on a signed integer type whose
-    /// mathematical result leaves the range of that type. Unset leaves such an operation alone.
+    /// Whether the program stops where arithmetic on a signed integer type gives a result outside
+    /// the range of that type. Unset lets it run on.
     check_signed_overflow: Option<bool>,
     /// Whether to compile `eval {side}; {main}` as `{main}`, leaving the effect of `{side}` out of
     /// the program. Unset evaluates `{side}`.
@@ -197,9 +197,7 @@ pub struct ProjectFileBuildTest {
     /// Whether to leave the run-time checks, such as the array bounds check, out of a test build.
     /// Unset keeps them, and the value the `build` section gives covers the program alone.
     no_runtime_check: Option<bool>,
-    /// Whether to stop a test at an arithmetic operation on a signed integer type whose
-    /// mathematical result leaves the range of that type. Unset leaves the value the `build`
-    /// section gives in force.
+    /// Whether a test stops there too. Unset takes the value from the `build` section.
     check_signed_overflow: Option<bool>,
     /// Whether to compile `eval {side}; {main}` as `{main}` in a test build, leaving the effect of
     /// `{side}` out of it. Unset evaluates `{side}`, and the value the `build` section gives covers
@@ -1069,22 +1067,19 @@ impl ProjectFile {
         config.no_runtime_check = no_runtime_check.unwrap_or(false);
         config.skip_eval = skip_eval.unwrap_or(false);
 
-        // Set check_signed_overflow. A test build keeps whatever the `build` section asks for and
-        // the `build.test` section may ask for it on top, since a check a project turns on is one
-        // it wants its tests to run under as well.
-        if self.build.check_signed_overflow == Some(true) {
-            config.check_signed_overflow = true;
-        }
-        if mode == BuildConfigType::Test
-            && self
-                .build
+        // Set check_signed_overflow. A project that asks for the check wants its tests run under
+        // it too, so a test build takes the `build` section's value where the `build.test` section
+        // names none.
+        let check_signed_overflow = if mode == BuildConfigType::Test {
+            self.build
                 .test
                 .as_ref()
                 .and_then(|test| test.check_signed_overflow)
-                == Some(true)
-        {
-            config.check_signed_overflow = true;
-        }
+                .or(self.build.check_signed_overflow)
+        } else {
+            self.build.check_signed_overflow
+        };
+        config.check_signed_overflow = check_signed_overflow.unwrap_or(false);
 
         Ok(())
     }

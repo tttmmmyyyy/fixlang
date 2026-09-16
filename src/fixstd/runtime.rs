@@ -18,9 +18,9 @@ pub const RUNTIME_NEGATIVE_ARRAY_SIZE: &str = "fixruntime_negative_array_size";
 /// The runtime function that reports an array capacity beyond what an element buffer can hold and
 /// ends the program. It takes the capacity, and returns to no one.
 pub const RUNTIME_ARRAY_SIZE_OVERFLOW: &str = "fixruntime_array_size_overflow";
-/// The runtime function that reports an arithmetic operation on a signed integer type whose result
-/// left the range of that type, and ends the program. It takes the operation's name and its two
-/// operands widened to 64 bits, and returns to no one.
+/// The runtime function that reports arithmetic whose result left the range of its signed integer
+/// type, and ends the program. It takes the operation's name and its two operands widened to 64
+/// bits, and returns to no one.
 pub const RUNTIME_SIGNED_OVERFLOW: &str = "fixruntime_signed_overflow";
 /// The runtime function that writes a C string to standard error, followed by a newline.
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
