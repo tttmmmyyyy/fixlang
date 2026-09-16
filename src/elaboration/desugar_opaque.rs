@@ -942,6 +942,8 @@ pub fn resolve_opaque_type_in_type(
 
         // Split the type args into prefix (arity args) and rest.
         let all_args = ty.collect_type_arguments();
+        // `TypeCheckContext::unify` lets a type variable stand for an opaque TyCon only with every
+        // argument it stands for, which is what keeps one short of them out of an inferred type.
         assert!(
             all_args.len() >= arity,
             "Opaque tycon `{}` expects arity {} but only {} args applied",

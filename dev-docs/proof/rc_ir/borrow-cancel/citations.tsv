@@ -182,13 +182,13 @@ src/constants.rs	TraverserWorkType	P26	dd8e82c37fba
 src/elaboration/desugar_opaque.rs	Program::desugar_opaque_types	P27,P29,P30	c56131df5dd5
 src/elaboration/desugar_opaque.rs	collect_opaque_infos	P27,P29,P30	a060a45a2d95
 src/elaboration/desugar_opaque.rs	register_opaque_tycon	P1,P2	fc5202f8b47e
-src/elaboration/desugar_opaque.rs	resolve_opaque_type_in_type	P2a,P15,P16,P17,P18	fb927ee1a67c
+src/elaboration/desugar_opaque.rs	resolve_opaque_type_in_type	P2a,P15,P16,P17,P18	a1befe79c7f3
 src/elaboration/mod.rs	elaborate	P1,P2,P5,P6,P7	cd448f6a71aa
 src/elaboration/typecheck.rs	Substitution	P2a,P15,P16,P17,P18	573fb707258d
 src/elaboration/typecheck.rs	Substitution::merge	P1,P2,P2a,P15,P16,P17,P18	d19740bbbe67
 src/elaboration/typecheck.rs	Substitution::single	P1,P2,P2a,P15,P16,P17,P18	40a589023dbf
 src/elaboration/typecheck.rs	Substitution::substitute_type	P1,P2,P2a,P15,P16,P17,P18	a0820f8e8059
-src/elaboration/typecheck.rs	TypeCheckContext::unify	P2a,P15,P16,P17,P18,P26	60ade9a49ea9
+src/elaboration/typecheck.rs	TypeCheckContext::unify	P2a,P15,P16,P17,P18,P26	1fa7c37ec68f
 src/elaboration/typecheck.rs	TypeCheckContext::unify_or_tolerated_mismatch	P26	20cd23171b40
 src/elaboration/typecheck.rs	TypeCheckContext::unify_type_of_expr	P26	9f6fcd7b0499
 src/elaboration/typecheck.rs	TypeCheckContext::unify_type_of_expr_inner	D/A,P26,A21	c3b65b0be2be
