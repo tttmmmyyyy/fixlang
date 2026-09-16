@@ -19,7 +19,7 @@ mod struct_get_borrow_tests {
 module Main;
 
 // A boxed value, so that a field holding one holds a reference.
-type Leaf = box struct { tag : Array I64 };
+type Leaf = box struct { arr : Array I64 };
 
 // An unbox struct with boxed leaves, so that retaining a field read out reaches every leaf.
 type Pair = unbox struct { left : Leaf, right : Leaf };
@@ -32,25 +32,25 @@ type Choice = unbox union { held : Leaf, plain : I64 };
 // boxed variant, and a closure.
 type Holder = box struct {
     n : I64,
-    xs : Array I64,
+    arr : Array I64,
     pair : Pair,
     choice : Choice,
     step : I64 -> I64
 };
 
 // The same read out of an unboxed container, which takes the container over instead.
-type Plain = unbox struct { xs : Array I64, n : I64 };
+type UnboxedHolder = unbox struct { arr : Array I64, n : I64 };
 
 make_holder : I64 -> Holder;
-make_holder = |s| Holder {
-    n : s,
-    xs : Array::from_map(4, |i| i + s),
+make_holder = |base| Holder {
+    n : base,
+    arr : Array::from_map(4, |i| i + base),
     pair : Pair {
-        left : Leaf { tag : Array::from_map(2, |i| i + s) },
-        right : Leaf { tag : Array::from_map(2, |i| i + s + 10) }
+        left : Leaf { arr : Array::from_map(2, |i| i + base) },
+        right : Leaf { arr : Array::from_map(2, |i| i + base + 10) }
     },
-    choice : Choice::held(Leaf { tag : Array::from_map(2, |i| i + s + 20) }),
-    step : |k| k + s
+    choice : Choice::held(Leaf { arr : Array::from_map(2, |i| i + base + 20) }),
+    step : |k| k + base
 };
 
 // Reads every reference-bearing field of the container once a round without consuming it, so each
@@ -58,7 +58,7 @@ make_holder = |s| Holder {
 read_each_round : I64 -> Holder -> I64;
 read_each_round = |rounds, h| (
     Iterator::range(0, rounds).fold(0, |_, acc|
-        acc + h.@xs.@(0) + h.@pair.@left.@tag.@(0) + h.@choice.as_held.@tag.@(0) + (h.@step $ 1)
+        acc + h.@arr.@(0) + h.@pair.@left.@arr.@(0) + h.@choice.as_held.@arr.@(0) + (h.@step $ 1)
     )
 );
 
@@ -68,14 +68,14 @@ main = (
 
     // A field read out of a boxed container is a reference of the reader's own, so writing to it
     // copies instead of writing through to the container's own.
-    assert_eq(|_|"the field read out is written", h.@xs.set(0, 111).@(0), 111);;
-    assert_eq(|_|"the container's own field is unchanged", h.@xs.@(0), 3);;
+    assert_eq(|_|"the field read out is written", h.@arr.set(0, 111).@(0), 111);;
+    assert_eq(|_|"the container's own field is unchanged", h.@arr.@(0), 3);;
     assert_eq(|_|"the leaf of an unbox struct field is written",
-        h.@pair.@left.@tag.set(0, 222).@(0), 222);;
-    assert_eq(|_|"the container's own leaf is unchanged", h.@pair.@left.@tag.@(0), 3);;
+        h.@pair.@left.@arr.set(0, 222).@(0), 222);;
+    assert_eq(|_|"the container's own leaf is unchanged", h.@pair.@left.@arr.@(0), 3);;
     assert_eq(|_|"the payload of a union field is written",
-        h.@choice.as_held.@tag.set(0, 333).@(0), 333);;
-    assert_eq(|_|"the container's own payload is unchanged", h.@choice.as_held.@tag.@(0), 23);;
+        h.@choice.as_held.@arr.set(0, 333).@(0), 333);;
+    assert_eq(|_|"the container's own payload is unchanged", h.@choice.as_held.@arr.@(0), 23);;
 
     // The reads leave the container usable, round after round.
     assert_eq(|_|"the container is read once a round", read_each_round(5, h), 165);;
@@ -85,14 +85,14 @@ main = (
     // has to carry a reference of its own out, or it is read back after the container freed it.
     let taken = (
         let holders = Array::from_map(3, make_holder);
-        holders.@(1).@xs
+        holders.@(1).@arr
     );
     assert_eq(|_|"the field outlives the container it was read out of", taken.@(0), 1);;
 
     // An unboxed container's read takes the container over, and hands out a field just as usable.
-    let p = Plain { xs : Array::from_map(4, |i| i * 2), n : 9 };
-    assert_eq(|_|"the field of an unboxed container is written", p.@xs.set(0, 444).@(0), 444);;
-    assert_eq(|_|"the unboxed container's own field is unchanged", p.@xs.@(0), 0);;
+    let p = UnboxedHolder { arr : Array::from_map(4, |i| i * 2), n : 9 };
+    assert_eq(|_|"the field of an unboxed container is written", p.@arr.set(0, 444).@(0), 444);;
+    assert_eq(|_|"the unboxed container's own field is unchanged", p.@arr.@(0), 0);;
 
     pure()
 );

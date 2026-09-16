@@ -211,12 +211,12 @@ mod integration_tests {
         let dump = emit_main_rc_ir(&project_dir);
 
         let container = var_bound_as(&dump, "h");
-        let retain = format!("retain {}", container);
+        let retain_line = format!("retain {}", container);
         assert!(
-            !dump.lines().any(|l| l.trim_start().starts_with(&retain)),
+            !dump.lines().any(|l| l.trim_start().starts_with(&retain_line)),
             "a field read out of a boxed container should not retain the container, but `{}` \
              stands in:\n{}",
-            retain,
+            retain_line,
             dump
         );
     }
