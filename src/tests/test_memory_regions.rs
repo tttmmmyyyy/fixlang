@@ -165,7 +165,7 @@ pub fn test_each_access_reaches_the_region_of_its_pointer() {
 ///
 /// The name in the emitted code carries a number where a function holds several values the compiler
 /// named the same, and `compiler_given_name` takes that number off.
-const REGION_OF_EACH_POINTER: [(&str, MemoryRegion); 13] = [
+const REGION_OF_EACH_POINTER: [(&str, MemoryRegion); 12] = [
     // `Generator::get_refcnt_ptr`
     ("ptr_to_refcnt", MemoryRegion::Refcnt),
     // `Generator::get_refcnt_state_ptr`
@@ -174,8 +174,6 @@ const REGION_OF_EACH_POINTER: [(&str, MemoryRegion); 13] = [
     ("ptr_to_alloc_offset", MemoryRegion::AllocOffset),
     // `Object::ptr_to_field_as`
     ("gep2field", MemoryRegion::Data),
-    // `Object::gep_boxed`
-    ("ptr_to_field_nocap", MemoryRegion::Data),
     // `build_gep_array_elem`
     ("ptr_to_elem_of_array", MemoryRegion::Data),
     ("ptr_to_src_elem", MemoryRegion::Data),
