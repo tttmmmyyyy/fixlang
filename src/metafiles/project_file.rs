@@ -197,7 +197,8 @@ pub struct ProjectFileBuildTest {
     /// Whether to leave the run-time checks, such as the array bounds check, out of a test build.
     /// Unset keeps them, and the value the `build` section gives covers the program alone.
     no_runtime_check: Option<bool>,
-    /// Whether a test stops there too. Unset takes the value from the `build` section.
+    /// Whether a test stops where arithmetic on a signed integer type gives a result outside the
+    /// range of that type. Unset takes the value from the `build` section.
     check_signed_overflow: Option<bool>,
     /// Whether to compile `eval {side}; {main}` as `{main}` in a test build, leaving the effect of
     /// `{side}` out of it. Unset evaluates `{side}`, and the value the `build` section gives covers

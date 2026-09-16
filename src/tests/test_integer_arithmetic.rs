@@ -50,7 +50,8 @@ pub fn test_signed_overflow_check_stops_a_product_past_the_greatest() {
 }
 
 /// A difference past the least value stops the program. A subtraction carries a left operand of
-/// its own, where a negation subtracts from zero, and the report names it by its own word.
+/// its own, where a negation subtracts from zero, and the report names the operation
+/// `subtraction`.
 #[test]
 pub fn test_signed_overflow_check_stops_a_difference_past_the_least() {
     assert_the_check_stops(

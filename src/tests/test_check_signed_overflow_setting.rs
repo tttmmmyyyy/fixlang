@@ -1,10 +1,10 @@
-//! Where a build stops at a signed overflow is a setting of the build being made, and a test build
-//! takes the `build` section's value where the `build.test` section names none.
+//! Whether a build stops at a signed overflow is a setting of that build. A test build takes the
+//! `build.test` section's value, and the `build` section's value where `build.test` names none.
 //!
 //! Each case under `test_check_signed_overflow_setting/cases` sums past the greatest value of
-//! `I64`. The check stops the program there; without it the sum is taken modulo two to the width of
-//! the type, so the program prints it and exits. So "the check was left out" is observable as a
-//! completed run.
+//! `I64`. Under the check the program stops there; without it the sum is taken modulo two to the
+//! width of the type, so the program prints it and exits. A run that completes therefore shows the
+//! build was made without the check.
 
 use crate::tests::test_util::{assert_succeeded, run_fix, setup_case_projects};
 use std::process::Output;
@@ -15,7 +15,10 @@ const CASES: &str = "src/tests/test_check_signed_overflow_setting/cases";
 /// What the check says when it stops the program at the sum the case projects ask for.
 const SUM_STOPPED: &str = "Signed integer overflow: I64 addition";
 
-/// Asserts that `output` failed with the check's report.
+/// Asserts that `output` failed with the check's report, quoting both streams otherwise.
+///
+/// # Arguments
+/// * `what` — what the run was expected to do, so a failure says which expectation broke.
 fn assert_stopped_by_the_check(output: &Output, what: &str) {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
