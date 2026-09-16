@@ -357,7 +357,7 @@ impl<'c> Object<'c> {
         assert!(self.is_box(&gc.type_env));
         let ptr_to_field = self.ptr_to_field_as(gc, ty, field_idx);
         let field_ty = ty.get_field_type_at_index(field_idx).unwrap();
-        gc.build_load(MemoryRegion::Value, field_ty, ptr_to_field, "field")
+        gc.build_load(MemoryRegion::Data, field_ty, ptr_to_field, "field")
     }
 
     /// Extract a field of an object as an `Object`, keeping its value in the part domain: for an
@@ -481,7 +481,7 @@ impl<'c> Object<'c> {
     {
         assert!(self.is_box(&gc.type_env));
         let ptr_to_field = self.ptr_to_field_as(gc, ty, field_idx);
-        gc.build_store(MemoryRegion::Value, ptr_to_field, value);
+        gc.build_store(MemoryRegion::Data, ptr_to_field, value);
     }
 
     /// The traverser function a `#DynamicObject` carries, which is what drives the lifetimes of the
@@ -1033,7 +1033,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         name: &str,
     ) -> BasicValueEnum<'c> {
         let loaded = self.builder().build_load(ty, ptr, name).unwrap();
-        self.tbaa.tag(
+        self.tbaa.tag_access(
             loaded
                 .as_instruction_value()
                 .expect("a load is an instruction"),
@@ -1049,8 +1049,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         ptr: PointerValue<'c>,
         value: V,
     ) {
-        let stored = self.builder().build_store(ptr, value).unwrap();
-        self.tbaa.tag(stored, region);
+        let store = self.builder().build_store(ptr, value).unwrap();
+        self.tbaa.tag_access(store, region);
     }
 
     /// Emit an atomic read-modify-write of `value` through `ptr` under `ordering`, an access
@@ -1067,7 +1067,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .builder()
             .build_atomicrmw(operation, ptr, value, ordering)
             .unwrap();
-        self.tbaa.tag(
+        self.tbaa.tag_access(
             old.as_instruction_value()
                 .expect("an atomic read-modify-write is an instruction"),
             region,
@@ -1723,7 +1723,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     .builder()
                     .build_struct_gep(buf_ty, out_ptr, i as u32, "out_part_ptr")
                     .unwrap();
-                self.build_load(MemoryRegion::Value, *part_ty, part_ptr, "load_out_part")
+                self.build_load(MemoryRegion::Data, *part_ty, part_ptr, "load_out_part")
             })
             .collect();
         Object::from_parts(parts, ret_ty, self)
@@ -2712,7 +2712,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     .builder()
                     .build_struct_gep(buf_ty, out_ptr, i as u32, "out_part_ptr")
                     .unwrap();
-                self.build_store(MemoryRegion::Value, part_ptr, *part);
+                self.build_store(MemoryRegion::Data, part_ptr, *part);
             }
             self.builder().build_return(None).unwrap();
             return;
@@ -3165,7 +3165,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let obj_val = obj.value(self);
         let storage =
             self.build_alloca_at_entry(obj_val.get_type(), "alloca@create_debug_local_variable");
-        self.build_store(MemoryRegion::Value, storage, obj_val);
+        self.build_store(MemoryRegion::Data, storage, obj_val);
 
         let embed_ty = obj.debug_embedded_ty(self);
         let loc_var = self.get_di_builder().create_auto_variable(
@@ -3202,8 +3202,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         let (from_size, to_size) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
         let larger_ty = if from_size > to_size { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
-        self.build_store(MemoryRegion::Value, ptr, val);
-        self.build_load(MemoryRegion::Value, to_ty, ptr, "bit_cast")
+        self.build_store(MemoryRegion::Data, ptr, val);
+        self.build_load(MemoryRegion::Data, to_ty, ptr, "bit_cast")
     }
 
     /// Add a named enum attribute (e.g. `noreturn`, `noalias`) to a function. Enum attributes

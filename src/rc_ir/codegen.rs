@@ -101,7 +101,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
             .try_as_basic_value()
             .expect_basic("`InitValue#...` returns the value of the global");
-        self.build_store(MemoryRegion::Value, global_var_ptr, computed);
+        self.build_store(MemoryRegion::Data, global_var_ptr, computed);
     }
 
     /// Implement an `RcFunc` body: bind the parameters (and the capture pointer, for a closure) onto
@@ -770,12 +770,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Compute and store the value on the first access alone.
         let end_bb = if !self.config.threaded {
             let flag = self
-                .build_load(
-                    MemoryRegion::Value,
-                    flag_ty,
-                    init_flag_ptr,
-                    "load_init_flag",
-                )
+                .build_load(MemoryRegion::Data, flag_ty, init_flag_ptr, "load_init_flag")
                 .into_int_value();
             let is_zero = self
                 .builder()
@@ -814,7 +809,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.builder().position_at_end(store_bb);
             self.store_init_value(init_value_fn, global_var_ptr);
             self.build_store(
-                MemoryRegion::Value,
+                MemoryRegion::Data,
                 init_flag_ptr,
                 flag_ty.const_int(1, false),
             );
@@ -853,7 +848,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Return the stored value.
         self.builder().position_at_end(end_bb);
         let value = self.build_load(
-            MemoryRegion::Value,
+            MemoryRegion::Data,
             obj_embed_ty,
             global_var_ptr,
             "load_global_var",

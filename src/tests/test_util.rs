@@ -381,7 +381,11 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
 /// Use this for a property of the code the compiler emits. The optimized module also holds code
 /// LLVM itself introduced, which such a test would take for the compiler's own work. A module
 /// numbers its metadata for itself, so a test that resolves a `!N` name reads one module of this.
-pub fn generated_llvm_ir_modules(source: &str, opt_level: &str, build_args: &[&str]) -> Vec<String> {
+pub fn generated_llvm_ir_modules(
+    source: &str,
+    opt_level: &str,
+    build_args: &[&str],
+) -> Vec<String> {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();
     let build = fix_build_source_command(dir, source, opt_level)

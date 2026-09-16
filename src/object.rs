@@ -320,7 +320,7 @@ impl ObjectFieldType {
         // Allocate and initialize loop counter.
         let counter_type = gc.context.i64_type();
         let counter_ptr = gc.build_alloca_at_entry(counter_type, "release_loop_counter");
-        gc.build_store(MemoryRegion::Value, counter_ptr, counter_type.const_zero());
+        gc.build_store(MemoryRegion::Data, counter_ptr, counter_type.const_zero());
 
         // Jump to loop_check bb.
         gc.builder()
@@ -330,12 +330,7 @@ impl ObjectFieldType {
         // Implement loop_check bb.
         gc.builder().position_at_end(loop_check_bb);
         let counter_val = gc
-            .build_load(
-                MemoryRegion::Value,
-                counter_type,
-                counter_ptr,
-                "counter_val",
-            )
+            .build_load(MemoryRegion::Data, counter_type, counter_ptr, "counter_val")
             .into_int_value();
         let is_end = gc
             .builder()
@@ -350,7 +345,7 @@ impl ObjectFieldType {
 
         // Generate code of loop body.
         let idx = gc
-            .build_load(MemoryRegion::Value, counter_type, counter_ptr, "idx")
+            .build_load(MemoryRegion::Data, counter_type, counter_ptr, "idx")
             .into_int_value();
         loop_body(gc, idx, size, buffer);
 
@@ -363,7 +358,7 @@ impl ObjectFieldType {
                 "incremented_counter_val",
             )
             .unwrap();
-        gc.build_store(MemoryRegion::Value, counter_ptr, incremented_counter_val);
+        gc.build_store(MemoryRegion::Data, counter_ptr, incremented_counter_val);
 
         // Jump back to loop_check bb.
         gc.builder()
@@ -432,7 +427,7 @@ impl ObjectFieldType {
                          ptr_to_buffer: PointerValue<'c>| {
             let ptr =
                 build_gep_array_elem(gc, value_ty, ptr_to_buffer, idx, "ptr_to_elem_of_array");
-            let obj_val = gc.build_load(MemoryRegion::Value, value_ty, ptr, "elem_of_array");
+            let obj_val = gc.build_load(MemoryRegion::Data, value_ty, ptr, "elem_of_array");
             // Perform the work on the element.
             let obj = Object::new(obj_val, elem_ty.clone(), gc);
             gc.build_traverser_work(obj, work_type, state);
@@ -528,7 +523,7 @@ impl ObjectFieldType {
                 let elem_ptr =
                     build_gep_array_elem(gc, value_ty, buf_ptr, idx, "ptr_to_elem_of_array");
                 let elem_val = value.value(gc);
-                gc.build_store(MemoryRegion::Value, elem_ptr, elem_val);
+                gc.build_store(MemoryRegion::Data, elem_ptr, elem_val);
             };
 
             // After loop, release value.
@@ -572,7 +567,7 @@ impl ObjectFieldType {
                          _count: IntValue<'c>,
                          buf_ptr: PointerValue<'c>| {
             let slot = build_gep_array_elem(gc, value_ty, buf_ptr, idx, "array_append_slot");
-            gc.build_store(MemoryRegion::Value, slot, elem_val);
+            gc.build_store(MemoryRegion::Data, slot, elem_val);
         };
         let after_loop =
             |_gc: &mut Generator<'c, 'm>, _count: IntValue<'c>, _buf: PointerValue<'c>| {};
@@ -645,7 +640,7 @@ impl ObjectFieldType {
         let elem_ptr = build_gep_array_elem(gc, elem_basic_ty, buffer, idx, "ptr_to_elem_of_array");
 
         // Get value
-        let elem_val = gc.build_load(MemoryRegion::Value, elem_basic_ty, elem_ptr, "elem");
+        let elem_val = gc.build_load(MemoryRegion::Data, elem_basic_ty, elem_ptr, "elem");
 
         // Return value
         Object::new(elem_val, elem_ty, gc)
@@ -702,14 +697,14 @@ impl ObjectFieldType {
 
         // Release element that is already at the place (if required).
         if release_old_value {
-            let elem_val = gc.build_load(MemoryRegion::Value, elem_basic_ty, elem_ptr, "elem");
-            let elem_obj = Object::new(elem_val, elem_ty, gc);
+            let old_elem_val = gc.build_load(MemoryRegion::Data, elem_basic_ty, elem_ptr, "elem");
+            let elem_obj = Object::new(old_elem_val, elem_ty, gc);
             gc.release(elem_obj, state);
         }
 
         // Insert the given value to the place.
         let elem_val = value.value(gc);
-        gc.build_store(MemoryRegion::Value, elem_ptr, elem_val);
+        gc.build_store(MemoryRegion::Data, elem_ptr, elem_val);
     }
 
     /// Copy `count` consecutive elements from `src_buffer` into `dst_buffer`, starting at index 0
@@ -737,8 +732,8 @@ impl ObjectFieldType {
                 build_gep_array_elem(gc, elem_basic_ty, src_buffer, idx, "ptr_to_src_elem");
             let dst_ptr =
                 build_gep_array_elem(gc, elem_basic_ty, dst_buffer, idx, "ptr_to_dst_elem");
-            let src_elem = gc.build_load(MemoryRegion::Value, elem_basic_ty, src_ptr, "src_elem");
-            gc.build_store(MemoryRegion::Value, dst_ptr, src_elem);
+            let src_elem = gc.build_load(MemoryRegion::Data, elem_basic_ty, src_ptr, "src_elem");
+            gc.build_store(MemoryRegion::Data, dst_ptr, src_elem);
             if !elem_ty.is_fully_unboxed(gc.type_env()) {
                 let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
                 gc.retain(src_obj, state);
@@ -2234,7 +2229,7 @@ pub fn create_obj<'c, 'm>(
                 assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
                 let ptr_to_trav = obj.gep_boxed(gc, i as u32);
                 let trav = get_traverser_ptr(&ty, capture, gc, None);
-                gc.build_store(MemoryRegion::Value, ptr_to_trav, trav);
+                gc.build_store(MemoryRegion::Data, ptr_to_trav, trav);
             }
             ObjectFieldType::UnionBuf(_) => {}
             ObjectFieldType::UnionTag => {}

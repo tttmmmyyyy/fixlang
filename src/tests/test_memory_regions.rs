@@ -47,8 +47,7 @@ fn single_threaded_modules() -> &'static [String] {
 /// is the one access the code generator emits that no other build produces.
 fn multi_threaded_modules() -> &'static [String] {
     static MODULES: OnceLock<Vec<String>> = OnceLock::new();
-    MODULES
-        .get_or_init(|| generated_llvm_ir_modules(MEMORY_ACCESS_SOURCE, "none", &["--threaded"]))
+    MODULES.get_or_init(|| generated_llvm_ir_modules(MEMORY_ACCESS_SOURCE, "none", &["--threaded"]))
 }
 
 /// The builds these tests read, each with the words a failure names it by.
@@ -68,20 +67,20 @@ fn memory_access_builds() -> [(&'static str, &'static [String]); 2] {
 /// an access, and an access built through the LLVM builder directly goes out bare.
 #[test]
 pub fn test_every_load_and_store_says_which_region_it_reaches() {
-    for (build, modules) in memory_access_builds() {
+    for (build_description, modules) in memory_access_builds() {
         let mut accesses = 0;
         for module in modules {
             let module_accesses = memory_accesses(module);
             accesses += module_accesses.len();
             let bare = module_accesses
                 .iter()
-                .filter(|access| access.tag.is_none())
+                .filter(|access| access.tag_name.is_none())
                 .map(|access| access.line.to_string())
                 .collect::<Vec<_>>();
             assert!(
                 bare.is_empty(),
                 "every memory access {} should carry a `!tbaa` tag, but {} do not:\n{}",
-                build,
+                build_description,
                 bare.len(),
                 bare.join("\n"),
             );
@@ -90,7 +89,7 @@ pub fn test_every_load_and_store_says_which_region_it_reaches() {
             accesses > 0,
             "a program that builds and reads boxed values should reach memory {}, so that this \
              test has accesses to read",
-            build,
+            build_description,
         );
     }
     // A single-threaded build updates a reference count in place, so the atomic read-modify-write
@@ -117,7 +116,7 @@ pub fn test_every_load_and_store_says_which_region_it_reaches() {
 #[test]
 pub fn test_each_access_reaches_the_region_of_its_pointer() {
     let mut regions_reached: Set<&str> = Set::default();
-    for (build, modules) in memory_access_builds() {
+    for (build_description, modules) in memory_access_builds() {
         for module in modules {
             let nodes = metadata_nodes(module);
             for access in memory_accesses(module) {
@@ -126,18 +125,21 @@ pub fn test_each_access_reaches_the_region_of_its_pointer() {
                     panic!(
                         "the pointer `{}` {} belongs to no region of `REGION_OF_EACH_POINTER`: {}",
                         pointer.unwrap_or("<a global>"),
-                        build,
+                        build_description,
                         access.line,
                     )
                 });
-                let tag = access.tag.unwrap_or_else(|| {
-                    panic!("an access {} carries no tag: {}", build, access.line)
+                let tag_name = access.tag_name.unwrap_or_else(|| {
+                    panic!(
+                        "an access {} carries no tag: {}",
+                        build_description, access.line
+                    )
                 });
                 assert_eq!(
-                    region_of_tag(&nodes, tag),
+                    region_of_tag(&nodes, tag_name),
                     region.name(),
                     "an access {} through `{}` should reach the `{}` region: {}",
-                    build,
+                    build_description,
                     pointer.unwrap_or("<a global>"),
                     region.name(),
                     access.line,
@@ -171,22 +173,22 @@ const REGION_OF_EACH_POINTER: [(&str, MemoryRegion); 13] = [
     // `build_gep_alloc_offset`
     ("ptr_to_alloc_offset", MemoryRegion::AllocOffset),
     // `Object::ptr_to_field_as`
-    ("gep2field", MemoryRegion::Value),
+    ("gep2field", MemoryRegion::Data),
     // `Object::gep_boxed`
-    ("ptr_to_field_nocap", MemoryRegion::Value),
+    ("ptr_to_field_nocap", MemoryRegion::Data),
     // `build_gep_array_elem`
-    ("ptr_to_elem_of_array", MemoryRegion::Value),
-    ("ptr_to_src_elem", MemoryRegion::Value),
-    ("ptr_to_dst_elem", MemoryRegion::Value),
-    ("array_append_slot", MemoryRegion::Value),
+    ("ptr_to_elem_of_array", MemoryRegion::Data),
+    ("ptr_to_src_elem", MemoryRegion::Data),
+    ("ptr_to_dst_elem", MemoryRegion::Data),
+    ("array_append_slot", MemoryRegion::Data),
     // `Generator::build_return_object` and `load_out_pointer_buffer`
-    ("out_part_ptr", MemoryRegion::Value),
+    ("out_part_ptr", MemoryRegion::Data),
     // `Generator::bit_cast`
-    ("alloca@bit_cast", MemoryRegion::Value),
+    ("alloca@bit_cast", MemoryRegion::Data),
     // `ObjectFieldType::loop_over_array_buf`
-    ("release_loop_counter", MemoryRegion::Value),
+    ("release_loop_counter", MemoryRegion::Data),
     // `build_get_argv_function`
-    ("elem_ptr", MemoryRegion::Value),
+    ("elem_ptr", MemoryRegion::Data),
 ];
 
 /// The region an access through `pointer` reaches, absent where `REGION_OF_EACH_POINTER` does not
@@ -194,7 +196,7 @@ const REGION_OF_EACH_POINTER: [(&str, MemoryRegion); 13] = [
 /// storage lies outside every control block.
 fn region_of_pointer(pointer: Option<&str>) -> Option<MemoryRegion> {
     let Some(name) = pointer else {
-        return Some(MemoryRegion::Value);
+        return Some(MemoryRegion::Data);
     };
     REGION_OF_EACH_POINTER
         .iter()
@@ -207,7 +209,7 @@ struct MemoryAccess<'a> {
     /// The instruction, as LLVM writes it.
     line: &'a str,
     /// The `!N` name of its `!tbaa` tag, absent where it carries none.
-    tag: Option<&'a str>,
+    tag_name: Option<&'a str>,
 }
 
 /// Every instruction of `module` that reaches memory.
@@ -222,7 +224,7 @@ fn memory_accesses(module: &str) -> Vec<MemoryAccess<'_>> {
         .filter(|line| reaches_memory(instruction_of(line)))
         .map(|line| MemoryAccess {
             line,
-            tag: access_tag(line),
+            tag_name: access_tag_name(line),
         })
         .collect()
 }
@@ -273,7 +275,7 @@ fn accessed_pointer(line: &str) -> Option<&str> {
 }
 
 /// The `!N` name of the `!tbaa` tag the access on `line` carries, absent where it carries none.
-fn access_tag(line: &str) -> Option<&str> {
+fn access_tag_name(line: &str) -> Option<&str> {
     let (_, tag) = line.split_once("!tbaa ")?;
     Some(tag.split(',').next()?.trim())
 }
@@ -310,21 +312,21 @@ fn metadata_nodes(module: &str) -> Map<&str, &str> {
     nodes
 }
 
-/// The name of the region the access tag named `tag` reaches.
+/// The name of the region the access tag named `tag_name` reaches.
 ///
 /// An access tag is `!{<region>, <region>, i64 <offset>}` and a region is
 /// `!{!"<name>", <parent>, i64 <offset>}`, so the name is the first operand of the tag's first
 /// operand.
-fn region_of_tag(nodes: &Map<&str, &str>, tag: &str) -> String {
-    let region = first_operand(node(nodes, tag));
-    first_operand(node(nodes, region))
+fn region_of_tag(nodes: &Map<&str, &str>, tag_name: &str) -> String {
+    let region = first_operand(operands_of(nodes, tag_name));
+    first_operand(operands_of(nodes, region))
         .trim_start_matches('!')
         .trim_matches('"')
         .to_string()
 }
 
 /// The operands of the metadata node named `name`.
-fn node<'a>(nodes: &Map<&str, &'a str>, name: &str) -> &'a str {
+fn operands_of<'a>(nodes: &Map<&str, &'a str>, name: &str) -> &'a str {
     nodes
         .get(name)
         .unwrap_or_else(|| panic!("the module should define the metadata node `{}`", name))

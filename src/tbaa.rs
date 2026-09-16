@@ -41,7 +41,7 @@ pub enum MemoryRegion {
     /// One region covers them all, so a value written under one LLVM type and read back under
     /// another — which a union's payload buffer is, and `Generator::bit_cast` — stays a pair of
     /// accesses that LLVM takes to reach the same byte.
-    Value,
+    Data,
 }
 
 impl MemoryRegion {
@@ -51,7 +51,7 @@ impl MemoryRegion {
             MemoryRegion::Refcnt => "refcnt",
             MemoryRegion::RefcntState => "refcnt state",
             MemoryRegion::AllocOffset => "alloc offset",
-            MemoryRegion::Value => "value",
+            MemoryRegion::Data => "data",
         }
     }
 }
@@ -69,7 +69,7 @@ pub struct TbaaTags<'c> {
     refcnt: MetadataValue<'c>,
     refcnt_state: MetadataValue<'c>,
     alloc_offset: MetadataValue<'c>,
-    value: MetadataValue<'c>,
+    data: MetadataValue<'c>,
     /// The id LLVM knows the metadata kind `tbaa` by, which an access carries its tag under.
     kind_id: u32,
 }
@@ -83,7 +83,7 @@ impl<'c> TbaaTags<'c> {
             // A type node names the region, the node it sits under, and the offset it begins at
             // within that node. A region is a leaf of the tree, so it begins where the root does.
             let zero = context.i64_type().const_zero();
-            let region = context.metadata_node(&[
+            let region_node = context.metadata_node(&[
                 context.metadata_string(region.name()).into(),
                 root.into(),
                 zero.into(),
@@ -91,25 +91,25 @@ impl<'c> TbaaTags<'c> {
             // An access tag names the region the access lands in, the region of the value it moves,
             // and the offset of that value within the first. An access to a whole region moves the
             // region itself, from its beginning.
-            context.metadata_node(&[region.into(), region.into(), zero.into()])
+            context.metadata_node(&[region_node.into(), region_node.into(), zero.into()])
         };
         TbaaTags {
             refcnt: region_tag(MemoryRegion::Refcnt),
             refcnt_state: region_tag(MemoryRegion::RefcntState),
             alloc_offset: region_tag(MemoryRegion::AllocOffset),
-            value: region_tag(MemoryRegion::Value),
+            data: region_tag(MemoryRegion::Data),
             kind_id: context.get_kind_id("tbaa"),
         }
     }
 
     /// State that `instruction` reaches `region`, so that LLVM can tell it from the accesses that
     /// reach the others.
-    pub fn tag(&self, instruction: InstructionValue<'c>, region: MemoryRegion) {
+    pub fn tag_access(&self, instruction: InstructionValue<'c>, region: MemoryRegion) {
         let tag = match region {
             MemoryRegion::Refcnt => self.refcnt,
             MemoryRegion::RefcntState => self.refcnt_state,
             MemoryRegion::AllocOffset => self.alloc_offset,
-            MemoryRegion::Value => self.value,
+            MemoryRegion::Data => self.data,
         };
         instruction
             .set_metadata(tag, self.kind_id)

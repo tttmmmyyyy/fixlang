@@ -341,7 +341,7 @@ fn build_get_argc_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) 
         .as_basic_value_enum()
         .into_pointer_value();
     let argc = gc
-        .build_load(MemoryRegion::Value, argc_gv_ty, argc_ptr, "argc")
+        .build_load(MemoryRegion::Data, argc_gv_ty, argc_ptr, "argc")
         .into_int_value();
     gc.builder().build_return(Some(&argc)).unwrap();
 }
@@ -373,7 +373,7 @@ fn build_get_argv_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) 
         .as_basic_value_enum()
         .into_pointer_value();
     let argv_ptr = gc
-        .build_load(MemoryRegion::Value, ptr_ty, argv_gv_ptr, "argv")
+        .build_load(MemoryRegion::Data, ptr_ty, argv_gv_ptr, "argv")
         .into_pointer_value();
 
     // Get argv[idx].
@@ -403,7 +403,7 @@ fn build_get_argv_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) 
 
     // Then, load argv[idx] to get the pointer to the argument string.
     let arg_ptr = gc
-        .build_load(MemoryRegion::Value, ptr_ty, elem_ptr, "arg_ptr")
+        .build_load(MemoryRegion::Data, ptr_ty, elem_ptr, "arg_ptr")
         .into_pointer_value();
     gc.builder().build_return(Some(&arg_ptr)).unwrap();
 }
