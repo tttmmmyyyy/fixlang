@@ -50,6 +50,23 @@ accesses the cache condition reads.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 8016c927f177e68a02770783486cd2f603fb524f
+
+A captured value whose type occupies no storage is no longer stored in the closure, so a closure
+capturing only such values builds no capture object. Six of the 106 programs move and every one of
+them moves down: `mutate_boxed_loop` -49.6%, `get_sub` -12.5%, `Etc::CacheSimulation` -6.8%,
+`Calculator::Interpreter` -0.25%, `Template::Parse` -0.11%, `CSV::Parse` -0.10%. The hundred others
+stay within 0.1% and none of the 106 rises by that much. What `mutate_boxed_loop` paid per round was
+one malloc and one free: `FFI::_mutate_boxed_internal` takes a closure, the lambda handed to it
+captures nothing, and the capture object built for it carried nothing.
+
+Read against the row before it, ce2842b04bd1145dade18972431249d8cef57995, which is the commit the
+change sits on and carries none of its own. Both rows were measured with other work on the machine,
+which left 40 of the 56 cases without a cycle count, so the figures above are instruction counts.
+
+This pair is also where the LangArena columns begin: every row above them carries those columns
+empty.
+
 ## 3debb13d30f78ca9b6f3b853da531b786716ffa7
 
 借用化が一意性の観測へ到達できる関数に借用版を作らなくなった行と、その直前の `main`

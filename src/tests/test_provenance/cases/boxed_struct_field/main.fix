@@ -1,0 +1,14 @@
+module Main;
+
+// A field read out of a boxed container borrows the container: the field is retained on its way
+// out, so what the read hands back is of unknown sharing, and the container is released at its
+// last use rather than at the read. The read below is followed by a second read of the same
+// container, so a container the read consumed would have to be retained to reach it.
+type Holder = box struct { arr : Array I64, n : I64 };
+
+main : IO ();
+main = (
+    let h = Holder { arr : Array::fill(4, 0), n : 7 };
+    let field = h.@arr;
+    println $ (field.@(0) + field.@(1) + h.@n).to_string
+);

@@ -16,10 +16,11 @@ use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{
     make_dynamic_object_ty, InlineLLVMArrayLitBody, InlineLLVMCaptureProjectBody,
-    InlineLLVMFFICallBody, InlineLLVMMakeStructBody,
+    InlineLLVMFFICallBody, InlineLLVMMakeStructBody, InlineLLVMNoStorageValueBody,
 };
 use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};
+use crate::object::occupies_no_storage;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
@@ -287,6 +288,7 @@ impl<'a> Lowerer<'a> {
                 &expr,
                 func_ref,
                 vec![],
+                vec![],
                 sym.inline_into_callers,
             ))
         } else {
@@ -309,17 +311,24 @@ impl<'a> Lowerer<'a> {
         Self::fold_bindings(bindings, Self::ret_node(v))
     }
 
-    /// Lower a lambda into a top-level function. `captures` are the values captured from the
-    /// enclosing scope (already resolved to enclosing RC IR variables), in the order the closure
-    /// stores them; for a funptr (no captures) it is empty. `inline_into_callers` says whether the
-    /// back end is asked to inline every call of the function. The body is lowered under a fresh
-    /// environment holding only the parameters and the projected captures.
+    /// Lower a lambda into a top-level function. `inline_into_callers` says whether the back end is
+    /// asked to inline every call of the function. The body is lowered under a fresh environment
+    /// holding only the parameters, the projected captures and the remade ones.
+    ///
+    /// # Arguments
+    /// * `captures` — the values the closure stores, already resolved to the enclosing RC IR
+    ///   variables, in the order it stores them. For a funptr, which captures nothing, it is empty.
+    /// * `remade` — the captured names the closure leaves out, with the type each was captured at.
+    ///   The body reads them like any other captured name, so each is bound here to a value made on
+    ///   the spot; `lower_lam` says which names these are and why one made here is the value that
+    ///   was left out.
     // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30, P31, A19, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lambda_as_function(
         &mut self,
         lam: &ExprNode,
         func_ref: FuncRef,
         captures: Vec<(FullName, RcVar)>,
+        remade: Vec<(FullName, Arc<TypeNode>)>,
         inline_into_callers: bool,
     ) -> RcFunc {
         let lam_ty = lam.type_.clone().unwrap();
@@ -331,9 +340,9 @@ impl<'a> Lowerer<'a> {
 
         let mut param_vars = vec![];
         for (p, ty) in params.iter().zip(src_tys.iter()) {
-            let pv = self.fresh_var(&p.name.name, ty.clone(), None);
-            self.bind(&p.name, pv.clone());
-            param_vars.push(pv);
+            let param_var = self.fresh_var(&p.name.name, ty.clone(), None);
+            self.bind(&p.name, param_var.clone());
+            param_vars.push(param_var);
         }
 
         let mut bindings = vec![];
@@ -367,11 +376,25 @@ impl<'a> Lowerer<'a> {
             Some(capture_var)
         } else {
             assert!(
-                captures.is_empty(),
+                captures.is_empty() && remade.is_empty(),
                 "a funptr function cannot have captures"
             );
             None
         };
+
+        // A capture whose type occupies no storage is left out of the closure, so the value it
+        // stood for is made here. Such a value carries no information, which is what makes the one
+        // made here the value that was left out; `lower_lam` is where that is decided.
+        for (ast_name, ty) in &remade {
+            let mut made = self.fresh_var(&ast_name.name, ty.clone(), None);
+            made.debug_name = Some(ast_name.to_string());
+            bindings.push(PendingBinding::Let(
+                made.clone(),
+                RcRhs::Llvm(Box::new(InlineLLVMNoStorageValueBody {}), vec![]),
+                None,
+            ));
+            self.bind(ast_name, made);
+        }
 
         let ret_var = self.lower_to_var(&body, &mut bindings);
         let body_expr = Self::fold_bindings(bindings, Self::ret_node(ret_var));
@@ -540,7 +563,8 @@ impl<'a> Lowerer<'a> {
 
     /// Lower a lambda written in place to a closure value: its body becomes a top-level function
     /// under a fresh name, and the binding appended builds the closure from that function and the
-    /// values it captures, in the order the closure stores them.
+    /// values it stores, in the order it stores them. Of the values the lambda captures, those the
+    /// closure stores are the ones whose type occupies storage.
     // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lam(
         &mut self,
@@ -555,20 +579,44 @@ impl<'a> Lowerer<'a> {
         );
         // Resolve the captured values from the enclosing scope, in the closure's storage order.
         let captured_names = expr.lambda_cap_names();
-        let captured_vars: Vec<RcVar> = captured_names
+        let all_captures: Vec<(FullName, RcVar)> = captured_names
             .iter()
-            .map(|n| self.resolve(n).expect("captured variable not bound"))
+            .map(|n| {
+                (
+                    n.clone(),
+                    self.resolve(n).expect("captured variable not bound"),
+                )
+            })
             .collect();
-        let captures: Vec<(FullName, RcVar)> = captured_names
-            .iter()
-            .cloned()
-            .zip(captured_vars.iter().cloned())
+
+        // A value of a type that occupies no storage carries no information, so the closure does not
+        // store it: the function the lambda becomes makes one of its own, under the same name. A
+        // closure whose captured values are all of such types is then left with no capture at all,
+        // and hence with no capture object to allocate.
+        let (remade, captures): (Vec<_>, Vec<_>) = all_captures
+            .into_iter()
+            .partition(|(_, var)| occupies_no_storage(&var.ty, self.type_env));
+        // A value occupying no storage holds no boxed value, since a pointer takes storage, so a
+        // capture left out here takes no reference-counting unit out of the closure with it.
+        for (name, var) in &remade {
+            assert!(
+                var.ty.is_fully_unboxed(self.type_env),
+                "the capture `{}` occupies no storage and holds a boxed value, at type `{}`",
+                name.to_string(),
+                var.ty.to_string()
+            );
+        }
+        let captured_vars: Vec<RcVar> = captures.iter().map(|(_, var)| var.clone()).collect();
+        let remade: Vec<(FullName, Arc<TypeNode>)> = remade
+            .into_iter()
+            .map(|(name, var)| (name, var.ty.clone()))
             .collect();
 
         let func_ref = self.fresh_closure_ref();
         // A lambda still written in place is reached through the closure that holds it, so its
         // callers are not known here.
-        let rc_func = self.lower_lambda_as_function(expr, func_ref.clone(), captures, false);
+        let rc_func =
+            self.lower_lambda_as_function(expr, func_ref.clone(), captures, remade, false);
         let previous = self.funcs.insert(func_ref.clone(), rc_func);
         assert!(
             previous.is_none(),

@@ -17,7 +17,7 @@
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::fixstd::builtin::InlineLLVMCaptureProjectBody;
+use crate::fixstd::builtin::{InlineLLVMCaptureProjectBody, InlineLLVMNoStorageValueBody};
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::ownership::rc_units;
@@ -87,7 +87,7 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
 
 /// The capture-object layout each function's capture projections read: the field types every
 /// projection of that function records, which is the layout a closure value targeting it must store.
-/// A function that projects no capture has no entry — it reads nothing, so any layout suits it.
+/// A function that projects no capture has no entry, and a closure targeting one stores nothing.
 ///
 /// Checking the projections of a function against each other, and against its capture parameter,
 /// happens here, where they are gathered.
@@ -193,6 +193,12 @@ struct Validator<'a> {
     location: String,
     /// Every name bound anywhere in this body; a second binding of one is a duplicate.
     seen: Set<FullName>,
+    /// The names bound to a value made by `InlineLLVMNoStorageValueBody`. A value of a type that
+    /// occupies no storage holds no boxed value, since a pointer takes storage, so no reference
+    /// count acts on one. `lower_lam` leaves such a capture out of the closure on that ground, and
+    /// this is where the ground is checked: the passes that run between the stages this validator
+    /// is called at — reference-count insertion, `borrow_ify`, `cancel` — must place no node on one.
+    made_without_storage: Set<FullName>,
     /// The names currently in scope, which a use must resolve to.
     scope: Set<FullName>,
 }
@@ -216,6 +222,7 @@ impl<'a> Validator<'a> {
             type_env,
             location,
             seen: Set::default(),
+            made_without_storage: Set::default(),
             scope: Set::default(),
         }
     }
@@ -310,12 +317,30 @@ impl<'a> Validator<'a> {
         match node.expr.as_ref() {
             RcExpr::Let(x, rhs, k) => {
                 self.check_rhs(x, rhs);
+                if let RcRhs::Llvm(llvm_gen, _) = rhs {
+                    if llvm_gen
+                        .as_any()
+                        .downcast_ref::<InlineLLVMNoStorageValueBody>()
+                        .is_some()
+                    {
+                        self.made_without_storage.insert(x.name.clone());
+                    }
+                }
                 self.bind(&x.name);
                 self.check_expr(k);
                 self.scope.remove(&x.name);
             }
             RcExpr::Retain(v, path, _, k) | RcExpr::Release(v, path, _, k) => {
                 self.use_var(&v.name);
+                if self.made_without_storage.contains(&v.name) {
+                    panic!(
+                        "[RC IR validate] {}: a reference count acts on `{}`, a value of `{}`, which occupies no storage, in `{}`",
+                        self.stage,
+                        v.name.to_string(),
+                        v.ty.to_string(),
+                        self.location,
+                    );
+                }
                 self.check_rc_unit(v, path);
                 self.check_expr(k);
             }
@@ -375,17 +400,34 @@ impl<'a> Validator<'a> {
                 // slot index against its own copy of the layout. The two are redundant stores of one
                 // layout, so a rewrite that reordered, retyped, added, or dropped the captures at one
                 // end alone would leave every projection reading the wrong slot.
-                if let Some(layout) = self.capture_layouts.get(fref) {
-                    let stored: Vec<Arc<TypeNode>> = caps.iter().map(|c| c.ty.clone()).collect();
-                    if *layout != stored {
-                        panic!(
-                            "[RC IR validate] {}: closure stores captures {:?} where `{}` projects {:?}, in `{}`",
-                            self.stage,
-                            stored,
-                            fref.name.to_string(),
-                            layout,
-                            self.location,
-                        );
+                match self.capture_layouts.get(fref) {
+                    Some(layout) => {
+                        let stored: Vec<Arc<TypeNode>> =
+                            caps.iter().map(|c| c.ty.clone()).collect();
+                        if *layout != stored {
+                            panic!(
+                                "[RC IR validate] {}: closure stores captures {:?} where `{}` projects {:?}, in `{}`",
+                                self.stage,
+                                stored,
+                                fref.name.to_string(),
+                                layout,
+                                self.location,
+                            );
+                        }
+                    }
+                    // A target that projects nothing reads no slot, so a closure targeting it fills
+                    // none: the capture object it would read is the null pointer. A closure storing
+                    // captures for such a target hands them to a body that never takes them out.
+                    None => {
+                        if !caps.is_empty() {
+                            panic!(
+                                "[RC IR validate] {}: closure stores captures {:?} where `{}` projects none, in `{}`",
+                                self.stage,
+                                caps.iter().map(|c| c.ty.clone()).collect::<Vec<_>>(),
+                                fref.name.to_string(),
+                                self.location,
+                            );
+                        }
                     }
                 }
                 for c in caps {

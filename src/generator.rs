@@ -34,6 +34,7 @@ use crate::object::control_block_type;
 use crate::object::create_traverser;
 use crate::object::lambda_function_type;
 use crate::object::lambda_return_part_types;
+use crate::object::occupies_no_storage;
 use crate::object::refcnt_state_type;
 use crate::object::refcnt_type;
 use crate::object::traverser_type;
@@ -104,6 +105,15 @@ pub enum ValueAccessor<'c> {
 }
 
 impl<'c> ValueAccessor<'c> {
+    /// The Fix type of the value this accessor names. Reading the type generates no code.
+    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    pub fn ty(&self) -> Arc<TypeNode> {
+        match self {
+            ValueAccessor::Local(obj) => obj.ty.clone(),
+            ValueAccessor::Global(_, ty) => ty.clone(),
+        }
+    }
+
     /// The object this accessor names: a local's object as it stands, or the value a global's
     /// getter returns. A global of funptr type is the function itself, so its address is taken
     /// without a call.
@@ -213,7 +223,13 @@ impl<'c> Object<'c> {
         }
         let embedded = self.ty.get_embedded_type(gc);
         let mut parts = self.parts.iter().copied();
-        gc.assemble_from_parts(embedded, &mut parts)
+        let value = gc.assemble_from_parts(embedded, &mut parts);
+        assert!(
+            parts.next().is_none(),
+            "a value of `{}` was assembled from fewer parts than the object holds",
+            self.ty.to_string()
+        );
+        value
     }
 
     /// An object of type `ty` whose value is `undef`, for an unreachable point that still has to
@@ -792,8 +808,32 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
         let object_ty = ty_to_object_ty(ty, &vec![], self.type_env());
         let struct_ty = object_ty.to_struct_type(self);
+        self.assert_storage_answers_agree(ty, struct_ty.into());
         self.struct_types.insert(ty.clone(), struct_ty);
         struct_ty
+    }
+
+    /// Asserts that `TypeNode::occupies_no_storage`, which answers on the Fix type, says what LLVM
+    /// says of `llvm_ty`, the type a value of `ty` is laid out as.
+    ///
+    /// A capture the two disagree about is left out of the closure that carried it while its reader
+    /// still reads the slot, so the two parting is a miscompilation with no diagnostic. The walk
+    /// costs what laying the type out costs, and the two callers lay each type out once, so this
+    /// runs under `develop_mode` and the test suite is what asks it.
+    fn assert_storage_answers_agree(&self, ty: &Arc<TypeNode>, llvm_ty: BasicTypeEnum<'c>) {
+        if !self.config.develop_mode {
+            return;
+        }
+        let fix_says = occupies_no_storage(ty, self.type_env());
+        let llvm_says = self.is_zero_sized(llvm_ty);
+        assert_eq!(
+            fix_says,
+            llvm_says,
+            "`{}` occupies {} storage as a Fix type and {} as an LLVM type",
+            ty.to_string(),
+            if fix_says { "no" } else { "some" },
+            if llvm_says { "none" } else { "some" },
+        );
     }
 
     /// The LLVM type a value of `ty` takes where it is embedded in another value: the struct it is
@@ -804,6 +844,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
         let object_ty = ty_to_object_ty(ty, &vec![], self.type_env());
         let embedded_ty = object_ty.to_embedded_type(self);
+        self.assert_storage_answers_agree(ty, embedded_ty);
         self.embedded_types.insert(ty.clone(), embedded_ty);
         embedded_ty
     }
@@ -1061,18 +1102,25 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// The object `name` is bound to, handed over as it stands: the reference counts are left
     /// untouched, so the caller owns whatever reference the binding already carried.
     // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
-    pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
-        self.get_scoped_value(name).accessor.get(self)
+    pub fn get_scoped_obj_noretain(&mut self, var: &FullName) -> Object<'c> {
+        self.get_scoped_value(var).accessor.get(self)
     }
 
-    /// The object `var_name` is bound to, as a reference the caller owns.
+    /// The Fix type of the value `var` is bound to. Reading the type generates no code, so an
+    /// operation can ask it before it decides how to read the value.
+    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    pub fn get_scoped_type(&mut self, var: &FullName) -> Arc<TypeNode> {
+        self.get_scoped_value(var).accessor.ty()
+    }
+
+    /// The object `var` is bound to, as a reference the caller owns.
     ///
     /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
     /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
     /// copy. Every other read is plain.
     // PROOF: P7c, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
-    pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
-        let val = self.get_scoped_value(var_name);
+    pub fn get_scoped_obj(&mut self, var: &FullName) -> Object<'c> {
+        let val = self.get_scoped_value(var);
         let obj = val.accessor.get(self);
         if val.retain_on_read {
             let one = self.context.i64_type().const_int(1, false);
@@ -1658,7 +1706,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// value carries no information, so the part helpers drop it: it yields no part (no phi, no ABI
     /// slot) and is rebuilt as `undef`. A phi of a zero-sized aggregate also crashes LLVM's
     /// AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
-    fn is_zero_sized(&self, ty: BasicTypeEnum<'c>) -> bool {
+    pub(crate) fn is_zero_sized(&self, ty: BasicTypeEnum<'c>) -> bool {
         self.target_data.get_bit_size(&ty) == 0
     }
 
@@ -2640,7 +2688,15 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) -> Object<'c> {
         let embedded = ret_ty.get_embedded_type(self);
         let parts: Vec<BasicValueEnum<'c>> = match call_result {
-            None => vec![],
+            None => {
+                assert_eq!(
+                    self.part_count(embedded),
+                    0,
+                    "a call answering with nothing returns `{}`, which is carried in parts",
+                    ret_ty.to_string()
+                );
+                vec![]
+            }
             Some(single_part) if self.part_count(embedded) == 1 => vec![single_part],
             Some(packed) => {
                 let packed = packed.into_struct_value();

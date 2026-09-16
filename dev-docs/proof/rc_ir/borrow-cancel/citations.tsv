@@ -198,6 +198,7 @@ src/error.rs	panic_with_msg	P3,P4	dd531b375c3d
 src/ffi.rs	CSignature::get_or_declare_in_module	D/A,P27,P29,P30	65818f246a29
 src/ffi.rs	CSignature::of_ffi_export	P26	ed5fe25c470a
 src/ffi.rs	c_boundary_tycon	D/A,P26,P28	2c5a42247af5
+src/fixstd/builtin.rs	FieldRead	P31,A19	ad23bcd367dc
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked	D/A,P26,P27,P29,P30	07ebf8fe4cde
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::generate	P26,P28	d09c8c4924d5
 src/fixstd/builtin.rs	InlineLLVMArrayAppendCapacityUnchecked::result_prov	P1,P2,P26	1937952562a5
@@ -258,11 +259,13 @@ src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody::result_prov	P1,P2,P26	
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody::generate	P26	e9c407350555
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMStringBuf::result_prov	P1,P2,P26	1937952562a5
-src/fixstd/builtin.rs	InlineLLVMStructGetBody	D/A	4049770e475e
-src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_container	P31,A19	a99191ddd748
-src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_operand	P26,P31,A19	7374525f2b11
+src/fixstd/builtin.rs	InlineLLVMStructGetBody	D/A	4db85a1a7375
+src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_operand	P26,P31,A19	a9438e99865d
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::field_index	P1,P2	2aef725958cb
+src/fixstd/builtin.rs	InlineLLVMStructGetBody::field_read	P31,A19	5dbad816a0dc
+src/fixstd/builtin.rs	InlineLLVMStructGetBody::field_read_of	P31,A19	b8c40e508c73
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::free_vars_mut	P1,P2	bf6eba8581e8
+src/fixstd/builtin.rs	InlineLLVMStructGetBody::generate	P26	ce944cbefe52
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::result_prov	P1,P2,P7a,P7d,P7e,P26,P31,A19	82a455b22cda
 src/fixstd/builtin.rs	InlineLLVMStructPlugInBody::generate	P26	a62d86ce74b0
 src/fixstd/builtin.rs	InlineLLVMStructPlugInBody::result_prov	P1,P2,P7a,P7d,P7e,P31,A19	583a60ad6b25
@@ -401,6 +404,7 @@ src/generator.rs	Generator::get_or_declare_global	P3,P4,P7c,P7f,P18a,P18b,P27,P2
 src/generator.rs	Generator::get_scoped_obj	P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P26,P27,P28,P29,P30	8931a2ab6068
 src/generator.rs	Generator::get_scoped_obj_field	P27,P29,P30	405bcba9e06d
 src/generator.rs	Generator::get_scoped_obj_noretain	P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P27,P29,P30	d306c3e81007
+src/generator.rs	Generator::get_scoped_type	D/A,P27,P29,P30	5bacbcb0e8df
 src/generator.rs	Generator::get_scoped_value	D/A,P3,P4,P7c,P7f,P18a,P18b,P27,P29,P30	c6a7bbca6b83
 src/generator.rs	Generator::mark_global	D/A,P26,P27,P28,P29,P30	a286105176a5
 src/generator.rs	Generator::mark_threaded	D/A,P26,P27,P29,P30	0a998e05aae3
@@ -416,6 +420,7 @@ src/generator.rs	Object::extract_field_object	D/A	bf876d5177c1
 src/generator.rs	Object::insert_field_object	P26	ea0d20189338
 src/generator.rs	Scope::push_local	D/A,P27,P28,P29,P30	fd57787daef2
 src/generator.rs	ValueAccessor::get	P3,P4,P7c,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P26,P27,P29,P30,A21	5cde27ed7938
+src/generator.rs	ValueAccessor::ty	P27,P29,P30	c8f3a37d192a
 src/generator.rs	get_scoped_value	P8,P9,P10,P11,P12,P13,P14,P14a,P14b	c6a7bbca6b83
 src/generator.rs	global_accessor_name	P27,P29,P30	5fa06dc51788
 src/generator.rs	object_file_symbol_name	P27,P29,P30	227cdfd72912
@@ -588,7 +593,7 @@ src/rc_ir/borrow.rs	used_later	P2a,P15,P16,P17,P18	2efecf89721b
 src/rc_ir/codegen.rs	Generator::bind_and_continue	P7a,P7d,P7e,P27,P29,P30	2ce49ba493cb
 src/rc_ir/codegen.rs	Generator::binding_fuses_into_return	P7a,P7d,P7e	a082312fb500
 src/rc_ir/codegen.rs	Generator::build_rc_closure	D/A,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P26,P27,P28,P29,P30	0a833fde2c28
-src/rc_ir/codegen.rs	Generator::eval_rc_expr_inner	P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P26,P27,P29,P30	7eb323ab25c9
+src/rc_ir/codegen.rs	Generator::eval_rc_expr_inner	D/A,P7a,P7c,P7d,P7e,P7f,P8,P9,P10,P11,P12,P13,P14,P14a,P14b,P18a,P18b,P26,P27,P29,P30	0a3ce2f2e307
 src/rc_ir/codegen.rs	Generator::eval_rc_match	D/A,P5,P6,P7,P7a,P7c,P7d,P7e,P7f,P18a,P18b,P26,P27,P29,P30	6e49f545164d
 src/rc_ir/codegen.rs	Generator::eval_rc_rhs	P7a,P7c,P7d,P7e,P7f,P18a,P18b,P27,P29,P30	bdc976128ed9
 src/rc_ir/codegen.rs	Generator::implement_rc_function	D/A,P27,P29,P30	c52d57516388
