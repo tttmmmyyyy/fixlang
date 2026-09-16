@@ -236,4 +236,50 @@ mod tests {
             dump
         );
     }
+
+    /// A struct whose only field occupies no storage, acted on over `IO`: `act_u` punches the field
+    /// out, and the lambda that plugs it back captures the punched struct, whose type occupies no
+    /// storage because the slot the hole keeps does.
+    const PUNCHED_CAPTURE_SOURCE: &str = r#"
+        module Main;
+
+        type Unitful = unbox struct { u : () };
+        type Both = unbox struct { u : (), xs : Array I64 };
+
+        main : IO ();
+        main = (
+            let s = *Unitful { u : () }.act_u(|u| println("punched").map(|_| u));
+            let _ = s;
+            let t = *Both { u : (), xs : [10, 20] }.act_u(|u| pure $ u);
+            let t = *t.act_xs(|xs| pure $ xs.push_back(30));
+            println $ t.@xs.to_iter.map(to_string).join(",")
+        );
+    "#;
+
+    /// What `PUNCHED_CAPTURE_SOURCE` prints: the line the action writes, then the array the second
+    /// struct carries once a value has been plugged back into it.
+    const PUNCHED_CAPTURE_OUTPUT: &str = "punched\n10,20,30";
+
+    /// A punched struct that occupies no storage is left out of the closure that plugs a value back
+    /// into it, and the value plugged in lands in the struct all the same.
+    ///
+    /// A punched slot holds no value and keeps the type it was declared at, so whether the struct
+    /// occupies storage is decided by every field, the punched one included. `act_` is what hands a
+    /// lambda a value at such a type.
+    #[test]
+    fn test_a_punched_struct_occupying_no_storage_is_plugged_into_all_the_same() {
+        for opt_level in ["none", "basic", "max"] {
+            assert_eq!(
+                build_within_and_run(
+                    PUNCHED_CAPTURE_SOURCE,
+                    opt_level,
+                    Duration::from_secs(600),
+                    "`act` on a struct field whose type occupies no storage",
+                ),
+                PUNCHED_CAPTURE_OUTPUT,
+                "the field should be plugged back at -O {}",
+                opt_level
+            );
+        }
+    }
 }
