@@ -39,17 +39,17 @@ mod tests {
     }
 
     /// Asserts that `dump` binds a value made on the spot -- the right-hand side is
-    /// `no_storage_value` -- on a line containing `named`, rather than projecting that value out of
-    /// a capture object.
+    /// `no_storage_value` -- on a line containing `line_part`, rather than projecting that value
+    /// out of a capture object.
     ///
-    /// `named` is matched against the whole line, so it reaches both the type a binding is held at
-    /// and the name it was minted under.
-    fn assert_a_value_is_made_where_it_is_read(dump: &str, named: &str) {
+    /// `line_part` is matched against the whole line, so it reaches both the type a binding is held
+    /// at and the name it was minted under.
+    fn assert_a_value_is_made_where_it_is_read(dump: &str, line_part: &str) {
         assert!(
-            dump.lines().any(|line| line.contains(named)
+            dump.lines().any(|line| line.contains(line_part)
                 && line.trim_end().ends_with("= no_storage_value")),
             "a value named by `{}` should be made where it is read:\n{}",
-            named,
+            line_part,
             dump
         );
     }

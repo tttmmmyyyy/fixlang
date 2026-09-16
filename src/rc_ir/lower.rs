@@ -579,7 +579,7 @@ impl<'a> Lowerer<'a> {
         );
         // Resolve the captured values from the enclosing scope, in the closure's storage order.
         let captured_names = expr.lambda_cap_names();
-        let resolved: Vec<(FullName, RcVar)> = captured_names
+        let all_captures: Vec<(FullName, RcVar)> = captured_names
             .iter()
             .map(|n| {
                 (
@@ -593,7 +593,7 @@ impl<'a> Lowerer<'a> {
         // store it: the function the lambda becomes makes one of its own, under the same name. A
         // closure whose captured values are all of such types is then left with no capture at all,
         // and hence with no capture object to allocate.
-        let (remade, captures): (Vec<_>, Vec<_>) = resolved
+        let (remade, captures): (Vec<_>, Vec<_>) = all_captures
             .into_iter()
             .partition(|(_, var)| occupies_no_storage(&var.ty, self.type_env));
         // A value occupying no storage holds no boxed value, since a pointer takes storage, so a
