@@ -1658,7 +1658,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// value carries no information, so the part helpers drop it: it yields no part (no phi, no ABI
     /// slot) and is rebuilt as `undef`. A phi of a zero-sized aggregate also crashes LLVM's
     /// AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
-    fn is_zero_sized(&self, ty: BasicTypeEnum<'c>) -> bool {
+    pub(crate) fn is_zero_sized(&self, ty: BasicTypeEnum<'c>) -> bool {
         self.target_data.get_bit_size(&ty) == 0
     }
 

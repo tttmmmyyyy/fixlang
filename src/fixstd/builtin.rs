@@ -5041,6 +5041,59 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
     }
 }
 
+// Make a value of a type that occupies no storage. Such a value carries no information, so the one
+// made here stands for any other of its type: lifting a lambda leaves a capture of such a type out
+// of the closure and binds the captured name to this instead, which is what lets a closure whose
+// captures are all of such types carry no capture object at all.
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMNoStorageValueBody {}
+
+// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
+#[typetag::serde]
+impl LLVMGen for InlineLLVMNoStorageValueBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        // Which captures are left out is decided by `TypeNode::occupies_no_storage`, which answers
+        // on the Fix type, while the storage a value takes is LLVM's answer. Reaching here with a
+        // type LLVM gives a size to means the two have parted, and the value made here stands for
+        // one the closure dropped and its reader still reads.
+        let llvm_ty = gc.embedded_type_of(ty);
+        assert!(
+            gc.is_zero_sized(llvm_ty),
+            "`{}` occupies no storage as a Fix type, and takes storage as an LLVM type",
+            ty.to_string(),
+        );
+        create_obj(ty.clone(), &vec![], None, gc, Some("no_storage_value"))
+    }
+
+    fn name(&self) -> String {
+        "no_storage_value".to_string()
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![]
+    }
+
+    /// Making a value that occupies no storage emits nothing, so a copy of this op at each name
+    /// holding its result costs no more than one copy does.
+    fn is_free_to_duplicate(&self) -> bool {
+        true
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 /// The body of a struct's `punch_x`: field `field_idx` is moved out of the struct bound to
 /// `var_name`, and is returned together with the punched struct, whose type records the hole.
 // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
