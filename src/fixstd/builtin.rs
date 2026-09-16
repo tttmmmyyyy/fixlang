@@ -30,13 +30,15 @@ use crate::constants::{
     STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
     TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
-use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC};
+use crate::fixstd::runtime::{
+    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC, RUNTIME_SIGNED_OVERFLOW,
+};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_array_storage_alloc_offset, build_capacity_check, build_elems_bytes,
-    build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned, create_obj,
-    get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
+    alloc_array_storage, build_abort_if, build_array_storage_alloc_offset, build_capacity_check,
+    build_elems_bytes, build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned,
+    create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
     write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
@@ -1371,8 +1373,8 @@ pub fn cast_between_integral_function(
     const FROM_NAME: &str = "from";
     let from_name = FullName::local(FROM_NAME);
 
-    let is_source_signed = from.toplevel_tycon().unwrap().is_signed_integer();
-    let is_target_signed = to.toplevel_tycon().unwrap().is_signed_integer();
+    let is_source_signed = from.is_signed_integer();
+    let is_target_signed = to.is_signed_integer();
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
@@ -1567,7 +1569,7 @@ pub fn cast_int_to_float_function(
     to: Arc<TypeNode>,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
-    let is_signed = from.toplevel_tycon().unwrap().is_signed_integer();
+    let is_signed = from.is_signed_integer();
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -1673,7 +1675,7 @@ pub fn cast_float_to_int_function(
     to: Arc<TypeNode>,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
-    let is_signed = to.toplevel_tycon().unwrap().is_signed_integer();
+    let is_signed = to.is_signed_integer();
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -1712,10 +1714,10 @@ impl LLVMGen for InlineLLVMShiftBody {
             .into_int_value();
         let n = gc.get_scoped_obj_field(&self.n_name, 0).into_int_value();
 
-        let is_signed = ty.toplevel_tycon().unwrap().is_signed_integer();
+        let is_signed = ty.is_signed_integer();
 
         // Perform shift operation.
-        let to_val = if self.is_left {
+        let shifted = if self.is_left {
             gc.builder()
                 .build_left_shift(val, n, "left_shift@shift_function")
                 .unwrap()
@@ -1727,7 +1729,7 @@ impl LLVMGen for InlineLLVMShiftBody {
 
         // Return result.
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@shift_function"));
-        obj.insert_field(gc, 0, to_val)
+        obj.insert_field(gc, 0, shifted)
     }
 
     fn name(&self) -> String {
@@ -9831,7 +9833,7 @@ impl LLVMGen for InlineLLVMIntLessThanBody {
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         let rhs_val: IntValue = rhs_obj.extract_field(gc, 0).into_int_value();
 
-        let is_signed = lhs_obj.ty.toplevel_tycon().unwrap().is_signed_integer();
+        let is_signed = lhs_obj.ty.is_signed_integer();
 
         let value = gc
             .builder()
@@ -10002,7 +10004,7 @@ impl LLVMGen for InlineLLVMIntLessThanOrEqBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
-        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
+        let is_signed = lhs.ty.is_signed_integer();
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
@@ -10163,6 +10165,249 @@ pub fn add_trait_id() -> TraitId {
     }
 }
 
+/// The LLVM intrinsic performing an addition and reporting whether the result left the range of
+/// the signed integer type, as `{ iN, i1 }`.
+const SIGNED_ADD_WITH_OVERFLOW: &str = "llvm.sadd.with.overflow";
+/// The LLVM intrinsic performing a subtraction and reporting whether the result left the range of
+/// the signed integer type, as `{ iN, i1 }`.
+const SIGNED_SUB_WITH_OVERFLOW: &str = "llvm.ssub.with.overflow";
+/// The LLVM intrinsic performing a multiplication and reporting whether the result left the range
+/// of the signed integer type, as `{ iN, i1 }`.
+const SIGNED_MUL_WITH_OVERFLOW: &str = "llvm.smul.with.overflow";
+
+/// Whether the program being generated stops at an arithmetic operation on a signed integer type
+/// whose result leaves the range of that type.
+///
+/// `--check-signed-overflow` asks for the check, and `--no-runtime-check` takes out every check
+/// that ends the program, this one among them.
+fn signed_overflow_is_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
+    gc.config.check_signed_overflow && gc.config.runtime_check()
+}
+
+/// An arithmetic operation the code generator emits for an integer type.
+///
+/// `Negate` negates its right operand, and takes as its left operand the zero that operand is
+/// subtracted from, which is the instruction emitted for a negation.
+#[derive(Clone, Copy)]
+enum IntegerArithmetic {
+    /// `Add::add`, the infix `+`.
+    Add,
+    /// `Sub::sub`, the infix `-`.
+    Subtract,
+    /// `Mul::mul`, the infix `*`.
+    Multiply,
+    /// `Neg::neg`, the prefix `-`.
+    Negate,
+    /// `Div::div`, the infix `/`, whose quotient truncates toward zero.
+    Divide,
+    /// `Rem::rem`, the infix `%`, whose result carries the sign of the dividend.
+    Remainder,
+}
+
+impl IntegerArithmetic {
+    /// The word a report calls this operation by.
+    fn reported_as(self) -> &'static str {
+        match self {
+            Self::Add => "addition",
+            Self::Subtract => "subtraction",
+            Self::Multiply => "multiplication",
+            Self::Negate => "negation",
+            Self::Divide => "division",
+            Self::Remainder => "remainder",
+        }
+    }
+
+    /// Whether this operation divides. LLVM offers no intrinsic reporting the overflow of these
+    /// two, so they are checked by comparing their operands.
+    fn is_division(self) -> bool {
+        matches!(self, Self::Divide | Self::Remainder)
+    }
+
+    /// The LLVM intrinsic that performs this operation and reports whether the result left the
+    /// range of the signed integer type.
+    ///
+    /// A division carries no such intrinsic: `build_division_overflow_check` compares its operands
+    /// against the one pair that overflows instead.
+    fn reporting_intrinsic(self) -> &'static str {
+        match self {
+            Self::Add => SIGNED_ADD_WITH_OVERFLOW,
+            Self::Subtract | Self::Negate => SIGNED_SUB_WITH_OVERFLOW,
+            Self::Multiply => SIGNED_MUL_WITH_OVERFLOW,
+            Self::Divide | Self::Remainder => unreachable!(
+                "`{}` is checked by comparing its operands, not by an intrinsic",
+                self.reported_as()
+            ),
+        }
+    }
+}
+
+/// Emit `operation` on `lhs` and `rhs` at the integer type `ty`: the instruction that performs it,
+/// or, where `--check-signed-overflow` asks for a signed result to be checked, the intrinsic that
+/// ends the program when the result leaves the range of the type.
+///
+/// # Arguments
+/// * `name` - the name the result carries in the generated code.
+fn build_integer_arithmetic<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    operation: IntegerArithmetic,
+    lhs: IntValue<'c>,
+    rhs: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+    name: &str,
+) -> IntValue<'c> {
+    if matches!(operation, IntegerArithmetic::Negate) {
+        assert_eq!(
+            lhs.get_zero_extended_constant(),
+            Some(0),
+            "a negation subtracts its operand from zero, and `{:?}` is not zero",
+            lhs
+        );
+    }
+    // Only a signed type has a range an operation can leave: an unsigned one is taken modulo two
+    // to its width, so every result is a value of the type.
+    let is_signed = ty.toplevel_tycon().unwrap().is_signed_integer();
+    if is_signed && signed_overflow_is_checked(gc) {
+        if operation.is_division() {
+            // A division carries no intrinsic reporting the overflow, so the check stands in front
+            // of the instruction rather than replacing it.
+            build_division_overflow_check(gc, operation, lhs, rhs, ty);
+        } else {
+            return build_checked_signed_arithmetic(gc, operation, lhs, rhs, ty, name);
+        }
+    }
+    // Addition, subtraction, multiplication and negation are one instruction for both signednesses,
+    // since a value of either is held in two's complement. A division is not.
+    let builder = gc.builder();
+    match operation {
+        IntegerArithmetic::Add => builder.build_int_add(lhs, rhs, name),
+        IntegerArithmetic::Subtract => builder.build_int_sub(lhs, rhs, name),
+        IntegerArithmetic::Multiply => builder.build_int_mul(lhs, rhs, name),
+        IntegerArithmetic::Negate => builder.build_int_neg(rhs, name),
+        IntegerArithmetic::Divide if is_signed => builder.build_int_signed_div(lhs, rhs, name),
+        IntegerArithmetic::Divide => builder.build_int_unsigned_div(lhs, rhs, name),
+        IntegerArithmetic::Remainder if is_signed => builder.build_int_signed_rem(lhs, rhs, name),
+        IntegerArithmetic::Remainder => builder.build_int_unsigned_rem(lhs, rhs, name),
+    }
+    .unwrap()
+}
+
+/// Emit `operation` on `lhs` and `rhs`, ending the program where the mathematical result leaves the
+/// range of the signed integer type `ty`.
+///
+/// # Arguments
+/// * `name` - the name the result carries in the generated code.
+///
+/// # Examples
+/// `build_checked_signed_arithmetic(gc, IntegerArithmetic::Add, x, y, i64_ty, "add")` emits the sum
+/// of `x` and `y`, and a call ending the program with `I64 addition, with <x> and <y>` where the
+/// sum leaves `I64`.
+fn build_checked_signed_arithmetic<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    operation: IntegerArithmetic,
+    lhs: IntValue<'c>,
+    rhs: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+    name: &str,
+) -> IntValue<'c> {
+    let intrinsic_fn =
+        gc.intrinsic_function(operation.reporting_intrinsic(), &[lhs.get_type().into()]);
+    let result_and_overflow = gc
+        .builder()
+        .build_call(intrinsic_fn, &[lhs.into(), rhs.into()], name)
+        .unwrap()
+        .try_as_basic_value()
+        .unwrap_basic()
+        .into_struct_value();
+    let overflowed = gc
+        .builder()
+        .build_extract_value(result_and_overflow, 1, "signed_overflowed")
+        .unwrap()
+        .into_int_value();
+    build_report_signed_overflow(gc, overflowed, operation, lhs, rhs, ty);
+    gc.builder()
+        .build_extract_value(result_and_overflow, 0, name)
+        .unwrap()
+        .into_int_value()
+}
+
+/// Emit the check that ends the program where `operation` divides the least value of the signed
+/// integer type `ty` by -1, which is the one pair a division and a remainder are undefined at: the
+/// quotient is one past the greatest value of the type. The check is emitted where
+/// `--check-signed-overflow` asks for it.
+fn build_division_overflow_check<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    operation: IntegerArithmetic,
+    lhs: IntValue<'c>,
+    rhs: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+) {
+    if !signed_overflow_is_checked(gc) {
+        return;
+    }
+    let int_ty = lhs.get_type();
+    let least = int_ty.const_int(1u64 << (int_ty.get_bit_width() - 1), false);
+    let is_least = gc
+        .builder()
+        .build_int_compare(IntPredicate::EQ, lhs, least, "is_least_of_type")
+        .unwrap();
+    let is_minus_one = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::EQ,
+            rhs,
+            int_ty.const_all_ones(),
+            "is_minus_one",
+        )
+        .unwrap();
+    let overflowed = gc
+        .builder()
+        .build_and(is_least, is_minus_one, "signed_division_overflowed")
+        .unwrap();
+    build_report_signed_overflow(gc, overflowed, operation, lhs, rhs, ty);
+}
+
+/// Emit the call that reports an arithmetic operation on the signed integer type `ty` whose result
+/// left the range of that type and ends the program, taken where `overflowed` holds.
+///
+/// The operands reach the report widened to 64 bits, which is the width the runtime function
+/// takes; the sign extension keeps the value.
+fn build_report_signed_overflow<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    overflowed: IntValue<'c>,
+    operation: IntegerArithmetic,
+    lhs: IntValue<'c>,
+    rhs: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+) {
+    assert!(
+        lhs.get_type().get_bit_width() <= 64,
+        "the report takes operands of 64 bits, and this one is {} bits wide",
+        lhs.get_type().get_bit_width()
+    );
+    let reported_operation = format!(
+        "{} {}",
+        ty.toplevel_tycon().unwrap().name.name,
+        operation.reported_as()
+    );
+    let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
+    let i64_ty = gc.context.i64_type();
+    let lhs = gc
+        .builder()
+        .build_int_s_extend_or_bit_cast(lhs, i64_ty, "signed_overflow_lhs")
+        .unwrap();
+    let rhs = gc
+        .builder()
+        .build_int_s_extend_or_bit_cast(rhs, i64_ty, "signed_overflow_rhs")
+        .unwrap();
+    build_abort_if(
+        gc,
+        overflowed,
+        RUNTIME_SIGNED_OVERFLOW,
+        &[reported_operation_ptr.into(), lhs.into(), rhs.into()],
+        "signed_overflow",
+    );
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIntAddBody {
     lhs_name: FullName,
@@ -10176,10 +10421,14 @@ impl LLVMGen for InlineLLVMIntAddBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = gc
-            .builder()
-            .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
-            .unwrap();
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Add,
+            lhs_val,
+            rhs_val,
+            &lhs.ty,
+            ADD_TRAIT_ADD_NAME,
+        );
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10317,10 +10566,14 @@ impl LLVMGen for InlineLLVMIntSubBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = gc
-            .builder()
-            .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
-            .unwrap();
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Subtract,
+            lhs_val,
+            rhs_val,
+            &lhs.ty,
+            SUBTRACT_TRAIT_SUBTRACT_NAME,
+        );
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10458,10 +10711,14 @@ impl LLVMGen for InlineLLVMIntMulBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = gc
-            .builder()
-            .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
-            .unwrap();
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Multiply,
+            lhs_val,
+            rhs_val,
+            &lhs.ty,
+            MULTIPLY_TRAIT_MULTIPLY_NAME,
+        );
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10600,17 +10857,14 @@ impl LLVMGen for InlineLLVMIntDivBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
-
-        let value = if is_signed {
-            gc.builder()
-                .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
-                .unwrap()
-        } else {
-            gc.builder()
-                .build_int_unsigned_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
-                .unwrap()
-        };
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Divide,
+            lhs_val,
+            rhs_val,
+            &lhs.ty,
+            DIVIDE_TRAIT_DIVIDE_NAME,
+        );
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10749,17 +11003,14 @@ impl LLVMGen for InlineLLVMIntRemBody {
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let is_signed = lhs.ty.toplevel_tycon().unwrap().is_signed_integer();
-
-        let value = if is_signed {
-            gc.builder()
-                .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
-                .unwrap()
-        } else {
-            gc.builder()
-                .build_int_unsigned_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
-                .unwrap()
-        };
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Remainder,
+            lhs_val,
+            rhs_val,
+            &lhs.ty,
+            REMAINDER_TRAIT_REMAINDER_NAME,
+        );
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -10828,10 +11079,15 @@ impl LLVMGen for InlineLLVMIntNegBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = gc
-            .builder()
-            .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)
-            .unwrap();
+        let zero = rhs_val.get_type().const_zero();
+        let value = build_integer_arithmetic(
+            gc,
+            IntegerArithmetic::Negate,
+            zero,
+            rhs_val,
+            &rhs.ty,
+            NEGATE_TRAIT_NEGATE_NAME,
+        );
         let obj = create_obj(
             rhs.ty.clone(),
             &vec![],
