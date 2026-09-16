@@ -1679,8 +1679,9 @@ pub fn occupies_no_storage(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
         .all(|field| field_occupies_no_storage(field, type_env))
 }
 
-/// Whether a field takes no room in the struct its object is laid out as. It answers for the fields
-/// `ObjectFieldType::to_basic_type` gives an LLVM type to, so the two are read beside each other.
+/// Whether a field takes no room in the struct its object is laid out as. It answers for the same
+/// fields `ObjectFieldType::to_basic_type` gives an LLVM type to, and its answer is what the size of
+/// that type comes to.
 // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn field_occupies_no_storage(field: ObjectFieldType, type_env: &TypeEnv) -> bool {
     match field {
