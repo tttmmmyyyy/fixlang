@@ -1689,15 +1689,14 @@ fn field_occupies_no_storage(field: ObjectFieldType, type_env: &TypeEnv) -> bool
         ObjectFieldType::SubObject(field_ty, _is_punched) => {
             occupies_no_storage(&field_ty, type_env)
         }
-        // The payload buffer is as wide as the widest variant.
-        ObjectFieldType::UnionBuf(payload_tys) => payload_tys
-            .iter()
-            .all(|payload_ty| occupies_no_storage(payload_ty, type_env)),
         // The element buffer is as wide as the capacity the program asks for as it runs.
         ObjectFieldType::ArrayStorageBuf(_) => false,
-        // A pointer, a machine scalar, or a union's tag. Listing them keeps this match exhaustive,
-        // so a field kind added later is answered here as well.
-        ObjectFieldType::ControlBlock
+        // A payload buffer stands under a tag, which takes an integer's room, so a union occupies
+        // storage however narrow its widest variant is.
+        ObjectFieldType::UnionBuf(_)
+        // A pointer, a machine scalar, or that tag. Listing them keeps this match exhaustive, so a
+        // field kind added later is answered here as well.
+        | ObjectFieldType::ControlBlock
         | ObjectFieldType::TraverseFunction
         | ObjectFieldType::LambdaFunction(_)
         | ObjectFieldType::Ptr
