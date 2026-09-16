@@ -213,7 +213,9 @@ mod integration_tests {
         let container = var_bound_as(&dump, "h");
         let retain_line = format!("retain {}", container);
         assert!(
-            !dump.lines().any(|l| l.trim_start().starts_with(&retain_line)),
+            !dump
+                .lines()
+                .any(|l| l.trim_start().starts_with(&retain_line)),
             "a field read out of a boxed container should not retain the container, but `{}` \
              stands in:\n{}",
             retain_line,
