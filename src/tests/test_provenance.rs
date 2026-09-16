@@ -147,24 +147,11 @@ mod integration_tests {
         assert_line_prov(line, &format!("`{}` produces", rhs_prefix), expected_prov);
     }
 
-    /// The variable bound to the result of the operation `rhs_prefix` names.
-    fn var_produced_by(dump: &str, rhs_prefix: &str) -> String {
-        let line = binding_by_rhs(dump, rhs_prefix);
-        line.trim_start()
-            .strip_prefix("let ")
-            .and_then(|rest| rest.split_once(" : "))
-            .map(|(var, _)| var.to_string())
-            .unwrap_or_else(|| panic!("no variable bound on:\n{}", line))
-    }
-
-    /// The variable the binding named `source_name` (its `(as ...)` annotation) binds.
-    fn var_bound_as(dump: &str, source_name: &str) -> String {
+    /// The line of the binding named `source_name` (its `(as ...)` annotation).
+    fn binding_by_source_name<'a>(dump: &'a str, source_name: &str) -> &'a str {
         let marker = format!("(as {})", source_name);
         dump.lines()
             .find(|l| l.contains(&marker))
-            .and_then(|l| l.trim_start().strip_prefix("let "))
-            .and_then(|rest| rest.split_once(" : "))
-            .map(|(var, _)| var.to_string())
             .unwrap_or_else(|| {
                 panic!(
                     "no binding `(as {})` in the RC IR dump:\n{}",
@@ -173,20 +160,34 @@ mod integration_tests {
             })
     }
 
+    /// The variable the binding line `line` binds.
+    fn var_bound_on(line: &str) -> String {
+        line.trim_start()
+            .strip_prefix("let ")
+            .and_then(|rest| rest.split_once(" : "))
+            .map(|(var, _)| var.to_string())
+            .unwrap_or_else(|| panic!("no variable bound on:\n{}", line))
+    }
+
+    /// The variable bound to the result of the operation `rhs_prefix` names.
+    fn var_produced_by(dump: &str, rhs_prefix: &str) -> String {
+        var_bound_on(binding_by_rhs(dump, rhs_prefix))
+    }
+
+    /// The variable the binding named `source_name` (its `(as ...)` annotation) binds.
+    fn var_bound_as(dump: &str, source_name: &str) -> String {
+        var_bound_on(binding_by_source_name(dump, source_name))
+    }
+
     /// Assert that the binding named `source_name` (its `(as ...)` annotation) is annotated with the
     /// given provenance in the dump.
     fn assert_binding_prov(dump: &str, source_name: &str, expected_prov: &str) {
-        let marker = format!("(as {})", source_name);
-        let line = dump
-            .lines()
-            .find(|l| l.contains(&marker))
-            .unwrap_or_else(|| {
-                panic!(
-                    "no binding `(as {})` in the RC IR dump:\n{}",
-                    source_name, dump
-                )
-            });
-        assert_line_prov(line, &format!("`{}` binds", marker), expected_prov);
+        let line = binding_by_source_name(dump, source_name);
+        assert_line_prov(
+            line,
+            &format!("`(as {})` binds", source_name),
+            expected_prov,
+        );
     }
 
     /// A field read out of a boxed container is `unknown`. The borrow such a read takes rests on

@@ -4649,6 +4649,15 @@ impl LLVMGen for InlineLLVMStructGetBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The value of a field getter is the field, so `ty` is the field's type.
         let container_ty = gc.get_scoped_type(&self.var_name);
+        if gc.config.develop_mode {
+            assert_eq!(
+                &container_ty.field_types(gc.type_env())[self.field_idx],
+                ty,
+                "the value of a getter of field {} of `{}` is that field",
+                self.field_idx,
+                container_ty.to_string()
+            );
+        }
         match Self::field_read(&container_ty, ty, gc.type_env()) {
             FieldRead::Moved => {
                 let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
