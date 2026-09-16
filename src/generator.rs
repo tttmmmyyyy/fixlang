@@ -514,7 +514,11 @@ impl<'c> Object<'c> {
         // `Generator::get_refcnt_ptr` and its neighbours instead. The control block and the fields
         // are separate regions of memory (see `MemoryRegion`), which a field reaching into the
         // control block would join.
-        assert!(field_idx >= BOXED_TYPE_DATA_IDX);
+        assert!(
+            field_idx >= BOXED_TYPE_DATA_IDX,
+            "field {} of a boxed object lies in its control block",
+            field_idx
+        );
         let ptr = self.value(gc).into_pointer_value();
         gc.builder()
             .build_struct_gep(ty, ptr, field_idx, "gep2field")

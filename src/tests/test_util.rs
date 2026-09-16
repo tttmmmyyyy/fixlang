@@ -374,17 +374,19 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
     emitted_llvm_ir_modules(dir, which).join("\n")
 }
 
-/// The LLVM IR the code generator wrote for `source`, compiled at `opt_level`, before the LLVM pass
-/// pipeline ran over it, one string per module. Fails the test unless the build succeeds.
+/// The LLVM IR the code generator wrote for `source`, compiled at `opt_level` with `build_args` on
+/// the build command, before the LLVM pass pipeline ran over it, one string per module. Fails the
+/// test unless the build succeeds.
 ///
 /// Use this for a property of the code the compiler emits. The optimized module also holds code
 /// LLVM itself introduced, which such a test would take for the compiler's own work. A module
 /// numbers its metadata for itself, so a test that resolves a `!N` name reads one module of this.
-pub fn generated_llvm_ir_modules(source: &str, opt_level: &str) -> Vec<String> {
+pub fn generated_llvm_ir_modules(source: &str, opt_level: &str, build_args: &[&str]) -> Vec<String> {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();
     let build = fix_build_source_command(dir, source, opt_level)
         .arg("--emit-llvm")
+        .args(build_args)
         .output()
         .expect("Failed to execute fix build");
     assert!(
@@ -399,7 +401,7 @@ pub fn generated_llvm_ir_modules(source: &str, opt_level: &str) -> Vec<String> {
 /// The LLVM IR the code generator wrote for `source`, compiled at `opt_level`, before the LLVM pass
 /// pipeline ran over it, the modules concatenated in file-name order.
 pub fn generated_llvm_ir(source: &str, opt_level: &str) -> String {
-    generated_llvm_ir_modules(source, opt_level).join("\n")
+    generated_llvm_ir_modules(source, opt_level, &[]).join("\n")
 }
 
 /// The name of the first local value in `text`, as LLVM writes one: `%name`, or `%"name"` when the

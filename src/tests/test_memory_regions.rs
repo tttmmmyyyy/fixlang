@@ -1,11 +1,7 @@
 use crate::misc::{Map, Set};
 use crate::tbaa::MemoryRegion;
-use crate::tests::test_util::{
-    emitted_llvm_ir_modules, first_local_value, fix_build_source_command,
-    generated_llvm_ir_modules, EmittedIr,
-};
+use crate::tests::test_util::{first_local_value, generated_llvm_ir_modules};
 use std::sync::OnceLock;
-use tempfile::TempDir;
 
 /// A program that reaches every region of memory the compiler names. A boxed struct and a boxed
 /// union give it fields and a payload buffer, an array gives it elements, a global gives it storage
@@ -41,7 +37,7 @@ const MEMORY_ACCESS_SOURCE: &str = r#"
 /// one module and the `!0` of the next stand for different nodes.
 fn single_threaded_modules() -> &'static [String] {
     static MODULES: OnceLock<Vec<String>> = OnceLock::new();
-    MODULES.get_or_init(|| generated_llvm_ir_modules(MEMORY_ACCESS_SOURCE, "none"))
+    MODULES.get_or_init(|| generated_llvm_ir_modules(MEMORY_ACCESS_SOURCE, "none", &[]))
 }
 
 /// The modules the compiler writes for `MEMORY_ACCESS_SOURCE` with multi-threading on, built once
@@ -51,22 +47,8 @@ fn single_threaded_modules() -> &'static [String] {
 /// is the one access the code generator emits that no other build produces.
 fn multi_threaded_modules() -> &'static [String] {
     static MODULES: OnceLock<Vec<String>> = OnceLock::new();
-    MODULES.get_or_init(|| {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let dir = temp_dir.path();
-        let build = fix_build_source_command(dir, MEMORY_ACCESS_SOURCE, "none")
-            .arg("--emit-llvm")
-            .arg("--threaded")
-            .output()
-            .expect("Failed to execute fix build");
-        assert!(
-            build.status.success(),
-            "the build should succeed.\nstdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr),
-        );
-        emitted_llvm_ir_modules(dir, EmittedIr::BeforeOptimization)
-    })
+    MODULES
+        .get_or_init(|| generated_llvm_ir_modules(MEMORY_ACCESS_SOURCE, "none", &["--threaded"]))
 }
 
 /// The builds these tests read, each with the words a failure names it by.
@@ -278,6 +260,11 @@ fn accessed_pointer(line: &str) -> Option<&str> {
         .map(|at| operands[at + "ptr ".len()..].trim_start())
         .unwrap_or_else(|| panic!("an access takes a pointer operand: {}", line));
     if !pointer_operand.starts_with('%') {
+        assert!(
+            pointer_operand.starts_with('@'),
+            "an access reaches a value the code generator named or a global variable: {}",
+            line
+        );
         return None;
     }
     let named = first_local_value(pointer_operand)
