@@ -157,6 +157,22 @@ mod integration_tests {
             .unwrap_or_else(|| panic!("no variable bound on:\n{}", line))
     }
 
+    /// The variable the binding named `source_name` (its `(as ...)` annotation) binds.
+    fn var_bound_as(dump: &str, source_name: &str) -> String {
+        let marker = format!("(as {})", source_name);
+        dump.lines()
+            .find(|l| l.contains(&marker))
+            .and_then(|l| l.trim_start().strip_prefix("let "))
+            .and_then(|rest| rest.split_once(" : "))
+            .map(|(var, _)| var.to_string())
+            .unwrap_or_else(|| {
+                panic!(
+                    "no binding `(as {})` in the RC IR dump:\n{}",
+                    source_name, dump
+                )
+            })
+    }
+
     /// Assert that the binding named `source_name` (its `(as ...)` annotation) is annotated with the
     /// given provenance in the dump.
     fn assert_binding_prov(dump: &str, source_name: &str, expected_prov: &str) {
@@ -171,6 +187,37 @@ mod integration_tests {
                 )
             });
         assert_line_prov(line, &format!("`{}` binds", marker), expected_prov);
+    }
+
+    /// A field read out of a boxed container is `unknown`. The borrow such a read takes rests on
+    /// this: an operation that borrows an operand declares no leaf of its result as a pass-through
+    /// of that operand, and for a boxed container that holds because every leaf is `unknown`. A
+    /// field carrying the container's leaf through would make the read's borrow unsound.
+    #[test]
+    fn test_provenance_dump_field_of_boxed_struct() {
+        let (_temp_dir, project_dir) = setup_test_env("boxed_struct_field");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        assert_binding_prov(&dump, "field", "[unknown]");
+    }
+
+    /// A field read out of a boxed container leaves the container to whoever owns it. Nothing
+    /// retains the container to pay for the read, so a container still read afterwards is retained
+    /// nowhere and released once, at its last use.
+    #[test]
+    fn test_provenance_dump_field_read_borrows_the_container() {
+        let (_temp_dir, project_dir) = setup_test_env("boxed_struct_field");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let container = var_bound_as(&dump, "h");
+        let retain = format!("retain {}", container);
+        assert!(
+            !dump.lines().any(|l| l.trim_start().starts_with(&retain)),
+            "a field read out of a boxed container should not retain the container, but `{}` \
+             stands in:\n{}",
+            retain,
+            dump
+        );
     }
 
     /// Verifies the three provenance judgements a single function produces: an allocation is
