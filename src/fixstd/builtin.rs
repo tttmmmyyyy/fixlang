@@ -4616,8 +4616,8 @@ impl InlineLLVMStructGetBody {
         }
     }
 
-    /// How a field getter reads the field this one names, out of the container it is applied to. A
-    /// field getter takes exactly the container, so `arg_tys[0]` is it.
+    /// How this getter reads its field out of its container. A field getter takes exactly the
+    /// container, so `arg_tys[0]` is it.
     // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn field_read_of(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> FieldRead {
         let container_ty = &arg_tys[0];

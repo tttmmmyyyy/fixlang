@@ -1,11 +1,10 @@
 // Memory-safety tests for a field getter reading a reference-bearing field out of a boxed
 // container. Such a read borrows the container: the field is moved out and retained, so the value
 // read out holds a reference of its own, and reference-count insertion releases the container at
-// its last use rather than at the read. The container's fields cover each shape whose retain has
-// somewhere to reach -- a boxed value, an unbox struct with two boxed leaves, a union with a boxed
-// variant, and a closure -- beside one holding no reference at all. An unboxed container is the
-// exception: its fields are its references, so a read takes it over, and the last arm below is
-// that shape.
+// its last use. The container's fields cover each shape whose retain has somewhere to reach -- a
+// boxed value, an unbox struct with two boxed leaves, a union with a boxed variant, and a closure
+// -- alongside one holding no reference at all. An unboxed container is the exception: its fields
+// are its references, so a read takes it over, and the last arm below is that shape.
 
 #[cfg(test)]
 mod struct_get_borrow_tests {

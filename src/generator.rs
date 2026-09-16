@@ -104,8 +104,7 @@ pub enum ValueAccessor<'c> {
 }
 
 impl<'c> ValueAccessor<'c> {
-    /// The Fix type of the value this accessor names, read without generating any code for the
-    /// read.
+    /// The Fix type of the value this accessor names. Reading the type generates no code.
     pub fn ty(&self) -> Arc<TypeNode> {
         match self {
             ValueAccessor::Local(obj) => obj.ty.clone(),
@@ -1074,8 +1073,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.get_scoped_value(name).accessor.get(self)
     }
 
-    /// The Fix type of the value `var` is bound to. Reading the type generates no code, so it is
-    /// what an operation asks before it decides how to read the value itself.
+    /// The Fix type of the value `var` is bound to. Reading the type generates no code, so an
+    /// operation can ask it before it decides how to read the value.
     pub fn get_scoped_type(&mut self, var: &FullName) -> Arc<TypeNode> {
         self.get_scoped_value(var).accessor.ty()
     }

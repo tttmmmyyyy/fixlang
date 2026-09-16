@@ -160,7 +160,7 @@ mod integration_tests {
             })
     }
 
-    /// The variable the binding line `line` binds.
+    /// The variable a binding line of the dump binds: the name between `let` and the type.
     fn var_bound_on(line: &str) -> String {
         line.trim_start()
             .strip_prefix("let ")
