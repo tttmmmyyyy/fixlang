@@ -259,7 +259,7 @@ src/fixstd/builtin.rs	InlineLLVMMarkThreadedFunctionBody::result_prov	P1,P2,P26	
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody::generate	P26	e9c407350555
 src/fixstd/builtin.rs	InlineLLVMPunchedArrayPlugBody::result_prov	P1,P2,P26	1937952562a5
 src/fixstd/builtin.rs	InlineLLVMStringBuf::result_prov	P1,P2,P26	1937952562a5
-src/fixstd/builtin.rs	InlineLLVMStructGetBody	D/A	001ea4441da3
+src/fixstd/builtin.rs	InlineLLVMStructGetBody	D/A	4db85a1a7375
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::borrows_operand	P26,P31,A19	a9438e99865d
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::field_index	P1,P2	2aef725958cb
 src/fixstd/builtin.rs	InlineLLVMStructGetBody::field_read	P31,A19	5dbad816a0dc
