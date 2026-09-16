@@ -2459,12 +2459,10 @@ pub fn test_opaque_type_under_a_higher_kinded_associated_type_is_reported() {
 
         trait fmt : Format {
             type Repr fmt : * -> *;
-            format_value : a -> fmt -> Repr fmt a;
         }
 
         impl () : Format {
             type Repr () = Array;
-            format_value = |x, _| [x];
         }
 
         take : [fmt : Format] fmt -> Repr fmt I64 -> I64;
