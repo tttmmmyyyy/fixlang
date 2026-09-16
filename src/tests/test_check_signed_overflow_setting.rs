@@ -6,8 +6,7 @@
 //! width of the type, so the program prints it and exits. A run that completes therefore shows the
 //! build was made without the check.
 
-use crate::tests::test_util::{assert_succeeded, run_fix, setup_case_projects};
-use std::process::Output;
+use crate::tests::test_util::{assert_failed_with, assert_succeeded, run_fix, setup_case_projects};
 
 /// The directory holding this module's case projects.
 const CASES: &str = "src/tests/test_check_signed_overflow_setting/cases";
@@ -15,27 +14,13 @@ const CASES: &str = "src/tests/test_check_signed_overflow_setting/cases";
 /// What the check says when it stops the program at the sum the case projects ask for.
 const SUM_STOPPED: &str = "Signed integer overflow: I64 addition";
 
-/// Asserts that `output` failed with the check's report, quoting both streams otherwise.
-///
-/// # Arguments
-/// * `what` — what the run was expected to do, so a failure says which expectation broke.
-fn assert_stopped_by_the_check(output: &Output, what: &str) {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !output.status.success() && stderr.contains(SUM_STOPPED),
-        "{}\nstdout: {}\nstderr: {}",
-        what,
-        String::from_utf8_lossy(&output.stdout),
-        stderr,
-    );
-}
-
 /// The `build` section decides the setting for the program.
 #[test]
 fn test_build_section_turns_the_check_on_for_the_program() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_on_in_build");
-    assert_stopped_by_the_check(
+    assert_failed_with(
         &run_fix(&project_dir, &["run"]),
+        SUM_STOPPED,
         "`fix run` should stop at the sum, because the build section turns the check on.",
     );
 }
@@ -45,8 +30,9 @@ fn test_build_section_turns_the_check_on_for_the_program() {
 #[test]
 fn test_build_section_turns_the_check_on_for_a_test() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_on_in_build");
-    assert_stopped_by_the_check(
+    assert_failed_with(
         &run_fix(&project_dir, &["test"]),
+        SUM_STOPPED,
         "`fix test` should stop at the sum, because the build section turns the check on and the \
          test section names no value of its own.",
     );
@@ -68,8 +54,9 @@ fn test_test_section_turns_the_check_off_for_a_test() {
 #[test]
 fn test_test_section_leaves_the_check_on_for_the_program() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_on_in_build_off_in_test");
-    assert_stopped_by_the_check(
+    assert_failed_with(
         &run_fix(&project_dir, &["run"]),
+        SUM_STOPPED,
         "`fix run` should stop at the sum, because the test section covers the test build alone.",
     );
 }
@@ -79,8 +66,9 @@ fn test_test_section_leaves_the_check_on_for_the_program() {
 #[test]
 fn test_test_section_turns_the_check_on_for_a_test() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_on_in_test");
-    assert_stopped_by_the_check(
+    assert_failed_with(
         &run_fix(&project_dir, &["test"]),
+        SUM_STOPPED,
         "`fix test` should stop at the sum, because the test section turns the check on.",
     );
 }
@@ -96,8 +84,9 @@ fn test_option_turns_the_check_on_for_a_test() {
         &run_fix(&project_dir, &["test"]),
         "`fix test` should succeed, because the test section turns the check off.",
     );
-    assert_stopped_by_the_check(
+    assert_failed_with(
         &run_fix(&project_dir, &["test", "--check-signed-overflow"]),
+        SUM_STOPPED,
         "`--check-signed-overflow` should turn the check on, over the value the test section names.",
     );
 }

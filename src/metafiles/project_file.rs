@@ -174,21 +174,20 @@ pub struct ProjectFileBuildTest {
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
 
-    /// Whether to build a test with thread-safe reference counting. Unset leaves the value the
-    /// `build` section gives in force.
+    /// Whether to build a test with thread-safe reference counting. A test is built with it when
+    /// this section or the `build` section asks for it.
     threaded: Option<bool>,
     /// Name of the sanitizer to instrument the built test program with, from the set
-    /// `Sanitizer::from_str` accepts.
+    /// `Sanitizer::from_str` accepts. Unset takes the value from the `build` section.
     sanitize: Option<String>,
-    /// Whether to put debugging information into a test build. Unset leaves the value the `build`
-    /// section gives in force.
+    /// Whether to put debugging information into a test build. A test build carries it when this
+    /// section or the `build` section asks for it.
     debug: Option<bool>,
     /// Name of the optimization level to build a test at, from the set
-    /// `FixOptimizationLevel::from_str` accepts. Unset leaves the value the `build` section gives in
-    /// force.
+    /// `FixOptimizationLevel::from_str` accepts. Unset takes the value from the `build` section.
     opt_level: Option<String>,
-    /// Whether a test prints a backtrace when a run-time error ends it. Unset leaves the value the
-    /// `build` section gives in force.
+    /// Whether a test prints a backtrace when a run-time error ends it. A test prints one when this
+    /// section or the `build` section asks for it.
     backtrace: Option<bool>,
     /// Regex patterns of the CPU features to turn off in a test build, added to the ones the
     /// `build` section gives.

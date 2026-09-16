@@ -6,26 +6,13 @@
 //! checks off the capacity is recorded as given, nothing writes to the buffer, and the program
 //! prints the capacity and exits. So "the check was removed" is observable as a completed run.
 
-use crate::tests::test_util::{assert_succeeded, run_fix, setup_case_projects};
-use std::process::Output;
+use crate::tests::test_util::{assert_failed_with, assert_succeeded, run_fix, setup_case_projects};
 
 /// The directory holding this module's case projects.
 const CASES: &str = "src/tests/test_no_runtime_check_setting/cases";
 
 /// What the run-time check says when it rejects the capacity the case projects ask for.
 const CAPACITY_REJECTED: &str = "Array size or capacity exceeds the address space";
-
-/// Asserts that `output` failed with the run-time check's diagnostic.
-fn assert_rejected_by_the_check(output: &Output, what: &str) {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !output.status.success() && stderr.contains(CAPACITY_REJECTED),
-        "{}\nstdout: {}\nstderr: {}",
-        what,
-        String::from_utf8_lossy(&output.stdout),
-        stderr,
-    );
-}
 
 /// The `build` section decides the setting for the program.
 #[test]
@@ -42,8 +29,9 @@ fn test_build_section_disables_the_checks_for_the_program() {
 #[test]
 fn test_build_section_leaves_the_checks_on_for_a_test() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_off_in_build");
-    assert_rejected_by_the_check(
+    assert_failed_with(
         &run_fix(&project_dir, &["test"]),
+        CAPACITY_REJECTED,
         "`fix test` should abort, because the test build keeps the checks.",
     );
 }
@@ -62,8 +50,9 @@ fn test_test_section_disables_the_checks_for_a_test() {
 #[test]
 fn test_test_section_leaves_the_checks_on_for_the_program() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_off_in_test");
-    assert_rejected_by_the_check(
+    assert_failed_with(
         &run_fix(&project_dir, &["run"]),
+        CAPACITY_REJECTED,
         "`fix run` should abort, because the test section does not reach the program.",
     );
 }
@@ -75,8 +64,9 @@ fn test_test_section_leaves_the_checks_on_for_the_program() {
 #[test]
 fn test_option_disables_the_checks_for_a_test() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_off_in_build");
-    assert_rejected_by_the_check(
+    assert_failed_with(
         &run_fix(&project_dir, &["test"]),
+        CAPACITY_REJECTED,
         "`fix test` should abort, because the test build keeps the checks.",
     );
     assert_succeeded(

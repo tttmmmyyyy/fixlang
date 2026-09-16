@@ -892,3 +892,22 @@ pub fn assert_failed(output: &Output, what: &str) {
         String::from_utf8_lossy(&output.stderr),
     );
 }
+
+/// Asserts that `output` failed with `report` somewhere in its standard error, quoting both
+/// streams otherwise.
+///
+/// # Arguments
+/// * `report` — what the run was expected to end with, so that a run failing for another reason
+///   is caught rather than counted as the expected failure.
+/// * `what` — what the run was expected to be rejected for, so a passing run says which
+///   expectation broke.
+pub fn assert_failed_with(output: &Output, report: &str, what: &str) {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success() && stderr.contains(report),
+        "{}\nstdout: {}\nstderr: {}",
+        what,
+        String::from_utf8_lossy(&output.stdout),
+        stderr,
+    );
+}
