@@ -340,9 +340,9 @@ impl<'a> Lowerer<'a> {
 
         let mut param_vars = vec![];
         for (p, ty) in params.iter().zip(src_tys.iter()) {
-            let pv = self.fresh_var(&p.name.name, ty.clone(), None);
-            self.bind(&p.name, pv.clone());
-            param_vars.push(pv);
+            let param_var = self.fresh_var(&p.name.name, ty.clone(), None);
+            self.bind(&p.name, param_var.clone());
+            param_vars.push(param_var);
         }
 
         let mut bindings = vec![];
