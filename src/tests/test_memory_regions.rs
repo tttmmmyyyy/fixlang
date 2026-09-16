@@ -50,11 +50,25 @@ fn multi_threaded_modules() -> &'static [String] {
     MODULES.get_or_init(|| generated_llvm_ir_modules(MEMORY_ACCESS_SOURCE, "none", &["--threaded"]))
 }
 
+/// The modules the compiler writes for `MEMORY_ACCESS_SOURCE` with debug information on, built
+/// once and shared the same way.
+///
+/// A local a debugger can show by name is written to a stack slot of its own, which is an access no
+/// other build makes.
+fn debug_info_modules() -> &'static [String] {
+    static MODULES: OnceLock<Vec<String>> = OnceLock::new();
+    MODULES.get_or_init(|| generated_llvm_ir_modules(MEMORY_ACCESS_SOURCE, "none", &["-g"]))
+}
+
 /// The builds these tests read, each with the words a failure names it by.
-fn memory_access_builds() -> [(&'static str, &'static [String]); 2] {
+fn memory_access_builds() -> [(&'static str, &'static [String]); 3] {
     [
         ("in a single-threaded build", single_threaded_modules()),
         ("in a multi-threaded build", multi_threaded_modules()),
+        (
+            "in a build carrying debug information",
+            debug_info_modules(),
+        ),
     ]
 }
 
@@ -165,7 +179,7 @@ pub fn test_each_access_reaches_the_region_of_its_pointer() {
 ///
 /// The name in the emitted code carries a number where a function holds several values the compiler
 /// named the same, and `compiler_given_name` takes that number off.
-const REGION_OF_EACH_POINTER: [(&str, MemoryRegion); 13] = [
+const REGION_OF_EACH_POINTER: [(&str, MemoryRegion); 14] = [
     // `Generator::get_refcnt_ptr`
     ("ptr_to_refcnt", MemoryRegion::Refcnt),
     // `Generator::get_refcnt_state_ptr`
@@ -189,6 +203,8 @@ const REGION_OF_EACH_POINTER: [(&str, MemoryRegion); 13] = [
     ("release_loop_counter", MemoryRegion::Data),
     // `build_get_argv_function`
     ("elem_ptr", MemoryRegion::Data),
+    // `Generator::create_debug_local_variable`
+    ("alloca@create_debug_local_variable", MemoryRegion::Data),
 ];
 
 /// The region an access through `pointer` reaches, absent where `REGION_OF_EACH_POINTER` does not
