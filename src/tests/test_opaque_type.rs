@@ -2300,9 +2300,9 @@ pub fn test_opaque_concrete_type_is_another_opaque_type() {
 // An opaque type is an atom of its declared kind
 // ============================================================
 
-/// An opaque type surviving into a type argument is reported. The struct asks for a type
-/// constructor of kind `* -> *`, and `Iterator::map` promises a type, so the use of `map` is
-/// reported where it is written rather than stopping the compiler later.
+/// An opaque type given as a type argument is reported, and the report cites the expression that
+/// wrote it. The struct asks for a type constructor of kind `* -> *`, and `Iterator::map` promises
+/// a type.
 #[test]
 pub fn test_opaque_type_is_not_read_as_a_type_constructor() {
     let source = r#"
@@ -2331,11 +2331,11 @@ pub fn test_opaque_type_is_not_read_as_a_type_constructor() {
     );
 }
 
-/// An opaque type is not read as a type constructor even where nothing would ever need the
-/// constructor on its own: `f` here is applied to `I64` wherever it occurs, so the type the
-/// compiler would resolve carries no half-applied constructor. What the signature of `to_iter`
-/// promises is a type, and that a type happens to be written as one constructor and one argument
-/// is not part of that promise, so the call is reported.
+/// An opaque type is not read as a type constructor even where nothing needs the constructor on
+/// its own: `f` here is applied to `I64` wherever it occurs, so no resolved type would carry a
+/// TyCon short of its arguments. The signature of `to_iter` promises a type, and that the type
+/// happens to be written as one constructor and one argument is not part of that promise, so the
+/// call is reported.
 #[test]
 pub fn test_opaque_type_is_not_read_as_a_type_constructor_even_when_always_applied() {
     let source = r#"
@@ -2354,9 +2354,9 @@ pub fn test_opaque_type_is_not_read_as_a_type_constructor_even_when_always_appli
     );
 }
 
-/// The rule reaches a type variable a signature fixed as well as one inference is free to bind:
+/// The rule reaches a type variable held fixed by a signature as well as one free to be bound:
 /// the return type of `mk_holder` is a type constructor its caller chooses, and the body gives an
-/// opaque type, so the body is reported with the same reason.
+/// opaque type, so the body is reported for the same reason.
 #[test]
 pub fn test_opaque_type_is_not_read_as_a_type_constructor_when_the_constructor_is_fixed_by_a_signature(
 ) {
@@ -2377,8 +2377,8 @@ pub fn test_opaque_type_is_not_read_as_a_type_constructor_when_the_constructor_i
 }
 
 /// The rule reaches an opaque type a trait member returns as well as one a global returns. The
-/// type constructor standing for `?it` takes the trait's type variable and the member's own, and
-/// the higher-kinded parameter given the call's result leaves it one argument short.
+/// TyCon standing for `?it` takes the trait's type variable and the member's own, so giving the
+/// call's result to a higher-kinded parameter leaves that TyCon one argument short.
 #[test]
 pub fn test_opaque_type_of_a_trait_member_is_not_read_as_a_type_constructor() {
     let source = r#"
@@ -2409,9 +2409,9 @@ pub fn test_opaque_type_of_a_trait_member_is_not_read_as_a_type_constructor() {
     );
 }
 
-/// An opaque type declared of kind `* -> *` stands where a type constructor of that kind is
-/// wanted, and is applied there, while the type constructor standing for it carries the type
-/// variable of the signature that wrote it.
+/// An opaque type declared with kind `* -> *` stands where a type constructor of that kind is
+/// wanted, and is applied there, although the TyCon standing for it also carries the type variable
+/// of the signature that wrote it.
 #[test]
 pub fn test_opaque_type_constructor_of_one_argument_as_a_higher_kinded_argument() {
     let source = r#"
@@ -2440,10 +2440,9 @@ pub fn test_opaque_type_constructor_of_one_argument_as_a_higher_kinded_argument(
     test_source(&source, Configuration::develop_mode());
 }
 
-/// An opaque type meeting a higher-kinded associated type is reported where the call is written.
-/// `Repr fmt` is fixed by the signature and reduces at no implementation here, so what the call
-/// demands is an equality on the opaque type, and the program is answered rather than carried into
-/// instantiation.
+/// An opaque type meeting a higher-kinded associated type is reported, and the report cites the
+/// call. `Repr fmt` is fixed by the signature and reduces at no implementation here, so the call
+/// demands an equality on the opaque type.
 #[test]
 pub fn test_opaque_type_under_a_higher_kinded_associated_type_is_reported() {
     let source = r#"

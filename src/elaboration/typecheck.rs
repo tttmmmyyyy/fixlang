@@ -2156,7 +2156,7 @@ impl TypeCheckContext {
     /// an associated type on either side becomes a pending equality, to be settled once enough is
     /// known about its arguments. Two types no substitution can make equal give
     /// `UnificationErr::Disjoint`, and two that could be made equal only by reading an opaque type
-    /// as a type constructor and an argument give `UnificationErr::IndivisibleOpaque`.
+    /// as a type constructor applied to an argument give `UnificationErr::IndivisibleOpaque`.
     // PROOF: P2a, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unify(
         &mut self,
@@ -2173,9 +2173,9 @@ impl TypeCheckContext {
             return Ok(());
         }
 
-        // A type variable required to stand for an opaque TyCon short of its arguments is answered
-        // by the rule that such a form is no type, ahead of the cases below, so that a variable
-        // inference is free to bind and one a signature fixed are answered alike.
+        // An opaque TyCon short of its arguments is no type, so a type variable required to stand
+        // for one is rejected here. This runs ahead of the type-variable cases, so that a variable
+        // free to be bound and a variable held fixed get the same answer.
         for (tyvar_side, other_side) in [(&ty1, &ty2), (&ty2, &ty1)] {
             if matches!(tyvar_side.ty, Type::TyVar(_))
                 && self.is_opaque_tycon_short_of_its_arguments(other_side)
@@ -2294,22 +2294,22 @@ impl TypeCheckContext {
         Ok(UnifOrOtherErr::extract_others(tc.unify(&ty1, &ty2))?.is_ok())
     }
 
-    /// Whether `ty` is an opaque type's TyCon carrying fewer arguments than it stands for.
+    /// Whether `ty` is an opaque type's TyCon carrying fewer arguments than it takes.
     ///
     /// An opaque type is an atom of the kind it was declared with: a signature writing `?it`
-    /// promises a type, and never a type constructor with an argument to read it as. The arguments
-    /// its TyCon takes stand for the generic type variables of that signature, so a TyCon carrying
-    /// fewer of them than it stands for is a type no signature describes, and unification answers
+    /// promises a type, and never a type constructor an argument can be split off from. The
+    /// arguments its TyCon takes stand for the generic type variables of that signature, so a
+    /// TyCon carrying fewer of them is a form no signature describes, and `unify` answers
     /// `UnificationErr::IndivisibleOpaque` where one is required.
     ///
     /// `desugar_opaque::resolve_opaque_type_in_type` asserts that no such type reaches it, so a
     /// path that let one through would abort the compiler rather than report anything.
     ///
-    /// A type headed by a type variable or an associated type, and one headed by a TyCon the type
-    /// environment does not declare, are both types this asks about and answers no for.
+    /// The answer is `false` for a type headed by a type variable or an associated type, and for
+    /// one headed by a TyCon the type environment does not declare.
     ///
     /// # Examples
-    /// `Std::Array::to_iter::?it` stands for one argument, so `?it Std::I64` is a type and the bare
+    /// `Std::Array::to_iter::?it` takes one argument, so `?it Std::I64` is a type and the bare
     /// `?it` is not.
     fn is_opaque_tycon_short_of_its_arguments(&self, ty: &Arc<TypeNode>) -> bool {
         let Some(tycon) = ty.toplevel_tycon() else {
