@@ -17,7 +17,7 @@
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::fixstd::builtin::InlineLLVMCaptureProjectBody;
+use crate::fixstd::builtin::{InlineLLVMCaptureProjectBody, InlineLLVMNoStorageValueBody};
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::ownership::rc_units;
@@ -193,6 +193,12 @@ struct Validator<'a> {
     location: String,
     /// Every name bound anywhere in this body; a second binding of one is a duplicate.
     seen: Set<FullName>,
+    /// The names bound to a value made by `InlineLLVMNoStorageValueBody`. A value of a type that
+    /// occupies no storage holds no boxed value, since a pointer takes storage, so no reference
+    /// count acts on one. `lower_lam` leaves such a capture out of the closure on that ground, and
+    /// this is where the ground is checked: the passes that run between the stages this validator
+    /// is called at — reference-count insertion, `borrow_ify`, `cancel` — must place no node on one.
+    made_without_storage: Set<FullName>,
     /// The names currently in scope, which a use must resolve to.
     scope: Set<FullName>,
 }
@@ -216,6 +222,7 @@ impl<'a> Validator<'a> {
             type_env,
             location,
             seen: Set::default(),
+            made_without_storage: Set::default(),
             scope: Set::default(),
         }
     }
@@ -310,12 +317,30 @@ impl<'a> Validator<'a> {
         match node.expr.as_ref() {
             RcExpr::Let(x, rhs, k) => {
                 self.check_rhs(x, rhs);
+                if let RcRhs::Llvm(llvm_gen, _) = rhs {
+                    if llvm_gen
+                        .as_any()
+                        .downcast_ref::<InlineLLVMNoStorageValueBody>()
+                        .is_some()
+                    {
+                        self.made_without_storage.insert(x.name.clone());
+                    }
+                }
                 self.bind(&x.name);
                 self.check_expr(k);
                 self.scope.remove(&x.name);
             }
             RcExpr::Retain(v, path, _, k) | RcExpr::Release(v, path, _, k) => {
                 self.use_var(&v.name);
+                if self.made_without_storage.contains(&v.name) {
+                    panic!(
+                        "[RC IR validate] {}: a reference count acts on `{}`, a value of `{}`, which occupies no storage, in `{}`",
+                        self.stage,
+                        v.name.to_string(),
+                        v.ty.to_string(),
+                        self.location,
+                    );
+                }
                 self.check_rc_unit(v, path);
                 self.check_expr(k);
             }

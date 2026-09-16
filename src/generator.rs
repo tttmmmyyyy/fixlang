@@ -34,6 +34,7 @@ use crate::object::control_block_type;
 use crate::object::create_traverser;
 use crate::object::lambda_function_type;
 use crate::object::lambda_return_part_types;
+use crate::object::occupies_no_storage;
 use crate::object::refcnt_state_type;
 use crate::object::refcnt_type;
 use crate::object::traverser_type;
@@ -792,8 +793,32 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
         let object_ty = ty_to_object_ty(ty, &vec![], self.type_env());
         let struct_ty = object_ty.to_struct_type(self);
+        self.assert_storage_answers_agree(ty, struct_ty.into());
         self.struct_types.insert(ty.clone(), struct_ty);
         struct_ty
+    }
+
+    /// Asserts that `TypeNode::occupies_no_storage`, which answers on the Fix type, says what LLVM
+    /// says of `llvm_ty`, the type a value of `ty` is laid out as.
+    ///
+    /// A capture the two disagree about is left out of the closure that carried it while its reader
+    /// still reads the slot, so the two parting is a miscompilation with no diagnostic. The walk
+    /// costs what laying the type out costs, and the two callers lay each type out once, so this
+    /// runs under `develop_mode` and the test suite is what asks it.
+    fn assert_storage_answers_agree(&self, ty: &Arc<TypeNode>, llvm_ty: BasicTypeEnum<'c>) {
+        if !self.config.develop_mode {
+            return;
+        }
+        let fix_says = occupies_no_storage(ty, self.type_env());
+        let llvm_says = self.is_zero_sized(llvm_ty);
+        assert_eq!(
+            fix_says,
+            llvm_says,
+            "`{}` occupies {} storage as a Fix type and {} as an LLVM type",
+            ty.to_string(),
+            if fix_says { "no" } else { "some" },
+            if llvm_says { "none" } else { "some" },
+        );
     }
 
     /// The LLVM type a value of `ty` takes where it is embedded in another value: the struct it is
@@ -804,6 +829,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
         let object_ty = ty_to_object_ty(ty, &vec![], self.type_env());
         let embedded_ty = object_ty.to_embedded_type(self);
+        self.assert_storage_answers_agree(ty, embedded_ty);
         self.embedded_types.insert(ty.clone(), embedded_ty);
         embedded_ty
     }
