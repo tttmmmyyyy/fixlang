@@ -588,10 +588,14 @@ impl Default for DeprecationMode {
 /// variants are ordered, so a pass can turn itself on from a given level up.
 #[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 pub enum FixOptimizationLevel {
-    None,         // For debugging; skip even tail call optimization.
-    Basic,        // Perform almost all of the optimizations except for LLVM-level LTO.
-    Max,          // For fast execution.
-    Experimental, // Performs optimizations that are still unstable.
+    /// For debugging: even tail call optimization is skipped.
+    None,
+    /// Almost every optimization, leaving out LLVM-level LTO.
+    Basic,
+    /// For fast execution.
+    Max,
+    /// Adds the optimizations that are still unstable.
+    Experimental,
 }
 
 impl fmt::Display for FixOptimizationLevel {

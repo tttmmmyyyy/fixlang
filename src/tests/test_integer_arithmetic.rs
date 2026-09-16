@@ -1,11 +1,11 @@
-//! What `--check-signed-overflow` stops the program at: an arithmetic operation on a signed integer
-//! type whose mathematical result leaves the range of that type.
+//! What `--check-signed-overflow` stops the program at: arithmetic on a signed integer type whose
+//! result is outside the range of that type.
 
 use crate::configuration::Configuration;
 use crate::tests::test_util::{test_source, test_source_fail};
 
-/// A configuration that stops the program where the result of a signed arithmetic operation leaves
-/// the range of its type, as `--check-signed-overflow` leaves it.
+/// A configuration that stops the program where arithmetic on a signed integer type gives a result
+/// outside the range of that type, as `--check-signed-overflow` asks for.
 fn overflow_checked_config() -> Configuration {
     let mut config = Configuration::develop_mode();
     config.check_signed_overflow = true;
@@ -84,10 +84,10 @@ pub fn test_signed_overflow_check_stops_dividing_the_least_by_minus_one() {
 /// The check leaves unsigned arithmetic alone: an unsigned operation is taken modulo two to the
 /// width of its type, so a build that stops at a signed overflow computes it and carries on.
 ///
-/// Every operation here leaves the range of the signed type of its width and stays inside the
-/// unsigned one, so a check reading these as signed would stop the program at each. The operands
-/// are built from the count of the program's arguments, which is one wherever the program runs and
-/// which the compiler cannot fold the arithmetic away through.
+/// Every operation here gives a result outside the range of the signed type of its width and
+/// inside the range of the unsigned one, so a check reading these as signed would stop the program
+/// at each. The operands are built from the count of the program's arguments, which is one
+/// wherever the program runs, so the compiler cannot fold the arithmetic away.
 #[test]
 pub fn test_signed_overflow_check_leaves_unsigned_arithmetic_alone() {
     let source = r#"
