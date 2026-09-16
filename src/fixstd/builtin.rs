@@ -5041,10 +5041,10 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
     }
 }
 
-// Make a value of a type that occupies no storage. Such a value carries no information, so the one
-// made here stands for any other of its type: lifting a lambda leaves a capture of such a type out
-// of the closure and binds the captured name to this instead, which is what lets a closure whose
-// captures are all of such types carry no capture object at all.
+/// Make a value of a type that occupies no storage. Such a value carries no information, so the one
+/// made here stands for any other of its type: lifting a lambda leaves a capture of such a type out
+/// of the closure and binds the captured name to this instead, which is what lets a closure whose
+/// captures are all of such types carry no capture object at all.
 // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMNoStorageValueBody {}

@@ -1,7 +1,7 @@
-// What a closure stores: the captured values whose type occupies storage. A value of a type that
-// occupies none carries no information, so the function a lambda becomes makes one of its own where
-// it would have read it out of the capture object, and a closure capturing only such values stores
-// nothing and allocates no capture object.
+//! What a closure stores: the captured values whose type occupies storage. A value of a type that
+//! occupies none carries no information, so the function a lambda becomes makes one of its own where
+//! it would have read it out of the capture object, and a closure capturing only such values stores
+//! nothing and allocates no capture object.
 
 #[cfg(test)]
 mod tests {
@@ -206,16 +206,17 @@ mod tests {
         );
     "#;
 
-    /// What `MIXED_CAPTURES_SOURCE` prints: the two captured values the closure stores, then the length of
-    /// the string it measures.
+    /// What `MIXED_CAPTURES_SOURCE` prints: the two captured values the closure stores, then the
+    /// length of the string it measures.
     const MIXED_CAPTURES_OUTPUT: &str = "tag,7,10";
 
     /// A closure storing some of its captures and leaving the rest out reads every one of them as
     /// the value it was handed: the stored ones are projected at the positions they hold in what the
     /// closure stores, and the rest are made in the function the lambda became.
     ///
-    /// The level is `none` for the reason the test above gives: at `-O max` a lambda's captures
-    /// arrive as one capture list, so no closure is handed a mixture.
+    /// The level is `none` for the reason `test_an_iostate_capture_is_left_out_of_the_closure`
+    /// gives: at `-O max` a lambda's captures arrive as one capture list, so no closure is handed a
+    /// mixture.
     #[test]
     fn test_a_closure_storing_some_of_its_captures_reads_them_all() {
         let dump = build_run_and_read_rc_ir(

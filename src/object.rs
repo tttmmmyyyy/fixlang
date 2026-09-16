@@ -1660,12 +1660,11 @@ pub fn ty_to_object_ty(
 /// unboxed struct with no field, and an unboxed value whose every field occupies none.
 ///
 /// Read from the object `ty_to_object_ty` builds, so that the answer follows the layout. The
-/// descent stops at a boxed field, a pointer whatever it points at, which makes it the descent
-/// `Program::validate_layouts` has already bounded.
+/// descent stops at a boxed field, which is a pointer whatever it points at, so it runs no deeper
+/// than the descent `Program::validate_layouts` bounds.
 ///
-/// A value of such a type is one the program may make where it is read rather than carry there:
-/// `lower_lam` leaves a capture of one out of the closure that would have carried it, and
-/// `InlineLLVMNoStorageValueBody` makes it at the other end.
+/// A value of such a type can be made wherever it is read: one made there stands for any other of
+/// its type.
 // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn occupies_no_storage(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
     let object_ty = ty_to_object_ty(ty, &vec![], type_env);
@@ -1680,8 +1679,8 @@ pub fn occupies_no_storage(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
 }
 
 /// Whether a field takes no room in the struct its object is laid out as. It answers for the same
-/// fields `ObjectFieldType::to_basic_type` gives an LLVM type to, and its answer is what the size of
-/// that type comes to.
+/// fields `ObjectFieldType::to_basic_type` gives an LLVM type to, and its answer is whether that
+/// type has size zero.
 // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn field_occupies_no_storage(field: ObjectFieldType, type_env: &TypeEnv) -> bool {
     match field {
