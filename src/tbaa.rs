@@ -1,8 +1,9 @@
 //! The type-based alias analysis metadata the generated code carries.
 //!
 //! LLVM has no way to tell a boxed object's reference count from the value the object holds: both
-//! are reached through pointers a program loaded from somewhere. So a store to a reference count
-//! stands between every pair of reads of a field, and the second read has to happen again.
+//! are reached through pointers a program loaded from somewhere. A reference count written between
+//! two reads of a field therefore reaches, as far as LLVM knows, the field itself, and the second
+//! read has to happen again.
 //!
 //! A `!tbaa` tag on a load or a store names the region of memory that access reaches. LLVM takes
 //! two accesses naming different regions never to reach the same byte, which is what lets a
@@ -14,8 +15,8 @@ use inkwell::values::{InstructionValue, MetadataValue};
 /// The region of memory a load or store the code generator emits reaches.
 ///
 /// The regions partition the memory the generated code touches: every byte a tagged access reaches
-/// belongs to one of them, and no byte belongs to two. That is what the tags promise LLVM, and a
-/// region that held a byte of another would let LLVM reorder two accesses to that byte.
+/// belongs to one of them, and no byte belongs to two. That is what the tags promise LLVM, so a
+/// byte that belonged to two regions would let LLVM reorder the accesses that reach it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MemoryRegion {
     /// The reference count of a boxed object.

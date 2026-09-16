@@ -50,9 +50,10 @@ fn memory_access_modules() -> &'static [String] {
 pub fn test_every_memory_access_says_which_region_it_reaches() {
     let mut accesses = 0;
     for module in memory_access_modules() {
-        let bare = memory_accesses(module)
+        let module_accesses = memory_accesses(module);
+        accesses += module_accesses.len();
+        let bare = module_accesses
             .iter()
-            .inspect(|_| accesses += 1)
             .filter(|access| access.tag.is_none())
             .map(|access| access.line.to_string())
             .collect::<Vec<_>>();
@@ -79,33 +80,39 @@ pub fn test_every_memory_access_says_which_region_it_reaches() {
 /// their own where they reach the same byte let LLVM reorder them.
 #[test]
 pub fn test_each_pointer_reaches_the_region_its_name_says() {
-    for (pointer, region) in POINTERS_INTO_EACH_REGION {
-        let mut accesses = 0;
-        for module in memory_access_modules() {
-            let nodes = metadata_nodes(module);
-            for access in memory_accesses(module) {
-                if access.pointer.map(name_without_llvm_suffix) != Some(pointer) {
-                    continue;
-                }
-                accesses += 1;
-                let tag = access.tag.unwrap_or_else(|| {
-                    panic!(
-                        "an access through `{}` carries no tag: {}",
-                        pointer, access.line
-                    )
-                });
-                assert_eq!(
-                    region_of_tag(&nodes, tag),
-                    region.name(),
-                    "an access through `{}` should reach the `{}` region: {}",
-                    pointer,
-                    region.name(),
-                    access.line,
-                );
-            }
+    let mut accesses: Map<&str, usize> = Map::default();
+    for module in memory_access_modules() {
+        let nodes = metadata_nodes(module);
+        for access in memory_accesses(module) {
+            let Some(pointer) = access.pointer.map(name_without_llvm_suffix) else {
+                continue;
+            };
+            let Some((_, region)) = POINTERS_INTO_EACH_REGION
+                .iter()
+                .find(|(named, _)| *named == pointer)
+            else {
+                continue;
+            };
+            *accesses.entry(pointer).or_default() += 1;
+            let tag = access.tag.unwrap_or_else(|| {
+                panic!(
+                    "an access through `{}` carries no tag: {}",
+                    pointer, access.line
+                )
+            });
+            assert_eq!(
+                region_of_tag(&nodes, tag),
+                region.name(),
+                "an access through `{}` should reach the `{}` region: {}",
+                pointer,
+                region.name(),
+                access.line,
+            );
         }
+    }
+    for (pointer, _) in POINTERS_INTO_EACH_REGION {
         assert!(
-            accesses > 0,
+            accesses.contains_key(pointer),
             "the program should reach memory through `{}`, so that this test has accesses to read",
             pointer,
         );
