@@ -38,6 +38,22 @@ mod tests {
         }
     }
 
+    /// Asserts that `dump` binds a value made on the spot -- the right-hand side is
+    /// `no_storage_value` -- on a line containing `named`, rather than projecting that value out of
+    /// a capture object.
+    ///
+    /// `named` is matched against the whole line, so it reaches both the type a binding is held at
+    /// and the name it was minted under.
+    fn assert_a_value_is_made_where_it_is_read(dump: &str, named: &str) {
+        assert!(
+            dump.lines().any(|line| line.contains(named)
+                && line.trim_end().ends_with("= no_storage_value")),
+            "a value named by `{}` should be made where it is read:\n{}",
+            named,
+            dump
+        );
+    }
+
     /// A lambda with no free variable, handed to a built-in that takes a closure. The built-in is
     /// what leaves a closure to look at: a Fix function handed the same lambda is specialized on it,
     /// and then none is built.
@@ -108,12 +124,7 @@ mod tests {
 
         // The capture list `Main` declares for the lambda is made where it is read, rather than
         // projected out of a capture object the closure would have had to carry it in.
-        assert!(
-            dump.lines().any(|line| line.contains("Main::#CapList@")
-                && line.trim_end().ends_with("= no_storage_value")),
-            "the capture list should be made where it is read:\n{}",
-            dump
-        );
+        assert_a_value_is_made_where_it_is_read(&dump, "Main::#CapList@");
     }
 
     /// Three lines of output around a call that takes a closure. The `IOState` an `IO` action
@@ -174,13 +185,7 @@ mod tests {
             IO_AROUND_A_CLOSURE_OUTPUT,
             "three `IO` actions around a call taking a closure",
         );
-        assert!(
-            dump.lines()
-                .any(|line| line.contains(" : Std::IO::IOState ")
-                    && line.trim_end().ends_with("= no_storage_value")),
-            "an `IOState` a closure captured should be made where it is read:\n{}",
-            dump
-        );
+        assert_a_value_is_made_where_it_is_read(&dump, " : Std::IO::IOState ");
     }
 
     /// A lambda capturing values of both kinds: `u` and `v` occupy no storage, `tag` and `n` occupy

@@ -593,15 +593,14 @@ impl<'a> Lowerer<'a> {
         // store it: the function the lambda becomes makes one of its own, under the same name. A
         // closure whose captured values are all of such types is then left with no capture at all,
         // and hence with no capture object to allocate.
-        let type_env = self.type_env;
         let (captures, remade): (Vec<_>, Vec<_>) = resolved
             .into_iter()
-            .partition(|(_, var)| !occupies_no_storage(&var.ty, type_env));
+            .partition(|(_, var)| !occupies_no_storage(&var.ty, self.type_env));
         // A value occupying no storage holds no boxed value, since a pointer takes storage, so a
         // capture left out here takes no reference-counting unit out of the closure with it.
         for (name, var) in &remade {
             assert!(
-                var.ty.is_fully_unboxed(type_env),
+                var.ty.is_fully_unboxed(self.type_env),
                 "the capture `{}` occupies no storage and holds a boxed value, at type `{}`",
                 name.to_string(),
                 var.ty.to_string()
