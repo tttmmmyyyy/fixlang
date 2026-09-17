@@ -1,8 +1,9 @@
 Subtracts two pointers.
 
-Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
+`target.subtract_ptr(origin)` is the number of bytes from `origin` to `target`. It is negative when
+`target` holds the lower address.
 
 # Parameters
 
-* `rhs` - The pointer the distance is measured from.
-* `lhs` - The pointer the distance is measured to.
+* `origin` - The pointer the distance is measured from.
+* `target` - The pointer the distance is measured to.
