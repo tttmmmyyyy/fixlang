@@ -4,12 +4,11 @@ use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
     RefcntState, TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT,
     ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME,
-    BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
-    DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
-    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, MAX_UNION_VARIANTS,
-    PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, REFCNT_BITS, STD_NAME, STORAGE_BUF_IDX,
-    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
-    UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
+    BOXED_TYPE_DATA_IDX, DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT,
+    DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX,
+    MAX_UNION_VARIANTS, PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, REFCNT_BITS, STD_NAME,
+    STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
+    TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
 };
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
@@ -1305,15 +1304,84 @@ pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
 /// count, the reference-counting state, and the distance the object sits above the base of its
 /// allocation.
 pub fn control_block_type<'c, 'm>(gc: &Generator<'c, 'm>) -> StructType<'c> {
-    let mut fields = vec![];
-    assert_eq!(fields.len(), CTRL_BLK_REFCNT_IDX as usize);
-    fields.push(refcnt_type(gc.context).into());
-    assert_eq!(fields.len(), CTRL_BLK_REFCNT_STATE_IDX as usize);
-    fields.push(refcnt_state_type(gc.context).into());
-    assert_eq!(fields.len(), CTRL_BLK_ALLOC_OFFSET_IDX as usize);
-    fields.push(alloc_offset_type(gc.context).into());
+    let fields = ControlBlockField::ALL
+        .iter()
+        .map(|field| field.ty(gc.context).into())
+        .collect::<Vec<BasicTypeEnum<'c>>>();
     gc.context.struct_type(&fields, false)
 }
+
+/// One field of the control block every boxed object begins with.
+///
+/// The fields sit in the block in the order `ALL` lists them, which is the order
+/// `control_block_type` lays them out in and the order `index` reads off a value's discriminant.
+/// Each field is a region of memory of its own, so writing one leaves the others where a reader
+/// already has them.
+#[derive(Clone, Copy)]
+pub enum ControlBlockField {
+    /// How many references to the object are held. The object is freed when the count reaches
+    /// zero.
+    Refcnt,
+    /// The `RefcntState` saying how the reference count is maintained.
+    RefcntState,
+    /// How far the object sits above the base of its allocation, in bytes. It is nonzero where the
+    /// object was placed off the base to put a buffer following it on a boundary, which
+    /// `#ArrayStorage` does for its elements; freeing or reallocating the object steps back by it
+    /// to recover the block. It occupies a byte of the control block's tail padding, so the
+    /// control block keeps its size.
+    AllocOffset,
+}
+
+impl ControlBlockField {
+    /// The fields of the control block, in the order they sit in it.
+    pub const ALL: [ControlBlockField; 3] = [
+        ControlBlockField::Refcnt,
+        ControlBlockField::RefcntState,
+        ControlBlockField::AllocOffset,
+    ];
+
+    /// The index of this field among the fields of `control_block_type`.
+    pub fn index(self) -> u32 {
+        self as u32
+    }
+
+    /// The integer type this field occupies.
+    pub fn ty<'c>(self, context: &'c Context) -> IntType<'c> {
+        match self {
+            ControlBlockField::Refcnt => refcnt_type(context),
+            ControlBlockField::RefcntState => refcnt_state_type(context),
+            ControlBlockField::AllocOffset => alloc_offset_type(context),
+        }
+    }
+
+    /// The region of memory this field lies in.
+    pub fn region(self) -> MemoryRegion {
+        match self {
+            ControlBlockField::Refcnt => MemoryRegion::Refcnt,
+            ControlBlockField::RefcntState => MemoryRegion::RefcntState,
+            ControlBlockField::AllocOffset => MemoryRegion::AllocOffset,
+        }
+    }
+
+    /// The name the emitted code gives a pointer to this field.
+    pub fn pointer_name(self) -> &'static str {
+        match self {
+            ControlBlockField::Refcnt => "ptr_to_refcnt",
+            ControlBlockField::RefcntState => "ptr_to_refcnt_state",
+            ControlBlockField::AllocOffset => "ptr_to_alloc_offset",
+        }
+    }
+}
+
+/// `ALL` lists the fields in the order their discriminants give, which is what lets `index` read a
+/// field's position off its value.
+const _: () = {
+    let mut position = 0;
+    while position < ControlBlockField::ALL.len() {
+        assert!(ControlBlockField::ALL[position] as usize == position);
+        position += 1;
+    }
+};
 
 /// The debug info type describing the control block that heads every boxed object. It presents the
 /// reference counter alone, the one field a debugger session has use for.
@@ -1325,7 +1393,7 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let refcnt_align_in_bits = gc.target_data.get_abi_alignment(&refcnt_ty) * 8;
     let refcnt_offset_in_bits = gc
         .target_data
-        .offset_of_element(&struct_type, CTRL_BLK_REFCNT_IDX)
+        .offset_of_element(&struct_type, ControlBlockField::Refcnt.index())
         .unwrap()
         * 8;
     let refcnt_member = gc
@@ -2075,29 +2143,12 @@ pub fn build_free_boxed<'c, 'm>(
     gc.builder().build_free(base).unwrap();
 }
 
-/// A pointer to the field of the control block of `ptr` recording how far the object sits above the
-/// base of its allocation.
-fn build_gep_alloc_offset<'c, 'm>(
-    gc: &mut Generator<'c, 'm>,
-    ptr: PointerValue<'c>,
-) -> PointerValue<'c> {
-    let ctrl_blk_ty = control_block_type(gc);
-    gc.builder()
-        .build_struct_gep(
-            ctrl_blk_ty,
-            ptr,
-            CTRL_BLK_ALLOC_OFFSET_IDX,
-            "ptr_to_alloc_offset",
-        )
-        .unwrap()
-}
-
 /// How far the object at `ptr` sits above the base of its allocation, as a pointer-sized integer.
 pub fn read_alloc_offset<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ptr: PointerValue<'c>,
 ) -> IntValue<'c> {
-    let ptr_to_alloc_offset = build_gep_alloc_offset(gc, ptr);
+    let ptr_to_alloc_offset = gc.get_control_block_field_ptr(ptr, ControlBlockField::AllocOffset);
     let alloc_offset = gc
         .build_load(
             MemoryRegion::AllocOffset,
@@ -2117,7 +2168,7 @@ pub fn write_alloc_offset<'c, 'm>(
     ptr: PointerValue<'c>,
     alloc_offset: IntValue<'c>,
 ) {
-    let ptr_to_alloc_offset = build_gep_alloc_offset(gc, ptr);
+    let ptr_to_alloc_offset = gc.get_control_block_field_ptr(ptr, ControlBlockField::AllocOffset);
     let alloc_offset = gc
         .builder()
         .build_int_truncate(
@@ -2193,7 +2244,7 @@ pub fn create_obj<'c, 'm>(
                 // Initialize the control block.
                 assert_eq!(i, 0);
                 // Get pointer to control block.
-                let ptr_to_ctrl_blk = obj.gep_boxed(gc, i as u32);
+                let ptr_to_ctrl_blk = obj.ptr_to_control_block(gc);
 
                 // Initialize the reference counter 1.
                 let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_ctrl_blk);

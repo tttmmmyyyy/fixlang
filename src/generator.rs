@@ -13,8 +13,6 @@ use crate::constants::TraverserWorkType;
 use crate::constants::BOXED_TYPE_DATA_IDX;
 use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::constants::CLOSURE_FUNPTR_IDX;
-use crate::constants::CTRL_BLK_REFCNT_IDX;
-use crate::constants::CTRL_BLK_REFCNT_STATE_IDX;
 use crate::constants::DESTRUCTOR_OBJECT_DTOR_FIELD_IDX;
 use crate::constants::DESTRUCTOR_OBJECT_VALUE_FIELD_IDX;
 use crate::constants::DYNAMIC_OBJ_CAP_IDX;
@@ -42,6 +40,7 @@ use crate::object::traverser_type;
 use crate::object::traverser_work_type;
 use crate::object::ty_to_debug_embedded_ty;
 use crate::object::ty_to_object_ty;
+use crate::object::ControlBlockField;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::SourceFile;
 use crate::parse::sourcefile::Span;
@@ -301,12 +300,14 @@ impl<'c> Object<'c> {
 
     /// The address of field `field_idx` within the heap block of this boxed object.
     pub fn gep_boxed<'m>(&self, gc: &mut Generator<'c, 'm>, field_idx: u32) -> PointerValue<'c> {
-        assert!(self.ty.is_box(gc.type_env()));
         let struct_ty = self.struct_ty(gc);
-        let ptr = self.value(gc).into_pointer_value();
-        gc.builder()
-            .build_struct_gep(struct_ty, ptr, field_idx, "ptr_to_field_nocap")
-            .unwrap()
+        self.ptr_to_field_as(gc, struct_ty, field_idx)
+    }
+
+    /// The address of the control block of this boxed object, which its layout begins with.
+    pub fn ptr_to_control_block<'m>(&self, gc: &mut Generator<'c, 'm>) -> PointerValue<'c> {
+        assert!(self.ty.is_box(gc.type_env()));
+        self.value(gc).into_pointer_value()
     }
 
     /// The value of field `field_idx`, sliced out of the parts of an unboxed object or loaded from
@@ -1224,16 +1225,25 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
-    /// The pointer to the reference count in the control block of the boxed object at `obj_ptr`.
-    pub fn get_refcnt_ptr(&self, obj_ptr: PointerValue<'c>) -> PointerValue<'c> {
+    /// The address of `field` in the control block of the boxed object at `obj_ptr`.
+    pub fn get_control_block_field_ptr(
+        &self,
+        obj_ptr: PointerValue<'c>,
+        field: ControlBlockField,
+    ) -> PointerValue<'c> {
         self.builder()
             .build_struct_gep(
                 control_block_type(self),
                 obj_ptr,
-                CTRL_BLK_REFCNT_IDX,
-                "ptr_to_refcnt",
+                field.index(),
+                field.pointer_name(),
             )
             .unwrap()
+    }
+
+    /// The pointer to the reference count in the control block of the boxed object at `obj_ptr`.
+    pub fn get_refcnt_ptr(&self, obj_ptr: PointerValue<'c>) -> PointerValue<'c> {
+        self.get_control_block_field_ptr(obj_ptr, ControlBlockField::Refcnt)
     }
 
     /// Whether the object's reference count is one, read in the current block.
@@ -1530,14 +1540,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// The pointer to the reference-count state in the control block of the boxed object at
     /// `obj_ptr`.
     pub fn get_refcnt_state_ptr(&self, obj_ptr: PointerValue<'c>) -> PointerValue<'c> {
-        self.builder()
-            .build_struct_gep(
-                control_block_type(self),
-                obj_ptr,
-                CTRL_BLK_REFCNT_STATE_IDX,
-                "ptr_to_refcnt_state",
-            )
-            .unwrap()
+        self.get_control_block_field_ptr(obj_ptr, ControlBlockField::RefcntState)
     }
 
     /// The code pointer to call a lambda through: the funcptr field of a closure, or the value

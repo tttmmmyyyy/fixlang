@@ -55,6 +55,7 @@ use std::{
     ffi::{c_char, CString},
     fmt::Display,
     fs::{self, create_dir_all, File},
+    iter::once,
     mem,
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
@@ -600,7 +601,7 @@ fn set_llvm_options(args: &[String]) {
         // LLVM reads the first argument as the name of the program, the way a `main` does, and puts
         // it in front of what it reports. Naming the option here is what marks such a report as
         // LLVM's.
-        let argv: Vec<CString> = std::iter::once("fix --llvm-arg")
+        let argv: Vec<CString> = once("fix --llvm-arg")
             .chain(args.iter().map(String::as_str))
             .map(|arg| CString::new(arg).expect("no argument of a command line holds a NUL byte"))
             .collect();
