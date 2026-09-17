@@ -1,5 +1,5 @@
-//! What `Std::I64::shift_left` and `Std::I64::shift_right` answer where the shift amount is
-//! outside `0 <= bits < the width of the type`.
+//! What `shift_left` and `shift_right` answer where the shift amount is outside the range a shift
+//! is defined on, which is from zero up to the number of bits of the type shifted.
 
 use crate::configuration::Configuration;
 use crate::tests::test_util::{test_source, test_source_fail};
@@ -77,8 +77,9 @@ pub fn test_a_shift_past_the_width_answers_one_value() {
 /// The shift amount is taken modulo the width of the type, so an amount of the width itself leaves
 /// the value where it is and an amount one past it moves the value one bit.
 ///
-/// `Document.md` leaves the answer to an amount outside `0 <= bits < the width` unspecified, and
-/// this pins the answer the code generator gives rather than one a program may rely on.
+/// The documentation of `shift_left` and `shift_right` leaves the answer to an amount outside that
+/// range unspecified, so this pins the answer the code generator gives rather than one a program
+/// may rely on.
 #[test]
 pub fn test_a_shift_amount_is_taken_modulo_the_width() {
     test_with_a_runtime_zero(
