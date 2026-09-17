@@ -1698,10 +1698,19 @@ pub fn cast_float_to_int_function(
     (expr, scm)
 }
 
+/// Evaluates `Std::I64::shift_left` and `Std::I64::shift_right`, and the same values of the other
+/// integer types: the value with its bits moved by the given number of places.
+///
+/// A right shift of a signed type fills the vacated places with the sign bit, and every other shift
+/// fills them with zeros. The number of places is read as an unsigned number, so a count of at
+/// least the width of the type in bits yields a poison value.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMShiftBody {
+    /// The local binding holding the value to shift.
     value_name: FullName,
+    /// The local binding holding the number of places to shift by.
     n_name: FullName,
+    /// Whether the bits move towards the more significant end.
     is_left: bool,
 }
 
@@ -1759,7 +1768,9 @@ impl LLVMGen for InlineLLVMShiftBody {
     }
 }
 
-// Shift functions
+/// `val` shifted by `n` bits, towards the more significant end when `is_left` holds and towards the
+/// less significant end otherwise.
+/// Type: ty -> ty -> ty
 pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const VALUE_NAME: &str = "val";
     const N_NAME: &str = "n";
@@ -1790,10 +1801,14 @@ pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<S
     (expr, scm)
 }
 
+/// A way of combining the corresponding bits of two integers into one bit.
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum BitOperationType {
+    /// The result bit is set where exactly one of the two operands has the bit set.
     Xor,
+    /// The result bit is set where either operand has the bit set.
     Or,
+    /// The result bit is set where both operands have the bit set.
     And,
 }
 
@@ -1808,10 +1823,15 @@ impl BitOperationType {
     }
 }
 
+/// Evaluates `Std::I64::bit_and`, `Std::I64::bit_or` and `Std::I64::bit_xor`, and the same values
+/// of the other integer types: the two operands combined bit by bit.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBitwiseOperationBody {
+    /// The local binding holding the left operand.
     lhs_name: FullName,
+    /// The local binding holding the right operand.
     rhs_name: FullName,
+    /// How the corresponding bits of the two operands are combined.
     op_type: BitOperationType,
 }
 
@@ -1822,7 +1842,7 @@ impl LLVMGen for InlineLLVMBitwiseOperationBody {
         let lhs = gc.get_scoped_obj_field(&self.lhs_name, 0).into_int_value();
         let rhs = gc.get_scoped_obj_field(&self.rhs_name, 0).into_int_value();
 
-        // Perform cast.
+        // Combine the bits.
         let val = match self.op_type {
             BitOperationType::Xor => gc
                 .builder()
@@ -1876,6 +1896,8 @@ impl LLVMGen for InlineLLVMBitwiseOperationBody {
     }
 }
 
+/// The bits of `lhs` and `rhs` combined pairwise by `op_type`.
+/// Type: ty -> ty -> ty
 pub fn bitwise_operation_function(
     ty: Arc<TypeNode>,
     op_type: BitOperationType,
@@ -1909,8 +1931,11 @@ pub fn bitwise_operation_function(
     (expr, scm)
 }
 
+/// Evaluates `Std::I64::bit_not`, and the same value of the other integer types: the operand with
+/// every bit flipped.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBitNotBody {
+    /// The local binding holding the operand whose bits are flipped.
     operand_name: FullName,
 }
 
@@ -1918,14 +1943,14 @@ pub struct InlineLLVMBitNotBody {
 impl LLVMGen for InlineLLVMBitNotBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
-        let lhs = gc
+        let operand = gc
             .get_scoped_obj_field(&self.operand_name, 0)
             .into_int_value();
 
-        // Perform cast.
+        // Flip every bit.
         let val = gc
             .builder()
-            .build_not(lhs, "not@bitwise_not_function")
+            .build_not(operand, "not@bitwise_not_function")
             .unwrap();
 
         // Return result.
@@ -1955,6 +1980,8 @@ impl LLVMGen for InlineLLVMBitNotBody {
     }
 }
 
+/// The value with every bit of `operand` flipped.
+/// Type: ty -> ty
 pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const OPERAND_NAME: &str = "operand";
 
