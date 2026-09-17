@@ -120,6 +120,24 @@ mod integration_tests {
                     section,
                 );
             }
+            // `subtract_ptr` takes two pointers, so the order the two are listed in is the only
+            // thing that says which of them the distance is measured from.
+            let where_named = parameters
+                .iter()
+                .map(|parameter| {
+                    section
+                        .find(parameter)
+                        .expect("the parameter is named above")
+                })
+                .collect::<Vec<_>>();
+            assert!(
+                where_named.windows(2).all(|pair| pair[0] < pair[1]),
+                "the documentation of `Std::Ptr::{}` should name its parameters in the order the \
+                 value takes them, {:?}:\n{}",
+                name,
+                parameters,
+                section,
+            );
         }
     }
 

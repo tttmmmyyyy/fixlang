@@ -294,3 +294,29 @@ pub fn test_the_inliner_carries_the_pointer_arithmetic_into_its_caller() {
         );
     }
 }
+
+/// `Std::Ptr::add_offset` counts from the integer address, so the address it answers with may lie
+/// outside the object the pointer points into.
+///
+/// `getelementptr inbounds` answers `poison` the moment the address it computes leaves the
+/// allocation it started in, and `test_every_pointer_into_an_object_is_computed_inside_it` requires
+/// every `getelementptr` the compiler emits to be `inbounds`. A primitive whose offset may leave
+/// the object therefore computes on the integer address, and the generated code says so.
+#[test]
+pub fn test_the_offset_is_counted_on_the_integer_address() {
+    // The property is about what the compiler emits, so it is read before LLVM has run.
+    let ir = generated_llvm_ir(POINTER_ARITHMETIC_SOURCE, "none");
+    let body = llvm_function_bodies(&ir, "Std::Ptr::add_offset").join("\n");
+    assert!(
+        !body.is_empty(),
+        "the program reaches `Std::Ptr::add_offset`, so the module holds its body",
+    );
+    for instruction in [" = ptrtoint ", " = inttoptr "] {
+        assert!(
+            body.contains(instruction),
+            "`Std::Ptr::add_offset` should compute its result with `{}`:\n{}",
+            instruction.trim(),
+            body,
+        );
+    }
+}
