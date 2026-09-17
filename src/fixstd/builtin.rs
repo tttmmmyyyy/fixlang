@@ -7416,8 +7416,8 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
             gc.builder().position_at_end(unreachable_bb);
         }
 
-        // Return undefined value.
-        Object::undef(ty.clone(), gc)
+        // Control never reaches this point, so the value it must produce is poison.
+        Object::poison(ty.clone(), gc)
     }
 
     fn name(&self) -> String {
@@ -7505,7 +7505,7 @@ impl LLVMGen for InlineLLVMHoleBody {
             .context
             .append_basic_block(current_func, "unreachable_bb");
         gc.builder().position_at_end(unreachable_bb);
-        Object::undef(ty.clone(), gc)
+        Object::poison(ty.clone(), gc)
     }
 
     fn name(&self) -> String {
@@ -7732,7 +7732,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             flag.add_incoming(&[(&unique_flag, unique_bb), (&shared_flag, shared_bb)]);
             flag.as_basic_value().into_int_value()
         };
-        let bool_val = make_bool_ty().get_struct_type(gc).get_undef();
+        let bool_val = make_bool_ty().get_struct_type(gc).get_poison();
         let bool_val = gc
             .builder()
             .build_insert_value(bool_val, is_unique, 0, "insert@is_unique")
@@ -7933,7 +7933,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             assert_array_storage_unique(gc, &array);
             bool_ty.const_int(1, false)
         };
-        let bool_val = make_bool_ty().get_struct_type(gc).get_undef();
+        let bool_val = make_bool_ty().get_struct_type(gc).get_poison();
         let bool_val = gc
             .builder()
             .build_insert_value(bool_val, is_unique, 0, "insert@is_storage_unique")

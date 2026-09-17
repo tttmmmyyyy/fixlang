@@ -135,7 +135,7 @@ impl<'c> ValueAccessor<'c> {
                         ValueKind::Basic(val) => val,
                         ValueKind::Instruction(_) => {
                             let ty = ty.get_embedded_type(gc);
-                            Generator::get_undef(&ty)
+                            Generator::get_poison(&ty)
                         }
                     }
                 };
@@ -233,15 +233,15 @@ impl<'c> Object<'c> {
         value
     }
 
-    /// An object of type `ty` whose value is `undef`, for an unreachable point that still has to
+    /// An object of type `ty` whose value is `poison`, for an unreachable point that still has to
     /// produce a value of the type.
-    pub fn undef<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
+    pub fn poison<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
         let val = if ty.is_unbox(gc.type_env()) {
-            ty.get_struct_type(gc).get_undef().as_basic_value_enum()
+            ty.get_struct_type(gc).get_poison().as_basic_value_enum()
         } else {
             gc.context
                 .ptr_type(AddressSpace::from(0))
-                .get_undef()
+                .get_poison()
                 .as_basic_value_enum()
         };
         Object::new(val, ty.clone(), gc)
@@ -1755,22 +1755,28 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
     }
 
-    /// Build an `undef` constant of the given basic type.
-    pub fn get_undef(ty: &BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
+    /// A `poison` constant of the given basic type, for a value the generated code never reads: a
+    /// field that every path overwrites, or a value produced where control never arrives.
+    ///
+    /// Poison is one value for all of its readers, which is what lets LLVM merge two reads of it or
+    /// duplicate one. The other undefined constant, `undef`, may yield a different value at each
+    /// use, and the choice between them belongs to the code that emits the constant: LLVM may
+    /// weaken a poison to an `undef`, never the reverse.
+    pub fn get_poison(ty: &BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
         match ty {
-            BasicTypeEnum::IntType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::FloatType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::PointerType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::VectorType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::StructType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::ArrayType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::ScalableVectorType(ty) => ty.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::IntType(ty) => ty.get_poison().as_basic_value_enum(),
+            BasicTypeEnum::FloatType(ty) => ty.get_poison().as_basic_value_enum(),
+            BasicTypeEnum::PointerType(ty) => ty.get_poison().as_basic_value_enum(),
+            BasicTypeEnum::VectorType(ty) => ty.get_poison().as_basic_value_enum(),
+            BasicTypeEnum::StructType(ty) => ty.get_poison().as_basic_value_enum(),
+            BasicTypeEnum::ArrayType(ty) => ty.get_poison().as_basic_value_enum(),
+            BasicTypeEnum::ScalableVectorType(ty) => ty.get_poison().as_basic_value_enum(),
         }
     }
 
     /// Whether `ty` occupies no storage, such as an empty union's `[0 x i8]` payload. A zero-sized
     /// value carries no information, so the part helpers drop it: it yields no part (no phi, no ABI
-    /// slot) and is rebuilt as `undef`. A phi of a zero-sized aggregate also crashes LLVM's
+    /// slot) and is rebuilt as `poison`. A phi of a zero-sized aggregate also crashes LLVM's
     /// AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
     pub(crate) fn is_zero_sized(&self, ty: BasicTypeEnum<'c>) -> bool {
         self.target_data.get_bit_size(&ty) == 0
@@ -1919,7 +1925,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Reassemble a value of `ty` from a part iterator produced in `type_parts` order, emitting an
     /// `insertvalue` per struct field. The inverse of `value_parts`. A zero-sized type consumes
-    /// no part and is rebuilt as `undef`; a type carried whole consumes the one part that is its
+    /// no part and is rebuilt as `poison`; a type carried whole consumes the one part that is its
     /// value.
     pub fn assemble_from_parts(
         &self,
@@ -1939,11 +1945,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         parts: &mut impl Iterator<Item = BasicValueEnum<'c>>,
     ) -> BasicValueEnum<'c> {
         if self.is_zero_sized(ty) {
-            return Self::get_undef(&ty);
+            return Self::get_poison(&ty);
         }
         match ty {
             BasicTypeEnum::StructType(st) => {
-                let mut val = st.get_undef();
+                let mut val = st.get_poison();
                 for i in 0..st.count_fields() {
                     let field_ty = st.get_field_type_at_index(i).unwrap();
                     let field = self.assemble_split_parts(field_ty, parts);
@@ -2730,7 +2736,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             }
             _ => {
                 let struct_ty = self.context.struct_type(&part_tys, false);
-                let mut val = struct_ty.get_undef();
+                let mut val = struct_ty.get_poison();
                 for (i, part) in parts.iter().enumerate() {
                     val = self
                         .builder()
@@ -2999,7 +3005,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             ValueKind::Basic(ret_c_val) => {
                 if is_io {
                     let ret_struct_ty = type_tycon(ret_tycon).get_struct_type(self);
-                    let ret_struct_val = ret_struct_ty.get_undef();
+                    let ret_struct_val = ret_struct_ty.get_poison();
                     let ret_struct_val = self
                         .builder()
                         .build_insert_value(ret_struct_val, ret_c_val, 0, "")

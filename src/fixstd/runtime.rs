@@ -134,7 +134,7 @@ pub enum BuildMode {
 /// is marked `noreturn` so LLVM knows control never continues past a call to it.
 ///
 /// Without `noreturn`, a bounds-check failure path (which calls the function and then flows to a
-/// merge) keeps contributing an `undef` value to the merge, forcing an aggregate phi that hides the
+/// merge) keeps contributing a `poison` value to the merge, forcing an aggregate phi that hides the
 /// array size and defeats bounds-check elimination.
 fn declare_noreturn_runtime_function<'c, 'm>(
     gc: &Generator<'c, 'm>,

@@ -2181,8 +2181,8 @@ pub fn write_alloc_offset<'c, 'm>(
 }
 
 /// A fresh object of type `ty`, with its control block initialized and its remaining fields left
-/// undefined for the caller to fill in. A boxed type is allocated on the heap and comes back as a
-/// pointer to it; an unboxed type comes back as an undefined aggregate value.
+/// `poison` for the caller to fill in. A boxed type is allocated on the heap and comes back as a
+/// pointer to it; an unboxed type comes back as a `poison` aggregate value.
 // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
@@ -2220,7 +2220,7 @@ pub fn create_obj<'c, 'm>(
             // When the object is unboxed (not a funptr),
             (
                 Object::new(
-                    struct_type.get_undef().as_basic_value_enum(),
+                    struct_type.get_poison().as_basic_value_enum(),
                     ty.clone(),
                     gc,
                 ),

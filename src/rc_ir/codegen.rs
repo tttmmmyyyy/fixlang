@@ -291,7 +291,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 }
                 // An inline-LLVM op may build the tail return itself (`FixBody`), in which case it
                 // yields no value. A diverging op (`undefined`) does not: it emits `unreachable` and
-                // yields an undef value, so the continuation is generated as dead code.
+                // yields a poison value, so the continuation is generated as dead code.
                 let llvm_tail = self.binding_fuses_into_return(x, k, tail);
                 // What the op says about applying its operands, for `apply_lambda` to check it by.
                 let outer_op = self.config.develop_mode.then(|| {
@@ -591,7 +591,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             // A non-tail arm that produced a value branches to the merge block and feeds the phi. An
             // arm that returned (tail) yields `None` and contributes nothing; a diverging arm feeds
-            // the phi an undef value from its unreachable block.
+            // the phi a poison value from its unreachable block.
             if let Some(arm_obj) = arm_obj {
                 let arm_end_bb = self.builder().get_insert_block().unwrap();
                 incomings.push((arm_obj, arm_end_bb));
