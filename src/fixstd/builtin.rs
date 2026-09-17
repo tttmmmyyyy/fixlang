@@ -1760,6 +1760,11 @@ fn build_shift_amount_check<'c, 'm>(
     is_left: bool,
 ) {
     let width = amount.get_type().get_bit_width();
+    assert!(
+        width <= 64,
+        "the report takes an amount of 64 bits, and this one is {} bits wide",
+        width
+    );
     let out_of_range = gc
         .builder()
         .build_int_compare(

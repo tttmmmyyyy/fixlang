@@ -27,13 +27,10 @@ fn source_with_a_runtime_zero(body: &str) -> String {
     )
 }
 
-/// Builds `source_with_a_runtime_zero(body)`, runs it, and fails the test unless the program exits
-/// with code 0.
-fn test_with_a_runtime_zero(body: &str) {
-    test_source(
-        &source_with_a_runtime_zero(body),
-        Configuration::develop_mode(),
-    );
+/// Builds `source_with_a_runtime_zero(body)` under `config`, runs it, and fails the test unless the
+/// program exits with code 0.
+fn test_with_a_runtime_zero(body: &str, config: Configuration) {
+    test_source(&source_with_a_runtime_zero(body), config);
 }
 
 /// A configuration that stops the program where the amount of a shift is outside the range the
@@ -79,6 +76,7 @@ pub fn test_a_shift_past_the_width_answers_one_value() {
                 x.to_string.get_bytes.@(0) == '-'
             );;
         "#,
+        Configuration::develop_mode(),
     );
 }
 
@@ -100,6 +98,7 @@ pub fn test_a_shift_amount_is_taken_modulo_the_width() {
                 I64::minimum
             );;
         "#,
+        Configuration::develop_mode(),
     );
 }
 
@@ -115,6 +114,7 @@ pub fn test_a_negative_shift_amount_is_taken_modulo_the_width() {
             assert_eq(|_|"I64 left by -1", 1.shift_left(zero - 1), I64::minimum);;
             assert_eq(|_|"I32 left by -1", 1_I32.shift_left((zero - 1).to_I32), I32::minimum);;
         "#,
+        Configuration::develop_mode(),
     );
 }
 
@@ -135,6 +135,7 @@ pub fn test_a_type_narrower_than_a_register_takes_its_own_width() {
             let z16 = zero.to_I16;
             assert_eq(|_|"I16 left by its width", 1_I16.shift_left(z16 + 16_I16), 1_I16);;
         "#,
+        Configuration::develop_mode(),
     );
 }
 
@@ -193,14 +194,12 @@ pub fn test_the_report_widens_the_amount_by_the_signedness_of_its_type() {
 /// An amount inside the width runs on under the check.
 #[test]
 pub fn test_the_check_lets_an_amount_inside_the_width_run_on() {
-    test_source(
-        &source_with_a_runtime_zero(
-            r#"
-                assert_eq(|_|"I64 left by one less than its width", 1.shift_left(zero + 63), I64::minimum);;
-                assert_eq(|_|"I64 left by zero", 1.shift_left(zero), 1);;
-                assert_eq(|_|"U8 right by one less than its width", 128_U8.shift_right(zero.to_U8 + 7_U8), 1_U8);;
-            "#,
-        ),
+    test_with_a_runtime_zero(
+        r#"
+            assert_eq(|_|"I64 left by one less than its width", 1.shift_left(zero + 63), I64::minimum);;
+            assert_eq(|_|"I64 left by zero", 1.shift_left(zero), 1);;
+            assert_eq(|_|"U8 right by one less than its width", 128_U8.shift_right(zero.to_U8 + 7_U8), 1_U8);;
+        "#,
         shift_amount_checked_config(),
     );
 }
@@ -210,12 +209,10 @@ pub fn test_the_check_lets_an_amount_inside_the_width_run_on() {
 /// width.
 #[test]
 pub fn test_the_check_respects_no_runtime_check() {
-    test_source(
-        &source_with_a_runtime_zero(
-            r#"
-                assert_eq(|_|"I64 left by its width", 1.shift_left(zero + 64), 1);;
-            "#,
-        ),
+    test_with_a_runtime_zero(
+        r#"
+            assert_eq(|_|"I64 left by its width", 1.shift_left(zero + 64), 1);;
+        "#,
         shift_amount_unchecked_config(),
     );
 }
