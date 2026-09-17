@@ -375,15 +375,25 @@ pub fn emitted_llvm_ir(dir: &Path, which: EmittedIr) -> String {
 }
 
 /// The LLVM IR the code generator wrote for `source`, compiled at `opt_level`, before the LLVM pass
-/// pipeline ran over it. Fails the test unless the build succeeds.
+/// pipeline ran over it, one string per module. Fails the test unless the build succeeds.
 ///
 /// Use this for a property of the code the compiler emits. The optimized module also holds code
-/// LLVM itself introduced, which such a test would take for the compiler's own work.
-pub fn generated_llvm_ir(source: &str, opt_level: &str) -> String {
+/// LLVM itself introduced, which such a test would take for the compiler's own work. A module
+/// numbers its metadata for itself, so a test that resolves a `!N` name reads one module of this.
+///
+/// # Arguments
+/// * `build_args` — further options for the build command, such as `--threaded`, which decide what
+///   the code generator emits.
+pub fn generated_llvm_ir_modules(
+    source: &str,
+    opt_level: &str,
+    build_args: &[&str],
+) -> Vec<String> {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let dir = temp_dir.path();
     let build = fix_build_source_command(dir, source, opt_level)
         .arg("--emit-llvm")
+        .args(build_args)
         .output()
         .expect("Failed to execute fix build");
     assert!(
@@ -392,7 +402,42 @@ pub fn generated_llvm_ir(source: &str, opt_level: &str) -> String {
         String::from_utf8_lossy(&build.stdout),
         String::from_utf8_lossy(&build.stderr),
     );
-    emitted_llvm_ir(dir, EmittedIr::BeforeOptimization)
+    emitted_llvm_ir_modules(dir, EmittedIr::BeforeOptimization)
+}
+
+/// The LLVM IR the code generator wrote for `source`, compiled at `opt_level`, before the LLVM pass
+/// pipeline ran over it, the modules concatenated in file-name order.
+pub fn generated_llvm_ir(source: &str, opt_level: &str) -> String {
+    generated_llvm_ir_modules(source, opt_level, &[]).join("\n")
+}
+
+/// The name of the first local value in `text`, as LLVM writes one: `%name`, or `%"name"` when the
+/// name holds a character that a plain identifier cannot.
+///
+/// # Examples
+/// `first_local_value("(ptr %x, i64 3)")` is `Some("%x")`, and
+/// `first_local_value("(ptr %\"a@b\", i64 3)")` is `Some("%\"a@b\"")`.
+pub fn first_local_value(text: &str) -> Option<&str> {
+    let start = text.find('%')?;
+    let rest = &text[start + 1..];
+    let length = match rest.strip_prefix('"') {
+        Some(quoted) => quoted.find('"')? + 2,
+        None => rest
+            .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.'))
+            .unwrap_or(rest.len()),
+    };
+    Some(&text[start..start + 1 + length])
+}
+
+/// Whether `text` names the local value `name`. The name has to stand whole: a longer name that
+/// begins with `name` belongs to another value.
+pub fn names_local_value(text: &str, name: &str) -> bool {
+    text.match_indices(name).any(|(at, _)| {
+        text[at + name.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == '.'))
+    })
 }
 
 /// The bodies of the LLVM functions of `ir` whose names contain `name_part`, one string each.

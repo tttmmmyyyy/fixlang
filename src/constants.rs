@@ -289,15 +289,6 @@ const _: () = assert!(
         && RefcntState::THREADED.0 < RefcntState::GLOBAL.0
 );
 
-// Field layout of the control block every boxed object begins with: the reference count, then the
-// `RefcntState` saying how that count is to be maintained.
-pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
-pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
-// How far the object sits above the base of its allocation. Nonzero where the object was placed
-// off the base to put a buffer following it on a boundary, which `#ArrayStorage` does for its
-// elements; freeing or reallocating the object steps back by it to recover the block. It occupies
-// a byte of the control block's tail padding, so the control block keeps its size.
-pub const CTRL_BLK_ALLOC_OFFSET_IDX: u32 = 2;
 /// The width of the reference count, which bounds the number of references to one object a program
 /// can hold.
 pub const REFCNT_BITS: u32 = 32;

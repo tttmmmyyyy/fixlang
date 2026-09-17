@@ -1,8 +1,8 @@
 use crate::configuration::Configuration;
 use crate::fixstd::runtime::{RUNTIME_MALLOC, RUNTIME_REALLOC};
 use crate::tests::test_util::{
-    build_run_and_read_rc_ir, generated_llvm_ir, llvm_function_bodies, rc_ir_function_bodies,
-    test_source,
+    build_run_and_read_rc_ir, first_local_value, generated_llvm_ir, llvm_function_bodies,
+    names_local_value, rc_ir_function_bodies, test_source,
 };
 use std::sync::OnceLock;
 
@@ -157,35 +157,6 @@ fn call_arguments<'a>(line: &'a str, name_before_arguments: &str) -> Option<&'a 
     }
     let (_, arguments) = line.split_once(name_before_arguments)?;
     Some(arguments)
-}
-
-/// The name of the first local value in `text`, as LLVM writes one: `%name`, or `%"name"` when the
-/// name holds a character that a plain identifier cannot.
-///
-/// # Examples
-/// `first_local_value("(ptr %x, i64 3)")` is `Some("%x")`, and
-/// `first_local_value("(ptr %\"a@b\", i64 3)")` is `Some("%\"a@b\"")`.
-fn first_local_value(text: &str) -> Option<&str> {
-    let start = text.find('%')?;
-    let rest = &text[start + 1..];
-    let length = match rest.strip_prefix('"') {
-        Some(quoted) => quoted.find('"')? + 2,
-        None => rest
-            .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.'))
-            .unwrap_or(rest.len()),
-    };
-    Some(&text[start..start + 1 + length])
-}
-
-/// Whether `text` names the local value `name`. The name has to stand whole: a longer name that
-/// begins with `name` belongs to another value.
-fn names_local_value(text: &str, name: &str) -> bool {
-    text.match_indices(name).any(|(at, _)| {
-        text[at + name.len()..]
-            .chars()
-            .next()
-            .is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == '.'))
-    })
 }
 
 /// The generated code stops reading the block it passes to `realloc` at the call.

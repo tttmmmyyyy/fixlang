@@ -4,12 +4,11 @@ use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
     RefcntState, TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT,
     ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME,
-    BOXED_TYPE_DATA_IDX, CTRL_BLK_ALLOC_OFFSET_IDX, CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX,
-    DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
-    DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX, MAX_UNION_VARIANTS,
-    PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, REFCNT_BITS, STD_NAME, STORAGE_BUF_IDX,
-    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
-    UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
+    BOXED_TYPE_DATA_IDX, DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT,
+    DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX,
+    MAX_UNION_VARIANTS, PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, REFCNT_BITS, STD_NAME,
+    STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
+    TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
 };
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
@@ -23,6 +22,7 @@ use crate::fixstd::runtime::{
 use crate::generator::{is_const_one, Generator, Object};
 use crate::misc::Map;
 use crate::rc_ir::ast::RcState;
+use crate::tbaa::MemoryRegion;
 use inkwell::context::Context;
 use inkwell::types::{
     BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, IntType, StructType,
@@ -319,9 +319,7 @@ impl ObjectFieldType {
         // Allocate and initialize loop counter.
         let counter_type = gc.context.i64_type();
         let counter_ptr = gc.build_alloca_at_entry(counter_type, "release_loop_counter");
-        gc.builder()
-            .build_store(counter_ptr, counter_type.const_zero())
-            .unwrap();
+        gc.build_store(MemoryRegion::Data, counter_ptr, counter_type.const_zero());
 
         // Jump to loop_check bb.
         gc.builder()
@@ -331,9 +329,7 @@ impl ObjectFieldType {
         // Implement loop_check bb.
         gc.builder().position_at_end(loop_check_bb);
         let counter_val = gc
-            .builder()
-            .build_load(counter_type, counter_ptr, "counter_val")
-            .unwrap()
+            .build_load(MemoryRegion::Data, counter_type, counter_ptr, "counter_val")
             .into_int_value();
         let is_end = gc
             .builder()
@@ -348,9 +344,7 @@ impl ObjectFieldType {
 
         // Generate code of loop body.
         let idx = gc
-            .builder()
-            .build_load(counter_type, counter_ptr, "idx")
-            .unwrap()
+            .build_load(MemoryRegion::Data, counter_type, counter_ptr, "idx")
             .into_int_value();
         loop_body(gc, idx, size, buffer);
 
@@ -363,9 +357,7 @@ impl ObjectFieldType {
                 "incremented_counter_val",
             )
             .unwrap();
-        gc.builder()
-            .build_store(counter_ptr, incremented_counter_val)
-            .unwrap();
+        gc.build_store(MemoryRegion::Data, counter_ptr, incremented_counter_val);
 
         // Jump back to loop_check bb.
         gc.builder()
@@ -434,10 +426,7 @@ impl ObjectFieldType {
                          ptr_to_buffer: PointerValue<'c>| {
             let ptr =
                 build_gep_array_elem(gc, value_ty, ptr_to_buffer, idx, "ptr_to_elem_of_array");
-            let obj_val = gc
-                .builder()
-                .build_load(value_ty, ptr, "elem_of_array")
-                .unwrap();
+            let obj_val = gc.build_load(MemoryRegion::Data, value_ty, ptr, "elem_of_array");
             // Perform the work on the element.
             let obj = Object::new(obj_val, elem_ty.clone(), gc);
             gc.build_traverser_work(obj, work_type, state);
@@ -532,7 +521,8 @@ impl ObjectFieldType {
                 gc.retain(value.clone(), RcState::Unknown);
                 let elem_ptr =
                     build_gep_array_elem(gc, value_ty, buf_ptr, idx, "ptr_to_elem_of_array");
-                gc.builder().build_store(elem_ptr, value.value(gc)).unwrap();
+                let elem_val = value.value(gc);
+                gc.build_store(MemoryRegion::Data, elem_ptr, elem_val);
             };
 
             // After loop, release value.
@@ -576,7 +566,7 @@ impl ObjectFieldType {
                          _count: IntValue<'c>,
                          buf_ptr: PointerValue<'c>| {
             let slot = build_gep_array_elem(gc, value_ty, buf_ptr, idx, "array_append_slot");
-            gc.builder().build_store(slot, elem_val).unwrap();
+            gc.build_store(MemoryRegion::Data, slot, elem_val);
         };
         let after_loop =
             |_gc: &mut Generator<'c, 'm>, _count: IntValue<'c>, _buf: PointerValue<'c>| {};
@@ -649,10 +639,7 @@ impl ObjectFieldType {
         let elem_ptr = build_gep_array_elem(gc, elem_basic_ty, buffer, idx, "ptr_to_elem_of_array");
 
         // Get value
-        let elem_val = gc
-            .builder()
-            .build_load(elem_basic_ty, elem_ptr, "elem")
-            .unwrap();
+        let elem_val = gc.build_load(MemoryRegion::Data, elem_basic_ty, elem_ptr, "elem");
 
         // Return value
         Object::new(elem_val, elem_ty, gc)
@@ -709,16 +696,14 @@ impl ObjectFieldType {
 
         // Release element that is already at the place (if required).
         if release_old_value {
-            let elem_val = gc
-                .builder()
-                .build_load(elem_basic_ty, elem_ptr, "elem")
-                .unwrap();
-            let elem_obj = Object::new(elem_val, elem_ty, gc);
+            let old_elem_val = gc.build_load(MemoryRegion::Data, elem_basic_ty, elem_ptr, "elem");
+            let elem_obj = Object::new(old_elem_val, elem_ty, gc);
             gc.release(elem_obj, state);
         }
 
         // Insert the given value to the place.
-        gc.builder().build_store(elem_ptr, value.value(gc)).unwrap();
+        let elem_val = value.value(gc);
+        gc.build_store(MemoryRegion::Data, elem_ptr, elem_val);
     }
 
     /// Copy `count` consecutive elements from `src_buffer` into `dst_buffer`, starting at index 0
@@ -746,11 +731,8 @@ impl ObjectFieldType {
                 build_gep_array_elem(gc, elem_basic_ty, src_buffer, idx, "ptr_to_src_elem");
             let dst_ptr =
                 build_gep_array_elem(gc, elem_basic_ty, dst_buffer, idx, "ptr_to_dst_elem");
-            let src_elem = gc
-                .builder()
-                .build_load(elem_basic_ty, src_ptr, "src_elem")
-                .unwrap();
-            gc.builder().build_store(dst_ptr, src_elem).unwrap();
+            let src_elem = gc.build_load(MemoryRegion::Data, elem_basic_ty, src_ptr, "src_elem");
+            gc.build_store(MemoryRegion::Data, dst_ptr, src_elem);
             if !elem_ty.is_fully_unboxed(gc.type_env()) {
                 let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
                 gc.retain(src_obj, state);
@@ -1322,15 +1304,84 @@ pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
 /// count, the reference-counting state, and the distance the object sits above the base of its
 /// allocation.
 pub fn control_block_type<'c, 'm>(gc: &Generator<'c, 'm>) -> StructType<'c> {
-    let mut fields = vec![];
-    assert_eq!(fields.len(), CTRL_BLK_REFCNT_IDX as usize);
-    fields.push(refcnt_type(gc.context).into());
-    assert_eq!(fields.len(), CTRL_BLK_REFCNT_STATE_IDX as usize);
-    fields.push(refcnt_state_type(gc.context).into());
-    assert_eq!(fields.len(), CTRL_BLK_ALLOC_OFFSET_IDX as usize);
-    fields.push(alloc_offset_type(gc.context).into());
+    let fields = ControlBlockField::ALL
+        .iter()
+        .map(|field| field.ty(gc.context).into())
+        .collect::<Vec<BasicTypeEnum<'c>>>();
     gc.context.struct_type(&fields, false)
 }
+
+/// One field of the control block every boxed object begins with.
+///
+/// The fields sit in the block in the order `ALL` lists them, which is the order
+/// `control_block_type` lays them out in and the order `index` reads off a value's discriminant.
+/// Each field is a region of memory of its own, so writing one leaves the others where a reader
+/// already has them.
+#[derive(Clone, Copy)]
+pub enum ControlBlockField {
+    /// How many references to the object are held. The object is freed when the count reaches
+    /// zero.
+    Refcnt,
+    /// The `RefcntState` saying how the reference count is maintained.
+    RefcntState,
+    /// How far the object sits above the base of its allocation, in bytes. It is nonzero where the
+    /// object was placed off the base to put a buffer following it on a boundary, which
+    /// `#ArrayStorage` does for its elements; freeing or reallocating the object steps back by it
+    /// to recover the block. It occupies a byte of the control block's tail padding, so the
+    /// control block keeps its size.
+    AllocOffset,
+}
+
+impl ControlBlockField {
+    /// The fields of the control block, in the order they sit in it.
+    pub const ALL: [ControlBlockField; 3] = [
+        ControlBlockField::Refcnt,
+        ControlBlockField::RefcntState,
+        ControlBlockField::AllocOffset,
+    ];
+
+    /// The index of this field among the fields of `control_block_type`.
+    pub fn index(self) -> u32 {
+        self as u32
+    }
+
+    /// The integer type this field occupies.
+    pub fn ty<'c>(self, context: &'c Context) -> IntType<'c> {
+        match self {
+            ControlBlockField::Refcnt => refcnt_type(context),
+            ControlBlockField::RefcntState => refcnt_state_type(context),
+            ControlBlockField::AllocOffset => alloc_offset_type(context),
+        }
+    }
+
+    /// The region of memory this field lies in.
+    pub fn region(self) -> MemoryRegion {
+        match self {
+            ControlBlockField::Refcnt => MemoryRegion::Refcnt,
+            ControlBlockField::RefcntState => MemoryRegion::RefcntState,
+            ControlBlockField::AllocOffset => MemoryRegion::AllocOffset,
+        }
+    }
+
+    /// The name the emitted code gives a pointer to this field.
+    pub fn pointer_name(self) -> &'static str {
+        match self {
+            ControlBlockField::Refcnt => "ptr_to_refcnt",
+            ControlBlockField::RefcntState => "ptr_to_refcnt_state",
+            ControlBlockField::AllocOffset => "ptr_to_alloc_offset",
+        }
+    }
+}
+
+/// `ALL` lists the fields in the order their discriminants give, which is what lets `index` read a
+/// field's position off its value.
+const _: () = {
+    let mut position = 0;
+    while position < ControlBlockField::ALL.len() {
+        assert!(ControlBlockField::ALL[position] as usize == position);
+        position += 1;
+    }
+};
 
 /// The debug info type describing the control block that heads every boxed object. It presents the
 /// reference counter alone, the one field a debugger session has use for.
@@ -1342,7 +1393,7 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let refcnt_align_in_bits = gc.target_data.get_abi_alignment(&refcnt_ty) * 8;
     let refcnt_offset_in_bits = gc
         .target_data
-        .offset_of_element(&struct_type, CTRL_BLK_REFCNT_IDX)
+        .offset_of_element(&struct_type, ControlBlockField::Refcnt.index())
         .unwrap()
         * 8;
     let refcnt_member = gc
@@ -2092,37 +2143,19 @@ pub fn build_free_boxed<'c, 'm>(
     gc.builder().build_free(base).unwrap();
 }
 
-/// A pointer to the field of the control block of `ptr` recording how far the object sits above the
-/// base of its allocation.
-fn build_gep_alloc_offset<'c, 'm>(
-    gc: &mut Generator<'c, 'm>,
-    ptr: PointerValue<'c>,
-) -> PointerValue<'c> {
-    let ctrl_blk_ty = control_block_type(gc);
-    gc.builder()
-        .build_struct_gep(
-            ctrl_blk_ty,
-            ptr,
-            CTRL_BLK_ALLOC_OFFSET_IDX,
-            "ptr_to_alloc_offset",
-        )
-        .unwrap()
-}
-
 /// How far the object at `ptr` sits above the base of its allocation, as a pointer-sized integer.
 pub fn read_alloc_offset<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     ptr: PointerValue<'c>,
 ) -> IntValue<'c> {
-    let ptr_to_alloc_offset = build_gep_alloc_offset(gc, ptr);
+    let ptr_to_alloc_offset = gc.get_control_block_field_ptr(ptr, ControlBlockField::AllocOffset);
     let alloc_offset = gc
-        .builder()
         .build_load(
+            MemoryRegion::AllocOffset,
             alloc_offset_type(gc.context),
             ptr_to_alloc_offset,
             "alloc_offset",
         )
-        .unwrap()
         .into_int_value();
     gc.builder()
         .build_int_z_extend(alloc_offset, gc.context.i64_type(), "alloc_offset_as_i64")
@@ -2135,7 +2168,7 @@ pub fn write_alloc_offset<'c, 'm>(
     ptr: PointerValue<'c>,
     alloc_offset: IntValue<'c>,
 ) {
-    let ptr_to_alloc_offset = build_gep_alloc_offset(gc, ptr);
+    let ptr_to_alloc_offset = gc.get_control_block_field_ptr(ptr, ControlBlockField::AllocOffset);
     let alloc_offset = gc
         .builder()
         .build_int_truncate(
@@ -2144,9 +2177,7 @@ pub fn write_alloc_offset<'c, 'm>(
             "alloc_offset_as_byte",
         )
         .unwrap();
-    gc.builder()
-        .build_store(ptr_to_alloc_offset, alloc_offset)
-        .unwrap();
+    gc.build_store(MemoryRegion::AllocOffset, ptr_to_alloc_offset, alloc_offset);
 }
 
 /// A fresh object of type `ty`, with its control block initialized and its remaining fields left
@@ -2213,13 +2244,15 @@ pub fn create_obj<'c, 'm>(
                 // Initialize the control block.
                 assert_eq!(i, 0);
                 // Get pointer to control block.
-                let ptr_to_ctrl_blk = obj.gep_boxed(gc, i as u32);
+                let ptr_to_ctrl_blk = obj.ptr_to_control_block(gc);
 
                 // Initialize the reference counter 1.
                 let ptr_to_refcnt = gc.get_refcnt_ptr(ptr_to_ctrl_blk);
-                gc.builder()
-                    .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false))
-                    .unwrap();
+                gc.build_store(
+                    MemoryRegion::Refcnt,
+                    ptr_to_refcnt,
+                    refcnt_type(context).const_int(1, false),
+                );
 
                 // A fresh object is reachable from the thread that made it alone.
                 gc.set_refcnt_state(ptr_to_ctrl_blk, RefcntState::LOCAL);
@@ -2247,7 +2280,7 @@ pub fn create_obj<'c, 'm>(
                 assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
                 let ptr_to_trav = obj.gep_boxed(gc, i as u32);
                 let trav = get_traverser_ptr(&ty, capture, gc, None);
-                gc.builder().build_store(ptr_to_trav, trav).unwrap();
+                gc.build_store(MemoryRegion::Data, ptr_to_trav, trav);
             }
             ObjectFieldType::UnionBuf(_) => {}
             ObjectFieldType::UnionTag => {}
