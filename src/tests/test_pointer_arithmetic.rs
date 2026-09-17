@@ -1,5 +1,9 @@
+use crate::configuration::Configuration;
 use crate::fixstd::runtime::{RUNTIME_MALLOC, RUNTIME_REALLOC};
-use crate::tests::test_util::{generated_llvm_ir, llvm_function_bodies};
+use crate::tests::test_util::{
+    build_run_and_read_rc_ir, generated_llvm_ir, llvm_function_bodies, rc_ir_function_bodies,
+    test_source,
+};
 use std::sync::OnceLock;
 
 /// A program that reaches an array's elements every way the compiler computes a pointer into one:
@@ -224,4 +228,73 @@ pub fn test_nothing_reads_the_block_a_reallocation_was_given() {
         calls > 0,
         "growing an array should reach `realloc`, so that this test has a call to read",
     );
+}
+
+/// A program that offsets a pointer each way and takes the distance between two pointers. It works
+/// on `nullptr`, where every answer is an address the source states outright, and on the elements of
+/// an array, where the same arithmetic runs on an address the program owns.
+const POINTER_ARITHMETIC_SOURCE: &str = r#"
+    module Main;
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"an offset of zero", nullptr.add_offset(0).to_string, "0000000000000000");;
+        assert_eq(|_|"an offset forward", nullptr.add_offset(16).to_string, "0000000000000010");;
+        assert_eq(|_|"an offset and its opposite", nullptr.add_offset(16).add_offset(-16).to_string, "0000000000000000");;
+        assert_eq(|_|"a distance forward", nullptr.add_offset(16).subtract_ptr(nullptr), 16);;
+        assert_eq(|_|"a distance backward", nullptr.subtract_ptr(nullptr.add_offset(16)), -16);;
+
+        let arr = Array::from_map(4, |i| i * 100);
+        let distance = arr.borrow_elements(|elements| elements.add_offset(24).subtract_ptr(elements));
+        assert_eq(|_|"a distance within a buffer", distance, 24);;
+
+        println("pointer arithmetic answered")
+    );
+"#;
+
+/// `Std::Ptr::add_offset` counts bytes from the address it is given, each way, and
+/// `Std::Ptr::subtract_ptr` answers with the count between two addresses, signed.
+#[test]
+pub fn test_pointer_arithmetic_counts_bytes_each_way() {
+    test_source(POINTER_ARITHMETIC_SOURCE, Configuration::develop_mode());
+}
+
+/// The two pointer-arithmetic primitives are operations the compiler emits, so the arithmetic lands
+/// in whichever unit writes it.
+///
+/// A foreign call would not: the compiler writes a runtime function's body into the main unit alone,
+/// leaving every other unit a call across a module boundary. What stands behind that boundary is one
+/// to three instructions, and the call is what an optimizer would have to fold the surrounding
+/// address arithmetic through.
+#[test]
+pub fn test_pointer_arithmetic_is_emitted_where_it_is_written() {
+    let dump = build_run_and_read_rc_ir(
+        POINTER_ARITHMETIC_SOURCE,
+        "none",
+        "pointer arithmetic answered",
+        "a program that offsets a pointer and takes the distance between two",
+    );
+    for (primitive, operation) in [
+        ("Std::Ptr::add_offset", "= add_offset("),
+        ("Std::Ptr::subtract_ptr", "= subtract_ptr("),
+    ] {
+        let body = rc_ir_function_bodies(&dump, primitive).join("\n");
+        assert!(
+            !body.is_empty(),
+            "the program reaches `{}`, so the dump holds its body",
+            primitive,
+        );
+        assert!(
+            body.contains(operation),
+            "`{}` should compute its result with an operation of the compiler:\n{}",
+            primitive,
+            body,
+        );
+        assert!(
+            !body.contains("ffi_call"),
+            "`{}` should reach no foreign function:\n{}",
+            primitive,
+            body,
+        );
+    }
 }

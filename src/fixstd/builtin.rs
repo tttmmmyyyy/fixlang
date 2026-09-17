@@ -2046,6 +2046,8 @@ impl LLVMGen for InlineLLVMAddOffsetBody {
     }
 }
 
+/// The address `offset` bytes past `ptr`, where the count is signed.
+/// Type: I64 -> Ptr -> Ptr
 pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const OFFSET_NAME: &str = "offset";
     const POINTER_NAME: &str = "ptr";
@@ -2137,6 +2139,8 @@ impl LLVMGen for InlineLLVMSubtractPtrBody {
     }
 }
 
+/// The distance in bytes from `rhs` to `lhs`, as a signed count.
+/// Type: Ptr -> Ptr -> I64
 pub fn subtract_ptr_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const RHS_NAME: &str = "rhs";
     const LHS_NAME: &str = "lhs";
