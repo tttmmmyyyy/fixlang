@@ -1698,6 +1698,38 @@ pub fn cast_float_to_int_function(
     (expr, scm)
 }
 
+/// `amount` with every bit above the width of its own type cleared, which is the shift amount
+/// `shl`, `lshr` and `ashr` are defined on.
+///
+/// Those instructions answer `poison` where the amount reaches the width of the value, and a
+/// `poison` is a permission to take any value rather than a value, so two readers of one shift may
+/// take different answers from it. Masking the amount puts it below the width, which is what makes
+/// the shift answer one value.
+///
+/// The machine's own shift instruction masks the amount by the width of the *register* holding it,
+/// so this `and` reaches the generated code only where the register is wider than the type — `I8`
+/// and `I16`, and their unsigned siblings — and only where the amount is not a constant.
+///
+/// # Examples
+/// An amount of 64 shifting an `I64` is masked to 0, and an amount of 8 shifting an `I8` to 0.
+fn mask_shift_amount_to_width<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    amount: IntValue<'c>,
+) -> IntValue<'c> {
+    let width = amount.get_type().get_bit_width();
+    // Clearing the bits above the width is taking the amount modulo the width, which the mask
+    // `width - 1` performs for a width that is a power of two. Every integer type of `Std` has one.
+    assert!(
+        width.is_power_of_two(),
+        "The width {} of a shifted integer type is not a power of two",
+        width
+    );
+    let mask = amount.get_type().const_int(width as u64 - 1, false);
+    gc.builder()
+        .build_and(amount, mask, "shift_amount@shift_function")
+        .unwrap()
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMShiftBody {
     value_name: FullName,
@@ -1715,6 +1747,8 @@ impl LLVMGen for InlineLLVMShiftBody {
         let n = gc.get_scoped_obj_field(&self.n_name, 0).into_int_value();
 
         let is_signed = ty.is_signed_integer();
+
+        let n = mask_shift_amount_to_width(gc, n);
 
         // Perform shift operation.
         let shifted = if self.is_left {

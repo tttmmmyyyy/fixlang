@@ -73,6 +73,7 @@ mod test_rc_ir_aliasing;
 mod test_runtime_build;
 mod test_sanitize_setting;
 mod test_shared_boxed_swap;
+mod test_shift_amount;
 mod test_signal;
 mod test_simplify;
 mod test_skip_eval;
