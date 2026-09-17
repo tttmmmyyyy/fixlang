@@ -2977,7 +2977,7 @@ namespace String {
             if pos == nullptr {
                 Option::none()
             };
-            let pos = pos.subtract_ptr(c_str);
+            let pos = pos.offset_from(c_str);
             Option::some(pos)
         )
     );
@@ -3806,25 +3806,10 @@ namespace F64 {
 }
 
 namespace Ptr {
-    // Adds an offset to a pointer.
-    //
-    // # Parameters
-    //
-    // * `offset`
-    // * `ptr`
-    add_offset : I64 -> Ptr -> Ptr;
-    add_offset = |off, ptr| FFI_CALL[Ptr fixruntime_ptr_add_offset(Ptr, I64), ptr, off];
-
-    // Subtracts two pointers.
-    // 
-    // Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
-    //
-    // # Parameters
-    //
-    // * `rhs`
-    // * `lhs`
-    subtract_ptr : Ptr -> Ptr -> I64;
-    subtract_ptr = |rhs, lhs| FFI_CALL[I64 fixruntime_subtract_ptr(Ptr, Ptr), lhs, rhs];
+    // Deprecated alias for `Std::Ptr::offset_from`. Kept for backward
+    // compatibility; `offset_from` is the canonical name.
+    subtract_ptr : Ptr -> Ptr -> I64 = |origin, ptr| ptr.offset_from(origin);
+    DEPRECATED[subtract_ptr, "Use `Std::Ptr::offset_from` instead."];
 }
 
 impl Ptr : ToString {

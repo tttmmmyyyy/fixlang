@@ -50,6 +50,22 @@ accesses the cache condition reads.
 across it.** The counters were read with whatever environment the harness inherited until that row,
 and a split count moves with the environment for the reason given there.
 
+## 026f90573d67a14508749fd5c1b433ee6f8be2da
+
+`Std::Ptr::add_offset` と `Std::Ptr::subtract_ptr` を inline-LLVM の op にした変更 (#695)、直前の行
+`209a81e57` に対して。**106 本すべて中立。**最大の動きは `Hash::CRC32` の -0.00005% (481 命令) で、
+同じコードを 2 回測った `24f7f6f50` 対 `209a81e57` の揺れと同じ大きさである。下がったのが 45 本、
+上がったのが 37 本、動かなかったのが 24 本。
+
+中立なのは、**この 106 本に 2 つの primitive を熱いループで通すものが無い**ためである。`Etc::LogParser`
+も `Template::Regex` も走査表を自前で持っており、`Std::String::find` の側の `add_offset` /
+`subtract_ptr` は呼び出しごとに 1 回ずつしか払わない。
+
+効く形を別に作って測ると差は出る。`Array::borrow_elements` の中で `memchr` を呼び、開始位置を
+`add_offset` で与えて答えを `offset_from` で読む — バイトを走査する正規表現の実装が取る形 — を
+1,048,576 回回すと、命令数は 199,526,004 から 189,040,243 へ **-5.255%**、**呼び出し 1 回あたり
+10.0 命令**である。サイクルも同じ向きに動く (41,928,051 -> 39,577,400、静かな機械で 5 回の最小値)。
+
 ## 8016c927f177e68a02770783486cd2f603fb524f
 
 A captured value whose type occupies no storage is no longer stored in the closure, so a closure
