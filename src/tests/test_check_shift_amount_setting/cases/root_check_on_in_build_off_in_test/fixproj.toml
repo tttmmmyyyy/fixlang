@@ -1,0 +1,12 @@
+[general]
+name = "root-check-on-in-build-off-in-test"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+check_shift_amount = true
+
+[build.test]
+files = ["test.fix"]
+check_shift_amount = false

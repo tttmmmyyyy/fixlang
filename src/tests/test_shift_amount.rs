@@ -2,17 +2,16 @@
 //! outside `0 <= bits < the width of the type`.
 
 use crate::configuration::Configuration;
-use crate::tests::test_util::test_source;
+use crate::tests::test_util::{test_source, test_source_fail};
 
-/// Builds a program whose `main` binds `zero` to a `Std::I64` that is 0 at run time and that no
-/// optimization level can fold, runs `body` after it, and fails the test unless the program exits
-/// with code 0.
+/// A program whose `main` binds `zero` to a `Std::I64` that is 0 at run time and that no
+/// optimization level can fold, and runs `body` after it.
 ///
 /// A shift amount built from `zero` reaches the code generator as a value, so the amount a case
 /// names is the amount the shift instruction receives. An amount written as a literal is folded
 /// long before that, and the shift then answers at compile time whatever the folding chose.
-fn test_with_a_runtime_zero(body: &str) {
-    let source = format!(
+fn source_with_a_runtime_zero(body: &str) -> String {
+    format!(
         r#"
         module Main;
         main : IO ();
@@ -25,8 +24,34 @@ fn test_with_a_runtime_zero(body: &str) {
         );
     "#,
         body
+    )
+}
+
+/// Builds `source_with_a_runtime_zero(body)`, runs it, and fails the test unless the program exits
+/// with code 0.
+fn test_with_a_runtime_zero(body: &str) {
+    test_source(
+        &source_with_a_runtime_zero(body),
+        Configuration::develop_mode(),
     );
-    test_source(&source, Configuration::develop_mode());
+}
+
+/// A configuration that stops the program where the amount of a shift is outside the range the
+/// shift is defined on, as `--check-shift-amount` asks for.
+fn shift_amount_checked_config() -> Configuration {
+    let mut config = Configuration::develop_mode();
+    config.check_shift_amount = true;
+    config
+}
+
+/// Builds `source_with_a_runtime_zero(body)` under a configuration that stops at a shift amount
+/// outside the width, runs it, and asserts that it stops with a report containing `report`.
+fn assert_the_check_stops(body: &str, report: &str) {
+    test_source_fail(
+        &source_with_a_runtime_zero(body),
+        shift_amount_checked_config(),
+        report,
+    );
 }
 
 /// A shift by an amount the type has no room for answers one value: what the result compares as
@@ -101,5 +126,54 @@ pub fn test_a_type_narrower_than_a_register_takes_its_own_width() {
             let z16 = zero.to_I16;
             assert_eq(|_|"I16 left by its width", 1_I16.shift_left(z16 + 16_I16), 1_I16);;
         "#,
+    );
+}
+
+/// The check stops the program where the amount reaches the width of the type, and the report names
+/// the operation and the amount.
+#[test]
+pub fn test_the_check_stops_a_shift_by_the_width() {
+    assert_the_check_stops(
+        "eval 1.shift_left(zero + 64);",
+        "Shift amount outside the width of the type: I64 shift_left, with 64",
+    );
+}
+
+/// The check stops the program at a negative amount, and the report shows the amount the program
+/// wrote rather than the bit pattern the comparison reads.
+#[test]
+pub fn test_the_check_stops_a_negative_shift_amount() {
+    assert_the_check_stops(
+        "eval 1.shift_left(zero - 1);",
+        "Shift amount outside the width of the type: I64 shift_left, with -1",
+    );
+}
+
+/// The check covers an unsigned type and a shift towards the least bit, and the report names which
+/// shift it stopped.
+///
+/// `--check-signed-overflow` leaves an unsigned type alone, because arithmetic on one is taken
+/// modulo two to its width and so has no result outside the type. A shift amount is outside the
+/// width for either signedness.
+#[test]
+pub fn test_the_check_stops_a_shift_of_an_unsigned_type() {
+    assert_the_check_stops(
+        "eval 1_U8.shift_right(zero.to_U8 + 8_U8);",
+        "Shift amount outside the width of the type: U8 shift_right, with 8",
+    );
+}
+
+/// An amount inside the width runs on under the check.
+#[test]
+pub fn test_the_check_lets_an_amount_inside_the_width_run_on() {
+    test_source(
+        &source_with_a_runtime_zero(
+            r#"
+                assert_eq(|_|"I64 left by one less than its width", 1.shift_left(zero + 63), I64::minimum);;
+                assert_eq(|_|"I64 left by zero", 1.shift_left(zero), 1);;
+                assert_eq(|_|"U8 right by one less than its width", 128_U8.shift_right(zero.to_U8 + 7_U8), 1_U8);;
+            "#,
+        ),
+        shift_amount_checked_config(),
     );
 }

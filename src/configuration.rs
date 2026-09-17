@@ -559,6 +559,10 @@ pub struct Configuration {
     /// of that type. This covers `+`, `-`, `*`, unary `-`, `/` and `%`. Arithmetic on an unsigned
     /// type is taken modulo two to the width of the type, so none of it is checked.
     pub check_signed_overflow: bool,
+    /// Stop the program where the amount of a shift is outside the range the shift is defined on.
+    /// This covers `shift_left` and `shift_right` on every integer type. The amount has to be at
+    /// least zero and less than the number of bits of the type shifted.
+    pub check_shift_amount: bool,
     /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
     /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.
     pub skip_eval: bool,
@@ -669,6 +673,7 @@ impl Configuration {
             backtrace: false,
             no_runtime_check: false,
             check_signed_overflow: false,
+            check_shift_amount: false,
             skip_eval: false,
             deprecation_mode: DeprecationMode::default(),
         })
@@ -1053,6 +1058,7 @@ impl Configuration {
             backtrace,
             no_runtime_check,
             check_signed_overflow,
+            check_shift_amount,
             skip_eval,
             develop_mode,
             emit_symbols,
@@ -1142,6 +1148,8 @@ impl Configuration {
         // The check is emitted into the arithmetic itself, so one source builds into two different
         // programs.
         object_generation.push_text(&check_signed_overflow.to_string());
+        // The check stands in front of the shift, so one source builds into two different programs.
+        object_generation.push_text(&check_shift_amount.to_string());
         object_generation.push_text(&skip_eval.to_string());
         // Development mode puts the compiler's own consistency checks into the code it generates —
         // the assertions of `Generator::build_assert_unique` and `build_assert_refcnt_state_local`,
@@ -1796,6 +1804,10 @@ mod tests {
             (
                 "check_signed_overflow",
                 Box::new(|config: &mut Configuration| config.check_signed_overflow = true),
+            ),
+            (
+                "check_shift_amount",
+                Box::new(|config: &mut Configuration| config.check_shift_amount = true),
             ),
             (
                 "skip_eval",

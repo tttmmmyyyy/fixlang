@@ -306,6 +306,12 @@ fn run_cli() {
             "Stop the program where arithmetic on a signed integer type gives a result outside the range of that type.\n\
             This covers `+`, `-`, `*`, unary `-`, `/` and `%` on `I8`, `I16`, `I32` and `I64`. Arithmetic on an unsigned type is taken modulo two to the width of the type, so none of it is checked."
         );
+    let check_shift_amount = Arg::new("check-shift-amount")
+        .long("check-shift-amount")
+        .help(
+            "Stop the program where the amount of a shift is outside the range the shift is defined on.\n\
+            This covers `shift_left` and `shift_right` on every integer type. The amount has to be at least zero and less than the number of bits of the type shifted."
+        );
     let skip_eval = Arg::new("skip-eval")
         .long("skip-eval")
         .takes_value(false)
@@ -358,6 +364,7 @@ fn run_cli() {
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
         .arg(check_signed_overflow.clone())
+        .arg(check_shift_amount.clone())
         .arg(skip_eval.clone())
         .arg(allow_preliminary_commands.clone())
         .arg(allow_deprecated.clone())
@@ -390,6 +397,7 @@ fn run_cli() {
             .arg(backtrace.clone())
             .arg(no_runtime_check.clone())
             .arg(check_signed_overflow.clone())
+            .arg(check_shift_amount.clone())
             .arg(skip_eval.clone())
             .arg(allow_preliminary_commands.clone())
             .arg(allow_deprecated.clone())
@@ -787,6 +795,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `check_signed_overflow`.
         if args.contains_id("check-signed-overflow") {
             config.check_signed_overflow = true;
+        }
+
+        // Set `check_shift_amount`.
+        if args.contains_id("check-shift-amount") {
+            config.check_shift_amount = true;
         }
 
         // Set `skip_eval`.

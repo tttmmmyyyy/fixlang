@@ -23,6 +23,10 @@ pub const RUNTIME_ARRAY_SIZE_OVERFLOW: &str = "fixruntime_array_size_overflow";
 /// type, and ends the program. It takes the operation's name and its two operands widened to 64
 /// bits, and returns to no one.
 pub const RUNTIME_SIGNED_OVERFLOW: &str = "fixruntime_signed_overflow";
+/// The runtime function that reports a shift whose amount is outside the range the shift is defined
+/// on, and ends the program. It takes the operation's name and the amount widened to 64 bits, and
+/// returns to no one.
+pub const RUNTIME_SHIFT_AMOUNT: &str = "fixruntime_shift_amount";
 /// The runtime function that writes a C string to standard error, followed by a newline.
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 /// libc `sprintf`, which writes a formatted value into a buffer the caller provides.
@@ -107,6 +111,12 @@ pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
         mode,
         RUNTIME_SIGNED_OVERFLOW,
         &[ptr_ty.into(), i64_ty.into(), i64_ty.into()],
+    );
+    declare_noreturn_runtime_function(
+        gc,
+        mode,
+        RUNTIME_SHIFT_AMOUNT,
+        &[ptr_ty.into(), i64_ty.into()],
     );
     build_eprintln_function(gc, mode);
     build_sprintf_function(gc, mode);

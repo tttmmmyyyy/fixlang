@@ -31,7 +31,8 @@ use crate::constants::{
     TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::fixstd::runtime::{
-    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC, RUNTIME_SIGNED_OVERFLOW,
+    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC, RUNTIME_SHIFT_AMOUNT,
+    RUNTIME_SIGNED_OVERFLOW,
 };
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
@@ -1730,6 +1731,70 @@ fn mask_shift_amount_to_width<'c, 'm>(
         .unwrap()
 }
 
+/// Whether the program being generated stops at a shift whose amount is outside the range the
+/// shift is defined on.
+///
+/// `--check-shift-amount` asks for the check, and `--no-runtime-check` takes out every check that
+/// ends the program, this one among them.
+fn shift_amount_is_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
+    gc.config.check_shift_amount && gc.config.runtime_check()
+}
+
+/// Emit the check that ends the program where `amount` is outside the range a shift of a value of
+/// `ty` is defined on, which is from zero up to the width of `ty`.
+///
+/// The comparison reads `amount` as unsigned, so one negative amount of a signed type answers it as
+/// well: every negative number is above every width read that way.
+///
+/// # Arguments
+/// * `is_left` — whether the shift the amount belongs to moves the value towards its greatest bit,
+///   which is what the report names.
+///
+/// # Examples
+/// `Std::I64::shift_left` reaching this with an amount of 64 ends the program with
+/// `Shift amount outside the width of the type: I64 shift_left, with 64`.
+fn build_shift_amount_check<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    amount: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+    is_left: bool,
+) {
+    let width = amount.get_type().get_bit_width();
+    let out_of_range = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::UGE,
+            amount,
+            amount.get_type().const_int(width as u64, false),
+            "shift_amount_out_of_range",
+        )
+        .unwrap();
+    let reported_operation = format!(
+        "{} {}",
+        ty.toplevel_tycon().unwrap().name.name,
+        if is_left { "shift_left" } else { "shift_right" }
+    );
+    let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
+    let i64_ty = gc.context.i64_type();
+    // The report shows the amount the program wrote, so a negative amount of a signed type reaches
+    // it as the negative number rather than as the bit pattern the comparison above reads.
+    let reported_amount = if ty.is_signed_integer() {
+        gc.builder()
+            .build_int_s_extend_or_bit_cast(amount, i64_ty, "shift_amount_reported")
+    } else {
+        gc.builder()
+            .build_int_z_extend_or_bit_cast(amount, i64_ty, "shift_amount_reported")
+    }
+    .unwrap();
+    build_abort_if(
+        gc,
+        out_of_range,
+        RUNTIME_SHIFT_AMOUNT,
+        &[reported_operation_ptr.into(), reported_amount.into()],
+        "shift_amount",
+    );
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMShiftBody {
     value_name: FullName,
@@ -1748,6 +1813,9 @@ impl LLVMGen for InlineLLVMShiftBody {
 
         let is_signed = ty.is_signed_integer();
 
+        if shift_amount_is_checked(gc) {
+            build_shift_amount_check(gc, n, ty, self.is_left);
+        }
         let n = mask_shift_amount_to_width(gc, n);
 
         // Perform shift operation.
