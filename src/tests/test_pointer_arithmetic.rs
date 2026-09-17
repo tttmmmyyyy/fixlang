@@ -243,15 +243,15 @@ pub fn test_pointer_arithmetic_counts_bytes_each_way() {
     test_source(POINTER_ARITHMETIC_SOURCE, Configuration::develop_mode());
 }
 
-/// The two pointer-arithmetic primitives are operations the compiler emits, so the arithmetic lands
-/// in whichever unit writes it.
+/// Each pointer-arithmetic primitive computes its result with an operation of the compiler, so the
+/// instructions stand in whichever unit names the primitive.
 ///
-/// A foreign call would not: the compiler writes a runtime function's body into the main unit alone,
-/// leaving every other unit a call across a module boundary. What stands behind that boundary is one
-/// to three instructions, and the call is what an optimizer would have to fold the surrounding
-/// address arithmetic through.
+/// A runtime function's body is written into the main unit alone, so a primitive that called one
+/// leaves every other unit a call across a module boundary. What stands behind that boundary is one
+/// to three instructions, and the boundary is what an optimizer has to fold the surrounding address
+/// arithmetic through.
 #[test]
-pub fn test_pointer_arithmetic_is_emitted_where_it_is_written() {
+pub fn test_each_pointer_primitive_computes_its_result_itself() {
     let dump = pointer_arithmetic_rc_ir("none");
     for (primitive, operation) in [
         ("Std::Ptr::add_offset", "= add_offset("),
@@ -272,13 +272,13 @@ pub fn test_pointer_arithmetic_is_emitted_where_it_is_written() {
     }
 }
 
-/// At the level a program is built at, the arithmetic stands in the function that writes it.
+/// The inliner carries a copy of each primitive's body to every place that names it, so at the
+/// level a program is built at the arithmetic stands in the function that writes it.
 ///
-/// This is what the change of `-O max` amounts to. The inliner carried a copy of each primitive's
-/// body to every place that names it before as it does now; what the copy held was a call into the
-/// one unit the runtime's body was written into, and what it holds now is the arithmetic itself.
+/// Where that copy lands is what decides the cost: a body holding a foreign call is carried just
+/// the same, and every copy of it calls across a module boundary.
 #[test]
-pub fn test_the_pointer_arithmetic_reaches_the_place_it_is_written() {
+pub fn test_the_inliner_carries_the_pointer_arithmetic_into_its_caller() {
     let dump = pointer_arithmetic_rc_ir("max");
     // A closure lifted out of `main` keeps its name, so this is the whole of what `main` writes.
     let written_in_main = rc_ir_function_bodies(&dump, "Main::main").join("\n");

@@ -1989,7 +1989,7 @@ pub struct InlineLLVMAddOffsetBody {
     /// The local binding holding the offset, in bytes.
     offset_name: FullName,
     /// The local binding holding the pointer the offset is applied to.
-    pointer_name: FullName,
+    ptr_name: FullName,
 }
 
 #[typetag::serde]
@@ -2002,7 +2002,7 @@ impl LLVMGen for InlineLLVMAddOffsetBody {
             .get_scoped_obj_field(&self.offset_name, 0)
             .into_int_value();
         let ptr = gc
-            .get_scoped_obj_field(&self.pointer_name, 0)
+            .get_scoped_obj_field(&self.ptr_name, 0)
             .into_pointer_value();
 
         let address = gc
@@ -2026,12 +2026,12 @@ impl LLVMGen for InlineLLVMAddOffsetBody {
         format!(
             "add_offset({}, {})",
             self.offset_name.to_string(),
-            self.pointer_name.to_string()
+            self.ptr_name.to_string()
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.offset_name, &mut self.pointer_name]
+        vec![&mut self.offset_name, &mut self.ptr_name]
     }
 
     fn result_locality(
@@ -2052,7 +2052,7 @@ impl LLVMGen for InlineLLVMAddOffsetBody {
 /// Type: I64 -> Ptr -> Ptr
 pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const OFFSET_NAME: &str = "offset";
-    const POINTER_NAME: &str = "ptr";
+    const PTR_NAME: &str = "ptr";
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -2063,11 +2063,11 @@ pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(OFFSET_NAME)],
         expr_abs(
-            vec![var_local(POINTER_NAME)],
+            vec![var_local(PTR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMAddOffsetBody {
                     offset_name: FullName::local(OFFSET_NAME),
-                    pointer_name: FullName::local(POINTER_NAME),
+                    ptr_name: FullName::local(PTR_NAME),
                 }),
                 make_ptr_ty(),
                 None,
@@ -2086,9 +2086,9 @@ pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// addresses.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMSubtractPtrBody {
-    /// The local binding holding the pointer subtracted from the other.
+    /// The local binding holding the pointer the distance is measured from.
     rhs_name: FullName,
-    /// The local binding holding the pointer subtracted from.
+    /// The local binding holding the pointer the distance is measured to.
     lhs_name: FullName,
 }
 

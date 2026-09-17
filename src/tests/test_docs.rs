@@ -31,16 +31,16 @@ mod integration_tests {
     fn documented_section(document: &str, name: &str) -> String {
         let heading = format!("#### {}", name);
         let opens_an_item = |line: &&str| {
-            let hashes = line.len() - line.trim_start_matches('#').len();
-            (1..=4).contains(&hashes)
+            let heading_level = line.len() - line.trim_start_matches('#').len();
+            (1..=4).contains(&heading_level)
         };
         let mut lines = document
             .lines()
             .skip_while(|line| line.trim_end() != heading);
-        let Some(first) = lines.next() else {
+        let Some(heading_line) = lines.next() else {
             return String::new();
         };
-        std::iter::once(first)
+        std::iter::once(heading_line)
             .chain(lines.take_while(|line| !opens_an_item(line)))
             .collect::<Vec<_>>()
             .join("\n")

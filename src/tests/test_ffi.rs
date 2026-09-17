@@ -343,10 +343,13 @@ pub fn test_export_taking_a_name_the_compiler_owns_fails() {
 /// The runtime is the only thing built into the module read back here, so every function it holds
 /// is one of the runtime's own, and a function the compiler leaves to the C runtime carries no
 /// basic block while one whose body it writes carries at least one.
-fn runtime_functions_with_bodies(config: &Configuration, type_env: &TypeEnv) -> Vec<String> {
+fn names_of_runtime_functions_with_bodies(
+    config: &Configuration,
+    type_env: &TypeEnv,
+) -> Vec<String> {
     let context = Context::create();
     let target_machine = get_target_machine(config.get_llvm_opt_level(), config);
-    let module = Generator::create_module("compiler_defined_c_names", &context, &target_machine);
+    let module = Generator::create_module("runtime_test", &context, &target_machine);
     let mut gc = Generator::new(
         &context,
         &module,
@@ -381,13 +384,13 @@ pub fn test_every_function_the_compiler_writes_a_body_for_is_refused_as_an_expor
     for threaded in [false, true] {
         let mut config = base.clone();
         config.threaded = threaded;
-        let written_here = runtime_functions_with_bodies(&config, &type_env);
+        let names_with_bodies = names_of_runtime_functions_with_bodies(&config, &type_env);
         assert!(
-            !written_here.is_empty(),
+            !names_with_bodies.is_empty(),
             "building the runtime writes the body of at least one function, so that this test has \
              a name to read",
         );
-        for name in written_here {
+        for name in names_with_bodies {
             assert!(
                 compiler_defined_c_function_reason(&name, OutputFileType::Executable).is_some(),
                 "the compiler writes the body of `{}`, so an export of that name has to be refused",
