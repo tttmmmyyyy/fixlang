@@ -2977,7 +2977,7 @@ namespace String {
             if pos == nullptr {
                 Option::none()
             };
-            let pos = pos.subtract_ptr(c_str);
+            let pos = pos.offset_from(c_str);
             Option::some(pos)
         )
     );
@@ -3803,6 +3803,13 @@ namespace F32 {
 namespace F64 {
     abs : F64 -> F64;
     abs = |f| if f < 0.0 { -f } else { f };
+}
+
+namespace Ptr {
+    // Deprecated alias for `Std::Ptr::offset_from`. Kept for backward
+    // compatibility; `offset_from` is the canonical name.
+    subtract_ptr : Ptr -> Ptr -> I64 = |origin, ptr| ptr.offset_from(origin);
+    DEPRECATED[subtract_ptr, "Use `Std::Ptr::offset_from` instead."];
 }
 
 impl Ptr : ToString {

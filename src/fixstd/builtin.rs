@@ -2083,14 +2083,14 @@ pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// Evaluates `Std::Ptr::subtract_ptr`: the distance in bytes from one pointer to another, as a
+/// Evaluates `Std::Ptr::offset_from`: the distance in bytes from one pointer to another, as a
 /// signed count.
 ///
 /// A pointer is a number in Fix, and this is the difference of two such numbers: the two pointers
 /// may point into different objects, the result may be negative, and the difference wraps at the
 /// width of `I64`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMSubtractPtrBody {
+pub struct InlineLLVMOffsetFromBody {
     /// The local binding holding the pointer the distance is measured from.
     origin_name: FullName,
     /// The local binding holding the pointer the distance is measured to.
@@ -2098,7 +2098,7 @@ pub struct InlineLLVMSubtractPtrBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMSubtractPtrBody {
+impl LLVMGen for InlineLLVMOffsetFromBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let i8_ty = gc.context.i8_type();
 
@@ -2112,16 +2112,16 @@ impl LLVMGen for InlineLLVMSubtractPtrBody {
         // The element type fixes the unit the distance is counted in, and this answers in bytes.
         let distance = gc
             .builder()
-            .build_ptr_diff(i8_ty, ptr, origin, "ptr_diff@subtract_ptr")
+            .build_ptr_diff(i8_ty, ptr, origin, "ptr_diff@offset_from")
             .unwrap();
 
-        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@subtract_ptr"));
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@offset_from"));
         obj.insert_field(gc, 0, distance)
     }
 
     fn name(&self) -> String {
         format!(
-            "subtract_ptr({}, {})",
+            "offset_from({}, {})",
             self.origin_name.to_string(),
             self.ptr_name.to_string()
         )
@@ -2147,7 +2147,7 @@ impl LLVMGen for InlineLLVMSubtractPtrBody {
 
 /// The distance in bytes from `origin` to `ptr`, as a signed count.
 /// Type: Ptr -> Ptr -> I64
-pub fn subtract_ptr_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn offset_from_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ORIGIN_NAME: &str = "origin";
     const PTR_NAME: &str = "ptr";
 
@@ -2162,7 +2162,7 @@ pub fn subtract_ptr_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(
             vec![var_local(PTR_NAME)],
             expr_llvm(
-                Box::new(InlineLLVMSubtractPtrBody {
+                Box::new(InlineLLVMOffsetFromBody {
                     origin_name: FullName::local(ORIGIN_NAME),
                     ptr_name: FullName::local(PTR_NAME),
                 }),

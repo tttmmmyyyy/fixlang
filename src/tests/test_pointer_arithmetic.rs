@@ -1,8 +1,8 @@
-use crate::configuration::Configuration;
+use crate::configuration::{Configuration, DeprecationMode};
 use crate::fixstd::runtime::{RUNTIME_MALLOC, RUNTIME_REALLOC};
 use crate::tests::test_util::{
     build_run_and_read_rc_ir, first_local_value, generated_llvm_ir, llvm_function_bodies,
-    names_local_value, rc_ir_function_bodies, test_source,
+    names_local_value, rc_ir_function_bodies, run_source_assert_failed, test_source,
 };
 use std::sync::OnceLock;
 
@@ -212,16 +212,16 @@ const POINTER_ARITHMETIC_SOURCE: &str = r#"
         assert_eq(|_|"an offset of zero", nullptr.add_offset(0).to_string, "0000000000000000");;
         assert_eq(|_|"an offset forward", nullptr.add_offset(16).to_string, "0000000000000010");;
         assert_eq(|_|"an offset and its opposite", nullptr.add_offset(16).add_offset(-16).to_string, "0000000000000000");;
-        assert_eq(|_|"a distance forward", nullptr.add_offset(16).subtract_ptr(nullptr), 16);;
-        assert_eq(|_|"a distance backward", nullptr.subtract_ptr(nullptr.add_offset(16)), -16);;
+        assert_eq(|_|"a distance forward", nullptr.add_offset(16).offset_from(nullptr), 16);;
+        assert_eq(|_|"a distance backward", nullptr.offset_from(nullptr.add_offset(16)), -16);;
         assert_eq(|_|"an offset that wraps at the top", nullptr.add_offset(I64::maximum).add_offset(1).to_string, "8000000000000000");;
         assert_eq(|_|"an offset that wraps at the bottom", nullptr.add_offset(I64::minimum).add_offset(-1).to_string, "7fffffffffffffff");;
-        assert_eq(|_|"a distance that wraps", nullptr.add_offset(I64::maximum).subtract_ptr(nullptr.add_offset(I64::minimum)), -1);;
+        assert_eq(|_|"a distance that wraps", nullptr.add_offset(I64::maximum).offset_from(nullptr.add_offset(I64::minimum)), -1);;
 
         let arr = Array::from_map(4, |i| i * 100);
-        let distance = arr.borrow_elements(|elements| elements.add_offset(24).subtract_ptr(elements));
+        let distance = arr.borrow_elements(|elements| elements.add_offset(24).offset_from(elements));
         assert_eq(|_|"a distance within a buffer", distance, 24);;
-        let no_distance = arr.borrow_elements(|elements| elements.subtract_ptr(elements));
+        let no_distance = arr.borrow_elements(|elements| elements.offset_from(elements));
         assert_eq(|_|"a pointer is no distance from itself", no_distance, 0);;
 
         println("pointer arithmetic answered")
@@ -241,7 +241,7 @@ fn pointer_arithmetic_rc_ir(opt_level: &str) -> String {
 
 /// A pointer is a number, and the two primitives are arithmetic on that number:
 /// `Std::Ptr::add_offset` counts bytes from the address it is given, each way, and
-/// `Std::Ptr::subtract_ptr` answers with the signed count between two addresses. Both wrap at the
+/// `Std::Ptr::offset_from` answers with the signed count between two addresses. Both wrap at the
 /// width of the address.
 #[test]
 pub fn test_pointer_arithmetic_counts_bytes_each_way() {
@@ -259,7 +259,7 @@ pub fn test_each_pointer_primitive_computes_its_result_itself() {
     let dump = pointer_arithmetic_rc_ir("none");
     for (primitive, operation) in [
         ("Std::Ptr::add_offset", "= add_offset("),
-        ("Std::Ptr::subtract_ptr", "= subtract_ptr("),
+        ("Std::Ptr::offset_from", "= offset_from("),
     ] {
         let body = rc_ir_function_bodies(&dump, primitive).join("\n");
         assert!(
@@ -290,7 +290,7 @@ pub fn test_the_inliner_carries_the_pointer_arithmetic_into_its_caller() {
         !written_in_main.is_empty(),
         "the program has an entry point, so the dump holds its body",
     );
-    for operation in ["= add_offset(", "= subtract_ptr("] {
+    for operation in ["= add_offset(", "= offset_from("] {
         assert!(
             written_in_main.contains(operation),
             "`{}` should stand in what `main` writes:\n{}",
@@ -326,4 +326,35 @@ pub fn test_the_offset_is_counted_on_the_integer_address() {
             body,
         );
     }
+}
+
+/// `Std::Ptr::subtract_ptr` answers what `Std::Ptr::offset_from` answers, and naming it is reported
+/// with the message its `DEPRECATED` pragma carries.
+#[test]
+pub fn test_the_deprecated_name_of_the_pointer_difference_answers_the_same() {
+    const SOURCE: &str = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let arr = Array::from_map(4, |i| i * 100);
+            let (canonical, deprecated) = arr.borrow_elements(|elements| (
+                elements.add_offset(24).offset_from(elements),
+                elements.add_offset(24).subtract_ptr(elements)
+            ));
+            assert_eq(|_|"the deprecated name answers the same", deprecated, canonical);;
+            assert_eq(|_|"the deprecated name counts backward", nullptr.subtract_ptr(nullptr.add_offset(16)), -16);;
+            pure()
+        );
+    "#;
+    test_source(SOURCE, Configuration::develop_mode());
+
+    let mut config = Configuration::develop_mode();
+    config.deprecation_mode = DeprecationMode::Deny;
+    let report = run_source_assert_failed(SOURCE, config);
+    assert!(
+        report.contains("Use `Std::Ptr::offset_from` instead."),
+        "naming `subtract_ptr` should be reported with the message its pragma carries:\n{}",
+        report,
+    );
 }

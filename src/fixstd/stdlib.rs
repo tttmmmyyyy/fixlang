@@ -38,8 +38,8 @@ use crate::{
         make_dynamic_object_ty, make_floating_ty, make_integral_ty, make_iostate_unsafe_create,
         make_ptr_ty, mark_threaded_function, multiply_trait_instance_float,
         multiply_trait_instance_int, negate_trait_instance_float, negate_trait_instance_int,
-        not_trait_instance_bool, punched_array_plug, quiet_nan_value, remainder_trait_instance_int,
-        set_array, shift_function, subtract_ptr_function, subtract_trait_instance_float,
+        not_trait_instance_bool, offset_from_function, punched_array_plug, quiet_nan_value,
+        remainder_trait_instance_int, set_array, shift_function, subtract_trait_instance_float,
         subtract_trait_instance_int, swap_array, swap_bounds_unchecked_array,
         undefined_internal_function, unsafe_set_bounds_unchecked_array, with_retained_function,
         BitOperationType,
@@ -628,11 +628,11 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("../docs/std_ptr_add_offset.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PTR_NAME], "subtract_ptr"),
-        subtract_ptr_function(),
+        FullName::from_strs(&[STD_NAME, PTR_NAME], "offset_from"),
+        offset_from_function(),
         None,
         None,
-        Some(include_str!("../docs/std_ptr_subtract_ptr.md").to_string()),
+        Some(include_str!("../docs/std_ptr_offset_from.md").to_string()),
     ));
 
     // FFI

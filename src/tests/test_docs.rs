@@ -87,9 +87,9 @@ mod integration_tests {
                 ["`offset`", "`ptr`"],
             ),
             (
-                "subtract_ptr",
+                "offset_from",
                 "Std::Ptr -> Std::Ptr -> Std::I64",
-                "Subtracts two pointers.",
+                "The distance in bytes from one pointer to another.",
                 ["`origin`", "`ptr`"],
             ),
         ] {
@@ -120,7 +120,7 @@ mod integration_tests {
                     section,
                 );
             }
-            // `subtract_ptr` takes two pointers, so the order the two are listed in is the only
+            // `offset_from` takes two pointers, so the order the two are listed in is the only
             // thing that says which of them the distance is measured from.
             let where_named = parameters
                 .iter()

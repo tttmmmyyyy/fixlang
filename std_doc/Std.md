@@ -4049,19 +4049,28 @@ Adds an offset to a pointer.
 * `offset` - The number of bytes to add. It may be negative.
 * `ptr` - The pointer whose address the offset is added to.
 
-#### subtract_ptr
+#### offset_from
 
 Type: `Std::Ptr -> Std::Ptr -> Std::I64`
 
-Subtracts two pointers.
+The distance in bytes from one pointer to another.
 
-`ptr.subtract_ptr(origin)` is the number of bytes from `origin` to `ptr`. It is negative when `ptr`
+`ptr.offset_from(origin)` is the number of bytes from `origin` to `ptr`. It is negative when `ptr`
 holds the lower address.
 
 ##### Parameters
 
 * `origin` - The pointer the distance is measured from.
 * `ptr` - The pointer the distance is measured to.
+
+#### subtract_ptr
+
+**Deprecated**: Use `Std::Ptr::offset_from` instead.
+
+Type: `Std::Ptr -> Std::Ptr -> Std::I64`
+
+Deprecated alias for `Std::Ptr::offset_from`. Kept for backward
+compatibility; `offset_from` is the canonical name.
 
 ### namespace Std::Rem
 
