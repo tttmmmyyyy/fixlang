@@ -1813,6 +1813,8 @@ impl LLVMGen for InlineLLVMShiftBody {
 
         let is_signed = ty.is_signed_integer();
 
+        // The check reads the amount the program wrote, so it stands ahead of the mask: masking
+        // first would put every amount inside the width and leave the check unable to fire.
         if shift_amount_is_checked(gc) {
             build_shift_amount_check(gc, n, ty, self.is_left);
         }
