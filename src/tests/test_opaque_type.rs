@@ -2471,3 +2471,32 @@ pub fn test_opaque_type_under_a_higher_kinded_associated_type_is_reported() {
         "take(f, [1, 2, 3].to_iter.map(|x| x + 1))",
     );
 }
+
+/// The value a higher-kinded opaque type carries reaches the caller. `Functor` alone gives a use
+/// site no way to read what it holds, so the sibling tests of a higher-kinded opaque type end by
+/// discarding the value; a constraint that takes the value out is what lets one be read, and the
+/// answer here is the one the body put in.
+#[test]
+pub fn test_higher_kinded_opaque_type_carries_its_value_to_the_use_site() {
+    let source = r#"
+        module Main;
+
+        trait [f : *->*] f : Extract {
+            extract : f a -> a;
+        }
+
+        impl Option : Extract {
+            extract = |o| o.as_some;
+        }
+
+        singleton : [?m : * -> *, ?m : Functor, ?m : Extract] a -> ?m a;
+        singleton = |x| Option::some(x);
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"a higher-kinded opaque type's value", singleton(7).map(|x| x * 2).extract, 14);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
