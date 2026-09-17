@@ -1,0 +1,8 @@
+module Test;
+
+test : IO ();
+test = (
+    let args = *IO::get_args;
+    let one = args.@size;
+    println(1.shift_left(one * 64).to_string)
+);

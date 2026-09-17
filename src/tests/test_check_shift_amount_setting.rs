@@ -2,7 +2,7 @@
 //! build. A test build takes the `build.test` section's value, and the `build` section's value
 //! where `build.test` names none.
 //!
-//! The case project under `test_check_shift_amount_setting/cases` shifts an `I64` by 64. Under the
+//! Each case project under `test_check_shift_amount_setting/cases` shifts an `I64` by 64. Under the
 //! check the program stops there; without it the amount is taken modulo the width, so the shift
 //! leaves the value where it is and the program prints it and exits. A run that completes
 //! therefore shows the build was made without the check.
@@ -23,6 +23,19 @@ fn test_build_section_turns_the_check_on_for_the_program() {
         &run_fix(&project_dir, &["run"]),
         SHIFT_STOPPED,
         "`fix run` should stop at the shift, because the build section turns the check on.",
+    );
+}
+
+/// A test build takes the `build` section's value where the `build.test` section names none, so a
+/// project that asks for the check runs its tests under it.
+#[test]
+fn test_build_section_turns_the_check_on_for_a_test() {
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_on_in_build");
+    assert_failed_with(
+        &run_fix(&project_dir, &["test"]),
+        SHIFT_STOPPED,
+        "`fix test` should stop at the shift, because the build section turns the check on and the \
+         test section names no value of its own.",
     );
 }
 

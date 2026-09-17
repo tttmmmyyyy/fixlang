@@ -44,6 +44,14 @@ fn shift_amount_checked_config() -> Configuration {
     config
 }
 
+/// A configuration that asks for the shift amount check and then leaves out every check that ends
+/// the program, as `--check-shift-amount --no-runtime-check` does.
+fn shift_amount_unchecked_config() -> Configuration {
+    let mut config = shift_amount_checked_config();
+    config.no_runtime_check = true;
+    config
+}
+
 /// Builds `source_with_a_runtime_zero(body)` under a configuration that stops at a shift amount
 /// outside the width, runs it, and asserts that it stops with a report containing `report`.
 fn assert_the_check_stops(body: &str, report: &str) {
@@ -164,6 +172,24 @@ pub fn test_the_check_stops_a_shift_of_an_unsigned_type() {
     );
 }
 
+/// The report shows the amount the program wrote, so it widens the amount to 64 bits by the
+/// signedness of its type: a negative amount of a signed type reads as the negative number, and an
+/// amount of an unsigned type as the magnitude its bits hold.
+///
+/// A type as wide as the report's own 64 bits leaves the two widenings the same value, so the type
+/// here is narrower than that.
+#[test]
+pub fn test_the_report_widens_the_amount_by_the_signedness_of_its_type() {
+    assert_the_check_stops(
+        "eval 1_I8.shift_left(zero.to_I8 - 1_I8);",
+        "Shift amount outside the width of the type: I8 shift_left, with -1",
+    );
+    assert_the_check_stops(
+        "eval 1_U8.shift_right(zero.to_U8 - 1_U8);",
+        "Shift amount outside the width of the type: U8 shift_right, with 255",
+    );
+}
+
 /// An amount inside the width runs on under the check.
 #[test]
 pub fn test_the_check_lets_an_amount_inside_the_width_run_on() {
@@ -176,5 +202,20 @@ pub fn test_the_check_lets_an_amount_inside_the_width_run_on() {
             "#,
         ),
         shift_amount_checked_config(),
+    );
+}
+
+/// `--no-runtime-check` takes the shift amount check out with the rest of the checks that end the
+/// program, so a build given both it and `--check-shift-amount` runs on at an amount outside the
+/// width.
+#[test]
+pub fn test_the_check_respects_no_runtime_check() {
+    test_source(
+        &source_with_a_runtime_zero(
+            r#"
+                assert_eq(|_|"I64 left by its width", 1.shift_left(zero + 64), 1);;
+            "#,
+        ),
+        shift_amount_unchecked_config(),
     );
 }
