@@ -60,6 +60,7 @@
 
 #### Language
 
+- #336, #693: An opaque type — what a signature writes as `?it`, and what a combinator such as `Iterator::map` returns — is now a type of the kind it was declared with, so a program that reads one as a type constructor applied to an argument is reported. `type [f : *->*] Holder f = box struct { v : f I64 };` with `Holder { v : [1, 2, 3].to_iter.map(|x| x + 1) }` used to pass `fix check` and then abort the compiler, and `id_container : [f : *->*] f I64 -> f I64;` applied to `[1, 2, 3].to_iter` used to compile. Take the whole type in a parameter of kind `*`: `type Holder a = box struct { v : a };`, `id_container : a -> a;`.
 - #588, #594: An `F32` literal now takes the `F32` value nearest the decimal written. `1.000000178813934326171874999999_F32` now gives the lower of the two nearest `F32` values, where it used to give the higher one.
 - #573, #585: A string literal now takes `\'` for a single quote, as a `U8` literal does. It was reported as `Expected string_char.`. An escape sequence a string literal does not have now says what one takes: ``Expected a character or an escape sequence such as `\n`.``
 - #356, #578: A `U8` literal may now hold a double quote, written `'"'` or `'\"'`. Both were reported as `Expected u8_lit_char.` at the quote. The manual now also lists the `'\xHH'` and `"\uXXXX"` escape sequences, which the compiler accepts.

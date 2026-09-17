@@ -16,9 +16,9 @@ use crate::{
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
         types::{
-            is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp,
-            type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo,
-            TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
+            is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar,
+            type_fun, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme,
+            TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
         },
     },
     constants::{
@@ -278,7 +278,7 @@ impl Substitution {
                     self.substitute_predicate(predicate);
                 }
             }
-            UnificationErr::Disjoint(ty1, ty2) => {
+            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::IndivisibleOpaque(ty1, ty2) => {
                 *ty1 = self.substitute_type(ty1);
                 *ty2 = self.substitute_type(ty2);
             }
@@ -438,10 +438,10 @@ impl Substitution {
             },
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
-                    let mut ret = Self::default();
+                    let mut merged = Self::default();
                     match Self::matching_internal(fun1, fun2, fixed_tyvars, kind_env)? {
                         Some(s) => {
-                            if !ret.merge(&s) {
+                            if !merged.merge(&s) {
                                 return Ok(None);
                             }
                         }
@@ -449,13 +449,13 @@ impl Substitution {
                     }
                     match Self::matching_internal(arg1, arg2, fixed_tyvars, kind_env)? {
                         Some(s) => {
-                            if !ret.merge(&s) {
+                            if !merged.merge(&s) {
                                 return Ok(None);
                             }
                         }
                         None => return Ok(None),
                     }
-                    return Ok(Some(ret));
+                    return Ok(Some(merged));
                 }
                 _ => return Ok(None),
             },
@@ -464,19 +464,19 @@ impl Substitution {
                     if assoc_ty1 != assoc_ty2 {
                         return Ok(None);
                     }
-                    let mut ret = Self::default();
+                    let mut merged = Self::default();
                     for i in 0..args1.len() {
                         match Self::matching_internal(&args1[i], &args2[i], fixed_tyvars, kind_env)?
                         {
                             Some(s) => {
-                                if !ret.merge(&s) {
+                                if !merged.merge(&s) {
                                     return Ok(None);
                                 }
                             }
                             None => return Ok(None),
                         }
                     }
-                    return Ok(Some(ret));
+                    return Ok(Some(merged));
                 }
                 _ => return Ok(None),
             },
@@ -748,12 +748,9 @@ impl TypeCheckContext {
         }
     }
 
-    /// Unify the outer expected type with the constructed struct
-    /// type, then return a `name -> field type` map the caller can
-    /// look each provided field expression up in. Returns an empty
-    /// map when `tycon_info` is `None` (the tolerant-mode degrade
-    /// path), so the caller falls back to fresh tyvars for every
-    /// field.
+    /// Unify `expected_ty` with the struct type headed by `tc`, and give the type of each of that
+    /// struct's fields by field name. `tycon_info` is the struct's definition, and is `None` where
+    /// tolerant mode left the type name unresolved, which gives an empty map.
     fn compute_make_struct_field_tys(
         &mut self,
         tc: &Arc<TyCon>,
@@ -796,11 +793,12 @@ impl TypeCheckContext {
         result
     }
 
-    /// Run `Pattern::validate_match_cases_exhaustiveness` on the
-    /// arms of a typed `Match` when at least one arm was a union
-    /// variant (signalled by `cond_tc_info.is_some()`). In
-    /// `error_tolerant` mode a non-exhaustive match is swallowed
-    /// so the typed tree still surfaces to downstream LSP consumers.
+    /// Check that the arms of a typed `Match` cover every variant of the union it matches on.
+    ///
+    /// `cond_tc_info` carries the matched union's TyCon where an arm named a variant of it, and is
+    /// `None` where every arm was of another shape, which leaves nothing to check. In
+    /// `error_tolerant` mode the diagnostic is dropped, so that a match with an arm missing still
+    /// yields its typed tree.
     fn validate_match_exhaustiveness_if_needed(
         &self,
         typed: &Arc<ExprNode>,
@@ -810,7 +808,7 @@ impl TypeCheckContext {
             return Ok(());
         };
         let pats = typed.get_match_pat_vals().into_iter().map(|(pat, _)| pat);
-        let res = Pattern::validate_match_cases_exhaustiveness(
+        let exhaustiveness = Pattern::validate_match_cases_exhaustiveness(
             &cond_tycon,
             &cond_ti,
             &typed.source,
@@ -819,7 +817,7 @@ impl TypeCheckContext {
         if self.error_tolerant {
             Ok(())
         } else {
-            res
+            exhaustiveness
         }
     }
 
@@ -841,11 +839,9 @@ impl TypeCheckContext {
         pat.validate_variant_name(tycon, ti)
     }
 
-    /// Resolve the matched value's TyCon for a `Match` arm with a
-    /// union pattern. Returns the `(TyCon, TyConInfo)` pair required
-    /// by `Pattern::validate_variant_name`. Fails if `cond_ty` isn't
-    /// resolvable to a concrete tycon yet, or if it resolves to a
-    /// non-union type.
+    /// The TyCon of the matched value's type, with its `TyConInfo`, for a `Match` arm whose
+    /// pattern names a union variant. The inference has to have settled `cond_ty` to a union TyCon
+    /// by this point.
     fn resolve_match_cond_tycon(
         &mut self,
         cond: &Arc<ExprNode>,
@@ -1860,16 +1856,12 @@ impl TypeCheckContext {
     /// expression annotated with inferred types on every subnode.
     ///
     /// # Returns
-    /// * `Ok((expr, errors))` — substitution finished and `expr` is
-    ///   the fully substituted typed expression. `errors` may still
-    ///   contain tolerated diagnostics (holes, cannot-infer,
-    ///   unsatisfiable predicates, disjoint equalities). Callers
-    ///   should propagate `errors` but may also use `expr` (e.g. save
-    ///   it so the LSP can hover on its sub-expressions).
-    /// * `Err(errs)` — a hard failure before substitution completed
-    ///   (type mismatch in `unify_type_of_expr`, failure of
-    ///   `substitute_and_reduce_type` inside `fix_types`, or scheme
-    ///   instantiation failure). No typed expression to return.
+    /// `Ok` carries the typed expression with the substitution applied
+    /// throughout, together with the diagnostics that were tolerated —
+    /// holes, types left undetermined, predicates and equalities that
+    /// went unmet — so an `Ok` whose `Errors` is non-empty is a program
+    /// with errors in it. `Err` carries a failure that left no typed
+    /// expression at all.
     pub fn check_type(
         &mut self,
         expr: Arc<ExprNode>,
@@ -1932,8 +1924,8 @@ impl TypeCheckContext {
         // Tolerated diagnostics are collected as a cascade — each
         // layer is reported only if every earlier layer was clean,
         // since later diagnostics are usually consequences of earlier
-        // ones and showing both is just noise. We always return the
-        // typed expression so callers can hand it to the LSP.
+        // ones and showing both is just noise. The typed expression is
+        // returned beside whichever layer is reported.
         //
         // Order (see also doc on `check_types_are_fixed`):
         //   hole > cannot-infer > predicate > equality
@@ -2155,7 +2147,8 @@ impl TypeCheckContext {
     /// fixed stands for a type the caller may not choose, so it agrees with itself alone. A use of
     /// an associated type on either side becomes a pending equality, to be settled once enough is
     /// known about its arguments. Two types no substitution can make equal give
-    /// `UnificationErr::Disjoint`.
+    /// `UnificationErr::Disjoint`, and two that could be made equal only by reading an opaque type
+    /// as a type constructor applied to an argument give `UnificationErr::IndivisibleOpaque`.
     // PROOF: P2a, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unify(
         &mut self,
@@ -2170,6 +2163,21 @@ impl TypeCheckContext {
         // `substitute_and_reduce_type` returned the same Arc unchanged.
         if Arc::ptr_eq(&ty1, &ty2) || ty1 == ty2 {
             return Ok(());
+        }
+
+        // An opaque TyCon short of its arguments is no type, so a type variable required to stand
+        // for one is rejected here. This runs ahead of the type-variable cases, so that a variable
+        // free to be bound and a variable held fixed get the same answer.
+        for (tyvar_side, other_side) in [(&ty1, &ty2), (&ty2, &ty1)] {
+            if matches!(tyvar_side.ty, Type::TyVar(_))
+                && self.is_opaque_tycon_short_of_its_arguments(other_side)
+            {
+                return Err(UnificationErr::IndivisibleOpaque(
+                    tyvar_side.clone(),
+                    other_side.clone(),
+                )
+                .into());
+            }
         }
 
         // Case: Either is a type variable.
@@ -2276,6 +2284,39 @@ impl TypeCheckContext {
             error_tolerant: self.error_tolerant,
         };
         Ok(UnifOrOtherErr::extract_others(tc.unify(&ty1, &ty2))?.is_ok())
+    }
+
+    /// Whether `ty` is an opaque type's TyCon carrying fewer arguments than it takes.
+    ///
+    /// An opaque type is an atom of the kind it was declared with: a signature writing `?it`
+    /// promises a type, and never a type constructor an argument can be split off from. The
+    /// arguments its TyCon takes stand for the generic type variables of that signature, so a
+    /// TyCon carrying fewer of them is a form no signature describes, and `unify` answers
+    /// `UnificationErr::IndivisibleOpaque` where one is required.
+    ///
+    /// `desugar_opaque::resolve_opaque_type_in_type` asserts that no such type reaches it, so a
+    /// path that let one through would abort the compiler rather than report anything.
+    ///
+    /// The answer is `false` for a type headed by a type variable or an associated type, and for
+    /// one headed by a TyCon the type environment does not declare.
+    ///
+    /// # Examples
+    /// `Std::Array::to_iter::?it` takes one argument, so `?it Std::I64` is a type and the bare
+    /// `?it` is not.
+    fn is_opaque_tycon_short_of_its_arguments(&self, ty: &Arc<TypeNode>) -> bool {
+        let Some(tycon) = ty.toplevel_tycon() else {
+            return false;
+        };
+        // The TyCon standing for an opaque type variable carries that variable's name, so the mark
+        // `is_opaque_tyvar` reads answers most types without the lookup below.
+        if !is_opaque_tyvar(&tycon.name.name) {
+            return false;
+        }
+        let Some(info) = self.type_env.tycons().get(&tycon) else {
+            return false;
+        };
+        info.variant == TyConVariant::Opaque
+            && ty.collect_type_arguments().len() < info.tyvars.len()
     }
 
     /// Binds the type variable `tyvar1` to `ty2` by extending the substitution,
@@ -2526,9 +2567,8 @@ impl TypeCheckContext {
     /// associated types. Associated-type reduction can fail when the
     /// substitution / equality state is inconsistent — a normal consequence
     /// of the tolerant elaborator stitching together partially failed
-    /// sub-expressions. On a tolerated failure, keep the un-reduced type so
-    /// downstream consumers (LSP dot completion, hover) can still read
-    /// whatever type info survived.
+    /// sub-expressions. On a tolerated failure the un-reduced type is kept,
+    /// so that whatever the inference did settle stays readable.
     fn substitute_and_reduce_type_or_keep(
         &mut self,
         ty: &Arc<TypeNode>,
@@ -2959,7 +2999,8 @@ fn make_struct_fields_in_declaration_order(
     Ok(ordered)
 }
 
-/// Returns the trimmed source text covered by `span` if it fits on a single line and within a small character budget, suitable for inlining into a diagnostic message.
+/// The trimmed source text `span` covers, where that text stands on one line and stays inside a
+/// small budget of characters, so that a diagnostic can quote it inline.
 fn short_span_snippet(span: &Span) -> Option<String> {
     /// The longest snippet a message quotes. Long enough for a field name or a small expression,
     /// short enough to leave the message readable.
@@ -3182,6 +3223,9 @@ pub enum UnificationErr {
     Endless(Vec<Predicate>),
     /// Two types that are required to be equal and that unification could not make equal.
     Disjoint(Arc<TypeNode>, Arc<TypeNode>),
+    /// Two types that are required to be equal, which unification could make equal only by reading
+    /// an opaque type as a type constructor applied to an argument.
+    IndivisibleOpaque(Arc<TypeNode>, Arc<TypeNode>),
 }
 
 impl UnificationErr {
@@ -3193,7 +3237,7 @@ impl UnificationErr {
             UnificationErr::Circular(way) | UnificationErr::Endless(way) => {
                 Self::reported_predicate(way).to_string()
             }
-            UnificationErr::Disjoint(ty1, ty2) => {
+            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::IndivisibleOpaque(ty1, ty2) => {
                 format!("{} = {}", ty1.to_string(), ty2.to_string())
             }
         }
@@ -3213,6 +3257,10 @@ impl UnificationErr {
     fn note(&self) -> Option<String> {
         match self {
             UnificationErr::Unsatisfiable(_) | UnificationErr::Disjoint(_, _) => None,
+            UnificationErr::IndivisibleOpaque(_, _) => Some(
+                "An opaque type cannot be read as a type constructor applied to an argument."
+                    .to_string(),
+            ),
             // A deduction that comes straight back to where it began is the whole story; a longer
             // one is told by the constraints it passes through.
             UnificationErr::Circular(way) if way.len() <= 2 => {
@@ -3243,7 +3291,7 @@ impl UnificationErr {
                     pred.free_vars_to_vec(buf);
                 }
             }
-            UnificationErr::Disjoint(ty1, ty2) => {
+            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::IndivisibleOpaque(ty1, ty2) => {
                 ty1.free_vars_to_vec(buf);
                 ty2.free_vars_to_vec(buf);
             }
