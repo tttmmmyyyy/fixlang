@@ -1980,10 +1980,14 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// Evaluates `Std::Ptr::add_offset`: the address a signed number of bytes past the given pointer.
 ///
-/// The offset is applied to the integer address, so it may be negative and the address it names may
-/// lie outside the object the pointer points into. The integer address also costs the pointer its
-/// provenance: LLVM takes a value built by `inttoptr` to point into any allocation, so an access
-/// through the result may reach any object.
+/// A pointer is a number in Fix, and this is arithmetic on that number: every offset is defined,
+/// including a negative one, one whose result lies outside the object the pointer points into, and
+/// one whose sum wraps at the width of the address. The offset therefore goes through the integer
+/// address. A `getelementptr inbounds` is `poison` once the address it computes leaves its
+/// allocation, and every `getelementptr` the compiler emits is `inbounds`.
+///
+/// The price of the integer address is the pointer's provenance: LLVM takes a value built by
+/// `inttoptr` to point into any allocation, so an access through the result may reach any object.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMAddOffsetBody {
     /// The local binding holding the offset, in bytes.
@@ -2082,8 +2086,9 @@ pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// Evaluates `Std::Ptr::subtract_ptr`: the distance in bytes from one pointer to another, as a
 /// signed count.
 ///
-/// The distance is taken between the integer addresses, so the two pointers may point into
-/// different objects.
+/// A pointer is a number in Fix, and this is the difference of two such numbers: the two pointers
+/// may point into different objects, the result may be negative, and the difference wraps at the
+/// width of `I64`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMSubtractPtrBody {
     /// The local binding holding the pointer the distance is measured from.

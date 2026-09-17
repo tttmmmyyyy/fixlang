@@ -4,5 +4,5 @@ Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calcul
 
 # Parameters
 
-* `rhs`
-* `lhs`
+* `rhs` - The pointer the distance is measured from.
+* `lhs` - The pointer the distance is measured to.

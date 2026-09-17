@@ -4046,8 +4046,8 @@ Adds an offset to a pointer.
 
 ##### Parameters
 
-* `offset`
-* `ptr`
+* `offset` - The number of bytes to add. It may be negative.
+* `ptr` - The pointer whose address the offset is added to.
 
 #### subtract_ptr
 
@@ -4059,8 +4059,8 @@ Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calcul
 
 ##### Parameters
 
-* `rhs`
-* `lhs`
+* `rhs` - The pointer the distance is measured from.
+* `lhs` - The pointer the distance is measured to.
 
 ### namespace Std::Rem
 

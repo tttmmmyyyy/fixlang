@@ -214,6 +214,9 @@ const POINTER_ARITHMETIC_SOURCE: &str = r#"
         assert_eq(|_|"an offset and its opposite", nullptr.add_offset(16).add_offset(-16).to_string, "0000000000000000");;
         assert_eq(|_|"a distance forward", nullptr.add_offset(16).subtract_ptr(nullptr), 16);;
         assert_eq(|_|"a distance backward", nullptr.subtract_ptr(nullptr.add_offset(16)), -16);;
+        assert_eq(|_|"an offset that wraps at the top", nullptr.add_offset(I64::maximum).add_offset(1).to_string, "8000000000000000");;
+        assert_eq(|_|"an offset that wraps at the bottom", nullptr.add_offset(I64::minimum).add_offset(-1).to_string, "7fffffffffffffff");;
+        assert_eq(|_|"a distance that wraps", nullptr.add_offset(I64::maximum).subtract_ptr(nullptr.add_offset(I64::minimum)), -1);;
 
         let arr = Array::from_map(4, |i| i * 100);
         let distance = arr.borrow_elements(|elements| elements.add_offset(24).subtract_ptr(elements));
@@ -236,8 +239,10 @@ fn pointer_arithmetic_rc_ir(opt_level: &str) -> String {
     )
 }
 
+/// A pointer is a number, and the two primitives are arithmetic on that number:
 /// `Std::Ptr::add_offset` counts bytes from the address it is given, each way, and
-/// `Std::Ptr::subtract_ptr` answers with the count between two addresses, signed.
+/// `Std::Ptr::subtract_ptr` answers with the signed count between two addresses. Both wrap at the
+/// width of the address.
 #[test]
 pub fn test_pointer_arithmetic_counts_bytes_each_way() {
     test_source(POINTER_ARITHMETIC_SOURCE, Configuration::develop_mode());
@@ -295,13 +300,15 @@ pub fn test_the_inliner_carries_the_pointer_arithmetic_into_its_caller() {
     }
 }
 
-/// `Std::Ptr::add_offset` counts from the integer address, so the address it answers with may lie
-/// outside the object the pointer points into.
+/// `Std::Ptr::add_offset` counts on the integer address, which is what lets the address it answers
+/// with lie outside the object the pointer points into.
 ///
 /// `getelementptr inbounds` answers `poison` the moment the address it computes leaves the
 /// allocation it started in, and `test_every_pointer_into_an_object_is_computed_inside_it` requires
-/// every `getelementptr` the compiler emits to be `inbounds`. A primitive whose offset may leave
-/// the object therefore computes on the integer address, and the generated code says so.
+/// every `getelementptr` the compiler emits to be `inbounds`. A primitive promising arithmetic on
+/// the address therefore computes on the integer address, and the generated code says so. The
+/// answers alone do not: LLVM leaves a `poison` address reaching `sprintf` where it was, so the
+/// program prints the same text either way.
 #[test]
 pub fn test_the_offset_is_counted_on_the_integer_address() {
     // The property is about what the compiler emits, so it is read before LLVM has run.
