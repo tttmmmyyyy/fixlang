@@ -2094,7 +2094,7 @@ pub struct InlineLLVMSubtractPtrBody {
     /// The local binding holding the pointer the distance is measured from.
     origin_name: FullName,
     /// The local binding holding the pointer the distance is measured to.
-    target_name: FullName,
+    ptr_name: FullName,
 }
 
 #[typetag::serde]
@@ -2105,14 +2105,14 @@ impl LLVMGen for InlineLLVMSubtractPtrBody {
         let origin = gc
             .get_scoped_obj_field(&self.origin_name, 0)
             .into_pointer_value();
-        let target = gc
-            .get_scoped_obj_field(&self.target_name, 0)
+        let ptr = gc
+            .get_scoped_obj_field(&self.ptr_name, 0)
             .into_pointer_value();
 
         // The element type fixes the unit the distance is counted in, and this answers in bytes.
         let distance = gc
             .builder()
-            .build_ptr_diff(i8_ty, target, origin, "ptr_diff@subtract_ptr")
+            .build_ptr_diff(i8_ty, ptr, origin, "ptr_diff@subtract_ptr")
             .unwrap();
 
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@subtract_ptr"));
@@ -2123,12 +2123,12 @@ impl LLVMGen for InlineLLVMSubtractPtrBody {
         format!(
             "subtract_ptr({}, {})",
             self.origin_name.to_string(),
-            self.target_name.to_string()
+            self.ptr_name.to_string()
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.origin_name, &mut self.target_name]
+        vec![&mut self.origin_name, &mut self.ptr_name]
     }
 
     fn result_locality(
@@ -2145,11 +2145,11 @@ impl LLVMGen for InlineLLVMSubtractPtrBody {
     }
 }
 
-/// The distance in bytes from `origin` to `target`, as a signed count.
+/// The distance in bytes from `origin` to `ptr`, as a signed count.
 /// Type: Ptr -> Ptr -> I64
 pub fn subtract_ptr_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ORIGIN_NAME: &str = "origin";
-    const TARGET_NAME: &str = "target";
+    const PTR_NAME: &str = "ptr";
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -2160,11 +2160,11 @@ pub fn subtract_ptr_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(ORIGIN_NAME)],
         expr_abs(
-            vec![var_local(TARGET_NAME)],
+            vec![var_local(PTR_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMSubtractPtrBody {
                     origin_name: FullName::local(ORIGIN_NAME),
-                    target_name: FullName::local(TARGET_NAME),
+                    ptr_name: FullName::local(PTR_NAME),
                 }),
                 make_i64_ty(),
                 None,

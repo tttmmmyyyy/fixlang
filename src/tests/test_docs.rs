@@ -90,7 +90,7 @@ mod integration_tests {
                 "subtract_ptr",
                 "Std::Ptr -> Std::Ptr -> Std::I64",
                 "Subtracts two pointers.",
-                ["`origin`", "`target`"],
+                ["`origin`", "`ptr`"],
             ),
         ] {
             let section = documented_section(&document, name);
