@@ -52,10 +52,12 @@ use crate::return_abi::{
 use crate::tbaa::{MemoryRegion, TbaaTags};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
+use inkwell::llvm_sys::core::LLVMBuildFreeze;
 use inkwell::llvm_sys::debuginfo::LLVMMetadataReplaceAllUsesWith;
 use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
 use inkwell::types::StructType;
+use inkwell::values::AsValueRef;
 use inkwell::values::BasicValue;
 use inkwell::values::BasicValueEnum;
 use inkwell::values::FunctionValue;
@@ -81,6 +83,7 @@ use inkwell::{
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue},
 };
+use std::ffi::CString;
 use std::{cell::RefCell, iter::successors, sync::Arc};
 
 /// A value bound to a name in the current scope.
@@ -3003,6 +3006,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
         match call_site.try_as_basic_value() {
             ValueKind::Basic(ret_c_val) => {
+                // What the C function returns is outside what Fix's types say, so fix its bits here.
+                let ret_c_val = self.build_freeze(ret_c_val, "FFI_CALL_result");
                 if is_io {
                     let ret_struct_ty = type_tycon(ret_tycon).get_struct_type(self);
                     let ret_struct_val = ret_struct_ty.get_poison();
@@ -3213,7 +3218,31 @@ impl<'c, 'm> Generator<'c, 'm> {
         let larger_ty = if from_size > to_size { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
         self.build_store(MemoryRegion::Data, ptr, val);
-        self.build_load(MemoryRegion::Data, to_ty, ptr, "bit_cast")
+        // The store covers the bytes of `from_ty`; a wider `to_ty`, or padding inside `from_ty`,
+        // leaves the rest of the load reading memory nothing wrote.
+        let loaded = self.build_load(MemoryRegion::Data, to_ty, ptr, "bit_cast");
+        self.build_freeze(loaded, "bit_cast_frozen")
+    }
+
+    /// `val` with its undefined bits fixed: one value that answers the same to every read of it.
+    ///
+    /// A value reaching the program from outside what Fix's types cover -- memory this code never
+    /// wrote, a C function's result -- can carry bits LLVM holds to be undefined, and a read of such
+    /// a bit may answer differently each time. Freezing chooses one answer and holds it for every
+    /// reader, which is what lets the value be stated to hold no undefined bit at all.
+    ///
+    /// The instruction names a value rather than work the machine does, so the code that comes out
+    /// is the same.
+    pub fn build_freeze(&self, val: BasicValueEnum<'c>, name: &str) -> BasicValueEnum<'c> {
+        // inkwell wraps no `freeze`, so reach the instruction through the C API it is built on.
+        let name = CString::new(name).expect("an LLVM value name holds no NUL byte");
+        unsafe {
+            BasicValueEnum::new(LLVMBuildFreeze(
+                self.builder().as_mut_ptr(),
+                val.as_value_ref(),
+                name.as_ptr(),
+            ))
+        }
     }
 
     /// Add a named enum attribute (e.g. `noreturn`, `noalias`) to a function. Enum attributes
