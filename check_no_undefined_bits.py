@@ -27,8 +27,11 @@ The walk is per field rather than per byte: a scaffold built by `insertvalue` fr
 once every field has been written, which is how the code generator builds an aggregate. `freeze`
 makes its result clean, which is what that instruction is for.
 
-A `phi` skips what reaches it from a block that ends the program: the code generator gives a
-diverging arm a value so that the merge has one, and control never arrives from there.
+Three places are passed over, because control never arrives at any of them. A block no branch names
+is one the code generator opens after `unreachable` so that what follows has somewhere to go. What
+follows a call that never returns is written so that the block has an end. And a `phi` skips what
+reaches it from a block that ends the program, since the code generator gives a diverging arm a value
+only so that the merge has one.
 
 Two things the walk does not follow. A value stored to memory and loaded back is clean here, so a
 field left unwritten in an allocated object is invisible to this walk -- what the walk covers is the
@@ -48,6 +51,7 @@ ARRAY_TYPE = re.compile(r"^\[\s*(\d+)\s*x\s")
 ATTRIBUTE_GROUP = re.compile(r"^attributes\s+(#\d+)\s*=\s*\{(.*)\}")
 DECLARATION = re.compile(r"^(?:declare|define)\b.*?@(\S+?)\(")
 BLOCK_LABEL = re.compile(r"^([-a-zA-Z$._0-9]+):")
+BRANCH_TARGET = re.compile(r"\blabel\s+%([-a-zA-Z$._0-9]+)")
 CALLEE = re.compile(r"@([-a-zA-Z$._0-9]+|\"[^\"]*\")\s*\(")
 
 
@@ -212,15 +216,40 @@ def ending_blocks(body: List[str], never_return: set) -> set:
     return labels
 
 
+def unreached_blocks(body: List[str]) -> set:
+    """The labels of the blocks no branch names, which is every block but the first that is dead."""
+    targets = set()
+    labels = []
+    for line in body:
+        label = BLOCK_LABEL.match(line)
+        if label:
+            labels.append(label.group(1))
+        targets.update(BRANCH_TARGET.findall(line))
+    return {label for label in labels if label not in targets}
+
+
 def check_function(name: str, body: List[str], path: str, never_return: set) -> List[str]:
     """The lines of `body` that hand a value with undefined bits to a caller or a callee."""
     taints: Dict[str, Taint] = {}
     findings: List[str] = []
     ending = ending_blocks(body, never_return)
+    unreached = unreached_blocks(body)
+    reached = True
 
     for line in body:
         text = line.strip()
         if not text or text.startswith(";"):
+            continue
+
+        label = BLOCK_LABEL.match(line)
+        if label:
+            reached = label.group(1) not in unreached
+            continue
+        if not reached:
+            continue
+        if any(callee.strip('"') in never_return for callee in CALLEE.findall(line)):
+            # Control stops here; what the block goes on to say is written to give it an end.
+            reached = False
             continue
 
         assignment = ASSIGNMENT.match(line)

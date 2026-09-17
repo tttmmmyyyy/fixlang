@@ -137,8 +137,9 @@ impl<'c> ValueAccessor<'c> {
                     match call {
                         ValueKind::Basic(val) => val,
                         ValueKind::Instruction(_) => {
-                            let ty = ty.get_embedded_type(gc);
-                            Generator::get_poison(&ty)
+                            // An accessor whose value occupies no storage returns nothing, and a
+                            // value of no bits is written by naming every one of them.
+                            ty.get_embedded_type(gc).const_zero()
                         }
                     }
                 };
@@ -1948,7 +1949,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         parts: &mut impl Iterator<Item = BasicValueEnum<'c>>,
     ) -> BasicValueEnum<'c> {
         if self.is_zero_sized(ty) {
-            return Self::get_poison(&ty);
+            // A value of no bits is written by naming every one of them, which is none.
+            return ty.const_zero();
         }
         match ty {
             BasicTypeEnum::StructType(st) => {
