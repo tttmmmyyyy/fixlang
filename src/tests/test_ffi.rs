@@ -1,7 +1,8 @@
 use crate::{
+    ast::program::TypeEnv,
     build::build_object_files::get_target_machine,
     configuration::{Configuration, OutputFileType},
-    constants::COMPILER_TEST_WORKING_PATH,
+    constants::{COMPILER_TEST_WORKING_PATH, C_ENTRY_POINT_NAME},
     elaboration::elaborate_via_config,
     error::panic_if_err,
     fixstd::runtime::{
@@ -315,7 +316,7 @@ pub fn test_export_non_ascii_first_character_fails() {
 #[test]
 pub fn test_export_taking_a_name_the_compiler_owns_fails() {
     for (c_function_name, reason) in [
-        ("main", "it is the entry point of the program"),
+        (C_ENTRY_POINT_NAME, "it is the entry point of the program"),
         (RUNTIME_ABORT, "belongs to the Fix runtime"),
         (RUNTIME_GET_ARGC, "belongs to the Fix runtime"),
     ] {
@@ -336,6 +337,37 @@ pub fn test_export_taking_a_name_the_compiler_owns_fails() {
     }
 }
 
+/// The names of the C functions the compiler writes a body for when it builds the runtime under
+/// `config`.
+///
+/// The runtime is the only thing built into the module read back here, so every function it holds
+/// is one of the runtime's own, and a function the compiler leaves to the C runtime carries no
+/// basic block while one whose body it writes carries at least one.
+fn runtime_functions_with_bodies(config: &Configuration, type_env: &TypeEnv) -> Vec<String> {
+    let context = Context::create();
+    let target_machine = get_target_machine(config.get_llvm_opt_level(), config);
+    let module = Generator::create_module("compiler_defined_c_names", &context, &target_machine);
+    let mut gc = Generator::new(
+        &context,
+        &module,
+        target_machine.get_target_data(),
+        config.clone(),
+        type_env.clone(),
+        Arc::new(Map::default()),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+    );
+    build_runtime(&mut gc, BuildMode::Declare);
+    build_runtime(&mut gc, BuildMode::Implement);
+
+    module
+        .get_functions()
+        .filter(|func| func.count_basic_blocks() > 0)
+        .map(|func| func.get_name().to_string_lossy().to_string())
+        .collect()
+}
+
 /// Every function the compiler writes a body for is one an export is refused. The names are read
 /// off a module the runtime was built into rather than listed here, so a runtime function written
 /// under a name outside the reserved prefix is reported by this test rather than by a program whose
@@ -349,33 +381,7 @@ pub fn test_every_function_the_compiler_writes_a_body_for_is_refused_as_an_expor
     for threaded in [false, true] {
         let mut config = base.clone();
         config.threaded = threaded;
-        let context = Context::create();
-        let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
-        let module =
-            Generator::create_module("compiler_defined_c_names", &context, &target_machine);
-        // The runtime is the only thing built into this module, so every function read back below
-        // is one of its own.
-        let mut gc = Generator::new(
-            &context,
-            &module,
-            target_machine.get_target_data(),
-            config.clone(),
-            type_env.clone(),
-            Arc::new(Map::default()),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-        );
-        build_runtime(&mut gc, BuildMode::Declare);
-        build_runtime(&mut gc, BuildMode::Implement);
-
-        // A function the compiler leaves to the C runtime carries no basic block; one whose body it
-        // writes carries at least one.
-        let written_here = module
-            .get_functions()
-            .filter(|func| func.count_basic_blocks() > 0)
-            .map(|func| func.get_name().to_string_lossy().to_string())
-            .collect::<Vec<_>>();
+        let written_here = runtime_functions_with_bodies(&config, &type_env);
         assert!(
             !written_here.is_empty(),
             "building the runtime writes the body of at least one function, so that this test has \

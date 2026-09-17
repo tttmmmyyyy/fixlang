@@ -54,8 +54,15 @@ mod integration_tests {
     fn test_a_value_the_compiler_defines_is_documented() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let project_dir = temp_dir.path().join("std_doc");
+        fs::create_dir(&project_dir).expect("Failed to create the copy of the std_doc project");
+        // The project's own two files, and nothing else `std_doc` holds: `test_generate_documents`
+        // regenerates `Std.md` in that directory and leaves a build directory beside it, and it
+        // runs alongside this test.
         let source_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("std_doc");
-        copy_dir_recursive(&source_dir, &project_dir).expect("Failed to copy the std_doc project");
+        for file in ["fixproj.toml", "main.fix"] {
+            fs::copy(source_dir.join(file), project_dir.join(file))
+                .unwrap_or_else(|e| panic!("Failed to copy std_doc/{}: {}", file, e));
+        }
 
         let output = fix_command()
             .args(&["docs", "-m", "Std", "-o", "."])
