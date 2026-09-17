@@ -3218,9 +3218,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         let larger_ty = if from_size > to_size { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
         self.build_store(MemoryRegion::Data, ptr, val);
-        // The store covers the bytes of `from_ty`; a wider `to_ty`, or padding inside `from_ty`,
-        // leaves the rest of the load reading memory nothing wrote.
         let loaded = self.build_load(MemoryRegion::Data, to_ty, ptr, "bit_cast");
+        // Where the store leaves a byte the load reads -- a wider `to_ty`, or a hole inside `from_ty`
+        // -- the load reads memory nothing wrote, and what it reads there is fixed here.
+        if from_size >= to_size && self.covers_its_bytes(from_ty) {
+            return loaded;
+        }
         self.build_freeze(loaded, "bit_cast_frozen")
     }
 
@@ -3242,6 +3245,28 @@ impl<'c, 'm> Generator<'c, 'm> {
                 val.as_value_ref(),
                 name.as_ptr(),
             ))
+        }
+    }
+
+    /// Whether storing a value of `ty` writes every byte of the space it occupies.
+    ///
+    /// A struct laid out with a field on a boundary its predecessor does not reach, and an array of
+    /// such a struct, hold bytes no field owns: a store writes the fields and leaves those bytes as
+    /// they were.
+    fn covers_its_bytes(&mut self, ty: BasicTypeEnum<'c>) -> bool {
+        match ty {
+            BasicTypeEnum::StructType(st) => {
+                let fields = st.get_field_types();
+                let occupied: u64 = fields.iter().map(|field| self.sizeof(field)).sum();
+                occupied == self.sizeof(&ty)
+                    && fields.into_iter().all(|field| self.covers_its_bytes(field))
+            }
+            BasicTypeEnum::ArrayType(at) => {
+                let element = at.get_element_type();
+                self.sizeof(&element) * at.len() as u64 == self.sizeof(&ty)
+                    && self.covers_its_bytes(element)
+            }
+            _ => true,
         }
     }
 
