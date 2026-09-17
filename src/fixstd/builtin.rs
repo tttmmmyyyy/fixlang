@@ -1981,7 +1981,9 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
 /// Evaluates `Std::Ptr::add_offset`: the address a signed number of bytes past the given pointer.
 ///
 /// The offset is applied to the integer address, so it may be negative and the address it names may
-/// lie outside the object the pointer points into.
+/// lie outside the object the pointer points into. What the integer address costs is the pointer's
+/// provenance: LLVM relates a result built by `inttoptr` to no allocation, so an access through it
+/// may reach any other.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMAddOffsetBody {
     /// The local binding holding the offset, in bytes.

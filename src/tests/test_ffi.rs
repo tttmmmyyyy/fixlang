@@ -1,6 +1,7 @@
 use crate::{
     configuration::Configuration,
     constants::COMPILER_TEST_WORKING_PATH,
+    fixstd::runtime::{RUNTIME_ABORT, RUNTIME_GET_ARGC},
     misc::function_name,
     tests::test_util::{
         emitted_llvm_ir, fix_command, test_source, test_source_fail, test_source_with_c, EmittedIr,
@@ -306,8 +307,8 @@ pub fn test_export_non_ascii_first_character_fails() {
 pub fn test_export_taking_a_name_the_compiler_owns_fails() {
     for (c_function_name, reason) in [
         ("main", "it is the entry point of the program"),
-        ("fixruntime_abort", "belongs to the Fix runtime"),
-        ("fixruntime_get_argc", "belongs to the Fix runtime"),
+        (RUNTIME_ABORT, "belongs to the Fix runtime"),
+        (RUNTIME_GET_ARGC, "belongs to the Fix runtime"),
     ] {
         let source = format!(
             r##"
