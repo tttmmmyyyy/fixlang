@@ -20,7 +20,7 @@ pub fn test_generate_documents() {
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
-    use std::{fs, path::PathBuf};
+    use std::{fs, iter, path::PathBuf};
     use tempfile::TempDir;
 
     /// The section a generated document gives the value `name`: its heading and the lines under it,
@@ -40,7 +40,7 @@ mod integration_tests {
         let Some(heading_line) = lines.next() else {
             return String::new();
         };
-        std::iter::once(heading_line)
+        iter::once(heading_line)
             .chain(lines.take_while(|line| !opens_an_item(line)))
             .collect::<Vec<_>>()
             .join("\n")

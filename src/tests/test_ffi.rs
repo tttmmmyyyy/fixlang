@@ -16,11 +16,11 @@ use crate::{
     },
 };
 use inkwell::context::Context;
-use std::sync::Arc;
 use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
+    sync::Arc,
 };
 
 // An exported function exchanges values with C through the C ABI, and the wrapper the compiler
