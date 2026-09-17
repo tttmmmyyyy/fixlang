@@ -2042,6 +2042,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.context.void_type().fn_type(&param_tys, false),
                 Some(Linkage::Internal),
             );
+            self.state_boundary_values_are_written(func);
             let bb = self.context.append_basic_block(func, "entry");
             let _builder_guard = self.push_builder();
             self.builder().position_at_end(bb);
@@ -2830,6 +2831,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.module
                 .add_function(&object_file_symbol_name(name), llvm_fn_ty, Some(linkage));
         func.set_call_conventions(self.lambda_calling_convention());
+        self.state_boundary_values_are_written(func);
         if fn_ty.is_funptr() {
             self.add_global_object(name.clone(), func, fn_ty.clone());
         }
@@ -2866,6 +2868,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let acc_fn = self
             .module
             .add_function(&acc_fn_name, acc_fn_ty, Some(Linkage::Internal));
+        self.state_boundary_values_are_written(acc_fn);
         self.add_global_object(name.clone(), acc_fn, ty);
         Some(acc_fn)
     }
@@ -3269,6 +3272,25 @@ impl<'c, 'm> Generator<'c, 'm> {
                     && self.covers_its_bytes(element)
             }
             _ => true,
+        }
+    }
+
+    /// State that every value crossing `func`'s boundary has all of its bits written.
+    ///
+    /// Fix's types cover every value a generated function takes and returns: no Fix program leaves
+    /// one uninitialized, and where the code generator makes a value of its own it writes every bit
+    /// of it. LLVM assumes neither on its own, so without this it has to keep an argument at the
+    /// place the caller put it -- it cannot move an instruction reading one to where it runs
+    /// unconditionally, and it inserts a `freeze` before branching on one.
+    ///
+    /// `check_no_undefined_bits.py` is what holds the statement up: it walks the emitted IR and
+    /// reports any value with a bit nothing wrote that reaches a call argument or a `ret`.
+    pub fn state_boundary_values_are_written(&self, func: FunctionValue<'c>) {
+        for index in 0..func.count_params() {
+            self.add_enum_attribute(func, "noundef", AttributeLoc::Param(index));
+        }
+        if func.get_type().get_return_type().is_some() {
+            self.add_enum_attribute(func, "noundef", AttributeLoc::Return);
         }
     }
 

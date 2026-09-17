@@ -2329,6 +2329,7 @@ pub fn get_traverser_ptr<'c, 'm>(
                 let func = gc
                     .module
                     .add_function(func_name, func_type, Some(Linkage::Internal));
+                gc.state_boundary_values_are_written(func);
                 let _builder_guard = gc.push_builder();
                 let bb = gc.context.append_basic_block(func, "entry");
                 gc.builder().position_at_end(bb);
@@ -2379,6 +2380,7 @@ pub fn create_traverser<'c, 'm>(
     let func = gc
         .module
         .add_function(&trav_name, func_type, Some(Linkage::Internal));
+    gc.state_boundary_values_are_written(func);
 
     let bb = gc.context.append_basic_block(func, "entry");
 

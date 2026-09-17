@@ -676,6 +676,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 },
             ),
         );
+        self.state_boundary_values_are_written(init_value_fn);
 
         // Evaluate the initializer and mark it global. A unit reading a value another computes
         // calls the function that unit publishes, which it has declared above.
