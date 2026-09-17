@@ -1978,6 +1978,194 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Evaluates `Std::Ptr::add_offset`: the address a signed number of bytes past the given pointer.
+///
+/// The offset is applied to the integer address, so it may be negative and the address it names may
+/// lie outside the object the pointer points into.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMAddOffsetBody {
+    /// The local binding holding the offset, in bytes.
+    offset_name: FullName,
+    /// The local binding holding the pointer the offset is applied to.
+    pointer_name: FullName,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMAddOffsetBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        let i64_ty = gc.context.i64_type();
+        let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+
+        let offset = gc
+            .get_scoped_obj_field(&self.offset_name, 0)
+            .into_int_value();
+        let ptr = gc
+            .get_scoped_obj_field(&self.pointer_name, 0)
+            .into_pointer_value();
+
+        let address = gc
+            .builder()
+            .build_ptr_to_int(ptr, i64_ty, "ptr_to_int@add_offset")
+            .unwrap();
+        let sum = gc
+            .builder()
+            .build_int_add(address, offset, "add@add_offset")
+            .unwrap();
+        let sum_ptr = gc
+            .builder()
+            .build_int_to_ptr(sum, ptr_ty, "int_to_ptr@add_offset")
+            .unwrap();
+
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@add_offset"));
+        obj.insert_field(gc, 0, sum_ptr)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "add_offset({}, {})",
+            self.offset_name.to_string(),
+            self.pointer_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.offset_name, &mut self.pointer_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const OFFSET_NAME: &str = "offset";
+    const POINTER_NAME: &str = "ptr";
+
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        vec![],
+        type_fun(make_i64_ty(), type_fun(make_ptr_ty(), make_ptr_ty())),
+    );
+    let expr = expr_abs(
+        vec![var_local(OFFSET_NAME)],
+        expr_abs(
+            vec![var_local(POINTER_NAME)],
+            expr_llvm(
+                Box::new(InlineLLVMAddOffsetBody {
+                    offset_name: FullName::local(OFFSET_NAME),
+                    pointer_name: FullName::local(POINTER_NAME),
+                }),
+                make_ptr_ty(),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+/// Evaluates `Std::Ptr::subtract_ptr`: the distance in bytes from one pointer to another, as a
+/// signed count.
+///
+/// The two pointers need not point into one object; the distance is taken between the integer
+/// addresses.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMSubtractPtrBody {
+    /// The local binding holding the pointer subtracted from the other.
+    rhs_name: FullName,
+    /// The local binding holding the pointer subtracted from.
+    lhs_name: FullName,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMSubtractPtrBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        let i8_ty = gc.context.i8_type();
+
+        let rhs = gc
+            .get_scoped_obj_field(&self.rhs_name, 0)
+            .into_pointer_value();
+        let lhs = gc
+            .get_scoped_obj_field(&self.lhs_name, 0)
+            .into_pointer_value();
+
+        // The element type fixes the unit the distance is counted in, and a byte is the unit this
+        // answers in.
+        let distance = gc
+            .builder()
+            .build_ptr_diff(i8_ty, lhs, rhs, "ptr_diff@subtract_ptr")
+            .unwrap();
+
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@subtract_ptr"));
+        obj.insert_field(gc, 0, distance)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "subtract_ptr({}, {})",
+            self.rhs_name.to_string(),
+            self.lhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.rhs_name, &mut self.lhs_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+pub fn subtract_ptr_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const RHS_NAME: &str = "rhs";
+    const LHS_NAME: &str = "lhs";
+
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        vec![],
+        type_fun(make_ptr_ty(), type_fun(make_ptr_ty(), make_i64_ty())),
+    );
+    let expr = expr_abs(
+        vec![var_local(RHS_NAME)],
+        expr_abs(
+            vec![var_local(LHS_NAME)],
+            expr_llvm(
+                Box::new(InlineLLVMSubtractPtrBody {
+                    rhs_name: FullName::local(RHS_NAME),
+                    lhs_name: FullName::local(LHS_NAME),
+                }),
+                make_i64_ty(),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
 /// Evaluates `Array::_unsafe_empty_capacity_unchecked`: an array of size 0 whose storage has room
 /// for the given capacity, its elements left uninitialized.
 #[derive(Clone, Serialize, Deserialize)]

@@ -307,7 +307,7 @@ pub fn test_export_taking_a_name_the_compiler_owns_fails() {
     for (c_function_name, reason) in [
         ("main", "it is the entry point of the program"),
         ("fixruntime_abort", "belongs to the Fix runtime"),
-        ("fixruntime_ptr_add_offset", "belongs to the Fix runtime"),
+        ("fixruntime_get_argc", "belongs to the Fix runtime"),
     ] {
         let source = format!(
             r##"

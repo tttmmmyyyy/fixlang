@@ -3805,28 +3805,6 @@ namespace F64 {
     abs = |f| if f < 0.0 { -f } else { f };
 }
 
-namespace Ptr {
-    // Adds an offset to a pointer.
-    //
-    // # Parameters
-    //
-    // * `offset`
-    // * `ptr`
-    add_offset : I64 -> Ptr -> Ptr;
-    add_offset = |off, ptr| FFI_CALL[Ptr fixruntime_ptr_add_offset(Ptr, I64), ptr, off];
-
-    // Subtracts two pointers.
-    // 
-    // Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
-    //
-    // # Parameters
-    //
-    // * `rhs`
-    // * `lhs`
-    subtract_ptr : Ptr -> Ptr -> I64;
-    subtract_ptr = |rhs, lhs| FFI_CALL[I64 fixruntime_subtract_ptr(Ptr, Ptr), lhs, rhs];
-}
-
 impl Ptr : ToString {
     to_string = |v| (
         let data = Array::empty(17); // len(ffffffffffffffff) + 1

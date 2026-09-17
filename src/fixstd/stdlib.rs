@@ -13,14 +13,15 @@ use crate::{
     constants::{
         ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
         ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME,
-        HOLE_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
-        WITH_RETAINED_NAME,
+        HOLE_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME, PTR_NAME, PUNCHED_ARRAY_NAME,
+        STD_NAME, WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
-        add_trait_instance_float, add_trait_instance_int, array_append_capacity_unchecked,
-        array_append_value_capacity_unchecked, array_borrow_elements, array_check_range,
-        array_check_size, array_copy_capacity_bounds_unchecked, array_get_capacity, array_get_size,
+        add_offset_function, add_trait_instance_float, add_trait_instance_int,
+        array_append_capacity_unchecked, array_append_value_capacity_unchecked,
+        array_borrow_elements, array_check_range, array_check_size,
+        array_copy_capacity_bounds_unchecked, array_get_capacity, array_get_size,
         array_is_storage_unique_function, array_mutate_elements_internal,
         array_mutate_elements_ios_internal, array_punch, array_set_capacity_bounds_unchecked,
         array_truncate_bounds_unchecked, array_unsafe_empty, array_unsafe_get_bounds_unchecked,
@@ -38,9 +39,10 @@ use crate::{
         make_ptr_ty, mark_threaded_function, multiply_trait_instance_float,
         multiply_trait_instance_int, negate_trait_instance_float, negate_trait_instance_int,
         not_trait_instance_bool, punched_array_plug, quiet_nan_value, remainder_trait_instance_int,
-        set_array, shift_function, subtract_trait_instance_float, subtract_trait_instance_int,
-        swap_array, swap_bounds_unchecked_array, undefined_internal_function,
-        unsafe_set_bounds_unchecked_array, with_retained_function, BitOperationType,
+        set_array, shift_function, subtract_ptr_function, subtract_trait_instance_float,
+        subtract_trait_instance_int, swap_array, swap_bounds_unchecked_array,
+        undefined_internal_function, unsafe_set_bounds_unchecked_array, with_retained_function,
+        BitOperationType,
     },
     misc::{make_map, upper_camel_to_lower_snake, Map},
     parse::parser::parse_and_save_to_temporary_file,
@@ -616,6 +618,22 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             Some(include_str!("../docs/std_float_quiet_nan.md").to_string()),
         ));
     }
+
+    // Ptr
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, PTR_NAME], "add_offset"),
+        add_offset_function(),
+        None,
+        None,
+        Some(include_str!("../docs/std_ptr_add_offset.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, PTR_NAME], "subtract_ptr"),
+        subtract_ptr_function(),
+        None,
+        None,
+        Some(include_str!("../docs/std_ptr_subtract_ptr.md").to_string()),
+    ));
 
     // FFI
     errors.eat_err(fix_module.add_global_value(
