@@ -341,8 +341,8 @@ pub fn test_export_taking_a_name_the_compiler_owns_fails() {
 /// `config`.
 ///
 /// The runtime is the only thing built into the module read back here, so every function it holds
-/// is one of the runtime's own, and a function the compiler leaves to the C runtime carries no
-/// basic block while one whose body it writes carries at least one.
+/// is one of the runtime's own. A function the compiler leaves to the C runtime carries no basic
+/// block; one whose body the compiler writes carries at least one.
 fn names_of_runtime_functions_with_bodies(
     config: &Configuration,
     type_env: &TypeEnv,
@@ -371,10 +371,11 @@ fn names_of_runtime_functions_with_bodies(
         .collect()
 }
 
-/// Every function the compiler writes a body for is one an export is refused. The names are read
-/// off a module the runtime was built into rather than listed here, so a runtime function written
-/// under a name outside the reserved prefix is reported by this test rather than by a program whose
-/// own definition was silently renamed.
+/// Every function the compiler writes a body for is one an export is refused.
+///
+/// The names are read off a module the runtime was built into, so the list follows the runtime as
+/// it grows. A runtime function added under a name outside the reserved prefix fails this test;
+/// without it, a program exporting that name would have its own definition silently renamed.
 #[test]
 pub fn test_every_function_the_compiler_writes_a_body_for_is_refused_as_an_export() {
     let base = panic_if_err(Configuration::check_mode());

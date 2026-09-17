@@ -1981,9 +1981,9 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
 /// Evaluates `Std::Ptr::add_offset`: the address a signed number of bytes past the given pointer.
 ///
 /// The offset is applied to the integer address, so it may be negative and the address it names may
-/// lie outside the object the pointer points into. What the integer address costs is the pointer's
-/// provenance: LLVM relates a result built by `inttoptr` to no allocation, so an access through it
-/// may reach any other.
+/// lie outside the object the pointer points into. The integer address also costs the pointer its
+/// provenance: LLVM takes a value built by `inttoptr` to point into any allocation, so an access
+/// through the result may reach any object.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMAddOffsetBody {
     /// The local binding holding the offset, in bytes.
@@ -2082,8 +2082,8 @@ pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// Evaluates `Std::Ptr::subtract_ptr`: the distance in bytes from one pointer to another, as a
 /// signed count.
 ///
-/// The two pointers need not point into one object; the distance is taken between the integer
-/// addresses.
+/// The distance is taken between the integer addresses, so the two pointers may point into
+/// different objects.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMSubtractPtrBody {
     /// The local binding holding the pointer the distance is measured from.
@@ -2104,8 +2104,7 @@ impl LLVMGen for InlineLLVMSubtractPtrBody {
             .get_scoped_obj_field(&self.lhs_name, 0)
             .into_pointer_value();
 
-        // The element type fixes the unit the distance is counted in, and a byte is the unit this
-        // answers in.
+        // The element type fixes the unit the distance is counted in, and this answers in bytes.
         let distance = gc
             .builder()
             .build_ptr_diff(i8_ty, lhs, rhs, "ptr_diff@subtract_ptr")

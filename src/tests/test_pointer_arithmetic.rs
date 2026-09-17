@@ -201,9 +201,9 @@ pub fn test_nothing_reads_the_block_a_reallocation_was_given() {
     );
 }
 
-/// A program that offsets a pointer each way and takes the distance between two pointers. It works
-/// on `nullptr`, where every answer is an address the source states outright, and on the elements of
-/// an array, where the same arithmetic runs on an address the program owns.
+/// A program that offsets a pointer each way and takes the distance between two pointers. The
+/// arithmetic runs on `nullptr`, where the source states every answer outright, and on the elements
+/// of an array, where it runs on an address the program owns.
 const POINTER_ARITHMETIC_SOURCE: &str = r#"
     module Main;
 
@@ -246,10 +246,9 @@ pub fn test_pointer_arithmetic_counts_bytes_each_way() {
 /// Each pointer-arithmetic primitive computes its result with an operation of the compiler, so the
 /// instructions stand in whichever unit names the primitive.
 ///
-/// A runtime function's body is written into the main unit alone, so a primitive that called one
-/// leaves every other unit a call across a module boundary. What stands behind that boundary is one
-/// to three instructions, and the boundary is what an optimizer has to fold the surrounding address
-/// arithmetic through.
+/// A runtime function's body is written into the main unit alone, so a primitive that calls one
+/// leaves every other unit a call across a module boundary. Behind that boundary stand one to three
+/// instructions, and an optimizer has to fold the surrounding address arithmetic through it.
 #[test]
 pub fn test_each_pointer_primitive_computes_its_result_itself() {
     let dump = pointer_arithmetic_rc_ir("none");
@@ -272,11 +271,11 @@ pub fn test_each_pointer_primitive_computes_its_result_itself() {
     }
 }
 
-/// The inliner carries a copy of each primitive's body to every place that names it, so at the
-/// level a program is built at the arithmetic stands in the function that writes it.
+/// The inliner carries a copy of each primitive's body to every place that names it, so at `max`,
+/// the level a program is normally built at, the arithmetic stands in the function that writes it.
 ///
-/// Where that copy lands is what decides the cost: a body holding a foreign call is carried just
-/// the same, and every copy of it calls across a module boundary.
+/// Inlining copies whatever the body holds: a body holding a foreign call is carried just the same,
+/// and then every copy of it calls across a module boundary.
 #[test]
 pub fn test_the_inliner_carries_the_pointer_arithmetic_into_its_caller() {
     let dump = pointer_arithmetic_rc_ir("max");

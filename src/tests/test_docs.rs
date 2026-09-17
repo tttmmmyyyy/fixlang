@@ -24,10 +24,11 @@ mod integration_tests {
     use tempfile::TempDir;
 
     /// The section a generated document gives the value `name`: its heading and the lines under it,
-    /// up to the heading that opens the next item.
+    /// up to the heading that opens the next item; the empty string where the document has no
+    /// heading for `name`.
     ///
-    /// A value is headed at level four and a part of one, such as its parameter list, at level
-    /// five, so the next item is the next heading of level four or above.
+    /// A value is headed at level four, and a part of one, such as its parameter list, is headed at
+    /// level five. So the section ends at the next heading whose level is four or less.
     fn documented_section(document: &str, name: &str) -> String {
         let heading = format!("#### {}", name);
         let opens_an_item = |line: &&str| {
