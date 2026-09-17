@@ -218,6 +218,8 @@ const POINTER_ARITHMETIC_SOURCE: &str = r#"
         let arr = Array::from_map(4, |i| i * 100);
         let distance = arr.borrow_elements(|elements| elements.add_offset(24).subtract_ptr(elements));
         assert_eq(|_|"a distance within a buffer", distance, 24);;
+        let no_distance = arr.borrow_elements(|elements| elements.subtract_ptr(elements));
+        assert_eq(|_|"a pointer is no distance from itself", no_distance, 0);;
 
         println("pointer arithmetic answered")
     );
@@ -266,6 +268,35 @@ pub fn test_pointer_arithmetic_is_emitted_where_it_is_written() {
             "`{}` should reach no foreign function:\n{}",
             primitive,
             body,
+        );
+    }
+}
+
+/// At the level a program is built at, the arithmetic stands in the function that writes it.
+///
+/// This is what the change of `-O max` amounts to. The inliner carried a copy of each primitive's
+/// body to every place that names it before as it does now; what the copy held was a call into the
+/// one unit the runtime's body was written into, and what it holds now is the arithmetic itself.
+#[test]
+pub fn test_the_pointer_arithmetic_reaches_the_place_it_is_written() {
+    let dump = build_run_and_read_rc_ir(
+        POINTER_ARITHMETIC_SOURCE,
+        "max",
+        "pointer arithmetic answered",
+        "a program that offsets a pointer and takes the distance between two",
+    );
+    // A closure lifted out of `main` keeps its name, so this is the whole of what `main` writes.
+    let written_in_main = rc_ir_function_bodies(&dump, "Main::main").join("\n");
+    assert!(
+        !written_in_main.is_empty(),
+        "the program has an entry point, so the dump holds its body",
+    );
+    for operation in ["= add_offset(", "= subtract_ptr("] {
+        assert!(
+            written_in_main.contains(operation),
+            "`{}` should stand in what `main` writes:\n{}",
+            operation,
+            written_in_main,
         );
     }
 }

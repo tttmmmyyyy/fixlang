@@ -1,12 +1,21 @@
 use crate::{
-    configuration::Configuration,
+    build::build_object_files::get_target_machine,
+    configuration::{Configuration, OutputFileType},
     constants::COMPILER_TEST_WORKING_PATH,
-    fixstd::runtime::{RUNTIME_ABORT, RUNTIME_GET_ARGC},
-    misc::function_name,
+    elaboration::elaborate_via_config,
+    error::panic_if_err,
+    fixstd::runtime::{
+        build_runtime, compiler_defined_c_function_reason, BuildMode, RUNTIME_ABORT,
+        RUNTIME_GET_ARGC,
+    },
+    generator::Generator,
+    misc::{function_name, Map},
     tests::test_util::{
         emitted_llvm_ir, fix_command, test_source, test_source_fail, test_source_with_c, EmittedIr,
     },
 };
+use inkwell::context::Context;
+use std::sync::Arc;
 use std::{
     fs::{self, File},
     io::Write,
@@ -324,6 +333,61 @@ pub fn test_export_taking_a_name_the_compiler_owns_fails() {
             c_function_name
         );
         test_source_fail(&source, Configuration::develop_mode(), reason);
+    }
+}
+
+/// Every function the compiler writes a body for is one an export is refused. The names are read
+/// off a module the runtime was built into rather than listed here, so a runtime function written
+/// under a name outside the reserved prefix is reported by this test rather than by a program whose
+/// own definition was silently renamed.
+#[test]
+pub fn test_every_function_the_compiler_writes_a_body_for_is_refused_as_an_export() {
+    let base = panic_if_err(Configuration::check_mode());
+    let program = panic_if_err(elaborate_via_config(&base));
+    let type_env = program.type_env().clone();
+    // Multi-threading decides which runtime functions a build emits, so both settings are read.
+    for threaded in [false, true] {
+        let mut config = base.clone();
+        config.threaded = threaded;
+        let context = Context::create();
+        let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
+        let module =
+            Generator::create_module("compiler_defined_c_names", &context, &target_machine);
+        // The runtime is the only thing built into this module, so every function read back below
+        // is one of its own.
+        let mut gc = Generator::new(
+            &context,
+            &module,
+            target_machine.get_target_data(),
+            config.clone(),
+            type_env.clone(),
+            Arc::new(Map::default()),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+        build_runtime(&mut gc, BuildMode::Declare);
+        build_runtime(&mut gc, BuildMode::Implement);
+
+        // A function the compiler leaves to the C runtime carries no basic block; one whose body it
+        // writes carries at least one.
+        let written_here = module
+            .get_functions()
+            .filter(|func| func.count_basic_blocks() > 0)
+            .map(|func| func.get_name().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        assert!(
+            !written_here.is_empty(),
+            "building the runtime writes the body of at least one function, so that this test has \
+             a name to read",
+        );
+        for name in written_here {
+            assert!(
+                compiler_defined_c_function_reason(&name, OutputFileType::Executable).is_some(),
+                "the compiler writes the body of `{}`, so an export of that name has to be refused",
+                name,
+            );
+        }
     }
 }
 

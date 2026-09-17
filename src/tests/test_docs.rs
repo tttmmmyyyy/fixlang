@@ -23,6 +23,98 @@ mod integration_tests {
     use std::{fs, path::PathBuf};
     use tempfile::TempDir;
 
+    /// The section a generated document gives the value `name`: its heading and the lines under it,
+    /// up to the heading that opens the next item.
+    ///
+    /// A value is headed at level four and a part of one, such as its parameter list, at level
+    /// five, so the next item is the next heading of level four or above.
+    fn documented_section(document: &str, name: &str) -> String {
+        let heading = format!("#### {}", name);
+        let opens_an_item = |line: &&str| {
+            let hashes = line.len() - line.trim_start_matches('#').len();
+            (1..=4).contains(&hashes)
+        };
+        let mut lines = document
+            .lines()
+            .skip_while(|line| line.trim_end() != heading);
+        let Some(first) = lines.next() else {
+            return String::new();
+        };
+        std::iter::once(first)
+            .chain(lines.take_while(|line| !opens_an_item(line)))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// A value whose body the compiler supplies has no declaration in a source to carry its
+    /// documentation, and takes it from the text `Program::add_global_value` is given instead.
+    /// `fix docs` renders that text under the value's own namespace, with the type, what the value
+    /// does, and every parameter it names.
+    #[test]
+    fn test_a_value_the_compiler_defines_is_documented() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let project_dir = temp_dir.path().join("std_doc");
+        let source_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("std_doc");
+        copy_dir_recursive(&source_dir, &project_dir).expect("Failed to copy the std_doc project");
+
+        let output = fix_command()
+            .args(&["docs", "-m", "Std", "-o", "."])
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix docs");
+        assert!(
+            output.status.success(),
+            "documenting `Std` failed.\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        let document =
+            fs::read_to_string(project_dir.join("Std.md")).expect("Failed to read Std.md");
+
+        for (name, type_, summary, parameters) in [
+            (
+                "add_offset",
+                "Std::I64 -> Std::Ptr -> Std::Ptr",
+                "Adds an offset to a pointer.",
+                ["`offset`", "`ptr`"],
+            ),
+            (
+                "subtract_ptr",
+                "Std::Ptr -> Std::Ptr -> Std::I64",
+                "Subtracts two pointers.",
+                ["`rhs`", "`lhs`"],
+            ),
+        ] {
+            let section = documented_section(&document, name);
+            assert!(
+                !section.is_empty(),
+                "`Std::Ptr::{}` should be documented in the generated `Std.md`",
+                name,
+            );
+            assert!(
+                section.contains(&format!("Type: `{}`", type_)),
+                "the documentation of `Std::Ptr::{}` should give its type:\n{}",
+                name,
+                section,
+            );
+            assert!(
+                section.contains(summary),
+                "the documentation of `Std::Ptr::{}` should say what it does:\n{}",
+                name,
+                section,
+            );
+            for parameter in parameters {
+                assert!(
+                    section.contains(parameter),
+                    "the documentation of `Std::Ptr::{}` should name its parameter {}:\n{}",
+                    name,
+                    parameter,
+                    section,
+                );
+            }
+        }
+    }
+
     // Get the path to the test project directory
     fn get_test_project_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
