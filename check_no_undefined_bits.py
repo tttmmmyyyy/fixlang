@@ -10,8 +10,11 @@ holds: it follows each `poison` and `undef` the module names, through the instru
 and reports every one that arrives at a call argument or a `ret`.
 
     python3 check_no_undefined_bits.py <module.ll> [<module.ll> ...]
+    python3 check_no_undefined_bits.py --self-test
 
-Exits 0 when nothing arrives, 1 when something does, and 2 when a file cannot be read.
+Exits 0 when nothing arrives, 1 when something does, and 2 when a file cannot be read. `--self-test`
+runs the walk over a module written here whose answers are known, so that a silent run over real
+modules says something.
 
 **Examples**
 
@@ -24,10 +27,13 @@ The walk is per field rather than per byte: a scaffold built by `insertvalue` fr
 once every field has been written, which is how the code generator builds an aggregate. `freeze`
 makes its result clean, which is what that instruction is for.
 
-Two things it does not follow. A value stored to memory and loaded back is clean here, so a field
-left unwritten in an allocated object is invisible to this walk -- what the walk covers is the value
-a function hands to another function. And a value a caller passes in is clean, since this asks what
-this module hands over rather than what it receives.
+A `phi` skips what reaches it from a block that ends the program: the code generator gives a
+diverging arm a value so that the merge has one, and control never arrives from there.
+
+Two things the walk does not follow. A value stored to memory and loaded back is clean here, so a
+field left unwritten in an allocated object is invisible to this walk -- what the walk covers is the
+value a function hands to another function. And a value a caller passes in is clean, since this asks
+what this module hands over rather than what it receives.
 """
 
 import re
@@ -39,6 +45,10 @@ UNDEFINED_CONSTANT = re.compile(r"\b(?:poison|undef)\b")
 ASSIGNMENT = re.compile(r"^\s*(%(?:[-a-zA-Z$._0-9]+|\"[^\"]*\"))\s*=\s*(.*)$")
 FUNCTION_HEADER = re.compile(r"^define\b.*?@([^(]*)\(")
 ARRAY_TYPE = re.compile(r"^\[\s*(\d+)\s*x\s")
+ATTRIBUTE_GROUP = re.compile(r"^attributes\s+(#\d+)\s*=\s*\{(.*)\}")
+DECLARATION = re.compile(r"^(?:declare|define)\b.*?@(\S+?)\(")
+BLOCK_LABEL = re.compile(r"^([-a-zA-Z$._0-9]+):")
+CALLEE = re.compile(r"@([-a-zA-Z$._0-9]+|\"[^\"]*\")\s*\(")
 
 
 class Taint:
@@ -165,10 +175,48 @@ def taint_of_result(expression: str, taints: Dict[str, Taint]) -> Taint:
     return NONE
 
 
-def check_function(name: str, body: List[str], path: str) -> List[str]:
+def never_returning_functions(lines: List[str]) -> set:
+    """The functions of the module that end the program rather than returning to their caller."""
+    groups = {
+        match.group(1)
+        for match in (ATTRIBUTE_GROUP.match(line) for line in lines)
+        if match and "noreturn" in match.group(2)
+    }
+    names = set()
+    for index, line in enumerate(lines):
+        declaration = DECLARATION.match(line)
+        if not declaration:
+            continue
+        attributes = line.split(")", 1)[1] if ")" in line else ""
+        previous = lines[index - 1] if index else ""
+        if any(group in attributes.split() for group in groups) or (
+            previous.startswith("; Function Attrs:") and "noreturn" in previous
+        ):
+            names.add(declaration.group(1).strip('"'))
+    return names
+
+
+def ending_blocks(body: List[str], never_return: set) -> set:
+    """The labels of the blocks that call a function which never returns."""
+    labels = set()
+    current = None
+    for line in body:
+        label = BLOCK_LABEL.match(line)
+        if label:
+            current = label.group(1)
+            continue
+        if current is None:
+            continue
+        if any(callee.strip('"') in never_return for callee in CALLEE.findall(line)):
+            labels.add(current)
+    return labels
+
+
+def check_function(name: str, body: List[str], path: str, never_return: set) -> List[str]:
     """The lines of `body` that hand a value with undefined bits to a caller or a callee."""
     taints: Dict[str, Taint] = {}
     findings: List[str] = []
+    ending = ending_blocks(body, never_return)
 
     for line in body:
         text = line.strip()
@@ -216,7 +264,10 @@ def check_function(name: str, body: List[str], path: str) -> List[str]:
         elif opcode == "phi":
             taint = NONE
             for incoming in re.findall(r"\[([^\]]*)\]", expression):
-                taint = taint.union(taint_of(incoming.split(",")[0], taints))
+                value, _, block = incoming.partition(",")
+                if block.strip().lstrip("%") in ending:
+                    continue
+                taint = taint.union(taint_of(value, taints))
             taints[defined] = taint
         elif opcode in ("load", "alloca"):
             # Memory is outside this walk; see the module docstring.
@@ -231,6 +282,7 @@ def check_module(path: str) -> List[str]:
     with open(path, "r", errors="replace") as handle:
         lines = handle.read().splitlines()
 
+    never_return = never_returning_functions(lines)
     findings: List[str] = []
     name: Optional[str] = None
     body: List[str] = []
@@ -243,17 +295,114 @@ def check_module(path: str) -> List[str]:
         if name is None:
             continue
         if line.startswith("}"):
-            findings.extend(check_function(name, body, path))
+            findings.extend(check_function(name, body, path, never_return))
             name = None
             continue
         body.append(line)
     return findings
 
 
+# A module whose answers are known, so that the walk can be shown to give them.
+SELF_TEST_MODULE = """
+declare void @sink({ i64, i64 })
+declare void @sink_i(i64)
+
+; Function Attrs: noreturn
+declare void @stop() #0
+
+define void @every_field_written(i64 %a, i64 %b) {
+  %0 = insertvalue { i64, i64 } poison, i64 %a, 0
+  %1 = insertvalue { i64, i64 } %0, i64 %b, 1
+  call void @sink({ i64, i64 } %1)
+  ret void
+}
+
+define void @one_field_left(i64 %a) {
+  %0 = insertvalue { i64, i64 } poison, i64 %a, 0
+  call void @sink({ i64, i64 } %0)
+  ret void
+}
+
+define void @frozen(i64 %a) {
+  %0 = insertvalue { i64, i64 } poison, i64 %a, 0
+  %1 = freeze { i64, i64 } %0
+  call void @sink({ i64, i64 } %1)
+  ret void
+}
+
+define i64 @poison_in_the_result() {
+  %0 = add i64 poison, 1
+  ret i64 %0
+}
+
+define void @a_written_field_read_back(i64 %a) {
+  %0 = insertvalue { i64, i64 } poison, i64 %a, 0
+  %1 = extractvalue { i64, i64 } %0, 0
+  call void @sink_i(i64 %1)
+  ret void
+}
+
+define void @an_unwritten_field_read_back(i64 %a) {
+  %0 = insertvalue { i64, i64 } poison, i64 %a, 0
+  %1 = extractvalue { i64, i64 } %0, 1
+  call void @sink_i(i64 %1)
+  ret void
+}
+
+define void @merged_with_a_block_that_stops(i1 %c, i64 %a) {
+entry:
+  br i1 %c, label %stopping, label %carrying
+stopping:
+  call void @stop()
+  br label %merge
+carrying:
+  br label %merge
+merge:
+  %0 = phi i64 [ poison, %stopping ], [ %a, %carrying ]
+  call void @sink_i(i64 %0)
+  ret void
+}
+
+attributes #0 = { noreturn nounwind }
+"""
+
+# The functions of `SELF_TEST_MODULE` the walk is to report, and no others.
+SELF_TEST_ANSWERS = {
+    "one_field_left",
+    "poison_in_the_result",
+    "an_unwritten_field_read_back",
+}
+
+
+def self_test() -> int:
+    """Run the walk over the module written above and compare what it says with what is known."""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile("w", suffix=".ll", delete=False) as handle:
+        handle.write(SELF_TEST_MODULE)
+        path = handle.name
+    findings = check_module(path)
+    reported = {finding.split(": ")[1] for finding in findings}
+    missing = SELF_TEST_ANSWERS - reported
+    extra = reported - SELF_TEST_ANSWERS
+    for finding in findings:
+        print(finding)
+    if missing:
+        print(f"went past: {', '.join(sorted(missing))}")
+    if extra:
+        print(f"reported with nothing to report: {', '.join(sorted(extra))}")
+    if missing or extra:
+        return 1
+    print(f"self-test: the walk reports {len(SELF_TEST_ANSWERS)} of 7 functions, as it is to")
+    return 0
+
+
 def main(argv: List[str]) -> int:
     if len(argv) < 2:
         print(__doc__)
         return 2
+    if argv[1] == "--self-test":
+        return self_test()
     findings: List[str] = []
     for path in argv[1:]:
         try:
