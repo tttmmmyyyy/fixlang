@@ -49,8 +49,12 @@ use crate::{
 };
 use std::sync::Arc;
 
+/// The name of `Std::fix`, the fixed-point combinator a Fix source uses to write a local recursive
+/// function.
 pub const FIX_NAME: &str = "fix";
 
+/// The Fix source of the `Std` module, which `make_std_mod` parses and then extends with the
+/// definitions the compiler supplies.
 const STD_SOURCE: &str = include_str!("std.fix");
 
 /// Body and scheme for a deprecated `Std::<From>::to_<To>` global that delegates
