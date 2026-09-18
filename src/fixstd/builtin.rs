@@ -8267,10 +8267,10 @@ impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
                 .context
                 .void_type()
                 .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
-            let release_function = gc.module.add_function(
+            let release_function = gc.add_generated_function(
                 &release_function_name,
                 release_function_ty,
-                Some(Linkage::Internal),
+                Linkage::Internal,
             );
             let bb = gc.context.append_basic_block(release_function, "entry");
             let _builder_guard = gc.push_builder();
@@ -8381,10 +8381,10 @@ impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
                 .context
                 .void_type()
                 .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
-            let retain_function = gc.module.add_function(
+            let retain_function = gc.add_generated_function(
                 &retain_function_name,
                 retain_function_ty,
-                Some(Linkage::Internal),
+                Linkage::Internal,
             );
             let bb = gc.context.append_basic_block(retain_function, "entry");
             let _builder_guard = gc.push_builder();

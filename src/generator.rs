@@ -56,6 +56,7 @@ use inkwell::llvm_sys::core::LLVMBuildFreeze;
 use inkwell::llvm_sys::debuginfo::LLVMMetadataReplaceAllUsesWith;
 use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
+use inkwell::types::FunctionType;
 use inkwell::types::StructType;
 use inkwell::values::AsValueRef;
 use inkwell::values::BasicValue;
@@ -137,9 +138,8 @@ impl<'c> ValueAccessor<'c> {
                     match call {
                         ValueKind::Basic(val) => val,
                         ValueKind::Instruction(_) => {
-                            // An accessor whose value occupies no storage returns nothing, and a
-                            // value of no bits is written by naming every one of them.
-                            ty.get_embedded_type(gc).const_zero()
+                            // An accessor whose value occupies no storage returns nothing.
+                            Generator::zero_sized_value(ty.get_embedded_type(gc))
                         }
                     }
                 };
@@ -239,6 +239,11 @@ impl<'c> Object<'c> {
 
     /// An object of type `ty` whose value is `poison`, for an unreachable point that still has to
     /// produce a value of the type.
+    ///
+    /// Poison is one value for all of its readers, which is what lets LLVM merge two reads of it or
+    /// duplicate one. The other undefined constant, `undef`, may yield a different value at each
+    /// use, and the choice between them belongs to the code that emits the constant: LLVM may
+    /// weaken a poison to an `undef`, never the reverse.
     pub fn poison<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
         let val = if ty.is_unbox(gc.type_env()) {
             ty.get_struct_type(gc).get_poison().as_basic_value_enum()
@@ -1759,23 +1764,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
     }
 
-    /// A `poison` constant of the given basic type, for a value the generated code never reads: a
-    /// field that every path overwrites, or a value produced where control never arrives.
+    /// The value of a type that occupies no storage: zero of the no bits it holds.
     ///
-    /// Poison is one value for all of its readers, which is what lets LLVM merge two reads of it or
-    /// duplicate one. The other undefined constant, `undef`, may yield a different value at each
-    /// use, and the choice between them belongs to the code that emits the constant: LLVM may
-    /// weaken a poison to an `undef`, never the reverse.
-    pub fn get_poison(ty: &BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
-        match ty {
-            BasicTypeEnum::IntType(ty) => ty.get_poison().as_basic_value_enum(),
-            BasicTypeEnum::FloatType(ty) => ty.get_poison().as_basic_value_enum(),
-            BasicTypeEnum::PointerType(ty) => ty.get_poison().as_basic_value_enum(),
-            BasicTypeEnum::VectorType(ty) => ty.get_poison().as_basic_value_enum(),
-            BasicTypeEnum::StructType(ty) => ty.get_poison().as_basic_value_enum(),
-            BasicTypeEnum::ArrayType(ty) => ty.get_poison().as_basic_value_enum(),
-            BasicTypeEnum::ScalableVectorType(ty) => ty.get_poison().as_basic_value_enum(),
-        }
+    /// Naming every bit of it leaves nothing undefined, which is what a boundary is then able to say
+    /// about a value carrying one.
+    pub fn zero_sized_value(ty: BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
+        ty.const_zero()
     }
 
     /// Whether `ty` occupies no storage, such as an empty union's `[0 x i8]` payload. A zero-sized
@@ -1949,8 +1943,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         parts: &mut impl Iterator<Item = BasicValueEnum<'c>>,
     ) -> BasicValueEnum<'c> {
         if self.is_zero_sized(ty) {
-            // A value of no bits is written by naming every one of them, which is none.
-            return ty.const_zero();
+            return Self::zero_sized_value(ty);
         }
         match ty {
             BasicTypeEnum::StructType(st) => {
@@ -2037,12 +2030,11 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .iter()
                 .map(|t| (*t).into())
                 .collect::<Vec<BasicMetadataTypeEnum>>();
-            let func = self.module.add_function(
+            let func = self.add_generated_function(
                 &func_name,
                 self.context.void_type().fn_type(&param_tys, false),
-                Some(Linkage::Internal),
+                Linkage::Internal,
             );
-            self.state_boundary_values_are_written(func);
             let bb = self.context.append_basic_block(func, "entry");
             let _builder_guard = self.push_builder();
             self.builder().position_at_end(bb);
@@ -2827,11 +2819,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             Linkage::Internal
         };
-        let func =
-            self.module
-                .add_function(&object_file_symbol_name(name), llvm_fn_ty, Some(linkage));
+        let func = self.add_generated_function(&object_file_symbol_name(name), llvm_fn_ty, linkage);
         func.set_call_conventions(self.lambda_calling_convention());
-        self.state_boundary_values_are_written(func);
         if fn_ty.is_funptr() {
             self.add_global_object(name.clone(), func, fn_ty.clone());
         }
@@ -2865,10 +2854,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // The accessor is internal wherever it is: a unit reading a global carries one of its own,
         // so no unit reaches another's. `assert_each_unit_serves_the_globals_it_reads` checks that
         // as the program is divided.
-        let acc_fn = self
-            .module
-            .add_function(&acc_fn_name, acc_fn_ty, Some(Linkage::Internal));
-        self.state_boundary_values_are_written(acc_fn);
+        let acc_fn = self.add_generated_function(&acc_fn_name, acc_fn_ty, Linkage::Internal);
         self.add_global_object(name.clone(), acc_fn, ty);
         Some(acc_fn)
     }
@@ -3223,9 +3209,15 @@ impl<'c, 'm> Generator<'c, 'm> {
         let larger_ty = if from_size > to_size { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
         // Where the store of `val` leaves a byte the load reads -- a wider `to_ty`, or a hole inside
-        // `from_ty` -- writing zero over the slot first is what puts a value in that byte.
+        // `from_ty` -- writing zero over the slot first is what puts a value in that byte. The zero
+        // is written as bytes rather than as a value of `larger_ty`, which would leave that type's
+        // own holes where they were.
         if from_size < to_size || !self.covers_its_bytes(from_ty) {
-            self.build_store(MemoryRegion::Data, ptr, larger_ty.const_zero());
+            let slot_bytes = self
+                .context
+                .i8_type()
+                .array_type(self.sizeof(&larger_ty) as u32);
+            self.build_store(MemoryRegion::Data, ptr, slot_bytes.const_zero());
         }
         self.build_store(MemoryRegion::Data, ptr, val);
         self.build_load(MemoryRegion::Data, to_ty, ptr, "bit_cast")
@@ -3274,6 +3266,25 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
+    /// A function of the generated program, carrying what is true of the values that cross its
+    /// boundary.
+    ///
+    /// Every function this compiler emits a body for is declared here, which is what keeps the
+    /// statement on all of them: written by hand beside each `Module::add_function`, it is a line
+    /// the next such function can be added without. A function this compiler only calls -- one
+    /// named by `FFI_CALL`, one of the runtime's -- is declared through the module directly, since
+    /// what reaches and leaves it is outside what Fix's types say.
+    pub fn add_generated_function(
+        &self,
+        name: &str,
+        ty: FunctionType<'c>,
+        linkage: Linkage,
+    ) -> FunctionValue<'c> {
+        let func = self.module.add_function(name, ty, Some(linkage));
+        self.state_boundary_values_are_written(func);
+        func
+    }
+
     /// State that every value crossing `func`'s boundary has all of its bits written.
     ///
     /// Fix's types cover every value a generated function takes and returns: no Fix program leaves
@@ -3284,7 +3295,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// `check_no_undefined_bits.py` is what holds the statement up: it walks the emitted IR and
     /// reports any value with a bit nothing wrote that reaches a call argument or a `ret`.
-    pub fn state_boundary_values_are_written(&self, func: FunctionValue<'c>) {
+    fn state_boundary_values_are_written(&self, func: FunctionValue<'c>) {
         for index in 0..func.count_params() {
             self.add_enum_attribute(func, "noundef", AttributeLoc::Param(index));
         }
