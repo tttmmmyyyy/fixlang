@@ -74,7 +74,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process,
-    vec::Vec,
 };
 
 /// The allocator the compiler process itself runs on. A program the compiler builds allocates
