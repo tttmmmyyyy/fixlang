@@ -3569,8 +3569,8 @@ pub fn test_integer_to_string_writes_the_decimal_digits() {
 
             // Each power of ten an `I64` reaches, and the numbers either side of it, where the
             // count of digits a number takes changes.
-            let wrong = Iterator::range(0, 19).fold(none(), |e, wrong|
-                let power = Iterator::range(0, e).fold(1, |_, p| p * 10);
+            let wrong = Iterator::range(0, 19).fold(none(), |exponent, wrong|
+                let power = Iterator::range(0, exponent).fold(1, |_, p| p * 10);
                 [power - 1, power, power + 1].to_iter.fold(wrong, keep_wrong)
             );
             assert_eq(|_|"the power of ten written wrongly", wrong.named, "none");;

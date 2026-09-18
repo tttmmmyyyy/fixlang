@@ -98,28 +98,28 @@ static const char FIXRUNTIME_DIGIT_PAIRS[201] =
 int64_t fixruntime_write_u64(char *buf, uint64_t v)
 {
     char digits[FIXRUNTIME_U64_DIGITS];
-    int at = FIXRUNTIME_U64_DIGITS;
+    int start = FIXRUNTIME_U64_DIGITS;
     while (v >= 100)
     {
-        uint64_t rest = v / 100;
-        unsigned int pair = (unsigned int)(v - rest * 100);
-        at -= 2;
-        digits[at] = FIXRUNTIME_DIGIT_PAIRS[2 * pair];
-        digits[at + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * pair + 1];
-        v = rest;
+        uint64_t higher = v / 100;
+        unsigned int pair = (unsigned int)(v - higher * 100);
+        start -= 2;
+        digits[start] = FIXRUNTIME_DIGIT_PAIRS[2 * pair];
+        digits[start + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * pair + 1];
+        v = higher;
     }
     if (v >= 10)
     {
-        at -= 2;
-        digits[at] = FIXRUNTIME_DIGIT_PAIRS[2 * v];
-        digits[at + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * v + 1];
+        start -= 2;
+        digits[start] = FIXRUNTIME_DIGIT_PAIRS[2 * v];
+        digits[start + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * v + 1];
     }
     else
     {
-        digits[--at] = (char)('0' + v);
+        digits[--start] = (char)('0' + v);
     }
-    int64_t length = FIXRUNTIME_U64_DIGITS - at;
-    memcpy(buf, digits + at, (size_t)length);
+    int64_t length = FIXRUNTIME_U64_DIGITS - start;
+    memcpy(buf, digits + start, (size_t)length);
     buf[length] = '\0';
     return length;
 }
