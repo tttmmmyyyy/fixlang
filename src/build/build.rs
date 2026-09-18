@@ -154,11 +154,11 @@ struct RuntimeSource {
 /// `ryu/d2s.c` and `ryu/f2s.c` each define a `to_chars` of their own, so each is a translation unit
 /// of its own.
 ///
-/// They are all compiled with optimization. Writing a number as text is arithmetic, and the
-/// arithmetic an optimizer leaves in place costs several times what it costs optimized: Ryu takes
-/// 214 ns to write a floating point number unoptimized against 88 ns optimized, and one integer
-/// takes 188 instructions against 97. The whole runtime compiles in a few milliseconds, and a
-/// build reuses the objects a previous build of the same compiler wrote.
+/// They are all compiled with optimization. Writing a number as text is arithmetic, and
+/// unoptimized arithmetic costs several times what optimized arithmetic costs: Ryu takes 214 ns to
+/// write a floating point number unoptimized against 88 ns optimized, and one integer takes 188
+/// instructions against 97. The whole runtime compiles in a few milliseconds, and a build reuses
+/// the objects a previous build of the same compiler wrote.
 const RUNTIME_SOURCES: [RuntimeSource; 4] = [
     RuntimeSource {
         object_name: "runtime",

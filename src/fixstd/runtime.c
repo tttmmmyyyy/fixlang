@@ -85,16 +85,16 @@ static const char FIXRUNTIME_DIGIT_PAIRS[201] =
     "0001020304050607080910111213141516171819202122232425262728293031323334353637383940414243444546474849"
     "5051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899";
 
-// The bytes a `uint64_t` takes in decimal: `18446744073709551615` is the longest.
+// The digits a `uint64_t` takes in decimal: `18446744073709551615` is the longest.
 #define FIXRUNTIME_U64_DIGITS 20
 
 // Writes `v` at `buf` in decimal, null-terminated, and reports how many digits it took.
 //
-// The digits are built from the last of them backwards into a scratch, which is what lets one pass
-// produce them without knowing first how many there are, and the scratch is then copied over.
+// The digits are produced from the last backwards into a scratch buffer, so that one pass writes
+// them without first counting how many there are. The scratch is then copied to `buf`.
 //
-// Declared in `float_text.c` as well, which writes a power of ten with it; the two translation
-// units carry the declaration because the runtime has no header of its own.
+// Declared in `float_text.c` as well; the two translation units carry the declaration because the
+// runtime has no header of its own.
 int64_t fixruntime_write_u64(char *buf, uint64_t v)
 {
     char digits[FIXRUNTIME_U64_DIGITS];
@@ -133,18 +133,21 @@ static int64_t fixruntime_write_i64(char *buf, int64_t v)
         return fixruntime_write_u64(buf, (uint64_t)v);
     }
     buf[0] = '-';
-    // The magnitude is taken in unsigned, where negating the least number a `int64_t` holds stays a
-    // number: negating it as signed would leave the type.
+    // The magnitude is taken in unsigned arithmetic, where negating the least number an `int64_t`
+    // holds is still a number. Negating it as signed overflows.
     return 1 + fixruntime_write_u64(buf + 1, -(uint64_t)v);
 }
 
-// The letters a hexadecimal digit is written with.
+// The characters a hexadecimal digit is written with.
 static const char FIXRUNTIME_HEX_DIGITS[17] = "0123456789abcdef";
 
-// The hexadecimal digits a pointer is written with, which is every digit a `uint64_t` holds.
+// How many hexadecimal digits a pointer is written with: every digit a `uint64_t` holds.
 #define FIXRUNTIME_PTR_DIGITS 16
 
-int64_t fixruntime_ptr_to_str(char *buf, uint64_t ptr) // To avoid warning, we use uint64_t instead of void*.
+// Writes `ptr` at `buf` as `FIXRUNTIME_PTR_DIGITS` hexadecimal digits, null-terminated, leading
+// zeros among them, and reports how many digits it wrote. The pointer is taken as a `uint64_t` to
+// avoid a compiler warning.
+int64_t fixruntime_ptr_to_str(char *buf, uint64_t ptr)
 {
     for (int i = 0; i < FIXRUNTIME_PTR_DIGITS; i++)
     {

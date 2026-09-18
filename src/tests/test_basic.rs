@@ -3508,44 +3508,32 @@ pub fn test98() {
     test_source(&source, Configuration::develop_mode());
 }
 
-#[test]
 /// Pins the decimal text `to_string` writes, against a spelling the test builds one digit at a
 /// time: every number of at most four digits, and every power of ten an `I64` reaches with the
-/// numbers either side of it, each with the negative that carries a sign.
+/// numbers either side of it, and the negative of each, which carries a sign.
+#[test]
 pub fn test_integer_to_string_writes_the_decimal_digits() {
     let source = r#"
         module Main;
 
         // The character a digit below ten is written with.
-        //
-        // # Parameters
-        // * `d` - The digit.
         digit : I64 -> String;
         digit = |d| "0123456789".get_sub(d, d + 1);
 
         // The decimal text of a number that is not negative, one digit at a time.
-        //
-        // # Parameters
-        // * `v` - The number to write.
         decimal : I64 -> String;
         decimal = |v| if v < 10 { digit(v) } else { decimal(v / 10) + digit(v % 10) };
 
         // Whether `to_string` writes a number as the digits it is spelled with, behind the sign
         // where it has one.
-        //
-        // # Parameters
-        // * `v` - The number to write.
         spells : I64 -> Bool;
         spells = |v| (
             if v < 0 { v.to_string == "-" + decimal(0 - v) };
             v.to_string == decimal(v)
         );
 
-        // The number the walk found written wrongly, kept from the first one it finds.
-        //
-        // # Parameters
-        // * `v` - The number to check.
-        // * `wrong` - What the walk has found so far.
+        // The first number found written wrongly: `wrong` where it already holds one, and `v`
+        // where `v` or its negative is written wrongly.
         keep_wrong : I64 -> Option I64 -> Option I64;
         keep_wrong = |v, wrong| (
             if wrong.is_some { wrong };
@@ -3553,10 +3541,7 @@ pub fn test_integer_to_string_writes_the_decimal_digits() {
             some(v)
         );
 
-        // The number to name in the message, or `none` where every number was written rightly.
-        //
-        // # Parameters
-        // * `wrong` - What the walk found.
+        // The number to name in the message, or `"none"` where every number was written rightly.
         named : Option I64 -> String;
         named = |wrong| match wrong { none() => "none", some(v) => v.to_string };
 

@@ -3,9 +3,8 @@
 // the digits into it without reading that size, so the derivation is the whole of what keeps the
 // write inside the buffer.
 //
-// So what this file does is write the widest text each of the nine can produce, under Valgrind,
-// where a write past the buffer shows up as an invalid write rather than as a text that happens to
-// read correctly.
+// This file writes the widest text each of the nine can produce, under Valgrind, so that a write
+// past the buffer shows up as an invalid write.
 
 #[cfg(test)]
 mod integer_text_buffer_tests {
@@ -18,7 +17,7 @@ mod integer_text_buffer_tests {
     /// Writes the widest text each of the nine functions can produce -- the greatest value of an
     /// unsigned type, the least of a signed one, and a pointer whose every digit is written --
     /// under Valgrind, so that a buffer sized short of that text shows up as a write past its
-    /// allocation.
+    /// allocation. Their lengths are summed and checked, so a text of the wrong width fails too.
     #[test]
     pub fn test_widest_integer_text_fits_its_buffer() {
         if !platform_valgrind_supported() {

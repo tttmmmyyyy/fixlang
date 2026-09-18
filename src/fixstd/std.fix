@@ -2848,7 +2848,7 @@ namespace String {
         buf._unsafe_from_c_str_with_len(len)
     );
 
-    // Create a string from a byte array holding a text of a known length, with a null after it.
+    // Create a `String` from a byte array holding a text of a known length, with a null after it.
     //
     // If the byte array holds fewer than `length + 1` bytes, or holds something other than `\0` at
     // `length`, this function causes undefined behavior.
@@ -2856,8 +2856,7 @@ namespace String {
     // The byte array must be unshared: this function updates its length in place.
     //
     // # Parameters
-    // * `length` - How many bytes the text holds, its null aside.
-    // * `buf` - The byte array holding it.
+    // * `length` - How many bytes the text holds, the null left out.
     _unsafe_from_c_str_with_len : I64 -> Array U8 -> String;
     _unsafe_from_c_str_with_len = |length, buf| String { _data : buf._unsafe_grow_size(length + 1) };
 

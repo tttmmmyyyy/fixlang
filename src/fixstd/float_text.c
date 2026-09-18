@@ -33,8 +33,8 @@ arithmetic rather than a call into C's library.
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
-// Writes a number at a place in decimal, null-terminated, and answers how many digits it took.
-// Defined in `runtime.c`, and declared here because the runtime has no header of its own.
+// Writes `v` at `buf` in decimal, null-terminated, and reports how many digits it took. Defined
+// in `runtime.c`, and declared here because the runtime has no header of its own.
 int64_t fixruntime_write_u64(char *buf, uint64_t v);
 
 // The bytes `fixruntime_write_float_text` builds a text in. The static assertions at the two
@@ -54,8 +54,8 @@ int64_t fixruntime_write_u64(char *buf, uint64_t v);
 #define F64_POSITIONAL_HIGH 16
 #define F64_DIGITS 17
 
-// Answers with `written` unless a text of that many bytes, and the null after it, fail to fit
-// `size`, where it stops the program instead.
+// Answers with `written` where a text of that many bytes, and the null after it, fit `size`, and
+// stops the program where they do not.
 //
 // The caller in `src/fixstd/std.fix` derives that buffer's size from the widest text it can be
 // asked for, so a text that does not fit means the derivation is wrong. Stopping here names the
@@ -101,7 +101,8 @@ int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8
     return fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*lf", (int)precision, v), size);
 }
 
-// Writes the scientific text Ryu produced the way Fix spells a floating point number.
+// Writes the scientific text Ryu produced the way Fix spells a floating point number, and
+// reports how many bytes the text took.
 //
 // `sci` holds what `d2s_buffered_n` or `f2s_buffered_n` wrote: a sign, the shortest digits that
 // read back as the number with a point after the first of them, `E`, and the power of ten those
