@@ -15,10 +15,10 @@ use tempfile::TempDir;
 /// A union of variants of three widths gives payload buffers read both wider and narrower than the
 /// value put in them, and one of those variants holds a byte no field owns. A boxed value gives the
 /// helpers that retain, release and traverse one. A fold gives a value a loop carries, which is
-/// defined below the `phi` that reads it. `undefined` gives a branch that ends the program, which
-/// produces a value only so that the merge has one. An `FFI_CALL` gives a value whose bits the
-/// declared signature does not settle. And an `FFI_EXPORT` gives a function whose callers are C
-/// code this compiler never sees.
+/// defined below the `phi` that reads it. `undefined` gives an arm that ends the program rather
+/// than handing a value back. An `FFI_CALL` gives a value whose bits the declared signature does
+/// not settle. And an `FFI_EXPORT` gives a function whose callers are C code this compiler never
+/// sees.
 const BOUNDARY_SOURCE: &str = r#"
     module Main;
 
