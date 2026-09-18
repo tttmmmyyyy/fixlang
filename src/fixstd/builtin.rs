@@ -1703,9 +1703,9 @@ pub fn cast_float_to_int_function(
 /// `shl`, `lshr` and `ashr` are defined on.
 ///
 /// Those instructions answer `poison` where the amount reaches the width of the value, and a
-/// `poison` is a permission to take any value rather than a value, so two readers of one shift may
-/// take different answers from it. Masking the amount puts it below the width, which is what makes
-/// the shift answer one value.
+/// `poison` is a permission to take any value, so two readers of one shift may take different
+/// answers from it. Masking the amount puts it below the width, which is what makes the shift
+/// answer one value.
 ///
 /// The machine's own shift instruction masks the amount by the width of the *register* holding it,
 /// so this `and` reaches the generated code only where the register is wider than the type — `I8`
@@ -1743,7 +1743,7 @@ fn shift_amount_is_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
 /// Emit the check that ends the program where `amount` is outside the range a shift of a value of
 /// `ty` is defined on, which is from zero up to the width of `ty`.
 ///
-/// The comparison reads `amount` as unsigned, so one negative amount of a signed type answers it as
+/// The comparison reads `amount` as unsigned, so a negative amount of a signed type answers it as
 /// well: every negative number is above every width read that way.
 ///
 /// # Arguments
@@ -1823,8 +1823,8 @@ impl LLVMGen for InlineLLVMShiftBody {
         if shift_amount_is_checked(gc) {
             build_shift_amount_check(gc, n, ty, self.is_left);
         }
-        // The masked amount shadows the amount the program wrote, so the shift below cannot reach
-        // the unmasked one.
+        // The masked amount shadows the amount the program wrote, so the shift below reaches the
+        // masked amount alone.
         let n = mask_shift_amount_to_width(gc, n);
 
         // Perform shift operation.

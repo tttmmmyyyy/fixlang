@@ -63,8 +63,8 @@ fn assert_the_check_stops(body: &str, report: &str) {
 /// and what it prints as agree.
 ///
 /// `shl` answers `poison` where the amount reaches the width of the value, and a `poison` is a
-/// permission to take any value rather than a value, so two readers of one shift may take
-/// different answers from it — a value that compares as positive and prints with a leading `-`.
+/// permission to take any value, so two readers of one shift may take different answers from it — a
+/// value that compares as positive and prints with a leading `-`.
 #[test]
 pub fn test_a_shift_past_the_width_answers_one_value() {
     test_with_a_runtime_zero(
