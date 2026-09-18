@@ -34,17 +34,17 @@ fn test_with_a_runtime_zero(body: &str, config: Configuration) {
 }
 
 /// A configuration that stops the program where the amount of a shift is outside the range the
-/// shift is defined on, as `--check-shift-amount` asks for.
-fn shift_amount_checked_config() -> Configuration {
+/// shift is defined on, as `--check-integer-operations` asks for.
+fn integer_operations_checked_config() -> Configuration {
     let mut config = Configuration::develop_mode();
-    config.check_shift_amount = true;
+    config.check_integer_operations = true;
     config
 }
 
 /// A configuration that asks for the shift amount check and then leaves out every check that ends
-/// the program, as `--check-shift-amount --no-runtime-check` does.
-fn shift_amount_checked_runtime_unchecked_config() -> Configuration {
-    let mut config = shift_amount_checked_config();
+/// the program, as `--check-integer-operations --no-runtime-check` does.
+fn integer_operations_checked_runtime_unchecked_config() -> Configuration {
+    let mut config = integer_operations_checked_config();
     config.no_runtime_check = true;
     config
 }
@@ -54,7 +54,7 @@ fn shift_amount_checked_runtime_unchecked_config() -> Configuration {
 fn assert_the_check_stops(body: &str, report: &str) {
     test_source_fail(
         &source_with_a_runtime_zero(body),
-        shift_amount_checked_config(),
+        integer_operations_checked_config(),
         report,
     );
 }
@@ -162,7 +162,7 @@ pub fn test_the_check_stops_a_negative_shift_amount() {
 /// The check covers an unsigned type and a shift towards the least bit, and the report names which
 /// shift it stopped.
 ///
-/// `--check-signed-overflow` leaves an unsigned type alone, because arithmetic on one is taken
+/// `--check-integer-operations` leaves an unsigned type alone, because arithmetic on one is taken
 /// modulo two to its width and so has no result outside the type. A shift amount is outside the
 /// width for either signedness.
 #[test]
@@ -200,12 +200,12 @@ pub fn test_the_check_lets_an_amount_inside_the_width_run_on() {
             assert_eq(|_|"I64 left by zero", 1.shift_left(zero), 1);;
             assert_eq(|_|"U8 right by one less than its width", 128_U8.shift_right(zero.to_U8 + 7_U8), 1_U8);;
         "#,
-        shift_amount_checked_config(),
+        integer_operations_checked_config(),
     );
 }
 
 /// `--no-runtime-check` takes the shift amount check out with the rest of the checks that end the
-/// program, so a build given both it and `--check-shift-amount` runs on at an amount outside the
+/// program, so a build given both it and `--check-integer-operations` runs on at an amount outside the
 /// width.
 #[test]
 pub fn test_the_check_respects_no_runtime_check() {
@@ -213,6 +213,6 @@ pub fn test_the_check_respects_no_runtime_check() {
         r#"
             assert_eq(|_|"I64 left by its width", 1.shift_left(zero + 64), 1);;
         "#,
-        shift_amount_checked_runtime_unchecked_config(),
+        integer_operations_checked_runtime_unchecked_config(),
     );
 }

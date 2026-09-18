@@ -120,12 +120,9 @@ pub struct ProjectFileBuild {
     /// Whether to leave the run-time checks, such as the array bounds check, out of the program.
     /// Unset keeps them.
     no_runtime_check: Option<bool>,
-    /// Whether the program stops where arithmetic on a signed integer type gives a result outside
-    /// the range of that type. Unset lets it run on.
-    check_signed_overflow: Option<bool>,
-    /// Whether the program stops where the amount of a shift is outside the range the shift is
-    /// defined on. Unset lets it run on.
-    check_shift_amount: Option<bool>,
+    /// Whether the program stops where an operation on an integer type is given, or produces, a
+    /// value outside what the operation is defined on. Unset lets it run on.
+    check_integer_operations: Option<bool>,
     /// Whether to compile `eval {side}; {main}` as `{main}`, leaving the effect of `{side}` out of
     /// the program. Unset evaluates `{side}`.
     skip_eval: Option<bool>,
@@ -199,12 +196,9 @@ pub struct ProjectFileBuildTest {
     /// Whether to leave the run-time checks, such as the array bounds check, out of a test build.
     /// Unset keeps them, and the value the `build` section gives covers the program alone.
     no_runtime_check: Option<bool>,
-    /// Whether a test stops where arithmetic on a signed integer type gives a result outside the
-    /// range of that type. Unset takes the value from the `build` section.
-    check_signed_overflow: Option<bool>,
-    /// Whether a test stops where the amount of a shift is outside the range the shift is defined
-    /// on. Unset takes the value from the `build` section.
-    check_shift_amount: Option<bool>,
+    /// Whether a test stops where an operation on an integer type is given, or produces, a value
+    /// outside what the operation is defined on. Unset takes the value from the `build` section.
+    check_integer_operations: Option<bool>,
     /// Whether to compile `eval {side}; {main}` as `{main}` in a test build, leaving the effect of
     /// `{side}` out of it. Unset evaluates `{side}`, and the value the `build` section gives covers
     /// the program alone.
@@ -1073,31 +1067,19 @@ impl ProjectFile {
         config.no_runtime_check = no_runtime_check.unwrap_or(false);
         config.skip_eval = skip_eval.unwrap_or(false);
 
-        // Set check_signed_overflow. A project that asks for the check wants its tests run under
-        // it too, so a test build takes the `build` section's value where the `build.test` section
-        // names none.
-        let check_signed_overflow = if mode == BuildConfigType::Test {
+        // Set check_integer_operations. A project that asks for the checks wants its tests run
+        // under them too, so a test build takes the `build` section's value where the `build.test`
+        // section names none.
+        let check_integer_operations = if mode == BuildConfigType::Test {
             self.build
                 .test
                 .as_ref()
-                .and_then(|test| test.check_signed_overflow)
-                .or(self.build.check_signed_overflow)
+                .and_then(|test| test.check_integer_operations)
+                .or(self.build.check_integer_operations)
         } else {
-            self.build.check_signed_overflow
+            self.build.check_integer_operations
         };
-        config.check_signed_overflow = check_signed_overflow.unwrap_or(false);
-
-        // Set check_shift_amount, the same way and for the same reason as check_signed_overflow.
-        let check_shift_amount = if mode == BuildConfigType::Test {
-            self.build
-                .test
-                .as_ref()
-                .and_then(|test| test.check_shift_amount)
-                .or(self.build.check_shift_amount)
-        } else {
-            self.build.check_shift_amount
-        };
-        config.check_shift_amount = check_shift_amount.unwrap_or(false);
+        config.check_integer_operations = check_integer_operations.unwrap_or(false);
 
         Ok(())
     }

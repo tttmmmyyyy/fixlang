@@ -555,14 +555,12 @@ pub struct Configuration {
     pub backtrace: bool,
     /// Leave the run-time checks, such as the array bounds check, out of the program.
     pub no_runtime_check: bool,
-    /// Stop the program where arithmetic on a signed integer type gives a result outside the range
-    /// of that type. This covers `+`, `-`, `*`, unary `-`, `/` and `%`. Arithmetic on an unsigned
-    /// type is taken modulo two to the width of the type, so none of it is checked.
-    pub check_signed_overflow: bool,
-    /// Stop the program where the amount of a shift is outside the range the shift is defined on.
-    /// This covers `shift_left` and `shift_right` on every integer type. The amount has to be at
-    /// least zero and less than the number of bits of the type shifted.
-    pub check_shift_amount: bool,
+    /// Stop the program where an operation on an integer type is given, or produces, a value
+    /// outside what the operation is defined on: the result of `+`, `-`, `*`, unary `-`, `/` and
+    /// `%` on a signed type, which can leave the type, and the amount of `shift_left` and
+    /// `shift_right` on every integer type. Arithmetic on an unsigned type is taken modulo two to
+    /// the width of the type, so none of it is checked.
+    pub check_integer_operations: bool,
     /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
     /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.
     pub skip_eval: bool,
@@ -672,8 +670,7 @@ impl Configuration {
             develop_mode: false,
             backtrace: false,
             no_runtime_check: false,
-            check_signed_overflow: false,
-            check_shift_amount: false,
+            check_integer_operations: false,
             skip_eval: false,
             deprecation_mode: DeprecationMode::default(),
         })
@@ -1057,8 +1054,7 @@ impl Configuration {
             sanitizer,
             backtrace,
             no_runtime_check,
-            check_signed_overflow,
-            check_shift_amount,
+            check_integer_operations,
             skip_eval,
             develop_mode,
             emit_symbols,
@@ -1145,11 +1141,9 @@ impl Configuration {
         runtime_object.push_text(&sanitizer.to_string());
         object_generation.push_text(&backtrace.to_string());
         object_generation.push_text(&no_runtime_check.to_string());
-        // The check is emitted into the arithmetic itself, so one source builds into two different
-        // programs.
-        object_generation.push_text(&check_signed_overflow.to_string());
-        // The check stands in front of the shift, so one source builds into two different programs.
-        object_generation.push_text(&check_shift_amount.to_string());
+        // The checks are emitted into the operations themselves, so one source builds into two
+        // different programs.
+        object_generation.push_text(&check_integer_operations.to_string());
         object_generation.push_text(&skip_eval.to_string());
         // Development mode puts the compiler's own consistency checks into the code it generates —
         // the assertions of `Generator::build_assert_unique` and `build_assert_refcnt_state_local`,
@@ -1802,12 +1796,8 @@ mod tests {
                 Box::new(|config: &mut Configuration| config.no_runtime_check = true),
             ),
             (
-                "check_signed_overflow",
-                Box::new(|config: &mut Configuration| config.check_signed_overflow = true),
-            ),
-            (
-                "check_shift_amount",
-                Box::new(|config: &mut Configuration| config.check_shift_amount = true),
+                "check_integer_operations",
+                Box::new(|config: &mut Configuration| config.check_integer_operations = true),
             ),
             (
                 "skip_eval",
