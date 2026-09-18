@@ -1746,7 +1746,7 @@ fn mask_shift_amount_to_width<'c, 'm>(
 }
 
 /// Emit the check that ends the program where `amount` is outside the range a shift of a value of
-/// `ty` is defined on, which is from zero up to the width of `ty`.
+/// `ty` is defined on, which is at least zero and less than the width of `ty`.
 ///
 /// The comparison reads `amount` as unsigned, so a negative amount of a signed type answers it as
 /// well: every negative number is above every width read that way.
@@ -10570,12 +10570,14 @@ fn build_division_overflow_check<'c, 'm>(
 /// the integer type `ty` together with the values `operands` it was performed on.
 ///
 /// The report names the operation as `<type> <operation>`, and carries each operand widened to the
-/// 64 bits the runtime takes. The widening follows the sign of `ty`, so a negative operand of a
-/// signed type reads as the negative number rather than as the bit pattern the check read.
+/// 64 bits the runtime takes. Both the widening and the report read an operand under the sign of
+/// `ty`, so a negative operand of a signed type reads as the negative number rather than as the bit
+/// pattern the check read, and an operand of an unsigned type as the magnitude its bits hold.
 ///
 /// # Arguments
 /// * `runtime_fn` — the runtime function that writes the report and ends the program. It takes the
-///   operation's name and then one 64-bit value per operand.
+///   operation's name, whether the operands are read as signed, and then one 64-bit value per
+///   operand.
 /// * `bb_name` — what the pair of basic blocks the check branches between is called in the emitted
 ///   code.
 ///
@@ -10595,7 +10597,12 @@ fn build_abort_on_integer_operation<'c, 'm>(
     let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
     let i64_ty = gc.context.i64_type();
     let is_signed = ty.is_signed_integer();
-    let mut args: Vec<BasicMetadataValueEnum<'c>> = vec![reported_operation_ptr.into()];
+    // The report reads every operand back under the sign of `ty`, so it is told that sign: an
+    // operand of an unsigned type fills all 64 bits, and reading it as signed would report a
+    // number its own type cannot hold.
+    let operands_are_signed = gc.context.i32_type().const_int(is_signed as u64, false);
+    let mut args: Vec<BasicMetadataValueEnum<'c>> =
+        vec![reported_operation_ptr.into(), operands_are_signed.into()];
     for operand in operands {
         assert!(
             operand.get_type().get_bit_width() <= 64,
