@@ -15,10 +15,11 @@ use tempfile::TempDir;
 /// A union of variants of three widths gives payload buffers read both wider and narrower than the
 /// value put in them, and one of those variants holds a byte no field owns. A boxed value gives the
 /// helpers that retain, release and traverse one. A fold gives a value a loop carries, which is
-/// defined below the `phi` that reads it. `undefined` gives a branch that ends the program, which
-/// produces a value only so that the merge has one. And an `FFI_CALL` gives a value whose bits the
-/// declared signature does not settle; the C function it names is written again in
-/// `C_FUNCTION_NAME`, which is what the emitted call is looked up under.
+/// defined below the `phi` that reads it. `undefined` gives an arm that ends the program rather
+/// than handing a value back. An `FFI_CALL` gives a value whose bits the declared signature does
+/// not settle; the C function it names is written again in `C_FUNCTION_NAME`, which is what the
+/// emitted call is looked up under. And an `FFI_EXPORT` gives a function whose callers are C code
+/// this compiler never sees.
 const BOUNDARY_SOURCE: &str = r#"
     module Main;
 
@@ -46,6 +47,11 @@ const BOUNDARY_SOURCE: &str = r#"
     positive : I64 -> I64;
     positive = |x| if x > 0 { x } else { undefined("a negative count") };
 
+    offered : I64 -> I64;
+    offered = |x| x + 1;
+
+    FFI_EXPORT[offered, c_offered];
+
     main : IO ();
     main = (
         eval nothing;
@@ -72,14 +78,22 @@ fn boundary_modules() -> &'static [String] {
     MODULES.get_or_init(|| generated_llvm_ir_modules(BOUNDARY_SOURCE, "none", &[]))
 }
 
+/// The name `BOUNDARY_SOURCE` offers its exported function to C under.
+const EXPORTED_C_FUNCTION_NAME: &str = "c_offered";
+
 /// The functions of an emitted module that carry no statement about their boundary values.
 ///
-/// `Generator::add_generated_function` states it on every function the compiler emits a body for,
-/// so what is left is what the compiler declares through `Module::add_function` directly: the two
-/// runtime functions a Fix program reaches through their C signatures, and the entry point, whose
-/// arguments the C runtime supplies.
-const FUNCTIONS_OUTSIDE_THE_STATEMENT: [&str; 3] =
-    [RUNTIME_GET_ARGC, RUNTIME_GET_ARGV, C_ENTRY_POINT_NAME];
+/// A function whose boundary is a C signature stands outside the statement, since the calls across
+/// it come from code this compiler never sees: the two runtime functions a Fix program reaches
+/// through their C signatures, the entry point whose arguments the C runtime supplies, and a
+/// function `FFI_EXPORT` offers. `Generator::add_generated_function` states it on every other
+/// function the compiler emits a body for.
+const FUNCTIONS_OUTSIDE_THE_STATEMENT: [&str; 4] = [
+    RUNTIME_GET_ARGC,
+    RUNTIME_GET_ARGV,
+    C_ENTRY_POINT_NAME,
+    EXPORTED_C_FUNCTION_NAME,
+];
 
 /// One `define` line of an emitted module, cut into the parts that carry the statement.
 struct DefinedFunction<'a> {
@@ -370,4 +384,75 @@ pub fn test_the_undefined_bits_check_gives_the_answers_it_is_known_to_give() {
         String::from_utf8_lossy(&report.stdout),
         String::from_utf8_lossy(&report.stderr),
     );
+}
+
+/// A variant exactly as wide as the payload buffer it goes into still has its unowned byte written.
+///
+/// A struct whose second field is aligned past the end of its first holds a byte no field owns, and
+/// a store of such a value leaves that byte as it was. Where the union carries that one variant,
+/// the payload buffer is the variant's own width, so nothing is left over at the end of the slot
+/// either: the byte inside the value is the only one the store leaves behind. `Generator::bit_cast`
+/// writes a zero over the whole slot first, which is what puts a value in it.
+#[test]
+pub fn test_the_slot_a_padded_value_bit_casts_through_is_written_whole_first() {
+    const SOURCE: &str = r#"
+        module Main;
+
+        type Padded = unbox struct { tag : U8, count : I64 };
+        type OnlyPadded = unbox union { padded : Padded };
+
+        main : IO ();
+        main = (
+            let n = (*get_args).@size;
+            let u = OnlyPadded::padded(Padded { tag : 1_U8, count : n });
+            println $ u.as_padded.@count.to_string
+        );
+    "#;
+    // The embedded type of `Padded`, as the value stored into the bit-cast slot is written.
+    const PADDED: &str = "{ { i8 }, { i64 } }";
+
+    let mut stores_read = 0;
+    let mut unfilled_slots = Vec::new();
+    for module in generated_llvm_ir_modules(SOURCE, "none", &[]) {
+        for body in llvm_function_bodies(&module, "") {
+            let mut filled: Set<String> = Set::default();
+            for line in body.lines() {
+                let line = line.trim();
+                if let Some(slot) = slot_a_store_of_zero_bytes_fills(line) {
+                    filled.insert(slot.to_string());
+                }
+                let Some(slot) = slot_a_store_of_the_type_writes(line, PADDED) else {
+                    continue;
+                };
+                stores_read += 1;
+                if !filled.contains(slot) {
+                    unfilled_slots.push(line.to_string());
+                }
+            }
+        }
+    }
+    assert!(
+        unfilled_slots.is_empty(),
+        "the slot a padded value is stored into should be written whole first, but {} are not:\n{}",
+        unfilled_slots.len(),
+        unfilled_slots.join("\n"),
+    );
+    assert!(
+        stores_read > 0,
+        "the program stores a `Padded` through a bit-cast slot, so that this test has one to read",
+    );
+}
+
+/// The slot `line` writes a zero of so many bytes over, where `line` is such a store.
+fn slot_a_store_of_zero_bytes_fills(line: &str) -> Option<&str> {
+    let arguments = line.strip_prefix("store [")?;
+    let (_, arguments) = arguments.split_once("x i8] zeroinitializer, ptr ")?;
+    first_local_value(arguments)
+}
+
+/// The slot `line` stores a value of `ty` into, where `line` is such a store.
+fn slot_a_store_of_the_type_writes<'a>(line: &'a str, ty: &str) -> Option<&'a str> {
+    let arguments = line.strip_prefix(&format!("store {} ", ty))?;
+    let (_, arguments) = arguments.split_once(", ptr ")?;
+    first_local_value(arguments)
 }

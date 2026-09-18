@@ -3277,10 +3277,11 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// A function of the generated program, carrying what is true of the values that cross its
     /// boundary.
     ///
-    /// Every function this compiler emits a body for is declared here, so the statement reaches all
-    /// of them. A function this compiler only calls -- one named by `FFI_CALL`, one of the
-    /// runtime's -- is declared through `Module::add_function` instead, since what reaches and
-    /// leaves it is outside what Fix's types say.
+    /// A function whose callers this compiler writes is declared here, so the statement reaches all
+    /// of them. A function whose boundary is a C signature -- one named by `FFI_CALL`, one of the
+    /// runtime's, one `FFI_EXPORT` offers, the entry point -- is declared through
+    /// `CSignature::get_or_declare_in_module` instead, since what crosses it is outside what Fix's
+    /// types say.
     pub fn add_generated_function(
         &self,
         name: &str,

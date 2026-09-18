@@ -50,8 +50,8 @@ FUNCTION_HEADER = re.compile(r"^define\b.*?@([^(]*)\(")
 ARRAY_TYPE = re.compile(r"^\[\s*(\d+)\s*x\s")
 ATTRIBUTE_GROUP = re.compile(r"^attributes\s+(#\d+)\s*=\s*\{(.*)\}")
 DECLARATION = re.compile(r"^(?:declare|define)\b.*?@(\S+?)\(")
-BLOCK_LABEL = re.compile(r"^([-a-zA-Z$._0-9]+):")
-BRANCH_TARGET = re.compile(r"\blabel\s+%([-a-zA-Z$._0-9]+)")
+BLOCK_LABEL = re.compile(r"^(\"[^\"]*\"|[-a-zA-Z$._0-9]+):")
+BRANCH_TARGET = re.compile(r"\blabel\s+%(\"[^\"]*\"|[-a-zA-Z$._0-9]+)")
 CALLEE = re.compile(r"@([-a-zA-Z$._0-9]+|\"[^\"]*\")\s*\(")
 
 
@@ -144,12 +144,34 @@ def split_operands(text: str) -> List[str]:
 def operand_type(operand: str) -> str:
     """The type an operand is written with: everything before the value it names.
 
+    A value can be written as a constant aggregate, which carries braces and commas of its own, so
+    the type is read from the front rather than by cutting the last word off.
+
     **Examples**
 
-        "{ i64, i64 } %0"  ->  "{ i64, i64 }"
-        "i64 %a"           ->  "i64"
+        "{ i64, i64 } %0"                          ->  "{ i64, i64 }"
+        "i64 %a"                                   ->  "i64"
+        "{ i64, i64 } { i64 poison, i64 poison }"  ->  "{ i64, i64 }"
     """
-    return operand.rsplit(" ", 1)[0].strip() if " " in operand else ""
+    text = operand.strip()
+    if not text:
+        return ""
+    if text[0] in "{[<":
+        closing = {"{": "}", "[": "]", "<": ">"}[text[0]]
+        depth = 0
+        for at, character in enumerate(text):
+            if character in "{[<":
+                depth += 1
+            elif character in "}]>":
+                depth -= 1
+                if depth == 0:
+                    ty = text[: at + 1]
+                    # An array type is written `[N x T]`, which closes where the type does; a
+                    # constant array is written the same way, so the type is what stands before the
+                    # value only when something follows.
+                    return ty if text[at + 1 :].strip() else ""
+        return ""
+    return text.rsplit(" ", 1)[0].strip() if " " in text else ""
 
 
 def arity_of(type_text: str) -> int:
@@ -163,7 +185,17 @@ def arity_of(type_text: str) -> int:
 
 
 def taint_of(operand: str, taints: Dict[str, Taint]) -> Taint:
-    """The undefined bits of one operand, whether it names a value or a constant."""
+    """The undefined bits of one operand, whether it names a value or a constant.
+
+    A constant aggregate is read field by field: `{ i8 0, [1 x i64] poison }` carries undefined bits
+    in its second field and none in its first, and reading it whole would call the value undefined
+    where an `insertvalue` is about to write the one field that is.
+    """
+    value = operand[len(operand_type(operand)) :].strip()
+    if value[:1] in ("{", "[", "<") and UNDEFINED_CONSTANT.search(value):
+        elements = split_operands(value[1:-1])
+        if elements:
+            return Taint(False, {i: taint_of(e, taints) for i, e in enumerate(elements)})
     if UNDEFINED_CONSTANT.search(operand):
         return ALL
     names = LOCAL.findall(operand)
@@ -213,7 +245,7 @@ def ending_blocks(body: List[str], never_return: set) -> set:
     for line in body:
         label = BLOCK_LABEL.match(line)
         if label:
-            current = label.group(1)
+            current = label.group(1).strip('"')
             continue
         if current is None:
             continue
@@ -235,12 +267,12 @@ def unreached_blocks(body: List[str]) -> set:
         label = BLOCK_LABEL.match(line)
         if label:
             if entry is None and not labels:
-                entry = label.group(1)
+                entry = label.group(1).strip('"')
             labels.append(label.group(1))
         elif entry is None and line.strip() and not line.strip().startswith(";"):
             # An instruction stands before any label, so the function begins in a block with none.
             entry = ""
-        targets.update(BRANCH_TARGET.findall(line))
+        targets.update(target.strip('"') for target in BRANCH_TARGET.findall(line))
     return {label for label in labels if label not in targets and label != entry}
 
 
@@ -260,7 +292,7 @@ def check_function(name: str, body: List[str], path: str, never_return: set) -> 
     taints: Dict[str, Taint] = {}
     for round_number in range(ROUNDS):
         before = {name: taint.key() for name, taint in taints.items()}
-        walk(body, taints, ending)
+        walk(body, taints, ending | unreached)
         if {name: taint.key() for name, taint in taints.items()} == before:
             break
     else:
@@ -268,7 +300,7 @@ def check_function(name: str, body: List[str], path: str, never_return: set) -> 
     return report(name, body, path, taints, unreached, never_return)
 
 
-def walk(body: List[str], taints: Dict[str, Taint], ending: set) -> None:
+def walk(body: List[str], taints: Dict[str, Taint], unarrived: set) -> None:
     """Read each instruction once, writing what its result carries into `taints`."""
     for line in body:
         text = line.strip()
@@ -305,7 +337,7 @@ def walk(body: List[str], taints: Dict[str, Taint], ending: set) -> None:
             taint = NONE
             for incoming in re.findall(r"\[([^\]]*)\]", expression):
                 value, _, block = incoming.partition(",")
-                if block.strip().lstrip("%") in ending:
+                if block.strip().strip('"').lstrip("%").strip('"') in unarrived:
                     continue
                 taint = taint.union(taint_of(value, taints))
             taints[defined] = taint
@@ -333,7 +365,7 @@ def report(
             continue
         label = BLOCK_LABEL.match(line)
         if label:
-            reached = label.group(1) not in unreached
+            reached = label.group(1).strip('"') not in unreached
             continue
         if not reached:
             continue
@@ -445,6 +477,59 @@ merge:
   ret void
 }
 
+define void @a_constant_scaffold_with_a_field_left(i64 %a) {
+  %0 = insertvalue { i64, i64 } { i64 poison, i64 poison }, i64 %a, 0
+  call void @sink({ i64, i64 } %0)
+  ret void
+}
+
+define void @a_constant_scaffold_whose_one_poison_field_is_written(i64 %a) {
+  %0 = insertvalue { i64, i64 } { i64 7, i64 poison }, i64 %a, 1
+  call void @sink({ i64, i64 } %0)
+  ret void
+}
+
+define void @a_constant_scaffold_whose_poison_field_is_left(i64 %a) {
+  %0 = insertvalue { i64, i64 } { i64 7, i64 poison }, i64 %a, 0
+  call void @sink({ i64, i64 } %0)
+  ret void
+}
+
+define void @a_constant_scaffold_every_field_written(i64 %a, i64 %b) {
+  %0 = insertvalue { i64, i64 } { i64 poison, i64 poison }, i64 %a, 0
+  %1 = insertvalue { i64, i64 } %0, i64 %b, 1
+  call void @sink({ i64, i64 } %1)
+  ret void
+}
+
+define void @merged_with_a_block_no_branch_names(i1 %c, i64 %a) {
+entry:
+  br i1 %c, label %carrying, label %out
+carrying:
+  br label %merge
+nothing_branches_here:
+  br label %merge
+merge:
+  %0 = phi i64 [ %a, %carrying ], [ poison, %nothing_branches_here ]
+  call void @sink_i(i64 %0)
+  br label %out
+out:
+  ret void
+}
+
+define void @a_quoted_block_after_one_that_stops(i1 %c) {
+entry:
+  br i1 %c, label %stopping, label %"cont_bb@retain"
+stopping:
+  call void @stop()
+  br label %out
+"cont_bb@retain":
+  call void @sink_i(i64 poison)
+  br label %out
+out:
+  ret void
+}
+
 define void @handed_over_from_the_first_block(i1 %c) {
 entry:
   call void @sink_i(i64 poison)
@@ -477,6 +562,9 @@ SELF_TEST_ANSWERS = {
     "an_unwritten_field_read_back",
     "carried_around_a_loop",
     "handed_over_from_the_first_block",
+    "a_constant_scaffold_with_a_field_left",
+    "a_quoted_block_after_one_that_stops",
+    "a_constant_scaffold_whose_poison_field_is_left",
 }
 
 
@@ -500,7 +588,7 @@ def self_test() -> int:
     if missing or extra:
         return 1
     defined = SELF_TEST_MODULE.count("\ndefine ")
-    print(f"self-test: the walk reports {len(SELF_TEST_ANSWERS)} of {defined} functions, as it is to")
+    print(f"self-test: the walk reports the {len(SELF_TEST_ANSWERS)} of {defined} functions it is to report")
     return 0
 
 
