@@ -1780,8 +1780,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Whether `ty` occupies no storage, such as an empty union's `[0 x i8]` payload. A zero-sized
     /// value carries no information, so the part helpers drop it: it yields no part (no phi, no ABI
-    /// slot) and is rebuilt as `poison`. A phi of a zero-sized aggregate also crashes LLVM's
-    /// AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
+    /// slot) and is rebuilt as the zero of its type. A phi of a zero-sized aggregate also crashes
+    /// LLVM's AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
     pub(crate) fn is_zero_sized(&self, ty: BasicTypeEnum<'c>) -> bool {
         self.target_data.get_bit_size(&ty) == 0
     }
@@ -1929,8 +1929,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Reassemble a value of `ty` from a part iterator produced in `type_parts` order, emitting an
     /// `insertvalue` per struct field. The inverse of `value_parts`. A zero-sized type consumes
-    /// no part and is rebuilt as `poison`; a type carried whole consumes the one part that is its
-    /// value.
+    /// no part and is rebuilt as the zero of its type; a type carried whole consumes the one part
+    /// that is its value.
     pub fn assemble_from_parts(
         &self,
         ty: BasicTypeEnum<'c>,
