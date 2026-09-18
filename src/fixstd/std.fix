@@ -2844,10 +2844,8 @@ namespace String {
     // The byte array must be unshared: this function updates its length in place.
     _unsafe_from_c_str : Array U8 -> String;
     _unsafe_from_c_str = |buf| (
-        // Calculate length.
         let len = buf.borrow_elements(|ptr| FFI_CALL[I64 strlen(Ptr), ptr]);
-        let buf = buf._unsafe_grow_size(len + 1);
-        String { _data : buf }
+        buf._unsafe_from_c_str_with_len(len)
     );
 
     // Create a string from a byte array holding a text of a known length, with a null after it.
@@ -2860,8 +2858,8 @@ namespace String {
     // # Parameters
     // * `length` - How many bytes the text holds, its null aside.
     // * `buf` - The byte array holding it.
-    _unsafe_from_text : I64 -> Array U8 -> String;
-    _unsafe_from_text = |length, buf| String { _data : buf._unsafe_grow_size(length + 1) };
+    _unsafe_from_c_str_with_len : I64 -> Array U8 -> String;
+    _unsafe_from_c_str_with_len = |length, buf| String { _data : buf._unsafe_grow_size(length + 1) };
 
     // Create a `String` from a pointer to a null-terminated C string.
     //
@@ -3829,7 +3827,7 @@ impl Ptr : ToString {
     to_string = |v| (
         let data = Array::empty(17); // len(ffffffffffffffff) + 1
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_ptr_to_str(Ptr, Ptr), ptr, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl U8 : ToBytes {
@@ -3851,7 +3849,7 @@ impl U8 : ToString {
     to_string = |v| (
         let data = Array::empty(4); // len(255) + 1
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_u8_to_str(Ptr, U8), ptr, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl U8 : FromString {
@@ -3877,7 +3875,7 @@ impl U16 : ToString {
     to_string = |v| (
         let data = Array::empty(6); // len(65535) + 1
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_u16_to_str(Ptr, U16), ptr, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl U16 : FromString {
@@ -3903,7 +3901,7 @@ impl U32 : ToString {
     to_string = |v| (
         let data = Array::empty(11); // len(4294967295) + 1
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_u32_to_str(Ptr, U32), ptr, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl U32 : FromString {
@@ -3929,7 +3927,7 @@ impl U64 : ToString {
     to_string = |v| (
         let data = Array::empty(21); // len(18446744073709551615) + 1
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_u64_to_str(Ptr, U64), ptr, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl U64 : FromString {
@@ -3964,7 +3962,7 @@ impl I8 : ToString {
     to_string = |v| (
         let data = Array::empty(5); // len(-128) + 1
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_i8_to_str(Ptr, I8), ptr, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl I8 : FromString {
@@ -3990,7 +3988,7 @@ impl I16 : ToString {
     to_string = |v| (
         let data = Array::empty(7); // len(-32768) + 1
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_i16_to_str(Ptr, I16), ptr, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl I16 : FromString {
@@ -4016,7 +4014,7 @@ impl I32 : ToString {
     to_string = |v| (
         let data = Array::empty(12); // len(-2147483648) + 1
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_i32_to_str(Ptr, I32), ptr, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl I32 : FromString {
@@ -4042,7 +4040,7 @@ impl I64 : ToString {
     to_string = |v| (
         let data = Array::empty(21); // len(-9223372036854775808) + 1
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_i64_to_str(Ptr, I64), ptr, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl I64 : FromString {
@@ -4087,7 +4085,7 @@ impl F32 : ToString {
         let size = 17;
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f32_to_str_shortest(Ptr, I64, F32), ptr, size, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 namespace F32 {
@@ -4110,7 +4108,7 @@ namespace F32 {
         let size = 8 + prec.i64;
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f32_to_str_exp_precision(Ptr, I64, F32, U8), ptr, size, v, prec]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 
     // Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
@@ -4125,7 +4123,7 @@ namespace F32 {
         let size = 42 + prec.i64;
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f32_to_str_precision(Ptr, I64, F32, U8), ptr, size, v, prec]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl F32 : FromString {
@@ -4169,7 +4167,7 @@ impl F64 : ToString {
         let size = 25;
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f64_to_str_shortest(Ptr, I64, F64), ptr, size, v]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 namespace F64 {
@@ -4192,7 +4190,7 @@ namespace F64 {
         let size = 9 + prec.i64;
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f64_to_str_exp_precision(Ptr, I64, F64, U8), ptr, size, v, prec]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 
     // Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
@@ -4207,7 +4205,7 @@ namespace F64 {
         let size = 312 + prec.i64;
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f64_to_str_precision(Ptr, I64, F64, U8), ptr, size, v, prec]);
-        data._unsafe_from_text(length)
+        data._unsafe_from_c_str_with_len(length)
     );
 }
 impl F64 : FromString {
