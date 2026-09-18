@@ -13,6 +13,7 @@ mod test_bool_union;
 mod test_borrow_tail_call;
 mod test_borrow_unit_ownership;
 mod test_borrowed_union_field;
+mod test_boundary_values_are_written;
 mod test_build_exit_status;
 mod test_check;
 mod test_check_signed_overflow_setting;
