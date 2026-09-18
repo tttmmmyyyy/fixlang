@@ -92,6 +92,9 @@ static const char FIXRUNTIME_DIGIT_PAIRS[201] =
 //
 // The digits are built from the last of them backwards into a scratch, which is what lets one pass
 // produce them without knowing first how many there are, and the scratch is then copied over.
+//
+// Declared in `float_text.c` as well, which writes a power of ten with it; the two translation
+// units carry the declaration because the runtime has no header of its own.
 int64_t fixruntime_write_u64(char *buf, uint64_t v)
 {
     char digits[FIXRUNTIME_U64_DIGITS];

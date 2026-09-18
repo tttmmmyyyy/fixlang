@@ -24,10 +24,6 @@ arithmetic rather than a call into C's library.
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-
-// Writes a number at a place in decimal, null-terminated, and answers how many digits it took. It
-// lives in `runtime.c`, which carries no header.
-int64_t fixruntime_write_u64(char *buf, uint64_t v);
 #ifdef __APPLE__
 #include <xlocale.h>
 #endif
@@ -36,6 +32,10 @@ int64_t fixruntime_write_u64(char *buf, uint64_t v);
 // Defined by the compiler, and declared in `runtime.c` as well; the two translation units carry
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
+
+// Writes a number at a place in decimal, null-terminated, and answers how many digits it took.
+// Defined in `runtime.c`, and declared here because the runtime has no header of its own.
+int64_t fixruntime_write_u64(char *buf, uint64_t v);
 
 // The bytes `fixruntime_write_float_text` builds a text in. The static assertions at the two
 // entry points hold each window to what fits here, since a wider one would write past it.
