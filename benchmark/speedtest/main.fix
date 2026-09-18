@@ -146,10 +146,9 @@ type Args = struct {
     // The compiler that builds the cases and the LangArena programs, as an absolute path, or
     // the empty string to build it from this working tree with `cargo run`.
     //
-    // A machine that measures needs no Rust and no LLVM when it is given one already built, so
-    // a compiler built elsewhere reaches a machine kept quiet by a copy of one file. The commit
-    // the row is logged under then comes from that compiler rather than from this working tree,
-    // since it is the compiler that produced the numbers.
+    // A compiler given here is already built, so the machine that runs the measurement needs
+    // neither Rust nor LLVM. The commit the row is logged under then comes from that compiler
+    // rather than from this working tree, since it is the compiler that produced the numbers.
     fix : String,
 };
 
