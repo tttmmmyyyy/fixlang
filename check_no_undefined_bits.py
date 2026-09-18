@@ -223,15 +223,25 @@ def ending_blocks(body: List[str], never_return: set) -> set:
 
 
 def unreached_blocks(body: List[str]) -> set:
-    """The labels of the blocks no branch names, which is every block but the first that is dead."""
+    """The labels of the blocks no branch names and control does not start at.
+
+    A function begins at its first block, whether or not that block is written with a label, so the
+    first one is reached however few branches name it.
+    """
     targets = set()
     labels = []
+    entry = None
     for line in body:
         label = BLOCK_LABEL.match(line)
         if label:
+            if entry is None and not labels:
+                entry = label.group(1)
             labels.append(label.group(1))
+        elif entry is None and line.strip() and not line.strip().startswith(";"):
+            # An instruction stands before any label, so the function begins in a block with none.
+            entry = ""
         targets.update(BRANCH_TARGET.findall(line))
-    return {label for label in labels if label not in targets}
+    return {label for label in labels if label not in targets and label != entry}
 
 
 # How many rounds the walk is given to settle. The transfer only ever adds undefined bits, so it
@@ -435,6 +445,16 @@ merge:
   ret void
 }
 
+define void @handed_over_from_the_first_block(i1 %c) {
+entry:
+  call void @sink_i(i64 poison)
+  br i1 %c, label %nothing_branches_to_entry, label %out
+nothing_branches_to_entry:
+  br label %out
+out:
+  ret void
+}
+
 define void @carried_around_a_loop(i1 %c) {
 entry:
   br label %head
@@ -456,6 +476,7 @@ SELF_TEST_ANSWERS = {
     "poison_in_the_result",
     "an_unwritten_field_read_back",
     "carried_around_a_loop",
+    "handed_over_from_the_first_block",
 }
 
 
@@ -478,7 +499,8 @@ def self_test() -> int:
         print(f"reported with nothing to report: {', '.join(sorted(extra))}")
     if missing or extra:
         return 1
-    print(f"self-test: the walk reports {len(SELF_TEST_ANSWERS)} of 8 functions, as it is to")
+    defined = SELF_TEST_MODULE.count("\ndefine ")
+    print(f"self-test: the walk reports {len(SELF_TEST_ANSWERS)} of {defined} functions, as it is to")
     return 0
 
 
