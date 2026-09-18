@@ -245,15 +245,41 @@ __attribute__((noreturn)) void fixruntime_array_size_overflow(int64_t size)
     fixruntime_abort();
 }
 
-__attribute__((noreturn)) void fixruntime_signed_overflow(const char *operation, int64_t lhs, int64_t rhs)
+// The bytes an operand of an integer operation takes in a report: the longest such number is
+// `18446744073709551615`, and the terminator follows it.
+#define FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE 21
+
+// Write `value` into `buf` as the number it holds under `is_signed`.
+//
+// A value of an unsigned type fills all 64 bits, so reading it as signed would report a number its
+// own type cannot hold: an amount of `U64::maximum` would read as -1.
+static void fixruntime_write_integer_operand(char *buf, size_t size, int32_t is_signed, int64_t value)
 {
-    fprintf(stderr, "Signed integer overflow: %s, with %" PRId64 " and %" PRId64 "\n", operation, lhs, rhs);
+    if (is_signed)
+    {
+        snprintf(buf, size, "%" PRId64, value);
+    }
+    else
+    {
+        snprintf(buf, size, "%" PRIu64, (uint64_t)value);
+    }
+}
+
+__attribute__((noreturn)) void fixruntime_signed_overflow(const char *operation, int32_t operands_are_signed, int64_t lhs, int64_t rhs)
+{
+    char lhs_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
+    char rhs_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
+    fixruntime_write_integer_operand(lhs_text, sizeof(lhs_text), operands_are_signed, lhs);
+    fixruntime_write_integer_operand(rhs_text, sizeof(rhs_text), operands_are_signed, rhs);
+    fprintf(stderr, "Signed integer overflow: %s, with %s and %s\n", operation, lhs_text, rhs_text);
     fixruntime_abort();
 }
 
-__attribute__((noreturn)) void fixruntime_shift_amount_out_of_range(const char *operation, int64_t amount)
+__attribute__((noreturn)) void fixruntime_shift_amount_out_of_range(const char *operation, int32_t operands_are_signed, int64_t amount)
 {
-    fprintf(stderr, "Shift amount outside the width of the type: %s, with %" PRId64 "\n", operation, amount);
+    char amount_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
+    fixruntime_write_integer_operand(amount_text, sizeof(amount_text), operands_are_signed, amount);
+    fprintf(stderr, "Shift amount outside the width of the type: %s, with %s\n", operation, amount_text);
     fixruntime_abort();
 }
 

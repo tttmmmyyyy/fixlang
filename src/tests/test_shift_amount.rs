@@ -1,5 +1,5 @@
 //! What `shift_left` and `shift_right` answer where the shift amount is outside the range a shift
-//! is defined on, which is from zero up to the number of bits of the type shifted.
+//! is defined on, which is at least zero and less than the number of bits of the type shifted.
 
 use crate::configuration::Configuration;
 use crate::tests::test_util::{test_source, test_source_fail};
@@ -177,8 +177,9 @@ pub fn test_the_check_stops_a_shift_of_an_unsigned_type() {
 /// signedness of its type: a negative amount of a signed type reads as the negative number, and an
 /// amount of an unsigned type as the magnitude its bits hold.
 ///
-/// A type as wide as the report's own 64 bits leaves the two widenings the same value, so the type
-/// here is narrower than that.
+/// The types here are narrower than 64 bits, which is where the widening itself decides what the
+/// report says. `test_the_report_reads_an_unsigned_amount_of_its_own_width_as_a_magnitude` covers
+/// the width at which it does not.
 #[test]
 pub fn test_the_report_widens_the_amount_by_the_signedness_of_its_type() {
     assert_the_check_stops(
@@ -188,6 +189,20 @@ pub fn test_the_report_widens_the_amount_by_the_signedness_of_its_type() {
     assert_the_check_stops(
         "eval 1_U8.shift_right(zero.to_U8 - 1_U8);",
         "Shift amount outside the width of the type: U8 shift_right, with 255",
+    );
+}
+
+/// An amount of an unsigned type as wide as the report's own 64 bits reads as the magnitude its
+/// bits hold, the way a narrower one does.
+///
+/// The widening leaves such an amount untouched, so the signedness the report reads it back under
+/// is the whole of what decides the number it shows. Read as signed, `U64::maximum` shows as -1,
+/// which is a number its own type cannot hold.
+#[test]
+pub fn test_the_report_reads_an_unsigned_amount_of_its_own_width_as_a_magnitude() {
+    assert_the_check_stops(
+        "eval 1_U64.shift_right(zero.to_U64 - 1_U64);",
+        "Shift amount outside the width of the type: U64 shift_right, with 18446744073709551615",
     );
 }
 

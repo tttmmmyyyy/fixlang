@@ -1741,7 +1741,7 @@ fn integer_operations_are_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
 }
 
 /// Emit the check that ends the program where `amount` is outside the range a shift of a value of
-/// `ty` is defined on, which is from zero up to the width of `ty`.
+/// `ty` is defined on, which is at least zero and less than the width of `ty`.
 ///
 /// The comparison reads `amount` as unsigned, so a negative amount of a signed type answers it as
 /// well: every negative number is above every width read that way.
@@ -1781,9 +1781,12 @@ fn build_shift_amount_check<'c, 'm>(
     );
     let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
     let i64_ty = gc.context.i64_type();
-    // The report shows the amount the program wrote, so a negative amount of a signed type reaches
-    // it as the negative number rather than as the bit pattern the comparison above reads.
-    let reported_amount = if ty.is_signed_integer() {
+    let is_signed = ty.is_signed_integer();
+    // The report shows the amount the program wrote, so the widening and the report both read the
+    // amount under the sign of its own type: a negative amount of a signed type reaches the report
+    // as the negative number rather than as the bit pattern the comparison above reads, and an
+    // amount of an unsigned type as the magnitude its bits hold.
+    let reported_amount = if is_signed {
         gc.builder()
             .build_int_s_extend_or_bit_cast(amount, i64_ty, "shift_amount_reported")
     } else {
@@ -1791,11 +1794,16 @@ fn build_shift_amount_check<'c, 'm>(
             .build_int_z_extend_or_bit_cast(amount, i64_ty, "shift_amount_reported")
     }
     .unwrap();
+    let amount_is_signed = gc.context.i32_type().const_int(is_signed as u64, false);
     build_abort_if(
         gc,
         out_of_range,
         RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE,
-        &[reported_operation_ptr.into(), reported_amount.into()],
+        &[
+            reported_operation_ptr.into(),
+            amount_is_signed.into(),
+            reported_amount.into(),
+        ],
         "shift_amount",
     );
 }
@@ -10605,11 +10613,19 @@ fn build_report_signed_overflow<'c, 'm>(
         .builder()
         .build_int_s_extend_or_bit_cast(rhs, i64_ty, "signed_overflow_rhs")
         .unwrap();
+    // Only a signed type has a range an arithmetic result can leave, so the report reads both
+    // operands as signed.
+    let operands_are_signed = gc.context.i32_type().const_int(1, false);
     build_abort_if(
         gc,
         overflowed,
         RUNTIME_SIGNED_OVERFLOW,
-        &[reported_operation_ptr.into(), lhs.into(), rhs.into()],
+        &[
+            reported_operation_ptr.into(),
+            operands_are_signed.into(),
+            lhs.into(),
+            rhs.into(),
+        ],
         "signed_overflow",
     );
 }
