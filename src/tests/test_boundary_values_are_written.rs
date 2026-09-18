@@ -19,7 +19,8 @@ use tempfile::TempDir;
 /// than handing a value back. An `FFI_CALL` gives a value whose bits the declared signature does
 /// not settle; the C function it names is written again in `C_FUNCTION_NAME`, which is what the
 /// emitted call is looked up under. And an `FFI_EXPORT` gives a function whose callers are C code
-/// this compiler never sees.
+/// this compiler never sees; the name it offers that function under is written again in
+/// `EXPORTED_C_FUNCTION_NAME`, which is what the emitted definition is looked up under.
 const BOUNDARY_SOURCE: &str = r#"
     module Main;
 
