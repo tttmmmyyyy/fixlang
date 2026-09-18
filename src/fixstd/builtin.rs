@@ -1812,7 +1812,7 @@ impl LLVMGen for InlineLLVMShiftBody {
 
         // The check reads the amount the program wrote, so it stands ahead of the mask: masking
         // first would put every amount inside the width and leave the check unable to fire.
-        if gc.config.checks_shift_amount() {
+        if gc.config.checks_integer_operations() {
             build_shift_amount_check(gc, amount, ty, self.is_left);
         }
         // The masked amount shadows the amount the program wrote, so the shift below reaches the
@@ -10443,7 +10443,7 @@ impl IntegerArithmetic {
 }
 
 /// Emit `operation` on `lhs` and `rhs` at the integer type `ty`: the instruction that performs it,
-/// or, where `--check-signed-overflow` asks for a signed result to be checked, the intrinsic that
+/// or, where `--check-integer-operations` asks for a signed result to be checked, the intrinsic that
 /// ends the program when the result leaves the range of the type.
 ///
 /// # Arguments
@@ -10467,7 +10467,7 @@ fn build_integer_arithmetic<'c, 'm>(
     // Only a signed type has a range an operation can leave: an unsigned one is taken modulo two
     // to its width, so every result is a value of the type.
     let is_signed = ty.toplevel_tycon().unwrap().is_signed_integer();
-    if is_signed && gc.config.checks_signed_overflow() {
+    if is_signed && gc.config.checks_integer_operations() {
         if operation.is_division() {
             // A division carries no intrinsic reporting the overflow, so the check stands in front
             // of the instruction rather than replacing it.
@@ -10535,8 +10535,8 @@ fn build_checked_signed_arithmetic<'c, 'm>(
 /// integer type `ty` by -1, which is the one pair a division and a remainder are undefined at: the
 /// quotient is one past the greatest value of the type.
 ///
-/// `build_integer_arithmetic` reaches this only where the program asks for the signed overflow
-/// check, so the check is emitted unconditionally here.
+/// `build_integer_arithmetic` reaches this only where the program asks for its integer operations
+/// to be checked, so the check is emitted unconditionally here.
 fn build_division_overflow_check<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     operation: IntegerArithmetic,

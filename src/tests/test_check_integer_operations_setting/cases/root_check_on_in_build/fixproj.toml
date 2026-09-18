@@ -5,7 +5,7 @@ fix_version = "*"
 
 [build]
 files = ["main.fix"]
-check_shift_amount = true
+check_integer_operations = true
 
 [build.test]
 files = ["test.fix"]

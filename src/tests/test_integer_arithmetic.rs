@@ -1,14 +1,14 @@
-//! What `--check-signed-overflow` stops the program at: arithmetic on a signed integer type whose
+//! What `--check-integer-operations` stops the program at: arithmetic on a signed integer type whose
 //! result is outside the range of that type.
 
 use crate::configuration::Configuration;
 use crate::tests::test_util::{test_source, test_source_fail};
 
 /// A configuration that stops the program where arithmetic on a signed integer type gives a result
-/// outside the range of that type, as `--check-signed-overflow` asks for.
-fn overflow_checked_config() -> Configuration {
+/// outside the range of that type, as `--check-integer-operations` asks for.
+fn integer_operations_checked_config() -> Configuration {
     let mut config = Configuration::develop_mode();
-    config.check_signed_overflow = true;
+    config.check_integer_operations = true;
     config
 }
 
@@ -26,7 +26,7 @@ fn assert_the_check_stops(expression: &str, report: &str) {
     "#,
         expression
     );
-    test_source_fail(&source, overflow_checked_config(), report);
+    test_source_fail(&source, integer_operations_checked_config(), report);
 }
 
 /// A sum past the greatest value of a signed integer type stops the program, and the message
@@ -113,5 +113,5 @@ pub fn test_signed_overflow_check_leaves_unsigned_arithmetic_alone() {
             pure()
         );
     "#;
-    test_source(&source, overflow_checked_config());
+    test_source(&source, integer_operations_checked_config());
 }

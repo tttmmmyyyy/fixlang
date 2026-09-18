@@ -1,7 +1,8 @@
-//! Whether a build stops at a signed overflow is a setting of that build. A test build takes the
+//! Whether a build stops at an operation on an integer type that is given, or produces, a value
+//! outside what the operation is defined on is a setting of that build. A test build takes the
 //! `build.test` section's value, and the `build` section's value where `build.test` names none.
 //!
-//! Each case under `test_check_signed_overflow_setting/cases` sums past the greatest value of
+//! Each case under `test_check_integer_operations_setting/cases` sums past the greatest value of
 //! `I64`. Under the check the program stops there; without it the sum is taken modulo two to the
 //! width of the type, so the program prints it and exits. A run that completes therefore shows the
 //! build was made without the check.
@@ -9,9 +10,10 @@
 use crate::tests::test_util::{assert_failed_with, assert_succeeded, run_fix, setup_case_projects};
 
 /// The directory holding this module's case projects.
-const CASES: &str = "src/tests/test_check_signed_overflow_setting/cases";
+const CASES: &str = "src/tests/test_check_integer_operations_setting/cases";
 
-/// What the check says when it stops the program at the sum the case projects ask for.
+/// What the checks say when they stop the program at the sum the case projects ask for.
+/// The setting covers the shift amount as well, which `test_shift_amount` exercises.
 const SUM_STOPPED: &str = "Signed integer overflow: I64 addition";
 
 /// The `build` section decides the setting for the program.
@@ -73,7 +75,7 @@ fn test_test_section_turns_the_check_on_for_a_test() {
     );
 }
 
-/// `--check-signed-overflow` turns the check on for a test build whose project file turns it off.
+/// `--check-integer-operations` turns the check on for a test build whose project file turns it off.
 ///
 /// The two runs share a project directory, so the second one meets the object files the first one
 /// cached. The setting therefore has to be part of what identifies them.
@@ -85,8 +87,8 @@ fn test_option_turns_the_check_on_for_a_test() {
         "`fix test` should succeed, because the test section turns the check off.",
     );
     assert_failed_with(
-        &run_fix(&project_dir, &["test", "--check-signed-overflow"]),
+        &run_fix(&project_dir, &["test", "--check-integer-operations"]),
         SUM_STOPPED,
-        "`--check-signed-overflow` should turn the check on, over the value the test section names.",
+        "`--check-integer-operations` should turn the check on, over the value the test section names.",
     );
 }

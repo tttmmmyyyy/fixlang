@@ -3017,18 +3017,11 @@ The following table shows how each setting is handled.
             <td>Disable runtime checks. <code>fix test</code> reads it from the <code>build.test</code> section, which defaults to keeping the checks.</td>
         </tr>
         <tr>
-            <td>check_signed_overflow</td>
-            <td>--check-signed-overflow</td>
+            <td>check_integer_operations</td>
+            <td>--check-integer-operations</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Stop the program where arithmetic on a signed integer type gives a result outside the range of that type. <code>fix test</code> reads it from the <code>build.test</code> section, and from the <code>build</code> section where that names no value.</td>
-        </tr>
-        <tr>
-            <td>check_shift_amount</td>
-            <td>--check-shift-amount</td>
-            <td>Overwrite</td>
-            <td>Does not affect</td>
-            <td>Stop the program where the amount of a shift is outside the range the shift is defined on, which is from zero up to the number of bits of the type shifted. <code>fix test</code> reads it from the <code>build.test</code> section, and from the <code>build</code> section where that names no value.</td>
+            <td>Stop the program where an operation on an integer type is given, or produces, a value outside what the operation is defined on: the result of <code>+</code>, <code>-</code>, <code>*</code>, unary <code>-</code>, <code>/</code> and <code>%</code> on a signed type, and the amount of <code>shift_left</code> and <code>shift_right</code> on any integer type. <code>fix test</code> reads it from the <code>build.test</code> section, and from the <code>build</code> section where that names no value.</td>
         </tr>
         <tr>
             <td>skip_eval</td>
