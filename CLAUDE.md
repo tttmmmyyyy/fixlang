@@ -64,6 +64,10 @@ This project implements the Fix programming language compiler and related tools 
   2. `bug-hunt` against the subsystem the change touched.
   3. `pr-message` to write the pull request body, then open the pull request.
   4. Put the pull request's number into the changelog entries the change adds, and push.
+- **A change confined to the development tools takes steps 3 and 4 alone** — the benchmark
+  harnesses under `benchmark/`, and anything else that no compiled program depends on. A defect
+  there shows itself in the numbers the tool prints, to the one person reading them, and is
+  corrected by running it again; the two review passes are for the code that ships to users.
 
 ## Changelog
 
