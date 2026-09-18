@@ -754,7 +754,6 @@ impl ProjectFile {
             .extend(libraries.iter().map(|name| (name.clone(), link_type)));
     }
 
-
     /// Updates a configuration from a project file.
     ///
     /// `self.role` decides whether the fields that only the root project contributes are skipped,
