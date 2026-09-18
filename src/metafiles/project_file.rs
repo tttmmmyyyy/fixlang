@@ -760,6 +760,31 @@ impl ProjectFile {
             .extend(libraries.iter().map(|name| (name.clone(), link_type)));
     }
 
+    /// Whether a build of `mode` performs a run-time check, where `from_build` reads the field
+    /// naming it out of the `build` section and `from_test` the one out of the `build.test`
+    /// section.
+    ///
+    /// A project that asks for a check wants its tests run under it too, so a test build takes the
+    /// `build` section's value where the `build.test` section names none. A project file naming
+    /// the check in neither section leaves it off.
+    fn check_is_on(
+        &self,
+        mode: BuildConfigType,
+        from_build: impl Fn(&ProjectFileBuild) -> Option<bool>,
+        from_test: impl Fn(&ProjectFileBuildTest) -> Option<bool>,
+    ) -> bool {
+        let asked_for = if mode == BuildConfigType::Test {
+            self.build
+                .test
+                .as_ref()
+                .and_then(from_test)
+                .or_else(|| from_build(&self.build))
+        } else {
+            from_build(&self.build)
+        };
+        asked_for.unwrap_or(false)
+    }
+
     /// Updates a configuration from a project file.
     ///
     /// `self.role` decides whether the fields that only the root project contributes are skipped,
@@ -1073,31 +1098,17 @@ impl ProjectFile {
         config.no_runtime_check = no_runtime_check.unwrap_or(false);
         config.skip_eval = skip_eval.unwrap_or(false);
 
-        // Set check_signed_overflow. A project that asks for the check wants its tests run under
-        // it too, so a test build takes the `build` section's value where the `build.test` section
-        // names none.
-        let check_signed_overflow = if mode == BuildConfigType::Test {
-            self.build
-                .test
-                .as_ref()
-                .and_then(|test| test.check_signed_overflow)
-                .or(self.build.check_signed_overflow)
-        } else {
-            self.build.check_signed_overflow
-        };
-        config.check_signed_overflow = check_signed_overflow.unwrap_or(false);
-
-        // Set check_shift_amount, the same way and for the same reason as check_signed_overflow.
-        let check_shift_amount = if mode == BuildConfigType::Test {
-            self.build
-                .test
-                .as_ref()
-                .and_then(|test| test.check_shift_amount)
-                .or(self.build.check_shift_amount)
-        } else {
-            self.build.check_shift_amount
-        };
-        config.check_shift_amount = check_shift_amount.unwrap_or(false);
+        // Set the checks the program performs on its integer operations.
+        config.check_signed_overflow = self.check_is_on(
+            mode,
+            |build| build.check_signed_overflow,
+            |test| test.check_signed_overflow,
+        );
+        config.check_shift_amount = self.check_is_on(
+            mode,
+            |build| build.check_shift_amount,
+            |test| test.check_shift_amount,
+        );
 
         Ok(())
     }

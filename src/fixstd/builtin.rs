@@ -1699,6 +1699,16 @@ pub fn cast_float_to_int_function(
     (expr, scm)
 }
 
+/// The name of the standard-library value `shift_function` builds, which moves a value towards its
+/// greatest bit where `is_left` holds and towards its least where it does not.
+fn shift_function_name(is_left: bool) -> &'static str {
+    if is_left {
+        "shift_left"
+    } else {
+        "shift_right"
+    }
+}
+
 /// `amount` with every bit above the width of its own type cleared, which is the shift amount
 /// `shl`, `lshr` and `ashr` are defined on.
 ///
@@ -1777,7 +1787,7 @@ fn build_shift_amount_check<'c, 'm>(
     let reported_operation = format!(
         "{} {}",
         ty.toplevel_tycon().unwrap().name.name,
-        if is_left { "shift_left" } else { "shift_right" }
+        shift_function_name(is_left)
     );
     let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
     let i64_ty = gc.context.i64_type();
@@ -1845,8 +1855,8 @@ impl LLVMGen for InlineLLVMShiftBody {
 
     fn name(&self) -> String {
         format!(
-            "shift_{}({}, {})",
-            if self.is_left { "left" } else { "right" },
+            "{}({}, {})",
+            shift_function_name(self.is_left),
             self.value_name.to_string(),
             self.n_name.to_string()
         )
