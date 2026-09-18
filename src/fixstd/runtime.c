@@ -76,44 +76,111 @@ double fixruntime_f64_from_bytes(double *buf)
     return *buf;
 }
 
-void fixruntime_ptr_to_str(char *buf, uint64_t ptr) // To avoid warning, we use uint64_t instead of void*.
+// The two digits each number below a hundred is written with, laid end to end, so that a number is
+// written two digits at a time.
+static const char FIXRUNTIME_DIGIT_PAIRS[201] =
+    "0001020304050607080910111213141516171819202122232425262728293031323334353637383940414243444546474849"
+    "5051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899";
+
+// The bytes a `uint64_t` takes in decimal: `18446744073709551615` is the longest.
+#define FIXRUNTIME_U64_DIGITS 20
+
+// Writes `v` at `buf` in decimal, null-terminated, and reports how many digits it took.
+//
+// The digits are built from the last of them backwards into a scratch, which is what lets one pass
+// produce them without knowing first how many there are, and the scratch is then copied over.
+static int64_t fixruntime_write_u64(char *buf, uint64_t v)
 {
-    sprintf(buf, "%016" PRIx64, ptr);
-}
-void fixruntime_i8_to_str(char *buf, int8_t v)
-{
-    sprintf(buf, "%" PRId8, v);
-}
-void fixruntime_u8_to_str(char *buf, uint8_t v)
-{
-    sprintf(buf, "%" PRIu8, v);
-}
-void fixruntime_i16_to_str(char *buf, int16_t v)
-{
-    sprintf(buf, "%" PRId16, v);
-}
-void fixruntime_u16_to_str(char *buf, uint16_t v)
-{
-    sprintf(buf, "%" PRIu16, v);
-}
-void fixruntime_u32_to_str(char *buf, uint32_t v)
-{
-    sprintf(buf, "%" PRIu32, v);
+    char digits[FIXRUNTIME_U64_DIGITS];
+    int at = FIXRUNTIME_U64_DIGITS;
+    while (v >= 100)
+    {
+        uint64_t rest = v / 100;
+        unsigned int pair = (unsigned int)(v - rest * 100);
+        at -= 2;
+        digits[at] = FIXRUNTIME_DIGIT_PAIRS[2 * pair];
+        digits[at + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * pair + 1];
+        v = rest;
+    }
+    if (v >= 10)
+    {
+        at -= 2;
+        digits[at] = FIXRUNTIME_DIGIT_PAIRS[2 * v];
+        digits[at + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * v + 1];
+    }
+    else
+    {
+        digits[--at] = (char)('0' + v);
+    }
+    int64_t length = FIXRUNTIME_U64_DIGITS - at;
+    memcpy(buf, digits + at, (size_t)length);
+    buf[length] = '\0';
+    return length;
 }
 
-void fixruntime_u64_to_str(char *buf, uint64_t v)
+// Writes `v` at `buf` in decimal, with a sign where it is negative, and reports how many bytes it
+// took, the sign among them.
+static int64_t fixruntime_write_i64(char *buf, int64_t v)
 {
-    sprintf(buf, "%" PRIu64, v);
+    if (v >= 0)
+    {
+        return fixruntime_write_u64(buf, (uint64_t)v);
+    }
+    buf[0] = '-';
+    // The magnitude is taken in unsigned, where negating the least number a `int64_t` holds stays a
+    // number: negating it as signed would leave the type.
+    return 1 + fixruntime_write_u64(buf + 1, -(uint64_t)v);
 }
 
-void fixruntime_i32_to_str(char *buf, int32_t v)
+// The letters a hexadecimal digit is written with.
+static const char FIXRUNTIME_HEX_DIGITS[17] = "0123456789abcdef";
+
+// The hexadecimal digits a pointer is written with, which is every digit a `uint64_t` holds.
+#define FIXRUNTIME_PTR_DIGITS 16
+
+int64_t fixruntime_ptr_to_str(char *buf, uint64_t ptr) // To avoid warning, we use uint64_t instead of void*.
 {
-    sprintf(buf, "%" PRId32, v);
+    for (int i = 0; i < FIXRUNTIME_PTR_DIGITS; i++)
+    {
+        buf[i] = FIXRUNTIME_HEX_DIGITS[(ptr >> (4 * (FIXRUNTIME_PTR_DIGITS - 1 - i))) & 0xF];
+    }
+    buf[FIXRUNTIME_PTR_DIGITS] = '\0';
+    return FIXRUNTIME_PTR_DIGITS;
+}
+int64_t fixruntime_i8_to_str(char *buf, int8_t v)
+{
+    return fixruntime_write_i64(buf, v);
+}
+int64_t fixruntime_u8_to_str(char *buf, uint8_t v)
+{
+    return fixruntime_write_u64(buf, v);
+}
+int64_t fixruntime_i16_to_str(char *buf, int16_t v)
+{
+    return fixruntime_write_i64(buf, v);
+}
+int64_t fixruntime_u16_to_str(char *buf, uint16_t v)
+{
+    return fixruntime_write_u64(buf, v);
+}
+int64_t fixruntime_u32_to_str(char *buf, uint32_t v)
+{
+    return fixruntime_write_u64(buf, v);
 }
 
-void fixruntime_i64_to_str(char *buf, int64_t v)
+int64_t fixruntime_u64_to_str(char *buf, uint64_t v)
 {
-    sprintf(buf, "%" PRId64, v);
+    return fixruntime_write_u64(buf, v);
+}
+
+int64_t fixruntime_i32_to_str(char *buf, int32_t v)
+{
+    return fixruntime_write_i64(buf, v);
+}
+
+int64_t fixruntime_i64_to_str(char *buf, int64_t v)
+{
+    return fixruntime_write_i64(buf, v);
 }
 
 int64_t fixruntime_strtoll_10(const char *str)
