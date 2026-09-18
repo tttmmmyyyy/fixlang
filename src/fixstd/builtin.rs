@@ -1308,7 +1308,7 @@ impl LLVMGen for InlineLLVMCastIntegralBody {
         let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
 
         // Get target type.
-        let to_int = to_ty
+        let to_int_ty = to_ty
             .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
@@ -1319,7 +1319,7 @@ impl LLVMGen for InlineLLVMCastIntegralBody {
             .builder()
             .build_int_cast_sign_flag(
                 from_val,
-                to_int,
+                to_int_ty,
                 self.is_source_signed,
                 "build_int_cast_sign_flag@cast_between_integral_function",
             )
@@ -1415,7 +1415,7 @@ impl LLVMGen for InlineLLVMCastFloatBody {
             .into_float_value();
 
         // Get target type.
-        let to_float = to_ty
+        let to_float_ty = to_ty
             .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
@@ -1424,7 +1424,11 @@ impl LLVMGen for InlineLLVMCastFloatBody {
         // Perform cast.
         let to_val = gc
             .builder()
-            .build_float_cast(from_val, to_float, "float_cast@cast_between_float_function")
+            .build_float_cast(
+                from_val,
+                to_float_ty,
+                "float_cast@cast_between_float_function",
+            )
             .unwrap();
 
         // Return result.
@@ -1505,7 +1509,7 @@ impl LLVMGen for InlineLLVMCastIntToFloatBody {
         let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
 
         // Get target type.
-        let to_float = to_ty
+        let to_float_ty = to_ty
             .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
@@ -1515,13 +1519,13 @@ impl LLVMGen for InlineLLVMCastIntToFloatBody {
         let to_val = if self.is_signed {
             gc.builder().build_signed_int_to_float(
                 from_val,
-                to_float,
+                to_float_ty,
                 "signed_int_to_float@cast_int_to_float_function",
             )
         } else {
             gc.builder().build_unsigned_int_to_float(
                 from_val,
-                to_float,
+                to_float_ty,
                 "unsigned_int_to_float@cast_int_to_float_function",
             )
         }
@@ -1608,7 +1612,7 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
             .into_float_value();
 
         // Get target type.
-        let to_int = to_ty
+        let to_int_ty = to_ty
             .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
@@ -1619,7 +1623,7 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
             gc.builder()
                 .build_float_to_signed_int(
                     from_val,
-                    to_int,
+                    to_int_ty,
                     "float_to_signed_int@cast_float_to_int_function",
                 )
                 .unwrap()
@@ -1627,7 +1631,7 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
             gc.builder()
                 .build_float_to_unsigned_int(
                     from_val,
-                    to_int,
+                    to_int_ty,
                     "float_to_unsigned_int@cast_float_to_int_function",
                 )
                 .unwrap()
@@ -1824,27 +1828,27 @@ impl LLVMGen for InlineLLVMShiftBody {
         let val = gc
             .get_scoped_obj_field(&self.value_name, 0)
             .into_int_value();
-        let n = gc.get_scoped_obj_field(&self.n_name, 0).into_int_value();
+        let amount = gc.get_scoped_obj_field(&self.n_name, 0).into_int_value();
 
         let is_signed = ty.is_signed_integer();
 
         // The check reads the amount the program wrote, so it stands ahead of the mask: masking
         // first would put every amount inside the width and leave the check unable to fire.
         if shift_amount_is_checked(gc) {
-            build_shift_amount_check(gc, n, ty, self.is_left);
+            build_shift_amount_check(gc, amount, ty, self.is_left);
         }
         // The masked amount shadows the amount the program wrote, so the shift below reaches the
         // masked amount alone.
-        let n = mask_shift_amount_to_width(gc, n);
+        let amount = mask_shift_amount_to_width(gc, amount);
 
         // Perform shift operation.
         let shifted = if self.is_left {
             gc.builder()
-                .build_left_shift(val, n, "left_shift@shift_function")
+                .build_left_shift(val, amount, "left_shift@shift_function")
                 .unwrap()
         } else {
             gc.builder()
-                .build_right_shift(val, n, is_signed, "right_shift@shift_function")
+                .build_right_shift(val, amount, is_signed, "right_shift@shift_function")
                 .unwrap()
         };
 
@@ -2039,14 +2043,14 @@ pub struct InlineLLVMBitNotBody {
 impl LLVMGen for InlineLLVMBitNotBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
-        let lhs = gc
+        let operand = gc
             .get_scoped_obj_field(&self.operand_name, 0)
             .into_int_value();
 
         // Perform cast.
         let val = gc
             .builder()
-            .build_not(lhs, "not@bitwise_not_function")
+            .build_not(operand, "not@bitwise_not_function")
             .unwrap();
 
         // Return result.

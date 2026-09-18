@@ -405,7 +405,7 @@ impl ProjectSources {
     /// path = "../depb"
     /// ```
     pub fn dependency_entry(&self, importer: &ProjectSources) -> String {
-        let source = match &self.origin {
+        let origin_line = match &self.origin {
             ProjectOrigin::Local(dir) => {
                 let dir = match &importer.origin {
                     ProjectOrigin::Local(importer_dir) => path_relative_to(dir, importer_dir),
@@ -417,7 +417,7 @@ impl ProjectSources {
         };
         format!(
             "[[dependencies]]\nname = \"{}\"\nversion = \"{}\"\n{}",
-            self.name, self.version, source
+            self.name, self.version, origin_line
         )
     }
 }
