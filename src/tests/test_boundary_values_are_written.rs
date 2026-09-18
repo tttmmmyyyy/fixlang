@@ -17,7 +17,8 @@ use tempfile::TempDir;
 /// helpers that retain, release and traverse one. A fold gives a value a loop carries, which is
 /// defined below the `phi` that reads it. `undefined` gives a branch that ends the program, which
 /// produces a value only so that the merge has one. And an `FFI_CALL` gives a value whose bits the
-/// declared signature does not settle.
+/// declared signature does not settle; the C function it names is written again in
+/// `C_FUNCTION_NAME`, which is what the emitted call is looked up under.
 const BOUNDARY_SOURCE: &str = r#"
     module Main;
 

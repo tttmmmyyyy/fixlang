@@ -28,7 +28,7 @@ use crate::tbaa::MemoryRegion;
 use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::{Linkage, Module};
-use inkwell::types::BasicType;
+use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
 use std::sync::Arc;
@@ -197,17 +197,11 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.build_tail(obj, tail)
             }
             RcExpr::Retain(x, path, state, k) => {
-                let obj = self.get_scoped_obj_noretain(&x.name);
-                let obj = self.project_rc_unit(obj, path);
+                let obj = self.rc_unit_object(x, path);
+                let one = self.context.i64_type().const_int(1, false);
                 if x.skip_null_check {
                     // A statically non-null boxed value (a non-empty capture object): retain
                     // without the null check that a possibly-null capture object needs.
-                    //
-                    // The bit describes the whole variable, so it says nothing about a sub-object.
-                    assert!(
-                        path.is_empty(),
-                        "`skip_null_check` describes the whole variable, not a projection of it"
-                    );
                     //
                     // The `skip_null_check` bit is set only on capture objects, and a capture object
                     // flows linearly — projected (a borrow), released at its last use, moved when
@@ -215,26 +209,17 @@ impl<'c, 'm> Generator<'c, 'm> {
                     // skip therefore almost never lands on a hot path, unlike the symmetric
                     // release-side skip, which fires wherever a non-empty capture is released. It
                     // is kept for that symmetry and for the rare code that does retain a capture.
-                    let one = self.context.i64_type().const_int(1, false);
                     self.retain_nonnull_boxed(&obj, one, *state);
                 } else {
-                    let one = self.context.i64_type().const_int(1, false);
                     self.build_retain(obj, one, *state);
                 }
                 self.eval_rc_expr(k, tail, func_vals)
             }
             RcExpr::Release(x, path, state, k) => {
-                let obj = self.get_scoped_obj_noretain(&x.name);
-                let obj = self.project_rc_unit(obj, path);
+                let obj = self.rc_unit_object(x, path);
                 if x.skip_null_check {
                     // A statically non-null boxed value (a non-empty capture object): release
                     // without the null check that a possibly-null capture object needs.
-                    //
-                    // The bit describes the whole variable, so it says nothing about a sub-object.
-                    assert!(
-                        path.is_empty(),
-                        "`skip_null_check` describes the whole variable, not a projection of it"
-                    );
                     self.release_nonnull_boxed(&obj, *state);
                 } else {
                     self.release(obj, *state);
@@ -352,6 +337,21 @@ impl<'c, 'm> Generator<'c, 'm> {
                 res
             }
         }
+    }
+
+    /// The object a `Retain` or `Release` node acts on: the value `x` names, projected down `path`
+    /// to the reference-counting unit that path reaches.
+    ///
+    /// The value is read without retaining it, since the node itself is what counts the reference.
+    fn rc_unit_object(&mut self, x: &RcVar, path: &[usize]) -> Object<'c> {
+        let obj = self.get_scoped_obj_noretain(&x.name);
+        let obj = self.project_rc_unit(obj, path);
+        // `skip_null_check` describes the whole variable, so it says nothing about a sub-object.
+        assert!(
+            !x.skip_null_check || path.is_empty(),
+            "`skip_null_check` describes the whole variable, not a projection of it"
+        );
+        obj
     }
 
     /// Project the whole object `obj` down `path` to the sub-object naming one reference-counting
@@ -718,25 +718,23 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .expect("a global initializer's symbol is a global of the program"),
         };
 
-        let owned_linkage = if shared {
-            Linkage::External
-        } else {
-            Linkage::Internal
-        };
+        // The linkage the unit owning the storage publishes it under, and `None` where another unit
+        // owns it.
+        let owned_linkage = global_init.owns_storage.then(|| {
+            if shared {
+                Linkage::External
+            } else {
+                Linkage::Internal
+            }
+        });
 
         // The storage for the initialized value, and the call-once flag.
-        let global_var = self.module.add_global(
-            obj_embed_ty,
-            None,
+        let global_var_ptr = self.add_global_variable(
             &format!("GlobalVar#{}", object_file_symbol_name(&global_init.symbol)),
+            obj_embed_ty,
+            obj_embed_ty.const_zero(),
+            owned_linkage,
         );
-        if global_init.owns_storage {
-            global_var.set_initializer(&obj_embed_ty.const_zero());
-            global_var.set_linkage(owned_linkage);
-        } else {
-            global_var.set_linkage(Linkage::External);
-        }
-        let global_var_ptr = global_var.as_basic_value_enum().into_pointer_value();
 
         let (flag_ty, flag_init_val) = if self.config.threaded {
             (
@@ -747,18 +745,12 @@ impl<'c, 'm> Generator<'c, 'm> {
             let ty = self.context.i8_type();
             (ty, ty.const_zero())
         };
-        let init_flag = self.module.add_global(
-            flag_ty,
-            None,
+        let init_flag_ptr = self.add_global_variable(
             &format!("InitFlag#{}", object_file_symbol_name(&global_init.symbol)),
+            flag_ty.into(),
+            flag_init_val.into(),
+            owned_linkage,
         );
-        if global_init.owns_storage {
-            init_flag.set_initializer(&flag_init_val);
-            init_flag.set_linkage(owned_linkage);
-        } else {
-            init_flag.set_linkage(Linkage::External);
-        }
-        let init_flag_ptr = init_flag.as_basic_value_enum().into_pointer_value();
 
         let _builder_guard = self.push_builder();
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
@@ -856,6 +848,30 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             self.builder().build_return(Some(&value)).unwrap();
         }
+    }
+
+    /// The module-level variable `name`, of type `ty`, holding one part of a global: the value
+    /// itself, or the flag saying the value has been computed.
+    ///
+    /// `owned_linkage` is the linkage the unit owning the storage publishes the variable under. It
+    /// is `None` in a unit that does not own it, which declares the variable alone and leaves the
+    /// linker to bind it to the definition the owning unit carries.
+    fn add_global_variable(
+        &self,
+        name: &str,
+        ty: BasicTypeEnum<'c>,
+        initial_value: BasicValueEnum<'c>,
+        owned_linkage: Option<Linkage>,
+    ) -> PointerValue<'c> {
+        let variable = self.module.add_global(ty, None, name);
+        match owned_linkage {
+            Some(linkage) => {
+                variable.set_initializer(&initial_value);
+                variable.set_linkage(linkage);
+            }
+            None => variable.set_linkage(Linkage::External),
+        }
+        variable.as_basic_value_enum().into_pointer_value()
     }
 }
 
