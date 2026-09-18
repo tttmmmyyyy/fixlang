@@ -248,10 +248,10 @@ impl<'c> Object<'c> {
     /// An object of type `ty` whose value is `poison`, for an unreachable point that still has to
     /// produce a value of the type.
     ///
-    /// Poison is one value for all of its readers, which is what lets LLVM merge two reads of it or
-    /// duplicate one. The other undefined constant, `undef`, may yield a different value at each
-    /// use, and the choice between them belongs to the code that emits the constant: LLVM may
-    /// weaken a poison to an `undef`, never the reverse.
+    /// A poison is one value for all of its readers, so LLVM may merge two reads of it or duplicate
+    /// one. LLVM's other undefined constant, `undef`, may give a different value at each use. This
+    /// code chooses between the two, since LLVM may weaken a poison into an `undef` and never the
+    /// reverse.
     pub fn poison<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
         let val = if ty.is_unbox(gc.type_env()) {
             ty.get_struct_type(gc).get_poison().as_basic_value_enum()
@@ -1772,10 +1772,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
     }
 
-    /// The value of a type that occupies no storage: zero of the no bits it holds.
+    /// The value of a type that occupies no storage, written as the zero of that type.
     ///
-    /// Naming every bit of it leaves nothing undefined, which is what a boundary is then able to say
-    /// about a value carrying one.
+    /// The constant leaves no bit undefined, so a function boundary carrying such a value can state
+    /// that every bit of it is written.
     pub fn zero_sized_value(ty: BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
         ty.const_zero()
     }
@@ -3216,10 +3216,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         let (from_size, to_size) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
         let larger_ty = if from_size > to_size { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
-        // Where the store of `val` leaves a byte the load reads -- a wider `to_ty`, or a hole inside
-        // `from_ty` -- writing zero over the slot first is what puts a value in that byte. The zero
-        // is written as bytes rather than as a value of `larger_ty`, which would leave that type's
-        // own holes where they were.
+        // Where the store of `val` leaves a byte the load reads -- a wider `to_ty`, or padding
+        // inside `from_ty` -- writing zero over the slot first puts a value in that byte. The zero
+        // is written as an array of bytes, so that the padding of `larger_ty` is written too.
         if from_size < to_size || self.has_padding(from_ty) {
             let slot_bytes_ty = self
                 .context
@@ -3233,13 +3232,12 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// `val` with its undefined bits fixed: one value that answers the same to every read of it.
     ///
-    /// A value reaching the program from outside what Fix's types cover -- memory this code never
-    /// wrote, a C function's result -- can carry bits LLVM holds to be undefined, and a read of such
-    /// a bit may answer differently each time. Freezing chooses one answer and holds it for every
-    /// reader, which is what lets the value be stated to hold no undefined bit at all.
+    /// A value reaching the program from outside what Fix's types cover -- a C function's result --
+    /// can carry bits LLVM holds to be undefined, and a read of such a bit may answer differently
+    /// each time. Freezing chooses one answer and holds it for every reader, so the value can be
+    /// stated to hold no undefined bit at all.
     ///
-    /// The instruction names a value rather than work the machine does, so the code that comes out
-    /// is the same.
+    /// A `freeze` names a value rather than work the machine does, so it adds no machine code.
     pub fn build_freeze(&self, val: BasicValueEnum<'c>, name: &str) -> BasicValueEnum<'c> {
         // inkwell wraps no `freeze`, so reach the instruction through the C API it is built on.
         let name = CString::new(name).expect("an LLVM value name holds no NUL byte");
@@ -3252,10 +3250,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Whether `ty` holds a byte no field owns, which a store of a value of it leaves as it was.
+    /// Whether `ty` holds padding: a byte no field of it owns, which a store of a value of `ty`
+    /// leaves as it was.
     ///
-    /// A struct laid out with a field on a boundary its predecessor does not reach carries such a
-    /// byte, and so does an array of one.
+    /// A struct whose field is aligned past the end of the field before it holds such a byte, and
+    /// so does an array of such a struct.
     fn has_padding(&mut self, ty: BasicTypeEnum<'c>) -> bool {
         match ty {
             BasicTypeEnum::StructType(st) => {
@@ -3278,11 +3277,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// A function of the generated program, carrying what is true of the values that cross its
     /// boundary.
     ///
-    /// Every function this compiler emits a body for is declared here, which is what keeps the
-    /// statement on all of them: written by hand beside each `Module::add_function`, it is a line
-    /// the next such function can be added without. A function this compiler only calls -- one
-    /// named by `FFI_CALL`, one of the runtime's -- is declared through the module directly, since
-    /// what reaches and leaves it is outside what Fix's types say.
+    /// Every function this compiler emits a body for is declared here, so the statement reaches all
+    /// of them. A function this compiler only calls -- one named by `FFI_CALL`, one of the
+    /// runtime's -- is declared through `Module::add_function` instead, since what reaches and
+    /// leaves it is outside what Fix's types say.
     pub fn add_generated_function(
         &self,
         name: &str,
@@ -3298,12 +3296,12 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// Fix's types cover every value a generated function takes and returns: no Fix program leaves
     /// one uninitialized, and where the code generator makes a value of its own it writes every bit
-    /// of it. LLVM assumes neither on its own, so without this it has to keep an argument at the
-    /// place the caller put it -- it cannot move an instruction reading one to where it runs
-    /// unconditionally, and it inserts a `freeze` before branching on one.
+    /// of it. LLVM assumes neither of these on its own, so without the statement it reads every
+    /// argument as one that may be undefined: it cannot move an instruction reading one to a place
+    /// that runs unconditionally, and it inserts a `freeze` before branching on one.
     ///
-    /// `check_no_undefined_bits.py` is what holds the statement up: it walks the emitted IR and
-    /// reports any value with a bit nothing wrote that reaches a call argument or a `ret`.
+    /// `check_no_undefined_bits.py` holds the statement up: it walks the emitted IR and reports any
+    /// value with a bit nothing wrote that reaches a call argument or a `ret`.
     fn state_boundary_values_are_written(&self, func: FunctionValue<'c>) {
         for index in 0..func.count_params() {
             self.add_enum_attribute(func, "noundef", AttributeLoc::Param(index));

@@ -14,7 +14,7 @@ and reports every one that arrives at a call argument or a `ret`.
 
 Exits 0 when nothing arrives, 1 when something does, and 2 when a file cannot be read. `--self-test`
 runs the walk over a module written here whose answers are known, so that a silent run over real
-modules says something.
+modules means something.
 
 **Examples**
 
@@ -58,9 +58,9 @@ CALLEE = re.compile(r"@([-a-zA-Z$._0-9]+|\"[^\"]*\")\s*\(")
 class Taint:
     """Which of a value's bits are undefined, as a tree over the value's fields.
 
-    A leaf is `ALL` or `NONE`, covering the whole value. A node carries one child per field, which is
-    what lets an aggregate written field by field start undefined and end defined: the node is clean
-    once every child is.
+    A leaf is `ALL` or `NONE`, covering the whole value. A node carries one child per field, so an
+    aggregate written field by field starts undefined and ends defined: the node is clean once every
+    child is.
     """
 
     __slots__ = ("fields", "undefined")
@@ -245,15 +245,15 @@ def unreached_blocks(body: List[str]) -> set:
 
 
 # How many rounds the walk is given to settle. The transfer only ever adds undefined bits, so it
-# settles; the bound is what turns a walk that does not into a loud failure rather than a silent one.
+# settles; the bound turns a walk that runs on into a loud failure.
 ROUNDS = 32
 
 
 def check_function(name: str, body: List[str], path: str, never_return: set) -> List[str]:
     """The lines of `body` that hand a value with undefined bits to a caller or a callee.
 
-    The walk runs until its answer stops changing. One pass forward is not enough: a value a loop
-    carries is defined below the `phi` that reads it, so the first pass reads it as written.
+    The walk runs until its answer stops changing. A value a loop carries is defined below the `phi`
+    that reads it, so the first pass forward reads it as written and a later one corrects it.
     """
     ending = ending_blocks(body, never_return)
     unreached = unreached_blocks(body)

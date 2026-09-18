@@ -63,8 +63,9 @@ const C_FUNCTION_NAME: &str = "abs";
 /// The modules the compiler writes for `BOUNDARY_SOURCE`, built once and shared by every test that
 /// reads them. The build is what these tests spend their time on.
 ///
-/// The code as the generator wrote it is what these tests read: the optimized module also holds
-/// what LLVM itself introduced, and LLVM is free to name `undef` where the generator named poison.
+/// These tests read the code as the generator wrote it, built at `-O none`: an optimized module
+/// also holds what LLVM itself introduced, and LLVM may name `undef` where the generator named
+/// `poison`.
 fn boundary_modules() -> &'static [String] {
     static MODULES: OnceLock<Vec<String>> = OnceLock::new();
     MODULES.get_or_init(|| generated_llvm_ir_modules(BOUNDARY_SOURCE, "none", &[]))
@@ -73,9 +74,9 @@ fn boundary_modules() -> &'static [String] {
 /// The functions of an emitted module that carry no statement about their boundary values.
 ///
 /// `Generator::add_generated_function` states it on every function the compiler emits a body for,
-/// so what is left is what the compiler declares through the module directly: the two runtime
-/// functions a Fix program reaches through their C signatures, and the entry point, whose arguments
-/// the C runtime supplies.
+/// so what is left is what the compiler declares through `Module::add_function` directly: the two
+/// runtime functions a Fix program reaches through their C signatures, and the entry point, whose
+/// arguments the C runtime supplies.
 const FUNCTIONS_OUTSIDE_THE_STATEMENT: [&str; 3] =
     [RUNTIME_GET_ARGC, RUNTIME_GET_ARGV, C_ENTRY_POINT_NAME];
 
@@ -153,8 +154,8 @@ fn states_the_value_is_written(text: &str) -> bool {
 /// Every value a generated function takes and returns has all of its bits written, and the
 /// generated code says so.
 ///
-/// LLVM assumes neither on its own: without the statement it keeps an argument where the caller put
-/// it, and it inserts a `freeze` before branching on one.
+/// LLVM assumes neither of these on its own: without the statement it reads every argument as one
+/// that may be undefined, and it inserts a `freeze` before branching on one.
 /// `Generator::add_generated_function` is the one constructor that puts the statement on, so a
 /// function declared through `Module::add_function` instead arrives here bare.
 #[test]
@@ -209,10 +210,9 @@ pub fn test_every_generated_function_states_its_boundary_values_are_written() {
 
 /// The code generator names `poison` where it says a value is never read, and never `undef`.
 ///
-/// An `undef` may yield a different value at each use, so LLVM can neither merge two reads of one
-/// nor duplicate a use of it; a poison is one value for all of its readers. The choice belongs to
-/// the code that emits the constant, since LLVM may weaken a poison to an `undef` and never the
-/// reverse.
+/// A poison is one value for all of its readers, so LLVM may merge two reads of it or duplicate
+/// one. An `undef` may give a different value at each use. The code that emits the constant chooses
+/// between the two, since LLVM may weaken a poison into an `undef` and never the reverse.
 #[test]
 pub fn test_the_code_generator_names_poison_rather_than_undef() {
     let mut lines_naming_undef = Vec::new();
@@ -246,7 +246,7 @@ fn names_undef(line: &str) -> bool {
 /// What a C function leaves behind is outside what Fix's types cover — C leaves a result undefined
 /// where the caller ignores it — so the value carries bits LLVM holds to be undefined, and a read
 /// of such a bit may answer differently each time. `Generator::build_freeze` chooses one answer and
-/// holds it, which is what lets the value reach a boundary that states it is written.
+/// holds it, so the value can cross a boundary that states it is written.
 #[test]
 pub fn test_the_result_of_a_c_function_is_given_one_answer_for_every_read() {
     let mut calls_read = 0;
@@ -307,7 +307,8 @@ fn undefined_bits_check_script() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("check_no_undefined_bits.py")
 }
 
-/// Runs `check_no_undefined_bits.py` with `arguments`.
+/// Runs `check_no_undefined_bits.py` with `arguments`, and hands back what it printed and the
+/// status it exited with.
 fn run_the_undefined_bits_check<S: AsRef<OsStr>>(arguments: impl IntoIterator<Item = S>) -> Output {
     let script = undefined_bits_check_script();
     Command::new("python3")
@@ -354,9 +355,10 @@ pub fn test_no_value_with_undefined_bits_reaches_a_function_boundary() {
 
 /// The walk `check_no_undefined_bits.py` makes gives the answers it is known to give.
 ///
-/// A silent run over the emitted modules says something only where the walk is seen to report what
-/// it is to report: `--self-test` runs it over a module written into the script whose answers are
-/// known, and fails where the walk goes past one of them or reports one with nothing to report.
+/// A silent run over the emitted modules means something only once the walk is seen to report what
+/// it should: `--self-test` runs it over a module written into the script whose answers are known,
+/// and fails where the walk goes past one of those answers or reports a function with nothing to
+/// report.
 #[test]
 pub fn test_the_undefined_bits_check_gives_the_answers_it_is_known_to_give() {
     let report = run_the_undefined_bits_check(["--self-test"]);
