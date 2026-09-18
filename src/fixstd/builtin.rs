@@ -1814,10 +1814,17 @@ fn build_shift_amount_check<'c, 'm>(
     );
 }
 
+/// The body of `shift_left` and `shift_right` at every integer type: it moves the bits of a value
+/// by an amount the program computes, and masks an amount outside the width of the type down into
+/// that width so that every amount gives one value.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMShiftBody {
+    /// The local name bound to the value whose bits move.
     value_name: FullName,
+    /// The local name bound to the amount, in bits, the value moves by.
     n_name: FullName,
+    /// Whether the value moves towards its greatest bit. A move towards its least bit fills the
+    /// bits it leaves with the sign bit on a signed type, and with zero on an unsigned one.
     is_left: bool,
 }
 
@@ -1884,7 +1891,10 @@ impl LLVMGen for InlineLLVMShiftBody {
     }
 }
 
-// Shift functions
+/// The definition of `shift_left` or `shift_right` at the integer type `ty`.
+///
+/// The amount is the first argument and the value shifted the second, which is what makes
+/// `v.shift_left(bits)` move the bits of `v` by `bits`.
 pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const VALUE_NAME: &str = "val";
     const N_NAME: &str = "n";
@@ -10415,8 +10425,8 @@ fn signed_overflow_is_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
 
 /// An arithmetic operation the code generator emits for an integer type.
 ///
-/// `Negate` negates its right operand, and takes as its left operand the zero that operand is
-/// subtracted from, which is the instruction emitted for a negation.
+/// `Negate` negates its right operand; its left operand is the zero that operand is subtracted
+/// from, since a negation is emitted as a subtraction from zero.
 #[derive(Clone, Copy)]
 enum IntegerArithmetic {
     /// `Add::add`, the infix `+`.
@@ -10446,8 +10456,8 @@ impl IntegerArithmetic {
         }
     }
 
-    /// Whether this operation divides. LLVM offers no intrinsic reporting the overflow of these
-    /// two, so they are checked by comparing their operands.
+    /// Whether this operation divides. LLVM offers no intrinsic reporting the overflow of `Divide`
+    /// and `Remainder`, so those two are checked by comparing their operands.
     fn is_division(self) -> bool {
         matches!(self, Self::Divide | Self::Remainder)
     }

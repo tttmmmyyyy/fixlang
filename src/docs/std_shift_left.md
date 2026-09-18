@@ -1,4 +1,4 @@
-`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
 
 A shift is defined for `bits` from zero up to the number of bits of the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-shift-amount` stops the program there.
 
