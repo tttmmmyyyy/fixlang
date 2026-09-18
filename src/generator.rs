@@ -3221,11 +3221,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         // is written as bytes rather than as a value of `larger_ty`, which would leave that type's
         // own holes where they were.
         if from_size < to_size || !self.covers_its_bytes(from_ty) {
-            let slot_bytes = self
+            let slot_bytes_ty = self
                 .context
                 .i8_type()
                 .array_type(self.sizeof(&larger_ty) as u32);
-            self.build_store(MemoryRegion::Data, ptr, slot_bytes.const_zero());
+            self.build_store(MemoryRegion::Data, ptr, slot_bytes_ty.const_zero());
         }
         self.build_store(MemoryRegion::Data, ptr, val);
         self.build_load(MemoryRegion::Data, to_ty, ptr, "bit_cast")
@@ -3261,14 +3261,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         match ty {
             BasicTypeEnum::StructType(st) => {
                 let fields = st.get_field_types();
-                let occupied: u64 = fields.iter().map(|field| self.sizeof(field)).sum();
-                occupied == self.sizeof(&ty)
+                let fields_size: u64 = fields.iter().map(|field| self.sizeof(field)).sum();
+                fields_size == self.sizeof(&ty)
                     && fields.into_iter().all(|field| self.covers_its_bytes(field))
             }
             BasicTypeEnum::ArrayType(at) => {
-                let element = at.get_element_type();
-                self.sizeof(&element) * at.len() as u64 == self.sizeof(&ty)
-                    && self.covers_its_bytes(element)
+                let element_ty = at.get_element_type();
+                self.sizeof(&element_ty) * at.len() as u64 == self.sizeof(&ty)
+                    && self.covers_its_bytes(element_ty)
             }
             // A scalar -- an integer, a float, a pointer -- is the bytes it occupies, so a store
             // of one writes all of them.

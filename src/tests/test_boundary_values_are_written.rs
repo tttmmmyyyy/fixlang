@@ -160,7 +160,7 @@ fn states_the_value_is_written(text: &str) -> bool {
 #[test]
 pub fn test_every_generated_function_states_its_boundary_values_are_written() {
     let mut functions_read = 0;
-    let mut bare = Vec::new();
+    let mut bare_boundary_values = Vec::new();
     let mut outside_the_statement: Set<&str> = Set::default();
     for module in boundary_modules() {
         for line in module.lines() {
@@ -174,11 +174,11 @@ pub fn test_every_generated_function_states_its_boundary_values_are_written() {
             functions_read += 1;
             let returns_a_value = function.result.split_whitespace().last() != Some("void");
             if returns_a_value && !states_the_value_is_written(function.result) {
-                bare.push(format!("the result of `{}`", function.name));
+                bare_boundary_values.push(format!("the result of `{}`", function.name));
             }
             for parameter in &function.parameters {
                 if *parameter != "..." && !states_the_value_is_written(parameter) {
-                    bare.push(format!(
+                    bare_boundary_values.push(format!(
                         "the parameter `{}` of `{}`",
                         parameter, function.name
                     ));
@@ -187,11 +187,11 @@ pub fn test_every_generated_function_states_its_boundary_values_are_written() {
         }
     }
     assert!(
-        bare.is_empty(),
+        bare_boundary_values.is_empty(),
         "every value crossing a generated function's boundary should be stated to have all of its \
          bits written, but {} do not:\n{}",
-        bare.len(),
-        bare.join("\n"),
+        bare_boundary_values.len(),
+        bare_boundary_values.join("\n"),
     );
     assert!(
         functions_read > 0,
@@ -215,20 +215,20 @@ pub fn test_every_generated_function_states_its_boundary_values_are_written() {
 /// reverse.
 #[test]
 pub fn test_the_code_generator_names_poison_rather_than_undef() {
-    let mut undefs = Vec::new();
+    let mut lines_naming_undef = Vec::new();
     for module in boundary_modules() {
         for line in module.lines() {
             if names_undef(line) {
-                undefs.push(line.trim().to_string());
+                lines_naming_undef.push(line.trim().to_string());
             }
         }
     }
     assert!(
-        undefs.is_empty(),
+        lines_naming_undef.is_empty(),
         "the code generator should name `poison` where a value is never read, but {} lines name \
          `undef`:\n{}",
-        undefs.len(),
-        undefs.join("\n"),
+        lines_naming_undef.len(),
+        lines_naming_undef.join("\n"),
     );
 }
 
@@ -250,7 +250,7 @@ fn names_undef(line: &str) -> bool {
 #[test]
 pub fn test_the_result_of_a_c_function_is_given_one_answer_for_every_read() {
     let mut calls_read = 0;
-    let mut unfrozen = Vec::new();
+    let mut unfrozen_calls = Vec::new();
     for module in boundary_modules() {
         for body in llvm_function_bodies(module, "") {
             let mut frozen: Set<String> = Set::default();
@@ -266,16 +266,16 @@ pub fn test_the_result_of_a_c_function_is_given_one_answer_for_every_read() {
                 };
                 calls_read += 1;
                 if !frozen.contains(result) {
-                    unfrozen.push(line.to_string());
+                    unfrozen_calls.push(line.to_string());
                 }
             }
         }
     }
     assert!(
-        unfrozen.is_empty(),
+        unfrozen_calls.is_empty(),
         "the result of a C function should be frozen before Fix code reads it, but {} are not:\n{}",
-        unfrozen.len(),
-        unfrozen.join("\n"),
+        unfrozen_calls.len(),
+        unfrozen_calls.join("\n"),
     );
     assert!(
         calls_read > 0,
