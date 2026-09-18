@@ -143,9 +143,9 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
             fprintf(stderr, "A number was written as \"%s\", which is neither digits nor Infinity nor NaN\n", sci);
             fixruntime_abort();
         }
-        int length = (int)strlen(special);
+        int length = fixruntime_check_float_text((int)strlen(special), size);
         memcpy(buf, special, (size_t)length + 1);
-        return fixruntime_check_float_text(length, size);
+        return length;
     }
 
     char digits[32];
