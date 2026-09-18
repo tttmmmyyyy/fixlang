@@ -2,43 +2,14 @@
 //! is defined on, which is from zero up to the number of bits of the type shifted.
 
 use crate::configuration::Configuration;
-use crate::tests::test_util::{test_source, test_source_fail};
-
-/// A program whose `main` binds `zero` to a `Std::I64` that is 0 at run time and that no
-/// optimization level can fold, and runs `body` after it.
-///
-/// A shift amount built from `zero` reaches the code generator as a value, so the amount a case
-/// names is the amount the shift instruction receives. An amount written as a literal is folded
-/// long before that, and the shift then answers at compile time whatever the folding chose.
-fn source_with_a_runtime_zero(body: &str) -> String {
-    format!(
-        r#"
-        module Main;
-        main : IO ();
-        main = (
-            let args = *get_args;
-            assert_eq(|_|"The test program is run with its own path alone", args.@size, 1);;
-            let zero = args.@size - 1;
-            {}
-            pure()
-        );
-    "#,
-        body
-    )
-}
+use crate::tests::test_util::{
+    integer_operations_checked_config, source_with_a_runtime_zero, test_source, test_source_fail,
+};
 
 /// Builds `source_with_a_runtime_zero(body)` under `config`, runs it, and fails the test unless the
 /// program exits with code 0.
 fn test_with_a_runtime_zero(body: &str, config: Configuration) {
     test_source(&source_with_a_runtime_zero(body), config);
-}
-
-/// A configuration that stops the program where the amount of a shift is outside the range the
-/// shift is defined on, as `--check-integer-operations` asks for.
-fn integer_operations_checked_config() -> Configuration {
-    let mut config = Configuration::develop_mode();
-    config.check_integer_operations = true;
-    config
 }
 
 /// A configuration that asks for the shift amount check and then leaves out every check that ends
@@ -51,7 +22,7 @@ fn integer_operations_checked_runtime_unchecked_config() -> Configuration {
 
 /// Builds `source_with_a_runtime_zero(body)` under a configuration that stops at a shift amount
 /// outside the width, runs it, and asserts that it stops with a report containing `report`.
-fn assert_the_check_stops(body: &str, report: &str) {
+fn assert_the_check_stops_running(body: &str, report: &str) {
     test_source_fail(
         &source_with_a_runtime_zero(body),
         integer_operations_checked_config(),
@@ -143,7 +114,7 @@ pub fn test_a_type_narrower_than_a_register_takes_its_own_width() {
 /// the operation and the amount.
 #[test]
 pub fn test_the_check_stops_a_shift_by_the_width() {
-    assert_the_check_stops(
+    assert_the_check_stops_running(
         "eval 1.shift_left(zero + 64);",
         "Shift amount outside the width of the type: I64 shift_left, with 64",
     );
@@ -153,7 +124,7 @@ pub fn test_the_check_stops_a_shift_by_the_width() {
 /// wrote rather than the bit pattern the comparison reads.
 #[test]
 pub fn test_the_check_stops_a_negative_shift_amount() {
-    assert_the_check_stops(
+    assert_the_check_stops_running(
         "eval 1.shift_left(zero - 1);",
         "Shift amount outside the width of the type: I64 shift_left, with -1",
     );
@@ -167,7 +138,7 @@ pub fn test_the_check_stops_a_negative_shift_amount() {
 /// width for either signedness.
 #[test]
 pub fn test_the_check_stops_a_shift_of_an_unsigned_type() {
-    assert_the_check_stops(
+    assert_the_check_stops_running(
         "eval 1_U8.shift_right(zero.to_U8 + 8_U8);",
         "Shift amount outside the width of the type: U8 shift_right, with 8",
     );
@@ -181,11 +152,11 @@ pub fn test_the_check_stops_a_shift_of_an_unsigned_type() {
 /// here is narrower than that.
 #[test]
 pub fn test_the_report_widens_the_amount_by_the_signedness_of_its_type() {
-    assert_the_check_stops(
+    assert_the_check_stops_running(
         "eval 1_I8.shift_left(zero.to_I8 - 1_I8);",
         "Shift amount outside the width of the type: I8 shift_left, with -1",
     );
-    assert_the_check_stops(
+    assert_the_check_stops_running(
         "eval 1_U8.shift_right(zero.to_U8 - 1_U8);",
         "Shift amount outside the width of the type: U8 shift_right, with 255",
     );
