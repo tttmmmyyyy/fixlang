@@ -31,7 +31,7 @@ use crate::constants::{
     TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::fixstd::runtime::{
-    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC, RUNTIME_SHIFT_AMOUNT,
+    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC, RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE,
     RUNTIME_SIGNED_OVERFLOW,
 };
 use crate::generator::{Generator, Object};
@@ -1794,7 +1794,7 @@ fn build_shift_amount_check<'c, 'm>(
     build_abort_if(
         gc,
         out_of_range,
-        RUNTIME_SHIFT_AMOUNT,
+        RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE,
         &[reported_operation_ptr.into(), reported_amount.into()],
         "shift_amount",
     );
@@ -1823,6 +1823,8 @@ impl LLVMGen for InlineLLVMShiftBody {
         if shift_amount_is_checked(gc) {
             build_shift_amount_check(gc, n, ty, self.is_left);
         }
+        // The masked amount shadows the amount the program wrote, so the shift below cannot reach
+        // the unmasked one.
         let n = mask_shift_amount_to_width(gc, n);
 
         // Perform shift operation.

@@ -251,7 +251,7 @@ __attribute__((noreturn)) void fixruntime_signed_overflow(const char *operation,
     fixruntime_abort();
 }
 
-__attribute__((noreturn)) void fixruntime_shift_amount(const char *operation, int64_t amount)
+__attribute__((noreturn)) void fixruntime_shift_amount_out_of_range(const char *operation, int64_t amount)
 {
     fprintf(stderr, "Shift amount outside the width of the type: %s, with %" PRId64 "\n", operation, amount);
     fixruntime_abort();

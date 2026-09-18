@@ -43,7 +43,7 @@ fn shift_amount_checked_config() -> Configuration {
 
 /// A configuration that asks for the shift amount check and then leaves out every check that ends
 /// the program, as `--check-shift-amount --no-runtime-check` does.
-fn shift_amount_unchecked_config() -> Configuration {
+fn shift_amount_checked_runtime_unchecked_config() -> Configuration {
     let mut config = shift_amount_checked_config();
     config.no_runtime_check = true;
     config
@@ -127,13 +127,13 @@ pub fn test_a_negative_shift_amount_is_taken_modulo_the_width() {
 pub fn test_a_type_narrower_than_a_register_takes_its_own_width() {
     test_with_a_runtime_zero(
         r#"
-            let z8 = zero.to_I8;
-            assert_eq(|_|"I8 left by its width", 1_I8.shift_left(z8 + 8_I8), 1_I8);;
-            assert_eq(|_|"I8 left by one past its width", 1_I8.shift_left(z8 + 9_I8), 2_I8);;
-            let zu8 = zero.to_U8;
-            assert_eq(|_|"U8 right by its width", 128_U8.shift_right(zu8 + 8_U8), 128_U8);;
-            let z16 = zero.to_I16;
-            assert_eq(|_|"I16 left by its width", 1_I16.shift_left(z16 + 16_I16), 1_I16);;
+            let zero_I8 = zero.to_I8;
+            assert_eq(|_|"I8 left by its width", 1_I8.shift_left(zero_I8 + 8_I8), 1_I8);;
+            assert_eq(|_|"I8 left by one past its width", 1_I8.shift_left(zero_I8 + 9_I8), 2_I8);;
+            let zero_U8 = zero.to_U8;
+            assert_eq(|_|"U8 right by its width", 128_U8.shift_right(zero_U8 + 8_U8), 128_U8);;
+            let zero_I16 = zero.to_I16;
+            assert_eq(|_|"I16 left by its width", 1_I16.shift_left(zero_I16 + 16_I16), 1_I16);;
         "#,
         Configuration::develop_mode(),
     );
@@ -213,6 +213,6 @@ pub fn test_the_check_respects_no_runtime_check() {
         r#"
             assert_eq(|_|"I64 left by its width", 1.shift_left(zero + 64), 1);;
         "#,
-        shift_amount_unchecked_config(),
+        shift_amount_checked_runtime_unchecked_config(),
     );
 }
