@@ -58,7 +58,7 @@ const BOUNDARY_SOURCE: &str = r#"
 "#;
 
 /// The C function `BOUNDARY_SOURCE` calls, whose result the code generator fixes the bits of.
-const C_FUNCTION_CALLED: &str = "abs";
+const C_FUNCTION_NAME: &str = "abs";
 
 /// The modules the compiler writes for `BOUNDARY_SOURCE`, built once and shared by every test that
 /// reads them. The build is what these tests spend their time on.
@@ -84,7 +84,7 @@ struct DefinedFunction<'a> {
     /// The name the compiler gave the function, without the `@` and any quotes around it.
     name: &'a str,
     /// The text before the name: the linkage, the return type, and the attributes on the result.
-    result: &'a str,
+    before_name: &'a str,
     /// The parameters, each with the attributes on it.
     parameters: Vec<&'a str>,
 }
@@ -93,7 +93,7 @@ struct DefinedFunction<'a> {
 fn defined_function(line: &str) -> Option<DefinedFunction<'_>> {
     let signature = line.strip_prefix("define ")?;
     let at = signature.find('@')?;
-    let (result, from_name) = signature.split_at(at);
+    let (before_name, from_name) = signature.split_at(at);
     let from_name = &from_name[1..];
     let (name, after_name) = match from_name.strip_prefix('"') {
         Some(quoted) => {
@@ -117,7 +117,7 @@ fn defined_function(line: &str) -> Option<DefinedFunction<'_>> {
         .0;
     Some(DefinedFunction {
         name,
-        result,
+        before_name,
         parameters: split_at_top_level_commas(parameters),
     })
 }
@@ -172,8 +172,8 @@ pub fn test_every_generated_function_states_its_boundary_values_are_written() {
                 continue;
             }
             functions_read += 1;
-            let returns_a_value = function.result.split_whitespace().last() != Some("void");
-            if returns_a_value && !states_the_value_is_written(function.result) {
+            let returns_a_value = function.before_name.split_whitespace().last() != Some("void");
+            if returns_a_value && !states_the_value_is_written(function.before_name) {
                 bare_boundary_values.push(format!("the result of `{}`", function.name));
             }
             for parameter in &function.parameters {
@@ -261,7 +261,7 @@ pub fn test_the_result_of_a_c_function_is_given_one_answer_for_every_read() {
             }
             for line in body.lines() {
                 let line = line.trim();
-                let Some(result) = result_of_a_call_to(line, C_FUNCTION_CALLED) else {
+                let Some(result) = result_of_a_call_to(line, C_FUNCTION_NAME) else {
                     continue;
                 };
                 calls_read += 1;
@@ -280,7 +280,7 @@ pub fn test_the_result_of_a_c_function_is_given_one_answer_for_every_read() {
     assert!(
         calls_read > 0,
         "the program calls `{}` through `FFI_CALL`, so that this test has a C result to read",
-        C_FUNCTION_CALLED,
+        C_FUNCTION_NAME,
     );
 }
 
@@ -302,14 +302,14 @@ fn frozen_operand(line: &str) -> Option<&str> {
     first_local_value(expression.strip_prefix("freeze ")?)
 }
 
-/// Where `check_no_undefined_bits.py` lives.
-fn the_undefined_bits_check() -> PathBuf {
+/// The path `check_no_undefined_bits.py` is at.
+fn undefined_bits_check_script() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("check_no_undefined_bits.py")
 }
 
 /// Runs `check_no_undefined_bits.py` with `arguments`.
 fn run_the_undefined_bits_check<S: AsRef<OsStr>>(arguments: impl IntoIterator<Item = S>) -> Output {
-    let script = the_undefined_bits_check();
+    let script = undefined_bits_check_script();
     Command::new("python3")
         .arg(&script)
         .args(arguments)
@@ -363,7 +363,7 @@ pub fn test_the_undefined_bits_check_gives_the_answers_it_is_known_to_give() {
     assert!(
         report.status.success(),
         "`{} --self-test` should report the functions it is known to report:\n{}{}",
-        the_undefined_bits_check().display(),
+        undefined_bits_check_script().display(),
         String::from_utf8_lossy(&report.stdout),
         String::from_utf8_lossy(&report.stderr),
     );

@@ -3006,7 +3006,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         match call_site.try_as_basic_value() {
             ValueKind::Basic(ret_c_val) => {
                 // What the C function returns is outside what Fix's types say, so fix its bits here.
-                let ret_c_val = self.build_freeze(ret_c_val, "FFI_CALL_result");
+                let ret_c_val = self.build_freeze(ret_c_val, "result@FFI_CALL");
                 if is_io {
                     let ret_struct_ty = type_tycon(ret_tycon).get_struct_type(self);
                     let ret_struct_val = ret_struct_ty.get_poison();
@@ -3220,7 +3220,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // `from_ty` -- writing zero over the slot first is what puts a value in that byte. The zero
         // is written as bytes rather than as a value of `larger_ty`, which would leave that type's
         // own holes where they were.
-        if from_size < to_size || !self.covers_its_bytes(from_ty) {
+        if from_size < to_size || self.has_padding(from_ty) {
             let slot_bytes_ty = self
                 .context
                 .i8_type()
@@ -3252,27 +3252,26 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Whether storing a value of `ty` writes every byte of the space it occupies.
+    /// Whether `ty` holds a byte no field owns, which a store of a value of it leaves as it was.
     ///
-    /// A struct laid out with a field on a boundary its predecessor does not reach, and an array of
-    /// such a struct, hold bytes no field owns: a store writes the fields and leaves those bytes as
-    /// they were.
-    fn covers_its_bytes(&mut self, ty: BasicTypeEnum<'c>) -> bool {
+    /// A struct laid out with a field on a boundary its predecessor does not reach carries such a
+    /// byte, and so does an array of one.
+    fn has_padding(&mut self, ty: BasicTypeEnum<'c>) -> bool {
         match ty {
             BasicTypeEnum::StructType(st) => {
                 let fields = st.get_field_types();
                 let fields_size: u64 = fields.iter().map(|field| self.sizeof(field)).sum();
-                fields_size == self.sizeof(&ty)
-                    && fields.into_iter().all(|field| self.covers_its_bytes(field))
+                fields_size != self.sizeof(&ty)
+                    || fields.into_iter().any(|field| self.has_padding(field))
             }
             BasicTypeEnum::ArrayType(at) => {
                 let element_ty = at.get_element_type();
-                self.sizeof(&element_ty) * at.len() as u64 == self.sizeof(&ty)
-                    && self.covers_its_bytes(element_ty)
+                self.sizeof(&element_ty) * at.len() as u64 != self.sizeof(&ty)
+                    || self.has_padding(element_ty)
             }
             // A scalar -- an integer, a float, a pointer -- is the bytes it occupies, so a store
             // of one writes all of them.
-            _ => true,
+            _ => false,
         }
     }
 
