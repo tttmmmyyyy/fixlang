@@ -143,6 +143,14 @@ type Args = struct {
     // Whether to measure the LangArena programs beside the cases. They take about ten minutes
     // against the two the cases take, which is why they are asked for rather than assumed.
     langarena : Bool,
+    // The compiler that builds the cases and the LangArena programs, as an absolute path, or
+    // the empty string to build it from this working tree with `cargo run`.
+    //
+    // A machine that measures needs no Rust and no LLVM when it is given one already built, so
+    // a compiler built elsewhere reaches a machine kept quiet by a copy of one file. The commit
+    // the row is logged under then comes from that compiler rather than from this working tree,
+    // since it is the compiler that produced the numbers.
+    fix : String,
 };
 
 namespace Args {
@@ -151,6 +159,7 @@ namespace Args {
         no_save: false,
         llvm_passes_file: "",
         langarena: false,
+        fix: "",
     };
 }
 
@@ -165,6 +174,11 @@ main = (
             continue $ (i + 1, args.set_no_save(true))
         } else if raw_args.@(i) == "--langarena" {
             continue $ (i + 1, args.set_langarena(true))
+        } else if raw_args.@(i) == "--fix" {
+            if i + 1 >= raw_args.@size {
+                undefined("error: --fix requires a path to a built compiler")
+            };
+            continue $ (i + 2, args.set_fix(raw_args.@(i + 1)))
         } else if raw_args.@(i) == "--llvm-passes-file" {
             if i + 1 >= raw_args.@size {
                 undefined("error: --llvm-passes-file requires a file path argument")
@@ -175,6 +189,13 @@ main = (
             undefined("error: Unknown argument: " + raw_args.@(i))
         }
     );
+
+    // The path a compiler given with `--fix` is reached by from every directory this run visits,
+    // since each case is built with that case as the working directory.
+    let args = *if args.@fix == "" { pure $ args } else {
+        let resolved = *["readlink", "-f", args.@fix].ez_run_o(config);
+        pure $ args.set_fix(resolved.strip_spaces)
+    };
 
     // Parse the log file.
     let log = *["cat", _LOG_FILE_PATH].ez_run_o(config);
@@ -200,6 +221,20 @@ main = (
         commit_hash + "(dirty)"
     } else {
         commit_hash
+    };
+
+    // A compiler given with `--fix` was built from another working tree, so the row names the
+    // commit that compiler reports instead: it is the compiler that produced the numbers, and
+    // nothing holds the tree measured from at the same commit. `--version` prints
+    // `fix <version> (<commit>)`, and one built from a dirty tree says so inside the parentheses.
+    let commit_hash = *if args.@fix == "" { pure $ commit_hash } else {
+        let version = *["sh", "-c", "'" + args.@fix + "' --version"].ez_run_o(config);
+        let opened = version.find("(", 0);
+        let closed = version.find(")", 0);
+        if opened.is_none || closed.is_none {
+            undefined("error: " + args.@fix + " --version printed no commit: " + version)
+        };
+        pure $ version.get_sub(opened.as_some + 1, closed.as_some)
     };
 
     // Add the new row to the log.
@@ -229,7 +264,8 @@ main = (
     // cycle columns.
     dirs.fold_m((), |dir, _|
         ez_cd(config, dir);;
-        let command = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols", "--allow-preliminary-commands"];
+        let compiler = if args.@fix == "" { ["cargo", "run", "--"] } else { [args.@fix] };
+        let command = compiler.append(["build", "-O", "experimental", "--emit-symbols", "--allow-preliminary-commands"]);
         let command = if args.@llvm_passes_file != "" {
             command.push_back("--llvm-passes-file")
                    .push_back("../../" + args.@llvm_passes_file)
@@ -252,11 +288,12 @@ main = (
 
     // The LangArena programs are built here too, for the reason the cases are: every build stands
     // before every measurement. They come last because the compiler that built the cases is what
-    // builds them, and the `cargo run` above is what puts that compiler where `--fix` names it.
+    // builds them, and the build above is what puts that compiler where `--fix` names it.
     ez_cd(config, "..");;
+    let langarena_compiler = if args.@fix == "" { _CARGO_BUILT_COMPILER } else { args.@fix };
     when(args.@langarena,
         ["python3", _LANGARENA_BENCH, "prepare"].ez_run_o(config);;
-        ["python3", _LANGARENA_BENCH, "build", "--fix", _CARGO_BUILT_COMPILER].ez_run_o(config);;
+        ["python3", _LANGARENA_BENCH, "build", "--fix", langarena_compiler].ez_run_o(config);;
         pure()
     );;
     ez_cd(config, _CASES_PATH);;

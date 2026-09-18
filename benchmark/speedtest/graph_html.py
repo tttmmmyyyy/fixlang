@@ -439,10 +439,23 @@ function render() {
   const lines = el("g", {}, svg);
   for (const s of series) {
     if (!isVisible(s)) continue;
-    const pts = [];
-    s.values.forEach((v, i) => { if (v !== null) pts.push(`${xAt(i)},${toY(v)}`); });
-    if (!pts.length) continue;
-    const d = "M" + pts.join("L");
+    // One segment per run of commits measured on one processor. A cycle count and a split count
+    // belong to the processor that read them, so a line carried across a change of machine shows
+    // the machine in the shape of the program. The `cpu` a row leaves empty names no processor,
+    // and so ends a segment as another processor would.
+    const parts = [];
+    let measured = 0;
+    let previous = null;
+    s.values.forEach((v, i) => {
+      if (v === null) return;
+      const starts = previous === null || DATA.commits[i].cpu !== DATA.commits[previous].cpu;
+      parts.push((starts ? "M" : "L") + `${xAt(i)},${toY(v)}`);
+      previous = i;
+      measured += 1;
+    });
+    if (!measured) continue;
+    const segments = parts.filter((p) => p[0] === "M").length;
+    const d = parts.join("");
     // The C and Rust counterparts of this case, on the same input and the same measurement.
     for (const [language, value] of Object.entries(s.refs)) {
       const y = toY(metric.kind === "ratio" ? value / s.base : value);
@@ -455,8 +468,9 @@ function render() {
     }
     el("path", { class: "series-line", stroke: s.color, d, "data-name": s.name }, lines);
     // Mark where the series was actually measured. A metric read on only some of the commits
-    // draws a line across the gaps, which would otherwise read as a continuous measurement.
-    if (pts.length < s.values.length) {
+    // draws a line across the gaps, which would otherwise read as a continuous measurement, and
+    // a segment of one commit draws no line at all.
+    if (measured < s.values.length || segments > 1) {
       s.values.forEach((v, i) => {
         if (v !== null) el("circle", { class: "point", cx: xAt(i), cy: toY(v), r: 2.5,
                                        fill: s.color }, lines);
@@ -501,7 +515,8 @@ function render() {
   const cpus = [...new Set(DATA.commits.map((c) => c.cpu).filter(Boolean))];
   if (cpus.length > 1) {
     note.textContent += ` Measured on more than one processor (${cpus.join("; ")}); `
-      + "counts from different ones do not belong on the same axis.";
+      + "each line breaks where the machine changes, since counts from different ones do not "
+      + "belong on the same axis.";
   }
   renderLegend(series);
 }
