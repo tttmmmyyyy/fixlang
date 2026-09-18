@@ -207,6 +207,27 @@ something the compiler has to leave alone — the program's arguments, a file, a
 computes — and confirm the choice by mutating the mechanism the test names and watching it go red.
 Until that, a green run says only that the program compiled.
 
+#### Count the shapes the corpus holds, not the ones the detector was written for
+
+A detector that reads machine-generated text -- IR, bytecode, a log, a serialized form -- implements
+a grammar, and it implements the part of that grammar its author thought of. Injecting a failure
+proves it fires on *that* shape; it says nothing about the shapes the generator emits that the author
+never pictured, and those are exactly where a walk goes quiet while looking as it does when it
+passes.
+
+So enumerate the shapes from the corpus rather than from the model of the input: grep the corpus for
+each construct the detector claims to handle, count the occurrences, and for every shape whose count
+is not zero, confirm the detector's answer on it is a decision rather than a miss. A shape the
+detector was never shown is one whose silence means nothing, however many times the corpus holds it
+-- and the count is the measurement of what the silence was worth. One walk of this kind reported
+correctly on a value built from a bare scaffold and dropped every unwritten field of one built from
+a constant aggregate; the two are the same situation written two ways, and the second stood 150
+times across 30 modules of the corpus the walk had just pronounced clean.
+
+The same enumeration catches the parser's own blind spots -- a name the generator quotes where the
+pattern admits no quote, an escape, a form the grammar allows and the sample never showed. Those
+make the detector skip whatever follows, which is the widest way for a walk to go quiet.
+
 #### Run the gatekeeper's predicate at the gate
 
 A pass that exists to guarantee something for a *later* stage — a validator that rejects what code
