@@ -16,8 +16,9 @@ use tempfile::TempDir;
 /// value put in them, and one of those variants holds a byte no field owns. A boxed value gives the
 /// helpers that retain, release and traverse one. A fold gives a value a loop carries, which is
 /// defined below the `phi` that reads it. `undefined` gives a branch that ends the program, which
-/// produces a value only so that the merge has one. And an `FFI_CALL` gives a value whose bits the
-/// declared signature does not settle.
+/// produces a value only so that the merge has one. An `FFI_CALL` gives a value whose bits the
+/// declared signature does not settle. And an `FFI_EXPORT` gives a function whose callers are C
+/// code this compiler never sees.
 const BOUNDARY_SOURCE: &str = r#"
     module Main;
 
@@ -45,6 +46,11 @@ const BOUNDARY_SOURCE: &str = r#"
     positive : I64 -> I64;
     positive = |x| if x > 0 { x } else { undefined("a negative count") };
 
+    offered : I64 -> I64;
+    offered = |x| x + 1;
+
+    FFI_EXPORT[offered, c_offered];
+
     main : IO ();
     main = (
         eval nothing;
@@ -71,14 +77,22 @@ fn boundary_modules() -> &'static [String] {
     MODULES.get_or_init(|| generated_llvm_ir_modules(BOUNDARY_SOURCE, "none", &[]))
 }
 
+/// The name `BOUNDARY_SOURCE` offers its exported function to C under.
+const EXPORTED_C_FUNCTION_NAME: &str = "c_offered";
+
 /// The functions of an emitted module that carry no statement about their boundary values.
 ///
-/// `Generator::add_generated_function` states it on every function the compiler emits a body for,
-/// so what is left is what the compiler declares through `Module::add_function` directly: the two
-/// runtime functions a Fix program reaches through their C signatures, and the entry point, whose
-/// arguments the C runtime supplies.
-const FUNCTIONS_OUTSIDE_THE_STATEMENT: [&str; 3] =
-    [RUNTIME_GET_ARGC, RUNTIME_GET_ARGV, C_ENTRY_POINT_NAME];
+/// A function whose boundary is a C signature stands outside the statement, since the calls across
+/// it come from code this compiler never sees: the two runtime functions a Fix program reaches
+/// through their C signatures, the entry point whose arguments the C runtime supplies, and a
+/// function `FFI_EXPORT` offers. `Generator::add_generated_function` states it on every other
+/// function the compiler emits a body for.
+const FUNCTIONS_OUTSIDE_THE_STATEMENT: [&str; 4] = [
+    RUNTIME_GET_ARGC,
+    RUNTIME_GET_ARGV,
+    C_ENTRY_POINT_NAME,
+    EXPORTED_C_FUNCTION_NAME,
+];
 
 /// One `define` line of an emitted module, cut into the parts that carry the statement.
 struct DefinedFunction<'a> {
