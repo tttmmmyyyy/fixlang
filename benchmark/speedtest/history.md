@@ -2,6 +2,40 @@
 
 Newer is above.
 
+**LangArena rows measured before the pinned revision rose from `69a97c9` to `53067d5` are
+comparable with rows after it on forty-six of the fifty programs, and on four they are not.** The
+pin names the revision of the benchmark sources every run measures, so raising it changes what the
+numbers describe with no compiler change behind it. The four were measured with one compiler on
+both sides -- `main` at `e714aeb`, whose `src/` is byte-identical to the `main` this note is
+written on -- so nothing but the benchmark sources differs between the two columns.
+
+| program | instructions | |
+| --- | --- | --- |
+| `Json::Generate` | **+89.50%** | the benchmark stopped taking a shortcut no other language had |
+| `Json::ParseMapping` | +8.92% | reads text the new writer produces |
+| `Compress::HuffEncode` | **-7.58%** | the benchmark stopped taking a slow path of its own |
+| `Json::ParseDom` | +0.69% | reads that text, through the new `json` release's reader |
+
+`Json::Generate` writes a document. It used to call `Json::write` with a precision of eight
+decimal places, which is what the coordinates are rounded to, and the writer used that number to
+assemble the digits without reaching the runtime's formatter. No other language's writer had such
+a number to work from. The `json` release this pin moves to takes the document alone and writes
+each number in the shortest decimal form that reads back as itself, which is the job the other
+languages were doing all along. The jump is a Fix advantage the comparison never intended being
+removed, not the compiler getting slower.
+
+The two parse rows read text that writer produces. `Json::ParseMapping` runs LangArena's own
+decoder, unchanged across these revisions, so its move is the input's alone; `Json::ParseDom` runs
+the `json` release's reader, which changed as well. Why the text costs `Json::ParseMapping` almost
+nine percent more to read was not isolated.
+
+`Compress::HuffEncode`'s `_write_bit` used to build each bit as `1_U8.shift_left(n)`. A byte shift
+by a variable amount touches a partial register; building the bit in `I64` and narrowing is the
+same work written so that it does not. The gain is the benchmark's, not the compiler's: it measures
+the same on a compiler from either side of #709.
+
+The other forty-six moved by less than 0.003%, which is the constant cost of starting a process.
+
 **Rows from `e714aeb` on are measured on a machine that runs nothing else, and no column of them
 is comparable with a row below.** The `cpu` column says which processor read a row and the graph
 breaks each line where it changes, so the two sides are never drawn as one measurement.
