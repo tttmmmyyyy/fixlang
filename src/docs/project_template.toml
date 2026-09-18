@@ -71,6 +71,13 @@ files = ["main.fix"]
 ## Whether to disable runtime checks (e.g., out-of-range check for array access).
 # no_runtime_check = false
 
+## Whether to stop the program where an operation on an integer type is given, or produces, a value
+## outside what the operation is defined on.
+## This covers the result of `+`, `-`, `*`, unary `-`, `/` and `%` on a signed type, and the amount
+## of `shift_left` and `shift_right` on any integer type.
+## Overwritten by the command line argument.
+# check_integer_operations = false
+
 ## Whether to skip the evaluation instructed by the `eval` syntax, which drops a debugging effect
 ## such as `Debug::debug_println` from the built program.
 # skip_eval = false
