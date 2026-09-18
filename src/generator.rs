@@ -139,7 +139,15 @@ impl<'c> ValueAccessor<'c> {
                         ValueKind::Basic(val) => val,
                         ValueKind::Instruction(_) => {
                             // An accessor whose value occupies no storage returns nothing.
-                            Generator::zero_sized_value(ty.get_embedded_type(gc))
+                            let embedded_ty = ty.get_embedded_type(gc);
+                            assert_eq!(
+                                gc.sizeof(&embedded_ty),
+                                0,
+                                "the accessor of `{}` returns nothing, so the value it names \
+                                 occupies no storage",
+                                ty.to_string(),
+                            );
+                            Generator::zero_sized_value(embedded_ty)
                         }
                     }
                 };
@@ -3262,6 +3270,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.sizeof(&element) * at.len() as u64 == self.sizeof(&ty)
                     && self.covers_its_bytes(element)
             }
+            // A scalar -- an integer, a float, a pointer -- is the bytes it occupies, so a store
+            // of one writes all of them.
             _ => true,
         }
     }
