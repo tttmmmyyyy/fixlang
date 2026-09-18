@@ -49,7 +49,7 @@ use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::{ExtCond, ExtShape, LeafCond};
 use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
 use inkwell::module::Linkage;
-use inkwell::values::{BasicValue, IntValue, PointerValue};
+use inkwell::values::{BasicMetadataValueEnum, BasicValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
@@ -1774,11 +1774,6 @@ fn build_shift_amount_check<'c, 'm>(
     is_left: bool,
 ) {
     let width = amount.get_type().get_bit_width();
-    assert!(
-        width <= 64,
-        "the report takes an amount of 64 bits, and this one is {} bits wide",
-        width
-    );
     let out_of_range = gc
         .builder()
         .build_int_compare(
@@ -1788,28 +1783,13 @@ fn build_shift_amount_check<'c, 'm>(
             "shift_amount_out_of_range",
         )
         .unwrap();
-    let reported_operation = format!(
-        "{} {}",
-        ty.toplevel_tycon().unwrap().name.name,
-        shift_function_name(is_left)
-    );
-    let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
-    let i64_ty = gc.context.i64_type();
-    // The report shows the amount the program wrote, so a negative amount of a signed type reaches
-    // it as the negative number rather than as the bit pattern the comparison above reads.
-    let reported_amount = if ty.is_signed_integer() {
-        gc.builder()
-            .build_int_s_extend_or_bit_cast(amount, i64_ty, "shift_amount_reported")
-    } else {
-        gc.builder()
-            .build_int_z_extend_or_bit_cast(amount, i64_ty, "shift_amount_reported")
-    }
-    .unwrap();
-    build_abort_if(
+    build_abort_on_integer_operation(
         gc,
         out_of_range,
+        ty,
+        shift_function_name(is_left),
         RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE,
-        &[reported_operation_ptr.into(), reported_amount.into()],
+        &[amount],
         "shift_amount",
     );
 }
@@ -10610,6 +10590,55 @@ fn build_division_overflow_check<'c, 'm>(
 ///
 /// The operands reach the report widened to 64 bits, which is the width the runtime function
 /// takes; the sign extension keeps the value.
+/// Emit the call that ends the program where `faulted` holds, reporting `operation` performed on
+/// the integer type `ty` together with the values `operands` it was performed on.
+///
+/// The report names the operation as `<type> <operation>`, and carries each operand widened to the
+/// 64 bits the runtime takes. The widening follows the sign of `ty`, so a negative operand of a
+/// signed type reads as the negative number rather than as the bit pattern the check read.
+///
+/// # Arguments
+/// * `runtime_fn` — the runtime function that writes the report and ends the program. It takes the
+///   operation's name and then one 64-bit value per operand.
+/// * `bb_name` — what the pair of basic blocks the check branches between is called in the emitted
+///   code.
+///
+/// # Examples
+/// A sum of `I64::maximum` and 1 reaching this ends the program with `I64 addition, with
+/// 9223372036854775807 and 1`.
+fn build_abort_on_integer_operation<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    faulted: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+    operation: &str,
+    runtime_fn: &str,
+    operands: &[IntValue<'c>],
+    bb_name: &str,
+) {
+    let reported_operation = format!("{} {}", ty.toplevel_tycon().unwrap().name.name, operation);
+    let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
+    let i64_ty = gc.context.i64_type();
+    let is_signed = ty.is_signed_integer();
+    let mut args: Vec<BasicMetadataValueEnum<'c>> = vec![reported_operation_ptr.into()];
+    for operand in operands {
+        assert!(
+            operand.get_type().get_bit_width() <= 64,
+            "the report takes operands of 64 bits, and this one is {} bits wide",
+            operand.get_type().get_bit_width()
+        );
+        let widened = if is_signed {
+            gc.builder()
+                .build_int_s_extend_or_bit_cast(*operand, i64_ty, "reported_operand")
+        } else {
+            gc.builder()
+                .build_int_z_extend_or_bit_cast(*operand, i64_ty, "reported_operand")
+        }
+        .unwrap();
+        args.push(widened.into());
+    }
+    build_abort_if(gc, faulted, runtime_fn, &args, bb_name);
+}
+
 fn build_report_signed_overflow<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     overflowed: IntValue<'c>,
@@ -10618,31 +10647,13 @@ fn build_report_signed_overflow<'c, 'm>(
     rhs: IntValue<'c>,
     ty: &Arc<TypeNode>,
 ) {
-    assert!(
-        lhs.get_type().get_bit_width() <= 64,
-        "the report takes operands of 64 bits, and this one is {} bits wide",
-        lhs.get_type().get_bit_width()
-    );
-    let reported_operation = format!(
-        "{} {}",
-        ty.toplevel_tycon().unwrap().name.name,
-        operation.reported_as()
-    );
-    let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
-    let i64_ty = gc.context.i64_type();
-    let lhs = gc
-        .builder()
-        .build_int_s_extend_or_bit_cast(lhs, i64_ty, "signed_overflow_lhs")
-        .unwrap();
-    let rhs = gc
-        .builder()
-        .build_int_s_extend_or_bit_cast(rhs, i64_ty, "signed_overflow_rhs")
-        .unwrap();
-    build_abort_if(
+    build_abort_on_integer_operation(
         gc,
         overflowed,
+        ty,
+        operation.reported_as(),
         RUNTIME_SIGNED_OVERFLOW,
-        &[reported_operation_ptr.into(), lhs.into(), rhs.into()],
+        &[lhs, rhs],
         "signed_overflow",
     );
 }
