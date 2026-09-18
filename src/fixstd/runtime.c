@@ -78,6 +78,9 @@ double fixruntime_f64_from_bytes(double *buf)
 
 // The two digits each number below a hundred is written with, laid end to end, so that a number is
 // written two digits at a time.
+//
+// Ryu carries the same table in `ryu/digit_table.h`, where it is `static`, so a source including
+// that header takes a copy of it rather than sharing this one.
 static const char FIXRUNTIME_DIGIT_PAIRS[201] =
     "0001020304050607080910111213141516171819202122232425262728293031323334353637383940414243444546474849"
     "5051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899";
@@ -89,7 +92,7 @@ static const char FIXRUNTIME_DIGIT_PAIRS[201] =
 //
 // The digits are built from the last of them backwards into a scratch, which is what lets one pass
 // produce them without knowing first how many there are, and the scratch is then copied over.
-static int64_t fixruntime_write_u64(char *buf, uint64_t v)
+int64_t fixruntime_write_u64(char *buf, uint64_t v)
 {
     char digits[FIXRUNTIME_U64_DIGITS];
     int at = FIXRUNTIME_U64_DIGITS;

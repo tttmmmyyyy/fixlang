@@ -24,6 +24,10 @@ arithmetic rather than a call into C's library.
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+// Writes a number at a place in decimal, null-terminated, and answers how many digits it took. It
+// lives in `runtime.c`, which carries no header.
+int64_t fixruntime_write_u64(char *buf, uint64_t v);
 #ifdef __APPLE__
 #include <xlocale.h>
 #endif
@@ -239,17 +243,7 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
             text[written++] = '-';
             exponent = -exponent;
         }
-        char reversed[8];
-        int length = 0;
-        do
-        {
-            reversed[length++] = (char)('0' + exponent % 10);
-            exponent /= 10;
-        } while (exponent != 0);
-        while (length > 0)
-        {
-            text[written++] = reversed[--length];
-        }
+        written += (int)fixruntime_write_u64(text + written, (uint64_t)exponent);
     }
     text[written] = '\0';
 
