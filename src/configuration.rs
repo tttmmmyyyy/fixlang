@@ -1370,6 +1370,24 @@ impl Configuration {
     pub fn runtime_check(&self) -> bool {
         !self.no_runtime_check
     }
+
+    /// Whether the generated program stops at an arithmetic operation on a signed integer type
+    /// whose result leaves the range of that type.
+    ///
+    /// `--check-signed-overflow` asks for the check, and `--no-runtime-check` takes out every check
+    /// that ends the program, this one among them.
+    pub fn checks_signed_overflow(&self) -> bool {
+        self.check_signed_overflow && self.runtime_check()
+    }
+
+    /// Whether the generated program stops at a shift whose amount is outside the range the shift
+    /// is defined on.
+    ///
+    /// `--check-shift-amount` asks for the check, and `--no-runtime-check` takes out every check
+    /// that ends the program, this one among them.
+    pub fn checks_shift_amount(&self) -> bool {
+        self.check_shift_amount && self.runtime_check()
+    }
 }
 
 /// The width of each C numeric type, in bits, on the machine the compiler runs on.

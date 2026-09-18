@@ -1745,15 +1745,6 @@ fn mask_shift_amount_to_width<'c, 'm>(
         .unwrap()
 }
 
-/// Whether the program being generated stops at a shift whose amount is outside the range the
-/// shift is defined on.
-///
-/// `--check-shift-amount` asks for the check, and `--no-runtime-check` takes out every check that
-/// ends the program, this one among them.
-fn shift_amount_is_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
-    gc.config.check_shift_amount && gc.config.runtime_check()
-}
-
 /// Emit the check that ends the program where `amount` is outside the range a shift of a value of
 /// `ty` is defined on, which is from zero up to the width of `ty`.
 ///
@@ -1821,7 +1812,7 @@ impl LLVMGen for InlineLLVMShiftBody {
 
         // The check reads the amount the program wrote, so it stands ahead of the mask: masking
         // first would put every amount inside the width and leave the check unable to fire.
-        if shift_amount_is_checked(gc) {
+        if gc.config.checks_shift_amount() {
             build_shift_amount_check(gc, amount, ty, self.is_left);
         }
         // The masked amount shadows the amount the program wrote, so the shift below reaches the
@@ -10394,15 +10385,6 @@ const SIGNED_SUB_WITH_OVERFLOW: &str = "llvm.ssub.with.overflow";
 /// of the signed integer type, as `{ iN, i1 }`.
 const SIGNED_MUL_WITH_OVERFLOW: &str = "llvm.smul.with.overflow";
 
-/// Whether the program being generated stops at an arithmetic operation on a signed integer type
-/// whose result leaves the range of that type.
-///
-/// `--check-signed-overflow` asks for the check, and `--no-runtime-check` takes out every check
-/// that ends the program, this one among them.
-fn signed_overflow_is_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
-    gc.config.check_signed_overflow && gc.config.runtime_check()
-}
-
 /// An arithmetic operation the code generator emits for an integer type.
 ///
 /// `Negate` negates its right operand; its left operand is the zero that operand is subtracted
@@ -10485,7 +10467,7 @@ fn build_integer_arithmetic<'c, 'm>(
     // Only a signed type has a range an operation can leave: an unsigned one is taken modulo two
     // to its width, so every result is a value of the type.
     let is_signed = ty.toplevel_tycon().unwrap().is_signed_integer();
-    if is_signed && signed_overflow_is_checked(gc) {
+    if is_signed && gc.config.checks_signed_overflow() {
         if operation.is_division() {
             // A division carries no intrinsic reporting the overflow, so the check stands in front
             // of the instruction rather than replacing it.
@@ -10551,8 +10533,10 @@ fn build_checked_signed_arithmetic<'c, 'm>(
 
 /// Emit the check that ends the program where `operation` divides the least value of the signed
 /// integer type `ty` by -1, which is the one pair a division and a remainder are undefined at: the
-/// quotient is one past the greatest value of the type. The check is emitted where
-/// `--check-signed-overflow` asks for it.
+/// quotient is one past the greatest value of the type.
+///
+/// `build_integer_arithmetic` reaches this only where the program asks for the signed overflow
+/// check, so the check is emitted unconditionally here.
 fn build_division_overflow_check<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     operation: IntegerArithmetic,
@@ -10560,9 +10544,6 @@ fn build_division_overflow_check<'c, 'm>(
     rhs: IntValue<'c>,
     ty: &Arc<TypeNode>,
 ) {
-    if !signed_overflow_is_checked(gc) {
-        return;
-    }
     let int_ty = lhs.get_type();
     let least = int_ty.const_int(1u64 << (int_ty.get_bit_width() - 1), false);
     let is_least = gc
