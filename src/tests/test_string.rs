@@ -129,6 +129,8 @@ pub fn test_ptr_to_string() {
     main : IO ();
     main = (
         assert_eq(|_|"", nullptr.add_offset(3134905646).to_string, "00000000badadd2e");;
+        // Every hexadecimal digit, each in the place its value puts it: 0x0123456789abcdef.
+        assert_eq(|_|"", nullptr.add_offset(81985529216486895).to_string, "0123456789abcdef");;
         pure()
     );
     "#;
