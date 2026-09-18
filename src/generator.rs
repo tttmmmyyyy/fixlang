@@ -3222,14 +3222,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         let (from_size, to_size) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
         let larger_ty = if from_size > to_size { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
-        self.build_store(MemoryRegion::Data, ptr, val);
-        let loaded = self.build_load(MemoryRegion::Data, to_ty, ptr, "bit_cast");
-        // Where the store leaves a byte the load reads -- a wider `to_ty`, or a hole inside `from_ty`
-        // -- the load reads memory nothing wrote, and what it reads there is fixed here.
-        if from_size >= to_size && self.covers_its_bytes(from_ty) {
-            return loaded;
+        // Where the store of `val` leaves a byte the load reads -- a wider `to_ty`, or a hole inside
+        // `from_ty` -- writing zero over the slot first is what puts a value in that byte.
+        if from_size < to_size || !self.covers_its_bytes(from_ty) {
+            self.build_store(MemoryRegion::Data, ptr, larger_ty.const_zero());
         }
-        self.build_freeze(loaded, "bit_cast_frozen")
+        self.build_store(MemoryRegion::Data, ptr, val);
+        self.build_load(MemoryRegion::Data, to_ty, ptr, "bit_cast")
     }
 
     /// `val` with its undefined bits fixed: one value that answers the same to every read of it.
