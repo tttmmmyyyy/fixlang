@@ -74,6 +74,12 @@ class Taint:
             return not self.undefined
         return all(field.is_clean() for field in self.fields.values())
 
+    def key(self):
+        """A comparable form of this taint, for telling one round's answer from the next."""
+        if self.fields is None:
+            return self.undefined
+        return tuple(sorted((i, f.key()) for i, f in self.fields.items()))
+
     def spread(self, arity: int) -> "Taint":
         """This taint as a node of `arity` fields, so that one of them can be written."""
         if self.fields is not None:
@@ -228,51 +234,46 @@ def unreached_blocks(body: List[str]) -> set:
     return {label for label in labels if label not in targets}
 
 
+# How many rounds the walk is given to settle. The transfer only ever adds undefined bits, so it
+# settles; the bound is what turns a walk that does not into a loud failure rather than a silent one.
+ROUNDS = 32
+
+
 def check_function(name: str, body: List[str], path: str, never_return: set) -> List[str]:
-    """The lines of `body` that hand a value with undefined bits to a caller or a callee."""
-    taints: Dict[str, Taint] = {}
-    findings: List[str] = []
+    """The lines of `body` that hand a value with undefined bits to a caller or a callee.
+
+    The walk runs until its answer stops changing. One pass forward is not enough: a value a loop
+    carries is defined below the `phi` that reads it, so the first pass reads it as written.
+    """
     ending = ending_blocks(body, never_return)
     unreached = unreached_blocks(body)
-    reached = True
+    taints: Dict[str, Taint] = {}
+    for round_number in range(ROUNDS):
+        before = {name: taint.key() for name, taint in taints.items()}
+        walk(body, taints, ending)
+        if {name: taint.key() for name, taint in taints.items()} == before:
+            break
+    else:
+        raise RuntimeError(f"{path}: {name}: the walk did not settle in {ROUNDS} rounds")
+    return report(name, body, path, taints, unreached, never_return)
 
+
+def walk(body: List[str], taints: Dict[str, Taint], ending: set) -> None:
+    """Read each instruction once, writing what its result carries into `taints`."""
     for line in body:
         text = line.strip()
         if not text or text.startswith(";"):
             continue
 
-        label = BLOCK_LABEL.match(line)
-        if label:
-            reached = label.group(1) not in unreached
-            continue
-        if not reached:
-            continue
-        if any(callee.strip('"') in never_return for callee in CALLEE.findall(line)):
-            # Control stops here; what the block goes on to say is written to give it an end.
-            reached = False
+        text = line.strip()
+        if not text or text.startswith(";"):
             continue
 
         assignment = ASSIGNMENT.match(line)
-        expression = assignment.group(2) if assignment else text
-        words = expression.split()
-        opcode = words[0] if words else ""
-
-        # What the instruction hands over, taken before what it defines: a call that returns a value
-        # does both.
-        if "call" in words[:3] or opcode == "invoke":
-            arguments = (
-                expression[expression.find("(") + 1 : expression.rfind(")")] if "(" in expression else ""
-            )
-            for operand in split_operands(arguments):
-                if not taint_of(operand, taints).is_clean():
-                    findings.append(f"{path}: {name}: argument `{operand}`: {text}")
-        elif opcode == "ret" and len(words) > 1:
-            for operand in split_operands(expression[len("ret") :]):
-                if not taint_of(operand, taints).is_clean():
-                    findings.append(f"{path}: {name}: result `{operand}`: {text}")
-
         if not assignment:
             continue
+        expression = assignment.group(2)
+        opcode = expression.split()[0] if expression.split() else ""
         defined = assignment.group(1)
 
         if opcode == "freeze":
@@ -304,6 +305,48 @@ def check_function(name: str, body: List[str], path: str, never_return: set) -> 
         else:
             taints[defined] = taint_of_result(expression, taints)
 
+
+def report(
+    name: str,
+    body: List[str],
+    path: str,
+    taints: Dict[str, Taint],
+    unreached: set,
+    never_return: set,
+) -> List[str]:
+    """The lines of `body` handing a value with undefined bits over, read off the settled walk."""
+    findings: List[str] = []
+    reached = True
+    for line in body:
+        text = line.strip()
+        if not text or text.startswith(";"):
+            continue
+        label = BLOCK_LABEL.match(line)
+        if label:
+            reached = label.group(1) not in unreached
+            continue
+        if not reached:
+            continue
+
+        assignment = ASSIGNMENT.match(line)
+        expression = assignment.group(2) if assignment else text
+        words = expression.split()
+        opcode = words[0] if words else ""
+        if "call" in words[:3] or opcode == "invoke":
+            arguments = (
+                expression[expression.find("(") + 1 : expression.rfind(")")] if "(" in expression else ""
+            )
+            for operand in split_operands(arguments):
+                if not taint_of(operand, taints).is_clean():
+                    findings.append(f"{path}: {name}: argument `{operand}`: {text}")
+        elif opcode == "ret" and len(words) > 1:
+            for operand in split_operands(expression[len("ret") :]):
+                if not taint_of(operand, taints).is_clean():
+                    findings.append(f"{path}: {name}: result `{operand}`: {text}")
+
+        if any(callee.strip('"') in never_return for callee in CALLEE.findall(line)):
+            # Control stops here; what the block goes on to say is written to give it an end.
+            reached = False
     return findings
 
 
@@ -392,6 +435,18 @@ merge:
   ret void
 }
 
+define void @carried_around_a_loop(i1 %c) {
+entry:
+  br label %head
+head:
+  %keep = phi i64 [ 0, %entry ], [ %later, %head ]
+  call void @sink_i(i64 %keep)
+  %later = add i64 poison, 1
+  br i1 %c, label %head, label %out
+out:
+  ret void
+}
+
 attributes #0 = { noreturn nounwind }
 """
 
@@ -400,6 +455,7 @@ SELF_TEST_ANSWERS = {
     "one_field_left",
     "poison_in_the_result",
     "an_unwritten_field_read_back",
+    "carried_around_a_loop",
 }
 
 
@@ -422,7 +478,7 @@ def self_test() -> int:
         print(f"reported with nothing to report: {', '.join(sorted(extra))}")
     if missing or extra:
         return 1
-    print(f"self-test: the walk reports {len(SELF_TEST_ANSWERS)} of 7 functions, as it is to")
+    print(f"self-test: the walk reports {len(SELF_TEST_ANSWERS)} of 8 functions, as it is to")
     return 0
 
 
