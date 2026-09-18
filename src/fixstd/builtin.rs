@@ -10566,11 +10566,6 @@ fn build_division_overflow_check<'c, 'm>(
     build_report_signed_overflow(gc, overflowed, operation, lhs, rhs, ty);
 }
 
-/// Emit the call that reports an arithmetic operation on the signed integer type `ty` whose result
-/// left the range of that type and ends the program, taken where `overflowed` holds.
-///
-/// The operands reach the report widened to 64 bits, which is the width the runtime function
-/// takes; the sign extension keeps the value.
 /// Emit the call that ends the program where `faulted` holds, reporting `operation` performed on
 /// the integer type `ty` together with the values `operands` it was performed on.
 ///
@@ -10620,6 +10615,10 @@ fn build_abort_on_integer_operation<'c, 'm>(
     build_abort_if(gc, faulted, runtime_fn, &args, bb_name);
 }
 
+/// Emit the call that reports an arithmetic operation on the signed integer type `ty` whose result
+/// left the range of that type and ends the program, taken where `overflowed` holds.
+///
+/// The report names both operands, so a reader of it sees the pair the operation was performed on.
 fn build_report_signed_overflow<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     overflowed: IntValue<'c>,
