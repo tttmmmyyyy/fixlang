@@ -48,11 +48,15 @@ This project implements the Fix programming language compiler and related tools 
   `benchmark/speedtest` run as `--langarena` so that all 106 programs land in one row.
 - **The primary metric is the instruction count (`instructions:u`).** Conclusions rest on it. It
   depends on neither the load on the machine nor where the code lands in `.text`.
-- **Wall time is the secondary metric**, reported beside the instruction count in the pull request.
-  It is a reference figure: it moves with what else the machine is doing.
-- **Cycle counts are not used.** Where a hot loop starts inside a 64-byte line decides them, and
-  what decides that is the sizes of everything the linker placed first. Measured with the code
-  held byte-identical, one benchmark spans 32.6% (#654).
+- **The cycle count is the secondary metric**, reported beside the instruction count in the pull
+  request, and read on a machine with nothing else running. Where a hot loop starts inside a
+  64-byte line decides it, and what decides that is the sizes of everything the linker placed
+  first: measured with the code held byte-identical, one benchmark spans 32.6% (#654). Read
+  `idq_uops_not_delivered.core` beside it to tell the two apart — a cycle count that carries that
+  counter with it is the front end being fed at another rate, which is what an address does, and
+  one that leaves it where it was is the work.
+- **Wall time says nothing the cycle count does not.** The two differ by a frequency that holds to
+  within a percent where nothing else runs, so the address above reaches it just the same.
 - **The report covers every case measured, the neutral ones included.** Listing only what moved
   makes a change look larger than it is; what says how much a gain or a regression weighs is how
   many of how many moved.
