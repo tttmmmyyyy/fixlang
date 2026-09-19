@@ -31,7 +31,8 @@ use crate::constants::{
     TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::fixstd::runtime::{
-    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC, RUNTIME_SIGNED_OVERFLOW,
+    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC, RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE,
+    RUNTIME_SIGNED_OVERFLOW,
 };
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
@@ -48,7 +49,7 @@ use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::{ExtCond, ExtShape, LeafCond};
 use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
 use inkwell::module::Linkage;
-use inkwell::values::{BasicValue, IntValue, PointerValue};
+use inkwell::values::{BasicMetadataValueEnum, BasicValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
@@ -1307,7 +1308,7 @@ impl LLVMGen for InlineLLVMCastIntegralBody {
         let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
 
         // Get target type.
-        let to_int = to_ty
+        let to_int_ty = to_ty
             .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
@@ -1318,7 +1319,7 @@ impl LLVMGen for InlineLLVMCastIntegralBody {
             .builder()
             .build_int_cast_sign_flag(
                 from_val,
-                to_int,
+                to_int_ty,
                 self.is_source_signed,
                 "build_int_cast_sign_flag@cast_between_integral_function",
             )
@@ -1414,7 +1415,7 @@ impl LLVMGen for InlineLLVMCastFloatBody {
             .into_float_value();
 
         // Get target type.
-        let to_float = to_ty
+        let to_float_ty = to_ty
             .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
@@ -1423,7 +1424,11 @@ impl LLVMGen for InlineLLVMCastFloatBody {
         // Perform cast.
         let to_val = gc
             .builder()
-            .build_float_cast(from_val, to_float, "float_cast@cast_between_float_function")
+            .build_float_cast(
+                from_val,
+                to_float_ty,
+                "float_cast@cast_between_float_function",
+            )
             .unwrap();
 
         // Return result.
@@ -1504,7 +1509,7 @@ impl LLVMGen for InlineLLVMCastIntToFloatBody {
         let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
 
         // Get target type.
-        let to_float = to_ty
+        let to_float_ty = to_ty
             .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
@@ -1514,13 +1519,13 @@ impl LLVMGen for InlineLLVMCastIntToFloatBody {
         let to_val = if self.is_signed {
             gc.builder().build_signed_int_to_float(
                 from_val,
-                to_float,
+                to_float_ty,
                 "signed_int_to_float@cast_int_to_float_function",
             )
         } else {
             gc.builder().build_unsigned_int_to_float(
                 from_val,
-                to_float,
+                to_float_ty,
                 "unsigned_int_to_float@cast_int_to_float_function",
             )
         }
@@ -1607,7 +1612,7 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
             .into_float_value();
 
         // Get target type.
-        let to_int = to_ty
+        let to_int_ty = to_ty
             .get_struct_type(gc)
             .get_field_type_at_index(0)
             .unwrap()
@@ -1618,7 +1623,7 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
             gc.builder()
                 .build_float_to_signed_int(
                     from_val,
-                    to_int,
+                    to_int_ty,
                     "float_to_signed_int@cast_float_to_int_function",
                 )
                 .unwrap()
@@ -1626,7 +1631,7 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
             gc.builder()
                 .build_float_to_unsigned_int(
                     from_val,
-                    to_int,
+                    to_int_ty,
                     "float_to_unsigned_int@cast_float_to_int_function",
                 )
                 .unwrap()
@@ -1698,18 +1703,101 @@ pub fn cast_float_to_int_function(
     (expr, scm)
 }
 
+/// The name of the standard-library value `shift_function` builds: `shift_left` when `is_left`
+/// holds, and `shift_right` when it does not.
+fn shift_function_name(is_left: bool) -> &'static str {
+    if is_left {
+        "shift_left"
+    } else {
+        "shift_right"
+    }
+}
+
+/// `amount` with every bit above the width of its own type cleared, which is the shift amount
+/// `shl`, `lshr` and `ashr` are defined on.
+///
+/// Those instructions answer `poison` when the amount reaches the width of the value, and a
+/// `poison` is a permission to take any value, so two readers of one shift may take different
+/// answers from it. Masking the amount puts it below the width, which is what makes the shift
+/// answer one value.
+///
+/// The machine's own shift instruction masks the amount by the width of the *register* holding it,
+/// so this `and` survives into the generated code only where the register is wider than the type —
+/// `I8` and `I16`, and their unsigned siblings — and only for an amount that is not a constant.
+///
+/// # Examples
+/// An amount of 64 shifting an `I64` is masked to 0, and an amount of 8 shifting an `I8` to 0.
+fn mask_shift_amount_to_width<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    amount: IntValue<'c>,
+) -> IntValue<'c> {
+    let width = amount.get_type().get_bit_width();
+    // Clearing the bits above the width is taking the amount modulo the width, which the mask
+    // `width - 1` performs for a width that is a power of two. Every integer type of `Std` has one.
+    assert!(
+        width.is_power_of_two(),
+        "The width {} of a shifted integer type is not a power of two",
+        width
+    );
+    let mask = amount.get_type().const_int(width as u64 - 1, false);
+    gc.builder()
+        .build_and(amount, mask, "shift_amount@shift_function")
+        .unwrap()
+}
+
+/// Emit the check that ends the program when `amount` is outside the range a shift of `ty` is
+/// defined on: at least zero, and less than the width of `ty`.
+///
+/// The comparison reads `amount` as unsigned, so one comparison catches a negative amount too:
+/// read that way, every negative number is above every width.
+///
+/// # Arguments
+/// * `is_left` — whether the shift the amount belongs to moves the value towards its greatest bit,
+///   which is what the report names.
+///
+/// # Examples
+/// `Std::I64::shift_left` reaching this with an amount of 64 ends the program with
+/// `Shift amount outside the width of the type: I64 shift_left, with 64`.
+fn build_shift_amount_check<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    amount: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+    is_left: bool,
+) {
+    let width = amount.get_type().get_bit_width();
+    let out_of_range = gc
+        .builder()
+        .build_int_compare(
+            IntPredicate::UGE,
+            amount,
+            amount.get_type().const_int(width as u64, false),
+            "shift_amount_out_of_range",
+        )
+        .unwrap();
+    build_abort_on_integer_operation(
+        gc,
+        out_of_range,
+        ty,
+        shift_function_name(is_left),
+        RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE,
+        &[amount],
+        "shift_amount",
+    );
+}
+
 /// Evaluates `Std::I64::shift_left` and `Std::I64::shift_right`, and the same values of the other
 /// integer types: the value with its bits moved by the given number of places.
 ///
 /// A right shift of a signed type fills the vacated places with the sign bit, and every other shift
-/// fills them with zeros. The number of places is read as an unsigned number, so a count of at
-/// least the width of the type in bits yields a poison value.
+/// fills them with zeros. The number of places is taken modulo the width of the type in bits, so
+/// every count gives one value of that type; `--check-integer-operations` stops the program on a
+/// count outside that range.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMShiftBody {
     /// The local binding holding the value to shift.
     value_name: FullName,
-    /// The local binding holding the number of places to shift by.
-    n_name: FullName,
+    /// The local binding holding the amount, in bits, to shift by.
+    amount_name: FullName,
     /// Whether the bits move towards the more significant end.
     is_left: bool,
 }
@@ -1721,18 +1809,29 @@ impl LLVMGen for InlineLLVMShiftBody {
         let val = gc
             .get_scoped_obj_field(&self.value_name, 0)
             .into_int_value();
-        let n = gc.get_scoped_obj_field(&self.n_name, 0).into_int_value();
+        let amount = gc
+            .get_scoped_obj_field(&self.amount_name, 0)
+            .into_int_value();
 
         let is_signed = ty.is_signed_integer();
+
+        // The check reads the amount the program wrote, so it stands ahead of the mask: masking
+        // first would put every amount inside the width and leave the check unable to fire.
+        if gc.config.checks_integer_operations() {
+            build_shift_amount_check(gc, amount, ty, self.is_left);
+        }
+        // The masked amount shadows the amount the program wrote, so the shift below reaches the
+        // masked amount alone.
+        let amount = mask_shift_amount_to_width(gc, amount);
 
         // Perform shift operation.
         let shifted = if self.is_left {
             gc.builder()
-                .build_left_shift(val, n, "left_shift@shift_function")
+                .build_left_shift(val, amount, "left_shift@shift_function")
                 .unwrap()
         } else {
             gc.builder()
-                .build_right_shift(val, n, is_signed, "right_shift@shift_function")
+                .build_right_shift(val, amount, is_signed, "right_shift@shift_function")
                 .unwrap()
         };
 
@@ -1743,15 +1842,15 @@ impl LLVMGen for InlineLLVMShiftBody {
 
     fn name(&self) -> String {
         format!(
-            "shift_{}({}, {})",
-            if self.is_left { "left" } else { "right" },
+            "{}({}, {})",
+            shift_function_name(self.is_left),
             self.value_name.to_string(),
-            self.n_name.to_string()
+            self.amount_name.to_string()
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.value_name, &mut self.n_name]
+        vec![&mut self.value_name, &mut self.amount_name]
     }
 
     fn result_locality(
@@ -1771,9 +1870,12 @@ impl LLVMGen for InlineLLVMShiftBody {
 /// `val` shifted by `n` bits, towards the more significant end when `is_left` holds and towards the
 /// less significant end otherwise.
 /// Type: ty -> ty -> ty
+///
+/// The number of bits is the first argument and the value the second, which is what makes
+/// `v.shift_left(bits)` move the bits of `v`.
 pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const VALUE_NAME: &str = "val";
-    const N_NAME: &str = "n";
+    const AMOUNT_NAME: &str = "amount";
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -1782,13 +1884,13 @@ pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<S
         type_fun(ty.clone(), type_fun(ty.clone(), ty.clone())),
     );
     let expr = expr_abs(
-        vec![var_local(N_NAME)],
+        vec![var_local(AMOUNT_NAME)],
         expr_abs(
             vec![var_local(VALUE_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMShiftBody {
                     value_name: FullName::local(VALUE_NAME),
-                    n_name: FullName::local(N_NAME),
+                    amount_name: FullName::local(AMOUNT_NAME),
                     is_left,
                 }),
                 ty,
@@ -10504,19 +10606,10 @@ const SIGNED_SUB_WITH_OVERFLOW: &str = "llvm.ssub.with.overflow";
 /// of the signed integer type, as `{ iN, i1 }`.
 const SIGNED_MUL_WITH_OVERFLOW: &str = "llvm.smul.with.overflow";
 
-/// Whether the program being generated stops at an arithmetic operation on a signed integer type
-/// whose result leaves the range of that type.
-///
-/// `--check-signed-overflow` asks for the check, and `--no-runtime-check` takes out every check
-/// that ends the program, this one among them.
-fn signed_overflow_is_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
-    gc.config.check_signed_overflow && gc.config.runtime_check()
-}
-
 /// An arithmetic operation the code generator emits for an integer type.
 ///
-/// `Negate` negates its right operand, and takes as its left operand the zero that operand is
-/// subtracted from, which is the instruction emitted for a negation.
+/// `Negate` negates its right operand; its left operand is the zero that operand is subtracted
+/// from, since a negation is emitted as a subtraction from zero.
 #[derive(Clone, Copy)]
 enum IntegerArithmetic {
     /// `Add::add`, the infix `+`.
@@ -10546,8 +10639,8 @@ impl IntegerArithmetic {
         }
     }
 
-    /// Whether this operation divides. LLVM offers no intrinsic reporting the overflow of these
-    /// two, so they are checked by comparing their operands.
+    /// Whether this operation divides. LLVM offers no intrinsic reporting the overflow of `Divide`
+    /// and `Remainder`, so those two are checked by comparing their operands.
     fn is_division(self) -> bool {
         matches!(self, Self::Divide | Self::Remainder)
     }
@@ -10571,7 +10664,7 @@ impl IntegerArithmetic {
 }
 
 /// Emit `operation` on `lhs` and `rhs` at the integer type `ty`: the instruction that performs it,
-/// or, where `--check-signed-overflow` asks for a signed result to be checked, the intrinsic that
+/// or, where `--check-integer-operations` asks for a signed result to be checked, the intrinsic that
 /// ends the program when the result leaves the range of the type.
 ///
 /// # Arguments
@@ -10595,7 +10688,7 @@ fn build_integer_arithmetic<'c, 'm>(
     // Only a signed type has a range an operation can leave: an unsigned one is taken modulo two
     // to its width, so every result is a value of the type.
     let is_signed = ty.toplevel_tycon().unwrap().is_signed_integer();
-    if is_signed && signed_overflow_is_checked(gc) {
+    if is_signed && gc.config.checks_integer_operations() {
         if operation.is_division() {
             // A division carries no intrinsic reporting the overflow, so the check stands in front
             // of the instruction rather than replacing it.
@@ -10659,10 +10752,12 @@ fn build_checked_signed_arithmetic<'c, 'm>(
         .into_int_value()
 }
 
-/// Emit the check that ends the program where `operation` divides the least value of the signed
-/// integer type `ty` by -1, which is the one pair a division and a remainder are undefined at: the
-/// quotient is one past the greatest value of the type. The check is emitted where
-/// `--check-signed-overflow` asks for it.
+/// Emit the check that ends the program when `operation` divides the least value of the signed
+/// integer type `ty` by -1. That is the one pair a division and a remainder are undefined at: the
+/// quotient is one past the greatest value of the type.
+///
+/// `build_integer_arithmetic` reaches this only when the program asks for its integer operations to
+/// be checked, so the check is emitted unconditionally here.
 fn build_division_overflow_check<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     operation: IntegerArithmetic,
@@ -10670,9 +10765,6 @@ fn build_division_overflow_check<'c, 'm>(
     rhs: IntValue<'c>,
     ty: &Arc<TypeNode>,
 ) {
-    if !signed_overflow_is_checked(gc) {
-        return;
-    }
     let int_ty = lhs.get_type();
     let least = int_ty.const_int(1u64 << (int_ty.get_bit_width() - 1), false);
     let is_least = gc
@@ -10695,11 +10787,66 @@ fn build_division_overflow_check<'c, 'm>(
     build_report_signed_overflow(gc, overflowed, operation, lhs, rhs, ty);
 }
 
+/// Emit the call that ends the program when `faulted` holds, reporting `operation` on the integer
+/// type `ty` together with the `operands` it was performed on.
+///
+/// The report names the operation as `<type> <operation>`, and carries each operand widened to the
+/// 64 bits the runtime takes. The widening and the report both read an operand under the sign of
+/// `ty`, so a negative operand of a signed type reads as that negative number rather than as the
+/// bit pattern the check saw, and an operand of an unsigned type as the magnitude its bits hold.
+///
+/// # Arguments
+/// * `runtime_fn` — the runtime function that writes the report and ends the program. It takes the
+///   operation's name, whether the operands are read as signed, and then one 64-bit value per
+///   operand.
+/// * `bb_name` — what the pair of basic blocks the check branches between is called in the emitted
+///   code.
+///
+/// # Examples
+/// A sum of `I64::maximum` and 1 reaching this ends the program with `I64 addition, with
+/// 9223372036854775807 and 1`.
+fn build_abort_on_integer_operation<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    faulted: IntValue<'c>,
+    ty: &Arc<TypeNode>,
+    operation: &str,
+    runtime_fn: &str,
+    operands: &[IntValue<'c>],
+    bb_name: &str,
+) {
+    let reported_operation = format!("{} {}", ty.toplevel_tycon().unwrap().name.name, operation);
+    let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
+    let i64_ty = gc.context.i64_type();
+    let is_signed = ty.is_signed_integer();
+    // The report reads every operand back under the sign of `ty`, so it is told that sign: an
+    // operand of an unsigned type fills all 64 bits, and reading it as signed would report a
+    // number its own type cannot hold.
+    let operands_are_signed = gc.context.i32_type().const_int(is_signed as u64, false);
+    let mut args: Vec<BasicMetadataValueEnum<'c>> =
+        vec![reported_operation_ptr.into(), operands_are_signed.into()];
+    for operand in operands {
+        assert!(
+            operand.get_type().get_bit_width() <= 64,
+            "the report takes operands of 64 bits, and this one is {} bits wide",
+            operand.get_type().get_bit_width()
+        );
+        let widened = if is_signed {
+            gc.builder()
+                .build_int_s_extend_or_bit_cast(*operand, i64_ty, "reported_operand")
+        } else {
+            gc.builder()
+                .build_int_z_extend_or_bit_cast(*operand, i64_ty, "reported_operand")
+        }
+        .unwrap();
+        args.push(widened.into());
+    }
+    build_abort_if(gc, faulted, runtime_fn, &args, bb_name);
+}
+
 /// Emit the call that reports an arithmetic operation on the signed integer type `ty` whose result
 /// left the range of that type and ends the program, taken where `overflowed` holds.
 ///
-/// The operands reach the report widened to 64 bits, which is the width the runtime function
-/// takes; the sign extension keeps the value.
+/// The report names both operands, so a reader of it sees the pair the operation was performed on.
 fn build_report_signed_overflow<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     overflowed: IntValue<'c>,
@@ -10708,31 +10855,13 @@ fn build_report_signed_overflow<'c, 'm>(
     rhs: IntValue<'c>,
     ty: &Arc<TypeNode>,
 ) {
-    assert!(
-        lhs.get_type().get_bit_width() <= 64,
-        "the report takes operands of 64 bits, and this one is {} bits wide",
-        lhs.get_type().get_bit_width()
-    );
-    let reported_operation = format!(
-        "{} {}",
-        ty.toplevel_tycon().unwrap().name.name,
-        operation.reported_as()
-    );
-    let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
-    let i64_ty = gc.context.i64_type();
-    let lhs = gc
-        .builder()
-        .build_int_s_extend_or_bit_cast(lhs, i64_ty, "signed_overflow_lhs")
-        .unwrap();
-    let rhs = gc
-        .builder()
-        .build_int_s_extend_or_bit_cast(rhs, i64_ty, "signed_overflow_rhs")
-        .unwrap();
-    build_abort_if(
+    build_abort_on_integer_operation(
         gc,
         overflowed,
+        ty,
+        operation.reported_as(),
         RUNTIME_SIGNED_OVERFLOW,
-        &[reported_operation_ptr.into(), lhs.into(), rhs.into()],
+        &[lhs, rhs],
         "signed_overflow",
     );
 }

@@ -2863,8 +2863,8 @@ A project file is a TOML file which contains information about a Fix project, su
 - Commands to be executed before the compilation.
 
 The project file should have a name "fixproj.toml".
-Many of features of "fix" command tries to read the project file in the current directory, and if found, uses the information in it.
-Moreover, some subcommands (e.g., "fix deps", "fix docs" or "fix language-server") requires the project file to be present.
+Many features of the "fix" command look for the project file in the current directory, and use the information in it when they find one.
+Moreover, some subcommands (e.g., "fix deps", "fix docs" or "fix language-server") require the project file to be present.
 
 "fix init" command generates [a template project file](./src/docs/project_template.toml).
 This file contains a list of available fields (almost all of which are commented out by default), examples, and explanations, so please refer to it.
@@ -3017,6 +3017,13 @@ The following table shows how each setting is handled.
             <td>Disable runtime checks. <code>fix test</code> reads it from the <code>build.test</code> section, which defaults to keeping the checks.</td>
         </tr>
         <tr>
+            <td>check_integer_operations</td>
+            <td>--check-integer-operations</td>
+            <td>Overwrite</td>
+            <td>Does not affect</td>
+            <td>Stop the program on a signed integer overflow, or on a shift by an amount outside the width of its type. <code>fix test</code> reads it from the <code>build.test</code> section, or from <code>build</code> when <code>build.test</code> does not set it.</td>
+        </tr>
+        <tr>
             <td>skip_eval</td>
             <td>--skip-eval</td>
             <td>Overwrite</td>
@@ -3027,7 +3034,7 @@ The following table shows how each setting is handled.
 </table>
 
 Note:
-The Fix build system compiles all the projects of a build as a single set of compilation units, so a setting such as the optimization level or the generation of debugging information takes one value across the whole build, which the compiler options and the main project's project file decide.
+The Fix build system compiles all the projects of a build as a single set of compilation units, so a setting such as the optimization level or the generation of debugging information takes one value across the whole build. The compiler options and the main project's project file decide that value.
 
 ### Approval of `preliminary_commands`
 

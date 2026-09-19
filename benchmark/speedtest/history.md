@@ -5,9 +5,9 @@ Newer is above.
 **LangArena rows measured before the pinned revision rose from `69a97c9` to `53067d5` are
 comparable with rows after it on forty-six of the fifty programs, and on four they are not.** The
 pin names the revision of the benchmark sources every run measures, so raising it changes what the
-numbers describe with no compiler change behind it. The four were measured with one compiler on
-both sides -- `main` at `e714aeb`, whose `src/` is byte-identical to the `main` this note is
-written on -- so nothing but the benchmark sources differs between the two columns.
+numbers describe with no compiler change behind it. The four were measured with one compiler on both
+sides -- `main` at `e714aeb`, the first row of the note below -- so nothing but the benchmark
+sources differs between the two columns.
 
 | program | instructions | |
 | --- | --- | --- |

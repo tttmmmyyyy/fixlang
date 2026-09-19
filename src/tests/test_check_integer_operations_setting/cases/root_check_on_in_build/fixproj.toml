@@ -1,11 +1,11 @@
 [general]
-name = "root-check-on-in-test"
+name = "root-check-on-in-build"
 version = "0.1.0"
 fix_version = "*"
 
 [build]
 files = ["main.fix"]
+check_integer_operations = true
 
 [build.test]
 files = ["test.fix"]
-check_signed_overflow = true

@@ -209,6 +209,27 @@ something the compiler has to leave alone — the program's arguments, a file, a
 computes — and confirm the choice by mutating the mechanism the test names and watching it go red.
 Until that, a green run says only that the program compiled.
 
+#### Count the shapes the corpus holds, not the ones the detector was written for
+
+A detector that reads machine-generated text -- IR, bytecode, a log, a serialized form -- implements
+a grammar, and it implements the part of that grammar its author thought of. Injecting a failure
+proves it fires on *that* shape; it says nothing about the shapes the generator emits that the author
+never pictured, and those are exactly where a walk goes quiet while looking as it does when it
+passes.
+
+So enumerate the shapes from the corpus rather than from the model of the input: grep the corpus for
+each construct the detector claims to handle, count the occurrences, and for every shape whose count
+is not zero, confirm the detector's answer on it is a decision rather than a miss. A shape the
+detector was never shown is one whose silence means nothing, however many times the corpus holds it
+-- and the count is the measurement of what the silence was worth. One walk of this kind reported
+correctly on a value built from a bare scaffold and dropped every unwritten field of one built from
+a constant aggregate; the two are the same situation written two ways, and the second stood 150
+times across 30 modules of the corpus the walk had just pronounced clean.
+
+The same enumeration catches the parser's own blind spots -- a name the generator quotes where the
+pattern admits no quote, an escape, a form the grammar allows and the sample never showed. Those
+make the detector skip whatever follows, which is the widest way for a walk to go quiet.
+
 #### Run the gatekeeper's predicate at the gate
 
 A pass that exists to guarantee something for a *later* stage — a validator that rejects what code
@@ -282,6 +303,14 @@ it reachable changes what every later build costs.
 #### Run the emitted programs under valgrind memcheck
 
 Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret its report against a baseline: a glibc thread-local pattern or a third-party library's internal allocation shows up identically on unmodified code.
+
+**It is blind to a stack array, and a compiler's own runtime is where that matters.** A tool that
+ships source it compiles for the user — a C runtime, a generated prelude, an injected shim — never
+has that source in its own build, so the project's test suite cannot put a sanitizer on it, and
+memcheck over the emitted program sees the heap but not a fixed-size array inside a runtime
+function. An overflow there lands in stack padding and every test passes. Compile those sources
+directly with `-fsanitize=address` and drive the functions from a small harness, sizing the buffer
+the way the caller does. Prove it fires by narrowing one bound by one.
 
 #### Recompute a memoized answer at the hit, and diff it against what the cache serves
 

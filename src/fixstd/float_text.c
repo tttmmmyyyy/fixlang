@@ -4,10 +4,6 @@ Writing a floating point number as text and reading one back, for `Std::F64` and
 The shortest text that reads back as the number is found by Ryu, whose sources sit beside this one
 under `ryu/`. Reading goes through C's `strtod`, under a locale of this file's own so that the
 point is the character Ryu writes whatever locale the program runs in.
-
-This file is compiled with optimization where the rest of the runtime is not: what it does —
-Ryu's search, and the placing of the digits it answers with — is the runtime's one piece of
-arithmetic rather than a call into C's library.
 */
 
 // `strtod_l` and `newlocale` are what read a number under a locale of our own choosing. glibc
@@ -33,6 +29,10 @@ arithmetic rather than a call into C's library.
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
+// Writes `v` at `buf` in decimal, null-terminated, and reports how many digits it took. Defined
+// in `runtime.c`, and declared here because the runtime has no header of its own.
+int64_t fixruntime_write_u64(char *buf, uint64_t v);
+
 // The bytes `fixruntime_write_float_text` builds a text in. The static assertions at the two
 // entry points hold each window to what fits here, since a wider one would write past it.
 #define FLOAT_TEXT_SIZE 48
@@ -50,17 +50,18 @@ __attribute__((noreturn)) void fixruntime_abort(void);
 #define F64_POSITIONAL_HIGH 16
 #define F64_DIGITS 17
 
-// Stops the program unless a text of `written` bytes, and the null after it, fit `size`.
+// Answers with `written` where a text of that many bytes, and the null after it, fit `size`, and
+// stops the program where they do not.
 //
-// The caller in `src/fixstd/std.fix` derives that buffer's size from the widest text it can be
-// asked for, so a text that does not fit means the derivation is wrong. Stopping here names the
-// two sizes, where letting the write run on would leave the heap damaged and the program going.
+// A buffer is sized from the widest text it can be asked to hold, so a text that does not fit
+// means that size was derived wrongly. Stopping here names the two sizes, where letting the write
+// run on would leave the heap damaged and the program going.
 //
 // # Arguments
 // * `written` - The length of the text, without its null. A negative number is what `snprintf`
 //   answers where it could not write the text at all.
 // * `size` - The bytes the buffer holds.
-static void fixruntime_check_float_text(int written, int64_t size)
+static int64_t fixruntime_checked_float_text_length(int written, int64_t size)
 {
     if (written < 0)
     {
@@ -73,29 +74,34 @@ static void fixruntime_check_float_text(int written, int64_t size)
                 (int64_t)written + 1, size);
         fixruntime_abort();
     }
+    return written;
 }
 
-void fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
+// Each of the four below writes `v` at `buf` with `precision` digits after the point, null-
+// terminated, and reports how many bytes the text took, the null left out. The `exp` ones write
+// the number in scientific notation, and the others write it positionally.
+int64_t fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*e", (int)precision, v), size);
+    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*e", (int)precision, v), size);
 }
 
-void fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
+int64_t fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*f", (int)precision, v), size);
+    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*f", (int)precision, v), size);
 }
 
-void fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
+int64_t fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*le", (int)precision, v), size);
+    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*le", (int)precision, v), size);
 }
 
-void fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
+int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*lf", (int)precision, v), size);
+    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*lf", (int)precision, v), size);
 }
 
-// Writes the scientific text Ryu produced the way Fix spells a floating point number.
+// Writes the scientific text Ryu produced the way Fix spells a floating point number, and
+// reports how many bytes the text took.
 //
 // `sci` holds what `d2s_buffered_n` or `f2s_buffered_n` wrote: a sign, the shortest digits that
 // read back as the number with a point after the first of them, `E`, and the power of ten those
@@ -112,8 +118,8 @@ void fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t 
 //   window costs zeros, so it is drawn around the digits the type carries, and the widest text it
 //   allows is what sizes the buffer `to_string` passes in — must stay in sync with the `size` the
 //   `ToString` implementations in `src/fixstd/std.fix` derive.
-static void fixruntime_write_float_text(const char *sci, char *buf, int64_t size,
-                                             int positional_low, int positional_high)
+static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t size,
+                                                int positional_low, int positional_high)
 {
     int read = 0;
     int negative = sci[0] == '-';
@@ -141,10 +147,9 @@ static void fixruntime_write_float_text(const char *sci, char *buf, int64_t size
             fprintf(stderr, "A number was written as \"%s\", which is neither digits nor Infinity nor NaN\n", sci);
             fixruntime_abort();
         }
-        int length = (int)strlen(special);
-        fixruntime_check_float_text(length, size);
+        int length = fixruntime_checked_float_text_length((int)strlen(special), size);
         memcpy(buf, special, (size_t)length + 1);
-        return;
+        return length;
     }
 
     char digits[32];
@@ -238,42 +243,35 @@ static void fixruntime_write_float_text(const char *sci, char *buf, int64_t size
             text[written++] = '-';
             exponent = -exponent;
         }
-        char reversed[8];
-        int length = 0;
-        do
-        {
-            reversed[length++] = (char)('0' + exponent % 10);
-            exponent /= 10;
-        } while (exponent != 0);
-        while (length > 0)
-        {
-            text[written++] = reversed[--length];
-        }
+        written += (int)fixruntime_write_u64(text + written, (uint64_t)exponent);
     }
     text[written] = '\0';
 
-    fixruntime_check_float_text(written, size);
+    fixruntime_checked_float_text_length(written, size);
     memcpy(buf, text, (size_t)written + 1);
+    return written;
 }
 
-void fixruntime_f32_to_str_shortest(char *buf, int64_t size, float v)
+// Each of the two below writes the shortest text of `v` that reads back as `v` at `buf`, null-
+// terminated, and reports how many bytes the text took, the null left out.
+int64_t fixruntime_f32_to_str_shortest(char *buf, int64_t size, float v)
 {
     _Static_assert(WIDEST_FLOAT_TEXT_SIZE(F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH, F32_DIGITS) <=
                        FLOAT_TEXT_SIZE,
                    "an F32's window asks for more than the text buffer holds");
     char sci[32];
     sci[f2s_buffered_n(v, sci)] = '\0';
-    fixruntime_write_float_text(sci, buf, size, F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH);
+    return fixruntime_write_float_text(sci, buf, size, F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH);
 }
 
-void fixruntime_f64_to_str_shortest(char *buf, int64_t size, double v)
+int64_t fixruntime_f64_to_str_shortest(char *buf, int64_t size, double v)
 {
     _Static_assert(WIDEST_FLOAT_TEXT_SIZE(F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH, F64_DIGITS) <=
                        FLOAT_TEXT_SIZE,
                    "an F64's window asks for more than the text buffer holds");
     char sci[32];
     sci[d2s_buffered_n(v, sci)] = '\0';
-    fixruntime_write_float_text(sci, buf, size, F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH);
+    return fixruntime_write_float_text(sci, buf, size, F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH);
 }
 
 // The locale a number is read under: the one whose decimal point is the `.` Ryu writes.
@@ -302,12 +300,12 @@ static locale_t float_text_locale(void)
         fprintf(stderr, "The C locale, which numbers are read under, could not be built\n");
         fixruntime_abort();
     }
-    locale_t none = (locale_t)0;
-    if (!__atomic_compare_exchange_n(&numeric_c_locale, &none, answer, false, __ATOMIC_ACQ_REL,
+    locale_t current = (locale_t)0;
+    if (!__atomic_compare_exchange_n(&numeric_c_locale, &current, answer, false, __ATOMIC_ACQ_REL,
                                      __ATOMIC_ACQUIRE))
     {
         freelocale(answer);
-        answer = none;
+        answer = current;
     }
     return answer;
 }
@@ -330,6 +328,11 @@ static void fixruntime_keep_only_overflow(double v)
     }
 }
 
+// Reads a `double` from the whole of `str`, with `.` as the decimal point whatever locale the
+// program runs in.
+//
+// The text names the number and nothing else: a leading space, or anything left over after the
+// number, sets `errno` to `EINVAL`, and a number too large to hold sets it to `ERANGE`.
 double fixruntime_strtod(const char *str)
 {
     char *endptr;
@@ -348,6 +351,11 @@ double fixruntime_strtod(const char *str)
     return v;
 }
 
+// Reads a `float` from the whole of `str`, with `.` as the decimal point whatever locale the
+// program runs in.
+//
+// The text names the number and nothing else: a leading space, or anything left over after the
+// number, sets `errno` to `EINVAL`, and a number too large to hold sets it to `ERANGE`.
 float fixruntime_strtof(const char *str)
 {
     char *endptr;
