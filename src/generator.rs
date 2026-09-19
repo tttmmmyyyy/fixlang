@@ -56,10 +56,12 @@ use crate::return_abi::{
 use crate::tbaa::{MemoryRegion, TbaaTags};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
+use inkwell::llvm_sys::core::LLVMBuildFreeze;
 use inkwell::llvm_sys::debuginfo::LLVMMetadataReplaceAllUsesWith;
 use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
 use inkwell::types::StructType;
+use inkwell::values::AsValueRef;
 use inkwell::values::BasicValue;
 use inkwell::values::BasicValueEnum;
 use inkwell::values::FunctionValue;
@@ -85,6 +87,7 @@ use inkwell::{
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue},
 };
+use std::ffi::CString;
 use std::{cell::RefCell, iter::successors, sync::Arc};
 
 /// A value bound to a name in the current scope.
@@ -138,8 +141,16 @@ impl<'c> ValueAccessor<'c> {
                     match call {
                         ValueKind::Basic(val) => val,
                         ValueKind::Instruction(_) => {
-                            let ty = ty.get_embedded_type(gc);
-                            Generator::get_undef(&ty)
+                            // An accessor whose value occupies no storage returns nothing.
+                            let embedded_ty = ty.get_embedded_type(gc);
+                            assert_eq!(
+                                gc.sizeof(&embedded_ty),
+                                0,
+                                "the accessor of `{}` returns nothing, so the value it names \
+                                 occupies no storage",
+                                ty.to_string(),
+                            );
+                            Generator::zero_sized_value(embedded_ty)
                         }
                     }
                 };
@@ -237,15 +248,20 @@ impl<'c> Object<'c> {
         value
     }
 
-    /// An object of type `ty` whose value is `undef`, for an unreachable point that still has to
+    /// An object of type `ty` whose value is `poison`, for an unreachable point that still has to
     /// produce a value of the type.
-    pub fn undef<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
+    ///
+    /// A poison is one value for all of its readers, so LLVM may merge two reads of it or duplicate
+    /// one. LLVM's other undefined constant, `undef`, may give a different value at each use. This
+    /// code chooses between the two, since LLVM may weaken a poison into an `undef` and never the
+    /// reverse.
+    pub fn poison<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
         let val = if ty.is_unbox(gc.type_env()) {
-            ty.get_struct_type(gc).get_undef().as_basic_value_enum()
+            ty.get_struct_type(gc).get_poison().as_basic_value_enum()
         } else {
             gc.context
                 .ptr_type(AddressSpace::from(0))
-                .get_undef()
+                .get_poison()
                 .as_basic_value_enum()
         };
         Object::new(val, ty.clone(), gc)
@@ -1896,23 +1912,18 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap()
     }
 
-    /// Build an `undef` constant of the given basic type.
-    pub fn get_undef(ty: &BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
-        match ty {
-            BasicTypeEnum::IntType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::FloatType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::PointerType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::VectorType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::StructType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::ArrayType(ty) => ty.get_undef().as_basic_value_enum(),
-            BasicTypeEnum::ScalableVectorType(ty) => ty.get_undef().as_basic_value_enum(),
-        }
+    /// The value of a type that occupies no storage, written as the zero of that type.
+    ///
+    /// The constant leaves no bit undefined, so a function boundary carrying such a value can state
+    /// that every bit of it is written.
+    pub fn zero_sized_value(ty: BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
+        ty.const_zero()
     }
 
     /// Whether `ty` occupies no storage, such as an empty union's `[0 x i8]` payload. A zero-sized
     /// value carries no information, so the part helpers drop it: it yields no part (no phi, no ABI
-    /// slot) and is rebuilt as `undef`. A phi of a zero-sized aggregate also crashes LLVM's
-    /// AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
+    /// slot) and is rebuilt as the zero of its type. A phi of a zero-sized aggregate also crashes
+    /// LLVM's AArch64 GlobalISel, so dropping it keeps `-O none` codegen valid there.
     pub(crate) fn is_zero_sized(&self, ty: BasicTypeEnum<'c>) -> bool {
         self.target_data.get_bit_size(&ty) == 0
     }
@@ -2060,8 +2071,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Reassemble a value of `ty` from a part iterator produced in `type_parts` order, emitting an
     /// `insertvalue` per struct field. The inverse of `value_parts`. A zero-sized type consumes
-    /// no part and is rebuilt as `undef`; a type carried whole consumes the one part that is its
-    /// value.
+    /// no part and is rebuilt as the zero of its type; a type carried whole consumes the one part
+    /// that is its value.
     pub fn assemble_from_parts(
         &self,
         ty: BasicTypeEnum<'c>,
@@ -2080,11 +2091,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         parts: &mut impl Iterator<Item = BasicValueEnum<'c>>,
     ) -> BasicValueEnum<'c> {
         if self.is_zero_sized(ty) {
-            return Self::get_undef(&ty);
+            return Self::zero_sized_value(ty);
         }
         match ty {
             BasicTypeEnum::StructType(st) => {
-                let mut val = st.get_undef();
+                let mut val = st.get_poison();
                 for i in 0..st.count_fields() {
                     let field_ty = st.get_field_type_at_index(i).unwrap();
                     let field = self.assemble_split_parts(field_ty, parts);
@@ -2871,7 +2882,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             }
             _ => {
                 let struct_ty = self.context.struct_type(&part_tys, false);
-                let mut val = struct_ty.get_undef();
+                let mut val = struct_ty.get_poison();
                 for (i, part) in parts.iter().enumerate() {
                     val = self
                         .builder()
@@ -3138,9 +3149,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
         match call_site.try_as_basic_value() {
             ValueKind::Basic(ret_c_val) => {
+                // What the C function returns is outside what Fix's types say, so fix its bits here.
+                let ret_c_val = self.build_freeze(ret_c_val, "result@FFI_CALL");
                 if is_io {
                     let ret_struct_ty = type_tycon(ret_tycon).get_struct_type(self);
-                    let ret_struct_val = ret_struct_ty.get_undef();
+                    let ret_struct_val = ret_struct_ty.get_poison();
                     let ret_struct_val = self
                         .builder()
                         .build_insert_value(ret_struct_val, ret_c_val, 0, "")
@@ -3347,8 +3360,62 @@ impl<'c, 'm> Generator<'c, 'm> {
         let (from_size, to_size) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
         let larger_ty = if from_size > to_size { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
+        // Where the store of `val` leaves a byte the load reads -- a wider `to_ty`, or padding
+        // inside `from_ty` -- writing zero over the slot first puts a value in that byte. The zero
+        // is written as an array of bytes, so that the padding of `larger_ty` is written too.
+        if from_size < to_size || self.has_padding(from_ty) {
+            let slot_bytes_ty = self
+                .context
+                .i8_type()
+                .array_type(self.sizeof(&larger_ty) as u32);
+            self.build_store(MemoryRegion::Data, ptr, slot_bytes_ty.const_zero());
+        }
         self.build_store(MemoryRegion::Data, ptr, val);
         self.build_load(MemoryRegion::Data, to_ty, ptr, "bit_cast")
+    }
+
+    /// `val` with its undefined bits fixed: one value that answers the same to every read of it.
+    ///
+    /// A value reaching the program from outside what Fix's types cover -- a C function's result --
+    /// can carry bits LLVM holds to be undefined, and a read of such a bit may answer differently
+    /// each time. Freezing chooses one answer and holds it for every reader, so the value can be
+    /// stated to hold no undefined bit at all.
+    ///
+    /// A `freeze` names a value rather than work the machine does, so it adds no machine code.
+    pub fn build_freeze(&self, val: BasicValueEnum<'c>, name: &str) -> BasicValueEnum<'c> {
+        // inkwell wraps no `freeze`, so reach the instruction through the C API it is built on.
+        let name = CString::new(name).expect("an LLVM value name holds no NUL byte");
+        unsafe {
+            BasicValueEnum::new(LLVMBuildFreeze(
+                self.builder().as_mut_ptr(),
+                val.as_value_ref(),
+                name.as_ptr(),
+            ))
+        }
+    }
+
+    /// Whether `ty` holds padding: a byte no field of it owns, which a store of a value of `ty`
+    /// leaves as it was.
+    ///
+    /// A struct whose field is aligned past the end of the field before it holds such a byte, and
+    /// so does an array of such a struct.
+    fn has_padding(&mut self, ty: BasicTypeEnum<'c>) -> bool {
+        match ty {
+            BasicTypeEnum::StructType(st) => {
+                let fields = st.get_field_types();
+                let fields_size: u64 = fields.iter().map(|field| self.sizeof(field)).sum();
+                fields_size != self.sizeof(&ty)
+                    || fields.into_iter().any(|field| self.has_padding(field))
+            }
+            BasicTypeEnum::ArrayType(at) => {
+                let element_ty = at.get_element_type();
+                self.sizeof(&element_ty) * at.len() as u64 != self.sizeof(&ty)
+                    || self.has_padding(element_ty)
+            }
+            // A scalar -- an integer, a float, a pointer -- is the bytes it occupies, so a store
+            // of one writes all of them.
+            _ => false,
+        }
     }
 
     /// Add a named enum attribute (e.g. `noreturn`, `noalias`) to a function. Enum attributes

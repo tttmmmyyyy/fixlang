@@ -2197,8 +2197,8 @@ pub fn write_alloc_offset<'c, 'm>(
 }
 
 /// A fresh object of type `ty`, with its control block initialized and its remaining fields left
-/// undefined for the caller to fill in. A boxed type is allocated on the heap and comes back as a
-/// pointer to it; an unboxed type comes back as an undefined aggregate value.
+/// `poison` for the caller to fill in. A boxed type is allocated on the heap and comes back as a
+/// pointer to it; an unboxed type comes back as a `poison` aggregate value.
 // PROOF: D/A, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
@@ -2225,8 +2225,8 @@ pub fn create_obj<'c, 'm>(
     let alloc_offset_at_base = gc.context.i64_type().const_zero();
     let (obj, alloc_offset) = if ty.is_array_storage() {
         // When the object is the array storage (a control block and a flexible element buffer),
-        let sizeof = object_type.size_of(gc, array_capacity);
-        let (ptr, alloc_offset) = build_alloc_array_storage(gc, struct_type, sizeof);
+        let storage_size = object_type.size_of(gc, array_capacity);
+        let (ptr, alloc_offset) = build_alloc_array_storage(gc, struct_type, storage_size);
         (
             Object::new(ptr.as_basic_value_enum(), ty.clone(), gc),
             alloc_offset,
@@ -2236,7 +2236,7 @@ pub fn create_obj<'c, 'm>(
             // When the object is unboxed (not a funptr),
             (
                 Object::new(
-                    struct_type.get_undef().as_basic_value_enum(),
+                    struct_type.get_poison().as_basic_value_enum(),
                     ty.clone(),
                     gc,
                 ),
@@ -2244,8 +2244,8 @@ pub fn create_obj<'c, 'm>(
             )
         } else {
             // When the object is boxed,
-            let sizeof = struct_type.size_of().unwrap();
-            let ptr = build_malloc(gc, sizeof, "malloc@create_obj");
+            let object_size = struct_type.size_of().unwrap();
+            let ptr = build_malloc(gc, object_size, "malloc@create_obj");
             (
                 Object::new(ptr.as_basic_value_enum(), ty.clone(), gc),
                 alloc_offset_at_base,
@@ -2254,8 +2254,8 @@ pub fn create_obj<'c, 'm>(
     };
 
     // Initialize refcnt, refcnt_state and traverser for dynamic object.
-    for (i, ft) in object_type.field_types.iter().enumerate() {
-        match ft {
+    for (i, field_ty) in object_type.field_types.iter().enumerate() {
+        match field_ty {
             ObjectFieldType::ControlBlock => {
                 // Initialize the control block.
                 assert_eq!(i, 0);
@@ -2338,8 +2338,8 @@ pub fn get_traverser_ptr<'c, 'm>(
             };
 
             // Define an empty function (if there is none) and return its pointer.
-            let fv = if let Some(fv) = gc.module.get_function(func_name) {
-                fv
+            let func = if let Some(func) = gc.module.get_function(func_name) {
+                func
             } else {
                 let func_type = traverser_type(gc, ty, work.is_none());
                 let func = gc
@@ -2351,7 +2351,7 @@ pub fn get_traverser_ptr<'c, 'm>(
                 gc.builder().build_return(None).unwrap();
                 func
             };
-            fv.as_global_value().as_pointer_value()
+            func.as_global_value().as_pointer_value()
         }
     }
 }
