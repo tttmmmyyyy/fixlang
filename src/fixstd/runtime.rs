@@ -142,16 +142,32 @@ fn declare_noreturn_runtime_function<'c, 'm>(
     name: &str,
     param_types: &[BasicMetadataTypeEnum<'c>],
 ) {
-    if mode != BuildMode::Declare {
+    let fn_ty = gc.context.void_type().fn_type(param_types, false);
+    let Some(func) = declare_external_runtime_function(gc, mode, name, fn_ty) else {
         return;
+    };
+    gc.add_enum_attribute(func, "noreturn", AttributeLoc::Function);
+}
+
+/// Declare the runtime function `name` of type `fn_ty`, whose body the program links against rather
+/// than this module writing it.
+///
+/// Returns the declaration this call added, for the caller to put attributes on. It is `None` where
+/// nothing was added: outside `Declare` mode, and where the module already holds the name, which the
+/// caller's attributes are on already.
+fn declare_external_runtime_function<'c, 'm>(
+    gc: &Generator<'c, 'm>,
+    mode: BuildMode,
+    name: &str,
+    fn_ty: FunctionType<'c>,
+) -> Option<FunctionValue<'c>> {
+    if mode != BuildMode::Declare {
+        return None;
     }
     if gc.module.get_function(name).is_some() {
-        return;
+        return None;
     }
-
-    let fn_ty = gc.context.void_type().fn_type(param_types, false);
-    let func = gc.module.add_function(name, fn_ty, None);
-    gc.add_enum_attribute(func, "noreturn", AttributeLoc::Function);
+    Some(gc.module.add_function(name, fn_ty, None))
 }
 
 /// Prepare the runtime function `name` of type `fn_ty`, which this module implements itself: in
@@ -183,66 +199,35 @@ fn declare_or_lookup_runtime_function<'c, 'm>(
 /// Declare `fixruntime_eprintln`, which writes a C string to stderr followed by a newline and
 /// flushes it.
 fn build_eprintln_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if gc.module.get_function(RUNTIME_EPRINTLN).is_some() {
-        return;
-    }
-
-    let context = gc.context;
-    let module = gc.module;
-
-    let ptr_ty = context.ptr_type(AddressSpace::from(0));
-
-    let fn_ty = context.void_type().fn_type(&[ptr_ty.into()], true);
-    module.add_function(RUNTIME_EPRINTLN, fn_ty, None);
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let fn_ty = gc.context.void_type().fn_type(&[ptr_ty.into()], true);
+    declare_external_runtime_function(gc, mode, RUNTIME_EPRINTLN, fn_ty);
 }
 
 /// Declare `sprintf`, which takes the output buffer and the format string and goes on to take the
 /// values the format names.
 fn build_sprintf_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if gc.module.get_function(RUNTIME_SPRINTF).is_some() {
-        return;
-    }
-
-    let context = gc.context;
-    let module = gc.module;
-
-    let i32_ty = context.i32_type();
-    let ptr_ty = context.ptr_type(AddressSpace::from(0));
-
-    let fn_ty = i32_ty.fn_type(
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let fn_ty = gc.context.i32_type().fn_type(
         &[
             ptr_ty.into(), /* output buffer */
             ptr_ty.into(), /* format */
         ],
         true,
     );
-    module.add_function(RUNTIME_SPRINTF, fn_ty, None);
+    declare_external_runtime_function(gc, mode, RUNTIME_SPRINTF, fn_ty);
 }
 
 /// Declare `pthread_once`, which takes the flag recording whether the initializer has run and the
 /// initializer itself. A multi-threaded program initializes each global through it.
 // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_pthread_once_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if gc.module.get_function(RUNTIME_PTHREAD_ONCE).is_some() {
-        return;
-    }
-
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
-    let pthread_once_ty = gc
+    let fn_ty = gc
         .context
         .void_type()
         .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
-    gc.module
-        .add_function(RUNTIME_PTHREAD_ONCE, pthread_once_ty, None);
+    declare_external_runtime_function(gc, mode, RUNTIME_PTHREAD_ONCE, fn_ty);
 }
 
 /// Build `fixruntime_get_argc`, which returns the number of command line arguments the program was
@@ -363,18 +348,13 @@ fn declare_allocator_function<'c, 'm>(
     name: &str,
     param_types: &[BasicMetadataTypeEnum<'c>],
 ) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if gc.module.get_function(name).is_some() {
-        return;
-    }
-
     let fn_ty = gc
         .context
         .ptr_type(AddressSpace::from(0))
         .fn_type(param_types, false);
-    let func = gc.module.add_function(name, fn_ty, None);
+    let Some(func) = declare_external_runtime_function(gc, mode, name, fn_ty) else {
+        return;
+    };
     gc.add_enum_attribute(func, "noalias", AttributeLoc::Return);
     gc.add_enum_attribute(func, "nobuiltin", AttributeLoc::Function);
 }
