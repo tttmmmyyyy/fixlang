@@ -1108,6 +1108,7 @@ impl LLVMGen for InlineLLVMStringBuf {
         vec![]
     }
 
+    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,

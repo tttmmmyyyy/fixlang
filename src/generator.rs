@@ -746,6 +746,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// Storages of equal bytes are one storage.
     pub fn add_global_byte_array_storage(&mut self, bytes: &[u8]) -> PointerValue<'c> {
+        // The field of the padded constant holding the object itself, the padding being the field
+        // ahead of it.
+        const PADDED_OBJECT_IDX: u32 = 1;
+
         if let Some(ptr) = self.global_byte_array_storages.get(bytes) {
             return *ptr;
         }
@@ -797,6 +801,24 @@ impl<'c, 'm> Generator<'c, 'm> {
             ],
             false,
         );
+        // Where the object sits in the padded constant is LLVM's layout of that constant to decide,
+        // and the elements start `header_size` bytes into the object. The alignment declared below
+        // is a claim about those elements, so it holds only where the two put them on the boundary.
+        if aligned {
+            let buf_offset = self
+                .target_data
+                .offset_of_element(&padded.get_type(), PADDED_OBJECT_IDX)
+                .expect("the padded constant holds the object after the padding")
+                + header_size;
+            assert_eq!(
+                buf_offset % ARRAY_BUF_ALIGNMENT,
+                0,
+                "a global `#ArrayStorage` of {} bytes starts its elements {} bytes into the constant, off the {}-byte boundary",
+                sizeof,
+                buf_offset,
+                ARRAY_BUF_ALIGNMENT
+            );
+        }
         let global = self.module.add_global(
             padded.get_type(),
             None,
@@ -817,7 +839,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         let ptr = unsafe {
             global.as_pointer_value().const_in_bounds_gep(
                 padded.get_type(),
-                &[i32_ty.const_zero(), i32_ty.const_int(1, false)],
+                &[
+                    i32_ty.const_zero(),
+                    i32_ty.const_int(PADDED_OBJECT_IDX as u64, false),
+                ],
             )
         };
         self.global_byte_array_storages.insert(bytes.to_vec(), ptr);

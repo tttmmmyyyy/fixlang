@@ -5,7 +5,7 @@
 //! A program that passes the checks answers what one built without them answers, so what is read
 //! here is that each subcommand building a program takes the option, and that what it built runs.
 
-use crate::tests::test_util::fix_command_at_opt_level;
+use crate::tests::test_util::{assert_succeeded, fix_command_at_opt_level};
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -46,6 +46,20 @@ fn run_fix_on_source(subcommand: &str, source: &str, dir: &Path, extra_args: &[&
         .expect("Failed to execute fix")
 }
 
+/// Fails the test unless `output` is a successful run that printed `EXPECTED`.
+///
+/// # Arguments
+/// * `what` — what was run, as a noun phrase that completes "... should succeed".
+fn assert_printed_the_answer(output: &Output, what: &str) {
+    assert_succeeded(output, &format!("{} should succeed.", what));
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        EXPECTED,
+        "{} should answer what the program prints",
+        what,
+    );
+}
+
 /// Every subcommand that builds a program takes `--develop-mode`, and what it builds runs and
 /// answers.
 #[test]
@@ -54,19 +68,7 @@ pub fn test_every_building_subcommand_takes_develop_mode() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let output =
             run_fix_on_source(subcommand, &source_for(module, entry), temp_dir.path(), &[]);
-        assert!(
-            output.status.success(),
-            "`fix {} --develop-mode` should succeed.\nstdout: {}\nstderr: {}",
-            subcommand,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&output.stdout).trim(),
-            EXPECTED,
-            "`fix {} --develop-mode` should run the program the option built",
-            subcommand,
-        );
+        assert_printed_the_answer(&output, &format!("`fix {} --develop-mode`", subcommand));
     }
 
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
@@ -77,23 +79,9 @@ pub fn test_every_building_subcommand_takes_develop_mode() {
         temp_dir.path(),
         &["-o", program_path.to_str().unwrap()],
     );
-    assert!(
-        output.status.success(),
-        "`fix build --develop-mode` should succeed.\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
+    assert_succeeded(&output, "`fix build --develop-mode` should succeed.");
     let run = Command::new(&program_path)
         .output()
         .expect("Failed to run the program the build produced");
-    assert!(
-        run.status.success(),
-        "the program `fix build --develop-mode` produced should run.\nstderr: {}",
-        String::from_utf8_lossy(&run.stderr),
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&run.stdout).trim(),
-        EXPECTED,
-        "the program `fix build --develop-mode` produced should answer",
-    );
+    assert_printed_the_answer(&run, "the program `fix build --develop-mode` produced");
 }
