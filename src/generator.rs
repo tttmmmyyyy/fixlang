@@ -8,6 +8,8 @@ use crate::ast::types::type_tycon;
 use crate::ast::types::TyCon;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
+use crate::fixstd::builtin::{make_array_storage_ty, make_u8_ty};
+use crate::constants::{ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT, STORAGE_BUF_IDX};
 use crate::constants::RefcntState;
 use crate::constants::TraverserWorkType;
 use crate::constants::BOXED_TYPE_DATA_IDX;
@@ -624,7 +626,7 @@ pub struct Generator<'c, 'm> {
     global_strings: Map<String, GlobalValue<'c>>,
     /// The constant `#ArrayStorage` emitted for each byte string a literal asks for, keyed by the
     /// bytes, so that literals of equal bytes name one storage.
-    pub global_byte_array_storages: Map<Vec<u8>, PointerValue<'c>>,
+    global_byte_array_storages: Map<Vec<u8>, PointerValue<'c>>,
     /// Debug type built for each Fix type, keyed by the type's canonical string, so a type is
     /// described once and shared across every reference to it.
     di_type_cache: Map<String, DIType<'c>>,
@@ -729,6 +731,95 @@ impl<'c> OutPointer<'c> {
 impl<'c, 'm> Generator<'c, 'm> {
     /// The module-level constant holding `s` as a null-terminated string. One constant is created
     /// per distinct string, and every later call for that string returns it again.
+    /// The `#ArrayStorage` holding `bytes`, emitted as a constant in the program's data rather than
+    /// built on the heap.
+    ///
+    /// Its control block says `RefcntState::GLOBAL`, which takes the object out of reference counting
+    /// altogether: it is never retained, released nor freed, and every check of whether it is uniquely
+    /// held answers no, so a write to one of its elements copies it first. That is what lets it sit in
+    /// read-only memory, and what keeps `AllocOffset` at zero — nothing ever steps back from the object
+    /// to the base of what holds it.
+    ///
+    /// A storage wide enough for the heap to align starts its elements on `ARRAY_BUF_ALIGNMENT` here
+    /// too, which the constant reaches by carrying the bytes that put the control block ahead of that
+    /// boundary.
+    ///
+    /// Storages of equal bytes are one storage.
+    pub fn add_global_byte_array_storage(&mut self, bytes: &[u8]) -> PointerValue<'c> {
+        if let Some(ptr) = self.global_byte_array_storages.get(bytes) {
+            return *ptr;
+        }
+        let context = self.context;
+
+        // The bytes the heap lays ahead of the elements, read off the type the heap builds.
+        let storage_struct_ty = make_array_storage_ty(make_u8_ty())
+            .get_object_type(&vec![], self.type_env())
+            .to_struct_type(self);
+        let header_size = self
+            .target_data
+            .offset_of_element(&storage_struct_ty, STORAGE_BUF_IDX)
+            .expect("`#ArrayStorage` lays its elements out after its control block");
+        let sizeof = header_size + bytes.len() as u64;
+        let padding = if sizeof >= ARRAY_ALIGNED_ALLOC_THRESHOLD {
+            (ARRAY_BUF_ALIGNMENT - header_size % ARRAY_BUF_ALIGNMENT) % ARRAY_BUF_ALIGNMENT
+        } else {
+            0
+        };
+
+        let control_block = control_block_type(self).const_named_struct(
+            &ControlBlockField::ALL
+                .iter()
+                .map(|field| {
+                    let value = match field {
+                        ControlBlockField::Refcnt => 1,
+                        ControlBlockField::RefcntState => RefcntState::GLOBAL.value() as u64,
+                        ControlBlockField::AllocOffset => 0,
+                    };
+                    field.ty(context).const_int(value, false).into()
+                })
+                .collect::<Vec<BasicValueEnum<'c>>>(),
+        );
+        let object = context.const_struct(
+            &[control_block.into(), context.const_string(bytes, false).into()],
+            false,
+        );
+        let padded = context.const_struct(
+            &[
+                context
+                    .i8_type()
+                    .const_array(&vec![context.i8_type().const_zero(); padding as usize])
+                    .into(),
+                object.into(),
+            ],
+            false,
+        );
+        let global = self.module.add_global(
+            padded.get_type(),
+            None,
+            &format!(
+                "GlobalArrayStorage#{}",
+                self.global_byte_array_storages.len()
+            ),
+        );
+        global.set_initializer(&padded);
+        global.set_constant(true);
+        global.set_linkage(Linkage::Internal);
+        if padding > 0 {
+            global.set_alignment(ARRAY_BUF_ALIGNMENT as u32);
+        }
+        // A constant address, so that every place naming this storage names the same one without an
+        // instruction of its own.
+        let i32_ty = context.i32_type();
+        let ptr = unsafe {
+            global.as_pointer_value().const_in_bounds_gep(
+                padded.get_type(),
+                &[i32_ty.const_zero(), i32_ty.const_int(1, false)],
+            )
+        };
+        self.global_byte_array_storages.insert(bytes.to_vec(), ptr);
+        ptr
+    }
+
     pub fn add_global_string(&mut self, s: &str) -> GlobalValue<'c> {
         if let Some(val) = self.global_strings.get(s) {
             return val.clone();

@@ -37,7 +37,7 @@ use crate::fixstd::runtime::{
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    add_global_byte_array_storage, alloc_array_storage, build_abort_if, build_array_storage_alloc_offset, build_capacity_check,
+    alloc_array_storage, build_abort_if, build_array_storage_alloc_offset, build_capacity_check,
     build_elems_bytes, build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned,
     create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
     write_alloc_offset, CapacityCheck, ObjectFieldType,
@@ -1076,7 +1076,7 @@ pub fn make_byte_array_of_global_storage<'c, 'm>(
         gc,
         Some("array@make_byte_array_of_global_storage"),
     );
-    let storage_ptr = add_global_byte_array_storage(gc, bytes);
+    let storage_ptr = gc.add_global_byte_array_storage(bytes);
     let len = gc.context.i64_type().const_int(bytes.len() as u64, false);
     let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_ptr);
     let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
