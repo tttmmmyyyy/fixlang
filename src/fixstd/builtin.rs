@@ -37,7 +37,7 @@ use crate::fixstd::runtime::{
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_abort_if, build_array_storage_alloc_offset, build_capacity_check,
+    add_global_byte_array_storage, alloc_array_storage, build_abort_if, build_array_storage_alloc_offset, build_capacity_check,
     build_elems_bytes, build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned,
     create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
     write_alloc_offset, CapacityCheck, ObjectFieldType,
@@ -1062,41 +1062,27 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_app(expr_var(ctor, source.clone()), vec![unit], source)
 }
 
-/// An `Array U8` of `len` bytes, holding a copy of the `len` bytes at `buf`.
-pub fn make_byte_array_copy<'c, 'm>(
+/// An `Array U8` of `bytes`, whose storage is a constant in the program's data rather than a block
+/// of the heap. Arrays of equal bytes name one storage.
+pub fn make_byte_array_of_global_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
-    buf: PointerValue<'c>,
-    len: IntValue<'c>,
+    bytes: &[u8],
 ) -> Object<'c> {
-    // Create `Array U8` which contains null-terminated string.
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
-    let storage = alloc_array_storage(gc, make_u8_ty(), len, CapacityCheck::Run);
     let array = create_obj(
         array_ty,
         &vec![],
         None,
         gc,
-        Some("array@make_byte_array_copy"),
+        Some("array@make_byte_array_of_global_storage"),
     );
-    let storage_val = storage.value(gc);
-    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
+    let storage_ptr = add_global_byte_array_storage(gc, bytes);
+    let len = gc.context.i64_type().const_int(bytes.len() as u64, false);
+    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_ptr);
     let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
-    let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
-    let dst = get_array_storage_buf(gc, &array);
-    let len_ptr_int = gc
-        .builder()
-        .build_int_cast(
-            len,
-            gc.context.ptr_sized_int_type(&gc.target_data, None),
-            "len_ptr_int@make_byte_array_copy",
-        )
-        .unwrap();
-    gc.builder()
-        .build_memcpy(dst, 1, buf, 1, len_ptr_int)
-        .unwrap();
-
-    array
+    array.insert_field(gc, ARRAY_CAP_IDX, len)
 }
+
 
 /// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
 /// null terminator, copied out of a global into a fresh array.
@@ -1110,12 +1096,9 @@ pub struct InlineLLVMStringBuf {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStringBuf {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
-        let string_ptr = gc.add_global_string(&self.string).as_pointer_value();
-        let len_with_null_terminator = gc
-            .context
-            .i64_type()
-            .const_int(self.string.as_bytes().len() as u64 + 1, false);
-        make_byte_array_copy(gc, string_ptr, len_with_null_terminator)
+        let mut bytes = self.string.as_bytes().to_vec();
+        bytes.push(0);
+        make_byte_array_of_global_storage(gc, &bytes)
     }
 
     fn name(&self) -> String {
@@ -1126,23 +1109,25 @@ impl LLVMGen for InlineLLVMStringBuf {
         vec![]
     }
 
-    // PROOF: P1, P2, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+        // The storage is a constant the whole program shares, so a caller asking whether it may
+        // write into it in place has to be told no.
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
     fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
+        _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+        // The storage is `RefcntState::GLOBAL`, which is neither of the states a local object is in.
+        ExtShape::always(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {

@@ -1822,6 +1822,45 @@ pub fn alloc_array_storage<'c, 'm>(
     create_obj(storage_ty, &vec![], Some(cap), gc, Some("array_storage"))
 }
 
+/// The `#ArrayStorage` holding `bytes`, emitted as a constant in the program's data rather than
+/// built on the heap.
+///
+/// Its control block says `RefcntState::GLOBAL`, which takes the object out of reference counting
+/// altogether: it is never retained, released nor freed, and every check of whether it is uniquely
+/// held answers no, so a write to one of its elements copies it first. That is what lets it sit in
+/// read-only memory.
+///
+/// Storages of equal bytes are one storage.
+pub fn add_global_byte_array_storage<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    bytes: &[u8],
+) -> PointerValue<'c> {
+    if let Some(ptr) = gc.global_byte_array_storages.get(bytes) {
+        return *ptr;
+    }
+    let context = gc.context;
+    let control_block = control_block_type(gc).const_named_struct(&[
+        refcnt_type(context).const_int(1, false).into(),
+        refcnt_state_type(context)
+            .const_int(RefcntState::GLOBAL.value() as u64, false)
+            .into(),
+        alloc_offset_type(context).const_zero().into(),
+    ]);
+    let elements = context.const_string(bytes, false);
+    let storage = context.const_struct(&[control_block.into(), elements.into()], false);
+    let global = gc.module.add_global(
+        storage.get_type(),
+        None,
+        &format!("GlobalArrayStorage#{}", gc.global_byte_array_storages.len()),
+    );
+    global.set_initializer(&storage);
+    global.set_constant(true);
+    global.set_linkage(Linkage::Internal);
+    let ptr = global.as_pointer_value();
+    gc.global_byte_array_storages.insert(bytes.to_vec(), ptr);
+    ptr
+}
+
 /// Emit a call to `malloc(sizeof)`.
 ///
 /// We bypass inkwell's `build_malloc` / `build_array_malloc` because they declare `@malloc` with an

@@ -622,6 +622,9 @@ pub struct Generator<'c, 'm> {
     /// The global constant emitted for each Rust string embedded in the module, keyed by the string,
     /// so that one string is emitted once.
     global_strings: Map<String, GlobalValue<'c>>,
+    /// The constant `#ArrayStorage` emitted for each byte string a literal asks for, keyed by the
+    /// bytes, so that literals of equal bytes name one storage.
+    pub global_byte_array_storages: Map<Vec<u8>, PointerValue<'c>>,
     /// Debug type built for each Fix type, keyed by the type's canonical string, so a type is
     /// described once and shared across every reference to it.
     di_type_cache: Map<String, DIType<'c>>,
@@ -974,6 +977,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             lambda_calling_convention: lambda_calling_convention_of_target(&triple),
             config,
             global_strings: Map::default(),
+            global_byte_array_storages: Map::default(),
             di_type_cache: Map::default(),
             di_type_placeholders: Map::default(),
             struct_types: Map::default(),
