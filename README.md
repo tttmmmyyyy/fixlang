@@ -1,6 +1,6 @@
 # Fix
 
-A fast, simple, functional language.
+A simple, fast, functional language.
 
 ![Ubuntu Tests](https://github.com/tttmmmyyyy/fixlang/actions/workflows/test.yml/badge.svg)
 [![GitHub release](https://img.shields.io/github/v/release/tttmmmyyyy/fixlang)](https://github.com/tttmmmyyyy/fixlang/releases)
