@@ -2677,28 +2677,25 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
         let size_in_bits = gc.target_data.get_bit_size(&struct_type);
         let align_in_bits = gc.target_data.get_abi_alignment(&struct_type) * 8;
 
-        let mut subelement_names = vec![];
-        if !ty.is_closure() {
-            let tc_info = ty.toplevel_tycon_info(gc.type_env());
-            subelement_names = tc_info
+        let mut subelement_names = if ty.is_closure() {
+            vec![]
+        } else {
+            ty.toplevel_tycon_info(gc.type_env())
                 .fields
                 .iter()
                 .map(|field| field.name.clone())
-                .collect();
+                .collect::<Vec<_>>()
         }
+        .into_iter();
 
         let mut elements = vec![];
         for (i, field) in obj_type.field_types.iter().enumerate() {
             let mut member_name = match field {
-                ObjectFieldType::SubObject(ty, _) => {
-                    if !subelement_names.is_empty() {
-                        subelement_names.remove(0)
-                    } else {
-                        // A closure's captured values are declared nowhere and so carry no names,
-                        // which leaves each of them presented to a debugger by its type.
-                        format!("<subelement of type {}>", ty.to_string())
-                    }
-                }
+                ObjectFieldType::SubObject(ty, _) => subelement_names.next().unwrap_or_else(|| {
+                    // A closure's captured values are declared nowhere and so carry no names,
+                    // which leaves each of them presented to a debugger by its type.
+                    format!("<subelement of type {}>", ty.to_string())
+                }),
                 ObjectFieldType::ControlBlock => "<control block>".to_string(),
                 ObjectFieldType::TraverseFunction => "<ptr to traverser function>".to_string(),
                 ObjectFieldType::LambdaFunction(_) => "<ptr to lambda function>".to_string(),
