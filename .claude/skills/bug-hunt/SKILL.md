@@ -198,6 +198,8 @@ A detector that reports nothing is evidence only once you have seen it report so
 
 Two shapes recur. **The detector never ran on the code**: the probe compiled away, the arm was unreachable, the process died before it got there. **The detector ran but could not see the fault**: the access stayed inside a block bigger than the data, the race needed a schedule that never happened, the wrong value was rounded away. The injection separates them, and both answers are worth more than the silence was.
 
+**The configuration you swept under can be the thing that disabled it.** A sweep varies settings to widen coverage, and a setting that widens one axis routinely turns another one off: an analysis that runs only above an optimization level, a check the threaded build path skips, a pass a debug flag disables. The detector is then silent for every run of that sweep, and the wider sweep is the quieter one. So before reading a sweep's silence, confirm the detector is live **in each cell** — inject into one run per setting, not one run per sweep.
+
 This applies with most force right after a change **tightens a bound that used to be loose** — an allocation sized exactly where it used to be over-approximate, a length that used to be padded, a timeout that used to be generous. The slack was hiding every violation smaller than itself; when it goes, the violations become reachable, and a detector proven to fire is how you find out whether any existed.
 
 **A test program is a detector, and a compiler is what makes it inert.** A test whose subject is a
@@ -289,16 +291,17 @@ Two things make the reading honest. Measure the pre-change compiler on the same 
 A project that checks its own invariants usually gates the expensive ones behind a development mode
 that only its test suite enables. Those checks are then a detector nobody has pointed at real code:
 the suite's inputs are small and written to exercise one thing each, while a corpus of real projects
-is a different distribution entirely. Wire a temporary switch that turns the mode on from the command
-line, build and **run** a corpus under it, and read what fires.
+is a different distribution entirely. Turn the mode on for an ordinary build, build and **run** a
+corpus under it, and read what fires. Look for the switch before building one: a project that has
+found this worth doing ships the flag (in this one, `fix --develop-mode`).
 
 The result reads both ways. A check that fires names a real input the suite's distribution never
 produced. A clean sweep is a measurement of the checks themselves — it says the invariants they state
 hold over inputs nobody wrote them for — and it costs one flag plus the corpus. Prove the switch
 reaches them the usual way, by breaking one invariant and watching its check abort.
 
-Revert the switch with the rest of the probes: the mode is gated for a reason, and a hunt that leaves
-it reachable changes what every later build costs.
+A switch you had to add is a probe, so revert it with the rest of them: the mode is gated for a
+reason, and a hunt that leaves it reachable changes what every later build costs.
 
 #### Run the emitted programs under valgrind memcheck
 
