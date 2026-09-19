@@ -205,10 +205,8 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
         return Ok(objects);
     }
 
-    let build_dir = PathBuf::from(INTERMEDIATE_PATH).join(format!(
-        "runtime.{}",
-        thread_rng().gen::<u64>().to_string()
-    ));
+    let build_dir = PathBuf::from(INTERMEDIATE_PATH)
+        .join(format!("runtime.{}", thread_rng().gen::<u64>().to_string()));
     let write_file = |path: &str, text: &str| {
         let path = build_dir.join(path);
         fs::create_dir_all(path.parent().unwrap())
@@ -238,7 +236,9 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
         // unoptimized against 88 ns optimized, and one integer takes 188 instructions against 97.
         // The whole runtime compiles in a few milliseconds, and a build reuses the objects a
         // previous build of the same compiler wrote.
-        com.arg("-O2").arg("-ffunction-sections").arg("-fdata-sections");
+        com.arg("-O2")
+            .arg("-ffunction-sections")
+            .arg("-fdata-sections");
         // Keep frame pointers for better backtraces on macOS when backtrace is enabled
         if config.no_elim_frame_pointers() {
             com.arg("-fno-omit-frame-pointer");
