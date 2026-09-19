@@ -19,7 +19,7 @@ A fast, familiar, functional language.
   - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(3.0)`
   - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
 - **Fast**
-  - In-place update: since Fix uses reference counting, it can update a uniquely referenced value in place instead of cloning it, even while remaining purely functional. As an example, look at the program below that calculates the Fibonacci sequence: the array is never cloned when the `set` function modifies it. This lets Fix implement algorithms naturally using arrays and hash tables without paying a cloning cost.
+  - In-place update: since Fix uses reference counting, it can update a uniquely referenced value in place instead of cloning it, even while remaining purely functional. As an example, look at the Fibonacci program under [Examples](#examples): the array is never cloned when the `set` function modifies it. This lets Fix implement algorithms naturally using arrays and hash tables without paying a cloning cost.
   - While Fix is still undergoing benchmarking and optimization, Fix can achieve performance comparable to C++ in a few simple programs that I have tested.
   - One of Fix's goals is to compile high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
   - [Benchmark history](https://tttmmmyyyy.github.io/fixlang/benchmark/)
@@ -34,36 +34,6 @@ A fast, familiar, functional language.
   - [Registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them
   - Document generator
   - Language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions
-
-The following is an example program that calculates the Fibonacci sequence using Fix:
-```
-module Main;
-
-calc_fib : I64 -> Array I64;
-calc_fib = |n| (
-    let arr = Array::fill(n, 0);
-    let arr = arr.set(0, 1);
-    let arr = arr.set(1, 1);
-    let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.@size {
-            break $ arr
-        } else {
-            let x = arr.@(idx-1);
-            let y = arr.@(idx-2);
-            let arr = arr.set(idx, x+y);
-            continue $ (idx+1, arr)
-        }
-    );
-    arr
-);
-
-main : IO ();
-main = (
-    let fib = calc_fib(30);
-    println("The first 30 numbers of Fibonacci sequence are: ");;
-    println $ fib.to_iter.map(to_string).join(", ")
-);
-```
 
 ## Installation
 
@@ -85,6 +55,35 @@ curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/tttmmmyyy
 On other platforms, or for other installation options (building from source, Docker, etc.), see [Document.md](./Document.md).
 
 ## Examples
+
+The following is an example program that calculates the Fibonacci sequence using Fix:
+```
+module Main;
+
+fib : I64 -> Array I64;
+fib = |n| (
+    let arr = Array::fill(n, 0);
+    let arr = arr.set(0, 1);
+    let arr = arr.set(1, 1);
+    let arr = loop((2, arr), |(idx, arr)|
+        if idx == arr.@size {
+            break $ arr
+        } else {
+            let x = arr.@(idx-1);
+            let y = arr.@(idx-2);
+            let arr = arr.set(idx, x+y);
+            continue $ (idx+1, arr)
+        }
+    );
+    arr
+);
+
+main : IO ();
+main = (
+    println("The first 30 numbers of Fibonacci sequence are: ");;
+    println $ fib(30).to_iter.map(to_string).join(", ")
+);
+```
 
 - [Basic syntax](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=Ly8gRWFjaCBzb3VyY2UgZmlsZSBoYXMgdG8gc3RhcnQgd2l0aCBtb2R1bGUgZGVjbGFyYXRpb24uDQptb2R1bGUgTWFpbjsNCg0KLy8gRGVjbGFyYXRpb24gYW5kIGRlZmluaXRpb24gb2YgZ2xvYmFsIHZhbHVlLg0KLy8gYEk2NGAgaXMgdGhlIHR5cGUgb2YgNjQtYml0IGludGVnZXJzLg0KdHJ1dGggOiBJNjQ7DQp0cnV0aCA9IDQyOyANCg0KLy8gRGVjbGFyYXRpb24gYW5kIGRlZmluaXRpb24gb2YgZ2xvYmFsIChyZWN1cnNpdmUpIGZ1bmN0aW9uLg0KLy8gVG8gZGVmaW5lIGZ1bmN0aW9uLCB3cml0ZSBgfGFyZzAsIGFyZzEsIC4uLnwgKGZ1bmN0aW9uIGJvZHkpYC4NCi8vIChQYXJlbnRoZXNlcyBhcm91bmQgYChmdW5jdGlvbiBib2R5KWAgaXMgbm90IG1hbmRhdG9yeS4pDQovLyBOb3RlIHRoYXQgRml4IGlzIGFuIGV4cHJlc3Npb24gYmFzZWQgbGFuZ3VhZ2UuIFlvdSBkb24ndCBuZWVkIHRvIHdyaXRlICJyZXR1cm4gc3RhdGVtZW50Ii4NCmNhbGNfZmliIDogSTY0IC0%2BIEk2NDsNCmNhbGNfZmliID0gfG58ICgNCiAgICBpZiBuIDw9IDEgeyBuIH0gZWxzZSB7IGNhbGNfZmliKG4tMSkgKyBjYWxjX2ZpYihuLTIpIH0NCik7DQoNCmNhbGNfZmliMiA6IEk2NCAtPiBJNjQ7DQpjYWxjX2ZpYjIgPSB8bnwgKA0KICAgIC8vIEFub3RoZXIgc3ludGF4IG9mIGBpZmAsIGBpZiAoY29uZCkgeyAodGhlbiBleHByKSB9OyAoZWxzZSBleHByKWAsIGNhbiBiZSB1c2VkIHRvIHdyaXRlIGVhcmx5IHJldHVybi4NCiAgICBpZiBuIDw9IDEgeyBuIH07DQoNCiAgICAvLyBVc2UgYGxldGAgdG8gZGVmaW5lIGEgbG9jYWwgbmFtZS4NCiAgICBsZXQgeCA9IGNhbGNfZmliMihuLTEpOw0KICAgIGxldCB5ID0gY2FsY19maWIyKG4tMik7DQogICAgeCArIHkNCik7DQoNCnRydXRoMiA6IEk2NDsNCnRydXRoMiA9ICgNCiAgICAvLyBZb3UgY2FuIGRlZmluZSBsb2NhbCBmdW5jdGlvbiAoY2xvc3VyZSkgbGlrZSB0aGlzLiBgZmAgaGFzIHR5cGUgYEk2NCAtPiBJNjQgLT4gSTY0IC0%2BIEk2NGAuDQogICAgbGV0IGYgPSB8YSwgYiwgY3wgKGEgKyBiKSAqIGM7DQoNCiAgICAvLyBQYXJ0aWFsIGFwcGxpY2F0aW9uLiBgZG91YmxlYCBoYXMgdHlwZSBgSTY0IC0%2BIEk2NGAgYW5kIG1hcHMgYGNgIHRvIGAoMSArIDEpICogYyA9PSAyICogY2AuDQogICAgbGV0IGRvdWJsZSA9IGYoMSwgMSk7DQoNCiAgICAvLyBSaWdodC1hc3NvY2lhdGl2ZSBvcGVyYXRvciBgJGAgYXBwbGllcyBhIGZ1bmN0aW9uIHRvIGEgdmFsdWU6IGBmICQgeCA9PSBmKHgpYCBhbmQgYGYgJCBnICQgeCA9PSBmKGcoeCkpYC4NCiAgICBsZXQgdHdlbHZlID0gZG91YmxlICQgZG91YmxlICQgMzsNCg0KICAgIC8vIGAuYCBpcyBhbm90aGVyIG9wZXJhdG9yIHRvIGFwcGx5IGEgZnVuY3Rpb246IGB4LmYgPT0gZih4KWAuDQogICAgLy8gSXQgaGFzIGxvd2VyIHByaW9yaXR5IHRoYW4gdXN1YWwgZnVuY3Rpb24gY2FsbCwgc28gYDMuZigxLCAyKSA9PSBmKDEsIDIpKDMpID09IGYoMSwgMiwgMylgLg0KICAgIGxldCBuaW5lID0gMy5mKDEsIDIpOw0KDQogICAgZG91YmxlICQgbmluZSArIHR3ZWx2ZQ0KKTsNCg0KLy8gRml4IHByb2dyYW0gY2FsbHMgYE1haW46Om1haW5gIChpLmUuLCBgbWFpbmAgb2YgYE1haW5gIG1vZHVsZSkgYXMgdGhlIGVudHJ5IHBvaW50Lg0KLy8gYE1haW46Om1haW5gIG11c3QgaGF2ZSB0eXBlIGBJTyAoKWAsIHdoZXJlIGBJTyBhYCBpcyB0aGUgdHlwZSBvZiBJL08gYWN0aW9ucyB3aGljaCByZXR1cm4gYSB2YWx1ZSBvZiB0eXBlIGBhYC4NCi8vIGAoKWAgaXMgdGhlIHVuaXQgdHlwZSwgd2hpY2ggaGFzIGEgdW5pcXVlIHZhbHVlIGFsc28gd3JpdHRlbiBhcyBgKClgLg0KbWFpbiA6IElPICgpOw0KbWFpbiA9ICgNCiAgICAvLyBgcHJpbnRsbiA6IFN0cmluZyAtPiBJTyAoKWAgbWFrZXMgYW4gSS9PIGFjdGlvbiB0aGF0IHByaW50cyBhIHN0cmluZyAoYW5kIGEgbmV3bGluZSkuDQogICAgLy8gUm91Z2hseSBzcGVha2luZywgYGFjdDs7YCBwZXJmb3JtcyB0aGUgSS9PIGFjdGlvbiBgYWN0YCBhbmQgaWdub3JlcyBpdHMgcmV0dXJuIHZhbHVlLg0KICAgIHByaW50bG4gJCAidHJ1dGggOiAiICsgdHJ1dGgudG9fc3RyaW5nOzsNCiAgICBwcmludGxuICQgInRydXRoMiA6ICIgKyB0cnV0aDIudG9fc3RyaW5nOzsNCiAgICBwcmludGxuICQgImNhbGNfZmliKDEwKSA6ICIgKyBjYWxjX2ZpYigxMCkudG9fc3RyaW5nOzsNCiAgICBwcmludGxuICQgImNhbGNfZmliMigxMCkgOiAiICsgY2FsY19maWIyKDEwKS50b19zdHJpbmc7Ow0KDQogICAgLy8gYHB1cmUgOiBhIC0%2BIElPIGFgIGNyZWF0ZXMgYW4gSS9PIGFjdGlvbiB3aGljaCBkb2VzIG5vdGhpbmcgYW5kIG9ubHkgcmV0dXJucyBhIHZhbHVlLiANCiAgICAvLyBCeSBhIHN5bnRheCBzdWdhciwgeW91IGNhbiB3cml0ZSBgcHVyZSgpYCBpbnN0ZWFkIG9mIGBwdXJlKCgpKWAuDQogICAgcHVyZSgpDQopOw%3D%3D)
 - [Array and loop](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src3=H4sIAAAAAAAACnVUTW%2BbQBC9W%2FJ%2FeIccQMHGjqOqIkrl9FCpUqtUSu5lDYO9Ct6lu0ti2vS%2FV7MbDInTPSCGefPmzcey12VbE74Lqa6mk%2BkkTfHDSOUsVgu3w6OoW4Ku8EVutBJFIWHpV0uqoPl0shdSIcPXW0Tx1Yt5jWg6AYA0RV7JumbAh0vMPkHw48YY0UHkkApK7Mk2oiDkd67MMu%2FLURgSjiyEgvBoXcE2VMhKUoma1NbtIFQJpqcSmw4iKJ2H1DU5jsR1yJZlDIxWywQL1tmrs%2BRy5nZdQ8jfEflGryXj%2BkyQyumjwvkb0rYpfQVuR9jKR%2BoLkQq30TKGrLzLUEWGe4lCt8qRgbTQihIc%2BbR5SWyPmUXFyKLWSqqt5wnkkXRw4oEsbiMVx9BuR%2BZJ2tOuCGPmlly0GDXk1LtMsBy16wZPokOlDWqtG1bqNFpLyNnOE%2BSFVk6qlnI%2FnHxjSDzkQ2t8WAbLXf2mdXPnhCNYGP5gMJvh3qvniqSSTooa1mOYzkdvdNkl3mzIVNrsrf8%2B5Ogl%2FCfPOIWigxvx95HB%2BZrVV4IsKD2h%2FMzeIcyzGXKtUeMFeH8%2FOSCKLhI24wTPkSwPwXgOUD6ygiwPuA6jWVv5m%2FBncPMJCs8YMDj%2Bgmp7Ak1T3GtsaVhlXR0XOQkTXQ%2BXdnQVRD%2FM%2FnAdh5eNWbP02XFhxpDuFeTiPcjrzfNNOJx3b5HH6Z6BMefL0KpRxeG1j2v4T1ar0Jf5Olot4rnTP60zfHPSFB9XF4vLxXQSX%2F0DmqM2NAgFAAA%3D)
