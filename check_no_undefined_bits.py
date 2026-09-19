@@ -1,11 +1,10 @@
 """Report the values carrying undefined bits that reach a function boundary.
 
-LLVM lets a caller state that an argument or a result holds no undefined bit (`noundef`), and reads a
-violation of that statement as undefined behavior. The statement is therefore worth only as much as
-the guarantee behind it, and the guarantee here is that the code generator writes every bit of every
-value it hands across a boundary.
+Fix's types cover every value a generated function hands to another, and where the code generator
+makes a value of its own it writes every bit of it. Nothing in the emitted code states that, so
+nothing enforces it either.
 
-This reads the LLVM IR the code generator emits, before any LLVM pass runs, and answers whether that
+This reads the LLVM IR the code generator emits, before any LLVM pass runs, and answers whether it
 holds: it follows each `poison` and `undef` the module names, through the instructions that carry it,
 and reports every one that arrives at a call argument or a `ret`.
 

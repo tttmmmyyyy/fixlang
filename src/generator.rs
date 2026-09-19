@@ -56,7 +56,6 @@ use inkwell::llvm_sys::core::LLVMBuildFreeze;
 use inkwell::llvm_sys::debuginfo::LLVMMetadataReplaceAllUsesWith;
 use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
-use inkwell::types::FunctionType;
 use inkwell::types::StructType;
 use inkwell::values::AsValueRef;
 use inkwell::values::BasicValue;
@@ -2038,10 +2037,10 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .iter()
                 .map(|t| (*t).into())
                 .collect::<Vec<BasicMetadataTypeEnum>>();
-            let func = self.add_generated_function(
+            let func = self.module.add_function(
                 &func_name,
                 self.context.void_type().fn_type(&param_tys, false),
-                Linkage::Internal,
+                Some(Linkage::Internal),
             );
             let bb = self.context.append_basic_block(func, "entry");
             let _builder_guard = self.push_builder();
@@ -2827,7 +2826,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             Linkage::Internal
         };
-        let func = self.add_generated_function(&object_file_symbol_name(name), llvm_fn_ty, linkage);
+        let func =
+            self.module
+                .add_function(&object_file_symbol_name(name), llvm_fn_ty, Some(linkage));
         func.set_call_conventions(self.lambda_calling_convention());
         if fn_ty.is_funptr() {
             self.add_global_object(name.clone(), func, fn_ty.clone());
@@ -2862,7 +2863,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         // The accessor is internal wherever it is: a unit reading a global carries one of its own,
         // so no unit reaches another's. `assert_each_unit_serves_the_globals_it_reads` checks that
         // as the program is divided.
-        let acc_fn = self.add_generated_function(&acc_fn_name, acc_fn_ty, Linkage::Internal);
+        let acc_fn = self
+            .module
+            .add_function(&acc_fn_name, acc_fn_ty, Some(Linkage::Internal));
         self.add_global_object(name.clone(), acc_fn, ty);
         Some(acc_fn)
     }
@@ -3271,44 +3274,6 @@ impl<'c, 'm> Generator<'c, 'm> {
             // A scalar -- an integer, a float, a pointer -- is the bytes it occupies, so a store
             // of one writes all of them.
             _ => false,
-        }
-    }
-
-    /// A function of the generated program, carrying what is true of the values that cross its
-    /// boundary.
-    ///
-    /// A function whose callers this compiler writes is declared here, so the statement reaches all
-    /// of them. A function whose boundary is a C signature -- one named by `FFI_CALL`, one of the
-    /// runtime's, one `FFI_EXPORT` offers, the entry point -- is declared through
-    /// `CSignature::get_or_declare_in_module` instead, since what crosses it is outside what Fix's
-    /// types say.
-    pub fn add_generated_function(
-        &self,
-        name: &str,
-        ty: FunctionType<'c>,
-        linkage: Linkage,
-    ) -> FunctionValue<'c> {
-        let func = self.module.add_function(name, ty, Some(linkage));
-        self.state_boundary_values_are_written(func);
-        func
-    }
-
-    /// State that every value crossing `func`'s boundary has all of its bits written.
-    ///
-    /// Fix's types cover every value a generated function takes and returns: no Fix program leaves
-    /// one uninitialized, and where the code generator makes a value of its own it writes every bit
-    /// of it. LLVM assumes neither of these on its own, so without the statement it reads every
-    /// argument as one that may be undefined: it cannot move an instruction reading one to a place
-    /// that runs unconditionally, and it inserts a `freeze` before branching on one.
-    ///
-    /// `check_no_undefined_bits.py` holds the statement up: it walks the emitted IR and reports any
-    /// value with a bit nothing wrote that reaches a call argument or a `ret`.
-    fn state_boundary_values_are_written(&self, func: FunctionValue<'c>) {
-        for index in 0..func.count_params() {
-            self.add_enum_attribute(func, "noundef", AttributeLoc::Param(index));
-        }
-        if func.get_type().get_return_type().is_some() {
-            self.add_enum_attribute(func, "noundef", AttributeLoc::Return);
         }
     }
 

@@ -1,5 +1,3 @@
-use crate::constants::C_ENTRY_POINT_NAME;
-use crate::fixstd::runtime::{RUNTIME_GET_ARGC, RUNTIME_GET_ARGV};
 use crate::misc::Set;
 use crate::tests::test_util::{first_local_value, generated_llvm_ir_modules, llvm_function_bodies};
 use std::ffi::OsStr;
@@ -18,9 +16,8 @@ use tempfile::TempDir;
 /// defined below the `phi` that reads it. `undefined` gives an arm that ends the program rather
 /// than handing a value back. An `FFI_CALL` gives a value whose bits the declared signature does
 /// not settle; the C function it names is written again in `C_FUNCTION_NAME`, which is what the
-/// emitted call is looked up under. And an `FFI_EXPORT` gives a function whose callers are C code
-/// this compiler never sees; the name it offers that function under is written again in
-/// `EXPORTED_C_FUNCTION_NAME`, which is what the emitted definition is looked up under.
+/// emitted call is looked up under. And an `FFI_EXPORT` gives a function whose boundary is a C
+/// signature, which this compiler declares through a path of its own.
 const BOUNDARY_SOURCE: &str = r#"
     module Main;
 
@@ -79,151 +76,6 @@ fn boundary_modules() -> &'static [String] {
     MODULES.get_or_init(|| generated_llvm_ir_modules(BOUNDARY_SOURCE, "none", &[]))
 }
 
-/// The name `BOUNDARY_SOURCE` offers its exported function to C under.
-const EXPORTED_C_FUNCTION_NAME: &str = "c_offered";
-
-/// The functions of an emitted module that carry no statement about their boundary values.
-///
-/// A function whose boundary is a C signature stands outside the statement, since the calls across
-/// it come from code this compiler never sees: the two runtime functions a Fix program reaches
-/// through their C signatures, the entry point whose arguments the C runtime supplies, and a
-/// function `FFI_EXPORT` offers. `Generator::add_generated_function` states it on every other
-/// function the compiler emits a body for.
-const FUNCTIONS_OUTSIDE_THE_STATEMENT: [&str; 4] = [
-    RUNTIME_GET_ARGC,
-    RUNTIME_GET_ARGV,
-    C_ENTRY_POINT_NAME,
-    EXPORTED_C_FUNCTION_NAME,
-];
-
-/// One `define` line of an emitted module, cut into the parts that carry the statement.
-struct DefinedFunction<'a> {
-    /// The name the compiler gave the function, without the `@` and any quotes around it.
-    name: &'a str,
-    /// The text before the name: the linkage, the return type, and the attributes on the result.
-    before_name: &'a str,
-    /// The parameters, each with the attributes on it.
-    parameters: Vec<&'a str>,
-}
-
-/// The function `line` defines, where `line` opens a definition.
-fn defined_function(line: &str) -> Option<DefinedFunction<'_>> {
-    let signature = line.strip_prefix("define ")?;
-    let at = signature.find('@')?;
-    let (before_name, from_name) = signature.split_at(at);
-    let from_name = &from_name[1..];
-    let (name, after_name) = match from_name.strip_prefix('"') {
-        Some(quoted) => {
-            let end = quoted
-                .find('"')
-                .unwrap_or_else(|| panic!("a quoted function name is closed: {}", line));
-            (&quoted[..end], &quoted[end + 1..])
-        }
-        None => {
-            let end = from_name.find('(').unwrap_or_else(|| {
-                panic!("a function name is followed by its parameters: {}", line)
-            });
-            (&from_name[..end], &from_name[end..])
-        }
-    };
-    let parameters = after_name
-        .strip_prefix('(')
-        .unwrap_or_else(|| panic!("a function name is followed by its parameters: {}", line))
-        .rsplit_once(')')
-        .unwrap_or_else(|| panic!("a parameter list is closed: {}", line))
-        .0;
-    Some(DefinedFunction {
-        name,
-        before_name,
-        parameters: split_at_top_level_commas(parameters),
-    })
-}
-
-/// `text` cut at the commas between its parts.
-///
-/// A type is written with commas inside it — `{ ptr, i64 }`, `[2 x i64]`, `<4 x i64>` — so the cut
-/// is made only where no bracket is open.
-fn split_at_top_level_commas(text: &str) -> Vec<&str> {
-    let mut depth = 0;
-    let mut parts = Vec::new();
-    let mut start = 0;
-    for (at, character) in text.char_indices() {
-        match character {
-            '{' | '[' | '<' | '(' => depth += 1,
-            '}' | ']' | '>' | ')' => depth -= 1,
-            ',' if depth == 0 => {
-                parts.push(text[start..at].trim());
-                start = at + character.len_utf8();
-            }
-            _ => {}
-        }
-    }
-    parts.push(text[start..].trim());
-    parts.into_iter().filter(|part| !part.is_empty()).collect()
-}
-
-/// Whether `text` carries `noundef` as a word of its own.
-fn states_the_value_is_written(text: &str) -> bool {
-    text.split_whitespace().any(|word| word == "noundef")
-}
-
-/// Every value a generated function takes and returns has all of its bits written, and the
-/// generated code says so.
-///
-/// LLVM assumes neither of these on its own: without the statement it reads every argument as one
-/// that may be undefined, and it inserts a `freeze` before branching on one.
-/// `Generator::add_generated_function` is the one constructor that puts the statement on, so a
-/// function declared through `Module::add_function` instead arrives here bare.
-#[test]
-pub fn test_every_generated_function_states_its_boundary_values_are_written() {
-    let mut functions_read = 0;
-    let mut bare_boundary_values = Vec::new();
-    let mut outside_the_statement: Set<&str> = Set::default();
-    for module in boundary_modules() {
-        for line in module.lines() {
-            let Some(function) = defined_function(line) else {
-                continue;
-            };
-            if FUNCTIONS_OUTSIDE_THE_STATEMENT.contains(&function.name) {
-                outside_the_statement.insert(function.name);
-                continue;
-            }
-            functions_read += 1;
-            let returns_a_value = function.before_name.split_whitespace().last() != Some("void");
-            if returns_a_value && !states_the_value_is_written(function.before_name) {
-                bare_boundary_values.push(format!("the result of `{}`", function.name));
-            }
-            for parameter in &function.parameters {
-                if *parameter != "..." && !states_the_value_is_written(parameter) {
-                    bare_boundary_values.push(format!(
-                        "the parameter `{}` of `{}`",
-                        parameter, function.name
-                    ));
-                }
-            }
-        }
-    }
-    assert!(
-        bare_boundary_values.is_empty(),
-        "every value crossing a generated function's boundary should be stated to have all of its \
-         bits written, but {} do not:\n{}",
-        bare_boundary_values.len(),
-        bare_boundary_values.join("\n"),
-    );
-    assert!(
-        functions_read > 0,
-        "the program should be compiled into functions, so that this test has boundaries to read",
-    );
-    for name in FUNCTIONS_OUTSIDE_THE_STATEMENT {
-        assert!(
-            outside_the_statement.contains(name),
-            "`{}` is named as standing outside the statement, so a build of an executable should \
-             define it",
-            name,
-        );
-    }
-}
-
 /// The code generator names `poison` where it says a value is never read, and never `undef`.
 ///
 /// A poison is one value for all of its readers, so LLVM may merge two reads of it or duplicate
@@ -249,9 +101,6 @@ pub fn test_the_code_generator_names_poison_rather_than_undef() {
 }
 
 /// Whether `line` names the `undef` constant.
-///
-/// `noundef` is a word of its own, so a line stating that a boundary value is written does not name
-/// it.
 fn names_undef(line: &str) -> bool {
     line.split(|c: char| !(c.is_alphanumeric() || c == '_'))
         .any(|word| word == "undef")
@@ -262,7 +111,7 @@ fn names_undef(line: &str) -> bool {
 /// What a C function leaves behind is outside what Fix's types cover — C leaves a result undefined
 /// where the caller ignores it — so the value carries bits LLVM holds to be undefined, and a read
 /// of such a bit may answer differently each time. `Generator::build_freeze` chooses one answer and
-/// holds it, so the value can cross a boundary that states it is written.
+/// holds it, so every read of the value agrees.
 #[test]
 pub fn test_the_result_of_a_c_function_is_given_one_answer_for_every_read() {
     let mut calls_read = 0;
@@ -353,10 +202,11 @@ fn boundary_module_files() -> (TempDir, Vec<PathBuf>) {
 
 /// No value carrying a bit nothing wrote reaches a call argument or a `ret`.
 ///
-/// This is the guarantee behind the statement every generated function makes about its boundary
-/// values: LLVM reads a violation of `noundef` as undefined behavior, so the statement is worth
-/// what the guarantee is worth. `check_no_undefined_bits.py` follows each `poison` and `undef` the
-/// emitted code names through the instructions that carry it, and reports the ones that arrive.
+/// Fix's types cover every value a generated function hands to another, and where the code
+/// generator makes a value of its own it writes every bit of it. Nothing in the emitted code says
+/// so, so this is what holds the property up: `check_no_undefined_bits.py` follows each `poison`
+/// and `undef` the emitted code names through the instructions that carry it, and reports the ones
+/// that arrive.
 #[test]
 pub fn test_no_value_with_undefined_bits_reaches_a_function_boundary() {
     let (_dir, paths) = boundary_module_files();

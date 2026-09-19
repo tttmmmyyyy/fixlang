@@ -665,14 +665,16 @@ impl<'c, 'm> Generator<'c, 'm> {
         // The initializer is internal to the unit that computes the value where that unit is also
         // the only one reading it; every other unit computing one publishes the function, since the
         // accessor calling it is in another unit.
-        let init_value_fn = self.add_generated_function(
+        let init_value_fn = self.module.add_function(
             &format!("InitValue#{}", object_file_symbol_name(&global_init.symbol)),
             BasicType::fn_type(&obj_embed_ty, &[], false),
-            if global_init.owns_initializer && global_init.owns_storage && !shared {
-                Linkage::Internal
-            } else {
-                Linkage::External
-            },
+            Some(
+                if global_init.owns_initializer && global_init.owns_storage && !shared {
+                    Linkage::Internal
+                } else {
+                    Linkage::External
+                },
+            ),
         );
 
         // Evaluate the initializer and mark it global. A unit reading a value another computes
@@ -808,10 +810,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             // `pthread_once` takes a function of no arguments and no result, so the store happens
             // inside that function, where a reader cannot see it.
-            let once_fn = self.add_generated_function(
+            let once_fn = self.module.add_function(
                 &format!("InitOnce#{}", object_file_symbol_name(&global_init.symbol)),
                 self.context.void_type().fn_type(&[], false),
-                Linkage::Internal,
+                Some(Linkage::Internal),
             );
             {
                 let _builder_guard = self.push_builder();

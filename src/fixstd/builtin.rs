@@ -8263,7 +8263,9 @@ fn rc_function_of_boxed_value<'c, 'm>(
                 .context
                 .void_type()
                 .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
-            let func = gc.add_generated_function(&function_name, function_ty, Linkage::Internal);
+            let func = gc
+                .module
+                .add_function(&function_name, function_ty, Some(Linkage::Internal));
             let bb = gc.context.append_basic_block(func, "entry");
             let _builder_guard = gc.push_builder();
             gc.builder().position_at_end(bb);
