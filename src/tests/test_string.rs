@@ -397,3 +397,41 @@ main = (
     "##;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// Writing through the bytes a string literal hands out leaves the literal saying what the source
+/// wrote, and the write lands in what the caller holds. A literal reads its bytes out of a
+/// constant the program holds in memory it may not write, so the copy the write goes to is what
+/// keeps both halves of that true.
+#[test]
+pub fn test_writing_through_a_literals_bytes_leaves_the_literal_alone() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            // A write whose only use of the array is the write itself: the path that updates a
+            // uniquely held array in place.
+            let written = "abc".get_bytes.set(0, 'x');
+            assert_eq(|_|"the write landed on the copy", written.@(0), 'x');;
+            assert_eq(|_|"the literal kept its first byte", "abc".get_bytes.@(0), 'a');;
+            assert_eq(|_|"the literal reads as it was written", "abc", "abc");;
+
+            // The same through the functorial write.
+            assert_eq(|_|"the functorial write landed on the copy",
+                "abc".get_bytes.mod(1, |_| 'Z').@(1), 'Z');;
+            assert_eq(|_|"the literal kept its second byte", "abc".get_bytes.@(1), 'b');;
+
+            // The empty literal, whose bytes are the null terminator alone.
+            assert_eq(|_|"growing the empty literal's bytes",
+                "".get_bytes.push_back('a').@size, 2);;
+            assert_eq(|_|"the empty literal kept its terminator", "".get_bytes.@(0), '\0');;
+
+            // A freshly built array takes the write in place and keeps it.
+            let fresh = Array::fill(4, 'a').set(0, 'x');
+            assert_eq(|_|"a freshly built array takes the write", fresh.@(0), 'x');;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}

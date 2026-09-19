@@ -142,3 +142,32 @@ main = (
     config.set_threaded();
     test_source(source, config);
 }
+
+/// A mark walk leaves the storage of a string literal where it stands.
+///
+/// A literal's bytes are a constant in memory the program may not write, already carrying the mark
+/// a walk would write. A walk passes over an object whose mark is already there, so it reaches
+/// this one and writes nothing; one that wrote would fault. Both walks reach it here: the
+/// initialization of a global value marks what it built, and `Std::mark_threaded` marks what it is
+/// given.
+#[test]
+fn test_marking_leaves_the_storage_of_a_string_literal_alone() {
+    let source = r#"
+module Main;
+
+greeting : String;
+greeting = "hello";
+
+main : IO ();
+main = (
+    assert_eq(|_|"the global value holds the literal", greeting, "hello");;
+    let handed_over = "hello".mark_threaded;
+    assert_eq(|_|"the marked value holds the literal", handed_over, "hello");;
+    assert_eq(|_|"the global value holds it still", greeting, "hello");;
+    pure()
+);
+"#;
+    let mut config = Configuration::develop_mode();
+    config.set_threaded();
+    test_source(source, config);
+}

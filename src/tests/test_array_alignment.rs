@@ -46,6 +46,38 @@ mod tests {
         )
     }
 
+    /// A string literal's bytes start on the boundary too. A literal's storage is a constant the
+    /// linker places, where every other array's is placed by the allocator that carries this rule,
+    /// so the two reach the boundary by different means and a reader of an array meets it either
+    /// way.
+    #[test]
+    fn test_the_element_buffer_of_a_string_literal_is_aligned() {
+        let length = ARRAY_ALIGNED_ALLOC_THRESHOLD as usize;
+        let literal = format!("{}z", "a".repeat(length - 1));
+        let source = preamble()
+            + &format!(
+                r#"
+        main : IO ();
+        main = (
+            let long = "{literal}";
+            assert_aligned("string literal", long.get_bytes);;
+            assert_eq(|_|"the literal holds every byte written", long.@size, {length});;
+            assert_eq(|_|"its first byte", long.get_bytes.@(0), 'a');;
+            assert_eq(|_|"its last byte", long.get_bytes.@({length} - 1), 'z');;
+            assert_eq(|_|"the null after them", long.get_bytes.@({length}), '\0');;
+            pure()
+        );
+        "#,
+                literal = literal,
+                length = length,
+            );
+        test_source_with_c(
+            &source,
+            ADDR_MOD_ALIGNMENT,
+            "array_alignment_string_literal",
+        );
+    }
+
     /// Every way of building an array over the threshold lands its elements on the boundary,
     /// whatever the element type.
     #[test]
