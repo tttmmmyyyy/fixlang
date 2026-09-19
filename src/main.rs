@@ -502,7 +502,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         .bin_name("fix")
         .version(VERSION)
         .propagate_version(true)
-        .about("The toolchain for Fix, a fast, simple, purely functional language.")
+        .about("The toolchain for Fix, a simple, fast, functional language.")
         .setting(AppSettings::ArgRequiredElseHelp)
         .subcommand(version_subc)
         .subcommand(build_subc)

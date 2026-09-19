@@ -1,35 +1,67 @@
-Fix-lang: Fix Programming Language
-====
+# Fix
+
+A simple, fast, functional language.
 
 ![Ubuntu Tests](https://github.com/tttmmmyyyy/fixlang/actions/workflows/test.yml/badge.svg)
+[![GitHub release](https://img.shields.io/github/v/release/tttmmmyyyy/fixlang)](https://github.com/tttmmmyyyy/fixlang/releases)
 
-## Overview
+## Concepts and features
 
-Fix is a purely functional programming language designed to be easy to learn, easy to use, and enjoyable.
-
-You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/).
-
-Concepts: 
-- **Syntax that combines the advantages of functional and OOP languages** 
-  - For example, if you have an array of integers called `fib` and you want to display it on the screen, you can write any of the following:
-    -  `println(fib.to_iter.map(to_string).join(", "))` 
-    -  `println $ fib.to_iter.map(to_string).join(", ")`
-    -  `fib.to_iter.map(to_string).join(", ").println`
-- **In-place update** 
-  - Since Fix uses reference counting for memory management, it can update uniquely referenced values in place while being purely functional.
-  - As an example, look at the program below that calculates the Fibonacci sequence. In this code, the array is never cloned when modified by the `set` function.
-  - This allows Fix to implement algorithms naturally using arrays and hash tables, while remaining purely functional.
-- **Performance** 
-  - While Fix is still undergoing benchmarking and optimization, Fix can achieve performance comparable to C++ in a few simple programs that I have tested.
-  - One of Fix's goals is to compile high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
+- **Functional**
+  - Fix is a purely functional language, like Haskell: functions are pure (except through the FFI), and effects — including I/O — are expressed as monadic values.
+  - Higher-kinded types, traits, and associated types give the type system the abstractions a purely functional language needs to abstract uniformly over containers and computations.
+- **Syntax**
+  - Functions are applied with parentheses or with `.`: `b.f(a)` means `f(a, b)`. So with `push_back : a -> Array a -> Array a`, you write `arr.push_back(x)` — a familiar shape, though Fix has no notion of a method.
+  - Closures (lambda expressions)
+    - `|x| x + 42`
+  - Haskell's `$` for application
+    - `println $ 42.to_string`
+  - Syntax for composing monadic actions (`;;` and `*`)
+    - `println("I will echo you: ");; println(*input_line)`
+  - Syntax for using Lens on hierarchical data
+    - `vectors[i][^x].iset(42.0)`
+- **Fast**
+  - In-place update: reference counting lets Fix update a uniquely referenced value in place rather than clone it, without giving up purity. In the Fibonacci program under [Examples](#examples), `set` never clones the array — so algorithms over arrays and hash tables can be written the natural way, with no copying.
+  - Fix is compiled ahead of time to a native binary, through LLVM. One of its goals is to turn high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
   - [Benchmark history](https://tttmmmyyyy.github.io/fixlang/benchmark/)
+- **Other features**
+  - Multithreading
+  - Foreign function interface (FFI)
+- **Memory management**
+  - Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
+- **Tools**
+  - Dependency manager
+  - [Registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them
+  - Document generator
+  - Language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions
+
+## Installation
+
+You can try Fix without installing it, in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/); it's also one of the judge languages on [AtCoder](https://atcoder.jp/), a major competitive programming site.
+
+Fix provides prebuilt binaries for:
+
+| OS | Architecture |
+| --- | --- |
+| Linux | x86_64 |
+| macOS | arm64 (Apple Silicon) |
+
+Run the following command to install `fix` to `~/.local/bin`:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/tttmmmyyyy/fixlang/main/install.sh | sh
+```
+
+On other platforms, or for other installation options (building from source, Docker, etc.), see [Document.md](./Document.md).
+
+## Examples
 
 The following is an example program that calculates the Fibonacci sequence using Fix:
 ```
 module Main;
 
-calc_fib : I64 -> Array I64;
-calc_fib = |n| (
+fib : I64 -> Array I64;
+fib = |n| (
     let arr = Array::fill(n, 0);
     let arr = arr.set(0, 1);
     let arr = arr.set(1, 1);
@@ -48,34 +80,10 @@ calc_fib = |n| (
 
 main : IO ();
 main = (
-    let fib = calc_fib(30);
     println("The first 30 numbers of Fibonacci sequence are: ");;
-    println $ fib.to_iter.map(to_string).join(", ")
+    println $ fib(30).to_iter.map(to_string).join(", ")
 );
 ```
-
-## Features
-
-- Functional paradigm and type system
-  - Closures: `|x| x + 42`
-  - Higher kinded types and traits: `Array : Functor`, `IO : Monad`, etc.
-  - Associated types to traits: `Iterator::Item`
-  - Syntax for combining monads (`;;` and `*`): `main : IO () = println("I will echo you: ");; println(*input_line);`
-  - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(3.0) // Update the "x" field of the struct at index 2 of an array of vectors`
-  - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
-- Memory management & mutability
-  - In-place update of values which is uniquely referenced
-  - Memory safety and thread safety
-  - No memory leak achieved by avoiding cyclic references syntactically
-- Multithreading
-- Foreign function interface (FFI)
-- Tools
-  - Dependency manager
-  - Document generation
-  - Language Server Protocol (LSP) support
-    - Editor extensions: [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) / [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support)
-
-## Examples
 
 - [Basic syntax](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=Ly8gRWFjaCBzb3VyY2UgZmlsZSBoYXMgdG8gc3RhcnQgd2l0aCBtb2R1bGUgZGVjbGFyYXRpb24uDQptb2R1bGUgTWFpbjsNCg0KLy8gRGVjbGFyYXRpb24gYW5kIGRlZmluaXRpb24gb2YgZ2xvYmFsIHZhbHVlLg0KLy8gYEk2NGAgaXMgdGhlIHR5cGUgb2YgNjQtYml0IGludGVnZXJzLg0KdHJ1dGggOiBJNjQ7DQp0cnV0aCA9IDQyOyANCg0KLy8gRGVjbGFyYXRpb24gYW5kIGRlZmluaXRpb24gb2YgZ2xvYmFsIChyZWN1cnNpdmUpIGZ1bmN0aW9uLg0KLy8gVG8gZGVmaW5lIGZ1bmN0aW9uLCB3cml0ZSBgfGFyZzAsIGFyZzEsIC4uLnwgKGZ1bmN0aW9uIGJvZHkpYC4NCi8vIChQYXJlbnRoZXNlcyBhcm91bmQgYChmdW5jdGlvbiBib2R5KWAgaXMgbm90IG1hbmRhdG9yeS4pDQovLyBOb3RlIHRoYXQgRml4IGlzIGFuIGV4cHJlc3Npb24gYmFzZWQgbGFuZ3VhZ2UuIFlvdSBkb24ndCBuZWVkIHRvIHdyaXRlICJyZXR1cm4gc3RhdGVtZW50Ii4NCmNhbGNfZmliIDogSTY0IC0%2BIEk2NDsNCmNhbGNfZmliID0gfG58ICgNCiAgICBpZiBuIDw9IDEgeyBuIH0gZWxzZSB7IGNhbGNfZmliKG4tMSkgKyBjYWxjX2ZpYihuLTIpIH0NCik7DQoNCmNhbGNfZmliMiA6IEk2NCAtPiBJNjQ7DQpjYWxjX2ZpYjIgPSB8bnwgKA0KICAgIC8vIEFub3RoZXIgc3ludGF4IG9mIGBpZmAsIGBpZiAoY29uZCkgeyAodGhlbiBleHByKSB9OyAoZWxzZSBleHByKWAsIGNhbiBiZSB1c2VkIHRvIHdyaXRlIGVhcmx5IHJldHVybi4NCiAgICBpZiBuIDw9IDEgeyBuIH07DQoNCiAgICAvLyBVc2UgYGxldGAgdG8gZGVmaW5lIGEgbG9jYWwgbmFtZS4NCiAgICBsZXQgeCA9IGNhbGNfZmliMihuLTEpOw0KICAgIGxldCB5ID0gY2FsY19maWIyKG4tMik7DQogICAgeCArIHkNCik7DQoNCnRydXRoMiA6IEk2NDsNCnRydXRoMiA9ICgNCiAgICAvLyBZb3UgY2FuIGRlZmluZSBsb2NhbCBmdW5jdGlvbiAoY2xvc3VyZSkgbGlrZSB0aGlzLiBgZmAgaGFzIHR5cGUgYEk2NCAtPiBJNjQgLT4gSTY0IC0%2BIEk2NGAuDQogICAgbGV0IGYgPSB8YSwgYiwgY3wgKGEgKyBiKSAqIGM7DQoNCiAgICAvLyBQYXJ0aWFsIGFwcGxpY2F0aW9uLiBgZG91YmxlYCBoYXMgdHlwZSBgSTY0IC0%2BIEk2NGAgYW5kIG1hcHMgYGNgIHRvIGAoMSArIDEpICogYyA9PSAyICogY2AuDQogICAgbGV0IGRvdWJsZSA9IGYoMSwgMSk7DQoNCiAgICAvLyBSaWdodC1hc3NvY2lhdGl2ZSBvcGVyYXRvciBgJGAgYXBwbGllcyBhIGZ1bmN0aW9uIHRvIGEgdmFsdWU6IGBmICQgeCA9PSBmKHgpYCBhbmQgYGYgJCBnICQgeCA9PSBmKGcoeCkpYC4NCiAgICBsZXQgdHdlbHZlID0gZG91YmxlICQgZG91YmxlICQgMzsNCg0KICAgIC8vIGAuYCBpcyBhbm90aGVyIG9wZXJhdG9yIHRvIGFwcGx5IGEgZnVuY3Rpb246IGB4LmYgPT0gZih4KWAuDQogICAgLy8gSXQgaGFzIGxvd2VyIHByaW9yaXR5IHRoYW4gdXN1YWwgZnVuY3Rpb24gY2FsbCwgc28gYDMuZigxLCAyKSA9PSBmKDEsIDIpKDMpID09IGYoMSwgMiwgMylgLg0KICAgIGxldCBuaW5lID0gMy5mKDEsIDIpOw0KDQogICAgZG91YmxlICQgbmluZSArIHR3ZWx2ZQ0KKTsNCg0KLy8gRml4IHByb2dyYW0gY2FsbHMgYE1haW46Om1haW5gIChpLmUuLCBgbWFpbmAgb2YgYE1haW5gIG1vZHVsZSkgYXMgdGhlIGVudHJ5IHBvaW50Lg0KLy8gYE1haW46Om1haW5gIG11c3QgaGF2ZSB0eXBlIGBJTyAoKWAsIHdoZXJlIGBJTyBhYCBpcyB0aGUgdHlwZSBvZiBJL08gYWN0aW9ucyB3aGljaCByZXR1cm4gYSB2YWx1ZSBvZiB0eXBlIGBhYC4NCi8vIGAoKWAgaXMgdGhlIHVuaXQgdHlwZSwgd2hpY2ggaGFzIGEgdW5pcXVlIHZhbHVlIGFsc28gd3JpdHRlbiBhcyBgKClgLg0KbWFpbiA6IElPICgpOw0KbWFpbiA9ICgNCiAgICAvLyBgcHJpbnRsbiA6IFN0cmluZyAtPiBJTyAoKWAgbWFrZXMgYW4gSS9PIGFjdGlvbiB0aGF0IHByaW50cyBhIHN0cmluZyAoYW5kIGEgbmV3bGluZSkuDQogICAgLy8gUm91Z2hseSBzcGVha2luZywgYGFjdDs7YCBwZXJmb3JtcyB0aGUgSS9PIGFjdGlvbiBgYWN0YCBhbmQgaWdub3JlcyBpdHMgcmV0dXJuIHZhbHVlLg0KICAgIHByaW50bG4gJCAidHJ1dGggOiAiICsgdHJ1dGgudG9fc3RyaW5nOzsNCiAgICBwcmludGxuICQgInRydXRoMiA6ICIgKyB0cnV0aDIudG9fc3RyaW5nOzsNCiAgICBwcmludGxuICQgImNhbGNfZmliKDEwKSA6ICIgKyBjYWxjX2ZpYigxMCkudG9fc3RyaW5nOzsNCiAgICBwcmludGxuICQgImNhbGNfZmliMigxMCkgOiAiICsgY2FsY19maWIyKDEwKS50b19zdHJpbmc7Ow0KDQogICAgLy8gYHB1cmUgOiBhIC0%2BIElPIGFgIGNyZWF0ZXMgYW4gSS9PIGFjdGlvbiB3aGljaCBkb2VzIG5vdGhpbmcgYW5kIG9ubHkgcmV0dXJucyBhIHZhbHVlLiANCiAgICAvLyBCeSBhIHN5bnRheCBzdWdhciwgeW91IGNhbiB3cml0ZSBgcHVyZSgpYCBpbnN0ZWFkIG9mIGBwdXJlKCgpKWAuDQogICAgcHVyZSgpDQopOw%3D%3D)
 - [Array and loop](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src3=H4sIAAAAAAAACnVUTW%2BbQBC9W%2FJ%2FeIccQMHGjqOqIkrl9FCpUqtUSu5lDYO9Ct6lu0ti2vS%2FV7MbDInTPSCGefPmzcey12VbE74Lqa6mk%2BkkTfHDSOUsVgu3w6OoW4Ku8EVutBJFIWHpV0uqoPl0shdSIcPXW0Tx1Yt5jWg6AYA0RV7JumbAh0vMPkHw48YY0UHkkApK7Mk2oiDkd67MMu%2FLURgSjiyEgvBoXcE2VMhKUoma1NbtIFQJpqcSmw4iKJ2H1DU5jsR1yJZlDIxWywQL1tmrs%2BRy5nZdQ8jfEflGryXj%2BkyQyumjwvkb0rYpfQVuR9jKR%2BoLkQq30TKGrLzLUEWGe4lCt8qRgbTQihIc%2BbR5SWyPmUXFyKLWSqqt5wnkkXRw4oEsbiMVx9BuR%2BZJ2tOuCGPmlly0GDXk1LtMsBy16wZPokOlDWqtG1bqNFpLyNnOE%2BSFVk6qlnI%2FnHxjSDzkQ2t8WAbLXf2mdXPnhCNYGP5gMJvh3qvniqSSTooa1mOYzkdvdNkl3mzIVNrsrf8%2B5Ogl%2FCfPOIWigxvx95HB%2BZrVV4IsKD2h%2FMzeIcyzGXKtUeMFeH8%2FOSCKLhI24wTPkSwPwXgOUD6ygiwPuA6jWVv5m%2FBncPMJCs8YMDj%2Bgmp7Ak1T3GtsaVhlXR0XOQkTXQ%2BXdnQVRD%2FM%2FnAdh5eNWbP02XFhxpDuFeTiPcjrzfNNOJx3b5HH6Z6BMefL0KpRxeG1j2v4T1ar0Jf5Olot4rnTP60zfHPSFB9XF4vLxXQSX%2F0DmqM2NAgFAAA%3D)
@@ -86,16 +94,6 @@ main = (
 - [Index Syntax](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src3=H4sIAAAAAAAACn2SwWvkIBjF74H8D4%2FSg4KkZnY6hwkDPfQyh6Ww3VtwSprYjpCoRMPSTvO%2FL8YmKZRdL5oX3%2Ffze9qZZmglflZKF2mSJv7NSvySta%2F0aytxgPP9UHtc0gQArHF7kONuy3DcbSmLqlPv8qucJuNUTHW2%2FVJsj9%2Fm0fdKv87lvHlyUTjgo5e1%2F8AVuYwMl5FeZdbYoa28JGX4ld1Z47LFwRDFwF5VQYs0GQO7q5TGHscHEIoDSAS20k8%2BhwPKKIWxnvHy2SJn4JTNneWcYcMpRvY%2FT37LsLldXT84wza4okkUcb65waP08GeJN9TG9I3SlZcwL5NmjVNeGT1%2Fv6jexUNHmjfI%2BfduprnkojxZ40R5ykWmnPQk53S6i0%2FyvRmeQ5GzxB%2FV%2BPNMcbI2ulkx%2FwLkojyF9kR54iJTnWlIN7RkQ1eK7ZX2rcZ1tKyXU6wBlMsqDBLizkPec9Lzy1o2LNmSXUyVLhvESh56SWia0OIv3V%2BEAdcCAAA%3D)
 - For more, see [examples](./examples/).
 
-## Installation
-
-Run the following command to install `fix` to `~/.local/bin`:
-
-```sh
-curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/tttmmmyyyy/fixlang/main/install.sh | sh
-```
-
-For other installation options (building from source, Docker, etc.), see [Document.md](./Document.md).
-
 ## Documents
 
 * [Tutorial and language specification](/Document.md)
@@ -104,10 +102,10 @@ For other installation options (building from source, Docker, etc.), see [Docume
 * [Change log](/CHANGELOG.md)
 * 紹介（日本語）：[HaskellとRustを足して2で割ったような関数型言語Fixを作っている話](https://qiita.com/tttmmmyyyy/items/ddb1c44efd81e3fc2370)
 
+## Community
+
+* https://discord.gg/ad4GakEA7R
+
 ## Third-party licenses
 
 See [this page](https://tttmmmyyyy.github.io/fixlang/third-party-licenses.html).
-
-## Discord
-
-* https://discord.gg/ad4GakEA7R
