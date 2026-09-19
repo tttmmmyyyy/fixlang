@@ -1146,10 +1146,10 @@ impl Configuration {
         object_generation.push_text(&skip_eval.to_string());
         // Development mode puts the compiler's own consistency checks into the code it generates —
         // the assertions of `Generator::build_assert_unique`, `build_assert_refcnt_state_local`
-        // and `build_assert_declared_passthrough_answers_the_operand`, and the arm a dynamic traverser takes when
-        // it is called with work it does not know. The
-        // same reasoning as the sanitizer's applies: an object built without those checks cannot
-        // stand in for one built with them.
+        // and `build_assert_declared_passthrough_answers_the_operand`, and the arm a dynamic
+        // traverser takes when it is called with work it does not know. The same reasoning as the
+        // sanitizer's applies: an object built without those checks cannot stand in for one built
+        // with them.
         object_generation.push_text(&develop_mode.to_string());
         // `simplify_symbol_names` runs where the symbols are asked for, and it renames the symbols
         // of the program that is generated, which a backtrace of the built program shows.

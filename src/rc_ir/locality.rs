@@ -2,7 +2,7 @@
 //! certainly in the `RefcntState::LOCAL` state, so that the operation can drop the runtime state
 //! dispatch and increment or decrement the count directly.
 //!
-//! Four operations take an object out of the local state: reading a global (whose initializer
+//! Exactly four operations take an object out of the local state: reading a global (whose initializer
 //! marks its whole result graph global), evaluating a string literal (whose storage is a constant
 //! the program's data holds, marked global where it stands), `Std::mark_threaded`, and
 //! `Std::boxed_from_retained_ptr`. Everything else — allocating, updating in place, cloning a

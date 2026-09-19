@@ -46,10 +46,9 @@ mod tests {
         )
     }
 
-    /// A string literal's bytes start on the boundary too. A literal's storage is a constant the
-    /// linker places, where every other array's is placed by the allocator that carries this rule,
-    /// so the two reach the boundary by different means and a reader of an array meets it either
-    /// way.
+    /// A string literal's bytes start on the boundary too. The linker places a literal's storage,
+    /// and the allocator that carries this rule places every other array's, so the two reach the
+    /// boundary by different means; a reader of an array meets it either way.
     #[test]
     fn test_the_element_buffer_of_a_string_literal_is_aligned() {
         let length = ARRAY_ALIGNED_ALLOC_THRESHOLD as usize;

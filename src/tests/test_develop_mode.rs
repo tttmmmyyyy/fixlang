@@ -1,8 +1,8 @@
 //! `--develop-mode` builds a program with the compiler's own consistency checks in it. The checks
-//! cost run time and stop the program where one of them fails, and they are what the compiler's own
-//! test suite builds under; the option is what builds a project of one's own the same way.
+//! cost run time and stop the program where one of them fails; they are what the compiler's own
+//! test suite builds under, and the option builds a project of one's own the same way.
 //!
-//! A program that passes the checks answers what one built without them answers, so what is read
+//! A program that passes the checks answers what a program built without them answers. What is read
 //! here is that each subcommand building a program takes the option, and that what it built runs.
 
 use crate::tests::test_util::{assert_succeeded, fix_command_at_opt_level};

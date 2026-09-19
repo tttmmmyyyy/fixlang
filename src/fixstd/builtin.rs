@@ -1062,8 +1062,8 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_app(expr_var(ctor, source.clone()), vec![unit], source)
 }
 
-/// An `Array U8` of `bytes`, whose storage is a constant in the program's data rather than a block
-/// of the heap. Arrays of equal bytes name one storage.
+/// An `Array U8` of `bytes`, whose storage is a constant in the program's data. Arrays of equal
+/// bytes name one storage.
 pub fn make_byte_array_of_global_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     bytes: &[u8],
@@ -1115,8 +1115,8 @@ impl LLVMGen for InlineLLVMStringBuf {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // The storage is a constant the whole program shares, so a caller asking whether it may
-        // write into it in place has to be told no.
+        // The storage is a constant the whole program shares, so its sharing is unknown here and
+        // a write into its elements copies it first.
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
@@ -1126,7 +1126,7 @@ impl LLVMGen for InlineLLVMStringBuf {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // The storage is `RefcntState::GLOBAL`, which is neither of the states a local object is in.
+        // The storage is `RefcntState::GLOBAL`, which reference counting reads as external.
         ExtShape::always(result_ty, type_env)
     }
 

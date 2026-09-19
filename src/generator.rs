@@ -731,8 +731,7 @@ impl<'c> OutPointer<'c> {
 
 // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 impl<'c, 'm> Generator<'c, 'm> {
-    /// The `#ArrayStorage` holding `bytes`, emitted as a constant in the program's data rather than
-    /// built on the heap.
+    /// The `#ArrayStorage` holding `bytes`, emitted as a constant in the program's data.
     ///
     /// Its control block says `RefcntState::GLOBAL`, which takes the object out of reference counting
     /// altogether: it is never retained, released nor freed, and every check of whether it is uniquely
@@ -741,12 +740,12 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// to the base of what holds it.
     ///
     /// A storage wide enough for the heap to align starts its elements on `ARRAY_BUF_ALIGNMENT` here
-    /// too, which the constant reaches by carrying the bytes that put the control block ahead of that
+    /// too: the constant carries padding ahead of the control block, which puts the elements on the
     /// boundary.
     ///
     /// Storages of equal bytes are one storage.
     pub fn add_global_byte_array_storage(&mut self, bytes: &[u8]) -> PointerValue<'c> {
-        // The field the storage itself sits in, the padding being the field ahead of it.
+        // The field the storage itself sits in; the padding is the field ahead of it.
         const STORAGE_IDX: u32 = 1;
 
         if let Some(ptr) = self.global_byte_array_storages.get(bytes) {
@@ -800,10 +799,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             ],
             false,
         );
-        // Where the storage sits in the padded constant is LLVM's layout of that constant to
-        // decide, and the elements start `header_size` bytes into the storage. The alignment
-        // declared below is a claim about those elements, so it holds only where the two put them
-        // on the boundary.
+        // LLVM decides where the storage sits in the padded constant, and the elements start
+        // `header_size` bytes into the storage. The alignment declared below is a claim about those
+        // elements, so it holds only where those two together put them on the boundary.
         if is_aligned {
             let buf_offset = self
                 .target_data
@@ -1586,10 +1584,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         );
     }
 
-    /// Print `message` and stop the program where `cond` holds, carrying on where it does not.
+    /// Print `message` and stop the program where `cond` holds; where `cond` fails, the program
+    /// carries on.
     ///
-    /// The builder is left in the block control reaches when the condition does not hold, so what
-    /// follows is emitted there.
+    /// The builder is left in the block control reaches where `cond` fails, so what follows is
+    /// emitted there.
     pub fn build_panic_if(&mut self, cond: IntValue<'c>, bb_name: &str, message: &str) {
         let current_func = self.current_function();
         let panic_bb = self

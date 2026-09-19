@@ -365,18 +365,18 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Abort, in compiler development mode, where an inline-LLVM op that declared its result to be
     /// one of its operands answered with another object.
     ///
-    /// `result_prov` lets an op declare its result to be argument `i` -- not a copy of it, the same
-    /// object. Reference counting reads that as identity: the argument goes unconsumed, and a
-    /// retain of the result pairs with a release of the argument. An op answering with a different
-    /// object turns that pair into a retain of one object and a release of another, which frees a
-    /// value still held and leaks the one it answered with. The declaration is hand-written per op
-    /// and nothing else compares it against what the op produces, so this does.
+    /// `result_prov` lets an op declare its result to be argument `i` itself, the same object.
+    /// Reference counting reads that as identity: the argument goes unconsumed, and a retain of the
+    /// result pairs with a release of the argument. An op answering with a different object turns
+    /// that pair into a retain of one object and a release of another, which frees a value still
+    /// held and leaks the one it answered with. The declaration is hand-written per op, and this
+    /// check is what compares it against what the op produces.
     ///
-    /// What is checked is the claim naming the whole of both values, so an op declaring anything
-    /// else passes through untouched -- a leaf deeper than the root is reached by a path whose
-    /// steps the value's layout decides, which is what `project_rc_unit` walks and is not the walk
-    /// a leaf path takes. No operation declares the root claim today; the check stands for the one
-    /// that does.
+    /// The check reads the claim naming the whole of both values, and an op declaring any other
+    /// claim passes through untouched. Reaching a leaf deeper than the root takes a path whose
+    /// steps the value's layout decides — the walk `project_rc_unit` makes — which differs from the
+    /// walk a leaf path takes. No operation declares the root claim today; the check stands for the
+    /// one that does.
     fn build_assert_declared_passthrough_answers_the_operand(
         &mut self,
         llvm_gen: &dyn LLVMGen,
