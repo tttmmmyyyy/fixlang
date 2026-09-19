@@ -1796,8 +1796,8 @@ fn build_shift_amount_check<'c, 'm>(
 pub struct InlineLLVMShiftBody {
     /// The local binding holding the value to shift.
     value_name: FullName,
-    /// The local binding holding the number of places to shift by.
-    n_name: FullName,
+    /// The local binding holding the amount, in bits, to shift by.
+    amount_name: FullName,
     /// Whether the bits move towards the more significant end.
     is_left: bool,
 }
@@ -1809,7 +1809,9 @@ impl LLVMGen for InlineLLVMShiftBody {
         let val = gc
             .get_scoped_obj_field(&self.value_name, 0)
             .into_int_value();
-        let amount = gc.get_scoped_obj_field(&self.n_name, 0).into_int_value();
+        let amount = gc
+            .get_scoped_obj_field(&self.amount_name, 0)
+            .into_int_value();
 
         let is_signed = ty.is_signed_integer();
 
@@ -1843,12 +1845,12 @@ impl LLVMGen for InlineLLVMShiftBody {
             "{}({}, {})",
             shift_function_name(self.is_left),
             self.value_name.to_string(),
-            self.n_name.to_string()
+            self.amount_name.to_string()
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.value_name, &mut self.n_name]
+        vec![&mut self.value_name, &mut self.amount_name]
     }
 
     fn result_locality(
@@ -1873,7 +1875,7 @@ impl LLVMGen for InlineLLVMShiftBody {
 /// `v.shift_left(bits)` move the bits of `v`.
 pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const VALUE_NAME: &str = "val";
-    const N_NAME: &str = "n";
+    const AMOUNT_NAME: &str = "amount";
 
     let scm = Scheme::generalize(
         Default::default(),
@@ -1882,13 +1884,13 @@ pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<S
         type_fun(ty.clone(), type_fun(ty.clone(), ty.clone())),
     );
     let expr = expr_abs(
-        vec![var_local(N_NAME)],
+        vec![var_local(AMOUNT_NAME)],
         expr_abs(
             vec![var_local(VALUE_NAME)],
             expr_llvm(
                 Box::new(InlineLLVMShiftBody {
                     value_name: FullName::local(VALUE_NAME),
-                    n_name: FullName::local(N_NAME),
+                    amount_name: FullName::local(AMOUNT_NAME),
                     is_left,
                 }),
                 ty,
