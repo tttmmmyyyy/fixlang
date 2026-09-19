@@ -304,7 +304,11 @@ impl<'c, 'm> Generator<'c, 'm> {
                     self.generating_llvm_op = outer_op;
                 }
                 if let Some(obj) = generated.as_ref() {
-                    self.assert_result_is_the_operand_declared(llvm_gen.as_ref(), args, obj);
+                    self.build_assert_declared_passthrough_answers_the_operand(
+                        llvm_gen.as_ref(),
+                        args,
+                        obj,
+                    );
                 }
                 match generated {
                     None => {
@@ -358,8 +362,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Abort, in compiler development mode, where an inline-LLVM op answered with an object other
-    /// than the operand it declared its result to be.
+    /// Abort, in compiler development mode, where an inline-LLVM op that declared its result to be
+    /// one of its operands answered with another object.
     ///
     /// `result_prov` lets an op declare its result to be argument `i` -- not a copy of it, the same
     /// object. Reference counting reads that as identity: the argument goes unconsumed, and a
@@ -368,10 +372,12 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// value still held and leaks the one it answered with. The declaration is hand-written per op
     /// and nothing else compares it against what the op produces, so this does.
     ///
-    /// The claim is checked where it names the whole of both values: a leaf deeper than that is
-    /// reached by a path whose steps the object's layout decides, which is what
-    /// `project_rc_unit` walks and is not the same walk a leaf path takes.
-    fn assert_result_is_the_operand_declared(
+    /// What is checked is the claim naming the whole of both values, so an op declaring anything
+    /// else passes through untouched -- a leaf deeper than the root is reached by a path whose
+    /// steps the value's layout decides, which is what `project_rc_unit` walks and is not the walk
+    /// a leaf path takes. No operation declares the root claim today; the check stands for the one
+    /// that does.
+    fn build_assert_declared_passthrough_answers_the_operand(
         &mut self,
         llvm_gen: &dyn LLVMGen,
         args: &[RcVar],
@@ -394,33 +400,33 @@ impl<'c, 'm> Generator<'c, 'm> {
         if !arg_leaf.is_empty() {
             return;
         }
-        let declared = self.get_scoped_obj_noretain(&args[i].name);
-        if !declared.is_box(self.type_env()) {
+        let operand = self.get_scoped_obj_noretain(&args[i].name);
+        if !operand.is_box(self.type_env()) {
             return;
         }
-        let declared_ptr = declared.value(self).into_pointer_value();
-        let answered_ptr = result.value(self).into_pointer_value();
+        let operand_ptr = operand.value(self).into_pointer_value();
+        let result_ptr = result.value(self).into_pointer_value();
         let i64_ty = self.context.i64_type();
-        let declared_int = self
+        let operand_int = self
             .builder()
-            .build_ptr_to_int(declared_ptr, i64_ty, "declared@is_the_operand")
+            .build_ptr_to_int(operand_ptr, i64_ty, "operand@assert_declared_passthrough")
             .unwrap();
-        let answered_int = self
+        let result_int = self
             .builder()
-            .build_ptr_to_int(answered_ptr, i64_ty, "answered@is_the_operand")
+            .build_ptr_to_int(result_ptr, i64_ty, "result@assert_declared_passthrough")
             .unwrap();
-        let differ = self
+        let is_different = self
             .builder()
             .build_int_compare(
                 IntPredicate::NE,
-                declared_int,
-                answered_int,
-                "differ@is_the_operand",
+                operand_int,
+                result_int,
+                "is_different@assert_declared_passthrough",
             )
             .unwrap();
         self.build_panic_if(
-            differ,
-            "is_the_operand",
+            is_different,
+            "assert_declared_passthrough",
             &format!(
                 "The inline-LLVM operation `{}` declared its result to be an operand, and answered with another object.\n",
                 llvm_gen.name()

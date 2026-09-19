@@ -746,9 +746,8 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// Storages of equal bytes are one storage.
     pub fn add_global_byte_array_storage(&mut self, bytes: &[u8]) -> PointerValue<'c> {
-        // The field of the padded constant holding the object itself, the padding being the field
-        // ahead of it.
-        const PADDED_OBJECT_IDX: u32 = 1;
+        // The field the storage itself sits in, the padding being the field ahead of it.
+        const STORAGE_IDX: u32 = 1;
 
         if let Some(ptr) = self.global_byte_array_storages.get(bytes) {
             return *ptr;
@@ -764,8 +763,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             .offset_of_element(&storage_struct_ty, STORAGE_BUF_IDX)
             .expect("`#ArrayStorage` lays its elements out after its control block");
         let sizeof = header_size + bytes.len() as u64;
-        let aligned = array_storage_is_aligned(sizeof);
-        let padding = if aligned {
+        let is_aligned = array_storage_is_aligned(sizeof);
+        let padding = if is_aligned {
             array_storage_buf_padding(header_size)
         } else {
             0
@@ -784,31 +783,32 @@ impl<'c, 'm> Generator<'c, 'm> {
                 })
                 .collect::<Vec<BasicValueEnum<'c>>>(),
         );
-        let object = context.const_struct(
+        let storage = context.const_struct(
             &[
                 control_block.into(),
                 context.const_string(bytes, false).into(),
             ],
             false,
         );
-        let padded = context.const_struct(
+        let padded_storage = context.const_struct(
             &[
                 context
                     .i8_type()
                     .const_array(&vec![context.i8_type().const_zero(); padding as usize])
                     .into(),
-                object.into(),
+                storage.into(),
             ],
             false,
         );
-        // Where the object sits in the padded constant is LLVM's layout of that constant to decide,
-        // and the elements start `header_size` bytes into the object. The alignment declared below
-        // is a claim about those elements, so it holds only where the two put them on the boundary.
-        if aligned {
+        // Where the storage sits in the padded constant is LLVM's layout of that constant to
+        // decide, and the elements start `header_size` bytes into the storage. The alignment
+        // declared below is a claim about those elements, so it holds only where the two put them
+        // on the boundary.
+        if is_aligned {
             let buf_offset = self
                 .target_data
-                .offset_of_element(&padded.get_type(), PADDED_OBJECT_IDX)
-                .expect("the padded constant holds the object after the padding")
+                .offset_of_element(&padded_storage.get_type(), STORAGE_IDX)
+                .expect("the padded constant holds the storage after the padding")
                 + header_size;
             assert_eq!(
                 buf_offset % ARRAY_BUF_ALIGNMENT,
@@ -820,17 +820,17 @@ impl<'c, 'm> Generator<'c, 'm> {
             );
         }
         let global = self.module.add_global(
-            padded.get_type(),
+            padded_storage.get_type(),
             None,
             &format!(
                 "GlobalArrayStorage#{}",
                 self.global_byte_array_storages.len()
             ),
         );
-        global.set_initializer(&padded);
+        global.set_initializer(&padded_storage);
         global.set_constant(true);
         global.set_linkage(Linkage::Internal);
-        if aligned {
+        if is_aligned {
             global.set_alignment(ARRAY_BUF_ALIGNMENT as u32);
         }
         // A constant address, so that every place naming this storage names the same one without an
@@ -838,10 +838,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         let i32_ty = context.i32_type();
         let ptr = unsafe {
             global.as_pointer_value().const_in_bounds_gep(
-                padded.get_type(),
+                padded_storage.get_type(),
                 &[
                     i32_ty.const_zero(),
-                    i32_ty.const_int(PADDED_OBJECT_IDX as u64, false),
+                    i32_ty.const_int(STORAGE_IDX as u64, false),
                 ],
             )
         };

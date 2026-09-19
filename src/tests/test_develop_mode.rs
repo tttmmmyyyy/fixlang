@@ -20,7 +20,7 @@ const BODY: &str = r#"
 "#;
 
 /// What the program prints, whichever subcommand built it.
-const EXPECTED: &str = "the answer is 12";
+const EXPECTED_OUTPUT: &str = "the answer is 12";
 
 /// A module named `module` whose `entry` runs `BODY`.
 fn source_for(module: &str, entry: &str) -> String {
@@ -46,17 +46,17 @@ fn run_fix_on_source(subcommand: &str, source: &str, dir: &Path, extra_args: &[&
         .expect("Failed to execute fix")
 }
 
-/// Fails the test unless `output` is a successful run that printed `EXPECTED`.
+/// Fails the test unless `output` is a successful run that printed `EXPECTED_OUTPUT`.
 ///
 /// # Arguments
-/// * `what` — what was run, as a noun phrase that completes "... should succeed".
-fn assert_printed_the_answer(output: &Output, what: &str) {
-    assert_succeeded(output, &format!("{} should succeed.", what));
+/// * `what_ran` — what was run, as a noun phrase that completes "... should succeed".
+fn assert_printed_the_answer(output: &Output, what_ran: &str) {
+    assert_succeeded(output, &format!("{} should succeed.", what_ran));
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        EXPECTED,
+        EXPECTED_OUTPUT,
         "{} should answer what the program prints",
-        what,
+        what_ran,
     );
 }
 
@@ -80,8 +80,11 @@ pub fn test_every_building_subcommand_takes_develop_mode() {
         &["-o", program_path.to_str().unwrap()],
     );
     assert_succeeded(&output, "`fix build --develop-mode` should succeed.");
-    let run = Command::new(&program_path)
+    let run_output = Command::new(&program_path)
         .output()
         .expect("Failed to run the program the build produced");
-    assert_printed_the_answer(&run, "the program `fix build --develop-mode` produced");
+    assert_printed_the_answer(
+        &run_output,
+        "the program `fix build --develop-mode` produced",
+    );
 }
