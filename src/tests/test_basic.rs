@@ -3528,8 +3528,8 @@ pub fn test_integer_to_string_writes_the_decimal_digits() {
 
         // Whether `to_string` writes a number as the digits it is spelled with, behind the sign
         // where it has one.
-        spells : I64 -> Bool;
-        spells = |v| (
+        is_written_rightly : I64 -> Bool;
+        is_written_rightly = |v| (
             if v < 0 { v.to_string == "-" + decimal(0 - v) };
             v.to_string == decimal(v)
         );
@@ -3539,20 +3539,20 @@ pub fn test_integer_to_string_writes_the_decimal_digits() {
         keep_wrong : I64 -> Option I64 -> Option I64;
         keep_wrong = |v, wrong| (
             if wrong.is_some { wrong };
-            if spells(v) && spells(0 - v) { wrong };
+            if is_written_rightly(v) && is_written_rightly(0 - v) { wrong };
             some(v)
         );
 
         // The number to name in the message, or `"none"` where every number was written rightly.
-        named : Option I64 -> String;
-        named = |wrong| match wrong { none() => "none", some(v) => v.to_string };
+        name : Option I64 -> String;
+        name = |wrong| match wrong { none() => "none", some(v) => v.to_string };
 
         main : IO ();
         main = (
             // Every number of at most four digits: each of the hundred pairs of digits is written
             // both at the end of a number and before another pair.
             let wrong = Iterator::range(0, 10000).fold(none(), keep_wrong);
-            assert_eq(|_|"the number below ten thousand written wrongly", wrong.named, "none");;
+            assert_eq(|_|"the number below ten thousand written wrongly", wrong.name, "none");;
 
             // Each power of ten an `I64` reaches, and the numbers either side of it, where the
             // count of digits a number takes changes.
@@ -3560,7 +3560,7 @@ pub fn test_integer_to_string_writes_the_decimal_digits() {
                 let power = Iterator::range(0, exponent).fold(1, |_, p| p * 10);
                 [power - 1, power, power + 1].to_iter.fold(wrong, keep_wrong)
             );
-            assert_eq(|_|"the power of ten written wrongly", wrong.named, "none");;
+            assert_eq(|_|"the power of ten written wrongly", wrong.name, "none");;
 
             pure()
         );
