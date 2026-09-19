@@ -3127,7 +3127,7 @@ Fixプログラムをビルドする際の設定は、以下の場所に記述�
             <td>--check-integer-operations</td>
             <td>上書き</td>
             <td>影響しない</td>
-            <td>整数型への操作が、その操作の定義されていない値を受け取るか作り出すところでプログラムを停止する。符号付き型の <code>+</code>、<code>-</code>、<code>*</code>、単項 <code>-</code>、<code>/</code>、<code>%</code> の結果と、任意の整数型の <code>shift_left</code>、<code>shift_right</code> のシフト量が対象です。<code>fix test</code> はこれを <code>build.test</code> セクションから読み、そこに値が無ければ <code>build</code> セクションから読みます。</td>
+            <td>符号付き整数の溢れ、またはシフト量が型の幅の外にあるところでプログラムを停止する。<code>fix test</code> はこれを <code>build.test</code> セクションから読み、<code>build.test</code> が値を持たなければ <code>build</code> セクションから読みます。</td>
         </tr>
         <tr>
             <td>skip_eval</td>
