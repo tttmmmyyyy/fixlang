@@ -10,6 +10,7 @@ When running program by `fix build`, then this source file will be compiled into
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #ifndef __MINGW32__
 #include <sys/wait.h>
 #endif // __MINGW32__
