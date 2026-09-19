@@ -435,3 +435,50 @@ pub fn test_writing_through_a_literals_bytes_leaves_the_literal_alone() {
     "#;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// Every `Std::Array` primitive that writes, applied to the bytes a string literal hands out,
+/// writes into a copy: the literal's storage is a constant in the program's data, so a write that
+/// reached it would land in read-only memory. Each write below is the only use of the bytes it is
+/// given, so the uniqueness check that makes the copy is one a shared array would fail.
+#[test]
+pub fn test_every_write_through_a_literals_bytes_lands_on_a_copy() {
+    // Long enough that the storage is the aligned kind.
+    let literal = "0123456789abcdefghijklmnopqrstuvwxyz".repeat(7) + "0123456789";
+    let source = format!(
+        r#"
+        module Main;
+
+        long : String;
+        long = "{literal}";
+
+        // Writes the byte 88 ('X') through the pointer the array lends.
+        write_x : Ptr -> IO ();
+        write_x = |p| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, U8), p, 88_U8];
+
+        main : IO ();
+        main = (
+            let n = long.get_bytes.@size;
+            assert_eq(|_|"swap", long.get_bytes.swap(0, n - 1).@(0), '\0');;
+            assert_eq(|_|"truncate", long.get_bytes.truncate(3).@size, 3);;
+            assert_eq(|_|"reserve", long.get_bytes.reserve(4 * n).@size, n);;
+            assert_eq(|_|"append", long.get_bytes.append(long.get_bytes).@size, 2 * n);;
+            assert_eq(|_|"sort", long.get_bytes.sort.@(0), '\0');;
+            assert_eq(|_|"reverse", long.get_bytes.reverse.@(0), '\0');;
+            assert_eq(|_|"resize", long.get_bytes.resize(n + 5, 'Z').@(n + 4), 'Z');;
+            assert_eq(|_|"pop_back", long.get_bytes.pop_back.@size, n - 1);;
+            assert_eq(|_|"get_sub", long.get_bytes.get_sub(0, 4).@size, 4);;
+            assert_eq(|_|"dedup", long.get_bytes.dedup.@size, n);;
+            let (written, _) = long.get_bytes.mutate_elements(write_x);
+            assert_eq(|_|"the pointer write landed on the copy", written.@(0), 'X');;
+
+            assert_eq(|_|"the literal kept its first byte", long.get_bytes.@(0), '0');;
+            assert_eq(|_|"the literal kept its last byte", long.get_bytes.@(n - 2), '9');;
+            assert_eq(|_|"the literal kept its terminator", long.get_bytes.@(n - 1), '\0');;
+            assert_eq(|_|"the literal reads as it was written", long.get_sub(0, 10), "0123456789");;
+            pure()
+        );
+        "#,
+        literal = literal,
+    );
+    test_source(&source, Configuration::develop_mode());
+}
