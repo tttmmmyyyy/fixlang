@@ -12,7 +12,7 @@ Fix has been in development since 2023.
 ## Concepts and features
 
 - **Functional**
-  - Fix is a purely functional language, like Haskell: functions are pure except through the FFI, and effects — including I/O — are expressed as monadic values.
+  - Fix is a purely functional language, like Haskell: functions are pure (except through the FFI), and effects — including I/O — are expressed as monadic values.
   - Higher-kinded types, traits, and associated types give the type system the abstractions a purely functional language needs to abstract uniformly over containers and computations.
   - Sequencing effects without leaving pure code: an `IO` action is an ordinary value, and Fix composes them with dedicated operators.
 - **Familiar Syntax**
