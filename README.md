@@ -12,10 +12,14 @@ A simple, fast, functional language.
   - Higher-kinded types, traits, and associated types give the type system the abstractions a purely functional language needs to abstract uniformly over containers and computations.
 - **Syntax**
   - Functions are applied with parentheses or with `.`: `b.f(a)` means `f(a, b)`. So with `push_back : a -> Array a -> Array a`, you write `arr.push_back(x)` — a familiar shape, though Fix has no notion of a method.
-  - Closures (lambda expressions): `|x| x + 42`
-  - Haskell's `$` for application: `println $ 42.to_string`
-  - Syntax for composing monadic actions (`;;` and `*`): `println("I will echo you: ");; println(*input_line)`
-  - Syntax for using Lens on hierarchical data: `vectors[i][^x].iset(42.0)`
+  - Closures (lambda expressions)
+    - `|x| x + 42`
+  - Haskell's `$` for application
+    - `println $ 42.to_string`
+  - Syntax for composing monadic actions (`;;` and `*`)
+    - `println("I will echo you: ");; println(*input_line)`
+  - Syntax for using Lens on hierarchical data
+    - `vectors[i][^x].iset(42.0)`
 - **Fast**
   - In-place update: reference counting lets Fix update a uniquely referenced value in place rather than clone it, without giving up purity. In the Fibonacci program under [Examples](#examples), `set` never clones the array — so algorithms over arrays and hash tables can be written the natural way, with no copying.
   - One of Fix's goals is to compile high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
