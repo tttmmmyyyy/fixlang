@@ -4,7 +4,7 @@ use crate::constants::INTERMEDIATE_PATH;
 use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
 use crate::misc::info_msg;
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -219,7 +219,7 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
 
     let build_dir = PathBuf::from(INTERMEDIATE_PATH).join(format!(
         "runtime.{}",
-        rand::thread_rng().gen::<u64>().to_string()
+        thread_rng().gen::<u64>().to_string()
     ));
     let write_file = |path: &str, text: &str| {
         let path = build_dir.join(path);
