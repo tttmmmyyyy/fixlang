@@ -1,5 +1,5 @@
-//! What `shift_left` and `shift_right` answer where the shift amount is outside the range a shift
-//! is defined on, which is at least zero and less than the number of bits of the type shifted.
+//! What `shift_left` and `shift_right` answer for a shift amount outside the range a shift is
+//! defined on: at least zero, and less than the number of bits of the type shifted.
 
 use crate::configuration::Configuration;
 use crate::tests::test_util::{
@@ -33,7 +33,7 @@ fn assert_the_check_stops_running(body: &str, report: &str) {
 /// A shift by an amount the type has no room for answers one value: what the result compares as
 /// and what it prints as agree.
 ///
-/// `shl` answers `poison` where the amount reaches the width of the value, and a `poison` is a
+/// `shl` answers `poison` when the amount reaches the width of the value, and a `poison` is a
 /// permission to take any value, so two readers of one shift may take different answers from it — a
 /// value that compares as positive and prints with a leading `-`.
 #[test]
@@ -110,7 +110,7 @@ pub fn test_a_type_narrower_than_a_register_takes_its_own_width() {
     );
 }
 
-/// The check stops the program where the amount reaches the width of the type, and the report names
+/// The check stops the program when the amount reaches the width of the type, and the report names
 /// the operation and the amount.
 #[test]
 pub fn test_the_check_stops_a_shift_by_the_width() {
@@ -133,9 +133,9 @@ pub fn test_the_check_stops_a_negative_shift_amount() {
 /// The check covers an unsigned type and a shift towards the least bit, and the report names which
 /// shift it stopped.
 ///
-/// `--check-integer-operations` leaves an unsigned type alone, because arithmetic on one is taken
-/// modulo two to its width and so has no result outside the type. A shift amount is outside the
-/// width for either signedness.
+/// The overflow half of `--check-integer-operations` leaves an unsigned type alone, because
+/// unsigned arithmetic wraps and so never leaves the type. A shift amount can be outside the width
+/// for either signedness.
 #[test]
 pub fn test_the_check_stops_a_shift_of_an_unsigned_type() {
     assert_the_check_stops_running(
@@ -148,8 +148,8 @@ pub fn test_the_check_stops_a_shift_of_an_unsigned_type() {
 /// signedness of its type: a negative amount of a signed type reads as the negative number, and an
 /// amount of an unsigned type as the magnitude its bits hold.
 ///
-/// The types here are narrower than 64 bits, which is where the widening itself decides what the
-/// report says. `test_the_report_reads_an_unsigned_amount_of_its_own_width_as_a_magnitude` covers
+/// The types here are narrower than 64 bits, where the widening itself decides what the report
+/// says. `test_the_report_reads_an_unsigned_amount_of_its_own_width_as_a_magnitude` covers
 /// the width at which it does not.
 #[test]
 pub fn test_the_report_widens_the_amount_by_the_signedness_of_its_type() {

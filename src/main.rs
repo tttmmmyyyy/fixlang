@@ -302,8 +302,8 @@ fn run_cli() {
     let check_integer_operations = Arg::new("check-integer-operations")
         .long("check-integer-operations")
         .help(
-            "Stop the program where an operation on an integer type is given, or produces, a value outside what the operation is defined on.\n\
-            This covers the result of `+`, `-`, `*`, unary `-`, `/` and `%` on `I8`, `I16`, `I32` and `I64`, which can leave the type; arithmetic on an unsigned type is taken modulo two to the width of the type, so none of it is checked. It also covers the amount of `shift_left` and `shift_right` on every integer type, which has to be at least zero and less than the number of bits of the type shifted."
+            "Stop the program on a signed integer overflow, or on a shift by an amount outside the width of its type.\n\
+            An overflow is a `+`, `-`, `*`, unary `-`, `/` or `%` on `I8`, `I16`, `I32` or `I64` whose result does not fit the type; unsigned arithmetic wraps instead, so it is never checked. The shift check applies to every integer type: the amount must be at least zero and less than the number of bits in the type."
         );
     let skip_eval = Arg::new("skip-eval")
         .long("skip-eval")

@@ -1703,8 +1703,8 @@ pub fn cast_float_to_int_function(
     (expr, scm)
 }
 
-/// The name of the standard-library value `shift_function` builds, which moves a value towards its
-/// greatest bit where `is_left` holds and towards its least where it does not.
+/// The name of the standard-library value `shift_function` builds: `shift_left` when `is_left`
+/// holds, and `shift_right` when it does not.
 fn shift_function_name(is_left: bool) -> &'static str {
     if is_left {
         "shift_left"
@@ -1716,14 +1716,14 @@ fn shift_function_name(is_left: bool) -> &'static str {
 /// `amount` with every bit above the width of its own type cleared, which is the shift amount
 /// `shl`, `lshr` and `ashr` are defined on.
 ///
-/// Those instructions answer `poison` where the amount reaches the width of the value, and a
+/// Those instructions answer `poison` when the amount reaches the width of the value, and a
 /// `poison` is a permission to take any value, so two readers of one shift may take different
 /// answers from it. Masking the amount puts it below the width, which is what makes the shift
 /// answer one value.
 ///
 /// The machine's own shift instruction masks the amount by the width of the *register* holding it,
-/// so this `and` reaches the generated code only where the register is wider than the type — `I8`
-/// and `I16`, and their unsigned siblings — and only where the amount is not a constant.
+/// so this `and` survives into the generated code only where the register is wider than the type —
+/// `I8` and `I16`, and their unsigned siblings — and only for an amount that is not a constant.
 ///
 /// # Examples
 /// An amount of 64 shifting an `I64` is masked to 0, and an amount of 8 shifting an `I8` to 0.
@@ -1745,11 +1745,11 @@ fn mask_shift_amount_to_width<'c, 'm>(
         .unwrap()
 }
 
-/// Emit the check that ends the program where `amount` is outside the range a shift of a value of
-/// `ty` is defined on, which is at least zero and less than the width of `ty`.
+/// Emit the check that ends the program when `amount` is outside the range a shift of `ty` is
+/// defined on: at least zero, and less than the width of `ty`.
 ///
-/// The comparison reads `amount` as unsigned, so a negative amount of a signed type answers it as
-/// well: every negative number is above every width read that way.
+/// The comparison reads `amount` as unsigned, so one comparison catches a negative amount too:
+/// read that way, every negative number is above every width.
 ///
 /// # Arguments
 /// * `is_left` — whether the shift the amount belongs to moves the value towards its greatest bit,
@@ -1785,9 +1785,9 @@ fn build_shift_amount_check<'c, 'm>(
     );
 }
 
-/// The body of `shift_left` and `shift_right` at every integer type: it moves the bits of a value
-/// by an amount the program computes, and masks an amount outside the width of the type down into
-/// that width so that every amount gives one value.
+/// The body of `shift_left` and `shift_right` at every integer type. It moves the bits of a value
+/// by an amount the program computes, masking an amount outside the width of the type down into
+/// it, so that every amount gives one value.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMShiftBody {
     /// The local name bound to the value whose bits move.
@@ -10531,12 +10531,12 @@ fn build_checked_signed_arithmetic<'c, 'm>(
         .into_int_value()
 }
 
-/// Emit the check that ends the program where `operation` divides the least value of the signed
-/// integer type `ty` by -1, which is the one pair a division and a remainder are undefined at: the
+/// Emit the check that ends the program when `operation` divides the least value of the signed
+/// integer type `ty` by -1. That is the one pair a division and a remainder are undefined at: the
 /// quotient is one past the greatest value of the type.
 ///
-/// `build_integer_arithmetic` reaches this only where the program asks for its integer operations
-/// to be checked, so the check is emitted unconditionally here.
+/// `build_integer_arithmetic` reaches this only when the program asks for its integer operations to
+/// be checked, so the check is emitted unconditionally here.
 fn build_division_overflow_check<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     operation: IntegerArithmetic,
@@ -10566,13 +10566,13 @@ fn build_division_overflow_check<'c, 'm>(
     build_report_signed_overflow(gc, overflowed, operation, lhs, rhs, ty);
 }
 
-/// Emit the call that ends the program where `faulted` holds, reporting `operation` performed on
-/// the integer type `ty` together with the values `operands` it was performed on.
+/// Emit the call that ends the program when `faulted` holds, reporting `operation` on the integer
+/// type `ty` together with the `operands` it was performed on.
 ///
 /// The report names the operation as `<type> <operation>`, and carries each operand widened to the
-/// 64 bits the runtime takes. Both the widening and the report read an operand under the sign of
-/// `ty`, so a negative operand of a signed type reads as the negative number rather than as the bit
-/// pattern the check read, and an operand of an unsigned type as the magnitude its bits hold.
+/// 64 bits the runtime takes. The widening and the report both read an operand under the sign of
+/// `ty`, so a negative operand of a signed type reads as that negative number rather than as the
+/// bit pattern the check saw, and an operand of an unsigned type as the magnitude its bits hold.
 ///
 /// # Arguments
 /// * `runtime_fn` — the runtime function that writes the report and ends the program. It takes the
