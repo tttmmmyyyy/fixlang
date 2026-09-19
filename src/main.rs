@@ -271,6 +271,9 @@ fn run_cli() {
         .help(
             "An option to hand LLVM, written as LLVM writes it, such as `--unroll-count=4` (intended for compiler development). LLVM ignores an option it does not know, with no warning.\n",
         );
+    let develop_mode = Arg::new("develop-mode")
+        .long("develop-mode")
+        .help("Build the program with the compiler's own checks turned on, which cost run time and abort where one fails (intended for compiler development).");
     let emit_symbols = Arg::new("emit-symbols")
         .long("emit-symbols")
         .help("Output symbols of the Fix program (intended for compiler development).");
@@ -352,6 +355,7 @@ fn run_cli() {
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
         .arg(llvm_arg.clone())
+        .arg(develop_mode.clone())
         .arg(emit_symbols.clone())
         .arg(emit_rc_ir.clone())
         .arg(backtrace.clone())
@@ -383,6 +387,7 @@ fn run_cli() {
             .arg(max_cu_size.clone())
             .arg(llvm_passes_file.clone())
             .arg(llvm_arg.clone())
+            .arg(develop_mode.clone())
             .arg(emit_symbols.clone())
             .arg(emit_rc_ir.clone())
             .arg(program_args.clone())
@@ -764,6 +769,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `llvm_args`. These reach LLVM's own option parser, and what they set there decides
         // the code generated, so they belong to `Configuration::object_generation_hash`.
         config.llvm_args = read_string_list_option(args, "llvm-arg");
+
+        // Set `develop_mode`.
+        if args.contains_id("develop-mode") {
+            config.develop_mode = true;
+        }
 
         // Set `emit_symbols`.
         if args.contains_id("emit-symbols") {
