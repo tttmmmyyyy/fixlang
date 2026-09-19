@@ -120,8 +120,8 @@ pub struct ProjectFileBuild {
     /// Whether to leave the run-time checks, such as the array bounds check, out of the program.
     /// Unset keeps them.
     no_runtime_check: Option<bool>,
-    /// Whether the program stops where an operation on an integer type is given, or produces, a
-    /// value outside what the operation is defined on. Unset lets it run on.
+    /// Whether the program stops on a signed integer overflow, or on a shift by an amount outside
+    /// the width of its type. Unset lets it run on.
     check_integer_operations: Option<bool>,
     /// Whether to compile `eval {side}; {main}` as `{main}`, leaving the effect of `{side}` out of
     /// the program. Unset evaluates `{side}`.
@@ -196,8 +196,8 @@ pub struct ProjectFileBuildTest {
     /// Whether to leave the run-time checks, such as the array bounds check, out of a test build.
     /// Unset keeps them, and the value the `build` section gives covers the program alone.
     no_runtime_check: Option<bool>,
-    /// Whether a test stops where an operation on an integer type is given, or produces, a value
-    /// outside what the operation is defined on. Unset takes the value from the `build` section.
+    /// Whether a test stops on a signed integer overflow, or on a shift by an amount outside the
+    /// width of its type. Unset takes the value from the `build` section.
     check_integer_operations: Option<bool>,
     /// Whether to compile `eval {side}; {main}` as `{main}` in a test build, leaving the effect of
     /// `{side}` out of it. Unset evaluates `{side}`, and the value the `build` section gives covers
@@ -1068,8 +1068,8 @@ impl ProjectFile {
         config.skip_eval = skip_eval.unwrap_or(false);
 
         // Set check_integer_operations. A project that asks for the checks wants its tests run
-        // under them too, so a test build takes the `build` section's value where the `build.test`
-        // section names none.
+        // under them too, so a test build falls back to the `build` section when the `build.test`
+        // section does not set it.
         let check_integer_operations = if mode == BuildConfigType::Test {
             self.build
                 .test

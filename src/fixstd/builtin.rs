@@ -1702,14 +1702,14 @@ pub fn cast_float_to_int_function(
 /// `amount` with every bit above the width of its own type cleared, which is the shift amount
 /// `shl`, `lshr` and `ashr` are defined on.
 ///
-/// Those instructions answer `poison` where the amount reaches the width of the value, and a
+/// Those instructions answer `poison` when the amount reaches the width of the value, and a
 /// `poison` is a permission to take any value, so two readers of one shift may take different
 /// answers from it. Masking the amount puts it below the width, which is what makes the shift
 /// answer one value.
 ///
 /// The machine's own shift instruction masks the amount by the width of the *register* holding it,
-/// so this `and` reaches the generated code only where the register is wider than the type — `I8`
-/// and `I16`, and their unsigned siblings — and only where the amount is not a constant.
+/// so this `and` survives into the generated code only where the register is wider than the type —
+/// `I8` and `I16`, and their unsigned siblings — and only for an amount that is not a constant.
 ///
 /// # Examples
 /// An amount of 64 shifting an `I64` is masked to 0, and an amount of 8 shifting an `I8` to 0.
@@ -1731,8 +1731,8 @@ fn mask_shift_amount_to_width<'c, 'm>(
         .unwrap()
 }
 
-/// Whether the program being generated stops at an operation on an integer type that is given, or
-/// produces, a value outside what the operation is defined on.
+/// Whether the program being generated stops on a signed integer overflow, or on a shift by an
+/// amount outside the width of its type.
 ///
 /// `--check-integer-operations` asks for the checks, and `--no-runtime-check` takes out every check
 /// that ends the program, these among them.
@@ -1740,11 +1740,11 @@ fn integer_operations_are_checked<'c, 'm>(gc: &Generator<'c, 'm>) -> bool {
     gc.config.check_integer_operations && gc.config.runtime_check()
 }
 
-/// Emit the check that ends the program where `amount` is outside the range a shift of a value of
-/// `ty` is defined on, which is at least zero and less than the width of `ty`.
+/// Emit the check that ends the program when `amount` is outside the range a shift of `ty` is
+/// defined on: at least zero, and less than the width of `ty`.
 ///
-/// The comparison reads `amount` as unsigned, so a negative amount of a signed type answers it as
-/// well: every negative number is above every width read that way.
+/// The comparison reads `amount` as unsigned, so one comparison catches a negative amount too:
+/// read that way, every negative number is above every width.
 ///
 /// # Arguments
 /// * `is_left` — whether the shift the amount belongs to moves the value towards its greatest bit,

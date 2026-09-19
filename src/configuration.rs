@@ -555,11 +555,10 @@ pub struct Configuration {
     pub backtrace: bool,
     /// Leave the run-time checks, such as the array bounds check, out of the program.
     pub no_runtime_check: bool,
-    /// Stop the program where an operation on an integer type is given, or produces, a value
-    /// outside what the operation is defined on: the result of `+`, `-`, `*`, unary `-`, `/` and
-    /// `%` on a signed type, which can leave the type, and the amount of `shift_left` and
-    /// `shift_right` on every integer type. Arithmetic on an unsigned type is taken modulo two to
-    /// the width of the type, so none of it is checked.
+    /// Stop the program on a signed integer overflow, or on a shift by an amount outside the
+    /// width of its type. The overflow check covers `+`, `-`, `*`, unary `-`, `/` and `%` on a
+    /// signed type; unsigned arithmetic wraps instead of overflowing, so it is never checked. The
+    /// shift check covers every integer type.
     pub check_integer_operations: bool,
     /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
     /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.

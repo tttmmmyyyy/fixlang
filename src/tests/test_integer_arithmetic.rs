@@ -1,5 +1,5 @@
-//! What `--check-integer-operations` stops the program at: arithmetic on a signed integer type whose
-//! result is outside the range of that type.
+//! What `--check-integer-operations` stops the program at: arithmetic on a signed integer type
+//! whose result does not fit that type.
 
 use crate::configuration::Configuration;
 use crate::tests::test_util::{test_source, test_source_fail};
@@ -81,8 +81,8 @@ pub fn test_signed_overflow_check_stops_dividing_the_least_by_minus_one() {
     );
 }
 
-/// The check leaves unsigned arithmetic alone: an unsigned operation is taken modulo two to the
-/// width of its type, so a build that stops at a signed overflow computes it and carries on.
+/// The check leaves unsigned arithmetic alone: an unsigned operation wraps, so a build that stops
+/// at a signed overflow computes it and carries on.
 ///
 /// Every operation here gives a result outside the range of the signed type of its width and
 /// inside the range of the unsigned one, so a check reading these as signed would stop the program
