@@ -28,7 +28,7 @@ A simple, fast, functional language.
   - Multithreading: [fixlang-asynctask](https://github.com/tttmmmyyyy/fixlang-asynctask) is a reference implementation on pthread
   - Foreign function interface (FFI)
 - **Safety**
-  - Outside its `unsafe_` functions and the FFI, Fix is memory safe by construction: array indices and union variants are checked at run time, unless the program is built with `--no-runtime-check`.
+  - Outside its `unsafe_` functions and the FFI, Fix is memory safe: array indices and union variants are checked at run time, unless the program is built with `--no-runtime-check`.
   - Fix's values are immutable, so thread safety follows: nothing shared between threads can be seen mutating. A multithreaded program turns on the `threaded` flag, which makes reference counts atomic at some run-time cost.
 - **Memory management**
   - Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
