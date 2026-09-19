@@ -28,6 +28,7 @@ mod test_defunctionalize_fix;
 mod test_dependencies;
 mod test_dependency_name_resolution;
 mod test_deprecation;
+mod test_develop_mode;
 mod test_docs;
 mod test_dynamic_library;
 mod test_evaluation_order;

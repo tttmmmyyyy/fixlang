@@ -37,10 +37,10 @@ use crate::fixstd::runtime::{
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_abort_if, build_array_storage_alloc_offset, build_capacity_check,
-    build_elems_bytes, build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned,
-    create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
-    write_alloc_offset, CapacityCheck, ObjectFieldType,
+    alloc_array_storage, build_abort_if, build_array_storage_alloc_offset,
+    build_array_storage_is_aligned, build_capacity_check, build_elems_bytes, build_gep_array_elem,
+    build_gep_within_allocation, create_obj, get_array_storage, get_array_storage_buf,
+    read_alloc_offset, union_tag_value, write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -1062,44 +1062,29 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_app(expr_var(ctor, source.clone()), vec![unit], source)
 }
 
-/// An `Array U8` of `len` bytes, holding a copy of the `len` bytes at `buf`.
-pub fn make_byte_array_copy<'c, 'm>(
+/// An `Array U8` of `bytes`, whose storage is a constant in the program's data. Arrays of equal
+/// bytes name one storage.
+pub fn make_byte_array_of_global_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
-    buf: PointerValue<'c>,
-    len: IntValue<'c>,
+    bytes: &[u8],
 ) -> Object<'c> {
-    // Create `Array U8` which contains null-terminated string.
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
-    let storage = alloc_array_storage(gc, make_u8_ty(), len, CapacityCheck::Run);
     let array = create_obj(
         array_ty,
         &vec![],
         None,
         gc,
-        Some("array@make_byte_array_copy"),
+        Some("array@make_byte_array_of_global_storage"),
     );
-    let storage_val = storage.value(gc);
-    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
+    let storage_ptr = gc.add_global_byte_array_storage(bytes);
+    let len = gc.context.i64_type().const_int(bytes.len() as u64, false);
+    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_ptr);
     let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
-    let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
-    let dst = get_array_storage_buf(gc, &array);
-    let len_ptr_int = gc
-        .builder()
-        .build_int_cast(
-            len,
-            gc.context.ptr_sized_int_type(&gc.target_data, None),
-            "len_ptr_int@make_byte_array_copy",
-        )
-        .unwrap();
-    gc.builder()
-        .build_memcpy(dst, 1, buf, 1, len_ptr_int)
-        .unwrap();
-
-    array
+    array.insert_field(gc, ARRAY_CAP_IDX, len)
 }
 
 /// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
-/// null terminator, copied out of a global into a fresh array.
+/// null terminator, read out of a constant in the program's data.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStringBuf {
     /// The literal's bytes, without the null terminator.
@@ -1110,12 +1095,9 @@ pub struct InlineLLVMStringBuf {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStringBuf {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
-        let string_ptr = gc.add_global_string(&self.string).as_pointer_value();
-        let len_with_null_terminator = gc
-            .context
-            .i64_type()
-            .const_int(self.string.as_bytes().len() as u64 + 1, false);
-        make_byte_array_copy(gc, string_ptr, len_with_null_terminator)
+        let mut bytes = self.string.as_bytes().to_vec();
+        bytes.push(0);
+        make_byte_array_of_global_storage(gc, &bytes)
     }
 
     fn name(&self) -> String {
@@ -1133,16 +1115,19 @@ impl LLVMGen for InlineLLVMStringBuf {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+        // The storage is a constant the whole program shares, so its sharing is unknown here and
+        // a write into its elements copies it first.
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
     fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
+        _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+        // The storage is `RefcntState::GLOBAL`, which reference counting reads as external.
+        ExtShape::always(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2900,7 +2885,7 @@ fn realloc_array<'c, 'm>(
 
     // A storage worth aligning keeps room to be placed off the base of its block; one below the
     // threshold keeps the room it already has, so that its contents stay where `realloc` leaves them.
-    let is_aligned = build_storage_is_aligned(gc, sizeof);
+    let is_aligned = build_array_storage_is_aligned(gc, sizeof);
     let slack = gc
         .builder()
         .build_select(
@@ -7600,14 +7585,10 @@ pub struct InlineLLVMHoleBody {}
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMHoleBody {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
-        gc.builder().build_unreachable().unwrap();
-        let current_func = gc.current_function();
-        let unreachable_bb = gc
-            .context
-            .append_basic_block(current_func, "unreachable_bb");
-        gc.builder().position_at_end(unreachable_bb);
-        Object::poison(ty.clone(), gc)
+    fn generate<'c, 'm>(&self, _gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
+        // `collect_hole_errors` reports every hole the source carries, and the build stops on a
+        // diagnostic, so a hole reaching code generation is one that check let through.
+        panic!("a hole reached code generation");
     }
 
     fn name(&self) -> String {
@@ -7624,7 +7605,7 @@ impl LLVMGen for InlineLLVMHoleBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // It emits `unreachable`, so there is no result value.
+        // A hole stands where an expression is missing, so it answers with no value.
         ExtShape::bottom(result_ty, type_env)
     }
 
@@ -9740,10 +9721,17 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 // PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
-        run_io(gc, io)
-    } else {
-        run_ios_runner(gc, io, None).1
+        return run_io(gc, io);
     }
+    // The other value run here is the runner an `IO` holds, which `run_ios_runner` applies to an
+    // `IOState`.
+    assert!(
+        (io.ty.is_closure() || io.ty.is_funptr())
+            && io.ty.get_lambda_srcs() == vec![make_iostate_ty()],
+        "a value run here is an `IO` or the runner one holds, and `{}` is neither",
+        io.ty.to_string()
+    );
+    run_ios_runner(gc, io, None).1
 }
 
 /// Runs the action held by a value of type `IO a` and returns its result.

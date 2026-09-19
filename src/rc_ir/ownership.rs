@@ -440,7 +440,7 @@ fn origin_from_leaves_under(
 
 /// The single `Arg(j, p)` a leaf source consists of, if it is exactly that.
 // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
-fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
+pub(crate) fn as_arg_projection(sources: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
     if sources.len() != 1 {
         return None;
     }

@@ -5,6 +5,7 @@
 //! `Release` node that disposes it. The work outside reference counting — closure layout, FFI,
 //! struct and array construction, the inline-LLVM builtins — is done by the `Generator` helpers.
 
+use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
@@ -23,7 +24,7 @@ use crate::object::{create_obj, lambda_return_part_types, union_tag_value, Objec
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
-use crate::rc_ir::ownership::{held_field_type, unit_step, UnitStep};
+use crate::rc_ir::ownership::{as_arg_projection, held_field_type, unit_step, UnitStep};
 use crate::tbaa::MemoryRegion;
 use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
@@ -287,6 +288,13 @@ impl<'c, 'm> Generator<'c, 'm> {
                 if let Some(outer_op) = outer_op {
                     self.generating_llvm_op = outer_op;
                 }
+                if let Some(obj) = generated.as_ref() {
+                    self.build_assert_declared_passthrough_answers_the_operand(
+                        llvm_gen.as_ref(),
+                        args,
+                        obj,
+                    );
+                }
                 match generated {
                     None => {
                         // Yielding no value says the op built the return, which it may only do in
@@ -337,6 +345,78 @@ impl<'c, 'm> Generator<'c, 'm> {
                 res
             }
         }
+    }
+
+    /// Abort, in compiler development mode, where an inline-LLVM op that declared its result to be
+    /// one of its operands answered with another object.
+    ///
+    /// `result_prov` lets an op declare its result to be argument `i` itself, the same object.
+    /// Reference counting reads that as identity: the argument goes unconsumed, and a retain of the
+    /// result pairs with a release of the argument. An op answering with a different object turns
+    /// that pair into a retain of one object and a release of another, which frees a value still
+    /// held and leaks the one it answered with. The declaration is hand-written per op, and this
+    /// check is what compares it against what the op produces.
+    ///
+    /// The check reads the claim naming the whole of both values, and an op declaring any other
+    /// claim passes through untouched. Reaching a leaf deeper than the root takes a path whose
+    /// steps the value's layout decides — the walk `project_rc_unit` makes — which differs from the
+    /// walk a leaf path takes. No operation declares the root claim today; the check stands for the
+    /// one that does.
+    fn build_assert_declared_passthrough_answers_the_operand(
+        &mut self,
+        llvm_gen: &dyn LLVMGen,
+        args: &[RcVar],
+        result: &Object<'c>,
+    ) {
+        if !self.config.develop_mode {
+            return;
+        }
+        if !result.is_box(self.type_env()) {
+            return;
+        }
+        let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+        let prov = llvm_gen.result_prov(&result.ty, &arg_tys, self.type_env());
+        let Some(origins) = prov.leaf_origins_at(&[]) else {
+            return;
+        };
+        let Some((i, arg_leaf)) = as_arg_projection(origins) else {
+            return;
+        };
+        if !arg_leaf.is_empty() {
+            return;
+        }
+        let operand = self.get_scoped_obj_noretain(&args[i].name);
+        if !operand.is_box(self.type_env()) {
+            return;
+        }
+        let operand_ptr = operand.value(self).into_pointer_value();
+        let result_ptr = result.value(self).into_pointer_value();
+        let i64_ty = self.context.i64_type();
+        let operand_int = self
+            .builder()
+            .build_ptr_to_int(operand_ptr, i64_ty, "operand@assert_declared_passthrough")
+            .unwrap();
+        let result_int = self
+            .builder()
+            .build_ptr_to_int(result_ptr, i64_ty, "result@assert_declared_passthrough")
+            .unwrap();
+        let is_different = self
+            .builder()
+            .build_int_compare(
+                IntPredicate::NE,
+                operand_int,
+                result_int,
+                "is_different@assert_declared_passthrough",
+            )
+            .unwrap();
+        self.build_panic_if(
+            is_different,
+            "assert_declared_passthrough",
+            &format!(
+                "The inline-LLVM operation `{}` declared its result to be an operand, and answered with another object.\n",
+                llvm_gen.name()
+            ),
+        );
     }
 
     /// The object a `Retain` or `Release` node acts on: the value `x` names, projected down `path`

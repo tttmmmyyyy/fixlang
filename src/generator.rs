@@ -19,15 +19,19 @@ use crate::constants::DYNAMIC_OBJ_CAP_IDX;
 use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
 use crate::constants::SYMBOL_VERSION_SEPARATOR;
 use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
+use crate::constants::{ARRAY_BUF_ALIGNMENT, STORAGE_BUF_IDX};
 use crate::error::panic_with_msg;
 use crate::ffi::{promote_through_ellipsis, CSignature};
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
+use crate::fixstd::builtin::{make_array_storage_ty, make_u8_ty};
 use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
 use crate::misc::Set;
+use crate::object::array_storage_buf_padding;
+use crate::object::array_storage_is_aligned;
 use crate::object::build_free_boxed;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
@@ -136,6 +140,8 @@ impl<'c> ValueAccessor<'c> {
                         .try_as_basic_value();
                     match call {
                         ValueKind::Basic(val) => val,
+                        // A global whose value takes no bytes is read through a void accessor
+                        // (see `declare_program_global`), and its type holds one value.
                         ValueKind::Instruction(_) => {
                             // An accessor whose value occupies no storage returns nothing.
                             let embedded_ty = ty.get_embedded_type(gc);
@@ -638,6 +644,9 @@ pub struct Generator<'c, 'm> {
     /// The global constant emitted for each Rust string embedded in the module, keyed by the string,
     /// so that one string is emitted once.
     global_strings: Map<String, GlobalValue<'c>>,
+    /// The constant `#ArrayStorage` emitted for each byte string a literal asks for, keyed by the
+    /// bytes, so that literals of equal bytes name one storage.
+    global_byte_array_storages: Map<Vec<u8>, PointerValue<'c>>,
     /// Debug type built for each Fix type, keyed by the type's canonical string, so a type is
     /// described once and shared across every reference to it.
     di_type_cache: Map<String, DIType<'c>>,
@@ -740,6 +749,122 @@ impl<'c> OutPointer<'c> {
 
 // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 impl<'c, 'm> Generator<'c, 'm> {
+    /// The `#ArrayStorage` holding `bytes`, emitted as a constant in the program's data.
+    ///
+    /// Its control block says `RefcntState::GLOBAL`, which takes the object out of reference counting
+    /// altogether: it is never retained, released nor freed, and every check of whether it is uniquely
+    /// held answers no, so a write to one of its elements copies it first. That is what lets it sit in
+    /// read-only memory, and what keeps `AllocOffset` at zero — nothing ever steps back from the object
+    /// to the base of what holds it.
+    ///
+    /// A storage wide enough for the heap to align starts its elements on `ARRAY_BUF_ALIGNMENT` here
+    /// too: the constant carries padding ahead of the control block, which puts the elements on the
+    /// boundary.
+    ///
+    /// Storages of equal bytes are one storage.
+    pub fn add_global_byte_array_storage(&mut self, bytes: &[u8]) -> PointerValue<'c> {
+        // The field the storage itself sits in; the padding is the field ahead of it.
+        const STORAGE_IDX: u32 = 1;
+
+        if let Some(ptr) = self.global_byte_array_storages.get(bytes) {
+            return *ptr;
+        }
+        let context = self.context;
+
+        // The bytes the heap lays ahead of the elements, read off the type the heap builds.
+        let storage_struct_ty = make_array_storage_ty(make_u8_ty())
+            .get_object_type(&vec![], self.type_env())
+            .to_struct_type(self);
+        let header_size = self
+            .target_data
+            .offset_of_element(&storage_struct_ty, STORAGE_BUF_IDX)
+            .expect("`#ArrayStorage` lays its elements out after its control block");
+        let sizeof = header_size + bytes.len() as u64;
+        let is_aligned = array_storage_is_aligned(sizeof);
+        let padding = if is_aligned {
+            array_storage_buf_padding(header_size)
+        } else {
+            0
+        };
+
+        let control_block = control_block_type(self).const_named_struct(
+            &ControlBlockField::ALL
+                .iter()
+                .map(|field| {
+                    let value = match field {
+                        ControlBlockField::Refcnt => 1,
+                        ControlBlockField::RefcntState => RefcntState::GLOBAL.value() as u64,
+                        ControlBlockField::AllocOffset => 0,
+                    };
+                    field.ty(context).const_int(value, false).into()
+                })
+                .collect::<Vec<BasicValueEnum<'c>>>(),
+        );
+        let storage = context.const_struct(
+            &[
+                control_block.into(),
+                context.const_string(bytes, false).into(),
+            ],
+            false,
+        );
+        let padded_storage = context.const_struct(
+            &[
+                context
+                    .i8_type()
+                    .const_array(&vec![context.i8_type().const_zero(); padding as usize])
+                    .into(),
+                storage.into(),
+            ],
+            false,
+        );
+        // LLVM decides where the storage sits in the padded constant, and the elements start
+        // `header_size` bytes into the storage. The alignment declared below is a claim about those
+        // elements, so it holds only where those two together put them on the boundary.
+        if is_aligned {
+            let buf_offset = self
+                .target_data
+                .offset_of_element(&padded_storage.get_type(), STORAGE_IDX)
+                .expect("the padded constant holds the storage after the padding")
+                + header_size;
+            assert_eq!(
+                buf_offset % ARRAY_BUF_ALIGNMENT,
+                0,
+                "a global `#ArrayStorage` of {} bytes starts its elements {} bytes into the constant, off the {}-byte boundary",
+                sizeof,
+                buf_offset,
+                ARRAY_BUF_ALIGNMENT
+            );
+        }
+        let global = self.module.add_global(
+            padded_storage.get_type(),
+            None,
+            &format!(
+                "GlobalArrayStorage#{}",
+                self.global_byte_array_storages.len()
+            ),
+        );
+        global.set_initializer(&padded_storage);
+        global.set_constant(true);
+        global.set_linkage(Linkage::Internal);
+        if is_aligned {
+            global.set_alignment(ARRAY_BUF_ALIGNMENT as u32);
+        }
+        // A constant address, so that every place naming this storage names the same one without an
+        // instruction of its own.
+        let i32_ty = context.i32_type();
+        let ptr = unsafe {
+            global.as_pointer_value().const_in_bounds_gep(
+                padded_storage.get_type(),
+                &[
+                    i32_ty.const_zero(),
+                    i32_ty.const_int(STORAGE_IDX as u64, false),
+                ],
+            )
+        };
+        self.global_byte_array_storages.insert(bytes.to_vec(), ptr);
+        ptr
+    }
+
     /// The module-level constant holding `s` as a null-terminated string. One constant is created
     /// per distinct string, and every later call for that string returns it again.
     pub fn add_global_string(&mut self, s: &str) -> GlobalValue<'c> {
@@ -990,6 +1115,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             lambda_calling_convention: lambda_calling_convention_of_target(&triple),
             config,
             global_strings: Map::default(),
+            global_byte_array_storages: Map::default(),
             di_type_cache: Map::default(),
             di_type_placeholders: Map::default(),
             struct_types: Map::default(),
@@ -1465,22 +1591,39 @@ impl<'c, 'm> Generator<'c, 'm> {
             RefcntState::LOCAL,
             "is_refcnt_state_local@assert",
         );
-        let current_func = self.current_function();
-        let nonlocal_bb = self
-            .context
-            .append_basic_block(current_func, "nonlocal_bb@assert_local");
-        let local_bb = self
-            .context
-            .append_basic_block(current_func, "local_bb@assert_local");
-        self.builder()
-            .build_conditional_branch(is_local, local_bb, nonlocal_bb)
+        let is_nonlocal = self
+            .builder()
+            .build_not(is_local, "is_refcnt_state_nonlocal@assert")
             .unwrap();
+        self.build_panic_if(
+            is_nonlocal,
+            "assert_local",
+            "A reference-counting operation inferred local reached a non-local object.\n",
+        );
+    }
 
-        self.builder().position_at_end(nonlocal_bb);
-        self.panic("A reference-counting operation inferred local reached a non-local object.\n");
-        self.builder().build_unconditional_branch(local_bb).unwrap();
-
-        self.builder().position_at_end(local_bb);
+    /// Print `message` and stop the program where `cond` holds; where `cond` fails, the program
+    /// carries on.
+    ///
+    /// The builder is left in the block control reaches where `cond` fails, so what follows is
+    /// emitted there.
+    pub fn build_panic_if(&mut self, cond: IntValue<'c>, bb_name: &str, message: &str) {
+        let current_func = self.current_function();
+        let panic_bb = self
+            .context
+            .append_basic_block(current_func, &format!("panic_bb@{}", bb_name));
+        let continue_bb = self
+            .context
+            .append_basic_block(current_func, &format!("continue_bb@{}", bb_name));
+        self.builder()
+            .build_conditional_branch(cond, panic_bb, continue_bb)
+            .unwrap();
+        self.builder().position_at_end(panic_bb);
+        self.panic(message);
+        self.builder()
+            .build_unconditional_branch(continue_bb)
+            .unwrap();
+        self.builder().position_at_end(continue_bb);
     }
 
     /// Abort, in compiler development mode, when the object at `obj_ptr` is shared where the
@@ -3022,6 +3165,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                     ret_obj = ret_obj.insert_field(self, 0, ret_c_val);
                 }
             }
+            // A C function declared to return `void` answers with no value, which leaves the
+            // return object holding the `()` the call produces.
             ValueKind::Instruction(_) => {}
         }
 

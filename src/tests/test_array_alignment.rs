@@ -46,6 +46,37 @@ mod tests {
         )
     }
 
+    /// A string literal's bytes start on the boundary too. The linker places a literal's storage,
+    /// and the allocator that carries this rule places every other array's, so the two reach the
+    /// boundary by different means; a reader of an array meets it either way.
+    #[test]
+    fn test_the_element_buffer_of_a_string_literal_is_aligned() {
+        let length = ARRAY_ALIGNED_ALLOC_THRESHOLD as usize;
+        let literal = format!("{}z", "a".repeat(length - 1));
+        let source = preamble()
+            + &format!(
+                r#"
+        main : IO ();
+        main = (
+            let long = "{literal}";
+            assert_aligned("string literal", long.get_bytes);;
+            assert_eq(|_|"the literal holds every byte written", long.@size, {length});;
+            assert_eq(|_|"its first byte", long.get_bytes.@(0), 'a');;
+            assert_eq(|_|"its last byte", long.get_bytes.@({length} - 1), 'z');;
+            assert_eq(|_|"the null after them", long.get_bytes.@({length}), '\0');;
+            pure()
+        );
+        "#,
+                literal = literal,
+                length = length,
+            );
+        test_source_with_c(
+            &source,
+            ADDR_MOD_ALIGNMENT,
+            "array_alignment_string_literal",
+        );
+    }
+
     /// Every way of building an array over the threshold lands its elements on the boundary,
     /// whatever the element type.
     #[test]
@@ -194,5 +225,63 @@ main = (
         );
         "#;
         test_source_with_c(&source, ADDR_MOD_ALIGNMENT, "array_alignment_resize");
+    }
+
+    /// A string literal's bytes land on the boundary at exactly the sizes a heap array lands on it.
+    ///
+    /// Two separate pieces of code decide it: the constant emitter pads in front of the storage it
+    /// writes into the program's data, and the allocator places the storage inside the block it
+    /// asks for. A reader of an array meets whichever one built it, so the two answer alike at
+    /// every size. The last two assertions read that the sizes swept straddle the threshold, which
+    /// is what puts both sides of it into the comparison.
+    #[test]
+    fn test_a_literal_and_a_heap_array_of_one_size_agree_on_the_boundary() {
+        // A literal of `len` characters holds `len + 1` bytes, and its storage lays a control block
+        // ahead of them, so the size at which the answer turns falls below the threshold by those
+        // two amounts. This range holds it whatever the control block takes.
+        let pairs = (ARRAY_ALIGNED_ALLOC_THRESHOLD.saturating_sub(24)
+            ..=ARRAY_ALIGNED_ALLOC_THRESHOLD + 8)
+            .map(|len| format!("        pair(\"{}\")", "a".repeat(len as usize)))
+            .collect::<Vec<_>>()
+            .join(",\n");
+        let source = format!(
+            r#"
+module Main;
+
+aligned : Array U8 -> Bool;
+aligned = |arr| arr.borrow_elements(|p|
+    FFI_CALL[I64 fixtest_addr_mod_alignment(Ptr, I64), p, {alignment}]
+) == 0;
+
+// Whether a literal's bytes are on the boundary, and whether a heap array of that size is.
+pair : String -> (Bool, Bool);
+pair = |lit| (
+    let bytes = lit.get_bytes;
+    (aligned(bytes), aligned(Array::fill(bytes.@size, 0_U8)))
+);
+
+main : IO ();
+main = (
+    let answers = [
+{pairs}
+    ];
+    let disagreements = answers.to_iter.fold(0, |a, acc|
+        if a.@0 == a.@1 {{ acc }} else {{ acc + 1 }});
+    assert_eq(|_|"a literal and a heap array of one size disagree on the boundary",
+        disagreements, 0);;
+    let on_boundary = answers.to_iter.fold(0, |a, acc| if a.@0 {{ acc + 1 }} else {{ acc }});
+    assert(|_|"no size swept reaches the boundary", on_boundary > 0);;
+    assert(|_|"every size swept is past the boundary", on_boundary < answers.@size);;
+    pure()
+);
+"#,
+            alignment = ARRAY_BUF_ALIGNMENT,
+            pairs = pairs,
+        );
+        test_source_with_c(
+            &source,
+            ADDR_MOD_ALIGNMENT,
+            "array_alignment_literal_and_heap",
+        );
     }
 }

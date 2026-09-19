@@ -438,10 +438,11 @@ pub struct Configuration {
     /// unit-test entry point builds a configuration around. The files the projects supply are in
     /// `project_sources`, and `source_files` answers with both.
     pub extra_source_files: Vec<PathBuf>,
-    /// The source files that are user-authored: the root project's own files, files passed via
-    /// `--file`, and files pushed by unit-test entry points. Excludes files contributed by
-    /// dependencies. Used to scope diagnostics to user code, mirroring how Rust/Swift/Kotlin/etc.
-    /// only flag a deprecated use in the crate or module currently being compiled.
+    /// The source files the user writes: the root project's own files, the ones a `--file` option
+    /// names, and the ones a unit-test entry point builds a configuration around. A diagnostic
+    /// drawn on a use rather than on a definition — a deprecated value being called, an import
+    /// that crosses an undeclared dependency — is reported where its span lies in one of these, so
+    /// that what is reported is what the user can edit.
     ///
     /// Every one of these is compiled, so `source_files` covers them.
     pub root_source_files: Vec<PathBuf>,
@@ -1145,10 +1146,11 @@ impl Configuration {
         object_generation.push_text(&check_integer_operations.to_string());
         object_generation.push_text(&skip_eval.to_string());
         // Development mode puts the compiler's own consistency checks into the code it generates —
-        // the assertions of `Generator::build_assert_unique` and `build_assert_refcnt_state_local`,
-        // and the arm a dynamic traverser takes when it is called with work it does not know. The
-        // same reasoning as the sanitizer's applies: an object built without those checks cannot
-        // stand in for one built with them.
+        // the assertions of `Generator::build_assert_unique`, `build_assert_refcnt_state_local`
+        // and `build_assert_declared_passthrough_answers_the_operand`, and the arm a dynamic
+        // traverser takes when it is called with work it does not know. The same reasoning as the
+        // sanitizer's applies: an object built without those checks cannot stand in for one built
+        // with them.
         object_generation.push_text(&develop_mode.to_string());
         // `simplify_symbol_names` runs where the symbols are asked for, and it renames the symbols
         // of the program that is generated, which a backtrace of the built program shows.
