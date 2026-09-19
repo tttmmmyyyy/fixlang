@@ -4139,12 +4139,13 @@ Type: `Std::String -> Std::String -> Std::String`
 
 Concatenate two strings.
 
-Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
+Note: Since `s1.concat(s2)` puts `s2` after `s1`, the argument written first is the one that
+goes second in the result.
 
 ##### Parameters
 
-* `first` - The first string.
-* `second` - The second string.
+* `rhs` - The string that goes second.
+* `lhs` - The string that goes first.
 
 #### concat_iter
 
@@ -4154,7 +4155,7 @@ Concatenate an iterator of strings.
 
 ##### Parameters
 
-* `iter_strs` - The iterator of strings.
+* `iter` - The iterator of strings.
 
 #### contains
 
@@ -4292,7 +4293,7 @@ Joins (an iterator of) strings by a separator.
 ##### Parameters
 
 * `sep` - The separator to be used for joining.
-* `iter_strs` - The iterator of strings to be joined.
+* `iter` - The iterator of strings to be joined.
 
 #### pop_back_byte
 

@@ -279,8 +279,8 @@ FILE *fixruntime_iohandle_get_file(IOHandle *handle)
 void fixruntime_iohandle_close(IOHandle *handle)
 {
     FILE *file;
-    FILE *new_val = NULL;
-    __atomic_exchange(&handle->file, &new_val, &file, __ATOMIC_SEQ_CST);
+    FILE *closed = NULL;
+    __atomic_exchange(&handle->file, &closed, &file, __ATOMIC_SEQ_CST);
     if (file)
     {
         fclose(file);
@@ -353,9 +353,9 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
                                               const char *filename, int lineno,
                                               const char *function)
 {
-    int *index = (int *)data;
+    int *frame_index = (int *)data;
     fprintf(stderr, "  #%02d  %s at %s:%d (pc=0x%lx)\n",
-            (*index)++, function ? function : "??",
+            (*frame_index)++, function ? function : "??",
             filename ? filename : "??", lineno,
             (unsigned long)pc);
     return 0; // 0 = continue, non-zero = stop
@@ -396,14 +396,14 @@ __attribute__((noreturn)) void fixruntime_abort(void)
     void *callstack[MAX_BACKTRACE_FRAMES];
     int frames = backtrace(callstack, MAX_BACKTRACE_FRAMES);
     fprintf(stderr, "Backtrace (%d frames):\n", frames);
-    char **strs = backtrace_symbols(callstack, frames);
-    if (strs)
+    char **symbols = backtrace_symbols(callstack, frames);
+    if (symbols)
     {
         for (int i = 1; i < frames; ++i)
         { // Skip frame 0 (current function)
-            fprintf(stderr, "  #%02d  %s\n", i - 1, strs[i]);
+            fprintf(stderr, "  #%02d  %s\n", i - 1, symbols[i]);
         }
-        free(strs);
+        free(symbols);
     }
     else
     {

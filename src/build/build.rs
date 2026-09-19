@@ -63,11 +63,11 @@ fn clang_path() -> Result<PathBuf, Errors> {
 /// * `step` — what the invocation is for, as a verb phrase that completes "Failed to ...", so that
 ///   a failure says which of the build's several C compiler calls it was.
 fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
-    let program = com.get_program().to_string_lossy().to_string();
+    let compiler = com.get_program().to_string_lossy().to_string();
     let output = com.output().map_err(|e| {
         Errors::from_msg(format!(
             "Failed to {}: could not run `{}`: {}.",
-            step, program, e
+            step, compiler, e
         ))
     })?;
     if output.stderr.len() > 0 {
@@ -79,7 +79,7 @@ fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
         return Err(Errors::from_msg(format!(
             "Failed to {}: {} exited with code {}.",
             step,
-            program,
+            compiler,
             output.status.code().unwrap_or(-1)
         )));
     }

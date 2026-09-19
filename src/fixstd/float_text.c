@@ -304,12 +304,12 @@ static locale_t float_text_locale(void)
         fprintf(stderr, "The C locale, which numbers are read under, could not be built\n");
         fixruntime_abort();
     }
-    locale_t none = (locale_t)0;
-    if (!__atomic_compare_exchange_n(&numeric_c_locale, &none, answer, false, __ATOMIC_ACQ_REL,
+    locale_t current = (locale_t)0;
+    if (!__atomic_compare_exchange_n(&numeric_c_locale, &current, answer, false, __ATOMIC_ACQ_REL,
                                      __ATOMIC_ACQUIRE))
     {
         freelocale(answer);
-        answer = none;
+        answer = current;
     }
     return answer;
 }
