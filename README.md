@@ -20,7 +20,7 @@ Fix has been in development since 2023.
     -  `println $ fib.to_iter.map(to_string).join(", ")`
     -  `fib.to_iter.map(to_string).join(", ").println`
   - Closures: `|x| x + 42`
-  - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(3.0) // Update the "x" field of the struct at index 2 of an array of vectors`
+  - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(3.0)`
   - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
 - **Fast**
   - In-place update: since Fix uses reference counting, it can update a uniquely referenced value in place instead of cloning it, even while remaining purely functional. As an example, look at the program below that calculates the Fibonacci sequence: the array is never cloned when the `set` function modifies it. This lets Fix implement algorithms naturally using arrays and hash tables without paying a cloning cost.
