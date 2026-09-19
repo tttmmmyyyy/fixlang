@@ -4,9 +4,9 @@
 //
 // A buffer short of that text stops the program: the six that go through `snprintf` pass it the
 // buffer's size, so a text that does not fit is truncated rather than written past the allocation,
-// and `fixruntime_check_float_text` reads the length `snprintf` reports and aborts on it; the two
-// `to_string` values build the text in the runtime's own buffer and hand the same guard its length
-// before copying. So what this file does is write the widest text each of the eight can produce,
+// and `fixruntime_checked_float_text_length` reads the length `snprintf` reports and aborts on it;
+// the two `to_string` values build the text in the runtime's own buffer and hand the same guard
+// its length before copying. So what this file does is write the widest text each of the eight can produce,
 // which is what proves the guard never fires — and an undersized buffer is caught by the abort
 // wherever the tests run, rather than by the Valgrind this file also asks for.
 //

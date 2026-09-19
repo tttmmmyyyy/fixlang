@@ -433,8 +433,7 @@ Creates an array by a mapping function.
 
 Type: `Std::Array a -> Std::I64`
 
-Deprecated alias for `Std::Array::@capacity`. Kept for backward
-compatibility; `@capacity` is the canonical accessor.
+Deprecated alias for `Std::Array::@capacity`.
 
 #### get_first
 
@@ -462,8 +461,7 @@ Gets the last element of an array. Returns none if the array is empty.
 
 Type: `Std::Array a -> Std::I64`
 
-Deprecated alias for `Std::Array::@size`. Kept for backward
-compatibility; `@size` is the canonical accessor.
+Deprecated alias for `Std::Array::@size`.
 
 #### get_sub
 
@@ -4069,8 +4067,7 @@ holds the lower address.
 
 Type: `Std::Ptr -> Std::Ptr -> Std::I64`
 
-Deprecated alias for `Std::Ptr::offset_from`. Kept for backward
-compatibility; `offset_from` is the canonical name.
+Deprecated alias for `Std::Ptr::offset_from`.
 
 ### namespace Std::Rem
 
@@ -4139,12 +4136,13 @@ Type: `Std::String -> Std::String -> Std::String`
 
 Concatenate two strings.
 
-Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
+Note: Since `s1.concat(s2)` puts `s2` after `s1`, the argument written first is the one that
+goes second in the result.
 
 ##### Parameters
 
-* `first` - The first string.
-* `second` - The second string.
+* `rhs` - The string that goes second.
+* `lhs` - The string that goes first.
 
 #### concat_iter
 
@@ -4154,7 +4152,7 @@ Concatenate an iterator of strings.
 
 ##### Parameters
 
-* `iter_strs` - The iterator of strings.
+* `iter` - The iterator of strings.
 
 #### contains
 
@@ -4192,10 +4190,11 @@ Checks if a string ends with a given suffix.
 
 Type: `Std::String -> Std::I64 -> Std::String -> Std::Option Std::I64`
 
-`str.find(token, start_idx)` finds the index where `token` firstly appears in `str` starting from `start_idx`.
+`str.find(token, start_idx)` finds the index where `token` first appears in `str`, searching
+from `start_idx`.
 
-Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
-`str.find("", start_idx)` with `start_idx >= str.@size` returns `str.@size`, not `start_idx`.
+The index it answers with is at least `start_idx`, with one exception:
+`str.find("", start_idx)` with `start_idx >= str.@size` answers with `str.@size`.
 
 ##### Parameters
 
@@ -4292,7 +4291,7 @@ Joins (an iterator of) strings by a separator.
 ##### Parameters
 
 * `sep` - The separator to be used for joining.
-* `iter_strs` - The iterator of strings to be joined.
+* `iter` - The iterator of strings to be joined.
 
 #### pop_back_byte
 
@@ -6433,6 +6432,8 @@ The iterator over bytes of a string, excluding null-terminator.
 #### StringSplitIterator
 
 Defined as: `type StringSplitIterator = unbox struct { ...fields... }`
+
+The iterator over the parts a string is split into by a separator.
 
 ##### field `idx`
 

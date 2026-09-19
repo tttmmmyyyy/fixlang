@@ -123,13 +123,11 @@ namespace Array {
         arr._unsafe_get_bounds_unchecked(idx)
     );
 
-    // Deprecated alias for `Std::Array::@size`. Kept for backward
-    // compatibility; `@size` is the canonical accessor.
+    // Deprecated alias for `Std::Array::@size`.
     get_size : Array a -> I64 = |arr| arr.@size;
     DEPRECATED[get_size, "Use `Std::Array::@size` instead."];
 
-    // Deprecated alias for `Std::Array::@capacity`. Kept for backward
-    // compatibility; `@capacity` is the canonical accessor.
+    // Deprecated alias for `Std::Array::@capacity`.
     get_capacity : Array a -> I64 = |arr| arr.@capacity;
     DEPRECATED[get_capacity, "Use `Std::Array::@capacity` instead."];
 
@@ -2837,7 +2835,7 @@ namespace String {
     _get_c_str = |s| s.@_data.borrow_elements(|ptr| ptr);
     DEPRECATED[_get_c_str, "This function returns a dangling pointer if it is the last use of the string. Use `borrow_c_str` or `borrow_c_str_io` instead."];
 
-    // Create a string from C string (i.e., null-terminated byte array).
+    // Create a `String` from a byte array holding a text with a null after it.
     //
     // If the byte array doesn't include `\0`, this function causes undefined behavior.
     //
@@ -2920,7 +2918,7 @@ namespace String {
     // * `borrower` - The function to be called with the C string.
     // * `str` - The string.
     borrow_c_str : (Ptr -> a) -> String -> a;
-    borrow_c_str = |f, str| str.@_data.borrow_elements(f);
+    borrow_c_str = |borrower, str| str.@_data.borrow_elements(borrower);
 
     // Call an IO action with a null-terminated C string.
     //
@@ -2929,18 +2927,19 @@ namespace String {
     // * `borrower` - The IO action to be called with the C string.
     // * `str` - The string.
     borrow_c_str_io : (Ptr -> IO a) -> String -> IO a;
-    borrow_c_str_io = |act, str| IO::from_runner $ |ios| (
-        str.borrow_c_str(|c_str| (act(c_str).@runner)(ios))
+    borrow_c_str_io = |borrower, str| IO::from_runner $ |ios| (
+        str.borrow_c_str(|c_str| (borrower(c_str).@runner)(ios))
     );
 
     // Concatenate two strings.
     // 
-    // Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
+    // Note: Since `s1.concat(s2)` puts `s2` after `s1`, the argument written first is the one that
+    // goes second in the result.
     //
     // # Parameters
     //
-    // * `first` - The first string.
-    // * `second` - The second string.
+    // * `rhs` - The string that goes second.
+    // * `lhs` - The string that goes first.
     concat : String -> String -> String;
     concat = |rhs, lhs| (
         // Remove null terminator from lhs and append rhs.
@@ -2951,7 +2950,7 @@ namespace String {
     //
     // # Parameters
     //
-    // * `iter_strs` - The iterator of strings.
+    // * `iter` - The iterator of strings.
     concat_iter : [strs : Iterator, Item strs = String] strs -> String;
     concat_iter = |iter| (
         let len = iter.map(@size).fold(0, add);
@@ -2967,12 +2966,13 @@ namespace String {
     //
     // * `capacity` - The capacity of the string to be created.
     empty : I64 -> String;
-    empty = |n| String { _data : Array::empty(n+1).push_back(0_U8) };
+    empty = |capacity| String { _data : Array::empty(capacity+1).push_back(0_U8) };
 
-    // `str.find(token, start_idx)` finds the index where `token` firstly appears in `str` starting from `start_idx`.
+    // `str.find(token, start_idx)` finds the index where `token` first appears in `str`, searching
+    // from `start_idx`.
     // 
-    // Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
-    // `str.find("", start_idx)` with `start_idx >= str.@size` returns `str.@size`, not `start_idx`.
+    // The index it answers with is at least `start_idx`, with one exception:
+    // `str.find("", start_idx)` with `start_idx >= str.@size` answers with `str.@size`.
     //
     // # Parameters
     //
@@ -2980,10 +2980,10 @@ namespace String {
     // * `start_idx` - The index to start searching from.
     // * `str` - The string to be searched.
     find : String -> I64 -> String -> Option I64;
-    find = |tok, start, str| (
+    find = |token, start_idx, str| (
         str.borrow_c_str(|c_str|
-            let start = min(start, str.@size);
-            let pos = tok.borrow_c_str(|tok_c_str| FFI_CALL[Ptr strstr(Ptr, Ptr), c_str.add_offset(start), tok_c_str]);
+            let start_idx = min(start_idx, str.@size);
+            let pos = token.borrow_c_str(|token_c_str| FFI_CALL[Ptr strstr(Ptr, Ptr), c_str.add_offset(start_idx), token_c_str]);
             if pos == nullptr {
                 Option::none()
             };
@@ -3068,9 +3068,9 @@ namespace String {
     //
     // * `str` - The string to be converted.
     get_first_byte : String -> Option U8;
-    get_first_byte = |s| (
-        if s.is_empty { Option::none() };
-        Option::some $ s.@_data.@(0)
+    get_first_byte = |str| (
+        if str.is_empty { Option::none() };
+        Option::some $ str.@_data.@(0)
     );
 
     // Gets the last byte of a string. Returns none if the string is empty.
@@ -3079,10 +3079,10 @@ namespace String {
     //
     // * `str` - The string to be converted.
     get_last_byte : String -> Option U8;
-    get_last_byte = |s| (
-        let len = s.@size;
+    get_last_byte = |str| (
+        let len = str.@size;
         if len == 0 { Option::none() };
-        Option::some $ s.@_data.@(len - 1)
+        Option::some $ str.@_data.@(len - 1)
     );
 
     // Gets the length of a string without counting the null-terminator.
@@ -3091,7 +3091,7 @@ namespace String {
     //
     // * `str` - The string to be converted.
     get_size : String -> I64;
-    get_size = |s| s.@_data.@size - 1; // exclude null terminator
+    get_size = |str| str.@_data.@size - 1; // exclude null terminator
     DEPRECATED[get_size, "Use `Std::String::@size` instead."];
 
     // Gets the size of a string without counting the null-terminator.
@@ -3108,9 +3108,9 @@ namespace String {
     // * `end` - The end index of the substring.
     // * `str` - The string to be sliced.
     get_sub : I64 -> I64 -> String -> String;
-    get_sub = |s, e, str| (
+    get_sub = |start, end, str| (
         let len = str.@size;
-        String::_unsafe_from_c_str $ str.get_bytes._get_sub_size_with_length_and_additional_capacity(len, 1, s, e).push_back('\0')
+        String::_unsafe_from_c_str $ str.get_bytes._get_sub_size_with_length_and_additional_capacity(len, 1, start, end).push_back('\0')
     );
 
     // Returns if the string is empty or not.
@@ -3119,17 +3119,17 @@ namespace String {
     //
     // * `str` - The string to be checked.
     is_empty : String -> Bool;
-    is_empty = |s| s.@size == 0;
+    is_empty = |str| str.@size == 0;
 
     // Joins (an iterator of) strings by a separator.
     //
     // # Parameters
     //
     // * `sep` - The separator to be used for joining.
-    // * `iter_strs` - The iterator of strings to be joined.
+    // * `iter` - The iterator of strings to be joined.
     join : [ss : Iterator, Item ss = String] String -> ss -> String;
-    join = |sep, ss| (
-        ss.intersperse(sep).concat_iter
+    join = |sep, iter| (
+        iter.intersperse(sep).concat_iter
     );
 
     // Removes the last byte.
@@ -3140,9 +3140,9 @@ namespace String {
     //
     // * `str` - The string to be modified.
     pop_back_byte : String -> String;
-    pop_back_byte = |s| (
-        if s.is_empty { s };
-        s.mod__data(|bytes| bytes.pop_back.pop_back.push_back(0_U8))
+    pop_back_byte = |str| (
+        if str.is_empty { str };
+        str.mod__data(|bytes| bytes.pop_back.pop_back.push_back(0_U8))
     );
 
     // `str.split(sep)` splits `str` by `sep` into an iterator.
@@ -3161,6 +3161,7 @@ namespace String {
     split : [?it : Iterator, Item ?it = String] String -> String -> ?it;
     split = |sep, str| StringSplitIterator { idx: 0, str: str, strlen: str.@size, sep: sep, sep_len: sep.@size };
 
+    // The iterator over the parts a string is split into by a separator.
     type StringSplitIterator = unbox struct { idx : I64, str : String, strlen : I64, sep : String, sep_len : I64 };
 
     impl StringSplitIterator : Iterator {
@@ -3192,7 +3193,7 @@ namespace String {
     //
     // * `byte` - The byte to be converted.
     from_U8 : U8 -> String;
-    from_U8 = |b| String::_unsafe_from_c_str([b, '\x00']);
+    from_U8 = |byte| String::_unsafe_from_c_str([byte, '\x00']);
 
     // Removes the first byte of a string while it satisifies the specified condition.
     //
@@ -3226,8 +3227,8 @@ namespace String {
     //
     // * `cond` - The condition for the byte to be removed.
     strip_last_bytes : (U8 -> Bool) -> String -> String;
-    strip_last_bytes = |cond, s| (
-        loop(s, |s|
+    strip_last_bytes = |cond, str| (
+        loop(str, |s|
             if s.is_empty { break $ s };
             if cond(s.get_last_byte.as_some) { 
                 continue $ s.pop_back_byte
@@ -3259,7 +3260,7 @@ namespace String {
     //
     // * `str` - The string to be modified.
     strip_spaces : String -> String;
-    strip_spaces = |s| s.strip_last_spaces.strip_first_spaces;
+    strip_spaces = |str| str.strip_last_spaces.strip_first_spaces;
 
     // Populate strings into a template string, similar to "format" function in other languages.
     //
@@ -3787,37 +3788,36 @@ trait a : One {
 
 namespace I8 {
     abs : I8 -> I8;
-    abs = |f| if f < 0_I8 { -f } else { f };
+    abs = |v| if v < 0_I8 { -v } else { v };
 }
 
 namespace I16 {
     abs : I16 -> I16;
-    abs = |f| if f < 0_I16 { -f } else { f };
+    abs = |v| if v < 0_I16 { -v } else { v };
 }
 
 namespace I32 {
     abs : I32 -> I32;
-    abs = |f| if f < 0_I32 { -f } else { f };
+    abs = |v| if v < 0_I32 { -v } else { v };
 }
 
 namespace I64 {
     abs : I64 -> I64;
-    abs = |f| if f < 0 { -f } else { f };
+    abs = |v| if v < 0 { -v } else { v };
 }
 
 namespace F32 {
     abs : F32 -> F32;
-    abs = |f| if f < 0.0_F32 { -f } else { f };
+    abs = |v| if v < 0.0_F32 { -v } else { v };
 }
 
 namespace F64 {
     abs : F64 -> F64;
-    abs = |f| if f < 0.0 { -f } else { f };
+    abs = |v| if v < 0.0 { -v } else { v };
 }
 
 namespace Ptr {
-    // Deprecated alias for `Std::Ptr::offset_from`. Kept for backward
-    // compatibility; `offset_from` is the canonical name.
+    // Deprecated alias for `Std::Ptr::offset_from`.
     subtract_ptr : Ptr -> Ptr -> I64 = |origin, ptr| ptr.offset_from(origin);
     DEPRECATED[subtract_ptr, "Use `Std::Ptr::offset_from` instead."];
 }
@@ -3933,10 +3933,10 @@ impl U64 : FromString {
     from_string = |str| (
         str.borrow_c_str_io(|c_str| (
             let v = *FFI_CALL_IO[U64 fixruntime_strtoull_10(Ptr), c_str];
-            let err = *FFI_CALL_IO[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str).pure };
-            let err = *FFI_CALL_IO[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str).pure };
+            let invalid_format = *FFI_CALL_IO[U8 fixruntime_is_einval()];
+            if invalid_format != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str).pure };
+            let out_of_range = *FFI_CALL_IO[U8 fixruntime_is_erange()];
+            if out_of_range != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str).pure };
             Result::ok(v).pure
         )).unsafe_perform
     );
@@ -4046,10 +4046,10 @@ impl I64 : FromString {
     from_string = |str| (
         str.borrow_c_str_io(|c_str| (
             let v = *FFI_CALL_IO[I64 fixruntime_strtoll_10(Ptr), c_str];
-            let err = *FFI_CALL_IO[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str).pure };
-            let err = *FFI_CALL_IO[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str).pure };
+            let invalid_format = *FFI_CALL_IO[U8 fixruntime_is_einval()];
+            if invalid_format != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str).pure };
+            let out_of_range = *FFI_CALL_IO[U8 fixruntime_is_erange()];
+            if out_of_range != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str).pure };
             Result::ok(v).pure
         )).unsafe_perform
     );
@@ -4129,10 +4129,10 @@ impl F32 : FromString {
     from_string = |str| (
         str.borrow_c_str_io(|c_str| (
             let v = *FFI_CALL_IO[F32 fixruntime_strtof(Ptr), c_str];
-            let err = *FFI_CALL_IO[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
-            let err = *FFI_CALL_IO[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
+            let invalid_format = *FFI_CALL_IO[U8 fixruntime_is_einval()];
+            if invalid_format != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
+            let out_of_range = *FFI_CALL_IO[U8 fixruntime_is_erange()];
+            if out_of_range != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
             Result::ok(v).pure
         )).unsafe_perform
     );
@@ -4211,10 +4211,10 @@ impl F64 : FromString {
     from_string = |str| (
         str.borrow_c_str_io(|c_str| (
             let v = *FFI_CALL_IO[F64 fixruntime_strtod(Ptr), c_str];
-            let err = *FFI_CALL_IO[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
-            let err = *FFI_CALL_IO[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
+            let invalid_format = *FFI_CALL_IO[U8 fixruntime_is_einval()];
+            if invalid_format != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
+            let out_of_range = *FFI_CALL_IO[U8 fixruntime_is_erange()];
+            if out_of_range != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
             Result::ok(v).pure
         )).unsafe_perform
     );
@@ -4236,11 +4236,11 @@ namespace Debug {
     // * `lazy_msg`
     // * `condition`
     assert : Lazy String -> Bool -> IO ();
-    assert = |msg, b| IO::from_runner $ |state| (
-        if b {
+    assert = |lazy_msg, condition| IO::from_runner $ |state| (
+        if condition {
             (state, ())
         } else {
-            undefined("Assertion failed!: " + msg())
+            undefined("Assertion failed!: " + lazy_msg())
         }
     );
 
@@ -4254,7 +4254,7 @@ namespace Debug {
     // * `lhs`
     // * `rhs`
     assert_eq : [a: Eq] Lazy String -> a -> a -> IO ();
-    assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
+    assert_eq = |lazy_msg, lhs, rhs| assert(lazy_msg, lhs == rhs);
 
     // Asserts that the given boxed value is unique, and returns the given value.
     // If the assertion failed, prints a message to the stderr and aborts the program.
@@ -4272,10 +4272,10 @@ namespace Debug {
     // * `lazy_msg`
     // * `value`
     assert_unique : [a : Boxed] Lazy String -> a -> a;
-    assert_unique = |msg, x| (
-        let (unique, x) = x.unsafe_is_unique;
-        if !unique { undefined("Value is not unique: " + msg()) };
-        x
+    assert_unique = |lazy_msg, value| (
+        let (unique, value) = value.unsafe_is_unique;
+        if !unique { undefined("Value is not unique: " + lazy_msg()) };
+        value
     );
 
     // Asserts that the storage buffer of the given array is uniquely referenced (not shared),
@@ -4289,9 +4289,9 @@ namespace Debug {
     // * `lazy_msg`
     // * `array`
     assert_unique_array : Lazy String -> Array a -> Array a;
-    assert_unique_array = |msg, arr| (
+    assert_unique_array = |lazy_msg, arr| (
         let (unique, arr) = arr._unsafe_is_storage_unique;
-        if !unique { undefined("Array storage is not unique: " + msg()) };
+        if !unique { undefined("Array storage is not unique: " + lazy_msg()) };
         arr
     );
 

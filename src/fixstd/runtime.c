@@ -1,6 +1,7 @@
 /*
-C functions / values for implementing Fix standard library.
-When running program by `fix build`, then this source file will be compiled into object file and linked to the binary.
+The C functions and values the Fix standard library is implemented with.
+
+`fix build` compiles this source into an object file and links it into the program it builds.
 */
 
 #include <ctype.h>
@@ -10,6 +11,7 @@ When running program by `fix build`, then this source file will be compiled into
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #ifndef __MINGW32__
 #include <sys/wait.h>
 #endif // __MINGW32__
@@ -27,6 +29,9 @@ void fixruntime_eprintln(const char *msg)
     fflush(stderr);
 }
 
+// Each of the twelve below moves a number between a value and the bytes holding it: the
+// `_to_bytes` ones write `v` into the object at `buf`, and the `_from_bytes` ones answer with the
+// number the object at `buf` holds.
 void fixruntime_u8_to_bytes(uint8_t *buf, uint8_t v)
 {
     *buf = v;
@@ -199,6 +204,9 @@ int64_t fixruntime_i64_to_str(char *buf, int64_t v)
     return fixruntime_write_i64(buf, v);
 }
 
+// Each of the two below reads a decimal number from the whole of `str`. The text names the number
+// and nothing else: a leading space, or anything left over after the number, sets `errno` to
+// `EINVAL`, and a number too large for the type sets it to `ERANGE`.
 int64_t fixruntime_strtoll_10(const char *str)
 {
     char *endptr;
@@ -233,21 +241,25 @@ uint64_t fixruntime_strtoull_10(const char *str)
     return v;
 }
 
+// The processor time the program has used so far, in the ticks C counts it in.
 int64_t fixruntime_clock()
 {
     return (int64_t)clock();
 }
 
+// The seconds `clocks` ticks come to.
 double fixruntime_clocks_to_sec(int64_t clocks)
 {
     return (double)(clock_t)clocks / CLOCKS_PER_SEC;
 }
 
+// Whether `errno` holds `EINVAL`, the error a text that does not name a number leaves.
 uint8_t fixruntime_is_einval()
 {
     return errno == EINVAL;
 }
 
+// Whether `errno` holds `ERANGE`, the error a number too large to hold leaves.
 uint8_t fixruntime_is_erange()
 {
     return errno == ERANGE;
@@ -259,32 +271,39 @@ typedef struct
     FILE *file;
 } IOHandle;
 
+// Answers with a handle holding `file`, allocated on the heap.
 IOHandle *fixruntime_iohandle_create(FILE *file)
 {
     IOHandle *handle = (IOHandle *)malloc(sizeof(IOHandle));
     handle->file = file;
     return handle;
 }
+// Frees the handle. The file it holds is left open.
 void fixruntime_iohandle_delete(IOHandle *handle)
 {
     free(handle);
 }
+// The file the handle holds, and `NULL` once the handle has been closed.
 FILE *fixruntime_iohandle_get_file(IOHandle *handle)
 {
     FILE *file;
     __atomic_load(&handle->file, &file, __ATOMIC_SEQ_CST);
     return file;
 }
+// Takes the file out of the handle and closes it. Two threads reaching this together close the
+// file once, since one of them takes it and the other finds the handle empty.
 void fixruntime_iohandle_close(IOHandle *handle)
 {
     FILE *file;
-    FILE *new_val = NULL;
-    __atomic_exchange(&handle->file, &new_val, &file, __ATOMIC_SEQ_CST);
+    FILE *closed = NULL;
+    __atomic_exchange(&handle->file, &closed, &file, __ATOMIC_SEQ_CST);
     if (file)
     {
         fclose(file);
     }
 }
+// Each of the three below answers with one of C's standard streams. They are macros, which an FFI
+// call cannot reach.
 FILE *fixruntime_c_stdin()
 {
     return stdin;
@@ -300,16 +319,21 @@ FILE *fixruntime_c_stderr()
     return stderr;
 }
 
+// The value `errno` holds. `errno` is a macro, which an FFI call cannot reach.
 int fixruntime_get_errno()
 {
     return errno;
 }
 
+// Sets `errno` to zero.
 void fixruntime_clear_errno()
 {
     errno = 0;
 }
 
+// Each of the four below prints what went wrong to standard error and stops the program: an index
+// fell outside its array, an array size was below zero, an array size was wider than the address
+// space, or a signed operation's result did not fit its type.
 __attribute__((noreturn)) void fixruntime_index_out_of_range(int64_t idx, int64_t size)
 {
     fprintf(stderr, "Index out of range: index=%" PRId64 ", size=%" PRId64 "\n", idx, size);
@@ -352,9 +376,9 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
                                               const char *filename, int lineno,
                                               const char *function)
 {
-    int *index = (int *)data;
+    int *frame_index = (int *)data;
     fprintf(stderr, "  #%02d  %s at %s:%d (pc=0x%lx)\n",
-            (*index)++, function ? function : "??",
+            (*frame_index)++, function ? function : "??",
             filename ? filename : "??", lineno,
             (unsigned long)pc);
     return 0; // 0 = continue, non-zero = stop
@@ -369,7 +393,8 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
 
 #endif // BACKTRACE
 
-// Abort function that prints backtrace if BACKTRACE is defined
+// Stops the program, printing the call stack it stopped at where the runtime was built with
+// `BACKTRACE` defined.
 __attribute__((noreturn)) void fixruntime_abort(void)
 {
 #if defined(BACKTRACE)
@@ -395,14 +420,14 @@ __attribute__((noreturn)) void fixruntime_abort(void)
     void *callstack[MAX_BACKTRACE_FRAMES];
     int frames = backtrace(callstack, MAX_BACKTRACE_FRAMES);
     fprintf(stderr, "Backtrace (%d frames):\n", frames);
-    char **strs = backtrace_symbols(callstack, frames);
-    if (strs)
+    char **symbols = backtrace_symbols(callstack, frames);
+    if (symbols)
     {
         for (int i = 1; i < frames; ++i)
         { // Skip frame 0 (current function)
-            fprintf(stderr, "  #%02d  %s\n", i - 1, strs[i]);
+            fprintf(stderr, "  #%02d  %s\n", i - 1, symbols[i]);
         }
-        free(strs);
+        free(symbols);
     }
     else
     {
