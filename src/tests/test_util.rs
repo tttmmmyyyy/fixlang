@@ -603,6 +603,37 @@ fn run_source(source: &str, config: Configuration) -> Result<Result<Output, io::
     run_sources(&[source], config)
 }
 
+/// A configuration with `--check-integer-operations` on, which stops the program on a signed
+/// integer overflow, or on a shift by an amount outside the width of its type.
+pub fn integer_operations_checked_config() -> Configuration {
+    let mut config = Configuration::develop_mode();
+    config.check_integer_operations = true;
+    config
+}
+
+/// A program whose `main` binds `zero` to a `Std::I64` that is 0 at run time and that no
+/// optimization level can fold, and runs `body` after it.
+///
+/// An operand built from `zero` reaches the code generator as a value, so the value a case names
+/// is the one the instruction receives. An operand written as a literal is folded long before
+/// that, and the instruction then answers at compile time whatever the folding chose.
+pub fn source_with_a_runtime_zero(body: &str) -> String {
+    format!(
+        r#"
+        module Main;
+        main : IO ();
+        main = (
+            let args = *get_args;
+            assert_eq(|_|"The test program is run with its own path alone", args.@size, 1);;
+            let zero = args.@size - 1;
+            {}
+            pure()
+        );
+    "#,
+        body
+    )
+}
+
 /// Compiles `source` under `config` and runs it, failing the test unless it exits with code 0. The
 /// program's stdout and stderr are forwarded to the test's stderr, so a failing run shows what it
 /// printed.

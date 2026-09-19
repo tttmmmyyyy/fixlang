@@ -405,7 +405,7 @@ impl ProjectSources {
     /// path = "../depb"
     /// ```
     pub fn dependency_entry(&self, importer: &ProjectSources) -> String {
-        let source = match &self.origin {
+        let origin_line = match &self.origin {
             ProjectOrigin::Local(dir) => {
                 let dir = match &importer.origin {
                     ProjectOrigin::Local(importer_dir) => path_relative_to(dir, importer_dir),
@@ -417,7 +417,7 @@ impl ProjectSources {
         };
         format!(
             "[[dependencies]]\nname = \"{}\"\nversion = \"{}\"\n{}",
-            self.name, self.version, source
+            self.name, self.version, origin_line
         )
     }
 }
@@ -555,10 +555,11 @@ pub struct Configuration {
     pub backtrace: bool,
     /// Leave the run-time checks, such as the array bounds check, out of the program.
     pub no_runtime_check: bool,
-    /// Stop the program where arithmetic on a signed integer type gives a result outside the range
-    /// of that type. This covers `+`, `-`, `*`, unary `-`, `/` and `%`. Arithmetic on an unsigned
-    /// type is taken modulo two to the width of the type, so none of it is checked.
-    pub check_signed_overflow: bool,
+    /// Stop the program on a signed integer overflow, or on a shift by an amount outside the
+    /// width of its type. The overflow check covers `+`, `-`, `*`, unary `-`, `/` and `%` on a
+    /// signed type; unsigned arithmetic wraps instead of overflowing, so it is never checked. The
+    /// shift check covers every integer type.
+    pub check_integer_operations: bool,
     /// Compile `eval {side}; {main}` as `{main}`, so that the effect of `{side}` is left out of the
     /// program. `eval` otherwise instructs the compiler to evaluate `{side}`.
     pub skip_eval: bool,
@@ -668,7 +669,7 @@ impl Configuration {
             develop_mode: false,
             backtrace: false,
             no_runtime_check: false,
-            check_signed_overflow: false,
+            check_integer_operations: false,
             skip_eval: false,
             deprecation_mode: DeprecationMode::default(),
         })
@@ -1052,7 +1053,7 @@ impl Configuration {
             sanitizer,
             backtrace,
             no_runtime_check,
-            check_signed_overflow,
+            check_integer_operations,
             skip_eval,
             develop_mode,
             emit_symbols,
@@ -1139,9 +1140,9 @@ impl Configuration {
         runtime_object.push_text(&sanitizer.to_string());
         object_generation.push_text(&backtrace.to_string());
         object_generation.push_text(&no_runtime_check.to_string());
-        // The check is emitted into the arithmetic itself, so one source builds into two different
-        // programs.
-        object_generation.push_text(&check_signed_overflow.to_string());
+        // The checks are emitted into the operations themselves, so one source builds into two
+        // different programs.
+        object_generation.push_text(&check_integer_operations.to_string());
         object_generation.push_text(&skip_eval.to_string());
         // Development mode puts the compiler's own consistency checks into the code it generates —
         // the assertions of `Generator::build_assert_unique` and `build_assert_refcnt_state_local`,
@@ -1361,6 +1362,15 @@ impl Configuration {
     /// bounds checks and the union variant checks of the `as_` functions.
     pub fn runtime_check(&self) -> bool {
         !self.no_runtime_check
+    }
+
+    /// Whether the generated program stops on a signed integer overflow, or on a shift by an
+    /// amount outside the width of its type.
+    ///
+    /// `--check-integer-operations` asks for the checks, and `--no-runtime-check` takes out every
+    /// check that ends the program, these among them.
+    pub fn checks_integer_operations(&self) -> bool {
+        self.check_integer_operations && self.runtime_check()
     }
 }
 
@@ -1794,8 +1804,8 @@ mod tests {
                 Box::new(|config: &mut Configuration| config.no_runtime_check = true),
             ),
             (
-                "check_signed_overflow",
-                Box::new(|config: &mut Configuration| config.check_signed_overflow = true),
+                "check_integer_operations",
+                Box::new(|config: &mut Configuration| config.check_integer_operations = true),
             ),
             (
                 "skip_eval",

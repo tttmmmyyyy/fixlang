@@ -1,17 +1,18 @@
-//! Whether a build stops at a signed overflow is a setting of that build. A test build takes the
-//! `build.test` section's value, and the `build` section's value where `build.test` names none.
+//! Whether a build stops on a signed integer overflow, or on a shift by an amount outside the
+//! width of its type, is a setting of that build. A test build takes the `build.test` section's
+//! value, and falls back to the `build` section when `build.test` does not set it.
 //!
-//! Each case under `test_check_signed_overflow_setting/cases` sums past the greatest value of
-//! `I64`. Under the check the program stops there; without it the sum is taken modulo two to the
-//! width of the type, so the program prints it and exits. A run that completes therefore shows the
-//! build was made without the check.
+//! Each case under `test_check_integer_operations_setting/cases` sums past the greatest value of
+//! `I64`. Under the check the program stops there; without it the sum wraps, so the program prints
+//! it and exits. A run that completes therefore shows the build was made without the check.
 
 use crate::tests::test_util::{assert_failed_with, assert_succeeded, run_fix, setup_case_projects};
 
 /// The directory holding this module's case projects.
-const CASES: &str = "src/tests/test_check_signed_overflow_setting/cases";
+const CASES: &str = "src/tests/test_check_integer_operations_setting/cases";
 
-/// What the check says when it stops the program at the sum the case projects ask for.
+/// What the checks say when they stop the program at the sum the case projects ask for.
+/// The setting covers the shift amount as well, which `test_shift_amount` exercises.
 const SUM_STOPPED: &str = "Signed integer overflow: I64 addition";
 
 /// The `build` section decides the setting for the program.
@@ -25,8 +26,8 @@ fn test_build_section_turns_the_check_on_for_the_program() {
     );
 }
 
-/// A test build takes the `build` section's value where the `build.test` section names none, so a
-/// project that asks for the check runs its tests under it.
+/// A test build falls back to the `build` section when the `build.test` section does not set the
+/// value, so a project that asks for the check runs its tests under it.
 #[test]
 fn test_build_section_turns_the_check_on_for_a_test() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_on_in_build");
@@ -34,12 +35,12 @@ fn test_build_section_turns_the_check_on_for_a_test() {
         &run_fix(&project_dir, &["test"]),
         SUM_STOPPED,
         "`fix test` should stop at the sum, because the build section turns the check on and the \
-         test section names no value of its own.",
+         test section does not set a value of its own.",
     );
 }
 
-/// The `build.test` section decides the setting for a test build, and `false` is a value it names:
-/// a project that asks for the check can still run its tests without it.
+/// The `build.test` section decides the setting for a test build, and `false` counts as setting
+/// it: a project that asks for the check can still run its tests without it.
 #[test]
 fn test_test_section_turns_the_check_off_for_a_test() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_on_in_build_off_in_test");
@@ -61,8 +62,9 @@ fn test_test_section_leaves_the_check_on_for_the_program() {
     );
 }
 
-/// The `build.test` section decides the setting for a test build where the `build` section names
-/// none, so a project can run its tests under the check while its program runs on without it.
+/// The `build.test` section decides the setting for a test build when the `build` section does
+/// not set it, so a project can run its tests under the check while its program runs on without
+/// it.
 #[test]
 fn test_test_section_turns_the_check_on_for_a_test() {
     let (_temp_dir, project_dir) = setup_case_projects(CASES, "root_check_on_in_test");
@@ -73,7 +75,7 @@ fn test_test_section_turns_the_check_on_for_a_test() {
     );
 }
 
-/// `--check-signed-overflow` turns the check on for a test build whose project file turns it off.
+/// `--check-integer-operations` turns the check on for a test build whose project file turns it off.
 ///
 /// The two runs share a project directory, so the second one meets the object files the first one
 /// cached. The setting therefore has to be part of what identifies them.
@@ -85,8 +87,8 @@ fn test_option_turns_the_check_on_for_a_test() {
         "`fix test` should succeed, because the test section turns the check off.",
     );
     assert_failed_with(
-        &run_fix(&project_dir, &["test", "--check-signed-overflow"]),
+        &run_fix(&project_dir, &["test", "--check-integer-operations"]),
         SUM_STOPPED,
-        "`--check-signed-overflow` should turn the check on, over the value the test section names.",
+        "`--check-integer-operations` should turn the check on, over the value the test section names.",
     );
 }
