@@ -11,7 +11,7 @@ A simple, fast, functional language.
   - Fix is a purely functional language, like Haskell: functions are pure (except through the FFI), and effects — including I/O — are expressed as monadic values.
   - Higher-kinded types, traits, and associated types give the type system the abstractions a purely functional language needs to abstract uniformly over containers and computations.
 - **Syntax**
-  - `.` applies a function to the value on its left (`x.f == f(x)`) rather than dispatching a method, and the standard library takes its data last. One argument order then serves both styles: `arr.push_back(x)` reads as a chain, while `push_back(x)` on its own is an `Array a -> Array a` ready to compose.
+  - Functions are applied with parentheses or with `.`: `b.f(a)` means `f(a, b)`. So with `push_back : a -> Array a -> Array a`, you write `arr.push_back(x)` — a familiar shape, though Fix has no notion of a method.
   - For example, if you have an array of integers called `fib` and you want to display it on the screen, you can write any of the following:
     -  `println(fib.to_iter.map(to_string).join(", "))` 
     -  `println $ fib.to_iter.map(to_string).join(", ")`
