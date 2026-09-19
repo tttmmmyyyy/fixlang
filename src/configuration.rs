@@ -405,7 +405,7 @@ impl ProjectSources {
     /// path = "../depb"
     /// ```
     pub fn dependency_entry(&self, importer: &ProjectSources) -> String {
-        let source = match &self.origin {
+        let origin_line = match &self.origin {
             ProjectOrigin::Local(dir) => {
                 let dir = match &importer.origin {
                     ProjectOrigin::Local(importer_dir) => path_relative_to(dir, importer_dir),
@@ -417,7 +417,7 @@ impl ProjectSources {
         };
         format!(
             "[[dependencies]]\nname = \"{}\"\nversion = \"{}\"\n{}",
-            self.name, self.version, source
+            self.name, self.version, origin_line
         )
     }
 }
@@ -1362,6 +1362,15 @@ impl Configuration {
     /// bounds checks and the union variant checks of the `as_` functions.
     pub fn runtime_check(&self) -> bool {
         !self.no_runtime_check
+    }
+
+    /// Whether the generated program stops on a signed integer overflow, or on a shift by an
+    /// amount outside the width of its type.
+    ///
+    /// `--check-integer-operations` asks for the checks, and `--no-runtime-check` takes out every
+    /// check that ends the program, these among them.
+    pub fn checks_integer_operations(&self) -> bool {
+        self.check_integer_operations && self.runtime_check()
     }
 }
 

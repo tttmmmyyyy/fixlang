@@ -74,7 +74,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process,
-    vec::Vec,
 };
 
 /// The allocator the compiler process itself runs on. A program the compiler builds allocates
@@ -586,18 +585,18 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     /// Every library the invocation links, each paired with how it is bound: `--static-link` names
     /// the libraries copied into the output, `--dynamic-link` the ones resolved at load time.
     fn read_library_options(args: &ArgMatches) -> Vec<(String, LinkType)> {
-        let mut options = vec![];
+        let mut libraries = vec![];
         for (opt_id, link_type) in [
             ("static-link-library", LinkType::Static),
             ("dynamic-link-library", LinkType::Dynamic),
         ] {
-            options.extend(
+            libraries.extend(
                 read_string_list_option(args, opt_id)
                     .into_iter()
                     .map(|name| (name, link_type)),
             );
         }
-        options
+        libraries
     }
 
     /// The directories the `--library-paths` option adds to the linker's search path for

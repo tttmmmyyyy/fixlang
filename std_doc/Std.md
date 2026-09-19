@@ -1765,7 +1765,7 @@ Type: `Std::I16`
 
 Type: `Std::I16 -> Std::I16 -> Std::I16`
 
-`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -1778,7 +1778,7 @@ Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 Type: `Std::I16 -> Std::I16 -> Std::I16`
 
-`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+`v.shift_right(bits)` shifts `v` to the right by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -2032,7 +2032,7 @@ Type: `Std::I32`
 
 Type: `Std::I32 -> Std::I32 -> Std::I32`
 
-`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -2045,7 +2045,7 @@ Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 Type: `Std::I32 -> Std::I32 -> Std::I32`
 
-`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+`v.shift_right(bits)` shifts `v` to the right by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -2299,7 +2299,7 @@ Type: `Std::I64`
 
 Type: `Std::I64 -> Std::I64 -> Std::I64`
 
-`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -2312,7 +2312,7 @@ Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 Type: `Std::I64 -> Std::I64 -> Std::I64`
 
-`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+`v.shift_right(bits)` shifts `v` to the right by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -2566,7 +2566,7 @@ Type: `Std::I8`
 
 Type: `Std::I8 -> Std::I8 -> Std::I8`
 
-`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -2579,7 +2579,7 @@ Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 Type: `Std::I8 -> Std::I8 -> Std::I8`
 
-`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+`v.shift_right(bits)` shifts `v` to the right by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -4794,7 +4794,7 @@ Type: `Std::U16`
 
 Type: `Std::U16 -> Std::U16 -> Std::U16`
 
-`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -4807,7 +4807,7 @@ Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 Type: `Std::U16 -> Std::U16 -> Std::U16`
 
-`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+`v.shift_right(bits)` shifts `v` to the right by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -5057,7 +5057,7 @@ Type: `Std::U32`
 
 Type: `Std::U32 -> Std::U32 -> Std::U32`
 
-`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -5070,7 +5070,7 @@ Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 Type: `Std::U32 -> Std::U32 -> Std::U32`
 
-`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+`v.shift_right(bits)` shifts `v` to the right by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -5320,7 +5320,7 @@ Type: `Std::U64`
 
 Type: `Std::U64 -> Std::U64 -> Std::U64`
 
-`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -5333,7 +5333,7 @@ Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 Type: `Std::U64 -> Std::U64 -> Std::U64`
 
-`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+`v.shift_right(bits)` shifts `v` to the right by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -5583,7 +5583,7 @@ Type: `Std::U8`
 
 Type: `Std::U8 -> Std::U8 -> Std::U8`
 
-`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 
@@ -5596,7 +5596,7 @@ Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 Type: `Std::U8 -> Std::U8 -> Std::U8`
 
-`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+`v.shift_right(bits)` shifts `v` to the right by `bits` bits.
 
 `bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
 

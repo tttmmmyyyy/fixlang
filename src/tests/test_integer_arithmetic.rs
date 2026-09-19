@@ -1,20 +1,13 @@
 //! What `--check-integer-operations` stops the program at: arithmetic on a signed integer type
 //! whose result does not fit that type.
 
-use crate::configuration::Configuration;
-use crate::tests::test_util::{test_source, test_source_fail};
-
-/// A configuration that stops the program where arithmetic on a signed integer type gives a result
-/// outside the range of that type, as `--check-integer-operations` asks for.
-fn integer_operations_checked_config() -> Configuration {
-    let mut config = Configuration::develop_mode();
-    config.check_integer_operations = true;
-    config
-}
+use crate::tests::test_util::{
+    integer_operations_checked_config, source_with_a_runtime_zero, test_source, test_source_fail,
+};
 
 /// Builds a program that evaluates `expression` under a configuration that stops at a signed
 /// overflow, runs it, and asserts that it stops with a report containing `report`.
-fn assert_the_check_stops(expression: &str, report: &str) {
+fn assert_the_check_stops_evaluating(expression: &str, report: &str) {
     let source = format!(
         r#"
         module Main;
@@ -33,7 +26,7 @@ fn assert_the_check_stops(expression: &str, report: &str) {
 /// reports the operation and both operands.
 #[test]
 pub fn test_signed_overflow_check_stops_an_addition_past_the_greatest() {
-    assert_the_check_stops(
+    assert_the_check_stops_evaluating(
         "I64::maximum + 1",
         "Signed integer overflow: I64 addition, with 9223372036854775807 and 1",
     );
@@ -43,7 +36,7 @@ pub fn test_signed_overflow_check_stops_an_addition_past_the_greatest() {
 /// intrinsic from addition, so it is read on its own.
 #[test]
 pub fn test_signed_overflow_check_stops_a_product_past_the_greatest() {
-    assert_the_check_stops(
+    assert_the_check_stops_evaluating(
         "I32::maximum * 2_I32",
         "Signed integer overflow: I32 multiplication, with 2147483647 and 2",
     );
@@ -54,7 +47,7 @@ pub fn test_signed_overflow_check_stops_a_product_past_the_greatest() {
 /// `subtraction`.
 #[test]
 pub fn test_signed_overflow_check_stops_a_difference_past_the_least() {
-    assert_the_check_stops(
+    assert_the_check_stops_evaluating(
         "I32::minimum - 1_I32",
         "Signed integer overflow: I32 subtraction, with -2147483648 and 1",
     );
@@ -64,7 +57,7 @@ pub fn test_signed_overflow_check_stops_a_difference_past_the_least() {
 /// emitted as a subtraction from zero, which is the shape the report names.
 #[test]
 pub fn test_signed_overflow_check_stops_the_negation_of_the_least() {
-    assert_the_check_stops(
+    assert_the_check_stops_evaluating(
         "-(I64::minimum)",
         "Signed integer overflow: I64 negation, with 0 and -9223372036854775808",
     );
@@ -75,7 +68,7 @@ pub fn test_signed_overflow_check_stops_the_negation_of_the_least() {
 /// against the one pair that overflows.
 #[test]
 pub fn test_signed_overflow_check_stops_dividing_the_least_by_minus_one() {
-    assert_the_check_stops(
+    assert_the_check_stops_evaluating(
         "I64::minimum / -1",
         "Signed integer overflow: I64 division, with -9223372036854775808 and -1",
     );
@@ -86,16 +79,13 @@ pub fn test_signed_overflow_check_stops_dividing_the_least_by_minus_one() {
 ///
 /// Every operation here gives a result outside the range of the signed type of its width and
 /// inside the range of the unsigned one, so a check reading these as signed would stop the program
-/// at each. The operands are built from the count of the program's arguments, which is one
-/// wherever the program runs, so the compiler cannot fold the arithmetic away.
+/// at each. The operands are built from the run-time zero, which the compiler cannot fold the
+/// arithmetic away through.
 #[test]
 pub fn test_signed_overflow_check_leaves_unsigned_arithmetic_alone() {
-    let source = r#"
-        module Main;
-        main : IO ();
-        main = (
-            let args = *IO::get_args;
-            let one = args.@size.to_U8;
+    let source = source_with_a_runtime_zero(
+        r#"
+            let one = (zero + 1).to_U8;
             let half8 = 127_U8 * one;
             assert_eq(|_|"U8 add", half8 + half8, 254_U8);;
             assert_eq(|_|"U8 mul", half8 * 2_U8, 254_U8);;
@@ -109,9 +99,7 @@ pub fn test_signed_overflow_check_leaves_unsigned_arithmetic_alone() {
 
             let half64 = 9223372036854775807_U64 * one.to_U64;
             assert_eq(|_|"U64 add", half64 + half64, 18446744073709551614_U64);;
-
-            pure()
-        );
-    "#;
+        "#,
+    );
     test_source(&source, integer_operations_checked_config());
 }
