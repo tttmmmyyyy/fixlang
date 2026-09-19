@@ -145,44 +145,32 @@ struct RuntimeSource {
     path: &'static str,
     /// The text of the source, carried in the compiler.
     text: &'static str,
-    /// The flags this source alone is compiled with.
-    flags: &'static [&'static str],
 }
 
 /// The C sources the runtime is built from.
 ///
 /// `ryu/d2s.c` and `ryu/f2s.c` each define a `to_chars` of their own, so each is a translation unit
 /// of its own.
-///
-/// They are all compiled with optimization. Writing a number as text is arithmetic, and
-/// unoptimized arithmetic costs several times what optimized arithmetic costs: Ryu takes 214 ns to
-/// write a floating point number unoptimized against 88 ns optimized, and one integer takes 188
-/// instructions against 97. The whole runtime compiles in a few milliseconds, and a build reuses
-/// the objects a previous build of the same compiler wrote.
 const RUNTIME_SOURCES: [RuntimeSource; 4] = [
     RuntimeSource {
         object_name: "runtime",
         path: "runtime.c",
         text: include_str!("../fixstd/runtime.c"),
-        flags: &["-O2"],
     },
     RuntimeSource {
         object_name: "float-text",
         path: "float_text.c",
         text: include_str!("../fixstd/float_text.c"),
-        flags: &["-O2"],
     },
     RuntimeSource {
         object_name: "ryu-d2s",
         path: "ryu/d2s.c",
         text: include_str!("../fixstd/ryu/d2s.c"),
-        flags: &["-O2"],
     },
     RuntimeSource {
         object_name: "ryu-f2s",
         path: "ryu/f2s.c",
         text: include_str!("../fixstd/ryu/f2s.c"),
-        flags: &["-O2"],
     },
 ];
 
@@ -245,8 +233,12 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
         // A source reaches the headers beside it by the path it includes them under, which is the
         // one it carries in the compiler's tree.
         com.current_dir(&build_dir).arg("-I.");
-        com.args(source.flags);
-        com.arg("-ffunction-sections").arg("-fdata-sections");
+        // Writing a number as text is arithmetic, and unoptimized arithmetic costs several times
+        // what optimized arithmetic costs: Ryu takes 214 ns to write a floating point number
+        // unoptimized against 88 ns optimized, and one integer takes 188 instructions against 97.
+        // The whole runtime compiles in a few milliseconds, and a build reuses the objects a
+        // previous build of the same compiler wrote.
+        com.arg("-O2").arg("-ffunction-sections").arg("-fdata-sections");
         // Keep frame pointers for better backtraces on macOS when backtrace is enabled
         if config.no_elim_frame_pointers() {
             com.arg("-fno-omit-frame-pointer");
