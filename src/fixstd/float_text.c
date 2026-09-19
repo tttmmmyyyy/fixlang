@@ -81,6 +81,9 @@ static int64_t fixruntime_check_float_text(int written, int64_t size)
     return written;
 }
 
+// Each of the four below writes `v` at `buf` with `precision` digits after the point, null-
+// terminated, and reports how many bytes the text took, the null left out. The `exp` ones write
+// the number in scientific notation, and the others write it positionally.
 int64_t fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
     return fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*e", (int)precision, v), size);
@@ -253,6 +256,8 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
     return written;
 }
 
+// Each of the two below writes the shortest text of `v` that reads back as `v` at `buf`, null-
+// terminated, and reports how many bytes the text took, the null left out.
 int64_t fixruntime_f32_to_str_shortest(char *buf, int64_t size, float v)
 {
     _Static_assert(WIDEST_FLOAT_TEXT_SIZE(F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH, F32_DIGITS) <=

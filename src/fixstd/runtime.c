@@ -156,22 +156,29 @@ int64_t fixruntime_ptr_to_str(char *buf, uint64_t ptr)
     buf[FIXRUNTIME_PTR_DIGITS] = '\0';
     return FIXRUNTIME_PTR_DIGITS;
 }
+// Each of the eight below writes `v` at `buf` in decimal, null-terminated, and reports how many
+// bytes the text took, the null left out. A negative number is written with a `-` before its
+// digits.
 int64_t fixruntime_i8_to_str(char *buf, int8_t v)
 {
     return fixruntime_write_i64(buf, v);
 }
+
 int64_t fixruntime_u8_to_str(char *buf, uint8_t v)
 {
     return fixruntime_write_u64(buf, v);
 }
+
 int64_t fixruntime_i16_to_str(char *buf, int16_t v)
 {
     return fixruntime_write_i64(buf, v);
 }
+
 int64_t fixruntime_u16_to_str(char *buf, uint16_t v)
 {
     return fixruntime_write_u64(buf, v);
 }
+
 int64_t fixruntime_u32_to_str(char *buf, uint32_t v)
 {
     return fixruntime_write_u64(buf, v);
