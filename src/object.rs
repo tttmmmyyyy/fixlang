@@ -1919,6 +1919,25 @@ pub fn build_array_storage_alloc_offset<'c, 'm>(
 
 /// Whether an `#ArrayStorage` object of `sizeof` bytes has its element buffer aligned, which it does
 /// from `ARRAY_ALIGNED_ALLOC_THRESHOLD` bytes up.
+///
+/// # Examples
+/// `array_storage_is_aligned(255)` is `false`, and `array_storage_is_aligned(256)` is `true`.
+pub fn array_storage_is_aligned(sizeof: u64) -> bool {
+    sizeof >= ARRAY_ALIGNED_ALLOC_THRESHOLD
+}
+
+/// The bytes that have to lie ahead of an `#ArrayStorage` whose control block takes `header_size`
+/// bytes, for its element buffer to start on `ARRAY_BUF_ALIGNMENT` when the object itself starts on
+/// that boundary.
+///
+/// # Examples
+/// With a control block of eight bytes, `array_storage_buf_padding(8)` is `24`.
+pub fn array_storage_buf_padding(header_size: u64) -> u64 {
+    (ARRAY_BUF_ALIGNMENT - header_size % ARRAY_BUF_ALIGNMENT) % ARRAY_BUF_ALIGNMENT
+}
+
+/// Whether an `#ArrayStorage` object of `sizeof` bytes has its element buffer aligned, as a value
+/// the emitted code branches on.
 pub fn build_storage_is_aligned<'c, 'm>(
     gc: &Generator<'c, 'm>,
     sizeof: IntValue<'c>,

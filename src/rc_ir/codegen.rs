@@ -24,8 +24,7 @@ use crate::object::{create_obj, lambda_return_part_types, union_tag_value, Objec
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
-use crate::rc_ir::ownership::{held_field_type, unit_step, UnitStep};
-use crate::rc_ir::provenance::LeafOrigin;
+use crate::rc_ir::ownership::{as_arg_projection, held_field_type, unit_step, UnitStep};
 use crate::tbaa::MemoryRegion;
 use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
@@ -389,10 +388,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let Some(origins) = prov.leaf_origins_at(&[]) else {
             return;
         };
-        if origins.len() != 1 {
-            return;
-        }
-        let LeafOrigin::Arg(i, arg_leaf) = origins.iter().next().unwrap().clone() else {
+        let Some((i, arg_leaf)) = as_arg_projection(origins) else {
             return;
         };
         if !arg_leaf.is_empty() {
@@ -422,23 +418,14 @@ impl<'c, 'm> Generator<'c, 'm> {
                 "differ@is_the_operand",
             )
             .unwrap();
-        let current_func = self.current_function();
-        let differ_bb = self
-            .context
-            .append_basic_block(current_func, "differ_bb@is_the_operand");
-        let same_bb = self
-            .context
-            .append_basic_block(current_func, "same_bb@is_the_operand");
-        self.builder()
-            .build_conditional_branch(differ, differ_bb, same_bb)
-            .unwrap();
-        self.builder().position_at_end(differ_bb);
-        self.panic(&format!(
-            "The inline-LLVM operation `{}` declared its result to be an operand, and answered with another object.\n",
-            llvm_gen.name()
-        ));
-        self.builder().build_unconditional_branch(same_bb).unwrap();
-        self.builder().position_at_end(same_bb);
+        self.build_panic_if(
+            differ,
+            "is_the_operand",
+            &format!(
+                "The inline-LLVM operation `{}` declared its result to be an operand, and answered with another object.\n",
+                llvm_gen.name()
+            ),
+        );
     }
 
     /// Project the whole object `obj` down `path` to the sub-object naming one reference-counting

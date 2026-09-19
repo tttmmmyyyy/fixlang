@@ -8,8 +8,6 @@ use crate::ast::types::type_tycon;
 use crate::ast::types::TyCon;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
-use crate::fixstd::builtin::{make_array_storage_ty, make_u8_ty};
-use crate::constants::{ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT, STORAGE_BUF_IDX};
 use crate::constants::RefcntState;
 use crate::constants::TraverserWorkType;
 use crate::constants::BOXED_TYPE_DATA_IDX;
@@ -21,15 +19,19 @@ use crate::constants::DYNAMIC_OBJ_CAP_IDX;
 use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
 use crate::constants::SYMBOL_VERSION_SEPARATOR;
 use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
+use crate::constants::{ARRAY_BUF_ALIGNMENT, STORAGE_BUF_IDX};
 use crate::error::panic_with_msg;
 use crate::ffi::{promote_through_ellipsis, CSignature};
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
+use crate::fixstd::builtin::{make_array_storage_ty, make_u8_ty};
 use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
 use crate::misc::Set;
+use crate::object::array_storage_buf_padding;
+use crate::object::array_storage_is_aligned;
 use crate::object::build_free_boxed;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
@@ -729,8 +731,6 @@ impl<'c> OutPointer<'c> {
 
 // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 impl<'c, 'm> Generator<'c, 'm> {
-    /// The module-level constant holding `s` as a null-terminated string. One constant is created
-    /// per distinct string, and every later call for that string returns it again.
     /// The `#ArrayStorage` holding `bytes`, emitted as a constant in the program's data rather than
     /// built on the heap.
     ///
@@ -760,8 +760,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             .offset_of_element(&storage_struct_ty, STORAGE_BUF_IDX)
             .expect("`#ArrayStorage` lays its elements out after its control block");
         let sizeof = header_size + bytes.len() as u64;
-        let padding = if sizeof >= ARRAY_ALIGNED_ALLOC_THRESHOLD {
-            (ARRAY_BUF_ALIGNMENT - header_size % ARRAY_BUF_ALIGNMENT) % ARRAY_BUF_ALIGNMENT
+        let aligned = array_storage_is_aligned(sizeof);
+        let padding = if aligned {
+            array_storage_buf_padding(header_size)
         } else {
             0
         };
@@ -780,7 +781,10 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .collect::<Vec<BasicValueEnum<'c>>>(),
         );
         let object = context.const_struct(
-            &[control_block.into(), context.const_string(bytes, false).into()],
+            &[
+                control_block.into(),
+                context.const_string(bytes, false).into(),
+            ],
             false,
         );
         let padded = context.const_struct(
@@ -804,7 +808,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         global.set_initializer(&padded);
         global.set_constant(true);
         global.set_linkage(Linkage::Internal);
-        if padding > 0 {
+        if aligned {
             global.set_alignment(ARRAY_BUF_ALIGNMENT as u32);
         }
         // A constant address, so that every place naming this storage names the same one without an
@@ -820,6 +824,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         ptr
     }
 
+    /// The module-level constant holding `s` as a null-terminated string. One constant is created
+    /// per distinct string, and every later call for that string returns it again.
     pub fn add_global_string(&mut self, s: &str) -> GlobalValue<'c> {
         if let Some(val) = self.global_strings.get(s) {
             return val.clone();
@@ -1544,22 +1550,38 @@ impl<'c, 'm> Generator<'c, 'm> {
             RefcntState::LOCAL,
             "is_refcnt_state_local@assert",
         );
-        let current_func = self.current_function();
-        let nonlocal_bb = self
-            .context
-            .append_basic_block(current_func, "nonlocal_bb@assert_local");
-        let local_bb = self
-            .context
-            .append_basic_block(current_func, "local_bb@assert_local");
-        self.builder()
-            .build_conditional_branch(is_local, local_bb, nonlocal_bb)
+        let is_nonlocal = self
+            .builder()
+            .build_not(is_local, "is_refcnt_state_nonlocal@assert")
             .unwrap();
+        self.build_panic_if(
+            is_nonlocal,
+            "assert_local",
+            "A reference-counting operation inferred local reached a non-local object.\n",
+        );
+    }
 
-        self.builder().position_at_end(nonlocal_bb);
-        self.panic("A reference-counting operation inferred local reached a non-local object.\n");
-        self.builder().build_unconditional_branch(local_bb).unwrap();
-
-        self.builder().position_at_end(local_bb);
+    /// Print `message` and stop the program where `cond` holds, carrying on where it does not.
+    ///
+    /// The builder is left in the block control reaches when the condition does not hold, so what
+    /// follows is emitted there.
+    pub fn build_panic_if(&mut self, cond: IntValue<'c>, bb_name: &str, message: &str) {
+        let current_func = self.current_function();
+        let panic_bb = self
+            .context
+            .append_basic_block(current_func, &format!("panic_bb@{}", bb_name));
+        let continue_bb = self
+            .context
+            .append_basic_block(current_func, &format!("continue_bb@{}", bb_name));
+        self.builder()
+            .build_conditional_branch(cond, panic_bb, continue_bb)
+            .unwrap();
+        self.builder().position_at_end(panic_bb);
+        self.panic(message);
+        self.builder()
+            .build_unconditional_branch(continue_bb)
+            .unwrap();
+        self.builder().position_at_end(continue_bb);
     }
 
     /// Abort, in compiler development mode, when the object at `obj_ptr` is shared where the

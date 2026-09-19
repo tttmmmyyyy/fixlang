@@ -1083,9 +1083,8 @@ pub fn make_byte_array_of_global_storage<'c, 'm>(
     array.insert_field(gc, ARRAY_CAP_IDX, len)
 }
 
-
 /// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
-/// null terminator, copied out of a global into a fresh array.
+/// null terminator, read out of a constant in the program's data.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStringBuf {
     /// The literal's bytes, without the null terminator.
