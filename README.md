@@ -22,7 +22,7 @@ A simple, fast, functional language.
     - `vectors[i][^x].iset(42.0)`
 - **Fast**
   - In-place update: reference counting lets Fix update a uniquely referenced value in place rather than clone it, without giving up purity. In the Fibonacci program under [Examples](#examples), `set` never clones the array — so algorithms over arrays and hash tables can be written the natural way, with no copying.
-  - One of Fix's goals is to compile high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
+  - Fix is compiled ahead of time to a native binary, through LLVM. One of its goals is to turn high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
   - [Benchmark history](https://tttmmmyyyy.github.io/fixlang/benchmark/)
 - **Other features**
   - Multithreading
