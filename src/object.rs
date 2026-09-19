@@ -1924,8 +1924,8 @@ pub fn array_storage_is_aligned(sizeof: u64) -> bool {
 }
 
 /// The bytes that have to lie ahead of an `#ArrayStorage` whose control block takes `header_size`
-/// bytes, for its element buffer to start on `ARRAY_BUF_ALIGNMENT` when the object itself starts on
-/// that boundary.
+/// bytes, for its element buffer to start on `ARRAY_BUF_ALIGNMENT` when those bytes themselves
+/// start on that boundary.
 ///
 /// # Examples
 /// `array_storage_buf_padding(8)` is `24`.
