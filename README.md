@@ -25,7 +25,7 @@ A simple, fast, functional language.
   - Fix is compiled ahead of time to a native binary, through LLVM. One of its goals is to turn high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
   - [Benchmark history](https://tttmmmyyyy.github.io/fixlang/benchmark/)
 - **Other features**
-  - Multithreading: [fixlang-asynctask](https://github.com/tttmmmyyyy/fixlang-asynctask) is a reference implementation on pthread
+  - [fixlang-asynctask](https://github.com/tttmmmyyyy/fixlang-asynctask) is a reference implementation for multithreading
   - Foreign function interface (FFI)
 - **Safety**
   - Outside its `unsafe_` functions and the FFI, Fix is memory safe: array indices and union variants are checked at run time, unless the program is built with `--no-runtime-check`.
