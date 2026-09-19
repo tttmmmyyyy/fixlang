@@ -5,6 +5,7 @@
 //! `Release` node that disposes it. The work outside reference counting — closure layout, FFI,
 //! struct and array construction, the inline-LLVM builtins — is done by the `Generator` helpers.
 
+use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
@@ -24,6 +25,7 @@ use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
 use crate::rc_ir::ownership::{held_field_type, unit_step, UnitStep};
+use crate::rc_ir::provenance::LeafOrigin;
 use crate::tbaa::MemoryRegion;
 use inkwell::attributes::AttributeLoc;
 use inkwell::basic_block::BasicBlock;
@@ -302,6 +304,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                 if let Some(outer_op) = outer_op {
                     self.generating_llvm_op = outer_op;
                 }
+                if let Some(obj) = generated.as_ref() {
+                    self.assert_result_is_the_operand_declared(llvm_gen.as_ref(), args, obj);
+                }
                 match generated {
                     None => {
                         // Yielding no value says the op built the return, which it may only do in
@@ -352,6 +357,88 @@ impl<'c, 'm> Generator<'c, 'm> {
                 res
             }
         }
+    }
+
+    /// Abort, in compiler development mode, where an inline-LLVM op answered with an object other
+    /// than the operand it declared its result to be.
+    ///
+    /// `result_prov` lets an op declare its result to be argument `i` -- not a copy of it, the same
+    /// object. Reference counting reads that as identity: the argument goes unconsumed, and a
+    /// retain of the result pairs with a release of the argument. An op answering with a different
+    /// object turns that pair into a retain of one object and a release of another, which frees a
+    /// value still held and leaks the one it answered with. The declaration is hand-written per op
+    /// and nothing else compares it against what the op produces, so this does.
+    ///
+    /// The claim is checked where it names the whole of both values: a leaf deeper than that is
+    /// reached by a path whose steps the object's layout decides, which is what
+    /// `project_rc_unit` walks and is not the same walk a leaf path takes.
+    fn assert_result_is_the_operand_declared(
+        &mut self,
+        llvm_gen: &dyn LLVMGen,
+        args: &[RcVar],
+        result: &Object<'c>,
+    ) {
+        if !self.config.develop_mode {
+            return;
+        }
+        if !result.is_box(self.type_env()) {
+            return;
+        }
+        let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+        let prov = llvm_gen.result_prov(&result.ty, &arg_tys, self.type_env());
+        let Some(origins) = prov.leaf_origins_at(&[]) else {
+            return;
+        };
+        if origins.len() != 1 {
+            return;
+        }
+        let LeafOrigin::Arg(i, arg_leaf) = origins.iter().next().unwrap().clone() else {
+            return;
+        };
+        if !arg_leaf.is_empty() {
+            return;
+        }
+        let declared = self.get_scoped_obj_noretain(&args[i].name);
+        if !declared.is_box(self.type_env()) {
+            return;
+        }
+        let declared_ptr = declared.value(self).into_pointer_value();
+        let answered_ptr = result.value(self).into_pointer_value();
+        let i64_ty = self.context.i64_type();
+        let declared_int = self
+            .builder()
+            .build_ptr_to_int(declared_ptr, i64_ty, "declared@is_the_operand")
+            .unwrap();
+        let answered_int = self
+            .builder()
+            .build_ptr_to_int(answered_ptr, i64_ty, "answered@is_the_operand")
+            .unwrap();
+        let differ = self
+            .builder()
+            .build_int_compare(
+                IntPredicate::NE,
+                declared_int,
+                answered_int,
+                "differ@is_the_operand",
+            )
+            .unwrap();
+        let current_func = self.current_function();
+        let differ_bb = self
+            .context
+            .append_basic_block(current_func, "differ_bb@is_the_operand");
+        let same_bb = self
+            .context
+            .append_basic_block(current_func, "same_bb@is_the_operand");
+        self.builder()
+            .build_conditional_branch(differ, differ_bb, same_bb)
+            .unwrap();
+        self.builder().position_at_end(differ_bb);
+        self.panic(&format!(
+            "The inline-LLVM operation `{}` declared its result to be an operand, and answered with another object.\n",
+            llvm_gen.name()
+        ));
+        self.builder().build_unconditional_branch(same_bb).unwrap();
+        self.builder().position_at_end(same_bb);
     }
 
     /// Project the whole object `obj` down `path` to the sub-object naming one reference-counting
