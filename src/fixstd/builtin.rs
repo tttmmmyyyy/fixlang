@@ -7518,8 +7518,8 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
             gc.builder().position_at_end(unreachable_bb);
         }
 
-        // Return undefined value.
-        Object::undef(ty.clone(), gc)
+        // Control never reaches this point, so the value it must produce is poison.
+        Object::poison(ty.clone(), gc)
     }
 
     fn name(&self) -> String {
@@ -7607,7 +7607,7 @@ impl LLVMGen for InlineLLVMHoleBody {
             .context
             .append_basic_block(current_func, "unreachable_bb");
         gc.builder().position_at_end(unreachable_bb);
-        Object::undef(ty.clone(), gc)
+        Object::poison(ty.clone(), gc)
     }
 
     fn name(&self) -> String {
@@ -7834,7 +7834,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
             flag.add_incoming(&[(&unique_flag, unique_bb), (&shared_flag, shared_bb)]);
             flag.as_basic_value().into_int_value()
         };
-        let bool_val = make_bool_ty().get_struct_type(gc).get_undef();
+        let bool_val = make_bool_ty().get_struct_type(gc).get_poison();
         let bool_val = gc
             .builder()
             .build_insert_value(bool_val, is_unique, 0, "insert@is_unique")
@@ -8035,7 +8035,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
             assert_array_storage_unique(gc, &array);
             bool_ty.const_int(1, false)
         };
-        let bool_val = make_bool_ty().get_struct_type(gc).get_undef();
+        let bool_val = make_bool_ty().get_struct_type(gc).get_poison();
         let bool_val = gc
             .builder()
             .build_insert_value(bool_val, is_unique, 0, "insert@is_storage_unique")
@@ -8341,6 +8341,57 @@ pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The `Ptr` naming the function that performs one reference-counting operation on the boxed value
+/// `var_name` names, which is the lazy value of a boxed type.
+///
+/// The function takes the object's pointer, does `build_operation` on it, and returns nothing. It is
+/// named `<operation>#<type>` and written once per module: a later request for the same pair reaches
+/// the function already there.
+fn rc_function_of_boxed_value<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    var_name: &FullName,
+    operation: &str,
+    build_operation: impl FnOnce(&mut Generator<'c, 'm>, Object<'c>),
+) -> Object<'c> {
+    let arg = gc.get_scoped_obj_noretain(var_name);
+    let target_ty = arg.ty.get_lambda_dst();
+    assert!(target_ty.is_box(gc.type_env()));
+
+    let function_name = format!("{}#{}", operation, arg.ty.to_string_normalize());
+    let func = match gc.module.get_function(&function_name) {
+        Some(func) => func,
+        None => {
+            let function_ty = gc
+                .context
+                .void_type()
+                .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
+            let func = gc
+                .module
+                .add_function(&function_name, function_ty, Some(Linkage::Internal));
+            let bb = gc.context.append_basic_block(func, "entry");
+            let _builder_guard = gc.push_builder();
+            gc.builder().position_at_end(bb);
+
+            let obj_ptr = func.get_nth_param(0).unwrap();
+            let obj = Object::new(obj_ptr, target_ty, gc);
+            build_operation(gc, obj);
+            gc.builder().build_return(None).unwrap();
+
+            func
+        }
+    };
+    let func_ptr = func.as_global_value().as_pointer_value();
+
+    let ret = create_obj(
+        make_ptr_ty(),
+        &vec![],
+        None,
+        gc,
+        Some(&format!("ret_val@get_funptr_{}", operation)),
+    );
+    ret.insert_field(gc, 0, func_ptr)
+}
+
 // PROOF: D/A, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
@@ -8351,54 +8402,9 @@ pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argument
-        let arg = gc.get_scoped_obj_noretain(&self.var_name);
-
-        // Get the target type.
-        let arg_ty = arg.ty.clone();
-        let target_ty = arg_ty.get_lambda_dst();
-        assert!(target_ty.is_box(gc.type_env()));
-
-        // Get function pointer to release function.
-        let release_function_name = format!("release#{}", arg.ty.to_string_normalize());
-        let func = if let Some(func) = gc.module.get_function(&release_function_name) {
-            func
-        } else {
-            // Define release function.
-            let release_function_ty = gc
-                .context
-                .void_type()
-                .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
-            let release_function = gc.module.add_function(
-                &release_function_name,
-                release_function_ty,
-                Some(Linkage::Internal),
-            );
-            let bb = gc.context.append_basic_block(release_function, "entry");
-            let _builder_guard = gc.push_builder();
-            gc.builder().position_at_end(bb);
-
-            // Get pointer to object.
-            let obj_ptr = release_function.get_nth_param(0).unwrap();
-            // Create object.
-            let obj = Object::new(obj_ptr, target_ty.clone(), gc);
-            // Release object.
+        rc_function_of_boxed_value(gc, &self.var_name, "release", |gc, obj| {
             gc.release(obj, RcState::Unknown);
-            // Return.
-            gc.builder().build_return(None).unwrap();
-
-            release_function
-        };
-        let func_ptr = func.as_global_value().as_pointer_value();
-
-        let ret = create_obj(
-            make_ptr_ty(),
-            &vec![],
-            None,
-            gc,
-            Some("ret_val@get_funptr_release"),
-        );
-        ret.insert_field(gc, 0, func_ptr)
+        })
     }
 
     fn name(&self) -> String {
@@ -8465,54 +8471,9 @@ pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argument
-        let arg = gc.get_scoped_obj_noretain(&self.var_name);
-
-        // Get the target type.
-        let arg_ty = arg.ty.clone();
-        let target_ty = arg_ty.get_lambda_dst();
-        assert!(target_ty.is_box(gc.type_env()));
-
-        // Get function pointer to retain function.
-        let retain_function_name = format!("retain#{}", arg.ty.to_string_normalize());
-        let func = if let Some(func) = gc.module.get_function(&retain_function_name) {
-            func
-        } else {
-            // Define release function.
-            let retain_function_ty = gc
-                .context
-                .void_type()
-                .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
-            let retain_function = gc.module.add_function(
-                &retain_function_name,
-                retain_function_ty,
-                Some(Linkage::Internal),
-            );
-            let bb = gc.context.append_basic_block(retain_function, "entry");
-            let _builder_guard = gc.push_builder();
-            gc.builder().position_at_end(bb);
-
-            // Get pointer to object.
-            let obj_ptr = retain_function.get_nth_param(0).unwrap();
-            // Create object.
-            let obj = Object::new(obj_ptr, target_ty, gc);
-            // retain object.
+        rc_function_of_boxed_value(gc, &self.var_name, "retain", |gc, obj| {
             gc.retain(obj, RcState::Unknown);
-            // Return.
-            gc.builder().build_return(None).unwrap();
-
-            retain_function
-        };
-        let func_ptr = func.as_global_value().as_pointer_value();
-
-        let ret = create_obj(
-            make_ptr_ty(),
-            &vec![],
-            None,
-            gc,
-            Some("ret_val@get_funptr_retain"),
-        );
-        ret.insert_field(gc, 0, func_ptr)
+        })
     }
 
     fn name(&self) -> String {

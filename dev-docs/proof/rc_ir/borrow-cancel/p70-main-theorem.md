@@ -1342,6 +1342,10 @@ SCAN src/ `Cell<`
 SCAN src/ `OnceLock<`
   = src/ast/types.rs: TypeNode -- `hash_cache`・`ground_cache`・`depth_cache`
   = src/object.rs: FIELDS_BY_NAME -- `static` の表であって、どの値の欄でもない
+  = src/build/build_object_files.rs: PARSED -- LLVM に一度だけ渡す旗の列
+  = src/tests/test_undefined_bits.rs: MODULES -- テストが 1 度だけ建てる IR
+  = src/tests/test_memory_regions.rs: MODULES -- 同上
+  = src/tests/test_pointer_arithmetic.rs: IR -- 同上
 
 SCAN src/ `Mutex<`
   = src/ast/expr.rs: ExprNode -- 脱糖前の AST の節点が持つ `free_vars`
