@@ -123,13 +123,11 @@ namespace Array {
         arr._unsafe_get_bounds_unchecked(idx)
     );
 
-    // Deprecated alias for `Std::Array::@size`. Kept for backward
-    // compatibility; `@size` is the canonical accessor.
+    // Deprecated alias for `Std::Array::@size`.
     get_size : Array a -> I64 = |arr| arr.@size;
     DEPRECATED[get_size, "Use `Std::Array::@size` instead."];
 
-    // Deprecated alias for `Std::Array::@capacity`. Kept for backward
-    // compatibility; `@capacity` is the canonical accessor.
+    // Deprecated alias for `Std::Array::@capacity`.
     get_capacity : Array a -> I64 = |arr| arr.@capacity;
     DEPRECATED[get_capacity, "Use `Std::Array::@capacity` instead."];
 
@@ -2837,7 +2835,7 @@ namespace String {
     _get_c_str = |s| s.@_data.borrow_elements(|ptr| ptr);
     DEPRECATED[_get_c_str, "This function returns a dangling pointer if it is the last use of the string. Use `borrow_c_str` or `borrow_c_str_io` instead."];
 
-    // Create a string from C string (i.e., null-terminated byte array).
+    // Create a `String` from a byte array holding a text with a null after it.
     //
     // If the byte array doesn't include `\0`, this function causes undefined behavior.
     //
@@ -2970,10 +2968,11 @@ namespace String {
     empty : I64 -> String;
     empty = |capacity| String { _data : Array::empty(capacity+1).push_back(0_U8) };
 
-    // `str.find(token, start_idx)` finds the index where `token` firstly appears in `str` starting from `start_idx`.
+    // `str.find(token, start_idx)` finds the index where `token` first appears in `str`, searching
+    // from `start_idx`.
     // 
-    // Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
-    // `str.find("", start_idx)` with `start_idx >= str.@size` returns `str.@size`, not `start_idx`.
+    // The index it answers with is at least `start_idx`, with one exception:
+    // `str.find("", start_idx)` with `start_idx >= str.@size` answers with `str.@size`.
     //
     // # Parameters
     //
@@ -3162,6 +3161,7 @@ namespace String {
     split : [?it : Iterator, Item ?it = String] String -> String -> ?it;
     split = |sep, str| StringSplitIterator { idx: 0, str: str, strlen: str.@size, sep: sep, sep_len: sep.@size };
 
+    // The iterator over the parts a string is split into by a separator.
     type StringSplitIterator = unbox struct { idx : I64, str : String, strlen : I64, sep : String, sep_len : I64 };
 
     impl StringSplitIterator : Iterator {
@@ -3817,8 +3817,7 @@ namespace F64 {
 }
 
 namespace Ptr {
-    // Deprecated alias for `Std::Ptr::offset_from`. Kept for backward
-    // compatibility; `offset_from` is the canonical name.
+    // Deprecated alias for `Std::Ptr::offset_from`.
     subtract_ptr : Ptr -> Ptr -> I64 = |origin, ptr| ptr.offset_from(origin);
     DEPRECATED[subtract_ptr, "Use `Std::Ptr::offset_from` instead."];
 }

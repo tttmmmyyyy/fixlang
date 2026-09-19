@@ -1,5 +1,7 @@
 use crate::{configuration::Configuration, tests::test_util::test_source};
 
+/// A string read back from the C string `borrow_c_str` lends is the string that was lent, so the
+/// bytes a `String` keeps are a null-terminated C string.
 #[test]
 pub fn test_string_unsafe_from_c_str_ptr() {
     let source = r#"
@@ -16,6 +18,8 @@ pub fn test_string_unsafe_from_c_str_ptr() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The substring between two indices, where the range covers part of the string, is empty, or
+/// reaches past the end, and where the string itself is empty.
 #[test]
 pub fn test_string_get_sub() {
     let source = r#"
@@ -38,6 +42,8 @@ pub fn test_string_get_sub() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Leading spaces and tabs are removed and the rest is kept, so a string of nothing but spaces
+/// becomes empty and one starting with another byte is unchanged.
 #[test]
 pub fn test_string_strip_first_spaces() {
     let source = r#"
@@ -58,6 +64,8 @@ pub fn test_string_strip_first_spaces() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Where a token first appears at or after the index searching starts from, including a token
+/// that is not there, the empty token, the empty string, and a start index past the end.
 #[test]
 pub fn test_string_find() {
     let source = r#"
@@ -95,6 +103,9 @@ pub fn test_string_find() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The parts a separator splits a string into, including the empty parts its edges and its
+/// repetitions leave, a separator that does not appear, and the empty separator, which cuts the
+/// string into single bytes.
 #[test]
 pub fn test_string_split() {
     let source = r#"
@@ -121,6 +132,8 @@ pub fn test_string_split() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A pointer is written as sixteen hexadecimal digits, padded with leading zeros, each digit in
+/// the place its value puts it.
 #[test]
 pub fn test_ptr_to_string() {
     let source = r#"
@@ -137,6 +150,8 @@ pub fn test_ptr_to_string() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `<` and `<=` order strings the way their positions in a sorted list do, so a prefix comes
+/// before what extends it and a byte decides the order where two strings first differ.
 #[test]
 pub fn test_string_less_than_and_less_than_or_eq() {
     let source = r##"
@@ -169,6 +184,8 @@ pub fn test_string_less_than_and_less_than_or_eq() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A byte becomes the string of that one byte, and the null byte becomes the empty string, since
+/// a `String` ends where its null is.
 #[test]
 pub fn test_string_from_u8() {
     let source = r##"
@@ -184,6 +201,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `from_bytes` reads the text a byte array holds up to its first null, and `to_bytes` answers
+/// with those bytes and the null. An array carrying no null, and the empty array, are errors.
 #[test]
 pub fn test_string_from_bytes_to_bytes() {
     let source = r##"
@@ -215,6 +234,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `from_bytes` reads the array it is given without consuming it, so the caller's array holds the
+/// size and the bytes it held before the call.
 #[test]
 pub fn test_string_from_bytes_keeps_argument() {
     let source = r##"
@@ -235,6 +256,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Whether a string starts with a prefix, including the empty prefix, a prefix as long as the
+/// string, one longer than it, and one differing only in case.
 #[test]
 pub fn test_string_starts_with() {
     let source = r##"
@@ -265,6 +288,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Whether a string ends with a suffix, including the empty suffix, a suffix as long as the
+/// string, one longer than it, and one differing only in case.
 #[test]
 pub fn test_string_ends_with() {
     let source = r##"
@@ -295,6 +320,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Whether a substring appears anywhere in a string -- at either end or in the middle, more than
+/// once, and in a case that differs -- and where either string is empty.
 #[test]
 pub fn test_string_contains() {
     let source = r##"
@@ -326,6 +353,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The bytes of a string in order, the null left out: one byte for each byte of the text, so a
+/// character taking several bytes in UTF-8 comes out as the several bytes it takes.
 #[test]
 pub fn test_string_to_iter_bytes() {
     let source = r##"
@@ -351,7 +380,7 @@ main = (
     assert_eq(|_|"8", single.@size, 1);;
     assert_eq(|_|"9", single.@(0), 65_U8);; // 'A'
 
-    // UTF-8 multi-byte character (こんにちは contains multi-byte characters)
+    // A character taking several bytes in UTF-8
     let utf8_str = "あ";  // U+3042, UTF-8: E3 81 82
     let utf8_bytes = utf8_str.to_iter_bytes.to_array;
     assert_eq(|_|"10", utf8_bytes.@size, 3);;

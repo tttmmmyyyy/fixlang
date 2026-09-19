@@ -35,7 +35,7 @@ fn c_compiler_command(config: &Configuration) -> Result<Command, Errors> {
 fn clang_path() -> Result<PathBuf, Errors> {
     // `llvm-sys` names this after the LLVM release it links, which `Cargo.toml` pins through
     // inkwell's `llvm22-1` feature. Raising one without the other leaves this looking for a prefix
-    // nothing sets, so say so rather than reach for whatever clang the path happens to hold.
+    // nothing sets, which is reported as an error.
     let Some(prefix) = option_env!("LLVM_SYS_221_PREFIX") else {
         return Err(Errors::from_msg(
             "This compiler was built without recording where its LLVM lives, so the clang a \
@@ -238,8 +238,8 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
     }
 
     for (source, object) in RUNTIME_SOURCES.iter().zip(objects.iter()) {
-        // The compiler runs inside the build directory, so it is given the name of the object it
-        // writes rather than a path reaching that directory.
+        // The compiler runs inside the build directory, so it is given the plain name of the
+        // object it writes.
         let compiled_name = format!("{}.o", source.object_name);
         let mut com = c_compiler_command(&config)?;
         // A source reaches the headers beside it by the path it includes them under, which is the

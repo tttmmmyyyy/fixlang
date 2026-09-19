@@ -4,10 +4,6 @@ Writing a floating point number as text and reading one back, for `Std::F64` and
 The shortest text that reads back as the number is found by Ryu, whose sources sit beside this one
 under `ryu/`. Reading goes through C's `strtod`, under a locale of this file's own so that the
 point is the character Ryu writes whatever locale the program runs in.
-
-This file is compiled with optimization where the rest of the runtime is not: what it does —
-Ryu's search, and the placing of the digits it answers with — is the runtime's one piece of
-arithmetic rather than a call into C's library.
 */
 
 // `strtod_l` and `newlocale` are what read a number under a locale of our own choosing. glibc
@@ -57,9 +53,9 @@ int64_t fixruntime_write_u64(char *buf, uint64_t v);
 // Answers with `written` where a text of that many bytes, and the null after it, fit `size`, and
 // stops the program where they do not.
 //
-// The caller in `src/fixstd/std.fix` derives that buffer's size from the widest text it can be
-// asked for, so a text that does not fit means the derivation is wrong. Stopping here names the
-// two sizes, where letting the write run on would leave the heap damaged and the program going.
+// A buffer is sized from the widest text it can be asked to hold, so a text that does not fit
+// means that size was derived wrongly. Stopping here names the two sizes, where letting the write
+// run on would leave the heap damaged and the program going.
 //
 // # Arguments
 // * `written` - The length of the text, without its null. A negative number is what `snprintf`
@@ -332,6 +328,11 @@ static void fixruntime_keep_only_overflow(double v)
     }
 }
 
+// Reads a `double` from the whole of `str`, with `.` as the decimal point whatever locale the
+// program runs in.
+//
+// The text names the number and nothing else: a leading space, or anything left over after the
+// number, sets `errno` to `EINVAL`, and a number too large to hold sets it to `ERANGE`.
 double fixruntime_strtod(const char *str)
 {
     char *endptr;
@@ -350,6 +351,11 @@ double fixruntime_strtod(const char *str)
     return v;
 }
 
+// Reads a `float` from the whole of `str`, with `.` as the decimal point whatever locale the
+// program runs in.
+//
+// The text names the number and nothing else: a leading space, or anything left over after the
+// number, sets `errno` to `EINVAL`, and a number too large to hold sets it to `ERANGE`.
 float fixruntime_strtof(const char *str)
 {
     char *endptr;

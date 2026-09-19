@@ -3444,9 +3444,11 @@ pub fn test97() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The decimal text each integer type writes its extreme values as, and that `from_string` reads
+/// those texts back as the numbers they name. A text that is not a number, one with a leading
+/// space, and one naming a number too large for the type are errors.
 #[test]
 pub fn test98() {
-    // Test to_string, from_string for integrals
     let source = r#"
         module Main; 
         main : IO ();
@@ -3566,9 +3568,10 @@ pub fn test_integer_to_string_writes_the_decimal_digits() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A cast between integral types answers with the bits of the source read as the target type,
+/// checked against Rust's own casts over a random value for each ordered pair of the eight types.
 #[test]
 pub fn test99() {
-    // Test cast between integral types.
     let mut rng = thread_rng();
     let mut cases: Vec<String> = vec![];
     let tys = &[
