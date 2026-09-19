@@ -11,7 +11,7 @@ You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-pla
 
 ## Development status
 
-Fix has been in development since 2023. Its tools include a dependency manager, a document generator, and a language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions, plus a [registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them.
+Fix has been in development since 2023.
 
 ## Concepts and features
 
@@ -19,9 +19,6 @@ Fix has been in development since 2023. Its tools include a dependency manager, 
   - Fix is a purely functional language, like Haskell: functions are pure, and effects are expressed as values, with the foreign function interface as the one exception, since a C function it calls can do anything.
   - Higher-kinded types, traits, and associated types give the type system the abstractions a purely functional language needs to express effects and generic structure.
   - Sequencing effects without leaving pure code: an `IO` action is an ordinary value, and Fix composes them with dedicated operators.
-- **Memory management**
-  - Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
-  - Fix's compiler inserts every retain and release, so this reference counting is memory-safe on its own, and its optional thread-safe mode extends that safety across threads.
 - **Familiar Syntax**
   - Syntax that combines the advantages of functional and OOP languages. For example, if you have an array of integers called `fib` and you want to display it on the screen, you can write any of the following:
     -  `println(fib.to_iter.map(to_string).join(", "))` 
@@ -38,6 +35,13 @@ Fix has been in development since 2023. Its tools include a dependency manager, 
 - **Other features**
   - Multithreading
   - Foreign function interface (FFI)
+- **Memory management**
+  - Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
+  - Fix's compiler inserts every retain and release, so this reference counting is memory-safe on its own, and its optional thread-safe mode extends that safety across threads.
+- **Tools**
+  - A dependency manager, and a [registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them.
+  - A document generator.
+  - A language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions.
 
 The following is an example program that calculates the Fibonacci sequence using Fix:
 ```
