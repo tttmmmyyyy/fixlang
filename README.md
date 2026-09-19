@@ -12,8 +12,10 @@ A simple, fast, functional language.
   - Higher-kinded types, traits, and associated types give the type system the abstractions a purely functional language needs to abstract uniformly over containers and computations.
 - **Syntax**
   - Functions are applied with parentheses or with `.`: `b.f(a)` means `f(a, b)`. So with `push_back : a -> Array a -> Array a`, you write `arr.push_back(x)` — a familiar shape, though Fix has no notion of a method.
-  - Closures: `|x| x + 42`
-  - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(3.0)`
+  - Closures (lambda expressions): `|x| x + 42`
+  - Haskell's `$` for application: `println $ 42.to_string`
+  - Syntax for composing monadic actions (`;;` and `*`): `println("I will echo you: ");; println(*input_line)`
+  - Syntax for using Lens on hierarchical data: `vectors[i][^x].iset(42.0)`
   - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
 - **Fast**
   - In-place update: since Fix uses reference counting, it can update a uniquely referenced value in place instead of cloning it, even while remaining purely functional. As an example, look at the Fibonacci program under [Examples](#examples): the array is never cloned when the `set` function modifies it. This lets Fix implement algorithms naturally using arrays and hash tables without paying a cloning cost.
