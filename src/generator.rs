@@ -140,6 +140,8 @@ impl<'c> ValueAccessor<'c> {
                         .try_as_basic_value();
                     match call {
                         ValueKind::Basic(val) => val,
+                        // A global whose value takes no bytes is read through a void accessor
+                        // (see `declare_program_global`), and its type holds one value.
                         ValueKind::Instruction(_) => {
                             // An accessor whose value occupies no storage returns nothing.
                             let embedded_ty = ty.get_embedded_type(gc);
@@ -3163,6 +3165,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                     ret_obj = ret_obj.insert_field(self, 0, ret_c_val);
                 }
             }
+            // A C function declared to return `void` answers with no value, which leaves the
+            // return object holding the `()` the call produces.
             ValueKind::Instruction(_) => {}
         }
 

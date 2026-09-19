@@ -37,10 +37,10 @@ use crate::fixstd::runtime::{
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_abort_if, build_array_storage_alloc_offset, build_capacity_check,
-    build_elems_bytes, build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned,
-    create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
-    write_alloc_offset, CapacityCheck, ObjectFieldType,
+    alloc_array_storage, build_abort_if, build_array_storage_alloc_offset,
+    build_array_storage_is_aligned, build_capacity_check, build_elems_bytes, build_gep_array_elem,
+    build_gep_within_allocation, create_obj, get_array_storage, get_array_storage_buf,
+    read_alloc_offset, union_tag_value, write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -2885,7 +2885,7 @@ fn realloc_array<'c, 'm>(
 
     // A storage worth aligning keeps room to be placed off the base of its block; one below the
     // threshold keeps the room it already has, so that its contents stay where `realloc` leaves them.
-    let is_aligned = build_storage_is_aligned(gc, sizeof);
+    let is_aligned = build_array_storage_is_aligned(gc, sizeof);
     let slack = gc
         .builder()
         .build_select(
@@ -7585,14 +7585,10 @@ pub struct InlineLLVMHoleBody {}
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMHoleBody {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
-        gc.builder().build_unreachable().unwrap();
-        let current_func = gc.current_function();
-        let unreachable_bb = gc
-            .context
-            .append_basic_block(current_func, "unreachable_bb");
-        gc.builder().position_at_end(unreachable_bb);
-        Object::poison(ty.clone(), gc)
+    fn generate<'c, 'm>(&self, _gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
+        // `collect_hole_errors` reports every hole the source carries, and the build stops on a
+        // diagnostic, so a hole reaching code generation is one that check let through.
+        panic!("a hole reached code generation");
     }
 
     fn name(&self) -> String {
@@ -7609,7 +7605,7 @@ impl LLVMGen for InlineLLVMHoleBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // It emits `unreachable`, so there is no result value.
+        // A hole stands where an expression is missing, so it answers with no value.
         ExtShape::bottom(result_ty, type_env)
     }
 
@@ -9725,10 +9721,17 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 // PROOF: D/A, P18c, P19, P20, P21, P22, P23, P24, P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
-        run_io(gc, io)
-    } else {
-        run_ios_runner(gc, io, None).1
+        return run_io(gc, io);
     }
+    // The other value run here is the runner an `IO` holds, which `run_ios_runner` applies to an
+    // `IOState`.
+    assert!(
+        (io.ty.is_closure() || io.ty.is_funptr())
+            && io.ty.get_lambda_srcs() == vec![make_iostate_ty()],
+        "a value run here is an `IO` or the runner one holds, and `{}` is neither",
+        io.ty.to_string()
+    );
+    run_ios_runner(gc, io, None).1
 }
 
 /// Runs the action held by a value of type `IO a` and returns its result.
