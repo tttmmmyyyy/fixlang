@@ -37,10 +37,10 @@ use crate::fixstd::runtime::{
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
-    alloc_array_storage, build_abort_if, build_array_storage_alloc_offset, build_capacity_check,
-    build_elems_bytes, build_gep_array_elem, build_gep_within_allocation, build_storage_is_aligned,
-    create_obj, get_array_storage, get_array_storage_buf, read_alloc_offset, union_tag_value,
-    write_alloc_offset, CapacityCheck, ObjectFieldType,
+    alloc_array_storage, build_abort_if, build_array_storage_alloc_offset,
+    build_array_storage_is_aligned, build_capacity_check, build_elems_bytes, build_gep_array_elem,
+    build_gep_within_allocation, create_obj, get_array_storage, get_array_storage_buf,
+    read_alloc_offset, union_tag_value, write_alloc_offset, CapacityCheck, ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -2885,7 +2885,7 @@ fn realloc_array<'c, 'm>(
 
     // A storage worth aligning keeps room to be placed off the base of its block; one below the
     // threshold keeps the room it already has, so that its contents stay where `realloc` leaves them.
-    let is_aligned = build_storage_is_aligned(gc, sizeof);
+    let is_aligned = build_array_storage_is_aligned(gc, sizeof);
     let slack = gc
         .builder()
         .build_select(

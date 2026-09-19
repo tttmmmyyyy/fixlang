@@ -1935,7 +1935,7 @@ pub fn array_storage_buf_padding(header_size: u64) -> u64 {
 
 /// Whether an `#ArrayStorage` object of `sizeof` bytes has its element buffer aligned, as a value
 /// the emitted code branches on.
-pub fn build_storage_is_aligned<'c, 'm>(
+pub fn build_array_storage_is_aligned<'c, 'm>(
     gc: &Generator<'c, 'm>,
     sizeof: IntValue<'c>,
 ) -> IntValue<'c> {
@@ -1946,7 +1946,7 @@ pub fn build_storage_is_aligned<'c, 'm>(
             gc.context
                 .i64_type()
                 .const_int(ARRAY_ALIGNED_ALLOC_THRESHOLD, false),
-            "storage_is_aligned",
+            "array_storage_is_aligned",
         )
         .unwrap()
 }
@@ -2103,7 +2103,7 @@ fn build_alloc_array_storage<'c, 'm>(
     sizeof: IntValue<'c>,
 ) -> (PointerValue<'c>, IntValue<'c>) {
     let i64_ty = gc.context.i64_type();
-    let is_aligned = build_storage_is_aligned(gc, sizeof);
+    let is_aligned = build_array_storage_is_aligned(gc, sizeof);
     let aligned_mask = gc
         .builder()
         .build_int_s_extend(is_aligned, i64_ty, "aligned_mask@alloc_array_storage")
