@@ -351,6 +351,12 @@ fn build_get_argv_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) 
 /// regresses cp_lib_prime_list by +5.9% and cp_lib_lsegtree by +3.0% in wall clock (hyperfine, 30
 /// runs each), with no benchmark in the speedtest suite measurably benefiting from builtin
 /// recognition.
+///
+/// `nobuiltin` also holds up what `Generator::state_boundary_values_are_written` says of a generated
+/// function's boundary. Where LLVM recognizes the call as an allocator, it reads the block the call
+/// answers with as uninitialized, and folds a load of a byte no store it can see wrote into `undef`;
+/// such a value crossing a boundary declared `noundef` is undefined behavior. Keep the attribute
+/// where this claim is to stand.
 fn declare_allocator_function<'c, 'm>(
     gc: &Generator<'c, 'm>,
     mode: BuildMode,
