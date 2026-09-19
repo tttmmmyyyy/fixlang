@@ -304,6 +304,14 @@ it reachable changes what every later build costs.
 
 Leaks, double frees, and use-after-free produce correct output on a good day, so comparing outputs finds none of them. Memcheck does. Interpret its report against a baseline: a glibc thread-local pattern or a third-party library's internal allocation shows up identically on unmodified code.
 
+**It is blind to a stack array, and a compiler's own runtime is where that matters.** A tool that
+ships source it compiles for the user — a C runtime, a generated prelude, an injected shim — never
+has that source in its own build, so the project's test suite cannot put a sanitizer on it, and
+memcheck over the emitted program sees the heap but not a fixed-size array inside a runtime
+function. An overflow there lands in stack padding and every test passes. Compile those sources
+directly with `-fsanitize=address` and drive the functions from a small harness, sizing the buffer
+the way the caller does. Prove it fires by narrowing one bound by one.
+
 #### Recompute a memoized answer at the hit, and diff it against what the cache serves
 
 A compiler memoizes almost everything expensive — a generated function keyed by a name, a type's layout keyed by the type, an elaborated module keyed by a hash of its sources. Every key is a claim: *this key names everything the value depends on.* Nothing checks the claim, and a key that omits an input serves a value computed for something else — a wrong answer with no diagnostic anywhere near it.
