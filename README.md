@@ -18,8 +18,8 @@ A simple, fast, functional language.
   - Syntax for using Lens on hierarchical data: `vectors[i][^x].iset(42.0)`
 - **Fast**
   - In-place update: since Fix uses reference counting, it can update a uniquely referenced value in place instead of cloning it, even while remaining purely functional. As an example, look at the Fibonacci program under [Examples](#examples): the array is never cloned when the `set` function modifies it. This lets Fix implement algorithms naturally using arrays and hash tables without paying a cloning cost.
-  - While Fix is still undergoing benchmarking and optimization, Fix can achieve performance comparable to C++ in a few simple programs that I have tested.
   - One of Fix's goals is to compile high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
+  - While Fix is still undergoing benchmarking and optimization, Fix can achieve performance comparable to C++ in a few simple programs that I have tested.
   - [Benchmark history](https://tttmmmyyyy.github.io/fixlang/benchmark/)
 - **Other features**
   - Multithreading
