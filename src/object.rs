@@ -2295,7 +2295,7 @@ pub fn create_obj<'c, 'm>(
                 // Initialize the traverser function.
                 assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
                 let ptr_to_trav = obj.gep_boxed(gc, i as u32);
-                let trav = get_traverser_ptr(&ty, capture, gc, None);
+                let trav = get_dynamic_traverser_ptr(&ty, capture, gc);
                 gc.build_store(MemoryRegion::Data, ptr_to_trav, trav);
             }
             ObjectFieldType::UnionBuf(_) => {}
@@ -2306,45 +2306,39 @@ pub fn create_obj<'c, 'm>(
     obj
 }
 
-/// The address of the traverser function for an object of type `ty`, for a dynamic object to store
-/// and call indirectly.
+/// The address of the dynamic traverser function for an object of type `ty`, which a dynamic
+/// object stores and calls indirectly. The dynamic traverser takes the job to perform as an
+/// argument and dispatches on it at run time.
 ///
 /// # Arguments
 /// * `capture` — the captured types of a dynamic object, whose traverser disposes of them.
-/// * `work` — the job the traverser performs: `TraverserWorkType::release` selects the object's
-///   destructor, `mark_global` and `mark_threaded` the corresponding markers. `None` selects the
-///   dynamic traverser, which takes the job as a second argument and dispatches on it at run time.
 ///
 /// # Returns
 /// Where the type leaves the traverser no work to do, the address of an empty function, so that a
 /// caller holding this pointer always has one to call.
 // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
-pub fn get_traverser_ptr<'c, 'm>(
+pub fn get_dynamic_traverser_ptr<'c, 'm>(
     ty: &Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
+    capture: &Vec<Arc<TypeNode>>,
     gc: &mut Generator<'c, 'm>,
-    work: Option<TraverserWorkType>,
 ) -> PointerValue<'c> {
+    const EMPTY_TRAVERSER_NAME: &str = "fixruntime_empty_traverser_dynamic";
+
     // The pointer is stored in a dynamic object and called indirectly at reference count zero, so
     // nothing is known about the state of what it traverses.
-    match create_traverser(ty, capture, gc, work, RcState::Unknown) {
+    match create_traverser(ty, capture, gc, None, RcState::Unknown) {
         Some(fv) => fv.as_global_value().as_pointer_value(),
         None => {
-            let is_dynamic = work.is_none();
-            let func_name = if is_dynamic {
-                "fixruntime_empty_traverser_dynamic"
-            } else {
-                "fixruntime_empty_traverser"
-            };
-
             // Define an empty function (if there is none) and return its pointer.
-            let fv = if let Some(fv) = gc.module.get_function(func_name) {
+            let fv = if let Some(fv) = gc.module.get_function(EMPTY_TRAVERSER_NAME) {
                 fv
             } else {
-                let func_type = traverser_type(gc, ty, work.is_none());
-                let func = gc
-                    .module
-                    .add_function(func_name, func_type, Some(Linkage::Internal));
+                let func_type = traverser_type(gc, ty, true);
+                let func = gc.module.add_function(
+                    EMPTY_TRAVERSER_NAME,
+                    func_type,
+                    Some(Linkage::Internal),
+                );
                 let _builder_guard = gc.push_builder();
                 let bb = gc.context.append_basic_block(func, "entry");
                 gc.builder().position_at_end(bb);
