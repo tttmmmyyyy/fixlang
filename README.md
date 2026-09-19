@@ -34,9 +34,10 @@ Fix has been in development since 2023.
   - Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
   - Fix's compiler inserts every retain and release, so this reference counting is memory-safe on its own, and its optional thread-safe mode extends that safety across threads.
 - **Tools**
-  - A dependency manager, and a [registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them.
-  - A document generator.
-  - A language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions.
+  - Dependency manager
+  - [Registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them
+  - Document generator
+  - Language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions
 
 The following is an example program that calculates the Fibonacci sequence using Fix:
 ```
